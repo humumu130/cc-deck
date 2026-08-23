@@ -1,0 +1,405 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Cloud Code Relay 控制台</title>
+<style>
+  :root {
+    --bg: #0f1117; --panel: #161a23; --panel2: #1d2230; --border: #2a3040;
+    --text: #e2e6f0; --dim: #8b93a7;
+    --working: #6c8cff; --waiting: #f0a437; --error: #e5484d; --done: #3fb96f;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: var(--bg); color: var(--text); font: 14px/1.5 "Segoe UI", system-ui, sans-serif; height: 100vh; display: flex; flex-direction: column; }
+
+  header { display: flex; gap: 8px; padding: 10px 14px; background: var(--panel); border-bottom: 1px solid var(--border); flex-wrap: wrap; align-items: center; }
+  header input { background: var(--panel2); border: 1px solid var(--border); color: var(--text); border-radius: 6px; padding: 6px 10px; font-size: 13px; }
+  #url { flex: 1; min-width: 200px; } #token { width: 220px; }
+  button { background: var(--panel2); color: var(--text); border: 1px solid var(--border); border-radius: 6px; padding: 6px 14px; cursor: pointer; font-size: 13px; }
+  button:hover { border-color: #4a5370; }
+  button.primary { background: #34405e; }
+  button.allow { background: #1d5c38; border-color: #2b7a4b; }
+  button.reject { background: #6c2326; border-color: #913336; }
+  button.stop { background: #5c3a1d; border-color: #7a4e28; }
+  #dot { width: 10px; height: 10px; border-radius: 50%; background: var(--error); flex: none; }
+  #dot.on { background: var(--done); } #dot.wait { background: var(--waiting); }
+
+  main { flex: 1; display: flex; overflow: hidden; }
+  #side { width: 340px; border-right: 1px solid var(--border); display: flex; flex-direction: column; }
+  #newform { padding: 10px; border-bottom: 1px solid var(--border); display: flex; flex-direction: column; gap: 6px; }
+  #newform input, #newform textarea { background: var(--panel2); border: 1px solid var(--border); color: var(--text); border-radius: 6px; padding: 6px 8px; font-size: 13px; resize: vertical; }
+  #cards { flex: 1; overflow-y: auto; padding: 8px; display: flex; flex-direction: column; gap: 8px; }
+
+  .card { background: var(--panel); border: 1px solid var(--border); border-left: 4px solid var(--dim); border-radius: 8px; padding: 10px; cursor: pointer; }
+  .card.sel { outline: 2px solid #4a5370; }
+  .card.WORKING { border-left-color: var(--working); }
+  .card.WAITING { border-left-color: var(--waiting); }
+  .card.ERROR { border-left-color: var(--error); }
+  .card.DONE { border-left-color: var(--done); }
+  .card .row { display: flex; justify-content: space-between; align-items: center; gap: 6px; }
+  .badge { font-size: 11px; padding: 2px 8px; border-radius: 10px; background: var(--panel2); }
+  .badge.WORKING { color: var(--working); } .badge.WAITING { color: var(--waiting); }
+  .badge.ERROR { color: var(--error); } .badge.DONE { color: var(--done); }
+  .summary { color: var(--dim); font-size: 12px; margin-top: 4px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .meta { color: var(--dim); font-size: 11px; margin-top: 4px; display: flex; gap: 10px; }
+
+  #detail { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
+  #dhead { padding: 12px 16px; border-bottom: 1px solid var(--border); background: var(--panel); }
+  #dhead h2 { font-size: 15px; font-weight: 600; }
+  #dhead .sub { color: var(--dim); font-size: 12px; margin-top: 4px; display: flex; gap: 12px; flex-wrap: wrap; }
+  #stats { margin-top: 6px; font-size: 12px; color: var(--dim); }
+  #stats .add { color: var(--done); } #stats .del { color: var(--error); }
+
+  #waitbox { margin: 10px 16px; background: #2b2416; border: 1px solid var(--waiting); border-radius: 8px; padding: 12px; display: none; }
+  #waitbox .t { color: var(--waiting); font-weight: 600; }
+  #waitbox .cmds { margin-top: 8px; display: flex; gap: 8px; }
+
+  #timeline { flex: 1; overflow-y: auto; padding: 10px 16px; font-family: Consolas, monospace; font-size: 12.5px; }
+  .entry { padding: 3px 0; border-bottom: 1px solid #1a1f2c; display: flex; gap: 8px; }
+  .entry .time { color: #5a627a; flex: none; }
+  .entry.assistant_text { color: var(--text); }
+  .entry.tool_use { color: #67c3e8; }
+  .entry.tool_result { color: #9aa3b8; }
+  .entry.system { color: var(--waiting); }
+  .entry.user_message { color: var(--done); }
+
+  #cmdbar { display: flex; gap: 8px; padding: 10px 16px; border-top: 1px solid var(--border); background: var(--panel); }
+  #msginput { flex: 1; background: var(--panel2); border: 1px solid var(--border); color: var(--text); border-radius: 6px; padding: 8px 10px; font-size: 13px; }
+
+  #empty { flex: 1; display: flex; align-items: center; justify-content: center; color: var(--dim); }
+
+  @media (max-width: 720px) {
+    main { flex-direction: column; }
+    #side { width: 100%; max-height: 45%; border-right: none; border-bottom: 1px solid var(--border); }
+    #url { min-width: 120px; } #token { width: 130px; }
+  }
+</style>
+</head>
+<body>
+<header>
+  <div id="dot"></div>
+  <input id="url" placeholder="ws://<pc-ip>:8787/ws">
+  <input id="token" placeholder="token">
+  <button id="connectBtn" class="primary">连接</button>
+</header>
+
+<main>
+  <div id="side">
+    <div id="newform">
+      <input id="cwd" placeholder="工作目录（如 D:\dev\cc-watch）">
+      <textarea id="prompt" rows="2" placeholder="初始指令，如：帮我看看当前项目结构并总结"></textarea>
+      <button id="createBtn" class="primary">新建会话</button>
+    </div>
+    <div id="cards"></div>
+  </div>
+  <div id="detail" style="display:none">
+    <div id="dhead">
+      <div class="row"><h2 id="dtitle"></h2><span id="dbadge" class="badge"></span></div>
+      <div class="sub"><span id="dsummary"></span><span id="delapsed"></span><span id="dmodel"></span></div>
+      <div id="stats"></div>
+    </div>
+    <div id="waitbox">
+      <div class="t">⚠ 等待确认</div>
+      <div id="waitdetail" style="margin-top:4px"></div>
+      <div id="waitelapsed" style="color:var(--dim);font-size:12px;margin-top:4px"></div>
+      <div class="cmds">
+        <button id="allowBtn" class="allow">✓ 允许</button>
+        <button id="rejectBtn" class="reject">✗ 拒绝</button>
+      </div>
+    </div>
+    <div id="timeline"></div>
+    <div id="cmdbar">
+      <input id="msginput" placeholder="发送消息（追加用户输入 / 开新回合）">
+      <button id="sendBtn" class="primary">发送</button>
+      <button id="stopBtn" class="stop">■ 停止</button>
+    </div>
+  </div>
+  <div id="empty">← 选择或新建一个会话</div>
+</main>
+
+<script>
+"use strict";
+const $ = (id) => document.getElementById(id);
+
+// ---------- 状态 ----------
+let ws = null;
+let lastSeq = 0;
+let connected = false;
+let selected = null;               // session_id
+const sessions = new Map();        // session_id -> state
+const timelines = new Map();       // session_id -> [{ts, kind, text}]
+let reconnectDelay = 1000;
+
+function uuid() {
+  if (crypto.randomUUID) return crypto.randomUUID();
+  return "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, (c) => {
+    const r = (Math.random() * 16) | 0;
+    return (c === "x" ? r : (r & 0x3) | 0x8).toString(16);
+  });
+}
+
+// ---------- 连接 ----------
+function connect() {
+  const url = $("url").value.trim() + "?token=" + encodeURIComponent($("token").value.trim());
+  setDot("wait", "连接中");
+  try { ws && ws.close(); } catch {}
+  ws = new WebSocket(url);
+  ws.onopen = () => { connected = true; reconnectDelay = 1000; setDot("on", "已连接"); };
+  ws.onclose = () => {
+    connected = false; setDot("", "已断开");
+    scheduleReconnect();
+  };
+  ws.onerror = () => {};
+  ws.onmessage = (ev) => {
+    let msg;
+    try { msg = JSON.parse(ev.data); } catch { return; }
+    if (msg.type === "COMMAND_ACK") { onAck(msg); return; }
+    if (msg.seq !== undefined) lastSeq = Math.max(lastSeq, msg.seq);
+    onEvent(msg);
+  };
+}
+
+function scheduleReconnect() {
+  if (!$("url").value.trim() || !$("token").value.trim()) return;
+  const delay = reconnectDelay;
+  reconnectDelay = Math.min(reconnectDelay * 2, 10000);
+  setDot("wait", `${delay / 1000}s 后重连`);
+  setTimeout(() => {
+    $("url").value = $("url").value.split("?")[0];
+    connect();
+  }, delay);
+}
+
+function setDot(cls, text) {
+  $("dot").className = cls;
+  $("connectBtn").textContent = connected ? "断开" : "连接";
+  document.title = (cls === "on" ? "" : "[" + (text || "") + "] ") + "Cloud Code Relay 控制台";
+}
+
+function sendCommand(type, payload) {
+  if (!connected) return alert("未连接");
+  ws.send(JSON.stringify({ command_id: uuid(), type, payload, ts: Date.now() }));
+}
+
+function onAck(ack) {
+  if (!ack.ok && ack.error && !ack.error.startsWith("duplicate")) {
+    console.warn("command failed:", ack);
+  }
+}
+
+// ---------- 事件处理 ----------
+function onEvent(msg) {
+  const sid = msg.session_id;
+  switch (msg.type) {
+    case "SNAPSHOT": {
+      sessions.clear(); timelines.clear();
+      for (const s of msg.payload.sessions) {
+        sessions.set(s.session_id, s);
+        timelines.set(s.session_id, []);
+      }
+      lastSeq = Math.max(lastSeq, msg.seq);
+      break;
+    }
+    case "SESSION_CREATED": {
+      sessions.set(sid, {
+        session_id: sid, cwd: msg.payload.cwd, initial_prompt: msg.payload.initial_prompt,
+        model: msg.payload.model, status: "WORKING", action_summary: "启动中",
+        started_at: msg.ts, updated_at: msg.ts, stats: { files_changed: 0, lines_added: 0, lines_deleted: 0 },
+      });
+      timelines.set(sid, []);
+      appendLog(sid, "system", `会话创建: ${msg.payload.initial_prompt.slice(0, 80)}`);
+      if (!selected) select(sid);
+      break;
+    }
+    case "SESSION_UPDATED": {
+      const s = sessions.get(sid); if (!s) break;
+      s.status = msg.payload.status;
+      s.action_summary = msg.payload.action_summary;
+      if (msg.payload.stats) s.stats = msg.payload.stats;
+      s.updated_at = msg.ts;
+      break;
+    }
+    case "SESSION_HEARTBEAT": {
+      const s = sessions.get(sid); if (!s) break;
+      s.elapsed_hint = msg.payload.elapsed_ms;
+      break;
+    }
+    case "SESSION_WAITING": {
+      const s = sessions.get(sid); if (!s) break;
+      s.status = "WAITING";
+      s.waiting_request = { ...msg.payload, received_at: msg.ts };
+      break;
+    }
+    case "SESSION_WAITING_RESOLVED": {
+      const s = sessions.get(sid); if (!s) break;
+      s.status = "WORKING";
+      s.waiting_request = null;
+      appendLog(sid, "system", `已${msg.payload.decision === "allow" ? "允许" : "拒绝"} (by ${msg.payload.by})`);
+      break;
+    }
+    case "SESSION_ERROR": {
+      const s = sessions.get(sid); if (!s) break;
+      s.status = "ERROR"; s.last_error = msg.payload.message;
+      appendLog(sid, "system", `错误: ${msg.payload.message}`);
+      break;
+    }
+    case "SESSION_DONE": {
+      const s = sessions.get(sid); if (!s) break;
+      s.status = "DONE"; s.done_reason = msg.payload.terminal_reason;
+      s.duration_ms = msg.payload.duration_ms;
+      if (msg.payload.stats) s.stats = msg.payload.stats;
+      appendLog(sid, "system", `完成: ${msg.payload.terminal_reason} · ${(msg.payload.duration_ms / 1000).toFixed(1)}s`);
+      break;
+    }
+    case "SESSION_LOG": {
+      appendLog(sid, msg.payload.kind, msg.payload.text);
+      break;
+    }
+  }
+  render();
+}
+
+function appendLog(sid, kind, text) {
+  if (!timelines.has(sid)) timelines.set(sid, []);
+  const list = timelines.get(sid);
+  list.push({ ts: Date.now(), kind, text });
+  if (list.length > 300) list.splice(0, list.length - 300);
+}
+
+// ---------- 渲染 ----------
+function statusText(s) {
+  return { WORKING: "运行中", WAITING: "等待确认", ERROR: "错误", DONE: "已完成" }[s] || s;
+}
+function fmtElapsed(ms) {
+  const sec = Math.floor(ms / 1000);
+  if (sec < 60) return `${sec}s`;
+  return `${Math.floor(sec / 60)}m${sec % 60}s`;
+}
+
+function render() {
+  // 卡片列表
+  const box = $("cards");
+  box.innerHTML = "";
+  for (const s of sessions.values()) {
+    const d = document.createElement("div");
+    d.className = `card ${s.status}` + (s.session_id === selected ? " sel" : "");
+    const elapsed = s.status === "DONE" && s.duration_ms ? s.duration_ms : Date.now() - s.started_at;
+    d.innerHTML = `
+      <div class="row">
+        <span>${s.cwd.split(/[\\/]/).pop() || s.cwd}</span>
+        <span class="badge ${s.status}">● ${statusText(s.status)}</span>
+      </div>
+      <div class="summary">${escapeHtml(s.action_summary || "")}</div>
+      <div class="meta">
+        <span>${fmtElapsed(elapsed)}</span>
+        <span>${s.stats.files_changed > 0 ? `${s.stats.files_changed} 文件 +${s.stats.lines_added}/-${s.stats.lines_deleted}` : ""}</span>
+      </div>`;
+    d.onclick = () => select(s.session_id);
+    box.appendChild(d);
+  }
+  renderDetail();
+}
+
+function renderDetail() {
+  const s = sessions.get(selected);
+  $("detail").style.display = s ? "flex" : "none";
+  $("empty").style.display = s ? "none" : "flex";
+  if (!s) return;
+
+  $("dtitle").textContent = s.cwd.split(/[\\/]/).pop() || s.cwd;
+  const badge = $("dbadge");
+  badge.textContent = "● " + statusText(s.status);
+  badge.className = "badge " + s.status;
+  $("dsummary").textContent = s.action_summary || "";
+  $("dmodel").textContent = s.model || "";
+  const elapsed = s.status === "DONE" && s.duration_ms ? s.duration_ms : Date.now() - s.started_at;
+  $("delapsed").textContent = "⏱ " + fmtElapsed(elapsed);
+  $("stats").innerHTML = s.stats
+    ? `变更: ${s.stats.files_changed} 文件 · <span class="add">+${s.stats.lines_added}</span> <span class="del">-${s.stats.lines_deleted}</span>`
+    : "";
+
+  // WAITING 卡片
+  const wb = $("waitbox");
+  if (s.status === "WAITING" && s.waiting_request) {
+    wb.style.display = "block";
+    $("waitdetail").textContent = `${s.waiting_request.tool_name} — ${s.waiting_request.input_summary}`;
+    const wsec = Math.floor((Date.now() - (s.waiting_request.received_at || Date.now())) / 1000);
+    $("waitelapsed").textContent = `已等待 ${wsec}s`;
+  } else {
+    wb.style.display = "none";
+  }
+
+  // 时间线（增量：仅当条数变化时重建，保持滚动位置）
+  const list = timelines.get(s.session_id) || [];
+  const tl = $("timeline");
+  if (Number(tl.dataset.count || 0) !== list.length || tl.dataset.sid !== s.session_id) {
+    const nearBottom = tl.scrollHeight - tl.scrollTop - tl.clientHeight < 60;
+    tl.dataset.count = list.length;
+    tl.dataset.sid = s.session_id;
+    tl.innerHTML = list
+      .map(
+        (e) =>
+          `<div class="entry ${e.kind}"><span class="time">${new Date(e.ts).toLocaleTimeString("zh-CN", { hour12: false })}</span><span>${escapeHtml(e.text)}</span></div>`,
+      )
+      .join("");
+    if (nearBottom || list.length <= 5) tl.scrollTop = tl.scrollHeight;
+  }
+}
+
+function escapeHtml(s) {
+  return String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+}
+
+function select(sid) {
+  selected = sid;
+  render();
+}
+
+// 每秒刷新计时
+setInterval(() => {
+  if (selected) renderDetail();
+  // 卡片里的耗时也要刷新：轻量重绘
+  render();
+}, 1000);
+
+// ---------- 交互 ----------
+$("connectBtn").onclick = () => {
+  if (connected) { try { ws.close(); } catch {} }
+  else { localStorage.setItem("ccr_url", $("url").value); localStorage.setItem("ccr_token", $("token").value); connect(); }
+};
+$("createBtn").onclick = () => {
+  const cwd = $("cwd").value.trim();
+  const prompt = $("prompt").value.trim();
+  if (!prompt) return alert("请输入初始指令");
+  sendCommand("COMMAND_CREATE", { cwd: cwd || ".", prompt });
+  $("prompt").value = "";
+};
+$("sendBtn").onclick = () => {
+  const text = $("msginput").value.trim();
+  if (!text || !selected) return;
+  sendCommand("COMMAND_MESSAGE", { session_id: selected, text });
+  $("msginput").value = "";
+};
+$("msginput").addEventListener("keydown", (e) => { if (e.key === "Enter") $("sendBtn").click(); });
+$("stopBtn").onclick = () => { if (selected) sendCommand("COMMAND_STOP", { session_id: selected }); };
+$("allowBtn").onclick = () => {
+  const s = sessions.get(selected);
+  if (s && s.waiting_request) sendCommand("COMMAND_CONTINUE", { session_id: selected, request_id: s.waiting_request.request_id });
+};
+$("rejectBtn").onclick = () => {
+  const s = sessions.get(selected);
+  if (s && s.waiting_request) sendCommand("COMMAND_REJECT", { session_id: selected, request_id: s.waiting_request.request_id });
+};
+
+// ---------- 初始化 ----------
+(function init() {
+  const params = new URLSearchParams(location.search);
+  const qToken = params.get("token") || "";
+  $("url").value = localStorage.getItem("ccr_url") || (location.hostname ? `ws://${location.hostname}:${location.port}/ws` : "");
+  $("token").value = qToken || localStorage.getItem("ccr_token") || "";
+  if ($("url").value && $("token").value) connect();
+})();
+</script>
+</body>
+</html>

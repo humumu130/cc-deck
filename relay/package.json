@@ -1,0 +1,23 @@
+{
+  "name": "cc-relay",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "tsx src/index.ts",
+    "spike": "tsx scripts/spike.ts",
+    "test:bus": "tsx scripts/test-event-bus.ts",
+    "test:sessions": "tsx scripts/test-sessions.ts",
+    "test:ws": "tsx scripts/test-ws.ts"
+  },
+  "dependencies": {
+    "@anthropic-ai/claude-agent-sdk": "latest",
+    "ws": "latest"
+  },
+  "devDependencies": {
+    "@types/node": "latest",
+    "@types/ws": "latest",
+    "tsx": "latest",
+    "typescript": "latest"
+  }
+}
