@@ -37,6 +37,32 @@ export function startServer(
   opts: StartServerOptions = {},
 ): { port: number; close: () => Promise<void>; bridge: Bridge } {
   const consoleHtml = fileURLToPath(new URL("../../web-console/index.html", import.meta.url));
+  const mobileDir = fileURLToPath(new URL("../../mobile/", import.meta.url));
+
+  const MIME: Record<string, string> = {
+    ".html": "text/html; charset=utf-8",
+    ".js": "text/javascript; charset=utf-8",
+    ".webmanifest": "application/manifest+json; charset=utf-8",
+    ".png": "image/png",
+    ".svg": "image/svg+xml",
+  };
+  // /m 静态托管（移动端 App 壳），仅允许 mobile/ 目录内已知扩展
+  const serveMobile = (url: URL, res: ServerResponse): boolean => {
+    if (url.pathname !== "/m" && !url.pathname.startsWith("/m/")) return false;
+    const rel = url.pathname === "/m" ? "index.html" : url.pathname.slice(3).replace(/^\/+/, "");
+    if (!/^[\w.-]+$/.test(rel)) {
+      res.writeHead(400).end("bad path");
+      return true;
+    }
+    const file = mobileDir + rel;
+    if (!existsSync(file)) {
+      res.writeHead(404).end("not found");
+      return true;
+    }
+    const ext = rel.slice(rel.lastIndexOf("."));
+    res.writeHead(200, { "content-type": MIME[ext] ?? "application/octet-stream" }).end(readFileSync(file));
+    return true;
+  };
 
   const wss = new WebSocketServer({ noServer: true });
   const bridge = new Bridge(bus, mgr, {
@@ -50,6 +76,13 @@ export function startServer(
     const url = new URL(req.url ?? "/", "http://localhost");
     if (req.method === "POST" && url.pathname === "/bridge/hook") {
       void handleBridgeHook(req, res, bridge, cfg);
+      return;
+    }
+    if (req.method === "GET" && serveMobile(url, res)) return;
+    // 手机浏览器访问根路径时跳转移动端
+    if (req.method === "GET" && url.pathname === "/" &&
+        /Android|iPhone|iPad|Mobile/i.test(req.headers["user-agent"] ?? "")) {
+      res.writeHead(302, { location: "/m" }).end();
       return;
     }
     if (req.method === "GET" && url.pathname === "/") {

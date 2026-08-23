@@ -1,0 +1,16 @@
+{
+  "name": "CC Watch - Cloud Code Relay",
+  "short_name": "CC Watch",
+  "description": "远程查看与控制 PC 上的 Claude Code 会话",
+  "start_url": "/m?source=pwa",
+  "scope": "/m",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#050B12",
+  "theme_color": "#050B12",
+  "icons": [
+    { "src": "/m/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "/m/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "/m/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}
