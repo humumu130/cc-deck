@@ -126,6 +126,9 @@
     font-size: 10px; color: var(--faint); border: 1px solid var(--border);
     padding: 1px 7px; border-radius: 999px; flex: none; font-weight: 500;
   }
+  .his-badge.ext { color: var(--brand-2); border-color: rgba(77,159,255,.4); }
+  .his-badge.ext.on { color: #0B141F; background: var(--brand-2); border-color: var(--brand-2); }
+  #extModeBtn { font-size: 12px; padding: 4px 12px; border-radius: 999px; }
   .card-summary { color: var(--dim); font-size: 12.5px; margin-top: 3px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .card-stats { font-size: 12px; color: var(--faint); margin-top: 6px; display: flex; gap: 10px; font-variant-numeric: tabular-nums; }
   .card-stats .add { color: var(--working); }
@@ -277,6 +280,7 @@
       <div class="dhead-row">
         <span id="dtitle"></span>
         <span id="dbadge" class="status-chip"></span>
+        <button id="extModeBtn" class="ghost" style="display:none">远程审批：关</button>
       </div>
       <div id="dsub">
         <span id="dcwd"></span>
@@ -422,11 +426,12 @@ function onEvent(msg) {
         session_id: sid, cwd: msg.payload.cwd, initial_prompt: msg.payload.initial_prompt,
         title: msg.payload.title || msg.payload.initial_prompt.slice(0, 24),
         model: msg.payload.model, status: "WORKING", action_summary: "启动中",
+        external: msg.payload.external || false, remote_mode: false,
         started_at: msg.ts, updated_at: msg.ts, stats: { files_changed: 0, lines_added: 0, lines_deleted: 0 },
       });
       timelines.set(sid, []);
-      pushLog(sid, { ts: msg.ts, kind: "system", text: "会话创建" });
-      select(sid);
+      pushLog(sid, { ts: msg.ts, kind: "system", text: msg.payload.external ? "外部会话接入 (hooks)" : "会话创建" });
+      if (!msg.payload.external) select(sid);
       break;
     }
     case "SESSION_UPDATED": {
@@ -434,6 +439,7 @@ function onEvent(msg) {
       s.status = msg.payload.status;
       s.action_summary = msg.payload.action_summary;
       if (msg.payload.stats) s.stats = msg.payload.stats;
+      if (msg.payload.remote_mode !== undefined) s.remote_mode = msg.payload.remote_mode;
       s.updated_at = msg.ts;
       break;
     }
@@ -452,7 +458,9 @@ function onEvent(msg) {
       const s = sessions.get(sid); if (!s) break;
       s.status = "WORKING";
       s.waiting_request = null;
-      pushLog(sid, { ts: msg.ts, kind: "system", text: "已" + (msg.payload.decision === "allow" ? "允许" : "拒绝") + " (by " + msg.payload.by + ")" });
+      const d = msg.payload.decision;
+      const dText = d === "allow" ? "已允许" : d === "deny" ? "已拒绝" : "远程审批超时，回退本地";
+      pushLog(sid, { ts: msg.ts, kind: "system", text: dText + (d === "timeout" ? "" : " (by " + msg.payload.by + ")") });
       break;
     }
     case "SESSION_ERROR": {
@@ -533,10 +541,12 @@ function render() {
         : (s.action_summary || "");
       d.innerHTML =
         '<div class="card-top">' + chip(s.status) + '<span class="elapsed">' + fmtElapsed(sessionElapsed(s)) + "</span></div>" +
-        '<div class="card-title">' + escapeHtml(s.title || "") + (s.historical ? '<span class="his-badge">历史</span>' : "") + "</div>" +
+        '<div class="card-title">' + escapeHtml(s.title || "") +
+          (s.historical ? '<span class="his-badge">历史</span>' : s.external ? '<span class="his-badge ext">外部</span>' : "") +
+          (s.external && s.remote_mode ? '<span class="his-badge ext on">远程审批</span>' : "") + "</div>" +
         '<div class="card-summary">' + escapeHtml(waitingText) + "</div>" +
         '<div class="card-stats">' + statsHtml(s.stats) + "</div>" +
-        (s.status === "WAITING" && !s.historical ? '<div class="card-cta"><button>处理</button></div>' : "");
+        (s.status === "WAITING" && !s.historical && s.waiting_request?.decidable !== false ? '<div class="card-cta"><button>处理</button></div>' : "");
       d.onclick = () => select(s.session_id);
       const cta = d.querySelector(".card-cta button");
       if (cta) cta.onclick = (e) => { e.stopPropagation(); select(s.session_id); };
@@ -567,16 +577,25 @@ function renderDetail() {
   const wb = $("waitbox");
   if (s.status === "WAITING" && s.waiting_request && !s.historical) {
     wb.style.display = "block";
-    $("waitdetail").textContent = s.waiting_request.tool_name + " — " + (s.waiting_request.input_summary || "");
+    const passive = s.waiting_request.decidable === false;
+    $("waitdetail").textContent = (s.waiting_request.tool_name ? s.waiting_request.tool_name + " — " : "") + (s.waiting_request.input_summary || "");
     const wsec = Math.floor((Date.now() - (s.waiting_request.received_at || Date.now())) / 1000);
-    $("waitelapsed").textContent = "已等待 " + wsec + "s" +
+    $("waitelapsed").textContent = passive ? "CLI 正在本地等待确认，请在电脑上处理" : "已等待 " + wsec + "s" +
       (s.waiting_request.suggestions?.length ? " · 建议: " + s.waiting_request.suggestions.join(" / ") : "");
+    const cmds = document.querySelector("#waitbox .cmds");
+    if (cmds) cmds.style.display = passive ? "none" : "flex";
   } else {
     wb.style.display = "none";
   }
 
-  $("hisnote").style.display = s.historical ? "block" : "none";
-  $("cmdbar").style.display = s.historical ? "none" : "flex";
+  // 外部会话：远程审批开关；隐藏消息/停止
+  const extBtn = $("extModeBtn");
+  extBtn.style.display = s.external && !s.historical ? "inline-block" : "none";
+  extBtn.textContent = "远程审批：" + (s.remote_mode ? "开" : "关");
+  extBtn.className = s.remote_mode ? "primary" : "ghost";
+  $("hisnote").style.display = s.historical ? "block" : s.external ? "block" : "none";
+  if (s.external) $("hisnote").textContent = "Ⓑ 外部会话（hooks 桥接）：单向可见。开启远程审批且手机在线时，Bash/Edit 等敏感工具会等你远程 Allow/Reject；终端切到 skip-permissions 模式则完全放行。";
+  $("cmdbar").style.display = s.historical || s.external ? "none" : "flex";
 
   // 时间线 / 统计（增量重建）
   const tl = $("timeline");
@@ -695,6 +714,10 @@ $("rejectBtn").onclick = () => {
   if (s && s.waiting_request) sendCommand("COMMAND_REJECT", { session_id: selected, request_id: s.waiting_request.request_id });
 };
 $("backBtn").onclick = closeDetail;
+$("extModeBtn").onclick = () => {
+  const s = sessions.get(selected);
+  if (s && s.external) sendCommand("COMMAND_EXT_MODE", { session_id: selected, enabled: !s.remote_mode });
+};
 document.querySelectorAll(".tabs button").forEach((b) => {
   b.onclick = () => {
     activeTab = b.dataset.tab;

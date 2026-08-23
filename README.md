@@ -43,6 +43,8 @@ npm run dev
 | `CCR_CWD` | relay 目录 | 新建会话缺省工作目录 |
 | `CCR_MODEL` | `ANTHROPIC_DEFAULT_SONNET_MODEL` | 会话模型（必须显式传给 SDK，否则 CLI 会拼 `[1m]` 后缀） |
 | `CCR_DEBUG` | - | 打印 CLI stderr 与 tool_use_result 原始结构 |
+| `CCR_GATE_TOOLS` | `Bash,Edit,Write,NotebookEdit,WebFetch,WebSearch` | 外部会话远程审批门控的工具名（逗号分隔） |
+| `CCR_BRIDGE_TOKEN` | `relay/data/bridge-token` | hooks 桥接令牌（默认首启生成后固定） |
 
 ### 调试台功能
 
@@ -51,6 +53,20 @@ npm run dev
 - WAITING 卡片内联"处理"入口；详情页 活动 / 日志 / 统计 三 Tab
 - 历史会话（Relay 重启前遗留）灰显为"历史"，时间线完整可查、不可操作
 - 追加消息（开新回合）、停止会话；断线自动重连（携带 last_seq 补发）
+
+## Hooks 桥接外部会话（M1.3）
+
+用户自己开的 Claude Code CLI 会话（非 Relay 拉起）经 hooks 单向接入：
+
+- `relay/hooks/bridge-hook.mjs`（已装进 `~/.claude/settings.json`，与 traffic-light 并存）→
+  POST 本机 `/bridge/hook`（loopback + `relay/data/bridge.json` 里的 token）
+- Relay 未运行时 hook 立即退出（<50ms），对 CLI 零影响
+- 外部会话在控制台带「外部」徽章：状态/时间线单向可见，标题取自 prompt
+- **远程审批**（默认关，控制台会话详情头开关）：开启后 `Bash/Edit/Write/WebFetch` 等
+  （`CCR_GATE_TOOLS` 可配）在**有客户端在线时**挂起等手机/网页 Allow/Reject
+  （最长 590s，超时回退 CLI 本地流程）；终端切 `--dangerously-skip-permissions`
+  （hook payload `permission_mode=bypassPermissions`）则完全放行
+- 外部会话不支持远程发消息/停止（hooks 无输入通道）
 
 ## 协议
 
@@ -67,6 +83,7 @@ npm run test:bus       # EventBus seq/环形缓冲/补发
 npm run test:sessions  # 双会话并发全生命周期（含 WAITING→Allow、diff 统计）
 npm run test:ws        # WS 鉴权/快照/断线补发/幂等/容错
 npm run test:history   # 历史持久化：压缩/重放/跨重启 seq/adopt
+npm run test:bridge    # hooks 桥接：外部会话/远程审批/超时/鉴权
 npx tsx scripts/smoke-e2e.ts <token>   # 对运行中的 dev server 走浏览器等价全流程
 ```
 

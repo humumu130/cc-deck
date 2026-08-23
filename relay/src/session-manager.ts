@@ -5,11 +5,13 @@ import { AgentSession } from "./agent-adapter.js";
 import type { RelayConfig } from "./config.js";
 import type { ReplayedSession } from "./history.js";
 import { deriveTitle } from "./history.js";
+import { truncate } from "./summarizer.js";
 import type {
   Command,
   CommandAckPayload,
   LogEntry,
   SessionState,
+  WaitingPayload,
 } from "./types.js";
 
 interface ManagedSession {
@@ -59,6 +61,114 @@ export class SessionManager {
     return adopted;
   }
 
+  // ---------- 外部会话（hooks 桥接）----------
+
+  private bridge: {
+    resolvePending: (sessionId: string, requestId: string, decision: "allow" | "deny", reason?: string) => boolean;
+  } | null = null;
+
+  setBridge(b: {
+    resolvePending: (sessionId: string, requestId: string, decision: "allow" | "deny", reason?: string) => boolean;
+  }): void {
+    this.bridge = b;
+  }
+
+  // 不存在则注册外部会话（bridge.ts 调用）；返回当前状态
+  ensureExternal(id: string, cwd: string, prompt: string, cliSessionId = ""): SessionState {
+    const existing = this.sessions.get(id);
+    if (existing) return existing.state;
+    const state: SessionState = {
+      session_id: id,
+      relay_session_id: cliSessionId,
+      cwd: cwd || process.cwd(),
+      initial_prompt: prompt,
+      title: prompt ? deriveTitle(prompt) : `外部会话 ${cwd.split(/[\\/]/).pop() ?? ""}`.trim(),
+      model: "",
+      status: "WORKING",
+      action_summary: prompt ? truncate(prompt, 40) : "外部会话",
+      started_at: Date.now(),
+      updated_at: Date.now(),
+      stats: { files_changed: 0, lines_added: 0, lines_deleted: 0 },
+      external: true,
+      remote_mode: false,
+    };
+    this.sessions.set(id, { agent: null, state, logs: [], lastUpdateEmit: 0 });
+    this.bus.emit(id, "SESSION_CREATED", {
+      cwd: state.cwd,
+      initial_prompt: prompt,
+      title: state.title,
+      model: "",
+      external: true,
+    });
+    return state;
+  }
+
+  getExternal(id: string): SessionState | undefined {
+    return this.sessions.get(id)?.state;
+  }
+
+  setExternalStatus(id: string, status: SessionState["status"], summary: string): void {
+    const s = this.sessions.get(id);
+    if (!s) return;
+    const changed = s.state.status !== status;
+    s.state.status = status;
+    s.state.action_summary = summary;
+    s.state.updated_at = Date.now();
+    if (changed || status === "WORKING") {
+      this.bus.emit(id, "SESSION_UPDATED", {
+        status,
+        action_summary: summary,
+        stats: { ...s.state.stats },
+      });
+    }
+  }
+
+  setExternalWaiting(id: string, payload: WaitingPayload): void {
+    const s = this.sessions.get(id);
+    if (!s) return;
+    s.state.status = "WAITING";
+    s.state.waiting_request = payload;
+    s.state.updated_at = Date.now();
+    this.bus.emit(id, "SESSION_WAITING", payload);
+  }
+
+  finishExternal(id: string, reason: string, durationMs: number): void {
+    const s = this.sessions.get(id);
+    if (!s) return;
+    s.state.status = "DONE";
+    s.state.done_reason = reason;
+    s.state.duration_ms = durationMs;
+    s.state.waiting_request = undefined;
+    s.state.updated_at = Date.now();
+    this.bus.emit(id, "SESSION_DONE", {
+      terminal_reason: reason,
+      duration_ms: durationMs,
+      stats: { ...s.state.stats },
+    });
+  }
+
+  pushExternalLog(id: string, kind: LogEntry["kind"], text: string, tool?: string): void {
+    const s = this.sessions.get(id);
+    if (!s) return;
+    const entry: LogEntry = { ts: Date.now(), kind, text, tool };
+    s.logs.push(entry);
+    if (s.logs.length > 300) s.logs.splice(0, s.logs.length - 300);
+    this.bus.emit(id, "SESSION_LOG", entry);
+  }
+
+  setRemoteMode(id: string, enabled: boolean): void {
+    const s = this.sessions.get(id);
+    if (!s || !s.state.external) return;
+    s.state.remote_mode = enabled;
+    s.state.updated_at = Date.now();
+    this.bus.emit(id, "SESSION_UPDATED", {
+      status: s.state.status,
+      action_summary: s.state.action_summary,
+      stats: { ...s.state.stats },
+      remote_mode: enabled,
+    });
+  }
+
   handleCommand(cmd: Command, by: string): CommandAckPayload {
     // 幂等去重：重复 command_id 直接返回已受理
     if (this.processedCommands.has(cmd.command_id)) {
@@ -91,17 +201,41 @@ export class SessionManager {
           return { command_id: cmd.command_id, ok: true };
         }
         case "COMMAND_CONTINUE": {
-          const s = this.requireLive(cmd.payload.session_id);
-          if (!s.agent.allow(cmd.payload.request_id, by)) {
+          const s = this.require(cmd.payload.session_id);
+          if (s.state.external) {
+            if (!this.bridge?.resolvePending(cmd.payload.session_id, cmd.payload.request_id, "allow")) {
+              return { command_id: cmd.command_id, ok: false, error: "no such pending request" };
+            }
+            this.emitWaitingResolved(cmd.payload.session_id, cmd.payload.request_id, "allow", by);
+            return { command_id: cmd.command_id, ok: true };
+          }
+          const live = this.requireLive(cmd.payload.session_id);
+          if (!live.agent.allow(cmd.payload.request_id, by)) {
             return { command_id: cmd.command_id, ok: false, error: "no such pending request" };
           }
           return { command_id: cmd.command_id, ok: true };
         }
         case "COMMAND_REJECT": {
-          const s = this.requireLive(cmd.payload.session_id);
-          if (!s.agent.deny(cmd.payload.request_id, cmd.payload.reason, by)) {
+          const s = this.require(cmd.payload.session_id);
+          if (s.state.external) {
+            if (!this.bridge?.resolvePending(cmd.payload.session_id, cmd.payload.request_id, "deny", cmd.payload.reason)) {
+              return { command_id: cmd.command_id, ok: false, error: "no such pending request" };
+            }
+            this.emitWaitingResolved(cmd.payload.session_id, cmd.payload.request_id, "deny", by);
+            return { command_id: cmd.command_id, ok: true };
+          }
+          const live = this.requireLive(cmd.payload.session_id);
+          if (!live.agent.deny(cmd.payload.request_id, cmd.payload.reason, by)) {
             return { command_id: cmd.command_id, ok: false, error: "no such pending request" };
           }
+          return { command_id: cmd.command_id, ok: true };
+        }
+        case "COMMAND_EXT_MODE": {
+          const s = this.require(cmd.payload.session_id);
+          if (!s.state.external) {
+            return { command_id: cmd.command_id, ok: false, error: "not an external session" };
+          }
+          this.setRemoteMode(cmd.payload.session_id, cmd.payload.enabled);
           return { command_id: cmd.command_id, ok: true };
         }
       }
@@ -232,8 +366,22 @@ export class SessionManager {
 
   private requireLive(sessionId: string): ManagedSession & { agent: AgentSession } {
     const s = this.require(sessionId);
-    if (!s.agent) throw new Error("历史会话不可操作（Relay 重启前遗留）");
+    if (!s.agent) {
+      throw new Error(
+        s.state.external ? "外部会话不支持该命令（hooks 单向桥接）" : "历史会话不可操作（Relay 重启前遗留）",
+      );
+    }
     return s as ManagedSession & { agent: AgentSession };
+  }
+
+  // 外部会话远程决定后的收尾（清 WAITING、回 WORKING）
+  private emitWaitingResolved(sessionId: string, requestId: string, decision: "allow" | "deny", by: string): void {
+    const s = this.sessions.get(sessionId);
+    if (!s) return;
+    s.state.status = "WORKING";
+    s.state.waiting_request = undefined;
+    s.state.updated_at = Date.now();
+    this.bus.emit(sessionId, "SESSION_WAITING_RESOLVED", { request_id: requestId, decision, by });
   }
 
   private emitUpdated(s: ManagedSession, force: boolean): void {

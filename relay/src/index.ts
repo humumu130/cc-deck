@@ -1,5 +1,6 @@
 import { networkInterfaces } from "node:os";
 import { join } from "node:path";
+import { writeFileSync } from "node:fs";
 import { loadConfig } from "./config.js";
 import { EventBus } from "./event-bus.js";
 import { SessionManager } from "./session-manager.js";
@@ -9,7 +10,7 @@ import { compactEvents, loadEvents, reduceHistory, rewriteFile } from "./history
 const cfg = loadConfig();
 
 // 历史持久化：relay/data/events.ndjson（重启后重放重建会话与时间线）
-const persistPath = join(process.cwd(), "data", "events.ndjson");
+const persistPath = join(cfg.dataDir, "events.ndjson");
 const prior = loadEvents(persistPath);
 const kept = compactEvents(prior);
 if (prior.length !== kept.length) rewriteFile(persistPath, kept); // 启动时压缩
@@ -20,10 +21,14 @@ const mgr = new SessionManager(bus, cfg);
 const adopted = mgr.adopt(replayed);
 startServer(bus, mgr, cfg);
 
+// hooks 桥接配置：bridge-hook.mjs 读取后回连本机 /bridge/hook
+writeFileSync(join(cfg.dataDir, "bridge.json"), JSON.stringify({ port: cfg.port, token: cfg.bridgeToken }), "utf-8");
+
 console.log("Cloud Code Relay 已启动");
 console.log(`  模型:   ${cfg.model}`);
 console.log(`  端口:   ${cfg.port}`);
 console.log(`  历史:   ${persistPath}（恢复 ${adopted} 个会话）`);
+console.log(`  桥接:   ${join(cfg.dataDir, "bridge.json")}（外部 CLI 会话经 hooks 接入）`);
 if (cfg.tokenGenerated) {
   console.log(`  token:  ${cfg.token}  (未设置 CCR_TOKEN，本次随机生成)`);
 }

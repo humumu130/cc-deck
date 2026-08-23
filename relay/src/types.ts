@@ -42,6 +42,8 @@ export interface SessionState {
   done_reason?: string;
   duration_ms?: number;
   historical?: boolean;       // true = Relay 重启前遗留的历史会话，不可操作
+  external?: boolean;         // true = 用户自开 CLI 会话（hooks 桥接），仅单向可见 + 远程审批
+  remote_mode?: boolean;      // external 会话的远程审批开关（默认关）
 }
 
 // 时间线历史条目（持久化 & 快照下发用）
@@ -59,12 +61,14 @@ export interface SessionCreatedPayload {
   initial_prompt: string;
   title: string;
   model: string;
+  external?: boolean;
 }
 
 export interface SessionUpdatedPayload {
   status: SessionStatus;
   action_summary: string;
   stats: FileChangeStats;
+  remote_mode?: boolean;       // external 会话切换远程审批时携带
 }
 
 export interface SessionHeartbeatPayload {
@@ -77,11 +81,12 @@ export interface WaitingPayload {
   tool_name: string;
   input_summary: string;
   suggestions: string[];
+  decidable?: boolean;   // false = 仅通知（外部会话 CLI 本地在等，远程无法决定）；默认 true
 }
 
 export interface WaitingResolvedPayload {
   request_id: string;
-  decision: "allow" | "deny";
+  decision: "allow" | "deny" | "timeout";   // timeout = 远程审批超时，回退 CLI 本地流程
   by: string;                 // 哪个客户端做的决定（调试用）
 }
 
@@ -143,7 +148,8 @@ export type CommandType =
   | "COMMAND_MESSAGE"
   | "COMMAND_STOP"
   | "COMMAND_CONTINUE"
-  | "COMMAND_REJECT";
+  | "COMMAND_REJECT"
+  | "COMMAND_EXT_MODE";
 
 export interface CommandBase {
   command_id: string;   // 客户端生成（uuid），Relay 按此去重
@@ -176,12 +182,33 @@ export interface RejectCommand extends CommandBase {
   payload: { session_id: string; request_id: string; reason?: string };
 }
 
+// 外部会话（hooks 桥接）远程审批开关
+export interface ExtModeCommand extends CommandBase {
+  type: "COMMAND_EXT_MODE";
+  payload: { session_id: string; enabled: boolean };
+}
+
 export type Command =
   | CreateCommand
   | MessageCommand
   | StopCommand
   | ContinueCommand
-  | RejectCommand;
+  | RejectCommand
+  | ExtModeCommand;
+
+// hooks 桥接：bridge-hook.mjs -> POST /bridge/hook 的请求体（token 走 x-bridge-token header）
+export interface BridgeEvent {
+  event: string;               // hook_event_name
+  session_id: string;          // CLI 侧 session_id
+  cwd: string;
+  permission_mode?: string;
+  prompt?: string;             // UserPromptSubmit
+  tool_name?: string;          // Pre/PostToolUse
+  tool_input?: unknown;
+  tool_response?: unknown;     // PostToolUse
+  message?: string;            // Notification
+  reason?: string;             // SessionEnd
+}
 
 // ---------- 命令回执（Relay -> 客户端，确认命令已受理） ----------
 

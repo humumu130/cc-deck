@@ -5,7 +5,8 @@ import { WebSocketServer, WebSocket } from "ws";
 import type { EventBus } from "./event-bus.js";
 import type { SessionManager } from "./session-manager.js";
 import type { RelayConfig } from "./config.js";
-import type { Command, CommandAckPayload, Envelope } from "./types.js";
+import { Bridge, parseGateTools } from "./bridge.js";
+import type { BridgeEvent, Command, CommandAckPayload, Envelope } from "./types.js";
 
 const COMMAND_TYPES = new Set([
   "COMMAND_CREATE",
@@ -13,9 +14,15 @@ const COMMAND_TYPES = new Set([
   "COMMAND_STOP",
   "COMMAND_CONTINUE",
   "COMMAND_REJECT",
+  "COMMAND_EXT_MODE",
 ]);
 
 const HEARTBEAT_MS = 30_000;
+
+export interface StartServerOptions {
+  gateToolsRaw?: string;    // CCR_GATE_TOOLS，逗号分隔门控工具名
+  holdMs?: number;          // PreToolUse 挂起上限（测试用短值）
+}
 
 // 连接策略：
 //  - 新客户端（无 last_seq）：发 SNAPSHOT 全量会话快照，之后收实时事件
@@ -25,11 +32,24 @@ export function startServer(
   bus: EventBus,
   mgr: SessionManager,
   cfg: RelayConfig,
-): { port: number; close: () => Promise<void> } {
+  opts: StartServerOptions = {},
+): { port: number; close: () => Promise<void>; bridge: Bridge } {
   const consoleHtml = fileURLToPath(new URL("../../web-console/index.html", import.meta.url));
+
+  const wss = new WebSocketServer({ noServer: true });
+  const bridge = new Bridge(bus, mgr, {
+    gateTools: parseGateTools(opts.gateToolsRaw ?? process.env.CCR_GATE_TOOLS),
+    hasClients: () => [...wss.clients].some((c) => c.readyState === WebSocket.OPEN),
+    holdMs: opts.holdMs,
+  });
+  mgr.setBridge(bridge);
 
   const server = createServer((req, res) => {
     const url = new URL(req.url ?? "/", "http://localhost");
+    if (req.method === "POST" && url.pathname === "/bridge/hook") {
+      void handleBridgeHook(req, res, bridge, cfg);
+      return;
+    }
     if (req.method === "GET" && url.pathname === "/") {
       if (!existsSync(consoleHtml)) {
         res.writeHead(503).end("web-console/index.html 不存在（步骤 6 生成）");
@@ -45,8 +65,6 @@ export function startServer(
     }
     res.writeHead(404).end("not found");
   });
-
-  const wss = new WebSocketServer({ noServer: true });
 
   server.on("upgrade", (req, socket, head) => {
     const url = new URL(req.url ?? "/", "http://localhost");
@@ -139,6 +157,7 @@ export function startServer(
 
   return {
     port: cfg.port,
+    bridge,
     close: () =>
       new Promise((resolve) => {
         clearInterval(heartbeat);
@@ -147,6 +166,33 @@ export function startServer(
         wss.close(() => server.close(() => resolve()));
       }),
   };
+}
+
+// hooks 桥接入口：仅本机回环 + bridge token；PreToolUse 可能长轮询挂起
+async function handleBridgeHook(
+  req: IncomingMessage,
+  res: ServerResponse,
+  bridge: Bridge,
+  cfg: RelayConfig,
+): Promise<void> {
+  const remote = req.socket.remoteAddress ?? "";
+  const isLoopback = remote === "127.0.0.1" || remote === "::1" || remote === "::ffff:127.0.0.1";
+  if (!isLoopback || (req.headers["x-bridge-token"] ?? "") !== cfg.bridgeToken) {
+    res.writeHead(403, { "content-type": "application/json" }).end('{"error":"forbidden"}');
+    return;
+  }
+  let body = "";
+  req.setEncoding("utf-8");
+  for await (const chunk of req) body += chunk;
+  try {
+    const ev = JSON.parse(body) as BridgeEvent;
+    const decision = await bridge.handleEvent(ev);
+    res.writeHead(200, { "content-type": "application/json" }).end(JSON.stringify(decision));
+  } catch (e) {
+    res.writeHead(400, { "content-type": "application/json" }).end(
+      JSON.stringify({ error: e instanceof Error ? e.message : String(e) }),
+    );
+  }
 }
 
 interface ClientWs extends WebSocket {

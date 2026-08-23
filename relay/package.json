@@ -9,7 +9,8 @@
     "test:bus": "tsx scripts/test-event-bus.ts",
     "test:sessions": "tsx scripts/test-sessions.ts",
     "test:ws": "tsx scripts/test-ws.ts",
-    "test:history": "tsx scripts/test-history.ts"
+    "test:history": "tsx scripts/test-history.ts",
+    "test:bridge": "tsx scripts/test-bridge.ts"
   },
   "dependencies": {
     "@anthropic-ai/claude-agent-sdk": "latest",
