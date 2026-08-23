@@ -9,7 +9,7 @@ function assert(cond: boolean, msg: string) {
   console.log(`ok - ${msg}`);
 }
 
-const bus = new EventBus(50);
+const bus = new EventBus({ capacity: 50 });
 
 // 1. 实时订阅收到全部事件
 const live: Envelope[] = [];

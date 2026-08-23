@@ -1,6 +1,11 @@
 node_modules/
 relay/.tmp-*/
 relay/.tmp-e2e/
+relay/data/
 *.log
 .DS_Store
 Thumbs.db
+.design-text.txt
+.colors.txt
+.sample-colors.ps1
+.scan_colors.py

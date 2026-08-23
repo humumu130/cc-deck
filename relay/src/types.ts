@@ -30,6 +30,7 @@ export interface SessionState {
   relay_session_id: string;   // SDK/CLI 侧 session_id（用于 resume）
   cwd: string;
   initial_prompt: string;
+  title: string;              // 人类可读标题（deriveTitle(initial_prompt)）
   model: string;
   status: SessionStatus;
   action_summary: string;     // 最近动作摘要，如 "修改 src/auth.ts"
@@ -40,6 +41,15 @@ export interface SessionState {
   last_error?: string;
   done_reason?: string;
   duration_ms?: number;
+  historical?: boolean;       // true = Relay 重启前遗留的历史会话，不可操作
+}
+
+// 时间线历史条目（持久化 & 快照下发用）
+export interface LogEntry {
+  ts: number;
+  kind: SessionLogPayload["kind"];
+  text: string;
+  tool?: string;
 }
 
 // ---------- 事件 payload（Relay -> 客户端） ----------
@@ -47,6 +57,7 @@ export interface SessionState {
 export interface SessionCreatedPayload {
   cwd: string;
   initial_prompt: string;
+  title: string;
   model: string;
 }
 
@@ -86,6 +97,7 @@ export interface SessionDonePayload {
 
 export interface SnapshotPayload {
   sessions: SessionState[];
+  logs: Record<string, LogEntry[]>;   // session_id -> 时间线（重启用历史补齐）
   server_time: number;
 }
 

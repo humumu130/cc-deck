@@ -2,121 +2,321 @@
 <html lang="zh-CN">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Cloud Code Relay 控制台</title>
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#050B12">
+<title>Cloud Code Relay</title>
 <style>
   :root {
-    --bg: #0f1117; --panel: #161a23; --panel2: #1d2230; --border: #2a3040;
-    --text: #e2e6f0; --dim: #8b93a7;
-    --working: #6c8cff; --waiting: #f0a437; --error: #e5484d; --done: #3fb96f;
+    --bg: #050B12;
+    --bg-soft: #07101A;
+    --panel: #0B141F;
+    --panel-2: #101B2B;
+    --border: #1B2739;
+    --text: #E8EDF5;
+    --dim: #7E8BA3;
+    --faint: #55617A;
+    --brand: #7C6CF2;
+    --brand-2: #4D9FFF;
+    --grad: linear-gradient(135deg, #4D9FFF, #7C6CF2);
+    --working: #2BD98F;
+    --waiting: #F5B841;
+    --error: #F0524F;
+    --done: #4D9FFF;
   }
-  * { box-sizing: border-box; margin: 0; padding: 0; }
-  body { background: var(--bg); color: var(--text); font: 14px/1.5 "Segoe UI", system-ui, sans-serif; height: 100vh; display: flex; flex-direction: column; }
+  * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+  html, body { height: 100%; }
+  body {
+    background:
+      radial-gradient(1200px 500px at 80% -10%, rgba(124,108,242,.10), transparent 60%),
+      radial-gradient(900px 400px at -10% 110%, rgba(77,159,255,.06), transparent 60%),
+      var(--bg);
+    color: var(--text);
+    font: 14px/1.5 "Segoe UI", system-ui, -apple-system, sans-serif;
+    display: flex; flex-direction: column; height: 100vh; overflow: hidden;
+  }
 
-  header { display: flex; gap: 8px; padding: 10px 14px; background: var(--panel); border-bottom: 1px solid var(--border); flex-wrap: wrap; align-items: center; }
-  header input { background: var(--panel2); border: 1px solid var(--border); color: var(--text); border-radius: 6px; padding: 6px 10px; font-size: 13px; }
-  #url { flex: 1; min-width: 200px; } #token { width: 220px; }
-  button { background: var(--panel2); color: var(--text); border: 1px solid var(--border); border-radius: 6px; padding: 6px 14px; cursor: pointer; font-size: 13px; }
-  button:hover { border-color: #4a5370; }
-  button.primary { background: #34405e; }
-  button.allow { background: #1d5c38; border-color: #2b7a4b; }
-  button.reject { background: #6c2326; border-color: #913336; }
-  button.stop { background: #5c3a1d; border-color: #7a4e28; }
-  #dot { width: 10px; height: 10px; border-radius: 50%; background: var(--error); flex: none; }
-  #dot.on { background: var(--done); } #dot.wait { background: var(--waiting); }
+  /* ---------- 顶栏 ---------- */
+  header {
+    display: flex; align-items: center; gap: 10px;
+    padding: 12px 18px;
+    background: rgba(9,15,25,.8); backdrop-filter: blur(10px);
+    border-bottom: 1px solid var(--border);
+    flex: none;
+  }
+  .logo {
+    width: 34px; height: 34px; border-radius: 10px; background: var(--grad);
+    display: flex; align-items: center; justify-content: center;
+    font-weight: 700; font-size: 13px; color: #fff; letter-spacing: .5px;
+    box-shadow: 0 2px 14px rgba(124,108,242,.35); flex: none;
+  }
+  .brand { display: flex; align-items: center; gap: 10px; min-width: 0; }
+  .brand h1 { font-size: 15px; font-weight: 700; letter-spacing: .3px; white-space: nowrap; }
+  #runhint { font-size: 12px; color: var(--dim); white-space: nowrap; }
+  header .spacer { flex: 1; }
 
+  #connChip {
+    display: flex; align-items: center; gap: 6px;
+    font-size: 12px; color: var(--dim);
+    padding: 5px 10px; border: 1px solid var(--border); border-radius: 999px;
+    cursor: pointer; white-space: nowrap; max-width: 40vw; overflow: hidden; text-overflow: ellipsis;
+  }
+  #connChip i { width: 8px; height: 8px; border-radius: 50%; background: var(--error); flex: none; }
+  #connChip.on i { background: var(--working); box-shadow: 0 0 6px var(--working); }
+  #connChip.wait i { background: var(--waiting); }
+
+  button {
+    background: var(--panel-2); color: var(--text);
+    border: 1px solid var(--border); border-radius: 10px;
+    padding: 7px 14px; cursor: pointer; font-size: 13px; font-family: inherit;
+    transition: border-color .15s, background .15s, transform .05s;
+  }
+  button:hover { border-color: #33436B; }
+  button:active { transform: scale(.97); }
+  button.primary { background: var(--grad); border: none; color: #fff; font-weight: 600; box-shadow: 0 2px 12px rgba(124,108,242,.3); }
+  button.allow { background: rgba(43,217,143,.12); border: 1px solid rgba(43,217,143,.5); color: var(--working); font-weight: 600; }
+  button.allow:hover { background: rgba(43,217,143,.22); }
+  button.reject { background: rgba(240,82,79,.10); border: 1px solid rgba(240,82,79,.5); color: var(--error); font-weight: 600; }
+  button.reject:hover { background: rgba(240,82,79,.2); }
+  button.ghost { background: transparent; }
+  button.big { padding: 10px 22px; font-size: 14px; border-radius: 12px; }
+
+  input, textarea {
+    background: var(--bg-soft); border: 1px solid var(--border); color: var(--text);
+    border-radius: 10px; padding: 8px 11px; font-size: 13px; font-family: inherit;
+    outline: none; transition: border-color .15s, box-shadow .15s;
+  }
+  input:focus, textarea:focus { border-color: var(--brand); box-shadow: 0 0 0 3px rgba(124,108,242,.15); }
+  input::placeholder, textarea::placeholder { color: var(--faint); }
+
+  /* ---------- 折叠面板（连接 / 新建） ---------- */
+  .panel {
+    display: none; gap: 8px; align-items: center; flex-wrap: wrap;
+    padding: 10px 18px; background: var(--bg-soft); border-bottom: 1px solid var(--border); flex: none;
+  }
+  .panel.open { display: flex; }
+  #connPanel input#url { flex: 1; min-width: 200px; }
+  #connPanel input#token { width: 200px; }
+  #newPanel input#cwd { flex: 1; min-width: 160px; }
+  #newPanel textarea { flex: 1 100%; resize: vertical; min-height: 44px; }
+
+  /* ---------- 主体 ---------- */
   main { flex: 1; display: flex; overflow: hidden; }
-  #side { width: 340px; border-right: 1px solid var(--border); display: flex; flex-direction: column; }
-  #newform { padding: 10px; border-bottom: 1px solid var(--border); display: flex; flex-direction: column; gap: 6px; }
-  #newform input, #newform textarea { background: var(--panel2); border: 1px solid var(--border); color: var(--text); border-radius: 6px; padding: 6px 8px; font-size: 13px; resize: vertical; }
-  #cards { flex: 1; overflow-y: auto; padding: 8px; display: flex; flex-direction: column; gap: 8px; }
+  #side {
+    width: 380px; flex: none; border-right: 1px solid var(--border);
+    display: flex; flex-direction: column; background: rgba(8,13,22,.5);
+  }
+  #side h3 {
+    font-size: 11px; font-weight: 600; letter-spacing: 1.5px; color: var(--faint);
+    text-transform: uppercase; padding: 14px 18px 6px;
+  }
+  #cards { flex: 1; overflow-y: auto; padding: 4px 14px 16px; display: flex; flex-direction: column; gap: 10px; }
 
-  .card { background: var(--panel); border: 1px solid var(--border); border-left: 4px solid var(--dim); border-radius: 8px; padding: 10px; cursor: pointer; }
-  .card.sel { outline: 2px solid #4a5370; }
-  .card.WORKING { border-left-color: var(--working); }
-  .card.WAITING { border-left-color: var(--waiting); }
-  .card.ERROR { border-left-color: var(--error); }
-  .card.DONE { border-left-color: var(--done); }
-  .card .row { display: flex; justify-content: space-between; align-items: center; gap: 6px; }
-  .badge { font-size: 11px; padding: 2px 8px; border-radius: 10px; background: var(--panel2); }
-  .badge.WORKING { color: var(--working); } .badge.WAITING { color: var(--waiting); }
-  .badge.ERROR { color: var(--error); } .badge.DONE { color: var(--done); }
-  .summary { color: var(--dim); font-size: 12px; margin-top: 4px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .meta { color: var(--dim); font-size: 11px; margin-top: 4px; display: flex; gap: 10px; }
+  .card {
+    background: var(--panel); border: 1px solid var(--border); border-radius: 14px;
+    padding: 13px 15px; cursor: pointer; position: relative;
+    transition: border-color .15s, transform .1s, box-shadow .15s;
+  }
+  .card:hover { border-color: #2C3D63; }
+  .card.sel { border-color: var(--brand); box-shadow: 0 0 0 1px var(--brand), 0 4px 20px rgba(124,108,242,.15); }
+  .card.historical { opacity: .75; }
+  .card-top { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+  .elapsed { font-size: 12px; color: var(--dim); font-variant-numeric: tabular-nums; }
+  .card-title { font-size: 15px; font-weight: 650; margin-top: 6px; display: flex; align-items: center; gap: 8px; }
+  .his-badge {
+    font-size: 10px; color: var(--faint); border: 1px solid var(--border);
+    padding: 1px 7px; border-radius: 999px; flex: none; font-weight: 500;
+  }
+  .card-summary { color: var(--dim); font-size: 12.5px; margin-top: 3px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .card-stats { font-size: 12px; color: var(--faint); margin-top: 6px; display: flex; gap: 10px; font-variant-numeric: tabular-nums; }
+  .card-stats .add { color: var(--working); }
+  .card-stats .del { color: var(--error); }
+  .card-cta { margin-top: 10px; display: flex; justify-content: flex-end; }
+  .card-cta button {
+    background: rgba(245,184,65,.12); border: 1px solid rgba(245,184,65,.45); color: var(--waiting);
+    font-weight: 600; border-radius: 999px; padding: 5px 18px;
+  }
+  .card-cta button:hover { background: rgba(245,184,65,.22); }
 
+  .status-chip {
+    display: inline-flex; align-items: center; gap: 6px;
+    font-size: 11px; font-weight: 700; letter-spacing: 1px;
+    color: var(--sc, var(--dim));
+  }
+  .status-chip i { width: 9px; height: 9px; border-radius: 50%; background: var(--sc, var(--dim)); flex: none; }
+  .status-chip .sym { font-size: 12px; font-style: normal; }
+  .status-chip.s-WORKING { --sc: var(--working); }
+  .status-chip.s-WAITING { --sc: var(--waiting); }
+  .status-chip.s-ERROR   { --sc: var(--error); }
+  .status-chip.s-DONE    { --sc: var(--done); }
+  .status-chip.s-WORKING i { animation: breathe 2s ease-in-out infinite; }
+  @keyframes breathe {
+    0%, 100% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--sc) 45%, transparent); }
+    50% { box-shadow: 0 0 9px 2px color-mix(in srgb, var(--sc) 55%, transparent); }
+  }
+
+  /* ---------- 详情 ---------- */
   #detail { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
-  #dhead { padding: 12px 16px; border-bottom: 1px solid var(--border); background: var(--panel); }
-  #dhead h2 { font-size: 15px; font-weight: 600; }
-  #dhead .sub { color: var(--dim); font-size: 12px; margin-top: 4px; display: flex; gap: 12px; flex-wrap: wrap; }
-  #stats { margin-top: 6px; font-size: 12px; color: var(--dim); }
-  #stats .add { color: var(--done); } #stats .del { color: var(--error); }
+  #dhead { padding: 14px 20px 0; border-bottom: 1px solid var(--border); background: rgba(9,15,25,.55); flex: none; }
+  #backBtn { display: none; margin-left: -8px; margin-bottom: 6px; }
+  .dhead-row { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+  #dtitle { font-size: 17px; font-weight: 700; }
+  #dsub { color: var(--dim); font-size: 12px; margin-top: 5px; display: flex; gap: 12px; flex-wrap: wrap; }
+  #dsub .elapsed { color: var(--text); }
 
-  #waitbox { margin: 10px 16px; background: #2b2416; border: 1px solid var(--waiting); border-radius: 8px; padding: 12px; display: none; }
-  #waitbox .t { color: var(--waiting); font-weight: 600; }
-  #waitbox .cmds { margin-top: 8px; display: flex; gap: 8px; }
+  .tabs { display: flex; gap: 2px; margin-top: 12px; }
+  .tabs button {
+    background: transparent; border: none; border-bottom: 2px solid transparent; border-radius: 0;
+    color: var(--dim); padding: 8px 16px; font-size: 13px; font-weight: 600;
+  }
+  .tabs button.active { color: var(--text); border-bottom-color: var(--brand); }
 
-  #timeline { flex: 1; overflow-y: auto; padding: 10px 16px; font-family: Consolas, monospace; font-size: 12.5px; }
-  .entry { padding: 3px 0; border-bottom: 1px solid #1a1f2c; display: flex; gap: 8px; }
-  .entry .time { color: #5a627a; flex: none; }
-  .entry.assistant_text { color: var(--text); }
-  .entry.tool_use { color: #67c3e8; }
-  .entry.tool_result { color: #9aa3b8; }
-  .entry.system { color: var(--waiting); }
-  .entry.user_message { color: var(--done); }
+  #waitbox {
+    margin: 12px 20px 0; background: rgba(245,184,65,.07);
+    border: 1px solid rgba(245,184,65,.4); border-radius: 14px; padding: 14px 16px; display: none;
+  }
+  #waitbox .t { color: var(--waiting); font-weight: 700; font-size: 13px; display: flex; align-items: center; gap: 8px; }
+  #waitbox .t i { width: 9px; height: 9px; border-radius: 50%; background: var(--waiting); animation: breathe 1.6s infinite; --sc: var(--waiting); }
+  #waitdetail { margin-top: 7px; font-size: 13px; word-break: break-all; }
+  #waitelapsed { color: var(--faint); font-size: 12px; margin-top: 5px; }
+  #waitbox .cmds { margin-top: 11px; display: flex; gap: 10px; }
 
-  #cmdbar { display: flex; gap: 8px; padding: 10px 16px; border-top: 1px solid var(--border); background: var(--panel); }
-  #msginput { flex: 1; background: var(--panel2); border: 1px solid var(--border); color: var(--text); border-radius: 6px; padding: 8px 10px; font-size: 13px; }
+  #timeline { flex: 1; overflow-y: auto; padding: 12px 20px; font-family: Consolas, "Cascadia Mono", monospace; font-size: 12.5px; }
+  .entry { padding: 4px 0; display: flex; gap: 10px; border-bottom: 1px solid rgba(27,39,57,.4); }
+  .entry .time { color: var(--faint); flex: none; font-size: 11px; padding-top: 2px; font-variant-numeric: tabular-nums; }
+  .entry .txt { word-break: break-word; min-width: 0; white-space: pre-wrap; }
+  .entry.assistant_text .txt { color: var(--text); }
+  .entry.user_message .txt { color: var(--done); }
+  .entry.tool_use .txt { color: #67C8E8; }
+  .entry.tool_result .txt { color: #93A0B8; }
+  .entry.system .txt { color: var(--waiting); }
 
-  #empty { flex: 1; display: flex; align-items: center; justify-content: center; color: var(--dim); }
+  .stats-card { border: 1px solid var(--border); border-radius: 14px; overflow: hidden; margin-top: 8px; }
+  .stats-row { display: flex; justify-content: space-between; gap: 16px; padding: 10px 16px; border-bottom: 1px solid rgba(27,39,57,.5); font-size: 13px; }
+  .stats-row:last-child { border-bottom: none; }
+  .stats-row .k { color: var(--dim); flex: none; }
+  .stats-row .v { text-align: right; word-break: break-all; font-variant-numeric: tabular-nums; }
+  .stats-row .v.add { color: var(--working); }
+  .stats-row .v.del { color: var(--error); }
 
+  #cmdbar { display: flex; gap: 8px; padding: 12px 20px calc(12px + env(safe-area-inset-bottom)); border-top: 1px solid var(--border); background: rgba(9,15,25,.8); flex: none; }
+  #msginput { flex: 1; }
+  #hisnote { display: none; padding: 14px 20px; border-top: 1px solid var(--border); color: var(--faint); font-size: 13px; background: rgba(9,15,25,.8); flex: none; }
+
+  #empty { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px; color: var(--faint); }
+  #empty .logo { width: 52px; height: 52px; border-radius: 16px; font-size: 18px; }
+
+  #toast {
+    position: fixed; left: 50%; bottom: 76px; transform: translateX(-50%) translateY(20px);
+    background: #1A2334; border: 1px solid var(--border); color: var(--text);
+    padding: 9px 18px; border-radius: 10px; font-size: 13px; opacity: 0;
+    transition: opacity .2s, transform .2s; pointer-events: none; z-index: 99; max-width: 80vw;
+    box-shadow: 0 6px 24px rgba(0,0,0,.5);
+  }
+  #toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+
+  ::-webkit-scrollbar { width: 8px; height: 8px; }
+  ::-webkit-scrollbar-thumb { background: #1E2B42; border-radius: 4px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+
+  /* ---------- 移动端 ---------- */
   @media (max-width: 720px) {
-    main { flex-direction: column; }
-    #side { width: 100%; max-height: 45%; border-right: none; border-bottom: 1px solid var(--border); }
-    #url { min-width: 120px; } #token { width: 130px; }
+    header { padding: 10px 14px; }
+    #runhint { display: none; }
+    .brand h1 { font-size: 14px; }
+    #cards { padding: 4px 10px 12px; }
+    main { position: relative; }
+    #side { width: 100%; border-right: none; }
+    #detail {
+      display: none; position: absolute; inset: 0; background: var(--bg);
+      z-index: 5; padding-top: env(safe-area-inset-top);
+    }
+    body.detail-open #side { display: none; }
+    body.detail-open #detail { display: flex; }
+    body.detail-open #backBtn { display: inline-block; }
+    #timeline, #dhead, #cmdbar, #waitbox, #hisnote { padding-left: 14px; padding-right: 14px; margin-left: 0; margin-right: 0; }
+    #waitbox { margin-left: 14px; margin-right: 14px; }
   }
 </style>
 </head>
 <body>
+
 <header>
-  <div id="dot"></div>
+  <div class="brand">
+    <div class="logo">CC</div>
+    <div>
+      <h1>Cloud Code</h1>
+      <div id="runhint">连接中…</div>
+    </div>
+  </div>
+  <div class="spacer"></div>
+  <div id="connChip" title="连接设置"><i></i><span id="connText">未连接</span></div>
+  <button id="addBtn" class="primary">＋ 新建</button>
+</header>
+
+<div class="panel" id="connPanel">
   <input id="url" placeholder="ws://<pc-ip>:8787/ws">
   <input id="token" placeholder="token">
   <button id="connectBtn" class="primary">连接</button>
-</header>
+</div>
+
+<div class="panel" id="newPanel">
+  <input id="cwd" placeholder="工作目录（如 D:\dev\cc-watch）">
+  <textarea id="prompt" rows="2" placeholder="初始指令，如：帮我看看当前项目结构并总结"></textarea>
+  <button id="createBtn" class="primary">创建会话</button>
+</div>
 
 <main>
   <div id="side">
-    <div id="newform">
-      <input id="cwd" placeholder="工作目录（如 D:\dev\cc-watch）">
-      <textarea id="prompt" rows="2" placeholder="初始指令，如：帮我看看当前项目结构并总结"></textarea>
-      <button id="createBtn" class="primary">新建会话</button>
-    </div>
+    <h3>会话</h3>
     <div id="cards"></div>
   </div>
-  <div id="detail" style="display:none">
+
+  <div id="detail">
     <div id="dhead">
-      <div class="row"><h2 id="dtitle"></h2><span id="dbadge" class="badge"></span></div>
-      <div class="sub"><span id="dsummary"></span><span id="delapsed"></span><span id="dmodel"></span></div>
-      <div id="stats"></div>
-    </div>
-    <div id="waitbox">
-      <div class="t">⚠ 等待确认</div>
-      <div id="waitdetail" style="margin-top:4px"></div>
-      <div id="waitelapsed" style="color:var(--dim);font-size:12px;margin-top:4px"></div>
-      <div class="cmds">
-        <button id="allowBtn" class="allow">✓ 允许</button>
-        <button id="rejectBtn" class="reject">✗ 拒绝</button>
+      <button id="backBtn" class="ghost">‹ 返回</button>
+      <div class="dhead-row">
+        <span id="dtitle"></span>
+        <span id="dbadge" class="status-chip"></span>
+      </div>
+      <div id="dsub">
+        <span id="dcwd"></span>
+        <span id="dmodel"></span>
+        <span class="elapsed" id="delapsed"></span>
+      </div>
+      <div class="tabs">
+        <button data-tab="activity" class="active">活动</button>
+        <button data-tab="log">日志</button>
+        <button data-tab="stats">统计</button>
       </div>
     </div>
+
+    <div id="waitbox">
+      <div class="t"><i></i>等待确认</div>
+      <div id="waitdetail"></div>
+      <div id="waitelapsed"></div>
+      <div class="cmds">
+        <button id="allowBtn" class="allow big">✓ 允许</button>
+        <button id="rejectBtn" class="reject big">✗ 拒绝</button>
+      </div>
+    </div>
+
     <div id="timeline"></div>
+
+    <div id="hisnote">⏳ 这是 Relay 重启前遗留的历史会话，仅可查看。</div>
     <div id="cmdbar">
-      <input id="msginput" placeholder="发送消息（追加用户输入 / 开新回合）">
+      <input id="msginput" placeholder="发送消息（追加输入 / 开新回合）">
       <button id="sendBtn" class="primary">发送</button>
-      <button id="stopBtn" class="stop">■ 停止</button>
+      <button id="stopBtn" class="ghost" title="停止会话">■</button>
     </div>
   </div>
-  <div id="empty">← 选择或新建一个会话</div>
+
+  <div id="empty">
+    <div class="logo">CC</div>
+    <div>选择左侧会话，或点「＋ 新建」开始</div>
+  </div>
 </main>
+
+<div id="toast"></div>
 
 <script>
 "use strict";
@@ -126,10 +326,18 @@ const $ = (id) => document.getElementById(id);
 let ws = null;
 let lastSeq = 0;
 let connected = false;
-let selected = null;               // session_id
-const sessions = new Map();        // session_id -> state
-const timelines = new Map();       // session_id -> [{ts, kind, text}]
+let selected = null;
+let activeTab = "activity";
+const sessions = new Map();    // session_id -> SessionState
+const timelines = new Map();   // session_id -> LogEntry[]
 let reconnectDelay = 1000;
+
+const STATUS = {
+  WORKING: { zh: "运行中", sym: "●" },
+  WAITING: { zh: "等待确认", sym: "◐" },
+  ERROR:   { zh: "错误", sym: "✕" },
+  DONE:    { zh: "已完成", sym: "✓" },
+};
 
 function uuid() {
   if (crypto.randomUUID) return crypto.randomUUID();
@@ -139,15 +347,26 @@ function uuid() {
   });
 }
 
+function toast(msg) {
+  const t = $("toast");
+  t.textContent = msg;
+  t.classList.add("show");
+  clearTimeout(toast._t);
+  toast._t = setTimeout(() => t.classList.remove("show"), 2600);
+}
+
 // ---------- 连接 ----------
 function connect() {
-  const url = $("url").value.trim() + "?token=" + encodeURIComponent($("token").value.trim());
-  setDot("wait", "连接中");
+  const urlBase = $("url").value.trim();
+  if (!urlBase || !$("token").value.trim()) { openPanel("conn"); return; }
+  const url = urlBase + "?token=" + encodeURIComponent($("token").value.trim()) +
+    (lastSeq > 0 ? "&last_seq=" + lastSeq : "");
+  setConn("wait", "连接中");
   try { ws && ws.close(); } catch {}
   ws = new WebSocket(url);
-  ws.onopen = () => { connected = true; reconnectDelay = 1000; setDot("on", "已连接"); };
+  ws.onopen = () => { connected = true; reconnectDelay = 1000; setConn("on", "已连接"); };
   ws.onclose = () => {
-    connected = false; setDot("", "已断开");
+    connected = false; setConn("", "已断开");
     scheduleReconnect();
   };
   ws.onerror = () => {};
@@ -164,28 +383,24 @@ function scheduleReconnect() {
   if (!$("url").value.trim() || !$("token").value.trim()) return;
   const delay = reconnectDelay;
   reconnectDelay = Math.min(reconnectDelay * 2, 10000);
-  setDot("wait", `${delay / 1000}s 后重连`);
-  setTimeout(() => {
-    $("url").value = $("url").value.split("?")[0];
-    connect();
-  }, delay);
+  setConn("wait", delay / 1000 + "s 后重连");
+  setTimeout(connect, delay);
 }
 
-function setDot(cls, text) {
-  $("dot").className = cls;
+function setConn(cls, text) {
+  $("connChip").className = cls;
+  $("connText").textContent = text;
   $("connectBtn").textContent = connected ? "断开" : "连接";
-  document.title = (cls === "on" ? "" : "[" + (text || "") + "] ") + "Cloud Code Relay 控制台";
 }
 
 function sendCommand(type, payload) {
-  if (!connected) return alert("未连接");
+  if (!connected) { toast("未连接"); openPanel("conn"); return false; }
   ws.send(JSON.stringify({ command_id: uuid(), type, payload, ts: Date.now() }));
+  return true;
 }
 
 function onAck(ack) {
-  if (!ack.ok && ack.error && !ack.error.startsWith("duplicate")) {
-    console.warn("command failed:", ack);
-  }
+  if (!ack.ok && ack.error && !ack.error.startsWith("duplicate")) toast("命令失败: " + ack.error);
 }
 
 // ---------- 事件处理 ----------
@@ -196,20 +411,22 @@ function onEvent(msg) {
       sessions.clear(); timelines.clear();
       for (const s of msg.payload.sessions) {
         sessions.set(s.session_id, s);
-        timelines.set(s.session_id, []);
+        timelines.set(s.session_id, msg.payload.logs[s.session_id] || []);
       }
       lastSeq = Math.max(lastSeq, msg.seq);
+      if (selected && !sessions.has(selected)) closeDetail();
       break;
     }
     case "SESSION_CREATED": {
       sessions.set(sid, {
         session_id: sid, cwd: msg.payload.cwd, initial_prompt: msg.payload.initial_prompt,
+        title: msg.payload.title || msg.payload.initial_prompt.slice(0, 24),
         model: msg.payload.model, status: "WORKING", action_summary: "启动中",
         started_at: msg.ts, updated_at: msg.ts, stats: { files_changed: 0, lines_added: 0, lines_deleted: 0 },
       });
       timelines.set(sid, []);
-      appendLog(sid, "system", `会话创建: ${msg.payload.initial_prompt.slice(0, 80)}`);
-      if (!selected) select(sid);
+      pushLog(sid, { ts: msg.ts, kind: "system", text: "会话创建" });
+      select(sid);
       break;
     }
     case "SESSION_UPDATED": {
@@ -235,13 +452,13 @@ function onEvent(msg) {
       const s = sessions.get(sid); if (!s) break;
       s.status = "WORKING";
       s.waiting_request = null;
-      appendLog(sid, "system", `已${msg.payload.decision === "allow" ? "允许" : "拒绝"} (by ${msg.payload.by})`);
+      pushLog(sid, { ts: msg.ts, kind: "system", text: "已" + (msg.payload.decision === "allow" ? "允许" : "拒绝") + " (by " + msg.payload.by + ")" });
       break;
     }
     case "SESSION_ERROR": {
       const s = sessions.get(sid); if (!s) break;
       s.status = "ERROR"; s.last_error = msg.payload.message;
-      appendLog(sid, "system", `错误: ${msg.payload.message}`);
+      pushLog(sid, { ts: msg.ts, kind: "system", text: "错误: " + msg.payload.message });
       break;
     }
     case "SESSION_DONE": {
@@ -249,102 +466,160 @@ function onEvent(msg) {
       s.status = "DONE"; s.done_reason = msg.payload.terminal_reason;
       s.duration_ms = msg.payload.duration_ms;
       if (msg.payload.stats) s.stats = msg.payload.stats;
-      appendLog(sid, "system", `完成: ${msg.payload.terminal_reason} · ${(msg.payload.duration_ms / 1000).toFixed(1)}s`);
+      pushLog(sid, { ts: msg.ts, kind: "system", text: "完成: " + msg.payload.terminal_reason + " · " + (msg.payload.duration_ms / 1000).toFixed(1) + "s" });
       break;
     }
     case "SESSION_LOG": {
-      appendLog(sid, msg.payload.kind, msg.payload.text);
+      pushLog(sid, msg.payload);
       break;
     }
   }
   render();
 }
 
-function appendLog(sid, kind, text) {
+function pushLog(sid, entry) {
   if (!timelines.has(sid)) timelines.set(sid, []);
   const list = timelines.get(sid);
-  list.push({ ts: Date.now(), kind, text });
+  list.push({ ts: entry.ts || Date.now(), kind: entry.kind, text: entry.text, tool: entry.tool });
   if (list.length > 300) list.splice(0, list.length - 300);
 }
 
 // ---------- 渲染 ----------
-function statusText(s) {
-  return { WORKING: "运行中", WAITING: "等待确认", ERROR: "错误", DONE: "已完成" }[s] || s;
+function chip(status, big) {
+  const meta = STATUS[status] || { zh: status, sym: "●" };
+  return '<span class="status-chip s-' + status + '"><i></i><span class="sym">' + meta.sym + "</span> " +
+    (big ? meta.zh + " · " + status : status) + "</span>";
 }
+
 function fmtElapsed(ms) {
   const sec = Math.floor(ms / 1000);
-  if (sec < 60) return `${sec}s`;
-  return `${Math.floor(sec / 60)}m${sec % 60}s`;
+  if (sec < 60) return sec + "s";
+  return Math.floor(sec / 60) + "m" + (sec % 60) + "s";
+}
+
+function sessionElapsed(s) {
+  if (s.status === "DONE" && s.duration_ms) return s.duration_ms;
+  if (s.historical || s.status === "ERROR") return s.updated_at - s.started_at;
+  return Date.now() - s.started_at;
+}
+
+function statsHtml(st) {
+  if (!st || st.files_changed === 0) return "";
+  return st.files_changed + " 文件 · <span class='add'>+" + st.lines_added + "</span> <span class='del'>-" + st.lines_deleted + "</span>";
 }
 
 function render() {
-  // 卡片列表
+  // 运行计数
+  let running = 0;
+  for (const s of sessions.values()) if (s.status === "WORKING" || s.status === "WAITING") running++;
+  $("runhint").textContent = running > 0 ? running + " 个会话正在运行" :
+    (sessions.size > 0 ? "暂无运行中的会话" : "等待连接");
+
   const box = $("cards");
-  box.innerHTML = "";
-  for (const s of sessions.values()) {
-    const d = document.createElement("div");
-    d.className = `card ${s.status}` + (s.session_id === selected ? " sel" : "");
-    const elapsed = s.status === "DONE" && s.duration_ms ? s.duration_ms : Date.now() - s.started_at;
-    d.innerHTML = `
-      <div class="row">
-        <span>${s.cwd.split(/[\\/]/).pop() || s.cwd}</span>
-        <span class="badge ${s.status}">● ${statusText(s.status)}</span>
-      </div>
-      <div class="summary">${escapeHtml(s.action_summary || "")}</div>
-      <div class="meta">
-        <span>${fmtElapsed(elapsed)}</span>
-        <span>${s.stats.files_changed > 0 ? `${s.stats.files_changed} 文件 +${s.stats.lines_added}/-${s.stats.lines_deleted}` : ""}</span>
-      </div>`;
-    d.onclick = () => select(s.session_id);
-    box.appendChild(d);
+  // 排序：运行中 > 等待 > 其余，同组按开始时间倒序
+  const order = { WAITING: 0, WORKING: 1, ERROR: 2, DONE: 3 };
+  const list = [...sessions.values()].sort((a, b) =>
+    (order[a.status] - order[b.status]) || (b.started_at - a.started_at));
+  const key = list.map((s) => s.session_id + ":" + s.status + ":" + Math.floor(sessionElapsed(s) / 1000) + ":" + (s.action_summary || "") + ":" + (s.waiting_request ? 1 : 0)).join("|");
+  if (box.dataset.key !== key) {
+    box.dataset.key = key;
+    box.innerHTML = "";
+    for (const s of list) {
+      const d = document.createElement("div");
+      d.dataset.sid = s.session_id;
+      d.className = "card " + s.status + (s.session_id === selected ? " sel" : "") + (s.historical ? " historical" : "");
+      const waitingText = s.waiting_request
+        ? "需要确认 " + s.waiting_request.tool_name + " — " + (s.waiting_request.input_summary || "")
+        : (s.action_summary || "");
+      d.innerHTML =
+        '<div class="card-top">' + chip(s.status) + '<span class="elapsed">' + fmtElapsed(sessionElapsed(s)) + "</span></div>" +
+        '<div class="card-title">' + escapeHtml(s.title || "") + (s.historical ? '<span class="his-badge">历史</span>' : "") + "</div>" +
+        '<div class="card-summary">' + escapeHtml(waitingText) + "</div>" +
+        '<div class="card-stats">' + statsHtml(s.stats) + "</div>" +
+        (s.status === "WAITING" && !s.historical ? '<div class="card-cta"><button>处理</button></div>' : "");
+      d.onclick = () => select(s.session_id);
+      const cta = d.querySelector(".card-cta button");
+      if (cta) cta.onclick = (e) => { e.stopPropagation(); select(s.session_id); };
+      box.appendChild(d);
+    }
+  } else {
+    // 仅刷新选中态
+    for (const el of box.children) el.classList.toggle("sel", el.dataset.sid === selected);
   }
   renderDetail();
 }
 
 function renderDetail() {
   const s = sessions.get(selected);
-  $("detail").style.display = s ? "flex" : "none";
-  $("empty").style.display = s ? "none" : "flex";
-  if (!s) return;
+  const has = !!s;
+  $("detail").style.display = has ? "flex" : "none";
+  $("empty").style.display = has ? "none" : "flex";
+  if (!has) return;
 
-  $("dtitle").textContent = s.cwd.split(/[\\/]/).pop() || s.cwd;
-  const badge = $("dbadge");
-  badge.textContent = "● " + statusText(s.status);
-  badge.className = "badge " + s.status;
-  $("dsummary").textContent = s.action_summary || "";
+  $("dtitle").textContent = s.title || "";
+  $("dbadge").outerHTML = '<span id="dbadge" class="status-chip"></span>';
+  $("dbadge").innerHTML = chip(s.status, true);
+  $("dcwd").textContent = s.cwd;
   $("dmodel").textContent = s.model || "";
-  const elapsed = s.status === "DONE" && s.duration_ms ? s.duration_ms : Date.now() - s.started_at;
-  $("delapsed").textContent = "⏱ " + fmtElapsed(elapsed);
-  $("stats").innerHTML = s.stats
-    ? `变更: ${s.stats.files_changed} 文件 · <span class="add">+${s.stats.lines_added}</span> <span class="del">-${s.stats.lines_deleted}</span>`
-    : "";
+  $("delapsed").textContent = "⏱ " + fmtElapsed(sessionElapsed(s));
 
-  // WAITING 卡片
+  // WAITING 处理框
   const wb = $("waitbox");
-  if (s.status === "WAITING" && s.waiting_request) {
+  if (s.status === "WAITING" && s.waiting_request && !s.historical) {
     wb.style.display = "block";
-    $("waitdetail").textContent = `${s.waiting_request.tool_name} — ${s.waiting_request.input_summary}`;
+    $("waitdetail").textContent = s.waiting_request.tool_name + " — " + (s.waiting_request.input_summary || "");
     const wsec = Math.floor((Date.now() - (s.waiting_request.received_at || Date.now())) / 1000);
-    $("waitelapsed").textContent = `已等待 ${wsec}s`;
+    $("waitelapsed").textContent = "已等待 " + wsec + "s" +
+      (s.waiting_request.suggestions?.length ? " · 建议: " + s.waiting_request.suggestions.join(" / ") : "");
   } else {
     wb.style.display = "none";
   }
 
-  // 时间线（增量：仅当条数变化时重建，保持滚动位置）
-  const list = timelines.get(s.session_id) || [];
+  $("hisnote").style.display = s.historical ? "block" : "none";
+  $("cmdbar").style.display = s.historical ? "none" : "flex";
+
+  // 时间线 / 统计（增量重建）
   const tl = $("timeline");
-  if (Number(tl.dataset.count || 0) !== list.length || tl.dataset.sid !== s.session_id) {
-    const nearBottom = tl.scrollHeight - tl.scrollTop - tl.clientHeight < 60;
-    tl.dataset.count = list.length;
-    tl.dataset.sid = s.session_id;
-    tl.innerHTML = list
-      .map(
-        (e) =>
-          `<div class="entry ${e.kind}"><span class="time">${new Date(e.ts).toLocaleTimeString("zh-CN", { hour12: false })}</span><span>${escapeHtml(e.text)}</span></div>`,
-      )
-      .join("");
+  if (activeTab === "stats") {
+    const statsKey = "stats:" + s.session_id + ":" + s.status + ":" + sessionElapsed(s);
+    if (tl.dataset.count !== statsKey) {
+      tl.dataset.count = statsKey;
+      tl.innerHTML = statsTabHtml(s);
+    }
+    return;
+  }
+  const full = timelines.get(s.session_id) || [];
+  const list = activeTab === "activity"
+    ? full.filter((e) => e.kind === "assistant_text" || e.kind === "user_message" || e.kind === "system")
+    : full;
+  const renderKey = s.session_id + ":" + activeTab + ":" + list.length;
+  if (tl.dataset.count !== renderKey) {
+    const nearBottom = tl.scrollHeight - tl.scrollTop - tl.clientHeight < 80;
+    tl.dataset.count = renderKey;
+    tl.innerHTML = list.length === 0
+      ? '<div style="color:var(--faint);padding:20px 4px;font-family:inherit">（暂无内容）</div>'
+      : list.map((e) =>
+          '<div class="entry ' + e.kind + '"><span class="time">' +
+          new Date(e.ts).toLocaleTimeString("zh-CN", { hour12: false }) +
+          "</span><span class='txt'>" + escapeHtml(e.text) + "</span></div>").join("");
     if (nearBottom || list.length <= 5) tl.scrollTop = tl.scrollHeight;
   }
+}
+
+function statsTabHtml(s) {
+  const rows = [
+    ["状态", (STATUS[s.status] || { zh: s.status }).zh + " · " + s.status],
+    ["目录", s.cwd],
+    ["模型", s.model || "-"],
+    ["开始时间", new Date(s.started_at).toLocaleString("zh-CN", { hour12: false })],
+    ["用时", fmtElapsed(sessionElapsed(s))],
+    ["修改文件", String(s.stats?.files_changed ?? 0)],
+    ["增删行", "+" + (s.stats?.lines_added ?? 0) + " / -" + (s.stats?.lines_deleted ?? 0)],
+    [s.status === "ERROR" ? "错误" : "结束原因", s.status === "ERROR" ? (s.last_error || "-") : (s.done_reason || "-")],
+    ["Session ID", s.session_id],
+  ];
+  return '<div class="stats-card">' + rows.map((r) =>
+    '<div class="stats-row"><span class="k">' + r[0] + '</span><span class="v">' + escapeHtml(String(r[1])) + "</span></div>").join("") + "</div>";
 }
 
 function escapeHtml(s) {
@@ -353,35 +628,63 @@ function escapeHtml(s) {
 
 function select(sid) {
   selected = sid;
+  activeTab = "activity";
+  document.querySelector(".tabs button[data-tab='activity']").classList.add("active");
+  document.querySelectorAll(".tabs button").forEach((b) => { if (b.dataset.tab !== "activity") b.classList.remove("active"); });
+  document.body.classList.add("detail-open");
+  $("timeline").dataset.count = "";
+  render();
+}
+
+function closeDetail() {
+  selected = null;
+  document.body.classList.remove("detail-open");
   render();
 }
 
 // 每秒刷新计时
-setInterval(() => {
-  if (selected) renderDetail();
-  // 卡片里的耗时也要刷新：轻量重绘
-  render();
-}, 1000);
+setInterval(render, 1000);
 
 // ---------- 交互 ----------
+function openPanel(which) {
+  $("connPanel").classList.toggle("open", which === "conn");
+  $("newPanel").classList.toggle("open", which === "new");
+}
+$("connChip").onclick = () => {
+  const open = $("connPanel").classList.contains("open");
+  openPanel(open ? "none" : "conn");
+};
+$("addBtn").onclick = () => {
+  const open = $("newPanel").classList.contains("open");
+  openPanel(open ? "none" : "new");
+  if (!open) $("prompt").focus();
+};
 $("connectBtn").onclick = () => {
-  if (connected) { try { ws.close(); } catch {} }
-  else { localStorage.setItem("ccr_url", $("url").value); localStorage.setItem("ccr_token", $("token").value); connect(); }
+  if (connected) { try { ws.close(); } catch {} return; }
+  localStorage.setItem("ccr_url", $("url").value);
+  localStorage.setItem("ccr_token", $("token").value);
+  connect();
 };
 $("createBtn").onclick = () => {
   const cwd = $("cwd").value.trim();
   const prompt = $("prompt").value.trim();
-  if (!prompt) return alert("请输入初始指令");
-  sendCommand("COMMAND_CREATE", { cwd: cwd || ".", prompt });
-  $("prompt").value = "";
+  if (!prompt) { toast("请输入初始指令"); return; }
+  if (sendCommand("COMMAND_CREATE", { cwd: cwd || ".", prompt })) {
+    localStorage.setItem("ccr_cwd", cwd);
+    $("prompt").value = "";
+    openPanel("none");
+  }
 };
 $("sendBtn").onclick = () => {
   const text = $("msginput").value.trim();
   if (!text || !selected) return;
-  sendCommand("COMMAND_MESSAGE", { session_id: selected, text });
-  $("msginput").value = "";
+  if (sendCommand("COMMAND_MESSAGE", { session_id: selected, text })) {
+    const s = sessions.get(selected);
+    if (s) pushLog(selected, { ts: Date.now(), kind: "user_message", text });
+    $("msginput").value = "";
+  }
 };
-$("msginput").addEventListener("keydown", (e) => { if (e.key === "Enter") $("sendBtn").click(); });
+$("msginput").addEventListener("keydown", (e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); $("sendBtn").click(); } });
 $("stopBtn").onclick = () => { if (selected) sendCommand("COMMAND_STOP", { session_id: selected }); };
 $("allowBtn").onclick = () => {
   const s = sessions.get(selected);
@@ -391,14 +694,26 @@ $("rejectBtn").onclick = () => {
   const s = sessions.get(selected);
   if (s && s.waiting_request) sendCommand("COMMAND_REJECT", { session_id: selected, request_id: s.waiting_request.request_id });
 };
+$("backBtn").onclick = closeDetail;
+document.querySelectorAll(".tabs button").forEach((b) => {
+  b.onclick = () => {
+    activeTab = b.dataset.tab;
+    document.querySelectorAll(".tabs button").forEach((x) => x.classList.toggle("active", x === b));
+    $("timeline").dataset.count = "";
+    renderDetail();
+  };
+});
 
 // ---------- 初始化 ----------
 (function init() {
   const params = new URLSearchParams(location.search);
   const qToken = params.get("token") || "";
-  $("url").value = localStorage.getItem("ccr_url") || (location.hostname ? `ws://${location.hostname}:${location.port}/ws` : "");
+  $("url").value = localStorage.getItem("ccr_url") ||
+    (location.hostname ? "ws://" + location.hostname + ":" + location.port + "/ws" : "");
   $("token").value = qToken || localStorage.getItem("ccr_token") || "";
+  $("cwd").value = localStorage.getItem("ccr_cwd") || "";
   if ($("url").value && $("token").value) connect();
+  else openPanel("conn");
 })();
 </script>
 </body>

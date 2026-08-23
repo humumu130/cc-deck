@@ -1,14 +1,30 @@
 import type { Envelope, EventType } from "./types.js";
+import { appendLine } from "./history.js";
 
 type Listener = (env: Envelope) => void;
 
-// 全局 seq 计数 + 环形缓冲 + 订阅/补发
+export interface EventBusOptions {
+  capacity?: number;
+  // 重启恢复：历史事件预填缓冲（seq 延续，重连客户端可无缝补发）
+  preload?: Envelope[];
+  // 落盘路径：设置后每个事件追加写入 ndjson
+  persistPath?: string;
+}
+
+// 全局 seq 计数 + 环形缓冲 + 订阅/补发 + 可选持久化
 export class EventBus {
   private seq = 0;
   private buffer: Envelope[] = [];
   private listeners = new Set<Listener>();
 
-  constructor(private capacity = 500) {}
+  constructor(private opts: EventBusOptions = {}) {
+    const capacity = opts.capacity ?? 500;
+    if (opts.preload?.length) {
+      const sorted = [...opts.preload].sort((a, b) => a.seq - b.seq);
+      this.seq = sorted[sorted.length - 1].seq;
+      this.buffer = sorted.slice(Math.max(0, sorted.length - capacity));
+    }
+  }
 
   emit<P>(sessionId: string, type: EventType, payload: P): Envelope {
     const env: Envelope = {
@@ -19,8 +35,15 @@ export class EventBus {
       payload,
     };
     this.buffer.push(env);
-    if (this.buffer.length > this.capacity) {
-      this.buffer.splice(0, this.buffer.length - this.capacity);
+    if (this.buffer.length > (this.opts.capacity ?? 500)) {
+      this.buffer.splice(0, this.buffer.length - (this.opts.capacity ?? 500));
+    }
+    if (this.opts.persistPath) {
+      try {
+        appendLine(this.opts.persistPath, env);
+      } catch {
+        // 落盘失败不影响在线广播
+      }
     }
     for (const l of this.listeners) {
       try {

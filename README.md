@@ -15,9 +15,12 @@ LAN 直连全链路已跑通：Web 调试台 ↔ WebSocket ↔ Relay ↔ Claude 
         💻 PC Relay（relay/）
            ├─ SessionManager   多会话表 + 状态机（WORKING/WAITING/ERROR/DONE）
            ├─ AgentSession     Agent SDK streaming 模式；canUseTool 挂起 → 远程 Allow/Reject
-           ├─ EventBus         全局 seq + 环形缓冲(500) + 断线补发(last_seq)
+           ├─ EventBus         全局 seq + 环形缓冲(500) + 断线补发(last_seq) + events.ndjson 落盘
            └─ ws-server        token 鉴权 + 命令路由 + 全量快照
 ```
+
+会话历史持久化在 `relay/data/events.ndjson`（gitignore）：Relay 重启后自动恢复历史会话
+（含时间线，标记为"历史"不可操作），seq 跨重启延续，断线客户端可无缝补发。
 
 ## 快速开始
 
@@ -43,9 +46,10 @@ npm run dev
 
 ### 调试台功能
 
-- 新建会话（指定 cwd + 初始指令）；会话卡片四态色（运行中/等待确认/错误/完成）
-- 时间线（助手文本 / 工具调用 / 工具结果 / 系统事件）
-- WAITING 卡片：远程 Allow / Reject；文件变更统计 `+N -M`
+- 视觉：OLED 黑底 + 蓝紫品牌色 + 四态色（WORKING 青绿呼吸 / WAITING 琥珀 / ERROR 红 / DONE 蓝）
+- 新建会话（指定 cwd + 初始指令）；会话卡片带自动标题 + 四态徽标 + `N 文件 · +N -M`
+- WAITING 卡片内联"处理"入口；详情页 活动 / 日志 / 统计 三 Tab
+- 历史会话（Relay 重启前遗留）灰显为"历史"，时间线完整可查、不可操作
 - 追加消息（开新回合）、停止会话；断线自动重连（携带 last_seq 补发）
 
 ## 协议
@@ -62,6 +66,7 @@ npm run spike          # 验证智谱 env 继承 + 模型自报
 npm run test:bus       # EventBus seq/环形缓冲/补发
 npm run test:sessions  # 双会话并发全生命周期（含 WAITING→Allow、diff 统计）
 npm run test:ws        # WS 鉴权/快照/断线补发/幂等/容错
+npm run test:history   # 历史持久化：压缩/重放/跨重启 seq/adopt
 npx tsx scripts/smoke-e2e.ts <token>   # 对运行中的 dev server 走浏览器等价全流程
 ```
 
