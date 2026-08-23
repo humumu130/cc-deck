@@ -45,6 +45,7 @@ export function startServer(
     ".webmanifest": "application/manifest+json; charset=utf-8",
     ".png": "image/png",
     ".svg": "image/svg+xml",
+    ".apk": "application/vnd.android.package-archive",
   };
   // /m 静态托管（移动端 App 壳），仅允许 mobile/ 目录内已知扩展
   const serveMobile = (url: URL, res: ServerResponse): boolean => {
