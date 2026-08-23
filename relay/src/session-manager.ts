@@ -65,10 +65,14 @@ export class SessionManager {
 
   private bridge: {
     resolvePending: (sessionId: string, requestId: string, decision: "allow" | "deny", reason?: string) => boolean;
+    extInput: (sessionId: string, text: string) => { ok: boolean; error?: string };
+    extStop: (sessionId: string) => { ok: boolean; error?: string };
   } | null = null;
 
   setBridge(b: {
     resolvePending: (sessionId: string, requestId: string, decision: "allow" | "deny", reason?: string) => boolean;
+    extInput: (sessionId: string, text: string) => { ok: boolean; error?: string };
+    extStop: (sessionId: string) => { ok: boolean; error?: string };
   }): void {
     this.bridge = b;
   }
@@ -76,7 +80,12 @@ export class SessionManager {
   // 不存在则注册外部会话（bridge.ts 调用）；返回当前状态
   ensureExternal(id: string, cwd: string, prompt: string, cliSessionId = ""): SessionState {
     const existing = this.sessions.get(id);
-    if (existing) return existing.state;
+    if (existing) {
+      // Relay 重启后 adopt 为 historical 的外部会话：真实 hook 事件回来了，恢复可操作
+      existing.state.historical = false;
+      if (!existing.state.relay_session_id && cliSessionId) existing.state.relay_session_id = cliSessionId;
+      return existing.state;
+    }
     const state: SessionState = {
       session_id: id,
       relay_session_id: cliSessionId,
@@ -169,6 +178,17 @@ export class SessionManager {
     });
   }
 
+  setExternalCliPid(id: string, pid: number): void {
+    const s = this.sessions.get(id);
+    if (!s || s.state.cli_pid === pid) return;
+    s.state.cli_pid = pid;
+  }
+
+  clearExternalCliPid(id: string): void {
+    const s = this.sessions.get(id);
+    if (s) s.state.cli_pid = undefined;
+  }
+
   handleCommand(cmd: Command, by: string): CommandAckPayload {
     // 幂等去重：重复 command_id 直接返回已受理
     if (this.processedCommands.has(cmd.command_id)) {
@@ -237,6 +257,28 @@ export class SessionManager {
           }
           this.setRemoteMode(cmd.payload.session_id, cmd.payload.enabled);
           return { command_id: cmd.command_id, ok: true };
+        }
+        case "COMMAND_EXT_INPUT": {
+          const s = this.require(cmd.payload.session_id);
+          if (!s.state.external) {
+            return { command_id: cmd.command_id, ok: false, error: "托管会话请使用 COMMAND_MESSAGE" };
+          }
+          if (!this.bridge) {
+            return { command_id: cmd.command_id, ok: false, error: "bridge 未就绪" };
+          }
+          const r = this.bridge.extInput(cmd.payload.session_id, cmd.payload.text);
+          return { command_id: cmd.command_id, ok: r.ok, error: r.error };
+        }
+        case "COMMAND_EXT_STOP": {
+          const s = this.require(cmd.payload.session_id);
+          if (!s.state.external) {
+            return { command_id: cmd.command_id, ok: false, error: "托管会话请使用 COMMAND_STOP" };
+          }
+          if (!this.bridge) {
+            return { command_id: cmd.command_id, ok: false, error: "bridge 未就绪" };
+          }
+          const r = this.bridge.extStop(cmd.payload.session_id);
+          return { command_id: cmd.command_id, ok: r.ok, error: r.error };
         }
       }
     } catch (e) {

@@ -93,7 +93,7 @@ export function reduceHistory(events: Envelope[]): Map<string, ReplayedSession> 
   for (const e of events) {
     let rs = out.get(e.session_id);
     if (!rs && e.type === "SESSION_CREATED") {
-      const p = e.payload as { cwd: string; initial_prompt: string; model: string; title?: string };
+      const p = e.payload as { cwd: string; initial_prompt: string; model: string; title?: string; external?: boolean };
       rs = {
         state: {
           session_id: e.session_id,
@@ -110,6 +110,7 @@ export function reduceHistory(events: Envelope[]): Map<string, ReplayedSession> 
         },
         logs: [],
       };
+      if (p.external) rs.state.external = true;
       out.set(e.session_id, rs);
       continue;
     }
@@ -118,10 +119,11 @@ export function reduceHistory(events: Envelope[]): Map<string, ReplayedSession> 
     s.updated_at = e.ts;
     switch (e.type) {
       case "SESSION_UPDATED": {
-        const p = e.payload as { status: SessionState["status"]; action_summary: string; stats: SessionState["stats"] };
+        const p = e.payload as { status: SessionState["status"]; action_summary: string; stats: SessionState["stats"]; remote_mode?: boolean };
         s.status = p.status;
         s.action_summary = p.action_summary;
         if (p.stats) s.stats = p.stats;
+        if (p.remote_mode !== undefined) s.remote_mode = p.remote_mode;
         break;
       }
       case "SESSION_WAITING": {

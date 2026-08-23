@@ -9,3 +9,5 @@ Thumbs.db
 .colors.txt
 .sample-colors.ps1
 .scan_colors.py
+*.exe
+.claude/

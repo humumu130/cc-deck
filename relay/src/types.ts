@@ -44,6 +44,7 @@ export interface SessionState {
   historical?: boolean;       // true = Relay 重启前遗留的历史会话，不可操作
   external?: boolean;         // true = 用户自开 CLI 会话（hooks 桥接），仅单向可见 + 远程审批
   remote_mode?: boolean;      // external 会话的远程审批开关（默认关）
+  cli_pid?: number;           // external 会话的 CLI 进程 pid（终端按键注入用）
 }
 
 // 时间线历史条目（持久化 & 快照下发用）
@@ -149,7 +150,9 @@ export type CommandType =
   | "COMMAND_STOP"
   | "COMMAND_CONTINUE"
   | "COMMAND_REJECT"
-  | "COMMAND_EXT_MODE";
+  | "COMMAND_EXT_MODE"
+  | "COMMAND_EXT_INPUT"
+  | "COMMAND_EXT_STOP";
 
 export interface CommandBase {
   command_id: string;   // 客户端生成（uuid），Relay 按此去重
@@ -188,13 +191,27 @@ export interface ExtModeCommand extends CommandBase {
   payload: { session_id: string; enabled: boolean };
 }
 
+// 外部会话输入注入（空闲时敲进终端；忙时排队，回合结束自动发送）
+export interface ExtInputCommand extends CommandBase {
+  type: "COMMAND_EXT_INPUT";
+  payload: { session_id: string; text: string };
+}
+
+// 外部会话打断（向终端注入 Esc）
+export interface ExtStopCommand extends CommandBase {
+  type: "COMMAND_EXT_STOP";
+  payload: { session_id: string };
+}
+
 export type Command =
   | CreateCommand
   | MessageCommand
   | StopCommand
   | ContinueCommand
   | RejectCommand
-  | ExtModeCommand;
+  | ExtModeCommand
+  | ExtInputCommand
+  | ExtStopCommand;
 
 // hooks 桥接：bridge-hook.mjs -> POST /bridge/hook 的请求体（token 走 x-bridge-token header）
 export interface BridgeEvent {
@@ -208,6 +225,7 @@ export interface BridgeEvent {
   tool_response?: unknown;     // PostToolUse
   message?: string;            // Notification
   reason?: string;             // SessionEnd
+  cli_pid?: number;            // hook 侧定位的 CLI 进程 pid（祖先解析+按 session_id 缓存）
 }
 
 // ---------- 命令回执（Relay -> 客户端，确认命令已受理） ----------

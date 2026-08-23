@@ -1,5 +1,7 @@
 // hooks 桥接全链路测试：模拟 bridge-hook.mjs 的 POST 序列 + WS 客户端命令
 import { randomUUID } from "node:crypto";
+import { readFileSync, rmSync } from "node:fs";
+import { fileURLToPath } from "node:url";
 import { WebSocket } from "ws";
 import { EventBus } from "../src/event-bus.js";
 import { SessionManager } from "../src/session-manager.js";
@@ -17,9 +19,21 @@ function assert(cond: boolean, msg: string): void {
 
 const wait = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
 
+const fakeLog = (): string[][] => {
+  try {
+    return readFileSync(INJECT_LOG, "utf-8").trim().split(/\r?\n/).filter(Boolean).map((l) => JSON.parse(l));
+  } catch {
+    return [];
+  }
+};
+
 process.env.CCR_PORT = "8798";
 process.env.CCR_TOKEN = "test-token-123";
 process.env.CCR_BRIDGE_TOKEN = "bridge-token-456";
+process.env.CCR_INJECT_CMD = fileURLToPath(new URL("./fake-injector.mjs", import.meta.url));
+const INJECT_LOG = fileURLToPath(new URL("../data/test-inject.log", import.meta.url));
+process.env.CCR_INJECT_LOG = INJECT_LOG;
+rmSync(INJECT_LOG, { force: true });
 const cfg = loadConfig();
 const bus = new EventBus();
 const mgr = new SessionManager(bus, cfg);
@@ -170,7 +184,58 @@ await wait(150);
 const done = findEvt("SESSION_DONE") as Envelope<"SESSION_DONE", { duration_ms: number }> | undefined;
 assert(!!done && done.payload.duration_ms >= 0, "Stop → DONE");
 
-// 15. SessionEnd → log
+// 15. cli_pid 捕获：事件携带 cli_pid → 状态存储（新回合 WORKING）
+await hook({ event: "UserPromptSubmit", prompt: "看看这个目录", cli_pid: 4321 });
+await wait(150);
+assert(mgr.snapshot().find((s) => s.session_id === extId("cli-1"))?.cli_pid === 4321, "cli_pid captured");
+
+// 16. 忙时 EXT_INPUT → 排队 ack，不注入
+const qId = send("COMMAND_EXT_INPUT", { session_id: extId("cli-1"), text: "排队消息A" });
+assert((await waitAck(qId)).ok, "EXT_INPUT queued acked");
+await wait(300);
+assert(fakeLog().length === 0, "no injection while WORKING");
+assert(events.some((e) => e.type === "SESSION_LOG" && String((e.payload as { text: string }).text).includes("已排队")), "queue logged");
+
+// 17. EXT_STOP（WORKING）→ 注入 Esc
+const escId = send("COMMAND_EXT_STOP", { session_id: extId("cli-1") });
+assert((await waitAck(escId)).ok, "EXT_STOP acked");
+await wait(300);
+assert(fakeLog().some((a) => a[0] === "4321" && a[1] === "--esc"), "esc injected");
+
+// 18. Stop → DONE 后自动 flush 队列（末条带回车）
+await hook({ event: "Stop" });
+await wait(800);
+const fl18 = fakeLog().filter((a) => a[1] === "排队消息A");
+assert(fl18.length === 1 && fl18[0][0] === "4321" && !fl18[0].includes("noenter"), "queued msg flushed with enter");
+
+// 19. 空闲直达：DONE 状态 EXT_INPUT 立即注入
+const dId = send("COMMAND_EXT_INPUT", { session_id: extId("cli-1"), text: "空闲直发" });
+assert((await waitAck(dId)).ok, "EXT_INPUT idle acked");
+await wait(800);
+assert(fakeLog().some((a) => a[1] === "空闲直发"), "idle injection direct");
+
+// 20. 无 cli_pid → 拒绝（等该会话下次活动定位）
+await hook({ event: "UserPromptSubmit", prompt: "无 pid 会话", session_id: "cli-2" });
+await wait(150);
+const noPidId = send("COMMAND_EXT_INPUT", { session_id: extId("cli-2"), text: "x" });
+const ack20 = await waitAck(noPidId);
+assert(ack20.ok === false && (ack20.error ?? "").includes("CLI 进程"), "EXT_INPUT without pid rejected");
+const noStopId = send("COMMAND_EXT_STOP", { session_id: extId("cli-2") });
+assert((await waitAck(noStopId)).ok === false, "EXT_STOP without pid rejected");
+await hook({ event: "SessionEnd", session_id: "cli-2", reason: "clear" });
+
+// 21. 注入失败（attach fail）→ 清 pid + 弃队列 + 日志
+await hook({ event: "UserPromptSubmit", prompt: "要失败的会话", session_id: "cli-3", cli_pid: 424242 });
+await wait(150);
+const fId = send("COMMAND_EXT_INPUT", { session_id: extId("cli-3"), text: "会失败" });
+assert((await waitAck(fId)).ok, "EXT_INPUT queued (will fail)");
+await hook({ event: "Stop", session_id: "cli-3" });
+await wait(800);
+assert(fakeLog().some((a) => a[0] === "424242"), "inject attempted on dead pid");
+assert(mgr.snapshot().find((s) => s.session_id === extId("cli-3"))?.cli_pid === undefined, "pid cleared on failure");
+assert(events.some((e) => e.type === "SESSION_LOG" && String((e.payload as { text: string }).text).includes("注入失败")), "failure logged");
+
+// 22. SessionEnd → log
 await hook({ event: "SessionEnd", reason: "clear" });
 await wait(150);
 assert(events.some((e) => e.type === "SESSION_LOG" && String((e.payload as { text: string }).text).includes("会话结束")), "SessionEnd logged");

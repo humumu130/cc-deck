@@ -590,12 +590,16 @@ function renderDetail() {
 
   // 外部会话：远程审批开关；隐藏消息/停止
   const extBtn = $("extModeBtn");
-  extBtn.style.display = s.external && !s.historical ? "inline-block" : "none";
+  extBtn.style.display = s.external ? "inline-block" : "none";
   extBtn.textContent = "远程审批：" + (s.remote_mode ? "开" : "关");
   extBtn.className = s.remote_mode ? "primary" : "ghost";
   $("hisnote").style.display = s.historical ? "block" : s.external ? "block" : "none";
-  if (s.external) $("hisnote").textContent = "Ⓑ 外部会话（hooks 桥接）：单向可见、不能发消息/停止。开启远程审批且手机在线时，Bash/Edit 等敏感工具会等你远程 Allow/Reject；终端切到 skip-permissions 模式则完全放行。要从手机发指令，请点右上「＋ 新建」创建可交互会话。";
-  $("cmdbar").style.display = s.historical || s.external ? "none" : "flex";
+  if (s.external) $("hisnote").textContent = "Ⓑ 外部会话（hooks 桥接）：可通过下方输入框向该终端注入文字（空闲时立即发送，忙碌时排队、回合结束后自动发送）。开启远程审批且手机在线时，Bash/Edit 等敏感工具会等你远程 Allow/Reject；终端切到 skip-permissions 模式则完全放行。";
+  $("cmdbar").style.display = s.historical && !s.external ? "none" : "flex";
+  $("msginput").placeholder = s.external
+    ? "注入到终端（空闲时自动发送，忙碌时排队）"
+    : "发送消息（追加输入 / 开新回合）";
+  $("stopBtn").title = s.external ? "注入 Esc 打断" : "停止会话";
 
   // 时间线 / 统计（增量重建）
   const tl = $("timeline");
@@ -697,14 +701,24 @@ $("createBtn").onclick = () => {
 $("sendBtn").onclick = () => {
   const text = $("msginput").value.trim();
   if (!text || !selected) return;
+  const s = sessions.get(selected);
+  if (s?.external) {
+    // 注入路径：时间线由 hook 的 UserPromptSubmit / 排队日志回填，不本地预写
+    if (sendCommand("COMMAND_EXT_INPUT", { session_id: selected, text })) $("msginput").value = "";
+    return;
+  }
   if (sendCommand("COMMAND_MESSAGE", { session_id: selected, text })) {
-    const s = sessions.get(selected);
-    if (s) pushLog(selected, { ts: Date.now(), kind: "user_message", text });
+    pushLog(selected, { ts: Date.now(), kind: "user_message", text });
     $("msginput").value = "";
   }
 };
 $("msginput").addEventListener("keydown", (e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); $("sendBtn").click(); } });
-$("stopBtn").onclick = () => { if (selected) sendCommand("COMMAND_STOP", { session_id: selected }); };
+$("stopBtn").onclick = () => {
+  if (!selected) return;
+  const s = sessions.get(selected);
+  if (s?.external) sendCommand("COMMAND_EXT_STOP", { session_id: selected });
+  else sendCommand("COMMAND_STOP", { session_id: selected });
+};
 $("allowBtn").onclick = () => {
   const s = sessions.get(selected);
   if (s && s.waiting_request) sendCommand("COMMAND_CONTINUE", { session_id: selected, request_id: s.waiting_request.request_id });
