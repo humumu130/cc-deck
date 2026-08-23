@@ -594,7 +594,7 @@ function renderDetail() {
   extBtn.textContent = "远程审批：" + (s.remote_mode ? "开" : "关");
   extBtn.className = s.remote_mode ? "primary" : "ghost";
   $("hisnote").style.display = s.historical ? "block" : s.external ? "block" : "none";
-  if (s.external) $("hisnote").textContent = "Ⓑ 外部会话（hooks 桥接）：单向可见。开启远程审批且手机在线时，Bash/Edit 等敏感工具会等你远程 Allow/Reject；终端切到 skip-permissions 模式则完全放行。";
+  if (s.external) $("hisnote").textContent = "Ⓑ 外部会话（hooks 桥接）：单向可见、不能发消息/停止。开启远程审批且手机在线时，Bash/Edit 等敏感工具会等你远程 Allow/Reject；终端切到 skip-permissions 模式则完全放行。要从手机发指令，请点右上「＋ 新建」创建可交互会话。";
   $("cmdbar").style.display = s.historical || s.external ? "none" : "flex";
 
   // 时间线 / 统计（增量重建）
