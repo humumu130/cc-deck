@@ -1,9 +1,17 @@
 #!/usr/bin/env node
 // Cloud Code Relay bridge hook：用户自开 CLI 会话 -> Relay 单向桥接
 // 设计约束：任何情况下静默 exit 0，绝不干扰 CLI（bridge.json 不存在 = Relay 没跑，立即退出）
-import { readFileSync } from "node:fs";
+import { readFileSync, appendFileSync } from "node:fs";
+
+// 诊断日志（排查 hooks 是否触发/为何失败；确认链路稳定后可移除）
+function diag(line) {
+  try {
+    appendFileSync(new URL("../data/hook-debug.log", import.meta.url), `${new Date().toISOString()} ${line}\n`);
+  } catch {}
+}
 
 async function main() {
+  diag("invoked");
   const stdin = await new Promise((resolve) => {
     let data = "";
     process.stdin.setEncoding("utf-8");
@@ -15,18 +23,21 @@ async function main() {
   let j;
   try {
     j = JSON.parse(stdin);
-  } catch {
+  } catch (e) {
+    diag("stdin parse fail: " + (e?.message ?? e) + " len=" + stdin.length);
     return;
   }
 
   let cfg;
   try {
     cfg = JSON.parse(readFileSync(new URL("../data/bridge.json", import.meta.url), "utf-8"));
-  } catch {
+  } catch (e) {
+    diag("bridge.json fail: " + (e?.message ?? e));
     return; // Relay 未运行
   }
 
   const event = j.hook_event_name ?? "";
+  diag(`event=${event} session=${(j.session_id ?? "").slice(0, 8)} mode=${j.permission_mode ?? ""}`);
   const body = {
     event,
     session_id: j.session_id ?? "",
@@ -49,7 +60,11 @@ async function main() {
       body: JSON.stringify(body),
     }),
     new Promise((_, rej) => setTimeout(() => rej(new Error("timeout")), waitMs).unref?.()),
-  ]).catch(() => null);
+  ]).catch((e) => {
+    diag("post fail: " + (e?.message ?? e));
+    return null;
+  });
+  if (res) diag(`post ok: ${res.status}`);
 
   // 仅 PreToolUse 需要把决定回给 CLI；其余事件纯旁路
   if (event === "PreToolUse" && res && res.ok) {
