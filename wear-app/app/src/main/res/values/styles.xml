@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <style name="Theme.CcWatch" parent="@android:style/Theme.DeviceDefault.NoActionBar">
+        <item name="android:windowBackground">#050B12</item>
+    </style>
+</resources>

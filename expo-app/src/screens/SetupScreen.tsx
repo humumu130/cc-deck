@@ -5,7 +5,7 @@ import { LinearGradient } from "expo-linear-gradient";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { withA, type ThemeColors } from "../theme";
 import { useTheme, useThemeStyles } from "../theme-context";
-import { store, type ServerEntry } from "../store";
+import { store, useRelay, type ServerEntry } from "../store";
 import { uuid } from "../fmt";
 import { useKbHeight } from "../kb";
 
@@ -24,6 +24,7 @@ function hostOf(wsUrl: string): string {
 export default function SetupScreen({ onClose }: Props) {
   const { c } = useTheme();
   const s = useThemeStyles(makeStyles);
+  const snap = useRelay();
   const [servers, setServers] = useState<ServerEntry[]>([]);
   const [activeId, setActiveId] = useState<string | null>(null);
   const [name, setName] = useState("");
@@ -42,6 +43,10 @@ export default function SetupScreen({ onClose }: Props) {
       if (v === "0") setRemember(false);
     });
   }, []);
+  // 配对完成后 store 已更新条目，这里同步刷新列表（显示 ☁ 徽标）
+  useEffect(() => {
+    void reload();
+  }, [snap.cloudMsg]);
 
   // 返回手势/返回键回到主界面（仅从 ⚙ 进入时；首次配置无路可退）
   useEffect(() => {
@@ -118,6 +123,7 @@ export default function SetupScreen({ onClose }: Props) {
                       <View style={s.srvHead}>
                         {active ? <View style={[s.srvDot, { backgroundColor: c.done }]} /> : null}
                         <Text style={s.srvName} numberOfLines={1}>{e.name}</Text>
+                        {e.cloud ? <Text style={s.srvCloud}>☁</Text> : null}
                       </View>
                       <Text style={s.srvUrl} numberOfLines={1}>{e.wsUrl}</Text>
                     </Pressable>
@@ -127,6 +133,25 @@ export default function SetupScreen({ onClose }: Props) {
                   </View>
                 );
               })}
+              <View style={s.pairRow}>
+                <Pressable
+                  style={[s.pairBtn, !(snap.connected && snap.channel === "lan") && s.pairBtnOff]}
+                  disabled={snap.cloudBusy || !(snap.connected && snap.channel === "lan")}
+                  android_ripple={{ color: c.tintSoft, borderless: false, radius: 17 }}
+                  onPress={() => void store.pairCloud()}
+                >
+                  <Text style={s.pairBtnT}>
+                    {snap.cloudBusy ? "配对中…" : servers.find((e) => e.id === activeId)?.cloud ? "重新配对云桥" : "配对云桥"}
+                  </Text>
+                </Pressable>
+              </View>
+              {snap.cloudMsg ? (
+                <Pressable hitSlop={6} onPress={() => store.clearCloudMsg()}>
+                  <Text style={s.pairMsg} numberOfLines={2}>{snap.cloudMsg}</Text>
+                </Pressable>
+              ) : !(snap.connected && snap.channel === "lan") ? (
+                <Text style={s.pairHint}>云桥配对需先在同一局域网内连接</Text>
+              ) : null}
             </View>
           ) : null}
 
@@ -210,6 +235,16 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
   srvUrl: { color: c.faint, fontSize: 11, marginTop: 2 },
   srvDel: { width: 40, height: 44, alignItems: "center", justifyContent: "center" },
   srvDelT: { color: c.faint, fontSize: 15 },
+  srvCloud: { color: c.done, fontSize: 12 },
+  pairRow: { marginTop: 4, alignSelf: "flex-start" },
+  pairBtn: {
+    paddingHorizontal: 16, paddingVertical: 7, borderRadius: 17, borderWidth: 1,
+    borderColor: withA(c.brandA, 0.55), backgroundColor: withA(c.brandA, 0.06),
+  },
+  pairBtnOff: { borderColor: c.line, backgroundColor: "transparent" },
+  pairBtnT: { color: c.dim, fontSize: 13, fontWeight: "600" },
+  pairMsg: { color: c.dim, fontSize: 12, marginTop: 8 },
+  pairHint: { color: c.faint, fontSize: 12, marginTop: 8 },
   field: { width: "100%", maxWidth: 340, marginBottom: 12 },
   input: {
     backgroundColor: c.panel2, borderWidth: 1, borderColor: c.line, borderRadius: 12,

@@ -1,0 +1,19 @@
+{
+  "name": "cc-cloud-bridge",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "tsx src/index.ts",
+    "test:cloud": "tsx scripts/test-cloud.ts"
+  },
+  "dependencies": {
+    "tsx": "latest",
+    "ws": "latest"
+  },
+  "devDependencies": {
+    "@types/node": "latest",
+    "@types/ws": "latest",
+    "typescript": "latest"
+  }
+}

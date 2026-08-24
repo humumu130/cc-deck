@@ -1,0 +1,19 @@
+{
+  "name": "cc-cloud-bridge-cf",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "wrangler dev --port 8791",
+    "deploy": "wrangler deploy",
+    "test:cloud": "tsx scripts/test-cloud.ts"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "latest",
+    "@types/ws": "latest",
+    "tsx": "latest",
+    "typescript": "latest",
+    "wrangler": "latest",
+    "ws": "latest"
+  }
+}

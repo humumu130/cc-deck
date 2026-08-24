@@ -10,10 +10,12 @@
     "test:sessions": "tsx scripts/test-sessions.ts",
     "test:ws": "tsx scripts/test-ws.ts",
     "test:history": "tsx scripts/test-history.ts",
-    "test:bridge": "tsx scripts/test-bridge.ts"
+    "test:bridge": "tsx scripts/test-bridge.ts",
+    "test:cloud": "tsx scripts/test-cloud.ts"
   },
   "dependencies": {
     "@anthropic-ai/claude-agent-sdk": "latest",
+    "tweetnacl": "^1.0.3",
     "ws": "latest"
   },
   "devDependencies": {

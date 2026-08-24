@@ -3,7 +3,7 @@ import { BackHandler, Pressable, ScrollView, StyleSheet, Text, TextInput, View }
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { STATUS_ZH, statusColor, withA, type ThemeColors } from "../theme";
 import { useTheme, useThemeStyles } from "../theme-context";
-import { fmtClock, fmtElapsed, sessionElapsed } from "../fmt";
+import { fmtClock, fmtElapsed, fmtTok, sessionElapsed } from "../fmt";
 import { store, useRelay } from "../store";
 import type { LogEntry, SessionState } from "../protocol";
 import { useKbHeight } from "../kb";
@@ -27,13 +27,6 @@ function matchFilter(kind: string, f: LogFilter): boolean {
   if (f === "tool") return kind === "tool_use" || kind === "tool_result";
   if (f === "msg") return kind === "assistant_text" || kind === "user_message";
   return kind === "system";
-}
-
-function fmtTok(n: number | undefined): string {
-  if (n === undefined) return "—";
-  if (n >= 1_000_000) return (n / 1_000_000).toFixed(1) + "M";
-  if (n >= 1000) return (n / 1000).toFixed(1) + "k";
-  return String(n);
 }
 
 function Row({ k, v, vc }: { k: string; v: string; vc?: string }) {
@@ -239,7 +232,7 @@ export default function DetailScreen({ sid, onBack }: { sid: string; onBack: () 
               ) : s.status === "WAITING" && s.waiting_request ? (
                 <LiveStatusLine summary={`等待确认：${s.waiting_request.tool_name}`} startedAt={s.waiting_request.received_at} color={c.waiting} />
               ) : null}
-              <Row k="当前动作" v={s.action_summary || "—"} />
+              {s.status !== "WORKING" ? <Row k="当前动作" v={s.action_summary || "—"} /> : null}
               {s.status === "ERROR" && s.last_error ? <Row k="错误" v={s.last_error} vc={c.error} /> : null}
               {s.status === "DONE" ? <Row k="结束原因" v={s.done_reason || "—"} /> : null}
             </View>
@@ -284,8 +277,8 @@ export default function DetailScreen({ sid, onBack }: { sid: string; onBack: () 
         )}
       </ScrollView>
 
-      {/* 底部命令栏：edge-to-edge 下 adjustResize 失效，用键盘 insets 高度手动抬升 */}
-      <View pointerEvents="box-none" style={{ paddingBottom: kb > 0 ? kb : insets.bottom }}>
+      {/* 底部命令栏：edge-to-edge 下 adjustResize 失效，键盘 insets 高度 translateY 直接抬升 */}
+      <View pointerEvents="box-none" style={{ paddingBottom: insets.bottom, transform: [{ translateY: kb > 0 ? -kb : 0 }] }}>
         {canCmd ? (
           <View style={d.tplRow}>
             <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 7 }}>

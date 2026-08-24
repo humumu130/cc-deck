@@ -74,7 +74,16 @@ export type CommandType =
   | "COMMAND_EXT_INPUT"
   | "COMMAND_EXT_STOP"
   | "COMMAND_DELETE"
-  | "COMMAND_RENAME";
+  | "COMMAND_RENAME"
+  | "COMMAND_PAIR_START";
+
+// 云桥配对信息：relay 经可信 LAN 信道下发，手机落盘后即可走云通道
+export interface CloudPairInfo {
+  url: string;
+  token: string;
+  relay_dev: string;
+  relay_pubkey: string;
+}
 
 export interface CommandAck {
   type: "COMMAND_ACK";
@@ -82,4 +91,5 @@ export interface CommandAck {
   ok: boolean;
   session_id?: string;
   error?: string;
+  cloud?: CloudPairInfo;
 }

@@ -12,3 +12,8 @@ Thumbs.db
 *.exe
 .claude/
 mobile/*.apk
+wear-app/.gradle/
+wear-app/.kotlin/
+wear-app/build/
+wear-app/app/build/
+wear-app/local.properties

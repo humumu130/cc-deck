@@ -1,0 +1,18 @@
+name = "cc-cloud-bridge"
+main = "src/worker.ts"
+compatibility_date = "2025-06-01"
+
+# 本地开发用默认 token；正式部署前执行
+#   npx wrangler secret put CLOUD_TOKEN
+# 并删掉下面的 [vars]（同名 secret 与 vars 不能并存）
+[vars]
+CLOUD_TOKEN = "changeme-cloudtoken"
+
+[durable_objects]
+bindings = [
+  { name = "ROUTER", class_name = "RouterDO" }
+]
+
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["RouterDO"]

@@ -5,7 +5,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { LinearGradient } from "expo-linear-gradient";
 import { STATUS_ZH, statusColor, withA, type ThemeColors } from "../theme";
 import { useTheme, useThemeStyles } from "../theme-context";
-import { sessionElapsed, fmtElapsed } from "../fmt";
+import { sessionElapsed, fmtElapsed, fmtTok } from "../fmt";
 import { store } from "../store";
 import type { SessionState } from "../protocol";
 import RenameModal from "./RenameModal";
@@ -42,6 +42,26 @@ function BlinkDot({ color }: { color: string }) {
     return () => loop.stop();
   }, [op]);
   return <Animated.View style={[styles.dot, { backgroundColor: color, opacity: op }]} />;
+}
+
+// 黄灯旁的实时工作状态：回合耗时 · ↓输出tokens · 当前动作（每秒走秒）
+function LiveStat({ s }: { s: SessionState }) {
+  const { c } = useTheme();
+  const styles = useThemeStyles(makeStyles);
+  const [, tick] = useState(0);
+  useEffect(() => {
+    const t = setInterval(() => tick((n) => n + 1), 1000);
+    return () => clearInterval(t);
+  }, []);
+  const secs = Math.max(0, Math.floor((Date.now() - (s.turn_started_at ?? s.updated_at)) / 1000));
+  const tok = s.usage?.output_tokens ?? 0;
+  const head = tok > 0 ? `${secs}s · ↓ ${fmtTok(tok)}` : `${secs}s`;
+  return (
+    <Text style={styles.liveStat} numberOfLines={1}>
+      <Text style={{ color: c.working }}>{head}</Text>
+      {s.action_summary ? ` · ${s.action_summary}` : ""}
+    </Text>
+  );
 }
 
 // 左滑露出操作面板（重命名 + 删除；DONE/ERROR 才可删）。
@@ -165,11 +185,11 @@ function SessionCard({
         ) : (
           <View style={[styles.dot, { backgroundColor: color, borderColor: color }]} />
         )}
-        <View style={{ flex: 1 }} />
+        {s.status === "WORKING" ? <LiveStat s={s} /> : <View style={{ flex: 1 }} />}
         <Text style={styles.elapsed}>{fmtElapsed(sessionElapsed(s))}</Text>
       </View>
       <Text style={styles.title} numberOfLines={1}>{s.title || "未命名会话"}</Text>
-      <Text style={styles.sum} numberOfLines={1}>{s.action_summary || "…"}</Text>
+      {s.status !== "WORKING" ? <Text style={styles.sum} numberOfLines={1}>{s.action_summary || "…"}</Text> : null}
       <View style={styles.foot}>
         <Text style={[styles.tag, s.external ? styles.tagExt : null]}>{s.external ? "外部 CLI" : "托管"}</Text>
         {s.cwd ? <Text style={styles.folderTag} numberOfLines={1}>📁 {folderOf(s.cwd)}</Text> : null}
@@ -378,6 +398,7 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
     alignItems: "center", justifyContent: "center",
   },
   elapsed: { fontSize: 12, color: c.faint, fontVariant: ["tabular-nums"] },
+  liveStat: { flex: 1, fontSize: 12, color: c.dim, fontVariant: ["tabular-nums"] },
   title: { color: c.text, fontSize: 15, fontWeight: "600", marginBottom: 5 },
   sum: { color: c.dim, fontSize: 13, marginBottom: 8 },
   foot: { flexDirection: "row", alignItems: "center", gap: 8 },

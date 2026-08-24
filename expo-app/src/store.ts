@@ -1,11 +1,21 @@
 import { useSyncExternalStore } from "react";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import type { CommandAck, Envelope, LogEntry, SessionState } from "./protocol";
+import { getRandomBytes } from "expo-crypto";
+import type { CloudPairInfo, CommandAck, Envelope, LogEntry, SessionState } from "./protocol";
 import { uuid } from "./fmt";
+import { devId, generateKeyPair, seal, unseal, setRandomBytes, type BoxKeyPair, type SealedBox } from "./e2e";
 
 export interface ConnConfig {
   wsUrl: string;
   token: string;
+}
+
+// 云桥配置（配对成功后落盘，LAN 不可达时走这条通道）
+export interface CloudConfig {
+  url: string;
+  token: string;
+  relayDev: string;
+  relayPubkey: string;
 }
 
 export interface ServerEntry {
@@ -13,26 +23,36 @@ export interface ServerEntry {
   name: string;
   wsUrl: string;
   token: string;
+  cloud?: CloudConfig;
 }
 
 export interface Snapshot {
   version: number;
   connected: boolean;
   connText: string;
+  channel: "lan" | "cloud" | null;
   sessions: SessionState[];
   lastErrorCmd: string | null;
+  cloudBusy: boolean;
+  cloudMsg: string | null;
 }
 
 const emptySnapshot: Snapshot = {
   version: 0,
   connected: false,
   connText: "未配置",
+  channel: null,
   sessions: [],
   lastErrorCmd: null,
+  cloudBusy: false,
+  cloudMsg: null,
 };
+
+const LAN_PROBE_MS = 4000;
 
 class RelayStore {
   private ws: WebSocket | null = null;
+  private channel: "lan" | "cloud" | null = null;
   private lastSeq = 0;
   private reconnectDelay = 1000;
   private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
@@ -41,7 +61,10 @@ class RelayStore {
   private sessions = new Map<string, SessionState>();
   private timelines = new Map<string, LogEntry[]>();
   private cfg: ConnConfig | null = null;
+  private cloudCfg: CloudConfig | null = null;
   private servers: ServerEntry[] = [];
+  private devKeys: BoxKeyPair | null = null;
+  private epoch = 0;
 
   onWaiting: ((s: SessionState) => void) | null = null;
 
@@ -64,6 +87,29 @@ class RelayStore {
       sessions: [...this.sessions.values()],
     };
     for (const fn of this.listeners) fn();
+  }
+
+  // ---------- 设备密钥（AsyncStorage 设备级，云通道 E2E 身份） ----------
+
+  private async deviceKeys(): Promise<BoxKeyPair> {
+    if (this.devKeys) return this.devKeys;
+    setRandomBytes(getRandomBytes); // Hermes 无全局 crypto，注入 expo-crypto
+    try {
+      const raw = await AsyncStorage.getItem("ccr_device_keys");
+      if (raw) {
+        const kp = JSON.parse(raw) as BoxKeyPair;
+        if (kp.publicKey && kp.secretKey) {
+          this.devKeys = kp;
+          return kp;
+        }
+      }
+    } catch {}
+    const kp = generateKeyPair();
+    this.devKeys = kp;
+    try {
+      await AsyncStorage.setItem("ccr_device_keys", JSON.stringify(kp));
+    } catch {}
+    return kp;
   }
 
   // ---------- 多服务器配置（ccr_conns 列表 + ccr_active 指针；旧 ccr_conn 自动迁移） ----------
@@ -112,7 +158,7 @@ class RelayStore {
     await AsyncStorage.setItem("ccr_conns", JSON.stringify(list));
     await AsyncStorage.setItem("ccr_active", entry.id);
     const tk = connectToken ?? entry.token;
-    if (tk) this.applyConfig({ wsUrl: entry.wsUrl, token: tk });
+    if (tk) this.applyConfig({ wsUrl: entry.wsUrl, token: tk }, entry.cloud);
   }
 
   async deleteServer(id: string): Promise<void> {
@@ -122,7 +168,7 @@ class RelayStore {
     if ((await AsyncStorage.getItem("ccr_active")) === id) {
       const next = list[0];
       await AsyncStorage.setItem("ccr_active", next ? next.id : "");
-      if (next) this.applyConfig({ wsUrl: next.wsUrl, token: next.token });
+      if (next) this.applyConfig({ wsUrl: next.wsUrl, token: next.token }, next.cloud);
     }
   }
 
@@ -133,12 +179,14 @@ class RelayStore {
     const active = list.find((e) => e.id === activeId) ?? list[0];
     // 活动服务器没记令牌（勾了不记住）：停在设置页，列表里点它补输令牌
     if (!active || !active.token) return null;
+    this.cloudCfg = active.cloud ?? null;
     this.cfg = { wsUrl: active.wsUrl, token: active.token };
     return this.cfg;
   }
 
-  private applyConfig(cfg: ConnConfig) {
+  private applyConfig(cfg: ConnConfig, cloud?: CloudConfig | null) {
     this.cfg = cfg;
+    this.cloudCfg = cloud ?? null;
     this.lastSeq = 0;
     this.sessions.clear();
     this.timelines.clear();
@@ -147,6 +195,7 @@ class RelayStore {
   }
 
   disconnect() {
+    this.epoch++;
     this.reconnectDelay = 1000;
     if (this.reconnectTimer) {
       clearTimeout(this.reconnectTimer);
@@ -155,53 +204,160 @@ class RelayStore {
     try {
       this.ws?.close();
     } catch {}
+    this.ws = null;
+    this.channel = null;
   }
 
+  // 连接周期：先 LAN 直连（探测超时），失败且已配对云桥则本轮转云通道
   connect() {
     if (!this.cfg || !this.cfg.token) return;
     if (this.reconnectTimer) {
       clearTimeout(this.reconnectTimer);
       this.reconnectTimer = null;
     }
-    const url =
-      this.cfg.wsUrl +
-      "?token=" + encodeURIComponent(this.cfg.token) +
-      (this.lastSeq > 0 ? "&last_seq=" + this.lastSeq : "");
+    const ep = ++this.epoch;
     this.emit({ connText: "连接中" });
+    if (this.cloudCfg && !this.devKeys) void this.deviceKeys();
+    void this.connectCycle(ep);
+  }
+
+  private async connectCycle(ep: number) {
+    const cfg = this.cfg!;
     try {
       this.ws?.close();
     } catch {}
-    const ws = new WebSocket(url);
+    this.ws = null;
+    this.channel = null;
+    const lanWs = await this.probeLan(cfg);
+    if (ep !== this.epoch) {
+      try {
+        lanWs?.close();
+      } catch {}
+      return;
+    }
+    if (lanWs) {
+      this.adoptLan(lanWs);
+      return;
+    }
+    if (this.cloudCfg && this.devKeys) {
+      this.openCloud(this.cloudCfg, ep);
+      return;
+    }
+    this.emit({ connected: false, connText: "已断开", channel: null });
+    this.scheduleReconnect();
+  }
+
+  // LAN 探测：open 即成功（返回活连接，由调用方接管）；超时/出错返回 null
+  private probeLan(cfg: ConnConfig): Promise<WebSocket | null> {
+    return new Promise((resolve) => {
+      const url =
+        cfg.wsUrl +
+        "?token=" + encodeURIComponent(cfg.token) +
+        (this.lastSeq > 0 ? "&last_seq=" + this.lastSeq : "");
+      let ws: WebSocket;
+      try {
+        ws = new WebSocket(url);
+      } catch {
+        resolve(null);
+        return;
+      }
+      let settled = false;
+      const timer = setTimeout(() => done(null), LAN_PROBE_MS);
+      const done = (result: WebSocket | null) => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timer);
+        if (!result) {
+          try {
+            ws.onopen = ws.onerror = ws.onclose = null;
+            ws.close();
+          } catch {}
+        }
+        resolve(result);
+      };
+      ws.onopen = () => done(ws);
+      ws.onerror = () => done(null);
+      ws.onclose = () => done(null);
+    });
+  }
+
+  private adoptLan(ws: WebSocket) {
     this.ws = ws;
-    ws.onopen = () => {
-      if (this.ws !== ws) return; // 竞态：已是更新的连接
-      this.reconnectDelay = 1000;
-      this.emit({ connected: true, connText: "已连接" });
-    };
+    this.channel = "lan";
+    this.reconnectDelay = 1000;
+    this.emit({ connected: true, connText: "已连接", channel: "lan" });
     ws.onclose = () => {
-      if (this.ws !== ws) return; // 旧连接的关闭事件（切换服务器），忽略
-      this.emit({ connected: false, connText: "已断开" });
+      if (this.ws !== ws) return;
+      this.emit({ connected: false, connText: "已断开", channel: null });
       this.scheduleReconnect();
     };
     ws.onerror = () => {};
     ws.onmessage = (ev: WebSocketMessageEvent) => {
+      if (this.ws !== ws) return;
       let msg: Envelope | CommandAck;
       try {
         msg = JSON.parse(String(ev.data));
       } catch {
         return;
       }
-      if ((msg as CommandAck).type === "COMMAND_ACK") {
-        const ack = msg as CommandAck;
-        if (!ack.ok && ack.error && !ack.error.startsWith("duplicate")) {
-          this.emit({ lastErrorCmd: ack.error });
-        }
+      this.onMessage(msg);
+    };
+  }
+
+  private openCloud(cloud: CloudConfig, ep: number) {
+    const keys = this.devKeys!;
+    const dev = devId(keys.publicKey, "ph");
+    const url =
+      cloud.url +
+      (cloud.url.includes("?") ? "&" : "?") +
+      "token=" + encodeURIComponent(cloud.token) +
+      "&dev=" + encodeURIComponent(dev);
+    let ws: WebSocket;
+    try {
+      ws = new WebSocket(url);
+    } catch {
+      this.emit({ connected: false, connText: "已断开", channel: null });
+      this.scheduleReconnect();
+      return;
+    }
+    this.ws = ws;
+    this.channel = "cloud";
+    ws.onopen = () => {
+      if (this.ws !== ws) return;
+      this.reconnectDelay = 1000;
+      this.emit({ connected: true, connText: "已连接（云）", channel: "cloud" });
+      ws.send(
+        JSON.stringify({
+          to: cloud.relayDev,
+          data: seal({ t: "hello", last_seq: this.lastSeq }, cloud.relayPubkey, keys.secretKey),
+        }),
+      );
+    };
+    ws.onclose = () => {
+      if (this.ws !== ws) return;
+      this.emit({ connected: false, connText: "已断开", channel: null });
+      this.scheduleReconnect();
+    };
+    ws.onerror = () => {};
+    ws.onmessage = (ev: WebSocketMessageEvent) => {
+      if (this.ws !== ws) return;
+      let frame: { type?: string; data?: SealedBox };
+      try {
+        frame = JSON.parse(String(ev.data));
+      } catch {
         return;
       }
-      const env = msg as Envelope;
-      if (env.seq !== undefined) this.lastSeq = Math.max(this.lastSeq, env.seq);
-      this.onEvent(env);
-      this.emit();
+      if (frame.type === "ROUTE_MISS") {
+        // relay 暂时掉线：断开走重连循环（每轮仍先试 LAN）
+        try {
+          ws.close();
+        } catch {}
+        return;
+      }
+      if (!frame.data) return;
+      const inner = unseal<Envelope | CommandAck>(frame.data, cloud.relayPubkey, keys.secretKey);
+      if (!inner) return;
+      this.onMessage(inner);
     };
   }
 
@@ -212,6 +368,68 @@ class RelayStore {
     this.emit({ connText: `${Math.round(delay / 1000)}s后重连` });
     if (this.reconnectTimer) clearTimeout(this.reconnectTimer);
     this.reconnectTimer = setTimeout(() => this.connect(), delay);
+  }
+
+  // LAN 与云通道共用的下行处理（云侧已解密）
+  private onMessage(msg: Envelope | CommandAck) {
+    if ((msg as CommandAck).type === "COMMAND_ACK") {
+      const ack = msg as CommandAck;
+      if (ack.cloud) void this.saveCloudPairing(ack.cloud);
+      if (!ack.ok && ack.error && !ack.error.startsWith("duplicate")) {
+        this.emit({ lastErrorCmd: ack.error });
+      }
+      return;
+    }
+    const env = msg as Envelope;
+    if (env.seq !== undefined) this.lastSeq = Math.max(this.lastSeq, env.seq);
+    this.onEvent(env);
+    this.emit();
+  }
+
+  // 配对 ACK：relay 经可信 LAN 信道回传云桥参数，落盘到当前服务器条目
+  private async saveCloudPairing(info: CloudPairInfo) {
+    const cloud: CloudConfig = {
+      url: info.url,
+      token: info.token,
+      relayDev: info.relay_dev,
+      relayPubkey: info.relay_pubkey,
+    };
+    this.cloudCfg = cloud;
+    try {
+      const list = await this.readServers();
+      const entry = list.find((e) => e.wsUrl === this.cfg?.wsUrl && e.token === this.cfg?.token);
+      if (entry) {
+        entry.cloud = cloud;
+        this.servers = list;
+        await AsyncStorage.setItem("ccr_conns", JSON.stringify(list));
+      }
+    } catch {}
+    this.emit({ cloudBusy: false, cloudMsg: "云桥配对成功，外出时自动经云通道连接" });
+  }
+
+  // 在已连接的 LAN 信道上发起云桥配对（信任锚 = LAN token）
+  async pairCloud(): Promise<void> {
+    this.clearCloudMsg();
+    if (!this.ws || this.ws.readyState !== WebSocket.OPEN || this.channel !== "lan") {
+      this.emit({ cloudMsg: "请先在同一局域网内连接" });
+      return;
+    }
+    this.emit({ cloudBusy: true });
+    let keys: BoxKeyPair;
+    try {
+      keys = await this.deviceKeys();
+    } catch {
+      this.emit({ cloudBusy: false, cloudMsg: "设备密钥生成失败" });
+      return;
+    }
+    const sent = this.send("COMMAND_PAIR_START", { pubkey: keys.publicKey, name: "手机" });
+    if (!sent) this.emit({ cloudBusy: false, cloudMsg: "配对命令发送失败" });
+  }
+
+  clearCloudMsg() {
+    if (this.snap.cloudBusy || this.snap.cloudMsg) {
+      this.emit({ cloudBusy: false, cloudMsg: null });
+    }
   }
 
   private onEvent(msg: Envelope) {
@@ -324,7 +542,17 @@ class RelayStore {
 
   send(type: string, payload: Record<string, unknown>): boolean {
     if (!this.ws || this.ws.readyState !== WebSocket.OPEN) return false;
-    this.ws.send(JSON.stringify({ command_id: uuid(), type, payload, ts: Date.now() }));
+    const cmd = { command_id: uuid(), type, payload, ts: Date.now() };
+    if (this.channel === "cloud" && this.cloudCfg && this.devKeys) {
+      this.ws.send(
+        JSON.stringify({
+          to: this.cloudCfg.relayDev,
+          data: seal(cmd, this.cloudCfg.relayPubkey, this.devKeys.secretKey),
+        }),
+      );
+    } else {
+      this.ws.send(JSON.stringify(cmd));
+    }
     return true;
   }
 

@@ -175,7 +175,8 @@ export type CommandType =
   | "COMMAND_EXT_INPUT"
   | "COMMAND_EXT_STOP"
   | "COMMAND_DELETE"
-  | "COMMAND_RENAME";
+  | "COMMAND_RENAME"
+  | "COMMAND_PAIR_START";
 
 export interface CommandBase {
   command_id: string;   // 客户端生成（uuid），Relay 按此去重
@@ -238,6 +239,13 @@ export interface RenameCommand extends CommandBase {
   payload: { session_id: string; title: string };
 }
 
+// 云桥配对：手机经已鉴权的 LAN 信道发起（token 即信任锚，无需扫码），
+// 上送手机 box 公钥，relay 回 PAIR_ACK 携带云配置 + relay 公钥
+export interface PairStartCommand extends CommandBase {
+  type: "COMMAND_PAIR_START";
+  payload: { pubkey: string; name?: string };
+}
+
 export type Command =
   | CreateCommand
   | MessageCommand
@@ -248,7 +256,8 @@ export type Command =
   | ExtInputCommand
   | ExtStopCommand
   | DeleteCommand
-  | RenameCommand;
+  | RenameCommand
+  | PairStartCommand;
 
 // hooks 桥接：bridge-hook.mjs -> POST /bridge/hook 的请求体（token 走 x-bridge-token header）
 export interface BridgeEvent {
@@ -267,9 +276,18 @@ export interface BridgeEvent {
 
 // ---------- 命令回执（Relay -> 客户端，确认命令已受理） ----------
 
+// 云桥配对信息（仅 COMMAND_PAIR_START 成功的 ACK 携带；手机存进 ServerEntry.cloud）
+export interface CloudPairInfo {
+  url: string;           // 桥地址（CCR_CLOUD_URL 原样）
+  token: string;         // 桥层连接 token
+  relay_dev: string;     // relay 云设备 id（rl-…，公钥派生）
+  relay_pubkey: string;  // relay box 公钥 b64
+}
+
 export interface CommandAckPayload {
   command_id: string;
   ok: boolean;
   session_id?: string;   // COMMAND_CREATE 成功时返回
   error?: string;
+  cloud?: CloudPairInfo; // 仅 COMMAND_PAIR_START 成功时携带
 }

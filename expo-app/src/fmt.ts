@@ -6,6 +6,13 @@ export function fmtElapsed(ms: number): string {
   return `${Math.floor(sec / 3600)}h${String(Math.floor((sec % 3600) / 60)).padStart(2, "0")}m`;
 }
 
+export function fmtTok(n: number | undefined): string {
+  if (n === undefined) return "—";
+  if (n >= 1_000_000) return (n / 1_000_000).toFixed(1) + "M";
+  if (n >= 1000) return (n / 1000).toFixed(1) + "k";
+  return String(n);
+}
+
 export function fmtClock(ts: number): string {
   if (!ts) return "--:--";
   const t = new Date(ts);

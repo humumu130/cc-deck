@@ -8,3 +8,5 @@ android/local.properties
 *.hbc
 .expo/
 android/build/
+modules/*/android/build/
+modules/*/android/.gradle/

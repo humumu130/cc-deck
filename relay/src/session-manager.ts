@@ -1,5 +1,6 @@
 import { statSync } from "node:fs";
 import { resolve } from "node:path";
+import { devId } from "./e2e.js";
 import type { EventBus } from "./event-bus.js";
 import { AgentSession } from "./agent-adapter.js";
 import type { RelayConfig } from "./config.js";
@@ -98,6 +99,23 @@ export class SessionManager {
     extStop: (sessionId: string) => { ok: boolean; error?: string };
   }): void {
     this.bridge = b;
+  }
+
+  // 云桥身份（index.ts 在云桥启用时注入；PAIR_START 依赖）
+  private cloud: {
+    keypair: { publicKey: string };
+    relayDev: string;
+    peers: Map<string, { pubkey: string; name?: string; paired_at: number }>;
+    addPeer: (dev: string, entry: { pubkey: string; name?: string; paired_at: number }) => void;
+  } | null = null;
+
+  setCloud(c: {
+    keypair: { publicKey: string };
+    relayDev: string;
+    peers: Map<string, { pubkey: string; name?: string; paired_at: number }>;
+    addPeer: (dev: string, entry: { pubkey: string; name?: string; paired_at: number }) => void;
+  }): void {
+    this.cloud = c;
   }
 
   // 不存在则注册外部会话（bridge.ts 调用）；返回当前状态
@@ -344,6 +362,28 @@ export class SessionManager {
             title_locked: true,
           });
           return { command_id: cmd.command_id, ok: true };
+        }
+        case "COMMAND_PAIR_START": {
+          // 云桥配对：信任锚 = LAN 信道的 token 鉴权（与现状同威胁模型）
+          if (!this.cloud || !this.cfg.cloudUrl) {
+            return { command_id: cmd.command_id, ok: false, error: "云桥未启用（PC 侧未设置 CCR_CLOUD_URL）" };
+          }
+          const { pubkey } = cmd.payload;
+          if (typeof pubkey !== "string" || !/^[A-Za-z0-9+/]{43}={0,2}$/.test(pubkey)) {
+            return { command_id: cmd.command_id, ok: false, error: "bad pubkey" };
+          }
+          const dev = devId(pubkey, "ph");
+          this.cloud.addPeer(dev, { pubkey, name: cmd.payload.name, paired_at: Date.now() });
+          return {
+            command_id: cmd.command_id,
+            ok: true,
+            cloud: {
+              url: this.cfg.cloudUrl,
+              token: this.cfg.cloudToken,
+              relay_dev: this.cloud.relayDev,
+              relay_pubkey: this.cloud.keypair.publicKey,
+            },
+          };
         }
       }
     } catch (e) {

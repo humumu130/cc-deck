@@ -4,6 +4,7 @@ import { StatusBar } from "expo-status-bar";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 import { store, useRelay } from "./src/store";
 import { ensureNotifPermission, fgSupported, notifyAlert, startForegroundService } from "./src/notify";
+import { startWatchGateway } from "./src/watch";
 import { ThemeProvider, useTheme, useThemeStyles } from "./src/theme-context";
 import type { ThemeColors } from "./src/theme";
 import ListScreen from "./src/screens/ListScreen";
@@ -48,6 +49,7 @@ function Shell() {
   const [setup, setSetup] = useState(false);
 
   useEffect(() => {
+    startWatchGateway();
     void store.loadConfig().then((cfg) => {
       setHasCfg(!!cfg);
       if (cfg) store.connect();

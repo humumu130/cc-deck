@@ -1,17 +1,14 @@
 import { useEffect, useState } from "react";
-import { Keyboard } from "react-native";
+import { DeviceEventEmitter } from "react-native";
 
-// edge-to-edge 下窗口不再 adjustResize，KeyboardAvoidingView 的重叠数学
-// 会算出 0；改用 insets 推导的键盘高度直接做 padding。
+// edge-to-edge 下窗口不再 adjustResize，RN 的 keyboardDidShow 在
+// bridgeless + Android 16 上不触发；MainActivity 原生监听 IME insets
+// 并经 RCTDeviceEventEmitter 发 "kbInsets"（px→dp）。
 export function useKbHeight(): number {
   const [h, setH] = useState(0);
   useEffect(() => {
-    const show = Keyboard.addListener("keyboardDidShow", (e) => setH(e.endCoordinates.height));
-    const hide = Keyboard.addListener("keyboardDidHide", () => setH(0));
-    return () => {
-      show.remove();
-      hide.remove();
-    };
+    const nat = DeviceEventEmitter.addListener("kbInsets", (e: { height: number }) => setH(e.height));
+    return () => nat.remove();
   }, []);
   return h;
 }

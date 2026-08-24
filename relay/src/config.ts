@@ -10,6 +10,8 @@ export interface RelayConfig {
   model: string;
   bridgeToken: string;       // hooks 桥接令牌（data/bridge-token，首启生成后固定）
   dataDir: string;
+  cloudUrl: string;          // 云桥地址（CCR_CLOUD_URL），空 = 云桥禁用
+  cloudToken: string;        // 云桥层连接 token（CCR_CLOUD_TOKEN）
 }
 
 export function loadConfig(): RelayConfig {
@@ -34,5 +36,11 @@ export function loadConfig(): RelayConfig {
     }
   }
 
-  return { port, token, tokenGenerated: !envToken, defaultCwd, model, bridgeToken, dataDir };
+  const cloudUrl = process.env.CCR_CLOUD_URL ?? "";
+  const cloudToken = process.env.CCR_CLOUD_TOKEN ?? "";
+
+  return {
+    port, token, tokenGenerated: !envToken, defaultCwd, model, bridgeToken, dataDir,
+    cloudUrl, cloudToken,
+  };
 }

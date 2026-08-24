@@ -2,9 +2,16 @@ package com.humumu.ccwatch
 
 import android.os.Build
 import android.os.Bundle
+import android.view.View
+
+import androidx.core.view.OnApplyWindowInsetsListener
+import androidx.core.view.ViewCompat
+import androidx.core.view.WindowInsetsCompat
 
 import com.facebook.react.ReactActivity
 import com.facebook.react.ReactActivityDelegate
+import com.facebook.react.bridge.Arguments
+import com.facebook.react.modules.core.DeviceEventManagerModule
 import com.facebook.react.defaults.DefaultNewArchitectureEntryPoint.fabricEnabled
 import com.facebook.react.defaults.DefaultReactActivityDelegate
 
@@ -17,6 +24,44 @@ class MainActivity : ReactActivity() {
     // This is required for expo-splash-screen.
     setTheme(R.style.AppTheme);
     super.onCreate(null)
+    installKbInsetsEmitter()
+  }
+
+  // bridgeless + edge-to-edge 下 ReactRootView 的 keyboardDidShow 不再触发（Android 16 实测），
+  // 把 IME 键盘高度（转 dp，RN 样式单位）发给 JS（src/kb.ts 消费）。
+  // insets listener 可能被 RN/expo 的 edge-to-edge 设置覆盖或截断分发，
+  // 用 OnGlobalLayoutListener + rootWindowInsets 兜底，直接从 decorView 读。
+  private fun installKbInsetsEmitter() {
+    var last = -1
+    val emit: (Int) -> Unit = { px ->
+      val dp = (px / resources.displayMetrics.density).toInt()
+      if (dp != last) {
+        last = dp
+        val ctx = (application as? MainApplication)?.reactHost?.currentReactContext
+        ctx
+          ?.getJSModule(DeviceEventManagerModule.RCTDeviceEventEmitter::class.java)
+          ?.emit("kbInsets", Arguments.createMap().apply { putInt("height", dp) })
+      }
+    }
+    val listener = OnApplyWindowInsetsListener { _, insets ->
+      emit(insets.getInsets(WindowInsetsCompat.Type.ime()).bottom)
+      insets
+    }
+    ViewCompat.setOnApplyWindowInsetsListener(window.decorView, listener)
+    findViewById<View>(android.R.id.content)?.let {
+      ViewCompat.setOnApplyWindowInsetsListener(it, listener)
+    }
+    window.decorView.viewTreeObserver.addOnGlobalLayoutListener {
+      val ime = if (Build.VERSION.SDK_INT >= 30) {
+        window.decorView.rootWindowInsets
+          ?.getInsets(android.view.WindowInsets.Type.ime())?.bottom ?: 0
+      } else {
+        val r = android.graphics.Rect()
+        window.decorView.getWindowVisibleDisplayFrame(r)
+        (window.decorView.height - r.bottom).coerceAtLeast(0)
+      }
+      emit(ime)
+    }
   }
 
   /**
