@@ -29,7 +29,7 @@ export default function NewSessionModal({ visible, onClose }: { visible: boolean
   return (
     <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
       <Pressable style={m.mask} onPress={onClose}>
-        <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : undefined} style={{ width: "100%" }}>
+        <KeyboardAvoidingView behavior="padding" style={{ width: "100%" }}>
           <Pressable style={m.sheet} onPress={(e) => e.stopPropagation()}>
             <Text style={m.h3}>新建托管会话</Text>
             <View style={m.field}>
@@ -56,10 +56,10 @@ export default function NewSessionModal({ visible, onClose }: { visible: boolean
                 multiline
               />
             </View>
-            <Pressable style={({ pressed }) => [m.createBtn, pressed && { opacity: 0.85 }]} onPress={create}>
+            <Pressable style={m.createBtn} android_ripple={{ color: "rgba(255,255,255,0.15)", borderless: false }} onPress={create}>
               <Text style={m.createT}>启动会话</Text>
             </Pressable>
-            <Pressable style={m.cancel} onPress={onClose}>
+            <Pressable style={m.cancel} android_ripple={{ color: "rgba(125,165,220,0.12)", borderless: false, radius: 22 }} onPress={onClose}>
               <Text style={m.cancelT}>取消</Text>
             </Pressable>
           </Pressable>

@@ -45,6 +45,7 @@ export interface SessionState {
   external?: boolean;         // true = 用户自开 CLI 会话（hooks 桥接），仅单向可见 + 远程审批
   remote_mode?: boolean;      // external 会话的远程审批开关（默认关）
   cli_pid?: number;           // external 会话的 CLI 进程 pid（终端按键注入用）
+  turn_started_at?: number;   // 当前 WORKING 回合起点（状态行计时用）
 }
 
 // 时间线历史条目（持久化 & 快照下发用）
@@ -70,6 +71,8 @@ export interface SessionUpdatedPayload {
   action_summary: string;
   stats: FileChangeStats;
   remote_mode?: boolean;       // external 会话切换远程审批时携带
+  title?: string;              // 标题升级（外部会话首个 prompt 到达时）
+  turn_started_at?: number;    // 回合起点变化时携带
 }
 
 export interface SessionHeartbeatPayload {
@@ -123,6 +126,7 @@ export type EventType =
   | "SESSION_ERROR"
   | "SESSION_DONE"
   | "SESSION_LOG"
+  | "SESSION_DELETED"
   | "SNAPSHOT";
 
 export type EventPayloadMap = {
@@ -134,8 +138,13 @@ export type EventPayloadMap = {
   SESSION_ERROR: SessionErrorPayload;
   SESSION_DONE: SessionDonePayload;
   SESSION_LOG: SessionLogPayload;
+  SESSION_DELETED: SessionDeletedPayload;
   SNAPSHOT: SnapshotPayload;
 };
+
+export interface SessionDeletedPayload {
+  session_id: string;
+}
 
 export type TypedEnvelope<T extends EventType = EventType> = Envelope<
   T,
@@ -152,7 +161,8 @@ export type CommandType =
   | "COMMAND_REJECT"
   | "COMMAND_EXT_MODE"
   | "COMMAND_EXT_INPUT"
-  | "COMMAND_EXT_STOP";
+  | "COMMAND_EXT_STOP"
+  | "COMMAND_DELETE";
 
 export interface CommandBase {
   command_id: string;   // 客户端生成（uuid），Relay 按此去重
@@ -203,6 +213,12 @@ export interface ExtStopCommand extends CommandBase {
   payload: { session_id: string };
 }
 
+// 删除会话（仅 DONE/ERROR；从内存与历史中移除）
+export interface DeleteCommand extends CommandBase {
+  type: "COMMAND_DELETE";
+  payload: { session_id: string };
+}
+
 export type Command =
   | CreateCommand
   | MessageCommand
@@ -211,7 +227,8 @@ export type Command =
   | RejectCommand
   | ExtModeCommand
   | ExtInputCommand
-  | ExtStopCommand;
+  | ExtStopCommand
+  | DeleteCommand;
 
 // hooks 桥接：bridge-hook.mjs -> POST /bridge/hook 的请求体（token 走 x-bridge-token header）
 export interface BridgeEvent {

@@ -197,9 +197,14 @@ export class Bridge {
 
   private onPrompt(ev: BridgeEvent): BridgeDecision {
     const id = this.extId(ev);
-    this.turnStart.set(id, Date.now());
+    const turnStartedAt = Date.now();
+    this.turnStart.set(id, turnStartedAt);
     const state = this.mgr.ensureExternal(id, ev.cwd, ev.prompt ?? "", ev.session_id);
-    this.mgr.setExternalStatus(id, "WORKING", truncate(ev.prompt ?? "新回合", 60));
+    // 会话由 PreToolUse 先创建（无 prompt）：首个 prompt 到达时把文件夹名标题升级为 prompt 摘要
+    if (state.external && !state.initial_prompt && ev.prompt) {
+      this.mgr.setExternalTitle(id, deriveTitle(ev.prompt), ev.prompt);
+    }
+    this.mgr.setExternalStatus(id, "WORKING", truncate(ev.prompt ?? "新回合", 60), turnStartedAt);
     this.mgr.pushExternalLog(id, "user_message", truncate(ev.prompt ?? "", 300));
     void state;
     return { decision: "pass" };

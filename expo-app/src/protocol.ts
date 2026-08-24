@@ -37,6 +37,7 @@ export interface SessionState {
   remote_mode?: boolean;
   cli_pid?: number;
   elapsed_hint?: number;
+  turn_started_at?: number;
 }
 
 export interface LogEntry {
@@ -62,7 +63,8 @@ export type CommandType =
   | "COMMAND_REJECT"
   | "COMMAND_EXT_MODE"
   | "COMMAND_EXT_INPUT"
-  | "COMMAND_EXT_STOP";
+  | "COMMAND_EXT_STOP"
+  | "COMMAND_DELETE";
 
 export interface CommandAck {
   type: "COMMAND_ACK";

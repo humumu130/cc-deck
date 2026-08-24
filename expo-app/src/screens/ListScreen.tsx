@@ -1,9 +1,11 @@
-import { useMemo } from "react";
-import { FlatList, Pressable, StyleSheet, Text, View } from "react-native";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { Animated, FlatList, PanResponder, Pressable, StyleSheet, Text, View } from "react-native";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { LinearGradient } from "expo-linear-gradient";
 import { C, STATUS_ZH, statusColor } from "../theme";
 import { sessionElapsed, fmtElapsed } from "../fmt";
+import { store } from "../store";
 import type { SessionState } from "../protocol";
 
 interface Props {
@@ -14,32 +16,92 @@ interface Props {
   onNew: () => void;
 }
 
+function folderOf(cwd: string): string {
+  const parts = cwd.split(/[\\/]/).filter(Boolean);
+  return parts[parts.length - 1] ?? cwd;
+}
+
+const DEL_W = 78;
+
+// 左滑露出删除按钮（DONE/ERROR 可删；其余状态按钮禁用提示走服务端校验）
+function SwipeRow({ deletable, onDelete, children }: { deletable: boolean; onDelete: () => void; children: React.ReactNode }) {
+  const x = useRef(new Animated.Value(0)).current;
+  const open = useRef(false);
+  const pan = useRef(
+    PanResponder.create({
+      onMoveShouldSetPanResponder: (_, g) => Math.abs(g.dx) > 10 && Math.abs(g.dy) < 12,
+      onPanResponderMove: (_, g) => {
+        const base = open.current ? -DEL_W : 0;
+        x.setValue(Math.min(0, Math.max(-DEL_W - 36, base + g.dx)));
+      },
+      onPanResponderRelease: (_, g) => {
+        const shouldOpen = open.current ? g.dx > -DEL_W / 2 : g.dx < -DEL_W / 2;
+        open.current = shouldOpen;
+        Animated.spring(x, { toValue: shouldOpen ? -DEL_W : 0, useNativeDriver: true, bounciness: 5, speed: 18 }).start();
+      },
+      onPanResponderTerminate: () => {
+        open.current = false;
+        Animated.spring(x, { toValue: 0, useNativeDriver: true }).start();
+      },
+    }),
+  ).current;
+  const close = () => {
+    open.current = false;
+    Animated.spring(x, { toValue: 0, useNativeDriver: true }).start();
+  };
+  return (
+    <View style={styles.swipeWrap}>
+      <Pressable
+        style={[styles.delBtn, !deletable && { backgroundColor: "rgba(125,165,220,0.10)" }]}
+        android_ripple={{ color: "rgba(255,255,255,0.15)", borderless: false }}
+        onPress={() => {
+          if (deletable) onDelete();
+          close();
+        }}
+      >
+        <Text style={styles.delT}>{deletable ? "删除" : "运行中"}</Text>
+      </Pressable>
+      <Animated.View style={[styles.swipeCard, { transform: [{ translateX: x }] }]} {...pan.panHandlers}>
+        {children}
+      </Animated.View>
+    </View>
+  );
+}
+
 function SessionCard({ s, onOpen }: { s: SessionState; onOpen: (sid: string) => void }) {
   const color = statusColor(s.status);
+  const deletable = s.status === "DONE" || s.status === "ERROR";
   return (
-    <Pressable style={({ pressed }) => [styles.card, pressed && { transform: [{ scale: 0.985 }] }]} onPress={() => onOpen(s.session_id)}>
-      <View style={styles.row1}>
-        <View style={[styles.dot, { backgroundColor: color, borderColor: color }]}>
-          {s.status === "WORKING" && <View style={styles.dotCore} />}
+    <SwipeRow deletable={deletable} onDelete={() => store.send("COMMAND_DELETE", { session_id: s.session_id })}>
+      <Pressable
+        style={styles.card}
+        android_ripple={{ color: "rgba(125,165,220,0.10)", borderless: false }}
+        onPress={() => onOpen(s.session_id)}
+      >
+        <View style={styles.row1}>
+          <View style={[styles.dot, { backgroundColor: color, borderColor: color }]}>
+            {s.status === "WORKING" && <View style={styles.dotCore} />}
+          </View>
+          <Text style={[styles.st, { color }]}>{STATUS_ZH[s.status] ?? s.status}</Text>
+          <Text style={styles.elapsed}>{fmtElapsed(sessionElapsed(s))}</Text>
         </View>
-        <Text style={[styles.st, { color }]}>{STATUS_ZH[s.status] ?? s.status}</Text>
-        <Text style={styles.elapsed}>{fmtElapsed(sessionElapsed(s))}</Text>
-      </View>
-      <Text style={styles.title} numberOfLines={1}>{s.title || "未命名会话"}</Text>
-      <Text style={styles.sum} numberOfLines={1}>{s.action_summary || "…"}</Text>
-      <View style={styles.foot}>
-        <Text style={[styles.tag, s.external ? styles.tagExt : null]}>{s.external ? "外部 CLI" : "托管"}</Text>
-        {s.historical && !s.external ? <Text style={styles.tag}>历史</Text> : null}
-        <View style={{ flex: 1 }} />
-        {s.stats && s.stats.files_changed > 0 ? (
-          <Text style={styles.stats}>
-            <Text style={{ color: C.working }}>+{s.stats.lines_added}</Text>
-            {" "}
-            <Text style={{ color: C.error }}>-{s.stats.lines_deleted}</Text>
-          </Text>
-        ) : null}
-      </View>
-    </Pressable>
+        <Text style={styles.title} numberOfLines={1}>{s.title || "未命名会话"}</Text>
+        <Text style={styles.sum} numberOfLines={1}>{s.action_summary || "…"}</Text>
+        <View style={styles.foot}>
+          <Text style={[styles.tag, s.external ? styles.tagExt : null]}>{s.external ? "外部 CLI" : "托管"}</Text>
+          {s.cwd ? <Text style={styles.folderTag} numberOfLines={1}>📁 {folderOf(s.cwd)}</Text> : null}
+          {s.historical && !s.external ? <Text style={styles.tag}>历史</Text> : null}
+          <View style={{ flex: 1 }} />
+          {s.stats && s.stats.files_changed > 0 ? (
+            <Text style={styles.stats}>
+              <Text style={{ color: C.working }}>+{s.stats.lines_added}</Text>
+              {" "}
+              <Text style={{ color: C.error }}>-{s.stats.lines_deleted}</Text>
+            </Text>
+          ) : null}
+        </View>
+      </Pressable>
+    </SwipeRow>
   );
 }
 
@@ -49,14 +111,31 @@ export default function ListScreen({ sessions, connected, connText, onOpen, onNe
     return [...sessions].sort((a, b) => (order[a.status] ?? 9) - (order[b.status] ?? 9) || b.started_at - a.started_at);
   }, [sessions]);
 
-  let waiting = 0, running = 0;
+  const counts: Record<string, number> = {};
   for (const s of sessions) {
-    if (s.status === "WAITING") waiting++;
-    else if (s.status === "WORKING") running++;
+    counts[s.status] = (counts[s.status] ?? 0) + 1;
   }
-  const hint = waiting > 0 ? `⚠ ${waiting} 个会话等待确认` : running > 0 ? `${running} 个会话运行中` : sessions.length > 0 ? `共 ${sessions.length} 个会话` : "暂无会话";
+  const statusItems = (["WORKING", "WAITING", "ERROR", "DONE"] as const)
+    .filter((k) => (counts[k] ?? 0) > 0)
+    .map((k) => ({ k, n: counts[k], color: statusColor(k) }));
 
   const connColor = connected ? C.working : connText.includes("连接中") || connText.includes("重连") ? C.waiting : C.error;
+
+  const [collapseIdle, setCollapseIdle] = useState(false);
+  useEffect(() => {
+    void AsyncStorage.getItem("ccr_collapse_idle").then((v) => setCollapseIdle(v === "1"));
+  }, []);
+  const toggleCollapse = () => {
+    setCollapseIdle((v) => {
+      void AsyncStorage.setItem("ccr_collapse_idle", v ? "0" : "1");
+      return !v;
+    });
+  };
+  const idleCount = counts["DONE"] ?? 0;
+  const visible = useMemo(
+    () => (collapseIdle ? sorted.filter((s) => s.status !== "DONE") : sorted),
+    [sorted, collapseIdle],
+  );
 
   return (
     <SafeAreaView style={styles.safe} edges={["top"]}>
@@ -70,23 +149,50 @@ export default function ListScreen({ sessions, connected, connText, onOpen, onNe
           <Text style={[styles.connText, { color: connColor }]}>{connText}</Text>
         </View>
       </View>
-      <Text style={styles.runhint}>{hint}</Text>
+      <View style={styles.statRow}>
+        <Text style={styles.statTotal}>{sessions.length > 0 ? `共 ${sessions.length} 个会话` : "暂无会话"}</Text>
+        <View style={styles.statChips}>
+          {statusItems.map(({ k, n, color }) => (
+            <View key={k} style={styles.statChip}>
+              <View style={[styles.statDot, { backgroundColor: color }]} />
+              <Text style={[styles.statChipT, { color }]}>{n} {STATUS_ZH[k]}</Text>
+            </View>
+          ))}
+        </View>
+        {idleCount > 0 ? (
+          <Pressable
+            style={[styles.collapseBtn, collapseIdle && styles.collapseBtnOn]}
+            android_ripple={{ color: "rgba(125,165,220,0.14)", borderless: false, radius: 16 }}
+            onPress={toggleCollapse}
+          >
+            <Text style={[styles.collapseT, collapseIdle && styles.collapseTOn]}>
+              {collapseIdle ? `展开空闲 ${idleCount}` : "折叠空闲 ▾"}
+            </Text>
+          </Pressable>
+        ) : null}
+      </View>
 
       <FlatList
-        data={sorted}
+        data={visible}
         keyExtractor={(x) => x.session_id}
         contentContainerStyle={{ paddingBottom: 120, paddingHorizontal: 14, paddingTop: 6 }}
         renderItem={({ item }) => <SessionCard s={item} onOpen={onOpen} />}
         ListEmptyComponent={
           <View style={styles.empty}>
             <Text style={styles.emptyIcon}>⚡</Text>
-            <Text style={styles.emptyT}>还没有会话</Text>
-            <Text style={styles.emptyS}>点右下角 ＋ 启动新会话{"\n"}或在 PC 上打开 claude 接入外部会话</Text>
+            <Text style={styles.emptyT}>{collapseIdle && idleCount > 0 ? "空闲会话已折叠" : "还没有会话"}</Text>
+            <Text style={styles.emptyS}>
+              {collapseIdle && idleCount > 0 ? "点上方「展开空闲」查看" : "点右下角 ＋ 启动新会话\n或在 PC 上打开 claude 接入外部会话"}
+            </Text>
           </View>
         }
       />
 
-      <Pressable style={({ pressed }) => [styles.fab, pressed && { transform: [{ scale: 0.92 }] }]} onPress={onNew}>
+      <Pressable
+        style={styles.fab}
+        android_ripple={{ color: "rgba(255,255,255,0.18)", borderless: false, radius: 30 }}
+        onPress={onNew}
+      >
         <LinearGradient colors={[C.brandA, C.brandB]} style={styles.fabGrad} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}>
           <Text style={styles.fabText}>＋</Text>
         </LinearGradient>
@@ -113,9 +219,33 @@ const styles = StyleSheet.create({
   connDot: { width: 6, height: 6, borderRadius: 3 },
   connText: { fontSize: 11 },
   runhint: { color: C.dim, fontSize: 12, paddingHorizontal: 18, paddingTop: 7, paddingBottom: 4 },
+  statRow: {
+    flexDirection: "row", alignItems: "center", flexWrap: "wrap", gap: 6,
+    paddingHorizontal: 18, paddingTop: 8, paddingBottom: 4,
+  },
+  statTotal: { color: C.dim, fontSize: 12.5, fontWeight: "600", marginRight: 4 },
+  statChips: { flexDirection: "row", flexWrap: "wrap", gap: 6 },
+  statChip: { flexDirection: "row", alignItems: "center", gap: 4 },
+  statDot: { width: 7, height: 7, borderRadius: 4 },
+  statChipT: { fontSize: 11.5 },
+  folderTag: { fontSize: 10, color: C.dim, maxWidth: 130 },
+  collapseBtn: {
+    borderRadius: 999, borderWidth: 1, borderColor: C.line, backgroundColor: "rgba(125,165,220,0.06)",
+    paddingHorizontal: 10, paddingVertical: 3,
+  },
+  collapseBtnOn: { backgroundColor: "rgba(93,134,245,0.16)", borderColor: "rgba(93,134,245,0.4)" },
+  collapseT: { fontSize: 11, color: C.dim },
+  collapseTOn: { color: "#9DB8F5" },
+  swipeWrap: { marginBottom: 11, borderRadius: 16, overflow: "hidden" },
+  swipeCard: { borderRadius: 16, overflow: "hidden", backgroundColor: C.panel },
+  delBtn: {
+    position: "absolute", top: 0, bottom: 0, right: 0, width: DEL_W,
+    backgroundColor: "rgba(240,82,79,0.85)", alignItems: "center", justifyContent: "center",
+  },
+  delT: { color: "#fff", fontSize: 13.5, fontWeight: "600" },
   card: {
     backgroundColor: C.panel, borderWidth: 1, borderColor: C.line,
-    borderRadius: 16, padding: 14, marginBottom: 11,
+    borderRadius: 16, padding: 14,
   },
   row1: { flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 8 },
   dot: {
@@ -139,7 +269,7 @@ const styles = StyleSheet.create({
   emptyIcon: { fontSize: 42, marginBottom: 12, opacity: 0.5 },
   emptyT: { color: C.faint, fontSize: 14, marginBottom: 6 },
   emptyS: { color: C.faint, fontSize: 12, textAlign: "center", lineHeight: 20 },
-  fab: { position: "absolute", right: 18, bottom: 28, borderRadius: 18, elevation: 8 },
+  fab: { position: "absolute", right: 30, bottom: 56, borderRadius: 18, elevation: 8 },
   fabGrad: { width: 56, height: 56, borderRadius: 18, alignItems: "center", justifyContent: "center" },
   fabText: { color: "#fff", fontSize: 30, fontWeight: "300", marginTop: -4 },
 });

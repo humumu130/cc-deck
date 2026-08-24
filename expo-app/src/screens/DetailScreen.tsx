@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
+import { BackHandler, KeyboardAvoidingView, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { C, STATUS_ZH, statusColor } from "../theme";
 import { fmtClock, fmtElapsed, sessionElapsed } from "../fmt";
@@ -48,11 +48,42 @@ function logColor(kind: string): string {
   }
 }
 
+const SPIN_FRAMES = ["✶", "✸", "✹", "✺", "✹", "✸"];
+
+// 类 Claude Code 状态行：✶ 摘要 · Ns（每秒走帧）
+function LiveStatusLine({ summary, startedAt, color }: { summary: string; startedAt?: number; color: string }) {
+  const [, tick] = useState(0);
+  useEffect(() => {
+    const t = setInterval(() => tick((n) => n + 1), 1000);
+    return () => clearInterval(t);
+  }, []);
+  const base = startedAt ?? Date.now();
+  const secs = Math.max(0, Math.floor((Date.now() - base) / 1000));
+  const frame = SPIN_FRAMES[Math.floor(Date.now() / 500) % SPIN_FRAMES.length];
+  const m = Math.floor(secs / 60);
+  const timeText = m > 0 ? `${m}m${secs % 60}s` : `${secs}s`;
+  return (
+    <View style={d.statusLine}>
+      <Text style={[d.statusSpin, { color }]}>{frame}</Text>
+      <Text style={[d.statusText, { color }]} numberOfLines={2}>{summary || "思考中…"}</Text>
+      <Text style={d.statusTime}>· {timeText}</Text>
+    </View>
+  );
+}
+
 export default function DetailScreen({ sid, onBack }: { sid: string; onBack: () => void }) {
   const snap = useRelay();
   const [tab, setTab] = useState<Tab>("activity");
   const [input, setInput] = useState("");
   const s: SessionState | undefined = snap.sessions.find((x) => x.session_id === sid);
+
+  useEffect(() => {
+    const sub = BackHandler.addEventListener("hardwareBackPress", () => {
+      onBack();
+      return true;
+    });
+    return () => sub.remove();
+  }, [onBack]);
 
   if (!s) {
     return (
@@ -85,7 +116,7 @@ export default function DetailScreen({ sid, onBack }: { sid: string; onBack: () 
     <SafeAreaView style={d.safe} edges={["top", "bottom"]}>
       {/* 头部 */}
       <View style={d.head}>
-        <Pressable style={({ pressed }) => [d.back, pressed && { opacity: 0.6 }]} onPress={onBack} hitSlop={8}>
+        <Pressable style={[d.back, d.opRipple]} android_ripple={{ color: "rgba(125,165,220,0.16)", borderless: false }} onPress={onBack} hitSlop={8}>
           <Text style={d.backText}>‹</Text>
         </Pressable>
         <View style={{ flex: 1, minWidth: 0 }}>
@@ -105,10 +136,10 @@ export default function DetailScreen({ sid, onBack }: { sid: string; onBack: () 
             <Text style={d.waitTool}>工具 <Text style={d.waitToolName}>{wr.tool_name}</Text></Text>
             <Text style={d.waitDesc} numberOfLines={6}>{wr.input_summary}</Text>
             <View style={d.wbtns}>
-              <Pressable style={({ pressed }) => [d.btnAllow, pressed && { opacity: 0.7 }]} onPress={() => decide(true)}>
+              <Pressable style={[d.btnAllow, d.opRipple]} android_ripple={{ color: "rgba(43,217,143,0.18)", borderless: false }} onPress={() => decide(true)}>
                 <Text style={d.btnAllowT}>✓ 允许</Text>
               </Pressable>
-              <Pressable style={({ pressed }) => [d.btnReject, pressed && { opacity: 0.7 }]} onPress={() => decide(false)}>
+              <Pressable style={[d.btnReject, d.opRipple]} android_ripple={{ color: "rgba(240,82,79,0.18)", borderless: false }} onPress={() => decide(false)}>
                 <Text style={d.btnRejectT}>✕ 拒绝</Text>
               </Pressable>
             </View>
@@ -120,7 +151,12 @@ export default function DetailScreen({ sid, onBack }: { sid: string; onBack: () 
         {/* Tab */}
         <View style={d.tabs}>
           {(["activity", "logs", "stats"] as Tab[]).map((t) => (
-            <Pressable key={t} style={[d.tab, tab === t && d.tabOn]} onPress={() => setTab(t)}>
+            <Pressable
+              key={t}
+              style={[d.tab, tab === t && d.tabOn]}
+              android_ripple={{ color: "rgba(125,165,220,0.14)", borderless: false, radius: 14 }}
+              onPress={() => setTab(t)}
+            >
               <Text style={[d.tabT, tab === t && d.tabTOn]}>{t === "activity" ? "活动" : t === "logs" ? "日志" : "统计"}</Text>
             </Pressable>
           ))}
@@ -134,23 +170,28 @@ export default function DetailScreen({ sid, onBack }: { sid: string; onBack: () 
                 <View style={[d.ovDot, { backgroundColor: color }]} />
                 <Text style={[d.ovSt, { color }]}>{STATUS_ZH[s.status] ?? s.status}</Text>
               </View>
+              {s.status === "WORKING" ? (
+                <LiveStatusLine summary={s.action_summary} startedAt={s.turn_started_at ?? s.updated_at} color={C.working} />
+              ) : s.status === "WAITING" && s.waiting_request ? (
+                <LiveStatusLine summary={`等待确认：${s.waiting_request.tool_name}`} startedAt={s.waiting_request.received_at} color={C.waiting} />
+              ) : null}
               <Row k="当前动作" v={s.action_summary || "—"} />
               {s.status === "ERROR" && s.last_error ? <Row k="错误" v={s.last_error} vc={C.error} /> : null}
               {s.status === "DONE" ? <Row k="结束原因" v={s.done_reason || "—"} /> : null}
             </View>
             <View style={d.ops}>
               {!external && s.status === "WORKING" ? (
-                <Pressable style={d.opWarn} onPress={() => store.send("COMMAND_STOP", { session_id: sid })}>
+                <Pressable style={[d.opWarn, d.opRipple]} android_ripple={{ color: "rgba(240,82,79,0.15)", borderless: false }} onPress={() => store.send("COMMAND_STOP", { session_id: sid })}>
                   <Text style={d.opWarnT}>■ 停止</Text>
                 </Pressable>
               ) : null}
               {external && s.status === "WORKING" ? (
-                <Pressable style={d.opWarn} onPress={() => store.send("COMMAND_EXT_STOP", { session_id: sid })}>
+                <Pressable style={[d.opWarn, d.opRipple]} android_ripple={{ color: "rgba(240,82,79,0.15)", borderless: false }} onPress={() => store.send("COMMAND_EXT_STOP", { session_id: sid })}>
                   <Text style={d.opWarnT}>■ 打断</Text>
                 </Pressable>
               ) : null}
               {external ? (
-                <Pressable style={d.op} onPress={() => store.send("COMMAND_EXT_MODE", { session_id: sid, enabled: !s.remote_mode })}>
+                <Pressable style={[d.op, d.opRipple]} android_ripple={{ color: "rgba(125,165,220,0.14)", borderless: false }} onPress={() => store.send("COMMAND_EXT_MODE", { session_id: sid, enabled: !s.remote_mode })}>
                   <Text style={d.opT}>{s.remote_mode ? "关闭远程审批" : "开启远程审批"}</Text>
                 </Pressable>
               ) : null}
@@ -175,8 +216,9 @@ export default function DetailScreen({ sid, onBack }: { sid: string; onBack: () 
         )}
       </ScrollView>
 
-      {/* 底部命令栏 */}
-      <View style={d.cmdbar}>
+      {/* 底部命令栏（键盘弹起时抬升到键盘上方） */}
+      <KeyboardAvoidingView behavior="padding" pointerEvents="box-none">
+        <View style={d.cmdbar}>
         <TextInput
           style={d.input}
           value={input}
@@ -186,10 +228,11 @@ export default function DetailScreen({ sid, onBack }: { sid: string; onBack: () 
           editable={canCmd}
           multiline
         />
-        <Pressable style={({ pressed }) => [d.sendBtn, (!canCmd || !input.trim()) && { opacity: 0.4 }, pressed && { transform: [{ scale: 0.92 }] }]} onPress={send} disabled={!canCmd}>
+        <Pressable style={[d.sendBtn, (!canCmd || !input.trim()) && { opacity: 0.4 }]} android_ripple={{ color: "rgba(255,255,255,0.2)", borderless: false }} onPress={send} disabled={!canCmd}>
           <Text style={d.sendT}>➤</Text>
         </Pressable>
-      </View>
+        </View>
+      </KeyboardAvoidingView>
     </SafeAreaView>
   );
 }
@@ -225,6 +268,13 @@ const d = StyleSheet.create({
   },
   btnRejectT: { color: C.error, fontWeight: "600", fontSize: 14.5 },
   histnote: { color: C.faint, fontSize: 11, textAlign: "center", marginBottom: 10 },
+  statusLine: {
+    flexDirection: "row", alignItems: "center", gap: 7, marginBottom: 12,
+    backgroundColor: "rgba(125,165,220,0.05)", borderRadius: 11, paddingHorizontal: 11, paddingVertical: 9,
+  },
+  statusSpin: { fontSize: 15, fontWeight: "700" },
+  statusText: { flex: 1, fontSize: 13.5, fontWeight: "600" },
+  statusTime: { color: C.faint, fontSize: 12, fontVariant: ["tabular-nums"] },
   tabs: { flexDirection: "row", gap: 7, marginBottom: 12 },
   tab: { flex: 1, height: 36, borderRadius: 11, backgroundColor: "rgba(125,165,220,0.06)", alignItems: "center", justifyContent: "center" },
   tabOn: { backgroundColor: "rgba(93,134,245,0.16)", borderWidth: 1, borderColor: "rgba(93,134,245,0.4)" },
@@ -238,6 +288,7 @@ const d = StyleSheet.create({
   rowK: { color: C.dim, fontSize: 13 },
   rowV: { color: C.text, fontSize: 13, fontVariant: ["tabular-nums"], textAlign: "right", flex: 1 },
   ops: { flexDirection: "row", gap: 10 },
+  opRipple: { borderRadius: 13, overflow: "hidden" },
   op: { flex: 1, height: 42, borderRadius: 13, backgroundColor: C.panel2, borderWidth: 1, borderColor: C.line, alignItems: "center", justifyContent: "center" },
   opT: { color: C.text, fontSize: 13.5, fontWeight: "600" },
   opWarn: { flex: 1, height: 42, borderRadius: 13, backgroundColor: C.panel2, borderWidth: 1, borderColor: "rgba(240,82,79,0.3)", alignItems: "center", justifyContent: "center" },

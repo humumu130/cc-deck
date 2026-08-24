@@ -116,20 +116,37 @@ export class SessionManager {
     return this.sessions.get(id)?.state;
   }
 
-  setExternalStatus(id: string, status: SessionState["status"], summary: string): void {
+  setExternalStatus(id: string, status: SessionState["status"], summary: string, turnStartedAt?: number): void {
     const s = this.sessions.get(id);
     if (!s) return;
     const changed = s.state.status !== status;
     s.state.status = status;
     s.state.action_summary = summary;
+    if (status === "WORKING" && turnStartedAt) s.state.turn_started_at = turnStartedAt;
     s.state.updated_at = Date.now();
     if (changed || status === "WORKING") {
       this.bus.emit(id, "SESSION_UPDATED", {
         status,
         action_summary: summary,
         stats: { ...s.state.stats },
+        ...(s.state.turn_started_at ? { turn_started_at: s.state.turn_started_at } : {}),
       });
     }
+  }
+
+  // 外部会话标题升级（首个 prompt 到达时，文件夹名 → prompt 摘要）
+  setExternalTitle(id: string, title: string, initialPrompt: string): void {
+    const s = this.sessions.get(id);
+    if (!s || !s.state.external) return;
+    s.state.title = title;
+    s.state.initial_prompt = initialPrompt;
+    s.state.updated_at = Date.now();
+    this.bus.emit(id, "SESSION_UPDATED", {
+      status: s.state.status,
+      action_summary: s.state.action_summary,
+      stats: { ...s.state.stats },
+      title,
+    });
   }
 
   setExternalWaiting(id: string, payload: WaitingPayload): void {
@@ -279,6 +296,15 @@ export class SessionManager {
           }
           const r = this.bridge.extStop(cmd.payload.session_id);
           return { command_id: cmd.command_id, ok: r.ok, error: r.error };
+        }
+        case "COMMAND_DELETE": {
+          const s = this.require(cmd.payload.session_id);
+          if (s.state.status === "WORKING" || s.state.status === "WAITING") {
+            return { command_id: cmd.command_id, ok: false, error: "会话运行中，不能删除" };
+          }
+          this.sessions.delete(cmd.payload.session_id);
+          this.bus.emit(cmd.payload.session_id, "SESSION_DELETED", { session_id: cmd.payload.session_id });
+          return { command_id: cmd.command_id, ok: true };
         }
       }
     } catch (e) {
@@ -435,6 +461,7 @@ export class SessionManager {
       status: s.state.status,
       action_summary: s.state.action_summary,
       stats: { ...s.state.stats },
+      ...(s.state.turn_started_at ? { turn_started_at: s.state.turn_started_at } : {}),
     });
   }
 

@@ -49,7 +49,7 @@ export default function SetupScreen() {
           spellCheck={false}
         />
       </View>
-      <Pressable style={({ pressed }) => [s.btn, pressed && { opacity: 0.85 }]} onPress={save}>
+      <Pressable style={s.btn} android_ripple={{ color: "rgba(255,255,255,0.15)", borderless: false }} onPress={save}>
         <LinearGradient colors={[C.brandA, C.brandB]} style={s.btnGrad}>
           <Text style={s.btnText}>连接</Text>
         </LinearGradient>

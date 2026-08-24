@@ -39,6 +39,10 @@ const STATE_TYPES = new Set<EventType>([
 export function compactEvents(events: Envelope[]): Envelope[] {
   const bySession = new Map<string, { states: Envelope[]; logs: Envelope[] }>();
   for (const e of events) {
+    if (e.type === "SESSION_DELETED") {
+      bySession.delete(e.session_id); // 已删除会话：整组丢弃
+      continue;
+    }
     if (!bySession.has(e.session_id)) bySession.set(e.session_id, { states: [], logs: [] });
     const bucket = bySession.get(e.session_id)!;
     if (e.type === "SESSION_LOG") bucket.logs.push(e);
@@ -114,16 +118,25 @@ export function reduceHistory(events: Envelope[]): Map<string, ReplayedSession> 
       out.set(e.session_id, rs);
       continue;
     }
-    if (!rs) continue; // 缺 CREATED 的残缺事件（压缩裁掉了），跳过
+    if (!rs) {
+      if (e.type === "SESSION_DELETED") out.delete(e.session_id);
+      continue; // 缺 CREATED 的残缺事件（压缩裁掉了），跳过
+    }
+    if (e.type === "SESSION_DELETED") {
+      out.delete(e.session_id);
+      continue;
+    }
     const s = rs.state;
     s.updated_at = e.ts;
     switch (e.type) {
       case "SESSION_UPDATED": {
-        const p = e.payload as { status: SessionState["status"]; action_summary: string; stats: SessionState["stats"]; remote_mode?: boolean };
+        const p = e.payload as { status: SessionState["status"]; action_summary: string; stats: SessionState["stats"]; remote_mode?: boolean; title?: string; turn_started_at?: number };
         s.status = p.status;
         s.action_summary = p.action_summary;
         if (p.stats) s.stats = p.stats;
         if (p.remote_mode !== undefined) s.remote_mode = p.remote_mode;
+        if (p.title) s.title = p.title;
+        if (p.turn_started_at) s.turn_started_at = p.turn_started_at;
         break;
       }
       case "SESSION_WAITING": {

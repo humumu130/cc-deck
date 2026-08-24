@@ -175,6 +175,8 @@ class RelayStore {
         s.action_summary = msg.payload.action_summary;
         if (msg.payload.stats) s.stats = msg.payload.stats;
         if (msg.payload.remote_mode !== undefined) s.remote_mode = msg.payload.remote_mode;
+        if (msg.payload.title) s.title = msg.payload.title;
+        if (msg.payload.turn_started_at) s.turn_started_at = msg.payload.turn_started_at;
         s.updated_at = msg.ts;
         break;
       }
@@ -222,6 +224,11 @@ class RelayStore {
       }
       case "SESSION_LOG": {
         this.pushLog(sid, msg.payload);
+        break;
+      }
+      case "SESSION_DELETED": {
+        this.sessions.delete(sid);
+        this.timelines.delete(sid);
         break;
       }
     }
