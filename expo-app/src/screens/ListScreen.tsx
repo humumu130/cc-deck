@@ -179,11 +179,11 @@ export default function ListScreen({ sessions, connected, connText, onOpen, onNe
           <Text style={styles.themeT}>{mode === "dark" ? "☀️" : "🌙"}</Text>
         </Pressable>
         <Pressable
-          style={styles.themeBtn}
-          android_ripple={{ color: c.tintSoft, borderless: false, radius: 15 }}
+          style={styles.srvBtn}
+          android_ripple={{ color: c.tintSoft, borderless: false, radius: 13 }}
           onPress={onSetup}
         >
-          <Text style={styles.themeT}>⚙</Text>
+          <Text style={styles.srvT}>服务器</Text>
         </Pressable>
         <View style={[styles.connChip, { borderColor: withA(connColor, 0.33) }]}>
           <View style={[styles.connDot, { backgroundColor: connColor }]} />
@@ -253,13 +253,18 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
   logoText: { color: "#fff", fontWeight: "800", fontSize: 13 },
   h1: { color: c.text, fontSize: 17, fontWeight: "700", flex: 1 },
   themeBtn: {
-    width: 30, height: 30, borderRadius: 15, alignItems: "center", justifyContent: "center",
+    width: 28, height: 28, borderRadius: 14, alignItems: "center", justifyContent: "center",
     backgroundColor: c.tintSoft, borderWidth: 1, borderColor: c.line,
   },
   themeT: { fontSize: 14 },
+  srvBtn: {
+    height: 28, borderRadius: 999, borderWidth: 1, borderColor: c.line, backgroundColor: c.tintSoft,
+    paddingHorizontal: 10, alignItems: "center", justifyContent: "center",
+  },
+  srvT: { fontSize: 11, color: c.dim },
   connChip: {
     flexDirection: "row", alignItems: "center", gap: 5, borderWidth: 1,
-    borderRadius: 999, paddingHorizontal: 9, paddingVertical: 4,
+    borderRadius: 999, height: 28, paddingHorizontal: 10,
     backgroundColor: c.tintSoft,
   },
   connDot: { width: 6, height: 6, borderRadius: 3 },

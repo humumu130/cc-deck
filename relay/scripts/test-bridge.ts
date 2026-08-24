@@ -30,6 +30,7 @@ const fakeLog = (): string[][] => {
 process.env.CCR_PORT = "8798";
 process.env.CCR_TOKEN = "test-token-123";
 process.env.CCR_BRIDGE_TOKEN = "bridge-token-456";
+process.env.CCR_NO_TITLE_GEN = "1";
 process.env.CCR_INJECT_CMD = fileURLToPath(new URL("./fake-injector.mjs", import.meta.url));
 const INJECT_LOG = fileURLToPath(new URL("../data/test-inject.log", import.meta.url));
 process.env.CCR_INJECT_LOG = INJECT_LOG;

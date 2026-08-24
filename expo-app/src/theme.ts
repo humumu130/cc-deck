@@ -38,22 +38,22 @@ export const DARK: ThemeColors = {
 };
 
 export const LIGHT: ThemeColors = {
-  bg: "#F4F7FB",
-  panel: "#FFFFFF",
-  panel2: "#EDF2F8",
-  line: "rgba(38,64,96,0.14)",
-  text: "#16202B",
-  dim: "#51637A",
-  faint: "#8296AB",
+  bg: "#EEF1F5",
+  panel: "#F7F9FB",
+  panel2: "#E5EAF1",
+  line: "rgba(38,64,96,0.12)",
+  text: "#22303E",
+  dim: "#5A6B7E",
+  faint: "#8697A9",
   brandA: "#2F7FE8",
   brandB: "#6F5FE8",
-  working: "#C98A00",
-  waiting: "#D93036",
-  error: "#D6541F",
-  done: "#0E9355",
-  tintSoft: "rgba(47,127,232,0.07)",
-  tintStrong: "rgba(47,127,232,0.14)",
-  overlay: "rgba(247,250,253,0.97)",
+  working: "#B58300",
+  waiting: "#C9383E",
+  error: "#C4521F",
+  done: "#118A52",
+  tintSoft: "rgba(47,127,232,0.06)",
+  tintStrong: "rgba(47,127,232,0.13)",
+  overlay: "rgba(244,246,249,0.97)",
 };
 
 // #RRGGBB + alpha -> #RRGGBBAA（RN 支持 8 位 hex）

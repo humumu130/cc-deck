@@ -5,6 +5,7 @@ import { AgentSession } from "./agent-adapter.js";
 import type { RelayConfig } from "./config.js";
 import type { ReplayedSession } from "./history.js";
 import { deriveTitle } from "./history.js";
+import { generateTitle } from "./title-gen.js";
 import { truncate } from "./summarizer.js";
 import type {
   Command,
@@ -28,6 +29,7 @@ const MAX_SESSIONS = 20;
 export class SessionManager {
   private sessions = new Map<string, ManagedSession>();
   private processedCommands = new Map<string, true>();
+  private titleRequested = new Set<string>();   // 已请求过自动命名的会话
 
   constructor(
     private bus: EventBus,
@@ -39,6 +41,27 @@ export class SessionManager {
 
   snapshot(): SessionState[] {
     return [...this.sessions.values()].map((s) => this.cloneState(s));
+  }
+
+  // 自动命名：一次轻量模型调用把首条 prompt 变成短标题（托管/外部会话通用）
+  // CC 自带的 session name 在本环境基本不生成，这里兜底；已有 CC 名时外部会话由 bridge 跳过
+  requestSmartTitle(sessionId: string, task: string): void {
+    if (process.env.CCR_NO_TITLE_GEN === "1") return;
+    if (this.titleRequested.has(sessionId)) return;
+    this.titleRequested.add(sessionId);
+    void generateTitle(task, this.cfg.model).then((t) => {
+      if (!t) return;
+      const s = this.sessions.get(sessionId);
+      if (!s || s.state.title === t) return;
+      s.state.title = t;
+      s.state.updated_at = Date.now();
+      this.bus.emit(sessionId, "SESSION_UPDATED", {
+        status: s.state.status,
+        action_summary: s.state.action_summary,
+        stats: { ...s.state.stats },
+        title: t,
+      });
+    });
   }
 
   snapshotLogs(): Record<string, LogEntry[]> {
@@ -434,6 +457,7 @@ export class SessionManager {
       title: managed.state.title,
       model: this.cfg.model,
     });
+    this.requestSmartTitle(agent.id, prompt);
     return agent.id;
   }
 

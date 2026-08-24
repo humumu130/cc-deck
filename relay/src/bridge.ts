@@ -210,6 +210,7 @@ export class Bridge {
       this.mgr.setExternalTitle(id, title, ev.prompt);
     }
     this.refreshName(id, ev);
+    if (!this.named.has(id) && ev.prompt) this.mgr.requestSmartTitle(id, ev.prompt);
     this.mgr.setExternalStatus(id, "WORKING", truncate(ev.prompt ?? "新回合", 60), turnStartedAt);
     this.mgr.pushExternalLog(id, "user_message", truncate(ev.prompt ?? "", 300));
     void state;

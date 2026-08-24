@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
+import { BackHandler, KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { LinearGradient } from "expo-linear-gradient";
 import { SafeAreaView } from "react-native-safe-area-context";
@@ -40,6 +40,16 @@ export default function SetupScreen({ onClose }: Props) {
       if (v === "0") setRemember(false);
     });
   }, []);
+
+  // 返回手势/返回键回到主界面（仅从 ⚙ 进入时；首次配置无路可退）
+  useEffect(() => {
+    if (!onClose) return;
+    const sub = BackHandler.addEventListener("hardwareBackPress", () => {
+      onClose();
+      return true;
+    });
+    return () => sub.remove();
+  }, [onClose]);
 
   const toggleRemember = () => {
     setRemember((v) => {
