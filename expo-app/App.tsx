@@ -55,6 +55,11 @@ function Shell() {
     });
   }, []);
 
+  // 首次在设置页连接成功：自动进入主界面（hasCfg 只在启动时算过一次）
+  useEffect(() => {
+    if (snap.connected && !hasCfg) setHasCfg(true);
+  }, [snap.connected, hasCfg]);
+
   const appState = useRef(AppState.currentState);
 
   useEffect(() => {

@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { LinearGradient } from "expo-linear-gradient";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { withA, type ThemeColors } from "../theme";
@@ -27,6 +28,7 @@ export default function SetupScreen({ onClose }: Props) {
   const [name, setName] = useState("");
   const [wsUrl, setWsUrl] = useState("ws://192.168.0.105:8787/ws");
   const [token, setToken] = useState("");
+  const [remember, setRemember] = useState(true);
 
   const reload = async () => {
     setServers(await store.loadServers());
@@ -34,7 +36,17 @@ export default function SetupScreen({ onClose }: Props) {
   };
   useEffect(() => {
     void reload();
+    void AsyncStorage.getItem("ccr_remember_token").then((v) => {
+      if (v === "0") setRemember(false);
+    });
   }, []);
+
+  const toggleRemember = () => {
+    setRemember((v) => {
+      void AsyncStorage.setItem("ccr_remember_token", v ? "0" : "1");
+      return !v;
+    });
+  };
 
   const add = () => {
     const base = wsUrl.trim().replace(/\/+$/, "");
@@ -44,17 +56,22 @@ export default function SetupScreen({ onClose }: Props) {
       id: uuid(),
       name: name.trim() || hostOf(base),
       wsUrl: base,
-      token: tk,
+      token: remember ? tk : "",   // 不记住：条目只存地址，令牌仅本次连接用
     };
-    void store.connectServer(entry).then(() => {
+    void store.connectServer(entry, tk).then(() => {
       setActiveId(entry.id);
-      setName("");
-      setToken("");
-      if (onClose) onClose();
+      if (onClose) onClose(); // 首次连接的导航由 App 在 connected 后接管
     });
   };
 
   const connect = (e: ServerEntry) => {
+    if (!e.token) {
+      // 没记令牌：预填表单让用户补输
+      setName(e.name);
+      setWsUrl(e.wsUrl);
+      setToken("");
+      return;
+    }
     void store.connectServer(e).then(() => {
       setActiveId(e.id);
       if (onClose) onClose();
@@ -134,6 +151,12 @@ export default function SetupScreen({ onClose }: Props) {
               spellCheck={false}
             />
           </View>
+          <Pressable style={s.checkRow} onPress={toggleRemember} hitSlop={6}>
+            <View style={[s.checkBox, remember && s.checkBoxOn]}>
+              {remember ? <Text style={s.checkT}>✓</Text> : null}
+            </View>
+            <Text style={s.checkLabel}>记住令牌（下次免输入）</Text>
+          </Pressable>
           <Pressable style={s.btn} android_ripple={{ color: "rgba(255,255,255,0.15)", borderless: false }} onPress={add}>
             <LinearGradient colors={[c.brandA, c.brandB]} style={s.btnGrad}>
               <Text style={s.btnText}>{servers.length > 0 ? "添加并连接" : "连接"}</Text>
@@ -153,7 +176,7 @@ export default function SetupScreen({ onClose }: Props) {
 
 const makeStyles = (c: ThemeColors) => StyleSheet.create({
   safe: { flex: 1, backgroundColor: c.bg },
-  wrap: { alignItems: "center", justifyContent: "center", padding: 28 },
+  wrap: { alignItems: "center", paddingTop: 72, paddingBottom: 36, paddingHorizontal: 28 },
   logo: { width: 64, height: 64, borderRadius: 19, alignItems: "center", justifyContent: "center", marginBottom: 16 },
   logoText: { color: "#fff", fontWeight: "800", fontSize: 22 },
   h2: { color: c.text, fontSize: 21, fontWeight: "700" },
@@ -180,6 +203,14 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
   btn: { width: "100%", maxWidth: 340, marginTop: 8, borderRadius: 14, overflow: "hidden" },
   btnGrad: { height: 48, alignItems: "center", justifyContent: "center" },
   btnText: { color: "#fff", fontSize: 15.5, fontWeight: "700" },
+  checkRow: { flexDirection: "row", alignItems: "center", gap: 8, width: "100%", maxWidth: 340, marginBottom: 4, alignSelf: "flex-start" },
+  checkBox: {
+    width: 20, height: 20, borderRadius: 6, borderWidth: 1.5, borderColor: c.line,
+    backgroundColor: c.panel2, alignItems: "center", justifyContent: "center",
+  },
+  checkBoxOn: { backgroundColor: c.brandA, borderColor: c.brandA },
+  checkT: { color: "#fff", fontSize: 13, fontWeight: "700" },
+  checkLabel: { color: c.dim, fontSize: 13 },
   hint: { color: c.faint, fontSize: 12, marginTop: 16, textAlign: "center", maxWidth: 320 },
   back: { marginTop: 14, paddingHorizontal: 22, paddingVertical: 8, borderRadius: 20 },
   backT: { color: c.dim, fontSize: 14 },

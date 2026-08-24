@@ -70,9 +70,10 @@ class RelayStore {
 
   private async readServers(): Promise<ServerEntry[]> {
     try {
-      const list = JSON.parse((await AsyncStorage.getItem("ccr_conns")) ?? "[]") as ServerEntry[];
-      if (Array.isArray(list)) {
-        return list.filter((e) => e && e.wsUrl && e.token);
+      const raw = await AsyncStorage.getItem("ccr_conns");
+      if (raw !== null) {
+        const list = JSON.parse(raw) as ServerEntry[];
+        if (Array.isArray(list)) return list.filter((e) => e && e.wsUrl);
       }
     } catch {}
     // 旧单条配置迁移
@@ -101,7 +102,8 @@ class RelayStore {
     return (await AsyncStorage.getItem("ccr_active")) ?? null;
   }
 
-  async connectServer(entry: ServerEntry): Promise<void> {
+  // entry 持久化（token 可为空 = 不记住令牌）；connectToken = 本次实际连接用的令牌
+  async connectServer(entry: ServerEntry, connectToken?: string): Promise<void> {
     const list = await this.readServers();
     const idx = list.findIndex((e) => e.id === entry.id);
     if (idx >= 0) list[idx] = entry;
@@ -109,7 +111,8 @@ class RelayStore {
     this.servers = list;
     await AsyncStorage.setItem("ccr_conns", JSON.stringify(list));
     await AsyncStorage.setItem("ccr_active", entry.id);
-    this.applyConfig({ wsUrl: entry.wsUrl, token: entry.token });
+    const tk = connectToken ?? entry.token;
+    if (tk) this.applyConfig({ wsUrl: entry.wsUrl, token: tk });
   }
 
   async deleteServer(id: string): Promise<void> {
@@ -128,7 +131,8 @@ class RelayStore {
     this.servers = list;
     const activeId = await AsyncStorage.getItem("ccr_active");
     const active = list.find((e) => e.id === activeId) ?? list[0];
-    if (!active) return null;
+    // 活动服务器没记令牌（勾了不记住）：停在设置页，列表里点它补输令牌
+    if (!active || !active.token) return null;
     this.cfg = { wsUrl: active.wsUrl, token: active.token };
     return this.cfg;
   }
@@ -154,7 +158,7 @@ class RelayStore {
   }
 
   connect() {
-    if (!this.cfg) return;
+    if (!this.cfg || !this.cfg.token) return;
     if (this.reconnectTimer) {
       clearTimeout(this.reconnectTimer);
       this.reconnectTimer = null;
@@ -170,10 +174,12 @@ class RelayStore {
     const ws = new WebSocket(url);
     this.ws = ws;
     ws.onopen = () => {
+      if (this.ws !== ws) return; // 竞态：已是更新的连接
       this.reconnectDelay = 1000;
       this.emit({ connected: true, connText: "已连接" });
     };
     ws.onclose = () => {
+      if (this.ws !== ws) return; // 旧连接的关闭事件（切换服务器），忽略
       this.emit({ connected: false, connText: "已断开" });
       this.scheduleReconnect();
     };
