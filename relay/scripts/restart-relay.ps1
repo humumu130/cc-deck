@@ -7,5 +7,5 @@ if ($c) {
 } else {
   Write-Host "no listener on 8787"
 }
-Start-Process cmd -ArgumentList '/k set CCR_TOKEN=devtoken&& cd /d D:\dev\cc-watch\relay && npm run dev'
+Start-Process cmd -ArgumentList '/k set CCR_TOKEN=devtoken&& cd /d D:\dev\cc-watch\relay && npm run dev 2>&1 | node scripts/tee-log.mjs data\relay-console.log'
 Write-Host "relay restarted"

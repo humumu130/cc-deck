@@ -104,15 +104,19 @@ export function startServer(
 
   server.on("upgrade", (req, socket, head) => {
     const url = new URL(req.url ?? "/", "http://localhost");
+    console.log(`[ws-upgrade] from=${req.socket.remoteAddress} path=${url.pathname}`);
     if (url.pathname !== "/ws") {
+      console.log(`[ws-upgrade] reject: bad path`);
       socket.destroy();
       return;
     }
     if ((url.searchParams.get("token") ?? "") !== cfg.token) {
+      console.log(`[ws-upgrade] reject: token mismatch (got=${url.searchParams.get("token") ?? ""})`);
       socket.write("HTTP/1.1 401 Unauthorized\r\n\r\n");
       socket.destroy();
       return;
     }
+    console.log(`[ws-upgrade] accepted`);
     wss.handleUpgrade(req, socket, head, (ws) => wss.emit("connection", ws, url));
   });
 
