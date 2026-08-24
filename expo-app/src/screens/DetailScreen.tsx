@@ -1,14 +1,41 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { BackHandler, KeyboardAvoidingView, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { C, STATUS_ZH, statusColor } from "../theme";
+import { STATUS_ZH, statusColor, withA, type ThemeColors } from "../theme";
+import { useTheme, useThemeStyles } from "../theme-context";
 import { fmtClock, fmtElapsed, sessionElapsed } from "../fmt";
 import { store, useRelay } from "../store";
 import type { LogEntry, SessionState } from "../protocol";
 
 type Tab = "activity" | "logs" | "stats";
 
+// 快捷指令模板：点击填入输入框（不自动发送）
+const TEMPLATES = ["继续", "总结当前进展", "运行测试", "提交代码"];
+
+const LOG_FILTERS = [
+  { k: "all", label: "全部" },
+  { k: "tool", label: "工具" },
+  { k: "msg", label: "消息" },
+  { k: "sys", label: "系统" },
+] as const;
+type LogFilter = (typeof LOG_FILTERS)[number]["k"];
+
+function matchFilter(kind: string, f: LogFilter): boolean {
+  if (f === "all") return true;
+  if (f === "tool") return kind === "tool_use" || kind === "tool_result";
+  if (f === "msg") return kind === "assistant_text" || kind === "user_message";
+  return kind === "system";
+}
+
+function fmtTok(n: number | undefined): string {
+  if (n === undefined) return "—";
+  if (n >= 1_000_000) return (n / 1_000_000).toFixed(1) + "M";
+  if (n >= 1000) return (n / 1000).toFixed(1) + "k";
+  return String(n);
+}
+
 function Row({ k, v, vc }: { k: string; v: string; vc?: string }) {
+  const d = useThemeStyles(makeStyles);
   return (
     <View style={d.row}>
       <Text style={d.rowK}>{k}</Text>
@@ -18,33 +45,54 @@ function Row({ k, v, vc }: { k: string; v: string; vc?: string }) {
 }
 
 function LogsView({ logs }: { logs: LogEntry[] }) {
+  const { c } = useTheme();
+  const d = useThemeStyles(makeStyles);
   const ref = useRef<ScrollView>(null);
+  const [filter, setFilter] = useState<LogFilter>("all");
+  const shown = useMemo(() => logs.filter((e) => matchFilter(e.kind, filter)), [logs, filter]);
   useEffect(() => {
     if (ref.current) ref.current.scrollToEnd({ animated: false });
-  }, [logs.length]);
-  if (logs.length === 0) return <Text style={d.empty}>暂无日志</Text>;
+  }, [shown.length]);
   return (
-    <ScrollView ref={ref} style={{ maxHeight: 420 }}>
-      {logs.map((e, i) => (
-        <View key={i} style={d.tlItem}>
-          <Text style={d.tlTime}>{fmtClock(e.ts).slice(0, 5)}</Text>
-          <View style={{ flex: 1 }}>
-            {e.tool ? <Text style={d.tlTool}>{e.tool}</Text> : null}
-            <Text style={[d.tlText, { color: logColor(e.kind) }]}>{e.text}</Text>
-          </View>
-        </View>
-      ))}
-    </ScrollView>
+    <View>
+      <View style={d.filterRow}>
+        {LOG_FILTERS.map((f) => (
+          <Pressable
+            key={f.k}
+            style={[d.filterChip, filter === f.k && d.filterChipOn]}
+            android_ripple={{ color: c.tintSoft, borderless: false, radius: 12 }}
+            onPress={() => setFilter(f.k)}
+          >
+            <Text style={[d.filterT, filter === f.k && d.filterTOn]}>{f.label}</Text>
+          </Pressable>
+        ))}
+      </View>
+      {shown.length === 0 ? (
+        <Text style={d.empty}>{logs.length === 0 ? "暂无日志" : "该类型暂无日志"}</Text>
+      ) : (
+        <ScrollView ref={ref} style={{ maxHeight: 420 }}>
+          {shown.map((e, i) => (
+            <View key={i} style={d.tlItem}>
+              <Text style={d.tlTime}>{fmtClock(e.ts).slice(0, 5)}</Text>
+              <View style={{ flex: 1 }}>
+                {e.tool ? <Text style={d.tlTool}>{e.tool}</Text> : null}
+                <Text style={[d.tlText, { color: logColor(e.kind, c) }]}>{e.text}</Text>
+              </View>
+            </View>
+          ))}
+        </ScrollView>
+      )}
+    </View>
   );
 }
 
-function logColor(kind: string): string {
+function logColor(kind: string, c: ThemeColors): string {
   switch (kind) {
-    case "tool_use": return "#9FC4F0";
-    case "tool_result": return C.dim;
-    case "system": return "#A99CF5";
-    case "user_message": return C.working;
-    default: return C.text;
+    case "tool_use": return c.brandA;
+    case "tool_result": return c.dim;
+    case "system": return c.brandB;
+    case "user_message": return c.working;
+    default: return c.text;
   }
 }
 
@@ -52,6 +100,7 @@ const SPIN_FRAMES = ["✶", "✸", "✹", "✺", "✹", "✸"];
 
 // 类 Claude Code 状态行：✶ 摘要 · Ns（每秒走帧）
 function LiveStatusLine({ summary, startedAt, color }: { summary: string; startedAt?: number; color: string }) {
+  const d = useThemeStyles(makeStyles);
   const [, tick] = useState(0);
   useEffect(() => {
     const t = setInterval(() => tick((n) => n + 1), 500);
@@ -72,6 +121,8 @@ function LiveStatusLine({ summary, startedAt, color }: { summary: string; starte
 }
 
 export default function DetailScreen({ sid, onBack }: { sid: string; onBack: () => void }) {
+  const { c } = useTheme();
+  const d = useThemeStyles(makeStyles);
   const snap = useRelay();
   const [tab, setTab] = useState<Tab>("activity");
   const [input, setInput] = useState("");
@@ -96,7 +147,7 @@ export default function DetailScreen({ sid, onBack }: { sid: string; onBack: () 
     );
   }
 
-  const color = statusColor(s.status);
+  const color = statusColor(s.status, c);
   const external = !!s.external;
   const canCmd = snap.connected && !(s.historical && !external);
   const wr = s.waiting_request;
@@ -116,7 +167,7 @@ export default function DetailScreen({ sid, onBack }: { sid: string; onBack: () 
     <SafeAreaView style={d.safe} edges={["top", "bottom"]}>
       {/* 头部 */}
       <View style={d.head}>
-        <Pressable style={[d.back, d.opRipple]} android_ripple={{ color: "rgba(125,165,220,0.16)", borderless: false }} onPress={onBack} hitSlop={8}>
+        <Pressable style={[d.back, d.opRipple]} android_ripple={{ color: c.tintSoft, borderless: false }} onPress={onBack} hitSlop={8}>
           <Text style={d.backText}>‹</Text>
         </Pressable>
         <View style={{ flex: 1, minWidth: 0 }}>
@@ -136,10 +187,10 @@ export default function DetailScreen({ sid, onBack }: { sid: string; onBack: () 
             <Text style={d.waitTool}>工具 <Text style={d.waitToolName}>{wr.tool_name}</Text></Text>
             <Text style={d.waitDesc} numberOfLines={6}>{wr.input_summary}</Text>
             <View style={d.wbtns}>
-              <Pressable style={[d.btnAllow, d.opRipple]} android_ripple={{ color: "rgba(43,217,143,0.18)", borderless: false }} onPress={() => decide(true)}>
+              <Pressable style={[d.btnAllow, d.opRipple]} android_ripple={{ color: withA(c.done, 0.18), borderless: false }} onPress={() => decide(true)}>
                 <Text style={d.btnAllowT}>✓ 允许</Text>
               </Pressable>
-              <Pressable style={[d.btnReject, d.opRipple]} android_ripple={{ color: "rgba(240,82,79,0.18)", borderless: false }} onPress={() => decide(false)}>
+              <Pressable style={[d.btnReject, d.opRipple]} android_ripple={{ color: withA(c.waiting, 0.18), borderless: false }} onPress={() => decide(false)}>
                 <Text style={d.btnRejectT}>✕ 拒绝</Text>
               </Pressable>
             </View>
@@ -154,7 +205,7 @@ export default function DetailScreen({ sid, onBack }: { sid: string; onBack: () 
             <Pressable
               key={t}
               style={[d.tab, tab === t && d.tabOn]}
-              android_ripple={{ color: "rgba(125,165,220,0.14)", borderless: false, radius: 14 }}
+              android_ripple={{ color: c.tintSoft, borderless: false, radius: 14 }}
               onPress={() => setTab(t)}
             >
               <Text style={[d.tabT, tab === t && d.tabTOn]}>{t === "activity" ? "活动" : t === "logs" ? "日志" : "统计"}</Text>
@@ -171,27 +222,27 @@ export default function DetailScreen({ sid, onBack }: { sid: string; onBack: () 
                 <Text style={[d.ovSt, { color }]}>{STATUS_ZH[s.status] ?? s.status}</Text>
               </View>
               {s.status === "WORKING" ? (
-                <LiveStatusLine summary={s.action_summary} startedAt={s.turn_started_at ?? s.updated_at} color={C.working} />
+                <LiveStatusLine summary={s.action_summary} startedAt={s.turn_started_at ?? s.updated_at} color={c.working} />
               ) : s.status === "WAITING" && s.waiting_request ? (
-                <LiveStatusLine summary={`等待确认：${s.waiting_request.tool_name}`} startedAt={s.waiting_request.received_at} color={C.waiting} />
+                <LiveStatusLine summary={`等待确认：${s.waiting_request.tool_name}`} startedAt={s.waiting_request.received_at} color={c.waiting} />
               ) : null}
               <Row k="当前动作" v={s.action_summary || "—"} />
-              {s.status === "ERROR" && s.last_error ? <Row k="错误" v={s.last_error} vc={C.error} /> : null}
+              {s.status === "ERROR" && s.last_error ? <Row k="错误" v={s.last_error} vc={c.error} /> : null}
               {s.status === "DONE" ? <Row k="结束原因" v={s.done_reason || "—"} /> : null}
             </View>
             <View style={d.ops}>
               {!external && s.status === "WORKING" ? (
-                <Pressable style={[d.opWarn, d.opRipple]} android_ripple={{ color: "rgba(240,82,79,0.15)", borderless: false }} onPress={() => store.send("COMMAND_STOP", { session_id: sid })}>
+                <Pressable style={[d.opWarn, d.opRipple]} android_ripple={{ color: withA(c.waiting, 0.15), borderless: false }} onPress={() => store.send("COMMAND_STOP", { session_id: sid })}>
                   <Text style={d.opWarnT}>■ 停止</Text>
                 </Pressable>
               ) : null}
               {external && s.status === "WORKING" ? (
-                <Pressable style={[d.opWarn, d.opRipple]} android_ripple={{ color: "rgba(240,82,79,0.15)", borderless: false }} onPress={() => store.send("COMMAND_EXT_STOP", { session_id: sid })}>
+                <Pressable style={[d.opWarn, d.opRipple]} android_ripple={{ color: withA(c.waiting, 0.15), borderless: false }} onPress={() => store.send("COMMAND_EXT_STOP", { session_id: sid })}>
                   <Text style={d.opWarnT}>■ 打断</Text>
                 </Pressable>
               ) : null}
               {external ? (
-                <Pressable style={[d.op, d.opRipple]} android_ripple={{ color: "rgba(125,165,220,0.14)", borderless: false }} onPress={() => store.send("COMMAND_EXT_MODE", { session_id: sid, enabled: !s.remote_mode })}>
+                <Pressable style={[d.op, d.opRipple]} android_ripple={{ color: c.tintSoft, borderless: false }} onPress={() => store.send("COMMAND_EXT_MODE", { session_id: sid, enabled: !s.remote_mode })}>
                   <Text style={d.opT}>{s.remote_mode ? "关闭远程审批" : "开启远程审批"}</Text>
                 </Pressable>
               ) : null}
@@ -205,8 +256,12 @@ export default function DetailScreen({ sid, onBack }: { sid: string; onBack: () 
           <View style={d.ovcard}>
             <Row k="耗时" v={fmtElapsed(sessionElapsed(s))} />
             <Row k="改动文件" v={String(s.stats?.files_changed ?? 0)} />
-            <Row k="新增行" v={"+" + (s.stats?.lines_added ?? 0)} vc={C.working} />
-            <Row k="删除行" v={"-" + (s.stats?.lines_deleted ?? 0)} vc={C.error} />
+            <Row k="新增行" v={"+" + (s.stats?.lines_added ?? 0)} vc={c.working} />
+            <Row k="删除行" v={"-" + (s.stats?.lines_deleted ?? 0)} vc={c.error} />
+            <Row k="输入 tokens" v={fmtTok(s.usage?.input_tokens)} />
+            <Row k="输出 tokens" v={fmtTok(s.usage?.output_tokens)} />
+            <Row k="缓存读取" v={fmtTok(s.usage?.cache_read_input_tokens)} />
+            <Row k="缓存写入" v={fmtTok(s.usage?.cache_creation_input_tokens)} />
             <Row k="模型" v={s.model || "—"} />
             <Row k="开始时间" v={fmtClock(s.started_at)} />
             <Row k="最近活动" v={fmtClock(s.updated_at)} />
@@ -218,13 +273,29 @@ export default function DetailScreen({ sid, onBack }: { sid: string; onBack: () 
 
       {/* 底部命令栏（键盘弹起时抬升到键盘上方） */}
       <KeyboardAvoidingView behavior="padding" pointerEvents="box-none">
+        {canCmd ? (
+          <View style={d.tplRow}>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 7 }}>
+              {TEMPLATES.map((t) => (
+                <Pressable
+                  key={t}
+                  style={d.tplChip}
+                  android_ripple={{ color: c.tintSoft, borderless: false, radius: 13 }}
+                  onPress={() => setInput(t)}
+                >
+                  <Text style={d.tplT}>{t}</Text>
+                </Pressable>
+              ))}
+            </ScrollView>
+          </View>
+        ) : null}
         <View style={d.cmdbar}>
         <TextInput
           style={d.input}
           value={input}
           onChangeText={setInput}
           placeholder={external ? "注入到终端（空闲时自动发送）" : "发送消息…"}
-          placeholderTextColor={C.faint}
+          placeholderTextColor={c.faint}
           editable={canCmd}
           multiline
         />
@@ -237,80 +308,97 @@ export default function DetailScreen({ sid, onBack }: { sid: string; onBack: () 
   );
 }
 
-const d = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: C.bg },
+const makeStyles = (c: ThemeColors) => StyleSheet.create({
+  safe: { flex: 1, backgroundColor: c.bg },
   head: {
     flexDirection: "row", alignItems: "center", gap: 10,
-    paddingHorizontal: 14, paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: C.line,
+    paddingHorizontal: 14, paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: c.line,
   },
-  back: { width: 36, height: 36, borderRadius: 11, backgroundColor: "rgba(125,165,220,0.08)", alignItems: "center", justifyContent: "center" },
-  backText: { color: C.dim, fontSize: 20, marginTop: -2 },
-  hintText: { color: C.faint },
-  title: { color: C.text, fontSize: 15, fontWeight: "600" },
-  sub: { color: C.dim, fontSize: 11, marginTop: 1 },
+  back: { width: 36, height: 36, borderRadius: 11, backgroundColor: c.tintSoft, alignItems: "center", justifyContent: "center" },
+  backText: { color: c.dim, fontSize: 20, marginTop: -2 },
+  hintText: { color: c.faint },
+  title: { color: c.text, fontSize: 15, fontWeight: "600" },
+  sub: { color: c.dim, fontSize: 11, marginTop: 1 },
   waitBanner: {
-    borderRadius: 16, borderWidth: 1, borderColor: "rgba(245,184,65,0.4)",
-    backgroundColor: "rgba(245,184,65,0.07)", padding: 14, marginBottom: 12,
+    borderRadius: 16, borderWidth: 1, borderColor: withA(c.working, 0.4),
+    backgroundColor: withA(c.working, 0.07), padding: 14, marginBottom: 12,
   },
-  waitT: { color: C.waiting, fontWeight: "700", fontSize: 13, marginBottom: 6 },
-  waitTool: { color: C.text, fontSize: 13, marginBottom: 4 },
-  waitToolName: { color: C.waiting, fontWeight: "700" },
-  waitDesc: { color: C.dim, fontSize: 13, marginBottom: 12 },
+  waitT: { color: c.working, fontWeight: "700", fontSize: 13, marginBottom: 6 },
+  waitTool: { color: c.text, fontSize: 13, marginBottom: 4 },
+  waitToolName: { color: c.working, fontWeight: "700" },
+  waitDesc: { color: c.dim, fontSize: 13, marginBottom: 12 },
   wbtns: { flexDirection: "row", gap: 10 },
   btnAllow: {
     flex: 1, height: 44, borderRadius: 13, alignItems: "center", justifyContent: "center",
-    backgroundColor: "rgba(43,217,143,0.14)", borderWidth: 1, borderColor: "rgba(43,217,143,0.35)",
+    backgroundColor: withA(c.done, 0.14), borderWidth: 1, borderColor: withA(c.done, 0.35),
   },
-  btnAllowT: { color: C.working, fontWeight: "600", fontSize: 14.5 },
+  btnAllowT: { color: c.done, fontWeight: "600", fontSize: 14.5 },
   btnReject: {
     flex: 1, height: 44, borderRadius: 13, alignItems: "center", justifyContent: "center",
-    backgroundColor: "rgba(240,82,79,0.10)", borderWidth: 1, borderColor: "rgba(240,82,79,0.3)",
+    backgroundColor: withA(c.waiting, 0.10), borderWidth: 1, borderColor: withA(c.waiting, 0.3),
   },
-  btnRejectT: { color: C.error, fontWeight: "600", fontSize: 14.5 },
-  histnote: { color: C.faint, fontSize: 11, textAlign: "center", marginBottom: 10 },
+  btnRejectT: { color: c.waiting, fontWeight: "600", fontSize: 14.5 },
+  histnote: { color: c.faint, fontSize: 11, textAlign: "center", marginBottom: 10 },
   statusLine: {
     flexDirection: "row", alignItems: "center", gap: 7, marginBottom: 12,
-    backgroundColor: "rgba(125,165,220,0.05)", borderRadius: 11, paddingHorizontal: 11, paddingVertical: 9,
+    backgroundColor: c.tintSoft, borderRadius: 11, paddingHorizontal: 11, paddingVertical: 9,
   },
   statusSpin: { fontSize: 15, fontWeight: "700" },
   statusText: { flex: 1, fontSize: 13.5, fontWeight: "600" },
-  statusTime: { color: C.faint, fontSize: 12, fontVariant: ["tabular-nums"] },
+  statusTime: { color: c.faint, fontSize: 12, fontVariant: ["tabular-nums"] },
   tabs: { flexDirection: "row", gap: 7, marginBottom: 12 },
-  tab: { flex: 1, height: 36, borderRadius: 11, backgroundColor: "rgba(125,165,220,0.06)", alignItems: "center", justifyContent: "center" },
-  tabOn: { backgroundColor: "rgba(93,134,245,0.16)", borderWidth: 1, borderColor: "rgba(93,134,245,0.4)" },
-  tabT: { color: C.dim, fontSize: 13, fontWeight: "600" },
-  tabTOn: { color: "#fff" },
-  ovcard: { backgroundColor: C.panel, borderWidth: 1, borderColor: C.line, borderRadius: 16, padding: 15, marginBottom: 12 },
+  tab: { flex: 1, height: 36, borderRadius: 11, backgroundColor: c.tintSoft, alignItems: "center", justifyContent: "center" },
+  tabOn: { backgroundColor: c.tintStrong, borderWidth: 1, borderColor: withA(c.brandA, 0.4) },
+  tabT: { color: c.dim, fontSize: 13, fontWeight: "600" },
+  tabTOn: { color: c.brandA },
+  ovcard: { backgroundColor: c.panel, borderWidth: 1, borderColor: c.line, borderRadius: 16, padding: 15, marginBottom: 12 },
   ovtop: { flexDirection: "row", alignItems: "center", gap: 10, marginBottom: 12 },
   ovDot: { width: 12, height: 12, borderRadius: 6 },
   ovSt: { fontSize: 14, fontWeight: "600" },
-  row: { flexDirection: "row", justifyContent: "space-between", paddingVertical: 7, borderTopWidth: 1, borderTopColor: "rgba(125,165,220,0.06)", gap: 14 },
-  rowK: { color: C.dim, fontSize: 13 },
-  rowV: { color: C.text, fontSize: 13, fontVariant: ["tabular-nums"], textAlign: "right", flex: 1 },
+  row: { flexDirection: "row", justifyContent: "space-between", paddingVertical: 7, borderTopWidth: 1, borderTopColor: withA(c.dim, 0.12), gap: 14 },
+  rowK: { color: c.dim, fontSize: 13 },
+  rowV: { color: c.text, fontSize: 13, fontVariant: ["tabular-nums"], textAlign: "right", flex: 1 },
   ops: { flexDirection: "row", gap: 10 },
   opRipple: { borderRadius: 13, overflow: "hidden" },
-  op: { flex: 1, height: 42, borderRadius: 13, backgroundColor: C.panel2, borderWidth: 1, borderColor: C.line, alignItems: "center", justifyContent: "center" },
-  opT: { color: C.text, fontSize: 13.5, fontWeight: "600" },
-  opWarn: { flex: 1, height: 42, borderRadius: 13, backgroundColor: C.panel2, borderWidth: 1, borderColor: "rgba(240,82,79,0.3)", alignItems: "center", justifyContent: "center" },
-  opWarnT: { color: C.error, fontSize: 13.5, fontWeight: "600" },
-  empty: { color: C.faint, textAlign: "center", paddingVertical: 40, fontSize: 13 },
-  tlItem: { flexDirection: "row", gap: 10, paddingVertical: 9, borderBottomWidth: 1, borderBottomColor: "rgba(125,165,220,0.06)" },
-  tlTime: { color: C.faint, fontSize: 11, fontVariant: ["tabular-nums"], paddingTop: 2, width: 36 },
-  tlTool: { color: C.faint, fontSize: 11, marginBottom: 2 },
+  op: { flex: 1, height: 42, borderRadius: 13, backgroundColor: c.panel2, borderWidth: 1, borderColor: c.line, alignItems: "center", justifyContent: "center" },
+  opT: { color: c.text, fontSize: 13.5, fontWeight: "600" },
+  opWarn: { flex: 1, height: 42, borderRadius: 13, backgroundColor: c.panel2, borderWidth: 1, borderColor: withA(c.waiting, 0.3), alignItems: "center", justifyContent: "center" },
+  opWarnT: { color: c.error, fontSize: 13.5, fontWeight: "600" },
+  empty: { color: c.faint, textAlign: "center", paddingVertical: 40, fontSize: 13 },
+  filterRow: { flexDirection: "row", gap: 7, marginBottom: 10 },
+  filterChip: {
+    paddingHorizontal: 12, paddingVertical: 5, borderRadius: 12,
+    backgroundColor: c.tintSoft, borderWidth: 1, borderColor: c.line,
+  },
+  filterChipOn: { backgroundColor: c.tintStrong, borderColor: withA(c.brandA, 0.4) },
+  filterT: { fontSize: 11.5, color: c.dim },
+  filterTOn: { color: c.brandA, fontWeight: "600" },
+  tlItem: { flexDirection: "row", gap: 10, paddingVertical: 9, borderBottomWidth: 1, borderBottomColor: withA(c.dim, 0.10) },
+  tlTime: { color: c.faint, fontSize: 11, fontVariant: ["tabular-nums"], paddingTop: 2, width: 36 },
+  tlTool: { color: c.faint, fontSize: 11, marginBottom: 2 },
   tlText: { fontSize: 13, flex: 1 },
+  tplRow: {
+    flexDirection: "row", backgroundColor: c.overlay,
+    borderTopWidth: 1, borderTopColor: c.line, paddingHorizontal: 10, paddingTop: 7,
+  },
+  tplChip: {
+    paddingHorizontal: 12, paddingVertical: 6, borderRadius: 13,
+    backgroundColor: c.panel2, borderWidth: 1, borderColor: c.line,
+  },
+  tplT: { fontSize: 12, color: c.dim },
   cmdbar: {
     position: "absolute", left: 0, right: 0, bottom: 0,
     paddingHorizontal: 12, paddingVertical: 10,
-    backgroundColor: "rgba(8,15,26,0.97)", borderTopWidth: 1, borderTopColor: C.line,
+    backgroundColor: c.overlay, borderTopWidth: 1, borderTopColor: c.line,
     flexDirection: "row", gap: 9, alignItems: "flex-end",
   },
   input: {
     flex: 1, minHeight: 44, maxHeight: 110, borderRadius: 13,
-    backgroundColor: C.panel2, borderWidth: 1, borderColor: C.line,
-    paddingHorizontal: 14, paddingVertical: 11, color: C.text, fontSize: 15,
+    backgroundColor: c.panel2, borderWidth: 1, borderColor: c.line,
+    paddingHorizontal: 14, paddingVertical: 11, color: c.text, fontSize: 15,
   },
   sendBtn: {
-    width: 44, height: 44, borderRadius: 13, backgroundColor: C.brandA,
+    width: 44, height: 44, borderRadius: 13, backgroundColor: c.brandA,
     alignItems: "center", justifyContent: "center",
   },
   sendT: { color: "#fff", fontSize: 17 },

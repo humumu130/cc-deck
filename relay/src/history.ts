@@ -130,13 +130,14 @@ export function reduceHistory(events: Envelope[]): Map<string, ReplayedSession> 
     s.updated_at = e.ts;
     switch (e.type) {
       case "SESSION_UPDATED": {
-        const p = e.payload as { status: SessionState["status"]; action_summary: string; stats: SessionState["stats"]; remote_mode?: boolean; title?: string; turn_started_at?: number };
+        const p = e.payload as { status: SessionState["status"]; action_summary: string; stats: SessionState["stats"]; remote_mode?: boolean; title?: string; turn_started_at?: number; usage?: SessionState["usage"] };
         s.status = p.status;
         s.action_summary = p.action_summary;
         if (p.stats) s.stats = p.stats;
         if (p.remote_mode !== undefined) s.remote_mode = p.remote_mode;
         if (p.title) s.title = p.title;
         if (p.turn_started_at) s.turn_started_at = p.turn_started_at;
+        if (p.usage) s.usage = p.usage;
         break;
       }
       case "SESSION_WAITING": {

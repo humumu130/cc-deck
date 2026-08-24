@@ -8,6 +8,13 @@ export interface ConnConfig {
   token: string;
 }
 
+export interface ServerEntry {
+  id: string;
+  name: string;
+  wsUrl: string;
+  token: string;
+}
+
 export interface Snapshot {
   version: number;
   connected: boolean;
@@ -34,6 +41,7 @@ class RelayStore {
   private sessions = new Map<string, SessionState>();
   private timelines = new Map<string, LogEntry[]>();
   private cfg: ConnConfig | null = null;
+  private servers: ServerEntry[] = [];
 
   onWaiting: ((s: SessionState) => void) | null = null;
 
@@ -58,26 +66,91 @@ class RelayStore {
     for (const fn of this.listeners) fn();
   }
 
-  async loadConfig(): Promise<ConnConfig | null> {
+  // ---------- 多服务器配置（ccr_conns 列表 + ccr_active 指针；旧 ccr_conn 自动迁移） ----------
+
+  private async readServers(): Promise<ServerEntry[]> {
+    try {
+      const list = JSON.parse((await AsyncStorage.getItem("ccr_conns")) ?? "[]") as ServerEntry[];
+      if (Array.isArray(list)) {
+        return list.filter((e) => e && e.wsUrl && e.token);
+      }
+    } catch {}
+    // 旧单条配置迁移
     try {
       const raw = await AsyncStorage.getItem("ccr_conn");
-      if (!raw) return null;
-      const cfg = JSON.parse(raw) as ConnConfig;
-      if (!cfg.wsUrl || !cfg.token) return null;
-      this.cfg = cfg;
-      return cfg;
-    } catch {
-      return null;
+      if (raw) {
+        const cfg = JSON.parse(raw) as ConnConfig;
+        if (cfg.wsUrl && cfg.token) {
+          const entry: ServerEntry = { id: uuid(), name: hostOf(cfg.wsUrl), wsUrl: cfg.wsUrl, token: cfg.token };
+          await AsyncStorage.setItem("ccr_conns", JSON.stringify([entry]));
+          await AsyncStorage.setItem("ccr_active", entry.id);
+          await AsyncStorage.removeItem("ccr_conn");
+          return [entry];
+        }
+      }
+    } catch {}
+    return [];
+  }
+
+  async loadServers(): Promise<ServerEntry[]> {
+    this.servers = await this.readServers();
+    return this.servers;
+  }
+
+  async activeServerId(): Promise<string | null> {
+    return (await AsyncStorage.getItem("ccr_active")) ?? null;
+  }
+
+  async connectServer(entry: ServerEntry): Promise<void> {
+    const list = await this.readServers();
+    const idx = list.findIndex((e) => e.id === entry.id);
+    if (idx >= 0) list[idx] = entry;
+    else list.push(entry);
+    this.servers = list;
+    await AsyncStorage.setItem("ccr_conns", JSON.stringify(list));
+    await AsyncStorage.setItem("ccr_active", entry.id);
+    this.applyConfig({ wsUrl: entry.wsUrl, token: entry.token });
+  }
+
+  async deleteServer(id: string): Promise<void> {
+    const list = (await this.readServers()).filter((e) => e.id !== id);
+    this.servers = list;
+    await AsyncStorage.setItem("ccr_conns", JSON.stringify(list));
+    if ((await AsyncStorage.getItem("ccr_active")) === id) {
+      const next = list[0];
+      await AsyncStorage.setItem("ccr_active", next ? next.id : "");
+      if (next) this.applyConfig({ wsUrl: next.wsUrl, token: next.token });
     }
   }
 
-  async saveConfig(cfg: ConnConfig) {
+  async loadConfig(): Promise<ConnConfig | null> {
+    const list = await this.readServers();
+    this.servers = list;
+    const activeId = await AsyncStorage.getItem("ccr_active");
+    const active = list.find((e) => e.id === activeId) ?? list[0];
+    if (!active) return null;
+    this.cfg = { wsUrl: active.wsUrl, token: active.token };
+    return this.cfg;
+  }
+
+  private applyConfig(cfg: ConnConfig) {
     this.cfg = cfg;
-    await AsyncStorage.setItem("ccr_conn", JSON.stringify(cfg));
     this.lastSeq = 0;
     this.sessions.clear();
     this.timelines.clear();
+    this.disconnect();
     this.connect();
+  }
+
+  disconnect() {
+    this.reconnectDelay = 1000;
+    if (this.reconnectTimer) {
+      clearTimeout(this.reconnectTimer);
+      this.reconnectTimer = null;
+    }
+    try {
+      this.ws?.close();
+    } catch {}
   }
 
   connect() {
@@ -177,6 +250,7 @@ class RelayStore {
         if (msg.payload.remote_mode !== undefined) s.remote_mode = msg.payload.remote_mode;
         if (msg.payload.title) s.title = msg.payload.title;
         if (msg.payload.turn_started_at) s.turn_started_at = msg.payload.turn_started_at;
+        if (msg.payload.usage) s.usage = msg.payload.usage;
         s.updated_at = msg.ts;
         break;
       }
@@ -253,6 +327,15 @@ class RelayStore {
 }
 
 export const store = new RelayStore();
+
+// ws://192.168.0.105:8787/ws -> 192.168.0.105
+function hostOf(wsUrl: string): string {
+  try {
+    return new URL(wsUrl).host;
+  } catch {
+    return wsUrl;
+  }
+}
 
 export function useRelay(): Snapshot {
   return useSyncExternalStore(store.subscribe, store.getSnapshot);

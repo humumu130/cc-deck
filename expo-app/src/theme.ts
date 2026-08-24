@@ -1,4 +1,24 @@
-export const C = {
+// 主题调色板：深色（默认，cc light 风格）+ 浅色
+export interface ThemeColors {
+  bg: string;
+  panel: string;
+  panel2: string;
+  line: string;
+  text: string;
+  dim: string;
+  faint: string;
+  brandA: string;
+  brandB: string;
+  working: string;
+  waiting: string;
+  error: string;
+  done: string;
+  tintSoft: string;    // 品牌色弱底（chip/卡片叠层）
+  tintStrong: string;  // 选中态底
+  overlay: string;     // 命令栏等近实底
+}
+
+export const DARK: ThemeColors = {
   bg: "#050B12",
   panel: "#0B1622",
   panel2: "#101F30",
@@ -12,7 +32,40 @@ export const C = {
   waiting: "#F0524F",
   error: "#FF7849",
   done: "#2BD98F",
+  tintSoft: "rgba(125,165,220,0.08)",
+  tintStrong: "rgba(93,134,245,0.16)",
+  overlay: "rgba(8,15,26,0.97)",
 };
+
+export const LIGHT: ThemeColors = {
+  bg: "#F4F7FB",
+  panel: "#FFFFFF",
+  panel2: "#EDF2F8",
+  line: "rgba(38,64,96,0.14)",
+  text: "#16202B",
+  dim: "#51637A",
+  faint: "#8296AB",
+  brandA: "#2F7FE8",
+  brandB: "#6F5FE8",
+  working: "#C98A00",
+  waiting: "#D93036",
+  error: "#D6541F",
+  done: "#0E9355",
+  tintSoft: "rgba(47,127,232,0.07)",
+  tintStrong: "rgba(47,127,232,0.14)",
+  overlay: "rgba(247,250,253,0.97)",
+};
+
+// #RRGGBB + alpha -> #RRGGBBAA（RN 支持 8 位 hex）
+export const withA = (hex: string, a: number): string => {
+  const v = Math.round(Math.min(1, Math.max(0, a)) * 255)
+    .toString(16)
+    .padStart(2, "0");
+  return `${hex}${v}`;
+};
+
+// 兼容旧引用（静态场景）；组件内请用 useTheme()
+export const C = DARK;
 
 export const STATUS_ZH: Record<string, string> = {
   WORKING: "运行中",
@@ -21,5 +74,5 @@ export const STATUS_ZH: Record<string, string> = {
   DONE: "已完成",
 };
 
-export const statusColor = (s: string) =>
-  s === "WORKING" ? C.working : s === "WAITING" ? C.waiting : s === "ERROR" ? C.error : C.done;
+export const statusColor = (s: string, c: ThemeColors = DARK) =>
+  s === "WORKING" ? c.working : s === "WAITING" ? c.waiting : s === "ERROR" ? c.error : c.done;

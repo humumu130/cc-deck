@@ -3,7 +3,8 @@ import { Animated, FlatList, PanResponder, Pressable, StyleSheet, Text, View } f
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { LinearGradient } from "expo-linear-gradient";
-import { C, STATUS_ZH, statusColor } from "../theme";
+import { STATUS_ZH, statusColor, withA, type ThemeColors } from "../theme";
+import { useTheme, useThemeStyles } from "../theme-context";
 import { sessionElapsed, fmtElapsed } from "../fmt";
 import { store } from "../store";
 import type { SessionState } from "../protocol";
@@ -14,6 +15,7 @@ interface Props {
   connText: string;
   onOpen: (sid: string) => void;
   onNew: () => void;
+  onSetup: () => void;
 }
 
 function folderOf(cwd: string): string {
@@ -26,6 +28,7 @@ const DEL_W = 78;
 // cc light 风格：运行中黄灯闪烁
 function BlinkDot({ color }: { color: string }) {
   const op = useRef(new Animated.Value(1)).current;
+  const styles = useThemeStyles(makeStyles);
   useEffect(() => {
     const loop = Animated.loop(
       Animated.sequence([
@@ -41,6 +44,8 @@ function BlinkDot({ color }: { color: string }) {
 
 // 左滑露出删除按钮（DONE/ERROR 可删；其余状态按钮禁用提示走服务端校验）
 function SwipeRow({ deletable, onDelete, children }: { deletable: boolean; onDelete: () => void; children: React.ReactNode }) {
+  const { c } = useTheme();
+  const styles = useThemeStyles(makeStyles);
   const x = useRef(new Animated.Value(0)).current;
   const open = useRef(false);
   const pan = useRef(
@@ -68,7 +73,7 @@ function SwipeRow({ deletable, onDelete, children }: { deletable: boolean; onDel
   return (
     <View style={styles.swipeWrap}>
       <Pressable
-        style={[styles.delBtn, !deletable && { backgroundColor: "rgba(125,165,220,0.10)" }]}
+        style={[styles.delBtn, !deletable && { backgroundColor: withA(c.dim, 0.10) }]}
         android_ripple={{ color: "rgba(255,255,255,0.15)", borderless: false }}
         onPress={() => {
           if (deletable) onDelete();
@@ -85,13 +90,15 @@ function SwipeRow({ deletable, onDelete, children }: { deletable: boolean; onDel
 }
 
 function SessionCard({ s, onOpen }: { s: SessionState; onOpen: (sid: string) => void }) {
-  const color = statusColor(s.status);
+  const { c } = useTheme();
+  const styles = useThemeStyles(makeStyles);
+  const color = statusColor(s.status, c);
   const deletable = s.status === "DONE" || s.status === "ERROR";
   return (
     <SwipeRow deletable={deletable} onDelete={() => store.send("COMMAND_DELETE", { session_id: s.session_id })}>
       <Pressable
         style={styles.card}
-        android_ripple={{ color: "rgba(125,165,220,0.10)", borderless: false }}
+        android_ripple={{ color: c.tintSoft, borderless: false }}
         onPress={() => onOpen(s.session_id)}
       >
         <View style={styles.row1}>
@@ -100,7 +107,7 @@ function SessionCard({ s, onOpen }: { s: SessionState; onOpen: (sid: string) => 
           ) : (
             <View style={[styles.dot, { backgroundColor: color, borderColor: color }]} />
           )}
-          <Text style={[styles.st, { color }]}>{STATUS_ZH[s.status] ?? s.status}</Text>
+          <View style={{ flex: 1 }} />
           <Text style={styles.elapsed}>{fmtElapsed(sessionElapsed(s))}</Text>
         </View>
         <Text style={styles.title} numberOfLines={1}>{s.title || "未命名会话"}</Text>
@@ -112,9 +119,9 @@ function SessionCard({ s, onOpen }: { s: SessionState; onOpen: (sid: string) => 
           <View style={{ flex: 1 }} />
           {s.stats && s.stats.files_changed > 0 ? (
             <Text style={styles.stats}>
-              <Text style={{ color: C.working }}>+{s.stats.lines_added}</Text>
+              <Text style={{ color: c.working }}>+{s.stats.lines_added}</Text>
               {" "}
-              <Text style={{ color: C.error }}>-{s.stats.lines_deleted}</Text>
+              <Text style={{ color: c.error }}>-{s.stats.lines_deleted}</Text>
             </Text>
           ) : null}
         </View>
@@ -123,7 +130,9 @@ function SessionCard({ s, onOpen }: { s: SessionState; onOpen: (sid: string) => 
   );
 }
 
-export default function ListScreen({ sessions, connected, connText, onOpen, onNew }: Props) {
+export default function ListScreen({ sessions, connected, connText, onOpen, onNew, onSetup }: Props) {
+  const { c, mode, toggle } = useTheme();
+  const styles = useThemeStyles(makeStyles);
   const sorted = useMemo(() => {
     const order: Record<string, number> = { WAITING: 0, WORKING: 1, ERROR: 2, DONE: 3 };
     return [...sessions].sort((a, b) => (order[a.status] ?? 9) - (order[b.status] ?? 9) || b.started_at - a.started_at);
@@ -135,9 +144,9 @@ export default function ListScreen({ sessions, connected, connText, onOpen, onNe
   }
   const statusItems = (["WORKING", "WAITING", "ERROR", "DONE"] as const)
     .filter((k) => (counts[k] ?? 0) > 0)
-    .map((k) => ({ k, n: counts[k], color: statusColor(k) }));
+    .map((k) => ({ k, n: counts[k], color: statusColor(k, c) }));
 
-  const connColor = connected ? C.working : connText.includes("连接中") || connText.includes("重连") ? C.waiting : C.error;
+  const connColor = connected ? c.working : connText.includes("连接中") || connText.includes("重连") ? c.waiting : c.error;
 
   const [collapseIdle, setCollapseIdle] = useState(false);
   useEffect(() => {
@@ -158,11 +167,25 @@ export default function ListScreen({ sessions, connected, connText, onOpen, onNe
   return (
     <SafeAreaView style={styles.safe} edges={["top"]}>
       <View style={styles.topbar}>
-        <LinearGradient colors={[C.brandA, C.brandB]} style={styles.logo}>
+        <LinearGradient colors={[c.brandA, c.brandB]} style={styles.logo}>
           <Text style={styles.logoText}>CC</Text>
         </LinearGradient>
         <Text style={styles.h1}>Cloud Code</Text>
-        <View style={[styles.connChip, { borderColor: connColor + "55" }]}>
+        <Pressable
+          style={styles.themeBtn}
+          android_ripple={{ color: c.tintSoft, borderless: false, radius: 15 }}
+          onPress={toggle}
+        >
+          <Text style={styles.themeT}>{mode === "dark" ? "☀️" : "🌙"}</Text>
+        </Pressable>
+        <Pressable
+          style={styles.themeBtn}
+          android_ripple={{ color: c.tintSoft, borderless: false, radius: 15 }}
+          onPress={onSetup}
+        >
+          <Text style={styles.themeT}>⚙</Text>
+        </Pressable>
+        <View style={[styles.connChip, { borderColor: withA(connColor, 0.33) }]}>
           <View style={[styles.connDot, { backgroundColor: connColor }]} />
           <Text style={[styles.connText, { color: connColor }]}>{connText}</Text>
         </View>
@@ -180,7 +203,7 @@ export default function ListScreen({ sessions, connected, connText, onOpen, onNe
         {idleCount > 0 ? (
           <Pressable
             style={[styles.collapseBtn, collapseIdle && styles.collapseBtnOn]}
-            android_ripple={{ color: "rgba(125,165,220,0.14)", borderless: false, radius: 16 }}
+            android_ripple={{ color: c.tintSoft, borderless: false, radius: 16 }}
             onPress={toggleCollapse}
           >
             <Text style={[styles.collapseT, collapseIdle && styles.collapseTOn]}>
@@ -211,7 +234,7 @@ export default function ListScreen({ sessions, connected, connText, onOpen, onNe
         android_ripple={{ color: "rgba(255,255,255,0.18)", borderless: false, radius: 30 }}
         onPress={onNew}
       >
-        <LinearGradient colors={[C.brandA, C.brandB]} style={styles.fabGrad} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}>
+        <LinearGradient colors={[c.brandA, c.brandB]} style={styles.fabGrad} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}>
           <Text style={styles.fabText}>＋</Text>
         </LinearGradient>
       </Pressable>
@@ -219,50 +242,54 @@ export default function ListScreen({ sessions, connected, connText, onOpen, onNe
   );
 }
 
-const styles = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: C.bg },
+const makeStyles = (c: ThemeColors) => StyleSheet.create({
+  safe: { flex: 1, backgroundColor: c.bg },
   topbar: {
     flexDirection: "row", alignItems: "center", gap: 10,
     paddingHorizontal: 16, paddingTop: 10, paddingBottom: 8,
-    borderBottomWidth: 1, borderBottomColor: C.line,
+    borderBottomWidth: 1, borderBottomColor: c.line,
   },
   logo: { width: 34, height: 34, borderRadius: 10, alignItems: "center", justifyContent: "center" },
   logoText: { color: "#fff", fontWeight: "800", fontSize: 13 },
-  h1: { color: C.text, fontSize: 17, fontWeight: "700", flex: 1 },
+  h1: { color: c.text, fontSize: 17, fontWeight: "700", flex: 1 },
+  themeBtn: {
+    width: 30, height: 30, borderRadius: 15, alignItems: "center", justifyContent: "center",
+    backgroundColor: c.tintSoft, borderWidth: 1, borderColor: c.line,
+  },
+  themeT: { fontSize: 14 },
   connChip: {
     flexDirection: "row", alignItems: "center", gap: 5, borderWidth: 1,
     borderRadius: 999, paddingHorizontal: 9, paddingVertical: 4,
-    backgroundColor: "rgba(125,165,220,0.08)",
+    backgroundColor: c.tintSoft,
   },
   connDot: { width: 6, height: 6, borderRadius: 3 },
   connText: { fontSize: 11 },
-  runhint: { color: C.dim, fontSize: 12, paddingHorizontal: 18, paddingTop: 7, paddingBottom: 4 },
   statRow: {
     flexDirection: "row", alignItems: "center", flexWrap: "wrap", gap: 6,
     paddingHorizontal: 18, paddingTop: 8, paddingBottom: 4,
   },
-  statTotal: { color: C.dim, fontSize: 12.5, fontWeight: "600", marginRight: 4 },
+  statTotal: { color: c.dim, fontSize: 12.5, fontWeight: "600", marginRight: 4 },
   statChips: { flexDirection: "row", flexWrap: "wrap", gap: 6 },
   statChip: { flexDirection: "row", alignItems: "center", gap: 4 },
   statDot: { width: 7, height: 7, borderRadius: 4 },
   statChipT: { fontSize: 11.5 },
-  folderTag: { fontSize: 10, color: C.dim, maxWidth: 130 },
+  folderTag: { fontSize: 10, color: c.dim, maxWidth: 130 },
   collapseBtn: {
-    borderRadius: 999, borderWidth: 1, borderColor: C.line, backgroundColor: "rgba(125,165,220,0.06)",
+    borderRadius: 999, borderWidth: 1, borderColor: c.line, backgroundColor: c.tintSoft,
     paddingHorizontal: 10, paddingVertical: 3,
   },
-  collapseBtnOn: { backgroundColor: "rgba(93,134,245,0.16)", borderColor: "rgba(93,134,245,0.4)" },
-  collapseT: { fontSize: 11, color: C.dim },
-  collapseTOn: { color: "#9DB8F5" },
+  collapseBtnOn: { backgroundColor: c.tintStrong, borderColor: withA(c.brandA, 0.4) },
+  collapseT: { fontSize: 11, color: c.dim },
+  collapseTOn: { color: c.brandA },
   swipeWrap: { marginBottom: 11, borderRadius: 16, overflow: "hidden" },
-  swipeCard: { borderRadius: 16, overflow: "hidden", backgroundColor: C.panel },
+  swipeCard: { borderRadius: 16, overflow: "hidden", backgroundColor: c.panel },
   delBtn: {
     position: "absolute", top: 0, bottom: 0, right: 0, width: DEL_W,
-    backgroundColor: "rgba(240,82,79,0.85)", alignItems: "center", justifyContent: "center",
+    backgroundColor: withA(c.waiting, 0.85), alignItems: "center", justifyContent: "center",
   },
   delT: { color: "#fff", fontSize: 13.5, fontWeight: "600" },
   card: {
-    backgroundColor: C.panel, borderWidth: 1, borderColor: C.line,
+    backgroundColor: c.panel, borderWidth: 1, borderColor: c.line,
     borderRadius: 16, padding: 14,
   },
   row1: { flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 8 },
@@ -270,23 +297,21 @@ const styles = StyleSheet.create({
     width: 10, height: 10, borderRadius: 5, opacity: 1,
     alignItems: "center", justifyContent: "center",
   },
-  dotCore: { width: 10, height: 10, borderRadius: 5, backgroundColor: C.bg },
-  st: { fontSize: 12, fontWeight: "600", flex: 1 },
-  elapsed: { fontSize: 12, color: C.faint, fontVariant: ["tabular-nums"] },
-  title: { color: C.text, fontSize: 15, fontWeight: "600", marginBottom: 5 },
-  sum: { color: C.dim, fontSize: 13, marginBottom: 8 },
+  elapsed: { fontSize: 12, color: c.faint, fontVariant: ["tabular-nums"] },
+  title: { color: c.text, fontSize: 15, fontWeight: "600", marginBottom: 5 },
+  sum: { color: c.dim, fontSize: 13, marginBottom: 8 },
   foot: { flexDirection: "row", alignItems: "center", gap: 8 },
   tag: {
-    fontSize: 10, color: C.dim, backgroundColor: "rgba(125,165,220,0.08)",
-    borderWidth: 1, borderColor: C.line, borderRadius: 6,
+    fontSize: 10, color: c.dim, backgroundColor: c.tintSoft,
+    borderWidth: 1, borderColor: c.line, borderRadius: 6,
     paddingHorizontal: 7, paddingVertical: 2, overflow: "hidden",
   },
-  tagExt: { color: "#A99CF5", backgroundColor: "rgba(124,108,242,0.12)", borderColor: "rgba(124,108,242,0.25)" },
+  tagExt: { color: c.brandB, backgroundColor: withA(c.brandB, 0.12), borderColor: withA(c.brandB, 0.25) },
   stats: { fontSize: 12, fontVariant: ["tabular-nums"] },
   empty: { alignItems: "center", paddingTop: 90, paddingHorizontal: 30 },
   emptyIcon: { fontSize: 42, marginBottom: 12, opacity: 0.5 },
-  emptyT: { color: C.faint, fontSize: 14, marginBottom: 6 },
-  emptyS: { color: C.faint, fontSize: 12, textAlign: "center", lineHeight: 20 },
+  emptyT: { color: c.faint, fontSize: 14, marginBottom: 6 },
+  emptyS: { color: c.faint, fontSize: 12, textAlign: "center", lineHeight: 20 },
   fab: { position: "absolute", right: 30, bottom: 56, borderRadius: 18, elevation: 8 },
   fabGrad: { width: 56, height: 56, borderRadius: 18, alignItems: "center", justifyContent: "center" },
   fabText: { color: "#fff", fontSize: 30, fontWeight: "300", marginTop: -4 },

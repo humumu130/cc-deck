@@ -1,78 +1,186 @@
-import { useState } from "react";
-import { KeyboardAvoidingView, Platform, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
+import { useEffect, useState } from "react";
+import { KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
-import { C } from "../theme";
-import { store } from "../store";
+import { SafeAreaView } from "react-native-safe-area-context";
+import { withA, type ThemeColors } from "../theme";
+import { useTheme, useThemeStyles } from "../theme-context";
+import { store, type ServerEntry } from "../store";
+import { uuid } from "../fmt";
 
-export default function SetupScreen() {
+interface Props {
+  onClose?: () => void; // 有值 = 从主界面进入（可返回）
+}
+
+function hostOf(wsUrl: string): string {
+  try {
+    return new URL(wsUrl).host;
+  } catch {
+    return wsUrl;
+  }
+}
+
+export default function SetupScreen({ onClose }: Props) {
+  const { c } = useTheme();
+  const s = useThemeStyles(makeStyles);
+  const [servers, setServers] = useState<ServerEntry[]>([]);
+  const [activeId, setActiveId] = useState<string | null>(null);
+  const [name, setName] = useState("");
   const [wsUrl, setWsUrl] = useState("ws://192.168.0.105:8787/ws");
   const [token, setToken] = useState("");
 
-  const save = () => {
+  const reload = async () => {
+    setServers(await store.loadServers());
+    setActiveId(await store.activeServerId());
+  };
+  useEffect(() => {
+    void reload();
+  }, []);
+
+  const add = () => {
     const base = wsUrl.trim().replace(/\/+$/, "");
     const tk = token.trim();
     if (!/^wss?:\/\//.test(base) || !tk) return;
-    void store.saveConfig({ wsUrl: base, token: tk });
+    const entry: ServerEntry = {
+      id: uuid(),
+      name: name.trim() || hostOf(base),
+      wsUrl: base,
+      token: tk,
+    };
+    void store.connectServer(entry).then(() => {
+      setActiveId(entry.id);
+      setName("");
+      setToken("");
+      if (onClose) onClose();
+    });
+  };
+
+  const connect = (e: ServerEntry) => {
+    void store.connectServer(e).then(() => {
+      setActiveId(e.id);
+      if (onClose) onClose();
+    });
+  };
+
+  const remove = (e: ServerEntry) => {
+    void store.deleteServer(e.id).then(() => reload());
   };
 
   return (
-    <KeyboardAvoidingView style={s.wrap} behavior={Platform.OS === "ios" ? "padding" : undefined}>
-      <LinearGradient colors={[C.brandA, C.brandB]} style={s.logo} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}>
-        <Text style={s.logoText}>CC</Text>
-      </LinearGradient>
-      <Text style={s.h2}>Cloud Code</Text>
-      <Text style={s.sub}>连接到 PC Relay</Text>
+    <SafeAreaView style={s.safe} edges={onClose ? ["top"] : []}>
+      <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === "ios" ? "padding" : undefined}>
+        <ScrollView contentContainerStyle={s.wrap} keyboardShouldPersistTaps="handled">
+          <LinearGradient colors={[c.brandA, c.brandB]} style={s.logo} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}>
+            <Text style={s.logoText}>CC</Text>
+          </LinearGradient>
+          <Text style={s.h2}>Cloud Code</Text>
+          <Text style={s.sub}>连接到 PC Relay</Text>
 
-      <View style={s.field}>
-        <Text style={s.label}>Relay 地址</Text>
-        <TextInput
-          style={s.input}
-          value={wsUrl}
-          onChangeText={setWsUrl}
-          placeholder="ws://192.168.0.105:8787/ws"
-          placeholderTextColor={C.faint}
-          autoCapitalize="none"
-          autoCorrect={false}
-          spellCheck={false}
-        />
-      </View>
-      <View style={s.field}>
-        <Text style={s.label}>访问令牌</Text>
-        <TextInput
-          style={s.input}
-          value={token}
-          onChangeText={setToken}
-          placeholder="token"
-          placeholderTextColor={C.faint}
-          autoCapitalize="none"
-          autoCorrect={false}
-          spellCheck={false}
-        />
-      </View>
-      <Pressable style={s.btn} android_ripple={{ color: "rgba(255,255,255,0.15)", borderless: false }} onPress={save}>
-        <LinearGradient colors={[C.brandA, C.brandB]} style={s.btnGrad}>
-          <Text style={s.btnText}>连接</Text>
-        </LinearGradient>
-      </Pressable>
-      <Text style={s.hint}>手机需与 PC 在同一 WiFi；地址填 PC 上的 ws://IP:8787/ws</Text>
-    </KeyboardAvoidingView>
+          {servers.length > 0 ? (
+            <View style={s.savedBox}>
+              <Text style={s.label}>已保存的服务器</Text>
+              {servers.map((e) => {
+                const active = e.id === activeId;
+                return (
+                  <View key={e.id} style={[s.srvRow, active && s.srvRowOn]}>
+                    <Pressable style={s.srvMain} android_ripple={{ color: c.tintSoft, borderless: false }} onPress={() => connect(e)}>
+                      <View style={s.srvHead}>
+                        {active ? <View style={[s.srvDot, { backgroundColor: c.done }]} /> : null}
+                        <Text style={s.srvName} numberOfLines={1}>{e.name}</Text>
+                      </View>
+                      <Text style={s.srvUrl} numberOfLines={1}>{e.wsUrl}</Text>
+                    </Pressable>
+                    <Pressable style={s.srvDel} android_ripple={{ color: withA(c.waiting, 0.15), borderless: false, radius: 14 }} onPress={() => remove(e)}>
+                      <Text style={s.srvDelT}>✕</Text>
+                    </Pressable>
+                  </View>
+                );
+              })}
+            </View>
+          ) : null}
+
+          <View style={s.field}>
+            <Text style={s.label}>名称（可选）</Text>
+            <TextInput
+              style={s.input}
+              value={name}
+              onChangeText={setName}
+              placeholder="书房电脑"
+              placeholderTextColor={c.faint}
+            />
+          </View>
+          <View style={s.field}>
+            <Text style={s.label}>Relay 地址</Text>
+            <TextInput
+              style={s.input}
+              value={wsUrl}
+              onChangeText={setWsUrl}
+              placeholder="ws://192.168.0.105:8787/ws"
+              placeholderTextColor={c.faint}
+              autoCapitalize="none"
+              autoCorrect={false}
+              spellCheck={false}
+            />
+          </View>
+          <View style={s.field}>
+            <Text style={s.label}>访问令牌</Text>
+            <TextInput
+              style={s.input}
+              value={token}
+              onChangeText={setToken}
+              placeholder="token"
+              placeholderTextColor={c.faint}
+              autoCapitalize="none"
+              autoCorrect={false}
+              spellCheck={false}
+            />
+          </View>
+          <Pressable style={s.btn} android_ripple={{ color: "rgba(255,255,255,0.15)", borderless: false }} onPress={add}>
+            <LinearGradient colors={[c.brandA, c.brandB]} style={s.btnGrad}>
+              <Text style={s.btnText}>{servers.length > 0 ? "添加并连接" : "连接"}</Text>
+            </LinearGradient>
+          </Pressable>
+          <Text style={s.hint}>手机需与 PC 在同一 WiFi；地址填 PC 上的 ws://IP:8787/ws</Text>
+          {onClose ? (
+            <Pressable style={s.back} android_ripple={{ color: c.tintSoft, borderless: false, radius: 20 }} onPress={onClose}>
+              <Text style={s.backT}>返回</Text>
+            </Pressable>
+          ) : null}
+        </ScrollView>
+      </KeyboardAvoidingView>
+    </SafeAreaView>
   );
 }
 
-const s = StyleSheet.create({
-  wrap: { flex: 1, backgroundColor: C.bg, alignItems: "center", justifyContent: "center", padding: 28 },
+const makeStyles = (c: ThemeColors) => StyleSheet.create({
+  safe: { flex: 1, backgroundColor: c.bg },
+  wrap: { alignItems: "center", justifyContent: "center", padding: 28 },
   logo: { width: 64, height: 64, borderRadius: 19, alignItems: "center", justifyContent: "center", marginBottom: 16 },
   logoText: { color: "#fff", fontWeight: "800", fontSize: 22 },
-  h2: { color: C.text, fontSize: 21, fontWeight: "700" },
-  sub: { color: C.dim, fontSize: 13, marginTop: 4, marginBottom: 28 },
+  h2: { color: c.text, fontSize: 21, fontWeight: "700" },
+  sub: { color: c.dim, fontSize: 13, marginTop: 4, marginBottom: 24 },
+  savedBox: { width: "100%", maxWidth: 340, marginBottom: 20 },
+  label: { color: c.dim, fontSize: 12, marginBottom: 6 },
+  srvRow: {
+    flexDirection: "row", alignItems: "center", borderWidth: 1, borderColor: c.line,
+    borderRadius: 13, backgroundColor: c.panel, marginBottom: 8, overflow: "hidden",
+  },
+  srvRowOn: { borderColor: withA(c.done, 0.45), backgroundColor: withA(c.done, 0.05) },
+  srvMain: { flex: 1, paddingVertical: 10, paddingLeft: 12, paddingRight: 4 },
+  srvHead: { flexDirection: "row", alignItems: "center", gap: 6 },
+  srvDot: { width: 7, height: 7, borderRadius: 4 },
+  srvName: { color: c.text, fontSize: 14, fontWeight: "600" },
+  srvUrl: { color: c.faint, fontSize: 11, marginTop: 2 },
+  srvDel: { width: 40, height: 44, alignItems: "center", justifyContent: "center" },
+  srvDelT: { color: c.faint, fontSize: 15 },
   field: { width: "100%", maxWidth: 340, marginBottom: 12 },
-  label: { color: C.dim, fontSize: 12, marginBottom: 6 },
   input: {
-    backgroundColor: C.panel2, borderWidth: 1, borderColor: C.line, borderRadius: 12,
-    paddingHorizontal: 13, paddingVertical: 11, color: C.text, fontSize: 15,
+    backgroundColor: c.panel2, borderWidth: 1, borderColor: c.line, borderRadius: 12,
+    paddingHorizontal: 13, paddingVertical: 11, color: c.text, fontSize: 15,
   },
   btn: { width: "100%", maxWidth: 340, marginTop: 8, borderRadius: 14, overflow: "hidden" },
   btnGrad: { height: 48, alignItems: "center", justifyContent: "center" },
   btnText: { color: "#fff", fontSize: 15.5, fontWeight: "700" },
-  hint: { color: C.faint, fontSize: 12, marginTop: 16, textAlign: "center", maxWidth: 320 },
+  hint: { color: c.faint, fontSize: 12, marginTop: 16, textAlign: "center", maxWidth: 320 },
+  back: { marginTop: 14, paddingHorizontal: 22, paddingVertical: 8, borderRadius: 20 },
+  backT: { color: c.dim, fontSize: 14 },
 });

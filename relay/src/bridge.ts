@@ -1,6 +1,7 @@
 // hooks 桥接：用户自开 CLI 会话（外部会话）事件路由 + 远程审批挂起 + 终端按键注入
 import { randomUUID } from "node:crypto";
-import { readFileSync, writeFileSync } from "node:fs";
+import { readFileSync, readdirSync, writeFileSync } from "node:fs";
+import { homedir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import type { EventBus } from "./event-bus.js";
@@ -38,6 +39,8 @@ export class Bridge {
   private turnStart = new Map<string, number>();  // ext session_id -> 本回合开始时间
   private inputQueue = new Map<string, string[]>(); // ext session_id -> 排队中的输入（忙时攒，回合结束注入）
   private flushing = new Set<string>();           // 正在逐条注入的会话（防并发交错）
+  private named = new Set<string>();              // 已取到 CC 会话名的外部会话
+  private nameMisses = new Map<string, number>(); // 取名失败计数（超过 8 次放弃，避免每事件扫目录）
 
   constructor(
     private bus: EventBus,
@@ -201,13 +204,45 @@ export class Bridge {
     this.turnStart.set(id, turnStartedAt);
     const state = this.mgr.ensureExternal(id, ev.cwd, ev.prompt ?? "", ev.session_id);
     // 会话由 PreToolUse 先创建（无 prompt）：首个 prompt 到达时把文件夹名标题升级为 prompt 摘要
+    //（已取到 CC 会话名的保留会话名，只补记 initial_prompt）
     if (state.external && !state.initial_prompt && ev.prompt) {
-      this.mgr.setExternalTitle(id, deriveTitle(ev.prompt), ev.prompt);
+      const title = this.named.has(id) ? state.title : deriveTitle(ev.prompt);
+      this.mgr.setExternalTitle(id, title, ev.prompt);
     }
+    this.refreshName(id, ev);
     this.mgr.setExternalStatus(id, "WORKING", truncate(ev.prompt ?? "新回合", 60), turnStartedAt);
     this.mgr.pushExternalLog(id, "user_message", truncate(ev.prompt ?? "", 300));
     void state;
     return { decision: "pass" };
+  }
+
+  // CC 会话名：~/.claude/sessions/<pid>.json 的 name 字段（CLI 启动数秒后异步写入，非必出现）
+  // 命中则升级为标题；未命中继续在后续 prompt/Stop 上重试（有次数上限）
+  private refreshName(id: string, ev: BridgeEvent): void {
+    if (this.named.has(id)) return;
+    if ((this.nameMisses.get(id) ?? 0) >= 8) return;
+    const name = this.readCcSessionName(ev.session_id);
+    if (name) {
+      this.named.add(id);
+      const state = this.mgr.getExternal(id);
+      if (state && state.title !== name) this.mgr.setExternalTitle(id, name);
+    } else {
+      this.nameMisses.set(id, (this.nameMisses.get(id) ?? 0) + 1);
+    }
+  }
+
+  private readCcSessionName(cliSessionId: string): string | null {
+    try {
+      const dir = path.join(homedir(), ".claude", "sessions");
+      for (const f of readdirSync(dir)) {
+        if (!f.endsWith(".json")) continue;
+        try {
+          const d = JSON.parse(readFileSync(path.join(dir, f), "utf-8")) as { sessionId?: string; name?: string };
+          if (d.sessionId === cliSessionId) return d.name?.trim() || null;
+        } catch {}
+      }
+    } catch {}
+    return null;
   }
 
   private async onPreToolUse(ev: BridgeEvent): Promise<BridgeDecision> {
@@ -289,6 +324,7 @@ export class Bridge {
     const id = this.extId(ev);
     const state = this.mgr.getExternal(id);
     if (!state) return { decision: "pass" };
+    this.refreshName(id, ev);
     const turn = this.turnStart.get(id) ?? state.started_at;
     this.turnStart.delete(id);
     this.mgr.finishExternal(id, "completed", Date.now() - turn);

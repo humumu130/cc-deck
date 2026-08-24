@@ -134,12 +134,12 @@ export class SessionManager {
     }
   }
 
-  // 外部会话标题升级（首个 prompt 到达时，文件夹名 → prompt 摘要）
-  setExternalTitle(id: string, title: string, initialPrompt: string): void {
+  // 外部会话标题升级（CC 会话名 / 首个 prompt 摘要）；initialPrompt 只在缺失时补记
+  setExternalTitle(id: string, title: string, initialPrompt?: string): void {
     const s = this.sessions.get(id);
     if (!s || !s.state.external) return;
     s.state.title = title;
-    s.state.initial_prompt = initialPrompt;
+    if (initialPrompt && !s.state.initial_prompt) s.state.initial_prompt = initialPrompt;
     s.state.updated_at = Date.now();
     this.bus.emit(id, "SESSION_UPDATED", {
       status: s.state.status,
@@ -376,6 +376,17 @@ export class SessionManager {
         onStats: (stats) => {
           managed.state.stats = stats;
         },
+        onUsage: (u) => {
+          // result 消息是每回合一条，usage 为回合量：累计成会话总量
+          const cur = managed.state.usage;
+          managed.state.usage = {
+            input_tokens: (cur?.input_tokens ?? 0) + u.input_tokens,
+            output_tokens: (cur?.output_tokens ?? 0) + u.output_tokens,
+            cache_read_input_tokens: (cur?.cache_read_input_tokens ?? 0) + (u.cache_read_input_tokens ?? 0),
+            cache_creation_input_tokens: (cur?.cache_creation_input_tokens ?? 0) + (u.cache_creation_input_tokens ?? 0),
+          };
+          this.emitUpdated(managed, true);
+        },
         onLog: (kind, text, tool) => {
           const entry: LogEntry = { ts: Date.now(), kind, text, tool };
           managed.logs.push(entry);
@@ -462,6 +473,7 @@ export class SessionManager {
       action_summary: s.state.action_summary,
       stats: { ...s.state.stats },
       ...(s.state.turn_started_at ? { turn_started_at: s.state.turn_started_at } : {}),
+      ...(s.state.usage ? { usage: { ...s.state.usage } } : {}),
     });
   }
 

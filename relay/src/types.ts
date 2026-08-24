@@ -25,6 +25,14 @@ export interface FileChangeStats {
   lines_deleted: number;
 }
 
+// 托管会话 token 用量（SDK result 消息携带；外部会话无数据）
+export interface TokenUsage {
+  input_tokens: number;
+  output_tokens: number;
+  cache_read_input_tokens: number;
+  cache_creation_input_tokens: number;
+}
+
 export interface SessionState {
   session_id: string;
   relay_session_id: string;   // SDK/CLI 侧 session_id（用于 resume）
@@ -46,6 +54,7 @@ export interface SessionState {
   remote_mode?: boolean;      // external 会话的远程审批开关（默认关）
   cli_pid?: number;           // external 会话的 CLI 进程 pid（终端按键注入用）
   turn_started_at?: number;   // 当前 WORKING 回合起点（状态行计时用）
+  usage?: TokenUsage;         // 托管会话 token 用量
 }
 
 // 时间线历史条目（持久化 & 快照下发用）
@@ -73,6 +82,7 @@ export interface SessionUpdatedPayload {
   remote_mode?: boolean;       // external 会话切换远程审批时携带
   title?: string;              // 标题升级（外部会话首个 prompt 到达时）
   turn_started_at?: number;    // 回合起点变化时携带
+  usage?: TokenUsage;          // token 用量变化时携带
 }
 
 export interface SessionHeartbeatPayload {

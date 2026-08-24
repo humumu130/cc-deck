@@ -3,6 +3,9 @@ import { AppState, StyleSheet, Text, View, Vibration } from "react-native";
 import { StatusBar } from "expo-status-bar";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 import { store, useRelay } from "./src/store";
+import { ensureNotifPermission, fgSupported, notifyAlert, startForegroundService } from "./src/notify";
+import { ThemeProvider, useTheme, useThemeStyles } from "./src/theme-context";
+import type { ThemeColors } from "./src/theme";
 import ListScreen from "./src/screens/ListScreen";
 import DetailScreen from "./src/screens/DetailScreen";
 import SetupScreen from "./src/screens/SetupScreen";
@@ -10,6 +13,7 @@ import NewSessionModal from "./src/screens/NewSessionModal";
 
 function Toast() {
   const snap = useRelay();
+  const st = useThemeStyles(makeStyles);
   const [show, setShow] = useState(false);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -33,12 +37,15 @@ function Toast() {
   );
 }
 
-export default function App() {
+function Shell() {
+  const { c, mode } = useTheme();
+  const st = useThemeStyles(makeStyles);
   const snap = useRelay();
   const [ready, setReady] = useState(false);
   const [hasCfg, setHasCfg] = useState(false);
   const [detail, setDetail] = useState<string | null>(null);
   const [sheet, setSheet] = useState(false);
+  const [setup, setSetup] = useState(false);
 
   useEffect(() => {
     void store.loadConfig().then((cfg) => {
@@ -48,19 +55,34 @@ export default function App() {
     });
   }, []);
 
+  const appState = useRef(AppState.currentState);
+
   useEffect(() => {
-    store.onWaiting = () => {
+    store.onWaiting = (s) => {
       try {
         Vibration.vibrate([0, 90, 60, 90]);
       } catch {}
+      // 后台时发高优先级通知（点了回到 App 审批）
+      if (appState.current !== "active") {
+        const tool = s.waiting_request?.tool_name || "";
+        notifyAlert("等待你的确认", tool ? `工具 ${tool}` : "会话等待确认");
+      }
     };
     return () => {
       store.onWaiting = null;
     };
   }, []);
 
+  // 连接成功后：请求通知权限 + 启动前台服务保活
+  useEffect(() => {
+    if (!snap.connected) return;
+    void ensureNotifPermission();
+    if (fgSupported()) startForegroundService();
+  }, [snap.connected]);
+
   useEffect(() => {
     const sub = AppState.addEventListener("change", (st) => {
+      appState.current = st;
       if (st === "active" && hasCfg && !snap.connected) store.connect();
     });
     return () => sub.remove();
@@ -74,42 +96,48 @@ export default function App() {
     );
   }
 
-  if (!hasCfg) {
-    return (
-      <SafeAreaProvider>
-        <StatusBar style="light" />
-        <SetupScreen />
-      </SafeAreaProvider>
-    );
-  }
-
   return (
     <SafeAreaProvider>
-      <StatusBar style="light" />
-      {detail ? (
-        <DetailScreen sid={detail} onBack={() => setDetail(null)} />
+      <StatusBar style={mode === "dark" ? "light" : "dark"} />
+      {hasCfg && !setup ? (
+        <>
+          {detail ? (
+            <DetailScreen sid={detail} onBack={() => setDetail(null)} />
+          ) : (
+            <ListScreen
+              sessions={snap.sessions}
+              connected={snap.connected}
+              connText={snap.connText}
+              onOpen={setDetail}
+              onNew={() => setSheet(true)}
+              onSetup={() => setSetup(true)}
+            />
+          )}
+          <NewSessionModal visible={sheet} onClose={() => setSheet(false)} />
+          <Toast />
+        </>
       ) : (
-        <ListScreen
-          sessions={snap.sessions}
-          connected={snap.connected}
-          connText={snap.connText}
-          onOpen={setDetail}
-          onNew={() => setSheet(true)}
-        />
+        <SetupScreen onClose={hasCfg ? () => setSetup(false) : undefined} />
       )}
-      <NewSessionModal visible={sheet} onClose={() => setSheet(false)} />
-      <Toast />
     </SafeAreaProvider>
   );
 }
 
-const st = StyleSheet.create({
-  boot: { flex: 1, backgroundColor: "#050B12", alignItems: "center", justifyContent: "center" },
-  bootT: { color: "#4A5F78", fontSize: 16, fontWeight: "600" },
+export default function App() {
+  return (
+    <ThemeProvider>
+      <Shell />
+    </ThemeProvider>
+  );
+}
+
+const makeStyles = (c: ThemeColors) => StyleSheet.create({
+  boot: { flex: 1, backgroundColor: c.bg, alignItems: "center", justifyContent: "center" },
+  bootT: { color: c.faint, fontSize: 16, fontWeight: "600" },
   toastWrap: { position: "absolute", left: 0, right: 0, bottom: 96, alignItems: "center", zIndex: 90 },
   toast: {
-    backgroundColor: "#16283D", borderWidth: 1, borderColor: "rgba(125,165,220,0.10)",
+    backgroundColor: c.panel2, borderWidth: 1, borderColor: c.line,
     borderRadius: 12, paddingHorizontal: 18, paddingVertical: 10, maxWidth: "86%",
   },
-  toastT: { color: "#E8F0FA", fontSize: 13.5, textAlign: "center" },
+  toastT: { color: c.text, fontSize: 13.5, textAlign: "center" },
 });

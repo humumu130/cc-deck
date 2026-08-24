@@ -1,10 +1,21 @@
 import { useState } from "react";
-import { KeyboardAvoidingView, Modal, Platform, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
+import { KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import { C } from "../theme";
+import { withA, type ThemeColors } from "../theme";
+import { useTheme, useThemeStyles } from "../theme-context";
 import { store } from "../store";
 
+// 任务模板：点击填入提示词（不自动提交）
+const PRESETS: { label: string; text: string }[] = [
+  { label: "修复构建", text: "运行构建，分析报错并修复，直到构建通过。" },
+  { label: "跑测试", text: "运行测试套件，修复所有失败的测试。" },
+  { label: "代码审查", text: "审查最近的改动（git diff），指出问题并给出改进建议。" },
+  { label: "继续未完成", text: "查看当前工作状态，继续完成未完成的任务。" },
+];
+
 export default function NewSessionModal({ visible, onClose }: { visible: boolean; onClose: () => void }) {
+  const { c } = useTheme();
+  const m = useThemeStyles(makeStyles);
   const [cwd, setCwd] = useState("");
   const [prompt, setPrompt] = useState("");
   const [loadedInit, setLoadedInit] = useState(false);
@@ -16,11 +27,11 @@ export default function NewSessionModal({ visible, onClose }: { visible: boolean
   if (!visible && loadedInit) setLoadedInit(false);
 
   const create = () => {
-    const c = cwd.trim();
+    const cc = cwd.trim();
     const p = prompt.trim();
-    if (!c || !p) return;
-    void AsyncStorage.setItem("ccr_cwd", c);
-    if (store.send("COMMAND_CREATE", { cwd: c, prompt: p })) {
+    if (!cc || !p) return;
+    void AsyncStorage.setItem("ccr_cwd", cc);
+    if (store.send("COMMAND_CREATE", { cwd: cc, prompt: p })) {
       setPrompt("");
       onClose();
     }
@@ -39,7 +50,7 @@ export default function NewSessionModal({ visible, onClose }: { visible: boolean
                 value={cwd}
                 onChangeText={setCwd}
                 placeholder="D:\dev\myproject"
-                placeholderTextColor={C.faint}
+                placeholderTextColor={c.faint}
                 autoCapitalize="none"
                 autoCorrect={false}
                 spellCheck={false}
@@ -47,19 +58,31 @@ export default function NewSessionModal({ visible, onClose }: { visible: boolean
             </View>
             <View style={m.field}>
               <Text style={m.label}>任务提示词</Text>
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} style={m.presetRow} contentContainerStyle={{ gap: 7 }}>
+                {PRESETS.map((p) => (
+                  <Pressable
+                    key={p.label}
+                    style={m.presetChip}
+                    android_ripple={{ color: c.tintSoft, borderless: false, radius: 12 }}
+                    onPress={() => setPrompt(p.text)}
+                  >
+                    <Text style={m.presetT}>{p.label}</Text>
+                  </Pressable>
+                ))}
+              </ScrollView>
               <TextInput
                 style={[m.input, m.ta]}
                 value={prompt}
                 onChangeText={setPrompt}
                 placeholder="描述要 Claude 做什么…"
-                placeholderTextColor={C.faint}
+                placeholderTextColor={c.faint}
                 multiline
               />
             </View>
             <Pressable style={m.createBtn} android_ripple={{ color: "rgba(255,255,255,0.15)", borderless: false }} onPress={create}>
               <Text style={m.createT}>启动会话</Text>
             </Pressable>
-            <Pressable style={m.cancel} android_ripple={{ color: "rgba(125,165,220,0.12)", borderless: false, radius: 22 }} onPress={onClose}>
+            <Pressable style={m.cancel} android_ripple={{ color: c.tintSoft, borderless: false, radius: 22 }} onPress={onClose}>
               <Text style={m.cancelT}>取消</Text>
             </Pressable>
           </Pressable>
@@ -69,26 +92,32 @@ export default function NewSessionModal({ visible, onClose }: { visible: boolean
   );
 }
 
-const m = StyleSheet.create({
-  mask: { flex: 1, backgroundColor: "rgba(2,5,10,0.65)", justifyContent: "flex-end" },
+const makeStyles = (c: ThemeColors) => StyleSheet.create({
+  mask: { flex: 1, backgroundColor: withA("#02050A", 0.65), justifyContent: "flex-end" },
   sheet: {
-    backgroundColor: "#0A141F", borderTopLeftRadius: 22, borderTopRightRadius: 22,
-    borderTopWidth: 1, borderTopColor: C.line, paddingHorizontal: 16,
+    backgroundColor: c.panel, borderTopLeftRadius: 22, borderTopRightRadius: 22,
+    borderTopWidth: 1, borderTopColor: c.line, paddingHorizontal: 16,
     paddingTop: 18, paddingBottom: 30,
   },
-  h3: { color: C.text, fontSize: 16, fontWeight: "700", marginBottom: 14 },
+  h3: { color: c.text, fontSize: 16, fontWeight: "700", marginBottom: 14 },
   field: { marginBottom: 12 },
-  label: { color: C.dim, fontSize: 12, marginBottom: 6 },
+  label: { color: c.dim, fontSize: 12, marginBottom: 6 },
   input: {
-    backgroundColor: C.panel2, borderWidth: 1, borderColor: C.line, borderRadius: 12,
-    paddingHorizontal: 13, paddingVertical: 11, color: C.text, fontSize: 15,
+    backgroundColor: c.panel2, borderWidth: 1, borderColor: c.line, borderRadius: 12,
+    paddingHorizontal: 13, paddingVertical: 11, color: c.text, fontSize: 15,
   },
   ta: { minHeight: 88, textAlignVertical: "top" },
+  presetRow: { marginBottom: 8, flexGrow: 0 },
+  presetChip: {
+    paddingHorizontal: 12, paddingVertical: 6, borderRadius: 12,
+    backgroundColor: c.panel2, borderWidth: 1, borderColor: c.line,
+  },
+  presetT: { fontSize: 12, color: c.dim },
   createBtn: {
-    height: 48, borderRadius: 14, marginTop: 4, backgroundColor: C.brandA,
+    height: 48, borderRadius: 14, marginTop: 4, backgroundColor: c.brandA,
     alignItems: "center", justifyContent: "center",
   },
   createT: { color: "#fff", fontSize: 15.5, fontWeight: "700" },
   cancel: { height: 42, marginTop: 8, alignItems: "center", justifyContent: "center" },
-  cancelT: { color: C.dim, fontSize: 14 },
+  cancelT: { color: c.dim, fontSize: 14 },
 });

@@ -7,6 +7,13 @@ export interface FileChangeStats {
   lines_deleted: number;
 }
 
+export interface TokenUsage {
+  input_tokens: number;
+  output_tokens: number;
+  cache_read_input_tokens: number;
+  cache_creation_input_tokens: number;
+}
+
 export interface WaitingPayload {
   request_id: string;
   tool_name: string;
@@ -38,6 +45,7 @@ export interface SessionState {
   cli_pid?: number;
   elapsed_hint?: number;
   turn_started_at?: number;
+  usage?: TokenUsage;
 }
 
 export interface LogEntry {

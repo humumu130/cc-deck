@@ -11,6 +11,7 @@ import type {
   FileChangeStats,
   SessionLogPayload,
   SessionStatus,
+  TokenUsage,
   WaitingPayload,
 } from "./types.js";
 import {
@@ -71,6 +72,8 @@ export interface AgentCallbacks {
   onWaiting(p: WaitingPayload): void;
   onWaitingResolved(requestId: string, decision: "allow" | "deny", by?: string): void;
   onStats(stats: FileChangeStats): void;
+  // 每回合 result 消息携带的 token 用量（累计口径由调用方决定）
+  onUsage(usage: TokenUsage): void;
   onLog(kind: SessionLogPayload["kind"], text: string, tool?: string): void;
   // 每回合结束（result 消息）：ok=true → DONE；ok=false → ERROR
   onTurnEnd(ok: boolean, reason: string, durationMs: number): void;
@@ -189,6 +192,8 @@ export class AgentSession {
       case "result": {
         this.resultSeenForTurn = true;
         const dur = msg.duration_ms;
+        const u = (msg as { usage?: TokenUsage }).usage;
+        if (u && typeof u.input_tokens === "number") this.cb.onUsage(u);
         if (this.stopping) {
           this.cb.onTurnEnd(true, "interrupted", dur);
         } else if (msg.subtype === "success" && !msg.is_error) {

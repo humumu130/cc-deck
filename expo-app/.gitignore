@@ -7,3 +7,4 @@ android/local.properties
 *.apk
 *.hbc
 .expo/
+android/build/
