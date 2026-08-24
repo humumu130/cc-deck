@@ -317,7 +317,7 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
   emptyIcon: { fontSize: 42, marginBottom: 12, opacity: 0.5 },
   emptyT: { color: c.faint, fontSize: 14, marginBottom: 6 },
   emptyS: { color: c.faint, fontSize: 12, textAlign: "center", lineHeight: 20 },
-  fab: { position: "absolute", right: 30, bottom: 56, borderRadius: 18, elevation: 8 },
-  fabGrad: { width: 56, height: 56, borderRadius: 18, alignItems: "center", justifyContent: "center" },
+  fab: { position: "absolute", right: 30, bottom: 56, borderRadius: 16, elevation: 8 },
+  fabGrad: { width: 56, height: 56, borderRadius: 16, alignItems: "center", justifyContent: "center" },
   fabText: { color: "#fff", fontSize: 30, fontWeight: "300", marginTop: -4 },
 });
