@@ -8,6 +8,7 @@ import { useTheme, useThemeStyles } from "../theme-context";
 import { sessionElapsed, fmtElapsed } from "../fmt";
 import { store } from "../store";
 import type { SessionState } from "../protocol";
+import RenameModal from "./RenameModal";
 
 interface Props {
   sessions: SessionState[];
@@ -23,7 +24,8 @@ function folderOf(cwd: string): string {
   return parts[parts.length - 1] ?? cwd;
 }
 
-const DEL_W = 78;
+const ACT_W = 78;    // 单个操作按钮宽
+const FULL_W = 156;  // 操作面板总宽（重命名 + 删除）
 
 // cc light 风格：运行中黄灯闪烁
 function BlinkDot({ color }: { color: string }) {
@@ -42,23 +44,49 @@ function BlinkDot({ color }: { color: string }) {
   return <Animated.View style={[styles.dot, { backgroundColor: color, opacity: op }]} />;
 }
 
-// 左滑露出删除按钮（DONE/ERROR 可删；其余状态按钮禁用提示走服务端校验）
-function SwipeRow({ deletable, onDelete, children }: { deletable: boolean; onDelete: () => void; children: React.ReactNode }) {
+// 左滑露出操作面板（重命名 + 删除；DONE/ERROR 才可删）。
+// 面板做成独立圆角小胶囊（上下留 3px），从卡片后面滑出，避免直角贴圆角的接缝
+function SwipeRow({
+  sid, deletable, onPress, onRename, onDelete, revealSid, onReveal, children,
+}: {
+  sid: string;
+  deletable: boolean;
+  onPress: () => void;
+  onRename: () => void;
+  onDelete: () => void;
+  revealSid: string | null;
+  onReveal: (v: string | null) => void;
+  children: React.ReactNode;
+}) {
   const { c } = useTheme();
   const styles = useThemeStyles(makeStyles);
   const x = useRef(new Animated.Value(0)).current;
   const open = useRef(false);
+  const close = () => {
+    open.current = false;
+    onReveal(null);
+    Animated.spring(x, { toValue: 0, useNativeDriver: true }).start();
+  };
+  // 同时只保留一行展开
+  useEffect(() => {
+    if (open.current && revealSid !== null && revealSid !== sid) {
+      open.current = false;
+      Animated.spring(x, { toValue: 0, useNativeDriver: true }).start();
+    }
+  }, [revealSid]);
   const pan = useRef(
     PanResponder.create({
       onMoveShouldSetPanResponder: (_, g) => Math.abs(g.dx) > 10 && Math.abs(g.dy) < 12,
       onPanResponderMove: (_, g) => {
-        const base = open.current ? -DEL_W : 0;
-        x.setValue(Math.min(0, Math.max(-DEL_W - 36, base + g.dx)));
+        const base = open.current ? -FULL_W : 0;
+        x.setValue(Math.min(0, Math.max(-FULL_W - 36, base + g.dx)));
       },
       onPanResponderRelease: (_, g) => {
-        const shouldOpen = open.current ? g.dx > -DEL_W / 2 : g.dx < -DEL_W / 2;
+        // 已展开：明显右移或右甩即收起；未展开：左移过半或左甩即展开
+        const shouldOpen = open.current ? !(g.dx > 24 || g.vx > 0.3) : g.dx < -ACT_W / 2 || g.vx < -0.5;
         open.current = shouldOpen;
-        Animated.spring(x, { toValue: shouldOpen ? -DEL_W : 0, useNativeDriver: true, bounciness: 5, speed: 18 }).start();
+        onReveal(shouldOpen ? sid : null);
+        Animated.spring(x, { toValue: shouldOpen ? -FULL_W : 0, useNativeDriver: true, bounciness: 5, speed: 18 }).start();
       },
       onPanResponderTerminate: () => {
         open.current = false;
@@ -66,66 +94,95 @@ function SwipeRow({ deletable, onDelete, children }: { deletable: boolean; onDel
       },
     }),
   ).current;
-  const close = () => {
-    open.current = false;
-    Animated.spring(x, { toValue: 0, useNativeDriver: true }).start();
-  };
   return (
     <View style={styles.swipeWrap}>
-      <Pressable
-        style={[styles.delBtn, !deletable && { backgroundColor: withA(c.dim, 0.10) }]}
-        android_ripple={{ color: "rgba(255,255,255,0.15)", borderless: false }}
-        onPress={() => {
-          if (deletable) onDelete();
-          close();
-        }}
-      >
-        <Text style={styles.delT}>{deletable ? "删除" : "运行中"}</Text>
-      </Pressable>
+      <View style={styles.actPanel}>
+        <Pressable
+          style={[styles.actBtn, styles.actRen]}
+          android_ripple={{ color: "rgba(255,255,255,0.18)", borderless: false }}
+          onPress={() => {
+            onRename();
+            close();
+          }}
+        >
+          <Text style={styles.actT}>✎</Text>
+          <Text style={styles.actT2}>重命名</Text>
+        </Pressable>
+        <Pressable
+          style={[styles.actBtn, !deletable && styles.actOff]}
+          android_ripple={{ color: "rgba(255,255,255,0.18)", borderless: false }}
+          onPress={() => {
+            if (deletable) onDelete();
+            close();
+          }}
+        >
+          <Text style={styles.actT}>✕</Text>
+          <Text style={styles.actT2}>{deletable ? "删除" : "运行中"}</Text>
+        </Pressable>
+      </View>
       <Animated.View style={[styles.swipeCard, { transform: [{ translateX: x }] }]} {...pan.panHandlers}>
-        {children}
+        <Pressable
+          style={styles.card}
+          android_ripple={{ color: c.tintSoft, borderless: false }}
+          onPress={() => {
+            if (open.current) close();
+            else onPress();
+          }}
+        >
+          {children}
+        </Pressable>
       </Animated.View>
     </View>
   );
 }
 
-function SessionCard({ s, onOpen }: { s: SessionState; onOpen: (sid: string) => void }) {
+function SessionCard({
+  s, onOpen, onRename, revealSid, onReveal,
+}: {
+  s: SessionState;
+  onOpen: (sid: string) => void;
+  onRename: () => void;
+  revealSid: string | null;
+  onReveal: (v: string | null) => void;
+}) {
   const { c } = useTheme();
   const styles = useThemeStyles(makeStyles);
   const color = statusColor(s.status, c);
   const deletable = s.status === "DONE" || s.status === "ERROR";
   return (
-    <SwipeRow deletable={deletable} onDelete={() => store.send("COMMAND_DELETE", { session_id: s.session_id })}>
-      <Pressable
-        style={styles.card}
-        android_ripple={{ color: c.tintSoft, borderless: false }}
-        onPress={() => onOpen(s.session_id)}
-      >
-        <View style={styles.row1}>
-          {s.status === "WORKING" ? (
-            <BlinkDot color={color} />
-          ) : (
-            <View style={[styles.dot, { backgroundColor: color, borderColor: color }]} />
-          )}
-          <View style={{ flex: 1 }} />
-          <Text style={styles.elapsed}>{fmtElapsed(sessionElapsed(s))}</Text>
-        </View>
-        <Text style={styles.title} numberOfLines={1}>{s.title || "未命名会话"}</Text>
-        <Text style={styles.sum} numberOfLines={1}>{s.action_summary || "…"}</Text>
-        <View style={styles.foot}>
-          <Text style={[styles.tag, s.external ? styles.tagExt : null]}>{s.external ? "外部 CLI" : "托管"}</Text>
-          {s.cwd ? <Text style={styles.folderTag} numberOfLines={1}>📁 {folderOf(s.cwd)}</Text> : null}
-          {s.historical && !s.external ? <Text style={styles.tag}>历史</Text> : null}
-          <View style={{ flex: 1 }} />
-          {s.stats && s.stats.files_changed > 0 ? (
-            <Text style={styles.stats}>
-              <Text style={{ color: c.working }}>+{s.stats.lines_added}</Text>
-              {" "}
-              <Text style={{ color: c.error }}>-{s.stats.lines_deleted}</Text>
-            </Text>
-          ) : null}
-        </View>
-      </Pressable>
+    <SwipeRow
+      sid={s.session_id}
+      deletable={deletable}
+      onPress={() => onOpen(s.session_id)}
+      onRename={onRename}
+      onDelete={() => store.send("COMMAND_DELETE", { session_id: s.session_id })}
+      revealSid={revealSid}
+      onReveal={onReveal}
+    >
+      <View style={styles.row1}>
+        {s.status === "WORKING" ? (
+          <BlinkDot color={color} />
+        ) : (
+          <View style={[styles.dot, { backgroundColor: color, borderColor: color }]} />
+        )}
+        <View style={{ flex: 1 }} />
+        <Text style={styles.elapsed}>{fmtElapsed(sessionElapsed(s))}</Text>
+      </View>
+      <Text style={styles.title} numberOfLines={1}>{s.title || "未命名会话"}</Text>
+      <Text style={styles.sum} numberOfLines={1}>{s.action_summary || "…"}</Text>
+      <View style={styles.foot}>
+        <Text style={[styles.tag, s.external ? styles.tagExt : null]}>{s.external ? "外部 CLI" : "托管"}</Text>
+        {s.cwd ? <Text style={styles.folderTag} numberOfLines={1}>📁 {folderOf(s.cwd)}</Text> : null}
+        {s.historical && !s.external ? <Text style={styles.tag}>历史</Text> : null}
+        <View style={{ flex: 1 }} />
+        {s.stats && s.stats.files_changed > 0 ? (
+          <Text style={styles.stats}>
+            <Text style={{ color: c.working }}>+{s.stats.lines_added}</Text>
+            {" "}
+            <Text style={{ color: c.error }}>-{s.stats.lines_deleted}</Text>
+          </Text>
+        ) : null}
+      </View>
     </SwipeRow>
   );
 }
@@ -133,6 +190,8 @@ function SessionCard({ s, onOpen }: { s: SessionState; onOpen: (sid: string) => 
 export default function ListScreen({ sessions, connected, connText, onOpen, onNew, onSetup }: Props) {
   const { c, mode, toggle } = useTheme();
   const styles = useThemeStyles(makeStyles);
+  const [revealSid, setRevealSid] = useState<string | null>(null);
+  const [renameTarget, setRenameTarget] = useState<SessionState | null>(null);
   const sorted = useMemo(() => {
     const order: Record<string, number> = { WAITING: 0, WORKING: 1, ERROR: 2, DONE: 3 };
     return [...sessions].sort((a, b) => (order[a.status] ?? 9) - (order[b.status] ?? 9) || b.started_at - a.started_at);
@@ -217,7 +276,9 @@ export default function ListScreen({ sessions, connected, connText, onOpen, onNe
         data={visible}
         keyExtractor={(x) => x.session_id}
         contentContainerStyle={{ paddingBottom: 120, paddingHorizontal: 14, paddingTop: 6 }}
-        renderItem={({ item }) => <SessionCard s={item} onOpen={onOpen} />}
+        renderItem={({ item }) => (
+          <SessionCard s={item} onOpen={onOpen} onRename={() => setRenameTarget(item)} revealSid={revealSid} onReveal={setRevealSid} />
+        )}
         ListEmptyComponent={
           <View style={styles.empty}>
             <Text style={styles.emptyIcon}>⚡</Text>
@@ -238,6 +299,16 @@ export default function ListScreen({ sessions, connected, connText, onOpen, onNe
           <Text style={styles.fabText}>＋</Text>
         </LinearGradient>
       </Pressable>
+
+      <RenameModal
+        visible={!!renameTarget}
+        initial={renameTarget?.title ?? ""}
+        onCancel={() => setRenameTarget(null)}
+        onSubmit={(title) => {
+          if (renameTarget) store.send("COMMAND_RENAME", { session_id: renameTarget.session_id, title });
+          setRenameTarget(null);
+        }}
+      />
     </SafeAreaView>
   );
 }
@@ -288,11 +359,15 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
   collapseTOn: { color: c.brandA },
   swipeWrap: { marginBottom: 11, borderRadius: 16, overflow: "hidden" },
   swipeCard: { borderRadius: 16, overflow: "hidden", backgroundColor: c.panel },
-  delBtn: {
-    position: "absolute", top: 0, bottom: 0, right: 0, width: DEL_W,
-    backgroundColor: withA(c.waiting, 0.85), alignItems: "center", justifyContent: "center",
+  actPanel: {
+    position: "absolute", top: 3, bottom: 3, right: 0, width: FULL_W,
+    flexDirection: "row", borderRadius: 16, overflow: "hidden",
   },
-  delT: { color: "#fff", fontSize: 13.5, fontWeight: "600" },
+  actBtn: { width: ACT_W, alignItems: "center", justifyContent: "center", gap: 3, backgroundColor: withA(c.waiting, 0.9) },
+  actRen: { backgroundColor: c.brandB },
+  actOff: { backgroundColor: withA(c.dim, 0.3) },
+  actT: { color: "#fff", fontSize: 17, fontWeight: "600" },
+  actT2: { color: "#fff", fontSize: 11.5, fontWeight: "600" },
   card: {
     backgroundColor: c.panel, borderWidth: 1, borderColor: c.line,
     borderRadius: 16, padding: 14,

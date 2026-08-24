@@ -255,6 +255,7 @@ class RelayStore {
         if (msg.payload.stats) s.stats = msg.payload.stats;
         if (msg.payload.remote_mode !== undefined) s.remote_mode = msg.payload.remote_mode;
         if (msg.payload.title) s.title = msg.payload.title;
+        if (msg.payload.title_locked !== undefined) s.title_locked = msg.payload.title_locked;
         if (msg.payload.turn_started_at) s.turn_started_at = msg.payload.turn_started_at;
         if (msg.payload.usage) s.usage = msg.payload.usage;
         s.updated_at = msg.ts;

@@ -52,7 +52,7 @@ export class SessionManager {
     void generateTitle(task, this.cfg.model).then((t) => {
       if (!t) return;
       const s = this.sessions.get(sessionId);
-      if (!s || s.state.title === t) return;
+      if (!s || s.state.title === t || s.state.title_locked) return;
       s.state.title = t;
       s.state.updated_at = Date.now();
       this.bus.emit(sessionId, "SESSION_UPDATED", {
@@ -327,6 +327,22 @@ export class SessionManager {
           }
           this.sessions.delete(cmd.payload.session_id);
           this.bus.emit(cmd.payload.session_id, "SESSION_DELETED", { session_id: cmd.payload.session_id });
+          return { command_id: cmd.command_id, ok: true };
+        }
+        case "COMMAND_RENAME": {
+          const s = this.require(cmd.payload.session_id);
+          const title = cmd.payload.title.trim().slice(0, 40);
+          if (!title) return { command_id: cmd.command_id, ok: false, error: "标题不能为空" };
+          s.state.title = title;
+          s.state.title_locked = true;
+          s.state.updated_at = Date.now();
+          this.bus.emit(cmd.payload.session_id, "SESSION_UPDATED", {
+            status: s.state.status,
+            action_summary: s.state.action_summary,
+            stats: { ...s.state.stats },
+            title,
+            title_locked: true,
+          });
           return { command_id: cmd.command_id, ok: true };
         }
       }

@@ -39,6 +39,7 @@ export interface SessionState {
   cwd: string;
   initial_prompt: string;
   title: string;              // 人类可读标题（deriveTitle(initial_prompt)）
+  title_locked?: boolean;     // true = 用户手动命名，自动命名（CC name/smart）不再覆盖
   model: string;
   status: SessionStatus;
   action_summary: string;     // 最近动作摘要，如 "修改 src/auth.ts"
@@ -80,7 +81,8 @@ export interface SessionUpdatedPayload {
   action_summary: string;
   stats: FileChangeStats;
   remote_mode?: boolean;       // external 会话切换远程审批时携带
-  title?: string;              // 标题升级（外部会话首个 prompt 到达时）
+  title?: string;              // 标题升级（外部会话首个 prompt 到达时 / 用户改名）
+  title_locked?: boolean;      // 用户命名标记（true 时自动命名跳过）
   turn_started_at?: number;    // 回合起点变化时携带
   usage?: TokenUsage;          // token 用量变化时携带
 }
@@ -172,7 +174,8 @@ export type CommandType =
   | "COMMAND_EXT_MODE"
   | "COMMAND_EXT_INPUT"
   | "COMMAND_EXT_STOP"
-  | "COMMAND_DELETE";
+  | "COMMAND_DELETE"
+  | "COMMAND_RENAME";
 
 export interface CommandBase {
   command_id: string;   // 客户端生成（uuid），Relay 按此去重
@@ -229,6 +232,12 @@ export interface DeleteCommand extends CommandBase {
   payload: { session_id: string };
 }
 
+// 会话重命名（用户手动命名；锁定后自动命名不再覆盖）
+export interface RenameCommand extends CommandBase {
+  type: "COMMAND_RENAME";
+  payload: { session_id: string; title: string };
+}
+
 export type Command =
   | CreateCommand
   | MessageCommand
@@ -238,7 +247,8 @@ export type Command =
   | ExtModeCommand
   | ExtInputCommand
   | ExtStopCommand
-  | DeleteCommand;
+  | DeleteCommand
+  | RenameCommand;
 
 // hooks 桥接：bridge-hook.mjs -> POST /bridge/hook 的请求体（token 走 x-bridge-token header）
 export interface BridgeEvent {

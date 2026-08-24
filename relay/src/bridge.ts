@@ -222,6 +222,7 @@ export class Bridge {
   private refreshName(id: string, ev: BridgeEvent): void {
     if (this.named.has(id)) return;
     if ((this.nameMisses.get(id) ?? 0) >= 8) return;
+    if (this.mgr.getExternal(id)?.title_locked) return;
     const name = this.readCcSessionName(ev.session_id);
     if (name) {
       this.named.add(id);

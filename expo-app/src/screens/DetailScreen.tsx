@@ -6,6 +6,7 @@ import { useTheme, useThemeStyles } from "../theme-context";
 import { fmtClock, fmtElapsed, sessionElapsed } from "../fmt";
 import { store, useRelay } from "../store";
 import type { LogEntry, SessionState } from "../protocol";
+import RenameModal from "./RenameModal";
 
 type Tab = "activity" | "logs" | "stats";
 
@@ -126,6 +127,7 @@ export default function DetailScreen({ sid, onBack }: { sid: string; onBack: () 
   const snap = useRelay();
   const [tab, setTab] = useState<Tab>("activity");
   const [input, setInput] = useState("");
+  const [renaming, setRenaming] = useState(false);
   const s: SessionState | undefined = snap.sessions.find((x) => x.session_id === sid);
 
   useEffect(() => {
@@ -177,6 +179,14 @@ export default function DetailScreen({ sid, onBack }: { sid: string; onBack: () 
             {" · " + (external ? "外部 CLI" : "托管") + (s.historical && !external ? " · 历史" : "") + " · " + fmtElapsed(sessionElapsed(s))}
           </Text>
         </View>
+        <Pressable
+          style={[d.editBtn, d.opRipple]}
+          android_ripple={{ color: c.tintSoft, borderless: false }}
+          onPress={() => setRenaming(true)}
+          hitSlop={8}
+        >
+          <Text style={d.editT}>✎</Text>
+        </Pressable>
       </View>
 
       <ScrollView style={{ flex: 1 }} contentContainerStyle={{ padding: 14, paddingBottom: 130 }}>
@@ -304,6 +314,16 @@ export default function DetailScreen({ sid, onBack }: { sid: string; onBack: () 
         </Pressable>
         </View>
       </KeyboardAvoidingView>
+
+      <RenameModal
+        visible={renaming}
+        initial={s.title || ""}
+        onCancel={() => setRenaming(false)}
+        onSubmit={(title) => {
+          store.send("COMMAND_RENAME", { session_id: sid, title });
+          setRenaming(false);
+        }}
+      />
     </SafeAreaView>
   );
 }
@@ -319,6 +339,11 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
   hintText: { color: c.faint },
   title: { color: c.text, fontSize: 15, fontWeight: "600" },
   sub: { color: c.dim, fontSize: 11, marginTop: 1 },
+  editBtn: {
+    width: 30, height: 30, borderRadius: 9, backgroundColor: c.tintSoft,
+    borderWidth: 1, borderColor: c.line, alignItems: "center", justifyContent: "center", marginLeft: 8,
+  },
+  editT: { color: c.dim, fontSize: 14, marginTop: -1 },
   waitBanner: {
     borderRadius: 16, borderWidth: 1, borderColor: withA(c.working, 0.4),
     backgroundColor: withA(c.working, 0.07), padding: 14, marginBottom: 12,

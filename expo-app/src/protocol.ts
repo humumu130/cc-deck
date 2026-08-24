@@ -46,6 +46,7 @@ export interface SessionState {
   elapsed_hint?: number;
   turn_started_at?: number;
   usage?: TokenUsage;
+  title_locked?: boolean;
 }
 
 export interface LogEntry {
@@ -72,7 +73,8 @@ export type CommandType =
   | "COMMAND_EXT_MODE"
   | "COMMAND_EXT_INPUT"
   | "COMMAND_EXT_STOP"
-  | "COMMAND_DELETE";
+  | "COMMAND_DELETE"
+  | "COMMAND_RENAME";
 
 export interface CommandAck {
   type: "COMMAND_ACK";

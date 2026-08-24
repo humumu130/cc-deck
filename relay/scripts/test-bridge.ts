@@ -241,6 +241,20 @@ await hook({ event: "SessionEnd", reason: "clear" });
 await wait(150);
 assert(events.some((e) => e.type === "SESSION_LOG" && String((e.payload as { text: string }).text).includes("会话结束")), "SessionEnd logged");
 
+// 23. COMMAND_RENAME：改名 + 锁定（title_locked）
+const renId = send("COMMAND_RENAME", { session_id: extId("cli-1"), title: "我的会话" });
+const ack23 = await waitAck(renId);
+assert(ack23.ok, "RENAME acked");
+await wait(150);
+const upd23 = events.filter((e) => e.type === "SESSION_UPDATED").at(-1) as Envelope<"SESSION_UPDATED", { title?: string; title_locked?: boolean }> | undefined;
+assert(upd23?.payload.title === "我的会话" && upd23?.payload.title_locked === true, "UPDATE carries title + title_locked");
+assert(mgr.snapshot().find((s) => s.session_id === extId("cli-1"))?.title === "我的会话", "state renamed");
+
+// 24. 空标题 → 拒绝
+const ren2Id = send("COMMAND_RENAME", { session_id: extId("cli-1"), title: "   " });
+const ack24 = await waitAck(ren2Id);
+assert(ack24.ok === false, "empty rename rejected");
+
 wsCur!.close();
 await wait(300);
 console.log("\nBRIDGE TESTS PASSED");
