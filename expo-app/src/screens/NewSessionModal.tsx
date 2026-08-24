@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
+import { Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { withA, type ThemeColors } from "../theme";
 import { useTheme, useThemeStyles } from "../theme-context";
@@ -40,9 +40,9 @@ export default function NewSessionModal({ visible, onClose }: { visible: boolean
   return (
     <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
       <Pressable style={m.mask} onPress={onClose}>
-        <KeyboardAvoidingView behavior="padding" style={{ width: "100%" }}>
-          <Pressable style={m.sheet} onPress={(e) => e.stopPropagation()}>
-            <Text style={m.h3}>新建托管会话</Text>
+        {/* Modal 独立窗口 decorFitsSystemWindows=true + adjustResize，原生即可避让键盘 */}
+        <View style={{ width: "100%" }}>
+          <Pressable style={m.sheet} onPress={(e) => e.stopPropagation()}>            <Text style={m.h3}>新建托管会话</Text>
             <View style={m.field}>
               <Text style={m.label}>工作目录（PC 上的路径）</Text>
               <TextInput
@@ -86,7 +86,7 @@ export default function NewSessionModal({ visible, onClose }: { visible: boolean
               <Text style={m.cancelT}>取消</Text>
             </Pressable>
           </Pressable>
-        </KeyboardAvoidingView>
+        </View>
       </Pressable>
     </Modal>
   );

@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { BackHandler, KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
+import { BackHandler, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { LinearGradient } from "expo-linear-gradient";
 import { SafeAreaView } from "react-native-safe-area-context";
@@ -7,6 +7,7 @@ import { withA, type ThemeColors } from "../theme";
 import { useTheme, useThemeStyles } from "../theme-context";
 import { store, type ServerEntry } from "../store";
 import { uuid } from "../fmt";
+import { useKbHeight } from "../kb";
 
 interface Props {
   onClose?: () => void; // 有值 = 从主界面进入（可返回）
@@ -29,6 +30,7 @@ export default function SetupScreen({ onClose }: Props) {
   const [wsUrl, setWsUrl] = useState("ws://192.168.0.105:8787/ws");
   const [token, setToken] = useState("");
   const [remember, setRemember] = useState(true);
+  const kb = useKbHeight();
 
   const reload = async () => {
     setServers(await store.loadServers());
@@ -94,8 +96,11 @@ export default function SetupScreen({ onClose }: Props) {
 
   return (
     <SafeAreaView style={s.safe} edges={onClose ? ["top"] : []}>
-      <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === "ios" ? "padding" : undefined}>
-        <ScrollView contentContainerStyle={s.wrap} keyboardShouldPersistTaps="handled">
+      <View style={{ flex: 1 }}>
+        <ScrollView
+          contentContainerStyle={{ ...s.wrap, paddingBottom: 36 + kb }}
+          keyboardShouldPersistTaps="handled"
+        >
           <LinearGradient colors={[c.brandA, c.brandB]} style={s.logo} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}>
             <Text style={s.logoText}>CC</Text>
           </LinearGradient>
@@ -179,7 +184,7 @@ export default function SetupScreen({ onClose }: Props) {
             </Pressable>
           ) : null}
         </ScrollView>
-      </KeyboardAvoidingView>
+      </View>
     </SafeAreaView>
   );
 }

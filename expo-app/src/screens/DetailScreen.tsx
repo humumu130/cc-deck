@@ -1,11 +1,12 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { BackHandler, KeyboardAvoidingView, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
+import { BackHandler, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
+import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { STATUS_ZH, statusColor, withA, type ThemeColors } from "../theme";
 import { useTheme, useThemeStyles } from "../theme-context";
 import { fmtClock, fmtElapsed, sessionElapsed } from "../fmt";
 import { store, useRelay } from "../store";
 import type { LogEntry, SessionState } from "../protocol";
+import { useKbHeight } from "../kb";
 import RenameModal from "./RenameModal";
 
 type Tab = "activity" | "logs" | "stats";
@@ -128,6 +129,8 @@ export default function DetailScreen({ sid, onBack }: { sid: string; onBack: () 
   const [tab, setTab] = useState<Tab>("activity");
   const [input, setInput] = useState("");
   const [renaming, setRenaming] = useState(false);
+  const kb = useKbHeight();
+  const insets = useSafeAreaInsets();
   const s: SessionState | undefined = snap.sessions.find((x) => x.session_id === sid);
 
   useEffect(() => {
@@ -166,7 +169,7 @@ export default function DetailScreen({ sid, onBack }: { sid: string; onBack: () 
   };
 
   return (
-    <SafeAreaView style={d.safe} edges={["top", "bottom"]}>
+    <SafeAreaView style={d.safe} edges={["top"]}>
       {/* 头部 */}
       <View style={d.head}>
         <Pressable style={[d.back, d.opRipple]} android_ripple={{ color: c.tintSoft, borderless: false }} onPress={onBack} hitSlop={8}>
@@ -281,8 +284,8 @@ export default function DetailScreen({ sid, onBack }: { sid: string; onBack: () 
         )}
       </ScrollView>
 
-      {/* 底部命令栏（键盘弹起时抬升到键盘上方） */}
-      <KeyboardAvoidingView behavior="padding" pointerEvents="box-none">
+      {/* 底部命令栏：edge-to-edge 下 adjustResize 失效，用键盘 insets 高度手动抬升 */}
+      <View pointerEvents="box-none" style={{ paddingBottom: kb > 0 ? kb : insets.bottom }}>
         {canCmd ? (
           <View style={d.tplRow}>
             <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 7 }}>
@@ -313,7 +316,7 @@ export default function DetailScreen({ sid, onBack }: { sid: string; onBack: () 
           <Text style={d.sendT}>➤</Text>
         </Pressable>
         </View>
-      </KeyboardAvoidingView>
+      </View>
 
       <RenameModal
         visible={renaming}
