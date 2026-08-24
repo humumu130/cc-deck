@@ -23,6 +23,22 @@ function folderOf(cwd: string): string {
 
 const DEL_W = 78;
 
+// cc light 风格：运行中黄灯闪烁
+function BlinkDot({ color }: { color: string }) {
+  const op = useRef(new Animated.Value(1)).current;
+  useEffect(() => {
+    const loop = Animated.loop(
+      Animated.sequence([
+        Animated.timing(op, { toValue: 0.25, duration: 550, useNativeDriver: true }),
+        Animated.timing(op, { toValue: 1, duration: 550, useNativeDriver: true }),
+      ]),
+    );
+    loop.start();
+    return () => loop.stop();
+  }, [op]);
+  return <Animated.View style={[styles.dot, { backgroundColor: color, opacity: op }]} />;
+}
+
 // 左滑露出删除按钮（DONE/ERROR 可删；其余状态按钮禁用提示走服务端校验）
 function SwipeRow({ deletable, onDelete, children }: { deletable: boolean; onDelete: () => void; children: React.ReactNode }) {
   const x = useRef(new Animated.Value(0)).current;
@@ -79,9 +95,11 @@ function SessionCard({ s, onOpen }: { s: SessionState; onOpen: (sid: string) => 
         onPress={() => onOpen(s.session_id)}
       >
         <View style={styles.row1}>
-          <View style={[styles.dot, { backgroundColor: color, borderColor: color }]}>
-            {s.status === "WORKING" && <View style={styles.dotCore} />}
-          </View>
+          {s.status === "WORKING" ? (
+            <BlinkDot color={color} />
+          ) : (
+            <View style={[styles.dot, { backgroundColor: color, borderColor: color }]} />
+          )}
           <Text style={[styles.st, { color }]}>{STATUS_ZH[s.status] ?? s.status}</Text>
           <Text style={styles.elapsed}>{fmtElapsed(sessionElapsed(s))}</Text>
         </View>

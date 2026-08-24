@@ -18,10 +18,10 @@
     --brand: #7C6CF2;
     --brand-2: #4D9FFF;
     --grad: linear-gradient(135deg, #4D9FFF, #7C6CF2);
-    --working: #2BD98F;
-    --waiting: #F5B841;
-    --error: #F0524F;
-    --done: #4D9FFF;
+    --working: #FFC53D;
+    --waiting: #F0524F;
+    --error: #FF7849;
+    --done: #2BD98F;
   }
   * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
   html, body { height: 100%; }
@@ -151,7 +151,8 @@
   .status-chip.s-WAITING { --sc: var(--waiting); }
   .status-chip.s-ERROR   { --sc: var(--error); }
   .status-chip.s-DONE    { --sc: var(--done); }
-  .status-chip.s-WORKING i { animation: breathe 2s ease-in-out infinite; }
+  .status-chip.s-WORKING i { animation: wblink 1.1s infinite; }
+  @keyframes wblink { 50% { opacity: 0.25; } }
   @keyframes breathe {
     0%, 100% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--sc) 45%, transparent); }
     50% { box-shadow: 0 0 9px 2px color-mix(in srgb, var(--sc) 55%, transparent); }

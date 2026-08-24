@@ -8,10 +8,10 @@ export const C = {
   faint: "#4A5F78",
   brandA: "#4D9FFF",
   brandB: "#7C6CF2",
-  working: "#2BD98F",
-  waiting: "#F5B841",
-  error: "#F0524F",
-  done: "#4D9FFF",
+  working: "#FFC53D",
+  waiting: "#F0524F",
+  error: "#FF7849",
+  done: "#2BD98F",
 };
 
 export const STATUS_ZH: Record<string, string> = {

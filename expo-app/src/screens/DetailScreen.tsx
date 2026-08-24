@@ -54,7 +54,7 @@ const SPIN_FRAMES = ["✶", "✸", "✹", "✺", "✹", "✸"];
 function LiveStatusLine({ summary, startedAt, color }: { summary: string; startedAt?: number; color: string }) {
   const [, tick] = useState(0);
   useEffect(() => {
-    const t = setInterval(() => tick((n) => n + 1), 1000);
+    const t = setInterval(() => tick((n) => n + 1), 500);
     return () => clearInterval(t);
   }, []);
   const base = startedAt ?? Date.now();
