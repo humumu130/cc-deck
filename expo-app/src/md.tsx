@@ -1,5 +1,5 @@
 // 轻量 Markdown 渲染（时间线 assistant 文本用）：
-// 覆盖标题/粗斜体/行内码/围栏码块/无序有序列表/引用/分割线/链接标题，零依赖子集实现，
+// 覆盖标题/粗斜体/行内码/围栏码块/无序有序列表/引用/分割线/GFM 表格/链接标题，零依赖子集实现，
 // 截断产生的残缺标记按字面渲染（解析器对不匹配标记容错）。
 import { useMemo } from "react";
 import { StyleSheet, Text, View, type TextStyle } from "react-native";
@@ -12,7 +12,13 @@ type Block =
   | { t: "code"; text: string }
   | { t: "li"; text: string; depth: number; ord?: string }
   | { t: "quote"; text: string }
+  | { t: "table"; head: string[]; rows: string[][] }
   | { t: "hr" };
+
+// GFM 表格分隔行：|---|:--:| 等
+const DELIM_RE = /^\s*\|?\s*:?-+:?\s*(\|\s*:?-+:?\s*)*\|?\s*$/;
+const splitRow = (l: string) =>
+  l.trim().replace(/^\|/, "").replace(/\|$/, "").split("|").map((c) => c.trim());
 
 function parseBlocks(src: string): Block[] {
   const out: Block[] = [];
@@ -20,11 +26,21 @@ function parseBlocks(src: string): Block[] {
   let para: string[] = [];
   let inCode = false;
   let code: string[] = [];
+  let tableBuf: string[] = [];
   const flush = () => {
     if (para.length) {
       out.push({ t: "p", text: para.join("\n") });
       para = [];
     }
+  };
+  const flushTable = () => {
+    if (!tableBuf.length) return;
+    if (tableBuf.length >= 2 && DELIM_RE.test(tableBuf[1])) {
+      out.push({ t: "table", head: splitRow(tableBuf[0]), rows: tableBuf.slice(2).map(splitRow) });
+    } else {
+      out.push({ t: "p", text: tableBuf.join("\n") });
+    }
+    tableBuf = [];
   };
   for (const raw of lines) {
     if (inCode) {
@@ -40,6 +56,12 @@ function parseBlocks(src: string): Block[] {
       inCode = true;
       continue;
     }
+    if (/^\s*\|/.test(raw)) {
+      flush();
+      tableBuf.push(raw);
+      continue;
+    }
+    flushTable();
     const h = /^(#{1,4})\s+(.*)$/.exec(raw);
     if (h) {
       flush();
@@ -72,6 +94,7 @@ function parseBlocks(src: string): Block[] {
     else para.push(raw);
   }
   if (inCode && code.length) out.push({ t: "code", text: code.join("\n") }); // 截断的码块兜底
+  flushTable();
   flush();
   return out;
 }
@@ -98,11 +121,11 @@ function parseInline(text: string): Span[] {
   return spans.length ? spans : [{ text }];
 }
 
-function InlineText({ text }: { text: string }) {
+function InlineText({ text, small, header }: { text: string; small?: boolean; header?: boolean }) {
   const { c } = useTheme();
   const d = useThemeStyles(makeStyles);
   return (
-    <Text style={d.base}>
+    <Text style={[d.base, small ? d.cellT : null, header ? d.thT : null]}>
       {parseInline(text).map((s, i) => (
         <Text
           key={i}
@@ -155,6 +178,33 @@ export function MdText({ src, style }: { src: string; style?: TextStyle }) {
                 <InlineText text={b.text} />
               </View>
             );
+          case "table": {
+            const n = Math.max(1, b.head.length);
+            const w: number[] = [];
+            for (let j = 0; j < n; j++) {
+              w[j] = Math.min(20, Math.max(4, b.head[j]?.length ?? 0, ...b.rows.map((r) => r[j]?.length ?? 0)));
+            }
+            return (
+              <View key={i} style={d.table}>
+                <View style={d.trHead}>
+                  {b.head.map((cell, j) => (
+                    <View key={j} style={[d.td, { flex: w[j] }]}>
+                      <InlineText text={cell} small header />
+                    </View>
+                  ))}
+                </View>
+                {b.rows.map((r, ri) => (
+                  <View key={ri} style={ri ? d.trSep : null}>
+                    {b.head.map((_, j) => (
+                      <View key={j} style={[d.td, { flex: w[j] }]}>
+                        <InlineText text={r[j] ?? ""} small />
+                      </View>
+                    ))}
+                  </View>
+                ))}
+              </View>
+            );
+          }
           case "hr":
             return <View key={i} style={d.hr} />;
           default:
@@ -189,5 +239,11 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
   codeBlockT: { fontFamily: "monospace", fontSize: 12, lineHeight: 17, color: c.text },
   li: { flexDirection: "row" },
   quote: { borderLeftWidth: 3, borderLeftColor: withA(c.brandA, 0.5), paddingLeft: 10 },
+  cellT: { fontSize: 12.5, lineHeight: 18 },
+  thT: { fontWeight: "600", color: c.dim },
+  table: { borderWidth: StyleSheet.hairlineWidth, borderColor: c.line, borderRadius: 8, overflow: "hidden" },
+  trHead: { flexDirection: "row", backgroundColor: withA(c.dim, 0.1), borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: c.line },
+  trSep: { flexDirection: "row", borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: withA(c.line, 0.6) },
+  td: { paddingHorizontal: 6, paddingVertical: 5, justifyContent: "center" },
   hr: { height: StyleSheet.hairlineWidth, backgroundColor: c.line, marginVertical: 4 },
 });

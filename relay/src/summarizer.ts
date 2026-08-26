@@ -9,8 +9,17 @@ export function basename(p: unknown): string {
   return i >= 0 ? norm.slice(i + 1) : norm;
 }
 
+// 空白归一但保留换行结构：Markdown 表格/列表依赖行首标记，折叠换行会毁掉渲染
+function normLines(s: string): string {
+  return s
+    .replace(/\r\n?/g, "\n")
+    .replace(/[^\S\n]+/g, " ")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+}
+
 export function truncate(s: string, n = MAX_SUMMARY): string {
-  const one = s.replace(/\s+/g, " ").trim();
+  const one = normLines(s);
   return one.length <= n ? one : one.slice(0, n - 1) + "…";
 }
 
@@ -19,7 +28,7 @@ export const FULL_TEXT_CAP = 10_000;
 
 // 原文：仅当摘要会截断（len > summaryCap）时返回，否则 undefined（text 即全文）
 export function fullText(s: string, summaryCap: number): string | undefined {
-  const one = s.replace(/\s+/g, " ").trim();
+  const one = normLines(s);
   if (one.length <= summaryCap) return undefined;
   return one.length <= FULL_TEXT_CAP ? one : one.slice(0, FULL_TEXT_CAP - 1) + "…";
 }
