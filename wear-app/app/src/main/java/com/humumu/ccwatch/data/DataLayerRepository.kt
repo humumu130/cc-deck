@@ -37,6 +37,10 @@ class DataLayerRepository(context: Context) : SessionRepo {
     private val _connected = MutableStateFlow(false)
     override val connected: StateFlow<Boolean> = _connected.asStateFlow()
 
+    /** GMS 快照通道不含日志；W2 活动强度降级为状态推导。 */
+    override val timelines: StateFlow<Map<String, List<com.humumu.ccwatch.protocol.RecentEvent>>> =
+        MutableStateFlow<Map<String, List<com.humumu.ccwatch.protocol.RecentEvent>>>(emptyMap()).asStateFlow()
+
     private val listener = MessageClient.OnMessageReceivedListener { event ->
         if (event.path != Paths.PATH_SESSIONS) return@OnMessageReceivedListener
         runCatching {

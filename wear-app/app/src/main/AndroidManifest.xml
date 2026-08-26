@@ -3,9 +3,14 @@
 
     <uses-feature android:name="android.hardware.type.watch" />
 
+    <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+
     <application
         android:label="CC Watch"
         android:icon="@mipmap/ic_launcher"
+        android:usesCleartextTraffic="true"
         android:theme="@style/Theme.CcWatch">
 
         <meta-data
@@ -21,5 +26,9 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
+
+        <receiver
+            android:name=".notification.NotificationActionReceiver"
+            android:exported="false" />
     </application>
 </manifest>

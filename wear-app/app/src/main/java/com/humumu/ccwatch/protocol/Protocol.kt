@@ -3,10 +3,11 @@ package com.humumu.ccwatch.protocol
 import org.json.JSONObject
 
 /**
- * 手表 <-> 手机 协议契约（与 relay 的 TS 接口字段保持一致，snake_case）。
+ * 协议契约（snake_case，与 relay 的 TS 定义一致）。
  *
- * 手机 -> 手表  MessageClient path = [PATH_SESSIONS]，payload = SessionState[] 全量快照 JSON
- * 手表 -> 手机  MessageClient path = [PATH_CMD]，payload = WatchCommand JSON
+ * 两种数据通道：
+ * ① 手机网关（GMS Data Layer）：PATH_SESSIONS 全量快照 / PATH_CMD WatchCommand（顶层 session_id）
+ * ② 直连 Relay WebSocket（OPPO 表无 GMS 的主通道）：Envelope 增量流 + relay 命令（payload 内 session_id）
  */
 object Paths {
     const val PATH_SESSIONS = "/ccr/sessions"
@@ -55,17 +56,51 @@ data class SessionState(
     val durationMs: Long? = null,
     val external: Boolean? = null,
     val usage: Usage? = null,
+    val todos: List<TodoItem> = emptyList(),
+    val elapsedHint: Long? = null,
 )
+
+/** TodoWrite 任务项（activeForm 进行时描述优先展示） */
+data class TodoItem(
+    val content: String,
+    val status: String, // pending | in_progress | completed
+    val activeForm: String? = null,
+) {
+    val isDone: Boolean get() = status == "completed"
+    val label: String get() = activeForm?.takeIf { it.isNotBlank() } ?: content
+}
+
+/** 时间线事件（relay SESSION_LOG 的 LogEntry，W2 展示 + W1 活动强度推导） */
+data class RecentEvent(
+    val ts: Long,
+    val kind: String, // assistant_text | tool_use | tool_result | system | user_message
+    val text: String,
+    val tool: String? = null,
+    val full: String? = null, // 原文（relay 仅在 text 被截断时携带）
+    val id: String? = null, // 流式块 id：同 id 事件在时间线原地替换
+    val streaming: Boolean = false, // true = 该文本块仍在生成中
+) {
+    val isError: Boolean get() = kind == "system" && text.startsWith("错误")
+    val isDone: Boolean get() = kind == "system" && text.startsWith("完成")
+}
 
 sealed class WatchCommand(val typeId: String) {
     abstract val commandId: String
     abstract val sessionId: String
 
-    data class Allow(override val commandId: String, override val sessionId: String) :
-        WatchCommand("COMMAND_ALLOW")
+    /** GMS 网关路径沿用 COMMAND_ALLOW（手机翻译为 CONTINUE）；relay 路径映射 COMMAND_CONTINUE */
+    data class Allow(
+        override val commandId: String,
+        override val sessionId: String,
+        val requestId: String? = null,
+    ) : WatchCommand("COMMAND_ALLOW")
 
-    data class Reject(override val commandId: String, override val sessionId: String) :
-        WatchCommand("COMMAND_REJECT")
+    data class Reject(
+        override val commandId: String,
+        override val sessionId: String,
+        val requestId: String? = null,
+        val reason: String? = null,
+    ) : WatchCommand("COMMAND_REJECT")
 
     data class Stop(override val commandId: String, override val sessionId: String) :
         WatchCommand("COMMAND_STOP")
@@ -75,18 +110,35 @@ sealed class WatchCommand(val typeId: String) {
         override val sessionId: String,
         val text: String,
     ) : WatchCommand("COMMAND_MESSAGE")
+
+    data class Delete(override val commandId: String, override val sessionId: String) :
+        WatchCommand("COMMAND_DELETE")
 }
 
 object ProtocolCodec {
     private fun optLong(o: JSONObject, k: String): Long? = if (o.has(k) && !o.isNull(k)) o.getLong(k) else null
     private fun optStr(o: JSONObject, k: String): String? = if (o.has(k) && !o.isNull(k)) o.getString(k) else null
 
+    /** SessionState.todos / SESSION_UPDATED.payload.todos 通用解析 */
+    fun parseTodos(o: JSONObject): List<TodoItem> =
+        o.optJSONArray("todos")?.let { arr ->
+            (0 until arr.length()).mapNotNull { i ->
+                arr.optJSONObject(i)?.takeIf { tj -> tj.optString("content").isNotBlank() }?.let { tj ->
+                    TodoItem(
+                        content = tj.optString("content"),
+                        status = tj.optString("status", "pending"),
+                        activeForm = if (tj.has("active_form") && !tj.isNull("active_form")) tj.getString("active_form") else null,
+                    )
+                }
+            }
+        } ?: emptyList()
+
     fun parseSessions(json: String): List<SessionState> {
         val arr = org.json.JSONArray(json)
         return (0 until arr.length()).map { i -> parseSession(arr.getJSONObject(i)) }
     }
 
-    private fun parseSession(o: JSONObject): SessionState {
+    fun parseSession(o: JSONObject): SessionState {
         val w = o.optJSONObject("waiting_request")?.let { wj ->
             WaitingRequest(
                 requestId = wj.getString("request_id"),
@@ -132,9 +184,22 @@ object ProtocolCodec {
             durationMs = optLong(o, "duration_ms"),
             external = if (o.has("external") && !o.isNull("external")) o.getBoolean("external") else null,
             usage = usage,
+            todos = parseTodos(o),
+            elapsedHint = optLong(o, "elapsed_hint"),
         )
     }
 
+    fun parseEvent(o: JSONObject): RecentEvent = RecentEvent(
+        ts = optLong(o, "ts") ?: 0L,
+        kind = optStr(o, "kind") ?: "system",
+        text = optStr(o, "text") ?: "",
+        tool = optStr(o, "tool"),
+        full = optStr(o, "full"),
+        id = optStr(o, "id"),
+        streaming = o.optBoolean("streaming", false),
+    )
+
+    /** 手机网关（GMS Data Layer）命令编码：顶层 session_id，由 expo-app watch.ts 翻译。 */
     fun encodeCommand(cmd: WatchCommand): String {
         val o = JSONObject()
         o.put("command_id", cmd.commandId)
@@ -143,6 +208,33 @@ object ProtocolCodec {
         if (cmd is WatchCommand.Message) {
             o.put("payload", JSONObject().put("text", cmd.text))
         }
+        return o.toString()
+    }
+
+    /**
+     * 直连 Relay 命令编码（session-manager.ts 约定：session_id / request_id / text 都在 payload 内）。
+     * [fallbackRequestId] 由仓库在发送时从当前 waiting_request 解析补齐。
+     */
+    fun encodeRelayCommand(cmd: WatchCommand, fallbackRequestId: String? = null): String {
+        val type = when (cmd) {
+            is WatchCommand.Allow -> "COMMAND_CONTINUE"
+            else -> cmd.typeId
+        }
+        val payload = JSONObject().put("session_id", cmd.sessionId)
+        when (cmd) {
+            is WatchCommand.Allow -> payload.put("request_id", cmd.requestId ?: fallbackRequestId)
+            is WatchCommand.Reject -> {
+                payload.put("request_id", cmd.requestId ?: fallbackRequestId)
+                cmd.reason?.let { payload.put("reason", it) }
+            }
+            is WatchCommand.Message -> payload.put("text", cmd.text)
+            else -> {}
+        }
+        val o = JSONObject()
+        o.put("command_id", cmd.commandId)
+        o.put("type", type)
+        o.put("payload", payload)
+        o.put("ts", System.currentTimeMillis())
         return o.toString()
     }
 }
