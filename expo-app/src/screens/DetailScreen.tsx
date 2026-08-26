@@ -1,15 +1,15 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { BackHandler, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { STATUS_ZH, statusColor, withA, type ThemeColors } from "../theme";
 import { useTheme, useThemeStyles } from "../theme-context";
-import { fmtClock, fmtElapsed, fmtTok, sessionElapsed } from "../fmt";
+import { fmtElapsed, sessionElapsed } from "../fmt";
 import { store, useRelay } from "../store";
 import type { LogEntry, SessionState } from "../protocol";
 import { useKbHeight } from "../kb";
+import { MdText } from "../md";
 import RenameModal from "./RenameModal";
-
-type Tab = "activity" | "logs" | "stats";
+import StatsModal from "./StatsModal";
 
 // 快捷指令模板：点击填入输入框（不自动发送）
 const TEMPLATES = ["继续", "总结当前进展", "运行测试", "提交代码"];
@@ -29,71 +29,48 @@ function matchFilter(kind: string, f: LogFilter): boolean {
   return kind === "system";
 }
 
-function Row({ k, v, vc }: { k: string; v: string; vc?: string }) {
-  const d = useThemeStyles(makeStyles);
-  return (
-    <View style={d.row}>
-      <Text style={d.rowK}>{k}</Text>
-      <Text style={[d.rowV, vc ? { color: vc } : null]}>{v}</Text>
-    </View>
-  );
-}
-
-function LogsView({ logs }: { logs: LogEntry[] }) {
+// 转录行：user=右气泡 / assistant=正文流式 / tool=紧凑卡片 / system=居中弱化
+function TranscriptRow({ e, open, onToggle }: { e: LogEntry; open: boolean; onToggle: () => void }) {
   const { c } = useTheme();
   const d = useThemeStyles(makeStyles);
-  const ref = useRef<ScrollView>(null);
-  const [filter, setFilter] = useState<LogFilter>("all");
-  const shown = useMemo(() => logs.filter((e) => matchFilter(e.kind, filter)), [logs, filter]);
-  useEffect(() => {
-    if (ref.current) ref.current.scrollToEnd({ animated: false });
-  }, [shown.length]);
-  return (
-    <View>
-      <View style={d.filterRow}>
-        {LOG_FILTERS.map((f) => (
-          <Pressable
-            key={f.k}
-            style={[d.filterChip, filter === f.k && d.filterChipOn]}
-            android_ripple={{ color: c.tintSoft, borderless: false, radius: 12 }}
-            onPress={() => setFilter(f.k)}
-          >
-            <Text style={[d.filterT, filter === f.k && d.filterTOn]}>{f.label}</Text>
-          </Pressable>
-        ))}
+  const cursor = e.streaming ? <Text style={{ color: c.working }}>▌</Text> : null;
+  if (e.kind === "user_message") {
+    return (
+      <View style={d.trUser}>
+        <Text style={d.trUserText}>{e.full ?? e.text}</Text>
       </View>
-      {shown.length === 0 ? (
-        <Text style={d.empty}>{logs.length === 0 ? "暂无日志" : "该类型暂无日志"}</Text>
-      ) : (
-        <ScrollView ref={ref} style={{ maxHeight: 420 }}>
-          {shown.map((e, i) => (
-            <View key={i} style={d.tlItem}>
-              <Text style={d.tlTime}>{fmtClock(e.ts).slice(0, 5)}</Text>
-              <View style={{ flex: 1 }}>
-                {e.tool ? <Text style={d.tlTool}>{e.tool}</Text> : null}
-                <Text style={[d.tlText, { color: logColor(e.kind, c) }]}>{e.text}</Text>
-              </View>
-            </View>
-          ))}
-        </ScrollView>
-      )}
-    </View>
-  );
-}
-
-function logColor(kind: string, c: ThemeColors): string {
-  switch (kind) {
-    case "tool_use": return c.brandA;
-    case "tool_result": return c.dim;
-    case "system": return c.brandB;
-    case "user_message": return c.working;
-    default: return c.text;
+    );
   }
+  if (e.kind === "assistant_text") {
+    return (
+      <View style={d.trMsg}>
+        <MdText src={open ? (e.full ?? e.text) : e.text} />
+        {cursor}
+        {e.full ? (
+          <Pressable onPress={onToggle} hitSlop={6}>
+            <Text style={d.tlExpand}>{open ? "收起 ▴" : `展开全文 ${e.full.length} 字 ▾`}</Text>
+          </Pressable>
+        ) : null}
+      </View>
+    );
+  }
+  if (e.kind === "tool_use") {
+    return (
+      <View style={d.trTool}>
+        <Text style={d.trToolName}>⚙ {e.tool || "tool"}</Text>
+        <Text style={d.trToolText} numberOfLines={2}>{e.text}</Text>
+      </View>
+    );
+  }
+  if (e.kind === "tool_result") {
+    return <Text style={d.trResult} numberOfLines={2}>↳ {e.text}</Text>;
+  }
+  return <Text style={d.trSystem}>{e.text}</Text>;
 }
 
 const SPIN_FRAMES = ["✶", "✸", "✹", "✺", "✹", "✸"];
 
-// 类 Claude Code 状态行：✶ 摘要 · Ns（每秒走帧）
+// 类 Claude Code 状态行：✶ 摘要 · Ns（每秒走帧）。无边框，嵌入状态条内。
 function LiveStatusLine({ summary, startedAt, color }: { summary: string; startedAt?: number; color: string }) {
   const d = useThemeStyles(makeStyles);
   const [, tick] = useState(0);
@@ -101,16 +78,15 @@ function LiveStatusLine({ summary, startedAt, color }: { summary: string; starte
     const t = setInterval(() => tick((n) => n + 1), 500);
     return () => clearInterval(t);
   }, []);
-  const base = startedAt ?? Date.now();
-  const secs = Math.max(0, Math.floor((Date.now() - base) / 1000));
+  const secs = startedAt ? Math.max(0, Math.floor((Date.now() - startedAt) / 1000)) : 0;
   const frame = SPIN_FRAMES[Math.floor(Date.now() / 500) % SPIN_FRAMES.length];
   const m = Math.floor(secs / 60);
   const timeText = m > 0 ? `${m}m${secs % 60}s` : `${secs}s`;
   return (
     <View style={d.statusLine}>
       <Text style={[d.statusSpin, { color }]}>{frame}</Text>
-      <Text style={[d.statusText, { color }]} numberOfLines={2}>{summary || "思考中…"}</Text>
-      <Text style={d.statusTime}>· {timeText}</Text>
+      <Text style={[d.statusText, { color }]} numberOfLines={1}>{summary || "思考中…"}</Text>
+      {startedAt ? <Text style={d.statusTime}>· {timeText}</Text> : null}
     </View>
   );
 }
@@ -119,12 +95,28 @@ export default function DetailScreen({ sid, onBack }: { sid: string; onBack: () 
   const { c } = useTheme();
   const d = useThemeStyles(makeStyles);
   const snap = useRelay();
-  const [tab, setTab] = useState<Tab>("activity");
   const [input, setInput] = useState("");
   const [renaming, setRenaming] = useState(false);
+  const [statsOpen, setStatsOpen] = useState(false);
+  const [filter, setFilter] = useState<LogFilter>("msg");
+  const [expanded, setExpanded] = useState<Record<string, boolean>>({});
+  const scrollRef = useRef<ScrollView>(null);
+  const atBottom = useRef(true);
+  // 手指按住期间暂停自动滚底：流式更新的 scrollToEnd 跳变会打断进行中的按压（chip/展开全文点不中）
+  const touching = useRef(false);
   const kb = useKbHeight();
   const insets = useSafeAreaInsets();
   const s: SessionState | undefined = snap.sessions.find((x) => x.session_id === sid);
+
+  // 转录跟随：直接 filter 不做 useMemo（logs 引用每次更新都变）；仅当用户停在底部时自动滚
+  const logs = s ? store.timelineOf(sid) : [];
+  const shown = logs.filter((e) => matchFilter(e.kind, filter));
+  const lastEntry = shown.length ? shown[shown.length - 1] : null;
+  const lastLen = lastEntry ? (lastEntry.full ?? lastEntry.text).length : 0;
+  useEffect(() => {
+    if (atBottom.current && !touching.current && scrollRef.current) scrollRef.current.scrollToEnd({ animated: false });
+  }, [shown.length, lastLen]);
+  const toggle = (key: string) => setExpanded((m) => ({ ...m, [key]: !m[key] }));
 
   useEffect(() => {
     const sub = BackHandler.addEventListener("hardwareBackPress", () => {
@@ -149,6 +141,11 @@ export default function DetailScreen({ sid, onBack }: { sid: string; onBack: () 
   const external = !!s.external;
   const canCmd = snap.connected && !(s.historical && !external);
   const wr = s.waiting_request;
+  const bannerVisible = !!wr && wr.decidable !== false;
+  // 状态条只在"有事发生"时出现：运行中/出错/等待确认（横幅未兜底时）；空闲会话靠头部状态行
+  const showStrip =
+    s.status === "WORKING" || s.status === "ERROR" ||
+    (s.status === "WAITING" && !bannerVisible) || (external && canCmd);
 
   const send = () => {
     const text = input.trim();
@@ -163,7 +160,7 @@ export default function DetailScreen({ sid, onBack }: { sid: string; onBack: () 
 
   return (
     <SafeAreaView style={d.safe} edges={["top"]}>
-      {/* 头部 */}
+      {/* 头部：标题 + 状态副行 + 统计/重命名 */}
       <View style={d.head}>
         <Pressable style={[d.back, d.opRipple]} android_ripple={{ color: c.tintSoft, borderless: false }} onPress={onBack} hitSlop={8}>
           <Text style={d.backText}>‹</Text>
@@ -176,6 +173,14 @@ export default function DetailScreen({ sid, onBack }: { sid: string; onBack: () 
           </Text>
         </View>
         <Pressable
+          style={[d.statsBtn, d.opRipple]}
+          android_ripple={{ color: c.tintSoft, borderless: false }}
+          onPress={() => setStatsOpen(true)}
+          hitSlop={4}
+        >
+          <Text style={d.statsT}>统计</Text>
+        </Pressable>
+        <Pressable
           style={[d.editBtn, d.opRipple]}
           android_ripple={{ color: c.tintSoft, borderless: false }}
           onPress={() => setRenaming(true)}
@@ -185,13 +190,83 @@ export default function DetailScreen({ sid, onBack }: { sid: string; onBack: () 
         </Pressable>
       </View>
 
-      <ScrollView style={{ flex: 1 }} contentContainerStyle={{ padding: 14, paddingBottom: 130 }}>
-        {/* 审批横幅 */}
-        {wr && wr.decidable !== false ? (
+      {/* 固定工具区：状态条 + 过滤 chips。不放进 ScrollView——RN Android 吸顶头有触点丢失问题，
+          且运行中自动滚底的跳变会打断按压；固定区根本不经过滚动手势系统 */}
+      <View style={d.fixedBar}>
+        {showStrip ? (
+            <View style={d.strip}>
+              {s.status === "WORKING" ? (
+                <LiveStatusLine summary={s.action_summary} startedAt={s.turn_started_at ?? s.updated_at} color={c.working} />
+              ) : s.status === "ERROR" ? (
+                <Text style={d.stripErr} numberOfLines={2}>⚠ {s.last_error || "出错了"}</Text>
+              ) : s.status === "WAITING" ? (
+                <LiveStatusLine summary={wr ? `等待确认：${wr.tool_name}` : "等待 CLI 输入"} startedAt={wr?.received_at} color={c.waiting} />
+              ) : (
+                <Text style={d.stripIdle} numberOfLines={1}>外部 CLI 转录</Text>
+              )}
+              {!external && s.status === "WORKING" ? (
+                <Pressable style={[d.stripBtnWarn, d.opRipple]} android_ripple={{ color: withA(c.waiting, 0.15), borderless: false }} onPress={() => store.send("COMMAND_STOP", { session_id: sid })}>
+                  <Text style={d.stripBtnWarnT}>■ 停止</Text>
+                </Pressable>
+              ) : null}
+              {external && s.status === "WORKING" ? (
+                <Pressable style={[d.stripBtnWarn, d.opRipple]} android_ripple={{ color: withA(c.waiting, 0.15), borderless: false }} onPress={() => store.send("COMMAND_EXT_STOP", { session_id: sid })}>
+                  <Text style={d.stripBtnWarnT}>■ 打断</Text>
+                </Pressable>
+              ) : null}
+              {external && canCmd ? (
+                <Pressable style={[d.stripBtn, d.opRipple]} android_ripple={{ color: c.tintSoft, borderless: false }} onPress={() => store.send("COMMAND_EXT_MODE", { session_id: sid, enabled: !s.remote_mode })}>
+                  <Text style={d.stripBtnT}>审批 {s.remote_mode ? "开" : "关"}</Text>
+                </Pressable>
+              ) : null}
+            </View>
+          ) : null}
+          <View style={d.filterRow}>
+            {LOG_FILTERS.map((f) => (
+              <Pressable
+                key={f.k}
+                style={[d.filterChip, filter === f.k && d.filterChipOn]}
+                android_ripple={{ color: c.tintSoft, borderless: false, radius: 12 }}
+                onPress={() => setFilter(f.k)}
+              >
+                <Text style={[d.filterT, filter === f.k && d.filterTOn]}>{f.label}</Text>
+              </Pressable>
+            ))}
+          </View>
+      </View>
+
+      <ScrollView
+        ref={scrollRef}
+        style={{ flex: 1 }}
+        contentContainerStyle={{ padding: 14, paddingBottom: 14 + (bannerVisible ? 200 : canCmd ? 96 : 60) + insets.bottom }}
+        onTouchStart={() => { touching.current = true; }}
+        onTouchEnd={() => { touching.current = false; }}
+        onTouchCancel={() => { touching.current = false; }}
+        onScroll={(e) => {
+          const { contentOffset, contentSize, layoutMeasurement } = e.nativeEvent;
+          atBottom.current = contentSize.height - contentOffset.y - layoutMeasurement.height < 80;
+        }}
+        scrollEventThrottle={120}
+      >
+        {s.historical && !external ? <Text style={d.histnote}>Relay 重启前的历史会话，仅可查看</Text> : null}
+
+        {shown.length === 0 ? (
+          <Text style={d.empty}>{logs.length === 0 ? "暂无对话" : "该类型暂无内容"}</Text>
+        ) : (
+          shown.map((e) => {
+            const key = e.id ?? `${e.ts}|${e.kind}|${e.text}`;
+            return <TranscriptRow key={key} e={e} open={!!expanded[key]} onToggle={() => toggle(key)} />;
+          })
+        )}
+      </ScrollView>
+
+      {/* 底部栈：审批横幅（常驻可见，类似 CLI 权限提示）> 模板行 > 命令栏；整体随键盘抬升 */}
+      <View pointerEvents="box-none" style={{ paddingBottom: insets.bottom, transform: [{ translateY: kb > 0 ? -kb : 0 }] }}>
+        {bannerVisible ? (
           <View style={d.waitBanner}>
             <Text style={d.waitT}>◐ 等待你的确认</Text>
-            <Text style={d.waitTool}>工具 <Text style={d.waitToolName}>{wr.tool_name}</Text></Text>
-            <Text style={d.waitDesc} numberOfLines={6}>{wr.input_summary}</Text>
+            <Text style={d.waitTool}>工具 <Text style={d.waitToolName}>{wr!.tool_name}</Text></Text>
+            <Text style={d.waitDesc} numberOfLines={6}>{wr!.input_summary}</Text>
             <View style={d.wbtns}>
               <Pressable style={[d.btnAllow, d.opRipple]} android_ripple={{ color: withA(c.done, 0.18), borderless: false }} onPress={() => decide(true)}>
                 <Text style={d.btnAllowT}>✓ 允许</Text>
@@ -201,85 +276,7 @@ export default function DetailScreen({ sid, onBack }: { sid: string; onBack: () 
               </Pressable>
             </View>
           </View>
-        ) : null}
-
-        {s.historical && !external ? <Text style={d.histnote}>Relay 重启前的历史会话，仅可查看</Text> : null}
-
-        {/* Tab */}
-        <View style={d.tabs}>
-          {(["activity", "logs", "stats"] as Tab[]).map((t) => (
-            <Pressable
-              key={t}
-              style={[d.tab, tab === t && d.tabOn]}
-              android_ripple={{ color: c.tintSoft, borderless: false, radius: 14 }}
-              onPress={() => setTab(t)}
-            >
-              <Text style={[d.tabT, tab === t && d.tabTOn]}>{t === "activity" ? "活动" : t === "logs" ? "日志" : "统计"}</Text>
-            </Pressable>
-          ))}
-        </View>
-
-        {/* Tab 内容 */}
-        {tab === "activity" ? (
-          <View>
-            <View style={d.ovcard}>
-              <View style={d.ovtop}>
-                <View style={[d.ovDot, { backgroundColor: color }]} />
-                <Text style={[d.ovSt, { color }]}>{STATUS_ZH[s.status] ?? s.status}</Text>
-              </View>
-              {s.status === "WORKING" ? (
-                <LiveStatusLine summary={s.action_summary} startedAt={s.turn_started_at ?? s.updated_at} color={c.working} />
-              ) : s.status === "WAITING" && s.waiting_request ? (
-                <LiveStatusLine summary={`等待确认：${s.waiting_request.tool_name}`} startedAt={s.waiting_request.received_at} color={c.waiting} />
-              ) : null}
-              {s.status !== "WORKING" ? <Row k="当前动作" v={s.action_summary || "—"} /> : null}
-              {s.status === "ERROR" && s.last_error ? <Row k="错误" v={s.last_error} vc={c.error} /> : null}
-              {s.status === "DONE" ? <Row k="结束原因" v={s.done_reason || "—"} /> : null}
-            </View>
-            <View style={d.ops}>
-              {!external && s.status === "WORKING" ? (
-                <Pressable style={[d.opWarn, d.opRipple]} android_ripple={{ color: withA(c.waiting, 0.15), borderless: false }} onPress={() => store.send("COMMAND_STOP", { session_id: sid })}>
-                  <Text style={d.opWarnT}>■ 停止</Text>
-                </Pressable>
-              ) : null}
-              {external && s.status === "WORKING" ? (
-                <Pressable style={[d.opWarn, d.opRipple]} android_ripple={{ color: withA(c.waiting, 0.15), borderless: false }} onPress={() => store.send("COMMAND_EXT_STOP", { session_id: sid })}>
-                  <Text style={d.opWarnT}>■ 打断</Text>
-                </Pressable>
-              ) : null}
-              {external ? (
-                <Pressable style={[d.op, d.opRipple]} android_ripple={{ color: c.tintSoft, borderless: false }} onPress={() => store.send("COMMAND_EXT_MODE", { session_id: sid, enabled: !s.remote_mode })}>
-                  <Text style={d.opT}>{s.remote_mode ? "关闭远程审批" : "开启远程审批"}</Text>
-                </Pressable>
-              ) : null}
-            </View>
-          </View>
-        ) : tab === "logs" ? (
-          <View style={d.ovcard}>
-            <LogsView logs={store.timelineOf(sid)} />
-          </View>
-        ) : (
-          <View style={d.ovcard}>
-            <Row k="耗时" v={fmtElapsed(sessionElapsed(s))} />
-            <Row k="改动文件" v={String(s.stats?.files_changed ?? 0)} />
-            <Row k="新增行" v={"+" + (s.stats?.lines_added ?? 0)} vc={c.working} />
-            <Row k="删除行" v={"-" + (s.stats?.lines_deleted ?? 0)} vc={c.error} />
-            <Row k="输入 tokens" v={fmtTok(s.usage?.input_tokens)} />
-            <Row k="输出 tokens" v={fmtTok(s.usage?.output_tokens)} />
-            <Row k="缓存读取" v={fmtTok(s.usage?.cache_read_input_tokens)} />
-            <Row k="缓存写入" v={fmtTok(s.usage?.cache_creation_input_tokens)} />
-            <Row k="模型" v={s.model || "—"} />
-            <Row k="开始时间" v={fmtClock(s.started_at)} />
-            <Row k="最近活动" v={fmtClock(s.updated_at)} />
-            <Row k="工作目录" v={s.cwd || "—"} />
-            {s.cli_pid ? <Row k="CLI PID" v={String(s.cli_pid)} /> : null}
-          </View>
-        )}
-      </ScrollView>
-
-      {/* 底部命令栏：edge-to-edge 下 adjustResize 失效，键盘 insets 高度 translateY 直接抬升 */}
-      <View pointerEvents="box-none" style={{ paddingBottom: insets.bottom, transform: [{ translateY: kb > 0 ? -kb : 0 }] }}>
-        {canCmd ? (
+        ) : canCmd ? (
           <View style={d.tplRow}>
             <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 7 }}>
               {TEMPLATES.map((t) => (
@@ -296,18 +293,18 @@ export default function DetailScreen({ sid, onBack }: { sid: string; onBack: () 
           </View>
         ) : null}
         <View style={d.cmdbar}>
-        <TextInput
-          style={d.input}
-          value={input}
-          onChangeText={setInput}
-          placeholder={external ? "注入到终端（空闲时自动发送）" : "发送消息…"}
-          placeholderTextColor={c.faint}
-          editable={canCmd}
-          multiline
-        />
-        <Pressable style={[d.sendBtn, (!canCmd || !input.trim()) && { opacity: 0.4 }]} android_ripple={{ color: "rgba(255,255,255,0.2)", borderless: false }} onPress={send} disabled={!canCmd}>
-          <Text style={d.sendT}>➤</Text>
-        </Pressable>
+          <TextInput
+            style={d.input}
+            value={input}
+            onChangeText={setInput}
+            placeholder={external ? "注入到终端（空闲时自动发送）" : "发送消息…"}
+            placeholderTextColor={c.faint}
+            editable={canCmd}
+            multiline
+          />
+          <Pressable style={[d.sendBtn, (!canCmd || !input.trim()) && { opacity: 0.4 }]} android_ripple={{ color: "rgba(255,255,255,0.2)", borderless: false }} onPress={send} disabled={!canCmd}>
+            <Text style={d.sendT}>➤</Text>
+          </Pressable>
         </View>
       </View>
 
@@ -320,6 +317,7 @@ export default function DetailScreen({ sid, onBack }: { sid: string; onBack: () 
           setRenaming(false);
         }}
       />
+      <StatsModal visible={statsOpen} s={s} onCancel={() => setStatsOpen(false)} />
     </SafeAreaView>
   );
 }
@@ -327,7 +325,7 @@ export default function DetailScreen({ sid, onBack }: { sid: string; onBack: () 
 const makeStyles = (c: ThemeColors) => StyleSheet.create({
   safe: { flex: 1, backgroundColor: c.bg },
   head: {
-    flexDirection: "row", alignItems: "center", gap: 10,
+    flexDirection: "row", alignItems: "center", gap: 8,
     paddingHorizontal: 14, paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: c.line,
   },
   back: { width: 36, height: 36, borderRadius: 11, backgroundColor: c.tintSoft, alignItems: "center", justifyContent: "center" },
@@ -335,14 +333,71 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
   hintText: { color: c.faint },
   title: { color: c.text, fontSize: 15, fontWeight: "600" },
   sub: { color: c.dim, fontSize: 11, marginTop: 1 },
+  statsBtn: {
+    height: 26, borderRadius: 8, paddingHorizontal: 9, backgroundColor: c.tintSoft,
+    borderWidth: 1, borderColor: c.line, alignItems: "center", justifyContent: "center", marginLeft: 6,
+  },
+  statsT: { color: c.dim, fontSize: 11, fontWeight: "600" },
   editBtn: {
     width: 30, height: 30, borderRadius: 9, backgroundColor: c.tintSoft,
-    borderWidth: 1, borderColor: c.line, alignItems: "center", justifyContent: "center", marginLeft: 8,
+    borderWidth: 1, borderColor: c.line, alignItems: "center", justifyContent: "center",
   },
   editT: { color: c.dim, fontSize: 14, marginTop: -1 },
+  // 固定工具区：跟随头部、不随转录滚动，底部一条分隔线与头部呼应
+  fixedBar: { paddingHorizontal: 14, paddingTop: 10, borderBottomWidth: 1, borderBottomColor: c.line },
+  strip: {
+    flexDirection: "row", alignItems: "center", gap: 8,
+    backgroundColor: c.panel, borderWidth: 1, borderColor: c.line,
+    borderRadius: 12, paddingHorizontal: 11, paddingVertical: 8, marginBottom: 8,
+  },
+  stripErr: { flex: 1, color: c.error, fontSize: 12.5, fontWeight: "600" },
+  stripIdle: { flex: 1, color: c.dim, fontSize: 12.5 },
+  stripBtn: {
+    height: 26, borderRadius: 8, paddingHorizontal: 10, backgroundColor: c.panel2,
+    borderWidth: 1, borderColor: c.line, alignItems: "center", justifyContent: "center",
+  },
+  stripBtnT: { color: c.text, fontSize: 11, fontWeight: "600" },
+  stripBtnWarn: {
+    height: 26, borderRadius: 8, paddingHorizontal: 10, backgroundColor: c.panel2,
+    borderWidth: 1, borderColor: withA(c.waiting, 0.3), alignItems: "center", justifyContent: "center",
+  },
+  stripBtnWarnT: { color: c.error, fontSize: 11, fontWeight: "600" },
+  statusLine: { flexDirection: "row", alignItems: "center", gap: 7, flex: 1, minWidth: 0 },
+  statusSpin: { fontSize: 14, fontWeight: "700" },
+  statusText: { flex: 1, fontSize: 12.5, fontWeight: "600" },
+  statusTime: { color: c.faint, fontSize: 11.5, fontVariant: ["tabular-nums"] },
+  filterRow: { flexDirection: "row", gap: 7, marginBottom: 10 },
+  filterChip: {
+    paddingHorizontal: 10, paddingVertical: 4, borderRadius: 10,
+    backgroundColor: c.tintSoft, borderWidth: 1, borderColor: c.line,
+  },
+  filterChipOn: { backgroundColor: c.tintStrong, borderColor: withA(c.brandA, 0.4) },
+  filterT: { fontSize: 11, color: c.dim },
+  filterTOn: { color: c.brandA, fontWeight: "600" },
+  histnote: { color: c.faint, fontSize: 11, textAlign: "center", marginBottom: 10 },
+  trUser: {
+    alignSelf: "flex-end", maxWidth: "85%", marginBottom: 10,
+    backgroundColor: withA(c.working, 0.10), borderWidth: 1, borderColor: withA(c.working, 0.25),
+    borderRadius: 14, borderTopRightRadius: 4, paddingHorizontal: 12, paddingVertical: 8,
+  },
+  trUserText: { color: c.text, fontSize: 14, lineHeight: 20 },
+  trMsg: { marginBottom: 10 },
+  trText: { color: c.text, fontSize: 14, lineHeight: 21 },
+  trTool: {
+    flexDirection: "row", gap: 8, alignItems: "flex-start", marginBottom: 8,
+    backgroundColor: c.panel2, borderWidth: 1, borderColor: c.line,
+    borderRadius: 10, paddingHorizontal: 10, paddingVertical: 7,
+  },
+  trToolName: { color: c.brandA, fontSize: 11.5, fontWeight: "700" },
+  trToolText: { color: c.dim, fontSize: 11.5, flex: 1 },
+  trResult: { color: c.faint, fontSize: 11.5, marginBottom: 8, paddingLeft: 12 },
+  trSystem: { color: c.faint, fontSize: 11, textAlign: "center", marginBottom: 8 },
+  tlExpand: { color: c.brandA, fontSize: 11, marginTop: 3 },
+  empty: { color: c.faint, textAlign: "center", paddingVertical: 40, fontSize: 13 },
   waitBanner: {
+    marginHorizontal: 8, marginBottom: 6,
     borderRadius: 16, borderWidth: 1, borderColor: withA(c.working, 0.4),
-    backgroundColor: withA(c.working, 0.07), padding: 14, marginBottom: 12,
+    backgroundColor: c.panel, padding: 14,
   },
   waitT: { color: c.working, fontWeight: "700", fontSize: 13, marginBottom: 6 },
   waitTool: { color: c.text, fontSize: 13, marginBottom: 4 },
@@ -350,54 +405,16 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
   waitDesc: { color: c.dim, fontSize: 13, marginBottom: 12 },
   wbtns: { flexDirection: "row", gap: 10 },
   btnAllow: {
-    flex: 1, height: 44, borderRadius: 13, alignItems: "center", justifyContent: "center",
+    flex: 1, height: 42, borderRadius: 12, alignItems: "center", justifyContent: "center",
     backgroundColor: withA(c.done, 0.14), borderWidth: 1, borderColor: withA(c.done, 0.35),
   },
-  btnAllowT: { color: c.done, fontWeight: "600", fontSize: 14.5 },
+  btnAllowT: { color: c.done, fontWeight: "600", fontSize: 14 },
   btnReject: {
-    flex: 1, height: 44, borderRadius: 13, alignItems: "center", justifyContent: "center",
+    flex: 1, height: 42, borderRadius: 12, alignItems: "center", justifyContent: "center",
     backgroundColor: withA(c.waiting, 0.10), borderWidth: 1, borderColor: withA(c.waiting, 0.3),
   },
-  btnRejectT: { color: c.waiting, fontWeight: "600", fontSize: 14.5 },
-  histnote: { color: c.faint, fontSize: 11, textAlign: "center", marginBottom: 10 },
-  statusLine: {
-    flexDirection: "row", alignItems: "center", gap: 7, marginBottom: 12,
-    backgroundColor: c.tintSoft, borderRadius: 11, paddingHorizontal: 11, paddingVertical: 9,
-  },
-  statusSpin: { fontSize: 15, fontWeight: "700" },
-  statusText: { flex: 1, fontSize: 13.5, fontWeight: "600" },
-  statusTime: { color: c.faint, fontSize: 12, fontVariant: ["tabular-nums"] },
-  tabs: { flexDirection: "row", gap: 7, marginBottom: 12 },
-  tab: { flex: 1, height: 36, borderRadius: 11, backgroundColor: c.tintSoft, alignItems: "center", justifyContent: "center" },
-  tabOn: { backgroundColor: c.tintStrong, borderWidth: 1, borderColor: withA(c.brandA, 0.4) },
-  tabT: { color: c.dim, fontSize: 13, fontWeight: "600" },
-  tabTOn: { color: c.brandA },
-  ovcard: { backgroundColor: c.panel, borderWidth: 1, borderColor: c.line, borderRadius: 16, padding: 15, marginBottom: 12 },
-  ovtop: { flexDirection: "row", alignItems: "center", gap: 10, marginBottom: 12 },
-  ovDot: { width: 12, height: 12, borderRadius: 6 },
-  ovSt: { fontSize: 14, fontWeight: "600" },
-  row: { flexDirection: "row", justifyContent: "space-between", paddingVertical: 7, borderTopWidth: 1, borderTopColor: withA(c.dim, 0.12), gap: 14 },
-  rowK: { color: c.dim, fontSize: 13 },
-  rowV: { color: c.text, fontSize: 13, fontVariant: ["tabular-nums"], textAlign: "right", flex: 1 },
-  ops: { flexDirection: "row", gap: 10 },
+  btnRejectT: { color: c.waiting, fontWeight: "600", fontSize: 14 },
   opRipple: { borderRadius: 13, overflow: "hidden" },
-  op: { flex: 1, height: 42, borderRadius: 13, backgroundColor: c.panel2, borderWidth: 1, borderColor: c.line, alignItems: "center", justifyContent: "center" },
-  opT: { color: c.text, fontSize: 13.5, fontWeight: "600" },
-  opWarn: { flex: 1, height: 42, borderRadius: 13, backgroundColor: c.panel2, borderWidth: 1, borderColor: withA(c.waiting, 0.3), alignItems: "center", justifyContent: "center" },
-  opWarnT: { color: c.error, fontSize: 13.5, fontWeight: "600" },
-  empty: { color: c.faint, textAlign: "center", paddingVertical: 40, fontSize: 13 },
-  filterRow: { flexDirection: "row", gap: 7, marginBottom: 10 },
-  filterChip: {
-    paddingHorizontal: 12, paddingVertical: 5, borderRadius: 12,
-    backgroundColor: c.tintSoft, borderWidth: 1, borderColor: c.line,
-  },
-  filterChipOn: { backgroundColor: c.tintStrong, borderColor: withA(c.brandA, 0.4) },
-  filterT: { fontSize: 11.5, color: c.dim },
-  filterTOn: { color: c.brandA, fontWeight: "600" },
-  tlItem: { flexDirection: "row", gap: 10, paddingVertical: 9, borderBottomWidth: 1, borderBottomColor: withA(c.dim, 0.10) },
-  tlTime: { color: c.faint, fontSize: 11, fontVariant: ["tabular-nums"], paddingTop: 2, width: 36 },
-  tlTool: { color: c.faint, fontSize: 11, marginBottom: 2 },
-  tlText: { fontSize: 13, flex: 1 },
   tplRow: {
     flexDirection: "row", backgroundColor: c.overlay,
     borderTopWidth: 1, borderTopColor: c.line, paddingHorizontal: 10, paddingTop: 7,
@@ -408,7 +425,6 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
   },
   tplT: { fontSize: 12, color: c.dim },
   cmdbar: {
-    position: "absolute", left: 0, right: 0, bottom: 0,
     paddingHorizontal: 12, paddingVertical: 10,
     backgroundColor: c.overlay, borderTopWidth: 1, borderTopColor: c.line,
     flexDirection: "row", gap: 9, alignItems: "flex-end",

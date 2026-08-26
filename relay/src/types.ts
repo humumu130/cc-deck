@@ -33,6 +33,13 @@ export interface TokenUsage {
   cache_creation_input_tokens: number;
 }
 
+// 任务清单（CLI TodoWrite 工具的最新快照；手表/手机进度展示用）
+export interface TodoItem {
+  content: string;
+  status: "pending" | "in_progress" | "completed";
+  active_form?: string;
+}
+
 export interface SessionState {
   session_id: string;
   relay_session_id: string;   // SDK/CLI 侧 session_id（用于 resume）
@@ -56,6 +63,7 @@ export interface SessionState {
   cli_pid?: number;           // external 会话的 CLI 进程 pid（终端按键注入用）
   turn_started_at?: number;   // 当前 WORKING 回合起点（状态行计时用）
   usage?: TokenUsage;         // 托管会话 token 用量
+  todos?: TodoItem[];         // 最近一次 TodoWrite 的任务清单
 }
 
 // 时间线历史条目（持久化 & 快照下发用）
@@ -64,6 +72,9 @@ export interface LogEntry {
   kind: SessionLogPayload["kind"];
   text: string;
   tool?: string;
+  full?: string;   // 原文（text 被截断时才有；上限 FULL_TEXT_CAP）
+  id?: string;     // 流式块 id：同 id 的 SESSION_LOG 客户端按原地替换（流式更新）
+  streaming?: boolean; // true = 该文本块仍在生成中
 }
 
 // ---------- 事件 payload（Relay -> 客户端） ----------
@@ -85,6 +96,7 @@ export interface SessionUpdatedPayload {
   title_locked?: boolean;      // 用户命名标记（true 时自动命名跳过）
   turn_started_at?: number;    // 回合起点变化时携带
   usage?: TokenUsage;          // token 用量变化时携带
+  todos?: TodoItem[];          // 任务清单变化时携带
 }
 
 export interface SessionHeartbeatPayload {
@@ -265,6 +277,7 @@ export interface BridgeEvent {
   session_id: string;          // CLI 侧 session_id
   cwd: string;
   permission_mode?: string;
+  transcript_path?: string;    // CLI 转录 JSONL（assistant 文本提取用）
   prompt?: string;             // UserPromptSubmit
   tool_name?: string;          // Pre/PostToolUse
   tool_input?: unknown;

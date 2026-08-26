@@ -11,13 +11,16 @@ import type {
   FileChangeStats,
   SessionLogPayload,
   SessionStatus,
+  TodoItem,
   TokenUsage,
   WaitingPayload,
 } from "./types.js";
 import {
   extractDiffStats,
+  fullText,
   summarizeToolResult,
   summarizeToolUse,
+  TaskTracker,
   truncate,
 } from "./summarizer.js";
 
@@ -74,7 +77,13 @@ export interface AgentCallbacks {
   onStats(stats: FileChangeStats): void;
   // 每回合 result 消息携带的 token 用量（累计口径由调用方决定）
   onUsage(usage: TokenUsage): void;
-  onLog(kind: SessionLogPayload["kind"], text: string, tool?: string): void;
+  // TodoWrite 工具调用：最新任务清单全量替换
+  onTodos(todos: TodoItem[]): void;
+  onLog(
+    kind: SessionLogPayload["kind"],
+    text: string,
+    meta?: { tool?: string; full?: string; id?: string; streaming?: boolean },
+  ): void;
   // 每回合结束（result 消息）：ok=true → DONE；ok=false → ERROR
   onTurnEnd(ok: boolean, reason: string, durationMs: number): void;
   // 底层流关闭（进程退出/输入收尾）
@@ -102,6 +111,14 @@ export class AgentSession {
   private stopping = false;
   private resultSeenForTurn = true;
   private lastSummary = "启动中";
+  // 流式文本块：index->id 映射 + id->累计文本 + 当前消息内文本块 id 顺序表
+  // （完整 assistant 消息的 content 数组可能重排/剔除 thinking，不能按 index 对齐，按文本块出现顺序对齐）
+  private blockSeq = 0;
+  private streamIdx = new Map<number, string>();
+  private streamBufs = new Map<string, string>();
+  private streamOrder: string[] = [];
+  private lastStreamEmit = 0;
+  private tasks = new TaskTracker();
   private q: Query;
 
   constructor(
@@ -116,7 +133,10 @@ export class AgentSession {
       options: {
         model: this.model,
         cwd: this.cwd,
+        // 标记为 Relay 子进程：全局 bridge hook 据此跳过上报（避免与 managed 会话双注册）
+        env: { ...process.env, CCR_RELAY_CHILD: "1" },
         permissionMode: "default",
+        includePartialMessages: true,
         canUseTool: (toolName, input, opts) =>
           this.handlePermission(toolName, input, opts as CanUseToolOpts),
         stderr: (s) => {
@@ -155,17 +175,34 @@ export class AgentSession {
         }
         break;
 
-      case "assistant":
+      case "assistant": {
+        let ti = 0;
         for (const block of msg.message.content) {
           if (block.type === "text" && block.text.trim()) {
-            this.cb.onLog("assistant_text", truncate(block.text, 400));
+            // 按出现顺序对齐流式期间的同 id 条目做替换；未经流式（如缓存命中）则新 id 追加
+            const id = this.streamOrder[ti++] ?? `t${++this.blockSeq}`;
+            this.cb.onLog("assistant_text", truncate(block.text, 400), {
+              full: fullText(block.text, 400),
+              id,
+            });
             this.cb.onStatusChange("WORKING", this.lastSummary);
           } else if (block.type === "tool_use") {
             this.lastSummary = summarizeToolUse(block.name, block.input as Record<string, unknown>);
-            this.cb.onLog("tool_use", this.lastSummary, block.name);
+            this.cb.onLog("tool_use", this.lastSummary, { tool: block.name });
+            const todos = this.tasks.feed(block.name, block.input);
+            if (todos) this.cb.onTodos(todos);
             this.cb.onStatusChange("WORKING", this.lastSummary);
           }
         }
+        // 完整消息已到，本条消息的流式状态作废（下一条 assistant 重新开始）
+        this.streamIdx.clear();
+        this.streamBufs.clear();
+        this.streamOrder = [];
+        break;
+      }
+
+      case "stream_event":
+        this.handleStreamEvent(msg);
         break;
 
       case "user": {
@@ -206,8 +243,48 @@ export class AgentSession {
       }
 
       default:
-        break; // stream_event / status 等次要消息忽略
+        break; // status 等次要消息忽略
     }
+  }
+
+  // 流式增量：只跟踪正文 text 块（thinking / tool input 的 delta 不下发），节流 ~200ms
+  private handleStreamEvent(
+    msg: SDKMessage & { type: "stream_event"; parent_tool_use_id: string | null },
+  ): void {
+    if (msg.parent_tool_use_id) return; // 子代理正文默认不转发
+    const ev = msg.event as {
+      type: string;
+      index?: number;
+      content_block?: { type: string };
+      delta?: { type: string; text?: string };
+    };
+    const idx = ev.index ?? -1;
+    if (ev.type === "content_block_start" && ev.content_block?.type === "text") {
+      const id = `t${++this.blockSeq}`;
+      this.streamIdx.set(idx, id);
+      this.streamBufs.set(id, "");
+      this.streamOrder.push(id);
+    } else if (ev.type === "content_block_delta" && ev.delta?.type === "text_delta") {
+      const id = this.streamIdx.get(idx);
+      if (!id) return;
+      this.streamBufs.set(id, (this.streamBufs.get(id) ?? "") + (ev.delta.text ?? ""));
+      if (Date.now() - this.lastStreamEmit >= 200) this.emitStreamBlock(id, true);
+    } else if (ev.type === "content_block_stop") {
+      const id = this.streamIdx.get(idx);
+      if (id) this.emitStreamBlock(id, false);
+    }
+  }
+
+  private emitStreamBlock(id: string, streaming: boolean): void {
+    const text = this.streamBufs.get(id) ?? "";
+    if (!text.trim()) return;
+    this.lastStreamEmit = Date.now();
+    this.cb.onLog("assistant_text", truncate(text, 400), {
+      full: fullText(text, 400),
+      id,
+      streaming,
+    });
+    this.cb.onStatusChange("WORKING", this.lastSummary);
   }
 
   private handlePermission(
@@ -249,7 +326,7 @@ export class AgentSession {
 
   sendMessage(text: string): void {
     this.pushUserMessage(text);
-    this.cb.onLog("user_message", truncate(text, 200));
+    this.cb.onLog("user_message", truncate(text, 200), { full: fullText(text, 200) });
     this.cb.onStatusChange("WORKING", this.lastSummary);
   }
 

@@ -19,6 +19,7 @@ export async function generateTitle(task: string, model: string): Promise<string
         options: {
           model,
           cwd: process.cwd(),
+          env: { ...process.env, CCR_RELAY_CHILD: "1" }, // 防止被全局 bridge hook 注册成外部会话
           permissionMode: "bypassPermissions",
           maxTurns: 1,
         },

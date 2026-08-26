@@ -23,6 +23,12 @@ export interface WaitingPayload {
   received_at?: number;
 }
 
+export interface TodoItem {
+  content: string;
+  status: "pending" | "in_progress" | "completed";
+  active_form?: string;
+}
+
 export interface SessionState {
   session_id: string;
   relay_session_id: string;
@@ -46,6 +52,7 @@ export interface SessionState {
   elapsed_hint?: number;
   turn_started_at?: number;
   usage?: TokenUsage;
+  todos?: TodoItem[];
   title_locked?: boolean;
 }
 
@@ -54,6 +61,9 @@ export interface LogEntry {
   kind: "assistant_text" | "tool_use" | "tool_result" | "system" | "user_message";
   text: string;
   tool?: string;
+  full?: string; // 原文（relay 仅在 text 被截断时携带）
+  id?: string; // 流式块 id：同 id 的时间线条目原地替换
+  streaming?: boolean; // true = 该文本块仍在生成中
 }
 
 export interface Envelope {

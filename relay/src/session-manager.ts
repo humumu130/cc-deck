@@ -13,6 +13,7 @@ import type {
   CommandAckPayload,
   LogEntry,
   SessionState,
+  TodoItem,
   WaitingPayload,
 } from "./types.js";
 
@@ -73,8 +74,9 @@ export class SessionManager {
 
   // Relay 重启后收养历史会话（agent 为空，仅展示不可操作）
   adopt(replayed: Map<string, ReplayedSession>): number {
-    // 新的在前：按 started_at 倒序插入，超出上限丢弃最旧的历史
-    const entries = [...replayed.entries()].sort((a, b) => b[1].state.started_at - a[1].state.started_at);
+    // 活跃度优先：按 updated_at 倒序收养，超出上限丢最久未动的
+    //（按 started_at 会把"创建早但一直在用"的长期会话挤出去，重启即丢整条时间线）
+    const entries = [...replayed.entries()].sort((a, b) => b[1].state.updated_at - a[1].state.updated_at);
     let adopted = 0;
     for (const [id, rs] of entries) {
       if (this.sessions.size >= MAX_SESSIONS) break;
@@ -175,6 +177,15 @@ export class SessionManager {
     }
   }
 
+  // 任务清单更新（TodoWrite；managed 与 external 两条路径共用）
+  setTodos(id: string, todos: TodoItem[]): void {
+    const s = this.sessions.get(id);
+    if (!s) return;
+    s.state.todos = todos;
+    s.state.updated_at = Date.now();
+    this.emitUpdated(s, true);
+  }
+
   // 外部会话标题升级（CC 会话名 / 首个 prompt 摘要）；initialPrompt 只在缺失时补记
   setExternalTitle(id: string, title: string, initialPrompt?: string): void {
     const s = this.sessions.get(id);
@@ -214,12 +225,12 @@ export class SessionManager {
     });
   }
 
-  pushExternalLog(id: string, kind: LogEntry["kind"], text: string, tool?: string): void {
+  pushExternalLog(id: string, kind: LogEntry["kind"], text: string, tool?: string, full?: string): void {
     const s = this.sessions.get(id);
     if (!s) return;
-    const entry: LogEntry = { ts: Date.now(), kind, text, tool };
+    const entry: LogEntry = { ts: Date.now(), kind, text, tool, ...(full ? { full } : {}) };
     s.logs.push(entry);
-    if (s.logs.length > 300) s.logs.splice(0, s.logs.length - 300);
+    if (s.logs.length > 500) s.logs.splice(0, s.logs.length - 500);
     this.bus.emit(id, "SESSION_LOG", entry);
   }
 
@@ -414,6 +425,7 @@ export class SessionManager {
         status: "WORKING",
         action_summary: "启动中",
         started_at: Date.now(),
+        turn_started_at: Date.now(),
         updated_at: Date.now(),
         stats: { files_changed: 0, lines_added: 0, lines_deleted: 0 },
       },
@@ -432,6 +444,8 @@ export class SessionManager {
         },
         onStatusChange: (status, summary) => {
           const changed = managed.state.status !== status;
+          // 回合起点：非 WORKING → WORKING 的跳变时刻（手机/手表状态行计时用）
+          if (changed && status === "WORKING") managed.state.turn_started_at = Date.now();
           managed.state.status = status;
           managed.state.action_summary = summary;
           this.emitUpdated(managed, changed);
@@ -455,6 +469,10 @@ export class SessionManager {
         onStats: (stats) => {
           managed.state.stats = stats;
         },
+        onTodos: (todos) => {
+          managed.state.todos = todos;
+          this.emitUpdated(managed, true);
+        },
         onUsage: (u) => {
           // result 消息是每回合一条，usage 为回合量：累计成会话总量
           const cur = managed.state.usage;
@@ -466,10 +484,15 @@ export class SessionManager {
           };
           this.emitUpdated(managed, true);
         },
-        onLog: (kind, text, tool) => {
-          const entry: LogEntry = { ts: Date.now(), kind, text, tool };
-          managed.logs.push(entry);
-          if (managed.logs.length > 300) managed.logs.splice(0, managed.logs.length - 300);
+        onLog: (kind, text, meta) => {
+          const entry: LogEntry = { ts: Date.now(), kind, text, ...meta };
+          // 同 id 流式块原地替换，避免时间线被增量刷屏
+          const i = meta?.id ? managed.logs.findIndex((e) => e.id === meta.id) : -1;
+          if (i >= 0) managed.logs[i] = entry;
+          else {
+            managed.logs.push(entry);
+            if (managed.logs.length > 500) managed.logs.splice(0, managed.logs.length - 500);
+          }
           this.bus.emit(managed.state.session_id, "SESSION_LOG", entry);
         },
         onTurnEnd: (ok, reason, durationMs) => {
@@ -554,6 +577,7 @@ export class SessionManager {
       stats: { ...s.state.stats },
       ...(s.state.turn_started_at ? { turn_started_at: s.state.turn_started_at } : {}),
       ...(s.state.usage ? { usage: { ...s.state.usage } } : {}),
+      ...(s.state.todos ? { todos: s.state.todos.map((t) => ({ ...t })) } : {}),
     });
   }
 

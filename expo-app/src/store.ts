@@ -476,6 +476,7 @@ class RelayStore {
         if (msg.payload.title_locked !== undefined) s.title_locked = msg.payload.title_locked;
         if (msg.payload.turn_started_at) s.turn_started_at = msg.payload.turn_started_at;
         if (msg.payload.usage) s.usage = msg.payload.usage;
+        if (msg.payload.todos) s.todos = msg.payload.todos;
         s.updated_at = msg.ts;
         break;
       }
@@ -533,11 +534,30 @@ class RelayStore {
     }
   }
 
+  // 时间线不可变更新：数组引用一变，渲染层的 useMemo/依赖比较才能感知新条目
   private pushLog(sid: string, entry: LogEntry) {
-    if (!this.timelines.has(sid)) this.timelines.set(sid, []);
-    const list = this.timelines.get(sid)!;
-    list.push({ ts: entry.ts || Date.now(), kind: entry.kind, text: entry.text, tool: entry.tool });
-    if (list.length > 300) list.splice(0, list.length - 300);
+    const list = this.timelines.get(sid) ?? [];
+    const e: LogEntry = {
+      ts: entry.ts || Date.now(),
+      kind: entry.kind,
+      text: entry.text,
+      tool: entry.tool,
+      full: entry.full,
+      id: entry.id,
+      streaming: entry.streaming,
+    };
+    if (e.id) {
+      const i = list.findIndex((x) => x.id === e.id);
+      if (i >= 0) {
+        const next = [...list];
+        next[i] = e;
+        this.timelines.set(sid, next);
+        return;
+      }
+    }
+    const next = [...list, e];
+    if (next.length > 500) next.splice(0, next.length - 500);
+    this.timelines.set(sid, next);
   }
 
   send(type: string, payload: Record<string, unknown>): boolean {

@@ -1,4 +1,4 @@
-import type { FileChangeStats } from "./types.js";
+import type { FileChangeStats, TodoItem } from "./types.js";
 
 const MAX_SUMMARY = 80;
 
@@ -12,6 +12,16 @@ export function basename(p: unknown): string {
 export function truncate(s: string, n = MAX_SUMMARY): string {
   const one = s.replace(/\s+/g, " ").trim();
   return one.length <= n ? one : one.slice(0, n - 1) + "…";
+}
+
+// 全文上限：防单条超长回复撑爆 300 条日志缓冲与 SNAPSHOT
+export const FULL_TEXT_CAP = 10_000;
+
+// 原文：仅当摘要会截断（len > summaryCap）时返回，否则 undefined（text 即全文）
+export function fullText(s: string, summaryCap: number): string | undefined {
+  const one = s.replace(/\s+/g, " ").trim();
+  if (one.length <= summaryCap) return undefined;
+  return one.length <= FULL_TEXT_CAP ? one : one.slice(0, FULL_TEXT_CAP - 1) + "…";
 }
 
 export function summarizeToolUse(tool: string, input: Record<string, unknown>): string {
@@ -116,4 +126,81 @@ export function extractDiffStats(
     }
   }
   stats.files_changed = files.size;
+}
+
+// TodoWrite 工具入参 -> 任务清单（字段形态异常时静默丢弃，上限 20 条）
+export function parseTodoList(input: unknown): TodoItem[] {
+  const todos = (input as { todos?: unknown } | null)?.todos;
+  if (!Array.isArray(todos)) return [];
+  const out: TodoItem[] = [];
+  for (const raw of todos) {
+    if (!raw || typeof raw !== "object") continue;
+    const t = raw as Record<string, unknown>;
+    const content = typeof t.content === "string" ? t.content.trim() : "";
+    const status = t.status;
+    if (!content || (status !== "pending" && status !== "in_progress" && status !== "completed")) continue;
+    const activeForm = typeof t.activeForm === "string" ? t.activeForm.trim() : "";
+    out.push({
+      content: content.slice(0, 120),
+      status,
+      ...(activeForm ? { active_form: activeForm.slice(0, 120) } : {}),
+    });
+    if (out.length >= 20) break;
+  }
+  return out;
+}
+
+// 任务清单追踪器：兼容两代工具——
+//   TodoWrite（全量快照）与 TaskCreate/TaskUpdate（增量；任务号按创建顺序递增，
+//   与 CLI "Task #N created" 一致）。feed 返回变更后的全量清单，未变更返回 null。
+export class TaskTracker {
+  private tasks: (TodoItem & { id: number })[] = [];
+  private nextId = 0;
+
+  feed(tool: string, input: unknown): TodoItem[] | null {
+    if (tool === "TodoWrite") {
+      const list = parseTodoList(input);
+      this.tasks = list.map((t, i) => ({ ...t, id: i + 1 }));
+      this.nextId = list.length;
+      return this.snapshot();
+    }
+    if (tool === "TaskCreate") {
+      const t = (input ?? {}) as { subject?: unknown; activeForm?: unknown };
+      const subject = typeof t.subject === "string" ? t.subject.trim() : "";
+      if (!subject) return null;
+      const activeForm = typeof t.activeForm === "string" ? t.activeForm.trim() : "";
+      this.tasks.push({
+        id: ++this.nextId,
+        content: subject.slice(0, 120),
+        status: "pending",
+        ...(activeForm ? { active_form: activeForm.slice(0, 120) } : {}),
+      });
+      return this.snapshot();
+    }
+    if (tool === "TaskUpdate") {
+      const t = (input ?? {}) as { taskId?: unknown; status?: unknown; activeForm?: unknown };
+      const id = Number(String(t.taskId ?? "").replace(/[^0-9]/g, ""));
+      const task = this.tasks.find((x) => x.id === id);
+      if (!task) return null;
+      const status = t.status;
+      let changed = false;
+      if (status === "pending" || status === "in_progress" || status === "completed") {
+        task.status = status;
+        changed = true;
+      } else if (status === "cancelled") {
+        task.status = "completed"; // 展示口径：取消视作已结束
+        changed = true;
+      }
+      if (typeof t.activeForm === "string" && t.activeForm.trim()) {
+        task.active_form = t.activeForm.trim().slice(0, 120);
+        changed = true;
+      }
+      return changed ? this.snapshot() : null;
+    }
+    return null;
+  }
+
+  snapshot(): TodoItem[] {
+    return this.tasks.map(({ id: _id, ...rest }) => rest);
+  }
 }

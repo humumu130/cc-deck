@@ -1,6 +1,6 @@
 // hooks 桥接：用户自开 CLI 会话（外部会话）事件路由 + 远程审批挂起 + 终端按键注入
 import { randomUUID } from "node:crypto";
-import { readFileSync, readdirSync, writeFileSync } from "node:fs";
+import { closeSync, openSync, readSync, readFileSync, readdirSync, statSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -8,7 +8,7 @@ import type { EventBus } from "./event-bus.js";
 import type { SessionManager } from "./session-manager.js";
 import type { BridgeEvent, WaitingPayload } from "./types.js";
 import { injectText, injectEsc } from "./injector.js";
-import { summarizeToolResult, summarizeToolUse, truncate } from "./summarizer.js";
+import { fullText, summarizeToolResult, summarizeToolUse, TaskTracker, truncate } from "./summarizer.js";
 import { deriveTitle } from "./history.js";
 
 export interface BridgeOptions {
@@ -247,6 +247,74 @@ export class Bridge {
     return null;
   }
 
+  // 外部会话的任务清单追踪（TodoWrite / TaskCreate / TaskUpdate 增量累积）
+  private trackers = new Map<string, TaskTracker>();
+
+  // transcript 已读字节偏移：PostToolUse/Stop 时增量读出助手文本推上时间线
+  private transcriptOffsets = new Map<string, number>();
+
+  // hooks 不携带助手输出——从 transcript JSONL 增量提取 assistant 文本块。
+  // 首见（或文件变小=轮转）只取最后一条，避免把历史回复全量刷进时间线；
+  // 只读到行尾完整处，半行留给下次读（转录文件是追加写）。
+  private pushAssistantTexts(id: string, transcriptPath?: string): void {
+    if (!transcriptPath) return;
+    try {
+      const size = statSync(transcriptPath).size;
+      const prev = this.transcriptOffsets.get(id);
+      let start: number;
+      let firstRead = false;
+      if (prev === undefined || prev > size) {
+        start = Math.max(0, size - 512 * 1024);
+        firstRead = true;
+      } else if (prev === size) {
+        return;
+      } else {
+        start = prev;
+      }
+      const fd = openSync(transcriptPath, "r");
+      const len = size - start;
+      const buf = Buffer.alloc(len);
+      readSync(fd, buf, 0, len, start);
+      closeSync(fd);
+      const raw = buf.toString("utf-8");
+      const end = raw.lastIndexOf("\n");
+      if (end < 0) return;
+      this.transcriptOffsets.set(id, start + Buffer.byteLength(raw.slice(0, end + 1), "utf-8"));
+      const texts: string[] = [];
+      for (const line of raw.slice(0, end).split("\n")) {
+        if (!line.includes('"type":"assistant"')) continue;
+        try {
+          const j = JSON.parse(line) as { message?: { content?: unknown[] } };
+          const content = j.message?.content;
+          if (!Array.isArray(content)) continue;
+          const text = content
+            .filter((b): b is { type: string; text: string } => !!b && typeof b === "object" && (b as { type?: string }).type === "text" && typeof (b as { text?: unknown }).text === "string")
+            .map((b) => b.text)
+            .join("\n")
+            .trim();
+          if (text) texts.push(text);
+        } catch {}
+      }
+      if (!texts.length) return;
+      const emit = firstRead ? texts.slice(-1) : texts;
+      for (const t of emit) {
+        this.mgr.pushExternalLog(id, "assistant_text", truncate(t, 400), undefined, fullText(t, 400));
+      }
+    } catch {}
+  }
+
+  private feedTaskTracker(id: string, tool: string, input: unknown): void {
+    if (tool !== "TodoWrite" && tool !== "TaskCreate" && tool !== "TaskUpdate") return;
+    let tr = this.trackers.get(id);
+    if (!tr) {
+      if (this.trackers.size > 60) this.trackers.clear(); // 防泄漏兜底
+      tr = new TaskTracker();
+      this.trackers.set(id, tr);
+    }
+    const todos = tr.feed(tool, input);
+    if (todos) this.mgr.setTodos(id, todos);
+  }
+
   private async onPreToolUse(ev: BridgeEvent): Promise<BridgeDecision> {
     const id = this.extId(ev);
     this.mgr.ensureExternal(id, ev.cwd, "", ev.session_id);
@@ -262,6 +330,7 @@ export class Bridge {
     if (!shouldGate) {
       this.mgr.setExternalStatus(id, "WORKING", summary);
       this.mgr.pushExternalLog(id, "tool_use", summary, ev.tool_name);
+      this.feedTaskTracker(id, ev.tool_name ?? "", ev.tool_input);
       return { decision: "pass" };
     }
 
@@ -276,6 +345,7 @@ export class Bridge {
     };
     this.mgr.setExternalWaiting(id, payload);
     this.mgr.pushExternalLog(id, "tool_use", summary, ev.tool_name);
+    this.feedTaskTracker(id, ev.tool_name ?? "", ev.tool_input);
 
     const holdMs = this.opts.holdMs ?? DEFAULT_HOLD_MS;
     return new Promise<BridgeDecision>((resolve) => {
@@ -295,6 +365,7 @@ export class Bridge {
     const state = this.mgr.getExternal(id);
     if (!state) return { decision: "pass" };
     this.mgr.pushExternalLog(id, "tool_result", summarizeToolResult(ev.tool_response));
+    this.pushAssistantTexts(id, ev.transcript_path);
     // 清除 passive WAITING（CLI 本地已处理）
     if (state.status === "WAITING" && state.waiting_request?.decidable === false) {
       this.mgr.setExternalStatus(id, "WORKING", state.action_summary);
@@ -327,6 +398,7 @@ export class Bridge {
     const state = this.mgr.getExternal(id);
     if (!state) return { decision: "pass" };
     this.refreshName(id, ev);
+    this.pushAssistantTexts(id, ev.transcript_path);
     const turn = this.turnStart.get(id) ?? state.started_at;
     this.turnStart.delete(id);
     this.mgr.finishExternal(id, "completed", Date.now() - turn);

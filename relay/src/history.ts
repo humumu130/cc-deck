@@ -4,7 +4,7 @@ import { dirname } from "node:path";
 import type { Envelope, EventType, LogEntry, SessionState } from "./types.js";
 
 const MAX_SESSIONS_KEPT = 30;
-const MAX_LOGS_PER_SESSION = 100;
+const MAX_LOGS_PER_SESSION = 300;
 const MAX_STATE_EVENTS_PER_SESSION = 50;
 
 // ---------- 加载 ----------
@@ -170,7 +170,7 @@ export function reduceHistory(events: Envelope[]): Map<string, ReplayedSession> 
       case "SESSION_LOG": {
         const p = e.payload as LogEntry & { kind: LogEntry["kind"] };
         rs.logs.push({ ts: e.ts, kind: p.kind, text: p.text, tool: p.tool });
-        if (rs.logs.length > 300) rs.logs.splice(0, rs.logs.length - 300);
+        if (rs.logs.length > 500) rs.logs.splice(0, rs.logs.length - 500);
         break;
       }
       default:

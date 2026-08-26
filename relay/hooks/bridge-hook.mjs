@@ -3,6 +3,10 @@
 // 设计约束：任何情况下静默 exit 0，绝不干扰 CLI（bridge.json 不存在 = Relay 没跑，立即退出）
 import { readFileSync, writeFileSync, appendFileSync } from "node:fs";
 
+// Relay 自己 spawn 的 CLI（managed 会话 / 标题生成）带 CCR_RELAY_CHILD=1，
+// 不上报桥接（否则会注册成多余的外部会话，与 managed 双注册）
+if (process.env.CCR_RELAY_CHILD) process.exit(0);
+
 // 诊断日志（排查 hooks 是否触发/为何失败；确认链路稳定后可移除）
 function diag(line) {
   try {
@@ -87,6 +91,7 @@ async function main() {
     session_id,
     cwd: j.cwd ?? "",
     permission_mode: j.permission_mode,
+    transcript_path: j.transcript_path,
     prompt: j.prompt,
     tool_name: j.tool_name,
     tool_input: j.tool_input,
