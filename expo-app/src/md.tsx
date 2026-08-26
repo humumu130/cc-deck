@@ -194,7 +194,7 @@ export function MdText({ src, style }: { src: string; style?: TextStyle }) {
                   ))}
                 </View>
                 {b.rows.map((r, ri) => (
-                  <View key={ri} style={ri ? d.trSep : null}>
+                  <View key={ri} style={ri ? d.trSep : d.tr}>
                     {b.head.map((_, j) => (
                       <View key={j} style={[d.td, { flex: w[j] }]}>
                         <InlineText text={r[j] ?? ""} small />
@@ -243,6 +243,7 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
   thT: { fontWeight: "600", color: c.dim },
   table: { borderWidth: StyleSheet.hairlineWidth, borderColor: c.line, borderRadius: 8, overflow: "hidden" },
   trHead: { flexDirection: "row", backgroundColor: withA(c.dim, 0.1), borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: c.line },
+  tr: { flexDirection: "row" },
   trSep: { flexDirection: "row", borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: withA(c.line, 0.6) },
   td: { paddingHorizontal: 6, paddingVertical: 5, justifyContent: "center" },
   hr: { height: StyleSheet.hairlineWidth, backgroundColor: c.line, marginVertical: 4 },
