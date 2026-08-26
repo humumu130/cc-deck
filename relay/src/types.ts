@@ -136,7 +136,7 @@ export interface SnapshotPayload {
 
 // 时间线条目（M1 调试台用；压缩/截断后的一行文本，不推原始日志流）
 export interface SessionLogPayload {
-  kind: "assistant_text" | "tool_use" | "tool_result" | "system" | "user_message";
+  kind: "assistant_text" | "thinking" | "tool_use" | "tool_result" | "system" | "user_message";
   text: string;
   tool?: string;
 }

@@ -280,25 +280,34 @@ export class Bridge {
       const end = raw.lastIndexOf("\n");
       if (end < 0) return;
       this.transcriptOffsets.set(id, start + Buffer.byteLength(raw.slice(0, end + 1), "utf-8"));
-      const texts: string[] = [];
+      const entries: { kind: "assistant_text" | "thinking"; text: string }[] = [];
       for (const line of raw.slice(0, end).split("\n")) {
-        if (!line.includes('"type":"assistant"')) continue;
+        // 宽容匹配：标准 CLI 转录是紧凑 JSON，但手写/第三方工具可能带空格
+        if (!/"type":\s*"assistant"/.test(line)) continue;
         try {
           const j = JSON.parse(line) as { message?: { content?: unknown[] } };
           const content = j.message?.content;
           if (!Array.isArray(content)) continue;
-          const text = content
-            .filter((b): b is { type: string; text: string } => !!b && typeof b === "object" && (b as { type?: string }).type === "text" && typeof (b as { text?: unknown }).text === "string")
-            .map((b) => b.text)
-            .join("\n")
-            .trim();
-          if (text) texts.push(text);
+          const texts: string[] = [];
+          const thinks: string[] = [];
+          for (const b of content) {
+            if (!b || typeof b !== "object") continue;
+            const blk = b as { type?: string; text?: unknown; thinking?: unknown };
+            if (blk.type === "text" && typeof blk.text === "string") texts.push(blk.text);
+            else if (blk.type === "thinking" && typeof blk.thinking === "string") thinks.push(blk.thinking);
+          }
+          // content 顺序上 thinking 在正文之前；每行各合并为一条
+          const th = thinks.join("\n").trim();
+          if (th) entries.push({ kind: "thinking", text: th });
+          const tx = texts.join("\n").trim();
+          if (tx) entries.push({ kind: "assistant_text", text: tx });
         } catch {}
       }
-      if (!texts.length) return;
-      const emit = firstRead ? texts.slice(-1) : texts;
-      for (const t of emit) {
-        this.mgr.pushExternalLog(id, "assistant_text", truncate(t, 400), undefined, fullText(t, 400));
+      if (!entries.length) return;
+      // 首读（relay 重启/新接入）只回放最后一条正文，thinking 不回放避免刷屏
+      const emit = firstRead ? entries.filter((e) => e.kind === "assistant_text").slice(-1) : entries;
+      for (const e of emit) {
+        this.mgr.pushExternalLog(id, e.kind, truncate(e.text, 400), undefined, fullText(e.text, 400));
       }
     } catch {}
   }

@@ -25,9 +25,12 @@ type LogFilter = (typeof LOG_FILTERS)[number]["k"];
 function matchFilter(kind: string, f: LogFilter): boolean {
   if (f === "all") return true;
   if (f === "tool") return kind === "tool_use" || kind === "tool_result";
-  if (f === "msg") return kind === "assistant_text" || kind === "user_message";
+  if (f === "msg") return kind === "assistant_text" || kind === "user_message" || kind === "thinking";
   return kind === "system";
 }
+
+// 思考过程显示开关：app 生命周期内记忆（跨页面切换，不落盘）
+let thinkShown = false;
 
 // 转录行：user=右气泡 / assistant=正文流式 / tool=紧凑卡片 / system=居中弱化
 function TranscriptRow({ e, open, onToggle }: { e: LogEntry; open: boolean; onToggle: () => void }) {
@@ -39,6 +42,19 @@ function TranscriptRow({ e, open, onToggle }: { e: LogEntry; open: boolean; onTo
       <View style={d.trUser}>
         <Text style={d.trUserText}>{e.full ?? e.text}</Text>
       </View>
+    );
+  }
+  if (e.kind === "thinking") {
+    const src = e.full ?? e.text;
+    return (
+      <Pressable
+        style={d.trThink}
+        onPress={onToggle}
+        android_ripple={{ color: c.tintSoft, borderless: false }}
+      >
+        <Text style={d.trThinkHead}>{open ? "▾ 思考过程" : `▸ 思考过程 · ${src.length} 字`}</Text>
+        {open ? <MdText src={src} style={d.trThinkT} /> : null}
+      </Pressable>
     );
   }
   if (e.kind === "assistant_text") {
@@ -99,6 +115,7 @@ export default function DetailScreen({ sid, onBack }: { sid: string; onBack: () 
   const [renaming, setRenaming] = useState(false);
   const [statsOpen, setStatsOpen] = useState(false);
   const [filter, setFilter] = useState<LogFilter>("msg");
+  const [showThink, setShowThink] = useState(thinkShown);
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
   const scrollRef = useRef<ScrollView>(null);
   const atBottom = useRef(true);
@@ -110,7 +127,7 @@ export default function DetailScreen({ sid, onBack }: { sid: string; onBack: () 
 
   // 转录跟随：直接 filter 不做 useMemo（logs 引用每次更新都变）；仅当用户停在底部时自动滚
   const logs = s ? store.timelineOf(sid) : [];
-  const shown = logs.filter((e) => matchFilter(e.kind, filter));
+  const shown = logs.filter((e) => matchFilter(e.kind, filter) && (e.kind !== "thinking" || showThink));
   const lastEntry = shown.length ? shown[shown.length - 1] : null;
   const lastLen = lastEntry ? (lastEntry.full ?? lastEntry.text).length : 0;
   useEffect(() => {
@@ -232,6 +249,16 @@ export default function DetailScreen({ sid, onBack }: { sid: string; onBack: () 
                 <Text style={[d.filterT, filter === f.k && d.filterTOn]}>{f.label}</Text>
               </Pressable>
             ))}
+            <Pressable
+              style={[d.filterChip, d.thinkChip, showThink && d.filterChipOn]}
+              android_ripple={{ color: c.tintSoft, borderless: false, radius: 12 }}
+              onPress={() => {
+                thinkShown = !thinkShown;
+                setShowThink(thinkShown);
+              }}
+            >
+              <Text style={[d.filterT, showThink && d.filterTOn]}>思考{showThink ? " ·开" : " ·关"}</Text>
+            </Pressable>
           </View>
       </View>
 
@@ -372,6 +399,7 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
     backgroundColor: c.tintSoft, borderWidth: 1, borderColor: c.line,
   },
   filterChipOn: { backgroundColor: c.tintStrong, borderColor: withA(c.brandA, 0.4) },
+  thinkChip: { marginLeft: "auto", borderStyle: "dashed" },
   filterT: { fontSize: 11, color: c.dim },
   filterTOn: { color: c.brandA, fontWeight: "600" },
   histnote: { color: c.faint, fontSize: 11, textAlign: "center", marginBottom: 10 },
@@ -382,6 +410,12 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
   },
   trUserText: { color: c.text, fontSize: 14, lineHeight: 20 },
   trMsg: { marginBottom: 10 },
+  trThink: {
+    marginBottom: 8, backgroundColor: c.panel2, borderWidth: 1, borderColor: c.line,
+    borderRadius: 10, paddingHorizontal: 10, paddingVertical: 7, overflow: "hidden",
+  },
+  trThinkHead: { color: c.faint, fontSize: 11.5, fontWeight: "600" },
+  trThinkT: { color: c.dim, fontSize: 12.5, lineHeight: 18, marginTop: 4 },
   trText: { color: c.text, fontSize: 14, lineHeight: 21 },
   trTool: {
     flexDirection: "row", gap: 8, alignItems: "flex-start", marginBottom: 8,

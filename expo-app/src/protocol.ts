@@ -58,7 +58,7 @@ export interface SessionState {
 
 export interface LogEntry {
   ts: number;
-  kind: "assistant_text" | "tool_use" | "tool_result" | "system" | "user_message";
+  kind: "assistant_text" | "thinking" | "tool_use" | "tool_result" | "system" | "user_message";
   text: string;
   tool?: string;
   full?: string; // 原文（relay 仅在 text 被截断时携带）

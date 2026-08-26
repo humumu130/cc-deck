@@ -178,7 +178,11 @@ export class AgentSession {
       case "assistant": {
         let ti = 0;
         for (const block of msg.message.content) {
-          if (block.type === "text" && block.text.trim()) {
+          if ((block as { type?: string }).type === "thinking") {
+            const raw = (block as { thinking?: unknown }).thinking;
+            const th = typeof raw === "string" ? raw.trim() : "";
+            if (th) this.cb.onLog("thinking", truncate(th, 400), { full: fullText(th, 400) });
+          } else if (block.type === "text" && block.text.trim()) {
             // 按出现顺序对齐流式期间的同 id 条目做替换；未经流式（如缓存命中）则新 id 追加
             const id = this.streamOrder[ti++] ?? `t${++this.blockSeq}`;
             this.cb.onLog("assistant_text", truncate(block.text, 400), {
