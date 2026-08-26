@@ -150,7 +150,8 @@ export function reduceHistory(events: Envelope[]): Map<string, ReplayedSession> 
       case "SESSION_WAITING_RESOLVED": {
         s.status = "WORKING";
         s.waiting_request = undefined;
-        rs.logs.push({ ts: e.ts, kind: "system", text: `已${(e.payload as { decision: string }).decision === "allow" ? "允许" : "拒绝"}` });
+        const d = (e.payload as { decision: string }).decision;
+        rs.logs.push({ ts: e.ts, kind: "system", text: `已${d === "allow" ? "允许" : d === "answer" ? "作答" : "拒绝"}` });
         break;
       }
       case "SESSION_ERROR": {

@@ -14,11 +14,24 @@ export interface TokenUsage {
   cache_creation_input_tokens: number;
 }
 
+export interface AskOption {
+  label: string;
+  description?: string;
+}
+
+export interface AskQuestion {
+  header: string;
+  question: string;
+  multi?: boolean;
+  options: AskOption[];
+}
+
 export interface WaitingPayload {
   request_id: string;
   tool_name: string;
   input_summary: string;
   suggestions: string[];
+  questions?: AskQuestion[]; // AskUserQuestion 结构化问题（存在时渲染选项点选作答）
   decidable?: boolean;
   received_at?: number;
 }
@@ -85,6 +98,7 @@ export type CommandType =
   | "COMMAND_EXT_STOP"
   | "COMMAND_DELETE"
   | "COMMAND_RENAME"
+  | "COMMAND_ANSWER"
   | "COMMAND_PAIR_START";
 
 // 云桥配对信息：relay 经可信 LAN 信道下发，手机落盘后即可走云通道

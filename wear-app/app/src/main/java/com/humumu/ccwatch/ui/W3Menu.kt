@@ -92,9 +92,13 @@ fun W3Menu(
         )
         Box(Modifier.fillMaxSize().scale(scale)) {
             RingSlot(angle = -150f) {
-                MenuBtn("继续", C.textSecondary, MenuIconKind.PLAY) {
+                val asking = s.status == SessionStatus.WAITING && !s.waitingRequest?.questions.isNullOrEmpty()
+                MenuBtn(if (asking) "作答" else "继续", C.textSecondary, MenuIconKind.PLAY) {
                     if (s.status == SessionStatus.WAITING) {
-                        onCommand(WatchCommand.Allow(cid(), s.sessionId, s.waitingRequest?.requestId))
+                        // 提问时 Allow 无意义（SDK 视为未作答）：仅收起菜单，回 W1 选项卡点选作答
+                        if (!asking) {
+                            onCommand(WatchCommand.Allow(cid(), s.sessionId, s.waitingRequest?.requestId))
+                        }
                     } else {
                         onCommand(WatchCommand.Message(cid(), s.sessionId, "继续"))
                     }

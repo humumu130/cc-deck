@@ -206,6 +206,7 @@ class RelayRepository(private val host: String, private val token: String) : Ses
                             requestId = p.getString("request_id"),
                             toolName = p.optString("tool_name"),
                             inputSummary = if (p.has("input_summary") && !p.isNull("input_summary")) p.getString("input_summary") else null,
+                            questions = ProtocolCodec.parseQuestions(p),
                             decidable = if (p.has("decidable") && !p.isNull("decidable")) p.getBoolean("decidable") else null,
                             receivedAt = ts,
                         ),
@@ -222,6 +223,7 @@ class RelayRepository(private val host: String, private val token: String) : Ses
                     val dText = when (d) {
                         "allow" -> "已允许"
                         "deny" -> "已拒绝"
+                        "answer" -> "已作答"
                         else -> "远程审批超时，回退本地"
                     }
                     pushEventLocked(sid, RecentEvent(ts, "system", dText + if (d == "timeout") "" else " (by ${p.optString("by")})"))

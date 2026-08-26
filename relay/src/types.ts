@@ -109,12 +109,26 @@ export interface WaitingPayload {
   tool_name: string;
   input_summary: string;
   suggestions: string[];
+  questions?: AskQuestion[]; // AskUserQuestion 结构化问题（存在时客户端渲染选项点选作答）
   decidable?: boolean;   // false = 仅通知（外部会话 CLI 本地在等，远程无法决定）；默认 true
+}
+
+// AskUserQuestion 工具的问题结构（SDK input.questions 防御性清洗后）
+export interface AskOption {
+  label: string;
+  description?: string;
+}
+
+export interface AskQuestion {
+  header: string;
+  question: string;
+  multi?: boolean;        // multiSelect
+  options: AskOption[];
 }
 
 export interface WaitingResolvedPayload {
   request_id: string;
-  decision: "allow" | "deny" | "timeout";   // timeout = 远程审批超时，回退 CLI 本地流程
+  decision: "allow" | "deny" | "timeout" | "answer";   // answer = AskUserQuestion 作答；timeout = 远程审批超时，回退 CLI 本地流程
   by: string;                 // 哪个客户端做的决定（调试用）
 }
 
@@ -188,6 +202,7 @@ export type CommandType =
   | "COMMAND_EXT_STOP"
   | "COMMAND_DELETE"
   | "COMMAND_RENAME"
+  | "COMMAND_ANSWER"
   | "COMMAND_PAIR_START";
 
 export interface CommandBase {
@@ -251,6 +266,12 @@ export interface RenameCommand extends CommandBase {
   payload: { session_id: string; title: string };
 }
 
+// AskUserQuestion 作答：answers[i] 对应 questions[i]（选项 label 或自由输入文本）
+export interface AnswerCommand extends CommandBase {
+  type: "COMMAND_ANSWER";
+  payload: { session_id: string; request_id: string; answers: string[] };
+}
+
 // 云桥配对：手机经已鉴权的 LAN 信道发起（token 即信任锚，无需扫码），
 // 上送手机 box 公钥，relay 回 PAIR_ACK 携带云配置 + relay 公钥
 export interface PairStartCommand extends CommandBase {
@@ -269,6 +290,7 @@ export type Command =
   | ExtStopCommand
   | DeleteCommand
   | RenameCommand
+  | AnswerCommand
   | PairStartCommand;
 
 // hooks 桥接：bridge-hook.mjs -> POST /bridge/hook 的请求体（token 走 x-bridge-token header）

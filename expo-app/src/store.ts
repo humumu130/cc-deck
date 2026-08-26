@@ -500,7 +500,7 @@ class RelayStore {
         s.status = "WORKING";
         s.waiting_request = null;
         const d = msg.payload.decision;
-        const dText = d === "allow" ? "已允许" : d === "deny" ? "已拒绝" : "远程审批超时，回退本地";
+        const dText = d === "allow" ? "已允许" : d === "deny" ? "已拒绝" : d === "answer" ? "已作答" : "远程审批超时，回退本地";
         this.pushLog(sid, { ts: msg.ts, kind: "system", text: dText + (d === "timeout" ? "" : ` (by ${msg.payload.by})`) });
         break;
       }

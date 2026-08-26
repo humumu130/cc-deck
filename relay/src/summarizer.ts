@@ -1,4 +1,4 @@
-import type { FileChangeStats, TodoItem } from "./types.js";
+import type { AskQuestion, FileChangeStats, TodoItem } from "./types.js";
 
 const MAX_SUMMARY = 80;
 
@@ -31,6 +31,53 @@ export function fullText(s: string, summaryCap: number): string | undefined {
   const one = normLines(s);
   if (one.length <= summaryCap) return undefined;
   return one.length <= FULL_TEXT_CAP ? one : one.slice(0, FULL_TEXT_CAP - 1) + "…";
+}
+
+// AskUserQuestion 输入解析（managed canUseTool / external PreToolUse 共用）；
+// 防御性截断：问题≤4、选项≤6（协议层越界数据不炸客户端）
+export function parseAskQuestions(input: Record<string, unknown>): AskQuestion[] {
+  const raw = input.questions;
+  if (!Array.isArray(raw)) return [];
+  const out: AskQuestion[] = [];
+  for (const q of raw.slice(0, 4)) {
+    if (!q || typeof q !== "object") continue;
+    const qq = q as Record<string, unknown>;
+    const question = typeof qq.question === "string" ? qq.question.trim() : "";
+    if (!question) continue;
+    const options: AskQuestion["options"] = [];
+    for (const o of Array.isArray(qq.options) ? qq.options.slice(0, 6) : []) {
+      if (!o || typeof o !== "object") continue;
+      const label = String((o as Record<string, unknown>).label ?? "").trim();
+      if (!label) continue;
+      const desc = (o as Record<string, unknown>).description;
+      options.push({
+        label: label.slice(0, 60),
+        ...(typeof desc === "string" && desc.trim() ? { description: desc.trim().slice(0, 120) } : {}),
+      });
+    }
+    out.push({
+      header: (typeof qq.header === "string" ? qq.header.trim().slice(0, 24) : "") || question.slice(0, 24),
+      question: question.slice(0, 200),
+      multi: qq.multiSelect === true,
+      options,
+    });
+  }
+  return out;
+}
+
+// 作答 -> deny message（spike-askuser 验证：deny message 作为 tool_result 回给模型，模型按答案继续；
+// allow+updatedInput.answers 会被 SDK 忽略并返回 "user did not answer"）
+export function buildAnswerMessage(questions: AskQuestion[] | undefined, answers: string[]): string {
+  if (!questions || questions.length === 0) {
+    return `用户回答：「${answers[0] ?? ""}」`;
+  }
+  if (questions.length === 1) {
+    return `用户回答：「${answers[0] ?? "（未作答）"}」`;
+  }
+  return (
+    "用户的回答：" +
+    questions.map((q, i) => `「${q.header}」→「${answers[i] ?? "（未作答）"}」`).join("；")
+  );
 }
 
 export function summarizeToolUse(tool: string, input: Record<string, unknown>): string {

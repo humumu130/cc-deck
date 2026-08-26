@@ -16,8 +16,10 @@ import type {
   WaitingPayload,
 } from "./types.js";
 import {
+  buildAnswerMessage,
   extractDiffStats,
   fullText,
+  parseAskQuestions,
   summarizeToolResult,
   summarizeToolUse,
   TaskTracker,
@@ -73,7 +75,7 @@ export interface AgentCallbacks {
   onInit(sdkSessionId: string, model: string): void;
   onStatusChange(status: SessionStatus, actionSummary: string): void;
   onWaiting(p: WaitingPayload): void;
-  onWaitingResolved(requestId: string, decision: "allow" | "deny", by?: string): void;
+  onWaitingResolved(requestId: string, decision: "allow" | "deny" | "answer", by?: string): void;
   onStats(stats: FileChangeStats): void;
   // 每回合 result 消息携带的 token 用量（累计口径由调用方决定）
   onUsage(usage: TokenUsage): void;
@@ -299,15 +301,20 @@ export class AgentSession {
     opts: CanUseToolOpts,
   ): Promise<PermissionResult> {
     const requestId = opts.requestId ?? opts.toolUseID;
-    const summary = opts.title ?? summarizeToolUse(toolName, input);
+    // AskUserQuestion：结构化问题下发，客户端渲染选项作答
+    const questions = toolName === "AskUserQuestion" ? parseAskQuestions(input) : [];
+    const summary = questions.length
+      ? `提问: ${questions.map((q) => q.header).join(" / ")}`
+      : opts.title ?? summarizeToolUse(toolName, input);
     this.lastSummary = summary;
     this.cb.onWaiting({
       request_id: requestId,
       tool_name: toolName,
       input_summary: summary,
       suggestions: [],
+      ...(questions.length ? { questions } : {}),
     });
-    this.cb.onLog("system", `等待确认: ${summary}`);
+    this.cb.onLog("system", questions.length ? summary : `等待确认: ${summary}`);
     return new Promise<PermissionResult>((resolve) => {
       this.pending.set(requestId, {
         input,
@@ -349,6 +356,15 @@ export class AgentSession {
     if (!p) return false;
     p.resolve({ behavior: "deny", message: reason ?? "用户拒绝", interrupt: false });
     this.cb.onWaitingResolved(requestId, "deny", by);
+    return true;
+  }
+
+  // AskUserQuestion 作答：deny-message 机制回传答案（见 summarizer.buildAnswerMessage 注释）
+  answer(requestId: string, answers: string[], by?: string): boolean {
+    const p = this.pending.get(requestId);
+    if (!p) return false;
+    p.resolve({ behavior: "deny", message: buildAnswerMessage(parseAskQuestions(p.input), answers), interrupt: false });
+    this.cb.onWaitingResolved(requestId, "answer", by);
     return true;
   }
 

@@ -7,7 +7,7 @@ import type { RelayConfig } from "./config.js";
 import type { ReplayedSession } from "./history.js";
 import { deriveTitle } from "./history.js";
 import { generateTitle } from "./title-gen.js";
-import { truncate } from "./summarizer.js";
+import { buildAnswerMessage, truncate } from "./summarizer.js";
 import type {
   Command,
   CommandAckPayload,
@@ -319,6 +319,27 @@ export class SessionManager {
           }
           return { command_id: cmd.command_id, ok: true };
         }
+        case "COMMAND_ANSWER": {
+          const answers = cmd.payload.answers.map((a) => a.trim()).filter(Boolean).slice(0, 4);
+          if (!answers.length) {
+            return { command_id: cmd.command_id, ok: false, error: "answers 不能为空" };
+          }
+          const s = this.require(cmd.payload.session_id);
+          if (s.state.external) {
+            // 外部会话：deny-with-reason 经 PreToolUse hook 回 CLI，模型同样能看到答案
+            const msg = buildAnswerMessage(s.state.waiting_request?.questions, answers);
+            if (!this.bridge?.resolvePending(cmd.payload.session_id, cmd.payload.request_id, "deny", msg)) {
+              return { command_id: cmd.command_id, ok: false, error: "no such pending request" };
+            }
+            this.emitWaitingResolved(cmd.payload.session_id, cmd.payload.request_id, "answer", by);
+            return { command_id: cmd.command_id, ok: true };
+          }
+          const live = this.requireLive(cmd.payload.session_id);
+          if (!live.agent.answer(cmd.payload.request_id, answers, by)) {
+            return { command_id: cmd.command_id, ok: false, error: "no such pending request" };
+          }
+          return { command_id: cmd.command_id, ok: true };
+        }
         case "COMMAND_EXT_MODE": {
           const s = this.require(cmd.payload.session_id);
           if (!s.state.external) {
@@ -557,7 +578,7 @@ export class SessionManager {
   }
 
   // 外部会话远程决定后的收尾（清 WAITING、回 WORKING）
-  private emitWaitingResolved(sessionId: string, requestId: string, decision: "allow" | "deny", by: string): void {
+  private emitWaitingResolved(sessionId: string, requestId: string, decision: "allow" | "deny" | "answer", by: string): void {
     const s = this.sessions.get(sessionId);
     if (!s) return;
     s.state.status = "WORKING";

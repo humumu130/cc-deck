@@ -8,7 +8,7 @@ import type { EventBus } from "./event-bus.js";
 import type { SessionManager } from "./session-manager.js";
 import type { BridgeEvent, WaitingPayload } from "./types.js";
 import { injectText, injectEsc } from "./injector.js";
-import { fullText, summarizeToolResult, summarizeToolUse, TaskTracker, truncate } from "./summarizer.js";
+import { fullText, parseAskQuestions, summarizeToolResult, summarizeToolUse, TaskTracker, truncate } from "./summarizer.js";
 import { deriveTitle } from "./history.js";
 
 export interface BridgeOptions {
@@ -344,11 +344,15 @@ export class Bridge {
     const id = this.extId(ev);
     this.mgr.ensureExternal(id, ev.cwd, "", ev.session_id);
     const input = (ev.tool_input ?? {}) as Record<string, unknown>;
-    const summary = summarizeToolUse(ev.tool_name ?? "tool", input);
+    // AskUserQuestion：解析结构化问题（门控时客户端渲染选项作答）
+    const questions = ev.tool_name === "AskUserQuestion" ? parseAskQuestions(input) : [];
+    const summary = questions.length
+      ? `提问: ${questions.map((q) => q.header).join(" / ")}`
+      : summarizeToolUse(ev.tool_name ?? "tool", input);
 
     const shouldGate =
       !!this.mgr.getExternal(id)?.remote_mode &&
-      this.opts.gateTools.has(ev.tool_name ?? "") &&
+      (this.opts.gateTools.has(ev.tool_name ?? "") || questions.length > 0) &&
       ev.permission_mode !== "bypassPermissions" &&   // 终端切到 skip 模式 = 用户显式放弃门控
       this.opts.hasClients();                          // 手机在线才拦截
 
@@ -367,6 +371,7 @@ export class Bridge {
       input_summary: summary,
       suggestions: [],
       decidable: true,
+      ...(questions.length ? { questions } : {}),
     };
     this.mgr.setExternalWaiting(id, payload);
     this.mgr.pushExternalLog(id, "tool_use", summary, ev.tool_name);

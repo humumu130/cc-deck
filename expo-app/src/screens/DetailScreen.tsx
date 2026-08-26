@@ -5,7 +5,7 @@ import { STATUS_ZH, statusColor, withA, type ThemeColors } from "../theme";
 import { useTheme, useThemeStyles } from "../theme-context";
 import { fmtElapsed, sessionElapsed } from "../fmt";
 import { store, useRelay } from "../store";
-import type { LogEntry, SessionState } from "../protocol";
+import type { LogEntry, SessionState, WaitingPayload } from "../protocol";
 import { useKbHeight } from "../kb";
 import { MdText } from "../md";
 import RenameModal from "./RenameModal";
@@ -103,6 +103,98 @@ function LiveStatusLine({ summary, startedAt, color }: { summary: string; starte
       <Text style={[d.statusSpin, { color }]}>{frame}</Text>
       <Text style={[d.statusText, { color }]} numberOfLines={1}>{summary || "思考中…"}</Text>
       {startedAt ? <Text style={d.statusTime}>· {timeText}</Text> : null}
+    </View>
+  );
+}
+
+// AskUserQuestion 作答横幅：单问题单选 = 点选项即发；多问题/多选 = 勾选后提交；单问题支持自由输入
+function AskBanner({ wr, sid }: { wr: WaitingPayload; sid: string }) {
+  const { c } = useTheme();
+  const d = useThemeStyles(makeStyles);
+  const qs = wr.questions ?? [];
+  const single = qs.length === 1 && !qs[0].multi;
+  const [picked, setPicked] = useState<Record<number, string[]>>({});
+  const [free, setFree] = useState("");
+  useEffect(() => {
+    setPicked({});
+    setFree("");
+  }, [wr.request_id]);
+
+  const answer = (answers: string[]) => {
+    store.send("COMMAND_ANSWER", { session_id: sid, request_id: wr.request_id, answers });
+  };
+  const toggle = (qi: number, label: string) => {
+    setPicked((p) => {
+      const cur = p[qi] ?? [];
+      const has = cur.includes(label);
+      const next = qs[qi].multi
+        ? has ? cur.filter((x) => x !== label) : [...cur, label]
+        : has ? [] : [label];
+      return { ...p, [qi]: next };
+    });
+  };
+  const allAnswered = qs.every((_, i) => (picked[i]?.length ?? 0) > 0);
+  const freeReady = single && free.trim().length > 0;
+
+  return (
+    <View style={d.waitBanner}>
+      <Text style={d.waitT}>◉ Claude 在提问</Text>
+      {qs.map((q, qi) => (
+        <View key={qi}>
+          <Text style={d.askQ}>{q.question}</Text>
+          <View style={d.askOpts}>
+            {q.options.map((o) => {
+              const on = (picked[qi] ?? []).includes(o.label);
+              return (
+                <Pressable
+                  key={o.label}
+                  style={[d.askChip, on && d.askChipOn]}
+                  android_ripple={{ color: c.tintSoft, borderless: false, radius: 14 }}
+                  onPress={() => (single ? answer([o.label]) : toggle(qi, o.label))}
+                >
+                  <Text style={[d.askChipT, on && d.askChipOnT]}>{(q.multi && (picked[qi] ?? []).includes(o.label) ? "✓ " : "") + o.label}</Text>
+                </Pressable>
+              );
+            })}
+          </View>
+        </View>
+      ))}
+      {!single ? (
+        <Pressable
+          style={[d.askSubmit, !allAnswered && { opacity: 0.4 }]}
+          android_ripple={{ color: withA(c.done, 0.18), borderless: false }}
+          disabled={!allAnswered}
+          onPress={() => answer(qs.map((_, i) => (picked[i] ?? []).join("、")))}
+        >
+          <Text style={d.askSubmitT}>提交回答</Text>
+        </Pressable>
+      ) : null}
+      {single ? (
+        <View style={d.askFreeRow}>
+          <TextInput
+            style={d.askFree}
+            value={free}
+            onChangeText={setFree}
+            placeholder="或输入自定义回答…"
+            placeholderTextColor={c.faint}
+            returnKeyType="send"
+            onSubmitEditing={() => {
+              if (free.trim()) answer([free.trim()]);
+            }}
+          />
+          <Pressable
+            style={[d.askFreeBtn, !freeReady && { opacity: 0.4 }]}
+            android_ripple={{ color: withA(c.brandA, 0.2), borderless: false }}
+            disabled={!freeReady}
+            onPress={() => free.trim() && answer([free.trim()])}
+          >
+            <Text style={d.askFreeBtnT}>作答</Text>
+          </Pressable>
+        </View>
+      ) : null}
+      <Pressable hitSlop={8} onPress={() => store.send("COMMAND_REJECT", { session_id: sid, request_id: wr.request_id })}>
+        <Text style={d.askSkip}>取消作答（视为拒绝回答）</Text>
+      </Pressable>
     </View>
   );
 }
@@ -217,7 +309,11 @@ export default function DetailScreen({ sid, onBack }: { sid: string; onBack: () 
               ) : s.status === "ERROR" ? (
                 <Text style={d.stripErr} numberOfLines={2}>⚠ {s.last_error || "出错了"}</Text>
               ) : s.status === "WAITING" ? (
-                <LiveStatusLine summary={wr ? `等待确认：${wr.tool_name}` : "等待 CLI 输入"} startedAt={wr?.received_at} color={c.waiting} />
+                <LiveStatusLine
+                  summary={wr ? (wr.questions?.length ? `等待作答：${wr.questions[0]?.header ?? ""}` : `等待确认：${wr.tool_name}`) : "等待 CLI 输入"}
+                  startedAt={wr?.received_at}
+                  color={c.waiting}
+                />
               ) : (
                 <Text style={d.stripIdle} numberOfLines={1}>外部 CLI 转录</Text>
               )}
@@ -290,6 +386,9 @@ export default function DetailScreen({ sid, onBack }: { sid: string; onBack: () 
       {/* 底部栈：审批横幅（常驻可见，类似 CLI 权限提示）> 模板行 > 命令栏；整体随键盘抬升 */}
       <View pointerEvents="box-none" style={{ paddingBottom: insets.bottom, transform: [{ translateY: kb > 0 ? -kb : 0 }] }}>
         {bannerVisible ? (
+          wr!.questions?.length ? (
+            <AskBanner wr={wr!} sid={sid} />
+          ) : (
           <View style={d.waitBanner}>
             <Text style={d.waitT}>◐ 等待你的确认</Text>
             <Text style={d.waitTool}>工具 <Text style={d.waitToolName}>{wr!.tool_name}</Text></Text>
@@ -303,6 +402,7 @@ export default function DetailScreen({ sid, onBack }: { sid: string; onBack: () 
               </Pressable>
             </View>
           </View>
+          )
         ) : canCmd ? (
           <View style={d.tplRow}>
             <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 7 }}>
@@ -448,6 +548,34 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
     backgroundColor: withA(c.waiting, 0.10), borderWidth: 1, borderColor: withA(c.waiting, 0.3),
   },
   btnRejectT: { color: c.waiting, fontWeight: "600", fontSize: 14 },
+  // AskUserQuestion 作答横幅
+  askQ: { color: c.text, fontSize: 13, fontWeight: "600", marginBottom: 7 },
+  askOpts: { flexDirection: "row", flexWrap: "wrap", gap: 7, marginBottom: 11 },
+  askChip: {
+    paddingHorizontal: 12, paddingVertical: 7, borderRadius: 14,
+    backgroundColor: c.panel2, borderWidth: 1, borderColor: c.line,
+  },
+  askChipOn: { backgroundColor: withA(c.brandA, 0.14), borderColor: withA(c.brandA, 0.55) },
+  askChipT: { color: c.text, fontSize: 13 },
+  askChipOnT: { color: c.brandA, fontWeight: "600" },
+  askSubmit: {
+    height: 40, borderRadius: 12, alignItems: "center", justifyContent: "center",
+    backgroundColor: withA(c.done, 0.14), borderWidth: 1, borderColor: withA(c.done, 0.35),
+    marginBottom: 8,
+  },
+  askSubmitT: { color: c.done, fontWeight: "600", fontSize: 14 },
+  askFreeRow: { flexDirection: "row", gap: 8, alignItems: "center", marginBottom: 8 },
+  askFree: {
+    flex: 1, minHeight: 40, borderRadius: 12,
+    backgroundColor: c.panel2, borderWidth: 1, borderColor: c.line,
+    paddingHorizontal: 12, color: c.text, fontSize: 14, paddingVertical: 9,
+  },
+  askFreeBtn: {
+    height: 40, borderRadius: 12, paddingHorizontal: 16, alignItems: "center", justifyContent: "center",
+    backgroundColor: withA(c.brandA, 0.16), borderWidth: 1, borderColor: withA(c.brandA, 0.45),
+  },
+  askFreeBtnT: { color: c.brandA, fontWeight: "600", fontSize: 13.5 },
+  askSkip: { color: c.faint, fontSize: 11.5, textAlign: "center" },
   opRipple: { borderRadius: 13, overflow: "hidden" },
   tplRow: {
     flexDirection: "row", backgroundColor: c.overlay,

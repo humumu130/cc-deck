@@ -1,17 +1,25 @@
 package com.humumu.ccwatch.ui
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -19,9 +27,11 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.wear.compose.material.Text
+import com.humumu.ccwatch.protocol.AskQuestion
 import com.humumu.ccwatch.protocol.RecentEvent
 import com.humumu.ccwatch.protocol.SessionState
 import com.humumu.ccwatch.protocol.SessionStatus
+import com.humumu.ccwatch.protocol.WaitingRequest
 import com.humumu.ccwatch.protocol.WatchCommand
 import java.util.UUID
 
@@ -125,10 +135,16 @@ private fun WorkingMetaRow(s: SessionState) {
     )
 }
 
-/** W6 · Waiting 确认：明确写出需要用户做什么 + Allow/Reject 同屏（规范 §11）。 */
+/** W6 · Waiting 确认：明确写出需要用户做什么 + Allow/Reject 同屏（规范 §11）。
+ *  AskUserQuestion 变体：问题 + 选项点选作答（多问顺序推进，点完自动发送）。 */
 @Composable
 private fun WaitingBody(s: SessionState, onCommand: (WatchCommand) -> Unit, cid: () -> String) {
     val w = s.waitingRequest
+    val qs = w?.questions ?: emptyList()
+    if (qs.isNotEmpty()) {
+        AskBody(s, w, qs, onCommand, cid)
+        return
+    }
     Spacer(Modifier.height(6.dp))
     Text(
         w?.let { "「${it.toolName}」请求确认" } ?: "需要确认",
@@ -160,8 +176,81 @@ private fun WaitingBody(s: SessionState, onCommand: (WatchCommand) -> Unit, cid:
     }
 }
 
-/** W7 · Error：错误信息 + 查看(W2)/重试（规范 §12）。 */
+/** W6 变体 · AskUserQuestion：选项即点即答；多问顺序推进，答完最后一问自动发送 */
 @Composable
+private fun AskBody(
+    s: SessionState,
+    w: WaitingRequest,
+    qs: List<AskQuestion>,
+    onCommand: (WatchCommand) -> Unit,
+    cid: () -> String,
+) {
+    var qi by remember(w.requestId) { mutableStateOf(0) }
+    var answers by remember(w.requestId) { mutableStateOf(listOf<String>()) }
+    val q = qs.getOrNull(qi) ?: return
+    Spacer(Modifier.height(6.dp))
+    Text(
+        if (qs.size > 1) "提问 ${qi + 1}/${qs.size}" else "Claude 在提问",
+        color = C.waiting,
+        fontSize = 12.sp,
+        fontWeight = FontWeight.Medium,
+        maxLines = 1,
+    )
+    Spacer(Modifier.height(3.dp))
+    Text(
+        q.question,
+        color = C.textPrimary,
+        fontSize = 11.sp,
+        maxLines = 2,
+        overflow = TextOverflow.Ellipsis,
+        textAlign = TextAlign.Center,
+    )
+    Spacer(Modifier.height(8.dp))
+    Column(
+        verticalArrangement = Arrangement.spacedBy(5.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
+        q.options.forEach { o ->
+            Box(
+                contentAlignment = Alignment.Center,
+                modifier = Modifier
+                    .clip(RoundedCornerShape(12.dp))
+                    .background(C.surface)
+                    .border(0.8.dp, C.primary.copy(alpha = 0.35f), RoundedCornerShape(12.dp))
+                    .clickable {
+                        val next = answers + o.label
+                        if (qi + 1 < qs.size) {
+                            answers = next
+                            qi += 1
+                        } else {
+                            onCommand(WatchCommand.Answer(cid(), s.sessionId, w.requestId, next))
+                        }
+                    }
+                    .padding(horizontal = 12.dp, vertical = 4.dp),
+            ) {
+                Text(
+                    o.label,
+                    color = C.textPrimary,
+                    fontSize = 11.sp,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
+        }
+    }
+    Spacer(Modifier.height(5.dp))
+    Text(
+        "跳过",
+        color = C.faintLabel,
+        fontSize = 10.sp,
+        modifier = Modifier
+            .clip(RoundedCornerShape(10.dp))
+            .clickable { onCommand(WatchCommand.Reject(cid(), s.sessionId, w.requestId, "用户未作答，跳过")) }
+            .padding(horizontal = 8.dp, vertical = 3.dp),
+    )
+}
+
+/** W7 · Error：错误信息 + 查看(W2)/重试（规范 §12）。 */@Composable
 private fun ErrorBody(
     s: SessionState,
     onCommand: (WatchCommand) -> Unit,

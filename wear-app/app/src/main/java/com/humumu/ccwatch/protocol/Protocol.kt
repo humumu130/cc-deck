@@ -16,11 +16,26 @@ object Paths {
 
 enum class SessionStatus { WORKING, WAITING, ERROR, DONE }
 
+/** AskUserQuestion 选项 */
+data class AskOption(
+    val label: String,
+    val description: String? = null,
+)
+
+/** AskUserQuestion 问题（relay 清洗后） */
+data class AskQuestion(
+    val header: String,
+    val question: String,
+    val multi: Boolean = false,
+    val options: List<AskOption> = emptyList(),
+)
+
 data class WaitingRequest(
     val requestId: String,
     val toolName: String,
     val inputSummary: String?,
     val suggestions: List<String> = emptyList(),
+    val questions: List<AskQuestion> = emptyList(),
     val decidable: Boolean? = null,
     val receivedAt: Long? = null,
 )
@@ -111,6 +126,14 @@ sealed class WatchCommand(val typeId: String) {
         val text: String,
     ) : WatchCommand("COMMAND_MESSAGE")
 
+    /** AskUserQuestion 作答：answers[i] 对应 questions[i]（选项 label） */
+    data class Answer(
+        override val commandId: String,
+        override val sessionId: String,
+        val requestId: String? = null,
+        val answers: List<String> = emptyList(),
+    ) : WatchCommand("COMMAND_ANSWER")
+
     data class Delete(override val commandId: String, override val sessionId: String) :
         WatchCommand("COMMAND_DELETE")
 }
@@ -138,6 +161,30 @@ object ProtocolCodec {
         return (0 until arr.length()).map { i -> parseSession(arr.getJSONObject(i)) }
     }
 
+    /** WaitingPayload.questions 解析（SNAPSHOT 与 SESSION_WAITING 共用） */
+    fun parseQuestions(wj: JSONObject): List<AskQuestion> =
+        wj.optJSONArray("questions")?.let { arr ->
+            (0 until arr.length()).mapNotNull { i ->
+                arr.optJSONObject(i)?.takeIf { qj -> qj.optString("question").isNotBlank() }?.let { qj ->
+                    AskQuestion(
+                        header = qj.optString("header").ifEmpty { qj.optString("question").take(24) },
+                        question = qj.optString("question"),
+                        multi = qj.optBoolean("multi", false),
+                        options = qj.optJSONArray("options")?.let { o ->
+                            (0 until o.length()).mapNotNull { k ->
+                                o.optJSONObject(k)?.takeIf { oj -> oj.optString("label").isNotBlank() }?.let { oj ->
+                                    AskOption(
+                                        label = oj.optString("label"),
+                                        description = optStr(oj, "description"),
+                                    )
+                                }
+                            }
+                        } ?: emptyList(),
+                    )
+                }
+            }
+        } ?: emptyList()
+
     fun parseSession(o: JSONObject): SessionState {
         val w = o.optJSONObject("waiting_request")?.let { wj ->
             WaitingRequest(
@@ -147,6 +194,7 @@ object ProtocolCodec {
                 suggestions = wj.optJSONArray("suggestions")?.let { s ->
                     (0 until s.length()).map { s.getString(it) }
                 } ?: emptyList(),
+                questions = parseQuestions(wj),
                 decidable = if (wj.has("decidable") && !wj.isNull("decidable")) wj.getBoolean("decidable") else null,
                 receivedAt = optLong(wj, "received_at"),
             )
@@ -208,6 +256,11 @@ object ProtocolCodec {
         if (cmd is WatchCommand.Message) {
             o.put("payload", JSONObject().put("text", cmd.text))
         }
+        if (cmd is WatchCommand.Answer) {
+            o.put("payload", JSONObject()
+                .put("request_id", cmd.requestId ?: JSONObject.NULL)
+                .put("answers", org.json.JSONArray(cmd.answers)))
+        }
         return o.toString()
     }
 
@@ -228,6 +281,10 @@ object ProtocolCodec {
                 cmd.reason?.let { payload.put("reason", it) }
             }
             is WatchCommand.Message -> payload.put("text", cmd.text)
+            is WatchCommand.Answer -> {
+                payload.put("request_id", cmd.requestId ?: fallbackRequestId)
+                payload.put("answers", org.json.JSONArray(cmd.answers))
+            }
             else -> {}
         }
         val o = JSONObject()
