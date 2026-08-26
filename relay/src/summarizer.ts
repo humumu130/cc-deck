@@ -160,17 +160,19 @@ export function parseTodoList(input: unknown): TodoItem[] {
 }
 
 // 任务清单追踪器：兼容两代工具——
-//   TodoWrite（全量快照）与 TaskCreate/TaskUpdate（增量；任务号按创建顺序递增，
-//   与 CLI "Task #N created" 一致）。feed 返回变更后的全量清单，未变更返回 null。
+//   TodoWrite（全量快照）与 TaskCreate/TaskUpdate（增量）。
+//   ⚠ CLI 的 taskId 是全局递增（跨会话共享），不能按会话内创建顺序自增模拟：
+//   TaskCreate 先以 id=null 入队，等其 tool_result {task:{id,subject}} 回填真实 id，
+//   之后 TaskUpdate 才能命中。feed/feedResult 返回变更后的全量清单，未变更返回 null。
 export class TaskTracker {
-  private tasks: (TodoItem & { id: number })[] = [];
-  private nextId = 0;
+  private tasks: (TodoItem & { id: number | null })[] = [];
+  private unconfirmed: number[] = []; // 已 TaskCreate 尚未收到 result 回填 id 的下标
 
   feed(tool: string, input: unknown): TodoItem[] | null {
     if (tool === "TodoWrite") {
       const list = parseTodoList(input);
-      this.tasks = list.map((t, i) => ({ ...t, id: i + 1 }));
-      this.nextId = list.length;
+      this.tasks = list.map((t) => ({ ...t, id: null }));
+      this.unconfirmed = [];
       return this.snapshot();
     }
     if (tool === "TaskCreate") {
@@ -179,11 +181,12 @@ export class TaskTracker {
       if (!subject) return null;
       const activeForm = typeof t.activeForm === "string" ? t.activeForm.trim() : "";
       this.tasks.push({
-        id: ++this.nextId,
+        id: null,
         content: subject.slice(0, 120),
         status: "pending",
         ...(activeForm ? { active_form: activeForm.slice(0, 120) } : {}),
       });
+      this.unconfirmed.push(this.tasks.length - 1);
       return this.snapshot();
     }
     if (tool === "TaskUpdate") {
@@ -207,6 +210,24 @@ export class TaskTracker {
       return changed ? this.snapshot() : null;
     }
     return null;
+  }
+
+  // TaskCreate 的 tool_result（{task:{id,subject}}）：回填真实任务号。
+  // CLI 工具串行，result 与最近的 TaskCreate 一一对应；subject 命中优先，否则 FIFO。
+  feedResult(result: unknown): TodoItem[] | null {
+    const t = (result as { task?: { id?: unknown; subject?: unknown } } | null)?.task;
+    const id = Number(String(t?.id ?? "").replace(/[^0-9]/g, ""));
+    if (!t || !id) return null;
+    const idx = this.unconfirmed.shift();
+    if (idx === undefined || !this.tasks[idx]) return null;
+    this.tasks[idx].id = id;
+    return this.snapshot();
+  }
+
+  // 重启恢复：用已知清单做种子（无任务号，TaskUpdate 无法命中旧条目，仅保展示）
+  seed(todos: TodoItem[]): void {
+    if (this.tasks.length || !todos.length) return;
+    this.tasks = todos.map((t) => ({ ...t, id: null }));
   }
 
   snapshot(): TodoItem[] {

@@ -314,14 +314,30 @@ export class Bridge {
 
   private feedTaskTracker(id: string, tool: string, input: unknown): void {
     if (tool !== "TodoWrite" && tool !== "TaskCreate" && tool !== "TaskUpdate") return;
+    const tr = this.ensureTracker(id);
+    const todos = tr.feed(tool, input);
+    if (todos) this.mgr.setTodos(id, todos);
+  }
+
+  // TaskCreate 的 tool_result（{task:{id,subject}}）：回填真实任务号（CLI taskId 全局递增，
+  // 不回填则 TaskUpdate 永远 miss）
+  private feedTaskResult(id: string, result: unknown): void {
+    const tr = this.trackers.get(id);
+    if (!tr) return;
+    const todos = tr.feedResult(result);
+    if (todos) this.mgr.setTodos(id, todos);
+  }
+
+  private ensureTracker(id: string): TaskTracker {
     let tr = this.trackers.get(id);
     if (!tr) {
       if (this.trackers.size > 60) this.trackers.clear(); // 防泄漏兜底
       tr = new TaskTracker();
+      // relay 重启后 tracker 丢了：用会话最后已知清单做种子（无任务号，仅保展示不丢）
+      tr.seed(this.mgr.getExternal(id)?.todos ?? []);
       this.trackers.set(id, tr);
     }
-    const todos = tr.feed(tool, input);
-    if (todos) this.mgr.setTodos(id, todos);
+    return tr;
   }
 
   private async onPreToolUse(ev: BridgeEvent): Promise<BridgeDecision> {
@@ -374,6 +390,7 @@ export class Bridge {
     const state = this.mgr.getExternal(id);
     if (!state) return { decision: "pass" };
     this.mgr.pushExternalLog(id, "tool_result", summarizeToolResult(ev.tool_response));
+    this.feedTaskResult(id, ev.tool_response);
     this.pushAssistantTexts(id, ev.transcript_path);
     // 清除 passive WAITING（CLI 本地已处理）
     if (state.status === "WAITING" && state.waiting_request?.decidable === false) {

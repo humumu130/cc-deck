@@ -224,6 +224,8 @@ export class AgentSession {
             extractDiffStats(structured ?? tr.content, this.stats, this.filesTouched);
             this.cb.onStats({ ...this.stats });
             this.cb.onLog("tool_result", summarizeToolResult(tr.content));
+            const todos = this.tasks.feedResult(structured);
+            if (todos) this.cb.onTodos(todos);
             this.cb.onStatusChange("WORKING", this.lastSummary);
           }
         }

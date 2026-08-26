@@ -84,6 +84,18 @@ private fun WorkingBody(s: SessionState, events: List<RecentEvent>) {
             textAlign = TextAlign.Center,
         )
     }
+    // 当前任务：首个进行中项（activeForm 优先），与动作摘要互补——摘要是"正在敲什么"，任务是"整体走到哪步"
+    s.todos.firstOrNull { !it.isDone && it.status == "in_progress" }?.let { t ->
+        Spacer(Modifier.height(3.dp))
+        Text(
+            "▸ ${t.label}",
+            color = C.working,
+            fontSize = 11.sp,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            textAlign = TextAlign.Center,
+        )
+    }
     Spacer(Modifier.height(10.dp))
     ActivityDots(activityIntensity(events, s), statusColor(s.status))
     Spacer(Modifier.height(10.dp))
@@ -174,12 +186,23 @@ private fun ErrorBody(
     }
 }
 
-/** W8 · Done：完成摘要 + 文件变化 + 耗时（规范 §12）。 */
+/** W8 · Done：完成摘要 + 任务完成度 + 文件变化 + 耗时（规范 §12）。 */
 @Composable
 private fun DoneBody(s: SessionState) {
     s.actionSummary?.let {
         Spacer(Modifier.height(4.dp))
         Text(it, color = C.textSecondary, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+    }
+    if (s.todos.isNotEmpty()) {
+        val done = s.todos.count { it.isDone }
+        Spacer(Modifier.height(3.dp))
+        Text(
+            if (done == s.todos.size) "任务全部完成 ☑${done}"
+            else "任务 ☑$done/${s.todos.size}",
+            color = if (done == s.todos.size) C.done else C.textSecondary,
+            fontSize = 11.sp,
+            maxLines = 1,
+        )
     }
     Spacer(Modifier.height(10.dp))
     StatsRow(s)
