@@ -1,0 +1,72 @@
+Cloud Code Relay 电脑端 使用说明
+====================================
+
+这是"手表/手机远程查看和控制 Claude Code"的电脑端程序。
+它必须在电脑上运行，手机和手表才能连上。装好之后无需任何日常操作。
+
+
+一、首次安装（只做一次，约 5 分钟）
+------------------------------------
+1. 安装 Node.js（18 以上版本）
+   官网 https://nodejs.org 下载 LTS 版，一路下一步。
+
+2. 在本文件夹打开终端（地址栏输入 cmd 回车），执行：
+   npm install
+
+3. 安装开机自启（以后开机自动运行，无窗口无感知）：
+   powershell -ExecutionPolicy Bypass -File scripts\install-autostart.ps1
+
+   安装完它会打印"连接信息"：IP 地址和 Token，
+   把这两样填到手机 App / 手表的设置里就算完成。
+
+4. 【管理员】放行防火墙（只需一次，否则手机手表连不进来）：
+   开始菜单搜 PowerShell → 右键"以管理员身份运行"，粘贴：
+   netsh advfirewall firewall add rule name="CC Relay 8787" dir=in action=allow protocol=TCP localport=8787
+
+
+二、日常使用
+------------------------------------
+- 不用管它。开机自动在后台运行，关机自动退出。
+- 手机/手表填写格式：
+    地址:  http://<安装时打印的IP>:8787   （手表设置里只填 IP:8787）
+    Token: 安装时打印的那串（默认 devtoken）
+- 提示：家里路由器重新分配过 IP 的话地址会变，
+  跑一遍 scripts\relay-status.ps1 就能看到当前可用 IP。
+
+
+三、连不上怎么办（90% 的情况）
+------------------------------------
+在 PowerShell 里运行：
+   powershell -ExecutionPolicy Bypass -File scripts\relay-status.ps1
+
+它会自动检查并把问题指出来。对照常见原因：
+
+1. 显示"端口 8787 无监听" → relay 没在跑
+   立即启动（不等重启电脑）：
+   wscript "scripts\start-relay.vbs"
+
+2. 显示"无防火墙放行规则" → 用管理员 PowerShell 执行上面第一条里的 netsh 命令
+
+3. 本机全部 [OK] 但手机还是连不上 →
+   - 手机和电脑不在同一个 WiFi
+   - 手机上填的 IP / Token 和 status 脚本打印的不一致（多一个空格也不行）
+
+
+四、其他操作
+------------------------------------
+看运行状态 / 排查问题:  powershell -File scripts\relay-status.ps1
+手动启动（隐藏窗口）:    wscript "scripts\start-relay.vbs"
+查看运行日志:           data\relay-console.log（最后部分就是最新的）
+强制重启:               powershell -File scripts\restart-relay.ps1
+取消开机自启:           删除这个文件即可
+   C:\Users\<你的用户名>\AppData\Roaming\Microsoft\Windows\Start Menu\Programs\Startup\CC Relay Autostart.lnk
+   （或 Win+R 输入 shell:startup 回车，直接打开该文件夹）
+
+
+五、文件说明（不用动）
+------------------------------------
+scripts\   启动/安装/诊断脚本
+data\      运行数据（日志、会话历史、密钥），删除会丢失历史记录
+src\       程序源码
+
+版本问题或功能建议联系开发者。
