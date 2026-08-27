@@ -31,7 +31,7 @@ const events: Envelope[] = [];
 let seq = 0;
 const sid = "s1";
 events.push(mk(++seq, sid, "SESSION_CREATED", { cwd: "/tmp", initial_prompt: "测试", title: "测试", model: "m" }));
-for (let i = 0; i < 150; i++) events.push(mk(++seq, sid, "SESSION_LOG", { kind: "assistant_text", text: `log${i}` }));
+for (let i = 0; i < 350; i++) events.push(mk(++seq, sid, "SESSION_LOG", { kind: "assistant_text", text: `log${i}` }));
 for (let i = 0; i < 80; i++) events.push(mk(++seq, sid, "SESSION_UPDATED", { status: "WORKING", action_summary: `u${i}`, stats: null }));
 events.push(mk(++seq, sid, "SESSION_HEARTBEAT", { elapsed_ms: 1, action_summary: "h" }));
 events.push(mk(++seq, sid, "SESSION_DONE", { terminal_reason: "success", duration_ms: 100, stats: { files_changed: 1, lines_added: 2, lines_deleted: 3 } }));
@@ -39,7 +39,7 @@ events.push(mk(++seq, sid, "SESSION_DONE", { terminal_reason: "success", duratio
 const compacted = compactEvents(events);
 assert(!compacted.some((e) => e.type === "SESSION_HEARTBEAT"), "丢弃心跳");
 const logs = compacted.filter((e) => e.type === "SESSION_LOG");
-assert(logs.length === 100 && (logs[0].payload as { text: string }).text === "log50", "每会话日志保留最后 100 条");
+assert(logs.length === 300 && (logs[0].payload as { text: string }).text === "log50", "每会话日志保留最后 300 条");
 const nonCreatedStates = compacted.filter((e) => e.type !== "SESSION_CREATED" && e.type !== "SESSION_LOG");
 assert(nonCreatedStates.length === 50, "非 CREATED 状态事件保留最后 50 条");
 assert(compacted.some((e) => e.type === "SESSION_CREATED") && compacted.some((e) => e.type === "SESSION_DONE"), "保留 CREATED/DONE");
@@ -53,7 +53,7 @@ assert(!!rs, "会话重建");
 assert(rs!.state.title === "测试", "标题恢复");
 assert(rs!.state.status === "DONE" && rs!.state.done_reason === "success", "终态恢复");
 assert(rs!.state.stats.lines_added === 2 && rs!.state.stats.lines_deleted === 3, "统计恢复");
-assert(rs!.logs.length === 101, "时间线 = 100 日志 + 1 完成事件");
+assert(rs!.logs.length === 301, "时间线 = 300 日志 + 1 完成事件");
 
 // 非终态会话 → ERROR + historical
 const events2 = [mk(1, "s2", "SESSION_CREATED", { cwd: "/x", initial_prompt: "中断测试", model: "m" }), mk(2, "s2", "SESSION_UPDATED", { status: "WORKING", action_summary: "干活", stats: null })];
