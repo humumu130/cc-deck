@@ -75,7 +75,7 @@ interface PendingPermission {
 }
 
 export interface AgentCallbacks {
-  onInit(sdkSessionId: string, model: string): void;
+  onInit(sdkSessionId: string, model: string, permissionMode?: string): void;
   onStatusChange(status: SessionStatus, actionSummary: string): void;
   onWaiting(p: WaitingPayload): void;
   onWaitingResolved(requestId: string, decision: "allow" | "deny" | "answer", by?: string): void;
@@ -110,6 +110,8 @@ export class AgentSession {
   readonly id = randomUUID();
   readonly startedAt = Date.now();
   readonly stats: FileChangeStats = { files_changed: 0, lines_added: 0, lines_deleted: 0 };
+  // 流已关闭（stop/进程退出）：此后 sendMessage 不可用，调用方走 resume 重建
+  ended = false;
   private filesTouched = new Set<string>();
   private queue = new AsyncQueue<SDKUserMessage>();
   private pending = new Map<string, PendingPermission>();
@@ -131,6 +133,7 @@ export class AgentSession {
     private readonly model: string,
     private readonly cb: AgentCallbacks,
     initialPrompt: string,
+    opts?: { resume?: string; permissionMode?: "default" | "acceptEdits" | "plan" },
   ) {
     this.pushUserMessage(initialPrompt);
     this.q = query({
@@ -140,10 +143,11 @@ export class AgentSession {
         cwd: this.cwd,
         // 标记为 Relay 子进程：全局 bridge hook 据此跳过上报（避免与 managed 会话双注册）
         env: { ...process.env, CCR_RELAY_CHILD: "1" },
-        permissionMode: "default",
+        permissionMode: opts?.permissionMode ?? "default",
+        ...(opts?.resume ? { resume: opts.resume } : {}),
         includePartialMessages: true,
-        canUseTool: (toolName, input, opts) =>
-          this.handlePermission(toolName, input, opts as CanUseToolOpts),
+        canUseTool: (toolName, input, opts2) =>
+          this.handlePermission(toolName, input, opts2 as CanUseToolOpts),
         stderr: (s) => {
           if (process.env.CCR_DEBUG) {
             process.stderr.write(`[cli:${this.id.slice(0, 8)}] ${s}`);
@@ -167,6 +171,7 @@ export class AgentSession {
         this.cb.onTurnEnd(this.stopping, this.stopping ? "interrupted" : message, Date.now() - this.startedAt);
       }
     } finally {
+      this.ended = true;
       this.denyAllPending("session closed");
       this.cb.onSessionEnd(this.stopping ? "stopped" : "stream closed");
     }
@@ -176,7 +181,7 @@ export class AgentSession {
     switch (msg.type) {
       case "system":
         if (msg.subtype === "init") {
-          this.cb.onInit(msg.session_id, msg.model ?? this.model);
+          this.cb.onInit(msg.session_id, msg.model ?? this.model, msg.permissionMode);
         }
         break;
 
@@ -386,8 +391,14 @@ export class AgentSession {
 
   async stop(): Promise<void> {
     this.stopping = true;
+    this.ended = true;
     this.denyAllPending("会话被停止");
     await this.q.interrupt();
     this.queue.end();
+  }
+
+  // 会话中途切换权限模式（SDK 控制通道，CLI 的 /permissions 同款能力）
+  async setPermissionMode(mode: "default" | "acceptEdits" | "plan"): Promise<void> {
+    await this.q.setPermissionMode(mode);
   }
 }

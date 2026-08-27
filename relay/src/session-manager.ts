@@ -9,13 +9,27 @@ import { deriveTitle } from "./history.js";
 import { generateTitle } from "./title-gen.js";
 import { buildAnswerMessage, truncate } from "./summarizer.js";
 import type {
+  AgentCallbacks,
+} from "./agent-adapter.js";
+import type {
   Command,
   CommandAckPayload,
   LogEntry,
+  ManagedPermissionMode,
   SessionState,
   TodoItem,
   WaitingPayload,
 } from "./types.js";
+
+function isManagedMode(m: unknown): m is ManagedPermissionMode {
+  return m === "default" || m === "acceptEdits" || m === "plan";
+}
+
+const PERM_MODE_ZH: Record<ManagedPermissionMode, string> = {
+  default: "标准（每次确认）",
+  acceptEdits: "自动接受编辑",
+  plan: "规划（只读）",
+};
 
 interface ManagedSession {
   agent: AgentSession | null;   // null = Relay 重启遗留的历史会话，不可操作
@@ -282,12 +296,40 @@ export class SessionManager {
           return { command_id: cmd.command_id, ok: true, session_id };
         }
         case "COMMAND_MESSAGE": {
-          const s = this.requireLive(cmd.payload.session_id);
+          const s = this.require(cmd.payload.session_id);
+          if (s.state.external) {
+            return { command_id: cmd.command_id, ok: false, error: "外部会话请使用 COMMAND_EXT_INPUT" };
+          }
+          // agent 已死（Relay 重启遗留 / stop 收尾）：有 SDK 会话 id 就地 resume 复活
+          if (!s.agent || s.agent.ended) {
+            this.resumeAgent(s, cmd.payload.text);
+            return { command_id: cmd.command_id, ok: true };
+          }
           if (s.state.status === "ERROR" || s.state.status === "DONE") {
             s.state.status = "WORKING";
           }
           s.agent.sendMessage(cmd.payload.text);
           this.emitUpdated(s, true);
+          return { command_id: cmd.command_id, ok: true };
+        }
+        case "COMMAND_PERM": {
+          const live = this.requireLive(cmd.payload.session_id);
+          if (live.state.external) {
+            return { command_id: cmd.command_id, ok: false, error: "外部会话不支持权限模式切换" };
+          }
+          const mode = cmd.payload.mode;
+          if (!isManagedMode(mode)) {
+            return { command_id: cmd.command_id, ok: false, error: `未知权限模式: ${mode}` };
+          }
+          void live.agent.setPermissionMode(mode)
+            .then(() => {
+              live.state.permission_mode = mode;
+              this.pushExternalLog(live.state.session_id, "system", `权限模式切换: ${PERM_MODE_ZH[mode]}`);
+              this.emitUpdated(live, true);
+            })
+            .catch((e) => {
+              this.pushExternalLog(live.state.session_id, "system", `权限模式切换失败: ${e instanceof Error ? e.message : String(e)}`);
+            });
           return { command_id: cmd.command_id, ok: true };
         }
         case "COMMAND_STOP": {
@@ -463,10 +505,30 @@ export class SessionManager {
     const agent = new AgentSession(
       cwd,
       this.cfg.model,
-      {
-        onInit: (sdkId, model) => {
+      this.agentCallbacks(managed),
+      prompt,
+    );
+
+    managed.agent = agent;
+    managed.state.session_id = agent.id;
+    this.sessions.set(agent.id, managed);
+    this.bus.emit(managed.state.session_id, "SESSION_CREATED", {
+      cwd,
+      initial_prompt: prompt,
+      title: managed.state.title,
+      model: this.cfg.model,
+    });
+    this.requestSmartTitle(agent.id, prompt);
+    return agent.id;
+  }
+
+  // AgentSession 回调：create 与 resume 共用（状态机与事件下发完全一致）
+  private agentCallbacks(managed: ManagedSession): AgentCallbacks {
+    return {
+        onInit: (sdkId, model, permissionMode) => {
           managed.state.relay_session_id = sdkId;
           managed.state.model = model;
+          if (isManagedMode(permissionMode)) managed.state.permission_mode = permissionMode;
           this.emitUpdated(managed, true);
         },
         onStatusChange: (status, summary) => {
@@ -550,21 +612,31 @@ export class SessionManager {
             });
           }
         },
-      },
-      prompt,
-    );
+    };
+  }
 
-    managed.agent = agent;
-    managed.state.session_id = agent.id;
-    this.sessions.set(agent.id, managed);
-    this.bus.emit(managed.state.session_id, "SESSION_CREATED", {
-      cwd,
-      initial_prompt: prompt,
-      title: managed.state.title,
-      model: this.cfg.model,
-    });
-    this.requestSmartTitle(agent.id, prompt);
-    return agent.id;
+  // 死会话复活：用 SDK resume 在同一 relay 会话上重建 agent（时间线/状态保留）
+  private resumeAgent(s: ManagedSession, firstMessage: string): void {
+    const sdkId = s.state.relay_session_id;
+    if (!sdkId) {
+      throw new Error("会话已结束且无 SDK 会话记录，无法恢复（模型尚未完成初始化）");
+    }
+    const agent = new AgentSession(
+      s.state.cwd,
+      s.state.model,
+      this.agentCallbacks(s),
+      firstMessage,
+      { resume: sdkId, permissionMode: s.state.permission_mode ?? "default" },
+    );
+    s.agent = agent;
+    s.state.status = "WORKING";
+    s.state.historical = false;
+    s.state.done_reason = undefined;
+    s.state.last_error = undefined;
+    s.state.turn_started_at = Date.now();
+    this.pushExternalLog(s.state.session_id, "user_message", truncate(firstMessage, 200));
+    this.pushExternalLog(s.state.session_id, "system", `已恢复 SDK 会话（resume ${sdkId.slice(0, 8)}…）`);
+    this.emitUpdated(s, true);
   }
 
   private require(sessionId: string): ManagedSession {
@@ -605,6 +677,8 @@ export class SessionManager {
       ...(s.state.turn_started_at ? { turn_started_at: s.state.turn_started_at } : {}),
       ...(s.state.usage ? { usage: { ...s.state.usage } } : {}),
       ...(s.state.todos ? { todos: s.state.todos.map((t) => ({ ...t })) } : {}),
+      ...(s.state.relay_session_id ? { relay_session_id: s.state.relay_session_id } : {}),
+      ...(s.state.permission_mode ? { permission_mode: s.state.permission_mode } : {}),
     });
   }
 

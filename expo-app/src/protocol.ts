@@ -67,6 +67,7 @@ export interface SessionState {
   usage?: TokenUsage;
   todos?: TodoItem[];
   title_locked?: boolean;
+  permission_mode?: "default" | "acceptEdits" | "plan"; // 托管会话权限模式
 }
 
 export interface LogEntry {
@@ -101,7 +102,8 @@ export type CommandType =
   | "COMMAND_DELETE"
   | "COMMAND_RENAME"
   | "COMMAND_ANSWER"
-  | "COMMAND_PAIR_START";
+  | "COMMAND_PAIR_START"
+  | "COMMAND_PERM";
 
 // 云桥配对信息：relay 经可信 LAN 信道下发，手机落盘后即可走云通道
 export interface CloudPairInfo {

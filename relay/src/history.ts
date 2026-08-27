@@ -140,6 +140,8 @@ export function reduceHistory(events: Envelope[]): Map<string, ReplayedSession> 
         if (p.turn_started_at) s.turn_started_at = p.turn_started_at;
         if (p.usage) s.usage = p.usage;
         if (p.todos) s.todos = p.todos;
+        if ((p as { relay_session_id?: string }).relay_session_id) s.relay_session_id = (p as { relay_session_id?: string }).relay_session_id!;
+        if ((p as { permission_mode?: SessionState["permission_mode"] }).permission_mode) s.permission_mode = (p as { permission_mode?: SessionState["permission_mode"] }).permission_mode;
         break;
       }
       case "SESSION_WAITING": {

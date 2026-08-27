@@ -22,6 +22,14 @@ const LOG_FILTERS = [
 ] as const;
 type LogFilter = (typeof LOG_FILTERS)[number]["k"];
 
+// 权限模式循环切换（与 relay 的 ManagedPermissionMode 对齐）
+const PERM_CYCLE = ["default", "acceptEdits", "plan"] as const;
+const PERM_LABEL: Record<(typeof PERM_CYCLE)[number], string> = {
+  default: "标准",
+  acceptEdits: "自动编辑",
+  plan: "规划",
+};
+
 function matchFilter(kind: string, f: LogFilter): boolean {
   if (f === "all") return true;
   if (f === "tool") return kind === "tool_use" || kind === "tool_result";
@@ -301,7 +309,9 @@ export default function DetailScreen({ sid, onBack }: { sid: string; onBack: () 
 
   const color = statusColor(s.status, c);
   const external = !!s.external;
-  const canCmd = snap.connected && !(s.historical && !external);
+  // 历史托管会话：有 SDK 会话 id 就能 resume 复活（发消息即恢复），否则只读
+  const resumable = !external && !!s.relay_session_id;
+  const canCmd = snap.connected && (!s.historical || external || resumable);
   const wr = s.waiting_request;
   const bannerVisible = !!wr && wr.decidable !== false;
   // 状态条只在"有事发生"时出现：运行中/出错/等待确认（横幅未兜底时）；空闲会话靠头部状态行
@@ -408,6 +418,19 @@ export default function DetailScreen({ sid, onBack }: { sid: string; onBack: () 
             >
               <Text style={[d.filterT, showThink && d.filterTOn]}>思考{showThink ? " ·开" : " ·关"}</Text>
             </Pressable>
+            {!external && canCmd && !s.historical ? (
+              <Pressable
+                style={[d.filterChip, d.thinkChip, (s.permission_mode ?? "default") !== "default" && d.filterChipOn]}
+                android_ripple={{ color: c.tintSoft, borderless: false, radius: 12 }}
+                onPress={() => {
+                  const cur = s.permission_mode ?? "default";
+                  const next = PERM_CYCLE[(PERM_CYCLE.indexOf(cur) + 1) % PERM_CYCLE.length];
+                  store.send("COMMAND_PERM", { session_id: sid, mode: next });
+                }}
+              >
+                <Text style={[d.filterT, (s.permission_mode ?? "default") !== "default" && d.filterTOn]}>权限·{PERM_LABEL[s.permission_mode ?? "default"]}</Text>
+              </Pressable>
+            ) : null}
           </View>
       </View>
 
@@ -424,7 +447,9 @@ export default function DetailScreen({ sid, onBack }: { sid: string; onBack: () 
         }}
         scrollEventThrottle={120}
       >
-        {s.historical && !external ? <Text style={d.histnote}>Relay 重启前的历史会话，仅可查看</Text> : null}
+        {s.historical && !external ? (
+          <Text style={d.histnote}>{resumable ? "历史会话 · 发送消息将恢复继续（SDK resume）" : "Relay 重启前的历史会话，仅可查看"}</Text>
+        ) : null}
 
         {shown.length === 0 ? (
           <Text style={d.empty}>{logs.length === 0 ? "暂无对话" : "该类型暂无内容"}</Text>
@@ -477,7 +502,7 @@ export default function DetailScreen({ sid, onBack }: { sid: string; onBack: () 
             style={d.input}
             value={input}
             onChangeText={setInput}
-            placeholder={external ? "注入到终端（空闲时自动发送）" : "发送消息…"}
+            placeholder={external ? "注入到终端（空闲时自动发送）" : s.historical ? "继续对话（恢复会话）…" : "发送消息…"}
             placeholderTextColor={c.faint}
             editable={canCmd}
             multiline

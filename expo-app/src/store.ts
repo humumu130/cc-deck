@@ -479,6 +479,8 @@ class RelayStore {
         if (msg.payload.turn_started_at) s.turn_started_at = msg.payload.turn_started_at;
         if (msg.payload.usage) s.usage = msg.payload.usage;
         if (msg.payload.todos) s.todos = msg.payload.todos;
+        if (msg.payload.relay_session_id) s.relay_session_id = msg.payload.relay_session_id;
+        if (msg.payload.permission_mode) s.permission_mode = msg.payload.permission_mode;
         s.updated_at = msg.ts;
         break;
       }

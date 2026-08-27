@@ -64,7 +64,11 @@ export interface SessionState {
   turn_started_at?: number;   // 当前 WORKING 回合起点（状态行计时用）
   usage?: TokenUsage;         // 托管会话 token 用量
   todos?: TodoItem[];         // 最近一次 TodoWrite 的任务清单
+  permission_mode?: ManagedPermissionMode; // 托管会话当前权限模式
 }
+
+// 托管会话权限模式（SDK PermissionMode 的安全子集：bypassPermissions 不开放远程切换）
+export type ManagedPermissionMode = "default" | "acceptEdits" | "plan";
 
 // 时间线历史条目（持久化 & 快照下发用）
 export interface LogEntry {
@@ -99,6 +103,8 @@ export interface SessionUpdatedPayload {
   turn_started_at?: number;    // 回合起点变化时携带
   usage?: TokenUsage;          // token 用量变化时携带
   todos?: TodoItem[];          // 任务清单变化时携带
+  relay_session_id?: string;   // SDK 侧会话 id（重启重放后仍可 resume 的凭证）
+  permission_mode?: ManagedPermissionMode; // 权限模式变化时携带
 }
 
 export interface SessionHeartbeatPayload {
@@ -207,7 +213,8 @@ export type CommandType =
   | "COMMAND_DELETE"
   | "COMMAND_RENAME"
   | "COMMAND_ANSWER"
-  | "COMMAND_PAIR_START";
+  | "COMMAND_PAIR_START"
+  | "COMMAND_PERM";
 
 export interface CommandBase {
   command_id: string;   // 客户端生成（uuid），Relay 按此去重
@@ -295,7 +302,14 @@ export type Command =
   | DeleteCommand
   | RenameCommand
   | AnswerCommand
-  | PairStartCommand;
+  | PairStartCommand
+  | PermCommand;
+
+// 托管会话权限模式切换（default=每次确认 / acceptEdits=自动接受编辑 / plan=只读规划）
+export interface PermCommand extends CommandBase {
+  type: "COMMAND_PERM";
+  payload: { session_id: string; mode: ManagedPermissionMode };
+}
 
 // hooks 桥接：bridge-hook.mjs -> POST /bridge/hook 的请求体（token 走 x-bridge-token header）
 export interface BridgeEvent {

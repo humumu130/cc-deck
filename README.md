@@ -98,6 +98,17 @@ LAN 不可达时手机经云桥中继连接 PC Relay，双方都只发起出站�
 命令 `COMMAND_CREATE/MESSAGE/STOP/CONTINUE/REJECT`（`command_id` 幂等去重）。
 Android 端（M2）将直接复用此协议。
 
+## 托管会话操作补齐（P3）
+
+- **会话恢复（resume）**：agent 已死（Relay 重启遗留 / 手动停止）的托管会话，
+  `SESSION_UPDATED` 全量携带 `relay_session_id` 并持久化；再发消息时 relay 自动
+  以 SDK `resume` 重建 agent（时间线/统计保留），手机端历史会话输入框可用
+- **权限模式切换**：`COMMAND_PERM {mode: default|acceptEdits|plan}` 经 SDK
+  控制通道热切换（acceptEdits 下 Write/Edit 不再进远程审批）；手机端过滤行
+  「权限·标准/自动编辑/规划」chip 循环切换
+- **/ 命令直通**：消息以 `/` 开头（如 `/usage`）原样下发，CLI 本地命令输出
+  以转录条目回显时间线
+
 ## 测试脚本（relay/ 下）
 
 ```bash
@@ -108,7 +119,9 @@ npm run test:ws        # WS 鉴权/快照/断线补发/幂等/容错
 npm run test:history   # 历史持久化：压缩/重放/跨重启 seq/adopt
 npm run test:bridge    # hooks 桥接：外部会话/远程审批/超时/鉴权
 npm run test:cloud     # 云通道端到端：配对/密文收发/断线补发/未配对拒收
-npx tsx scripts/smoke-e2e.ts <token>   # 对运行中的 dev server 走浏览器等价全流程
+npx tsx scripts/test-transcript.ts   # P2 转录：Write/Edit detail 与 diff 下发
+npx tsx scripts/test-p3.ts           # P3：权限模式切换 / stop 后自动 resume / 斜杠直通
+npx tsx scripts/smoke-e2e.ts <token> # 对运行中的 dev server 走浏览器等价全流程
 ```
 
 cloud-bridge/ 下：`npm run test:cloud`（鉴权/双设备互通/ROUTE_MISS/同 dev 顶替/断连清理）。
