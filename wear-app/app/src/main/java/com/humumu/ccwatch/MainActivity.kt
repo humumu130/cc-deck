@@ -172,11 +172,20 @@ fun App(
             if (old == st) return@forEach
             val s = sessions.firstOrNull { it.sessionId == sid } ?: return@forEach
             when (st) {
-                SessionStatus.WAITING, SessionStatus.ERROR, SessionStatus.DONE -> {
+                SessionStatus.WAITING -> {
                     Notifier.notify(context, s)
-                    if (s.sessionId == current?.sessionId) {
-                        haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+                    haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+                    // 可远程作答的提问/确认：直达该会话 W1 选项卡（不看当前在哪页，别让用户错过）
+                    if (s.waitingRequest?.decidable != false) {
+                        val idx = sessions.indexOfFirst { it.sessionId == s.sessionId }
+                        if (idx >= 0) {
+                            hPager.scrollToPage(idx)
+                            vPager.scrollToPage(0)
+                        }
                     }
+                }
+                SessionStatus.ERROR, SessionStatus.DONE -> {
+                    Notifier.notify(context, s)
                 }
                 SessionStatus.WORKING -> Notifier.cancel(context, sid)
             }

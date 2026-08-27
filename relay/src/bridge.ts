@@ -362,9 +362,11 @@ export class Bridge {
 
     const shouldGate =
       !!this.mgr.getExternal(id)?.remote_mode &&
-      (this.opts.gateTools.has(ev.tool_name ?? "") || questions.length > 0) &&
-      ev.permission_mode !== "bypassPermissions" &&   // 终端切到 skip 模式 = 用户显式放弃门控
-      this.opts.hasClients();                          // 手机在线才拦截
+      // AskUserQuestion 不是权限决策而是必需输入：bypass 模式也要远程下发（终端本地仍可答，超时回退）
+      (questions.length > 0 ||
+        (this.opts.gateTools.has(ev.tool_name ?? "") &&
+          ev.permission_mode !== "bypassPermissions")) &&   // 权限类：终端切到 skip 模式 = 用户显式放弃门控
+      this.opts.hasClients();                                // 手机在线才拦截
 
     if (!shouldGate) {
       this.mgr.setExternalStatus(id, "WORKING", summary);

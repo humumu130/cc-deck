@@ -88,7 +88,8 @@ LAN 不可达时手机经云桥中继连接 PC Relay，双方都只发起出站�
 - **远程审批**（默认关，控制台会话详情头开关）：开启后 `Bash/Edit/Write/WebFetch` 等
   （`CCR_GATE_TOOLS` 可配）在**有客户端在线时**挂起等手机/网页 Allow/Reject
   （最长 590s，超时回退 CLI 本地流程）；终端切 `--dangerously-skip-permissions`
-  （hook payload `permission_mode=bypassPermissions`）则完全放行
+  （hook payload `permission_mode=bypassPermissions`）时权限类放行，但
+  **AskUserQuestion 提问仍远程下发**（提问是模型必需输入而非权限决策）
 - 外部会话不支持远程发消息/停止（hooks 无输入通道）
 
 ## 协议
