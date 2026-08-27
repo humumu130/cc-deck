@@ -109,6 +109,16 @@ Android 端（M2）将直接复用此协议。
 - **/ 命令直通**：消息以 `/` 开头（如 `/usage`）原样下发，CLI 本地命令输出
   以转录条目回显时间线
 
+## TodoWrite 任务面板 + 图片输入（P4）
+
+- **任务面板**：TodoWrite 工具调用（含 tool_result 确认）解析为结构化 todos 随
+  `SESSION_UPDATED` 全量下发；手机端详情页过滤行下方折叠面板「☰ 任务 x/y」：
+  进度条 + 逐项状态（✓ 完成 / ◐ 进行中显示 active_form / ○ 待办）
+- **图片输入**：手机相册选图（≤4 张，统一 JPEG/长边≤1568/质量 0.82 压缩后
+  base64 上送）→ relay 转为 SDK image block（live 回合与 resume 重建路径均支持）；
+  时间线用户消息带「（+N 图）」标记。智谱 GLM 经内置 analyze_image 服务端工具
+  读图，视觉链路可用
+
 ## 测试脚本（relay/ 下）
 
 ```bash
@@ -121,6 +131,7 @@ npm run test:bridge    # hooks 桥接：外部会话/远程审批/超时/鉴权
 npm run test:cloud     # 云通道端到端：配对/密文收发/断线补发/未配对拒收
 npx tsx scripts/test-transcript.ts   # P2 转录：Write/Edit detail 与 diff 下发
 npx tsx scripts/test-p3.ts           # P3：权限模式切换 / stop 后自动 resume / 斜杠直通
+npx tsx scripts/test-p4.ts           # P4：TodoWrite todos 下发 + 图片消息（live/resume）视觉链路
 npx tsx scripts/smoke-e2e.ts <token> # 对运行中的 dev server 走浏览器等价全流程
 ```
 

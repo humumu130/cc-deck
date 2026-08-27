@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState } from "react";
-import { BackHandler, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
+import { BackHandler, Image, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
+import * as ImagePicker from "expo-image-picker";
+import * as ImageManipulator from "expo-image-manipulator";
 import { STATUS_ZH, statusColor, withA, type ThemeColors } from "../theme";
 import { useTheme, useThemeStyles } from "../theme-context";
 import { fmtElapsed, sessionElapsed } from "../fmt";
@@ -270,6 +272,9 @@ export default function DetailScreen({ sid, onBack }: { sid: string; onBack: () 
   const [filter, setFilter] = useState<LogFilter>("msg");
   const [showThink, setShowThink] = useState(thinkShown);
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
+  const [todoOpen, setTodoOpen] = useState(false);
+  const [images, setImages] = useState<string[]>([]);
+  const [picking, setPicking] = useState(false);
   const scrollRef = useRef<ScrollView>(null);
   const atBottom = useRef(true);
   // 手指按住期间暂停自动滚底：流式更新的 scrollToEnd 跳变会打断进行中的按压（chip/展开全文点不中）
@@ -321,9 +326,53 @@ export default function DetailScreen({ sid, onBack }: { sid: string; onBack: () 
 
   const send = () => {
     const text = input.trim();
-    if (!text) return;
-    const ok = store.send(external ? "COMMAND_EXT_INPUT" : "COMMAND_MESSAGE", { session_id: sid, text });
-    if (ok) setInput("");
+    if (!text && images.length === 0) return;
+    const ok = store.send(
+      external ? "COMMAND_EXT_INPUT" : "COMMAND_MESSAGE",
+      external
+        ? { session_id: sid, text }
+        : { session_id: sid, text, ...(images.length > 0 ? { images } : {}) },
+    );
+    if (ok) {
+      setInput("");
+      setImages([]);
+    }
+  };
+
+  // 相册选图 → 统一转 JPEG/长边≤1568（base64 上送）
+  const pickImages = async () => {
+    if (picking) return;
+    setPicking(true);
+    try {
+      const res = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ["images"],
+        allowsMultipleSelection: true,
+        selectionLimit: 4,
+        quality: 0.85,
+        base64: true,
+      });
+      if (res.canceled) return;
+      const out: string[] = [];
+      for (const asset of res.assets) {
+        const long = Math.max(asset.width, asset.height);
+        const scale = long > 1568 ? 1568 / long : 1;
+        if (scale < 1 || !asset.base64 || !asset.mimeType || asset.mimeType !== "image/jpeg") {
+          const m = await ImageManipulator.manipulateAsync(
+            asset.uri,
+            scale < 1 ? [{ resize: { width: Math.round(asset.width * scale), height: Math.round(asset.height * scale) } }] : [],
+            { format: ImageManipulator.SaveFormat.JPEG, compress: 0.82, base64: true },
+          );
+          if (m.base64) out.push(m.base64);
+        } else if (asset.base64) {
+          out.push(asset.base64);
+        }
+      }
+      if (out.length > 0) setImages((prev) => [...prev, ...out].slice(0, 4));
+    } catch {
+      // 用户取消/读取失败：静默
+    } finally {
+      setPicking(false);
+    }
   };
   const decide = (allow: boolean) => {
     if (!wr) return;
@@ -432,6 +481,45 @@ export default function DetailScreen({ sid, onBack }: { sid: string; onBack: () 
               </Pressable>
             ) : null}
           </View>
+          {(s.todos?.length ?? 0) > 0 ? (
+            <View style={d.todoBox}>
+              <Pressable
+                style={d.todoHead}
+                android_ripple={{ color: c.tintSoft, borderless: false, radius: 9 }}
+                onPress={() => setTodoOpen((v) => !v)}
+              >
+                <Text style={d.todoHeadT}>☰ 任务 {s.todos!.filter((t) => t.status === "completed").length}/{s.todos!.length}</Text>
+                <View style={d.todoBar}>
+                  <View style={[d.todoBarFill, { width: `${Math.round((s.todos!.filter((t) => t.status === "completed").length / s.todos!.length) * 100)}%` }]} />
+                </View>
+                <Text style={d.todoCaret}>{todoOpen ? "▾" : "▸"}</Text>
+              </Pressable>
+              {todoOpen ? s.todos!.map((t, i) => (
+                <View key={i} style={d.todoRow}>
+                  <Text
+                    style={[
+                      d.todoMark,
+                      t.status === "completed" && { color: c.done },
+                      t.status === "in_progress" && { color: c.working },
+                    ]}
+                  >
+                    {t.status === "completed" ? "✓" : t.status === "in_progress" ? "◐" : "○"}
+                  </Text>
+                  <Text
+                    style={[
+                      d.todoT,
+                      t.status === "pending" && { color: c.faint },
+                      t.status === "in_progress" && { color: c.text, fontWeight: "700" },
+                      t.status === "completed" && { color: c.dim },
+                    ]}
+                    numberOfLines={2}
+                  >
+                    {t.status === "in_progress" && t.active_form ? t.active_form : t.content}
+                  </Text>
+                </View>
+              )) : null}
+            </View>
+          ) : null}
       </View>
 
       <ScrollView
@@ -497,7 +585,29 @@ export default function DetailScreen({ sid, onBack }: { sid: string; onBack: () 
             </ScrollView>
           </View>
         ) : null}
+        {images.length > 0 ? (
+          <View style={d.imgRow}>
+            {images.map((b, i) => (
+              <View key={i} style={d.imgCell}>
+                <Image style={d.imgThumb} source={{ uri: `data:image/jpeg;base64,${b}` }} />
+                <Pressable style={d.imgDel} android_ripple={{ color: "rgba(0,0,0,0.3)", borderless: false, radius: 10 }} onPress={() => setImages((prev) => prev.filter((_, j) => j !== i))}>
+                  <Text style={d.imgDelT}>×</Text>
+                </Pressable>
+              </View>
+            ))}
+          </View>
+        ) : null}
         <View style={d.cmdbar}>
+          {!external && !s.historical ? (
+            <Pressable
+              style={[d.imgBtn, d.opRipple, (!canCmd || images.length >= 4) && { opacity: 0.4 }]}
+              android_ripple={{ color: c.tintSoft, borderless: false, radius: 11 }}
+              onPress={pickImages}
+              disabled={!canCmd || images.length >= 4}
+            >
+              <Text style={d.imgBtnT}>📷</Text>
+            </Pressable>
+          ) : null}
           <TextInput
             style={d.input}
             value={input}
@@ -507,7 +617,7 @@ export default function DetailScreen({ sid, onBack }: { sid: string; onBack: () 
             editable={canCmd}
             multiline
           />
-          <Pressable style={[d.sendBtn, (!canCmd || !input.trim()) && { opacity: 0.4 }]} android_ripple={{ color: "rgba(255,255,255,0.2)", borderless: false }} onPress={send} disabled={!canCmd}>
+          <Pressable style={[d.sendBtn, (!canCmd || (!input.trim() && images.length === 0)) && { opacity: 0.4 }]} android_ripple={{ color: "rgba(255,255,255,0.2)", borderless: false }} onPress={send} disabled={!canCmd}>
             <Text style={d.sendT}>➤</Text>
           </Pressable>
         </View>
@@ -580,6 +690,19 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
   thinkChip: { marginLeft: "auto", borderStyle: "dashed" },
   filterT: { fontSize: 11, color: c.dim },
   filterTOn: { color: c.brandA, fontWeight: "600" },
+  // todo 面板：折叠只占一行（标题+进度条），展开列任务清单
+  todoBox: {
+    backgroundColor: c.panel2, borderWidth: 1, borderColor: c.line,
+    borderRadius: 12, paddingHorizontal: 11, paddingVertical: 6, marginBottom: 10,
+  },
+  todoHead: { flexDirection: "row", alignItems: "center", gap: 9, paddingVertical: 4 },
+  todoHeadT: { color: c.dim, fontSize: 11.5, fontWeight: "600" },
+  todoBar: { flex: 1, height: 4, borderRadius: 2, backgroundColor: c.tintSoft, overflow: "hidden" },
+  todoBarFill: { height: 4, borderRadius: 2, backgroundColor: c.done },
+  todoCaret: { color: c.faint, fontSize: 11, width: 14, textAlign: "center" },
+  todoRow: { flexDirection: "row", gap: 8, alignItems: "flex-start", paddingVertical: 5, borderTopWidth: 1, borderTopColor: c.line, marginTop: 5 },
+  todoMark: { color: c.faint, fontSize: 12, width: 16, textAlign: "center", lineHeight: 17 },
+  todoT: { flex: 1, color: c.text, fontSize: 12.5, lineHeight: 17 },
   histnote: { color: c.faint, fontSize: 11, textAlign: "center", marginBottom: 10 },
   trUser: {
     alignSelf: "flex-end", maxWidth: "85%", marginBottom: 10,
@@ -677,6 +800,24 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
     backgroundColor: c.panel2, borderWidth: 1, borderColor: c.line,
   },
   tplT: { fontSize: 12, color: c.dim },
+  // 待发图片：缩略图行（可删除）+ 相册按钮
+  imgRow: {
+    flexDirection: "row", gap: 8, backgroundColor: c.overlay,
+    borderTopWidth: 1, borderTopColor: c.line, paddingHorizontal: 12, paddingTop: 9,
+  },
+  imgCell: { width: 52, height: 52 },
+  imgThumb: { width: 52, height: 52, borderRadius: 10 },
+  imgDel: {
+    position: "absolute", top: -6, right: -6, width: 20, height: 20, borderRadius: 10,
+    backgroundColor: c.panel, borderWidth: 1, borderColor: c.line,
+    alignItems: "center", justifyContent: "center",
+  },
+  imgDelT: { color: c.dim, fontSize: 13, lineHeight: 15, marginTop: -1 },
+  imgBtn: {
+    width: 44, height: 44, borderRadius: 13, backgroundColor: c.panel2,
+    borderWidth: 1, borderColor: c.line, alignItems: "center", justifyContent: "center",
+  },
+  imgBtnT: { fontSize: 17 },
   cmdbar: {
     paddingHorizontal: 12, paddingVertical: 10,
     backgroundColor: c.overlay, borderTopWidth: 1, borderTopColor: c.line,

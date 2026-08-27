@@ -31,6 +31,13 @@ const PERM_MODE_ZH: Record<ManagedPermissionMode, string> = {
   plan: "规划（只读）",
 };
 
+// 图片消息清洗：最多 4 张、单张 8MB base64，剔除非法项
+function sanitizeImages(raw: unknown): string[] | undefined {
+  if (!Array.isArray(raw)) return undefined;
+  const list = raw.filter((x): x is string => typeof x === "string" && x.length > 0 && x.length <= 8 * 1024 * 1024);
+  return list.length > 0 ? list.slice(0, 4) : undefined;
+}
+
 interface ManagedSession {
   agent: AgentSession | null;   // null = Relay 重启遗留的历史会话，不可操作
   state: SessionState;
@@ -302,13 +309,13 @@ export class SessionManager {
           }
           // agent 已死（Relay 重启遗留 / stop 收尾）：有 SDK 会话 id 就地 resume 复活
           if (!s.agent || s.agent.ended) {
-            this.resumeAgent(s, cmd.payload.text);
+            this.resumeAgent(s, cmd.payload.text, sanitizeImages(cmd.payload.images));
             return { command_id: cmd.command_id, ok: true };
           }
           if (s.state.status === "ERROR" || s.state.status === "DONE") {
             s.state.status = "WORKING";
           }
-          s.agent.sendMessage(cmd.payload.text);
+          s.agent.sendMessage(cmd.payload.text, sanitizeImages(cmd.payload.images));
           this.emitUpdated(s, true);
           return { command_id: cmd.command_id, ok: true };
         }
@@ -616,7 +623,7 @@ export class SessionManager {
   }
 
   // 死会话复活：用 SDK resume 在同一 relay 会话上重建 agent（时间线/状态保留）
-  private resumeAgent(s: ManagedSession, firstMessage: string): void {
+  private resumeAgent(s: ManagedSession, firstMessage: string, images?: string[]): void {
     const sdkId = s.state.relay_session_id;
     if (!sdkId) {
       throw new Error("会话已结束且无 SDK 会话记录，无法恢复（模型尚未完成初始化）");
@@ -626,7 +633,7 @@ export class SessionManager {
       s.state.model,
       this.agentCallbacks(s),
       firstMessage,
-      { resume: sdkId, permissionMode: s.state.permission_mode ?? "default" },
+      { resume: sdkId, permissionMode: s.state.permission_mode ?? "default", images },
     );
     s.agent = agent;
     s.state.status = "WORKING";
@@ -634,7 +641,8 @@ export class SessionManager {
     s.state.done_reason = undefined;
     s.state.last_error = undefined;
     s.state.turn_started_at = Date.now();
-    this.pushExternalLog(s.state.session_id, "user_message", truncate(firstMessage, 200));
+    const marker = images && images.length > 0 ? `（+${images.length} 图）` : "";
+    this.pushExternalLog(s.state.session_id, "user_message", truncate(firstMessage, 200) + marker);
     this.pushExternalLog(s.state.session_id, "system", `已恢复 SDK 会话（resume ${sdkId.slice(0, 8)}…）`);
     this.emitUpdated(s, true);
   }

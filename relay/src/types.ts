@@ -229,7 +229,8 @@ export interface CreateCommand extends CommandBase {
 
 export interface MessageCommand extends CommandBase {
   type: "COMMAND_MESSAGE";
-  payload: { session_id: string; text: string };
+  // images：原始 base64（JPEG），由手机端压缩后上送
+  payload: { session_id: string; text: string; images?: string[] };
 }
 
 export interface StopCommand extends CommandBase {

@@ -133,9 +133,9 @@ export class AgentSession {
     private readonly model: string,
     private readonly cb: AgentCallbacks,
     initialPrompt: string,
-    opts?: { resume?: string; permissionMode?: "default" | "acceptEdits" | "plan" },
+    opts?: { resume?: string; permissionMode?: "default" | "acceptEdits" | "plan"; images?: string[] },
   ) {
-    this.pushUserMessage(initialPrompt);
+    this.pushUserMessage(initialPrompt, opts?.images);
     this.q = query({
       prompt: this.queue.iterable,
       options: {
@@ -341,19 +341,32 @@ export class AgentSession {
     });
   }
 
-  private pushUserMessage(text: string): void {
+  private pushUserMessage(text: string, images?: string[]): void {
     this.resultSeenForTurn = false;
+    let content: string | SDKUserMessage["message"]["content"];
+    if (images && images.length > 0) {
+      content = [
+        ...(text ? [{ type: "text" as const, text }] : []),
+        ...images.map((data) => ({
+          type: "image" as const,
+          source: { type: "base64" as const, media_type: "image/jpeg" as const, data },
+        })),
+      ];
+    } else {
+      content = text;
+    }
     this.queue.push({
       type: "user",
-      message: { role: "user", content: text },
+      message: { role: "user", content },
       parent_tool_use_id: null,
       origin: { kind: "human" },
     });
   }
 
-  sendMessage(text: string): void {
-    this.pushUserMessage(text);
-    this.cb.onLog("user_message", truncate(text, 200), { full: fullText(text, 200) });
+  sendMessage(text: string, images?: string[]): void {
+    this.pushUserMessage(text, images);
+    const marker = images && images.length > 0 ? `（+${images.length} 图）` : "";
+    this.cb.onLog("user_message", truncate(text, 200) + marker, { full: fullText(text, 200) + marker });
     this.cb.onStatusChange("WORKING", this.lastSummary);
   }
 
