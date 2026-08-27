@@ -179,6 +179,10 @@ class DemoRepository : SessionRepo {
                     it.copy(status = SessionStatus.DONE, waitingRequest = null, actionSummary = "已停止（演示）", doneReason = "stopped", durationMs = now - it.startedAt)
                 is WatchCommand.Message ->
                     it.copy(actionSummary = "已发送：${cmd.text.take(12)}")
+                is WatchCommand.Answer ->
+                    if (it.status == SessionStatus.WAITING)
+                        it.copy(status = SessionStatus.WORKING, waitingRequest = null, actionSummary = "作答已发送（演示）")
+                    else it
                 is WatchCommand.Delete -> it
             }
         }

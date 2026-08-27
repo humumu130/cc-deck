@@ -141,7 +141,7 @@ private fun WorkingMetaRow(s: SessionState) {
 private fun WaitingBody(s: SessionState, onCommand: (WatchCommand) -> Unit, cid: () -> String) {
     val w = s.waitingRequest
     val qs = w?.questions ?: emptyList()
-    if (qs.isNotEmpty()) {
+    if (w != null && qs.isNotEmpty()) {
         AskBody(s, w, qs, onCommand, cid)
         return
     }
