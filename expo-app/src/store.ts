@@ -567,7 +567,10 @@ class RelayStore {
   }
 
   send(type: string, payload: Record<string, unknown>): boolean {
-    if (!this.ws || this.ws.readyState !== WebSocket.OPEN) return false;
+    if (!this.ws || this.ws.readyState !== WebSocket.OPEN) {
+      this.emit({ lastErrorCmd: "未连接，命令未发送" });
+      return false;
+    }
     const cmd = { command_id: uuid(), type, payload, ts: Date.now() };
     if (this.channel === "cloud" && this.cloudCfg && this.devKeys) {
       this.ws.send(
