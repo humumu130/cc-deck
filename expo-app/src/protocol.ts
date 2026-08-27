@@ -77,6 +77,8 @@ export interface LogEntry {
   full?: string; // 原文（relay 仅在 text 被截断时携带）
   id?: string; // 流式块 id：同 id 的时间线条目原地替换
   streaming?: boolean; // true = 该文本块仍在生成中
+  detail?: string; // 工具完整入参/输出（展开查看）
+  diff?: string[]; // Edit/Write 的 +/- diff 行（着色渲染）
 }
 
 export interface Envelope {

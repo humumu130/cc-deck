@@ -470,6 +470,8 @@ class RelayStore {
         if (!s) break;
         s.status = msg.payload.status;
         s.action_summary = msg.payload.action_summary;
+        // 状态离开 WAITING 却没等来 RESOLVED 事件（relay 重启重放等场景）：清掉残留的审批面板数据
+        if (msg.payload.status !== "WAITING") s.waiting_request = null;
         if (msg.payload.stats) s.stats = msg.payload.stats;
         if (msg.payload.remote_mode !== undefined) s.remote_mode = msg.payload.remote_mode;
         if (msg.payload.title) s.title = msg.payload.title;
@@ -545,6 +547,8 @@ class RelayStore {
       full: entry.full,
       id: entry.id,
       streaming: entry.streaming,
+      detail: entry.detail,
+      diff: entry.diff,
     };
     if (e.id) {
       const i = list.findIndex((x) => x.id === e.id);

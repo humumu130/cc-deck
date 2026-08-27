@@ -71,6 +71,20 @@ function TranscriptRow({ e, open, onToggle }: { e: LogEntry; open: boolean; onTo
     );
   }
   if (e.kind === "tool_use") {
+    if (e.detail) {
+      return (
+        <Pressable style={d.trTool} onPress={onToggle} android_ripple={{ color: c.tintSoft, borderless: false }}>
+          <View style={{ flex: 1 }}>
+            <View style={{ flexDirection: "row", gap: 6, alignItems: "baseline" }}>
+              <Text style={d.trToolName}>⚙ {e.tool || "tool"}</Text>
+              <Text style={d.trToolText} numberOfLines={1}>{e.text}</Text>
+            </View>
+            {open ? <Text style={d.trDetail} selectable>{e.detail}</Text> : null}
+          </View>
+          <Text style={d.tlExpand}>{open ? "▴" : "▾"}</Text>
+        </Pressable>
+      );
+    }
     return (
       <View style={d.trTool}>
         <Text style={d.trToolName}>⚙ {e.tool || "tool"}</Text>
@@ -79,9 +93,48 @@ function TranscriptRow({ e, open, onToggle }: { e: LogEntry; open: boolean; onTo
     );
   }
   if (e.kind === "tool_result") {
+    if (e.diff && e.diff.length > 0) {
+      return (
+        <Pressable style={d.trDiffWrap} onPress={onToggle} android_ripple={{ color: c.tintSoft, borderless: false }}>
+          <Text style={d.trResult} numberOfLines={open ? undefined : 1}>
+            ↳ {open ? "收起变更 ▴" : `变更 · ${e.diff.filter((l) => l.startsWith("+")).length}+ ${e.diff.filter((l) => l.startsWith("-")).length}− ▾`}
+          </Text>
+          {open ? <DiffBlock lines={e.diff} /> : null}
+        </Pressable>
+      );
+    }
+    if (e.detail) {
+      return (
+        <Pressable onPress={onToggle} hitSlop={4}>
+          <Text style={d.trResult} numberOfLines={open ? undefined : 2}>
+            ↳ {e.text} <Text style={d.tlExpand}>{open ? "收起 ▴" : "展开 ▾"}</Text>
+          </Text>
+          {open ? <Text style={d.trDetail} selectable>{e.detail}</Text> : null}
+        </Pressable>
+      );
+    }
     return <Text style={d.trResult} numberOfLines={2}>↳ {e.text}</Text>;
   }
   return <Text style={d.trSystem}>{e.text}</Text>;
+}
+
+// diff 着色块：+/−/@@ 逐行着色（等宽），行数据由 relay 从 structuredPatch 提取
+function DiffBlock({ lines }: { lines: string[] }) {
+  const d = useThemeStyles(makeStyles);
+  return (
+    <View style={d.diffBox}>
+      {lines.map((l, i) => {
+        const st = l.startsWith("@@")
+          ? d.diffHunk
+          : l.startsWith("+")
+            ? d.diffAdd
+            : l.startsWith("-")
+              ? d.diffDel
+              : d.diffCtx;
+        return <Text key={i} style={st} selectable>{l || " "}</Text>;
+      })}
+    </View>
+  );
 }
 
 const SPIN_FRAMES = ["✶", "✸", "✹", "✺", "✹", "✸"];
@@ -524,7 +577,20 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
   },
   trToolName: { color: c.brandA, fontSize: 11.5, fontWeight: "700" },
   trToolText: { color: c.dim, fontSize: 11.5, flex: 1 },
-  trResult: { color: c.faint, fontSize: 11.5, marginBottom: 8, paddingLeft: 12 },
+  trDetail: {
+    fontFamily: "monospace", color: c.dim, fontSize: 10.5, lineHeight: 15.5,
+    marginTop: 6,
+  },
+  trDiffWrap: { paddingLeft: 12 },
+  diffBox: {
+    marginTop: 4, borderRadius: 8, borderWidth: 1, borderColor: c.line,
+    paddingVertical: 5, paddingHorizontal: 8, overflow: "hidden",
+  },
+  diffHunk: { fontFamily: "monospace", fontSize: 10, lineHeight: 15, color: c.working, backgroundColor: withA(c.working, 0.07) },
+  diffAdd: { fontFamily: "monospace", fontSize: 10, lineHeight: 15, color: c.done, backgroundColor: withA(c.done, 0.08) },
+  diffDel: { fontFamily: "monospace", fontSize: 10, lineHeight: 15, color: c.waiting, backgroundColor: withA(c.waiting, 0.07) },
+  diffCtx: { fontFamily: "monospace", fontSize: 10, lineHeight: 15, color: c.faint },
+  trResult: { color: c.faint, fontSize: 11.5, marginBottom: 8 },
   trSystem: { color: c.faint, fontSize: 11, textAlign: "center", marginBottom: 8 },
   tlExpand: { color: c.brandA, fontSize: 11, marginTop: 3 },
   empty: { color: c.faint, textAlign: "center", paddingVertical: 40, fontSize: 13 },

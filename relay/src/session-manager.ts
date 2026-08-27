@@ -225,10 +225,16 @@ export class SessionManager {
     });
   }
 
-  pushExternalLog(id: string, kind: LogEntry["kind"], text: string, tool?: string, full?: string): void {
+  pushExternalLog(
+    id: string,
+    kind: LogEntry["kind"],
+    text: string,
+    tool?: string,
+    meta?: { full?: string; detail?: string; diff?: string[] },
+  ): void {
     const s = this.sessions.get(id);
     if (!s) return;
-    const entry: LogEntry = { ts: Date.now(), kind, text, tool, ...(full ? { full } : {}) };
+    const entry: LogEntry = { ts: Date.now(), kind, text, tool, ...meta };
     s.logs.push(entry);
     if (s.logs.length > 500) s.logs.splice(0, s.logs.length - 500);
     this.bus.emit(id, "SESSION_LOG", entry);

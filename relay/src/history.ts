@@ -171,7 +171,11 @@ export function reduceHistory(events: Envelope[]): Map<string, ReplayedSession> 
       }
       case "SESSION_LOG": {
         const p = e.payload as LogEntry & { kind: LogEntry["kind"] };
-        rs.logs.push({ ts: e.ts, kind: p.kind, text: p.text, tool: p.tool });
+        // streaming 不回放：历史条目都是终态，残留光标会卡住 "▌"
+        rs.logs.push({
+          ts: e.ts, kind: p.kind, text: p.text, tool: p.tool,
+          full: p.full, id: p.id, detail: p.detail, diff: p.diff,
+        });
         if (rs.logs.length > 500) rs.logs.splice(0, rs.logs.length - 500);
         break;
       }
@@ -188,6 +192,9 @@ export function reduceHistory(events: Envelope[]): Map<string, ReplayedSession> 
       rs.state.historical = true;
       rs.logs.push({ ts: Date.now(), kind: "system", text: "Relay 重启，会话中断" });
     }
+    // 重放后不存在仍可决的等待（进程已随重启断开）：残留 waiting_request 会让
+    // 手机端给死会话渲染可操作的审批面板；外部会话重连后会重新下发真实状态
+    rs.state.waiting_request = undefined;
   }
   return out;
 }

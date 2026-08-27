@@ -107,6 +107,92 @@ export function summarizeToolUse(tool: string, input: Record<string, unknown>): 
   }
 }
 
+// ---------- P2 结构化转录：工具完整输入/输出 + diff 行 ----------
+
+const MAX_DETAIL = 4_000;
+
+function capDetail(s: string, n = MAX_DETAIL): string {
+  return s.length <= n ? s : s.slice(0, n - 1) + `… (+${s.length - n} 字符)`;
+}
+
+// 工具入参详情（CLI 体感：$ 命令 / 文件路径+old→new / 搜索式…），无实质内容返回 undefined
+export function detailToolUse(tool: string, input: Record<string, unknown>): string | undefined {
+  const s = (k: string) => (typeof input[k] === "string" ? (input[k] as string).trim() : "");
+  switch (tool) {
+    case "Bash":
+      return capDetail([`$ ${s("command")}`, s("description") ? `# ${s("description")}` : ""].filter(Boolean).join("\n"));
+    case "Edit":
+      return capDetail(
+        [s("file_path") || "文件", "──── 旧 ────", s("old_string"), "──── 新 ────", s("new_string")].join("\n"),
+        3_000,
+      );
+    case "Write":
+      return capDetail([s("file_path") || "文件", s("content")].join("\n"));
+    case "Read": {
+      const parts = [s("file_path"), input.offset ? `offset ${input.offset}` : "", input.limit ? `limit ${input.limit}` : ""];
+      const j = parts.filter(Boolean).join(" · ");
+      return j || undefined;
+    }
+    case "Grep":
+      return [`"${s("pattern")}"`, s("path") || s("glob") || "", input.i === true ? "-i" : ""].filter(Boolean).join(" · ") || undefined;
+    case "Glob":
+      return [s("pattern"), s("path")].filter(Boolean).join(" · ") || undefined;
+    case "Agent":
+      return capDetail([s("description"), s("prompt")].filter(Boolean).join("\n"), 1_500) || undefined;
+    case "WebFetch":
+      return capDetail([s("url"), s("prompt")].filter(Boolean).join("\n"), 1_000) || undefined;
+    case "WebSearch":
+      return s("query") || undefined;
+    default: {
+      try {
+        const j = JSON.stringify(input);
+        return j && j !== "{}" && j !== "[]" ? capDetail(j, 2_000) : undefined;
+      } catch {
+        return undefined;
+      }
+    }
+  }
+}
+
+// 工具输出全文（text 即全文时不需要 detail）
+export function detailToolResult(content: unknown): string | undefined {
+  let text = "";
+  if (typeof content === "string") text = content;
+  else if (Array.isArray(content))
+    text = content
+      .map((b) => (b && typeof b === "object" && "text" in b ? String((b as { text: unknown }).text) : ""))
+      .join("\n");
+  else if (content && typeof content === "object" && "text" in content)
+    text = String((content as { text: unknown }).text);
+  const one = normLines(text);
+  return one.length > 160 ? capDetail(one) : undefined;
+}
+
+// Edit/Write 结果的 structuredPatch -> 带行首 +/- 的 diff 行（手机端着色渲染）
+export function diffLines(result: unknown): string[] | undefined {
+  if (!result || typeof result !== "object") return undefined;
+  const r = result as { structuredPatch?: unknown; filePath?: unknown; file_path?: unknown; content?: unknown };
+  const file = typeof r.filePath === "string" ? r.filePath : typeof r.file_path === "string" ? r.file_path : "";
+  const out: string[] = [];
+  if (Array.isArray(r.structuredPatch) && r.structuredPatch.length > 0) {
+    if (file) out.push(`@@ ${file}`);
+    for (const h of r.structuredPatch as { lines?: unknown }[]) {
+      if (!h || !Array.isArray(h.lines)) continue;
+      for (const l of h.lines) if (typeof l === "string") out.push(l);
+    }
+  } else if (typeof r.content === "string" && r.content.length > 0) {
+    // 新建文件：无旧内容，全文即新增
+    if (file) out.push(`@@ ${file} (新文件)`);
+    const lines = r.content.split("\n");
+    if (lines[lines.length - 1] === "") lines.pop();
+    for (const l of lines) out.push("+" + l);
+  } else {
+    return undefined;
+  }
+  if (out.length === 0) return undefined;
+  return out.length > 400 ? [...out.slice(0, 400), `… (+${out.length - 400} 行)`] : out;
+}
+
 // 工具输出压缩：优先报错行，其次成功标志行（✓/passed/built...），否则取末行
 export function summarizeToolResult(content: unknown): string {
   let text = "";

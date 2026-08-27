@@ -8,7 +8,17 @@ import type { EventBus } from "./event-bus.js";
 import type { SessionManager } from "./session-manager.js";
 import type { BridgeEvent, WaitingPayload } from "./types.js";
 import { injectText, injectEsc } from "./injector.js";
-import { fullText, parseAskQuestions, summarizeToolResult, summarizeToolUse, TaskTracker, truncate } from "./summarizer.js";
+import {
+  detailToolResult,
+  detailToolUse,
+  diffLines,
+  fullText,
+  parseAskQuestions,
+  summarizeToolResult,
+  summarizeToolUse,
+  TaskTracker,
+  truncate,
+} from "./summarizer.js";
 import { deriveTitle } from "./history.js";
 
 export interface BridgeOptions {
@@ -307,7 +317,7 @@ export class Bridge {
       // 首读（relay 重启/新接入）只回放最后一条正文，thinking 不回放避免刷屏
       const emit = firstRead ? entries.filter((e) => e.kind === "assistant_text").slice(-1) : entries;
       for (const e of emit) {
-        this.mgr.pushExternalLog(id, e.kind, truncate(e.text, 400), undefined, fullText(e.text, 400));
+        this.mgr.pushExternalLog(id, e.kind, truncate(e.text, 400), undefined, { full: fullText(e.text, 400) });
       }
     } catch {}
   }
@@ -358,7 +368,9 @@ export class Bridge {
 
     if (!shouldGate) {
       this.mgr.setExternalStatus(id, "WORKING", summary);
-      this.mgr.pushExternalLog(id, "tool_use", summary, ev.tool_name);
+      this.mgr.pushExternalLog(id, "tool_use", summary, ev.tool_name, {
+        detail: detailToolUse(ev.tool_name ?? "tool", input),
+      });
       this.feedTaskTracker(id, ev.tool_name ?? "", ev.tool_input);
       return { decision: "pass" };
     }
@@ -374,7 +386,9 @@ export class Bridge {
       ...(questions.length ? { questions } : {}),
     };
     this.mgr.setExternalWaiting(id, payload);
-    this.mgr.pushExternalLog(id, "tool_use", summary, ev.tool_name);
+    this.mgr.pushExternalLog(id, "tool_use", summary, ev.tool_name, {
+      detail: detailToolUse(ev.tool_name ?? "tool", input),
+    });
     this.feedTaskTracker(id, ev.tool_name ?? "", ev.tool_input);
 
     const holdMs = this.opts.holdMs ?? DEFAULT_HOLD_MS;
@@ -394,7 +408,10 @@ export class Bridge {
     const id = this.extId(ev);
     const state = this.mgr.getExternal(id);
     if (!state) return { decision: "pass" };
-    this.mgr.pushExternalLog(id, "tool_result", summarizeToolResult(ev.tool_response));
+    this.mgr.pushExternalLog(id, "tool_result", summarizeToolResult(ev.tool_response), undefined, {
+      detail: detailToolResult(ev.tool_response),
+      diff: diffLines(ev.tool_response),
+    });
     this.feedTaskResult(id, ev.tool_response);
     this.pushAssistantTexts(id, ev.transcript_path);
     // 清除 passive WAITING（CLI 本地已处理）

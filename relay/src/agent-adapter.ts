@@ -17,6 +17,9 @@ import type {
 } from "./types.js";
 import {
   buildAnswerMessage,
+  detailToolResult,
+  detailToolUse,
+  diffLines,
   extractDiffStats,
   fullText,
   parseAskQuestions,
@@ -84,7 +87,7 @@ export interface AgentCallbacks {
   onLog(
     kind: SessionLogPayload["kind"],
     text: string,
-    meta?: { tool?: string; full?: string; id?: string; streaming?: boolean },
+    meta?: { tool?: string; full?: string; id?: string; streaming?: boolean; detail?: string; diff?: string[] },
   ): void;
   // 每回合结束（result 消息）：ok=true → DONE；ok=false → ERROR
   onTurnEnd(ok: boolean, reason: string, durationMs: number): void;
@@ -194,7 +197,10 @@ export class AgentSession {
             this.cb.onStatusChange("WORKING", this.lastSummary);
           } else if (block.type === "tool_use") {
             this.lastSummary = summarizeToolUse(block.name, block.input as Record<string, unknown>);
-            this.cb.onLog("tool_use", this.lastSummary, { tool: block.name });
+            this.cb.onLog("tool_use", this.lastSummary, {
+              tool: block.name,
+              detail: detailToolUse(block.name, block.input as Record<string, unknown>),
+            });
             const todos = this.tasks.feed(block.name, block.input);
             if (todos) this.cb.onTodos(todos);
             this.cb.onStatusChange("WORKING", this.lastSummary);
@@ -225,7 +231,10 @@ export class AgentSession {
             }
             extractDiffStats(structured ?? tr.content, this.stats, this.filesTouched);
             this.cb.onStats({ ...this.stats });
-            this.cb.onLog("tool_result", summarizeToolResult(tr.content));
+            this.cb.onLog("tool_result", summarizeToolResult(tr.content), {
+              detail: detailToolResult(structured ?? tr.content),
+              diff: diffLines(structured),
+            });
             const todos = this.tasks.feedResult(structured);
             if (todos) this.cb.onTodos(todos);
             this.cb.onStatusChange("WORKING", this.lastSummary);

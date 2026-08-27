@@ -75,6 +75,8 @@ export interface LogEntry {
   full?: string;   // 原文（text 被截断时才有；上限 FULL_TEXT_CAP）
   id?: string;     // 流式块 id：同 id 的 SESSION_LOG 客户端按原地替换（流式更新）
   streaming?: boolean; // true = 该文本块仍在生成中
+  detail?: string; // P2 转录：工具完整入参/输出（等宽展开）
+  diff?: string[]; // P2 转录：Edit/Write 的 +/- diff 行（着色渲染）
 }
 
 // ---------- 事件 payload（Relay -> 客户端） ----------
@@ -153,6 +155,8 @@ export interface SessionLogPayload {
   kind: "assistant_text" | "thinking" | "tool_use" | "tool_result" | "system" | "user_message";
   text: string;
   tool?: string;
+  detail?: string;
+  diff?: string[];
 }
 
 export type EventType =

@@ -22,6 +22,17 @@ const bus = new EventBus({ preload: kept, persistPath });
 const mgr = new SessionManager(bus, cfg);
 const adopted = mgr.adopt(replayed);
 
+// 重放会重写历史状态（非终态→ERROR、清 waiting_request），但重连客户端走
+// last_seq 补发拿不到 SNAPSHOT——为每个收养会话广播一次当前状态，补发路径也能收敛
+for (const s of mgr.snapshot()) {
+  bus.emit(s.session_id, "SESSION_UPDATED", {
+    status: s.status,
+    action_summary: s.action_summary,
+    stats: { ...s.stats },
+    ...(s.usage ? { usage: s.usage } : {}),
+  });
+}
+
 // 云桥：CCR_CLOUD_URL 配置了才启用（出站连桥，公司网络友好）
 let cloudIdentity: ReturnType<typeof loadOrCreateIdentity> | null = null;
 if (cfg.cloudUrl) {
