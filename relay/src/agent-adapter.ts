@@ -366,7 +366,8 @@ export class AgentSession {
   sendMessage(text: string, images?: string[]): void {
     this.pushUserMessage(text, images);
     const marker = images && images.length > 0 ? `（+${images.length} 图）` : "";
-    this.cb.onLog("user_message", truncate(text, 200) + marker, { full: fullText(text, 200) + marker });
+    const full = fullText(text, 200);
+    this.cb.onLog("user_message", truncate(text, 200) + marker, { full: full === undefined ? undefined : full + marker });
     this.cb.onStatusChange("WORKING", this.lastSummary);
   }
 
