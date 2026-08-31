@@ -437,6 +437,14 @@ export class Bridge {
         suggestions: [],
         decidable: false,
       });
+    } else if (/waiting for your input/i.test(msg) && state.status === "WORKING") {
+      // Esc 打断的回合不触发 Stop hook，CLI 空闲 60s 通知是唯一回退信号：
+      // 视作回合结束（状态回落 DONE + flush 排队输入），迟于真实打断 ≤60s
+      const turn = this.turnStart.get(id) ?? state.started_at;
+      this.turnStart.delete(id);
+      this.mgr.finishExternal(id, "completed", Date.now() - turn);
+      this.mgr.pushExternalLog(id, "system", "空闲回退：未收到 Stop（回合可能被打断），已标记结束");
+      if ((this.inputQueue.get(id)?.length ?? 0) > 0) void this.flushQueue(id);
     } else {
       this.mgr.pushExternalLog(id, "system", truncate(msg, 120));
     }

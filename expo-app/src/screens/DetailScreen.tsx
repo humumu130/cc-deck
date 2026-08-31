@@ -274,6 +274,11 @@ export default function DetailScreen({ sid, onBack }: { sid: string; onBack: () 
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
   const [todoOpen, setTodoOpen] = useState(false);
   const [images, setImages] = useState<string[]>([]);
+  const [queuedHint, setQueuedHint] = useState<string | null>(null);
+  const flashQueuedHint = () => {
+    setQueuedHint("已加入队列，回合结束自动发送（Esc 打断需等约 1 分钟空闲回落）");
+    setTimeout(() => setQueuedHint(null), 4000);
+  };
   const [picking, setPicking] = useState(false);
   const scrollRef = useRef<ScrollView>(null);
   const atBottom = useRef(true);
@@ -327,6 +332,7 @@ export default function DetailScreen({ sid, onBack }: { sid: string; onBack: () 
   const send = () => {
     const text = input.trim();
     if (!text && images.length === 0) return;
+    const willQueue = external && s.status !== "DONE";
     const ok = store.send(
       external ? "COMMAND_EXT_INPUT" : "COMMAND_MESSAGE",
       external
@@ -336,6 +342,7 @@ export default function DetailScreen({ sid, onBack }: { sid: string; onBack: () 
     if (ok) {
       setInput("");
       setImages([]);
+      if (willQueue) flashQueuedHint();
     }
   };
 
@@ -597,6 +604,9 @@ export default function DetailScreen({ sid, onBack }: { sid: string; onBack: () 
             ))}
           </View>
         ) : null}
+        {queuedHint ? (
+          <Text style={d.queuedHint}>{queuedHint}</Text>
+        ) : null}
         <View style={d.cmdbar}>
           {!external && !s.historical ? (
             <Pressable
@@ -818,6 +828,10 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
     borderWidth: 1, borderColor: c.line, alignItems: "center", justifyContent: "center",
   },
   imgBtnT: { fontSize: 17 },
+  queuedHint: {
+    paddingHorizontal: 14, paddingVertical: 5,
+    color: c.dim, fontSize: 11, backgroundColor: c.overlay,
+  },
   cmdbar: {
     paddingHorizontal: 12, paddingVertical: 10,
     backgroundColor: c.overlay, borderTopWidth: 1, borderTopColor: c.line,

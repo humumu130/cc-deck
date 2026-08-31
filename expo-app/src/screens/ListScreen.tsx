@@ -213,8 +213,13 @@ export default function ListScreen({ sessions, connected, connText, onOpen, onNe
   const [revealSid, setRevealSid] = useState<string | null>(null);
   const [renameTarget, setRenameTarget] = useState<SessionState | null>(null);
   const sorted = useMemo(() => {
-    const order: Record<string, number> = { WAITING: 0, WORKING: 1, ERROR: 2, DONE: 3 };
-    return [...sessions].sort((a, b) => (order[a.status] ?? 9) - (order[b.status] ?? 9) || b.started_at - a.started_at);
+    // 活跃（等待/运行/错误）置顶，其余按最近更新倒序：
+    // 新完成的会话紧跟活跃段，不再"闪现后跳到 20 个会话底部"像消失
+    const rank = (s: SessionState) =>
+      s.status === "WORKING" || s.status === "WAITING" || s.status === "ERROR" ? 0 : 1;
+    return [...sessions].sort(
+      (a, b) => rank(a) - rank(b) || (b.updated_at ?? b.started_at) - (a.updated_at ?? a.started_at),
+    );
   }, [sessions]);
 
   const counts: Record<string, number> = {};
