@@ -155,6 +155,11 @@ export function startServer(
         ws.send(JSON.stringify({ type: "COMMAND_ACK", command_id: "?", ok: false, error: "invalid JSON" }));
         return;
       }
+      if (cmd && (cmd as { type?: string }).type === "PING") {
+        // 手机应用层心跳（云/LAN 同协议）：探测 NAT 半开
+        ws.send('{"type":"PONG"}');
+        return;
+      }
       if (
         !cmd ||
         typeof cmd.command_id !== "string" ||

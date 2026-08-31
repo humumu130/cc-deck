@@ -56,6 +56,8 @@ class RelayStore {
   private lastSeq = 0;
   private reconnectDelay = 1000;
   private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
+  private hbTimer: ReturnType<typeof setInterval> | null = null;
+  private lastDownAt = 0;
   private listeners = new Set<() => void>();
   private snap: Snapshot = emptySnapshot;
   private sessions = new Map<string, SessionState>();
@@ -286,14 +288,17 @@ class RelayStore {
     this.channel = "lan";
     this.reconnectDelay = 1000;
     this.emit({ connected: true, connText: "已连接", channel: "lan" });
+    this.startHb(ws);
     ws.onclose = () => {
       if (this.ws !== ws) return;
+      this.stopHb();
       this.emit({ connected: false, connText: "已断开", channel: null });
       this.scheduleReconnect();
     };
     ws.onerror = () => {};
     ws.onmessage = (ev: WebSocketMessageEvent) => {
       if (this.ws !== ws) return;
+      this.lastDownAt = Date.now();
       let msg: Envelope | CommandAck;
       try {
         msg = JSON.parse(String(ev.data));
@@ -326,6 +331,7 @@ class RelayStore {
       if (this.ws !== ws) return;
       this.reconnectDelay = 1000;
       this.emit({ connected: true, connText: "已连接（云）", channel: "cloud" });
+      this.startHb(ws, cloud, keys);
       ws.send(
         JSON.stringify({
           to: cloud.relayDev,
@@ -335,12 +341,14 @@ class RelayStore {
     };
     ws.onclose = () => {
       if (this.ws !== ws) return;
+      this.stopHb();
       this.emit({ connected: false, connText: "已断开", channel: null });
       this.scheduleReconnect();
     };
     ws.onerror = () => {};
     ws.onmessage = (ev: WebSocketMessageEvent) => {
       if (this.ws !== ws) return;
+      this.lastDownAt = Date.now();
       let frame: { type?: string; data?: SealedBox };
       try {
         frame = JSON.parse(String(ev.data));
@@ -361,8 +369,36 @@ class RelayStore {
     };
   }
 
-  private scheduleReconnect() {
-    if (!this.cfg) return;
+  // 应用层心跳：15s 一拍保持链路流量（防公司网络 idle 掐 NAT），55s 无任何下行
+  // 判半开强制断开重连（否则要等 TCP 重传超时，分钟级黑洞）
+  private startHb(ws: WebSocket, cloud?: CloudConfig, keys?: BoxKeyPair) {
+    this.stopHb();
+    this.lastDownAt = Date.now();
+    this.hbTimer = setInterval(() => {
+      if (this.ws !== ws) {
+        this.stopHb();
+        return;
+      }
+      if (Date.now() - this.lastDownAt > 55_000) {
+        try { ws.close(); } catch {}
+        return;
+      }
+      try {
+        ws.send(cloud && keys
+          ? JSON.stringify({ to: cloud.relayDev, data: seal({ t: "ping" }, cloud.relayPubkey, keys.secretKey) })
+          : JSON.stringify({ type: "PING" }));
+      } catch {}
+    }, 15_000);
+  }
+
+  private stopHb() {
+    if (this.hbTimer) {
+      clearInterval(this.hbTimer);
+      this.hbTimer = null;
+    }
+  }
+
+  private scheduleReconnect() {    if (!this.cfg) return;
     const delay = this.reconnectDelay;
     this.reconnectDelay = Math.min(this.reconnectDelay * 2, 10000);
     this.emit({ connText: `${Math.round(delay / 1000)}s后重连` });

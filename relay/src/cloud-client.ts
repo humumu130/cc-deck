@@ -115,6 +115,11 @@ export class CloudClient {
       }
       return;
     }
+    if (inner.t === "ping") {
+      // 手机应用层心跳：探测 NAT 半开（TCP 超时需分钟级，这里压到 <1 分钟）
+      this.sendSealed(f.from, { t: "pong", ts: Date.now() });
+      return;
+    }
     // 普通命令（COMMAND_ACK 加密回发，与 ws-server 的直发 ACK 同构）
     const cmd = inner as unknown as Command;
     if (typeof cmd.command_id !== "string" || typeof cmd.type !== "string" || typeof cmd.payload !== "object" || !cmd.payload) {
