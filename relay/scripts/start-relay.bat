@@ -12,6 +12,9 @@ cd /d "%~dp0.." || exit /b 1
 
 if not defined CCR_TOKEN if exist "data\relay-token.txt" set /p CCR_TOKEN=<"data\relay-token.txt"
 if not defined CCR_TOKEN set "CCR_TOKEN=devtoken"
+rem 云桥：存在 cloud-url.txt 即启用出站云客户端（阿里云 ECS :8790，2026-08-31 上线）
+if not defined CCR_CLOUD_URL if exist "data\cloud-url.txt" set /p CCR_CLOUD_URL=<"data\cloud-url.txt"
+if not defined CCR_CLOUD_TOKEN if exist "data\cloud-bridge-token.txt" set /p CCR_CLOUD_TOKEN=<"data\cloud-bridge-token.txt"
 
 where node >nul 2>&1 || (echo [ERR] node not found in PATH >"data\relay-autostart.log" & exit /b 1)
 if not exist "node_modules\tsx\dist\cli.mjs" (

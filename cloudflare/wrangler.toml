@@ -2,11 +2,9 @@ name = "cc-cloud-bridge"
 main = "src/worker.ts"
 compatibility_date = "2025-06-01"
 
-# 本地开发用默认 token；正式部署前执行
+# 桥 token 走 secret（本机副本在 relay/data/cloud-bridge-token.txt，gitignored）：
 #   npx wrangler secret put CLOUD_TOKEN
-# 并删掉下面的 [vars]（同名 secret 与 vars 不能并存）
-[vars]
-CLOUD_TOKEN = "changeme-cloudtoken"
+# 未设置 secret 时 worker 全拒（env.CLOUD_TOKEN undefined → 401），可安全先部署
 
 [durable_objects]
 bindings = [
