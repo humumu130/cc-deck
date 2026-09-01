@@ -11,6 +11,7 @@ import { useKbHeight } from "../kb";
 
 interface Props {
   onClose?: () => void; // 有值 = 从主界面进入（可返回）
+  editId?: string | null; // 编辑已有服务器（预填表单，保存=更新条目）
 }
 
 function hostOf(wsUrl: string): string {
@@ -21,7 +22,7 @@ function hostOf(wsUrl: string): string {
   }
 }
 
-export default function SetupScreen({ onClose }: Props) {
+export default function SetupScreen({ onClose, editId }: Props) {
   const { c } = useTheme();
   const s = useThemeStyles(makeStyles);
   const snap = useRelay();
@@ -43,6 +44,18 @@ export default function SetupScreen({ onClose }: Props) {
       if (v === "0") setRemember(false);
     });
   }, []);
+  // 编辑模式：预填该服务器现有配置
+  useEffect(() => {
+    if (!editId) return;
+    void store.loadServers().then((list) => {
+      const e = list.find((x) => x.id === editId);
+      if (!e) return;
+      setName(e.name);
+      setWsUrl(e.wsUrl);
+      setToken(e.token);
+      setRemember(!!e.token);
+    });
+  }, [editId]);
   // 配对完成后 store 已更新条目，这里同步刷新列表（显示 ☁ 徽标）
   useEffect(() => {
     void reload();
@@ -81,6 +94,19 @@ export default function SetupScreen({ onClose }: Props) {
     });
   };
 
+  const saveEdit = () => {
+    const base = wsUrl.trim().replace(/\/+$/, "");
+    if (!editId || !/^wss?:\/\//.test(base)) return;
+    const tk = token.trim();
+    void store.updateServer(editId, {
+      name: name.trim() || hostOf(base),
+      wsUrl: base,
+      token: remember && tk ? tk : "",
+    }).then(() => {
+      if (onClose) onClose();
+    });
+  };
+
   const connect = (e: ServerEntry) => {
     if (!e.token) {
       // 没记令牌：预填表单让用户补输
@@ -99,6 +125,10 @@ export default function SetupScreen({ onClose }: Props) {
     void store.deleteServer(e.id).then(() => reload());
   };
 
+  // 云桥区块针对的服务器：编辑模式=被编辑的条目，否则=当前活动条目；配对走当前 LAN 连接，故要求该条目已激活
+  const cloudEntry = editId ? servers.find((e) => e.id === editId) : servers.find((e) => e.id === activeId);
+  const cloudReady = !!cloudEntry && cloudEntry.id === activeId && snap.connected && snap.channel === "lan";
+
   return (
     <SafeAreaView style={s.safe} edges={onClose ? ["top"] : []}>
       <View style={{ flex: 1 }}>
@@ -110,7 +140,7 @@ export default function SetupScreen({ onClose }: Props) {
             <Text style={s.logoText}>CC</Text>
           </LinearGradient>
           <Text style={s.h2}>Claude Code</Text>
-          <Text style={s.sub}>连接到 PC Relay</Text>
+          <Text style={s.sub}>{editId ? "编辑服务器配置" : "连接到 PC Relay"}</Text>
 
           {servers.length > 0 ? (
             <View style={s.savedBox}>
@@ -135,22 +165,31 @@ export default function SetupScreen({ onClose }: Props) {
               })}
               <View style={s.pairRow}>
                 <Pressable
-                  style={[s.pairBtn, !(snap.connected && snap.channel === "lan") && s.pairBtnOff]}
-                  disabled={snap.cloudBusy || !(snap.connected && snap.channel === "lan")}
+                  style={[s.pairBtn, !cloudReady && s.pairBtnOff]}
+                  disabled={snap.cloudBusy || !cloudReady}
                   android_ripple={{ color: c.tintSoft, borderless: false, radius: 17 }}
                   onPress={() => void store.pairCloud()}
                 >
                   <Text style={s.pairBtnT}>
-                    {snap.cloudBusy ? "配对中…" : servers.find((e) => e.id === activeId)?.cloud ? "重新配对云桥" : "配对云桥"}
+                    {snap.cloudBusy ? "配对中…" : cloudEntry?.cloud ? "重新配对云桥" : "配对云桥"}
                   </Text>
                 </Pressable>
+                {cloudEntry?.cloud ? (
+                  <Pressable
+                    style={s.unbindBtn}
+                    android_ripple={{ color: c.tintSoft, borderless: false, radius: 17 }}
+                    onPress={() => void store.updateServer(cloudEntry.id, { cloud: null }).then(() => reload())}
+                  >
+                    <Text style={s.unbindT}>解绑</Text>
+                  </Pressable>
+                ) : null}
               </View>
               {snap.cloudMsg ? (
                 <Pressable hitSlop={6} onPress={() => store.clearCloudMsg()}>
                   <Text style={s.pairMsg} numberOfLines={2}>{snap.cloudMsg}</Text>
                 </Pressable>
-              ) : !(snap.connected && snap.channel === "lan") ? (
-                <Text style={s.pairHint}>云桥配对需先在同一局域网内连接</Text>
+              ) : !cloudReady ? (
+                <Text style={s.pairHint}>{cloudEntry && cloudEntry.id !== activeId ? "该服务器未连接：先在列表中点选连接它（需同局域网）再配对云桥" : "云桥配对需先在同一局域网内连接"}</Text>
               ) : null}
             </View>
           ) : null}
@@ -197,9 +236,9 @@ export default function SetupScreen({ onClose }: Props) {
             </View>
             <Text style={s.checkLabel}>记住令牌（下次免输入）</Text>
           </Pressable>
-          <Pressable style={s.btn} android_ripple={{ color: "rgba(255,255,255,0.15)", borderless: false }} onPress={add}>
+          <Pressable style={s.btn} android_ripple={{ color: "rgba(255,255,255,0.15)", borderless: false }} onPress={editId ? saveEdit : add}>
             <LinearGradient colors={[c.brandA, c.brandB]} style={s.btnGrad}>
-              <Text style={s.btnText}>{servers.length > 0 ? "添加并连接" : "连接"}</Text>
+              <Text style={s.btnText}>{editId ? "保存修改" : servers.length > 0 ? "添加并连接" : "连接"}</Text>
             </LinearGradient>
           </Pressable>
           <Text style={s.hint}>手机需与 PC 在同一 WiFi；地址填 PC 上的 ws://IP:8787/ws</Text>
@@ -236,13 +275,18 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
   srvDel: { width: 40, height: 44, alignItems: "center", justifyContent: "center" },
   srvDelT: { color: c.faint, fontSize: 15 },
   srvCloud: { color: c.done, fontSize: 12 },
-  pairRow: { marginTop: 4, alignSelf: "flex-start" },
+  pairRow: { marginTop: 4, alignSelf: "flex-start", flexDirection: "row", gap: 8 },
   pairBtn: {
     paddingHorizontal: 16, paddingVertical: 7, borderRadius: 17, borderWidth: 1,
     borderColor: withA(c.brandA, 0.55), backgroundColor: withA(c.brandA, 0.06),
   },
   pairBtnOff: { borderColor: c.line, backgroundColor: "transparent" },
   pairBtnT: { color: c.dim, fontSize: 13, fontWeight: "600" },
+  unbindBtn: {
+    paddingHorizontal: 13, paddingVertical: 7, borderRadius: 17, borderWidth: 1,
+    borderColor: c.line,
+  },
+  unbindT: { color: c.faint, fontSize: 13, fontWeight: "600" },
   pairMsg: { color: c.dim, fontSize: 12, marginTop: 8 },
   pairHint: { color: c.faint, fontSize: 12, marginTop: 8 },
   field: { width: "100%", maxWidth: 340, marginBottom: 12 },

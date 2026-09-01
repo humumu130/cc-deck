@@ -18,6 +18,7 @@ interface Props {
   onOpen: (sid: string) => void;
   onNew: () => void;
   onSetup: () => void;
+  onEditServer: (id: string) => void;
 }
 
 function folderOf(cwd: string): string {
@@ -208,7 +209,7 @@ function SessionCard({
   );
 }
 
-export default function ListScreen({ sessions, connected, connText, onOpen, onNew, onSetup }: Props) {
+export default function ListScreen({ sessions, connected, connText, onOpen, onNew, onSetup, onEditServer }: Props) {
   const { c } = useTheme();
   const styles = useThemeStyles(makeStyles);
   const [revealSid, setRevealSid] = useState<string | null>(null);
@@ -339,7 +340,12 @@ export default function ListScreen({ sessions, connected, connText, onOpen, onNe
         }}
       />
 
-      <SettingsDrawer visible={drawerOpen} onClose={() => setDrawerOpen(false)} onSetup={onSetup} />
+      <SettingsDrawer
+        visible={drawerOpen}
+        onClose={() => setDrawerOpen(false)}
+        onSetup={onSetup}
+        onEdit={(e) => onEditServer(e.id)}
+      />
     </SafeAreaView>
   );
 }

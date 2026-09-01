@@ -51,6 +51,11 @@ export class Bridge {
   private flushing = new Set<string>();           // 正在逐条注入的会话（防并发交错）
   private named = new Set<string>();              // 已取到 CC 会话名的外部会话
   private nameMisses = new Map<string, number>(); // 取名失败计数（超过 8 次放弃，避免每事件扫目录）
+  private transcriptPaths = new Map<string, string>();  // ext id -> transcript JSONL（排队消息轮询）
+  private recentUserMsgs = new Map<string, Map<string, number>>(); // ext id -> text -> 最近记为正式消息时间
+  private queuePollTimer: NodeJS.Timeout | null = null;
+  private extFileStats = new Map<string, { files: Set<string>; added: number; deleted: number }>();
+  private extUsage = new Map<string, { input: number; output: number; cacheRead: number; cacheWrite: number; model: string }>();
 
   constructor(
     private bus: EventBus,
@@ -77,7 +82,77 @@ export class Bridge {
     const decision = await this.dispatch(ev);
     // 分发后捕获：新会话的首个事件（UserPromptSubmit/PreToolUse）在 handler 内才 ensureExternal
     if (ev.cli_pid && ev.cli_pid > 0) this.mgr.setExternalCliPid(this.extId(ev), ev.cli_pid);
+    if (ev.transcript_path) {
+      this.transcriptPaths.set(this.extId(ev), ev.transcript_path);
+      this.ensureQueuePoll();
+    }
     return decision;
+  }
+
+  // 5s 轮询 transcript：PC 端敲字排队（queue-operation enqueue）发生在任意时刻，
+  // 只靠 hook 触发的增量读会有长工具调用期间的盲区
+  private ensureQueuePoll(): void {
+    if (this.queuePollTimer) return;
+    this.queuePollTimer = setInterval(() => {
+      if (this.transcriptPaths.size > 60) this.transcriptPaths.clear();
+      for (const [id, p] of this.transcriptPaths) this.pushAssistantTexts(id, p);
+    }, 5000);
+    this.queuePollTimer.unref();
+  }
+
+  // 记账"该文本近期已晋升为正式消息"：transcript 里 enqueue 与晋升可能同批读到，
+  // 不去重会把已处理的消息再塞回 pending（手机双气泡）
+  private noteUserMsg(id: string, text: string): void {
+    let m = this.recentUserMsgs.get(id);
+    if (!m) {
+      m = new Map();
+      this.recentUserMsgs.set(id, m);
+    }
+    m.set(text.trim(), Date.now());
+    if (m.size > 40) {
+      const cutoff = Date.now() - 10 * 60_000;
+      for (const [k, ts] of m) if (ts < cutoff) m.delete(k);
+    }
+  }
+
+  private recentlyLogged(id: string, text: string): boolean {
+    const ts = this.recentUserMsgs.get(id)?.get(text.trim());
+    return ts !== undefined && Date.now() - ts < 60_000;
+  }
+
+  // PC 端敲字排队：与手机注入同构地进 pending_inputs，手机立即显示"排队中"
+  private onQueueEnqueue(id: string, content: string): void {
+    const state = this.mgr.getExternal(id);
+    if (!state) return;
+    const text = truncate(content.trim(), 300);
+    if (!text || this.recentlyLogged(id, text)) return;
+    const pending = state.pending_inputs ?? [];
+    if (pending.some((p) => p.text === text)) return; // 手机注入回显（extInput）已进队
+    this.mgr.setExternalPending(id, [...pending, { text, ts: Date.now() }]);
+  }
+
+  // steering 中途交付（attachment queued_command，不触发 UserPromptSubmit）：
+  // 出 pending + 记正式消息；有钩子的路径仍由 promotePending 处理
+  private onSteerDelivered(id: string, prompt: string): void {
+    const state = this.mgr.getExternal(id);
+    if (!state) return;
+    const text = truncate(prompt.trim(), 300);
+    if (!text || this.recentlyLogged(id, text)) return;
+    const pending = (state.pending_inputs ?? []).filter((p) => p.text !== text);
+    if (pending.length !== (state.pending_inputs?.length ?? 0)) {
+      this.mgr.setExternalPending(id, pending);
+    }
+    this.noteUserMsg(id, text);
+    this.mgr.pushExternalLog(id, "user_message", text);
+  }
+
+  // 手动撤回排队消息（remove 且无 attachment 配对）：FIFO 出队一条
+  private onQueueDiscard(id: string, count: number): void {
+    const state = this.mgr.getExternal(id);
+    if (!state || count <= 0) return;
+    const pending = [...(state.pending_inputs ?? [])];
+    while (count-- > 0 && pending.length) pending.shift();
+    this.mgr.setExternalPending(id, pending);
   }
 
   private async dispatch(ev: BridgeEvent): Promise<BridgeDecision> {
@@ -150,6 +225,7 @@ export class Bridge {
     const promoted = list[i];
     list.splice(i, 1);
     this.mgr.setExternalPending(sessionId, list);
+    this.noteUserMsg(sessionId, promoted.text);
     this.mgr.pushExternalLog(sessionId, "user_message", truncate(promoted.text, 300));
     return true;
   }
@@ -244,6 +320,7 @@ export class Bridge {
     if (!this.named.has(id) && ev.prompt) this.mgr.requestSmartTitle(id, ev.prompt);
     this.mgr.setExternalStatus(id, "WORKING", truncate(ev.prompt ?? "新回合", 60), turnStartedAt);
     if (!this.promotePending(id, ev.prompt ?? "")) {
+      this.noteUserMsg(id, ev.prompt ?? "");
       this.mgr.pushExternalLog(id, "user_message", truncate(ev.prompt ?? "", 300));
     }
     void state;
@@ -314,11 +391,48 @@ export class Bridge {
       if (end < 0) return;
       this.transcriptOffsets.set(id, start + Buffer.byteLength(raw.slice(0, end + 1), "utf-8"));
       const entries: { kind: "assistant_text" | "thinking"; text: string }[] = [];
+      const enqueues: string[] = [];
+      const steers: string[] = [];
+      let removes = 0;
+      // token 用量/模型：assistant 条目自带 usage（逐条 API 调用量，累加为会话总量）
+      let usageIn = 0;
+      let usageOut = 0;
+      let usageCr = 0;
+      let usageCw = 0;
+      let usageSeen = false;
+      let model = "";
       for (const line of raw.slice(0, end).split("\n")) {
         // 宽容匹配：标准 CLI 转录是紧凑 JSON，但手写/第三方工具可能带空格
+        if (/"type":\s*"queue-operation"/.test(line)) {
+          try {
+            const j = JSON.parse(line) as { operation?: string; content?: string };
+            if (j.operation === "enqueue" && typeof j.content === "string" && j.content.trim()) enqueues.push(j.content);
+            else if (j.operation === "remove") removes++;
+          } catch {}
+          continue;
+        }
+        if (/"type":\s*"attachment"/.test(line)) {
+          try {
+            const j = JSON.parse(line) as { attachment?: { type?: string; prompt?: string } };
+            if (j.attachment?.type === "queued_command" && typeof j.attachment.prompt === "string" && j.attachment.prompt.trim()) {
+              steers.push(j.attachment.prompt);
+            }
+          } catch {}
+          continue;
+        }
         if (!/"type":\s*"assistant"/.test(line)) continue;
         try {
-          const j = JSON.parse(line) as { message?: { content?: unknown[] } };
+          const j = JSON.parse(line) as { message?: { content?: unknown[]; usage?: Record<string, unknown>; model?: unknown } };
+          const mu = j.message?.usage;
+          if (mu && typeof mu === "object") {
+            const inc = (v: unknown) => (typeof v === "number" && v > 0 ? v : 0);
+            usageIn += inc(mu.input_tokens);
+            usageOut += inc(mu.output_tokens);
+            usageCr += inc(mu.cache_read_input_tokens);
+            usageCw += inc(mu.cache_creation_input_tokens);
+            usageSeen = true;
+          }
+          if (typeof j.message?.model === "string" && j.message.model) model = j.message.model;
           const content = j.message?.content;
           if (!Array.isArray(content)) continue;
           const texts: string[] = [];
@@ -336,13 +450,81 @@ export class Bridge {
           if (tx) entries.push({ kind: "assistant_text", text: tx });
         } catch {}
       }
-      if (!entries.length) return;
-      // 首读（relay 重启/新接入）只回放最后一条正文，thinking 不回放避免刷屏
+      // 首读（relay 重启/新接入）只回放最后一条正文，thinking 不回放避免刷屏；排队台账不回放（陈旧）
       const emit = firstRead ? entries.filter((e) => e.kind === "assistant_text").slice(-1) : entries;
       for (const e of emit) {
         this.mgr.pushExternalLog(id, e.kind, truncate(e.text, 400), undefined, { full: fullText(e.text, 400) });
       }
+      if (!firstRead) {
+        for (const t of enqueues) this.onQueueEnqueue(id, t);
+        for (const t of steers) this.onSteerDelivered(id, t);
+        if (removes > steers.length) this.onQueueDiscard(id, removes - steers.length);
+      }
+      if (usageSeen || model) {
+        // 首读以窗口内条目做种子（relay 重启后的近似值）；此后增量累加
+        let u = this.extUsage.get(id);
+        if (!u || firstRead) {
+          if (this.extUsage.size > 60) this.extUsage.clear();
+          u = { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, model: "" };
+          this.extUsage.set(id, u);
+        }
+        u.input += usageIn;
+        u.output += usageOut;
+        u.cacheRead += usageCr;
+        u.cacheWrite += usageCw;
+        if (model) u.model = model;
+        this.mgr.setExternalUsage(
+          id,
+          { input_tokens: u.input, output_tokens: u.output, cache_read_input_tokens: u.cacheRead, cache_creation_input_tokens: u.cacheWrite },
+          u.model || undefined,
+        );
+      }
     } catch {}
+  }
+
+  // 文件改动统计：Edit/Write/MultiEdit/NotebookEdit 结果的 +/- 行累计（统计页数据源）
+  private feedFileStats(id: string, ev: BridgeEvent): void {
+    const tool = ev.tool_name ?? "";
+    if (tool !== "Edit" && tool !== "Write" && tool !== "MultiEdit" && tool !== "NotebookEdit") return;
+    const r = ev.tool_response as
+      | { structuredPatch?: unknown; content?: unknown; filePath?: unknown; file_path?: unknown }
+      | null
+      | undefined;
+    if (!r || typeof r !== "object") return;
+    let added = 0;
+    let deleted = 0;
+    if (Array.isArray(r.structuredPatch)) {
+      for (const h of r.structuredPatch as { lines?: unknown }[]) {
+        if (!h || !Array.isArray(h.lines)) continue;
+        for (const l of h.lines as unknown[]) {
+          if (typeof l !== "string" || !l) continue;
+          if (l.startsWith("+")) added++;
+          else if (l.startsWith("-")) deleted++;
+        }
+      }
+    } else if (typeof r.content === "string" && r.content) {
+      const lines = r.content.split("\n");
+      if (lines[lines.length - 1] === "") lines.pop();
+      added += lines.length;
+    } else {
+      return;
+    }
+    const input = (ev.tool_input ?? {}) as { file_path?: unknown };
+    const file =
+      typeof r.filePath === "string" ? r.filePath :
+      typeof r.file_path === "string" ? r.file_path :
+      typeof input.file_path === "string" ? input.file_path :
+      "(未知文件)";
+    let st = this.extFileStats.get(id);
+    if (!st) {
+      st = { files: new Set(), added: 0, deleted: 0 };
+      if (this.extFileStats.size > 60) this.extFileStats.clear();
+      this.extFileStats.set(id, st);
+    }
+    st.files.add(file);
+    st.added += added;
+    st.deleted += deleted;
+    this.mgr.setExternalStats(id, { files_changed: st.files.size, lines_added: st.added, lines_deleted: st.deleted });
   }
 
   private feedTaskTracker(id: string, tool: string, input: unknown): void {
@@ -438,6 +620,7 @@ export class Bridge {
       diff: diffLines(ev.tool_response),
     });
     this.feedTaskResult(id, ev.tool_response);
+    this.feedFileStats(id, ev);
     this.pushAssistantTexts(id, ev.transcript_path);
     // 清除 passive WAITING（CLI 本地已处理）
     if (state.status === "WAITING" && state.waiting_request?.decidable === false) {
@@ -486,8 +669,10 @@ export class Bridge {
     const kept: PendingInput[] = [];
     for (const p of state.pending_inputs ?? []) {
       const qi = avail.findIndex((t) => t.trim() === p.text);
-      if (qi === -1) this.mgr.pushExternalLog(id, "user_message", truncate(p.text, 300));
-      else {
+      if (qi === -1) {
+        this.noteUserMsg(id, p.text);
+        this.mgr.pushExternalLog(id, "user_message", truncate(p.text, 300));
+      } else {
         avail.splice(qi, 1); // 只做匹配记账，不动原队列（flushQueue 随后要注入）
         kept.push(p);
       }

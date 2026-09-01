@@ -11,11 +11,22 @@ import { withA, type ThemeColors } from "../theme";
 const FILL = { position: "absolute", left: 0, right: 0, top: 0, bottom: 0 } as const;
 
 const FONT_OPTS: { k: ProcessFont; label: string }[] = [
-  { k: "compact", label: "紧凑" },
   { k: "normal", label: "标准" },
+  { k: "compact", label: "紧凑" },
+  { k: "hidden", label: "隐藏" },
 ];
 
-export default function SettingsDrawer({ visible, onClose, onSetup }: { visible: boolean; onClose: () => void; onSetup: () => void }) {
+export default function SettingsDrawer({
+  visible,
+  onClose,
+  onSetup,
+  onEdit,
+}: {
+  visible: boolean;
+  onClose: () => void;
+  onSetup: () => void;
+  onEdit: (e: ServerEntry) => void;
+}) {
   const { c, mode, toggle } = useTheme();
   const d = useThemeStyles(makeStyles);
   const insets = useSafeAreaInsets();
@@ -38,13 +49,18 @@ export default function SettingsDrawer({ visible, onClose, onSetup }: { visible:
 
   const pick = (e: ServerEntry) => {
     if (!e.token) {
-      // 没存令牌：跳配置页补输
+      // 没存令牌：跳编辑页补输（预填地址/名称）
       onClose();
-      onSetup();
+      onEdit(e);
       return;
     }
     void store.connectServer(e).then(() => setActiveId(e.id));
     onClose();
+  };
+
+  const edit = (e: ServerEntry) => {
+    onClose();
+    onEdit(e);
   };
 
   const remove = (e: ServerEntry) => {
@@ -54,7 +70,7 @@ export default function SettingsDrawer({ visible, onClose, onSetup }: { visible:
     });
   };
 
-  const translateX = x.interpolate({ inputRange: [0, 1], outputRange: [-320, 0] });
+  const translateX = x.interpolate({ inputRange: [0, 1], outputRange: [-240, 0] });
   const scrimOp = x.interpolate({ inputRange: [0, 1], outputRange: [0, 0.55] });
 
   return (
@@ -69,7 +85,7 @@ export default function SettingsDrawer({ visible, onClose, onSetup }: { visible:
           </LinearGradient>
           <View style={{ flex: 1, minWidth: 0 }}>
             <Text style={d.nameT}>Claude Code</Text>
-            <Text style={d.verT}>手机遥控 · v0.2.16</Text>
+            <Text style={d.verT}>移动工作台 · v0.2.17</Text>
           </View>
         </View>
 
@@ -87,6 +103,9 @@ export default function SettingsDrawer({ visible, onClose, onSetup }: { visible:
                   </View>
                   <Text style={d.srvUrl} numberOfLines={1}>{e.wsUrl}</Text>
                 </Pressable>
+                <Pressable style={d.srvEdit} android_ripple={{ color: c.tintSoft, borderless: false, radius: 13 }} onPress={() => edit(e)}>
+                  <Text style={d.srvEditT}>✎</Text>
+                </Pressable>
                 <Pressable style={d.srvDel} android_ripple={{ color: withA(c.waiting, 0.15), borderless: false, radius: 13 }} onPress={() => remove(e)}>
                   <Text style={d.srvDelT}>✕</Text>
                 </Pressable>
@@ -101,7 +120,7 @@ export default function SettingsDrawer({ visible, onClose, onSetup }: { visible:
 
         <Text style={d.secT}>显示</Text>
         <View style={d.rowStatic}>
-          <Text style={d.rowT}>过程消息字号</Text>
+          <Text style={d.rowT}>过程消息</Text>
           <View style={d.seg}>
             {FONT_OPTS.map((o) => (
               <Pressable
@@ -126,7 +145,7 @@ export default function SettingsDrawer({ visible, onClose, onSetup }: { visible:
             </Pressable>
           </View>
         </View>
-        <Text style={d.tipT}>过程消息 = 工具调用 / 结果 / 系统提示；紧凑即小一号显示。</Text>
+        <Text style={d.tipT}>过程消息 = 工具调用 / 结果 / 系统提示；紧凑小一号+淡化，隐藏则整行不显示（思考内容保留）。</Text>
       </Animated.View>
     </View>
   );
@@ -136,7 +155,7 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
   root: { ...FILL, zIndex: 60, flexDirection: "row" },
   scrim: { ...FILL, backgroundColor: "#000" },
   panel: {
-    width: 300, height: "100%", backgroundColor: c.bg,
+    width: 225, height: "100%", backgroundColor: c.bg,
     borderRightWidth: 1, borderColor: c.line, paddingTop: 18, paddingHorizontal: 16,
   },
   head: { flexDirection: "row", alignItems: "center", gap: 12, paddingBottom: 16, borderBottomWidth: 1, borderBottomColor: c.line },
@@ -157,6 +176,8 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
   srvName: { color: c.text, fontSize: 13.5, fontWeight: "600", flexShrink: 1 },
   srvUrl: { color: c.faint, fontSize: 10.5, marginTop: 1.5 },
   srvCloud: { color: c.done, fontSize: 11.5 },
+  srvEdit: { width: 34, height: 42, alignItems: "center", justifyContent: "center" },
+  srvEditT: { color: c.dim, fontSize: 13.5 },
   srvDel: { width: 36, height: 42, alignItems: "center", justifyContent: "center" },
   srvDelT: { color: c.faint, fontSize: 14 },
   addRow: {

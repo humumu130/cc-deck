@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { Animated, BackHandler, Image, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
+import { Animated, BackHandler, Image, PermissionsAndroid, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import * as ImagePicker from "expo-image-picker";
 import * as ImageManipulator from "expo-image-manipulator";
@@ -10,6 +10,7 @@ import { store, useRelay } from "../store";
 import type { LogEntry, SessionState, WaitingPayload } from "../protocol";
 import { useKbHeight } from "../kb";
 import { useProcessFont } from "../display-settings";
+import { voice } from "../voice";
 import { MdText } from "../md";
 import RenameModal from "./RenameModal";
 import StatsModal from "./StatsModal";
@@ -47,10 +48,13 @@ let thinkShown = false;
 let ctrlCollapsed = false;
 
 // 转录行：user=右气泡 / assistant=正文流式 / tool=紧凑卡片 / system=居中弱化
-// 转录字号分级：过程消息（工具/结果/系统/思考）比消息（用户/assistant）小一档，可在设置抽屉调
+// 转录字号分级：过程消息（工具/结果/系统/思考）比消息（用户/assistant）小一档，可在设置抽屉调。
+// 紧凑档双维度拉开差距：字号小 3px + 整体降不透明度（procOp），保证档位切换一眼可辨
 const PROC_FONT = {
-  compact: { tool: 9.5, sys: 9, result: 9.5, thinkHead: 9.5, think: 10.5, thinkLH: 15 },
-  normal: { tool: 11.5, sys: 11, result: 11.5, thinkHead: 11.5, think: 12.5, thinkLH: 18 },
+  compact: { tool: 8.5, sys: 8, result: 8.5, thinkHead: 8.5, think: 10, thinkLH: 14, op: 0.75 },
+  normal: { tool: 11.5, sys: 11, result: 11.5, thinkHead: 11.5, think: 12.5, thinkLH: 18, op: 1 },
+  // 隐藏档：工具/结果/系统行整行不渲染，思考沿用紧凑小字号
+  hidden: { tool: 8.5, sys: 8, result: 8.5, thinkHead: 8.5, think: 10, thinkLH: 14, op: 0.75 },
 } as const;
 
 function TranscriptRow({ e, open, onToggle }: { e: LogEntry; open: boolean; onToggle: () => void }) {
@@ -70,7 +74,7 @@ function TranscriptRow({ e, open, onToggle }: { e: LogEntry; open: boolean; onTo
     const src = e.full ?? e.text;
     return (
       <Pressable
-        style={d.trThink}
+        style={[d.trThink, { opacity: pf.op }]}
         onPress={onToggle}
         android_ripple={{ color: c.tintSoft, borderless: false }}
       >
@@ -96,7 +100,7 @@ function TranscriptRow({ e, open, onToggle }: { e: LogEntry; open: boolean; onTo
   if (e.kind === "tool_use") {
     if (e.detail) {
       return (
-        <Pressable style={d.trTool} onPress={onToggle} android_ripple={{ color: c.tintSoft, borderless: false }}>
+        <Pressable style={[d.trTool, { opacity: pf.op }]} onPress={onToggle} android_ripple={{ color: c.tintSoft, borderless: false }}>
           <View style={{ flex: 1 }}>
             <View style={{ flexDirection: "row", gap: 6, alignItems: "baseline" }}>
               <Text style={[d.trToolName, { fontSize: pf.tool }]}>⚙ {e.tool || "tool"}</Text>
@@ -109,7 +113,7 @@ function TranscriptRow({ e, open, onToggle }: { e: LogEntry; open: boolean; onTo
       );
     }
     return (
-      <View style={d.trTool}>
+      <View style={[d.trTool, { opacity: pf.op }]}>
         <Text style={[d.trToolName, { fontSize: pf.tool }]}>⚙ {e.tool || "tool"}</Text>
         <Text style={[d.trToolText, { fontSize: pf.tool }]} numberOfLines={2}>{e.text}</Text>
       </View>
@@ -118,7 +122,7 @@ function TranscriptRow({ e, open, onToggle }: { e: LogEntry; open: boolean; onTo
   if (e.kind === "tool_result") {
     if (e.diff && e.diff.length > 0) {
       return (
-        <Pressable style={d.trDiffWrap} onPress={onToggle} android_ripple={{ color: c.tintSoft, borderless: false }}>
+        <Pressable style={[d.trDiffWrap, { opacity: pf.op }]} onPress={onToggle} android_ripple={{ color: c.tintSoft, borderless: false }}>
           <Text style={[d.trResult, { fontSize: pf.result }]} numberOfLines={open ? undefined : 1}>
             ↳ {open ? "收起变更 ▴" : `变更 · ${e.diff.filter((l) => l.startsWith("+")).length}+ ${e.diff.filter((l) => l.startsWith("-")).length}− ▾`}
           </Text>
@@ -128,7 +132,7 @@ function TranscriptRow({ e, open, onToggle }: { e: LogEntry; open: boolean; onTo
     }
     if (e.detail) {
       return (
-        <Pressable onPress={onToggle} hitSlop={4}>
+        <Pressable onPress={onToggle} hitSlop={4} style={{ opacity: pf.op }}>
           <Text style={[d.trResult, { fontSize: pf.result }]} numberOfLines={open ? undefined : 2}>
             ↳ {e.text} <Text style={d.tlExpand}>{open ? "收起 ▴" : "展开 ▾"}</Text>
           </Text>
@@ -136,9 +140,9 @@ function TranscriptRow({ e, open, onToggle }: { e: LogEntry; open: boolean; onTo
         </Pressable>
       );
     }
-    return <Text style={[d.trResult, { fontSize: pf.result }]} numberOfLines={2}>↳ {e.text}</Text>;
+    return <Text style={[d.trResult, { fontSize: pf.result, opacity: pf.op }]} numberOfLines={2}>↳ {e.text}</Text>;
   }
-  return <Text style={[d.trSystem, { fontSize: pf.sys }]}>{e.text}</Text>;
+  return <Text style={[d.trSystem, { fontSize: pf.sys, opacity: pf.op }]}>{e.text}</Text>;
 }
 
 // diff 着色块：+/−/@@ 逐行着色（等宽），行数据由 relay 从 structuredPatch 提取
@@ -325,7 +329,13 @@ export default function DetailScreen({ sid, onBack }: { sid: string; onBack: () 
 
   // 转录跟随：直接 filter 不做 useMemo（logs 引用每次更新都变）；仅当用户停在底部时自动滚
   const logs = s ? store.timelineOf(sid) : [];
-  const shown = logs.filter((e) => matchFilter(e.kind, filter) && (e.kind !== "thinking" || showThink));
+  const procFont = useProcessFont();
+  const shown = logs.filter(
+    (e) =>
+      matchFilter(e.kind, filter) &&
+      (e.kind !== "thinking" || showThink) &&
+      !(procFont === "hidden" && (e.kind === "tool_use" || e.kind === "tool_result" || e.kind === "system")),
+  );
   const lastEntry = shown.length ? shown[shown.length - 1] : null;
   const lastLen = lastEntry ? (lastEntry.full ?? lastEntry.text).length : 0;
   useEffect(() => {
@@ -342,6 +352,28 @@ export default function DetailScreen({ sid, onBack }: { sid: string; onBack: () 
     });
     return () => sub.remove();
   }, [onBack]);
+
+  // 语音输入状态与事件订阅（钩子须在下方早退 return 之前）
+  const [listening, setListening] = useState(false);
+  const [voiceHint, setVoiceHint] = useState<string | null>(null);
+  const voiceRef = useRef({ partial: "", final: "", resolved: false });
+  useEffect(() => {
+    const sub = voice.subscribe((ev) => {
+      if (ev.type === "partial") {
+        voiceRef.current.partial = ev.text;
+        setInput(ev.text);
+      } else if (ev.type === "final") {
+        voiceRef.current.final = ev.text;
+        voiceRef.current.resolved = true;
+      } else {
+        setListening(false);
+        voice.cancel();
+        // 7=NO_MATCH 6=SPEECH_TIMEOUT：安静松手不算错误；其余提示
+        if (ev.code !== 7 && ev.code !== 6) setVoiceHintOnce("语音识别出错（" + ev.code + "），请重试");
+      }
+    });
+    return () => sub.remove();
+  }, []);
 
   if (!s) {
     return (
@@ -364,8 +396,8 @@ export default function DetailScreen({ sid, onBack }: { sid: string; onBack: () 
   // WORKING 状态行移入对话流（类 CLI），不再占顶栏
   const showStrip = s.status === "ERROR" || (s.status === "WAITING" && !bannerVisible);
 
-  const send = () => {
-    const text = input.trim();
+  const send = (override?: string) => {
+    const text = (override ?? input).trim();
     if (!text && images.length === 0) return;
     const willQueue = external && s.status === "WAITING";
     const ok = store.send(
@@ -379,6 +411,55 @@ export default function DetailScreen({ sid, onBack }: { sid: string; onBack: () 
       setImages([]);
       if (willQueue) flashQueuedHint();
     }
+  };
+
+  // 语音输入：按住说话，partial 实时进输入框，松手 stopListening 等 final 发送（超时兜底用 partial）
+  const setVoiceHintOnce = (t: string) => {
+    setVoiceHint(t);
+    setTimeout(() => setVoiceHint(null), 3500);
+  };
+  const startVoice = async () => {
+    if (listening || !canCmd) return;
+    try {
+      const res = await PermissionsAndroid.request("android.permission.RECORD_AUDIO");
+      if (res !== PermissionsAndroid.RESULTS.GRANTED) {
+        setVoiceHintOnce("需要麦克风权限才能语音输入");
+        return;
+      }
+    } catch {
+      setVoiceHintOnce("无法申请麦克风权限");
+      return;
+    }
+    if (!(await voice.available())) {
+      setVoiceHintOnce("本机无语音识别服务");
+      return;
+    }
+    voiceRef.current = { partial: "", final: "", resolved: false };
+    setInput("");
+    voice.start();
+    setListening(true);
+  };
+  const endVoice = () => {
+    if (!listening) return;
+    setListening(false);
+    voice.stop();
+    const t0 = Date.now();
+    const waitFinal = () => {
+      const v = voiceRef.current;
+      if (v.resolved) {
+        const text = (v.final || v.partial).trim();
+        if (text) send(text);
+        return;
+      }
+      if (Date.now() - t0 > 1500) {
+        voice.cancel();
+        const text = v.partial.trim();
+        if (text) send(text);
+      } else {
+        setTimeout(waitFinal, 60);
+      }
+    };
+    waitFinal();
   };
 
   // 相册选图 → 统一转 JPEG/长边≤1568（base64 上送）
@@ -665,6 +746,9 @@ export default function DetailScreen({ sid, onBack }: { sid: string; onBack: () 
         {queuedHint ? (
           <Text style={d.queuedHint}>{queuedHint}</Text>
         ) : null}
+        {voiceHint ? (
+          <Text style={d.queuedHint}>{voiceHint}</Text>
+        ) : null}
         <View style={d.cmdbar}>
           {!external && !s.historical ? (
             <Pressable
@@ -676,16 +760,28 @@ export default function DetailScreen({ sid, onBack }: { sid: string; onBack: () 
               <Text style={d.imgBtnT}>📷</Text>
             </Pressable>
           ) : null}
+          <Pressable
+            style={[d.imgBtn, listening && d.micOn, !canCmd && { opacity: 0.4 }]}
+            android_ripple={{ color: c.tintSoft, borderless: false, radius: 13 }}
+            onPressIn={() => void startVoice()}
+            onPressOut={endVoice}
+            disabled={!canCmd}
+          >
+            <Text style={[d.imgBtnT, { color: listening ? c.brandA : undefined }]}>🎤</Text>
+          </Pressable>
           <TextInput
-            style={d.input}
+            style={[d.input, listening && d.inputListening]}
             value={input}
             onChangeText={setInput}
-            placeholder={external ? "发送到终端（CLI 忙时自动排队）" : s.historical ? "继续对话（恢复会话）…" : "发送消息…"}
+            placeholder={listening ? "正在听，松开发送…" : external ? "发送到终端（CLI 忙时自动排队）" : s.historical ? "继续对话（恢复会话）…" : "发送消息…"}
             placeholderTextColor={c.faint}
             editable={canCmd}
             multiline
+            returnKeyType="send"
+            blurOnSubmit={false}
+            onSubmitEditing={() => send()}
           />
-          <Pressable style={[d.sendBtn, (!canCmd || (!input.trim() && images.length === 0)) && { opacity: 0.4 }]} android_ripple={{ color: "rgba(255,255,255,0.2)", borderless: false }} onPress={send} disabled={!canCmd}>
+          <Pressable style={[d.sendBtn, (!canCmd || (!input.trim() && images.length === 0)) && { opacity: 0.4 }]} android_ripple={{ color: "rgba(255,255,255,0.2)", borderless: false }} onPress={() => send()} disabled={!canCmd}>
             <Text style={d.sendT}>➤</Text>
           </Pressable>
         </View>
@@ -901,6 +997,8 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
     borderWidth: 1, borderColor: c.line, alignItems: "center", justifyContent: "center",
   },
   imgBtnT: { fontSize: 17 },
+  micOn: { backgroundColor: c.tintStrong, borderColor: withA(c.brandA, 0.55) },
+  inputListening: { borderColor: c.brandA },
   queuedHint: {
     paddingHorizontal: 14, paddingVertical: 5,
     color: c.dim, fontSize: 11, backgroundColor: c.overlay,

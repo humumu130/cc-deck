@@ -285,6 +285,36 @@ const ren2Id = send("COMMAND_RENAME", { session_id: extId("cli-1"), title: "   "
 const ack24 = await waitAck(ren2Id);
 assert(ack24.ok === false, "empty rename rejected");
 
+// 25. PC 端敲字排队（transcript queue-operation）→ pending 回显；steering 交付（attachment）→ 晋升正式消息；重复 enqueue 去重
+{
+  const { appendFileSync, writeFileSync } = await import("node:fs");
+  const T = fileURLToPath(new URL("../data/test-transcript.jsonl", import.meta.url));
+  rmSync(T, { force: true });
+  writeFileSync(T, JSON.stringify({ type: "assistant", message: { role: "assistant", content: [{ type: "text", text: "基线" }] } }) + "\n");
+  const umCount = (t: string) =>
+    events.filter((e) => e.type === "SESSION_LOG" && (e.payload as { kind?: string; text?: string }).kind === "user_message" && (e.payload as { text: string }).text === t).length;
+  const before25 = umCount("PC敲字排队消息");
+  // 首个带 transcript 的事件：建立偏移（首读只取最后一条正文）
+  await hook({ event: "UserPromptSubmit", prompt: "排队测试回合", cli_pid: 4321, transcript_path: T });
+  await hook({ event: "PostToolUse", tool_name: "Bash", tool_response: "ok", transcript_path: T });
+  // 用户在 PC 终端敲字 → CLI 写 enqueue 台账 → 下一次增量读补进 pending_inputs
+  appendFileSync(T, JSON.stringify({ type: "queue-operation", operation: "enqueue", content: "PC敲字排队消息" }) + "\n");
+  await hook({ event: "PostToolUse", tool_name: "Bash", tool_response: "ok", transcript_path: T });
+  assert(pendOf(extId("cli-1")).some((p) => p.text === "PC敲字排队消息"), "PC-typed enqueue reflected in pending_inputs");
+  // steering 中途交付（remove + attachment，无 UserPromptSubmit）→ 出 pending + 记正式消息
+  appendFileSync(T, JSON.stringify({ type: "queue-operation", operation: "remove" }) + "\n");
+  appendFileSync(T, JSON.stringify({ type: "attachment", attachment: { type: "queued_command", prompt: "PC敲字排队消息" } }) + "\n");
+  await hook({ event: "PostToolUse", tool_name: "Bash", tool_response: "ok", transcript_path: T });
+  assert(!pendOf(extId("cli-1")).some((p) => p.text === "PC敲字排队消息"), "steered msg leaves pending on delivery");
+  assert(umCount("PC敲字排队消息") === before25 + 1, "steered msg logged as user_message exactly once");
+  // 已晋升的文本再次 enqueue（陈旧台账）→ 不回塞 pending
+  appendFileSync(T, JSON.stringify({ type: "queue-operation", operation: "enqueue", content: "PC敲字排队消息" }) + "\n");
+  await hook({ event: "PostToolUse", tool_name: "Bash", tool_response: "ok", transcript_path: T });
+  assert(!pendOf(extId("cli-1")).some((p) => p.text === "PC敲字排队消息"), "stale enqueue of promoted text not re-queued");
+  assert(umCount("PC敲字排队消息") === before25 + 1, "no duplicate user_message from stale enqueue");
+  rmSync(T, { force: true });
+}
+
 wsCur!.close();
 await wait(300);
 console.log("\nBRIDGE TESTS PASSED");

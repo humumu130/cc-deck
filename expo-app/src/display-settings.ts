@@ -2,7 +2,7 @@
 import { useEffect, useState } from "react";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 
-export type ProcessFont = "compact" | "normal";
+export type ProcessFont = "compact" | "normal" | "hidden";
 
 let processFont: ProcessFont = "compact";
 const listeners = new Set<() => void>();
@@ -36,7 +36,7 @@ export function useProcessFont(): ProcessFont {
 export async function loadDisplaySettings(): Promise<void> {
   try {
     const v = (await AsyncStorage.getItem("cc.display.processFont")) as ProcessFont | null;
-    if (v === "compact" || v === "normal") processFont = v;
+    if (v === "compact" || v === "normal" || v === "hidden") processFont = v;
   } catch {}
   notify();
 }

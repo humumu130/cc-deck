@@ -47,7 +47,8 @@ function Shell() {
   const [hasCfg, setHasCfg] = useState(false);
   const [detail, setDetail] = useState<string | null>(null);
   const [sheet, setSheet] = useState(false);
-  const [setup, setSetup] = useState(false);
+  // null=关闭；"new"=新增服务器；其余字符串=编辑该 id 的服务器
+  const [setup, setSetup] = useState<string | null>(null);
 
   useEffect(() => {
     startWatchGateway();
@@ -119,14 +120,18 @@ function Shell() {
               connText={snap.connText}
               onOpen={setDetail}
               onNew={() => setSheet(true)}
-              onSetup={() => setSetup(true)}
+              onSetup={() => setSetup("new")}
+              onEditServer={(id) => setSetup(id)}
             />
           )}
           <NewSessionModal visible={sheet} onClose={() => setSheet(false)} />
           <Toast />
         </>
       ) : (
-        <SetupScreen onClose={hasCfg ? () => setSetup(false) : undefined} />
+        <SetupScreen
+          onClose={hasCfg ? () => setSetup(null) : undefined}
+          editId={setup && setup !== "new" ? setup : null}
+        />
       )}
     </SafeAreaProvider>
   );

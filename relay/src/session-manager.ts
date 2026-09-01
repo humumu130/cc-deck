@@ -14,11 +14,13 @@ import type {
 import type {
   Command,
   CommandAckPayload,
+  FileChangeStats,
   LogEntry,
   ManagedPermissionMode,
   PendingInput,
   SessionState,
   TodoItem,
+  TokenUsage,
   WaitingPayload,
 } from "./types.js";
 
@@ -235,6 +237,35 @@ export class SessionManager {
       action_summary: s.state.action_summary,
       stats: { ...s.state.stats },
       pending_inputs: list,
+    });
+  }
+
+  // 外部会话文件改动统计（bridge 从 Edit/Write 结果累计）
+  setExternalStats(id: string, stats: FileChangeStats): void {
+    const s = this.sessions.get(id);
+    if (!s) return;
+    s.state.stats = stats;
+    s.state.updated_at = Date.now();
+    this.bus.emit(id, "SESSION_UPDATED", {
+      status: s.state.status,
+      action_summary: s.state.action_summary,
+      stats: { ...stats },
+    });
+  }
+
+  // 外部会话 token 用量 / 模型（bridge 从 transcript assistant 条目累计提取）
+  setExternalUsage(id: string, usage: TokenUsage, model?: string): void {
+    const s = this.sessions.get(id);
+    if (!s) return;
+    s.state.usage = usage;
+    if (model) s.state.model = model;
+    s.state.updated_at = Date.now();
+    this.bus.emit(id, "SESSION_UPDATED", {
+      status: s.state.status,
+      action_summary: s.state.action_summary,
+      stats: { ...s.state.stats },
+      usage,
+      ...(model ? { model } : {}),
     });
   }
 

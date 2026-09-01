@@ -23,7 +23,7 @@ export interface ServerEntry {
   name: string;
   wsUrl: string;
   token: string;
-  cloud?: CloudConfig;
+  cloud?: CloudConfig | null;
 }
 
 export interface Snapshot {
@@ -171,6 +171,28 @@ class RelayStore {
       const next = list[0];
       await AsyncStorage.setItem("ccr_active", next ? next.id : "");
       if (next) this.applyConfig({ wsUrl: next.wsUrl, token: next.token }, next.cloud);
+    }
+  }
+
+  // 编辑服务器条目（名称/地址/令牌/云桥）：不切活动指针；改的是当前活动服务器且连接相关字段变化时重连
+  async updateServer(
+    id: string,
+    patch: { name?: string; wsUrl?: string; token?: string; cloud?: CloudConfig | null },
+  ): Promise<void> {
+    const list = await this.readServers();
+    const idx = list.findIndex((e) => e.id === id);
+    if (idx < 0) return;
+    const before = list[idx];
+    list[idx] = { ...before, ...patch };
+    this.servers = list;
+    await AsyncStorage.setItem("ccr_conns", JSON.stringify(list));
+    const changed =
+      (patch.wsUrl !== undefined && patch.wsUrl !== before.wsUrl) ||
+      (patch.token !== undefined && patch.token !== before.token) ||
+      (patch.cloud !== undefined && JSON.stringify(patch.cloud ?? null) !== JSON.stringify(before.cloud ?? null));
+    if (changed && (await AsyncStorage.getItem("ccr_active")) === id) {
+      const tk = list[idx].token;
+      if (tk) this.applyConfig({ wsUrl: list[idx].wsUrl, token: tk }, list[idx].cloud);
     }
   }
 
@@ -514,6 +536,7 @@ class RelayStore {
         if (msg.payload.title_locked !== undefined) s.title_locked = msg.payload.title_locked;
         if (msg.payload.turn_started_at) s.turn_started_at = msg.payload.turn_started_at;
         if (msg.payload.usage) s.usage = msg.payload.usage;
+        if (msg.payload.model) s.model = msg.payload.model;
         if (msg.payload.todos) s.todos = msg.payload.todos;
         if (msg.payload.relay_session_id) s.relay_session_id = msg.payload.relay_session_id;
         if (msg.payload.permission_mode) s.permission_mode = msg.payload.permission_mode;
