@@ -5,7 +5,7 @@ import * as ImagePicker from "expo-image-picker";
 import * as ImageManipulator from "expo-image-manipulator";
 import { STATUS_ZH, statusColor, withA, type ThemeColors } from "../theme";
 import { useTheme, useThemeStyles } from "../theme-context";
-import { fmtElapsed, sessionElapsed } from "../fmt";
+import { fmtElapsed, sessionElapsed, fmtHM, dayKey } from "../fmt";
 import { store, useRelay } from "../store";
 import type { LogEntry, SessionState, WaitingPayload } from "../protocol";
 import { useKbHeight } from "../kb";
@@ -42,6 +42,9 @@ function matchFilter(kind: string, f: LogFilter): boolean {
 // 思考过程显示开关：app 生命周期内记忆（跨页面切换，不落盘）
 let thinkShown = false;
 
+// 详情页工具区折叠开关：同样 app 生命周期内记忆
+let ctrlCollapsed = false;
+
 // 转录行：user=右气泡 / assistant=正文流式 / tool=紧凑卡片 / system=居中弱化
 function TranscriptRow({ e, open, onToggle }: { e: LogEntry; open: boolean; onToggle: () => void }) {
   const { c } = useTheme();
@@ -51,6 +54,7 @@ function TranscriptRow({ e, open, onToggle }: { e: LogEntry; open: boolean; onTo
     return (
       <View style={d.trUser}>
         <Text style={d.trUserText}>{e.full ?? e.text}</Text>
+        {e.ts ? <Text style={d.trUserTime}>{fmtHM(e.ts)}</Text> : null}
       </View>
     );
   }
@@ -62,7 +66,7 @@ function TranscriptRow({ e, open, onToggle }: { e: LogEntry; open: boolean; onTo
         onPress={onToggle}
         android_ripple={{ color: c.tintSoft, borderless: false }}
       >
-        <Text style={d.trThinkHead}>{open ? "▾ 思考过程" : `▸ 思考过程 · ${src.length} 字`}</Text>
+        <Text style={d.trThinkHead}>{open ? "▾ 思考过程" : `▸ 思考过程 · ${src.length} 字`}{e.ts ? ` · ${fmtHM(e.ts)}` : ""}</Text>
         {open ? <MdText src={src} style={d.trThinkT} /> : null}
       </Pressable>
     );
@@ -70,6 +74,7 @@ function TranscriptRow({ e, open, onToggle }: { e: LogEntry; open: boolean; onTo
   if (e.kind === "assistant_text") {
     return (
       <View style={d.trMsg}>
+        {e.ts ? <Text style={d.trMsgTime}>{fmtHM(e.ts)}</Text> : null}
         <MdText src={open ? (e.full ?? e.text) : e.text} />
         {cursor}
         {e.full ? (
@@ -271,6 +276,7 @@ export default function DetailScreen({ sid, onBack }: { sid: string; onBack: () 
   const [statsOpen, setStatsOpen] = useState(false);
   const [filter, setFilter] = useState<LogFilter>("msg");
   const [showThink, setShowThink] = useState(thinkShown);
+  const [collapsed, setCollapsed] = useState(ctrlCollapsed);
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
   const [todoOpen, setTodoOpen] = useState(false);
   const [images, setImages] = useState<string[]>([]);
@@ -297,6 +303,8 @@ export default function DetailScreen({ sid, onBack }: { sid: string; onBack: () 
     if (atBottom.current && !touching.current && scrollRef.current) scrollRef.current.scrollToEnd({ animated: false });
   }, [shown.length, lastLen]);
   const toggle = (key: string) => setExpanded((m) => ({ ...m, [key]: !m[key] }));
+  // 跨天分隔线的游标：每次渲染从空开始，随 map 推进
+  let lastDay = "";
 
   useEffect(() => {
     const sub = BackHandler.addEventListener("hardwareBackPress", () => {
@@ -401,6 +409,17 @@ export default function DetailScreen({ sid, onBack }: { sid: string; onBack: () 
           </Text>
         </View>
         <Pressable
+          style={[d.editBtn, d.opRipple]}
+          android_ripple={{ color: c.tintSoft, borderless: false }}
+          onPress={() => {
+            ctrlCollapsed = !ctrlCollapsed;
+            setCollapsed(ctrlCollapsed);
+          }}
+          hitSlop={4}
+        >
+          <Text style={d.editT}>{collapsed ? "▾" : "▴"}</Text>
+        </Pressable>
+        <Pressable
           style={[d.statsBtn, d.opRipple]}
           android_ripple={{ color: c.tintSoft, borderless: false }}
           onPress={() => setStatsOpen(true)}
@@ -419,7 +438,8 @@ export default function DetailScreen({ sid, onBack }: { sid: string; onBack: () 
       </View>
 
       {/* 固定工具区：状态条 + 过滤 chips。不放进 ScrollView——RN Android 吸顶头有触点丢失问题，
-          且运行中自动滚底的跳变会打断按压；固定区根本不经过滚动手势系统 */}
+          且运行中自动滚底的跳变会打断按压；固定区根本不经过滚动手势系统。头部 ▴/▾ 可整体折叠 */}
+      {!collapsed ? (
       <View style={d.fixedBar}>
         {showStrip ? (
             <View style={d.strip}>
@@ -528,6 +548,7 @@ export default function DetailScreen({ sid, onBack }: { sid: string; onBack: () 
             </View>
           ) : null}
       </View>
+      ) : null}
 
       <ScrollView
         ref={scrollRef}
@@ -551,7 +572,15 @@ export default function DetailScreen({ sid, onBack }: { sid: string; onBack: () 
         ) : (
           shown.map((e) => {
             const key = e.id ?? `${e.ts}|${e.kind}|${e.text}`;
-            return <TranscriptRow key={key} e={e} open={!!expanded[key]} onToggle={() => toggle(key)} />;
+            const nodes = [];
+            // 跨天分隔线：与上一条可见消息不同日时插入（首条也插，标注起始日期）
+            const day = e.ts ? dayKey(e.ts) : "";
+            if (day && day !== lastDay) {
+              nodes.push(<Text key={`day-${key}`} style={d.daySep}>── {day} ──</Text>);
+            }
+            if (day) lastDay = day;
+            nodes.push(<TranscriptRow key={key} e={e} open={!!expanded[key]} onToggle={() => toggle(key)} />);
+            return nodes;
           })
         )}
       </ScrollView>
@@ -720,7 +749,10 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
     borderRadius: 14, borderTopRightRadius: 4, paddingHorizontal: 12, paddingVertical: 8,
   },
   trUserText: { color: c.text, fontSize: 14, lineHeight: 20 },
+  trUserTime: { color: c.faint, fontSize: 10, textAlign: "right", marginTop: 3, fontVariant: ["tabular-nums"] },
   trMsg: { marginBottom: 10 },
+  trMsgTime: { color: c.faint, fontSize: 10, marginBottom: 2, fontVariant: ["tabular-nums"] },
+  daySep: { color: c.faint, fontSize: 10.5, textAlign: "center", marginVertical: 8, fontVariant: ["tabular-nums"] },
   trThink: {
     marginBottom: 8, backgroundColor: c.panel2, borderWidth: 1, borderColor: c.line,
     borderRadius: 10, paddingHorizontal: 10, paddingVertical: 7, overflow: "hidden",

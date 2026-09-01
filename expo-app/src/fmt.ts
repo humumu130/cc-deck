@@ -20,6 +20,21 @@ export function fmtClock(ts: number): string {
   return `${p(t.getHours())}:${p(t.getMinutes())}:${p(t.getSeconds())}`;
 }
 
+// 消息时间戳：HH:mm（无秒，逐条角标用）
+export function fmtHM(ts: number): string {
+  if (!ts) return "";
+  const t = new Date(ts);
+  const p = (n: number) => String(n).padStart(2, "0");
+  return `${p(t.getHours())}:${p(t.getMinutes())}`;
+}
+
+// 跨天分隔线标签：MM-DD
+export function dayKey(ts: number): string {
+  if (!ts) return "";
+  const t = new Date(ts);
+  return `${String(t.getMonth() + 1).padStart(2, "0")}-${String(t.getDate()).padStart(2, "0")}`;
+}
+
 export function sessionElapsed(s: { status: string; duration_ms?: number; historical?: boolean; started_at: number; updated_at: number }): number {
   if (s.status === "DONE" && s.duration_ms) return s.duration_ms;
   if (s.historical || s.status === "ERROR") return s.updated_at - s.started_at;
