@@ -16,6 +16,7 @@ import type {
   CommandAckPayload,
   LogEntry,
   ManagedPermissionMode,
+  PendingInput,
   SessionState,
   TodoItem,
   WaitingPayload,
@@ -219,6 +220,21 @@ export class SessionManager {
       action_summary: s.state.action_summary,
       stats: { ...s.state.stats },
       title,
+    });
+  }
+
+  // external 会话排队注入消息（已发送、CLI 尚未处理）：随状态下发，
+  // 客户端显示在工作指示器下方；UserPromptSubmit 匹配 / Stop 回合结束时晋升为正式 user_message
+  setExternalPending(id: string, list: PendingInput[]): void {
+    const s = this.sessions.get(id);
+    if (!s) return;
+    s.state.pending_inputs = list.length ? list : undefined;
+    s.state.updated_at = Date.now();
+    this.bus.emit(id, "SESSION_UPDATED", {
+      status: s.state.status,
+      action_summary: s.state.action_summary,
+      stats: { ...s.state.stats },
+      pending_inputs: list,
     });
   }
 

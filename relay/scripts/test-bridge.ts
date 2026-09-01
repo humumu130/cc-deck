@@ -197,6 +197,8 @@ await wait(800);
 const fl16 = fakeLog().filter((a) => a[1] === "忙时直发A");
 assert(fl16.length === 1 && fl16[0][0] === "4321" && !fl16[0].includes("noenter"), "busy injection direct with enter");
 assert(events.some((e) => e.type === "SESSION_LOG" && String((e.payload as { text: string }).text).includes("已注入终端")), "busy injection logged");
+const pendOf = (sid: string) => mgr.snapshot().find((s) => s.session_id === sid)?.pending_inputs ?? [];
+assert(pendOf(extId("cli-1")).some((p) => p.text === "忙时直发A"), "busy inject echoed in pending_inputs");
 
 // 17. EXT_STOP（WORKING）→ 注入 Esc
 const escId = send("COMMAND_EXT_STOP", { session_id: extId("cli-1") });
@@ -214,21 +216,34 @@ assert((await waitAck(qId)).ok, "EXT_INPUT queued acked");
 await wait(300);
 assert(!fakeLog().some((a) => a[1] === "排队消息A"), "no injection while WAITING");
 assert(events.some((e) => e.type === "SESSION_LOG" && String((e.payload as { text: string }).text).includes("已排队")), "queue logged");
+assert(pendOf(extId("cli-1")).some((p) => p.text === "排队消息A"), "queued msg echoed in pending_inputs");
 const cont17 = send("COMMAND_CONTINUE", { session_id: extId("cli-1"), request_id: w17.payload.request_id });
 assert((await waitAck(cont17)).ok, "17.5 CONTINUE acked");
 assert((await held17).body.decision === "allow", "17.5 hook got allow");
 
 // 18. Stop → DONE 后自动 flush 队列（末条带回车）
+//    steering 消息（忙时直发A，已注入）晋升为正式消息；仍在队列的（排队消息A）保留 pending 等 UPS 晋升
 await hook({ event: "Stop" });
 await wait(800);
 const fl18 = fakeLog().filter((a) => a[1] === "排队消息A");
 assert(fl18.length === 1 && fl18[0][0] === "4321" && !fl18[0].includes("noenter"), "queued msg flushed with enter");
+const umLogs = (t: string) => events.filter((e) => e.type === "SESSION_LOG" && (e.payload as { kind: string; text: string }).kind === "user_message" && (e.payload as { text: string }).text === t).length;
+assert(umLogs("忙时直发A") === 1, "steering msg promoted on Stop");
+assert(!pendOf(extId("cli-1")).some((p) => p.text === "忙时直发A"), "promoted msg removed from pending");
+assert(pendOf(extId("cli-1")).some((p) => p.text === "排队消息A"), "still-queued msg kept in pending");
 
 // 19. 空闲直达：DONE 状态 EXT_INPUT 立即注入
 const dId = send("COMMAND_EXT_INPUT", { session_id: extId("cli-1"), text: "空闲直发" });
 assert((await waitAck(dId)).ok, "EXT_INPUT idle acked");
 await wait(800);
 assert(fakeLog().some((a) => a[1] === "空闲直发"), "idle injection direct");
+assert(pendOf(extId("cli-1")).some((p) => p.text === "空闲直发"), "idle inject echoed in pending_inputs");
+
+// 19.5 晋升去重：CLI 处理空闲注入 → UserPromptSubmit 同文本 → pending 移除 + 仅一条 user_message（上浮不重复）
+await hook({ event: "UserPromptSubmit", prompt: "空闲直发" });
+await wait(200);
+assert(umLogs("空闲直发") === 1, "UPS promotes pending into single user_message");
+assert(!pendOf(extId("cli-1")).some((p) => p.text === "空闲直发"), "promoted msg removed from pending");
 
 // 20. 无 cli_pid → 拒绝（等该会话下次活动定位）
 await hook({ event: "UserPromptSubmit", prompt: "无 pid 会话", session_id: "cli-2" });

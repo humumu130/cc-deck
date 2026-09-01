@@ -109,7 +109,7 @@ export default function SetupScreen({ onClose }: Props) {
           <LinearGradient colors={[c.brandA, c.brandB]} style={s.logo} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}>
             <Text style={s.logoText}>CC</Text>
           </LinearGradient>
-          <Text style={s.h2}>Cloud Code</Text>
+          <Text style={s.h2}>Claude Code</Text>
           <Text style={s.sub}>连接到 PC Relay</Text>
 
           {servers.length > 0 ? (

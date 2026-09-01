@@ -517,6 +517,7 @@ class RelayStore {
         if (msg.payload.todos) s.todos = msg.payload.todos;
         if (msg.payload.relay_session_id) s.relay_session_id = msg.payload.relay_session_id;
         if (msg.payload.permission_mode) s.permission_mode = msg.payload.permission_mode;
+        if (msg.payload.pending_inputs) s.pending_inputs = msg.payload.pending_inputs.length ? msg.payload.pending_inputs : undefined;
         s.updated_at = msg.ts;
         break;
       }

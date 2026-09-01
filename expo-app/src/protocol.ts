@@ -68,6 +68,12 @@ export interface SessionState {
   todos?: TodoItem[];
   title_locked?: boolean;
   permission_mode?: "default" | "acceptEdits" | "plan"; // 托管会话权限模式
+  pending_inputs?: PendingInput[]; // 外部会话已发送未处理的注入消息（显示在工作指示器下方，处理时上浮为正式消息）
+}
+
+export interface PendingInput {
+  text: string;
+  ts: number;
 }
 
 export interface LogEntry {

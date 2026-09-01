@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Animated, FlatList, PanResponder, Pressable, StyleSheet, Text, View } from "react-native";
+import { Animated, BackHandler, FlatList, PanResponder, Pressable, StyleSheet, Text, View } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { LinearGradient } from "expo-linear-gradient";
@@ -9,6 +9,7 @@ import { sessionElapsed, fmtElapsed, fmtTok } from "../fmt";
 import { store } from "../store";
 import type { SessionState } from "../protocol";
 import RenameModal from "./RenameModal";
+import SettingsDrawer from "./SettingsDrawer";
 
 interface Props {
   sessions: SessionState[];
@@ -208,10 +209,21 @@ function SessionCard({
 }
 
 export default function ListScreen({ sessions, connected, connText, onOpen, onNew, onSetup }: Props) {
-  const { c, mode, toggle } = useTheme();
+  const { c } = useTheme();
   const styles = useThemeStyles(makeStyles);
   const [revealSid, setRevealSid] = useState<string | null>(null);
   const [renameTarget, setRenameTarget] = useState<SessionState | null>(null);
+  const [drawerOpen, setDrawerOpen] = useState(false);
+
+  // 抽屉打开时硬件返回先关抽屉
+  useEffect(() => {
+    if (!drawerOpen) return;
+    const sub = BackHandler.addEventListener("hardwareBackPress", () => {
+      setDrawerOpen(false);
+      return true;
+    });
+    return () => sub.remove();
+  }, [drawerOpen]);
   const sorted = useMemo(() => {
     // 活跃（等待/运行/错误）置顶，其余按最近更新倒序：
     // 新完成的会话紧跟活跃段，不再"闪现后跳到 20 个会话底部"像消失
@@ -251,23 +263,15 @@ export default function ListScreen({ sessions, connected, connText, onOpen, onNe
   return (
     <SafeAreaView style={styles.safe} edges={["top"]}>
       <View style={styles.topbar}>
-        <LinearGradient colors={[c.brandA, c.brandB]} style={styles.logo}>
-          <Text style={styles.logoText}>CC</Text>
-        </LinearGradient>
-        <Text style={styles.h1}>Cloud Code</Text>
         <Pressable
-          style={styles.themeBtn}
+          style={styles.logoBtn}
           android_ripple={{ color: c.tintSoft, borderless: false, radius: 15 }}
-          onPress={toggle}
+          onPress={() => setDrawerOpen(true)}
+          hitSlop={6}
         >
-          <Text style={styles.themeT}>{mode === "dark" ? "☀️" : "🌙"}</Text>
-        </Pressable>
-        <Pressable
-          style={styles.srvBtn}
-          android_ripple={{ color: c.tintSoft, borderless: false, radius: 13 }}
-          onPress={onSetup}
-        >
-          <Text style={styles.srvT}>服务器</Text>
+          <LinearGradient colors={[c.brandA, c.brandB]} style={styles.logo}>
+            <Text style={styles.logoText}>CC</Text>
+          </LinearGradient>
         </Pressable>
         <View style={[styles.connChip, { borderColor: withA(connColor, 0.33) }]}>
           <View style={[styles.connDot, { backgroundColor: connColor }]} />
@@ -334,6 +338,8 @@ export default function ListScreen({ sessions, connected, connText, onOpen, onNe
           setRenameTarget(null);
         }}
       />
+
+      <SettingsDrawer visible={drawerOpen} onClose={() => setDrawerOpen(false)} onSetup={onSetup} />
     </SafeAreaView>
   );
 }
@@ -345,23 +351,13 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
     paddingHorizontal: 16, paddingTop: 10, paddingBottom: 8,
     borderBottomWidth: 1, borderBottomColor: c.line,
   },
+  logoBtn: { borderRadius: 12 },
   logo: { width: 34, height: 34, borderRadius: 10, alignItems: "center", justifyContent: "center" },
   logoText: { color: "#fff", fontWeight: "800", fontSize: 13 },
-  h1: { color: c.text, fontSize: 17, fontWeight: "700", flex: 1 },
-  themeBtn: {
-    width: 28, height: 28, borderRadius: 14, alignItems: "center", justifyContent: "center",
-    backgroundColor: c.tintSoft, borderWidth: 1, borderColor: c.line,
-  },
-  themeT: { fontSize: 14 },
-  srvBtn: {
-    height: 28, borderRadius: 999, borderWidth: 1, borderColor: c.line, backgroundColor: c.tintSoft,
-    paddingHorizontal: 10, alignItems: "center", justifyContent: "center",
-  },
-  srvT: { fontSize: 11, color: c.dim },
   connChip: {
     flexDirection: "row", alignItems: "center", gap: 5, borderWidth: 1,
     borderRadius: 999, height: 28, paddingHorizontal: 10,
-    backgroundColor: c.tintSoft,
+    backgroundColor: c.tintSoft, marginLeft: "auto",
   },
   connDot: { width: 6, height: 6, borderRadius: 3 },
   connText: { fontSize: 11 },

@@ -1,14 +1,15 @@
 import { useEffect, useRef, useState } from "react";
-import { BackHandler, Image, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
+import { Animated, BackHandler, Image, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import * as ImagePicker from "expo-image-picker";
 import * as ImageManipulator from "expo-image-manipulator";
-import { STATUS_ZH, statusColor, withA, type ThemeColors } from "../theme";
+import { withA, type ThemeColors } from "../theme";
 import { useTheme, useThemeStyles } from "../theme-context";
 import { fmtElapsed, sessionElapsed, fmtHM, dayKey } from "../fmt";
 import { store, useRelay } from "../store";
 import type { LogEntry, SessionState, WaitingPayload } from "../protocol";
 import { useKbHeight } from "../kb";
+import { useProcessFont } from "../display-settings";
 import { MdText } from "../md";
 import RenameModal from "./RenameModal";
 import StatsModal from "./StatsModal";
@@ -46,9 +47,16 @@ let thinkShown = false;
 let ctrlCollapsed = false;
 
 // 转录行：user=右气泡 / assistant=正文流式 / tool=紧凑卡片 / system=居中弱化
+// 转录字号分级：过程消息（工具/结果/系统/思考）比消息（用户/assistant）小一档，可在设置抽屉调
+const PROC_FONT = {
+  compact: { tool: 10.5, sys: 10, result: 10.5, thinkHead: 10.5, think: 11, thinkLH: 16 },
+  normal: { tool: 11.5, sys: 11, result: 11.5, thinkHead: 11.5, think: 12.5, thinkLH: 18 },
+} as const;
+
 function TranscriptRow({ e, open, onToggle }: { e: LogEntry; open: boolean; onToggle: () => void }) {
   const { c } = useTheme();
   const d = useThemeStyles(makeStyles);
+  const pf = PROC_FONT[useProcessFont()];
   const cursor = e.streaming ? <Text style={{ color: c.working }}>▌</Text> : null;
   if (e.kind === "user_message") {
     return (
@@ -66,8 +74,8 @@ function TranscriptRow({ e, open, onToggle }: { e: LogEntry; open: boolean; onTo
         onPress={onToggle}
         android_ripple={{ color: c.tintSoft, borderless: false }}
       >
-        <Text style={d.trThinkHead}>{open ? "▾ 思考过程" : `▸ 思考过程 · ${src.length} 字`}{e.ts ? ` · ${fmtHM(e.ts)}` : ""}</Text>
-        {open ? <MdText src={src} style={d.trThinkT} /> : null}
+        <Text style={[d.trThinkHead, { fontSize: pf.thinkHead }]}>{open ? "▾ 思考过程" : `▸ 思考过程 · ${src.length} 字`}{e.ts ? ` · ${fmtHM(e.ts)}` : ""}</Text>
+        {open ? <MdText src={src} style={{ ...d.trThinkT, fontSize: pf.think, lineHeight: pf.thinkLH }} /> : null}
       </Pressable>
     );
   }
@@ -91,8 +99,8 @@ function TranscriptRow({ e, open, onToggle }: { e: LogEntry; open: boolean; onTo
         <Pressable style={d.trTool} onPress={onToggle} android_ripple={{ color: c.tintSoft, borderless: false }}>
           <View style={{ flex: 1 }}>
             <View style={{ flexDirection: "row", gap: 6, alignItems: "baseline" }}>
-              <Text style={d.trToolName}>⚙ {e.tool || "tool"}</Text>
-              <Text style={d.trToolText} numberOfLines={1}>{e.text}</Text>
+              <Text style={[d.trToolName, { fontSize: pf.tool }]}>⚙ {e.tool || "tool"}</Text>
+              <Text style={[d.trToolText, { fontSize: pf.tool }]} numberOfLines={1}>{e.text}</Text>
             </View>
             {open ? <Text style={d.trDetail} selectable>{e.detail}</Text> : null}
           </View>
@@ -102,8 +110,8 @@ function TranscriptRow({ e, open, onToggle }: { e: LogEntry; open: boolean; onTo
     }
     return (
       <View style={d.trTool}>
-        <Text style={d.trToolName}>⚙ {e.tool || "tool"}</Text>
-        <Text style={d.trToolText} numberOfLines={2}>{e.text}</Text>
+        <Text style={[d.trToolName, { fontSize: pf.tool }]}>⚙ {e.tool || "tool"}</Text>
+        <Text style={[d.trToolText, { fontSize: pf.tool }]} numberOfLines={2}>{e.text}</Text>
       </View>
     );
   }
@@ -111,7 +119,7 @@ function TranscriptRow({ e, open, onToggle }: { e: LogEntry; open: boolean; onTo
     if (e.diff && e.diff.length > 0) {
       return (
         <Pressable style={d.trDiffWrap} onPress={onToggle} android_ripple={{ color: c.tintSoft, borderless: false }}>
-          <Text style={d.trResult} numberOfLines={open ? undefined : 1}>
+          <Text style={[d.trResult, { fontSize: pf.result }]} numberOfLines={open ? undefined : 1}>
             ↳ {open ? "收起变更 ▴" : `变更 · ${e.diff.filter((l) => l.startsWith("+")).length}+ ${e.diff.filter((l) => l.startsWith("-")).length}− ▾`}
           </Text>
           {open ? <DiffBlock lines={e.diff} /> : null}
@@ -121,16 +129,16 @@ function TranscriptRow({ e, open, onToggle }: { e: LogEntry; open: boolean; onTo
     if (e.detail) {
       return (
         <Pressable onPress={onToggle} hitSlop={4}>
-          <Text style={d.trResult} numberOfLines={open ? undefined : 2}>
+          <Text style={[d.trResult, { fontSize: pf.result }]} numberOfLines={open ? undefined : 2}>
             ↳ {e.text} <Text style={d.tlExpand}>{open ? "收起 ▴" : "展开 ▾"}</Text>
           </Text>
           {open ? <Text style={d.trDetail} selectable>{e.detail}</Text> : null}
         </Pressable>
       );
     }
-    return <Text style={d.trResult} numberOfLines={2}>↳ {e.text}</Text>;
+    return <Text style={[d.trResult, { fontSize: pf.result }]} numberOfLines={2}>↳ {e.text}</Text>;
   }
-  return <Text style={d.trSystem}>{e.text}</Text>;
+  return <Text style={[d.trSystem, { fontSize: pf.sys }]}>{e.text}</Text>;
 }
 
 // diff 着色块：+/−/@@ 逐行着色（等宽），行数据由 relay 从 structuredPatch 提取
@@ -172,6 +180,27 @@ function LiveStatusLine({ summary, startedAt, color }: { summary: string; starte
       <Text style={[d.statusText, { color }]} numberOfLines={1}>{summary || "思考中…"}</Text>
       {startedAt ? <Text style={d.statusTime}>· {timeText}</Text> : null}
     </View>
+  );
+}
+
+// 排队注入消息：脉冲呼吸（类 CLI queued），CLI 处理/回合结束时上浮为正式消息
+function PendingRow({ text }: { text: string }) {
+  const d = useThemeStyles(makeStyles);
+  const op = useRef(new Animated.Value(0.35)).current;
+  useEffect(() => {
+    const a = Animated.loop(
+      Animated.sequence([
+        Animated.timing(op, { toValue: 0.85, duration: 900, useNativeDriver: true }),
+        Animated.timing(op, { toValue: 0.35, duration: 900, useNativeDriver: true }),
+      ]),
+    );
+    a.start();
+    return () => a.stop();
+  }, [op]);
+  return (
+    <Animated.View style={[d.pendRow, { opacity: op }]}>
+      <Text style={d.pendT} numberOfLines={3}>{text}</Text>
+    </Animated.View>
   );
 }
 
@@ -301,7 +330,7 @@ export default function DetailScreen({ sid, onBack }: { sid: string; onBack: () 
   const lastLen = lastEntry ? (lastEntry.full ?? lastEntry.text).length : 0;
   useEffect(() => {
     if (atBottom.current && !touching.current && scrollRef.current) scrollRef.current.scrollToEnd({ animated: false });
-  }, [shown.length, lastLen]);
+  }, [shown.length, lastLen, s?.pending_inputs?.length ?? 0, s?.status === "WORKING"]);
   const toggle = (key: string) => setExpanded((m) => ({ ...m, [key]: !m[key] }));
   // 跨天分隔线的游标：每次渲染从空开始，随 map 推进
   let lastDay = "";
@@ -325,17 +354,16 @@ export default function DetailScreen({ sid, onBack }: { sid: string; onBack: () 
     );
   }
 
-  const color = statusColor(s.status, c);
   const external = !!s.external;
   // 历史托管会话：有 SDK 会话 id 就能 resume 复活（发消息即恢复），否则只读
   const resumable = !external && !!s.relay_session_id;
   const canCmd = snap.connected && (!s.historical || external || resumable);
   const wr = s.waiting_request;
   const bannerVisible = !!wr && wr.decidable !== false;
-  // 状态条只在"有事发生"时出现：运行中/出错/等待确认（横幅未兜底时）；空闲会话靠头部状态行
+  // 状态条只保留"需要注意"的状态：出错/等待确认（横幅未兜底时）+ 外部会话控制（审批开关）。
+  // WORKING 状态行移入对话流（类 CLI），不再占顶栏
   const showStrip =
-    s.status === "WORKING" || s.status === "ERROR" ||
-    (s.status === "WAITING" && !bannerVisible) || (external && canCmd);
+    s.status === "ERROR" || (s.status === "WAITING" && !bannerVisible) || (external && canCmd);
 
   const send = () => {
     const text = input.trim();
@@ -404,8 +432,7 @@ export default function DetailScreen({ sid, onBack }: { sid: string; onBack: () 
         <View style={{ flex: 1, minWidth: 0 }}>
           <Text style={d.title} numberOfLines={1}>{s.title || "未命名会话"}</Text>
           <Text style={d.sub}>
-            <Text style={{ color }}>{STATUS_ZH[s.status] ?? s.status}</Text>
-            {" · " + (external ? "外部 CLI" : "托管") + (s.historical && !external ? " · 历史" : "") + " · " + fmtElapsed(sessionElapsed(s))}
+            {(external ? "外部 CLI" : "托管") + (s.historical && !external ? " · 历史" : "") + " · " + fmtElapsed(sessionElapsed(s))}
           </Text>
         </View>
         <Pressable
@@ -443,9 +470,7 @@ export default function DetailScreen({ sid, onBack }: { sid: string; onBack: () 
       <View style={d.fixedBar}>
         {showStrip ? (
             <View style={d.strip}>
-              {s.status === "WORKING" ? (
-                <LiveStatusLine summary={s.action_summary} startedAt={s.turn_started_at ?? s.updated_at} color={c.working} />
-              ) : s.status === "ERROR" ? (
+              {s.status === "ERROR" ? (
                 <Text style={d.stripErr} numberOfLines={2}>⚠ {s.last_error || "出错了"}</Text>
               ) : s.status === "WAITING" ? (
                 <LiveStatusLine
@@ -456,16 +481,6 @@ export default function DetailScreen({ sid, onBack }: { sid: string; onBack: () 
               ) : (
                 <Text style={d.stripIdle} numberOfLines={1}>外部 CLI 转录</Text>
               )}
-              {!external && s.status === "WORKING" ? (
-                <Pressable style={[d.stripBtnWarn, d.opRipple]} android_ripple={{ color: withA(c.waiting, 0.15), borderless: false }} onPress={() => store.send("COMMAND_STOP", { session_id: sid })}>
-                  <Text style={d.stripBtnWarnT}>■ 停止</Text>
-                </Pressable>
-              ) : null}
-              {external && s.status === "WORKING" ? (
-                <Pressable style={[d.stripBtnWarn, d.opRipple]} android_ripple={{ color: withA(c.waiting, 0.15), borderless: false }} onPress={() => store.send("COMMAND_EXT_STOP", { session_id: sid })}>
-                  <Text style={d.stripBtnWarnT}>■ 打断</Text>
-                </Pressable>
-              ) : null}
               {external && canCmd ? (
                 <Pressable style={[d.stripBtn, d.opRipple]} android_ripple={{ color: c.tintSoft, borderless: false }} onPress={() => store.send("COMMAND_EXT_MODE", { session_id: sid, enabled: !s.remote_mode })}>
                   <Text style={d.stripBtnT}>审批 {s.remote_mode ? "开" : "关"}</Text>
@@ -583,6 +598,28 @@ export default function DetailScreen({ sid, onBack }: { sid: string; onBack: () 
             return nodes;
           })
         )}
+
+        {/* 工作状态行：类 CLI 放对话流内（顶栏不再显示工作状态）；排队注入消息在其下方，
+            CLI 处理（UserPromptSubmit）/回合结束时上浮为正式消息 */}
+        {s.status === "WORKING" ? (
+          <View style={d.liveRow}>
+            <LiveStatusLine summary={s.action_summary} startedAt={s.turn_started_at ?? s.updated_at} color={c.working} />
+            <Pressable
+              style={[d.stripBtnWarn, d.opRipple]}
+              android_ripple={{ color: withA(c.waiting, 0.15), borderless: false }}
+              onPress={() => store.send(external ? "COMMAND_EXT_STOP" : "COMMAND_STOP", { session_id: sid })}
+            >
+              <Text style={d.stripBtnWarnT}>{external ? "■ 打断" : "■ 停止"}</Text>
+            </Pressable>
+          </View>
+        ) : null}
+        {(s.pending_inputs?.length ?? 0) > 0 ? (
+          <View style={d.pendWrap}>
+            {s.pending_inputs!.map((p, i) => (
+              <PendingRow key={`${p.ts}|${i}`} text={p.text} />
+            ))}
+          </View>
+        ) : null}
       </ScrollView>
 
       {/* 底部栈：审批横幅（常驻可见，类似 CLI 权限提示）> 模板行 > 命令栏；整体随键盘抬升 */}
@@ -726,6 +763,18 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
   statusSpin: { fontSize: 14, fontWeight: "700" },
   statusText: { flex: 1, fontSize: 12.5, fontWeight: "600" },
   statusTime: { color: c.faint, fontSize: 11.5, fontVariant: ["tabular-nums"] },
+  // 工作状态行（对话流内，类 CLI）+ 其下方的排队注入消息
+  liveRow: {
+    flexDirection: "row", alignItems: "center", gap: 8,
+    backgroundColor: c.panel, borderWidth: 1, borderColor: c.line,
+    borderRadius: 12, paddingHorizontal: 11, paddingVertical: 8, marginTop: 10,
+  },
+  pendWrap: { flexDirection: "column", gap: 6, marginTop: 8, alignItems: "flex-end" },
+  pendRow: {
+    maxWidth: "86%", backgroundColor: c.tintSoft, borderWidth: 1, borderColor: c.line,
+    borderRadius: 12, borderTopRightRadius: 4, paddingHorizontal: 10, paddingVertical: 7,
+  },
+  pendT: { color: c.dim, fontSize: 12.5, lineHeight: 17 },
   filterRow: { flexDirection: "row", gap: 7, marginBottom: 10 },
   filterChip: {
     paddingHorizontal: 10, paddingVertical: 4, borderRadius: 10,

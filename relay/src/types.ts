@@ -65,6 +65,13 @@ export interface SessionState {
   usage?: TokenUsage;         // 托管会话 token 用量
   todos?: TodoItem[];         // 最近一次 TodoWrite 的任务清单
   permission_mode?: ManagedPermissionMode; // 托管会话当前权限模式
+  pending_inputs?: PendingInput[]; // external 会话已发送未处理的注入消息（客户端显示在工作指示器下方，处理/回合结束时晋升为正式消息）
+}
+
+// external 会话排队注入消息（EXT_INPUT 回显）
+export interface PendingInput {
+  text: string;
+  ts: number;
 }
 
 // 托管会话权限模式（SDK PermissionMode 的安全子集：bypassPermissions 不开放远程切换）
@@ -105,6 +112,7 @@ export interface SessionUpdatedPayload {
   todos?: TodoItem[];          // 任务清单变化时携带
   relay_session_id?: string;   // SDK 侧会话 id（重启重放后仍可 resume 的凭证）
   permission_mode?: ManagedPermissionMode; // 权限模式变化时携带
+  pending_inputs?: PendingInput[]; // 排队注入消息增减时携带（[] = 清空）
 }
 
 export interface SessionHeartbeatPayload {

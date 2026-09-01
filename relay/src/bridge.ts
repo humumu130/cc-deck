@@ -6,7 +6,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import type { EventBus } from "./event-bus.js";
 import type { SessionManager } from "./session-manager.js";
-import type { BridgeEvent, WaitingPayload } from "./types.js";
+import type { BridgeEvent, PendingInput, WaitingPayload } from "./types.js";
 import { injectText, injectEsc } from "./injector.js";
 import {
   detailToolResult,
@@ -127,6 +127,8 @@ export class Bridge {
     const q = this.inputQueue.get(sessionId) ?? [];
     q.push(text);
     this.inputQueue.set(sessionId, q);
+    // 发送方回显：进会话状态 pending_inputs（客户端显示在工作指示器下方，处理时上浮为正式消息）
+    this.mgr.setExternalPending(sessionId, [...(state.pending_inputs ?? []), { text: text.trim(), ts: Date.now() }]);
     if ((state.status === "DONE" || state.status === "WORKING") && !this.flushing.has(sessionId)) {
       if (state.status === "WORKING") {
         this.mgr.pushExternalLog(sessionId, "system", `已注入终端（CLI 运行中，自动排队跟随）：${truncate(text, 80)}`);
@@ -136,6 +138,20 @@ export class Bridge {
       this.mgr.pushExternalLog(sessionId, "system", `已排队（等待确认/回合结束后自动发送）：${truncate(text, 80)}`);
     }
     return { ok: true };
+  }
+
+  // UserPromptSubmit 到达：若与排队注入消息同文本 → 晋升该条（出 pending 区、入正式转录），
+  // 返回 true 表示已由回显晋升、无需重复记 user_message 日志
+  private promotePending(sessionId: string, prompt: string): boolean {
+    const state = this.mgr.getExternal(sessionId);
+    const list = state?.pending_inputs ?? [];
+    const i = list.findIndex((p) => p.text === prompt.trim());
+    if (i === -1) return false;
+    const promoted = list[i];
+    list.splice(i, 1);
+    this.mgr.setExternalPending(sessionId, list);
+    this.mgr.pushExternalLog(sessionId, "user_message", truncate(promoted.text, 300));
+    return true;
   }
 
   // 注入 Esc 打断当前回合
@@ -189,6 +205,7 @@ export class Bridge {
     this.mgr.clearExternalCliPid(sessionId);
     const dropped = this.inputQueue.get(sessionId)?.length ?? 0;
     this.inputQueue.delete(sessionId);
+    if (this.mgr.getExternal(sessionId)?.pending_inputs?.length) this.mgr.setExternalPending(sessionId, []);
     this.clearPidCache(sessionId);
     this.mgr.pushExternalLog(
       sessionId,
@@ -226,7 +243,9 @@ export class Bridge {
     this.refreshName(id, ev);
     if (!this.named.has(id) && ev.prompt) this.mgr.requestSmartTitle(id, ev.prompt);
     this.mgr.setExternalStatus(id, "WORKING", truncate(ev.prompt ?? "新回合", 60), turnStartedAt);
-    this.mgr.pushExternalLog(id, "user_message", truncate(ev.prompt ?? "", 300));
+    if (!this.promotePending(id, ev.prompt ?? "")) {
+      this.mgr.pushExternalLog(id, "user_message", truncate(ev.prompt ?? "", 300));
+    }
     void state;
     return { decision: "pass" };
   }
@@ -461,6 +480,19 @@ export class Bridge {
     if (!state) return { decision: "pass" };
     this.refreshName(id, ev);
     this.pushAssistantTexts(id, ev.transcript_path);
+    // 回合结束：已在回合中消费的 steering 消息（不在注入队列里）晋升为正式消息；
+    // 仍在队列里的即将注入，等 CLI 处理时的 UserPromptSubmit 晋升（避免双气泡）
+    const avail = [...(this.inputQueue.get(id) ?? [])];
+    const kept: PendingInput[] = [];
+    for (const p of state.pending_inputs ?? []) {
+      const qi = avail.findIndex((t) => t.trim() === p.text);
+      if (qi === -1) this.mgr.pushExternalLog(id, "user_message", truncate(p.text, 300));
+      else {
+        avail.splice(qi, 1); // 只做匹配记账，不动原队列（flushQueue 随后要注入）
+        kept.push(p);
+      }
+    }
+    if ((state.pending_inputs?.length ?? 0) !== kept.length) this.mgr.setExternalPending(id, kept);
     const turn = this.turnStart.get(id) ?? state.started_at;
     this.turnStart.delete(id);
     this.mgr.finishExternal(id, "completed", Date.now() - turn);
@@ -475,6 +507,7 @@ export class Bridge {
     this.mgr.pushExternalLog(id, "system", "会话结束" + (ev.reason ? ` (${ev.reason})` : ""));
     const dropped = this.inputQueue.get(id)?.length ?? 0;
     this.inputQueue.delete(id);
+    if (state.pending_inputs?.length) this.mgr.setExternalPending(id, []);
     if (dropped) this.mgr.pushExternalLog(id, "system", `会话结束，弃 ${dropped} 条排队消息`);
     const turn = this.turnStart.get(id) ?? state.started_at;
     this.turnStart.delete(id);
