@@ -49,7 +49,7 @@ let ctrlCollapsed = false;
 // 转录行：user=右气泡 / assistant=正文流式 / tool=紧凑卡片 / system=居中弱化
 // 转录字号分级：过程消息（工具/结果/系统/思考）比消息（用户/assistant）小一档，可在设置抽屉调
 const PROC_FONT = {
-  compact: { tool: 10.5, sys: 10, result: 10.5, thinkHead: 10.5, think: 11, thinkLH: 16 },
+  compact: { tool: 9.5, sys: 9, result: 9.5, thinkHead: 9.5, think: 10.5, thinkLH: 15 },
   normal: { tool: 11.5, sys: 11, result: 11.5, thinkHead: 11.5, think: 12.5, thinkLH: 18 },
 } as const;
 
@@ -360,10 +360,9 @@ export default function DetailScreen({ sid, onBack }: { sid: string; onBack: () 
   const canCmd = snap.connected && (!s.historical || external || resumable);
   const wr = s.waiting_request;
   const bannerVisible = !!wr && wr.decidable !== false;
-  // 状态条只保留"需要注意"的状态：出错/等待确认（横幅未兜底时）+ 外部会话控制（审批开关）。
+  // 状态条只保留"需要注意"的状态：出错/等待确认（横幅未兜底时）。
   // WORKING 状态行移入对话流（类 CLI），不再占顶栏
-  const showStrip =
-    s.status === "ERROR" || (s.status === "WAITING" && !bannerVisible) || (external && canCmd);
+  const showStrip = s.status === "ERROR" || (s.status === "WAITING" && !bannerVisible);
 
   const send = () => {
     const text = input.trim();
@@ -472,20 +471,13 @@ export default function DetailScreen({ sid, onBack }: { sid: string; onBack: () 
             <View style={d.strip}>
               {s.status === "ERROR" ? (
                 <Text style={d.stripErr} numberOfLines={2}>⚠ {s.last_error || "出错了"}</Text>
-              ) : s.status === "WAITING" ? (
+              ) : (
                 <LiveStatusLine
                   summary={wr ? (wr.questions?.length ? `等待作答：${wr.questions[0]?.header ?? ""}` : `等待确认：${wr.tool_name}`) : "等待 CLI 输入"}
                   startedAt={wr?.received_at}
                   color={c.waiting}
                 />
-              ) : (
-                <Text style={d.stripIdle} numberOfLines={1}>外部 CLI 转录</Text>
               )}
-              {external && canCmd ? (
-                <Pressable style={[d.stripBtn, d.opRipple]} android_ripple={{ color: c.tintSoft, borderless: false }} onPress={() => store.send("COMMAND_EXT_MODE", { session_id: sid, enabled: !s.remote_mode })}>
-                  <Text style={d.stripBtnT}>审批 {s.remote_mode ? "开" : "关"}</Text>
-                </Pressable>
-              ) : null}
             </View>
           ) : null}
           <View style={d.filterRow}>
@@ -748,12 +740,6 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
     borderRadius: 12, paddingHorizontal: 11, paddingVertical: 8, marginBottom: 8,
   },
   stripErr: { flex: 1, color: c.error, fontSize: 12.5, fontWeight: "600" },
-  stripIdle: { flex: 1, color: c.dim, fontSize: 12.5 },
-  stripBtn: {
-    height: 26, borderRadius: 8, paddingHorizontal: 10, backgroundColor: c.panel2,
-    borderWidth: 1, borderColor: c.line, alignItems: "center", justifyContent: "center",
-  },
-  stripBtnT: { color: c.text, fontSize: 11, fontWeight: "600" },
   stripBtnWarn: {
     height: 26, borderRadius: 8, paddingHorizontal: 10, backgroundColor: c.panel2,
     borderWidth: 1, borderColor: withA(c.waiting, 0.3), alignItems: "center", justifyContent: "center",

@@ -1,11 +1,12 @@
-// 设置抽屉：首页左上角图标呼出（侧滑），收纳服务器配置与显示设置
+// 设置抽屉：首页左上角图标呼出（侧滑），收纳服务器列表与显示设置
 import { useEffect, useState } from "react";
-import { Animated, Pressable, StyleSheet, Text, View } from "react-native";
+import { Animated, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { LinearGradient } from "expo-linear-gradient";
 import { useTheme, useThemeStyles } from "../theme-context";
 import { setProcessFont, useProcessFont, type ProcessFont } from "../display-settings";
-import type { ThemeColors } from "../theme";
+import { store, useRelay, type ServerEntry } from "../store";
+import { withA, type ThemeColors } from "../theme";
 
 const FILL = { position: "absolute", left: 0, right: 0, top: 0, bottom: 0 } as const;
 
@@ -20,10 +21,38 @@ export default function SettingsDrawer({ visible, onClose, onSetup }: { visible:
   const insets = useSafeAreaInsets();
   const [x] = useState(new Animated.Value(0));
   const processFont = useProcessFont();
+  const snap = useRelay();
+  const [servers, setServers] = useState<ServerEntry[]>([]);
+  const [activeId, setActiveId] = useState<string | null>(null);
 
   useEffect(() => {
     Animated.timing(x, { toValue: visible ? 1 : 0, duration: 210, useNativeDriver: true }).start();
   }, [visible, x]);
+
+  // 每次展开时刷新（配对完成后 cloudMsg 变化也会触发条目更新）
+  useEffect(() => {
+    if (!visible) return;
+    void store.loadServers().then(setServers);
+    void store.activeServerId().then(setActiveId);
+  }, [visible, snap.cloudMsg]);
+
+  const pick = (e: ServerEntry) => {
+    if (!e.token) {
+      // 没存令牌：跳配置页补输
+      onClose();
+      onSetup();
+      return;
+    }
+    void store.connectServer(e).then(() => setActiveId(e.id));
+    onClose();
+  };
+
+  const remove = (e: ServerEntry) => {
+    void store.deleteServer(e.id).then(() => {
+      void store.loadServers().then(setServers);
+      void store.activeServerId().then(setActiveId);
+    });
+  };
 
   const translateX = x.interpolate({ inputRange: [0, 1], outputRange: [-320, 0] });
   const scrimOp = x.interpolate({ inputRange: [0, 1], outputRange: [0, 0.55] });
@@ -40,15 +69,35 @@ export default function SettingsDrawer({ visible, onClose, onSetup }: { visible:
           </LinearGradient>
           <View style={{ flex: 1, minWidth: 0 }}>
             <Text style={d.nameT}>Claude Code</Text>
-            <Text style={d.verT}>手机遥控 · v0.2.15</Text>
+            <Text style={d.verT}>手机遥控 · v0.2.16</Text>
           </View>
         </View>
 
-        <Text style={d.secT}>连接</Text>
-        <Pressable style={d.row} android_ripple={{ color: c.tintSoft, borderless: false }} onPress={() => { onClose(); onSetup(); }}>
-          <Text style={d.rowT}>服务器配置</Text>
-          <Text style={d.rowCaret}>›</Text>
-        </Pressable>
+        <Text style={d.secT}>服务器列表</Text>
+        <ScrollView style={d.srvScroll} nestedScrollEnabled>
+          {servers.map((e) => {
+            const active = e.id === activeId;
+            return (
+              <View key={e.id} style={[d.srvRow, active && d.srvRowOn]}>
+                <Pressable style={d.srvMain} android_ripple={{ color: c.tintSoft, borderless: false }} onPress={() => pick(e)}>
+                  <View style={d.srvHead}>
+                    {active ? <View style={[d.srvDot, { backgroundColor: c.done }]} /> : null}
+                    <Text style={d.srvName} numberOfLines={1}>{e.name}</Text>
+                    {e.cloud ? <Text style={d.srvCloud}>☁</Text> : null}
+                  </View>
+                  <Text style={d.srvUrl} numberOfLines={1}>{e.wsUrl}</Text>
+                </Pressable>
+                <Pressable style={d.srvDel} android_ripple={{ color: withA(c.waiting, 0.15), borderless: false, radius: 13 }} onPress={() => remove(e)}>
+                  <Text style={d.srvDelT}>✕</Text>
+                </Pressable>
+              </View>
+            );
+          })}
+          <Pressable style={d.addRow} android_ripple={{ color: c.tintSoft, borderless: false }} onPress={() => { onClose(); onSetup(); }}>
+            <Text style={d.addT}>＋ 新增服务器</Text>
+          </Pressable>
+        </ScrollView>
+        {servers.length === 0 ? <Text style={d.srvEmpty}>还没有服务器，点下方新增</Text> : null}
 
         <Text style={d.secT}>显示</Text>
         <View style={d.rowStatic}>
@@ -96,18 +145,32 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
   nameT: { color: c.text, fontSize: 16, fontWeight: "700" },
   verT: { color: c.faint, fontSize: 11.5, marginTop: 1 },
   secT: { color: c.faint, fontSize: 11, fontWeight: "700", marginTop: 20, marginBottom: 6, letterSpacing: 1 },
-  row: {
-    flexDirection: "row", alignItems: "center", justifyContent: "space-between",
-    backgroundColor: c.panel, borderWidth: 1, borderColor: c.line,
-    borderRadius: 12, paddingHorizontal: 12, paddingVertical: 13,
+  srvScroll: { maxHeight: 236 },
+  srvRow: {
+    flexDirection: "row", alignItems: "center", borderWidth: 1, borderColor: c.line,
+    borderRadius: 12, backgroundColor: c.panel, marginBottom: 8, overflow: "hidden",
   },
+  srvRowOn: { borderColor: withA(c.done, 0.45), backgroundColor: withA(c.done, 0.05) },
+  srvMain: { flex: 1, paddingVertical: 9, paddingLeft: 11, paddingRight: 4 },
+  srvHead: { flexDirection: "row", alignItems: "center", gap: 6 },
+  srvDot: { width: 7, height: 7, borderRadius: 4 },
+  srvName: { color: c.text, fontSize: 13.5, fontWeight: "600", flexShrink: 1 },
+  srvUrl: { color: c.faint, fontSize: 10.5, marginTop: 1.5 },
+  srvCloud: { color: c.done, fontSize: 11.5 },
+  srvDel: { width: 36, height: 42, alignItems: "center", justifyContent: "center" },
+  srvDelT: { color: c.faint, fontSize: 14 },
+  addRow: {
+    borderWidth: 1, borderColor: withA(c.brandA, 0.45), borderStyle: "dashed", borderRadius: 12,
+    alignItems: "center", justifyContent: "center", paddingVertical: 10, marginBottom: 8,
+  },
+  addT: { color: c.brandA, fontSize: 13, fontWeight: "700" },
+  srvEmpty: { color: c.faint, fontSize: 11, marginTop: 2 },
   rowStatic: {
     flexDirection: "row", alignItems: "center", justifyContent: "space-between",
     backgroundColor: c.panel, borderWidth: 1, borderColor: c.line,
     borderRadius: 12, paddingHorizontal: 12, paddingVertical: 9, marginBottom: 8,
   },
   rowT: { color: c.text, fontSize: 14, fontWeight: "600" },
-  rowCaret: { color: c.faint, fontSize: 18, marginTop: -2 },
   seg: { flexDirection: "row", gap: 6 },
   segOpt: {
     paddingHorizontal: 13, paddingVertical: 6, borderRadius: 10,

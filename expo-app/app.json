@@ -2,7 +2,7 @@
   "expo": {
     "name": "CC Watch",
     "slug": "cc-watch",
-    "version": "0.2.15",
+    "version": "0.2.16",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "dark",
