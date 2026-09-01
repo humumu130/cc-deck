@@ -115,7 +115,8 @@ export class Bridge {
 
   // ---------- 输入注入（COMMAND_EXT_INPUT / COMMAND_EXT_STOP）----------
 
-  // 空闲（DONE）立即注入；WORKING/WAITING/注入中排队，Stop 后自动 flush
+  // 空闲（DONE）/运行中（WORKING）立即注入——CLI 对工作中收到的输入会原生排队/steering，
+  // 与 PC 终端手敲一致；WAITING（本地权限弹窗/远程审批挂起）注入 Enter 可能误触弹窗，排队等回合结束
   extInput(sessionId: string, text: string): { ok: boolean; error?: string } {
     const state = this.mgr.getExternal(sessionId);
     if (!state) return { ok: false, error: `会话不存在: ${sessionId}` };
@@ -126,10 +127,13 @@ export class Bridge {
     const q = this.inputQueue.get(sessionId) ?? [];
     q.push(text);
     this.inputQueue.set(sessionId, q);
-    if (state.status === "DONE" && !this.flushing.has(sessionId)) {
+    if ((state.status === "DONE" || state.status === "WORKING") && !this.flushing.has(sessionId)) {
+      if (state.status === "WORKING") {
+        this.mgr.pushExternalLog(sessionId, "system", `已注入终端（CLI 运行中，自动排队跟随）：${truncate(text, 80)}`);
+      }
       void this.flushQueue(sessionId);
     } else {
-      this.mgr.pushExternalLog(sessionId, "system", `已排队（回合结束后自动发送）：${truncate(text, 80)}`);
+      this.mgr.pushExternalLog(sessionId, "system", `已排队（等待确认/回合结束后自动发送）：${truncate(text, 80)}`);
     }
     return { ok: true };
   }
@@ -156,8 +160,8 @@ export class Bridge {
         const state = this.mgr.getExternal(sessionId);
         const q = this.inputQueue.get(sessionId);
         if (!q || q.length === 0) break;
-        // 注入的下一条已开新回合（UserPromptSubmit 到达）：剩余留给下一次 Stop 后 flush
-        if (!state || state.status !== "DONE") break;
+        // 注入的下一条已进 WAITING（权限弹窗/审批挂起）：剩余留给下一次 Stop 后 flush
+        if (!state || (state.status !== "DONE" && state.status !== "WORKING")) break;
         if (!state.cli_pid) {
           this.inputQueue.delete(sessionId);
           this.mgr.pushExternalLog(sessionId, "system", "排队消息被弃（进程定位丢失）");
@@ -169,7 +173,7 @@ export class Bridge {
           this.onInjectFail(sessionId, r.error);
           return;
         }
-        await sleep(400); // 等 UserPromptSubmit 把状态翻成 WORKING
+        await sleep(400); // 等 UserPromptSubmit 翻状态/给连续注入留节奏
       }
     } finally {
       this.flushing.delete(sessionId);

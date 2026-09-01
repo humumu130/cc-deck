@@ -282,7 +282,7 @@ export default function DetailScreen({ sid, onBack }: { sid: string; onBack: () 
   const [images, setImages] = useState<string[]>([]);
   const [queuedHint, setQueuedHint] = useState<string | null>(null);
   const flashQueuedHint = () => {
-    setQueuedHint("已加入队列，回合结束自动发送（Esc 打断需等约 1 分钟空闲回落）");
+    setQueuedHint("已排队，确认/回合结束自动发送（Esc 打断则等约 1 分钟空闲回落）");
     setTimeout(() => setQueuedHint(null), 4000);
   };
   const [picking, setPicking] = useState(false);
@@ -340,7 +340,7 @@ export default function DetailScreen({ sid, onBack }: { sid: string; onBack: () 
   const send = () => {
     const text = input.trim();
     if (!text && images.length === 0) return;
-    const willQueue = external && s.status !== "DONE";
+    const willQueue = external && s.status === "WAITING";
     const ok = store.send(
       external ? "COMMAND_EXT_INPUT" : "COMMAND_MESSAGE",
       external
@@ -409,7 +409,7 @@ export default function DetailScreen({ sid, onBack }: { sid: string; onBack: () 
           </Text>
         </View>
         <Pressable
-          style={[d.editBtn, d.opRipple]}
+          style={[d.foldBtn, d.opRipple]}
           android_ripple={{ color: c.tintSoft, borderless: false }}
           onPress={() => {
             ctrlCollapsed = !ctrlCollapsed;
@@ -417,7 +417,7 @@ export default function DetailScreen({ sid, onBack }: { sid: string; onBack: () 
           }}
           hitSlop={4}
         >
-          <Text style={d.editT}>{collapsed ? "▾" : "▴"}</Text>
+          <Text style={d.foldT}>{collapsed ? "▼" : "▲"}</Text>
         </Pressable>
         <Pressable
           style={[d.statsBtn, d.opRipple]}
@@ -651,7 +651,7 @@ export default function DetailScreen({ sid, onBack }: { sid: string; onBack: () 
             style={d.input}
             value={input}
             onChangeText={setInput}
-            placeholder={external ? "注入到终端（空闲时自动发送）" : s.historical ? "继续对话（恢复会话）…" : "发送消息…"}
+            placeholder={external ? "发送到终端（CLI 忙时自动排队）" : s.historical ? "继续对话（恢复会话）…" : "发送消息…"}
             placeholderTextColor={c.faint}
             editable={canCmd}
             multiline
@@ -697,6 +697,12 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
     borderWidth: 1, borderColor: c.line, alignItems: "center", justifyContent: "center",
   },
   editT: { color: c.dim, fontSize: 14, marginTop: -1 },
+  // 折叠开关：用选中态视觉（品牌色）——它切换的是整个工具区，比 ✎ 更该被看见
+  foldBtn: {
+    width: 30, height: 30, borderRadius: 9, backgroundColor: c.tintStrong,
+    borderWidth: 1, borderColor: withA(c.brandA, 0.4), alignItems: "center", justifyContent: "center",
+  },
+  foldT: { color: c.brandA, fontSize: 11, marginTop: -1 },
   // 固定工具区：跟随头部、不随转录滚动，底部一条分隔线与头部呼应
   fixedBar: { paddingHorizontal: 14, paddingTop: 10, borderBottomWidth: 1, borderBottomColor: c.line },
   strip: {

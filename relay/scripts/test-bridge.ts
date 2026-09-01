@@ -190,18 +190,33 @@ await hook({ event: "UserPromptSubmit", prompt: "看看这个目录", cli_pid: 4
 await wait(150);
 assert(mgr.snapshot().find((s) => s.session_id === extId("cli-1"))?.cli_pid === 4321, "cli_pid captured");
 
-// 16. 忙时 EXT_INPUT → 排队 ack，不注入
-const qId = send("COMMAND_EXT_INPUT", { session_id: extId("cli-1"), text: "排队消息A" });
-assert((await waitAck(qId)).ok, "EXT_INPUT queued acked");
-await wait(300);
-assert(fakeLog().length === 0, "no injection while WORKING");
-assert(events.some((e) => e.type === "SESSION_LOG" && String((e.payload as { text: string }).text).includes("已排队")), "queue logged");
+// 16. WORKING 时 EXT_INPUT → 立即注入（CLI 原生排队），带"已注入终端"日志
+const busyId = send("COMMAND_EXT_INPUT", { session_id: extId("cli-1"), text: "忙时直发A" });
+assert((await waitAck(busyId)).ok, "EXT_INPUT while WORKING acked");
+await wait(800);
+const fl16 = fakeLog().filter((a) => a[1] === "忙时直发A");
+assert(fl16.length === 1 && fl16[0][0] === "4321" && !fl16[0].includes("noenter"), "busy injection direct with enter");
+assert(events.some((e) => e.type === "SESSION_LOG" && String((e.payload as { text: string }).text).includes("已注入终端")), "busy injection logged");
 
 // 17. EXT_STOP（WORKING）→ 注入 Esc
 const escId = send("COMMAND_EXT_STOP", { session_id: extId("cli-1") });
 assert((await waitAck(escId)).ok, "EXT_STOP acked");
 await wait(300);
 assert(fakeLog().some((a) => a[0] === "4321" && a[1] === "--esc"), "esc injected");
+
+// 17.5 WAITING（远程审批挂起）时 EXT_INPUT → relay 侧排队，不注入
+const held17 = hook({ event: "PreToolUse", tool_name: "Bash", tool_input: { command: "npm run build" }, permission_mode: "default" });
+await wait(300);
+const w17 = events.filter((e) => e.type === "SESSION_WAITING").at(-1) as Envelope<"SESSION_WAITING", WaitingPayload>;
+assert(!!w17 && w17.payload.decidable === true, "17.5 WAITING(decidable) emitted");
+const qId = send("COMMAND_EXT_INPUT", { session_id: extId("cli-1"), text: "排队消息A" });
+assert((await waitAck(qId)).ok, "EXT_INPUT queued acked");
+await wait(300);
+assert(!fakeLog().some((a) => a[1] === "排队消息A"), "no injection while WAITING");
+assert(events.some((e) => e.type === "SESSION_LOG" && String((e.payload as { text: string }).text).includes("已排队")), "queue logged");
+const cont17 = send("COMMAND_CONTINUE", { session_id: extId("cli-1"), request_id: w17.payload.request_id });
+assert((await waitAck(cont17)).ok, "17.5 CONTINUE acked");
+assert((await held17).body.decision === "allow", "17.5 hook got allow");
 
 // 18. Stop → DONE 后自动 flush 队列（末条带回车）
 await hook({ event: "Stop" });
@@ -229,7 +244,7 @@ await hook({ event: "SessionEnd", session_id: "cli-2", reason: "clear" });
 await hook({ event: "UserPromptSubmit", prompt: "要失败的会话", session_id: "cli-3", cli_pid: 424242 });
 await wait(150);
 const fId = send("COMMAND_EXT_INPUT", { session_id: extId("cli-3"), text: "会失败" });
-assert((await waitAck(fId)).ok, "EXT_INPUT queued (will fail)");
+assert((await waitAck(fId)).ok, "EXT_INPUT acked (immediate inject will fail)");
 await hook({ event: "Stop", session_id: "cli-3" });
 await wait(800);
 assert(fakeLog().some((a) => a[0] === "424242"), "inject attempted on dead pid");
