@@ -356,17 +356,20 @@ export default function DetailScreen({ sid, onBack }: { sid: string; onBack: () 
   // 语音输入状态与事件订阅（钩子须在下方早退 return 之前）
   const [listening, setListening] = useState(false);
   const [voiceHint, setVoiceHint] = useState<string | null>(null);
+  // partial 只进独立的单行字幕条，不动输入框内容（避免高度跳变）
+  const [voiceText, setVoiceText] = useState("");
   const voiceRef = useRef({ partial: "", final: "", resolved: false });
   useEffect(() => {
     const sub = voice.subscribe((ev) => {
       if (ev.type === "partial") {
         voiceRef.current.partial = ev.text;
-        setInput(ev.text);
+        setVoiceText(ev.text);
       } else if (ev.type === "final") {
         voiceRef.current.final = ev.text;
         voiceRef.current.resolved = true;
       } else {
         setListening(false);
+        setVoiceText("");
         voice.cancel();
         // 7=NO_MATCH 6=SPEECH_TIMEOUT：安静松手不算错误；其余提示
         if (ev.code !== 7 && ev.code !== 6) setVoiceHintOnce("语音识别出错（" + ev.code + "），请重试");
@@ -413,7 +416,7 @@ export default function DetailScreen({ sid, onBack }: { sid: string; onBack: () 
     }
   };
 
-  // 语音输入：按住说话，partial 实时进输入框，松手 stopListening 等 final 发送（超时兜底用 partial）
+  // 语音输入：按住说话，partial 实时上字幕条，松手 stopListening 等 final 发送（超时兜底用 partial）
   const setVoiceHintOnce = (t: string) => {
     setVoiceHint(t);
     setTimeout(() => setVoiceHint(null), 3500);
@@ -431,11 +434,11 @@ export default function DetailScreen({ sid, onBack }: { sid: string; onBack: () 
       return;
     }
     if (!(await voice.available())) {
-      setVoiceHintOnce("本机无语音识别服务");
+      setVoiceHintOnce("本机无语音识别服务，可用键盘自带的语音输入");
       return;
     }
     voiceRef.current = { partial: "", final: "", resolved: false };
-    setInput("");
+    setVoiceText("");
     voice.start();
     setListening(true);
   };
@@ -749,6 +752,11 @@ export default function DetailScreen({ sid, onBack }: { sid: string; onBack: () 
         {voiceHint ? (
           <Text style={d.queuedHint}>{voiceHint}</Text>
         ) : null}
+        {listening ? (
+          <Text style={d.voiceLive} numberOfLines={1}>
+            {voiceText || "正在听，松开发送…"}
+          </Text>
+        ) : null}
         <View style={d.cmdbar}>
           {!external && !s.historical ? (
             <Pressable
@@ -760,20 +768,11 @@ export default function DetailScreen({ sid, onBack }: { sid: string; onBack: () 
               <Text style={d.imgBtnT}>📷</Text>
             </Pressable>
           ) : null}
-          <Pressable
-            style={[d.imgBtn, listening && d.micOn, !canCmd && { opacity: 0.4 }]}
-            android_ripple={{ color: c.tintSoft, borderless: false, radius: 13 }}
-            onPressIn={() => void startVoice()}
-            onPressOut={endVoice}
-            disabled={!canCmd}
-          >
-            <Text style={[d.imgBtnT, { color: listening ? c.brandA : undefined }]}>🎤</Text>
-          </Pressable>
           <TextInput
-            style={[d.input, listening && d.inputListening]}
+            style={d.input}
             value={input}
             onChangeText={setInput}
-            placeholder={listening ? "正在听，松开发送…" : external ? "发送到终端（CLI 忙时自动排队）" : s.historical ? "继续对话（恢复会话）…" : "发送消息…"}
+            placeholder={external ? "CLI忙时自动排队" : s.historical ? "继续对话（恢复会话）…" : "发送消息…"}
             placeholderTextColor={c.faint}
             editable={canCmd}
             multiline
@@ -781,6 +780,15 @@ export default function DetailScreen({ sid, onBack }: { sid: string; onBack: () 
             blurOnSubmit={false}
             onSubmitEditing={() => send()}
           />
+          <Pressable
+            style={[d.imgBtn, listening && d.micOn, !canCmd && { opacity: 0.4 }]}
+            android_ripple={{ color: c.tintSoft, borderless: false, radius: 13 }}
+            onPressIn={() => void startVoice()}
+            onPressOut={endVoice}
+            disabled={!canCmd}
+          >
+            <MicIcon color={listening ? c.brandA : c.dim} />
+          </Pressable>
           <Pressable style={[d.sendBtn, (!canCmd || (!input.trim() && images.length === 0)) && { opacity: 0.4 }]} android_ripple={{ color: "rgba(255,255,255,0.2)", borderless: false }} onPress={() => send()} disabled={!canCmd}>
             <Text style={d.sendT}>➤</Text>
           </Pressable>
@@ -798,6 +806,23 @@ export default function DetailScreen({ sid, onBack }: { sid: string; onBack: () 
       />
       <StatsModal visible={statsOpen} s={s} onCancel={() => setStatsOpen(false)} />
     </SafeAreaView>
+  );
+}
+
+// 输入法风格麦克风矢量图标：胶囊 + U 形支架 + 立柱 + 底座（替代 emoji）
+function MicIcon({ color }: { color: string }) {
+  return (
+    <View style={{ width: 15, height: 21, alignItems: "center" }}>
+      <View style={{ width: 8, height: 11, borderRadius: 4, backgroundColor: color }} />
+      <View
+        style={{
+          position: "absolute", top: 0, width: 13, height: 12,
+          borderRadius: 7.5, borderWidth: 1.5, borderBottomWidth: 0, borderColor: color,
+        }}
+      />
+      <View style={{ width: 1.5, height: 3.5, backgroundColor: color, marginTop: 3.5 }} />
+      <View style={{ width: 6, height: 1.5, borderRadius: 0.75, backgroundColor: color, marginTop: 1 }} />
+    </View>
   );
 }
 
@@ -998,7 +1023,10 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
   },
   imgBtnT: { fontSize: 17 },
   micOn: { backgroundColor: c.tintStrong, borderColor: withA(c.brandA, 0.55) },
-  inputListening: { borderColor: c.brandA },
+  voiceLive: {
+    paddingHorizontal: 14, paddingVertical: 5,
+    color: c.brandA, fontSize: 12, backgroundColor: c.overlay,
+  },
   queuedHint: {
     paddingHorizontal: 14, paddingVertical: 5,
     color: c.dim, fontSize: 11, backgroundColor: c.overlay,

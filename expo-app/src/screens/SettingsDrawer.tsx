@@ -85,7 +85,7 @@ export default function SettingsDrawer({
           </LinearGradient>
           <View style={{ flex: 1, minWidth: 0 }}>
             <Text style={d.nameT}>Claude Code</Text>
-            <Text style={d.verT}>移动工作台 · v0.2.17</Text>
+            <Text style={d.verT}>移动工作台 · v0.2.18</Text>
           </View>
         </View>
 
@@ -119,14 +119,14 @@ export default function SettingsDrawer({
         {servers.length === 0 ? <Text style={d.srvEmpty}>还没有服务器，点下方新增</Text> : null}
 
         <Text style={d.secT}>显示</Text>
-        <View style={d.rowStatic}>
+        <View style={d.rowCol}>
           <Text style={d.rowT}>过程消息</Text>
-          <View style={d.seg}>
+          <View style={d.segFull}>
             {FONT_OPTS.map((o) => (
               <Pressable
                 key={o.k}
-                style={[d.segOpt, processFont === o.k && d.segOptOn]}
-                android_ripple={{ color: c.tintSoft, borderless: false, radius: 11 }}
+                style={[d.segOptF, processFont === o.k && d.segOptOn]}
+                android_ripple={{ color: c.tintSoft, borderless: false, radius: 10 }}
                 onPress={() => setProcessFont(o.k)}
               >
                 <Text style={[d.segT, processFont === o.k && d.segTOn]}>{o.label}</Text>
@@ -191,7 +191,16 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
     backgroundColor: c.panel, borderWidth: 1, borderColor: c.line,
     borderRadius: 12, paddingHorizontal: 12, paddingVertical: 9, marginBottom: 8,
   },
+  rowCol: {
+    backgroundColor: c.panel, borderWidth: 1, borderColor: c.line,
+    borderRadius: 12, paddingHorizontal: 12, paddingVertical: 9, marginBottom: 8,
+  },
   rowT: { color: c.text, fontSize: 14, fontWeight: "600" },
+  segFull: { flexDirection: "row", gap: 6, marginTop: 8 },
+  segOptF: {
+    flex: 1, alignItems: "center", paddingVertical: 6, borderRadius: 10,
+    backgroundColor: c.tintSoft, borderWidth: 1, borderColor: c.line,
+  },
   seg: { flexDirection: "row", gap: 6 },
   segOpt: {
     paddingHorizontal: 13, paddingVertical: 6, borderRadius: 10,

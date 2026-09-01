@@ -1,5 +1,7 @@
 package expo.modules.voice
 
+import android.content.ComponentName
+import android.content.Context
 import android.content.Intent
 import android.os.Bundle
 import android.speech.RecognitionListener
@@ -10,8 +12,19 @@ import expo.modules.kotlin.modules.ModuleDefinition
 
 // 语音输入：android.speech.SpeechRecognizer 实时转文字（partial 增量下发，松手 stopListening 后 final）。
 // 无识别服务的设备（无 GMS 的 ROM / VM）上 available() 返回 false，JS 侧提示，不抛错。
+// 国产 ROM 常有识别服务但未设为系统默认（isRecognitionAvailable 只查默认）：
+// 枚举 android.speech.RecognitionService 意图的服务显式绑定（优先 Google）。
 class VoiceModule : Module() {
   private var recognizer: SpeechRecognizer? = null
+
+  private fun pickService(ctx: Context): ComponentName? {
+    return runCatching {
+      val list = ctx.packageManager.queryIntentServices(Intent(SERVICE_ACTION), 0)
+      if (list.isNullOrEmpty()) return@runCatching null
+      val ri = list.firstOrNull { it.serviceInfo?.packageName?.contains("google") == true } ?: list[0]
+      ComponentName(ri.serviceInfo.packageName, ri.serviceInfo.name)
+    }.getOrNull()
+  }
 
   override fun definition() = ModuleDefinition {
     Name("Voice")
@@ -25,7 +38,9 @@ class VoiceModule : Module() {
 
     AsyncFunction("available") {
       val ctx = appContext.reactContext ?: return@AsyncFunction false
-      runCatching { SpeechRecognizer.isRecognitionAvailable(ctx) }.getOrDefault(false)
+      runCatching {
+        SpeechRecognizer.isRecognitionAvailable(ctx) || pickService(ctx) != null
+      }.getOrDefault(false)
     }
 
     Function("start") {
@@ -33,7 +48,9 @@ class VoiceModule : Module() {
       runCatching { recognizer?.destroy() }
       recognizer = null
       val r = try {
-        SpeechRecognizer.createSpeechRecognizer(ctx)
+        val comp = pickService(ctx)
+        if (comp != null) SpeechRecognizer.createSpeechRecognizer(ctx, comp)
+        else SpeechRecognizer.createSpeechRecognizer(ctx)
       } catch (e: Exception) {
         null
       } ?: return@Function null
@@ -77,5 +94,9 @@ class VoiceModule : Module() {
       runCatching { recognizer?.destroy() }
       recognizer = null
     }
+  }
+
+  companion object {
+    private const val SERVICE_ACTION = "android.speech.RecognitionService"
   }
 }
