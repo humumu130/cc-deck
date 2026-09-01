@@ -10,13 +10,11 @@ import { store, useRelay } from "../store";
 import type { LogEntry, SessionState, WaitingPayload } from "../protocol";
 import { useKbHeight } from "../kb";
 import { useProcessFont } from "../display-settings";
+import { usePhraseState } from "../phrases";
 import { voice } from "../voice";
 import { MdText } from "../md";
 import RenameModal from "./RenameModal";
 import StatsModal from "./StatsModal";
-
-// 快捷指令模板：点击填入输入框（不自动发送）
-const TEMPLATES = ["继续", "总结当前进展", "运行测试", "提交代码"];
 
 const LOG_FILTERS = [
   { k: "all", label: "全部" },
@@ -354,6 +352,7 @@ export default function DetailScreen({ sid, onBack }: { sid: string; onBack: () 
   }, [onBack]);
 
   // 语音输入状态与事件订阅（钩子须在下方早退 return 之前）
+  const phrases = usePhraseState().list;
   const [listening, setListening] = useState(false);
   const [voiceHint, setVoiceHint] = useState<string | null>(null);
   // partial 只进独立的单行字幕条，不动输入框内容（避免高度跳变）
@@ -718,10 +717,10 @@ export default function DetailScreen({ sid, onBack }: { sid: string; onBack: () 
             </View>
           </View>
           )
-        ) : canCmd ? (
+        ) : canCmd && phrases.length > 0 ? (
           <View style={d.tplRow}>
             <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 7 }}>
-              {TEMPLATES.map((t) => (
+              {phrases.map((t) => (
                 <Pressable
                   key={t}
                   style={d.tplChip}

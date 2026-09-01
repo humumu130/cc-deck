@@ -1,10 +1,11 @@
-// 设置抽屉：首页左上角图标呼出（侧滑），收纳服务器列表与显示设置
+// 设置抽屉：首页左上角图标呼出（侧滑），收纳服务器列表、快捷短语与显示设置
 import { useEffect, useState } from "react";
-import { Animated, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { Animated, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { LinearGradient } from "expo-linear-gradient";
 import { useTheme, useThemeStyles } from "../theme-context";
 import { setProcessFont, useProcessFont, type ProcessFont } from "../display-settings";
+import { resetPhrases, setPhrases, usePhraseState } from "../phrases";
 import { store, useRelay, type ServerEntry } from "../store";
 import { withA, type ThemeColors } from "../theme";
 
@@ -73,6 +74,16 @@ export default function SettingsDrawer({
   const translateX = x.interpolate({ inputRange: [0, 1], outputRange: [-240, 0] });
   const scrimOp = x.interpolate({ inputRange: [0, 1], outputRange: [0, 0.55] });
 
+  // 快捷短语管理（详情页 chips 数据源）
+  const ph = usePhraseState();
+  const [newPh, setNewPh] = useState("");
+  const addPh = () => {
+    const t = newPh.trim().slice(0, 40);
+    if (!t) return;
+    setPhrases([...ph.list, t]);
+    setNewPh("");
+  };
+
   return (
     <View style={d.root} pointerEvents={visible ? "auto" : "none"}>
       <Animated.View style={[d.scrim, { opacity: scrimOp }]}>
@@ -85,10 +96,11 @@ export default function SettingsDrawer({
           </LinearGradient>
           <View style={{ flex: 1, minWidth: 0 }}>
             <Text style={d.nameT}>Claude Code</Text>
-            <Text style={d.verT}>移动工作台 · v0.2.18</Text>
+            <Text style={d.verT}>移动工作台 · v0.2.19</Text>
           </View>
         </View>
 
+        <ScrollView style={d.body} nestedScrollEnabled>
         <Text style={d.secT}>服务器列表</Text>
         <ScrollView style={d.srvScroll} nestedScrollEnabled>
           {servers.map((e) => {
@@ -118,6 +130,47 @@ export default function SettingsDrawer({
         </ScrollView>
         {servers.length === 0 ? <Text style={d.srvEmpty}>还没有服务器，点下方新增</Text> : null}
 
+        <Text style={d.secT}>快捷短语</Text>
+        <View style={d.phBox}>
+          {ph.list.map((p, i) => (
+            <View key={i} style={d.phRow}>
+              <Text style={d.phT} numberOfLines={1}>{p}</Text>
+              <Pressable
+                style={d.phDel}
+                android_ripple={{ color: withA(c.waiting, 0.15), borderless: false, radius: 12 }}
+                onPress={() => setPhrases(ph.list.filter((_, j) => j !== i))}
+              >
+                <Text style={d.phDelT}>✕</Text>
+              </Pressable>
+            </View>
+          ))}
+          {ph.list.length === 0 ? <Text style={d.srvEmpty}>已清空：详情页将不再显示短语条</Text> : null}
+          <View style={d.phAddRow}>
+            <TextInput
+              style={d.phInput}
+              value={newPh}
+              onChangeText={setNewPh}
+              placeholder="新短语"
+              placeholderTextColor={c.faint}
+              returnKeyType="done"
+              onSubmitEditing={addPh}
+            />
+            <Pressable
+              style={[d.phAddBtn, !newPh.trim() && { opacity: 0.4 }]}
+              android_ripple={{ color: c.tintSoft, borderless: false, radius: 10 }}
+              onPress={addPh}
+              disabled={!newPh.trim()}
+            >
+              <Text style={d.phAddT}>＋</Text>
+            </Pressable>
+          </View>
+          {ph.customized ? (
+            <Pressable style={d.phReset} android_ripple={{ color: c.tintSoft, borderless: false, radius: 10 }} onPress={resetPhrases}>
+              <Text style={d.phResetT}>恢复默认</Text>
+            </Pressable>
+          ) : null}
+        </View>
+
         <Text style={d.secT}>显示</Text>
         <View style={d.rowCol}>
           <Text style={d.rowT}>过程消息</Text>
@@ -146,6 +199,7 @@ export default function SettingsDrawer({
           </View>
         </View>
         <Text style={d.tipT}>过程消息 = 工具调用 / 结果 / 系统提示；紧凑小一号+淡化，隐藏则整行不显示（思考内容保留）。</Text>
+        </ScrollView>
       </Animated.View>
     </View>
   );
@@ -186,6 +240,31 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
   },
   addT: { color: c.brandA, fontSize: 13, fontWeight: "700" },
   srvEmpty: { color: c.faint, fontSize: 11, marginTop: 2 },
+  body: { flex: 1 },
+  phBox: {
+    backgroundColor: c.panel, borderWidth: 1, borderColor: c.line,
+    borderRadius: 12, paddingHorizontal: 10, paddingVertical: 5,
+  },
+  phRow: { flexDirection: "row", alignItems: "center", minHeight: 32 },
+  phT: { color: c.text, fontSize: 13, flex: 1 },
+  phDel: { width: 30, height: 30, alignItems: "center", justifyContent: "center" },
+  phDelT: { color: c.faint, fontSize: 13 },
+  phAddRow: { flexDirection: "row", gap: 6, marginTop: 5 },
+  phInput: {
+    flex: 1, minHeight: 34, borderRadius: 10,
+    backgroundColor: c.tintSoft, borderWidth: 1, borderColor: c.line,
+    paddingHorizontal: 10, paddingVertical: 7, color: c.text, fontSize: 13,
+  },
+  phAddBtn: {
+    width: 44, borderRadius: 10, backgroundColor: c.tintStrong,
+    borderWidth: 1, borderColor: withA(c.brandA, 0.45), alignItems: "center", justifyContent: "center",
+  },
+  phAddT: { color: c.brandA, fontSize: 16, fontWeight: "700" },
+  phReset: {
+    alignItems: "center", paddingVertical: 7, marginTop: 8, borderRadius: 10,
+    borderWidth: 1, borderColor: c.line, borderStyle: "dashed",
+  },
+  phResetT: { color: c.dim, fontSize: 12, fontWeight: "600" },
   rowStatic: {
     flexDirection: "row", alignItems: "center", justifyContent: "space-between",
     backgroundColor: c.panel, borderWidth: 1, borderColor: c.line,

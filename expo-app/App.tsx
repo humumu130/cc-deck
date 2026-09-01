@@ -7,6 +7,7 @@ import { ensureNotifPermission, fgSupported, notifyAlert, startForegroundService
 import { startWatchGateway } from "./src/watch";
 import { ThemeProvider, useTheme, useThemeStyles } from "./src/theme-context";
 import { loadDisplaySettings } from "./src/display-settings";
+import { loadPhrases } from "./src/phrases";
 import type { ThemeColors } from "./src/theme";
 import ListScreen from "./src/screens/ListScreen";
 import DetailScreen from "./src/screens/DetailScreen";
@@ -53,6 +54,7 @@ function Shell() {
   useEffect(() => {
     startWatchGateway();
     void loadDisplaySettings();
+    void loadPhrases();
     void store.loadConfig().then((cfg) => {
       setHasCfg(!!cfg);
       if (cfg) store.connect();
