@@ -79,20 +79,20 @@ export class CloudClient {
     });
   }
 
-  // 出站链路心跳：20s 协议层 ping 保活 NAT 映射；45s 无任何回包说明对端/路径已死
+  // 出站链路心跳：10s 协议层 ping 保活 NAT 映射；25s 无任何回包说明对端/路径已死
   // （半开 TCP 不触发 close），主动 terminate 走统一重连路径。
   private startHeartbeat(): void {
     if (this.hbTimer) return;
     this.hbTimer = setInterval(() => {
       const ws = this.ws;
       if (!ws || ws.readyState !== WebSocket.OPEN) return;
-      if (Date.now() - this.lastRecv > 45_000) {
-        console.log("[cloud] heartbeat timeout (>45s no traffic), terminating for reconnect");
+      if (Date.now() - this.lastRecv > 25_000) {
+        console.log("[cloud] heartbeat timeout (>25s no traffic), terminating for reconnect");
         ws.terminate();
         return;
       }
       ws.ping();
-    }, 20_000);
+    }, 10_000);
     this.hbTimer.unref?.();
   }
 
@@ -106,11 +106,37 @@ export class CloudClient {
     this.send({ to: dev, data: seal(obj, peer.pubkey, this.identity.keypair.secretKey) });
   }
 
+  // 手机激活/恢复：缓冲内按 last_seq 补发，否则全量 SNAPSHOT（hello 与 ping-resume 共用）
+  private resumePhone(dev: string, lastSeq: number): void {
+    this.phones.set(dev, { lastSeq, active: true });
+    if (lastSeq > 0 && !this.bus.isBeyondBuffer(lastSeq)) {
+      for (const env of this.bus.replayAfter(lastSeq)) this.sendSealed(dev, env);
+    } else {
+      const snapshot: Envelope = {
+        seq: this.bus.lastSeq(),
+        session_id: "",
+        ts: Date.now(),
+        type: "SNAPSHOT",
+        payload: { sessions: this.mgr.snapshot(), logs: this.mgr.snapshotLogs(), server_time: Date.now() },
+      };
+      this.sendSealed(dev, snapshot);
+    }
+  }
+
   private onFrame(text: string): void {
     let f: CloudFrame;
     try {
       f = JSON.parse(text) as CloudFrame;
     } catch {
+      return;
+    }
+    // 桥告知目标手机不在线：标记下线等对方 ping/hello 恢复，避免持续向虚空加密下发
+    if (f.type === "ROUTE_MISS" && f.to) {
+      const st = this.phones.get(f.to);
+      if (st?.active) {
+        st.active = false;
+        console.log(`[cloud] route miss dev=${f.to}, mark inactive`);
+      }
       return;
     }
     if (!f.from || !f.data || typeof f.from !== "string") return;
@@ -126,24 +152,23 @@ export class CloudClient {
     }
     if (inner.t === "hello") {
       const lastSeq = Number(inner.last_seq ?? 0) || 0;
-      this.phones.set(f.from, { lastSeq, active: true });
       console.log(`[cloud] phone ${f.from} hello last_seq=${lastSeq}`);
-      if (lastSeq > 0 && !this.bus.isBeyondBuffer(lastSeq)) {
-        for (const env of this.bus.replayAfter(lastSeq)) this.sendSealed(f.from, env);
-      } else {
-        const snapshot: Envelope = {
-          seq: this.bus.lastSeq(),
-          session_id: "",
-          ts: Date.now(),
-          type: "SNAPSHOT",
-          payload: { sessions: this.mgr.snapshot(), logs: this.mgr.snapshotLogs(), server_time: Date.now() },
-        };
-        this.sendSealed(f.from, snapshot);
-      }
+      this.resumePhone(f.from, lastSeq);
       return;
     }
     if (inner.t === "ping") {
-      // 手机应用层心跳：探测 NAT 半开（TCP 超时需分钟级，这里压到 <1 分钟）
+      // 手机应用层心跳：探测 NAT 半开（TCP 超时需分钟级，这里压到 <1 分钟）。
+      // 兼作 resume：relay 侧断线重连/重启会把手机置 active=false，但手机 ws 存活
+      // 不会再发 hello，下行将永久黑洞（上行命令/ACK 不受门控，极难察觉）——
+      // ping 到达即链路通，顺手按 ping.last_seq 恢复补发（旧版无字段则全量 SNAPSHOT）。
+      const st = this.phones.get(f.from);
+      const lastSeq = Number(inner.last_seq ?? 0) || 0;
+      if (!st || !st.active) {
+        console.log(`[cloud] phone ${f.from} resume via ping last_seq=${lastSeq}`);
+        this.resumePhone(f.from, lastSeq);
+      } else {
+        st.lastSeq = lastSeq;
+      }
       this.sendSealed(f.from, { t: "pong", ts: Date.now() });
       return;
     }

@@ -158,6 +158,62 @@ assert(
   "配对手机仍正常收到该事件",
 );
 
+// ---------- 7) 云侧单边断线自愈（relay ws 掉线重连，手机 ws 不动） ----------
+// 场景：relay 重启/心跳超时只断 relay↔桥，手机 ws 存活不会再发 hello。
+// 旧行为：active=false 后下行永久黑洞（上行/ACK/ping-pong 照常，极难察觉）。
+const ccInternal = cloud as unknown as { ws: WebSocket | null };
+ccInternal.ws!.close();
+assert(
+  await waitFor(() => ccInternal.ws !== null && ccInternal.ws.readyState === WebSocket.OPEN, 5000),
+  "relay 侧重连桥成功",
+);
+await wait(300);
+bus.emit("sess-cloud", "SESSION_LOG", { kind: "system", text: "blackout-1" });
+await wait(800);
+assert(
+  !inbox2.some((m) => m.type === "SESSION_LOG" && (m.payload as { text?: string })?.text === "blackout-1"),
+  "未 ping 恢复前下行黑洞（旧行为复现）",
+);
+const seqNow = Math.max(...inbox2.map((m) => Number(m.seq ?? 0)).filter((n) => n > 0));
+phoneWs2.send(JSON.stringify({ to: identity.relayDev, data: seal({ t: "ping", last_seq: seqNow }, relayPubkey, phoneKp.secretKey) }));
+assert(
+  await waitFor(() => inbox2.some((m) => m.type === "SESSION_LOG" && (m.payload as { text?: string })?.text === "blackout-1")),
+  "ping 携带 last_seq 触发补发，黑洞自愈",
+);
+assert(
+  await waitFor(() => inbox2.some((m) => m.t === "pong")),
+  "ping 仍收到 pong（心跳语义不变）",
+);
+bus.emit("sess-cloud", "SESSION_LOG", { kind: "system", text: "after-resume" });
+assert(
+  await waitFor(() => inbox2.some((m) => m.type === "SESSION_LOG" && (m.payload as { text?: string })?.text === "after-resume")),
+  "恢复后实时事件继续下发",
+);
+
+// 旧版 ping（无 last_seq）→ 全量 SNAPSHOT 恢复（当前线上 APK 兼容路径）
+const ccWsBefore = ccInternal.ws;
+ccInternal.ws!.close();
+assert(
+  await waitFor(() => ccInternal.ws !== null && ccInternal.ws !== ccWsBefore && ccInternal.ws.readyState === WebSocket.OPEN, 5000),
+  "再次单边断线后 relay 重连",
+);
+const pongsBefore = inbox2.filter((m) => m.t === "pong").length;
+phoneWs2.send(JSON.stringify({ to: identity.relayDev, data: seal({ t: "ping" }, relayPubkey, phoneKp.secretKey) }));
+// inbox2 此前从未收到过 SNAPSHOT（hello/补发都在缓冲内），它出现即 resume 已完成
+assert(
+  await waitFor(() => inbox2.some((m) => m.type === "SNAPSHOT")),
+  "旧版无字段 ping 触发全量 SNAPSHOT 恢复",
+);
+assert(
+  await waitFor(() => inbox2.filter((m) => m.t === "pong").length > pongsBefore),
+  "旧版 ping 仍收到 pong",
+);
+bus.emit("sess-cloud", "SESSION_LOG", { kind: "system", text: "legacy-ping-resume" });
+assert(
+  await waitFor(() => inbox2.some((m) => m.type === "SESSION_LOG" && (m.payload as { text?: string })?.text === "legacy-ping-resume")),
+  "SNAPSHOT 恢复后实时事件继续下发",
+);
+
 // ---------- 清理 ----------
 phoneWs2.close();
 rogueWs.close();

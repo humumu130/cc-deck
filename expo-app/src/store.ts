@@ -407,7 +407,7 @@ class RelayStore {
       }
       try {
         ws.send(cloud && keys
-          ? JSON.stringify({ to: cloud.relayDev, data: seal({ t: "ping" }, cloud.relayPubkey, keys.secretKey) })
+          ? JSON.stringify({ to: cloud.relayDev, data: seal({ t: "ping", last_seq: this.lastSeq }, cloud.relayPubkey, keys.secretKey) })
           : JSON.stringify({ type: "PING" }));
       } catch {}
     }, 15_000);
