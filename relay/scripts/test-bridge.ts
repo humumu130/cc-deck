@@ -43,7 +43,8 @@ rmSync(INJECT_LOG, { force: true });
 const cfg = loadConfig();
 const bus = new EventBus();
 const mgr = new SessionManager(bus, cfg);
-startServer(bus, mgr, cfg, { holdMs: 1200, questionHoldMs: 800, gateToolsRaw: "Bash,Edit" });
+let cloudOnline = false; // 33 段置 true：云通道手机计入"在线"门控
+const { bridge } = startServer(bus, mgr, cfg, { holdMs: 1200, questionHoldMs: 800, gateToolsRaw: "Bash,Edit", cloudHasPhones: () => cloudOnline });
 await wait(300);
 
 const http = `http://127.0.0.1:${cfg.port}`;
@@ -585,6 +586,77 @@ assert(ack24.ok === false, "empty rename rejected");
   await wait(1500);
   assert(fakeLog().some((a) => a[0] === "4321" && a[1] === "--esc"), "31 esc injected for late answer");
   assert(fakeLog().some((a) => a[0] === "4321" && String(a[1]).includes("「X」")), "31 answer text injected");
+}
+
+// 32. relay 重启丢内存兜底后的晚答恢复：waiting 状态（events 重放）里找回问题定义；
+//     PC 本地作答后横幅也收起（fb 已丢不悬死）；云通道手机计入"手机在线"门控
+{
+  const qInput = { questions: [{ header: "方案", question: "重启后的问题?", options: [{ label: "M" }, { label: "N" }] }] };
+  const st = () => mgr.snapshot().find((s) => s.session_id === extId("cli-1"));
+  await hook({ event: "UserPromptSubmit", prompt: "重启恢复回合", cli_pid: 4321 });
+
+  // 32a. 提问超时进入兜底 → 模拟重启清空兜底表 → 手机晚答仍可从状态恢复注入
+  const pA = hook({ event: "PreToolUse", tool_name: "AskUserQuestion", tool_input: qInput });
+  await wait(1200);
+  assert((await pA).body.decision === "pass", "32 question timed out to local picker");
+  const sA = st();
+  const ridA = sA!.waiting_request!.request_id;
+  assert(sA?.status === "WAITING" && !!ridA, "32 banner kept after timeout");
+  (bridge as unknown as { askFallback: Map<string, unknown> }).askFallback.clear(); // 模拟 relay 重启
+  const aId = send("COMMAND_ANSWER", { session_id: extId("cli-1"), request_id: ridA, answers: ["M"] });
+  assert((await waitAck(aId)).ok, "32 late answer recovered after restart-wipe");
+  await wait(1500);
+  assert(fakeLog().some((a) => a[0] === "4321" && a[1] === "--esc"), "32 esc injected via state recovery");
+  assert(fakeLog().some((a) => a[0] === "4321" && String(a[1]).includes("「M」")), "32 answer text injected via state recovery");
+  assert(events.some((e) => e.type === "SESSION_WAITING_RESOLVED" && (e.payload as { request_id: string }).request_id === ridA), "32 resolved event emitted");
+
+  // 32b. 重启丢兜底后 PC 在本地选择器作答 → 横幅仍收起（按状态里的 request_id 结）
+  const pB = hook({ event: "PreToolUse", tool_name: "AskUserQuestion", tool_input: qInput });
+  await wait(1200);
+  await pB;
+  const ridB = st()!.waiting_request!.request_id;
+  (bridge as unknown as { askFallback: Map<string, unknown> }).askFallback.clear();
+  await hook({ event: "PostToolUse", tool_name: "AskUserQuestion", tool_response: {} });
+  await wait(200);
+  const sB = st();
+  assert(!sB?.waiting_request && sB?.status !== "WAITING", "32 pc-answered clears banner even without fb");
+  assert(events.some((e) => e.type === "SESSION_WAITING_RESOLVED" && (e.payload as { request_id: string }).request_id === ridB && (e.payload as { decision: string }).decision === "answered"), "32 answered-by-cli resolved event");
+}
+
+// 33. 云通道手机计入"手机在线"：无 LAN 客户端 + 云手机活跃 → 提问照常挂起（不放行本地）
+{
+  const qInput = { questions: [{ header: "方案", question: "云手机在线时的问题?", options: [{ label: "P" }, { label: "Q" }] }] };
+  const st = () => mgr.snapshot().find((s) => s.session_id === extId("cli-1"));
+  await hook({ event: "UserPromptSubmit", prompt: "云门控回合", cli_pid: 4321 });
+  cloudOnline = true;
+  wsCur!.close();
+  await wait(500);
+  let settled = false;
+  const p = hook({ event: "PreToolUse", tool_name: "AskUserQuestion", tool_input: qInput });
+  p.then(() => { settled = true; });
+  await wait(300);
+  assert(!settled, "33 cloud-only phone gates question (held, not passed)");
+  const rid = st()!.waiting_request!.request_id;
+  const cws = new WebSocket(`ws://127.0.0.1:${cfg.port}/ws?token=${cfg.token}`);
+  attach(cws);
+  await new Promise((r) => cws.once("open", r));
+  await wait(50);
+  const aId = send("COMMAND_ANSWER", { session_id: extId("cli-1"), request_id: rid, answers: ["P"] });
+  assert((await waitAck(aId)).ok, "33 in-window answer acked while cloud gating");
+  const r = await p;
+  const upd = (r.body as { updatedInput?: { answers?: Record<string, string> } }).updatedInput;
+  assert(r.body.decision === "allow" && upd?.answers?.["云手机在线时的问题?"] === "P", "33 cloud gate in-window answer injects updatedInput");
+  // 双端都不在线后恢复旧行为：立即放行本地选择器
+  cloudOnline = false;
+  cws.close();
+  await wait(300);
+  const p2 = hook({ event: "PreToolUse", tool_name: "AskUserQuestion", tool_input: qInput });
+  const t0 = Date.now();
+  assert((await p2).body.decision === "pass", "33 offline cloud passes immediately");
+  assert(Date.now() - t0 < 500, "33 no hold when cloud phone gone");
+  // 收尾：清掉这次提问的横幅
+  await hook({ event: "PostToolUse", tool_name: "AskUserQuestion", tool_response: {} });
+  await wait(200);
 }
 
 wsCur!.close();

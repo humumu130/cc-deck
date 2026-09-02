@@ -100,6 +100,12 @@ export class CloudClient {
     if (this.ws?.readyState === WebSocket.OPEN) this.ws.send(JSON.stringify(frame));
   }
 
+  // 云通道是否有已 hello 的手机（提问/权限门控的"手机在线"判定要计入）
+  hasActivePhones(): boolean {
+    for (const st of this.phones.values()) if (st.active) return true;
+    return false;
+  }
+
   private sendSealed(dev: string, obj: unknown): void {
     const peer = this.identity.peers.get(dev);
     if (!peer) return;

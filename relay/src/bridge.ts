@@ -301,13 +301,18 @@ export class Bridge {
       });
       return true;
     }
-    // 超时兜底：CLI 本地选择器已弹出（hook 已放行），手机晚到的作答转为注入送达
+    // 超时兜底：CLI 本地选择器已弹出（hook 已放行），手机晚到的作答转为注入送达。
+    // relay 重启会清内存兜底表，但 waiting 状态经 events.ndjson 重放仍在——按
+    // request_id 从会话状态找回问题定义，晚答不因重启失效
     const fb = this.askFallback.get(sessionId);
-    if (!fb || fb.requestId !== requestId || !ensureInjector()) return false;
-    this.askFallback.delete(sessionId);
-    const pid = this.mgr.getExternal(sessionId)?.cli_pid;
-    if (!pid) return false;
-    const msg = buildAnswerMessage(fb.questions, answers);
+    if (fb && fb.requestId !== requestId) return false;
+    const st = this.mgr.getExternal(sessionId);
+    const wq = st?.waiting_request;
+    const questions = fb?.questions ?? (wq?.request_id === requestId ? wq?.questions : undefined);
+    if (!questions?.length || !ensureInjector() || !st?.cli_pid) return false;
+    if (fb) this.askFallback.delete(sessionId);
+    const pid = st.cli_pid;
+    const msg = buildAnswerMessage(questions, answers);
     this.mgr.setExternalStatus(sessionId, "WORKING", "手机作答");
     void injectEsc(pid).then(async (r) => {
       if (!r.ok) {
@@ -1010,10 +1015,11 @@ export class Bridge {
       this.mgr.setExternalStatus(id, "WORKING", state.action_summary);
     }
     // 提问兜底收尾：PC 端已在本地选择器作答/取消 → 手机横幅收起
-    const fb = this.askFallback.get(id);
-    if (ev.tool_name === "AskUserQuestion" && fb) {
+    //（兜底表被重启清掉时也要收——waiting 状态还在，按状态里的 request_id 结）
+    if (ev.tool_name === "AskUserQuestion" && state.status === "WAITING" && state.waiting_request?.decidable) {
+      const fb = this.askFallback.get(id);
       this.askFallback.delete(id);
-      this.mgr.emitWaitingResolved(id, fb.requestId, "answered", "cli");
+      this.mgr.emitWaitingResolved(id, fb?.requestId ?? state.waiting_request.request_id, "answered", "cli");
     }
     return { decision: "pass" };
   }

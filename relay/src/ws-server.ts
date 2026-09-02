@@ -32,6 +32,7 @@ export interface StartServerOptions {
   gateToolsRaw?: string;    // CCR_GATE_TOOLS，逗号分隔门控工具名
   holdMs?: number;          // PreToolUse 挂起上限（测试用短值）
   questionHoldMs?: number;  // AskUserQuestion 挂起窗口（测试用短值）
+  cloudHasPhones?: () => boolean; // 云通道是否有活跃手机（计入"手机在线"门控）
 }
 
 // 连接策略：
@@ -76,7 +77,7 @@ export function startServer(
   const wss = new WebSocketServer({ noServer: true });
   const bridge = new Bridge(bus, mgr, {
     gateTools: parseGateTools(opts.gateToolsRaw ?? process.env.CCR_GATE_TOOLS),
-    hasClients: () => [...wss.clients].some((c) => c.readyState === WebSocket.OPEN),
+    hasClients: () => [...wss.clients].some((c) => c.readyState === WebSocket.OPEN) || !!opts.cloudHasPhones?.(),
     holdMs: opts.holdMs,
     questionHoldMs: opts.questionHoldMs,
   });
