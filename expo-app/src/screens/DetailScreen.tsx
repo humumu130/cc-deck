@@ -24,6 +24,17 @@ const LOG_FILTERS = [
 ] as const;
 type LogFilter = (typeof LOG_FILTERS)[number]["k"];
 
+// SpeechRecognizer 错误码人话（反馈排查用；1/2/4 多为云识别服务连不上）
+const VOICE_ERR_NAMES: Record<number, string> = {
+  1: "网络超时",
+  2: "网络",
+  3: "麦克风",
+  4: "识别服务",
+  5: "客户端",
+  8: "忙",
+  9: "权限",
+};
+
 // 权限模式循环切换（与 relay 的 ManagedPermissionMode 对齐）
 const PERM_CYCLE = ["default", "acceptEdits", "plan"] as const;
 const PERM_LABEL: Record<(typeof PERM_CYCLE)[number], string> = {
@@ -478,7 +489,10 @@ export default function DetailScreen({ sid, onBack }: { sid: string; onBack: () 
         // 7=NO_MATCH 6=SPEECH_TIMEOUT：安静松手不算错误；-2/-3 无服务/服务全无响应给针对性提示
         if (ev.code === -2) setVoiceHintOnce("本机无语音识别服务，可用键盘自带的语音输入");
         else if (ev.code === -3) setVoiceHintOnce("内置识别服务均无响应，可用键盘自带的语音输入");
-        else if (ev.code !== 7 && ev.code !== 6) setVoiceHintOnce("语音识别出错（" + ev.code + "），请重试");
+        else if (ev.code !== 7 && ev.code !== 6) {
+          const name = VOICE_ERR_NAMES[ev.code] ?? "未知";
+          setVoiceHintOnce(`语音识别出错（${ev.code}·${name}），请重试`);
+        }
       }
     });
     return () => sub.remove();

@@ -7,6 +7,7 @@ import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
 import android.provider.Settings
+import android.util.Log
 import android.speech.RecognitionListener
 import android.speech.RecognizerIntent
 import android.speech.SpeechRecognizer
@@ -27,13 +28,15 @@ class VoiceModule : Module() {
   private var chainIdx = 0
   private var holding = false
   private var sawAudio = false
+  private var sawText = false
 
   private fun enumerate(ctx: Context): List<ComponentName> {
     return runCatching {
       ctx.packageManager.queryIntentServices(Intent(SERVICE_ACTION), 0)
         .orEmpty()
         .mapNotNull { ri -> ri.serviceInfo?.let { ComponentName(it.packageName, it.name) } }
-        .sortedBy { !it.packageName.contains("google") }
+        // Google 服务放最后：国内连不上识别服务器，绑上即报 1/2/4 类网络错
+        .sortedBy { it.packageName.contains("google") }
     }.getOrDefault(emptyList())
   }
 
@@ -56,21 +59,28 @@ class VoiceModule : Module() {
     override fun onBufferReceived(buffer: ByteArray?) {}
     override fun onEndOfSpeech() {}
     override fun onError(error: Int) {
-      // 出声前就报 5(CLIENT)/8(BUSY)：多半是该服务本身坏的，静默换下一个
-      if (!sawAudio && (error == 5 || error == 8) && chainIdx < chain.size - 1 && holding) {
+      // 出字前就报 1/2/4(网络/服务端)/5(CLIENT)/8(BUSY)：该服务彻底没法用（国内
+      // Google 服务连不上服务器是典型），静默换下一个；已出过转写文字则不折腾
+      if (!sawText && (error == 5 || error == 8 || error == 1 || error == 2 || error == 4) &&
+        chainIdx < chain.size - 1 && holding
+      ) {
+        Log.d(TAG, "service $chainIdx error $error, trying next")
         nextAttempt()
         return
       }
+      Log.d(TAG, "error $error surfaced (chainIdx=$chainIdx/${chain.size}, sawText=$sawText)")
       sendEvent("onVoiceEvent", mapOf("type" to "error", "code" to error))
     }
     override fun onResults(results: Bundle?) {
       val text = results?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)?.firstOrNull() ?: ""
+      sawText = true
       sendEvent("onVoiceEvent", mapOf("type" to "final", "text" to text))
     }
     override fun onPartialResults(partialResults: Bundle?) {
       sawAudio = true
       val text = partialResults?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)?.firstOrNull() ?: ""
       if (text.isNotEmpty()) {
+        sawText = true
         lastGood = chain.getOrNull(chainIdx)
         sendEvent("onVoiceEvent", mapOf("type" to "partial", "text" to text))
       }
@@ -86,6 +96,8 @@ class VoiceModule : Module() {
       return
     }
     sawAudio = false
+    sawText = false
+    Log.d(TAG, "attempt $chainIdx/${chain.size}: ${comp.flattenToShortString()}")
     val r = runCatching { SpeechRecognizer.createSpeechRecognizer(ctx, comp) }.getOrNull() ?: run {
       nextAttempt()
       return
@@ -173,6 +185,7 @@ class VoiceModule : Module() {
   }
 
   companion object {
+    private const val TAG = "ccwatch-voice"
     private const val SERVICE_ACTION = "android.speech.RecognitionService"
     // 进程级记忆：上次真正出过转写文字的服务，下次优先（跳过已证实坏掉的服务）
     private var lastGood: ComponentName? = null
