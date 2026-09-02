@@ -335,6 +335,11 @@ export class TaskTracker {
       } else if (status === "cancelled") {
         task.status = "completed"; // 展示口径：取消视作已结束
         changed = true;
+      } else if (status === "deleted") {
+        // TaskUpdate(status=deleted) = 永久移除：清单里直接拿掉
+        const i = this.tasks.indexOf(task);
+        if (i >= 0) this.tasks.splice(i, 1);
+        changed = true;
       }
       if (typeof t.activeForm === "string" && t.activeForm.trim()) {
         task.active_form = t.activeForm.trim().slice(0, 120);

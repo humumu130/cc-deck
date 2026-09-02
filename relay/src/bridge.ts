@@ -6,7 +6,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import type { EventBus } from "./event-bus.js";
 import type { SessionManager } from "./session-manager.js";
-import type { BridgeEvent, PendingInput, WaitingPayload } from "./types.js";
+import type { BridgeEvent, PendingInput, WaitingPayload, TodoItem } from "./types.js";
 import { injectText, injectEsc } from "./injector.js";
 import {
   detailToolResult,
@@ -38,6 +38,9 @@ interface Pending {
   resolve: (d: BridgeDecision) => void;
   timer: NodeJS.Timeout;
 }
+
+// transcript 里一次任务工具操作（use 或已配对的 result）
+type TaskOp = { tool?: string; input?: unknown; result?: { task: { id: number } } };
 
 const DEFAULT_HOLD_MS = 590_000;
 
@@ -393,6 +396,8 @@ export class Bridge {
       const entries: { kind: "assistant_text" | "thinking"; text: string }[] = [];
       const enqueues: string[] = [];
       const steers: string[] = [];
+      const taskOps: TaskOp[] = [];
+      const creates = this.taskCreateSet(id);
       let removes = 0;
       // token 用量/模型：assistant 条目自带 usage（逐条 API 调用量，累加为会话总量）
       let usageIn = 0;
@@ -420,7 +425,16 @@ export class Bridge {
           } catch {}
           continue;
         }
-        if (!/"type":\s*"assistant"/.test(line)) continue;
+        if (!/"type":\s*"assistant"/.test(line)) {
+          // user 行的 tool_result：TaskCreate 的结果文本（"Task #N created successfully"）
+          if (line.includes("created successfully")) {
+            try {
+              const j = JSON.parse(line) as { message?: { content?: unknown[] } };
+              if (Array.isArray(j.message?.content)) Bridge.collectTaskOps(j.message.content, taskOps, creates);
+            } catch {}
+          }
+          continue;
+        }
         try {
           const j = JSON.parse(line) as { message?: { content?: unknown[]; usage?: Record<string, unknown>; model?: unknown } };
           const mu = j.message?.usage;
@@ -435,6 +449,7 @@ export class Bridge {
           if (typeof j.message?.model === "string" && j.message.model) model = j.message.model;
           const content = j.message?.content;
           if (!Array.isArray(content)) continue;
+          Bridge.collectTaskOps(content, taskOps, creates);
           const texts: string[] = [];
           const thinks: string[] = [];
           for (const b of content) {
@@ -459,6 +474,24 @@ export class Bridge {
         for (const t of enqueues) this.onQueueEnqueue(id, t);
         for (const t of steers) this.onSteerDelivered(id, t);
         if (removes > steers.length) this.onQueueDiscard(id, removes - steers.length);
+      }
+      // 任务清单：CLI 任务存储目录优先（权威、变更检测防重发），无目录再 transcript 回放/增量
+      const storeTodos = this.readTaskStore(id);
+      if (storeTodos) {
+        const j = JSON.stringify(storeTodos);
+        if (this.lastTodos.get(id) !== j) {
+          if (this.lastTodos.size > 60) this.lastTodos.clear();
+          this.lastTodos.set(id, j);
+          this.mgr.setTodos(id, storeTodos);
+        }
+      } else if (firstRead) {
+        this.replayTaskHistory(id, transcriptPath);
+      } else if (taskOps.length) {
+        const tr = this.ensureTracker(id);
+        for (const op of taskOps) {
+          const todos = op.result ? tr.feedResult(op.result) : tr.feed(op.tool as string, op.input);
+          if (todos) this.mgr.setTodos(id, todos);
+        }
       }
       if (usageSeen || model) {
         // 首读以窗口内条目做种子（relay 重启后的近似值）；此后增量累加
@@ -527,20 +560,109 @@ export class Bridge {
     this.mgr.setExternalStats(id, { files_changed: st.files.size, lines_added: st.added, lines_deleted: st.deleted });
   }
 
-  private feedTaskTracker(id: string, tool: string, input: unknown): void {
-    if (tool !== "TodoWrite" && tool !== "TaskCreate" && tool !== "TaskUpdate") return;
-    const tr = this.ensureTracker(id);
-    const todos = tr.feed(tool, input);
-    if (todos) this.mgr.setTodos(id, todos);
+  // 首见/轮转（firstRead）：全文件回放任务工具调用重建完整清单。
+  // 旧方案靠 hook 事件增量累积，relay 每次重启都从零开始（手机端 7/18 ≠ 实际的根因）；
+  // transcript 是唯一完整事实源。预过滤 + 分块读，108MB 转录一次性扫描 ~1s。
+  // 工具串行执行，use/result 按文件顺序回放即可正确配对（callId 交集做结果匹配）。
+  private replayTaskHistory(id: string, path: string): void {
+    const ops: TaskOp[] = [];
+    const creates = new Set<string>();
+    try {
+      const size = statSync(path).size;
+      const fd = openSync(path, "r");
+      const CHUNK = 8 * 1024 * 1024;
+      const buf = Buffer.alloc(CHUNK);
+      let carry = "";
+      for (let pos = 0; pos < size; ) {
+        const n = readSync(fd, buf, 0, CHUNK, pos);
+        if (n <= 0) break;
+        const text = carry + buf.toString("utf-8", 0, n);
+        const lines = text.split("\n");
+        carry = lines.pop() ?? "";
+        for (const line of lines) {
+          if (!line.includes("TaskCreate") && !line.includes("TaskUpdate") && !line.includes("TodoWrite") && !line.includes("created successfully")) continue;
+          try {
+            const j = JSON.parse(line) as { message?: { content?: unknown[] } };
+            if (Array.isArray(j.message?.content)) Bridge.collectTaskOps(j.message.content, ops, creates);
+          } catch {}
+        }
+        pos += n;
+      }
+      closeSync(fd);
+    } catch {
+      return;
+    }
+    const tr = new TaskTracker();
+    this.trackers.set(id, tr);
+    for (const op of ops) {
+      const todos = op.result ? tr.feedResult(op.result) : tr.feed(op.tool as string, op.input);
+      if (todos) this.mgr.setTodos(id, todos);
+    }
   }
 
-  // TaskCreate 的 tool_result（{task:{id,subject}}）：回填真实任务号（CLI taskId 全局递增，
-  // 不回填则 TaskUpdate 永远 miss）
-  private feedTaskResult(id: string, result: unknown): void {
-    const tr = this.trackers.get(id);
-    if (!tr) return;
-    const todos = tr.feedResult(result);
-    if (todos) this.mgr.setTodos(id, todos);
+  // transcript content 块 → 任务操作序列（tool_use 直接收；tool_result 仅认已见 TaskCreate 的
+  // "Task #N created successfully" 文本，经 callId 配对回填真实任务号）
+  private static collectTaskOps(content: unknown[], ops: TaskOp[], creates: Set<string>): void {
+    for (const b of content) {
+      if (!b || typeof b !== "object") continue;
+      const blk = b as { type?: string; name?: unknown; input?: unknown; id?: unknown; tool_use_id?: unknown; content?: unknown };
+      if (blk.type === "tool_use") {
+        const name = typeof blk.name === "string" ? blk.name : "";
+        if (name !== "TaskCreate" && name !== "TaskUpdate" && name !== "TodoWrite") continue;
+        ops.push({ tool: name, input: blk.input });
+        if (name === "TaskCreate" && typeof blk.id === "string") creates.add(blk.id);
+      } else if (blk.type === "tool_result" && typeof blk.tool_use_id === "string" && creates.has(blk.tool_use_id)) {
+        const c = blk.content;
+        const text = typeof c === "string" ? c : Array.isArray(c)
+          ? (c as { type?: string; text?: unknown }[]).map((x) => (x && typeof x === "object" && x.type === "text" && typeof x.text === "string" ? x.text : "")).join("")
+          : "";
+        const m = /Task #(\d+) created successfully/.exec(text);
+        if (m) ops.push({ result: { task: { id: Number(m[1]) } } });
+      }
+    }
+  }
+
+  // 增量批次里见过的 TaskCreate callId（跨批次配对 result 用）
+  private taskCalls = new Map<string, Set<string>>();
+
+  private taskCreateSet(id: string): Set<string> {
+    let set = this.taskCalls.get(id);
+    if (!set) {
+      if (this.taskCalls.size > 60) this.taskCalls.clear();
+      set = new Set();
+      this.taskCalls.set(id, set);
+    }
+    return set;
+  }
+
+  // CLI 任务存储目录（~/.claude/tasks/<cli_session>/*.json）：权威清单，与 /tasks 实时一致
+  // （会话压缩/任务清理后也对）。目录不存在（旧版 CLI/其他会话形态）返回 null 走 transcript 兜底。
+  private lastTodos = new Map<string, string>();
+
+  private readTaskStore(id: string): TodoItem[] | null {
+    const cli = id.startsWith("ext-") ? id.slice(4) : id;
+    const dir = path.join(homedir(), ".claude", "tasks", cli);
+    let files: string[];
+    try {
+      files = readdirSync(dir).filter((f) => f.endsWith(".json"));
+    } catch {
+      return null;
+    }
+    if (!files.length) return null;
+    const out: (TodoItem & { n: number })[] = [];
+    for (const f of files) {
+      try {
+        const t = JSON.parse(readFileSync(path.join(dir, f), "utf-8")) as { subject?: unknown; status?: unknown; activeForm?: unknown };
+        const subject = typeof t.subject === "string" ? t.subject.trim() : "";
+        if (!subject) continue;
+        const status = t.status === "in_progress" || t.status === "completed" ? t.status : "pending";
+        const activeForm = typeof t.activeForm === "string" && t.activeForm.trim() ? { active_form: t.activeForm.trim().slice(0, 120) } : {};
+        out.push({ n: Number(f.replace(/[^0-9]/g, "")) || 0, content: subject.slice(0, 120), status, ...activeForm });
+      } catch {}
+    }
+    if (!out.length) return null;
+    out.sort((a, b) => a.n - b.n);
+    return out.map(({ n: _n, ...rest }) => rest);
   }
 
   private ensureTracker(id: string): TaskTracker {
@@ -578,7 +700,6 @@ export class Bridge {
       this.mgr.pushExternalLog(id, "tool_use", summary, ev.tool_name, {
         detail: detailToolUse(ev.tool_name ?? "tool", input),
       });
-      this.feedTaskTracker(id, ev.tool_name ?? "", ev.tool_input);
       return { decision: "pass" };
     }
 
@@ -596,7 +717,6 @@ export class Bridge {
     this.mgr.pushExternalLog(id, "tool_use", summary, ev.tool_name, {
       detail: detailToolUse(ev.tool_name ?? "tool", input),
     });
-    this.feedTaskTracker(id, ev.tool_name ?? "", ev.tool_input);
 
     const holdMs = this.opts.holdMs ?? DEFAULT_HOLD_MS;
     return new Promise<BridgeDecision>((resolve) => {
@@ -619,7 +739,6 @@ export class Bridge {
       detail: detailToolResult(ev.tool_response),
       diff: diffLines(ev.tool_response),
     });
-    this.feedTaskResult(id, ev.tool_response);
     this.feedFileStats(id, ev);
     this.pushAssistantTexts(id, ev.transcript_path);
     // 清除 passive WAITING（CLI 本地已处理）
