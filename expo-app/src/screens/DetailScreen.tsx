@@ -7,7 +7,7 @@ import { withA, type ThemeColors } from "../theme";
 import { useTheme, useThemeStyles } from "../theme-context";
 import { fmtElapsed, sessionElapsed, fmtHM, dayKey } from "../fmt";
 import { store, useRelay } from "../store";
-import type { LogEntry, SessionState, WaitingPayload } from "../protocol";
+import type { LogEntry, SessionState, TodoItem, WaitingPayload } from "../protocol";
 import { useKbHeight } from "../kb";
 import { useProcessFont } from "../display-settings";
 import { usePhraseState } from "../phrases";
@@ -310,6 +310,7 @@ export default function DetailScreen({ sid, onBack }: { sid: string; onBack: () 
   const [collapsed, setCollapsed] = useState(ctrlCollapsed);
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
   const [todoOpen, setTodoOpen] = useState(false);
+  const [todoDoneOpen, setTodoDoneOpen] = useState(false);
   const [images, setImages] = useState<string[]>([]);
   const [queuedHint, setQueuedHint] = useState<string | null>(null);
   const flashQueuedHint = () => {
@@ -324,6 +325,34 @@ export default function DetailScreen({ sid, onBack }: { sid: string; onBack: () 
   const kb = useKbHeight();
   const insets = useSafeAreaInsets();
   const s: SessionState | undefined = snap.sessions.find((x) => x.session_id === sid);
+
+  // 任务存储是全会话历史（动辄几十条已完成）：默认只列未完成，已完成折叠成一行
+  const openTodos = (s?.todos ?? []).filter((t) => t.status !== "completed");
+  const doneTodos = (s?.todos ?? []).filter((t) => t.status === "completed");
+  const renderTodo = (t: TodoItem, i: number) => (
+    <View key={i} style={d.todoRow}>
+      <Text
+        style={[
+          d.todoMark,
+          t.status === "completed" && { color: c.done },
+          t.status === "in_progress" && { color: c.working },
+        ]}
+      >
+        {t.status === "completed" ? "✓" : t.status === "in_progress" ? "◐" : "○"}
+      </Text>
+      <Text
+        style={[
+          d.todoT,
+          t.status === "pending" && { color: c.faint },
+          t.status === "in_progress" && { color: c.text, fontWeight: "700" },
+          t.status === "completed" && { color: c.dim },
+        ]}
+        numberOfLines={2}
+      >
+        {t.status === "in_progress" && t.active_form ? t.active_form : t.content}
+      </Text>
+    </View>
+  );
 
   // 转录跟随：直接 filter 不做 useMemo（logs 引用每次更新都变）；仅当用户停在底部时自动滚
   const logs = s ? store.timelineOf(sid) : [];
@@ -615,30 +644,22 @@ export default function DetailScreen({ sid, onBack }: { sid: string; onBack: () 
                 </View>
                 <Text style={d.todoCaret}>{todoOpen ? "▾" : "▸"}</Text>
               </Pressable>
-              {todoOpen ? s.todos!.map((t, i) => (
-                <View key={i} style={d.todoRow}>
-                  <Text
-                    style={[
-                      d.todoMark,
-                      t.status === "completed" && { color: c.done },
-                      t.status === "in_progress" && { color: c.working },
-                    ]}
-                  >
-                    {t.status === "completed" ? "✓" : t.status === "in_progress" ? "◐" : "○"}
-                  </Text>
-                  <Text
-                    style={[
-                      d.todoT,
-                      t.status === "pending" && { color: c.faint },
-                      t.status === "in_progress" && { color: c.text, fontWeight: "700" },
-                      t.status === "completed" && { color: c.dim },
-                    ]}
-                    numberOfLines={2}
-                  >
-                    {t.status === "in_progress" && t.active_form ? t.active_form : t.content}
-                  </Text>
-                </View>
-              )) : null}
+              {todoOpen ? (
+                <>
+                  {openTodos.map(renderTodo)}
+                  {doneTodos.length > 0 ? (
+                    <Pressable
+                      style={d.todoDoneHead}
+                      android_ripple={{ color: c.tintSoft, borderless: false, radius: 9 }}
+                      onPress={() => setTodoDoneOpen((v) => !v)}
+                    >
+                      <Text style={d.todoDoneT}>已完成 {doneTodos.length} 项</Text>
+                      <Text style={d.todoDoneCaret}>{todoDoneOpen ? "▾" : "▸"}</Text>
+                    </Pressable>
+                  ) : null}
+                  {todoDoneOpen ? doneTodos.map(renderTodo) : null}
+                </>
+              ) : null}
             </View>
           ) : null}
       </View>
@@ -905,6 +926,12 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
   todoBarFill: { height: 4, borderRadius: 2, backgroundColor: c.done },
   todoCaret: { color: c.faint, fontSize: 11, width: 14, textAlign: "center" },
   todoRow: { flexDirection: "row", gap: 8, alignItems: "flex-start", paddingVertical: 5, borderTopWidth: 1, borderTopColor: c.line, marginTop: 5 },
+  todoDoneHead: {
+    flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6,
+    borderTopWidth: 1, borderTopColor: c.line, marginTop: 5, paddingVertical: 6,
+  },
+  todoDoneT: { color: c.faint, fontSize: 11.5, fontWeight: "600" },
+  todoDoneCaret: { color: c.faint, fontSize: 10, width: 12, textAlign: "center" },
   todoMark: { color: c.faint, fontSize: 12, width: 16, textAlign: "center", lineHeight: 17 },
   todoT: { flex: 1, color: c.text, fontSize: 12.5, lineHeight: 17 },
   histnote: { color: c.faint, fontSize: 11, textAlign: "center", marginBottom: 10 },
