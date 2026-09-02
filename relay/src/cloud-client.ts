@@ -27,6 +27,8 @@ export class CloudClient {
   private delayMs = 1000;
   private stopped = false;
   private timer: ReturnType<typeof setTimeout> | null = null;
+  private lastRecv = 0;
+  private hbTimer: ReturnType<typeof setInterval> | null = null;
   private unsubscribe: () => void;
 
   constructor(
@@ -40,6 +42,7 @@ export class CloudClient {
 
   start(): void {
     this.connect();
+    this.startHeartbeat();
   }
 
   private bridgeUrl(): string {
@@ -54,9 +57,16 @@ export class CloudClient {
     this.ws = ws;
     ws.on("open", () => {
       this.delayMs = 1000;
+      this.lastRecv = Date.now();
       console.log(`[cloud] bridge connected (dev=${this.identity.relayDev})`);
     });
-    ws.on("message", (raw) => this.onFrame(String(raw)));
+    ws.on("message", (raw) => {
+      this.lastRecv = Date.now();
+      this.onFrame(String(raw));
+    });
+    ws.on("pong", () => {
+      this.lastRecv = Date.now();
+    });
     ws.on("error", () => undefined); // close 会跟着触发，统一在那处理
     ws.on("close", () => {
       if (this.ws === ws) {
@@ -67,6 +77,23 @@ export class CloudClient {
         this.delayMs = Math.min(this.delayMs * 2, 30_000);
       }
     });
+  }
+
+  // 出站链路心跳：20s 协议层 ping 保活 NAT 映射；45s 无任何回包说明对端/路径已死
+  // （半开 TCP 不触发 close），主动 terminate 走统一重连路径。
+  private startHeartbeat(): void {
+    if (this.hbTimer) return;
+    this.hbTimer = setInterval(() => {
+      const ws = this.ws;
+      if (!ws || ws.readyState !== WebSocket.OPEN) return;
+      if (Date.now() - this.lastRecv > 45_000) {
+        console.log("[cloud] heartbeat timeout (>45s no traffic), terminating for reconnect");
+        ws.terminate();
+        return;
+      }
+      ws.ping();
+    }, 20_000);
+    this.hbTimer.unref?.();
   }
 
   private send(frame: unknown): void {
@@ -141,6 +168,7 @@ export class CloudClient {
     this.stopped = true;
     this.unsubscribe();
     if (this.timer) clearTimeout(this.timer);
+    if (this.hbTimer) clearInterval(this.hbTimer);
     this.ws?.close();
   }
 }

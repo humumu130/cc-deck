@@ -370,8 +370,10 @@ export default function DetailScreen({ sid, onBack }: { sid: string; onBack: () 
         setListening(false);
         setVoiceText("");
         voice.cancel();
-        // 7=NO_MATCH 6=SPEECH_TIMEOUT：安静松手不算错误；其余提示
-        if (ev.code !== 7 && ev.code !== 6) setVoiceHintOnce("语音识别出错（" + ev.code + "），请重试");
+        // 7=NO_MATCH 6=SPEECH_TIMEOUT：安静松手不算错误；-2/-3 无服务/服务全无响应给针对性提示
+        if (ev.code === -2) setVoiceHintOnce("本机无语音识别服务，可用键盘自带的语音输入");
+        else if (ev.code === -3) setVoiceHintOnce("内置识别服务均无响应，可用键盘自带的语音输入");
+        else if (ev.code !== 7 && ev.code !== 6) setVoiceHintOnce("语音识别出错（" + ev.code + "），请重试");
       }
     });
     return () => sub.remove();
@@ -451,12 +453,14 @@ export default function DetailScreen({ sid, onBack }: { sid: string; onBack: () 
       if (v.resolved) {
         const text = (v.final || v.partial).trim();
         if (text) send(text);
+        else setVoiceHintOnce("没听到内容，请再试一次");
         return;
       }
       if (Date.now() - t0 > 1500) {
         voice.cancel();
         const text = v.partial.trim();
         if (text) send(text);
+        else setVoiceHintOnce("没听到内容，请再试一次");
       } else {
         setTimeout(waitFinal, 60);
       }
