@@ -352,7 +352,7 @@ class RelayStore {
     ws.onopen = () => {
       if (this.ws !== ws) return;
       this.reconnectDelay = 1000;
-      this.emit({ connected: true, connText: "已连接（云）", channel: "cloud" });
+      this.emit({ connected: true, connText: "已连接 ☁", channel: "cloud" });
       this.startHb(ws, cloud, keys);
       ws.send(
         JSON.stringify({

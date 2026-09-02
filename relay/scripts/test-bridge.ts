@@ -315,6 +315,91 @@ assert(ack24.ok === false, "empty rename rejected");
   rmSync(T, { force: true });
 }
 
+// 26. #126 排队消息晋升双显回归：CLI 会把多条排队消息合并成一条 enqueue / attachment /
+//     UserPromptSubmit（"\r" 连接、消息内换行折叠为空格），relay 必须只按原句各记一次
+{
+  const { appendFileSync, writeFileSync } = await import("node:fs");
+  const T = fileURLToPath(new URL("../data/test-transcript.jsonl", import.meta.url));
+  rmSync(T, { force: true });
+  writeFileSync(T, JSON.stringify({ type: "assistant", message: { role: "assistant", content: [{ type: "text", text: "基线26" }] } }) + "\n");
+  const umCount = (t: string) =>
+    events.filter((e) => e.type === "SESSION_LOG" && (e.payload as { kind?: string; text?: string }).kind === "user_message" && (e.payload as { text: string }).text === t).length;
+  const pendTexts = () => pendOf(extId("cli-1")).map((p) => p.text);
+  // 手机连发两条（A 带内部换行，B 短句），CLI 忙 → 原生排队
+  await hook({ event: "UserPromptSubmit", prompt: "双显回归回合一", cli_pid: 4321, transcript_path: T });
+  await hook({ event: "PostToolUse", tool_name: "Bash", tool_response: "ok", transcript_path: T });
+  const A = "任务清单太多了。\n具体显示逻辑你来定，可以参考近一天或前 N 条的方案";
+  const B = "侧边栏手势保留现状即可";
+  for (const t of [A, B]) {
+    const xId = send("COMMAND_EXT_INPUT", { session_id: extId("cli-1"), text: t });
+    assert((await waitAck(xId)).ok, `26 EXT_INPUT queued: ${t.slice(0, 8)}`);
+  }
+  await wait(1500); // 等 flushQueue 把两条都注入完（每条 400ms 间隔），Stop 时队列为空才走晋升
+  assert(pendTexts().length === 2, "26 two phone msgs in pending");
+  // ① CLI 合并形态 enqueue（A 折叠空格 + "\r" + B）→ 不得回塞第三条 pending
+  appendFileSync(T, JSON.stringify({ type: "queue-operation", operation: "enqueue", content: A.replace(/\n/g, " ") + "\r" + B }) + "\n");
+  await hook({ event: "PostToolUse", tool_name: "Bash", tool_response: "ok", transcript_path: T });
+  assert(pendTexts().length === 2, "26 merged enqueue does not add a 3rd pending");
+  // ② Stop 晋升：A、B 各记一条 user_message，pending 清空
+  await hook({ event: "Stop", transcript_path: T });
+  await wait(200);
+  assert(umCount(A) === 1, "26 A logged exactly once on Stop");
+  assert(umCount(B) === 1, "26 B logged exactly once on Stop");
+  assert(pendTexts().length === 0, "26 pending cleared once");
+  // ③ CLI 回合结束把整队合并成一条真 prompt 再提交 → 不得重复记录
+  await hook({ event: "UserPromptSubmit", prompt: A.replace(/\n/g, " ") + "\r" + B, transcript_path: T });
+  await wait(200);
+  assert(umCount(A) === 1 && umCount(B) === 1, "26 joined re-submit logs nothing new");
+  // ④ steering 中途交付合并形态（attachment "C\rD"）→ 按原句各记一条，pending 清空；随后 Stop 不再补记
+  const C = "我发了两条消息都在排队，上去之后显示了两次";
+  const D = "近三天的范围是不是太大了";
+  await hook({ event: "UserPromptSubmit", prompt: "双显回归回合二", cli_pid: 4321, transcript_path: T });
+  await hook({ event: "PostToolUse", tool_name: "Bash", tool_response: "ok", transcript_path: T });
+  for (const t of [C, D]) {
+    const xId = send("COMMAND_EXT_INPUT", { session_id: extId("cli-1"), text: t });
+    assert((await waitAck(xId)).ok, `26 EXT_INPUT queued: ${t.slice(0, 8)}`);
+  }
+  await wait(1200);
+  appendFileSync(T, JSON.stringify({ type: "queue-operation", operation: "remove" }) + "\n");
+  appendFileSync(T, JSON.stringify({ type: "attachment", attachment: { type: "queued_command", prompt: C + "\r" + D } }) + "\n");
+  await hook({ event: "PostToolUse", tool_name: "Bash", tool_response: "ok", transcript_path: T });
+  await wait(200);
+  assert(umCount(C) === 1 && umCount(D) === 1, "26 merged steer logs each original msg once");
+  assert(pendTexts().length === 0, "26 pending cleared by merged steer");
+  await hook({ event: "Stop", transcript_path: T });
+  await wait(200);
+  assert(umCount(C) === 1 && umCount(D) === 1, "26 Stop after merged steer logs nothing new");
+  // ⑤ 合并形态直接作为 UserPromptSubmit 先到（pending 未清）→ 整批晋升、各记一条
+  const E = "第五条排队消息";
+  const F = "第六条排队消息";
+  await hook({ event: "UserPromptSubmit", prompt: "双显回归回合三", cli_pid: 4321, transcript_path: T });
+  for (const t of [E, F]) {
+    const xId = send("COMMAND_EXT_INPUT", { session_id: extId("cli-1"), text: t });
+    await waitAck(xId);
+  }
+  await wait(1500);
+  await hook({ event: "UserPromptSubmit", prompt: E + "\r" + F, transcript_path: T });
+  await wait(200);
+  assert(umCount(E) === 1 && umCount(F) === 1, "26 joined UserPromptSubmit promotes each pending once");
+  assert(pendTexts().length === 0, "26 pending cleared once by joined promote");
+  // ⑥ 去重不吞真实重发：PC 手敲同句两次 → 各记一条；手机快速重发同句两次 → Stop 各记一条
+  await hook({ event: "UserPromptSubmit", prompt: "手敲重发不吞测试", transcript_path: T });
+  await hook({ event: "UserPromptSubmit", prompt: "手敲重发不吞测试", transcript_path: T });
+  await wait(200);
+  assert(umCount("手敲重发不吞测试") === 2, "26 PC retyped same prompt within 60s logs twice");
+  await hook({ event: "UserPromptSubmit", prompt: "双显回归回合四", cli_pid: 4321, transcript_path: T });
+  for (let k = 0; k < 2; k++) {
+    const xId = send("COMMAND_EXT_INPUT", { session_id: extId("cli-1"), text: "手机重发同句" });
+    await waitAck(xId);
+  }
+  await wait(1500);
+  await hook({ event: "Stop", transcript_path: T });
+  await wait(200);
+  assert(umCount("手机重发同句") === 2, "26 phone quick-resend logs twice (promote not deduped)");
+  await hook({ event: "SessionEnd", reason: "clear" });
+  rmSync(T, { force: true });
+}
+
 wsCur!.close();
 await wait(300);
 console.log("\nBRIDGE TESTS PASSED");

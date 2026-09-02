@@ -225,6 +225,16 @@ export default function ListScreen({ sessions, connected, connText, onOpen, onNe
     });
     return () => sub.remove();
   }, [drawerOpen]);
+
+  // 左缘手势条：从屏幕左缘右滑呼出侧边栏（透明覆盖条，只认横向滑动，不拦点击/竖向滚动）
+  const edgePan = useRef(
+    PanResponder.create({
+      onMoveShouldSetPanResponder: (_, g) => g.dx > 12 && Math.abs(g.dy) < 14,
+      onPanResponderRelease: (_, g) => {
+        if (g.dx > 36 || g.vx > 0.35) setDrawerOpen(true);
+      },
+    }),
+  ).current;
   const sorted = useMemo(() => {
     // 活跃（等待/运行/错误）置顶，其余按最近更新倒序：
     // 新完成的会话紧跟活跃段，不再"闪现后跳到 20 个会话底部"像消失
@@ -305,6 +315,7 @@ export default function ListScreen({ sessions, connected, connText, onOpen, onNe
       <FlatList
         data={visible}
         keyExtractor={(x) => x.session_id}
+        showsVerticalScrollIndicator={false}
         contentContainerStyle={{ paddingBottom: 120, paddingHorizontal: 14, paddingTop: 6 }}
         renderItem={({ item }) => (
           <SessionCard s={item} onOpen={onOpen} onRename={() => setRenameTarget(item)} revealSid={revealSid} onReveal={setRevealSid} />
@@ -319,6 +330,8 @@ export default function ListScreen({ sessions, connected, connText, onOpen, onNe
           </View>
         }
       />
+
+      <View style={styles.edgeZone} {...edgePan.panHandlers} />
 
       <Pressable
         style={styles.fab}
@@ -420,6 +433,7 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
   emptyIcon: { fontSize: 42, marginBottom: 12, opacity: 0.5 },
   emptyT: { color: c.faint, fontSize: 14, marginBottom: 6 },
   emptyS: { color: c.faint, fontSize: 12, textAlign: "center", lineHeight: 20 },
+  edgeZone: { position: "absolute", left: 0, top: 0, bottom: 0, width: 22, zIndex: 5 },
   fab: { position: "absolute", right: 30, bottom: 56, borderRadius: 16, elevation: 8 },
   fabGrad: { width: 56, height: 56, borderRadius: 16, alignItems: "center", justifyContent: "center" },
   fabText: { color: "#fff", fontSize: 30, fontWeight: "300", marginTop: -4 },

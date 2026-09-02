@@ -55,7 +55,8 @@ export class Bridge {
   private named = new Set<string>();              // 已取到 CC 会话名的外部会话
   private nameMisses = new Map<string, number>(); // 取名失败计数（超过 8 次放弃，避免每事件扫目录）
   private transcriptPaths = new Map<string, string>();  // ext id -> transcript JSONL（排队消息轮询）
-  private recentUserMsgs = new Map<string, Map<string, number>>(); // ext id -> text -> 最近记为正式消息时间
+  private recentUserMsgs = new Map<string, Map<string, { ts: number; via: "promote" | "prompt" }>>(); // ext id -> 归一化文本 -> 最近记录（via：晋升回显 / PC 手敲 prompt）
+  private escMarkedAt = new Map<string, number>(); // ext id -> 最近一次 Esc 注入成功时间（乐观置 DONE 的自我纠正窗口）
   private queuePollTimer: NodeJS.Timeout | null = null;
   private extFileStats = new Map<string, { files: Set<string>; added: number; deleted: number }>();
   private extUsage = new Map<string, { input: number; output: number; cacheRead: number; cacheWrite: number; model: string }>();
@@ -89,7 +90,41 @@ export class Bridge {
       this.transcriptPaths.set(this.extId(ev), ev.transcript_path);
       this.ensureQueuePoll();
     }
+    this.correctEscMark(this.extId(ev), ev);
     return decision;
+  }
+
+  // Esc 乐观置 DONE 的自我纠正：Esc 打断不触发 Stop hook，置 DONE 后若仍有工具活动，
+  // 说明打断没真生效 → 翻回 WORKING；回合自然翻篇（新 prompt/Stop/SessionEnd）则撤销标记
+  private correctEscMark(id: string, ev: BridgeEvent): void {
+    const marked = this.escMarkedAt.get(id);
+    if (marked === undefined) return;
+    if (!this.mgr.getExternal(id)) {
+      this.escMarkedAt.delete(id);
+      return;
+    }
+    if (ev.event === "PreToolUse") {
+      // 新工具又开跑了：打断未生效（dispatch 已置 WORKING/WAITING，DONE 时补翻）
+      if (this.mgr.getExternal(id)?.status === "DONE") {
+        this.mgr.setExternalStatus(id, "WORKING", "打断未生效，恢复运行中");
+      }
+      this.mgr.pushExternalLog(id, "system", "打断未生效，恢复运行中");
+      this.escMarkedAt.delete(id);
+      return;
+    }
+    if (ev.event === "PostToolUse") {
+      // ≤3s 的视为被打断回合的收尾事件：忽略且不删标记
+      if (Date.now() - marked <= 3000) return;
+      if (this.mgr.getExternal(id)?.status === "DONE") {
+        this.mgr.setExternalStatus(id, "WORKING", "打断未生效，恢复运行中");
+        this.mgr.pushExternalLog(id, "system", "打断未生效，恢复运行中");
+      }
+      this.escMarkedAt.delete(id);
+      return;
+    }
+    if (ev.event === "UserPromptSubmit" || ev.event === "Stop" || ev.event === "SessionEnd") {
+      this.escMarkedAt.delete(id); // 回合已自然翻篇
+    }
   }
 
   // 5s 轮询 transcript：PC 端敲字排队（queue-operation enqueue）发生在任意时刻，
@@ -103,24 +138,57 @@ export class Bridge {
     this.queuePollTimer.unref();
   }
 
-  // 记账"该文本近期已晋升为正式消息"：transcript 里 enqueue 与晋升可能同批读到，
+  // 匹配键：CLI 会把多条排队消息合并成一条（"\r" 连接），且消息内换行折叠为空格、
+  // 各处截断上限不一——精确比对会把同一批消息认成多条（#126 双气泡）。统一折叠空白 + 300 截断。
+  private static normKey(text: string): string {
+    return truncate(text.trim(), 300).replace(/\s+/g, " ");
+  }
+
+  // 记账"该文本近期已记为正式消息"：transcript 里 enqueue 与晋升可能同批读到，
   // 不去重会把已处理的消息再塞回 pending（手机双气泡）
-  private noteUserMsg(id: string, text: string): void {
+  private noteUserMsg(id: string, text: string, via: "promote" | "prompt"): void {
     let m = this.recentUserMsgs.get(id);
     if (!m) {
       m = new Map();
       this.recentUserMsgs.set(id, m);
     }
-    m.set(text.trim(), Date.now());
+    m.set(Bridge.normKey(text), { ts: Date.now(), via });
     if (m.size > 40) {
       const cutoff = Date.now() - 10 * 60_000;
-      for (const [k, ts] of m) if (ts < cutoff) m.delete(k);
+      for (const [k, rec] of m) if (rec.ts < cutoff) m.delete(k);
     }
   }
 
   private recentlyLogged(id: string, text: string): boolean {
-    const ts = this.recentUserMsgs.get(id)?.get(text.trim());
-    return ts !== undefined && Date.now() - ts < 60_000;
+    const rec = this.recentUserMsgs.get(id)?.get(Bridge.normKey(text));
+    return rec !== undefined && Date.now() - rec.ts < 60_000;
+  }
+
+  // 该文本是否被近期"晋升"记录覆盖（双向包含）：CLI 用合并形态（"A\rB"）重发已按单条
+  // 晋升过的消息（或反之）时，任一方向包含即视为同批已展示；只认 promote 来源，
+  // PC 手敲 60s 内重发同一句（via=prompt）不吞
+  private coveredByRecentPromote(id: string, text: string): boolean {
+    const m = this.recentUserMsgs.get(id);
+    if (!m) return false;
+    const pk = Bridge.normKey(text);
+    const now = Date.now();
+    for (const [k, rec] of m) {
+      if (rec.via !== "promote" || now - rec.ts >= 60_000 || !k) continue;
+      if (k === pk || k.includes(pk) || pk.includes(k)) return true;
+    }
+    return false;
+  }
+
+  // 从 pending 里出队所有被 text 覆盖的条目（单条精确 / 合并形态包含），返回被出队的原文
+  private consumePendingTexts(id: string, text: string): string[] {
+    const state = this.mgr.getExternal(id);
+    const list = state?.pending_inputs ?? [];
+    if (!list.length) return [];
+    const key = Bridge.normKey(text);
+    const kept = list.filter((p) => !key.includes(Bridge.normKey(p.text)));
+    if (kept.length === list.length) return [];
+    this.mgr.setExternalPending(id, kept);
+    return list.filter((p) => key.includes(Bridge.normKey(p.text))).map((p) => p.text);
   }
 
   // PC 端敲字排队：与手机注入同构地进 pending_inputs，手机立即显示"排队中"
@@ -129,8 +197,11 @@ export class Bridge {
     if (!state) return;
     const text = truncate(content.trim(), 300);
     if (!text || this.recentlyLogged(id, text)) return;
+    const key = Bridge.normKey(content);
     const pending = state.pending_inputs ?? [];
-    if (pending.some((p) => p.text === text)) return; // 手机注入回显（extInput）已进队
+    // CLI 会把多条排队消息合并成一条 enqueue（"A\rB"，内部换行折叠）：覆盖任一待发消息
+    // 即为同一批的重复表示，不重复入队；手机注入回显（extInput）已进队同样跳过
+    if (pending.some((p) => key.includes(Bridge.normKey(p.text)))) return;
     this.mgr.setExternalPending(id, [...pending, { text, ts: Date.now() }]);
   }
 
@@ -140,13 +211,18 @@ export class Bridge {
     const state = this.mgr.getExternal(id);
     if (!state) return;
     const text = truncate(prompt.trim(), 300);
-    if (!text || this.recentlyLogged(id, text)) return;
-    const pending = (state.pending_inputs ?? []).filter((p) => p.text !== text);
-    if (pending.length !== (state.pending_inputs?.length ?? 0)) {
-      this.mgr.setExternalPending(id, pending);
+    if (!text || this.recentlyLogged(id, text) || this.coveredByRecentPromote(id, text)) return;
+    // 合并形态（"A\rB"）交付：出队覆盖到的所有 pending，按各自原文各记一条（不记合并稿）
+    const consumed = this.consumePendingTexts(id, text);
+    if (consumed.length) {
+      for (const t of consumed) {
+        if (!this.recentlyLogged(id, t)) this.mgr.pushExternalLog(id, "user_message", truncate(t, 300));
+        this.noteUserMsg(id, t, "promote");
+      }
+    } else {
+      this.mgr.pushExternalLog(id, "user_message", text);
     }
-    this.noteUserMsg(id, text);
-    this.mgr.pushExternalLog(id, "user_message", text);
+    this.noteUserMsg(id, text, "promote");
   }
 
   // 手动撤回排队消息（remove 且无 attachment 配对）：FIFO 出队一条
@@ -219,18 +295,42 @@ export class Bridge {
   }
 
   // UserPromptSubmit 到达：若与排队注入消息同文本 → 晋升该条（出 pending 区、入正式转录），
-  // 返回 true 表示已由回显晋升、无需重复记 user_message 日志
+  // 返回 true 表示已由回显晋升、无需重复记 user_message 日志。
+  // 匹配不做 recentlyLogged 门控：pending 条目按次生成，命中即代表这是一次新的注入回显
+  // （手机快速重发同一句会各自命中、各记一条，不会被 60s 去重吞掉）
   private promotePending(sessionId: string, prompt: string): boolean {
     const state = this.mgr.getExternal(sessionId);
     const list = state?.pending_inputs ?? [];
-    const i = list.findIndex((p) => p.text === prompt.trim());
-    if (i === -1) return false;
-    const promoted = list[i];
-    list.splice(i, 1);
-    this.mgr.setExternalPending(sessionId, list);
-    this.noteUserMsg(sessionId, promoted.text);
-    this.mgr.pushExternalLog(sessionId, "user_message", truncate(promoted.text, 300));
-    return true;
+    if (!list.length) return false;
+    const key = Bridge.normKey(prompt);
+    const i = list.findIndex((p) => Bridge.normKey(p.text) === key);
+    if (i !== -1) {
+      const promoted = list.splice(i, 1)[0];
+      this.mgr.setExternalPending(sessionId, list);
+      this.noteUserMsg(sessionId, promoted.text, "promote");
+      this.mgr.pushExternalLog(sessionId, "user_message", truncate(promoted.text, 300));
+      return true;
+    }
+    // CLI 回合结束会把整队排队消息合并成一条 "A\rB" prompt 提交：连续段拼接匹配则整批晋升
+    for (let s = 0; s < list.length; s++) {
+      const acc: string[] = [];
+      for (let e = s; e < list.length; e++) {
+        acc.push(Bridge.normKey(list[e].text));
+        const joined = acc.join(" ");
+        if (joined.length > key.length) break;
+        if (joined === key) {
+          const hits = list.splice(s, e - s + 1);
+          this.mgr.setExternalPending(sessionId, list);
+          for (const h of hits) {
+            this.noteUserMsg(sessionId, h.text, "promote");
+            this.mgr.pushExternalLog(sessionId, "user_message", truncate(h.text, 300));
+          }
+          this.noteUserMsg(sessionId, prompt, "promote"); // 合并形态也记账：后续同形态到达直接跳过
+          return true;
+        }
+      }
+    }
+    return false;
   }
 
   // 注入 Esc 打断当前回合
@@ -242,7 +342,22 @@ export class Bridge {
     const pid = state.cli_pid;
     this.mgr.pushExternalLog(sessionId, "system", "发送打断（Esc）");
     void injectEsc(pid).then((r) => {
-      if (!r.ok) this.onInjectFail(sessionId, r.error);
+      if (!r.ok) {
+        this.onInjectFail(sessionId, r.error);
+        return;
+      }
+      // Esc 打断的回合不触发 Stop hook：乐观置 DONE（手机立即看到结束），
+      // 若打断没真生效（后续仍有工具活动），correctEscMark 会翻回 WORKING
+      const s = this.mgr.getExternal(sessionId);
+      if (!s || s.status !== "WORKING") return; // 注入期间回合已自然结束/状态已翻篇
+      if (this.escMarkedAt.size > 60) this.escMarkedAt.clear();
+      this.escMarkedAt.set(sessionId, Date.now());
+      const turn = this.turnStart.get(sessionId) ?? s.started_at;
+      this.turnStart.delete(sessionId);
+      this.mgr.finishExternal(sessionId, "interrupted", Date.now() - turn);
+      this.mgr.pushExternalLog(sessionId, "system", "已打断");
+      // 状态已是 DONE：排队的消息照常注入（flushQueue 认 DONE/WORKING）
+      if ((this.inputQueue.get(sessionId)?.length ?? 0) > 0) void this.flushQueue(sessionId);
     });
     return { ok: true };
   }
@@ -323,8 +438,12 @@ export class Bridge {
     if (!this.named.has(id) && ev.prompt) this.mgr.requestSmartTitle(id, ev.prompt);
     this.mgr.setExternalStatus(id, "WORKING", truncate(ev.prompt ?? "新回合", 60), turnStartedAt);
     if (!this.promotePending(id, ev.prompt ?? "")) {
-      this.noteUserMsg(id, ev.prompt ?? "");
-      this.mgr.pushExternalLog(id, "user_message", truncate(ev.prompt ?? "", 300));
+      // 晋升未命中：可能是 CLI 回合结束对已晋升排队消息的重复 UserPromptSubmit（合并形态冲刷），
+      // 60s 内已被晋升记录覆盖 → 跳过；PC 手敲重发（上一条也走 prompt 记录）不受影响
+      if (!this.coveredByRecentPromote(id, ev.prompt ?? "")) {
+        this.noteUserMsg(id, ev.prompt ?? "", "prompt");
+        this.mgr.pushExternalLog(id, "user_message", truncate(ev.prompt ?? "", 300));
+      }
     }
     void state;
     return { decision: "pass" };
@@ -804,9 +923,9 @@ export class Bridge {
     const avail = [...(this.inputQueue.get(id) ?? [])];
     const kept: PendingInput[] = [];
     for (const p of state.pending_inputs ?? []) {
-      const qi = avail.findIndex((t) => t.trim() === p.text);
+      const qi = avail.findIndex((t) => Bridge.normKey(t) === Bridge.normKey(p.text));
       if (qi === -1) {
-        this.noteUserMsg(id, p.text);
+        this.noteUserMsg(id, p.text, "promote");
         this.mgr.pushExternalLog(id, "user_message", truncate(p.text, 300));
       } else {
         avail.splice(qi, 1); // 只做匹配记账，不动原队列（flushQueue 随后要注入）

@@ -1,6 +1,6 @@
-// 设置抽屉：首页左上角图标呼出（侧滑），收纳服务器列表、快捷短语与显示设置
-import { useEffect, useState } from "react";
-import { Animated, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
+// 设置抽屉：首页左上角图标呼出，也支持左缘右滑呼出 / 面板上左滑收起；收纳服务器列表、快捷短语与显示设置
+import { useEffect, useRef, useState } from "react";
+import { Animated, PanResponder, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { LinearGradient } from "expo-linear-gradient";
 import { useTheme, useThemeStyles } from "../theme-context";
@@ -32,6 +32,22 @@ export default function SettingsDrawer({
   const d = useThemeStyles(makeStyles);
   const insets = useSafeAreaInsets();
   const [x] = useState(new Animated.Value(0));
+  const visRef = useRef(visible);
+  visRef.current = visible;
+  // 面板上左滑收起：面板跟手拖动（x: 0 关 / 1 开），松手按位移/速度决定收起或弹回
+  const pan = useRef(
+    PanResponder.create({
+      onMoveShouldSetPanResponderCapture: (_, g) => visRef.current && g.dx < -12 && Math.abs(g.dy) < 14,
+      onPanResponderMove: (_, g) => x.setValue(Math.min(1, Math.max(0, 1 + g.dx / 240))),
+      onPanResponderRelease: (_, g) => {
+        if (g.dx < -60 || g.vx < -0.4) onClose();
+        else Animated.timing(x, { toValue: 1, duration: 160, useNativeDriver: true }).start();
+      },
+      onPanResponderTerminate: () => {
+        if (visRef.current) Animated.timing(x, { toValue: 1, duration: 160, useNativeDriver: true }).start();
+      },
+    }),
+  ).current;
   const processFont = useProcessFont();
   const snap = useRelay();
   const [servers, setServers] = useState<ServerEntry[]>([]);
@@ -89,20 +105,20 @@ export default function SettingsDrawer({
       <Animated.View style={[d.scrim, { opacity: scrimOp }]}>
         <Pressable style={FILL} onPress={onClose} />
       </Animated.View>
-      <Animated.View style={[d.panel, { transform: [{ translateX }], paddingTop: 18 + insets.top }]}>
+      <Animated.View style={[d.panel, { transform: [{ translateX }], paddingTop: 18 + insets.top }]} {...pan.panHandlers}>
         <View style={d.head}>
           <LinearGradient colors={[c.brandA, c.brandB]} style={d.logo}>
             <Text style={d.logoT}>CC</Text>
           </LinearGradient>
           <View style={{ flex: 1, minWidth: 0 }}>
             <Text style={d.nameT}>Claude Code</Text>
-            <Text style={d.verT}>移动工作台 · v0.2.25</Text>
+            <Text style={d.verT}>移动工作台 · v0.2.28</Text>
           </View>
         </View>
 
-        <ScrollView style={d.body} nestedScrollEnabled>
+        <ScrollView style={d.body} nestedScrollEnabled showsVerticalScrollIndicator={false}>
         <Text style={d.secT}>服务器列表</Text>
-        <ScrollView style={d.srvScroll} nestedScrollEnabled>
+        <ScrollView style={d.srvScroll} nestedScrollEnabled showsVerticalScrollIndicator={false}>
           {servers.map((e) => {
             const active = e.id === activeId;
             return (

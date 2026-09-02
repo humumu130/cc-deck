@@ -117,12 +117,14 @@ export class SessionManager {
     resolvePending: (sessionId: string, requestId: string, decision: "allow" | "deny", reason?: string) => boolean;
     extInput: (sessionId: string, text: string) => { ok: boolean; error?: string };
     extStop: (sessionId: string) => { ok: boolean; error?: string };
+    refreshTodos: (sessionId: string) => { ok: boolean; error?: string };
   } | null = null;
 
   setBridge(b: {
     resolvePending: (sessionId: string, requestId: string, decision: "allow" | "deny", reason?: string) => boolean;
     extInput: (sessionId: string, text: string) => { ok: boolean; error?: string };
     extStop: (sessionId: string) => { ok: boolean; error?: string };
+    refreshTodos: (sessionId: string) => { ok: boolean; error?: string };
   }): void {
     this.bridge = b;
   }

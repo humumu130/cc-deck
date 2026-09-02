@@ -1,5 +1,5 @@
 import { Fragment, useEffect, useRef, useState } from "react";
-import { Animated, BackHandler, Image, PermissionsAndroid, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
+import { Animated, BackHandler, Image, PermissionsAndroid, Pressable, ScrollView, StyleSheet, Text, TextInput, View, type NativeScrollEvent, type NativeSyntheticEvent } from "react-native";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import * as ImagePicker from "expo-image-picker";
 import * as ImageManipulator from "expo-image-manipulator";
@@ -312,16 +312,20 @@ export default function DetailScreen({ sid, onBack }: { sid: string; onBack: () 
   const [todoOpen, setTodoOpen] = useState(false);
   const todoScrollRef = useRef<ScrollView>(null);
   const todoAtBottom = useRef(true);
-  // 任务面板常驻滑块：滚动进度 0..1 + 内容/视口高度（thumb 高度按比例、最短 28）
-  const todoProg = useRef(new Animated.Value(1)).current;
+  // 任务面板常驻滑块：onScroll 里 setValue(contentOffset.y)（bridgeless 下 Animated.event
+  // 原生驱动会崩，见 0.2.26），thumb 位移靠 interpolate 插值；尺寸来自 onLayout/onContentSizeChange，
+  // 展开即渲染，不依赖首次滚动
+  const todoScrollY = useRef(new Animated.Value(0)).current;
   const [todoMetrics, setTodoMetrics] = useState({ content: 0, layout: 0 });
   const todoThumbH = todoMetrics.content > 0
     ? Math.max(28, (todoMetrics.layout * todoMetrics.layout) / todoMetrics.content)
     : 28;
+  const todoTravel = Math.max(1, todoMetrics.content - todoMetrics.layout);
+  const thumbTravel = Math.max(0, todoMetrics.layout - todoThumbH - 4);
   const [images, setImages] = useState<string[]>([]);
   const [queuedHint, setQueuedHint] = useState<string | null>(null);
   const flashQueuedHint = () => {
-    setQueuedHint("已排队，确认/回合结束自动发送（Esc 打断则等约 1 分钟空闲回落）");
+    setQueuedHint("已排队，确认/回合结束后自动发送");
     setTimeout(() => setQueuedHint(null), 4000);
   };
   const [picking, setPicking] = useState(false);
@@ -353,15 +357,22 @@ export default function DetailScreen({ sid, onBack }: { sid: string; onBack: () 
 
   // 任务存储是全会话历史。排序：已完成置顶、下面进行中、再待办；组内保持 relay 下发的
   // 任务号顺序（旧→新，稳定排序不动组内先后）——整列从上往下时间感单调。
-  // 已完成历史不无限堆：带 mtime 只展示近 3 天，旧数据无时间戳则兜底最近 20 条
+  // 已完成历史不无限堆：带 mtime 只展示近 24h，再封顶最新 15 条（防马拉松日爆量）；
+  // 无时间戳的旧数据直接取最新 15 条。进行中/待办是可操作项，全保留
   const todoRank = (t: TodoItem) => (t.status === "completed" ? 0 : t.status === "in_progress" ? 1 : 2);
   const allTodos = s?.todos ?? [];
   const doneAll = allTodos.filter((t) => t.status === "completed");
   const doneHasTs = doneAll.length > 0 && doneAll.every((t) => typeof t.updated_at === "number");
-  const doneList = doneHasTs
-    ? doneAll.filter((t) => (t.updated_at ?? 0) >= Date.now() - 3 * 24 * 3600 * 1000)
-    : doneAll.slice(-20);
-  const doneNote = doneList.length < doneAll.length ? (doneHasTs ? " · 近3天" : " · 最近20") : "";
+  const doneWindow = doneHasTs
+    ? doneAll.filter((t) => (t.updated_at ?? 0) >= Date.now() - 24 * 3600 * 1000)
+    : doneAll;
+  const doneList = doneWindow.slice(-15);
+  const doneNote =
+    doneList.length < doneAll.length
+      ? doneHasTs
+        ? ` · 近1天${doneWindow.length > 15 ? "·最新15" : ""}`
+        : " · 最新15"
+      : "";
   const sortedTodos = [...doneList, ...allTodos.filter((t) => t.status !== "completed")].sort(
     (a, b) => todoRank(a) - todoRank(b),
   );
@@ -702,16 +713,20 @@ export default function DetailScreen({ sid, onBack }: { sid: string; onBack: () 
                   style={d.todoScroll}
                   nestedScrollEnabled
                   showsVerticalScrollIndicator={false}
-                  scrollEventThrottle={64}
-                  onScroll={(e) => {
+                  scrollEventThrottle={16}
+                  onScroll={(e: NativeSyntheticEvent<NativeScrollEvent>) => {
+                    // bridgeless 下 Animated.event+useNativeDriver 不可用（0.2.26 闪退），
+                    // 退回 JS setValue：throttle 16 保证 60fps 事件流，thumb 仍逐帧跟手
                     const { contentOffset, contentSize, layoutMeasurement } = e.nativeEvent;
                     todoAtBottom.current = contentOffset.y + layoutMeasurement.height >= contentSize.height - 24;
-                    if (contentSize.height !== todoMetrics.content || layoutMeasurement.height !== todoMetrics.layout)
-                      setTodoMetrics({ content: contentSize.height, layout: layoutMeasurement.height });
-                    const range = contentSize.height - layoutMeasurement.height;
-                    todoProg.setValue(range > 8 ? Math.min(1, Math.max(0, contentOffset.y / range)) : 1);
+                    todoScrollY.setValue(contentOffset.y);
                   }}
-                  onContentSizeChange={() => {
+                  onLayout={(e) => {
+                    const h = e.nativeEvent.layout.height;
+                    setTodoMetrics((m) => (h !== m.layout ? { ...m, layout: h } : m));
+                  }}
+                  onContentSizeChange={(_w, h) => {
+                    setTodoMetrics((m) => (h !== m.content ? { ...m, content: h } : m));
                     if (todoAtBottom.current) todoScrollRef.current?.scrollToEnd({ animated: false });
                   }}
                 >
@@ -736,7 +751,7 @@ export default function DetailScreen({ sid, onBack }: { sid: string; onBack: () 
                             <View style={d.todoSecLine} />
                           </View>
                         ) : null}
-                        {renderTodo(t, i, !head)}
+                        {renderTodo(t, i, !!head)}
                       </Fragment>
                     );
                   })}
@@ -750,9 +765,10 @@ export default function DetailScreen({ sid, onBack }: { sid: string; onBack: () 
                         height: todoThumbH,
                         transform: [
                           {
-                            translateY: todoProg.interpolate({
-                              inputRange: [0, 1],
-                              outputRange: [0, Math.max(0, todoMetrics.layout - todoThumbH - 4)],
+                            translateY: todoScrollY.interpolate({
+                              inputRange: [0, todoTravel],
+                              outputRange: [0, thumbTravel],
+                              extrapolate: "clamp",
                             }),
                           },
                         ],
@@ -770,6 +786,7 @@ export default function DetailScreen({ sid, onBack }: { sid: string; onBack: () 
       <ScrollView
         ref={scrollRef}
         style={{ flex: 1 }}
+        showsVerticalScrollIndicator={false}
         contentContainerStyle={{ padding: 14, paddingBottom: 14 + (bannerVisible ? 200 : canCmd ? 96 : 60) + insets.bottom }}
         onTouchStart={() => { touching.current = true; }}
         onTouchEnd={() => { touching.current = false; }}
@@ -825,7 +842,7 @@ export default function DetailScreen({ sid, onBack }: { sid: string; onBack: () 
       </ScrollView>
 
       {/* 底部栈：审批横幅（常驻可见，类似 CLI 权限提示）> 模板行 > 命令栏；整体随键盘抬升 */}
-      <View pointerEvents="box-none" style={{ paddingBottom: insets.bottom, transform: [{ translateY: kb > 0 ? -kb : 0 }] }}>
+      <View pointerEvents="box-none" style={{ paddingBottom: kb > 0 ? 0 : insets.bottom, transform: [{ translateY: kb > 0 ? -kb : 0 }] }}>
         {bannerVisible ? (
           wr!.questions?.length ? (
             <AskBanner wr={wr!} sid={sid} />
