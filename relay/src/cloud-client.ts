@@ -112,20 +112,37 @@ export class CloudClient {
     this.send({ to: dev, data: seal(obj, peer.pubkey, this.identity.keypair.secretKey) });
   }
 
-  // 手机激活/恢复：缓冲内按 last_seq 补发，否则全量 SNAPSHOT（hello 与 ping-resume 共用）
+  // 手机激活/恢复：缓冲内按 last_seq 补发，否则全量 SNAPSHOT（hello 与 ping-resume 共用）。
+  // 全量恢复时 SNAPSHOT 只带会话状态不带时间线日志，日志随后逐条 SESSION_LOG 密文流式补发
+  // （手机端 SESSION_LOG 处理器即 pushLog 追加，旧 APK 直接兼容）——所有日志塞进单帧会随
+  // 历史增长无限膨胀，迟早再次撞上桥的帧上限；流式每帧只有单条日志大小。
+  // 流式帧 seq 统一取 snapshot 时的 lastSeq：手机 lastSeq 不会因此前移，下次重连的 bus
+  // 补发从该 seq 之后开始，不会与已流式补发的旧日志重复。
   private resumePhone(dev: string, lastSeq: number): void {
     this.phones.set(dev, { lastSeq, active: true });
     if (lastSeq > 0 && !this.bus.isBeyondBuffer(lastSeq)) {
       for (const env of this.bus.replayAfter(lastSeq)) this.sendSealed(dev, env);
-    } else {
-      const snapshot: Envelope = {
-        seq: this.bus.lastSeq(),
-        session_id: "",
-        ts: Date.now(),
-        type: "SNAPSHOT",
-        payload: { sessions: this.mgr.snapshot(), logs: this.mgr.snapshotLogs(), server_time: Date.now() },
-      };
-      this.sendSealed(dev, snapshot);
+      return;
+    }
+    const snapSeq = this.bus.lastSeq();
+    const snapshot: Envelope = {
+      seq: snapSeq,
+      session_id: "",
+      ts: Date.now(),
+      type: "SNAPSHOT",
+      payload: { sessions: this.mgr.snapshot(), logs: {}, server_time: Date.now() },
+    };
+    this.sendSealed(dev, snapshot);
+    for (const [sid, logs] of Object.entries(this.mgr.snapshotLogs())) {
+      for (const entry of logs) {
+        this.sendSealed(dev, {
+          seq: snapSeq,
+          session_id: sid,
+          ts: entry.ts ?? Date.now(),
+          type: "SESSION_LOG",
+          payload: entry,
+        } as Envelope);
+      }
     }
   }
 

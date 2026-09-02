@@ -214,8 +214,75 @@ assert(
   "SNAPSHOT 恢复后实时事件继续下发",
 );
 
-// ---------- 清理 ----------
+// ---------- 8) 全量恢复：瘦身 SNAPSHOT + SESSION_LOG 流式补发 ----------
+// 线上事故：时间线日志涨大后全量 SNAPSHOT 密文超桥 1MB 帧上限，桥把 relay 连接
+// 1009 踢掉 → 重连循环，手机列表永远为空。现改为 SNAPSHOT 只带会话状态、日志逐条流式。
 phoneWs2.close();
+const seedId = "ext-stream-test";
+mgr.ensureExternal(seedId, "/tmp", "流式补发验证");
+const SEED_N = 5;
+for (let i = 1; i <= SEED_N; i++) mgr.pushExternalLog(seedId, "assistant_text", `stream-${i}`);
+
+const phoneWs3 = new WebSocket(`ws://127.0.0.1:${BRIDGE_PORT}/cloud?token=${BRIDGE_TOKEN}&dev=${phoneDev}`);
+const inbox3: Record<string, unknown>[] = [];
+let snapFrameLen = 0;
+phoneWs3.on("message", (raw) => {
+  const f = JSON.parse(String(raw)) as { data?: SealedBox };
+  if (!f.data) return;
+  const inner = unseal<Record<string, unknown>>(f.data, relayPubkey, phoneKp.secretKey);
+  if (!inner) return;
+  if (inner.type === "SNAPSHOT") snapFrameLen = String(raw).length;
+  inbox3.push(inner);
+});
+phoneWs3.on("error", () => undefined);
+await new Promise<void>((r) => phoneWs3.on("open", r));
+phoneWs3.send(JSON.stringify({ to: identity.relayDev, data: seal({ t: "hello", last_seq: 0 }, relayPubkey, phoneKp.secretKey) }));
+
+const snap3 = (await waitFor(() => inbox3.some((m) => m.type === "SNAPSHOT")))
+  ? (inbox3.find((m) => m.type === "SNAPSHOT") as unknown as { seq: number; payload: { sessions: { session_id: string }[]; logs?: Record<string, unknown[]> } })
+  : undefined;
+assert(!!snap3, "全量恢复收到 SNAPSHOT");
+assert(Object.keys(snap3?.payload.logs ?? {}).length === 0, "SNAPSHOT 已瘦身（不带时间线日志）");
+assert(!!snap3?.payload.sessions.some((s) => s.session_id === seedId), "SNAPSHOT 携带会话状态");
+assert(
+  await waitFor(() => inbox3.filter((m) => m.type === "SESSION_LOG" && m.session_id === seedId).length === SEED_N),
+  "时间线以 SESSION_LOG 逐条流式补发",
+);
+{
+  const texts = inbox3
+    .filter((m) => m.type === "SESSION_LOG" && m.session_id === seedId)
+    .map((m) => (m.payload as { text?: string }).text);
+  assert(texts.join(",") === Array.from({ length: SEED_N }, (_, i) => `stream-${i + 1}`).join(","), "流式补发顺序正确");
+  assert(snapFrameLen > 0 && snapFrameLen < 256 * 1024, "SNAPSHOT 单帧远低于 1MB 桥上限");
+}
+
+// 用流式帧统一过的 seq 重新 hello：bus 补发从该 seq 之后开始，不与已流式的旧日志重复
+phoneWs3.close();
+await wait(200);
+const phoneWs4 = new WebSocket(`ws://127.0.0.1:${BRIDGE_PORT}/cloud?token=${BRIDGE_TOKEN}&dev=${phoneDev}`);
+const inbox4: Record<string, unknown>[] = [];
+phoneWs4.on("message", (raw) => {
+  const f = JSON.parse(String(raw)) as { data?: SealedBox };
+  if (!f.data) return;
+  const inner = unseal<Record<string, unknown>>(f.data, relayPubkey, phoneKp.secretKey);
+  if (inner) inbox4.push(inner);
+});
+phoneWs4.on("error", () => undefined);
+await new Promise<void>((r) => phoneWs4.on("open", r));
+phoneWs4.send(JSON.stringify({ to: identity.relayDev, data: seal({ t: "hello", last_seq: snap3!.seq }, relayPubkey, phoneKp.secretKey) }));
+await wait(400);
+phoneWs4.send(JSON.stringify({ to: identity.relayDev, data: seal({ t: "ping" }, relayPubkey, phoneKp.secretKey) }));
+assert(
+  await waitFor(() => inbox4.some((m) => m.t === "pong")),
+  "重连 hello 已处理（pong 为证）",
+);
+assert(
+  inbox4.filter((m) => m.type === "SESSION_LOG" && m.session_id === seedId).length === 0,
+  "last_seq 补发不与流式补发的旧日志重复",
+);
+
+// ---------- 清理 ----------
+phoneWs4.close();
 rogueWs.close();
 cloud.close();
 await bridge.close();

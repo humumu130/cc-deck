@@ -13,7 +13,9 @@ export interface RouterOptions {
   log?: (msg: string) => void;
 }
 
-const MAX_FRAME = 1 << 20; // 1MB 防御性上限
+// 8MB 防御性上限：SNAPSHOT/图片上传等合法帧可达 MB 级（1MB 时快照密文刚超线，
+// 桥把 relay 连接 1009 踢掉导致手机列表全空循环）
+const MAX_FRAME = 8 << 20;
 const MAX_DEV = 64;
 
 export class CloudRouter {
