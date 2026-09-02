@@ -40,6 +40,7 @@ export interface TodoItem {
   content: string;
   status: "pending" | "in_progress" | "completed";
   active_form?: string;
+  updated_at?: number;
 }
 
 export interface SessionState {
@@ -109,7 +110,8 @@ export type CommandType =
   | "COMMAND_RENAME"
   | "COMMAND_ANSWER"
   | "COMMAND_PAIR_START"
-  | "COMMAND_PERM";
+  | "COMMAND_PERM"
+  | "COMMAND_REFRESH_TODOS";
 
 // 云桥配对信息：relay 经可信 LAN 信道下发，手机落盘后即可走云通道
 export interface CloudPairInfo {

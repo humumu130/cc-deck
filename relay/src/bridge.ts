@@ -652,17 +652,34 @@ export class Bridge {
     const out: (TodoItem & { n: number })[] = [];
     for (const f of files) {
       try {
-        const t = JSON.parse(readFileSync(path.join(dir, f), "utf-8")) as { subject?: unknown; status?: unknown; activeForm?: unknown };
+        const fp = path.join(dir, f);
+        const t = JSON.parse(readFileSync(fp, "utf-8")) as { subject?: unknown; status?: unknown; activeForm?: unknown };
         const subject = typeof t.subject === "string" ? t.subject.trim() : "";
         if (!subject) continue;
         const status = t.status === "in_progress" || t.status === "completed" ? t.status : "pending";
         const activeForm = typeof t.activeForm === "string" && t.activeForm.trim() ? { active_form: t.activeForm.trim().slice(0, 120) } : {};
-        out.push({ n: Number(f.replace(/[^0-9]/g, "")) || 0, content: subject.slice(0, 120), status, ...activeForm });
+        out.push({ n: Number(f.replace(/[^0-9]/g, "")) || 0, content: subject.slice(0, 120), status, updated_at: statSync(fp).mtimeMs, ...activeForm });
       } catch {}
     }
     if (!out.length) return null;
     out.sort((a, b) => a.n - b.n);
     return out.map(({ n: _n, ...rest }) => rest);
+  }
+
+  // 手动刷新：清掉 JSON 变更检测的缓存，强制重读任务存储并重发（绕过"内容没变不推"）
+  refreshTodos(sessionId: string): { ok: boolean; error?: string } {
+    try {
+      const t = this.readTaskStore(sessionId);
+      this.lastTodos.delete(sessionId);
+      if (t) this.mgr.setTodos(sessionId, t);
+      else {
+        const cur = this.mgr.getExternal(sessionId)?.todos;
+        if (cur) this.mgr.setTodos(sessionId, cur.map((x) => ({ ...x })));
+      }
+      return { ok: true };
+    } catch (e) {
+      return { ok: false, error: String(e) };
+    }
   }
 
   private ensureTracker(id: string): TaskTracker {

@@ -472,6 +472,19 @@ export class SessionManager {
           const r = this.bridge.extStop(cmd.payload.session_id);
           return { command_id: cmd.command_id, ok: r.ok, error: r.error };
         }
+        case "COMMAND_REFRESH_TODOS": {
+          const s = this.require(cmd.payload.session_id);
+          if (s.state.external) {
+            if (!this.bridge) {
+              return { command_id: cmd.command_id, ok: false, error: "bridge 未就绪" };
+            }
+            const r = this.bridge.refreshTodos(cmd.payload.session_id);
+            return { command_id: cmd.command_id, ok: r.ok, error: r.error };
+          }
+          // 托管会话清单来自 SDK 实时 feed：重发当前值即可
+          if (s.state.todos) this.setTodos(cmd.payload.session_id, s.state.todos.map((t) => ({ ...t })));
+          return { command_id: cmd.command_id, ok: true };
+        }
         case "COMMAND_DELETE": {
           const s = this.require(cmd.payload.session_id);
           if (s.state.status === "WORKING" || s.state.status === "WAITING") {

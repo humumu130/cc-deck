@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { Fragment, useEffect, useRef, useState } from "react";
 import { Animated, BackHandler, Image, PermissionsAndroid, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import * as ImagePicker from "expo-image-picker";
@@ -312,6 +312,12 @@ export default function DetailScreen({ sid, onBack }: { sid: string; onBack: () 
   const [todoOpen, setTodoOpen] = useState(false);
   const todoScrollRef = useRef<ScrollView>(null);
   const todoAtBottom = useRef(true);
+  // 任务面板常驻滑块：滚动进度 0..1 + 内容/视口高度（thumb 高度按比例、最短 28）
+  const todoProg = useRef(new Animated.Value(1)).current;
+  const [todoMetrics, setTodoMetrics] = useState({ content: 0, layout: 0 });
+  const todoThumbH = todoMetrics.content > 0
+    ? Math.max(28, (todoMetrics.layout * todoMetrics.layout) / todoMetrics.content)
+    : 28;
   const [images, setImages] = useState<string[]>([]);
   const [queuedHint, setQueuedHint] = useState<string | null>(null);
   const flashQueuedHint = () => {
@@ -327,9 +333,45 @@ export default function DetailScreen({ sid, onBack }: { sid: string; onBack: () 
   const insets = useSafeAreaInsets();
   const s: SessionState | undefined = snap.sessions.find((x) => x.session_id === sid);
 
-  // 任务存储是全会话历史（旧→新，新的在底部）：固定高度内嵌滚动，默认停在最底部（最新一屏）
-  const renderTodo = (t: TodoItem, i: number) => (
-    <View key={i} style={d.todoRow}>
+  // 手动刷新任务清单：↻ 发命令，等下一帧 todos 引用变化（或 2.5s 超时）结束等待态
+  const [todoSpin, setTodoSpin] = useState(false);
+  const todoSpinAt = useRef<unknown>(null);
+  const todoSpinTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const refreshTodos = () => {
+    store.send("COMMAND_REFRESH_TODOS", { session_id: sid });
+    todoSpinAt.current = s?.todos ?? null;
+    setTodoSpin(true);
+    if (todoSpinTimer.current) clearTimeout(todoSpinTimer.current);
+    todoSpinTimer.current = setTimeout(() => setTodoSpin(false), 2500);
+  };
+  useEffect(() => {
+    if (todoSpin && s?.todos && s.todos !== todoSpinAt.current) {
+      if (todoSpinTimer.current) clearTimeout(todoSpinTimer.current);
+      setTodoSpin(false);
+    }
+  }, [s?.todos, todoSpin]);
+
+  // 任务存储是全会话历史。排序：已完成置顶、下面进行中、再待办；组内保持 relay 下发的
+  // 任务号顺序（旧→新，稳定排序不动组内先后）——整列从上往下时间感单调。
+  // 已完成历史不无限堆：带 mtime 只展示近 3 天，旧数据无时间戳则兜底最近 20 条
+  const todoRank = (t: TodoItem) => (t.status === "completed" ? 0 : t.status === "in_progress" ? 1 : 2);
+  const allTodos = s?.todos ?? [];
+  const doneAll = allTodos.filter((t) => t.status === "completed");
+  const doneHasTs = doneAll.length > 0 && doneAll.every((t) => typeof t.updated_at === "number");
+  const doneList = doneHasTs
+    ? doneAll.filter((t) => (t.updated_at ?? 0) >= Date.now() - 3 * 24 * 3600 * 1000)
+    : doneAll.slice(-20);
+  const doneNote = doneList.length < doneAll.length ? (doneHasTs ? " · 近3天" : " · 最近20") : "";
+  const sortedTodos = [...doneList, ...allTodos.filter((t) => t.status !== "completed")].sort(
+    (a, b) => todoRank(a) - todoRank(b),
+  );
+  const todoGroups = [
+    { status: "completed", label: `已完成 ${doneList.length}/${doneAll.length}${doneNote}` },
+    { status: "in_progress", label: `进行中 ${allTodos.filter((t) => t.status === "in_progress").length}` },
+    { status: "pending", label: `待开始 ${allTodos.filter((t) => t.status === "pending").length}` },
+  ] as const;
+  const renderTodo = (t: TodoItem, i: number, grouped: boolean) => (
+    <View style={[d.todoRow, grouped && { borderTopWidth: 0, marginTop: 0 }]}>
       <Text
         style={[
           d.todoMark,
@@ -538,6 +580,8 @@ export default function DetailScreen({ sid, onBack }: { sid: string; onBack: () 
 
   return (
     <SafeAreaView style={d.safe} edges={["top"]}>
+      {/* 点任务面板外任意处自动折起（任务框内 stopPropagation 防误触） */}
+      <View style={{ flex: 1 }} onTouchStart={() => { if (todoOpen) setTodoOpen(false); }}>
       {/* 头部：标题 + 状态副行 + 统计/重命名 */}
       <View style={d.head}>
         <Pressable style={[d.back, d.opRipple]} android_ripple={{ color: c.tintSoft, borderless: false }} onPress={onBack} hitSlop={8}>
@@ -631,7 +675,7 @@ export default function DetailScreen({ sid, onBack }: { sid: string; onBack: () 
             ) : null}
           </View>
           {(s.todos?.length ?? 0) > 0 ? (
-            <View style={d.todoBox}>
+            <View style={d.todoBox} onTouchStart={(e) => e.stopPropagation()}>
               <Pressable
                 style={d.todoHead}
                 android_ripple={{ color: c.tintSoft, borderless: false, radius: 9 }}
@@ -641,24 +685,82 @@ export default function DetailScreen({ sid, onBack }: { sid: string; onBack: () 
                 <View style={d.todoBar}>
                   <View style={[d.todoBarFill, { width: `${Math.round((s.todos!.filter((t) => t.status === "completed").length / s.todos!.length) * 100)}%` }]} />
                 </View>
+                <Pressable
+                  style={d.todoRefresh}
+                  hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                  android_ripple={{ color: c.tintSoft, borderless: false, radius: 12 }}
+                  onPress={refreshTodos}
+                >
+                  <Text style={[d.todoRefreshT, todoSpin && { color: c.brandA }]}>↻</Text>
+                </Pressable>
                 <Text style={d.todoCaret}>{todoOpen ? "▾" : "▸"}</Text>
               </Pressable>
               {todoOpen ? (
+                <View style={d.todoScrollWrap}>
                 <ScrollView
                   ref={todoScrollRef}
                   style={d.todoScroll}
                   nestedScrollEnabled
-                  persistentScrollbar
+                  showsVerticalScrollIndicator={false}
+                  scrollEventThrottle={64}
                   onScroll={(e) => {
                     const { contentOffset, contentSize, layoutMeasurement } = e.nativeEvent;
                     todoAtBottom.current = contentOffset.y + layoutMeasurement.height >= contentSize.height - 24;
+                    if (contentSize.height !== todoMetrics.content || layoutMeasurement.height !== todoMetrics.layout)
+                      setTodoMetrics({ content: contentSize.height, layout: layoutMeasurement.height });
+                    const range = contentSize.height - layoutMeasurement.height;
+                    todoProg.setValue(range > 8 ? Math.min(1, Math.max(0, contentOffset.y / range)) : 1);
                   }}
                   onContentSizeChange={() => {
                     if (todoAtBottom.current) todoScrollRef.current?.scrollToEnd({ animated: false });
                   }}
                 >
-                  {s.todos!.map(renderTodo)}
+                  {sortedTodos.map((t, i) => {
+                    const g = todoGroups.find((x) => x.status === t.status)!;
+                    const head = i === 0 || sortedTodos[i - 1].status !== t.status ? g : null;
+                    return (
+                      <Fragment key={i}>
+                        {head ? (
+                          <View style={d.todoSec}>
+                            <View style={d.todoSecLine} />
+                            <Text
+                              style={[
+                                d.todoSecT,
+                                t.status === "completed" && { color: c.done },
+                                t.status === "in_progress" && { color: c.working },
+                                t.status === "pending" && { color: c.faint },
+                              ]}
+                            >
+                              {head.label}
+                            </Text>
+                            <View style={d.todoSecLine} />
+                          </View>
+                        ) : null}
+                        {renderTodo(t, i, !head)}
+                      </Fragment>
+                    );
+                  })}
                 </ScrollView>
+                {/* 常驻自绘滑块：系统 scrollbar 在两端都不可见（VM/API28、真机/API16 实测） */}
+                {todoMetrics.content > todoMetrics.layout + 8 ? (
+                  <Animated.View
+                    style={[
+                      d.todoThumb,
+                      {
+                        height: todoThumbH,
+                        transform: [
+                          {
+                            translateY: todoProg.interpolate({
+                              inputRange: [0, 1],
+                              outputRange: [0, Math.max(0, todoMetrics.layout - todoThumbH - 4)],
+                            }),
+                          },
+                        ],
+                      },
+                    ]}
+                  />
+                ) : null}
+                </View>
               ) : null}
             </View>
           ) : null}
@@ -829,6 +931,7 @@ export default function DetailScreen({ sid, onBack }: { sid: string; onBack: () 
         }}
       />
       <StatsModal visible={statsOpen} s={s} onCancel={() => setStatsOpen(false)} />
+      </View>
     </SafeAreaView>
   );
 }
@@ -924,7 +1027,14 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
   todoHeadT: { color: c.dim, fontSize: 11.5, fontWeight: "600" },
   todoBar: { flex: 1, height: 4, borderRadius: 2, backgroundColor: c.tintSoft, overflow: "hidden" },
   todoBarFill: { height: 4, borderRadius: 2, backgroundColor: c.done },
+  todoRefresh: { width: 26, height: 26, alignItems: "center", justifyContent: "center" },
+  todoRefreshT: { color: c.dim, fontSize: 14, lineHeight: 16 },
   todoCaret: { color: c.faint, fontSize: 11, width: 14, textAlign: "center" },
+  todoScrollWrap: { position: "relative" },
+  todoThumb: { position: "absolute", right: 1, top: 2, width: 3, borderRadius: 2, backgroundColor: withA(c.text, 0.28) },
+  todoSec: { flexDirection: "row", alignItems: "center", gap: 7, marginTop: 9, marginBottom: 1 },
+  todoSecLine: { flex: 1, height: 1, backgroundColor: c.line },
+  todoSecT: { fontSize: 10.5, fontWeight: "700", letterSpacing: 0.5 },
   todoRow: { flexDirection: "row", gap: 8, alignItems: "flex-start", paddingVertical: 5, borderTopWidth: 1, borderTopColor: c.line, marginTop: 5 },
   todoScroll: { maxHeight: 400, flexGrow: 0 },
   todoMark: { color: c.faint, fontSize: 12, width: 16, textAlign: "center", lineHeight: 17 },

@@ -38,6 +38,7 @@ export interface TodoItem {
   content: string;
   status: "pending" | "in_progress" | "completed";
   active_form?: string;
+  updated_at?: number;    // 任务文件 mtime（毫秒）：手机端"近3天"展示窗口用
 }
 
 export interface SessionState {
@@ -223,7 +224,8 @@ export type CommandType =
   | "COMMAND_RENAME"
   | "COMMAND_ANSWER"
   | "COMMAND_PAIR_START"
-  | "COMMAND_PERM";
+  | "COMMAND_PERM"
+  | "COMMAND_REFRESH_TODOS";
 
 export interface CommandBase {
   command_id: string;   // 客户端生成（uuid），Relay 按此去重
@@ -313,12 +315,19 @@ export type Command =
   | RenameCommand
   | AnswerCommand
   | PairStartCommand
-  | PermCommand;
+  | PermCommand
+  | RefreshTodosCommand;
 
 // 托管会话权限模式切换（default=每次确认 / acceptEdits=自动接受编辑 / plan=只读规划）
 export interface PermCommand extends CommandBase {
   type: "COMMAND_PERM";
   payload: { session_id: string; mode: ManagedPermissionMode };
+}
+
+// 手动刷新任务清单：外部会话强制重读 CLI 任务存储并重发；托管会话重发当前值
+export interface RefreshTodosCommand extends CommandBase {
+  type: "COMMAND_REFRESH_TODOS";
+  payload: { session_id: string };
 }
 
 // hooks 桥接：bridge-hook.mjs -> POST /bridge/hook 的请求体（token 走 x-bridge-token header）
