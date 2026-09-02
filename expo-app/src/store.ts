@@ -541,6 +541,7 @@ class RelayStore {
         if (msg.payload.relay_session_id) s.relay_session_id = msg.payload.relay_session_id;
         if (msg.payload.permission_mode) s.permission_mode = msg.payload.permission_mode;
         if (msg.payload.pending_inputs) s.pending_inputs = msg.payload.pending_inputs.length ? msg.payload.pending_inputs : undefined;
+        if (msg.payload.subagents) s.subagents = msg.payload.subagents;
         s.updated_at = msg.ts;
         break;
       }
@@ -564,7 +565,7 @@ class RelayStore {
         s.status = "WORKING";
         s.waiting_request = null;
         const d = msg.payload.decision;
-        const dText = d === "allow" ? "已允许" : d === "deny" ? "已拒绝" : d === "answer" ? "已作答" : "远程审批超时，回退本地";
+        const dText = d === "allow" ? "已允许" : d === "deny" ? "已拒绝" : d === "answer" ? "已作答" : d === "answered" ? "电脑端已作答" : "远程审批超时，回退本地";
         this.pushLog(sid, { ts: msg.ts, kind: "system", text: dText + (d === "timeout" ? "" : ` (by ${msg.payload.by})`) });
         break;
       }

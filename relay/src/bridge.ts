@@ -6,13 +6,18 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import type { EventBus } from "./event-bus.js";
 import type { SessionManager } from "./session-manager.js";
-import type { BridgeEvent, PendingInput, WaitingPayload, TodoItem } from "./types.js";
-import { injectText, injectEsc } from "./injector.js";
+import type { BridgeEvent, PendingInput, WaitingPayload, TodoItem, SubagentInfo, AskQuestion } from "./types.js";
+import { injectText, injectEsc, injectEnter, ensureInjector } from "./injector.js";
 import {
+  addHiddenTodoKey,
+} from "./todo-hidden.js";
+import {
+  buildAnswerMessage,
   detailToolResult,
   detailToolUse,
   diffLines,
   fullText,
+  normKey,
   parseAskQuestions,
   summarizeToolResult,
   summarizeToolUse,
@@ -25,11 +30,13 @@ export interface BridgeOptions {
   gateTools: Set<string>;          // 远程审批门控的工具名
   hasClients: () => boolean;       // 当前是否有 WS 客户端在线（手机在线才拦截）
   holdMs?: number;                 // PreToolUse 最长挂起（默认 590s，须 < hook 脚本内部 600s < settings timeout 620s）
+  questionHoldMs?: number;         // AskUserQuestion 挂起窗口（默认 90s；超时放行 CLI 本地选择器）
 }
 
 export interface BridgeDecision {
   decision: "allow" | "deny" | "pass";   // pass = 不干预，CLI 走正常权限流程
   reason?: string;
+  updatedInput?: Record<string, unknown>; // allow 时改写工具入参（AskUserQuestion 答案注入）
 }
 
 interface Pending {
@@ -37,12 +44,15 @@ interface Pending {
   requestId: string;
   resolve: (d: BridgeDecision) => void;
   timer: NodeJS.Timeout;
+  questions?: AskQuestion[];               // AskUserQuestion：原问题（作答时回显进 updatedInput）
+  toolInput?: Record<string, unknown>;     // AskUserQuestion：原始 tool_input
 }
 
 // transcript 里一次任务工具操作（use 或已配对的 result）
 type TaskOp = { tool?: string; input?: unknown; result?: { task: { id: number } } };
 
 const DEFAULT_HOLD_MS = 590_000;
+const QUESTION_HOLD_MS = 90_000;
 
 const CLI_PID_CACHE = path.join(path.dirname(fileURLToPath(import.meta.url)), "..", "data", "cli-pids.json");
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
@@ -60,12 +70,26 @@ export class Bridge {
   private queuePollTimer: NodeJS.Timeout | null = null;
   private extFileStats = new Map<string, { files: Set<string>; added: number; deleted: number }>();
   private extUsage = new Map<string, { input: number; output: number; cacheRead: number; cacheWrite: number; model: string }>();
+  // 排队消息滞留看门狗：ext id -> { 最近补发时间, 连续补发次数, 是否已放弃 }
+  private stuckWatch = new Map<string, { lastTry: number; tries: number; given_up: boolean }>();
+  private subagentSeq = 0; // hook 未带 tool_use_id 时的合成 id 序号（ag-N）
+  private askFallback = new Map<string, { requestId: string; questions: AskQuestion[] }>(); // 提问超时放行本地选择器后的兜底（手机晚答仍可送达）
+
+  // 看门狗/子 Agent TTL 阈值（env 可调：测试用短值，生产默认 90s/60s/10min/30min）
+  private readonly stuckAfterMs: number;
+  private readonly stuckRetryMs: number;
+  private readonly subagentEndTtlMs: number;
+  private readonly subagentRunTtlMs: number;
 
   constructor(
     private bus: EventBus,
     private mgr: SessionManager,
     private opts: BridgeOptions,
   ) {
+    this.stuckAfterMs = Number(process.env.CCR_STUCK_AFTER_MS) > 0 ? Number(process.env.CCR_STUCK_AFTER_MS) : 90_000;
+    this.stuckRetryMs = Number(process.env.CCR_STUCK_RETRY_MS) > 0 ? Number(process.env.CCR_STUCK_RETRY_MS) : 60_000;
+    this.subagentEndTtlMs = Number(process.env.CCR_SUBAGENT_END_TTL_MS) > 0 ? Number(process.env.CCR_SUBAGENT_END_TTL_MS) : 10 * 60_000;
+    this.subagentRunTtlMs = Number(process.env.CCR_SUBAGENT_RUN_TTL_MS) > 0 ? Number(process.env.CCR_SUBAGENT_RUN_TTL_MS) : 30 * 60_000;
     this.hydratePidsFromCache();
   }
 
@@ -128,20 +152,17 @@ export class Bridge {
   }
 
   // 5s 轮询 transcript：PC 端敲字排队（queue-operation enqueue）发生在任意时刻，
-  // 只靠 hook 触发的增量读会有长工具调用期间的盲区
+  // 只靠 hook 触发的增量读会有长工具调用期间的盲区；同一节拍顺带跑子 Agent TTL 清理
+  // 与排队消息滞留看门狗
   private ensureQueuePoll(): void {
     if (this.queuePollTimer) return;
     this.queuePollTimer = setInterval(() => {
       if (this.transcriptPaths.size > 60) this.transcriptPaths.clear();
       for (const [id, p] of this.transcriptPaths) this.pushAssistantTexts(id, p);
+      this.sweepSubagents();
+      this.sweepStuckInputs();
     }, 5000);
     this.queuePollTimer.unref();
-  }
-
-  // 匹配键：CLI 会把多条排队消息合并成一条（"\r" 连接），且消息内换行折叠为空格、
-  // 各处截断上限不一——精确比对会把同一批消息认成多条（#126 双气泡）。统一折叠空白 + 300 截断。
-  private static normKey(text: string): string {
-    return truncate(text.trim(), 300).replace(/\s+/g, " ");
   }
 
   // 记账"该文本近期已记为正式消息"：transcript 里 enqueue 与晋升可能同批读到，
@@ -152,7 +173,7 @@ export class Bridge {
       m = new Map();
       this.recentUserMsgs.set(id, m);
     }
-    m.set(Bridge.normKey(text), { ts: Date.now(), via });
+    m.set(normKey(text), { ts: Date.now(), via });
     if (m.size > 40) {
       const cutoff = Date.now() - 10 * 60_000;
       for (const [k, rec] of m) if (rec.ts < cutoff) m.delete(k);
@@ -160,7 +181,7 @@ export class Bridge {
   }
 
   private recentlyLogged(id: string, text: string): boolean {
-    const rec = this.recentUserMsgs.get(id)?.get(Bridge.normKey(text));
+    const rec = this.recentUserMsgs.get(id)?.get(normKey(text));
     return rec !== undefined && Date.now() - rec.ts < 60_000;
   }
 
@@ -170,7 +191,7 @@ export class Bridge {
   private coveredByRecentPromote(id: string, text: string): boolean {
     const m = this.recentUserMsgs.get(id);
     if (!m) return false;
-    const pk = Bridge.normKey(text);
+    const pk = normKey(text);
     const now = Date.now();
     for (const [k, rec] of m) {
       if (rec.via !== "promote" || now - rec.ts >= 60_000 || !k) continue;
@@ -184,11 +205,11 @@ export class Bridge {
     const state = this.mgr.getExternal(id);
     const list = state?.pending_inputs ?? [];
     if (!list.length) return [];
-    const key = Bridge.normKey(text);
-    const kept = list.filter((p) => !key.includes(Bridge.normKey(p.text)));
+    const key = normKey(text);
+    const kept = list.filter((p) => !key.includes(normKey(p.text)));
     if (kept.length === list.length) return [];
     this.mgr.setExternalPending(id, kept);
-    return list.filter((p) => key.includes(Bridge.normKey(p.text))).map((p) => p.text);
+    return list.filter((p) => key.includes(normKey(p.text))).map((p) => p.text);
   }
 
   // PC 端敲字排队：与手机注入同构地进 pending_inputs，手机立即显示"排队中"
@@ -197,11 +218,11 @@ export class Bridge {
     if (!state) return;
     const text = truncate(content.trim(), 300);
     if (!text || this.recentlyLogged(id, text)) return;
-    const key = Bridge.normKey(content);
+    const key = normKey(content);
     const pending = state.pending_inputs ?? [];
     // CLI 会把多条排队消息合并成一条 enqueue（"A\rB"，内部换行折叠）：覆盖任一待发消息
     // 即为同一批的重复表示，不重复入队；手机注入回显（extInput）已进队同样跳过
-    if (pending.some((p) => key.includes(Bridge.normKey(p.text)))) return;
+    if (pending.some((p) => key.includes(normKey(p.text)))) return;
     this.mgr.setExternalPending(id, [...pending, { text, ts: Date.now() }]);
   }
 
@@ -263,6 +284,46 @@ export class Bridge {
     return true;
   }
 
+  // 手机作答 AskUserQuestion：窗口内 allow+updatedInput 把答案注入工具入参（CLI 不再弹本地选择器）；
+  // 窗口外（本地选择器已弹出）Esc 关闭它再以消息注入答案——两端任一先答即生效
+  answerPending(sessionId: string, requestId: string, answers: string[]): boolean {
+    const p = this.pending.get(sessionId);
+    if (p && p.requestId === requestId && p.questions?.length && p.toolInput) {
+      clearTimeout(p.timer);
+      this.pending.delete(sessionId);
+      const answersMap: Record<string, string> = {};
+      p.questions.forEach((q, i) => {
+        if (answers[i]) answersMap[q.question] = answers[i];
+      });
+      p.resolve({
+        decision: "allow",
+        updatedInput: { ...p.toolInput, answers: answersMap },
+      });
+      return true;
+    }
+    // 超时兜底：CLI 本地选择器已弹出（hook 已放行），手机晚到的作答转为注入送达
+    const fb = this.askFallback.get(sessionId);
+    if (!fb || fb.requestId !== requestId || !ensureInjector()) return false;
+    this.askFallback.delete(sessionId);
+    const pid = this.mgr.getExternal(sessionId)?.cli_pid;
+    if (!pid) return false;
+    const msg = buildAnswerMessage(fb.questions, answers);
+    this.mgr.setExternalStatus(sessionId, "WORKING", "手机作答");
+    void injectEsc(pid).then(async (r) => {
+      if (!r.ok) {
+        this.onInjectFail(sessionId, r.error);
+        return;
+      }
+      // 等本地选择器收起、焦点回到输入框
+      await sleep(400);
+      const pid2 = this.mgr.getExternal(sessionId)?.cli_pid;
+      if (!pid2) return;
+      const r2 = await injectText(pid2, msg);
+      if (!r2.ok) this.onInjectFail(sessionId, r2.error);
+    });
+    return true;
+  }
+
   hasPending(sessionId: string): boolean {
     return this.pending.has(sessionId);
   }
@@ -302,8 +363,8 @@ export class Bridge {
     const state = this.mgr.getExternal(sessionId);
     const list = state?.pending_inputs ?? [];
     if (!list.length) return false;
-    const key = Bridge.normKey(prompt);
-    const i = list.findIndex((p) => Bridge.normKey(p.text) === key);
+    const key = normKey(prompt);
+    const i = list.findIndex((p) => normKey(p.text) === key);
     if (i !== -1) {
       const promoted = list.splice(i, 1)[0];
       this.mgr.setExternalPending(sessionId, list);
@@ -315,7 +376,7 @@ export class Bridge {
     for (let s = 0; s < list.length; s++) {
       const acc: string[] = [];
       for (let e = s; e < list.length; e++) {
-        acc.push(Bridge.normKey(list[e].text));
+        acc.push(normKey(list[e].text));
         const joined = acc.join(" ");
         if (joined.length > key.length) break;
         if (joined === key) {
@@ -516,6 +577,8 @@ export class Bridge {
       const enqueues: string[] = [];
       const steers: string[] = [];
       const taskOps: TaskOp[] = [];
+      const agentNotifs: string[] = []; // 后台子 Agent 完成通知里的 tool-use-id
+      const agentUses: { id: string; input: unknown }[] = []; // Agent/Task tool_use 块（真实 call id）
       const creates = this.taskCreateSet(id);
       let removes = 0;
       // token 用量/模型：assistant 条目自带 usage（逐条 API 调用量，累加为会话总量）
@@ -526,6 +589,13 @@ export class Bridge {
       let usageSeen = false;
       let model = "";
       for (const line of raw.slice(0, end).split("\n")) {
+        // 后台子 Agent 完成通知：作为 user 消息或 attachment 行出现，取 tool-use-id 配对收尾
+        //（捕获到 "<" 为止：不受 JSON 对闭合标签斜杠的转义影响）
+        if (line.includes("<task-notification>")) {
+          const m = /<tool-use-id>([^<]+)/.exec(line);
+          if (m && m[1].trim()) agentNotifs.push(m[1].trim());
+          continue;
+        }
         // 宽容匹配：标准 CLI 转录是紧凑 JSON，但手写/第三方工具可能带空格
         if (/"type":\s*"queue-operation"/.test(line)) {
           try {
@@ -573,9 +643,12 @@ export class Bridge {
           const thinks: string[] = [];
           for (const b of content) {
             if (!b || typeof b !== "object") continue;
-            const blk = b as { type?: string; text?: unknown; thinking?: unknown };
+            const blk = b as { type?: string; text?: unknown; thinking?: unknown; name?: unknown; id?: unknown };
             if (blk.type === "text" && typeof blk.text === "string") texts.push(blk.text);
             else if (blk.type === "thinking" && typeof blk.thinking === "string") thinks.push(blk.thinking);
+            else if (blk.type === "tool_use" && (blk.name === "Agent" || blk.name === "Task")) {
+              agentUses.push({ id: typeof blk.id === "string" ? blk.id : "", input: (b as { input?: unknown }).input });
+            }
           }
           // content 顺序上 thinking 在正文之前；每行各合并为一条
           const th = thinks.join("\n").trim();
@@ -594,6 +667,9 @@ export class Bridge {
         for (const t of steers) this.onSteerDelivered(id, t);
         if (removes > steers.length) this.onQueueDiscard(id, removes - steers.length);
       }
+      // 子 Agent：先补/升级 tool_use 条目（同批快速完成时通知才有配对目标），再按通知收尾
+      for (const u of agentUses) this.observeAgentUse(id, u);
+      for (const n of agentNotifs) this.closeSubagentByNotification(id, n);
       // 任务清单：CLI 任务存储目录优先（权威、变更检测防重发），无目录再 transcript 回放/增量
       const storeTodos = this.readTaskStore(id);
       if (storeTodos) {
@@ -801,6 +877,22 @@ export class Bridge {
     }
   }
 
+  // 隐藏任务清单条目：CLI 任务存储无法外部真删——记 normKey 进隐藏集（持久化），
+  // 再把当前 todos 重过一遍 setTodos（过滤在 SessionManager.setTodos 咽喉点）触发 SESSION_UPDATED。
+  // 重复隐藏幂等；找不到匹配条目也回 ok（手机端有本地乐观过滤）
+  hideTodo(sessionId: string, content: string): { ok: boolean; error?: string } {
+    try {
+      const text = content.trim();
+      if (!text) return { ok: false, error: "content 不能为空" };
+      addHiddenTodoKey(sessionId, normKey(text));
+      const cur = this.mgr.getExternal(sessionId)?.todos;
+      if (cur?.length) this.mgr.setTodos(sessionId, cur.map((x) => ({ ...x })));
+      return { ok: true };
+    } catch (e) {
+      return { ok: false, error: String(e) };
+    }
+  }
+
   private ensureTracker(id: string): TaskTracker {
     let tr = this.trackers.get(id);
     if (!tr) {
@@ -817,22 +909,40 @@ export class Bridge {
     const id = this.extId(ev);
     this.mgr.ensureExternal(id, ev.cwd, "", ev.session_id);
     const input = (ev.tool_input ?? {}) as Record<string, unknown>;
+    // 子 Agent 派生追踪（Agent/Task 双名防御别名）：Pre 到达即建 running 条目
+    if (ev.tool_name === "Agent" || ev.tool_name === "Task") this.trackSubagentStart(id, ev);
     // AskUserQuestion：解析结构化问题（门控时客户端渲染选项作答）
     const questions = ev.tool_name === "AskUserQuestion" ? parseAskQuestions(input) : [];
     const summary = questions.length
       ? `提问: ${questions.map((q) => q.header).join(" / ")}`
       : summarizeToolUse(ev.tool_name ?? "tool", input);
 
+    const remote = !!this.mgr.getExternal(id)?.remote_mode;
     const shouldGate =
-      !!this.mgr.getExternal(id)?.remote_mode &&
-      // AskUserQuestion 不是权限决策而是必需输入：bypass 模式也要远程下发（终端本地仍可答，超时回退）
+      // AskUserQuestion 不是权限决策而是必需输入：不要求 remote_mode，手机在线就下发选项
       (questions.length > 0 ||
-        (this.opts.gateTools.has(ev.tool_name ?? "") &&
+        (remote &&
+          this.opts.gateTools.has(ev.tool_name ?? "") &&
           ev.permission_mode !== "bypassPermissions")) &&   // 权限类：终端切到 skip 模式 = 用户显式放弃门控
       this.opts.hasClients();                                // 手机在线才拦截
 
     if (!shouldGate) {
-      this.mgr.setExternalStatus(id, "WORKING", summary);
+      // 提问遇手机离线：CLI 立即弹本地选择器，但仍登记提问横幅——手机稍后重连（SNAPSHOT）
+      // 即见横幅可晚答（askFallback 注入送达）；PC 先答由 PostToolUse 收尾。权限类不登记。
+      if (questions.length) {
+        const requestId = randomUUID();
+        this.mgr.setExternalWaiting(id, {
+          request_id: requestId,
+          tool_name: ev.tool_name ?? "tool",
+          input_summary: summary,
+          suggestions: [],
+          decidable: true,
+          questions,
+        });
+        this.askFallback.set(id, { requestId, questions });
+      } else {
+        this.mgr.setExternalStatus(id, "WORKING", summary);
+      }
       this.mgr.pushExternalLog(id, "tool_use", summary, ev.tool_name, {
         detail: detailToolUse(ev.tool_name ?? "tool", input),
       });
@@ -854,16 +964,31 @@ export class Bridge {
       detail: detailToolUse(ev.tool_name ?? "tool", input),
     });
 
-    const holdMs = this.opts.holdMs ?? DEFAULT_HOLD_MS;
+    // 权限类长挂起（590s）；提问类 90s 窗口——手机先答则 updatedInput 注入答案（PC 不再弹）；
+    // 超时放行 CLI 本地选择器但手机横幅保留（askFallback），晚答仍可送达，两端任一先答即生效
+    const holdMs = questions.length
+      ? this.opts.questionHoldMs ?? QUESTION_HOLD_MS
+      : this.opts.holdMs ?? DEFAULT_HOLD_MS;
     return new Promise<BridgeDecision>((resolve) => {
       const timer = setTimeout(() => {
         this.pending.delete(id);
-        this.mgr.setExternalStatus(id, "WORKING", summary);
-        this.bus.emit(id, "SESSION_WAITING_RESOLVED", { request_id: requestId, decision: "timeout", by: "relay" });
-        resolve({ decision: "pass" });   // 回退 CLI 正常权限流程（本地提示）
+        if (questions.length) {
+          // 提问超时：CLI 弹本地选择器，手机横幅保留可继续作答；PC 先答由 PostToolUse 清横幅
+          this.askFallback.set(id, { requestId, questions });
+        } else {
+          this.mgr.setExternalStatus(id, "WORKING", summary);
+          this.bus.emit(id, "SESSION_WAITING_RESOLVED", { request_id: requestId, decision: "timeout", by: "relay" });
+        }
+        resolve({ decision: "pass" });   // 回退 CLI 正常权限流程（提问=本地选择器）
       }, holdMs);
       timer.unref();
-      this.pending.set(id, { sessionId: id, requestId, resolve, timer });
+      this.pending.set(id, {
+        sessionId: id,
+        requestId,
+        resolve,
+        timer,
+        ...(questions.length ? { questions, toolInput: input } : {}),
+      });
     });
   }
 
@@ -871,6 +996,9 @@ export class Bridge {
     const id = this.extId(ev);
     const state = this.mgr.getExternal(id);
     if (!state) return { decision: "pass" };
+    // 子 Agent 收尾：非后台条目按 tool_use id（或串行兜底）置 ended；后台条目忽略——
+    // 后台 spawn 的 PostToolUse 在派生瞬间就返回，真实结束靠 transcript 的 <task-notification>
+    if (ev.tool_name === "Agent" || ev.tool_name === "Task") this.trackSubagentEnd(id, ev);
     this.mgr.pushExternalLog(id, "tool_result", summarizeToolResult(ev.tool_response), undefined, {
       detail: detailToolResult(ev.tool_response),
       diff: diffLines(ev.tool_response),
@@ -880,6 +1008,12 @@ export class Bridge {
     // 清除 passive WAITING（CLI 本地已处理）
     if (state.status === "WAITING" && state.waiting_request?.decidable === false) {
       this.mgr.setExternalStatus(id, "WORKING", state.action_summary);
+    }
+    // 提问兜底收尾：PC 端已在本地选择器作答/取消 → 手机横幅收起
+    const fb = this.askFallback.get(id);
+    if (ev.tool_name === "AskUserQuestion" && fb) {
+      this.askFallback.delete(id);
+      this.mgr.emitWaitingResolved(id, fb.requestId, "answered", "cli");
     }
     return { decision: "pass" };
   }
@@ -923,7 +1057,7 @@ export class Bridge {
     const avail = [...(this.inputQueue.get(id) ?? [])];
     const kept: PendingInput[] = [];
     for (const p of state.pending_inputs ?? []) {
-      const qi = avail.findIndex((t) => Bridge.normKey(t) === Bridge.normKey(p.text));
+      const qi = avail.findIndex((t) => normKey(t) === normKey(p.text));
       if (qi === -1) {
         this.noteUserMsg(id, p.text, "promote");
         this.mgr.pushExternalLog(id, "user_message", truncate(p.text, 300));
@@ -947,12 +1081,158 @@ export class Bridge {
     this.mgr.pushExternalLog(id, "system", "会话结束" + (ev.reason ? ` (${ev.reason})` : ""));
     const dropped = this.inputQueue.get(id)?.length ?? 0;
     this.inputQueue.delete(id);
+    this.askFallback.delete(id);
     if (state.pending_inputs?.length) this.mgr.setExternalPending(id, []);
     if (dropped) this.mgr.pushExternalLog(id, "system", `会话结束，弃 ${dropped} 条排队消息`);
     const turn = this.turnStart.get(id) ?? state.started_at;
     this.turnStart.delete(id);
     this.mgr.finishExternal(id, ev.reason ?? "ended", Date.now() - turn);
     return { decision: "pass" };
+  }
+
+  // ---------- 子 Agent 工作状态（SessionState.subagents）----------
+
+  private static subagentDesc(input: Record<string, unknown>): string {
+    const d = typeof input.description === "string" ? input.description.trim() : "";
+    if (d) return truncate(d, 80);
+    return truncate(String(input.prompt ?? "").trim(), 80) || "(子代理)";
+  }
+
+  // PreToolUse(Agent/Task)：建 running 条目（幂等：同 tool_use id 不重建）
+  private trackSubagentStart(id: string, ev: BridgeEvent): void {
+    const input = (ev.tool_input ?? {}) as Record<string, unknown>;
+    const tuId = typeof ev.tool_use_id === "string" && ev.tool_use_id ? ev.tool_use_id : `ag-${++this.subagentSeq}`;
+    const list = [...(this.mgr.getExternal(id)?.subagents ?? [])];
+    if (list.some((x) => x.id === tuId)) return;
+    const entry: SubagentInfo = {
+      id: tuId,
+      desc: Bridge.subagentDesc(input),
+      kind: typeof input.subagent_type === "string" && input.subagent_type ? input.subagent_type : "general",
+      bg: input.run_in_background === true,
+      started_at: Date.now(),
+    };
+    list.push(entry);
+    if (list.length > 30) list.splice(0, list.length - 30);
+    this.mgr.setExternalSubagents(id, list);
+  }
+
+  // PostToolUse(Agent/Task)：id 命中或串行兜底（CLI 工具串行）收尾最近的 running 非后台条目；
+  // bg 条目忽略（结束靠 task-notification）
+  private trackSubagentEnd(id: string, ev: BridgeEvent): void {
+    const list = this.mgr.getExternal(id)?.subagents;
+    if (!list?.length) return;
+    const tuId = typeof ev.tool_use_id === "string" ? ev.tool_use_id : "";
+    let i = tuId ? list.findIndex((x) => x.id === tuId) : -1;
+    if (i === -1) {
+      for (let k = list.length - 1; k >= 0; k--) {
+        if (!list[k].ended_at && !list[k].bg) {
+          i = k;
+          break;
+        }
+      }
+    }
+    if (i === -1 || list[i].bg || list[i].ended_at) return;
+    // 不可原地改 list：它就是 state.subagents 的引用，先改会让 setExternalSubagents
+    // 的 JSON 对比判定"无变化"而不下发（手机端永远收不到 ended）
+    this.mgr.setExternalSubagents(id, list.map((x, k) => (k === i ? { ...x, ended_at: Date.now() } : { ...x })));
+  }
+
+  // transcript 里的 Agent tool_use 块（真实 call_xxx id）：
+  //  - hook 未带 tool_use_id 时 Pre 建的是合成 id（ag-N）——升级为真实 id，后续 task-notification 才能配对
+  //  - relay 重启等原因错过 Pre hook 的后台派生：补建条目（结束靠 task-notification）
+  private observeAgentUse(id: string, use: { id: string; input: unknown }): void {
+    if (!use.id) return;
+    const list = this.mgr.getExternal(id)?.subagents;
+    if (!list) return;
+    if (list.some((x) => x.id === use.id)) return;
+    const input = (use.input ?? {}) as Record<string, unknown>;
+    const desc = Bridge.subagentDesc(input);
+    for (let k = list.length - 1; k >= 0; k--) {
+      const x = list[k];
+      if (!x.ended_at && x.id.startsWith("ag-") && normKey(x.desc) === normKey(desc)) {
+        const next = list.map((y, i2) => (i2 === k ? { ...y, id: use.id } : y));
+        this.mgr.setExternalSubagents(id, next);
+        return;
+      }
+    }
+    if (input.run_in_background === true) {
+      const next = [...list, {
+        id: use.id,
+        desc,
+        kind: typeof input.subagent_type === "string" && input.subagent_type ? input.subagent_type : "general",
+        bg: true,
+        started_at: Date.now(),
+      }];
+      if (next.length > 30) next.splice(0, next.length - 30);
+      this.mgr.setExternalSubagents(id, next);
+    }
+  }
+
+  // transcript 里 <task-notification> 的 tool-use-id：收尾后台子 Agent
+  // （通知可能作为 user 消息或 attachment 行出现，识别在 pushAssistantTexts 的行扫描里做）
+  private closeSubagentByNotification(id: string, toolUseId: string): void {
+    const list = this.mgr.getExternal(id)?.subagents;
+    if (!list?.length) return;
+    let i = list.findIndex((x) => x.id === toolUseId);
+    if (i === -1) {
+      // hook 未带 id、合成条目未升级成功：退而收尾最老的 running 后台条目（合成 id）
+      i = list.findIndex((x) => !x.ended_at && x.bg && x.id.startsWith("ag-"));
+    }
+    if (i === -1 || list[i].ended_at) return;
+    // 同上：禁止原地改共享引用，否则变更检测吞掉 ended 下发
+    this.mgr.setExternalSubagents(id, list.map((x, k) => (k === i ? { ...x, ended_at: Date.now() } : { ...x })));
+  }
+
+  // TTL 清理（每 5s 轮询节拍里跑）：已结束保留 10 分钟；running 30 分钟无事件视为僵尸清除
+  private sweepSubagents(): void {
+    const now = Date.now();
+    for (const s of this.mgr.snapshot()) {
+      if (!s.external || !s.subagents?.length) continue;
+      const kept = s.subagents.filter((x) =>
+        x.ended_at ? now - x.ended_at < this.subagentEndTtlMs : now - x.started_at < this.subagentRunTtlMs,
+      );
+      if (kept.length !== s.subagents.length) this.mgr.setExternalSubagents(s.session_id, kept);
+    }
+  }
+
+  // ---------- 排队消息滞留输入框看门狗 ----------
+
+  // 现象：注入的回车在回合切换瞬间被 CLI 界面层吞掉，文字滞留输入框未提交，
+  // 直到下一条消息的回车才把两条一起冲出去。补发一个空回车（injectEnter）补救。
+  // WAITING 严禁补发——回车会误触权限弹窗。
+  private sweepStuckInputs(): void {
+    const now = Date.now();
+    for (const s of this.mgr.snapshot()) {
+      if (!s.external) continue;
+      const id = s.session_id;
+      const stuck = (s.pending_inputs ?? []).some(
+        (p) => now - p.ts > this.stuckAfterMs && !this.recentlyLogged(id, p.text),
+      );
+      if (
+        !stuck ||
+        !s.cli_pid ||
+        (s.status !== "WORKING" && s.status !== "DONE") ||
+        this.flushing.has(id) ||
+        (this.inputQueue.get(id)?.length ?? 0) > 0
+      ) {
+        this.stuckWatch.delete(id); // 不满足条件（含已送达/状态变化）：重置看门狗
+        continue;
+      }
+      const w = this.stuckWatch.get(id);
+      if (w?.given_up) continue; // 连续 3 次仍滞留：放弃，防无限打转
+      if (w && now - w.lastTry < this.stuckRetryMs) continue; // 每会话限速
+      const tries = (w?.tries ?? 0) + 1;
+      const pid = s.cli_pid;
+      this.stuckWatch.set(id, { lastTry: now, tries, given_up: tries >= 3 });
+      if (tries >= 3) {
+        this.mgr.pushExternalLog(id, "system", "排队消息疑似滞留输入框，已补发 3 次回车仍滞留，暂停自动补发（下次发送消息时会一并提交）");
+      } else {
+        this.mgr.pushExternalLog(id, "system", "排队消息疑似滞留输入框，已补发回车");
+      }
+      void injectEnter(pid).then((r) => {
+        if (!r.ok) this.onInjectFail(id, r.error);
+      });
+    }
   }
 }
 

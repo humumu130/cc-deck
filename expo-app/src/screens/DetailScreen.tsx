@@ -355,12 +355,20 @@ export default function DetailScreen({ sid, onBack }: { sid: string; onBack: () 
     }
   }, [s?.todos, todoSpin]);
 
+  // 任务条目 ✕ 隐藏：本地先过滤（立即消失），relay 记隐藏集过滤后续下发
+  const [todoHidden, setTodoHidden] = useState<string[]>([]);
+  const hideTodo = (content: string) => {
+    console.log("[todo-hide]", content.slice(0, 30));
+    setTodoHidden((h) => (h.includes(content) ? h : [...h, content]));
+    store.send("COMMAND_TODO_HIDE", { session_id: sid, content });
+  };
+
   // 任务存储是全会话历史。排序：已完成置顶、下面进行中、再待办；组内保持 relay 下发的
   // 任务号顺序（旧→新，稳定排序不动组内先后）——整列从上往下时间感单调。
   // 已完成历史不无限堆：带 mtime 只展示近 24h，再封顶最新 15 条（防马拉松日爆量）；
   // 无时间戳的旧数据直接取最新 15 条。进行中/待办是可操作项，全保留
   const todoRank = (t: TodoItem) => (t.status === "completed" ? 0 : t.status === "in_progress" ? 1 : 2);
-  const allTodos = s?.todos ?? [];
+  const allTodos = (s?.todos ?? []).filter((t) => !todoHidden.includes(t.content));
   const doneAll = allTodos.filter((t) => t.status === "completed");
   const doneHasTs = doneAll.length > 0 && doneAll.every((t) => typeof t.updated_at === "number");
   const doneWindow = doneHasTs
@@ -381,6 +389,15 @@ export default function DetailScreen({ sid, onBack }: { sid: string; onBack: () 
     { status: "in_progress", label: `进行中 ${allTodos.filter((t) => t.status === "in_progress").length}` },
     { status: "pending", label: `待开始 ${allTodos.filter((t) => t.status === "pending").length}` },
   ] as const;
+  // 子 Agent 运行中时本地走秒（relay 只在状态变化时推，秒数由端上自算）
+  const agRunning = (s?.subagents ?? []).some((a) => !a.ended_at);
+  const [, setAgTick] = useState(0);
+  useEffect(() => {
+    if (!agRunning) return;
+    const t = setInterval(() => setAgTick((n) => n + 1), 1000);
+    return () => clearInterval(t);
+  }, [agRunning]);
+
   const renderTodo = (t: TodoItem, i: number, grouped: boolean) => (
     <View style={[d.todoRow, grouped && { borderTopWidth: 0, marginTop: 0 }]}>
       <Text
@@ -403,6 +420,13 @@ export default function DetailScreen({ sid, onBack }: { sid: string; onBack: () 
       >
         {t.status === "in_progress" && t.active_form ? t.active_form : t.content}
       </Text>
+      <Pressable
+        style={d.todoDel}
+        android_ripple={{ color: c.tintSoft, borderless: false, radius: 11 }}
+        onPress={() => hideTodo(t.content)}
+      >
+        <Text style={d.todoDelT}>✕</Text>
+      </Pressable>
     </View>
   );
 
@@ -692,9 +716,9 @@ export default function DetailScreen({ sid, onBack }: { sid: string; onBack: () 
                 android_ripple={{ color: c.tintSoft, borderless: false, radius: 9 }}
                 onPress={() => { todoAtBottom.current = true; setTodoOpen((v) => !v); }}
               >
-                <Text style={d.todoHeadT}>☰ 任务 {s.todos!.filter((t) => t.status === "completed").length}/{s.todos!.length}</Text>
+                <Text style={d.todoHeadT}>☰ 任务 {doneList.length}/{sortedTodos.length}</Text>
                 <View style={d.todoBar}>
-                  <View style={[d.todoBarFill, { width: `${Math.round((s.todos!.filter((t) => t.status === "completed").length / s.todos!.length) * 100)}%` }]} />
+                  <View style={[d.todoBarFill, { width: `${Math.round((doneList.length / Math.max(1, sortedTodos.length)) * 100)}%` }]} />
                 </View>
                 <Pressable
                   style={d.todoRefresh}
@@ -830,6 +854,24 @@ export default function DetailScreen({ sid, onBack }: { sid: string; onBack: () 
             >
               <Text style={d.stripBtnWarnT}>{external ? "■ 打断" : "■ 停止"}</Text>
             </Pressable>
+          </View>
+        ) : null}
+        {/* 并行子 Agent 状态：主工作状态栏下方；⑂ 运行中走秒（本地计时，relay 只在变化时推）、✓ 刚结束带时长 */}
+        {(s?.subagents?.length ?? 0) > 0 ? (
+          <View style={[d.agBox, d.agBoxFlow]}>
+            {(s!.subagents!).slice(-4).map((a) => {
+              const run = !a.ended_at;
+              const ms = (a.ended_at ?? Date.now()) - a.started_at;
+              const dur = ms < 60_000 ? `${Math.floor(ms / 1000)}s` : `${Math.floor(ms / 60_000)}m${String(Math.floor((ms % 60_000) / 1000)).padStart(2, "0")}s`;
+              return (
+                <View key={a.id} style={d.agRow}>
+                  <Text style={[d.agT, { color: run ? c.working : c.dim }]} numberOfLines={1}>
+                    {run ? "⑂" : "✓"} {a.desc}
+                  </Text>
+                  <Text style={[d.agTime, { color: run ? c.working : c.faint }]}>{dur}</Text>
+                </View>
+              );
+            })}
           </View>
         ) : null}
         {(s.pending_inputs?.length ?? 0) > 0 ? (
@@ -1056,6 +1098,17 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
   todoScroll: { maxHeight: 400, flexGrow: 0 },
   todoMark: { color: c.faint, fontSize: 12, width: 16, textAlign: "center", lineHeight: 17 },
   todoT: { flex: 1, color: c.text, fontSize: 12.5, lineHeight: 17 },
+  todoDel: { width: 24, height: 22, alignItems: "center", justifyContent: "center" },
+  todoDelT: { color: c.faint, fontSize: 12 },
+  // 子 Agent 状态块：紧贴筛选行下方，与 todoBox 同宽同圆角
+  agBox: {
+    backgroundColor: c.panel2, borderWidth: 1, borderColor: c.line,
+    borderRadius: 12, paddingHorizontal: 12, paddingVertical: 2, marginBottom: 8,
+  },
+  agRow: { flexDirection: "row", alignItems: "center", gap: 8, paddingVertical: 5 },
+  agBoxFlow: { marginTop: 4, marginBottom: 10 },
+  agT: { flex: 1, fontSize: 12 },
+  agTime: { fontSize: 11, fontVariant: ["tabular-nums"] },
   histnote: { color: c.faint, fontSize: 11, textAlign: "center", marginBottom: 10 },
   trUser: {
     alignSelf: "flex-end", maxWidth: "85%", marginBottom: 10,

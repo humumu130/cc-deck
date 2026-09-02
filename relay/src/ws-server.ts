@@ -23,6 +23,7 @@ const COMMAND_TYPES = new Set([
   "COMMAND_PAIR_START",
   "COMMAND_PERM",
   "COMMAND_REFRESH_TODOS",
+  "COMMAND_TODO_HIDE",
 ]);
 
 const HEARTBEAT_MS = 30_000;
@@ -30,6 +31,7 @@ const HEARTBEAT_MS = 30_000;
 export interface StartServerOptions {
   gateToolsRaw?: string;    // CCR_GATE_TOOLS，逗号分隔门控工具名
   holdMs?: number;          // PreToolUse 挂起上限（测试用短值）
+  questionHoldMs?: number;  // AskUserQuestion 挂起窗口（测试用短值）
 }
 
 // 连接策略：
@@ -76,6 +78,7 @@ export function startServer(
     gateTools: parseGateTools(opts.gateToolsRaw ?? process.env.CCR_GATE_TOOLS),
     hasClients: () => [...wss.clients].some((c) => c.readyState === WebSocket.OPEN),
     holdMs: opts.holdMs,
+    questionHoldMs: opts.questionHoldMs,
   });
   mgr.setBridge(bridge);
 

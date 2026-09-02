@@ -83,3 +83,11 @@ export async function injectEsc(pid: number): Promise<InjectResult> {
   if (!ensureInjector()) return { ok: false, error: "注入器不可用" };
   return run([String(pid), "--esc"]);
 }
+
+// 只发一个回车（空文本 + 默认带回车；inject.cs 对空文本不拒绝——
+// args=["pid",""] 通过长度检查，text="" 不产生字符记录，enter=true 只写 CR）：
+// 用于冲出滞留在 CLI 输入框、回车被界面层吞掉的排队消息
+export async function injectEnter(pid: number): Promise<InjectResult> {
+  if (!ensureInjector()) return { ok: false, error: "注入器不可用" };
+  return run([String(pid), ""]);
+}

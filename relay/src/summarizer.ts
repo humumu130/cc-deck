@@ -23,6 +23,13 @@ export function truncate(s: string, n = MAX_SUMMARY): string {
   return one.length <= n ? one : one.slice(0, n - 1) + "…";
 }
 
+// 匹配键：CLI 会把多条排队消息合并成一条（"\r" 连接），且消息内换行折叠为空格、
+// 各处截断上限不一——精确比对会把同一批消息认成多条。统一折叠空白 + 300 截断。
+// bridge（排队消息配对）与 todo-hidden（任务条目隐藏匹配）共用，勿复制两份漂移
+export function normKey(text: string): string {
+  return truncate(text.trim(), 300).replace(/\s+/g, " ");
+}
+
 // 全文上限：防单条超长回复撑爆 300 条日志缓冲与 SNAPSHOT
 export const FULL_TEXT_CAP = 10_000;
 

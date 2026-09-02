@@ -112,7 +112,7 @@ export default function SettingsDrawer({
           </LinearGradient>
           <View style={{ flex: 1, minWidth: 0 }}>
             <Text style={d.nameT}>Claude Code</Text>
-            <Text style={d.verT}>移动工作台 · v0.2.28</Text>
+            <Text style={d.verT}>移动工作台 · v0.2.29</Text>
           </View>
         </View>
 

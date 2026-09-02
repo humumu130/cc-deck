@@ -85,7 +85,7 @@ async function main() {
   const event = j.hook_event_name ?? "";
   const session_id = j.session_id ?? "";
   const cli_pid = session_id ? await resolveCliPid(session_id) : 0;
-  diag(`event=${event} session=${session_id.slice(0, 8)} mode=${j.permission_mode ?? ""} cli_pid=${cli_pid || "-"}`);
+  diag(`event=${event} session=${session_id.slice(0, 8)} mode=${j.permission_mode ?? ""} tool=${j.tool_name ?? ""} tu=${j.tool_use_id ? String(j.tool_use_id).slice(0, 12) : "-"} cli_pid=${cli_pid || "-"}`);
   const body = {
     event,
     session_id,
@@ -94,6 +94,7 @@ async function main() {
     transcript_path: j.transcript_path,
     prompt: j.prompt,
     tool_name: j.tool_name,
+    tool_use_id: j.tool_use_id,
     tool_input: j.tool_input,
     tool_response: j.tool_response,
     message: j.message,
@@ -125,6 +126,7 @@ async function main() {
           hookEventName: "PreToolUse",
           permissionDecision: d.decision,
           ...(d.reason ? { permissionDecisionReason: d.reason } : {}),
+          ...(d.updatedInput ? { updatedInput: d.updatedInput } : {}),
         },
       };
       // 等 flush 完成再退出，避免管道下 stdout 被截断

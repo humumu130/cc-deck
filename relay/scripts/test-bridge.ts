@@ -31,6 +31,11 @@ process.env.CCR_PORT = "8798";
 process.env.CCR_TOKEN = "test-token-123";
 process.env.CCR_BRIDGE_TOKEN = "bridge-token-456";
 process.env.CCR_NO_TITLE_GEN = "1";
+// 看门狗/子 Agent TTL 测试短值（Bridge 构造时读取；生产默认 90s/60s/10min/30min）
+process.env.CCR_STUCK_AFTER_MS = "2000";
+process.env.CCR_STUCK_RETRY_MS = "1500";
+process.env.CCR_SUBAGENT_END_TTL_MS = "2000";
+process.env.CCR_SUBAGENT_RUN_TTL_MS = "3000";
 process.env.CCR_INJECT_CMD = fileURLToPath(new URL("./fake-injector.mjs", import.meta.url));
 const INJECT_LOG = fileURLToPath(new URL("../data/test-inject.log", import.meta.url));
 process.env.CCR_INJECT_LOG = INJECT_LOG;
@@ -38,7 +43,7 @@ rmSync(INJECT_LOG, { force: true });
 const cfg = loadConfig();
 const bus = new EventBus();
 const mgr = new SessionManager(bus, cfg);
-startServer(bus, mgr, cfg, { holdMs: 1200, gateToolsRaw: "Bash,Edit" });
+startServer(bus, mgr, cfg, { holdMs: 1200, questionHoldMs: 800, gateToolsRaw: "Bash,Edit" });
 await wait(300);
 
 const http = `http://127.0.0.1:${cfg.port}`;
@@ -398,6 +403,188 @@ assert(ack24.ok === false, "empty rename rejected");
   assert(umCount("手机重发同句") === 2, "26 phone quick-resend logs twice (promote not deduped)");
   await hook({ event: "SessionEnd", reason: "clear" });
   rmSync(T, { force: true });
+}
+
+// 27. COMMAND_TODO_HIDE：隐藏条目在 setTodos 咽喉点过滤 + 持久化（模拟重启）仍生效
+{
+  const { readFileSync: rf, writeFileSync: wf, existsSync: ef, rmSync: rmf } = await import("node:fs");
+  const hiddenFile = fileURLToPath(new URL("../data/todo-hidden.json", import.meta.url));
+  const orig = ef(hiddenFile) ? rf(hiddenFile, "utf-8") : null;
+  const sid = extId("cli-1");
+  const todosOf = () => mgr.snapshot().find((s) => s.session_id === sid)?.todos ?? [];
+  mgr.setTodos(sid, [{ content: "任务甲", status: "pending" }, { content: "任务乙", status: "in_progress" }]);
+  assert(todosOf().length === 2, "27 two todos before hide");
+  const hide1 = send("COMMAND_TODO_HIDE", { session_id: sid, content: "任务甲" });
+  assert((await waitAck(hide1)).ok, "27 TODO_HIDE acked");
+  await wait(150);
+  assert(todosOf().length === 1 && todosOf()[0].content === "任务乙", "27 hidden item filtered out");
+  assert(events.some((e) => e.type === "SESSION_UPDATED" && Array.isArray((e.payload as { todos?: unknown[] }).todos)), "27 SESSION_UPDATED carries filtered todos");
+  // 找不到匹配条目也回 ok；重复隐藏幂等
+  const hide2 = send("COMMAND_TODO_HIDE", { session_id: sid, content: "不存在的任务" });
+  assert((await waitAck(hide2)).ok, "27 hide non-matching item still ok");
+  const hide3 = send("COMMAND_TODO_HIDE", { session_id: sid, content: "  任务甲  " });
+  assert((await waitAck(hide3)).ok, "27 duplicate hide (whitespace-normalized) ok");
+  assert(todosOf().length === 1, "27 duplicate hide keeps single filtered list");
+  // CLI 重发全量清单（hook/transcript 路径）：隐藏依然生效
+  mgr.setTodos(sid, [{ content: "任务甲", status: "completed" }, { content: "任务乙", status: "completed" }]);
+  assert(todosOf().length === 1, "27 re-pushed todo list still filtered");
+  // 持久化：磁盘有键；清内存缓存（模拟 relay 重启）后仍隐藏
+  assert(ef(hiddenFile) && rf(hiddenFile, "utf-8").includes("任务甲"), "27 hidden key persisted to disk");
+  const { resetHiddenTodoStore } = await import("../src/todo-hidden.js");
+  resetHiddenTodoStore();
+  mgr.setTodos(sid, [{ content: "任务甲", status: "pending" }, { content: "任务乙", status: "pending" }]);
+  assert(todosOf().length === 1, "27 hidden after store reload (simulated relay restart)");
+  // 清理：还原隐藏集文件，避免污染生产数据
+  if (orig === null) rmf(hiddenFile, { force: true });
+  else wf(hiddenFile, orig, "utf-8");
+  resetHiddenTodoStore();
+}
+
+// 28. 子 Agent 工作状态：Pre/Post 配对、bg 由 <task-notification> 收尾、合成 id 升级、TTL 清理
+{
+  const { appendFileSync, writeFileSync } = await import("node:fs");
+  const T = fileURLToPath(new URL("../data/test-transcript.jsonl", import.meta.url));
+  rmSync(T, { force: true });
+  writeFileSync(T, JSON.stringify({ type: "assistant", message: { role: "assistant", content: [{ type: "text", text: "基线28" }] } }) + "\n");
+  const sid = extId("cli-1");
+  const subs = () => mgr.snapshot().find((s) => s.session_id === sid)?.subagents ?? [];
+  await hook({ event: "UserPromptSubmit", prompt: "子代理测试回合", cli_pid: 4321, transcript_path: T });
+  // ① 前台：Pre 建 running 条目，Post 按 tool_use_id 收尾
+  await hook({ event: "PreToolUse", tool_name: "Agent", tool_use_id: "call_fg1", tool_input: { description: "前台子代理", subagent_type: "general", run_in_background: false }, permission_mode: "default" });
+  const fg = subs()[0];
+  assert(subs().length === 1 && fg.id === "call_fg1" && fg.desc === "前台子代理" && fg.kind === "general" && fg.bg === false && fg.ended_at === undefined, "28 Pre creates running subagent entry");
+  await hook({ event: "PostToolUse", tool_name: "Agent", tool_use_id: "call_fg1", tool_response: "ok" });
+  assert(subs()[0].ended_at !== undefined, "28 Post ends foreground subagent");
+  // ② 后台：PostToolUse（派生瞬间返回）不收尾，transcript 的 task-notification（user 行）收尾
+  await hook({ event: "PreToolUse", tool_name: "Agent", tool_use_id: "call_bg1", tool_input: { description: "后台子代理", run_in_background: true }, permission_mode: "default" });
+  assert(subs().length === 2 && subs()[1].bg === true && subs()[1].ended_at === undefined, "28 bg subagent entry created");
+  await hook({ event: "PostToolUse", tool_name: "Agent", tool_use_id: "call_bg1", tool_response: "spawned" });
+  assert(subs()[1].ended_at === undefined, "28 bg subagent ignores PostToolUse");
+  appendFileSync(T, JSON.stringify({ type: "user", message: { role: "user", content: [{ type: "text", text: "<task-notification>\n<task-id>b1</task-id>\n<tool-use-id>call_bg1</tool-use-id>\n<status>completed</status>\n<summary>done</summary>" }] } }) + "\n");
+  await hook({ event: "PostToolUse", tool_name: "Bash", tool_response: "ok", transcript_path: T });
+  assert(subs().find((x) => x.id === "call_bg1")?.ended_at !== undefined, "28 task-notification (user line) ends bg subagent");
+  // ③ hook 未带 tool_use_id → 合成 ag-N；transcript tool_use 块升级为真实 call id，通知配对收尾
+  await hook({ event: "PreToolUse", tool_name: "Agent", tool_input: { description: "升级测试", run_in_background: true }, permission_mode: "default" });
+  assert(subs().some((x) => x.bg && !x.ended_at && x.id.startsWith("ag-")), "28 synthetic id entry when hook lacks tool_use_id");
+  appendFileSync(T, JSON.stringify({ type: "assistant", message: { role: "assistant", content: [{ type: "tool_use", id: "call_up1", name: "Agent", input: { description: "升级测试", run_in_background: true } }] } }) + "\n");
+  await hook({ event: "PostToolUse", tool_name: "Bash", tool_response: "ok", transcript_path: T });
+  assert(subs().some((x) => x.id === "call_up1" && !x.ended_at) && !subs().some((x) => x.id.startsWith("ag-")), "28 synthetic id upgraded to real call id");
+  appendFileSync(T, JSON.stringify({ type: "attachment", attachment: { type: "task_notification", text: "<task-notification>\n<tool-use-id>call_up1</tool-use-id>\n<status>completed</status>" } }) + "\n");
+  await hook({ event: "PostToolUse", tool_name: "Bash", tool_response: "ok", transcript_path: T });
+  assert(subs().find((x) => x.id === "call_up1")?.ended_at !== undefined, "28 notification (attachment line) ends upgraded bg subagent");
+  assert(events.some((e) => e.type === "SESSION_UPDATED" && Array.isArray((e.payload as { subagents?: unknown[] }).subagents)), "28 SESSION_UPDATED carries subagents");
+  // ④ TTL：测试短值（end 2s / run 3s）+ 5s 轮询节拍 → 全部清空
+  assert(subs().length > 0, "28 entries present before TTL sweep");
+  await wait(7000);
+  assert(subs().length === 0, "28 TTL sweep clears ended and zombie entries");
+  rmSync(T, { force: true });
+}
+
+// 29. 排队消息滞留输入框看门狗：滞留补发回车、WAITING 严禁、送达后不再触发、连续 3 次后放弃
+{
+  const { writeFileSync } = await import("node:fs");
+  const T = fileURLToPath(new URL("../data/test-transcript.jsonl", import.meta.url));
+  rmSync(T, { force: true });
+  writeFileSync(T, JSON.stringify({ type: "assistant", message: { role: "assistant", content: [{ type: "text", text: "基线29" }] } }) + "\n");
+  const sid = extId("cli-7");
+  const enters = () => fakeLog().filter((a) => a[0] === "7777" && a[1] === "").length;
+  await hook({ event: "UserPromptSubmit", prompt: "看门狗回合", session_id: "cli-7", cli_pid: 7777, transcript_path: T });
+  // WORKING + pending 滞留（注入成功但回车被吞、未晋升）→ 5s 节拍内补发回车
+  const wId = send("COMMAND_EXT_INPUT", { session_id: sid, text: "滞留的消息" });
+  assert((await waitAck(wId)).ok, "29 EXT_INPUT acked (WORKING direct inject)");
+  await wait(8000);
+  assert(enters() >= 1, "29 stuck pending triggers enter re-send");
+  assert(events.some((e) => e.type === "SESSION_LOG" && String((e.payload as { text: string }).text).includes("已补发回车")), "29 watchdog log emitted");
+  const afterTrigger = enters();
+  // WAITING（权限弹窗/审批挂起）→ 严禁补发（回车会误触弹窗）
+  mgr.setExternalStatus(sid, "WAITING", "权限确认");
+  mgr.setExternalPending(sid, [{ text: "滞留的消息", ts: Date.now() - 9000 }]);
+  await wait(6500);
+  assert(enters() === afterTrigger, "29 no enter re-send while WAITING");
+  // 送达（pending 清空）→ 看门狗重置，不再触发
+  mgr.setExternalStatus(sid, "DONE", "完成");
+  mgr.setExternalPending(sid, []);
+  await wait(6500);
+  assert(enters() === afterTrigger, "29 no enter re-send after delivered");
+  // 再滞留：连续 3 次补发后放弃（防无限打转），之后不再尝试
+  mgr.setExternalStatus(sid, "WORKING", "再跑");
+  mgr.setExternalPending(sid, [{ text: "滞留的消息", ts: Date.now() - 9000 }]);
+  await wait(17000);
+  const afterRetry = enters();
+  assert(afterRetry - afterTrigger === 3, `29 exactly three retries then give up (got ${afterRetry - afterTrigger})`);
+  assert(events.some((e) => e.type === "SESSION_LOG" && String((e.payload as { text: string }).text).includes("暂停自动补发")), "29 give-up log emitted");
+  await wait(6500);
+  assert(enters() === afterRetry, "29 no further attempts after give-up");
+  await hook({ event: "SessionEnd", session_id: "cli-7", reason: "clear" });
+  rmSync(T, { force: true });
+}
+
+// 30. AskUserQuestion 双端任一作答：窗口内 updatedInput 注入；超时兜底横幅保留 + 晚答 Esc+注入；PC 先答清横幅
+{
+  const qInput = { questions: [{ header: "方案", question: "用哪个库?", options: [{ label: "A" }, { label: "B" }] }] };
+  const st = () => mgr.snapshot().find((s) => s.session_id === extId("cli-1"));
+  await hook({ event: "UserPromptSubmit", prompt: "提问测试回合", cli_pid: 4321 });
+
+  // 30a. 窗口内手机作答 → allow + updatedInput（CLI 不再弹本地选择器）
+  const pA = hook({ event: "PreToolUse", tool_name: "AskUserQuestion", tool_input: qInput });
+  await wait(150);
+  const wA = st()?.waiting_request;
+  assert(!!wA?.questions?.length, "30 waiting carries questions");
+  const aId = send("COMMAND_ANSWER", { session_id: extId("cli-1"), request_id: wA!.request_id, answers: ["A"] });
+  assert((await waitAck(aId)).ok, "30 in-window answer acked");
+  const rA = await pA;
+  const upd = (rA.body as { updatedInput?: { answers?: Record<string, string>; questions?: unknown[] } }).updatedInput;
+  assert(rA.body.decision === "allow" && upd?.answers?.["用哪个库?"] === "A" && Array.isArray(upd?.questions), "30 allow + updatedInput carries answer");
+  assert(st()?.waiting_request === undefined || st()?.waiting_request === null, "30 waiting cleared after answer");
+
+  // 30b. 超时 → 放行本地选择器，但横幅保留（兜底仍可作答），不发 timeout resolved
+  const pB = hook({ event: "PreToolUse", tool_name: "AskUserQuestion", tool_input: qInput });
+  await wait(1200);
+  assert((await pB).body.decision === "pass", "30 timeout falls back to local picker (pass)");
+  const sB = st();
+  assert(sB?.status === "WAITING" && !!sB?.waiting_request, "30 banner kept after timeout");
+  const rbId = sB!.waiting_request!.request_id;
+  assert(!events.some((e) => e.type === "SESSION_WAITING_RESOLVED" && (e.payload as { request_id: string }).request_id === rbId), "30 no timeout resolved for question");
+
+  // 30c. 晚答（兜底）→ Esc 关本地选择器 + 答案文本注入
+  const bId = send("COMMAND_ANSWER", { session_id: extId("cli-1"), request_id: rbId, answers: ["B"] });
+  assert((await waitAck(bId)).ok, "30 late answer acked via fallback");
+  await wait(1500);
+  assert(fakeLog().some((a) => a[0] === "4321" && a[1] === "--esc"), "30 esc closes local picker");
+  assert(fakeLog().some((a) => a[0] === "4321" && String(a[1]).includes("「B」")), "30 answer text injected");
+
+  // 30d. PC 端先答 → 横幅收起（answered by cli）
+  const pC = hook({ event: "PreToolUse", tool_name: "AskUserQuestion", tool_input: qInput });
+  await wait(1200);
+  await pC;
+  await hook({ event: "PostToolUse", tool_name: "AskUserQuestion", tool_response: { answers: [{ question: "用哪个库?", answer: "A" }] } });
+  await wait(200);
+  assert(events.some((e) => e.type === "SESSION_WAITING_RESOLVED" && (e.payload as { decision: string }).decision === "answered" && (e.payload as { by: string }).by === "cli"), "30 pc-answered clears banner");
+  const sC = st();
+  assert(sC?.status === "WORKING" && !sC?.waiting_request, "30 state back to WORKING, waiting cleared");
+}
+
+// 31. 手机离线时的提问：立即放行 PC 本地选择器，但仍登记横幅——重连后晚答走兜底注入
+{
+  const qInput = { questions: [{ header: "方案", question: "离线时的问题?", options: [{ label: "X" }, { label: "Y" }] }] };
+  const st = () => mgr.snapshot().find((s) => s.session_id === extId("cli-1"));
+  wsCur!.close();
+  await wait(500);
+  const p = hook({ event: "PreToolUse", tool_name: "AskUserQuestion", tool_input: qInput });
+  const t0 = Date.now();
+  assert((await p).body.decision === "pass", "31 offline question passes immediately");
+  assert(Date.now() - t0 < 500, "31 no hold when phone offline");
+  const s = st();
+  assert(s?.status === "WAITING" && !!s?.waiting_request?.questions?.length, "31 banner registered for late phone");
+  const second = new WebSocket(`ws://127.0.0.1:${cfg.port}/ws?token=${cfg.token}`);
+  attach(second);
+  await new Promise((r) => second.once("open", r));
+  await wait(200);
+  const aId = send("COMMAND_ANSWER", { session_id: extId("cli-1"), request_id: s!.waiting_request!.request_id, answers: ["X"] });
+  assert((await waitAck(aId)).ok, "31 late answer after reconnect acked");
+  await wait(1500);
+  assert(fakeLog().some((a) => a[0] === "4321" && a[1] === "--esc"), "31 esc injected for late answer");
+  assert(fakeLog().some((a) => a[0] === "4321" && String(a[1]).includes("「X」")), "31 answer text injected");
 }
 
 wsCur!.close();

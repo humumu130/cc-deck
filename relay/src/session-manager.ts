@@ -7,7 +7,8 @@ import type { RelayConfig } from "./config.js";
 import type { ReplayedSession } from "./history.js";
 import { deriveTitle } from "./history.js";
 import { generateTitle } from "./title-gen.js";
-import { buildAnswerMessage, truncate } from "./summarizer.js";
+import { normKey, truncate } from "./summarizer.js";
+import { addHiddenTodoKey, hiddenTodoKeys } from "./todo-hidden.js";
 import type {
   AgentCallbacks,
 } from "./agent-adapter.js";
@@ -19,6 +20,7 @@ import type {
   ManagedPermissionMode,
   PendingInput,
   SessionState,
+  SubagentInfo,
   TodoItem,
   TokenUsage,
   WaitingPayload,
@@ -115,16 +117,20 @@ export class SessionManager {
 
   private bridge: {
     resolvePending: (sessionId: string, requestId: string, decision: "allow" | "deny", reason?: string) => boolean;
+    answerPending: (sessionId: string, requestId: string, answers: string[]) => boolean;
     extInput: (sessionId: string, text: string) => { ok: boolean; error?: string };
     extStop: (sessionId: string) => { ok: boolean; error?: string };
     refreshTodos: (sessionId: string) => { ok: boolean; error?: string };
+    hideTodo: (sessionId: string, content: string) => { ok: boolean; error?: string };
   } | null = null;
 
   setBridge(b: {
     resolvePending: (sessionId: string, requestId: string, decision: "allow" | "deny", reason?: string) => boolean;
+    answerPending: (sessionId: string, requestId: string, answers: string[]) => boolean;
     extInput: (sessionId: string, text: string) => { ok: boolean; error?: string };
     extStop: (sessionId: string) => { ok: boolean; error?: string };
     refreshTodos: (sessionId: string) => { ok: boolean; error?: string };
+    hideTodo: (sessionId: string, content: string) => { ok: boolean; error?: string };
   }): void {
     this.bridge = b;
   }
@@ -203,13 +209,35 @@ export class SessionManager {
     }
   }
 
-  // 任务清单更新（TodoWrite；managed 与 external 两条路径共用）
+  // 任务清单更新（TodoWrite；managed 与 external 两条路径共用）。
+  // 单一咽喉点：hook 路径 / transcript 轮询 / COMMAND_REFRESH_TODOS 重发全部经此，
+  // 隐藏条目（COMMAND_TODO_HIDE 记入 todo-hidden.json）在这里统一过滤
   setTodos(id: string, todos: TodoItem[]): void {
     const s = this.sessions.get(id);
     if (!s) return;
-    s.state.todos = todos;
+    const hidden = hiddenTodoKeys(id);
+    const list = hidden.size ? todos.filter((t) => !hidden.has(normKey(t.content))) : todos;
+    s.state.todos = list;
     s.state.updated_at = Date.now();
     this.emitUpdated(s, true);
+  }
+
+  // external 会话子 Agent 工作状态：仅 subagents 实际变化时下发 SESSION_UPDATED
+  // （运行中条目的"秒数走动"由客户端本地计时，relay 不逐秒推）
+  setExternalSubagents(id: string, list: SubagentInfo[]): void {
+    const s = this.sessions.get(id);
+    if (!s) return;
+    const prev = JSON.stringify(s.state.subagents ?? []);
+    const next = JSON.stringify(list);
+    if (prev === next) return;
+    s.state.subagents = list.length ? list : undefined;
+    s.state.updated_at = Date.now();
+    this.bus.emit(id, "SESSION_UPDATED", {
+      status: s.state.status,
+      action_summary: s.state.action_summary,
+      stats: { ...s.state.stats },
+      subagents: list,
+    });
   }
 
   // 外部会话标题升级（CC 会话名 / 首个 prompt 摘要）；initialPrompt 只在缺失时补记
@@ -430,9 +458,8 @@ export class SessionManager {
           }
           const s = this.require(cmd.payload.session_id);
           if (s.state.external) {
-            // 外部会话：deny-with-reason 经 PreToolUse hook 回 CLI，模型同样能看到答案
-            const msg = buildAnswerMessage(s.state.waiting_request?.questions, answers);
-            if (!this.bridge?.resolvePending(cmd.payload.session_id, cmd.payload.request_id, "deny", msg)) {
+            // 外部会话：allow+updatedInput 把答案注入工具入参，CLI 视为已作答不再弹本地选择器
+            if (!this.bridge?.answerPending(cmd.payload.session_id, cmd.payload.request_id, answers)) {
               return { command_id: cmd.command_id, ok: false, error: "no such pending request" };
             }
             this.emitWaitingResolved(cmd.payload.session_id, cmd.payload.request_id, "answer", by);
@@ -484,6 +511,22 @@ export class SessionManager {
             return { command_id: cmd.command_id, ok: r.ok, error: r.error };
           }
           // 托管会话清单来自 SDK 实时 feed：重发当前值即可
+          if (s.state.todos) this.setTodos(cmd.payload.session_id, s.state.todos.map((t) => ({ ...t })));
+          return { command_id: cmd.command_id, ok: true };
+        }
+        case "COMMAND_TODO_HIDE": {
+          const s = this.require(cmd.payload.session_id);
+          const content = cmd.payload.content.trim();
+          if (!content) return { command_id: cmd.command_id, ok: false, error: "content 不能为空" };
+          if (s.state.external) {
+            if (!this.bridge) {
+              return { command_id: cmd.command_id, ok: false, error: "bridge 未就绪" };
+            }
+            const r = this.bridge.hideTodo(cmd.payload.session_id, content);
+            return { command_id: cmd.command_id, ok: r.ok, error: r.error };
+          }
+          // 托管会话：SDK feed 后续重推也被 setTodos 过滤兜住
+          addHiddenTodoKey(cmd.payload.session_id, normKey(content));
           if (s.state.todos) this.setTodos(cmd.payload.session_id, s.state.todos.map((t) => ({ ...t })));
           return { command_id: cmd.command_id, ok: true };
         }
@@ -628,8 +671,8 @@ export class SessionManager {
           managed.state.stats = stats;
         },
         onTodos: (todos) => {
-          managed.state.todos = todos;
-          this.emitUpdated(managed, true);
+          // 经 setTodos 咽喉点：托管会话的隐藏条目同样被过滤
+          this.setTodos(managed.state.session_id, todos);
         },
         onUsage: (u) => {
           // result 消息是每回合一条，usage 为回合量：累计成会话总量
@@ -725,8 +768,8 @@ export class SessionManager {
     return s as ManagedSession & { agent: AgentSession };
   }
 
-  // 外部会话远程决定后的收尾（清 WAITING、回 WORKING）
-  private emitWaitingResolved(sessionId: string, requestId: string, decision: "allow" | "deny" | "answer", by: string): void {
+  // 外部会话远程决定后的收尾（清 WAITING、回 WORKING）；answered = PC 端本地已作答
+  emitWaitingResolved(sessionId: string, requestId: string, decision: "allow" | "deny" | "answer" | "answered", by: string): void {
     const s = this.sessions.get(sessionId);
     if (!s) return;
     s.state.status = "WORKING";
@@ -747,6 +790,7 @@ export class SessionManager {
       ...(s.state.turn_started_at ? { turn_started_at: s.state.turn_started_at } : {}),
       ...(s.state.usage ? { usage: { ...s.state.usage } } : {}),
       ...(s.state.todos ? { todos: s.state.todos.map((t) => ({ ...t })) } : {}),
+      ...(s.state.subagents ? { subagents: s.state.subagents.map((x) => ({ ...x })) } : {}),
       ...(s.state.relay_session_id ? { relay_session_id: s.state.relay_session_id } : {}),
       ...(s.state.permission_mode ? { permission_mode: s.state.permission_mode } : {}),
     });

@@ -65,8 +65,19 @@ export interface SessionState {
   turn_started_at?: number;   // 当前 WORKING 回合起点（状态行计时用）
   usage?: TokenUsage;         // 托管会话 token 用量
   todos?: TodoItem[];         // 最近一次 TodoWrite 的任务清单
+  subagents?: SubagentInfo[]; // external 会话的子 Agent 派生/结束追踪（手机端工作状态展示）
   permission_mode?: ManagedPermissionMode; // 托管会话当前权限模式
   pending_inputs?: PendingInput[]; // external 会话已发送未处理的注入消息（客户端显示在工作指示器下方，处理/回合结束时晋升为正式消息）
+}
+
+// external 会话子 Agent 工作状态（Agent/Task 工具派生）
+export interface SubagentInfo {
+  id: string;            // tool_use id（call_…；hook 未携带时 relay 合成 ag-N，之后用 transcript 真实 id 升级）
+  desc: string;          // input.description（缺失退 prompt 摘要）
+  kind: string;          // input.subagent_type（默认 general）
+  bg: boolean;           // run_in_background
+  started_at: number;
+  ended_at?: number;     // 缺失 = 运行中；非 bg 由 PostToolUse 收尾，bg 由 transcript 的 <task-notification> 收尾
 }
 
 // external 会话排队注入消息（EXT_INPUT 回显）
@@ -112,6 +123,7 @@ export interface SessionUpdatedPayload {
   turn_started_at?: number;    // 回合起点变化时携带
   usage?: TokenUsage;          // token 用量变化时携带
   todos?: TodoItem[];          // 任务清单变化时携带
+  subagents?: SubagentInfo[];  // 子 Agent 工作状态变化时携带（[] = 清空；运行中条目秒数由客户端本地计时）
   relay_session_id?: string;   // SDK 侧会话 id（重启重放后仍可 resume 的凭证）
   permission_mode?: ManagedPermissionMode; // 权限模式变化时携带
   pending_inputs?: PendingInput[]; // 排队注入消息增减时携带（[] = 清空）
@@ -225,7 +237,8 @@ export type CommandType =
   | "COMMAND_ANSWER"
   | "COMMAND_PAIR_START"
   | "COMMAND_PERM"
-  | "COMMAND_REFRESH_TODOS";
+  | "COMMAND_REFRESH_TODOS"
+  | "COMMAND_TODO_HIDE";
 
 export interface CommandBase {
   command_id: string;   // 客户端生成（uuid），Relay 按此去重
@@ -316,7 +329,8 @@ export type Command =
   | AnswerCommand
   | PairStartCommand
   | PermCommand
-  | RefreshTodosCommand;
+  | RefreshTodosCommand
+  | TodoHideCommand;
 
 // 托管会话权限模式切换（default=每次确认 / acceptEdits=自动接受编辑 / plan=只读规划）
 export interface PermCommand extends CommandBase {
@@ -330,6 +344,13 @@ export interface RefreshTodosCommand extends CommandBase {
   payload: { session_id: string };
 }
 
+// 隐藏任务清单条目：CLI 任务存储无法外部真删，relay 按 content 归一化匹配在
+// setTodos 咽喉点过滤（hook/transcript/手动刷新三条路径全覆盖）；持久化到 data/todo-hidden.json
+export interface TodoHideCommand extends CommandBase {
+  type: "COMMAND_TODO_HIDE";
+  payload: { session_id: string; content: string }; // content = 条目原文（TodoItem.content）
+}
+
 // hooks 桥接：bridge-hook.mjs -> POST /bridge/hook 的请求体（token 走 x-bridge-token header）
 export interface BridgeEvent {
   event: string;               // hook_event_name
@@ -339,6 +360,7 @@ export interface BridgeEvent {
   transcript_path?: string;    // CLI 转录 JSONL（assistant 文本提取用）
   prompt?: string;             // UserPromptSubmit
   tool_name?: string;          // Pre/PostToolUse
+  tool_use_id?: string;        // Pre/PostToolUse 的 tool_use id（CLI 版本未携带时为空，bridge 合成兜底）
   tool_input?: unknown;
   tool_response?: unknown;     // PostToolUse
   message?: string;            // Notification
