@@ -15,10 +15,10 @@
     --text: #E8EDF5;
     --dim: #7E8BA3;
     --faint: #55617A;
-    --brand: #7C6CF2;
-    --brand-2: #4D9FFF;
-    --send-btn: #4D9FFF;
-    --grad: linear-gradient(135deg, #4D9FFF, #7C6CF2);
+    --brand: #D97757;
+    --brand-2: #C96442;
+    --send-btn: #D97757;
+    --grad: linear-gradient(135deg, #E8985F, #C96442);
     --working: #FFC53D;
     --waiting: #F0524F;
     --error: #FF7849;
@@ -46,8 +46,8 @@
     --text: #1C2637;
     --dim: #5F6C84;
     --faint: #8D99AE;
-    --brand: #6A5AE0;
-    --brand-2: #2563EB;
+    --brand: #C2603E;
+    --brand-2: #A04E30;
     --send-btn: #2F7FE8;
     --working: #A16207;
     --waiting: #DC2626;
@@ -70,8 +70,8 @@
   html, body { height: 100%; }
   body {
     background:
-      radial-gradient(1200px 500px at 80% -10%, rgba(124,108,242,.10), transparent 60%),
-      radial-gradient(900px 400px at -10% 110%, rgba(77,159,255,.06), transparent 60%),
+      radial-gradient(1200px 500px at 80% -10%, rgba(217,119,87,.08), transparent 60%),
+      radial-gradient(900px 400px at -10% 110%, rgba(201,100,66,.05), transparent 60%),
       var(--bg);
     color: var(--text);
     font: 14px/1.55 "Segoe UI", system-ui, -apple-system, "PingFang SC", "Microsoft YaHei UI", "Microsoft YaHei", sans-serif;
@@ -80,24 +80,24 @@
 
   /* ---------- 顶栏（窄条，置于侧栏顶部，会话区顶到视口顶） ---------- */
   header {
-    display: flex; align-items: center; gap: 8px;
-    padding: 7px 14px;
+    display: flex; align-items: center; gap: 9px;
+    padding: 12px 16px;
     background: var(--glass); backdrop-filter: blur(10px);
     border-bottom: 1px solid var(--border);
     flex: none;
   }
   .logo {
-    width: 27px; height: 27px; border-radius: 9px;
+    width: 31px; height: 31px; border-radius: 10px;
     background: linear-gradient(180deg, #2B2433, #161221);
     border: 1px solid rgba(255,255,255,.09);
     display: flex; align-items: center; justify-content: center;
     box-shadow: 0 2px 12px rgba(0,0,0,.35), inset 0 1px 0 rgba(255,255,255,.06); flex: none;
   }
-  .logo svg { width: 16px; height: 16px; }
+  .logo svg { width: 19px; height: 19px; }
   #empty .logo svg { width: 30px; height: 30px; }
   .brand { display: flex; align-items: center; gap: 8px; min-width: 0; }
-  .brand h1 { font-size: 13.5px; font-weight: 700; letter-spacing: .3px; white-space: nowrap; }
-  #runhint { font-size: 11px; color: var(--dim); white-space: nowrap; }
+  .brand h1 { font-size: 15px; font-weight: 700; letter-spacing: .3px; white-space: nowrap; }
+  #runhint { font-size: 11.5px; color: var(--dim); white-space: nowrap; }
   header .spacer { flex: 1; }
 
   #connChip {
@@ -118,7 +118,7 @@
   }
   button:hover { border-color: var(--hov); }
   button:active { transform: scale(.97); }
-  button.primary { background: var(--grad); border: none; color: #fff; font-weight: 600; box-shadow: 0 2px 12px rgba(124,108,242,.3); }
+  button.primary { background: var(--grad); border: none; color: #fff; font-weight: 600; box-shadow: 0 2px 12px rgba(217,119,87,.3); }
   button.allow { background: rgba(43,217,143,.12); border: 1px solid rgba(43,217,143,.5); color: var(--done); font-weight: 600; }
   button.allow:hover { background: rgba(43,217,143,.22); }
   button.reject { background: rgba(240,82,79,.10); border: 1px solid rgba(240,82,79,.5); color: var(--error); font-weight: 600; }
@@ -131,20 +131,26 @@
     border-radius: 10px; padding: 8px 11px; font-size: 13px; font-family: inherit;
     outline: none; transition: border-color .15s, box-shadow .15s;
   }
-  input:focus, textarea:focus { border-color: var(--brand); box-shadow: 0 0 0 3px rgba(124,108,242,.15); }
+  input:focus, textarea:focus { border-color: var(--brand); box-shadow: 0 0 0 3px rgba(217,119,87,.15); }
   input::placeholder, textarea::placeholder { color: var(--faint); }
 
   /* ---------- 折叠面板（连接） ---------- */
   .panel {
-    display: none; gap: 8px; align-items: center; flex-wrap: wrap;
-    padding: 10px 18px; background: var(--bg-soft); border-bottom: 1px solid var(--border); flex: none;
+    display: none; flex-direction: column; gap: 9px;
+    padding: 12px 16px 13px; background: var(--bg-soft); border-bottom: 1px solid var(--border); flex: none;
   }
   .panel.open { display: flex; }
-  #connPanel input#url { flex: 1; min-width: 200px; }
-  #connPanel input#token { width: 200px; }
-  #pairBox { display: none; align-items: center; gap: 8px; width: 100%; }
-  #pairBox input { flex: 1; min-width: 160px; letter-spacing: 2px; font-size: 15px; }
-  #pairBox .pair-hint { font-size: 11.5px; color: var(--dim); width: 100%; }
+  .conn-row { display: flex; align-items: center; gap: 8px; }
+  .conn-row input#url { flex: 1; min-width: 120px; }
+  .conn-row input#token { width: 170px; }
+  .seg { display: flex; border: 1px solid var(--border); border-radius: 10px; overflow: hidden; background: var(--panel-2); flex: none; }
+  .seg button { border: none; border-radius: 0; padding: 7px 13px; background: transparent; color: var(--dim); font-size: 12.5px; font-weight: 500; }
+  .seg button + button { border-left: 1px solid var(--border); }
+  .seg button.on { background: var(--grad); color: #fff; font-weight: 600; }
+  #pairBox { display: none; align-items: center; gap: 8px; }
+  #pairBox input { width: 150px; letter-spacing: 3px; font-size: 15px; text-align: center; }
+  .pair-hint { font-size: 11.5px; color: var(--dim); }
+  .pair-hint b { color: var(--text); font-weight: 600; }
 
   /* ---------- 主体 ---------- */
   main { flex: 1; display: flex; overflow: hidden; }
@@ -169,7 +175,7 @@
     border: 1px dashed var(--border); background: transparent; color: var(--dim);
     font-weight: 600; font-size: 13px;
   }
-  #addBtn:hover { color: var(--brand); border-color: rgba(124,108,242,.6); background: transparent; }
+  #addBtn:hover { color: var(--brand); border-color: rgba(217,119,87,.6); background: transparent; }
 
   .card {
     background: var(--panel); border: 1px solid var(--border); border-radius: 14px;
@@ -177,7 +183,7 @@
     transition: border-color .15s, transform .1s, box-shadow .15s;
   }
   .card:hover { border-color: var(--hov2); }
-  .card.sel { border-color: var(--brand); box-shadow: 0 0 0 1px var(--brand), 0 4px 20px rgba(124,108,242,.15); }
+  .card.sel { border-color: var(--brand); box-shadow: 0 0 0 1px var(--brand), 0 4px 20px rgba(217,119,87,.15); }
   .card.historical { opacity: .75; }
   .card-top { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
   .elapsed { font-size: 12px; color: var(--dim); font-variant-numeric: tabular-nums; }
@@ -186,7 +192,7 @@
     font-size: 10px; color: var(--faint); border: 1px solid var(--border);
     padding: 1px 7px; border-radius: 999px; flex: none; font-weight: 500;
   }
-  .his-badge.ext { color: var(--brand-2); border-color: rgba(77,159,255,.4); }
+  .his-badge.ext { color: var(--brand-2); border-color: rgba(201,100,66,.4); }
   .card-edit {
     margin-left: auto; flex: none; background: none; border: none; cursor: pointer;
     color: var(--faint); font-size: 12px; padding: 2px 4px; border-radius: 6px; opacity: 0;
@@ -268,7 +274,7 @@
     font-size: 11.5px; padding: 5px 11px; border-radius: 999px; color: var(--dim);
     border: 1px dashed var(--border); background: transparent;
   }
-  .tabs button.mini.on { color: var(--brand); border-color: rgba(124,108,242,.55); border-style: solid; }
+  .tabs button.mini.on { color: var(--brand); border-color: rgba(217,119,87,.55); border-style: solid; }
 
   /* 工作状态行（类 CLI）：✶ 摘要 · 回合耗时 */
   #liverow {
@@ -302,8 +308,6 @@
   .q-free { margin-top: 7px; width: 100%; }
   .q-foot { display: flex; gap: 8px; margin-top: 10px; align-items: center; }
   #askCancel { background: none; border: none; color: var(--faint); font-size: 11.5px; padding: 4px 6px; text-decoration: underline dotted; }
-  .cmode { display: flex; align-items: center; gap: 5px; font-size: 12.5px; color: var(--dim); cursor: pointer; white-space: nowrap; }
-  .cmode input { accent-color: var(--brand); }
 
   /* ---------- 时间线（聊天式，与手机端转录对齐） ---------- */
   /* 阅读体验：正文 15px×字号档 + 1.75 行高 + 阅读列宽（宽屏行长控制） */
@@ -327,7 +331,7 @@
     width: 28px; height: 28px; border-radius: 50%; background: var(--grad);
     display: flex; align-items: center; justify-content: center;
     color: #fff; font-size: 14px; flex: none;
-    box-shadow: 0 1px 8px rgba(124,108,242,.3);
+    box-shadow: 0 1px 8px rgba(217,119,87,.3);
   }
   .msg-ai .ai-name { font-weight: 650; font-size: 13.5px; }
   .msg-ai .ai-body { padding-left: 37px; min-width: 0; }
@@ -424,7 +428,7 @@
   }
   #inputcard:focus-within {
     border-color: var(--brand);
-    box-shadow: 0 0 0 3px rgba(124,108,242,.13), 0 2px 18px rgba(124,108,242,.08);
+    box-shadow: 0 0 0 3px rgba(217,119,87,.13), 0 2px 18px rgba(217,119,87,.08);
   }
   #inputcard .ic-top { display: flex; align-items: flex-start; gap: 8px; }
   #inputcard .ic-at { color: var(--faint); font-weight: 700; font-size: 15px; line-height: 30px; flex: none; cursor: pointer; user-select: none; }
@@ -470,10 +474,10 @@
 
   /* ---------- 移动端 ---------- */
   @media (max-width: 720px) {
-    header { padding: 7px 12px; }
+    header { padding: 10px 12px; }
     #runhint { display: none; }
     #timeline { font-size: calc(14px * var(--tl-scale, 1)); }
-    .brand h1 { font-size: 13.5px; }
+    .brand h1 { font-size: 14px; }
     #cards { padding: 4px 10px 12px; }
     main { position: relative; }
     #side { width: 100%; border-right: none; }
@@ -510,16 +514,20 @@
     </header>
 
     <div class="panel" id="connPanel">
-      <label class="cmode"><input type="radio" name="cmode" value="lan" checked>直连</label>
-      <label class="cmode"><input type="radio" name="cmode" value="cloud">云桥</label>
-      <input id="url" placeholder="ws://<pc-ip>:8787/ws">
-      <input id="token" placeholder="token">
-      <button id="connectBtn" class="primary">连接</button>
+      <div class="conn-row">
+        <div class="seg" id="cmodeSeg">
+          <button type="button" data-m="lan">直连</button>
+          <button type="button" data-m="cloud">云桥</button>
+        </div>
+        <input id="url" placeholder="ws://<pc-ip>:8787/ws">
+        <input id="token" placeholder="token">
+        <button id="connectBtn" class="primary">连接</button>
+      </div>
       <div id="pairBox">
         <input id="pairCode" inputmode="numeric" maxlength="6" placeholder="6 位配对码" autocomplete="off">
         <button id="pairBtn" class="primary">配对</button>
-        <div class="pair-hint">云桥提示"未配对"时，输入手机 App（侧边栏·新设备配对）或家里 PC 领取的 6 位配对码即可（30 秒内有效），无需配对链接</div>
       </div>
+      <div class="pair-hint" id="pairHint">未配对时输入 <b>6 位配对码</b>（手机 App 或家里 PC 领取，30 秒内有效）</div>
     </div>
 
     <h3>会话</h3>
@@ -679,6 +687,12 @@ let pairTimer = 0;             // 配对 ack 看门狗：8s 无应答重发 pair
 // rd/rk 非机密（dev 路由号 + 公开公钥），安全边界是 LAN 领取的一次性配对码。
 // relay 换 data/cloud-keypair.json 后需同步更新此处并重新部署。
 const BAKED_RELAY = { rd: "rl-3a9a68c9104f5b44", rk: "OppoyRBPW0QTDZNuDoNnucqgIuPFaAG9YXuVMadJARw=" };
+// 云桥准入 token 烘焙（用户免填）：与 BAKED_RELAY 同理同义务——桥 token 轮换
+// （wrangler secret / ECS 环境变量 / relay data/cloud-bridge-token.txt）后需同步更新并重新部署。
+// 桥只转发密文不落盘，token 暴露面=能连桥发垃圾密文帧（relay 全丢弃），真正安全边界在配对码。
+const BAKED_BRIDGE_TOKEN = "REMOVED";
+// 桥 token 取值：配对链接带过的 bt / 手填过的（localStorage）优先，否则用烘焙值
+function cloudToken() { return localStorage.getItem("ccr_cloud_token") || BAKED_BRIDGE_TOKEN; }
 let pingTimer = null;
 let lastPong = 0;
 let transport = "ws";          // 云桥传输：ws | poll（公司代理掐 WS 升级时自动降级）
@@ -744,8 +758,8 @@ function connect() {
 // WS 升级被公司 TLS 解密代理掐断时（握手返回 200 非 101）自动降级 HTTP 长轮询。
 function connectCloud() {
   const base = $("url").value.trim();
-  const token = $("token").value.trim();
-  if (!base || !token) { openPanel("conn"); return; }
+  const token = cloudToken();
+  if (!base) { openPanel("conn"); return; }
   loadCloudIdentity();
   const pair = pendingPair || JSON.parse(sessionStorage.getItem("ccr_pair") || "null");
   pendingPair = pair;
@@ -871,7 +885,11 @@ async function pollLoop() {
       continue;
     }
     if (gen !== pollGen) return;
-    if (!r.ok) { console.log("[cloud] 轮询 GET HTTP " + r.status); break; } // 401/400：回到重连流程重建会话
+    if (!r.ok) {
+      console.log("[cloud] 轮询 GET HTTP " + r.status);
+      if (r.status === 401) { setConn("", "云桥拒绝"); toast("云桥 token 无效：桥已换代？清 localStorage 的 ccr_cloud_token 后刷新"); }
+      break; // 401/400：回到重连流程重建会话
+    }
     let out;
     try { out = await r.json(); } catch { break; }
     if (gen !== pollGen) return;
@@ -962,6 +980,7 @@ function sendCloudRaw(str) {
         if (r.ok) { postFails = 0; return; }
         postFails++;
         console.log("[cloud] 轮询 POST HTTP " + r.status);
+        if (r.status === 401) { setConn("", "云桥拒绝"); toast("云桥 token 无效：桥已换代？清 localStorage 的 ccr_cloud_token 后刷新"); return; }
         if (postFails >= 3) setConn("", "上行被拦 HTTP " + r.status);
       })
       .catch((e) => {
@@ -998,7 +1017,8 @@ function startCloudPing() {
 function stopCloudPing() { if (pingTimer) { clearInterval(pingTimer); pingTimer = null; } }
 
 function scheduleReconnect() {
-  if (!$("url").value.trim() || !$("token").value.trim()) return;
+  const tok = mode === "cloud" ? cloudToken() : $("token").value.trim();
+  if (!$("url").value.trim() || !tok) return;
   const delay = reconnectDelay;
   reconnectDelay = Math.min(reconnectDelay * 2, 10000);
   setConn("wait", delay / 1000 + "s 后重连");
@@ -1374,10 +1394,11 @@ function todosTabHtml(s) {
   const todos = s.todos ?? [];
   if (!todos.length) return '<div class="todo-empty">暂无任务清单<br><span style="font-size:12px">CLI 里使用 TodoWrite 工具后，这里会显示任务进度</span></div>';
   const done = todos.filter((t) => t.status === "completed").length;
+  // 分组顺序对齐手机端：已完成置顶，进行中/待办在下方
   const groups = [
+    ["已完成", todos.filter((t) => t.status === "completed"), "dn"],
     ["进行中", todos.filter((t) => t.status === "in_progress"), "ip"],
     ["待办", todos.filter((t) => t.status === "pending"), ""],
-    ["已完成", todos.filter((t) => t.status === "completed"), "dn"],
   ];
   let html =
     '<div class="todo-head"><div class="todo-bar"><i style="width:' + Math.round((done / todos.length) * 100) + '%"></i></div>' +
@@ -1673,17 +1694,16 @@ $("connectBtn").onclick = () => {
   }
   if (mode === "cloud") {
     localStorage.setItem("ccr_cloud_url", $("url").value);
-    localStorage.setItem("ccr_cloud_token", $("token").value);
   } else {
     localStorage.setItem("ccr_url", $("url").value);
     localStorage.setItem("ccr_token", $("token").value);
   }
   connect();
 };
-document.querySelectorAll('input[name="cmode"]').forEach((r) => {
-  r.onchange = () => {
-    if (!r.checked) return;
-    mode = r.value;
+document.querySelectorAll("#cmodeSeg button").forEach((b) => {
+  b.onclick = () => {
+    if (mode === b.dataset.m) return;
+    mode = b.dataset.m;
     localStorage.setItem("ccr_mode", mode);
     stopCloudPing();
     pollGen++;
@@ -1831,21 +1851,23 @@ setInterval(() => { if (selected) renderDetail(); }, 1000);
 
 // ---------- 初始化 ----------
 function applyMode() {
-  document.querySelectorAll('input[name="cmode"]').forEach((r) => { r.checked = r.value === mode; });
+  document.querySelectorAll("#cmodeSeg button").forEach((b) => { b.classList.toggle("on", b.dataset.m === mode); });
   if (mode === "cloud") {
     $("url").value = localStorage.getItem("ccr_cloud_url") ||
-      (location.protocol.startsWith("http") ? "ws://" + location.host + "/cloud" : "");
-    $("token").value = localStorage.getItem("ccr_cloud_token") || "";
-    $("url").placeholder = "ws://<云桥>:8790/cloud";
-    $("token").placeholder = "云桥 token";
+      (location.protocol.startsWith("http") ? (location.protocol === "https:" ? "wss://" : "ws://") + location.host + "/cloud" : "");
+    $("url").placeholder = "wss://<云桥>/cloud";
+    $("token").style.display = "none";
     $("pairBox").style.display = "flex";
+    $("pairHint").style.display = "block";
   } else {
     $("url").value = localStorage.getItem("ccr_url") ||
       (location.hostname ? "ws://" + location.hostname + ":" + location.port + "/ws" : "");
     $("token").value = localStorage.getItem("ccr_token") || "";
     $("url").placeholder = "ws://<pc-ip>:8787/ws";
     $("token").placeholder = "token";
+    $("token").style.display = "";
     $("pairBox").style.display = "none";
+    $("pairHint").style.display = "none";
   }
 }
 
@@ -1860,8 +1882,8 @@ function submitPairCode() {
   pendingPair = { rd: src.rd, rk: src.rk, pc: code };
   sessionStorage.setItem("ccr_pair", JSON.stringify(pendingPair));
   $("pairCode").value = "";
-  if (!$("url").value.trim() || !$("token").value.trim()) {
-    toast("请先填写云桥地址与 token");
+  if (!$("url").value.trim()) {
+    toast("请先填写云桥地址");
     $("url").focus();
     return;
   }
@@ -1887,7 +1909,7 @@ $("pairCode").addEventListener("keydown", (e) => { if (e.key === "Enter") { e.pr
   const qToken = params.get("token") || "";
   if (qToken && mode === "lan") $("token").value = qToken;
   $("cwd").value = localStorage.getItem("ccr_cwd") || "";
-  if ($("url").value && $("token").value) connect();
+  if ($("url").value && (mode === "cloud" ? cloudToken() : $("token").value)) connect();
   else openPanel("conn");
 })();
 </script>
