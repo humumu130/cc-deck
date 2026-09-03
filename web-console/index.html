@@ -140,9 +140,9 @@
     padding: 12px 16px 13px; background: var(--bg-soft); border-bottom: 1px solid var(--border); flex: none;
   }
   .panel.open { display: flex; }
-  .conn-row { display: flex; align-items: center; gap: 8px; }
-  .conn-row input#url { flex: 1; min-width: 120px; }
-  .conn-row input#token { width: 170px; }
+  .conn-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+  .conn-row input#url { flex: 1; min-width: 130px; }
+  .conn-row input#token { width: 170px; flex: none; }
   .seg { display: flex; border: 1px solid var(--border); border-radius: 10px; overflow: hidden; background: var(--panel-2); flex: none; }
   .seg button { border: none; border-radius: 0; padding: 7px 13px; background: transparent; color: var(--dim); font-size: 12.5px; font-weight: 500; }
   .seg button + button { border-left: 1px solid var(--border); }
