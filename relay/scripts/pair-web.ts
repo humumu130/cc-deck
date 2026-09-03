@@ -36,7 +36,8 @@ if (!res.ok) {
 const { code, expires_in } = (await res.json()) as { code: string; expires_in: number };
 
 const identity = loadOrCreateIdentity(cfg.dataDir);
-const httpBase = cfg.cloudUrl.replace(/^ws/, "http").replace(/\/cloud$/, "");
+// 网页端入口地址：默认云桥 443（公司网络常拦非标准端口），可用 CCR_PUBLIC_HTTP 覆盖
+const httpBase = process.env.CCR_PUBLIC_HTTP ?? `http://REMOVED:443`;
 const frag = [
   "bt=" + encodeURIComponent(cfg.cloudToken),
   "rd=" + encodeURIComponent(identity.relayDev),

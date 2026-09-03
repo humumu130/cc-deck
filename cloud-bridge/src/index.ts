@@ -1,4 +1,4 @@
-import { createServer } from "node:http";
+import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 import { existsSync, readFileSync } from "node:fs";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { WebSocketServer, WebSocket } from "ws";
@@ -12,7 +12,7 @@ const HEARTBEAT_MS = 30_000;
 
 // Node 形态云桥：HTTP upgrade 鉴权（/cloud?token=&dev=）后交 CloudRouter。
 // 桥不持久化任何状态，重启即清空（补发由 relay 的 seq 机制负责）。
-export function startCloudServer(port: number, token: string): {
+export function startCloudServer(port: number, token: string, extraPort = 0): {
   port: number;
   close: () => Promise<void>;
   router: CloudRouter;
@@ -34,7 +34,7 @@ export function startCloudServer(port: number, token: string): {
     log: (m) => console.log(`[cloud-bridge] ${m}`),
   });
 
-  const server = createServer((req, res) => {
+  const onRequest = (req: IncomingMessage, res: ServerResponse) => {
     const url = new URL(req.url ?? "/", "http://localhost");
     if (req.method === "GET" && url.pathname === "/health") {
       res.writeHead(200, { "content-type": "application/json" }).end(
@@ -63,7 +63,8 @@ export function startCloudServer(port: number, token: string): {
       return;
     }
     res.writeHead(404).end("not found");
-  });
+  };
+  const server = createServer(onRequest);
 
   server.on("upgrade", (req, socket, head) => {
     const url = new URL(req.url ?? "/", "http://localhost");
@@ -112,6 +113,12 @@ export function startCloudServer(port: number, token: string): {
   }, HEARTBEAT_MS);
 
   server.listen(port);
+  // 同一 net.Server 不能 listen 两次，443 走第二个实例、upgrade 事件转发给主实例
+  const extra = extraPort > 0 ? createServer(onRequest) : null;
+  if (extra) {
+    extra.on("upgrade", (req, socket, head) => server.emit("upgrade", req, socket, head));
+    extra.listen(extraPort);
+  }
 
   return {
     port,
@@ -120,7 +127,9 @@ export function startCloudServer(port: number, token: string): {
       new Promise((resolve) => {
         clearInterval(heartbeat);
         for (const ws of socks.values()) ws.terminate();
-        wss.close(() => server.close(() => resolve()));
+        wss.close(() =>
+          extra ? extra.close(() => server.close(() => resolve())) : server.close(() => resolve()),
+        );
       }),
   };
 }
@@ -131,8 +140,8 @@ interface HbWs extends WebSocket {
 
 function main(): void {
   const cfg = loadConfig();
-  startCloudServer(cfg.port, cfg.token);
-  console.log(`[cloud-bridge] listening :${cfg.port} path=/cloud`);
+  startCloudServer(cfg.port, cfg.token, cfg.extraPort);
+  console.log(`[cloud-bridge] listening :${cfg.port}${cfg.extraPort ? ` :${cfg.extraPort}` : ""} path=/cloud`);
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
