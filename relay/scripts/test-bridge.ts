@@ -698,12 +698,19 @@ assert(ack24.ok === false, "empty rename rejected");
   assert(st?.status === "DONE" && st?.action_summary === "扫描接入（只读）", "34 orphan read-only DONE");
   assert(!mgr.getExternal("ext-bb11bb22-cc33-dd44-ee55-ff6677889900"), "34 stale transcript skipped");
   assert(!mgr.getExternal("ext-cc11bb22-cc33-dd44-ee55-ff6677889900"), "34 no-cwd transcript skipped");
-  // 已注册会话（模拟重启后恢复）重扫：不报错不重复创建
+  // 已注册会话（模拟重启后恢复）重扫：不报错不重复创建，且 transcript 轮询必须（重）挂上
+  // ——外部会话的 relay_session_id 也命中 ownsCliSession，分支顺序错了会跳过补挂，
+  // 重启后手机只剩系统日志看不到正文（真实踩坑）
+  (bridge as unknown as { transcriptPaths: Map<string, string> }).transcriptPaths.delete(orphanId);
   scan();
   await wait(100);
   assert(
     !!mgr.getExternal(orphanId) && events.filter((e) => e.type === "SESSION_CREATED" && e.session_id === orphanId).length === 1,
     "34 rescan keeps existing orphan without duplicates",
+  );
+  assert(
+    (bridge as unknown as { transcriptPaths: Map<string, string> }).transcriptPaths.has(orphanId),
+    "34 rescan reattaches transcript polling for existing external",
   );
   // 手机删除 → 墓碑 → 重扫不复活
   const del = send("COMMAND_DELETE", { session_id: orphanId });

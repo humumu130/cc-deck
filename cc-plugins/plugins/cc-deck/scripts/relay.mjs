@@ -38516,7 +38516,6 @@ var Bridge = class _Bridge {
           if (!f.endsWith(".jsonl")) continue;
           const sid = f.slice(0, -6);
           if (!/^[0-9a-f-]{8,64}$/i.test(sid)) continue;
-          if (this.mgr.ownsCliSession(sid)) continue;
           const id2 = "ext-" + sid;
           const p = path3.join(root, dir.name, f);
           if (this.mgr.getExternal(id2)) {
@@ -38526,6 +38525,7 @@ var Bridge = class _Bridge {
             }
             continue;
           }
+          if (this.mgr.ownsCliSession(sid)) continue;
           if (this.mgr.isDeletedExt(id2)) continue;
           let mtime;
           try {

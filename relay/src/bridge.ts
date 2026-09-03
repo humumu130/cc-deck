@@ -153,18 +153,19 @@ export class Bridge {
           if (!f.endsWith(".jsonl")) continue;
           const sid = f.slice(0, -6);
           if (!/^[0-9a-f-]{8,64}$/i.test(sid)) continue;
-          if (this.mgr.ownsCliSession(sid)) continue;
           const id = "ext-" + sid;
           const p = path.join(root, dir.name, f);
           if (this.mgr.getExternal(id)) {
-            // 已注册：relay 重启后 transcriptPaths 是纯内存的会丢，孤儿（无 hook 补挂）
-            // 必须在这里补回，否则重启后只读文本桥接永久失效
+            // 已注册外部会话：relay 重启后 transcriptPaths 是纯内存的会丢（外部会话的
+            // relay_session_id 同时命中 ownsCliSession，必须先走这个分支补挂，否则
+            // 重启后文本桥接永久失效——曾致手机只看得到系统日志看不到正文）
             if (!this.transcriptPaths.has(id)) {
               this.transcriptPaths.set(id, p);
               this.ensureQueuePoll();
             }
             continue;
           }
+          if (this.mgr.ownsCliSession(sid)) continue; // 托管会话/一次性子会话：不收养
           if (this.mgr.isDeletedExt(id)) continue; // 手机删过的：墓碑拦截，防复活
           let mtime: number;
           try {
