@@ -8,6 +8,7 @@ import { startServer } from "./ws-server.js";
 import { compactEvents, loadEvents, reduceHistory, rewriteFile } from "./history.js";
 import { loadOrCreateIdentity } from "./cloud-identity.js";
 import { CloudClient } from "./cloud-client.js";
+import { createPairingCodes } from "./pairing.js";
 
 const cfg = loadConfig();
 
@@ -36,17 +37,21 @@ for (const s of mgr.snapshot()) {
 // 云桥：CCR_CLOUD_URL 配置了才启用（出站连桥，公司网络友好）
 let cloudIdentity: ReturnType<typeof loadOrCreateIdentity> | null = null;
 let cloudClient: CloudClient | null = null;
+const pairCodes = createPairingCodes();
 if (cfg.cloudUrl) {
   cloudIdentity = loadOrCreateIdentity(cfg.dataDir);
   mgr.setCloud(cloudIdentity);
   if (cfg.cloudToken) {
-    cloudClient = new CloudClient(bus, mgr, cfg, cloudIdentity);
+    cloudClient = new CloudClient(bus, mgr, cfg, cloudIdentity, pairCodes);
     cloudClient.start();
   }
 }
 
 // 云通道活跃手机计入"手机在线"：云桥场景下提问/权限照常门控（否则手机在场却直接放行本地）
-startServer(bus, mgr, cfg, { cloudHasPhones: () => cloudClient?.hasActivePhones() ?? false });
+startServer(bus, mgr, cfg, {
+  cloudHasPhones: () => cloudClient?.hasActivePhones() ?? false,
+  pairCodes,
+});
 
 // hooks 桥接配置：bridge-hook.mjs 读取后回连本机 /bridge/hook
 writeFileSync(join(cfg.dataDir, "bridge.json"), JSON.stringify({ port: cfg.port, token: cfg.bridgeToken }), "utf-8");

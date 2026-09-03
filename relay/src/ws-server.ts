@@ -33,6 +33,7 @@ export interface StartServerOptions {
   holdMs?: number;          // PreToolUse 挂起上限（测试用短值）
   questionHoldMs?: number;  // AskUserQuestion 挂起窗口（测试用短值）
   cloudHasPhones?: () => boolean; // 云通道是否有活跃手机（计入"手机在线"门控）
+  pairCodes?: { issue(): { code: string; expires_in: number } }; // 云桥配对码（网页端领码）
 }
 
 // 连接策略：
@@ -46,6 +47,7 @@ export function startServer(
   opts: StartServerOptions = {},
 ): { port: number; close: () => Promise<void>; bridge: Bridge } {
   const consoleHtml = fileURLToPath(new URL("../../web-console/index.html", import.meta.url));
+  const naclJs = fileURLToPath(new URL("../../web-console/nacl.js", import.meta.url));
   const mobileDir = fileURLToPath(new URL("../../mobile/", import.meta.url));
 
   const MIME: Record<string, string> = {
@@ -105,8 +107,30 @@ export function startServer(
       res.writeHead(200, { "content-type": "text/html; charset=utf-8" }).end(html);
       return;
     }
+    if (req.method === "GET" && url.pathname === "/nacl.js") {
+      // web-console 云桥模式依赖的 tweetnacl（页面 <script src="/nacl.js">）
+      if (!existsSync(naclJs)) {
+        res.writeHead(503).end("web-console/nacl.js 不存在（cp node_modules/tweetnacl/nacl-fast.min.js）");
+        return;
+      }
+      res.writeHead(200, { "content-type": "text/javascript; charset=utf-8" }).end(readFileSync(naclJs));
+      return;
+    }
     if (req.method === "GET" && url.pathname === "/health") {
       res.writeHead(200, { "content-type": "application/json" }).end('{"ok":true}');
+      return;
+    }
+    // 云桥配对码（网页端首次配对用）：LAN token 鉴权，码一次性 10 分钟有效
+    if (req.method === "POST" && url.pathname === "/api/pair-code") {
+      if ((url.searchParams.get("token") ?? "") !== cfg.token) {
+        res.writeHead(401).end("unauthorized");
+        return;
+      }
+      if (!opts.pairCodes) {
+        res.writeHead(501).end("pairing not enabled");
+        return;
+      }
+      res.writeHead(200, { "content-type": "application/json" }).end(JSON.stringify(opts.pairCodes.issue()));
       return;
     }
     res.writeHead(404).end("not found");

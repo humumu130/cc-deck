@@ -3,7 +3,8 @@ import type { EventBus } from "./event-bus.js";
 import type { SessionManager } from "./session-manager.js";
 import type { RelayConfig } from "./config.js";
 import type { CloudIdentity } from "./cloud-identity.js";
-import { seal, unseal, type SealedBox } from "./e2e.js";
+import type { PairingCodes } from "./pairing.js";
+import { devId, seal, unseal, type SealedBox } from "./e2e.js";
 import type { Command, CommandAckPayload, Envelope } from "./types.js";
 
 interface PhoneState {
@@ -36,6 +37,7 @@ export class CloudClient {
     private mgr: SessionManager,
     private cfg: RelayConfig,
     private identity: CloudIdentity,
+    private pairCodes?: PairingCodes,
   ) {
     this.unsubscribe = bus.subscribe((env) => this.onEnv(env));
   }
@@ -160,6 +162,26 @@ export class CloudClient {
         st.active = false;
         console.log(`[cloud] route miss dev=${f.to}, mark inactive`);
       }
+      return;
+    }
+    // 网页端等远端设备的一次性配对：data 为明文 {t:"pair_req", code, pubkey}（未配对设备
+    // 尚无法加密；公钥本就公开，码一次性 10 分钟）。dev 必须与公钥派生值一致（防冒名），
+    // 校验通过即 addPeer 并回密封 pair_ack。
+    const pairReq = f.data as { t?: unknown } | undefined;
+    if (f.from && pairReq && typeof pairReq === "object" && pairReq.t === "pair_req") {
+      const pr = f.data as unknown as { code?: unknown; pubkey?: unknown; name?: unknown };
+      const pubkey = typeof pr.pubkey === "string" ? pr.pubkey : "";
+      const dev = pubkey ? devId(pubkey, "wb") : "";
+      if (!pubkey || dev !== f.from || !this.pairCodes?.consume(String(pr.code ?? ""))) {
+        console.log(`[cloud] pair_req rejected dev=${f.from}`);
+        if (pubkey && dev === f.from) {
+          this.send({ to: f.from, data: seal({ t: "pair_nack", error: "配对码无效或已过期" }, pubkey, this.identity.keypair.secretKey) });
+        }
+        return;
+      }
+      this.identity.addPeer(dev, { pubkey, name: typeof pr.name === "string" ? pr.name : "web", paired_at: Date.now() });
+      console.log(`[cloud] paired web dev=${dev}`);
+      this.sendSealed(f.from, { t: "pair_ack", relay_dev: this.identity.relayDev, relay_pubkey: this.identity.keypair.publicKey });
       return;
     }
     if (!f.from || !f.data || typeof f.from !== "string") return;

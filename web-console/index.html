@@ -183,6 +183,17 @@
   #waitdetail { margin-top: 7px; font-size: 13px; word-break: break-all; }
   #waitelapsed { color: var(--faint); font-size: 12px; margin-top: 5px; }
   #waitbox .cmds { margin-top: 11px; display: flex; gap: 10px; }
+  #questions { margin-top: 10px; display: flex; flex-direction: column; gap: 10px; }
+  .q-item .q-text { font-size: 13px; font-weight: 600; }
+  .q-item .q-header { font-size: 11px; color: var(--brand-2); letter-spacing: 1px; margin-bottom: 2px; }
+  .q-opts { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 7px; }
+  .q-opts button { font-size: 12.5px; }
+  .q-opts button.sel { background: var(--grad); border: none; color: #fff; font-weight: 600; }
+  .q-opts button .d { display: block; font-size: 11px; color: var(--dim); font-weight: 400; max-width: 260px; text-align: left; }
+  .q-opts button.sel .d { color: rgba(255,255,255,.75); }
+  .q-free { margin-top: 7px; width: 100%; }
+  .cmode { display: flex; align-items: center; gap: 5px; font-size: 12.5px; color: var(--dim); cursor: pointer; white-space: nowrap; }
+  .cmode input { accent-color: var(--brand); }
 
   #timeline { flex: 1; overflow-y: auto; padding: 12px 20px; font-family: Consolas, "Cascadia Mono", monospace; font-size: 12.5px; }
   .entry { padding: 4px 0; display: flex; gap: 10px; border-bottom: 1px solid rgba(27,39,57,.4); }
@@ -258,6 +269,8 @@
 </header>
 
 <div class="panel" id="connPanel">
+  <label class="cmode"><input type="radio" name="cmode" value="lan" checked>直连</label>
+  <label class="cmode"><input type="radio" name="cmode" value="cloud">云桥</label>
   <input id="url" placeholder="ws://<pc-ip>:8787/ws">
   <input id="token" placeholder="token">
   <button id="connectBtn" class="primary">连接</button>
@@ -299,9 +312,11 @@
       <div class="t"><i></i>等待确认</div>
       <div id="waitdetail"></div>
       <div id="waitelapsed"></div>
+      <div id="questions"></div>
       <div class="cmds">
         <button id="allowBtn" class="allow big">✓ 允许</button>
         <button id="rejectBtn" class="reject big">✗ 拒绝</button>
+        <button id="answerBtn" class="primary big" style="display:none">提交作答</button>
       </div>
     </div>
 
@@ -323,9 +338,49 @@
 
 <div id="toast"></div>
 
+<script src="/nacl.js"></script>
 <script>
 "use strict";
 const $ = (id) => document.getElementById(id);
+
+// ---------- E2E（与 relay/src/e2e.ts 同构；nacl 由 /nacl.js 提供） ----------
+const B64 = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+function toB64(b) {
+  let s = "";
+  for (let i = 0; i < b.length; i += 3) {
+    const b1 = b[i], b2 = i + 1 < b.length ? b[i + 1] : null, b3 = i + 2 < b.length ? b[i + 2] : null;
+    s += B64[b1 >> 2] + B64[((b1 & 3) << 4) | (b2 === null ? 0 : b2 >> 4)];
+    s += b2 === null ? "=" : B64[((b2 & 15) << 2) | (b3 === null ? 0 : b3 >> 6)];
+    s += b3 === null ? "=" : B64[b3 & 63];
+  }
+  return s;
+}
+function fromB64(st) {
+  const out = []; let bits = 0, acc = 0;
+  for (const ch of st.replace(/=+$/, "")) {
+    const v = B64.indexOf(ch);
+    if (v < 0) throw new Error("bad base64");
+    acc = (acc << 6) | v; bits += 6;
+    if (bits >= 8) { bits -= 8; out.push((acc >> bits) & 0xff); }
+  }
+  return new Uint8Array(out);
+}
+function genKp() {
+  const kp = nacl.box.keyPair();
+  return { publicKey: toB64(kp.publicKey), secretKey: toB64(kp.secretKey) };
+}
+function devId(pk, prefix) {
+  return prefix + "-" + [...fromB64(pk).slice(0, 8)].map((x) => x.toString(16).padStart(2, "0")).join("");
+}
+function seal(obj, theirPk, mySk) {
+  const nonce = nacl.randomBytes(nacl.box.nonceLength);
+  const c = nacl.box(new TextEncoder().encode(JSON.stringify(obj)), nonce, fromB64(theirPk), fromB64(mySk));
+  return { n: toB64(nonce), c: toB64(c) };
+}
+function unseal(box, theirPk, mySk) {
+  const opened = nacl.box.open(fromB64(box.c), fromB64(box.n), fromB64(theirPk), fromB64(mySk));
+  return opened ? JSON.parse(new TextDecoder().decode(opened)) : null;
+}
 
 // ---------- 状态 ----------
 let ws = null;
@@ -336,6 +391,14 @@ let activeTab = "activity";
 const sessions = new Map();    // session_id -> SessionState
 const timelines = new Map();   // session_id -> LogEntry[]
 let reconnectDelay = 1000;
+
+// 云桥模式状态
+let mode = "lan";              // lan | cloud
+let ckp = null;                // 本浏览器固定 box 密钥对
+let relayPeer = null;          // {relay_dev, relay_pubkey}，配对成功后落 localStorage
+let pendingPair = null;        // {rd, rk, pc} 来自配对链接，一次性
+let pingTimer = null;
+let lastPong = 0;
 
 const STATUS = {
   WORKING: { zh: "运行中", sym: "●" },
@@ -362,6 +425,8 @@ function toast(msg) {
 
 // ---------- 连接 ----------
 function connect() {
+  stopCloudPing();
+  if (mode === "cloud") { connectCloud(); return; }
   const urlBase = $("url").value.trim();
   if (!urlBase || !$("token").value.trim()) { openPanel("conn"); return; }
   const url = urlBase + "?token=" + encodeURIComponent($("token").value.trim()) +
@@ -384,6 +449,103 @@ function connect() {
   };
 }
 
+// 云桥：浏览器 → 桥(ws) → 家里 relay，帧全部 tweetnacl box 密封（桥只见密文）。
+// 配对走一次性配对链接（#bt=&rd=&rk=&pc=），成功后本浏览器与 relay 互记公钥。
+function connectCloud() {
+  const base = $("url").value.trim();
+  const token = $("token").value.trim();
+  if (!base || !token) { openPanel("conn"); return; }
+  loadCloudIdentity();
+  const pair = pendingPair || JSON.parse(sessionStorage.getItem("ccr_pair") || "null");
+  pendingPair = pair;
+  if (!relayPeer && !pair) {
+    setConn("", "未配对");
+    toast("首次使用请打开配对链接（向家里 PC 领取）");
+    openPanel("conn");
+    return;
+  }
+  const dev = devId(ckp.publicKey, "wb");
+  const url = base + (base.includes("?") ? "&" : "?") + "token=" + encodeURIComponent(token) +
+    "&dev=" + encodeURIComponent(dev);
+  setConn("wait", relayPeer ? "连接中 ☁" : "配对中…");
+  try { ws && ws.close(); } catch {}
+  ws = new WebSocket(url);
+  ws.onopen = () => {
+    connected = true; reconnectDelay = 1000;
+    if (!relayPeer) {
+      ws.send(JSON.stringify({ to: pair.rd, data: { t: "pair_req", code: pair.pc, pubkey: ckp.publicKey, name: "web-" + dev.slice(3, 11) } }));
+      return;
+    }
+    setConn("on", "已连接 ☁");
+    sendCloud({ t: "hello", last_seq: cloudLastSeq() });
+    startCloudPing();
+  };
+  ws.onclose = () => {
+    connected = false; setConn("", "已断开 ☁");
+    scheduleReconnect();
+  };
+  ws.onerror = () => {};
+  ws.onmessage = (ev) => {
+    let f;
+    try { f = JSON.parse(ev.data); } catch { return; }
+    if (f.type === "ROUTE_MISS") { setConn("", "家里 relay 离线"); return; }
+    if (f.type === "ERROR") return;
+    if (!f.data || !f.data.n) return;
+    const senderPk = relayPeer ? relayPeer.relay_pubkey : (pendingPair ? pendingPair.rk : "");
+    if (!senderPk) return;
+    const inner = unseal(f.data, senderPk, ckp.secretKey);
+    if (!inner) return;
+    if (inner.t === "pair_ack") {
+      relayPeer = { relay_dev: inner.relay_dev, relay_pubkey: inner.relay_pubkey };
+      localStorage.setItem("ccr_cloud_peer", JSON.stringify(relayPeer));
+      sessionStorage.removeItem("ccr_pair");
+      pendingPair = null;
+      setConn("on", "已连接 ☁");
+      toast("配对成功");
+      sendCloud({ t: "hello", last_seq: cloudLastSeq() });
+      startCloudPing();
+      return;
+    }
+    if (inner.t === "pair_nack") { setConn("", "未配对"); toast("配对失败：" + (inner.error || "码无效")); return; }
+    if (inner.t === "pong") { lastPong = Date.now(); return; }
+    if (inner.type === "COMMAND_ACK") { onAck(inner); return; }
+    if (inner.seq !== undefined) {
+      lastSeq = Math.max(lastSeq, inner.seq);
+      localStorage.setItem("ccr_lastseq", String(lastSeq));
+    }
+    onEvent(inner);
+  };
+}
+
+function loadCloudIdentity() {
+  try { ckp = JSON.parse(localStorage.getItem("ccr_cloud_kp") || "null"); } catch { ckp = null; }
+  if (!ckp || !ckp.publicKey || !ckp.secretKey) {
+    ckp = genKp();
+    localStorage.setItem("ccr_cloud_kp", JSON.stringify(ckp));
+  }
+  try { relayPeer = JSON.parse(localStorage.getItem("ccr_cloud_peer") || "null"); } catch { relayPeer = null; }
+}
+
+function cloudLastSeq() { return parseInt(localStorage.getItem("ccr_lastseq") || "0", 10) || 0; }
+
+function sendCloud(obj) {
+  if (!ws || ws.readyState !== 1 || !relayPeer) return false;
+  ws.send(JSON.stringify({ to: relayPeer.relay_dev, data: seal(obj, relayPeer.relay_pubkey, ckp.secretKey) }));
+  return true;
+}
+
+// 应用层心跳：兼作断线自愈（relay 侧 ping-resume 会按 last_seq 补发漏掉的事件）
+function startCloudPing() {
+  stopCloudPing();
+  lastPong = Date.now();
+  pingTimer = setInterval(() => {
+    if (!connected) return;
+    if (Date.now() - lastPong > 45000) { try { ws && ws.close(); } catch {} return; }
+    sendCloud({ t: "ping", last_seq: lastSeq });
+  }, 20000);
+}
+function stopCloudPing() { if (pingTimer) { clearInterval(pingTimer); pingTimer = null; } }
+
 function scheduleReconnect() {
   if (!$("url").value.trim() || !$("token").value.trim()) return;
   const delay = reconnectDelay;
@@ -400,7 +562,12 @@ function setConn(cls, text) {
 
 function sendCommand(type, payload) {
   if (!connected) { toast("未连接"); openPanel("conn"); return false; }
-  ws.send(JSON.stringify({ command_id: uuid(), type, payload, ts: Date.now() }));
+  const cmd = { command_id: uuid(), type, payload, ts: Date.now() };
+  if (mode === "cloud") {
+    if (!sendCloud(cmd)) return false;
+  } else {
+    ws.send(JSON.stringify(cmd));
+  }
   return true;
 }
 
@@ -585,12 +752,17 @@ function renderDetail() {
   if (s.status === "WAITING" && s.waiting_request && !s.historical) {
     wb.style.display = "block";
     const passive = s.waiting_request.decidable === false;
+    const isAsk = Array.isArray(s.waiting_request.questions) && s.waiting_request.questions.length > 0;
     $("waitdetail").textContent = (s.waiting_request.tool_name ? s.waiting_request.tool_name + " — " : "") + (s.waiting_request.input_summary || "");
     const wsec = Math.floor((Date.now() - (s.waiting_request.received_at || Date.now())) / 1000);
     $("waitelapsed").textContent = passive ? "CLI 正在本地等待确认，请在电脑上处理" : "已等待 " + wsec + "s" +
-      (s.waiting_request.suggestions?.length ? " · 建议: " + s.waiting_request.suggestions.join(" / ") : "");
+      (s.waiting_request.suggestions?.length && !isAsk ? " · 建议: " + s.waiting_request.suggestions.join(" / ") : "");
     const cmds = document.querySelector("#waitbox .cmds");
     if (cmds) cmds.style.display = passive ? "none" : "flex";
+    $("allowBtn").style.display = isAsk ? "none" : "";
+    $("rejectBtn").style.display = isAsk ? "none" : "";
+    $("answerBtn").style.display = isAsk ? "" : "none";
+    renderQuestions(s.waiting_request);
   } else {
     wb.style.display = "none";
   }
@@ -656,6 +828,65 @@ function escapeHtml(s) {
   return String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 }
 
+// ---------- AskUserQuestion 选项作答 ----------
+let askState = null; // {rid, sel: [Set<label>...], free: [string...]}
+function renderQuestions(wr) {
+  const box = $("questions");
+  const qs = Array.isArray(wr.questions) ? wr.questions : [];
+  if (!qs.length) { box.innerHTML = ""; box.style.display = "none"; askState = null; return; }
+  box.style.display = "flex";
+  if (!askState || askState.rid !== wr.request_id) {
+    askState = { rid: wr.request_id, sel: qs.map(() => new Set()), free: qs.map(() => "") };
+    box.innerHTML = qs.map((q, qi) => {
+      const opts = (q.options || []).map((o, oi) =>
+        '<button type="button" data-q="' + qi + '" data-o="' + oi + '"><span class="l">' + escapeHtml(o.label) + "</span>" +
+        (o.description ? '<span class="d">' + escapeHtml(o.description) + "</span>" : "") + "</button>").join("");
+      return '<div class="q-item" data-qi="' + qi + '">' +
+        '<div class="q-header">' + escapeHtml(q.header || "问题 " + (qi + 1)) + (q.multi ? " · 可多选" : "") + "</div>" +
+        '<div class="q-text">' + escapeHtml(q.question) + "</div>" +
+        '<div class="q-opts">' + opts + "</div>" +
+        '<input class="q-free" data-q="' + qi + '" placeholder="或自由输入…">' +
+        "</div>";
+    }).join("");
+    box.querySelectorAll(".q-opts button").forEach((b) => {
+      b.onclick = () => {
+        const qi = +b.dataset.q, label = qs[qi].options[+b.dataset.o].label;
+        const set = askState.sel[qi];
+        if (qs[qi].multi) { set.has(label) ? set.delete(label) : set.add(label); }
+        else { set.clear(); set.add(label); askState.free[qi] = ""; box.querySelector('.q-free[data-q="' + qi + '"]').value = ""; }
+        syncSelClasses(qs);
+      };
+    });
+    box.querySelectorAll(".q-free").forEach((inp) => {
+      inp.oninput = () => { askState.free[+inp.dataset.q] = inp.value; };
+    });
+  }
+}
+function syncSelClasses(qs) {
+  const box = $("questions");
+  qs.forEach((q, qi) => {
+    box.querySelectorAll('.q-opts button[data-q="' + qi + '"]').forEach((b) => {
+      b.classList.toggle("sel", askState.sel[qi].has(q.options[+b.dataset.o].label));
+    });
+  });
+}
+function submitAnswer() {
+  const s = sessions.get(selected);
+  if (!s || !s.waiting_request || !askState) return;
+  const qs = s.waiting_request.questions;
+  const answers = qs.map((q, qi) => {
+    const free = (askState.free[qi] || "").trim();
+    if (free) return free;
+    const sel = [...askState.sel[qi]];
+    if (q.multi) return sel.join("、");
+    return sel[0] ?? "";
+  });
+  if (answers.some((a) => !a)) { toast("还有问题未作答"); return; }
+  if (sendCommand("COMMAND_ANSWER", { session_id: selected, request_id: s.waiting_request.request_id, answers })) {
+    toast("已作答");
+  }
+}
+
 function select(sid) {
   selected = sid;
   activeTab = "activity";
@@ -691,10 +922,27 @@ $("addBtn").onclick = () => {
 };
 $("connectBtn").onclick = () => {
   if (connected) { try { ws.close(); } catch {} return; }
-  localStorage.setItem("ccr_url", $("url").value);
-  localStorage.setItem("ccr_token", $("token").value);
+  if (mode === "cloud") {
+    localStorage.setItem("ccr_cloud_url", $("url").value);
+    localStorage.setItem("ccr_cloud_token", $("token").value);
+  } else {
+    localStorage.setItem("ccr_url", $("url").value);
+    localStorage.setItem("ccr_token", $("token").value);
+  }
   connect();
 };
+document.querySelectorAll('input[name="cmode"]').forEach((r) => {
+  r.onchange = () => {
+    if (!r.checked) return;
+    mode = r.value;
+    localStorage.setItem("ccr_mode", mode);
+    stopCloudPing();
+    try { ws && ws.close(); } catch {}
+    connected = false;
+    applyMode();
+    setConn("", mode === "cloud" ? "未连接 ☁" : "未连接");
+  };
+});
 $("createBtn").onclick = () => {
   const cwd = $("cwd").value.trim();
   const prompt = $("prompt").value.trim();
@@ -730,6 +978,7 @@ $("allowBtn").onclick = () => {
   const s = sessions.get(selected);
   if (s && s.waiting_request) sendCommand("COMMAND_CONTINUE", { session_id: selected, request_id: s.waiting_request.request_id });
 };
+$("answerBtn").onclick = submitAnswer;
 $("rejectBtn").onclick = () => {
   const s = sessions.get(selected);
   if (s && s.waiting_request) sendCommand("COMMAND_REJECT", { session_id: selected, request_id: s.waiting_request.request_id });
@@ -749,12 +998,39 @@ document.querySelectorAll(".tabs button").forEach((b) => {
 });
 
 // ---------- 初始化 ----------
+function applyMode() {
+  document.querySelectorAll('input[name="cmode"]').forEach((r) => { r.checked = r.value === mode; });
+  if (mode === "cloud") {
+    $("url").value = localStorage.getItem("ccr_cloud_url") ||
+      (location.protocol.startsWith("http") ? "ws://" + location.host + "/cloud" : "");
+    $("token").value = localStorage.getItem("ccr_cloud_token") || "";
+    $("url").placeholder = "ws://<云桥>:8790/cloud";
+    $("token").placeholder = "云桥 token";
+  } else {
+    $("url").value = localStorage.getItem("ccr_url") ||
+      (location.hostname ? "ws://" + location.hostname + ":" + location.port + "/ws" : "");
+    $("token").value = localStorage.getItem("ccr_token") || "";
+    $("url").placeholder = "ws://<pc-ip>:8787/ws";
+    $("token").placeholder = "token";
+  }
+}
+
 (function init() {
+  // 配对链接：#bt=<桥token>&rd=<relay dev>&rk=<relay 公钥>&pc=<一次性配对码>。
+  // 参数走 fragment（不落服务器日志/Referer），捕获后立刻从地址栏抹掉。
+  const h = new URLSearchParams(location.hash.slice(1));
+  if (h.get("pc") && h.get("rd") && h.get("rk")) {
+    sessionStorage.setItem("ccr_pair", JSON.stringify({ rd: h.get("rd"), rk: h.get("rk"), pc: h.get("pc") }));
+    if (h.get("bt")) localStorage.setItem("ccr_cloud_token", h.get("bt"));
+    if (location.protocol.startsWith("http")) localStorage.setItem("ccr_cloud_url", "ws://" + location.host + "/cloud");
+    localStorage.setItem("ccr_mode", "cloud");
+    history.replaceState(null, "", location.pathname);
+  }
+  mode = localStorage.getItem("ccr_mode") === "cloud" ? "cloud" : "lan";
+  applyMode();
   const params = new URLSearchParams(location.search);
   const qToken = params.get("token") || "";
-  $("url").value = localStorage.getItem("ccr_url") ||
-    (location.hostname ? "ws://" + location.hostname + ":" + location.port + "/ws" : "");
-  $("token").value = qToken || localStorage.getItem("ccr_token") || "";
+  if (qToken && mode === "lan") $("token").value = qToken;
   $("cwd").value = localStorage.getItem("ccr_cwd") || "";
   if ($("url").value && $("token").value) connect();
   else openPanel("conn");

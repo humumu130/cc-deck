@@ -1,8 +1,12 @@
 import { createServer } from "node:http";
-import { pathToFileURL } from "node:url";
+import { existsSync, readFileSync } from "node:fs";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import { WebSocketServer, WebSocket } from "ws";
 import { loadConfig } from "./config.js";
 import { CloudRouter } from "./router.js";
+
+// 网页端静态文件目录（仓库 web-console/，部署布局 /opt/cc-cloud-bridge/web-console/）
+const webDir = (name: string) => fileURLToPath(new URL(`../web-console/${name}`, import.meta.url));
 
 const HEARTBEAT_MS = 30_000;
 
@@ -36,6 +40,26 @@ export function startCloudServer(port: number, token: string): {
       res.writeHead(200, { "content-type": "application/json" }).end(
         JSON.stringify({ ok: true, devices: router.devs() }),
       );
+      return;
+    }
+    // 网页端托管（公司电脑浏览器）：页面与 nacl 静态文件，不含任何密钥——
+    // E2E 密钥在浏览器 localStorage，桥 token 经配对链接的 fragment 送达
+    if (req.method === "GET" && (url.pathname === "/" || url.pathname === "/index.html")) {
+      const file = webDir("index.html");
+      if (!existsSync(file)) {
+        res.writeHead(503).end("web-console/index.html 不存在");
+        return;
+      }
+      res.writeHead(200, { "content-type": "text/html; charset=utf-8" }).end(readFileSync(file));
+      return;
+    }
+    if (req.method === "GET" && url.pathname === "/nacl.js") {
+      const file = webDir("nacl.js");
+      if (!existsSync(file)) {
+        res.writeHead(503).end("web-console/nacl.js 不存在");
+        return;
+      }
+      res.writeHead(200, { "content-type": "text/javascript; charset=utf-8" }).end(readFileSync(file));
       return;
     }
     res.writeHead(404).end("not found");

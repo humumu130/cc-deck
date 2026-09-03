@@ -59,7 +59,8 @@ export function generateKeyPair(): BoxKeyPair {
 }
 
 // 设备 id 由公钥派生：relay 侧无需试解即可 dev → 公钥映射
-export function devId(publicKeyB64: string, prefix: "rl" | "ph"): string {
+// prefix：rl=relay / ph=手机 / wb=网页端
+export function devId(publicKeyB64: string, prefix: string): string {
   const hex = [...fromB64(publicKeyB64).slice(0, 8)]
     .map((x) => x.toString(16).padStart(2, "0"))
     .join("");

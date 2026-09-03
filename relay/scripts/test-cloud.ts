@@ -12,6 +12,7 @@ import { EventBus } from "../src/event-bus.js";
 import { SessionManager } from "../src/session-manager.js";
 import { CloudClient } from "../src/cloud-client.js";
 import { loadOrCreateIdentity } from "../src/cloud-identity.js";
+import { createPairingCodes } from "../src/pairing.js";
 import { devId, generateKeyPair, seal, unseal, type SealedBox } from "../src/e2e.js";
 import type { CommandAckPayload, Envelope } from "../src/types.js";
 
@@ -52,7 +53,8 @@ const bus = new EventBus();
 const mgr = new SessionManager(bus, cfg);
 const identity = loadOrCreateIdentity(cfg.dataDir);
 mgr.setCloud(identity);
-const cloud = new CloudClient(bus, mgr, cfg, identity);
+const pairCodes = createPairingCodes();
+const cloud = new CloudClient(bus, mgr, cfg, identity, pairCodes);
 cloud.start();
 await wait(300);
 
@@ -281,8 +283,85 @@ assert(
   "last_seq 补发不与流式补发的旧日志重复",
 );
 
+// ---------- 9) 网页端一次性配对码（pair_req → pair_ack → hello 可用） ----------
+const webKp = generateKeyPair();
+const webDev = devId(webKp.publicKey, "wb");
+const { code: pairCode } = pairCodes.issue();
+
+// 冒名测试会用同 dev 顶掉本连接（桥按 dev 顶号），所以 ws 可重建、收件箱累积
+const webInbox: Record<string, unknown>[] = [];
+let webWs = new WebSocket(`ws://127.0.0.1:${BRIDGE_PORT}/cloud?token=${BRIDGE_TOKEN}&dev=${webDev}`);
+const attachWeb = (ws: WebSocket) => {
+  ws.on("message", (raw) => {
+    const f = JSON.parse(String(raw)) as { data?: SealedBox };
+    if (!f.data) return;
+    const inner = unseal<Record<string, unknown>>(f.data, relayPubkey, webKp.secretKey);
+    if (inner) webInbox.push(inner);
+  });
+  ws.on("error", () => undefined);
+};
+attachWeb(webWs);
+await new Promise<void>((r) => webWs.on("open", r));
+const webSend = (obj: unknown, plain = false) =>
+  webWs.send(JSON.stringify(
+    plain
+      ? { to: identity.relayDev, data: obj }
+      : { to: identity.relayDev, data: seal(obj, relayPubkey, webKp.secretKey) },
+  ));
+
+// 错码先来：回 pair_nack
+webSend({ t: "pair_req", code: "000000", pubkey: webKp.publicKey, name: "web-test" }, true);
+assert(
+  await waitFor(() => webInbox.some((m) => m.t === "pair_nack")),
+  "错配对码被拒（pair_nack）",
+);
+// 冒名 dev（连接冒用 webDev 但公钥派生不一致）：静默丢弃且不烧码
+{
+  const fakeKp = generateKeyPair();
+  const rogue2 = new WebSocket(`ws://127.0.0.1:${BRIDGE_PORT}/cloud?token=${BRIDGE_TOKEN}&dev=${webDev}`);
+  rogue2.on("error", () => undefined);
+  await new Promise<void>((r) => rogue2.on("open", r));
+  rogue2.send(JSON.stringify({ to: identity.relayDev, data: { t: "pair_req", code: pairCode, pubkey: fakeKp.publicKey } }));
+  await wait(400);
+  assert(!identity.peers.has(webDev), "冒名 dev 未被登记");
+  rogue2.close();
+  // 真身连接已被顶号踢断，重建后继续配对
+  await wait(100);
+  webWs = new WebSocket(`ws://127.0.0.1:${BRIDGE_PORT}/cloud?token=${BRIDGE_TOKEN}&dev=${webDev}`);
+  attachWeb(webWs);
+  await new Promise<void>((r) => webWs.on("open", r));
+}
+// 正码：pair_ack 携带 relay 身份，随后 hello 立即可用
+webSend({ t: "pair_req", code: pairCode, pubkey: webKp.publicKey, name: "web-test" }, true);
+assert(
+  await waitFor(() => webInbox.some((m) => m.t === "pair_ack")),
+  "正确配对码完成配对（pair_ack，冒名未烧码）",
+);
+assert(identity.peers.has(webDev), "web 设备已登记 peers");
+{
+  const ack = webInbox.find((m) => m.t === "pair_ack") as unknown as { relay_dev: string; relay_pubkey: string };
+  assert(ack.relay_dev === identity.relayDev && ack.relay_pubkey === identity.keypair.publicKey, "pair_ack 携带 relay dev 与公钥");
+}
+// 码一次性：同码再用 → nack
+webSend({ t: "pair_req", code: pairCode, pubkey: webKp.publicKey }, true);
+assert(
+  await waitFor(() => webInbox.filter((m) => m.t === "pair_nack").length === 2),
+  "配对码一次性（重用被拒）",
+);
+webSend({ t: "hello", last_seq: 0 });
+assert(
+  await waitFor(() => webInbox.some((m) => m.type === "SNAPSHOT")),
+  "配对后 web 端 hello 收到 SNAPSHOT",
+);
+webSend({ command_id: "web-cmd-1", type: "COMMAND_REFRESH_TODOS", payload: { session_id: seedId }, ts: Date.now() });
+assert(
+  await waitFor(() => webInbox.some((m) => m.type === "COMMAND_ACK" && m.command_id === "web-cmd-1")),
+  "web 端命令密文往返收到 ACK",
+);
+
 // ---------- 清理 ----------
 phoneWs4.close();
+webWs.close();
 rogueWs.close();
 cloud.close();
 await bridge.close();
