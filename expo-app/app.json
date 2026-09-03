@@ -1,7 +1,7 @@
 {
   "expo": {
-    "name": "CC Watch",
-    "slug": "cc-watch",
+    "name": "CC Deck",
+    "slug": "cc-deck",
     "version": "0.2.17",
     "orientation": "portrait",
     "icon": "./assets/icon.png",

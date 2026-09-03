@@ -61,7 +61,7 @@ startServer(bus, mgr, cfg, {
 // hooks 桥接配置：bridge-hook.mjs 读取后回连本机 /bridge/hook
 writeFileSync(join(cfg.dataDir, "bridge.json"), JSON.stringify({ port: cfg.port, token: cfg.bridgeToken }), "utf-8");
 
-console.log("Cloud Code Relay 已启动");
+console.log("CC Deck Relay 已启动");
 console.log(`  模型:   ${cfg.model}`);
 console.log(`  端口:   ${cfg.port}`);
 console.log(`  历史:   ${persistPath}（恢复 ${adopted} 个会话）`);

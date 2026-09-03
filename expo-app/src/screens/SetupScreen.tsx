@@ -4,6 +4,7 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import { LinearGradient } from "expo-linear-gradient";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { withA, type ThemeColors } from "../theme";
+import { LogoMark } from "../brand";
 import { useTheme, useThemeStyles } from "../theme-context";
 import { store, useRelay, type ServerEntry } from "../store";
 import { uuid } from "../fmt";
@@ -136,9 +137,9 @@ export default function SetupScreen({ onClose, editId }: Props) {
           contentContainerStyle={{ ...s.wrap, paddingBottom: 36 + kb }}
           keyboardShouldPersistTaps="handled"
         >
-          <LinearGradient colors={[c.brandA, c.brandB]} style={s.logo} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}>
-            <Text style={s.logoText}>CC</Text>
-          </LinearGradient>
+          <View style={s.logo}>
+            <LogoMark size={34} />
+          </View>
           <Text style={s.h2}>Claude Code</Text>
           <Text style={s.sub}>{editId ? "编辑服务器配置" : "连接到 PC Relay"}</Text>
 
@@ -256,8 +257,10 @@ export default function SetupScreen({ onClose, editId }: Props) {
 const makeStyles = (c: ThemeColors) => StyleSheet.create({
   safe: { flex: 1, backgroundColor: c.bg },
   wrap: { alignItems: "center", paddingTop: 72, paddingBottom: 36, paddingHorizontal: 28 },
-  logo: { width: 64, height: 64, borderRadius: 19, alignItems: "center", justifyContent: "center", marginBottom: 16 },
-  logoText: { color: "#fff", fontWeight: "800", fontSize: 22 },
+  logo: {
+    width: 64, height: 64, borderRadius: 19, alignItems: "center", justifyContent: "center", marginBottom: 16,
+    backgroundColor: "#1D1726", borderWidth: 1, borderColor: "rgba(255,255,255,0.09)",
+  },
   h2: { color: c.text, fontSize: 21, fontWeight: "700" },
   sub: { color: c.dim, fontSize: 13, marginTop: 4, marginBottom: 24 },
   savedBox: { width: "100%", maxWidth: 340, marginBottom: 20 },

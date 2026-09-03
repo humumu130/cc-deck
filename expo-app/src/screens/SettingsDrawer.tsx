@@ -2,8 +2,8 @@
 import { useEffect, useRef, useState } from "react";
 import { Animated, PanResponder, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { LinearGradient } from "expo-linear-gradient";
 import { useTheme, useThemeStyles } from "../theme-context";
+import { LogoMark } from "../brand";
 import { setProcessFont, useProcessFont, type ProcessFont } from "../display-settings";
 import { resetPhrases, setPhrases, usePhraseState } from "../phrases";
 import { store, useRelay, type ServerEntry } from "../store";
@@ -121,12 +121,12 @@ export default function SettingsDrawer({
       </Animated.View>
       <Animated.View style={[d.panel, { transform: [{ translateX }], paddingTop: 18 + insets.top }]} {...pan.panHandlers}>
         <View style={d.head}>
-          <LinearGradient colors={[c.brandA, c.brandB]} style={d.logo}>
-            <Text style={d.logoT}>CC</Text>
-          </LinearGradient>
+          <View style={d.logo}>
+            <LogoMark size={24} />
+          </View>
           <View style={{ flex: 1, minWidth: 0 }}>
-            <Text style={d.nameT}>Claude Code</Text>
-            <Text style={d.verT}>移动工作台 · v0.2.30</Text>
+            <Text style={d.nameT}>CC Deck</Text>
+            <Text style={d.verT}>v0.2.32</Text>
           </View>
         </View>
 
@@ -209,7 +209,7 @@ export default function SettingsDrawer({
           <View style={d.pairBox}>
             <Text style={d.pairCodeT}>{pc.code.slice(0, 3)} {pc.code.slice(3)}</Text>
             <Text style={[d.pairExpT, pairLeft === 0 && { color: c.waiting }]}>
-              {pairLeft > 0 ? `剩余 ${Math.floor(pairLeft / 60)}:${String(pairLeft % 60).padStart(2, "0")} · 一次性` : "已过期，请重新生成"}
+              {pairLeft > 0 ? `剩余 ${pairLeft} 秒 · 一次性` : "已过期，请重新生成"}
             </Text>
             <Text style={d.pairHintT}>新设备打开网页端，选"云桥"连接后输入此码</Text>
           </View>
@@ -258,8 +258,10 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
     borderRightWidth: 1, borderColor: c.line, paddingTop: 18, paddingHorizontal: 16,
   },
   head: { flexDirection: "row", alignItems: "center", gap: 12, paddingBottom: 16, borderBottomWidth: 1, borderBottomColor: c.line },
-  logo: { width: 42, height: 42, borderRadius: 13, alignItems: "center", justifyContent: "center" },
-  logoT: { color: "#fff", fontSize: 17, fontWeight: "800" },
+  logo: {
+    width: 42, height: 42, borderRadius: 13, alignItems: "center", justifyContent: "center",
+    backgroundColor: "#1D1726", borderWidth: 1, borderColor: "rgba(255,255,255,0.09)",
+  },
   nameT: { color: c.text, fontSize: 16, fontWeight: "700" },
   verT: { color: c.faint, fontSize: 11.5, marginTop: 1 },
   secT: { color: c.faint, fontSize: 11, fontWeight: "700", marginTop: 20, marginBottom: 6, letterSpacing: 1 },
