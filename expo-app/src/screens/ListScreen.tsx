@@ -2,9 +2,9 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { Animated, BackHandler, FlatList, PanResponder, Pressable, StyleSheet, Text, View } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { LinearGradient } from "expo-linear-gradient";
 import { STATUS_ZH, statusColor, withA, type ThemeColors } from "../theme";
 import { useTheme, useThemeStyles } from "../theme-context";
+import { LogoMark } from "../brand";
 import { sessionElapsed, fmtElapsed, fmtTok } from "../fmt";
 import { store } from "../store";
 import type { SessionState } from "../protocol";
@@ -26,27 +26,13 @@ function folderOf(cwd: string): string {
   return parts[parts.length - 1] ?? cwd;
 }
 
-// 品牌星芒标（与网页端同款）：深底圆角块 + 8 芒放射，纯 View 组合免 SVG 依赖
-function LogoMark({ size = 19, color = "#D97757" }: { size?: number; color?: string }) {
-  const h = Math.round(size * 0.92);
-  const w = 2.6;
+// 新增会话 ＋：圆头细条十字，与品牌星芒同线条语言
+function PlusMark({ size = 20, color = "#D97757" }: { size?: number; color?: string }) {
+  const w = 2.8;
   return (
     <View style={{ width: size, height: size }}>
-      {[0, 90, 45, -45].map((deg) => (
-        <View
-          key={deg}
-          style={{
-            position: "absolute",
-            width: w,
-            height: h,
-            top: (size - h) / 2,
-            left: (size - w) / 2,
-            borderRadius: w / 2,
-            backgroundColor: color,
-            transform: [{ rotate: `${deg}deg` }],
-          }}
-        />
-      ))}
+      <View style={{ position: "absolute", width: w, height: size, left: (size - w) / 2, borderRadius: w / 2, backgroundColor: color }} />
+      <View style={{ position: "absolute", height: w, width: size, top: (size - w) / 2, borderRadius: w / 2, backgroundColor: color }} />
     </View>
   );
 }
@@ -363,9 +349,9 @@ export default function ListScreen({ sessions, connected, connText, onOpen, onNe
         android_ripple={{ color: "rgba(255,255,255,0.18)", borderless: false, radius: 30 }}
         onPress={onNew}
       >
-        <LinearGradient colors={[c.brandA, c.brandB]} style={styles.fabGrad} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}>
-          <Text style={styles.fabText}>＋</Text>
-        </LinearGradient>
+        <View style={styles.fabGrad}>
+          <PlusMark size={20} />
+        </View>
       </Pressable>
 
       <RenameModal
@@ -462,6 +448,8 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
   emptyS: { color: c.faint, fontSize: 12, textAlign: "center", lineHeight: 20 },
   edgeZone: { position: "absolute", left: 0, top: 0, bottom: 0, width: 22, zIndex: 5 },
   fab: { position: "absolute", right: 30, bottom: 56, borderRadius: 16, elevation: 8 },
-  fabGrad: { width: 56, height: 56, borderRadius: 16, alignItems: "center", justifyContent: "center" },
-  fabText: { color: "#fff", fontSize: 30, fontWeight: "300", marginTop: -4 },
+  fabGrad: {
+    width: 56, height: 56, borderRadius: 16, alignItems: "center", justifyContent: "center",
+    backgroundColor: "#1D1726", borderWidth: 1, borderColor: "rgba(255,255,255,0.09)",
+  },
 });

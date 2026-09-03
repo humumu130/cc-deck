@@ -989,7 +989,7 @@ export default function DetailScreen({ sid, onBack }: { sid: string; onBack: () 
             <MicIcon color={listening ? c.brandA : c.dim} />
           </Pressable>
           <Pressable style={[d.sendBtn, (!canCmd || (!input.trim() && images.length === 0)) && { opacity: 0.4 }]} android_ripple={{ color: "rgba(255,255,255,0.2)", borderless: false }} onPress={() => send()} disabled={!canCmd}>
-            <Text style={d.sendT}>➤</Text>
+            <SendArrow color={c.brandA} />
           </Pressable>
         </View>
       </View>
@@ -1006,6 +1006,19 @@ export default function DetailScreen({ sid, onBack }: { sid: string; onBack: () 
       <StatsModal visible={statsOpen} s={s} onCancel={() => setStatsOpen(false)} />
       </View>
     </SafeAreaView>
+  );
+}
+
+// 发送上箭头（与品牌星芒同线条语言：圆头细条组合）
+function SendArrow({ color }: { color: string }) {
+  const w = 2.6;
+  const box = 16;
+  return (
+    <View style={{ width: box, height: box }}>
+      <View style={{ position: "absolute", width: w, height: 11, bottom: 0, left: box / 2 - w / 2, borderRadius: w / 2, backgroundColor: color }} />
+      <View style={{ position: "absolute", width: w, height: 9, top: -1.5, left: box / 2 - w / 2, borderRadius: w / 2, backgroundColor: color, transform: [{ rotate: "45deg" }] }} />
+      <View style={{ position: "absolute", width: w, height: 9, top: -1.5, left: box / 2 - w / 2, borderRadius: w / 2, backgroundColor: color, transform: [{ rotate: "-45deg" }] }} />
+    </View>
   );
 }
 
@@ -1261,8 +1274,8 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
     paddingHorizontal: 14, paddingVertical: 11, color: c.text, fontSize: 15,
   },
   sendBtn: {
-    width: 44, height: 44, borderRadius: 13, backgroundColor: c.brandA,
+    width: 44, height: 44, borderRadius: 13, backgroundColor: "#1D1726",
+    borderWidth: 1, borderColor: "rgba(255,255,255,0.09)",
     alignItems: "center", justifyContent: "center",
   },
-  sendT: { color: "#fff", fontSize: 17 },
 });
