@@ -2,16 +2,23 @@
 // （本机 CC 自己的 session name 生成在 GLM 环境基本不触发，Relay 兜底）
 import { query } from "@anthropic-ai/claude-agent-sdk";
 
-export async function generateTitle(task: string, model: string): Promise<string | null> {
+// 返回 title + 本次一次性 SDK 会话的 session_id（其 transcript 须被孤儿扫描排除，防误收养）；
+// onSid 在拿到首条消息（含 session_id）时立刻回调——不等 result，防 20s 超时把 sid 一起丢了
+export async function generateTitle(
+  task: string,
+  model: string,
+  onSid?: (sid: string) => void,
+): Promise<{ title: string | null; sid?: string }> {
   const trimmed = task.trim().slice(0, 600);
-  if (!trimmed) return null;
+  if (!trimmed) return { title: null };
   let timer: NodeJS.Timeout | undefined;
-  const timeout = new Promise<null>((resolve) => {
-    timer = setTimeout(() => resolve(null), 20_000);
+  let sidSeen = false;
+  const timeout = new Promise<{ title: null }>((resolve) => {
+    timer = setTimeout(() => resolve({ title: null }), 20_000);
     timer.unref();
   });
   try {
-    const run = async (): Promise<string | null> => {
+    const run = async (): Promise<{ title: string | null; sid?: string }> => {
       const q = query({
         prompt:
           "为下面的任务起一个简短的中文标题，不超过 12 个字，直接输出标题本身，不要引号和任何解释：\n\n" +
@@ -25,17 +32,23 @@ export async function generateTitle(task: string, model: string): Promise<string
         },
       });
       for await (const msg of q) {
+        const sid = (msg as { session_id?: string }).session_id;
+        if (sid && !sidSeen) {
+          sidSeen = true;
+          onSid?.(sid);
+        }
         if (msg.type === "result" && !msg.is_error) {
           const raw = ((msg as { result?: string }).result ?? "").trim();
           const t = raw.replace(/^["'「『]|["'」』]$/g, "").split("\n")[0].trim();
-          if (t) return [...t].slice(0, 16).join("");
+          if (t) return { title: [...t].slice(0, 16).join(""), sid };
+          if (sid) return { title: null, sid };
         }
       }
-      return null;
+      return { title: null };
     };
     return await Promise.race([run(), timeout]);
   } catch {
-    return null;
+    return { title: null };
   } finally {
     if (timer) clearTimeout(timer);
   }

@@ -1,6 +1,7 @@
 // hooks 桥接全链路测试：模拟 bridge-hook.mjs 的 POST 序列 + WS 客户端命令
 import { randomUUID } from "node:crypto";
-import { readFileSync, rmSync } from "node:fs";
+import { mkdirSync, readFileSync, rmSync, utimesSync, writeFileSync } from "node:fs";
+import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { WebSocket } from "ws";
 import { EventBus } from "../src/event-bus.js";
@@ -40,6 +41,12 @@ process.env.CCR_INJECT_CMD = fileURLToPath(new URL("./fake-injector.mjs", import
 const INJECT_LOG = fileURLToPath(new URL("../data/test-inject.log", import.meta.url));
 process.env.CCR_INJECT_LOG = INJECT_LOG;
 rmSync(INJECT_LOG, { force: true });
+// 孤儿扫描（34 段）用临时 projects 根，防止测试扫到真实 ~/.claude/projects
+const PROOT = fileURLToPath(new URL("../data/test-projects/", import.meta.url));
+process.env.CCR_PROJECTS_ROOT = PROOT;
+rmSync(PROOT, { recursive: true, force: true });
+// 34 段断言删除墓碑：先清上一轮残留，保证测试幂等
+rmSync(fileURLToPath(new URL("../data/deleted-ext.json", import.meta.url)), { force: true });
 const cfg = loadConfig();
 const bus = new EventBus();
 const mgr = new SessionManager(bus, cfg);
@@ -657,6 +664,56 @@ assert(ack24.ok === false, "empty rename rejected");
   // 收尾：清掉这次提问的横幅
   await hook({ event: "PostToolUse", tool_name: "AskUserQuestion", tool_response: {} });
   await wait(200);
+}
+
+// 34. 孤儿扫描：无 hook 的活跃 transcript 收养为只读会话；陈旧/无 cwd 跳过；删除墓碑防复活
+{
+  const w34 = new WebSocket(`ws://127.0.0.1:${cfg.port}/ws?token=${cfg.token}`);
+  attach(w34);
+  await new Promise((r) => w34.once("open", r));
+  await wait(100);
+  const scan = () => (bridge as unknown as { adoptOrphans(): void }).adoptOrphans();
+  mkdirSync(join(PROOT, "proj-a"), { recursive: true });
+  const sid = "aa11bb22-cc33-dd44-ee55-ff6677889900";
+  const orphanId = "ext-" + sid;
+  writeFileSync(
+    join(PROOT, "proj-a", sid + ".jsonl"),
+    JSON.stringify({ type: "user", cwd: "D:\\orphan-test", message: { role: "user", content: "hi" } }) + "\n",
+  );
+  // 扫描跳过 15s 内的新鲜文件（title-gen 登记竞态防线），测试文件回拨到 60s 前
+  const ago = (f: string, ms: number) => utimesSync(f, new Date(Date.now() - ms), new Date(Date.now() - ms));
+  ago(join(PROOT, "proj-a", sid + ".jsonl"), 60_000);
+  const stale = join(PROOT, "proj-a", "bb11bb22-cc33-dd44-ee55-ff6677889900.jsonl");
+  writeFileSync(stale, JSON.stringify({ type: "user", cwd: "D:\\stale" }) + "\n");
+  utimesSync(stale, new Date(Date.now() - 3600_000), new Date(Date.now() - 3600_000));
+  writeFileSync(
+    join(PROOT, "proj-a", "cc11bb22-cc33-dd44-ee55-ff6677889900.jsonl"),
+    JSON.stringify({ type: "x", sessionId: "cc11bb22-cc33-dd44-ee55-ff6677889900" }) + "\n",
+  );
+  ago(join(PROOT, "proj-a", "cc11bb22-cc33-dd44-ee55-ff6677889900.jsonl"), 60_000);
+  scan();
+  await wait(300);
+  assert(events.some((e) => e.type === "SESSION_CREATED" && e.session_id === orphanId), "34 fresh orphan adopted");
+  const st = mgr.getExternal(orphanId);
+  assert(st?.status === "DONE" && st?.action_summary === "扫描接入（只读）", "34 orphan read-only DONE");
+  assert(!mgr.getExternal("ext-bb11bb22-cc33-dd44-ee55-ff6677889900"), "34 stale transcript skipped");
+  assert(!mgr.getExternal("ext-cc11bb22-cc33-dd44-ee55-ff6677889900"), "34 no-cwd transcript skipped");
+  // 已注册会话（模拟重启后恢复）重扫：不报错不重复创建
+  scan();
+  await wait(100);
+  assert(
+    !!mgr.getExternal(orphanId) && events.filter((e) => e.type === "SESSION_CREATED" && e.session_id === orphanId).length === 1,
+    "34 rescan keeps existing orphan without duplicates",
+  );
+  // 手机删除 → 墓碑 → 重扫不复活
+  const del = send("COMMAND_DELETE", { session_id: orphanId });
+  assert((await waitAck(del)).ok, "34 orphan delete acked");
+  assert(events.some((e) => e.type === "SESSION_DELETED" && e.session_id === orphanId), "34 SESSION_DELETED emitted");
+  scan();
+  await wait(200);
+  assert(!mgr.getExternal(orphanId), "34 tombstone prevents resurrection");
+  w34.close();
+  rmSync(PROOT, { recursive: true, force: true });
 }
 
 wsCur!.close();

@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { WebSocket } from "ws";
+import { fileURLToPath } from "node:url";
 import { EventBus } from "../src/event-bus.js";
 import { SessionManager } from "../src/session-manager.js";
 import { loadConfig } from "../src/config.js";
@@ -55,6 +56,8 @@ function send(c: TestClient, partial: Omit<Command, "command_id" | "ts">): strin
 // ---- 启动被测服务（独立端口，避免与 dev server 冲突） ----
 process.env.CCR_PORT = "8799";
 process.env.CCR_TOKEN = "test-token-123";
+// 孤儿扫描用空临时根，防止测试扫到真实 ~/.claude/projects
+process.env.CCR_PROJECTS_ROOT = fileURLToPath(new URL("../data/test-projects-ws/", import.meta.url));
 const cfg = loadConfig();
 const bus = new EventBus();
 const mgr = new SessionManager(bus, cfg);

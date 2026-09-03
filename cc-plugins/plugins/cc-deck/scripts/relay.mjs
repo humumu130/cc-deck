@@ -7001,8 +7001,8 @@ var require_main = __commonJS({
 
 // src/index.ts
 import { networkInterfaces as networkInterfaces2 } from "node:os";
-import { join as join8 } from "node:path";
-import { writeFileSync as writeFileSync6, openSync as openSync3, readFileSync as readFileSync8, rmSync as rmSync2 } from "node:fs";
+import { join as join9 } from "node:path";
+import { writeFileSync as writeFileSync7, openSync as openSync3, readFileSync as readFileSync9, rmSync as rmSync2 } from "node:fs";
 import { spawn as spawn3, execFileSync as execFileSync2 } from "node:child_process";
 import { fileURLToPath as fileURLToPath4 } from "node:url";
 
@@ -7298,8 +7298,8 @@ var EventBus = class {
 };
 
 // src/session-manager.ts
-import { statSync as statSync2 } from "node:fs";
-import { resolve as resolve5 } from "node:path";
+import { readFileSync as readFileSync5, statSync as statSync2, writeFileSync as writeFileSync4 } from "node:fs";
+import { join as join6, resolve as resolve5 } from "node:path";
 
 // src/e2e.ts
 var import_tweetnacl = __toESM(require_nacl_fast(), 1);
@@ -37440,12 +37440,13 @@ var AgentSession = class {
 };
 
 // src/title-gen.ts
-async function generateTitle(task, model) {
+async function generateTitle(task, model, onSid) {
   const trimmed = task.trim().slice(0, 600);
-  if (!trimmed) return null;
+  if (!trimmed) return { title: null };
   let timer;
+  let sidSeen = false;
   const timeout = new Promise((resolve6) => {
-    timer = setTimeout(() => resolve6(null), 2e4);
+    timer = setTimeout(() => resolve6({ title: null }), 2e4);
     timer.unref();
   });
   try {
@@ -37462,17 +37463,23 @@ async function generateTitle(task, model) {
         }
       });
       for await (const msg of q2) {
+        const sid = msg.session_id;
+        if (sid && !sidSeen) {
+          sidSeen = true;
+          onSid?.(sid);
+        }
         if (msg.type === "result" && !msg.is_error) {
           const raw = (msg.result ?? "").trim();
           const t = raw.replace(/^["'「『]|["'」』]$/g, "").split("\n")[0].trim();
-          if (t) return [...t].slice(0, 16).join("");
+          if (t) return { title: [...t].slice(0, 16).join(""), sid };
+          if (sid) return { title: null, sid };
         }
       }
-      return null;
+      return { title: null };
     };
     return await Promise.race([run2(), timeout]);
   } catch {
-    return null;
+    return { title: null };
   } finally {
     if (timer) clearTimeout(timer);
   }
@@ -37540,14 +37547,50 @@ function sanitizeImages(raw) {
   const list = raw.filter((x) => typeof x === "string" && x.length > 0 && x.length <= 8 * 1024 * 1024);
   return list.length > 0 ? list.slice(0, 4) : void 0;
 }
+var CHILD_SESSIONS_CAP = 200;
+function readChildSessions(dataDir2) {
+  try {
+    const raw = JSON.parse(readFileSync5(join6(dataDir2, "child-sessions.json"), "utf-8"));
+    return Array.isArray(raw) ? raw.filter((x) => typeof x === "string") : [];
+  } catch {
+    return [];
+  }
+}
+function appendChildSession(dataDir2, sid) {
+  const list = readChildSessions(dataDir2);
+  if (list.includes(sid)) return;
+  list.push(sid);
+  try {
+    writeFileSync4(join6(dataDir2, "child-sessions.json"), JSON.stringify(list.slice(-CHILD_SESSIONS_CAP)));
+  } catch {
+  }
+}
+function readDeletedExts(dataDir2) {
+  try {
+    const raw = JSON.parse(readFileSync5(join6(dataDir2, "deleted-ext.json"), "utf-8"));
+    return Array.isArray(raw) ? raw.filter((x) => typeof x === "string") : [];
+  } catch {
+    return [];
+  }
+}
+function appendDeletedExt(dataDir2, id2) {
+  const list = readDeletedExts(dataDir2);
+  if (list.includes(id2)) return;
+  list.push(id2);
+  try {
+    writeFileSync4(join6(dataDir2, "deleted-ext.json"), JSON.stringify(list.slice(-300)));
+  } catch {
+  }
+}
 var UPDATE_THROTTLE_MS = 2e3;
 var HEARTBEAT_INTERVAL_MS = 5e3;
 var MAX_SESSIONS = 20;
 var SessionManager = class {
-  // 已请求过自动命名的会话
   constructor(bus2, cfg2) {
     this.bus = bus2;
     this.cfg = cfg2;
+    this.childSdkIds = new Set(readChildSessions(cfg2.dataDir));
+    this.deletedExtIds = new Set(readDeletedExts(cfg2.dataDir));
     const t = setInterval(() => this.heartbeat(), HEARTBEAT_INTERVAL_MS);
     t.unref();
   }
@@ -37556,6 +37599,20 @@ var SessionManager = class {
   sessions = /* @__PURE__ */ new Map();
   processedCommands = /* @__PURE__ */ new Map();
   titleRequested = /* @__PURE__ */ new Set();
+  // 已请求过自动命名的会话
+  // relay 自拉的一次性 SDK 子会话（标题生成）的 CLI session_id：
+  // 无 hook 但 transcript 活跃，孤儿扫描必须排除，否则被误收养成垃圾外部会话
+  childSdkIds;
+  deletedExtIds;
+  // 该 CLI session_id 是否归 relay 自己管（托管会话的 relay_session_id / 一次性子会话）
+  ownsCliSession(cliSid) {
+    if (this.childSdkIds.has(cliSid)) return true;
+    for (const s of this.sessions.values()) if (s.state.relay_session_id === cliSid) return true;
+    return false;
+  }
+  isDeletedExt(id2) {
+    return this.deletedExtIds.has(id2);
+  }
   snapshot() {
     return [...this.sessions.values()].map((s) => this.cloneState(s));
   }
@@ -37565,7 +37622,10 @@ var SessionManager = class {
     if (process.env.CCR_NO_TITLE_GEN === "1") return;
     if (this.titleRequested.has(sessionId)) return;
     this.titleRequested.add(sessionId);
-    void generateTitle(task, this.cfg.model).then((t) => {
+    void generateTitle(task, this.cfg.model, (sid) => {
+      this.childSdkIds.add(sid);
+      appendChildSession(this.cfg.dataDir, sid);
+    }).then(({ title: t }) => {
       if (!t) return;
       const s = this.sessions.get(sessionId);
       if (!s || s.state.title === t || s.state.title_locked) return;
@@ -37968,6 +38028,10 @@ var SessionManager = class {
             return { command_id: cmd.command_id, ok: false, error: "\u4F1A\u8BDD\u8FD0\u884C\u4E2D\uFF0C\u4E0D\u80FD\u5220\u9664" };
           }
           this.sessions.delete(cmd.payload.session_id);
+          if (s.state.external) {
+            this.deletedExtIds.add(cmd.payload.session_id);
+            appendDeletedExt(this.cfg.dataDir, cmd.payload.session_id);
+          }
           this.bus.emit(cmd.payload.session_id, "SESSION_DELETED", { session_id: cmd.payload.session_id });
           return { command_id: cmd.command_id, ok: true };
         }
@@ -38245,8 +38309,8 @@ var SessionManager = class {
 
 // src/ws-server.ts
 import { createServer } from "node:http";
-import { readFileSync as readFileSync6, existsSync as existsSync5 } from "node:fs";
-import { join as join6, sep as sep5 } from "node:path";
+import { readFileSync as readFileSync7, existsSync as existsSync5 } from "node:fs";
+import { join as join7, sep as sep5 } from "node:path";
 import { networkInterfaces } from "node:os";
 import { fileURLToPath as fileURLToPath3 } from "node:url";
 
@@ -38263,7 +38327,7 @@ var wrapper_default = import_websocket.default;
 
 // src/bridge.ts
 import { randomUUID as randomUUID4 } from "node:crypto";
-import { closeSync as closeSync2, openSync as openSync2, readSync as readSync2, readFileSync as readFileSync5, readdirSync as readdirSync2, statSync as statSync3, writeFileSync as writeFileSync4 } from "node:fs";
+import { closeSync as closeSync2, openSync as openSync2, readSync as readSync2, readFileSync as readFileSync6, readdirSync as readdirSync2, statSync as statSync3, writeFileSync as writeFileSync5 } from "node:fs";
 import { homedir as homedir2 } from "node:os";
 import path3 from "node:path";
 
@@ -38370,7 +38434,11 @@ var Bridge = class _Bridge {
     this.subagentRunTtlMs = Number(process.env.CCR_SUBAGENT_RUN_TTL_MS) > 0 ? Number(process.env.CCR_SUBAGENT_RUN_TTL_MS) : 30 * 6e4;
     this.hydratePidsFromCache();
     this.healExternal();
-    this.healTimer = setInterval(() => this.healExternal(), 6e4);
+    this.adoptOrphans();
+    this.healTimer = setInterval(() => {
+      this.healExternal();
+      this.adoptOrphans();
+    }, 6e4);
     this.healTimer.unref?.();
   }
   bus;
@@ -38427,11 +38495,95 @@ var Bridge = class _Bridge {
       this.mgr.pushExternalLog(s.session_id, "system", "\u68C0\u6D4B\u5230\u8BEF\u6807\u9519\u8BEF\uFF08CLI \u8FDB\u7A0B\u4ECD\u5728\u8FD0\u884C\uFF09\uFF0C\u5DF2\u81EA\u52A8\u6062\u590D\u4E3A\u8FD0\u884C\u4E2D");
     }
   }
+  // 孤儿扫描：CLI 早于插件安装/启动（或 hook 未注册）的外部会话永远不发事件，
+  // 手机上完全不可见。扫 ~/.claude/projects/*/*.jsonl 找 30 分钟内活跃、
+  // 不归 relay 管（托管 relay_session_id / 一次性子会话）、也非已注册 ext 的 transcript，
+  // 收养为只读外部会话——无 pid 不能注入，但列表可见 + transcript 文本照常轮询桥接；
+  // 该 CLI 重启后 hook 生效即获得完整功能
+  adoptOrphans() {
+    try {
+      const root = process.env.CCR_PROJECTS_ROOT ?? path3.join(homedir2(), ".claude", "projects");
+      const cutoff = Date.now() - 30 * 6e4;
+      for (const dir of readdirSync2(root, { withFileTypes: true })) {
+        if (!dir.isDirectory()) continue;
+        let files;
+        try {
+          files = readdirSync2(path3.join(root, dir.name));
+        } catch {
+          continue;
+        }
+        for (const f of files) {
+          if (!f.endsWith(".jsonl")) continue;
+          const sid = f.slice(0, -6);
+          if (!/^[0-9a-f-]{8,64}$/i.test(sid)) continue;
+          if (this.mgr.ownsCliSession(sid)) continue;
+          const id2 = "ext-" + sid;
+          const p = path3.join(root, dir.name, f);
+          if (this.mgr.getExternal(id2)) {
+            if (!this.transcriptPaths.has(id2)) {
+              this.transcriptPaths.set(id2, p);
+              this.ensureQueuePoll();
+            }
+            continue;
+          }
+          if (this.mgr.isDeletedExt(id2)) continue;
+          let mtime;
+          try {
+            mtime = statSync3(p).mtimeMs;
+          } catch {
+            continue;
+          }
+          if (mtime < cutoff) continue;
+          if (mtime > Date.now() - 15e3) continue;
+          const cwd = this.readCwdFromTail(p);
+          if (!cwd) continue;
+          this.mgr.ensureExternal(id2, cwd, "", sid);
+          this.transcriptPaths.set(id2, p);
+          this.mgr.setExternalStatus(id2, "DONE", "\u626B\u63CF\u63A5\u5165\uFF08\u53EA\u8BFB\uFF09");
+          this.mgr.pushExternalLog(
+            id2,
+            "system",
+            "\u5B64\u513F\u626B\u63CF\u63A5\u5165\uFF1A\u8BE5 CLI \u542F\u52A8\u65E9\u4E8E\u63D2\u4EF6\u6216\u672A\u52A0\u8F7D hook\uFF0C\u4E8B\u4EF6\u65E0\u6CD5\u4E0A\u62A5\uFF1B\u5F53\u524D\u53EA\u8BFB\u53EF\u89C1\uFF0C\u91CD\u542F\u8BE5 CLI \u540E\u83B7\u5F97\u5B8C\u6574\u529F\u80FD"
+          );
+          this.ensureQueuePoll();
+          console.log(`[orphan-adopt] ${id2} cwd=${cwd}`);
+        }
+      }
+    } catch {
+    }
+  }
+  // 从 transcript 尾部抓 cwd（CC 每条记录都带 cwd）：只读末 8KB，避免大文件全量 IO；
+  // 首行可能是被截断的半行，JSON.parse 失败自然跳过
+  readCwdFromTail(p) {
+    let fd2;
+    try {
+      fd2 = openSync2(p, "r");
+      const size = statSync3(p).size;
+      const len = Math.min(size, 8192);
+      const buf = Buffer.alloc(len);
+      readSync2(fd2, buf, 0, len, size - len);
+      const lines = buf.toString("utf-8").split("\n").reverse();
+      for (const line of lines) {
+        const i = line.indexOf("{");
+        if (i < 0) continue;
+        try {
+          const j2 = JSON.parse(line.slice(i));
+          if (typeof j2.cwd === "string" && j2.cwd) return j2.cwd;
+        } catch {
+        }
+      }
+      return "";
+    } catch {
+      return "";
+    } finally {
+      if (fd2 !== void 0) closeSync2(fd2);
+    }
+  }
   // Relay 重启后内存里的 cli_pid 丢了，而空闲终端不会有新 hook 事件来恢复；
   // 从 hook 侧缓存文件补回（key=CLI session_id，CLI 存活期不变）
   hydratePidsFromCache() {
     try {
-      const cache = JSON.parse(readFileSync5(this.pidCacheFile, "utf-8"));
+      const cache = JSON.parse(readFileSync6(this.pidCacheFile, "utf-8"));
       for (const s of this.mgr.snapshot()) {
         if (!s.external || s.cli_pid) continue;
         const pid = cache[s.relay_session_id || s.session_id.slice(4)];
@@ -38486,7 +38638,12 @@ var Bridge = class _Bridge {
   ensureQueuePoll() {
     if (this.queuePollTimer) return;
     this.queuePollTimer = setInterval(() => {
-      if (this.transcriptPaths.size > 60) this.transcriptPaths.clear();
+      if (this.transcriptPaths.size > 60) {
+        for (const id2 of [...this.transcriptPaths.keys()]) {
+          if (!this.mgr.getExternal(id2)) this.transcriptPaths.delete(id2);
+        }
+        if (this.transcriptPaths.size > 120) this.transcriptPaths.clear();
+      }
       for (const [id2, p] of this.transcriptPaths) this.pushAssistantTexts(id2, p);
       this.sweepSubagents();
       this.sweepStuckInputs();
@@ -38775,9 +38932,9 @@ var Bridge = class _Bridge {
   // hook 侧 pid 缓存（relay 会话 id = "ext-" + CLI session_id）
   clearPidCache(sessionId) {
     try {
-      const raw = JSON.parse(readFileSync5(this.pidCacheFile, "utf-8"));
+      const raw = JSON.parse(readFileSync6(this.pidCacheFile, "utf-8"));
       delete raw[sessionId.slice(4)];
-      writeFileSync4(this.pidCacheFile, JSON.stringify(raw));
+      writeFileSync5(this.pidCacheFile, JSON.stringify(raw));
     } catch {
     }
   }
@@ -38827,7 +38984,7 @@ var Bridge = class _Bridge {
       for (const f of readdirSync2(dir)) {
         if (!f.endsWith(".json")) continue;
         try {
-          const d2 = JSON.parse(readFileSync5(path3.join(dir, f), "utf-8"));
+          const d2 = JSON.parse(readFileSync6(path3.join(dir, f), "utf-8"));
           if (d2.sessionId === cliSessionId) return d2.name?.trim() || null;
         } catch {
         }
@@ -39122,7 +39279,7 @@ var Bridge = class _Bridge {
     for (const f of files) {
       try {
         const fp2 = path3.join(dir, f);
-        const t = JSON.parse(readFileSync5(fp2, "utf-8"));
+        const t = JSON.parse(readFileSync6(fp2, "utf-8"));
         const subject = typeof t.subject === "string" ? t.subject.trim() : "";
         if (!subject) continue;
         const status = t.status === "in_progress" || t.status === "completed" ? t.status : "pending";
@@ -39502,9 +39659,9 @@ var COMMAND_TYPES = /* @__PURE__ */ new Set([
 var HEARTBEAT_MS = 3e4;
 function startServer(bus2, mgr2, cfg2, opts = {}) {
   const webRoot = process.env.CCR_WEB_ROOT ?? ("1" ? fileURLToPath3(new URL("../", import.meta.url)) : fileURLToPath3(new URL("../../", import.meta.url)));
-  const consoleHtml = join6(webRoot, "web-console", "index.html");
-  const naclJs = join6(webRoot, "web-console", "nacl.js");
-  const mobileDir = join6(webRoot, "mobile") + sep5;
+  const consoleHtml = join7(webRoot, "web-console", "index.html");
+  const naclJs = join7(webRoot, "web-console", "nacl.js");
+  const mobileDir = join7(webRoot, "mobile") + sep5;
   const MIME = {
     ".html": "text/html; charset=utf-8",
     ".js": "text/javascript; charset=utf-8",
@@ -39526,7 +39683,7 @@ function startServer(bus2, mgr2, cfg2, opts = {}) {
       return true;
     }
     const ext = rel.slice(rel.lastIndexOf("."));
-    res.writeHead(200, { "content-type": MIME[ext] ?? "application/octet-stream" }).end(readFileSync6(file));
+    res.writeHead(200, { "content-type": MIME[ext] ?? "application/octet-stream" }).end(readFileSync7(file));
     return true;
   };
   const wss = new import_websocket_server.default({ noServer: true });
@@ -39554,7 +39711,7 @@ function startServer(bus2, mgr2, cfg2, opts = {}) {
         res.writeHead(503).end("web-console/index.html \u4E0D\u5B58\u5728\uFF08\u6B65\u9AA4 6 \u751F\u6210\uFF09");
         return;
       }
-      const html = readFileSync6(consoleHtml);
+      const html = readFileSync7(consoleHtml);
       res.writeHead(200, { "content-type": "text/html; charset=utf-8" }).end(html);
       return;
     }
@@ -39563,7 +39720,7 @@ function startServer(bus2, mgr2, cfg2, opts = {}) {
         res.writeHead(503).end("web-console/nacl.js \u4E0D\u5B58\u5728\uFF08cp node_modules/tweetnacl/nacl-fast.min.js\uFF09");
         return;
       }
-      res.writeHead(200, { "content-type": "text/javascript; charset=utf-8" }).end(readFileSync6(naclJs));
+      res.writeHead(200, { "content-type": "text/javascript; charset=utf-8" }).end(readFileSync7(naclJs));
       return;
     }
     if (req.method === "GET" && url.pathname === "/health") {
@@ -39728,23 +39885,23 @@ async function handleBridgeHook(req, res, bridge, cfg2) {
 var connectionCounter = 0;
 
 // src/cloud-identity.ts
-import { existsSync as existsSync6, readFileSync as readFileSync7, writeFileSync as writeFileSync5 } from "node:fs";
-import { join as join7 } from "node:path";
+import { existsSync as existsSync6, readFileSync as readFileSync8, writeFileSync as writeFileSync6 } from "node:fs";
+import { join as join8 } from "node:path";
 function loadOrCreateIdentity(dataDir2) {
-  const kpPath = join7(dataDir2, "cloud-keypair.json");
+  const kpPath = join8(dataDir2, "cloud-keypair.json");
   let keypair;
   if (existsSync6(kpPath)) {
-    keypair = JSON.parse(readFileSync7(kpPath, "utf-8"));
+    keypair = JSON.parse(readFileSync8(kpPath, "utf-8"));
     if (!keypair.publicKey || !keypair.secretKey) throw new Error("cloud-keypair.json \u635F\u574F\uFF0C\u8BF7\u5220\u9664\u540E\u91CD\u542F\u91CD\u65B0\u751F\u6210\uFF08\u5DF2\u914D\u5BF9\u624B\u673A\u9700\u91CD\u65B0\u914D\u5BF9\uFF09");
   } else {
     keypair = generateKeyPair();
-    writeFileSync5(kpPath, JSON.stringify(keypair), "utf-8");
+    writeFileSync6(kpPath, JSON.stringify(keypair), "utf-8");
   }
-  const peersPath = join7(dataDir2, "cloud-peers.json");
+  const peersPath = join8(dataDir2, "cloud-peers.json");
   const peers = /* @__PURE__ */ new Map();
   if (existsSync6(peersPath)) {
     try {
-      const raw = JSON.parse(readFileSync7(peersPath, "utf-8"));
+      const raw = JSON.parse(readFileSync8(peersPath, "utf-8"));
       for (const [dev, entry] of Object.entries(raw)) peers.set(dev, entry);
     } catch {
     }
@@ -39758,7 +39915,7 @@ function loadOrCreateIdentity(dataDir2) {
       peers.set(dev, entry);
       const obj = {};
       for (const [k3, v] of peers) obj[k3] = v;
-      writeFileSync5(peersPath, JSON.stringify(obj, null, 2), "utf-8");
+      writeFileSync6(peersPath, JSON.stringify(obj, null, 2), "utf-8");
     }
   };
 }
@@ -40053,14 +40210,14 @@ if (cliArgs.has("--daemon")) {
     process.exit(1);
   }
   const rest = process.argv.slice(2).filter((a) => a !== "--daemon");
-  const logFd = openSync3(join8(cfg.dataDir, "relay.log"), "a");
+  const logFd = openSync3(join9(cfg.dataDir, "relay.log"), "a");
   const child = spawn3(process.execPath, [fileURLToPath4(import.meta.url), ...rest], {
     detached: true,
     stdio: ["ignore", logFd, logFd],
     env: { ...process.env, CC_DECK_DAEMON: "1" }
   });
   child.unref();
-  console.log(`CC Deck Relay \u5DF2\u8F6C\u540E\u53F0\u8FD0\u884C\uFF08\u65E5\u5FD7: ${join8(cfg.dataDir, "relay.log")}\uFF09`);
+  console.log(`CC Deck Relay \u5DF2\u8F6C\u540E\u53F0\u8FD0\u884C\uFF08\u65E5\u5FD7: ${join9(cfg.dataDir, "relay.log")}\uFF09`);
   process.exit(0);
 }
 function pidIsNode(pid) {
@@ -40072,15 +40229,15 @@ function pidIsNode(pid) {
       });
       return /node/i.test(out);
     }
-    return readFileSync8(`/proc/${pid}/comm`, "utf-8").includes("node");
+    return readFileSync9(`/proc/${pid}/comm`, "utf-8").includes("node");
   } catch {
     return false;
   }
 }
 if (cliArgs.has("--stop")) {
-  const pidFile = join8(cfg.dataDir, "relay.pid");
+  const pidFile = join9(cfg.dataDir, "relay.pid");
   try {
-    const pid = Number(readFileSync8(pidFile, "utf-8").trim());
+    const pid = Number(readFileSync9(pidFile, "utf-8").trim());
     if (pid > 0 && pidIsNode(pid)) {
       process.kill(pid);
       console.log(`CC Deck Relay \u5DF2\u505C\u6B62\uFF08pid ${pid}\uFF09`);
@@ -40096,7 +40253,7 @@ if (cliArgs.has("--stop")) {
   }
   process.exit(0);
 }
-var persistPath = join8(cfg.dataDir, "events.ndjson");
+var persistPath = join9(cfg.dataDir, "events.ndjson");
 var prior = loadEvents(persistPath);
 var kept = compactEvents(prior);
 if (prior.length !== kept.length) rewriteFile(persistPath, kept);
@@ -40133,16 +40290,16 @@ startServer(bus, mgr, cfg, {
   // daemon 子进程 listen 成功后自写 pid（父进程不预写，端口被占时不留死 pid）
   onReady: () => {
     if (process.env.CC_DECK_DAEMON === "1") {
-      writeFileSync6(join8(cfg.dataDir, "relay.pid"), String(process.pid), "utf-8");
+      writeFileSync7(join9(cfg.dataDir, "relay.pid"), String(process.pid), "utf-8");
     }
   }
 });
-writeFileSync6(join8(cfg.dataDir, "bridge.json"), JSON.stringify({ port: cfg.port, token: cfg.bridgeToken }), "utf-8");
+writeFileSync7(join9(cfg.dataDir, "bridge.json"), JSON.stringify({ port: cfg.port, token: cfg.bridgeToken }), "utf-8");
 console.log("CC Deck Relay \u5DF2\u542F\u52A8");
 console.log(`  \u6A21\u578B:   ${cfg.model}`);
 console.log(`  \u7AEF\u53E3:   ${cfg.port}`);
 console.log(`  \u5386\u53F2:   ${persistPath}\uFF08\u6062\u590D ${adopted} \u4E2A\u4F1A\u8BDD\uFF09`);
-console.log(`  \u6865\u63A5:   ${join8(cfg.dataDir, "bridge.json")}\uFF08\u5916\u90E8 CLI \u4F1A\u8BDD\u7ECF hooks \u63A5\u5165\uFF09`);
+console.log(`  \u6865\u63A5:   ${join9(cfg.dataDir, "bridge.json")}\uFF08\u5916\u90E8 CLI \u4F1A\u8BDD\u7ECF hooks \u63A5\u5165\uFF09`);
 console.log(
   cloudIdentity ? `  \u4E91\u6865:   ${cfg.cloudUrls.join(" + ")}\uFF08dev=${cloudIdentity.relayDev}\uFF0C\u5DF2\u914D\u5BF9 ${cloudIdentity.peers.size} \u53F0\u8BBE\u5907${cfg.cloudToken ? "" : "\uFF1B\u672A\u8BBE CCR_CLOUD_TOKEN\uFF0C\u4EC5\u53EF\u914D\u5BF9\u4E0D\u53EF\u8FDE\u6865"}\uFF09` : `  \u4E91\u6865:   \u672A\u542F\u7528\uFF08\u672A\u8BBE\u7F6E CCR_CLOUD_URL\uFF09`
 );

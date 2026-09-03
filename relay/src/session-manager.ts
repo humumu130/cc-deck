@@ -1,5 +1,5 @@
-import { statSync } from "node:fs";
-import { resolve } from "node:path";
+import { readFileSync, statSync, writeFileSync } from "node:fs";
+import { join, resolve } from "node:path";
 import { devId } from "./e2e.js";
 import type { EventBus } from "./event-bus.js";
 import { AgentSession } from "./agent-adapter.js";
@@ -43,6 +43,48 @@ function sanitizeImages(raw: unknown): string[] | undefined {
   return list.length > 0 ? list.slice(0, 4) : undefined;
 }
 
+// relay 自拉的一次性 SDK 子会话记录（标题生成等），持久化到 <dataDir>/child-sessions.json；
+// 孤儿扫描（bridge.adoptOrphans）必须跳过这些 CLI session_id，否则被误收养成垃圾外部会话
+const CHILD_SESSIONS_CAP = 200;
+
+function readChildSessions(dataDir: string): string[] {
+  try {
+    const raw = JSON.parse(readFileSync(join(dataDir, "child-sessions.json"), "utf-8")) as unknown;
+    return Array.isArray(raw) ? raw.filter((x): x is string => typeof x === "string") : [];
+  } catch {
+    return [];
+  }
+}
+
+function appendChildSession(dataDir: string, sid: string): void {
+  const list = readChildSessions(dataDir);
+  if (list.includes(sid)) return;
+  list.push(sid);
+  try {
+    writeFileSync(join(dataDir, "child-sessions.json"), JSON.stringify(list.slice(-CHILD_SESSIONS_CAP)));
+  } catch {}
+}
+
+// 手机端删除过的外部会话 id：孤儿扫描的墓碑。没有它，transcript 还新鲜（30 分钟内）
+// 的已删会话会在下一轮扫描被重新收养，删除永远不生效
+function readDeletedExts(dataDir: string): string[] {
+  try {
+    const raw = JSON.parse(readFileSync(join(dataDir, "deleted-ext.json"), "utf-8")) as unknown;
+    return Array.isArray(raw) ? raw.filter((x): x is string => typeof x === "string") : [];
+  } catch {
+    return [];
+  }
+}
+
+function appendDeletedExt(dataDir: string, id: string): void {
+  const list = readDeletedExts(dataDir);
+  if (list.includes(id)) return;
+  list.push(id);
+  try {
+    writeFileSync(join(dataDir, "deleted-ext.json"), JSON.stringify(list.slice(-300)));
+  } catch {}
+}
+
 interface ManagedSession {
   agent: AgentSession | null;   // null = Relay 重启遗留的历史会话，不可操作
   state: SessionState;
@@ -58,13 +100,30 @@ export class SessionManager {
   private sessions = new Map<string, ManagedSession>();
   private processedCommands = new Map<string, true>();
   private titleRequested = new Set<string>();   // 已请求过自动命名的会话
+  // relay 自拉的一次性 SDK 子会话（标题生成）的 CLI session_id：
+  // 无 hook 但 transcript 活跃，孤儿扫描必须排除，否则被误收养成垃圾外部会话
+  private childSdkIds: Set<string>;
+  private deletedExtIds: Set<string>;
 
   constructor(
     private bus: EventBus,
     private cfg: RelayConfig,
   ) {
+    this.childSdkIds = new Set(readChildSessions(cfg.dataDir));
+    this.deletedExtIds = new Set(readDeletedExts(cfg.dataDir));
     const t = setInterval(() => this.heartbeat(), HEARTBEAT_INTERVAL_MS);
     t.unref();
+  }
+
+  // 该 CLI session_id 是否归 relay 自己管（托管会话的 relay_session_id / 一次性子会话）
+  ownsCliSession(cliSid: string): boolean {
+    if (this.childSdkIds.has(cliSid)) return true;
+    for (const s of this.sessions.values()) if (s.state.relay_session_id === cliSid) return true;
+    return false;
+  }
+
+  isDeletedExt(id: string): boolean {
+    return this.deletedExtIds.has(id);
   }
 
   snapshot(): SessionState[] {
@@ -77,7 +136,11 @@ export class SessionManager {
     if (process.env.CCR_NO_TITLE_GEN === "1") return;
     if (this.titleRequested.has(sessionId)) return;
     this.titleRequested.add(sessionId);
-    void generateTitle(task, this.cfg.model).then((t) => {
+    void generateTitle(task, this.cfg.model, (sid) => {
+      // 子会话 id 一到手就登记（不等 result：超时丢 sid 会让孤儿扫描误收养它）
+      this.childSdkIds.add(sid);
+      appendChildSession(this.cfg.dataDir, sid);
+    }).then(({ title: t }) => {
       if (!t) return;
       const s = this.sessions.get(sessionId);
       if (!s || s.state.title === t || s.state.title_locked) return;
@@ -547,6 +610,10 @@ export class SessionManager {
             return { command_id: cmd.command_id, ok: false, error: "会话运行中，不能删除" };
           }
           this.sessions.delete(cmd.payload.session_id);
+          if (s.state.external) {
+            this.deletedExtIds.add(cmd.payload.session_id);
+            appendDeletedExt(this.cfg.dataDir, cmd.payload.session_id);
+          }
           this.bus.emit(cmd.payload.session_id, "SESSION_DELETED", { session_id: cmd.payload.session_id });
           return { command_id: cmd.command_id, ok: true };
         }

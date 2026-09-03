@@ -107,8 +107,12 @@ export class Bridge {
     this.subagentRunTtlMs = Number(process.env.CCR_SUBAGENT_RUN_TTL_MS) > 0 ? Number(process.env.CCR_SUBAGENT_RUN_TTL_MS) : 30 * 60_000;
     this.hydratePidsFromCache();
     this.healExternal();
-    // 自愈扫描：60s 一轮，也兜住运行期间任何来源的误标（不止重启重放）
-    this.healTimer = setInterval(() => this.healExternal(), 60_000);
+    this.adoptOrphans();
+    // 自愈 + 孤儿扫描：60s 一轮，也兜住运行期间任何来源的误标（不止重启重放）
+    this.healTimer = setInterval(() => {
+      this.healExternal();
+      this.adoptOrphans();
+    }, 60_000);
     this.healTimer.unref?.();
   }
 
@@ -124,6 +128,95 @@ export class Bridge {
       if (st?.historical) st.historical = false; // 恢复可操作（ensureExternal 的 adopt 路径同款语义）
       this.mgr.setExternalStatus(s.session_id, "WORKING", "自愈：CLI 进程仍在运行");
       this.mgr.pushExternalLog(s.session_id, "system", "检测到误标错误（CLI 进程仍在运行），已自动恢复为运行中");
+    }
+  }
+
+  // 孤儿扫描：CLI 早于插件安装/启动（或 hook 未注册）的外部会话永远不发事件，
+  // 手机上完全不可见。扫 ~/.claude/projects/*/*.jsonl 找 30 分钟内活跃、
+  // 不归 relay 管（托管 relay_session_id / 一次性子会话）、也非已注册 ext 的 transcript，
+  // 收养为只读外部会话——无 pid 不能注入，但列表可见 + transcript 文本照常轮询桥接；
+  // 该 CLI 重启后 hook 生效即获得完整功能
+  private adoptOrphans(): void {
+    try {
+      const root =
+        process.env.CCR_PROJECTS_ROOT ?? path.join(homedir(), ".claude", "projects");
+      const cutoff = Date.now() - 30 * 60_000;
+      for (const dir of readdirSync(root, { withFileTypes: true })) {
+        if (!dir.isDirectory()) continue;
+        let files: string[];
+        try {
+          files = readdirSync(path.join(root, dir.name));
+        } catch {
+          continue;
+        }
+        for (const f of files) {
+          if (!f.endsWith(".jsonl")) continue;
+          const sid = f.slice(0, -6);
+          if (!/^[0-9a-f-]{8,64}$/i.test(sid)) continue;
+          if (this.mgr.ownsCliSession(sid)) continue;
+          const id = "ext-" + sid;
+          const p = path.join(root, dir.name, f);
+          if (this.mgr.getExternal(id)) {
+            // 已注册：relay 重启后 transcriptPaths 是纯内存的会丢，孤儿（无 hook 补挂）
+            // 必须在这里补回，否则重启后只读文本桥接永久失效
+            if (!this.transcriptPaths.has(id)) {
+              this.transcriptPaths.set(id, p);
+              this.ensureQueuePoll();
+            }
+            continue;
+          }
+          if (this.mgr.isDeletedExt(id)) continue; // 手机删过的：墓碑拦截，防复活
+          let mtime: number;
+          try {
+            mtime = statSync(p).mtimeMs;
+          } catch {
+            continue;
+          }
+          if (mtime < cutoff) continue;
+          // 太新鲜的也跳过：title-gen 子会话从 transcript 落盘到 onSid 登记有 ~1s 窗口，
+          // 这里的文件下一轮（60s 后）仍会被扫到，不损失发现速度
+          if (mtime > Date.now() - 15_000) continue;
+          const cwd = this.readCwdFromTail(p);
+          if (!cwd) continue;
+          this.mgr.ensureExternal(id, cwd, "", sid);
+          this.transcriptPaths.set(id, p);
+          this.mgr.setExternalStatus(id, "DONE", "扫描接入（只读）");
+          this.mgr.pushExternalLog(
+            id,
+            "system",
+            "孤儿扫描接入：该 CLI 启动早于插件或未加载 hook，事件无法上报；当前只读可见，重启该 CLI 后获得完整功能",
+          );
+          this.ensureQueuePoll();
+          console.log(`[orphan-adopt] ${id} cwd=${cwd}`);
+        }
+      }
+    } catch {}
+  }
+
+  // 从 transcript 尾部抓 cwd（CC 每条记录都带 cwd）：只读末 8KB，避免大文件全量 IO；
+  // 首行可能是被截断的半行，JSON.parse 失败自然跳过
+  private readCwdFromTail(p: string): string {
+    let fd: number | undefined;
+    try {
+      fd = openSync(p, "r");
+      const size = statSync(p).size;
+      const len = Math.min(size, 8192);
+      const buf = Buffer.alloc(len);
+      readSync(fd, buf, 0, len, size - len);
+      const lines = buf.toString("utf-8").split("\n").reverse();
+      for (const line of lines) {
+        const i = line.indexOf("{");
+        if (i < 0) continue;
+        try {
+          const j = JSON.parse(line.slice(i)) as { cwd?: unknown };
+          if (typeof j.cwd === "string" && j.cwd) return j.cwd;
+        } catch {}
+      }
+      return "";
+    } catch {
+      return "";
+    } finally {
+      if (fd !== undefined) closeSync(fd);
     }
   }
 
@@ -191,7 +284,13 @@ export class Bridge {
   private ensureQueuePoll(): void {
     if (this.queuePollTimer) return;
     this.queuePollTimer = setInterval(() => {
-      if (this.transcriptPaths.size > 60) this.transcriptPaths.clear();
+      if (this.transcriptPaths.size > 60) {
+        // 只清已不存在的会话；全清会误伤长工具调用期间（无新 hook 事件）的活会话
+        for (const id of [...this.transcriptPaths.keys()]) {
+          if (!this.mgr.getExternal(id)) this.transcriptPaths.delete(id);
+        }
+        if (this.transcriptPaths.size > 120) this.transcriptPaths.clear(); // 兜底硬上限
+      }
       for (const [id, p] of this.transcriptPaths) this.pushAssistantTexts(id, p);
       this.sweepSubagents();
       this.sweepStuckInputs();
