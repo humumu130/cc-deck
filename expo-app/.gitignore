@@ -10,3 +10,10 @@ android/local.properties
 android/build/
 modules/*/android/build/
 modules/*/android/.gradle/
+
+# wrangler files
+.wrangler
+.dev.vars*
+!.dev.vars.example
+.env*
+!.env.example
