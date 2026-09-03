@@ -7,7 +7,7 @@
     {
       "name": "cc-deck",
       "source": "./plugins/cc-deck",
-      "version": "0.2.35",
+      "version": "0.2.36",
       "description": "CC Deck：手机/手表/网页远程操控 Claude Code（启动 relay + 二维码装机 + hooks 自动接入）"
     }
   ]

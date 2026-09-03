@@ -41,7 +41,7 @@
 - 若 `~/.claude/settings.json` 中存在旧版 `bridge-hook.mjs` 手动 hooks（`relay/scripts/install-hooks.mjs` 安装），会与本插件重复上报，建议删除旧条目。
 - 远程权限审批依赖手机在线；手机不在线时 CLI 走本地正常权限流程。
 - LAN 直连未启用 TLS，token 会出现在 URL 中——仅限可信局域网使用；跨公网场景请走云桥（E2E 加密）。
-- 云桥（外出场景经公网中继）需在 relay 侧配置 `CCR_CLOUD_URL`，详见主仓库 README。
+- 云桥（外出场景经公网中继）默认连 CC Deck 公共桥，开箱即用；自建/禁用用 `CCR_CLOUD_URL` 覆盖，详见主仓库 README。
 
 ## 从源码构建
 

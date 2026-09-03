@@ -52,7 +52,8 @@ LAN 不可达时手机经云桥中继连接 PC Relay，双方都只发起出站�
   `COMMAND_PAIR_START` → Relay 记 `data/cloud-peers.json` → ACK 回云桥参数落手机
 - **双形态**：`cloud-bridge/`（Node + ws，Docker 就绪）与 `cloudflare/`（Worker +
   Durable Object）共享同一纯函数路由核心 `router.ts`；本机各起 8790/8791 均已验证
-- **启动**：Relay 侧设 `CCR_CLOUD_URL` + `CCR_CLOUD_TOKEN` 即启用出站云客户端；
+- **启动**：默认连 CC Deck 公共桥（`wss://cc.humumu.online/cloud`，开箱即用）；
+  自建桥用 `CCR_CLOUD_URL` + `CCR_CLOUD_TOKEN` 覆盖，`CCR_CLOUD_URL=""` 可完全禁用；
   未配对的手机设备帧直接丢弃
 
 ### 环境变量
@@ -60,14 +61,14 @@ LAN 不可达时手机经云桥中继连接 PC Relay，双方都只发起出站�
 | 变量 | 默认 | 说明 |
 |---|---|---|
 | `CCR_PORT` | `8787` | 监听端口 |
-| `CCR_TOKEN` | 随机生成并打印 | 鉴权 token（重启不变需显式设置） |
+| `CCR_TOKEN` | `data/token` 文件（首启生成，持久化） | 鉴权 token（设环境变量可覆盖；扫码/二维码里携带） |
 | `CCR_CWD` | relay 目录 | 新建会话缺省工作目录 |
 | `CCR_MODEL` | `ANTHROPIC_DEFAULT_SONNET_MODEL` | 会话模型（必须显式传给 SDK，否则 CLI 会拼 `[1m]` 后缀） |
 | `CCR_DEBUG` | - | 打印 CLI stderr 与 tool_use_result 原始结构 |
 | `CCR_GATE_TOOLS` | `Bash,Edit,Write,NotebookEdit,WebFetch,WebSearch` | 外部会话远程审批门控的工具名（逗号分隔） |
 | `CCR_BRIDGE_TOKEN` | `relay/data/bridge-token` | hooks 桥接令牌（默认首启生成后固定） |
-| `CCR_CLOUD_URL` | -（禁用） | 云桥地址如 `ws://host:8790/cloud`，设置后启用云客户端 |
-| `CCR_CLOUD_TOKEN` | - | 云桥层连接 token |
+| `CCR_CLOUD_URL` | `wss://cc.humumu.online/cloud` | 云桥地址（逗号分隔多桥并行，首地址为主桥；空串禁用云桥） |
+| `CCR_CLOUD_TOKEN` | `ccdeck-public-9f3k2m7v` | 云桥层连接 token（公共桥公开 token，自建桥换自己的） |
 
 ### 调试台功能
 

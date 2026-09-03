@@ -56,9 +56,17 @@ export function loadConfig(): RelayConfig {
   }
 
   // 多桥并行：逗号分隔多个地址（如 CF wss + ECS ws），每桥一个 CloudClient 实例；
-  // 首地址为主桥（PAIR_ACK 下发给新配对手机的地址）
-  const cloudUrls = (process.env.CCR_CLOUD_URL ?? "").split(",").map((s) => s.trim()).filter(Boolean);
-  const cloudToken = process.env.CCR_CLOUD_TOKEN ?? "";
+  // 首地址为主桥（PAIR_ACK 下发给新配对手机的地址）。
+  // 开箱即用：未配置时默认连 CC Deck 公共桥（公开 token + 限流防滥用；桥只见 E2E 密文，
+  // 设备间按公钥派生 dev id 路由、互不可见）。自建桥后用 CCR_CLOUD_URL/CCR_CLOUD_TOKEN 覆盖；
+  // CCR_CLOUD_URL 设为空串可完全禁用云桥
+  const DEFAULT_CLOUD_URL = "wss://cc.humumu.online/cloud";
+  const DEFAULT_CLOUD_TOKEN = "ccdeck-public-9f3k2m7v";
+  const cloudUrls = (process.env.CCR_CLOUD_URL ?? DEFAULT_CLOUD_URL)
+    .split(",")
+    .map((s) => s.trim())
+    .filter(Boolean);
+  const cloudToken = process.env.CCR_CLOUD_TOKEN ?? DEFAULT_CLOUD_TOKEN;
 
   return {
     port, token, tokenGenerated: !envToken, defaultCwd, model, bridgeToken, dataDir,
