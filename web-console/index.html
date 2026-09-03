@@ -204,6 +204,21 @@
   .entry.tool_use .txt { color: #67C8E8; }
   .entry.tool_result .txt { color: #93A0B8; }
   .entry.system .txt { color: var(--waiting); }
+  /* 轻量 Markdown（assistant_text/thinking，与手机端 md.tsx 同构） */
+  .entry .txt.md { white-space: normal; }
+  .md-p { white-space: pre-wrap; margin: 2px 0; }
+  .md-h1, .md-h2, .md-h3, .md-h4 { font-weight: 700; margin: 6px 0 2px; }
+  .md-h1 { font-size: 15px; } .md-h2 { font-size: 14px; } .md-h3 { font-size: 13px; } .md-h4 { font-size: 12.5px; }
+  .txt.md code { background: rgba(148,163,190,.14); border-radius: 3px; padding: 0 4px; }
+  .md-code { background: rgba(148,163,190,.08); border: 1px solid var(--border); border-radius: 6px; padding: 8px 10px; margin: 4px 0; overflow-x: auto; white-space: pre; font-size: 12px; }
+  .md-li { margin: 2px 0; white-space: pre-wrap; }
+  .md-bul { color: var(--faint); }
+  .md-quote { border-left: 3px solid var(--brand); padding: 2px 10px; color: var(--faint); margin: 4px 0; }
+  .md-hr { border-top: 1px solid var(--border); margin: 6px 0; }
+  .md-table-wrap { overflow-x: auto; margin: 6px 0; max-width: 100%; }
+  table.md-table { border-collapse: collapse; font-size: 12px; }
+  .md-table th, .md-table td { border: 1px solid var(--border); padding: 4px 8px; text-align: left; vertical-align: top; word-break: break-word; max-width: 340px; white-space: normal; }
+  .md-table th { background: rgba(148,163,190,.12); font-weight: 600; }
 
   .stats-card { border: 1px solid var(--border); border-radius: 14px; overflow: hidden; margin-top: 8px; }
   .stats-row { display: flex; justify-content: space-between; gap: 16px; padding: 10px 16px; border-bottom: 1px solid rgba(27,39,57,.5); font-size: 13px; }
@@ -800,10 +815,7 @@ function renderDetail() {
     tl.dataset.count = renderKey;
     tl.innerHTML = list.length === 0
       ? '<div style="color:var(--faint);padding:20px 4px;font-family:inherit">（暂无内容）</div>'
-      : list.map((e) =>
-          '<div class="entry ' + e.kind + '"><span class="time">' +
-          new Date(e.ts).toLocaleTimeString("zh-CN", { hour12: false }) +
-          "</span><span class='txt'>" + escapeHtml(e.text) + "</span></div>").join("");
+      : list.map(entryHtml).join("");
     if (nearBottom || list.length <= 5) tl.scrollTop = tl.scrollHeight;
   }
 }
@@ -827,6 +839,82 @@ function statsTabHtml(s) {
 function escapeHtml(s) {
   return String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 }
+
+// ---------- 轻量 Markdown（移植自 expo-app/src/md.tsx：GFM 表格/码块/列表/引用等） ----------
+const MD_DELIM_RE = /^\s*\|?\s*:?-+:?\s*(\|\s*:?-+:?\s*)*\|?\s*$/;
+const mdSplitRow = (l) => l.trim().replace(/^\|/, "").replace(/\|$/, "").split("|").map((c) => c.trim());
+function mdBlocks(src) {
+  const out = [];
+  const lines = String(src).split(/\r?\n/);
+  let para = [], inCode = false, code = [], tableBuf = [];
+  const flush = () => { if (para.length) { out.push({ t: "p", text: para.join("\n") }); para = []; } };
+  const flushTable = () => {
+    if (!tableBuf.length) return;
+    if (tableBuf.length >= 2 && MD_DELIM_RE.test(tableBuf[1])) {
+      out.push({ t: "table", head: mdSplitRow(tableBuf[0]), rows: tableBuf.slice(2).map(mdSplitRow) });
+    } else out.push({ t: "p", text: tableBuf.join("\n") });
+    tableBuf = [];
+  };
+  for (const raw of lines) {
+    if (inCode) {
+      if (/^\s*```/.test(raw)) { out.push({ t: "code", text: code.join("\n") }); code = []; inCode = false; }
+      else code.push(raw);
+      continue;
+    }
+    if (/^\s*```/.test(raw)) { flush(); inCode = true; continue; }
+    if (/^\s*\|/.test(raw)) { flush(); tableBuf.push(raw); continue; }
+    flushTable();
+    const h = /^(#{1,4})\s+(.*)$/.exec(raw);
+    if (h) { flush(); out.push({ t: "h", level: h[1].length, text: h[2] }); continue; }
+    if (/^\s*([-*_]\s*){3,}$/.test(raw)) { flush(); out.push({ t: "hr" }); continue; }
+    const li = /^(\s*)([-*+]|\d+[.)])\s+(.*)$/.exec(raw);
+    if (li) { flush(); out.push({ t: "li", depth: Math.min(2, Math.floor(li[1].length / 2)), ord: /\d/.test(li[2]) ? li[2].replace(/[.)]/, "") : null, text: li[3] }); continue; }
+    const q = /^>\s?(.*)$/.exec(raw);
+    if (q) { flush(); out.push({ t: "quote", text: q[1] }); continue; }
+    if (!raw.trim()) flush();
+    else para.push(raw);
+  }
+  if (inCode && code.length) out.push({ t: "code", text: code.join("\n") }); // 截断码块兜底
+  flushTable();
+  flush();
+  return out;
+}
+const MD_INLINE_RE = /(\*\*[^*\n]+\*\*|__[^_\n]+__|\*[^*\n]+\*|_[^_\n]+_|`[^`\n]+`|\[[^\]\n]+\]\([^)\n]+\))/g;
+function mdInline(text) {
+  let out = "", last = 0;
+  for (const m of String(text).matchAll(MD_INLINE_RE)) {
+    const tok = m[0], i = m.index ?? 0;
+    out += escapeHtml(text.slice(last, i));
+    if (tok.startsWith("**") || tok.startsWith("__")) out += "<b>" + escapeHtml(tok.slice(2, -2)) + "</b>";
+    else if (tok.startsWith("`")) out += "<code>" + escapeHtml(tok.slice(1, -1)) + "</code>";
+    else if (tok.startsWith("[")) out += "<b>" + escapeHtml(/^\[([^\]]+)\]/.exec(tok)?.[1] ?? tok) + "</b>";
+    else out += "<i>" + escapeHtml(tok.slice(1, -1)) + "</i>";
+    last = i + tok.length;
+  }
+  return out + escapeHtml(text.slice(last));
+}
+function mdHtml(src) {
+  let html = "";
+  for (const b of mdBlocks(src)) {
+    if (b.t === "h") html += '<div class="md-h' + b.level + '">' + mdInline(b.text) + "</div>";
+    else if (b.t === "code") html += '<pre class="md-code">' + escapeHtml(b.text) + "</pre>";
+    else if (b.t === "li") html += '<div class="md-li" style="padding-left:' + (14 + b.depth * 14) + 'px"><span class="md-bul">' + (b.ord ? b.ord + "." : "•") + "</span> " + mdInline(b.text) + "</div>";
+    else if (b.t === "quote") html += '<div class="md-quote">' + mdInline(b.text) + "</div>";
+    else if (b.t === "table") html += '<div class="md-table-wrap"><table class="md-table"><thead><tr>' +
+      b.head.map((c) => "<th>" + mdInline(c) + "</th>").join("") + "</tr></thead><tbody>" +
+      b.rows.map((r) => "<tr>" + b.head.map((_, j) => "<td>" + mdInline(r[j] ?? "") + "</td>").join("") + "</tr>").join("") +
+      "</tbody></table></div>";
+    else if (b.t === "hr") html += '<div class="md-hr"></div>';
+    else html += '<div class="md-p">' + mdInline(b.text) + "</div>";
+  }
+  return html;
+}
+const entryHtml = (e) =>
+  '<div class="entry ' + e.kind + '"><span class="time">' +
+  new Date(e.ts).toLocaleTimeString("zh-CN", { hour12: false }) +
+  (e.kind === "assistant_text" || e.kind === "thinking"
+    ? '</span><div class="txt md">' + mdHtml(e.text) + "</div></div>"
+    : '</span><span class="txt">' + escapeHtml(e.text) + "</span></div>");
 
 // ---------- AskUserQuestion 选项作答 ----------
 let askState = null; // {rid, sel: [Set<label>...], free: [string...]}
