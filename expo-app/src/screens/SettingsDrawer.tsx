@@ -255,7 +255,7 @@ export default function SettingsDrawer({
             </Pressable>
           </View>
         </View>
-        <Text style={d.tipT}>过程消息 = 工具调用 / 结果 / 系统提示；紧凑小一号+淡化，隐藏则整行不显示（思考内容保留）。简洁列表 = 会话卡只留状态与名称，一屏显示更多。</Text>
+        <Text style={d.tipT}>过程消息 = 工具调用 / 结果 / 系统提示；紧凑小一号+淡化，隐藏则整行不显示（思考内容保留）。简洁列表 = 会话卡只留状态、耗时与名称，一屏显示更多。</Text>
         </ScrollView>
       </Animated.View>
     </View>

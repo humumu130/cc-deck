@@ -53,13 +53,15 @@ function Shell() {
 
   useEffect(() => {
     startWatchGateway();
-    void loadDisplaySettings();
     void loadPhrases();
-    void store.loadConfig().then((cfg) => {
+    void (async () => {
+      // 显示设置先于首帧加载完成，避免简洁模式/字号闪默认值
+      await loadDisplaySettings();
+      const cfg = await store.loadConfig();
       setHasCfg(!!cfg);
       if (cfg) store.connect();
       setReady(true);
-    });
+    })();
   }, []);
 
   // 首次在设置页连接成功：自动进入主界面（hasCfg 只在启动时算过一次）

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Animated, BackHandler, Easing, FlatList, PanResponder, Pressable, StyleSheet, Text, View } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { SafeAreaView } from "react-native-safe-area-context";
@@ -90,6 +90,19 @@ function LiveStat({ s }: { s: SessionState }) {
   );
 }
 
+// 会话耗时：WORKING 时自带每秒 tick（简洁模式没有 LiveStat，耗时也要走秒）
+function Elapsed({ s }: { s: SessionState }) {
+  const styles = useThemeStyles(makeStyles);
+  const [, tick] = useState(0);
+  const live = s.status === "WORKING";
+  useEffect(() => {
+    if (!live) return;
+    const t = setInterval(() => tick((n) => n + 1), 1000);
+    return () => clearInterval(t);
+  }, [live]);
+  return <Text style={styles.elapsed}>{fmtElapsed(sessionElapsed(s))}</Text>;
+}
+
 // 左滑露出操作面板（重命名 + 删除；DONE/ERROR 才可删）。
 // 面板做成独立圆角小胶囊（上下留 3px），从卡片后面滑出，避免直角贴圆角的接缝
 function SwipeRow({
@@ -142,7 +155,7 @@ function SwipeRow({
     }),
   ).current;
   return (
-    <View style={styles.swipeWrap}>
+    <View style={[styles.swipeWrap, compact && styles.swipeWrapC]}>
       <View style={styles.actPanel}>
         <Pressable
           style={[styles.actBtn, styles.actRen]}
@@ -169,7 +182,7 @@ function SwipeRow({
       </View>
       <Animated.View style={[styles.swipeCard, { transform: [{ translateX: x }] }]} {...pan.panHandlers}>
         <Pressable
-          style={compact ? styles.cardC : styles.card}
+          style={[styles.card, compact && styles.cardC]}
           android_ripple={{ color: c.tintSoft, borderless: false }}
           onPress={() => {
             if (open.current) close();
@@ -183,12 +196,13 @@ function SwipeRow({
   );
 }
 
-function SessionCard({
+// memo：流式刷新只重渲变化的那一行（onRename/onReveal 均为稳定引用）
+const SessionCard = memo(function SessionCard({
   s, onOpen, onRename, revealSid, onReveal, compact,
 }: {
   s: SessionState;
   onOpen: (sid: string) => void;
-  onRename: () => void;
+  onRename: (sid: string) => void;
   revealSid: string | null;
   onReveal: (v: string | null) => void;
   compact?: boolean;
@@ -202,7 +216,7 @@ function SessionCard({
       sid={s.session_id}
       deletable={deletable}
       onPress={() => onOpen(s.session_id)}
-      onRename={onRename}
+      onRename={() => onRename(s.session_id)}
       onDelete={() => store.send("COMMAND_DELETE", { session_id: s.session_id })}
       revealSid={revealSid}
       onReveal={onReveal}
@@ -212,10 +226,10 @@ function SessionCard({
         {s.status === "WORKING" ? (
           <BlinkDot color={color} />
         ) : (
-          <View style={[styles.dot, { backgroundColor: color, borderColor: color }]} />
+          <View style={[styles.dot, { backgroundColor: color }]} />
         )}
         {!compact && s.status === "WORKING" ? <LiveStat s={s} /> : <View style={{ flex: 1 }} />}
-        <Text style={styles.elapsed}>{fmtElapsed(sessionElapsed(s))}</Text>
+        <Elapsed s={s} />
       </View>
       <Text style={[styles.title, compact && { marginBottom: 0, fontSize: 14 }]} numberOfLines={1}>
         {s.title || "未命名会话"}
@@ -238,14 +252,19 @@ function SessionCard({
       )}
     </SwipeRow>
   );
-}
+});
 
 export default function ListScreen({ sessions, connected, connText, onOpen, onNew, onSetup, onEditServer }: Props) {
   const { c } = useTheme();
   const styles = useThemeStyles(makeStyles);
   const compact = useListCompact();
   const [revealSid, setRevealSid] = useState<string | null>(null);
-  const [renameTarget, setRenameTarget] = useState<SessionState | null>(null);
+  const [renameSid, setRenameSid] = useState<string | null>(null);
+  const renameTarget = useMemo(
+    () => sessions.find((s) => s.session_id === renameSid) ?? null,
+    [sessions, renameSid],
+  );
+  const handleRename = useCallback((sid: string) => setRenameSid(sid), []);
   const [drawerOpen, setDrawerOpen] = useState(false);
 
   // 抽屉打开时硬件返回先关抽屉
@@ -350,7 +369,7 @@ export default function ListScreen({ sessions, connected, connText, onOpen, onNe
         showsVerticalScrollIndicator={false}
         contentContainerStyle={{ paddingBottom: 120, paddingHorizontal: 14, paddingTop: 6 }}
         renderItem={({ item }) => (
-          <SessionCard s={item} onOpen={onOpen} onRename={() => setRenameTarget(item)} revealSid={revealSid} onReveal={setRevealSid} compact={compact} />
+          <SessionCard s={item} onOpen={onOpen} onRename={handleRename} revealSid={revealSid} onReveal={setRevealSid} compact={compact} />
         )}
         ListEmptyComponent={
           <View style={styles.empty}>
@@ -378,10 +397,10 @@ export default function ListScreen({ sessions, connected, connText, onOpen, onNe
       <RenameModal
         visible={!!renameTarget}
         initial={renameTarget?.title ?? ""}
-        onCancel={() => setRenameTarget(null)}
+        onCancel={() => setRenameSid(null)}
         onSubmit={(title) => {
           if (renameTarget) store.send("COMMAND_RENAME", { session_id: renameTarget.session_id, title });
-          setRenameTarget(null);
+          setRenameSid(null);
         }}
       />
 
@@ -432,6 +451,7 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
   collapseT: { fontSize: 11, color: c.dim },
   collapseTOn: { color: c.brandA },
   swipeWrap: { marginBottom: 11, borderRadius: 16, overflow: "hidden" },
+  swipeWrapC: { marginBottom: 7 },
   swipeCard: { borderRadius: 16, overflow: "hidden", backgroundColor: c.panel },
   actPanel: {
     position: "absolute", top: 3, bottom: 3, right: 0, width: FULL_W,
@@ -446,10 +466,7 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
     backgroundColor: c.panel, borderWidth: 1, borderColor: c.line,
     borderRadius: 16, padding: 14,
   },
-  cardC: {
-    backgroundColor: c.panel, borderWidth: 1, borderColor: c.line,
-    borderRadius: 13, padding: 9,
-  },
+  cardC: { borderRadius: 13, padding: 9 },
   row1: { flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 8 },
   dot: {
     width: 11, height: 11, borderRadius: 6, opacity: 1,
