@@ -61,7 +61,7 @@
     cursor: pointer; white-space: nowrap; max-width: 40vw; overflow: hidden; text-overflow: ellipsis;
   }
   #connChip i { width: 8px; height: 8px; border-radius: 50%; background: var(--error); flex: none; }
-  #connChip.on i { background: var(--dim); }
+  #connChip.on i { background: var(--done); }
   #connChip.wait i { background: var(--waiting); }
 
   button {
@@ -492,7 +492,9 @@ function connectCloud() {
       return;
     }
     setConn("on", "已连接 ☁");
-    sendCloud({ t: "hello", last_seq: cloudLastSeq() });
+    // 刷新后内存无会话：必须 last_seq=0 走全量 SNAPSHOT 重建，
+    // localStorage 的旧 seq 只会造成"只补增量、页面永远是空列表"
+    sendCloud({ t: "hello", last_seq: sessions.size > 0 ? lastSeq : 0 });
     startCloudPing();
   };
   ws.onclose = () => {
@@ -517,7 +519,7 @@ function connectCloud() {
       pendingPair = null;
       setConn("on", "已连接 ☁");
       toast("配对成功");
-      sendCloud({ t: "hello", last_seq: cloudLastSeq() });
+      sendCloud({ t: "hello", last_seq: sessions.size > 0 ? lastSeq : 0 });
       startCloudPing();
       return;
     }
@@ -540,8 +542,6 @@ function loadCloudIdentity() {
   }
   try { relayPeer = JSON.parse(localStorage.getItem("ccr_cloud_peer") || "null"); } catch { relayPeer = null; }
 }
-
-function cloudLastSeq() { return parseInt(localStorage.getItem("ccr_lastseq") || "0", 10) || 0; }
 
 function sendCloud(obj) {
   if (!ws || ws.readyState !== 1 || !relayPeer) return false;
@@ -710,7 +710,7 @@ function render() {
   let running = 0;
   for (const s of sessions.values()) if (s.status === "WORKING" || s.status === "WAITING") running++;
   $("runhint").textContent = running > 0 ? running + " 个会话正在运行" :
-    (sessions.size > 0 ? "暂无运行中的会话" : "等待连接");
+    (sessions.size > 0 ? "暂无运行中的会话" : (connected ? "已连接 · 暂无会话" : "等待连接"));
 
   const box = $("cards");
   // 排序：运行中 > 等待 > 其余，同组按开始时间倒序
