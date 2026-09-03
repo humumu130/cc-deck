@@ -127,7 +127,7 @@ export default function SettingsDrawer({
           </View>
           <View style={{ flex: 1, minWidth: 0 }}>
             <Text style={d.nameT}>CC Deck</Text>
-            <Text style={d.verT}>v0.2.32</Text>
+            <Text style={d.verT}>v0.2.33</Text>
           </View>
         </View>
 
