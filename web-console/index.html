@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="theme-color" content="#050B12">
-<title>Claude Code Relay</title>
+<title>CC Deck</title>
 <style>
   :root {
     --bg: #050B12;
@@ -78,33 +78,33 @@
     display: flex; flex-direction: column; height: 100vh; overflow: hidden;
   }
 
-  /* ---------- 顶栏 ---------- */
+  /* ---------- 顶栏（窄条，置于侧栏顶部，会话区顶到视口顶） ---------- */
   header {
-    display: flex; align-items: center; gap: 10px;
-    padding: 12px 18px;
+    display: flex; align-items: center; gap: 8px;
+    padding: 7px 14px;
     background: var(--glass); backdrop-filter: blur(10px);
     border-bottom: 1px solid var(--border);
     flex: none;
   }
   .logo {
-    width: 34px; height: 34px; border-radius: 10px;
+    width: 27px; height: 27px; border-radius: 9px;
     background: linear-gradient(180deg, #2B2433, #161221);
     border: 1px solid rgba(255,255,255,.09);
     display: flex; align-items: center; justify-content: center;
     box-shadow: 0 2px 12px rgba(0,0,0,.35), inset 0 1px 0 rgba(255,255,255,.06); flex: none;
   }
-  .logo svg { width: 19px; height: 19px; }
+  .logo svg { width: 16px; height: 16px; }
   #empty .logo svg { width: 30px; height: 30px; }
-  .brand { display: flex; align-items: center; gap: 10px; min-width: 0; }
-  .brand h1 { font-size: 15px; font-weight: 700; letter-spacing: .3px; white-space: nowrap; }
-  #runhint { font-size: 12px; color: var(--dim); white-space: nowrap; }
+  .brand { display: flex; align-items: center; gap: 8px; min-width: 0; }
+  .brand h1 { font-size: 13.5px; font-weight: 700; letter-spacing: .3px; white-space: nowrap; }
+  #runhint { font-size: 11px; color: var(--dim); white-space: nowrap; }
   header .spacer { flex: 1; }
 
   #connChip {
-    display: flex; align-items: center; gap: 6px;
-    font-size: 12px; color: var(--dim);
-    padding: 5px 10px; border: 1px solid var(--border); border-radius: 999px;
-    cursor: pointer; white-space: nowrap; max-width: 40vw; overflow: hidden; text-overflow: ellipsis;
+    display: flex; align-items: center; gap: 5px;
+    font-size: 11.5px; color: var(--dim);
+    padding: 4px 9px; border: 1px solid var(--border); border-radius: 999px;
+    cursor: pointer; white-space: nowrap; max-width: 128px; overflow: hidden; text-overflow: ellipsis;
   }
   #connChip i { width: 8px; height: 8px; border-radius: 50%; background: var(--error); flex: none; }
   #connChip.on i { background: var(--done); }
@@ -154,7 +154,7 @@
   }
   #side h3 {
     font-size: 11px; font-weight: 600; letter-spacing: 1.5px; color: var(--faint);
-    text-transform: uppercase; padding: 14px 18px 6px;
+    text-transform: uppercase; padding: 10px 16px 4px;
   }
   #cards { flex: 1; overflow-y: auto; padding: 4px 14px 10px; display: flex; flex-direction: column; gap: 10px; }
 
@@ -187,8 +187,36 @@
     padding: 1px 7px; border-radius: 999px; flex: none; font-weight: 500;
   }
   .his-badge.ext { color: var(--brand-2); border-color: rgba(77,159,255,.4); }
-  .his-badge.ext.on { color: var(--on-accent); background: var(--brand-2); border-color: var(--brand-2); }
-  #extModeBtn { font-size: 12px; padding: 4px 12px; border-radius: 999px; }
+  .card-edit {
+    margin-left: auto; flex: none; background: none; border: none; cursor: pointer;
+    color: var(--faint); font-size: 12px; padding: 2px 4px; border-radius: 6px; opacity: 0;
+    transition: opacity .12s;
+  }
+  .card:hover .card-edit { opacity: 1; }
+  .card-edit:hover { color: var(--dim); background: var(--bg-soft); }
+  .card-title input {
+    flex: 1; min-width: 0; font-size: 13.5px; font-weight: 600; padding: 3px 8px; border-radius: 7px;
+  }
+
+  /* ---------- 任务面板（详情页"任务" tab） ---------- */
+  .todo-head { display: flex; align-items: center; gap: 10px; padding: 16px 4px 6px; }
+  .todo-bar { flex: 1; height: 5px; border-radius: 3px; background: var(--bg-soft); overflow: hidden; }
+  .todo-bar i { display: block; height: 100%; border-radius: 3px; background: var(--done); transition: width .3s; }
+  .todo-pct { font-size: 12px; color: var(--dim); font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .todo-head button { font-size: 12px; padding: 4px 10px; border-radius: 999px; }
+  .todo-group { margin: 10px 0 16px; }
+  .todo-gt { font-size: 11px; letter-spacing: 1.5px; font-weight: 600; color: var(--faint); text-transform: uppercase; padding-bottom: 6px; border-bottom: 1px solid var(--border); margin-bottom: 2px; }
+  .todo-gt.ip { color: var(--working); border-bottom-color: rgba(255,197,61,.25); }
+  .todo-gt.dn { color: var(--done); border-bottom-color: rgba(43,217,143,.22); }
+  .todo-item { display: flex; align-items: flex-start; gap: 9px; padding: 7px 2px; font-size: 13.5px; line-height: 1.5; }
+  .todo-ck { flex: none; width: 16px; text-align: center; font-size: 12px; padding-top: 1px; }
+  .todo-item.in_progress .todo-ck { color: var(--working); }
+  .todo-item.completed .todo-ck { color: var(--done); }
+  .todo-item.pending .todo-ck { color: var(--faint); }
+  .todo-item.completed .todo-tx { color: var(--faint); text-decoration: line-through; text-decoration-color: rgba(255,255,255,.22); }
+  .todo-item.in_progress .todo-tx { color: var(--text); }
+  .todo-item.pending .todo-tx { color: var(--dim); }
+  .todo-empty { color: var(--faint); padding: 60px 4px; text-align: center; font-size: 13px; }
   .card-summary { color: var(--dim); font-size: 12.5px; margin-top: 3px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .card-summary.waiting { color: var(--working); }
   .card-stats { font-size: 12px; color: var(--faint); margin-top: 6px; display: flex; gap: 10px; font-variant-numeric: tabular-nums; }
@@ -442,10 +470,10 @@
 
   /* ---------- 移动端 ---------- */
   @media (max-width: 720px) {
-    header { padding: 10px 14px; }
+    header { padding: 7px 12px; }
     #runhint { display: none; }
     #timeline { font-size: calc(14px * var(--tl-scale, 1)); }
-    .brand h1 { font-size: 14px; }
+    .brand h1 { font-size: 13.5px; }
     #cards { padding: 4px 10px 12px; }
     main { position: relative; }
     #side { width: 100%; border-right: none; }
@@ -466,34 +494,34 @@
 </head>
 <body>
 
-<header>
-  <div class="brand">
-    <div class="logo"><svg viewBox="0 0 24 24" fill="none"><defs><linearGradient id="lgA" x1="4" y1="4" x2="20" y2="20" gradientUnits="userSpaceOnUse"><stop stop-color="#E8985F"/><stop offset="1" stop-color="#C96442"/></linearGradient></defs><g stroke="url(#lgA)" stroke-width="2.5" stroke-linecap="round"><path d="M12 3.5v17"/><path d="M3.5 12h17"/><path d="M6.2 6.2l11.6 11.6"/><path d="M17.8 6.2L6.2 17.8"/></g></svg></div>
-    <div>
-      <h1>Claude Code</h1>
-      <div id="runhint">连接中…</div>
-    </div>
-  </div>
-  <div class="spacer"></div>
-  <div id="connChip" title="连接设置"><i></i><span id="connText">未连接</span></div>
-  <button id="themeBtn" title="深浅色切换">☀️</button>
-</header>
-
-<div class="panel" id="connPanel">
-  <label class="cmode"><input type="radio" name="cmode" value="lan" checked>直连</label>
-  <label class="cmode"><input type="radio" name="cmode" value="cloud">云桥</label>
-  <input id="url" placeholder="ws://<pc-ip>:8787/ws">
-  <input id="token" placeholder="token">
-  <button id="connectBtn" class="primary">连接</button>
-  <div id="pairBox">
-    <input id="pairCode" inputmode="numeric" maxlength="6" placeholder="6 位配对码" autocomplete="off">
-    <button id="pairBtn" class="primary">配对</button>
-    <div class="pair-hint">云桥提示"未配对"时，输入家里 PC 领取的 6 位配对码即可（10 分钟内有效），无需配对链接</div>
-  </div>
-</div>
-
 <main>
   <div id="side">
+    <header>
+      <div class="brand">
+        <div class="logo"><svg viewBox="0 0 24 24" fill="none"><defs><linearGradient id="lgA" x1="4" y1="4" x2="20" y2="20" gradientUnits="userSpaceOnUse"><stop stop-color="#E8985F"/><stop offset="1" stop-color="#C96442"/></linearGradient></defs><g><rect x="3.4" y="6.2" width="11" height="14" rx="2.8" transform="rotate(-11 8.9 13.2)" stroke="url(#lgA)" stroke-opacity=".5" stroke-width="1.5"/><rect x="9.6" y="5.4" width="11" height="14" rx="2.8" transform="rotate(10 15.1 12.4)" stroke="url(#lgA)" stroke-opacity=".85" stroke-width="1.5"/><rect x="6.5" y="4.2" width="11.4" height="15.2" rx="3" fill="url(#lgA)"/><path d="M9.2 8.7h6" stroke="#171220" stroke-width="1.7" stroke-linecap="round"/><path d="M9.2 12.2h4.2" stroke="#171220" stroke-opacity=".55" stroke-width="1.7" stroke-linecap="round"/></g></svg></div>
+        <div>
+          <h1>CC Deck</h1>
+          <div id="runhint">连接中…</div>
+        </div>
+      </div>
+      <div class="spacer"></div>
+      <div id="connChip" title="连接设置"><i></i><span id="connText">未连接</span></div>
+      <button id="themeBtn" title="深浅色切换">☀️</button>
+    </header>
+
+    <div class="panel" id="connPanel">
+      <label class="cmode"><input type="radio" name="cmode" value="lan" checked>直连</label>
+      <label class="cmode"><input type="radio" name="cmode" value="cloud">云桥</label>
+      <input id="url" placeholder="ws://<pc-ip>:8787/ws">
+      <input id="token" placeholder="token">
+      <button id="connectBtn" class="primary">连接</button>
+      <div id="pairBox">
+        <input id="pairCode" inputmode="numeric" maxlength="6" placeholder="6 位配对码" autocomplete="off">
+        <button id="pairBtn" class="primary">配对</button>
+        <div class="pair-hint">云桥提示"未配对"时，输入手机 App（侧边栏·新设备配对）或家里 PC 领取的 6 位配对码即可（30 秒内有效），无需配对链接</div>
+      </div>
+    </div>
+
     <h3>会话</h3>
     <div id="cards"></div>
     <div id="newbox">
@@ -516,7 +544,6 @@
         <span id="dbadge" class="status-chip"></span>
         <span class="spacer"></span>
         <button id="renameBtn" class="ghost" title="重命名会话">✎</button>
-        <button id="extModeBtn" class="ghost" style="display:none">远程审批：关</button>
       </div>
       <div id="dsub">
         <span id="dcwd"></span>
@@ -526,6 +553,7 @@
       <div class="tabs">
         <button data-tab="activity" class="tab active">消息</button>
         <button data-tab="log" class="tab">全部</button>
+        <button data-tab="todos" class="tab">任务</button>
         <button data-tab="stats" class="tab">统计</button>
         <span class="spacer"></span>
         <button id="fontBtn" class="mini" title="正文字号（点按切换）">字·标准</button>
@@ -577,7 +605,7 @@
   </div>
 
   <div id="empty">
-    <div class="logo"><svg viewBox="0 0 24 24" fill="none"><defs><linearGradient id="lgB" x1="4" y1="4" x2="20" y2="20" gradientUnits="userSpaceOnUse"><stop stop-color="#E8985F"/><stop offset="1" stop-color="#C96442"/></linearGradient></defs><g stroke="url(#lgB)" stroke-width="2.5" stroke-linecap="round"><path d="M12 3.5v17"/><path d="M3.5 12h17"/><path d="M6.2 6.2l11.6 11.6"/><path d="M17.8 6.2L6.2 17.8"/></g></svg></div>
+    <div class="logo"><svg viewBox="0 0 24 24" fill="none"><defs><linearGradient id="lgB" x1="4" y1="4" x2="20" y2="20" gradientUnits="userSpaceOnUse"><stop stop-color="#E8985F"/><stop offset="1" stop-color="#C96442"/></linearGradient></defs><g><rect x="3.4" y="6.2" width="11" height="14" rx="2.8" transform="rotate(-11 8.9 13.2)" stroke="url(#lgB)" stroke-opacity=".5" stroke-width="1.5"/><rect x="9.6" y="5.4" width="11" height="14" rx="2.8" transform="rotate(10 15.1 12.4)" stroke="url(#lgB)" stroke-opacity=".85" stroke-width="1.5"/><rect x="6.5" y="4.2" width="11.4" height="15.2" rx="3" fill="url(#lgB)"/><path d="M9.2 8.7h6" stroke="#171220" stroke-width="1.7" stroke-linecap="round"/><path d="M9.2 12.2h4.2" stroke="#171220" stroke-opacity=".55" stroke-width="1.7" stroke-linecap="round"/></g></svg></div>
     <div>选择左侧会话，或点「＋ 新建」开始</div>
   </div>
 </main>
@@ -1128,7 +1156,11 @@ function chip(status) {
 function fmtElapsed(ms) {
   const sec = Math.floor(ms / 1000);
   if (sec < 60) return sec + "s";
-  return Math.floor(sec / 60) + "m" + (sec % 60) + "s";
+  const min = Math.floor(sec / 60);
+  if (min < 60) return min + "m" + (sec % 60) + "s";
+  const hr = Math.floor(min / 60);
+  if (hr < 24) return hr + "h" + (min % 60) + "m";
+  return Math.floor(hr / 24) + "d" + (hr % 24) + "h";
 }
 
 function sessionElapsed(s) {
@@ -1154,8 +1186,10 @@ function render() {
   const order = { WAITING: 0, WORKING: 1, ERROR: 2, DONE: 3 };
   const list = [...sessions.values()].sort((a, b) =>
     (order[a.status] - order[b.status]) || (b.started_at - a.started_at));
-  const key = list.map((s) => s.session_id + ":" + s.status + ":" + Math.floor(sessionElapsed(s) / 1000) + ":" + (s.action_summary || "") + ":" + (s.waiting_request ? 1 : 0)).join("|");
+  const key = list.map((s) => s.session_id + ":" + s.status + ":" + Math.floor(sessionElapsed(s) / 1000) + ":" + (s.title || "") + ":" + (s.action_summary || "") + ":" + (s.waiting_request ? 1 : 0)).join("|");
   if (box.dataset.key !== key) {
+    // 就地改名进行中：跳过重建（运行中会话 key 每秒变，会把编辑框冲掉）
+    if (document.activeElement && document.activeElement.classList.contains("card-rename")) return;
     box.dataset.key = key;
     box.innerHTML = "";
     for (const s of list) {
@@ -1170,13 +1204,15 @@ function render() {
         '<div class="card-top">' + chip(s.status) + '<span class="elapsed">' + fmtElapsed(sessionElapsed(s)) + "</span></div>" +
         '<div class="card-title">' + escapeHtml(s.title || "") +
           (s.historical ? '<span class="his-badge">历史</span>' : s.external ? '<span class="his-badge ext">外部</span>' : "") +
-          (s.external && s.remote_mode ? '<span class="his-badge ext on">远程审批</span>' : "") + "</div>" +
+          '<button class="card-edit" title="重命名">✎</button></div>' +
         '<div class="card-summary' + (waiting ? " waiting" : "") + '">' + escapeHtml(waitingText) + "</div>" +
         '<div class="card-stats">' + statsHtml(s.stats) + "</div>" +
         (waiting && !s.historical && s.waiting_request?.decidable !== false ? '<div class="card-cta"><button>处理</button></div>' : "");
       d.onclick = () => select(s.session_id);
       const cta = d.querySelector(".card-cta button");
       if (cta) cta.onclick = (e) => { e.stopPropagation(); select(s.session_id); };
+      const edit = d.querySelector(".card-edit");
+      if (edit) edit.onclick = (e) => { e.stopPropagation(); startCardRename(d, s); };
       box.appendChild(d);
     }
   } else {
@@ -1260,11 +1296,7 @@ function renderDetail() {
     pb.innerHTML = pi.map((p) => "<span>" + escapeHtml(p.text) + "</span>").join("");
   } else pb.style.display = "none";
 
-  // 外部会话：远程审批开关；隐藏消息/停止
-  const extBtn = $("extModeBtn");
-  extBtn.style.display = s.external ? "inline-block" : "none";
-  extBtn.textContent = "远程审批：" + (s.remote_mode ? "开" : "关");
-  extBtn.className = s.remote_mode ? "primary" : "ghost";
+  // 外部会话
   $("hisnote").style.display = s.historical ? "block" : "none";
   $("cmdbar").style.display = s.historical && !s.external ? "none" : "flex";
   $("msginput").placeholder = s.external
@@ -1283,6 +1315,16 @@ function renderDetail() {
     if (tl.dataset.count !== statsKey) {
       tl.dataset.count = statsKey;
       tl.innerHTML = statsTabHtml(s);
+    }
+    return;
+  }
+  if (activeTab === "todos") {
+    const todosKey = "todos:" + s.session_id + ":" + (s.todos?.length ?? 0) + ":" + (s.todos?.map((t) => t.status).join(",") ?? "");
+    if (tl.dataset.count !== todosKey) {
+      tl.dataset.count = todosKey;
+      tl.innerHTML = todosTabHtml(s);
+      const ref = $("todoRefresh");
+      if (ref) ref.onclick = () => sendCommand("COMMAND_REFRESH_TODOS", { session_id: s.session_id });
     }
     return;
   }
@@ -1326,6 +1368,31 @@ function statsTabHtml(s) {
   ];
   return '<div class="stats-card">' + rows.map((r) =>
     '<div class="stats-row"><span class="k">' + r[0] + '</span><span class="v">' + escapeHtml(String(r[1])) + "</span></div>").join("") + "</div>";
+}
+
+function todosTabHtml(s) {
+  const todos = s.todos ?? [];
+  if (!todos.length) return '<div class="todo-empty">暂无任务清单<br><span style="font-size:12px">CLI 里使用 TodoWrite 工具后，这里会显示任务进度</span></div>';
+  const done = todos.filter((t) => t.status === "completed").length;
+  const groups = [
+    ["进行中", todos.filter((t) => t.status === "in_progress"), "ip"],
+    ["待办", todos.filter((t) => t.status === "pending"), ""],
+    ["已完成", todos.filter((t) => t.status === "completed"), "dn"],
+  ];
+  let html =
+    '<div class="todo-head"><div class="todo-bar"><i style="width:' + Math.round((done / todos.length) * 100) + '%"></i></div>' +
+    '<span class="todo-pct">' + done + " / " + todos.length + '</span>' +
+    '<button id="todoRefresh" class="ghost" title="重读 CLI 任务存储">↻ 刷新</button></div>';
+  for (const [label, items, cls] of groups) {
+    if (!items.length) continue;
+    html += '<div class="todo-group"><div class="todo-gt ' + cls + '">' + label + " · " + items.length + "</div>";
+    for (const t of items) {
+      const mark = t.status === "completed" ? "✓" : t.status === "in_progress" ? "◐" : "·";
+      html += '<div class="todo-item ' + t.status + '"><span class="todo-ck">' + mark + '</span><span class="todo-tx">' + escapeHtml(t.content) + "</span></div>";
+    }
+    html += "</div>";
+  }
+  return html;
 }
 
 function escapeHtml(s) {
@@ -1686,10 +1753,33 @@ $("rejectBtn").onclick = () => {
   if (s && s.waiting_request) sendCommand("COMMAND_REJECT", { session_id: selected, request_id: s.waiting_request.request_id });
 };
 $("backBtn").onclick = closeDetail;
-$("extModeBtn").onclick = () => {
-  const s = sessions.get(selected);
-  if (s && s.external) sendCommand("COMMAND_EXT_MODE", { session_id: selected, enabled: !s.remote_mode });
-};
+// 会话列表卡片就地改名：标题变输入框，Enter 提交 / Esc·失焦取消
+function startCardRename(cardEl, s) {
+  const titleEl = cardEl.querySelector(".card-title");
+  const old = s.title || "";
+  titleEl.innerHTML = "";
+  const inp = document.createElement("input");
+  inp.className = "card-rename";
+  inp.value = old;
+  titleEl.appendChild(inp);
+  inp.focus();
+  inp.select();
+  let done = false;
+  const finish = (submit) => {
+    if (done) return;
+    done = true;
+    const v = inp.value.trim();
+    if (submit && v && v !== old) sendCommand("COMMAND_RENAME", { session_id: s.session_id, title: v });
+    render();
+  };
+  inp.onkeydown = (ev) => {
+    ev.stopPropagation();
+    if (ev.key === "Enter") { ev.preventDefault(); finish(true); }
+    else if (ev.key === "Escape") finish(false);
+  };
+  inp.onclick = (ev) => ev.stopPropagation();
+  inp.onblur = () => finish(false);
+}
 $("renameBtn").onclick = () => {
   const s = sessions.get(selected);
   if (!s) return;
