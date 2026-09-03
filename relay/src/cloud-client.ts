@@ -25,6 +25,7 @@ interface CloudFrame {
 export class CloudClient {
   private ws: WebSocket | null = null;
   private phones = new Map<string, PhoneState>();
+  private unpairedNotice = new Map<string, number>();
   private delayMs = 1000;
   private stopped = false;
   private timer: ReturnType<typeof setTimeout> | null = null;
@@ -124,6 +125,16 @@ export class CloudClient {
     this.send({ to: dev, data: seal(obj, peer.pubkey, this.identity.keypair.secretKey) });
   }
 
+  // 未配对设备的帧此前静默丢弃：对端不知道自己已被除名，只能永远卡"连接中"
+  // 并按心跳节奏刷帧。回一帧明文 pair_nack（此时不知道对方公钥、无法加密），
+  // 浏览器据此显示"未配对"并停止重试。每设备 60s 限一帧，防心跳放大成刷屏。
+  private notifyUnpaired(dev: string, reason: string): void {
+    const now = Date.now();
+    if (now - (this.unpairedNotice.get(dev) ?? 0) < 60_000) return;
+    this.unpairedNotice.set(dev, now);
+    this.send({ to: dev, data: { t: "pair_nack", error: reason } });
+  }
+
   // 手机激活/恢复：缓冲内按 last_seq 补发，否则全量 SNAPSHOT（hello 与 ping-resume 共用）。
   // 全量恢复时 SNAPSHOT 只带会话状态不带时间线日志，日志随后逐条 SESSION_LOG 密文流式补发
   // （手机端 SESSION_LOG 处理器即 pushLog 追加，旧 APK 直接兼容）——所有日志塞进单帧会随
@@ -182,15 +193,21 @@ export class CloudClient {
       const pr = f.data as unknown as { code?: unknown; pubkey?: unknown; name?: unknown };
       const pubkey = typeof pr.pubkey === "string" ? pr.pubkey : "";
       const dev = pubkey ? devId(pubkey, "wb") : "";
-      if (!pubkey || dev !== f.from || !this.pairCodes?.consume(String(pr.code ?? ""))) {
+      if (!pubkey || dev !== f.from) {
         console.log(`[cloud] pair_req rejected dev=${f.from}`);
-        if (pubkey && dev === f.from) {
-          this.send({ to: f.from, data: seal({ t: "pair_nack", error: "配对码无效或已过期" }, pubkey, this.identity.keypair.secretKey) });
-        }
         return;
       }
-      this.identity.addPeer(dev, { pubkey, name: typeof pr.name === "string" ? pr.name : "web", paired_at: Date.now() });
-      console.log(`[cloud] paired web dev=${dev}`);
+      if (this.pairCodes?.consume(String(pr.code ?? ""))) {
+        this.identity.addPeer(dev, { pubkey, name: typeof pr.name === "string" ? pr.name : "web", paired_at: Date.now() });
+        console.log(`[cloud] paired web dev=${dev}`);
+      } else if (!this.identity.peers.get(dev)) {
+        // 码无效且未配对过：真拒绝
+        console.log(`[cloud] pair_req rejected dev=${f.from}`);
+        this.send({ to: f.from, data: seal({ t: "pair_nack", error: "配对码无效或已过期" }, pubkey, this.identity.keypair.secretKey) });
+        return;
+      }
+      // 码已消费但设备已配对：幂等补发 ack——首包 ack 可能随桥连接闪断一起丢失，
+      // 浏览器重试/F5 即自愈，不必重新领配对链接
       this.sendSealed(f.from, { t: "pair_ack", relay_dev: this.identity.relayDev, relay_pubkey: this.identity.keypair.publicKey });
       return;
     }
@@ -198,11 +215,13 @@ export class CloudClient {
     const peer = this.identity.peers.get(f.from);
     if (!peer) {
       console.log(`[cloud] drop frame from unpaired dev=${f.from}`);
+      this.notifyUnpaired(f.from, "设备不在 relay 配对列表中（relay 侧配对信息已丢失），请重新打开配对链接");
       return;
     }
     const inner = unseal<Record<string, unknown>>(f.data, peer.pubkey, this.identity.keypair.secretKey);
     if (!inner) {
       console.log(`[cloud] decrypt failed from dev=${f.from}（对端密钥已换，需重新配对）`);
+      this.notifyUnpaired(f.from, "设备密钥对不上（浏览器或 relay 已换密钥），请重新打开配对链接");
       return;
     }
     if (inner.t === "hello") {
