@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="theme-color" content="#050B12">
-<title>Cloud Code Relay</title>
+<title>Claude Code Relay</title>
 <style>
   :root {
     --bg: #050B12;
@@ -17,6 +17,7 @@
     --faint: #55617A;
     --brand: #7C6CF2;
     --brand-2: #4D9FFF;
+    --send-btn: #4D9FFF;
     --grad: linear-gradient(135deg, #4D9FFF, #7C6CF2);
     --working: #FFC53D;
     --waiting: #F0524F;
@@ -47,6 +48,7 @@
     --faint: #8D99AE;
     --brand: #6A5AE0;
     --brand-2: #2563EB;
+    --send-btn: #2F7FE8;
     --working: #A16207;
     --waiting: #DC2626;
     --error: #C2410C;
@@ -408,12 +410,12 @@
   }
   #stopBtn:hover { background: rgba(240,82,79,.18); border-color: rgba(240,82,79,.55); }
   #sendBtn {
-    width: 34px; height: 34px; border-radius: 11px; padding: 0; border: none; flex: none;
-    background: var(--grad); color: #fff;
+    width: 34px; height: 34px; border-radius: 10px; padding: 0; border: none; flex: none;
+    background: var(--send-btn); color: #fff; font-size: 17px; line-height: 1;
     display: flex; align-items: center; justify-content: center;
-    box-shadow: 0 2px 10px rgba(124,108,242,.3);
   }
-  #sendBtn:disabled { opacity: .35; cursor: default; box-shadow: none; transform: none; }
+  #sendBtn:hover:not(:disabled) { filter: brightness(1.1); }
+  #sendBtn:disabled { opacity: .4; cursor: default; }
   #hisnote { display: none; padding: 14px 20px; border-top: 1px solid var(--border); color: var(--faint); font-size: 13px; background: var(--glass); flex: none; }
 
   #empty { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px; color: var(--faint); }
@@ -462,7 +464,7 @@
   <div class="brand">
     <div class="logo">CC</div>
     <div>
-      <h1>Cloud Code</h1>
+      <h1>Claude Code</h1>
       <div id="runhint">连接中…</div>
     </div>
   </div>
@@ -557,7 +559,7 @@
           <div class="ic-left">
             <button id="stopBtn" title="停止会话">⏹ 停止</button>
           </div>
-          <button id="sendBtn" title="发送（Enter）"><svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor"><path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/></svg></button>
+          <button id="sendBtn" title="发送（Enter）">➤</button>
         </div>
       </div>
     </div>
@@ -1048,11 +1050,27 @@ function onEvent(msg) {
       break;
     }
     case "SESSION_LOG": {
+      if (msg.payload?.kind === "user_message") consumePendingByUserMsg(sid, msg.payload.text ?? "");
       pushLog(sid, msg.payload);
       break;
     }
   }
   render();
+}
+
+// 兜底：user_message 晋升日志到达时本地移除被覆盖的排队条目
+// （正常路径靠 SESSION_UPDATED.pending_inputs 清空；该帧丢失/旧版 relay 不发时由此兜底，
+// 排队气泡才不会在消息已处理后一直闪烁）
+function consumePendingByUserMsg(sid, text) {
+  const s = sessions.get(sid);
+  if (!s?.external || !s.pending_inputs?.length) return;
+  const key = String(text).trim().replace(/\s+/g, " ");
+  if (!key) return;
+  const kept = s.pending_inputs.filter((p) => {
+    const pk = String(p.text ?? "").trim().replace(/\s+/g, " ").slice(0, 200);
+    return !(pk && key.includes(pk));
+  });
+  if (kept.length !== s.pending_inputs.length) s.pending_inputs = kept.length ? kept : undefined;
 }
 
 // 同 id 流式块原地替换（relay stream_event：SESSION_LOG 带 id = 增量更新同一条）

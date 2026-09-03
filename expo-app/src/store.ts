@@ -588,6 +588,7 @@ class RelayStore {
         break;
       }
       case "SESSION_LOG": {
+        if (msg.payload.kind === "user_message") this.consumePendingByUserMsg(sid, msg.payload.text ?? "");
         this.pushLog(sid, msg.payload);
         break;
       }
@@ -596,6 +597,24 @@ class RelayStore {
         this.timelines.delete(sid);
         break;
       }
+    }
+  }
+
+  // 兜底：user_message 晋升日志到达时本地移除被覆盖的排队条目
+  // （正常路径靠 SESSION_UPDATED.pending_inputs 清空；该帧丢失/旧版 relay 不发时由此兜底，
+  // 排队气泡才不会在消息已处理后一直闪烁）
+  private consumePendingByUserMsg(sid: string, text: string) {
+    const s = this.sessions.get(sid);
+    if (!s?.external || !s.pending_inputs?.length) return;
+    const key = text.trim().replace(/\s+/g, " ");
+    if (!key) return;
+    const kept = s.pending_inputs.filter((p) => {
+      const pk = (p.text ?? "").trim().replace(/\s+/g, " ").slice(0, 200);
+      return !(pk && key.includes(pk));
+    });
+    if (kept.length !== s.pending_inputs.length) {
+      s.pending_inputs = kept.length ? kept : undefined;
+      this.emit();
     }
   }
 
