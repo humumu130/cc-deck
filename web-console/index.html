@@ -26,7 +26,6 @@
     --glass: rgba(9,15,25,.8);
     --glass-soft: rgba(9,15,25,.55);
     --side-bg: rgba(8,13,22,.5);
-    --aicode-bg: rgba(13,22,36,.78);
     --code-bg: rgba(148,163,190,.14);
     --mdcode-bg: rgba(148,163,190,.07);
     --th-bg: rgba(148,163,190,.12);
@@ -55,7 +54,6 @@
     --glass: rgba(255,255,255,.82);
     --glass-soft: rgba(255,255,255,.6);
     --side-bg: rgba(238,242,248,.55);
-    --aicode-bg: rgba(255,255,255,.92);
     --code-bg: rgba(100,116,139,.14);
     --mdcode-bg: rgba(100,116,139,.06);
     --th-bg: rgba(100,116,139,.10);
@@ -279,15 +277,25 @@
   }
   #timeline > * { max-width: min(880px, 100%); margin-left: auto; margin-right: auto; }
   .day-sep { text-align: center; color: var(--faint); font-size: 10.5px; margin: 14px 0 4px; font-variant-numeric: tabular-nums; letter-spacing: 1px; }
-  .msg-user { display: flex; flex-direction: column; align-items: flex-end; margin: 16px 0; }
+  .msg-user { display: flex; flex-direction: column; align-items: flex-end; margin: 18px 0; }
   .msg-user .ub {
-    max-width: 82%; background: rgba(255,197,61,.09); border: 1px solid rgba(255,197,61,.25);
-    border-radius: 16px; border-top-right-radius: 4px; padding: 10px 14px;
+    max-width: 82%; background: var(--panel-2); border: 1px solid var(--border);
+    border-radius: 14px; border-top-right-radius: 5px; padding: 10px 15px;
     white-space: pre-wrap; word-break: break-word;
   }
   .msg-user .mt { color: var(--faint); font-size: 10.5px; margin-top: 4px; font-variant-numeric: tabular-nums; }
-  .msg-ai { margin: 16px 0; }
-  .msg-ai .mt { color: var(--faint); font-size: 10.5px; margin-bottom: 5px; font-variant-numeric: tabular-nums; }
+  /* AI 消息：无气泡，头像 + 名称行（WorkBuddy 式），正文直接排版 */
+  .msg-ai { margin: 18px 0; }
+  .msg-ai .ai-head { display: flex; align-items: center; gap: 9px; margin-bottom: 7px; }
+  .msg-ai .ai-ava {
+    width: 28px; height: 28px; border-radius: 50%; background: var(--grad);
+    display: flex; align-items: center; justify-content: center;
+    color: #fff; font-size: 14px; flex: none;
+    box-shadow: 0 1px 8px rgba(124,108,242,.3);
+  }
+  .msg-ai .ai-name { font-weight: 650; font-size: 13.5px; }
+  .msg-ai .ai-body { padding-left: 37px; min-width: 0; }
+  .msg-ai .mt { color: var(--faint); font-size: 10.5px; font-variant-numeric: tabular-nums; }
   .msg-sys { text-align: center; color: var(--faint); font-size: .8em; margin: 10px 0; }
   /* 思考过程：折叠卡（默认收起，与手机端一致） */
   .think {
@@ -297,14 +305,23 @@
   .think .th-head { color: var(--faint); font-weight: 600; cursor: pointer; font-size: 11.5px; user-select: none; }
   .think .th-head:hover { color: var(--dim); }
   .think .th-body { margin-top: 7px; color: var(--dim); }
-  /* 工具卡片（过程消息：小一号 + 降透明度） */
-  .trow { margin: 8px 0; font-size: .8em; opacity: .82; }
-  .tcard { background: var(--panel-2); border: 1px solid var(--border); border-radius: 10px; padding: 7px 10px; }
+  /* 工具行（过程消息：轻量行式，WorkBuddy 风格：图标 + 名称 + 摘要 + 折叠） */
+  .trow { margin: 5px 0; font-size: .8em; opacity: .88; }
+  .tline {
+    display: flex; align-items: baseline; gap: 7px; flex-wrap: wrap;
+    color: var(--dim); border-radius: 8px; padding: 3px 7px; margin-left: -7px;
+  }
+  .tline:hover { background: var(--code-bg); }
+  .tline .tico { flex: none; color: var(--faint); }
+  .tline .tname { font-weight: 600; }
   .tname { color: var(--brand-2); font-weight: 700; }
   .tres { color: var(--faint); }
+  .ds-add { color: var(--done); font-family: var(--mono); font-size: .95em; }
+  .ds-del { color: var(--error); font-family: var(--mono); font-size: .95em; }
   .tdetail {
     font-family: var(--mono); font-size: .78em; line-height: 1.55; color: var(--dim); letter-spacing: 0;
-    white-space: pre-wrap; word-break: break-all; margin-top: 6px; max-height: 360px; overflow: auto;
+    white-space: pre-wrap; word-break: break-all; margin: 4px 0 2px; max-height: 360px; overflow: auto;
+    background: var(--mdcode-bg); border: 1px solid var(--border); border-radius: 8px; padding: 8px 10px;
   }
   .diff { margin-top: 5px; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
   .diff div { font-family: var(--mono); font-size: .76em; line-height: 1.55; padding: 0 8px; white-space: pre; letter-spacing: 0; }
@@ -335,16 +352,10 @@
   .agrow .at { color: var(--faint); font-size: 11px; font-variant-numeric: tabular-nums; }
 
   /* 轻量 Markdown（assistant_text/thinking，与手机端 md.tsx 同构）。
-     assistant 正文给独立卡片容器（与用户气泡形成对话层级）；字号随时间线档位缩放 */
-  .msg-ai > .txt.md {
-    min-width: 0;
-    background: var(--aicode-bg);
-    border: 1px solid var(--border);
-    border-radius: 14px;
-    padding: 13px 17px 14px;
-  }
-  .msg-ai > .txt.md > :first-child { margin-top: 0; }
-  .msg-ai > .txt.md > :last-child { margin-bottom: 0; }
+     assistant 正文无卡片直接排版（WorkBuddy 式，靠头像行区分发言者）；字号随时间线档位缩放 */
+  .ai-body > .txt.md { min-width: 0; }
+  .ai-body > .txt.md > :first-child { margin-top: 0; }
+  .ai-body > .txt.md > :last-child { margin-bottom: 0; }
   .md-p { white-space: pre-wrap; margin: 9px 0; }
   .md-h1, .md-h2, .md-h3, .md-h4 { font-weight: 700; margin: 15px 0 6px; }
   .md-h1 { font-size: 1.18em; } .md-h2 { font-size: 1.1em; } .md-h3 { font-size: 1.03em; } .md-h4 { font-size: 1em; }
@@ -365,8 +376,44 @@
   .stats-row .k { color: var(--dim); flex: none; }
   .stats-row .v { text-align: right; word-break: break-all; font-variant-numeric: tabular-nums; }
 
-  #cmdbar { display: flex; gap: 8px; padding: 12px 20px calc(12px + env(safe-area-inset-bottom)); border-top: 1px solid var(--border); background: var(--glass); flex: none; }
-  #msginput { flex: 1; }
+  /* ---------- 输入卡（WorkBuddy 式：卡片内嵌 + 图标行 + 底部功能行 + 纸飞机） ---------- */
+  #cmdbar {
+    padding: 12px 20px calc(14px + env(safe-area-inset-bottom));
+    border-top: 1px solid var(--border); background: var(--glass); flex: none;
+  }
+  #cmdbar > * { width: 100%; max-width: min(880px, 100%); margin: 0 auto; }
+  #inputcard {
+    background: var(--panel); border: 1px solid var(--border); border-radius: 16px;
+    padding: 7px 10px 8px 12px; transition: border-color .15s, box-shadow .15s;
+  }
+  #inputcard:focus-within {
+    border-color: var(--brand);
+    box-shadow: 0 0 0 3px rgba(124,108,242,.13), 0 2px 18px rgba(124,108,242,.08);
+  }
+  #inputcard .ic-top { display: flex; align-items: flex-start; gap: 8px; }
+  #inputcard .ic-at { color: var(--faint); font-weight: 700; font-size: 15px; line-height: 30px; flex: none; cursor: pointer; user-select: none; }
+  #inputcard .ic-at:hover { color: var(--dim); }
+  #msginput {
+    flex: 1; background: none; border: none; box-shadow: none; resize: none;
+    padding: 6px 2px; font-size: 14px; line-height: 1.6; min-height: 30px; max-height: 170px;
+    border-radius: 0;
+  }
+  #msginput:focus { border: none; box-shadow: none; }
+  #inputcard .ic-bottom { display: flex; align-items: center; gap: 8px; margin-top: 4px; }
+  #inputcard .ic-left { display: flex; align-items: center; gap: 8px; flex: 1; min-width: 0; }
+  #stopBtn {
+    display: none; border-radius: 999px; padding: 4px 13px; font-size: 12px; font-weight: 600;
+    background: rgba(240,82,79,.1); border: 1px solid rgba(240,82,79,.4); color: var(--error);
+    align-self: center; flex: none;
+  }
+  #stopBtn:hover { background: rgba(240,82,79,.18); border-color: rgba(240,82,79,.55); }
+  #sendBtn {
+    width: 34px; height: 34px; border-radius: 11px; padding: 0; border: none; flex: none;
+    background: var(--grad); color: #fff;
+    display: flex; align-items: center; justify-content: center;
+    box-shadow: 0 2px 10px rgba(124,108,242,.3);
+  }
+  #sendBtn:disabled { opacity: .35; cursor: default; box-shadow: none; transform: none; }
   #hisnote { display: none; padding: 14px 20px; border-top: 1px solid var(--border); color: var(--faint); font-size: 13px; background: var(--glass); flex: none; }
 
   #empty { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px; color: var(--faint); }
@@ -501,9 +548,18 @@
     <div id="pendbox"></div>
     <div id="agbox"></div>
     <div id="cmdbar">
-      <input id="msginput" placeholder="发送消息（追加输入 / 开新回合）">
-      <button id="sendBtn" class="primary">发送</button>
-      <button id="stopBtn" class="ghost" title="停止会话">■</button>
+      <div id="inputcard">
+        <div class="ic-top">
+          <span class="ic-at" id="atBtn" title="输入">@</span>
+          <textarea id="msginput" rows="1" placeholder="发送消息（追加输入 / 开新回合）"></textarea>
+        </div>
+        <div class="ic-bottom">
+          <div class="ic-left">
+            <button id="stopBtn" title="停止会话">⏹ 停止</button>
+          </div>
+          <button id="sendBtn" title="发送（Enter）"><svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor"><path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/></svg></button>
+        </div>
+      </div>
     </div>
   </div>
 
@@ -1166,8 +1222,12 @@ function renderDetail() {
   if (s.external) $("hisnote").textContent = "Ⓑ 外部会话（hooks 桥接）：可通过下方输入框向该终端注入文字（空闲时立即发送，忙碌时排队、回合结束后自动发送）。开启远程审批且手机在线时，Bash/Edit 等敏感工具会等你远程 Allow/Reject；终端切到 skip-permissions 模式则完全放行。";
   $("cmdbar").style.display = s.historical && !s.external ? "none" : "flex";
   $("msginput").placeholder = s.external
-    ? "注入到终端（空闲时自动发送，忙碌时排队）"
-    : "发送消息（追加输入 / 开新回合）";
+    ? "注入到终端（空闲即发，忙碌排队）"
+    : "发送消息（Enter 发送 · Shift+Enter 换行）";
+  // 停止入口只在运行中出现（WorkBuddy 式：执行中输入区显示停止）
+  const running = s.status === "WORKING" || s.status === "WAITING";
+  $("stopBtn").style.display = running ? "flex" : "none";
+  $("stopBtn").textContent = s.external ? "⏹ 注入 Esc" : "⏹ 停止";
   $("stopBtn").title = s.external ? "注入 Esc 打断" : "停止会话";
 
   // 时间线 / 统计（增量重建）
@@ -1317,36 +1377,42 @@ function entryHtml(e, prevDay) {
     html += '<div class="msg-user"><div class="ub">' + escapeHtml(e.full ?? e.text) + "</div>" +
       (hm ? '<div class="mt">' + hm + "</div>" : "") + "</div>";
   } else if (e.kind === "assistant_text") {
-    html += '<div class="msg-ai">' + (hm ? '<div class="mt">' + hm + "</div>" : "") +
-      '<div class="txt md">' + mdHtml(open ? (e.full ?? e.text) : e.text) +
+    html += '<div class="msg-ai"><div class="ai-head"><span class="ai-ava">✻</span><span class="ai-name">Claude</span>' +
+      (hm ? '<span class="mt">' + hm + "</span>" : "") + "</div>" +
+      '<div class="ai-body"><div class="txt md">' + mdHtml(open ? (e.full ?? e.text) : e.text) +
       (e.streaming ? '<span class="stream-cur">▌</span>' : "") + "</div>" +
       (e.full ? '<span class="x-full" data-x="' + k + '">' + (open ? "收起 ▴" : "展开全文 " + e.full.length + " 字 ▾") + "</span>" : "") +
-      "</div>";
+      "</div></div>";
   } else if (e.kind === "thinking") {
     const src = e.full ?? e.text;
     html += '<div class="think"><div class="th-head" data-x="' + k + '">' +
       (open ? "▾ 思考过程" : "▸ 思考过程 · " + src.length + " 字") + (hm ? " · " + hm : "") + "</div>" +
       (open ? '<div class="th-body txt md">' + mdHtml(src) + "</div>" : "") + "</div>";
   } else if (e.kind === "tool_use") {
-    html += '<div class="trow tcard"><span class="tname">⚙ ' + escapeHtml(e.tool || "tool") + "</span> " + escapeHtml(e.text) +
+    const t = e.tool || "";
+    const tico = /^(Edit|Write|MultiEdit|NotebookEdit)$/.test(t) ? "✎" : t === "Bash" ? "❯_" : /^(Read|Glob|Grep|WebFetch|WebSearch)$/.test(t) ? "▤" : "⚙";
+    html += '<div class="trow"><div class="tline"><span class="tico">' + tico + '</span><span class="tname">' + escapeHtml(t || "tool") + "</span><span>" + escapeHtml(e.text) + "</span>" +
       (e.detail
         ? (open
-          ? ' <span class="x-full" data-x="' + k + '">收起 ▴</span><div class="tdetail">' + escapeHtml(e.detail) + "</div>"
+          ? '<span class="x-full" data-x="' + k + '">收起 ▴</span>'
           : '<span class="x-full" data-x="' + k + '">展开 ▾</span>')
-        : "") + "</div>";
+        : "") + "</div>" +
+      (open && e.detail ? '<div class="tdetail">' + escapeHtml(e.detail) + "</div>" : "") + "</div>";
   } else if (e.kind === "tool_result") {
     if (e.diff && e.diff.length) {
       const plus = e.diff.filter((l) => l.startsWith("+")).length;
       const minus = e.diff.filter((l) => l.startsWith("-")).length;
-      html += '<div class="trow">' + (open
-        ? '<span class="tres">↳ 收起变更</span> <span class="x-full" data-x="' + k + '">▴</span><div class="diff">' + e.diff.map(diffLine).join("") + "</div>"
-        : '<span class="tres x-full" data-x="' + k + '">↳ 变更 · ' + plus + "+ " + minus + "− ▾</span>") + "</div>";
+      html += '<div class="trow"><div class="tline"><span class="tico">✎</span><span class="tres x-full" data-x="' + k + '">' +
+        (open ? "收起变更 ▴" : "变更 <span class='ds-add'>+" + plus + "</span> <span class='ds-del'>-" + minus + "</span> ▾") +
+        "</span></div>" +
+        (open ? '<div class="diff">' + e.diff.map(diffLine).join("") + "</div>" : "") + "</div>";
     } else if (e.detail) {
-      html += '<div class="trow"><span class="tres">↳ ' + escapeHtml(e.text) + "</span> " + (open
-        ? '<span class="x-full" data-x="' + k + '">收起 ▴</span><div class="tdetail">' + escapeHtml(e.detail) + "</div>"
-        : '<span class="x-full" data-x="' + k + '">展开 ▾</span>') + "</div>";
+      html += '<div class="trow"><div class="tline"><span class="tico">↳</span><span class="tres">' + escapeHtml(e.text) + "</span> " + (open
+        ? '<span class="x-full" data-x="' + k + '">收起 ▴</span>'
+        : '<span class="x-full" data-x="' + k + '">展开 ▾</span>') + "</div>" +
+        (open ? '<div class="tdetail">' + escapeHtml(e.detail) + "</div>" : "") + "</div>";
     } else {
-      html += '<div class="trow"><span class="tres">↳ ' + escapeHtml(e.text) + "</span></div>";
+      html += '<div class="trow"><div class="tline"><span class="tico">↳</span><span class="tres">' + escapeHtml(e.text) + "</span></div></div>";
     }
   } else {
     html += '<div class="msg-sys">' + escapeHtml(e.text) + "</div>";
@@ -1524,6 +1590,16 @@ $("createBtn").onclick = () => {
     closeNewForm();
   }
 };
+// 输入卡：textarea 自适应高度 + 纸飞机可用态同步
+function syncSendState() {
+  const mi = $("msginput");
+  $("sendBtn").disabled = !mi.value.trim();
+  mi.style.height = "auto";
+  mi.style.height = Math.min(mi.scrollHeight, 170) + "px";
+}
+$("msginput").addEventListener("input", syncSendState);
+$("atBtn").onclick = () => $("msginput").focus();
+syncSendState();
 $("sendBtn").onclick = () => {
   const text = $("msginput").value.trim();
   if (!text || !selected) return;
@@ -1532,6 +1608,7 @@ $("sendBtn").onclick = () => {
     // 注入路径：时间线由 hook 的 UserPromptSubmit / 排队日志回填，不本地预写
     if (sendCommand("COMMAND_EXT_INPUT", { session_id: selected, text })) {
       $("msginput").value = "";
+      syncSendState();
       if (s.status === "WAITING") toast("已排队，回合结束后自动发送");
     }
     return;
@@ -1539,6 +1616,7 @@ $("sendBtn").onclick = () => {
   if (sendCommand("COMMAND_MESSAGE", { session_id: selected, text })) {
     pushLog(selected, { ts: Date.now(), kind: "user_message", text });
     $("msginput").value = "";
+    syncSendState();
   }
 };
 $("msginput").addEventListener("keydown", (e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); $("sendBtn").click(); } });
