@@ -247,6 +247,8 @@ export class Bridge {
     if (!state) return;
     const text = truncate(content.trim(), 300);
     if (!text || this.recentlyLogged(id, text)) return;
+    // 删除闭环的系统通知注入：不作为排队气泡回显（晋升时的 user_message 已足够透明）
+    if (text.startsWith("[移动端删除任务]")) return;
     const key = normKey(content);
     const pending = state.pending_inputs ?? [];
     // CLI 会把多条排队消息合并成一条 enqueue（"A\rB"，内部换行折叠）：覆盖任一待发消息
@@ -922,9 +924,23 @@ export class Bridge {
       addHiddenTodoKey(sessionId, normKey(text));
       const cur = this.mgr.getExternal(sessionId)?.todos;
       if (cur?.length) this.mgr.setTodos(sessionId, cur.map((x) => ({ ...x })));
+      this.injectTodoDelete(sessionId, text);
       return { ok: true };
     } catch (e) {
       return { ok: false, error: String(e) };
+    }
+  }
+
+  // 删除闭环：显示层靠隐藏键过滤，但 CLI 本地任务存储无法外部真删——注入一条简短
+  // 指令让会话本体在下一回合把该条目从自己的任务列表同步删除，两端才不会"删了又冒回来"
+  private injectTodoDelete(sessionId: string, text: string): void {
+    const st = this.mgr.getExternal(sessionId);
+    if (!st) return;
+    const q = this.inputQueue.get(sessionId) ?? [];
+    q.push(`[移动端删除任务] 用户删除了任务清单条目：「${truncate(text, 120)}」。请将该条目从你的本地任务列表同步删除（任务工具置 deleted 或移除），不要重新创建或继续处理它。本条为系统通知，简短确认即可。`);
+    this.inputQueue.set(sessionId, q);
+    if ((st.status === "DONE" || st.status === "WORKING" || st.status === "ERROR") && !this.flushing.has(sessionId)) {
+      void this.flushQueue(sessionId);
     }
   }
 

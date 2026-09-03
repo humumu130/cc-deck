@@ -528,6 +528,10 @@ export class SessionManager {
           // 托管会话：SDK feed 后续重推也被 setTodos 过滤兜住
           addHiddenTodoKey(cmd.payload.session_id, normKey(content));
           if (s.state.todos) this.setTodos(cmd.payload.session_id, s.state.todos.map((t) => ({ ...t })));
+          // 删除闭环：让会话本体同步删掉本地任务条目（显示层过滤≠源头删除）
+          s.agent?.sendMessage(
+            `[移动端删除任务] 用户删除了任务清单条目：「${truncate(content.trim(), 120)}」。请将该条目从你的本地任务列表同步删除（任务工具置 deleted 或移除），不要重新创建或继续处理它。本条为系统通知，简短确认即可。`,
+          );
           return { command_id: cmd.command_id, ok: true };
         }
         case "COMMAND_DELETE": {
