@@ -1,11 +1,12 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Animated, BackHandler, FlatList, PanResponder, Pressable, StyleSheet, Text, View } from "react-native";
+import { Animated, BackHandler, Easing, FlatList, PanResponder, Pressable, StyleSheet, Text, View } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { STATUS_ZH, statusColor, withA, type ThemeColors } from "../theme";
 import { useTheme, useThemeStyles } from "../theme-context";
 import { LogoMark } from "../brand";
 import { sessionElapsed, fmtElapsed, fmtTok } from "../fmt";
+import { useListCompact } from "../display-settings";
 import { store } from "../store";
 import type { SessionState } from "../protocol";
 import RenameModal from "./RenameModal";
@@ -40,21 +41,33 @@ function PlusMark({ size = 20, color = "#D97757" }: { size?: number; color?: str
 const ACT_W = 78;    // 单个操作按钮宽
 const FULL_W = 156;  // 操作面板总宽（重命名 + 删除）
 
-// cc light 风格：运行中黄灯闪烁
+// cc light 风格：运行中黄灯呼吸（亮度+缩放联动，2.4s 一拍，对齐网页端呼吸灯）
 function BlinkDot({ color }: { color: string }) {
   const op = useRef(new Animated.Value(1)).current;
+  const sc = useRef(new Animated.Value(1)).current;
   const styles = useThemeStyles(makeStyles);
   useEffect(() => {
+    const ease = Easing.inOut(Easing.quad);
     const loop = Animated.loop(
-      Animated.sequence([
-        Animated.timing(op, { toValue: 0.25, duration: 550, useNativeDriver: true }),
-        Animated.timing(op, { toValue: 1, duration: 550, useNativeDriver: true }),
+      Animated.parallel([
+        Animated.sequence([
+          Animated.timing(op, { toValue: 0.45, duration: 1200, easing: ease, useNativeDriver: true }),
+          Animated.timing(op, { toValue: 1, duration: 1200, easing: ease, useNativeDriver: true }),
+        ]),
+        Animated.sequence([
+          Animated.timing(sc, { toValue: 0.8, duration: 1200, easing: ease, useNativeDriver: true }),
+          Animated.timing(sc, { toValue: 1, duration: 1200, easing: ease, useNativeDriver: true }),
+        ]),
       ]),
     );
     loop.start();
     return () => loop.stop();
-  }, [op]);
-  return <Animated.View style={[styles.dot, { backgroundColor: color, opacity: op }]} />;
+  }, [op, sc]);
+  return (
+    <Animated.View
+      style={[styles.dot, { backgroundColor: color, opacity: op, transform: [{ scale: sc }] }]}
+    />
+  );
 }
 
 // 黄灯旁的实时工作状态：回合耗时 · ↓输出tokens · 当前动作（每秒走秒）
@@ -80,7 +93,7 @@ function LiveStat({ s }: { s: SessionState }) {
 // 左滑露出操作面板（重命名 + 删除；DONE/ERROR 才可删）。
 // 面板做成独立圆角小胶囊（上下留 3px），从卡片后面滑出，避免直角贴圆角的接缝
 function SwipeRow({
-  sid, deletable, onPress, onRename, onDelete, revealSid, onReveal, children,
+  sid, deletable, onPress, onRename, onDelete, revealSid, onReveal, compact, children,
 }: {
   sid: string;
   deletable: boolean;
@@ -89,6 +102,7 @@ function SwipeRow({
   onDelete: () => void;
   revealSid: string | null;
   onReveal: (v: string | null) => void;
+  compact?: boolean;
   children: React.ReactNode;
 }) {
   const { c } = useTheme();
@@ -155,7 +169,7 @@ function SwipeRow({
       </View>
       <Animated.View style={[styles.swipeCard, { transform: [{ translateX: x }] }]} {...pan.panHandlers}>
         <Pressable
-          style={styles.card}
+          style={compact ? styles.cardC : styles.card}
           android_ripple={{ color: c.tintSoft, borderless: false }}
           onPress={() => {
             if (open.current) close();
@@ -170,13 +184,14 @@ function SwipeRow({
 }
 
 function SessionCard({
-  s, onOpen, onRename, revealSid, onReveal,
+  s, onOpen, onRename, revealSid, onReveal, compact,
 }: {
   s: SessionState;
   onOpen: (sid: string) => void;
   onRename: () => void;
   revealSid: string | null;
   onReveal: (v: string | null) => void;
+  compact?: boolean;
 }) {
   const { c } = useTheme();
   const styles = useThemeStyles(makeStyles);
@@ -191,31 +206,36 @@ function SessionCard({
       onDelete={() => store.send("COMMAND_DELETE", { session_id: s.session_id })}
       revealSid={revealSid}
       onReveal={onReveal}
+      compact={compact}
     >
-      <View style={styles.row1}>
+      <View style={[styles.row1, compact && { marginBottom: 3 }]}>
         {s.status === "WORKING" ? (
           <BlinkDot color={color} />
         ) : (
           <View style={[styles.dot, { backgroundColor: color, borderColor: color }]} />
         )}
-        {s.status === "WORKING" ? <LiveStat s={s} /> : <View style={{ flex: 1 }} />}
+        {!compact && s.status === "WORKING" ? <LiveStat s={s} /> : <View style={{ flex: 1 }} />}
         <Text style={styles.elapsed}>{fmtElapsed(sessionElapsed(s))}</Text>
       </View>
-      <Text style={styles.title} numberOfLines={1}>{s.title || "未命名会话"}</Text>
-      {s.status !== "WORKING" ? <Text style={styles.sum} numberOfLines={1}>{s.action_summary || "…"}</Text> : null}
-      <View style={styles.foot}>
-        <Text style={[styles.tag, s.external ? styles.tagExt : null]}>{s.external ? "外部 CLI" : "托管"}</Text>
-        {s.cwd ? <Text style={styles.folderTag} numberOfLines={1}>📁 {folderOf(s.cwd)}</Text> : null}
-        {s.historical && !s.external ? <Text style={styles.tag}>历史</Text> : null}
-        <View style={{ flex: 1 }} />
-        {s.stats && s.stats.files_changed > 0 ? (
-          <Text style={styles.stats}>
-            <Text style={{ color: c.working }}>+{s.stats.lines_added}</Text>
-            {" "}
-            <Text style={{ color: c.error }}>-{s.stats.lines_deleted}</Text>
-          </Text>
-        ) : null}
-      </View>
+      <Text style={[styles.title, compact && { marginBottom: 0, fontSize: 14 }]} numberOfLines={1}>
+        {s.title || "未命名会话"}
+      </Text>
+      {!compact && s.status !== "WORKING" ? <Text style={styles.sum} numberOfLines={1}>{s.action_summary || "…"}</Text> : null}
+      {!compact && (
+        <View style={styles.foot}>
+          <Text style={[styles.tag, s.external ? styles.tagExt : null]}>{s.external ? "外部 CLI" : "托管"}</Text>
+          {s.cwd ? <Text style={styles.folderTag} numberOfLines={1}>📁 {folderOf(s.cwd)}</Text> : null}
+          {s.historical && !s.external ? <Text style={styles.tag}>历史</Text> : null}
+          <View style={{ flex: 1 }} />
+          {s.stats && s.stats.files_changed > 0 ? (
+            <Text style={styles.stats}>
+              <Text style={{ color: c.working }}>+{s.stats.lines_added}</Text>
+              {" "}
+              <Text style={{ color: c.error }}>-{s.stats.lines_deleted}</Text>
+            </Text>
+          ) : null}
+        </View>
+      )}
     </SwipeRow>
   );
 }
@@ -223,6 +243,7 @@ function SessionCard({
 export default function ListScreen({ sessions, connected, connText, onOpen, onNew, onSetup, onEditServer }: Props) {
   const { c } = useTheme();
   const styles = useThemeStyles(makeStyles);
+  const compact = useListCompact();
   const [revealSid, setRevealSid] = useState<string | null>(null);
   const [renameTarget, setRenameTarget] = useState<SessionState | null>(null);
   const [drawerOpen, setDrawerOpen] = useState(false);
@@ -329,7 +350,7 @@ export default function ListScreen({ sessions, connected, connText, onOpen, onNe
         showsVerticalScrollIndicator={false}
         contentContainerStyle={{ paddingBottom: 120, paddingHorizontal: 14, paddingTop: 6 }}
         renderItem={({ item }) => (
-          <SessionCard s={item} onOpen={onOpen} onRename={() => setRenameTarget(item)} revealSid={revealSid} onReveal={setRevealSid} />
+          <SessionCard s={item} onOpen={onOpen} onRename={() => setRenameTarget(item)} revealSid={revealSid} onReveal={setRevealSid} compact={compact} />
         )}
         ListEmptyComponent={
           <View style={styles.empty}>
@@ -425,9 +446,13 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
     backgroundColor: c.panel, borderWidth: 1, borderColor: c.line,
     borderRadius: 16, padding: 14,
   },
+  cardC: {
+    backgroundColor: c.panel, borderWidth: 1, borderColor: c.line,
+    borderRadius: 13, padding: 9,
+  },
   row1: { flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 8 },
   dot: {
-    width: 10, height: 10, borderRadius: 5, opacity: 1,
+    width: 11, height: 11, borderRadius: 6, opacity: 1,
     alignItems: "center", justifyContent: "center",
   },
   elapsed: { fontSize: 12, color: c.faint, fontVariant: ["tabular-nums"] },

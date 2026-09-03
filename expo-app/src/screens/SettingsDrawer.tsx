@@ -4,7 +4,7 @@ import { Animated, PanResponder, Pressable, ScrollView, StyleSheet, Text, TextIn
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useTheme, useThemeStyles } from "../theme-context";
 import { LogoMark } from "../brand";
-import { setProcessFont, useProcessFont, type ProcessFont } from "../display-settings";
+import { setProcessFont, useProcessFont, setListCompact, useListCompact, type ProcessFont } from "../display-settings";
 import { resetPhrases, setPhrases, usePhraseState } from "../phrases";
 import { store, useRelay, type ServerEntry } from "../store";
 import { withA, type ThemeColors } from "../theme";
@@ -49,6 +49,7 @@ export default function SettingsDrawer({
     }),
   ).current;
   const processFont = useProcessFont();
+  const listCompact = useListCompact();
   const snap = useRelay();
   const [servers, setServers] = useState<ServerEntry[]>([]);
   const [activeId, setActiveId] = useState<string | null>(null);
@@ -243,7 +244,18 @@ export default function SettingsDrawer({
             </Pressable>
           </View>
         </View>
-        <Text style={d.tipT}>过程消息 = 工具调用 / 结果 / 系统提示；紧凑小一号+淡化，隐藏则整行不显示（思考内容保留）。</Text>
+        <View style={d.rowStatic}>
+          <Text style={d.rowT}>简洁列表</Text>
+          <View style={d.seg}>
+            <Pressable style={[d.segOpt, listCompact && d.segOptOn]} android_ripple={{ color: c.tintSoft, borderless: false, radius: 11 }} onPress={() => !listCompact && setListCompact(true)}>
+              <Text style={[d.segT, listCompact && d.segTOn]}>开</Text>
+            </Pressable>
+            <Pressable style={[d.segOpt, !listCompact && d.segOptOn]} android_ripple={{ color: c.tintSoft, borderless: false, radius: 11 }} onPress={() => listCompact && setListCompact(false)}>
+              <Text style={[d.segT, !listCompact && d.segTOn]}>关</Text>
+            </Pressable>
+          </View>
+        </View>
+        <Text style={d.tipT}>过程消息 = 工具调用 / 结果 / 系统提示；紧凑小一号+淡化，隐藏则整行不显示（思考内容保留）。简洁列表 = 会话卡只留状态与名称，一屏显示更多。</Text>
         </ScrollView>
       </Animated.View>
     </View>
