@@ -152,6 +152,13 @@ export class SessionManager {
     this.cloud = c;
   }
 
+  // 配对码签发器（index.ts 注入，与 /api/pair-code 同源）：COMMAND_PAIR_CODE 依赖
+  private pairIssuer: (() => { code: string; expires_in: number }) | null = null;
+
+  setPairIssuer(fn: () => { code: string; expires_in: number }): void {
+    this.pairIssuer = fn;
+  }
+
   // 不存在则注册外部会话（bridge.ts 调用）；返回当前状态
   ensureExternal(id: string, cwd: string, prompt: string, cliSessionId = ""): SessionState {
     const existing = this.sessions.get(id);
@@ -580,6 +587,13 @@ export class SessionManager {
               relay_pubkey: this.cloud.keypair.publicKey,
             },
           };
+        }
+        case "COMMAND_PAIR_CODE": {
+          // 信任设备（已配对手机，LAN token / 云 E2E 任一信道）为网页端新设备签发一次性配对码
+          if (!this.cloud || !this.pairIssuer) {
+            return { command_id: cmd.command_id, ok: false, error: "云桥未启用（PC 侧未设置 CCR_CLOUD_URL）" };
+          }
+          return { command_id: cmd.command_id, ok: true, pair_code: this.pairIssuer() };
         }
       }
     } catch (e) {

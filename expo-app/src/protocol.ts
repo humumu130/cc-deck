@@ -139,4 +139,5 @@ export interface CommandAck {
   session_id?: string;
   error?: string;
   cloud?: CloudPairInfo;
+  pair_code?: { code: string; expires_in: number };
 }

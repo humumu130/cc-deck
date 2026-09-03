@@ -35,6 +35,7 @@ export interface Snapshot {
   lastErrorCmd: string | null;
   cloudBusy: boolean;
   cloudMsg: string | null;
+  pairCode: { code: string; expiresAt: number } | null;
 }
 
 const emptySnapshot: Snapshot = {
@@ -46,6 +47,7 @@ const emptySnapshot: Snapshot = {
   lastErrorCmd: null,
   cloudBusy: false,
   cloudMsg: null,
+  pairCode: null,
 };
 
 const LAN_PROBE_MS = 4000;
@@ -433,6 +435,9 @@ class RelayStore {
     if ((msg as CommandAck).type === "COMMAND_ACK") {
       const ack = msg as CommandAck;
       if (ack.cloud) void this.saveCloudPairing(ack.cloud);
+      if (ack.pair_code) {
+        this.emit({ pairCode: { code: ack.pair_code.code, expiresAt: Date.now() + ack.pair_code.expires_in * 1000 } });
+      }
       if (!ack.ok && ack.error && !ack.error.startsWith("duplicate")) {
         this.emit({ lastErrorCmd: ack.error });
       }
@@ -488,6 +493,13 @@ class RelayStore {
     if (this.snap.cloudBusy || this.snap.cloudMsg) {
       this.emit({ cloudBusy: false, cloudMsg: null });
     }
+  }
+
+  // 为网页端等新设备签发一次性配对码（LAN/云任一已连接信道均可）
+  async requestPairCode(): Promise<string | null> {
+    if (!this.ws || this.ws.readyState !== WebSocket.OPEN) return "请先连接服务器";
+    if (this.send("COMMAND_PAIR_CODE", {})) return null;
+    return "命令发送失败";
   }
 
   private onEvent(msg: Envelope) {

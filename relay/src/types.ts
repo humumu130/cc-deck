@@ -236,6 +236,7 @@ export type CommandType =
   | "COMMAND_RENAME"
   | "COMMAND_ANSWER"
   | "COMMAND_PAIR_START"
+  | "COMMAND_PAIR_CODE"
   | "COMMAND_PERM"
   | "COMMAND_REFRESH_TODOS"
   | "COMMAND_TODO_HIDE";
@@ -315,6 +316,12 @@ export interface PairStartCommand extends CommandBase {
   payload: { pubkey: string; name?: string };
 }
 
+// 已配对的信任设备（手机）请求签发网页端配对码，ACK 携带 pair_code
+export interface PairCodeCommand extends CommandBase {
+  type: "COMMAND_PAIR_CODE";
+  payload: Record<string, never>;
+}
+
 export type Command =
   | CreateCommand
   | MessageCommand
@@ -328,6 +335,7 @@ export type Command =
   | RenameCommand
   | AnswerCommand
   | PairStartCommand
+  | PairCodeCommand
   | PermCommand
   | RefreshTodosCommand
   | TodoHideCommand;
@@ -384,4 +392,5 @@ export interface CommandAckPayload {
   session_id?: string;   // COMMAND_CREATE 成功时返回
   error?: string;
   cloud?: CloudPairInfo; // 仅 COMMAND_PAIR_START 成功时携带
+  pair_code?: { code: string; expires_in: number }; // 仅 COMMAND_PAIR_CODE 成功时携带
 }

@@ -42,6 +42,7 @@ const pairCodes = createPairingCodes();
 if (cfg.cloudUrls.length) {
   cloudIdentity = loadOrCreateIdentity(cfg.dataDir);
   mgr.setCloud(cloudIdentity);
+  mgr.setPairIssuer(() => pairCodes.issue());
   if (cfg.cloudToken) {
     for (const url of cfg.cloudUrls) {
       const c = new CloudClient(bus, mgr, cfg, cloudIdentity, pairCodes, url);

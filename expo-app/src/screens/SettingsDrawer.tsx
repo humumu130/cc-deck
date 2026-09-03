@@ -100,6 +100,20 @@ export default function SettingsDrawer({
     setNewPh("");
   };
 
+  // 新设备配对码：信任设备向 relay 领一次性码，供网页端新浏览器输入
+  const [pairErr, setPairErr] = useState<string | null>(null);
+  const [now, setNow] = useState(Date.now());
+  const pc = snap.pairCode;
+  useEffect(() => {
+    if (!pc) return;
+    const t = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(t);
+  }, [pc?.code]);
+  const pairLeft = pc ? Math.max(0, Math.floor((pc.expiresAt - now) / 1000)) : 0;
+  const genPairCode = async () => {
+    setPairErr(await store.requestPairCode());
+  };
+
   return (
     <View style={d.root} pointerEvents={visible ? "auto" : "none"}>
       <Animated.View style={[d.scrim, { opacity: scrimOp }]}>
@@ -186,6 +200,21 @@ export default function SettingsDrawer({
             </Pressable>
           ) : null}
         </View>
+
+        <Text style={d.secT}>新设备配对</Text>
+        <Pressable style={d.pairGen} android_ripple={{ color: c.tintSoft, borderless: false }} onPress={() => void genPairCode()}>
+          <Text style={d.pairGenT}>生成网页端配对码</Text>
+        </Pressable>
+        {pc ? (
+          <View style={d.pairBox}>
+            <Text style={d.pairCodeT}>{pc.code.slice(0, 3)} {pc.code.slice(3)}</Text>
+            <Text style={[d.pairExpT, pairLeft === 0 && { color: c.waiting }]}>
+              {pairLeft > 0 ? `剩余 ${Math.floor(pairLeft / 60)}:${String(pairLeft % 60).padStart(2, "0")} · 一次性` : "已过期，请重新生成"}
+            </Text>
+            <Text style={d.pairHintT}>新设备打开网页端，选"云桥"连接后输入此码</Text>
+          </View>
+        ) : null}
+        {pairErr ? <Text style={d.pairErrT}>{pairErr}</Text> : null}
 
         <Text style={d.secT}>显示</Text>
         <View style={d.rowCol}>
@@ -281,6 +310,19 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
     borderWidth: 1, borderColor: c.line, borderStyle: "dashed",
   },
   phResetT: { color: c.dim, fontSize: 12, fontWeight: "600" },
+  pairGen: {
+    alignItems: "center", paddingVertical: 10, borderRadius: 12, marginBottom: 8,
+    backgroundColor: c.tintStrong, borderWidth: 1, borderColor: withA(c.brandA, 0.45),
+  },
+  pairGenT: { color: c.brandA, fontSize: 13, fontWeight: "700" },
+  pairBox: {
+    backgroundColor: c.panel, borderWidth: 1, borderColor: withA(c.brandA, 0.45),
+    borderRadius: 12, alignItems: "center", paddingVertical: 12, paddingHorizontal: 10, marginBottom: 8,
+  },
+  pairCodeT: { color: c.text, fontSize: 26, fontWeight: "800", letterSpacing: 4 },
+  pairExpT: { color: c.dim, fontSize: 11.5, marginTop: 2 },
+  pairHintT: { color: c.faint, fontSize: 10.5, marginTop: 6, textAlign: "center", lineHeight: 15 },
+  pairErrT: { color: c.waiting, fontSize: 11.5, marginBottom: 8 },
   rowStatic: {
     flexDirection: "row", alignItems: "center", justifyContent: "space-between",
     backgroundColor: c.panel, borderWidth: 1, borderColor: c.line,

@@ -661,10 +661,10 @@ let wsFails = 0;               // WS 连上又断且一帧未收的连续次数�
 let postFails = 0;             // 轮询上行 POST 连续失败次数（诊断展示用）
 
 const STATUS = {
-  WORKING: { zh: "运行中", sym: "●" },
-  WAITING: { zh: "等待确认", sym: "◐" },
-  ERROR:   { zh: "错误", sym: "✕" },
-  DONE:    { zh: "已完成", sym: "✓" },
+  WORKING: { sym: "●" },
+  WAITING: { sym: "◐" },
+  ERROR:   { sym: "✕" },
+  DONE:    { sym: "✓" },
 };
 const PERM_CYCLE = ["default", "acceptEdits", "plan"];
 const PERM_LABEL = { default: "标准", acceptEdits: "自动编辑", plan: "规划" };
@@ -1120,10 +1120,9 @@ function pushLog(sid, entry) {
 }
 
 // ---------- 渲染 ----------
-function chip(status, big) {
-  const meta = STATUS[status] || { zh: status, sym: "●" };
-  return '<span class="status-chip s-' + status + '"><i></i><span class="sym">' + meta.sym + "</span> " +
-    (big ? meta.zh + " · " + status : status) + "</span>";
+function chip(status) {
+  const meta = STATUS[status] || { sym: "●" };
+  return '<span class="status-chip s-' + status + '"><i></i><span class="sym">' + meta.sym + "</span> " + status + "</span>";
 }
 
 function fmtElapsed(ms) {
@@ -1196,7 +1195,7 @@ function renderDetail() {
 
   $("dtitle").textContent = s.title || "";
   $("dbadge").outerHTML = '<span id="dbadge" class="status-chip"></span>';
-  $("dbadge").innerHTML = chip(s.status, true);
+  $("dbadge").innerHTML = chip(s.status);
   $("dcwd").textContent = s.cwd;
   $("dmodel").textContent = s.model || "";
   $("delapsed").textContent = "⏱ " + fmtElapsed(sessionElapsed(s));
@@ -1307,7 +1306,7 @@ function renderDetail() {
 function statsTabHtml(s) {
   const u = s.usage;
   const rows = [
-    ["状态", (STATUS[s.status] || { zh: s.status }).zh + " · " + s.status],
+    ["状态", s.status],
     ["目录", s.cwd],
     ["模型", s.model || "-"],
     ["权限模式", s.external ? "-" : (PERM_LABEL[s.permission_mode ?? "default"] ?? s.permission_mode ?? "标准")],
