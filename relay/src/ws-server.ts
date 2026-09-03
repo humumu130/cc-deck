@@ -1,5 +1,6 @@
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 import { readFileSync, existsSync } from "node:fs";
+import { networkInterfaces } from "node:os";
 import { fileURLToPath } from "node:url";
 import { WebSocketServer, WebSocket } from "ws";
 import type { EventBus } from "./event-bus.js";
@@ -7,6 +8,14 @@ import type { SessionManager } from "./session-manager.js";
 import type { RelayConfig } from "./config.js";
 import { Bridge, parseGateTools } from "./bridge.js";
 import type { BridgeEvent, Command, CommandAckPayload, Envelope } from "./types.js";
+
+function localIps(): Set<string> {
+  const out = new Set<string>();
+  for (const list of Object.values(networkInterfaces())) {
+    for (const ni of list ?? []) if (ni.family === "IPv4") out.add(ni.address);
+  }
+  return out;
+}
 
 const COMMAND_TYPES = new Set([
   "COMMAND_CREATE",
@@ -119,6 +128,35 @@ export function startServer(
     }
     if (req.method === "GET" && url.pathname === "/health") {
       res.writeHead(200, { "content-type": "application/json" }).end('{"ok":true}');
+      return;
+    }
+    // 同机零配置直连：本机浏览器打开 CC Deck 网页时探测本机 relay，直接拿连接参数。
+    // 仅 loopback 请求放行；token 只回给可信 origin（我们的部署域/本机/本机 LAN IP 托管页），
+    // 防止任意网页从 loopback 套取 token。Safari 不豁免 loopback 混合内容，会探测失败（回退手动）。
+    if (req.method === "GET" && url.pathname === "/local-info") {
+      const remote = req.socket.remoteAddress ?? "";
+      const isLoopback = remote === "127.0.0.1" || remote === "::1" || remote === "::ffff:127.0.0.1";
+      const origin = (req.headers.origin ?? "").trim();
+      const ips = localIps();
+      const hostTrusted = (h: string) => h === "localhost" || h === "127.0.0.1" || ips.has(h);
+      // 带 Origin（跨源页面）：白名单回显放行；无 Origin：同源 fetch / 本机进程，认 Host。
+      // Host 浏览器不可伪造；能伪造的非浏览器进程本来就能直接读 token 文件，非此端点威胁面。
+      let allowOrigin = "";
+      if (origin) {
+        try {
+          const u = new URL(origin);
+          if (u.origin === "https://cc.humumu.online" || hostTrusted(u.hostname)) allowOrigin = origin;
+        } catch {}
+      } else {
+        const host = (req.headers.host ?? "").split(":")[0];
+        if (hostTrusted(host)) allowOrigin = `http://${req.headers.host}`;
+      }
+      if (!isLoopback || !allowOrigin) { res.writeHead(404).end(); return; }
+      res.writeHead(200, {
+        "content-type": "application/json",
+        "access-control-allow-origin": allowOrigin,
+        "cache-control": "no-store",
+      }).end(JSON.stringify({ ok: true, port: cfg.port, token: cfg.token }));
       return;
     }
     // 云桥配对码（网页端首次配对用）：LAN token 鉴权，码一次性 10 分钟有效

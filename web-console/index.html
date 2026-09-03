@@ -1887,7 +1887,17 @@ function submitPairCode() {
 $("pairBtn").onclick = submitPairCode;
 $("pairCode").addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); submitPairCode(); } });
 
-(function init() {
+// 同机零配置直连：探测本机 relay（/local-info 仅 loopback 可访问，Chrome/Edge 豁免 loopback 混合内容）
+async function probeLocalRelay() {
+  try {
+    const r = await fetch("http://127.0.0.1:8787/local-info", { signal: AbortSignal.timeout?.(1500) });
+    if (!r.ok) return null;
+    const j = await r.json().catch(() => null);
+    return j && j.ok && j.token ? j : null;
+  } catch { return null; }
+}
+
+(async function init() {
   // 配对链接：#bt=<桥token>&rd=<relay dev>&rk=<relay 公钥>&pc=<一次性配对码>。
   // 参数走 fragment（不落服务器日志/Referer），捕获后立刻从地址栏抹掉。
   const h = new URLSearchParams(location.hash.slice(1));
@@ -1904,8 +1914,22 @@ $("pairCode").addEventListener("keydown", (e) => { if (e.key === "Enter") { e.pr
   const qToken = params.get("token") || "";
   if (qToken && mode === "lan") $("token").value = qToken;
   $("cwd").value = localStorage.getItem("ccr_cwd") || "";
-  if ($("url").value && (mode === "cloud" ? cloudToken() : $("token").value)) connect();
-  else openPanel("conn");
+  const configured = $("url").value && (mode === "cloud" ? cloudToken() : $("token").value);
+  if (configured) { connect(); return; }
+  // 未配置过：探测本机 relay，命中即自动直连（同机零配置）
+  if (mode === "lan") {
+    const local = await probeLocalRelay();
+    if (local) {
+      $("url").value = "ws://127.0.0.1:8787/ws";
+      $("token").value = local.token;
+      localStorage.setItem("ccr_url", $("url").value);
+      localStorage.setItem("ccr_token", local.token);
+      toast("检测到本机 CC Deck Relay，已自动连接");
+      connect();
+      return;
+    }
+  }
+  openPanel("conn");
 })();
 </script>
 </body>
