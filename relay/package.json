@@ -15,6 +15,7 @@
   },
   "dependencies": {
     "@anthropic-ai/claude-agent-sdk": "latest",
+    "qrcode-terminal": "^0.12.0",
     "tweetnacl": "^1.0.3",
     "ws": "latest"
   },

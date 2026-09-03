@@ -5,7 +5,10 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
-const binDir = path.join(here, "..", "data", "bin");
+// 插件/EXE 形态：bin 目录跟随 CCR_DATA_DIR；inject.cs 源可用 CCR_INJECT_CS 指定（打包时带出）
+const dataDir = process.env.CCR_DATA_DIR ?? path.join(here, "..", "data");
+const binDir = path.join(dataDir, "bin");
+const injectCs = process.env.CCR_INJECT_CS ?? path.join(here, "..", "bin", "inject.cs");
 const exe = path.join(binDir, "inject.exe");
 const CSC = "C:/Windows/Microsoft.NET/Framework64/v4.0.30319/csc.exe";
 
@@ -17,7 +20,7 @@ export function ensureInjector(): boolean {
   if (ready) return true;
   try {
     mkdirSync(binDir, { recursive: true });
-    execFileSync(CSC, ["-nologo", `-out:${exe}`, path.join(here, "..", "bin", "inject.cs")], { timeout: 30_000 });
+    execFileSync(CSC, ["-nologo", `-out:${exe}`, injectCs], { timeout: 30_000 });
     ready = true;
   } catch (e) {
     console.warn("[injector] compile failed:", e instanceof Error ? e.message : e);

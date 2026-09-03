@@ -1,0 +1,14 @@
+{
+  "name": "cc-deck-plugins",
+  "owner": {
+    "name": "humumu"
+  },
+  "plugins": [
+    {
+      "name": "cc-deck",
+      "source": "./plugins/cc-deck",
+      "version": "0.2.35",
+      "description": "CC Deck：手机/手表/网页远程操控 Claude Code（启动 relay + 二维码装机 + hooks 自动接入）"
+    }
+  ]
+}

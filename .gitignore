@@ -12,6 +12,7 @@ Thumbs.db
 *.exe
 .claude/
 mobile/*.apk
+cc-plugins/plugins/cc-deck/mobile/cc-watch.apk
 wear-app/.gradle/
 wear-app/.kotlin/
 wear-app/build/
@@ -19,3 +20,6 @@ wear-app/app/build/
 wear-app/local.properties
 .locks/
 cloudflare/.dev.vars
+relay/cf-*.png
+web-console/.wrangler/
+cc-watch-relay-office.zip

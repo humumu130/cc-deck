@@ -1,5 +1,6 @@
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 import { readFileSync, existsSync } from "node:fs";
+import { join, sep } from "node:path";
 import { networkInterfaces } from "node:os";
 import { fileURLToPath } from "node:url";
 import { WebSocketServer, WebSocket } from "ws";
@@ -44,6 +45,7 @@ export interface StartServerOptions {
   questionHoldMs?: number;  // AskUserQuestion 挂起窗口（测试用短值）
   cloudHasPhones?: () => boolean; // 云通道是否有活跃手机（计入"手机在线"门控）
   pairCodes?: { issue(): { code: string; expires_in: number } }; // 云桥配对码（网页端领码）
+  onReady?: () => void;     // listen 成功后回调（daemon 模式在此时写 pid 文件，防端口被占时留下死 pid）
 }
 
 // 连接策略：
@@ -56,9 +58,15 @@ export function startServer(
   cfg: RelayConfig,
   opts: StartServerOptions = {},
 ): { port: number; close: () => Promise<void>; bridge: Bridge } {
-  const consoleHtml = fileURLToPath(new URL("../../web-console/index.html", import.meta.url));
-  const naclJs = fileURLToPath(new URL("../../web-console/nacl.js", import.meta.url));
-  const mobileDir = fileURLToPath(new URL("../../mobile/", import.meta.url));
+  // 静态根：插件 bundle（CC_DECK_PLUGIN define）= 插件根（scripts/../）；开发模式 = 仓库根（src/../../）
+  const webRoot =
+    process.env.CCR_WEB_ROOT ??
+    ((process.env.CC_DECK_PLUGIN as string | undefined)
+      ? fileURLToPath(new URL("../", import.meta.url))
+      : fileURLToPath(new URL("../../", import.meta.url)));
+  const consoleHtml = join(webRoot, "web-console", "index.html");
+  const naclJs = join(webRoot, "web-console", "nacl.js");
+  const mobileDir = join(webRoot, "mobile") + sep;
 
   const MIME: Record<string, string> = {
     ".html": "text/html; charset=utf-8",
@@ -184,7 +192,7 @@ export function startServer(
       return;
     }
     if ((url.searchParams.get("token") ?? "") !== cfg.token) {
-      console.log(`[ws-upgrade] reject: token mismatch (got=${url.searchParams.get("token") ?? ""})`);
+      console.log(`[ws-upgrade] reject: token mismatch`);
       socket.write("HTTP/1.1 401 Unauthorized\r\n\r\n");
       socket.destroy();
       return;
@@ -271,7 +279,7 @@ export function startServer(
     }
   }, HEARTBEAT_MS);
 
-  server.listen(cfg.port);
+  server.listen(cfg.port, opts.onReady);
 
   return {
     port: cfg.port,

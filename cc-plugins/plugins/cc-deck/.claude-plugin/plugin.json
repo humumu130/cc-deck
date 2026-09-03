@@ -1,0 +1,5 @@
+{
+  "name": "cc-deck",
+  "version": "0.2.35",
+  "description": "CC Deck：手机/手表/网页远程操控 Claude Code。提供 /cc-deck 启动 relay 并显示扫码连接，hooks 自动把 CLI 会话桥接给手机。"
+}
