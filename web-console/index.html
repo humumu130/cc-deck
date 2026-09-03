@@ -87,11 +87,14 @@
     flex: none;
   }
   .logo {
-    width: 34px; height: 34px; border-radius: 10px; background: var(--grad);
+    width: 34px; height: 34px; border-radius: 10px;
+    background: linear-gradient(180deg, #2B2433, #161221);
+    border: 1px solid rgba(255,255,255,.09);
     display: flex; align-items: center; justify-content: center;
-    font-weight: 700; font-size: 13px; color: #fff; letter-spacing: .5px;
-    box-shadow: 0 2px 14px rgba(124,108,242,.35); flex: none;
+    box-shadow: 0 2px 12px rgba(0,0,0,.35), inset 0 1px 0 rgba(255,255,255,.06); flex: none;
   }
+  .logo svg { width: 19px; height: 19px; }
+  #empty .logo svg { width: 30px; height: 30px; }
   .brand { display: flex; align-items: center; gap: 10px; min-width: 0; }
   .brand h1 { font-size: 15px; font-weight: 700; letter-spacing: .3px; white-space: nowrap; }
   #runhint { font-size: 12px; color: var(--dim); white-space: nowrap; }
@@ -139,6 +142,9 @@
   .panel.open { display: flex; }
   #connPanel input#url { flex: 1; min-width: 200px; }
   #connPanel input#token { width: 200px; }
+  #pairBox { display: none; align-items: center; gap: 8px; width: 100%; }
+  #pairBox input { flex: 1; min-width: 160px; letter-spacing: 2px; font-size: 15px; }
+  #pairBox .pair-hint { font-size: 11.5px; color: var(--dim); width: 100%; }
 
   /* ---------- 主体 ---------- */
   main { flex: 1; display: flex; overflow: hidden; }
@@ -277,7 +283,7 @@
     flex: 1; overflow-y: auto; padding: 14px 22px 20px;
     font-size: calc(15px * var(--tl-scale, 1)); line-height: 1.75; letter-spacing: .012em;
   }
-  #timeline > * { max-width: min(880px, 100%); margin-left: auto; margin-right: auto; }
+  #timeline > * { max-width: min(1040px, 100%); margin-left: auto; margin-right: auto; }
   .day-sep { text-align: center; color: var(--faint); font-size: 10.5px; margin: 14px 0 4px; font-variant-numeric: tabular-nums; letter-spacing: 1px; }
   .msg-user { display: flex; flex-direction: column; align-items: flex-end; margin: 18px 0; }
   .msg-user .ub {
@@ -337,7 +343,7 @@
   .stream-cur { color: var(--working); animation: blinkcur 1s infinite; font-weight: 700; }
   @keyframes blinkcur { 50% { opacity: .15; } }
   /* 排队注入消息（外部会话）：右对齐呼吸气泡 */
-  #pendbox { display: none; flex-direction: column; align-items: flex-end; gap: 6px; padding: 0 20px 8px; flex: none; }
+  #pendbox { display: none; flex-direction: column; align-items: flex-end; gap: 6px; padding: 0 20px 8px; flex: none; width: 100%; max-width: min(1040px, 100%); margin: 0 auto; box-sizing: border-box; }
   #pendbox span {
     background: var(--panel-2); border: 1px dashed var(--border); color: var(--dim);
     border-radius: 12px; border-top-right-radius: 4px; padding: 6px 11px; font-size: 12px;
@@ -383,7 +389,7 @@
     padding: 12px 20px calc(14px + env(safe-area-inset-bottom));
     border-top: 1px solid var(--border); background: var(--glass); flex: none;
   }
-  #cmdbar > * { width: 100%; max-width: min(880px, 100%); margin: 0 auto; }
+  #cmdbar > * { width: 100%; max-width: min(1040px, 100%); margin: 0 auto; }
   #inputcard {
     background: var(--panel); border: 1px solid var(--border); border-radius: 16px;
     padding: 7px 10px 8px 12px; transition: border-color .15s, box-shadow .15s;
@@ -462,7 +468,7 @@
 
 <header>
   <div class="brand">
-    <div class="logo">CC</div>
+    <div class="logo"><svg viewBox="0 0 24 24" fill="none"><defs><linearGradient id="lgA" x1="4" y1="4" x2="20" y2="20" gradientUnits="userSpaceOnUse"><stop stop-color="#E8985F"/><stop offset="1" stop-color="#C96442"/></linearGradient></defs><g stroke="url(#lgA)" stroke-width="2.5" stroke-linecap="round"><path d="M12 3.5v17"/><path d="M3.5 12h17"/><path d="M6.2 6.2l11.6 11.6"/><path d="M17.8 6.2L6.2 17.8"/></g></svg></div>
     <div>
       <h1>Claude Code</h1>
       <div id="runhint">连接中…</div>
@@ -479,6 +485,11 @@
   <input id="url" placeholder="ws://<pc-ip>:8787/ws">
   <input id="token" placeholder="token">
   <button id="connectBtn" class="primary">连接</button>
+  <div id="pairBox">
+    <input id="pairCode" inputmode="numeric" maxlength="6" placeholder="6 位配对码" autocomplete="off">
+    <button id="pairBtn" class="primary">配对</button>
+    <div class="pair-hint">云桥提示"未配对"时，输入家里 PC 领取的 6 位配对码即可（10 分钟内有效），无需配对链接</div>
+  </div>
 </div>
 
 <main>
@@ -566,7 +577,7 @@
   </div>
 
   <div id="empty">
-    <div class="logo">CC</div>
+    <div class="logo"><svg viewBox="0 0 24 24" fill="none"><defs><linearGradient id="lgB" x1="4" y1="4" x2="20" y2="20" gradientUnits="userSpaceOnUse"><stop stop-color="#E8985F"/><stop offset="1" stop-color="#C96442"/></linearGradient></defs><g stroke="url(#lgB)" stroke-width="2.5" stroke-linecap="round"><path d="M12 3.5v17"/><path d="M3.5 12h17"/><path d="M6.2 6.2l11.6 11.6"/><path d="M17.8 6.2L6.2 17.8"/></g></svg></div>
     <div>选择左侧会话，或点「＋ 新建」开始</div>
   </div>
 </main>
@@ -634,8 +645,12 @@ let expandRev = 0;             // 展开变更计数（驱动时间线重建）
 let mode = "lan";              // lan | cloud
 let ckp = null;                // 本浏览器固定 box 密钥对
 let relayPeer = null;          // {relay_dev, relay_pubkey}，配对成功后落 localStorage
-let pendingPair = null;        // {rd, rk, pc} 来自配对链接，一次性
+let pendingPair = null;        // {rd, rk, pc} 来自配对链接或输码，一次性
 let pairTimer = 0;             // 配对 ack 看门狗：8s 无应答重发 pair_req（ack 会随桥闪断丢失）
+// 输码配对兜底：浏览器无 relayPeer（首次/被 nack 清除）时也允许纯 6 位码配对，
+// rd/rk 非机密（dev 路由号 + 公开公钥），安全边界是 LAN 领取的一次性配对码。
+// relay 换 data/cloud-keypair.json 后需同步更新此处并重新部署。
+const BAKED_RELAY = { rd: "rl-3a9a68c9104f5b44", rk: "OppoyRBPW0QTDZNuDoNnucqgIuPFaAG9YXuVMadJARw=" };
 let pingTimer = null;
 let lastPong = 0;
 let transport = "ws";          // 云桥传输：ws | poll（公司代理掐 WS 升级时自动降级）
@@ -708,8 +723,9 @@ function connectCloud() {
   pendingPair = pair;
   if (!relayPeer && !pair) {
     setConn("", "未配对");
-    toast("首次使用请打开配对链接（向家里 PC 领取）");
+    toast("请输入配对码配对（家里 PC 领取）");
     openPanel("conn");
+    setTimeout(() => { if (mode === "cloud") $("pairCode").focus(); }, 80);
     return;
   }
   const dev = devId(ckp.publicKey, "wb");
@@ -717,7 +733,7 @@ function connectCloud() {
   clearInterval(pairTimer);
   try { ws && ws.close(); } catch {}
   ws = null;
-  setConn("wait", relayPeer ? "连接中 ☁" : "配对中…");
+  setConn("wait", relayPeer && !pendingPair ? "连接中 ☁" : "配对中…");
   if (transport === "poll") { startPollTransport(base, token, dev, pair); return; }
   // 手填 https://…/cloud 也能连：统一归一到 ws/wss scheme
   const wsBase = base.replace(/^http:\/\//i, "ws://").replace(/^https:\/\//i, "wss://");
@@ -745,8 +761,8 @@ function connectCloud() {
     opened = true;
     clearTimeout(hsTimer);
     connected = true; reconnectDelay = 1000;
-    if (!relayPeer) {
-      sendPairReq(pair, dev);
+    if (!relayPeer || pendingPair) {
+      sendPairReq(pendingPair, dev);
       startPairWatchdog();
       return;
     }
@@ -802,9 +818,9 @@ function startPollTransport(base, token, dev, pair) {
   pollBase = httpBase + "/cloud-poll?token=" + encodeURIComponent(token) +
     "&dev=" + encodeURIComponent(dev) + "&sid=" + pollSid;
   connected = true; reconnectDelay = 1000;
-  if (!relayPeer) {
+  if (!relayPeer || pendingPair) {
     setConn("wait", "配对中…(轮询)");
-    sendPairReq(pair, dev);
+    sendPairReq(pendingPair, dev);
     startPairWatchdog();
   } else {
     setConn("on", "已连接 ☁(轮询)");
@@ -856,8 +872,10 @@ function onCloudText(text) {
       connected = false;
       if (relayPeer) { localStorage.removeItem("ccr_cloud_peer"); relayPeer = null; }
       setConn("", "未配对");
-      toast(f.data.error || "设备未配对，请重新打开配对链接");
+      toast("请输入配对码重新配对（家里 PC 领取）");
       console.log("[cloud] relay 判定未配对:", f.data.error);
+      openPanel("conn");
+      setTimeout(() => { if (mode === "cloud") $("pairCode").focus(); }, 80);
     }
     return;
   }
@@ -879,7 +897,17 @@ function onCloudText(text) {
     startCloudPing();
     return;
   }
-  if (inner.t === "pair_nack") { clearInterval(pairTimer); setConn("", "未配对"); toast("配对失败：" + (inner.error || "码无效")); return; }
+  if (inner.t === "pair_nack") {
+    clearInterval(pairTimer);
+    // 码一次性：失败即作废，清掉避免刷新后拿废码反复重试
+    sessionStorage.removeItem("ccr_pair");
+    pendingPair = null;
+    setConn("", "未配对");
+    toast("配对失败：" + (inner.error || "码无效") + "，请重新领码输入");
+    openPanel("conn");
+    setTimeout(() => { if (mode === "cloud") $("pairCode").focus(); }, 80);
+    return;
+  }
   if (inner.t === "pong") { lastPong = Date.now(); return; }
   if (inner.type === "COMMAND_ACK") { onAck(inner); return; }
   if (inner.seq !== undefined) {
@@ -953,6 +981,8 @@ function setConn(cls, text) {
   $("connChip").className = cls;
   $("connText").textContent = text;
   $("connectBtn").textContent = connected ? "断开" : "连接";
+  // 连接成功自动收起连接面板，把高度还给会话区（点右上角连接状态条可重开）
+  if (cls === "on") $("connPanel").classList.remove("open");
 }
 
 function sendCommand(type, payload) {
@@ -1236,8 +1266,7 @@ function renderDetail() {
   extBtn.style.display = s.external ? "inline-block" : "none";
   extBtn.textContent = "远程审批：" + (s.remote_mode ? "开" : "关");
   extBtn.className = s.remote_mode ? "primary" : "ghost";
-  $("hisnote").style.display = s.historical ? "block" : s.external ? "block" : "none";
-  if (s.external) $("hisnote").textContent = "Ⓑ 外部会话（hooks 桥接）：可通过下方输入框向该终端注入文字（空闲时立即发送，忙碌时排队、回合结束后自动发送）。开启远程审批且手机在线时，Bash/Edit 等敏感工具会等你远程 Allow/Reject；终端切到 skip-permissions 模式则完全放行。";
+  $("hisnote").style.display = s.historical ? "block" : "none";
   $("cmdbar").style.display = s.historical && !s.external ? "none" : "flex";
   $("msginput").placeholder = s.external
     ? "注入到终端（空闲即发，忙碌排队）"
@@ -1720,14 +1749,37 @@ function applyMode() {
     $("token").value = localStorage.getItem("ccr_cloud_token") || "";
     $("url").placeholder = "ws://<云桥>:8790/cloud";
     $("token").placeholder = "云桥 token";
+    $("pairBox").style.display = "flex";
   } else {
     $("url").value = localStorage.getItem("ccr_url") ||
       (location.hostname ? "ws://" + location.hostname + ":" + location.port + "/ws" : "");
     $("token").value = localStorage.getItem("ccr_token") || "";
     $("url").placeholder = "ws://<pc-ip>:8787/ws";
     $("token").placeholder = "token";
+    $("pairBox").style.display = "none";
   }
 }
+
+// 输码配对：rd/rk 优先取本浏览器记忆的 relayPeer，被清/首次用页面内嵌值兜底。
+// 提交后走与配对链接完全相同的 pair_req → pair_ack 流程。
+function submitPairCode() {
+  const code = $("pairCode").value.trim();
+  if (!/^\d{6}$/.test(code)) { toast("请输入 6 位数字配对码"); $("pairCode").focus(); return; }
+  loadCloudIdentity();
+  const src = relayPeer ? { rd: relayPeer.relay_dev, rk: relayPeer.relay_pubkey } : BAKED_RELAY;
+  if (!src.rd || !src.rk) { toast("缺少 relay 信息，请使用配对链接"); return; }
+  pendingPair = { rd: src.rd, rk: src.rk, pc: code };
+  sessionStorage.setItem("ccr_pair", JSON.stringify(pendingPair));
+  $("pairCode").value = "";
+  if (!$("url").value.trim() || !$("token").value.trim()) {
+    toast("请先填写云桥地址与 token");
+    $("url").focus();
+    return;
+  }
+  connect();
+}
+$("pairBtn").onclick = submitPairCode;
+$("pairCode").addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); submitPairCode(); } });
 
 (function init() {
   // 配对链接：#bt=<桥token>&rd=<relay dev>&rk=<relay 公钥>&pc=<一次性配对码>。

@@ -26,6 +26,31 @@ function folderOf(cwd: string): string {
   return parts[parts.length - 1] ?? cwd;
 }
 
+// 品牌星芒标（与网页端同款）：深底圆角块 + 8 芒放射，纯 View 组合免 SVG 依赖
+function LogoMark({ size = 19, color = "#D97757" }: { size?: number; color?: string }) {
+  const h = Math.round(size * 0.92);
+  const w = 2.6;
+  return (
+    <View style={{ width: size, height: size }}>
+      {[0, 90, 45, -45].map((deg) => (
+        <View
+          key={deg}
+          style={{
+            position: "absolute",
+            width: w,
+            height: h,
+            top: (size - h) / 2,
+            left: (size - w) / 2,
+            borderRadius: w / 2,
+            backgroundColor: color,
+            transform: [{ rotate: `${deg}deg` }],
+          }}
+        />
+      ))}
+    </View>
+  );
+}
+
 const ACT_W = 78;    // 单个操作按钮宽
 const FULL_W = 156;  // 操作面板总宽（重命名 + 删除）
 
@@ -280,9 +305,9 @@ export default function ListScreen({ sessions, connected, connText, onOpen, onNe
           onPress={() => setDrawerOpen(true)}
           hitSlop={6}
         >
-          <LinearGradient colors={[c.brandA, c.brandB]} style={styles.logo}>
-            <Text style={styles.logoText}>CC</Text>
-          </LinearGradient>
+          <View style={styles.logo}>
+            <LogoMark size={19} />
+          </View>
         </Pressable>
         <View style={[styles.connChip, { borderColor: withA(connColor, 0.33) }]}>
           <View style={[styles.connDot, { backgroundColor: connColor }]} />
@@ -371,8 +396,10 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
     borderBottomWidth: 1, borderBottomColor: c.line,
   },
   logoBtn: { borderRadius: 12 },
-  logo: { width: 34, height: 34, borderRadius: 10, alignItems: "center", justifyContent: "center" },
-  logoText: { color: "#fff", fontWeight: "800", fontSize: 13 },
+  logo: {
+    width: 34, height: 34, borderRadius: 10, alignItems: "center", justifyContent: "center",
+    backgroundColor: "#1D1726", borderWidth: 1, borderColor: "rgba(255,255,255,0.09)",
+  },
   connChip: {
     flexDirection: "row", alignItems: "center", gap: 5, borderWidth: 1,
     borderRadius: 999, height: 28, paddingHorizontal: 10,
