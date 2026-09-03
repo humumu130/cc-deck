@@ -407,6 +407,10 @@ export class AgentSession {
     this.stopping = true;
     this.ended = true;
     this.denyAllPending("会话被停止");
+    // deny 的 control 响应还没写完就立刻 interrupt，实测会把 CLI 的权限控制通道打坏
+    // （resume 后所有门控工具 "AbortError: Stream closed" 六连挂）。留 250ms 让
+    // deny 响应先落地再打断
+    await new Promise((r) => setTimeout(r, 250));
     await this.q.interrupt();
     this.queue.end();
   }

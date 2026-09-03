@@ -57,6 +57,15 @@ const QUESTION_HOLD_MS = 90_000;
 const CLI_PID_CACHE = path.join(path.dirname(fileURLToPath(import.meta.url)), "..", "data", "cli-pids.json");
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
+function pidAlive(pid: number): boolean {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch (e) {
+    return (e as NodeJS.ErrnoException).code === "EPERM"; // Windows 上他人进程也报 EPERM，视作存活
+  }
+}
+
 export class Bridge {
   private pending = new Map<string, Pending>();   // ext session_id -> 挂起中的一次审批（CLI 工具串行，一会话最多一个）
   private turnStart = new Map<string, number>();  // ext session_id -> 本回合开始时间
@@ -68,6 +77,7 @@ export class Bridge {
   private recentUserMsgs = new Map<string, Map<string, { ts: number; via: "promote" | "prompt" }>>(); // ext id -> 归一化文本 -> 最近记录（via：晋升回显 / PC 手敲 prompt）
   private escMarkedAt = new Map<string, number>(); // ext id -> 最近一次 Esc 注入成功时间（乐观置 DONE 的自我纠正窗口）
   private queuePollTimer: NodeJS.Timeout | null = null;
+  private healTimer: NodeJS.Timeout | null = null;
   private extFileStats = new Map<string, { files: Set<string>; added: number; deleted: number }>();
   private extUsage = new Map<string, { input: number; output: number; cacheRead: number; cacheWrite: number; model: string }>();
   // 排队消息滞留看门狗：ext id -> { 最近补发时间, 连续补发次数, 是否已放弃 }
@@ -91,6 +101,25 @@ export class Bridge {
     this.subagentEndTtlMs = Number(process.env.CCR_SUBAGENT_END_TTL_MS) > 0 ? Number(process.env.CCR_SUBAGENT_END_TTL_MS) : 10 * 60_000;
     this.subagentRunTtlMs = Number(process.env.CCR_SUBAGENT_RUN_TTL_MS) > 0 ? Number(process.env.CCR_SUBAGENT_RUN_TTL_MS) : 30 * 60_000;
     this.hydratePidsFromCache();
+    this.healExternal();
+    // 自愈扫描：60s 一轮，也兜住运行期间任何来源的误标（不止重启重放）
+    this.healTimer = setInterval(() => this.healExternal(), 60_000);
+    this.healTimer.unref?.();
+  }
+
+  // 外部会话 ERROR 自愈：外部 CLI 是独立进程，relay 重启/重放把它标成 ERROR 属误伤
+  // （空闲 ext 会话没有 hook 事件来翻状态，就永久锁死在"错误"）。pid 仍在跑 → 翻回
+  // WORKING；pid 已死则维持 ERROR（真终态）。注入失败自愈链（onInjectFail）会在
+  // pid 失效时清掉定位，与这里不冲突。
+  private healExternal(): void {
+    for (const s of this.mgr.snapshot()) {
+      if (!s.external || s.status !== "ERROR" || !s.cli_pid) continue;
+      if (!pidAlive(s.cli_pid)) continue;
+      const st = this.mgr.getExternal(s.session_id);
+      if (st?.historical) st.historical = false; // 恢复可操作（ensureExternal 的 adopt 路径同款语义）
+      this.mgr.setExternalStatus(s.session_id, "WORKING", "自愈：CLI 进程仍在运行");
+      this.mgr.pushExternalLog(s.session_id, "system", "检测到误标错误（CLI 进程仍在运行），已自动恢复为运行中");
+    }
   }
 
   // Relay 重启后内存里的 cli_pid 丢了，而空闲终端不会有新 hook 事件来恢复；
@@ -336,21 +365,22 @@ export class Bridge {
   // ---------- 输入注入（COMMAND_EXT_INPUT / COMMAND_EXT_STOP）----------
 
   // 空闲（DONE）/运行中（WORKING）立即注入——CLI 对工作中收到的输入会原生排队/steering，
-  // 与 PC 终端手敲一致；WAITING（本地权限弹窗/远程审批挂起）注入 Enter 可能误触弹窗，排队等回合结束
+  // 与 PC 终端手敲一致；WAITING（本地权限弹窗/远程审批挂起）注入 Enter 可能误触弹窗，排队等回合结束。
+  // ERROR 也放行（relay 重启重放的误标，自愈 sweeper 未及翻转时先到）：pid 死了注入
+  // 自然失败走 onInjectFail 清定位，不会卡死
   extInput(sessionId: string, text: string): { ok: boolean; error?: string } {
     const state = this.mgr.getExternal(sessionId);
     if (!state) return { ok: false, error: `会话不存在: ${sessionId}` };
     if (!text.trim()) return { ok: false, error: "空消息" };
     if (!state.cli_pid) return { ok: false, error: "尚未定位 CLI 进程，等该会话下次活动后重试" };
-    if (state.status === "ERROR") return { ok: false, error: "会话处于错误状态" };
 
     const q = this.inputQueue.get(sessionId) ?? [];
     q.push(text);
     this.inputQueue.set(sessionId, q);
     // 发送方回显：进会话状态 pending_inputs（客户端显示在工作指示器下方，处理时上浮为正式消息）
     this.mgr.setExternalPending(sessionId, [...(state.pending_inputs ?? []), { text: text.trim(), ts: Date.now() }]);
-    if ((state.status === "DONE" || state.status === "WORKING") && !this.flushing.has(sessionId)) {
-      if (state.status === "WORKING") {
+    if ((state.status === "DONE" || state.status === "WORKING" || state.status === "ERROR") && !this.flushing.has(sessionId)) {
+      if (state.status !== "DONE") {
         this.mgr.pushExternalLog(sessionId, "system", `已注入终端（CLI 运行中，自动排队跟随）：${truncate(text, 80)}`);
       }
       void this.flushQueue(sessionId);
@@ -436,8 +466,8 @@ export class Bridge {
         const state = this.mgr.getExternal(sessionId);
         const q = this.inputQueue.get(sessionId);
         if (!q || q.length === 0) break;
-        // 注入的下一条已进 WAITING（权限弹窗/审批挂起）：剩余留给下一次 Stop 后 flush
-        if (!state || (state.status !== "DONE" && state.status !== "WORKING")) break;
+        // 注入的下一条已进 WAITING（权限弹窗/审批挂起）：剩余留给下一次 Stop 后 flush（ERROR 放行，误标会话）
+        if (!state || (state.status !== "DONE" && state.status !== "WORKING" && state.status !== "ERROR")) break;
         if (!state.cli_pid) {
           this.inputQueue.delete(sessionId);
           this.mgr.pushExternalLog(sessionId, "system", "排队消息被弃（进程定位丢失）");
