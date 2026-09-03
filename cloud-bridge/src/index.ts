@@ -12,7 +12,7 @@ const HEARTBEAT_MS = 30_000;
 
 // Node 形态云桥：HTTP upgrade 鉴权（/cloud?token=&dev=）后交 CloudRouter。
 // 桥不持久化任何状态，重启即清空（补发由 relay 的 seq 机制负责）。
-export function startCloudServer(port: number, token: string, extraPort = 0): {
+export function startCloudServer(port: number, token: string, extraPorts: number[] = []): {
   port: number;
   close: () => Promise<void>;
   router: CloudRouter;
@@ -113,12 +113,13 @@ export function startCloudServer(port: number, token: string, extraPort = 0): {
   }, HEARTBEAT_MS);
 
   server.listen(port);
-  // 同一 net.Server 不能 listen 两次，443 走第二个实例、upgrade 事件转发给主实例
-  const extra = extraPort > 0 ? createServer(onRequest) : null;
-  if (extra) {
-    extra.on("upgrade", (req, socket, head) => server.emit("upgrade", req, socket, head));
-    extra.listen(extraPort);
-  }
+  // 同一 net.Server 不能 listen 两次，附加端口各起一个实例、upgrade 事件转发给主实例
+  const extras = extraPorts.map((p) => {
+    const ex = createServer(onRequest);
+    ex.on("upgrade", (req, socket, head) => server.emit("upgrade", req, socket, head));
+    ex.listen(p);
+    return ex;
+  });
 
   return {
     port,
@@ -127,9 +128,12 @@ export function startCloudServer(port: number, token: string, extraPort = 0): {
       new Promise((resolve) => {
         clearInterval(heartbeat);
         for (const ws of socks.values()) ws.terminate();
-        wss.close(() =>
-          extra ? extra.close(() => server.close(() => resolve())) : server.close(() => resolve()),
-        );
+        wss.close(() => {
+          let pending = extras.length;
+          const done = () => (--pending === 0 ? server.close(() => resolve()) : undefined);
+          if (pending === 0) return server.close(() => resolve());
+          for (const ex of extras) ex.close(done);
+        });
       }),
   };
 }
@@ -140,8 +144,8 @@ interface HbWs extends WebSocket {
 
 function main(): void {
   const cfg = loadConfig();
-  startCloudServer(cfg.port, cfg.token, cfg.extraPort);
-  console.log(`[cloud-bridge] listening :${cfg.port}${cfg.extraPort ? ` :${cfg.extraPort}` : ""} path=/cloud`);
+  startCloudServer(cfg.port, cfg.token, cfg.extraPorts);
+  console.log(`[cloud-bridge] listening :${cfg.port}${cfg.extraPorts.map((p) => ` :${p}`).join("")} path=/cloud`);
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
