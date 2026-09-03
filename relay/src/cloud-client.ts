@@ -38,6 +38,7 @@ export class CloudClient {
     private cfg: RelayConfig,
     private identity: CloudIdentity,
     private pairCodes?: PairingCodes,
+    private url?: string,
   ) {
     this.unsubscribe = bus.subscribe((env) => this.onEnv(env));
   }
@@ -48,7 +49,7 @@ export class CloudClient {
   }
 
   private bridgeUrl(): string {
-    const base = this.cfg.cloudUrl;
+    const base = this.url ?? this.cfg.cloudUrl;
     const sep = base.includes("?") ? "&" : "?";
     return `${base}${sep}token=${encodeURIComponent(this.cfg.cloudToken)}&dev=${this.identity.relayDev}`;
   }
@@ -60,7 +61,7 @@ export class CloudClient {
     ws.on("open", () => {
       this.delayMs = 1000;
       this.lastRecv = Date.now();
-      console.log(`[cloud] bridge connected (dev=${this.identity.relayDev})`);
+      console.log(`[cloud] bridge connected ${this.tag} (dev=${this.identity.relayDev})`);
     });
     ws.on("message", (raw) => {
       this.lastRecv = Date.now();
@@ -72,7 +73,7 @@ export class CloudClient {
     ws.on("error", () => undefined); // close 会跟着触发，统一在那处理
     ws.on("close", () => {
       if (this.ws === ws) {
-        console.log(`[cloud] bridge disconnected, retry in ${this.delayMs}ms`);
+        console.log(`[cloud] bridge disconnected ${this.tag}, retry in ${this.delayMs}ms`);
         for (const st of this.phones.values()) st.active = false;
         this.ws = null;
         this.timer = setTimeout(() => this.connect(), this.delayMs);
@@ -100,6 +101,15 @@ export class CloudClient {
 
   private send(frame: unknown): void {
     if (this.ws?.readyState === WebSocket.OPEN) this.ws.send(JSON.stringify(frame));
+  }
+
+  // 多桥并行时的日志标签（桥 host）
+  private get tag(): string {
+    try {
+      return new URL(this.url ?? this.cfg.cloudUrl).host;
+    } catch {
+      return "?";
+    }
   }
 
   // 云通道是否有已 hello 的手机（提问/权限门控的"手机在线"判定要计入）

@@ -10,8 +10,9 @@ export interface RelayConfig {
   model: string;
   bridgeToken: string;       // hooks 桥接令牌（data/bridge-token，首启生成后固定）
   dataDir: string;
-  cloudUrl: string;          // 云桥地址（CCR_CLOUD_URL），空 = 云桥禁用
-  cloudToken: string;        // 云桥层连接 token（CCR_CLOUD_TOKEN）
+  cloudUrls: string[];       // 云桥地址列表（CCR_CLOUD_URL 逗号分隔），空 = 云桥禁用
+  cloudUrl: string;          // 主桥（首地址）：PAIR_ACK 下发给新配对设备
+  cloudToken: string;        // 云桥层连接 token（CCR_CLOUD_TOKEN，所有桥共用）
 }
 
 export function loadConfig(): RelayConfig {
@@ -36,11 +37,13 @@ export function loadConfig(): RelayConfig {
     }
   }
 
-  const cloudUrl = process.env.CCR_CLOUD_URL ?? "";
+  // 多桥并行：逗号分隔多个地址（如 CF wss + ECS ws），每桥一个 CloudClient 实例；
+  // 首地址为主桥（PAIR_ACK 下发给新配对手机的地址）
+  const cloudUrls = (process.env.CCR_CLOUD_URL ?? "").split(",").map((s) => s.trim()).filter(Boolean);
   const cloudToken = process.env.CCR_CLOUD_TOKEN ?? "";
 
   return {
     port, token, tokenGenerated: !envToken, defaultCwd, model, bridgeToken, dataDir,
-    cloudUrl, cloudToken,
+    cloudUrls, cloudUrl: cloudUrls[0] ?? "", cloudToken,
   };
 }

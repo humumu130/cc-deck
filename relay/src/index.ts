@@ -34,22 +34,26 @@ for (const s of mgr.snapshot()) {
   });
 }
 
-// 云桥：CCR_CLOUD_URL 配置了才启用（出站连桥，公司网络友好）
+// 云桥：CCR_CLOUD_URL 配置了才启用（出站连桥，公司网络友好）。
+// 逗号分隔多桥并行：每桥一个 CloudClient，手机/网页各自连任一桥都能互通
 let cloudIdentity: ReturnType<typeof loadOrCreateIdentity> | null = null;
-let cloudClient: CloudClient | null = null;
+const cloudClients: CloudClient[] = [];
 const pairCodes = createPairingCodes();
-if (cfg.cloudUrl) {
+if (cfg.cloudUrls.length) {
   cloudIdentity = loadOrCreateIdentity(cfg.dataDir);
   mgr.setCloud(cloudIdentity);
   if (cfg.cloudToken) {
-    cloudClient = new CloudClient(bus, mgr, cfg, cloudIdentity, pairCodes);
-    cloudClient.start();
+    for (const url of cfg.cloudUrls) {
+      const c = new CloudClient(bus, mgr, cfg, cloudIdentity, pairCodes, url);
+      cloudClients.push(c);
+      c.start();
+    }
   }
 }
 
 // 云通道活跃手机计入"手机在线"：云桥场景下提问/权限照常门控（否则手机在场却直接放行本地）
 startServer(bus, mgr, cfg, {
-  cloudHasPhones: () => cloudClient?.hasActivePhones() ?? false,
+  cloudHasPhones: () => cloudClients.some((c) => c.hasActivePhones()),
   pairCodes,
 });
 
@@ -63,7 +67,7 @@ console.log(`  历史:   ${persistPath}（恢复 ${adopted} 个会话）`);
 console.log(`  桥接:   ${join(cfg.dataDir, "bridge.json")}（外部 CLI 会话经 hooks 接入）`);
 console.log(
   cloudIdentity
-    ? `  云桥:   ${cfg.cloudUrl}（dev=${cloudIdentity.relayDev}，已配对 ${cloudIdentity.peers.size} 台设备${cfg.cloudToken ? "" : "；未设 CCR_CLOUD_TOKEN，仅可配对不可连桥"}）`
+    ? `  云桥:   ${cfg.cloudUrls.join(" + ")}（dev=${cloudIdentity.relayDev}，已配对 ${cloudIdentity.peers.size} 台设备${cfg.cloudToken ? "" : "；未设 CCR_CLOUD_TOKEN，仅可配对不可连桥"}）`
     : `  云桥:   未启用（未设置 CCR_CLOUD_URL）`,
 );
 if (cfg.tokenGenerated) {
