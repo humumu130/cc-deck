@@ -5,6 +5,17 @@ compatibility_date = "2025-06-01"
 # 桥 token 走 secret（本机副本在 relay/data/cloud-bridge-token.txt，gitignored）：
 #   npx wrangler secret put CLOUD_TOKEN
 # 未设置 secret 时 worker 全拒（env.CLOUD_TOKEN undefined → 401），可安全先部署
+# 本地开发：cloudflare/.dev.vars 写 CLOUD_TOKEN=changeme-cloudtoken（gitignored）
+
+# 部署后自动绑定自定义域（需 zone 在同一 CF 账号；Workers Routes/DNS 权限）
+routes = [
+  { pattern = "cc.humumu.online", custom_domain = true }
+]
+
+# 网页端静态托管：/ 与 /nacl.js 直接出文件；/cloud /health 先进 Worker
+[assets]
+directory = "../web-console"
+run_worker_first = ["/cloud", "/health"]
 
 [durable_objects]
 bindings = [

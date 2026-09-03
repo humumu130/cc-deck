@@ -14,7 +14,9 @@ export default {
   async fetch(req: Request, env: Env): Promise<Response> {
     const url = new URL(req.url);
     if (url.pathname === "/health") {
-      return Response.json({ ok: true, bridge: "cloudflare" });
+      // 转发进 DO 拿设备列表（与 Node 形态 /health 对齐；会唤醒 DO，无连接时即刻再休眠）
+      const stub = env.ROUTER.get(env.ROUTER.idFromName("main"));
+      return stub.fetch(new Request("https://router/health"));
     }
     if (url.pathname !== "/cloud") {
       return new Response("not found", { status: 404 });
@@ -56,6 +58,10 @@ export class RouterDO extends DurableObject {
 
   async fetch(req: Request): Promise<Response> {
     const url = new URL(req.url);
+    if (url.pathname === "/health") {
+      this.rehydrate();
+      return Response.json({ ok: true, bridge: "cloudflare", devices: this.router.devs() });
+    }
     if (url.pathname !== "/cloud") return new Response("not found", { status: 404 });
     const dev = url.searchParams.get("dev") ?? "";
     if (dev.length < 1 || dev.length > 64) return new Response("bad dev", { status: 400 });
@@ -80,25 +86,38 @@ export class RouterDO extends DurableObject {
   // 本地 workerd 的 webSocketMessage 里 ws.tags 未暴露（undefined），
   // 但 serializeAttachment/deserializeAttachment 可用——connId 存附件；
   // getWebSockets(tag) 的 tag 过滤仍然有效（顶替/定向发送用它）
-  private connOf(ws: WebSocket): string | undefined {
+  private attachOf(ws: WebSocket): { dev?: string; connId?: string } | undefined {
     const raw = (ws as { deserializeAttachment?: () => unknown }).deserializeAttachment?.();
     if (typeof raw !== "string") return undefined;
     try {
-      const v = JSON.parse(raw) as { connId?: string };
-      return typeof v.connId === "string" ? v.connId : undefined;
+      return JSON.parse(raw) as { dev?: string; connId?: string };
     } catch {
       return undefined;
     }
   }
 
+  // 休眠唤醒后 CloudRouter 内存表已丢，但 WebSocket 与附件还在运行时：
+  // 首个事件到达时按附件重建路由表，否则 handleFrame 全部静默丢弃、对端 ROUTE_MISS
+  private rehydrated = false;
+  private rehydrate(): void {
+    if (this.rehydrated) return;
+    this.rehydrated = true;
+    for (const ws of this.ctx.getWebSockets()) {
+      const a = this.attachOf(ws);
+      if (a?.dev && a.connId) this.router.register(a.connId, a.dev);
+    }
+  }
+
   override async webSocketMessage(ws: WebSocket, message: string | ArrayBuffer): Promise<void> {
     if (typeof message !== "string") return;
-    const connId = this.connOf(ws);
+    this.rehydrate();
+    const connId = this.attachOf(ws)?.connId;
     if (connId) this.router.handleFrame(connId, message);
   }
 
   override async webSocketClose(ws: WebSocket): Promise<void> {
-    const connId = this.connOf(ws);
+    this.rehydrate();
+    const connId = this.attachOf(ws)?.connId;
     if (connId) this.router.unregister(connId);
   }
 }

@@ -572,7 +572,9 @@ function connectCloud() {
     return;
   }
   const dev = devId(ckp.publicKey, "wb");
-  const url = base + (base.includes("?") ? "&" : "?") + "token=" + encodeURIComponent(token) +
+  // 手填 https://…/cloud 也能连：统一归一到 ws/wss scheme
+  const wsBase = base.replace(/^http:\/\//i, "ws://").replace(/^https:\/\//i, "wss://");
+  const url = wsBase + (wsBase.includes("?") ? "&" : "?") + "token=" + encodeURIComponent(token) +
     "&dev=" + encodeURIComponent(dev);
   setConn("wait", relayPeer ? "连接中 ☁" : "配对中…");
   try { ws && ws.close(); } catch {}
@@ -1371,7 +1373,7 @@ function applyMode() {
   if (h.get("pc") && h.get("rd") && h.get("rk")) {
     sessionStorage.setItem("ccr_pair", JSON.stringify({ rd: h.get("rd"), rk: h.get("rk"), pc: h.get("pc") }));
     if (h.get("bt")) localStorage.setItem("ccr_cloud_token", h.get("bt"));
-    if (location.protocol.startsWith("http")) localStorage.setItem("ccr_cloud_url", "ws://" + location.host + "/cloud");
+    if (location.protocol.startsWith("http")) localStorage.setItem("ccr_cloud_url", (location.protocol === "https:" ? "wss://" : "ws://") + location.host + "/cloud");
     localStorage.setItem("ccr_mode", "cloud");
     history.replaceState(null, "", location.pathname);
   }

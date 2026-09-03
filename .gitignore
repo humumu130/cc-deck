@@ -18,3 +18,4 @@ wear-app/build/
 wear-app/app/build/
 wear-app/local.properties
 .locks/
+cloudflare/.dev.vars
