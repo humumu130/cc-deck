@@ -31,6 +31,7 @@ export interface BridgeOptions {
   hasClients: () => boolean;       // 当前是否有 WS 客户端在线（手机在线才拦截）
   holdMs?: number;                 // PreToolUse 最长挂起（默认 590s，须 < hook 脚本内部 600s < settings timeout 620s）
   questionHoldMs?: number;         // AskUserQuestion 挂起窗口（默认 90s；超时放行 CLI 本地选择器）
+  dataDir: string;                 // pid 缓存所在数据目录（与 hook 单源对齐：插件形态 ~/.cc-deck/data，dev 形态 <repo>/data）
 }
 
 export interface BridgeDecision {
@@ -53,8 +54,6 @@ type TaskOp = { tool?: string; input?: unknown; result?: { task: { id: number } 
 
 const DEFAULT_HOLD_MS = 590_000;
 const QUESTION_HOLD_MS = 90_000;
-
-const CLI_PID_CACHE = path.join(path.dirname(fileURLToPath(import.meta.url)), "..", "data", "cli-pids.json");
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 function pidAlive(pid: number): boolean {
@@ -91,11 +90,17 @@ export class Bridge {
   private readonly subagentEndTtlMs: number;
   private readonly subagentRunTtlMs: number;
 
+  // hook 侧 pid 缓存路径必须与 bridge-hook.mjs 的 dataDir 判定一致，
+  // 否则插件形态下（bundle 在插件缓存目录）按模块路径解析会读错文件，
+  // relay 重启后 cli_pid 补水失效、远程发消息全被拒
+  private pidCacheFile = "";
+
   constructor(
     private bus: EventBus,
     private mgr: SessionManager,
     private opts: BridgeOptions,
   ) {
+    this.pidCacheFile = path.join(opts.dataDir, "cli-pids.json");
     this.stuckAfterMs = Number(process.env.CCR_STUCK_AFTER_MS) > 0 ? Number(process.env.CCR_STUCK_AFTER_MS) : 90_000;
     this.stuckRetryMs = Number(process.env.CCR_STUCK_RETRY_MS) > 0 ? Number(process.env.CCR_STUCK_RETRY_MS) : 60_000;
     this.subagentEndTtlMs = Number(process.env.CCR_SUBAGENT_END_TTL_MS) > 0 ? Number(process.env.CCR_SUBAGENT_END_TTL_MS) : 10 * 60_000;
@@ -126,7 +131,7 @@ export class Bridge {
   // 从 hook 侧缓存文件补回（key=CLI session_id，CLI 存活期不变）
   private hydratePidsFromCache(): void {
     try {
-      const cache = JSON.parse(readFileSync(CLI_PID_CACHE, "utf-8")) as Record<string, number>;
+      const cache = JSON.parse(readFileSync(this.pidCacheFile, "utf-8")) as Record<string, number>;
       for (const s of this.mgr.snapshot()) {
         if (!s.external || s.cli_pid) continue;
         const pid = cache[s.relay_session_id || s.session_id.slice(4)];
@@ -509,9 +514,9 @@ export class Bridge {
   // hook 侧 pid 缓存（relay 会话 id = "ext-" + CLI session_id）
   private clearPidCache(sessionId: string): void {
     try {
-      const raw = JSON.parse(readFileSync(CLI_PID_CACHE, "utf-8")) as Record<string, number>;
+      const raw = JSON.parse(readFileSync(this.pidCacheFile, "utf-8")) as Record<string, number>;
       delete raw[sessionId.slice(4)];
-      writeFileSync(CLI_PID_CACHE, JSON.stringify(raw));
+      writeFileSync(this.pidCacheFile, JSON.stringify(raw));
     } catch {}
   }
 

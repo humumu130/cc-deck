@@ -7004,7 +7004,7 @@ import { networkInterfaces as networkInterfaces2 } from "node:os";
 import { join as join8 } from "node:path";
 import { writeFileSync as writeFileSync6, openSync as openSync3, readFileSync as readFileSync8, rmSync as rmSync2 } from "node:fs";
 import { spawn as spawn3, execFileSync as execFileSync2 } from "node:child_process";
-import { fileURLToPath as fileURLToPath5 } from "node:url";
+import { fileURLToPath as fileURLToPath4 } from "node:url";
 
 // src/config.ts
 import { randomUUID } from "node:crypto";
@@ -7038,8 +7038,10 @@ function loadConfig() {
       writeFileSync(bridgeTokenPath, bridgeToken, "utf-8");
     }
   }
-  const cloudUrls = (process.env.CCR_CLOUD_URL ?? "").split(",").map((s) => s.trim()).filter(Boolean);
-  const cloudToken = process.env.CCR_CLOUD_TOKEN ?? "";
+  const DEFAULT_CLOUD_URL = "wss://cc.humumu.online/cloud";
+  const DEFAULT_CLOUD_TOKEN = "ccdeck-public-9f3k2m7v";
+  const cloudUrls = (process.env.CCR_CLOUD_URL ?? DEFAULT_CLOUD_URL).split(",").map((s) => s.trim()).filter(Boolean);
+  const cloudToken = process.env.CCR_CLOUD_TOKEN ?? DEFAULT_CLOUD_TOKEN;
   return {
     port,
     token,
@@ -38246,7 +38248,7 @@ import { createServer } from "node:http";
 import { readFileSync as readFileSync6, existsSync as existsSync5 } from "node:fs";
 import { join as join6, sep as sep5 } from "node:path";
 import { networkInterfaces } from "node:os";
-import { fileURLToPath as fileURLToPath4 } from "node:url";
+import { fileURLToPath as fileURLToPath3 } from "node:url";
 
 // node_modules/ws/wrapper.mjs
 var import_stream5 = __toESM(require_stream(), 1);
@@ -38264,7 +38266,6 @@ import { randomUUID as randomUUID4 } from "node:crypto";
 import { closeSync as closeSync2, openSync as openSync2, readSync as readSync2, readFileSync as readFileSync5, readdirSync as readdirSync2, statSync as statSync3, writeFileSync as writeFileSync4 } from "node:fs";
 import { homedir as homedir2 } from "node:os";
 import path3 from "node:path";
-import { fileURLToPath as fileURLToPath3 } from "node:url";
 
 // src/injector.ts
 import { spawn as spawn2, execFileSync } from "node:child_process";
@@ -38348,7 +38349,6 @@ async function injectEnter(pid) {
 // src/bridge.ts
 var DEFAULT_HOLD_MS = 59e4;
 var QUESTION_HOLD_MS = 9e4;
-var CLI_PID_CACHE = path3.join(path3.dirname(fileURLToPath3(import.meta.url)), "..", "data", "cli-pids.json");
 var sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 function pidAlive(pid) {
   try {
@@ -38363,6 +38363,7 @@ var Bridge = class _Bridge {
     this.bus = bus2;
     this.mgr = mgr2;
     this.opts = opts;
+    this.pidCacheFile = path3.join(opts.dataDir, "cli-pids.json");
     this.stuckAfterMs = Number(process.env.CCR_STUCK_AFTER_MS) > 0 ? Number(process.env.CCR_STUCK_AFTER_MS) : 9e4;
     this.stuckRetryMs = Number(process.env.CCR_STUCK_RETRY_MS) > 0 ? Number(process.env.CCR_STUCK_RETRY_MS) : 6e4;
     this.subagentEndTtlMs = Number(process.env.CCR_SUBAGENT_END_TTL_MS) > 0 ? Number(process.env.CCR_SUBAGENT_END_TTL_MS) : 10 * 6e4;
@@ -38408,6 +38409,10 @@ var Bridge = class _Bridge {
   stuckRetryMs;
   subagentEndTtlMs;
   subagentRunTtlMs;
+  // hook 侧 pid 缓存路径必须与 bridge-hook.mjs 的 dataDir 判定一致，
+  // 否则插件形态下（bundle 在插件缓存目录）按模块路径解析会读错文件，
+  // relay 重启后 cli_pid 补水失效、远程发消息全被拒
+  pidCacheFile = "";
   // 外部会话 ERROR 自愈：外部 CLI 是独立进程，relay 重启/重放把它标成 ERROR 属误伤
   // （空闲 ext 会话没有 hook 事件来翻状态，就永久锁死在"错误"）。pid 仍在跑 → 翻回
   // WORKING；pid 已死则维持 ERROR（真终态）。注入失败自愈链（onInjectFail）会在
@@ -38426,7 +38431,7 @@ var Bridge = class _Bridge {
   // 从 hook 侧缓存文件补回（key=CLI session_id，CLI 存活期不变）
   hydratePidsFromCache() {
     try {
-      const cache = JSON.parse(readFileSync5(CLI_PID_CACHE, "utf-8"));
+      const cache = JSON.parse(readFileSync5(this.pidCacheFile, "utf-8"));
       for (const s of this.mgr.snapshot()) {
         if (!s.external || s.cli_pid) continue;
         const pid = cache[s.relay_session_id || s.session_id.slice(4)];
@@ -38770,9 +38775,9 @@ var Bridge = class _Bridge {
   // hook 侧 pid 缓存（relay 会话 id = "ext-" + CLI session_id）
   clearPidCache(sessionId) {
     try {
-      const raw = JSON.parse(readFileSync5(CLI_PID_CACHE, "utf-8"));
+      const raw = JSON.parse(readFileSync5(this.pidCacheFile, "utf-8"));
       delete raw[sessionId.slice(4)];
-      writeFileSync4(CLI_PID_CACHE, JSON.stringify(raw));
+      writeFileSync4(this.pidCacheFile, JSON.stringify(raw));
     } catch {
     }
   }
@@ -39496,7 +39501,7 @@ var COMMAND_TYPES = /* @__PURE__ */ new Set([
 ]);
 var HEARTBEAT_MS = 3e4;
 function startServer(bus2, mgr2, cfg2, opts = {}) {
-  const webRoot = process.env.CCR_WEB_ROOT ?? ("1" ? fileURLToPath4(new URL("../", import.meta.url)) : fileURLToPath4(new URL("../../", import.meta.url)));
+  const webRoot = process.env.CCR_WEB_ROOT ?? ("1" ? fileURLToPath3(new URL("../", import.meta.url)) : fileURLToPath3(new URL("../../", import.meta.url)));
   const consoleHtml = join6(webRoot, "web-console", "index.html");
   const naclJs = join6(webRoot, "web-console", "nacl.js");
   const mobileDir = join6(webRoot, "mobile") + sep5;
@@ -39527,6 +39532,7 @@ function startServer(bus2, mgr2, cfg2, opts = {}) {
   const wss = new import_websocket_server.default({ noServer: true });
   const bridge = new Bridge(bus2, mgr2, {
     gateTools: parseGateTools(opts.gateToolsRaw ?? process.env.CCR_GATE_TOOLS),
+    dataDir: cfg2.dataDir,
     hasClients: () => [...wss.clients].some((c) => c.readyState === import_websocket.default.OPEN) || !!opts.cloudHasPhones?.(),
     holdMs: opts.holdMs,
     questionHoldMs: opts.questionHoldMs
@@ -40048,7 +40054,7 @@ if (cliArgs.has("--daemon")) {
   }
   const rest = process.argv.slice(2).filter((a) => a !== "--daemon");
   const logFd = openSync3(join8(cfg.dataDir, "relay.log"), "a");
-  const child = spawn3(process.execPath, [fileURLToPath5(import.meta.url), ...rest], {
+  const child = spawn3(process.execPath, [fileURLToPath4(import.meta.url), ...rest], {
     detached: true,
     stdio: ["ignore", logFd, logFd],
     env: { ...process.env, CC_DECK_DAEMON: "1" }

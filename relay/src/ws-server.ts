@@ -97,6 +97,7 @@ export function startServer(
   const wss = new WebSocketServer({ noServer: true });
   const bridge = new Bridge(bus, mgr, {
     gateTools: parseGateTools(opts.gateToolsRaw ?? process.env.CCR_GATE_TOOLS),
+    dataDir: cfg.dataDir,
     hasClients: () => [...wss.clients].some((c) => c.readyState === WebSocket.OPEN) || !!opts.cloudHasPhones?.(),
     holdMs: opts.holdMs,
     questionHoldMs: opts.questionHoldMs,
