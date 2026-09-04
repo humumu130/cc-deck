@@ -323,12 +323,7 @@
   #renameBtn { padding: 3px 9px; font-size: 13px; color: var(--dim); }
   #dsub { color: var(--dim); font-size: 12px; margin-top: 5px; display: flex; gap: 12px; flex-wrap: wrap; }
   #dsub .elapsed { color: var(--text); }
-  /* 上下文占用条（详情副行）：标签 + 3px 细条 + 百分比，颜色按占用分级（与手机端同口径） */
-  #dsub .dctx { display: inline-flex; align-items: center; gap: 6px; }
-  #dsub .dctx .lbl { color: var(--faint); font-size: 10px; }
-  #dsub .dctx .bar { width: 90px; height: 3px; border-radius: 1.5px; background: rgba(128,134,148,.28); overflow: hidden; }
-  #dsub .dctx .bar i { display: block; height: 100%; border-radius: 1.5px; }
-  #dsub .dctx .t { font-size: 11px; font-variant-numeric: tabular-nums; }
+  /* 上下文水位只在列表卡片显示（详情页与列表同屏，不重复；与手机端同口径） */
   .card-stats .ctx-mini { display: inline-flex; align-items: center; gap: 4px; margin-left: auto; }
   .card-stats .ctx-mini-bar { width: 30px; height: 3px; border-radius: 1.5px; background: rgba(128,134,148,.28); overflow: hidden; }
   .card-stats .ctx-mini-bar i { display: block; height: 100%; border-radius: 1.5px; }
@@ -662,7 +657,6 @@
         <span id="dcwd"></span>
         <span id="dmodel"></span>
         <span class="elapsed" id="delapsed"></span>
-        <span class="dctx" id="dctx"></span>
       </div>
       <div class="tabs">
         <button data-tab="activity" class="tab active">消息</button>
@@ -1526,7 +1520,7 @@ function tokStr(n) {
   if (n >= 1000) return Math.round(n / 1000) + "k";
   return String(n);
 }
-function ctxHtml(s, mini) {
+function ctxHtml(s) {
   const used = (s && s.context_usage) || 0;
   if (!used) return "";
   const limit = (s && s.context_limit) || 200000;
@@ -1534,9 +1528,7 @@ function ctxHtml(s, mini) {
   const r = used / limit;
   const lv = r < 0.6 ? "done" : r < 0.85 ? "working" : "waiting";
   const col = "var(--" + lv + ")";
-  return mini
-    ? '<span class="ctx-mini"><span class="ctx-mini-bar"><i style="width:' + pct + "%;background:" + col + '"></i></span><span class="ctx-mini-t" style="color:' + col + '">' + pct + "%</span></span>"
-    : '<span class="lbl">上下文</span><span class="bar"><i style="width:' + pct + "%;background:" + col + '"></i></span><span class="t" style="color:' + col + '">' + pct + "%</span>";
+  return '<span class="ctx-mini"><span class="ctx-mini-bar"><i style="width:' + pct + "%;background:" + col + '"></i></span><span class="ctx-mini-t" style="color:' + col + '">' + pct + "%</span></span>";
 }
 
 // 全源会话视图（含所属源，供角标/过滤/命令路由）
@@ -1619,7 +1611,7 @@ function render() {
           (s.historical ? '<span class="his-badge">历史</span>' : s.external ? '<span class="his-badge ext">外部</span>' : "") +
           '<button class="card-edit" title="重命名">✎</button></div>' +
         '<div class="card-summary' + (waiting ? " waiting" : "") + '">' + escapeHtml(waitingText) + "</div>" +
-        '<div class="card-stats">' + statsHtml(s.stats) + ctxHtml(s, true) + "</div>" +
+        '<div class="card-stats">' + statsHtml(s.stats) + ctxHtml(s) + "</div>" +
         (waiting && !s.historical && s.waiting_request?.decidable !== false ? '<div class="card-cta"><button>处理</button></div>' : "");
       d.onclick = () => select(s.session_id, ctx.cfg.id);
       const cta = d.querySelector(".card-cta button");
@@ -1650,7 +1642,6 @@ function renderDetail() {
   $("dcwd").textContent = s.cwd;
   $("dmodel").textContent = s.model || "";
   $("delapsed").textContent = "⏱ " + fmtElapsed(sessionElapsed(s));
-  $("dctx").innerHTML = ctxHtml(s, false);
 
   // 思考开关 / 权限模式 chip
   $("thinkBtn").classList.toggle("on", thinkShown);
