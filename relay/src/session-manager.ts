@@ -7,6 +7,7 @@ import type { RelayConfig } from "./config.js";
 import type { ReplayedSession } from "./history.js";
 import { deriveTitle } from "./history.js";
 import { generateTitle } from "./title-gen.js";
+import { cronTasksKey, readCronTasks } from "./cron.js";
 import { normKey, truncate } from "./summarizer.js";
 import { addHiddenTodoKey, hiddenTodoKeys } from "./todo-hidden.js";
 import type {
@@ -94,6 +95,7 @@ interface ManagedSession {
 
 const UPDATE_THROTTLE_MS = 2000;   // 同状态下的 SESSION_UPDATED 节流
 const HEARTBEAT_INTERVAL_MS = 5000;
+const CRON_POLL_INTERVAL_MS = 30_000; // 定时任务文件轮询（无官方文件监听事件，读文件足够便宜）
 const MAX_SESSIONS = 20;
 
 export class SessionManager {
@@ -113,6 +115,8 @@ export class SessionManager {
     this.deletedExtIds = new Set(readDeletedExts(cfg.dataDir));
     const t = setInterval(() => this.heartbeat(), HEARTBEAT_INTERVAL_MS);
     t.unref();
+    const c = setInterval(() => this.pollCronTasks(), CRON_POLL_INTERVAL_MS);
+    c.unref();
   }
 
   // 该 CLI session_id 是否归 relay 自己管（托管会话的 relay_session_id / 一次性子会话）
@@ -886,6 +890,7 @@ export class SessionManager {
       ...(s.state.subagents ? { subagents: s.state.subagents.map((x) => ({ ...x })) } : {}),
       ...(s.state.relay_session_id ? { relay_session_id: s.state.relay_session_id } : {}),
       ...(s.state.permission_mode ? { permission_mode: s.state.permission_mode } : {}),
+      ...(s.state.cron_tasks ? { cron_tasks: s.state.cron_tasks.map((t) => ({ ...t })) } : {}),
       // historical 增删必须实时下发：转录自愈/pid 对账解锁后，已连接的客户端
       // 要等到下次 SNAPSHOT 才能摘掉"仅可查看"——期间用户以为发不了消息
       historical: !!s.state.historical,
@@ -901,6 +906,21 @@ export class SessionManager {
           action_summary: s.state.action_summary,
         });
       }
+    }
+  }
+
+  // 定时任务轮询：读各会话 cwd 下 .claude/scheduled_tasks.json，变化才下发。
+  // 文件消失但此前有任务 → 视为清空（CLI 移除任务时可能直接删文件而非留空数组）
+  private pollCronTasks(): void {
+    for (const s of this.sessions.values()) {
+      const tasks = readCronTasks(s.state.cwd);
+      const next = tasks ?? (s.state.cron_tasks ? [] : undefined);
+      if (next === undefined) continue;
+      const prev = s.state.cron_tasks ?? [];
+      if (prev.length === 0 && next.length === 0) continue;
+      if (cronTasksKey(prev) === cronTasksKey(next)) continue;
+      s.state.cron_tasks = next;
+      this.emitUpdated(s, true);
     }
   }
 

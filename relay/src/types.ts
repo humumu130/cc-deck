@@ -41,6 +41,18 @@ export interface TodoItem {
   updated_at?: number;    // 任务文件 mtime（毫秒）：手机端"近3天"展示窗口用
 }
 
+// 定时任务（CLI 会话目录 .claude/scheduled_tasks.json 的宽容解析快照；
+// Claude Code 版本间字段可能变化，cron.ts 解析层隔离 schema 不确定性）
+export interface CronTask {
+  id: string;
+  name: string;           // 缺失时由 prompt 截断兜底
+  prompt: string;
+  schedule: string;       // 人读描述优先，缺失退 cron 表达式
+  next_run_at?: number;   // 毫秒时间戳（能解析时才有）
+  paused?: boolean;       // true = 暂停/禁用
+  recurring?: boolean;    // false = 一次性任务（跑完自删）
+}
+
 export interface SessionState {
   session_id: string;
   relay_session_id: string;   // SDK/CLI 侧 session_id（用于 resume）
@@ -68,6 +80,7 @@ export interface SessionState {
   subagents?: SubagentInfo[]; // external 会话的子 Agent 派生/结束追踪（手机端工作状态展示）
   permission_mode?: ManagedPermissionMode; // 托管会话当前权限模式
   pending_inputs?: PendingInput[]; // external 会话已发送未处理的注入消息（客户端显示在工作指示器下方，处理/回合结束时晋升为正式消息）
+  cron_tasks?: CronTask[];   // 会话目录的定时任务快照（30s 轮询，变化才下发；[] = 已清空）
 }
 
 // external 会话子 Agent 工作状态（Agent/Task 工具派生）
@@ -127,6 +140,7 @@ export interface SessionUpdatedPayload {
   relay_session_id?: string;   // SDK 侧会话 id（重启重放后仍可 resume 的凭证）
   permission_mode?: ManagedPermissionMode; // 权限模式变化时携带
   pending_inputs?: PendingInput[]; // 排队注入消息增减时携带（[] = 清空）
+  cron_tasks?: CronTask[];    // 定时任务变化时携带（[] = 清空）
 }
 
 export interface SessionHeartbeatPayload {
