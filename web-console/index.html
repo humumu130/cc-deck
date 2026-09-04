@@ -2260,6 +2260,7 @@ function submitAnswer() {
 
 function select(sid, srcId) {
   selected = { src: srcId, sid };
+  document.body.classList.add("detail-open"); // ≤720px：详情覆盖层切换（桌面态该 class 无样式作用）
   activeTab = "activity";
   document.querySelectorAll(".tabs button.tab").forEach((b) => b.classList.toggle("active", b.dataset.tab === "activity"));
   $("timeline").dataset.count = "";
@@ -2753,9 +2754,22 @@ async function probeLocalRelay() {
     saveServers();
     history.replaceState(null, "", location.pathname);
   }
-  // 旧入口兼容：?token= 直连令牌预填进直连表单
+  // 旧入口兼容：?token= 直连令牌——推导 host 建直连源、落库并设为活动源（对齐旧 /m 行为），
+  // 随后从地址栏抹掉（token 不留在历史/复制面）
   const params = new URLSearchParams(location.search);
-  if (params.get("token")) { setFormKind("lan", null); $("token").value = params.get("token"); }
+  if (params.get("token") && location.protocol.startsWith("http")) {
+    const wsUrl = (location.protocol === "https:" ? "wss://" : "ws://") + location.host + "/ws";
+    let s = servers.find((x) => x.kind === "lan" && x.wsUrl === wsUrl);
+    if (s) s.token = params.get("token");
+    else {
+      s = { id: uuid(), name: "直连 " + location.host, kind: "lan", wsUrl, token: params.get("token") };
+      servers.push(s);
+    }
+    activeServerId = s.id;
+    saveServers();
+    history.replaceState(null, "", location.pathname);
+    setFormKind("lan", s);
+  }
   $("cwd").value = lsGet("ccr_cwd") || "";
   // 空的直连占位：探测本机 relay，命中即补全（同机零配置）
   const ph = servers.find((s) => s.kind === "lan" && !s.wsUrl);
