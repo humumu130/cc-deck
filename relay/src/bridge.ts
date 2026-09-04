@@ -346,12 +346,13 @@ export class Bridge {
     this.queuePollTimer.unref();
   }
 
-  // 无 hook 会话的回合结束：无 Stop 事件可依赖，转录静默超过阈值视作回合结束
-  //（状态回落 + flush 排队消息）。误判代价小：长工具静默期短暂回落，下一段
-  // 转录增长会再翻回 WORKING；提前 flush 的消息 CLI 本就原生排队
+  // 无 hook 会话的回合结束：无 Stop 事件可依赖。纯文本收尾（turnShape="end"）静默
+  // 超过阈值即视作结束（状态回落 + flush 排队消息）；其余形态（工具执行中/下一条
+  // 生成中）给 10 分钟长窗——转录整条落盘，纯思考空窗可达分钟级，短窗必误判回落
+  //（封顶防 Esc 打断/进程死亡后再无写入的永久卡 WORKING）
   private sweepNoHookIdle(): void {
     if (!this.noHookIds.size) return;
-    const idleMs = Number(process.env.CCR_NOHOOK_IDLE_MS) > 0 ? Number(process.env.CCR_NOHOOK_IDLE_MS) : 25_000;
+    const idleMs = Number(process.env.CCR_NOHOOK_IDLE_MS) > 0 ? Number(process.env.CCR_NOHOOK_IDLE_MS) : 90_000;
     const now = Date.now();
     for (const id of [...this.noHookIds]) {
       const st = this.mgr.getExternal(id);
@@ -359,11 +360,13 @@ export class Bridge {
         this.noHookIds.delete(id);
         this.lastGrow.delete(id);
         this.turnStart.delete(id);
+        this.turnShape.delete(id);
         continue;
       }
       if (st.status !== "WORKING" || this.pending.has(id)) continue;
       const last = this.lastGrow.get(id) ?? 0;
-      if (!last || now - last <= idleMs) continue;
+      const shape = this.turnShape.get(id) ?? "gen";
+      if (!last || now - last <= (shape === "end" ? idleMs : 600_000)) continue;
       this.noHookIds.delete(id);
       const turn = this.turnStart.get(id) ?? st.started_at;
       this.turnStart.delete(id);
@@ -762,6 +765,11 @@ export class Bridge {
   // transcript 已读字节偏移：PostToolUse/Stop 时增量读出助手文本推上时间线
   private transcriptOffsets = new Map<string, number>();
 
+  // 转录末条形态：assistant 消息整条完成才落盘（生成期间零写入，纯思考可达分钟级），
+  // 静默 ≠ 回合结束。可靠区分：末条是纯文本 assistant 消息 = 回合自然结束；
+  // 末条是 tool_use（工具执行中）或 tool_result/新 prompt（下一条消息生成中）= 仍在回合内
+  private turnShape = new Map<string, "tool" | "gen" | "end">();
+
   // hooks 不携带助手输出——从 transcript JSONL 增量提取 assistant 文本块。
   // 首见（或文件变小=轮转）只取最后一条，避免把历史回复全量刷进时间线；
   // 只读到行尾完整处，半行留给下次读（转录文件是追加写）。
@@ -812,6 +820,8 @@ export class Bridge {
       const entries: { kind: "assistant_text" | "thinking"; text: string }[] = [];
       const enqueues: string[] = [];
       const steers: string[] = [];
+      // 末条形态：tool=悬置 tool_use / gen=回合推进中 / end=纯文本收尾；null=窗口内无相关行
+      let shape: "tool" | "gen" | "end" | null = null;
       const taskOps: TaskOp[] = [];
       const agentNotifs: string[] = []; // 后台子 Agent 完成通知里的 tool-use-id
       const agentUses: { id: string; input: unknown }[] = []; // Agent/Task tool_use 块（真实 call id）
@@ -851,6 +861,9 @@ export class Bridge {
           continue;
         }
         if (!/"type":\s*"assistant"/.test(line)) {
+          // 非 assistant 行（tool_result / 新 prompt / system 等）：回合仍在推进——
+          // tool_result 之后 CLI 必生成下一条消息，prompt 之后同样
+          shape = "gen";
           // user 行的 tool_result：TaskCreate 的结果文本（"Task #N created successfully"）
           if (line.includes("created successfully")) {
             try {
@@ -877,21 +890,31 @@ export class Bridge {
           Bridge.collectTaskOps(content, taskOps, creates);
           const texts: string[] = [];
           const thinks: string[] = [];
+          let hasToolUse = false;
           for (const b of content) {
             if (!b || typeof b !== "object") continue;
             const blk = b as { type?: string; text?: unknown; thinking?: unknown; name?: unknown; id?: unknown };
             if (blk.type === "text" && typeof blk.text === "string") texts.push(blk.text);
             else if (blk.type === "thinking" && typeof blk.thinking === "string") thinks.push(blk.thinking);
-            else if (blk.type === "tool_use" && (blk.name === "Agent" || blk.name === "Task")) {
-              agentUses.push({ id: typeof blk.id === "string" ? blk.id : "", input: (b as { input?: unknown }).input });
+            else if (blk.type === "tool_use") {
+              hasToolUse = true;
+              if (blk.name === "Agent" || blk.name === "Task") {
+                agentUses.push({ id: typeof blk.id === "string" ? blk.id : "", input: (b as { input?: unknown }).input });
+              }
             }
           }
+          shape = hasToolUse ? "tool" : "end";
           // content 顺序上 thinking 在正文之前；每行各合并为一条
           const th = thinks.join("\n").trim();
           if (th) entries.push({ kind: "thinking", text: th });
           const tx = texts.join("\n").trim();
           if (tx) entries.push({ kind: "assistant_text", text: tx });
         } catch {}
+      }
+      // 末条形态记账（首读也算：relay 重启可能正落在回合中途）
+      if (shape !== null) {
+        if (this.turnShape.size > 200) this.turnShape.clear();
+        this.turnShape.set(id, shape);
       }
       // 首读（relay 重启/新接入）只回放最后一条正文，thinking 不回放避免刷屏；排队台账不回放（陈旧）
       const emit = firstRead ? entries.filter((e) => e.kind === "assistant_text").slice(-1) : entries;

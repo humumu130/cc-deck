@@ -38691,12 +38691,13 @@ var Bridge = class _Bridge {
     }, 5e3);
     this.queuePollTimer.unref();
   }
-  // 无 hook 会话的回合结束：无 Stop 事件可依赖，转录静默超过阈值视作回合结束
-  //（状态回落 + flush 排队消息）。误判代价小：长工具静默期短暂回落，下一段
-  // 转录增长会再翻回 WORKING；提前 flush 的消息 CLI 本就原生排队
+  // 无 hook 会话的回合结束：无 Stop 事件可依赖。纯文本收尾（turnShape="end"）静默
+  // 超过阈值即视作结束（状态回落 + flush 排队消息）；其余形态（工具执行中/下一条
+  // 生成中）给 10 分钟长窗——转录整条落盘，纯思考空窗可达分钟级，短窗必误判回落
+  //（封顶防 Esc 打断/进程死亡后再无写入的永久卡 WORKING）
   sweepNoHookIdle() {
     if (!this.noHookIds.size) return;
-    const idleMs = Number(process.env.CCR_NOHOOK_IDLE_MS) > 0 ? Number(process.env.CCR_NOHOOK_IDLE_MS) : 25e3;
+    const idleMs = Number(process.env.CCR_NOHOOK_IDLE_MS) > 0 ? Number(process.env.CCR_NOHOOK_IDLE_MS) : 9e4;
     const now = Date.now();
     for (const id2 of [...this.noHookIds]) {
       const st2 = this.mgr.getExternal(id2);
@@ -38704,11 +38705,13 @@ var Bridge = class _Bridge {
         this.noHookIds.delete(id2);
         this.lastGrow.delete(id2);
         this.turnStart.delete(id2);
+        this.turnShape.delete(id2);
         continue;
       }
       if (st2.status !== "WORKING" || this.pending.has(id2)) continue;
       const last = this.lastGrow.get(id2) ?? 0;
-      if (!last || now - last <= idleMs) continue;
+      const shape = this.turnShape.get(id2) ?? "gen";
+      if (!last || now - last <= (shape === "end" ? idleMs : 6e5)) continue;
       this.noHookIds.delete(id2);
       const turn = this.turnStart.get(id2) ?? st2.started_at;
       this.turnStart.delete(id2);
@@ -39064,6 +39067,10 @@ var Bridge = class _Bridge {
   trackers = /* @__PURE__ */ new Map();
   // transcript 已读字节偏移：PostToolUse/Stop 时增量读出助手文本推上时间线
   transcriptOffsets = /* @__PURE__ */ new Map();
+  // 转录末条形态：assistant 消息整条完成才落盘（生成期间零写入，纯思考可达分钟级），
+  // 静默 ≠ 回合结束。可靠区分：末条是纯文本 assistant 消息 = 回合自然结束；
+  // 末条是 tool_use（工具执行中）或 tool_result/新 prompt（下一条消息生成中）= 仍在回合内
+  turnShape = /* @__PURE__ */ new Map();
   // hooks 不携带助手输出——从 transcript JSONL 增量提取 assistant 文本块。
   // 首见（或文件变小=轮转）只取最后一条，避免把历史回复全量刷进时间线；
   // 只读到行尾完整处，半行留给下次读（转录文件是追加写）。
@@ -39109,6 +39116,7 @@ var Bridge = class _Bridge {
       const entries = [];
       const enqueues = [];
       const steers = [];
+      let shape = null;
       const taskOps = [];
       const agentNotifs = [];
       const agentUses = [];
@@ -39146,6 +39154,7 @@ var Bridge = class _Bridge {
           continue;
         }
         if (!/"type":\s*"assistant"/.test(line)) {
+          shape = "gen";
           if (line.includes("created successfully")) {
             try {
               const j2 = JSON.parse(line);
@@ -39172,21 +39181,30 @@ var Bridge = class _Bridge {
           _Bridge.collectTaskOps(content, taskOps, creates);
           const texts = [];
           const thinks = [];
+          let hasToolUse = false;
           for (const b of content) {
             if (!b || typeof b !== "object") continue;
             const blk = b;
             if (blk.type === "text" && typeof blk.text === "string") texts.push(blk.text);
             else if (blk.type === "thinking" && typeof blk.thinking === "string") thinks.push(blk.thinking);
-            else if (blk.type === "tool_use" && (blk.name === "Agent" || blk.name === "Task")) {
-              agentUses.push({ id: typeof blk.id === "string" ? blk.id : "", input: b.input });
+            else if (blk.type === "tool_use") {
+              hasToolUse = true;
+              if (blk.name === "Agent" || blk.name === "Task") {
+                agentUses.push({ id: typeof blk.id === "string" ? blk.id : "", input: b.input });
+              }
             }
           }
+          shape = hasToolUse ? "tool" : "end";
           const th2 = thinks.join("\n").trim();
           if (th2) entries.push({ kind: "thinking", text: th2 });
           const tx2 = texts.join("\n").trim();
           if (tx2) entries.push({ kind: "assistant_text", text: tx2 });
         } catch {
         }
+      }
+      if (shape !== null) {
+        if (this.turnShape.size > 200) this.turnShape.clear();
+        this.turnShape.set(id2, shape);
       }
       const emit = firstRead ? entries.filter((e) => e.kind === "assistant_text").slice(-1) : entries;
       for (const e of emit) {

@@ -777,6 +777,19 @@ assert(ack24.ok === false, "empty rename rejected");
     appendFileSync(f36, JSON.stringify({ type: "assistant", message: { content: [{ type: "text", text: "new turn" }] } }) + "\n");
     await wait(6500);
     assert(mgr.getExternal(id36)?.status === "WORKING", "36 regrowth flips WORKING again");
+    // 末条为 tool_use（工具执行中）：静默超过 idle 阈值也不回落——真实转录整条落盘，
+    // 工具/长思考静默分钟级，短窗必误判（曾致 WORKING→DONE 来回跳 + 刷系统日志）
+    appendFileSync(f36, JSON.stringify({ type: "assistant", message: { content: [{ type: "tool_use", id: "tu1", name: "Bash", input: {} }] } }) + "\n");
+    await wait(6500);
+    assert(mgr.getExternal(id36)?.status === "WORKING", "36 dangling tool_use keeps WORKING");
+    // tool_result 落地后下一条消息生成中（gen）同样长窗豁免
+    appendFileSync(f36, JSON.stringify({ type: "user", message: { content: [{ type: "tool_result", tool_use_id: "tu1", content: "ok" }] } }) + "\n");
+    await wait(6500);
+    assert(mgr.getExternal(id36)?.status === "WORKING", "36 awaiting generation keeps WORKING");
+    // 纯文本收尾才是回合结束信号 → 回落 DONE（等待需覆盖最坏对齐：读取 tick 5s + 回落 tick 5s）
+    appendFileSync(f36, JSON.stringify({ type: "assistant", message: { content: [{ type: "text", text: "final answer" }] } }) + "\n");
+    await wait(11_500);
+    assert(mgr.getExternal(id36)?.status === "DONE", "36 text ending falls to DONE");
   } finally {
     delete process.env.CCR_NOHOOK_IDLE_MS;
   }
