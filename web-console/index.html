@@ -469,6 +469,7 @@
   #cmdbar {
     padding: 12px 20px calc(14px + env(safe-area-inset-bottom));
     border-top: 1px solid var(--border); background: var(--glass); flex: none;
+    position: relative;
   }
   #cmdbar > * { width: 100%; max-width: min(1040px, 100%); margin: 0 auto; }
   #inputcard {
@@ -489,6 +490,26 @@
   }
   #msginput:focus { border: none; box-shadow: none; }
   #inputcard .ic-bottom { display: flex; align-items: center; gap: 8px; margin-top: 4px; }
+  /* Slash 命令联想：输入 / 时浮在输入卡上方 */
+  #slashbox {
+    display: none; position: absolute; bottom: calc(12px + env(safe-area-inset-bottom));
+    left: 20px; right: 20px; margin: 0 auto; max-width: min(1040px, calc(100% - 40px));
+    max-height: 248px; overflow-y: auto; z-index: 30;
+    background: var(--panel); border: 1px solid var(--border); border-radius: 14px;
+    box-shadow: 0 8px 28px rgba(0,0,0,.4);
+  }
+  #slashbox .sl-row {
+    display: flex; align-items: center; gap: 9px; padding: 8px 13px;
+    cursor: pointer; font-size: 13px;
+  }
+  #slashbox .sl-row:hover, #slashbox .sl-row.hot { background: var(--code-bg); }
+  #slashbox .sl-name { font-weight: 600; color: var(--text); flex: none; }
+  #slashbox .sl-desc { color: var(--faint); font-size: 11.5px; flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  #slashbox .sl-src {
+    flex: none; font-size: 10px; color: var(--dim); border: 1px solid var(--border);
+    border-radius: 7px; padding: 1px 6px;
+  }
+  #slashbox .sl-empty { padding: 12px 13px; color: var(--faint); font-size: 12px; }
   #inputcard .ic-left { display: flex; align-items: center; gap: 8px; flex: 1; min-width: 0; }
   #stopBtn {
     display: none; border-radius: 999px; padding: 4px 13px; font-size: 12px; font-weight: 600;
@@ -543,6 +564,7 @@
     #waitbox { margin-left: 14px; margin-right: 14px; }
     #liverow, #agbox { margin-left: 14px; margin-right: 14px; }
     #pendbox { padding: 0 14px 8px; }
+    #slashbox { left: 14px; right: 14px; max-width: calc(100% - 28px); }
   }
 </style>
 <script>try{if(localStorage.getItem("ccr_theme")==="light")document.documentElement.classList.add("light")}catch(e){}</script>
@@ -656,6 +678,7 @@
     <div id="pendbox"></div>
     <div id="agbox"></div>
     <div id="cmdbar">
+      <div id="slashbox"></div>
       <div id="inputcard">
         <div class="ic-top">
           <span class="ic-at" id="atBtn" title="输入">@</span>
@@ -762,6 +785,10 @@ const cfgOf = (id) => servers.find((s) => s.id === id);
 function saveServers() {
   try { localStorage.setItem(SERVERS_KEY, JSON.stringify(servers)); } catch {}
 }
+// Safari 无痕模式 setItem 抛 QuotaExceeded、getItem 极端环境也可能抛：
+// 统一走安全封装，避免顶层脚本中断白板 / connectAll 循环被打断
+function lsGet(k) { try { return localStorage.getItem(k); } catch { return null; } }
+function lsSet(k, v) { try { localStorage.setItem(k, v); } catch {} }
 
 // 旧单源配置（ccr_mode/ccr_url/ccr_token/ccr_cloud_*）→ 第一批 server 记录；
 // 迁移后清旧键避免双计。ccr_cloud_kp 是浏览器 E2E 身份（跨源共用），保留。
@@ -770,23 +797,23 @@ function migrateLegacy() {
   try { list = JSON.parse(localStorage.getItem(SERVERS_KEY) || "null"); } catch {}
   if (Array.isArray(list)) { servers = list.filter((e) => e && e.id && e.kind); return; }
   list = [];
-  const mode = localStorage.getItem("ccr_mode");
+  const mode = lsGet("ccr_mode");
   let peer = null;
   try { peer = JSON.parse(localStorage.getItem("ccr_cloud_peer") || "null"); } catch {}
   if (mode === "cloud") {
-    const url = localStorage.getItem("ccr_cloud_url") || defaultCloudUrl();
-    const token = localStorage.getItem("ccr_cloud_token") || BAKED_BRIDGE_TOKEN;
+    const url = lsGet("ccr_cloud_url") || defaultCloudUrl();
+    const token = lsGet("ccr_cloud_token") || BAKED_BRIDGE_TOKEN;
     list.push({
       id: uuid(), name: peer ? "云桥" : "公共桥（默认）", kind: "cloud", wsUrl: url, token,
       cloud: { url, token, rd: peer?.relay_dev || BAKED_RELAY.rd, rk: peer?.relay_pubkey || BAKED_RELAY.rk, paired: !!peer },
     });
   } else {
-    const u = localStorage.getItem("ccr_url");
-    if (u) list.push({ id: uuid(), name: hostOf(u), kind: "lan", wsUrl: u, token: localStorage.getItem("ccr_token") || "" });
+    const u = lsGet("ccr_url");
+    if (u) list.push({ id: uuid(), name: hostOf(u), kind: "lan", wsUrl: u, token: lsGet("ccr_token") || "" });
     // LAN 模式但曾配对过云桥：配对身份不丢，附带一条已配对云源
     if (peer) {
-      const url = localStorage.getItem("ccr_cloud_url") || defaultCloudUrl();
-      const token = localStorage.getItem("ccr_cloud_token") || BAKED_BRIDGE_TOKEN;
+      const url = lsGet("ccr_cloud_url") || defaultCloudUrl();
+      const token = lsGet("ccr_cloud_token") || BAKED_BRIDGE_TOKEN;
       list.push({
         id: uuid(), name: "云桥", kind: "cloud", wsUrl: url, token,
         cloud: { url, token, rd: peer.relay_dev, rk: peer.relay_pubkey, paired: true },
@@ -819,7 +846,7 @@ function ensureCtx(cfg) {
       ws: null, reconnectDelay: 1000, reconnectTimer: 0,
       pendingPair: null, pairTimer: 0, pingTimer: null, lastPong: 0,
       transport: "ws", pollGen: 0, pollSid: "", pollBase: "",
-      wsFails: 0, postFails: 0,
+      wsFails: 0, postFails: 0, hsTimer: 0,
     };
     ctxs.set(cfg.id, c);
   } else c.cfg = cfg;
@@ -831,6 +858,7 @@ function disconnectCtx(ctx, text) {
   clearInterval(ctx.pairTimer); ctx.pairTimer = 0;
   stopCloudPing(ctx);
   clearTimeout(ctx.reconnectTimer); ctx.reconnectTimer = 0;
+  clearTimeout(ctx.hsTimer); ctx.hsTimer = 0;
   try { ctx.ws && ctx.ws.close(); } catch {}
   ctx.ws = null;
   ctx.status = "offline";
@@ -917,6 +945,7 @@ function connectCloudFor(ctx, manual) {
   const dev = devId(ckp.publicKey, "wb");
   ctx.pollGen++;                 // 掐掉旧轮询循环（若有）
   clearInterval(ctx.pairTimer);
+  clearTimeout(ctx.reconnectTimer); ctx.reconnectTimer = 0;
   try { ctx.ws && ctx.ws.close(); } catch {}
   ctx.ws = null;
   setConn(ctx, "connecting", peer && !pair ? "连接中 ☁" : "配对中…");
@@ -928,17 +957,21 @@ function connectCloudFor(ctx, manual) {
   let opened = false;
   const w = new WebSocket(url);
   ctx.ws = w;
-  // 握手看门狗：公司代理可能把升级请求挂起不答（onopen/onclose 都不来），8s 强制降级
+  // 握手看门狗：公司代理可能把升级请求挂起不答（onopen/onclose 都不来），8s 强制降级。
+  // 挂到 ctx 上，disconnectCtx 可清理——否则删除/编辑源撞上握手期会对孤儿 ctx 复活连接
   let switched = false;
   const switchToPoll = (why) => {
     if (switched) return;
+    if (ctxs.get(ctx.cfg.id) !== ctx) return; // ctx 已被删除/替换，不复活
     switched = true;
     ctx.transport = "poll";
     console.log("[cloud:" + cfg.name + "] 切换 HTTP 轮询传输:", why);
     toast("WebSocket 被网络拦截，已切换 HTTP 轮询");
     connectCloudFor(ctx, manual);
   };
-  const hsTimer = setTimeout(() => {
+  clearTimeout(ctx.hsTimer);
+  ctx.hsTimer = setTimeout(() => {
+    ctx.hsTimer = 0;
     if (!opened) {
       try { ctx.ws && ctx.ws.close(); } catch {}
       switchToPoll("握手 8s 无响应");
@@ -947,7 +980,7 @@ function connectCloudFor(ctx, manual) {
   w.onopen = () => {
     if (ctx.ws !== w) return;
     opened = true;
-    clearTimeout(hsTimer);
+    clearTimeout(ctx.hsTimer); ctx.hsTimer = 0;
     ctx.reconnectDelay = 1000;
     if (!peer || pair) {
       sendPairReq(ctx, pair, dev);
@@ -962,7 +995,7 @@ function connectCloudFor(ctx, manual) {
   };
   w.onclose = (ev) => {
     if (ctx.ws !== w) return;
-    clearTimeout(hsTimer);
+    clearTimeout(ctx.hsTimer); ctx.hsTimer = 0;
     console.log("[cloud:" + cfg.name + "] ws 断开 code=" + ev.code);
     if (switched) return;
     if (!opened) { switchToPoll("握手被拒 code=" + ev.code); return; }
@@ -1025,6 +1058,7 @@ function startPairWatchdog(ctx) {
 
 // HTTP 长轮询传输：POST /cloud-poll 上行，GET /cloud-poll&wait=20 挂着收下行
 function startPollTransport(ctx, base, token, dev, pair) {
+  clearTimeout(ctx.reconnectTimer); ctx.reconnectTimer = 0; // 挂起的重连定时器会二次 connect 踢掉新连接
   const httpBase = base.replace(/^ws:\/\//i, "http://").replace(/^wss:\/\//i, "https://").replace(/\/cloud\/?$/, "");
   ctx.pollSid = uuid();
   ctx.pollBase = httpBase + "/cloud-poll?token=" + encodeURIComponent(token) +
@@ -1165,7 +1199,7 @@ function loadCloudIdentity() {
   try { ckp = JSON.parse(localStorage.getItem("ccr_cloud_kp") || "null"); } catch { ckp = null; }
   if (!ckp || !ckp.publicKey || !ckp.secretKey) {
     ckp = genKp();
-    localStorage.setItem("ccr_cloud_kp", JSON.stringify(ckp));
+    lsSet("ccr_cloud_kp", JSON.stringify(ckp));
   }
 }
 
@@ -1330,7 +1364,8 @@ function onEvent(ctx, msg) {
       });
       ctx.timelines.set(sid, []);
       pushLog(ctx, sid, { ts: msg.ts, kind: "system", text: msg.payload.external ? "外部会话接入 (hooks)" : "会话创建" });
-      if (!msg.payload.external) select(sid, ctx.cfg.id);
+      // 多源：仅当选中源就是本源（或无选中）才自动跳新会话，别抢用户正在看的源
+      if (!msg.payload.external && (!selected || selected.src === ctx.cfg.id)) select(sid, ctx.cfg.id);
       break;
     }
     case "SESSION_UPDATED": {
@@ -1803,7 +1838,8 @@ const dayKey = (ts) => {
   const d = new Date(ts);
   return d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0");
 };
-const eKey = (e) => e.id ?? (e.ts + "|" + e.kind + "|" + (e.text || "").length);
+// 展开键带源前缀：时间线只显示选中会话，跨源的同 id/同 ts+长度条目不串展开态
+const eKey = (e) => (selected?.src || "") + ":" + (e.id ?? (e.ts + "|" + e.kind + "|" + (e.text || "").length));
 const diffLine = (l) =>
   '<div class="' + (l.startsWith("@@") ? "h" : l.startsWith("+") ? "a" : l.startsWith("-") ? "d" : "c") + '">' + escapeHtml(l || " ") + "</div>";
 
@@ -1955,12 +1991,14 @@ function select(sid, srcId) {
   activeTab = "activity";
   document.querySelectorAll(".tabs button.tab").forEach((b) => b.classList.toggle("active", b.dataset.tab === "activity"));
   $("timeline").dataset.count = "";
+  updateSlashBox(); // 切会话收起旧联想（会话的命令集不同）
   render();
 }
 
 function closeDetail() {
   selected = null;
   document.body.classList.remove("detail-open");
+  updateSlashBox();
   render();
 }
 
@@ -2105,6 +2143,11 @@ $("saveSrvBtn").onclick = () => {
     setFormKind(kind, null);
     if (canAutoConnect(cfg)) connectServer(cfg);
   } else {
+    // 同桥双云源会互踢（桥按 dev 顶替，dev 由共享 E2E 身份派生），添加时拦截
+    if (kind === "cloud") {
+      const dup = servers.find((s) => s.kind === "cloud" && s.wsUrl === url);
+      if (dup) { toast("已有同地址云源「" + dup.name + "」，同桥两条源会互踢断连"); return; }
+    }
     const cfg = { id: uuid(), name, kind, wsUrl: url, token };
     if (kind === "cloud") cfg.cloud = { url, token: token || BAKED_BRIDGE_TOKEN, rd: BAKED_RELAY.rd, rk: BAKED_RELAY.rk, paired: false };
     servers.push(cfg);
@@ -2121,7 +2164,7 @@ $("createBtn").onclick = () => {
   if (!prompt) { toast("请输入初始指令"); return; }
   const ctx = ctxs.get(activeServerId) || firstOnlineCtx();
   if (sendCommandTo(ctx, "COMMAND_CREATE", { cwd: cwd || ".", prompt })) {
-    localStorage.setItem("ccr_cwd", cwd);
+    lsSet("ccr_cwd", cwd);
     $("prompt").value = "";
     closeNewForm();
   }
@@ -2134,6 +2177,108 @@ function syncSendState() {
   mi.style.height = Math.min(mi.scrollHeight, 170) + "px";
 }
 $("msginput").addEventListener("input", syncSendState);
+// ---------- Slash 命令联想（与手机端 slash.ts 同构） ----------
+// 内置表与 relay/src/ws-server.ts BUILTIN_COMMANDS 同步维护；LAN 源 fetch
+// /api/commands 拿用户/项目自定义命令（60s 缓存），云源/失败回落内置表
+const SLASH_BUILTIN = [
+  ["compact", "压缩对话历史，释放上下文"],
+  ["clear", "清空当前会话历史"],
+  ["help", "查看帮助"],
+  ["model", "查看/切换模型"],
+  ["cost", "当前会话 token 用量"],
+  ["context", "上下文使用概况"],
+  ["memory", "编辑项目记忆 CLAUDE.md"],
+  ["init", "为当前项目初始化 CLAUDE.md"],
+  ["review", "审查 PR / 代码变更"],
+  ["resume", "恢复历史会话"],
+  ["rename", "重命名当前会话"],
+  ["export", "导出当前会话记录"],
+  ["todos", "查看当前任务清单"],
+  ["permissions", "权限规则管理"],
+  ["config", "打开配置面板"],
+  ["mcp", "MCP 服务器管理"],
+  ["statusline", "状态栏配置"],
+  ["output-style", "切换输出风格"],
+  ["add-dir", "添加额外工作目录"],
+  ["vim", "切换 vim 按键模式"],
+  ["doctor", "Claude Code 健康检查"],
+  ["login", "切换账号"],
+  ["bug", "报告问题"],
+  ["release-notes", "查看更新日志"],
+].map(([name, desc]) => ({ name, desc, source: "builtin" }));
+const slashCache = new Map();
+let slashList = SLASH_BUILTIN;
+function slashHttpBase(cfg) {
+  try { const u = new URL(cfg.wsUrl); return (u.protocol === "wss:" ? "https://" : "http://") + u.host; }
+  catch { return ""; }
+}
+async function slashFetch() {
+  const sel = selSession();
+  if (!sel) return;
+  const cfg = sel.ctx.cfg;
+  if (cfg.kind !== "lan") { slashList = SLASH_BUILTIN; return; } // 云源：HTTP 到不了 relay
+  const base = slashHttpBase(cfg);
+  const cwd = sel.s.cwd ?? "";
+  const key = base + "|" + cwd;
+  const hit = slashCache.get(key);
+  if (hit && Date.now() - hit.ts < 60000) { slashList = hit.list; updateSlashBox(); return; }
+  const wantSrc = sel.ctx.cfg.id, wantSid = sel.s.session_id;
+  try {
+    const r = await fetch(base + "/api/commands?token=" + encodeURIComponent(cfg.token) + "&cwd=" + encodeURIComponent(cwd));
+    if (!r.ok) throw new Error(String(r.status));
+    const j = await r.json();
+    if (!j?.ok || !Array.isArray(j.commands)) throw new Error("bad shape");
+    const cur = selSession(); // 慢请求期间切了会话/源：丢弃结果，别污染新会话的联想
+    if (!cur || cur.ctx.cfg.id !== wantSrc || cur.s.session_id !== wantSid) return;
+    const list = j.commands.filter((c2) => c2 && typeof c2.name === "string");
+    slashCache.set(key, { ts: Date.now(), list });
+    slashList = list;
+  } catch { slashList = SLASH_BUILTIN; }
+  updateSlashBox();
+}
+function slashMatches(q) {
+  const s = q.trim().toLowerCase();
+  if (!s) return slashList.slice(0, 8);
+  return slashList.filter((c2) => c2.name.toLowerCase().startsWith(s) || (c2.desc || "").toLowerCase().includes(s)).slice(0, 8);
+}
+function updateSlashBox() {
+  const box = $("slashbox");
+  const v = $("msginput").value;
+  const q = v.startsWith("/") && !/\s/.test(v) ? v.slice(1) : null;
+  if (q === null || !selSession()) { box.style.display = "none"; return; }
+  const ms = slashMatches(q);
+  box.innerHTML = ms.length
+    ? ms.map((m) => '<div class="sl-row" data-n="' + escapeHtml(m.name) + '"><span class="sl-name">/' + escapeHtml(m.name) + "</span>" +
+      '<span class="sl-desc">' + escapeHtml(m.desc || "") + "</span>" +
+      (m.source && m.source !== "builtin" ? '<span class="sl-src">' + (m.source === "user" ? "用户" : "项目") + "</span>" : "") + "</div>").join("")
+    : '<div class="sl-empty">无匹配命令，Enter 原样发送</div>';
+  box.style.display = "block";
+}
+$("slashbox").addEventListener("mousedown", (e) => {
+  const row = e.target.closest(".sl-row");
+  if (!row) return;
+  e.preventDefault(); // 不让输入框失焦
+  $("msginput").value = "/" + row.dataset.n + " ";
+  syncSendState();
+  updateSlashBox();
+  $("msginput").focus();
+});
+$("msginput").addEventListener("input", () => {
+  updateSlashBox();
+  const v = $("msginput").value;
+  if (v.startsWith("/") && !/\s/.test(v)) void slashFetch();
+});
+$("msginput").addEventListener("keydown", (e) => {
+  if (e.key === "Tab" && $("slashbox").style.display === "block") {
+    const ms = slashMatches($("msginput").value.slice(1));
+    if (ms.length) {
+      e.preventDefault();
+      $("msginput").value = "/" + ms[0].name + " ";
+      syncSendState();
+      updateSlashBox();
+    }
+  }
+});
 $("atBtn").onclick = () => $("msginput").focus();
 syncSendState();
 $("sendBtn").onclick = () => {
@@ -2219,12 +2364,12 @@ $("thinkBtn").onclick = () => {
 };
 // 正文 fontSize 档位（紧凑/标准/大）：CSS 变量驱动时间线全部相对字号
 const TL_SCALES = [["紧凑", 0.92], ["标准", 1], ["大", 1.15]];
-let tlScaleIdx = TL_SCALES.findIndex(([, v]) => String(v) === localStorage.getItem("ccr_tl_scale"));
+let tlScaleIdx = TL_SCALES.findIndex(([, v]) => String(v) === lsGet("ccr_tl_scale"));
 if (tlScaleIdx < 0) tlScaleIdx = 1;
 function applyTlScale() {
   const [label, v] = TL_SCALES[tlScaleIdx];
   document.documentElement.style.setProperty("--tl-scale", String(v));
-  localStorage.setItem("ccr_tl_scale", String(v));
+  lsSet("ccr_tl_scale", String(v));
   $("fontBtn").textContent = "字·" + label;
 }
 $("fontBtn").onclick = () => {
@@ -2299,7 +2444,7 @@ async function probeLocalRelay() {
 (async function init() {
   // 旧单源配置迁移 → servers 列表（含首次使用的烘焙默认源种子）
   migrateLegacy();
-  activeServerId = localStorage.getItem(ACTIVE_KEY) || "";
+  activeServerId = lsGet(ACTIVE_KEY) || "";
   if (!cfgOf(activeServerId)) activeServerId = servers[0]?.id || "";
   setFormKind("lan", null);
   // 配对链接：#bt=<桥token>&rd=<relay dev>&rk=<relay 公钥>&pc=<一次性配对码>。
@@ -2327,7 +2472,7 @@ async function probeLocalRelay() {
   // 旧入口兼容：?token= 直连令牌预填进直连表单
   const params = new URLSearchParams(location.search);
   if (params.get("token")) { setFormKind("lan", null); $("token").value = params.get("token"); }
-  $("cwd").value = localStorage.getItem("ccr_cwd") || "";
+  $("cwd").value = lsGet("ccr_cwd") || "";
   // 空的直连占位：探测本机 relay，命中即补全（同机零配置）
   const ph = servers.find((s) => s.kind === "lan" && !s.wsUrl);
   if (ph) {
