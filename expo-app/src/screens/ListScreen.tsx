@@ -317,14 +317,18 @@ export default function ListScreen({ sessions, connected, connText, onOpen, onNe
   const [drawerOpen, setDrawerOpen] = useState(false);
   // 状态图例浮窗（统计行 ？ 呼出）
   const [legendOpen, setLegendOpen] = useState(false);
-  // 顶栏品牌区副标题：当前连接的服务器名（多源场景区分家里/公司）
+  // 顶栏品牌区副标题：当前连接的服务器名（多源场景区分家里/公司）。
+  // 抽屉关上时重读——切服务器不重挂载本页，副标题要跟着换
   const [activeName, setActiveName] = useState("");
   useEffect(() => {
-    void Promise.all([store.loadServers(), store.activeServerId()]).then(([list, id]) => {
-      const active = list.find((e) => e.id === id) ?? list[0];
-      setActiveName(active?.name?.trim() ?? "");
-    });
-  }, []);
+    if (drawerOpen) return;
+    void Promise.all([store.loadServers(), store.activeServerId()])
+      .then(([list, id]) => {
+        const active = list.find((e) => e.id === id) ?? list[0];
+        setActiveName(active?.name?.trim() ?? "");
+      })
+      .catch(() => {});
+  }, [drawerOpen]);
 
   // 抽屉打开时硬件返回先关抽屉
   useEffect(() => {

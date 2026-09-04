@@ -253,7 +253,7 @@ export function startServer(
       res.writeHead(200, { "content-type": "application/json" }).end(JSON.stringify(opts.pairCodes.issue()));
       return;
     }
-    // 云桥配对码（网页端首次配对用）：LAN token 鉴权，码一次性 30 秒有效
+    // 云桥配对码（网页端首次配对用）：LAN token 鉴权，码一次性 1 分钟有效（pairing.ts 默认 TTL）
     if (req.method === "POST" && url.pathname === "/api/pair-code") {
       if ((url.searchParams.get("token") ?? "") !== cfg.token) {
         res.writeHead(401).end("unauthorized");

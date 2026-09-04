@@ -194,7 +194,8 @@ export default function SettingsDrawer({
         {!srvCollapsed && servers.length === 0 ? <Text style={d.srvEmpty}>还没有服务器，点下方新增</Text> : null}
 
         <Text style={d.secT}>新设备配对</Text>
-        {pc && pairLeft > 0 ? (
+        {pc ? (
+          // pc 存在即显示码框：到期 0:00 到续领回包之间不闪「已过期」按钮（抽屉常开时每 TTL 闪一次）
           <View style={d.pairBox}>
             <View style={d.pairTop}>
               <Text style={d.pairCodeT}>{pc.code.slice(0, 3)} {pc.code.slice(3)}</Text>
