@@ -1,7 +1,7 @@
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
-import { readFileSync, existsSync } from "node:fs";
+import { readFileSync, existsSync, readdirSync, type Dirent } from "node:fs";
 import { join, sep } from "node:path";
-import { networkInterfaces } from "node:os";
+import { homedir, networkInterfaces } from "node:os";
 import { fileURLToPath } from "node:url";
 import { WebSocketServer, WebSocket } from "ws";
 import type { EventBus } from "./event-bus.js";
@@ -38,6 +38,75 @@ const COMMAND_TYPES = new Set([
 ]);
 
 const HEARTBEAT_MS = 30_000;
+
+// 内置 slash 命令表（手机/网页输入联想）：只列稳定核心集，desc 仅作提示文案
+const BUILTIN_COMMANDS: { name: string; desc: string }[] = [
+  { name: "compact", desc: "压缩对话历史，释放上下文" },
+  { name: "clear", desc: "清空当前会话历史" },
+  { name: "help", desc: "查看帮助" },
+  { name: "model", desc: "查看/切换模型" },
+  { name: "cost", desc: "当前会话 token 用量" },
+  { name: "context", desc: "上下文使用概况" },
+  { name: "memory", desc: "编辑项目记忆 CLAUDE.md" },
+  { name: "init", desc: "为当前项目初始化 CLAUDE.md" },
+  { name: "review", desc: "审查 PR / 代码变更" },
+  { name: "resume", desc: "恢复历史会话" },
+  { name: "rename", desc: "重命名当前会话" },
+  { name: "export", desc: "导出当前会话记录" },
+  { name: "todos", desc: "查看当前任务清单" },
+  { name: "permissions", desc: "权限规则管理" },
+  { name: "config", desc: "打开配置面板" },
+  { name: "mcp", desc: "MCP 服务器管理" },
+  { name: "statusline", desc: "状态栏配置" },
+  { name: "output-style", desc: "切换输出风格" },
+  { name: "add-dir", desc: "添加额外工作目录" },
+  { name: "vim", desc: "切换 vim 按键模式" },
+  { name: "doctor", desc: "Claude Code 健康检查" },
+  { name: "login", desc: "切换账号" },
+  { name: "bug", desc: "报告问题" },
+  { name: "release-notes", desc: "查看更新日志" },
+];
+
+interface SlashCommand {
+  name: string;
+  desc: string;
+  source: "builtin" | "user" | "project";
+}
+
+// 扫描自定义命令目录（~/.claude/commands 或 <cwd>/.claude/commands）：
+// 文件名=命令名，子目录一层 namespace:name；desc 取 frontmatter description 或首个非空行
+function listCustomCommands(dir: string, source: "user" | "project"): SlashCommand[] {
+  let entries: Dirent[];
+  try {
+    entries = readdirSync(dir, { withFileTypes: true }) as unknown as Dirent[];
+  } catch {
+    return [];
+  }
+  const descOf = (p: string): string => {
+    try {
+      const head = readFileSync(p, "utf-8").slice(0, 400);
+      const m = /^description:\s*(.+)$/m.exec(head);
+      if (m) return m[1].trim().slice(0, 80);
+      const line = head.split(/\r?\n/).find((l) => l.trim() && !l.startsWith("---"));
+      return line ? line.trim().slice(0, 80) : "";
+    } catch {
+      return "";
+    }
+  };
+  const out: SlashCommand[] = [];
+  for (const e of entries) {
+    if (e.isFile() && e.name.endsWith(".md")) {
+      out.push({ name: e.name.slice(0, -3), desc: descOf(join(dir, e.name)), source });
+    } else if (e.isDirectory()) {
+      try {
+        for (const g of readdirSync(join(dir, e.name))) {
+          if (g.endsWith(".md")) out.push({ name: `${e.name}:${g.slice(0, -3)}`, desc: descOf(join(dir, e.name, g)), source });
+        }
+      } catch {}
+    }
+  }
+  return out;
+}
 
 export interface StartServerOptions {
   gateToolsRaw?: string;    // CCR_GATE_TOOLS，逗号分隔门控工具名
@@ -195,6 +264,28 @@ export function startServer(
         return;
       }
       res.writeHead(200, { "content-type": "application/json" }).end(JSON.stringify(opts.pairCodes.issue()));
+      return;
+    }
+    // Slash 命令列表（手机/网页输入联想）：内置表 + 用户级 ~/.claude/commands +
+    // 项目级 <cwd>/.claude/commands（cwd 经 LAN token 鉴权后信任，与 WS 命令同信任级）
+    if (req.method === "GET" && url.pathname === "/api/commands") {
+      if ((url.searchParams.get("token") ?? "") !== cfg.token) {
+        res.writeHead(401).end("unauthorized");
+        return;
+      }
+      const cwd = url.searchParams.get("cwd") ?? "";
+      const custom = [
+        ...listCustomCommands(join(homedir(), ".claude", "commands"), "user"),
+        ...(cwd ? listCustomCommands(join(cwd, ".claude", "commands"), "project") : []),
+      ];
+      // 自定义命令同名覆盖内置
+      const seen = new Set(custom.map((c) => c.name));
+      const commands: SlashCommand[] = [
+        ...custom,
+        ...BUILTIN_COMMANDS.filter((c) => !seen.has(c.name)).map((c) => ({ ...c, source: "builtin" as const })),
+      ];
+      res.writeHead(200, { "content-type": "application/json", "cache-control": "no-store" })
+        .end(JSON.stringify({ ok: true, commands }));
       return;
     }
     res.writeHead(404).end("not found");
