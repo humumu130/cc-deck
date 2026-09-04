@@ -578,6 +578,21 @@
   }
   #toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
 
+  /* 任务完成汇报悬浮框（#204）：右下角卡片，10s 后折叠为一行小条 */
+  #taskDone {
+    position: fixed; right: 16px; bottom: 76px; max-width: 340px;
+    background: var(--toast-bg); border: 1px solid var(--border); color: var(--text);
+    border-radius: 12px; padding: 10px 12px; font-size: 13px; z-index: 98;
+    box-shadow: var(--toast-shadow); display: none; cursor: pointer;
+  }
+  #taskDone.show { display: block; }
+  #taskDone .td-head { display: flex; align-items: center; gap: 8px; }
+  #taskDone .td-title { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1; }
+  #taskDone .td-x { color: var(--faint); padding: 3px 6px; font-size: 14px; flex: none; }
+  #taskDone .td-x:hover { color: var(--text); }
+  #taskDone .td-item { opacity: .85; font-size: 12px; margin-top: 6px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  #taskDone .td-remain { color: var(--faint); font-size: 12px; margin-top: 8px; }
+
   ::-webkit-scrollbar { width: 8px; height: 8px; }
   ::-webkit-scrollbar-thumb { background: var(--scroll); border-radius: 4px; }
   ::-webkit-scrollbar-track { background: transparent; }
@@ -600,6 +615,7 @@
     body.detail-open #side { display: none; }
     body.detail-open #detail { display: flex; }
     body.detail-open #backBtn { display: inline-block; }
+    #taskDone { right: 10px; bottom: 84px; max-width: calc(100vw - 20px); }
     #timeline, #dhead, #cmdbar, #hisnote { padding-left: 14px; padding-right: 14px; margin-left: 0; margin-right: 0; }
     #waitbox, #liverow, #agbox { margin-left: 14px; margin-right: 14px; width: calc(100% - 28px); }
     #pendbox { padding: 0 14px 8px; }
@@ -747,6 +763,7 @@
 </main>
 
 <div id="toast"></div>
+<div id="taskDone"></div>
 
 <script src="/nacl.js"></script>
 <script>
@@ -935,6 +952,47 @@ function toast(msg, ms = 2600) {
   t.classList.add("show");
   clearTimeout(toast._t);
   toast._t = setTimeout(() => t.classList.remove("show"), ms);
+}
+
+// 任务完成汇报悬浮框（#204）：新报告展开列出完成项，10s 后自动折叠为一行小条，
+// 点卡片再展开；✕ 关闭（多源共用一个浮框，哪个源来报都弹）
+const tdFloat = { expanded: true, timer: 0 };
+function showTaskDone(ctx, sid, payload) {
+  const s = ctx.sessions.get(sid);
+  const total = Array.isArray(payload?.done) ? payload.done.length : 0;
+  const done = Array.isArray(payload?.done) ? payload.done.slice(0, 10) : [];
+  const remaining = Array.isArray(payload?.remaining) ? payload.remaining.length : 0;
+  const title = (s && (s.title || s.action_summary)) || "会话";
+  const el = $("taskDone");
+  clearTimeout(tdFloat.timer);
+  tdFloat.expanded = true;
+  const renderTd = () => {
+    let html = '<div class="td-head"><span class="td-title">✓ ' + total + " 项任务完成 · " +
+      escapeHtml(title) + '</span><span class="td-x" data-td="x">✕</span></div>';
+    if (tdFloat.expanded) {
+      for (const d of done) html += '<div class="td-item">✓ ' + escapeHtml(d) + "</div>";
+      html += '<div class="td-remain">' + (remaining > 0 ? "剩余 " + remaining + " 项进行中" : "全部完成") + "</div>";
+    } else {
+      html += '<div class="td-remain">' + (remaining > 0 ? "剩余 " + remaining + " 项 · " : "") + "展开查看 ▾</div>";
+    }
+    el.innerHTML = html;
+    el.classList.add("show");
+  };
+  renderTd();
+  tdFloat.timer = setTimeout(() => { tdFloat.expanded = false; renderTd(); }, 10000);
+  el.onclick = (e) => {
+    if (e.target && e.target.dataset && e.target.dataset.td === "x") {
+      clearTimeout(tdFloat.timer);
+      el.classList.remove("show");
+      return;
+    }
+    tdFloat.expanded = !tdFloat.expanded;
+    renderTd();
+    if (tdFloat.expanded) {
+      clearTimeout(tdFloat.timer);
+      tdFloat.timer = setTimeout(() => { tdFloat.expanded = false; renderTd(); }, 10000);
+    }
+  };
 }
 
 // ---------- 连接（每源独立状态机：一处断另一处还在） ----------
@@ -1566,6 +1624,10 @@ function onEvent(ctx, msg) {
     case "SESSION_LOG": {
       if (msg.payload?.kind === "user_message") consumePendingByUserMsg(ctx, sid, msg.payload.text ?? "");
       pushLog(ctx, sid, msg.payload);
+      break;
+    }
+    case "TASK_DONE": {
+      showTaskDone(ctx, sid, msg.payload);
       break;
     }
   }
