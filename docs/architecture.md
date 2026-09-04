@@ -24,7 +24,7 @@ flowchart TB
 
     subgraph LAN["局域网客户端（token 鉴权，WS 直连）"]
         PHONE["📱 手机 App（expo / Android）<br/>LAN 直连，外出自动切云桥"]
-        WEB["🌐 网页控制台<br/>relay 静态服务 / + /m（PWA）"]
+        WEB["🌐 网页控制台<br/>relay 静态服务 /（响应式，手机/PWA 同页）"]
         WATCH["⌚ OPPO 手表（wear-app）<br/>WS 直连（抬腕速览）"]
     end
 
@@ -68,7 +68,7 @@ flowchart LR
         H["POST /bridge/hook"]
         W["GET /ws（token + last_seq 补发）"]
         API["/api/pair-issue · /api/pair-code · /api/commands · /health · /local-info"]
-        STATIC["静态：/（网页控制台）· /m（App 下载）· /nacl.js"]
+        STATIC["静态：/（网页控制台+PWA 资产）· /m（旧图标跳转页+APK 分发）· /nacl.js"]
     end
     subgraph 核心["session-manager.ts"]
         SM["状态机 + 20 会话上限 LRU"]

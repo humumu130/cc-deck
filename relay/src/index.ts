@@ -74,7 +74,7 @@ if (cliArgs.has("--pair")) {
 // --qr：只打印连接二维码（App 下载 + 控制台），不启动服务
 if (cliArgs.has("--qr")) {
   const ip = lanIps()[0] ?? "127.0.0.1";
-  printQr(`http://${ip}:${cfg.port}/m`, `App 下载（手机摄像头扫描）: http://${ip}:${cfg.port}/m`);
+  printQr(`http://${ip}:${cfg.port}/m/cc-watch.apk`, `App 下载（手机摄像头扫描）: http://${ip}:${cfg.port}/m/cc-watch.apk`);
   printQr(
     `http://${ip}:${cfg.port}/?token=${cfg.token}`,
     `网页控制台: http://${ip}:${cfg.port}/?token=${cfg.token}`,

@@ -81,7 +81,7 @@ iOS 原生分发的最低持续成本 = **$99/年 + TestFlight 每版本 Beta Re
 
 #### 1.3.1 现状盘点：web-console 已具备的能力
 
-- **云桥模式今天就能在 iOS Safari 用**：web-console（`web-console/index.html` 单文件）的 wss + tweetnacl E2E + localStorage 持久化（配对密钥/云桥 token/last_seq/主题）全部是标准 Web API；relay（`ws-server.ts`）已内置 iPhone/iPad UA 自动跳 `/m`、loopback local-info 探测（注释已考虑 Safari 混合内容行为）。
+- **云桥模式今天就能在 iOS Safari 用**：web-console（`web-console/index.html` 单文件）的 wss + tweetnacl E2E + localStorage 持久化（配对密钥/云桥 token/last_seq/主题）全部是标准 Web API；relay（`ws-server.ts`）对手机 UA 直接服务响应式控制台（`/m` 已改为跳回 `/` 的兼容中转页）、loopback local-info 探测（注释已考虑 Safari 混合内容行为）。
 - **断线自愈机制已按"移动端前台应用"场景设计完备**（代码盘点）：
   - 20s 应用层心跳 ping（探测 NAT 半开），relay 侧 ping-resume 按 last_seq 补发漏掉的事件；
   - **visibilitychange 回前台立即补一次 ping-resume，并 8s 探活失败即强制重连**——代码注释明确写了这是针对"后台标签页定时器被浏览器节流甚至冻结"的场景；
@@ -153,7 +153,7 @@ iOS 原生分发的最低持续成本 = **$99/年 + TestFlight 每版本 Beta Re
 |---|---|---|---|
 | `src/injector.ts` | `CSC = "C:/Windows/Microsoft.NET/Framework64/v4.0.30319/csc.exe"` 硬路径；产物 `inject.exe`；`CCR_INJECT_CMD` 假注入器仅测试用 | `ensureInjector()` 编译失败 → 返回 false → 注入类命令回 `{ok:false, error:"注入器不可用（编译失败…）"}`，**已优雅降级**；但 `ready` 永远 false，**每次注入调用都重试一次 csc**（ENOENT 快速失败，浪费 spawn 且日志噪音） | 加 `process.platform` 守卫直接返回不可用（2.3-1） |
 | `src/config.ts` | 无：dataDir 全走 `homedir()/.cc-deck/data` 或 `CCR_DATA_DIR`/cwd 环境变量 | 直接可用 | 无需改 |
-| `src/ws-server.ts` | 无：loopback 判定含 `::ffff:127.0.0.1`（macOS Node 同样适用）；`/m` 的 iPhone UA 跳转照常；`.apk` MIME 在 mac 无害 | 直接可用 | 无需改 |
+| `src/ws-server.ts` | 无：loopback 判定含 `::ffff:127.0.0.1`（macOS Node 同样适用）；`/m` 仅作旧图标跳转页（iPhone UA 现在直接吃根路径控制台）；`.apk` MIME 在 mac 无害 | 直接可用 | 无需改 |
 | `src/index.ts` | `pidIsNode()`：win32 走 `tasklist`，**fallback 读 `/proc/<pid>/comm`——macOS 无 /proc，必抛异常被 catch → 恒 false** | `--stop`（插件 `/cc-deck-stop`）在 macOS 会误报"未发现运行中的 relay"；另 `lanIps()` 的网卡名过滤表（vEthernet/WSL 等）偏 Windows，对 mac 无害只是过滤不全 | 加 darwin 分支（2.3-3） |
 | `hooks/bridge-hook.mjs` | `resolveCliPid()` 用 **powershell Get-CimInstance Win32_Process** 走父进程链定位 claude.exe | mac 上 execFileSync("powershell") 直接失败 → `cli_pid=0` → **六事件照常上报、远程审批照常，只是注入定位缺失**（diag 记一条 walk fail） | 可选加 `ps -o ppid=` 祖先链分支（2.3-4） |
 | `scripts/install-hooks.mjs` | 无：写 `~/.claude/settings.json`，hook 路径已归一化正斜杠，`node <path>` 命令 mac 通用 | 直接可用 | 无需改 |

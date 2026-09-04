@@ -40172,6 +40172,13 @@ function startServer(bus2, mgr2, cfg2, opts = {}) {
   const consoleHtml = join8(webRoot, "web-console", "index.html");
   const naclJs = join8(webRoot, "web-console", "nacl.js");
   const mobileDir = join8(webRoot, "mobile") + sep5;
+  const PWA_ASSETS = {
+    "/manifest.json": "application/manifest+json; charset=utf-8",
+    "/apple-touch-icon.png": "image/png",
+    "/icon-192.png": "image/png",
+    "/icon-512.png": "image/png",
+    "/maskable-512.png": "image/png"
+  };
   const MIME = {
     ".html": "text/html; charset=utf-8",
     ".js": "text/javascript; charset=utf-8",
@@ -40218,7 +40225,7 @@ function startServer(bus2, mgr2, cfg2, opts = {}) {
         return;
       }
       const html = readFileSync9(consoleHtml);
-      res.writeHead(200, { "content-type": "text/html; charset=utf-8" }).end(html);
+      res.writeHead(200, { "content-type": "text/html; charset=utf-8", "cache-control": "no-store" }).end(html);
       return;
     }
     if (req.method === "GET" && url.pathname === "/nacl.js") {
@@ -40226,7 +40233,16 @@ function startServer(bus2, mgr2, cfg2, opts = {}) {
         res.writeHead(503).end("web-console/nacl.js \u4E0D\u5B58\u5728\uFF08cp node_modules/tweetnacl/nacl-fast.min.js\uFF09");
         return;
       }
-      res.writeHead(200, { "content-type": "text/javascript; charset=utf-8" }).end(readFileSync9(naclJs));
+      res.writeHead(200, { "content-type": "text/javascript; charset=utf-8", "cache-control": "no-store" }).end(readFileSync9(naclJs));
+      return;
+    }
+    if (req.method === "GET" && PWA_ASSETS[url.pathname]) {
+      const file = join8(webRoot, "web-console", url.pathname.slice(1));
+      if (!existsSync5(file)) {
+        res.writeHead(404).end("not found");
+        return;
+      }
+      res.writeHead(200, { "content-type": PWA_ASSETS[url.pathname] }).end(readFileSync9(file));
       return;
     }
     if (req.method === "GET" && url.pathname === "/health") {
@@ -40798,7 +40814,7 @@ if (cliArgs.has("--pair")) {
 }
 if (cliArgs.has("--qr")) {
   const ip2 = lanIps()[0] ?? "127.0.0.1";
-  printQr(`http://${ip2}:${cfg.port}/m`, `App \u4E0B\u8F7D\uFF08\u624B\u673A\u6444\u50CF\u5934\u626B\u63CF\uFF09: http://${ip2}:${cfg.port}/m`);
+  printQr(`http://${ip2}:${cfg.port}/m/cc-watch.apk`, `App \u4E0B\u8F7D\uFF08\u624B\u673A\u6444\u50CF\u5934\u626B\u63CF\uFF09: http://${ip2}:${cfg.port}/m/cc-watch.apk`);
   printQr(
     `http://${ip2}:${cfg.port}/?token=${cfg.token}`,
     `\u7F51\u9875\u63A7\u5236\u53F0: http://${ip2}:${cfg.port}/?token=${cfg.token}`

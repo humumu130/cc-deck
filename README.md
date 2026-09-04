@@ -222,7 +222,7 @@ cd cloudflare && npm run test:cloud        # Worker 形态协议冒烟
 cd relay && node scripts/build-plugin.mjs
 ```
 
-仓库布局：`relay/`（核心，协议唯一定义源 `relay/src/types.ts`）、`web-console/`（网页控制台）、`mobile/`（App 下载页壳与 APK 分发）、`expo-app/`（Android 手机端 + 手表网关）、`wear-app/`（Wear OS 手表端）、`desktop/`（Windows 桌面客户端，Electron 壳复用 web-console）、`cloud-bridge/` 与 `cloudflare/`（云桥双形态，共享同一路由核心语义）、`cc-plugins/`（Claude Code 插件成品，由 build-plugin.mjs 生成）、`design/`（技术方案评审记录）。
+仓库布局：`relay/`（核心，协议唯一定义源 `relay/src/types.ts`）、`web-console/`（网页控制台）、`mobile/`（APK 分发 + 旧 /m 图标跳转页）、`expo-app/`（Android 手机端 + 手表网关）、`wear-app/`（Wear OS 手表端）、`desktop/`（Windows 桌面客户端，Electron 壳复用 web-console）、`cloud-bridge/` 与 `cloudflare/`（云桥双形态，共享同一路由核心语义）、`cc-plugins/`（Claude Code 插件成品，由 build-plugin.mjs 生成）、`design/`（技术方案评审记录）。
 
 ## Roadmap
 
