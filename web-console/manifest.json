@@ -1,0 +1,16 @@
+{
+  "name": "CC Deck",
+  "short_name": "CC Deck",
+  "description": "CC Deck Relay 多源控制台（直连 + 云桥）",
+  "start_url": ".",
+  "scope": ".",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#1D1726",
+  "theme_color": "#D97757",
+  "icons": [
+    { "src": "icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}
