@@ -842,6 +842,49 @@ assert(ack24.ok === false, "empty rename rejected");
   rmSync(SROOT, { recursive: true, force: true });
 }
 
+// 38. transcript 用户行晋升 pending（hook 死亡时 UserPromptSubmit 断流的根治路径）：
+//     CLI 把排队消息提交成 transcript user 行，轮询/事件增量读出即晋升，
+//     消息不再滞留 pending 闪烁；无 pending 命中的手敲/工具结果行不产生 user_message（防双记）
+{
+  const w38 = new WebSocket(`ws://127.0.0.1:${cfg.port}/ws?token=${cfg.token}`);
+  attach(w38);
+  await new Promise((r) => w38.once("open", r));
+  await wait(100);
+  const { appendFileSync, writeFileSync } = await import("node:fs");
+  const T = fileURLToPath(new URL("../data/test-transcript.jsonl", import.meta.url));
+  rmSync(T, { force: true });
+  writeFileSync(T, JSON.stringify({ type: "assistant", message: { role: "assistant", content: [{ type: "text", text: "基线38" }] } }) + "\n");
+  const sid = extId("cli-1");
+  const umCount = (t: string) =>
+    events.filter((e) => e.type === "SESSION_LOG" && (e.payload as { kind?: string; text?: string }).kind === "user_message" && (e.payload as { text: string }).text === t).length;
+  const pendTexts = () => pendOf(sid).map((p) => p.text);
+  await hook({ event: "UserPromptSubmit", prompt: "转录晋升回合", cli_pid: 4321, transcript_path: T });
+  await hook({ event: "PostToolUse", tool_name: "Bash", tool_response: "ok", transcript_path: T });
+  // 模拟 hook 死亡：状态 DONE + pending 滞留（不经 extInput，避免真注入）
+  mgr.setExternalStatus(sid, "DONE", "回合结束");
+  mgr.setExternalPending(sid, [{ text: "转录晋升消息", ts: Date.now() }]);
+  // CLI 把排队消息提交为 user 行 → 增量读出 → 晋升（无任何 UserPromptSubmit 事件）
+  appendFileSync(T, JSON.stringify({ type: "user", isMeta: false, message: { role: "user", content: "转录晋升消息" } }) + "\n");
+  await hook({ event: "PostToolUse", tool_name: "Bash", tool_response: "ok", transcript_path: T });
+  assert(umCount("转录晋升消息") === 1, "38 user line promotes stuck pending");
+  assert(!pendTexts().includes("转录晋升消息"), "38 promoted msg leaves pending");
+  // 纯手敲（无 pending 命中）：不记 user_message（hook 在时由 UPS 记，防双记）
+  appendFileSync(T, JSON.stringify({ type: "user", message: { role: "user", content: "纯手敲消息" } }) + "\n");
+  await hook({ event: "PostToolUse", tool_name: "Bash", tool_response: "ok", transcript_path: T });
+  assert(umCount("纯手敲消息") === 0, "38 unmatched user line logs nothing");
+  // tool_result 回填的 user 行不当用户输入
+  appendFileSync(T, JSON.stringify({ type: "user", message: { role: "user", content: [{ type: "tool_result", tool_use_id: "t1", content: "Task #1 created successfully" }] } }) + "\n");
+  await hook({ event: "PostToolUse", tool_name: "Bash", tool_response: "ok", transcript_path: T });
+  assert(umCount("Task #1 created successfully") === 0, "38 tool_result line not treated as user input");
+  // isMeta 行（系统注入）不晋升
+  mgr.setExternalPending(sid, [{ text: "Caveat: 注入", ts: Date.now() }]);
+  appendFileSync(T, JSON.stringify({ type: "user", isMeta: true, message: { role: "user", content: "Caveat: 注入" } }) + "\n");
+  await hook({ event: "PostToolUse", tool_name: "Bash", tool_response: "ok", transcript_path: T });
+  assert(umCount("Caveat: 注入") === 0, "38 isMeta line skipped");
+  w38.close();
+  rmSync(T, { force: true });
+}
+
 wsCur!.close();
 await wait(300);
 console.log("\nBRIDGE TESTS PASSED");

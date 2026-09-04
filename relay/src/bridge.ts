@@ -874,6 +874,7 @@ export class Bridge {
       const entries: { kind: "assistant_text" | "thinking"; text: string }[] = [];
       const enqueues: string[] = [];
       const steers: string[] = [];
+      const userTexts: string[] = []; // 本批真实用户 prompt 行（晋升 pending 用）
       // 末条形态：tool=悬置 tool_use / gen=回合推进中 / end=纯文本收尾；null=窗口内无相关行
       let shape: "tool" | "gen" | "end" | null = null;
       const taskOps: TaskOp[] = [];
@@ -918,6 +919,33 @@ export class Bridge {
           // 非 assistant 行（tool_result / 新 prompt / system 等）：回合仍在推进——
           // tool_result 之后 CLI 必生成下一条消息，prompt 之后同样
           shape = "gen";
+          // 真实用户 prompt 行（string content 或纯 text 块数组；含 tool_result 等混合块整行跳过）：
+          // 提取出来晋升 pending——hook 死亡/无 hook 会话的 UserPromptSubmit 断流由转录兜底
+          if (userTexts.length < 16 && /"type":\s*"user"/.test(line)) {
+            try {
+              const j = JSON.parse(line) as { isMeta?: boolean; message?: { content?: unknown } };
+              const c = j.message?.content;
+              let t = "";
+              if (!j.isMeta && typeof c === "string") t = c;
+              else if (
+                !j.isMeta &&
+                Array.isArray(c) &&
+                c.every((b) => b && typeof b === "object" && (b as { type?: string }).type === "text")
+              ) {
+                t = (c as { text?: unknown }[]).map((b) => (typeof b.text === "string" ? b.text : "")).join("");
+              }
+              t = t.trim();
+              if (
+                t &&
+                !t.startsWith("<task-notification>") &&
+                !t.startsWith("<command-name>") &&
+                !t.startsWith("<local-command") &&
+                !t.startsWith("Caveat:")
+              ) {
+                userTexts.push(t);
+              }
+            } catch {}
+          }
           // user 行的 tool_result：TaskCreate 的结果文本（"Task #N created successfully"）
           if (line.includes("created successfully")) {
             try {
@@ -979,6 +1007,9 @@ export class Bridge {
         for (const t of enqueues) this.onQueueEnqueue(id, t);
         for (const t of steers) this.onSteerDelivered(id, t);
         if (removes > steers.length) this.onQueueDiscard(id, removes - steers.length);
+        // hook 断流兜底：transcript 用户行晋升 pending。只晋升不新记（防与 UPS hook 双记）：
+        // hook 在时 UPS 先到先晋升、这里无匹配静默；hook 死时这里补位——根治消息滞留排队闪烁
+        for (const t of userTexts) this.promotePending(id, t);
       }
       // 子 Agent：先补/升级 tool_use 条目（同批快速完成时通知才有配对目标），再按通知收尾
       for (const u of agentUses) this.observeAgentUse(id, u);

@@ -39180,6 +39180,7 @@ var Bridge = class _Bridge {
       const entries = [];
       const enqueues = [];
       const steers = [];
+      const userTexts = [];
       let shape = null;
       const taskOps = [];
       const agentNotifs = [];
@@ -39219,6 +39220,22 @@ var Bridge = class _Bridge {
         }
         if (!/"type":\s*"assistant"/.test(line)) {
           shape = "gen";
+          if (userTexts.length < 16 && /"type":\s*"user"/.test(line)) {
+            try {
+              const j2 = JSON.parse(line);
+              const c = j2.message?.content;
+              let t = "";
+              if (!j2.isMeta && typeof c === "string") t = c;
+              else if (!j2.isMeta && Array.isArray(c) && c.every((b) => b && typeof b === "object" && b.type === "text")) {
+                t = c.map((b) => typeof b.text === "string" ? b.text : "").join("");
+              }
+              t = t.trim();
+              if (t && !t.startsWith("<task-notification>") && !t.startsWith("<command-name>") && !t.startsWith("<local-command") && !t.startsWith("Caveat:")) {
+                userTexts.push(t);
+              }
+            } catch {
+            }
+          }
           if (line.includes("created successfully")) {
             try {
               const j2 = JSON.parse(line);
@@ -39278,6 +39295,7 @@ var Bridge = class _Bridge {
         for (const t of enqueues) this.onQueueEnqueue(id2, t);
         for (const t of steers) this.onSteerDelivered(id2, t);
         if (removes > steers.length) this.onQueueDiscard(id2, removes - steers.length);
+        for (const t of userTexts) this.promotePending(id2, t);
       }
       for (const u of agentUses) this.observeAgentUse(id2, u);
       for (const n of agentNotifs) this.closeSubagentByNotification(id2, n);
