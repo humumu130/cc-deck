@@ -5,7 +5,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { STATUS_ZH, statusColor, withA, type ThemeColors } from "../theme";
 import { useTheme, useThemeStyles } from "../theme-context";
 import { LogoMark } from "../brand";
-import { sessionElapsed, fmtElapsed, fmtTok } from "../fmt";
+import { sessionElapsed, fmtElapsed, fmtTok, contextUsage, contextPct, contextLevel } from "../fmt";
 import { useListCompact } from "../display-settings";
 import { store } from "../store";
 import type { SessionState } from "../protocol";
@@ -196,6 +196,24 @@ function SwipeRow({
   );
 }
 
+// 上下文占用 mini 指示：30px 微型条 + 百分比（与详情页头部 ctx 行、网页端同口径同分级）
+function CtxMini({ s }: { s: SessionState }) {
+  const { c } = useTheme();
+  const styles = useThemeStyles(makeStyles);
+  const used = contextUsage(s.usage);
+  if (!used) return null;
+  const pct = contextPct(used);
+  const lv = contextLevel(used);
+  return (
+    <View style={styles.ctxMini}>
+      <View style={styles.ctxMiniBar}>
+        <View style={{ width: `${pct}%`, height: 3, borderRadius: 1.5, backgroundColor: c[lv] }} />
+      </View>
+      <Text style={[styles.ctxMiniT, { color: c[lv] }]}>{pct}%</Text>
+    </View>
+  );
+}
+
 // memo：流式刷新只重渲变化的那一行（onRename/onReveal 均为稳定引用）
 const SessionCard = memo(function SessionCard({
   s, onOpen, onRename, revealSid, onReveal, compact,
@@ -248,6 +266,7 @@ const SessionCard = memo(function SessionCard({
               <Text style={{ color: c.error }}>-{s.stats.lines_deleted}</Text>
             </Text>
           ) : null}
+          <CtxMini s={s} />
         </View>
       )}
     </SwipeRow>
@@ -484,6 +503,10 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
   },
   tagExt: { color: c.brandB, backgroundColor: withA(c.brandB, 0.12), borderColor: withA(c.brandB, 0.25) },
   stats: { fontSize: 12, fontVariant: ["tabular-nums"] },
+  // 上下文占用 mini（foot 最右）：30px 微型条 + 百分比
+  ctxMini: { flexDirection: "row", alignItems: "center", gap: 4 },
+  ctxMiniBar: { width: 30, height: 3, borderRadius: 1.5, backgroundColor: c.tintSoft, overflow: "hidden" },
+  ctxMiniT: { fontSize: 10, fontVariant: ["tabular-nums"], minWidth: 24, textAlign: "right" },
   empty: { alignItems: "center", paddingTop: 90, paddingHorizontal: 30 },
   emptyIcon: { fontSize: 42, marginBottom: 12, opacity: 0.5 },
   emptyT: { color: c.faint, fontSize: 14, marginBottom: 6 },

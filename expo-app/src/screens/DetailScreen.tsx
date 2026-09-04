@@ -5,7 +5,7 @@ import * as ImagePicker from "expo-image-picker";
 import * as ImageManipulator from "expo-image-manipulator";
 import { withA, type ThemeColors } from "../theme";
 import { useTheme, useThemeStyles } from "../theme-context";
-import { fmtElapsed, sessionElapsed, fmtHM, dayKey, fmtClock, fmtTok } from "../fmt";
+import { fmtElapsed, sessionElapsed, fmtHM, dayKey, fmtClock, fmtTok, contextUsage, contextPct, contextLevel } from "../fmt";
 import { store, useRelay } from "../store";
 import type { CronTask, LogEntry, SessionState, TodoItem, WaitingPayload } from "../protocol";
 import { useKbHeight } from "../kb";
@@ -535,6 +535,9 @@ export default function DetailScreen({ sid, onBack }: { sid: string; onBack: () 
   }
 
   const external = !!s.external;
+  // 上下文占用（200k 窗口）：列表页 mini 条与网页端同口径
+  const ctxUsed = contextUsage(s.usage);
+  const ctxPct = contextPct(ctxUsed);
   // 历史托管会话：有 SDK 会话 id 就能 resume 复活（发消息即恢复），否则只读
   const resumable = !external && !!s.relay_session_id;
   const canCmd = snap.connected && (!s.historical || external || resumable);
@@ -665,6 +668,15 @@ export default function DetailScreen({ sid, onBack }: { sid: string; onBack: () 
           <Text style={d.sub}>
             {(external ? "外部 CLI" : "托管") + (s.historical && !external ? " · 历史" : "") + " · " + fmtElapsed(sessionElapsed(s))}
           </Text>
+          {ctxUsed > 0 ? (
+            <View style={d.ctxRow}>
+              <Text style={d.ctxLabel}>上下文</Text>
+              <View style={d.ctxBar}>
+                <View style={{ width: `${ctxPct}%`, height: 3, borderRadius: 1.5, backgroundColor: c[contextLevel(ctxUsed)] }} />
+              </View>
+              <Text style={[d.ctxPct, { color: c[contextLevel(ctxUsed)] }]}>{ctxPct}%</Text>
+            </View>
+          ) : null}
         </View>
         <Pressable
           style={[d.editBtn, d.opRipple]}
@@ -1117,6 +1129,11 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
   hintText: { color: c.faint },
   title: { color: c.text, fontSize: 15, fontWeight: "600" },
   sub: { color: c.dim, fontSize: 11, marginTop: 1 },
+  // 上下文占用条（头部副行下）：标签 + 3px 细条 + 百分比，颜色按占用分级
+  ctxRow: { flexDirection: "row", alignItems: "center", gap: 6, marginTop: 3 },
+  ctxLabel: { color: c.faint, fontSize: 9.5 },
+  ctxBar: { flex: 1, height: 3, borderRadius: 1.5, backgroundColor: c.tintSoft, overflow: "hidden" },
+  ctxPct: { fontSize: 10, fontVariant: ["tabular-nums"], minWidth: 26, textAlign: "right" },
   // 统计视图卡片（原 StatsModal 内容平铺）
   statsCard: {
     borderRadius: 14, backgroundColor: c.panel, borderWidth: 1, borderColor: c.line, padding: 16,
