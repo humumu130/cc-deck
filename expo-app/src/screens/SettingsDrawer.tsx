@@ -1,6 +1,7 @@
 // 设置抽屉：首页左上角图标呼出，也支持左缘右滑呼出 / 面板上左滑收起；收纳服务器列表、快捷短语与显示设置
 import { useEffect, useRef, useState } from "react";
 import { Animated, PanResponder, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
+import Constants from "expo-constants";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useTheme, useThemeStyles } from "../theme-context";
 import { LogoMark } from "../brand";
@@ -9,6 +10,9 @@ import { store, useRelay, type ServerEntry } from "../store";
 import { withA, type ThemeColors } from "../theme";
 
 const FILL = { position: "absolute", left: 0, right: 0, top: 0, bottom: 0 } as const;
+
+// 版本号读原生 versionName（build.gradle），杜绝手写硬编码再漏更
+const APP_VER = "v" + (Constants.nativeApplicationVersion ?? Constants.expoConfig?.version ?? "-");
 
 const FONT_OPTS: { k: ProcessFont; label: string }[] = [
   { k: "normal", label: "标准" },
@@ -117,7 +121,7 @@ export default function SettingsDrawer({
           </View>
           <View style={{ flex: 1, minWidth: 0 }}>
             <Text style={d.nameT}>CC Deck</Text>
-            <Text style={d.verT}>v0.2.33</Text>
+            <Text style={d.verT}>{APP_VER}</Text>
           </View>
         </View>
 
