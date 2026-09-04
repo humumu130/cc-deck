@@ -270,6 +270,15 @@
   .todo-item.in_progress .todo-tx { color: var(--text); }
   .todo-item.pending .todo-tx { color: var(--dim); }
   .todo-empty { color: var(--faint); padding: 60px 4px; text-align: center; font-size: 13px; }
+  /* ---------- 定时任务（详情页"定时" tab） ---------- */
+  .cron-item { display: flex; align-items: flex-start; gap: 9px; padding: 9px 2px; border-bottom: 1px solid var(--border); }
+  .cron-item:last-child { border-bottom: none; }
+  .cron-mark { flex: none; color: var(--working); font-size: 13px; padding-top: 1px; }
+  .cron-item.paused .cron-mark { color: var(--faint); }
+  .cron-main { flex: 1; min-width: 0; }
+  .cron-name { font-size: 13.5px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .cron-item.paused .cron-name { color: var(--dim); font-weight: 500; }
+  .cron-meta { font-size: 11.5px; color: var(--faint); margin-top: 1px; font-variant-numeric: tabular-nums; }
   .card-summary { color: var(--dim); font-size: 12.5px; margin-top: 3px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .card-summary.waiting { color: var(--working); }
   .card-stats { font-size: 12px; color: var(--faint); margin-top: 6px; display: flex; gap: 10px; font-variant-numeric: tabular-nums; }
@@ -643,6 +652,7 @@
         <button data-tab="activity" class="tab active">消息</button>
         <button data-tab="log" class="tab">全部</button>
         <button data-tab="todos" class="tab">任务</button>
+        <button data-tab="cron" class="tab">定时</button>
         <button data-tab="stats" class="tab">统计</button>
         <span class="spacer"></span>
         <button id="fontBtn" class="mini" title="正文字号（点按切换）">字·标准</button>
@@ -1375,7 +1385,7 @@ function onEvent(ctx, msg) {
       if (msg.payload.stats) s.stats = msg.payload.stats;
       // 其余可选字段：出现即覆盖（与手机端 store 对齐）
       for (const f of ["remote_mode", "title", "title_locked", "model", "turn_started_at",
-        "usage", "todos", "subagents", "permission_mode", "pending_inputs", "relay_session_id"]) {
+        "usage", "todos", "subagents", "permission_mode", "pending_inputs", "relay_session_id", "cron_tasks"]) {
         if (msg.payload[f] !== undefined) s[f] = msg.payload[f];
       }
       s.updated_at = msg.ts;
@@ -1690,6 +1700,14 @@ function renderDetail() {
     }
     return;
   }
+  if (activeTab === "cron") {
+    const cronKey = "cron:" + s.session_id + ":" + (s.cron_tasks?.map((t) => t.id + "|" + t.schedule + "|" + (t.paused ? 1 : 0) + "|" + (t.next_run_at ?? 0)).join(",") ?? "none");
+    if (tl.dataset.count !== cronKey) {
+      tl.dataset.count = cronKey;
+      tl.innerHTML = cronTabHtml(s);
+    }
+    return;
+  }
   const full = sel.ctx.timelines.get(s.session_id) || [];
   const list = activeTab === "activity"
     ? full.filter((e) => e.kind === "assistant_text" || e.kind === "user_message" || e.kind === "system" || (e.kind === "thinking" && thinkShown))
@@ -1756,6 +1774,20 @@ function todosTabHtml(s) {
     html += "</div>";
   }
   return html;
+}
+
+// 定时任务 tab（详情页"定时"，与手机端 cron 面板同构）
+function cronTabHtml(s) {
+  const tasks = s.cron_tasks ?? [];
+  if (!tasks.length) return '<div class="todo-empty">暂无定时任务<br><span style="font-size:12px">CLI 里创建 durable 定时任务后，这里 30s 内显示</span></div>';
+  return tasks.map((t) =>
+    '<div class="cron-item' + (t.paused ? " paused" : "") + '">' +
+      '<span class="cron-mark">' + (t.paused ? "⏸" : "⏰") + "</span>" +
+      '<div class="cron-main"><div class="cron-name">' + escapeHtml(t.name) + "</div>" +
+      '<div class="cron-meta">' + escapeHtml(t.schedule) +
+        (t.recurring === false ? " · 一次性" : "") +
+        (t.next_run_at ? " · 下次 " + fmtDT(t.next_run_at) : "") +
+      "</div></div></div>").join("");
 }
 
 function escapeHtml(s) {
@@ -1837,6 +1869,12 @@ const fmtHM = (ts) => new Date(ts).toLocaleTimeString("zh-CN", { hour12: false, 
 const dayKey = (ts) => {
   const d = new Date(ts);
   return d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0");
+};
+// 定时任务下次运行时间：MM-dd HH:mm（毫秒时间戳，与手机端 fmtDT 同构）
+const fmtDT = (ts) => {
+  const d = new Date(ts);
+  const p = (n) => String(n).padStart(2, "0");
+  return p(d.getMonth() + 1) + "-" + p(d.getDate()) + " " + p(d.getHours()) + ":" + p(d.getMinutes());
 };
 // 展开键带源前缀：时间线只显示选中会话，跨源的同 id/同 ts+长度条目不串展开态
 const eKey = (e) => (selected?.src || "") + ":" + (e.id ?? (e.ts + "|" + e.kind + "|" + (e.text || "").length));
