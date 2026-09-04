@@ -5,25 +5,27 @@ import * as ImagePicker from "expo-image-picker";
 import * as ImageManipulator from "expo-image-manipulator";
 import { withA, type ThemeColors } from "../theme";
 import { useTheme, useThemeStyles } from "../theme-context";
-import { fmtElapsed, sessionElapsed, fmtHM, dayKey } from "../fmt";
+import { fmtElapsed, sessionElapsed, fmtHM, dayKey, fmtClock, fmtTok } from "../fmt";
 import { store, useRelay } from "../store";
 import type { CronTask, LogEntry, SessionState, TodoItem, WaitingPayload } from "../protocol";
 import { useKbHeight } from "../kb";
-import { useProcessFont } from "../display-settings";
-import { usePhraseState } from "../phrases";
+import { useProcessFont, useVoiceInput } from "../display-settings";
 import { voice } from "../voice";
 import { BUILTIN_COMMANDS, fetchSlashCommands, httpBaseOf, matchSlash, type SlashCommand } from "../slash";
 import { MdText } from "../md";
 import RenameModal from "./RenameModal";
-import StatsModal from "./StatsModal";
 
-const LOG_FILTERS = [
-  { k: "all", label: "全部" },
-  { k: "tool", label: "工具" },
+// 详情页视图 tab（与网页端 tabs 对齐：消息/全部/任务/定时/统计，同序）。
+// 消息/全部 = 转录过滤视图；任务/定时/统计 = 独占内容视图。
+// 原"工具/系统"过滤 chips 与设置抽屉"过程消息·隐藏档"重叠，移除。
+const VIEWS = [
   { k: "msg", label: "消息" },
-  { k: "sys", label: "系统" },
+  { k: "all", label: "全部" },
+  { k: "todos", label: "任务" },
+  { k: "cron", label: "定时" },
+  { k: "stats", label: "统计" },
 ] as const;
-type LogFilter = (typeof LOG_FILTERS)[number]["k"];
+type ViewKind = (typeof VIEWS)[number]["k"];
 
 // SpeechRecognizer 错误码人话（反馈排查用；1/2/4 多为云识别服务连不上）
 const VOICE_ERR_NAMES: Record<number, string> = {
@@ -44,11 +46,9 @@ const PERM_LABEL: Record<(typeof PERM_CYCLE)[number], string> = {
   plan: "规划",
 };
 
-function matchFilter(kind: string, f: LogFilter): boolean {
-  if (f === "all") return true;
-  if (f === "tool") return kind === "tool_use" || kind === "tool_result";
-  if (f === "msg") return kind === "assistant_text" || kind === "user_message" || kind === "thinking";
-  return kind === "system";
+function matchFilter(kind: string, f: ViewKind): boolean {
+  if (f !== "msg") return true;
+  return kind === "assistant_text" || kind === "user_message" || kind === "thinking";
 }
 
 // 思考过程显示开关：app 生命周期内记忆（跨页面切换，不落盘）
@@ -324,13 +324,10 @@ export default function DetailScreen({ sid, onBack }: { sid: string; onBack: () 
   const [input, setInput] = useState("");
   const [slashCommands, setSlashCommands] = useState<SlashCommand[]>(BUILTIN_COMMANDS);
   const [renaming, setRenaming] = useState(false);
-  const [statsOpen, setStatsOpen] = useState(false);
-  const [filter, setFilter] = useState<LogFilter>("msg");
+  const [view, setView] = useState<ViewKind>("msg");
   const [showThink, setShowThink] = useState(thinkShown);
   const [collapsed, setCollapsed] = useState(ctrlCollapsed);
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
-  const [todoOpen, setTodoOpen] = useState(false);
-  const [cronOpen, setCronOpen] = useState(false);
   const todoScrollRef = useRef<ScrollView>(null);
   const todoAtBottom = useRef(true);
   // 任务面板常驻滑块：onScroll 里 setValue(contentOffset.y)（bridgeless 下 Animated.event
@@ -375,12 +372,6 @@ export default function DetailScreen({ sid, onBack }: { sid: string; onBack: () 
       setTodoSpin(false);
     }
   }, [s?.todos, todoSpin]);
-
-  // 定时任务清空时折起面板，避免残留展开态（新任务到来时意外弹开）
-  const cronCount = s?.cron_tasks?.length ?? 0;
-  useEffect(() => {
-    if (cronCount === 0) setCronOpen(false);
-  }, [cronCount]);
 
   // 任务条目 ✕ 隐藏：本地先过滤（立即消失），relay 记隐藏集过滤后续下发
   const [todoHidden, setTodoHidden] = useState<string[]>([]);
@@ -460,12 +451,14 @@ export default function DetailScreen({ sid, onBack }: { sid: string; onBack: () 
   // 转录跟随：直接 filter 不做 useMemo（logs 引用每次更新都变）；仅当用户停在底部时自动滚
   const logs = s ? store.timelineOf(sid) : [];
   const procFont = useProcessFont();
-  const shown = logs.filter(
-    (e) =>
-      matchFilter(e.kind, filter) &&
-      (e.kind !== "thinking" || showThink) &&
-      !(procFont === "hidden" && (e.kind === "tool_use" || e.kind === "tool_result" || e.kind === "system")),
-  );
+  const shown = (view === "msg" || view === "all"
+    ? logs.filter(
+        (e) =>
+          matchFilter(e.kind, view) &&
+          (e.kind !== "thinking" || showThink) &&
+          !(procFont === "hidden" && (e.kind === "tool_use" || e.kind === "tool_result" || e.kind === "system")),
+      )
+    : []);
   const lastEntry = shown.length ? shown[shown.length - 1] : null;
   const lastLen = lastEntry ? (lastEntry.full ?? lastEntry.text).length : 0;
   useEffect(() => {
@@ -483,14 +476,15 @@ export default function DetailScreen({ sid, onBack }: { sid: string; onBack: () 
     return () => sub.remove();
   }, [onBack]);
 
-  // 语音输入状态与事件订阅（钩子须在下方早退 return 之前）
-  const phrases = usePhraseState().list;
+  // 语音输入状态与事件订阅（钩子须在下方早退 return 之前）；默认关，设置抽屉开启
+  const voiceOn = useVoiceInput();
   const [listening, setListening] = useState(false);
   const [voiceHint, setVoiceHint] = useState<string | null>(null);
   // partial 只进独立的单行字幕条，不动输入框内容（避免高度跳变）
   const [voiceText, setVoiceText] = useState("");
   const voiceRef = useRef({ partial: "", final: "", resolved: false });
   useEffect(() => {
+    if (!voiceOn) return;
     const sub = voice.subscribe((ev) => {
       if (ev.type === "partial") {
         voiceRef.current.partial = ev.text;
@@ -512,7 +506,7 @@ export default function DetailScreen({ sid, onBack }: { sid: string; onBack: () 
       }
     });
     return () => sub.remove();
-  }, []);
+  }, [voiceOn]);
 
   // Slash 联想：/ 开头且未到参数段（无空白）时弹出。仅 LAN 通道 fetch relay
   // /api/commands（含用户/项目自定义命令），云通道 HTTP 到不了 relay 直接用内置表
@@ -660,9 +654,8 @@ export default function DetailScreen({ sid, onBack }: { sid: string; onBack: () 
 
   return (
     <SafeAreaView style={d.safe} edges={["top"]}>
-      {/* 点任务/定时面板外任意处自动折起（面板内 stopPropagation 防误触） */}
-      <View style={{ flex: 1 }} onTouchStart={() => { if (todoOpen) setTodoOpen(false); if (cronOpen) setCronOpen(false); }}>
-      {/* 头部：标题 + 状态副行 + 统计/重命名 */}
+      <View style={{ flex: 1 }}>
+      {/* 头部：标题 + 状态副行 + 折叠/重命名 */}
       <View style={d.head}>
         <Pressable style={[d.back, d.opRipple]} android_ripple={{ color: c.tintSoft, borderless: false }} onPress={onBack} hitSlop={8}>
           <Text style={d.backText}>‹</Text>
@@ -683,14 +676,6 @@ export default function DetailScreen({ sid, onBack }: { sid: string; onBack: () 
           hitSlop={4}
         >
           <Text style={d.foldT}>{collapsed ? "▼" : "▲"}</Text>
-        </Pressable>
-        <Pressable
-          style={[d.statsBtn, d.opRipple]}
-          android_ripple={{ color: c.tintSoft, borderless: false }}
-          onPress={() => setStatsOpen(true)}
-          hitSlop={4}
-        >
-          <Text style={d.statsT}>统计</Text>
         </Pressable>
         <Pressable
           style={[d.editBtn, d.opRipple]}
@@ -720,18 +705,20 @@ export default function DetailScreen({ sid, onBack }: { sid: string; onBack: () 
             </View>
           ) : null}
           <View style={d.filterRow}>
-            {LOG_FILTERS.map((f) => (
+            {VIEWS.map((v) => (
               <Pressable
-                key={f.k}
-                style={[d.filterChip, filter === f.k && d.filterChipOn]}
+                key={v.k}
+                style={[d.filterChip, d.filterChipFlex, view === v.k && d.filterChipOn]}
                 android_ripple={{ color: c.tintSoft, borderless: false, radius: 12 }}
-                onPress={() => setFilter(f.k)}
+                onPress={() => setView(v.k)}
               >
-                <Text style={[d.filterT, filter === f.k && d.filterTOn]}>{f.label}</Text>
+                <Text style={[d.filterT, view === v.k && d.filterTOn]}>{v.label}</Text>
               </Pressable>
             ))}
+          </View>
+          <View style={d.subFilterRow}>
             <Pressable
-              style={[d.filterChip, d.thinkChip, showThink && d.filterChipOn]}
+              style={[d.filterChip, showThink && d.filterChipOn]}
               android_ripple={{ color: c.tintSoft, borderless: false, radius: 12 }}
               onPress={() => {
                 thinkShown = !thinkShown;
@@ -742,7 +729,7 @@ export default function DetailScreen({ sid, onBack }: { sid: string; onBack: () 
             </Pressable>
             {!external && canCmd && !s.historical ? (
               <Pressable
-                style={[d.filterChip, d.thinkChip, (s.permission_mode ?? "default") !== "default" && d.filterChipOn]}
+                style={[d.filterChip, (s.permission_mode ?? "default") !== "default" && d.filterChipOn]}
                 android_ripple={{ color: c.tintSoft, borderless: false, radius: 12 }}
                 onPress={() => {
                   const cur = s.permission_mode ?? "default";
@@ -754,135 +741,144 @@ export default function DetailScreen({ sid, onBack }: { sid: string; onBack: () 
               </Pressable>
             ) : null}
           </View>
-          {(s.todos?.length ?? 0) > 0 ? (
-            <View style={d.todoBox} onTouchStart={(e) => e.stopPropagation()}>
-              <Pressable
-                style={d.todoHead}
-                android_ripple={{ color: c.tintSoft, borderless: false, radius: 9 }}
-                onPress={() => { todoAtBottom.current = true; setTodoOpen((v) => !v); }}
-              >
-                <Text style={d.todoHeadT}>☰ 任务 {doneList.length}/{sortedTodos.length}</Text>
-                <View style={d.todoBar}>
-                  <View style={[d.todoBarFill, { width: `${Math.round((doneList.length / Math.max(1, sortedTodos.length)) * 100)}%` }]} />
-                </View>
-                <Pressable
-                  style={d.todoRefresh}
-                  hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-                  android_ripple={{ color: c.tintSoft, borderless: false, radius: 12 }}
-                  onPress={refreshTodos}
-                >
-                  <Text style={[d.todoRefreshT, todoSpin && { color: c.brandA }]}>↻</Text>
-                </Pressable>
-                <Text style={d.todoCaret}>{todoOpen ? "▾" : "▸"}</Text>
-              </Pressable>
-              {todoOpen ? (
-                <View style={d.todoScrollWrap}>
-                <ScrollView
-                  ref={todoScrollRef}
-                  style={d.todoScroll}
-                  nestedScrollEnabled
-                  showsVerticalScrollIndicator={false}
-                  scrollEventThrottle={16}
-                  onScroll={(e: NativeSyntheticEvent<NativeScrollEvent>) => {
-                    // bridgeless 下 Animated.event+useNativeDriver 不可用（0.2.26 闪退），
-                    // 退回 JS setValue：throttle 16 保证 60fps 事件流，thumb 仍逐帧跟手
-                    const { contentOffset, contentSize, layoutMeasurement } = e.nativeEvent;
-                    todoAtBottom.current = contentOffset.y + layoutMeasurement.height >= contentSize.height - 24;
-                    todoScrollY.setValue(contentOffset.y);
-                  }}
-                  onLayout={(e) => {
-                    const h = e.nativeEvent.layout.height;
-                    setTodoMetrics((m) => (h !== m.layout ? { ...m, layout: h } : m));
-                  }}
-                  onContentSizeChange={(_w, h) => {
-                    setTodoMetrics((m) => (h !== m.content ? { ...m, content: h } : m));
-                    if (todoAtBottom.current) todoScrollRef.current?.scrollToEnd({ animated: false });
-                  }}
-                >
-                  {sortedTodos.map((t, i) => {
-                    const g = todoGroups.find((x) => x.status === t.status)!;
-                    const head = i === 0 || sortedTodos[i - 1].status !== t.status ? g : null;
-                    return (
-                      <Fragment key={i}>
-                        {head ? (
-                          <View style={d.todoSec}>
-                            <View style={d.todoSecLine} />
-                            <Text
-                              style={[
-                                d.todoSecT,
-                                t.status === "completed" && { color: c.done },
-                                t.status === "in_progress" && { color: c.working },
-                                t.status === "pending" && { color: c.faint },
-                              ]}
-                            >
-                              {head.label}
-                            </Text>
-                            <View style={d.todoSecLine} />
-                          </View>
-                        ) : null}
-                        {renderTodo(t, i, !!head)}
-                      </Fragment>
-                    );
-                  })}
-                </ScrollView>
-                {/* 常驻自绘滑块：系统 scrollbar 在两端都不可见（VM/API28、真机/API16 实测） */}
-                {todoMetrics.content > todoMetrics.layout + 8 ? (
-                  <Animated.View
-                    style={[
-                      d.todoThumb,
-                      {
-                        height: todoThumbH,
-                        transform: [
-                          {
-                            translateY: todoScrollY.interpolate({
-                              inputRange: [0, todoTravel],
-                              outputRange: [0, thumbTravel],
-                              extrapolate: "clamp",
-                            }),
-                          },
-                        ],
-                      },
-                    ]}
-                  />
-                ) : null}
-                </View>
-              ) : null}
-            </View>
-          ) : null}
-
-          {/* 定时任务面板：会话目录 .claude/scheduled_tasks.json 快照（relay 30s 轮询下发） */}
-          {(s.cron_tasks?.length ?? 0) > 0 ? (
-            <View style={d.cronBox} onTouchStart={(e) => e.stopPropagation()}>
-              <Pressable
-                style={d.cronHead}
-                android_ripple={{ color: c.tintSoft, borderless: false, radius: 9 }}
-                onPress={() => setCronOpen((v) => !v)}
-              >
-                <Text style={d.cronHeadT}>⏰ 定时 {s.cron_tasks!.length}</Text>
-                <Text style={d.todoCaret}>{cronOpen ? "▾" : "▸"}</Text>
-              </Pressable>
-              {cronOpen ? (
-                <ScrollView style={d.cronScroll} nestedScrollEnabled showsVerticalScrollIndicator={false}>
-                  {s.cron_tasks!.map((t, i) => (
-                    <View key={t.id + "|" + i} style={[d.cronRow, i === 0 && { borderTopWidth: 0, marginTop: 0 }]}>
-                      <Text style={[d.cronMark, t.paused && { color: c.faint }]}>{t.paused ? "⏸" : "⏰"}</Text>
-                      <View style={{ flex: 1, minWidth: 0 }}>
-                        <Text style={[d.cronName, t.paused && { color: c.dim }]} numberOfLines={1}>{t.name}</Text>
-                        <Text style={d.cronMeta} numberOfLines={1}>
-                          {t.schedule}
-                          {t.recurring === false ? " · 一次性" : ""}
-                          {t.next_run_at ? " · 下次 " + fmtDT(t.next_run_at) : ""}
-                        </Text>
-                      </View>
-                    </View>
-                  ))}
-                </ScrollView>
-              ) : null}
-            </View>
-          ) : null}
       </View>
       ) : null}
 
+      {/* 任务视图：整屏列表（网页端"任务" tab 同构；进度条 + 手动刷新 + 常驻滑块沿用） */}
+      {view === "todos" ? (
+        <View style={d.viewCol}>
+          <View style={d.todoHead}>
+            <Text style={d.todoHeadT}>☰ 任务 {doneList.length}/{sortedTodos.length}</Text>
+            <View style={d.todoBar}>
+              <View style={[d.todoBarFill, { width: `${Math.round((doneList.length / Math.max(1, sortedTodos.length)) * 100)}%` }]} />
+            </View>
+            <Pressable
+              style={d.todoRefresh}
+              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+              android_ripple={{ color: c.tintSoft, borderless: false, radius: 12 }}
+              onPress={refreshTodos}
+            >
+              <Text style={[d.todoRefreshT, todoSpin && { color: c.brandA }]}>↻</Text>
+            </Pressable>
+          </View>
+          {sortedTodos.length === 0 ? (
+            <Text style={d.empty}>暂无任务清单{"\n"}CLI 里使用 TodoWrite 工具后，这里会显示任务进度</Text>
+          ) : (
+          <View style={d.todoScrollWrap}>
+            <ScrollView
+              ref={todoScrollRef}
+              style={{ flex: 1 }}
+              showsVerticalScrollIndicator={false}
+              scrollEventThrottle={16}
+              onScroll={(e: NativeSyntheticEvent<NativeScrollEvent>) => {
+                // bridgeless 下 Animated.event+useNativeDriver 不可用（0.2.26 闪退），
+                // 退回 JS setValue：throttle 16 保证 60fps 事件流，thumb 仍逐帧跟手
+                const { contentOffset, contentSize, layoutMeasurement } = e.nativeEvent;
+                todoAtBottom.current = contentOffset.y + layoutMeasurement.height >= contentSize.height - 24;
+                todoScrollY.setValue(contentOffset.y);
+              }}
+              onLayout={(e) => {
+                const h = e.nativeEvent.layout.height;
+                setTodoMetrics((m) => (h !== m.layout ? { ...m, layout: h } : m));
+              }}
+              onContentSizeChange={(_w, h) => {
+                setTodoMetrics((m) => (h !== m.content ? { ...m, content: h } : m));
+                if (todoAtBottom.current) todoScrollRef.current?.scrollToEnd({ animated: false });
+              }}
+            >
+              {sortedTodos.map((t, i) => {
+                const g = todoGroups.find((x) => x.status === t.status)!;
+                const head = i === 0 || sortedTodos[i - 1].status !== t.status ? g : null;
+                return (
+                  <Fragment key={i}>
+                    {head ? (
+                      <View style={d.todoSec}>
+                        <View style={d.todoSecLine} />
+                        <Text
+                          style={[
+                            d.todoSecT,
+                            t.status === "completed" && { color: c.done },
+                            t.status === "in_progress" && { color: c.working },
+                            t.status === "pending" && { color: c.faint },
+                          ]}
+                        >
+                          {head.label}
+                        </Text>
+                        <View style={d.todoSecLine} />
+                      </View>
+                    ) : null}
+                    {renderTodo(t, i, !!head)}
+                  </Fragment>
+                );
+              })}
+            </ScrollView>
+            {/* 常驻自绘滑块：系统 scrollbar 在两端都不可见（VM/API28、真机/API16 实测） */}
+            {todoMetrics.content > todoMetrics.layout + 8 ? (
+              <Animated.View
+                style={[
+                  d.todoThumb,
+                  {
+                    height: todoThumbH,
+                    transform: [
+                      {
+                        translateY: todoScrollY.interpolate({
+                          inputRange: [0, todoTravel],
+                          outputRange: [0, thumbTravel],
+                          extrapolate: "clamp",
+                        }),
+                      },
+                    ],
+                  },
+                ]}
+              />
+            ) : null}
+          </View>
+          )}
+        </View>
+      ) : view === "cron" ? (
+        /* 定时任务视图：会话目录 .claude/scheduled_tasks.json 快照（relay 30s 轮询下发） */
+        <ScrollView style={{ flex: 1 }} contentContainerStyle={{ padding: 14, paddingBottom: 40 + insets.bottom }} showsVerticalScrollIndicator={false}>
+          {(s.cron_tasks?.length ?? 0) === 0 ? (
+            <Text style={d.empty}>暂无定时任务{"\n"}CLI 里创建 durable 定时任务后，这里 30s 内显示</Text>
+          ) : (
+            s.cron_tasks!.map((t, i) => (
+              <View key={t.id + "|" + i} style={[d.cronRow, i === 0 && { borderTopWidth: 0, marginTop: 0 }]}>
+                <Text style={[d.cronMark, t.paused && { color: c.faint }]}>{t.paused ? "⏸" : "⏰"}</Text>
+                <View style={{ flex: 1, minWidth: 0 }}>
+                  <Text style={[d.cronName, t.paused && { color: c.dim }]} numberOfLines={1}>{t.name}</Text>
+                  <Text style={d.cronMeta} numberOfLines={1}>
+                    {t.schedule}
+                    {t.recurring === false ? " · 一次性" : ""}
+                    {t.next_run_at ? " · 下次 " + fmtDT(t.next_run_at) : ""}
+                  </Text>
+                </View>
+              </View>
+            ))
+          )}
+        </ScrollView>
+      ) : view === "stats" ? (
+        /* 统计视图（原 StatsModal 内容平铺；字段与网页"统计" tab 呼应） */
+        <ScrollView style={{ flex: 1 }} contentContainerStyle={{ padding: 14, paddingBottom: 40 + insets.bottom }} showsVerticalScrollIndicator={false}>
+          <View style={d.statsCard}>
+            <StatRow k="耗时" v={fmtElapsed(sessionElapsed(s))} />
+            {s.todos?.length ? (
+              <StatRow k="任务进度" v={`${s.todos.filter((t) => t.status === "completed").length}/${s.todos.length}`} />
+            ) : null}
+            <StatRow k="改动文件" v={String(s.stats?.files_changed ?? 0)} />
+            <StatRow k="新增行" v={"+" + (s.stats?.lines_added ?? 0)} vc={c.working} />
+            <StatRow k="删除行" v={"-" + (s.stats?.lines_deleted ?? 0)} vc={c.error} />
+            <StatRow k="输入 tokens" v={fmtTok(s.usage?.input_tokens)} />
+            <StatRow k="输出 tokens" v={fmtTok(s.usage?.output_tokens)} />
+            <StatRow k="缓存读取" v={fmtTok(s.usage?.cache_read_input_tokens)} />
+            <StatRow k="缓存写入" v={fmtTok(s.usage?.cache_creation_input_tokens)} />
+            <StatRow k="模型" v={s.model || "—"} />
+            <StatRow k="开始时间" v={fmtClock(s.started_at)} />
+            <StatRow k="最近活动" v={fmtClock(s.updated_at)} />
+            <StatRow k="工作目录" v={s.cwd || "—"} />
+            {s.cli_pid ? <StatRow k="CLI PID" v={String(s.cli_pid)} /> : null}
+          </View>
+        </ScrollView>
+      ) : (
       <ScrollView
         ref={scrollRef}
         style={{ flex: 1 }}
@@ -958,6 +954,7 @@ export default function DetailScreen({ sid, onBack }: { sid: string; onBack: () 
           </View>
         ) : null}
       </ScrollView>
+      )}
 
       {/* 底部栈：审批横幅（常驻可见，类似 CLI 权限提示）> 模板行 > 命令栏；整体随键盘抬升 */}
       <View pointerEvents="box-none" style={{ paddingBottom: kb > 0 ? 0 : insets.bottom, transform: [{ translateY: kb > 0 ? -kb : 0 }] }}>
@@ -979,21 +976,6 @@ export default function DetailScreen({ sid, onBack }: { sid: string; onBack: () 
             </View>
           </View>
           )
-        ) : canCmd && phrases.length > 0 ? (
-          <View style={d.tplRow}>
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 7 }}>
-              {phrases.map((t) => (
-                <Pressable
-                  key={t}
-                  style={d.tplChip}
-                  android_ripple={{ color: c.tintSoft, borderless: false, radius: 13 }}
-                  onPress={() => setInput(t)}
-                >
-                  <Text style={d.tplT}>{t}</Text>
-                </Pressable>
-              ))}
-            </ScrollView>
-          </View>
         ) : null}
         {images.length > 0 ? (
           <View style={d.imgRow}>
@@ -1064,17 +1046,19 @@ export default function DetailScreen({ sid, onBack }: { sid: string; onBack: () 
             blurOnSubmit={false}
             onSubmitEditing={() => send()}
           />
-          <Pressable
-            style={[d.imgBtn, listening && d.micOn, !canCmd && { opacity: 0.4 }]}
-            android_ripple={{ color: c.tintSoft, borderless: false, radius: 13 }}
-            onPressIn={() => void startVoice()}
-            onPressOut={endVoice}
-            disabled={!canCmd}
-          >
-            <MicIcon color={listening ? c.brandA : c.dim} />
-          </Pressable>
+          {voiceOn ? (
+            <Pressable
+              style={[d.imgBtn, listening && d.micOn, !canCmd && { opacity: 0.4 }]}
+              android_ripple={{ color: c.tintSoft, borderless: false, radius: 13 }}
+              onPressIn={() => void startVoice()}
+              onPressOut={endVoice}
+              disabled={!canCmd}
+            >
+              <MicIcon color={listening ? c.brandA : c.dim} />
+            </Pressable>
+          ) : null}
           <Pressable style={[d.sendBtn, (!canCmd || (!input.trim() && images.length === 0)) && { opacity: 0.4 }]} android_ripple={{ color: "rgba(255,255,255,0.2)", borderless: false }} onPress={() => send()} disabled={!canCmd}>
-            <SendArrow color={c.brandA} />
+            <Text style={d.sendT}>➤</Text>
           </Pressable>
         </View>
       </View>
@@ -1088,21 +1072,18 @@ export default function DetailScreen({ sid, onBack }: { sid: string; onBack: () 
           setRenaming(false);
         }}
       />
-      <StatsModal visible={statsOpen} s={s} onCancel={() => setStatsOpen(false)} />
       </View>
     </SafeAreaView>
   );
 }
 
-// 发送上箭头（与品牌星芒同线条语言：圆头细条组合）
-function SendArrow({ color }: { color: string }) {
-  const w = 2.6;
-  const box = 16;
+// 统计视图行（原 StatsModal 的 Row 平铺化）
+function StatRow({ k, v, vc }: { k: string; v: string; vc?: string }) {
+  const d = useThemeStyles(makeStyles);
   return (
-    <View style={{ width: box, height: box }}>
-      <View style={{ position: "absolute", width: w, height: 11, bottom: 0, left: box / 2 - w / 2, borderRadius: w / 2, backgroundColor: color }} />
-      <View style={{ position: "absolute", width: w, height: 9, top: -1.5, left: box / 2 - w / 2, borderRadius: w / 2, backgroundColor: color, transform: [{ rotate: "45deg" }] }} />
-      <View style={{ position: "absolute", width: w, height: 9, top: -1.5, left: box / 2 - w / 2, borderRadius: w / 2, backgroundColor: color, transform: [{ rotate: "-45deg" }] }} />
+    <View style={d.statRow}>
+      <Text style={d.statRowK}>{k}</Text>
+      <Text style={[d.statRowV, vc ? { color: vc } : null]}>{v}</Text>
     </View>
   );
 }
@@ -1135,11 +1116,13 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
   hintText: { color: c.faint },
   title: { color: c.text, fontSize: 15, fontWeight: "600" },
   sub: { color: c.dim, fontSize: 11, marginTop: 1 },
-  statsBtn: {
-    height: 26, borderRadius: 8, paddingHorizontal: 9, backgroundColor: c.tintSoft,
-    borderWidth: 1, borderColor: c.line, alignItems: "center", justifyContent: "center", marginLeft: 6,
+  // 统计视图卡片（原 StatsModal 内容平铺）
+  statsCard: {
+    borderRadius: 14, backgroundColor: c.panel, borderWidth: 1, borderColor: c.line, padding: 16,
   },
-  statsT: { color: c.dim, fontSize: 11, fontWeight: "600" },
+  statRow: { flexDirection: "row", justifyContent: "space-between", gap: 14, paddingVertical: 8, borderTopWidth: 1, borderTopColor: withA(c.dim, 0.12) },
+  statRowK: { color: c.dim, fontSize: 13 },
+  statRowV: { color: c.text, fontSize: 13, fontVariant: ["tabular-nums"], textAlign: "right", flex: 1 },
   editBtn: {
     width: 30, height: 30, borderRadius: 9, backgroundColor: c.tintSoft,
     borderWidth: 1, borderColor: c.line, alignItems: "center", justifyContent: "center",
@@ -1180,37 +1163,29 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
     borderRadius: 12, borderTopRightRadius: 4, paddingHorizontal: 10, paddingVertical: 7,
   },
   pendT: { color: c.dim, fontSize: 12.5, lineHeight: 17 },
-  filterRow: { flexDirection: "row", gap: 7, marginBottom: 10 },
+  filterRow: { flexDirection: "row", gap: 7, marginBottom: 8 },
   filterChip: {
     paddingHorizontal: 10, paddingVertical: 4, borderRadius: 10,
     backgroundColor: c.tintSoft, borderWidth: 1, borderColor: c.line,
   },
+  filterChipFlex: { flex: 1, alignItems: "center" },
   filterChipOn: { backgroundColor: c.tintStrong, borderColor: withA(c.brandA, 0.4) },
-  thinkChip: { marginLeft: "auto", borderStyle: "dashed" },
+  // 视图 tab 第二行：思考/权限开关（原与过滤 chips 挤一行，5 tab 后独立成行）
+  subFilterRow: { flexDirection: "row", gap: 7, marginBottom: 10 },
+  // 任务/定时/统计视图容器
+  viewCol: { flex: 1 },
   filterT: { fontSize: 11, color: c.dim },
   filterTOn: { color: c.brandA, fontWeight: "600" },
-  // todo 面板：折叠只占一行（标题+进度条），展开列任务清单
-  todoBox: {
-    backgroundColor: c.panel2, borderWidth: 1, borderColor: c.line,
-    borderRadius: 12, paddingHorizontal: 11, paddingVertical: 6, marginBottom: 10,
-  },
-  todoHead: { flexDirection: "row", alignItems: "center", gap: 9, paddingVertical: 4 },
+  // todo 视图头：标题 + 进度条 + 手动刷新（原折叠面板头部去 caret）
+  todoHead: { flexDirection: "row", alignItems: "center", gap: 9, paddingVertical: 4, paddingHorizontal: 14 },
   todoHeadT: { color: c.dim, fontSize: 11.5, fontWeight: "600" },
   todoBar: { flex: 1, height: 4, borderRadius: 2, backgroundColor: c.tintSoft, overflow: "hidden" },
   todoBarFill: { height: 4, borderRadius: 2, backgroundColor: c.done },
   todoRefresh: { width: 26, height: 26, alignItems: "center", justifyContent: "center" },
   todoRefreshT: { color: c.dim, fontSize: 14, lineHeight: 16 },
-  todoCaret: { color: c.faint, fontSize: 11, width: 14, textAlign: "center" },
-  todoScrollWrap: { position: "relative" },
+  todoScrollWrap: { position: "relative", flex: 1 },
   todoThumb: { position: "absolute", right: 1, top: 2, width: 3, borderRadius: 2, backgroundColor: withA(c.text, 0.28) },
-  // 定时任务面板：与 todoBox 同宽同圆角，折叠只占一行
-  cronBox: {
-    backgroundColor: c.panel2, borderWidth: 1, borderColor: c.line,
-    borderRadius: 12, paddingHorizontal: 11, paddingVertical: 6, marginBottom: 10,
-  },
-  cronHead: { flexDirection: "row", alignItems: "center", gap: 9, paddingVertical: 4 },
-  cronHeadT: { color: c.dim, fontSize: 11.5, fontWeight: "600" },
-  cronScroll: { maxHeight: 320, flexGrow: 0 },
+  // 定时任务视图行（原 cronScroll/cronBox 折叠面板平铺化）
   cronRow: { flexDirection: "row", gap: 8, alignItems: "flex-start", paddingVertical: 6, borderTopWidth: 1, borderTopColor: c.line, marginTop: 4 },
   cronMark: { color: c.working, fontSize: 12, width: 16, textAlign: "center", lineHeight: 17 },
   cronName: { color: c.text, fontSize: 12.5, lineHeight: 17 },
@@ -1324,15 +1299,6 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
   askFreeBtnT: { color: c.brandA, fontWeight: "600", fontSize: 13.5 },
   askSkip: { color: c.faint, fontSize: 11.5, textAlign: "center" },
   opRipple: { borderRadius: 13, overflow: "hidden" },
-  tplRow: {
-    flexDirection: "row", backgroundColor: c.overlay,
-    borderTopWidth: 1, borderTopColor: c.line, paddingHorizontal: 10, paddingTop: 7,
-  },
-  tplChip: {
-    paddingHorizontal: 12, paddingVertical: 6, borderRadius: 13,
-    backgroundColor: c.panel2, borderWidth: 1, borderColor: c.line,
-  },
-  tplT: { fontSize: 12, color: c.dim },
   // 待发图片：缩略图行（可删除）+ 相册按钮
   imgRow: {
     flexDirection: "row", gap: 8, backgroundColor: c.overlay,
@@ -1365,9 +1331,9 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
     backgroundColor: c.overlay, borderTopWidth: 1, borderTopColor: c.line,
     flexDirection: "row", gap: 9, alignItems: "flex-end",
   },
-  // Slash 联想面板：输入 / 时悬于命令条上方，限高可滚
+  // Slash 联想面板：输入 / 时悬于命令条上方，限高可滚； marginBottom 0 贴合命令条不透字
   slashBox: {
-    marginHorizontal: 12, marginBottom: 6, maxHeight: 224,
+    marginHorizontal: 12, marginBottom: 0, maxHeight: 224,
     backgroundColor: c.panel, borderWidth: 1, borderColor: c.line, borderRadius: 13,
     overflow: "hidden",
   },
@@ -1387,9 +1353,10 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
     backgroundColor: c.panel2, borderWidth: 1, borderColor: c.line,
     paddingHorizontal: 14, paddingVertical: 11, color: c.text, fontSize: 15,
   },
+  // 发送按钮对齐网页版 #sendBtn：品牌色实底方块 + 白色 ➤
   sendBtn: {
-    width: 44, height: 44, borderRadius: 13, backgroundColor: "#1D1726",
-    borderWidth: 1, borderColor: "rgba(255,255,255,0.09)",
+    width: 44, height: 44, borderRadius: 13, backgroundColor: c.brandA,
     alignItems: "center", justifyContent: "center",
   },
+  sendT: { color: "#fff", fontSize: 17, lineHeight: 20, marginLeft: 2 },
 });
