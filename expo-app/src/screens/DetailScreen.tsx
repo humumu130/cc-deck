@@ -500,6 +500,21 @@ export default function DetailScreen({ sid, onBack }: { sid: string; onBack: () 
     return () => sub.remove();
   }, []);
 
+  // Slash 联想：/ 开头且未到参数段（无空白）时弹出。仅 LAN 通道 fetch relay
+  // /api/commands（含用户/项目自定义命令），云通道 HTTP 到不了 relay 直接用内置表
+  //（fetchSlashCommands 失败也回落内置）。钩子必须位于下方 !s 早退之前。
+  const slashQuery = input.startsWith("/") && !/\s/.test(input) ? input.slice(1) : null;
+  const slashMatches = slashQuery !== null ? matchSlash(slashCommands, slashQuery) : [];
+  useEffect(() => {
+    if (slashQuery === null || !s || snap.channel !== "lan") return;
+    let dead = false;
+    const cfg = store.connInfo;
+    void fetchSlashCommands(cfg ? httpBaseOf(cfg.wsUrl) : "", cfg?.token ?? "", s.cwd ?? "")
+      .then((list) => { if (!dead) setSlashCommands(list); });
+    return () => { dead = true; };
+    // 面板开合一次拉取（slash.ts 内 60s 缓存兜频）；cwd / 通道变化重拉
+  }, [slashQuery !== null, s?.cwd, snap.channel]);
+
   if (!s) {
     return (
       <SafeAreaView style={d.safe} edges={["top"]}>
@@ -537,21 +552,6 @@ export default function DetailScreen({ sid, onBack }: { sid: string; onBack: () 
       if (willQueue) flashQueuedHint();
     }
   };
-
-  // Slash 联想：/ 开头且未到参数段（无空白）时弹出。优先 LAN fetch relay
-  // /api/commands（含用户/项目自定义命令），失败或云通道（HTTP 到不了 relay）
-  // 由 fetchSlashCommands 回落内置表
-  const slashQuery = input.startsWith("/") && !/\s/.test(input) ? input.slice(1) : null;
-  const slashMatches = slashQuery !== null ? matchSlash(slashCommands, slashQuery) : [];
-  useEffect(() => {
-    if (slashQuery === null || !s) return;
-    let dead = false;
-    const cfg = store.connInfo;
-    void fetchSlashCommands(cfg ? httpBaseOf(cfg.wsUrl) : "", cfg?.token ?? "", s.cwd ?? "")
-      .then((list) => { if (!dead) setSlashCommands(list); });
-    return () => { dead = true; };
-    // 面板开合一次拉取（slash.ts 内 60s 缓存兜频）；cwd / 通道变化重拉
-  }, [slashQuery !== null, s?.cwd, snap.channel]);
 
   // 语音输入：按住说话，partial 实时上字幕条，松手 stopListening 等 final 发送（超时兜底用 partial）
   const setVoiceHintOnce = (t: string) => {

@@ -50,7 +50,7 @@ export function httpBaseOf(wsUrl: string): string {
 export function matchSlash(list: SlashCommand[], query: string): SlashCommand[] {
   const q = query.trim().toLowerCase();
   if (!q) return list.slice(0, 8);
-  return list.filter((c) => c.name.toLowerCase().startsWith(q) || c.desc.toLowerCase().includes(q)).slice(0, 8);
+  return list.filter((c) => c.name.toLowerCase().startsWith(q) || (c.desc || "").toLowerCase().includes(q)).slice(0, 8);
 }
 
 export async function fetchSlashCommands(
