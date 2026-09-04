@@ -1,0 +1,68 @@
+name: desktop
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+concurrency:
+  group: desktop-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: write # tag 触发时用 github.token 把产物挂到 Release（零 secrets）
+
+jobs:
+  build:
+    name: Electron NSIS + zip
+    runs-on: windows-latest
+    timeout-minutes: 40
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: desktop/package-lock.json
+
+      - name: Install dependencies
+        working-directory: desktop
+        run: npm ci --no-audit --no-fund
+
+      - name: Smoke test (load console + probe local relay mock)
+        working-directory: desktop
+        shell: bash
+        run: |
+          # 冒烟不依赖真实 relay：起一个假 /local-info（HTTP 200 JSON），验证 file:// 加载、
+          # nacl 加载与探测写回全链路（electron 主进程 fetch 127.0.0.1:8787）
+          node smoke-server.mjs > smoke.log 2>&1 &
+          SRV=$!
+          npx electron . --smoke
+          CODE=$?
+          kill $SRV 2>/dev/null || true
+          cat smoke.log 2>/dev/null || true
+          exit $CODE
+
+      - name: Build NSIS + portable zip
+        working-directory: desktop
+        run: npx electron-builder --win nsis zip --publish never
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: CC-Deck-Desktop-${{ github.ref_name }}
+          path: |
+            desktop/dist/*.exe
+            desktop/dist/*.zip
+          if-no-files-found: error
+
+      - name: Attach to GitHub Release
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            desktop/dist/*.exe
+            desktop/dist/*.zip
+          generate_release_notes: true
