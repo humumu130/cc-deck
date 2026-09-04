@@ -69,6 +69,7 @@ export function startCloudServer(port: number, token: string, extraPorts: number
   server.on("upgrade", (req, socket, head) => {
     const url = new URL(req.url ?? "/", "http://localhost");
     const dev = url.searchParams.get("dev") ?? "";
+    const rk = url.searchParams.get("rk") ?? ""; // relay 连接上报公钥（发现帧下发，浏览器无需预知）
     if (
       url.pathname !== "/cloud" ||
       (url.searchParams.get("token") ?? "") !== token ||
@@ -96,7 +97,7 @@ export function startCloudServer(port: number, token: string, extraPorts: number
         if (isBinary) return;
         router.handleFrame(connId, data.toString());
       });
-      router.register(connId, dev);
+      router.register(connId, dev, rk || undefined);
     });
   });
 

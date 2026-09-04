@@ -1,6 +1,7 @@
 // Cloudflare 形态冒烟：起 `wrangler dev`（workerd 本地运行，不需要账号），
 // 等健康检查就绪后跑与 Node 形态相同的 bridgeSmoke 协议断言。
 import { spawn, execSync } from "node:child_process";
+import { WebSocket } from "ws";
 import { bridgeSmoke } from "../../cloud-bridge/scripts/smoke.js";
 
 let failures = 0;
@@ -95,6 +96,41 @@ process.on("exit", () => void killTree());
 try {
   assert(await waitHealthy(), "wrangler dev 就绪");
   await bridgeSmoke(`ws://127.0.0.1:${PORT}`, TOKEN, assert);
+
+  // 轮询传输的发现帧（现实拓扑：relay 走 ws 上报 rk，浏览器被代理掐 ws 时降级 poll）：
+  // POST disc → 桥回 RELAYS 入 poll 队列 → GET 取回，与 ws 路径行为一致
+  {
+    const base = `http://127.0.0.1:${PORT}`;
+    const rw = new WebSocket(`ws://127.0.0.1:${PORT}/cloud?token=${TOKEN}&dev=rl-pollt&rk=RkPollRelay1`);
+    const opened = await new Promise<boolean>((r) => {
+      rw.on("open", () => r(true));
+      rw.on("error", () => r(false));
+    });
+    assert(opened, "poll 发现帧: relay ws 连接（带 rk）");
+    const sid = "poll-disc-wb";
+    const p = await fetch(`${base}/cloud-poll?token=${TOKEN}&dev=wb-pollt&sid=${sid}`, {
+      method: "POST",
+      body: JSON.stringify({ to: "*", data: { t: "disc" } }),
+    });
+    assert(p.ok, "poll 发现帧: disc POST 成功");
+    const g = await fetch(`${base}/cloud-poll?token=${TOKEN}&dev=wb-pollt&sid=${sid}&wait=3`);
+    const out = (await g.json()) as { frames?: string[] };
+    const relaysFrame = (out.frames || [])
+      .map((x) => {
+        try {
+          return JSON.parse(x) as { type?: string; relays?: { dev: string; rk: string }[] };
+        } catch {
+          return null;
+        }
+      })
+      .find((x) => x && x.type === "RELAYS");
+    assert(!!relaysFrame, "poll 发现帧: GET 收到 RELAYS");
+    assert(
+      !!relaysFrame?.relays?.some((x) => x.dev === "rl-pollt" && x.rk === "RkPollRelay1"),
+      "poll 发现帧: RELAYS 带 relay 公钥",
+    );
+    rw.close();
+  }
 } finally {
   await killTree();
 }

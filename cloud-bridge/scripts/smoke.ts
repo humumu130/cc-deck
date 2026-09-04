@@ -22,9 +22,9 @@ async function waitFor(fn: () => boolean, ms = 5000, every = 25): Promise<boolea
 }
 
 export async function bridgeSmoke(base: string, token: string, assert: Assert): Promise<void> {
-  const urlOf = (dev: string, tok: string) => `${base}/cloud?token=${tok}&dev=${dev}`;
-  const connect = (dev: string, tok = token): TestClient => {
-    const ws = new WebSocket(urlOf(dev, tok));
+  const urlOf = (dev: string, tok: string, extra = "") => `${base}/cloud?token=${tok}&dev=${dev}${extra}`;
+  const connect = (dev: string, tok = token, extra = ""): TestClient => {
+    const ws = new WebSocket(urlOf(dev, tok, extra));
     let settled = false;
     const c: TestClient = {
       ws,
@@ -56,7 +56,7 @@ export async function bridgeSmoke(base: string, token: string, assert: Assert): 
   assert(!(await bad.open), "错误 token 被拒");
   bad.ws.terminate();
 
-  const relay = connect("relay1");
+  const relay = connect("rl-relay1", token, "&rk=RkRelayPubkey1"); // relay 连接上报公钥
   const phone = connect("phone1");
   assert((await relay.open) && (await phone.open), "双设备连接成功");
 
@@ -68,7 +68,7 @@ export async function bridgeSmoke(base: string, token: string, assert: Assert): 
       phone.frames.some(
         (f) =>
           (f as { to?: string }).to === "phone1" &&
-          (f as { from?: string }).from === "relay1" &&
+          (f as { from?: string }).from === "rl-relay1" &&
           JSON.stringify((f as { data?: unknown }).data) === JSON.stringify(cipher),
       ),
     ),
@@ -82,13 +82,29 @@ export async function bridgeSmoke(base: string, token: string, assert: Assert): 
     "离线目标回 ROUTE_MISS",
   );
 
+  // 发现帧：网页（不知 relay 指纹）问桥要在线 relay 身份，回 {dev, rk}
+  phone.ws.send(JSON.stringify({ to: "*", data: { t: "disc" } }));
+  assert(
+    await waitFor(() =>
+      phone.frames.some(
+        (f) =>
+          (f as { type?: string }).type === "RELAYS" &&
+          Array.isArray((f as { relays?: { dev: string; rk: string }[] }).relays) &&
+          (f as { relays: { dev: string; rk: string }[] }).relays.some(
+            (r) => r.dev === "rl-relay1" && r.rk === "RkRelayPubkey1",
+          ),
+      ),
+    ),
+    "发现帧回 RELAYS 带 relay 公钥",
+  );
+
   // 同 dev 顶替：旧连接被踢，新连接接管路由
   const phone2 = connect("phone1");
   assert(await phone2.open, "同 dev 新连接可建立");
   assert(await waitFor(() => phone.closed), "旧连接被顶替关闭");
   relay.ws.send(JSON.stringify({ to: "phone1", data: { n: "x", c: "y" } }));
   assert(
-    await waitFor(() => phone2.frames.some((f) => (f as { from?: string })?.from === "relay1")),
+    await waitFor(() => phone2.frames.some((f) => (f as { from?: string })?.from === "rl-relay1")),
     "顶替后新连接收到路由",
   );
 

@@ -69,6 +69,34 @@ function makeRouter(): { router: CloudRouter; rec: Recorded } {
   assert(router.devs().length === 1, "注销后设备移除");
 }
 
+// ---------- A2) 发现帧与 rk 记账（网页 relay 指纹自愈） ----------
+{
+  const { router, rec } = makeRouter();
+  router.register("r1", "rl-abc", "RK1"); // relay 连接上报公钥
+  router.register("w1", "wb-1", "RK-WB"); // 浏览器连接即使带 rk 也不该被下发
+  router.handleFrame("w1", JSON.stringify({ to: "*", data: { t: "disc" } }));
+  const relays = rec.sent.filter(([, f]) => f.includes('"RELAYS"'));
+  assert(relays.length === 1, "发现帧回 RELAYS");
+  const parsed = JSON.parse(relays[0][1]);
+  assert(
+    Array.isArray(parsed.relays) && parsed.relays.length === 1 &&
+      parsed.relays[0].dev === "rl-abc" && parsed.relays[0].rk === "RK1",
+    "RELAYS 只列 relay 前缀设备并带其上报公钥",
+  );
+
+  router.handleFrame("w1", JSON.stringify({ to: "*", data: { t: "other" } }));
+  assert(rec.sent.some(([, f]) => f.includes("bad frame")), "非 disc 发现帧回 bad frame");
+
+  // relay 重连不带 rk（老版本 relay）：旧公钥必须清掉，不能残留给发现帧下发
+  router.register("r2", "rl-abc");
+  router.handleFrame("w1", JSON.stringify({ to: "*", data: { t: "disc" } }));
+  const again = rec.sent.filter(([, f]) => f.includes('"RELAYS"'));
+  assert(
+    again.length === 2 && JSON.parse(again[1][1]).relays[0].rk === "",
+    "relay 重连未上报 rk 时清空旧公钥",
+  );
+}
+
 // ---------- B) 真实服务冒烟（与 Cloudflare 形态共用 bridgeSmoke） ----------
 
 {

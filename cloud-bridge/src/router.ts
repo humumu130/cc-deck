@@ -21,6 +21,7 @@ const MAX_DEV = 64;
 export class CloudRouter {
   private devOf = new Map<string, string>();  // connId → dev
   private connOf = new Map<string, string>(); // dev → connId（一设备一连接）
+  private keyOf = new Map<string, string>();  // dev → 公钥（relay 连接时上报，发现帧用；公钥本身公开无害）
 
   constructor(private opts: RouterOptions) {}
 
@@ -37,8 +38,8 @@ export class CloudRouter {
   }
 
   // 登记（token 鉴权在适配器层完成）。同 dev 新连接顶替旧连接并踢掉，
-  // 避免设备闪断重连期间双连接重复投递。
-  register(connId: string, dev: string): void {
+  // 避免设备闪断重连期间双连接重复投递。rk 为可选公钥（relay 连接上报）。
+  register(connId: string, dev: string, rk?: string): void {
     if (dev.length < 1 || dev.length > MAX_DEV) throw new Error("bad dev");
     const old = this.connOf.get(dev);
     if (old !== undefined && old !== connId) {
@@ -48,6 +49,8 @@ export class CloudRouter {
     }
     this.devOf.set(connId, dev);
     this.connOf.set(dev, connId);
+    if (rk) this.keyOf.set(dev, rk);
+    else this.keyOf.delete(dev);
     this.opts.log?.(`register dev=${dev} conn=${connId}`);
   }
 
@@ -55,7 +58,10 @@ export class CloudRouter {
     const dev = this.devOf.get(connId);
     if (dev === undefined) return;
     this.devOf.delete(connId);
-    if (this.connOf.get(dev) === connId) this.connOf.delete(dev);
+    if (this.connOf.get(dev) === connId) {
+      this.connOf.delete(dev);
+      this.keyOf.delete(dev);
+    }
     this.opts.log?.(`unregister dev=${dev} conn=${connId}`);
   }
 
@@ -83,6 +89,20 @@ export class CloudRouter {
       !("data" in m)
     ) {
       this.reply(connId, { type: "ERROR", error: "bad frame" });
+      return;
+    }
+    // 发现帧 {to:"*", data:{t:"disc"}}：回在线 relay 列表（dev+公钥）。
+    // 网页烘焙的 relay 指纹在 relay 换 keypair 后失配，ROUTE_MISS 前先发现真实身份
+    if (m.to === "*") {
+      const d = m.data as { t?: unknown } | null;
+      if (!d || typeof d !== "object" || d.t !== "disc") {
+        this.reply(connId, { type: "ERROR", error: "bad frame" });
+        return;
+      }
+      const relays = this.devs()
+        .filter((dev) => dev.startsWith("rl-"))
+        .map((dev) => ({ dev, rk: this.keyOf.get(dev) ?? "" }));
+      this.reply(connId, { type: "RELAYS", relays });
       return;
     }
     const target = this.connOf.get(m.to);

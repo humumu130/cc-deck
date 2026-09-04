@@ -56,7 +56,8 @@ export class CloudClient {
   private bridgeUrl(): string {
     const base = this.url ?? this.cfg.cloudUrl;
     const sep = base.includes("?") ? "&" : "?";
-    return `${base}${sep}token=${encodeURIComponent(this.cfg.cloudToken)}&dev=${this.identity.relayDev}`;
+    // rk=公钥上报给桥：桥发现帧（网页 to:"*" disc）下发 {dev,rk}，浏览器无需预知 relay 指纹
+    return `${base}${sep}token=${encodeURIComponent(this.cfg.cloudToken)}&dev=${this.identity.relayDev}&rk=${encodeURIComponent(this.identity.keypair.publicKey)}`;
   }
 
   private connect(): void {

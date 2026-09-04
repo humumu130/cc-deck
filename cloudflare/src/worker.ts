@@ -104,6 +104,7 @@ export class RouterDO extends DurableObject {
     }
     if (url.pathname !== "/cloud" && url.pathname !== "/cloud-poll") return new Response("not found", { status: 404 });
     const dev = url.searchParams.get("dev") ?? "";
+    const rk = url.searchParams.get("rk") ?? ""; // relay 连接上报公钥（发现帧下发；浏览器连接不带）
     if (dev.length < 1 || dev.length > 64) return new Response("bad dev", { status: 400 });
     // 容量门禁：唤醒后按附件/轮询表重建的存活连接计数，超限拒新连（429）。
     // 清扫必须先于门禁：否则 polls 撑爆后所有请求 429、永远到不了 ensurePoll
@@ -168,8 +169,9 @@ export class RouterDO extends DurableObject {
     const connId = crypto.randomUUID();
     const pair = new WebSocketPair();
     this.ctx.acceptWebSocket(pair[1], [dev, connId]);
-    pair[1].serializeAttachment(JSON.stringify({ dev, connId, ip: req.headers.get("CF-Connecting-IP") }));
-    this.router.register(connId, dev);
+    // rk 进 attachment：DO 休眠唤醒 rehydrate 重建路由表时带回，发现帧不因唤醒丢公钥
+    pair[1].serializeAttachment(JSON.stringify({ dev, connId, rk, ip: req.headers.get("CF-Connecting-IP") }));
+    this.router.register(connId, dev, rk || undefined);
     return new Response(null, { status: 101, webSocket: pair[0] });
   }
 
@@ -228,11 +230,11 @@ export class RouterDO extends DurableObject {
   // 本地 workerd 的 webSocketMessage 里 ws.tags 未暴露（undefined），
   // 但 serializeAttachment/deserializeAttachment 可用——connId 存附件；
   // getWebSockets(tag) 的 tag 过滤仍然有效（顶替/定向发送用它）
-  private attachOf(ws: WebSocket): { dev?: string; connId?: string; ip?: string } | undefined {
+  private attachOf(ws: WebSocket): { dev?: string; connId?: string; rk?: string; ip?: string } | undefined {
     const raw = (ws as { deserializeAttachment?: () => unknown }).deserializeAttachment?.();
     if (typeof raw !== "string") return undefined;
     try {
-      return JSON.parse(raw) as { dev?: string; connId?: string; ip?: string };
+      return JSON.parse(raw) as { dev?: string; connId?: string; rk?: string; ip?: string };
     } catch {
       return undefined;
     }
@@ -246,7 +248,7 @@ export class RouterDO extends DurableObject {
     this.rehydrated = true;
     for (const ws of this.ctx.getWebSockets()) {
       const a = this.attachOf(ws);
-      if (a?.dev && a.connId) this.router.register(a.connId, a.dev);
+      if (a?.dev && a.connId) this.router.register(a.connId, a.dev, a.rk || undefined);
     }
   }
 
