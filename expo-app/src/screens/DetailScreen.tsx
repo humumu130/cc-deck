@@ -680,6 +680,7 @@ export default function DetailScreen({ sid, onBack }: { sid: string; onBack: () 
           </Text>
           {ctxUsed > 0 ? (
             <View style={d.ctxRow}>
+              <Text style={d.ctxLabel}>ctx</Text>
               <View style={d.ctxBar}>
                 <View style={{ width: `${ctxPct}%`, height: 3, borderRadius: 1.5, backgroundColor: c[contextLevel(ctxUsed, ctxLimit)] }} />
               </View>
@@ -1145,6 +1146,7 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
   sub: { color: c.dim, fontSize: 11, marginTop: 1 },
   // 上下文占用条（头部副行下）：标签 + 3px 细条 + 百分比，颜色按占用分级
   ctxRow: { flexDirection: "row", alignItems: "center", gap: 6, marginTop: 3 },
+  ctxLabel: { color: c.faint, fontSize: 10, fontWeight: "600" },
   ctxBar: { flex: 1, height: 3, borderRadius: 1.5, backgroundColor: c.tintSoft, overflow: "hidden" },
   ctxPct: { fontSize: 10, fontVariant: ["tabular-nums"], minWidth: 26, textAlign: "right" },
   // 统计视图卡片（原 StatsModal 内容平铺）
