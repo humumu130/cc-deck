@@ -3,7 +3,8 @@
 // 设计约束：任何情况下静默 exit 0，绝不干扰 CLI（bridge.json 不存在 = Relay 没跑，立即退出）
 // 单源双形态：本文件同时服务 dev 模式（relay/hooks/ -> ../data）与插件模式
 // （build-plugin.mjs 复制到 cc-deck/scripts/hook.mjs -> ~/.cc-deck/data 优先）
-import { readFileSync, writeFileSync, appendFileSync, existsSync, statSync } from "node:fs";
+import { readFileSync, writeFileSync, appendFileSync, existsSync, statSync, mkdirSync, readdirSync, rmSync } from "node:fs";
+import { createHash } from "node:crypto";
 import { join } from "node:path";
 import { homedir } from "node:os";
 import { fileURLToPath } from "node:url";
@@ -28,6 +29,38 @@ function diag(line) {
     }
     appendFileSync(diagFile, `${new Date().toISOString()} ${line}\n`);
   } catch {}
+}
+
+// 双注册去重：hook 同时挂在 settings.json 与插件 hooks.json 上（老会话插件 hook
+// 会失效，settings 级是保底），同一事件会被 CLI 双发、毫秒级重复到达。文件级原子锁
+//（wx 独占创建 + 事件内容 hash + TTL）保证只有第一个实例上报；任何异常都放行——
+// 宁可偶发双发，绝不丢事件
+const DEDUP_TTL_MS = 5000;
+function onceByKey(key) {
+  try {
+    const dir = join(dataDir, "hook-dedup");
+    mkdirSync(dir, { recursive: true });
+    const f = join(dir, key + ".mark");
+    try {
+      writeFileSync(f, String(Date.now()), { flag: "wx" });
+    } catch (e) {
+      if (e?.code !== "EEXIST") return true;
+      try {
+        if (Date.now() - statSync(f).mtimeMs < DEDUP_TTL_MS) return false;
+        rmSync(f);
+        writeFileSync(f, String(Date.now()), { flag: "wx" });
+      } catch {}
+    }
+    try {
+      for (const g of readdirSync(dir)) {
+        const p = join(dir, g);
+        try { if (Date.now() - statSync(p).mtimeMs > 60_000) rmSync(p); } catch {}
+      }
+    } catch {}
+    return true;
+  } catch {
+    return true;
+  }
 }
 
 // 定位 CLI 进程 pid（注入用）：hook 父链 node(hook)→bash×N→claude.exe，
@@ -100,7 +133,13 @@ async function main() {
 
   const event = j.hook_event_name ?? "";
   const session_id = j.session_id ?? "";
-  const cli_pid = session_id ? await resolveCliPid(session_id) : 0;
+  if (!session_id) return;
+  const dedupKey = createHash("md5")
+    .update(JSON.stringify([event, session_id, j.tool_name ?? "", j.tool_use_id ?? "", j.prompt ?? null, j.message ?? null]))
+    .digest("hex")
+    .slice(0, 16);
+  if (!onceByKey(dedupKey)) return;
+  const cli_pid = await resolveCliPid(session_id);
   diag(`event=${event} session=${session_id.slice(0, 8)} mode=${j.permission_mode ?? ""} tool=${j.tool_name ?? ""} tu=${j.tool_use_id ? String(j.tool_use_id).slice(0, 12) : "-"} cli_pid=${cli_pid || "-"}`);
   const body = {
     event,
