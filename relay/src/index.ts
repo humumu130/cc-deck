@@ -108,6 +108,7 @@ function pidIsNode(pid: number): boolean {
       const out = execFileSync("tasklist", ["/FI", `PID eq ${pid}`, "/FO", "CSV", "/NH"], {
         encoding: "utf-8",
         timeout: 5000,
+        windowsHide: true,
       });
       return /node/i.test(out);
     }

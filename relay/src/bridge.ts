@@ -735,10 +735,11 @@ export class Bridge {
     this.inputQueue.delete(sessionId);
     if (this.mgr.getExternal(sessionId)?.pending_inputs?.length) this.mgr.setExternalPending(sessionId, []);
     this.clearPidCache(sessionId);
+    const why = error === "pid-reuse" ? "进程定位失效（PID 被系统复用）" : (error ?? "未知");
     this.mgr.pushExternalLog(
       sessionId,
       "system",
-      `注入失败（${error ?? "未知"}），已清除进程定位${dropped ? `并弃 ${dropped} 条排队消息` : ""}；该会话下次活动后可重试`,
+      `注入失败（${why}），已清除进程定位${dropped ? `并弃 ${dropped} 条排队消息` : ""}；该会话下次活动后可重试`,
     );
   }
 
