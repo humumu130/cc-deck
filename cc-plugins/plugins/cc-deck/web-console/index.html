@@ -765,7 +765,7 @@
 <div id="toast"></div>
 <div id="taskDone"></div>
 
-<script src="/nacl.js"></script>
+<script src="nacl.js"></script>
 <script>
 "use strict";
 const $ = (id) => document.getElementById(id);
@@ -2712,6 +2712,11 @@ $("pairCode").addEventListener("keydown", (e) => { if (e.key === "Enter") { e.pr
 
 // 同机零配置直连：探测本机 relay（/local-info 仅 loopback 可访问，Chrome/Edge 豁免 loopback 混合内容）
 async function probeLocalRelay() {
+  // 桌面壳（Electron preload 注入）：file:// 页面 fetch 带 Origin: null 进不了
+  // relay 白名单（防任意本地网页套 token，安全正确），改由主进程代理探测（同信任模型）
+  if (window.ccDeck?.probeLocal) {
+    try { return await window.ccDeck.probeLocal(); } catch { return null; }
+  }
   try {
     const r = await fetch("http://127.0.0.1:8787/local-info", { signal: AbortSignal.timeout?.(1500) });
     if (!r.ok) return null;
