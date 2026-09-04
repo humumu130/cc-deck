@@ -1052,6 +1052,23 @@ function startCloudPing() {
 }
 function stopCloudPing() { if (pingTimer) { clearInterval(pingTimer); pingTimer = null; } }
 
+// 回前台立即 resume：后台标签页的定时器会被浏览器节流甚至冻结，20s 心跳发不
+// 出去；relay↔桥闪断后设备被置 inactive 的话，下行会一直黑洞到手动刷新。
+// visibilitychange 不受节流影响，切回标签瞬间补一次 ping-resume（带 last_seq，
+// relay 会按需补发漏掉的事件）；顺带探测半开连接：8s 无回包即强制重连。
+document.addEventListener("visibilitychange", () => {
+  if (document.visibilityState !== "visible" || mode !== "cloud" || !connected) return;
+  if (!relayPeer || pendingPair) return;
+  const t0 = Date.now();
+  sendCloud({ t: "ping", last_seq: sessions.size > 0 ? lastSeq : 0 });
+  setTimeout(() => {
+    if (mode !== "cloud" || !connected || document.visibilityState !== "visible" || lastPong >= t0) return;
+    console.log("[cloud] 回前台探测 8s 无回包，判定链路死，强制重连");
+    if (transport === "poll") { pollGen++; connected = false; setConn("", "已断开 ☁"); scheduleReconnect(); }
+    else { try { ws && ws.close(); } catch {} }
+  }, 8000);
+});
+
 function scheduleReconnect() {
   const tok = mode === "cloud" ? cloudToken() : $("token").value.trim();
   if (!$("url").value.trim() || !tok) return;

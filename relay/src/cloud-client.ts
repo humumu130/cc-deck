@@ -33,6 +33,8 @@ export class CloudClient {
   private timer: ReturnType<typeof setTimeout> | null = null;
   private lastRecv = 0;
   private hbTimer: ReturnType<typeof setInterval> | null = null;
+  // 桥闪断时记录断线前 active 的设备，重连后主动补发（见 connect 的 open 处理）
+  private resumeOnOpen = new Set<string>();
   private unsubscribe: () => void;
 
   constructor(
@@ -65,6 +67,15 @@ export class CloudClient {
       this.delayMs = 1000;
       this.lastRecv = Date.now();
       console.log(`[cloud] bridge connected ${this.tag} (dev=${this.identity.relayDev})`);
+      // 闪断自愈：桥链路闪断不该连累每台设备重新 hello——后台网页标签会被浏览器
+      // 冻结定时器发不出 ping，下行将黑洞到手动刷新。重连后立即按各设备 lastSeq
+      // 主动补发；设备自身已掉线时桥回 ROUTE_MISS，走原有下线标记路径。
+      if (this.resumeOnOpen.size) {
+        const devs = [...this.resumeOnOpen];
+        this.resumeOnOpen.clear();
+        console.log(`[cloud] auto-resume ${devs.length} device(s) after bridge reconnect: ${devs.join(",")}`);
+        for (const dev of devs) this.resumePhone(dev, this.phones.get(dev)?.lastSeq ?? 0);
+      }
     });
     ws.on("message", (raw) => {
       this.lastRecv = Date.now();
@@ -77,7 +88,10 @@ export class CloudClient {
     ws.on("close", () => {
       if (this.ws === ws) {
         console.log(`[cloud] bridge disconnected ${this.tag}, retry in ${this.delayMs}ms`);
-        for (const st of this.phones.values()) st.active = false;
+        for (const [dev, st] of this.phones) {
+          if (st.active) this.resumeOnOpen.add(dev);
+          st.active = false;
+        }
         this.ws = null;
         this.timer = setTimeout(() => this.connect(), this.delayMs);
         this.delayMs = Math.min(this.delayMs * 2, 30_000);
@@ -121,10 +135,11 @@ export class CloudClient {
     return false;
   }
 
-  private sendSealed(dev: string, obj: unknown): void {
+  private sendSealed(dev: string, obj: unknown): boolean {
     const peer = this.identity.peers.get(dev);
-    if (!peer) return;
+    if (!peer) return false;
     this.send({ to: dev, data: seal(obj, peer.pubkey, this.identity.keypair.secretKey) });
+    return true;
   }
 
   // 未配对设备的帧此前静默丢弃：对端不知道自己已被除名，只能永远卡"连接中"
@@ -274,7 +289,9 @@ export class CloudClient {
   private onEnv(env: Envelope): void {
     if (!this.ws || this.ws.readyState !== WebSocket.OPEN) return;
     for (const [dev, st] of this.phones) {
-      if (st.active) this.sendSealed(dev, env);
+      // 推进 lastSeq：桥闪断后 auto-resume 按 seq 补发，服务端必须知道已推到哪
+      // （否则只能等设备 ping 上报，回补会重复下发已收事件）
+      if (st.active && this.sendSealed(dev, env)) st.lastSeq = env.seq;
     }
   }
 

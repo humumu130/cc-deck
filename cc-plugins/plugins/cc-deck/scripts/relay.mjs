@@ -40038,6 +40038,8 @@ var CloudClient = class {
   timer = null;
   lastRecv = 0;
   hbTimer = null;
+  // 桥闪断时记录断线前 active 的设备，重连后主动补发（见 connect 的 open 处理）
+  resumeOnOpen = /* @__PURE__ */ new Set();
   unsubscribe;
   start() {
     this.connect();
@@ -40056,6 +40058,12 @@ var CloudClient = class {
       this.delayMs = 1e3;
       this.lastRecv = Date.now();
       console.log(`[cloud] bridge connected ${this.tag} (dev=${this.identity.relayDev})`);
+      if (this.resumeOnOpen.size) {
+        const devs = [...this.resumeOnOpen];
+        this.resumeOnOpen.clear();
+        console.log(`[cloud] auto-resume ${devs.length} device(s) after bridge reconnect: ${devs.join(",")}`);
+        for (const dev of devs) this.resumePhone(dev, this.phones.get(dev)?.lastSeq ?? 0);
+      }
     });
     ws2.on("message", (raw) => {
       this.lastRecv = Date.now();
@@ -40068,7 +40076,10 @@ var CloudClient = class {
     ws2.on("close", () => {
       if (this.ws === ws2) {
         console.log(`[cloud] bridge disconnected ${this.tag}, retry in ${this.delayMs}ms`);
-        for (const st2 of this.phones.values()) st2.active = false;
+        for (const [dev, st2] of this.phones) {
+          if (st2.active) this.resumeOnOpen.add(dev);
+          st2.active = false;
+        }
         this.ws = null;
         this.timer = setTimeout(() => this.connect(), this.delayMs);
         this.delayMs = Math.min(this.delayMs * 2, 3e4);
@@ -40109,8 +40120,9 @@ var CloudClient = class {
   }
   sendSealed(dev, obj) {
     const peer = this.identity.peers.get(dev);
-    if (!peer) return;
+    if (!peer) return false;
     this.send({ to: dev, data: seal(obj, peer.pubkey, this.identity.keypair.secretKey) });
+    return true;
   }
   // 未配对设备的帧此前静默丢弃：对端不知道自己已被除名，只能永远卡"连接中"
   // 并按心跳节奏刷帧。回一帧明文 pair_nack（此时不知道对方公钥、无法加密），
@@ -40243,7 +40255,7 @@ var CloudClient = class {
   onEnv(env) {
     if (!this.ws || this.ws.readyState !== wrapper_default.OPEN) return;
     for (const [dev, st2] of this.phones) {
-      if (st2.active) this.sendSealed(dev, env);
+      if (st2.active && this.sendSealed(dev, env)) st2.lastSeq = env.seq;
     }
   }
   close() {

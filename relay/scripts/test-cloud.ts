@@ -165,45 +165,49 @@ assert(
 );
 
 // ---------- 7) 云侧单边断线自愈（relay ws 掉线重连，手机 ws 不动） ----------
-// 场景：relay 重启/心跳超时只断 relay↔桥，手机 ws 存活不会再发 hello。
-// 旧行为：active=false 后下行永久黑洞（上行/ACK/ping-pong 照常，极难察觉）。
-const ccInternal = cloud as unknown as { ws: WebSocket | null };
+// 场景：桥闪断只断 relay↔桥，手机 ws 存活不会再发 hello；网页标签页在后台时连
+// ping 都发不出（浏览器冻结定时器）。新行为：重连后 relay 对断线前 active 的设备
+// 按 lastSeq 主动 auto-resume，闪断窗口的事件从 bus 缓冲补发，全程无需设备配合。
+const ccInternal = cloud as unknown as {
+  ws: WebSocket | null;
+  phones: Map<string, { lastSeq: number; active: boolean }>;
+};
 ccInternal.ws!.close();
+bus.emit("sess-cloud", "SESSION_LOG", { kind: "system", text: "blackout-1" }); // 断线窗口内事件，只能靠重连补发
 assert(
   await waitFor(() => ccInternal.ws !== null && ccInternal.ws.readyState === WebSocket.OPEN, 5000),
   "relay 侧重连桥成功",
 );
-await wait(300);
-bus.emit("sess-cloud", "SESSION_LOG", { kind: "system", text: "blackout-1" });
-await wait(800);
-assert(
-  !inbox2.some((m) => m.type === "SESSION_LOG" && (m.payload as { text?: string })?.text === "blackout-1"),
-  "未 ping 恢复前下行黑洞（旧行为复现）",
-);
-const seqNow = Math.max(...inbox2.map((m) => Number(m.seq ?? 0)).filter((n) => n > 0));
-phoneWs2.send(JSON.stringify({ to: identity.relayDev, data: seal({ t: "ping", last_seq: seqNow }, relayPubkey, phoneKp.secretKey) }));
 assert(
   await waitFor(() => inbox2.some((m) => m.type === "SESSION_LOG" && (m.payload as { text?: string })?.text === "blackout-1")),
-  "ping 携带 last_seq 触发补发，黑洞自愈",
+  "重连后 auto-resume 主动补发断线窗口事件（无需设备 ping）",
 );
 assert(
-  await waitFor(() => inbox2.some((m) => m.t === "pong")),
-  "ping 仍收到 pong（心跳语义不变）",
+  await waitFor(() => ccInternal.phones.get(phoneDev)?.active === true),
+  "auto-resume 恢复设备 active",
+);
+assert(
+  inbox2.filter((m) => m.type === "SESSION_LOG" && (m.payload as { text?: string })?.text === "rogue-probe").length === 1,
+  "auto-resume 补发无重复（onEnv 推进 lastSeq）",
 );
 bus.emit("sess-cloud", "SESSION_LOG", { kind: "system", text: "after-resume" });
 assert(
   await waitFor(() => inbox2.some((m) => m.type === "SESSION_LOG" && (m.payload as { text?: string })?.text === "after-resume")),
   "恢复后实时事件继续下发",
 );
-
-// 旧版 ping（无 last_seq）→ 全量 SNAPSHOT 恢复（当前线上 APK 兼容路径）
-const ccWsBefore = ccInternal.ws;
-ccInternal.ws!.close();
-assert(
-  await waitFor(() => ccInternal.ws !== null && ccInternal.ws !== ccWsBefore && ccInternal.ws.readyState === WebSocket.OPEN, 5000),
-  "再次单边断线后 relay 重连",
-);
 const pongsBefore = inbox2.filter((m) => m.t === "pong").length;
+const seqNow = Math.max(...inbox2.map((m) => Number(m.seq ?? 0)).filter((n) => n > 0));
+phoneWs2.send(JSON.stringify({ to: identity.relayDev, data: seal({ t: "ping", last_seq: seqNow }, relayPubkey, phoneKp.secretKey) }));
+assert(
+  await waitFor(() => inbox2.filter((m) => m.t === "pong").length > pongsBefore),
+  "ping 仍收到 pong（心跳语义不变）",
+);
+
+// 旧版 ping（无 last_seq）→ 全量 SNAPSHOT 恢复（当前线上 APK 兼容路径）。
+// 新架构下 auto-resume 让设备多数时间保持 active，但 ROUTE_MISS/真实掉线仍会置
+// inactive——旧版 ping 的全量恢复路径必须保留，这里手动置 inactive 模拟。
+ccInternal.phones.get(phoneDev)!.active = false;
+const pongsBefore2 = inbox2.filter((m) => m.t === "pong").length;
 phoneWs2.send(JSON.stringify({ to: identity.relayDev, data: seal({ t: "ping" }, relayPubkey, phoneKp.secretKey) }));
 // inbox2 此前从未收到过 SNAPSHOT（hello/补发都在缓冲内），它出现即 resume 已完成
 assert(
@@ -211,7 +215,7 @@ assert(
   "旧版无字段 ping 触发全量 SNAPSHOT 恢复",
 );
 assert(
-  await waitFor(() => inbox2.filter((m) => m.t === "pong").length > pongsBefore),
+  await waitFor(() => inbox2.filter((m) => m.t === "pong").length > pongsBefore2),
   "旧版 ping 仍收到 pong",
 );
 bus.emit("sess-cloud", "SESSION_LOG", { kind: "system", text: "legacy-ping-resume" });
