@@ -4,8 +4,7 @@ import { Animated, PanResponder, Pressable, ScrollView, StyleSheet, Text, TextIn
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useTheme, useThemeStyles } from "../theme-context";
 import { LogoMark } from "../brand";
-import { setProcessFont, useProcessFont, setListCompact, useListCompact, type ProcessFont } from "../display-settings";
-import { resetPhrases, setPhrases, usePhraseState } from "../phrases";
+import { setProcessFont, useProcessFont, setListCompact, useListCompact, setVoiceInput, useVoiceInput, type ProcessFont } from "../display-settings";
 import { store, useRelay, type ServerEntry } from "../store";
 import { withA, type ThemeColors } from "../theme";
 
@@ -50,6 +49,7 @@ export default function SettingsDrawer({
   ).current;
   const processFont = useProcessFont();
   const listCompact = useListCompact();
+  const voiceInput = useVoiceInput();
   const snap = useRelay();
   const [servers, setServers] = useState<ServerEntry[]>([]);
   const [activeId, setActiveId] = useState<string | null>(null);
@@ -90,16 +90,6 @@ export default function SettingsDrawer({
 
   const translateX = x.interpolate({ inputRange: [0, 1], outputRange: [-240, 0] });
   const scrimOp = x.interpolate({ inputRange: [0, 1], outputRange: [0, 0.55] });
-
-  // 快捷短语管理（详情页 chips 数据源）
-  const ph = usePhraseState();
-  const [newPh, setNewPh] = useState("");
-  const addPh = () => {
-    const t = newPh.trim().slice(0, 40);
-    if (!t) return;
-    setPhrases([...ph.list, t]);
-    setNewPh("");
-  };
 
   // 新设备配对码：信任设备向 relay 领一次性码，供网页端新浏览器输入
   const [pairErr, setPairErr] = useState<string | null>(null);
@@ -161,47 +151,6 @@ export default function SettingsDrawer({
         </ScrollView>
         {servers.length === 0 ? <Text style={d.srvEmpty}>还没有服务器，点下方新增</Text> : null}
 
-        <Text style={d.secT}>快捷短语</Text>
-        <View style={d.phBox}>
-          {ph.list.map((p, i) => (
-            <View key={i} style={d.phRow}>
-              <Text style={d.phT} numberOfLines={1}>{p}</Text>
-              <Pressable
-                style={d.phDel}
-                android_ripple={{ color: withA(c.waiting, 0.15), borderless: false, radius: 12 }}
-                onPress={() => setPhrases(ph.list.filter((_, j) => j !== i))}
-              >
-                <Text style={d.phDelT}>✕</Text>
-              </Pressable>
-            </View>
-          ))}
-          {ph.list.length === 0 ? <Text style={d.srvEmpty}>已清空：详情页将不再显示短语条</Text> : null}
-          <View style={d.phAddRow}>
-            <TextInput
-              style={d.phInput}
-              value={newPh}
-              onChangeText={setNewPh}
-              placeholder="新短语"
-              placeholderTextColor={c.faint}
-              returnKeyType="done"
-              onSubmitEditing={addPh}
-            />
-            <Pressable
-              style={[d.phAddBtn, !newPh.trim() && { opacity: 0.4 }]}
-              android_ripple={{ color: c.tintSoft, borderless: false, radius: 10 }}
-              onPress={addPh}
-              disabled={!newPh.trim()}
-            >
-              <Text style={d.phAddT}>＋</Text>
-            </Pressable>
-          </View>
-          {ph.customized ? (
-            <Pressable style={d.phReset} android_ripple={{ color: c.tintSoft, borderless: false, radius: 10 }} onPress={resetPhrases}>
-              <Text style={d.phResetT}>恢复默认</Text>
-            </Pressable>
-          ) : null}
-        </View>
-
         <Text style={d.secT}>新设备配对</Text>
         <Pressable style={d.pairGen} android_ripple={{ color: c.tintSoft, borderless: false }} onPress={() => void genPairCode()}>
           <Text style={d.pairGenT}>生成网页端配对码</Text>
@@ -255,7 +204,18 @@ export default function SettingsDrawer({
             </Pressable>
           </View>
         </View>
-        <Text style={d.tipT}>过程消息 = 工具调用 / 结果 / 系统提示；紧凑小一号+淡化，隐藏则整行不显示（思考内容保留）。简洁列表 = 会话卡只留状态、耗时与名称，一屏显示更多。</Text>
+        <View style={d.rowStatic}>
+          <Text style={d.rowT}>语音输入</Text>
+          <View style={d.seg}>
+            <Pressable style={[d.segOpt, voiceInput && d.segOptOn]} android_ripple={{ color: c.tintSoft, borderless: false, radius: 11 }} onPress={() => !voiceInput && setVoiceInput(true)}>
+              <Text style={[d.segT, voiceInput && d.segTOn]}>开</Text>
+            </Pressable>
+            <Pressable style={[d.segOpt, !voiceInput && d.segOptOn]} android_ripple={{ color: c.tintSoft, borderless: false, radius: 11 }} onPress={() => voiceInput && setVoiceInput(false)}>
+              <Text style={[d.segT, !voiceInput && d.segTOn]}>关</Text>
+            </Pressable>
+          </View>
+        </View>
+        <Text style={d.tipT}>过程消息 = 工具调用 / 结果 / 系统提示；紧凑小一号+淡化，隐藏则整行不显示（思考内容保留）。简洁列表 = 会话卡只留状态、耗时与名称，一屏显示更多。语音输入 = 输入栏按住说话（部分机型识别服务不可用，默认关闭）。</Text>
         </ScrollView>
       </Animated.View>
     </View>
@@ -300,30 +260,6 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
   addT: { color: c.brandA, fontSize: 13, fontWeight: "700" },
   srvEmpty: { color: c.faint, fontSize: 11, marginTop: 2 },
   body: { flex: 1 },
-  phBox: {
-    backgroundColor: c.panel, borderWidth: 1, borderColor: c.line,
-    borderRadius: 12, paddingHorizontal: 10, paddingVertical: 5,
-  },
-  phRow: { flexDirection: "row", alignItems: "center", minHeight: 32 },
-  phT: { color: c.text, fontSize: 13, flex: 1 },
-  phDel: { width: 30, height: 30, alignItems: "center", justifyContent: "center" },
-  phDelT: { color: c.faint, fontSize: 13 },
-  phAddRow: { flexDirection: "row", gap: 6, marginTop: 5 },
-  phInput: {
-    flex: 1, minHeight: 34, borderRadius: 10,
-    backgroundColor: c.tintSoft, borderWidth: 1, borderColor: c.line,
-    paddingHorizontal: 10, paddingVertical: 7, color: c.text, fontSize: 13,
-  },
-  phAddBtn: {
-    width: 44, borderRadius: 10, backgroundColor: c.tintStrong,
-    borderWidth: 1, borderColor: withA(c.brandA, 0.45), alignItems: "center", justifyContent: "center",
-  },
-  phAddT: { color: c.brandA, fontSize: 16, fontWeight: "700" },
-  phReset: {
-    alignItems: "center", paddingVertical: 7, marginTop: 8, borderRadius: 10,
-    borderWidth: 1, borderColor: c.line, borderStyle: "dashed",
-  },
-  phResetT: { color: c.dim, fontSize: 12, fontWeight: "600" },
   pairGen: {
     alignItems: "center", paddingVertical: 10, borderRadius: 12, marginBottom: 8,
     backgroundColor: c.tintStrong, borderWidth: 1, borderColor: withA(c.brandA, 0.45),

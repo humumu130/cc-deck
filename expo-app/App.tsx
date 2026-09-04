@@ -7,7 +7,6 @@ import { ensureNotifPermission, fgSupported, notifyAlert, startForegroundService
 import { startWatchGateway } from "./src/watch";
 import { ThemeProvider, useTheme, useThemeStyles } from "./src/theme-context";
 import { loadDisplaySettings } from "./src/display-settings";
-import { loadPhrases } from "./src/phrases";
 import type { ThemeColors } from "./src/theme";
 import ListScreen from "./src/screens/ListScreen";
 import DetailScreen from "./src/screens/DetailScreen";
@@ -53,7 +52,6 @@ function Shell() {
 
   useEffect(() => {
     startWatchGateway();
-    void loadPhrases();
     void (async () => {
       // 显示设置先于首帧加载完成，避免简洁模式/字号闪默认值
       await loadDisplaySettings();
