@@ -183,7 +183,7 @@ export function startServer(
     // 手机浏览器访问根路径时跳转移动端
     if (req.method === "GET" && url.pathname === "/" &&
         /Android|iPhone|iPad|Mobile/i.test(req.headers["user-agent"] ?? "")) {
-      res.writeHead(302, { location: "/m" }).end();
+      res.writeHead(302, { location: "/m" + (url.search || "") }).end(); // 保留 ?token= 等查询（丢了配对链接就废了）
       return;
     }
     if (req.method === "GET" && url.pathname === "/") {
