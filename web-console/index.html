@@ -105,6 +105,25 @@
   .brand { display: flex; align-items: center; gap: 8px; min-width: 0; }
   .brand h1 { font-size: 15px; font-weight: 700; letter-spacing: .3px; white-space: nowrap; }
   #runhint { font-size: 11.5px; color: var(--dim); white-space: nowrap; }
+  /* 状态统计（灯+数字，无文字标签）；? 呼出图例浮窗 */
+  #runhint .rh-total { font-variant-numeric: tabular-nums; }
+  #runhint .rh-chip { display: inline-flex; align-items: center; gap: 4px; margin-left: 9px; font-variant-numeric: tabular-nums; }
+  #runhint .rh-chip i { width: 7px; height: 7px; border-radius: 50%; flex: none; }
+  #runhint .rh-help {
+    display: inline-flex; align-items: center; justify-content: center;
+    margin-left: 9px; width: 14px; height: 14px; border-radius: 50%;
+    border: 1px solid var(--border); color: var(--faint); font-size: 10px;
+    cursor: pointer; user-select: none; vertical-align: middle;
+  }
+  #runhint .rh-help:hover { color: var(--dim); border-color: var(--hov); }
+  #rhPop {
+    display: none; position: absolute; top: 60px; left: 16px; z-index: 40;
+    background: var(--panel); border: 1px solid var(--border); border-radius: 12px;
+    padding: 11px 14px; box-shadow: 0 8px 28px rgba(0,0,0,.4);
+  }
+  #rhPop.open { display: flex; flex-direction: column; gap: 7px; }
+  .rh-row { display: flex; align-items: center; gap: 8px; font-size: 12.5px; color: var(--text); }
+  .rh-row i { width: 8px; height: 8px; border-radius: 50%; flex: none; }
   header .spacer { flex: 1; }
 
   #connChip {
@@ -207,6 +226,7 @@
   #side {
     width: 380px; flex: none; border-right: 1px solid var(--border);
     display: flex; flex-direction: column; background: var(--side-bg);
+    position: relative;
   }
   #side h3 {
     font-size: 11px; font-weight: 600; letter-spacing: 1.5px; color: var(--faint);
@@ -604,6 +624,13 @@
       <div id="connChip" title="连接设置"><i></i><span id="connText">未连接</span></div>
       <button id="themeBtn" title="深浅色切换">☀️</button>
     </header>
+
+    <div id="rhPop">
+      <div class="rh-row"><i style="background:var(--working)"></i>working</div>
+      <div class="rh-row"><i style="background:var(--waiting)"></i>waiting</div>
+      <div class="rh-row"><i style="background:var(--error)"></i>error</div>
+      <div class="rh-row"><i style="background:var(--done)"></i>done</div>
+    </div>
 
     <div class="panel" id="connPanel">
       <div id="srvList"></div>
@@ -1569,17 +1596,30 @@ function renderSrcChips() {
 }
 
 function render() {
-  // 运行计数（全源汇总）
-  let running = 0, total = 0, anyOnline = false;
+  // 运行计数（全源汇总；灯+数字，无文字标签——含义见 ？ 图例）
+  let total = 0, anyOnline = false;
+  const cnt = { WORKING: 0, WAITING: 0, ERROR: 0, DONE: 0 };
   for (const ctx of ctxs.values()) {
     anyOnline = anyOnline || ctx.status === "online";
     for (const s of ctx.sessions.values()) {
       total++;
-      if (s.status === "WORKING" || s.status === "WAITING") running++;
+      if (cnt[s.status] !== undefined) cnt[s.status]++;
     }
   }
-  $("runhint").textContent = running > 0 ? running + " 个会话正在运行" :
-    (total > 0 ? "暂无运行中的会话" : (anyOnline ? "已连接 · 暂无会话" : "等待连接"));
+  if (total > 0) {
+    const chips = Object.entries(cnt).filter(([, n]) => n > 0).map(([k, n]) => {
+      const col = "var(--" + k.toLowerCase() + ")";
+      return '<span class="rh-chip" style="color:' + col + '"><i style="background:' + col + '"></i>' + n + "</span>";
+    }).join("");
+    const key = total + "|" + chips;
+    if ($("runhint").dataset.key !== key) {
+      $("runhint").dataset.key = key;
+      $("runhint").innerHTML = '<span class="rh-total">共 ' + total + "</span>" + chips + '<span class="rh-help" id="rhHelp">?</span>';
+    }
+  } else if ($("runhint").dataset.key !== "empty") {
+    $("runhint").dataset.key = "empty";
+    $("runhint").textContent = anyOnline ? "已连接 · 暂无会话" : "等待连接";
+  }
   renderSrcChips();
 
   const box = $("cards");
@@ -2086,6 +2126,11 @@ $("connChip").onclick = () => {
   const open = $("connPanel").classList.contains("open");
   openPanel(open ? "none" : "conn");
 };
+// 状态图例浮窗：点 ？ 开合，点外部收起（rhHelp 随 runhint 重建，走事件委托）
+document.addEventListener("click", (ev) => {
+  if (ev.target.closest("#rhHelp")) { $("rhPop").classList.toggle("open"); return; }
+  if (!ev.target.closest("#rhPop")) $("rhPop").classList.remove("open");
+});
 $("addBtn").onclick = () => {
   const open = !$("newform").classList.contains("open");
   $("newform").classList.toggle("open", open);

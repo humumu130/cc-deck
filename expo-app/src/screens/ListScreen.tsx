@@ -2,7 +2,7 @@ import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Animated, BackHandler, Easing, FlatList, PanResponder, Pressable, StyleSheet, Text, View } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { STATUS_ZH, statusColor, withA, type ThemeColors } from "../theme";
+import { statusColor, withA, type ThemeColors } from "../theme";
 import { useTheme, useThemeStyles } from "../theme-context";
 import { LogoMark } from "../brand";
 import { sessionElapsed, fmtElapsed, fmtTok, contextPct, contextLevel, CONTEXT_LIMIT_FALLBACK } from "../fmt";
@@ -286,6 +286,8 @@ export default function ListScreen({ sessions, connected, connText, onOpen, onNe
   );
   const handleRename = useCallback((sid: string) => setRenameSid(sid), []);
   const [drawerOpen, setDrawerOpen] = useState(false);
+  // 状态图例浮窗（统计行 ？ 呼出）
+  const [legendOpen, setLegendOpen] = useState(false);
 
   // 抽屉打开时硬件返回先关抽屉
   useEffect(() => {
@@ -366,9 +368,14 @@ export default function ListScreen({ sessions, connected, connText, onOpen, onNe
           {statusItems.map(({ k, n, color }) => (
             <View key={k} style={styles.statChip}>
               <View style={[styles.statDot, { backgroundColor: color }]} />
-              <Text style={[styles.statChipT, { color }]}>{n} {STATUS_ZH[k]}</Text>
+              <Text style={[styles.statChipT, { color }]}>{n}</Text>
             </View>
           ))}
+          {statusItems.length > 0 ? (
+            <Pressable style={styles.helpBtn} onPress={() => setLegendOpen(true)} hitSlop={8}>
+              <Text style={styles.helpT}>?</Text>
+            </Pressable>
+          ) : null}
         </View>
         {idleCount > 0 ? (
           <Pressable
@@ -430,6 +437,20 @@ export default function ListScreen({ sessions, connected, connText, onOpen, onNe
         onSetup={onSetup}
         onEdit={(e) => onEditServer(e.id)}
       />
+
+      {/* 状态图例浮窗：统计行 ？ 呼出，点任意处收起 */}
+      {legendOpen ? (
+        <Pressable style={styles.legendScrim} onPress={() => setLegendOpen(false)}>
+          <View style={styles.legendCard}>
+            {(["WORKING", "WAITING", "ERROR", "DONE"] as const).map((k) => (
+              <View key={k} style={styles.legendRow}>
+                <View style={[styles.legendDot, { backgroundColor: statusColor(k, c) }]} />
+                <Text style={styles.legendT}>{k.toLowerCase()}</Text>
+              </View>
+            ))}
+          </View>
+        </Pressable>
+      ) : null}
     </SafeAreaView>
   );
 }
@@ -462,6 +483,21 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
   statChip: { flexDirection: "row", alignItems: "center", gap: 4 },
   statDot: { width: 7, height: 7, borderRadius: 4 },
   statChipT: { fontSize: 11.5 },
+  // ？ 图例按钮：淡色小圆圈问号
+  helpBtn: {
+    width: 15, height: 15, borderRadius: 8, borderWidth: 1, borderColor: c.line,
+    alignItems: "center", justifyContent: "center", marginLeft: 2,
+  },
+  helpT: { fontSize: 10, color: c.faint, lineHeight: 12 },
+  legendScrim: { position: "absolute", left: 0, right: 0, top: 0, bottom: 0, backgroundColor: "rgba(0,0,0,0.25)", zIndex: 60 },
+  legendCard: {
+    position: "absolute", top: 90, left: 18, minWidth: 128,
+    backgroundColor: c.panel, borderWidth: 1, borderColor: c.line, borderRadius: 12,
+    paddingVertical: 12, paddingHorizontal: 14, gap: 8, elevation: 6,
+  },
+  legendRow: { flexDirection: "row", alignItems: "center", gap: 8 },
+  legendDot: { width: 8, height: 8, borderRadius: 4 },
+  legendT: { color: c.text, fontSize: 12.5 },
   folderTag: { fontSize: 10, color: c.dim, maxWidth: 130 },
   collapseBtn: {
     borderRadius: 999, borderWidth: 1, borderColor: c.line, backgroundColor: c.tintSoft,
