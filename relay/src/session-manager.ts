@@ -609,7 +609,10 @@ export class SessionManager {
             const r = this.bridge.refreshTodos(cmd.payload.session_id);
             return { command_id: cmd.command_id, ok: r.ok, error: r.error };
           }
-          // 托管会话清单来自 SDK 实时 feed：重发当前值即可
+          // 托管会话：任务目录是权威源（#206）。清轮询变更缓存强制重读磁盘，
+          // 无目录（旧版 CLI）再回落 SDK feed 当前值重发
+          this.lastStoreTodos.delete(cmd.payload.session_id);
+          this.pollTaskStore();
           if (s.state.todos) this.setTodos(cmd.payload.session_id, s.state.todos.map((t) => ({ ...t })));
           return { command_id: cmd.command_id, ok: true };
         }
@@ -954,6 +957,7 @@ export class SessionManager {
   // 陈旧快照/跨会话污染从源头消除（目录天然按会话隔离）
   private pollTaskStore(): void {
     for (const s of this.sessions.values()) {
+      if (s.state.historical) continue; // 历史会话无活跃目录，读到的只能是陈旧/噪音
       const sid = s.state.relay_session_id || (s.state.external ? s.state.session_id.slice(4) : "");
       if (!sid) continue;
       const todos = readTaskStoreTodos(sid);

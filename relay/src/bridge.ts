@@ -1083,7 +1083,8 @@ export class Bridge {
       // 子 Agent：先补/升级 tool_use 条目（同批快速完成时通知才有配对目标），再按通知收尾
       for (const u of agentUses) this.observeAgentUse(id, u);
       for (const n of agentNotifs) this.closeSubagentByNotification(id, n);
-      // 任务清单：CLI 任务存储目录优先（权威、变更检测防重发），无目录再 transcript 回放/增量
+      // 任务清单：CLI 任务存储目录优先（权威、变更检测防重发），无目录再 transcript 回放/增量。
+      // store 命中过至少一次后目录消失（CLI 清理/换代）不再回退 tracker——陈旧基线会覆写权威快照
       const storeTodos = this.readTaskStore(id);
       if (storeTodos) {
         const j = JSON.stringify(storeTodos);
@@ -1092,13 +1093,14 @@ export class Bridge {
           this.lastTodos.set(id, j);
           this.mgr.setTodos(id, storeTodos);
         }
-      } else if (firstRead) {
-        this.replayTaskHistory(id, transcriptPath);
-      } else if (taskOps.length) {
-        const tr = this.ensureTracker(id);
-        for (const op of taskOps) {
-          const todos = op.result ? tr.feedResult(op.result) : tr.feed(op.tool as string, op.input);
-          if (todos) this.mgr.setTodos(id, todos);
+      } else if (!this.lastTodos.has(id)) {
+        if (firstRead) this.replayTaskHistory(id, transcriptPath);
+        else if (taskOps.length) {
+          const tr = this.ensureTracker(id);
+          for (const op of taskOps) {
+            const todos = op.result ? tr.feedResult(op.result) : tr.feed(op.tool as string, op.input);
+            if (todos) this.mgr.setTodos(id, todos);
+          }
         }
       }
       if (usageSeen || model) {
