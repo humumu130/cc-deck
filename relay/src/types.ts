@@ -150,6 +150,13 @@ export interface SessionHeartbeatPayload {
   action_summary: string;
 }
 
+// 任务完成汇报（#204）：权威任务轮询 diff 出"本次完成"时下发，
+// 驱动手机/网页悬浮汇报框与系统通知。done 按 content 匹配前后快照得出
+export interface TaskDonePayload {
+  done: string[];          // 本次完成的任务内容（一轮可完成多条）
+  remaining: TodoItem[];   // 完成后仍未完任务（[] = 全部完成）
+}
+
 export interface WaitingPayload {
   request_id: string;
   tool_name: string;
@@ -212,6 +219,7 @@ export type EventType =
   | "SESSION_ERROR"
   | "SESSION_DONE"
   | "SESSION_LOG"
+  | "TASK_DONE"
   | "SESSION_DELETED"
   | "SNAPSHOT";
 
@@ -224,6 +232,7 @@ export type EventPayloadMap = {
   SESSION_ERROR: SessionErrorPayload;
   SESSION_DONE: SessionDonePayload;
   SESSION_LOG: SessionLogPayload;
+  TASK_DONE: TaskDonePayload;
   SESSION_DELETED: SessionDeletedPayload;
   SNAPSHOT: SnapshotPayload;
 };

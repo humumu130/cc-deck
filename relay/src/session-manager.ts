@@ -609,10 +609,9 @@ export class SessionManager {
             const r = this.bridge.refreshTodos(cmd.payload.session_id);
             return { command_id: cmd.command_id, ok: r.ok, error: r.error };
           }
-          // 托管会话：任务目录是权威源（#206）。清轮询变更缓存强制重读磁盘，
-          // 无目录（旧版 CLI）再回落 SDK feed 当前值重发
-          this.lastStoreTodos.delete(cmd.payload.session_id);
-          this.pollTaskStore();
+          // 托管会话：任务目录是权威源（#206）。force 重读磁盘强制重发可见集，
+          // 不删轮询缓存——diff 仍与上轮比较，恰逢完成项照样发 TASK_DONE
+          this.pollTaskStore(true);
           if (s.state.todos) this.setTodos(cmd.payload.session_id, s.state.todos.map((t) => ({ ...t })));
           return { command_id: cmd.command_id, ok: true };
         }
@@ -642,6 +641,7 @@ export class SessionManager {
             return { command_id: cmd.command_id, ok: false, error: "会话运行中，不能删除" };
           }
           this.sessions.delete(cmd.payload.session_id);
+          this.lastStoreTodos.delete(cmd.payload.session_id);
           if (s.state.external) {
             this.deletedExtIds.add(cmd.payload.session_id);
             appendDeletedExt(this.cfg.dataDir, cmd.payload.session_id);
@@ -955,18 +955,36 @@ export class SessionManager {
   // 托管（sdkId）与外部（hook session_id）统一覆盖；JSON 变更检测防重发。
   // bridge 的 transcript 旁路 tracker 降级为无目录时的回退，本轮询是主路径——
   // 陈旧快照/跨会话污染从源头消除（目录天然按会话隔离）
-  private pollTaskStore(): void {
+  private pollTaskStore(force = false): void {
     for (const s of this.sessions.values()) {
       if (s.state.historical) continue; // 历史会话无活跃目录，读到的只能是陈旧/噪音
       const sid = s.state.relay_session_id || (s.state.external ? s.state.session_id.slice(4) : "");
       if (!sid) continue;
       const todos = readTaskStoreTodos(sid);
       if (todos === null) continue;
-      const next = JSON.stringify(todos);
-      if (this.lastStoreTodos.get(s.state.session_id) === next) continue;
-      if (this.lastStoreTodos.size > 60) this.lastStoreTodos.clear();
+      // 与 setTodos 同口径先滤隐藏条目：缓存/diff/TASK_DONE 都基于可见集，被隐藏任务完成不弹汇报
+      const hidden = hiddenTodoKeys(s.state.session_id);
+      const visible = hidden.size ? todos.filter((t) => !hidden.has(normKey(t.content))) : todos;
+      const next = JSON.stringify(visible);
+      const prevStr = this.lastStoreTodos.get(s.state.session_id);
+      if (!force && prevStr === next) continue;
       this.lastStoreTodos.set(s.state.session_id, next);
       this.setTodos(s.state.session_id, todos);
+      // 任务完成汇报（#204）：前快照未完成 → 后快照已完成的项即本次完成。
+      // 首见（prevStr 空，冷启动/SNAPSHOT 重建）不报，避免重启刷一屏假完成
+      if (prevStr) {
+        try {
+          const prev = JSON.parse(prevStr) as TodoItem[];
+          const prevOpen = new Set(prev.filter((t) => t.status !== "completed").map((t) => t.content));
+          const done = visible.filter((t) => t.status === "completed" && prevOpen.has(t.content)).map((t) => t.content);
+          if (done.length) {
+            this.bus.emit(s.state.session_id, "TASK_DONE", {
+              done,
+              remaining: visible.filter((t) => t.status !== "completed"),
+            });
+          }
+        } catch {}
+      }
     }
   }
 
@@ -981,6 +999,7 @@ export class SessionManager {
       if (this.sessions.size < MAX_SESSIONS) break;
       void s.agent?.stop(); // 回收 parked 的 CLI 子进程（历史会话无 agent）
       this.sessions.delete(s.state.session_id);
+      this.lastStoreTodos.delete(s.state.session_id);
     }
   }
 
