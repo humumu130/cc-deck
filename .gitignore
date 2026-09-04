@@ -4,6 +4,7 @@ relay/.tmp-e2e/
 relay/data/
 *.log
 .DS_Store
+data/
 Thumbs.db
 .design-text.txt
 .colors.txt
