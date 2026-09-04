@@ -26,6 +26,8 @@ export class CloudClient {
   private ws: WebSocket | null = null;
   private phones = new Map<string, PhoneState>();
   private unpairedNotice = new Map<string, number>();
+  // 配对码爆破限流：10 分钟有效窗口内连续错码的 dev 直接静默丢弃（码空间 10^6）
+  private pairFails = new Map<string, { n: number; until: number }>();
   private delayMs = 1000;
   private stopped = false;
   private timer: ReturnType<typeof setTimeout> | null = null;
@@ -197,11 +199,24 @@ export class CloudClient {
         console.log(`[cloud] pair_req rejected dev=${f.from}`);
         return;
       }
+      const now = Date.now();
+      const pf = this.pairFails.get(dev);
+      if (pf && pf.until > now) {
+        console.log(`[cloud] pair_req throttled dev=${dev}（连续错码）`);
+        return;
+      }
+      if (pf) this.pairFails.delete(dev); // 静默期满：计数归零重来（否则手误 5 次后永久一触即锁）
       if (this.pairCodes?.consume(String(pr.code ?? ""))) {
         this.identity.addPeer(dev, { pubkey, name: typeof pr.name === "string" ? pr.name : "web", paired_at: Date.now() });
         console.log(`[cloud] paired web dev=${dev}`);
       } else if (!this.identity.peers.get(dev)) {
-        // 码无效且未配对过：真拒绝
+        // 码无效且未配对过：真拒绝；连续 5 次错码进入 10 分钟静默期（防爆破枚举）。
+        // 清理只删已过期条目，不清仍在静默期内的（全清会给爆破者开窗）
+        const n = (pf?.n ?? 0) + 1;
+        this.pairFails.set(dev, { n, until: n >= 5 ? now + 600_000 : 0 });
+        if (this.pairFails.size > 100) {
+          for (const [d, v] of this.pairFails) if (v.until <= now) this.pairFails.delete(d);
+        }
         console.log(`[cloud] pair_req rejected dev=${f.from}`);
         this.send({ to: f.from, data: seal({ t: "pair_nack", error: "配对码无效或已过期" }, pubkey, this.identity.keypair.secretKey) });
         return;

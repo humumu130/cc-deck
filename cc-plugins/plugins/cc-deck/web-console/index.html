@@ -529,7 +529,7 @@
         <input id="pairCode" inputmode="numeric" maxlength="6" placeholder="6 位配对码" autocomplete="off">
         <button id="pairBtn" class="primary">配对</button>
       </div>
-      <div class="pair-hint" id="pairHint">未配对时输入 <b>6 位配对码</b>（手机 App 或家里 PC 领取，30 秒内有效）</div>
+      <div class="pair-hint" id="pairHint">未配对时输入 <b>6 位配对码</b>（手机 App 或家里 PC 领取，10 分钟内有效）</div>
     </div>
 
     <h3>会话</h3>
@@ -688,7 +688,7 @@ let pairTimer = 0;             // 配对 ack 看门狗：8s 无应答重发 pair
 // 输码配对兜底：浏览器无 relayPeer（首次/被 nack 清除）时也允许纯 6 位码配对，
 // rd/rk 非机密（dev 路由号 + 公开公钥），安全边界是 LAN 领取的一次性配对码。
 // relay 换 data/cloud-keypair.json 后需同步更新此处并重新部署。
-const BAKED_RELAY = { rd: "rl-3a9a68c9104f5b44", rk: "OppoyRBPW0QTDZNuDoNnucqgIuPFaAG9YXuVMadJARw=" };
+const BAKED_RELAY = { rd: "rl-586b030b1e8b171b", rk: "WGsDCx6LFxuFsIPSrOoFJcyYcLiDKkTetYUTw4h07SE=" };
 // 云桥准入 token 烘焙（用户免填）：与 BAKED_RELAY 同理同义务——桥 token 轮换
 // （wrangler secret / ECS 环境变量 / relay data/cloud-bridge-token.txt）后需同步更新并重新部署。
 // 桥只转发密文不落盘，token 暴露面=能连桥发垃圾密文帧（relay 全丢弃），真正安全边界在配对码。
@@ -883,8 +883,20 @@ async function pollLoop() {
     if (gen !== pollGen) return;
     if (!r.ok) {
       console.log("[cloud] 轮询 GET HTTP " + r.status);
-      if (r.status === 401) { setConn("", "云桥拒绝"); toast("云桥 token 无效：桥已换代？清 localStorage 的 ccr_cloud_token 后刷新"); }
-      break; // 401/400：回到重连流程重建会话
+      // 401 自愈一次：本地存的桥 token（手抄配对链接抄错/桥已换代）丢弃后回退
+      // 页面烘焙值重建连接；烘焙值也被拒才是真换代（提示更新页面）
+      if (r.status === 401) {
+        if (localStorage.getItem("ccr_cloud_token")) {
+          console.log("[cloud] 401：丢弃本地桥 token，回退烘焙值重试");
+          localStorage.removeItem("ccr_cloud_token");
+          pollGen++;
+          transport = "ws"; // 重走 WS 优先（之前可能因坏 token 降级过轮询）
+          connectCloud();
+          return;
+        }
+        setConn("", "云桥拒绝"); toast("云桥 token 无效（页面烘焙值也被拒）：桥已换代，需更新页面");
+      }
+      break; // 其余 401/400：回到重连流程重建会话
     }
     let out;
     try { out = await r.json(); } catch { break; }
@@ -901,7 +913,21 @@ async function pollLoop() {
 function onCloudText(text) {
   let f;
   try { f = JSON.parse(text); } catch { return; }
-  if (f.type === "ROUTE_MISS") { setConn("", "家里 relay 离线"); return; }
+  if (f.type === "ROUTE_MISS") {
+    // 配对期 ROUTE_MISS：待配对 rd 不在线——本浏览器记忆的 relayPeer 失效
+    //（relay 换过密钥对）时清掉，换烘焙 rd/rk 携同一配对码重试（一次性自愈）
+    if (pendingPair && BAKED_RELAY.rd && BAKED_RELAY.rd !== pendingPair.rd) {
+      localStorage.removeItem("ccr_cloud_peer"); relayPeer = null;
+      pendingPair = { rd: BAKED_RELAY.rd, rk: BAKED_RELAY.rk, pc: pendingPair.pc };
+      sessionStorage.setItem("ccr_pair", JSON.stringify(pendingPair));
+      console.log("[cloud] 配对 ROUTE_MISS，改用烘焙 relay 身份重试");
+      sendPairReq(pendingPair, devId(ckp.publicKey, "wb"));
+      startPairWatchdog(); // 重置看门狗：换 rd 重试不与旧 rd 共享 3 次预算
+      return;
+    }
+    setConn("", "家里 relay 离线");
+    return;
+  }
   if (f.type === "ERROR") return;
   // 明文帧：relay 发现本设备未配对/密钥失效时回的 pair_nack（它不知道我方
   // 公钥、无法加密）——清掉失效配对态，显示"未配对"并停掉注定无效的重试
@@ -976,7 +1002,18 @@ function sendCloudRaw(str) {
         if (r.ok) { postFails = 0; return; }
         postFails++;
         console.log("[cloud] 轮询 POST HTTP " + r.status);
-        if (r.status === 401) { setConn("", "云桥拒绝"); toast("云桥 token 无效：桥已换代？清 localStorage 的 ccr_cloud_token 后刷新"); return; }
+        if (r.status === 401) {
+          // 与 GET 路径同款自愈：丢弃手抄错的本地 token，回退烘焙值重建连接
+          if (localStorage.getItem("ccr_cloud_token")) {
+            console.log("[cloud] POST 401：丢弃本地桥 token，回退烘焙值重试");
+            localStorage.removeItem("ccr_cloud_token");
+            transport = "ws";
+            pollGen++;
+            connectCloud();
+            return;
+          }
+          setConn("", "云桥拒绝"); toast("云桥 token 无效（页面烘焙值也被拒）：桥已换代，需更新页面"); return;
+        }
         if (postFails >= 3) setConn("", "上行被拦 HTTP " + r.status);
       })
       .catch((e) => {

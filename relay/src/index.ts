@@ -31,6 +31,46 @@ function lanIps(): string[] {
 
 const cliArgs = new Set(process.argv.slice(2));
 
+// --pair：向运行中的 relay 领取云桥配对码（异地网页端/设备输码接入，无需 LAN 可达）。
+// bridge.json 自带端口+bridgeToken，只打 loopback——能读本机 bridge.json 的进程本就可信
+if (cliArgs.has("--pair")) {
+  let port = cfg.port;
+  let bridgeToken = cfg.bridgeToken;
+  try {
+    const b = JSON.parse(readFileSync(join(cfg.dataDir, "bridge.json"), "utf-8")) as {
+      port?: number;
+      token?: string;
+    };
+    if (b.port) port = b.port;
+    if (b.token) bridgeToken = b.token;
+  } catch {}
+  try {
+    const r = await fetch(`http://127.0.0.1:${port}/api/pair-issue`, {
+      method: "POST",
+      headers: { "x-bridge-token": bridgeToken },
+    });
+    if (r.status === 501) {
+      console.log("云桥未启用（未设置 CCR_CLOUD_URL/CCR_CLOUD_TOKEN），无可领配对码");
+      process.exit(1);
+    }
+    if (!r.ok) {
+      console.log(`领取失败: HTTP ${r.status}（先运行 /cc-deck 启动 relay）`);
+      process.exit(1);
+    }
+    const d = (await r.json()) as { code: string; expires_in: number };
+    console.log("");
+    console.log("════════════════════════════");
+    console.log(`  云桥配对码：${d.code.slice(0, 3)} ${d.code.slice(3)}`);
+    console.log("════════════════════════════");
+    console.log(`${Math.round(d.expires_in / 60)} 分钟内有效、一次性。在异地网页端（${cfg.cloudUrls[0] ?? "云桥"}）或`);
+    console.log("手机 App「配对码」入口输入即可接入本机 relay。");
+    process.exit(0);
+  } catch {
+    console.log("连不上本机 relay（先运行 /cc-deck 启动）");
+    process.exit(1);
+  }
+}
+
 // --qr：只打印连接二维码（App 下载 + 控制台），不启动服务
 if (cliArgs.has("--qr")) {
   const ip = lanIps()[0] ?? "127.0.0.1";
@@ -139,9 +179,10 @@ if (cfg.cloudUrls.length) {
 }
 
 // 云通道活跃手机计入"手机在线"：云桥场景下提问/权限照常门控（否则手机在场却直接放行本地）
+// pairCodes 仅云桥启用时下发（无云桥时配对码无处消费，领了也白领）
 startServer(bus, mgr, cfg, {
   cloudHasPhones: () => cloudClients.some((c) => c.hasActivePhones()),
-  pairCodes,
+  ...(cloudClients.length ? { pairCodes } : {}),
   // daemon 子进程 listen 成功后自写 pid（父进程不预写，端口被占时不留死 pid）
   onReady: () => {
     if (process.env.CC_DECK_DAEMON === "1") {

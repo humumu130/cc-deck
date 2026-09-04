@@ -151,10 +151,14 @@ rogueWs.on("error", () => undefined);
 await new Promise<void>((r) => rogueWs.on("open", r));
 rogueWs.send(JSON.stringify({ to: identity.relayDev, data: seal({ t: "hello", last_seq: 0 }, relayPubkey, rogueKp.secretKey) }));
 bus.emit("sess-cloud", "SESSION_LOG", { kind: "system", text: "rogue-probe" });
-let rogueGot = 0;
-rogueWs.on("message", () => rogueGot++);
+// 未配对设备只可能收到明文"请重新配对"提示（notifyUnpaired，60s 限一条）；
+// 密文会话帧形状是 {to,data:{n,c}}，顶层无 seq/type——断言所有帧都是明文 pair_nack 才实
+const rogueMsgs: { data?: { t?: string; n?: string } }[] = [];
+rogueWs.on("message", (d) => {
+  try { rogueMsgs.push(JSON.parse(String(d))); } catch {}
+});
 await wait(1200);
-assert(rogueGot === 0, "未配对设备收不到任何下发");
+assert(rogueMsgs.length > 0 && rogueMsgs.every((m) => m.data?.t === "pair_nack" && !m.data.n), "未配对设备只收到明文重配对提示（无密文会话下发）");
 assert(
   await waitFor(() => inbox2.some((m) => m.type === "SESSION_LOG" && (m.payload as { text?: string })?.text === "rogue-probe")),
   "配对手机仍正常收到该事件",
@@ -342,12 +346,41 @@ assert(identity.peers.has(webDev), "web 设备已登记 peers");
   const ack = webInbox.find((m) => m.t === "pair_ack") as unknown as { relay_dev: string; relay_pubkey: string };
   assert(ack.relay_dev === identity.relayDev && ack.relay_pubkey === identity.keypair.publicKey, "pair_ack 携带 relay dev 与公钥");
 }
-// 码一次性：同码再用 → nack
+// 码一次性：已配对设备重发同码幂等补 ack（ack 随桥闪断丢失的自愈路径）；
+// 新设备拿已消费的码配对 → 真拒绝 nack
 webSend({ t: "pair_req", code: pairCode, pubkey: webKp.publicKey }, true);
 assert(
-  await waitFor(() => webInbox.filter((m) => m.t === "pair_nack").length === 2),
-  "配对码一次性（重用被拒）",
+  await waitFor(() => webInbox.filter((m) => m.t === "pair_ack").length === 2),
+  "已配对设备重发同码幂等补 ack（一次性不重复配对）",
 );
+{
+  const kp2 = generateKeyPair();
+  const dev2 = devId(kp2.publicKey, "wb");
+  const ws2 = new WebSocket(`ws://127.0.0.1:${BRIDGE_PORT}/cloud?token=${BRIDGE_TOKEN}&dev=${dev2}`);
+  const inbox2: { t?: string }[] = [];
+  ws2.on("message", (raw) => {
+    try {
+      const f = JSON.parse(String(raw)) as { data?: SealedBox };
+      const inner = f.data ? unseal<Record<string, unknown>>(f.data, relayPubkey, kp2.secretKey) : null;
+      if (inner) inbox2.push(inner as { t?: string });
+    } catch {}
+  });
+  ws2.on("error", () => undefined);
+  await new Promise<void>((r) => ws2.on("open", r));
+  ws2.send(JSON.stringify({ to: identity.relayDev, data: { t: "pair_req", code: pairCode, pubkey: kp2.publicKey } }));
+  assert(await waitFor(() => inbox2.some((m) => m.t === "pair_nack")), "已消费配对码对新设备被拒（一次性）");
+  assert(!identity.peers.has(dev2), "新设备未因重放旧码入册");
+  // 连续错码限流：累计 5 次 nack 后进入 10 分钟静默期（第 5 次起不再回包）
+  const nackCount = () => inbox2.filter((m) => m.t === "pair_nack").length;
+  for (let i = 0; i < 5; i++) {
+    ws2.send(JSON.stringify({ to: identity.relayDev, data: { t: "pair_req", code: "000000", pubkey: kp2.publicKey } }));
+    await wait(150);
+  }
+  assert(await waitFor(() => nackCount() === 5, 4000), "错码累计 5 次均回 nack");
+  await wait(1500);
+  assert(nackCount() === 5, "第 6 次起静默丢弃（错码限流生效）");
+  ws2.close();
+}
 webSend({ t: "hello", last_seq: 0 });
 assert(
   await waitFor(() => webInbox.some((m) => m.type === "SNAPSHOT")),

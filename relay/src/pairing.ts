@@ -1,12 +1,13 @@
 // 云桥配对码：无法走 LAN 信道的远端设备（公司电脑网页端）的一次性信任锚。
 // 管理员经 POST /api/pair-code（LAN token 鉴权）领码，设备在云通道 pair_req 帧
-// 里携带公钥+码，relay 校验通过即 addPeer。码 30 秒有效、一次性。
+// 里携带公钥+码，relay 校验通过即 addPeer。码一次性，默认 10 分钟有效——
+// 领码走手机转达/配对链接投递，30 秒窗口到不了用户手里（防爆破靠 consume 失败限流）。
 export interface PairingCodes {
   issue(): { code: string; expires_in: number };
   consume(code: string): boolean;
 }
 
-export function createPairingCodes(ttlMs = 30 * 1000): PairingCodes {
+export function createPairingCodes(ttlMs = 600 * 1000): PairingCodes {
   const codes = new Map<string, { expires: number }>();
   return {
     issue() {

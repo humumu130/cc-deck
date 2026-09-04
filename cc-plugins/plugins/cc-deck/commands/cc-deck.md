@@ -30,6 +30,7 @@ node "${CLAUDE_PLUGIN_ROOT}/scripts/relay.mjs" --qr
 
 - 手机扫第一个码下载安装 CC Deck App，打开后选「新增服务器」填本机局域网地址（二维码上方标明的 IP:8787）即可连接；同电脑浏览器打开 `http://127.0.0.1:8787` 会自动直连，无需配置。
 - 装完后新开的 Claude Code 会话会自动出现在手机上（hooks 已由插件注册）。当前已运行的会话需要新开会话才会接入。
+- 异地设备（公司网页端/不在局域网的手机）接入用 `/cc-deck-pair` 领 6 位配对码。
 - 停止用 `/cc-deck-stop`。
 
 注意：若用户 ~/.claude/settings.json 中已存在旧的 bridge-hook.mjs 手动 hooks（relay/scripts/install-hooks.mjs 安装的），提醒用户二者会重复上报，建议手动删除旧条目。

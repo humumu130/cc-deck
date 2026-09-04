@@ -168,7 +168,23 @@ export function startServer(
       }).end(JSON.stringify({ ok: true, port: cfg.port, token: cfg.token }));
       return;
     }
-    // 云桥配对码（网页端首次配对用）：LAN token 鉴权，码一次性 10 分钟有效
+    // 领取配对码（--pair CLI / /cc-deck-pair 用）：loopback + bridgeToken，
+    // 与 /bridge/hook 同信任模型（能读本机 bridge.json 的进程本就可信）
+    if (req.method === "POST" && url.pathname === "/api/pair-issue") {
+      const remote = req.socket.remoteAddress ?? "";
+      const isLoopback = remote === "127.0.0.1" || remote === "::1" || remote === "::ffff:127.0.0.1";
+      if (!isLoopback || (req.headers["x-bridge-token"] ?? "") !== cfg.bridgeToken) {
+        res.writeHead(403).end();
+        return;
+      }
+      if (!opts.pairCodes) {
+        res.writeHead(501).end("pairing not enabled");
+        return;
+      }
+      res.writeHead(200, { "content-type": "application/json" }).end(JSON.stringify(opts.pairCodes.issue()));
+      return;
+    }
+    // 云桥配对码（网页端首次配对用）：LAN token 鉴权，码一次性 30 秒有效
     if (req.method === "POST" && url.pathname === "/api/pair-code") {
       if ((url.searchParams.get("token") ?? "") !== cfg.token) {
         res.writeHead(401).end("unauthorized");

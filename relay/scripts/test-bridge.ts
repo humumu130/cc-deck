@@ -8,6 +8,7 @@ import { EventBus } from "../src/event-bus.js";
 import { SessionManager } from "../src/session-manager.js";
 import { loadConfig } from "../src/config.js";
 import { startServer } from "../src/ws-server.js";
+import { createPairingCodes } from "../src/pairing.js";
 import type { BridgeEvent, Command, CommandAckPayload, Envelope, WaitingPayload } from "../src/types.js";
 
 function assert(cond: boolean, msg: string): void {
@@ -721,6 +722,23 @@ assert(ack24.ok === false, "empty rename rejected");
   assert(!mgr.getExternal(orphanId), "34 tombstone prevents resurrection");
   w34.close();
   rmSync(PROOT, { recursive: true, force: true });
+}
+
+// 35. 配对码领码端点：错 token 403；pairCodes 未下发（云桥未启用）501；配对码单元回合
+{
+  const r403 = await fetch(`${http}/api/pair-issue`, { method: "POST", headers: { "x-bridge-token": "WRONG" } });
+  assert(r403.status === 403, "35 pair-issue wrong token rejected");
+  const r501 = await fetch(`${http}/api/pair-issue`, { method: "POST", headers: { "x-bridge-token": cfg.bridgeToken } });
+  assert(r501.status === 501, "35 pair-issue 501 without cloud pairing");
+  const pcs = createPairingCodes(1);
+  const { code, expires_in } = pcs.issue();
+  assert(/^\d{6}$/.test(code) && expires_in === 0, "35 issue returns 6-digit code");
+  assert(!pcs.consume("000000"), "35 unknown code rejected");
+  await wait(20);
+  assert(!pcs.consume(code), "35 expired code rejected");
+  const pcs2 = createPairingCodes();
+  const c2 = pcs2.issue().code;
+  assert(pcs2.consume(c2) && !pcs2.consume(c2), "35 code one-time consume");
 }
 
 wsCur!.close();
