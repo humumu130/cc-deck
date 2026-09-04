@@ -57,6 +57,9 @@ let thinkShown = false;
 // 详情页工具区折叠开关：同样 app 生命周期内记忆
 let ctrlCollapsed = false;
 
+// 输入草稿跨进出保留：按 session_id 暂存（app 生命周期内，发送即清）
+const drafts = new Map<string, string>();
+
 // 定时任务下次运行时间：MM-dd HH:mm（毫秒时间戳）
 const fmtDT = (ts: number) => {
   const d = new Date(ts);
@@ -322,7 +325,12 @@ export default function DetailScreen({ sid, onBack }: { sid: string; onBack: () 
   const { c } = useTheme();
   const d = useThemeStyles(makeStyles);
   const snap = useRelay();
-  const [input, setInput] = useState("");
+  const [input, setInput] = useState(() => drafts.get(sid) ?? "");
+  const editInput = (v: string) => {
+    if (v) drafts.set(sid, v);
+    else drafts.delete(sid);
+    setInput(v);
+  };
   const [slashCommands, setSlashCommands] = useState<SlashCommand[]>(BUILTIN_COMMANDS);
   const [renaming, setRenaming] = useState(false);
   const [view, setView] = useState<ViewKind>("msg");
@@ -560,7 +568,7 @@ export default function DetailScreen({ sid, onBack }: { sid: string; onBack: () 
         : { session_id: sid, text, ...(images.length > 0 ? { images } : {}) },
     );
     if (ok) {
-      setInput("");
+      editInput("");
       setImages([]);
       if (willQueue) flashQueuedHint();
     }
@@ -672,7 +680,6 @@ export default function DetailScreen({ sid, onBack }: { sid: string; onBack: () 
           </Text>
           {ctxUsed > 0 ? (
             <View style={d.ctxRow}>
-              <Text style={d.ctxLabel}>上下文</Text>
               <View style={d.ctxBar}>
                 <View style={{ width: `${ctxPct}%`, height: 3, borderRadius: 1.5, backgroundColor: c[contextLevel(ctxUsed, ctxLimit)] }} />
               </View>
@@ -1028,7 +1035,7 @@ export default function DetailScreen({ sid, onBack }: { sid: string; onBack: () 
                   key={m.name}
                   style={d.slashRow}
                   android_ripple={{ color: c.tintSoft, borderless: false }}
-                  onPress={() => setInput("/" + m.name + " ")}
+                  onPress={() => editInput("/" + m.name + " ")}
                 >
                   <Text style={d.slashName}>/{m.name}</Text>
                   <Text style={d.slashDesc} numberOfLines={1}>{m.desc}</Text>
@@ -1057,7 +1064,7 @@ export default function DetailScreen({ sid, onBack }: { sid: string; onBack: () 
           <TextInput
             style={d.input}
             value={input}
-            onChangeText={setInput}
+            onChangeText={editInput}
             placeholder={external ? "CLI忙时自动排队" : s.historical ? "继续对话（恢复会话）…" : "发送消息…"}
             placeholderTextColor={c.faint}
             editable={canCmd}
@@ -1138,7 +1145,6 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
   sub: { color: c.dim, fontSize: 11, marginTop: 1 },
   // 上下文占用条（头部副行下）：标签 + 3px 细条 + 百分比，颜色按占用分级
   ctxRow: { flexDirection: "row", alignItems: "center", gap: 6, marginTop: 3 },
-  ctxLabel: { color: c.faint, fontSize: 9.5 },
   ctxBar: { flex: 1, height: 3, borderRadius: 1.5, backgroundColor: c.tintSoft, overflow: "hidden" },
   ctxPct: { fontSize: 10, fontVariant: ["tabular-nums"], minWidth: 26, textAlign: "right" },
   // 统计视图卡片（原 StatsModal 内容平铺）
