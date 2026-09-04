@@ -529,7 +529,7 @@
         <input id="pairCode" inputmode="numeric" maxlength="6" placeholder="6 位配对码" autocomplete="off">
         <button id="pairBtn" class="primary">配对</button>
       </div>
-      <div class="pair-hint" id="pairHint">未配对时输入 <b>6 位配对码</b>（手机 App 或家里 PC 领取，10 分钟内有效）</div>
+      <div class="pair-hint" id="pairHint">未配对时输入 <b>6 位配对码</b>（手机 App 或家里 PC 领取，20 分钟内有效）</div>
     </div>
 
     <h3>会话</h3>
@@ -715,12 +715,12 @@ function uuid() {
   });
 }
 
-function toast(msg) {
+function toast(msg, ms = 2600) {
   const t = $("toast");
   t.textContent = msg;
   t.classList.add("show");
   clearTimeout(toast._t);
-  toast._t = setTimeout(() => t.classList.remove("show"), 2600);
+  toast._t = setTimeout(() => t.classList.remove("show"), ms);
 }
 
 // ---------- 连接 ----------
@@ -829,16 +829,18 @@ function connectCloud() {
 function sendPairReq(pair, dev) {
   sendCloudRaw(JSON.stringify({ to: pair.rd, data: { t: "pair_req", code: pair.pc, pubkey: ckp.publicKey, name: "web-" + dev.slice(3, 11) } }));
 }
-// pair_ack 可能随桥连接闪断一起丢失（relay 侧已幂等补 ack）：8s 无应答重发
+// pair_ack 可能随桥连接闪断一起丢失（relay 侧已幂等补 ack）：8s 无应答重发。
+// relayPeer 存在不等于配对成功——可能是换代前的旧配对残留，必须对比 dev 号变化
 function startPairWatchdog() {
   clearInterval(pairTimer);
   let tries = 0;
+  const peerBefore = relayPeer ? relayPeer.relay_dev : "";
   pairTimer = setInterval(() => {
-    if (relayPeer || ++tries > 3) {
+    if ((relayPeer && relayPeer.relay_dev !== peerBefore) || ++tries > 3) {
       clearInterval(pairTimer);
       if (!relayPeer) {
         setConn("", "配对无应答");
-        toast("配对请求一直没回音：按 F12 看 Console 的 [cloud] 日志和 Network 里 cloud-poll 请求，截图发家里");
+        toast("配对请求一直没回音：按 F12 看 Console 的 [cloud] 日志和 Network 里 cloud-poll 请求，截图发家里", 6000);
         console.log("[cloud] 配对看门狗耗尽：pair_req 已重发 3 次无 pair_ack");
       }
       return;
@@ -940,7 +942,7 @@ function onCloudText(text) {
       connected = false;
       if (relayPeer) { localStorage.removeItem("ccr_cloud_peer"); relayPeer = null; }
       setConn("", "未配对");
-      toast("请输入配对码重新配对（家里 PC 领取）");
+      toast("请输入配对码重新配对（家里 PC 领取）", 6000);
       console.log("[cloud] relay 判定未配对:", f.data.error);
       openPanel("conn");
       setTimeout(() => { if (mode === "cloud") $("pairCode").focus(); }, 80);
@@ -948,7 +950,8 @@ function onCloudText(text) {
     return;
   }
   if (!f.data) return;
-  const senderPk = relayPeer ? relayPeer.relay_pubkey : (pendingPair ? pendingPair.rk : "");
+  // 配对期优先 pendingPair.rk：relayPeer 可能是换代前旧公钥，拿它解 pair_nack 会静默失败（用户看到"点了没反应"）
+  const senderPk = pendingPair ? pendingPair.rk : (relayPeer ? relayPeer.relay_pubkey : "");
   if (!senderPk) return;
   const inner = unseal(f.data, senderPk, ckp.secretKey);
   if (!inner) return;
@@ -971,7 +974,7 @@ function onCloudText(text) {
     sessionStorage.removeItem("ccr_pair");
     pendingPair = null;
     setConn("", "未配对");
-    toast("配对失败：" + (inner.error || "码无效") + "，请重新领码输入");
+    toast("配对失败：" + (inner.error || "码无效") + "，请重新领码输入", 6000);
     openPanel("conn");
     setTimeout(() => { if (mode === "cloud") $("pairCode").focus(); }, 80);
     return;

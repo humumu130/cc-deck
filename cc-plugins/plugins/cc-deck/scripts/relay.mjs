@@ -38586,7 +38586,8 @@ var Bridge = class _Bridge {
     }
   }
   // transcript 是否有多条 user 行（含工具结果回填的 user 行）。流式分块扫全文件，
-  // 64KB 块 + 1KB 重叠防跨界漏匹配；只对孤儿候选（新发现、mtime 30min 内）执行，频次低
+  // 64KB 块 + 1KB carry 防跨界漏匹配；非末块的末 1KB 区域命中留给下一块计（避免重复
+  // 计数），只对孤儿候选（新发现、mtime 30min 内）执行，频次低
   hasMultiUserTurns(p) {
     let fd2;
     try {
@@ -38596,12 +38597,18 @@ var Bridge = class _Bridge {
       const buf = Buffer.alloc(chunk + 1024);
       let carry = Buffer.alloc(0);
       let count = 0;
-      for (let pos = 0; pos < size; pos += chunk) {
+      const re = /"type":\s*"user"/g;
+      for (let pos = 0; pos < size; ) {
         const len = readSync2(fd2, buf, 0, chunk, pos);
         if (len <= 0) break;
+        pos += len;
+        const isLast = pos >= size;
         const text = Buffer.concat([carry, buf.subarray(0, len)]).toString("latin1");
-        count += (text.match(/"type":\s*"user"/g) || []).length;
-        if (count >= 2) return true;
+        const limit = isLast ? text.length : text.length - 1024;
+        re.lastIndex = 0;
+        for (let m = re.exec(text); m && m.index < limit; m = re.exec(text)) {
+          if (++count >= 2) return true;
+        }
         carry = Buffer.from(text.slice(-1024), "latin1");
       }
       return false;
@@ -38625,6 +38632,7 @@ var Bridge = class _Bridge {
     }
   }
   async handleEvent(ev2) {
+    this.noHookIds.delete(this.extId(ev2));
     const decision = await this.dispatch(ev2);
     if (ev2.cli_pid && ev2.cli_pid > 0) this.mgr.setExternalCliPid(this.extId(ev2), ev2.cli_pid);
     if (ev2.transcript_path) {
@@ -39084,6 +39092,7 @@ var Bridge = class _Bridge {
       if (end < 0) return;
       this.transcriptOffsets.set(id2, start + Buffer.byteLength(raw.slice(0, end + 1), "utf-8"));
       if (!firstRead) {
+        if (this.lastGrow.size > 200) this.lastGrow.clear();
         this.lastGrow.set(id2, Date.now());
         const st0 = this.mgr.getExternal(id2);
         if (st0 && st0.status === "DONE") {
@@ -40175,14 +40184,16 @@ var CloudClient = class {
         console.log(`[cloud] pair_req throttled dev=${dev}\uFF08\u8FDE\u7EED\u9519\u7801\uFF09`);
         return;
       }
+      if (pf) this.pairFails.delete(dev);
       if (this.pairCodes?.consume(String(pr2.code ?? ""))) {
-        this.pairFails.delete(dev);
         this.identity.addPeer(dev, { pubkey, name: typeof pr2.name === "string" ? pr2.name : "web", paired_at: Date.now() });
         console.log(`[cloud] paired web dev=${dev}`);
       } else if (!this.identity.peers.get(dev)) {
         const n = (pf?.n ?? 0) + 1;
         this.pairFails.set(dev, { n, until: n >= 5 ? now + 6e5 : 0 });
-        if (this.pairFails.size > 100) this.pairFails.clear();
+        if (this.pairFails.size > 100) {
+          for (const [d2, v] of this.pairFails) if (v.until <= now) this.pairFails.delete(d2);
+        }
         console.log(`[cloud] pair_req rejected dev=${f.from}`);
         this.send({ to: f.from, data: seal({ t: "pair_nack", error: "\u914D\u5BF9\u7801\u65E0\u6548\u6216\u5DF2\u8FC7\u671F" }, pubkey, this.identity.keypair.secretKey) });
         return;
@@ -40245,7 +40256,7 @@ var CloudClient = class {
 };
 
 // src/pairing.ts
-function createPairingCodes(ttlMs = 600 * 1e3) {
+function createPairingCodes(ttlMs = 1200 * 1e3) {
   const codes = /* @__PURE__ */ new Map();
   return {
     issue() {
@@ -40304,7 +40315,7 @@ if (cliArgs.has("--pair")) {
       headers: { "x-bridge-token": bridgeToken }
     });
     if (r.status === 501) {
-      console.log("\u4E91\u6865\u672A\u542F\u7528\uFF08\u672A\u8BBE\u7F6E CCR_CLOUD_URL\uFF09\uFF0C\u65E0\u53EF\u9886\u914D\u5BF9\u7801");
+      console.log("\u4E91\u6865\u672A\u542F\u7528\uFF08\u672A\u8BBE\u7F6E CCR_CLOUD_URL/CCR_CLOUD_TOKEN\uFF09\uFF0C\u65E0\u53EF\u9886\u914D\u5BF9\u7801");
       process.exit(1);
     }
     if (!r.ok) {
