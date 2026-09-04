@@ -1,0 +1,44 @@
+name: relay
+
+on:
+  push:
+    branches: [master, dev]
+  pull_request:
+
+concurrency:
+  group: relay-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: relay tests (${{ matrix.script }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        # 只跑自包含测试：进程内/回环网络/fake-injector，不需要 Claude CLI 与 API 凭据。
+        # test:sessions / test:ws 通过 agent SDK query() 拉起真实 claude CLI 子进程并
+        # 等待真实模型回合完成，CI 无 CLI/凭据必挂，故排除。
+        script: [test:bus, test:history, test:bridge, test:cloud]
+    defaults:
+      run:
+        working-directory: relay
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: relay/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Type check (tsc --noEmit)
+        run: npx tsc --noEmit
+
+      - name: Run ${{ matrix.script }}
+        run: npm run ${{ matrix.script }}
