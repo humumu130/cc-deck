@@ -655,7 +655,7 @@ export default function DetailScreen({ sid, onBack }: { sid: string; onBack: () 
   return (
     <SafeAreaView style={d.safe} edges={["top"]}>
       <View style={{ flex: 1 }}>
-      {/* 头部：标题 + 状态副行 + 折叠/重命名 */}
+      {/* 头部：标题 + 状态副行 + 编辑/折叠/思考（三按钮同高 30，思考与折叠间隔开） */}
       <View style={d.head}>
         <Pressable style={[d.back, d.opRipple]} android_ripple={{ color: c.tintSoft, borderless: false }} onPress={onBack} hitSlop={8}>
           <Text style={d.backText}>‹</Text>
@@ -666,6 +666,14 @@ export default function DetailScreen({ sid, onBack }: { sid: string; onBack: () 
             {(external ? "外部 CLI" : "托管") + (s.historical && !external ? " · 历史" : "") + " · " + fmtElapsed(sessionElapsed(s))}
           </Text>
         </View>
+        <Pressable
+          style={[d.editBtn, d.opRipple]}
+          android_ripple={{ color: c.tintSoft, borderless: false }}
+          onPress={() => setRenaming(true)}
+          hitSlop={8}
+        >
+          <Text style={d.editT}>✎</Text>
+        </Pressable>
         <Pressable
           style={[d.foldBtn, d.opRipple]}
           android_ripple={{ color: c.tintSoft, borderless: false }}
@@ -678,12 +686,15 @@ export default function DetailScreen({ sid, onBack }: { sid: string; onBack: () 
           <Text style={d.foldT}>{collapsed ? "▼" : "▲"}</Text>
         </Pressable>
         <Pressable
-          style={[d.editBtn, d.opRipple]}
-          android_ripple={{ color: c.tintSoft, borderless: false }}
-          onPress={() => setRenaming(true)}
-          hitSlop={8}
+          style={[d.thinkBtn, showThink && d.thinkBtnOn, d.opRipple]}
+          android_ripple={{ color: c.tintSoft, borderless: false, radius: 9 }}
+          onPress={() => {
+            thinkShown = !thinkShown;
+            setShowThink(thinkShown);
+          }}
+          hitSlop={4}
         >
-          <Text style={d.editT}>✎</Text>
+          <Text style={[d.thinkBtnT, showThink && d.thinkBtnTOn]}>思考{showThink ? "·开" : "·关"}</Text>
         </Pressable>
       </View>
 
@@ -708,39 +719,29 @@ export default function DetailScreen({ sid, onBack }: { sid: string; onBack: () 
             {VIEWS.map((v) => (
               <Pressable
                 key={v.k}
-                style={[d.filterChip, d.filterChipFlex, view === v.k && d.filterChipOn]}
-                android_ripple={{ color: c.tintSoft, borderless: false, radius: 12 }}
+                style={[d.tabBtn, view === v.k && d.tabBtnOn]}
                 onPress={() => setView(v.k)}
+                hitSlop={{ top: 6, bottom: 2, left: 3, right: 3 }}
               >
-                <Text style={[d.filterT, view === v.k && d.filterTOn]}>{v.label}</Text>
+                <Text style={[d.tabT, view === v.k && d.tabTOn]}>{v.label}</Text>
               </Pressable>
             ))}
           </View>
+          {!external && canCmd && !s.historical ? (
           <View style={d.subFilterRow}>
             <Pressable
-              style={[d.filterChip, showThink && d.filterChipOn]}
+              style={[d.filterChip, (s.permission_mode ?? "default") !== "default" && d.filterChipOn]}
               android_ripple={{ color: c.tintSoft, borderless: false, radius: 12 }}
               onPress={() => {
-                thinkShown = !thinkShown;
-                setShowThink(thinkShown);
+                const cur = s.permission_mode ?? "default";
+                const next = PERM_CYCLE[(PERM_CYCLE.indexOf(cur) + 1) % PERM_CYCLE.length];
+                store.send("COMMAND_PERM", { session_id: sid, mode: next });
               }}
             >
-              <Text style={[d.filterT, showThink && d.filterTOn]}>思考{showThink ? " ·开" : " ·关"}</Text>
+              <Text style={[d.filterT, (s.permission_mode ?? "default") !== "default" && d.filterTOn]}>权限·{PERM_LABEL[s.permission_mode ?? "default"]}</Text>
             </Pressable>
-            {!external && canCmd && !s.historical ? (
-              <Pressable
-                style={[d.filterChip, (s.permission_mode ?? "default") !== "default" && d.filterChipOn]}
-                android_ripple={{ color: c.tintSoft, borderless: false, radius: 12 }}
-                onPress={() => {
-                  const cur = s.permission_mode ?? "default";
-                  const next = PERM_CYCLE[(PERM_CYCLE.indexOf(cur) + 1) % PERM_CYCLE.length];
-                  store.send("COMMAND_PERM", { session_id: sid, mode: next });
-                }}
-              >
-                <Text style={[d.filterT, (s.permission_mode ?? "default") !== "default" && d.filterTOn]}>权限·{PERM_LABEL[s.permission_mode ?? "default"]}</Text>
-              </Pressable>
-            ) : null}
           </View>
+          ) : null}
       </View>
       ) : null}
 
@@ -1134,6 +1135,15 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
     borderWidth: 1, borderColor: withA(c.brandA, 0.4), alignItems: "center", justifyContent: "center",
   },
   foldT: { color: c.brandA, fontSize: 11, marginTop: -1 },
+  // 思考开关（头部第三按钮）：与 ✎/▲ 同高 30，与折叠间额外隔 8（头部 gap 8 之上）
+  thinkBtn: {
+    marginLeft: 8, height: 30, borderRadius: 9, paddingHorizontal: 9,
+    backgroundColor: c.tintSoft, borderWidth: 1, borderColor: c.line,
+    alignItems: "center", justifyContent: "center",
+  },
+  thinkBtnOn: { backgroundColor: c.tintStrong, borderColor: withA(c.brandA, 0.4) },
+  thinkBtnT: { fontSize: 11, color: c.dim },
+  thinkBtnTOn: { color: c.brandA, fontWeight: "600" },
   // 固定工具区：跟随头部、不随转录滚动，底部一条分隔线与头部呼应
   fixedBar: { paddingHorizontal: 14, paddingTop: 10, borderBottomWidth: 1, borderBottomColor: c.line },
   strip: {
@@ -1163,14 +1173,18 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
     borderRadius: 12, borderTopRightRadius: 4, paddingHorizontal: 10, paddingVertical: 7,
   },
   pendT: { color: c.dim, fontSize: 12.5, lineHeight: 17 },
-  filterRow: { flexDirection: "row", gap: 7, marginBottom: 8 },
+  // 视图 tab 行：下划线式（与网页端 tabs 同风格，去掉边框底色更轻）
+  filterRow: { flexDirection: "row", gap: 6, marginBottom: 10, paddingLeft: 4 },
+  tabBtn: { paddingVertical: 4, paddingHorizontal: 10, borderBottomWidth: 2, borderBottomColor: "transparent" },
+  tabBtnOn: { borderBottomColor: c.brandA },
+  tabT: { fontSize: 12, color: c.dim },
+  tabTOn: { color: c.text, fontWeight: "600" },
   filterChip: {
     paddingHorizontal: 10, paddingVertical: 4, borderRadius: 10,
     backgroundColor: c.tintSoft, borderWidth: 1, borderColor: c.line,
   },
-  filterChipFlex: { flex: 1, alignItems: "center" },
   filterChipOn: { backgroundColor: c.tintStrong, borderColor: withA(c.brandA, 0.4) },
-  // 视图 tab 第二行：思考/权限开关（原与过滤 chips 挤一行，5 tab 后独立成行）
+  // tab 第二行：权限开关（思考开关已移头部）
   subFilterRow: { flexDirection: "row", gap: 7, marginBottom: 10 },
   // 任务/定时/统计视图容器
   viewCol: { flex: 1 },
