@@ -36,6 +36,17 @@ export interface Snapshot {
   cloudBusy: boolean;
   cloudMsg: string | null;
   pairCode: { code: string; expiresAt: number } | null;
+  taskDone: TaskDoneReport | null;
+}
+
+// 任务完成汇报（#204）：relay TASK_DONE 事件驱动，悬浮框 + 系统通知共用
+export interface TaskDoneReport {
+  id: number;        // 报告标识（新报告 id 变，驱动浮层重置）
+  sid: string;
+  title: string;
+  done: string[];    // 本次完成的任务
+  remaining: number; // 完成后剩余未完数
+  ts: number;
 }
 
 const emptySnapshot: Snapshot = {
@@ -48,6 +59,7 @@ const emptySnapshot: Snapshot = {
   cloudBusy: false,
   cloudMsg: null,
   pairCode: null,
+  taskDone: null,
 };
 
 const LAN_PROBE_MS = 4000;
@@ -69,8 +81,10 @@ class RelayStore {
   private servers: ServerEntry[] = [];
   private devKeys: BoxKeyPair | null = null;
   private epoch = 0;
+  private taskDoneSeq = 0;
 
   onWaiting: ((s: SessionState) => void) | null = null;
+  onTaskDone: ((r: TaskDoneReport) => void) | null = null;
 
   subscribe = (fn: () => void) => {
     this.listeners.add(fn);
@@ -607,6 +621,21 @@ class RelayStore {
         this.pushLog(sid, msg.payload);
         break;
       }
+      case "TASK_DONE": {
+        const s = this.sessions.get(sid);
+        if (!s) break;
+        const r: TaskDoneReport = {
+          id: ++this.taskDoneSeq,
+          sid,
+          title: s.title || s.action_summary || "会话",
+          done: Array.isArray(msg.payload.done) ? msg.payload.done.slice(0, 10) : [],
+          remaining: Array.isArray(msg.payload.remaining) ? msg.payload.remaining.length : 0,
+          ts: msg.ts,
+        };
+        this.emit({ taskDone: r });
+        if (this.onTaskDone) this.onTaskDone(r);
+        break;
+      }
       case "SESSION_DELETED": {
         this.sessions.delete(sid);
         this.timelines.delete(sid);
@@ -687,6 +716,10 @@ class RelayStore {
 
   clearCmdError() {
     if (this.snap.lastErrorCmd) this.emit({ lastErrorCmd: null });
+  }
+
+  clearTaskDone() {
+    if (this.snap.taskDone) this.emit({ taskDone: null });
   }
 }
 

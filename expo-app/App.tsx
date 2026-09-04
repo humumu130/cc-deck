@@ -1,8 +1,9 @@
 import { useEffect, useRef, useState } from "react";
-import { AppState, StyleSheet, Text, View, Vibration } from "react-native";
+import { AppState, StyleSheet, Text, TouchableOpacity, View, Vibration } from "react-native";
 import { StatusBar } from "expo-status-bar";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 import { store, useRelay } from "./src/store";
+import type { TaskDoneReport } from "./src/store";
 import { ensureNotifPermission, fgSupported, notifyAlert, startForegroundService } from "./src/notify";
 import { startWatchGateway } from "./src/watch";
 import { ThemeProvider, useTheme, useThemeStyles } from "./src/theme-context";
@@ -34,6 +35,62 @@ function Toast() {
     <View style={st.toastWrap} pointerEvents="none">
       <View style={st.toast}>
         <Text style={st.toastT}>命令失败: {snap.lastErrorCmd}</Text>
+      </View>
+    </View>
+  );
+}
+
+// 任务完成汇报悬浮框（#204）：新报告展开列出完成项，10s 后自动折叠为
+// 一行小条（点按再展开）；✕ 关闭。全局浮层，列表/详情页都可见
+function TaskDoneFloat() {
+  const snap = useRelay();
+  const st = useThemeStyles(makeStyles);
+  const r = snap.taskDone;
+  const [expanded, setExpanded] = useState(true);
+  const lastId = useRef(0);
+
+  useEffect(() => {
+    if (!r || r.id === lastId.current) return;
+    lastId.current = r.id;
+    setExpanded(true);
+    const t = setTimeout(() => setExpanded(false), 10_000);
+    return () => clearTimeout(t);
+  }, [r?.id]);
+
+  if (!r) return null;
+  const n = r.done.length;
+  return (
+    <View style={st.tdWrap} pointerEvents="box-none">
+      <View style={st.tdCard}>
+        <View style={st.tdHead}>
+          <Text style={st.tdTitle} numberOfLines={1}>
+            ✓ {n} 项任务完成{r.title ? ` · ${r.title}` : ""}
+          </Text>
+          <TouchableOpacity
+            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+            onPress={() => store.clearTaskDone()}
+          >
+            <Text style={st.tdClose}>✕</Text>
+          </TouchableOpacity>
+        </View>
+        {expanded ? (
+          <View>
+            {r.done.map((d, i) => (
+              <Text key={i} style={st.tdItem} numberOfLines={1}>
+                ✓ {d}
+              </Text>
+            ))}
+            <Text style={st.tdRemain}>
+              {r.remaining > 0 ? `剩余 ${r.remaining} 项进行中` : "全部完成"}
+            </Text>
+          </View>
+        ) : (
+          <TouchableOpacity onPress={() => setExpanded(true)}>
+            <Text style={st.tdRemain}>
+              {r.remaining > 0 ? `剩余 ${r.remaining} 项 · ` : ""}展开查看 ▾
+            </Text>
+          </TouchableOpacity>
+        )}
       </View>
     </View>
   );
@@ -80,8 +137,18 @@ function Shell() {
         notifyAlert("等待你的确认", tool ? `工具 ${tool}` : "会话等待确认");
       }
     };
+    store.onTaskDone = (r) => {
+      if (appState.current === "active") {
+        try {
+          Vibration.vibrate(60);
+        } catch {}
+        return;
+      }
+      notifyAlert(`任务完成 · ${r.title}`, r.remaining > 0 ? `完成 ${r.done.length} 项，剩余 ${r.remaining} 项` : `全部完成（${r.done.length} 项）`);
+    };
     return () => {
       store.onWaiting = null;
+      store.onTaskDone = null;
     };
   }, []);
 
@@ -128,6 +195,7 @@ function Shell() {
           )}
           <NewSessionModal visible={sheet} onClose={() => setSheet(false)} />
           <Toast />
+          <TaskDoneFloat />
         </>
       ) : (
         <SetupScreen
@@ -156,4 +224,14 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
     borderRadius: 12, paddingHorizontal: 18, paddingVertical: 10, maxWidth: "86%",
   },
   toastT: { color: c.text, fontSize: 13.5, textAlign: "center" },
+  tdWrap: { position: "absolute", left: 0, right: 0, bottom: 148, alignItems: "center", zIndex: 80 },
+  tdCard: {
+    backgroundColor: c.panel2, borderWidth: 1, borderColor: c.line,
+    borderRadius: 12, paddingHorizontal: 14, paddingVertical: 10, maxWidth: "88%",
+  },
+  tdHead: { flexDirection: "row", alignItems: "center", gap: 8 },
+  tdTitle: { color: c.text, fontSize: 13.5, fontWeight: "600", flex: 1 },
+  tdClose: { color: c.faint, fontSize: 15, paddingHorizontal: 4 },
+  tdItem: { color: c.text, fontSize: 12.5, marginTop: 6, opacity: 0.9 },
+  tdRemain: { color: c.faint, fontSize: 12, marginTop: 8 },
 });
