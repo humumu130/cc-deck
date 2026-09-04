@@ -40212,10 +40212,6 @@ function startServer(bus2, mgr2, cfg2, opts = {}) {
       return;
     }
     if (req.method === "GET" && serveMobile(url, res)) return;
-    if (req.method === "GET" && url.pathname === "/" && /Android|iPhone|iPad|Mobile/i.test(req.headers["user-agent"] ?? "")) {
-      res.writeHead(302, { location: "/m" }).end();
-      return;
-    }
     if (req.method === "GET" && url.pathname === "/") {
       if (!existsSync5(consoleHtml)) {
         res.writeHead(503).end("web-console/index.html \u4E0D\u5B58\u5728\uFF08\u6B65\u9AA4 6 \u751F\u6210\uFF09");

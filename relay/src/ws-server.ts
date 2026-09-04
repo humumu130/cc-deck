@@ -180,12 +180,8 @@ export function startServer(
       return;
     }
     if (req.method === "GET" && serveMobile(url, res)) return;
-    // 手机浏览器访问根路径时跳转移动端
-    if (req.method === "GET" && url.pathname === "/" &&
-        /Android|iPhone|iPad|Mobile/i.test(req.headers["user-agent"] ?? "")) {
-      res.writeHead(302, { location: "/m" + (url.search || "") }).end(); // 保留 ?token= 等查询（丢了配对链接就废了）
-      return;
-    }
+    // 手机浏览器不再跳 /m：web-console 自带 720px 移动端布局（#169 PWA 路线），
+    // /m 仅保留给旧主屏图标，页面自身跳回根路径
     if (req.method === "GET" && url.pathname === "/") {
       if (!existsSync(consoleHtml)) {
         res.writeHead(503).end("web-console/index.html 不存在（步骤 6 生成）");
