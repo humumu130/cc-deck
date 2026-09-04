@@ -796,6 +796,52 @@ assert(ack24.ok === false, "empty rename rejected");
   rmSync(PROOT, { recursive: true, force: true });
 }
 
+// 37. pid 对账自愈：cli-pids.json 缺失（hook 死亡/dataDir 换代窗口）时，
+// ~/.claude/sessions/<pid>.json 是 hook 无关的 pid 权威源——重启后按会话 id 对上即补定位，
+// 顺带清 historical（活 pid 即会话存活证明）。2026-09-04 下午 2h40m"发不出去"事故的根治
+{
+  const SROOT = fileURLToPath(new URL("../data/test-sessions/", import.meta.url));
+  process.env.CCR_SESSIONS_ROOT = SROOT;
+  rmSync(SROOT, { recursive: true, force: true });
+  mkdirSync(SROOT, { recursive: true });
+  const sid37 = "aa11bb22-" + "7".repeat(12);
+  const id37 = "ext-" + sid37;
+  await bridge.handleEvent({
+    event: "UserPromptSubmit",
+    session_id: sid37,
+    cwd: "D:\\pid-reconcile-test",
+    prompt: "pid test",
+    transcript_path: undefined,
+  });
+  // 模拟 relay 重启后的锁死态：pid 丢失 + historical=true
+  const st37 = mgr.getExternal(id37)!;
+  st37.cli_pid = undefined;
+  st37.historical = true;
+  // CLI 自写的会话信息文件：文件名 = pid（用测试进程自身 pid 保证存活）
+  writeFileSync(join(SROOT, `${process.pid}.json`), JSON.stringify({ sessionId: sid37, name: "pid test" }));
+  (bridge as unknown as { reconcilePidsFromSessions(): void }).reconcilePidsFromSessions();
+  assert(mgr.getExternal(id37)?.cli_pid === process.pid, "37 pid reconciled from sessions dir");
+  assert(mgr.getExternal(id37)?.historical === false, "37 historical cleared by live pid");
+  // 死 pid 的 sessions 文件不得覆盖（无 pid 会话保持无 pid，防陈旧文件误定位）
+  rmSync(join(SROOT, `${process.pid}.json`));
+  const sid37b = "bb22cc33-" + "8".repeat(12);
+  await bridge.handleEvent({
+    event: "UserPromptSubmit",
+    session_id: sid37b,
+    cwd: "D:\\pid-reconcile-test",
+    prompt: "dead pid",
+    transcript_path: undefined,
+  });
+  const st37b = mgr.getExternal("ext-" + sid37b)!;
+  st37b.cli_pid = undefined;
+  const deadPid = 9999999;
+  writeFileSync(join(SROOT, `${deadPid}.json`), JSON.stringify({ sessionId: sid37b }));
+  (bridge as unknown as { reconcilePidsFromSessions(): void }).reconcilePidsFromSessions();
+  assert(mgr.getExternal("ext-" + sid37b)?.cli_pid === undefined, "37 dead pid not adopted");
+  delete process.env.CCR_SESSIONS_ROOT;
+  rmSync(SROOT, { recursive: true, force: true });
+}
+
 wsCur!.close();
 await wait(300);
 console.log("\nBRIDGE TESTS PASSED");

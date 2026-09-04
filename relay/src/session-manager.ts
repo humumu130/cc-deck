@@ -275,8 +275,16 @@ export class SessionManager {
         action_summary: summary,
         stats: { ...s.state.stats },
         ...(s.state.turn_started_at ? { turn_started_at: s.state.turn_started_at } : {}),
+        historical: !!s.state.historical,
       });
     }
+  }
+
+  // pid 对账/解锁等纯状态修复后强制下发：emitUpdated 携带 historical 等字段，
+  // 否则客户端要等下次 SNAPSHOT 才摘掉"仅可查看"
+  emitExternalSync(id: string): void {
+    const s = this.sessions.get(id);
+    if (s) this.emitUpdated(s, true);
   }
 
   // 任务清单更新（TodoWrite；managed 与 external 两条路径共用）。
@@ -878,6 +886,9 @@ export class SessionManager {
       ...(s.state.subagents ? { subagents: s.state.subagents.map((x) => ({ ...x })) } : {}),
       ...(s.state.relay_session_id ? { relay_session_id: s.state.relay_session_id } : {}),
       ...(s.state.permission_mode ? { permission_mode: s.state.permission_mode } : {}),
+      // historical 增删必须实时下发：转录自愈/pid 对账解锁后，已连接的客户端
+      // 要等到下次 SNAPSHOT 才能摘掉"仅可查看"——期间用户以为发不了消息
+      historical: !!s.state.historical,
     });
   }
 

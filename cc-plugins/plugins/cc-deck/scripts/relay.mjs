@@ -37720,9 +37720,16 @@ var SessionManager = class {
         status,
         action_summary: summary,
         stats: { ...s.state.stats },
-        ...s.state.turn_started_at ? { turn_started_at: s.state.turn_started_at } : {}
+        ...s.state.turn_started_at ? { turn_started_at: s.state.turn_started_at } : {},
+        historical: !!s.state.historical
       });
     }
+  }
+  // pid 对账/解锁等纯状态修复后强制下发：emitUpdated 携带 historical 等字段，
+  // 否则客户端要等下次 SNAPSHOT 才摘掉"仅可查看"
+  emitExternalSync(id2) {
+    const s = this.sessions.get(id2);
+    if (s) this.emitUpdated(s, true);
   }
   // 任务清单更新（TodoWrite；managed 与 external 两条路径共用）。
   // 单一咽喉点：hook 路径 / transcript 轮询 / COMMAND_REFRESH_TODOS 重发全部经此，
@@ -38279,7 +38286,10 @@ var SessionManager = class {
       ...s.state.todos ? { todos: s.state.todos.map((t) => ({ ...t })) } : {},
       ...s.state.subagents ? { subagents: s.state.subagents.map((x) => ({ ...x })) } : {},
       ...s.state.relay_session_id ? { relay_session_id: s.state.relay_session_id } : {},
-      ...s.state.permission_mode ? { permission_mode: s.state.permission_mode } : {}
+      ...s.state.permission_mode ? { permission_mode: s.state.permission_mode } : {},
+      // historical 增删必须实时下发：转录自愈/pid 对账解锁后，已连接的客户端
+      // 要等到下次 SNAPSHOT 才能摘掉"仅可查看"——期间用户以为发不了消息
+      historical: !!s.state.historical
     });
   }
   heartbeat() {
@@ -38433,9 +38443,12 @@ var Bridge = class _Bridge {
     this.subagentEndTtlMs = Number(process.env.CCR_SUBAGENT_END_TTL_MS) > 0 ? Number(process.env.CCR_SUBAGENT_END_TTL_MS) : 10 * 6e4;
     this.subagentRunTtlMs = Number(process.env.CCR_SUBAGENT_RUN_TTL_MS) > 0 ? Number(process.env.CCR_SUBAGENT_RUN_TTL_MS) : 30 * 6e4;
     this.hydratePidsFromCache();
+    this.reconcilePidsFromSessions();
     this.healExternal();
     this.adoptOrphans();
     this.healTimer = setInterval(() => {
+      this.hydratePidsFromCache();
+      this.reconcilePidsFromSessions();
       this.healExternal();
       this.adoptOrphans();
     }, 6e4);
@@ -38629,6 +38642,57 @@ var Bridge = class _Bridge {
         if (pid) this.mgr.setExternalCliPid(s.session_id, pid);
       }
     } catch {
+    }
+  }
+  // hook 侧 pid 缓存有不存在的窗口（hook 死亡后无人写、dataDir 换代后从未写过）——
+  // 2026-09-04 下午事故：cli-pids.json 缺失 8 小时，daemon 每次重启 pid 补水无源，
+  // 手机发消息被"尚未定位 CLI 进程"拒绝 2h40m。CLI 自写的 ~/.claude/sessions/<pid>.json
+  //（sessionId→name）是 hook 无关的权威源：按会话 id 对上即补定位；只在会话无 pid
+  // 或现有 pid 已死时才写（不覆盖活的），陈旧 sessions 文件靠 pid 存活校验兜底。
+  // 补定位顺带清 historical：活 pid 即会话真实存活的证明。
+  reconcilePidsFromSessions() {
+    try {
+      const dir = process.env.CCR_SESSIONS_ROOT || path3.join(homedir2(), ".claude", "sessions");
+      let files;
+      try {
+        files = readdirSync2(dir);
+      } catch {
+        return;
+      }
+      for (const f of files) {
+        if (!f.endsWith(".json")) continue;
+        const pid = Number(f.slice(0, -5));
+        if (!Number.isInteger(pid) || pid <= 0) continue;
+        let sid = "";
+        try {
+          const d2 = JSON.parse(readFileSync6(path3.join(dir, f), "utf-8"));
+          if (typeof d2.sessionId === "string" && d2.sessionId) sid = d2.sessionId;
+        } catch {
+        }
+        if (!sid || !_Bridge.pidAlive(pid)) continue;
+        for (const s of this.mgr.snapshot()) {
+          if (!s.external) continue;
+          if (s.cli_pid && _Bridge.pidAlive(s.cli_pid)) continue;
+          const key = s.relay_session_id || s.session_id.slice(4);
+          if (key !== sid) continue;
+          this.mgr.setExternalCliPid(s.session_id, pid);
+          const st2 = this.mgr.getExternal(s.session_id);
+          if (st2?.historical) {
+            st2.historical = false;
+            this.mgr.pushExternalLog(s.session_id, "system", "\u5DF2\u901A\u8FC7 CLI \u4F1A\u8BDD\u4FE1\u606F\u6062\u590D\u8FDB\u7A0B\u5B9A\u4F4D\uFF08\u81EA\u6108\uFF09");
+          }
+          this.mgr.emitExternalSync(s.session_id);
+        }
+      }
+    } catch {
+    }
+  }
+  static pidAlive(pid) {
+    try {
+      process.kill(pid, 0);
+      return true;
+    } catch {
+      return false;
     }
   }
   async handleEvent(ev2) {

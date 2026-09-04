@@ -111,10 +111,13 @@ export class Bridge {
     this.subagentEndTtlMs = Number(process.env.CCR_SUBAGENT_END_TTL_MS) > 0 ? Number(process.env.CCR_SUBAGENT_END_TTL_MS) : 10 * 60_000;
     this.subagentRunTtlMs = Number(process.env.CCR_SUBAGENT_RUN_TTL_MS) > 0 ? Number(process.env.CCR_SUBAGENT_RUN_TTL_MS) : 30 * 60_000;
     this.hydratePidsFromCache();
+    this.reconcilePidsFromSessions();
     this.healExternal();
     this.adoptOrphans();
     // 自愈 + 孤儿扫描：60s 一轮，也兜住运行期间任何来源的误标（不止重启重放）
     this.healTimer = setInterval(() => {
+      this.hydratePidsFromCache();
+      this.reconcilePidsFromSessions();
       this.healExternal();
       this.adoptOrphans();
     }, 60_000);
@@ -274,6 +277,57 @@ export class Bridge {
         if (pid) this.mgr.setExternalCliPid(s.session_id, pid);
       }
     } catch {}
+  }
+
+  // hook 侧 pid 缓存有不存在的窗口（hook 死亡后无人写、dataDir 换代后从未写过）——
+  // 2026-09-04 下午事故：cli-pids.json 缺失 8 小时，daemon 每次重启 pid 补水无源，
+  // 手机发消息被"尚未定位 CLI 进程"拒绝 2h40m。CLI 自写的 ~/.claude/sessions/<pid>.json
+  //（sessionId→name）是 hook 无关的权威源：按会话 id 对上即补定位；只在会话无 pid
+  // 或现有 pid 已死时才写（不覆盖活的），陈旧 sessions 文件靠 pid 存活校验兜底。
+  // 补定位顺带清 historical：活 pid 即会话真实存活的证明。
+  private reconcilePidsFromSessions(): void {
+    try {
+      const dir = process.env.CCR_SESSIONS_ROOT || path.join(homedir(), ".claude", "sessions");
+      let files: string[];
+      try {
+        files = readdirSync(dir);
+      } catch {
+        return;
+      }
+      for (const f of files) {
+        if (!f.endsWith(".json")) continue;
+        const pid = Number(f.slice(0, -5));
+        if (!Number.isInteger(pid) || pid <= 0) continue;
+        let sid = "";
+        try {
+          const d = JSON.parse(readFileSync(path.join(dir, f), "utf-8")) as { sessionId?: string };
+          if (typeof d.sessionId === "string" && d.sessionId) sid = d.sessionId;
+        } catch {}
+        if (!sid || !Bridge.pidAlive(pid)) continue;
+        for (const s of this.mgr.snapshot()) {
+          if (!s.external) continue;
+          if (s.cli_pid && Bridge.pidAlive(s.cli_pid)) continue;
+          const key = s.relay_session_id || s.session_id.slice(4);
+          if (key !== sid) continue;
+          this.mgr.setExternalCliPid(s.session_id, pid);
+          const st = this.mgr.getExternal(s.session_id);
+          if (st?.historical) {
+            st.historical = false;
+            this.mgr.pushExternalLog(s.session_id, "system", "已通过 CLI 会话信息恢复进程定位（自愈）");
+          }
+          this.mgr.emitExternalSync(s.session_id);
+        }
+      }
+    } catch {}
+  }
+
+  private static pidAlive(pid: number): boolean {
+    try {
+      process.kill(pid, 0);
+      return true;
+    } catch {
+      return false;
+    }
   }
 
   async handleEvent(ev: BridgeEvent): Promise<BridgeDecision> {
