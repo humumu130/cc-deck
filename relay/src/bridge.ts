@@ -510,6 +510,7 @@ export class Bridge {
     const kept = list.filter((p) => !key.includes(normKey(p.text)));
     if (kept.length === list.length) return [];
     this.mgr.setExternalPending(id, kept);
+    for (const p of list) if (key.includes(normKey(p.text))) this.dropEnqueuedKey(id, p.text);
     return list.filter((p) => key.includes(normKey(p.text))).map((p) => p.text);
   }
 
@@ -524,9 +525,40 @@ export class Bridge {
     const key = normKey(content);
     const pending = state.pending_inputs ?? [];
     // CLI 会把多条排队消息合并成一条 enqueue（"A\rB"，内部换行折叠）：覆盖任一待发消息
-    // 即为同一批的重复表示，不重复入队；手机注入回显（extInput）已进队同样跳过
-    if (pending.some((p) => key.includes(normKey(p.text)))) return;
+    // 即为同一批的重复表示，不重复入队；手机注入回显（extInput）已进队同样跳过。
+    // 同时登记"已进 CLI 队列"：看门狗的滞留判定跳过（CLI 忙时排队是正常路径，非滞留）
+    const covered = pending.some((p) => key.includes(normKey(p.text)));
+    if (covered) {
+      for (const p of pending) if (key.includes(normKey(p.text))) this.noteEnqueuedKey(id, normKey(p.text));
+      this.noteEnqueuedKey(id, key);
+      return;
+    }
     this.mgr.setExternalPending(id, [...pending, { text, ts: Date.now() }]);
+  }
+
+  // ext id -> transcript queue-operation 已见过的 normKey：这些文本已被 CLI 捕获进队，
+  // 滞留看门狗不得对它们补发回车（误补发会在回合边界提交空行/干扰排队语义）
+  private enqueuedKeys = new Map<string, Set<string>>();
+
+  private noteEnqueuedKey(id: string, key: string): void {
+    if (!key) return;
+    let m = this.enqueuedKeys.get(id);
+    if (!m) {
+      if (this.enqueuedKeys.size > 60) this.enqueuedKeys.clear();
+      m = new Set();
+      this.enqueuedKeys.set(id, m);
+    }
+    m.add(key);
+    if (m.size > 40) m.clear();
+  }
+
+  private isEnqueued(id: string, text: string): boolean {
+    return this.enqueuedKeys.get(id)?.has(normKey(text)) ?? false;
+  }
+
+  // 晋升（transcript user 行 / UPS hook 确认提交）后移除标记：同文本再次注入滞留时看门狗仍要管
+  private dropEnqueuedKey(id: string, text: string): void {
+    this.enqueuedKeys.get(id)?.delete(normKey(text));
   }
 
   // steering 中途交付（attachment queued_command，不触发 UserPromptSubmit）：
@@ -677,6 +709,7 @@ export class Bridge {
     if (i !== -1) {
       const promoted = list.splice(i, 1)[0];
       this.mgr.setExternalPending(sessionId, list);
+      this.dropEnqueuedKey(sessionId, promoted.text);
       this.noteUserMsg(sessionId, promoted.text, "promote");
       this.mgr.pushExternalLog(sessionId, "user_message", truncate(promoted.text, 300));
       return true;
@@ -692,6 +725,7 @@ export class Bridge {
           const hits = list.splice(s, e - s + 1);
           this.mgr.setExternalPending(sessionId, list);
           for (const h of hits) {
+            this.dropEnqueuedKey(sessionId, h.text);
             this.noteUserMsg(sessionId, h.text, "promote");
             this.mgr.pushExternalLog(sessionId, "user_message", truncate(h.text, 300));
           }
@@ -1612,12 +1646,22 @@ export class Bridge {
   // WAITING 严禁补发——回车会误触权限弹窗。
   private sweepStuckInputs(): void {
     const now = Date.now();
+    // 首检快窗：注入后 10s（env 短值时遵从 env）未提交也未进 CLI 队列即补发——
+    // 手机发的消息不该等到用户走到 PC 才发现滞留输入框；补发过的回归长窗（stuckAfterMs）
+    const firstMs = Math.min(10_000, this.stuckAfterMs);
     for (const s of this.mgr.snapshot()) {
       if (!s.external) continue;
       const id = s.session_id;
-      const stuck = (s.pending_inputs ?? []).some(
-        (p) => now - p.ts > this.stuckAfterMs && !this.recentlyLogged(id, p.text),
-      );
+      const w0 = this.stuckWatch.get(id);
+      const threshold = w0 && w0.tries > 0 ? this.stuckAfterMs : firstMs;
+      const stuck = (s.pending_inputs ?? []).some((p) => {
+        if (now - p.ts <= threshold) return false;
+        if (this.isEnqueued(id, p.text)) return false;
+        // 60s 内晋升过同文本：pending 条目早于晋升记录 = 已处理过的残留，跳过；
+        // 条目更新 = 用户重发（"继续"这类高频词）再滞留，照常补发
+        const rec = this.recentUserMsgs.get(id)?.get(normKey(p.text));
+        return !(rec && now - rec.ts < 60_000 && rec.ts >= p.ts);
+      });
       if (
         !stuck ||
         !s.cli_pid ||

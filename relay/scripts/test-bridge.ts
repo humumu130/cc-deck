@@ -885,6 +885,37 @@ assert(ack24.ok === false, "empty rename rejected");
   rmSync(T, { force: true });
 }
 
+// 39. 发送可靠性：已进 CLI 队列的 pending 不补发回车；晋升后同文本重发再滞留恢复补发
+{
+  const { appendFileSync, writeFileSync } = await import("node:fs");
+  const T = fileURLToPath(new URL("../data/test-transcript.jsonl", import.meta.url));
+  rmSync(T, { force: true });
+  writeFileSync(T, JSON.stringify({ type: "assistant", message: { role: "assistant", content: [{ type: "text", text: "基线39" }] } }) + "\n");
+  const sid = extId("cli-8");
+  const enters = () => fakeLog().filter((a) => a[0] === "8888" && a[1] === "").length;
+  await hook({ event: "UserPromptSubmit", prompt: "看门狗39", session_id: "cli-8", cli_pid: 8888, transcript_path: T });
+  await hook({ event: "PostToolUse", tool_name: "Bash", tool_response: "ok", session_id: "cli-8", transcript_path: T });
+  // CLI 忙时把注入消息捕获进队（queue-operation enqueue 行）→ pending 保留但看门狗跳过
+  mgr.setExternalStatus(sid, "WORKING", "跑");
+  mgr.setExternalPending(sid, [{ text: "进队消息", ts: Date.now() - 9000 }]);
+  appendFileSync(T, JSON.stringify({ type: "queue-operation", operation: "enqueue", content: "进队消息" }) + "\n");
+  await hook({ event: "PostToolUse", tool_name: "Bash", tool_response: "ok", session_id: "cli-8", transcript_path: T });
+  await wait(8000);
+  assert(enters() === 0, "39 enqueued pending does not trigger enter re-send");
+  // 回合结束 CLI 提交该消息（user 行）→ 晋升 + 移除进队标记
+  mgr.setExternalStatus(sid, "DONE", "结束");
+  appendFileSync(T, JSON.stringify({ type: "user", isMeta: false, message: { role: "user", content: "进队消息" } }) + "\n");
+  await hook({ event: "PostToolUse", tool_name: "Bash", tool_response: "ok", session_id: "cli-8", transcript_path: T });
+  assert(!(mgr.getExternal(sid)?.pending_inputs ?? []).some((p) => p.text === "进队消息"), "39 promoted by user line, pending cleared");
+  // 同文本再次滞留（未进队的新注入条目，时间晚于晋升记录）→ 看门狗恢复补发
+  mgr.setExternalStatus(sid, "WORKING", "再跑");
+  mgr.setExternalPending(sid, [{ text: "进队消息", ts: Date.now() }]);
+  await wait(12000);
+  assert(enters() >= 1, "39 same text re-stuck after promotion triggers re-send");
+  await hook({ event: "SessionEnd", session_id: "cli-8", reason: "clear" });
+  rmSync(T, { force: true });
+}
+
 wsCur!.close();
 await wait(300);
 console.log("\nBRIDGE TESTS PASSED");
