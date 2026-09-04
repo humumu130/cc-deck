@@ -32,10 +32,18 @@ jobs:
         with:
           node-version: 20
           cache: npm
-          cache-dependency-path: relay/package-lock.json
+          cache-dependency-path: |
+            relay/package-lock.json
+            cloud-bridge/package-lock.json
 
       - name: Install dependencies
         run: npm ci
+
+      # relay 的 scripts/test-cloud.ts 进程内 import ../cloud-bridge 源码，
+      # tsc/tsx 都会从 cloud-bridge 向上解析 ws —— 必须同装其依赖
+      - name: Install cloud-bridge dependencies
+        run: npm ci
+        working-directory: cloud-bridge
 
       - name: Type check (tsc --noEmit)
         run: npx tsc --noEmit
