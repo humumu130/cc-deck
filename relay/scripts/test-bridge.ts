@@ -679,7 +679,8 @@ assert(ack24.ok === false, "empty rename rejected");
   const orphanId = "ext-" + sid;
   writeFileSync(
     join(PROOT, "proj-a", sid + ".jsonl"),
-    JSON.stringify({ type: "user", cwd: "D:\\orphan-test", message: { role: "user", content: "hi" } }) + "\n",
+    JSON.stringify({ type: "user", cwd: "D:\\orphan-test", message: { role: "user", content: "hi" } }) + "\n" +
+      JSON.stringify({ type: "user", cwd: "D:\\orphan-test", message: { role: "user", content: "second turn" } }) + "\n",
   );
   // 扫描跳过 15s 内的新鲜文件（title-gen 登记竞态防线），测试文件回拨到 60s 前
   const ago = (f: string, ms: number) => utimesSync(f, new Date(Date.now() - ms), new Date(Date.now() - ms));
@@ -692,6 +693,12 @@ assert(ack24.ok === false, "empty rename rejected");
     JSON.stringify({ type: "x", sessionId: "cc11bb22-cc33-dd44-ee55-ff6677889900" }) + "\n",
   );
   ago(join(PROOT, "proj-a", "cc11bb22-cc33-dd44-ee55-ff6677889900.jsonl"), 60_000);
+  // 单回合探针转录（一次性 print 模式 CLI）：有 cwd 也不收养（测试探针垃圾过滤）
+  writeFileSync(
+    join(PROOT, "proj-a", "ee11bb22-cc33-dd44-ee55-ff6677889900.jsonl"),
+    JSON.stringify({ type: "user", cwd: "D:\\probe", message: { role: "user", content: "请直接回复两个字：收到" } }) + "\n",
+  );
+  ago(join(PROOT, "proj-a", "ee11bb22-cc33-dd44-ee55-ff6677889900.jsonl"), 60_000);
   scan();
   await wait(300);
   assert(events.some((e) => e.type === "SESSION_CREATED" && e.session_id === orphanId), "34 fresh orphan adopted");
@@ -699,6 +706,7 @@ assert(ack24.ok === false, "empty rename rejected");
   assert(st?.status === "DONE" && st?.action_summary === "扫描接入（只读）", "34 orphan read-only DONE");
   assert(!mgr.getExternal("ext-bb11bb22-cc33-dd44-ee55-ff6677889900"), "34 stale transcript skipped");
   assert(!mgr.getExternal("ext-cc11bb22-cc33-dd44-ee55-ff6677889900"), "34 no-cwd transcript skipped");
+  assert(!mgr.getExternal("ext-ee11bb22-cc33-dd44-ee55-ff6677889900"), "34 single-turn probe transcript skipped");
   // 已注册会话（模拟重启后恢复）重扫：不报错不重复创建，且 transcript 轮询必须（重）挂上
   // ——外部会话的 relay_session_id 也命中 ownsCliSession，分支顺序错了会跳过补挂，
   // 重启后手机只剩系统日志看不到正文（真实踩坑）

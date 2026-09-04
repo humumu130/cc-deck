@@ -184,6 +184,9 @@ export class Bridge {
           if (mtime > Date.now() - 15_000) continue;
           const cwd = this.readCwdFromTail(p);
           if (!cwd) continue;
+          // 单发探针/一次性 print 模式 CLI（单回合无追问）不值得监控：全文件
+          // user 行 <2 条不收养——交互会话必然多回合（含工具结果的 user 行也算）
+          if (!this.hasMultiUserTurns(p)) continue;
           this.mgr.ensureExternal(id, cwd, "", sid);
           this.transcriptPaths.set(id, p);
           this.mgr.setExternalStatus(id, "DONE", "扫描接入（只读）");
@@ -221,6 +224,40 @@ export class Bridge {
       return "";
     } catch {
       return "";
+    } finally {
+      if (fd !== undefined) closeSync(fd);
+    }
+  }
+
+  // transcript 是否有多条 user 行（含工具结果回填的 user 行）。流式分块扫全文件，
+  // 64KB 块 + 1KB carry 防跨界漏匹配；非末块的末 1KB 区域命中留给下一块计（避免重复
+  // 计数），只对孤儿候选（新发现、mtime 30min 内）执行，频次低
+  private hasMultiUserTurns(p: string): boolean {
+    let fd: number | undefined;
+    try {
+      fd = openSync(p, "r");
+      const size = statSync(p).size;
+      const chunk = 64 * 1024;
+      const buf = Buffer.alloc(chunk + 1024);
+      let carry = Buffer.alloc(0);
+      let count = 0;
+      const re = /"type":\s*"user"/g;
+      for (let pos = 0; pos < size; ) {
+        const len = readSync(fd, buf, 0, chunk, pos);
+        if (len <= 0) break;
+        pos += len; // 按实际读取推进（防短读跳字节）
+        const isLast = pos >= size;
+        const text = Buffer.concat([carry, buf.subarray(0, len)]).toString("latin1");
+        const limit = isLast ? text.length : text.length - 1024;
+        re.lastIndex = 0;
+        for (let m = re.exec(text); m && m.index < limit; m = re.exec(text)) {
+          if (++count >= 2) return true;
+        }
+        carry = Buffer.from(text.slice(-1024), "latin1");
+      }
+      return false;
+    } catch {
+      return false;
     } finally {
       if (fd !== undefined) closeSync(fd);
     }

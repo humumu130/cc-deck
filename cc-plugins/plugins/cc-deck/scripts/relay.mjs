@@ -38472,6 +38472,11 @@ var Bridge = class _Bridge {
   // hook 未带 tool_use_id 时的合成 id 序号（ag-N）
   askFallback = /* @__PURE__ */ new Map();
   // 提问超时放行本地选择器后的兜底（手机晚答仍可送达）
+  // 无 hook 会话（CLI 早于插件启动，无 Stop/UserPromptSubmit 事件）：
+  // 转录在 DONE 态仍在增长即翻 WORKING，静默 25s 视作回合结束——状态显示与排队消息
+  // 注入不再依赖 90s 看门狗兜底
+  noHookIds = /* @__PURE__ */ new Set();
+  lastGrow = /* @__PURE__ */ new Map();
   // 看门狗/子 Agent TTL 阈值（env 可调：测试用短值，生产默认 90s/60s/10min/30min）
   stuckAfterMs;
   stuckRetryMs;
@@ -38537,6 +38542,7 @@ var Bridge = class _Bridge {
           if (mtime > Date.now() - 15e3) continue;
           const cwd = this.readCwdFromTail(p);
           if (!cwd) continue;
+          if (!this.hasMultiUserTurns(p)) continue;
           this.mgr.ensureExternal(id2, cwd, "", sid);
           this.transcriptPaths.set(id2, p);
           this.mgr.setExternalStatus(id2, "DONE", "\u626B\u63CF\u63A5\u5165\uFF08\u53EA\u8BFB\uFF09");
@@ -38575,6 +38581,32 @@ var Bridge = class _Bridge {
       return "";
     } catch {
       return "";
+    } finally {
+      if (fd2 !== void 0) closeSync2(fd2);
+    }
+  }
+  // transcript 是否有多条 user 行（含工具结果回填的 user 行）。流式分块扫全文件，
+  // 64KB 块 + 1KB 重叠防跨界漏匹配；只对孤儿候选（新发现、mtime 30min 内）执行，频次低
+  hasMultiUserTurns(p) {
+    let fd2;
+    try {
+      fd2 = openSync2(p, "r");
+      const size = statSync3(p).size;
+      const chunk = 64 * 1024;
+      const buf = Buffer.alloc(chunk + 1024);
+      let carry = Buffer.alloc(0);
+      let count = 0;
+      for (let pos = 0; pos < size; pos += chunk) {
+        const len = readSync2(fd2, buf, 0, chunk, pos);
+        if (len <= 0) break;
+        const text = Buffer.concat([carry, buf.subarray(0, len)]).toString("latin1");
+        count += (text.match(/"type":\s*"user"/g) || []).length;
+        if (count >= 2) return true;
+        carry = Buffer.from(text.slice(-1024), "latin1");
+      }
+      return false;
+    } catch {
+      return false;
     } finally {
       if (fd2 !== void 0) closeSync2(fd2);
     }
@@ -38645,10 +38677,37 @@ var Bridge = class _Bridge {
         if (this.transcriptPaths.size > 120) this.transcriptPaths.clear();
       }
       for (const [id2, p] of this.transcriptPaths) this.pushAssistantTexts(id2, p);
+      this.sweepNoHookIdle();
       this.sweepSubagents();
       this.sweepStuckInputs();
     }, 5e3);
     this.queuePollTimer.unref();
+  }
+  // 无 hook 会话的回合结束：无 Stop 事件可依赖，转录静默超过阈值视作回合结束
+  //（状态回落 + flush 排队消息）。误判代价小：长工具静默期短暂回落，下一段
+  // 转录增长会再翻回 WORKING；提前 flush 的消息 CLI 本就原生排队
+  sweepNoHookIdle() {
+    if (!this.noHookIds.size) return;
+    const idleMs = Number(process.env.CCR_NOHOOK_IDLE_MS) > 0 ? Number(process.env.CCR_NOHOOK_IDLE_MS) : 25e3;
+    const now = Date.now();
+    for (const id2 of [...this.noHookIds]) {
+      const st2 = this.mgr.getExternal(id2);
+      if (!st2) {
+        this.noHookIds.delete(id2);
+        this.lastGrow.delete(id2);
+        this.turnStart.delete(id2);
+        continue;
+      }
+      if (st2.status !== "WORKING" || this.pending.has(id2)) continue;
+      const last = this.lastGrow.get(id2) ?? 0;
+      if (!last || now - last <= idleMs) continue;
+      this.noHookIds.delete(id2);
+      const turn = this.turnStart.get(id2) ?? st2.started_at;
+      this.turnStart.delete(id2);
+      this.mgr.finishExternal(id2, "completed", Date.now() - turn);
+      this.mgr.pushExternalLog(id2, "system", "\u8F6C\u5F55\u9759\u9ED8\uFF0C\u56DE\u5408\u89C6\u4F5C\u7ED3\u675F\uFF08\u65E0 hook \u4F1A\u8BDD\uFF09");
+      if ((this.inputQueue.get(id2)?.length ?? 0) > 0) void this.flushQueue(id2);
+    }
   }
   // 记账"该文本近期已记为正式消息"：transcript 里 enqueue 与晋升可能同批读到，
   // 不去重会把已处理的消息再塞回 pending（手机双气泡）
@@ -39024,6 +39083,15 @@ var Bridge = class _Bridge {
       const end = raw.lastIndexOf("\n");
       if (end < 0) return;
       this.transcriptOffsets.set(id2, start + Buffer.byteLength(raw.slice(0, end + 1), "utf-8"));
+      if (!firstRead) {
+        this.lastGrow.set(id2, Date.now());
+        const st0 = this.mgr.getExternal(id2);
+        if (st0 && st0.status === "DONE") {
+          this.noHookIds.add(id2);
+          if (!this.turnStart.has(id2)) this.turnStart.set(id2, Date.now());
+          this.mgr.setExternalStatus(id2, "WORKING", "\u8F6C\u5F55\u6D3B\u8DC3\uFF08\u65E0 hook \u4F1A\u8BDD\uFF09");
+        }
+      }
       const entries = [];
       const enqueues = [];
       const steers = [];
@@ -39755,6 +39823,20 @@ function startServer(bus2, mgr2, cfg2, opts = {}) {
       }).end(JSON.stringify({ ok: true, port: cfg2.port, token: cfg2.token }));
       return;
     }
+    if (req.method === "POST" && url.pathname === "/api/pair-issue") {
+      const remote = req.socket.remoteAddress ?? "";
+      const isLoopback = remote === "127.0.0.1" || remote === "::1" || remote === "::ffff:127.0.0.1";
+      if (!isLoopback || (req.headers["x-bridge-token"] ?? "") !== cfg2.bridgeToken) {
+        res.writeHead(403).end();
+        return;
+      }
+      if (!opts.pairCodes) {
+        res.writeHead(501).end("pairing not enabled");
+        return;
+      }
+      res.writeHead(200, { "content-type": "application/json" }).end(JSON.stringify(opts.pairCodes.issue()));
+      return;
+    }
     if (req.method === "POST" && url.pathname === "/api/pair-code") {
       if ((url.searchParams.get("token") ?? "") !== cfg2.token) {
         res.writeHead(401).end("unauthorized");
@@ -39940,6 +40022,8 @@ var CloudClient = class {
   ws = null;
   phones = /* @__PURE__ */ new Map();
   unpairedNotice = /* @__PURE__ */ new Map();
+  // 配对码爆破限流：10 分钟有效窗口内连续错码的 dev 直接静默丢弃（码空间 10^6）
+  pairFails = /* @__PURE__ */ new Map();
   delayMs = 1e3;
   stopped = false;
   timer = null;
@@ -40085,10 +40169,20 @@ var CloudClient = class {
         console.log(`[cloud] pair_req rejected dev=${f.from}`);
         return;
       }
+      const now = Date.now();
+      const pf = this.pairFails.get(dev);
+      if (pf && pf.until > now) {
+        console.log(`[cloud] pair_req throttled dev=${dev}\uFF08\u8FDE\u7EED\u9519\u7801\uFF09`);
+        return;
+      }
       if (this.pairCodes?.consume(String(pr2.code ?? ""))) {
+        this.pairFails.delete(dev);
         this.identity.addPeer(dev, { pubkey, name: typeof pr2.name === "string" ? pr2.name : "web", paired_at: Date.now() });
         console.log(`[cloud] paired web dev=${dev}`);
       } else if (!this.identity.peers.get(dev)) {
+        const n = (pf?.n ?? 0) + 1;
+        this.pairFails.set(dev, { n, until: n >= 5 ? now + 6e5 : 0 });
+        if (this.pairFails.size > 100) this.pairFails.clear();
         console.log(`[cloud] pair_req rejected dev=${f.from}`);
         this.send({ to: f.from, data: seal({ t: "pair_nack", error: "\u914D\u5BF9\u7801\u65E0\u6548\u6216\u5DF2\u8FC7\u671F" }, pubkey, this.identity.keypair.secretKey) });
         return;
@@ -40151,7 +40245,7 @@ var CloudClient = class {
 };
 
 // src/pairing.ts
-function createPairingCodes(ttlMs = 30 * 1e3) {
+function createPairingCodes(ttlMs = 600 * 1e3) {
   const codes = /* @__PURE__ */ new Map();
   return {
     issue() {
@@ -40195,6 +40289,41 @@ function lanIps() {
   return out;
 }
 var cliArgs = new Set(process.argv.slice(2));
+if (cliArgs.has("--pair")) {
+  let port = cfg.port;
+  let bridgeToken = cfg.bridgeToken;
+  try {
+    const b = JSON.parse(readFileSync9(join9(cfg.dataDir, "bridge.json"), "utf-8"));
+    if (b.port) port = b.port;
+    if (b.token) bridgeToken = b.token;
+  } catch {
+  }
+  try {
+    const r = await fetch(`http://127.0.0.1:${port}/api/pair-issue`, {
+      method: "POST",
+      headers: { "x-bridge-token": bridgeToken }
+    });
+    if (r.status === 501) {
+      console.log("\u4E91\u6865\u672A\u542F\u7528\uFF08\u672A\u8BBE\u7F6E CCR_CLOUD_URL\uFF09\uFF0C\u65E0\u53EF\u9886\u914D\u5BF9\u7801");
+      process.exit(1);
+    }
+    if (!r.ok) {
+      console.log(`\u9886\u53D6\u5931\u8D25: HTTP ${r.status}\uFF08\u5148\u8FD0\u884C /cc-deck \u542F\u52A8 relay\uFF09`);
+      process.exit(1);
+    }
+    const d2 = await r.json();
+    console.log("");
+    console.log("\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550");
+    console.log(`  \u4E91\u6865\u914D\u5BF9\u7801\uFF1A${d2.code.slice(0, 3)} ${d2.code.slice(3)}`);
+    console.log("\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550");
+    console.log(`${Math.round(d2.expires_in / 60)} \u5206\u949F\u5185\u6709\u6548\u3001\u4E00\u6B21\u6027\u3002\u5728\u5F02\u5730\u7F51\u9875\u7AEF\uFF08${cfg.cloudUrls[0] ?? "\u4E91\u6865"}\uFF09\u6216`);
+    console.log("\u624B\u673A App\u300C\u914D\u5BF9\u7801\u300D\u5165\u53E3\u8F93\u5165\u5373\u53EF\u63A5\u5165\u672C\u673A relay\u3002");
+    process.exit(0);
+  } catch {
+    console.log("\u8FDE\u4E0D\u4E0A\u672C\u673A relay\uFF08\u5148\u8FD0\u884C /cc-deck \u542F\u52A8\uFF09");
+    process.exit(1);
+  }
+}
 if (cliArgs.has("--qr")) {
   const ip2 = lanIps()[0] ?? "127.0.0.1";
   printQr(`http://${ip2}:${cfg.port}/m`, `App \u4E0B\u8F7D\uFF08\u624B\u673A\u6444\u50CF\u5934\u626B\u63CF\uFF09: http://${ip2}:${cfg.port}/m`);
@@ -40286,7 +40415,7 @@ if (cfg.cloudUrls.length) {
 }
 startServer(bus, mgr, cfg, {
   cloudHasPhones: () => cloudClients.some((c) => c.hasActivePhones()),
-  pairCodes,
+  ...cloudClients.length ? { pairCodes } : {},
   // daemon 子进程 listen 成功后自写 pid（父进程不预写，端口被占时不留死 pid）
   onReady: () => {
     if (process.env.CC_DECK_DAEMON === "1") {
