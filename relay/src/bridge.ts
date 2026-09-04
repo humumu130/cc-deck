@@ -453,9 +453,10 @@ export class Bridge {
         this.lastHookAt.get(id) ?? 0,
         s.updated_at ?? 0,
       );
-      if (!idleSince || now - idleSince <= 600_000) continue;
+      // 末条形态分档（与 sweepNoHookIdle 同参）：end=纯文本收尾 90s 即回落，
+      // 其余（工具执行中/生成中）给 10 分钟长窗——先判全局 600s 会让 90s 档变死代码
       const shape = this.turnShape.get(id) ?? "gen";
-      if (shape === "end" && now - idleSince <= idleMs) continue;
+      if (!idleSince || now - idleSince <= (shape === "end" ? idleMs : 600_000)) continue;
       const turn = this.turnStart.get(id) ?? s.started_at;
       this.turnStart.delete(id);
       this.mgr.finishExternal(id, "completed", now - turn);
