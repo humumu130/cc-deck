@@ -1,6 +1,6 @@
 // hooks 桥接全链路测试：模拟 bridge-hook.mjs 的 POST 序列 + WS 客户端命令
 import { randomUUID } from "node:crypto";
-import { mkdirSync, readFileSync, rmSync, utimesSync, writeFileSync } from "node:fs";
+import { appendFileSync, mkdirSync, readFileSync, rmSync, utimesSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { WebSocket } from "ws";
@@ -739,6 +739,40 @@ assert(ack24.ok === false, "empty rename rejected");
   const pcs2 = createPairingCodes();
   const c2 = pcs2.issue().code;
   assert(pcs2.consume(c2) && !pcs2.consume(c2), "35 code one-time consume");
+}
+
+// 36. 无 hook 会话：转录增量增长翻 WORKING（状态/呼吸灯随转录走），静默后回合视作结束
+{
+  mkdirSync(join(PROOT, "proj-a"), { recursive: true });
+  const sid = "dd11bb22-cc33-dd44-ee55-ff6677889900";
+  const id36 = "ext-" + sid;
+  const f36 = join(PROOT, "proj-a", sid + ".jsonl");
+  writeFileSync(f36,
+    JSON.stringify({ type: "user", cwd: "D:\\nohook-test", message: { role: "user", content: "hi" } }) + "\n" +
+    JSON.stringify({ type: "user", cwd: "D:\\nohook-test", message: { role: "user", content: "turn 2" } }) + "\n");
+  utimesSync(f36, new Date(Date.now() - 60_000), new Date(Date.now() - 60_000));
+  (bridge as unknown as { adoptOrphans(): void }).adoptOrphans();
+  await wait(300);
+  assert(mgr.getExternal(id36)?.status === "DONE", "36 adopted as DONE");
+  // 等一轮轮询（5s）完成首读建 offset 基线，之后的追加才算增量增长
+  await wait(5500);
+  // CLI 正在写转录（增量）→ 下一轮轮询（5s）翻 WORKING
+  appendFileSync(f36, JSON.stringify({ type: "assistant", message: { content: [{ type: "text", text: "streaming" }] } }) + "\n");
+  await wait(6500);
+  const st36 = mgr.getExternal(id36);
+  assert(st36?.status === "WORKING" && st36?.action_summary === "转录活跃（无 hook 会话）", "36 transcript growth flips WORKING");
+  // 转录静默（idle 阈值压到 1s）→ 回合视作结束回落 DONE；再增长能重新翻回 WORKING
+  try {
+    process.env.CCR_NOHOOK_IDLE_MS = "1000";
+    await wait(6500);
+    assert(mgr.getExternal(id36)?.status === "DONE", "36 idle falls back to DONE");
+    appendFileSync(f36, JSON.stringify({ type: "assistant", message: { content: [{ type: "text", text: "new turn" }] } }) + "\n");
+    await wait(6500);
+    assert(mgr.getExternal(id36)?.status === "WORKING", "36 regrowth flips WORKING again");
+  } finally {
+    delete process.env.CCR_NOHOOK_IDLE_MS;
+  }
+  rmSync(PROOT, { recursive: true, force: true });
 }
 
 wsCur!.close();

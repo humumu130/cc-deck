@@ -83,6 +83,11 @@ export class Bridge {
   private stuckWatch = new Map<string, { lastTry: number; tries: number; given_up: boolean }>();
   private subagentSeq = 0; // hook 未带 tool_use_id 时的合成 id 序号（ag-N）
   private askFallback = new Map<string, { requestId: string; questions: AskQuestion[] }>(); // 提问超时放行本地选择器后的兜底（手机晚答仍可送达）
+  // 无 hook 会话（CLI 早于插件启动，无 Stop/UserPromptSubmit 事件）：
+  // 转录在 DONE 态仍在增长即翻 WORKING，静默 25s 视作回合结束——状态显示与排队消息
+  // 注入不再依赖 90s 看门狗兜底
+  private noHookIds = new Set<string>();
+  private lastGrow = new Map<string, number>();
 
   // 看门狗/子 Agent TTL 阈值（env 可调：测试用短值，生产默认 90s/60s/10min/30min）
   private readonly stuckAfterMs: number;
@@ -235,6 +240,10 @@ export class Bridge {
   }
 
   async handleEvent(ev: BridgeEvent): Promise<BridgeDecision> {
+    // hook 事件到达即证明该会话有 hook：从无 hook 疑似名单除名（回合首条转录写入
+    // 早于 UserPromptSubmit POST 到达的竞态窗口里可能被 5s tick 误登记，长工具
+    // 静默期会被 sweepNoHookIdle 误判回合结束）
+    this.noHookIds.delete(this.extId(ev));
     const decision = await this.dispatch(ev);
     // 分发后捕获：新会话的首个事件（UserPromptSubmit/PreToolUse）在 handler 内才 ensureExternal
     if (ev.cli_pid && ev.cli_pid > 0) this.mgr.setExternalCliPid(this.extId(ev), ev.cli_pid);
@@ -293,10 +302,38 @@ export class Bridge {
         if (this.transcriptPaths.size > 120) this.transcriptPaths.clear(); // 兜底硬上限
       }
       for (const [id, p] of this.transcriptPaths) this.pushAssistantTexts(id, p);
+      this.sweepNoHookIdle();
       this.sweepSubagents();
       this.sweepStuckInputs();
     }, 5000);
     this.queuePollTimer.unref();
+  }
+
+  // 无 hook 会话的回合结束：无 Stop 事件可依赖，转录静默超过阈值视作回合结束
+  //（状态回落 + flush 排队消息）。误判代价小：长工具静默期短暂回落，下一段
+  // 转录增长会再翻回 WORKING；提前 flush 的消息 CLI 本就原生排队
+  private sweepNoHookIdle(): void {
+    if (!this.noHookIds.size) return;
+    const idleMs = Number(process.env.CCR_NOHOOK_IDLE_MS) > 0 ? Number(process.env.CCR_NOHOOK_IDLE_MS) : 25_000;
+    const now = Date.now();
+    for (const id of [...this.noHookIds]) {
+      const st = this.mgr.getExternal(id);
+      if (!st) {
+        this.noHookIds.delete(id);
+        this.lastGrow.delete(id);
+        this.turnStart.delete(id);
+        continue;
+      }
+      if (st.status !== "WORKING" || this.pending.has(id)) continue;
+      const last = this.lastGrow.get(id) ?? 0;
+      if (!last || now - last <= idleMs) continue;
+      this.noHookIds.delete(id);
+      const turn = this.turnStart.get(id) ?? st.started_at;
+      this.turnStart.delete(id);
+      this.mgr.finishExternal(id, "completed", Date.now() - turn);
+      this.mgr.pushExternalLog(id, "system", "转录静默，回合视作结束（无 hook 会话）");
+      if ((this.inputQueue.get(id)?.length ?? 0) > 0) void this.flushQueue(id);
+    }
   }
 
   // 记账"该文本近期已记为正式消息"：transcript 里 enqueue 与晋升可能同批读到，
@@ -715,6 +752,18 @@ export class Bridge {
       const end = raw.lastIndexOf("\n");
       if (end < 0) return;
       this.transcriptOffsets.set(id, start + Buffer.byteLength(raw.slice(0, end + 1), "utf-8"));
+      if (!firstRead) {
+        if (this.lastGrow.size > 200) this.lastGrow.clear(); // 兜底上限（普通会话也在记账）
+        this.lastGrow.set(id, Date.now());
+        const st0 = this.mgr.getExternal(id);
+        // 增量增长落在 DONE 态 = 无 hook 会话（hook 会话回合首事件 UserPromptSubmit
+        // 早已翻 WORKING）：翻 WORKING 让手机呼吸灯/工作状态随转录实时走
+        if (st0 && st0.status === "DONE") {
+          this.noHookIds.add(id);
+          if (!this.turnStart.has(id)) this.turnStart.set(id, Date.now());
+          this.mgr.setExternalStatus(id, "WORKING", "转录活跃（无 hook 会话）");
+        }
+      }
       const entries: { kind: "assistant_text" | "thinking"; text: string }[] = [];
       const enqueues: string[] = [];
       const steers: string[] = [];
