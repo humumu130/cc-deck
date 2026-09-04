@@ -1,5 +1,7 @@
 @echo off
-rem Cloud Code Relay - office PC launcher (cloud bridge mode)
+rem CC Deck relay - remote PC launcher (cloud bridge mode)
+rem Cloud bridge params default to the public CC Deck bridge; override via env
+rem before running (set CCR_CLOUD_URL / CCR_CLOUD_TOKEN) to use your own bridge.
 cd /d "%~dp0relay"
 if not exist node_modules (
   echo [1/2] Installing dependencies, first run only...
@@ -12,8 +14,8 @@ if not exist node_modules (
 )
 echo [2/2] Starting relay (LAN :8787 + cloud bridge)...
 set CCR_TOKEN=devtoken
-set CCR_CLOUD_URL=ws://REMOVED:8790/cloud
-set CCR_CLOUD_TOKEN=REMOVED
-node node_modules	sx\dist\cli.mjs src\index.ts
+if "%CCR_CLOUD_URL%"=="" set CCR_CLOUD_URL=wss://cc.humumu.online/cloud
+if "%CCR_CLOUD_TOKEN%"=="" set CCR_CLOUD_TOKEN=ccdeck-public-9f3k2m7v
+node node_modules\tsx\dist\cli.mjs src\index.ts
 echo Relay exited.
 pause

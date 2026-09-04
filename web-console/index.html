@@ -689,10 +689,9 @@ let pairTimer = 0;             // 配对 ack 看门狗：8s 无应答重发 pair
 // rd/rk 非机密（dev 路由号 + 公开公钥），安全边界是 LAN 领取的一次性配对码。
 // relay 换 data/cloud-keypair.json 后需同步更新此处并重新部署。
 const BAKED_RELAY = { rd: "rl-586b030b1e8b171b", rk: "WGsDCx6LFxuFsIPSrOoFJcyYcLiDKkTetYUTw4h07SE=" };
-// 云桥准入 token 烘焙（用户免填）：与 BAKED_RELAY 同理同义务——桥 token 轮换
-// （wrangler secret / ECS 环境变量 / relay data/cloud-bridge-token.txt）后需同步更新并重新部署。
+// 云桥准入 token 烘焙（用户免填）：默认公共桥 token（开源用户零配置）。
 // 桥只转发密文不落盘，token 暴露面=能连桥发垃圾密文帧（relay 全丢弃），真正安全边界在配对码。
-const BAKED_BRIDGE_TOKEN = "REMOVED";
+const BAKED_BRIDGE_TOKEN = "ccdeck-public-9f3k2m7v";
 // 桥 token 取值：配对链接带过的 bt / 手填过的（localStorage）优先，否则用烘焙值
 function cloudToken() { return localStorage.getItem("ccr_cloud_token") || BAKED_BRIDGE_TOKEN; }
 let pingTimer = null;
