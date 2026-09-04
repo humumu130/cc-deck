@@ -7,7 +7,7 @@ import { withA, type ThemeColors } from "../theme";
 import { useTheme, useThemeStyles } from "../theme-context";
 import { fmtElapsed, sessionElapsed, fmtHM, dayKey } from "../fmt";
 import { store, useRelay } from "../store";
-import type { LogEntry, SessionState, TodoItem, WaitingPayload } from "../protocol";
+import type { CronTask, LogEntry, SessionState, TodoItem, WaitingPayload } from "../protocol";
 import { useKbHeight } from "../kb";
 import { useProcessFont } from "../display-settings";
 import { usePhraseState } from "../phrases";
@@ -56,6 +56,13 @@ let thinkShown = false;
 
 // 详情页工具区折叠开关：同样 app 生命周期内记忆
 let ctrlCollapsed = false;
+
+// 定时任务下次运行时间：MM-dd HH:mm（毫秒时间戳）
+const fmtDT = (ts: number) => {
+  const d = new Date(ts);
+  const p = (n: number) => String(n).padStart(2, "0");
+  return `${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`;
+};
 
 // 转录行：user=右气泡 / assistant=正文流式 / tool=紧凑卡片 / system=居中弱化
 // 转录字号分级：过程消息（工具/结果/系统/思考）比消息（用户/assistant）小一档，可在设置抽屉调。
@@ -323,6 +330,7 @@ export default function DetailScreen({ sid, onBack }: { sid: string; onBack: () 
   const [collapsed, setCollapsed] = useState(ctrlCollapsed);
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
   const [todoOpen, setTodoOpen] = useState(false);
+  const [cronOpen, setCronOpen] = useState(false);
   const todoScrollRef = useRef<ScrollView>(null);
   const todoAtBottom = useRef(true);
   // 任务面板常驻滑块：onScroll 里 setValue(contentOffset.y)（bridgeless 下 Animated.event
@@ -646,8 +654,8 @@ export default function DetailScreen({ sid, onBack }: { sid: string; onBack: () 
 
   return (
     <SafeAreaView style={d.safe} edges={["top"]}>
-      {/* 点任务面板外任意处自动折起（任务框内 stopPropagation 防误触） */}
-      <View style={{ flex: 1 }} onTouchStart={() => { if (todoOpen) setTodoOpen(false); }}>
+      {/* 点任务/定时面板外任意处自动折起（面板内 stopPropagation 防误触） */}
+      <View style={{ flex: 1 }} onTouchStart={() => { if (todoOpen) setTodoOpen(false); if (cronOpen) setCronOpen(false); }}>
       {/* 头部：标题 + 状态副行 + 统计/重命名 */}
       <View style={d.head}>
         <Pressable style={[d.back, d.opRipple]} android_ripple={{ color: c.tintSoft, borderless: false }} onPress={onBack} hitSlop={8}>
@@ -832,6 +840,37 @@ export default function DetailScreen({ sid, onBack }: { sid: string; onBack: () 
                   />
                 ) : null}
                 </View>
+              ) : null}
+            </View>
+          ) : null}
+
+          {/* 定时任务面板：会话目录 .claude/scheduled_tasks.json 快照（relay 30s 轮询下发） */}
+          {(s.cron_tasks?.length ?? 0) > 0 ? (
+            <View style={d.cronBox} onTouchStart={(e) => e.stopPropagation()}>
+              <Pressable
+                style={d.cronHead}
+                android_ripple={{ color: c.tintSoft, borderless: false, radius: 9 }}
+                onPress={() => setCronOpen((v) => !v)}
+              >
+                <Text style={d.cronHeadT}>⏰ 定时 {s.cron_tasks!.length}</Text>
+                <Text style={d.todoCaret}>{cronOpen ? "▾" : "▸"}</Text>
+              </Pressable>
+              {cronOpen ? (
+                <ScrollView style={d.cronScroll} nestedScrollEnabled showsVerticalScrollIndicator={false}>
+                  {s.cron_tasks!.map((t, i) => (
+                    <View key={t.id + "|" + i} style={[d.cronRow, i === 0 && { borderTopWidth: 0, marginTop: 0 }]}>
+                      <Text style={[d.cronMark, t.paused && { color: c.faint }]}>{t.paused ? "⏸" : "⏰"}</Text>
+                      <View style={{ flex: 1, minWidth: 0 }}>
+                        <Text style={[d.cronName, t.paused && { color: c.dim }]} numberOfLines={1}>{t.name}</Text>
+                        <Text style={d.cronMeta} numberOfLines={1}>
+                          {t.schedule}
+                          {t.recurring === false ? " · 一次性" : ""}
+                          {t.next_run_at ? " · 下次 " + fmtDT(t.next_run_at) : ""}
+                        </Text>
+                      </View>
+                    </View>
+                  ))}
+                </ScrollView>
               ) : null}
             </View>
           ) : null}
@@ -1158,6 +1197,18 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
   todoCaret: { color: c.faint, fontSize: 11, width: 14, textAlign: "center" },
   todoScrollWrap: { position: "relative" },
   todoThumb: { position: "absolute", right: 1, top: 2, width: 3, borderRadius: 2, backgroundColor: withA(c.text, 0.28) },
+  // 定时任务面板：与 todoBox 同宽同圆角，折叠只占一行
+  cronBox: {
+    backgroundColor: c.panel2, borderWidth: 1, borderColor: c.line,
+    borderRadius: 12, paddingHorizontal: 11, paddingVertical: 6, marginBottom: 10,
+  },
+  cronHead: { flexDirection: "row", alignItems: "center", gap: 9, paddingVertical: 4 },
+  cronHeadT: { color: c.dim, fontSize: 11.5, fontWeight: "600" },
+  cronScroll: { maxHeight: 320, flexGrow: 0 },
+  cronRow: { flexDirection: "row", gap: 8, alignItems: "flex-start", paddingVertical: 6, borderTopWidth: 1, borderTopColor: c.line, marginTop: 4 },
+  cronMark: { color: c.working, fontSize: 12, width: 16, textAlign: "center", lineHeight: 17 },
+  cronName: { color: c.text, fontSize: 12.5, lineHeight: 17 },
+  cronMeta: { color: c.faint, fontSize: 11, lineHeight: 15, marginTop: 1, fontVariant: ["tabular-nums"] },
   todoSec: { flexDirection: "row", alignItems: "center", gap: 7, marginTop: 9, marginBottom: 1 },
   todoSecLine: { flex: 1, height: 1, backgroundColor: c.line },
   todoSecT: { fontSize: 10.5, fontWeight: "700", letterSpacing: 0.5 },

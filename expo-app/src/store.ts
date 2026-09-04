@@ -554,6 +554,7 @@ class RelayStore {
         if (msg.payload.permission_mode) s.permission_mode = msg.payload.permission_mode;
         if (msg.payload.pending_inputs) s.pending_inputs = msg.payload.pending_inputs.length ? msg.payload.pending_inputs : undefined;
         if (msg.payload.subagents) s.subagents = msg.payload.subagents;
+        if (msg.payload.cron_tasks) s.cron_tasks = msg.payload.cron_tasks;
         s.updated_at = msg.ts;
         break;
       }
