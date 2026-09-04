@@ -1520,6 +1520,12 @@ function ctxPct(s) {
   const limit = s.context_limit || 200000;
   return Math.min(100, Math.round((s.context_usage / limit) * 100));
 }
+// token 缩写（状态行 "123k/1M" 段用，与手机端 fmtTok 同口径）
+function tokStr(n) {
+  if (n >= 1_000_000) return (n / 1_000_000).toFixed(n % 1_000_000 === 0 ? 0 : 1) + "M";
+  if (n >= 1000) return Math.round(n / 1000) + "k";
+  return String(n);
+}
 function ctxHtml(s, mini) {
   const used = (s && s.context_usage) || 0;
   if (!used) return "";
@@ -1682,7 +1688,8 @@ function renderDetail() {
   if (s.status === "WORKING") {
     lr.style.display = "flex";
     $("livesum").textContent = s.action_summary || "思考中…";
-    $("liveel").textContent = "· " + fmtElapsed(Date.now() - (s.turn_started_at ?? s.updated_at));
+    $("liveel").textContent = "· " + fmtElapsed(Date.now() - (s.turn_started_at ?? s.updated_at))
+      + (s.context_usage ? " · " + tokStr(s.context_usage) + "/" + tokStr(s.context_limit || 200000) : "");
   } else lr.style.display = "none";
 
   // 子 Agent 状态（external 会话）

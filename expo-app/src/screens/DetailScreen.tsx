@@ -184,7 +184,7 @@ function DiffBlock({ lines }: { lines: string[] }) {
 const SPIN_FRAMES = ["✶", "✸", "✹", "✺", "✹", "✸"];
 
 // 类 Claude Code 状态行：✶ 摘要 · Ns（每秒走帧）。无边框，嵌入状态条内。
-function LiveStatusLine({ summary, startedAt, color }: { summary: string; startedAt?: number; color: string }) {
+function LiveStatusLine({ summary, startedAt, color, tok }: { summary: string; startedAt?: number; color: string; tok?: string }) {
   const d = useThemeStyles(makeStyles);
   const [, tick] = useState(0);
   useEffect(() => {
@@ -200,6 +200,7 @@ function LiveStatusLine({ summary, startedAt, color }: { summary: string; starte
       <Text style={[d.statusSpin, { color }]}>{frame}</Text>
       <Text style={[d.statusText, { color }]} numberOfLines={1}>{summary || "思考中…"}</Text>
       {startedAt ? <Text style={d.statusTime}>· {timeText}</Text> : null}
+      {tok ? <Text style={d.statusTime}>· {tok}</Text> : null}
     </View>
   );
 }
@@ -932,7 +933,12 @@ export default function DetailScreen({ sid, onBack }: { sid: string; onBack: () 
             CLI 处理（UserPromptSubmit）/回合结束时上浮为正式消息 */}
         {s.status === "WORKING" ? (
           <View style={d.liveRow}>
-            <LiveStatusLine summary={s.action_summary} startedAt={s.turn_started_at ?? s.updated_at} color={c.working} />
+            <LiveStatusLine
+              summary={s.action_summary}
+              startedAt={s.turn_started_at ?? s.updated_at}
+              color={c.working}
+              tok={s.context_usage ? fmtTok(s.context_usage) + "/" + fmtTok(s.context_limit ?? CONTEXT_LIMIT_FALLBACK) : undefined}
+            />
             <Pressable
               style={[d.stripBtnWarn, d.opRipple]}
               android_ripple={{ color: withA(c.waiting, 0.15), borderless: false }}

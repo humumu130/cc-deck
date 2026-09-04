@@ -912,6 +912,10 @@ export class Bridge {
       const enqueues: string[] = [];
       const steers: string[] = [];
       const userTexts: string[] = []; // 本批真实用户 prompt 行（晋升 pending 用）
+      // 类 CLI 摘要素材（#212）：无 hook/自愈会话的状态行从转录批次派生，
+      // 不再长期停留在"转录活跃/自愈"这类兜底文案上
+      let lastTool: { name: string; input: Record<string, unknown> } | null = null;
+      let thinkPreview = "";
       // 末条形态：tool=悬置 tool_use / gen=回合推进中 / end=纯文本收尾；null=窗口内无相关行
       let shape: "tool" | "gen" | "end" | null = null;
       const taskOps: TaskOp[] = [];
@@ -1016,9 +1020,15 @@ export class Bridge {
             if (!b || typeof b !== "object") continue;
             const blk = b as { type?: string; text?: unknown; thinking?: unknown; name?: unknown; id?: unknown };
             if (blk.type === "text" && typeof blk.text === "string") texts.push(blk.text);
-            else if (blk.type === "thinking" && typeof blk.thinking === "string") thinks.push(blk.thinking);
-            else if (blk.type === "tool_use") {
+            else if (blk.type === "thinking" && typeof blk.thinking === "string") {
+              thinks.push(blk.thinking);
+              if (!thinkPreview) thinkPreview = blk.thinking;
+            } else if (blk.type === "tool_use") {
               hasToolUse = true;
+              lastTool = {
+                name: typeof blk.name === "string" ? blk.name : "",
+                input: ((b as { input?: unknown }).input ?? {}) as Record<string, unknown>,
+              };
               if (blk.name === "Agent" || blk.name === "Task") {
                 agentUses.push({ id: typeof blk.id === "string" ? blk.id : "", input: (b as { input?: unknown }).input });
               }
@@ -1036,6 +1046,26 @@ export class Bridge {
       if (shape !== null) {
         if (this.turnShape.size > 200) this.turnShape.clear();
         this.turnShape.set(id, shape);
+      }
+      // 类 CLI 摘要升级（#212）：无 hook 会话（持续）与刚从兜底文案翻 WORKING 的会话，
+      // 用本批最后一条 tool_use / thinking 预览替代"转录活跃/自愈"类占位文本；
+      // 有 hook 的会话 PreToolUse 自带更及时的摘要，不碰
+      if (!firstRead) {
+        const derived = lastTool
+          ? summarizeToolUse(lastTool.name || "tool", lastTool.input)
+          : thinkPreview
+            ? `思考中: ${truncate(thinkPreview, 60)}`
+            : "";
+        const st1 = this.mgr.getExternal(id);
+        if (
+          derived &&
+          st1 &&
+          st1.status === "WORKING" &&
+          derived !== st1.action_summary &&
+          (this.noHookIds.has(id) || /^转录活跃|^自愈：/.test(st1.action_summary ?? ""))
+        ) {
+          this.mgr.setExternalStatus(id, "WORKING", derived);
+        }
       }
       // 首读（relay 重启/新接入）只回放最后一条正文，thinking 不回放避免刷屏；排队台账不回放（陈旧）
       const emit = firstRead ? entries.filter((e) => e.kind === "assistant_text").slice(-1) : entries;
