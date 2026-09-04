@@ -658,6 +658,11 @@ class RelayStore {
     this.timelines.set(sid, next);
   }
 
+  // 当前连接参数（slash 联想 fetch /api/commands 等只读 HTTP 端点用）
+  get connInfo(): { wsUrl: string; token: string } | null {
+    return this.cfg ? { ...this.cfg } : null;
+  }
+
   send(type: string, payload: Record<string, unknown>): boolean {
     if (!this.ws || this.ws.readyState !== WebSocket.OPEN) {
       this.emit({ lastErrorCmd: "未连接，命令未发送" });

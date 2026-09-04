@@ -12,6 +12,7 @@ import { useKbHeight } from "../kb";
 import { useProcessFont } from "../display-settings";
 import { usePhraseState } from "../phrases";
 import { voice } from "../voice";
+import { BUILTIN_COMMANDS, fetchSlashCommands, httpBaseOf, matchSlash, type SlashCommand } from "../slash";
 import { MdText } from "../md";
 import RenameModal from "./RenameModal";
 import StatsModal from "./StatsModal";
@@ -314,6 +315,7 @@ export default function DetailScreen({ sid, onBack }: { sid: string; onBack: () 
   const d = useThemeStyles(makeStyles);
   const snap = useRelay();
   const [input, setInput] = useState("");
+  const [slashCommands, setSlashCommands] = useState<SlashCommand[]>(BUILTIN_COMMANDS);
   const [renaming, setRenaming] = useState(false);
   const [statsOpen, setStatsOpen] = useState(false);
   const [filter, setFilter] = useState<LogFilter>("msg");
@@ -535,6 +537,21 @@ export default function DetailScreen({ sid, onBack }: { sid: string; onBack: () 
       if (willQueue) flashQueuedHint();
     }
   };
+
+  // Slash 联想：/ 开头且未到参数段（无空白）时弹出。优先 LAN fetch relay
+  // /api/commands（含用户/项目自定义命令），失败或云通道（HTTP 到不了 relay）
+  // 由 fetchSlashCommands 回落内置表
+  const slashQuery = input.startsWith("/") && !/\s/.test(input) ? input.slice(1) : null;
+  const slashMatches = slashQuery !== null ? matchSlash(slashCommands, slashQuery) : [];
+  useEffect(() => {
+    if (slashQuery === null || !s) return;
+    let dead = false;
+    const cfg = store.connInfo;
+    void fetchSlashCommands(cfg ? httpBaseOf(cfg.wsUrl) : "", cfg?.token ?? "", s.cwd ?? "")
+      .then((list) => { if (!dead) setSlashCommands(list); });
+    return () => { dead = true; };
+    // 面板开合一次拉取（slash.ts 内 60s 缓存兜频）；cwd / 通道变化重拉
+  }, [slashQuery !== null, s?.cwd, snap.channel]);
 
   // 语音输入：按住说话，partial 实时上字幕条，松手 stopListening 等 final 发送（超时兜底用 partial）
   const setVoiceHintOnce = (t: string) => {
@@ -956,6 +973,29 @@ export default function DetailScreen({ sid, onBack }: { sid: string; onBack: () 
             {voiceText || "正在听，松开发送…"}
           </Text>
         ) : null}
+        {slashQuery !== null ? (
+          <View style={d.slashBox}>
+            <ScrollView keyboardShouldPersistTaps="always" nestedScrollEnabled>
+              {slashMatches.map((m) => (
+                <Pressable
+                  key={m.name}
+                  style={d.slashRow}
+                  android_ripple={{ color: c.tintSoft, borderless: false }}
+                  onPress={() => setInput("/" + m.name + " ")}
+                >
+                  <Text style={d.slashName}>/{m.name}</Text>
+                  <Text style={d.slashDesc} numberOfLines={1}>{m.desc}</Text>
+                  {m.source !== "builtin" ? (
+                    <Text style={d.slashSrc}>{m.source === "user" ? "用户" : "项目"}</Text>
+                  ) : null}
+                </Pressable>
+              ))}
+              {slashMatches.length === 0 ? (
+                <Text style={d.slashEmpty}>无匹配命令，直接发送则原样注入</Text>
+              ) : null}
+            </ScrollView>
+          </View>
+        ) : null}
         <View style={d.cmdbar}>
           {!external && !s.historical ? (
             <Pressable
@@ -1268,6 +1308,23 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
     backgroundColor: c.overlay, borderTopWidth: 1, borderTopColor: c.line,
     flexDirection: "row", gap: 9, alignItems: "flex-end",
   },
+  // Slash 联想面板：输入 / 时悬于命令条上方，限高可滚
+  slashBox: {
+    marginHorizontal: 12, marginBottom: 6, maxHeight: 224,
+    backgroundColor: c.panel, borderWidth: 1, borderColor: c.line, borderRadius: 13,
+    overflow: "hidden",
+  },
+  slashRow: {
+    flexDirection: "row", alignItems: "center", gap: 8,
+    paddingHorizontal: 12, paddingVertical: 9,
+  },
+  slashName: { color: c.text, fontSize: 13, fontWeight: "600" },
+  slashDesc: { flex: 1, color: c.faint, fontSize: 11.5 },
+  slashSrc: {
+    fontSize: 9.5, color: c.dim, borderWidth: 1, borderColor: c.line,
+    borderRadius: 7, paddingHorizontal: 5, paddingVertical: 1, overflow: "hidden",
+  },
+  slashEmpty: { color: c.faint, fontSize: 12, paddingHorizontal: 12, paddingVertical: 10 },
   input: {
     flex: 1, minHeight: 44, maxHeight: 110, borderRadius: 13,
     backgroundColor: c.panel2, borderWidth: 1, borderColor: c.line,
