@@ -1,6 +1,7 @@
 // 设置抽屉：首页左上角图标呼出，也支持左缘右滑呼出 / 面板上左滑收起；收纳服务器列表、快捷短语与显示设置
 import { useEffect, useRef, useState } from "react";
 import { Animated, PanResponder, Pressable, ScrollView, StyleSheet, Switch, Text, TextInput, View } from "react-native";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import Constants from "expo-constants";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useTheme, useThemeStyles } from "../theme-context";
@@ -57,6 +58,17 @@ export default function SettingsDrawer({
   const snap = useRelay();
   const [servers, setServers] = useState<ServerEntry[]>([]);
   const [activeId, setActiveId] = useState<string | null>(null);
+  // 服务器列表折叠：多服务器时腾出空间（记忆上次选择）
+  const [srvCollapsed, setSrvCollapsed] = useState(false);
+  useEffect(() => {
+    void AsyncStorage.getItem("cc.drawer.srvCollapsed").then((v) => setSrvCollapsed(v === "1"));
+  }, []);
+  const toggleSrv = () => {
+    setSrvCollapsed((v) => {
+      void AsyncStorage.setItem("cc.drawer.srvCollapsed", v ? "0" : "1");
+      return !v;
+    });
+  };
 
   useEffect(() => {
     Animated.timing(x, { toValue: visible ? 1 : 0, duration: 210, useNativeDriver: true }).start();
@@ -100,25 +112,33 @@ export default function SettingsDrawer({
   const [pairErr, setPairErr] = useState<string | null>(null);
   const [now, setNow] = useState(Date.now());
   const pc = snap.pairCode;
-  useEffect(() => {
-    if (!pc) return;
-    const t = setInterval(() => setNow(Date.now()), 1000);
-    return () => clearInterval(t);
-  }, [pc?.code]);
   const pairLeft = pc ? Math.max(0, Math.floor((pc.expiresAt - now) / 1000)) : 0;
+  // 倒计时 1Hz 时钟：仅抽屉可见且码未到期时运行，到期即停表（避免常驻耗电）
+  useEffect(() => {
+    if (!visible || !pc || pc.expiresAt <= Date.now()) return;
+    const t = setInterval(() => {
+      setNow(Date.now());
+      if (pc.expiresAt - Date.now() <= 0) clearInterval(t);
+    }, 1000);
+    return () => clearInterval(t);
+  }, [visible, pc, pc?.code]);
   const genPairCode = async () => {
     setPairErr(await store.requestPairCode());
   };
   const pairing = useRef(false);
+  // 抽屉打开即领码；开着期间码到期（pairLeft 归零）自动续领
   useEffect(() => {
     if (!visible || !snap.connected) return;
     if (pc && pc.expiresAt - Date.now() > 2000) return;
     if (pairing.current) return;
     pairing.current = true;
-    void store.requestPairCode().then(() => {
-      pairing.current = false;
-    });
-  }, [visible, snap.connected, pc]);
+    void store
+      .requestPairCode()
+      .catch(() => {})
+      .finally(() => {
+        pairing.current = false;
+      });
+  }, [visible, snap.connected, pc, pairLeft === 0]);
 
   return (
     <View style={d.root} pointerEvents={visible ? "auto" : "none"}>
@@ -137,7 +157,13 @@ export default function SettingsDrawer({
         </View>
 
         <ScrollView style={d.body} nestedScrollEnabled showsVerticalScrollIndicator={false}>
-        <Text style={d.secT}>服务器列表</Text>
+        <View style={d.secHead}>
+          <Text style={d.secTitleT}>服务器列表{srvCollapsed && servers.length ? ` · ${servers.length}` : ""}</Text>
+          <Pressable style={d.secToggle} hitSlop={10} onPress={toggleSrv} android_ripple={{ color: c.tintSoft, borderless: true, radius: 12 }}>
+            <Text style={d.secToggleT}>{srvCollapsed ? "▸" : "▾"}</Text>
+          </Pressable>
+        </View>
+        {!srvCollapsed ? (
         <ScrollView style={d.srvScroll} nestedScrollEnabled showsVerticalScrollIndicator={false}>
           {servers.map((e) => {
             const active = e.id === activeId;
@@ -164,7 +190,8 @@ export default function SettingsDrawer({
             <Text style={d.addT}>＋ 新增服务器</Text>
           </Pressable>
         </ScrollView>
-        {servers.length === 0 ? <Text style={d.srvEmpty}>还没有服务器，点下方新增</Text> : null}
+        ) : null}
+        {!srvCollapsed && servers.length === 0 ? <Text style={d.srvEmpty}>还没有服务器，点下方新增</Text> : null}
 
         <Text style={d.secT}>新设备配对</Text>
         {pc && pairLeft > 0 ? (
@@ -185,7 +212,7 @@ export default function SettingsDrawer({
                 </Pressable>
               </View>
             </View>
-            <Text style={d.pairHintT}>网页端选「云桥」连接后输入此码 · 一次性</Text>
+            <Text style={d.pairHintT}>网页端输入此码配对 · 一次性</Text>
           </View>
         ) : (
           <Pressable style={d.pairGen} android_ripple={{ color: c.tintSoft, borderless: false }} onPress={() => void genPairCode()}>
@@ -240,7 +267,7 @@ export default function SettingsDrawer({
             thumbColor="#fff"
           />
         </View>
-        <Text style={d.tipT}>过程消息可紧凑或隐藏 · 简洁列表精简会话卡 · 语音输入部分机型不可用</Text>
+        <Text style={d.tipT}>{"过程消息：可紧凑或隐藏\n简洁列表：精简会话卡\n语音输入：部分机型不可用"}</Text>
         </ScrollView>
       </Animated.View>
     </View>
@@ -262,6 +289,10 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
   nameT: { color: c.text, fontSize: 16, fontWeight: "700" },
   verT: { color: c.faint, fontSize: 11.5, marginTop: 1 },
   secT: { color: c.faint, fontSize: 11, fontWeight: "700", marginTop: 20, marginBottom: 6, letterSpacing: 1 },
+  secHead: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginTop: 20, marginBottom: 6 },
+  secTitleT: { color: c.faint, fontSize: 11, fontWeight: "700", letterSpacing: 1 },
+  secToggle: { width: 24, height: 24, alignItems: "center", justifyContent: "center", marginVertical: -6 },
+  secToggleT: { color: c.dim, fontSize: 11 },
   srvScroll: { maxHeight: 236 },
   srvRow: {
     flexDirection: "row", alignItems: "center", borderWidth: 1, borderColor: c.line,
@@ -295,15 +326,15 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
     borderRadius: 12, paddingVertical: 12, paddingHorizontal: 14, marginBottom: 8,
   },
   pairTop: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
-  pairSide: { flexDirection: "row", alignItems: "center", gap: 8 },
-  pairCodeT: { color: c.text, fontSize: 26, fontWeight: "800", letterSpacing: 4 },
-  pairExpT: { color: c.dim, fontSize: 11.5, fontVariant: ["tabular-nums"] },
+  pairSide: { flexDirection: "row", alignItems: "center", gap: 6 },
+  pairCodeT: { color: c.text, fontSize: 19, fontWeight: "800", letterSpacing: 3 },
+  pairExpT: { color: c.dim, fontSize: 11, fontVariant: ["tabular-nums"] },
   pairRefresh: {
-    width: 28, height: 28, borderRadius: 14, alignItems: "center", justifyContent: "center",
+    width: 24, height: 24, borderRadius: 12, alignItems: "center", justifyContent: "center",
     backgroundColor: c.tintSoft, borderWidth: 1, borderColor: c.line,
   },
-  pairRefreshT: { color: c.dim, fontSize: 14 },
-  pairHintT: { color: c.faint, fontSize: 10.5, marginTop: 6, textAlign: "center", lineHeight: 15 },
+  pairRefreshT: { color: c.dim, fontSize: 12.5 },
+  pairHintT: { color: c.faint, fontSize: 10, marginTop: 7, textAlign: "center" },
   pairErrT: { color: c.waiting, fontSize: 11.5, marginBottom: 8 },
   setItem: {
     paddingVertical: 11, borderBottomWidth: StyleSheet.hairlineWidth,
