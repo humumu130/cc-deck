@@ -33,6 +33,9 @@ const copy = (from, to) => {
 };
 copy(join(root, "web-console", "index.html"), join(out, "web-console", "index.html"));
 copy(join(root, "web-console", "nacl.js"), join(out, "web-console", "nacl.js"));
+for (const f of ["manifest.json", "apple-touch-icon.png", "icon-192.png", "icon-512.png", "maskable-512.png"]) {
+  copy(join(root, "web-console", f), join(out, "web-console", f));
+}
 for (const f of ["index.html", "manifest.webmanifest", "sw.js", "icon-192.png", "icon-512.png", "cc-watch.apk"]) {
   copy(join(root, "mobile", f), join(out, "mobile", f));
 }

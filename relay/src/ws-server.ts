@@ -136,6 +136,14 @@ export function startServer(
   const consoleHtml = join(webRoot, "web-console", "index.html");
   const naclJs = join(webRoot, "web-console", "nacl.js");
   const mobileDir = join(webRoot, "mobile") + sep;
+  // web-console PWA 资产白名单（manifest 引用的文件；此前 404 → 加主屏无图标/无 manifest）
+  const PWA_ASSETS: Record<string, string> = {
+    "/manifest.json": "application/manifest+json; charset=utf-8",
+    "/apple-touch-icon.png": "image/png",
+    "/icon-192.png": "image/png",
+    "/icon-512.png": "image/png",
+    "/maskable-512.png": "image/png",
+  };
 
   const MIME: Record<string, string> = {
     ".html": "text/html; charset=utf-8",
@@ -188,7 +196,9 @@ export function startServer(
         return;
       }
       const html = readFileSync(consoleHtml);
-      res.writeHead(200, { "content-type": "text/html; charset=utf-8" }).end(html);
+      // no-store：控制台是单文件全量替换（无哈希资产名），浏览器启发式缓存会
+      // 让 relay 升级后的 LAN 用户一直看旧页（token 换代 → 莫名 401）
+      res.writeHead(200, { "content-type": "text/html; charset=utf-8", "cache-control": "no-store" }).end(html);
       return;
     }
     if (req.method === "GET" && url.pathname === "/nacl.js") {
@@ -197,7 +207,13 @@ export function startServer(
         res.writeHead(503).end("web-console/nacl.js 不存在（cp node_modules/tweetnacl/nacl-fast.min.js）");
         return;
       }
-      res.writeHead(200, { "content-type": "text/javascript; charset=utf-8" }).end(readFileSync(naclJs));
+      res.writeHead(200, { "content-type": "text/javascript; charset=utf-8", "cache-control": "no-store" }).end(readFileSync(naclJs));
+      return;
+    }
+    if (req.method === "GET" && PWA_ASSETS[url.pathname]) {
+      const file = join(webRoot, "web-console", url.pathname.slice(1));
+      if (!existsSync(file)) { res.writeHead(404).end("not found"); return; }
+      res.writeHead(200, { "content-type": PWA_ASSETS[url.pathname] }).end(readFileSync(file));
       return;
     }
     if (req.method === "GET" && url.pathname === "/health") {
