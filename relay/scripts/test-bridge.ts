@@ -907,7 +907,10 @@ assert(ack24.ok === false, "empty rename rejected");
   appendFileSync(T, JSON.stringify({ type: "user", isMeta: false, message: { role: "user", content: "进队消息" } }) + "\n");
   await hook({ event: "PostToolUse", tool_name: "Bash", tool_response: "ok", session_id: "cli-8", transcript_path: T });
   assert(!(mgr.getExternal(sid)?.pending_inputs ?? []).some((p) => p.text === "进队消息"), "39 promoted by user line, pending cleared");
-  // 同文本再次滞留（未进队的新注入条目，时间晚于晋升记录）→ 看门狗恢复补发
+  // 同文本再次滞留（未进队的新注入条目，时间晚于晋升记录）→ 看门狗恢复补发。
+  // 等 5ms 确保 p.ts 严格晚于晋升记录：同步 stretch 内两处 Date.now() 可能同毫秒，
+  // 相等时 rec.ts >= p.ts 判定为残留跳过，看门狗永远不补发（历史 flake 根因）
+  await wait(5);
   mgr.setExternalStatus(sid, "WORKING", "再跑");
   mgr.setExternalPending(sid, [{ text: "进队消息", ts: Date.now() }]);
   await wait(12000);
