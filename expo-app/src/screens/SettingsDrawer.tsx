@@ -1,6 +1,6 @@
 // 设置抽屉：首页左上角图标呼出，也支持左缘右滑呼出 / 面板上左滑收起；收纳服务器列表、快捷短语与显示设置
 import { useEffect, useRef, useState } from "react";
-import { Animated, PanResponder, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
+import { Animated, PanResponder, Pressable, ScrollView, StyleSheet, Switch, Text, TextInput, View } from "react-native";
 import Constants from "expo-constants";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useTheme, useThemeStyles } from "../theme-context";
@@ -95,7 +95,8 @@ export default function SettingsDrawer({
   const translateX = x.interpolate({ inputRange: [0, 1], outputRange: [-240, 0] });
   const scrimOp = x.interpolate({ inputRange: [0, 1], outputRange: [0, 0.55] });
 
-  // 新设备配对码：信任设备向 relay 领一次性码，供网页端新浏览器输入
+  // 新设备配对码：信任设备向 relay 领一次性码，供网页端新浏览器输入。
+  // 抽屉打开即自动领码（relay 侧多码并存互不作废），常驻展示 + 倒计时 + 刷新
   const [pairErr, setPairErr] = useState<string | null>(null);
   const [now, setNow] = useState(Date.now());
   const pc = snap.pairCode;
@@ -108,6 +109,16 @@ export default function SettingsDrawer({
   const genPairCode = async () => {
     setPairErr(await store.requestPairCode());
   };
+  const pairing = useRef(false);
+  useEffect(() => {
+    if (!visible || !snap.connected) return;
+    if (pc && pc.expiresAt - Date.now() > 2000) return;
+    if (pairing.current) return;
+    pairing.current = true;
+    void store.requestPairCode().then(() => {
+      pairing.current = false;
+    });
+  }, [visible, snap.connected, pc]);
 
   return (
     <View style={d.root} pointerEvents={visible ? "auto" : "none"}>
@@ -156,23 +167,36 @@ export default function SettingsDrawer({
         {servers.length === 0 ? <Text style={d.srvEmpty}>还没有服务器，点下方新增</Text> : null}
 
         <Text style={d.secT}>新设备配对</Text>
-        <Pressable style={d.pairGen} android_ripple={{ color: c.tintSoft, borderless: false }} onPress={() => void genPairCode()}>
-          <Text style={d.pairGenT}>生成网页端配对码</Text>
-        </Pressable>
-        {pc ? (
+        {pc && pairLeft > 0 ? (
           <View style={d.pairBox}>
-            <Text style={d.pairCodeT}>{pc.code.slice(0, 3)} {pc.code.slice(3)}</Text>
-            <Text style={[d.pairExpT, pairLeft === 0 && { color: c.waiting }]}>
-              {pairLeft > 0 ? `剩余 ${pairLeft} 秒 · 一次性` : "已过期，请重新生成"}
-            </Text>
-            <Text style={d.pairHintT}>新设备打开网页端，选"云桥"连接后输入此码</Text>
+            <View style={d.pairTop}>
+              <Text style={d.pairCodeT}>{pc.code.slice(0, 3)} {pc.code.slice(3)}</Text>
+              <View style={d.pairSide}>
+                <Text style={d.pairExpT}>
+                  {Math.floor(pairLeft / 60)}:{String(pairLeft % 60).padStart(2, "0")}
+                </Text>
+                <Pressable
+                  style={d.pairRefresh}
+                  android_ripple={{ color: c.tintSoft, borderless: false, radius: 14 }}
+                  hitSlop={6}
+                  onPress={() => void genPairCode()}
+                >
+                  <Text style={d.pairRefreshT}>↻</Text>
+                </Pressable>
+              </View>
+            </View>
+            <Text style={d.pairHintT}>网页端选「云桥」连接后输入此码 · 一次性</Text>
           </View>
-        ) : null}
+        ) : (
+          <Pressable style={d.pairGen} android_ripple={{ color: c.tintSoft, borderless: false }} onPress={() => void genPairCode()}>
+            <Text style={d.pairGenT}>{pc ? "已过期 · 重新生成" : "生成配对码"}</Text>
+          </Pressable>
+        )}
         {pairErr ? <Text style={d.pairErrT}>{pairErr}</Text> : null}
 
         <Text style={d.secT}>显示</Text>
-        <View style={d.rowCol}>
-          <Text style={d.rowT}>过程消息</Text>
+        <View style={d.setItem}>
+          <Text style={d.setLabel}>过程消息</Text>
           <View style={d.segFull}>
             {FONT_OPTS.map((o) => (
               <Pressable
@@ -186,40 +210,37 @@ export default function SettingsDrawer({
             ))}
           </View>
         </View>
-        <View style={d.rowStatic}>
-          <Text style={d.rowT}>深色模式</Text>
-          <View style={d.seg}>
-            <Pressable style={[d.segOpt, mode === "dark" && d.segOptOn]} android_ripple={{ color: c.tintSoft, borderless: false, radius: 11 }} onPress={() => mode !== "dark" && toggle()}>
-              <Text style={[d.segT, mode === "dark" && d.segTOn]}>开</Text>
-            </Pressable>
-            <Pressable style={[d.segOpt, mode !== "dark" && d.segOptOn]} android_ripple={{ color: c.tintSoft, borderless: false, radius: 11 }} onPress={() => mode === "dark" && toggle()}>
-              <Text style={[d.segT, mode !== "dark" && d.segTOn]}>关</Text>
-            </Pressable>
-          </View>
+        <View style={[d.setItem, d.setRow]}>
+          <Text style={d.setLabel}>深色模式</Text>
+          <Switch
+            style={d.sw}
+            value={mode === "dark"}
+            onValueChange={() => toggle()}
+            trackColor={{ false: c.tintSoft, true: c.brandA }}
+            thumbColor="#fff"
+          />
         </View>
-        <View style={d.rowStatic}>
-          <Text style={d.rowT}>简洁列表</Text>
-          <View style={d.seg}>
-            <Pressable style={[d.segOpt, listCompact && d.segOptOn]} android_ripple={{ color: c.tintSoft, borderless: false, radius: 11 }} onPress={() => !listCompact && setListCompact(true)}>
-              <Text style={[d.segT, listCompact && d.segTOn]}>开</Text>
-            </Pressable>
-            <Pressable style={[d.segOpt, !listCompact && d.segOptOn]} android_ripple={{ color: c.tintSoft, borderless: false, radius: 11 }} onPress={() => listCompact && setListCompact(false)}>
-              <Text style={[d.segT, !listCompact && d.segTOn]}>关</Text>
-            </Pressable>
-          </View>
+        <View style={[d.setItem, d.setRow]}>
+          <Text style={d.setLabel}>简洁列表</Text>
+          <Switch
+            style={d.sw}
+            value={listCompact}
+            onValueChange={setListCompact}
+            trackColor={{ false: c.tintSoft, true: c.brandA }}
+            thumbColor="#fff"
+          />
         </View>
-        <View style={d.rowStatic}>
-          <Text style={d.rowT}>语音输入</Text>
-          <View style={d.seg}>
-            <Pressable style={[d.segOpt, voiceInput && d.segOptOn]} android_ripple={{ color: c.tintSoft, borderless: false, radius: 11 }} onPress={() => !voiceInput && setVoiceInput(true)}>
-              <Text style={[d.segT, voiceInput && d.segTOn]}>开</Text>
-            </Pressable>
-            <Pressable style={[d.segOpt, !voiceInput && d.segOptOn]} android_ripple={{ color: c.tintSoft, borderless: false, radius: 11 }} onPress={() => voiceInput && setVoiceInput(false)}>
-              <Text style={[d.segT, !voiceInput && d.segTOn]}>关</Text>
-            </Pressable>
-          </View>
+        <View style={[d.setItem, d.setRow]}>
+          <Text style={d.setLabel}>语音输入</Text>
+          <Switch
+            style={d.sw}
+            value={voiceInput}
+            onValueChange={setVoiceInput}
+            trackColor={{ false: c.tintSoft, true: c.brandA }}
+            thumbColor="#fff"
+          />
         </View>
-        <Text style={d.tipT}>过程消息 = 工具调用 / 结果 / 系统提示；紧凑小一号+淡化，隐藏则整行不显示（思考内容保留）。简洁列表 = 会话卡只留状态、耗时与名称，一屏显示更多。语音输入 = 输入栏按住说话（部分机型识别服务不可用，默认关闭）。</Text>
+        <Text style={d.tipT}>过程消息可紧凑或隐藏 · 简洁列表精简会话卡 · 语音输入部分机型不可用</Text>
         </ScrollView>
       </Animated.View>
     </View>
@@ -271,34 +292,33 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
   pairGenT: { color: c.brandA, fontSize: 13, fontWeight: "700" },
   pairBox: {
     backgroundColor: c.panel, borderWidth: 1, borderColor: withA(c.brandA, 0.45),
-    borderRadius: 12, alignItems: "center", paddingVertical: 12, paddingHorizontal: 10, marginBottom: 8,
+    borderRadius: 12, paddingVertical: 12, paddingHorizontal: 14, marginBottom: 8,
   },
+  pairTop: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
+  pairSide: { flexDirection: "row", alignItems: "center", gap: 8 },
   pairCodeT: { color: c.text, fontSize: 26, fontWeight: "800", letterSpacing: 4 },
-  pairExpT: { color: c.dim, fontSize: 11.5, marginTop: 2 },
+  pairExpT: { color: c.dim, fontSize: 11.5, fontVariant: ["tabular-nums"] },
+  pairRefresh: {
+    width: 28, height: 28, borderRadius: 14, alignItems: "center", justifyContent: "center",
+    backgroundColor: c.tintSoft, borderWidth: 1, borderColor: c.line,
+  },
+  pairRefreshT: { color: c.dim, fontSize: 14 },
   pairHintT: { color: c.faint, fontSize: 10.5, marginTop: 6, textAlign: "center", lineHeight: 15 },
   pairErrT: { color: c.waiting, fontSize: 11.5, marginBottom: 8 },
-  rowStatic: {
-    flexDirection: "row", alignItems: "center", justifyContent: "space-between",
-    backgroundColor: c.panel, borderWidth: 1, borderColor: c.line,
-    borderRadius: 12, paddingHorizontal: 12, paddingVertical: 9, marginBottom: 8,
+  setItem: {
+    paddingVertical: 11, borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: withA(c.line, 0.6),
   },
-  rowCol: {
-    backgroundColor: c.panel, borderWidth: 1, borderColor: c.line,
-    borderRadius: 12, paddingHorizontal: 12, paddingVertical: 9, marginBottom: 8,
-  },
-  rowT: { color: c.text, fontSize: 14, fontWeight: "600" },
+  setRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
+  setLabel: { color: c.text, fontSize: 13.5, fontWeight: "600" },
+  sw: { transform: [{ scale: 0.85 }] },
   segFull: { flexDirection: "row", gap: 6, marginTop: 8 },
   segOptF: {
     flex: 1, alignItems: "center", paddingVertical: 6, borderRadius: 10,
     backgroundColor: c.tintSoft, borderWidth: 1, borderColor: c.line,
   },
-  seg: { flexDirection: "row", gap: 6 },
-  segOpt: {
-    paddingHorizontal: 13, paddingVertical: 6, borderRadius: 10,
-    backgroundColor: c.tintSoft, borderWidth: 1, borderColor: c.line,
-  },
   segOptOn: { backgroundColor: c.tintStrong, borderColor: c.brandA },
   segT: { color: c.dim, fontSize: 12, fontWeight: "600" },
   segTOn: { color: c.brandA },
-  tipT: { color: c.faint, fontSize: 11, lineHeight: 16, marginTop: 10 },
+  tipT: { color: c.faint, fontSize: 10.5, lineHeight: 15, marginTop: 10 },
 });
