@@ -376,6 +376,12 @@ export default function DetailScreen({ sid, onBack }: { sid: string; onBack: () 
     }
   }, [s?.todos, todoSpin]);
 
+  // 定时任务清空时折起面板，避免残留展开态（新任务到来时意外弹开）
+  const cronCount = s?.cron_tasks?.length ?? 0;
+  useEffect(() => {
+    if (cronCount === 0) setCronOpen(false);
+  }, [cronCount]);
+
   // 任务条目 ✕ 隐藏：本地先过滤（立即消失），relay 记隐藏集过滤后续下发
   const [todoHidden, setTodoHidden] = useState<string[]>([]);
   const hideTodo = (content: string) => {

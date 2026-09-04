@@ -1701,7 +1701,8 @@ function renderDetail() {
     return;
   }
   if (activeTab === "cron") {
-    const cronKey = "cron:" + s.session_id + ":" + (s.cron_tasks?.map((t) => t.id + "|" + t.schedule + "|" + (t.paused ? 1 : 0) + "|" + (t.next_run_at ?? 0)).join(",") ?? "none");
+    // 全量序列化作 key：改名/暂停/下次时间任一变化都触发重建
+    const cronKey = "cron:" + s.session_id + ":" + JSON.stringify(s.cron_tasks ?? null);
     if (tl.dataset.count !== cronKey) {
       tl.dataset.count = cronKey;
       tl.innerHTML = cronTabHtml(s);
