@@ -363,7 +363,7 @@ export default function ListScreen({ sessions, connected, connText, onOpen, onNe
         </View>
       </View>
       <View style={styles.statRow}>
-        <Text style={styles.statTotal}>{sessions.length > 0 ? `共 ${sessions.length} 个会话` : "暂无会话"}</Text>
+        <Text style={styles.statTotal}>{sessions.length > 0 ? `${sessions.length} 会话` : "暂无会话"}</Text>
         <View style={styles.statChips}>
           {statusItems.map(({ k, n, color }) => (
             <View key={k} style={styles.statChip}>
@@ -475,12 +475,12 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
   connDot: { width: 6, height: 6, borderRadius: 3 },
   connText: { fontSize: 11 },
   statRow: {
-    flexDirection: "row", alignItems: "center", flexWrap: "wrap", gap: 6,
+    flexDirection: "row", alignItems: "center", flexWrap: "wrap", gap: 9,
     paddingHorizontal: 18, paddingTop: 8, paddingBottom: 4,
   },
-  statTotal: { color: c.dim, fontSize: 12.5, fontWeight: "600", marginRight: 4 },
-  statChips: { flexDirection: "row", flexWrap: "wrap", gap: 6 },
-  statChip: { flexDirection: "row", alignItems: "center", gap: 4 },
+  statTotal: { color: c.dim, fontSize: 12.5, fontWeight: "600" },
+  statChips: { flexDirection: "row", flexWrap: "wrap", gap: 9 },
+  statChip: { flexDirection: "row", alignItems: "center", gap: 3.5 },
   statDot: { width: 7, height: 7, borderRadius: 4 },
   statChipT: { fontSize: 11.5 },
   // ？ 图例按钮：淡色小圆圈问号
@@ -500,7 +500,7 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
   legendT: { color: c.text, fontSize: 12.5 },
   folderTag: { fontSize: 10, color: c.dim, maxWidth: 130 },
   collapseBtn: {
-    borderRadius: 999, borderWidth: 1, borderColor: c.line, backgroundColor: c.tintSoft,
+    marginLeft: "auto", borderRadius: 999, borderWidth: 1, borderColor: c.line, backgroundColor: c.tintSoft,
     paddingHorizontal: 10, paddingVertical: 3,
   },
   collapseBtnOn: { backgroundColor: c.tintStrong, borderColor: withA(c.brandA, 0.4) },
