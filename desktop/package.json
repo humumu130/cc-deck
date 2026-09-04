@@ -1,0 +1,52 @@
+{
+  "name": "cc-deck-desktop",
+  "productName": "CC Deck",
+  "version": "0.3.0",
+  "description": "CC Deck 桌面客户端：本地加载控制台，默认连本机 relay，数据不出局域网",
+  "main": "main.js",
+  "author": "humumu130",
+  "license": "MIT",
+  "private": true,
+  "scripts": {
+    "start": "electron .",
+    "smoke": "electron . --smoke",
+    "dist": "electron-builder --win nsis zip"
+  },
+  "devDependencies": {
+    "electron": "44.2.0",
+    "electron-builder": "26.15.3"
+  },
+  "build": {
+    "appId": "online.humumu.ccdeck.desktop",
+    "productName": "CC Deck",
+    "directories": {
+      "output": "dist"
+    },
+    "files": [
+      "main.js",
+      "preload.js",
+      "build/icon.png",
+      "assets/tray.png"
+    ],
+    "extraFiles": [
+      {
+        "from": "../web-console",
+        "to": "web-console",
+        "filter": ["index.html", "nacl.js", "manifest.json", "apple-touch-icon.png"]
+      }
+    ],
+    "win": {
+      "target": [
+        { "target": "nsis", "arch": ["x64"] },
+        { "target": "zip", "arch": ["x64"] }
+      ],
+      "icon": "build/icon.png",
+      "artifactName": "CC-Deck-${version}-portable.${ext}"
+    },
+    "nsis": {
+      "oneClick": true,
+      "perMachine": false,
+      "artifactName": "CC-Deck-Setup-${version}.${ext}"
+    }
+  }
+}
