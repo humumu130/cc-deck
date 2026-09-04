@@ -127,6 +127,16 @@ node scripts/install-hooks.mjs     # relay 目录下执行；幂等，首次自�
 - **跨网络连接**：无需碰 IP 和端口——PC 上执行 `/cc-deck-pair`（插件）或 `npx tsx src/index.ts --pair`（手动）领 6 位配对码，手机 App「新增服务器 → 配对码」输入即可；异地浏览器则打开 <https://cc.humumu.online> 输码接入
 - **Wear OS 手表**：手表端 App（`wear-app/`）支持两种接入——WebSocket 直连 relay（无 GMS 设备的主通道，国行手表实测可用）或经手机 App 的 Data Layer 网关转发快照
 
+### ④ 桌面端（Windows，不信任托管网页时用）
+
+网页控制台默认由你自己的 relay 托管，也有公网镜像 <https://cc.humumu.online>（云桥密文通道）。如果你不希望在任何浏览器/托管页输入 relay token，可以用桌面客户端——UI 从本地磁盘加载、默认自动探测并连接本机 relay，全程不出局域网：
+
+- 在 [Releases](https://github.com/humumu130/cc-watch/releases) 下载 `CC-Deck-Setup-<tag>.exe`（一键安装）或 `CC-Deck-<tag>-portable.zip`（免安装解压即用）
+- 启动后自动检测本机 relay（`127.0.0.1:8787`）并连上；也可在设置里手动添加局域网 / 云桥源
+- 关窗最小化到托盘，双击托盘图标恢复；`Electron` 壳仅加载本地 `web-console/`，无任何远程页面
+
+从源码构建：`cd desktop && npm install && npm run dist`（产物在 `desktop/dist/`）。首次运行未签名 exe 会触发 SmartScreen 提示，选「更多信息 → 仍要运行」即可（详见 [docs/desktop-decision.md](docs/desktop-decision.md)）。
+
 ### 环境变量（relay）
 
 | 变量 | 默认 | 说明 |
@@ -212,7 +222,7 @@ cd cloudflare && npm run test:cloud        # Worker 形态协议冒烟
 cd relay && node scripts/build-plugin.mjs
 ```
 
-仓库布局：`relay/`（核心，协议唯一定义源 `relay/src/types.ts`）、`web-console/`（网页控制台）、`mobile/`（App 下载页壳与 APK 分发）、`expo-app/`（Android 手机端 + 手表网关）、`wear-app/`（Wear OS 手表端）、`cloud-bridge/` 与 `cloudflare/`（云桥双形态，共享同一路由核心语义）、`cc-plugins/`（Claude Code 插件成品，由 build-plugin.mjs 生成）、`design/`（技术方案评审记录）。
+仓库布局：`relay/`（核心，协议唯一定义源 `relay/src/types.ts`）、`web-console/`（网页控制台）、`mobile/`（App 下载页壳与 APK 分发）、`expo-app/`（Android 手机端 + 手表网关）、`wear-app/`（Wear OS 手表端）、`desktop/`（Windows 桌面客户端，Electron 壳复用 web-console）、`cloud-bridge/` 与 `cloudflare/`（云桥双形态，共享同一路由核心语义）、`cc-plugins/`（Claude Code 插件成品，由 build-plugin.mjs 生成）、`design/`（技术方案评审记录）。
 
 ## Roadmap
 
