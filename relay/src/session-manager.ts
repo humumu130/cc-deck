@@ -9,6 +9,13 @@ import { deriveTitle } from "./history.js";
 import { generateTitle } from "./title-gen.js";
 import { cronTasksKey, readCronTasks } from "./cron.js";
 import { normKey, truncate } from "./summarizer.js";
+
+// 上下文窗口上限按模型区分：集中在此维护并随 context_usage 下发，客户端不存映射表
+function contextLimitOf(model: string | undefined): number {
+  const m = (model || "").toLowerCase();
+  if (/glm[-_]?5/.test(m)) return 1_000_000; // GLM-5.x 系列 1M 窗口
+  return 200_000;
+}
 import { addHiddenTodoKey, hiddenTodoKeys } from "./todo-hidden.js";
 import type {
   AgentCallbacks,
@@ -366,11 +373,16 @@ export class SessionManager {
   }
 
   // 外部会话 token 用量 / 模型（bridge 从 transcript assistant 条目累计提取）
-  setExternalUsage(id: string, usage: TokenUsage, model?: string): void {
+  // 上下文窗口上限按模型区分（集中维护，随 context_usage 一起下发；换模型只改这里）
+  setExternalUsage(id: string, usage: TokenUsage, model?: string, contextUsage?: number): void {
     const s = this.sessions.get(id);
     if (!s) return;
     s.state.usage = usage;
     if (model) s.state.model = model;
+    if (contextUsage !== undefined) {
+      s.state.context_usage = contextUsage;
+      s.state.context_limit = contextLimitOf(model ?? s.state.model);
+    }
     s.state.updated_at = Date.now();
     this.bus.emit(id, "SESSION_UPDATED", {
       status: s.state.status,
@@ -378,6 +390,7 @@ export class SessionManager {
       stats: { ...s.state.stats },
       usage,
       ...(model ? { model } : {}),
+      ...(contextUsage !== undefined ? { context_usage: contextUsage, context_limit: contextLimitOf(model ?? s.state.model) } : {}),
     });
   }
 
@@ -780,6 +793,10 @@ export class SessionManager {
             cache_read_input_tokens: (cur?.cache_read_input_tokens ?? 0) + (u.cache_read_input_tokens ?? 0),
             cache_creation_input_tokens: (cur?.cache_creation_input_tokens ?? 0) + (u.cache_creation_input_tokens ?? 0),
           };
+          // 当回合水位（CLI 上下文占用口径）：覆盖不累计
+          managed.state.context_usage =
+            (u.input_tokens || 0) + (u.cache_read_input_tokens || 0) + (u.cache_creation_input_tokens || 0);
+          managed.state.context_limit = contextLimitOf(managed.state.model);
           this.emitUpdated(managed, true);
         },
         onLog: (kind, text, meta) => {
@@ -886,6 +903,7 @@ export class SessionManager {
       stats: { ...s.state.stats },
       ...(s.state.turn_started_at ? { turn_started_at: s.state.turn_started_at } : {}),
       ...(s.state.usage ? { usage: { ...s.state.usage } } : {}),
+      ...(s.state.context_usage ? { context_usage: s.state.context_usage, context_limit: contextLimitOf(s.state.model) } : {}),
       ...(s.state.todos ? { todos: s.state.todos.map((t) => ({ ...t })) } : {}),
       ...(s.state.subagents ? { subagents: s.state.subagents.map((x) => ({ ...x })) } : {}),
       ...(s.state.relay_session_id ? { relay_session_id: s.state.relay_session_id } : {}),

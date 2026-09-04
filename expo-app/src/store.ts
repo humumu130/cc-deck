@@ -548,6 +548,8 @@ class RelayStore {
         if (msg.payload.title_locked !== undefined) s.title_locked = msg.payload.title_locked;
         if (msg.payload.turn_started_at) s.turn_started_at = msg.payload.turn_started_at;
         if (msg.payload.usage) s.usage = msg.payload.usage;
+        if (msg.payload.context_usage !== undefined) s.context_usage = msg.payload.context_usage;
+        if (msg.payload.context_limit !== undefined) s.context_limit = msg.payload.context_limit;
         if (msg.payload.model) s.model = msg.payload.model;
         if (msg.payload.todos) s.todos = msg.payload.todos;
         if (msg.payload.relay_session_id) s.relay_session_id = msg.payload.relay_session_id;

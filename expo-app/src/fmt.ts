@@ -41,21 +41,17 @@ export function sessionElapsed(s: { status: string; duration_ms?: number; histor
   return Date.now() - s.started_at;
 }
 
-// 上下文窗口占用：输入 + 缓存读 + 缓存写（与 Claude Code 状态行口径一致），200k 窗口
-export const CONTEXT_LIMIT = 200_000;
+// 上下文水位条：水位与上限均由 relay 下发（context_usage/context_limit），
+// 上限按模型在 relay 集中维护（glm-5.x 1M / 其余 200k），端上只兜底缺省
+export const CONTEXT_LIMIT_FALLBACK = 200_000;
 
-export function contextUsage(u: { input_tokens?: number; cache_read_input_tokens?: number; cache_creation_input_tokens?: number } | undefined): number {
-  if (!u) return 0;
-  return (u.input_tokens ?? 0) + (u.cache_read_input_tokens ?? 0) + (u.cache_creation_input_tokens ?? 0);
-}
-
-export function contextPct(used: number): number {
-  return Math.min(100, Math.round((used / CONTEXT_LIMIT) * 100));
+export function contextPct(used: number, limit: number): number {
+  return Math.min(100, Math.round((used / limit) * 100));
 }
 
 // 占用分级（配色键）：<60% 正常 / <85% 偏高 / ≥85% 紧张，两端（手机/网页）阈值一致
-export function contextLevel(used: number): "done" | "working" | "waiting" {
-  const p = used / CONTEXT_LIMIT;
+export function contextLevel(used: number, limit: number): "done" | "working" | "waiting" {
+  const p = used / limit;
   if (p < 0.6) return "done";
   if (p < 0.85) return "working";
   return "waiting";

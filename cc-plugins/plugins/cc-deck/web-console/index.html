@@ -1513,18 +1513,19 @@ function statsHtml(st) {
   return st.files_changed + " 文件 · <span class='add'>+" + st.lines_added + "</span> <span class='del'>-" + st.lines_deleted + "</span>";
 }
 
-// 上下文占用（200k 窗口）：输入+缓存读+缓存写；判级用原始比值（与手机端 contextLevel 同口径，避免取整边界色级不一致）
-function ctxPct(u) {
-  if (!u) return 0;
-  const used = (u.input_tokens || 0) + (u.cache_read_input_tokens || 0) + (u.cache_creation_input_tokens || 0);
-  return Math.min(100, Math.round((used / 200000) * 100));
+// 上下文水位：context_usage/context_limit 均由 relay 按模型下发（手机端同口径）；
+// 判级用原始比值（与手机端 contextLevel 一致，避免取整边界色级不一致）
+function ctxPct(s) {
+  if (!s || !s.context_usage) return 0;
+  const limit = s.context_limit || 200000;
+  return Math.min(100, Math.round((s.context_usage / limit) * 100));
 }
-function ctxHtml(u, mini) {
-  if (!u) return "";
-  const used = (u.input_tokens || 0) + (u.cache_read_input_tokens || 0) + (u.cache_creation_input_tokens || 0);
+function ctxHtml(s, mini) {
+  const used = (s && s.context_usage) || 0;
   if (!used) return "";
-  const pct = ctxPct(u);
-  const r = used / 200000;
+  const limit = (s && s.context_limit) || 200000;
+  const pct = ctxPct(s);
+  const r = used / limit;
   const lv = r < 0.6 ? "done" : r < 0.85 ? "working" : "waiting";
   const col = "var(--" + lv + ")";
   return mini
@@ -1590,7 +1591,7 @@ function render() {
   if (filterSrc !== "all") entries = entries.filter((e) => e.ctx.cfg.id === filterSrc);
   const list = entries.sort((a, b) =>
     (order[a.s.status] - order[b.s.status]) || (b.s.started_at - a.s.started_at));
-  const key = list.map((e) => e.ctx.cfg.id + ":" + e.s.session_id + ":" + e.s.status + ":" + Math.floor(sessionElapsed(e.s) / 1000) + ":" + (e.s.title || "") + ":" + (e.s.action_summary || "") + ":" + (e.s.waiting_request ? 1 : 0) + ":" + ctxPct(e.s.usage)).join("|");
+  const key = list.map((e) => e.ctx.cfg.id + ":" + e.s.session_id + ":" + e.s.status + ":" + Math.floor(sessionElapsed(e.s) / 1000) + ":" + (e.s.title || "") + ":" + (e.s.action_summary || "") + ":" + (e.s.waiting_request ? 1 : 0) + ":" + ctxPct(e.s)).join("|");
   if (box.dataset.key !== key) {
     // 就地改名进行中：跳过重建（运行中会话 key 每秒变，会把编辑框冲掉）
     if (document.activeElement && document.activeElement.classList.contains("card-rename")) return;
@@ -1612,7 +1613,7 @@ function render() {
           (s.historical ? '<span class="his-badge">历史</span>' : s.external ? '<span class="his-badge ext">外部</span>' : "") +
           '<button class="card-edit" title="重命名">✎</button></div>' +
         '<div class="card-summary' + (waiting ? " waiting" : "") + '">' + escapeHtml(waitingText) + "</div>" +
-        '<div class="card-stats">' + statsHtml(s.stats) + ctxHtml(s.usage, true) + "</div>" +
+        '<div class="card-stats">' + statsHtml(s.stats) + ctxHtml(s, true) + "</div>" +
         (waiting && !s.historical && s.waiting_request?.decidable !== false ? '<div class="card-cta"><button>处理</button></div>' : "");
       d.onclick = () => select(s.session_id, ctx.cfg.id);
       const cta = d.querySelector(".card-cta button");
@@ -1643,7 +1644,7 @@ function renderDetail() {
   $("dcwd").textContent = s.cwd;
   $("dmodel").textContent = s.model || "";
   $("delapsed").textContent = "⏱ " + fmtElapsed(sessionElapsed(s));
-  $("dctx").innerHTML = ctxHtml(s.usage, false);
+  $("dctx").innerHTML = ctxHtml(s, false);
 
   // 思考开关 / 权限模式 chip
   $("thinkBtn").classList.toggle("on", thinkShown);

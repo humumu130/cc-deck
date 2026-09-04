@@ -5,7 +5,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { STATUS_ZH, statusColor, withA, type ThemeColors } from "../theme";
 import { useTheme, useThemeStyles } from "../theme-context";
 import { LogoMark } from "../brand";
-import { sessionElapsed, fmtElapsed, fmtTok, contextUsage, contextPct, contextLevel } from "../fmt";
+import { sessionElapsed, fmtElapsed, fmtTok, contextPct, contextLevel, CONTEXT_LIMIT_FALLBACK } from "../fmt";
 import { useListCompact } from "../display-settings";
 import { store } from "../store";
 import type { SessionState } from "../protocol";
@@ -200,10 +200,11 @@ function SwipeRow({
 function CtxMini({ s }: { s: SessionState }) {
   const { c } = useTheme();
   const styles = useThemeStyles(makeStyles);
-  const used = contextUsage(s.usage);
+  const used = s.context_usage ?? 0;
   if (!used) return null;
-  const pct = contextPct(used);
-  const lv = contextLevel(used);
+  const limit = s.context_limit ?? CONTEXT_LIMIT_FALLBACK;
+  const pct = contextPct(used, limit);
+  const lv = contextLevel(used, limit);
   return (
     <View style={styles.ctxMini}>
       <View style={styles.ctxMiniBar}>

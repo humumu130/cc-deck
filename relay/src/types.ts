@@ -75,7 +75,9 @@ export interface SessionState {
   remote_mode?: boolean;      // external 会话的远程审批开关（默认关）
   cli_pid?: number;           // external 会话的 CLI 进程 pid（终端按键注入用）
   turn_started_at?: number;   // 当前 WORKING 回合起点（状态行计时用）
-  usage?: TokenUsage;         // 托管会话 token 用量
+  usage?: TokenUsage;         // 会话累计 token 用量（统计页口径）
+  context_usage?: number;     // 当前上下文水位 tokens（最后一条 assistant 的 usage：input+缓存读+缓存写；水位条数据源）
+  context_limit?: number;     // 上下文窗口上限（contextLimitOf 按模型算出后随 state 持久下发，SNAPSHOT 也带上）
   todos?: TodoItem[];         // 最近一次 TodoWrite 的任务清单
   subagents?: SubagentInfo[]; // external 会话的子 Agent 派生/结束追踪（手机端工作状态展示）
   permission_mode?: ManagedPermissionMode; // 托管会话当前权限模式

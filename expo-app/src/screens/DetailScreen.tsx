@@ -5,7 +5,7 @@ import * as ImagePicker from "expo-image-picker";
 import * as ImageManipulator from "expo-image-manipulator";
 import { withA, type ThemeColors } from "../theme";
 import { useTheme, useThemeStyles } from "../theme-context";
-import { fmtElapsed, sessionElapsed, fmtHM, dayKey, fmtClock, fmtTok, contextUsage, contextPct, contextLevel } from "../fmt";
+import { fmtElapsed, sessionElapsed, fmtHM, dayKey, fmtClock, fmtTok, contextPct, contextLevel, CONTEXT_LIMIT_FALLBACK } from "../fmt";
 import { store, useRelay } from "../store";
 import type { CronTask, LogEntry, SessionState, TodoItem, WaitingPayload } from "../protocol";
 import { useKbHeight } from "../kb";
@@ -535,9 +535,10 @@ export default function DetailScreen({ sid, onBack }: { sid: string; onBack: () 
   }
 
   const external = !!s.external;
-  // 上下文占用（200k 窗口）：列表页 mini 条与网页端同口径
-  const ctxUsed = contextUsage(s.usage);
-  const ctxPct = contextPct(ctxUsed);
+  // 上下文水位：relay 下发的当回合占用 + 按模型上限（与列表卡 mini 条、网页端同口径）
+  const ctxUsed = s.context_usage ?? 0;
+  const ctxLimit = s.context_limit ?? CONTEXT_LIMIT_FALLBACK;
+  const ctxPct = contextPct(ctxUsed, ctxLimit);
   // 历史托管会话：有 SDK 会话 id 就能 resume 复活（发消息即恢复），否则只读
   const resumable = !external && !!s.relay_session_id;
   const canCmd = snap.connected && (!s.historical || external || resumable);
@@ -672,9 +673,9 @@ export default function DetailScreen({ sid, onBack }: { sid: string; onBack: () 
             <View style={d.ctxRow}>
               <Text style={d.ctxLabel}>上下文</Text>
               <View style={d.ctxBar}>
-                <View style={{ width: `${ctxPct}%`, height: 3, borderRadius: 1.5, backgroundColor: c[contextLevel(ctxUsed)] }} />
+                <View style={{ width: `${ctxPct}%`, height: 3, borderRadius: 1.5, backgroundColor: c[contextLevel(ctxUsed, ctxLimit)] }} />
               </View>
-              <Text style={[d.ctxPct, { color: c[contextLevel(ctxUsed)] }]}>{ctxPct}%</Text>
+              <Text style={[d.ctxPct, { color: c[contextLevel(ctxUsed, ctxLimit)] }]}>{ctxPct}%</Text>
             </View>
           ) : null}
         </View>

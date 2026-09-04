@@ -77,6 +77,8 @@ export interface SessionState {
   elapsed_hint?: number;
   turn_started_at?: number;
   usage?: TokenUsage;
+  context_usage?: number; // 当前上下文水位 tokens（最后一条 assistant 的 usage；水位条数据源）
+  context_limit?: number; // 上下文窗口上限（relay 按模型下发；缺省兜底 200k）
   todos?: TodoItem[];
   title_locked?: boolean;
   permission_mode?: "default" | "acceptEdits" | "plan"; // 托管会话权限模式
