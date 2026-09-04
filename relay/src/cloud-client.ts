@@ -160,8 +160,11 @@ export class CloudClient {
   // 补发从该 seq 之后开始，不会与已流式补发的旧日志重复。
   private resumePhone(dev: string, lastSeq: number): void {
     this.phones.set(dev, { lastSeq, active: true });
-    if (lastSeq > 0 && !this.bus.isBeyondBuffer(lastSeq)) {
-      for (const env of this.bus.replayAfter(lastSeq)) this.sendSealed(dev, env);
+    const replay = lastSeq > 0 && !this.bus.isBeyondBuffer(lastSeq) ? this.bus.replayAfter(lastSeq) : null;
+    // 落后太多 = 设备冷启动（内存空但持久化了旧 seq）：增量事件只能更新已知会话、
+    // 建不出列表，且上千帧补发挤占桥带宽——超过阈值直接 SNAPSHOT 全量重建
+    if (replay && replay.length <= 200) {
+      for (const env of replay) this.sendSealed(dev, env);
       return;
     }
     const snapSeq = this.bus.lastSeq();

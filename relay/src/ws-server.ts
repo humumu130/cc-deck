@@ -227,8 +227,11 @@ export function startServer(
     ws.on("error", () => undefined);
 
     const lastSeq = Number(url.searchParams.get("last_seq") ?? "0") || 0;
-    if (lastSeq > 0 && !bus.isBeyondBuffer(lastSeq)) {
-      for (const env of bus.replayAfter(lastSeq)) ws.send(JSON.stringify(env));
+    const replay = lastSeq > 0 && !bus.isBeyondBuffer(lastSeq) ? bus.replayAfter(lastSeq) : null;
+    // 落后太多 = 客户端冷启动（内存空但 localStorage 存着旧 seq）：增量事件只能更新
+    // 已知会话、建不出列表，且上千帧补发挤占带宽——超过阈值直接 SNAPSHOT 全量重建
+    if (replay && replay.length <= 200) {
+      for (const env of replay) ws.send(JSON.stringify(env));
     } else {
       const snapshot: Envelope = {
         seq: bus.lastSeq(),

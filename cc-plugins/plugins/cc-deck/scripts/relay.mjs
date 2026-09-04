@@ -39095,11 +39095,16 @@ var Bridge = class _Bridge {
         if (this.lastGrow.size > 200) this.lastGrow.clear();
         this.lastGrow.set(id2, Date.now());
         const st0 = this.mgr.getExternal(id2);
-        if (st0 && st0.status === "DONE") {
+        if (st0 && (st0.status === "DONE" || st0.status === "ERROR")) {
           this.noHookIds.add(id2);
           if (!this.turnStart.has(id2)) this.turnStart.set(id2, Date.now());
-          this.mgr.setExternalStatus(id2, "WORKING", "\u8F6C\u5F55\u6D3B\u8DC3\uFF08\u65E0 hook \u4F1A\u8BDD\uFF09");
+          this.mgr.setExternalStatus(
+            id2,
+            "WORKING",
+            st0.status === "ERROR" ? "\u8F6C\u5F55\u6D3B\u8DC3\uFF08\u81EA\u6108\uFF1A\u91CD\u542F\u8BEF\u6807\u9519\u8BEF\uFF09" : "\u8F6C\u5F55\u6D3B\u8DC3\uFF08\u65E0 hook \u4F1A\u8BDD\uFF09"
+          );
         }
+        if (st0?.historical) st0.historical = false;
       }
       const entries = [];
       const enqueues = [];
@@ -39885,8 +39890,9 @@ function startServer(bus2, mgr2, cfg2, opts = {}) {
     });
     ws2.on("error", () => void 0);
     const lastSeq = Number(url.searchParams.get("last_seq") ?? "0") || 0;
-    if (lastSeq > 0 && !bus2.isBeyondBuffer(lastSeq)) {
-      for (const env of bus2.replayAfter(lastSeq)) ws2.send(JSON.stringify(env));
+    const replay = lastSeq > 0 && !bus2.isBeyondBuffer(lastSeq) ? bus2.replayAfter(lastSeq) : null;
+    if (replay && replay.length <= 200) {
+      for (const env of replay) ws2.send(JSON.stringify(env));
     } else {
       const snapshot = {
         seq: bus2.lastSeq(),
@@ -40141,8 +40147,9 @@ var CloudClient = class {
   // 补发从该 seq 之后开始，不会与已流式补发的旧日志重复。
   resumePhone(dev, lastSeq) {
     this.phones.set(dev, { lastSeq, active: true });
-    if (lastSeq > 0 && !this.bus.isBeyondBuffer(lastSeq)) {
-      for (const env of this.bus.replayAfter(lastSeq)) this.sendSealed(dev, env);
+    const replay = lastSeq > 0 && !this.bus.isBeyondBuffer(lastSeq) ? this.bus.replayAfter(lastSeq) : null;
+    if (replay && replay.length <= 200) {
+      for (const env of replay) this.sendSealed(dev, env);
       return;
     }
     const snapSeq = this.bus.lastSeq();

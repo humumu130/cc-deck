@@ -794,12 +794,20 @@ export class Bridge {
         this.lastGrow.set(id, Date.now());
         const st0 = this.mgr.getExternal(id);
         // 增量增长落在 DONE 态 = 无 hook 会话（hook 会话回合首事件 UserPromptSubmit
-        // 早已翻 WORKING）：翻 WORKING 让手机呼吸灯/工作状态随转录实时走
-        if (st0 && st0.status === "DONE") {
+        // 早已翻 WORKING）：翻 WORKING 让手机呼吸灯/工作状态随转录实时走。
+        // ERROR 态同理——relay 重启会把无 pid 的外部会话误标 ERROR，没有 hook 事件
+        // 就永远无自愈路径；转录在写 = CLI 活着。顺带清 historical：重启遗留的
+        // "仅可查看"标记在会话被证活后必须解除，否则设备端永远发不了消息
+        if (st0 && (st0.status === "DONE" || st0.status === "ERROR")) {
           this.noHookIds.add(id);
           if (!this.turnStart.has(id)) this.turnStart.set(id, Date.now());
-          this.mgr.setExternalStatus(id, "WORKING", "转录活跃（无 hook 会话）");
+          this.mgr.setExternalStatus(
+            id,
+            "WORKING",
+            st0.status === "ERROR" ? "转录活跃（自愈：重启误标错误）" : "转录活跃（无 hook 会话）",
+          );
         }
+        if (st0?.historical) st0.historical = false;
       }
       const entries: { kind: "assistant_text" | "thinking"; text: string }[] = [];
       const enqueues: string[] = [];
