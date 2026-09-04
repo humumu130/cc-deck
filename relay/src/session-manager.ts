@@ -903,7 +903,7 @@ export class SessionManager {
       stats: { ...s.state.stats },
       ...(s.state.turn_started_at ? { turn_started_at: s.state.turn_started_at } : {}),
       ...(s.state.usage ? { usage: { ...s.state.usage } } : {}),
-      ...(s.state.context_usage ? { context_usage: s.state.context_usage, context_limit: contextLimitOf(s.state.model) } : {}),
+      ...(s.state.context_usage !== undefined ? { context_usage: s.state.context_usage, context_limit: s.state.context_limit ?? contextLimitOf(s.state.model) } : {}),
       ...(s.state.todos ? { todos: s.state.todos.map((t) => ({ ...t })) } : {}),
       ...(s.state.subagents ? { subagents: s.state.subagents.map((x) => ({ ...x })) } : {}),
       ...(s.state.relay_session_id ? { relay_session_id: s.state.relay_session_id } : {}),

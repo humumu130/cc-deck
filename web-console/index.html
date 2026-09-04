@@ -1402,7 +1402,7 @@ function onEvent(ctx, msg) {
       if (msg.payload.stats) s.stats = msg.payload.stats;
       // 其余可选字段：出现即覆盖（与手机端 store 对齐）
       for (const f of ["remote_mode", "title", "title_locked", "model", "turn_started_at",
-        "usage", "todos", "subagents", "permission_mode", "pending_inputs", "relay_session_id", "cron_tasks"]) {
+        "usage", "context_usage", "context_limit", "todos", "subagents", "permission_mode", "pending_inputs", "relay_session_id", "cron_tasks"]) {
         if (msg.payload[f] !== undefined) s[f] = msg.payload[f];
       }
       s.updated_at = msg.ts;
