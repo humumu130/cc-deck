@@ -184,6 +184,7 @@ class RelayRepository(private val host: String, private val token: String) : Ses
                             )
                         } ?: s.usage,
                         todos = if (p.has("todos") && !p.isNull("todos")) ProtocolCodec.parseTodos(p) else s.todos,
+                        cronTasks = if (p.has("cron_tasks") && !p.isNull("cron_tasks")) ProtocolCodec.parseCronTasks(p) else s.cronTasks,
                         updatedAt = ts,
                     )
                 }

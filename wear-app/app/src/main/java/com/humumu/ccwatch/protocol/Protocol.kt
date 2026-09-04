@@ -72,6 +72,7 @@ data class SessionState(
     val external: Boolean? = null,
     val usage: Usage? = null,
     val todos: List<TodoItem> = emptyList(),
+    val cronTasks: List<CronTask> = emptyList(),
     val elapsedHint: Long? = null,
 )
 
@@ -84,6 +85,17 @@ data class TodoItem(
     val isDone: Boolean get() = status == "completed"
     val label: String get() = activeForm?.takeIf { it.isNotBlank() } ?: content
 }
+
+/** 定时任务快照（会话目录 .claude/scheduled_tasks.json，relay 30s 轮询下发） */
+data class CronTask(
+    val id: String,
+    val name: String,
+    val prompt: String,
+    val schedule: String,
+    val nextRunAt: Long? = null,
+    val paused: Boolean? = null,
+    val recurring: Boolean? = null, // false = 一次性
+)
 
 /** 时间线事件（relay SESSION_LOG 的 LogEntry，W2 展示 + W1 活动强度推导） */
 data class RecentEvent(
@@ -151,6 +163,24 @@ object ProtocolCodec {
                         content = tj.optString("content"),
                         status = tj.optString("status", "pending"),
                         activeForm = if (tj.has("active_form") && !tj.isNull("active_form")) tj.getString("active_form") else null,
+                    )
+                }
+            }
+        } ?: emptyList()
+
+    /** SessionState.cron_tasks / SESSION_UPDATED.payload.cron_tasks 通用解析 */
+    fun parseCronTasks(o: JSONObject): List<CronTask> =
+        o.optJSONArray("cron_tasks")?.let { arr ->
+            (0 until arr.length()).mapNotNull { i ->
+                arr.optJSONObject(i)?.takeIf { tj -> tj.optString("id").isNotBlank() }?.let { tj ->
+                    CronTask(
+                        id = tj.optString("id"),
+                        name = tj.optString("name"),
+                        prompt = tj.optString("prompt"),
+                        schedule = tj.optString("schedule"),
+                        nextRunAt = optLong(tj, "next_run_at"),
+                        paused = if (tj.has("paused") && !tj.isNull("paused")) tj.getBoolean("paused") else null,
+                        recurring = if (tj.has("recurring") && !tj.isNull("recurring")) tj.getBoolean("recurring") else null,
                     )
                 }
             }
@@ -233,6 +263,7 @@ object ProtocolCodec {
             external = if (o.has("external") && !o.isNull("external")) o.getBoolean("external") else null,
             usage = usage,
             todos = parseTodos(o),
+            cronTasks = parseCronTasks(o),
             elapsedHint = optLong(o, "elapsed_hint"),
         )
     }
