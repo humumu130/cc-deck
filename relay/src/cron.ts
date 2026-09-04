@@ -26,15 +26,18 @@ function normalizeTask(raw: unknown, fallbackId: string): CronTask | null {
   const o = raw as Record<string, unknown>;
   const status = str(o.status);
   if (status === "deleted") return null; // 软删除条目不展示
+  const rawId = str(o.id) ?? str(o.taskId);
   const prompt = str(o.prompt) ?? str(o.command) ?? str(o.task) ?? str(o.instruction) ?? str(o.message) ?? "";
   const schedule = str(o.humanSchedule) ?? str(o.schedule) ?? str(o.cron) ?? str(o.interval) ?? str(o.expression) ?? "";
   const name = str(o.name) ?? str(o.title) ?? str(o.label);
+  // 识别不出任何任务字段（如 {jobs:[...]} 异名包装的包装对象本身）→ 幽灵条目，丢弃
+  if (!prompt && !schedule && !name && !rawId) return null;
   const paused =
     o.paused === true || o.enabled === false || o.active === false ||
     status === "paused" || status === "expired";
   const next = tsNum(o.next_run_at ?? o.nextRunAt ?? o.next_run ?? o.nextExecutionAt);
   return {
-    id: str(o.id) ?? str(o.taskId) ?? fallbackId,
+    id: rawId ?? fallbackId,
     name: name ?? (prompt ? prompt.slice(0, 40) : schedule || "未命名任务"),
     prompt,
     schedule,
@@ -44,20 +47,21 @@ function normalizeTask(raw: unknown, fallbackId: string): CronTask | null {
   };
 }
 
-// undefined = 文件不存在/不可读/不合法 JSON（等同"无定时任务信息"，不触发下发）；
-// 空数组 = 文件存在但任务已清空（触发客户端清空展示）
-export function readCronTasks(cwd: string): CronTask[] | undefined {
+// 三态：undefined = 文件不存在（视为清空候选）；"bad" = 文件在但读/解析失败
+// （非原子写入读到半截 JSON：保留旧值等下一轮，避免误发清空再回填的闪烁）；
+// 数组 = 解析结果（空数组 = 已清空，触发客户端清空展示）
+export function readCronTasks(cwd: string): CronTask[] | "bad" | undefined {
   let text: string;
   try {
     text = readFileSync(join(cwd, ".claude", "scheduled_tasks.json"), "utf8");
-  } catch {
-    return undefined;
+  } catch (e) {
+    return (e as NodeJS.ErrnoException).code === "ENOENT" ? undefined : "bad";
   }
   let root: unknown;
   try {
     root = JSON.parse(text);
   } catch {
-    return undefined;
+    return "bad";
   }
   let entries: [string, unknown][];
   if (Array.isArray(root)) {
@@ -68,7 +72,7 @@ export function readCronTasks(cwd: string): CronTask[] | undefined {
       ? wrapped.map((r, i) => [String(i), r])
       : Object.entries(root as Record<string, unknown>);
   } else {
-    return undefined;
+    return "bad"; // 文件在但根形态不可识别（字符串/数字等）：保留旧值
   }
   const out: CronTask[] = [];
   for (const [key, raw] of entries) {

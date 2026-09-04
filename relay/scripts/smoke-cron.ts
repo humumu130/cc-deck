@@ -3,6 +3,11 @@
 import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { readCronTasks } from "../src/cron.js";
+import type { CronTask } from "../src/types.js";
+
+// "bad" 哨兵收敛：成功路径断言只关心 数组 | undefined
+const asList = (v: ReturnType<typeof readCronTasks>): CronTask[] | undefined =>
+  v === "bad" ? undefined : v;
 
 const root = join(process.cwd(), "data", "smoke-cron");
 rmSync(root, { recursive: true, force: true });
@@ -28,7 +33,7 @@ function assert(cond: boolean, msg: string) {
     { id: "x1y2z3w4", cron: "30 14 5 9 *", prompt: "跑一次", status: "active", recurring: false },
     { id: "deadbeef", cron: "* * * * *", prompt: "已删", status: "deleted" },
   ]);
-  const r = readCronTasks(cwd)!;
+  const r = asList(readCronTasks(cwd))!;
   assert(r.length === 3, "数组形态：软删除被过滤，剩 3 条");
   const first = r[0];
   assert(first.id === "a1b2c3d4" && first.schedule === "每天 09:00" && first.prompt === "检查收件箱", "humanSchedule 优先作 schedule");
@@ -42,7 +47,7 @@ function assert(cond: boolean, msg: string) {
   const cwd = fixture("map", {
     "task-9": { name: "日报", command: "生成日报", interval: "0 18 * * 1-5", enabled: false },
   });
-  const r = readCronTasks(cwd)!;
+  const r = asList(readCronTasks(cwd))!;
   assert(r.length === 1 && r[0].id === "task-9", "map 形态：键作 fallback id");
   assert(r[0].prompt === "生成日报" && r[0].schedule === "0 18 * * 1-5", "command/interval 别名生效");
   assert(r[0].paused === true, "enabled:false → paused");
@@ -54,20 +59,25 @@ function assert(cond: boolean, msg: string) {
   const cwd = fixture("wrap", { tasks: [
     { id: "w1", cron: "0 0 * * *", prompt: "p", nextRunAt: "2026-09-05T00:00:00Z" },
   ] });
-  const r = readCronTasks(cwd)!;
+  const r = asList(readCronTasks(cwd))!;
   assert(r.length === 1 && r[0].next_run_at === Date.parse("2026-09-05T00:00:00Z"), "包装形态 + ISO nextRunAt → 毫秒");
 }
 
-// ④ 无文件 / 非法 JSON / 空数组
+// ④ 无文件 / 非法 JSON / 空数组 / 异名包装
 {
   const cwd = join(root, "none");
   mkdirSync(cwd, { recursive: true });
-  assert(readCronTasks(cwd) === undefined, "无文件 → undefined");
-  const bad = fixture("bad", "not json{");
-  assert(readCronTasks(bad) === undefined, "非法 JSON → undefined");
+  assert(asList(readCronTasks(cwd)) === undefined, "无文件 → undefined（清空候选）");
+  const badCwd = join(root, "bad");
+  mkdirSync(join(badCwd, ".claude"), { recursive: true });
+  writeFileSync(join(badCwd, ".claude", "scheduled_tasks.json"), 'not json{');
+  assert(readCronTasks(badCwd) === "bad", "非法 JSON → \"bad\"（保留旧值不误清空）");
   const empty = fixture("empty", []);
-  const r = readCronTasks(empty)!;
+  const r = asList(readCronTasks(empty))!;
   assert(Array.isArray(r) && r.length === 0, "空数组 → []（触发清空）");
+  const ghost = fixture("ghost", { jobs: [{ cron: "* * * * *", prompt: "被包装" }] });
+  const rg = asList(readCronTasks(ghost))!;
+  assert(Array.isArray(rg) && rg.length === 0, "异名包装 {jobs:[]} → 无幽灵任务");
 }
 
 console.log(fails === 0 ? "\nALL PASS" : `\n${fails} FAILED`);

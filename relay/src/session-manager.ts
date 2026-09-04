@@ -910,10 +910,12 @@ export class SessionManager {
   }
 
   // 定时任务轮询：读各会话 cwd 下 .claude/scheduled_tasks.json，变化才下发。
-  // 文件消失但此前有任务 → 视为清空（CLI 移除任务时可能直接删文件而非留空数组）
+  // 文件消失但此前有任务 → 视为清空（CLI 移除任务时可能直接删文件而非留空数组）；
+  // "bad"（读到半截 JSON 等解析失败）→ 保留旧值等下一轮，避免误发清空再回填的闪烁
   private pollCronTasks(): void {
     for (const s of this.sessions.values()) {
       const tasks = readCronTasks(s.state.cwd);
+      if (tasks === "bad") continue;
       const next = tasks ?? (s.state.cron_tasks ? [] : undefined);
       if (next === undefined) continue;
       const prev = s.state.cron_tasks ?? [];
