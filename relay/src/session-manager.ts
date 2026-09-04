@@ -195,7 +195,7 @@ export class SessionManager {
 
   private bridge: {
     resolvePending: (sessionId: string, requestId: string, decision: "allow" | "deny", reason?: string) => boolean;
-    answerPending: (sessionId: string, requestId: string, answers: string[]) => boolean;
+    answerPending: (sessionId: string, requestId: string, answers: string[]) => string | null;
     extInput: (sessionId: string, text: string) => { ok: boolean; error?: string };
     extStop: (sessionId: string) => { ok: boolean; error?: string };
     refreshTodos: (sessionId: string) => { ok: boolean; error?: string };
@@ -204,7 +204,7 @@ export class SessionManager {
 
   setBridge(b: {
     resolvePending: (sessionId: string, requestId: string, decision: "allow" | "deny", reason?: string) => boolean;
-    answerPending: (sessionId: string, requestId: string, answers: string[]) => boolean;
+    answerPending: (sessionId: string, requestId: string, answers: string[]) => string | null;
     extInput: (sessionId: string, text: string) => { ok: boolean; error?: string };
     extStop: (sessionId: string) => { ok: boolean; error?: string };
     refreshTodos: (sessionId: string) => { ok: boolean; error?: string };
@@ -558,8 +558,9 @@ export class SessionManager {
           const s = this.require(cmd.payload.session_id);
           if (s.state.external) {
             // 外部会话：allow+updatedInput 把答案注入工具入参，CLI 视为已作答不再弹本地选择器
-            if (!this.bridge?.answerPending(cmd.payload.session_id, cmd.payload.request_id, answers)) {
-              return { command_id: cmd.command_id, ok: false, error: "no such pending request" };
+            const ansErr = this.bridge?.answerPending(cmd.payload.session_id, cmd.payload.request_id, answers);
+            if (ansErr) {
+              return { command_id: cmd.command_id, ok: false, error: ansErr };
             }
             this.emitWaitingResolved(cmd.payload.session_id, cmd.payload.request_id, "answer", by);
             return { command_id: cmd.command_id, ok: true };

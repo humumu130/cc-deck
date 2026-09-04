@@ -7000,9 +7000,9 @@ var require_main = __commonJS({
 });
 
 // src/index.ts
-import { networkInterfaces as networkInterfaces2 } from "node:os";
-import { join as join9 } from "node:path";
-import { writeFileSync as writeFileSync7, openSync as openSync3, readFileSync as readFileSync9, rmSync as rmSync2 } from "node:fs";
+import { networkInterfaces as networkInterfaces2, homedir as homedir5 } from "node:os";
+import { join as join10 } from "node:path";
+import { writeFileSync as writeFileSync7, openSync as openSync3, readFileSync as readFileSync11, rmSync as rmSync2, existsSync as existsSync7 } from "node:fs";
 import { spawn as spawn3, execFileSync as execFileSync2 } from "node:child_process";
 import { fileURLToPath as fileURLToPath4 } from "node:url";
 
@@ -7062,10 +7062,10 @@ import { dirname } from "node:path";
 var MAX_SESSIONS_KEPT = 30;
 var MAX_LOGS_PER_SESSION = 300;
 var MAX_STATE_EVENTS_PER_SESSION = 50;
-function loadEvents(path4) {
-  if (!existsSync2(path4)) return [];
+function loadEvents(path5) {
+  if (!existsSync2(path5)) return [];
   const out = [];
-  for (const line of readFileSync2(path4, "utf-8").split("\n")) {
+  for (const line of readFileSync2(path5, "utf-8").split("\n")) {
     const t = line.trim();
     if (!t) continue;
     try {
@@ -7113,13 +7113,13 @@ function lastTs(b) {
 function tail(arr, n) {
   return arr.length <= n ? arr : arr.slice(arr.length - n);
 }
-function rewriteFile(path4, events) {
-  mkdirSync2(dirname(path4), { recursive: true });
-  writeFileSync2(path4, events.map((e) => JSON.stringify(e)).join("\n") + "\n", "utf-8");
+function rewriteFile(path5, events) {
+  mkdirSync2(dirname(path5), { recursive: true });
+  writeFileSync2(path5, events.map((e) => JSON.stringify(e)).join("\n") + "\n", "utf-8");
 }
-function appendLine(path4, env) {
-  mkdirSync2(dirname(path4), { recursive: true });
-  writeFileSync2(path4, JSON.stringify(env) + "\n", { flag: "a" });
+function appendLine(path5, env) {
+  mkdirSync2(dirname(path5), { recursive: true });
+  writeFileSync2(path5, JSON.stringify(env) + "\n", { flag: "a" });
 }
 function reduceHistory(events) {
   const out = /* @__PURE__ */ new Map();
@@ -7298,8 +7298,8 @@ var EventBus = class {
 };
 
 // src/session-manager.ts
-import { readFileSync as readFileSync5, statSync as statSync2, writeFileSync as writeFileSync4 } from "node:fs";
-import { join as join6, resolve as resolve5 } from "node:path";
+import { readFileSync as readFileSync7, statSync as statSync3, writeFileSync as writeFileSync4 } from "node:fs";
+import { join as join7, resolve as resolve5 } from "node:path";
 
 // src/e2e.ts
 var import_tweetnacl = __toESM(require_nacl_fast(), 1);
@@ -37485,18 +37485,117 @@ async function generateTitle(task, model, onSid) {
   }
 }
 
-// src/todo-hidden.ts
-import { readFileSync as readFileSync4, writeFileSync as writeFileSync3 } from "node:fs";
+// src/cron.ts
+import { readFileSync as readFileSync4 } from "node:fs";
+import { join as join6 } from "node:path";
+var str = (v) => typeof v === "string" && v.trim() ? v : void 0;
+function tsNum(v) {
+  if (typeof v === "number" && Number.isFinite(v) && v > 0) return v;
+  if (typeof v === "string" && v.trim()) {
+    const parsed = Date.parse(v);
+    if (Number.isFinite(parsed)) return parsed;
+    const n = Number(v);
+    if (Number.isFinite(n) && n > 0) return n;
+  }
+  return void 0;
+}
+function normalizeTask(raw, fallbackId) {
+  if (!raw || typeof raw !== "object") return null;
+  const o = raw;
+  const status = str(o.status);
+  if (status === "deleted") return null;
+  const rawId = str(o.id) ?? str(o.taskId);
+  const prompt = str(o.prompt) ?? str(o.command) ?? str(o.task) ?? str(o.instruction) ?? str(o.message) ?? "";
+  const schedule = str(o.humanSchedule) ?? str(o.schedule) ?? str(o.cron) ?? str(o.interval) ?? str(o.expression) ?? "";
+  const name = str(o.name) ?? str(o.title) ?? str(o.label);
+  if (!prompt && !schedule && !name && !rawId) return null;
+  const paused = o.paused === true || o.enabled === false || o.active === false || status === "paused" || status === "expired";
+  const next = tsNum(o.next_run_at ?? o.nextRunAt ?? o.next_run ?? o.nextExecutionAt);
+  return {
+    id: rawId ?? fallbackId,
+    name: name ?? (prompt ? prompt.slice(0, 40) : schedule || "\u672A\u547D\u540D\u4EFB\u52A1"),
+    prompt,
+    schedule,
+    ...next !== void 0 ? { next_run_at: next } : {},
+    ...paused ? { paused: true } : {},
+    ...o.recurring === false ? { recurring: false } : {}
+  };
+}
+function readCronTasks(cwd) {
+  let text;
+  try {
+    text = readFileSync4(join6(cwd, ".claude", "scheduled_tasks.json"), "utf8");
+  } catch (e) {
+    return e.code === "ENOENT" ? void 0 : "bad";
+  }
+  let root;
+  try {
+    root = JSON.parse(text);
+  } catch {
+    return "bad";
+  }
+  let entries;
+  if (Array.isArray(root)) {
+    entries = root.map((r, i) => [String(i), r]);
+  } else if (root && typeof root === "object") {
+    const wrapped = root.tasks;
+    entries = Array.isArray(wrapped) ? wrapped.map((r, i) => [String(i), r]) : Object.entries(root);
+  } else {
+    return "bad";
+  }
+  const out = [];
+  for (const [key, raw] of entries) {
+    const t = normalizeTask(raw, key);
+    if (t) out.push(t);
+  }
+  return out;
+}
+function cronTasksKey(tasks) {
+  return JSON.stringify(tasks);
+}
+
+// src/task-store.ts
+import { readdirSync as readdirSync2, readFileSync as readFileSync5, statSync as statSync2 } from "node:fs";
+import { homedir as homedir2 } from "node:os";
 import path from "node:path";
+function readTaskStoreTodos(cliSessionId) {
+  const dir = path.join(homedir2(), ".claude", "tasks", cliSessionId);
+  let files;
+  try {
+    files = readdirSync2(dir).filter((f) => f.endsWith(".json"));
+  } catch {
+    return null;
+  }
+  const out = [];
+  for (const f of files) {
+    try {
+      const fp2 = path.join(dir, f);
+      const t = JSON.parse(readFileSync5(fp2, "utf-8"));
+      if (t.status === "deleted") continue;
+      const subject = typeof t.subject === "string" ? t.subject.trim() : "";
+      if (!subject) continue;
+      const status = t.status === "in_progress" || t.status === "completed" ? t.status : "pending";
+      const activeForm = typeof t.activeForm === "string" && t.activeForm.trim() ? { active_form: t.activeForm.trim().slice(0, 120) } : {};
+      out.push({ n: Number(f.replace(/[^0-9]/g, "")) || 0, content: subject.slice(0, 120), status, updated_at: statSync2(fp2).mtimeMs, ...activeForm });
+    } catch {
+    }
+  }
+  out.sort((a, b) => a.n - b.n);
+  return out.map(({ n: _n2, ...rest }) => rest);
+}
+
+// src/todo-hidden.ts
+import { readFileSync as readFileSync6, writeFileSync as writeFileSync3 } from "node:fs";
+import path2 from "node:path";
 import { fileURLToPath } from "node:url";
-var FILE = path.join(path.dirname(fileURLToPath(import.meta.url)), "..", "data", "todo-hidden.json");
+var FILE = path2.join(path2.dirname(fileURLToPath(import.meta.url)), "..", "data", "todo-hidden.json");
 var MAX_PER_SESSION = 200;
 var fileCache = null;
 var keySets = /* @__PURE__ */ new Map();
 function load() {
   if (fileCache) return fileCache;
   try {
-    const raw = JSON.parse(readFileSync4(FILE, "utf-8"));
+    const raw = JSON.parse(readFileSync6(FILE, "utf-8"));
     fileCache = {};
     for (const [k3, v] of Object.entries(raw)) {
       if (Array.isArray(v)) {
@@ -37534,6 +37633,11 @@ function addHiddenTodoKey(sessionId, key) {
 }
 
 // src/session-manager.ts
+function contextLimitOf(model) {
+  const m = (model || "").toLowerCase();
+  if (/glm[-_]?5/.test(m)) return 1e6;
+  return 2e5;
+}
 function isManagedMode(m) {
   return m === "default" || m === "acceptEdits" || m === "plan";
 }
@@ -37550,7 +37654,7 @@ function sanitizeImages(raw) {
 var CHILD_SESSIONS_CAP = 200;
 function readChildSessions(dataDir2) {
   try {
-    const raw = JSON.parse(readFileSync5(join6(dataDir2, "child-sessions.json"), "utf-8"));
+    const raw = JSON.parse(readFileSync7(join7(dataDir2, "child-sessions.json"), "utf-8"));
     return Array.isArray(raw) ? raw.filter((x) => typeof x === "string") : [];
   } catch {
     return [];
@@ -37561,13 +37665,13 @@ function appendChildSession(dataDir2, sid) {
   if (list.includes(sid)) return;
   list.push(sid);
   try {
-    writeFileSync4(join6(dataDir2, "child-sessions.json"), JSON.stringify(list.slice(-CHILD_SESSIONS_CAP)));
+    writeFileSync4(join7(dataDir2, "child-sessions.json"), JSON.stringify(list.slice(-CHILD_SESSIONS_CAP)));
   } catch {
   }
 }
 function readDeletedExts(dataDir2) {
   try {
-    const raw = JSON.parse(readFileSync5(join6(dataDir2, "deleted-ext.json"), "utf-8"));
+    const raw = JSON.parse(readFileSync7(join7(dataDir2, "deleted-ext.json"), "utf-8"));
     return Array.isArray(raw) ? raw.filter((x) => typeof x === "string") : [];
   } catch {
     return [];
@@ -37578,12 +37682,13 @@ function appendDeletedExt(dataDir2, id2) {
   if (list.includes(id2)) return;
   list.push(id2);
   try {
-    writeFileSync4(join6(dataDir2, "deleted-ext.json"), JSON.stringify(list.slice(-300)));
+    writeFileSync4(join7(dataDir2, "deleted-ext.json"), JSON.stringify(list.slice(-300)));
   } catch {
   }
 }
 var UPDATE_THROTTLE_MS = 2e3;
 var HEARTBEAT_INTERVAL_MS = 5e3;
+var CRON_POLL_INTERVAL_MS = 3e4;
 var MAX_SESSIONS = 20;
 var SessionManager = class {
   constructor(bus2, cfg2) {
@@ -37593,6 +37698,11 @@ var SessionManager = class {
     this.deletedExtIds = new Set(readDeletedExts(cfg2.dataDir));
     const t = setInterval(() => this.heartbeat(), HEARTBEAT_INTERVAL_MS);
     t.unref();
+    const c = setInterval(() => {
+      this.pollCronTasks();
+      this.pollTaskStore();
+    }, CRON_POLL_INTERVAL_MS);
+    c.unref();
   }
   bus;
   cfg;
@@ -37801,18 +37911,24 @@ var SessionManager = class {
     });
   }
   // 外部会话 token 用量 / 模型（bridge 从 transcript assistant 条目累计提取）
-  setExternalUsage(id2, usage, model) {
+  // 上下文窗口上限按模型区分（集中维护，随 context_usage 一起下发；换模型只改这里）
+  setExternalUsage(id2, usage, model, contextUsage) {
     const s = this.sessions.get(id2);
     if (!s) return;
     s.state.usage = usage;
     if (model) s.state.model = model;
+    if (contextUsage !== void 0) {
+      s.state.context_usage = contextUsage;
+      s.state.context_limit = contextLimitOf(model ?? s.state.model);
+    }
     s.state.updated_at = Date.now();
     this.bus.emit(id2, "SESSION_UPDATED", {
       status: s.state.status,
       action_summary: s.state.action_summary,
       stats: { ...s.state.stats },
       usage,
-      ...model ? { model } : {}
+      ...model ? { model } : {},
+      ...contextUsage !== void 0 ? { context_usage: contextUsage, context_limit: contextLimitOf(model ?? s.state.model) } : {}
     });
   }
   setExternalWaiting(id2, payload) {
@@ -37957,8 +38073,9 @@ var SessionManager = class {
           }
           const s = this.require(cmd.payload.session_id);
           if (s.state.external) {
-            if (!this.bridge?.answerPending(cmd.payload.session_id, cmd.payload.request_id, answers)) {
-              return { command_id: cmd.command_id, ok: false, error: "no such pending request" };
+            const ansErr = this.bridge?.answerPending(cmd.payload.session_id, cmd.payload.request_id, answers);
+            if (ansErr) {
+              return { command_id: cmd.command_id, ok: false, error: ansErr };
             }
             this.emitWaitingResolved(cmd.payload.session_id, cmd.payload.request_id, "answer", by);
             return { command_id: cmd.command_id, ok: true };
@@ -38008,6 +38125,7 @@ var SessionManager = class {
             const r = this.bridge.refreshTodos(cmd.payload.session_id);
             return { command_id: cmd.command_id, ok: r.ok, error: r.error };
           }
+          this.pollTaskStore(true);
           if (s.state.todos) this.setTodos(cmd.payload.session_id, s.state.todos.map((t) => ({ ...t })));
           return { command_id: cmd.command_id, ok: true };
         }
@@ -38035,6 +38153,7 @@ var SessionManager = class {
             return { command_id: cmd.command_id, ok: false, error: "\u4F1A\u8BDD\u8FD0\u884C\u4E2D\uFF0C\u4E0D\u80FD\u5220\u9664" };
           }
           this.sessions.delete(cmd.payload.session_id);
+          this.lastStoreTodos.delete(cmd.payload.session_id);
           if (s.state.external) {
             this.deletedExtIds.add(cmd.payload.session_id);
             appendDeletedExt(this.cfg.dataDir, cmd.payload.session_id);
@@ -38096,7 +38215,7 @@ var SessionManager = class {
   }
   create(rawCwd, prompt) {
     const cwd = resolve5(rawCwd || this.cfg.defaultCwd);
-    if (!statSync2(cwd).isDirectory()) {
+    if (!statSync3(cwd).isDirectory()) {
       throw new Error(`cwd \u4E0D\u662F\u6709\u6548\u76EE\u5F55: ${cwd}`);
     }
     this.evictOldSessions();
@@ -38183,6 +38302,8 @@ var SessionManager = class {
           cache_read_input_tokens: (cur?.cache_read_input_tokens ?? 0) + (u.cache_read_input_tokens ?? 0),
           cache_creation_input_tokens: (cur?.cache_creation_input_tokens ?? 0) + (u.cache_creation_input_tokens ?? 0)
         };
+        managed.state.context_usage = (u.input_tokens || 0) + (u.cache_read_input_tokens || 0) + (u.cache_creation_input_tokens || 0);
+        managed.state.context_limit = contextLimitOf(managed.state.model);
         this.emitUpdated(managed, true);
       },
       onLog: (kind, text, meta) => {
@@ -38283,10 +38404,12 @@ var SessionManager = class {
       stats: { ...s.state.stats },
       ...s.state.turn_started_at ? { turn_started_at: s.state.turn_started_at } : {},
       ...s.state.usage ? { usage: { ...s.state.usage } } : {},
+      ...s.state.context_usage !== void 0 ? { context_usage: s.state.context_usage, context_limit: s.state.context_limit ?? contextLimitOf(s.state.model) } : {},
       ...s.state.todos ? { todos: s.state.todos.map((t) => ({ ...t })) } : {},
       ...s.state.subagents ? { subagents: s.state.subagents.map((x) => ({ ...x })) } : {},
       ...s.state.relay_session_id ? { relay_session_id: s.state.relay_session_id } : {},
       ...s.state.permission_mode ? { permission_mode: s.state.permission_mode } : {},
+      ...s.state.cron_tasks ? { cron_tasks: s.state.cron_tasks.map((t) => ({ ...t })) } : {},
       // historical 增删必须实时下发：转录自愈/pid 对账解锁后，已连接的客户端
       // 要等到下次 SNAPSHOT 才能摘掉"仅可查看"——期间用户以为发不了消息
       historical: !!s.state.historical
@@ -38303,6 +38426,57 @@ var SessionManager = class {
       }
     }
   }
+  // 定时任务轮询：读各会话 cwd 下 .claude/scheduled_tasks.json，变化才下发。
+  // 文件消失但此前有任务 → 视为清空（CLI 移除任务时可能直接删文件而非留空数组）；
+  // "bad"（读到半截 JSON 等解析失败）→ 保留旧值等下一轮，避免误发清空再回填的闪烁
+  pollCronTasks() {
+    for (const s of this.sessions.values()) {
+      const tasks = readCronTasks(s.state.cwd);
+      if (tasks === "bad") continue;
+      const next = tasks ?? (s.state.cron_tasks ? [] : void 0);
+      if (next === void 0) continue;
+      const prev = s.state.cron_tasks ?? [];
+      if (prev.length === 0 && next.length === 0) continue;
+      if (cronTasksKey(prev) === cronTasksKey(next)) continue;
+      s.state.cron_tasks = next;
+      this.emitUpdated(s, true);
+    }
+  }
+  // 权威任务清单轮询（#206）：直读 CLI 任务存储 ~/.claude/tasks/<cli_sid>/，
+  // 托管（sdkId）与外部（hook session_id）统一覆盖；JSON 变更检测防重发。
+  // bridge 的 transcript 旁路 tracker 降级为无目录时的回退，本轮询是主路径——
+  // 陈旧快照/跨会话污染从源头消除（目录天然按会话隔离）
+  pollTaskStore(force = false) {
+    for (const s of this.sessions.values()) {
+      if (s.state.historical) continue;
+      const sid = s.state.relay_session_id || (s.state.external ? s.state.session_id.slice(4) : "");
+      if (!sid) continue;
+      const todos = readTaskStoreTodos(sid);
+      if (todos === null) continue;
+      const hidden = hiddenTodoKeys(s.state.session_id);
+      const visible = hidden.size ? todos.filter((t) => !hidden.has(normKey(t.content))) : todos;
+      const next = JSON.stringify(visible);
+      const prevStr = this.lastStoreTodos.get(s.state.session_id);
+      if (!force && prevStr === next) continue;
+      this.lastStoreTodos.set(s.state.session_id, next);
+      this.setTodos(s.state.session_id, todos);
+      if (prevStr) {
+        try {
+          const prev = JSON.parse(prevStr);
+          const prevOpen = new Set(prev.filter((t) => t.status !== "completed").map((t) => t.content));
+          const done = visible.filter((t) => t.status === "completed" && prevOpen.has(t.content)).map((t) => t.content);
+          if (done.length) {
+            this.bus.emit(s.state.session_id, "TASK_DONE", {
+              done,
+              remaining: visible.filter((t) => t.status !== "completed")
+            });
+          }
+        } catch {
+        }
+      }
+    }
+  }
+  lastStoreTodos = /* @__PURE__ */ new Map();
   evictOldSessions() {
     if (this.sessions.size < MAX_SESSIONS) return;
     const finished = [...this.sessions.values()].filter((s) => s.state.status === "DONE" || s.state.status === "ERROR").sort((a, b) => a.state.started_at - b.state.started_at);
@@ -38310,6 +38484,7 @@ var SessionManager = class {
       if (this.sessions.size < MAX_SESSIONS) break;
       void s.agent?.stop();
       this.sessions.delete(s.state.session_id);
+      this.lastStoreTodos.delete(s.state.session_id);
     }
   }
   cloneState(s) {
@@ -38319,9 +38494,9 @@ var SessionManager = class {
 
 // src/ws-server.ts
 import { createServer } from "node:http";
-import { readFileSync as readFileSync7, existsSync as existsSync5 } from "node:fs";
-import { join as join7, sep as sep5 } from "node:path";
-import { networkInterfaces } from "node:os";
+import { readFileSync as readFileSync9, existsSync as existsSync5, readdirSync as readdirSync4 } from "node:fs";
+import { join as join8, sep as sep5 } from "node:path";
+import { homedir as homedir4, networkInterfaces } from "node:os";
 import { fileURLToPath as fileURLToPath3 } from "node:url";
 
 // node_modules/ws/wrapper.mjs
@@ -38337,33 +38512,49 @@ var wrapper_default = import_websocket.default;
 
 // src/bridge.ts
 import { randomUUID as randomUUID4 } from "node:crypto";
-import { closeSync as closeSync2, openSync as openSync2, readSync as readSync2, readFileSync as readFileSync6, readdirSync as readdirSync2, statSync as statSync3, writeFileSync as writeFileSync5 } from "node:fs";
-import { homedir as homedir2 } from "node:os";
-import path3 from "node:path";
+import { closeSync as closeSync2, openSync as openSync2, readSync as readSync2, readFileSync as readFileSync8, readdirSync as readdirSync3, statSync as statSync4, writeFileSync as writeFileSync5 } from "node:fs";
+import { homedir as homedir3 } from "node:os";
+import path4 from "node:path";
 
 // src/injector.ts
 import { spawn as spawn2, execFileSync } from "node:child_process";
 import { existsSync as existsSync4, mkdirSync as mkdirSync4 } from "node:fs";
-import path2 from "node:path";
+import path3 from "node:path";
 import { fileURLToPath as fileURLToPath2 } from "node:url";
-var here = path2.dirname(fileURLToPath2(import.meta.url));
-var dataDir = process.env.CCR_DATA_DIR ?? path2.join(here, "..", "data");
-var binDir = path2.join(dataDir, "bin");
-var injectCs = process.env.CCR_INJECT_CS ?? path2.join(here, "..", "bin", "inject.cs");
-var exe2 = path2.join(binDir, "inject.exe");
+var here = path3.dirname(fileURLToPath2(import.meta.url));
+var dataDir = process.env.CCR_DATA_DIR ?? path3.join(here, "..", "data");
+var binDir = path3.join(dataDir, "bin");
+var injectCs = process.env.CCR_INJECT_CS ?? path3.join(here, "..", "bin", "inject.cs");
+var exe2 = path3.join(binDir, "inject.exe");
 var CSC = "C:/Windows/Microsoft.NET/Framework64/v4.0.30319/csc.exe";
 var ready = existsSync4(exe2);
 function ensureInjector() {
   if (process.env.CCR_INJECT_CMD) return true;
+  if (process.platform !== "win32") return false;
   if (ready) return true;
   try {
     mkdirSync4(binDir, { recursive: true });
-    execFileSync(CSC, ["-nologo", `-out:${exe2}`, injectCs], { timeout: 3e4 });
+    execFileSync(CSC, ["-nologo", `-out:${exe2}`, injectCs], { timeout: 3e4, windowsHide: true });
     ready = true;
   } catch (e) {
     console.warn("[injector] compile failed:", e instanceof Error ? e.message : e);
   }
   return ready;
+}
+var VALID_TARGET = /^(claude|node)(\.exe)?$/i;
+function targetIsCliHost(pid) {
+  if (process.env.CCR_INJECT_CMD) return true;
+  try {
+    const out = execFileSync(
+      "tasklist",
+      ["/FI", `PID eq ${pid}`, "/FO", "CSV", "/NH"],
+      { encoding: "utf8", timeout: 5e3, windowsHide: true }
+    );
+    const m = /^"([^"]+?\.exe)"/.exec(out.trim());
+    return !!m && VALID_TARGET.test(m[1]);
+  } catch {
+    return false;
+  }
 }
 var ERR_BY_CODE = {
   1: "process-gone",
@@ -38375,7 +38566,7 @@ var ERR_BY_CODE = {
 function run(args) {
   return new Promise((resolve6) => {
     const fake = process.env.CCR_INJECT_CMD;
-    const child = fake ? spawn2(process.execPath, [fake, ...args]) : spawn2(exe2, args);
+    const child = fake ? spawn2(process.execPath, [fake, ...args], { windowsHide: true }) : spawn2(exe2, args, { windowsHide: true });
     let err = "";
     child.stderr?.on("data", (c) => err += c);
     const timer = setTimeout(() => {
@@ -38394,8 +38585,14 @@ function run(args) {
   });
 }
 var CHUNK = 400;
+function injectSupported() {
+  return process.platform === "win32" || !!process.env.CCR_INJECT_CMD;
+}
+var ERR_UNSUPPORTED = "\u5F53\u524D\u5E73\u53F0\u4E0D\u652F\u6301\u6309\u952E\u6CE8\u5165\uFF08\u4EC5 Windows\uFF09";
 async function injectText(pid, rawText) {
+  if (!injectSupported()) return { ok: false, error: ERR_UNSUPPORTED };
   if (!ensureInjector()) return { ok: false, error: "\u6CE8\u5165\u5668\u4E0D\u53EF\u7528\uFF08\u7F16\u8BD1\u5931\u8D25\uFF0C\u7F3A .NET Framework csc\uFF1F\uFF09" };
+  if (!targetIsCliHost(pid)) return { ok: false, error: "pid-reuse" };
   const text = rawText.replace(/[\r\n]+/g, " ").trim();
   if (!text) return { ok: false, error: "\u7A7A\u6D88\u606F" };
   for (let i = 0; i < text.length; i += CHUNK) {
@@ -38412,11 +38609,15 @@ async function injectText(pid, rawText) {
   return { ok: true };
 }
 async function injectEsc(pid) {
+  if (!injectSupported()) return { ok: false, error: ERR_UNSUPPORTED };
   if (!ensureInjector()) return { ok: false, error: "\u6CE8\u5165\u5668\u4E0D\u53EF\u7528" };
+  if (!targetIsCliHost(pid)) return { ok: false, error: "pid-reuse" };
   return run([String(pid), "--esc"]);
 }
 async function injectEnter(pid) {
+  if (!injectSupported()) return { ok: false, error: ERR_UNSUPPORTED };
   if (!ensureInjector()) return { ok: false, error: "\u6CE8\u5165\u5668\u4E0D\u53EF\u7528" };
+  if (!targetIsCliHost(pid)) return { ok: false, error: "pid-reuse" };
   return run([String(pid), ""]);
 }
 
@@ -38437,7 +38638,7 @@ var Bridge = class _Bridge {
     this.bus = bus2;
     this.mgr = mgr2;
     this.opts = opts;
-    this.pidCacheFile = path3.join(opts.dataDir, "cli-pids.json");
+    this.pidCacheFile = path4.join(opts.dataDir, "cli-pids.json");
     this.stuckAfterMs = Number(process.env.CCR_STUCK_AFTER_MS) > 0 ? Number(process.env.CCR_STUCK_AFTER_MS) : 9e4;
     this.stuckRetryMs = Number(process.env.CCR_STUCK_RETRY_MS) > 0 ? Number(process.env.CCR_STUCK_RETRY_MS) : 6e4;
     this.subagentEndTtlMs = Number(process.env.CCR_SUBAGENT_END_TTL_MS) > 0 ? Number(process.env.CCR_SUBAGENT_END_TTL_MS) : 10 * 6e4;
@@ -38490,6 +38691,9 @@ var Bridge = class _Bridge {
   // 注入不再依赖 90s 看门狗兜底
   noHookIds = /* @__PURE__ */ new Set();
   lastGrow = /* @__PURE__ */ new Map();
+  // ext id -> 最近一次 hook 事件到达时间（#211 空闲兜底的时钟之一：
+  // Stop 上报被 403 丢弃时无任何事件到达，转录也不再增长 → 判定 CLI 实际空闲）
+  lastHookAt = /* @__PURE__ */ new Map();
   // 看门狗/子 Agent TTL 阈值（env 可调：测试用短值，生产默认 90s/60s/10min/30min）
   stuckAfterMs;
   stuckRetryMs;
@@ -38520,13 +38724,13 @@ var Bridge = class _Bridge {
   // 该 CLI 重启后 hook 生效即获得完整功能
   adoptOrphans() {
     try {
-      const root = process.env.CCR_PROJECTS_ROOT ?? path3.join(homedir2(), ".claude", "projects");
+      const root = process.env.CCR_PROJECTS_ROOT ?? path4.join(homedir3(), ".claude", "projects");
       const cutoff = Date.now() - 30 * 6e4;
-      for (const dir of readdirSync2(root, { withFileTypes: true })) {
+      for (const dir of readdirSync3(root, { withFileTypes: true })) {
         if (!dir.isDirectory()) continue;
         let files;
         try {
-          files = readdirSync2(path3.join(root, dir.name));
+          files = readdirSync3(path4.join(root, dir.name));
         } catch {
           continue;
         }
@@ -38535,7 +38739,7 @@ var Bridge = class _Bridge {
           const sid = f.slice(0, -6);
           if (!/^[0-9a-f-]{8,64}$/i.test(sid)) continue;
           const id2 = "ext-" + sid;
-          const p = path3.join(root, dir.name, f);
+          const p = path4.join(root, dir.name, f);
           if (this.mgr.getExternal(id2)) {
             if (!this.transcriptPaths.has(id2)) {
               this.transcriptPaths.set(id2, p);
@@ -38547,7 +38751,7 @@ var Bridge = class _Bridge {
           if (this.mgr.isDeletedExt(id2)) continue;
           let mtime;
           try {
-            mtime = statSync3(p).mtimeMs;
+            mtime = statSync4(p).mtimeMs;
           } catch {
             continue;
           }
@@ -38577,7 +38781,7 @@ var Bridge = class _Bridge {
     let fd2;
     try {
       fd2 = openSync2(p, "r");
-      const size = statSync3(p).size;
+      const size = statSync4(p).size;
       const len = Math.min(size, 8192);
       const buf = Buffer.alloc(len);
       readSync2(fd2, buf, 0, len, size - len);
@@ -38605,7 +38809,7 @@ var Bridge = class _Bridge {
     let fd2;
     try {
       fd2 = openSync2(p, "r");
-      const size = statSync3(p).size;
+      const size = statSync4(p).size;
       const chunk = 64 * 1024;
       const buf = Buffer.alloc(chunk + 1024);
       let carry = Buffer.alloc(0);
@@ -38635,7 +38839,7 @@ var Bridge = class _Bridge {
   // 从 hook 侧缓存文件补回（key=CLI session_id，CLI 存活期不变）
   hydratePidsFromCache() {
     try {
-      const cache = JSON.parse(readFileSync6(this.pidCacheFile, "utf-8"));
+      const cache = JSON.parse(readFileSync8(this.pidCacheFile, "utf-8"));
       for (const s of this.mgr.snapshot()) {
         if (!s.external || s.cli_pid) continue;
         const pid = cache[s.relay_session_id || s.session_id.slice(4)];
@@ -38652,10 +38856,10 @@ var Bridge = class _Bridge {
   // 补定位顺带清 historical：活 pid 即会话真实存活的证明。
   reconcilePidsFromSessions() {
     try {
-      const dir = process.env.CCR_SESSIONS_ROOT || path3.join(homedir2(), ".claude", "sessions");
+      const dir = process.env.CCR_SESSIONS_ROOT || path4.join(homedir3(), ".claude", "sessions");
       let files;
       try {
-        files = readdirSync2(dir);
+        files = readdirSync3(dir);
       } catch {
         return;
       }
@@ -38665,7 +38869,7 @@ var Bridge = class _Bridge {
         if (!Number.isInteger(pid) || pid <= 0) continue;
         let sid = "";
         try {
-          const d2 = JSON.parse(readFileSync6(path3.join(dir, f), "utf-8"));
+          const d2 = JSON.parse(readFileSync8(path4.join(dir, f), "utf-8"));
           if (typeof d2.sessionId === "string" && d2.sessionId) sid = d2.sessionId;
         } catch {
         }
@@ -38697,6 +38901,7 @@ var Bridge = class _Bridge {
   }
   async handleEvent(ev2) {
     this.noHookIds.delete(this.extId(ev2));
+    this.lastHookAt.set(this.extId(ev2), Date.now());
     const decision = await this.dispatch(ev2);
     if (ev2.cli_pid && ev2.cli_pid > 0) this.mgr.setExternalCliPid(this.extId(ev2), ev2.cli_pid);
     if (ev2.transcript_path) {
@@ -38750,6 +38955,7 @@ var Bridge = class _Bridge {
       }
       for (const [id2, p] of this.transcriptPaths) this.pushAssistantTexts(id2, p);
       this.sweepNoHookIdle();
+      this.sweepWorkingIdle();
       this.sweepSubagents();
       this.sweepStuckInputs();
     }, 5e3);
@@ -38781,6 +38987,33 @@ var Bridge = class _Bridge {
       this.turnStart.delete(id2);
       this.mgr.finishExternal(id2, "completed", Date.now() - turn);
       this.mgr.pushExternalLog(id2, "system", "\u8F6C\u5F55\u9759\u9ED8\uFF0C\u56DE\u5408\u89C6\u4F5C\u7ED3\u675F\uFF08\u65E0 hook \u4F1A\u8BDD\uFF09");
+      if ((this.inputQueue.get(id2)?.length ?? 0) > 0) void this.flushQueue(id2);
+    }
+  }
+  // #211 空闲兜底：hook 上报链路整体失联（403/桥配置失配/relay 换 token）时 Stop
+  // 永远到不了，WORKING 外部会话永久卡死。有 hook 会话（不在 noHookIds）以
+  // "转录增长 + hook 事件"双时钟判空闲：两时钟均静默超过 shape 档上限（end=90s /
+  // 其余 10min，与 sweepNoHookIdle 同参）即视作回合完成。误判可自愈——真在跑的
+  // 长工具下一事件到达即翻回 WORKING；不兜底则是永久假 WORKING（更糟）。
+  sweepWorkingIdle() {
+    const idleMs = Number(process.env.CCR_NOHOOK_IDLE_MS) > 0 ? Number(process.env.CCR_NOHOOK_IDLE_MS) : 9e4;
+    const now = Date.now();
+    if (this.lastHookAt.size > 200) this.lastHookAt.clear();
+    for (const s of this.mgr.snapshot()) {
+      if (!s.external || s.status !== "WORKING") continue;
+      const id2 = s.session_id;
+      if (this.noHookIds.has(id2) || this.pending.has(id2)) continue;
+      const idleSince = Math.max(
+        this.lastGrow.get(id2) ?? 0,
+        this.lastHookAt.get(id2) ?? 0,
+        s.updated_at ?? 0
+      );
+      const shape = this.turnShape.get(id2) ?? "gen";
+      if (!idleSince || now - idleSince <= (shape === "end" ? idleMs : 6e5)) continue;
+      const turn = this.turnStart.get(id2) ?? s.started_at;
+      this.turnStart.delete(id2);
+      this.mgr.finishExternal(id2, "completed", now - turn);
+      this.mgr.pushExternalLog(id2, "system", "\u8F6C\u5F55\u4E0E\u4E8B\u4EF6\u5747\u9759\u9ED8\u8D85\u65F6\uFF0C\u56DE\u5408\u89C6\u4F5C\u7ED3\u675F\uFF08hook \u5931\u8054\u515C\u5E95\uFF09");
       if ((this.inputQueue.get(id2)?.length ?? 0) > 0) void this.flushQueue(id2);
     }
   }
@@ -38825,6 +39058,7 @@ var Bridge = class _Bridge {
     const kept2 = list.filter((p) => !key.includes(normKey(p.text)));
     if (kept2.length === list.length) return [];
     this.mgr.setExternalPending(id2, kept2);
+    for (const p of list) if (key.includes(normKey(p.text))) this.dropEnqueuedKey(id2, p.text);
     return list.filter((p) => key.includes(normKey(p.text))).map((p) => p.text);
   }
   // PC 端敲字排队：与手机注入同构地进 pending_inputs，手机立即显示"排队中"
@@ -38836,8 +39070,34 @@ var Bridge = class _Bridge {
     if (text.startsWith("[\u79FB\u52A8\u7AEF\u5220\u9664\u4EFB\u52A1]")) return;
     const key = normKey(content);
     const pending = state.pending_inputs ?? [];
-    if (pending.some((p) => key.includes(normKey(p.text)))) return;
+    const covered = pending.some((p) => key.includes(normKey(p.text)));
+    if (covered) {
+      for (const p of pending) if (key.includes(normKey(p.text))) this.noteEnqueuedKey(id2, normKey(p.text));
+      this.noteEnqueuedKey(id2, key);
+      return;
+    }
     this.mgr.setExternalPending(id2, [...pending, { text, ts: Date.now() }]);
+  }
+  // ext id -> transcript queue-operation 已见过的 normKey：这些文本已被 CLI 捕获进队，
+  // 滞留看门狗不得对它们补发回车（误补发会在回合边界提交空行/干扰排队语义）
+  enqueuedKeys = /* @__PURE__ */ new Map();
+  noteEnqueuedKey(id2, key) {
+    if (!key) return;
+    let m = this.enqueuedKeys.get(id2);
+    if (!m) {
+      if (this.enqueuedKeys.size > 60) this.enqueuedKeys.clear();
+      m = /* @__PURE__ */ new Set();
+      this.enqueuedKeys.set(id2, m);
+    }
+    m.add(key);
+    if (m.size > 40) m.clear();
+  }
+  isEnqueued(id2, text) {
+    return this.enqueuedKeys.get(id2)?.has(normKey(text)) ?? false;
+  }
+  // 晋升（transcript user 行 / UPS hook 确认提交）后移除标记：同文本再次注入滞留时看门狗仍要管
+  dropEnqueuedKey(id2, text) {
+    this.enqueuedKeys.get(id2)?.delete(normKey(text));
   }
   // steering 中途交付（attachment queued_command，不触发 UserPromptSubmit）：
   // 出 pending + 记正式消息；有钩子的路径仍由 promotePending 处理
@@ -38893,7 +39153,8 @@ var Bridge = class _Bridge {
     return true;
   }
   // 手机作答 AskUserQuestion：窗口内 allow+updatedInput 把答案注入工具入参（CLI 不再弹本地选择器）；
-  // 窗口外（本地选择器已弹出）Esc 关闭它再以消息注入答案——两端任一先答即生效
+  // 窗口外（本地选择器已弹出）Esc 关闭它再以消息注入答案——两端任一先答即生效。
+  // 返回 null=已受理，字符串=失败原因（Mac 无注入器等场景给用户可读的提示）
   answerPending(sessionId, requestId, answers) {
     const p = this.pending.get(sessionId);
     if (p && p.requestId === requestId && p.questions?.length && p.toolInput) {
@@ -38907,14 +39168,16 @@ var Bridge = class _Bridge {
         decision: "allow",
         updatedInput: { ...p.toolInput, answers: answersMap }
       });
-      return true;
+      return null;
     }
     const fb2 = this.askFallback.get(sessionId);
-    if (fb2 && fb2.requestId !== requestId) return false;
+    if (fb2 && fb2.requestId !== requestId) return "no such pending request";
     const st2 = this.mgr.getExternal(sessionId);
     const wq = st2?.waiting_request;
     const questions = fb2?.questions ?? (wq?.request_id === requestId ? wq?.questions : void 0);
-    if (!questions?.length || !ensureInjector() || !st2?.cli_pid) return false;
+    if (!questions?.length) return "no such pending request";
+    if (!st2?.cli_pid) return "CLI \u8FDB\u7A0B\u672A\u5B9A\u4F4D";
+    if (!ensureInjector()) return "\u5F53\u524D\u5E73\u53F0\u4E0D\u652F\u6301\u6309\u952E\u6CE8\u5165\uFF0C\u8BF7\u5728\u7535\u8111\u7AEF\u4F5C\u7B54";
     if (fb2) this.askFallback.delete(sessionId);
     const pid = st2.cli_pid;
     const msg = buildAnswerMessage(questions, answers);
@@ -38930,7 +39193,7 @@ var Bridge = class _Bridge {
       const r2 = await injectText(pid2, msg);
       if (!r2.ok) this.onInjectFail(sessionId, r2.error);
     });
-    return true;
+    return null;
   }
   hasPending(sessionId) {
     return this.pending.has(sessionId);
@@ -38972,6 +39235,7 @@ var Bridge = class _Bridge {
     if (i !== -1) {
       const promoted = list.splice(i, 1)[0];
       this.mgr.setExternalPending(sessionId, list);
+      this.dropEnqueuedKey(sessionId, promoted.text);
       this.noteUserMsg(sessionId, promoted.text, "promote");
       this.mgr.pushExternalLog(sessionId, "user_message", truncate(promoted.text, 300));
       return true;
@@ -38986,6 +39250,7 @@ var Bridge = class _Bridge {
           const hits = list.splice(s, e - s + 1);
           this.mgr.setExternalPending(sessionId, list);
           for (const h of hits) {
+            this.dropEnqueuedKey(sessionId, h.text);
             this.noteUserMsg(sessionId, h.text, "promote");
             this.mgr.pushExternalLog(sessionId, "user_message", truncate(h.text, 300));
           }
@@ -39057,16 +39322,17 @@ var Bridge = class _Bridge {
     this.inputQueue.delete(sessionId);
     if (this.mgr.getExternal(sessionId)?.pending_inputs?.length) this.mgr.setExternalPending(sessionId, []);
     this.clearPidCache(sessionId);
+    const why = error === "pid-reuse" ? "\u8FDB\u7A0B\u5B9A\u4F4D\u5931\u6548\uFF08PID \u88AB\u7CFB\u7EDF\u590D\u7528\uFF09" : error ?? "\u672A\u77E5";
     this.mgr.pushExternalLog(
       sessionId,
       "system",
-      `\u6CE8\u5165\u5931\u8D25\uFF08${error ?? "\u672A\u77E5"}\uFF09\uFF0C\u5DF2\u6E05\u9664\u8FDB\u7A0B\u5B9A\u4F4D${dropped ? `\u5E76\u5F03 ${dropped} \u6761\u6392\u961F\u6D88\u606F` : ""}\uFF1B\u8BE5\u4F1A\u8BDD\u4E0B\u6B21\u6D3B\u52A8\u540E\u53EF\u91CD\u8BD5`
+      `\u6CE8\u5165\u5931\u8D25\uFF08${why}\uFF09\uFF0C\u5DF2\u6E05\u9664\u8FDB\u7A0B\u5B9A\u4F4D${dropped ? `\u5E76\u5F03 ${dropped} \u6761\u6392\u961F\u6D88\u606F` : ""}\uFF1B\u8BE5\u4F1A\u8BDD\u4E0B\u6B21\u6D3B\u52A8\u540E\u53EF\u91CD\u8BD5`
     );
   }
   // hook 侧 pid 缓存（relay 会话 id = "ext-" + CLI session_id）
   clearPidCache(sessionId) {
     try {
-      const raw = JSON.parse(readFileSync6(this.pidCacheFile, "utf-8"));
+      const raw = JSON.parse(readFileSync8(this.pidCacheFile, "utf-8"));
       delete raw[sessionId.slice(4)];
       writeFileSync5(this.pidCacheFile, JSON.stringify(raw));
     } catch {
@@ -39114,11 +39380,11 @@ var Bridge = class _Bridge {
   }
   readCcSessionName(cliSessionId) {
     try {
-      const dir = path3.join(homedir2(), ".claude", "sessions");
-      for (const f of readdirSync2(dir)) {
+      const dir = path4.join(homedir3(), ".claude", "sessions");
+      for (const f of readdirSync3(dir)) {
         if (!f.endsWith(".json")) continue;
         try {
-          const d2 = JSON.parse(readFileSync6(path3.join(dir, f), "utf-8"));
+          const d2 = JSON.parse(readFileSync8(path4.join(dir, f), "utf-8"));
           if (d2.sessionId === cliSessionId) return d2.name?.trim() || null;
         } catch {
         }
@@ -39141,7 +39407,7 @@ var Bridge = class _Bridge {
   pushAssistantTexts(id2, transcriptPath) {
     if (!transcriptPath) return;
     try {
-      const size = statSync3(transcriptPath).size;
+      const size = statSync4(transcriptPath).size;
       const prev = this.transcriptOffsets.get(id2);
       let start;
       let firstRead = false;
@@ -39181,6 +39447,8 @@ var Bridge = class _Bridge {
       const enqueues = [];
       const steers = [];
       const userTexts = [];
+      let lastTool = null;
+      let thinkPreview = "";
       let shape = null;
       const taskOps = [];
       const agentNotifs = [];
@@ -39192,6 +39460,7 @@ var Bridge = class _Bridge {
       let usageCr = 0;
       let usageCw = 0;
       let usageSeen = false;
+      let ctxLast = 0;
       let model = "";
       for (const line of raw.slice(0, end).split("\n")) {
         if (line.includes("<task-notification>")) {
@@ -39255,6 +39524,7 @@ var Bridge = class _Bridge {
             usageCr += inc(mu2.cache_read_input_tokens);
             usageCw += inc(mu2.cache_creation_input_tokens);
             usageSeen = true;
+            ctxLast = inc(mu2.input_tokens) + inc(mu2.cache_read_input_tokens) + inc(mu2.cache_creation_input_tokens);
           }
           if (typeof j2.message?.model === "string" && j2.message.model) model = j2.message.model;
           const content = j2.message?.content;
@@ -39267,9 +39537,15 @@ var Bridge = class _Bridge {
             if (!b || typeof b !== "object") continue;
             const blk = b;
             if (blk.type === "text" && typeof blk.text === "string") texts.push(blk.text);
-            else if (blk.type === "thinking" && typeof blk.thinking === "string") thinks.push(blk.thinking);
-            else if (blk.type === "tool_use") {
+            else if (blk.type === "thinking" && typeof blk.thinking === "string") {
+              thinks.push(blk.thinking);
+              if (!thinkPreview) thinkPreview = blk.thinking;
+            } else if (blk.type === "tool_use") {
               hasToolUse = true;
+              lastTool = {
+                name: typeof blk.name === "string" ? blk.name : "",
+                input: b.input ?? {}
+              };
               if (blk.name === "Agent" || blk.name === "Task") {
                 agentUses.push({ id: typeof blk.id === "string" ? blk.id : "", input: b.input });
               }
@@ -39286,6 +39562,13 @@ var Bridge = class _Bridge {
       if (shape !== null) {
         if (this.turnShape.size > 200) this.turnShape.clear();
         this.turnShape.set(id2, shape);
+      }
+      if (!firstRead) {
+        const derived = lastTool ? summarizeToolUse(lastTool.name || "tool", lastTool.input) : thinkPreview ? `\u601D\u8003\u4E2D: ${truncate(thinkPreview, 60)}` : "";
+        const st1 = this.mgr.getExternal(id2);
+        if (derived && st1 && st1.status === "WORKING" && derived !== st1.action_summary && (this.noHookIds.has(id2) || /^转录活跃|^自愈：/.test(st1.action_summary ?? ""))) {
+          this.mgr.setExternalStatus(id2, "WORKING", derived);
+        }
       }
       const emit = firstRead ? entries.filter((e) => e.kind === "assistant_text").slice(-1) : entries;
       for (const e of emit) {
@@ -39307,31 +39590,34 @@ var Bridge = class _Bridge {
           this.lastTodos.set(id2, j2);
           this.mgr.setTodos(id2, storeTodos);
         }
-      } else if (firstRead) {
-        this.replayTaskHistory(id2, transcriptPath);
-      } else if (taskOps.length) {
-        const tr = this.ensureTracker(id2);
-        for (const op2 of taskOps) {
-          const todos = op2.result ? tr.feedResult(op2.result) : tr.feed(op2.tool, op2.input);
-          if (todos) this.mgr.setTodos(id2, todos);
+      } else if (!this.lastTodos.has(id2)) {
+        if (firstRead) this.replayTaskHistory(id2, transcriptPath);
+        else if (taskOps.length) {
+          const tr = this.ensureTracker(id2);
+          for (const op2 of taskOps) {
+            const todos = op2.result ? tr.feedResult(op2.result) : tr.feed(op2.tool, op2.input);
+            if (todos) this.mgr.setTodos(id2, todos);
+          }
         }
       }
       if (usageSeen || model) {
         let u = this.extUsage.get(id2);
         if (!u || firstRead) {
           if (this.extUsage.size > 60) this.extUsage.clear();
-          u = { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, model: "" };
+          u = { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, model: "", ctx: 0 };
           this.extUsage.set(id2, u);
         }
         u.input += usageIn;
         u.output += usageOut;
         u.cacheRead += usageCr;
         u.cacheWrite += usageCw;
+        if (usageSeen) u.ctx = ctxLast;
         if (model) u.model = model;
         this.mgr.setExternalUsage(
           id2,
           { input_tokens: u.input, output_tokens: u.output, cache_read_input_tokens: u.cacheRead, cache_creation_input_tokens: u.cacheWrite },
-          u.model || void 0
+          u.model || void 0,
+          u.ctx || void 0
         );
       }
     } catch {
@@ -39378,12 +39664,12 @@ var Bridge = class _Bridge {
   // 旧方案靠 hook 事件增量累积，relay 每次重启都从零开始（手机端 7/18 ≠ 实际的根因）；
   // transcript 是唯一完整事实源。预过滤 + 分块读，108MB 转录一次性扫描 ~1s。
   // 工具串行执行，use/result 按文件顺序回放即可正确配对（callId 交集做结果匹配）。
-  replayTaskHistory(id2, path4) {
+  replayTaskHistory(id2, path5) {
     const ops = [];
     const creates = /* @__PURE__ */ new Set();
     try {
-      const size = statSync3(path4).size;
-      const fd2 = openSync2(path4, "r");
+      const size = statSync4(path5).size;
+      const fd2 = openSync2(path5, "r");
       const CHUNK2 = 8 * 1024 * 1024;
       const buf = Buffer.alloc(CHUNK2);
       let carry = "";
@@ -39446,33 +39732,10 @@ var Bridge = class _Bridge {
   }
   // CLI 任务存储目录（~/.claude/tasks/<cli_session>/*.json）：权威清单，与 /tasks 实时一致
   // （会话压缩/任务清理后也对）。目录不存在（旧版 CLI/其他会话形态）返回 null 走 transcript 兜底。
+  // 直读逻辑已抽到 task-store.ts，SessionManager 30s 轮询同源（#206）
   lastTodos = /* @__PURE__ */ new Map();
   readTaskStore(id2) {
-    const cli = id2.startsWith("ext-") ? id2.slice(4) : id2;
-    const dir = path3.join(homedir2(), ".claude", "tasks", cli);
-    let files;
-    try {
-      files = readdirSync2(dir).filter((f) => f.endsWith(".json"));
-    } catch {
-      return null;
-    }
-    if (!files.length) return null;
-    const out = [];
-    for (const f of files) {
-      try {
-        const fp2 = path3.join(dir, f);
-        const t = JSON.parse(readFileSync6(fp2, "utf-8"));
-        const subject = typeof t.subject === "string" ? t.subject.trim() : "";
-        if (!subject) continue;
-        const status = t.status === "in_progress" || t.status === "completed" ? t.status : "pending";
-        const activeForm = typeof t.activeForm === "string" && t.activeForm.trim() ? { active_form: t.activeForm.trim().slice(0, 120) } : {};
-        out.push({ n: Number(f.replace(/[^0-9]/g, "")) || 0, content: subject.slice(0, 120), status, updated_at: statSync3(fp2).mtimeMs, ...activeForm });
-      } catch {
-      }
-    }
-    if (!out.length) return null;
-    out.sort((a, b) => a.n - b.n);
-    return out.map(({ n: _n2, ...rest }) => rest);
+    return readTaskStoreTodos(id2.startsWith("ext-") ? id2.slice(4) : id2);
   }
   // 手动刷新：清掉 JSON 变更检测的缓存，强制重读任务存储并重发（绕过"内容没变不推"）
   refreshTodos(sessionId) {
@@ -39780,12 +40043,18 @@ var Bridge = class _Bridge {
   // WAITING 严禁补发——回车会误触权限弹窗。
   sweepStuckInputs() {
     const now = Date.now();
+    const firstMs = Math.min(1e4, this.stuckAfterMs);
     for (const s of this.mgr.snapshot()) {
       if (!s.external) continue;
       const id2 = s.session_id;
-      const stuck = (s.pending_inputs ?? []).some(
-        (p) => now - p.ts > this.stuckAfterMs && !this.recentlyLogged(id2, p.text)
-      );
+      const w02 = this.stuckWatch.get(id2);
+      const threshold = w02 && w02.tries > 0 ? this.stuckAfterMs : firstMs;
+      const stuck = (s.pending_inputs ?? []).some((p) => {
+        if (now - p.ts <= threshold) return false;
+        if (this.isEnqueued(id2, p.text)) return false;
+        const rec = this.recentUserMsgs.get(id2)?.get(normKey(p.text));
+        return !(rec && now - rec.ts < 6e4 && rec.ts >= p.ts);
+      });
       if (!stuck || !s.cli_pid || s.status !== "WORKING" && s.status !== "DONE" || this.flushing.has(id2) || (this.inputQueue.get(id2)?.length ?? 0) > 0) {
         this.stuckWatch.delete(id2);
         continue;
@@ -39839,11 +40108,70 @@ var COMMAND_TYPES = /* @__PURE__ */ new Set([
   "COMMAND_TODO_HIDE"
 ]);
 var HEARTBEAT_MS = 3e4;
+var BUILTIN_COMMANDS = [
+  { name: "compact", desc: "\u538B\u7F29\u5BF9\u8BDD\u5386\u53F2\uFF0C\u91CA\u653E\u4E0A\u4E0B\u6587" },
+  { name: "clear", desc: "\u6E05\u7A7A\u5F53\u524D\u4F1A\u8BDD\u5386\u53F2" },
+  { name: "help", desc: "\u67E5\u770B\u5E2E\u52A9" },
+  { name: "model", desc: "\u67E5\u770B/\u5207\u6362\u6A21\u578B" },
+  { name: "cost", desc: "\u5F53\u524D\u4F1A\u8BDD token \u7528\u91CF" },
+  { name: "context", desc: "\u4E0A\u4E0B\u6587\u4F7F\u7528\u6982\u51B5" },
+  { name: "memory", desc: "\u7F16\u8F91\u9879\u76EE\u8BB0\u5FC6 CLAUDE.md" },
+  { name: "init", desc: "\u4E3A\u5F53\u524D\u9879\u76EE\u521D\u59CB\u5316 CLAUDE.md" },
+  { name: "review", desc: "\u5BA1\u67E5 PR / \u4EE3\u7801\u53D8\u66F4" },
+  { name: "resume", desc: "\u6062\u590D\u5386\u53F2\u4F1A\u8BDD" },
+  { name: "rename", desc: "\u91CD\u547D\u540D\u5F53\u524D\u4F1A\u8BDD" },
+  { name: "export", desc: "\u5BFC\u51FA\u5F53\u524D\u4F1A\u8BDD\u8BB0\u5F55" },
+  { name: "todos", desc: "\u67E5\u770B\u5F53\u524D\u4EFB\u52A1\u6E05\u5355" },
+  { name: "permissions", desc: "\u6743\u9650\u89C4\u5219\u7BA1\u7406" },
+  { name: "config", desc: "\u6253\u5F00\u914D\u7F6E\u9762\u677F" },
+  { name: "mcp", desc: "MCP \u670D\u52A1\u5668\u7BA1\u7406" },
+  { name: "statusline", desc: "\u72B6\u6001\u680F\u914D\u7F6E" },
+  { name: "output-style", desc: "\u5207\u6362\u8F93\u51FA\u98CE\u683C" },
+  { name: "add-dir", desc: "\u6DFB\u52A0\u989D\u5916\u5DE5\u4F5C\u76EE\u5F55" },
+  { name: "vim", desc: "\u5207\u6362 vim \u6309\u952E\u6A21\u5F0F" },
+  { name: "doctor", desc: "Claude Code \u5065\u5EB7\u68C0\u67E5" },
+  { name: "login", desc: "\u5207\u6362\u8D26\u53F7" },
+  { name: "bug", desc: "\u62A5\u544A\u95EE\u9898" },
+  { name: "release-notes", desc: "\u67E5\u770B\u66F4\u65B0\u65E5\u5FD7" }
+];
+function listCustomCommands(dir, source) {
+  let entries;
+  try {
+    entries = readdirSync4(dir, { withFileTypes: true });
+  } catch {
+    return [];
+  }
+  const descOf = (p) => {
+    try {
+      const head = readFileSync9(p, "utf-8").slice(0, 400);
+      const m = /^description:\s*(.+)$/m.exec(head);
+      if (m) return m[1].trim().slice(0, 80);
+      const line = head.split(/\r?\n/).find((l) => l.trim() && !l.startsWith("---"));
+      return line ? line.trim().slice(0, 80) : "";
+    } catch {
+      return "";
+    }
+  };
+  const out = [];
+  for (const e of entries) {
+    if (e.isFile() && e.name.endsWith(".md")) {
+      out.push({ name: e.name.slice(0, -3), desc: descOf(join8(dir, e.name)), source });
+    } else if (e.isDirectory()) {
+      try {
+        for (const g2 of readdirSync4(join8(dir, e.name))) {
+          if (g2.endsWith(".md")) out.push({ name: `${e.name}:${g2.slice(0, -3)}`, desc: descOf(join8(dir, e.name, g2)), source });
+        }
+      } catch {
+      }
+    }
+  }
+  return out;
+}
 function startServer(bus2, mgr2, cfg2, opts = {}) {
   const webRoot = process.env.CCR_WEB_ROOT ?? ("1" ? fileURLToPath3(new URL("../", import.meta.url)) : fileURLToPath3(new URL("../../", import.meta.url)));
-  const consoleHtml = join7(webRoot, "web-console", "index.html");
-  const naclJs = join7(webRoot, "web-console", "nacl.js");
-  const mobileDir = join7(webRoot, "mobile") + sep5;
+  const consoleHtml = join8(webRoot, "web-console", "index.html");
+  const naclJs = join8(webRoot, "web-console", "nacl.js");
+  const mobileDir = join8(webRoot, "mobile") + sep5;
   const MIME = {
     ".html": "text/html; charset=utf-8",
     ".js": "text/javascript; charset=utf-8",
@@ -39865,7 +40193,7 @@ function startServer(bus2, mgr2, cfg2, opts = {}) {
       return true;
     }
     const ext = rel.slice(rel.lastIndexOf("."));
-    res.writeHead(200, { "content-type": MIME[ext] ?? "application/octet-stream" }).end(readFileSync7(file));
+    res.writeHead(200, { "content-type": MIME[ext] ?? "application/octet-stream" }).end(readFileSync9(file));
     return true;
   };
   const wss = new import_websocket_server.default({ noServer: true });
@@ -39893,7 +40221,7 @@ function startServer(bus2, mgr2, cfg2, opts = {}) {
         res.writeHead(503).end("web-console/index.html \u4E0D\u5B58\u5728\uFF08\u6B65\u9AA4 6 \u751F\u6210\uFF09");
         return;
       }
-      const html = readFileSync7(consoleHtml);
+      const html = readFileSync9(consoleHtml);
       res.writeHead(200, { "content-type": "text/html; charset=utf-8" }).end(html);
       return;
     }
@@ -39902,7 +40230,7 @@ function startServer(bus2, mgr2, cfg2, opts = {}) {
         res.writeHead(503).end("web-console/nacl.js \u4E0D\u5B58\u5728\uFF08cp node_modules/tweetnacl/nacl-fast.min.js\uFF09");
         return;
       }
-      res.writeHead(200, { "content-type": "text/javascript; charset=utf-8" }).end(readFileSync7(naclJs));
+      res.writeHead(200, { "content-type": "text/javascript; charset=utf-8" }).end(readFileSync9(naclJs));
       return;
     }
     if (req.method === "GET" && url.pathname === "/health") {
@@ -39961,6 +40289,24 @@ function startServer(bus2, mgr2, cfg2, opts = {}) {
         return;
       }
       res.writeHead(200, { "content-type": "application/json" }).end(JSON.stringify(opts.pairCodes.issue()));
+      return;
+    }
+    if (req.method === "GET" && url.pathname === "/api/commands") {
+      if ((url.searchParams.get("token") ?? "") !== cfg2.token) {
+        res.writeHead(401).end("unauthorized");
+        return;
+      }
+      const cwd = url.searchParams.get("cwd") ?? "";
+      const custom = [
+        ...listCustomCommands(join8(homedir4(), ".claude", "commands"), "user"),
+        ...cwd ? listCustomCommands(join8(cwd, ".claude", "commands"), "project") : []
+      ];
+      const seen = new Set(custom.map((c) => c.name));
+      const commands = [
+        ...custom,
+        ...BUILTIN_COMMANDS.filter((c) => !seen.has(c.name)).map((c) => ({ ...c, source: "builtin" }))
+      ];
+      res.writeHead(200, { "content-type": "application/json", "cache-control": "no-store" }).end(JSON.stringify({ ok: true, commands }));
       return;
     }
     res.writeHead(404).end("not found");
@@ -40082,23 +40428,23 @@ async function handleBridgeHook(req, res, bridge, cfg2) {
 var connectionCounter = 0;
 
 // src/cloud-identity.ts
-import { existsSync as existsSync6, readFileSync as readFileSync8, writeFileSync as writeFileSync6 } from "node:fs";
-import { join as join8 } from "node:path";
+import { existsSync as existsSync6, readFileSync as readFileSync10, writeFileSync as writeFileSync6 } from "node:fs";
+import { join as join9 } from "node:path";
 function loadOrCreateIdentity(dataDir2) {
-  const kpPath = join8(dataDir2, "cloud-keypair.json");
+  const kpPath = join9(dataDir2, "cloud-keypair.json");
   let keypair;
   if (existsSync6(kpPath)) {
-    keypair = JSON.parse(readFileSync8(kpPath, "utf-8"));
+    keypair = JSON.parse(readFileSync10(kpPath, "utf-8"));
     if (!keypair.publicKey || !keypair.secretKey) throw new Error("cloud-keypair.json \u635F\u574F\uFF0C\u8BF7\u5220\u9664\u540E\u91CD\u542F\u91CD\u65B0\u751F\u6210\uFF08\u5DF2\u914D\u5BF9\u624B\u673A\u9700\u91CD\u65B0\u914D\u5BF9\uFF09");
   } else {
     keypair = generateKeyPair();
     writeFileSync6(kpPath, JSON.stringify(keypair), "utf-8");
   }
-  const peersPath = join8(dataDir2, "cloud-peers.json");
+  const peersPath = join9(dataDir2, "cloud-peers.json");
   const peers = /* @__PURE__ */ new Map();
   if (existsSync6(peersPath)) {
     try {
-      const raw = JSON.parse(readFileSync8(peersPath, "utf-8"));
+      const raw = JSON.parse(readFileSync10(peersPath, "utf-8"));
       for (const [dev, entry] of Object.entries(raw)) peers.set(dev, entry);
     } catch {
     }
@@ -40154,7 +40500,7 @@ var CloudClient = class {
   bridgeUrl() {
     const base = this.url ?? this.cfg.cloudUrl;
     const sep6 = base.includes("?") ? "&" : "?";
-    return `${base}${sep6}token=${encodeURIComponent(this.cfg.cloudToken)}&dev=${this.identity.relayDev}`;
+    return `${base}${sep6}token=${encodeURIComponent(this.cfg.cloudToken)}&dev=${this.identity.relayDev}&rk=${encodeURIComponent(this.identity.keypair.publicKey)}`;
   }
   connect() {
     if (this.stopped) return;
@@ -40375,7 +40721,7 @@ var CloudClient = class {
 };
 
 // src/pairing.ts
-function createPairingCodes(ttlMs = 1200 * 1e3) {
+function createPairingCodes(ttlMs = 60 * 1e3) {
   const codes = /* @__PURE__ */ new Map();
   return {
     issue() {
@@ -40423,7 +40769,7 @@ if (cliArgs.has("--pair")) {
   let port = cfg.port;
   let bridgeToken = cfg.bridgeToken;
   try {
-    const b = JSON.parse(readFileSync9(join9(cfg.dataDir, "bridge.json"), "utf-8"));
+    const b = JSON.parse(readFileSync11(join10(cfg.dataDir, "bridge.json"), "utf-8"));
     if (b.port) port = b.port;
     if (b.token) bridgeToken = b.token;
   } catch {
@@ -40469,14 +40815,14 @@ if (cliArgs.has("--daemon")) {
     process.exit(1);
   }
   const rest = process.argv.slice(2).filter((a) => a !== "--daemon");
-  const logFd = openSync3(join9(cfg.dataDir, "relay.log"), "a");
+  const logFd = openSync3(join10(cfg.dataDir, "relay.log"), "a");
   const child = spawn3(process.execPath, [fileURLToPath4(import.meta.url), ...rest], {
     detached: true,
     stdio: ["ignore", logFd, logFd],
     env: { ...process.env, CC_DECK_DAEMON: "1" }
   });
   child.unref();
-  console.log(`CC Deck Relay \u5DF2\u8F6C\u540E\u53F0\u8FD0\u884C\uFF08\u65E5\u5FD7: ${join9(cfg.dataDir, "relay.log")}\uFF09`);
+  console.log(`CC Deck Relay \u5DF2\u8F6C\u540E\u53F0\u8FD0\u884C\uFF08\u65E5\u5FD7: ${join10(cfg.dataDir, "relay.log")}\uFF09`);
   process.exit(0);
 }
 function pidIsNode(pid) {
@@ -40484,19 +40830,24 @@ function pidIsNode(pid) {
     if (process.platform === "win32") {
       const out = execFileSync2("tasklist", ["/FI", `PID eq ${pid}`, "/FO", "CSV", "/NH"], {
         encoding: "utf-8",
-        timeout: 5e3
+        timeout: 5e3,
+        windowsHide: true
       });
       return /node/i.test(out);
     }
-    return readFileSync9(`/proc/${pid}/comm`, "utf-8").includes("node");
+    if (existsSync7("/proc")) return readFileSync11(`/proc/${pid}/comm`, "utf-8").includes("node");
+    return "node" === execFileSync2("ps", ["-o", "comm=", "-p", String(pid)], {
+      encoding: "utf-8",
+      timeout: 5e3
+    }).trim().split(/[\\/]/).pop();
   } catch {
     return false;
   }
 }
 if (cliArgs.has("--stop")) {
-  const pidFile = join9(cfg.dataDir, "relay.pid");
+  const pidFile = join10(cfg.dataDir, "relay.pid");
   try {
-    const pid = Number(readFileSync9(pidFile, "utf-8").trim());
+    const pid = Number(readFileSync11(pidFile, "utf-8").trim());
     if (pid > 0 && pidIsNode(pid)) {
       process.kill(pid);
       console.log(`CC Deck Relay \u5DF2\u505C\u6B62\uFF08pid ${pid}\uFF09`);
@@ -40512,7 +40863,7 @@ if (cliArgs.has("--stop")) {
   }
   process.exit(0);
 }
-var persistPath = join9(cfg.dataDir, "events.ndjson");
+var persistPath = join10(cfg.dataDir, "events.ndjson");
 var prior = loadEvents(persistPath);
 var kept = compactEvents(prior);
 if (prior.length !== kept.length) rewriteFile(persistPath, kept);
@@ -40549,16 +40900,24 @@ startServer(bus, mgr, cfg, {
   // daemon 子进程 listen 成功后自写 pid（父进程不预写，端口被占时不留死 pid）
   onReady: () => {
     if (process.env.CC_DECK_DAEMON === "1") {
-      writeFileSync7(join9(cfg.dataDir, "relay.pid"), String(process.pid), "utf-8");
+      writeFileSync7(join10(cfg.dataDir, "relay.pid"), String(process.pid), "utf-8");
+    }
+    const bridgeJson = JSON.stringify({ port: cfg.port, token: cfg.bridgeToken });
+    writeFileSync7(join10(cfg.dataDir, "bridge.json"), bridgeJson, "utf-8");
+    const hookHome = join10(homedir5(), ".cc-deck", "data");
+    if (cfg.dataDir !== hookHome && existsSync7(hookHome)) {
+      try {
+        writeFileSync7(join10(hookHome, "bridge.json"), bridgeJson, "utf-8");
+      } catch {
+      }
     }
   }
 });
-writeFileSync7(join9(cfg.dataDir, "bridge.json"), JSON.stringify({ port: cfg.port, token: cfg.bridgeToken }), "utf-8");
 console.log("CC Deck Relay \u5DF2\u542F\u52A8");
 console.log(`  \u6A21\u578B:   ${cfg.model}`);
 console.log(`  \u7AEF\u53E3:   ${cfg.port}`);
 console.log(`  \u5386\u53F2:   ${persistPath}\uFF08\u6062\u590D ${adopted} \u4E2A\u4F1A\u8BDD\uFF09`);
-console.log(`  \u6865\u63A5:   ${join9(cfg.dataDir, "bridge.json")}\uFF08\u5916\u90E8 CLI \u4F1A\u8BDD\u7ECF hooks \u63A5\u5165\uFF09`);
+console.log(`  \u6865\u63A5:   ${join10(cfg.dataDir, "bridge.json")}\uFF08\u5916\u90E8 CLI \u4F1A\u8BDD\u7ECF hooks \u63A5\u5165\uFF09`);
 console.log(
   cloudIdentity ? `  \u4E91\u6865:   ${cfg.cloudUrls.join(" + ")}\uFF08dev=${cloudIdentity.relayDev}\uFF0C\u5DF2\u914D\u5BF9 ${cloudIdentity.peers.size} \u53F0\u8BBE\u5907${cfg.cloudToken ? "" : "\uFF1B\u672A\u8BBE CCR_CLOUD_TOKEN\uFF0C\u4EC5\u53EF\u914D\u5BF9\u4E0D\u53EF\u8FDE\u6865"}\uFF09` : `  \u4E91\u6865:   \u672A\u542F\u7528\uFF08\u672A\u8BBE\u7F6E CCR_CLOUD_URL\uFF09`
 );

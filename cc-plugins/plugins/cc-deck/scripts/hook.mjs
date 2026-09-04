@@ -66,11 +66,41 @@ function onceByKey(key) {
   }
 }
 
-// 定位 CLI 进程 pid（注入用）：hook 父链 node(hook)→bash×N→claude.exe，
-// 向上走祖先跳过 bash/sh 层取第一个非 shell 进程（AttachConsole 同控制台任意进程均可，
-// claude.exe 存活期=会话期，最稳）。缓存 session_id→pid，命中零开销；attach 失败时
-// Relay 删缓存促下次事件重新定位（CLI 每次启动 session_id 变化，天然无陈旧）。
-const SKIP_SHELL = /^(bash|sh)\.exe$/i;
+// 定位 CLI 进程 pid（注入用）：hook 父链 node(hook)→shell×N→CLI 宿主，
+// 向上走祖先跳过 shell 层取第一个非 shell 进程（Windows 上 AttachConsole 同控制台
+// 任意进程均可，claude.exe 存活期=会话期，最稳）。缓存 session_id→pid，命中零开销；
+// attach 失败时 Relay 删缓存促下次事件重新定位（CLI 每次启动 session_id 变化，天然无陈旧）。
+// 平台：win32 走 powershell CIM；macOS/Linux 走 ps（登录 shell comm 可能带前导 -）
+const SKIP_SHELL = /^-?(bash|sh|zsh|fish|dash|ksh)(\.exe)?$/i;
+
+function walkAncestorsWindows(execFileSync) {
+  const out = execFileSync("powershell", ["-NoProfile", "-Command",
+    `$p=${process.ppid}; for($i=0;$i -lt 6 -and $p;$i++){ $proc=Get-CimInstance Win32_Process -Filter "ProcessId=$p"; if(-not $proc){break}; "$p|$($proc.Name)"; $p=$proc.ParentProcessId }`],
+    { encoding: "utf8", timeout: 8000 }).trim();
+  for (const line of out.split(/\r?\n/)) {
+    const m = /^(\d+)\|(.+)$/.exec(line.trim());
+    if (!m) continue;
+    if (SKIP_SHELL.test(m[2])) continue;
+    return Number(m[1]);
+  }
+  return 0;
+}
+
+function walkAncestorsUnix(execFileSync) {
+  let pid = process.ppid;
+  for (let i = 0; i < 6 && pid > 0; i++) {
+    const line = execFileSync("ps", ["-o", "ppid=,comm=", "-p", String(pid)],
+      { encoding: "utf8", timeout: 5000 }).trim();
+    const m = /^(\d+)\s+(.+)$/.exec(line);
+    if (!m) break;
+    // macOS comm 是完整路径（/bin/zsh、/opt/homebrew/bin/node），先取 basename；
+    // 登录 shell argv[0] 带前导 -
+    const name = (m[2].trim().split("/").pop() ?? "").replace(/^-+/, "");
+    if (!SKIP_SHELL.test(name)) return pid;
+    pid = Number(m[1]);
+  }
+  return 0;
+}
 
 async function resolveCliPid(sessionId) {
   const cacheUrl = join(dataDir, "cli-pids.json");
@@ -82,16 +112,7 @@ async function resolveCliPid(sessionId) {
   let pid = 0;
   try {
     const { execFileSync } = await import("node:child_process");
-    const out = execFileSync("powershell", ["-NoProfile", "-Command",
-      `$p=${process.ppid}; for($i=0;$i -lt 6 -and $p;$i++){ $proc=Get-CimInstance Win32_Process -Filter "ProcessId=$p"; if(-not $proc){break}; "$p|$($proc.Name)"; $p=$proc.ParentProcessId }`],
-      { encoding: "utf8", timeout: 8000 }).trim();
-    for (const line of out.split(/\r?\n/)) {
-      const m = /^(\d+)\|(.+)$/.exec(line.trim());
-      if (!m) continue;
-      if (SKIP_SHELL.test(m[2])) continue;
-      pid = Number(m[1]);
-      break;
-    }
+    pid = process.platform === "win32" ? walkAncestorsWindows(execFileSync) : walkAncestorsUnix(execFileSync);
   } catch (e) {
     diag("cli_pid walk fail: " + (e?.message ?? e));
   }

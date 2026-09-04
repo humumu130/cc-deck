@@ -620,8 +620,9 @@ export class Bridge {
   }
 
   // 手机作答 AskUserQuestion：窗口内 allow+updatedInput 把答案注入工具入参（CLI 不再弹本地选择器）；
-  // 窗口外（本地选择器已弹出）Esc 关闭它再以消息注入答案——两端任一先答即生效
-  answerPending(sessionId: string, requestId: string, answers: string[]): boolean {
+  // 窗口外（本地选择器已弹出）Esc 关闭它再以消息注入答案——两端任一先答即生效。
+  // 返回 null=已受理，字符串=失败原因（Mac 无注入器等场景给用户可读的提示）
+  answerPending(sessionId: string, requestId: string, answers: string[]): string | null {
     const p = this.pending.get(sessionId);
     if (p && p.requestId === requestId && p.questions?.length && p.toolInput) {
       clearTimeout(p.timer);
@@ -634,17 +635,19 @@ export class Bridge {
         decision: "allow",
         updatedInput: { ...p.toolInput, answers: answersMap },
       });
-      return true;
+      return null;
     }
     // 超时兜底：CLI 本地选择器已弹出（hook 已放行），手机晚到的作答转为注入送达。
     // relay 重启会清内存兜底表，但 waiting 状态经 events.ndjson 重放仍在——按
     // request_id 从会话状态找回问题定义，晚答不因重启失效
     const fb = this.askFallback.get(sessionId);
-    if (fb && fb.requestId !== requestId) return false;
+    if (fb && fb.requestId !== requestId) return "no such pending request";
     const st = this.mgr.getExternal(sessionId);
     const wq = st?.waiting_request;
     const questions = fb?.questions ?? (wq?.request_id === requestId ? wq?.questions : undefined);
-    if (!questions?.length || !ensureInjector() || !st?.cli_pid) return false;
+    if (!questions?.length) return "no such pending request";
+    if (!st?.cli_pid) return "CLI 进程未定位";
+    if (!ensureInjector()) return "当前平台不支持按键注入，请在电脑端作答";
     if (fb) this.askFallback.delete(sessionId);
     const pid = st.cli_pid;
     const msg = buildAnswerMessage(questions, answers);
@@ -661,7 +664,7 @@ export class Bridge {
       const r2 = await injectText(pid2, msg);
       if (!r2.ok) this.onInjectFail(sessionId, r2.error);
     });
-    return true;
+    return null;
   }
 
   hasPending(sessionId: string): boolean {

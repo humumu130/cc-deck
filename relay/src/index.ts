@@ -112,7 +112,13 @@ function pidIsNode(pid: number): boolean {
       });
       return /node/i.test(out);
     }
-    return readFileSync(`/proc/${pid}/comm`, "utf-8").includes("node");
+    if (existsSync("/proc")) return readFileSync(`/proc/${pid}/comm`, "utf-8").includes("node");
+    // macOS 无 /proc，用 ps 查进程名（拿不到=已退出，走 catch 返回 false）；
+    // comm 可能是完整路径，按 basename 精确比对，避免路径含 node 误判
+    return "node" === execFileSync("ps", ["-o", "comm=", "-p", String(pid)], {
+      encoding: "utf-8",
+      timeout: 5000,
+    }).trim().split(/[\\/]/).pop();
   } catch {
     return false;
   }

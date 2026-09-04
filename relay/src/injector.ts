@@ -1,6 +1,6 @@
 // 终端按键注入：编译并调用 bin/inject.cs 产物（Windows；ConPTY/conhost 均可，不抢焦点）
 import { spawn, execFileSync } from "node:child_process";
-import { existsSync, mkdirSync, readFileSync } from "node:fs";
+import { existsSync, mkdirSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -15,8 +15,10 @@ const CSC = "C:/Windows/Microsoft.NET/Framework64/v4.0.30319/csc.exe";
 // 测试用：CCR_INJECT_CMD=node 脚本路径 时改走假注入器（记录参数）；运行时读取以兼容测试先 import 后设 env
 let ready = existsSync(exe);
 
+// inject.exe 只在 Windows 存在（csc 编译 + AttachConsole）；CCR_INJECT_CMD 假注入器平台无关（CI 在 Linux 跑测试用）
 export function ensureInjector(): boolean {
   if (process.env.CCR_INJECT_CMD) return true;
+  if (process.platform !== "win32") return false;
   if (ready) return true;
   try {
     mkdirSync(binDir, { recursive: true });
@@ -34,21 +36,19 @@ export type InjectResult = { ok: boolean; error?: string };
 // pid 回收快，可能已指向无关进程——AttachConsole 对任何有控制台的进程都会成功，
 // 按键会打进无辜终端。注入前校验目标映像仍是 CLI 宿主（claude.exe / node.exe）。
 // 假注入器（CCR_INJECT_CMD，测试）用任意 pid，跳过校验。
+// 调用方已做平台门控（injectSupported），这里只需 Windows tasklist 路径。
 const VALID_TARGET = /^(claude|node)(\.exe)?$/i;
 
 function targetIsCliHost(pid: number): boolean {
   if (process.env.CCR_INJECT_CMD) return true;
   try {
-    if (process.platform === "win32") {
-      const out = execFileSync(
-        "tasklist",
-        ["/FI", `PID eq ${pid}`, "/FO", "CSV", "/NH"],
-        { encoding: "utf8", timeout: 5000, windowsHide: true },
-      );
-      const m = /^"([^"]+?\.exe)"/.exec(out.trim());
-      return !!m && VALID_TARGET.test(m[1]);
-    }
-    return VALID_TARGET.test(readFileSync(`/proc/${pid}/comm`, "utf8").trim());
+    const out = execFileSync(
+      "tasklist",
+      ["/FI", `PID eq ${pid}`, "/FO", "CSV", "/NH"],
+      { encoding: "utf8", timeout: 5000, windowsHide: true },
+    );
+    const m = /^"([^"]+?\.exe)"/.exec(out.trim());
+    return !!m && VALID_TARGET.test(m[1]);
   } catch {
     return false;
   }
@@ -91,7 +91,15 @@ function run(args: string[]): Promise<InjectResult> {
 
 const CHUNK = 400;
 
+// 运行时读 env（测试先 import 后设 CCR_INJECT_CMD）：非 Windows 明确报不支持，
+// 外部会话注入功能降级，managed 会话不受影响
+function injectSupported(): boolean {
+  return process.platform === "win32" || !!process.env.CCR_INJECT_CMD;
+}
+const ERR_UNSUPPORTED = "当前平台不支持按键注入（仅 Windows）";
+
 export async function injectText(pid: number, rawText: string): Promise<InjectResult> {
+  if (!injectSupported()) return { ok: false, error: ERR_UNSUPPORTED };
   if (!ensureInjector()) return { ok: false, error: "注入器不可用（编译失败，缺 .NET Framework csc？）" };
   if (!targetIsCliHost(pid)) return { ok: false, error: "pid-reuse" };
   const text = rawText.replace(/[\r\n]+/g, " ").trim();
@@ -112,6 +120,7 @@ export async function injectText(pid: number, rawText: string): Promise<InjectRe
 }
 
 export async function injectEsc(pid: number): Promise<InjectResult> {
+  if (!injectSupported()) return { ok: false, error: ERR_UNSUPPORTED };
   if (!ensureInjector()) return { ok: false, error: "注入器不可用" };
   if (!targetIsCliHost(pid)) return { ok: false, error: "pid-reuse" };
   return run([String(pid), "--esc"]);
@@ -121,6 +130,7 @@ export async function injectEsc(pid: number): Promise<InjectResult> {
 // args=["pid",""] 通过长度检查，text="" 不产生字符记录，enter=true 只写 CR）：
 // 用于冲出滞留在 CLI 输入框、回车被界面层吞掉的排队消息
 export async function injectEnter(pid: number): Promise<InjectResult> {
+  if (!injectSupported()) return { ok: false, error: ERR_UNSUPPORTED };
   if (!ensureInjector()) return { ok: false, error: "注入器不可用" };
   if (!targetIsCliHost(pid)) return { ok: false, error: "pid-reuse" };
   return run([String(pid), ""]);

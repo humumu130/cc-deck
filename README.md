@@ -76,6 +76,8 @@ claude plugin install cc-deck@cc-deck-plugins
 
 要求：Node.js ≥ 20，且 PC 上已能正常使用 `claude` CLI（模型 / API 配置由你现有环境决定）。
 
+> 平台说明：Windows / macOS / Linux 均可运行 relay。仅「向外部 CLI 会话注入按键」（发消息 / 打断 / 晚到作答）依赖 Windows 专属注入器，其他平台上外部会话为只读监控 + 审批；relay 自己管理的会话全功能可用。
+
 ```bash
 cd relay
 npm install
