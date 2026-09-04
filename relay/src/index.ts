@@ -1,6 +1,6 @@
-import { networkInterfaces } from "node:os";
+import { networkInterfaces, homedir } from "node:os";
 import { join } from "node:path";
-import { writeFileSync, openSync, readFileSync, rmSync } from "node:fs";
+import { writeFileSync, openSync, readFileSync, rmSync, existsSync } from "node:fs";
 import { spawn, execFileSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { loadConfig } from "./config.js";
@@ -189,11 +189,19 @@ startServer(bus, mgr, cfg, {
     if (process.env.CC_DECK_DAEMON === "1") {
       writeFileSync(join(cfg.dataDir, "relay.pid"), String(process.pid), "utf-8");
     }
+    // hooks 桥接配置：listen 成功后才写（启动失败不覆盖持端口 relay 的配置）。
+    // 开发模式额外镜像到 ~/.cc-deck/data（hook 的首选目录）：dev/插件两个 relay
+    // 换班持端口时，hook 读到的 token 始终属于实际活着的 relay，杜绝 403 失联（#211）
+    const bridgeJson = JSON.stringify({ port: cfg.port, token: cfg.bridgeToken });
+    writeFileSync(join(cfg.dataDir, "bridge.json"), bridgeJson, "utf-8");
+    const hookHome = join(homedir(), ".cc-deck", "data");
+    if (cfg.dataDir !== hookHome && existsSync(hookHome)) {
+      try {
+        writeFileSync(join(hookHome, "bridge.json"), bridgeJson, "utf-8");
+      } catch {}
+    }
   },
 });
-
-// hooks 桥接配置：bridge-hook.mjs 读取后回连本机 /bridge/hook
-writeFileSync(join(cfg.dataDir, "bridge.json"), JSON.stringify({ port: cfg.port, token: cfg.bridgeToken }), "utf-8");
 
 console.log("CC Deck Relay 已启动");
 console.log(`  模型:   ${cfg.model}`);

@@ -78,7 +78,7 @@ export class Bridge {
   private queuePollTimer: NodeJS.Timeout | null = null;
   private healTimer: NodeJS.Timeout | null = null;
   private extFileStats = new Map<string, { files: Set<string>; added: number; deleted: number }>();
-  private extUsage = new Map<string, { input: number; output: number; cacheRead: number; cacheWrite: number; model: string }>();
+  private extUsage = new Map<string, { input: number; output: number; cacheRead: number; cacheWrite: number; model: string; ctx: number }>();
   // 排队消息滞留看门狗：ext id -> { 最近补发时间, 连续补发次数, 是否已放弃 }
   private stuckWatch = new Map<string, { lastTry: number; tries: number; given_up: boolean }>();
   private subagentSeq = 0; // hook 未带 tool_use_id 时的合成 id 序号（ag-N）
@@ -88,6 +88,9 @@ export class Bridge {
   // 注入不再依赖 90s 看门狗兜底
   private noHookIds = new Set<string>();
   private lastGrow = new Map<string, number>();
+  // ext id -> 最近一次 hook 事件到达时间（#211 空闲兜底的时钟之一：
+  // Stop 上报被 403 丢弃时无任何事件到达，转录也不再增长 → 判定 CLI 实际空闲）
+  private lastHookAt = new Map<string, number>();
 
   // 看门狗/子 Agent TTL 阈值（env 可调：测试用短值，生产默认 90s/60s/10min/30min）
   private readonly stuckAfterMs: number;
@@ -335,6 +338,7 @@ export class Bridge {
     // 早于 UserPromptSubmit POST 到达的竞态窗口里可能被 5s tick 误登记，长工具
     // 静默期会被 sweepNoHookIdle 误判回合结束）
     this.noHookIds.delete(this.extId(ev));
+    this.lastHookAt.set(this.extId(ev), Date.now());
     const decision = await this.dispatch(ev);
     // 分发后捕获：新会话的首个事件（UserPromptSubmit/PreToolUse）在 handler 内才 ensureExternal
     if (ev.cli_pid && ev.cli_pid > 0) this.mgr.setExternalCliPid(this.extId(ev), ev.cli_pid);
@@ -394,6 +398,7 @@ export class Bridge {
       }
       for (const [id, p] of this.transcriptPaths) this.pushAssistantTexts(id, p);
       this.sweepNoHookIdle();
+      this.sweepWorkingIdle();
       this.sweepSubagents();
       this.sweepStuckInputs();
     }, 5000);
@@ -426,6 +431,35 @@ export class Bridge {
       this.turnStart.delete(id);
       this.mgr.finishExternal(id, "completed", Date.now() - turn);
       this.mgr.pushExternalLog(id, "system", "转录静默，回合视作结束（无 hook 会话）");
+      if ((this.inputQueue.get(id)?.length ?? 0) > 0) void this.flushQueue(id);
+    }
+  }
+
+  // #211 空闲兜底：hook 上报链路整体失联（403/桥配置失配/relay 换 token）时 Stop
+  // 永远到不了，WORKING 外部会话永久卡死。有 hook 会话（不在 noHookIds）以
+  // "转录增长 + hook 事件"双时钟判空闲：两时钟均静默超过 shape 档上限（end=90s /
+  // 其余 10min，与 sweepNoHookIdle 同参）即视作回合完成。误判可自愈——真在跑的
+  // 长工具下一事件到达即翻回 WORKING；不兜底则是永久假 WORKING（更糟）。
+  private sweepWorkingIdle(): void {
+    const idleMs = Number(process.env.CCR_NOHOOK_IDLE_MS) > 0 ? Number(process.env.CCR_NOHOOK_IDLE_MS) : 90_000;
+    const now = Date.now();
+    if (this.lastHookAt.size > 200) this.lastHookAt.clear(); // 会话量上限兜底（与 lastGrow 同口径）
+    for (const s of this.mgr.snapshot()) {
+      if (!s.external || s.status !== "WORKING") continue;
+      const id = s.session_id;
+      if (this.noHookIds.has(id) || this.pending.has(id)) continue; // 无 hook 会话有专属扫描；审批挂起中不动
+      const idleSince = Math.max(
+        this.lastGrow.get(id) ?? 0,
+        this.lastHookAt.get(id) ?? 0,
+        s.updated_at ?? 0,
+      );
+      if (!idleSince || now - idleSince <= 600_000) continue;
+      const shape = this.turnShape.get(id) ?? "gen";
+      if (shape === "end" && now - idleSince <= idleMs) continue;
+      const turn = this.turnStart.get(id) ?? s.started_at;
+      this.turnStart.delete(id);
+      this.mgr.finishExternal(id, "completed", now - turn);
+      this.mgr.pushExternalLog(id, "system", "转录与事件均静默超时，回合视作结束（hook 失联兜底）");
       if ((this.inputQueue.get(id)?.length ?? 0) > 0) void this.flushQueue(id);
     }
   }
@@ -889,6 +923,7 @@ export class Bridge {
       let usageCr = 0;
       let usageCw = 0;
       let usageSeen = false;
+      let ctxLast = 0; // 本轮增量中最后一条 assistant 的上下文水位（覆盖式）
       let model = "";
       for (const line of raw.slice(0, end).split("\n")) {
         // 后台子 Agent 完成通知：作为 user 消息或 attachment 行出现，取 tool-use-id 配对收尾
@@ -966,6 +1001,7 @@ export class Bridge {
             usageCr += inc(mu.cache_read_input_tokens);
             usageCw += inc(mu.cache_creation_input_tokens);
             usageSeen = true;
+            ctxLast = inc(mu.input_tokens) + inc(mu.cache_read_input_tokens) + inc(mu.cache_creation_input_tokens);
           }
           if (typeof j.message?.model === "string" && j.message.model) model = j.message.model;
           const content = j.message?.content;
@@ -1038,18 +1074,20 @@ export class Bridge {
         let u = this.extUsage.get(id);
         if (!u || firstRead) {
           if (this.extUsage.size > 60) this.extUsage.clear();
-          u = { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, model: "" };
+          u = { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, model: "", ctx: 0 };
           this.extUsage.set(id, u);
         }
         u.input += usageIn;
         u.output += usageOut;
         u.cacheRead += usageCr;
         u.cacheWrite += usageCw;
+        if (usageSeen) u.ctx = ctxLast;
         if (model) u.model = model;
         this.mgr.setExternalUsage(
           id,
           { input_tokens: u.input, output_tokens: u.output, cache_read_input_tokens: u.cacheRead, cache_creation_input_tokens: u.cacheWrite },
           u.model || undefined,
+          u.ctx || undefined,
         );
       }
     } catch {}

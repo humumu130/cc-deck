@@ -13,12 +13,15 @@ import { fileURLToPath } from "node:url";
 // 不上报桥接（否则会注册成多余的外部会话，与 managed 双注册）
 if (process.env.CCR_RELAY_CHILD) process.exit(0);
 
-// dataDir：插件 relay（/cc-deck 启动）写 ~/.cc-deck/data，存在即优先；
-// 否则回退本文件旁边的 ../data（dev 模式）
+// dataDir 候选：插件 relay（/cc-deck 启动）写 ~/.cc-deck/data（hook 首选）；
+// 另收本文件旁 ./data 与 ../data（直装 ~/.cc-deck/ 与开发仓 relay/hooks/ 布局）。
+// 候选取"存在 bridge.json"者，POST 403/连不上时逐个回退——dev/插件两个 relay
+// 换班持端口时首选目录的 token 可能短暂失配，绝不因单点 403 丢事件（#211）
 const pluginData = join(homedir(), ".cc-deck", "data");
-const dataDir = existsSync(join(pluginData, "bridge.json"))
-  ? pluginData
-  : fileURLToPath(new URL("../data", import.meta.url));
+const selfDir = fileURLToPath(new URL(".", import.meta.url));
+const dataDirs = [...new Set([pluginData, join(selfDir, "data"), join(selfDir, "..", "data")])]
+  .filter((d) => existsSync(join(d, "bridge.json")));
+const dataDir = dataDirs[0] ?? join(selfDir, "..", "data");
 
 // 诊断日志（事件名/工具名/pid，不含用户内容；超 256KB 截断防无限增长）
 const diagFile = join(dataDir, "hook-debug.log");
@@ -123,13 +126,16 @@ async function main() {
     return;
   }
 
-  let cfg;
-  try {
-    cfg = JSON.parse(readFileSync(join(dataDir, "bridge.json"), "utf-8"));
-  } catch (e) {
-    diag("bridge.json fail: " + (e?.message ?? e));
-    return; // Relay 未运行
+  const cfgs = [];
+  for (const d of dataDirs) {
+    try {
+      const c = JSON.parse(readFileSync(join(d, "bridge.json"), "utf-8"));
+      if (c && c.port && c.token) cfgs.push(c);
+    } catch (e) {
+      diag("bridge.json fail (" + d + "): " + (e?.message ?? e));
+    }
   }
+  if (!cfgs.length) return; // Relay 未运行
 
   const event = j.hook_event_name ?? "";
   const session_id = j.session_id ?? "";
@@ -159,18 +165,32 @@ async function main() {
 
   // PreToolUse 等远程审批（最长 600s，须 < settings.json 里该 hook 的 timeout 620s）
   const waitMs = event === "PreToolUse" ? 600_000 : 1500;
-  const res = await Promise.race([
-    fetch(`http://127.0.0.1:${cfg.port}/bridge/hook`, {
-      method: "POST",
-      headers: { "content-type": "application/json", "x-bridge-token": cfg.token },
-      body: JSON.stringify(body),
-    }),
-    new Promise((_, rej) => setTimeout(() => rej(new Error("timeout")), waitMs).unref?.()),
-  ]).catch((e) => {
-    diag("post fail: " + (e?.message ?? e));
-    return null;
-  });
-  if (res) diag(`post ok: ${res.status}`);
+  // 逐候选上报：403（token 失配）/连不上（relay 未起或换班）就试下一目录的
+  // bridge.json；命中 2xx 即止。多数时候首轮即成功，失配期多花一次本地请求
+  let res = null;
+  for (let i = 0; i < cfgs.length; i++) {
+    const c = cfgs[i];
+    try {
+      res = await Promise.race([
+        fetch(`http://127.0.0.1:${c.port}/bridge/hook`, {
+          method: "POST",
+          headers: { "content-type": "application/json", "x-bridge-token": c.token },
+          body: JSON.stringify(body),
+        }),
+        new Promise((_, rej) => setTimeout(() => rej(new Error("timeout")), waitMs).unref?.()),
+      ]);
+    } catch (e) {
+      diag(`post fail (${i}): ` + (e?.message ?? e));
+      res = null;
+      continue;
+    }
+    if (res && res.ok) {
+      diag(`post ok (${i})`);
+      break;
+    }
+    diag(`post ${res ? res.status : "?"} (${i})，回退下一候选`);
+    res = null;
+  }
 
   // 仅 PreToolUse 需要把决定回给 CLI；其余事件纯旁路
   if (event === "PreToolUse" && res && res.ok) {
