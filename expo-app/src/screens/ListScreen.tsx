@@ -241,34 +241,63 @@ const SessionCard = memo(function SessionCard({
       onReveal={onReveal}
       compact={compact}
     >
-      <View style={[styles.row1, compact && { marginBottom: 3 }]}>
-        {s.status === "WORKING" ? (
-          <BlinkDot color={color} />
-        ) : (
-          <View style={[styles.dot, { backgroundColor: color }]} />
-        )}
-        {!compact && s.status === "WORKING" ? <LiveStat s={s} /> : <View style={{ flex: 1 }} />}
-        <Elapsed s={s} />
-      </View>
-      <Text style={[styles.title, compact && { marginBottom: 0, fontSize: 14 }]} numberOfLines={1}>
-        {s.title || "未命名会话"}
-      </Text>
-      {!compact && s.status !== "WORKING" ? <Text style={styles.sum} numberOfLines={1}>{s.action_summary || "…"}</Text> : null}
-      {!compact && (
-        <View style={styles.foot}>
-          <Text style={[styles.tag, s.external ? styles.tagExt : null]}>{s.external ? "外部 CLI" : "托管"}</Text>
-          {s.cwd ? <Text style={styles.folderTag} numberOfLines={1}>📁 {folderOf(s.cwd)}</Text> : null}
-          {s.historical && !s.external ? <Text style={styles.tag}>历史</Text> : null}
-          <View style={{ flex: 1 }} />
-          {s.stats && s.stats.files_changed > 0 ? (
-            <Text style={styles.stats}>
-              <Text style={{ color: c.working }}>+{s.stats.lines_added}</Text>
-              {" "}
-              <Text style={{ color: c.error }}>-{s.stats.lines_deleted}</Text>
-            </Text>
-          ) : null}
-          <CtxMini s={s} />
-        </View>
+      {compact ? (
+        // 紧凑卡：状态点+标题+时长一行、动作摘要一行、目录/改动/水位一行——省高度但不丢信息
+        <>
+          <View style={styles.rowC}>
+            {s.status === "WORKING" ? (
+              <BlinkDot color={color} />
+            ) : (
+              <View style={[styles.dot, { backgroundColor: color }]} />
+            )}
+            <Text style={styles.titleC} numberOfLines={1}>{s.title || "未命名会话"}</Text>
+            <View style={{ flex: 1 }} />
+            <Elapsed s={s} />
+          </View>
+          <Text style={styles.sumC} numberOfLines={1}>{s.action_summary || "…"}</Text>
+          <View style={styles.footC}>
+            {s.cwd ? <Text style={styles.folderC} numberOfLines={1}>📁 {folderOf(s.cwd)}</Text> : null}
+            <View style={{ flex: 1 }} />
+            {s.stats && s.stats.files_changed > 0 ? (
+              <Text style={styles.statsC}>
+                <Text style={{ color: c.working }}>+{s.stats.lines_added}</Text>
+                {" "}
+                <Text style={{ color: c.error }}>-{s.stats.lines_deleted}</Text>
+              </Text>
+            ) : null}
+            <CtxMini s={s} />
+          </View>
+        </>
+      ) : (
+        <>
+          <View style={styles.row1}>
+            {s.status === "WORKING" ? (
+              <BlinkDot color={color} />
+            ) : (
+              <View style={[styles.dot, { backgroundColor: color }]} />
+            )}
+            {s.status === "WORKING" ? <LiveStat s={s} /> : <View style={{ flex: 1 }} />}
+            <Elapsed s={s} />
+          </View>
+          <Text style={styles.title} numberOfLines={1}>
+            {s.title || "未命名会话"}
+          </Text>
+          {s.status !== "WORKING" ? <Text style={styles.sum} numberOfLines={1}>{s.action_summary || "…"}</Text> : null}
+          <View style={styles.foot}>
+            <Text style={[styles.tag, s.external ? styles.tagExt : null]}>{s.external ? "外部 CLI" : "托管"}</Text>
+            {s.cwd ? <Text style={styles.folderTag} numberOfLines={1}>📁 {folderOf(s.cwd)}</Text> : null}
+            {s.historical && !s.external ? <Text style={styles.tag}>历史</Text> : null}
+            <View style={{ flex: 1 }} />
+            {s.stats && s.stats.files_changed > 0 ? (
+              <Text style={styles.stats}>
+                <Text style={{ color: c.working }}>+{s.stats.lines_added}</Text>
+                {" "}
+                <Text style={{ color: c.error }}>-{s.stats.lines_deleted}</Text>
+              </Text>
+            ) : null}
+            <CtxMini s={s} />
+          </View>
+        </>
       )}
     </SwipeRow>
   );
@@ -288,6 +317,14 @@ export default function ListScreen({ sessions, connected, connText, onOpen, onNe
   const [drawerOpen, setDrawerOpen] = useState(false);
   // 状态图例浮窗（统计行 ？ 呼出）
   const [legendOpen, setLegendOpen] = useState(false);
+  // 顶栏品牌区副标题：当前连接的服务器名（多源场景区分家里/公司）
+  const [activeName, setActiveName] = useState("");
+  useEffect(() => {
+    void Promise.all([store.loadServers(), store.activeServerId()]).then(([list, id]) => {
+      const active = list.find((e) => e.id === id) ?? list[0];
+      setActiveName(active?.name?.trim() ?? "");
+    });
+  }, []);
 
   // 抽屉打开时硬件返回先关抽屉
   useEffect(() => {
@@ -357,13 +394,17 @@ export default function ListScreen({ sessions, connected, connText, onOpen, onNe
             <LogoMark size={19} />
           </View>
         </Pressable>
+        <View style={styles.titleWrap}>
+          <Text style={styles.titleT}>CC Deck</Text>
+          {activeName ? <Text style={styles.titleSub} numberOfLines={1}>{activeName}</Text> : null}
+        </View>
         <View style={[styles.connChip, { borderColor: withA(connColor, 0.33) }]}>
           <View style={[styles.connDot, { backgroundColor: connColor }]} />
           <Text style={[styles.connText, { color: connColor }]}>{connText}</Text>
         </View>
       </View>
       <View style={styles.statRow}>
-        <Text style={styles.statTotal}>{sessions.length > 0 ? `${sessions.length} 会话` : "暂无会话"}</Text>
+        <Text style={styles.statTotal} numberOfLines={1}>{sessions.length > 0 ? `${sessions.length} 会话` : "暂无会话"}</Text>
         <View style={styles.statChips}>
           {statusItems.map(({ k, n, color }) => (
             <View key={k} style={styles.statChip}>
@@ -383,7 +424,7 @@ export default function ListScreen({ sessions, connected, connText, onOpen, onNe
             android_ripple={{ color: c.tintSoft, borderless: false, radius: 16 }}
             onPress={toggleCollapse}
           >
-            <Text style={[styles.collapseT, collapseIdle && styles.collapseTOn]}>
+            <Text style={[styles.collapseT, collapseIdle && styles.collapseTOn]} numberOfLines={1}>
               {collapseIdle ? `展开空闲 ${idleCount}` : "折叠空闲 ▾"}
             </Text>
           </Pressable>
@@ -474,12 +515,15 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
   },
   connDot: { width: 6, height: 6, borderRadius: 3 },
   connText: { fontSize: 11 },
+  titleWrap: { flexShrink: 1, marginRight: "auto" },
+  titleT: { color: c.text, fontSize: 16, fontWeight: "700", letterSpacing: 0.2 },
+  titleSub: { color: c.faint, fontSize: 11, marginTop: 0.5 },
   statRow: {
-    flexDirection: "row", alignItems: "center", flexWrap: "wrap", gap: 9,
+    flexDirection: "row", alignItems: "center", gap: 9,
     paddingHorizontal: 18, paddingTop: 8, paddingBottom: 4,
   },
-  statTotal: { color: c.dim, fontSize: 12.5, fontWeight: "600" },
-  statChips: { flexDirection: "row", flexWrap: "wrap", gap: 9 },
+  statTotal: { color: c.dim, fontSize: 12.5, fontWeight: "600", flexShrink: 1 },
+  statChips: { flexDirection: "row", gap: 9 },
   statChip: { flexDirection: "row", alignItems: "center", gap: 3.5 },
   statDot: { width: 7, height: 7, borderRadius: 4 },
   statChipT: { fontSize: 11.5 },
@@ -500,7 +544,7 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
   legendT: { color: c.text, fontSize: 12.5 },
   folderTag: { fontSize: 10, color: c.dim, maxWidth: 130 },
   collapseBtn: {
-    marginLeft: "auto", borderRadius: 999, borderWidth: 1, borderColor: c.line, backgroundColor: c.tintSoft,
+    marginLeft: "auto", flexShrink: 1, borderRadius: 999, borderWidth: 1, borderColor: c.line, backgroundColor: c.tintSoft,
     paddingHorizontal: 10, paddingVertical: 3,
   },
   collapseBtnOn: { backgroundColor: c.tintStrong, borderColor: withA(c.brandA, 0.4) },
@@ -523,6 +567,12 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
     borderRadius: 16, padding: 14,
   },
   cardC: { borderRadius: 13, padding: 9 },
+  rowC: { flexDirection: "row", alignItems: "center", gap: 7 },
+  titleC: { color: c.text, fontSize: 14, fontWeight: "600", flexShrink: 1 },
+  sumC: { color: c.faint, fontSize: 11, marginTop: 2 },
+  footC: { flexDirection: "row", alignItems: "center", gap: 8, marginTop: 4 },
+  folderC: { fontSize: 10, color: c.dim, flexShrink: 1, maxWidth: 120 },
+  statsC: { fontSize: 10, color: c.faint, fontVariant: ["tabular-nums"] },
   row1: { flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 8 },
   dot: {
     width: 11, height: 11, borderRadius: 6, opacity: 1,
