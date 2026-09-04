@@ -892,7 +892,7 @@ function ensureCtx(cfg) {
       ws: null, reconnectDelay: 1000, reconnectTimer: 0,
       pendingPair: null, pairTimer: 0, pingTimer: null, lastPong: 0,
       transport: "ws", pollGen: 0, pollSid: "", pollBase: "",
-      wsFails: 0, postFails: 0, hsTimer: 0,
+      wsFails: 0, postFails: 0, hsTimer: 0, discTried: false, discTimer: 0,
     };
     ctxs.set(cfg.id, c);
   } else c.cfg = cfg;
@@ -905,6 +905,7 @@ function disconnectCtx(ctx, text) {
   stopCloudPing(ctx);
   clearTimeout(ctx.reconnectTimer); ctx.reconnectTimer = 0;
   clearTimeout(ctx.hsTimer); ctx.hsTimer = 0;
+  clearTimeout(ctx.discTimer); ctx.discTimer = 0;
   try { ctx.ws && ctx.ws.close(); } catch {}
   ctx.ws = null;
   ctx.status = "offline";
@@ -991,6 +992,8 @@ function connectCloudFor(ctx, manual) {
   const dev = devId(ckp.publicKey, "wb");
   ctx.pollGen++;                 // 掐掉旧轮询循环（若有）
   clearInterval(ctx.pairTimer);
+  ctx.discTried = false;         // 发现帧预算按连接重置（旧桥对 disc 回 ROUTE_MISS 会再触发）
+  clearTimeout(ctx.discTimer); ctx.discTimer = 0;
   clearTimeout(ctx.reconnectTimer); ctx.reconnectTimer = 0;
   try { ctx.ws && ctx.ws.close(); } catch {}
   ctx.ws = null;
@@ -1079,6 +1082,11 @@ function resetCloudPairing(cfg) {
 function sendPairReq(ctx, pair, dev) {
   sendCloudRaw(ctx, JSON.stringify({ to: pair.rd, data: { t: "pair_req", code: pair.pc, pubkey: ckp.publicKey, name: "web-" + dev.slice(3, 11) } }));
 }
+// 发现帧：桥回 {type:"RELAYS", relays:[{dev,rk}]}（在线 relay 列表）。
+// relay 换 keypair 后本地记忆/烘焙的 rd/rk 全部过期，只能运行时向桥发现真实身份
+function discoverRelay(ctx) {
+  sendCloudRaw(ctx, JSON.stringify({ to: "*", data: { t: "disc" } }));
+}
 // pair_ack 可能随桥连接闪断一起丢失（relay 侧已幂等补 ack）：8s 无应答重发。
 // 已配对身份存在不等于配对成功——可能是换代前的旧配对残留，必须对比 dev 号变化
 function startPairWatchdog(ctx) {
@@ -1089,8 +1097,11 @@ function startPairWatchdog(ctx) {
     const peer = cloudPeerOf(ctx.cfg);
     if ((peer && peer.relay_dev !== peerBefore) || ++tries > 3) {
       clearInterval(ctx.pairTimer);
-      if (!peer) {
+      if (!peer || peer.relay_dev === peerBefore) {
+        // 耗尽无新身份（含 relay 连续错码进入 pairFails 静默期）：offline + 退避重连，
+        // 不能静默 return——否则状态永久卡"配对中…"直到 F5
         setConn(ctx, "offline", "配对无应答");
+        scheduleReconnect(ctx);
         toast("配对请求一直没回音：按 F12 看 Console 的 [cloud] 日志和 Network 里 cloud-poll 请求，截图发家里", 6000);
         console.log("[cloud:" + ctx.cfg.name + "] 配对看门狗耗尽：pair_req 已重发 3 次无 pair_ack");
       }
@@ -1184,7 +1195,80 @@ function onCloudText(ctx, text) {
       startPairWatchdog(ctx); // 重置看门狗：换 rd 重试不与旧 rd 共享 3 次预算
       return;
     }
+    // 烘焙值也失配（relay 换 keypair 后 rd 全部过期，重新部署页面也追不上）：
+    // 发发现帧向桥要在线 relay 列表，拿真实身份自愈。预算每连接一次，
+    // 无回应/空列表由 discTimer/RELAYS 分支兜底进重连循环
+    if (!ctx.discTried) {
+      ctx.discTried = true;
+      setConn(ctx, "connecting", "定位 relay…");
+      console.log("[cloud:" + cfg.name + "] ROUTE_MISS，发送发现帧定位在线 relay");
+      discoverRelay(ctx);
+      clearTimeout(ctx.discTimer);
+      ctx.discTimer = setTimeout(() => {
+        ctx.discTimer = 0;
+        if (ctx.status !== "connecting") return;
+        clearInterval(ctx.pairTimer);
+        setConn(ctx, "offline", "家里 relay 离线");
+        scheduleReconnect(ctx);
+      }, 6000);
+      return;
+    }
+    clearInterval(ctx.pairTimer);
     setConn(ctx, "offline", "家里 relay 离线");
+    scheduleReconnect(ctx);
+    return;
+  }
+  if (f.type === "RELAYS") {
+    // 发现帧回包：桥下发在线 relay {dev, rk}。公共桥上 rl- 注册无鉴权——
+    // 假 relay 可混入列表截获 pair_req 里的 6 位码，因此只自动采用两种结果：
+    //   ① 可信命中：dev = 本源记忆 / 烘焙值 / 当前配对目标（上次成功配对或部署锚定，
+    //      rk 允许为空 = 旧版 relay 未上报，沿用记忆 rk）
+    //   ② 列表唯一：relay 换代后的新身份（自家部署只有一条；注入假条目会变成
+    //      多条 → 歧义，绝不自动配对，交用户重新领码决断）
+    clearTimeout(ctx.discTimer); ctx.discTimer = 0;
+    const all = (Array.isArray(f.relays) ? f.relays : [])
+      .filter((x) => x && typeof x.dev === "string" && x.dev.startsWith("rl-"));
+    const pair = ctx.pendingPair || pendingPairOf(cfg.id);
+    const peer = cloudPeerOf(cfg);
+    const known = [pair && pair.rd, peer && peer.relay_dev, cfg.cloud && cfg.cloud.rd, BAKED_RELAY.rd]
+      .filter((x) => x && typeof x === "string");
+    const hit = all.find((x) => known.includes(x.dev));
+    const pick = hit || (all.length === 1 ? all[0] : null);
+    if (!pick) {
+      clearInterval(ctx.pairTimer);
+      setConn(ctx, "offline", all.length > 1 ? "发现多个 relay，请重新领码" : "家里 relay 离线");
+      scheduleReconnect(ctx);
+      return;
+    }
+    if (pair) {
+      // 配对期：rk 空回落记忆值（旧 relay），dev/rk 有变即换代——换身份携同码重发，
+      // 一致则是闪断竞态（relay 刚回），重发一次让看门狗接管
+      const rk = pick.rk || pair.rk;
+      if (pick.dev !== pair.rd || rk !== pair.rk) {
+        ctx.pendingPair = { rd: pick.dev, rk, pc: pair.pc };
+        setPendingPair(cfg.id, ctx.pendingPair);
+        console.log("[cloud:" + cfg.name + "] 发现 relay 身份 " + pick.dev + "，重发配对请求");
+      } else {
+        console.log("[cloud:" + cfg.name + "] relay " + pick.dev + " 已回在线，重发配对请求");
+      }
+      setConn(ctx, "connecting", "配对中…");
+      sendPairReq(ctx, ctx.pendingPair, devId(ckp.publicKey, "wb"));
+      startPairWatchdog(ctx);
+      return;
+    }
+    if (peer && peer.relay_dev === pick.dev) {
+      // 已配对运行中吃 ROUTE_MISS 多为桥闪断竞态：relay 实际在线，重发 hello 恢复
+      setConn(ctx, "online", ctx.transport === "poll" ? "已连接 ☁(轮询)" : "已连接 ☁");
+      sendCloud(ctx, { t: "hello", last_seq: ctx.sessions.size > 0 ? ctx.lastSeq : 0 });
+      startCloudPing(ctx);
+      return;
+    }
+    // 在线 relay 与已配对身份不符 = relay 换代：更新记忆身份（输码直达），
+    // 旧身份配对态必然失效，等用户重新领码（nack 分支已引导输码，不重复 toast）
+    cfg.cloud = { url: cfg.wsUrl, token: serverBridgeToken(cfg), rd: pick.dev, rk: pick.rk || BAKED_RELAY.rk, paired: false };
+    saveServers();
+    clearInterval(ctx.pairTimer);
+    setConn(ctx, "offline", "未配对（relay 已换代）");
     return;
   }
   if (f.type === "ERROR") return;
@@ -1192,13 +1276,17 @@ function onCloudText(ctx, text) {
   // 公钥、无法加密）——清掉失效配对态，显示"未配对"并停掉注定无效的重试
   if (f.data && !f.data.n) {
     if (f.data.t === "pair_nack") {
-      disconnectCtx(ctx, "未配对");
+      clearInterval(ctx.pairTimer); ctx.pairTimer = 0;
+      stopCloudPing(ctx);
       setPendingPair(cfg.id, null);
       ctx.pendingPair = null;
       resetCloudPairing(cfg);
-      renderServers(); renderConnChip(); render();
+      setConn(ctx, "offline", "未配对");
       toast("请输入配对码重新配对（家里 PC 领取）", 6000);
       console.log("[cloud:" + cfg.name + "] relay 判定未配对:", f.data.error);
+      // relay 在线才回得出 nack：连接保持（发现帧需要活通道），顺手刷新 relay
+      // 真实身份——烘焙 rd 可能已随换代过期，刷新后输码直达、省一轮往返
+      discoverRelay(ctx);
       openPanel("conn");
       setTimeout(() => { if (formKind === "cloud") $("pairCode").focus(); }, 80);
     }
@@ -1213,6 +1301,13 @@ function onCloudText(ctx, text) {
   ctx.wsFails = 0; // 收到有效密封帧 = 传输链路健康
   if (inner.t === "pair_ack") {
     clearInterval(ctx.pairTimer);
+    // ack 身份必须对应当次请求目标：公共桥上假 relay 可自演自唱（自有密钥解得开），
+    // 采信错位身份会把后续 seal 永久指向攻击者公钥
+    const target = ctx.pendingPair || pendingPairOf(cfg.id);
+    if (target && inner.relay_dev !== target.rd) {
+      console.log("[cloud:" + cfg.name + "] pair_ack 身份错位（" + inner.relay_dev + " ≠ " + target.rd + "），丢弃");
+      return;
+    }
     cfg.cloud = { url: cfg.wsUrl, token: serverBridgeToken(cfg), rd: inner.relay_dev, rk: inner.relay_pubkey, paired: true };
     saveServers();
     setPendingPair(cfg.id, null);
@@ -2538,7 +2633,8 @@ function submitPairCode() {
     servers.push(cfg);
   }
   const c = cfg.cloud || (cfg.cloud = { url: cfg.wsUrl, token: serverBridgeToken(cfg), rd: BAKED_RELAY.rd, rk: BAKED_RELAY.rk, paired: false });
-  const src = c.paired && c.rd && c.rk ? { rd: c.rd, rk: c.rk } : BAKED_RELAY;
+  // rd/rk 只要有就优先（发现帧刷新的新鲜身份 paired=false 也要用），烘焙值仅兜底
+  const src = c.rd && c.rk ? { rd: c.rd, rk: c.rk } : BAKED_RELAY;
   if (!src.rd || !src.rk) { toast("缺少 relay 信息，请使用配对链接"); return; }
   const pair = { rd: src.rd, rk: src.rk, pc: code };
   setPendingPair(cfg.id, pair);
