@@ -113,6 +113,9 @@
     padding: 4px 9px; border: 1px solid var(--border); border-radius: 999px;
     cursor: pointer; white-space: nowrap; max-width: 128px; overflow: hidden; text-overflow: ellipsis;
   }
+  /* 折叠指示箭头：提示可点开连接面板 */
+  #connChip::after { content: "▸"; color: var(--faint); flex: none; }
+  #connChip.open::after { content: "▾"; }
   #connChip i { width: 8px; height: 8px; border-radius: 50%; background: var(--error); flex: none; }
   #connChip.on i { background: var(--done); }
   #connChip.wait i { background: var(--working); --sc: var(--working); animation: dot-breathe 2.4s ease-in-out infinite; }
@@ -147,10 +150,10 @@
     padding: 12px 16px 13px; background: var(--bg-soft); border-bottom: 1px solid var(--border); flex: none;
   }
   .panel.open { display: flex; }
-  .conn-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
-  .conn-row input#url { flex: 1; min-width: 130px; }
-  .conn-row input#token { width: 205px; flex: none; }
-  .conn-row input#srvName { flex: 1; min-width: 110px; }
+  /* 连接表单：五行纵排（类型/名称/地址/token/动作），前四行左对齐，动作行靠右 */
+  .conn-form { display: flex; flex-direction: column; gap: 9px; align-items: flex-start; }
+  .conn-form input { width: 100%; align-self: stretch; }
+  .conn-actions { display: flex; gap: 8px; margin-left: auto; }
   .seg { display: flex; border: 1px solid var(--border); border-radius: 10px; overflow: hidden; background: var(--panel-2); flex: none; }
   .seg button { border: none; border-radius: 0; padding: 7px 13px; background: transparent; color: var(--dim); font-size: 12.5px; font-weight: 500; }
   .seg button + button { border-left: 1px solid var(--border); }
@@ -334,9 +337,10 @@
   }
   .tabs button.mini.on { color: var(--brand); border-color: rgba(217,119,87,.55); border-style: solid; }
 
-  /* 工作状态行（类 CLI）：✶ 摘要 · 回合耗时 */
+  /* 工作状态行（类 CLI，置于输入卡上方）：✶ 摘要 · 回合耗时；宽度与时间线会话列对齐 */
   #liverow {
-    display: none; align-items: center; gap: 8px; margin: 10px 20px 0;
+    display: none; align-items: center; gap: 8px;
+    margin: 10px auto 10px; width: calc(100% - 40px); max-width: min(1040px, 100%);
     background: var(--panel); border: 1px solid var(--border); border-radius: 12px;
     padding: 8px 12px; font-size: 12.5px; flex: none;
   }
@@ -346,7 +350,8 @@
   #liverow .el { color: var(--faint); font-variant-numeric: tabular-nums; font-size: 11.5px; }
 
   #waitbox {
-    margin: 12px 20px 0; background: rgba(245,184,65,.07);
+    margin: 12px auto 0; width: calc(100% - 40px); max-width: min(1040px, 100%);
+    background: rgba(245,184,65,.07);
     border: 1px solid rgba(245,184,65,.4); border-radius: 14px; padding: 14px 16px; display: none;
     flex: none;
   }
@@ -442,7 +447,8 @@
   @keyframes pendpulse { 50% { opacity: .45; } }
   /* 子 Agent 工作状态 */
   #agbox {
-    display: none; margin: 10px 20px 0; background: var(--panel-2); border: 1px solid var(--border);
+    display: none; margin: 10px auto 0; width: calc(100% - 40px); max-width: min(1040px, 100%);
+    background: var(--panel-2); border: 1px solid var(--border);
     border-radius: 12px; padding: 7px 12px; flex: none;
   }
   .agrow { display: flex; gap: 10px; align-items: baseline; font-size: 12px; padding: 3px 0; }
@@ -569,9 +575,8 @@
     body.detail-open #side { display: none; }
     body.detail-open #detail { display: flex; }
     body.detail-open #backBtn { display: inline-block; }
-    #timeline, #dhead, #cmdbar, #waitbox, #hisnote { padding-left: 14px; padding-right: 14px; margin-left: 0; margin-right: 0; }
-    #waitbox { margin-left: 14px; margin-right: 14px; }
-    #liverow, #agbox { margin-left: 14px; margin-right: 14px; }
+    #timeline, #dhead, #cmdbar, #hisnote { padding-left: 14px; padding-right: 14px; margin-left: 0; margin-right: 0; }
+    #waitbox, #liverow, #agbox { margin-left: 14px; margin-right: 14px; width: calc(100% - 28px); }
     #pendbox { padding: 0 14px 8px; }
     #slashbox { left: 14px; right: 14px; max-width: calc(100% - 28px); }
   }
@@ -597,18 +602,18 @@
 
     <div class="panel" id="connPanel">
       <div id="srvList"></div>
-      <div class="conn-row">
+      <div class="conn-form">
         <div class="seg" id="cmodeSeg">
           <button type="button" data-m="lan">直连</button>
           <button type="button" data-m="cloud">云桥</button>
         </div>
         <input id="srvName" placeholder="名称（可选）">
-        <button id="cancelEdit" style="display:none">取消</button>
-      </div>
-      <div class="conn-row">
         <input id="url" placeholder="ws://<pc-ip>:8787/ws">
         <input id="token" placeholder="token">
-        <button id="saveSrvBtn" class="primary">添加直连</button>
+        <div class="conn-actions">
+          <button id="cancelEdit" style="display:none">取消</button>
+          <button id="saveSrvBtn" class="primary">添加直连</button>
+        </div>
       </div>
       <div id="pairBox">
         <input id="pairCode" inputmode="numeric" maxlength="6" placeholder="6 位配对码" autocomplete="off">
@@ -661,12 +666,6 @@
       </div>
     </div>
 
-    <div id="liverow">
-      <span class="spin">✶</span>
-      <span class="sum" id="livesum">思考中…</span>
-      <span class="el" id="liveel"></span>
-    </div>
-
     <div id="waitbox">
       <div class="t"><i></i>等待你的确认</div>
       <div id="waitdetail"></div>
@@ -687,6 +686,11 @@
     <div id="hisnote">⏳ 这是 Relay 重启前遗留的历史会话，仅可查看。</div>
     <div id="pendbox"></div>
     <div id="agbox"></div>
+    <div id="liverow">
+      <span class="spin">✶</span>
+      <span class="sum" id="livesum">思考中…</span>
+      <span class="el" id="liveel"></span>
+    </div>
     <div id="cmdbar">
       <div id="slashbox"></div>
       <div id="inputcard">
@@ -1312,12 +1316,14 @@ function setConn(ctx, status, text) {
   render();
 }
 
-// 汇总徽标：N/M 源在线（多源同连的核心反馈）
+// 汇总徽标：N/M 源在线（多源同连的核心反馈）。
+// className 整体覆写会抹掉 .open——折叠箭头状态以面板实际开合为准重建
 function renderConnChip() {
   const list = [...ctxs.values()];
   const on = list.filter((c) => c.status === "online").length;
   const conn = list.filter((c) => c.status === "connecting").length;
-  $("connChip").className = on > 0 ? "on" : conn > 0 ? "wait" : "";
+  const open = $("connPanel").classList.contains("open");
+  $("connChip").className = (on > 0 ? "on" : conn > 0 ? "wait" : "") + (open ? " open" : "");
   $("connText").textContent = list.length === 0 ? "未配置" : on + "/" + list.length + " 在线";
 }
 
@@ -2044,6 +2050,7 @@ function closeDetail() {
 // ---------- 交互绑定 ----------
 function openPanel(which) {
   $("connPanel").classList.toggle("open", which === "conn");
+  $("connChip").classList.toggle("open", which === "conn");
 }
 $("connChip").onclick = () => {
   const open = $("connPanel").classList.contains("open");
