@@ -25,6 +25,7 @@ import {
   truncate,
 } from "./summarizer.js";
 import { deriveTitle } from "./history.js";
+import { readTaskStoreTodos } from "./task-store.js";
 
 export interface BridgeOptions {
   gateTools: Set<string>;          // 远程审批门控的工具名
@@ -1216,33 +1217,11 @@ export class Bridge {
 
   // CLI 任务存储目录（~/.claude/tasks/<cli_session>/*.json）：权威清单，与 /tasks 实时一致
   // （会话压缩/任务清理后也对）。目录不存在（旧版 CLI/其他会话形态）返回 null 走 transcript 兜底。
+  // 直读逻辑已抽到 task-store.ts，SessionManager 30s 轮询同源（#206）
   private lastTodos = new Map<string, string>();
 
   private readTaskStore(id: string): TodoItem[] | null {
-    const cli = id.startsWith("ext-") ? id.slice(4) : id;
-    const dir = path.join(homedir(), ".claude", "tasks", cli);
-    let files: string[];
-    try {
-      files = readdirSync(dir).filter((f) => f.endsWith(".json"));
-    } catch {
-      return null;
-    }
-    if (!files.length) return null;
-    const out: (TodoItem & { n: number })[] = [];
-    for (const f of files) {
-      try {
-        const fp = path.join(dir, f);
-        const t = JSON.parse(readFileSync(fp, "utf-8")) as { subject?: unknown; status?: unknown; activeForm?: unknown };
-        const subject = typeof t.subject === "string" ? t.subject.trim() : "";
-        if (!subject) continue;
-        const status = t.status === "in_progress" || t.status === "completed" ? t.status : "pending";
-        const activeForm = typeof t.activeForm === "string" && t.activeForm.trim() ? { active_form: t.activeForm.trim().slice(0, 120) } : {};
-        out.push({ n: Number(f.replace(/[^0-9]/g, "")) || 0, content: subject.slice(0, 120), status, updated_at: statSync(fp).mtimeMs, ...activeForm });
-      } catch {}
-    }
-    if (!out.length) return null;
-    out.sort((a, b) => a.n - b.n);
-    return out.map(({ n: _n, ...rest }) => rest);
+    return readTaskStoreTodos(id.startsWith("ext-") ? id.slice(4) : id);
   }
 
   // 手动刷新：清掉 JSON 变更检测的缓存，强制重读任务存储并重发（绕过"内容没变不推"）

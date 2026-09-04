@@ -8,6 +8,7 @@ import type { ReplayedSession } from "./history.js";
 import { deriveTitle } from "./history.js";
 import { generateTitle } from "./title-gen.js";
 import { cronTasksKey, readCronTasks } from "./cron.js";
+import { readTaskStoreTodos } from "./task-store.js";
 import { normKey, truncate } from "./summarizer.js";
 
 // 上下文窗口上限按模型区分：集中在此维护并随 context_usage 下发，客户端不存映射表
@@ -122,7 +123,10 @@ export class SessionManager {
     this.deletedExtIds = new Set(readDeletedExts(cfg.dataDir));
     const t = setInterval(() => this.heartbeat(), HEARTBEAT_INTERVAL_MS);
     t.unref();
-    const c = setInterval(() => this.pollCronTasks(), CRON_POLL_INTERVAL_MS);
+    const c = setInterval(() => {
+      this.pollCronTasks();
+      this.pollTaskStore();
+    }, CRON_POLL_INTERVAL_MS);
     c.unref();
   }
 
@@ -943,6 +947,26 @@ export class SessionManager {
       this.emitUpdated(s, true);
     }
   }
+
+  // 权威任务清单轮询（#206）：直读 CLI 任务存储 ~/.claude/tasks/<cli_sid>/，
+  // 托管（sdkId）与外部（hook session_id）统一覆盖；JSON 变更检测防重发。
+  // bridge 的 transcript 旁路 tracker 降级为无目录时的回退，本轮询是主路径——
+  // 陈旧快照/跨会话污染从源头消除（目录天然按会话隔离）
+  private pollTaskStore(): void {
+    for (const s of this.sessions.values()) {
+      const sid = s.state.relay_session_id || (s.state.external ? s.state.session_id.slice(4) : "");
+      if (!sid) continue;
+      const todos = readTaskStoreTodos(sid);
+      if (todos === null) continue;
+      const next = JSON.stringify(todos);
+      if (this.lastStoreTodos.get(s.state.session_id) === next) continue;
+      if (this.lastStoreTodos.size > 60) this.lastStoreTodos.clear();
+      this.lastStoreTodos.set(s.state.session_id, next);
+      this.setTodos(s.state.session_id, todos);
+    }
+  }
+
+  private lastStoreTodos = new Map<string, string>();
 
   private evictOldSessions(): void {
     if (this.sessions.size < MAX_SESSIONS) return;
