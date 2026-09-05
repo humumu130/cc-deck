@@ -287,6 +287,17 @@ class RelayStore {
   }
 
   private applyConfig(cfg: ConnConfig, cloud?: CloudConfig | null) {
+    // 幂等：目标与当前一致且正在建连/已在线 → 跳过，免一次拆了重连
+    // （每次重建都要过 CONNECTING 窗口，正是旧连接泄漏的高危期）
+    if (
+      this.cfg &&
+      this.cfg.wsUrl === cfg.wsUrl &&
+      this.cfg.token === cfg.token &&
+      sameCloud(this.cloudCfg, cloud ?? null) &&
+      (this.snap.connState === "connecting" || this.snap.connState === "online")
+    ) {
+      return;
+    }
     this.cfg = cfg;
     this.cloudCfg = cloud ?? null;
     this.lastSeq = 0;
@@ -308,9 +319,7 @@ class RelayStore {
       this.probeTimer = null;
     }
     this.clearPendingCmds();
-    try {
-      this.ws?.close();
-    } catch {}
+    killWs(this.ws);
     this.ws = null;
     this.channel = null;
   }
@@ -337,9 +346,7 @@ class RelayStore {
 
   private async connectCycle(ep: number) {
     const cfg = this.cfg!;
-    try {
-      this.ws?.close();
-    } catch {}
+    killWs(this.ws);
     this.ws = null;
     this.channel = null;
     const lanWs = await this.probeLan(cfg);
@@ -381,12 +388,7 @@ class RelayStore {
         if (settled) return;
         settled = true;
         clearTimeout(timer);
-        if (!result) {
-          try {
-            ws.onopen = ws.onerror = ws.onclose = null;
-            ws.close();
-          } catch {}
-        }
+        if (!result) killWs(ws);
         resolve(result);
       };
       ws.onopen = () => done(ws);
@@ -942,6 +944,32 @@ class RelayStore {
 }
 
 export const store = new RelayStore();
+
+// 弃用旧 socket 统一走这里（#291 泄漏根因）：RN Android 原生侧只把已完成 onOpen 的
+// socket 登记进连接表，CONNECTING 期调 close() 是静默 no-op——握手照样完成，旧连接
+// 开门后无人再关，表现为切源后双连接并存、旧连接持续收事件。除立即 close 外，
+// 摘掉全部 handler，并留一个「晚开门就补刀」的 onopen 哨兵（届时已在原生表内，close 生效）
+function killWs(ws: WebSocket | null | undefined) {
+  if (!ws) return;
+  try {
+    ws.onopen = ws.onclose = ws.onerror = ws.onmessage = null;
+  } catch {}
+  try {
+    ws.close();
+  } catch {}
+  ws.onopen = () => {
+    try {
+      ws.close();
+    } catch {}
+  };
+}
+
+function sameCloud(a: CloudConfig | null, b: CloudConfig | null): boolean {
+  return (
+    a === b ||
+    (!!a && !!b && a.url === b.url && a.token === b.token && a.relayDev === b.relayDev && a.relayPubkey === b.relayPubkey)
+  );
+}
 
 // ws://192.168.0.105:8787/ws -> 192.168.0.105
 function hostOf(wsUrl: string): string {
