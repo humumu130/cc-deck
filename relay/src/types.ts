@@ -83,6 +83,11 @@ export interface SessionState {
   permission_mode?: ManagedPermissionMode; // 托管会话当前权限模式
   pending_inputs?: PendingInput[]; // external 会话已发送未处理的注入消息（客户端显示在工作指示器下方，处理/回合结束时晋升为正式消息）
   cron_tasks?: CronTask[];   // 会话目录的定时任务快照（30s 轮询，变化才下发；[] = 已清空）
+  // 最近一次任务完成汇报（#254）：TASK_DONE 是瞬态事件，客户端断线/进程被杀时收不到；
+  // 记入会话状态仅随 SNAPSHOT 下发（SESSION_UPDATED 增量帧不携带），端上按 ts 去重后恢复
+  // 未读汇报。remaining_count 为数字（剩余条数）——TASK_DONE 事件的 remaining 是 TodoItem[]，
+  // 同名异型故改名区分。2h TTL：pollTaskStore 超龄清扫，过期不再随快照携带
+  last_task_done?: { done: string[]; remaining_count: number; ts: number };
 }
 
 // external 会话子 Agent 工作状态（Agent/Task 工具派生）
@@ -155,6 +160,7 @@ export interface SessionHeartbeatPayload {
 export interface TaskDonePayload {
   done: string[];          // 本次完成的任务内容（一轮可完成多条）
   remaining: TodoItem[];   // 完成后仍未完任务（[] = 全部完成）
+  ts: number;              // 汇报产生时刻（与 SessionState.last_task_done.ts 同值，端上据此去重/恢复）
 }
 
 export interface WaitingPayload {

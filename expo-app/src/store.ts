@@ -38,17 +38,19 @@ export interface Snapshot {
   cloudBusy: boolean;
   cloudMsg: string | null;
   pairCode: { code: string; expiresAt: number } | null;
-  taskDone: TaskDoneReport | null;
+  taskDoneQueue: TaskDoneReport[];
 }
 
-// 任务完成汇报（#204）：relay TASK_DONE 事件驱动，悬浮框 + 系统通知共用
+// 任务完成汇报（#204/#254）：relay TASK_DONE 事件驱动，悬浮框 + 系统通知共用。
+// 队列化：未读报告累积（按钮计数=未点开的完成项总数），点开标 viewed、清除/查看才出队
 export interface TaskDoneReport {
-  id: number;        // 报告标识（新报告 id 变，驱动浮层重置）
+  id: number;        // 报告标识（新报告 id 变，驱动浮层动画）
   sid: string;
   title: string;
   done: string[];    // 本次完成的任务
   remaining: number; // 完成后剩余未完数
   ts: number;
+  viewed?: boolean;  // false = 尚未点开（计入按钮计数）
 }
 
 const emptySnapshot: Snapshot = {
@@ -62,7 +64,7 @@ const emptySnapshot: Snapshot = {
   cloudBusy: false,
   cloudMsg: null,
   pairCode: null,
-  taskDone: null,
+  taskDoneQueue: [],
 };
 
 const LAN_PROBE_MS = 4000;
@@ -109,6 +111,13 @@ class RelayStore {
   private devKeys: BoxKeyPair | null = null;
   private epoch = 0;
   private taskDoneSeq = 0;
+  // 任务汇报去重/防复活（#254）：reported=已入队最新 ts（内存，挡 replay+SNAPSHOT 双投递）；
+  // taskSeen=用户已清除的最新 ts（AsyncStorage 持久，挡进程重启后 SNAPSHOT 复活旧汇报）；
+  // taskViewed=用户点开看过的最新 ts（持久，挡重启后已看过项重新计未读）
+  private reportedTaskTs = new Map<string, number>();
+  private taskSeen: Record<string, number> = {};
+  private taskViewed: Record<string, number> = {};
+  private taskDoneQueue: TaskDoneReport[] = [];
   // 已发出未回执的命令（ACK 追踪）：断开时静默清空，靠重连快照对账
   private pendingCmds = new Map<
     string,
@@ -226,8 +235,10 @@ class RelayStore {
         this.lastSeq = 0;
         this.sessions.clear();
         this.timelines.clear();
+        this.taskDoneQueue = [];
+        this.reportedTaskTs.clear();
         this.disconnect();
-        this.emit({ connected: false, connText: "未配置", connState: "idle", channel: null });
+        this.emit({ connected: false, connText: "未配置", connState: "idle", channel: null, taskDoneQueue: [] });
       }
     }
   }
@@ -255,6 +266,14 @@ class RelayStore {
   }
 
   async loadConfig(): Promise<ConnConfig | null> {
+    // 启动时先读"已清除/已看过汇报"水位（#254）：SNAPSHOT 恢复要用它们挡复活与重复计数，
+    // 须赶在首次快照前就绪
+    try {
+      const v = await AsyncStorage.getItem("ccr_task_seen");
+      if (v) this.taskSeen = JSON.parse(v) as Record<string, number>;
+      const v2 = await AsyncStorage.getItem("ccr_task_viewed");
+      if (v2) this.taskViewed = JSON.parse(v2) as Record<string, number>;
+    } catch {}
     const list = await this.readServers();
     this.servers = list;
     const activeId = await AsyncStorage.getItem("ccr_active");
@@ -592,6 +611,7 @@ class RelayStore {
           this.timelines.set(s.session_id, msg.payload.logs[s.session_id] ?? []);
         }
         this.lastSeq = Math.max(this.lastSeq, msg.seq);
+        this.recoverTaskDone(msg.payload.sessions as SessionState[]);
         break;
       }
       case "SESSION_CREATED": {
@@ -689,15 +709,21 @@ class RelayStore {
       case "TASK_DONE": {
         const s = this.sessions.get(sid);
         if (!s) break;
+        const tdTs = typeof msg.payload.ts === "number" ? msg.payload.ts : msg.ts;
+        if (tdTs <= (this.reportedTaskTs.get(sid) ?? 0)) break; // 重连 replay 重复投递
+        this.reportedTaskTs.set(sid, tdTs);
+        if (tdTs <= (this.taskSeen[sid] ?? 0)) break; // 用户已清除过的汇报不再入队
         const r: TaskDoneReport = {
           id: ++this.taskDoneSeq,
           sid,
           title: s.title || s.action_summary || "会话",
           done: Array.isArray(msg.payload.done) ? msg.payload.done.slice(0, 10) : [],
           remaining: Array.isArray(msg.payload.remaining) ? msg.payload.remaining.length : 0,
-          ts: msg.ts,
+          ts: tdTs,
+          viewed: tdTs <= (this.taskViewed[sid] ?? 0),
         };
-        this.emit({ taskDone: r });
+        this.taskDoneQueue = [...this.taskDoneQueue, r].slice(-8);
+        this.emit({ taskDoneQueue: this.taskDoneQueue });
         if (this.onTaskDone) this.onTaskDone(r);
         break;
       }
@@ -809,8 +835,67 @@ class RelayStore {
     if (this.snap.lastErrorCmd) this.emit({ lastErrorCmd: null });
   }
 
-  clearTaskDone() {
-    if (this.snap.taskDone) this.emit({ taskDone: null });
+  // 快照恢复未读汇报（#254）：瞬态 TASK_DONE 在断线/进程被杀期间丢失，relay 把最近
+  // 汇报随会话状态下发；仅恢复 2h 内、未入过队、未被用户清除过的（防重启翻旧账）
+  private recoverTaskDone(list: SessionState[]): void {
+    const now = Date.now();
+    let changed = false;
+    for (const s of list) {
+      const td = s.last_task_done;
+      if (!td || !Array.isArray(td.done) || td.done.length === 0) continue;
+      if (typeof td.ts !== "number" || now - td.ts > 2 * 3600_000) continue;
+      if (td.ts <= (this.reportedTaskTs.get(s.session_id) ?? 0)) continue;
+      if (td.ts <= (this.taskSeen[s.session_id] ?? 0)) continue;
+      this.reportedTaskTs.set(s.session_id, td.ts);
+      this.taskDoneQueue = [
+        ...this.taskDoneQueue,
+        {
+          id: ++this.taskDoneSeq,
+          sid: s.session_id,
+          title: s.title || s.action_summary || "会话",
+          done: td.done.slice(0, 10),
+          remaining: typeof td.remaining_count === "number" ? td.remaining_count : 0,
+          ts: td.ts,
+          viewed: td.ts <= (this.taskViewed[s.session_id] ?? 0),
+        },
+      ].slice(-8);
+      changed = true;
+    }
+    if (changed) this.emit({ taskDoneQueue: this.taskDoneQueue });
+  }
+
+  // 点开悬浮按钮 = 已读：计数清零，报告留在卡里直到清除/查看会话。
+  // viewed 落水位持久化：进程重启后 SNAPSHOT 恢复不再把已看过的项重新计未读
+  markTaskDoneViewed() {
+    if (!this.taskDoneQueue.some((r) => !r.viewed)) return;
+    this.taskDoneQueue = this.taskDoneQueue.map((r) => {
+      if (!r.viewed && (this.taskViewed[r.sid] ?? 0) < r.ts) this.taskViewed[r.sid] = r.ts;
+      return { ...r, viewed: true };
+    });
+    this.taskViewed = this.pruneWatermark(this.taskViewed);
+    void AsyncStorage.setItem("ccr_task_viewed", JSON.stringify(this.taskViewed));
+    this.emit({ taskDoneQueue: this.taskDoneQueue });
+  }
+
+  // 清除汇报并落"已清除"水位。带 sid 时只清该会话的报告（查看会话跳转用，
+  // 其他会话的未读汇报保留），不带 sid 清全部（清除按钮）
+  clearTaskDone(sid?: string) {
+    const out = sid ? this.taskDoneQueue.filter((r) => r.sid === sid) : this.taskDoneQueue;
+    if (!out.length) return;
+    for (const r of out) {
+      if ((this.taskSeen[r.sid] ?? 0) < r.ts) this.taskSeen[r.sid] = r.ts;
+    }
+    this.taskDoneQueue = sid ? this.taskDoneQueue.filter((r) => r.sid !== sid) : [];
+    this.taskSeen = this.pruneWatermark(this.taskSeen);
+    void AsyncStorage.setItem("ccr_task_seen", JSON.stringify(this.taskSeen));
+    this.emit({ taskDoneQueue: this.taskDoneQueue });
+  }
+
+  // 水位表裁剪：按 ts 留最新 60 条防无限增长（被挤出的旧水位仅在 2h 恢复窗口内
+  // 有理论复活风险，会话数超 60 且近期全有汇报时才可能触发）
+  private pruneWatermark(m: Record<string, number>): Record<string, number> {
+    const entries = Object.entries(m).sort((a, b) => b[1] - a[1]).slice(0, 60);
+    return Object.fromEntries(entries);
   }
 }
 

@@ -917,6 +917,8 @@ export class SessionManager {
       ...(s.state.relay_session_id ? { relay_session_id: s.state.relay_session_id } : {}),
       ...(s.state.permission_mode ? { permission_mode: s.state.permission_mode } : {}),
       ...(s.state.cron_tasks ? { cron_tasks: s.state.cron_tasks.map((t) => ({ ...t })) } : {}),
+      // last_task_done 不随增量帧下发（#254）：手机/网页都不消费该路径，只在
+      // SNAPSHOT 里用于断线恢复，增量携带纯属带宽浪费
       // historical 增删必须实时下发：转录自愈/pid 对账解锁后，已连接的客户端
       // 要等到下次 SNAPSHOT 才能摘掉"仅可查看"——期间用户以为发不了消息
       historical: !!s.state.historical,
@@ -961,6 +963,10 @@ export class SessionManager {
       if (s.state.historical) continue; // 历史会话无活跃目录，读到的只能是陈旧/噪音
       const sid = s.state.relay_session_id || (s.state.external ? s.state.session_id.slice(4) : "");
       if (!sid) continue;
+      // last_task_done 2h TTL 清扫（#254）：与手机端恢复窗口同口径，过期摘除
+      // 不再随快照携带（手表转发整 sessions，常驻大包白占帧）
+      const ltd = s.state.last_task_done;
+      if (ltd && Date.now() - ltd.ts > 2 * 3600_000) s.state.last_task_done = undefined;
       const todos = readTaskStoreTodos(sid);
       if (todos === null) continue;
       // 与 setTodos 同口径先滤隐藏条目：缓存/diff/TASK_DONE 都基于可见集，被隐藏任务完成不弹汇报
@@ -970,7 +976,6 @@ export class SessionManager {
       const prevStr = this.lastStoreTodos.get(s.state.session_id);
       if (!force && prevStr === next) continue;
       this.lastStoreTodos.set(s.state.session_id, next);
-      this.setTodos(s.state.session_id, todos);
       // 任务完成汇报（#204）：前快照未完成 → 后快照已完成的项即本次完成。
       // 首见（prevStr 空，冷启动/SNAPSHOT 重建）不报，避免重启刷一屏假完成
       if (prevStr) {
@@ -979,13 +984,24 @@ export class SessionManager {
           const prevOpen = new Set(prev.filter((t) => t.status !== "completed").map((t) => t.content));
           const done = visible.filter((t) => t.status === "completed" && prevOpen.has(t.content)).map((t) => t.content);
           if (done.length) {
+            // 汇报同时记入会话状态（#254）：TASK_DONE 瞬态事件在客户端断线/进程被杀时
+            // 丢失，落状态后 SNAPSHOT 可恢复未读汇报（端上按 ts 与已清除位去重）。
+            // 状态里 done 截断 10 条与手机队列口径一致（事件 payload 保持全量供网页展示）
+            const report = {
+              done: done.slice(0, 10),
+              remaining_count: visible.filter((t) => t.status !== "completed").length,
+              ts: Date.now(),
+            };
+            s.state.last_task_done = report;
             this.bus.emit(s.state.session_id, "TASK_DONE", {
               done,
               remaining: visible.filter((t) => t.status !== "completed"),
+              ts: report.ts,
             });
           }
         } catch {}
       }
+      this.setTodos(s.state.session_id, todos);
     }
   }
 

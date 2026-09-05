@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { Animated, AppState, Pressable, StyleSheet, Text, View, Vibration } from "react-native";
+import { Animated, AppState, BackHandler, Pressable, ScrollView, StyleSheet, Text, View, Vibration } from "react-native";
 import { StatusBar } from "expo-status-bar";
 import { SafeAreaProvider, useSafeAreaInsets } from "react-native-safe-area-context";
 import { store, useRelay } from "./src/store";
@@ -59,26 +59,55 @@ function Toast() {
   );
 }
 
-// 任务完成汇报悬浮按钮（#204/#240）：右下角 44dp 小方钮（同发送按钮规格），新报告
-// 弹簧弹入；点击展开详情卡（fade+上滑），点空白处收起，✕ 关闭，「查看会话」直达。
-// 全局浮层：详情页贴命令栏上方，列表页抬高让开 FAB
+// 任务完成汇报悬浮按钮（#204/#240/#254）：右下角 44dp 小方钮 + 未读计数徽标
+// （未点开的完成项总数持续累积），点击展开详情卡（fade+上滑）并清计数。
+// 卡片无标题：直接列完成任务项，底部「清除 / 查看会话」。全局浮层：详情页贴命令栏上方，
+// 列表页抬高让开 FAB
 function TaskDoneFloat({ isDetail, onOpenSession }: { isDetail: boolean; onOpenSession: (sid: string) => void }) {
   const { c } = useTheme();
   const snap = useRelay();
   const st = useThemeStyles(makeStyles);
   const insets = useSafeAreaInsets();
-  const r = snap.taskDone;
+  const q = snap.taskDoneQueue;
+  const unviewed = q.reduce((n, r) => n + (r.viewed ? 0 : r.done.length), 0);
+  // 跨会话汇报平铺、行带 sid：渲染时在不同会话交界插分隔线（多会话并行时区分来源）
+  const rows = q.flatMap((r) => r.done.map((text) => ({ sid: r.sid, text })));
+  const shown = rows.slice(0, 8);
+  const overflow = rows.length - shown.length;
+  const latestSid = q.length ? q[q.length - 1].sid : "";
+  const multi = new Set(q.map((r) => r.sid)).size > 1;
   const [expanded, setExpanded] = useState(false);
   const pop = useRef(new Animated.Value(0)).current;
+  const badgePulse = useRef(new Animated.Value(1)).current;
   const cardOp = useRef(new Animated.Value(0)).current;
   const cardY = useRef(new Animated.Value(10)).current;
+  const hasQ = q.length > 0;
 
   useEffect(() => {
-    if (!r) return;
-    setExpanded(false);
+    if (!hasQ) {
+      setExpanded(false);
+      return;
+    }
     pop.setValue(0.4);
     Animated.spring(pop, { toValue: 1, useNativeDriver: true, bounciness: 6, speed: 12 }).start();
-  }, [r?.id]);
+  }, [hasQ]);
+
+  // 卡片展开时硬件返回先收卡（否则详情页 BackHandler 抢走返回键，浮层开着却被拽回列表）
+  useEffect(() => {
+    if (!expanded) return;
+    const sub = BackHandler.addEventListener("hardwareBackPress", () => {
+      setExpanded(false);
+      return true;
+    });
+    return () => sub.remove();
+  }, [expanded]);
+
+  // 未读计数变化时徽标弹一下，提示又完成了新任务
+  useEffect(() => {
+    if (!unviewed) return;
+    badgePulse.setValue(0.6);
+    Animated.spring(badgePulse, { toValue: 1, useNativeDriver: true, bounciness: 7, speed: 14 }).start();
+  }, [unviewed]);
 
   useEffect(() => {
     if (!expanded) return;
@@ -90,8 +119,7 @@ function TaskDoneFloat({ isDetail, onOpenSession }: { isDetail: boolean; onOpenS
     ]).start();
   }, [expanded]);
 
-  if (!r) return null;
-  const n = r.done.length;
+  if (!q.length) return null;
   const bottom = insets.bottom + (isDetail ? 74 : 124);
   return (
     <View style={st.tdWrap} pointerEvents="box-none">
@@ -99,43 +127,55 @@ function TaskDoneFloat({ isDetail, onOpenSession }: { isDetail: boolean; onOpenS
         <>
           <Pressable style={st.tdScrim} onPress={() => setExpanded(false)} />
           <Animated.View style={[st.tdCard, { opacity: cardOp, transform: [{ translateY: cardY }], bottom: bottom + 52 }]}>
-            <View style={st.tdHead}>
-              <Text style={st.tdTitle} numberOfLines={1}>
-                ✓ {n} 项任务完成{r.title ? ` · ${r.title}` : ""}
-              </Text>
-              <Pressable hitSlop={8} onPress={() => store.clearTaskDone()}>
-                <Text style={st.tdClose}>✕</Text>
+            <ScrollView nestedScrollEnabled>
+              {shown.map((row, i) => (
+                <View key={i}>
+                  {i > 0 && row.sid !== shown[i - 1].sid ? <View style={st.tdDivider} /> : null}
+                  <View style={st.tdItemRow}>
+                    <Text style={st.tdItemMark}>✓</Text>
+                    <Text style={st.tdItem} numberOfLines={2}>{row.text}</Text>
+                  </View>
+                </View>
+              ))}
+              {overflow > 0 ? <Text style={st.tdMore}>… 还有 {overflow} 项</Text> : null}
+            </ScrollView>
+            <View style={st.tdBtnRow}>
+              <Pressable
+                style={st.tdClear}
+                android_ripple={{ color: c.tintSoft, borderless: false, radius: 9 }}
+                onPress={() => store.clearTaskDone()}
+              >
+                <Text style={st.tdClearT}>清除</Text>
+              </Pressable>
+              <Pressable
+                style={st.tdGo}
+                android_ripple={{ color: withA(c.done, 0.18), borderless: false, radius: 9 }}
+                onPress={() => onOpenSession(latestSid)}
+              >
+                <Text style={st.tdGoT}>{multi ? "查看最新会话 ›" : "查看会话 ›"}</Text>
               </Pressable>
             </View>
-            {r.done.map((d, i) => (
-              <Text key={i} style={st.tdItem} numberOfLines={1}>
-                ✓ {d}
-              </Text>
-            ))}
-            <Text style={st.tdRemain}>
-              {r.remaining > 0 ? `剩余 ${r.remaining} 项进行中` : "全部完成"}
-            </Text>
-            <Pressable
-              style={st.tdGo}
-              android_ripple={{ color: withA(c.brandA, 0.15), borderless: false, radius: 9 }}
-              onPress={() => onOpenSession(r.sid)}
-            >
-              <Text style={st.tdGoT}>查看会话 ›</Text>
-            </Pressable>
           </Animated.View>
         </>
       ) : (
         <Animated.View style={[st.tdFab, { transform: [{ scale: pop }], bottom }]}>
           <Pressable
             style={st.tdFabHit}
-            android_ripple={{ color: withA(c.done, 0.2), borderless: false, radius: 13 }}
+            android_ripple={{ color: withA(c.done, 0.2), borderless: false, radius: 14 }}
+            accessibilityLabel={unviewed > 0 ? `${unviewed} 项任务完成待查看` : "任务完成汇报"}
             onPress={() => {
               try { Vibration.vibrate(10); } catch {}
+              store.markTaskDoneViewed();
               setExpanded(true);
             }}
           >
-            <Text style={st.tdFabT}>✓{n}</Text>
+            <Text style={st.tdFabT}>✓</Text>
           </Pressable>
+          {unviewed > 0 ? (
+            <Animated.View style={[st.tdBadge, { transform: [{ scale: badgePulse }] }]}>
+              <Text style={st.tdBadgeT}>{unviewed > 99 ? "99+" : unviewed}</Text>
+            </Animated.View>
+          ) : null}
         </Animated.View>
       )}
     </View>
@@ -245,7 +285,7 @@ function Shell() {
             isDetail={!!detail}
             onOpenSession={(sid) => {
               setDetail(sid);
-              store.clearTaskDone();
+              store.clearTaskDone(sid);
             }}
           />
         </>
@@ -279,23 +319,41 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
   // 悬浮层根：全屏 box-none，按钮/卡片/收起 scrim 各自绝对定位
   tdWrap: { position: "absolute", top: 0, left: 0, right: 0, bottom: 0, zIndex: 80 },
   tdScrim: { position: "absolute", top: 0, left: 0, right: 0, bottom: 0 },
+  // 汇报小方钮：done 色轻染底 + 描边，右上角徽标凸出显示未读数（点开清零）
   tdFab: {
-    position: "absolute", right: 12, width: 44, height: 44, borderRadius: 13,
-    backgroundColor: c.panel, borderWidth: 1, borderColor: withA(c.done, 0.5),
-    overflow: "hidden", elevation: 4,
+    position: "absolute", right: 12, width: 44, height: 44, borderRadius: 14,
+    backgroundColor: withA(c.done, 0.10), borderWidth: 1, borderColor: withA(c.done, 0.45),
+    overflow: "visible", elevation: 4,
   },
-  tdFabHit: { flex: 1, alignItems: "center", justifyContent: "center" },
-  tdFabT: { color: c.done, fontSize: 15, fontWeight: "700" },
+  tdFabHit: { flex: 1, alignItems: "center", justifyContent: "center", borderRadius: 14, overflow: "hidden" },
+  tdFabT: { color: c.done, fontSize: 17, fontWeight: "700" },
+  tdBadge: {
+    position: "absolute", top: -6, right: -6, minWidth: 18, height: 18, borderRadius: 9,
+    paddingHorizontal: 5, backgroundColor: c.done, alignItems: "center", justifyContent: "center",
+    elevation: 5,
+  },
+  tdBadgeT: { color: "#06281A", fontSize: 11, fontWeight: "800" },
+  // 展开卡：无标题，任务项两行封顶（大字体时 maxHeight 兜底内部滚动），底部 清除/查看会话 双钮
   tdCard: {
-    position: "absolute", right: 12, maxWidth: "80%",
-    backgroundColor: c.panel2, borderWidth: 1, borderColor: c.line,
-    borderRadius: 14, paddingHorizontal: 14, paddingVertical: 12, elevation: 4,
+    position: "absolute", right: 12, maxWidth: "84%", maxHeight: "70%",
+    backgroundColor: c.panel, borderWidth: 1, borderColor: withA(c.done, 0.28),
+    borderRadius: 16, paddingHorizontal: 14, paddingVertical: 12, elevation: 8,
   },
-  tdHead: { flexDirection: "row", alignItems: "center", gap: 8 },
-  tdTitle: { color: c.text, fontSize: 13.5, fontWeight: "600", flex: 1 },
-  tdClose: { color: c.faint, fontSize: 15, paddingHorizontal: 4 },
-  tdItem: { color: c.text, fontSize: 12.5, marginTop: 6, opacity: 0.9 },
-  tdRemain: { color: c.faint, fontSize: 12, marginTop: 8 },
-  tdGo: { alignSelf: "flex-start", marginTop: 10, paddingHorizontal: 8, paddingVertical: 4, borderRadius: 9 },
-  tdGoT: { color: c.brandA, fontSize: 12.5, fontWeight: "600" },
+  // 多会话汇报交界分隔线
+  tdDivider: { height: 1, backgroundColor: c.line, marginTop: 9 },
+  tdItemRow: { flexDirection: "row", alignItems: "flex-start", gap: 8, marginTop: 7 },
+  tdItemMark: { color: c.done, fontSize: 12.5, fontWeight: "700", lineHeight: 18 },
+  tdItem: { flex: 1, color: c.text, fontSize: 12.5, lineHeight: 18 },
+  tdMore: { color: c.faint, fontSize: 11.5, marginTop: 7 },
+  tdBtnRow: { flexDirection: "row", gap: 8, marginTop: 12 },
+  tdClear: {
+    height: 30, paddingHorizontal: 13, borderRadius: 8, alignItems: "center", justifyContent: "center",
+    backgroundColor: c.tintSoft, borderWidth: 1, borderColor: c.line,
+  },
+  tdClearT: { color: c.faint, fontSize: 12, fontWeight: "600" },
+  tdGo: {
+    height: 30, paddingHorizontal: 13, borderRadius: 8, alignItems: "center", justifyContent: "center",
+    backgroundColor: withA(c.done, 0.14), borderWidth: 1, borderColor: withA(c.done, 0.35),
+  },
+  tdGoT: { color: c.done, fontSize: 12, fontWeight: "600" },
 });

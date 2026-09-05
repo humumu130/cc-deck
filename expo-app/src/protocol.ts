@@ -85,6 +85,9 @@ export interface SessionState {
   pending_inputs?: PendingInput[]; // 外部会话已发送未处理的注入消息（显示在工作指示器下方，处理时上浮为正式消息）
   subagents?: SubagentEntry[]; // 并行子 Agent（⑂）：运行中/刚结束的后台任务状态
   cron_tasks?: CronTask[]; // 定时任务快照（[] = 已清空）
+  // 最近一次任务完成汇报（#254）：瞬态 TASK_DONE 断线丢失时，端上从快照恢复未读汇报。
+  // remaining_count 是数字（剩余条数）——与 TASK_DONE 事件的 remaining（TodoItem[]）同名异型，故改名区分
+  last_task_done?: { done: string[]; remaining_count: number; ts: number };
 }
 
 export interface PendingInput {
