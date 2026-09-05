@@ -1,5 +1,5 @@
-import { useEffect, useRef, useState } from "react";
-import { Animated, AppState, BackHandler, Pressable, ScrollView, StyleSheet, Text, View, Vibration } from "react-native";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { Animated, AppState, BackHandler, Dimensions, Easing, Pressable, ScrollView, StyleSheet, Text, View, Vibration } from "react-native";
 import { StatusBar } from "expo-status-bar";
 import { SafeAreaProvider, useSafeAreaInsets } from "react-native-safe-area-context";
 import { store, useRelay } from "./src/store";
@@ -189,6 +189,36 @@ function Shell() {
   const [ready, setReady] = useState(false);
   const [hasCfg, setHasCfg] = useState(false);
   const [detail, setDetail] = useState<string | null>(null);
+  // 列表⇄详情过渡（#259）：entering=详情从右滑入（列表垫底，落定卸载列表）；
+  // closing=详情右滑出（列表先挂回垫底，滑完卸载详情）。仅 transform+native 驱动
+  const [navPhase, setNavPhase] = useState<"idle" | "entering" | "closing">("idle");
+  const navX = useRef(new Animated.Value(0)).current;
+  // 宽度调用时取（分屏/折叠屏变化后首帧窗口已换宽，冻结值会让滑入起点露边/滑出残留）
+  const openDetail = useCallback((sid: string): boolean => {
+    if (navPhase !== "idle") return false;
+    if (detail) {
+      setDetail(sid); // 详情页内直接换会话（FAB 查看最新）：无动画
+      return true;
+    }
+    const w = Dimensions.get("window").width;
+    setDetail(sid);
+    setNavPhase("entering");
+    navX.setValue(w);
+    Animated.timing(navX, { toValue: 0, duration: 230, easing: Easing.out(Easing.cubic), useNativeDriver: true }).start(({ finished }) => {
+      if (finished) setNavPhase("idle");
+    });
+    return true;
+  }, [navPhase, detail, navX]);
+  const closeDetail = useCallback(() => {
+    if (navPhase !== "idle" || !detail) return;
+    setNavPhase("closing");
+    Animated.timing(navX, { toValue: Dimensions.get("window").width, duration: 200, easing: Easing.in(Easing.cubic), useNativeDriver: true }).start(({ finished }) => {
+      if (finished) {
+        setDetail(null);
+        setNavPhase("idle");
+      }
+    });
+  }, [navPhase, detail, navX]);
   const [sheet, setSheet] = useState(false);
   // null=关闭；"new"=新增服务器；其余字符串=编辑该 id 的服务器
   const [setup, setSetup] = useState<string | null>(null);
@@ -270,25 +300,30 @@ function Shell() {
       <StatusBar style={mode === "dark" ? "light" : "dark"} />
       {hasCfg && !setup ? (
         <>
-          {detail ? (
-            <DetailScreen sid={detail} onBack={() => setDetail(null)} />
-          ) : (
+          {(!detail || navPhase !== "idle") && (
             <ListScreen
               sessions={snap.sessions}
               connected={snap.connected}
               connText={snap.connText}
-              onOpen={setDetail}
+              onOpen={openDetail}
               onNew={() => setSheet(true)}
               onSetup={() => setSetup("new")}
               onEditServer={(id) => setSetup(id)}
             />
           )}
+          {detail ? (
+            <Animated.View
+              style={[st.navLayer, { transform: [{ translateX: navX }] }]}
+            >
+              <DetailScreen sid={detail} onBack={closeDetail} />
+            </Animated.View>
+          ) : null}
           <NewSessionModal visible={sheet} onClose={() => setSheet(false)} />
           <Toast />
           <TaskDoneFloat
             isDetail={!!detail}
             onOpenSession={(sid) => {
-              setDetail(sid);
+              openDetail(sid);
               store.clearTaskDone(sid);
             }}
           />
@@ -314,6 +349,8 @@ export default function App() {
 const makeStyles = (c: ThemeColors) => StyleSheet.create({
   boot: { flex: 1, backgroundColor: c.bg, alignItems: "center", justifyContent: "center" },
   bootT: { color: c.faint, fontSize: 16, fontWeight: "600" },
+  // 详情层：盖在列表上，滑入/滑出只动 translateX（native 驱动）
+  navLayer: { position: "absolute", top: 0, left: 0, right: 0, bottom: 0, backgroundColor: c.bg, elevation: 8 },
   toastWrap: { position: "absolute", left: 0, right: 0, bottom: 124, alignItems: "center", zIndex: 90 },
   toast: {
     backgroundColor: c.panel2, borderWidth: 1, borderColor: c.line,
@@ -323,11 +360,10 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
   // 悬浮层根：全屏 box-none，按钮/卡片/收起 scrim 各自绝对定位
   tdWrap: { position: "absolute", top: 0, left: 0, right: 0, bottom: 0, zIndex: 80 },
   tdScrim: { position: "absolute", top: 0, left: 0, right: 0, bottom: 0 },
-  // 汇报小方钮：done 色轻染底 + 描边，右上角徽标凸出显示未读数（点开清零）
   tdFab: {
     position: "absolute", right: 12, width: 44, height: 44, borderRadius: 14,
     backgroundColor: withA(c.done, 0.10), borderWidth: 1, borderColor: withA(c.done, 0.45),
-    overflow: "visible", elevation: 4,
+    elevation: 4, overflow: "visible",
   },
   tdFabHit: { flex: 1, alignItems: "center", justifyContent: "center", borderRadius: 14, overflow: "hidden" },
   tdFabT: { color: c.done, fontSize: 17, fontWeight: "700" },
