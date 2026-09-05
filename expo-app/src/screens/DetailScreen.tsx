@@ -445,6 +445,19 @@ export default function DetailScreen({ sid, onBack }: { sid: string; onBack: () 
     }
   }, [s?.todos, todoSpin]);
 
+  // 底部上拉刷新（#257）：滚到底松手即触发同一 refreshTodos；冷却 8s。
+  // 「拖拽装弹」守卫同 #255：stick-to-bottom 的 scrollToEnd 是程序滚动，不装弹，
+  // 只有真实拖过列表（onScrollBeginDrag）才允许消费一次触发
+  const todoFootArmed = useRef(false);
+  const todoFootLast = useRef(0);
+  const todoFootRefresh = () => {
+    if (!todoFootArmed.current) return;
+    todoFootArmed.current = false;
+    if (todoSpin || Date.now() - todoFootLast.current < 8000) return;
+    todoFootLast.current = Date.now();
+    refreshTodos();
+  };
+
   // 任务条目 ✕ 隐藏：本地先过滤（立即消失），relay 记隐藏集过滤后续下发
   const [todoHidden, setTodoHidden] = useState<string[]>([]);
   const hideTodo = (content: string) => {
@@ -931,6 +944,10 @@ export default function DetailScreen({ sid, onBack }: { sid: string; onBack: () 
               style={{ flex: 1 }}
               showsVerticalScrollIndicator={false}
               scrollEventThrottle={16}
+              nestedScrollEnabled
+              onScrollBeginDrag={() => { todoFootArmed.current = true; }}
+              onScrollEndDrag={() => { if (todoAtBottom.current) todoFootRefresh(); }}
+              onMomentumScrollEnd={() => { if (todoAtBottom.current) todoFootRefresh(); }}
               refreshControl={
                 <RefreshControl
                   refreshing={todoSpin}
@@ -981,6 +998,9 @@ export default function DetailScreen({ sid, onBack }: { sid: string; onBack: () 
                   </Fragment>
                 );
               })}
+              <Pressable style={d.todoFootHint} disabled={todoSpin} onPress={refreshTodos} hitSlop={{ top: 10, bottom: 16 }}>
+                <Text style={d.todoFootHintT}>{todoSpin ? "刷新中…" : "↻ 上拉刷新"}</Text>
+              </Pressable>
             </ScrollView>
             {/* 常驻自绘滑块：系统 scrollbar 在两端都不可见（VM/API28、真机/API16 实测） */}
             {todoMetrics.content > todoMetrics.layout + 8 ? (
@@ -1402,6 +1422,8 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
   todoRefresh: { width: 26, height: 26, alignItems: "center", justifyContent: "center" },
   todoRefreshT: { color: c.dim, fontSize: 14, lineHeight: 16 },
   todoScrollWrap: { position: "relative", flex: 1 },
+  todoFootHint: { alignItems: "center", paddingVertical: 10 },
+  todoFootHintT: { color: c.faint, fontSize: 12 },
   todoThumb: { position: "absolute", right: 1, top: 2, width: 3, borderRadius: 2, backgroundColor: withA(c.text, 0.28) },
   // 定时任务视图行（原 cronScroll/cronBox 折叠面板平铺化）
   cronRow: { flexDirection: "row", gap: 8, alignItems: "flex-start", paddingVertical: 6, borderTopWidth: 1, borderTopColor: c.line, marginTop: 4 },
