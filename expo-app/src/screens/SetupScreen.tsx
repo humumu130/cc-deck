@@ -33,6 +33,7 @@ export default function SetupScreen({ onClose, editId }: Props) {
   const [wsUrl, setWsUrl] = useState("ws://192.168.0.105:8787/ws");
   const [token, setToken] = useState("");
   const [remember, setRemember] = useState(true);
+  const [err, setErr] = useState<string | null>(null);
   const kb = useKbHeight();
 
   const reload = async () => {
@@ -82,7 +83,15 @@ export default function SetupScreen({ onClose, editId }: Props) {
   const add = () => {
     const base = wsUrl.trim().replace(/\/+$/, "");
     const tk = token.trim();
-    if (!/^wss?:\/\//.test(base) || !tk) return;
+    if (!/^wss?:\/\//.test(base)) {
+      setErr("地址需以 ws:// 或 wss:// 开头");
+      return;
+    }
+    if (!tk) {
+      setErr("请填写访问令牌");
+      return;
+    }
+    setErr(null);
     const entry: ServerEntry = {
       id: uuid(),
       name: name.trim() || hostOf(base),
@@ -97,7 +106,12 @@ export default function SetupScreen({ onClose, editId }: Props) {
 
   const saveEdit = () => {
     const base = wsUrl.trim().replace(/\/+$/, "");
-    if (!editId || !/^wss?:\/\//.test(base)) return;
+    if (!editId) return;
+    if (!/^wss?:\/\//.test(base)) {
+      setErr("地址需以 ws:// 或 wss:// 开头");
+      return;
+    }
+    setErr(null);
     const tk = token.trim();
     void store.updateServer(editId, {
       name: name.trim() || hostOf(base),
@@ -208,9 +222,9 @@ export default function SetupScreen({ onClose, editId }: Props) {
           <View style={s.field}>
             <Text style={s.label}>Relay 地址</Text>
             <TextInput
-              style={s.input}
+              style={[s.input, err && !/^wss?:\/\//.test(wsUrl.trim()) && s.inputErr]}
               value={wsUrl}
-              onChangeText={setWsUrl}
+              onChangeText={(v) => { setWsUrl(v); setErr(null); }}
               placeholder="ws://192.168.0.105:8787/ws"
               placeholderTextColor={c.faint}
               autoCapitalize="none"
@@ -221,14 +235,15 @@ export default function SetupScreen({ onClose, editId }: Props) {
           <View style={s.field}>
             <Text style={s.label}>访问令牌</Text>
             <TextInput
-              style={s.input}
+              style={[s.input, err && !token.trim() && s.inputErr]}
               value={token}
-              onChangeText={setToken}
+              onChangeText={(v) => { setToken(v); setErr(null); }}
               placeholder="token"
               placeholderTextColor={c.faint}
               autoCapitalize="none"
               autoCorrect={false}
               spellCheck={false}
+              secureTextEntry
             />
           </View>
           <Pressable style={s.checkRow} onPress={toggleRemember} hitSlop={6}>
@@ -237,6 +252,7 @@ export default function SetupScreen({ onClose, editId }: Props) {
             </View>
             <Text style={s.checkLabel}>记住令牌（下次免输入）</Text>
           </Pressable>
+          {err ? <Text style={s.errT}>{err}</Text> : null}
           <Pressable style={s.btn} android_ripple={{ color: "rgba(255,255,255,0.15)", borderless: false }} onPress={editId ? saveEdit : add}>
             <LinearGradient colors={[c.brandA, c.brandB]} style={s.btnGrad}>
               <Text style={s.btnText}>{editId ? "保存修改" : servers.length > 0 ? "添加并连接" : "连接"}</Text>
@@ -297,6 +313,8 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
     backgroundColor: c.panel2, borderWidth: 1, borderColor: c.line, borderRadius: 12,
     paddingHorizontal: 13, paddingVertical: 11, color: c.text, fontSize: 15,
   },
+  inputErr: { borderColor: withA(c.waiting, 0.6) },
+  errT: { color: c.waiting, fontSize: 12.5, marginTop: 4, marginBottom: 6, alignSelf: "flex-start" },
   btn: { width: "100%", maxWidth: 340, marginTop: 8, borderRadius: 14, overflow: "hidden" },
   btnGrad: { height: 48, alignItems: "center", justifyContent: "center" },
   btnText: { color: "#fff", fontSize: 15.5, fontWeight: "700" },

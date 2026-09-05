@@ -1,8 +1,9 @@
 // 设置抽屉：首页左上角图标呼出，也支持左缘右滑呼出 / 面板上左滑收起；收纳服务器列表、快捷短语与显示设置
 import { useEffect, useRef, useState } from "react";
-import { Animated, PanResponder, Pressable, ScrollView, StyleSheet, Switch, Text, TextInput, View } from "react-native";
+import { Animated, PanResponder, Pressable, ScrollView, StyleSheet, Switch, Text, View } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import Constants from "expo-constants";
+import * as Clipboard from "expo-clipboard";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useTheme, useThemeStyles } from "../theme-context";
 import { LogoMark } from "../brand";
@@ -125,6 +126,16 @@ export default function SettingsDrawer({
   const genPairCode = async () => {
     setPairErr(await store.requestPairCode());
   };
+  // 点码即复制：粘到网页端配对框省一程手输
+  const [copied, setCopied] = useState(false);
+  const copyCode = async () => {
+    if (!pc) return;
+    try {
+      await Clipboard.setStringAsync(pc.code);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1500);
+    } catch {}
+  };
   const pairing = useRef(false);
   // 抽屉打开即领码；开着期间码到期（pairLeft 归零）自动续领
   useEffect(() => {
@@ -157,6 +168,21 @@ export default function SettingsDrawer({
         </View>
 
         <ScrollView style={d.body} nestedScrollEnabled showsVerticalScrollIndicator={false}>
+        <Pressable
+          style={d.connRow}
+          android_ripple={{ color: c.tintSoft, borderless: false, radius: 12 }}
+          onPress={() => store.connect()}
+          accessibilityLabel={`连接状态 ${snap.connText}，点击立即重连`}
+        >
+          <View
+            style={[
+              d.connDot,
+              { backgroundColor: snap.connState === "online" ? c.done : snap.connState === "offline" ? c.waiting : c.dim },
+            ]}
+          />
+          <Text style={d.connT} numberOfLines={1}>{snap.connText}</Text>
+          <Text style={d.connReT}>↻ 重连</Text>
+        </Pressable>
         <View style={d.secHead}>
           <Text style={d.secTitleT}>服务器列表{srvCollapsed && servers.length ? ` · ${servers.length}` : ""}</Text>
           <Pressable style={d.secToggle} hitSlop={10} onPress={toggleSrv} android_ripple={{ color: c.tintSoft, borderless: true, radius: 12 }}>
@@ -198,7 +224,9 @@ export default function SettingsDrawer({
           // pc 存在即显示码框：到期 0:00 到续领回包之间不闪「已过期」按钮（抽屉常开时每 TTL 闪一次）
           <View style={d.pairBox}>
             <View style={d.pairTop}>
-              <Text style={d.pairCodeT}>{pc.code.slice(0, 3)} {pc.code.slice(3)}</Text>
+              <Pressable onPress={() => void copyCode()} hitSlop={4} accessibilityLabel="配对码，点击复制">
+                <Text style={d.pairCodeT}>{pc.code.slice(0, 3)} {pc.code.slice(3)}</Text>
+              </Pressable>
               <View style={d.pairSide}>
                 <Text style={d.pairExpT}>
                   {Math.floor(pairLeft / 60)}:{String(pairLeft % 60).padStart(2, "0")}
@@ -213,7 +241,7 @@ export default function SettingsDrawer({
                 </Pressable>
               </View>
             </View>
-            <Text style={d.pairHintT}>网页端输入此码配对 · 一次性</Text>
+            <Text style={d.pairHintT}>{copied ? "✓ 已复制，粘贴到网页端配对框" : "网页端输入此码配对 · 一次性 · 点码复制"}</Text>
           </View>
         ) : (
           <Pressable style={d.pairGen} android_ripple={{ color: c.tintSoft, borderless: false }} onPress={() => void genPairCode()}>
@@ -316,6 +344,15 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
   addT: { color: c.brandA, fontSize: 13, fontWeight: "700" },
   srvEmpty: { color: c.faint, fontSize: 11, marginTop: 2 },
   body: { flex: 1 },
+  // 连接状态行（抽屉顶）：状态点 + 文案 + 手动重连；点击整行重连
+  connRow: {
+    flexDirection: "row", alignItems: "center", gap: 7,
+    paddingVertical: 8, paddingHorizontal: 10, borderRadius: 12,
+    backgroundColor: c.panel, borderWidth: 1, borderColor: c.line,
+  },
+  connDot: { width: 7, height: 7, borderRadius: 4 },
+  connT: { flex: 1, color: c.dim, fontSize: 12.5 },
+  connReT: { color: c.brandA, fontSize: 12, fontWeight: "600" },
   pairGen: {
     alignItems: "center", paddingVertical: 10, borderRadius: 12, marginBottom: 8,
     backgroundColor: c.tintStrong, borderWidth: 1, borderColor: withA(c.brandA, 0.45),

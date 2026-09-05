@@ -18,10 +18,12 @@ export default function NewSessionModal({ visible, onClose }: { visible: boolean
   const m = useThemeStyles(makeStyles);
   const [cwd, setCwd] = useState("");
   const [prompt, setPrompt] = useState("");
+  const [err, setErr] = useState<string | null>(null);
   const [loadedInit, setLoadedInit] = useState(false);
 
   if (visible && !loadedInit) {
     setLoadedInit(true);
+    setErr(null);
     void AsyncStorage.getItem("ccr_cwd").then((v) => v && setCwd(v));
   }
   if (!visible && loadedInit) setLoadedInit(false);
@@ -29,7 +31,15 @@ export default function NewSessionModal({ visible, onClose }: { visible: boolean
   const create = () => {
     const cc = cwd.trim();
     const p = prompt.trim();
-    if (!cc || !p) return;
+    if (!cc) {
+      setErr("请填写工作目录（PC 上的项目路径）");
+      return;
+    }
+    if (!p) {
+      setErr("请填写任务提示词");
+      return;
+    }
+    setErr(null);
     void AsyncStorage.setItem("ccr_cwd", cc);
     if (store.send("COMMAND_CREATE", { cwd: cc, prompt: p })) {
       setPrompt("");
@@ -46,9 +56,9 @@ export default function NewSessionModal({ visible, onClose }: { visible: boolean
             <View style={m.field}>
               <Text style={m.label}>工作目录（PC 上的路径）</Text>
               <TextInput
-                style={m.input}
+                style={[m.input, err && !cwd.trim() && m.inputErr]}
                 value={cwd}
-                onChangeText={setCwd}
+                onChangeText={(v) => { setCwd(v); setErr(null); }}
                 placeholder="D:\dev\myproject"
                 placeholderTextColor={c.faint}
                 autoCapitalize="none"
@@ -71,14 +81,15 @@ export default function NewSessionModal({ visible, onClose }: { visible: boolean
                 ))}
               </ScrollView>
               <TextInput
-                style={[m.input, m.ta]}
+                style={[m.input, m.ta, err && !prompt.trim() && m.inputErr]}
                 value={prompt}
-                onChangeText={setPrompt}
+                onChangeText={(v) => { setPrompt(v); setErr(null); }}
                 placeholder="描述要 Claude 做什么…"
                 placeholderTextColor={c.faint}
                 multiline
               />
             </View>
+            {err ? <Text style={m.errT}>{err}</Text> : null}
             <Pressable style={m.createBtn} android_ripple={{ color: "rgba(255,255,255,0.15)", borderless: false }} onPress={create}>
               <Text style={m.createT}>启动会话</Text>
             </Pressable>
@@ -106,6 +117,8 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
     backgroundColor: c.panel2, borderWidth: 1, borderColor: c.line, borderRadius: 12,
     paddingHorizontal: 13, paddingVertical: 11, color: c.text, fontSize: 15,
   },
+  inputErr: { borderColor: withA(c.waiting, 0.6) },
+  errT: { color: c.waiting, fontSize: 12, marginBottom: 10 },
   ta: { minHeight: 88, textAlignVertical: "top" },
   presetRow: { marginBottom: 8, flexGrow: 0 },
   presetChip: {

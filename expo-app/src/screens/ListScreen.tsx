@@ -1,5 +1,5 @@
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Animated, BackHandler, Easing, FlatList, PanResponder, Pressable, StyleSheet, Text, View } from "react-native";
+import { Animated, BackHandler, Easing, FlatList, PanResponder, Pressable, RefreshControl, StyleSheet, Text, View } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { statusColor, withA, type ThemeColors } from "../theme";
@@ -403,6 +403,19 @@ export default function ListScreen({ sessions, connected, connText, onOpen, onNe
     [sorted, collapseIdle],
   );
 
+  // 下拉刷新 = 断开重连一次（重走快照），在线即收起转圈；3s 兜底
+  const [refreshing, setRefreshing] = useState(false);
+  useEffect(() => {
+    if (refreshing && snap.connState === "online") setRefreshing(false);
+  }, [refreshing, snap.connState]);
+  const refresh = () => {
+    if (refreshing) return;
+    setRefreshing(true);
+    store.disconnect();
+    store.connect();
+    setTimeout(() => setRefreshing(false), 3000);
+  };
+
   return (
     <SafeAreaView style={styles.safe} edges={["top"]}>
       <View style={styles.topbar}>
@@ -420,10 +433,16 @@ export default function ListScreen({ sessions, connected, connText, onOpen, onNe
           <Text style={styles.titleT}>CC Deck</Text>
           {activeName ? <Text style={styles.titleSub} numberOfLines={1}>{activeName}</Text> : null}
         </View>
-        <View style={[styles.connChip, { borderColor: withA(connColor, 0.33) }]}>
+        <Pressable
+          style={[styles.connChip, { borderColor: withA(connColor, 0.33) }]}
+          android_ripple={{ color: c.tintSoft, borderless: false, radius: 14 }}
+          hitSlop={6}
+          accessibilityLabel={`连接状态 ${connText}，点击立即重连`}
+          onPress={() => { if (!connected) store.connect(); }}
+        >
           <View style={[styles.connDot, { backgroundColor: connColor }]} />
           <Text style={[styles.connText, { color: connColor }]}>{connText}</Text>
-        </View>
+        </Pressable>
       </View>
       <View style={styles.statRow}>
         <Text style={styles.statTotal} numberOfLines={1}>{sessions.length > 0 ? `${sessions.length} 会话` : "暂无会话"}</Text>
@@ -457,6 +476,15 @@ export default function ListScreen({ sessions, connected, connText, onOpen, onNe
         data={visible}
         keyExtractor={(x) => x.session_id}
         showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={refresh}
+            tintColor={c.working}
+            colors={[c.working]}
+            progressBackgroundColor={c.panel}
+          />
+        }
         contentContainerStyle={{ paddingBottom: 120, paddingHorizontal: 14, paddingTop: 6 }}
         renderItem={({ item }) => (
           <SessionCard s={item} onOpen={onOpen} onRename={handleRename} revealSid={revealSid} onReveal={setRevealSid} compact={compact} />

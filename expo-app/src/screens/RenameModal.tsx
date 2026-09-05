@@ -14,12 +14,19 @@ export default function RenameModal({ visible, initial, onCancel, onSubmit }: Pr
   const { c } = useTheme();
   const styles = useThemeStyles(makeStyles);
   const [v, setV] = useState(initial);
+  const [err, setErr] = useState(false);
   useEffect(() => {
-    if (visible) setV(initial);
+    if (visible) {
+      setV(initial);
+      setErr(false);
+    }
   }, [visible, initial]);
   const submit = () => {
     const t = v.trim();
-    if (!t) return;
+    if (!t) {
+      setErr(true);
+      return;
+    }
     onSubmit(t.slice(0, 40));
   };
   return (
@@ -28,9 +35,9 @@ export default function RenameModal({ visible, initial, onCancel, onSubmit }: Pr
         <Pressable style={styles.card} onPress={() => {}}>
           <Text style={styles.h}>重命名会话</Text>
           <TextInput
-            style={styles.input}
+            style={[styles.input, err && styles.inputErr]}
             value={v}
-            onChangeText={setV}
+            onChangeText={(t) => { setV(t); setErr(false); }}
             placeholder="会话名称"
             placeholderTextColor={c.faint}
             maxLength={40}
@@ -39,6 +46,7 @@ export default function RenameModal({ visible, initial, onCancel, onSubmit }: Pr
             onSubmitEditing={submit}
             returnKeyType="done"
           />
+          {err ? <Text style={styles.errT}>名称不能为空</Text> : null}
           <View style={styles.btnRow}>
             <Pressable style={styles.btn} android_ripple={{ color: c.tintSoft, borderless: false }} onPress={onCancel}>
               <Text style={styles.btnT}>取消</Text>
@@ -65,6 +73,8 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
     borderRadius: 10, backgroundColor: c.panel2, paddingHorizontal: 12,
     paddingVertical: 10, marginBottom: 16,
   },
+  inputErr: { borderColor: withA(c.waiting, 0.6) },
+  errT: { color: c.waiting, fontSize: 12, marginTop: -10, marginBottom: 12 },
   btnRow: { flexDirection: "row", gap: 10 },
   btn: {
     flex: 1, height: 40, borderRadius: 10, alignItems: "center", justifyContent: "center",
