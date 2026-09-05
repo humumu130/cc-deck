@@ -22,6 +22,7 @@ import {
   parseAskQuestions,
   summarizeToolResult,
   summarizeToolUse,
+  splitZaiText,
   TaskTracker,
   truncate,
   zaiToolName,
@@ -1060,6 +1061,8 @@ export class Bridge {
           // 先收集：content 顺序上 zai 注入对（调用→结果）在正文之前，循环内即时
           // push 会排在 thinking/正文之前，时间线倒挂
           const zaiEntries: { kind: "tool_use" | "tool_result"; text: string; tool: string; detail: string }[] = [];
+          // #265 混合形态（正文+桥文本同块）拆出的段：位于正文之后，排在 zaiEntries 后
+          const zaiMixed: { kind: "tool_use" | "tool_result"; text: string; tool: string; detail: string }[] = [];
           let hasToolUse = false;
           for (const b of content) {
             if (!b || typeof b !== "object") continue;
@@ -1075,7 +1078,19 @@ export class Bridge {
                 zaiEntries.push({ kind: "tool_result", text: "zai 内置工具结果", tool: "zai", detail: capDetail(blk.text, 2000) });
                 continue;
               }
-              texts.push(blk.text);
+              // 混合形态：正文尾部被 z.ai append 了桥调用/输出（#265）——拆段，
+              // 前后正文保留，桥段归工具日志
+              const { body, segs } = splitZaiText(blk.text);
+              for (const sg of segs) {
+                if (sg.kind === "tool_use") hasToolUse = true;
+                zaiMixed.push({
+                  kind: sg.kind,
+                  text: sg.kind === "tool_use" ? `zai 内置 ${sg.tool.slice(4)} 调用` : "zai 内置工具结果",
+                  tool: sg.kind === "tool_use" ? sg.tool : "zai",
+                  detail: capDetail(sg.raw, 2000),
+                });
+              }
+              if (body) texts.push(body);
             }
             else if (blk.type === "thinking" && typeof blk.thinking === "string") {
               thinks.push(blk.thinking);
@@ -1092,12 +1107,14 @@ export class Bridge {
             }
           }
           shape = hasToolUse ? "tool" : "end";
-          // content 顺序上 thinking 在正文之前；每行各合并为一条
+          // content 顺序上 thinking 在正文之前；每行各合并为一条。
+          // 混合拆出的桥段在正文之后（append 形态所致），排在正文后
           const th = thinks.join("\n").trim();
           if (th) entries.push({ kind: "thinking", text: th });
           entries.push(...zaiEntries);
           const tx = texts.join("\n").trim();
           if (tx) entries.push({ kind: "assistant_text", text: tx });
+          entries.push(...zaiMixed);
         } catch {}
       }
       // 末条形态记账（首读也算：relay 重启可能正落在回合中途）

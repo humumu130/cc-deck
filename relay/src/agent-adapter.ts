@@ -31,6 +31,7 @@ import {
   zaiToolName,
   isZaiOutput,
   zaiBridgePrefix,
+  splitZaiText,
 } from "./summarizer.js";
 
 // streaming input 模式的 prompt 源：push 用户消息 / end 收尾
@@ -210,12 +211,23 @@ export class AgentSession {
               ti += 1; // 同上：消费静默块的流式槽位
               this.cb.onLog("tool_result", "zai 内置工具结果", { tool: "zai", detail: capDetail(block.text, 2000) });
             } else {
-              // 按出现顺序对齐流式期间的同 id 条目做替换；未经流式（如缓存命中）则新 id 追加
+              // #265 混合形态：正文尾部被 z.ai append 桥调用/输出——拆段，桥段归
+              // 工具日志，正文复用流式 id 原地替换（流式期间已只下发正文部分）
+              const { body, segs } = splitZaiText(block.text);
               const id = this.streamOrder[ti++] ?? `t${++this.blockSeq}`;
-              this.cb.onLog("assistant_text", truncate(block.text, 400), {
-                full: fullText(block.text, 400),
-                id,
-              });
+              if (body) {
+                this.cb.onLog("assistant_text", truncate(body, 400), {
+                  full: fullText(body, 400),
+                  id,
+                });
+              }
+              for (const sg of segs) {
+                if (sg.kind === "tool_use") this.lastSummary = `zai 内置 ${sg.tool.slice(4)}`;
+                this.cb.onLog(sg.kind, sg.kind === "tool_use" ? `zai 内置 ${sg.tool.slice(4)} 调用` : "zai 内置工具结果", {
+                  tool: sg.kind === "tool_use" ? sg.tool : "zai",
+                  detail: capDetail(sg.raw, 2000),
+                });
+              }
               this.cb.onStatusChange("WORKING", this.lastSummary);
             }
           } else if (block.type === "tool_use") {
@@ -320,11 +332,15 @@ export class AgentSession {
     if (!text.trim()) return;
     // zai 工具桥展示文本流式期间静默：完整 assistant 消息到达时在上方分支归类为工具日志。
     // 只挡前缀会漏 "**Output:**" 块——其流式条目带 id 下发后终态重分类不复用该 id，
-    // relay 与客户端均只按 id 替换不删除，会永久残留超长 JSON
+    // relay 与客户端均只按 id 替换不删除，会永久残留超长 JSON。
+    // #265 混合形态（正文+桥文本同块）：前缀判定不命中，拆段后只下发正文部分，
+    // 桥段（含半截锚，Built-in 行起吞到尾）静默——终态到达时归类补全
     if (zaiBridgePrefix(text)) return;
+    const { body, segs } = splitZaiText(text);
+    if (segs.length && !body) return;
     this.lastStreamEmit = Date.now();
-    this.cb.onLog("assistant_text", truncate(text, 400), {
-      full: fullText(text, 400),
+    this.cb.onLog("assistant_text", truncate(body || text, 400), {
+      full: fullText(body || text, 400),
       id,
       streaming,
     });

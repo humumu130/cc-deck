@@ -146,6 +146,76 @@ export function zaiBridgePrefix(text: string): boolean {
   return t.startsWith("**🌐") || t.startsWith("**Output:**") || "**🌐".startsWith(t) || "**Output:**".startsWith(t);
 }
 
+// ---------- #265 混合形态拆分 ----------
+// z.ai 会把内置工具桥文本（调用→Input→*Executing*→Output）直接 append 到正文
+// 同一条 text 块（"正文...**🌐 Z.ai Built-in Tool: xxx**..."），行首整块识别
+// （zaiToolName/isZaiOutput）对混合形态不命中，Input JSON 与结果全文随
+// assistant_text 漏进"消息"视图。按行状态机切段：桥段归工具日志，前后正文保留。
+// 锚点要求完整行形态（Built-in 整行 / Output 整行 + 次行 summary 键），
+// "讨论该格式"的正文（反引号包裹、行中引用）不会误拆。
+export interface ZaiSeg {
+  kind: "tool_use" | "tool_result";
+  tool: string; // tool_use 为 "zai:<name>"，tool_result 恒 "zai"
+  raw: string;
+}
+
+const RE_ZAI_CALL_ANY = /\*\*🌐 Z\.ai Built-in Tool: ([^\s*]+)\*\*/;
+const RE_FENCE_LINE = /^(```|~~~)/;
+const RE_ZAI_OUT_LINE = /^\*\*Output:\*\*$/;
+const RE_ZAI_SUMMARY_LINE = /^\*\*[\w.-]+_result_summary\b/;
+
+export function splitZaiText(text: string): { body: string; segs: ZaiSeg[] } {
+  const lines = text.replace(/\r\n?/g, "\n").split("\n");
+  const bodyLines: string[] = [];
+  const segs: ZaiSeg[] = [];
+  let cur: { kind: ZaiSeg["kind"]; tool: string; lines: string[] } | null = null;
+  let inFence = false; // 正文区围栏跟踪：``` 代码块内演示桥格式属于正文，识别会让悬空段吞掉后续正文
+  const flush = () => {
+    if (!cur) return;
+    const raw = cur.lines.join("\n").trim();
+    if (raw) segs.push({ kind: cur.kind, tool: cur.kind === "tool_use" ? cur.tool : "zai", raw });
+    cur = null;
+  };
+  for (let i = 0; i < lines.length; i++) {
+    const l = lines[i].trim();
+    // 围栏只在正文区开关：桥段内 Input JSON 的 ```json 包裹是段内容，不参与跟踪
+    if (!cur && RE_FENCE_LINE.test(l)) {
+      inFence = !inFence;
+      bodyLines.push(lines[i]);
+      continue;
+    }
+    if (!cur && inFence) {
+      bodyLines.push(lines[i]);
+      continue;
+    }
+    // 调用锚行内匹配：z.ai append 时标记与正文同行（"正文。**🌐...**"），
+    // 标记前文本归正文；标记两侧紧贴反引号 = 正文引用格式讨论，不拆
+    const m = RE_ZAI_CALL_ANY.exec(l);
+    const afterCh = m ? l[m.index + m[0].length] : "";
+    if (m && l[m.index - 1] !== "`" && afterCh !== "`") {
+      flush();
+      const before = l.slice(0, m.index).trim();
+      if (before) bodyLines.push(before);
+      cur = { kind: "tool_use", tool: `zai:${m[1]}`, lines: [l.slice(m.index)] };
+      continue;
+    }
+    if (RE_ZAI_OUT_LINE.test(l) && RE_ZAI_SUMMARY_LINE.test((lines[i + 1] ?? "").trim())) {
+      flush(); // 调用段终结，开输出段
+      cur = { kind: "tool_result", tool: "zai", lines: [lines[i]] };
+      continue;
+    }
+    if (cur) {
+      cur.lines.push(lines[i]);
+      // 输出段在 summary 行（单行 JSON 数组，字面 \n 不折行）后结束，回到正文
+      if (cur.kind === "tool_result" && RE_ZAI_SUMMARY_LINE.test(l)) flush();
+    } else {
+      bodyLines.push(lines[i]);
+    }
+  }
+  flush(); // 无 Output 跟随的悬空调用段：整段归工具日志（桥截断时不把标记漏回正文）
+  return { body: bodyLines.join("\n").trim(), segs };
+}
+
 // 工具入参详情（CLI 体感：$ 命令 / 文件路径+old→new / 搜索式…），无实质内容返回 undefined
 export function detailToolUse(tool: string, input: Record<string, unknown>): string | undefined {
   const s = (k: string) => (typeof input[k] === "string" ? (input[k] as string).trim() : "");
