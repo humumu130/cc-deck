@@ -13,7 +13,7 @@ import { useProcessFont, useVoiceInput } from "../display-settings";
 import { voice } from "../voice";
 import { BUILTIN_COMMANDS, fetchSlashCommands, httpBaseOf, matchSlash, type SlashCommand } from "../slash";
 import { MdText } from "../md";
-import { FadeIn, PressScale } from "../motion";
+import { Collapse, FadeIn, PressScale } from "../motion";
 import RenameModal from "./RenameModal";
 
 // 详情页视图 tab（与网页端 tabs 对齐：消息/全部/任务/定时/统计，同序）。
@@ -103,7 +103,9 @@ function TranscriptRow({ e, open, onToggle }: { e: LogEntry; open: boolean; onTo
         android_ripple={{ color: c.tintSoft, borderless: false }}
       >
         <Text style={[d.trThinkHead, { fontSize: pf.thinkHead }]}>{open ? "▾ 思考过程" : `▸ 思考过程 · ${src.length} 字`}{e.ts ? ` · ${fmtHM(e.ts)}` : ""}</Text>
-        {open ? <MdText src={src} style={{ ...d.trThinkT, fontSize: pf.think, lineHeight: pf.thinkLH }} /> : null}
+        <Collapse open={open}>
+          <MdText src={src} style={{ ...d.trThinkT, fontSize: pf.think, lineHeight: pf.thinkLH }} />
+        </Collapse>
       </Pressable>
     );
   }
@@ -130,7 +132,9 @@ function TranscriptRow({ e, open, onToggle }: { e: LogEntry; open: boolean; onTo
               <Text style={[d.trToolName, { fontSize: pf.tool }]}>⚙ {e.tool || "tool"}</Text>
               <Text style={[d.trToolText, { fontSize: pf.tool }]} numberOfLines={1}>{e.text}</Text>
             </View>
-            {open ? <Text style={d.trDetail} selectable>{e.detail}</Text> : null}
+            <Collapse open={open}>
+              <Text style={d.trDetail} selectable>{e.detail}</Text>
+            </Collapse>
           </View>
           <Text style={d.tlExpand}>{open ? "▴" : "▾"}</Text>
         </Pressable>
@@ -150,7 +154,9 @@ function TranscriptRow({ e, open, onToggle }: { e: LogEntry; open: boolean; onTo
           <Text style={[d.trResult, { fontSize: pf.result }]} numberOfLines={open ? undefined : 1}>
             ↳ {open ? "收起变更 ▴" : `变更 · ${e.diff.filter((l) => l.startsWith("+")).length}+ ${e.diff.filter((l) => l.startsWith("-")).length}− ▾`}
           </Text>
-          {open ? <DiffBlock lines={e.diff} /> : null}
+          <Collapse open={open}>
+            <DiffBlock lines={e.diff} />
+          </Collapse>
         </Pressable>
       );
     }
@@ -160,7 +166,9 @@ function TranscriptRow({ e, open, onToggle }: { e: LogEntry; open: boolean; onTo
           <Text style={[d.trResult, { fontSize: pf.result }]} numberOfLines={open ? undefined : 2}>
             ↳ {e.text} <Text style={d.tlExpand}>{open ? "收起 ▴" : "展开 ▾"}</Text>
           </Text>
-          {open ? <Text style={d.trDetail} selectable>{e.detail}</Text> : null}
+          <Collapse open={open}>
+            <Text style={d.trDetail} selectable>{e.detail}</Text>
+          </Collapse>
         </Pressable>
       );
     }
