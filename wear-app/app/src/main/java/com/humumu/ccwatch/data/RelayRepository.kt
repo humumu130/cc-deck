@@ -6,6 +6,7 @@ import com.humumu.ccwatch.protocol.RecentEvent
 import com.humumu.ccwatch.protocol.SessionState
 import com.humumu.ccwatch.protocol.SessionStats
 import com.humumu.ccwatch.protocol.SessionStatus
+import com.humumu.ccwatch.protocol.TaskDoneReport
 import com.humumu.ccwatch.protocol.Usage
 import com.humumu.ccwatch.protocol.WaitingRequest
 import com.humumu.ccwatch.protocol.WatchCommand
@@ -183,6 +184,9 @@ class RelayRepository(private val host: String, private val token: String) : Ses
                                 it.optLong("cache_read_input_tokens", 0), it.optLong("cache_creation_input_tokens", 0),
                             )
                         } ?: s.usage,
+                        // 上下文水位：relay 携带时覆盖（与手机 store 的"present 即覆盖"口径一致）
+                        contextUsage = if (p.has("context_usage") && !p.isNull("context_usage")) p.getLong("context_usage") else s.contextUsage,
+                        contextLimit = if (p.has("context_limit") && !p.isNull("context_limit")) p.getLong("context_limit") else s.contextLimit,
                         todos = if (p.has("todos") && !p.isNull("todos")) ProtocolCodec.parseTodos(p) else s.todos,
                         cronTasks = if (p.has("cron_tasks") && !p.isNull("cron_tasks")) ProtocolCodec.parseCronTasks(p) else s.cronTasks,
                         updatedAt = ts,
@@ -257,6 +261,22 @@ class RelayRepository(private val host: String, private val token: String) : Ses
                     pushEventLocked(
                         sid,
                         RecentEvent(ts, "system", "完成: ${p.optString("terminal_reason")} · %.1fs".format((p.optLong("duration_ms") / 1000.0)))
+                    )
+                }
+                publish()
+            }
+            "TASK_DONE" -> {
+                // 任务完成汇报（#288）：事件 payload 的 remaining 是 TodoItem[]，取长度即剩余数
+                synchronized(lock) {
+                    val s = sessionMap[sid] ?: return
+                    val p = env.getJSONObject("payload")
+                    sessionMap[sid] = s.copy(
+                        lastTaskDone = TaskDoneReport(
+                            done = p.optJSONArray("done")?.let { a -> (0 until a.length()).map { a.optString(it) } }
+                                ?: emptyList(),
+                            remainingCount = p.optJSONArray("remaining")?.length() ?: 0,
+                            ts = p.optLong("ts", ts),
+                        ),
                     )
                 }
                 publish()

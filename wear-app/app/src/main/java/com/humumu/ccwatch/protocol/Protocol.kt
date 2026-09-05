@@ -53,6 +53,17 @@ data class Usage(
     val cacheCreationInputTokens: Long = 0,
 )
 
+/**
+ * 最近一次任务完成汇报（#254 断线恢复语义，#288 手表消费）：
+ * TASK_DONE 是瞬态事件，客户端断线/进程被杀时收不到，relay 把最近汇报随 SNAPSHOT 下发。
+ * 注意与 TASK_DONE 事件 payload 的 remaining（TodoItem[]）同名异型，此处 remainingCount 为数字。
+ */
+data class TaskDoneReport(
+    val done: List<String> = emptyList(), // 本次完成任务内容（relay 截断 10 条）
+    val remainingCount: Int = 0,          // 完成后剩余任务数（0 = 全部完成）
+    val ts: Long,                         // 汇报产生时刻（端上据此去重）
+)
+
 data class SessionState(
     val sessionId: String,
     val relaySessionId: String? = null,
@@ -71,6 +82,9 @@ data class SessionState(
     val durationMs: Long? = null,
     val external: Boolean? = null,
     val usage: Usage? = null,
+    val contextUsage: Long? = null, // 上下文水位 tokens（relay 按模型随 SNAPSHOT/SESSION_UPDATED 下发）
+    val contextLimit: Long? = null, // 上下文窗口上限（relay 集中维护，端上只兜底缺省 200k）
+    val lastTaskDone: TaskDoneReport? = null,
     val todos: List<TodoItem> = emptyList(),
     val cronTasks: List<CronTask> = emptyList(),
     val elapsedHint: Long? = null,
@@ -188,6 +202,17 @@ object ProtocolCodec {
             }
         } ?: emptyList()
 
+    /** SessionState.last_task_done 解析（仅 SNAPSHOT 携带；2h TTL 由 relay 清扫） */
+    fun parseTaskDone(o: JSONObject): TaskDoneReport? =
+        o.optJSONObject("last_task_done")?.let { td ->
+            TaskDoneReport(
+                done = td.optJSONArray("done")?.let { arr -> (0 until arr.length()).map { arr.optString(it) } }
+                    ?: emptyList(),
+                remainingCount = td.optInt("remaining_count", 0),
+                ts = optLong(td, "ts") ?: 0L,
+            )
+        }?.takeIf { it.ts > 0 }
+
     fun parseSessions(json: String): List<SessionState> {
         val arr = org.json.JSONArray(json)
         return (0 until arr.length()).map { i -> parseSession(arr.getJSONObject(i)) }
@@ -264,6 +289,9 @@ object ProtocolCodec {
             durationMs = optLong(o, "duration_ms"),
             external = if (o.has("external") && !o.isNull("external")) o.getBoolean("external") else null,
             usage = usage,
+            contextUsage = optLong(o, "context_usage"),
+            contextLimit = optLong(o, "context_limit"),
+            lastTaskDone = parseTaskDone(o),
             todos = parseTodos(o),
             cronTasks = parseCronTasks(o),
             elapsedHint = optLong(o, "elapsed_hint"),

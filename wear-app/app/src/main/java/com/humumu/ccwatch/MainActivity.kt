@@ -193,6 +193,20 @@ fun App(
         prevStatuses = next
     }
 
+    // 任务完成汇报（#288 A 类⑥）：lastTaskDone.ts 跃变 → 单次轻震 + 通知。
+    // 内存去重水位挡 relay replay 与 SNAPSHOT 双投递；首见只记基线不打扰——
+    // 手表无后台，进程存活期内才是提醒窗口（对齐上面状态跃变的 prevStatuses 语义，
+    // 进程生命周期短，无需像手机那样持久化 taskSeen）
+    var reportedTaskTs by remember { mutableStateOf<Map<String, Long>>(emptyMap()) }
+    LaunchedEffect(sessions) {
+        sessions.forEach { s ->
+            val tdTs = s.lastTaskDone?.ts ?: return@forEach
+            val prev = reportedTaskTs[s.sessionId]
+            if (prev != null && tdTs > prev) Notifier.notifyTaskDone(context, s)
+            if (prev == null || tdTs > prev) reportedTaskTs = reportedTaskTs + (s.sessionId to tdTs)
+        }
+    }
+
     // 通知深链：直达对应 Session 的 W1
     LaunchedEffect(pendingSid, sessions) {
         if (pendingSid == null) return@LaunchedEffect

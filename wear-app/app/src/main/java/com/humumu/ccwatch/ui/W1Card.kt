@@ -21,7 +21,11 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -113,26 +117,43 @@ private fun WorkingBody(s: SessionState, events: List<RecentEvent>) {
     WorkingMetaRow(s)
 }
 
-/** 运行中元信息：耗时 · 输出 tokens · 任务进度（快照间隔内静态，不逐秒跳动） */
+/** 运行中元信息：耗时 · 输出 tokens · 任务进度 · 上下文水位（快照间隔内静态，不逐秒跳动） */
 @Composable
 private fun WorkingMetaRow(s: SessionState) {
     val todos = s.todos
     val done = todos.count { it.isDone }
     val tok = s.usage?.outputTokens ?: 0L
-    val text = buildList {
+    val base = buildList {
         add(formatDuration(System.currentTimeMillis() - s.startedAt))
         if (tok > 0) add("↓${formatTokens(tok)}")
         if (todos.isNotEmpty()) add("☑$done/${todos.size}")
-    }.joinToString(" · ")
+    }
+    // 上下文水位（#288 A 类③）：马拉松会话期间"还能跑多久"的抬腕速览数
+    val ctx = s.contextUsage?.takeIf { it > 0 }
     Spacer(Modifier.height(4.dp))
     Text(
-        text,
+        buildAnnotatedString {
+            append(base.joinToString(" · "))
+            if (ctx != null) {
+                val limit = s.contextLimit?.takeIf { it > 0 } ?: 200_000L
+                val pct = Math.round(ctx * 100.0 / limit).toInt().coerceAtMost(100)
+                if (base.isNotEmpty()) append(" · ")
+                withStyle(SpanStyle(color = ctxLevelColor(ctx, limit))) { append("ctx $pct%") }
+            }
+        },
         color = C.textSecondary,
         fontSize = 10.sp,
         maxLines = 1,
         overflow = TextOverflow.Ellipsis,
         textAlign = TextAlign.Center,
     )
+}
+
+/** 水位分级配色（阈值同手机 fmt.ts/网页端）：<60% 绿 / <85% 黄 / ≥85% 红 */
+private fun ctxLevelColor(used: Long, limit: Long): Color = when {
+    used.toDouble() / limit < 0.6 -> C.done
+    used.toDouble() / limit < 0.85 -> C.working
+    else -> C.waiting
 }
 
 /** W6 · Waiting 确认：明确写出需要用户做什么 + Allow/Reject 同屏（规范 §11）。

@@ -70,6 +70,31 @@ object Notifier {
         nm.notify(s.sessionId.hashCode(), b.build())
     }
 
+    /** 任务完成汇报（#288 A 类⑥）：复用 CH_DONE 渠道（60ms 单次轻震，ColorOS 审核禁持续震动）。
+     *  纯通知形态——手表无后台，前台时 W1 本就能看到 ☑ 进度；点按深链对应会话 W1。 */
+    fun notifyTaskDone(ctx: Context, s: SessionState) {
+        val td = s.lastTaskDone ?: return
+        if (td.done.isEmpty()) return
+        val n = td.done.size
+        val tail = if (td.remainingCount > 0) "剩 ${td.remainingCount}" else "全部完成"
+        val text = (if (n == 1) td.done.first() else "${td.done.first().take(24)} 等 $n 项") + " · $tail"
+        val open = PendingIntent.getActivity(
+            ctx, s.sessionId.hashCode(),
+            Intent(ctx, MainActivity::class.java).putExtra("sid", s.sessionId),
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+        )
+        val b = Notification.Builder(ctx, CH_DONE)
+            .setSmallIcon(R.drawable.ic_notification)
+            .setContentTitle("完成任务 · ${s.title}")
+            .setContentText(text)
+            .setContentIntent(open)
+            .setAutoCancel(true)
+            .setOnlyAlertOnce(false)
+        val nm = ctx.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+        // 独立 id：回到 WORKING 撤状态通知时（notify/cancel 均按 sid.hashCode）不误清任务汇报
+        nm.notify(("taskdone:" + s.sessionId).hashCode(), b.build())
+    }
+
     private fun action(ctx: Context, label: String, kind: String, sid: String, rid: String?): Notification.Action {
         val pi = PendingIntent.getBroadcast(
             ctx, (sid + kind).hashCode(),

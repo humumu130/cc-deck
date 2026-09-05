@@ -140,6 +140,8 @@ class DemoRepository : SessionRepo {
                     receivedAt = t - 15_000,
                 ) else null,
                 stats = SessionStats(filesChanged = 3, linesAdded = 128, linesDeleted = 41),
+                contextUsage = 124_000, // 62% → 黄档（水位分级演示）
+                contextLimit = 200_000,
                 cronTasks = listOf(
                     CronTask(id = "cron-1", name = "每日日报", prompt = "汇总今日改动", schedule = "0 8 * * *", nextRunAt = tomorrowMorning(), recurring = true),
                     CronTask(id = "cron-2", name = "依赖巡检", prompt = "检查依赖更新", schedule = "0 */2 * * *", nextRunAt = now + 2 * 3_600_000L, recurring = true),
