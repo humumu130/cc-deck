@@ -196,8 +196,9 @@ export class Bridge {
           const cwd = this.readCwdFromTail(p);
           if (!cwd) continue;
           // 测试沙箱不收养：relay 自测（test:sessions 等）在 .tmp-test 起真实 SDK 会话，
-          // transcript 落全局 projects 目录，不拦就以孤儿身份混进手机会话列表（#269）
-          if (cwd.split(/[\\/]+/).includes(".tmp-test")) continue;
+          // transcript 落全局 projects 目录，不拦就以孤儿身份混进手机会话列表（#269）。
+          // Windows 路径大小写不敏感，段比较需 lower（手工建 .TMP-TEST 会让护栏静默失效）
+          if (cwd.split(/[\\/]+/).some((seg) => seg.toLowerCase() === ".tmp-test")) continue;
           // 单发探针/一次性 print 模式 CLI（单回合无追问）不值得监控：全文件
           // user 行 <2 条不收养——交互会话必然多回合（含工具结果的 user 行也算）
           if (!this.hasMultiUserTurns(p)) continue;
@@ -345,7 +346,7 @@ export class Bridge {
     // 测试沙箱事件直接放行不建档：relay 自测（test:sessions 等）的 SDK 子进程会加载
     // 全局 hook 把事件发给生产 relay，不拦就以真实会话身份混进手机列表（#269；
     // 孤儿收养侧 adoptOrphans 另有同款护栏，两路都堵才断根）
-    if ((ev.cwd ?? "").split(/[\\/]+/).includes(".tmp-test")) return { decision: "pass" };
+    if ((ev.cwd ?? "").split(/[\\/]+/).some((seg) => seg.toLowerCase() === ".tmp-test")) return { decision: "pass" };
     // hook 事件到达即证明该会话有 hook：从无 hook 疑似名单除名（回合首条转录写入
     // 早于 UserPromptSubmit POST 到达的竞态窗口里可能被 5s tick 误登记，长工具
     // 静默期会被 sweepNoHookIdle 误判回合结束）
@@ -1521,8 +1522,12 @@ export class Bridge {
     if (/permission/i.test(msg)) {
       // CLI 在本地等权限确认：通知手机，但远程无法决定（无挂起通道）。
       // 从消息里抠工具名（"Claude needs your permission to use Update"→"Update"），
-      // 否则手机状态条只能显示空荡荡的"等待确认："（#271）
-      const toolName = /to use (\S+)/i.exec(msg)?.[1] ?? "";
+      // 否则手机状态条只能显示空荡荡的"等待确认："（#271）。
+      // 剥尾标点 + 滤停用词："to use the WebFetch tool" 会抓到 the，非空错提取
+      // 反而屏蔽手机端 input_summary 回退，比留空更差
+      const m = /to use (\S+)/i.exec(msg);
+      const rawName = m ? m[1].replace(/[.,;:!?)+]+$/, "") : "";
+      const toolName = /^(the|a|an|this|that)$/i.test(rawName) ? "" : rawName;
       this.mgr.setExternalWaiting(id, {
         request_id: randomUUID(),
         tool_name: toolName,
