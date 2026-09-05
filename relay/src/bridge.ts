@@ -195,6 +195,9 @@ export class Bridge {
           if (mtime > Date.now() - 15_000) continue;
           const cwd = this.readCwdFromTail(p);
           if (!cwd) continue;
+          // 测试沙箱不收养：relay 自测（test:sessions 等）在 .tmp-test 起真实 SDK 会话，
+          // transcript 落全局 projects 目录，不拦就以孤儿身份混进手机会话列表（#269）
+          if (cwd.split(/[\\/]+/).includes(".tmp-test")) continue;
           // 单发探针/一次性 print 模式 CLI（单回合无追问）不值得监控：全文件
           // user 行 <2 条不收养——交互会话必然多回合（含工具结果的 user 行也算）
           if (!this.hasMultiUserTurns(p)) continue;
@@ -339,6 +342,10 @@ export class Bridge {
   }
 
   async handleEvent(ev: BridgeEvent): Promise<BridgeDecision> {
+    // 测试沙箱事件直接放行不建档：relay 自测（test:sessions 等）的 SDK 子进程会加载
+    // 全局 hook 把事件发给生产 relay，不拦就以真实会话身份混进手机列表（#269；
+    // 孤儿收养侧 adoptOrphans 另有同款护栏，两路都堵才断根）
+    if ((ev.cwd ?? "").split(/[\\/]+/).includes(".tmp-test")) return { decision: "pass" };
     // hook 事件到达即证明该会话有 hook：从无 hook 疑似名单除名（回合首条转录写入
     // 早于 UserPromptSubmit POST 到达的竞态窗口里可能被 5s tick 误登记，长工具
     // 静默期会被 sweepNoHookIdle 误判回合结束）
