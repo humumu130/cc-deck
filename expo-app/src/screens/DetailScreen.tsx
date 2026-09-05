@@ -1,5 +1,5 @@
 import { Fragment, useEffect, useRef, useState } from "react";
-import { Animated, BackHandler, Dimensions, Image, PermissionsAndroid, Pressable, ScrollView, StyleSheet, Text, TextInput, View, type NativeScrollEvent, type NativeSyntheticEvent } from "react-native";
+import { Animated, BackHandler, Dimensions, Image, PermissionsAndroid, Pressable, ScrollView, StyleSheet, Text, TextInput, Vibration, View, type NativeScrollEvent, type NativeSyntheticEvent } from "react-native";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import * as ImagePicker from "expo-image-picker";
 import * as ImageManipulator from "expo-image-manipulator";
@@ -26,6 +26,9 @@ const VIEWS = [
   { k: "cron", label: "定时" },
   { k: "stats", label: "统计" },
 ] as const;
+// tab 指示条几何参数：filterRow 左边距与 tab 间隙（JS 几何计算与 makeStyles 共用）
+const TAB_PAD_L = 4;
+const TAB_GAP = 6;
 type ViewKind = (typeof VIEWS)[number]["k"];
 
 // SpeechRecognizer 错误码人话（反馈排查用；1/2/4 多为云识别服务连不上）
@@ -360,6 +363,9 @@ export default function DetailScreen({ sid, onBack }: { sid: string; onBack: () 
   const scrollRef = useRef<ScrollView>(null);
   const allScrollRef = useRef<ScrollView>(null);
   const pagerRef = useRef<ScrollView>(null);
+  // 五视图滑动指示条：由翻页滚动位置原生驱动（useNativeDriver 跟手，不走 JS 线程不掉帧）
+  const scrollX = useRef(new Animated.Value(0)).current;
+  const [tabRowW, setTabRowW] = useState(0);
   const atBottom = useRef(true);
   // 手指按住期间暂停自动滚底：流式更新的 scrollToEnd 跳变会打断进行中的按压（chip/展开全文点不中）
   const touching = useRef(false);
@@ -479,13 +485,52 @@ export default function DetailScreen({ sid, onBack }: { sid: string; onBack: () 
     if (ref && atBottom.current && !touching.current) ref.scrollToEnd({ animated: false });
   }, [view, pageShown.length, lastLen, s?.pending_inputs?.length ?? 0, s?.status === "WORKING"]);
   const toggle = (key: string) => setExpanded((m) => ({ ...m, [key]: !m[key] }));
-  // 五视图横向翻页（#250）：页宽=窗口宽（锁定竖屏），tab 点击远跳直接落位、相邻才动画滚动
+  // 五视图横向翻页（#250/#252）：页宽=窗口宽（锁定竖屏）。tab 点击一律动画滚动；
+  // 远跳（>1 页）飞行途中临时全渲染，防掠过的中间页闪空白
   const viewIdx = VIEWS.findIndex((v) => v.k === view);
   const pagerW = Dimensions.get("window").width;
+  const [flight, setFlight] = useState(false);
+  // 程序化滚动期间挂起 onScroll 的 label 联动：tab 已即时高亮目标项，
+  // 不能被飞行起点处"位置还在旧页"的回写打回。兜底定时器存 ref：连点
+  // tab 时先清上一次的，防止旧定时提前复位打断本次飞行（momentum end 是权威清旗点）
+  const progJump = useRef(false);
+  const progTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const flightTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => () => {
+    if (progTimer.current) clearTimeout(progTimer.current);
+    if (flightTimer.current) clearTimeout(flightTimer.current);
+  }, []);
   const gotoView = (i: number) => {
+    if (i === viewIdx) return;
+    try { Vibration.vibrate(10); } catch {}
+    progJump.current = true;
+    if (progTimer.current) clearTimeout(progTimer.current);
+    progTimer.current = setTimeout(() => { progJump.current = false; }, 1200);
     setView(VIEWS[i].k);
-    pagerRef.current?.scrollTo({ x: i * pagerW, animated: Math.abs(i - viewIdx) === 1 });
+    if (Math.abs(i - viewIdx) > 1) {
+      setFlight(true);
+      if (flightTimer.current) clearTimeout(flightTimer.current);
+      flightTimer.current = setTimeout(() => setFlight(false), 1200);
+    }
+    pagerRef.current?.scrollTo({ x: i * pagerW, animated: true });
   };
+  // 指示条几何：tab 等宽分铺整行（TAB_PAD_L 左边距 + TAB_GAP 间隙），横杠宽 = 单 tab 宽，
+  // 每滑一页平移 (tabW + gap)；滑到两页中间时轻微拉伸（1.3x）落位回缩，clamp 防 overscroll 过冲
+  const tabW = tabRowW > 0 ? (tabRowW - TAB_PAD_L - TAB_GAP * (VIEWS.length - 1)) / VIEWS.length : 0;
+  const indX = scrollX.interpolate({
+    inputRange: VIEWS.map((_, i) => i * pagerW),
+    outputRange: VIEWS.map((_, i) => i * (tabW + TAB_GAP)),
+    extrapolate: "clamp",
+  });
+  const stretchIn: number[] = [0];
+  const stretchOut: number[] = [1];
+  for (let k = 0; k < VIEWS.length - 1; k++) {
+    for (const f of [0.25, 0.5, 0.75, 1]) {
+      stretchIn.push((k + f) * pagerW);
+      stretchOut.push(f === 1 ? 1 : f === 0.5 ? 1.3 : 1.16);
+    }
+  }
+  const indS = scrollX.interpolate({ inputRange: stretchIn, outputRange: stretchOut, extrapolate: "clamp" });
 
   useEffect(() => {
     const sub = BackHandler.addEventListener("hardwareBackPress", () => {
@@ -749,17 +794,18 @@ export default function DetailScreen({ sid, onBack }: { sid: string; onBack: () 
               )}
             </View>
           ) : null}
-          <View style={d.filterRow}>
+          <View style={d.filterRow} onLayout={(e) => setTabRowW(e.nativeEvent.layout.width)}>
             {VIEWS.map((v, i) => (
               <Pressable
                 key={v.k}
-                style={[d.tabBtn, view === v.k && d.tabBtnOn]}
+                style={d.tabBtn}
                 onPress={() => gotoView(i)}
-                hitSlop={{ top: 6, bottom: 2, left: 3, right: 3 }}
+                hitSlop={{ top: 6, bottom: 2 }}
               >
                 <Text style={[d.tabT, view === v.k && d.tabTOn]}>{v.label}</Text>
               </Pressable>
             ))}
+            <Animated.View style={[d.tabInd, { width: tabW, transform: [{ translateX: indX }, { scaleX: indS }] }]} />
           </View>
           {!external && canCmd && !s.historical ? (
           <View style={d.subFilterRow}>
@@ -779,22 +825,34 @@ export default function DetailScreen({ sid, onBack }: { sid: string; onBack: () 
       </View>
       ) : null}
 
-      {/* 五视图横向翻页（#250）：面板上左右滑动切换，懒渲染相邻 ±1 页；tab 点击联动滚动。
-          任务视图：整屏列表（网页端"任务" tab 同构；进度条 + 手动刷新 + 常驻滑块沿用） */}
+      {/* 五视图横向翻页（#250/#252）：面板上左右滑动切换，懒渲染相邻 ±1 页（远跳飞行中临时全渲染）；
+          滚动位置原生驱动 tab 指示条逐像素跟手。任务视图：整屏列表（网页端"任务" tab 同构） */}
       <ScrollView
         ref={pagerRef}
         style={{ flex: 1 }}
         horizontal
         pagingEnabled
         showsHorizontalScrollIndicator={false}
+        scrollEventThrottle={16}
+        onScroll={(e: NativeSyntheticEvent<NativeScrollEvent>) => {
+          // bridgeless 下 Animated.event+useNativeDriver 会闪退（0.2.26，同任务面板滑块结论），
+          // 退回 JS setValue：throttle 16 逐帧事件流，指示条仍跟手
+          scrollX.setValue(e.nativeEvent.contentOffset.x);
+          if (progJump.current) return;
+          // 越过中线即换高亮（不等落定）：滑到一半停住时 label 与页面一致停在中间态
+          const i = Math.round(e.nativeEvent.contentOffset.x / pagerW);
+          if (i >= 0 && i < VIEWS.length && VIEWS[i].k !== view) setView(VIEWS[i].k);
+        }}
         onMomentumScrollEnd={(e) => {
           const i = Math.round(e.nativeEvent.contentOffset.x / pagerW);
           if (i >= 0 && i < VIEWS.length && VIEWS[i].k !== view) setView(VIEWS[i].k);
+          progJump.current = false;
+          setFlight(false);
         }}
       >
       {VIEWS.map((v, vi) => (
         <View key={v.k} style={{ width: pagerW }}>
-        {Math.abs(vi - viewIdx) <= 1 ? (v.k === "todos" ? (
+        {Math.abs(vi - viewIdx) <= 1 || flight ? (v.k === "todos" ? (
         <View style={d.viewCol}>
           <View style={d.todoHead}>
             <Text style={d.todoHeadT}>☰ 任务 {doneList.length}/{sortedTodos.length}</Text>
@@ -1255,9 +1313,9 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
   },
   pendT: { color: c.dim, fontSize: 12.5, lineHeight: 17 },
   // 视图 tab 行：下划线式（与网页端 tabs 同风格，去掉边框底色更轻）
-  filterRow: { flexDirection: "row", gap: 6, marginBottom: 10, paddingLeft: 4 },
-  tabBtn: { paddingVertical: 4, paddingHorizontal: 10, borderBottomWidth: 2, borderBottomColor: "transparent" },
-  tabBtnOn: { borderBottomColor: c.brandA },
+  filterRow: { position: "relative", flexDirection: "row", gap: 6, marginBottom: 10, paddingLeft: 4 },
+  tabBtn: { flex: 1, alignItems: "center", paddingVertical: 4, borderBottomWidth: 2, borderBottomColor: "transparent" },
+  tabInd: { position: "absolute", left: TAB_PAD_L, bottom: 0, height: 2.5, borderRadius: 1.5, backgroundColor: c.brandA },
   tabT: { fontSize: 12, color: c.dim },
   tabTOn: { color: c.text, fontWeight: "600" },
   filterChip: {
