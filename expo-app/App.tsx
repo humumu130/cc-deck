@@ -10,7 +10,7 @@ import { ThemeProvider, useTheme, useThemeStyles } from "./src/theme-context";
 import { useKbHeight } from "./src/kb";
 import { loadDisplaySettings } from "./src/display-settings";
 import { withA, type ThemeColors } from "./src/theme";
-import ListScreen from "./src/screens/ListScreen";
+import ListScreen, { type ListBackHandle } from "./src/screens/ListScreen";
 import DetailScreen from "./src/screens/DetailScreen";
 import SetupScreen from "./src/screens/SetupScreen";
 import NewSessionModal from "./src/screens/NewSessionModal";
@@ -63,8 +63,18 @@ function Toast() {
 // 任务完成汇报悬浮按钮（#204/#240/#254）：右下角 44dp 小方钮 + 未读计数徽标
 // （未点开的完成项总数持续累积），点击展开详情卡（fade+上滑）并清计数。
 // 卡片无标题：直接列完成任务项，底部「清除 / 查看会话」。全局浮层：详情页贴命令栏上方，
-// 列表页抬高让开 FAB
-function TaskDoneFloat({ isDetail, onOpenSession }: { isDetail: boolean; onOpenSession: (sid: string) => void }) {
+// 列表页抬高让开 FAB。展开态由 Shell 持有（#282）：硬件返回统一在顶层分发先收卡
+function TaskDoneFloat({
+  isDetail,
+  onOpenSession,
+  expanded,
+  setExpanded,
+}: {
+  isDetail: boolean;
+  onOpenSession: (sid: string) => void;
+  expanded: boolean;
+  setExpanded: (v: boolean) => void;
+}) {
   const { c } = useTheme();
   const snap = useRelay();
   const st = useThemeStyles(makeStyles);
@@ -77,7 +87,6 @@ function TaskDoneFloat({ isDetail, onOpenSession }: { isDetail: boolean; onOpenS
   const overflow = rows.length - shown.length;
   const latestSid = q.length ? q[q.length - 1].sid : "";
   const multi = new Set(q.map((r) => r.sid)).size > 1;
-  const [expanded, setExpanded] = useState(false);
   // 键盘跟随（#270）：详情页点输入框弹键盘时 FAB 随之上移，避免被键盘整块遮住。
   // RN Keyboard 事件在 bridgeless+edge-to-edge 下不触发，走原生 kbInsets 通道（src/kb.ts）
   const kbH = useKbHeight();
@@ -94,17 +103,7 @@ function TaskDoneFloat({ isDetail, onOpenSession }: { isDetail: boolean; onOpenS
     }
     pop.setValue(0.4);
     Animated.spring(pop, { toValue: 1, useNativeDriver: true, bounciness: 6, speed: 12 }).start();
-  }, [hasQ]);
-
-  // 卡片展开时硬件返回先收卡（否则详情页 BackHandler 抢走返回键，浮层开着却被拽回列表）
-  useEffect(() => {
-    if (!expanded) return;
-    const sub = BackHandler.addEventListener("hardwareBackPress", () => {
-      setExpanded(false);
-      return true;
-    });
-    return () => sub.remove();
-  }, [expanded]);
+  }, [hasQ, setExpanded]);
 
   // 未读计数变化时徽标弹一下，提示又完成了新任务
   useEffect(() => {
@@ -214,8 +213,10 @@ function Shell() {
     });
     return true;
   }, [navPhase, detail, navX]);
-  const closeDetail = useCallback(() => {
-    if (navPhase !== "idle" || !detail) return;
+  // 关详情：仅在空闲相位且详情确实开着时启动关闭动画，返回是否实际执行（#282 条件消费
+  // 的依据——分发层据此决定 return true / false，不再无条件吞键）
+  const closeDetail = useCallback((): boolean => {
+    if (navPhase !== "idle" || !detail) return false;
     setNavPhase("closing");
     Animated.timing(navX, { toValue: Dimensions.get("window").width, duration: 200, easing: Easing.in(Easing.cubic), useNativeDriver: true }).start(({ finished }) => {
       if (finished) {
@@ -223,10 +224,58 @@ function Shell() {
         setNavPhase("idle");
       }
     });
+    return true;
   }, [navPhase, detail, navX]);
+  // navPhase 卡相位兜底（#282）：动画 finished 回调可能因 JS 线程繁忙被打断/丢失，
+  // entering/closing 永不回 idle 会让 openDetail/closeDetail 永久拒绝——正是详情页
+  // 返回键静默失灵的守卫源头。500ms > 滑入 230ms/滑出 200ms，超时按应然结果收场放行
+  useEffect(() => {
+    if (navPhase === "idle") return;
+    const t = setTimeout(() => {
+      if (navPhase === "closing") setDetail(null);
+      setNavPhase("idle");
+    }, 500);
+    return () => clearTimeout(t);
+  }, [navPhase]);
   const [sheet, setSheet] = useState(false);
   // null=关闭；"new"=新增服务器；其余字符串=编辑该 id 的服务器
   const [setup, setSetup] = useState<string | null>(null);
+  // 任务汇报卡展开态提到 Shell（#282）：硬件返回要在顶层先收卡；列表抽屉/图例开闭
+  // 只有 ListScreen 知道，经 ref 句柄承接分发
+  const [tdExpanded, setTdExpanded] = useState(false);
+  const listBackRef = useRef<ListBackHandle | null>(null);
+
+  // 硬件返回统一分发（#282）：全 App 唯一 BackHandler 订阅（原 DetailScreen/
+  // ListScreen 抽屉+图例/TaskDoneFloat/SetupScreen 各自订阅全部并入）。按
+  // 设置页 → 汇报卡 → 详情 → 列表浮层 的优先级消费；仅实际执行了返回动作才
+  // return true，无路可退 return false 走系统默认退出语义——废除「无条件消费 +
+  // 守卫拒绝」的静默吞键组合
+  const onHardwareBack = useCallback((): boolean => {
+    // 设置页（从 ⚙ 进入，可退）→ 回主界面；首次配置无路可退不消费
+    if (setup !== null) {
+      if (hasCfg) {
+        setSetup(null);
+        return true;
+      }
+      return false;
+    }
+    // 任务汇报卡展开：先收卡（不拽走底下的详情/列表）
+    if (tdExpanded) {
+      setTdExpanded(false);
+      return true;
+    }
+    // 详情开 → 关详情（动画窗口期被相位守卫拒绝时不消费，500ms 兜底放行后恢复）
+    if (detail) return closeDetail();
+    // 列表抽屉/图例浮窗开 → 关浮层（列表页挂载时才可能）
+    if (listBackRef.current?.requestBack()) return true;
+    // 根路由列表：不消费，交给系统默认
+    return false;
+  }, [setup, hasCfg, tdExpanded, detail, closeDetail]);
+
+  useEffect(() => {
+    const sub = BackHandler.addEventListener("hardwareBackPress", onHardwareBack);
+    return () => sub.remove();
+  }, [onHardwareBack]);
 
   useEffect(() => {
     startWatchGateway();
@@ -307,6 +356,7 @@ function Shell() {
         <>
           {(!detail || navPhase !== "idle") && (
             <ListScreen
+              ref={listBackRef}
               sessions={snap.sessions}
               connected={snap.connected}
               connText={snap.connText}
@@ -327,6 +377,8 @@ function Shell() {
           <Toast />
           <TaskDoneFloat
             isDetail={!!detail && navPhase !== "closing"}
+            expanded={tdExpanded}
+            setExpanded={setTdExpanded}
             onOpenSession={(sid) => {
               // 动画窗口期 openDetail 拒跳转：此时不得清汇报，否则既没进会话又丢了通知
               if (openDetail(sid)) store.clearTaskDone(sid);

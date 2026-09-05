@@ -1,5 +1,5 @@
 import { Fragment, useEffect, useRef, useState } from "react";
-import { Animated, BackHandler, Dimensions, Image, Modal, PermissionsAndroid, Pressable, RefreshControl, ScrollView, Share, StyleSheet, Text, TextInput, Vibration, View, type NativeScrollEvent, type NativeSyntheticEvent, type NativeTouchEvent, type StyleProp, type TextStyle } from "react-native";
+import { Animated, Dimensions, Image, Modal, PermissionsAndroid, Pressable, RefreshControl, ScrollView, Share, StyleSheet, Text, TextInput, Vibration, View, type NativeScrollEvent, type NativeSyntheticEvent, type NativeTouchEvent, type StyleProp, type TextStyle } from "react-native";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import * as ImagePicker from "expo-image-picker";
 import * as ImageManipulator from "expo-image-manipulator";
@@ -676,13 +676,9 @@ export default function DetailScreen({ sid, onBack }: { sid: string; onBack: () 
   }
   const indS = scrollX.interpolate({ inputRange: stretchIn, outputRange: stretchOut, extrapolate: "clamp" });
 
-  useEffect(() => {
-    const sub = BackHandler.addEventListener("hardwareBackPress", () => {
-      onBack();
-      return true;
-    });
-    return () => sub.remove();
-  }, [onBack]);
+  // 硬件返回已收敛到 App.tsx 顶层单订阅统一分发（#282）：本页不再自订
+  // BackHandler（旧写法无条件 return true，动画窗口期被 closeDetail 守卫拒绝后
+  // 按键被静默吞掉）；onBack 仅由顶层按条件调用
 
   // 语音输入状态与事件订阅（钩子须在下方早退 return 之前）；默认关，设置抽屉开启
   const voiceOn = useVoiceInput();

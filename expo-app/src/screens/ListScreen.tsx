@@ -1,5 +1,5 @@
-import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Animated, BackHandler, Easing, FlatList, PanResponder, Pressable, RefreshControl, StyleSheet, Text, Vibration, View } from "react-native";
+import { memo, useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState, type Ref } from "react";
+import { Animated, Easing, FlatList, PanResponder, Pressable, RefreshControl, StyleSheet, Text, Vibration, View } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { statusColor, withA, type ThemeColors } from "../theme";
@@ -13,6 +13,12 @@ import type { SessionState } from "../protocol";
 import RenameModal from "./RenameModal";
 import SettingsDrawer from "./SettingsDrawer";
 
+// 硬件返回句柄（#282）：返回键收敛为 App.tsx 顶层单订阅统一分发，抽屉/图例浮层
+// 是否开着只有本组件知道——经 ref 暴露 requestBack 供父级分发时调用
+export interface ListBackHandle {
+  requestBack: () => boolean; // 关掉一个开着的浮层返回 true；无可关返回 false
+}
+
 interface Props {
   sessions: SessionState[];
   connected: boolean;
@@ -21,6 +27,7 @@ interface Props {
   onNew: () => void;
   onSetup: () => void;
   onEditServer: (id: string) => void;
+  ref?: Ref<ListBackHandle>;
 }
 
 function folderOf(cwd: string): string {
@@ -349,7 +356,7 @@ const SessionCard = memo(function SessionCard({
   );
 });
 
-export default function ListScreen({ sessions, connected, connText, onOpen, onNew, onSetup, onEditServer }: Props) {
+export default function ListScreen({ sessions, connected, connText, onOpen, onNew, onSetup, onEditServer, ref }: Props) {
   const { c } = useTheme();
   const styles = useThemeStyles(makeStyles);
   const insets = useSafeAreaInsets();
@@ -444,25 +451,21 @@ export default function ListScreen({ sessions, connected, connText, onOpen, onNe
       .catch(() => {});
   }, [drawerOpen]);
 
-  // 抽屉打开时硬件返回先关抽屉
-  useEffect(() => {
-    if (!drawerOpen) return;
-    const sub = BackHandler.addEventListener("hardwareBackPress", () => {
-      setDrawerOpen(false);
-      return true;
-    });
-    return () => sub.remove();
-  }, [drawerOpen]);
-
-  // 图例浮窗同理：返回键收起浮窗而不是退出 App（列表页是根路由）
-  useEffect(() => {
-    if (!legendOpen) return;
-    const sub = BackHandler.addEventListener("hardwareBackPress", () => {
-      setLegendOpen(false);
-      return true;
-    });
-    return () => sub.remove();
-  }, [legendOpen]);
+  // 硬件返回（#282）：抽屉/图例开着时先关浮层而不是退出 App（列表页是根路由）。
+  // 原两处局部 BackHandler 订阅已并入 App.tsx 顶层单订阅，这里经 ref 句柄承接分发
+  useImperativeHandle(ref, () => ({
+    requestBack: () => {
+      if (legendOpen) {
+        setLegendOpen(false);
+        return true;
+      }
+      if (drawerOpen) {
+        setDrawerOpen(false);
+        return true;
+      }
+      return false;
+    },
+  }), [drawerOpen, legendOpen]);
 
   // 左缘手势条：从屏幕左缘右滑呼出侧边栏（透明覆盖条，只认横向滑动，不拦点击/竖向滚动）
   const edgePan = useRef(
