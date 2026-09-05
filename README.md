@@ -122,7 +122,7 @@ node scripts/install-hooks.mjs     # relay 目录下执行；幂等，首次自�
 
 ### ③ 手机端
 
-- **安装**：在 [Releases](https://github.com/humumu130/cc-watch/releases) 下载 `CC-Deck-<tag>.apk` 安装（当前 0.2.x，包名 `com.humumu.ccwatch`）
+- **安装**：在 [Releases](https://github.com/humumu130/cc-watch/releases) 下载 `CC-Deck-<tag>.apk` 安装（当前 0.3.x，包名 `com.humumu.ccwatch`）
 - **局域网连接**：App 内「设置 → 新增服务器」，地址填 `ws://<PC-IP>:8787/ws`，令牌填 relay 启动时打印的 token（即上面 URL 里 `?token=` 的值）
 - **跨网络连接**：无需碰 IP 和端口——PC 上执行 `/cc-deck-pair`（插件）或 `npx tsx src/index.ts --pair`（手动）领 6 位配对码，手机 App「新增服务器 → 配对码」输入即可；异地浏览器则打开 <https://cc.humumu.online> 输码接入
 - **Wear OS 手表**：手表端 App（`wear-app/`）支持两种接入——WebSocket 直连 relay（无 GMS 设备的主通道，国行手表实测可用）或经手机 App 的 Data Layer 网关转发快照
