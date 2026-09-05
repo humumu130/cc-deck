@@ -333,6 +333,8 @@
     0%, 100% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--sc) 45%, transparent); }
     50% { box-shadow: 0 0 9px 2px color-mix(in srgb, var(--sc) 55%, transparent); }
   }
+  /* 入场动效（与手机端 FadeIn 同语言）：display none→block 出现时自动重放 */
+  @keyframes riseIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
 
   /* ---------- 详情 ---------- */
   #detail { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
@@ -368,6 +370,7 @@
     margin: 10px auto 10px; width: calc(100% - 40px); max-width: min(1040px, 100%);
     background: var(--panel); border: 1px solid var(--border); border-radius: 12px;
     padding: 8px 12px; font-size: 12.5px; flex: none;
+    animation: riseIn .18s ease-out;
   }
   #liverow .spin { display: inline-block; color: var(--working); animation: rot 1.8s linear infinite; font-weight: 700; }
   @keyframes rot { to { transform: rotate(360deg); } }
@@ -379,6 +382,7 @@
     background: rgba(245,184,65,.07);
     border: 1px solid rgba(245,184,65,.4); border-radius: 14px; padding: 14px 16px; display: none;
     flex: none;
+    animation: riseIn .18s ease-out;
   }
   #waitbox .t { color: var(--working); font-weight: 700; font-size: 13px; display: flex; align-items: center; gap: 8px; }
   #waitbox .t i { width: 9px; height: 9px; border-radius: 50%; background: var(--working); animation: breathe 1.6s infinite; --sc: var(--working); }
@@ -404,6 +408,8 @@
     font-size: calc(15px * var(--tl-scale, 1)); line-height: 1.75; letter-spacing: .012em;
   }
   #timeline > * { max-width: min(1040px, 100%); margin-left: auto; margin-right: auto; }
+  /* tab 切换淡入（JS 重触发）：与手机端翻页切换的动效语言呼应 */
+  #timeline.rise { animation: riseIn .18s ease-out; }
   .day-sep { text-align: center; color: var(--faint); font-size: 10.5px; margin: 14px 0 4px; font-variant-numeric: tabular-nums; letter-spacing: 1px; }
   .msg-user { display: flex; flex-direction: column; align-items: flex-end; margin: 18px 0; }
   .msg-user .ub {
@@ -463,7 +469,7 @@
   .stream-cur { color: var(--working); animation: blinkcur 1s infinite; font-weight: 700; }
   @keyframes blinkcur { 50% { opacity: .15; } }
   /* 排队注入消息（外部会话）：右对齐呼吸气泡 */
-  #pendbox { display: none; flex-direction: column; align-items: flex-end; gap: 6px; padding: 0 20px 8px; flex: none; width: 100%; max-width: min(1040px, 100%); margin: 0 auto; box-sizing: border-box; }
+  #pendbox { display: none; flex-direction: column; align-items: flex-end; gap: 6px; padding: 0 20px 8px; flex: none; width: 100%; max-width: min(1040px, 100%); margin: 0 auto; box-sizing: border-box; animation: riseIn .18s ease-out; }
   #pendbox span {
     background: var(--panel-2); border: 1px dashed var(--border); color: var(--dim);
     border-radius: 12px; border-top-right-radius: 4px; padding: 6px 11px; font-size: 12px;
@@ -475,6 +481,7 @@
     display: none; margin: 10px auto 0; width: calc(100% - 40px); max-width: min(1040px, 100%);
     background: var(--panel-2); border: 1px solid var(--border);
     border-radius: 12px; padding: 7px 12px; flex: none;
+    animation: riseIn .18s ease-out;
   }
   .agrow { display: flex; gap: 10px; align-items: baseline; font-size: 12px; padding: 3px 0; }
   .agrow .ad { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -538,6 +545,7 @@
     max-height: 248px; overflow-y: auto; z-index: 30;
     background: var(--panel); border: 1px solid var(--border); border-radius: 14px;
     box-shadow: 0 8px 28px rgba(0,0,0,.4);
+    animation: riseIn .18s ease-out;
   }
   #slashbox .sl-row {
     display: flex; align-items: center; gap: 9px; padding: 8px 13px;
@@ -2683,8 +2691,13 @@ document.querySelectorAll(".tabs button.tab").forEach((b) => {
   b.onclick = () => {
     activeTab = b.dataset.tab;
     document.querySelectorAll(".tabs button.tab").forEach((x) => x.classList.toggle("active", x === b));
-    $("timeline").dataset.count = "";
+    const tl = $("timeline");
+    tl.dataset.count = "";
     renderDetail();
+    // 切页淡入：强制重排重放一次 riseIn
+    tl.classList.remove("rise");
+    void tl.offsetWidth;
+    tl.classList.add("rise");
   };
 });
 
