@@ -1798,12 +1798,13 @@ function render() {
   renderSrcChips();
 
   const box = $("cards");
-  // 排序：运行中 > 等待 > 其余，同组按开始时间倒序
+  // 排序：等待 > 运行 > 错误 > 完成；组内按更新时间倒序（#279E 对齐手机口径：
+  // 新完成的会话紧跟活跃段顶部，不再按启动时间沉到 DONE 组底部像"消失"）
   const order = { WAITING: 0, WORKING: 1, ERROR: 2, DONE: 3 };
   let entries = allSessions();
   if (filterSrc !== "all") entries = entries.filter((e) => e.ctx.cfg.id === filterSrc);
   const list = entries.sort((a, b) =>
-    (order[a.s.status] - order[b.s.status]) || (b.s.started_at - a.s.started_at));
+    (order[a.s.status] - order[b.s.status]) || ((b.s.updated_at || b.s.started_at) - (a.s.updated_at || a.s.started_at)));
   const key = list.map((e) => e.ctx.cfg.id + ":" + e.s.session_id + ":" + e.s.status + ":" + Math.floor(sessionElapsed(e.s) / 1000) + ":" + (e.s.title || "") + ":" + (e.s.action_summary || "") + ":" + (e.s.waiting_request ? 1 : 0) + ":" + ctxPct(e.s)).join("|");
   if (box.dataset.key !== key) {
     // 就地改名进行中：跳过重建（运行中会话 key 每秒变，会把编辑框冲掉）
