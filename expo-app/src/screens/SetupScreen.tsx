@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { BackHandler, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { LinearGradient } from "expo-linear-gradient";
@@ -34,6 +34,9 @@ export default function SetupScreen({ onClose, editId }: Props) {
   const [token, setToken] = useState("");
   const [remember, setRemember] = useState(true);
   const [err, setErr] = useState<string | null>(null);
+  const tokenInputRef = useRef<TextInput>(null);
+  // 状态行显示的主机名：发起连接时固化，不随表单后续编辑漂移
+  const [connHost, setConnHost] = useState("");
   const kb = useKbHeight();
 
   const reload = async () => {
@@ -91,7 +94,18 @@ export default function SetupScreen({ onClose, editId }: Props) {
       setErr("请填写访问令牌");
       return;
     }
+    const dup = servers.find((e) => e.wsUrl === base);
     setErr(null);
+    setConnHost(hostOf(base));
+    if (dup) {
+      // 已保存过该地址：多为点选无令牌条目后补输令牌的场景，直接带令牌连它
+      // （按「记住令牌」决定是否回写条目），别用"去点选"把用户锁进提示循环
+      void store.connectServer({ ...dup, token: remember ? tk : "" }, tk).then(() => {
+        setActiveId(dup.id);
+        if (onClose) onClose();
+      });
+      return;
+    }
     const entry: ServerEntry = {
       id: uuid(),
       name: name.trim() || hostOf(base),
@@ -100,6 +114,7 @@ export default function SetupScreen({ onClose, editId }: Props) {
     };
     void store.connectServer(entry, tk).then(() => {
       setActiveId(entry.id);
+      reload(); // 同步本地列表：连接失败停留本页时防重才有据可依
       if (onClose) onClose(); // 首次连接的导航由 App 在 connected 后接管
     });
   };
@@ -109,6 +124,11 @@ export default function SetupScreen({ onClose, editId }: Props) {
     if (!editId) return;
     if (!/^wss?:\/\//.test(base)) {
       setErr("地址需以 ws:// 或 wss:// 开头");
+      return;
+    }
+    const dup = servers.find((e) => e.wsUrl === base && e.id !== editId);
+    if (dup) {
+      setErr(`此地址已保存（${dup.name || hostOf(base)}），去改那条或换个地址`);
       return;
     }
     setErr(null);
@@ -124,12 +144,15 @@ export default function SetupScreen({ onClose, editId }: Props) {
 
   const connect = (e: ServerEntry) => {
     if (!e.token) {
-      // 没记令牌：预填表单让用户补输
+      // 没记令牌：预填表单让用户补输，聚焦令牌框直接唤起键盘
       setName(e.name);
       setWsUrl(e.wsUrl);
       setToken("");
+      setErr("该服务器未记住令牌，补输后点下方按钮连接");
+      setTimeout(() => tokenInputRef.current?.focus(), 60);
       return;
     }
+    setConnHost(hostOf(e.wsUrl));
     void store.connectServer(e).then(() => {
       setActiveId(e.id);
       if (onClose) onClose();
@@ -235,6 +258,7 @@ export default function SetupScreen({ onClose, editId }: Props) {
           <View style={s.field}>
             <Text style={s.label}>访问令牌</Text>
             <TextInput
+              ref={tokenInputRef}
               style={[s.input, err && !token.trim() && s.inputErr]}
               value={token}
               onChangeText={(v) => { setToken(v); setErr(null); }}
@@ -258,6 +282,23 @@ export default function SetupScreen({ onClose, editId }: Props) {
               <Text style={s.btnText}>{editId ? "保存修改" : servers.length > 0 ? "添加并连接" : "连接"}</Text>
             </LinearGradient>
           </Pressable>
+          {/* 连接过程反馈（仅首次配置页；从主界面进入时后台重连循环不该误报"连接失败"）：
+              host 固化于发起连接时，不随表单后续编辑漂移；offline 至多闪一帧，并入失败分支 */}
+          {!onClose && snap.connState !== "idle" && snap.connState !== "online" ? (
+            <View style={s.connStatRow}>
+              <View
+                style={[
+                  s.connStatDot,
+                  { backgroundColor: snap.connState === "connecting" ? c.working : c.waiting },
+                ]}
+              />
+              <Text style={s.connStatT} numberOfLines={2}>
+                {snap.connState === "connecting"
+                  ? `正在连接 ${connHost || hostOf(wsUrl)}…`
+                  : `连接失败，${snap.connText}。请检查地址/令牌，手机需与 PC 同一 WiFi`}
+              </Text>
+            </View>
+          ) : null}
           <Text style={s.hint}>手机需与 PC 在同一 WiFi；地址填 PC 上的 ws://IP:8787/ws</Text>
           {onClose ? (
             <Pressable style={s.back} android_ripple={{ color: c.tintSoft, borderless: false, radius: 20 }} onPress={onClose}>
@@ -327,6 +368,9 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
   checkT: { color: "#fff", fontSize: 13, fontWeight: "700" },
   checkLabel: { color: c.dim, fontSize: 13 },
   hint: { color: c.faint, fontSize: 12, marginTop: 16, textAlign: "center", maxWidth: 320 },
+  connStatRow: { flexDirection: "row", alignItems: "center", gap: 7, marginTop: 12, width: "100%", maxWidth: 340 },
+  connStatDot: { width: 7, height: 7, borderRadius: 4 },
+  connStatT: { flex: 1, color: c.dim, fontSize: 12.5, minHeight: 34 },
   back: { marginTop: 14, paddingHorizontal: 22, paddingVertical: 8, borderRadius: 20 },
   backT: { color: c.dim, fontSize: 14 },
 });
