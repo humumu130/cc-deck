@@ -90,7 +90,7 @@ function TranscriptRow({ e, open, onToggle, onContentMenu }: { e: LogEntry; open
   if (e.kind === "user_message") {
     return (
       <View style={d.trUser}>
-        <Text style={d.trUserText} onLongPress={onContentMenu ? () => onContentMenu(e.full ?? e.text) : undefined}>{e.full ?? e.text}</Text>
+        <Text style={d.trUserText} selectable>{e.full ?? e.text}</Text>
         {e.ts ? <Text style={d.trUserTime}>{fmtHM(e.ts)}</Text> : null}
       </View>
     );
@@ -101,12 +101,11 @@ function TranscriptRow({ e, open, onToggle, onContentMenu }: { e: LogEntry; open
       <Pressable
         style={[d.trThink, { opacity: pf.op }]}
         onPress={onToggle}
-        onLongPress={onContentMenu ? () => onContentMenu(src) : undefined}
         android_ripple={{ color: c.tintSoft, borderless: false }}
       >
         <Text style={[d.trThinkHead, { fontSize: pf.thinkHead }]}>{open ? "▾ 思考过程" : `▸ 思考过程 · ${src.length} 字`}{e.ts ? ` · ${fmtHM(e.ts)}` : ""}</Text>
         <Collapse open={open}>
-          <MdText src={src} style={{ ...d.trThinkT, fontSize: pf.think, lineHeight: pf.thinkLH }} />
+          <MdText src={src} selectable style={{ ...d.trThinkT, fontSize: pf.think, lineHeight: pf.thinkLH }} />
         </Collapse>
       </Pressable>
     );
@@ -115,7 +114,7 @@ function TranscriptRow({ e, open, onToggle, onContentMenu }: { e: LogEntry; open
     return (
       <View style={d.trMsg}>
         {e.ts ? <Text style={d.trMsgTime}>{fmtHM(e.ts)}</Text> : null}
-        <MdText src={open ? (e.full ?? e.text) : e.text} onLongPress={onContentMenu ? () => onContentMenu(e.full ?? e.text) : undefined} />
+        <MdText src={open ? (e.full ?? e.text) : e.text} selectable />
         {cursor}
         {e.full ? (
           <Pressable onPress={onToggle} hitSlop={6}>
@@ -198,7 +197,8 @@ function DiffBlock({ lines }: { lines: string[] }) {
   );
 }
 
-// 内容长按菜单（#249）：预览 + 复制全文 / 系统分享（视觉对齐 md.tsx 链接浮窗）
+// 内容长按菜单（#249/#260）：复制全文 / 系统分享，仅挂 detail/diff 摘要行——
+// 正文（用户/assistant/思考）长按即原生选择手柄可拖选片段，不走此菜单
 function ContentMenu({ text, onClose }: { text: string; onClose: () => void }) {
   const { c } = useTheme();
   const d = useThemeStyles(makeStyles);
@@ -209,7 +209,6 @@ function ContentMenu({ text, onClose }: { text: string; onClose: () => void }) {
     <Modal visible transparent animationType="fade" onRequestClose={onClose}>
       <Pressable style={d.menuScrim} onPress={onClose}>
         <Pressable style={d.menuCard} onPress={() => undefined}>
-          <Text style={d.menuText} numberOfLines={3}>{text}</Text>
           <View style={d.menuBtns}>
             <Pressable
               style={d.menuBtn}
@@ -1580,14 +1579,13 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
   sendT: { color: "#fff", fontSize: 17, lineHeight: 20, marginLeft: 2 },
   // 内容长按菜单（#249）：与 md.tsx 链接浮窗同视觉语言
   menuScrim: { flex: 1, backgroundColor: "rgba(0,0,0,0.5)", justifyContent: "center", alignItems: "center", padding: 28 },
-  menuCard: { width: "100%", maxWidth: 340, backgroundColor: c.panel, borderRadius: 14, borderWidth: 1, borderColor: c.line, padding: 14 },
-  menuText: { color: c.dim, fontSize: 12.5, lineHeight: 18 },
-  menuBtns: { flexDirection: "row", gap: 8, justifyContent: "flex-end", marginTop: 12 },
+  menuCard: { width: "100%", maxWidth: 340, backgroundColor: c.panel, borderRadius: 14, borderWidth: 1, borderColor: c.line, padding: 12 },
+  menuBtns: { flexDirection: "row", gap: 10 },
   menuBtn: {
-    paddingVertical: 8, paddingHorizontal: 14, borderRadius: 10,
+    flex: 1, height: 42, borderRadius: 12, alignItems: "center", justifyContent: "center",
     backgroundColor: c.tintSoft, borderWidth: 1, borderColor: c.line, overflow: "hidden",
   },
   menuBtnPri: { backgroundColor: c.brandA, borderColor: "transparent" },
-  menuBtnT: { color: c.dim, fontSize: 13, fontWeight: "600" },
-  menuBtnPriT: { color: "#fff", fontSize: 13, fontWeight: "600" },
+  menuBtnT: { color: c.dim, fontSize: 14, fontWeight: "600" },
+  menuBtnPriT: { color: "#fff", fontSize: 14, fontWeight: "600" },
 });

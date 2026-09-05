@@ -135,38 +135,21 @@ function parseInline(text: string): Span[] {
   return spans.length ? spans : [{ text }];
 }
 
-function InlineText({ text, small, header, outer, onLink, onLong }: {
+function InlineText({ text, small, header, outer, onLink, sel }: {
   text: string;
   small?: boolean;
   header?: boolean;
   outer?: TextStyle;
   onLink?: (url: string) => void;
-  onLong?: () => void;
+  sel?: boolean;
 }) {
   const { c } = useTheme();
   const d = useThemeStyles(makeStyles);
-  // 链接双击直达（#249）：单击 280ms 后弹浮窗，期间第二击即双击 → 直接开浏览器；
-  // 双击后短暂抑制连击，防三击开完浏览器又弹浮窗
-  const lastTap = useRef(0);
-  const suppressUntil = useRef(0);
-  const tapTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  useEffect(() => () => { if (tapTimer.current) clearTimeout(tapTimer.current); }, []);
-  const tapLink = (url: string) => {
-    const now = Date.now();
-    if (now < suppressUntil.current) return;
-    if (now - lastTap.current < 280) {
-      lastTap.current = 0;
-      suppressUntil.current = now + 400;
-      if (tapTimer.current) clearTimeout(tapTimer.current);
-      void Linking.openURL(url).catch(() => undefined);
-    } else {
-      lastTap.current = now;
-      if (tapTimer.current) clearTimeout(tapTimer.current);
-      tapTimer.current = setTimeout(() => { tapTimer.current = null; onLink?.(url); }, 280);
-    }
-  };
+  // 链接单击即时弹浮窗（#260 收敛双击直达）：正文 selectable 后双击已被系统
+  // "选词"占用，双击直达必然打架；浮窗内本就有"打开"，无需双击捷径
+  const tapLink = (url: string) => onLink?.(url);
   return (
-    <Text style={[d.base, small ? d.cellT : null, header ? d.thT : null, outer]} onLongPress={onLong}>
+    <Text style={[d.base, small ? d.cellT : null, header ? d.thT : null, outer]} selectable={sel}>
       {parseInline(text).map((s, i) => (
         <Text
           key={i}
@@ -226,7 +209,7 @@ function LinkSheet({ url, onClose }: { url: string; onClose: () => void }) {
   );
 }
 
-export function MdText({ src, style, onLongPress }: { src: string; style?: TextStyle; onLongPress?: () => void }) {
+export function MdText({ src, style, selectable }: { src: string; style?: TextStyle; selectable?: boolean }) {
   const { c } = useTheme();
   const d = useThemeStyles(makeStyles);
   const blocks = useMemo(() => parseBlocks(src), [src]);
@@ -239,7 +222,7 @@ export function MdText({ src, style, onLongPress }: { src: string; style?: TextS
         switch (b.t) {
           case "h":
             return (
-              <Text key={i} style={[d.base, { fontWeight: "700", fontSize: 14.5 - b.level * 0.5, marginTop: i ? 6 : 0 }]} onLongPress={onLongPress}>
+              <Text key={i} style={[d.base, { fontWeight: "700", fontSize: 14.5 - b.level * 0.5, marginTop: i ? 6 : 0 }]} selectable={selectable}>
                 {b.text}
               </Text>
             );
@@ -254,14 +237,14 @@ export function MdText({ src, style, onLongPress }: { src: string; style?: TextS
               <View key={i} style={[d.li, { paddingLeft: 14 + b.depth * 14 }]}>
                 <Text style={[d.base, { color: c.dim }]}>{b.ord ? `${b.ord}. ` : "• "}</Text>
                 <View style={{ flex: 1 }}>
-                  <InlineText text={b.text} onLink={openLink} onLong={onLongPress} />
+                  <InlineText text={b.text} onLink={openLink} sel={selectable} />
                 </View>
               </View>
             );
           case "quote":
             return (
               <View key={i} style={d.quote}>
-                <InlineText text={b.text} onLink={openLink} onLong={onLongPress} />
+                <InlineText text={b.text} onLink={openLink} sel={selectable} />
               </View>
             );
           case "table": {
@@ -275,7 +258,7 @@ export function MdText({ src, style, onLongPress }: { src: string; style?: TextS
                 <View style={d.trHead}>
                   {b.head.map((cell, j) => (
                     <View key={j} style={[d.td, { flex: w[j] }]}>
-                      <InlineText text={cell} small header onLink={openLink} />
+                      <InlineText text={cell} small header onLink={openLink} sel={selectable} />
                     </View>
                   ))}
                 </View>
@@ -283,7 +266,7 @@ export function MdText({ src, style, onLongPress }: { src: string; style?: TextS
                   <View key={ri} style={ri ? d.trSep : d.tr}>
                     {b.head.map((_, j) => (
                       <View key={j} style={[d.td, { flex: w[j] }]}>
-                        <InlineText text={r[j] ?? ""} small onLink={openLink} />
+                        <InlineText text={r[j] ?? ""} small onLink={openLink} sel={selectable} />
                       </View>
                     ))}
                   </View>
@@ -294,7 +277,7 @@ export function MdText({ src, style, onLongPress }: { src: string; style?: TextS
           case "hr":
             return <View key={i} style={d.hr} />;
           default:
-            return <InlineText key={i} text={b.text} outer={style} onLink={openLink} onLong={onLongPress} />;
+            return <InlineText key={i} text={b.text} outer={style} onLink={openLink} sel={selectable} />;
         }
       })}
     </View>
