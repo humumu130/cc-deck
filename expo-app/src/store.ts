@@ -67,6 +67,30 @@ const emptySnapshot: Snapshot = {
 
 const LAN_PROBE_MS = 4000;
 
+// 命令 ACK 追踪：无回执超时（首等 4s）→ 重发同 id 一次（relay 按 command_id 幂等去重，
+// 重复送达回 ok:true "duplicate"，不会双执行）→ 再等 6s 仍无回执才报失败。
+// LAN 回执 <100ms、云链路 <1s，4s 已是宽裕值，避免把慢处理误判成丢包。
+const ACK_TIMEOUT_MS = 4000;
+const ACK_RETRY_TIMEOUT_MS = 6000;
+
+const CMD_LABEL: Record<string, string> = {
+  COMMAND_MESSAGE: "消息",
+  COMMAND_EXT_INPUT: "注入消息",
+  COMMAND_EXT_STOP: "打断",
+  COMMAND_STOP: "停止",
+  COMMAND_CONTINUE: "允许",
+  COMMAND_REJECT: "拒绝",
+  COMMAND_ANSWER: "作答",
+  COMMAND_CREATE: "新建会话",
+  COMMAND_RENAME: "重命名",
+  COMMAND_DELETE: "删除",
+  COMMAND_PERM: "权限切换",
+  COMMAND_REFRESH_TODOS: "任务刷新",
+  COMMAND_TODO_HIDE: "任务隐藏",
+  COMMAND_PAIR_CODE: "配对码",
+  COMMAND_PAIR_START: "云桥配对",
+};
+
 class RelayStore {
   private ws: WebSocket | null = null;
   private channel: "lan" | "cloud" | null = null;
@@ -85,6 +109,11 @@ class RelayStore {
   private devKeys: BoxKeyPair | null = null;
   private epoch = 0;
   private taskDoneSeq = 0;
+  // 已发出未回执的命令（ACK 追踪）：断开时静默清空，靠重连快照对账
+  private pendingCmds = new Map<
+    string,
+    { type: string; tries: number; timer: ReturnType<typeof setTimeout>; wire: () => boolean }
+  >();
 
   onWaiting: ((s: SessionState) => void) | null = null;
   onTaskDone: ((r: TaskDoneReport) => void) | null = null;
@@ -254,11 +283,19 @@ class RelayStore {
       clearTimeout(this.reconnectTimer);
       this.reconnectTimer = null;
     }
+    this.clearPendingCmds();
     try {
       this.ws?.close();
     } catch {}
     this.ws = null;
     this.channel = null;
+  }
+
+  // 断开即静默清空在途命令：结果靠重连快照对账，残留 timer 只会在
+  // 离线窗口误报「未确认」、甚至把重发打到新连接上
+  private clearPendingCmds() {
+    for (const p of this.pendingCmds.values()) clearTimeout(p.timer);
+    this.pendingCmds.clear();
   }
 
   // 连接周期：先 LAN 直连（探测超时），失败且已配对云桥则本轮转云通道
@@ -343,6 +380,7 @@ class RelayStore {
     ws.onclose = () => {
       if (this.ws !== ws) return;
       this.stopHb();
+      this.clearPendingCmds();
       this.emit({ connected: false, connText: "已断开", connState: "offline", channel: null });
       this.scheduleReconnect();
     };
@@ -393,6 +431,7 @@ class RelayStore {
     ws.onclose = () => {
       if (this.ws !== ws) return;
       this.stopHb();
+      this.clearPendingCmds();
       this.emit({ connected: false, connText: "已断开", connState: "offline", channel: null });
       this.scheduleReconnect();
     };
@@ -461,11 +500,24 @@ class RelayStore {
   private onMessage(msg: Envelope | CommandAck) {
     if ((msg as CommandAck).type === "COMMAND_ACK") {
       const ack = msg as CommandAck;
+      const p = this.pendingCmds.get(ack.command_id);
+      if (p) {
+        clearTimeout(p.timer);
+        this.pendingCmds.delete(ack.command_id);
+      }
       if (ack.cloud) void this.saveCloudPairing(ack.cloud);
       if (ack.pair_code) {
         this.emit({ pairCode: { code: ack.pair_code.code, expiresAt: Date.now() + ack.pair_code.expires_in * 1000 } });
       }
-      if (!ack.ok && ack.error && !ack.error.startsWith("duplicate")) {
+      if (!ack.ok && ack.error && ack.error.startsWith("duplicate")) {
+        // 重发命中 relay 幂等去重：命令早已执行过，但结果数据（云桥参数）不随
+        // duplicate 回传。云桥配对首条回执丢失时会永远转圈，这里解除并提示重试
+        if (p && p.type === "COMMAND_PAIR_START") {
+          this.emit({ cloudBusy: false, cloudMsg: "配对回执丢失，请重新配对" });
+        }
+        return;
+      }
+      if (!ack.ok && ack.error) {
         this.emit({ lastErrorCmd: ack.error });
       }
       return;
@@ -714,17 +766,43 @@ class RelayStore {
       return false;
     }
     const cmd = { command_id: uuid(), type, payload, ts: Date.now() };
-    if (this.channel === "cloud" && this.cloudCfg && this.devKeys) {
-      this.ws.send(
-        JSON.stringify({
-          to: this.cloudCfg.relayDev,
-          data: seal(cmd, this.cloudCfg.relayPubkey, this.devKeys.secretKey),
-        }),
-      );
-    } else {
-      this.ws.send(JSON.stringify(cmd));
-    }
+    const wire = (): boolean => {
+      if (!this.ws || this.ws.readyState !== WebSocket.OPEN) return false;
+      if (this.channel === "cloud" && this.cloudCfg && this.devKeys) {
+        this.ws.send(
+          JSON.stringify({
+            to: this.cloudCfg.relayDev,
+            data: seal(cmd, this.cloudCfg.relayPubkey, this.devKeys.secretKey),
+          }),
+        );
+      } else {
+        this.ws.send(JSON.stringify(cmd));
+      }
+      return true;
+    };
+    const id = cmd.command_id;
+    const entry: { type: string; tries: number; timer: ReturnType<typeof setTimeout>; wire: () => boolean } = {
+      type,
+      tries: 0,
+      timer: null as unknown as ReturnType<typeof setTimeout>,
+      wire,
+    };
+    entry.timer = setTimeout(() => this.onCmdTimeout(id), ACK_TIMEOUT_MS);
+    this.pendingCmds.set(id, entry);
     return true;
+  }
+
+  // 回执超时：先重发一次同 id（幂等）；再超时才报失败。连接中途断开由 disconnect 清场
+  private onCmdTimeout(id: string) {
+    const p = this.pendingCmds.get(id);
+    if (!p) return;
+    if (p.tries === 0 && p.wire()) {
+      p.tries = 1;
+      p.timer = setTimeout(() => this.onCmdTimeout(id), ACK_RETRY_TIMEOUT_MS);
+      return;
+    }
+    this.pendingCmds.delete(id);
+    this.emit({ lastErrorCmd: `${CMD_LABEL[p.type] ?? "命令"}重发后仍未确认，可能未送达` });
   }
 
   clearCmdError() {

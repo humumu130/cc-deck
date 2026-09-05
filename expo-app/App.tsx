@@ -47,8 +47,9 @@ function Toast() {
   useEffect(() => () => { if (timer.current) clearTimeout(timer.current); }, []);
 
   if (!show || !snap.lastErrorCmd) return null;
-  // 本地未连接拒绝发送的场景文案本身就是完整句子，不再套"命令失败:"前缀误导排查方向
-  const msg = snap.lastErrorCmd === "未连接，命令未发送" ? snap.lastErrorCmd : `命令失败: ${snap.lastErrorCmd}`;
+  // 完整句子的文案（本地未发送 / ACK 超时结论）不再套"命令失败:"前缀，避免语义叠加误导排查方向
+  const raw = snap.lastErrorCmd;
+  const msg = raw === "未连接，命令未发送" || raw.endsWith("可能未送达") ? raw : `命令失败: ${raw}`;
   return (
     <View style={st.toastWrap} pointerEvents="none">
       <Animated.View style={[st.toast, { opacity: op, transform: [{ translateY: y }] }]}>
