@@ -293,6 +293,15 @@
   .todo-item.in_progress .todo-tx { color: var(--text); }
   .todo-item.pending .todo-tx { color: var(--dim); }
   .todo-empty { color: var(--faint); padding: 60px 4px; text-align: center; font-size: 13px; }
+  /* #279④ 转录 #NNN 任务号可点段（对齐手机 TaskRefText：品牌色加粗） */
+  .task-ref { color: var(--brand); font-weight: 700; cursor: pointer; }
+  .task-ref:hover { text-decoration: underline; }
+  /* #279⑤ 任务条目 ✕ 隐藏（hover 显现，同 card-edit 语言） */
+  .todo-del { flex: none; margin-left: auto; opacity: 0; border: none; background: transparent; color: var(--faint); font-size: 11px; line-height: 1.5; padding: 2px 7px; border-radius: 6px; cursor: pointer; transition: opacity .15s; }
+  .todo-item:hover .todo-del { opacity: 1; }
+  .todo-del:hover { color: var(--dim); background: var(--bg-soft); }
+  /* #279④ #NNN 跳转落点闪高 1.5s（对齐手机 todoFlash） */
+  .todo-item.flash { background: rgba(217,119,87,.14); border-radius: 8px; }
   /* ---------- 定时任务（详情页"定时" tab） ---------- */
   .cron-item { display: flex; align-items: flex-start; gap: 9px; padding: 9px 2px; border-bottom: 1px solid var(--border); }
   .cron-item:last-child { border-bottom: none; }
@@ -1933,7 +1942,10 @@ function renderDetail() {
     return;
   }
   if (activeTab === "todos") {
-    const todosKey = "todos:" + s.session_id + ":" + (s.todos?.length ?? 0) + ":" + (s.todos?.map((t) => t.status).join(",") ?? "");
+    // key 计入 hidden 计数（本地隐藏立即重建）与 id/active_form（治理展示随刷新更新）
+    const todosKey = "todos:" + s.session_id + ":" + (s.todos?.length ?? 0) + ":" +
+      (s.todos?.map((t) => (t.id ?? "-") + ":" + t.status + (t.active_form ? "+f" : "")).join(",") ?? "") +
+      ":" + todoHiddenOf(s.session_id).length;
     if (tl.dataset.count !== todosKey) {
       tl.dataset.count = todosKey;
       tl.innerHTML = todosTabHtml(s);
@@ -1993,26 +2005,56 @@ function statsTabHtml(s) {
     '<div class="stats-row"><span class="k">' + r[0] + '</span><span class="v">' + escapeHtml(String(r[1])) + "</span></div>").join("") + "</div>";
 }
 
+// #279⑤ 任务面板治理（对齐手机口径）：任务存储是全会话历史，已完成只显近 24h（有 mtime 时）
+// 再封顶最新 15 条防马拉松日爆量；进行中/待办是可操作项全保留；条目 ✕ 本地先滤 + 上行隐藏。
+// #279④ 行上带 data-tid={t.id} 供 #NNN 跳转定位（relay TodoItem 已带 id；旧清单无号时不带锚）
+const todoHiddenMap = {}; // sid -> content[]（按会话隔离，切会话互不污染）
+function todoHiddenOf(sid) { return todoHiddenMap[sid] || (todoHiddenMap[sid] = []); }
+function hideTodo(content) {
+  const sel = selSession();
+  if (!sel) return;
+  const arr = todoHiddenOf(sel.s.session_id);
+  if (!arr.includes(content)) arr.push(content);
+  sendCommandTo(sel.ctx, "COMMAND_TODO_HIDE", { session_id: sel.s.session_id, content });
+  renderDetail(); // todosKey 已含 hidden 计数，立即重建
+}
+
 function todosTabHtml(s) {
   const todos = s.todos ?? [];
   if (!todos.length) return '<div class="todo-empty">暂无任务清单<br><span style="font-size:12px">CLI 里使用 TodoWrite 工具后，这里会显示任务进度</span></div>';
-  const done = todos.filter((t) => t.status === "completed").length;
+  const hidden = todoHiddenOf(s.session_id);
+  const all = todos.filter((t) => !hidden.includes(t.content));
+  if (!all.length) return '<div class="todo-empty">任务清单已全部隐藏<br><span style="font-size:12px">CLI 里更新任务后会重新显示</span></div>';
+  const doneAll = all.filter((t) => t.status === "completed");
+  const doneHasTs = doneAll.length > 0 && doneAll.every((t) => typeof t.updated_at === "number");
+  const doneWindow = doneHasTs
+    ? doneAll.filter((t) => (t.updated_at ?? 0) >= Date.now() - 24 * 3600 * 1000)
+    : doneAll;
+  const doneList = doneWindow.slice(-15);
+  const doneNote = doneList.length < doneAll.length
+    ? (doneHasTs ? " · 近1天" + (doneWindow.length > 15 ? "·最新15" : "") : " · 最新15")
+    : "";
+  const ip = all.filter((t) => t.status === "in_progress");
+  const pd = all.filter((t) => t.status === "pending");
   // 分组顺序对齐手机端：已完成置顶，进行中/待办在下方
   const groups = [
-    ["已完成", todos.filter((t) => t.status === "completed"), "dn"],
-    ["进行中", todos.filter((t) => t.status === "in_progress"), "ip"],
-    ["待办", todos.filter((t) => t.status === "pending"), ""],
+    ["已完成 " + doneList.length + "/" + doneAll.length + doneNote, doneList, "dn"],
+    ["进行中 " + ip.length, ip, "ip"],
+    ["待办 " + pd.length, pd, ""],
   ];
   let html =
-    '<div class="todo-head"><div class="todo-bar"><i style="width:' + Math.round((done / todos.length) * 100) + '%"></i></div>' +
-    '<span class="todo-pct">' + done + " / " + todos.length + '</span>' +
+    '<div class="todo-head"><div class="todo-bar"><i style="width:' + Math.round((doneAll.length / all.length) * 100) + '%"></i></div>' +
+    '<span class="todo-pct">' + doneAll.length + " / " + all.length + '</span>' +
     '<button id="todoRefresh" class="ghost" title="重读 CLI 任务存储">↻ 刷新</button></div>';
   for (const [label, items, cls] of groups) {
     if (!items.length) continue;
-    html += '<div class="todo-group"><div class="todo-gt ' + cls + '">' + label + " · " + items.length + "</div>";
+    html += '<div class="todo-group"><div class="todo-gt ' + cls + '">' + label + "</div>";
     for (const t of items) {
       const mark = t.status === "completed" ? "✓" : t.status === "in_progress" ? "◐" : "·";
-      html += '<div class="todo-item ' + t.status + '"><span class="todo-ck">' + mark + '</span><span class="todo-tx">' + escapeHtml(t.content) + "</span></div>";
+      html += '<div class="todo-item ' + t.status + '"' + (t.id != null ? ' data-tid="' + t.id + '"' : "") + '>' +
+        '<span class="todo-ck">' + mark + '</span><span class="todo-tx">' +
+        escapeHtml(t.status === "in_progress" && t.active_form ? t.active_form : t.content) + "</span>" +
+        '<button class="todo-del" data-c="' + escapeHtml(t.content) + '" title="隐藏该条">✕</button></div>';
     }
     html += "</div>";
   }
@@ -2035,6 +2077,16 @@ function cronTabHtml(s) {
 
 function escapeHtml(s) {
   return String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+}
+
+// #279④ 工具行摘要文本里的 #NNN 任务号（1~3 位数字）链接化成可点段。
+// 先按原始文本切分再逐段 escape：避免 escapeHtml 产生的 &#39; 实体被正则误吞
+function taskRefHtml(t) {
+  const s = String(t ?? "");
+  if (!/#\d{1,3}\b/.test(s)) return escapeHtml(s);
+  return s.split(/#(\d{1,3})\b/g).map((p, i) =>
+    i % 2 === 1 ? '<span class="task-ref" data-n="' + p + '">#' + p + "</span>" : escapeHtml(p)
+  ).join("");
 }
 
 // ---------- 轻量 Markdown（移植自 expo-app/src/md.tsx：GFM 表格/码块/列表/引用等） ----------
@@ -2161,7 +2213,7 @@ function entryHtml(e, prevDay) {
   } else if (e.kind === "tool_use") {
     const t = e.tool || "";
     const tico = /^(Edit|Write|MultiEdit|NotebookEdit)$/.test(t) ? "✎" : t === "Bash" ? "❯_" : /^(Read|Glob|Grep|WebFetch|WebSearch)$/.test(t) ? "▤" : "⚙";
-    html += '<div class="trow"><div class="tline"><span class="tico">' + tico + '</span><span class="tname">' + escapeHtml(t || "tool") + "</span><span>" + escapeHtml(e.text) + "</span>" +
+    html += '<div class="trow"><div class="tline"><span class="tico">' + tico + '</span><span class="tname">' + escapeHtml(t || "tool") + "</span><span>" + taskRefHtml(e.text) + "</span>" +
       (e.detail
         ? (open
           ? '<span class="x-full" data-x="' + k + '">收起 ▴</span>'
@@ -2177,12 +2229,12 @@ function entryHtml(e, prevDay) {
         "</span></div>" +
         (open ? '<div class="diff">' + e.diff.map(diffLine).join("") + "</div>" : "") + "</div>";
     } else if (e.detail) {
-      html += '<div class="trow"><div class="tline"><span class="tico">↳</span><span class="tres">' + escapeHtml(e.text) + "</span> " + (open
+      html += '<div class="trow"><div class="tline"><span class="tico">↳</span><span class="tres">' + taskRefHtml(e.text) + "</span> " + (open
         ? '<span class="x-full" data-x="' + k + '">收起 ▴</span>'
         : '<span class="x-full" data-x="' + k + '">展开 ▾</span>') + "</div>" +
         (open ? '<div class="tdetail">' + escapeHtml(e.detail) + "</div>" : "") + "</div>";
     } else {
-      html += '<div class="trow"><div class="tline"><span class="tico">↳</span><span class="tres">' + escapeHtml(e.text) + "</span></div></div>";
+      html += '<div class="trow"><div class="tline"><span class="tico">↳</span><span class="tres">' + taskRefHtml(e.text) + "</span></div></div>";
     }
   } else {
     html += '<div class="msg-sys">' + escapeHtml(e.text) + "</div>";
@@ -2687,18 +2739,37 @@ $("permBtn").onclick = () => {
   const next = PERM_CYCLE[(PERM_CYCLE.indexOf(cur) + 1) % PERM_CYCLE.length];
   sendCommandTo(sel.ctx, "COMMAND_PERM", { session_id: selected.sid, mode: next });
 };
+function switchTab(name) {
+  activeTab = name;
+  document.querySelectorAll(".tabs button.tab").forEach((x) => x.classList.toggle("active", x.dataset.tab === name));
+  const tl = $("timeline");
+  tl.dataset.count = "";
+  renderDetail();
+  // 切页淡入：强制重排重放一次 riseIn
+  tl.classList.remove("rise");
+  void tl.offsetWidth;
+  tl.classList.add("rise");
+}
 document.querySelectorAll(".tabs button.tab").forEach((b) => {
-  b.onclick = () => {
-    activeTab = b.dataset.tab;
-    document.querySelectorAll(".tabs button.tab").forEach((x) => x.classList.toggle("active", x === b));
-    const tl = $("timeline");
-    tl.dataset.count = "";
-    renderDetail();
-    // 切页淡入：强制重排重放一次 riseIn
-    tl.classList.remove("rise");
-    void tl.offsetWidth;
-    tl.classList.add("rise");
-  };
+  b.onclick = () => switchTab(b.dataset.tab);
+});
+
+// #279④ #NNN 点击 → 任务 tab 定位该条（闪高 1.5s，对齐手机 #264 jumpToTask）；
+// 任务未渲染（超出近 24h 窗口/封顶 15 条）或旧清单无号时只切 tab，无害回退
+function jumpToTask(n) {
+  switchTab("todos");
+  const row = $("timeline").querySelector('.todo-item[data-tid="' + n + '"]');
+  if (!row) return;
+  row.scrollIntoView({ block: "center", behavior: "smooth" });
+  row.classList.add("flash");
+  setTimeout(() => row.classList.remove("flash"), 1500);
+}
+// #279④⑤ 事件委托（timeline innerHTML 全量重建，委托免重挂）
+$("timeline").addEventListener("click", (ev) => {
+  const ref = ev.target.closest(".task-ref");
+  if (ref) { jumpToTask(Number(ref.dataset.n)); return; }
+  const del = ev.target.closest(".todo-del");
+  if (del) { hideTodo(del.dataset.c); return; }
 });
 
 // 秒级走时：已等待/耗时/回合计时每秒刷新（innerHTML 由 key 守卫，代价极小）
