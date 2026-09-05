@@ -37,6 +37,7 @@ export interface WaitingPayload {
 }
 
 export interface TodoItem {
+  id?: number; // CLI 任务库任务号（转录 #NNN 跳转定位；旧 TodoWrite 清单无）
   content: string;
   status: "pending" | "in_progress" | "completed";
   active_form?: string;

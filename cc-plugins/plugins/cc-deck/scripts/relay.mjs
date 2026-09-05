@@ -37126,7 +37126,7 @@ var TaskTracker = class {
   feed(tool, input) {
     if (tool === "TodoWrite") {
       const list = parseTodoList(input);
-      this.tasks = list.map((t) => ({ ...t, id: null }));
+      this.tasks = list.map((t) => ({ ...t }));
       this.unconfirmed = [];
       return this.snapshot();
     }
@@ -37136,7 +37136,6 @@ var TaskTracker = class {
       if (!subject) return null;
       const activeForm = typeof t.activeForm === "string" ? t.activeForm.trim() : "";
       this.tasks.push({
-        id: null,
         content: subject.slice(0, 120),
         status: "pending",
         ...activeForm ? { active_form: activeForm.slice(0, 120) } : {}
@@ -37181,13 +37180,13 @@ var TaskTracker = class {
     this.tasks[idx].id = id2;
     return this.snapshot();
   }
-  // 重启恢复：用已知清单做种子（无任务号，TaskUpdate 无法命中旧条目，仅保展示）
+  // 重启恢复：用已知清单做种子（store 快照带号时保留，TaskUpdate 可命中）
   seed(todos) {
     if (this.tasks.length || !todos.length) return;
-    this.tasks = todos.map((t) => ({ ...t, id: null }));
+    this.tasks = todos.map((t) => ({ ...t }));
   }
   snapshot() {
-    return this.tasks.map(({ id: _id, ...rest }) => rest);
+    return this.tasks.map((t) => ({ ...t }));
   }
 };
 
@@ -37665,12 +37664,14 @@ function readTaskStoreTodos(cliSessionId) {
       if (!subject) continue;
       const status = t.status === "in_progress" || t.status === "completed" ? t.status : "pending";
       const activeForm = typeof t.activeForm === "string" && t.activeForm.trim() ? { active_form: t.activeForm.trim().slice(0, 120) } : {};
-      out.push({ n: Number(f.replace(/[^0-9]/g, "")) || 0, content: subject.slice(0, 120), status, updated_at: statSync2(fp2).mtimeMs, ...activeForm });
+      const parsed = Number(t.id);
+      const id2 = (Number.isFinite(parsed) && parsed > 0 ? parsed : 0) || Number(f.replace(/[^0-9]/g, "")) || 0;
+      out.push({ id: id2 || void 0, content: subject.slice(0, 120), status, updated_at: statSync2(fp2).mtimeMs, ...activeForm });
     } catch {
     }
   }
-  out.sort((a, b) => a.n - b.n);
-  return out.map(({ n: _n2, ...rest }) => rest);
+  out.sort((a, b) => (a.id ?? 0) - (b.id ?? 0));
+  return out;
 }
 
 // src/todo-hidden.ts

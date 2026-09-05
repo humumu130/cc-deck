@@ -92,8 +92,8 @@ android {
         applicationId 'com.humumu.ccwatch'
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode 61
-        versionName "0.3.11"
+        versionCode 62
+        versionName "0.3.12"
 
         buildConfigField "String", "REACT_NATIVE_RELEASE_LEVEL", "\"${findProperty('reactNativeReleaseLevel') ?: 'stable'}\""
     }

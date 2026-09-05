@@ -78,6 +78,7 @@ data class SessionState(
 
 /** TodoWrite 任务项（activeForm 进行时描述优先展示） */
 data class TodoItem(
+    val id: Int = 0, // CLI 任务库任务号（转录 #NNN 定位用；旧 TodoWrite 清单为 0）
     val content: String,
     val status: String, // pending | in_progress | completed
     val activeForm: String? = null,
@@ -160,6 +161,7 @@ object ProtocolCodec {
             (0 until arr.length()).mapNotNull { i ->
                 arr.optJSONObject(i)?.takeIf { tj -> tj.optString("content").isNotBlank() }?.let { tj ->
                     TodoItem(
+                        id = tj.optInt("id", 0),
                         content = tj.optString("content"),
                         status = tj.optString("status", "pending"),
                         activeForm = if (tj.has("active_form") && !tj.isNull("active_form")) tj.getString("active_form") else null,

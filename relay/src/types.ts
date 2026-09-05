@@ -35,6 +35,7 @@ export interface TokenUsage {
 
 // 任务清单（CLI TodoWrite 工具的最新快照；手表/手机进度展示用）
 export interface TodoItem {
+  id?: number;               // CLI 任务库数字任务号（转录 #NNN 跳转定位用；TodoWrite 旧清单无号）
   content: string;
   status: "pending" | "in_progress" | "completed";
   active_form?: string;

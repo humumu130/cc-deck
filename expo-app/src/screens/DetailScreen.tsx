@@ -1,5 +1,5 @@
 import { Fragment, useEffect, useRef, useState } from "react";
-import { Animated, BackHandler, Dimensions, Image, Modal, PermissionsAndroid, Pressable, RefreshControl, ScrollView, Share, StyleSheet, Text, TextInput, Vibration, View, type NativeScrollEvent, type NativeSyntheticEvent, type NativeTouchEvent } from "react-native";
+import { Animated, BackHandler, Dimensions, Image, Modal, PermissionsAndroid, Pressable, RefreshControl, ScrollView, Share, StyleSheet, Text, TextInput, Vibration, View, type NativeScrollEvent, type NativeSyntheticEvent, type NativeTouchEvent, type StyleProp, type TextStyle } from "react-native";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import * as ImagePicker from "expo-image-picker";
 import * as ImageManipulator from "expo-image-manipulator";
@@ -82,7 +82,7 @@ const PROC_FONT = {
   hidden: { tool: 8.5, sys: 8, result: 8.5, thinkHead: 8.5, think: 10, thinkLH: 14, op: 0.75 },
 } as const;
 
-function TranscriptRow({ e, open, onToggle, onContentMenu }: { e: LogEntry; open: boolean; onToggle: () => void; onContentMenu?: (text: string) => void }) {
+function TranscriptRow({ e, open, onToggle, onContentMenu, onTaskRef }: { e: LogEntry; open: boolean; onToggle: () => void; onContentMenu?: (text: string) => void; onTaskRef?: (n: number) => void }) {
   const { c } = useTheme();
   const d = useThemeStyles(makeStyles);
   const pf = PROC_FONT[useProcessFont()];
@@ -131,7 +131,7 @@ function TranscriptRow({ e, open, onToggle, onContentMenu }: { e: LogEntry; open
           <View style={{ flex: 1 }}>
             <View style={{ flexDirection: "row", gap: 6, alignItems: "baseline" }}>
               <Text style={[d.trToolName, { fontSize: pf.tool }]}>⚙ {e.tool || "tool"}</Text>
-              <Text style={[d.trToolText, { fontSize: pf.tool }]} numberOfLines={1}>{e.text}</Text>
+              <TaskRefText style={[d.trToolText, { fontSize: pf.tool }]} numberOfLines={1} text={e.text} onTaskRef={onTaskRef} />
             </View>
             <Collapse open={open}>
               <Text style={d.trDetail} selectable>{e.detail}</Text>
@@ -144,7 +144,7 @@ function TranscriptRow({ e, open, onToggle, onContentMenu }: { e: LogEntry; open
     return (
       <View style={[d.trTool, { opacity: pf.op }]}>
         <Text style={[d.trToolName, { fontSize: pf.tool }]}>⚙ {e.tool || "tool"}</Text>
-        <Text style={[d.trToolText, { fontSize: pf.tool }]} numberOfLines={2}>{e.text}</Text>
+        <TaskRefText style={[d.trToolText, { fontSize: pf.tool }]} numberOfLines={2} text={e.text} onTaskRef={onTaskRef} />
       </View>
     );
   }
@@ -164,16 +164,21 @@ function TranscriptRow({ e, open, onToggle, onContentMenu }: { e: LogEntry; open
     if (e.detail) {
       return (
         <Pressable onPress={onToggle} onLongPress={e.detail ? () => onContentMenu?.(e.detail!) : undefined} hitSlop={4} style={{ opacity: pf.op }}>
-          <Text style={[d.trResult, { fontSize: pf.result }]} numberOfLines={open ? undefined : 2}>
-            ↳ {e.text} <Text style={d.tlExpand}>{open ? "收起 ▴" : "展开 ▾"}</Text>
-          </Text>
+          <TaskRefText
+            style={[d.trResult, { fontSize: pf.result }]}
+            numberOfLines={open ? undefined : 2}
+            text={`↳ ${e.text} `}
+            suffix={open ? "收起 ▴" : "展开 ▾"}
+            suffixStyle={d.tlExpand}
+            onTaskRef={onTaskRef}
+          />
           <Collapse open={open}>
             <Text style={d.trDetail} selectable>{e.detail}</Text>
           </Collapse>
         </Pressable>
       );
     }
-    return <Text style={[d.trResult, { fontSize: pf.result, opacity: pf.op }]} numberOfLines={2}>↳ {e.text}</Text>;
+    return <TaskRefText style={[d.trResult, { fontSize: pf.result, opacity: pf.op }]} numberOfLines={2} text={`↳ ${e.text}`} onTaskRef={onTaskRef} />;
   }
   return <Text style={[d.trSystem, { fontSize: pf.sys, opacity: pf.op }]}>{e.text}</Text>;
 }
@@ -194,6 +199,35 @@ function DiffBlock({ lines }: { lines: string[] }) {
         return <Text key={i} style={st} selectable>{l || " "}</Text>;
       })}
     </View>
+  );
+}
+
+// #264：摘要文本里的 #NNN 任务号渲染成可点高亮段（1~3 位数字，避免误吞时间戳/长号），
+// 点击跳任务 tab 并定位该条。找不到对应任务时仍切到任务 tab（无害回退）
+function TaskRefText({ text, style, numberOfLines, suffix, suffixStyle, onTaskRef }: { text: string; style: StyleProp<TextStyle>; numberOfLines?: number; suffix?: string; suffixStyle?: StyleProp<TextStyle>; onTaskRef?: (n: number) => void }) {
+  const { c } = useTheme();
+  if (!onTaskRef || !/#\d{1,3}\b/.test(text)) {
+    return (
+      <Text style={style} numberOfLines={numberOfLines}>
+        {text}
+        {suffix ? <Text style={suffixStyle}>{suffix}</Text> : null}
+      </Text>
+    );
+  }
+  const parts = text.split(/#(\d{1,3})\b/g);
+  return (
+    <Text style={style} numberOfLines={numberOfLines}>
+      {parts.map((p, i) =>
+        i % 2 === 1 ? (
+          <Text key={i} style={{ color: c.brandA, fontWeight: "700" }} onPress={() => onTaskRef(Number(p))}>
+            #{p}
+          </Text>
+        ) : (
+          <Text key={i}>{p}</Text>
+        ),
+      )}
+      {suffix ? <Text style={suffixStyle}>{suffix}</Text> : null}
+    </Text>
   );
 }
 
@@ -520,7 +554,10 @@ export default function DetailScreen({ sid, onBack }: { sid: string; onBack: () 
   }, [agRunning]);
 
   const renderTodo = (t: TodoItem, i: number, grouped: boolean) => (
-    <View style={[d.todoRow, grouped && { borderTopWidth: 0, marginTop: 0 }]}>
+    <View
+      style={[d.todoRow, grouped && { borderTopWidth: 0, marginTop: 0 }, t.id != null && t.id === flashTodo && d.todoFlash]}
+      onLayout={t.id != null ? (ev) => todoY.current.set(t.id!, ev.nativeEvent.layout.y) : undefined}
+    >
       <Text
         style={[
           d.todoMark,
@@ -550,6 +587,28 @@ export default function DetailScreen({ sid, onBack }: { sid: string; onBack: () 
       </Pressable>
     </View>
   );
+
+  // #264：转录 #NNN 点击 → 任务 tab 定位该条（行 y 由 onLayout 记账，落点闪高 1.5s；
+  // 任务不在近 3 天窗口（未渲染）时只切 tab 不滚——y 无记录为无害回退）
+  const todoY = useRef(new Map<number, number>());
+  const [flashTodo, setFlashTodo] = useState<number | null>(null);
+  const flashTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => () => { if (flashTimer.current) clearTimeout(flashTimer.current); }, []);
+  const jumpToTask = (n: number) => {
+    const i = VIEWS.findIndex((v) => v.k === "todos");
+    if (i < 0) return;
+    const needFly = i !== viewIdx;
+    if (needFly) gotoView(i);
+    setTimeout(() => {
+      // y 要在飞行后读：跨页时任务页此刻才挂载、行 onLayout 才记账（审查必须修项）
+      const y = todoY.current.get(n);
+      if (y === undefined) return;
+      todoScrollRef.current?.scrollTo({ y: Math.max(0, y - 110), animated: true });
+      setFlashTodo(n);
+      if (flashTimer.current) clearTimeout(flashTimer.current);
+      flashTimer.current = setTimeout(() => setFlashTodo(null), 1500);
+    }, needFly ? 380 : 0);
+  };
 
   // 转录跟随：直接 filter 不做 useMemo（logs 引用每次更新都变）；仅当用户停在底部时自动滚。
   // 五视图翻页（#250）：消息/全部两页各自过滤，当前页的滚动容器才跟随滚底
@@ -1124,7 +1183,7 @@ export default function DetailScreen({ sid, onBack }: { sid: string; onBack: () 
               nodes.push(<Text key={`day-${key}`} style={d.daySep}>── {day} ──</Text>);
             }
             if (day) lastDay = day;
-            nodes.push(<TranscriptRow key={key} e={e} open={!!expanded[key]} onToggle={() => toggle(key)} onContentMenu={setMenuText} />);
+            nodes.push(<TranscriptRow key={key} e={e} open={!!expanded[key]} onToggle={() => toggle(key)} onContentMenu={setMenuText} onTaskRef={jumpToTask} />);
             return nodes;
           })
         )}
@@ -1455,6 +1514,7 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
   todoSecLine: { flex: 1, height: 1, backgroundColor: c.line },
   todoSecT: { fontSize: 10.5, fontWeight: "700", letterSpacing: 0.5 },
   todoRow: { flexDirection: "row", gap: 8, alignItems: "flex-start", paddingVertical: 5, borderTopWidth: 1, borderTopColor: c.line, marginTop: 5 },
+  todoFlash: { backgroundColor: withA(c.brandA, 0.14), borderRadius: 8 },
   todoScroll: { maxHeight: 400, flexGrow: 0 },
   todoMark: { color: c.faint, fontSize: 12, width: 16, textAlign: "center", lineHeight: 17 },
   todoT: { flex: 1, color: c.text, fontSize: 12.5, lineHeight: 17 },
