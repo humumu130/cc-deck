@@ -248,7 +248,11 @@ function Shell() {
   useEffect(() => {
     const sub = AppState.addEventListener("change", (st) => {
       appState.current = st;
-      if (st === "active" && hasCfg && !snap.connected) store.connect();
+      if (st !== "active") return;
+      // 半开连接即时体检（#258）：后台期间 socket 可能已死而 connected 仍真，
+      // 先探测判死再走既有重连/恢复链；已断线则直接重连
+      store.resumeProbe();
+      if (hasCfg && !snap.connected) store.connect();
     });
     return () => sub.remove();
   }, [hasCfg, snap.connected]);

@@ -100,6 +100,7 @@ class RelayStore {
   private reconnectDelay = 1000;
   private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
   private hbTimer: ReturnType<typeof setInterval> | null = null;
+  private probeTimer: ReturnType<typeof setTimeout> | null = null;
   private lastDownAt = 0;
   private listeners = new Set<() => void>();
   private snap: Snapshot = emptySnapshot;
@@ -301,6 +302,10 @@ class RelayStore {
     if (this.reconnectTimer) {
       clearTimeout(this.reconnectTimer);
       this.reconnectTimer = null;
+    }
+    if (this.probeTimer) {
+      clearTimeout(this.probeTimer);
+      this.probeTimer = null;
     }
     this.clearPendingCmds();
     try {
@@ -505,6 +510,43 @@ class RelayStore {
       clearInterval(this.hbTimer);
       this.hbTimer = null;
     }
+  }
+
+  // 回前台即时体检（#258）：后台冻结/断网期间 socket 可能已被系统杀死而
+  // connected 仍真——AppState active 不能只信 connected 干等 15s 心跳拍。
+  // 先按心跳同口径判死（>55s 无下行直接断开），否则补发一拍 PING 等 4s，
+  // 仍无任何下行（PONG 也算）即判死。断开走既有 onClose→重连→replay/SNAPSHOT
+  // 恢复链，错过的 TASK_DONE 由 last_task_done 状态兜回
+  resumeProbe() {
+    const ws = this.ws;
+    // readyState 守卫：disconnect 后 hbTimer 残留 ≤15s（下一拍自清）+ 新 socket
+    // 尚在 CONNECTING 的窗口内，hbTimer 判存活不可靠，只探已 OPEN 的连接
+    if (!ws || !this.hbTimer || ws.readyState !== WebSocket.OPEN) return;
+    if (this.probeTimer) {
+      clearTimeout(this.probeTimer);
+      this.probeTimer = null;
+    }
+    const t0 = this.lastDownAt;
+    if (Date.now() - t0 > 55_000) {
+      try { ws.close(); } catch {}
+      return;
+    }
+    const cloud = this.channel === "cloud" && this.cloudCfg ? this.cloudCfg : undefined;
+    const keys = this.devKeys;
+    try {
+      ws.send(cloud && keys
+        ? JSON.stringify({ to: cloud.relayDev, data: seal({ t: "ping", last_seq: this.lastSeq }, cloud.relayPubkey, keys.secretKey) })
+        : JSON.stringify({ type: "PING" }));
+    } catch {
+      try { ws.close(); } catch {}
+      return;
+    }
+    this.probeTimer = setTimeout(() => {
+      this.probeTimer = null;
+      if (this.ws === ws && this.lastDownAt === t0) {
+        try { ws.close(); } catch {}
+      }
+    }, 4000);
   }
 
   private scheduleReconnect() {    if (!this.cfg) return;
