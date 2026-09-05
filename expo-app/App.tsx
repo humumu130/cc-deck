@@ -216,7 +216,7 @@ function Shell() {
   if (!ready) {
     return (
       <View style={st.boot}>
-        <Text style={st.bootT}>Claude Code</Text>
+        <Text style={st.bootT}>CC Deck</Text>
       </View>
     );
   }

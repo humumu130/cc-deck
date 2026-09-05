@@ -1,7 +1,7 @@
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Animated, BackHandler, Easing, FlatList, PanResponder, Pressable, RefreshControl, StyleSheet, Text, View } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import { SafeAreaView } from "react-native-safe-area-context";
+import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { statusColor, withA, type ThemeColors } from "../theme";
 import { useTheme, useThemeStyles } from "../theme-context";
 import { LogoMark } from "../brand";
@@ -307,6 +307,7 @@ const SessionCard = memo(function SessionCard({
 export default function ListScreen({ sessions, connected, connText, onOpen, onNew, onSetup, onEditServer }: Props) {
   const { c } = useTheme();
   const styles = useThemeStyles(makeStyles);
+  const insets = useSafeAreaInsets();
   const snap = useRelay();
   const compact = useListCompact();
   const [revealSid, setRevealSid] = useState<string | null>(null);
@@ -485,7 +486,7 @@ export default function ListScreen({ sessions, connected, connText, onOpen, onNe
             progressBackgroundColor={c.panel}
           />
         }
-        contentContainerStyle={{ paddingBottom: 120, paddingHorizontal: 14, paddingTop: 6 }}
+        contentContainerStyle={{ paddingBottom: insets.bottom + 120, paddingHorizontal: 14, paddingTop: 6 }}
         renderItem={({ item }) => (
           <SessionCard s={item} onOpen={onOpen} onRename={handleRename} revealSid={revealSid} onReveal={setRevealSid} compact={compact} />
         )}
@@ -506,7 +507,7 @@ export default function ListScreen({ sessions, connected, connText, onOpen, onNe
 
       <View style={styles.edgeZone} {...edgePan.panHandlers} />
 
-      <PressScale style={styles.fab} ripple="rgba(255,255,255,0.18)" haptic onPress={onNew}>
+      <PressScale style={[styles.fab, { bottom: insets.bottom + 24 }]} ripple="rgba(255,255,255,0.18)" haptic onPress={onNew}>
         <View style={styles.fabGrad}>
           <PlusMark size={20} />
         </View>
@@ -651,7 +652,7 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
   emptyT: { color: c.faint, fontSize: 14, marginBottom: 6 },
   emptyS: { color: c.faint, fontSize: 12, textAlign: "center", lineHeight: 20 },
   edgeZone: { position: "absolute", left: 0, top: 0, bottom: 0, width: 22, zIndex: 5 },
-  fab: { position: "absolute", right: 30, bottom: 56, borderRadius: 16, elevation: 8 },
+  fab: { position: "absolute", right: 30, borderRadius: 16, elevation: 8 },
   fabGrad: {
     width: 56, height: 56, borderRadius: 16, alignItems: "center", justifyContent: "center",
     backgroundColor: "#1D1726", borderWidth: 1, borderColor: "rgba(255,255,255,0.09)",

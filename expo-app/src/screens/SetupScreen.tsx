@@ -154,7 +154,7 @@ export default function SetupScreen({ onClose, editId }: Props) {
           <View style={s.logo}>
             <LogoMark size={34} />
           </View>
-          <Text style={s.h2}>Claude Code</Text>
+          <Text style={s.h2}>CC Deck</Text>
           <Text style={s.sub}>{editId ? "编辑服务器配置" : "连接到 PC Relay"}</Text>
 
           {servers.length > 0 ? (
