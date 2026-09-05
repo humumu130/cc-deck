@@ -1,8 +1,9 @@
 import { Fragment, useEffect, useRef, useState } from "react";
-import { Animated, BackHandler, Dimensions, Image, PermissionsAndroid, Pressable, RefreshControl, ScrollView, StyleSheet, Text, TextInput, Vibration, View, type NativeScrollEvent, type NativeSyntheticEvent } from "react-native";
+import { Animated, BackHandler, Dimensions, Image, Modal, PermissionsAndroid, Pressable, RefreshControl, ScrollView, Share, StyleSheet, Text, TextInput, Vibration, View, type NativeScrollEvent, type NativeSyntheticEvent } from "react-native";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import * as ImagePicker from "expo-image-picker";
 import * as ImageManipulator from "expo-image-manipulator";
+import * as Clipboard from "expo-clipboard";
 import { withA, type ThemeColors } from "../theme";
 import { useTheme, useThemeStyles } from "../theme-context";
 import { fmtElapsed, sessionElapsed, fmtHM, dayKey, fmtClock, fmtTok, contextPct, contextLevel, CONTEXT_LIMIT_FALLBACK } from "../fmt";
@@ -81,7 +82,7 @@ const PROC_FONT = {
   hidden: { tool: 8.5, sys: 8, result: 8.5, thinkHead: 8.5, think: 10, thinkLH: 14, op: 0.75 },
 } as const;
 
-function TranscriptRow({ e, open, onToggle }: { e: LogEntry; open: boolean; onToggle: () => void }) {
+function TranscriptRow({ e, open, onToggle, onContentMenu }: { e: LogEntry; open: boolean; onToggle: () => void; onContentMenu?: (text: string) => void }) {
   const { c } = useTheme();
   const d = useThemeStyles(makeStyles);
   const pf = PROC_FONT[useProcessFont()];
@@ -89,7 +90,7 @@ function TranscriptRow({ e, open, onToggle }: { e: LogEntry; open: boolean; onTo
   if (e.kind === "user_message") {
     return (
       <View style={d.trUser}>
-        <Text style={d.trUserText}>{e.full ?? e.text}</Text>
+        <Text style={d.trUserText} onLongPress={onContentMenu ? () => onContentMenu(e.full ?? e.text) : undefined}>{e.full ?? e.text}</Text>
         {e.ts ? <Text style={d.trUserTime}>{fmtHM(e.ts)}</Text> : null}
       </View>
     );
@@ -100,6 +101,7 @@ function TranscriptRow({ e, open, onToggle }: { e: LogEntry; open: boolean; onTo
       <Pressable
         style={[d.trThink, { opacity: pf.op }]}
         onPress={onToggle}
+        onLongPress={onContentMenu ? () => onContentMenu(src) : undefined}
         android_ripple={{ color: c.tintSoft, borderless: false }}
       >
         <Text style={[d.trThinkHead, { fontSize: pf.thinkHead }]}>{open ? "▾ 思考过程" : `▸ 思考过程 · ${src.length} 字`}{e.ts ? ` · ${fmtHM(e.ts)}` : ""}</Text>
@@ -113,7 +115,7 @@ function TranscriptRow({ e, open, onToggle }: { e: LogEntry; open: boolean; onTo
     return (
       <View style={d.trMsg}>
         {e.ts ? <Text style={d.trMsgTime}>{fmtHM(e.ts)}</Text> : null}
-        <MdText src={open ? (e.full ?? e.text) : e.text} />
+        <MdText src={open ? (e.full ?? e.text) : e.text} onLongPress={onContentMenu ? () => onContentMenu(e.full ?? e.text) : undefined} />
         {cursor}
         {e.full ? (
           <Pressable onPress={onToggle} hitSlop={6}>
@@ -126,7 +128,7 @@ function TranscriptRow({ e, open, onToggle }: { e: LogEntry; open: boolean; onTo
   if (e.kind === "tool_use") {
     if (e.detail) {
       return (
-        <Pressable style={[d.trTool, { opacity: pf.op }]} onPress={onToggle} android_ripple={{ color: c.tintSoft, borderless: false }}>
+        <Pressable style={[d.trTool, { opacity: pf.op }]} onPress={onToggle} onLongPress={e.detail ? () => onContentMenu?.(e.detail!) : undefined} android_ripple={{ color: c.tintSoft, borderless: false }}>
           <View style={{ flex: 1 }}>
             <View style={{ flexDirection: "row", gap: 6, alignItems: "baseline" }}>
               <Text style={[d.trToolName, { fontSize: pf.tool }]}>⚙ {e.tool || "tool"}</Text>
@@ -150,7 +152,7 @@ function TranscriptRow({ e, open, onToggle }: { e: LogEntry; open: boolean; onTo
   if (e.kind === "tool_result") {
     if (e.diff && e.diff.length > 0) {
       return (
-        <Pressable style={[d.trDiffWrap, { opacity: pf.op }]} onPress={onToggle} android_ripple={{ color: c.tintSoft, borderless: false }}>
+        <Pressable style={[d.trDiffWrap, { opacity: pf.op }]} onPress={onToggle} onLongPress={() => onContentMenu?.(e.diff!.join("\n"))} android_ripple={{ color: c.tintSoft, borderless: false }}>
           <Text style={[d.trResult, { fontSize: pf.result }]} numberOfLines={open ? undefined : 1}>
             ↳ {open ? "收起变更 ▴" : `变更 · ${e.diff.filter((l) => l.startsWith("+")).length}+ ${e.diff.filter((l) => l.startsWith("-")).length}− ▾`}
           </Text>
@@ -162,7 +164,7 @@ function TranscriptRow({ e, open, onToggle }: { e: LogEntry; open: boolean; onTo
     }
     if (e.detail) {
       return (
-        <Pressable onPress={onToggle} hitSlop={4} style={{ opacity: pf.op }}>
+        <Pressable onPress={onToggle} onLongPress={e.detail ? () => onContentMenu?.(e.detail!) : undefined} hitSlop={4} style={{ opacity: pf.op }}>
           <Text style={[d.trResult, { fontSize: pf.result }]} numberOfLines={open ? undefined : 2}>
             ↳ {e.text} <Text style={d.tlExpand}>{open ? "收起 ▴" : "展开 ▾"}</Text>
           </Text>
@@ -193,6 +195,49 @@ function DiffBlock({ lines }: { lines: string[] }) {
         return <Text key={i} style={st} selectable>{l || " "}</Text>;
       })}
     </View>
+  );
+}
+
+// 内容长按菜单（#249）：预览 + 复制全文 / 系统分享（视觉对齐 md.tsx 链接浮窗）
+function ContentMenu({ text, onClose }: { text: string; onClose: () => void }) {
+  const { c } = useTheme();
+  const d = useThemeStyles(makeStyles);
+  const [copied, setCopied] = useState(false);
+  const copiedTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => () => { if (copiedTimer.current) clearTimeout(copiedTimer.current); }, []);
+  return (
+    <Modal visible transparent animationType="fade" onRequestClose={onClose}>
+      <Pressable style={d.menuScrim} onPress={onClose}>
+        <Pressable style={d.menuCard} onPress={() => undefined}>
+          <Text style={d.menuText} numberOfLines={3}>{text}</Text>
+          <View style={d.menuBtns}>
+            <Pressable
+              style={d.menuBtn}
+              android_ripple={{ color: withA(c.dim, 0.2), borderless: false, radius: 10 }}
+              onPress={() => {
+                void Clipboard.setStringAsync(text).then(() => {
+                  setCopied(true);
+                  copiedTimer.current = setTimeout(() => setCopied(false), 1500);
+                });
+              }}
+            >
+              <Text style={d.menuBtnT}>{copied ? "已复制 ✓" : "复制全文"}</Text>
+            </Pressable>
+            <Pressable
+              style={[d.menuBtn, d.menuBtnPri]}
+              android_ripple={{ color: "rgba(255,255,255,0.15)", borderless: false, radius: 10 }}
+              onPress={() => {
+                onClose();
+                // 防 Android binder 事务上限：超长 detail 截断分享
+                void Share.share({ message: text.slice(0, 100_000) }).catch(() => undefined);
+              }}
+            >
+              <Text style={d.menuBtnPriT}>分享</Text>
+            </Pressable>
+          </View>
+        </Pressable>
+      </Pressable>
+    </Modal>
   );
 }
 
@@ -349,6 +394,8 @@ export default function DetailScreen({ sid, onBack }: { sid: string; onBack: () 
   const [showThink, setShowThink] = useState(thinkShown);
   const [collapsed, setCollapsed] = useState(ctrlCollapsed);
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
+  // 内容长按菜单（#249）：非空即弹 ContentMenu
+  const [menuText, setMenuText] = useState<string | null>(null);
   const todoScrollRef = useRef<ScrollView>(null);
   const todoAtBottom = useRef(true);
   // 任务面板常驻滑块：onScroll 里 setValue(contentOffset.y)（bridgeless 下 Animated.event
@@ -1037,7 +1084,7 @@ export default function DetailScreen({ sid, onBack }: { sid: string; onBack: () 
               nodes.push(<Text key={`day-${key}`} style={d.daySep}>── {day} ──</Text>);
             }
             if (day) lastDay = day;
-            nodes.push(<TranscriptRow key={key} e={e} open={!!expanded[key]} onToggle={() => toggle(key)} />);
+            nodes.push(<TranscriptRow key={key} e={e} open={!!expanded[key]} onToggle={() => toggle(key)} onContentMenu={setMenuText} />);
             return nodes;
           })
         )}
@@ -1224,6 +1271,8 @@ export default function DetailScreen({ sid, onBack }: { sid: string; onBack: () 
           setRenaming(false);
         }}
       />
+
+      {menuText ? <ContentMenu text={menuText} onClose={() => setMenuText(null)} /> : null}
       </View>
     </SafeAreaView>
   );
@@ -1529,4 +1578,16 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
     alignItems: "center", justifyContent: "center",
   },
   sendT: { color: "#fff", fontSize: 17, lineHeight: 20, marginLeft: 2 },
+  // 内容长按菜单（#249）：与 md.tsx 链接浮窗同视觉语言
+  menuScrim: { flex: 1, backgroundColor: "rgba(0,0,0,0.5)", justifyContent: "center", alignItems: "center", padding: 28 },
+  menuCard: { width: "100%", maxWidth: 340, backgroundColor: c.panel, borderRadius: 14, borderWidth: 1, borderColor: c.line, padding: 14 },
+  menuText: { color: c.dim, fontSize: 12.5, lineHeight: 18 },
+  menuBtns: { flexDirection: "row", gap: 8, justifyContent: "flex-end", marginTop: 12 },
+  menuBtn: {
+    paddingVertical: 8, paddingHorizontal: 14, borderRadius: 10,
+    backgroundColor: c.tintSoft, borderWidth: 1, borderColor: c.line, overflow: "hidden",
+  },
+  menuBtnPri: { backgroundColor: c.brandA, borderColor: "transparent" },
+  menuBtnT: { color: c.dim, fontSize: 13, fontWeight: "600" },
+  menuBtnPriT: { color: "#fff", fontSize: 13, fontWeight: "600" },
 });

@@ -135,22 +135,43 @@ function parseInline(text: string): Span[] {
   return spans.length ? spans : [{ text }];
 }
 
-function InlineText({ text, small, header, outer, onLink }: {
+function InlineText({ text, small, header, outer, onLink, onLong }: {
   text: string;
   small?: boolean;
   header?: boolean;
   outer?: TextStyle;
   onLink?: (url: string) => void;
+  onLong?: () => void;
 }) {
   const { c } = useTheme();
   const d = useThemeStyles(makeStyles);
+  // 链接双击直达（#249）：单击 280ms 后弹浮窗，期间第二击即双击 → 直接开浏览器；
+  // 双击后短暂抑制连击，防三击开完浏览器又弹浮窗
+  const lastTap = useRef(0);
+  const suppressUntil = useRef(0);
+  const tapTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => () => { if (tapTimer.current) clearTimeout(tapTimer.current); }, []);
+  const tapLink = (url: string) => {
+    const now = Date.now();
+    if (now < suppressUntil.current) return;
+    if (now - lastTap.current < 280) {
+      lastTap.current = 0;
+      suppressUntil.current = now + 400;
+      if (tapTimer.current) clearTimeout(tapTimer.current);
+      void Linking.openURL(url).catch(() => undefined);
+    } else {
+      lastTap.current = now;
+      if (tapTimer.current) clearTimeout(tapTimer.current);
+      tapTimer.current = setTimeout(() => { tapTimer.current = null; onLink?.(url); }, 280);
+    }
+  };
   return (
-    <Text style={[d.base, small ? d.cellT : null, header ? d.thT : null, outer]}>
+    <Text style={[d.base, small ? d.cellT : null, header ? d.thT : null, outer]} onLongPress={onLong}>
       {parseInline(text).map((s, i) => (
         <Text
           key={i}
           accessibilityRole={s.link ? "link" : undefined}
-          onPress={s.link ? () => onLink?.(s.link!) : undefined}
+          onPress={s.link ? () => tapLink(s.link!) : undefined}
           style={[
             s.code ? d.code : null,
             s.bold ? { fontWeight: "600" } : null,
@@ -205,7 +226,7 @@ function LinkSheet({ url, onClose }: { url: string; onClose: () => void }) {
   );
 }
 
-export function MdText({ src, style }: { src: string; style?: TextStyle }) {
+export function MdText({ src, style, onLongPress }: { src: string; style?: TextStyle; onLongPress?: () => void }) {
   const { c } = useTheme();
   const d = useThemeStyles(makeStyles);
   const blocks = useMemo(() => parseBlocks(src), [src]);
@@ -218,7 +239,7 @@ export function MdText({ src, style }: { src: string; style?: TextStyle }) {
         switch (b.t) {
           case "h":
             return (
-              <Text key={i} style={[d.base, { fontWeight: "700", fontSize: 14.5 - b.level * 0.5, marginTop: i ? 6 : 0 }]}>
+              <Text key={i} style={[d.base, { fontWeight: "700", fontSize: 14.5 - b.level * 0.5, marginTop: i ? 6 : 0 }]} onLongPress={onLongPress}>
                 {b.text}
               </Text>
             );
@@ -233,14 +254,14 @@ export function MdText({ src, style }: { src: string; style?: TextStyle }) {
               <View key={i} style={[d.li, { paddingLeft: 14 + b.depth * 14 }]}>
                 <Text style={[d.base, { color: c.dim }]}>{b.ord ? `${b.ord}. ` : "• "}</Text>
                 <View style={{ flex: 1 }}>
-                  <InlineText text={b.text} onLink={openLink} />
+                  <InlineText text={b.text} onLink={openLink} onLong={onLongPress} />
                 </View>
               </View>
             );
           case "quote":
             return (
               <View key={i} style={d.quote}>
-                <InlineText text={b.text} onLink={openLink} />
+                <InlineText text={b.text} onLink={openLink} onLong={onLongPress} />
               </View>
             );
           case "table": {
@@ -273,7 +294,7 @@ export function MdText({ src, style }: { src: string; style?: TextStyle }) {
           case "hr":
             return <View key={i} style={d.hr} />;
           default:
-            return <InlineText key={i} text={b.text} outer={style} onLink={openLink} />;
+            return <InlineText key={i} text={b.text} outer={style} onLink={openLink} onLong={onLongPress} />;
         }
       })}
     </View>
