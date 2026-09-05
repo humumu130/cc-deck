@@ -1,5 +1,5 @@
 import { Fragment, useEffect, useRef, useState } from "react";
-import { Animated, BackHandler, Dimensions, Image, PermissionsAndroid, Pressable, ScrollView, StyleSheet, Text, TextInput, Vibration, View, type NativeScrollEvent, type NativeSyntheticEvent } from "react-native";
+import { Animated, BackHandler, Dimensions, Image, PermissionsAndroid, Pressable, RefreshControl, ScrollView, StyleSheet, Text, TextInput, Vibration, View, type NativeScrollEvent, type NativeSyntheticEvent } from "react-native";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import * as ImagePicker from "expo-image-picker";
 import * as ImageManipulator from "expo-image-manipulator";
@@ -877,6 +877,15 @@ export default function DetailScreen({ sid, onBack }: { sid: string; onBack: () 
               style={{ flex: 1 }}
               showsVerticalScrollIndicator={false}
               scrollEventThrottle={16}
+              refreshControl={
+                <RefreshControl
+                  refreshing={todoSpin}
+                  onRefresh={refreshTodos}
+                  tintColor={c.working}
+                  colors={[c.working]}
+                  progressBackgroundColor={c.panel}
+                />
+              }
               onScroll={(e: NativeSyntheticEvent<NativeScrollEvent>) => {
                 // bridgeless 下 Animated.event+useNativeDriver 不可用（0.2.26 闪退），
                 // 退回 JS setValue：throttle 16 保证 60fps 事件流，thumb 仍逐帧跟手
