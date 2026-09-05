@@ -197,7 +197,11 @@ export class AgentSession {
             const raw = (block as { thinking?: unknown }).thinking;
             const th = typeof raw === "string" ? raw.trim() : "";
             if (th) this.cb.onLog("thinking", truncate(th, 400), { full: fullText(th, 400) });
-          } else if (block.type === "text" && block.text.trim()) {
+          } else if (block.type === "text" && !block.text.trim()) {
+            // 空白 text 块：content_block_start 已登记 streamOrder 槽位，终态跳过不消费
+            // 会让后续正文错拿前块 id，流式气泡残留成孤儿——消费掉
+            ti += 1;
+          } else if (block.type === "text") {
             // z.ai 内置工具桥的展示文本（过程噪声）：归工具类日志，不进"消息"视图
             const zn = zaiToolName(block.text);
             if (zn) {
