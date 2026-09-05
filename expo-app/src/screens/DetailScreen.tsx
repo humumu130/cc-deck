@@ -668,7 +668,7 @@ export default function DetailScreen({ sid, onBack }: { sid: string; onBack: () 
   return (
     <SafeAreaView style={d.safe} edges={["top"]}>
       <View style={{ flex: 1 }}>
-      {/* 头部：标题 + 状态副行 + 编辑/折叠/思考（三按钮同高 30，思考与折叠间隔开） */}
+      {/* 头部：标题 + 状态副行 + 编辑/折叠/思考（三按钮同高 30；思考选中态=品牌色，同 chip 语言） */}
       <View style={d.head}>
         <Pressable style={[d.back, d.opRipple]} android_ripple={{ color: c.tintSoft, borderless: false }} onPress={onBack} hitSlop={8}>
           <Text style={d.backText}>‹</Text>
@@ -685,6 +685,7 @@ export default function DetailScreen({ sid, onBack }: { sid: string; onBack: () 
                 <View style={{ width: `${ctxPct}%`, height: 3, borderRadius: 1.5, backgroundColor: c[contextLevel(ctxUsed, ctxLimit)] }} />
               </View>
               <Text style={[d.ctxPct, { color: c[contextLevel(ctxUsed, ctxLimit)] }]}>{ctxPct}%</Text>
+              <View style={{ flex: 0.25 }} />
             </View>
           ) : null}
         </View>
@@ -703,7 +704,7 @@ export default function DetailScreen({ sid, onBack }: { sid: string; onBack: () 
             ctrlCollapsed = !ctrlCollapsed;
             setCollapsed(ctrlCollapsed);
           }}
-          hitSlop={4}
+          hitSlop={6}
         >
           <Text style={d.foldT}>{collapsed ? "▼" : "▲"}</Text>
         </Pressable>
@@ -714,9 +715,10 @@ export default function DetailScreen({ sid, onBack }: { sid: string; onBack: () 
             thinkShown = !thinkShown;
             setShowThink(thinkShown);
           }}
-          hitSlop={4}
+          hitSlop={6}
+          accessibilityLabel={showThink ? "思考过程显示，已开" : "思考过程显示，已关"}
         >
-          <Text style={[d.thinkBtnT, showThink && d.thinkBtnTOn]}>思考{showThink ? "·开" : "·关"}</Text>
+          <Text style={[d.thinkBtnT, showThink && d.thinkBtnTOn]}>思考</Text>
         </Pressable>
       </View>
 
@@ -1136,11 +1138,11 @@ function MicIcon({ color }: { color: string }) {
 const makeStyles = (c: ThemeColors) => StyleSheet.create({
   safe: { flex: 1, backgroundColor: c.bg },
   head: {
-    flexDirection: "row", alignItems: "center", gap: 8,
-    paddingHorizontal: 14, paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: c.line,
+    flexDirection: "row", alignItems: "center", gap: 6,
+    paddingHorizontal: 12, paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: c.line,
   },
-  back: { width: 36, height: 36, borderRadius: 11, backgroundColor: c.tintSoft, alignItems: "center", justifyContent: "center" },
-  backText: { color: c.dim, fontSize: 20, marginTop: -2 },
+  back: { width: 32, height: 32, borderRadius: 10, backgroundColor: c.tintSoft, alignItems: "center", justifyContent: "center" },
+  backText: { color: c.dim, fontSize: 18, marginTop: -1 },
   hintText: { color: c.faint },
   title: { color: c.text, fontSize: 15, fontWeight: "600" },
   sub: { color: c.dim, fontSize: 11, marginTop: 1 },
@@ -1167,9 +1169,9 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
     borderWidth: 1, borderColor: withA(c.brandA, 0.4), alignItems: "center", justifyContent: "center",
   },
   foldT: { color: c.brandA, fontSize: 11, marginTop: -1 },
-  // 思考开关（头部第三按钮）：与 ✎/▲ 同高 30，与折叠间额外隔 8（头部 gap 8 之上）
+  // 思考开关（头部第三按钮）：与 ✎/▲ 同高 30；无文字后缀，选中态=品牌底/品牌字（同 chip 语言）
   thinkBtn: {
-    marginLeft: 8, height: 30, borderRadius: 9, paddingHorizontal: 9,
+    height: 30, borderRadius: 9, paddingHorizontal: 8,
     backgroundColor: c.tintSoft, borderWidth: 1, borderColor: c.line,
     alignItems: "center", justifyContent: "center",
   },
