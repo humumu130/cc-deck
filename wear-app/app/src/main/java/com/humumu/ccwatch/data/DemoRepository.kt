@@ -1,5 +1,6 @@
 package com.humumu.ccwatch.data
 
+import com.humumu.ccwatch.protocol.CronTask
 import com.humumu.ccwatch.protocol.RecentEvent
 import com.humumu.ccwatch.protocol.SessionState
 import com.humumu.ccwatch.protocol.SessionStats
@@ -97,6 +98,15 @@ class DemoRepository : SessionRepo {
         _timelines.value = cur
     }
 
+    /** 明早 08:00（demo cron 卡展示"明早 08:00"档位用） */
+    private fun tomorrowMorning(): Long = java.util.Calendar.getInstance().apply {
+        add(java.util.Calendar.DAY_OF_YEAR, 1)
+        set(java.util.Calendar.HOUR_OF_DAY, 8)
+        set(java.util.Calendar.MINUTE, 0)
+        set(java.util.Calendar.SECOND, 0)
+        set(java.util.Calendar.MILLISECOND, 0)
+    }.timeInMillis
+
     private fun buildSessions(): List<SessionState> {
         val t = now
         return listOf(
@@ -130,6 +140,11 @@ class DemoRepository : SessionRepo {
                     receivedAt = t - 15_000,
                 ) else null,
                 stats = SessionStats(filesChanged = 3, linesAdded = 128, linesDeleted = 41),
+                cronTasks = listOf(
+                    CronTask(id = "cron-1", name = "每日日报", prompt = "汇总今日改动", schedule = "0 8 * * *", nextRunAt = tomorrowMorning(), recurring = true),
+                    CronTask(id = "cron-2", name = "依赖巡检", prompt = "检查依赖更新", schedule = "0 */2 * * *", nextRunAt = now + 2 * 3_600_000L, recurring = true),
+                    CronTask(id = "cron-3", name = "周报草稿", prompt = "整理本周周报", schedule = "0 9 * * 1", paused = true, recurring = true),
+                ),
                 lastError = if (phase == 3) "TS2322: Type 'string' is not assignable to 'number'" else null,
                 doneReason = if (phase == 4) "completed" else null,
                 durationMs = if (phase == 4) 180_000 else null,

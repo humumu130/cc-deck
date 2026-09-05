@@ -34,6 +34,7 @@ import androidx.wear.compose.foundation.lazy.ScalingLazyColumn
 import androidx.wear.compose.foundation.lazy.items
 import androidx.wear.compose.foundation.lazy.rememberScalingLazyListState
 import androidx.wear.compose.material.Text
+import com.humumu.ccwatch.protocol.CronTask
 import com.humumu.ccwatch.protocol.RecentEvent
 import com.humumu.ccwatch.protocol.SessionState
 import com.humumu.ccwatch.protocol.TodoItem
@@ -84,6 +85,9 @@ fun W2Timeline(s: SessionState, events: List<RecentEvent>) {
             if (s.todos.isNotEmpty()) {
                 item(key = "todos") { TodosCard(s.todos) }
             }
+            if (s.cronTasks.isNotEmpty()) {
+                item(key = "crons") { CronCard(s.cronTasks) }
+            }
             if (newestFirst.isEmpty()) {
                 item {
                     Text("暂无事件", color = C.textSecondary, fontSize = 12.sp, modifier = Modifier.padding(top = 20.dp))
@@ -132,6 +136,37 @@ private fun TodosCard(todos: List<TodoItem>) {
         if (open.size > 4) {
             Spacer(Modifier.height(2.dp))
             Text("…还有 ${open.size - 4} 项", color = C.textSecondary, fontSize = 10.sp)
+        }
+    }
+}
+
+/** 定时任务只读卡（#288 A 类①）："定时任务有没有排上"的抬腕速览位；
+ *  ⏰ 运行中排程 / ⏸ 已暂停，暂停、删除等操作去手机做。结构对齐 TodosCard。 */
+@Composable
+private fun CronCard(tasks: List<CronTask>) {
+    Column(
+        horizontalAlignment = Alignment.CenterHorizontally,
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 26.dp, vertical = 4.dp),
+    ) {
+        Text("定时任务 ${tasks.size}", color = C.primary, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+        tasks.take(4).forEach { t ->
+            Spacer(Modifier.height(2.dp))
+            Text(
+                if (t.paused == true) "⏸ ${t.name} · 已暂停"
+                else "⏰ ${t.name} · ${t.nextRunAt?.takeIf { it > 0 }?.let { formatNextRun(it) } ?: "待排期"}",
+                color = if (t.paused == true) C.textSecondary else C.textPrimary,
+                fontSize = 11.sp,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                textAlign = TextAlign.Start,
+                modifier = Modifier.fillMaxWidth(),
+            )
+        }
+        if (tasks.size > 4) {
+            Spacer(Modifier.height(2.dp))
+            Text("…还有 ${tasks.size - 4} 项", color = C.textSecondary, fontSize = 10.sp)
         }
     }
 }

@@ -100,3 +100,24 @@ fun OfflineChip() {
         Text("OFFLINE", color = C.offline, fontSize = 10.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.sp)
     }
 }
+
+/** cron 下次运行相对时间（#288 只读卡）："23m 后" / "3h 后" / "明早 08:30" / "2d 后"。
+ *  落在明天上午的常用档（日报/晨报）直接给钟点，比 "23h 后" 好读；过期按"即将运行"兜底。 */
+fun formatNextRun(ts: Long, now: Long = System.currentTimeMillis()): String {
+    val diff = ts - now
+    if (diff <= 60_000) return "即将运行"
+    val min = diff / 60_000
+    if (min < 60) return "${min}m 后"
+    val cal = java.util.Calendar.getInstance().apply { timeInMillis = ts }
+    val tomorrow = java.util.Calendar.getInstance().apply {
+        timeInMillis = now
+        add(java.util.Calendar.DAY_OF_YEAR, 1)
+    }
+    val h = cal.get(java.util.Calendar.HOUR_OF_DAY)
+    val isTomorrowMorning = h < 12 &&
+        cal.get(java.util.Calendar.DAY_OF_YEAR) == tomorrow.get(java.util.Calendar.DAY_OF_YEAR) &&
+        cal.get(java.util.Calendar.YEAR) == tomorrow.get(java.util.Calendar.YEAR)
+    if (isTomorrowMorning) return "明早 %02d:%02d".format(h, cal.get(java.util.Calendar.MINUTE))
+    if (min < 24 * 60) return "${min / 60}h 后"
+    return "${diff / (24 * 3_600_000L)}d 后"
+}
