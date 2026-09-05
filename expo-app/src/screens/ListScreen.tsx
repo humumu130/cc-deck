@@ -8,6 +8,7 @@ import { LogoMark } from "../brand";
 import { sessionElapsed, fmtElapsed, fmtTok, contextPct, contextLevel, CONTEXT_LIMIT_FALLBACK } from "../fmt";
 import { useListCompact } from "../display-settings";
 import { store, useRelay } from "../store";
+import { FadeIn, PressScale } from "../motion";
 import type { SessionState } from "../protocol";
 import RenameModal from "./RenameModal";
 import SettingsDrawer from "./SettingsDrawer";
@@ -477,15 +478,11 @@ export default function ListScreen({ sessions, connected, connText, onOpen, onNe
 
       <View style={styles.edgeZone} {...edgePan.panHandlers} />
 
-      <Pressable
-        style={styles.fab}
-        android_ripple={{ color: "rgba(255,255,255,0.18)", borderless: false, radius: 30 }}
-        onPress={onNew}
-      >
+      <PressScale style={styles.fab} ripple="rgba(255,255,255,0.18)" haptic onPress={onNew}>
         <View style={styles.fabGrad}>
           <PlusMark size={20} />
         </View>
-      </Pressable>
+      </PressScale>
 
       <RenameModal
         visible={!!renameTarget}
@@ -507,14 +504,16 @@ export default function ListScreen({ sessions, connected, connText, onOpen, onNe
       {/* 状态图例浮窗：统计行 ？ 呼出，点任意处收起 */}
       {legendOpen ? (
         <Pressable style={styles.legendScrim} onPress={() => setLegendOpen(false)}>
-          <View style={styles.legendCard}>
-            {(["WORKING", "WAITING", "ERROR", "DONE"] as const).map((k) => (
-              <View key={k} style={styles.legendRow}>
-                <View style={[styles.legendDot, { backgroundColor: statusColor(k, c) }]} />
-                <Text style={styles.legendT}>{k.toLowerCase()}</Text>
-              </View>
-            ))}
-          </View>
+          <FadeIn dy={5}>
+            <View style={styles.legendCard}>
+              {(["WORKING", "WAITING", "ERROR", "DONE"] as const).map((k) => (
+                <View key={k} style={styles.legendRow}>
+                  <View style={[styles.legendDot, { backgroundColor: statusColor(k, c) }]} />
+                  <Text style={styles.legendT}>{k.toLowerCase()}</Text>
+                </View>
+              ))}
+            </View>
+          </FadeIn>
         </Pressable>
       ) : null}
     </SafeAreaView>

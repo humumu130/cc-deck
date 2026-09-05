@@ -13,6 +13,7 @@ import { useProcessFont, useVoiceInput } from "../display-settings";
 import { voice } from "../voice";
 import { BUILTIN_COMMANDS, fetchSlashCommands, httpBaseOf, matchSlash, type SlashCommand } from "../slash";
 import { MdText } from "../md";
+import { FadeIn, PressScale } from "../motion";
 import RenameModal from "./RenameModal";
 
 // 详情页视图 tab（与网页端 tabs 对齐：消息/全部/任务/定时/统计，同序）。
@@ -990,47 +991,54 @@ export default function DetailScreen({ sid, onBack }: { sid: string; onBack: () 
       <View pointerEvents="box-none" style={{ paddingBottom: kb > 0 ? 0 : insets.bottom, transform: [{ translateY: kb > 0 ? -kb : 0 }] }}>
         {bannerVisible ? (
           wr!.questions?.length ? (
-            <AskBanner wr={wr!} sid={sid} />
+            <FadeIn><AskBanner wr={wr!} sid={sid} /></FadeIn>
           ) : (
+          <FadeIn>
           <View style={d.waitBanner}>
             <Text style={d.waitT}>◐ 等待你的确认</Text>
             <Text style={d.waitTool}>工具 <Text style={d.waitToolName}>{wr!.tool_name}</Text></Text>
             <Text style={d.waitDesc} numberOfLines={6}>{wr!.input_summary}</Text>
             <View style={d.wbtns}>
-              <Pressable style={[d.btnAllow, d.opRipple]} android_ripple={{ color: withA(c.done, 0.18), borderless: false }} onPress={() => decide(true)}>
+              <PressScale style={[d.btnAllow, d.opRipple]} ripple={withA(c.done, 0.18)} haptic onPress={() => decide(true)}>
                 <Text style={d.btnAllowT}>✓ 允许</Text>
-              </Pressable>
-              <Pressable style={[d.btnReject, d.opRipple]} android_ripple={{ color: withA(c.waiting, 0.18), borderless: false }} onPress={() => decide(false)}>
+              </PressScale>
+              <PressScale style={[d.btnReject, d.opRipple]} ripple={withA(c.waiting, 0.18)} haptic onPress={() => decide(false)}>
                 <Text style={d.btnRejectT}>✕ 拒绝</Text>
-              </Pressable>
+              </PressScale>
             </View>
           </View>
+          </FadeIn>
           )
         ) : null}
         {images.length > 0 ? (
           <View style={d.imgRow}>
             {images.map((b, i) => (
-              <View key={i} style={d.imgCell}>
-                <Image style={d.imgThumb} source={{ uri: `data:image/jpeg;base64,${b}` }} />
-                <Pressable style={d.imgDel} android_ripple={{ color: "rgba(0,0,0,0.3)", borderless: false, radius: 10 }} onPress={() => setImages((prev) => prev.filter((_, j) => j !== i))}>
-                  <Text style={d.imgDelT}>×</Text>
-                </Pressable>
-              </View>
+              <FadeIn key={i} dy={4}>
+                <View style={d.imgCell}>
+                  <Image style={d.imgThumb} source={{ uri: `data:image/jpeg;base64,${b}` }} />
+                  <Pressable style={d.imgDel} android_ripple={{ color: "rgba(0,0,0,0.3)", borderless: false, radius: 10 }} onPress={() => setImages((prev) => prev.filter((_, j) => j !== i))}>
+                    <Text style={d.imgDelT}>×</Text>
+                  </Pressable>
+                </View>
+              </FadeIn>
             ))}
           </View>
         ) : null}
         {queuedHint ? (
-          <Text style={d.queuedHint}>{queuedHint}</Text>
+          <FadeIn dy={4}><Text style={d.queuedHint}>{queuedHint}</Text></FadeIn>
         ) : null}
         {voiceHint ? (
-          <Text style={d.queuedHint}>{voiceHint}</Text>
+          <FadeIn dy={4}><Text style={d.queuedHint}>{voiceHint}</Text></FadeIn>
         ) : null}
         {listening ? (
-          <Text style={d.voiceLive} numberOfLines={1}>
-            {voiceText || "正在听，松开发送…"}
-          </Text>
+          <FadeIn dy={4}>
+            <Text style={d.voiceLive} numberOfLines={1}>
+              {voiceText || "正在听，松开发送…"}
+            </Text>
+          </FadeIn>
         ) : null}
         {slashQuery !== null ? (
+          <FadeIn dy={10}>
           <View style={d.slashBox}>
             <ScrollView keyboardShouldPersistTaps="always" nestedScrollEnabled>
               {slashMatches.map((m) => (
@@ -1052,6 +1060,7 @@ export default function DetailScreen({ sid, onBack }: { sid: string; onBack: () 
               ) : null}
             </ScrollView>
           </View>
+          </FadeIn>
         ) : null}
         <View style={d.cmdbar}>
           {!external && !s.historical ? (
@@ -1087,9 +1096,15 @@ export default function DetailScreen({ sid, onBack }: { sid: string; onBack: () 
               <MicIcon color={listening ? c.brandA : c.dim} />
             </Pressable>
           ) : null}
-          <Pressable style={[d.sendBtn, (!canCmd || (!input.trim() && images.length === 0)) && { opacity: 0.4 }]} android_ripple={{ color: "rgba(255,255,255,0.2)", borderless: false }} onPress={() => send()} disabled={!canCmd}>
+          <PressScale
+            style={[d.sendBtn, (!canCmd || (!input.trim() && images.length === 0)) && { opacity: 0.4 }]}
+            ripple="rgba(255,255,255,0.2)"
+            haptic
+            onPress={() => send()}
+            disabled={!canCmd}
+          >
             <Text style={d.sendT}>➤</Text>
-          </Pressable>
+          </PressScale>
         </View>
       </View>
 

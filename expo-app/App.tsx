@@ -14,30 +14,46 @@ import DetailScreen from "./src/screens/DetailScreen";
 import SetupScreen from "./src/screens/SetupScreen";
 import NewSessionModal from "./src/screens/NewSessionModal";
 
+// 全局错误 Toast：弹簧上滑入场 + 到期下滑退场（入场/退场动画，#242）
 function Toast() {
   const snap = useRelay();
   const st = useThemeStyles(makeStyles);
   const [show, setShow] = useState(false);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const op = useRef(new Animated.Value(0)).current;
+  const y = useRef(new Animated.Value(16)).current;
 
   useEffect(() => {
     if (!snap.lastErrorCmd) return;
     setShow(true);
     if (timer.current) clearTimeout(timer.current);
+    op.setValue(0);
+    y.setValue(16);
+    Animated.parallel([
+      Animated.spring(y, { toValue: 0, useNativeDriver: true, speed: 30, bounciness: 6 }),
+      Animated.timing(op, { toValue: 1, duration: 120, useNativeDriver: true }),
+    ]).start();
     timer.current = setTimeout(() => {
-      setShow(false);
-      store.clearCmdError();
+      Animated.parallel([
+        Animated.timing(op, { toValue: 0, duration: 140, useNativeDriver: true }),
+        Animated.timing(y, { toValue: 16, duration: 140, useNativeDriver: true }),
+      ]).start(() => {
+        setShow(false);
+        store.clearCmdError();
+      });
     }, 2600);
   }, [snap.lastErrorCmd]);
+
+  useEffect(() => () => { if (timer.current) clearTimeout(timer.current); }, []);
 
   if (!show || !snap.lastErrorCmd) return null;
   // 本地未连接拒绝发送的场景文案本身就是完整句子，不再套"命令失败:"前缀误导排查方向
   const msg = snap.lastErrorCmd === "未连接，命令未发送" ? snap.lastErrorCmd : `命令失败: ${snap.lastErrorCmd}`;
   return (
     <View style={st.toastWrap} pointerEvents="none">
-      <View style={st.toast}>
+      <Animated.View style={[st.toast, { opacity: op, transform: [{ translateY: y }] }]}>
         <Text style={st.toastT}>{msg}</Text>
-      </View>
+      </Animated.View>
     </View>
   );
 }
@@ -253,7 +269,7 @@ export default function App() {
 const makeStyles = (c: ThemeColors) => StyleSheet.create({
   boot: { flex: 1, backgroundColor: c.bg, alignItems: "center", justifyContent: "center" },
   bootT: { color: c.faint, fontSize: 16, fontWeight: "600" },
-  toastWrap: { position: "absolute", left: 0, right: 0, bottom: 96, alignItems: "center", zIndex: 90 },
+  toastWrap: { position: "absolute", left: 0, right: 0, bottom: 124, alignItems: "center", zIndex: 90 },
   toast: {
     backgroundColor: c.panel2, borderWidth: 1, borderColor: c.line,
     borderRadius: 12, paddingHorizontal: 18, paddingVertical: 10, maxWidth: "86%",
