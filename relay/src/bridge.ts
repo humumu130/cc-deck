@@ -13,6 +13,7 @@ import {
 } from "./todo-hidden.js";
 import {
   buildAnswerMessage,
+  capDetail,
   detailToolResult,
   detailToolUse,
   diffLines,
@@ -23,6 +24,8 @@ import {
   summarizeToolUse,
   TaskTracker,
   truncate,
+  zaiToolName,
+  isZaiOutput,
 } from "./summarizer.js";
 import { deriveTitle } from "./history.js";
 import { readTaskStoreTodos } from "./task-store.js";
@@ -945,7 +948,7 @@ export class Bridge {
         }
         if (st0?.historical) st0.historical = false;
       }
-      const entries: { kind: "assistant_text" | "thinking"; text: string }[] = [];
+      const entries: { kind: "assistant_text" | "thinking" | "tool_use" | "tool_result"; text: string; tool?: string; detail?: string }[] = [];
       const enqueues: string[] = [];
       const steers: string[] = [];
       const userTexts: string[] = []; // 本批真实用户 prompt 行（晋升 pending 用）
@@ -1052,11 +1055,28 @@ export class Bridge {
           Bridge.collectTaskOps(content, taskOps, creates);
           const texts: string[] = [];
           const thinks: string[] = [];
+          // z.ai 内置工具桥的展示文本（过程噪声，常带超长 URL/字面 \n 的 JSON）：
+          // 归工具类日志，客户端"消息"视图按 kind 过滤即自动隐藏。
+          // 先收集：content 顺序上 zai 注入对（调用→结果）在正文之前，循环内即时
+          // push 会排在 thinking/正文之前，时间线倒挂
+          const zaiEntries: { kind: "tool_use" | "tool_result"; text: string; tool: string; detail: string }[] = [];
           let hasToolUse = false;
           for (const b of content) {
             if (!b || typeof b !== "object") continue;
             const blk = b as { type?: string; text?: unknown; thinking?: unknown; name?: unknown; id?: unknown };
-            if (blk.type === "text" && typeof blk.text === "string") texts.push(blk.text);
+            if (blk.type === "text" && typeof blk.text === "string") {
+              const zn = zaiToolName(blk.text);
+              if (zn) {
+                hasToolUse = true;
+                zaiEntries.push({ kind: "tool_use", text: `zai 内置 ${zn.slice(4)} 调用`, tool: zn, detail: capDetail(blk.text, 2000) });
+                continue;
+              }
+              if (isZaiOutput(blk.text)) {
+                zaiEntries.push({ kind: "tool_result", text: "zai 内置工具结果", tool: "zai", detail: capDetail(blk.text, 2000) });
+                continue;
+              }
+              texts.push(blk.text);
+            }
             else if (blk.type === "thinking" && typeof blk.thinking === "string") {
               thinks.push(blk.thinking);
               if (!thinkPreview) thinkPreview = blk.thinking;
@@ -1075,6 +1095,7 @@ export class Bridge {
           // content 顺序上 thinking 在正文之前；每行各合并为一条
           const th = thinks.join("\n").trim();
           if (th) entries.push({ kind: "thinking", text: th });
+          entries.push(...zaiEntries);
           const tx = texts.join("\n").trim();
           if (tx) entries.push({ kind: "assistant_text", text: tx });
         } catch {}
@@ -1107,7 +1128,10 @@ export class Bridge {
       // 首读（relay 重启/新接入）只回放最后一条正文，thinking 不回放避免刷屏；排队台账不回放（陈旧）
       const emit = firstRead ? entries.filter((e) => e.kind === "assistant_text").slice(-1) : entries;
       for (const e of emit) {
-        this.mgr.pushExternalLog(id, e.kind, truncate(e.text, 400), undefined, { full: fullText(e.text, 400) });
+        this.mgr.pushExternalLog(id, e.kind, truncate(e.text, 400), e.tool, {
+          full: fullText(e.text, 400),
+          ...(e.detail ? { detail: e.detail } : {}),
+        });
       }
       if (!firstRead) {
         for (const t of enqueues) this.onQueueEnqueue(id, t);

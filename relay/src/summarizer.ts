@@ -118,8 +118,32 @@ export function summarizeToolUse(tool: string, input: Record<string, unknown>): 
 
 const MAX_DETAIL = 4_000;
 
-function capDetail(s: string, n = MAX_DETAIL): string {
+export function capDetail(s: string, n = MAX_DETAIL): string {
   return s.length <= n ? s : s.slice(0, n - 1) + `… (+${s.length - n} 字符)`;
+}
+
+// ---------- z.ai 内置工具桥识别 ----------
+// z.ai 端把 MCP 工具调用/结果伪装成 assistant text block 注入对话流（"**🌐 Z.ai
+// Built-in Tool: xxx**" + Input JSON / "**Output:** xxx_result_summary: [...]"）。
+// 对用户是纯过程噪声且常带超长 CDN URL 与字面 \n 的 JSON 数组——归类为工具类
+// 日志，客户端"消息"视图只按 kind 过滤即自动隐藏，无需四端改动
+export function zaiToolName(text: string): string | null {
+  const m = /^\*\*🌐 Z\.ai Built-in Tool: ([^\s*]+)\*\*/.exec(text.trimStart());
+  return m ? `zai:${m[1]}` : null;
+}
+
+// 收紧：要求次行即 "**<tool>_result_summary" 键，避免讨论该格式本身的正文被误判
+export function isZaiOutput(text: string): boolean {
+  return /^\*\*Output:\*\*\s*\n\*\*[\w.-]+_result_summary/.test(text.trimStart());
+}
+
+// 流式期间的 zai 桥文本拦截（块未送达完整，只看前缀；终态由上面两函数精确归类）。
+// 双向前缀：缓冲是标记的子前缀（"*"、"**"、"**Outp"…）时也静默——tokenizer 会把
+// "**🌐" 切进多个 delta，首 delta 只含 "*" 若放行会漏出且终态重分类后成永久孤儿气泡；
+// 正文以 * 开头时仅首个节流 tick 被静默，后续 tick / 终态必补发，无丢失
+export function zaiBridgePrefix(text: string): boolean {
+  const t = text.trimStart();
+  return t.startsWith("**🌐") || t.startsWith("**Output:**") || "**🌐".startsWith(t) || "**Output:**".startsWith(t);
 }
 
 // 工具入参详情（CLI 体感：$ 命令 / 文件路径+old→new / 搜索式…），无实质内容返回 undefined
@@ -151,9 +175,13 @@ export function detailToolUse(tool: string, input: Record<string, unknown>): str
     case "WebSearch":
       return s("query") || undefined;
     default: {
+      // 键值行式渲染替代裸 JSON.stringify：保留真实换行，字面 \n 不再出现在卡片里
       try {
-        const j = JSON.stringify(input);
-        return j && j !== "{}" && j !== "[]" ? capDetail(j, 2_000) : undefined;
+        const lines = Object.entries(input)
+          .filter(([, v]) => v !== undefined && v !== null && v !== "")
+          .map(([k, v]) => `${k}: ${typeof v === "string" ? v : JSON.stringify(v)}`);
+        if (!lines.length) return undefined;
+        return capDetail(lines.join("\n"), 2_000);
       } catch {
         return undefined;
       }

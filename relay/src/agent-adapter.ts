@@ -27,6 +27,10 @@ import {
   summarizeToolUse,
   TaskTracker,
   truncate,
+  capDetail,
+  zaiToolName,
+  isZaiOutput,
+  zaiBridgePrefix,
 } from "./summarizer.js";
 
 // streaming input 模式的 prompt 源：push 用户消息 / end 收尾
@@ -193,13 +197,27 @@ export class AgentSession {
             const th = typeof raw === "string" ? raw.trim() : "";
             if (th) this.cb.onLog("thinking", truncate(th, 400), { full: fullText(th, 400) });
           } else if (block.type === "text" && block.text.trim()) {
-            // 按出现顺序对齐流式期间的同 id 条目做替换；未经流式（如缓存命中）则新 id 追加
-            const id = this.streamOrder[ti++] ?? `t${++this.blockSeq}`;
-            this.cb.onLog("assistant_text", truncate(block.text, 400), {
-              full: fullText(block.text, 400),
-              id,
-            });
-            this.cb.onStatusChange("WORKING", this.lastSummary);
+            // z.ai 内置工具桥的展示文本（过程噪声）：归工具类日志，不进"消息"视图
+            const zn = zaiToolName(block.text);
+            if (zn) {
+              // 消费该块在流式期间登记的 streamOrder 槽位（emitStreamBlock 静默未下发，id 作废），
+              // 否则同消息后续正文会错拿本块的流式 id，终态找不到同 id 替换 → 正文双气泡
+              ti += 1;
+              this.lastSummary = `zai 内置 ${zn.slice(4)}`;
+              this.cb.onLog("tool_use", this.lastSummary, { tool: zn, detail: capDetail(block.text, 2000) });
+              this.cb.onStatusChange("WORKING", this.lastSummary);
+            } else if (isZaiOutput(block.text)) {
+              ti += 1; // 同上：消费静默块的流式槽位
+              this.cb.onLog("tool_result", "zai 内置工具结果", { tool: "zai", detail: capDetail(block.text, 2000) });
+            } else {
+              // 按出现顺序对齐流式期间的同 id 条目做替换；未经流式（如缓存命中）则新 id 追加
+              const id = this.streamOrder[ti++] ?? `t${++this.blockSeq}`;
+              this.cb.onLog("assistant_text", truncate(block.text, 400), {
+                full: fullText(block.text, 400),
+                id,
+              });
+              this.cb.onStatusChange("WORKING", this.lastSummary);
+            }
           } else if (block.type === "tool_use") {
             this.lastSummary = summarizeToolUse(block.name, block.input as Record<string, unknown>);
             this.cb.onLog("tool_use", this.lastSummary, {
@@ -300,6 +318,10 @@ export class AgentSession {
   private emitStreamBlock(id: string, streaming: boolean): void {
     const text = this.streamBufs.get(id) ?? "";
     if (!text.trim()) return;
+    // zai 工具桥展示文本流式期间静默：完整 assistant 消息到达时在上方分支归类为工具日志。
+    // 只挡前缀会漏 "**Output:**" 块——其流式条目带 id 下发后终态重分类不复用该 id，
+    // relay 与客户端均只按 id 替换不删除，会永久残留超长 JSON
+    if (zaiBridgePrefix(text)) return;
     this.lastStreamEmit = Date.now();
     this.cb.onLog("assistant_text", truncate(text, 400), {
       full: fullText(text, 400),
