@@ -140,6 +140,12 @@ class RelayStore {
   }
 
   private emit(patch: Partial<Snapshot> = {}) {
+    // 直接 emit 意味着全部状态（含已写入 timelines 的流式块）对监听者可见：
+    // 取消挂起的日志合帧补发，避免随后再多通知一次（后续流式块会按新窗口重排）
+    if (this.logEmitTimer) {
+      clearTimeout(this.logEmitTimer);
+      this.logEmitTimer = null;
+    }
     this.snap = {
       ...this.snap,
       ...patch,
@@ -147,6 +153,32 @@ class RelayStore {
       sessions: [...this.sessions.values()],
     };
     for (const fn of this.listeners) fn();
+  }
+
+  // 流式日志合帧（#282）：SESSION_LOG 流式块高频到达，逐块 emit 会让列表/详情整树
+  // 重渲占满 JS 线程——bridgeless 下硬件 back 事件异步排队后无超时兜底，被持续挤压
+  // 即表现为详情页连按返回无响应/积压齐发塌缩退出。数据仍同步写入 timelines
+  // （不丢块、不乱序），仅通知按窗口合并：距上次通知 ≥LOG_FRAME_MS 的首块立即发
+  // （保住首块跟手），窗口内的后续块合并为窗口末的一次补发（末帧 flush）
+  private static readonly LOG_FRAME_MS = 200;
+  private logEmitAt = 0;
+  private logEmitTimer: ReturnType<typeof setTimeout> | null = null;
+
+  private emitLogFrame() {
+    const now = Date.now();
+    const elapsed = now - this.logEmitAt;
+    if (elapsed >= RelayStore.LOG_FRAME_MS) {
+      this.logEmitAt = now;
+      this.emit();
+      return;
+    }
+    if (!this.logEmitTimer) {
+      this.logEmitTimer = setTimeout(() => {
+        this.logEmitTimer = null;
+        this.logEmitAt = Date.now();
+        this.emit();
+      }, RelayStore.LOG_FRAME_MS - elapsed);
+    }
   }
 
   // ---------- 设备密钥（AsyncStorage 设备级，云通道 E2E 身份） ----------
@@ -317,6 +349,10 @@ class RelayStore {
     if (this.probeTimer) {
       clearTimeout(this.probeTimer);
       this.probeTimer = null;
+    }
+    if (this.logEmitTimer) {
+      clearTimeout(this.logEmitTimer);
+      this.logEmitTimer = null;
     }
     this.clearPendingCmds();
     killWs(this.ws);
@@ -588,7 +624,10 @@ class RelayStore {
     const env = msg as Envelope;
     if (env.seq !== undefined) this.lastSeq = Math.max(this.lastSeq, env.seq);
     this.onEvent(env);
-    this.emit();
+    // 流式日志走合帧通知；其余事件（状态/快照/汇报等）照常即时通知——
+    // 即时 emit 同时会把窗口内积着的流式块一并冲出（会话切换天然 flush）
+    if (env.type === "SESSION_LOG") this.emitLogFrame();
+    else this.emit();
   }
 
   // 配对 ACK：relay 经可信 LAN 信道回传云桥参数，落盘到当前服务器条目
