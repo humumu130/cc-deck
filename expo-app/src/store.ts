@@ -30,6 +30,8 @@ export interface Snapshot {
   version: number;
   connected: boolean;
   connText: string;
+  // 连接阶段（供 UI 配色/文案判断，不靠 connText 字符串匹配）
+  connState: "idle" | "connecting" | "online" | "reconnecting" | "offline";
   channel: "lan" | "cloud" | null;
   sessions: SessionState[];
   lastErrorCmd: string | null;
@@ -53,6 +55,7 @@ const emptySnapshot: Snapshot = {
   version: 0,
   connected: false,
   connText: "未配置",
+  connState: "idle",
   channel: null,
   sessions: [],
   lastErrorCmd: null,
@@ -187,6 +190,16 @@ class RelayStore {
       const next = list[0];
       await AsyncStorage.setItem("ccr_active", next ? next.id : "");
       if (next) this.applyConfig({ wsUrl: next.wsUrl, token: next.token }, next.cloud);
+      else {
+        // 删光全部服务器：断开并清空状态，避免列表空了却仍显示"已连接"的幽灵连接
+        this.cfg = null;
+        this.cloudCfg = null;
+        this.lastSeq = 0;
+        this.sessions.clear();
+        this.timelines.clear();
+        this.disconnect();
+        this.emit({ connected: false, connText: "未配置", connState: "idle", channel: null });
+      }
     }
   }
 
@@ -256,7 +269,7 @@ class RelayStore {
       this.reconnectTimer = null;
     }
     const ep = ++this.epoch;
-    this.emit({ connText: "连接中" });
+    this.emit({ connText: "连接中", connState: "connecting" });
     if (this.cloudCfg && !this.devKeys) void this.deviceKeys();
     void this.connectCycle(ep);
   }
@@ -283,7 +296,7 @@ class RelayStore {
       this.openCloud(this.cloudCfg, ep);
       return;
     }
-    this.emit({ connected: false, connText: "已断开", channel: null });
+    this.emit({ connected: false, connText: "已断开", connState: "offline", channel: null });
     this.scheduleReconnect();
   }
 
@@ -325,12 +338,12 @@ class RelayStore {
     this.ws = ws;
     this.channel = "lan";
     this.reconnectDelay = 1000;
-    this.emit({ connected: true, connText: "已连接", channel: "lan" });
+    this.emit({ connected: true, connText: "已连接", connState: "online", channel: "lan" });
     this.startHb(ws);
     ws.onclose = () => {
       if (this.ws !== ws) return;
       this.stopHb();
-      this.emit({ connected: false, connText: "已断开", channel: null });
+      this.emit({ connected: false, connText: "已断开", connState: "offline", channel: null });
       this.scheduleReconnect();
     };
     ws.onerror = () => {};
@@ -359,7 +372,7 @@ class RelayStore {
     try {
       ws = new WebSocket(url);
     } catch {
-      this.emit({ connected: false, connText: "已断开", channel: null });
+      this.emit({ connected: false, connText: "已断开", connState: "offline", channel: null });
       this.scheduleReconnect();
       return;
     }
@@ -368,7 +381,7 @@ class RelayStore {
     ws.onopen = () => {
       if (this.ws !== ws) return;
       this.reconnectDelay = 1000;
-      this.emit({ connected: true, connText: "已连接 ☁", channel: "cloud" });
+      this.emit({ connected: true, connText: "已连接 ☁", connState: "online", channel: "cloud" });
       this.startHb(ws, cloud, keys);
       ws.send(
         JSON.stringify({
@@ -380,7 +393,7 @@ class RelayStore {
     ws.onclose = () => {
       if (this.ws !== ws) return;
       this.stopHb();
-      this.emit({ connected: false, connText: "已断开", channel: null });
+      this.emit({ connected: false, connText: "已断开", connState: "offline", channel: null });
       this.scheduleReconnect();
     };
     ws.onerror = () => {};
@@ -439,7 +452,7 @@ class RelayStore {
   private scheduleReconnect() {    if (!this.cfg) return;
     const delay = this.reconnectDelay;
     this.reconnectDelay = Math.min(this.reconnectDelay * 2, 10000);
-    this.emit({ connText: `${Math.round(delay / 1000)}s后重连` });
+    this.emit({ connText: `${Math.round(delay / 1000)}s后重连`, connState: "reconnecting" });
     if (this.reconnectTimer) clearTimeout(this.reconnectTimer);
     this.reconnectTimer = setTimeout(() => this.connect(), delay);
   }

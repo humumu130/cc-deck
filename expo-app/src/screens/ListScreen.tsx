@@ -7,7 +7,7 @@ import { useTheme, useThemeStyles } from "../theme-context";
 import { LogoMark } from "../brand";
 import { sessionElapsed, fmtElapsed, fmtTok, contextPct, contextLevel, CONTEXT_LIMIT_FALLBACK } from "../fmt";
 import { useListCompact } from "../display-settings";
-import { store } from "../store";
+import { store, useRelay } from "../store";
 import type { SessionState } from "../protocol";
 import RenameModal from "./RenameModal";
 import SettingsDrawer from "./SettingsDrawer";
@@ -306,6 +306,7 @@ const SessionCard = memo(function SessionCard({
 export default function ListScreen({ sessions, connected, connText, onOpen, onNew, onSetup, onEditServer }: Props) {
   const { c } = useTheme();
   const styles = useThemeStyles(makeStyles);
+  const snap = useRelay();
   const compact = useListCompact();
   const [revealSid, setRevealSid] = useState<string | null>(null);
   const [renameSid, setRenameSid] = useState<string | null>(null);
@@ -340,6 +341,16 @@ export default function ListScreen({ sessions, connected, connText, onOpen, onNe
     return () => sub.remove();
   }, [drawerOpen]);
 
+  // 图例浮窗同理：返回键收起浮窗而不是退出 App（列表页是根路由）
+  useEffect(() => {
+    if (!legendOpen) return;
+    const sub = BackHandler.addEventListener("hardwareBackPress", () => {
+      setLegendOpen(false);
+      return true;
+    });
+    return () => sub.remove();
+  }, [legendOpen]);
+
   // 左缘手势条：从屏幕左缘右滑呼出侧边栏（透明覆盖条，只认横向滑动，不拦点击/竖向滚动）
   const edgePan = useRef(
     PanResponder.create({
@@ -367,7 +378,13 @@ export default function ListScreen({ sessions, connected, connText, onOpen, onNe
     .filter((k) => (counts[k] ?? 0) > 0)
     .map((k) => ({ k, n: counts[k], color: statusColor(k, c) }));
 
-  const connColor = connected ? c.working : connText.includes("连接中") || connText.includes("重连") ? c.waiting : c.error;
+  // 连接 chip 配色按 store 连接阶段：连接中/重连中 = 中性 dim（正常过程不着红色），断开才红
+  const connColor =
+    connected || snap.connState === "online"
+      ? c.working
+      : snap.connState === "connecting" || snap.connState === "reconnecting"
+        ? c.dim
+        : c.waiting;
 
   const [collapseIdle, setCollapseIdle] = useState(false);
   useEffect(() => {
@@ -448,7 +465,11 @@ export default function ListScreen({ sessions, connected, connText, onOpen, onNe
             <Text style={styles.emptyIcon}>⚡</Text>
             <Text style={styles.emptyT}>{collapseIdle && idleCount > 0 ? "空闲会话已折叠" : "还没有会话"}</Text>
             <Text style={styles.emptyS}>
-              {collapseIdle && idleCount > 0 ? "点上方「展开空闲」查看" : "点右下角 ＋ 启动新会话\n或在 PC 上打开 claude 接入外部会话"}
+              {collapseIdle && idleCount > 0
+                ? "点上方「展开空闲」查看"
+                : !connected
+                  ? "未连接服务器，等待自动重连\n也可点左上角图标打开设置检查配置"
+                  : "点右下角 ＋ 启动新会话\n或在 PC 上打开 claude 接入外部会话"}
             </Text>
           </View>
         }

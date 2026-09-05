@@ -338,7 +338,7 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
   pairErrT: { color: c.waiting, fontSize: 11.5, marginBottom: 8 },
   setItem: {
     paddingVertical: 11, borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: withA(c.line, 0.6),
+    borderBottomColor: c.line,
   },
   setRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
   setLabel: { color: c.text, fontSize: 13.5, fontWeight: "600" },

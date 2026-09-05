@@ -31,10 +31,12 @@ function Toast() {
   }, [snap.lastErrorCmd]);
 
   if (!show || !snap.lastErrorCmd) return null;
+  // 本地未连接拒绝发送的场景文案本身就是完整句子，不再套"命令失败:"前缀误导排查方向
+  const msg = snap.lastErrorCmd === "未连接，命令未发送" ? snap.lastErrorCmd : `命令失败: ${snap.lastErrorCmd}`;
   return (
     <View style={st.toastWrap} pointerEvents="none">
       <View style={st.toast}>
-        <Text style={st.toastT}>命令失败: {snap.lastErrorCmd}</Text>
+        <Text style={st.toastT}>{msg}</Text>
       </View>
     </View>
   );
