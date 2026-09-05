@@ -1,5 +1,5 @@
 import { Fragment, useEffect, useRef, useState } from "react";
-import { Animated, BackHandler, Image, PermissionsAndroid, Pressable, ScrollView, StyleSheet, Text, TextInput, View, type NativeScrollEvent, type NativeSyntheticEvent } from "react-native";
+import { Animated, BackHandler, Dimensions, Image, PermissionsAndroid, Pressable, ScrollView, StyleSheet, Text, TextInput, View, type NativeScrollEvent, type NativeSyntheticEvent } from "react-native";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import * as ImagePicker from "expo-image-picker";
 import * as ImageManipulator from "expo-image-manipulator";
@@ -358,6 +358,8 @@ export default function DetailScreen({ sid, onBack }: { sid: string; onBack: () 
   };
   const [picking, setPicking] = useState(false);
   const scrollRef = useRef<ScrollView>(null);
+  const allScrollRef = useRef<ScrollView>(null);
+  const pagerRef = useRef<ScrollView>(null);
   const atBottom = useRef(true);
   // 手指按住期间暂停自动滚底：流式更新的 scrollToEnd 跳变会打断进行中的按压（chip/展开全文点不中）
   const touching = useRef(false);
@@ -458,25 +460,32 @@ export default function DetailScreen({ sid, onBack }: { sid: string; onBack: () 
     </View>
   );
 
-  // 转录跟随：直接 filter 不做 useMemo（logs 引用每次更新都变）；仅当用户停在底部时自动滚
+  // 转录跟随：直接 filter 不做 useMemo（logs 引用每次更新都变）；仅当用户停在底部时自动滚。
+  // 五视图翻页（#250）：消息/全部两页各自过滤，当前页的滚动容器才跟随滚底
   const logs = s ? store.timelineOf(sid) : [];
   const procFont = useProcessFont();
-  const shown = (view === "msg" || view === "all"
-    ? logs.filter(
-        (e) =>
-          matchFilter(e.kind, view) &&
-          (e.kind !== "thinking" || showThink) &&
-          !(procFont === "hidden" && (e.kind === "tool_use" || e.kind === "tool_result" || e.kind === "system")),
-      )
-    : []);
-  const lastEntry = shown.length ? shown[shown.length - 1] : null;
+  const procVisible = logs.filter(
+    (e) =>
+      (e.kind !== "thinking" || showThink) &&
+      !(procFont === "hidden" && (e.kind === "tool_use" || e.kind === "tool_result" || e.kind === "system")),
+  );
+  const shownMsg = procVisible.filter((e) => matchFilter(e.kind, "msg"));
+  const shownAll = procVisible;
+  const pageShown = view === "msg" ? shownMsg : view === "all" ? shownAll : [];
+  const lastEntry = pageShown.length ? pageShown[pageShown.length - 1] : null;
   const lastLen = lastEntry ? (lastEntry.full ?? lastEntry.text).length : 0;
   useEffect(() => {
-    if (atBottom.current && !touching.current && scrollRef.current) scrollRef.current.scrollToEnd({ animated: false });
-  }, [shown.length, lastLen, s?.pending_inputs?.length ?? 0, s?.status === "WORKING"]);
+    const ref = view === "msg" ? scrollRef.current : view === "all" ? allScrollRef.current : null;
+    if (ref && atBottom.current && !touching.current) ref.scrollToEnd({ animated: false });
+  }, [view, pageShown.length, lastLen, s?.pending_inputs?.length ?? 0, s?.status === "WORKING"]);
   const toggle = (key: string) => setExpanded((m) => ({ ...m, [key]: !m[key] }));
-  // 跨天分隔线的游标：每次渲染从空开始，随 map 推进
-  let lastDay = "";
+  // 五视图横向翻页（#250）：页宽=窗口宽（锁定竖屏），tab 点击远跳直接落位、相邻才动画滚动
+  const viewIdx = VIEWS.findIndex((v) => v.k === view);
+  const pagerW = Dimensions.get("window").width;
+  const gotoView = (i: number) => {
+    setView(VIEWS[i].k);
+    pagerRef.current?.scrollTo({ x: i * pagerW, animated: Math.abs(i - viewIdx) === 1 });
+  };
 
   useEffect(() => {
     const sub = BackHandler.addEventListener("hardwareBackPress", () => {
@@ -741,11 +750,11 @@ export default function DetailScreen({ sid, onBack }: { sid: string; onBack: () 
             </View>
           ) : null}
           <View style={d.filterRow}>
-            {VIEWS.map((v) => (
+            {VIEWS.map((v, i) => (
               <Pressable
                 key={v.k}
                 style={[d.tabBtn, view === v.k && d.tabBtnOn]}
-                onPress={() => setView(v.k)}
+                onPress={() => gotoView(i)}
                 hitSlop={{ top: 6, bottom: 2, left: 3, right: 3 }}
               >
                 <Text style={[d.tabT, view === v.k && d.tabTOn]}>{v.label}</Text>
@@ -770,8 +779,22 @@ export default function DetailScreen({ sid, onBack }: { sid: string; onBack: () 
       </View>
       ) : null}
 
-      {/* 任务视图：整屏列表（网页端"任务" tab 同构；进度条 + 手动刷新 + 常驻滑块沿用） */}
-      {view === "todos" ? (
+      {/* 五视图横向翻页（#250）：面板上左右滑动切换，懒渲染相邻 ±1 页；tab 点击联动滚动。
+          任务视图：整屏列表（网页端"任务" tab 同构；进度条 + 手动刷新 + 常驻滑块沿用） */}
+      <ScrollView
+        ref={pagerRef}
+        style={{ flex: 1 }}
+        horizontal
+        pagingEnabled
+        showsHorizontalScrollIndicator={false}
+        onMomentumScrollEnd={(e) => {
+          const i = Math.round(e.nativeEvent.contentOffset.x / pagerW);
+          if (i >= 0 && i < VIEWS.length && VIEWS[i].k !== view) setView(VIEWS[i].k);
+        }}
+      >
+      {VIEWS.map((v, vi) => (
+        <View key={v.k} style={{ width: pagerW }}>
+        {Math.abs(vi - viewIdx) <= 1 ? (v.k === "todos" ? (
         <View style={d.viewCol}>
           <View style={d.todoHead}>
             <Text style={d.todoHeadT}>☰ 任务 {doneList.length}/{sortedTodos.length}</Text>
@@ -861,7 +884,7 @@ export default function DetailScreen({ sid, onBack }: { sid: string; onBack: () 
           </View>
           )}
         </View>
-      ) : view === "cron" ? (
+      ) : v.k === "cron" ? (
         /* 定时任务视图：会话目录 .claude/scheduled_tasks.json 快照（relay 30s 轮询下发） */
         <ScrollView style={{ flex: 1 }} contentContainerStyle={{ padding: 14, paddingBottom: 40 + insets.bottom }} showsVerticalScrollIndicator={false}>
           {(s.cron_tasks?.length ?? 0) === 0 ? (
@@ -882,7 +905,7 @@ export default function DetailScreen({ sid, onBack }: { sid: string; onBack: () 
             ))
           )}
         </ScrollView>
-      ) : view === "stats" ? (
+      ) : v.k === "stats" ? (
         /* 统计视图（原 StatsModal 内容平铺；字段与网页"统计" tab 呼应） */
         <ScrollView style={{ flex: 1 }} contentContainerStyle={{ padding: 14, paddingBottom: 40 + insets.bottom }} showsVerticalScrollIndicator={false}>
           <View style={d.statsCard}>
@@ -904,9 +927,13 @@ export default function DetailScreen({ sid, onBack }: { sid: string; onBack: () 
             {s.cli_pid ? <StatRow k="CLI PID" v={String(s.cli_pid)} /> : null}
           </View>
         </ScrollView>
-      ) : (
+      ) : (() => {
+        // 转录页（消息/全部共用结构）：list 按页取过滤结果，跨天分隔游标随本页 map 推进
+        const list = v.k === "msg" ? shownMsg : shownAll;
+        let lastDay = "";
+        return (
       <ScrollView
-        ref={scrollRef}
+        ref={v.k === "msg" ? scrollRef : allScrollRef}
         style={{ flex: 1 }}
         showsVerticalScrollIndicator={false}
         contentContainerStyle={{ padding: 14, paddingBottom: 14 + (bannerVisible ? 200 : canCmd ? 96 : 60) + insets.bottom }}
@@ -923,10 +950,10 @@ export default function DetailScreen({ sid, onBack }: { sid: string; onBack: () 
           <Text style={d.histnote}>{resumable ? "历史会话 · 发送消息将恢复继续（SDK resume）" : "Relay 重启前的历史会话，仅可查看"}</Text>
         ) : null}
 
-        {shown.length === 0 ? (
+        {list.length === 0 ? (
           <Text style={d.empty}>{logs.length === 0 ? "暂无对话" : "该类型暂无内容"}</Text>
         ) : (
-          shown.map((e) => {
+          list.map((e) => {
             const key = e.id ?? `${e.ts}|${e.kind}|${e.text}`;
             const nodes = [];
             // 跨天分隔线：与上一条可见消息不同日时插入（首条也插，标注起始日期）
@@ -985,7 +1012,12 @@ export default function DetailScreen({ sid, onBack }: { sid: string; onBack: () 
           </View>
         ) : null}
       </ScrollView>
-      )}
+        );
+      })()
+        ) : null}
+        </View>
+      ))}
+      </ScrollView>
 
       {/* 底部栈：审批横幅（常驻可见，类似 CLI 权限提示）> 模板行 > 命令栏；整体随键盘抬升 */}
       <View pointerEvents="box-none" style={{ paddingBottom: kb > 0 ? 0 : insets.bottom, transform: [{ translateY: kb > 0 ? -kb : 0 }] }}>
