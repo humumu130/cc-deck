@@ -36,7 +36,7 @@ copy(join(root, "web-console", "nacl.js"), join(out, "web-console", "nacl.js"));
 for (const f of ["manifest.json", "apple-touch-icon.png", "icon-192.png", "icon-512.png", "maskable-512.png"]) {
   copy(join(root, "web-console", f), join(out, "web-console", f));
 }
-for (const f of ["index.html", "manifest.webmanifest", "sw.js", "icon-192.png", "icon-512.png", "cc-watch.apk"]) {
+for (const f of ["index.html", "manifest.webmanifest", "sw.js", "icon-192.png", "icon-512.png", "cc-deck.apk"]) {
   copy(join(root, "mobile", f), join(out, "mobile", f));
 }
 copy(join(relayRoot, "bin", "inject.cs"), join(out, "bin", "inject.cs"));
@@ -44,7 +44,7 @@ copy(join(relayRoot, "hooks", "bridge-hook.mjs"), join(out, "scripts", "hook.mjs
 
 // 3. 版本同步：plugin.json 为源，写回 marketplace.json（防两处手改漂移）
 const pluginJson = JSON.parse(readFileSync(join(out, ".claude-plugin", "plugin.json"), "utf-8"));
-const mktPath = join(root, "cc-plugins", ".claude-plugin", "marketplace.json");
+const mktPath = join(root, ".claude-plugin", "marketplace.json");
 const mkt = JSON.parse(readFileSync(mktPath, "utf-8"));
 for (const p of mkt.plugins) {
   if (p.name === pluginJson.name) p.version = pluginJson.version;
