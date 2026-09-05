@@ -416,6 +416,20 @@ export default function ListScreen({ sessions, connected, connText, onOpen, onNe
     store.connect();
     setTimeout(() => setRefreshing(false), 3000);
   };
+  // 底部上拉刷新（#255）：滚到底即触发同一 refresh；冷却 8s 防连续滚动反复重连。
+  // 列表上方堆满已完成会话时免滚回顶部下拉。
+  // 守卫：onEndReached 在内容不满一屏时挂载即触发、用户停在底部时流式重渲也会反复触发
+  // ——「拖拽装弹」：只有真实拖过一次列表，onEndReached 才允许消费一次触发（防止
+  // 打开列表就断链重连、清掉在途命令 ACK 追踪）
+  const lastFootRefresh = useRef(0);
+  const scrollArmed = useRef(false);
+  const footRefresh = () => {
+    if (!scrollArmed.current) return;
+    scrollArmed.current = false;
+    if (refreshing || Date.now() - lastFootRefresh.current < 8000) return;
+    lastFootRefresh.current = Date.now();
+    refresh();
+  };
 
   return (
     <SafeAreaView style={styles.safe} edges={["top"]}>
@@ -487,6 +501,16 @@ export default function ListScreen({ sessions, connected, connText, onOpen, onNe
           />
         }
         contentContainerStyle={{ paddingBottom: insets.bottom + 120, paddingHorizontal: 14, paddingTop: 6 }}
+        onScrollBeginDrag={() => { scrollArmed.current = true; }}
+        onEndReached={footRefresh}
+        onEndReachedThreshold={0.2}
+        ListFooterComponent={
+          visible.length > 0 ? (
+            <Pressable style={styles.footHint} disabled={refreshing} onPress={refresh} hitSlop={{ top: 10, bottom: 16 }}>
+              <Text style={styles.footHintT}>{refreshing ? "刷新中…" : "↻ 上拉刷新"}</Text>
+            </Pressable>
+          ) : null
+        }
         renderItem={({ item }) => (
           <SessionCard s={item} onOpen={onOpen} onRename={handleRename} revealSid={revealSid} onReveal={setRevealSid} compact={compact} />
         )}
@@ -652,6 +676,9 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
   emptyT: { color: c.faint, fontSize: 14, marginBottom: 6 },
   emptyS: { color: c.faint, fontSize: 12, textAlign: "center", lineHeight: 20 },
   edgeZone: { position: "absolute", left: 0, top: 0, bottom: 0, width: 22, zIndex: 5 },
+  // 列表底部上拉刷新提示行（#255）：滚到底自动触发，也可点按
+  footHint: { alignItems: "center", paddingVertical: 10 },
+  footHintT: { color: c.faint, fontSize: 12 },
   fab: { position: "absolute", right: 30, borderRadius: 16, elevation: 8 },
   fabGrad: {
     width: 56, height: 56, borderRadius: 16, alignItems: "center", justifyContent: "center",
