@@ -1,8 +1,9 @@
 // 轻量 Markdown 渲染（时间线 assistant 文本用）：
-// 覆盖标题/粗斜体/行内码/围栏码块/无序有序列表/引用/分割线/GFM 表格/链接标题，零依赖子集实现，
+// 覆盖标题/粗斜体/行内码/围栏码块/无序有序列表/引用/分割线/GFM 表格/链接（可点击浮窗复制/打开），零依赖子集实现，
 // 截断产生的残缺标记按字面渲染（解析器对不匹配标记容错）。
-import { useMemo } from "react";
-import { StyleSheet, Text, View, type TextStyle } from "react-native";
+import { useMemo, useState } from "react";
+import { Linking, Modal, Pressable, StyleSheet, Text, View, type TextStyle } from "react-native";
+import * as Clipboard from "expo-clipboard";
 import { withA, type ThemeColors } from "./theme";
 import { useTheme, useThemeStyles } from "./theme-context";
 
@@ -99,10 +100,11 @@ function parseBlocks(src: string): Block[] {
   return out;
 }
 
-type Span = { text: string; bold?: boolean; italic?: boolean; code?: boolean };
+type Span = { text: string; bold?: boolean; italic?: boolean; code?: boolean; link?: string };
 
-// 行内标记：**粗** / *斜* / __粗__ / _斜_ / `码` / [标题](url → 只渲染标题)
-const INLINE_RE = /(\*\*[^*\n]+\*\*|__[^_\n]+__|\*[^*\n]+\*|_[^_\n]+_|`[^`\n]+`|\[[^\]\n]+\]\([^)\n]+\))/g;
+// 行内标记：**粗** / *斜* / __粗__ / _斜_ / `码` / [标题](url) / 裸 URL。
+// 裸 URL 排除中日文标点与括号（markdown 链接整体 token 排在前，不会被拆开）
+const INLINE_RE = /(\*\*[^*\n]+\*\*|__[^_\n]+__|\*[^*\n]+\*|_[^_\n]+_|`[^`\n]+`|\[[^\]\n]+\]\([^)\n]+\)|https?:\/\/[^\s（）【】，。；、！？：""''《》<>()[\]{}]+)/g;
 
 function parseInline(text: string): Span[] {
   const spans: Span[] = [];
@@ -113,7 +115,12 @@ function parseInline(text: string): Span[] {
     if (i > last) spans.push({ text: text.slice(last, i) });
     if (tok.startsWith("**") || tok.startsWith("__")) spans.push({ text: tok.slice(2, -2), bold: true });
     else if (tok.startsWith("`")) spans.push({ text: tok.slice(1, -1), code: true });
-    else if (tok.startsWith("[")) spans.push({ text: /^\[([^\]]+)\]/.exec(tok)?.[1] ?? tok, bold: true });
+    else if (tok.startsWith("[")) {
+      // [标题](url)：标题可点，URL 存 span.link 供浮窗复制/打开
+      const mm = /^\[([^\]]+)\]\(([^)]+)\)$/.exec(tok);
+      if (mm) spans.push({ text: mm[1], link: mm[2] });
+      else spans.push({ text: tok });
+    } else if (tok.startsWith("http")) spans.push({ text: tok, link: tok });
     else spans.push({ text: tok.slice(1, -1), italic: true });
     last = i + tok.length;
   }
@@ -121,19 +128,27 @@ function parseInline(text: string): Span[] {
   return spans.length ? spans : [{ text }];
 }
 
-function InlineText({ text, small, header }: { text: string; small?: boolean; header?: boolean }) {
+function InlineText({ text, small, header, outer, onLink }: {
+  text: string;
+  small?: boolean;
+  header?: boolean;
+  outer?: TextStyle;
+  onLink?: (url: string) => void;
+}) {
   const { c } = useTheme();
   const d = useThemeStyles(makeStyles);
   return (
-    <Text style={[d.base, small ? d.cellT : null, header ? d.thT : null]}>
+    <Text style={[d.base, small ? d.cellT : null, header ? d.thT : null, outer]}>
       {parseInline(text).map((s, i) => (
         <Text
           key={i}
+          onPress={s.link ? () => onLink?.(s.link!) : undefined}
           style={[
             s.code ? d.code : null,
             s.bold ? { fontWeight: "600" } : null,
             s.italic ? { fontStyle: "italic" } : null,
             s.code ? { color: c.brandA } : null,
+            s.link ? d.linkT : null,
           ]}
         >
           {s.text}
@@ -143,12 +158,52 @@ function InlineText({ text, small, header }: { text: string; small?: boolean; he
   );
 }
 
+// 链接浮窗：点击链接弹出，可复制 URL 或用系统浏览器打开（复制不便的核心痛点）
+function LinkSheet({ url, onClose }: { url: string; onClose: () => void }) {
+  const { c } = useTheme();
+  const d = useThemeStyles(makeStyles);
+  const [copied, setCopied] = useState(false);
+  return (
+    <Modal visible transparent animationType="fade" onRequestClose={onClose}>
+      <Pressable style={d.linkScrim} onPress={onClose}>
+        <Pressable style={d.linkCard} onPress={() => undefined}>
+          <Text style={d.linkUrlT} selectable>{url}</Text>
+          <View style={d.linkBtns}>
+            <Pressable
+              style={d.linkBtn}
+              android_ripple={{ color: withA(c.dim, 0.2), borderless: false, radius: 10 }}
+              onPress={() => {
+                void Clipboard.setStringAsync(url).then(() => {
+                  setCopied(true);
+                  setTimeout(() => setCopied(false), 1500);
+                });
+              }}
+            >
+              <Text style={d.linkBtnT}>{copied ? "已复制 ✓" : "复制链接"}</Text>
+            </Pressable>
+            <Pressable
+              style={[d.linkBtn, d.linkBtnPri]}
+              android_ripple={{ color: "rgba(255,255,255,0.15)", borderless: false, radius: 10 }}
+              onPress={() => void Linking.openURL(url).catch(() => undefined)}
+            >
+              <Text style={d.linkBtnPriT}>打开</Text>
+            </Pressable>
+          </View>
+        </Pressable>
+      </Pressable>
+    </Modal>
+  );
+}
+
 export function MdText({ src, style }: { src: string; style?: TextStyle }) {
   const { c } = useTheme();
   const d = useThemeStyles(makeStyles);
   const blocks = useMemo(() => parseBlocks(src), [src]);
+  const [linkUrl, setLinkUrl] = useState<string | null>(null);
+  const openLink = setLinkUrl;
   return (
     <View style={d.wrap}>
+      {linkUrl ? <LinkSheet url={linkUrl} onClose={() => setLinkUrl(null)} /> : null}
       {blocks.map((b, i) => {
         switch (b.t) {
           case "h":
@@ -168,14 +223,14 @@ export function MdText({ src, style }: { src: string; style?: TextStyle }) {
               <View key={i} style={[d.li, { paddingLeft: 14 + b.depth * 14 }]}>
                 <Text style={[d.base, { color: c.dim }]}>{b.ord ? `${b.ord}. ` : "• "}</Text>
                 <View style={{ flex: 1 }}>
-                  <InlineText text={b.text} />
+                  <InlineText text={b.text} onLink={openLink} />
                 </View>
               </View>
             );
           case "quote":
             return (
               <View key={i} style={d.quote}>
-                <InlineText text={b.text} />
+                <InlineText text={b.text} onLink={openLink} />
               </View>
             );
           case "table": {
@@ -189,7 +244,7 @@ export function MdText({ src, style }: { src: string; style?: TextStyle }) {
                 <View style={d.trHead}>
                   {b.head.map((cell, j) => (
                     <View key={j} style={[d.td, { flex: w[j] }]}>
-                      <InlineText text={cell} small header />
+                      <InlineText text={cell} small header onLink={openLink} />
                     </View>
                   ))}
                 </View>
@@ -197,7 +252,7 @@ export function MdText({ src, style }: { src: string; style?: TextStyle }) {
                   <View key={ri} style={ri ? d.trSep : d.tr}>
                     {b.head.map((_, j) => (
                       <View key={j} style={[d.td, { flex: w[j] }]}>
-                        <InlineText text={r[j] ?? ""} small />
+                        <InlineText text={r[j] ?? ""} small onLink={openLink} />
                       </View>
                     ))}
                   </View>
@@ -208,23 +263,7 @@ export function MdText({ src, style }: { src: string; style?: TextStyle }) {
           case "hr":
             return <View key={i} style={d.hr} />;
           default:
-            return (
-              <Text key={i} style={[d.base, style]}>
-                {parseInline(b.text).map((s, j) => (
-                  <Text
-                    key={j}
-                    style={[
-                      s.code ? d.code : null,
-                      s.bold ? { fontWeight: "600" } : null,
-                      s.italic ? { fontStyle: "italic" } : null,
-                      s.code ? { color: c.brandA } : null,
-                    ]}
-                  >
-                    {s.text}
-                  </Text>
-                ))}
-              </Text>
-            );
+            return <InlineText key={i} text={b.text} outer={style} onLink={openLink} />;
         }
       })}
     </View>
@@ -247,4 +286,16 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
   trSep: { flexDirection: "row", borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: withA(c.line, 0.6) },
   td: { paddingHorizontal: 6, paddingVertical: 5, justifyContent: "center" },
   hr: { height: StyleSheet.hairlineWidth, backgroundColor: c.line, marginVertical: 4 },
+  linkT: { color: c.brandA, textDecorationLine: "underline" },
+  linkScrim: { flex: 1, backgroundColor: "rgba(0,0,0,0.5)", justifyContent: "center", alignItems: "center", padding: 28 },
+  linkCard: { width: "100%", maxWidth: 340, backgroundColor: c.panel, borderRadius: 14, borderWidth: 1, borderColor: c.line, padding: 14 },
+  linkUrlT: { color: c.dim, fontSize: 12.5, lineHeight: 18, fontFamily: "monospace" },
+  linkBtns: { flexDirection: "row", gap: 8, justifyContent: "flex-end", marginTop: 12 },
+  linkBtn: {
+    paddingVertical: 8, paddingHorizontal: 14, borderRadius: 10,
+    backgroundColor: c.tintSoft, borderWidth: 1, borderColor: c.line, overflow: "hidden",
+  },
+  linkBtnPri: { backgroundColor: c.brandA, borderColor: "transparent" },
+  linkBtnT: { color: c.dim, fontSize: 13, fontWeight: "600" },
+  linkBtnPriT: { color: "#fff", fontSize: 13, fontWeight: "600" },
 });

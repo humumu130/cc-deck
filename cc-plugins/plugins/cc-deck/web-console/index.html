@@ -489,6 +489,7 @@
   .md-h1, .md-h2, .md-h3, .md-h4 { font-weight: 700; margin: 15px 0 6px; }
   .md-h1 { font-size: 1.18em; } .md-h2 { font-size: 1.1em; } .md-h3 { font-size: 1.03em; } .md-h4 { font-size: 1em; }
   .txt.md code { background: var(--code-bg); border-radius: 4px; padding: 1px 5px; font-family: var(--mono); font-size: .88em; letter-spacing: 0; }
+  .txt.md a { color: var(--brand); text-decoration: underline; word-break: break-all; }
   .md-code { background: var(--mdcode-bg); border: 1px solid var(--border); border-radius: 10px; padding: 11px 13px; margin: 10px 0; overflow-x: auto; white-space: pre; font-family: var(--mono); font-size: .86em; line-height: 1.6; letter-spacing: 0; }
   .md-li { margin: 5px 0; white-space: pre-wrap; }
   .md-bul { color: var(--faint); }
@@ -2067,7 +2068,7 @@ function mdBlocks(src) {
   flush();
   return out;
 }
-const MD_INLINE_RE = /(\*\*[^*\n]+\*\*|__[^_\n]+__|\*[^*\n]+\*|_[^_\n]+_|`[^`\n]+`|\[[^\]\n]+\]\([^)\n]+\))/g;
+const MD_INLINE_RE = /(\*\*[^*\n]+\*\*|__[^_\n]+__|\*[^*\n]+\*|_[^_\n]+_|`[^`\n]+`|\[[^\]\n]+\]\([^)\n]+\)|https?:\/\/[^\s（）【】，。；、！？：""''《》<>()\[\]{}]+)/g;
 function mdInline(text) {
   let out = "", last = 0;
   for (const m of String(text).matchAll(MD_INLINE_RE)) {
@@ -2075,7 +2076,11 @@ function mdInline(text) {
     out += escapeHtml(text.slice(last, i));
     if (tok.startsWith("**") || tok.startsWith("__")) out += "<b>" + escapeHtml(tok.slice(2, -2)) + "</b>";
     else if (tok.startsWith("`")) out += "<code>" + escapeHtml(tok.slice(1, -1)) + "</code>";
-    else if (tok.startsWith("[")) out += "<b>" + escapeHtml(/^\[([^\]]+)\]/.exec(tok)?.[1] ?? tok) + "</b>";
+    else if (tok.startsWith("[")) {
+      // [标题](url)：渲染真链接（新标签打开），标题与 URL 均转义
+      const mm = /^\[([^\]]+)\]\(([^)]+)\)$/.exec(tok);
+      out += mm ? '<a href="' + escapeHtml(mm[2]) + '" target="_blank" rel="noopener noreferrer">' + escapeHtml(mm[1]) + "</a>" : escapeHtml(tok);
+    } else if (tok.startsWith("http")) out += '<a href="' + escapeHtml(tok) + '" target="_blank" rel="noopener noreferrer">' + escapeHtml(tok) + "</a>";
     else out += "<i>" + escapeHtml(tok.slice(1, -1)) + "</i>";
     last = i + tok.length;
   }
