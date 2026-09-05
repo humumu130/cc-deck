@@ -1519,10 +1519,13 @@ export class Bridge {
     if (!state) return { decision: "pass" };
     const msg = ev.message ?? "";
     if (/permission/i.test(msg)) {
-      // CLI 在本地等权限确认：通知手机，但远程无法决定（无挂起通道）
+      // CLI 在本地等权限确认：通知手机，但远程无法决定（无挂起通道）。
+      // 从消息里抠工具名（"Claude needs your permission to use Update"→"Update"），
+      // 否则手机状态条只能显示空荡荡的"等待确认："（#271）
+      const toolName = /to use (\S+)/i.exec(msg)?.[1] ?? "";
       this.mgr.setExternalWaiting(id, {
         request_id: randomUUID(),
-        tool_name: "",
+        tool_name: toolName,
         input_summary: msg,
         suggestions: [],
         decidable: false,

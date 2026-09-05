@@ -872,7 +872,7 @@ export default function DetailScreen({ sid, onBack }: { sid: string; onBack: () 
                 <Text style={d.stripErr} numberOfLines={2}>⚠ {s.last_error || "出错了"}</Text>
               ) : (
                 <LiveStatusLine
-                  summary={wr ? (wr.questions?.length ? `等待作答：${wr.questions[0]?.header ?? ""}` : `等待确认：${wr.tool_name}`) : "等待 CLI 输入"}
+                  summary={wr ? (wr.questions?.length ? `等待作答：${wr.questions[0]?.header ?? ""}` : `等待确认：${wr.tool_name || (wr.input_summary ?? "").slice(0, 48)}`) : "等待 CLI 输入"}
                   startedAt={wr?.received_at}
                   color={c.waiting}
                 />
