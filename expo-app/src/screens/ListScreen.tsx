@@ -1,5 +1,5 @@
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Animated, BackHandler, Easing, FlatList, PanResponder, Pressable, RefreshControl, StyleSheet, Text, View } from "react-native";
+import { Animated, BackHandler, Easing, FlatList, PanResponder, Pressable, RefreshControl, StyleSheet, Text, Vibration, View } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { statusColor, withA, type ThemeColors } from "../theme";
@@ -197,6 +197,50 @@ function SwipeRow({
   );
 }
 
+// 删除撤销浮条（#247）：入场 spring 上滑、退场 fade 下滑（对齐 App.tsx Toast 动效语言）；
+// shown=false 先播退场再卸载。标题预截断——numberOfLines 省略号会吃掉收尾引号
+function UndoBar({ shown, title, onUndo }: { shown: boolean; title: string; onUndo: () => void }) {
+  const { c } = useTheme();
+  const styles = useThemeStyles(makeStyles);
+  const insets = useSafeAreaInsets();
+  const [live, setLive] = useState(shown);
+  const op = useRef(new Animated.Value(0)).current;
+  const y = useRef(new Animated.Value(10)).current;
+  useEffect(() => {
+    if (shown) {
+      setLive(true);
+      op.setValue(0);
+      y.setValue(10);
+      Animated.parallel([
+        Animated.spring(y, { toValue: 0, useNativeDriver: true, speed: 30, bounciness: 6 }),
+        Animated.timing(op, { toValue: 1, duration: 120, useNativeDriver: true }),
+      ]).start();
+    } else if (live) {
+      Animated.parallel([
+        Animated.timing(op, { toValue: 0, duration: 140, useNativeDriver: true }),
+        Animated.timing(y, { toValue: 10, duration: 140, useNativeDriver: true }),
+      ]).start(({ finished }) => {
+        if (finished) setLive(false);
+      });
+    }
+  }, [shown]);
+  if (!live) return null;
+  const t = title.length > 16 ? `${title.slice(0, 16)}…` : title;
+  return (
+    <Animated.View style={[styles.undoBar, { bottom: insets.bottom + 92, opacity: op, transform: [{ translateY: y }] }]}>
+      <Text style={styles.undoT} numberOfLines={1}>{t ? `已删除「${t}」` : "已删除会话"}</Text>
+      <Pressable
+        style={styles.undoBtn}
+        android_ripple={{ color: c.tintSoft, borderless: false, radius: 8 }}
+        onPress={onUndo}
+        hitSlop={8}
+      >
+        <Text style={styles.undoBtnT}>撤销</Text>
+      </Pressable>
+    </Animated.View>
+  );
+}
+
 // 上下文占用 mini 指示：30px 微型条 + 百分比（与详情页头部 ctx 行、网页端同口径同分级）
 function CtxMini({ s }: { s: SessionState }) {
   const { c } = useTheme();
@@ -216,13 +260,14 @@ function CtxMini({ s }: { s: SessionState }) {
   );
 }
 
-// memo：流式刷新只重渲变化的那一行（onRename/onReveal 均为稳定引用）
+// memo：流式刷新只重渲变化的那一行（onRename/onReveal/onDelete 均为稳定引用）
 const SessionCard = memo(function SessionCard({
-  s, onOpen, onRename, revealSid, onReveal, compact,
+  s, onOpen, onRename, onDelete, revealSid, onReveal, compact,
 }: {
   s: SessionState;
   onOpen: (sid: string) => void;
   onRename: (sid: string) => void;
+  onDelete: (sid: string) => void;
   revealSid: string | null;
   onReveal: (v: string | null) => void;
   compact?: boolean;
@@ -237,7 +282,7 @@ const SessionCard = memo(function SessionCard({
       deletable={deletable}
       onPress={() => onOpen(s.session_id)}
       onRename={() => onRename(s.session_id)}
-      onDelete={() => store.send("COMMAND_DELETE", { session_id: s.session_id })}
+      onDelete={() => onDelete(s.session_id)}
       revealSid={revealSid}
       onReveal={onReveal}
       compact={compact}
@@ -317,6 +362,72 @@ export default function ListScreen({ sessions, connected, connText, onOpen, onNe
     [sessions, renameSid],
   );
   const handleRename = useCallback((sid: string) => setRenameSid(sid), []);
+
+  // 删除撤销（#247）：点删除只隐藏卡片 + 浮撤销条，4s 内可撤（纯客户端延迟提交），
+  // 超时才真正发 COMMAND_DELETE——误触不丢会话。两次快速删除时前一条立即提交
+  const [pendingDel, setPendingDel] = useState<string | null>(null);
+  const pendingDelSid = useRef<string | null>(null);
+  const delTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // 离开列表页（进详情/设置）时挂起的删除视为确认：立即提交，静默丢弃反而反直觉
+  useEffect(() => () => {
+    if (delTimer.current) clearTimeout(delTimer.current);
+    const cur = pendingDelSid.current;
+    if (cur) store.send("COMMAND_DELETE", { session_id: cur });
+  }, []);
+  // 已提交待服务器确认的 sid：保持隐藏到 SESSION_DELETED 生效，防提交瞬间闪回；
+  // 3s 兜底出列（发送失败/ACK 异常时卡片要能回来，错误提示由全局 Toast 负责）
+  const [deleting, setDeleting] = useState<string[]>([]);
+  const commitDelete = useCallback((sid: string) => {
+    setDeleting((l) => (l.includes(sid) ? l : [...l, sid]));
+    store.send("COMMAND_DELETE", { session_id: sid });
+    setTimeout(() => setDeleting((l) => l.filter((x) => x !== sid)), 3000);
+  }, []);
+  // 服务器侧会话消失时：已提交项出列；挂起中的删除被别处删除终结——免得超时后
+  // 对已不存在的会话发命令，弹"会话不存在"误报
+  useEffect(() => {
+    if (pendingDel && !sessions.some((s) => s.session_id === pendingDel)) {
+      if (delTimer.current) {
+        clearTimeout(delTimer.current);
+        delTimer.current = null;
+      }
+      pendingDelSid.current = null;
+      setPendingDel(null);
+    }
+    if (deleting.length) {
+      const next = deleting.filter((sid) => sessions.some((s) => s.session_id === sid));
+      if (next.length !== deleting.length) setDeleting(next);
+    }
+  }, [sessions, pendingDel, deleting]);
+  const requestDelete = useCallback((sid: string) => {
+    try { Vibration.vibrate(20); } catch {}
+    if (delTimer.current) {
+      clearTimeout(delTimer.current);
+      delTimer.current = null;
+      const prev = pendingDelSid.current;
+      if (prev && prev !== sid) commitDelete(prev);
+    }
+    pendingDelSid.current = sid;
+    setPendingDel(sid);
+    delTimer.current = setTimeout(() => {
+      delTimer.current = null;
+      const cur = pendingDelSid.current;
+      pendingDelSid.current = null;
+      setPendingDel(null);
+      if (cur) commitDelete(cur);
+    }, 4000);
+  }, [commitDelete]);
+  const undoDelete = useCallback(() => {
+    if (delTimer.current) {
+      clearTimeout(delTimer.current);
+      delTimer.current = null;
+    }
+    pendingDelSid.current = null;
+    setPendingDel(null);
+  }, []);
+  const pendingTitle = useMemo(
+    () => sessions.find((s) => s.session_id === pendingDel)?.title ?? "",
+    [sessions, pendingDel],
+  );
   const [drawerOpen, setDrawerOpen] = useState(false);
   // 状态图例浮窗（统计行 ？ 呼出）
   const [legendOpen, setLegendOpen] = useState(false);
@@ -400,8 +511,9 @@ export default function ListScreen({ sessions, connected, connText, onOpen, onNe
   };
   const idleCount = counts["DONE"] ?? 0;
   const visible = useMemo(
-    () => (collapseIdle ? sorted.filter((s) => s.status !== "DONE") : sorted),
-    [sorted, collapseIdle],
+    () => (collapseIdle ? sorted.filter((s) => s.status !== "DONE") : sorted)
+      .filter((s) => s.session_id !== pendingDel && !deleting.includes(s.session_id)),
+    [sorted, collapseIdle, pendingDel, deleting],
   );
 
   // 下拉刷新 = 断开重连一次（重走快照），在线即收起转圈；3s 兜底
@@ -512,7 +624,7 @@ export default function ListScreen({ sessions, connected, connText, onOpen, onNe
           ) : null
         }
         renderItem={({ item }) => (
-          <SessionCard s={item} onOpen={onOpen} onRename={handleRename} revealSid={revealSid} onReveal={setRevealSid} compact={compact} />
+          <SessionCard s={item} onOpen={onOpen} onRename={handleRename} onDelete={requestDelete} revealSid={revealSid} onReveal={setRevealSid} compact={compact} />
         )}
         ListEmptyComponent={
           <View style={styles.empty}>
@@ -536,6 +648,9 @@ export default function ListScreen({ sessions, connected, connText, onOpen, onNe
           <PlusMark size={20} />
         </View>
       </PressScale>
+
+      {/* 删除撤销条（#247）：4s 窗口，撤销即恢复卡片；抽屉/图例打开时收起（层级 60 之下防穿模） */}
+      <UndoBar shown={!!pendingDel && !drawerOpen && !legendOpen} title={pendingTitle} onUndo={undoDelete} />
 
       <RenameModal
         visible={!!renameTarget}
@@ -680,6 +795,18 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
   footHint: { alignItems: "center", paddingVertical: 10 },
   footHintT: { color: c.faint, fontSize: 12 },
   fab: { position: "absolute", right: 30, borderRadius: 16, elevation: 8 },
+  // 删除撤销条（#247）：底部浮条；右侧留出让任务汇报悬浮钮（44dp@right12）的空档。
+  // zIndex 50：高于列表/边缘手势条（5），低于抽屉/图例（60）——配合打开时隐藏双保险
+  undoBar: {
+    position: "absolute", left: 20, right: 76, flexDirection: "row", alignItems: "center", gap: 10,
+    backgroundColor: c.panel2, borderWidth: 1, borderColor: c.line, borderRadius: 12,
+    paddingHorizontal: 14, paddingVertical: 9, zIndex: 50, elevation: 6,
+  },
+  undoT: { flex: 1, color: c.dim, fontSize: 13 },
+  undoBtn: {
+    borderRadius: 8, backgroundColor: c.tintStrong, paddingHorizontal: 12, paddingVertical: 5,
+  },
+  undoBtnT: { color: c.brandA, fontSize: 12.5, fontWeight: "700" },
   fabGrad: {
     width: 56, height: 56, borderRadius: 16, alignItems: "center", justifyContent: "center",
     backgroundColor: "#1D1726", borderWidth: 1, borderColor: "rgba(255,255,255,0.09)",
