@@ -1,4 +1,4 @@
-import { readFileSync, statSync, writeFileSync } from "node:fs";
+import { mkdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { devId } from "./e2e.js";
 import type { EventBus } from "./event-bus.js";
@@ -151,11 +151,15 @@ export class SessionManager {
     if (process.env.CCR_NO_TITLE_GEN === "1") return;
     if (this.titleRequested.has(sessionId)) return;
     this.titleRequested.add(sessionId);
+    // 子会话 cwd 指到数据目录下的 .tmp-titlegen：转录不落用户项目区（.tmp- 前缀段
+    // 被 bridge 孤儿扫描/事件双护栏排除，#283）
+    const titleCwd = join(this.cfg.dataDir, ".tmp-titlegen");
+    try { mkdirSync(titleCwd, { recursive: true }); } catch {}
     void generateTitle(task, this.cfg.model, (sid) => {
       // 子会话 id 一到手就登记（不等 result：超时丢 sid 会让孤儿扫描误收养它）
       this.childSdkIds.add(sid);
       appendChildSession(this.cfg.dataDir, sid);
-    }).then(({ title: t }) => {
+    }, titleCwd).then(({ title: t }) => {
       if (!t) return;
       const s = this.sessions.get(sessionId);
       if (!s || s.state.title === t || s.state.title_locked) return;

@@ -7298,7 +7298,7 @@ var EventBus = class {
 };
 
 // src/session-manager.ts
-import { readFileSync as readFileSync7, statSync as statSync3, writeFileSync as writeFileSync4 } from "node:fs";
+import { mkdirSync as mkdirSync4, readFileSync as readFileSync7, statSync as statSync3, writeFileSync as writeFileSync4 } from "node:fs";
 import { join as join7, resolve as resolve5 } from "node:path";
 
 // src/e2e.ts
@@ -37528,7 +37528,7 @@ var AgentSession = class {
 };
 
 // src/title-gen.ts
-async function generateTitle(task, model, onSid) {
+async function generateTitle(task, model, onSid, cwd) {
   const trimmed = task.trim().slice(0, 600);
   if (!trimmed) return { title: null };
   let timer;
@@ -37543,7 +37543,9 @@ async function generateTitle(task, model, onSid) {
         prompt: "\u4E3A\u4E0B\u9762\u7684\u4EFB\u52A1\u8D77\u4E00\u4E2A\u7B80\u77ED\u7684\u4E2D\u6587\u6807\u9898\uFF0C\u4E0D\u8D85\u8FC7 12 \u4E2A\u5B57\uFF0C\u76F4\u63A5\u8F93\u51FA\u6807\u9898\u672C\u8EAB\uFF0C\u4E0D\u8981\u5F15\u53F7\u548C\u4EFB\u4F55\u89E3\u91CA\uFF1A\n\n" + trimmed,
         options: {
           model,
-          cwd: process.cwd(),
+          // 专用 .tmp- 目录：transcript 不落用户项目区（.tmp- 前缀段被孤儿扫描/事件护栏
+          // 排除，#283——此前 cwd=relay 进程目录，被收养成"relay"垃圾会话）
+          cwd: cwd ?? process.cwd(),
           env: { ...process.env, CCR_RELAY_CHILD: "1" },
           // 防止被全局 bridge hook 注册成外部会话
           permissionMode: "bypassPermissions",
@@ -37822,10 +37824,15 @@ var SessionManager = class {
     if (process.env.CCR_NO_TITLE_GEN === "1") return;
     if (this.titleRequested.has(sessionId)) return;
     this.titleRequested.add(sessionId);
+    const titleCwd = join7(this.cfg.dataDir, ".tmp-titlegen");
+    try {
+      mkdirSync4(titleCwd, { recursive: true });
+    } catch {
+    }
     void generateTitle(task, this.cfg.model, (sid) => {
       this.childSdkIds.add(sid);
       appendChildSession(this.cfg.dataDir, sid);
-    }).then(({ title: t }) => {
+    }, titleCwd).then(({ title: t }) => {
       if (!t) return;
       const s = this.sessions.get(sessionId);
       if (!s || s.state.title === t || s.state.title_locked) return;
@@ -38619,7 +38626,7 @@ import path4 from "node:path";
 
 // src/injector.ts
 import { spawn as spawn2, execFileSync } from "node:child_process";
-import { existsSync as existsSync4, mkdirSync as mkdirSync4 } from "node:fs";
+import { existsSync as existsSync4, mkdirSync as mkdirSync5 } from "node:fs";
 import path3 from "node:path";
 import { fileURLToPath as fileURLToPath2 } from "node:url";
 var here = path3.dirname(fileURLToPath2(import.meta.url));
@@ -38634,7 +38641,7 @@ function ensureInjector() {
   if (process.platform !== "win32") return false;
   if (ready) return true;
   try {
-    mkdirSync4(binDir, { recursive: true });
+    mkdirSync5(binDir, { recursive: true });
     execFileSync(CSC, ["-nologo", `-out:${exe2}`, injectCs], { timeout: 3e4, windowsHide: true });
     ready = true;
   } catch (e) {
@@ -38860,7 +38867,8 @@ var Bridge = class _Bridge {
           if (mtime > Date.now() - 15e3) continue;
           const cwd = this.readCwdFromTail(p);
           if (!cwd) continue;
-          if (cwd.split(/[\\/]+/).some((seg) => seg.toLowerCase() === ".tmp-test")) continue;
+          if (this.isTitleGenTranscript(p)) continue;
+          if (cwd.split(/[\\/]+/).some((seg) => seg.toLowerCase().startsWith(".tmp-"))) continue;
           if (!this.hasMultiUserTurns(p)) continue;
           this.mgr.ensureExternal(id2, cwd, "", sid);
           this.transcriptPaths.set(id2, p);
@@ -38900,6 +38908,21 @@ var Bridge = class _Bridge {
       return "";
     } catch {
       return "";
+    } finally {
+      if (fd2 !== void 0) closeSync2(fd2);
+    }
+  }
+  // 起标题子会话转录识别：只读文件头 4KB 找命名指令指纹（latin1 子串匹配，中文
+  // prompt 经 JSON 转义后 UTF-8 字节序列不变，latin1 视图下按字节序列命中）
+  isTitleGenTranscript(p) {
+    let fd2;
+    try {
+      fd2 = openSync2(p, "r");
+      const buf = Buffer.alloc(4096);
+      const n = readSync2(fd2, buf, 0, 4096, 0);
+      return buf.subarray(0, n).includes("\u8D77\u4E00\u4E2A\u7B80\u77ED\u7684\u4E2D\u6587\u6807\u9898");
+    } catch {
+      return false;
     } finally {
       if (fd2 !== void 0) closeSync2(fd2);
     }
@@ -39002,7 +39025,7 @@ var Bridge = class _Bridge {
     }
   }
   async handleEvent(ev2) {
-    if ((ev2.cwd ?? "").split(/[\\/]+/).some((seg) => seg.toLowerCase() === ".tmp-test")) return { decision: "pass" };
+    if ((ev2.cwd ?? "").split(/[\\/]+/).some((seg) => seg.toLowerCase().startsWith(".tmp-"))) return { decision: "pass" };
     this.noHookIds.delete(this.extId(ev2));
     this.lastHookAt.set(this.extId(ev2), Date.now());
     const decision = await this.dispatch(ev2);

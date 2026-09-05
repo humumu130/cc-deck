@@ -8,6 +8,7 @@ export async function generateTitle(
   task: string,
   model: string,
   onSid?: (sid: string) => void,
+  cwd?: string,
 ): Promise<{ title: string | null; sid?: string }> {
   const trimmed = task.trim().slice(0, 600);
   if (!trimmed) return { title: null };
@@ -25,7 +26,9 @@ export async function generateTitle(
           trimmed,
         options: {
           model,
-          cwd: process.cwd(),
+          // 专用 .tmp- 目录：transcript 不落用户项目区（.tmp- 前缀段被孤儿扫描/事件护栏
+          // 排除，#283——此前 cwd=relay 进程目录，被收养成"relay"垃圾会话）
+          cwd: cwd ?? process.cwd(),
           env: { ...process.env, CCR_RELAY_CHILD: "1" }, // 防止被全局 bridge hook 注册成外部会话
           permissionMode: "bypassPermissions",
           maxTurns: 1,

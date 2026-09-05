@@ -1079,7 +1079,7 @@ export default function DetailScreen({ sid, onBack }: { sid: string; onBack: () 
                 );
               })}
               <Pressable style={d.todoFootHint} disabled={todoSpin} onPress={refreshTodos} hitSlop={{ top: 10, bottom: 16 }}>
-                <Text style={d.todoFootHintT}>{todoSpin ? "刷新中…" : "↻ 上拉刷新"}</Text>
+                <Text style={d.todoFootHintT}>{todoSpin ? "刷新中…" : "↻ 上滑更新"}</Text>
               </Pressable>
             </ScrollView>
             {/* 常驻自绘滑块：系统 scrollbar 在两端都不可见（VM/API28、真机/API16 实测） */}

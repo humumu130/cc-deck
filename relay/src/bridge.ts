@@ -195,10 +195,15 @@ export class Bridge {
           if (mtime > Date.now() - 15_000) continue;
           const cwd = this.readCwdFromTail(p);
           if (!cwd) continue;
+          // 起标题子会话指纹（#283）：首条 user prompt 是 relay 自己的命名指令——
+          // 历史 title-gen 转录（cwd=relay 进程目录）已被 .tmp- 护栏之前的版本落盘，
+          // 靠 registry（重启/换形态丢失）挡不住，指纹是形态无关的最终防线
+          if (this.isTitleGenTranscript(p)) continue;
           // 测试沙箱不收养：relay 自测（test:sessions 等）在 .tmp-test 起真实 SDK 会话，
           // transcript 落全局 projects 目录，不拦就以孤儿身份混进手机会话列表（#269）。
           // Windows 路径大小写不敏感，段比较需 lower（手工建 .TMP-TEST 会让护栏静默失效）
-          if (cwd.split(/[\\/]+/).some((seg) => seg.toLowerCase() === ".tmp-test")) continue;
+          // .tmp- 前缀泛化：.tmp-test 沙箱 + .tmp-titlegen 起标题子会话（#283）
+          if (cwd.split(/[\\/]+/).some((seg) => seg.toLowerCase().startsWith(".tmp-"))) continue;
           // 单发探针/一次性 print 模式 CLI（单回合无追问）不值得监控：全文件
           // user 行 <2 条不收养——交互会话必然多回合（含工具结果的 user 行也算）
           if (!this.hasMultiUserTurns(p)) continue;
@@ -239,6 +244,22 @@ export class Bridge {
       return "";
     } catch {
       return "";
+    } finally {
+      if (fd !== undefined) closeSync(fd);
+    }
+  }
+
+  // 起标题子会话转录识别：只读文件头 4KB 找命名指令指纹（latin1 子串匹配，中文
+  // prompt 经 JSON 转义后 UTF-8 字节序列不变，latin1 视图下按字节序列命中）
+  private isTitleGenTranscript(p: string): boolean {
+    let fd: number | undefined;
+    try {
+      fd = openSync(p, "r");
+      const buf = Buffer.alloc(4096);
+      const n = readSync(fd, buf, 0, 4096, 0);
+      return buf.subarray(0, n).includes("起一个简短的中文标题");
+    } catch {
+      return false;
     } finally {
       if (fd !== undefined) closeSync(fd);
     }
@@ -346,7 +367,7 @@ export class Bridge {
     // 测试沙箱事件直接放行不建档：relay 自测（test:sessions 等）的 SDK 子进程会加载
     // 全局 hook 把事件发给生产 relay，不拦就以真实会话身份混进手机列表（#269；
     // 孤儿收养侧 adoptOrphans 另有同款护栏，两路都堵才断根）
-    if ((ev.cwd ?? "").split(/[\\/]+/).some((seg) => seg.toLowerCase() === ".tmp-test")) return { decision: "pass" };
+    if ((ev.cwd ?? "").split(/[\\/]+/).some((seg) => seg.toLowerCase().startsWith(".tmp-"))) return { decision: "pass" };
     // hook 事件到达即证明该会话有 hook：从无 hook 疑似名单除名（回合首条转录写入
     // 早于 UserPromptSubmit POST 到达的竞态窗口里可能被 5s tick 误登记，长工具
     // 静默期会被 sweepNoHookIdle 误判回合结束）
