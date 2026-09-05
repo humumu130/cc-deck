@@ -1,5 +1,5 @@
 import { Fragment, useEffect, useRef, useState } from "react";
-import { Animated, BackHandler, Dimensions, Image, Modal, PermissionsAndroid, Pressable, RefreshControl, ScrollView, Share, StyleSheet, Text, TextInput, Vibration, View, type NativeScrollEvent, type NativeSyntheticEvent } from "react-native";
+import { Animated, BackHandler, Dimensions, Image, Modal, PermissionsAndroid, Pressable, RefreshControl, ScrollView, Share, StyleSheet, Text, TextInput, Vibration, View, type NativeScrollEvent, type NativeSyntheticEvent, type NativeTouchEvent } from "react-native";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import * as ImagePicker from "expo-image-picker";
 import * as ImageManipulator from "expo-image-manipulator";
@@ -450,12 +450,30 @@ export default function DetailScreen({ sid, onBack }: { sid: string; onBack: () 
   // 只有真实拖过列表（onScrollBeginDrag）才允许消费一次触发
   const todoFootArmed = useRef(false);
   const todoFootLast = useRef(0);
-  const todoFootRefresh = () => {
-    if (!todoFootArmed.current) return;
+  // fromTouch=true 走 touch 位移兜底（#266）：列表已停在底部时继续上拉无滚动位移，
+  // Android 不派发 onScrollBeginDrag → armed 永不置位，只能装弹一次后失效
+  const todoFootRefresh = (fromTouch = false) => {
+    if (!fromTouch && !todoFootArmed.current) return;
     todoFootArmed.current = false;
     if (todoSpin || Date.now() - todoFootLast.current < 8000) return;
     todoFootLast.current = Date.now();
     refreshTodos();
+  };
+  // touch 兜底判定：起止位移垂直占优、上拉 >40dp（pageX/pageY 为相对根视图 dp 坐标）
+  // 且松手时仍在底部才触发——免疫程序 scrollToEnd（无 touch）、点按/长按 ✕（无位移）、
+  // 横向翻页与下拉刷新（父容器/RefreshControl 接管后子端收 touchCancel 而非 touchEnd）
+  const todoTouch = useRef<{ x: number; y: number } | null>(null);
+  const todoTouchStart = (e: NativeSyntheticEvent<NativeTouchEvent>) => {
+    const t = e.nativeEvent.changedTouches?.[0] ?? e.nativeEvent.touches?.[0];
+    todoTouch.current = t ? { x: t.pageX, y: t.pageY } : null;
+  };
+  const todoTouchEnd = (e: NativeSyntheticEvent<NativeTouchEvent>) => {
+    const s = todoTouch.current;
+    todoTouch.current = null;
+    const t = e.nativeEvent.changedTouches?.[0] ?? e.nativeEvent.touches?.[0];
+    if (!s || !t) return;
+    const dy = s.y - t.pageY;
+    if (dy > 40 && dy > Math.abs(t.pageX - s.x) && todoAtBottom.current) todoFootRefresh(true);
   };
 
   // 任务条目 ✕ 隐藏：本地先过滤（立即消失），relay 记隐藏集过滤后续下发
@@ -945,6 +963,9 @@ export default function DetailScreen({ sid, onBack }: { sid: string; onBack: () 
               showsVerticalScrollIndicator={false}
               scrollEventThrottle={16}
               nestedScrollEnabled
+              onTouchStart={todoTouchStart}
+              onTouchEnd={todoTouchEnd}
+              onTouchCancel={() => { todoTouch.current = null; }}
               onScrollBeginDrag={() => { todoFootArmed.current = true; }}
               onScrollEndDrag={() => { if (todoAtBottom.current) todoFootRefresh(); }}
               onMomentumScrollEnd={() => { if (todoAtBottom.current) todoFootRefresh(); }}
