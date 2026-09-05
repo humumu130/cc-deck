@@ -45,6 +45,14 @@ jobs:
           cat smoke.log 2>/dev/null || true
           exit $CODE
 
+      - name: Sync version from tag
+        # 产物版本号跟随 tag：electron-builder 从 package.json 读版本烙进 exe 元数据/文件名，
+        # 本地手动构建回落到 package.json 里的checked-in 值
+        if: startsWith(github.ref, 'refs/tags/')
+        working-directory: desktop
+        shell: bash
+        run: npm version --no-git-tag-version --allow-same-version "${GITHUB_REF_NAME#v}"
+
       - name: Build NSIS + portable zip
         working-directory: desktop
         run: npx electron-builder --win nsis zip --publish never

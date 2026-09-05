@@ -1,7 +1,7 @@
 {
   "name": "cc-deck-desktop",
   "productName": "CC Deck",
-  "version": "0.3.0",
+  "version": "0.3.12",
   "description": "CC Deck 桌面客户端：本地加载控制台，默认连本机 relay，数据不出局域网",
   "main": "main.js",
   "author": "humumu130",
