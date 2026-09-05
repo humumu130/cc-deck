@@ -241,7 +241,7 @@ export default function SettingsDrawer({
                 </Pressable>
               </View>
             </View>
-            <Text style={d.pairHintT}>{copied ? "✓ 已复制，粘贴到网页端配对框" : "网页端输入此码配对 · 一次性 · 点码复制"}</Text>
+            {copied ? <Text style={d.pairHintT}>已复制</Text> : null}
           </View>
         ) : (
           <Pressable style={d.pairGen} android_ripple={{ color: c.tintSoft, borderless: false }} onPress={() => void genPairCode()}>
@@ -371,7 +371,7 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
     backgroundColor: c.tintSoft, borderWidth: 1, borderColor: c.line,
   },
   pairRefreshT: { color: c.dim, fontSize: 12.5 },
-  pairHintT: { color: c.faint, fontSize: 10, marginTop: 7, textAlign: "center" },
+  pairHintT: { color: c.faint, fontSize: 10, marginTop: 6, textAlign: "center" },
   pairErrT: { color: c.waiting, fontSize: 11.5, marginBottom: 8 },
   setItem: {
     paddingVertical: 11, borderBottomWidth: StyleSheet.hairlineWidth,
