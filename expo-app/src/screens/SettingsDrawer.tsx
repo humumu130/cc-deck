@@ -268,7 +268,6 @@ export default function SettingsDrawer({
             thumbColor="#fff"
           />
         </View>
-        <Text style={d.tipT}>{"过程消息：可紧凑或隐藏\n简洁列表：精简会话卡\n语音输入：部分机型不可用"}</Text>
         </ScrollView>
       </Animated.View>
     </View>
@@ -352,5 +351,4 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
   segOptOn: { backgroundColor: c.tintStrong, borderColor: c.brandA },
   segT: { color: c.dim, fontSize: 12, fontWeight: "600" },
   segTOn: { color: c.brandA },
-  tipT: { color: c.faint, fontSize: 10.5, lineHeight: 15, marginTop: 10 },
 });
