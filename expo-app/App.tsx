@@ -7,6 +7,7 @@ import type { TaskDoneReport } from "./src/store";
 import { ensureNotifPermission, fgSupported, notifyAlert, startForegroundService } from "./src/notify";
 import { startWatchGateway } from "./src/watch";
 import { ThemeProvider, useTheme, useThemeStyles } from "./src/theme-context";
+import { useKbHeight } from "./src/kb";
 import { loadDisplaySettings } from "./src/display-settings";
 import { withA, type ThemeColors } from "./src/theme";
 import ListScreen from "./src/screens/ListScreen";
@@ -77,6 +78,9 @@ function TaskDoneFloat({ isDetail, onOpenSession }: { isDetail: boolean; onOpenS
   const latestSid = q.length ? q[q.length - 1].sid : "";
   const multi = new Set(q.map((r) => r.sid)).size > 1;
   const [expanded, setExpanded] = useState(false);
+  // 键盘跟随（#270）：详情页点输入框弹键盘时 FAB 随之上移，避免被键盘整块遮住。
+  // RN Keyboard 事件在 bridgeless+edge-to-edge 下不触发，走原生 kbInsets 通道（src/kb.ts）
+  const kbH = useKbHeight();
   const pop = useRef(new Animated.Value(0)).current;
   const badgePulse = useRef(new Animated.Value(1)).current;
   const cardOp = useRef(new Animated.Value(0)).current;
@@ -120,7 +124,8 @@ function TaskDoneFloat({ isDetail, onOpenSession }: { isDetail: boolean; onOpenS
   }, [expanded]);
 
   if (!q.length) return null;
-  const bottom = insets.bottom + (isDetail ? 74 : 124);
+  // 键盘弹出时贴键盘上沿（详情页垫在命令栏上方），收起回落原位
+  const bottom = kbH > 0 ? kbH + (isDetail ? 80 : 10) : insets.bottom + (isDetail ? 74 : 124);
   return (
     <View style={st.tdWrap} pointerEvents="box-none">
       {expanded ? (
@@ -158,7 +163,7 @@ function TaskDoneFloat({ isDetail, onOpenSession }: { isDetail: boolean; onOpenS
           </Animated.View>
         </>
       ) : (
-        <Animated.View style={[st.tdFab, { transform: [{ scale: pop }], bottom }]}>
+        <Animated.View style={[st.tdFab, isDetail ? st.tdFabDetail : st.tdFabList, { transform: [{ scale: pop }], bottom }]}>
           <Pressable
             style={st.tdFabHit}
             android_ripple={{ color: withA(c.done, 0.2), borderless: false, radius: 14 }}
@@ -321,10 +326,10 @@ function Shell() {
           <NewSessionModal visible={sheet} onClose={() => setSheet(false)} />
           <Toast />
           <TaskDoneFloat
-            isDetail={!!detail}
+            isDetail={!!detail && navPhase !== "closing"}
             onOpenSession={(sid) => {
-              openDetail(sid);
-              store.clearTaskDone(sid);
+              // 动画窗口期 openDetail 拒跳转：此时不得清汇报，否则既没进会话又丢了通知
+              if (openDetail(sid)) store.clearTaskDone(sid);
             }}
           />
         </>
@@ -360,10 +365,17 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
   // 悬浮层根：全屏 box-none，按钮/卡片/收起 scrim 各自绝对定位
   tdWrap: { position: "absolute", top: 0, left: 0, right: 0, bottom: 0, zIndex: 80 },
   tdScrim: { position: "absolute", top: 0, left: 0, right: 0, bottom: 0 },
+  // 汇报小方钮基础形（位置/尺寸/圆角），两种表面形态：详情页沿用 done 轻染底；
+  // 列表页盖在会话卡上，轻染底会透出卡面文字——改实底 panel + 描边 + 高一点的 elevation
   tdFab: {
     position: "absolute", right: 12, width: 44, height: 44, borderRadius: 14,
-    backgroundColor: withA(c.done, 0.10), borderWidth: 1, borderColor: withA(c.done, 0.45),
-    elevation: 4, overflow: "visible",
+    overflow: "visible",
+  },
+  tdFabDetail: {
+    backgroundColor: withA(c.done, 0.10), borderWidth: 1, borderColor: withA(c.done, 0.45), elevation: 4,
+  },
+  tdFabList: {
+    backgroundColor: c.panel, borderWidth: 1, borderColor: withA(c.done, 0.5), elevation: 6,
   },
   tdFabHit: { flex: 1, alignItems: "center", justifyContent: "center", borderRadius: 14, overflow: "hidden" },
   tdFabT: { color: c.done, fontSize: 17, fontWeight: "700" },
