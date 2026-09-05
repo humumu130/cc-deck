@@ -36911,6 +36911,68 @@ var MAX_DETAIL = 4e3;
 function capDetail(s, n = MAX_DETAIL) {
   return s.length <= n ? s : s.slice(0, n - 1) + `\u2026 (+${s.length - n} \u5B57\u7B26)`;
 }
+function zaiToolName(text) {
+  const m = /^\*\*🌐 Z\.ai Built-in Tool: ([^\s*]+)\*\*/.exec(text.trimStart());
+  return m ? `zai:${m[1]}` : null;
+}
+function isZaiOutput(text) {
+  return /^\*\*Output:\*\*\s*\n\*\*[\w.-]+_result_summary/.test(text.trimStart());
+}
+function zaiBridgePrefix(text) {
+  const t = text.trimStart();
+  return t.startsWith("**\u{1F310}") || t.startsWith("**Output:**") || "**\u{1F310}".startsWith(t) || "**Output:**".startsWith(t);
+}
+var RE_ZAI_CALL_ANY = /\*\*🌐 Z\.ai Built-in Tool: ([^\s*]+)\*\*/;
+var RE_FENCE_LINE = /^(```|~~~)/;
+var RE_ZAI_OUT_LINE = /^\*\*Output:\*\*$/;
+var RE_ZAI_SUMMARY_LINE = /^\*\*[\w.-]+_result_summary\b/;
+function splitZaiText(text) {
+  const lines = text.replace(/\r\n?/g, "\n").split("\n");
+  const bodyLines = [];
+  const segs = [];
+  let cur = null;
+  let inFence = false;
+  const flush = () => {
+    if (!cur) return;
+    const raw = cur.lines.join("\n").trim();
+    if (raw) segs.push({ kind: cur.kind, tool: cur.kind === "tool_use" ? cur.tool : "zai", raw });
+    cur = null;
+  };
+  for (let i = 0; i < lines.length; i++) {
+    const l = lines[i].trim();
+    if (!cur && RE_FENCE_LINE.test(l)) {
+      inFence = !inFence;
+      bodyLines.push(lines[i]);
+      continue;
+    }
+    if (!cur && inFence) {
+      bodyLines.push(lines[i]);
+      continue;
+    }
+    const m = RE_ZAI_CALL_ANY.exec(l);
+    const afterCh = m ? l[m.index + m[0].length] : "";
+    if (m && l[m.index - 1] !== "`" && afterCh !== "`") {
+      flush();
+      const before = l.slice(0, m.index).trim();
+      if (before) bodyLines.push(before);
+      cur = { kind: "tool_use", tool: `zai:${m[1]}`, lines: [l.slice(m.index)] };
+      continue;
+    }
+    if (RE_ZAI_OUT_LINE.test(l) && RE_ZAI_SUMMARY_LINE.test((lines[i + 1] ?? "").trim())) {
+      flush();
+      cur = { kind: "tool_result", tool: "zai", lines: [lines[i]] };
+      continue;
+    }
+    if (cur) {
+      cur.lines.push(lines[i]);
+      if (cur.kind === "tool_result" && RE_ZAI_SUMMARY_LINE.test(l)) flush();
+    } else {
+      bodyLines.push(lines[i]);
+    }
+  }
+  flush();
+  return { body: bodyLines.join("\n").trim(), segs };
+}
 function detailToolUse(tool, input) {
   const s = (k3) => typeof input[k3] === "string" ? input[k3].trim() : "";
   switch (tool) {
@@ -36940,8 +37002,9 @@ function detailToolUse(tool, input) {
       return s("query") || void 0;
     default: {
       try {
-        const j2 = JSON.stringify(input);
-        return j2 && j2 !== "{}" && j2 !== "[]" ? capDetail(j2, 2e3) : void 0;
+        const lines = Object.entries(input).filter(([, v]) => v !== void 0 && v !== null && v !== "").map(([k3, v]) => `${k3}: ${typeof v === "string" ? v : JSON.stringify(v)}`);
+        if (!lines.length) return void 0;
+        return capDetail(lines.join("\n"), 2e3);
       } catch {
         return void 0;
       }
@@ -37243,13 +37306,36 @@ var AgentSession = class {
             const raw = block.thinking;
             const th2 = typeof raw === "string" ? raw.trim() : "";
             if (th2) this.cb.onLog("thinking", truncate(th2, 400), { full: fullText(th2, 400) });
-          } else if (block.type === "text" && block.text.trim()) {
-            const id2 = this.streamOrder[ti++] ?? `t${++this.blockSeq}`;
-            this.cb.onLog("assistant_text", truncate(block.text, 400), {
-              full: fullText(block.text, 400),
-              id: id2
-            });
-            this.cb.onStatusChange("WORKING", this.lastSummary);
+          } else if (block.type === "text" && !block.text.trim()) {
+            ti += 1;
+          } else if (block.type === "text") {
+            const zn2 = zaiToolName(block.text);
+            if (zn2) {
+              ti += 1;
+              this.lastSummary = `zai \u5185\u7F6E ${zn2.slice(4)}`;
+              this.cb.onLog("tool_use", this.lastSummary, { tool: zn2, detail: capDetail(block.text, 2e3) });
+              this.cb.onStatusChange("WORKING", this.lastSummary);
+            } else if (isZaiOutput(block.text)) {
+              ti += 1;
+              this.cb.onLog("tool_result", "zai \u5185\u7F6E\u5DE5\u5177\u7ED3\u679C", { tool: "zai", detail: capDetail(block.text, 2e3) });
+            } else {
+              const { body, segs } = splitZaiText(block.text);
+              const id2 = this.streamOrder[ti++] ?? `t${++this.blockSeq}`;
+              if (body) {
+                this.cb.onLog("assistant_text", truncate(body, 400), {
+                  full: fullText(body, 400),
+                  id: id2
+                });
+              }
+              for (const sg2 of segs) {
+                if (sg2.kind === "tool_use") this.lastSummary = `zai \u5185\u7F6E ${sg2.tool.slice(4)}`;
+                this.cb.onLog(sg2.kind, sg2.kind === "tool_use" ? `zai \u5185\u7F6E ${sg2.tool.slice(4)} \u8C03\u7528` : "zai \u5185\u7F6E\u5DE5\u5177\u7ED3\u679C", {
+                  tool: sg2.kind === "tool_use" ? sg2.tool : "zai",
+                  detail: capDetail(sg2.raw, 2e3)
+                });
+              }
+              this.cb.onStatusChange("WORKING", this.lastSummary);
+            }
           } else if (block.type === "tool_use") {
             this.lastSummary = summarizeToolUse(block.name, block.input);
             this.cb.onLog("tool_use", this.lastSummary, {
@@ -37337,9 +37423,12 @@ var AgentSession = class {
   emitStreamBlock(id2, streaming) {
     const text = this.streamBufs.get(id2) ?? "";
     if (!text.trim()) return;
+    if (zaiBridgePrefix(text)) return;
+    const { body, segs } = splitZaiText(text);
+    if (segs.length && !body) return;
     this.lastStreamEmit = Date.now();
-    this.cb.onLog("assistant_text", truncate(text, 400), {
-      full: fullText(text, 400),
+    this.cb.onLog("assistant_text", truncate(body || text, 400), {
+      full: fullText(body || text, 400),
       id: id2,
       streaming
     });
@@ -38410,6 +38499,8 @@ var SessionManager = class {
       ...s.state.relay_session_id ? { relay_session_id: s.state.relay_session_id } : {},
       ...s.state.permission_mode ? { permission_mode: s.state.permission_mode } : {},
       ...s.state.cron_tasks ? { cron_tasks: s.state.cron_tasks.map((t) => ({ ...t })) } : {},
+      // last_task_done 不随增量帧下发（#254）：手机/网页都不消费该路径，只在
+      // SNAPSHOT 里用于断线恢复，增量携带纯属带宽浪费
       // historical 增删必须实时下发：转录自愈/pid 对账解锁后，已连接的客户端
       // 要等到下次 SNAPSHOT 才能摘掉"仅可查看"——期间用户以为发不了消息
       historical: !!s.state.historical
@@ -38451,6 +38542,8 @@ var SessionManager = class {
       if (s.state.historical) continue;
       const sid = s.state.relay_session_id || (s.state.external ? s.state.session_id.slice(4) : "");
       if (!sid) continue;
+      const ltd = s.state.last_task_done;
+      if (ltd && Date.now() - ltd.ts > 2 * 36e5) s.state.last_task_done = void 0;
       const todos = readTaskStoreTodos(sid);
       if (todos === null) continue;
       const hidden = hiddenTodoKeys(s.state.session_id);
@@ -38459,21 +38552,28 @@ var SessionManager = class {
       const prevStr = this.lastStoreTodos.get(s.state.session_id);
       if (!force && prevStr === next) continue;
       this.lastStoreTodos.set(s.state.session_id, next);
-      this.setTodos(s.state.session_id, todos);
       if (prevStr) {
         try {
           const prev = JSON.parse(prevStr);
           const prevOpen = new Set(prev.filter((t) => t.status !== "completed").map((t) => t.content));
           const done = visible.filter((t) => t.status === "completed" && prevOpen.has(t.content)).map((t) => t.content);
           if (done.length) {
+            const report = {
+              done: done.slice(0, 10),
+              remaining_count: visible.filter((t) => t.status !== "completed").length,
+              ts: Date.now()
+            };
+            s.state.last_task_done = report;
             this.bus.emit(s.state.session_id, "TASK_DONE", {
               done,
-              remaining: visible.filter((t) => t.status !== "completed")
+              remaining: visible.filter((t) => t.status !== "completed"),
+              ts: report.ts
             });
           }
         } catch {
         }
       }
+      this.setTodos(s.state.session_id, todos);
     }
   }
   lastStoreTodos = /* @__PURE__ */ new Map();
@@ -38759,6 +38859,7 @@ var Bridge = class _Bridge {
           if (mtime > Date.now() - 15e3) continue;
           const cwd = this.readCwdFromTail(p);
           if (!cwd) continue;
+          if (cwd.split(/[\\/]+/).some((seg) => seg.toLowerCase() === ".tmp-test")) continue;
           if (!this.hasMultiUserTurns(p)) continue;
           this.mgr.ensureExternal(id2, cwd, "", sid);
           this.transcriptPaths.set(id2, p);
@@ -38900,6 +39001,7 @@ var Bridge = class _Bridge {
     }
   }
   async handleEvent(ev2) {
+    if ((ev2.cwd ?? "").split(/[\\/]+/).some((seg) => seg.toLowerCase() === ".tmp-test")) return { decision: "pass" };
     this.noHookIds.delete(this.extId(ev2));
     this.lastHookAt.set(this.extId(ev2), Date.now());
     const decision = await this.dispatch(ev2);
@@ -39532,12 +39634,35 @@ var Bridge = class _Bridge {
           _Bridge.collectTaskOps(content, taskOps, creates);
           const texts = [];
           const thinks = [];
+          const zaiEntries = [];
+          const zaiMixed = [];
           let hasToolUse = false;
           for (const b of content) {
             if (!b || typeof b !== "object") continue;
             const blk = b;
-            if (blk.type === "text" && typeof blk.text === "string") texts.push(blk.text);
-            else if (blk.type === "thinking" && typeof blk.thinking === "string") {
+            if (blk.type === "text" && typeof blk.text === "string") {
+              const zn2 = zaiToolName(blk.text);
+              if (zn2) {
+                hasToolUse = true;
+                zaiEntries.push({ kind: "tool_use", text: `zai \u5185\u7F6E ${zn2.slice(4)} \u8C03\u7528`, tool: zn2, detail: capDetail(blk.text, 2e3) });
+                continue;
+              }
+              if (isZaiOutput(blk.text)) {
+                zaiEntries.push({ kind: "tool_result", text: "zai \u5185\u7F6E\u5DE5\u5177\u7ED3\u679C", tool: "zai", detail: capDetail(blk.text, 2e3) });
+                continue;
+              }
+              const { body, segs } = splitZaiText(blk.text);
+              for (const sg2 of segs) {
+                if (sg2.kind === "tool_use") hasToolUse = true;
+                zaiMixed.push({
+                  kind: sg2.kind,
+                  text: sg2.kind === "tool_use" ? `zai \u5185\u7F6E ${sg2.tool.slice(4)} \u8C03\u7528` : "zai \u5185\u7F6E\u5DE5\u5177\u7ED3\u679C",
+                  tool: sg2.kind === "tool_use" ? sg2.tool : "zai",
+                  detail: capDetail(sg2.raw, 2e3)
+                });
+              }
+              if (body) texts.push(body);
+            } else if (blk.type === "thinking" && typeof blk.thinking === "string") {
               thinks.push(blk.thinking);
               if (!thinkPreview) thinkPreview = blk.thinking;
             } else if (blk.type === "tool_use") {
@@ -39554,8 +39679,10 @@ var Bridge = class _Bridge {
           shape = hasToolUse ? "tool" : "end";
           const th2 = thinks.join("\n").trim();
           if (th2) entries.push({ kind: "thinking", text: th2 });
+          entries.push(...zaiEntries);
           const tx2 = texts.join("\n").trim();
           if (tx2) entries.push({ kind: "assistant_text", text: tx2 });
+          entries.push(...zaiMixed);
         } catch {
         }
       }
@@ -39572,7 +39699,10 @@ var Bridge = class _Bridge {
       }
       const emit = firstRead ? entries.filter((e) => e.kind === "assistant_text").slice(-1) : entries;
       for (const e of emit) {
-        this.mgr.pushExternalLog(id2, e.kind, truncate(e.text, 400), void 0, { full: fullText(e.text, 400) });
+        this.mgr.pushExternalLog(id2, e.kind, truncate(e.text, 400), e.tool, {
+          full: fullText(e.text, 400),
+          ...e.detail ? { detail: e.detail } : {}
+        });
       }
       if (!firstRead) {
         for (const t of enqueues) this.onQueueEnqueue(id2, t);
@@ -39885,9 +40015,12 @@ var Bridge = class _Bridge {
     if (!state) return { decision: "pass" };
     const msg = ev2.message ?? "";
     if (/permission/i.test(msg)) {
+      const m = /to use (\S+)/i.exec(msg);
+      const rawName = m ? m[1].replace(/[.,;:!?)+]+$/, "") : "";
+      const toolName = /^(the|a|an|this|that)$/i.test(rawName) ? "" : rawName;
       this.mgr.setExternalWaiting(id2, {
         request_id: randomUUID4(),
-        tool_name: "",
+        tool_name: toolName,
         input_summary: msg,
         suggestions: [],
         decidable: false
@@ -40814,7 +40947,7 @@ if (cliArgs.has("--pair")) {
 }
 if (cliArgs.has("--qr")) {
   const ip2 = lanIps()[0] ?? "127.0.0.1";
-  printQr(`http://${ip2}:${cfg.port}/m/cc-watch.apk`, `App \u4E0B\u8F7D\uFF08\u624B\u673A\u6444\u50CF\u5934\u626B\u63CF\uFF09: http://${ip2}:${cfg.port}/m/cc-watch.apk`);
+  printQr(`http://${ip2}:${cfg.port}/m/cc-deck.apk`, `App \u4E0B\u8F7D\uFF08\u624B\u673A\u6444\u50CF\u5934\u626B\u63CF\uFF09: http://${ip2}:${cfg.port}/m/cc-deck.apk`);
   printQr(
     `http://${ip2}:${cfg.port}/?token=${cfg.token}`,
     `\u7F51\u9875\u63A7\u5236\u53F0: http://${ip2}:${cfg.port}/?token=${cfg.token}`

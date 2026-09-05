@@ -13,7 +13,7 @@ Thumbs.db
 *.exe
 .claude/
 mobile/*.apk
-cc-plugins/plugins/cc-deck/mobile/cc-watch.apk
+cc-plugins/plugins/cc-deck/mobile/cc-deck.apk
 wear-app/.gradle/
 wear-app/.kotlin/
 wear-app/build/
