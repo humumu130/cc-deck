@@ -1,7 +1,7 @@
 // 轻量 Markdown 渲染（时间线 assistant 文本用）：
 // 覆盖标题/粗斜体/行内码/围栏码块/无序有序列表/引用/分割线/GFM 表格/链接（可点击浮窗复制/打开），零依赖子集实现，
 // 截断产生的残缺标记按字面渲染（解析器对不匹配标记容错）。
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Linking, Modal, Pressable, StyleSheet, Text, View, type TextStyle } from "react-native";
 import * as Clipboard from "expo-clipboard";
 import { withA, type ThemeColors } from "./theme";
@@ -103,8 +103,12 @@ function parseBlocks(src: string): Block[] {
 type Span = { text: string; bold?: boolean; italic?: boolean; code?: boolean; link?: string };
 
 // 行内标记：**粗** / *斜* / __粗__ / _斜_ / `码` / [标题](url) / 裸 URL。
-// 裸 URL 排除中日文标点与括号（markdown 链接整体 token 排在前，不会被拆开）
-const INLINE_RE = /(\*\*[^*\n]+\*\*|__[^_\n]+__|\*[^*\n]+\*|_[^_\n]+_|`[^`\n]+`|\[[^\]\n]+\]\([^)\n]+\)|https?:\/\/[^\s（）【】，。；、！？：""''《》<>()[\]{}]+)/g;
+// 裸 URL 排除中日文标点与括号（markdown 链接整体 token 排在前，不会被拆开）；
+// _斜_ 不跨空白——防止 snake_case 与 URL 内下划线配对吞掉链接
+const INLINE_RE = /(\*\*[^*\n]+\*\*|__[^_\n]+__|\*[^*\n]+\*|_[^_\n\s]+_|`[^`\n]+`|\[[^\]\n]+\]\([^)\n]+\)|https?:\/\/[^\s（）【】，。；、！？：""''《》<>()[\]{}一-鿿぀-ヿ]+)/g;
+// 裸 URL 尾部剥离的句末标点（英文句号/逗号等不该进链接）
+const URL_TRAIL_PUNCT = /[.,;:!?"']+$/;
+const HTTP_RE = /^https?:\/\//i;
 
 function parseInline(text: string): Span[] {
   const spans: Span[] = [];
@@ -116,12 +120,15 @@ function parseInline(text: string): Span[] {
     if (tok.startsWith("**") || tok.startsWith("__")) spans.push({ text: tok.slice(2, -2), bold: true });
     else if (tok.startsWith("`")) spans.push({ text: tok.slice(1, -1), code: true });
     else if (tok.startsWith("[")) {
-      // [标题](url)：标题可点，URL 存 span.link 供浮窗复制/打开
+      // [标题](url)：标题可点，URL 存 span.link 供浮窗复制/打开；仅 http(s) 视为链接
       const mm = /^\[([^\]]+)\]\(([^)]+)\)$/.exec(tok);
-      if (mm) spans.push({ text: mm[1], link: mm[2] });
+      if (mm && HTTP_RE.test(mm[2])) spans.push({ text: mm[1], link: mm[2] });
       else spans.push({ text: tok });
-    } else if (tok.startsWith("http")) spans.push({ text: tok, link: tok });
-    else spans.push({ text: tok.slice(1, -1), italic: true });
+    } else if (tok.startsWith("http")) {
+      const url = tok.replace(URL_TRAIL_PUNCT, "");
+      spans.push({ text: url, link: url });
+      if (url.length < tok.length) spans.push({ text: tok.slice(url.length) });
+    } else spans.push({ text: tok.slice(1, -1), italic: true });
     last = i + tok.length;
   }
   if (last < text.length) spans.push({ text: text.slice(last) });
@@ -142,6 +149,7 @@ function InlineText({ text, small, header, outer, onLink }: {
       {parseInline(text).map((s, i) => (
         <Text
           key={i}
+          accessibilityRole={s.link ? "link" : undefined}
           onPress={s.link ? () => onLink?.(s.link!) : undefined}
           style={[
             s.code ? d.code : null,
@@ -163,6 +171,8 @@ function LinkSheet({ url, onClose }: { url: string; onClose: () => void }) {
   const { c } = useTheme();
   const d = useThemeStyles(makeStyles);
   const [copied, setCopied] = useState(false);
+  const copiedTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => () => { if (copiedTimer.current) clearTimeout(copiedTimer.current); }, []);
   return (
     <Modal visible transparent animationType="fade" onRequestClose={onClose}>
       <Pressable style={d.linkScrim} onPress={onClose}>
@@ -175,7 +185,7 @@ function LinkSheet({ url, onClose }: { url: string; onClose: () => void }) {
               onPress={() => {
                 void Clipboard.setStringAsync(url).then(() => {
                   setCopied(true);
-                  setTimeout(() => setCopied(false), 1500);
+                  copiedTimer.current = setTimeout(() => setCopied(false), 1500);
                 });
               }}
             >

@@ -2068,7 +2068,9 @@ function mdBlocks(src) {
   flush();
   return out;
 }
-const MD_INLINE_RE = /(\*\*[^*\n]+\*\*|__[^_\n]+__|\*[^*\n]+\*|_[^_\n]+_|`[^`\n]+`|\[[^\]\n]+\]\([^)\n]+\)|https?:\/\/[^\s（）【】，。；、！？：""''《》<>()\[\]{}]+)/g;
+const MD_INLINE_RE = /(\*\*[^*\n]+\*\*|__[^_\n]+__|\*[^*\n]+\*|_[^_\n\s]+_|`[^`\n]+`|\[[^\]\n]+\]\([^)\n]+\)|https?:\/\/[^\s（）【】，。；、！？：""''《》<>()\[\]{}一-鿿぀-ヿ]+)/g;
+const URL_TRAIL_PUNCT = /[.,;:!?"']+$/;
+const HTTP_RE = /^https?:\/\//i;
 function mdInline(text) {
   let out = "", last = 0;
   for (const m of String(text).matchAll(MD_INLINE_RE)) {
@@ -2077,10 +2079,16 @@ function mdInline(text) {
     if (tok.startsWith("**") || tok.startsWith("__")) out += "<b>" + escapeHtml(tok.slice(2, -2)) + "</b>";
     else if (tok.startsWith("`")) out += "<code>" + escapeHtml(tok.slice(1, -1)) + "</code>";
     else if (tok.startsWith("[")) {
-      // [标题](url)：渲染真链接（新标签打开），标题与 URL 均转义
+      // [标题](url)：渲染真链接（新标签打开），标题与 URL 均转义；仅 http(s) 可成为链接，防 javascript: 注入
       const mm = /^\[([^\]]+)\]\(([^)]+)\)$/.exec(tok);
-      out += mm ? '<a href="' + escapeHtml(mm[2]) + '" target="_blank" rel="noopener noreferrer">' + escapeHtml(mm[1]) + "</a>" : escapeHtml(tok);
-    } else if (tok.startsWith("http")) out += '<a href="' + escapeHtml(tok) + '" target="_blank" rel="noopener noreferrer">' + escapeHtml(tok) + "</a>";
+      out += mm && HTTP_RE.test(mm[2])
+        ? '<a href="' + escapeHtml(mm[2]) + '" target="_blank" rel="noopener noreferrer">' + escapeHtml(mm[1]) + "</a>"
+        : escapeHtml(tok);
+    } else if (tok.startsWith("http")) {
+      const url = tok.replace(URL_TRAIL_PUNCT, "");
+      out += '<a href="' + escapeHtml(url) + '" target="_blank" rel="noopener noreferrer">' + escapeHtml(url) + "</a>";
+      if (url.length < tok.length) out += escapeHtml(tok.slice(url.length));
+    }
     else out += "<i>" + escapeHtml(tok.slice(1, -1)) + "</i>";
     last = i + tok.length;
   }
