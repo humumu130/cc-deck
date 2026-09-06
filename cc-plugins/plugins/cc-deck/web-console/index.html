@@ -382,6 +382,8 @@
   .card-stats { font-size: 12px; color: var(--faint); margin-top: 6px; display: flex; gap: 10px; font-variant-numeric: tabular-nums; }
   .card-stats .add { color: var(--done); }
   .card-stats .del { color: var(--error); }
+  /* #302 源角标独立行：卡片最底部左对齐（不再与耗时/±行数/ctx 同行，对齐手机端） */
+  .card-src { margin-top: 4px; }
   .card-cta { margin-top: 10px; display: flex; justify-content: flex-end; }
   .card-cta button {
     background: rgba(245,184,65,.12); border: 1px solid rgba(245,184,65,.45); color: var(--working);
@@ -2053,21 +2055,23 @@ function render() {
       const summaryRow = '<div class="card-summary' + (waiting ? " waiting" : "") + '">' + escapeHtml(waitingText) + "</div>";
       const ctaRow = waiting && !s.historical && s.waiting_request?.decidable !== false ? '<div class="card-cta"><button>处理</button></div>' : "";
       if (listCompact) {
-        // #279⑨ 紧凑卡三行（对齐手机）：状态点+标题+耗时 / 摘要 / 角标+改动+水位
+        // #279⑨ 紧凑卡（对齐手机）：状态点+标题+耗时 / 摘要 / 改动+水位 / 源角标独立末行
         d.innerHTML =
           '<div class="c-row1"><span class="c-dot' + (s.status === "WORKING" ? " run" : "") + '" style="--sc:var(--' + s.status.toLowerCase() + ')"></span>' +
             '<span class="card-title"><span class="c-tt">' + escapeHtml(s.title || "") + "</span>" + badges + opBtns + "</span>" +
             '<span class="elapsed">' + fmtElapsed(sessionElapsed(s)) + "</span></div>" +
           summaryRow +
-          '<div class="card-stats">' + srcBadgeHtml(ctx.cfg) + statsHtml(s.stats) + ctxHtml(s) + "</div>" +
+          '<div class="card-stats">' + statsHtml(s.stats) + ctxHtml(s) + "</div>" +
+          '<div class="card-src">' + srcBadgeHtml(ctx.cfg) + "</div>" +
           ctaRow;
       } else {
         d.innerHTML =
           '<div class="card-top">' + chip(s.status) + '<span style="display:flex;align-items:center;gap:6px">' +
-            srcBadgeHtml(ctx.cfg) + '<span class="elapsed">' + fmtElapsed(sessionElapsed(s)) + "</span></span></div>" +
+            '<span class="elapsed">' + fmtElapsed(sessionElapsed(s)) + "</span></span></div>" +
           '<div class="card-title">' + escapeHtml(s.title || "") + badges + opBtns + "</div>" +
           summaryRow +
           '<div class="card-stats">' + statsHtml(s.stats) + ctxHtml(s) + "</div>" +
+          '<div class="card-src">' + srcBadgeHtml(ctx.cfg) + "</div>" +
           ctaRow;
       }
       d.onclick = () => select(s.session_id, ctx.cfg.id);

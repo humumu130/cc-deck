@@ -60,6 +60,7 @@ function displaySrcName(name: string | undefined): string {
 
 // 源角标（#294 批2）：聚合且多源时区分会话归属——色点 + 源名胶囊（tag/tagExt 形态：
 // 描边 + 轻染底，染底/描边按源色）；单源模式不渲染（ListScreen 侧把关）。
+// #302：独立成行放卡片最底部左对齐，不与时长/±行数/ctx% 挤同行。
 // id 即 colorKey（调用方传入，见 srcKeys）
 function SrcBadge({ id, name }: { id: string; name: string }) {
   const styles = useThemeStyles(makeStyles);
@@ -349,7 +350,6 @@ const SessionCard = memo(function SessionCard({
           </View>
           <Text style={styles.sumC} numberOfLines={1}>{s.action_summary || "…"}</Text>
           <View style={styles.footC}>
-            {srcName && s.src ? <SrcBadge id={srcKey ?? s.src} name={srcName} /> : null}
             {s.cwd ? <Text style={styles.folderC} numberOfLines={1}>📁 {folderOf(s.cwd)}</Text> : null}
             <View style={{ flex: 1 }} />
             {s.stats && s.stats.files_changed > 0 ? (
@@ -361,6 +361,12 @@ const SessionCard = memo(function SessionCard({
             ) : null}
             <CtxMini s={s} />
           </View>
+          {/* #302 源角标独立成行：卡片最底部左对齐，永不与时长/±行数/ctx% 同行 */}
+          {srcName && s.src ? (
+            <View style={styles.srcRow}>
+              <SrcBadge id={srcKey ?? s.src} name={srcName} />
+            </View>
+          ) : null}
         </>
       ) : (
         <>
@@ -378,7 +384,6 @@ const SessionCard = memo(function SessionCard({
           </Text>
           {s.status !== "WORKING" ? <Text style={styles.sum} numberOfLines={1}>{s.action_summary || "…"}</Text> : null}
           <View style={styles.foot}>
-            {srcName && s.src ? <SrcBadge id={srcKey ?? s.src} name={srcName} /> : null}
             <Text style={[styles.tag, s.external ? styles.tagExt : null]}>{s.external ? "外部 CLI" : "托管"}</Text>
             {s.cwd ? <Text style={styles.folderTag} numberOfLines={1}>📁 {folderOf(s.cwd)}</Text> : null}
             {s.historical && !s.external ? <Text style={styles.tag}>历史</Text> : null}
@@ -392,6 +397,11 @@ const SessionCard = memo(function SessionCard({
             ) : null}
             <CtxMini s={s} />
           </View>
+          {srcName && s.src ? (
+            <View style={styles.srcRow}>
+              <SrcBadge id={srcKey ?? s.src} name={srcName} />
+            </View>
+          ) : null}
         </>
       )}
     </SwipeRow>
@@ -931,7 +941,9 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
     paddingHorizontal: 7, paddingVertical: 2, overflow: "hidden",
   },
   tagExt: { color: c.brandB, backgroundColor: withA(c.brandB, 0.12), borderColor: withA(c.brandB, 0.25) },
-  // 源角标（#294 批2）：tag 形态的胶囊版，染底/描边色由组件按源色注入
+  // 源角标（#294 批2）：tag 形态的胶囊版，染底/描边色由组件按源色注入；
+  // #302 独立行容器：卡片最底部左对齐
+  srcRow: { flexDirection: "row", marginTop: 4 },
   srcTag: {
     flexDirection: "row", alignItems: "center", gap: 4, maxWidth: 96, flexShrink: 1,
     borderWidth: 1, borderRadius: 999, paddingHorizontal: 7, paddingVertical: 2, overflow: "hidden",
