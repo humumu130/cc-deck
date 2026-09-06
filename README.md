@@ -201,7 +201,7 @@ cd desktop-tauri && npx tauri build              # Tauri 平行壳
 cd relay && node scripts/build-plugin.mjs
 ```
 
-仓库布局：`relay/`（核心，协议唯一定义源 `relay/src/types.ts`）、`web-console/`（网页控制台）、`expo-app/`（Android 手机端 + 手表网关）、`wear-app/`（Wear OS 手表端）、`desktop-tauri/`（桌面壳主推，3.4MB）与 `desktop/`（Electron，过渡期保留，复用 web-console）、`cloud-bridge/` 与 `cloudflare/`（云桥双形态）、`mobile/`（APK 分发页）、`cc-plugins/`（Claude Code 插件成品）、`docs/` 与 `design/`（设计文档与技术评审）。
+仓库布局：`relay/`（核心，协议唯一定义源 `relay/src/types.ts`）、`web-console/`（网页控制台）、`expo-app/`（Android 手机端 + 手表网关）、`wear-app/`（Wear OS 手表端）、`desktop-tauri/`（桌面壳主推，3.4MB）与 `desktop/`（Electron，过渡期保留，复用 web-console）、`cloud-bridge/` 与 `cloudflare/`（云桥双形态）、`mobile/`（APK 分发页）、`cc-plugins/`（Claude Code 插件成品）、`docs/`（架构文档）。
 
 未签名 exe 首次运行会触发 SmartScreen 提示，选「更多信息 → 仍要运行」即可。
 
