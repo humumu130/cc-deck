@@ -233,6 +233,16 @@
     text-transform: uppercase; padding: 10px 16px 4px;
   }
   #cards { flex: 1; overflow-y: auto; padding: 4px 14px 10px; display: flex; flex-direction: column; gap: 10px; }
+  /* #279⑨ 列表工具行：折叠空闲 + 密度切换（网页无设置抽屉，放"会话"标题行，视觉同 tabs mini chips） */
+  #listBar { display: flex; align-items: center; gap: 6px; padding: 10px 16px 4px; }
+  #listBar h3 { padding: 0; flex: none; }
+  .hbtn {
+    font-size: 10.5px; padding: 2px 9px; border-radius: 999px; color: var(--dim);
+    border: 1px dashed var(--border); background: transparent;
+  }
+  .hbtn:hover { color: var(--text); }
+  .hbtn.on { color: var(--brand); border-color: rgba(217,119,87,.55); border-style: solid; }
+  #densityBtn { margin-left: auto; }
 
   /* 侧栏底部：新建会话（表单 + 按钮，风格贴合会话卡片） */
   #newbox { flex: none; border-top: 1px solid var(--border); padding: 12px 14px calc(14px + env(safe-area-inset-bottom)); background: var(--side-bg); }
@@ -283,6 +293,16 @@
   .card-title input {
     flex: 1; min-width: 0; font-size: 13.5px; font-weight: 600; padding: 3px 8px; border-radius: 7px;
   }
+  /* #279⑨ 紧凑卡（对齐手机"简洁列表"三行）：状态点+标题+耗时 / 摘要 / 角标+改动+水位 */
+  .card.compact { padding: 8px 12px 9px; border-radius: 11px; }
+  .card.compact .c-row1 { display: flex; align-items: center; gap: 7px; }
+  .c-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--sc, var(--dim)); flex: none; }
+  .c-dot.run { animation: dot-breathe 2.4s ease-in-out infinite; }
+  .card.compact .card-title { flex: 1; min-width: 0; margin-top: 0; font-size: 13px; gap: 6px; }
+  .card.compact .c-tt { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .card.compact .card-title input { font-size: 12.5px; }
+  .card.compact .card-summary { font-size: 11.5px; margin-top: 2px; }
+  .card.compact .card-stats { font-size: 10.5px; margin-top: 4px; gap: 8px; }
 
   /* ---------- 任务面板（详情页"任务" tab） ---------- */
   .todo-head { display: flex; align-items: center; gap: 10px; padding: 16px 4px 6px; }
@@ -290,6 +310,10 @@
   .todo-bar i { display: block; height: 100%; border-radius: 3px; background: var(--done); transition: width .3s; }
   .todo-pct { font-size: 12px; color: var(--dim); font-variant-numeric: tabular-nums; white-space: nowrap; }
   .todo-head button { font-size: 12px; padding: 4px 10px; border-radius: 999px; }
+  /* #279⑮ 刷新等待态（对齐手机 todoSpin）：↻ 品牌色旋转，todos 回帧或 2.5s 超时复位 */
+  #todoRefresh.wait { color: var(--brand); border-color: rgba(217,119,87,.45); }
+  #todoRefresh .tr-ico { display: inline-block; }
+  #todoRefresh.wait .tr-ico { animation: rot 1.2s linear infinite; }
   .todo-group { margin: 10px 0 16px; }
   .todo-gt { font-size: 11px; letter-spacing: 1.5px; font-weight: 600; color: var(--faint); text-transform: uppercase; padding-bottom: 6px; border-bottom: 1px solid var(--border); margin-bottom: 2px; }
   .todo-gt.ip { color: var(--working); border-bottom-color: rgba(255,197,61,.25); }
@@ -364,19 +388,28 @@
   #renameBtn { padding: 3px 9px; font-size: 13px; color: var(--dim); }
   #dsub { color: var(--dim); font-size: 12px; margin-top: 5px; display: flex; gap: 12px; flex-wrap: wrap; }
   #dsub .elapsed { color: var(--text); }
-  /* 上下文水位只在列表卡片显示（详情页与列表同屏，不重复；与手机端同口径） */
-  .card-stats .ctx-mini { display: inline-flex; align-items: center; gap: 4px; margin-left: auto; }
-  .card-stats .ctx-mini-bar { width: 30px; height: 3px; border-radius: 1.5px; background: rgba(128,134,148,.28); overflow: hidden; }
-  .card-stats .ctx-mini-bar i { display: block; height: 100%; border-radius: 1.5px; }
-  .card-stats .ctx-mini-t { font-size: 10px; font-variant-numeric: tabular-nums; }
+  /* 上下文水位：列表卡常显（详情页与列表同屏不重复，与手机端同口径）；
+     #279⑦ ≤720px 详情全屏盖住列表 → #dsub 行尾补一条，仅窄屏显示（桌面布局不动） */
+  .ctx-mini { display: inline-flex; align-items: center; gap: 4px; }
+  .card-stats .ctx-mini { margin-left: auto; }
+  .ctx-mini-bar { width: 30px; height: 3px; border-radius: 1.5px; background: rgba(128,134,148,.28); overflow: hidden; }
+  .ctx-mini-bar i { display: block; height: 100%; border-radius: 1.5px; }
+  .ctx-mini-t { font-size: 10px; font-variant-numeric: tabular-nums; }
+  #dsub .ctx-mini { display: none; }
 
-  .tabs { display: flex; gap: 2px; margin-top: 10px; align-items: center; }
+  .tabs { display: flex; gap: 2px; margin-top: 10px; align-items: center; position: relative; }
   .tabs .spacer { flex: 1; }
   .tabs button.tab {
     background: transparent; border: none; border-bottom: 2px solid transparent; border-radius: 0;
     color: var(--dim); padding: 8px 16px; font-size: 13px; font-weight: 600;
   }
-  .tabs button.tab.active { color: var(--text); border-bottom-color: var(--brand); }
+  .tabs button.tab.active { color: var(--text); }
+  /* #279③ 下划线改独立指示条（对齐手机 #252 动效语言）：几何取 active 按钮实测，平移过渡 */
+  .tab-ind {
+    position: absolute; left: 0; bottom: 0; height: 2px; width: 0; border-radius: 1px;
+    background: var(--brand); pointer-events: none;
+    transition: transform .22s ease, width .22s ease;
+  }
   .tabs button.mini {
     font-size: 11.5px; padding: 5px 11px; border-radius: 999px; color: var(--dim);
     border: 1px dashed var(--border); background: transparent;
@@ -429,6 +462,9 @@
   #timeline > * { max-width: min(1040px, 100%); margin-left: auto; margin-right: auto; }
   /* tab 切换淡入（JS 重触发）：与手机端翻页切换的动效语言呼应 */
   #timeline.rise { animation: riseIn .18s ease-out; }
+  /* #279⑪ 展开/收起入场（对齐手机 Collapse）：重建后新插入的折叠体 fade+下移；
+     仅在展开点击的短窗口内挂类，流式重建不重播 */
+  #timeline.x-anim .th-body, #timeline.x-anim .tdetail, #timeline.x-anim .diff { animation: riseIn .18s ease-out; }
   .day-sep { text-align: center; color: var(--faint); font-size: 10.5px; margin: 14px 0 4px; font-variant-numeric: tabular-nums; letter-spacing: 1px; }
   .msg-user { display: flex; flex-direction: column; align-items: flex-end; margin: 18px 0; }
   .msg-user .ub {
@@ -676,6 +712,9 @@
     .brand h1 { font-size: 14px; }
     #cards { padding: 4px 10px 12px; }
     #srcChips { padding: 0 10px 4px; }
+    #listBar { padding: 10px 10px 4px; }
+    /* #279⑦ 窄屏详情全屏（#side 隐藏）→ #dsub 行尾的 ctx 水位条补位显示 */
+    #dsub .ctx-mini { display: inline-flex; }
     .srv-row .srv-edit, .srv-row .srv-del { opacity: 1; }
     main { position: relative; }
     #side { width: 100%; border-right: none; }
@@ -744,7 +783,11 @@
       <div class="pair-hint" id="pairHint">云桥未配对时输入 <b>6 位配对码</b>（手机 App 或家里 PC 领取，20 分钟内有效），配对成功落成一条云源</div>
     </div>
 
-    <h3>会话</h3>
+    <div id="listBar">
+      <h3>会话</h3>
+      <button id="idleBtn" class="hbtn" style="display:none" title="隐藏已完成会话">折叠空闲 ▾</button>
+      <button id="densityBtn" class="hbtn" title="切换列表密度">密度·标准</button>
+    </div>
     <div id="srcChips"></div>
     <div id="cards"></div>
     <div id="newbox">
@@ -774,8 +817,9 @@
         <span id="dcwd"></span>
         <span id="dmodel"></span>
         <span class="elapsed" id="delapsed"></span>
+        <span id="dctx"></span>
       </div>
-      <div class="tabs">
+      <div class="tabs" title="点击或 ←/→ 键切换视图">
         <button data-tab="activity" class="tab active">消息</button>
         <button data-tab="log" class="tab">全部</button>
         <button data-tab="todos" class="tab">任务</button>
@@ -785,6 +829,7 @@
         <button id="fontBtn" class="mini" title="正文字号（点按切换）">字·标准</button>
         <button id="thinkBtn" class="mini" title="显示思考过程">思考 ·关</button>
         <button id="permBtn" class="mini" style="display:none">权限·标准</button>
+        <span class="tab-ind" id="tabInd"></span>
       </div>
     </div>
 
@@ -895,6 +940,9 @@ const expanded = new Set();    // 展开状态（全文/思考/工具详情/diff
 let expandRev = 0;             // 展开变更计数（驱动时间线重建）
 let filterSrc = "all";         // 会话列表按源过滤：all | serverId
 let cmdLocked = false;         // #279B 选中会话不可发消息（历史且无可恢复记录）→ 输入卡禁用态
+// #279⑨ 列表密度（对齐手机"简洁列表"）与折叠空闲：localStorage 持久化（手机 AsyncStorage 同语义）
+let listCompact = lsGet("ccd_list_compact") === "1";
+let collapseIdle = lsGet("ccd_collapse_idle") === "1";
 
 // ---------- 多源服务器 ----------
 // 持久化 ccd_servers：[{id, name, kind:"lan"|"cloud", wsUrl, token,
@@ -1865,17 +1913,28 @@ function render() {
   }
   renderSrcChips();
 
+  // #279⑨ 折叠空闲（对齐手机）：仅 DONE>0 时可见，开着时隐藏 DONE 卡（顶部计数仍全量）
+  const ib = $("idleBtn");
+  const ikey = cnt.DONE + (collapseIdle ? "|1" : "|0");
+  if (ib.dataset.key !== ikey) {
+    ib.dataset.key = ikey;
+    ib.style.display = cnt.DONE > 0 ? "" : "none";
+    ib.textContent = collapseIdle ? "展开空闲 " + cnt.DONE : "折叠空闲 ▾";
+    ib.classList.toggle("on", collapseIdle);
+  }
+
   const box = $("cards");
   // 排序：等待 > 运行 > 错误 > 完成；组内按更新时间倒序（#279E 对齐手机口径：
   // 新完成的会话紧跟活跃段顶部，不再按启动时间沉到 DONE 组底部像"消失"）
   const order = { WAITING: 0, WORKING: 1, ERROR: 2, DONE: 3 };
   let entries = allSessions();
   if (filterSrc !== "all") entries = entries.filter((e) => e.ctx.cfg.id === filterSrc);
+  if (collapseIdle) entries = entries.filter((e) => e.s.status !== "DONE");
   // #279① 挂起删除（4s 撤销窗口内）与已提交删除（待 SESSION_DELETED 确认）的卡片保持隐藏
   entries = entries.filter((e) => e.s.session_id !== pendingDel.sid && !deleting.has(e.s.session_id));
   const list = entries.sort((a, b) =>
     (order[a.s.status] - order[b.s.status]) || ((b.s.updated_at || b.s.started_at) - (a.s.updated_at || a.s.started_at)));
-  const key = list.map((e) => e.ctx.cfg.id + ":" + e.s.session_id + ":" + e.s.status + ":" + Math.floor(sessionElapsed(e.s) / 1000) + ":" + (e.s.title || "") + ":" + (e.s.action_summary || "") + ":" + (e.s.waiting_request ? 1 : 0) + ":" + ctxPct(e.s)).join("|");
+  const key = (listCompact ? "C|" : "") + list.map((e) => e.ctx.cfg.id + ":" + e.s.session_id + ":" + e.s.status + ":" + Math.floor(sessionElapsed(e.s) / 1000) + ":" + (e.s.title || "") + ":" + (e.s.action_summary || "") + ":" + (e.s.waiting_request ? 1 : 0) + ":" + ctxPct(e.s)).join("|");
   if (box.dataset.key !== key) {
     // 就地改名进行中：跳过重建（运行中会话 key 每秒变，会把编辑框冲掉）
     if (document.activeElement && document.activeElement.classList.contains("card-rename")) return;
@@ -1885,23 +1944,37 @@ function render() {
       const d = document.createElement("div");
       d.dataset.sid = s.session_id;
       d.dataset.src = ctx.cfg.id;
-      d.className = "card " + s.status + (selected && selected.src === ctx.cfg.id && s.session_id === selected.sid ? " sel" : "") + (s.historical ? " historical" : "");
+      d.className = "card " + s.status + (listCompact ? " compact" : "") + (selected && selected.src === ctx.cfg.id && s.session_id === selected.sid ? " sel" : "") + (s.historical ? " historical" : "");
       const waiting = !!s.waiting_request;
       const waitingText = waiting
         ? (s.waiting_request.questions?.length ? "Claude 在提问：" + (s.waiting_request.questions[0].header || "") : "需要确认 " + s.waiting_request.tool_name + " — " + (s.waiting_request.input_summary || ""))
         : (s.action_summary || "");
       // 与手机 deletable 同口径：仅 DONE/ERROR 可删（relay 对运行中会话拒绝删除）
       const deletable = s.status === "DONE" || s.status === "ERROR";
-      d.innerHTML =
-        '<div class="card-top">' + chip(s.status) + '<span style="display:flex;align-items:center;gap:6px">' +
-          srcBadgeHtml(ctx.cfg) + '<span class="elapsed">' + fmtElapsed(sessionElapsed(s)) + "</span></span></div>" +
-        '<div class="card-title">' + escapeHtml(s.title || "") +
-          (s.historical ? '<span class="his-badge">历史</span>' : s.external ? '<span class="his-badge ext">外部</span>' : "") +
-          '<button class="card-edit" title="重命名">✎</button>' +
-          '<button class="card-del' + (deletable ? "" : " off") + '" title="' + (deletable ? "删除会话" : "运行中，不能删除") + '">✕</button></div>' +
-        '<div class="card-summary' + (waiting ? " waiting" : "") + '">' + escapeHtml(waitingText) + "</div>" +
-        '<div class="card-stats">' + statsHtml(s.stats) + ctxHtml(s) + "</div>" +
-        (waiting && !s.historical && s.waiting_request?.decidable !== false ? '<div class="card-cta"><button>处理</button></div>' : "");
+      const badges = s.historical ? '<span class="his-badge">历史</span>' : s.external ? '<span class="his-badge ext">外部</span>' : "";
+      const opBtns =
+        '<button class="card-edit" title="重命名">✎</button>' +
+        '<button class="card-del' + (deletable ? "" : " off") + '" title="' + (deletable ? "删除会话" : "运行中，不能删除") + '">✕</button>';
+      const summaryRow = '<div class="card-summary' + (waiting ? " waiting" : "") + '">' + escapeHtml(waitingText) + "</div>";
+      const ctaRow = waiting && !s.historical && s.waiting_request?.decidable !== false ? '<div class="card-cta"><button>处理</button></div>' : "";
+      if (listCompact) {
+        // #279⑨ 紧凑卡三行（对齐手机）：状态点+标题+耗时 / 摘要 / 角标+改动+水位
+        d.innerHTML =
+          '<div class="c-row1"><span class="c-dot' + (s.status === "WORKING" ? " run" : "") + '" style="--sc:var(--' + s.status.toLowerCase() + ')"></span>' +
+            '<span class="card-title"><span class="c-tt">' + escapeHtml(s.title || "") + "</span>" + badges + opBtns + "</span>" +
+            '<span class="elapsed">' + fmtElapsed(sessionElapsed(s)) + "</span></div>" +
+          summaryRow +
+          '<div class="card-stats">' + srcBadgeHtml(ctx.cfg) + statsHtml(s.stats) + ctxHtml(s) + "</div>" +
+          ctaRow;
+      } else {
+        d.innerHTML =
+          '<div class="card-top">' + chip(s.status) + '<span style="display:flex;align-items:center;gap:6px">' +
+            srcBadgeHtml(ctx.cfg) + '<span class="elapsed">' + fmtElapsed(sessionElapsed(s)) + "</span></span></div>" +
+          '<div class="card-title">' + escapeHtml(s.title || "") + badges + opBtns + "</div>" +
+          summaryRow +
+          '<div class="card-stats">' + statsHtml(s.stats) + ctxHtml(s) + "</div>" +
+          ctaRow;
+      }
       d.onclick = () => select(s.session_id, ctx.cfg.id);
       const cta = d.querySelector(".card-cta button");
       if (cta) cta.onclick = (e) => { e.stopPropagation(); select(s.session_id, ctx.cfg.id); };
@@ -1937,6 +2010,7 @@ function renderDetail() {
   $("dcwd").textContent = s.cwd;
   $("dmodel").textContent = s.model || "";
   $("delapsed").textContent = "⏱ " + fmtElapsed(sessionElapsed(s));
+  $("dctx").innerHTML = ctxHtml(s); // #279⑦ 窄屏详情全屏时的水位条（桌面 CSS 隐藏，不与列表卡重复）
 
   // 思考开关 / 权限模式 chip
   $("thinkBtn").classList.toggle("on", thinkShown);
@@ -2027,6 +2101,7 @@ function renderDetail() {
 
   // 时间线 / 统计（增量重建）
   const tl = $("timeline");
+  moveTabInd(); // #279③ 指示条随 active tab 平移（每秒重设同值，不重复触发过渡）
   if (activeTab === "stats") {
     const statsKey = "stats:" + s.session_id + ":" + s.status + ":" + Math.floor(sessionElapsed(s) / 1000);
     if (tl.dataset.count !== statsKey) {
@@ -2036,6 +2111,8 @@ function renderDetail() {
     return;
   }
   if (activeTab === "todos") {
+    // #279⑮ 刷新等待态收尾：todos 引用已换（刷新回帧）即复位，2.5s 超时兜底
+    if (todoSpin.sid && todoSpin.sid === s.session_id && s.todos && s.todos !== todoSpin.ref) endTodoSpin();
     // key 计入 hidden 计数（本地隐藏立即重建）与 id/active_form（治理展示随刷新更新）
     const todosKey = "todos:" + s.session_id + ":" + (s.todos?.length ?? 0) + ":" +
       (s.todos?.map((t) => (t.id ?? "-") + ":" + t.status + (t.active_form ? "+f" : "")).join(",") ?? "") +
@@ -2044,7 +2121,10 @@ function renderDetail() {
       tl.dataset.count = todosKey;
       tl.innerHTML = todosTabHtml(s);
       const ref = $("todoRefresh");
-      if (ref) ref.onclick = () => sendCommandTo(sel.ctx, "COMMAND_REFRESH_TODOS", { session_id: s.session_id });
+      if (ref) {
+        ref.onclick = () => refreshTodos(sel, s);
+        if (todoSpin.sid === s.session_id) ref.classList.add("wait"); // 重建后保持等待态
+      }
     }
     return;
   }
@@ -2113,6 +2193,24 @@ function hideTodo(content) {
   renderDetail(); // todosKey 已含 hidden 计数，立即重建
 }
 
+// #279⑮ 任务手动刷新等待态（对齐手机 todoSpin）：点 ↻ 发命令即变品牌色旋转，
+// 下一帧 todos 引用变化（SESSION_UPDATED 携带新数组）或 2.5s 超时复位
+const todoSpin = { sid: "", ref: null, timer: 0 };
+function endTodoSpin() {
+  clearTimeout(todoSpin.timer); todoSpin.timer = 0; todoSpin.sid = ""; todoSpin.ref = null;
+  const btn = $("todoRefresh");
+  if (btn) btn.classList.remove("wait");
+}
+function refreshTodos(sel, s) {
+  if (!sendCommandTo(sel.ctx, "COMMAND_REFRESH_TODOS", { session_id: s.session_id })) return;
+  todoSpin.sid = s.session_id;
+  todoSpin.ref = s.todos ?? null; // 引用记账：relay 回帧必然换新数组
+  const btn = $("todoRefresh");
+  if (btn) btn.classList.add("wait");
+  clearTimeout(todoSpin.timer);
+  todoSpin.timer = setTimeout(endTodoSpin, 2500);
+}
+
 function todosTabHtml(s) {
   const todos = s.todos ?? [];
   if (!todos.length) return '<div class="todo-empty">暂无任务清单<br><span style="font-size:12px">CLI 里使用 TodoWrite 工具后，这里会显示任务进度</span></div>';
@@ -2139,7 +2237,7 @@ function todosTabHtml(s) {
   let html =
     '<div class="todo-head"><div class="todo-bar"><i style="width:' + Math.round((doneAll.length / all.length) * 100) + '%"></i></div>' +
     '<span class="todo-pct">' + doneAll.length + " / " + all.length + '</span>' +
-    '<button id="todoRefresh" class="ghost" title="重读 CLI 任务存储">↻ 刷新</button></div>';
+    '<button id="todoRefresh" class="ghost" title="重读 CLI 任务存储"><span class="tr-ico">↻</span> 刷新</button></div>';
   for (const [label, items, cls] of groups) {
     if (!items.length) continue;
     html += '<div class="todo-group"><div class="todo-gt ' + cls + '">' + label + "</div>";
@@ -2346,7 +2444,9 @@ function renderTimeline(list) {
   return html;
 }
 
-// 展开切换（事件委托：全文/思考/工具详情/diff 共用）
+// 展开切换（事件委托：全文/思考/工具详情/diff 共用）；
+// #279⑪ 展开瞬间给重建出的折叠体播 riseIn 入场（240ms 后摘类，流式重建不重播）
+let expandAnimTimer = 0;
 $("timeline").addEventListener("click", (ev) => {
   const t = ev.target.closest("[data-x]");
   if (!t) return;
@@ -2354,6 +2454,11 @@ $("timeline").addEventListener("click", (ev) => {
   if (expanded.has(k)) expanded.delete(k);
   else expanded.add(k);
   expandRev++;
+  if (expanded.has(k)) {
+    $("timeline").classList.add("x-anim"); // 先挂类再重建：插入时动画才生效
+    clearTimeout(expandAnimTimer);
+    expandAnimTimer = setTimeout(() => $("timeline").classList.remove("x-anim"), 240);
+  }
   renderDetail();
 });
 
@@ -2470,6 +2575,24 @@ function closeNewForm() {
   $("newform").classList.remove("open");
   $("addBtn").textContent = "＋ 新建会话";
 }
+// #279⑨ 列表密度 / 折叠空闲：会话标题行两个小开关（localStorage 持久化，render 内联动卡片与计数）
+function syncDensityBtn() {
+  const b = $("densityBtn");
+  b.textContent = "密度·" + (listCompact ? "紧凑" : "标准");
+  b.classList.toggle("on", listCompact);
+}
+$("densityBtn").onclick = () => {
+  listCompact = !listCompact;
+  lsSet("ccd_list_compact", listCompact ? "1" : "0");
+  syncDensityBtn();
+  render();
+};
+$("idleBtn").onclick = () => {
+  collapseIdle = !collapseIdle;
+  lsSet("ccd_collapse_idle", collapseIdle ? "1" : "0");
+  render();
+};
+syncDensityBtn();
 $("themeBtn").onclick = () => {
   const light = !document.documentElement.classList.contains("light");
   document.documentElement.classList.toggle("light", light);
@@ -3006,6 +3129,7 @@ $("permBtn").onclick = () => {
 function switchTab(name) {
   activeTab = name;
   document.querySelectorAll(".tabs button.tab").forEach((x) => x.classList.toggle("active", x.dataset.tab === name));
+  moveTabInd(); // #279③ 指示条平移到新 active（renderDetail 内也会补一次）
   const tl = $("timeline");
   tl.dataset.count = "";
   renderDetail();
@@ -3016,6 +3140,31 @@ function switchTab(name) {
 }
 document.querySelectorAll(".tabs button.tab").forEach((b) => {
   b.onclick = () => switchTab(b.dataset.tab);
+});
+
+// #279③ tab 指示条几何（offsetParent=.tabs）：等宽 tab 下 translateX 平移 + 宽度过渡；
+// 详情隐藏（无选中）时 offsetParent 为 null 直接跳过，重开时由 renderDetail 补设
+function moveTabInd() {
+  const ind = $("tabInd");
+  const btn = document.querySelector(".tabs button.tab.active");
+  if (!ind || !btn || !btn.offsetParent) return;
+  ind.style.width = btn.offsetWidth + "px";
+  ind.style.transform = "translateX(" + btn.offsetLeft + "px)";
+}
+window.addEventListener("resize", moveTabInd);
+// #279③ 键盘 ←/→ 切 tab（桌面加分项）：输入控件聚焦时不抢键
+document.addEventListener("keydown", (ev) => {
+  if (ev.key !== "ArrowLeft" && ev.key !== "ArrowRight") return;
+  if (!selected) return;
+  const ae = document.activeElement;
+  if (ae && (ae.tagName === "INPUT" || ae.tagName === "TEXTAREA" || ae.isContentEditable)) return;
+  const tabs = [...document.querySelectorAll(".tabs button.tab")];
+  const i = tabs.findIndex((b) => b.dataset.tab === activeTab);
+  if (i < 0) return;
+  const n = ev.key === "ArrowRight" ? i + 1 : i - 1;
+  if (n < 0 || n >= tabs.length) return;
+  ev.preventDefault();
+  switchTab(tabs[n].dataset.tab);
 });
 
 // #279④ #NNN 点击 → 任务 tab 定位该条（闪高 1.5s，对齐手机 #264 jumpToTask）；
