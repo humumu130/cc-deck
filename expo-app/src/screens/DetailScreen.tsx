@@ -1,4 +1,4 @@
-import { Fragment, useEffect, useRef, useState } from "react";
+import { Fragment, useEffect, useImperativeHandle, useRef, useState, type Ref } from "react";
 import { Animated, Dimensions, Image, Modal, PermissionsAndroid, Pressable, RefreshControl, ScrollView, Share, StyleSheet, Text, TextInput, Vibration, View, type NativeScrollEvent, type NativeSyntheticEvent, type NativeTouchEvent, type StyleProp, type TextStyle } from "react-native";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import * as ImagePicker from "expo-image-picker";
@@ -413,7 +413,12 @@ function AskBanner({ wr, sid }: { wr: WaitingPayload; sid: string }) {
 
 // initialView（#300/#306）：外部直达目标页（待确认悬浮清单跳"任务" tab）——挂载即落位，
 // 不播 tab 切换动画；缺省 "msg" 与旧行为一致
-export default function DetailScreen({ sid, onBack, initialView }: { sid: string; onBack: () => void; initialView?: ViewKind }) {
+// 返回句柄（#282 顶层分发的详情侧扩展）：非消息视图时返回键先回消息页而不是退出详情
+export interface DetailBackHandle {
+  requestBack: () => boolean;
+}
+
+export default function DetailScreen({ sid, onBack, initialView, ref }: { sid: string; onBack: () => void; initialView?: ViewKind; ref?: Ref<DetailBackHandle> }) {
   const { c } = useTheme();
   const d = useThemeStyles(makeStyles);
   const snap = useRelay();
@@ -608,7 +613,7 @@ export default function DetailScreen({ sid, onBack, initialView }: { sid: string
       todoScrollRef.current?.scrollTo({ y: Math.max(0, y - 110), animated: true });
       setFlashTodo(n);
       if (flashTimer.current) clearTimeout(flashTimer.current);
-      flashTimer.current = setTimeout(() => setFlashTodo(null), 1500);
+      flashTimer.current = setTimeout(() => setFlashTodo(null), 2600);
     }, needFly ? 380 : 0);
   };
 
@@ -633,6 +638,7 @@ export default function DetailScreen({ sid, onBack, initialView }: { sid: string
   const toggle = (key: string) => setExpanded((m) => ({ ...m, [key]: !m[key] }));
   // 五视图横向翻页（#250/#252）：页宽=窗口宽（锁定竖屏）。tab 点击一律动画滚动；
   // 远跳（>1 页）飞行途中临时全渲染，防掠过的中间页闪空白
+
   const viewIdx = VIEWS.findIndex((v) => v.k === view);
   const pagerW = Dimensions.get("window").width;
   const [flight, setFlight] = useState(false);
@@ -660,6 +666,17 @@ export default function DetailScreen({ sid, onBack, initialView }: { sid: string
     }
     pagerRef.current?.scrollTo({ x: i * pagerW, animated: true });
   };
+  useImperativeHandle(ref, () => ({
+    // 非"消息"视图：返回=切回消息页；消息视图：交给 Shell 关详情
+    requestBack: () => {
+      if (viewIdx > 0) {
+        gotoView(0);
+        return true;
+      }
+      return false;
+    },
+  }), [viewIdx]);
+
   // 外部直达目标页（#300）：view 初值即 initialView，但 pager 原生滚动位置仍在 0——
   // 挂载后程序滚动落位（animated:false 不播切换动画）；宽度渲染时重读（分屏/旋转后
   // 首帧窗口已换宽）。仅在挂载时执行一次，后续 initialView 变化不追（组件随 sid 换不重挂）
@@ -1528,7 +1545,7 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
   todoSecLine: { flex: 1, height: 1, backgroundColor: c.line },
   todoSecT: { fontSize: 10.5, fontWeight: "700", letterSpacing: 0.5 },
   todoRow: { flexDirection: "row", gap: 8, alignItems: "flex-start", paddingVertical: 5, borderTopWidth: 1, borderTopColor: c.line, marginTop: 5 },
-  todoFlash: { backgroundColor: withA(c.brandA, 0.14), borderRadius: 8 },
+  todoFlash: { backgroundColor: withA(c.brandA, 0.32), borderRadius: 8, borderWidth: 1, borderColor: withA(c.brandA, 0.55) },
   todoScroll: { maxHeight: 400, flexGrow: 0 },
   todoMark: { color: c.faint, fontSize: 12, width: 16, textAlign: "center", lineHeight: 17 },
   todoT: { flex: 1, color: c.text, fontSize: 12.5, lineHeight: 17 },

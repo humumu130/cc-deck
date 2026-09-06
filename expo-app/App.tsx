@@ -5,6 +5,7 @@ import { SafeAreaProvider, useSafeAreaInsets } from "react-native-safe-area-cont
 import { store, useRelay } from "./src/store";
 import type { TaskDoneReport } from "./src/store";
 import { isConfirmTodo, displaySrcName } from "./src/fmt";
+import type { DetailBackHandle } from "./src/screens/DetailScreen";
 import type { SessionState } from "./src/protocol";
 import { ensureNotifPermission, fgSupported, notifyAlert, startForegroundService, updateForeground } from "./src/notify";
 import { startWatchGateway } from "./src/watch";
@@ -139,7 +140,7 @@ function TaskDoneFloat({
                   {i > 0 && row.sid !== shown[i - 1].sid ? <View style={st.tdDivider} /> : null}
                   <View style={st.tdItemRow}>
                     <Text style={st.tdItemMark}>✓</Text>
-                    <Text style={st.tdItem} numberOfLines={2}>{row.text}</Text>
+                    <Text style={st.tdItem} numberOfLines={4}>{row.text}</Text>
                   </View>
                 </View>
               ))}
@@ -193,10 +194,10 @@ function TaskDoneFloat({
 function ConfirmText({ text }: { text: string }) {
   const st = useThemeStyles(makeStyles);
   if (!/#\d{1,3}\b/.test(text)) {
-    return <Text style={st.cfItem} numberOfLines={2}>{text}</Text>;
+    return <Text style={st.cfItem} numberOfLines={4}>{text}</Text>;
   }
   return (
-    <Text style={st.cfItem} numberOfLines={2}>
+    <Text style={st.cfItem} numberOfLines={4}>
       {text.split(/#(\d{1,3})\b/g).map((p, i) =>
         i % 2 === 1 ? <Text key={i} style={st.cfRef}>#{p}</Text> : <Text key={i}>{p}</Text>,
       )}
@@ -457,6 +458,7 @@ function Shell() {
     if (v) setTdExpanded(false);
   }, []);
   const listBackRef = useRef<ListBackHandle | null>(null);
+  const detailBackRef = useRef<DetailBackHandle>(null);
 
   // 硬件返回统一分发（#282）：全 App 唯一 BackHandler 订阅（原 DetailScreen/
   // ListScreen 抽屉+图例/TaskDoneFloat/SetupScreen 各自订阅全部并入）。按
@@ -479,7 +481,7 @@ function Shell() {
       return true;
     }
     // 详情开 → 关详情（动画窗口期被相位守卫拒绝时不消费，500ms 兜底放行后恢复）
-    if (detail) return closeDetail();
+    if (detail) return (detailBackRef.current?.requestBack() ?? false) || closeDetail();
     // 列表抽屉/图例浮窗开 → 关浮层（列表页挂载时才可能）
     if (listBackRef.current?.requestBack()) return true;
     // 根路由列表：不消费，交给系统默认
@@ -614,7 +616,8 @@ function Shell() {
             <Animated.View
               style={[st.navLayer, { transform: [{ translateX: navX }] }]}
             >
-              <DetailScreen sid={detail} initialView={detailView} onBack={closeDetail} />
+              <DetailScreen
+          ref={detailBackRef} sid={detail} initialView={detailView} onBack={closeDetail} />
             </Animated.View>
           ) : null}
           <NewSessionModal visible={sheet} onClose={() => setSheet(false)} />
@@ -741,7 +744,7 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
   cfBadgeT: { color: "#06182E", fontSize: 11, fontWeight: "800" },
   // 展开卡：同 tdCard 形制；按会话分组——组头会话名（displaySrcName 缩写）+ 条目行
   cfCard: {
-    position: "absolute", right: 12, maxWidth: "92%", maxHeight: "72%",
+    position: "absolute", right: 12, maxWidth: "94%", maxHeight: "78%",
     backgroundColor: c.panel, borderWidth: 1, borderColor: withA(c.brandA, 0.28),
     borderRadius: 16, paddingHorizontal: 14, paddingVertical: 12, elevation: 8,
   },
