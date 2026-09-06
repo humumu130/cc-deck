@@ -216,6 +216,60 @@ export function splitZaiText(text: string): { body: string; segs: ZaiSeg[] } {
   return { body: bodyLines.join("\n").trim(), segs };
 }
 
+// ---------- #292 系统包装块过滤 ----------
+// Claude Code 会把系统级内容（后台任务通知 <task-notification>、slash 命令回显
+// <command-name>、系统提醒 <system-reminder> 等）以用户消息形态写进 transcript 并
+// 触发 UserPromptSubmit——直接下发即成手机/网页"消息"列表污染（#292，与 #263/#265
+// zai 污染同系列）。规则只认块首（trimStart 后 ^ 位置）的完整标签前缀：正文中间
+// 正常出现的同名尖括号文本（讨论格式本身）不受影响
+const SYSTEM_WRAPPER_TAGS = [
+  "task-notification",
+  "system-reminder",
+  "command-name",
+  "command-message",
+  "command-args",
+  "local-command-stdout",
+  "local-command-caveat",
+] as const;
+
+// 后台任务产物机器路径（C:\Users\...\Temp\claude\<proj>\<sid>\tasks\xxx.output；
+// Linux /tmp/claude/...；macOS $TMPDIR 以 /T/ 结尾故含 t 段）：user 侧文本含此
+// 路径视为机器内容，不下发
+const RE_TASK_OUTPUT_PATH = /[\\/](?:temp|tmp|t)[\\/]claude[\\/][^\s"'<>]*?tasks[\\/][^\s"'<>]+?\.output\b/i;
+
+// user 侧文本是否为机器内容：系统包装标签开头的整块，或携带后台任务输出路径
+//（CLI 重发通知时可能带引号等杂前缀，标签前缀匹配不命中，靠路径规则兜住）
+export function isMachineUserText(text: string): boolean {
+  const t = text.trimStart();
+  if (!t) return false;
+  if (t.startsWith("Caveat:")) return true;
+  for (const tag of SYSTEM_WRAPPER_TAGS) {
+    if (t.startsWith("<" + tag)) return true;
+  }
+  return RE_TASK_OUTPUT_PATH.test(text);
+}
+
+// 剥离文本块首的系统包装块（连续多个，上限 4 个防御；未闭合的块吞到结尾），
+// 返回剩余正文（trim 后，全为包装块则空串）。assistant 正文被系统注入前缀污染时用
+//（如 zai 图片占位提醒 + 真实回复同块）；块中间出现的标签不动
+export function stripLeadingSystemBlocks(text: string): string {
+  let t = text.trimStart();
+  for (let n = 0; n < 4 && t.startsWith("<"); n++) {
+    let hit = false;
+    for (const tag of SYSTEM_WRAPPER_TAGS) {
+      if (!t.startsWith("<" + tag)) continue;
+      const close = "</" + tag + ">";
+      const end = t.indexOf(close);
+      t = end === -1 ? "" : t.slice(end + close.length);
+      hit = true;
+      break;
+    }
+    if (!hit) break;
+    t = t.trimStart();
+  }
+  return t.trim();
+}
+
 // 工具入参详情（CLI 体感：$ 命令 / 文件路径+old→new / 搜索式…），无实质内容返回 undefined
 export function detailToolUse(tool: string, input: Record<string, unknown>): string | undefined {
   const s = (k: string) => (typeof input[k] === "string" ? (input[k] as string).trim() : "");

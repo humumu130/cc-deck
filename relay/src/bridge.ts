@@ -27,6 +27,8 @@ import {
   truncate,
   zaiToolName,
   isZaiOutput,
+  isMachineUserText,
+  stripLeadingSystemBlocks,
 } from "./summarizer.js";
 import { deriveTitle } from "./history.js";
 import { readTaskStoreTodos } from "./task-store.js";
@@ -868,22 +870,37 @@ export class Bridge {
     const id = this.extId(ev);
     const turnStartedAt = Date.now();
     this.turnStart.set(id, turnStartedAt);
-    const state = this.mgr.ensureExternal(id, ev.cwd, ev.prompt ?? "", ev.session_id);
+    // #292 系统通知块（后台任务通知 / slash 命令回显等）也会以 UserPromptSubmit 形态
+    // 到达（CLI 把它们当 user 消息提交）：整块不作为用户消息/标题/状态摘要下发，
+    // 只留 system 级过滤痕迹；回合本身是真实的（CLI 会处理该通知），照常翻 WORKING
+    const rawPrompt = ev.prompt ?? "";
+    const machine = isMachineUserText(rawPrompt);
+    const prompt = machine ? "" : rawPrompt;
+    const state = this.mgr.ensureExternal(id, ev.cwd, prompt, ev.session_id);
     // 会话由 PreToolUse 先创建（无 prompt）：首个 prompt 到达时把文件夹名标题升级为 prompt 摘要
     //（已取到 CC 会话名的保留会话名，只补记 initial_prompt）
-    if (state.external && !state.initial_prompt && ev.prompt) {
-      const title = this.named.has(id) ? state.title : deriveTitle(ev.prompt);
-      this.mgr.setExternalTitle(id, title, ev.prompt);
+    if (state.external && !state.initial_prompt && prompt) {
+      const title = this.named.has(id) ? state.title : deriveTitle(prompt);
+      this.mgr.setExternalTitle(id, title, prompt);
     }
     this.refreshName(id, ev);
-    if (!this.named.has(id) && ev.prompt) this.mgr.requestSmartTitle(id, ev.prompt);
-    this.mgr.setExternalStatus(id, "WORKING", truncate(ev.prompt ?? "新回合", 60), turnStartedAt);
-    if (!this.promotePending(id, ev.prompt ?? "")) {
+    if (!this.named.has(id) && prompt) this.mgr.requestSmartTitle(id, prompt);
+    this.mgr.setExternalStatus(
+      id,
+      "WORKING",
+      machine ? "处理系统通知（后台任务/命令回显）" : truncate(rawPrompt || "新回合", 60),
+      turnStartedAt,
+    );
+    if (machine) {
+      this.mgr.pushExternalLog(id, "system", "系统通知块已过滤（后台任务/命令回显，不入消息列表）");
+      return { decision: "pass" };
+    }
+    if (!this.promotePending(id, rawPrompt)) {
       // 晋升未命中：可能是 CLI 回合结束对已晋升排队消息的重复 UserPromptSubmit（合并形态冲刷），
       // 60s 内已被晋升记录覆盖 → 跳过；PC 手敲重发（上一条也走 prompt 记录）不受影响
-      if (!this.coveredByRecentPromote(id, ev.prompt ?? "")) {
-        this.noteUserMsg(id, ev.prompt ?? "", "prompt");
-        this.mgr.pushExternalLog(id, "user_message", truncate(ev.prompt ?? "", 300));
+      if (!this.coveredByRecentPromote(id, rawPrompt)) {
+        this.noteUserMsg(id, rawPrompt, "prompt");
+        this.mgr.pushExternalLog(id, "user_message", truncate(rawPrompt, 300));
       }
     }
     void state;
@@ -1047,15 +1064,9 @@ export class Bridge {
                 t = (c as { text?: unknown }[]).map((b) => (typeof b.text === "string" ? b.text : "")).join("");
               }
               t = t.trim();
-              if (
-                t &&
-                !t.startsWith("<task-notification>") &&
-                !t.startsWith("<command-name>") &&
-                !t.startsWith("<local-command") &&
-                !t.startsWith("Caveat:")
-              ) {
-                userTexts.push(t);
-              }
+              // #292 系统包装块（后台任务通知/命令回显/系统提醒）与含后台任务输出
+              // 路径的机器文本不作为用户输入（规则单源在 summarizer.isMachineUserText）
+              if (t && !isMachineUserText(t)) userTexts.push(t);
             } catch {}
           }
           // user 行的 tool_result：TaskCreate 的结果文本（"Task #N created successfully"）
@@ -1097,19 +1108,23 @@ export class Bridge {
             if (!b || typeof b !== "object") continue;
             const blk = b as { type?: string; text?: unknown; thinking?: unknown; name?: unknown; id?: unknown };
             if (blk.type === "text" && typeof blk.text === "string") {
-              const zn = zaiToolName(blk.text);
+              // #292 块首系统包装块（zai 图片占位提醒等系统注入与正文同块）：
+              // 剥离后再进正文/桥识别，纯包装块整条不产生消息
+              const clean = stripLeadingSystemBlocks(blk.text);
+              if (!clean) continue;
+              const zn = zaiToolName(clean);
               if (zn) {
                 hasToolUse = true;
-                zaiEntries.push({ kind: "tool_use", text: `zai 内置 ${zn.slice(4)} 调用`, tool: zn, detail: capDetail(blk.text, 2000) });
+                zaiEntries.push({ kind: "tool_use", text: `zai 内置 ${zn.slice(4)} 调用`, tool: zn, detail: capDetail(clean, 2000) });
                 continue;
               }
-              if (isZaiOutput(blk.text)) {
-                zaiEntries.push({ kind: "tool_result", text: "zai 内置工具结果", tool: "zai", detail: capDetail(blk.text, 2000) });
+              if (isZaiOutput(clean)) {
+                zaiEntries.push({ kind: "tool_result", text: "zai 内置工具结果", tool: "zai", detail: capDetail(clean, 2000) });
                 continue;
               }
               // 混合形态：正文尾部被 z.ai append 了桥调用/输出（#265）——拆段，
               // 前后正文保留，桥段归工具日志
-              const { body, segs } = splitZaiText(blk.text);
+              const { body, segs } = splitZaiText(clean);
               for (const sg of segs) {
                 if (sg.kind === "tool_use") hasToolUse = true;
                 zaiMixed.push({

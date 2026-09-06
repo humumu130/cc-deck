@@ -919,6 +919,72 @@ assert(ack24.ok === false, "empty rename rejected");
   rmSync(T, { force: true });
 }
 
+// 40. #292 系统通知块污染过滤：后台任务通知/命令回显以 UserPromptSubmit 形态到达时
+//     不产生 user_message、不污染标题与状态摘要；含机器输出路径的变体同拦；
+//     assistant 块首系统包装块剥离后正文保留；正文中间的正常尖括号不受影响
+{
+  const { isMachineUserText, stripLeadingSystemBlocks } = await import("../src/summarizer.js");
+  // 单元规则：块首标签 / 机器路径（Win 反斜杠、Unix、引号前缀变体）/ 正文尖括号不误伤
+  assert(isMachineUserText("<task-notification>\n<task-id>b</task-id>\n</task-notification>"), "40 unit: task-notification prefix detected");
+  assert(isMachineUserText("<command-name>/model</command-name>"), "40 unit: command echo prefix detected");
+  assert(isMachineUserText("<system-reminder>注入</system-reminder>"), "40 unit: system-reminder prefix detected");
+  assert(isMachineUserText('“<task-notification> <output-file>C:\\Users\\u\\AppData\\Local\\Temp\\claude\\p\\s\\tasks\\b1.output</output-file>'), "40 unit: quoted variant caught by output path");
+  assert(isMachineUserText("/tmp/claude/proj/sid/tasks/xx.output 已生成，请查看"), "40 unit: unix task output path caught");
+  assert(!isMachineUserText("帮我看看 transcript 里的 <task-notification> 块是什么"), "40 unit: mid-text angle brackets not harmed");
+  assert(!isMachineUserText("普通用户消息"), "40 unit: normal prompt passes");
+  assert(stripLeadingSystemBlocks("<system-reminder>\n图片占位\n</system-reminder>好的，已确认。") === "好的，已确认。", "40 unit: leading system block stripped, body kept");
+  assert(stripLeadingSystemBlocks("<command-name>/model</command-name>\n<command-message>model</command-message>") === "", "40 unit: stacked command blocks fully stripped");
+  assert(stripLeadingSystemBlocks("正文里的 <system-reminder>x</system-reminder> 保留") === "正文里的 <system-reminder>x</system-reminder> 保留", "40 unit: mid-text tag untouched");
+
+  const { appendFileSync, writeFileSync } = await import("node:fs");
+  const T = fileURLToPath(new URL("../data/test-transcript.jsonl", import.meta.url));
+  rmSync(T, { force: true });
+  // 事件断言需要在线 WS 客户端（此前测试段的 socket 已全部关闭）
+  const w40 = new WebSocket(`ws://127.0.0.1:${cfg.port}/ws?token=${cfg.token}`);
+  attach(w40);
+  await new Promise((r) => w40.once("open", r));
+  await wait(100);
+  writeFileSync(T, JSON.stringify({ type: "assistant", message: { role: "assistant", content: [{ type: "text", text: "基线40" }] } }) + "\n");
+  const sid = extId("cli-40");
+  const um40 = () => events.filter((e) => e.type === "SESSION_LOG" && e.session_id === sid && (e.payload as { kind?: string }).kind === "user_message");
+  const at40 = () => events.filter((e) => e.type === "SESSION_LOG" && e.session_id === sid && (e.payload as { kind?: string }).kind === "assistant_text");
+  const notif =
+    '<task-notification>\n<task-id>bx1</task-id>\n<tool-use-id>call_1</tool-use-id>\n' +
+    '<output-file>C:\\Users\\u\\AppData\\Local\\Temp\\claude\\D--dev-cc-watch\\sid40\\tasks\\bx1.output</output-file>\n' +
+    '<status>completed</status>\n<summary>Background command "build" completed (exit code 0)</summary>\n</task-notification>';
+  // ① hook 携带通知原文（后台任务完成以此形态泄漏）：无 user_message、摘要/标题不污染、状态照常 WORKING
+  await hook({ event: "UserPromptSubmit", prompt: notif, session_id: "cli-40", cli_pid: 4040, transcript_path: T });
+  await wait(200);
+  const st40 = mgr.getExternal(sid);
+  assert(um40().length === 0, "40 task-notification prompt yields no user_message");
+  assert(!!st40 && st40.status === "WORKING" && !(st40.action_summary ?? "").includes("<"), "40 action_summary not polluted, still WORKING");
+  assert(!(st40?.title ?? "").includes("task-notification"), "40 title not polluted");
+  assert(events.some((e) => e.type === "SESSION_LOG" && e.session_id === sid && (e.payload as { kind?: string }).kind === "system" && String((e.payload as { text?: string }).text).includes("已过滤")), "40 filter trace logged as system kind");
+  // ② slash 命令回显 / ③ 引号前缀变体（CLI 重发形态，靠路径规则兜住）
+  await hook({ event: "UserPromptSubmit", prompt: "<command-name>/model</command-name>\n<command-message>model</command-message>", session_id: "cli-40", transcript_path: T });
+  await hook({ event: "UserPromptSubmit", prompt: '“<task-notification> <task-id>b2</task-id> <output-file>C:\\Users\\u\\AppData\\Local\\Temp\\claude\\p\\s\\tasks\\b2.output</output-file> done', session_id: "cli-40", transcript_path: T });
+  await wait(200);
+  assert(um40().length === 0, "40 command echo & quoted variant yield no user_message");
+  // ④ 正常 prompt 不受过滤影响（回归护栏）
+  await hook({ event: "UserPromptSubmit", prompt: "正常消息回归检查", session_id: "cli-40", transcript_path: T });
+  await wait(200);
+  assert(um40().length === 1 && (um40()[0].payload as { text?: string }).text === "正常消息回归检查", "40 normal prompt still logged as user_message");
+  // ⑤ transcript 侧：user 行系统块不入用户文本；assistant 块首系统块剥离保留正文、纯块不产生消息
+  await hook({ event: "PostToolUse", tool_name: "Bash", tool_response: "ok", session_id: "cli-40", transcript_path: T });
+  await wait(200);
+  appendFileSync(T, JSON.stringify({ type: "user", isMeta: false, message: { role: "user", content: "<system-reminder>机器注入内容</system-reminder>" } }) + "\n");
+  appendFileSync(T, JSON.stringify({ type: "assistant", message: { role: "assistant", content: [{ type: "text", text: "<system-reminder>\n图片占位提醒\n</system-reminder>好的，已确认图内容。" }] } }) + "\n");
+  appendFileSync(T, JSON.stringify({ type: "assistant", message: { role: "assistant", content: [{ type: "text", text: "<system-reminder>纯系统块无正文</system-reminder>" }] } }) + "\n");
+  await hook({ event: "PostToolUse", tool_name: "Bash", tool_response: "ok", session_id: "cli-40", transcript_path: T });
+  await wait(200);
+  assert(um40().length === 1, "40 transcript system-reminder user line yields no user_message");
+  assert(at40().some((e) => (e.payload as { text?: string }).text === "好的，已确认图内容。"), "40 assistant body kept after leading block strip");
+  assert(at40().every((e) => !String((e.payload as { text?: string }).text).includes("<system-reminder>")), "40 no system-reminder leaks into assistant_text");
+  await hook({ event: "SessionEnd", session_id: "cli-40", reason: "clear" });
+  w40.close();
+  rmSync(T, { force: true });
+}
+
 wsCur!.close();
 await wait(300);
 console.log("\nBRIDGE TESTS PASSED");
