@@ -1862,8 +1862,14 @@ function srcColor(id) {
   for (const ch of String(id)) h = ((h * 31) + ch.charCodeAt(0)) >>> 0;
   return SRC_COLORS[h % SRC_COLORS.length];
 }
+// 源配色键（#294 审查修复）：跨端稳定身份——云源取 relay 设备 id（cloud.rd）、LAN 源
+// 取 wsUrl，同一台服务器在手机/网页两端同色（本地 uuid 两端各异不可用；与手机端
+// SourceStatus.colorKey 同构）
+function srcColorKey(cfg) {
+  return (cfg.cloud && cfg.cloud.rd) || cfg.wsUrl || cfg.id;
+}
 function srcBadgeHtml(cfg) {
-  return '<span class="src-badge" title="' + escapeHtml(cfg.name) + '"><i style="background:' + srcColor(cfg.id) + '"></i><span class="sb-t">' + escapeHtml(cfg.name || "?") + '</span></span>';
+  return '<span class="src-badge" title="' + escapeHtml(cfg.name) + '"><i style="background:' + srcColor(srcColorKey(cfg)) + '"></i><span class="sb-t">' + escapeHtml(cfg.name || "?") + '</span></span>';
 }
 
 // 列表上方源过滤 chips（单源时隐藏）；过滤目标被删/失效时自愈回"全部"
@@ -1880,7 +1886,7 @@ function renderSrcChips() {
     servers.map((s) => {
       const n = ctxs.get(s.id)?.sessions.size || 0;
       return '<button data-f="' + s.id + '" class="' + (filterSrc === s.id ? "on" : "") + '" title="' + escapeHtml(s.name) + '">' +
-        '<i style="background:' + srcColor(s.id) + '"></i><span>' + escapeHtml(s.name) + " " + n + "</span></button>";
+        '<i style="background:' + srcColor(srcColorKey(s)) + '"></i><span>' + escapeHtml(s.name) + " " + n + "</span></button>";
     }).join("");
   box.querySelectorAll("button").forEach((b) => {
     b.onclick = () => { filterSrc = b.dataset.f; renderSrcChips(); render(); };
