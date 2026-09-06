@@ -1,6 +1,6 @@
 // 设置抽屉：首页左上角图标呼出，也支持左缘右滑呼出 / 面板上左滑收起；收纳服务器列表、快捷短语与显示设置
 import { useEffect, useRef, useState } from "react";
-import { Animated, PanResponder, Pressable, ScrollView, StyleSheet, Switch, Text, View } from "react-native";
+import { Animated, Linking, Modal, PanResponder, Pressable, ScrollView, StyleSheet, Switch, Text, View } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import Constants from "expo-constants";
 import * as Clipboard from "expo-clipboard";
@@ -8,7 +8,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useTheme, useThemeStyles } from "../theme-context";
 import { LogoMark } from "../brand";
 import { setProcessFont, useProcessFont, setListCompact, useListCompact, setVoiceInput, useVoiceInput, setAggregate as persistAggregate, useAggregate, type ProcessFont } from "../display-settings";
-import { checkUpdate, announceUpdate } from "../updates";
+import { checkUpdate, announceUpdate, VERSION_NOTES } from "../updates";
 import { store, useRelay, type ServerEntry } from "../store";
 import { withA, type ThemeColors } from "../theme";
 
@@ -17,11 +17,86 @@ const FILL = { position: "absolute", left: 0, right: 0, top: 0, bottom: 0 } as c
 // 版本号读原生 versionName（build.gradle），杜绝手写硬编码再漏更
 const APP_VER = "v" + (Constants.nativeApplicationVersion ?? Constants.expoConfig?.version ?? "-");
 
+// #313 反馈入口：关于弹窗「✎ 反馈」跳 GitHub Issues
+const FEEDBACK_URL = "https://github.com/humumu130/cc-deck/issues";
+
 const FONT_OPTS: { k: ProcessFont; label: string }[] = [
   { k: "normal", label: "标准" },
   { k: "compact", label: "紧凑" },
   { k: "hidden", label: "隐藏" },
 ];
+
+// #313 关于弹窗：底部滑上卡片（NewSessionModal 同款视觉语言——全宽贴底、只上圆角）。
+// 版本信息（LogoMark + 版本号）+ 本版特性摘要（VERSION_NOTES 逐条）+ 检查更新
+// （原 #312 抽屉行迁入：结果行内反馈，有新版经 announceUpdate 弹 App 层 UpdateBanner）
+// + 反馈入口（GitHub Issues）
+function AboutModal({ visible, onClose }: { visible: boolean; onClose: () => void }) {
+  const { c } = useTheme();
+  const m = useThemeStyles(makeStyles);
+  // 手动检查：loading 态禁用按钮；无新版"已是最新 ✓"，有新版行内提示 + 顶部横幅
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState<string | null>(null);
+  const checkNow = async () => {
+    if (busy) return;
+    setBusy(true);
+    setMsg("检查中…");
+    const info = await checkUpdate();
+    setBusy(false);
+    if (info) {
+      setMsg(`发现新版 v${info.version} ↗`);
+      announceUpdate(info);
+    } else {
+      setMsg(`已是最新 ✓ ${APP_VER}`);
+    }
+  };
+  return (
+    <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
+      <Pressable style={m.abMask} onPress={onClose}>
+        <View style={{ width: "100%" }}>
+          <Pressable style={m.abSheet} onPress={(e) => e.stopPropagation()}>
+            <View style={m.abHead}>
+              <View style={m.abLogo}>
+                <LogoMark size={26} />
+              </View>
+              <View style={{ flex: 1, minWidth: 0 }}>
+                <Text style={m.abNameT}>CC Deck</Text>
+                <Text style={m.abVerT}>{APP_VER}</Text>
+              </View>
+              <Pressable style={m.abClose} hitSlop={8} onPress={onClose} accessibilityLabel="关闭关于">
+                <Text style={m.abCloseT}>✕</Text>
+              </Pressable>
+            </View>
+            <Text style={m.abSecT}>本版特性</Text>
+            {VERSION_NOTES.map((n, i) => (
+              <View key={i} style={m.abNoteRow}>
+                <View style={m.abNoteDot} />
+                <Text style={m.abNoteT}>{n}</Text>
+              </View>
+            ))}
+            <View style={m.abBtnRow}>
+              <Pressable
+                style={[m.abBtn, busy && m.abBtnOff]}
+                disabled={busy}
+                android_ripple={{ color: "rgba(255,255,255,0.15)", borderless: false, radius: 13 }}
+                onPress={() => void checkNow()}
+              >
+                <Text style={m.abBtnT}>{busy ? "检查中…" : "↻ 检查更新"}</Text>
+              </Pressable>
+              <Pressable
+                style={[m.abBtn, m.abBtnGhost]}
+                android_ripple={{ color: c.tintSoft, borderless: false, radius: 13 }}
+                onPress={() => void Linking.openURL(FEEDBACK_URL).catch(() => {})}
+              >
+                <Text style={[m.abBtnT, m.abBtnGhostT]}>✎ 反馈</Text>
+              </Pressable>
+            </View>
+            {msg ? <Text style={m.abMsgT} numberOfLines={1}>{msg}</Text> : null}
+          </Pressable>
+        </View>
+      </Pressable>
+    </Modal>
+  );
+}
 
 export default function SettingsDrawer({
   visible,
@@ -155,22 +230,22 @@ export default function SettingsDrawer({
       });
   }, [visible, snap.connected, pc, pairLeft === 0]);
 
-  // #312 手动检查更新：无新版行内显示"已是最新 vX"，有新版经 announceUpdate 弹 App 横幅
-  // （checkUpdate 失败也静默返回 null，此处与"已是最新"同文案，不额外报错打扰）
-  const [updBusy, setUpdBusy] = useState(false);
-  const [updMsg, setUpdMsg] = useState<string | null>(null);
-  const checkNow = async () => {
-    if (updBusy) return;
-    setUpdBusy(true);
-    setUpdMsg("检查中…");
-    const info = await checkUpdate();
-    setUpdBusy(false);
-    if (info) {
-      setUpdMsg(`新版 v${info.version} ↗`);
-      announceUpdate(info);
-    } else {
-      setUpdMsg(`已是最新 ${APP_VER}`);
-    }
+  // #313 关于弹窗：抽屉「ⓘ 关于」行呼出；检查更新从抽屉行迁入弹窗。抽屉收起时一并收弹窗
+  const [aboutOpen, setAboutOpen] = useState(false);
+  useEffect(() => {
+    if (!visible) setAboutOpen(false);
+  }, [visible]);
+
+  // #313 显示设置区折叠：低频项收纳腾空间（记忆上次选择，默认展开），折叠态标题示"常用"
+  const [dispCollapsed, setDispCollapsed] = useState(false);
+  useEffect(() => {
+    void AsyncStorage.getItem("cc_display_collapsed").then((v) => setDispCollapsed(v === "1"));
+  }, []);
+  const toggleDisp = () => {
+    setDispCollapsed((v) => {
+      void AsyncStorage.setItem("cc_display_collapsed", v ? "0" : "1");
+      return !v;
+    });
   };
 
   return (
@@ -300,7 +375,15 @@ export default function SettingsDrawer({
         )}
         {pairErr ? <Text style={d.pairErrT}>{pairErr}</Text> : null}
 
-        <Text style={d.secT}>显示</Text>
+        {/* #313 显示区可折叠：服务器列表同款 secHead + ▾/▸，AsyncStorage 记忆（默认展开） */}
+        <View style={d.secHead}>
+          <Text style={d.secTitleT}>显示{dispCollapsed ? " · 常用" : ""}</Text>
+          <Pressable style={d.secToggle} hitSlop={10} onPress={toggleDisp} android_ripple={{ color: c.tintSoft, borderless: true, radius: 12 }}>
+            <Text style={d.secToggleT}>{dispCollapsed ? "▸" : "▾"}</Text>
+          </Pressable>
+        </View>
+        {!dispCollapsed ? (
+        <>
         <View style={d.setItem}>
           <Text style={d.setLabel}>过程消息</Text>
           <View style={d.segFull}>
@@ -361,18 +444,21 @@ export default function SettingsDrawer({
             thumbColor="#fff"
           />
         </View>
-        {/* #312 检查更新：GitHub Releases 查新版，有新版弹 App 顶部横幅 */}
+        </>
+        ) : null}
+        {/* #313 关于：检查更新从抽屉行迁入弹窗承载（版本信息/特性摘要/检查更新/反馈） */}
         <Pressable
           style={[d.setItem, d.setRow]}
           android_ripple={{ color: c.tintSoft, borderless: false }}
-          onPress={() => void checkNow()}
-          accessibilityLabel="检查更新"
+          onPress={() => setAboutOpen(true)}
+          accessibilityLabel="关于"
         >
-          <Text style={d.setLabel}>↻ 检查更新</Text>
-          <Text style={d.updT} numberOfLines={1}>{updBusy ? "检查中…" : (updMsg ?? APP_VER)}</Text>
+          <Text style={d.setLabel}>ⓘ 关于</Text>
+          <Text style={d.aboutT}>›</Text>
         </Pressable>
         </ScrollView>
       </Animated.View>
+      <AboutModal visible={aboutOpen} onClose={() => setAboutOpen(false)} />
     </View>
   );
 }
@@ -469,6 +555,40 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
   segOptOn: { backgroundColor: c.tintStrong, borderColor: c.brandA },
   segT: { color: c.dim, fontSize: 12, fontWeight: "600" },
   segTOn: { color: c.brandA },
-  // #312 检查更新行右侧状态：默认展示当前版本号，点按后显示检查结果
-  updT: { color: c.brandA, fontSize: 12, fontWeight: "600" },
+  // #313 关于行右侧箭头
+  aboutT: { color: c.faint, fontSize: 14 },
+  // #313 关于弹窗（ab = about）：NewSessionModal 同款贴底卡片视觉语言
+  abMask: { flex: 1, backgroundColor: withA("#02050A", 0.65), justifyContent: "flex-end" },
+  abSheet: {
+    backgroundColor: c.panel, borderTopLeftRadius: 22, borderTopRightRadius: 22,
+    borderTopWidth: 1, borderTopColor: c.line, paddingHorizontal: 16,
+    paddingTop: 18, paddingBottom: 30,
+  },
+  abHead: { flexDirection: "row", alignItems: "center", gap: 12, marginBottom: 14 },
+  abLogo: {
+    width: 46, height: 46, borderRadius: 14, alignItems: "center", justifyContent: "center",
+    backgroundColor: "#1D1726", borderWidth: 1, borderColor: "rgba(255,255,255,0.09)",
+  },
+  abNameT: { color: c.text, fontSize: 16.5, fontWeight: "700" },
+  abVerT: { color: c.faint, fontSize: 11.5, marginTop: 1 },
+  abClose: {
+    width: 30, height: 30, borderRadius: 15, alignItems: "center", justifyContent: "center",
+    backgroundColor: c.tintSoft, borderWidth: 1, borderColor: c.line,
+  },
+  abCloseT: { color: c.dim, fontSize: 13 },
+  abSecT: { color: c.faint, fontSize: 11, fontWeight: "700", marginBottom: 8, letterSpacing: 1 },
+  abNoteRow: { flexDirection: "row", alignItems: "center", gap: 8, paddingVertical: 3.5 },
+  abNoteDot: { width: 5, height: 5, borderRadius: 3, backgroundColor: c.brandA },
+  abNoteT: { flex: 1, color: c.dim, fontSize: 12.5, lineHeight: 18 },
+  abBtnRow: { flexDirection: "row", gap: 8, marginTop: 16 },
+  abBtn: {
+    flex: 1, height: 44, borderRadius: 13, alignItems: "center", justifyContent: "center",
+    backgroundColor: c.tintStrong, borderWidth: 1, borderColor: withA(c.brandA, 0.45),
+    overflow: "hidden",
+  },
+  abBtnOff: { opacity: 0.55 },
+  abBtnT: { color: c.brandA, fontSize: 13.5, fontWeight: "700" },
+  abBtnGhost: { backgroundColor: c.tintSoft, borderColor: c.line },
+  abBtnGhostT: { color: c.dim },
+  abMsgT: { color: c.dim, fontSize: 12, marginTop: 10, textAlign: "center" },
 });

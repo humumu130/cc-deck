@@ -1,4 +1,4 @@
-// #312 App 在线更新：GitHub Releases 查新版（24h 静默检查 + 抽屉手动检查），
+// #312 App 在线更新：GitHub Releases 查新版（24h 静默检查 + 关于弹窗手动检查，#313 迁入），
 // 双源下载（ECS 镜像优先，GitHub asset 回落），安装交给系统安装器（APK 签名兜底）。
 // 全链路静默容错：任何失败返回 null，不打扰用户。
 import AsyncStorage from "@react-native-async-storage/async-storage";
@@ -13,6 +13,17 @@ const KEY_LAST_CHECK = "cc_update_last_check";
 const KEY_SKIPPED = "cc_update_skipped";
 const CHECK_WINDOW_MS = 24 * 3600 * 1000;
 const FETCH_TIMEOUT_MS = 5000;
+
+// #313 本版特性摘要（关于弹窗逐条展示），随版本发布同步维护
+export const VERSION_NOTES: string[] = [
+  "多源聚合模式：同时连接多台 PC，会话合并展示",
+  "待确认悬浮提醒：等待你确认的事项点开直达",
+  "扫码添加服务器：扫 PC 终端二维码一步接入",
+  "定时任务速览、任务号跳转（#NNN 直达任务卡）",
+  "上下文水位：会话卡实时用量百分比",
+  "在线更新：应用内检查新版、一键下载安装",
+  "手表端增强：速览与状态同步",
+];
 
 export type UpdateInfo = {
   version: string; // 不带 v 前缀
