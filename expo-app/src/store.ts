@@ -26,6 +26,47 @@ export interface ServerEntry {
   cloud?: CloudConfig | null;
 }
 
+// 源运行态（#294 批1，对齐网页端 ensureCtx 的 ctx）：单连接状态机按源实例化。
+// conn.cfg = 该源最后一次实际建连参数（幂等比较基准；区别于 entry 持久化字段——
+// 勾了"不记住令牌"时 entry.token 为空而 cfg.token 是本次连接用的令牌）
+export interface SourceConn {
+  id: string;            // = ServerEntry.id
+  name: string;
+  entry: ServerEntry;    // 最新条目（saveCloudPairing 回写 / 建连参数来源）
+  cfg: ConnConfig | null;
+  cloudCfg: CloudConfig | null; // 取自 entry.cloud
+  ws: WebSocket | null;
+  channel: "lan" | "cloud" | null;
+  state: Snapshot["connState"];
+  stateText: string | null; // 单源模式下透出的动态文案（"3s后重连"），非 reconnecting 时为 null
+  lastSeq: number;
+  sessions: Map<string, SessionState>;
+  timelines: Map<string, LogEntry[]>;
+  reconnectDelay: number;
+  reconnectTimer: ReturnType<typeof setTimeout> | null;
+  hbTimer: ReturnType<typeof setInterval> | null;
+  probeTimer: ReturnType<typeof setTimeout> | null;
+  lastDownAt: number;
+  epoch: number;
+  pendingCmds: Map<string, PendingCmd>;
+}
+
+// 已发出未回执的命令（ACK 追踪，按源隔离）：断开时静默清空，靠重连快照对账
+interface PendingCmd {
+  type: string;
+  tries: number;
+  timer: ReturnType<typeof setTimeout>;
+  wire: () => boolean;
+}
+
+// 按源连接状态（#294 批1：聚合视图数据源；单源模式仅活动源在连，UI 暂不消费）
+export interface SourceStatus {
+  id: string;
+  name: string;
+  state: Snapshot["connState"];
+  channel: "lan" | "cloud" | null;
+}
+
 export interface Snapshot {
   version: number;
   connected: boolean;
@@ -33,6 +74,7 @@ export interface Snapshot {
   // 连接阶段（供 UI 配色/文案判断，不靠 connText 字符串匹配）
   connState: "idle" | "connecting" | "online" | "reconnecting" | "offline";
   channel: "lan" | "cloud" | null;
+  sources: SourceStatus[];
   sessions: SessionState[];
   lastErrorCmd: string | null;
   cloudBusy: boolean;
@@ -59,6 +101,7 @@ const emptySnapshot: Snapshot = {
   connText: "未配置",
   connState: "idle",
   channel: null,
+  sources: [],
   sessions: [],
   lastErrorCmd: null,
   cloudBusy: false,
@@ -94,36 +137,25 @@ const CMD_LABEL: Record<string, string> = {
 };
 
 class RelayStore {
-  private ws: WebSocket | null = null;
-  private channel: "lan" | "cloud" | null = null;
-  private lastSeq = 0;
-  private reconnectDelay = 1000;
-  private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
-  private hbTimer: ReturnType<typeof setInterval> | null = null;
-  private probeTimer: ReturnType<typeof setTimeout> | null = null;
-  private lastDownAt = 0;
+  // #294 批1：单连接状态机按源实例化（conns），activeId 单源模式下唯一在连源；
+  // aggregate=false 时行为与旧单源逐字节等价。sidIndex 维护 sid→源路由（send/timelineOf）
+  private conns = new Map<string, SourceConn>();
+  private sidIndex = new Map<string, SourceConn>();
+  private activeId: string | null = null;
+  private aggregate = false;
   private listeners = new Set<() => void>();
   private snap: Snapshot = emptySnapshot;
-  private sessions = new Map<string, SessionState>();
-  private timelines = new Map<string, LogEntry[]>();
-  private cfg: ConnConfig | null = null;
-  private cloudCfg: CloudConfig | null = null;
   private servers: ServerEntry[] = [];
-  private devKeys: BoxKeyPair | null = null;
-  private epoch = 0;
+  private devKeys: BoxKeyPair | null = null; // 设备级共用（同网页端 ckp 跨源共用）
   private taskDoneSeq = 0;
   // 任务汇报去重/防复活（#254）：reported=已入队最新 ts（内存，挡 replay+SNAPSHOT 双投递）；
   // taskSeen=用户已清除的最新 ts（AsyncStorage 持久，挡进程重启后 SNAPSHOT 复活旧汇报）；
-  // taskViewed=用户点开看过的最新 ts（持久，挡重启后已看过项重新计未读）
+  // taskViewed=用户点开看过的最新 ts（持久，挡重启后已看过项重新计未读）。
+  // 均按 sid 键，sid 为 uuid 全局唯一，跨源无碰撞
   private reportedTaskTs = new Map<string, number>();
   private taskSeen: Record<string, number> = {};
   private taskViewed: Record<string, number> = {};
   private taskDoneQueue: TaskDoneReport[] = [];
-  // 已发出未回执的命令（ACK 追踪）：断开时静默清空，靠重连快照对账
-  private pendingCmds = new Map<
-    string,
-    { type: string; tries: number; timer: ReturnType<typeof setTimeout>; wire: () => boolean }
-  >();
 
   onWaiting: ((s: SessionState) => void) | null = null;
   onTaskDone: ((r: TaskDoneReport) => void) | null = null;
@@ -136,7 +168,8 @@ class RelayStore {
   getSnapshot = (): Snapshot => this.snap;
 
   timelineOf(sid: string): LogEntry[] {
-    return this.timelines.get(sid) ?? [];
+    const conn = this.sidIndex.get(sid) ?? this.activeConn();
+    return conn?.timelines.get(sid) ?? [];
   }
 
   private emit(patch: Partial<Snapshot> = {}) {
@@ -146,20 +179,68 @@ class RelayStore {
       clearTimeout(this.logEmitTimer);
       this.logEmitTimer = null;
     }
+    const active = this.activeConn();
     this.snap = {
       ...this.snap,
       ...patch,
       version: this.snap.version + 1,
-      sessions: [...this.sessions.values()],
+      // 批1 保持单源语义：快照会话仍只装活动源（聚合平铺 + src 字段是批2）
+      sessions: active ? [...active.sessions.values()] : [],
+      ...this.connStatusPatch(),
     };
     for (const fn of this.listeners) fn();
+  }
+
+  // 连接状态聚合（#294 批1）：单源 = 活动源直出（既有文案/字段逐字不变）；
+  // 聚合 = any-online 派生，connText `${online}/${total} 在线`（connected/connState 供
+  // App.tsx 通知权限/前台服务/回前台重连取此口径，调用方零改动）
+  private connStatusPatch(): Pick<Snapshot, "connected" | "connText" | "connState" | "channel" | "sources"> {
+    const sources: SourceStatus[] = [...this.conns.values()].map((c) => ({
+      id: c.id,
+      name: c.name,
+      state: c.state,
+      channel: c.channel,
+    }));
+    const inPlay: SourceConn[] = this.aggregate
+      ? [...this.conns.values()]
+      : this.activeId
+        ? [this.conns.get(this.activeId)].filter((c): c is SourceConn => !!c)
+        : [];
+    if (!inPlay.length) return { connected: false, connText: "未配置", connState: "idle", channel: null, sources };
+    if (this.aggregate) {
+      const online = inPlay.filter((c) => c.state === "online");
+      const connState = online.length
+        ? "online"
+        : inPlay.some((c) => c.state === "connecting")
+          ? "connecting"
+          : inPlay.some((c) => c.state === "reconnecting")
+            ? "reconnecting"
+            : "offline";
+      const ref = online.find((c) => c.id === this.activeId) ?? online[0] ?? null;
+      return {
+        connected: online.length > 0,
+        connText: `${online.length}/${inPlay.length} 在线`,
+        connState,
+        channel: ref ? ref.channel : null,
+        sources,
+      };
+    }
+    const c = inPlay[0];
+    return {
+      connected: c.state === "online",
+      connText: c.stateText ?? singleConnText(c),
+      connState: c.state,
+      channel: c.state === "online" ? c.channel : null,
+      sources,
+    };
   }
 
   // 流式日志合帧（#282）：SESSION_LOG 流式块高频到达，逐块 emit 会让列表/详情整树
   // 重渲占满 JS 线程——bridgeless 下硬件 back 事件异步排队后无超时兜底，被持续挤压
   // 即表现为详情页连按返回无响应/积压齐发塌缩退出。数据仍同步写入 timelines
   // （不丢块、不乱序），仅通知按窗口合并：距上次通知 ≥LOG_FRAME_MS 的首块立即发
-  // （保住首块跟手），窗口内的后续块合并为窗口末的一次补发（末帧 flush）
+  // （保住首块跟手），窗口内的后续块合并为窗口末的一次补发（末帧 flush）。
+  // 多源共用全局一个合帧窗口，通知频率反而更低
   private static readonly LOG_FRAME_MS = 200;
   private logEmitAt = 0;
   private logEmitTimer: ReturnType<typeof setTimeout> | null = null;
@@ -181,7 +262,7 @@ class RelayStore {
     }
   }
 
-  // ---------- 设备密钥（AsyncStorage 设备级，云通道 E2E 身份） ----------
+  // ---------- 设备密钥（AsyncStorage 设备级，云通道 E2E 身份，跨源共用） ----------
 
   private async deviceKeys(): Promise<BoxKeyPair> {
     if (this.devKeys) return this.devKeys;
@@ -249,34 +330,48 @@ class RelayStore {
     this.servers = list;
     await AsyncStorage.setItem("ccr_conns", JSON.stringify(list));
     await AsyncStorage.setItem("ccr_active", entry.id);
+    const prevId = this.activeId && this.activeId !== entry.id ? this.activeId : null;
+    this.activeId = entry.id;
     const tk = connectToken ?? entry.token;
-    if (tk) this.applyConfig({ wsUrl: entry.wsUrl, token: tk }, entry.cloud);
+    const conn = this.ensureConn(entry);
+    if (tk) {
+      // 聚合时只建/换该源不拆其他源并设 active（applyConfig 天然满足）；活动源
+      // 目标一致且在连则被幂等跳过，不拆重建
+      this.applyConfig(conn, entry, tk);
+    } else if (!this.aggregate && prevId) {
+      // 单源切到无令牌源：无新连接可建，旧连接同步拆掉防僵尸（#291 纪律），
+      // 状态落到"未配置"引导补输令牌
+      const prev = this.conns.get(prevId);
+      if (prev) this.connDisconnect(prev);
+      this.emit();
+    }
   }
 
   async deleteServer(id: string): Promise<void> {
     const list = (await this.readServers()).filter((e) => e.id !== id);
     this.servers = list;
     await AsyncStorage.setItem("ccr_conns", JSON.stringify(list));
+    // 聚合时销毁该源（killWs + 清缓存 + 出 Map）；其余源不受扰
+    this.destroyConn(id);
     if ((await AsyncStorage.getItem("ccr_active")) === id) {
       const next = list[0];
       await AsyncStorage.setItem("ccr_active", next ? next.id : "");
-      if (next) this.applyConfig({ wsUrl: next.wsUrl, token: next.token }, next.cloud);
-      else {
-        // 删光全部服务器：断开并清空状态，避免列表空了却仍显示"已连接"的幽灵连接
-        this.cfg = null;
-        this.cloudCfg = null;
-        this.lastSeq = 0;
-        this.sessions.clear();
-        this.timelines.clear();
+      this.activeId = next ? next.id : null;
+      if (next) {
+        const nc = this.ensureConn(next);
+        if (next.token) this.applyConfig(nc, next, next.token);
+      } else {
+        // 删光全部服务器：清空全局汇报状态，避免列表空了却仍显示"已连接"的幽灵连接
         this.taskDoneQueue = [];
         this.reportedTaskTs.clear();
-        this.disconnect();
-        this.emit({ connected: false, connText: "未配置", connState: "idle", channel: null, taskDoneQueue: [] });
+        this.emit({ taskDoneQueue: [] });
+        return;
       }
     }
+    this.emit();
   }
 
-  // 编辑服务器条目（名称/地址/令牌/云桥）：不切活动指针；改的是当前活动服务器且连接相关字段变化时重连
+  // 编辑服务器条目（名称/地址/令牌/云桥）：不切活动指针；连接相关字段变化时只重连被改的源
   async updateServer(
     id: string,
     patch: { name?: string; wsUrl?: string; token?: string; cloud?: CloudConfig | null },
@@ -288,14 +383,20 @@ class RelayStore {
     list[idx] = { ...before, ...patch };
     this.servers = list;
     await AsyncStorage.setItem("ccr_conns", JSON.stringify(list));
+    const conn = this.conns.get(id);
+    if (conn) {
+      conn.entry = list[idx];
+      conn.name = list[idx].name;
+    }
     const changed =
       (patch.wsUrl !== undefined && patch.wsUrl !== before.wsUrl) ||
       (patch.token !== undefined && patch.token !== before.token) ||
       (patch.cloud !== undefined && JSON.stringify(patch.cloud ?? null) !== JSON.stringify(before.cloud ?? null));
-    if (changed && (await AsyncStorage.getItem("ccr_active")) === id) {
-      const tk = list[idx].token;
-      if (tk) this.applyConfig({ wsUrl: list[idx].wsUrl, token: tk }, list[idx].cloud);
-    }
+    if (!changed || !conn) return;
+    // 单源模式只重连活动源（非活动源本就不在连）；聚合模式重连被改源
+    if (!this.aggregate && id !== this.activeId) return;
+    const tk = list[idx].token;
+    if (tk) this.applyConfig(conn, list[idx], tk);
   }
 
   async loadConfig(): Promise<ConnConfig | null> {
@@ -307,110 +408,222 @@ class RelayStore {
       const v2 = await AsyncStorage.getItem("ccr_task_viewed");
       if (v2) this.taskViewed = JSON.parse(v2) as Record<string, number>;
     } catch {}
+    // 聚合开关（#294）：设置项 UI 批4 上线，批1–3 联调经 adb 直写 cc.display.aggregate=1
+    try {
+      this.aggregate = (await AsyncStorage.getItem("cc.display.aggregate")) === "1";
+    } catch {}
     const list = await this.readServers();
     this.servers = list;
     const activeId = await AsyncStorage.getItem("ccr_active");
     const active = list.find((e) => e.id === activeId) ?? list[0];
+    this.activeId = active ? active.id : null;
     // 活动服务器没记令牌（勾了不记住）：停在设置页，列表里点它补输令牌
     if (!active || !active.token) return null;
-    this.cloudCfg = active.cloud ?? null;
-    this.cfg = { wsUrl: active.wsUrl, token: active.token };
-    return this.cfg;
+    const conn = this.ensureConn(active);
+    conn.cfg = { wsUrl: active.wsUrl, token: active.token };
+    conn.cloudCfg = active.cloud ?? null;
+    return conn.cfg;
   }
 
-  private applyConfig(cfg: ConnConfig, cloud?: CloudConfig | null) {
-    // 幂等：目标与当前一致且正在建连/已在线 → 跳过，免一次拆了重连
-    // （每次重建都要过 CONNECTING 窗口，正是旧连接泄漏的高危期）
-    if (
-      this.cfg &&
-      this.cfg.wsUrl === cfg.wsUrl &&
-      this.cfg.token === cfg.token &&
-      sameCloud(this.cloudCfg, cloud ?? null) &&
-      (this.snap.connState === "connecting" || this.snap.connState === "online")
-    ) {
+  // 聚合开关切换（#294）：true→逐源建连（活动源目标一致且在连，被幂等跳过不拆重建）；
+  // false→其余源拆连接清 timer，保留 sessions/timelines/lastSeq 内存缓存——再开时按
+  // last_seq 续传无感恢复，只有 deleteServer 才彻底清
+  setAggregate(v: boolean) {
+    if (this.aggregate === v) return;
+    this.aggregate = v;
+    if (v) {
+      for (const e of this.servers) {
+        if (!e.token) continue;
+        this.applyConfig(this.ensureConn(e), e, e.token);
+      }
+    } else {
+      for (const conn of this.conns.values()) {
+        if (conn.id === this.activeId) continue;
+        this.connDisconnect(conn);
+      }
+    }
+    this.emit();
+  }
+
+  // ---------- 源连接管理 ----------
+
+  private ensureConn(entry: ServerEntry): SourceConn {
+    let conn = this.conns.get(entry.id);
+    if (!conn) {
+      conn = {
+        id: entry.id,
+        name: entry.name,
+        entry,
+        cfg: null,
+        cloudCfg: entry.cloud ?? null,
+        ws: null,
+        channel: null,
+        state: "idle",
+        stateText: null,
+        lastSeq: 0,
+        sessions: new Map(),
+        timelines: new Map(),
+        reconnectDelay: 1000,
+        reconnectTimer: null,
+        hbTimer: null,
+        probeTimer: null,
+        lastDownAt: 0,
+        epoch: 0,
+        pendingCmds: new Map(),
+      };
+      this.conns.set(entry.id, conn);
+    } else {
+      conn.entry = entry;
+      conn.name = entry.name;
+    }
+    return conn;
+  }
+
+  private activeConn(): SourceConn | null {
+    return this.activeId ? this.conns.get(this.activeId) ?? null : null;
+  }
+
+  // 换连入口（#291 纪律：所有重建路径必经 connDisconnect→killWs，含 probeLan 失败分支）。
+  // 幂等降级为 conn 级：目标与该源最后建连参数一致且 connecting/online → 跳过重建；
+  // 目标一致但已断 → 保留缓存直接续连（last_seq 续传）；目标变化 → 清缓存全量重建
+  private applyConfig(conn: SourceConn, entry: ServerEntry, token: string) {
+    const sameTarget =
+      !!conn.cfg &&
+      conn.cfg.wsUrl === entry.wsUrl &&
+      conn.cfg.token === token &&
+      sameCloud(conn.cloudCfg, entry.cloud ?? null);
+    if (sameTarget && (conn.state === "connecting" || conn.state === "online")) return;
+    if (!sameTarget) {
+      for (const sid of conn.sessions.keys()) {
+        if (this.sidIndex.get(sid) === conn) this.sidIndex.delete(sid);
+      }
+      conn.sessions.clear();
+      conn.timelines.clear();
+      conn.lastSeq = 0;
+      conn.cfg = { wsUrl: entry.wsUrl, token };
+      conn.cloudCfg = entry.cloud ?? null;
+    }
+    this.connDisconnect(conn);
+    this.connConnect(conn);
+  }
+
+  // 拆单个源：掐周期/timer/在途命令 + killWs；不动 sessions/timelines/lastSeq 缓存。
+  // hbTimer 不在此清（对齐旧 disconnect）：残留一拍后由 startHb 的 ws 守卫自清
+  private connDisconnect(conn: SourceConn) {
+    conn.epoch++;
+    conn.reconnectDelay = 1000;
+    if (conn.reconnectTimer) {
+      clearTimeout(conn.reconnectTimer);
+      conn.reconnectTimer = null;
+    }
+    if (conn.probeTimer) {
+      clearTimeout(conn.probeTimer);
+      conn.probeTimer = null;
+    }
+    this.clearPendingCmds(conn);
+    killWs(conn.ws);
+    conn.ws = null;
+    conn.channel = null;
+    conn.state = "offline";
+    conn.stateText = null;
+  }
+
+  // 彻底销毁（仅 deleteServer 触达）：拆连接 + 清缓存 + 出 Map + 摘 sidIndex
+  private destroyConn(id: string) {
+    const conn = this.conns.get(id);
+    if (!conn) return;
+    this.connDisconnect(conn);
+    for (const sid of conn.sessions.keys()) {
+      if (this.sidIndex.get(sid) === conn) this.sidIndex.delete(sid);
+    }
+    conn.sessions.clear();
+    conn.timelines.clear();
+    conn.lastSeq = 0;
+    this.conns.delete(id);
+  }
+
+  // 断开即静默清空该源在途命令：结果靠重连快照对账，残留 timer 只会在
+  // 离线窗口误报「未确认」、甚至把重发打到新连接上
+  private clearPendingCmds(conn: SourceConn) {
+    for (const p of conn.pendingCmds.values()) clearTimeout(p.timer);
+    conn.pendingCmds.clear();
+  }
+
+  // 对外连接入口（启动自动连/回前台重连/手动重连按钮共用）：内部按 aggregate 分发
+  // 聚合逐源建连 / 单源只连活动源
+  connect() {
+    if (this.aggregate) {
+      for (const e of this.servers) {
+        if (!e.token) continue;
+        this.applyConfig(this.ensureConn(e), e, e.token);
+      }
       return;
     }
-    this.cfg = cfg;
-    this.cloudCfg = cloud ?? null;
-    this.lastSeq = 0;
-    this.sessions.clear();
-    this.timelines.clear();
-    this.disconnect();
-    this.connect();
+    const conn = this.activeConn();
+    if (conn) this.connConnect(conn);
   }
 
   disconnect() {
-    this.epoch++;
-    this.reconnectDelay = 1000;
-    if (this.reconnectTimer) {
-      clearTimeout(this.reconnectTimer);
-      this.reconnectTimer = null;
-    }
-    if (this.probeTimer) {
-      clearTimeout(this.probeTimer);
-      this.probeTimer = null;
-    }
     if (this.logEmitTimer) {
       clearTimeout(this.logEmitTimer);
       this.logEmitTimer = null;
     }
-    this.clearPendingCmds();
-    killWs(this.ws);
-    this.ws = null;
-    this.channel = null;
-  }
-
-  // 断开即静默清空在途命令：结果靠重连快照对账，残留 timer 只会在
-  // 离线窗口误报「未确认」、甚至把重发打到新连接上
-  private clearPendingCmds() {
-    for (const p of this.pendingCmds.values()) clearTimeout(p.timer);
-    this.pendingCmds.clear();
-  }
-
-  // 连接周期：先 LAN 直连（探测超时），失败且已配对云桥则本轮转云通道
-  connect() {
-    if (!this.cfg || !this.cfg.token) return;
-    if (this.reconnectTimer) {
-      clearTimeout(this.reconnectTimer);
-      this.reconnectTimer = null;
+    if (this.aggregate) {
+      for (const conn of this.conns.values()) this.connDisconnect(conn);
+      return;
     }
-    const ep = ++this.epoch;
-    this.emit({ connText: "连接中", connState: "connecting" });
-    if (this.cloudCfg && !this.devKeys) void this.deviceKeys();
-    void this.connectCycle(ep);
+    const conn = this.activeConn();
+    if (conn) this.connDisconnect(conn);
   }
 
-  private async connectCycle(ep: number) {
-    const cfg = this.cfg!;
-    killWs(this.ws);
-    this.ws = null;
-    this.channel = null;
-    const lanWs = await this.probeLan(cfg);
-    if (ep !== this.epoch) {
+  // 连接周期：先 LAN 直连（探测超时），失败且已配对云桥则本轮转云通道。每源独立循环
+  private connConnect(conn: SourceConn) {
+    if (!conn.cfg || !conn.cfg.token) return;
+    if (conn.reconnectTimer) {
+      clearTimeout(conn.reconnectTimer);
+      conn.reconnectTimer = null;
+    }
+    const ep = ++conn.epoch;
+    conn.state = "connecting";
+    conn.stateText = null;
+    this.emit();
+    if (conn.cloudCfg && !this.devKeys) void this.deviceKeys();
+    void this.connCycle(conn, ep);
+  }
+
+  private async connCycle(conn: SourceConn, ep: number) {
+    const cfg = conn.cfg!;
+    killWs(conn.ws);
+    conn.ws = null;
+    conn.channel = null;
+    const lanWs = await this.probeLan(conn, cfg);
+    if (ep !== conn.epoch) {
       try {
         lanWs?.close();
       } catch {}
       return;
     }
     if (lanWs) {
-      this.adoptLan(lanWs);
+      this.adoptLan(conn, lanWs);
       return;
     }
-    if (this.cloudCfg && this.devKeys) {
-      this.openCloud(this.cloudCfg, ep);
+    if (conn.cloudCfg && this.devKeys) {
+      this.openCloud(conn, conn.cloudCfg);
       return;
     }
-    this.emit({ connected: false, connText: "已断开", connState: "offline", channel: null });
-    this.scheduleReconnect();
+    conn.state = "offline";
+    conn.stateText = null;
+    this.emit();
+    this.scheduleReconnect(conn);
   }
 
   // LAN 探测：open 即成功（返回活连接，由调用方接管）；超时/出错返回 null
-  private probeLan(cfg: ConnConfig): Promise<WebSocket | null> {
+  private probeLan(conn: SourceConn, cfg: ConnConfig): Promise<WebSocket | null> {
     return new Promise((resolve) => {
       const url =
         cfg.wsUrl +
         "?token=" + encodeURIComponent(cfg.token) +
-        (this.lastSeq > 0 ? "&last_seq=" + this.lastSeq : "");
+        (conn.lastSeq > 0 ? "&last_seq=" + conn.lastSeq : "");
       let ws: WebSocket;
       try {
         ws = new WebSocket(url);
@@ -433,34 +646,39 @@ class RelayStore {
     });
   }
 
-  private adoptLan(ws: WebSocket) {
-    this.ws = ws;
-    this.channel = "lan";
-    this.reconnectDelay = 1000;
-    this.emit({ connected: true, connText: "已连接", connState: "online", channel: "lan" });
-    this.startHb(ws);
+  private adoptLan(conn: SourceConn, ws: WebSocket) {
+    conn.ws = ws;
+    conn.channel = "lan";
+    conn.reconnectDelay = 1000;
+    conn.state = "online";
+    conn.stateText = null;
+    this.emit();
+    this.startHb(conn, ws);
     ws.onclose = () => {
-      if (this.ws !== ws) return;
-      this.stopHb();
-      this.clearPendingCmds();
-      this.emit({ connected: false, connText: "已断开", connState: "offline", channel: null });
-      this.scheduleReconnect();
+      if (conn.ws !== ws) return;
+      this.stopHb(conn);
+      this.clearPendingCmds(conn);
+      conn.state = "offline";
+      conn.stateText = null;
+      conn.channel = null;
+      this.emit();
+      this.scheduleReconnect(conn);
     };
     ws.onerror = () => {};
     ws.onmessage = (ev: WebSocketMessageEvent) => {
-      if (this.ws !== ws) return;
-      this.lastDownAt = Date.now();
+      if (conn.ws !== ws) return;
+      conn.lastDownAt = Date.now();
       let msg: Envelope | CommandAck;
       try {
         msg = JSON.parse(String(ev.data));
       } catch {
         return;
       }
-      this.onMessage(msg);
+      this.onMessage(conn, msg);
     };
   }
 
-  private openCloud(cloud: CloudConfig, ep: number) {
+  private openCloud(conn: SourceConn, cloud: CloudConfig) {
     const keys = this.devKeys!;
     const dev = devId(keys.publicKey, "ph");
     const url =
@@ -472,35 +690,42 @@ class RelayStore {
     try {
       ws = new WebSocket(url);
     } catch {
-      this.emit({ connected: false, connText: "已断开", connState: "offline", channel: null });
-      this.scheduleReconnect();
+      conn.state = "offline";
+      conn.stateText = null;
+      this.emit();
+      this.scheduleReconnect(conn);
       return;
     }
-    this.ws = ws;
-    this.channel = "cloud";
+    conn.ws = ws;
+    conn.channel = "cloud";
     ws.onopen = () => {
-      if (this.ws !== ws) return;
-      this.reconnectDelay = 1000;
-      this.emit({ connected: true, connText: "已连接 ☁", connState: "online", channel: "cloud" });
-      this.startHb(ws, cloud, keys);
+      if (conn.ws !== ws) return;
+      conn.reconnectDelay = 1000;
+      conn.state = "online";
+      conn.stateText = null;
+      this.emit();
+      this.startHb(conn, ws, cloud, keys);
       ws.send(
         JSON.stringify({
           to: cloud.relayDev,
-          data: seal({ t: "hello", last_seq: this.lastSeq }, cloud.relayPubkey, keys.secretKey),
+          data: seal({ t: "hello", last_seq: conn.lastSeq }, cloud.relayPubkey, keys.secretKey),
         }),
       );
     };
     ws.onclose = () => {
-      if (this.ws !== ws) return;
-      this.stopHb();
-      this.clearPendingCmds();
-      this.emit({ connected: false, connText: "已断开", connState: "offline", channel: null });
-      this.scheduleReconnect();
+      if (conn.ws !== ws) return;
+      this.stopHb(conn);
+      this.clearPendingCmds(conn);
+      conn.state = "offline";
+      conn.stateText = null;
+      conn.channel = null;
+      this.emit();
+      this.scheduleReconnect(conn);
     };
     ws.onerror = () => {};
     ws.onmessage = (ev: WebSocketMessageEvent) => {
-      if (this.ws !== ws) return;
-      this.lastDownAt = Date.now();
+      if (conn.ws !== ws) return;
+      conn.lastDownAt = Date.now();
       let frame: { type?: string; data?: SealedBox };
       try {
         frame = JSON.parse(String(ev.data));
@@ -517,36 +742,36 @@ class RelayStore {
       if (!frame.data) return;
       const inner = unseal<Envelope | CommandAck>(frame.data, cloud.relayPubkey, keys.secretKey);
       if (!inner) return;
-      this.onMessage(inner);
+      this.onMessage(conn, inner);
     };
   }
 
   // 应用层心跳：15s 一拍保持链路流量（防公司网络 idle 掐 NAT），55s 无任何下行
-  // 判半开强制断开重连（否则要等 TCP 重传超时，分钟级黑洞）
-  private startHb(ws: WebSocket, cloud?: CloudConfig, keys?: BoxKeyPair) {
-    this.stopHb();
-    this.lastDownAt = Date.now();
-    this.hbTimer = setInterval(() => {
-      if (this.ws !== ws) {
-        this.stopHb();
+  // 判半开强制断开重连（否则要等 TCP 重传超时，分钟级黑洞）。每源独立计时
+  private startHb(conn: SourceConn, ws: WebSocket, cloud?: CloudConfig, keys?: BoxKeyPair) {
+    this.stopHb(conn);
+    conn.lastDownAt = Date.now();
+    conn.hbTimer = setInterval(() => {
+      if (conn.ws !== ws) {
+        this.stopHb(conn);
         return;
       }
-      if (Date.now() - this.lastDownAt > 55_000) {
+      if (Date.now() - conn.lastDownAt > 55_000) {
         try { ws.close(); } catch {}
         return;
       }
       try {
         ws.send(cloud && keys
-          ? JSON.stringify({ to: cloud.relayDev, data: seal({ t: "ping", last_seq: this.lastSeq }, cloud.relayPubkey, keys.secretKey) })
+          ? JSON.stringify({ to: cloud.relayDev, data: seal({ t: "ping", last_seq: conn.lastSeq }, cloud.relayPubkey, keys.secretKey) })
           : JSON.stringify({ type: "PING" }));
       } catch {}
     }, 15_000);
   }
 
-  private stopHb() {
-    if (this.hbTimer) {
-      clearInterval(this.hbTimer);
-      this.hbTimer = null;
+  private stopHb(conn: SourceConn) {
+    if (conn.hbTimer) {
+      clearInterval(conn.hbTimer);
+      conn.hbTimer = null;
     }
   }
 
@@ -554,57 +779,69 @@ class RelayStore {
   // connected 仍真——AppState active 不能只信 connected 干等 15s 心跳拍。
   // 先按心跳同口径判死（>55s 无下行直接断开），否则补发一拍 PING 等 4s，
   // 仍无任何下行（PONG 也算）即判死。断开走既有 onClose→重连→replay/SNAPSHOT
-  // 恢复链，错过的 TASK_DONE 由 last_task_done 状态兜回
+  // 恢复链，错过的 TASK_DONE 由 last_task_done 状态兜回。
+  // 聚合模式遍历 conns 逐个体检
   resumeProbe() {
-    const ws = this.ws;
+    for (const conn of this.conns.values()) {
+      if (!this.aggregate && conn.id !== this.activeId) continue;
+      this.connResumeProbe(conn);
+    }
+  }
+
+  private connResumeProbe(conn: SourceConn) {
+    const ws = conn.ws;
     // readyState 守卫：disconnect 后 hbTimer 残留 ≤15s（下一拍自清）+ 新 socket
     // 尚在 CONNECTING 的窗口内，hbTimer 判存活不可靠，只探已 OPEN 的连接
-    if (!ws || !this.hbTimer || ws.readyState !== WebSocket.OPEN) return;
-    if (this.probeTimer) {
-      clearTimeout(this.probeTimer);
-      this.probeTimer = null;
+    if (!ws || !conn.hbTimer || ws.readyState !== WebSocket.OPEN) return;
+    if (conn.probeTimer) {
+      clearTimeout(conn.probeTimer);
+      conn.probeTimer = null;
     }
-    const t0 = this.lastDownAt;
+    const t0 = conn.lastDownAt;
     if (Date.now() - t0 > 55_000) {
       try { ws.close(); } catch {}
       return;
     }
-    const cloud = this.channel === "cloud" && this.cloudCfg ? this.cloudCfg : undefined;
+    const cloud = conn.channel === "cloud" && conn.cloudCfg ? conn.cloudCfg : undefined;
     const keys = this.devKeys;
     try {
       ws.send(cloud && keys
-        ? JSON.stringify({ to: cloud.relayDev, data: seal({ t: "ping", last_seq: this.lastSeq }, cloud.relayPubkey, keys.secretKey) })
+        ? JSON.stringify({ to: cloud.relayDev, data: seal({ t: "ping", last_seq: conn.lastSeq }, cloud.relayPubkey, keys.secretKey) })
         : JSON.stringify({ type: "PING" }));
     } catch {
       try { ws.close(); } catch {}
       return;
     }
-    this.probeTimer = setTimeout(() => {
-      this.probeTimer = null;
-      if (this.ws === ws && this.lastDownAt === t0) {
+    conn.probeTimer = setTimeout(() => {
+      conn.probeTimer = null;
+      if (conn.ws === ws && conn.lastDownAt === t0) {
         try { ws.close(); } catch {}
       }
     }, 4000);
   }
 
-  private scheduleReconnect() {    if (!this.cfg) return;
-    const delay = this.reconnectDelay;
-    this.reconnectDelay = Math.min(this.reconnectDelay * 2, 10000);
-    this.emit({ connText: `${Math.round(delay / 1000)}s后重连`, connState: "reconnecting" });
-    if (this.reconnectTimer) clearTimeout(this.reconnectTimer);
-    this.reconnectTimer = setTimeout(() => this.connect(), delay);
+  private scheduleReconnect(conn: SourceConn) {
+    if (!conn.cfg) return;
+    const delay = conn.reconnectDelay;
+    conn.reconnectDelay = Math.min(conn.reconnectDelay * 2, 10000);
+    conn.state = "reconnecting";
+    conn.stateText = `${Math.round(delay / 1000)}s后重连`;
+    this.emit();
+    if (conn.reconnectTimer) clearTimeout(conn.reconnectTimer);
+    conn.reconnectTimer = setTimeout(() => this.connConnect(conn), delay);
   }
 
-  // LAN 与云通道共用的下行处理（云侧已解密）
-  private onMessage(msg: Envelope | CommandAck) {
+  // ---------- 下行处理（LAN 与云通道共用，云侧已解密；按源隔离） ----------
+
+  private onMessage(conn: SourceConn, msg: Envelope | CommandAck) {
     if ((msg as CommandAck).type === "COMMAND_ACK") {
       const ack = msg as CommandAck;
-      const p = this.pendingCmds.get(ack.command_id);
+      const p = conn.pendingCmds.get(ack.command_id);
       if (p) {
         clearTimeout(p.timer);
-        this.pendingCmds.delete(ack.command_id);
+        conn.pendingCmds.delete(ack.command_id);
       }
-      if (ack.cloud) void this.saveCloudPairing(ack.cloud);
+      if (ack.cloud) void this.saveCloudPairing(conn, ack.cloud);
       if (ack.pair_code) {
         this.emit({ pairCode: { code: ack.pair_code.code, expiresAt: Date.now() + ack.pair_code.expires_in * 1000 } });
       }
@@ -622,39 +859,42 @@ class RelayStore {
       return;
     }
     const env = msg as Envelope;
-    if (env.seq !== undefined) this.lastSeq = Math.max(this.lastSeq, env.seq);
-    this.onEvent(env);
+    if (env.seq !== undefined) conn.lastSeq = Math.max(conn.lastSeq, env.seq);
+    this.onEvent(conn, env);
     // 流式日志走合帧通知；其余事件（状态/快照/汇报等）照常即时通知——
     // 即时 emit 同时会把窗口内积着的流式块一并冲出（会话切换天然 flush）
     if (env.type === "SESSION_LOG") this.emitLogFrame();
     else this.emit();
   }
 
-  // 配对 ACK：relay 经可信 LAN 信道回传云桥参数，落盘到当前服务器条目
-  private async saveCloudPairing(info: CloudPairInfo) {
+  // 配对 ACK：relay 经可信 LAN 信道回传云桥参数，按 conn.entry 定位条目落盘
+  private async saveCloudPairing(conn: SourceConn, info: CloudPairInfo) {
     const cloud: CloudConfig = {
       url: info.url,
       token: info.token,
       relayDev: info.relay_dev,
       relayPubkey: info.relay_pubkey,
     };
-    this.cloudCfg = cloud;
+    conn.cloudCfg = cloud;
     try {
       const list = await this.readServers();
-      const entry = list.find((e) => e.wsUrl === this.cfg?.wsUrl && e.token === this.cfg?.token);
+      const entry = list.find((e) => e.id === conn.id);
       if (entry) {
         entry.cloud = cloud;
         this.servers = list;
+        conn.entry = entry;
         await AsyncStorage.setItem("ccr_conns", JSON.stringify(list));
       }
     } catch {}
     this.emit({ cloudBusy: false, cloudMsg: "云桥配对成功，外出时自动经云通道连接" });
   }
 
-  // 在已连接的 LAN 信道上发起云桥配对（信任锚 = LAN token）
+  // 在已连接的 LAN 信道上发起云桥配对（信任锚 = LAN token）。配对是 per-server
+  // 行为：走活动源，语义与单源时代一致
   async pairCloud(): Promise<void> {
     this.clearCloudMsg();
-    if (!this.ws || this.ws.readyState !== WebSocket.OPEN || this.channel !== "lan") {
+    const conn = this.activeConn();
+    if (!conn || !conn.ws || conn.ws.readyState !== WebSocket.OPEN || conn.channel !== "lan") {
       this.emit({ cloudMsg: "请先在同一局域网内连接" });
       return;
     }
@@ -676,29 +916,34 @@ class RelayStore {
     }
   }
 
-  // 为网页端等新设备签发一次性配对码（LAN/云任一已连接信道均可）
+  // 为网页端等新设备签发一次性配对码（LAN/云任一已连接信道均可）：走活动源
   async requestPairCode(): Promise<string | null> {
-    if (!this.ws || this.ws.readyState !== WebSocket.OPEN) return "请先连接服务器";
+    const conn = this.activeConn();
+    if (!conn || !conn.ws || conn.ws.readyState !== WebSocket.OPEN) return "请先连接服务器";
     if (this.send("COMMAND_PAIR_CODE", {})) return null;
     return "命令发送失败";
   }
 
-  private onEvent(msg: Envelope) {
+  private onEvent(conn: SourceConn, msg: Envelope) {
     const sid = msg.session_id;
     switch (msg.type) {
       case "SNAPSHOT": {
-        this.sessions.clear();
-        this.timelines.clear();
-        for (const s of msg.payload.sessions as SessionState[]) {
-          this.sessions.set(s.session_id, s);
-          this.timelines.set(s.session_id, msg.payload.logs[s.session_id] ?? []);
+        for (const old of conn.sessions.keys()) {
+          if (this.sidIndex.get(old) === conn) this.sidIndex.delete(old);
         }
-        this.lastSeq = Math.max(this.lastSeq, msg.seq);
+        conn.sessions.clear();
+        conn.timelines.clear();
+        for (const s of msg.payload.sessions as SessionState[]) {
+          conn.sessions.set(s.session_id, s);
+          conn.timelines.set(s.session_id, msg.payload.logs[s.session_id] ?? []);
+          this.sidIndex.set(s.session_id, conn);
+        }
+        conn.lastSeq = Math.max(conn.lastSeq, msg.seq);
         this.recoverTaskDone(msg.payload.sessions as SessionState[]);
         break;
       }
       case "SESSION_CREATED": {
-        this.sessions.set(sid, {
+        conn.sessions.set(sid, {
           session_id: sid,
           relay_session_id: "",
           cwd: msg.payload.cwd,
@@ -713,12 +958,13 @@ class RelayStore {
           updated_at: msg.ts,
           stats: { files_changed: 0, lines_added: 0, lines_deleted: 0 },
         });
-        this.timelines.set(sid, []);
-        this.pushLog(sid, { ts: msg.ts, kind: "system", text: msg.payload.external ? "外部会话接入 (hooks)" : "会话创建" });
+        conn.timelines.set(sid, []);
+        this.sidIndex.set(sid, conn);
+        this.pushLog(conn, sid, { ts: msg.ts, kind: "system", text: msg.payload.external ? "外部会话接入 (hooks)" : "会话创建" });
         break;
       }
       case "SESSION_UPDATED": {
-        const s = this.sessions.get(sid);
+        const s = conn.sessions.get(sid);
         if (!s) break;
         s.status = msg.payload.status;
         s.action_summary = msg.payload.action_summary;
@@ -743,13 +989,13 @@ class RelayStore {
         break;
       }
       case "SESSION_HEARTBEAT": {
-        const s = this.sessions.get(sid);
+        const s = conn.sessions.get(sid);
         if (!s) break;
         s.elapsed_hint = msg.payload.elapsed_ms;
         break;
       }
       case "SESSION_WAITING": {
-        const s = this.sessions.get(sid);
+        const s = conn.sessions.get(sid);
         if (!s) break;
         s.status = "WAITING";
         s.waiting_request = { ...msg.payload, received_at: msg.ts };
@@ -757,40 +1003,40 @@ class RelayStore {
         break;
       }
       case "SESSION_WAITING_RESOLVED": {
-        const s = this.sessions.get(sid);
+        const s = conn.sessions.get(sid);
         if (!s) break;
         s.status = "WORKING";
         s.waiting_request = null;
         const d = msg.payload.decision;
         const dText = d === "allow" ? "已允许" : d === "deny" ? "已拒绝" : d === "answer" ? "已作答" : d === "answered" ? "电脑端已作答" : "远程审批超时，回退本地";
-        this.pushLog(sid, { ts: msg.ts, kind: "system", text: dText + (d === "timeout" ? "" : ` (by ${msg.payload.by})`) });
+        this.pushLog(conn, sid, { ts: msg.ts, kind: "system", text: dText + (d === "timeout" ? "" : ` (by ${msg.payload.by})`) });
         break;
       }
       case "SESSION_ERROR": {
-        const s = this.sessions.get(sid);
+        const s = conn.sessions.get(sid);
         if (!s) break;
         s.status = "ERROR";
         s.last_error = msg.payload.message;
-        this.pushLog(sid, { ts: msg.ts, kind: "system", text: "错误: " + msg.payload.message });
+        this.pushLog(conn, sid, { ts: msg.ts, kind: "system", text: "错误: " + msg.payload.message });
         break;
       }
       case "SESSION_DONE": {
-        const s = this.sessions.get(sid);
+        const s = conn.sessions.get(sid);
         if (!s) break;
         s.status = "DONE";
         s.done_reason = msg.payload.terminal_reason;
         s.duration_ms = msg.payload.duration_ms;
         if (msg.payload.stats) s.stats = msg.payload.stats;
-        this.pushLog(sid, { ts: msg.ts, kind: "system", text: `完成: ${msg.payload.terminal_reason} · ${(msg.payload.duration_ms / 1000).toFixed(1)}s` });
+        this.pushLog(conn, sid, { ts: msg.ts, kind: "system", text: `完成: ${msg.payload.terminal_reason} · ${(msg.payload.duration_ms / 1000).toFixed(1)}s` });
         break;
       }
       case "SESSION_LOG": {
-        if (msg.payload.kind === "user_message") this.consumePendingByUserMsg(sid, msg.payload.text ?? "");
-        this.pushLog(sid, msg.payload);
+        if (msg.payload.kind === "user_message") this.consumePendingByUserMsg(conn, sid, msg.payload.text ?? "");
+        this.pushLog(conn, sid, msg.payload);
         break;
       }
       case "TASK_DONE": {
-        const s = this.sessions.get(sid);
+        const s = conn.sessions.get(sid);
         if (!s) break;
         const tdTs = typeof msg.payload.ts === "number" ? msg.payload.ts : msg.ts;
         if (tdTs <= (this.reportedTaskTs.get(sid) ?? 0)) break; // 重连 replay 重复投递
@@ -811,8 +1057,9 @@ class RelayStore {
         break;
       }
       case "SESSION_DELETED": {
-        this.sessions.delete(sid);
-        this.timelines.delete(sid);
+        conn.sessions.delete(sid);
+        conn.timelines.delete(sid);
+        if (this.sidIndex.get(sid) === conn) this.sidIndex.delete(sid);
         break;
       }
     }
@@ -821,8 +1068,8 @@ class RelayStore {
   // 兜底：user_message 晋升日志到达时本地移除被覆盖的排队条目
   // （正常路径靠 SESSION_UPDATED.pending_inputs 清空；该帧丢失/旧版 relay 不发时由此兜底，
   // 排队气泡才不会在消息已处理后一直闪烁）
-  private consumePendingByUserMsg(sid: string, text: string) {
-    const s = this.sessions.get(sid);
+  private consumePendingByUserMsg(conn: SourceConn, sid: string, text: string) {
+    const s = conn.sessions.get(sid);
     if (!s?.external || !s.pending_inputs?.length) return;
     const key = text.trim().replace(/\s+/g, " ");
     if (!key) return;
@@ -837,8 +1084,8 @@ class RelayStore {
   }
 
   // 时间线不可变更新：数组引用一变，渲染层的 useMemo/依赖比较才能感知新条目
-  private pushLog(sid: string, entry: LogEntry) {
-    const list = this.timelines.get(sid) ?? [];
+  private pushLog(conn: SourceConn, sid: string, entry: LogEntry) {
+    const list = conn.timelines.get(sid) ?? [];
     const e: LogEntry = {
       ts: entry.ts || Date.now(),
       kind: entry.kind,
@@ -855,62 +1102,69 @@ class RelayStore {
       if (i >= 0) {
         const next = [...list];
         next[i] = e;
-        this.timelines.set(sid, next);
+        conn.timelines.set(sid, next);
         return;
       }
     }
     const next = [...list, e];
     if (next.length > 500) next.splice(0, next.length - 500);
-    this.timelines.set(sid, next);
+    conn.timelines.set(sid, next);
   }
 
-  // 当前连接参数（slash 联想 fetch /api/commands 等只读 HTTP 端点用）
+  // 当前连接参数（slash 联想 fetch /api/commands 等只读 HTTP 端点用）：活动源口径
   get connInfo(): { wsUrl: string; token: string } | null {
-    return this.cfg ? { ...this.cfg } : null;
+    const conn = this.activeConn();
+    return conn?.cfg ? { ...conn.cfg } : null;
   }
 
+  // 命令路由（#294 批1）：按 payload.session_id 经 sidIndex 定位源（sid 为 uuid
+  // 全局唯一，可作跨源主键）；无 sid（COMMAND_CREATE / PAIR_*）→ 活动源。
+  // ACK 追踪按源隔离（pendingCmds 在 conn 上）：超时重发同源同 command_id，
+  // relay 幂等去重兜底，不跨源串扰
   send(type: string, payload: Record<string, unknown>): boolean {
-    if (!this.ws || this.ws.readyState !== WebSocket.OPEN) {
+    const sid = typeof payload.session_id === "string" ? (payload.session_id as string) : null;
+    const conn = (sid ? this.sidIndex.get(sid) : undefined) ?? this.activeConn();
+    if (!conn || !conn.ws || conn.ws.readyState !== WebSocket.OPEN) {
       this.emit({ lastErrorCmd: "未连接，命令未发送" });
       return false;
     }
     const cmd = { command_id: uuid(), type, payload, ts: Date.now() };
     const wire = (): boolean => {
-      if (!this.ws || this.ws.readyState !== WebSocket.OPEN) return false;
-      if (this.channel === "cloud" && this.cloudCfg && this.devKeys) {
-        this.ws.send(
+      if (!conn.ws || conn.ws.readyState !== WebSocket.OPEN) return false;
+      if (conn.channel === "cloud" && conn.cloudCfg && this.devKeys) {
+        conn.ws.send(
           JSON.stringify({
-            to: this.cloudCfg.relayDev,
-            data: seal(cmd, this.cloudCfg.relayPubkey, this.devKeys.secretKey),
+            to: conn.cloudCfg.relayDev,
+            data: seal(cmd, conn.cloudCfg.relayPubkey, this.devKeys.secretKey),
           }),
         );
       } else {
-        this.ws.send(JSON.stringify(cmd));
+        conn.ws.send(JSON.stringify(cmd));
       }
       return true;
     };
     const id = cmd.command_id;
-    const entry: { type: string; tries: number; timer: ReturnType<typeof setTimeout>; wire: () => boolean } = {
+    const entry: PendingCmd = {
       type,
       tries: 0,
       timer: null as unknown as ReturnType<typeof setTimeout>,
       wire,
     };
-    entry.timer = setTimeout(() => this.onCmdTimeout(id), ACK_TIMEOUT_MS);
-    this.pendingCmds.set(id, entry);
+    entry.timer = setTimeout(() => this.onCmdTimeout(conn, id), ACK_TIMEOUT_MS);
+    conn.pendingCmds.set(id, entry);
     return true;
   }
 
   // 回执超时：先重发一次同 id（幂等）；再超时才报失败。连接中途断开由 disconnect 清场
-  private onCmdTimeout(id: string) {
-    const p = this.pendingCmds.get(id);
+  private onCmdTimeout(conn: SourceConn, id: string) {
+    const p = conn.pendingCmds.get(id);
     if (!p) return;
     if (p.tries === 0 && p.wire()) {
       p.tries = 1;
-      p.timer = setTimeout(() => this.onCmdTimeout(id), ACK_RETRY_TIMEOUT_MS);
+      p.timer = setTimeout(() => this.onCmdTimeout(conn, id), ACK_RETRY_TIMEOUT_MS);
       return;
     }
-    this.pendingCmds.delete(id);
+    conn.pendingCmds.delete(id);
     this.emit({ lastErrorCmd: `${CMD_LABEL[p.type] ?? "命令"}重发后仍未确认，可能未送达` });
   }
 
@@ -984,10 +1238,21 @@ class RelayStore {
 
 export const store = new RelayStore();
 
+// 单源模式连接文案（conn.state → connText，逐字保持旧版语义）
+function singleConnText(c: SourceConn): string {
+  switch (c.state) {
+    case "online": return c.channel === "cloud" ? "已连接 ☁" : "已连接";
+    case "connecting": return "连接中";
+    case "reconnecting": return "重连中"; // stateText 缺失时的兜底（理论不达）
+    case "offline": return "已断开";
+    default: return "未配置";
+  }
+}
+
 // 弃用旧 socket 统一走这里（#291 泄漏根因）：RN Android 原生侧只把已完成 onOpen 的
 // socket 登记进连接表，CONNECTING 期调 close() 是静默 no-op——握手照样完成，旧连接
 // 开门后无人再关，表现为切源后双连接并存、旧连接持续收事件。除立即 close 外，
-// 摘掉全部 handler，并留一个「晚开门就补刀」的 onopen 哨兵（届时已在原生表内，close 生效）
+// 摘掉全部 handlers，并留一个「晚开门就补刀」的 onopen 哨兵（届时已在原生表内，close 生效）
 function killWs(ws: WebSocket | null | undefined) {
   if (!ws) return;
   try {
