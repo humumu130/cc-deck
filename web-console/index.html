@@ -585,6 +585,8 @@
     align-self: center; flex: none;
   }
   #stopBtn:hover { background: rgba(240,82,79,.18); border-color: rgba(240,82,79,.55); }
+  /* #279 批次3 图片入口：输入卡底部功能行的 📷 图标钮（外部 CLI/历史会话隐藏） */
+  #imgBtn { padding: 3px 8px; font-size: 15px; line-height: 1.4; flex: none; }
   #sendBtn {
     width: 34px; height: 34px; border-radius: 10px; padding: 0; border: none; flex: none;
     background: var(--send-btn); color: #fff; font-size: 17px; line-height: 1;
@@ -592,6 +594,25 @@
   }
   #sendBtn:hover:not(:disabled) { filter: brightness(1.1); }
   #sendBtn:disabled { opacity: .4; cursor: default; }
+
+  /* ---------- #279 批次3 待发图片行：输入卡上方缩略图（✕ 可删，≤4 张） ---------- */
+  #imgrow {
+    display: none; flex-wrap: wrap; gap: 8px; align-items: flex-start;
+    margin: 10px auto 0; width: calc(100% - 40px); max-width: min(1040px, 100%); flex: none;
+    animation: riseIn .18s ease-out;
+  }
+  #imgrow .img-cell { position: relative; width: 56px; height: 56px; }
+  #imgrow .img-cell img {
+    width: 56px; height: 56px; object-fit: cover; border-radius: 10px;
+    border: 1px solid var(--border); display: block; background: var(--bg-soft);
+  }
+  #imgrow .img-x {
+    position: absolute; top: -7px; right: -7px; width: 20px; height: 20px; border-radius: 50%;
+    padding: 0; font-size: 11px; line-height: 1; display: flex; align-items: center; justify-content: center;
+    background: var(--panel);
+  }
+  #imgrow .img-x:hover { color: var(--text); border-color: var(--hov); }
+
   #hisnote { display: none; padding: 14px 20px; border-top: 1px solid var(--border); color: var(--faint); font-size: 13px; background: var(--glass); flex: none; }
 
   #empty { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px; color: var(--faint); }
@@ -667,7 +688,7 @@
     /* 触屏无 hover：卡片操作钮常显（同 srv-row 按钮处理），删除入口才可达 */
     .card-edit, .card-del { opacity: 1; }
     #timeline, #dhead, #cmdbar, #hisnote { padding-left: 14px; padding-right: 14px; margin-left: 0; margin-right: 0; }
-    #waitbox, #liverow, #agbox { margin-left: 14px; margin-right: 14px; width: calc(100% - 28px); }
+    #waitbox, #liverow, #agbox, #imgrow { margin-left: 14px; margin-right: 14px; width: calc(100% - 28px); }
     #pendbox { padding: 0 14px 8px; }
     #slashbox { left: 14px; right: 14px; max-width: calc(100% - 28px); }
   }
@@ -789,6 +810,8 @@
       <span class="sum" id="livesum">思考中…</span>
       <span class="el" id="liveel"></span>
     </div>
+    <div id="imgrow"></div>
+    <input type="file" id="imgFile" accept="image/*" multiple hidden>
     <div id="cmdbar">
       <div id="slashbox"></div>
       <div id="inputcard">
@@ -798,6 +821,7 @@
         </div>
         <div class="ic-bottom">
           <div class="ic-left">
+            <button id="imgBtn" title="添加图片（最多 4 张，也可直接 Ctrl+V 粘贴）">📷</button>
             <button id="stopBtn" title="停止会话">⏹ 停止</button>
           </div>
           <button id="sendBtn" title="发送（Enter）">➤</button>
@@ -1982,6 +2006,8 @@ function renderDetail() {
   $("stopBtn").style.display = running ? "flex" : "none";
   $("stopBtn").textContent = s.external ? "⏹ 注入 Esc" : "⏹ 停止";
   $("stopBtn").title = s.external ? "注入 Esc 打断" : "停止会话";
+  // #279 批次3：图片入口仅托管会话（外部 CLI 会话发图入口隐藏，对齐手机端）
+  $("imgBtn").style.display = s.external || s.historical ? "none" : "";
 
   // 时间线 / 统计（增量重建）
   const tl = $("timeline");
@@ -2389,6 +2415,8 @@ function select(sid, srcId) {
   activeTab = "activity";
   document.querySelectorAll(".tabs button.tab").forEach((b) => b.classList.toggle("active", b.dataset.tab === "activity"));
   $("timeline").dataset.count = "";
+  sendImages = []; // #279 批次3：待发图不跨会话（手机端随页面卸载重置，网页常驻需显式清）
+  renderImgRow();
   updateSlashBox(); // 切会话收起旧联想（会话的命令集不同）
   render();
 }
@@ -2396,6 +2424,8 @@ function select(sid, srcId) {
 function closeDetail() {
   selected = null;
   document.body.classList.remove("detail-open");
+  sendImages = [];
+  renderImgRow();
   updateSlashBox();
   render();
 }
@@ -2573,10 +2603,103 @@ $("createBtn").onclick = () => {
     closeNewForm();
   }
 };
+// ---------- #279 批次3 图片发送（对齐手机 DetailScreen 图片链路） ----------
+// 入口：输入区 📷 选图 + document paste 剪贴板贴图（网页端独有）；
+// 压缩：canvas 重绘 JPEG 长边≤1568 / 质量 0.82（HEIC 等浏览器不解码格式 catch 后 toast）；
+// 上送：COMMAND_MESSAGE payload.images = 原始 base64 数组（relay sanitizeImages 限 4 张/单张 8MB，同口径）。
+let sendImages = []; // 待发图 base64（无 data: 前缀，与手机端一致）；切会话即清
+const IMG_MAX = 4;
+function imgSessionOk(s) { return !s.external && !s.historical; }
+
+function compressImageFile(file) {
+  return new Promise((resolve, reject) => {
+    const url = URL.createObjectURL(file);
+    const img = new Image();
+    const finish = (fn, arg) => { URL.revokeObjectURL(url); fn(arg); };
+    img.onload = () => {
+      try {
+        const long = Math.max(img.naturalWidth || 1, img.naturalHeight || 1);
+        const scale = long > 1568 ? 1568 / long : 1;
+        const w = Math.max(1, Math.round((img.naturalWidth || 1) * scale));
+        const h = Math.max(1, Math.round((img.naturalHeight || 1) * scale));
+        const cv = document.createElement("canvas");
+        cv.width = w; cv.height = h;
+        const cx = cv.getContext("2d");
+        if (!cx) throw new Error("no ctx");
+        cx.fillStyle = "#fff"; // PNG 透明底压 JPEG 前铺白，避免糊黑
+        cx.fillRect(0, 0, w, h);
+        cx.drawImage(img, 0, 0, w, h);
+        const b64 = cv.toDataURL("image/jpeg", 0.82).split(",")[1];
+        if (!b64 || b64.length < 32) throw new Error("empty");
+        finish(resolve, b64);
+      } catch (e) { finish(reject, e); }
+    };
+    img.onerror = () => finish(reject, new Error("decode"));
+    img.src = url;
+  });
+}
+
+async function addImageFiles(files) {
+  const sel = selSession();
+  if (!sel || !imgSessionOk(sel.s)) return;
+  const imgs = [...files].filter((f) => f && String(f.type).startsWith("image/"));
+  if (!imgs.length) return;
+  const room = IMG_MAX - sendImages.length;
+  if (room <= 0) { toast("最多 " + IMG_MAX + " 张图片"); return; }
+  const take = imgs.slice(0, room);
+  let bad = 0, badName = "";
+  for (const f of take) {
+    try { sendImages.push(await compressImageFile(f)); }
+    catch { bad++; badName = f.name || "图片"; }
+  }
+  if (imgs.length > take.length) toast("最多 " + IMG_MAX + " 张，超出的未添加");
+  if (bad) toast("「" + badName.slice(0, 24) + "」无法解码（HEIC 等格式浏览器不支持），请转 JPG/PNG", 4200);
+  renderImgRow();
+  syncSendState();
+}
+
+function renderImgRow() {
+  const row = $("imgrow");
+  if (!sendImages.length) { row.style.display = "none"; row.innerHTML = ""; return; }
+  row.style.display = "flex";
+  row.innerHTML = sendImages.map((b, i) =>
+    '<div class="img-cell"><img src="data:image/jpeg;base64,' + b + '" alt="">' +
+    '<button class="img-x" data-i="' + i + '" title="移除">✕</button></div>').join("");
+}
+$("imgrow").addEventListener("click", (ev) => {
+  const x = ev.target.closest(".img-x");
+  if (!x) return;
+  sendImages.splice(+x.dataset.i, 1);
+  renderImgRow();
+  syncSendState();
+});
+$("imgBtn").onclick = () => { const f = $("imgFile"); f.value = ""; f.click(); };
+$("imgFile").addEventListener("change", () => { void addImageFiles($("imgFile").files || []); });
+// 粘贴贴图（网页端独有优势）：剪贴板含图片文件即进待发行；纯文本粘贴不受影响
+document.addEventListener("paste", (ev) => {
+  const items = ev.clipboardData && ev.clipboardData.items;
+  if (!items) return;
+  const files = [];
+  for (const it of items) {
+    if (it.kind === "file" && String(it.type).startsWith("image/")) {
+      const f = it.getAsFile();
+      if (f) files.push(f);
+    }
+  }
+  if (!files.length) return;
+  const sel = selSession();
+  if (!sel) return;
+  if (!imgSessionOk(sel.s)) {
+    if (sel.s.external) toast("外部 CLI 会话不支持发图");
+    return;
+  }
+  ev.preventDefault();
+  void addImageFiles(files);
+});
 // 输入卡：textarea 自适应高度 + 纸飞机可用态同步
 function syncSendState() {
   const mi = $("msginput");
-  $("sendBtn").disabled = !mi.value.trim();
+  $("sendBtn").disabled = !mi.value.trim() && sendImages.length === 0;
   mi.style.height = "auto";
   mi.style.height = Math.min(mi.scrollHeight, 170) + "px";
 }
@@ -2687,11 +2810,13 @@ $("atBtn").onclick = () => $("msginput").focus();
 syncSendState();
 $("sendBtn").onclick = () => {
   const text = $("msginput").value.trim();
-  if (!text || !selected) return;
+  const imgs = sendImages;
+  if ((!text && !imgs.length) || !selected) return;
   const sel = selSession();
   if (!sel) return;
   const sid = selected.sid;
   if (sel.s.external) {
+    if (imgs.length) { toast("外部 CLI 会话不支持发图"); return; }
     // 注入路径：时间线由 hook 的 UserPromptSubmit / 排队日志回填，不本地预写
     if (sendCommandTo(sel.ctx, "COMMAND_EXT_INPUT", { session_id: sid, text })) {
       $("msginput").value = "";
@@ -2700,9 +2825,12 @@ $("sendBtn").onclick = () => {
     }
     return;
   }
-  if (sendCommandTo(sel.ctx, "COMMAND_MESSAGE", { session_id: sid, text })) {
-    pushLog(sel.ctx, sid, { ts: Date.now(), kind: "user_message", text });
+  // #279 批次3：带图走 COMMAND_MESSAGE images（原始 base64；空文本 + 图也可发，relay 侧文本块省略）
+  if (sendCommandTo(sel.ctx, "COMMAND_MESSAGE", { session_id: sid, text, ...(imgs.length ? { images: imgs } : {}) })) {
+    pushLog(sel.ctx, sid, { ts: Date.now(), kind: "user_message", text: text + (imgs.length ? "（+" + imgs.length + " 图）" : "") });
     $("msginput").value = "";
+    sendImages = [];
+    renderImgRow();
     syncSendState();
   }
 };
