@@ -1,8 +1,9 @@
 // 终端按键注入：Windows 走 bin/inject.cs 产物（SendInput/AttachConsole，不抢焦点）；
 // macOS 走 osascript + System Events keystroke（#305，需辅助功能一次性授权）
 import { spawn, execFileSync } from "node:child_process";
-import { existsSync, mkdirSync } from "node:fs";
-import path from "node:path";
+import { existsSync, mkdirSync, appendFileSync } from "node:fs";
+import path, { join } from "node:path";
+import { homedir } from "node:os";
 import { fileURLToPath } from "node:url";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
@@ -128,7 +129,7 @@ export function buildAppleScript(pid: number, actions: string[]): string {
     `	set targetTty to do shell script "ps -o tty= -p ${pid}"`,
     "	repeat with w in windows",
     "		try",
-    "			if tty of selected tab of w starts with targetTty then",
+    "			if tty of selected tab of w ends with targetTty then",
     "				set frontmost of w to true",
     "				exit repeat",
     "			end if",
@@ -175,6 +176,8 @@ function runAppleScript(script: string): Promise<InjectResult> {
       clearTimeout(timer);
       // 权限/进程类失败重试无益（与 Windows 控制台竞态不同），直接把 osascript 报错带回
       if (code === 0) return resolve({ ok: true });
+      // #305 诊断：relay 宿主（Terminal）内 osascript 的真实报错落盘——ssh 上下文无法复现
+      try { appendFileSync(join(homedir(), "inject-debug.log"), `[${new Date().toISOString()}] code=${code} err=${err} |n`); } catch {}
       resolve({ ok: false, error: mapAppleError(err) ?? (err.trim() || `exit ${code}`) });
     });
   });
