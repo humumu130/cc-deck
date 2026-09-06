@@ -358,18 +358,27 @@ const SessionCard = memo(function SessionCard({
         </>
       ) : (
         <>
-          <View style={styles.row1}>
-            {s.status === "WORKING" ? (
+          {s.status === "WORKING" ? (
+            <View style={styles.row1}>
               <BlinkDot color={color} />
-            ) : (
+              <LiveStat s={s} />
+              <Elapsed s={s} />
+            </View>
+          ) : (
+            // #286：空闲卡点+标题同行（点在标题前，耗时右对齐）——省一行高度
+            <View style={styles.titleRow}>
               <View style={[styles.dot, { backgroundColor: color }]} />
-            )}
-            {s.status === "WORKING" ? <LiveStat s={s} /> : <View style={{ flex: 1 }} />}
-            <Elapsed s={s} />
-          </View>
-          <Text style={styles.title} numberOfLines={1}>
-            {s.title || "未命名会话"}
-          </Text>
+              <Text style={styles.title} numberOfLines={1}>
+                {s.title || "未命名会话"}
+              </Text>
+              <Elapsed s={s} />
+            </View>
+          )}
+          {s.status === "WORKING" ? (
+            <Text style={styles.title} numberOfLines={1}>
+              {s.title || "未命名会话"}
+            </Text>
+          ) : null}
           {s.status !== "WORKING" ? <Text style={styles.sum} numberOfLines={1}>{s.action_summary || "…"}</Text> : null}
           <View style={styles.foot}>
             <Text style={[styles.tag, s.external ? styles.tagExt : null]}>{s.external ? "外部 CLI" : "托管"}</Text>
@@ -846,7 +855,8 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
   },
   elapsed: { fontSize: 12, color: c.faint, fontVariant: ["tabular-nums"] },
   liveStat: { flex: 1, fontSize: 12, color: c.dim, fontVariant: ["tabular-nums"] },
-  title: { color: c.text, fontSize: 15, fontWeight: "600", marginBottom: 5 },
+  titleRow: { flexDirection: "row", alignItems: "center", gap: 7 },
+  title: { color: c.text, fontSize: 15, fontWeight: "600", marginBottom: 5, flexShrink: 1 },
   sum: { color: c.dim, fontSize: 13, marginBottom: 8 },
   foot: { flexDirection: "row", alignItems: "center", gap: 8 },
   tag: {
