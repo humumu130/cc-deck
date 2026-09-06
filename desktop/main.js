@@ -1,7 +1,7 @@
 // CC Deck 桌面壳（Electron）：本地加载 web-console，默认连本机 relay。
 // 安全基线：contextIsolation 默认开、nodeIntegration 关（纯渲染 UI 不需要 Node）、
 // 不加载任何远程内容（云桥只走 WS 数据通道）。
-const { app, BrowserWindow, Tray, Menu, ipcMain, nativeImage, shell } = require("electron");
+const { app, BrowserWindow, Tray, Menu, ipcMain, nativeImage, nativeTheme, shell } = require("electron");
 const path = require("node:path");
 
 const SMOKE = process.argv.includes("--smoke");
@@ -35,6 +35,7 @@ function createWindow() {
     minWidth: 960,
     minHeight: 640,
     title: "CC Deck",
+    backgroundColor: "#050B12", // 深色底匹配 web-console 默认主题，消除启动白闪
     icon: path.join(__dirname, "build", "icon.png"),
     webPreferences: {
       preload: path.join(__dirname, "preload.js"),
@@ -98,6 +99,12 @@ ipcMain.handle("cc-deck:probe-local", async () => {
   } catch {
     return null;
   }
+});
+
+// 应用内主题 ↔ 原生标题栏同步：web-console 默认深色，Windows 应用模式为浅色时
+// 原生标题栏会浅一块；页面切换主题时经 preload 通知，themeSource 驱动标题栏变色
+ipcMain.on("cc-deck:set-native-theme", (_e, dark) => {
+  nativeTheme.themeSource = dark ? "dark" : "light";
 });
 
 app.on("second-instance", () => showWin()); // 顶层注册：就绪前到来的二次启动消息不丢

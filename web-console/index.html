@@ -788,6 +788,7 @@
   }
 </style>
 <script>try{if(localStorage.getItem("ccr_theme")==="light")document.documentElement.classList.add("light")}catch(e){}</script>
+<script>/* 桌面壳标题栏主题同步：Electron 走 preload IPC，Tauri 走全局 API；浏览器无桥接自动跳过 */window.__ccShellTheme=(light)=>{try{window.ccDeck&&window.ccDeck.setNativeTheme(!light)}catch(e){}try{window.__TAURI__&&window.__TAURI__.window.getCurrentWindow().setTheme(light?"light":"dark")}catch(e){}};__ccShellTheme(document.documentElement.classList.contains("light"));</script>
 </head>
 <body>
 
@@ -2772,6 +2773,7 @@ $("themeBtn").onclick = () => {
   try { localStorage.setItem("ccr_theme", light ? "light" : "dark"); } catch {}
   $("themeBtn").textContent = light ? "🌙" : "☀️";
   document.querySelector('meta[name="theme-color"]')?.setAttribute("content", light ? "#F3F5F9" : "#050B12");
+  __ccShellTheme(light);
 };
 // ---------- 服务器管理（多源：列表 + 添加/编辑表单） ----------
 let formKind = "lan";   // 表单当前类型（添加目标）

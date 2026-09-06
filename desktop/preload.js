@@ -3,4 +3,5 @@ const { contextBridge, ipcRenderer } = require("electron");
 
 contextBridge.exposeInMainWorld("ccDeck", {
   probeLocal: () => ipcRenderer.invoke("cc-deck:probe-local"),
+  setNativeTheme: (dark) => ipcRenderer.send("cc-deck:set-native-theme", !!dark),
 });
