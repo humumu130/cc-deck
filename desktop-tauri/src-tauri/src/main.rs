@@ -143,6 +143,9 @@ fn main() {
             show_main(app);
         }))
         .plugin(tauri_plugin_opener::init())
+        // 在线更新（#319）：检查/下载/安装由 web-console ⚙ 关于区经 __TAURI__.updater 调用，
+        // 签名公钥在 tauri.conf.json plugins.updater，签名的私钥经 CI Secrets 注入
+        .plugin(tauri_plugin_updater::Builder::new().build())
         .invoke_handler(tauri::generate_handler![probe_local, open_external])
         .setup(|app| {
             if build_tray(app).is_ok() {

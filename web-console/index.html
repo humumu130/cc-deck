@@ -876,6 +876,7 @@
       <div class="gp-row" id="gpIdle" style="display:none">折叠空闲 <b id="gpIdleV"></b></div>
       <div class="gp-sec">关于</div>
       <div class="gp-row gp-static">CC Deck 控制台 <b id="gpVer"></b></div>
+      <div class="gp-row" id="gpUpdate">检查更新 <b id="gpUpdateV"></b></div>
       <div class="gp-links"><a href="https://github.com/humumu130/cc-deck/releases" target="_blank" rel="noopener">下载 / 更新</a><a href="https://github.com/humumu130/cc-deck/issues" target="_blank" rel="noopener">反馈</a></div>
     </div>
 
@@ -2819,6 +2820,51 @@ $("gpDensity").onclick = () => { $("densityBtn").click(); syncGearPop(); };
 $("gpFont").onclick = () => { $("fontBtn").click(); syncGearPop(); };
 $("gpThink").onclick = () => { $("thinkBtn").click(); syncGearPop(); };
 $("gpIdle").onclick = () => { $("idleBtn").click(); syncGearPop(); };
+
+// 检查更新（#319）：Electron 走 preload IPC，Tauri 走 updater 插件全局 API；
+// 浏览器无桥接时提示网页随仓库更新。Tauri 侧启动时静默检查并后台下载（退出时安装）
+async function shellCheckUpdate() {
+  if (window.ccDeck && window.ccDeck.checkUpdate) {
+    const r = await window.ccDeck.checkUpdate();
+    if (r.error) throw new Error(r.error);
+    return { available: !!r.available, version: r.version, current: r.current };
+  }
+  if (window.__TAURI__ && window.__TAURI__.updater) {
+    const u = await window.__TAURI__.updater.check();
+    if (u && u.available) {
+      await u.downloadAndInstall();
+      return { available: true, version: u.version, current: u.currentVersion, installed: true };
+    }
+    return { available: false, version: u && u.currentVersion };
+  }
+  return null; // 浏览器：无更新通道
+}
+$("gpUpdate").onclick = async () => {
+  const v = $("gpUpdateV");
+  v.textContent = "检查中…";
+  try {
+    const r = await shellCheckUpdate();
+    if (r === null) v.textContent = "网页随仓库";
+    else if (r.available) v.textContent = r.installed ? "已装·重启生效" : `→ ${r.version}`;
+    else v.textContent = "已是最新";
+  } catch (e) {
+    v.textContent = "失败";
+    toast("检查更新失败：" + (e && e.message ? e.message : e));
+  }
+  setTimeout(() => { v.textContent = ""; }, 4000);
+};
+// Tauri 静默检查：启动 5s 后台查一次，发现新版直接下载安装（退出时生效，不打扰）
+setTimeout(() => {
+  try {
+    if (window.__TAURI__ && window.__TAURI__.updater) {
+      window.__TAURI__.updater.check().then((u) => {
+        if (u && u.available) { u.downloadAndInstall().then(() => toast("新版本已就绪，重启后生效")).catch(() => {}); }
+      }).catch(() => {});
+    } else if (window.ccDeck && window.ccDeck.checkUpdate) {
+      // Electron 主进程启动时已静默检查（autoDownload + 退出安装），此处无需重复
+    }
+  } catch (e) {}
+}, 5000);
 $("addBtn").onclick = () => {
   const open = !$("newform").classList.contains("open");
   $("newform").classList.toggle("open", open);

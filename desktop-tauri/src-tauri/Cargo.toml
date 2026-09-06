@@ -17,6 +17,8 @@ tauri = { version = "2", features = ["tray-icon"] }
 tauri-plugin-single-instance = "2"
 # 外链走系统浏览器（v2 的 shell.openExternal 继任者；Rust 侧调用不经 IPC，无需 ACL 放行）
 tauri-plugin-opener = "2"
+# 在线更新（v2 官方插件）：签名校验走 TAURI_SIGNING_PRIVATE_KEY，CI 注入
+tauri-plugin-updater = "2"
 serde_json = "1"
 # 探测只走明文 http://127.0.0.1:8787，不需要 TLS 栈（关默认特性控体积）
 reqwest = { version = "0.12", default-features = false, features = ["json"] }

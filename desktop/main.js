@@ -3,6 +3,11 @@
 // 不加载任何远程内容（云桥只走 WS 数据通道）。
 const { app, BrowserWindow, Tray, Menu, ipcMain, nativeImage, nativeTheme, shell } = require("electron");
 const path = require("node:path");
+// 在线更新（#319）：electron-updater 读 GitHub Release 的 latest.yml（package.json build.publish）；
+// 启动静默检查 + autoInstallOnAppQuit，⚙ 设置抽屉可手动检查
+const { autoUpdater } = require("electron-updater");
+autoUpdater.autoDownload = true;
+autoUpdater.autoInstallOnAppQuit = true;
 
 const SMOKE = process.argv.includes("--smoke");
 
@@ -107,11 +112,26 @@ ipcMain.on("cc-deck:set-native-theme", (_e, dark) => {
   nativeTheme.themeSource = dark ? "dark" : "light";
 });
 
+// 手动检查更新（⚙ 设置抽屉）：返回 {available, version, current}，失败带 error 字段
+ipcMain.handle("cc-deck:check-update", async () => {
+  if (!app.isPackaged) return { available: false, current: app.getVersion(), dev: true };
+  try {
+    const r = await autoUpdater.checkForUpdates();
+    const current = autoUpdater.currentVersion.version;
+    const version = r?.updateInfo?.version ?? current;
+    return { available: version !== current, version, current };
+  } catch (e) {
+    return { error: String(e?.message || e) };
+  }
+});
+
 app.on("second-instance", () => showWin()); // 顶层注册：就绪前到来的二次启动消息不丢
 
 app.whenReady().then(() => {
   createTray();
   createWindow();
+  // 静默检查更新：发现新版自动下载，退出时安装（无弹窗打扰；手动入口在 ⚙ 设置抽屉）
+  if (app.isPackaged) autoUpdater.checkForUpdates().catch(() => {});
 });
 
 app.on("before-quit", () => { quitting = true; });

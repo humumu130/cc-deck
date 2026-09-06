@@ -22,6 +22,13 @@
     "directories": {
       "output": "dist"
     },
+    "publish": [
+      {
+        "provider": "github",
+        "owner": "humumu130",
+        "repo": "cc-deck"
+      }
+    ],
     "files": [
       "main.js",
       "preload.js",
@@ -32,13 +39,28 @@
       {
         "from": "../web-console",
         "to": "web-console",
-        "filter": ["index.html", "nacl.js", "manifest.json", "apple-touch-icon.png"]
+        "filter": [
+          "index.html",
+          "nacl.js",
+          "manifest.json",
+          "apple-touch-icon.png"
+        ]
       }
     ],
     "win": {
       "target": [
-        { "target": "nsis", "arch": ["x64"] },
-        { "target": "zip", "arch": ["x64"] }
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        },
+        {
+          "target": "zip",
+          "arch": [
+            "x64"
+          ]
+        }
       ],
       "icon": "build/icon.png",
       "artifactName": "CC-Deck-${version}-portable.${ext}"
@@ -48,5 +70,8 @@
       "perMachine": false,
       "artifactName": "CC-Deck-Setup-${version}.${ext}"
     }
+  },
+  "dependencies": {
+    "electron-updater": "^6.8.9"
   }
 }

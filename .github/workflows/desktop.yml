@@ -64,6 +64,7 @@ jobs:
           path: |
             desktop/dist/*.exe
             desktop/dist/*.zip
+            desktop/dist/latest.yml
           if-no-files-found: error
 
       - name: Attach to GitHub Release
@@ -73,6 +74,7 @@ jobs:
           files: |
             desktop/dist/*.exe
             desktop/dist/*.zip
+            desktop/dist/latest.yml
           generate_release_notes: true
 
   build-tauri:
@@ -114,19 +116,22 @@ jobs:
       - name: Build NSIS
         working-directory: desktop-tauri
         shell: bash
+        env:
+          # updater 签名（#319）：私钥/密码来自 repo Secrets，产物 .sig 与 latest.json 随之生成
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         run: |
           npx tauri build --bundles nsis
-          # 产物名对齐 Electron 版（CC-Deck-Setup-<v>.exe）并加 -tauri 后缀区分两壳
-          # 就地重命名（挪出 nsis 目录会让下面两处 path 扑空，v0.3.13 实际翻车点）
-          V=$(node -p "require('./package.json').version")
-          mv src-tauri/target/release/bundle/nsis/*-setup.exe "src-tauri/target/release/bundle/nsis/CC-Deck-Setup-${V}-tauri.exe"
+          # 不再改名：updater 的 latest.json 按原始产物名（CC Deck Tauri_<v>_x64-setup.exe）寻址
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
           name: CC-Deck-Desktop-Tauri-${{ github.ref_name }}
           path: |
-            desktop-tauri/src-tauri/target/release/bundle/nsis/CC-Deck-Setup-*-tauri.exe
+            desktop-tauri/src-tauri/target/release/bundle/nsis/*-setup.exe
+            desktop-tauri/src-tauri/target/release/bundle/nsis/*-setup.exe.sig
+            desktop-tauri/src-tauri/target/release/bundle/nsis/latest.json
           if-no-files-found: error
 
       - name: Attach to GitHub Release
@@ -134,5 +139,7 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           files: |
-            desktop-tauri/src-tauri/target/release/bundle/nsis/CC-Deck-Setup-*-tauri.exe
+            desktop-tauri/src-tauri/target/release/bundle/nsis/*-setup.exe
+            desktop-tauri/src-tauri/target/release/bundle/nsis/*-setup.exe.sig
+            desktop-tauri/src-tauri/target/release/bundle/nsis/latest.json
           generate_release_notes: true
