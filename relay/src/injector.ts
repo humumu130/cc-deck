@@ -119,15 +119,17 @@ function escapeApple(text: string): string {
 
 // 组装 System Events 脚本（导出供测试断言命令串结构，Windows 上不真跑 osascript）
 export function buildAppleScript(pid: number, actions: string[]): string {
+  // pid 定位的是 claude 子进程（node），System Events 里没有对应 GUI process，keystroke 静默落空（实测根因）。
+  // keystroke 打给前台应用进程——relay 宿主终端在前台时即目标（注入瞬间短暂抢焦点）。
   return [
     'tell application "System Events"',
-    `\ttell (first process whose unix id is ${pid})`,
-    "\t\tset frontmost to true",
-    "\t\tdelay 0.1",
-    ...actions.map((a) => `\t\t${a}`),
-    "\tend tell",
+    "	set hostApp to first application process whose frontmost is true",
+    "	set frontmost of hostApp to true",
+    "	delay 0.1",
+    ...actions.map((a) => `	${a}`),
     "end tell",
-  ].join("\n");
+  ].join("
+");
 }
 
 const appleKeystroke = (text: string) => `keystroke "${escapeApple(text)}"`;
