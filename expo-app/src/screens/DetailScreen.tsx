@@ -431,9 +431,12 @@ export default function DetailScreen({ sid, onBack, initialView, ref }: { sid: s
   const [slashCommands, setSlashCommands] = useState<SlashCommand[]>(BUILTIN_COMMANDS);
   const [renaming, setRenaming] = useState(false);
   const [view, setView] = useState<ViewKind>(initialView ?? "msg");
-  // 回到底部浮钮（#322）：距底超一屏时出现，点击滚底；切视图重置
+  // 回到底部浮钮（#322 第三轮定位，用户拍板）：与任务完成/待确认悬浮钮同列（right 12、
+  // 44×44 r14 同族形制），其在场时纵向叠上方——复算 App 壳同款落位公式保证不错位
   const [showJump, setShowJump] = useState(false);
   useEffect(() => { setShowJump(false); }, [view]);
+  const hasTdFloat = (snap.taskDoneQueue?.length ?? 0) > 0;
+  const hasCfFloat = snap.sessions.some((s) => (s.todos ?? []).some((t) => /待确认/.test(t.content ?? "")));
   const [showThink, setShowThink] = useState(thinkShown);
   const [collapsed, setCollapsed] = useState(ctrlCollapsed);
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
@@ -469,6 +472,9 @@ export default function DetailScreen({ sid, onBack, initialView, ref }: { sid: s
   const touching = useRef(false);
   const kb = useKbHeight();
   const insets = useSafeAreaInsets();
+  // ↓ 钮落位：App 壳悬浮钮同款基线（键盘贴沿 / insets+74），td/cf 在场各 +52 纵排
+  const jumpBottom =
+    (kb > 0 ? kb + 80 : insets.bottom + 74) + (hasTdFloat ? 52 : 0) + (hasCfFloat ? 52 : 0);
   const s: SessionState | undefined = snap.sessions.find((x) => x.session_id === sid);
 
   // 手动刷新任务清单：↻ 发命令，等下一帧 todos 引用变化（或 2.5s 超时）结束等待态
@@ -1279,8 +1285,8 @@ export default function DetailScreen({ sid, onBack, initialView, ref }: { sid: s
       {/* 回到底部浮钮（#322）：距底超过一屏时出现，避让审批横幅 */}
       {showJump && (view === "msg" || view === "all") ? (
         <Pressable
-          style={[d.jumpFab, { bottom: (bannerVisible ? 208 : canCmd ? 104 : 68) + insets.bottom }]}
-          android_ripple={{ color: withA(c.working, 0.2), borderless: false, radius: 20 }}
+          style={[d.jumpFab, { bottom: jumpBottom }]}
+          android_ripple={{ color: withA(c.working, 0.2), borderless: false, radius: 14 }}
           onPress={() => {
             (view === "msg" ? scrollRef : allScrollRef).current?.scrollToEnd({ animated: true });
             setShowJump(false);
@@ -1459,11 +1465,11 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
   safe: { flex: 1, backgroundColor: c.bg },
   // 回到底部浮钮（#322）：贴屏幕左侧（右侧与任务完成/待确认悬浮钮打架，用户拍板挪左侧）
   jumpFab: {
-    position: "absolute", left: 14, width: 40, height: 40, borderRadius: 20,
+    position: "absolute", right: 12, width: 44, height: 44, borderRadius: 14,
     alignItems: "center", justifyContent: "center",
-    backgroundColor: c.panel2, borderWidth: 1, borderColor: c.line, elevation: 4,
+    backgroundColor: c.panel, borderWidth: 1, borderColor: c.line, elevation: 4,
   },
-  jumpFabT: { color: c.dim, fontSize: 18, fontWeight: "700", marginTop: -1 },
+  jumpFabT: { color: c.dim, fontSize: 19, fontWeight: "700", marginTop: -1 },
   head: {
     flexDirection: "row", alignItems: "center", gap: 6,
     paddingHorizontal: 12, paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: c.line,
