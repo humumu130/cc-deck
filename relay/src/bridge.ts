@@ -59,6 +59,25 @@ interface Pending {
 // transcript 里一次任务工具操作（use 或已配对的 result）
 type TaskOp = { tool?: string; input?: unknown; result?: { task: { id: number } } };
 
+// transcript 首条记录的时间戳（ISO 字符串）——孤儿收养时的真实会话起点（#321）；
+// 只读首 4KB，解析失败返回 0（回落 ensureExternal 的 Date.now()）
+function transcriptFirstTs(p: string): number {
+  let fd: number | undefined;
+  try {
+    fd = openSync(p, "r");
+    const buf = Buffer.alloc(4096);
+    const n = readSync(fd, buf, 0, 4096, 0);
+    const line = buf.toString("utf-8", 0, n).split("\n")[0];
+    const ts = line ? (JSON.parse(line) as { timestamp?: string }).timestamp : undefined;
+    const t = ts ? Date.parse(ts) : NaN;
+    return Number.isFinite(t) ? t : 0;
+  } catch {
+    return 0;
+  } finally {
+    if (fd !== undefined) try { closeSync(fd); } catch {}
+  }
+}
+
 const DEFAULT_HOLD_MS = 590_000;
 const QUESTION_HOLD_MS = 90_000;
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
@@ -209,7 +228,7 @@ export class Bridge {
           // 单发探针/一次性 print 模式 CLI（单回合无追问）不值得监控：全文件
           // user 行 <2 条不收养——交互会话必然多回合（含工具结果的 user 行也算）
           if (!this.hasMultiUserTurns(p)) continue;
-          this.mgr.ensureExternal(id, cwd, "", sid);
+          this.mgr.ensureExternal(id, cwd, "", sid, transcriptFirstTs(p));
           this.transcriptPaths.set(id, p);
           this.mgr.setExternalStatus(id, "DONE", "扫描接入（只读）");
           this.mgr.pushExternalLog(

@@ -97,7 +97,7 @@ export function reduceHistory(events: Envelope[]): Map<string, ReplayedSession> 
   for (const e of events) {
     let rs = out.get(e.session_id);
     if (!rs && e.type === "SESSION_CREATED") {
-      const p = e.payload as { cwd: string; initial_prompt: string; model: string; title?: string; external?: boolean };
+      const p = e.payload as { cwd: string; initial_prompt: string; model: string; title?: string; external?: boolean; started_at?: number };
       rs = {
         state: {
           session_id: e.session_id,
@@ -108,7 +108,8 @@ export function reduceHistory(events: Envelope[]): Map<string, ReplayedSession> 
           model: p.model,
           status: "WORKING",
           action_summary: "（历史）",
-          started_at: e.ts,
+          // 孤儿收养等场景的 started_at 与事件落盘时刻不同步：载荷显式带了就优先（#321）
+          started_at: p.started_at && p.started_at > 0 ? p.started_at : e.ts,
           updated_at: e.ts,
           stats: { files_changed: 0, lines_added: 0, lines_deleted: 0 },
         },

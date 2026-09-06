@@ -284,8 +284,9 @@ export class SessionManager {
     this.pairIssuer = fn;
   }
 
-  // 不存在则注册外部会话（bridge.ts 调用）；返回当前状态
-  ensureExternal(id: string, cwd: string, prompt: string, cliSessionId = ""): SessionState {
+  // 不存在则注册外部会话（bridge.ts 调用）；startedAt：真实起点（孤儿收养时取自
+  // transcript 首条时间戳，#321——否则收养时刻会冒充会话时长起点，老会话显示 55s）
+  ensureExternal(id: string, cwd: string, prompt: string, cliSessionId = "", startedAt = 0): SessionState {
     const existing = this.sessions.get(id);
     if (existing) {
       // Relay 重启后 adopt 为 historical 的外部会话：真实 hook 事件回来了，恢复可操作
@@ -302,7 +303,7 @@ export class SessionManager {
       model: "",
       status: "WORKING",
       action_summary: prompt ? truncate(prompt, 40) : "接入中",
-      started_at: Date.now(),
+      started_at: startedAt || Date.now(),
       updated_at: Date.now(),
       stats: { files_changed: 0, lines_added: 0, lines_deleted: 0 },
       external: true,
@@ -315,6 +316,7 @@ export class SessionManager {
       title: state.title,
       model: "",
       external: true,
+      started_at: state.started_at,
     });
     return state;
   }
