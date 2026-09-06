@@ -215,11 +215,12 @@
   #srcChips button.on { color: var(--text); border-color: rgba(217,119,87,.6); background: rgba(217,119,87,.12); }
   #srcChips button i { width: 7px; height: 7px; border-radius: 50%; flex: none; }
   .src-badge {
-    display: inline-flex; align-items: center; gap: 4px; flex: none;
-    font-size: 10.5px; font-weight: 500; color: var(--dim);
-    border: 1px solid var(--border); padding: 1px 7px; border-radius: 999px;
+    display: inline-flex; align-items: center; gap: 5px; flex: none;
+    font-size: 11.5px; font-weight: 600; color: var(--dim);
+    border: 1px solid var(--border); padding: 2px 9px; border-radius: 999px;
   }
-  .src-badge i { width: 7px; height: 7px; border-radius: 50%; }
+  .src-badge i { width: 9px; height: 9px; border-radius: 50%; flex: none; }
+  .src-badge .sb-t { max-width: 96px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
   /* ---------- 主体 ---------- */
   main { flex: 1; display: flex; overflow: hidden; }
@@ -1862,7 +1863,7 @@ function srcColor(id) {
   return SRC_COLORS[h % SRC_COLORS.length];
 }
 function srcBadgeHtml(cfg) {
-  return '<span class="src-badge" title="' + escapeHtml(cfg.name) + '"><i style="background:' + srcColor(cfg.id) + '"></i>' + escapeHtml((cfg.name || "?").slice(0, 2)) + "</span>";
+  return '<span class="src-badge" title="' + escapeHtml(cfg.name) + '"><i style="background:' + srcColor(cfg.id) + '"></i><span class="sb-t">' + escapeHtml(cfg.name || "?") + '</span></span>';
 }
 
 // 列表上方源过滤 chips（单源时隐藏）；过滤目标被删/失效时自愈回"全部"
