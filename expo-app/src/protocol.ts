@@ -89,6 +89,10 @@ export interface SessionState {
   // 最近一次任务完成汇报（#254）：瞬态 TASK_DONE 断线丢失时，端上从快照恢复未读汇报。
   // remaining_count 是数字（剩余条数）——与 TASK_DONE 事件的 remaining（TodoItem[]）同名异型，故改名区分
   last_task_done?: { done: string[]; remaining_count: number; ts: number };
+  // 归属源 id（#294 聚合模式）：纯客户端字段，relay 不下发——store 快照平铺时写入，
+  // 列表源角标/详情页源标注用。sid 为 uuid 全局唯一，可作跨源主键；单源模式不写
+  // （watch 网关直发 snap.sessions，保持手表快照字节不变）
+  src?: string;
 }
 
 export interface PendingInput {

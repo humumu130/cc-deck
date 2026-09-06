@@ -36,6 +36,28 @@ function folderOf(cwd: string): string {
   return parts[parts.length - 1] ?? cwd;
 }
 
+// 源角标配色（#294 批2）：色板/哈希与网页端 SRC_COLORS/srcColor 逐字节对齐，
+// 同一源 id 在两端取到同色
+const SRC_COLORS = ["#D97757", "#5B9DFF", "#2BD98F", "#FFC53D", "#C792EA", "#F06292", "#4DD0E1", "#7E57C2"];
+function srcColor(id: string): string {
+  let h = 0;
+  for (const ch of String(id)) h = ((h * 31) + ch.charCodeAt(0)) >>> 0;
+  return SRC_COLORS[h % SRC_COLORS.length];
+}
+
+// 源角标（#294 批2）：聚合且多源时区分会话归属——色点 + 源名胶囊（tag/tagExt 形态：
+// 描边 + 轻染底，染底/描边按源色）；单源模式不渲染（ListScreen 侧把关）
+function SrcBadge({ id, name }: { id: string; name: string }) {
+  const styles = useThemeStyles(makeStyles);
+  const color = srcColor(id);
+  return (
+    <View style={[styles.srcTag, { borderColor: withA(color, 0.28), backgroundColor: withA(color, 0.1) }]}>
+      <View style={[styles.srcDot, { backgroundColor: color }]} />
+      <Text style={styles.srcTagT} numberOfLines={1}>{name}</Text>
+    </View>
+  );
+}
+
 // 新增会话 ＋：圆头细条十字，与品牌星芒同线条语言
 function PlusMark({ size = 20, color = "#D97757" }: { size?: number; color?: string }) {
   const w = 2.8;
@@ -268,9 +290,10 @@ function CtxMini({ s }: { s: SessionState }) {
   );
 }
 
-// memo：流式刷新只重渲变化的那一行（onRename/onReveal/onDelete 均为稳定引用）
+// memo：流式刷新只重渲变化的那一行（onRename/onReveal/onDelete 均为稳定引用；
+// srcName 为字符串原始值，浅比较按值相等，Map 重建不触发未变行重渲）
 const SessionCard = memo(function SessionCard({
-  s, onOpen, onRename, onDelete, revealSid, onReveal, compact,
+  s, onOpen, onRename, onDelete, revealSid, onReveal, compact, srcName,
 }: {
   s: SessionState;
   onOpen: (sid: string) => void;
@@ -279,6 +302,7 @@ const SessionCard = memo(function SessionCard({
   revealSid: string | null;
   onReveal: (v: string | null) => void;
   compact?: boolean;
+  srcName?: string | null; // 归属源名（聚合且多源时非空，#294 批2）
 }) {
   const { c } = useTheme();
   const styles = useThemeStyles(makeStyles);
@@ -310,6 +334,7 @@ const SessionCard = memo(function SessionCard({
           </View>
           <Text style={styles.sumC} numberOfLines={1}>{s.action_summary || "…"}</Text>
           <View style={styles.footC}>
+            {srcName && s.src ? <SrcBadge id={s.src} name={srcName} /> : null}
             {s.cwd ? <Text style={styles.folderC} numberOfLines={1}>📁 {folderOf(s.cwd)}</Text> : null}
             <View style={{ flex: 1 }} />
             {s.stats && s.stats.files_changed > 0 ? (
@@ -338,6 +363,7 @@ const SessionCard = memo(function SessionCard({
           </Text>
           {s.status !== "WORKING" ? <Text style={styles.sum} numberOfLines={1}>{s.action_summary || "…"}</Text> : null}
           <View style={styles.foot}>
+            {srcName && s.src ? <SrcBadge id={s.src} name={srcName} /> : null}
             <Text style={[styles.tag, s.external ? styles.tagExt : null]}>{s.external ? "外部 CLI" : "托管"}</Text>
             {s.cwd ? <Text style={styles.folderTag} numberOfLines={1}>📁 {folderOf(s.cwd)}</Text> : null}
             {s.historical && !s.external ? <Text style={styles.tag}>历史</Text> : null}
@@ -479,13 +505,20 @@ export default function ListScreen({ sessions, connected, connText, onOpen, onNe
   ).current;
   const sorted = useMemo(() => {
     // 活跃（等待/运行/错误）置顶，其余按最近更新倒序：
-    // 新完成的会话紧跟活跃段，不再"闪现后跳到 20 个会话底部"像消失
+    // 新完成的会话紧跟活跃段，不再"闪现后跳到 20 个会话底部"像消失。
+    // #294 批2：聚合时 sessions 已是全源平铺，同一比较器作用于合并列表 =
+    // 源内规则保持（活跃置顶+updated_at 倒序）、源间按更新时间全局混排
     const rank = (s: SessionState) =>
       s.status === "WORKING" || s.status === "WAITING" || s.status === "ERROR" ? 0 : 1;
     return [...sessions].sort(
       (a, b) => rank(a) - rank(b) || (b.updated_at ?? b.started_at) - (a.updated_at ?? a.started_at),
     );
   }, [sessions]);
+
+  // 聚合源角标（#294 批2）：仅聚合且源>1 时展示；id→名映射每渲染重建无妨——传入
+  // SessionCard 的是查出的字符串（按值浅比较），不破坏 memo 行级重渲
+  const badgeOn = snap.aggregate && snap.sources.length > 1;
+  const srcNames = new Map(snap.sources.map((x) => [x.id, x.name] as const));
 
   const counts: Record<string, number> = {};
   for (const s of sessions) {
@@ -628,7 +661,16 @@ export default function ListScreen({ sessions, connected, connText, onOpen, onNe
           ) : null
         }
         renderItem={({ item }) => (
-          <SessionCard s={item} onOpen={onOpen} onRename={handleRename} onDelete={requestDelete} revealSid={revealSid} onReveal={setRevealSid} compact={compact} />
+          <SessionCard
+            s={item}
+            onOpen={onOpen}
+            onRename={handleRename}
+            onDelete={requestDelete}
+            revealSid={revealSid}
+            onReveal={setRevealSid}
+            compact={compact}
+            srcName={badgeOn && item.src ? srcNames.get(item.src) ?? null : null}
+          />
         )}
         ListEmptyComponent={
           <View style={styles.empty}>
@@ -786,6 +828,13 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
     paddingHorizontal: 7, paddingVertical: 2, overflow: "hidden",
   },
   tagExt: { color: c.brandB, backgroundColor: withA(c.brandB, 0.12), borderColor: withA(c.brandB, 0.25) },
+  // 源角标（#294 批2）：tag 形态的胶囊版，染底/描边色由组件按源色注入
+  srcTag: {
+    flexDirection: "row", alignItems: "center", gap: 4, maxWidth: 96, flexShrink: 1,
+    borderWidth: 1, borderRadius: 999, paddingHorizontal: 7, paddingVertical: 2, overflow: "hidden",
+  },
+  srcDot: { width: 6, height: 6, borderRadius: 3 },
+  srcTagT: { fontSize: 10, color: c.dim, flexShrink: 1 },
   stats: { fontSize: 12, fontVariant: ["tabular-nums"] },
   // 上下文占用 mini（foot 最右）：30px 微型条 + 百分比
   ctxMini: { flexDirection: "row", alignItems: "center", gap: 4 },

@@ -75,6 +75,9 @@ export interface Snapshot {
   connState: "idle" | "connecting" | "online" | "reconnecting" | "offline";
   channel: "lan" | "cloud" | null;
   sources: SourceStatus[];
+  // 聚合模式开关透出（#294 批2）：UI 据此切换聚合口径（源角标等）；默认 false，
+  // 设置项开关批4 上线，批1–3 联调经 adb 置 cc.display.aggregate=1
+  aggregate: boolean;
   sessions: SessionState[];
   lastErrorCmd: string | null;
   cloudBusy: boolean;
@@ -102,6 +105,7 @@ const emptySnapshot: Snapshot = {
   connState: "idle",
   channel: null,
   sources: [],
+  aggregate: false,
   sessions: [],
   lastErrorCmd: null,
   cloudBusy: false,
@@ -184,17 +188,34 @@ class RelayStore {
       ...this.snap,
       ...patch,
       version: this.snap.version + 1,
-      // 批1 保持单源语义：快照会话仍只装活动源（聚合平铺 + src 字段是批2）
-      sessions: active ? [...active.sessions.values()] : [],
+      // #294 批2：聚合时平铺全部源会话并写 src（源 id，角标/详情页标注/批3 路由用）；
+      // 单源仍只装活动源且不写 src（watch 网关直发 sessions，保持快照字节不变）
+      sessions: this.snapshotSessions(active),
       ...this.connStatusPatch(),
     };
     for (const fn of this.listeners) fn();
   }
 
+  // 快照会话装配（#294 批2）：聚合 = 全源平铺（源内/源间排序由 ListScreen 同一比较器
+  // 完成——活跃置顶 + updated_at 倒序作用于合并列表即全局混排）；单源 = 活动源直出。
+  // src 懒盖章：仅缺失/不符时就地写入，对象引用跨 emit 稳定——SessionCard memo 的
+  // 行级重渲（#282）依赖"未变会话引用不变"，逐对象展开会让每次 emit 全列表重渲
+  private snapshotSessions(active: SourceConn | null): SessionState[] {
+    if (!this.aggregate) return active ? [...active.sessions.values()] : [];
+    const out: SessionState[] = [];
+    for (const conn of this.conns.values()) {
+      for (const s of conn.sessions.values()) {
+        if (s.src !== conn.id) s.src = conn.id;
+        out.push(s);
+      }
+    }
+    return out;
+  }
+
   // 连接状态聚合（#294 批1）：单源 = 活动源直出（既有文案/字段逐字不变）；
   // 聚合 = any-online 派生，connText `${online}/${total} 在线`（connected/connState 供
   // App.tsx 通知权限/前台服务/回前台重连取此口径，调用方零改动）
-  private connStatusPatch(): Pick<Snapshot, "connected" | "connText" | "connState" | "channel" | "sources"> {
+  private connStatusPatch(): Pick<Snapshot, "connected" | "connText" | "connState" | "channel" | "sources" | "aggregate"> {
     const sources: SourceStatus[] = [...this.conns.values()].map((c) => ({
       id: c.id,
       name: c.name,
@@ -206,7 +227,7 @@ class RelayStore {
       : this.activeId
         ? [this.conns.get(this.activeId)].filter((c): c is SourceConn => !!c)
         : [];
-    if (!inPlay.length) return { connected: false, connText: "未配置", connState: "idle", channel: null, sources };
+    if (!inPlay.length) return { connected: false, connText: "未配置", connState: "idle", channel: null, sources, aggregate: this.aggregate };
     if (this.aggregate) {
       const online = inPlay.filter((c) => c.state === "online");
       const connState = online.length
@@ -223,6 +244,7 @@ class RelayStore {
         connState,
         channel: ref ? ref.channel : null,
         sources,
+        aggregate: this.aggregate,
       };
     }
     const c = inPlay[0];
@@ -232,6 +254,7 @@ class RelayStore {
       connState: c.state,
       channel: c.state === "online" ? c.channel : null,
       sources,
+      aggregate: this.aggregate,
     };
   }
 
