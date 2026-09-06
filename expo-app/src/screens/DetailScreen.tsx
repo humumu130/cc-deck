@@ -411,7 +411,7 @@ function AskBanner({ wr, sid }: { wr: WaitingPayload; sid: string }) {
   );
 }
 
-// initialView（#300）：外部直达目标页（待确认横幅跳"任务" tab）——挂载即落位，
+// initialView（#300/#306）：外部直达目标页（待确认悬浮清单跳"任务" tab）——挂载即落位，
 // 不播 tab 切换动画；缺省 "msg" 与旧行为一致
 export default function DetailScreen({ sid, onBack, initialView }: { sid: string; onBack: () => void; initialView?: ViewKind }) {
   const { c } = useTheme();

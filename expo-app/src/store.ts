@@ -91,9 +91,10 @@ export interface Snapshot {
   cloudMsg: string | null;
   pairCode: { code: string; expiresAt: number } | null;
   taskDoneQueue: TaskDoneReport[];
-  // #300 [待确认] 横幅已读记忆（内存级）： dismissing 时记下当前待确认集合的
-  // key（sid+条数拼接）；集合一变（新增/完成/去标记）key 不匹配横幅自动重现。
-  // 不落盘——进程重启后重新提醒，符合"常驻提醒直到确认"语义
+  // #300/#306 [待确认] 已读记忆（内存级）：已读条目指纹集合（U+0001 控制字符分隔）拼接存
+  // 此字段（fp = sid + status + encodeURIComponent(content)）。条目内容一变
+  // （新增/完成/去标记）指纹不匹配即自动重现。不落盘——进程重启后重新提醒，
+  // 符合"常驻提醒直到确认"语义
   confirmDismissedKey: string | null;
 }
 
@@ -1312,8 +1313,8 @@ class RelayStore {
     return Object.fromEntries(entries);
   }
 
-  // #300 待确认横幅 ✕ = 已读：记下当前集合 key（调用方按当前数据拼好传入），
-  // 数据变化后 key 不匹配横幅重现
+  // #306 待确认已读：调用方把当前已读指纹集合（U+0001 分隔）拼好传入——逐条 ✕
+  // 与"全部已读"都走这里；条目数据变化后指纹不匹配自动重现
   dismissConfirm(key: string) {
     if (this.snap.confirmDismissedKey === key) return;
     this.emit({ confirmDismissedKey: key });

@@ -1,9 +1,10 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Animated, AppState, BackHandler, Dimensions, Easing, Pressable, ScrollView, StyleSheet, Text, View, Vibration } from "react-native";
 import { StatusBar } from "expo-status-bar";
 import { SafeAreaProvider, useSafeAreaInsets } from "react-native-safe-area-context";
 import { store, useRelay } from "./src/store";
 import type { TaskDoneReport } from "./src/store";
+import { isConfirmTodo, displaySrcName } from "./src/fmt";
 import type { SessionState } from "./src/protocol";
 import { ensureNotifPermission, fgSupported, notifyAlert, startForegroundService, updateForeground } from "./src/notify";
 import { startWatchGateway } from "./src/watch";
@@ -187,6 +188,199 @@ function TaskDoneFloat({
   );
 }
 
+// 待确认条目摘要（#306）：#NNN 任务号品牌色高亮——形态同详情页 TaskRefText（#264），
+// 悬浮清单内不接点击（整行点击直达会话"任务" tab）
+function ConfirmText({ text }: { text: string }) {
+  const st = useThemeStyles(makeStyles);
+  if (!/#\d{1,3}\b/.test(text)) {
+    return <Text style={st.cfItem} numberOfLines={2}>{text}</Text>;
+  }
+  return (
+    <Text style={st.cfItem} numberOfLines={2}>
+      {text.split(/#(\d{1,3})\b/g).map((p, i) =>
+        i % 2 === 1 ? <Text key={i} style={st.cfRef}>#{p}</Text> : <Text key={i}>{p}</Text>,
+      )}
+    </Text>
+  );
+}
+
+// #306 已读指纹分隔符：内容里不可能出现的控制字符，sid/status 本身不含分隔符
+const CF_SEP = "\u0001";
+
+// #306 待确认悬浮按钮：TaskDoneFloat 同款形态（右下 44dp 小方钮 + 数字角标 +
+// spring 弹入、展开卡 fade+上滑收放），换品牌色系区分语义（任务完成=绿 /
+// 待确认=品牌色）。位置与其错开：TaskDoneFloat 在场时垫其上方 +52，不在场时
+// 落其标准位（FAB/命令栏之上）。展开卡按会话分组逐条列出 [待确认] 事项：
+// 会话名（displaySrcName 源名规则缩写）+ 内容摘要，点条目直达该会话"任务"
+// tab；✕ 逐条已读、底部全部已读——已读指纹记 store.confirmDismissedKey
+// （内存级，#300 语义：内容变化指纹不匹配自动重现）。展开态由 Shell 持有（#282）
+function ConfirmFloat({
+  isDetail,
+  hasTaskDone,
+  expanded,
+  setExpanded,
+  onOpen,
+}: {
+  isDetail: boolean;
+  hasTaskDone: boolean;
+  expanded: boolean;
+  setExpanded: (v: boolean) => void;
+  onOpen: (sid: string) => void;
+}) {
+  const { c } = useTheme();
+  const snap = useRelay();
+  const st = useThemeStyles(makeStyles);
+  const insets = useSafeAreaInsets();
+  // 键盘跟随：与 TaskDoneFloat 同款落位公式（原生 kbInsets 通道，src/kb.ts）
+  const kbH = useKbHeight();
+  const pop = useRef(new Animated.Value(0)).current;
+  const badgePulse = useRef(new Animated.Value(1)).current;
+  const cardOp = useRef(new Animated.Value(0)).current;
+  const cardY = useRef(new Animated.Value(10)).current;
+  const prevTotal = useRef(0);
+
+  // 已读指纹集合：fp = sid + status + encodeURIComponent(content)，CF_SEP 拼接存
+  // confirmDismissedKey（内存级）——内容一变指纹不匹配条目自动重现
+  const readSet = useMemo(
+    () => new Set((snap.confirmDismissedKey ?? "").split(CF_SEP).filter(Boolean)),
+    [snap.confirmDismissedKey],
+  );
+  // 待确认条目按会话分组（会话按更新时间倒序，#300 横幅同口径），滤掉已读
+  const groups = useMemo(() => {
+    const out: { sid: string; name: string; at: number; items: { fp: string; text: string }[] }[] = [];
+    for (const s of snap.sessions) {
+      const items = (s.todos ?? [])
+        .filter(isConfirmTodo)
+        .map((t) => ({ fp: `${s.session_id}${CF_SEP}${t.status}${CF_SEP}${encodeURIComponent(t.content)}`, text: t.content }))
+        .filter((it) => !readSet.has(it.fp));
+      if (items.length) {
+        out.push({ sid: s.session_id, name: displaySrcName(s.title || "未命名会话"), at: s.updated_at ?? s.started_at, items });
+      }
+    }
+    return out.sort((a, b) => b.at - a.at);
+  }, [snap.sessions, readSet]);
+  const total = groups.reduce((n, g) => n + g.items.length, 0);
+
+  // 出现（0→有）弹入；又进新事项角标弹一下；全部已读收卡
+  useEffect(() => {
+    if (!total) {
+      prevTotal.current = 0;
+      setExpanded(false);
+      return;
+    }
+    if (!prevTotal.current) {
+      pop.setValue(0.4);
+      Animated.spring(pop, { toValue: 1, useNativeDriver: true, bounciness: 6, speed: 12 }).start();
+    } else if (total > prevTotal.current) {
+      badgePulse.setValue(0.6);
+      Animated.spring(badgePulse, { toValue: 1, useNativeDriver: true, bounciness: 7, speed: 14 }).start();
+    }
+    prevTotal.current = total;
+  }, [total, setExpanded]);
+
+  useEffect(() => {
+    if (!expanded) return;
+    cardOp.setValue(0);
+    cardY.setValue(10);
+    Animated.parallel([
+      Animated.timing(cardOp, { toValue: 1, duration: 160, useNativeDriver: true }),
+      Animated.timing(cardY, { toValue: 0, duration: 160, useNativeDriver: true }),
+    ]).start();
+  }, [expanded]);
+
+  // ✕ 逐条已读 / 全部已读：指纹并回 store（dismissConfirm），集合变化自动重现
+  const markRead = (fps: string[]) => {
+    if (!fps.length) return;
+    const next = new Set(readSet);
+    for (const fp of fps) next.add(fp);
+    store.dismissConfirm([...next].join(CF_SEP));
+  };
+
+  if (!total) return null;
+  // TaskDoneFloat 同款落位：键盘弹出贴键盘上沿；其在场时本钮垫其上方 +52 错开
+  const base = kbH > 0 ? kbH + (isDetail ? 80 : 10) : insets.bottom + (isDetail ? 74 : 124);
+  const bottom = base + (hasTaskDone ? 52 : 0);
+  // 展示上限 8 条（与汇报卡同量级），余量折进 overflow 行
+  const cap = 8;
+  let budget = cap;
+  const shownGroups: typeof groups = [];
+  for (const g of groups) {
+    if (budget <= 0) break;
+    const items = g.items.slice(0, budget);
+    budget -= items.length;
+    shownGroups.push({ ...g, items });
+  }
+  const overflow = total - shownGroups.reduce((n, g) => n + g.items.length, 0);
+
+  return (
+    <View style={st.cfWrap} pointerEvents="box-none">
+      {expanded ? (
+        <>
+          <Pressable style={st.cfScrim} onPress={() => setExpanded(false)} />
+          <Animated.View style={[st.cfCard, { opacity: cardOp, transform: [{ translateY: cardY }], bottom: bottom + 52 }]}>
+            <ScrollView nestedScrollEnabled>
+              {shownGroups.map((g, gi) => (
+                <View key={g.sid}>
+                  <Text style={[st.cfSrc, gi === 0 && st.cfSrc0]} numberOfLines={1}>
+                    {g.name}{g.items.length > 1 ? ` · ${g.items.length} 项` : ""}
+                  </Text>
+                  {g.items.map((it) => (
+                    <View key={it.fp} style={st.cfItemRow}>
+                      <Pressable
+                        style={st.cfItemHit}
+                        android_ripple={{ color: withA(c.brandA, 0.12), borderless: false, radius: 9 }}
+                        onPress={() => onOpen(g.sid)}
+                      >
+                        <Text style={st.cfItemMark}>?</Text>
+                        <ConfirmText text={it.text} />
+                      </Pressable>
+                      <Pressable
+                        style={st.cfX}
+                        hitSlop={6}
+                        accessibilityLabel="该条已读"
+                        onPress={() => markRead([it.fp])}
+                      >
+                        <Text style={st.cfXT}>✕</Text>
+                      </Pressable>
+                    </View>
+                  ))}
+                </View>
+              ))}
+              {overflow > 0 ? <Text style={st.cfMore}>… 还有 {overflow} 项待确认</Text> : null}
+            </ScrollView>
+            <View style={st.cfBtnRow}>
+              <Pressable
+                style={st.cfAll}
+                android_ripple={{ color: withA(c.brandA, 0.18), borderless: false, radius: 9 }}
+                onPress={() => markRead(groups.flatMap((g) => g.items.map((it) => it.fp)))}
+              >
+                <Text style={st.cfAllT}>全部已读</Text>
+              </Pressable>
+            </View>
+          </Animated.View>
+        </>
+      ) : (
+        <Animated.View style={[st.cfFab, isDetail ? st.cfFabDetail : st.cfFabList, { transform: [{ scale: pop }], bottom }]}>
+          <Pressable
+            style={st.cfFabHit}
+            android_ripple={{ color: withA(c.brandA, 0.2), borderless: false, radius: 14 }}
+            accessibilityLabel={`${total} 项待你确认，展开清单`}
+            onPress={() => {
+              try { Vibration.vibrate(10); } catch {}
+              setExpanded(true);
+            }}
+          >
+            <Text style={st.cfFabT}>?</Text>
+          </Pressable>
+          <Animated.View style={[st.cfBadge, { transform: [{ scale: badgePulse }] }]}>
+            <Text style={st.cfBadgeT}>{total > 99 ? "99+" : total}</Text>
+          </Animated.View>
+        </Animated.View>
+      )}
+    </View>
+  );
+}
+
 function Shell() {
   const { c, mode } = useTheme();
   const st = useThemeStyles(makeStyles);
@@ -194,7 +388,7 @@ function Shell() {
   const [ready, setReady] = useState(false);
   const [hasCfg, setHasCfg] = useState(false);
   const [detail, setDetail] = useState<string | null>(null);
-  // 详情初始视图（#300）：待确认横幅跳转带 "todos" 直达任务 tab；普通打开缺省消息页
+  // 详情初始视图（#300/#306）：待确认悬浮清单跳转带 "todos" 直达任务 tab；普通打开缺省消息页
   const [detailView, setDetailView] = useState<ViewKind>("msg");
   // 列表⇄详情过渡（#259）：entering=详情从右滑入（列表垫底，落定卸载列表）；
   // closing=详情右滑出（列表先挂回垫底，滑完卸载详情）。仅 transform+native 驱动
@@ -250,6 +444,17 @@ function Shell() {
   // 任务汇报卡展开态提到 Shell（#282）：硬件返回要在顶层先收卡；列表抽屉/图例开闭
   // 只有 ListScreen 知道，经 ref 句柄承接分发
   const [tdExpanded, setTdExpanded] = useState(false);
+  // #306 待确认悬浮卡展开态同款持有（硬件返回顶层先收卡）。两张卡都锚 right:12，
+  // 同时展开会叠卡——开一张收另一张（互斥）
+  const [cfExpanded, setCfExpanded] = useState(false);
+  const openTd = useCallback((v: boolean) => {
+    setTdExpanded(v);
+    if (v) setCfExpanded(false);
+  }, []);
+  const openCf = useCallback((v: boolean) => {
+    setCfExpanded(v);
+    if (v) setTdExpanded(false);
+  }, []);
   const listBackRef = useRef<ListBackHandle | null>(null);
 
   // 硬件返回统一分发（#282）：全 App 唯一 BackHandler 订阅（原 DetailScreen/
@@ -266,9 +471,10 @@ function Shell() {
       }
       return false;
     }
-    // 任务汇报卡展开：先收卡（不拽走底下的详情/列表）
-    if (tdExpanded) {
+    // 任务汇报卡/待确认卡展开：先收卡（不拽走底下的详情/列表）
+    if (tdExpanded || cfExpanded) {
       setTdExpanded(false);
+      setCfExpanded(false);
       return true;
     }
     // 详情开 → 关详情（动画窗口期被相位守卫拒绝时不消费，500ms 兜底放行后恢复）
@@ -277,7 +483,7 @@ function Shell() {
     if (listBackRef.current?.requestBack()) return true;
     // 根路由列表：不消费，交给系统默认
     return false;
-  }, [setup, hasCfg, tdExpanded, detail, closeDetail]);
+  }, [setup, hasCfg, tdExpanded, cfExpanded, detail, closeDetail]);
 
   useEffect(() => {
     const sub = BackHandler.addEventListener("hardwareBackPress", onHardwareBack);
@@ -415,10 +621,20 @@ function Shell() {
           <TaskDoneFloat
             isDetail={!!detail && navPhase !== "closing"}
             expanded={tdExpanded}
-            setExpanded={setTdExpanded}
+            setExpanded={openTd}
             onOpenSession={(sid) => {
               // 动画窗口期 openDetail 拒跳转：此时不得清汇报，否则既没进会话又丢了通知
               if (openDetail(sid)) store.clearTaskDone(sid);
+            }}
+          />
+          <ConfirmFloat
+            isDetail={!!detail && navPhase !== "closing"}
+            hasTaskDone={snap.taskDoneQueue.length > 0}
+            expanded={cfExpanded}
+            setExpanded={openCf}
+            onOpen={(sid) => {
+              // 动画窗口期 openDetail 拒跳转时保持卡开着（既没跳成又不丢清单）
+              if (openDetail(sid, "todos")) openCf(false);
             }}
           />
         </>
@@ -498,4 +714,53 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
     backgroundColor: withA(c.done, 0.14), borderWidth: 1, borderColor: withA(c.done, 0.35),
   },
   tdGoT: { color: c.done, fontSize: 12, fontWeight: "600" },
+  // #306 待确认悬浮（cf = confirm float）：形制与 td* 同款，品牌色系换语义。
+  // 悬浮层根：全屏 box-none，按钮/卡片/scrim 各自绝对定位
+  cfWrap: { position: "absolute", top: 0, left: 0, right: 0, bottom: 0, zIndex: 80 },
+  cfScrim: { position: "absolute", top: 0, left: 0, right: 0, bottom: 0 },
+  // 小方钮：与 tdFab 同尺寸同圆角；落位（right/上偏）由 JSX 按 TaskDoneFloat 在场与否注入
+  cfFab: {
+    position: "absolute", right: 12, width: 44, height: 44, borderRadius: 14,
+    overflow: "visible",
+  },
+  cfFabDetail: {
+    backgroundColor: withA(c.brandA, 0.10), borderWidth: 1, borderColor: withA(c.brandA, 0.45), elevation: 4,
+  },
+  cfFabList: {
+    backgroundColor: c.panel, borderWidth: 1, borderColor: withA(c.brandA, 0.5), elevation: 6,
+  },
+  cfFabHit: { flex: 1, alignItems: "center", justifyContent: "center", borderRadius: 14, overflow: "hidden" },
+  cfFabT: { color: c.brandA, fontSize: 17, fontWeight: "800" },
+  cfBadge: {
+    position: "absolute", top: -6, right: -6, minWidth: 18, height: 18, borderRadius: 9,
+    paddingHorizontal: 5, backgroundColor: c.brandA, alignItems: "center", justifyContent: "center",
+    elevation: 5,
+  },
+  // 品牌蓝底上的深色徽标字（同 tdBadgeT 的深底浅字反向配色逻辑）
+  cfBadgeT: { color: "#06182E", fontSize: 11, fontWeight: "800" },
+  // 展开卡：同 tdCard 形制；按会话分组——组头会话名（displaySrcName 缩写）+ 条目行
+  cfCard: {
+    position: "absolute", right: 12, maxWidth: "84%", maxHeight: "70%",
+    backgroundColor: c.panel, borderWidth: 1, borderColor: withA(c.brandA, 0.28),
+    borderRadius: 16, paddingHorizontal: 14, paddingVertical: 12, elevation: 8,
+  },
+  cfSrc: { color: c.faint, fontSize: 11.5, marginTop: 9 },
+  cfSrc0: { marginTop: 0 },
+  cfItemRow: { flexDirection: "row", alignItems: "flex-start", gap: 6, marginTop: 5 },
+  cfItemHit: {
+    flex: 1, flexDirection: "row", alignItems: "flex-start", gap: 8,
+    borderRadius: 9, overflow: "hidden", paddingRight: 2, paddingVertical: 2,
+  },
+  cfItemMark: { color: c.brandA, fontSize: 12.5, fontWeight: "700", lineHeight: 18 },
+  cfItem: { flex: 1, color: c.text, fontSize: 12.5, lineHeight: 18 },
+  cfRef: { color: c.brandA, fontWeight: "700" },
+  cfX: { width: 24, height: 24, alignItems: "center", justifyContent: "center" },
+  cfXT: { color: c.dim, fontSize: 12 },
+  cfMore: { color: c.faint, fontSize: 11.5, marginTop: 7 },
+  cfBtnRow: { flexDirection: "row", gap: 8, marginTop: 12 },
+  cfAll: {
+    height: 30, paddingHorizontal: 13, borderRadius: 8, alignItems: "center", justifyContent: "center",
+    backgroundColor: withA(c.brandA, 0.14), borderWidth: 1, borderColor: withA(c.brandA, 0.35),
+  },
+  cfAllT: { color: c.brandA, fontSize: 12, fontWeight: "600" },
 });

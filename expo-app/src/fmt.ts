@@ -65,6 +65,18 @@ export function contextLevel(used: number, limit: number): "done" | "working" | 
   return "waiting";
 }
 
+// 源显示名（用户规则 2026-09-06，与网页端 srcDisplayName 同款）：
+// 自定义名优先；缺省名（hostOf 的 IP:port 样式）显示"源+末段数字"；本机回环显示"本机"。
+// #306 起待确认悬浮清单的会话名也走同规则缩写（IP 形态标题同样收短）
+export function displaySrcName(name: string | undefined): string {
+  const n = (name ?? "").trim();
+  if (!n) return "?";
+  if (/^(localhost|127\.0\.0\.1|\[?::1\]?)(:\d+)?$/i.test(n)) return "本机";
+  const m = n.match(/^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})(:\d+)?$/);
+  if (m) return `源${m[4]}`;
+  return n;
+}
+
 export function uuid(): string {
   return "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, (c) => {
     const r = (Math.random() * 16) | 0;

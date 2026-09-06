@@ -5,14 +5,13 @@ import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context"
 import { statusColor, withA, type ThemeColors } from "../theme";
 import { useTheme, useThemeStyles } from "../theme-context";
 import { LogoMark } from "../brand";
-import { sessionElapsed, fmtElapsed, fmtTok, contextPct, contextLevel, CONTEXT_LIMIT_FALLBACK, isConfirmTodo } from "../fmt";
+import { sessionElapsed, fmtElapsed, fmtTok, contextPct, contextLevel, CONTEXT_LIMIT_FALLBACK, displaySrcName } from "../fmt";
 import { useListCompact } from "../display-settings";
 import { store, useRelay } from "../store";
 import { FadeIn, PressScale } from "../motion";
 import type { SessionState } from "../protocol";
 import RenameModal from "./RenameModal";
 import SettingsDrawer from "./SettingsDrawer";
-import type { ViewKind } from "./DetailScreen";
 
 // 硬件返回句柄（#282）：返回键收敛为 App.tsx 顶层单订阅统一分发，抽屉/图例浮层
 // 是否开着只有本组件知道——经 ref 暴露 requestBack 供父级分发时调用
@@ -24,7 +23,7 @@ interface Props {
   sessions: SessionState[];
   connected: boolean;
   connText: string;
-  onOpen: (sid: string, view?: ViewKind) => void; // view（#300）：待确认横幅跳转带 "todos" 直达任务 tab
+  onOpen: (sid: string) => void; // 待确认悬浮清单（#306）的直达跳转由 App.tsx 层直接走 openDetail(sid, "todos")
   onNew: () => void;
   onSetup: () => void;
   onScanServer: () => void; // 抽屉「扫码添加」（#276）：开设置页直接拉起扫码
@@ -45,17 +44,6 @@ function srcColor(id: string): string {
   let h = 0;
   for (const ch of String(id)) h = ((h * 31) + ch.charCodeAt(0)) >>> 0;
   return SRC_COLORS[h % SRC_COLORS.length];
-}
-
-// 源显示名（用户规则 2026-09-06，与网页端 srcDisplayName 同款）：
-// 自定义名优先；缺省名（hostOf 的 IP:port 样式）显示"源+末段数字"；本机回环显示"本机"
-function displaySrcName(name: string | undefined): string {
-  const n = (name ?? "").trim();
-  if (!n) return "?";
-  if (/^(localhost|127\.0\.0\.1|\[?::1\]?)(:\d+)?$/i.test(n)) return "本机";
-  const m = n.match(/^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})(:\d+)?$/);
-  if (m) return `源${m[4]}`;
-  return n;
 }
 
 // 源角标（#294 批2）：聚合且多源时区分会话归属——色点 + 源名胶囊（tag/tagExt 形态：
@@ -557,22 +545,6 @@ export default function ListScreen({ sessions, connected, connText, onOpen, onNe
     .filter((k) => (counts[k] ?? 0) > 0)
     .map((k) => ({ k, n: counts[k], color: statusColor(k, c) }));
 
-  // #300 [待确认] 常驻横幅数据：pending + 含 [待确认] 标记的 todo 按会话汇总，
-  // 按会话更新时间倒序（点横幅跳最新那个的详情任务 tab）。key=sid+条数拼接——
-  // ✕ 已读只记当前集合，新增/完成/去标记任一变化 key 不匹配横幅自动重现
-  const confirmEntries = useMemo(() => {
-    const out: { sid: string; title: string; n: number; at: number }[] = [];
-    for (const s of sessions) {
-      const n = (s.todos ?? []).filter(isConfirmTodo).length;
-      if (n > 0) out.push({ sid: s.session_id, title: s.title || "未命名会话", n, at: s.updated_at ?? s.started_at });
-    }
-    return out.sort((a, b) => b.at - a.at);
-  }, [sessions]);
-  const confirmKey = confirmEntries.map((e) => `${e.sid}:${e.n}`).join("|");
-  const confirmTotal = confirmEntries.reduce((acc, e) => acc + e.n, 0);
-  // ✕ 已读（内存级 store）：集合不变不再弹；进程重启后重新提醒
-  const confirmShown = confirmTotal > 0 && snap.confirmDismissedKey !== confirmKey;
-
   // 连接 chip 配色按 store 连接阶段：连接中/重连中 = 中性 dim（正常过程不着红色），断开才红
   const connColor =
     connected || snap.connState === "online"
@@ -683,44 +655,6 @@ export default function ListScreen({ sessions, connected, connText, onOpen, onNe
           </Pressable>
         ) : null}
       </View>
-
-      {/* #300 [待确认] 常驻横幅：品牌色描边细条，点击直达最新会话详情"任务" tab；✕ 已读（内存级） */}
-      {confirmShown ? (
-        <FadeIn dy={4}>
-          <View
-            style={[
-              styles.confirmBar,
-              { borderColor: withA(c.brandA, 0.5), backgroundColor: withA(c.brandA, 0.1) },
-            ]}
-          >
-            <Pressable
-              style={styles.confirmHit}
-              android_ripple={{ color: withA(c.brandA, 0.14), borderless: false, radius: 12 }}
-              accessibilityLabel={`${confirmTotal} 项待你确认，打开任务清单`}
-              onPress={() => onOpen(confirmEntries[0].sid, "todos")}
-            >
-              <View style={[styles.confirmBadge, { backgroundColor: withA(c.brandA, 0.22) }]}>
-                <Text style={[styles.confirmBadgeT, { color: c.brandA }]}>{confirmTotal > 9 ? "9+" : confirmTotal}</Text>
-              </View>
-              <Text style={styles.confirmT} numberOfLines={1}>
-                <Text style={{ color: c.brandA, fontWeight: "700" }}>{confirmTotal} 项待你确认</Text>
-                <Text style={{ color: c.dim }}>
-                  {confirmEntries.length > 1 ? ` · ${confirmEntries.length} 个会话` : ` · ${confirmEntries[0].title}`}
-                </Text>
-              </Text>
-              <Text style={[styles.confirmGo, { color: c.brandA }]}>›</Text>
-            </Pressable>
-            <Pressable
-              style={styles.confirmX}
-              hitSlop={10}
-              accessibilityLabel="关闭待确认横幅（已读）"
-              onPress={() => store.dismissConfirm(confirmKey)}
-            >
-              <Text style={styles.confirmXT}>✕</Text>
-            </Pressable>
-          </View>
-        </FadeIn>
-      ) : null}
 
       <FlatList
         data={visible}
@@ -882,26 +816,6 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
   collapseBtnOn: { backgroundColor: c.tintStrong, borderColor: withA(c.brandA, 0.4) },
   collapseT: { fontSize: 11, color: c.dim },
   collapseTOn: { color: c.brandA },
-  // #300 [待确认] 常驻横幅：统计行下细条（高 32 同 connChip 量级、圆角 12 同卡片语言），
-  // 描边/染底品牌色由 JSX 注入；左徽标计数 + 主文案 + ✕ 已读
-  confirmBar: {
-    flexDirection: "row", alignItems: "stretch",
-    marginHorizontal: 14, marginTop: 6, height: 32,
-    borderWidth: 1, borderRadius: 12, overflow: "hidden",
-  },
-  confirmHit: { flex: 1, flexDirection: "row", alignItems: "center", gap: 8, paddingLeft: 10, paddingRight: 4 },
-  confirmBadge: {
-    minWidth: 18, height: 18, borderRadius: 9, paddingHorizontal: 5,
-    alignItems: "center", justifyContent: "center",
-  },
-  confirmBadgeT: { fontSize: 10.5, fontWeight: "800", fontVariant: ["tabular-nums"] },
-  confirmT: { flex: 1, fontSize: 12.5, flexShrink: 1 },
-  confirmGo: { fontSize: 15, fontWeight: "700" },
-  confirmX: {
-    width: 34, alignItems: "center", justifyContent: "center",
-    borderLeftWidth: 1, borderLeftColor: withA(c.brandA, 0.18),
-  },
-  confirmXT: { color: c.dim, fontSize: 12.5 },
   swipeWrap: { marginBottom: 11, borderRadius: 16, overflow: "hidden" },
   swipeWrapC: { marginBottom: 7 },
   swipeCard: { borderRadius: 16, overflow: "hidden", backgroundColor: c.panel },
