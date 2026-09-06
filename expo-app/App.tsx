@@ -240,6 +240,9 @@ function Shell() {
   const [sheet, setSheet] = useState(false);
   // null=关闭；"new"=新增服务器；其余字符串=编辑该 id 的服务器
   const [setup, setSetup] = useState<string | null>(null);
+  // 设置页进页即扫码（#276 抽屉「扫码添加」入口）：SetupScreen 每次开页重挂载，
+  // 该标记只在打开瞬间消费；各打开路径都显式置值，杜绝上次残留误拉起
+  const [setupScan, setSetupScan] = useState(false);
   // 任务汇报卡展开态提到 Shell（#282）：硬件返回要在顶层先收卡；列表抽屉/图例开闭
   // 只有 ListScreen 知道，经 ref 句柄承接分发
   const [tdExpanded, setTdExpanded] = useState(false);
@@ -362,8 +365,9 @@ function Shell() {
               connText={snap.connText}
               onOpen={openDetail}
               onNew={() => setSheet(true)}
-              onSetup={() => setSetup("new")}
-              onEditServer={(id) => setSetup(id)}
+              onSetup={() => { setSetupScan(false); setSetup("new"); }}
+              onScanServer={() => { setSetupScan(true); setSetup("new"); }}
+              onEditServer={(id) => { setSetupScan(false); setSetup(id); }}
             />
           )}
           {detail ? (
@@ -389,6 +393,7 @@ function Shell() {
         <SetupScreen
           onClose={hasCfg ? () => setSetup(null) : undefined}
           editId={setup && setup !== "new" ? setup : null}
+          initialScan={setupScan}
         />
       )}
     </SafeAreaProvider>

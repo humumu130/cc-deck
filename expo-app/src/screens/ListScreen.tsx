@@ -26,6 +26,7 @@ interface Props {
   onOpen: (sid: string) => void;
   onNew: () => void;
   onSetup: () => void;
+  onScanServer: () => void; // 抽屉「扫码添加」（#276）：开设置页直接拉起扫码
   onEditServer: (id: string) => void;
   ref?: Ref<ListBackHandle>;
 }
@@ -356,7 +357,7 @@ const SessionCard = memo(function SessionCard({
   );
 });
 
-export default function ListScreen({ sessions, connected, connText, onOpen, onNew, onSetup, onEditServer, ref }: Props) {
+export default function ListScreen({ sessions, connected, connText, onOpen, onNew, onSetup, onScanServer, onEditServer, ref }: Props) {
   const { c } = useTheme();
   const styles = useThemeStyles(makeStyles);
   const insets = useSafeAreaInsets();
@@ -669,6 +670,7 @@ export default function ListScreen({ sessions, connected, connText, onOpen, onNe
         visible={drawerOpen}
         onClose={() => setDrawerOpen(false)}
         onSetup={onSetup}
+        onScan={onScanServer}
         onEdit={(e) => onEditServer(e.id)}
       />
 

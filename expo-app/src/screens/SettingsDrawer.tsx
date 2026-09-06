@@ -26,11 +26,13 @@ export default function SettingsDrawer({
   visible,
   onClose,
   onSetup,
+  onScan,
   onEdit,
 }: {
   visible: boolean;
   onClose: () => void;
   onSetup: () => void;
+  onScan: () => void; // 扫码添加服务器（#276）：开设置页并直接拉起扫码
   onEdit: (e: ServerEntry) => void;
 }) {
   const { c, mode, toggle } = useTheme();
@@ -212,9 +214,15 @@ export default function SettingsDrawer({
               </View>
             );
           })}
-          <Pressable style={d.addRow} android_ripple={{ color: c.tintSoft, borderless: false }} onPress={() => { onClose(); onSetup(); }}>
-            <Text style={d.addT}>＋ 新增服务器</Text>
-          </Pressable>
+          {/* 新增入口两格（#276）：手动添表单 / 扫 PC 终端码一步填——同一虚线风格并排 */}
+          <View style={d.addRowWrap}>
+            <Pressable style={d.addRow} android_ripple={{ color: c.tintSoft, borderless: false }} onPress={() => { onClose(); onSetup(); }}>
+              <Text style={d.addT}>＋ 手动添加</Text>
+            </Pressable>
+            <Pressable style={d.addRow} android_ripple={{ color: c.tintSoft, borderless: false }} onPress={() => { onClose(); onScan(); }}>
+              <Text style={d.addT}>▣ 扫码添加</Text>
+            </Pressable>
+          </View>
         </ScrollView>
         ) : null}
         {!srvCollapsed && servers.length === 0 ? <Text style={d.srvEmpty}>还没有服务器，点下方新增</Text> : null}
@@ -337,9 +345,10 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
   srvEditT: { color: c.dim, fontSize: 13.5 },
   srvDel: { width: 36, height: 42, alignItems: "center", justifyContent: "center" },
   srvDelT: { color: c.faint, fontSize: 14 },
+  addRowWrap: { flexDirection: "row", gap: 8, marginBottom: 8 },
   addRow: {
-    borderWidth: 1, borderColor: withA(c.brandA, 0.45), borderStyle: "dashed", borderRadius: 12,
-    alignItems: "center", justifyContent: "center", paddingVertical: 10, marginBottom: 8,
+    flex: 1, borderWidth: 1, borderColor: withA(c.brandA, 0.45), borderStyle: "dashed", borderRadius: 12,
+    alignItems: "center", justifyContent: "center", paddingVertical: 10, overflow: "hidden",
   },
   addT: { color: c.brandA, fontSize: 13, fontWeight: "700" },
   srvEmpty: { color: c.faint, fontSize: 11, marginTop: 2 },

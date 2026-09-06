@@ -9,10 +9,12 @@ import { useTheme, useThemeStyles } from "../theme-context";
 import { store, useRelay, type ServerEntry } from "../store";
 import { uuid } from "../fmt";
 import { useKbHeight } from "../kb";
+import ScanScreen, { type ScanResult } from "./ScanScreen";
 
 interface Props {
   onClose?: () => void; // 有值 = 从主界面进入（可返回）
   editId?: string | null; // 编辑已有服务器（预填表单，保存=更新条目）
+  initialScan?: boolean; // 从抽屉「扫码添加」进入：直接拉起扫码页
 }
 
 function hostOf(wsUrl: string): string {
@@ -23,7 +25,7 @@ function hostOf(wsUrl: string): string {
   }
 }
 
-export default function SetupScreen({ onClose, editId }: Props) {
+export default function SetupScreen({ onClose, editId, initialScan }: Props) {
   const { c } = useTheme();
   const s = useThemeStyles(makeStyles);
   const snap = useRelay();
@@ -34,6 +36,9 @@ export default function SetupScreen({ onClose, editId }: Props) {
   const [token, setToken] = useState("");
   const [remember, setRemember] = useState(true);
   const [err, setErr] = useState<string | null>(null);
+  // 扫码直连（#276）：initialScan（抽屉扫码入口）进页即开扫码；扫得连接码自动填表单，
+  // 预览确认后仍走下方 add() 既有流程
+  const [scanOpen, setScanOpen] = useState(!!initialScan);
   const tokenInputRef = useRef<TextInput>(null);
   // 状态行显示的主机名：发起连接时固化，不随表单后续编辑漂移
   const [connHost, setConnHost] = useState("");
@@ -156,6 +161,14 @@ export default function SetupScreen({ onClose, editId }: Props) {
     void store.deleteServer(e.id).then(() => reload());
   };
 
+  // 扫码结果回填：地址 + 令牌 + 默认名 host（用户已手输名称则尊重，不覆盖）
+  const applyScan = (r: ScanResult) => {
+    setWsUrl(r.wsUrl);
+    setToken(r.token);
+    setErr(null);
+    if (!name.trim()) setName(hostOf(r.wsUrl));
+  };
+
   // 云桥区块针对的服务器：编辑模式=被编辑的条目，否则=当前活动条目；配对走当前 LAN 连接，故要求该条目已激活
   const cloudEntry = editId ? servers.find((e) => e.id === editId) : servers.find((e) => e.id === activeId);
   const cloudReady = !!cloudEntry && cloudEntry.id === activeId && snap.connected && snap.channel === "lan";
@@ -172,6 +185,19 @@ export default function SetupScreen({ onClose, editId }: Props) {
           </View>
           <Text style={s.h2}>CC Deck</Text>
           <Text style={s.sub}>{editId ? "编辑服务器配置" : "连接到 PC Relay"}</Text>
+
+          {!editId ? (
+            <Pressable
+              style={s.scanRow}
+              android_ripple={{ color: c.tintSoft, borderless: false }}
+              onPress={() => setScanOpen(true)}
+              accessibilityLabel="扫码自动填写地址与令牌"
+            >
+              <Text style={s.scanGlyph}>▣</Text>
+              <Text style={s.scanT}>扫码添加</Text>
+              <Text style={s.scanHint}>对准 PC 终端二维码，免手输</Text>
+            </Pressable>
+          ) : null}
 
           {servers.length > 0 ? (
             <View style={s.savedBox}>
@@ -300,6 +326,7 @@ export default function SetupScreen({ onClose, editId }: Props) {
           ) : null}
         </ScrollView>
       </View>
+      <ScanScreen visible={scanOpen} onClose={() => setScanOpen(false)} onResult={applyScan} />
     </SafeAreaView>
   );
 }
@@ -313,6 +340,16 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
   },
   h2: { color: c.text, fontSize: 21, fontWeight: "700" },
   sub: { color: c.dim, fontSize: 13, marginTop: 4, marginBottom: 24 },
+  // 扫码添加入口行（#276）：左侧图标+主文案，右侧灰色提示；点击拉起全屏扫码
+  scanRow: {
+    flexDirection: "row", alignItems: "center", gap: 8, width: "100%", maxWidth: 340,
+    marginBottom: 20, paddingVertical: 11, paddingHorizontal: 14, borderRadius: 12,
+    backgroundColor: c.panel, borderWidth: 1, borderColor: withA(c.brandA, 0.45),
+    overflow: "hidden",
+  },
+  scanGlyph: { color: c.brandA, fontSize: 15, fontWeight: "700" },
+  scanT: { color: c.brandA, fontSize: 13.5, fontWeight: "700" },
+  scanHint: { flex: 1, color: c.faint, fontSize: 11, textAlign: "right" },
   savedBox: { width: "100%", maxWidth: 340, marginBottom: 20 },
   label: { color: c.dim, fontSize: 12, marginBottom: 6 },
   srvRow: {

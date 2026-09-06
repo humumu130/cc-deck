@@ -7,6 +7,16 @@
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "dark",
     "backgroundColor": "#050B12",
+    "plugins": [
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "允许 $(PRODUCT_NAME) 访问摄像头，用于扫描 PC 端 relay 的连接二维码",
+          "recordAudioAndroid": false,
+          "barcodeScannerEnabled": true
+        }
+      ]
+    ],
     "ios": {
       "supportsTablet": false,
       "bundleIdentifier": "com.humumu.ccwatch"
