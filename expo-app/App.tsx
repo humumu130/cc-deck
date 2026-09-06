@@ -206,6 +206,7 @@ function ConfirmText({ text }: { text: string }) {
 
 // #306 已读指纹分隔符：内容里不可能出现的控制字符，sid/status 本身不含分隔符
 const CF_SEP = "\u0001";
+const CF_JOIN = ""; //  与 fp 内部的  不同，join/split 才不成碎片
 
 // #306 待确认悬浮按钮：TaskDoneFloat 同款形态（右下 44dp 小方钮 + 数字角标 +
 // spring 弹入、展开卡 fade+上滑收放），换品牌色系区分语义（任务完成=绿 /
@@ -242,7 +243,7 @@ function ConfirmFloat({
   // 已读指纹集合：fp = sid + status + encodeURIComponent(content)，CF_SEP 拼接存
   // confirmDismissedKey（内存级）——内容一变指纹不匹配条目自动重现
   const readSet = useMemo(
-    () => new Set((snap.confirmDismissedKey ?? "").split(CF_SEP).filter(Boolean)),
+    () => new Set((snap.confirmDismissedKey ?? "").split(CF_JOIN).filter(Boolean)),
     [snap.confirmDismissedKey],
   );
   // 待确认条目按会话分组（会话按更新时间倒序，#300 横幅同口径），滤掉已读
@@ -293,7 +294,7 @@ function ConfirmFloat({
     if (!fps.length) return;
     const next = new Set(readSet);
     for (const fp of fps) next.add(fp);
-    store.dismissConfirm([...next].join(CF_SEP));
+    store.dismissConfirm([...next].join(CF_JOIN));
   };
 
   if (!total) return null;
@@ -720,7 +721,7 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
   cfScrim: { position: "absolute", top: 0, left: 0, right: 0, bottom: 0 },
   // 小方钮：与 tdFab 同尺寸同圆角；落位（right/上偏）由 JSX 按 TaskDoneFloat 在场与否注入
   cfFab: {
-    position: "absolute", right: 12, width: 38, height: 38, borderRadius: 12,
+    position: "absolute", right: 12, width: 44, height: 44, borderRadius: 14,
     overflow: "visible",
   },
   cfFabDetail: {
@@ -730,17 +731,17 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
     backgroundColor: c.panel, borderWidth: 1, borderColor: withA(c.brandA, 0.5), elevation: 6,
   },
   cfFabHit: { flex: 1, alignItems: "center", justifyContent: "center", borderRadius: 14, overflow: "hidden" },
-  cfFabT: { color: c.brandA, fontSize: 15, fontWeight: "800" },
+  cfFabT: { color: c.brandA, fontSize: 17, fontWeight: "800" },
   cfBadge: {
-    position: "absolute", top: -5, right: -5, minWidth: 16, height: 16, borderRadius: 8,
-    paddingHorizontal: 4, backgroundColor: c.brandA, alignItems: "center", justifyContent: "center",
+    position: "absolute", top: -6, right: -6, minWidth: 18, height: 18, borderRadius: 9,
+    paddingHorizontal: 5, backgroundColor: c.brandA, alignItems: "center", justifyContent: "center",
     elevation: 5,
   },
   // 品牌蓝底上的深色徽标字（同 tdBadgeT 的深底浅字反向配色逻辑）
-  cfBadgeT: { color: "#06182E", fontSize: 10, fontWeight: "800" },
+  cfBadgeT: { color: "#06182E", fontSize: 11, fontWeight: "800" },
   // 展开卡：同 tdCard 形制；按会话分组——组头会话名（displaySrcName 缩写）+ 条目行
   cfCard: {
-    position: "absolute", right: 12, maxWidth: "84%", maxHeight: "50%",
+    position: "absolute", right: 12, maxWidth: "92%", maxHeight: "72%",
     backgroundColor: c.panel, borderWidth: 1, borderColor: withA(c.brandA, 0.28),
     borderRadius: 16, paddingHorizontal: 14, paddingVertical: 12, elevation: 8,
   },
@@ -757,10 +758,10 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
   cfX: { width: 24, height: 24, alignItems: "center", justifyContent: "center" },
   cfXT: { color: c.dim, fontSize: 12 },
   cfMore: { color: c.faint, fontSize: 11.5, marginTop: 7 },
-  cfBtnRow: { flexDirection: "row", gap: 8, marginTop: 12 },
+  cfBtnRow: { flexDirection: "row", gap: 8, marginTop: 9 },
   cfAll: {
-    height: 30, paddingHorizontal: 13, borderRadius: 8, alignItems: "center", justifyContent: "center",
+    height: 28, paddingHorizontal: 10, borderRadius: 8, alignItems: "center", justifyContent: "center",
     backgroundColor: withA(c.brandA, 0.14), borderWidth: 1, borderColor: withA(c.brandA, 0.35),
   },
-  cfAllT: { color: c.brandA, fontSize: 12, fontWeight: "600" },
+  cfAllT: { color: c.brandA, fontSize: 11.5, fontWeight: "600" },
 });
