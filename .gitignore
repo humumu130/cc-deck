@@ -25,3 +25,4 @@ relay/cf-*.png
 web-console/.wrangler/
 cc-watch-relay-office.zip
 relay/scripts/office-start.local.bat
+docs-internal/

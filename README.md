@@ -139,7 +139,7 @@ npx wrangler deploy
 | 历史会话恢复 / 续聊 | ✅ | — | ✅ | ✅ |
 | 接入通道 | LAN 直连（扫码）/ 云桥 | WS 直连 / 经手机网关 | LAN / 云桥（WS 被拦降级 HTTP 轮询） | 本机自动探测 / LAN / 云桥 |
 
-手表端功能取舍按「抬腕时需不需要立刻知道 / 立刻点」分级维护，判定基准见 [docs/watch-feature-scope.md](docs/watch-feature-scope.md)。
+手表端功能取舍按「抬腕时需不需要立刻知道 / 立刻点」分级维护。
 
 ## 进阶
 
@@ -211,7 +211,7 @@ cd relay && node scripts/build-plugin.mjs
 
 - 手表 Tiles（不开 App 直接看状态）
 - 多手机 / 多设备同时在线
-- iOS / macOS：PWA 路线（调研已完结，见 [docs/ios-mac-research.md](docs/ios-mac-research.md)）
+- iOS / macOS：PWA 路线
 - LAN 直连 WSS / TLS 部署加固
 
 ## 相关文档
@@ -220,8 +220,6 @@ cd relay && node scripts/build-plugin.mjs
 - [docs/watch-feature-scope.md](docs/watch-feature-scope.md) — 手表端功能域定义与 A/B/C 取舍分级
 - [docs/feature-parity-web.md](docs/feature-parity-web.md) — 网页端功能对齐清单
 - [docs/aggregate-mode-design.md](docs/aggregate-mode-design.md) — App 多源聚合模式设计
-- [docs/desktop-decision.md](docs/desktop-decision.md) — 桌面壳选型决策（Electron vs Tauri vs WebView2）
-- [docs/ios-mac-research.md](docs/ios-mac-research.md) — iOS / macOS 支持可行性调研
 - [网页控制台公网镜像](https://cc.humumu.online) · [Releases 下载](https://github.com/humumu130/cc-deck/releases/latest)
 
 ## License
