@@ -1043,7 +1043,7 @@ assert(ack24.ok === false, "empty rename rejected");
     assert((await injectText(5555, '带"引号"与\\反斜杠')).ok, "42 darwin injectText ok via fake osascript");
     const s1 = appleLog().at(-1)!;
     assert(s1.includes("ps -o tty= -p 5555"), "42 resolves tty by pid");
-    assert(s1.includes("tty of selected tab of w starts with targetTty"), "42 selects window by tty");
+    assert(s1.includes("tty of selected tab of w ends with targetTty"), "42 selects window by tty");
     assert(s1.includes('keystroke "带\\"引号\\"与\\\\反斜杠"'), "42 keystroke escapes quotes and backslashes");
     assert(s1.includes("key code 36"), "42 text ends with enter (key code 36)");
     // ② 换行折叠（与 Windows 行为一致：单行 keystroke）
