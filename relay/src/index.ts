@@ -71,9 +71,15 @@ if (cliArgs.has("--pair")) {
   }
 }
 
-// --qr：只打印连接二维码（App 下载 + 控制台），不启动服务
+// --qr：只打印连接二维码（App 直连 + App 下载 + 控制台），不启动服务
 if (cliArgs.has("--qr")) {
   const ip = lanIps()[0] ?? "127.0.0.1";
+  // App 直连码（#276）：JSON {v,url,token}，CC Deck App 扫码添加服务器——地址+令牌一步到位，
+  // 免手输。v 版本号留扩展余地；扫码页按 v 分发解析
+  printQr(
+    JSON.stringify({ v: 1, url: `ws://${ip}:${cfg.port}/ws`, token: cfg.token }),
+    `App 直连（CC Deck App 内扫码添加）: ws://${ip}:${cfg.port}/ws`,
+  );
   printQr(`http://${ip}:${cfg.port}/m/cc-deck.apk`, `App 下载（手机摄像头扫描）: http://${ip}:${cfg.port}/m/cc-deck.apk`);
   printQr(
     `http://${ip}:${cfg.port}/?token=${cfg.token}`,
