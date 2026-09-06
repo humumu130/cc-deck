@@ -1868,8 +1868,18 @@ function srcColor(id) {
 function srcColorKey(cfg) {
   return (cfg.cloud && cfg.cloud.rd) || cfg.wsUrl || cfg.id;
 }
+// 源显示名（用户规则 2026-09-06）：自定义名优先；缺省名（hostOf 的 IP:port 样式）显示"源+末段"，
+// 本机回环显示"本机"。title 悬停仍给完整名。
+function srcDisplayName(cfg) {
+  const n = String(cfg.name || "").trim();
+  if (!n) return "?";
+  if (/^(localhost|127\.0\.0\.1|\[?::1\]?)(:\d+)?$/i.test(n)) return "本机";
+  const m = n.match(/^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})(:\d+)?$/);
+  if (m) return "源" + m[4];
+  return n;
+}
 function srcBadgeHtml(cfg) {
-  return '<span class="src-badge" title="' + escapeHtml(cfg.name) + '"><i style="background:' + srcColor(srcColorKey(cfg)) + '"></i><span class="sb-t">' + escapeHtml(cfg.name || "?") + '</span></span>';
+  return '<span class="src-badge" title="' + escapeHtml(cfg.name) + '"><i style="background:' + srcColor(srcColorKey(cfg)) + '"></i><span class="sb-t">' + escapeHtml(srcDisplayName(cfg)) + '</span></span>';
 }
 
 // 列表上方源过滤 chips（单源时隐藏）；过滤目标被删/失效时自愈回"全部"
@@ -1886,7 +1896,7 @@ function renderSrcChips() {
     servers.map((s) => {
       const n = ctxs.get(s.id)?.sessions.size || 0;
       return '<button data-f="' + s.id + '" class="' + (filterSrc === s.id ? "on" : "") + '" title="' + escapeHtml(s.name) + '">' +
-        '<i style="background:' + srcColor(srcColorKey(s)) + '"></i><span>' + escapeHtml(s.name) + " " + n + "</span></button>";
+        '<i style="background:' + srcColor(srcColorKey(s)) + '"></i><span>' + escapeHtml(srcDisplayName(s)) + " " + n + "</span></button>";
     }).join("");
   box.querySelectorAll("button").forEach((b) => {
     b.onclick = () => { filterSrc = b.dataset.f; renderSrcChips(); render(); };

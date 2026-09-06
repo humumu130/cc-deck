@@ -46,6 +46,17 @@ function srcColor(id: string): string {
   return SRC_COLORS[h % SRC_COLORS.length];
 }
 
+// 源显示名（用户规则 2026-09-06，与网页端 srcDisplayName 同款）：
+// 自定义名优先；缺省名（hostOf 的 IP:port 样式）显示"源+末段数字"；本机回环显示"本机"
+function displaySrcName(name: string | undefined): string {
+  const n = (name ?? "").trim();
+  if (!n) return "?";
+  if (/^(localhost|127\.0\.0\.1|\[?::1\]?)(:\d+)?$/i.test(n)) return "本机";
+  const m = n.match(/^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})(:\d+)?$/);
+  if (m) return `源${m[4]}`;
+  return n;
+}
+
 // 源角标（#294 批2）：聚合且多源时区分会话归属——色点 + 源名胶囊（tag/tagExt 形态：
 // 描边 + 轻染底，染底/描边按源色）；单源模式不渲染（ListScreen 侧把关）。
 // id 即 colorKey（调用方传入，见 srcKeys）
@@ -523,7 +534,7 @@ export default function ListScreen({ sessions, connected, connText, onOpen, onNe
   const badgeOn = snap.aggregate && snap.sources.length > 1;
   // 聚合源在线数（#294 批4）：统计行「N 源聚合」与空态「online/total 源」共用
   const onlineSrcs = snap.sources.filter((x) => x.state === "online").length;
-  const srcNames = new Map(snap.sources.map((x) => [x.id, x.name] as const));
+  const srcNames = new Map(snap.sources.map((x) => [x.id, displaySrcName(x.name)] as const));
   // 源跨端配色键（#294 审查修复）：id→colorKey 同款按值传参，不破坏 memo
   const srcKeys = new Map(snap.sources.map((x) => [x.id, x.colorKey] as const));
 
