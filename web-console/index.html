@@ -126,10 +126,12 @@
   .rh-row i { width: 8px; height: 8px; border-radius: 50%; flex: none; }
   /* ⚙ 设置浮层：与 rhPop 同款面板，行点击镜像触发散装开关 */
   #gearPop {
-    display: none; position: absolute; top: 60px; left: 16px; z-index: 40; min-width: 188px;
+    display: none; position: absolute; top: 60px; left: 16px; z-index: 40; width: 316px;
+    max-height: calc(100vh - 96px); overflow-y: auto;
     background: var(--panel); border: 1px solid var(--border); border-radius: 12px;
     padding: 10px 12px; box-shadow: 0 8px 28px rgba(0,0,0,.4);
   }
+  #gearPop .panel { background: none; border-bottom: none; padding: 2px 2px 6px; }
   #gearPop.open { display: flex; flex-direction: column; gap: 2px; }
   .gp-sec { font-size: 10.5px; color: var(--dim); letter-spacing: .06em; padding: 6px 4px 3px; }
   .gp-sec:first-child { padding-top: 2px; }
@@ -835,6 +837,28 @@
     </div>
 
     <div id="gearPop">
+      <div class="gp-sec">服务器</div>
+      <div class="panel" id="connPanel">
+        <div id="srvList"></div>
+        <div class="conn-form">
+          <div class="seg" id="cmodeSeg">
+            <button type="button" data-m="lan">直连</button>
+            <button type="button" data-m="cloud">云桥</button>
+          </div>
+          <input id="srvName" placeholder="名称（可选）">
+          <input id="url" placeholder="ws://<pc-ip>:8787/ws">
+          <input id="token" placeholder="token">
+          <div class="conn-actions">
+            <button id="cancelEdit" style="display:none">取消</button>
+            <button id="saveSrvBtn" class="primary">添加直连</button>
+          </div>
+        </div>
+        <div id="pairBox">
+          <input id="pairCode" inputmode="numeric" maxlength="6" placeholder="6 位配对码" autocomplete="off">
+          <button id="pairBtn" class="primary">配对</button>
+        </div>
+        <div class="pair-hint" id="pairHint">云桥未配对时输入 <b>6 位配对码</b>（手机 App 或家里 PC 领取，20 分钟内有效），配对成功落成一条云源</div>
+      </div>
       <div class="gp-sec">显示</div>
       <div class="gp-row" id="gpTheme">主题 <b id="gpThemeV"></b></div>
       <div class="gp-row" id="gpDensity">列表密度 <b id="gpDensityV"></b></div>
@@ -844,28 +868,6 @@
       <div class="gp-sec">关于</div>
       <div class="gp-row gp-static">CC Deck 控制台 <b id="gpVer"></b></div>
       <div class="gp-links"><a href="https://github.com/humumu130/cc-deck/releases" target="_blank" rel="noopener">下载 / 更新</a><a href="https://github.com/humumu130/cc-deck/issues" target="_blank" rel="noopener">反馈</a></div>
-    </div>
-
-    <div class="panel" id="connPanel">
-      <div id="srvList"></div>
-      <div class="conn-form">
-        <div class="seg" id="cmodeSeg">
-          <button type="button" data-m="lan">直连</button>
-          <button type="button" data-m="cloud">云桥</button>
-        </div>
-        <input id="srvName" placeholder="名称（可选）">
-        <input id="url" placeholder="ws://<pc-ip>:8787/ws">
-        <input id="token" placeholder="token">
-        <div class="conn-actions">
-          <button id="cancelEdit" style="display:none">取消</button>
-          <button id="saveSrvBtn" class="primary">添加直连</button>
-        </div>
-      </div>
-      <div id="pairBox">
-        <input id="pairCode" inputmode="numeric" maxlength="6" placeholder="6 位配对码" autocomplete="off">
-        <button id="pairBtn" class="primary">配对</button>
-      </div>
-      <div class="pair-hint" id="pairHint">云桥未配对时输入 <b>6 位配对码</b>（手机 App 或家里 PC 领取，20 分钟内有效），配对成功落成一条云源</div>
     </div>
 
     <div id="listBar">
@@ -1707,8 +1709,13 @@ function scheduleReconnect(ctx) {
 function setConn(ctx, status, text) {
   ctx.status = status;
   ctx.statusText = text;
-  // 任一源连接成功自动收起连接面板，把高度还给会话区（点右上角连接状态条可重开）
-  if (status === "online") $("connPanel").classList.remove("open");
+  // 任一源首次连接成功自动收起设置抽屉，把视线还给会话区（仅首次——重连不中断用户操作）
+  if (status === "online" && !ctx._everOnline) {
+    ctx._everOnline = true;
+    $("connPanel").classList.remove("open");
+    $("gearPop").classList.remove("open");
+    $("connChip").classList.remove("open");
+  }
   renderServers();
   renderConnChip();
   render();
@@ -2761,6 +2768,7 @@ function closeDetail() {
 function openPanel(which) {
   $("connPanel").classList.toggle("open", which === "conn");
   $("connChip").classList.toggle("open", which === "conn");
+  $("gearPop").classList.toggle("open", which === "conn");
 }
 $("connChip").onclick = () => {
   const open = $("connPanel").classList.contains("open");
@@ -2773,6 +2781,8 @@ document.addEventListener("click", (ev) => {
     const open = !$("gearPop").classList.contains("open");
     $("rhPop").classList.remove("open");
     $("gearPop").classList.toggle("open", open);
+    $("connPanel").classList.toggle("open", open);
+    $("connChip").classList.toggle("open", open);
     if (open) syncGearPop();
     return;
   }
