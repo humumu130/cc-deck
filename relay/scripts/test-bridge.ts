@@ -1039,11 +1039,11 @@ assert(ack24.ok === false, "empty rename rejected");
   process.env.CCR_OSASCRIPT_CMD = fileURLToPath(new URL("./fake-injector.mjs", import.meta.url));
   const appleLog = () => fakeLog().filter((a) => a[0] === "-e").map((a) => String(a[1]));
   try {
-    // ① 短文本：按 unix id 定位 + frontmost 前置 + 转义 keystroke + key code 36 收尾
+    // ① 短文本：前台应用定位 + frontmost 前置 + 转义 keystroke + key code 36 收尾
     assert((await injectText(5555, '带"引号"与\\反斜杠')).ok, "42 darwin injectText ok via fake osascript");
     const s1 = appleLog().at(-1)!;
-    assert(s1.includes("whose unix id is 5555"), "42 targets process by unix id");
-    assert(s1.includes("set frontmost to true"), "42 brings target frontmost before keystroke");
+    assert(s1.includes("frontmost is true"), "42 targets frontmost application process");
+    assert(s1.includes("set frontmost of hostApp to true"), "42 brings target frontmost before keystroke");
     assert(s1.includes('keystroke "带\\"引号\\"与\\\\反斜杠"'), "42 keystroke escapes quotes and backslashes");
     assert(s1.includes("key code 36"), "42 text ends with enter (key code 36)");
     // ② 换行折叠（与 Windows 行为一致：单行 keystroke）
