@@ -832,7 +832,7 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
   collapseBtnOn: { backgroundColor: c.tintStrong, borderColor: withA(c.brandA, 0.4) },
   collapseT: { fontSize: 11, color: c.dim },
   collapseTOn: { color: c.brandA },
-  swipeWrap: { marginBottom: 11, borderRadius: 16, overflow: "hidden" },
+  swipeWrap: { marginBottom: 9, borderRadius: 16, overflow: "hidden" },
   swipeWrapC: { marginBottom: 7 },
   swipeCard: { borderRadius: 16, overflow: "hidden", backgroundColor: c.panel },
   actPanel: {
@@ -846,7 +846,7 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
   actT2: { color: "#fff", fontSize: 11.5, fontWeight: "600" },
   card: {
     backgroundColor: c.panel, borderWidth: 1, borderColor: c.line,
-    borderRadius: 16, padding: 14,
+    borderRadius: 16, paddingVertical: 11, paddingHorizontal: 13,
   },
   cardC: { borderRadius: 13, padding: 9 },
   rowC: { flexDirection: "row", alignItems: "center", gap: 7 },
@@ -855,7 +855,7 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
   footC: { flexDirection: "row", alignItems: "center", gap: 8, marginTop: 4 },
   folderC: { fontSize: 10, color: c.dim, flexShrink: 1, maxWidth: 120 },
   statsC: { fontSize: 10, color: c.faint, fontVariant: ["tabular-nums"] },
-  row1: { flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 8 },
+  row1: { flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 6 },
   dot: {
     width: 11, height: 11, borderRadius: 6, opacity: 1,
     alignItems: "center", justifyContent: "center",
@@ -863,8 +863,8 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
   elapsed: { fontSize: 12, color: c.faint, fontVariant: ["tabular-nums"] },
   liveStat: { flex: 1, fontSize: 12, color: c.dim, fontVariant: ["tabular-nums"] },
   titleRow: { flexDirection: "row", alignItems: "center", gap: 7 },
-  title: { color: c.text, fontSize: 15, fontWeight: "600", marginBottom: 5, flexShrink: 1 },
-  sum: { color: c.dim, fontSize: 13, marginBottom: 8 },
+  title: { color: c.text, fontSize: 15, fontWeight: "600", marginBottom: 3, flexShrink: 1 },
+  sum: { color: c.dim, fontSize: 13, marginBottom: 5 },
   foot: { flexDirection: "row", alignItems: "center", gap: 8 },
   tag: {
     fontSize: 10, color: c.dim, backgroundColor: c.tintSoft,
