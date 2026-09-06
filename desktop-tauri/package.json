@@ -1,0 +1,15 @@
+{
+  "name": "cc-deck-desktop-tauri",
+  "version": "0.3.12",
+  "description": "CC Deck 桌面客户端（Tauri 壳，与 Electron 壳共存）：本地加载控制台，默认连本机 relay",
+  "author": "humumu130",
+  "license": "MIT",
+  "private": true,
+  "scripts": {
+    "tauri": "tauri",
+    "icon": "tauri icon ../desktop/build/icon.png"
+  },
+  "devDependencies": {
+    "@tauri-apps/cli": "^2.9.0"
+  }
+}

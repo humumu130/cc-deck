@@ -1,0 +1,25 @@
+[package]
+name = "cc-deck-desktop-tauri"
+version = "0.3.12"
+description = "CC Deck 桌面客户端（Tauri 壳）：本地加载控制台，默认连本机 relay"
+authors = ["humumu130"]
+license = "MIT"
+edition = "2021"
+# 版本事实源是 tauri.conf.json 的 version（指向 ../package.json，CI 跟 tag npm version 同步）
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = [] }
+serde_json = "1"
+# 探测只走明文 http://127.0.0.1:8787，不需要 TLS 栈（关默认特性控体积）
+reqwest = { version = "0.12", default-features = false, features = ["json"] }
+
+[profile.release]
+# 换壳动机是体积（Electron 106MB → ~10MB），按 Tauri 官方体积优化档配置
+strip = true
+lto = true
+codegen-units = 1
+opt-level = "s"
+panic = "abort"
