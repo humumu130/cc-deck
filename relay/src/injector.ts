@@ -119,13 +119,25 @@ function escapeApple(text: string): string {
 
 // 组装 System Events 脚本（导出供测试断言命令串结构，Windows 上不真跑 osascript）
 export function buildAppleScript(pid: number, actions: string[]): string {
-  // pid 定位的是 claude 子进程（node），System Events 里没有对应 GUI process，keystroke 静默落空（实测根因）。
-  // keystroke 打给前台应用进程——relay 宿主终端在前台时即目标（注入瞬间短暂抢焦点）。
+  // pid 是 claude 子进程（node），System Events 无对应 GUI process——keystroke 会
+  // 静默落空（实测根因①）。keystroke 打给前台应用的 key window，Terminal 多窗口时
+  // key window 可能是 relay 自己（实测根因②）。正解：按 pid 反查 tty，遍历 Terminal
+  // 窗口选中 tty 匹配的目标窗口置前，再 keystroke。
   return [
+    "tell application \"Terminal\"",
+    `	set targetTty to do shell script "ps -o tty= -p ${pid}"`,
+    "	repeat with w in windows",
+    "		try",
+    "			if tty of selected tab of w starts with targetTty then",
+    "				set frontmost of w to true",
+    "				exit repeat",
+    "			end if",
+    "		end try",
+    "	end repeat",
+    "	activate",
+    "end tell",
+    "delay 0.15",
     'tell application "System Events"',
-    "	set hostApp to first application process whose frontmost is true",
-    "	set frontmost of hostApp to true",
-    "	delay 0.1",
     ...actions.map((a) => `	${a}`),
     "end tell",
   ].join("\n");
