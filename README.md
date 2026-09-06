@@ -44,7 +44,7 @@ flowchart LR
 
     CLOUD["☁️ CF 云桥 cc.humumu.online<br/>零知识密文路由 · 默认公共桥 · 可自建"]
 
-    subgraph PC["PC · 家里或公司（Node ≥ 20）"]
+    subgraph PC["你的 PC · 任意网络环境（Node ≥ 20）"]
         RELAY["CC Deck Relay（:8787）<br/>事件总线 · seq 断线补发 · 事件落盘<br/>审批门控 · 任务汇报 · 定时任务快照"]
         EXT["Claude Code 外部会话<br/>你自己开的 CLI ×N"]
         HOSTED["Claude Code 托管会话<br/>Agent SDK query() 拉起"]
@@ -88,17 +88,17 @@ claude plugin install cc-deck@cc-deck-plugins
 
 插件自带的 hooks 会自动把**新开的** Claude Code 会话桥接进来（含远程审批）；已运行的会话需新开后才接入。
 
-### 场景 A · 家里：手机和 PC 同一个 WiFi
+### 场景 A · 局域网：设备与 PC 在同一网络
 
 - **手机 App**：在 [Releases](https://github.com/humumu130/cc-deck/releases) 下载 `CC-Deck-<tag>.apk` 安装，「新增服务器」页点「扫码添加」，扫 `/cc-deck` 打出的「App 直连」码——地址与令牌自动填好，零手输
 - **任何浏览器**：扫控制台码，或直接打开 `http://<PC-IP>:8787/?token=…`（二维码里带 token）
 - **桌面**：Releases 下载 `CC-Deck-Setup-<tag>.exe`（或 portable zip），启动自动探测并连上本机 relay
 
-### 场景 B · 公司：PC 在家、人在公司
+### 场景 B · 跨网络：设备不在 PC 所在网络（外出/异地）
 
-- 家里 PC 保持插件 relay 运行，执行 `/cc-deck-pair` 领 6 位配对码（PC 只发出站连接，无需公网可达）
-- 公司设备接入：手机 App「新增服务器 → 配对码」输码；或任意浏览器打开 <https://cc.humumu.online> 输码（PWA 可加主屏当轻 App 用）
-- 全程端到端加密，桥只见密文；公司网络做 TLS 解密、拦掉 WSS 时，**网页端自动降级 HTTP 长轮询**保持在线（App 端目前仅 WS）
+- PC 保持插件 relay 运行，执行 `/cc-deck-pair` 领 6 位配对码（PC 只发出站连接，无需公网可达、无需端口映射）
+- 其他设备接入：手机 App「新增服务器 → 配对码」输码；或任意浏览器打开 <https://cc.humumu.online> 输码（PWA 可加主屏当轻 App 用）
+- 全程端到端加密，桥只见密文；所在网络做 TLS 解密、拦掉 WSS 时，**网页端自动降级 HTTP 长轮询**保持在线（App 端目前仅 WS）
 
 ### 更多姿势
 
