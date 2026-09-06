@@ -8,8 +8,6 @@
 [![release](https://img.shields.io/github/v/release/humumu130/cc-deck)](https://github.com/humumu130/cc-deck/releases/latest)
 [![license](https://img.shields.io/badge/license-MIT-blue)](./LICENSE)
 
-模型不绑定：relay 会话走你现有的 `claude` CLI 配置（作者日常挂智谱 GLM），任何 Anthropic 兼容端点都能跑。
-
 ## 功能亮点
 
 ### 随身掌控 —— 把终端装进口袋
@@ -217,9 +215,6 @@ cd relay && node scripts/build-plugin.mjs
 ## 相关文档
 
 - [docs/architecture.md](docs/architecture.md) — 全链路架构：模块图 / 数据流时序 / 持久化与可靠性
-- [docs/watch-feature-scope.md](docs/watch-feature-scope.md) — 手表端功能域定义与 A/B/C 取舍分级
-- [docs/feature-parity-web.md](docs/feature-parity-web.md) — 网页端功能对齐清单
-- [docs/aggregate-mode-design.md](docs/aggregate-mode-design.md) — App 多源聚合模式设计
 - [网页控制台公网镜像](https://cc.humumu.online) · [Releases 下载](https://github.com/humumu130/cc-deck/releases/latest)
 
 ## License
