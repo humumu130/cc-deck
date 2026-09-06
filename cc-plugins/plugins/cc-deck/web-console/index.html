@@ -245,36 +245,52 @@
   .hbtn.on { color: var(--brand); border-color: rgba(217,119,87,.55); border-style: solid; }
   #densityBtn { margin-left: auto; }
 
-  /* #300 [待确认] 常驻横幅：顶栏下品牌色描边细条，列出含 [待确认] pending todo 的
-     会话；点行开详情"任务" tab，✕ 全部已读（localStorage 记 sid+ts 集合，集合变化重现） */
-  #confirmBar {
-    display: none; flex-direction: column; gap: 1px;
-    margin: 8px 14px 0; padding: 6px 10px 7px;
-    border: 1px solid rgba(217,119,87,.45); border-radius: 12px;
-    background: rgba(217,119,87,.09);
+  /* #306 [待确认] 悬浮清单（taskDone 同款右下浮框语言，#300 横幅改形）：小方钮
+     常驻（数字角标 = 未读条目数），点开上方展开卡逐条列出；位置与 taskDone/
+     undoBar 错开（bottom 抬到其折叠条之上）。点行开详情"任务" tab，✕ 逐条已读、
+     全部已读（localStorage 记已读条目 key，内容变化重现） */
+  #confirmFloat {
+    position: fixed; right: 16px; bottom: 150px; z-index: 97;
+    display: none; flex-direction: column; align-items: flex-end; gap: 8px;
   }
-  #confirmBar.show { display: flex; }
-  #confirmBar .cb-head { display: flex; align-items: center; gap: 7px; color: var(--brand); font-size: 12.5px; font-weight: 700; }
-  #confirmBar .cb-badge {
-    min-width: 18px; height: 18px; padding: 0 5px; border-radius: 9px;
-    background: rgba(217,119,87,.22); font-size: 10.5px; font-weight: 800;
-    display: inline-flex; align-items: center; justify-content: center;
-    font-variant-numeric: tabular-nums;
+  #confirmFloat.show { display: flex; }
+  .cf-btn {
+    position: relative; width: 36px; height: 36px; border-radius: 12px;
+    border: 1px solid rgba(217,119,87,.55); background: var(--toast-bg); color: var(--brand);
+    font-size: 15px; font-weight: 800; cursor: pointer; box-shadow: var(--toast-shadow); flex: none;
   }
-  #confirmBar .cb-x {
-    margin-left: auto; color: var(--dim); font-size: 12.5px; font-weight: 400;
-    padding: 2px 4px; border-radius: 6px; cursor: pointer;
+  .cf-btn:hover { border-color: rgba(217,119,87,.9); }
+  .cf-badge {
+    position: absolute; top: -7px; right: -7px; min-width: 17px; height: 17px; padding: 0 4px;
+    border-radius: 9px; background: var(--brand); color: #241209; font-size: 10px; font-weight: 800;
+    display: inline-flex; align-items: center; justify-content: center; font-variant-numeric: tabular-nums;
   }
-  #confirmBar .cb-x:hover { color: var(--text); background: rgba(217,119,87,.12); }
-  #confirmBar .cb-row {
-    display: flex; align-items: center; gap: 7px; padding: 2.5px 2px 2.5px 25px;
-    color: var(--dim); font-size: 12px; cursor: pointer; border-radius: 6px;
+  .cf-card {
+    display: none; max-width: 340px; max-height: min(46vh, 380px); overflow-y: auto;
+    background: var(--toast-bg); border: 1px solid var(--border); color: var(--text);
+    border-radius: 12px; padding: 10px 12px; font-size: 13px; box-shadow: var(--toast-shadow);
   }
-  #confirmBar .cb-row:hover { color: var(--text); background: rgba(217,119,87,.1); }
-  #confirmBar .cb-row .cb-n { color: var(--brand); font-weight: 700; font-variant-numeric: tabular-nums; flex: none; }
-  #confirmBar .cb-row .cb-t { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  #confirmBar .cb-row .cb-go { color: var(--brand); font-weight: 700; flex: none; }
-  #confirmBar .cb-more { color: var(--faint); font-size: 11px; padding-left: 25px; }
+  #confirmFloat.open .cf-card { display: block; }
+  .cf-head { display: flex; align-items: center; gap: 8px; }
+  .cf-title { font-weight: 700; color: var(--brand); flex: 1; }
+  .cf-all {
+    background: rgba(217,119,87,.14); border: 1px solid rgba(217,119,87,.4); color: var(--brand);
+    font-weight: 700; font-size: 11.5px; border-radius: 8px; padding: 3px 10px; cursor: pointer; flex: none;
+  }
+  .cf-all:hover { background: rgba(217,119,87,.24); }
+  .cf-close { color: var(--faint); padding: 3px 6px; font-size: 14px; cursor: pointer; flex: none; }
+  .cf-close:hover { color: var(--text); }
+  .cf-src { color: var(--faint); font-size: 11px; margin-top: 8px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .cf-row {
+    display: flex; align-items: flex-start; gap: 7px; padding: 3px 5px; margin-top: 2px;
+    color: var(--dim); font-size: 12px; line-height: 1.5; cursor: pointer; border-radius: 6px;
+  }
+  .cf-row:hover { color: var(--text); background: rgba(217,119,87,.1); }
+  .cf-row .cf-t { flex: 1; min-width: 0; }
+  .cf-ref { color: var(--brand); font-weight: 700; }
+  .cf-x { color: var(--faint); padding: 0 3px; font-size: 12px; flex: none; border-radius: 4px; cursor: pointer; }
+  .cf-x:hover { color: var(--text); background: rgba(217,119,87,.12); }
+  .cf-more { color: var(--faint); font-size: 11px; margin-top: 6px; }
 
   /* 侧栏底部：新建会话（表单 + 按钮，风格贴合会话卡片） */
   #newbox { flex: none; border-top: 1px solid var(--border); padding: 12px 14px calc(14px + env(safe-area-inset-bottom)); background: var(--side-bg); }
@@ -761,6 +777,8 @@
     body.detail-open #backBtn { display: inline-block; }
     #taskDone { right: 10px; bottom: 84px; max-width: calc(100vw - 20px); }
     #undoBar { right: 10px; bottom: 84px; max-width: calc(100vw - 20px); }
+    #confirmFloat { right: 10px; bottom: 158px; }
+    .cf-card { max-width: calc(100vw - 20px); }
     /* 触屏无 hover：卡片操作钮常显（同 srv-row 按钮处理），删除入口才可达 */
     .card-edit, .card-del { opacity: 1; }
     #timeline, #dhead, #cmdbar, #hisnote { padding-left: 14px; padding-right: 14px; margin-left: 0; margin-right: 0; }
@@ -787,8 +805,6 @@
       <div id="connChip" title="连接设置"><i></i><span id="connText">未连接</span></div>
       <button id="themeBtn" title="深浅色切换">☀️</button>
     </header>
-
-    <div id="confirmBar"></div>
 
     <div id="rhPop">
       <div class="rh-row"><i style="background:var(--working)"></i>working</div>
@@ -922,6 +938,7 @@
 
 <div id="toast"></div>
 <div id="taskDone"></div>
+<div id="confirmFloat"></div>
 <div id="undoBar"><span class="ub-t" id="undoTitle"></span><button class="ub-btn" id="undoBtn" title="撤销删除">撤销</button></div>
 
 <script src="nacl.js"></script>
@@ -1892,48 +1909,81 @@ function allSessions() {
   return out;
 }
 
-// ---------- #300 [待确认] 常驻横幅（与手机端 fmt.isConfirmTodo 同款正则/口径） ----------
+// ---------- #300/#306 [待确认] 悬浮清单（与手机端 fmt.isConfirmTodo 同款正则/口径） ----------
 // pending + content 含 [待确认]（含全角〔〕【】变体）= 等用户确认的事项。
 // 标记与任务号前缀 "#NNN [待确认] …" 共存，用包含匹配而非行首
 const CONFIRM_RE = /[〔\[【]\s*待确认\s*[〕\]】]/;
 function isConfirmTodo(t) { return t.status === "pending" && CONFIRM_RE.test(t.content || ""); }
-// 含 [待确认] 事项的会话汇总（按更新时间倒序，首行跳最新会话）；k = 该会话当前
-// 待确认集合指纹（id:status:content）——✕ 已读记 localStorage（sid → {t: ts, k: 指纹}），
-// 集合一变（新增/完成/去标记）指纹不匹配横幅自动重现
+// 含 [待确认] 事项的会话汇总（按更新时间倒序）；items = 该会话当前待确认条目。
+// 逐条已读（#306）：localStorage 记 sid → 已读条目 key 数组（key = status:content），
+// 条目内容一变（新增/完成/去标记）key 不匹配自动重现
 function confirmRows() {
   const out = [];
   for (const { ctx, s } of allSessions()) {
     const items = (s.todos ?? []).filter(isConfirmTodo);
     if (!items.length) continue;
-    out.push({ ctx, s, n: items.length, k: items.map((t) => (t.id ?? "-") + ":" + t.status + ":" + t.content).join("|") });
+    out.push({ ctx, s, items });
   }
   return out.sort((a, b) => (b.s.updated_at || b.s.started_at) - (a.s.updated_at || a.s.started_at));
 }
-function confirmReadMap() { try { return JSON.parse(lsGet("ccr_confirm_read") || "{}") || {}; } catch { return {}; } }
-function renderConfirmBar() {
-  const box = $("confirmBar");
+function confirmItemKey(t) { return t.status + ":" + t.content; }
+// 旧格式（#300 横幅的 {t,k} 对象）作废清掉——升级后重新提醒一次，符合"常驻提醒"语义
+function confirmReadMap() {
+  try {
+    const m = JSON.parse(lsGet("ccr_confirm_read") || "{}") || {};
+    for (const k of Object.keys(m)) if (!Array.isArray(m[k])) delete m[k];
+    return m;
+  } catch { return {}; }
+}
+// #306 悬浮清单渲染（key 守卫同 cards 口径：快照流式重渲不重建 DOM；展开态走
+// .open class 不参与 key，避免开合闪重绘）
+const cfFloat = { open: false };
+function renderConfirmFloat() {
+  const box = $("confirmFloat");
   const read = confirmReadMap();
-  const fresh = confirmRows().filter((r) => !read[r.s.session_id] || read[r.s.session_id].k !== r.k);
-  // key 守卫（同 cards 口径）：快照流式重渲不重建 DOM
-  const key = fresh.map((r) => r.s.session_id + ":" + r.n + ":" + r.k).join("|");
+  const rows = confirmRows()
+    .map((r) => ({ ...r, items: r.items.filter((t) => !(read[r.s.session_id] || []).includes(confirmItemKey(t))) }))
+    .filter((r) => r.items.length);
+  const key = rows.map((r) => r.s.session_id + ":" + r.items.map(confirmItemKey).join("^")).join("|");
   if (box.dataset.key === key) return;
   box.dataset.key = key;
-  if (!fresh.length) { box.classList.remove("show"); box.innerHTML = ""; return; }
-  const total = fresh.reduce((a, r) => a + r.n, 0);
-  let html =
-    '<div class="cb-head"><span class="cb-badge">' + (total > 9 ? "9+" : total) + "</span>" +
-    "<span>" + total + " 项待你确认</span>" +
-    '<span class="cb-x" title="全部已读（集合变化后重新提醒）">✕</span></div>';
-  for (const r of fresh.slice(0, 4)) {
-    html +=
-      '<div class="cb-row" data-sid="' + escapeHtml(r.s.session_id) + '" data-src="' + escapeHtml(r.ctx.cfg.id) + '" title="打开任务清单">' +
-      '<span class="cb-n">' + r.n + "</span>" +
-      '<span class="cb-t">' + escapeHtml(r.s.title || "未命名会话") + "</span>" +
-      '<span class="cb-go">›</span></div>';
+  if (!rows.length) {
+    cfFloat.open = false;
+    box.classList.remove("show", "open");
+    box.innerHTML = "";
+    return;
   }
-  if (fresh.length > 4) html += '<div class="cb-more">…另有 ' + (fresh.length - 4) + " 个会话</div>";
-  box.classList.add("show");
+  const total = rows.reduce((a, r) => a + r.items.length, 0);
+  // 展示上限 8 条（对齐手机端悬浮卡），余量折进 overflow 行
+  const shown = [];
+  let budget = 8;
+  for (const r of rows) {
+    if (budget <= 0) break;
+    const items = r.items.slice(0, budget);
+    budget -= items.length;
+    shown.push({ ...r, items });
+  }
+  const overflow = total - shown.reduce((a, r) => a + r.items.length, 0);
+  let html = '<button class="cf-btn" title="待你确认的事项">?' +
+    '<span class="cf-badge">' + (total > 9 ? "9+" : total) + "</span></button>";
+  html += '<div class="cf-card">' +
+    '<div class="cf-head"><span class="cf-title">' + total + " 项待你确认</span>" +
+    '<button class="cf-all" title="当前集合全部已读（内容变化后重新提醒）">全部已读</button>' +
+    '<span class="cf-close" title="收起">✕</span></div>';
+  for (const r of shown) {
+    html += '<div class="cf-src" title="' + escapeHtml(r.s.title || "未命名会话") + '">' +
+      escapeHtml(shortName(r.s.title || "未命名会话")) + (r.items.length > 1 ? " · " + r.items.length + " 项" : "") + "</div>";
+    for (const t of r.items) {
+      html += '<div class="cf-row" data-sid="' + escapeHtml(r.s.session_id) + '" data-src="' + escapeHtml(r.ctx.cfg.id) + '" title="打开任务清单">' +
+        '<span class="cf-t">' + cfItemHtml(t) + "</span>" +
+        '<span class="cf-x" data-sid="' + escapeHtml(r.s.session_id) + '" data-key="' + escapeHtml(confirmItemKey(t)) + '" title="该条已读">✕</span></div>';
+    }
+  }
+  if (overflow > 0) html += '<div class="cf-more">…另有 ' + overflow + " 项</div>";
+  html += "</div>";
   box.innerHTML = html;
+  box.classList.add("show");
+  box.classList.toggle("open", cfFloat.open);
 }
 const SRC_COLORS = ["#D97757", "#5B9DFF", "#2BD98F", "#FFC53D", "#C792EA", "#F06292", "#4DD0E1", "#7E57C2"];
 function srcColor(id) {
@@ -1947,15 +1997,19 @@ function srcColor(id) {
 function srcColorKey(cfg) {
   return (cfg.cloud && cfg.cloud.rd) || cfg.wsUrl || cfg.id;
 }
-// 源显示名（用户规则 2026-09-06）：自定义名优先；缺省名（hostOf 的 IP:port 样式）显示"源+末段"，
-// 本机回环显示"本机"。title 悬停仍给完整名。
-function srcDisplayName(cfg) {
-  const n = String(cfg.name || "").trim();
+// 名字缩写规则（用户规则 2026-09-06）：自定义名优先；缺省名（hostOf 的 IP:port 样式）
+// 显示"源+末段"，本机回环显示"本机"。#306 起待确认悬浮清单的会话名走同规则缩写
+function shortName(n) {
+  n = String(n || "").trim();
   if (!n) return "?";
   if (/^(localhost|127\.0\.0\.1|\[?::1\]?)(:\d+)?$/i.test(n)) return "本机";
   const m = n.match(/^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})(:\d+)?$/);
   if (m) return "源" + m[4];
   return n;
+}
+// 源显示名：title 悬停仍给完整名（srcBadgeHtml）
+function srcDisplayName(cfg) {
+  return shortName(cfg.name);
 }
 function srcBadgeHtml(cfg) {
   return '<span class="src-badge" title="' + escapeHtml(cfg.name) + '"><i style="background:' + srcColor(srcColorKey(cfg)) + '"></i><span class="sb-t">' + escapeHtml(srcDisplayName(cfg)) + '</span></span>';
@@ -2008,7 +2062,7 @@ function render() {
     $("runhint").textContent = anyOnline ? "已连接 · 暂无会话" : "等待连接";
   }
   renderSrcChips();
-  renderConfirmBar(); // #300 [待确认] 常驻横幅（key 守卫，重渲代价极小）
+  renderConfirmFloat(); // #306 [待确认] 悬浮清单（key 守卫，重渲代价极小）
 
   // #279⑨ 折叠空闲（对齐手机）：仅 DONE>0 时可见，开着时隐藏 DONE 卡（顶部计数仍全量）
   const ib = $("idleBtn");
@@ -2368,6 +2422,16 @@ function cronTabHtml(s) {
 
 function escapeHtml(s) {
   return String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+}
+
+// #306 待确认清单条目摘要：#NNN 任务号品牌色高亮（切分/转义口径同 taskRefHtml，
+// 浮动卡内不接点击——整行点击直达会话"任务" tab）
+function cfItemHtml(t) {
+  const s = String(t.content ?? "");
+  if (!/#\d{1,3}\b/.test(s)) return escapeHtml(s);
+  return s.split(/#(\d{1,3})\b/g).map((p, i) =>
+    i % 2 === 1 ? '<span class="cf-ref">#' + p + "</span>" : escapeHtml(p)
+  ).join("");
 }
 
 // #279④ 工具行摘要文本里的 #NNN 任务号（1~3 位数字）链接化成可点段。
@@ -3284,24 +3348,44 @@ $("timeline").addEventListener("click", (ev) => {
   if (del) { hideTodo(del.dataset.c); return; }
 });
 
-// #300 待确认横幅交互（同上委托口径）：行 → 开该会话详情"任务" tab；✕ → 当前
-// 集合全部已读（localStorage 记 sid+ts+指纹，集合变化后自动重现），顺手清掉已消亡
-// 会话的残留条目防 map 无限增长
-$("confirmBar").addEventListener("click", (ev) => {
-  const x = ev.target.closest(".cb-x");
+// #306 待确认悬浮清单交互（同上委托口径）：✕ → 该条已读（localStorage 记已读条目
+// key，内容变化后自动重现）；全部已读 → 当前集合全标（顺手清掉已消亡会话的残留
+// 条目防 map 无限增长）；行 → 开该会话详情"任务" tab；小方钮/✕ 开合卡
+$("confirmFloat").addEventListener("click", (ev) => {
+  const box = $("confirmFloat");
+  const x = ev.target.closest(".cf-x");
   if (x) {
-    const rows = confirmRows();
-    const read = {};
-    for (const r of rows) read[r.s.session_id] = { t: Date.now(), k: r.k };
+    const read = confirmReadMap();
+    (read[x.dataset.sid] = read[x.dataset.sid] || []).push(x.dataset.key);
     lsSet("ccr_confirm_read", JSON.stringify(read));
-    $("confirmBar").dataset.key = "";
-    renderConfirmBar();
+    box.dataset.key = "";
+    renderConfirmFloat();
     return;
   }
-  const row = ev.target.closest(".cb-row");
+  if (ev.target.closest(".cf-all")) {
+    const read = {};
+    for (const r of confirmRows()) read[r.s.session_id] = r.items.map(confirmItemKey);
+    lsSet("ccr_confirm_read", JSON.stringify(read));
+    box.dataset.key = "";
+    renderConfirmFloat();
+    return;
+  }
+  if (ev.target.closest(".cf-close")) {
+    cfFloat.open = false;
+    box.classList.remove("open");
+    return;
+  }
+  const row = ev.target.closest(".cf-row");
   if (row) {
     select(row.dataset.sid, row.dataset.src); // select 内部切回"消息"tab，紧接直落"任务"
     switchTab("todos");
+    cfFloat.open = false;
+    box.classList.remove("open");
+    return;
+  }
+  if (ev.target.closest(".cf-btn")) {
+    cfFloat.open = !cfFloat.open;
+    box.classList.toggle("open", cfFloat.open);
   }
 });
 
