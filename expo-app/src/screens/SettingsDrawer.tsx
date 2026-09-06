@@ -8,6 +8,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useTheme, useThemeStyles } from "../theme-context";
 import { LogoMark } from "../brand";
 import { setProcessFont, useProcessFont, setListCompact, useListCompact, setVoiceInput, useVoiceInput, setAggregate as persistAggregate, useAggregate, type ProcessFont } from "../display-settings";
+import { checkUpdate, announceUpdate } from "../updates";
 import { store, useRelay, type ServerEntry } from "../store";
 import { withA, type ThemeColors } from "../theme";
 
@@ -153,6 +154,24 @@ export default function SettingsDrawer({
         pairing.current = false;
       });
   }, [visible, snap.connected, pc, pairLeft === 0]);
+
+  // #312 手动检查更新：无新版行内显示"已是最新 vX"，有新版经 announceUpdate 弹 App 横幅
+  // （checkUpdate 失败也静默返回 null，此处与"已是最新"同文案，不额外报错打扰）
+  const [updBusy, setUpdBusy] = useState(false);
+  const [updMsg, setUpdMsg] = useState<string | null>(null);
+  const checkNow = async () => {
+    if (updBusy) return;
+    setUpdBusy(true);
+    setUpdMsg("检查中…");
+    const info = await checkUpdate();
+    setUpdBusy(false);
+    if (info) {
+      setUpdMsg(`新版 v${info.version} ↗`);
+      announceUpdate(info);
+    } else {
+      setUpdMsg(`已是最新 ${APP_VER}`);
+    }
+  };
 
   return (
     <View style={d.root} pointerEvents={visible ? "auto" : "none"}>
@@ -342,6 +361,16 @@ export default function SettingsDrawer({
             thumbColor="#fff"
           />
         </View>
+        {/* #312 检查更新：GitHub Releases 查新版，有新版弹 App 顶部横幅 */}
+        <Pressable
+          style={[d.setItem, d.setRow]}
+          android_ripple={{ color: c.tintSoft, borderless: false }}
+          onPress={() => void checkNow()}
+          accessibilityLabel="检查更新"
+        >
+          <Text style={d.setLabel}>↻ 检查更新</Text>
+          <Text style={d.updT} numberOfLines={1}>{updBusy ? "检查中…" : (updMsg ?? APP_VER)}</Text>
+        </Pressable>
         </ScrollView>
       </Animated.View>
     </View>
@@ -440,4 +469,6 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
   segOptOn: { backgroundColor: c.tintStrong, borderColor: c.brandA },
   segT: { color: c.dim, fontSize: 12, fontWeight: "600" },
   segTOn: { color: c.brandA },
+  // #312 检查更新行右侧状态：默认展示当前版本号，点按后显示检查结果
+  updT: { color: c.brandA, fontSize: 12, fontWeight: "600" },
 });

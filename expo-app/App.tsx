@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Animated, AppState, BackHandler, Dimensions, Easing, Pressable, ScrollView, StyleSheet, Text, View, Vibration } from "react-native";
 import { StatusBar } from "expo-status-bar";
+import * as FileSystem from "expo-file-system/legacy";
+import * as IntentLauncher from "expo-intent-launcher";
 import { SafeAreaProvider, useSafeAreaInsets } from "react-native-safe-area-context";
 import { store, useRelay } from "./src/store";
 import type { TaskDoneReport } from "./src/store";
@@ -13,6 +15,7 @@ import { ThemeProvider, useTheme, useThemeStyles } from "./src/theme-context";
 import { useKbHeight } from "./src/kb";
 import { loadDisplaySettings } from "./src/display-settings";
 import { withA, type ThemeColors } from "./src/theme";
+import { checkUpdate, shouldAutoCheck, getSkippedVersion, skipVersion, setUpdateListener, type UpdateInfo } from "./src/updates";
 import ListScreen, { type ListBackHandle } from "./src/screens/ListScreen";
 import DetailScreen, { type ViewKind } from "./src/screens/DetailScreen";
 import SetupScreen from "./src/screens/SetupScreen";
@@ -383,6 +386,101 @@ function ConfirmFloat({
   );
 }
 
+// #312 更新横幅：发现新版从顶部滑入（品牌色描边卡，cfFloat 同视觉语言）。
+// 立即更新 = 下载 APK（ECS 镜像优先 / GitHub asset 回落，行内百分比进度）→
+// getContentUriAsync 换 content:// → ACTION_VIEW 唤起系统安装器（用户确认安装，
+// APK 签名校验由安装器兜底）。忽略此版持久化 cc_update_skipped，该版不再弹
+function UpdateBanner({ info, onSkip }: { info: UpdateInfo; onSkip: () => void }) {
+  const { c } = useTheme();
+  const st = useThemeStyles(makeStyles);
+  const insets = useSafeAreaInsets();
+  const [phase, setPhase] = useState<"idle" | "dl" | "err">("idle");
+  const [pct, setPct] = useState(0);
+  const y = useRef(new Animated.Value(-36)).current;
+  const op = useRef(new Animated.Value(0)).current;
+  const busy = useRef(false);
+
+  useEffect(() => {
+    Animated.parallel([
+      Animated.spring(y, { toValue: 0, useNativeDriver: true, speed: 14, bounciness: 5 }),
+      Animated.timing(op, { toValue: 1, duration: 150, useNativeDriver: true }),
+    ]).start();
+  }, [y, op]);
+
+  const doUpdate = async () => {
+    if (busy.current) return;
+    busy.current = true;
+    setPhase("dl");
+    setPct(0);
+    try {
+      const dest = FileSystem.cacheDirectory + "cc-deck-update.apk";
+      let ok = false;
+      for (const url of [info.apkUrl, info.ghUrl]) {
+        try {
+          const r = await FileSystem.createDownloadResumable(url, dest, {}, (d) => {
+            if (d.totalBytesExpectedToWrite > 0) {
+              setPct(Math.floor((d.totalBytesWritten / d.totalBytesExpectedToWrite) * 100));
+            }
+          }).downloadAsync();
+          if (r?.status === 200) {
+            ok = true;
+            break;
+          }
+        } catch {}
+      }
+      if (!ok) throw new Error("download failed");
+      const uri = await FileSystem.getContentUriAsync(dest);
+      // flags:1 = FLAG_GRANT_READ_URI_PERMISSION，授权系统安装器读缓存里的 content:// 文件
+      await IntentLauncher.startActivityAsync("android.intent.action.VIEW", {
+        data: uri,
+        type: "application/vnd.android.package-archive",
+        flags: 1,
+      });
+      setPhase("idle"); // 用户从安装器返回（装完/取消）：横幅保留，可再点
+    } catch {
+      setPhase("err");
+    } finally {
+      busy.current = false;
+    }
+  };
+
+  // release body 首个非空行做摘要（CI 自动 notes 以 "## What's Changed" 开头，去 markdown 井号头）
+  const firstNote = (info.notes.split("\n").map((l) => l.trim()).find(Boolean) ?? "").replace(/^#+\s*/, "");
+
+  return (
+    <Animated.View style={[st.ubCard, { opacity: op, transform: [{ translateY: y }], top: insets.top + 8 }]}>
+      <Text style={st.ubTitle}>🆕 v{info.version} 可更新</Text>
+      {firstNote ? <Text style={st.ubNote} numberOfLines={2}>{firstNote}</Text> : null}
+      {phase === "dl" ? (
+        <Text style={st.ubPct}>下载中 {pct}%</Text>
+      ) : (
+        <>
+          {phase === "err" ? <Text style={st.ubErr}>下载失败，请重试</Text> : null}
+          <View style={st.ubBtnRow}>
+            <Pressable
+              style={st.ubSkip}
+              android_ripple={{ color: c.tintSoft, borderless: false, radius: 8 }}
+              onPress={() => {
+                void skipVersion(info.version);
+                onSkip();
+              }}
+            >
+              <Text style={st.ubSkipT}>忽略此版</Text>
+            </Pressable>
+            <Pressable
+              style={st.ubGo}
+              android_ripple={{ color: withA(c.brandA, 0.18), borderless: false, radius: 8 }}
+              onPress={() => void doUpdate()}
+            >
+              <Text style={st.ubGoT}>{phase === "err" ? "重试更新" : "立即更新"}</Text>
+            </Pressable>
+          </View>
+        </>
+      )}
+    </Animated.View>
+  );
+}
+
 function Shell() {
   const { c, mode } = useTheme();
   const st = useThemeStyles(makeStyles);
@@ -502,7 +600,19 @@ function Shell() {
       setHasCfg(!!cfg);
       if (cfg) store.connect();
       setReady(true);
+      // #312 启动静默检查更新：24h 窗口 + 已忽略版本过滤，全失败静默不打扰
+      if (await shouldAutoCheck()) {
+        const info = await checkUpdate();
+        if (info && (await getSkippedVersion()) !== info.version) setUpdateInfo(info);
+      }
     })();
+  }, []);
+
+  // #312 更新横幅：设置抽屉手动检查发现新版经 announceUpdate 送达（同版去重）
+  const [updateInfo, setUpdateInfo] = useState<UpdateInfo | null>(null);
+  useEffect(() => {
+    setUpdateListener((info) => setUpdateInfo((cur) => (cur?.version === info.version ? cur : info)));
+    return () => setUpdateListener(null);
   }, []);
 
   // 首次在设置页连接成功：自动进入主界面（hasCfg 只在启动时算过一次）
@@ -621,6 +731,7 @@ function Shell() {
             </Animated.View>
           ) : null}
           <NewSessionModal visible={sheet} onClose={() => setSheet(false)} />
+          {updateInfo ? <UpdateBanner info={updateInfo} onSkip={() => setUpdateInfo(null)} /> : null}
           <Toast />
           <TaskDoneFloat
             isDetail={!!detail && navPhase !== "closing"}
@@ -767,4 +878,26 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
     backgroundColor: withA(c.brandA, 0.14), borderWidth: 1, borderColor: withA(c.brandA, 0.35),
   },
   cfAllT: { color: c.brandA, fontSize: 11.5, fontWeight: "600" },
+  // #312 更新横幅（ub = update banner）：品牌色描边卡，顶部 absolute 滑入。
+  // zIndex 50 压内容但不压悬浮钮/Toast；抽屉(60)打开时被盖住，收抽屉自然重现
+  ubCard: {
+    position: "absolute", left: 12, right: 12, zIndex: 50, elevation: 8,
+    backgroundColor: c.panel, borderWidth: 1, borderColor: withA(c.brandA, 0.45),
+    borderRadius: 16, paddingHorizontal: 14, paddingVertical: 12,
+  },
+  ubTitle: { color: c.brandA, fontSize: 14, fontWeight: "800" },
+  ubNote: { color: c.dim, fontSize: 12, lineHeight: 17, marginTop: 4 },
+  ubPct: { color: c.dim, fontSize: 12.5, marginTop: 8, fontVariant: ["tabular-nums"] },
+  ubErr: { color: c.waiting, fontSize: 11.5, marginTop: 4 },
+  ubBtnRow: { flexDirection: "row", gap: 8, marginTop: 10, justifyContent: "flex-end" },
+  ubSkip: {
+    height: 30, paddingHorizontal: 13, borderRadius: 8, alignItems: "center", justifyContent: "center",
+    backgroundColor: c.tintSoft, borderWidth: 1, borderColor: c.line,
+  },
+  ubSkipT: { color: c.faint, fontSize: 12, fontWeight: "600" },
+  ubGo: {
+    height: 30, paddingHorizontal: 13, borderRadius: 8, alignItems: "center", justifyContent: "center",
+    backgroundColor: withA(c.brandA, 0.14), borderWidth: 1, borderColor: withA(c.brandA, 0.35),
+  },
+  ubGoT: { color: c.brandA, fontSize: 12, fontWeight: "600" },
 });
