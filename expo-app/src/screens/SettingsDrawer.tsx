@@ -231,6 +231,21 @@ export default function SettingsDrawer({
               <Text style={d.addT}>▣ 扫码添加</Text>
             </Pressable>
           </View>
+          {/* #308：活动源是局域网地址且未配云桥——离家即断线，温和引导去编辑页配对 */}
+          {(() => {
+            const cur = servers.find((e) => e.id === activeId) ?? servers[0];
+            const lanOnly = cur && /^ws:\/\/(10\.|192\.168\.|172\.(1[6-9]|2\d|3[01])\.|127\.)/.test(cur.wsUrl) && !cur.cloud;
+            if (!lanOnly || srvCollapsed) return null;
+            return (
+              <Pressable
+                style={d.cloudHint}
+                android_ripple={{ color: c.tintSoft, borderless: false }}
+                onPress={() => edit(cur)}
+              >
+                <Text style={d.cloudHintT}>🌤 离家也能用：为此源配对云桥 ›</Text>
+              </Pressable>
+            );
+          })()}
         </ScrollView>
         ) : null}
         {!srvCollapsed && servers.length === 0 ? <Text style={d.srvEmpty}>还没有服务器，点下方新增</Text> : null}
@@ -374,6 +389,11 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
     alignItems: "center", justifyContent: "center", paddingVertical: 10, overflow: "hidden",
   },
   addT: { color: c.brandA, fontSize: 13, fontWeight: "700" },
+  cloudHint: {
+    marginTop: 8, alignItems: "center", paddingVertical: 7, borderRadius: 10,
+    borderWidth: 1, borderColor: withA(c.working, 0.35), backgroundColor: withA(c.working, 0.07),
+  },
+  cloudHintT: { color: c.working, fontSize: 11.5, fontWeight: "600" },
   srvEmpty: { color: c.faint, fontSize: 11, marginTop: 2 },
   body: { flex: 1 },
   // 连接状态行（抽屉顶）：状态点 + 文案 + 手动重连；点击整行重连
