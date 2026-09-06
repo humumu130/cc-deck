@@ -36,8 +36,9 @@ function folderOf(cwd: string): string {
   return parts[parts.length - 1] ?? cwd;
 }
 
-// 源角标配色（#294 批2）：色板/哈希与网页端 SRC_COLORS/srcColor 逐字节对齐，
-// 同一源 id 在两端取到同色
+// 源角标配色（#294 批2 + 审查修复）：色板/哈希与网页端 SRC_COLORS/srcColor 逐字节
+// 对齐；哈希键用跨端稳定身份（store SourceStatus.colorKey：云源 relay 设备 id、
+// LAN 源 wsUrl），同一台服务器在两端取到同色——本地 uuid 两端各异不可用
 const SRC_COLORS = ["#D97757", "#5B9DFF", "#2BD98F", "#FFC53D", "#C792EA", "#F06292", "#4DD0E1", "#7E57C2"];
 function srcColor(id: string): string {
   let h = 0;
@@ -46,7 +47,8 @@ function srcColor(id: string): string {
 }
 
 // 源角标（#294 批2）：聚合且多源时区分会话归属——色点 + 源名胶囊（tag/tagExt 形态：
-// 描边 + 轻染底，染底/描边按源色）；单源模式不渲染（ListScreen 侧把关）
+// 描边 + 轻染底，染底/描边按源色）；单源模式不渲染（ListScreen 侧把关）。
+// id 即 colorKey（调用方传入，见 srcKeys）
 function SrcBadge({ id, name }: { id: string; name: string }) {
   const styles = useThemeStyles(makeStyles);
   const color = srcColor(id);
@@ -293,7 +295,7 @@ function CtxMini({ s }: { s: SessionState }) {
 // memo：流式刷新只重渲变化的那一行（onRename/onReveal/onDelete 均为稳定引用；
 // srcName 为字符串原始值，浅比较按值相等，Map 重建不触发未变行重渲）
 const SessionCard = memo(function SessionCard({
-  s, onOpen, onRename, onDelete, revealSid, onReveal, compact, srcName,
+  s, onOpen, onRename, onDelete, revealSid, onReveal, compact, srcName, srcKey,
 }: {
   s: SessionState;
   onOpen: (sid: string) => void;
@@ -303,6 +305,7 @@ const SessionCard = memo(function SessionCard({
   onReveal: (v: string | null) => void;
   compact?: boolean;
   srcName?: string | null; // 归属源名（聚合且多源时非空，#294 批2）
+  srcKey?: string | null;  // 归属源跨端配色键（#294 审查修复，SrcBadge 用）
 }) {
   const { c } = useTheme();
   const styles = useThemeStyles(makeStyles);
@@ -334,7 +337,7 @@ const SessionCard = memo(function SessionCard({
           </View>
           <Text style={styles.sumC} numberOfLines={1}>{s.action_summary || "…"}</Text>
           <View style={styles.footC}>
-            {srcName && s.src ? <SrcBadge id={s.src} name={srcName} /> : null}
+            {srcName && s.src ? <SrcBadge id={srcKey ?? s.src} name={srcName} /> : null}
             {s.cwd ? <Text style={styles.folderC} numberOfLines={1}>📁 {folderOf(s.cwd)}</Text> : null}
             <View style={{ flex: 1 }} />
             {s.stats && s.stats.files_changed > 0 ? (
@@ -363,7 +366,7 @@ const SessionCard = memo(function SessionCard({
           </Text>
           {s.status !== "WORKING" ? <Text style={styles.sum} numberOfLines={1}>{s.action_summary || "…"}</Text> : null}
           <View style={styles.foot}>
-            {srcName && s.src ? <SrcBadge id={s.src} name={srcName} /> : null}
+            {srcName && s.src ? <SrcBadge id={srcKey ?? s.src} name={srcName} /> : null}
             <Text style={[styles.tag, s.external ? styles.tagExt : null]}>{s.external ? "外部 CLI" : "托管"}</Text>
             {s.cwd ? <Text style={styles.folderTag} numberOfLines={1}>📁 {folderOf(s.cwd)}</Text> : null}
             {s.historical && !s.external ? <Text style={styles.tag}>历史</Text> : null}
@@ -521,6 +524,8 @@ export default function ListScreen({ sessions, connected, connText, onOpen, onNe
   // 聚合源在线数（#294 批4）：统计行「N 源聚合」与空态「online/total 源」共用
   const onlineSrcs = snap.sources.filter((x) => x.state === "online").length;
   const srcNames = new Map(snap.sources.map((x) => [x.id, x.name] as const));
+  // 源跨端配色键（#294 审查修复）：id→colorKey 同款按值传参，不破坏 memo
+  const srcKeys = new Map(snap.sources.map((x) => [x.id, x.colorKey] as const));
 
   const counts: Record<string, number> = {};
   for (const s of sessions) {
@@ -675,6 +680,7 @@ export default function ListScreen({ sessions, connected, connText, onOpen, onNe
             onReveal={setRevealSid}
             compact={compact}
             srcName={badgeOn && item.src ? srcNames.get(item.src) ?? null : null}
+            srcKey={badgeOn && item.src ? srcKeys.get(item.src) ?? null : null}
           />
         )}
         ListEmptyComponent={

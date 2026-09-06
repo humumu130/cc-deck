@@ -65,6 +65,9 @@ export interface SourceStatus {
   name: string;
   state: Snapshot["connState"];
   channel: "lan" | "cloud" | null;
+  // 跨端稳定配色键（#294 审查修复）：云源 = relay 设备 id（cloud.relayDev）、LAN 源
+  // = wsUrl——同一台服务器在手机/网页两端取到同色（本地 uuid 两端各异不可用）
+  colorKey: string;
 }
 
 export interface Snapshot {
@@ -226,6 +229,7 @@ class RelayStore {
       name: c.name,
       state: c.state,
       channel: c.channel,
+      colorKey: c.entry.cloud?.relayDev || c.entry.wsUrl,
     }));
     const inPlay: SourceConn[] = this.aggregate
       ? [...this.conns.values()]
@@ -456,8 +460,18 @@ class RelayStore {
     const activeId = await AsyncStorage.getItem("ccr_active");
     const active = list.find((e) => e.id === activeId) ?? list[0];
     this.activeId = active ? active.id : null;
-    // 活动服务器没记令牌（勾了不记住）：停在设置页，列表里点它补输令牌
-    if (!active || !active.token) return null;
+    // 活动服务器没记令牌（勾了不记住）：单源停在设置页，列表里点它补输令牌；
+    // 聚合模式回落任一有令牌源（#294 审查修复——聚合本就逐源建连，不能因活动源
+    // 缺令牌把整个 App 卡在设置页；活动指针仍指向用户选的源）
+    if (!active || !active.token) {
+      if (!this.aggregate) return null;
+      const any = list.find((e) => e.token);
+      if (!any) return null;
+      const fc = this.ensureConn(any);
+      fc.cfg = { wsUrl: any.wsUrl, token: any.token };
+      fc.cloudCfg = any.cloud ?? null;
+      return fc.cfg;
+    }
     const conn = this.ensureConn(active);
     conn.cfg = { wsUrl: active.wsUrl, token: active.token };
     conn.cloudCfg = active.cloud ?? null;
@@ -1156,6 +1170,15 @@ class RelayStore {
     return conn?.cfg ? { ...conn.cfg } : null;
   }
 
+  // 按源查连接参数与通道（#294 审查修复）：slash 联想等按"会话所属源"取数，
+  // 不再一律走活动源口径（聚合下活动源走云时会误判会话源不可拉命令表）；
+  // 源未知/从未建连（无 cfg）返回 null
+  sourceInfoOf(srcId: string): { wsUrl: string; token: string; channel: "lan" | "cloud" | null } | null {
+    const conn = this.conns.get(srcId);
+    if (!conn?.cfg) return null;
+    return { wsUrl: conn.cfg.wsUrl, token: conn.cfg.token, channel: conn.channel };
+  }
+
   // 命令路由（#294 批1/批3）：按 payload.session_id 经 sidIndex 定位源（sid 为 uuid
   // 全局唯一，可作跨源主键）——会话命令永远发往该会话的源，不改协议；无 sid 时取
   // 显式 sourceId（批3 新建会话选目标源），再退活动源（COMMAND_CREATE / PAIR_*）。
@@ -1163,6 +1186,12 @@ class RelayStore {
   // relay 幂等去重兜底，不跨源串扰
   send(type: string, payload: Record<string, unknown>, sourceId?: string): boolean {
     const sid = typeof payload.session_id === "string" ? (payload.session_id as string) : null;
+    // sid 已给但 sidIndex 未命中（#294 审查修复：会话已删/所属源换目标清缓存）：
+    // 明确报"会话不存在"，不再回落活动源——回落会把命令发给另一台服务器
+    if (sid && !this.sidIndex.has(sid)) {
+      this.emit({ lastErrorCmd: "会话不存在，命令未发送" });
+      return false;
+    }
     const conn =
       (sid ? this.sidIndex.get(sid) : undefined) ??
       (sourceId ? this.conns.get(sourceId) : undefined) ??
