@@ -621,7 +621,14 @@ export default function ListScreen({ sessions, connected, connText, onOpen, onNe
         </Pressable>
         <View style={styles.titleWrap}>
           <Text style={styles.titleT}>CC Deck</Text>
-          {activeName ? <Text style={styles.titleSub} numberOfLines={1}>{activeName}</Text> : null}
+          {snap.aggregate && snap.sources.length > 1 ? (
+            // 聚合模式副标题：不再显示单一活动源（误导），改显"· N 源 · M 在线"概览
+            <Text style={styles.titleSub} numberOfLines={1}>
+              {snap.sources.length} 源聚合 · {snap.sources.filter((x) => x.state === "online").length} 在线
+            </Text>
+          ) : activeName ? (
+            <Text style={styles.titleSub} numberOfLines={1}>{activeName}</Text>
+          ) : null}
         </View>
         <Pressable
           style={[styles.connChip, { borderColor: withA(connColor, 0.33) }]}
