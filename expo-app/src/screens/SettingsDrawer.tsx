@@ -200,7 +200,14 @@ export default function SettingsDrawer({
               <View key={e.id} style={[d.srvRow, active && d.srvRowOn]}>
                 <Pressable style={d.srvMain} android_ripple={{ color: c.tintSoft, borderless: false }} onPress={() => pick(e)}>
                   <View style={d.srvHead}>
-                    {active ? <View style={[d.srvDot, { backgroundColor: c.done }]} /> : null}
+                    {/* 绿点=连接状态（在线绿/连接中黄/离线红）；当前选中由 srvRowOn 底色表达。
+                        无状态数据的源（单源模式下未连接的）不显示点，避免误读 */}
+                    {(() => {
+                      const st = snap.sources.find((x) => x.id === e.id)?.state;
+                      if (!st) return null;
+                      const col = st === "online" ? c.done : st === "offline" ? c.waiting : c.working;
+                      return <View style={[d.srvDot, { backgroundColor: col }]} />;
+                    })()}
                     <Text style={d.srvName} numberOfLines={1}>{e.name}</Text>
                     {e.cloud ? <Text style={d.srvCloud}>☁</Text> : null}
                   </View>
@@ -350,7 +357,7 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
     flexDirection: "row", alignItems: "center", borderWidth: 1, borderColor: c.line,
     borderRadius: 12, backgroundColor: c.panel, marginBottom: 8, overflow: "hidden",
   },
-  srvRowOn: { borderColor: withA(c.done, 0.45), backgroundColor: withA(c.done, 0.05) },
+  srvRowOn: { borderColor: withA(c.done, 0.45), backgroundColor: withA(c.done, 0.08) },
   srvMain: { flex: 1, paddingVertical: 9, paddingLeft: 11, paddingRight: 4 },
   srvHead: { flexDirection: "row", alignItems: "center", gap: 6 },
   srvDot: { width: 7, height: 7, borderRadius: 4 },
