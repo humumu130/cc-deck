@@ -594,6 +594,9 @@
   }
   #sendBtn:hover:not(:disabled) { filter: brightness(1.1); }
   #sendBtn:disabled { opacity: .4; cursor: default; }
+  /* #279B 历史会话无可恢复记录：输入卡整体禁用态（不隐藏，对齐手机 editable={false}+透明度） */
+  #cmdbar.cmd-off #inputcard { opacity: .55; }
+  #cmdbar.cmd-off { cursor: not-allowed; }
 
   /* ---------- #279 批次3 待发图片行：输入卡上方缩略图（✕ 可删，≤4 张） ---------- */
   #imgrow {
@@ -802,7 +805,7 @@
 
     <div id="timeline"></div>
 
-    <div id="hisnote">⏳ 这是 Relay 重启前遗留的历史会话，仅可查看。</div>
+    <div id="hisnote">⏳ Relay 重启前的历史会话，仅可查看。</div>
     <div id="pendbox"></div>
     <div id="agbox"></div>
     <div id="liverow">
@@ -891,6 +894,7 @@ let thinkShown = false;        // 思考过程显示开关（与手机端一致�
 const expanded = new Set();    // 展开状态（全文/思考/工具详情/diff），键 = e.id ?? ts|kind|len
 let expandRev = 0;             // 展开变更计数（驱动时间线重建）
 let filterSrc = "all";         // 会话列表按源过滤：all | serverId
+let cmdLocked = false;         // #279B 选中会话不可发消息（历史且无可恢复记录）→ 输入卡禁用态
 
 // ---------- 多源服务器 ----------
 // 持久化 ccd_servers：[{id, name, kind:"lan"|"cloud", wsUrl, token,
@@ -1995,12 +1999,24 @@ function renderDetail() {
     pb.innerHTML = pi.map((p) => "<span>" + escapeHtml(p.text) + "</span>").join("");
   } else pb.style.display = "none";
 
-  // 外部会话
-  $("hisnote").style.display = s.historical ? "block" : "none";
-  $("cmdbar").style.display = s.historical && !s.external ? "none" : "flex";
+  // #279B 历史会话续聊（对齐手机 resumable 口径）：relay_session_id 在即可发消息恢复（SDK resume）；
+  // 无可恢复记录的历史会话不再整个隐藏输入条——保持禁用态 + hisnote 说明（入口可见性对齐手机端）
+  const resumable = !s.external && !!s.relay_session_id;
+  const canCmd = !s.historical || s.external || resumable;
+  cmdLocked = !canCmd;
+  $("hisnote").style.display = s.historical && !s.external ? "block" : "none";
+  $("hisnote").textContent = resumable
+    ? "⏳ 历史会话 · 发送消息将恢复继续（SDK resume）"
+    : "⏳ Relay 重启前的历史会话，仅可查看";
+  $("cmdbar").style.display = "flex";
+  $("cmdbar").classList.toggle("cmd-off", cmdLocked);
+  $("msginput").disabled = cmdLocked;
   $("msginput").placeholder = s.external
     ? "注入到终端（空闲即发，忙碌排队）"
-    : "发送消息（Enter 发送 · Shift+Enter 换行）";
+    : s.historical
+      ? (resumable ? "继续对话（恢复会话）…" : "历史会话仅可查看")
+      : "发送消息（Enter 发送 · Shift+Enter 换行）";
+  syncSendState();
   // 停止入口只在运行中出现（WorkBuddy 式：执行中输入区显示停止）
   const running = s.status === "WORKING" || s.status === "WAITING";
   $("stopBtn").style.display = running ? "flex" : "none";
@@ -2691,6 +2707,7 @@ document.addEventListener("paste", (ev) => {
   if (!sel) return;
   if (!imgSessionOk(sel.s)) {
     if (sel.s.external) toast("外部 CLI 会话不支持发图");
+    else if (sel.s.historical) toast(sel.s.relay_session_id ? "恢复会话不支持带图" : "历史会话仅可查看");
     return;
   }
   ev.preventDefault();
@@ -2699,10 +2716,15 @@ document.addEventListener("paste", (ev) => {
 // 输入卡：textarea 自适应高度 + 纸飞机可用态同步
 function syncSendState() {
   const mi = $("msginput");
-  $("sendBtn").disabled = !mi.value.trim() && sendImages.length === 0;
+  // #279B 锁定态（历史无可恢复）叠加内容空判：禁用钮统一在此合流
+  $("sendBtn").disabled = cmdLocked || (!mi.value.trim() && sendImages.length === 0);
   mi.style.height = "auto";
   mi.style.height = Math.min(mi.scrollHeight, 170) + "px";
 }
+// #279B 锁定态点击说明：禁用的表单控件不派发事件，点输入卡空白区由父级兜底 toast
+$("cmdbar").addEventListener("click", () => {
+  if ($("cmdbar").classList.contains("cmd-off")) toast("历史会话仅可查看（无可恢复的 SDK 会话记录）");
+});
 $("msginput").addEventListener("input", syncSendState);
 // ---------- Slash 命令联想（与手机端 slash.ts 同构） ----------
 // 内置表与 relay/src/ws-server.ts BUILTIN_COMMANDS 同步维护；LAN 源 fetch
@@ -2812,6 +2834,7 @@ $("sendBtn").onclick = () => {
   const text = $("msginput").value.trim();
   const imgs = sendImages;
   if ((!text && !imgs.length) || !selected) return;
+  if ($("msginput").disabled) return; // #279B 锁定态（历史无可恢复）：输入已禁用，防御性兜底
   const sel = selSession();
   if (!sel) return;
   const sid = selected.sid;
@@ -2827,7 +2850,9 @@ $("sendBtn").onclick = () => {
   }
   // #279 批次3：带图走 COMMAND_MESSAGE images（原始 base64；空文本 + 图也可发，relay 侧文本块省略）
   if (sendCommandTo(sel.ctx, "COMMAND_MESSAGE", { session_id: sid, text, ...(imgs.length ? { images: imgs } : {}) })) {
-    pushLog(sel.ctx, sid, { ts: Date.now(), kind: "user_message", text: text + (imgs.length ? "（+" + imgs.length + " 图）" : "") });
+    // #279B 历史会话 resume 路径：relay resumeAgent 会 pushExternalLog 回填 user_message
+    // + "已恢复 SDK 会话"系统行，本地不预写防重复；活会话仍本地即时回显
+    if (!sel.s.historical) pushLog(sel.ctx, sid, { ts: Date.now(), kind: "user_message", text: text + (imgs.length ? "（+" + imgs.length + " 图）" : "") });
     $("msginput").value = "";
     sendImages = [];
     renderImgRow();
