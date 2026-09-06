@@ -75,6 +75,9 @@ export interface Snapshot {
   connState: "idle" | "connecting" | "online" | "reconnecting" | "offline";
   channel: "lan" | "cloud" | null;
   sources: SourceStatus[];
+  // 活动源 id（#294 批3）：单源 = 唯一在连源；聚合 = 当前"主"源（无 sid 命令的
+  // 默认去向、配对/connInfo 口径）。NewSessionModal 选源默认值，批4 空态提示可复用
+  activeSourceId: string | null;
   // 聚合模式开关透出（#294 批2）：UI 据此切换聚合口径（源角标等）；默认 false，
   // 设置项开关批4 上线，批1–3 联调经 adb 置 cc.display.aggregate=1
   aggregate: boolean;
@@ -105,6 +108,7 @@ const emptySnapshot: Snapshot = {
   connState: "idle",
   channel: null,
   sources: [],
+  activeSourceId: null,
   aggregate: false,
   sessions: [],
   lastErrorCmd: null,
@@ -215,7 +219,7 @@ class RelayStore {
   // 连接状态聚合（#294 批1）：单源 = 活动源直出（既有文案/字段逐字不变）；
   // 聚合 = any-online 派生，connText `${online}/${total} 在线`（connected/connState 供
   // App.tsx 通知权限/前台服务/回前台重连取此口径，调用方零改动）
-  private connStatusPatch(): Pick<Snapshot, "connected" | "connText" | "connState" | "channel" | "sources" | "aggregate"> {
+  private connStatusPatch(): Pick<Snapshot, "connected" | "connText" | "connState" | "channel" | "sources" | "activeSourceId" | "aggregate"> {
     const sources: SourceStatus[] = [...this.conns.values()].map((c) => ({
       id: c.id,
       name: c.name,
@@ -227,7 +231,7 @@ class RelayStore {
       : this.activeId
         ? [this.conns.get(this.activeId)].filter((c): c is SourceConn => !!c)
         : [];
-    if (!inPlay.length) return { connected: false, connText: "未配置", connState: "idle", channel: null, sources, aggregate: this.aggregate };
+    if (!inPlay.length) return { connected: false, connText: "未配置", connState: "idle", channel: null, sources, activeSourceId: this.activeId, aggregate: this.aggregate };
     if (this.aggregate) {
       const online = inPlay.filter((c) => c.state === "online");
       const connState = online.length
@@ -244,6 +248,7 @@ class RelayStore {
         connState,
         channel: ref ? ref.channel : null,
         sources,
+        activeSourceId: this.activeId,
         aggregate: this.aggregate,
       };
     }
@@ -254,6 +259,7 @@ class RelayStore {
       connState: c.state,
       channel: c.state === "online" ? c.channel : null,
       sources,
+      activeSourceId: this.activeId,
       aggregate: this.aggregate,
     };
   }
@@ -1140,13 +1146,17 @@ class RelayStore {
     return conn?.cfg ? { ...conn.cfg } : null;
   }
 
-  // 命令路由（#294 批1）：按 payload.session_id 经 sidIndex 定位源（sid 为 uuid
-  // 全局唯一，可作跨源主键）；无 sid（COMMAND_CREATE / PAIR_*）→ 活动源。
+  // 命令路由（#294 批1/批3）：按 payload.session_id 经 sidIndex 定位源（sid 为 uuid
+  // 全局唯一，可作跨源主键）——会话命令永远发往该会话的源，不改协议；无 sid 时取
+  // 显式 sourceId（批3 新建会话选目标源），再退活动源（COMMAND_CREATE / PAIR_*）。
   // ACK 追踪按源隔离（pendingCmds 在 conn 上）：超时重发同源同 command_id，
   // relay 幂等去重兜底，不跨源串扰
-  send(type: string, payload: Record<string, unknown>): boolean {
+  send(type: string, payload: Record<string, unknown>, sourceId?: string): boolean {
     const sid = typeof payload.session_id === "string" ? (payload.session_id as string) : null;
-    const conn = (sid ? this.sidIndex.get(sid) : undefined) ?? this.activeConn();
+    const conn =
+      (sid ? this.sidIndex.get(sid) : undefined) ??
+      (sourceId ? this.conns.get(sourceId) : undefined) ??
+      this.activeConn();
     if (!conn || !conn.ws || conn.ws.readyState !== WebSocket.OPEN) {
       this.emit({ lastErrorCmd: "未连接，命令未发送" });
       return false;

@@ -739,6 +739,13 @@ export default function DetailScreen({ sid, onBack }: { sid: string; onBack: () 
   }
 
   const external = !!s.external;
+  // 源标注（#294 批3）：聚合且多源时头部副行附源名——与列表卡源角标同口径 gating。
+  // 会话对象随快照携带 src（批2 平铺盖章），timelineOf 已按 sidIndex 跨源路由（批1），
+  // 本页转录/命令零改动即达正确源
+  const srcName =
+    snap.aggregate && snap.sources.length > 1 && s.src
+      ? snap.sources.find((x) => x.id === s.src)?.name
+      : undefined;
   // 上下文水位：relay 下发的当回合占用 + 按模型上限（与列表卡 mini 条、网页端同口径）
   const ctxUsed = s.context_usage ?? 0;
   const ctxLimit = s.context_limit ?? CONTEXT_LIMIT_FALLBACK;
@@ -870,8 +877,8 @@ export default function DetailScreen({ sid, onBack }: { sid: string; onBack: () 
         </Pressable>
         <View style={{ flex: 1, minWidth: 0 }}>
           <Text style={d.title} numberOfLines={1}>{s.title || "未命名会话"}</Text>
-          <Text style={d.sub}>
-            {(external ? "外部 CLI" : "托管") + (s.historical && !external ? " · 历史" : "") + " · " + fmtElapsed(sessionElapsed(s))}
+          <Text style={d.sub} numberOfLines={1}>
+            {(external ? "外部 CLI" : "托管") + (s.historical && !external ? " · 历史" : "") + (srcName ? ` · ${srcName}` : "") + " · " + fmtElapsed(sessionElapsed(s))}
           </Text>
           {ctxUsed > 0 ? (
             <View style={d.ctxRow}>

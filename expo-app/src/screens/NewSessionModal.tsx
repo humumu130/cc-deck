@@ -3,7 +3,7 @@ import { Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { withA, type ThemeColors } from "../theme";
 import { useTheme, useThemeStyles } from "../theme-context";
-import { store } from "../store";
+import { store, useRelay } from "../store";
 
 // 任务模板：点击填入提示词（不自动提交）
 const PRESETS: { label: string; text: string }[] = [
@@ -16,14 +16,27 @@ const PRESETS: { label: string; text: string }[] = [
 export default function NewSessionModal({ visible, onClose }: { visible: boolean; onClose: () => void }) {
   const { c } = useTheme();
   const m = useThemeStyles(makeStyles);
+  const snap = useRelay();
   const [cwd, setCwd] = useState("");
   const [prompt, setPrompt] = useState("");
   const [err, setErr] = useState<string | null>(null);
   const [loadedInit, setLoadedInit] = useState(false);
 
+  // 目标源（#294 批3）：聚合且多源时 chips 选发送目标，默认跟随活动源；本次打开
+  // 内记住手选，重开回到活动源。单源/未聚合零变化——不渲染选择、不传 sourceId，
+  // COMMAND_CREATE 照旧走活动源
+  const multi = snap.aggregate && snap.sources.length > 1;
+  const [targetId, setTargetId] = useState<string | null>(null);
+  const effTarget = multi
+    ? targetId && snap.sources.some((x) => x.id === targetId)
+      ? targetId
+      : snap.activeSourceId ?? snap.sources[0]?.id ?? null
+    : null;
+
   if (visible && !loadedInit) {
     setLoadedInit(true);
     setErr(null);
+    setTargetId(null);
     void AsyncStorage.getItem("ccr_cwd").then((v) => v && setCwd(v));
   }
   if (!visible && loadedInit) setLoadedInit(false);
@@ -41,7 +54,7 @@ export default function NewSessionModal({ visible, onClose }: { visible: boolean
     }
     setErr(null);
     void AsyncStorage.setItem("ccr_cwd", cc);
-    if (store.send("COMMAND_CREATE", { cwd: cc, prompt: p })) {
+    if (store.send("COMMAND_CREATE", { cwd: cc, prompt: p }, multi ? effTarget ?? undefined : undefined)) {
       setPrompt("");
       onClose();
     }
@@ -53,6 +66,30 @@ export default function NewSessionModal({ visible, onClose }: { visible: boolean
         {/* Modal 独立窗口 decorFitsSystemWindows=true + adjustResize，原生即可避让键盘 */}
         <View style={{ width: "100%" }}>
           <Pressable style={m.sheet} onPress={(e) => e.stopPropagation()}>            <Text style={m.h3}>新建托管会话</Text>
+            {multi ? (
+              <View style={m.field}>
+                <Text style={m.label}>发送至</Text>
+                <ScrollView horizontal showsHorizontalScrollIndicator={false} style={m.presetRow} contentContainerStyle={{ gap: 7 }}>
+                  {snap.sources.map((src) => {
+                    const on = src.id === effTarget;
+                    const online = src.state === "online";
+                    return (
+                      <Pressable
+                        key={src.id}
+                        style={[m.srcChip, on && m.srcChipOn]}
+                        android_ripple={{ color: c.tintSoft, borderless: false, radius: 12 }}
+                        onPress={() => setTargetId(src.id)}
+                      >
+                        <View style={[m.srcDot, { backgroundColor: online ? c.done : c.faint }]} />
+                        <Text style={[m.srcChipT, on && m.srcChipTOn, !online && !on && { color: c.faint }]} numberOfLines={1}>
+                          {src.name}
+                        </Text>
+                      </Pressable>
+                    );
+                  })}
+                </ScrollView>
+              </View>
+            ) : null}
             <View style={m.field}>
               <Text style={m.label}>工作目录（PC 上的路径）</Text>
               <TextInput
@@ -126,6 +163,17 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
     backgroundColor: c.panel2, borderWidth: 1, borderColor: c.line,
   },
   presetT: { fontSize: 12, color: c.dim },
+  // 目标源 chip（#294 批3）：presetChip 同形态 + 状态点（在线绿/离线灰），选中态同
+  // chip 语言（品牌染底/描边）；离线源可选，发送时报"未连接"由全局 Toast 兜底
+  srcChip: {
+    flexDirection: "row", alignItems: "center", gap: 5, maxWidth: 156,
+    paddingHorizontal: 12, paddingVertical: 6, borderRadius: 12,
+    backgroundColor: c.panel2, borderWidth: 1, borderColor: c.line,
+  },
+  srcChipOn: { backgroundColor: c.tintStrong, borderColor: withA(c.brandA, 0.4) },
+  srcChipT: { fontSize: 12, color: c.dim, flexShrink: 1 },
+  srcChipTOn: { color: c.brandA, fontWeight: "600" },
+  srcDot: { width: 6, height: 6, borderRadius: 3 },
   createBtn: {
     height: 48, borderRadius: 14, marginTop: 4, backgroundColor: c.brandA,
     alignItems: "center", justifyContent: "center",
