@@ -5,6 +5,7 @@ import com.humumu.ccwatch.protocol.RecentEvent
 import com.humumu.ccwatch.protocol.SessionState
 import com.humumu.ccwatch.protocol.SessionStats
 import com.humumu.ccwatch.protocol.SessionStatus
+import com.humumu.ccwatch.protocol.SubagentInfo
 import com.humumu.ccwatch.protocol.WaitingRequest
 import com.humumu.ccwatch.protocol.WatchCommand
 import kotlinx.coroutines.CoroutineScope
@@ -146,6 +147,12 @@ class DemoRepository : SessionRepo {
                     CronTask(id = "cron-1", name = "每日日报", prompt = "汇总今日改动", schedule = "0 8 * * *", nextRunAt = tomorrowMorning(), recurring = true),
                     CronTask(id = "cron-2", name = "依赖巡检", prompt = "检查依赖更新", schedule = "0 */2 * * *", nextRunAt = now + 2 * 3_600_000L, recurring = true),
                     CronTask(id = "cron-3", name = "周报草稿", prompt = "整理本周周报", schedule = "0 9 * * 1", paused = true, recurring = true),
+                ),
+                // 2 运行中 + 1 已结束：聚合行演示 "⑂×2 并行子任务"（已结束不计入）
+                subagents = listOf(
+                    SubagentInfo(id = "call-a1", desc = "排查 token 刷新链路", startedAt = t - 120_000),
+                    SubagentInfo(id = "call-a2", desc = "回归登录用例", startedAt = t - 45_000),
+                    SubagentInfo(id = "call-a0", desc = "读取历史日志", startedAt = t - 300_000, endedAt = t - 240_000),
                 ),
                 lastError = if (phase == 3) "TS2322: Type 'string' is not assignable to 'number'" else null,
                 doneReason = if (phase == 4) "completed" else null,

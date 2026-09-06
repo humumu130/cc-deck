@@ -87,6 +87,7 @@ data class SessionState(
     val lastTaskDone: TaskDoneReport? = null,
     val todos: List<TodoItem> = emptyList(),
     val cronTasks: List<CronTask> = emptyList(),
+    val subagents: List<SubagentInfo> = emptyList(),
     val elapsedHint: Long? = null,
 )
 
@@ -111,6 +112,18 @@ data class CronTask(
     val paused: Boolean? = null,
     val recurring: Boolean? = null, // false = 一次性
 )
+
+/** 外部会话子 Agent 派生/结束追踪（relay bridge.ts SubagentInfo；手表仅消费运行中计数） */
+data class SubagentInfo(
+    val id: String,       // tool_use id（call_…；hook 未携带时 relay 合成 ag-N，之后用 transcript 真实 id 升级）
+    val desc: String,     // input.description（缺失退 prompt 摘要）
+    val kind: String = "general",
+    val bg: Boolean = false,
+    val startedAt: Long = 0L,
+    val endedAt: Long? = null, // null = 运行中；非 bg 由 PostToolUse 收尾，bg 由 task-notification 收尾
+) {
+    val running: Boolean get() = endedAt == null
+}
 
 /** 时间线事件（relay SESSION_LOG 的 LogEntry，W2 展示 + W1 活动强度推导） */
 data class RecentEvent(
@@ -197,6 +210,23 @@ object ProtocolCodec {
                         nextRunAt = optLong(tj, "next_run_at"),
                         paused = if (tj.has("paused") && !tj.isNull("paused")) tj.getBoolean("paused") else null,
                         recurring = if (tj.has("recurring") && !tj.isNull("recurring")) tj.getBoolean("recurring") else null,
+                    )
+                }
+            }
+        } ?: emptyList()
+
+    /** SessionState.subagents / SESSION_UPDATED.payload.subagents 通用解析（[] = 已清空） */
+    fun parseSubagents(o: JSONObject): List<SubagentInfo> =
+        o.optJSONArray("subagents")?.let { arr ->
+            (0 until arr.length()).mapNotNull { i ->
+                arr.optJSONObject(i)?.takeIf { sj -> sj.optString("id").isNotBlank() }?.let { sj ->
+                    SubagentInfo(
+                        id = sj.optString("id"),
+                        desc = sj.optString("desc"),
+                        kind = sj.optString("kind").ifEmpty { "general" },
+                        bg = sj.optBoolean("bg", false),
+                        startedAt = optLong(sj, "started_at") ?: 0L,
+                        endedAt = optLong(sj, "ended_at"),
                     )
                 }
             }
@@ -294,6 +324,7 @@ object ProtocolCodec {
             lastTaskDone = parseTaskDone(o),
             todos = parseTodos(o),
             cronTasks = parseCronTasks(o),
+            subagents = parseSubagents(o),
             elapsedHint = optLong(o, "elapsed_hint"),
         )
     }

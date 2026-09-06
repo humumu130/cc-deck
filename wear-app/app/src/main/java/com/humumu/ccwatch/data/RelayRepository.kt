@@ -189,6 +189,8 @@ class RelayRepository(private val host: String, private val token: String) : Ses
                         contextLimit = if (p.has("context_limit") && !p.isNull("context_limit")) p.getLong("context_limit") else s.contextLimit,
                         todos = if (p.has("todos") && !p.isNull("todos")) ProtocolCodec.parseTodos(p) else s.todos,
                         cronTasks = if (p.has("cron_tasks") && !p.isNull("cron_tasks")) ProtocolCodec.parseCronTasks(p) else s.cronTasks,
+                        // 子 Agent 工作状态：present 即覆盖（[] = 清空，与手机 store 口径一致）
+                        subagents = if (p.has("subagents") && !p.isNull("subagents")) ProtocolCodec.parseSubagents(p) else s.subagents,
                         updatedAt = ts,
                     )
                 }

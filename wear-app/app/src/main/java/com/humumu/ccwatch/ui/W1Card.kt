@@ -110,6 +110,19 @@ private fun WorkingBody(s: SessionState, events: List<RecentEvent>) {
             textAlign = TextAlign.Center,
         )
     }
+    // 子 Agent 聚合行（#288 B类⑦）："卡住了还是在并行干活"的速览信号；
+    // 逐条 desc/时长不上面（详情去手机），仅统计运行中条目
+    s.subagents.count { it.running }.takeIf { it > 0 }?.let { n ->
+        Spacer(Modifier.height(3.dp))
+        Text(
+            "⑂×$n 并行子任务",
+            color = C.working.copy(alpha = 0.85f),
+            fontSize = 10.sp,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            textAlign = TextAlign.Center,
+        )
+    }
     Spacer(Modifier.height(10.dp))
     ActivityDots(activityIntensity(events, s), statusColor(s.status))
     Spacer(Modifier.height(10.dp))
