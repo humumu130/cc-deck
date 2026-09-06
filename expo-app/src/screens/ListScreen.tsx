@@ -943,7 +943,7 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
   tagExt: { color: c.brandB, backgroundColor: withA(c.brandB, 0.12), borderColor: withA(c.brandB, 0.25) },
   // 源角标（#294 批2）：tag 形态的胶囊版，染底/描边色由组件按源色注入；
   // #302 独立行容器：卡片最底部左对齐
-  srcRow: { flexDirection: "row", marginTop: 4 },
+  srcRow: { flexDirection: "row", marginTop: 4, justifyContent: "flex-end" },
   srcTag: {
     flexDirection: "row", alignItems: "center", gap: 4, maxWidth: 96, flexShrink: 1,
     borderWidth: 1, borderRadius: 999, paddingHorizontal: 7, paddingVertical: 2, overflow: "hidden",
