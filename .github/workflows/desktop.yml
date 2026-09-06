@@ -117,8 +117,9 @@ jobs:
         run: |
           npx tauri build --bundles nsis
           # 产物名对齐 Electron 版（CC-Deck-Setup-<v>.exe）并加 -tauri 后缀区分两壳
+          # 就地重命名（挪出 nsis 目录会让下面两处 path 扑空，v0.3.13 实际翻车点）
           V=$(node -p "require('./package.json').version")
-          mv src-tauri/target/release/bundle/nsis/*-setup.exe "CC-Deck-Setup-${V}-tauri.exe"
+          mv src-tauri/target/release/bundle/nsis/*-setup.exe "src-tauri/target/release/bundle/nsis/CC-Deck-Setup-${V}-tauri.exe"
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
