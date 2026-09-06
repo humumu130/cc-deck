@@ -697,7 +697,7 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
   tdBadgeT: { color: "#06281A", fontSize: 11, fontWeight: "800" },
   // 展开卡：无标题，任务项两行封顶（大字体时 maxHeight 兜底内部滚动），底部 清除/查看会话 双钮
   tdCard: {
-    position: "absolute", right: 12, maxWidth: "84%", maxHeight: "70%",
+    position: "absolute", left: 12, right: 12, maxHeight: "70%",
     backgroundColor: c.panel, borderWidth: 1, borderColor: withA(c.done, 0.28),
     borderRadius: 16, paddingHorizontal: 14, paddingVertical: 12, elevation: 8,
   },
