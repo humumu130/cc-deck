@@ -270,6 +270,16 @@
   }
   .card:hover .card-edit { opacity: 1; }
   .card-edit:hover { color: var(--dim); background: var(--bg-soft); }
+  /* #279① 会话删除 ✕（与 ✎ 同款 hover 显现；DONE/ERROR 才可删，运行中置灰） */
+  .card-del {
+    flex: none; background: none; border: none; cursor: pointer;
+    color: var(--faint); font-size: 12px; padding: 2px 4px; border-radius: 6px; opacity: 0;
+    transition: opacity .12s;
+  }
+  .card:hover .card-del { opacity: 1; }
+  .card-del:hover { color: var(--error); background: var(--bg-soft); }
+  .card:hover .card-del.off { opacity: .35; }
+  .card-del.off, .card-del.off:hover { cursor: not-allowed; color: var(--faint); background: none; }
   .card-title input {
     flex: 1; min-width: 0; font-size: 13.5px; font-weight: 600; padding: 3px 8px; border-radius: 7px;
   }
@@ -611,6 +621,25 @@
   #taskDone .td-item { opacity: .85; font-size: 12px; margin-top: 6px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   #taskDone .td-remain { color: var(--faint); font-size: 12px; margin-top: 8px; }
 
+  /* #279① 删除撤销条（#247）：右下角浮条，视觉复用 taskDone 浮框语言、
+     transform 显隐对齐 #toast（上移淡入）；z 与 taskDone 同层，DOM 靠后叠其上 */
+  #undoBar {
+    position: fixed; right: 16px; bottom: 76px; max-width: 340px;
+    display: flex; align-items: center; gap: 10px;
+    background: var(--toast-bg); border: 1px solid var(--border); color: var(--text);
+    border-radius: 12px; padding: 9px 12px; font-size: 13px; z-index: 98;
+    box-shadow: var(--toast-shadow);
+    opacity: 0; transform: translateY(14px); pointer-events: none;
+    transition: opacity .18s, transform .18s;
+  }
+  #undoBar.show { opacity: 1; transform: translateY(0); pointer-events: auto; }
+  #undoBar .ub-t { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  #undoBar .ub-btn {
+    flex: none; background: rgba(217,119,87,.14); border: 1px solid rgba(217,119,87,.4);
+    color: var(--brand); font-weight: 700; font-size: 12.5px; border-radius: 8px; padding: 4px 12px;
+  }
+  #undoBar .ub-btn:hover { background: rgba(217,119,87,.24); }
+
   ::-webkit-scrollbar { width: 8px; height: 8px; }
   ::-webkit-scrollbar-thumb { background: var(--scroll); border-radius: 4px; }
   ::-webkit-scrollbar-track { background: transparent; }
@@ -634,6 +663,9 @@
     body.detail-open #detail { display: flex; }
     body.detail-open #backBtn { display: inline-block; }
     #taskDone { right: 10px; bottom: 84px; max-width: calc(100vw - 20px); }
+    #undoBar { right: 10px; bottom: 84px; max-width: calc(100vw - 20px); }
+    /* 触屏无 hover：卡片操作钮常显（同 srv-row 按钮处理），删除入口才可达 */
+    .card-edit, .card-del { opacity: 1; }
     #timeline, #dhead, #cmdbar, #hisnote { padding-left: 14px; padding-right: 14px; margin-left: 0; margin-right: 0; }
     #waitbox, #liverow, #agbox { margin-left: 14px; margin-right: 14px; width: calc(100% - 28px); }
     #pendbox { padding: 0 14px 8px; }
@@ -782,6 +814,7 @@
 
 <div id="toast"></div>
 <div id="taskDone"></div>
+<div id="undoBar"><span class="ub-t" id="undoTitle"></span><button class="ub-btn" id="undoBtn" title="撤销删除">撤销</button></div>
 
 <script src="nacl.js"></script>
 <script>
@@ -1570,6 +1603,9 @@ function onEvent(ctx, msg) {
         ctx.timelines.set(s.session_id, msg.payload.logs[s.session_id] || []);
       }
       ctx.lastSeq = Math.max(ctx.lastSeq, msg.seq);
+      // 重连快照里已没有挂起删除的会话 = 别处已删/服务器侧已终结：取消挂起，
+      // 免得 4s 后对不存在的会话发命令弹"会话不存在"误报
+      if (pendingDel.sid && !ctx.sessions.has(pendingDel.sid)) cancelPendingDel();
       if (selected && selected.src === ctx.cfg.id && !ctx.sessions.has(selected.sid)) closeDetail();
       break;
     }
@@ -1637,6 +1673,10 @@ function onEvent(ctx, msg) {
     }
     case "SESSION_DELETED": {
       ctx.sessions.delete(sid);
+      // #279① 服务器确认删除：已提交项出列（保持隐藏的使命完成）；挂起中的
+      // 删除被别处终结 → 取消挂起，防超时后误发命令
+      deleting.delete(sid);
+      if (pendingDel.sid === sid) cancelPendingDel();
       break;
     }
     case "SESSION_LOG": {
@@ -1803,6 +1843,8 @@ function render() {
   const order = { WAITING: 0, WORKING: 1, ERROR: 2, DONE: 3 };
   let entries = allSessions();
   if (filterSrc !== "all") entries = entries.filter((e) => e.ctx.cfg.id === filterSrc);
+  // #279① 挂起删除（4s 撤销窗口内）与已提交删除（待 SESSION_DELETED 确认）的卡片保持隐藏
+  entries = entries.filter((e) => e.s.session_id !== pendingDel.sid && !deleting.has(e.s.session_id));
   const list = entries.sort((a, b) =>
     (order[a.s.status] - order[b.s.status]) || ((b.s.updated_at || b.s.started_at) - (a.s.updated_at || a.s.started_at)));
   const key = list.map((e) => e.ctx.cfg.id + ":" + e.s.session_id + ":" + e.s.status + ":" + Math.floor(sessionElapsed(e.s) / 1000) + ":" + (e.s.title || "") + ":" + (e.s.action_summary || "") + ":" + (e.s.waiting_request ? 1 : 0) + ":" + ctxPct(e.s)).join("|");
@@ -1820,12 +1862,15 @@ function render() {
       const waitingText = waiting
         ? (s.waiting_request.questions?.length ? "Claude 在提问：" + (s.waiting_request.questions[0].header || "") : "需要确认 " + s.waiting_request.tool_name + " — " + (s.waiting_request.input_summary || ""))
         : (s.action_summary || "");
+      // 与手机 deletable 同口径：仅 DONE/ERROR 可删（relay 对运行中会话拒绝删除）
+      const deletable = s.status === "DONE" || s.status === "ERROR";
       d.innerHTML =
         '<div class="card-top">' + chip(s.status) + '<span style="display:flex;align-items:center;gap:6px">' +
           srcBadgeHtml(ctx.cfg) + '<span class="elapsed">' + fmtElapsed(sessionElapsed(s)) + "</span></span></div>" +
         '<div class="card-title">' + escapeHtml(s.title || "") +
           (s.historical ? '<span class="his-badge">历史</span>' : s.external ? '<span class="his-badge ext">外部</span>' : "") +
-          '<button class="card-edit" title="重命名">✎</button></div>' +
+          '<button class="card-edit" title="重命名">✎</button>' +
+          '<button class="card-del' + (deletable ? "" : " off") + '" title="' + (deletable ? "删除会话" : "运行中，不能删除") + '">✕</button></div>' +
         '<div class="card-summary' + (waiting ? " waiting" : "") + '">' + escapeHtml(waitingText) + "</div>" +
         '<div class="card-stats">' + statsHtml(s.stats) + ctxHtml(s) + "</div>" +
         (waiting && !s.historical && s.waiting_request?.decidable !== false ? '<div class="card-cta"><button>处理</button></div>' : "");
@@ -1834,6 +1879,12 @@ function render() {
       if (cta) cta.onclick = (e) => { e.stopPropagation(); select(s.session_id, ctx.cfg.id); };
       const edit = d.querySelector(".card-edit");
       if (edit) edit.onclick = (e) => { e.stopPropagation(); startCardRename(d, s, ctx); };
+      const del = d.querySelector(".card-del");
+      if (del) del.onclick = (e) => {
+        e.stopPropagation();
+        if (!deletable) { toast("会话运行中，不能删除"); return; }
+        requestDelete(ctx.cfg.id, s.session_id);
+      };
       box.appendChild(d);
     }
   } else {
@@ -2676,6 +2727,65 @@ $("rejectBtn").onclick = () => {
   if (sel && sel.s.waiting_request) sendCommandTo(sel.ctx, "COMMAND_REJECT", { session_id: selected.sid, request_id: sel.s.waiting_request.request_id });
 };
 $("backBtn").onclick = closeDetail;
+// ---------- #279① 会话删除 + 4s 撤销（对齐手机 ListScreen #247） ----------
+// 点删除只隐藏卡片 + 底部弹撤销条，4s 内可撤（纯客户端延迟提交），超时才真发
+// COMMAND_DELETE——误触不丢会话。两次快速删除时前一条立即提交。
+// 多源语义：sid 全局唯一，按 sid 全局记账；命令经 pendingDel.src 按源路由。
+const pendingDel = { sid: "", src: "", title: "", timer: 0 }; // 4s 撤销窗口内的挂起删除
+const deleting = new Set(); // 已提交待服务器确认的 sid：保持隐藏到 SESSION_DELETED，3s 兜底出列
+function cancelPendingDel() {
+  if (pendingDel.timer) { clearTimeout(pendingDel.timer); pendingDel.timer = 0; }
+  pendingDel.sid = ""; pendingDel.src = ""; pendingDel.title = "";
+  renderUndoBar();
+}
+function undoDelete() { cancelPendingDel(); render(); }
+function commitDelete(src, sid) {
+  if (!sid) return;
+  const ctx = ctxs.get(src);
+  if (!ctx || !ctx.sessions.has(sid)) return; // 会话已不存在（别处已删/快照重建）：不再发命令
+  deleting.add(sid);
+  sendCommandTo(ctx, "COMMAND_DELETE", { session_id: sid });
+  // 兜底出列：发送失败/ACK 异常时卡片要能回来（错误提示由 onAck 的 toast 负责）
+  setTimeout(() => { deleting.delete(sid); render(); }, 3000);
+}
+function requestDelete(src, sid) {
+  const s = ctxs.get(src)?.sessions.get(sid);
+  if (pendingDel.timer) {
+    clearTimeout(pendingDel.timer);
+    pendingDel.timer = 0;
+    const prevSid = pendingDel.sid, prevSrc = pendingDel.src;
+    if (prevSid && prevSid !== sid) commitDelete(prevSrc, prevSid); // 连删第二条：前一条立即提交
+  }
+  pendingDel.sid = sid; pendingDel.src = src; pendingDel.title = s?.title || "";
+  renderUndoBar(); render();
+  pendingDel.timer = setTimeout(() => {
+    pendingDel.timer = 0;
+    const curSid = pendingDel.sid, curSrc = pendingDel.src;
+    cancelPendingDel();
+    commitDelete(curSrc, curSid);
+  }, 4000);
+}
+// 撤销浮条：标题预截断 16 字（CSS 省略号会吃掉收尾引号，与手机 UndoBar 同处理）
+function renderUndoBar() {
+  const bar = $("undoBar");
+  if (!pendingDel.sid) { bar.classList.remove("show"); return; }
+  const s = ctxs.get(pendingDel.src)?.sessions.get(pendingDel.sid);
+  let t = (s?.title || pendingDel.title || "").trim();
+  if (t.length > 16) t = t.slice(0, 16) + "…";
+  $("undoTitle").textContent = t ? "已删除「" + t + "」" : "已删除会话";
+  bar.classList.add("show");
+}
+$("undoBtn").onclick = (e) => { e.stopPropagation(); undoDelete(); };
+// 离开页面（关标签/跳转）时挂起的删除视为确认：立即提交（同手机离开列表页语义；
+// WS 同步入队通常可冲刷，轮询传输尽力而为）
+window.addEventListener("pagehide", () => {
+  if (!pendingDel.sid || !pendingDel.timer) return;
+  clearTimeout(pendingDel.timer);
+  pendingDel.timer = 0;
+  const curSid = pendingDel.sid, curSrc = pendingDel.src;
+  pendingDel.sid = ""; pendingDel.src = "";
+  commitDelete(curSrc, curSid);
+});
 // 会话列表卡片就地改名：标题变输入框，Enter 提交 / Esc·失焦取消
 function startCardRename(cardEl, s, ctx) {
   const titleEl = cardEl.querySelector(".card-title");
