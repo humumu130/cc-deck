@@ -2011,8 +2011,18 @@ function shortName(n) {
 function srcDisplayName(cfg) {
   return shortName(cfg.name);
 }
+// 同屏配色去重（与手机端同规则）：按 colorKey 稳定排序分配调色板序号，源数≤8 必不重
+const srcColorCache = new Map();
+function srcColorByKey(cfg) {
+  const key = srcColorKey(cfg);
+  if (!srcColorCache.has(key)) {
+    const all = servers.map((x) => srcColorKey(x)).sort();
+    srcColorCache.set(key, SRC_COLORS[all.indexOf(key) % SRC_COLORS.length]);
+  }
+  return srcColorCache.get(key);
+}
 function srcBadgeHtml(cfg) {
-  return '<span class="src-badge" title="' + escapeHtml(cfg.name) + '"><i style="background:' + srcColor(srcColorKey(cfg)) + '"></i><span class="sb-t">' + escapeHtml(srcDisplayName(cfg)) + '</span></span>';
+  return '<span class="src-badge" title="' + escapeHtml(cfg.name) + '"><i style="background:' + srcColorByKey(cfg) + '"></i><span class="sb-t">' + escapeHtml(srcDisplayName(cfg)) + '</span></span>';
 }
 
 // 列表上方源过滤 chips（单源时隐藏）；过滤目标被删/失效时自愈回"全部"
@@ -2029,7 +2039,7 @@ function renderSrcChips() {
     servers.map((s) => {
       const n = ctxs.get(s.id)?.sessions.size || 0;
       return '<button data-f="' + s.id + '" class="' + (filterSrc === s.id ? "on" : "") + '" title="' + escapeHtml(s.name) + '">' +
-        '<i style="background:' + srcColor(srcColorKey(s)) + '"></i><span>' + escapeHtml(srcDisplayName(s)) + " " + n + "</span></button>";
+        '<i style="background:' + srcColorByKey(s) + '"></i><span>' + escapeHtml(srcDisplayName(s)) + " " + n + "</span></button>";
     }).join("");
   box.querySelectorAll("button").forEach((b) => {
     b.onclick = () => { filterSrc = b.dataset.f; renderSrcChips(); render(); };

@@ -49,10 +49,8 @@ function srcColor(id: string): string {
 // 源角标（#294 批2）：聚合且多源时区分会话归属——色点 + 源名胶囊（tag/tagExt 形态：
 // 描边 + 轻染底，染底/描边按源色）；单源模式不渲染（ListScreen 侧把关）。
 // #302：独立成行放卡片最底部左对齐，不与时长/±行数/ctx% 挤同行。
-// id 即 colorKey（调用方传入，见 srcKeys）
-function SrcBadge({ id, name }: { id: string; name: string }) {
+function SrcBadge({ color, name }: { color: string; name: string }) {
   const styles = useThemeStyles(makeStyles);
-  const color = srcColor(id);
   return (
     <View style={[styles.srcTag, { borderColor: withA(color, 0.28), backgroundColor: withA(color, 0.1) }]}>
       <View style={[styles.srcDot, { backgroundColor: color }]} />
@@ -306,7 +304,7 @@ const SessionCard = memo(function SessionCard({
   onReveal: (v: string | null) => void;
   compact?: boolean;
   srcName?: string | null; // 归属源名（聚合且多源时非空，#294 批2）
-  srcKey?: string | null;  // 归属源跨端配色键（#294 审查修复，SrcBadge 用）
+  srcKey?: string | null;  // 归属源配色（调用方已去重，直传 SrcBadge）
 }) {
   const { c } = useTheme();
   const styles = useThemeStyles(makeStyles);
@@ -352,7 +350,7 @@ const SessionCard = memo(function SessionCard({
           {/* #302 源角标独立成行：卡片最底部左对齐，永不与时长/±行数/ctx% 同行 */}
           {srcName && s.src ? (
             <View style={styles.srcRow}>
-              <SrcBadge id={srcKey ?? s.src} name={srcName} />
+              <SrcBadge color={srcKey ?? srcColor(s.src)} name={srcName} />
             </View>
           ) : null}
         </>
@@ -396,7 +394,7 @@ const SessionCard = memo(function SessionCard({
           </View>
           {srcName && s.src ? (
             <View style={styles.srcRow}>
-              <SrcBadge id={srcKey ?? s.src} name={srcName} />
+              <SrcBadge color={srcKey ?? srcColor(s.src)} name={srcName} />
             </View>
           ) : null}
         </>
@@ -544,7 +542,9 @@ export default function ListScreen({ sessions, connected, connText, onOpen, onNe
   const onlineSrcs = snap.sources.filter((x) => x.state === "online").length;
   const srcNames = new Map(snap.sources.map((x) => [x.id, displaySrcName(x.name)] as const));
   // 源跨端配色键（#294 审查修复）：id→colorKey 同款按值传参，不破坏 memo
-  const srcKeys = new Map(snap.sources.map((x) => [x.id, x.colorKey] as const));
+  // 同屏配色去重：按 colorKey 稳定排序分配调色板序号——哈希法双源 1/8 撞色（实测 PC/Mac 同紫）
+  const sortedSrcs = [...snap.sources].sort((a, b) => (a.colorKey ?? a.id).localeCompare(b.colorKey ?? b.id));
+  const srcColors = new Map(sortedSrcs.map((x, i) => [x.id, SRC_COLORS[i % SRC_COLORS.length]] as const));
 
   const counts: Record<string, number> = {};
   for (const s of sessions) {
@@ -699,7 +699,7 @@ export default function ListScreen({ sessions, connected, connText, onOpen, onNe
             onReveal={setRevealSid}
             compact={compact}
             srcName={badgeOn && item.src ? srcNames.get(item.src) ?? null : null}
-            srcKey={badgeOn && item.src ? srcKeys.get(item.src) ?? null : null}
+            srcKey={badgeOn && item.src ? srcColors.get(item.src) ?? null : null}
           />
         )}
         ListEmptyComponent={
