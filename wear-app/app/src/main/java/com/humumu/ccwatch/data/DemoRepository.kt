@@ -1,5 +1,7 @@
 package com.humumu.ccwatch.data
 
+import com.humumu.ccwatch.protocol.AskOption
+import com.humumu.ccwatch.protocol.AskQuestion
 import com.humumu.ccwatch.protocol.CronTask
 import com.humumu.ccwatch.protocol.RecentEvent
 import com.humumu.ccwatch.protocol.SessionState
@@ -169,8 +171,21 @@ class DemoRepository : SessionRepo {
                 elapsedHint = 95_000,
                 waitingRequest = if (phase >= 3) WaitingRequest(
                     requestId = "req-2",
-                    toolName = "Bash",
-                    inputSummary = "gradlew assembleDebug",
+                    toolName = "AskUserQuestion",
+                    inputSummary = null,
+                    // 多选作答演示（#288 B类⑪）：勾亮 ✓ → 提交
+                    questions = listOf(
+                        AskQuestion(
+                            header = "验证范围",
+                            question = "本次验证覆盖哪些项？",
+                            multi = true,
+                            options = listOf(
+                                AskOption("单元测试"),
+                                AskOption("真机构建"),
+                                AskOption("协议回放"),
+                            ),
+                        ),
+                    ),
                     decidable = true,
                     receivedAt = t0 - 5_000,
                 ) else null,

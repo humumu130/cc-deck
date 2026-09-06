@@ -170,7 +170,7 @@ private fun ctxLevelColor(used: Long, limit: Long): Color = when {
 }
 
 /** W6 · Waiting 确认：明确写出需要用户做什么 + Allow/Reject 同屏（规范 §11）。
- *  AskUserQuestion 变体：问题 + 选项点选作答（多问顺序推进，点完自动发送）。 */
+ *  AskUserQuestion 变体：问题 + 选项点选作答（单选即点即答；多选勾选后确认提交）。 */
 @Composable
 private fun WaitingBody(s: SessionState, onCommand: (WatchCommand) -> Unit, cid: () -> String) {
     val w = s.waitingRequest
@@ -210,7 +210,9 @@ private fun WaitingBody(s: SessionState, onCommand: (WatchCommand) -> Unit, cid:
     }
 }
 
-/** W6 变体 · AskUserQuestion：选项即点即答；多问顺序推进，答完最后一问自动发送 */
+/** W6 变体 · AskUserQuestion（#288 B类⑪ 对齐手机口径）：
+ *  单选（multi=false）即点即答不变；多选（multi=true）改为"点选勾亮 ✓ → 提交"，
+ *  选中项以 "、" 连接；多问顺序推进，答完最后一问自动发送。 */
 @Composable
 private fun AskBody(
     s: SessionState,
@@ -221,10 +223,24 @@ private fun AskBody(
 ) {
     var qi by remember(w.requestId) { mutableStateOf(0) }
     var answers by remember(w.requestId) { mutableStateOf(listOf<String>()) }
+    // 多选草稿按问题隔离：remember 键含 qi，推进下一问自动清空
+    var picked by remember(w.requestId, qi) { mutableStateOf(setOf<String>()) }
     val q = qs.getOrNull(qi) ?: return
+
+    /** 单选点选 / 多选确认共用：记录一问的作答并推进，最后一问直接发送 */
+    fun advance(one: String) {
+        val next = answers + one
+        if (qi + 1 < qs.size) {
+            answers = next
+            qi += 1
+        } else {
+            onCommand(WatchCommand.Answer(cid(), s.sessionId, w.requestId, next))
+        }
+    }
+
     Spacer(Modifier.height(6.dp))
     Text(
-        if (qs.size > 1) "提问 ${qi + 1}/${qs.size}" else "Claude 在提问",
+        (if (qs.size > 1) "提问 ${qi + 1}/${qs.size}" else "Claude 在提问") + if (q.multi) " · 可多选" else "",
         color = C.waiting,
         fontSize = 12.sp,
         fontWeight = FontWeight.Medium,
@@ -245,26 +261,29 @@ private fun AskBody(
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
         q.options.forEach { o ->
+            val on = q.multi && o.label in picked
             Box(
                 contentAlignment = Alignment.Center,
                 modifier = Modifier
                     .clip(RoundedCornerShape(12.dp))
-                    .background(C.surface)
-                    .border(0.8.dp, C.primary.copy(alpha = 0.35f), RoundedCornerShape(12.dp))
+                    .background(if (on) C.done.copy(alpha = 0.14f) else C.surface)
+                    .border(
+                        0.8.dp,
+                        if (on) C.done else C.primary.copy(alpha = 0.35f),
+                        RoundedCornerShape(12.dp),
+                    )
                     .clickable {
-                        val next = answers + o.label
-                        if (qi + 1 < qs.size) {
-                            answers = next
-                            qi += 1
+                        if (q.multi) {
+                            picked = if (o.label in picked) picked - o.label else picked + o.label
                         } else {
-                            onCommand(WatchCommand.Answer(cid(), s.sessionId, w.requestId, next))
+                            advance(o.label)
                         }
                     }
                     .padding(horizontal = 12.dp, vertical = 4.dp),
             ) {
                 Text(
-                    o.label,
-                    color = C.textPrimary,
+                    if (on) "✓ ${o.label}" else o.label,
+                    color = if (on) C.done else C.textPrimary,
                     fontSize = 11.sp,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
@@ -272,14 +291,47 @@ private fun AskBody(
             }
         }
     }
-    Spacer(Modifier.height(5.dp))
+    if (q.multi) {
+        Spacer(Modifier.height(6.dp))
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(10.dp),
+        ) {
+            // 提交：未勾选置灰防误触空作答；确认后选中项 "、" 连接（同手机 AskBanner）
+            Text(
+                "提交",
+                color = if (picked.isEmpty()) C.faintLabel else C.done,
+                fontSize = 11.sp,
+                fontWeight = FontWeight.Medium,
+                modifier = Modifier
+                    .clip(RoundedCornerShape(12.dp))
+                    .background(if (picked.isEmpty()) Color.Transparent else C.done.copy(alpha = 0.14f))
+                    .border(
+                        0.8.dp,
+                        if (picked.isEmpty()) C.faintLabel.copy(alpha = 0.4f) else C.done,
+                        RoundedCornerShape(12.dp),
+                    )
+                    .clickable(enabled = picked.isNotEmpty()) { advance(picked.joinToString("、")) }
+                    .padding(horizontal = 16.dp, vertical = 4.dp),
+            )
+            AskSkip { onCommand(WatchCommand.Reject(cid(), s.sessionId, w.requestId, "用户未作答，跳过")) }
+        }
+    } else {
+        Spacer(Modifier.height(5.dp))
+        AskSkip { onCommand(WatchCommand.Reject(cid(), s.sessionId, w.requestId, "用户未作答，跳过")) }
+    }
+}
+
+/** Ask 跳过：不作答直接拒绝（单选/多选共用逃生口）。 */
+@Composable
+private fun AskSkip(onSkip: () -> Unit) {
     Text(
         "跳过",
         color = C.faintLabel,
         fontSize = 10.sp,
         modifier = Modifier
             .clip(RoundedCornerShape(10.dp))
-            .clickable { onCommand(WatchCommand.Reject(cid(), s.sessionId, w.requestId, "用户未作答，跳过")) }
+            .clickable(onClick = onSkip)
             .padding(horizontal = 8.dp, vertical = 3.dp),
     )
 }
