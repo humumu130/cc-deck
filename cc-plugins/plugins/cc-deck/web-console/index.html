@@ -363,6 +363,14 @@
   .card.historical { opacity: .75; }
   .card-top { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
   .elapsed { font-size: 12px; color: var(--dim); font-variant-numeric: tabular-nums; }
+  /* WORKING 实时工作行（App LiveStat 同构）：呼吸点 + 走秒 + ↓tokens + 动作摘要 */
+  .c-live { display: flex; align-items: center; gap: 8px; margin: 7px 0 5px; font-size: 12px; color: var(--dim); font-variant-numeric: tabular-nums; min-width: 0; }
+  .c-live .lv-dot { width: 9px; height: 9px; border-radius: 50%; background: var(--working); flex: none; animation: dot-breathe 2.4s ease-in-out infinite; }
+  .c-live .lv-sec { color: var(--working); flex: none; }
+  .c-live .lv-tok { flex: none; }
+  .c-live .lv-sum { color: var(--faint); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1; min-width: 0; }
+  .cards-empty { align-items: center; text-align: center; color: var(--faint); font-size: 12.5px; padding: 46px 12px; }
+  .cards-empty .ce-icon { font-size: 34px; opacity: .5; margin-bottom: 10px; }
   .card-title { font-size: 15px; font-weight: 650; margin-top: 6px; display: flex; align-items: center; gap: 8px; }
   .his-badge {
     font-size: 10px; color: var(--faint); border: 1px solid var(--border);
@@ -2174,12 +2182,25 @@ function render() {
   entries = entries.filter((e) => e.s.session_id !== pendingDel.sid && !deleting.has(e.s.session_id));
   const list = entries.sort((a, b) =>
     (order[a.s.status] - order[b.s.status]) || ((b.s.updated_at || b.s.started_at) - (a.s.updated_at || a.s.started_at)));
-  const key = (listCompact ? "C|" : "") + list.map((e) => e.ctx.cfg.id + ":" + e.s.session_id + ":" + e.s.status + ":" + Math.floor(sessionElapsed(e.s) / 1000) + ":" + (e.s.title || "") + ":" + (e.s.action_summary || "") + ":" + (e.s.waiting_request ? 1 : 0) + ":" + ctxPct(e.s)).join("|");
+  const key = (listCompact ? "C|" : "") + list.map((e) => e.ctx.cfg.id + ":" + e.s.session_id + ":" + e.s.status + ":" + (e.s.title || "") + ":" + (e.s.action_summary || "") + ":" + (e.s.waiting_request ? 1 : 0) + ":" + ctxPct(e.s)).join("|");
   if (box.dataset.key !== key) {
     // 就地改名进行中：跳过重建（运行中会话 key 每秒变，会把编辑框冲掉）
     if (document.activeElement && document.activeElement.classList.contains("card-rename")) return;
     box.dataset.key = key;
     box.innerHTML = "";
+    if (!list.length) {
+      const on = [...ctxs.values()].filter((c) => c.status === "online").length;
+      const total = ctxs.size;
+      const hint = total === 0
+        ? "先点左下 ⚙ 添加服务器"
+        : on === 0
+          ? (collapseIdle ? "空闲会话已折叠" : "服务器未连接，等待自动重连")
+          : (filterSrc !== "all" ? "该源暂无会话" : (collapseIdle ? "空闲会话已折叠" : "暂无会话，点 ＋ 新建或在 PC 上打开 claude"));
+      const d2 = document.createElement("div");
+      d2.className = "cards-empty";
+      d2.innerHTML = '<div class="ce-icon">⚡</div><div>' + escapeHtml(hint) + "</div>";
+      box.appendChild(d2);
+    }
     for (const { ctx, s } of list) {
       const d = document.createElement("div");
       d.dataset.sid = s.session_id;
@@ -2188,7 +2209,7 @@ function render() {
       const waiting = !!s.waiting_request;
       const waitingText = waiting
         ? (s.waiting_request.questions?.length ? "Claude 在提问：" + (s.waiting_request.questions[0].header || "") : "需要确认 " + s.waiting_request.tool_name + " — " + (s.waiting_request.input_summary || ""))
-        : (s.action_summary || "");
+        : (s.status === "ERROR" && s.last_error ? "⚠ " + s.last_error : s.action_summary || "");
       // 与手机 deletable 同口径：仅 DONE/ERROR 可删（relay 对运行中会话拒绝删除）
       const deletable = s.status === "DONE" || s.status === "ERROR";
       const badges = s.historical ? '<span class="his-badge">历史</span>' : s.external ? '<span class="his-badge ext">外部</span>' : "";
@@ -2197,6 +2218,12 @@ function render() {
         '<button class="card-del' + (deletable ? "" : " off") + '" title="' + (deletable ? "删除会话" : "运行中，不能删除") + '">✕</button>';
       const summaryRow = '<div class="card-summary' + (waiting ? " waiting" : "") + '">' + escapeHtml(waitingText) + "</div>";
       const ctaRow = waiting && !s.historical && s.waiting_request?.decidable !== false ? '<div class="card-cta"><button>处理</button></div>' : "";
+      const tok = s.usage && s.usage.output_tokens ? s.usage.output_tokens : 0;
+      const liveRow = s.status === "WORKING"
+        ? '<div class="c-live"><span class="lv-dot"></span><span class="lv-sec">' + Math.max(0, Math.floor((Date.now() - (s.turn_started_at ?? s.updated_at)) / 1000)) + 's</span>' +
+          (tok ? '<span class="lv-tok">↓ ' + tokStr(tok) + "</span>" : "") +
+          (s.action_summary ? '<span class="lv-sum">' + escapeHtml(s.action_summary) + "</span>" : "") + "</div>"
+        : "";
       if (listCompact) {
         // #279⑨ 紧凑卡（对齐手机）：状态点+标题+耗时 / 摘要 / 改动+水位 / 源角标独立末行
         d.innerHTML =
@@ -2211,6 +2238,7 @@ function render() {
         d.innerHTML =
           '<div class="card-top">' + chip(s.status) + '<span style="display:flex;align-items:center;gap:6px">' +
             '<span class="elapsed">' + fmtElapsed(sessionElapsed(s)) + "</span></span></div>" +
+          liveRow +
           '<div class="card-title">' + escapeHtml(s.title || "") + badges + opBtns + "</div>" +
           summaryRow +
           '<div class="card-stats">' + statsHtml(s.stats) + ctxHtml(s) + "</div>" +
@@ -2234,8 +2262,22 @@ function render() {
     // 仅刷新选中态
     for (const el of box.children) el.classList.toggle("sel", !!selected && el.dataset.src === selected.src && el.dataset.sid === selected.sid);
   }
+  const lbH3 = document.querySelector("#listBar h3");
+  if (lbH3) lbH3.textContent = list.length ? list.length + " 会话" : "会话";
   renderDetail();
 }
+
+// 每秒定点刷新（#320）：WORKING 卡耗时/实时工作行走秒，querySelector 级更新不触发整列重建
+setInterval(() => {
+  for (const el of document.querySelectorAll("#cards .card.WORKING")) {
+    const hit = allSessions().find((x) => x.ctx.cfg.id === el.dataset.src && x.s.session_id === el.dataset.sid);
+    if (!hit) continue;
+    const e2 = el.querySelector(".elapsed");
+    if (e2) e2.textContent = fmtElapsed(sessionElapsed(hit.s));
+    const sec = el.querySelector(".lv-sec");
+    if (sec) sec.textContent = Math.max(0, Math.floor((Date.now() - (hit.s.turn_started_at ?? hit.s.updated_at)) / 1000)) + "s";
+  }
+}, 1000);
 
 function renderDetail() {
   const sel = selSession();
