@@ -27,7 +27,7 @@
 
 ### 多源多端 —— 一套协议，四块屏幕
 
-- **四端客户端**：Android App（扫码直连）、Wear OS 手表（抬腕速览 + 轻操作，无 GMS 国行表可用）、网页控制台 / PWA、Windows 桌面 exe 壳（Electron 与 Tauri 双壳共存）；多台 PC 的 relay 可聚合同屏（opt-in，默认单源）
+- **四端客户端**：Android App（扫码直连）、Wear OS 手表（抬腕速览 + 轻操作，无 GMS 国行表可用）、网页控制台 / PWA、Windows 桌面壳（Tauri 主推 3.4MB，Electron 过渡期保留）；多台 PC 的 relay 可聚合同屏（opt-in，默认单源）
 - **跨网络可达**：PC 与手机都只发出站连接（公司网络友好）；外出时 6 位配对码经云桥接入，端到端加密
 
 ## 架构
@@ -39,7 +39,7 @@ flowchart LR
         APP["📱 手机 App（expo-app / Android）"]
         WATCH["⌚ Wear OS 手表（wear-app）"]
         WEB["🌐 网页控制台 / PWA（web-console）"]
-        EXE["🖥️ 桌面壳 exe（Electron + Tauri 双壳）"]
+        EXE["🖥️ 桌面壳 exe（Tauri 主推 · Electron 过渡）"]
     end
 
     CLOUD["☁️ CF 云桥 cc.humumu.online<br/>零知识密文路由 · 默认公共桥 · 可自建"]
@@ -203,7 +203,7 @@ cd desktop-tauri && npx tauri build              # Tauri 平行壳
 cd relay && node scripts/build-plugin.mjs
 ```
 
-仓库布局：`relay/`（核心，协议唯一定义源 `relay/src/types.ts`）、`web-console/`（网页控制台）、`expo-app/`（Android 手机端 + 手表网关）、`wear-app/`（Wear OS 手表端）、`desktop/` 与 `desktop-tauri/`（桌面双壳，复用 web-console）、`cloud-bridge/` 与 `cloudflare/`（云桥双形态）、`mobile/`（APK 分发页）、`cc-plugins/`（Claude Code 插件成品）、`docs/` 与 `design/`（设计文档与技术评审）。
+仓库布局：`relay/`（核心，协议唯一定义源 `relay/src/types.ts`）、`web-console/`（网页控制台）、`expo-app/`（Android 手机端 + 手表网关）、`wear-app/`（Wear OS 手表端）、`desktop-tauri/`（桌面壳主推，3.4MB）与 `desktop/`（Electron，过渡期保留，复用 web-console）、`cloud-bridge/` 与 `cloudflare/`（云桥双形态）、`mobile/`（APK 分发页）、`cc-plugins/`（Claude Code 插件成品）、`docs/` 与 `design/`（设计文档与技术评审）。
 
 未签名 exe 首次运行会触发 SmartScreen 提示，选「更多信息 → 仍要运行」即可。
 
