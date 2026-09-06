@@ -707,7 +707,7 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
   tdItemMark: { color: c.done, fontSize: 12.5, fontWeight: "700", lineHeight: 18 },
   tdItem: { flex: 1, color: c.text, fontSize: 12.5, lineHeight: 18 },
   tdMore: { color: c.faint, fontSize: 11.5, marginTop: 7 },
-  tdBtnRow: { flexDirection: "row", gap: 8, marginTop: 12 },
+  tdBtnRow: { flexDirection: "row", gap: 8, marginTop: 12, justifyContent: "flex-end" },
   tdClear: {
     height: 30, paddingHorizontal: 13, borderRadius: 8, alignItems: "center", justifyContent: "center",
     backgroundColor: c.tintSoft, borderWidth: 1, borderColor: c.line,
@@ -761,7 +761,7 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
   cfX: { width: 24, height: 24, alignItems: "center", justifyContent: "center" },
   cfXT: { color: c.dim, fontSize: 12 },
   cfMore: { color: c.faint, fontSize: 11.5, marginTop: 7 },
-  cfBtnRow: { flexDirection: "row", gap: 8, marginTop: 9 },
+  cfBtnRow: { flexDirection: "row", gap: 8, marginTop: 9, justifyContent: "flex-end" },
   cfAll: {
     height: 28, paddingHorizontal: 10, borderRadius: 8, alignItems: "center", justifyContent: "center",
     backgroundColor: withA(c.brandA, 0.14), borderWidth: 1, borderColor: withA(c.brandA, 0.35),
