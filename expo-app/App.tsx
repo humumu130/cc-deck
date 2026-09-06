@@ -744,7 +744,7 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
   cfBadgeT: { color: "#06182E", fontSize: 11, fontWeight: "800" },
   // 展开卡：同 tdCard 形制；按会话分组——组头会话名（displaySrcName 缩写）+ 条目行
   cfCard: {
-    position: "absolute", right: 12, maxWidth: "94%", maxHeight: "78%",
+    position: "absolute", left: 12, right: 12, maxHeight: "78%",
     backgroundColor: c.panel, borderWidth: 1, borderColor: withA(c.brandA, 0.28),
     borderRadius: 16, paddingHorizontal: 14, paddingVertical: 12, elevation: 8,
   },
