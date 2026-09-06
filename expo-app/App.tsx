@@ -720,7 +720,7 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
   cfScrim: { position: "absolute", top: 0, left: 0, right: 0, bottom: 0 },
   // 小方钮：与 tdFab 同尺寸同圆角；落位（right/上偏）由 JSX 按 TaskDoneFloat 在场与否注入
   cfFab: {
-    position: "absolute", right: 12, width: 44, height: 44, borderRadius: 14,
+    position: "absolute", right: 12, width: 38, height: 38, borderRadius: 12,
     overflow: "visible",
   },
   cfFabDetail: {
@@ -730,17 +730,17 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
     backgroundColor: c.panel, borderWidth: 1, borderColor: withA(c.brandA, 0.5), elevation: 6,
   },
   cfFabHit: { flex: 1, alignItems: "center", justifyContent: "center", borderRadius: 14, overflow: "hidden" },
-  cfFabT: { color: c.brandA, fontSize: 17, fontWeight: "800" },
+  cfFabT: { color: c.brandA, fontSize: 15, fontWeight: "800" },
   cfBadge: {
-    position: "absolute", top: -6, right: -6, minWidth: 18, height: 18, borderRadius: 9,
-    paddingHorizontal: 5, backgroundColor: c.brandA, alignItems: "center", justifyContent: "center",
+    position: "absolute", top: -5, right: -5, minWidth: 16, height: 16, borderRadius: 8,
+    paddingHorizontal: 4, backgroundColor: c.brandA, alignItems: "center", justifyContent: "center",
     elevation: 5,
   },
   // 品牌蓝底上的深色徽标字（同 tdBadgeT 的深底浅字反向配色逻辑）
-  cfBadgeT: { color: "#06182E", fontSize: 11, fontWeight: "800" },
+  cfBadgeT: { color: "#06182E", fontSize: 10, fontWeight: "800" },
   // 展开卡：同 tdCard 形制；按会话分组——组头会话名（displaySrcName 缩写）+ 条目行
   cfCard: {
-    position: "absolute", right: 12, maxWidth: "84%", maxHeight: "70%",
+    position: "absolute", right: 12, maxWidth: "84%", maxHeight: "50%",
     backgroundColor: c.panel, borderWidth: 1, borderColor: withA(c.brandA, 0.28),
     borderRadius: 16, paddingHorizontal: 14, paddingVertical: 12, elevation: 8,
   },
