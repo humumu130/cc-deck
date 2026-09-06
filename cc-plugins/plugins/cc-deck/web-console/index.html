@@ -352,12 +352,6 @@
   #newform.open { display: flex; }
   #newform textarea { resize: vertical; min-height: 56px; }
   #newform .row { display: flex; justify-content: flex-end; gap: 8px; }
-  #addBtn {
-    width: 100%; padding: 10px; border-radius: 14px;
-    border: 1px dashed var(--border); background: transparent; color: var(--dim);
-    font-weight: 600; font-size: 13px;
-  }
-  #addBtn:hover { color: var(--brand); border-color: rgba(217,119,87,.6); background: transparent; }
 
   .card {
     background: var(--panel); border: 1px solid var(--border); border-radius: 14px;
@@ -2788,8 +2782,12 @@ function submitAnswer() {
   sendAnswer(answers);
 }
 
+// 输入草稿按会话存取（对齐 App drafts）：切走保存、切回恢复，发送时清
+const inputDrafts = new Map();
 function select(sid, srcId) {
+  if (selected) inputDrafts.set(selected.sid + "@" + selected.src, $("msginput").value);
   selected = { src: srcId, sid };
+  $("msginput").value = inputDrafts.get(sid + "@" + srcId) ?? "";
   document.body.classList.add("detail-open"); // ≤720px：详情覆盖层切换（桌面态该 class 无样式作用）
   activeTab = "activity";
   document.querySelectorAll(".tabs button.tab").forEach((b) => b.classList.toggle("active", b.dataset.tab === "activity"));
