@@ -93,7 +93,7 @@ const CHUNK = 400;
 
 // 运行时读 env（测试先 import 后设 CCR_INJECT_CMD）：非 Windows 明确报不支持，
 // 外部会话注入功能降级，managed 会话不受影响
-function injectSupported(): boolean {
+export function injectSupported(): boolean {
   return process.platform === "win32" || !!process.env.CCR_INJECT_CMD;
 }
 const ERR_UNSUPPORTED = "当前平台不支持按键注入（仅 Windows）";

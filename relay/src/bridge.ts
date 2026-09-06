@@ -7,7 +7,7 @@ import { fileURLToPath } from "node:url";
 import type { EventBus } from "./event-bus.js";
 import type { SessionManager } from "./session-manager.js";
 import type { BridgeEvent, PendingInput, WaitingPayload, TodoItem, SubagentInfo, AskQuestion } from "./types.js";
-import { injectText, injectEsc, injectEnter, ensureInjector } from "./injector.js";
+import { injectText, injectEsc, injectEnter, ensureInjector, injectSupported } from "./injector.js";
 import {
   addHiddenTodoKey,
 } from "./todo-hidden.js";
@@ -716,6 +716,11 @@ export class Bridge {
     const state = this.mgr.getExternal(sessionId);
     if (!state) return { ok: false, error: `会话不存在: ${sessionId}` };
     if (!text.trim()) return { ok: false, error: "空消息" };
+    // 平台不支持注入（macOS/Linux 无按键注入器）：明确报错而非排队后静默失败——
+    // 手机端"消息消失无反应"的根因（#303），ACK ok:false 让客户端弹原因
+    if (!injectSupported()) {
+      return { ok: false, error: "当前 relay 主机暂不支持向外部 CLI 会话注入输入（仅 Windows）；托管会话不受影响" };
+    }
     if (!state.cli_pid) return { ok: false, error: "尚未定位 CLI 进程，等该会话下次活动后重试" };
 
     const q = this.inputQueue.get(sessionId) ?? [];
