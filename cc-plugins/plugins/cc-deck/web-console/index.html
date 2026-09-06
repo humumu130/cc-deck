@@ -245,6 +245,37 @@
   .hbtn.on { color: var(--brand); border-color: rgba(217,119,87,.55); border-style: solid; }
   #densityBtn { margin-left: auto; }
 
+  /* #300 [待确认] 常驻横幅：顶栏下品牌色描边细条，列出含 [待确认] pending todo 的
+     会话；点行开详情"任务" tab，✕ 全部已读（localStorage 记 sid+ts 集合，集合变化重现） */
+  #confirmBar {
+    display: none; flex-direction: column; gap: 1px;
+    margin: 8px 14px 0; padding: 6px 10px 7px;
+    border: 1px solid rgba(217,119,87,.45); border-radius: 12px;
+    background: rgba(217,119,87,.09);
+  }
+  #confirmBar.show { display: flex; }
+  #confirmBar .cb-head { display: flex; align-items: center; gap: 7px; color: var(--brand); font-size: 12.5px; font-weight: 700; }
+  #confirmBar .cb-badge {
+    min-width: 18px; height: 18px; padding: 0 5px; border-radius: 9px;
+    background: rgba(217,119,87,.22); font-size: 10.5px; font-weight: 800;
+    display: inline-flex; align-items: center; justify-content: center;
+    font-variant-numeric: tabular-nums;
+  }
+  #confirmBar .cb-x {
+    margin-left: auto; color: var(--dim); font-size: 12.5px; font-weight: 400;
+    padding: 2px 4px; border-radius: 6px; cursor: pointer;
+  }
+  #confirmBar .cb-x:hover { color: var(--text); background: rgba(217,119,87,.12); }
+  #confirmBar .cb-row {
+    display: flex; align-items: center; gap: 7px; padding: 2.5px 2px 2.5px 25px;
+    color: var(--dim); font-size: 12px; cursor: pointer; border-radius: 6px;
+  }
+  #confirmBar .cb-row:hover { color: var(--text); background: rgba(217,119,87,.1); }
+  #confirmBar .cb-row .cb-n { color: var(--brand); font-weight: 700; font-variant-numeric: tabular-nums; flex: none; }
+  #confirmBar .cb-row .cb-t { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  #confirmBar .cb-row .cb-go { color: var(--brand); font-weight: 700; flex: none; }
+  #confirmBar .cb-more { color: var(--faint); font-size: 11px; padding-left: 25px; }
+
   /* 侧栏底部：新建会话（表单 + 按钮，风格贴合会话卡片） */
   #newbox { flex: none; border-top: 1px solid var(--border); padding: 12px 14px calc(14px + env(safe-area-inset-bottom)); background: var(--side-bg); }
   #newform { display: none; flex-direction: column; gap: 8px; margin-bottom: 10px; }
@@ -754,6 +785,8 @@
       <div id="connChip" title="连接设置"><i></i><span id="connText">未连接</span></div>
       <button id="themeBtn" title="深浅色切换">☀️</button>
     </header>
+
+    <div id="confirmBar"></div>
 
     <div id="rhPop">
       <div class="rh-row"><i style="background:var(--working)"></i>working</div>
@@ -1856,6 +1889,50 @@ function allSessions() {
   for (const ctx of ctxs.values()) for (const s of ctx.sessions.values()) out.push({ ctx, s });
   return out;
 }
+
+// ---------- #300 [待确认] 常驻横幅（与手机端 fmt.isConfirmTodo 同款正则/口径） ----------
+// pending + content 含 [待确认]（含全角〔〕【】变体）= 等用户确认的事项。
+// 标记与任务号前缀 "#NNN [待确认] …" 共存，用包含匹配而非行首
+const CONFIRM_RE = /[〔\[【]\s*待确认\s*[〕\]】]/;
+function isConfirmTodo(t) { return t.status === "pending" && CONFIRM_RE.test(t.content || ""); }
+// 含 [待确认] 事项的会话汇总（按更新时间倒序，首行跳最新会话）；k = 该会话当前
+// 待确认集合指纹（id:status:content）——✕ 已读记 localStorage（sid → {t: ts, k: 指纹}），
+// 集合一变（新增/完成/去标记）指纹不匹配横幅自动重现
+function confirmRows() {
+  const out = [];
+  for (const { ctx, s } of allSessions()) {
+    const items = (s.todos ?? []).filter(isConfirmTodo);
+    if (!items.length) continue;
+    out.push({ ctx, s, n: items.length, k: items.map((t) => (t.id ?? "-") + ":" + t.status + ":" + t.content).join("|") });
+  }
+  return out.sort((a, b) => (b.s.updated_at || b.s.started_at) - (a.s.updated_at || a.s.started_at));
+}
+function confirmReadMap() { try { return JSON.parse(lsGet("ccr_confirm_read") || "{}") || {}; } catch { return {}; } }
+function renderConfirmBar() {
+  const box = $("confirmBar");
+  const read = confirmReadMap();
+  const fresh = confirmRows().filter((r) => !read[r.s.session_id] || read[r.s.session_id].k !== r.k);
+  // key 守卫（同 cards 口径）：快照流式重渲不重建 DOM
+  const key = fresh.map((r) => r.s.session_id + ":" + r.n + ":" + r.k).join("|");
+  if (box.dataset.key === key) return;
+  box.dataset.key = key;
+  if (!fresh.length) { box.classList.remove("show"); box.innerHTML = ""; return; }
+  const total = fresh.reduce((a, r) => a + r.n, 0);
+  let html =
+    '<div class="cb-head"><span class="cb-badge">' + (total > 9 ? "9+" : total) + "</span>" +
+    "<span>" + total + " 项待你确认</span>" +
+    '<span class="cb-x" title="全部已读（集合变化后重新提醒）">✕</span></div>';
+  for (const r of fresh.slice(0, 4)) {
+    html +=
+      '<div class="cb-row" data-sid="' + escapeHtml(r.s.session_id) + '" data-src="' + escapeHtml(r.ctx.cfg.id) + '" title="打开任务清单">' +
+      '<span class="cb-n">' + r.n + "</span>" +
+      '<span class="cb-t">' + escapeHtml(r.s.title || "未命名会话") + "</span>" +
+      '<span class="cb-go">›</span></div>';
+  }
+  if (fresh.length > 4) html += '<div class="cb-more">…另有 ' + (fresh.length - 4) + " 个会话</div>";
+  box.classList.add("show");
+  box.innerHTML = html;
+}
 const SRC_COLORS = ["#D97757", "#5B9DFF", "#2BD98F", "#FFC53D", "#C792EA", "#F06292", "#4DD0E1", "#7E57C2"];
 function srcColor(id) {
   let h = 0;
@@ -1929,6 +2006,7 @@ function render() {
     $("runhint").textContent = anyOnline ? "已连接 · 暂无会话" : "等待连接";
   }
   renderSrcChips();
+  renderConfirmBar(); // #300 [待确认] 常驻横幅（key 守卫，重渲代价极小）
 
   // #279⑨ 折叠空闲（对齐手机）：仅 DONE>0 时可见，开着时隐藏 DONE 卡（顶部计数仍全量）
   const ib = $("idleBtn");
@@ -3200,6 +3278,27 @@ $("timeline").addEventListener("click", (ev) => {
   if (ref) { jumpToTask(Number(ref.dataset.n)); return; }
   const del = ev.target.closest(".todo-del");
   if (del) { hideTodo(del.dataset.c); return; }
+});
+
+// #300 待确认横幅交互（同上委托口径）：行 → 开该会话详情"任务" tab；✕ → 当前
+// 集合全部已读（localStorage 记 sid+ts+指纹，集合变化后自动重现），顺手清掉已消亡
+// 会话的残留条目防 map 无限增长
+$("confirmBar").addEventListener("click", (ev) => {
+  const x = ev.target.closest(".cb-x");
+  if (x) {
+    const rows = confirmRows();
+    const read = {};
+    for (const r of rows) read[r.s.session_id] = { t: Date.now(), k: r.k };
+    lsSet("ccr_confirm_read", JSON.stringify(read));
+    $("confirmBar").dataset.key = "";
+    renderConfirmBar();
+    return;
+  }
+  const row = ev.target.closest(".cb-row");
+  if (row) {
+    select(row.dataset.sid, row.dataset.src); // select 内部切回"消息"tab，紧接直落"任务"
+    switchTab("todos");
+  }
 });
 
 // 秒级走时：已等待/耗时/回合计时每秒刷新（innerHTML 由 key 守卫，代价极小）
