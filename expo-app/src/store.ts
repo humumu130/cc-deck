@@ -368,6 +368,14 @@ class RelayStore {
       // 聚合时只建/换该源不拆其他源并设 active（applyConfig 天然满足）；活动源
       // 目标一致且在连则被幂等跳过，不拆重建
       this.applyConfig(conn, entry, tk);
+      // 单源带令牌切源：旧活动源连接同步拆掉防僵尸（#294 审查修复——此前 tk 分支
+      // 漏拆，切源后旧源 socket 仍在后台收事件）。connDisconnect 保留 sessions/
+      // timelines/lastSeq 缓存，回切按 last_seq 续传，与下方无令牌分支同语义
+      if (!this.aggregate && prevId) {
+        const prev = this.conns.get(prevId);
+        if (prev) this.connDisconnect(prev);
+        this.emit();
+      }
     } else if (!this.aggregate && prevId) {
       // 单源切到无令牌源：无新连接可建，旧连接同步拆掉防僵尸（#291 纪律），
       // 状态落到"未配置"引导补输令牌
