@@ -1,4 +1,5 @@
 import { mkdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
+import { homedir } from "node:os";
 import { join, resolve } from "node:path";
 import { devId } from "./e2e.js";
 import type { EventBus } from "./event-bus.js";
@@ -37,6 +38,48 @@ import type {
 
 function isManagedMode(m: unknown): m is ManagedPermissionMode {
   return m === "default" || m === "acceptEdits" || m === "plan";
+}
+
+// #293 新增会话工作目录三级回落：手机指定目录 → 默认目录（CCR_CWD）→ 用户主目录。
+// 目录校验必须 try/catch：目录不存在/不可访问时 statSync 直接抛 ENOENT，旧实现裸调
+// 把 errno 原文抛给手机端（Mac 源启动目录失效时"新增会话"必失败且提示不可读）。
+// 未配置或校验失败一律回落 homedir（跨平台）并返回人话说明；完全无可用目录时
+// cwd 返回空串，由调用方把说明当错误上屏（含建议值）。
+export function resolveCreateCwd(
+  rawCwd: string,
+  defaultCwd: string,
+): { cwd: string; fallbackNote: string } {
+  const isUsableDir = (p: string): boolean => {
+    if (!p) return false;
+    try {
+      return statSync(p).isDirectory();
+    } catch {
+      return false; // 不存在/无权访问/非目录：一律视为不可用
+    }
+  };
+
+  const wanted = (rawCwd || "").trim() || (defaultCwd || "").trim();
+  if (wanted) {
+    const abs = resolve(wanted);
+    if (isUsableDir(abs)) return { cwd: abs, fallbackNote: "" };
+  }
+
+  const home = homedir();
+  const wantedDesc = wanted
+    ? `指定的工作目录 ${resolve(wanted)} 不是有效目录（不存在或无法访问）`
+    : "未指定工作目录，且默认目录未配置（CCR_CWD）";
+  const suggest =
+    '如需固定工作目录，请设置 CCR_CWD 环境变量指向实际项目目录（如 Windows "D:\\projects\\myapp"、macOS/Linux "~/projects/myapp"）后重启 relay';
+  if (isUsableDir(home)) {
+    return {
+      cwd: home,
+      fallbackNote: `${wantedDesc}，本次已回落用户主目录 ${home}。${suggest}`,
+    };
+  }
+  return {
+    cwd: "",
+    fallbackNote: `${wantedDesc}，用户主目录 ${home} 也无法访问，无法创建会话。请在手机端填写有效的工作目录。${suggest}`,
+  };
 }
 
 const PERM_MODE_ZH: Record<ManagedPermissionMode, string> = {
@@ -710,10 +753,9 @@ export class SessionManager {
   }
 
   private create(rawCwd: string, prompt: string): string {
-    const cwd = resolve(rawCwd || this.cfg.defaultCwd);
-    if (!statSync(cwd).isDirectory()) {
-      throw new Error(`cwd 不是有效目录: ${cwd}`);
-    }
+    // #293 三级回落：指定/默认目录无效时回落用户主目录（说明进时间线），完全无可用目录才报错
+    const { cwd, fallbackNote } = resolveCreateCwd(rawCwd, this.cfg.defaultCwd);
+    if (!cwd) throw new Error(fallbackNote);
     this.evictOldSessions();
 
     const managed: ManagedSession = {
@@ -752,6 +794,13 @@ export class SessionManager {
       title: managed.state.title,
       model: this.cfg.model,
     });
+    // 目录回落说明进时间线：手机端能看到会话为何落在用户主目录，relay 日志同步留痕
+    if (fallbackNote) {
+      const entry: LogEntry = { ts: Date.now(), kind: "system", text: fallbackNote };
+      managed.logs.push(entry);
+      this.bus.emit(managed.state.session_id, "SESSION_LOG", entry);
+      console.log(`[create-cwd] ${agent.id.slice(0, 8)} ${fallbackNote}`);
+    }
     this.requestSmartTitle(agent.id, prompt);
     return agent.id;
   }

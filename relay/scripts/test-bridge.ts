@@ -985,6 +985,48 @@ assert(ack24.ok === false, "empty rename rejected");
   rmSync(T, { force: true });
 }
 
+// 41. #293 新增会话默认目录回落：未配置 CCR_CWD 时默认 homedir；指定/默认目录无效
+//     （不存在/是文件/statSync 抛错）回落 homedir 且说明含原目录与 CCR_CWD 建议值；
+//     有效指定目录 > 配置默认目录的优先级不变
+{
+  const { resolveCreateCwd } = await import("../src/session-manager.js");
+  const { homedir } = await import("node:os");
+  const { resolve } = await import("node:path");
+  const home = homedir();
+  mkdirSync(PROOT, { recursive: true });
+
+  // ① 无指定 + 无默认 → homedir，说明含 CCR_CWD 建议值
+  const r1 = resolveCreateCwd("", "");
+  assert(r1.cwd === home && r1.fallbackNote.includes("CCR_CWD"), "41 no cwd & no default falls back to homedir with CCR_CWD hint");
+
+  // ② Mac 源事故形态：默认目录指向已删除的启动目录（statSync 抛 ENOENT 而非返回 false）→ 回落
+  const gone = join(PROOT, "gone-cwd");
+  mkdirSync(gone, { recursive: true });
+  rmSync(gone, { recursive: true, force: true });
+  const r2 = resolveCreateCwd("", gone);
+  assert(r2.cwd === home && r2.fallbackNote.includes("gone-cwd"), "41 deleted default cwd falls back to homedir, note names it");
+
+  // ③ 指定路径是文件（存在但非目录）→ 回落
+  const aFile = join(PROOT, "not-a-dir.txt");
+  writeFileSync(aFile, "x");
+  assert(resolveCreateCwd(aFile, "").cwd === home, "41 file path as cwd falls back to homedir");
+  rmSync(aFile, { force: true });
+
+  // ④ 有效指定目录优先于默认目录；⑤ 配置的默认目录（CCR_CWD 形态）直接采用不回落
+  assert(resolveCreateCwd(PROOT, "Z:/definitely-missing").cwd === resolve(PROOT), "41 valid raw cwd wins over default");
+  assert(resolveCreateCwd("", PROOT).cwd === resolve(PROOT), "41 configured default cwd used as-is");
+
+  // ⑥ 配置层：未设 CCR_CWD → defaultCwd 即 homedir（不再拿启动目录当默认）；设置后优先级不变
+  const hadCwd = process.env.CCR_CWD;
+  delete process.env.CCR_CWD;
+  assert(loadConfig().defaultCwd === home, "41 config: absent CCR_CWD defaults to homedir");
+  process.env.CCR_CWD = PROOT;
+  assert(loadConfig().defaultCwd === PROOT, "41 config: CCR_CWD keeps priority");
+  if (hadCwd === undefined) delete process.env.CCR_CWD;
+  else process.env.CCR_CWD = hadCwd;
+  rmSync(PROOT, { recursive: true, force: true });
+}
+
 wsCur!.close();
 await wait(300);
 console.log("\nBRIDGE TESTS PASSED");
