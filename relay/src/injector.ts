@@ -105,54 +105,51 @@ function run(args: string[]): Promise<InjectResult> {
 
 const CHUNK = 400;
 
-// ---------- macOS（#305）：osascript + System Events ----------
-// keystroke 发给"焦点窗口"，所以先按 unix id 精确定位目标进程并 set frontmost 把它
-// 带到前台（node 等后台进程没有自己的窗口，frontmost 是尽力而为唤起宿主终端）。
-// 注入后不还原前台——保持简单，多会话连发时最后注入的会话留在前台。
-// AppleScript key code：36=Return，53=Escape
-const KEY_ENTER = 36;
-const KEY_ESC = 53;
+// ---------- macOS（#305 第七轮）：Terminal `do script ... in tab` ----------
+// 前六轮 System Events keystroke 全链路 code=0 但键不落 claude 终端（TUI 拒收合成键盘
+// 事件 / key window 命不中双假设未破）。本轮换原生通道：按 pid 反查 tty → 遍历 Terminal
+// 窗口命中 tty 的标签页 → `do script "text" in selected tab`。do script 的语义是
+// "往该标签页打字并回车"——字节经 tty 行规范进入前台程序（claude 读的是真实输入流，
+// 与真人敲键盘同路径），不经合成事件、不需要辅助功能权限、不抢焦点。
+// 注意：do script 一定追加 Return（整段文本一次调用正好=提交）；relay 需在 Terminal.app
+// 内运行（自己 tell 自己免 TCC；sshd/nohup 上下文会吃 Automation 拒绝）。
 
-// AppleScript 字符串字面量转义：反斜杠、双引号（keystroke 的 text 参数是字面量）
+// AppleScript 字符串字面量转义：反斜杠、双引号（do script 的 command 参数是字面量）
 function escapeApple(text: string): string {
   return text.replace(/\\/g, "\\\\").replace(/"/g, '\\"');
 }
 
-// 组装 System Events 脚本（导出供测试断言命令串结构，Windows 上不真跑 osascript）
-export function buildAppleScript(pid: number, actions: string[]): string {
-  // pid 是 claude 子进程（node），System Events 无对应 GUI process——keystroke 会
-  // 静默落空（实测根因①）。keystroke 打给前台应用的 key window，Terminal 多窗口时
-  // key window 可能是 relay 自己（实测根因②）。正解：按 pid 反查 tty，遍历 Terminal
-  // 窗口选中 tty 匹配的目标窗口置前，再 keystroke。
+// 组装 do-script 脚本（导出供测试断言结构，Windows 上不真跑 osascript）。
+// 文本走 buildDoScript（字面量转义）；ESC 等 ctrl 字符走 buildDoScriptExpr（传 AppleScript
+// 表达式，如 "ASCII character 27"——字面量里写  会被当五个字符打出来）
+export function buildDoScript(pid: number, command: string): string {
+  return buildDoScriptExpr(pid, `"${escapeApple(command)}"`);
+}
+
+export function buildDoScriptExpr(pid: number, expr: string): string {
   return [
     "tell application \"Terminal\"",
     `	set targetTty to do shell script "ps -o tty= -p ${pid}"`,
     "	repeat with w in windows",
     "		try",
     "			if tty of selected tab of w ends with targetTty then",
-    "				set frontmost of w to true",
+    `				do script (${expr}) in selected tab of w`,
     "				exit repeat",
     "			end if",
     "		end try",
     "	end repeat",
-    "	activate",
-    "end tell",
-    "delay 0.15",
-    'tell application "System Events"',
-    ...actions.map((a) => `	${a}`),
     "end tell",
   ].join("\n");
 }
 
-const appleKeystroke = (text: string) => `keystroke "${escapeApple(text)}"`;
-const appleKeyCode = (code: number) => `key code ${code}`;
-
-// 辅助功能（Accessibility）未授权：osascript 以 -25211/-1719 失败（sshd 会话/终端不在
-// 系统设置→隐私与安全性→辅助功能白名单）——翻译成一次性授权指引（导出供测试）
+// Automation 权限拒绝（-25211/-1743）：relay 跑在 sshd/nohup 上下文时 tell Terminal
+// 会被 TCC 拦——翻译成人话（导出供测试）。辅助功能（-1719）已不再需要，保留映射兜底旧错。
 export function mapAppleError(stderr: string): string | undefined {
-  return /(?:-25211|-1719)\b/.test(stderr)
-    ? "需要在 Mac 系统设置→隐私与安全性→辅助功能中授权（给 sshd-keygen-wrapper/终端），一次性操作"
-    : undefined;
+  return /-25211\b|-1743\b/.test(stderr)
+    ? "Mac relay 需在 Terminal 窗口内运行（sshd/nohup 上下文无权自动化 Terminal；或给对应进程授 Terminal 自动化权限）"
+    : /-1719\b/.test(stderr)
+      ? "需要在 Mac 系统设置→隐私与安全性→辅助功能中授权（旧 keystroke 路径遗留，do script 理论上不再需要）"
+      : undefined;
 }
 
 function runAppleScript(script: string): Promise<InjectResult> {
@@ -200,14 +197,8 @@ async function injectTextMac(pid: number, rawText: string): Promise<InjectResult
   if (!macTargetIsCliHost(pid)) return { ok: false, error: "pid-reuse" };
   const text = rawText.replace(/[\r\n]+/g, " ").trim();
   if (!text) return { ok: false, error: "空消息" };
-  for (let i = 0; i < text.length; i += CHUNK) {
-    const last = i + CHUNK >= text.length;
-    const actions = [appleKeystroke(text.slice(i, i + CHUNK)), ...(last ? [appleKeyCode(KEY_ENTER)] : [])];
-    const r = await runAppleScript(buildAppleScript(pid, actions));
-    if (!r.ok) return r;
-    if (!last) await new Promise((r2) => setTimeout(r2, 120));
-  }
-  return { ok: true };
+  // do script 单次整段注入（无 keystroke 的长度可靠性问题，不切分；自带 Return 提交）
+  return runAppleScript(buildDoScript(pid, text));
 }
 
 // 运行时读 env（测试先 import 后设 CCR_INJECT_CMD）：非 Windows/macOS 明确报不支持，
@@ -244,7 +235,9 @@ export async function injectEsc(pid: number): Promise<InjectResult> {
   if (!ensureInjector()) return { ok: false, error: "注入器不可用" };
   if (useAppleInjector()) {
     if (!macTargetIsCliHost(pid)) return { ok: false, error: "pid-reuse" };
-    return runAppleScript(buildAppleScript(pid, [appleKeyCode(KEY_ESC)]));
+    // do script 只能打"文本+Return"：ESC 用 ASCII 27 表达式注入，尾随 Return 对 claude
+    // 是"打断后提交空输入"，实测无害
+    return runAppleScript(buildDoScriptExpr(pid, "ASCII character 27"));
   }
   if (!targetIsCliHost(pid)) return { ok: false, error: "pid-reuse" };
   return run([String(pid), "--esc"]);
@@ -258,7 +251,7 @@ export async function injectEnter(pid: number): Promise<InjectResult> {
   if (!ensureInjector()) return { ok: false, error: "注入器不可用" };
   if (useAppleInjector()) {
     if (!macTargetIsCliHost(pid)) return { ok: false, error: "pid-reuse" };
-    return runAppleScript(buildAppleScript(pid, [appleKeyCode(KEY_ENTER)]));
+    return runAppleScript(buildDoScriptExpr(pid, '""'));
   }
   if (!targetIsCliHost(pid)) return { ok: false, error: "pid-reuse" };
   return run([String(pid), ""]);
