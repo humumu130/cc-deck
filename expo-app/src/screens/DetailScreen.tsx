@@ -105,7 +105,7 @@ function TranscriptRow({ e, open, onToggle, onContentMenu, onTaskRef }: { e: Log
       >
         <Text style={[d.trThinkHead, { fontSize: pf.thinkHead }]}>{open ? "▾ 思考过程" : `▸ 思考过程 · ${src.length} 字`}{e.ts ? ` · ${fmtHM(e.ts)}` : ""}</Text>
         <Collapse open={open}>
-          <MdText src={src} selectable style={{ ...d.trThinkT, fontSize: pf.think, lineHeight: pf.thinkLH }} />
+          <MdText src={src} selectable onTaskRef={onTaskRef} style={{ ...d.trThinkT, fontSize: pf.think, lineHeight: pf.thinkLH }} />
         </Collapse>
       </Pressable>
     );
@@ -114,7 +114,7 @@ function TranscriptRow({ e, open, onToggle, onContentMenu, onTaskRef }: { e: Log
     return (
       <View style={d.trMsg}>
         {e.ts ? <Text style={d.trMsgTime}>{fmtHM(e.ts)}</Text> : null}
-        <MdText src={open ? (e.full ?? e.text) : e.text} selectable />
+        <MdText src={open ? (e.full ?? e.text) : e.text} selectable onTaskRef={onTaskRef} />
         {cursor}
         {e.full ? (
           <Pressable onPress={onToggle} hitSlop={6}>
