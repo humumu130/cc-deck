@@ -1027,6 +1027,53 @@ assert(ack24.ok === false, "empty rename rejected");
   rmSync(PROOT, { recursive: true, force: true });
 }
 
+// 42. #305 macOS 按键注入器（darwin 分支）：osascript 命令串组装（unix id 定位 / frontmost /
+//     keystroke 转义 / key code / 超长分段 / 换行折叠）与辅助功能权限错误翻译。
+//     测试跑在 Windows 上：CCR_TEST_PLATFORM=darwin 强制走 macOS 分发 + CCR_OSASCRIPT_CMD 假
+//     osascript（fake-injector.mjs 记录 argv），不真跑 osascript
+{
+  const { injectText, injectEsc, injectEnter, mapAppleError } = await import("../src/injector.js");
+  const savedCmd = process.env.CCR_INJECT_CMD;
+  delete process.env.CCR_INJECT_CMD; // 假注入器优先于平台分支，本段让位给 darwin 路径
+  process.env.CCR_TEST_PLATFORM = "darwin";
+  process.env.CCR_OSASCRIPT_CMD = fileURLToPath(new URL("./fake-injector.mjs", import.meta.url));
+  const appleLog = () => fakeLog().filter((a) => a[0] === "-e").map((a) => String(a[1]));
+  try {
+    // ① 短文本：按 unix id 定位 + frontmost 前置 + 转义 keystroke + key code 36 收尾
+    assert((await injectText(5555, '带"引号"与\\反斜杠')).ok, "42 darwin injectText ok via fake osascript");
+    const s1 = appleLog().at(-1)!;
+    assert(s1.includes("whose unix id is 5555"), "42 targets process by unix id");
+    assert(s1.includes("set frontmost to true"), "42 brings target frontmost before keystroke");
+    assert(s1.includes('keystroke "带\\"引号\\"与\\\\反斜杠"'), "42 keystroke escapes quotes and backslashes");
+    assert(s1.includes("key code 36"), "42 text ends with enter (key code 36)");
+    // ② 换行折叠（与 Windows 行为一致：单行 keystroke）
+    assert((await injectText(5555, "第一行\n第二行")).ok, "42 multiline inject ok");
+    assert(appleLog().at(-1)!.includes('keystroke "第一行 第二行"'), "42 newlines folded to spaces");
+    // ③ 超长分段：非末段无 key code，末段带回车
+    const before3 = appleLog().length;
+    assert((await injectText(5555, "长".repeat(401) + "尾")).ok, "42 long text inject ok");
+    const segs = appleLog().slice(before3);
+    assert(segs.length === 2, "42 long text split into 2 chunks");
+    assert(!segs[0].includes("key code"), "42 non-last chunk carries no enter");
+    assert(segs[1].includes("key code 36"), "42 last chunk carries enter");
+    // ④ Esc / 纯回车：key code 53 / 36，无 keystroke
+    assert((await injectEsc(5555)).ok, "42 darwin injectEsc ok");
+    const esc = appleLog().at(-1)!;
+    assert(esc.includes("key code 53") && !esc.includes("keystroke"), "42 esc maps to key code 53 alone");
+    assert((await injectEnter(5555)).ok, "42 darwin injectEnter ok");
+    const ent = appleLog().at(-1)!;
+    assert(ent.includes("key code 36") && !ent.includes("keystroke"), "42 enter maps to key code 36 alone");
+  } finally {
+    delete process.env.CCR_TEST_PLATFORM;
+    delete process.env.CCR_OSASCRIPT_CMD;
+    if (savedCmd !== undefined) process.env.CCR_INJECT_CMD = savedCmd;
+  }
+  // ⑤ 纯函数：辅助功能未授权错误翻译（-25211 / -1719），其他错误透传
+  assert((mapAppleError("execution error: System Events got an error: ... (-25211)") ?? "").includes("辅助功能"), "42 -25211 translated to accessibility hint");
+  assert((mapAppleError("execution error: ... (-1719)") ?? "").includes("辅助功能"), "42 -1719 translated to accessibility hint");
+  assert(mapAppleError("execution error: other (-1750)") === undefined, "42 other osascript errors pass through");
+}
+
 wsCur!.close();
 await wait(300);
 console.log("\nBRIDGE TESTS PASSED");
