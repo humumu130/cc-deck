@@ -1457,9 +1457,9 @@ function MicIcon({ color }: { color: string }) {
 
 const makeStyles = (c: ThemeColors) => StyleSheet.create({
   safe: { flex: 1, backgroundColor: c.bg },
-  // 回到底部浮钮（#322）
+  // 回到底部浮钮（#322）：right 66 避让任务完成悬浮钮（44dp@right12）
   jumpFab: {
-    position: "absolute", right: 14, width: 40, height: 40, borderRadius: 20,
+    position: "absolute", right: 66, width: 40, height: 40, borderRadius: 20,
     alignItems: "center", justifyContent: "center",
     backgroundColor: c.panel2, borderWidth: 1, borderColor: c.line, elevation: 4,
   },
