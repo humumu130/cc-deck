@@ -124,36 +124,60 @@
   #rhPop.open { display: flex; flex-direction: column; gap: 7px; }
   .rh-row { display: flex; align-items: center; gap: 8px; font-size: 12.5px; color: var(--text); }
   .rh-row i { width: 8px; height: 8px; border-radius: 50%; flex: none; }
-  /* ⚙ 设置浮层：与 rhPop 同款面板，行点击镜像触发散装开关 */
+  /* 左下角双悬浮钮（＋ 新建在上、⚙ 设置在下）：裸图标无边框，齿轮中心方向箭头随抽屉开合旋转 */
+  #sideFabs { position: absolute; left: 14px; bottom: 72px; z-index: 46; display: flex; flex-direction: column; gap: 10px; }
+  .sfab {
+    width: 42px; height: 42px; border: none; background: none; cursor: pointer;
+    display: flex; align-items: center; justify-content: center; position: relative;
+    color: var(--dim); border-radius: 50%; padding: 0;
+  }
+  .sfab:hover { color: var(--text); background: rgba(127,127,127,.14); }
+  .sfab svg { width: 28px; height: 28px; display: block; }
+  #addBtn svg { transition: transform .2s ease; }
+  #addBtn.on svg { transform: rotate(45deg); }
+  #gearBtn .gchev {
+    position: absolute; top: 50%; left: 50%;
+    font-style: normal; font-size: 12px; line-height: 1; font-weight: 700;
+    transform: translate(-50%, -54%); transition: transform .2s ease;
+    text-shadow: 0 0 5px var(--bg), 0 0 5px var(--bg);
+  }
+  #gearBtn .gchev::after { content: "›"; }
+  #gearBtn.on .gchev { transform: translate(-50%, -54%) rotate(90deg); }
+  /* 设置抽屉：从整个面板左侧滑出、覆盖会话栏（对齐 App SettingsDrawer 形态），齿轮悬浮其上 */
   #gearPop {
-    display: flex; flex-direction: column; gap: 2px;
-    position: absolute; top: 60px; left: 16px; z-index: 40; width: 316px;
-    max-height: calc(100vh - 96px); overflow-y: auto;
-    background: var(--panel); border: 1px solid var(--border); border-radius: 12px;
-    padding: 10px 12px; box-shadow: 0 8px 28px rgba(0,0,0,.4);
-    visibility: hidden; opacity: 0; transform: translateY(-6px) scale(.985); pointer-events: none;
-    transition: opacity .16s ease, transform .16s ease, visibility .16s;
+    position: absolute; inset: 0; z-index: 45; display: flex; flex-direction: column;
+    background: var(--bg-soft); border-right: 1px solid var(--border);
+    padding: 0 12px 14px; overflow-y: auto;
+    transform: translateX(-102%); visibility: hidden; transition: transform .22s ease, visibility .22s;
   }
-  #gearPop .panel { background: none; border-bottom: none; padding: 2px 2px 6px; }
-  #gearPop.open { visibility: visible; opacity: 1; transform: none; pointer-events: auto; }
-  #gearBtn i {
-    font-style: normal; font-size: 9px; line-height: 1; display: inline-block;
-    margin-left: 1px; transition: transform .16s ease;
+  #gearPop.open { transform: none; visibility: visible; }
+  #gearPop .panel { background: none; border: none; padding: 0; }
+  .gp-head {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 16px 6px 8px; font-size: 15px; font-weight: 700; color: var(--text);
+    position: sticky; top: 0; background: var(--bg-soft); z-index: 2;
   }
-  #gearBtn i::after { content: "›"; }
-  #gearBtn.on i { transform: rotate(90deg); }
-  .gp-sec { font-size: 10.5px; color: var(--dim); letter-spacing: .06em; padding: 6px 4px 3px; }
-  .gp-sec:first-child { padding-top: 2px; }
+  .gp-head button { border: none; background: none; color: var(--dim); font-size: 15px; cursor: pointer; padding: 4px 8px; }
+  .gp-head button:hover { color: var(--text); }
+  .gp-card { background: var(--panel); border: 1px solid var(--border); border-radius: 14px; padding: 2px 2px 8px; margin-bottom: 12px; }
+  .gp-sec { font-size: 11px; color: var(--dim); letter-spacing: .06em; padding: 10px 10px 4px; }
   .gp-row {
     display: flex; align-items: center; justify-content: space-between; gap: 10px;
-    font-size: 12.5px; color: var(--text); padding: 6px 8px; border-radius: 8px; cursor: pointer;
+    font-size: 12.5px; color: var(--text); padding: 8px 10px; border-radius: 9px; cursor: pointer;
   }
-  .gp-row:hover { background: var(--tint-soft, rgba(127,127,127,.12)); }
+  .gp-row:hover { background: rgba(127,127,127,.12); }
   .gp-row b { font-weight: 600; color: var(--dim); font-size: 12px; }
   .gp-static { cursor: default; }
   .gp-static:hover { background: none; }
-  .gp-links { display: flex; gap: 8px; padding: 8px 8px 4px; }
+  .gp-links { display: flex; gap: 10px; padding: 4px 10px 6px; }
   .gp-links a { font-size: 12px; color: var(--brand, #D97757); text-decoration: none; }
+  /* 空详情态 CTA：直达新建表单 */
+  #emptyNewBtn {
+    margin-top: 16px; padding: 9px 22px; border-radius: 12px; cursor: pointer;
+    background: var(--grad); color: #fff; border: none; font-size: 13.5px; font-weight: 600;
+    box-shadow: 0 4px 18px rgba(217,119,87,.28);
+  }
+  #emptyNewBtn:hover { filter: brightness(1.07); }
   header .spacer { flex: 1; }
 
   #connChip {
@@ -835,7 +859,6 @@
       <div class="spacer"></div>
       <div id="connChip" title="连接设置"><i></i><span id="connText">未连接</span></div>
       <button id="themeBtn" title="深浅色切换">☀️</button>
-      <button id="gearBtn" title="设置">⚙<i></i></button>
     </header>
 
     <div id="rhPop">
@@ -845,40 +868,46 @@
       <div class="rh-row"><i style="background:var(--done)"></i>done</div>
     </div>
 
-    <div id="gearPop">
-      <div class="gp-sec">服务器</div>
-      <div class="panel" id="connPanel">
-        <div id="srvList"></div>
-        <div class="conn-form">
-          <div class="seg" id="cmodeSeg">
-            <button type="button" data-m="lan">直连</button>
-            <button type="button" data-m="cloud">云桥</button>
+    <aside id="gearPop">
+      <div class="gp-head"><b>设置</b><button id="gearClose" title="收起">✕</button></div>
+      <div class="gp-card">
+        <div class="gp-sec">服务器</div>
+        <div class="panel" id="connPanel">
+          <div id="srvList"></div>
+          <div class="conn-form">
+            <div class="seg" id="cmodeSeg">
+              <button type="button" data-m="lan">直连</button>
+              <button type="button" data-m="cloud">云桥</button>
+            </div>
+            <input id="srvName" placeholder="名称（可选）">
+            <input id="url" placeholder="ws://<pc-ip>:8787/ws">
+            <input id="token" placeholder="token">
+            <div class="conn-actions">
+              <button id="cancelEdit" style="display:none">取消</button>
+              <button id="saveSrvBtn" class="primary">添加直连</button>
+            </div>
           </div>
-          <input id="srvName" placeholder="名称（可选）">
-          <input id="url" placeholder="ws://<pc-ip>:8787/ws">
-          <input id="token" placeholder="token">
-          <div class="conn-actions">
-            <button id="cancelEdit" style="display:none">取消</button>
-            <button id="saveSrvBtn" class="primary">添加直连</button>
+          <div id="pairBox">
+            <input id="pairCode" inputmode="numeric" maxlength="6" placeholder="6 位配对码" autocomplete="off">
+            <button id="pairBtn" class="primary">配对</button>
           </div>
+          <div class="pair-hint" id="pairHint">云桥未配对时输入 <b>6 位配对码</b>（手机 App 或家里 PC 领取，20 分钟内有效），配对成功落成一条云源</div>
         </div>
-        <div id="pairBox">
-          <input id="pairCode" inputmode="numeric" maxlength="6" placeholder="6 位配对码" autocomplete="off">
-          <button id="pairBtn" class="primary">配对</button>
-        </div>
-        <div class="pair-hint" id="pairHint">云桥未配对时输入 <b>6 位配对码</b>（手机 App 或家里 PC 领取，20 分钟内有效），配对成功落成一条云源</div>
       </div>
-      <div class="gp-sec">显示</div>
-      <div class="gp-row" id="gpTheme">主题 <b id="gpThemeV"></b></div>
-      <div class="gp-row" id="gpDensity">列表密度 <b id="gpDensityV"></b></div>
-      <div class="gp-row" id="gpFont">正文字号 <b id="gpFontV"></b></div>
-      <div class="gp-row" id="gpThink">思考过程 <b id="gpThinkV"></b></div>
-      <div class="gp-row" id="gpIdle" style="display:none">折叠空闲 <b id="gpIdleV"></b></div>
-      <div class="gp-sec">关于</div>
-      <div class="gp-row gp-static">CC Deck 控制台 <b id="gpVer"></b></div>
-      <div class="gp-row" id="gpUpdate">检查更新 <b id="gpUpdateV"></b></div>
-      <div class="gp-links"><a href="https://github.com/humumu130/cc-deck/releases" target="_blank" rel="noopener">下载 / 更新</a><a href="https://github.com/humumu130/cc-deck/issues" target="_blank" rel="noopener">反馈</a></div>
-    </div>
+      <div class="gp-card">
+        <div class="gp-sec">显示</div>
+        <div class="gp-row" id="gpDensity">列表密度 <b id="gpDensityV"></b></div>
+        <div class="gp-row" id="gpFont">正文字号 <b id="gpFontV"></b></div>
+        <div class="gp-row" id="gpThink">思考过程 <b id="gpThinkV"></b></div>
+        <div class="gp-row" id="gpIdle" style="display:none">折叠空闲 <b id="gpIdleV"></b></div>
+      </div>
+      <div class="gp-card">
+        <div class="gp-sec">关于</div>
+        <div class="gp-row gp-static">CC Deck 控制台 <b id="gpVer"></b></div>
+        <div class="gp-row" id="gpUpdate">检查更新 <b id="gpUpdateV"></b></div>
+        <div class="gp-links"><a href="https://github.com/humumu130/cc-deck/issues" target="_blank" rel="noopener">反馈</a></div>
+      </div>
+    </aside>
 
     <div id="listBar">
       <h3>会话</h3>
@@ -896,7 +925,11 @@
           <button id="createBtn" class="primary">创建会话</button>
         </div>
       </div>
-      <button id="addBtn">＋ 新建会话</button>
+    </div>
+
+    <div id="sideFabs">
+      <button id="addBtn" class="sfab" title="新建会话"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></button>
+      <button id="gearBtn" class="sfab" title="设置"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M19.14,12.94c0.04-0.3,0.06-0.61,0.06-0.94c0-0.32-0.02-0.64-0.07-0.94l2.03-1.58c0.18-0.14,0.23-0.41,0.12-0.61 l-1.92-3.32c-0.12-0.22-0.37-0.29-0.59-0.22l-2.39,0.96c-0.5-0.38-1.03-0.7-1.62-0.94l-0.36-2.54C14.36,2.18,14.16,2,13.92,2 h-3.84c-0.24,0-0.43,0.18-0.47,0.41L9.25,4.95C8.66,5.19,8.12,5.51,7.63,5.88L5.24,4.92c-0.22-0.08-0.47,0-0.59,0.22L2.74,8.47 c-0.12,0.21-0.08,0.47,0.12,0.61l2.03,1.58c-0.05,0.3-0.09,0.63-0.09,0.94s0.02,0.64,0.07,0.94l-2.03,1.58 c-0.18,0.14-0.23,0.41-0.12,0.61l1.92,3.32c0.12,0.22,0.37,0.29,0.59,0.22l2.39-0.96c0.5,0.38,1.03,0.7,1.62,0.94l0.36,2.54 c0.05,0.24,0.24,0.41,0.48,0.41h3.84c0.24,0,0.44-0.17,0.47-0.41l0.36-2.54c0.59-0.24,1.13-0.56,1.62-0.94l2.39,0.96 c0.22,0.08,0.47,0,0.59-0.22l1.92-3.32c0.12-0.22,0.07-0.47-0.12-0.61L19.14,12.94z M12,15.6c-1.98,0-3.6-1.62-3.6-3.6 s1.62-3.6,3.6-3.6s3.6,1.62,3.6,3.6S13.98,15.6,12,15.6z"/></svg><i class="gchev"></i></button>
     </div>
   </div>
 
@@ -977,7 +1010,8 @@
 
   <div id="empty">
     <div class="logo"><svg viewBox="0 0 24 24" fill="none"><defs><linearGradient id="lgB" x1="4" y1="4" x2="20" y2="20" gradientUnits="userSpaceOnUse"><stop stop-color="#E8985F"/><stop offset="1" stop-color="#C96442"/></linearGradient></defs><g><rect x="3.4" y="6.2" width="11" height="14" rx="2.8" transform="rotate(-11 8.9 13.2)" stroke="url(#lgB)" stroke-opacity=".5" stroke-width="1.5"/><rect x="9.6" y="5.4" width="11" height="14" rx="2.8" transform="rotate(10 15.1 12.4)" stroke="url(#lgB)" stroke-opacity=".85" stroke-width="1.5"/><rect x="6.5" y="4.2" width="11.4" height="15.2" rx="3" fill="url(#lgB)"/><path d="M9.2 8.7h6" stroke="#171220" stroke-width="1.7" stroke-linecap="round"/><path d="M9.2 12.2h4.2" stroke="#171220" stroke-opacity=".55" stroke-width="1.7" stroke-linecap="round"/></g></svg></div>
-    <div>选择左侧会话，或点「＋ 新建」开始</div>
+    <div>选择左侧会话，或新建一个开始</div>
+    <button id="emptyNewBtn">＋ 新建会话</button>
   </div>
 </main>
 
@@ -2806,7 +2840,7 @@ document.addEventListener("click", (ev) => {
 // 服务器管理不进浮层——左栏常驻面板已是高频区，与手机抽屉同为一级入口
 const CONSOLE_VERSION = "0.3.15";
 function syncGearPop() {
-  $("gpThemeV").textContent = document.documentElement.classList.contains("light") ? "浅色" : "深色";
+  $("gpThemeV") && ($("gpThemeV").textContent = document.documentElement.classList.contains("light") ? "浅色" : "深色");
   $("gpDensityV").textContent = ($("densityBtn").textContent.split("·")[1] || "").trim();
   $("gpFontV").textContent = ($("fontBtn").textContent.split("·")[1] || "").trim();
   $("gpThinkV").textContent = $("thinkBtn").textContent.includes("开") ? "开" : "关";
@@ -2815,7 +2849,12 @@ function syncGearPop() {
   $("gpIdleV").textContent = idle.textContent.startsWith("展开") ? "已折叠" : "显示中";
   $("gpVer").textContent = CONSOLE_VERSION;
 }
-$("gpTheme").onclick = () => { $("themeBtn").click(); syncGearPop(); };
+$("gpTheme") && ($("gpTheme").onclick = () => { $("themeBtn").click(); syncGearPop(); });
+$("gearClose").onclick = () => openPanel("none");
+$("emptyNewBtn").onclick = () => {
+  if (!$("newform").classList.contains("open")) $("addBtn").click();
+  setTimeout(() => $("cwd").focus(), 60);
+};
 $("gpDensity").onclick = () => { $("densityBtn").click(); syncGearPop(); };
 $("gpFont").onclick = () => { $("fontBtn").click(); syncGearPop(); };
 $("gpThink").onclick = () => { $("thinkBtn").click(); syncGearPop(); };
@@ -2868,12 +2907,12 @@ setTimeout(() => {
 $("addBtn").onclick = () => {
   const open = !$("newform").classList.contains("open");
   $("newform").classList.toggle("open", open);
-  $("addBtn").textContent = open ? "收起 ✕" : "＋ 新建会话";
+  $("addBtn").classList.toggle("on", open);
   if (open) $("prompt").focus();
 };
 function closeNewForm() {
   $("newform").classList.remove("open");
-  $("addBtn").textContent = "＋ 新建会话";
+  $("addBtn").classList.remove("on");
 }
 // #279⑨ 列表密度 / 折叠空闲：会话标题行两个小开关（localStorage 持久化，render 内联动卡片与计数）
 function syncDensityBtn() {

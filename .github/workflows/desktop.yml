@@ -132,6 +132,7 @@ jobs:
             desktop-tauri/src-tauri/target/release/bundle/nsis/*-setup.exe
             desktop-tauri/src-tauri/target/release/bundle/nsis/*-setup.exe.sig
             desktop-tauri/src-tauri/target/release/bundle/nsis/latest.json
+            desktop-tauri/src-tauri/target/release/bundle/latest.json
           if-no-files-found: error
 
       - name: Attach to GitHub Release
@@ -142,4 +143,5 @@ jobs:
             desktop-tauri/src-tauri/target/release/bundle/nsis/*-setup.exe
             desktop-tauri/src-tauri/target/release/bundle/nsis/*-setup.exe.sig
             desktop-tauri/src-tauri/target/release/bundle/nsis/latest.json
+            desktop-tauri/src-tauri/target/release/bundle/latest.json
           generate_release_notes: true
