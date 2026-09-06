@@ -124,6 +124,25 @@
   #rhPop.open { display: flex; flex-direction: column; gap: 7px; }
   .rh-row { display: flex; align-items: center; gap: 8px; font-size: 12.5px; color: var(--text); }
   .rh-row i { width: 8px; height: 8px; border-radius: 50%; flex: none; }
+  /* ⚙ 设置浮层：与 rhPop 同款面板，行点击镜像触发散装开关 */
+  #gearPop {
+    display: none; position: absolute; top: 60px; left: 16px; z-index: 40; min-width: 188px;
+    background: var(--panel); border: 1px solid var(--border); border-radius: 12px;
+    padding: 10px 12px; box-shadow: 0 8px 28px rgba(0,0,0,.4);
+  }
+  #gearPop.open { display: flex; flex-direction: column; gap: 2px; }
+  .gp-sec { font-size: 10.5px; color: var(--dim); letter-spacing: .06em; padding: 6px 4px 3px; }
+  .gp-sec:first-child { padding-top: 2px; }
+  .gp-row {
+    display: flex; align-items: center; justify-content: space-between; gap: 10px;
+    font-size: 12.5px; color: var(--text); padding: 6px 8px; border-radius: 8px; cursor: pointer;
+  }
+  .gp-row:hover { background: var(--tint-soft, rgba(127,127,127,.12)); }
+  .gp-row b { font-weight: 600; color: var(--dim); font-size: 12px; }
+  .gp-static { cursor: default; }
+  .gp-static:hover { background: none; }
+  .gp-links { display: flex; gap: 8px; padding: 8px 8px 4px; }
+  .gp-links a { font-size: 12px; color: var(--brand, #D97757); text-decoration: none; }
   header .spacer { flex: 1; }
 
   #connChip {
@@ -805,6 +824,7 @@
       <div class="spacer"></div>
       <div id="connChip" title="连接设置"><i></i><span id="connText">未连接</span></div>
       <button id="themeBtn" title="深浅色切换">☀️</button>
+      <button id="gearBtn" title="设置">⚙</button>
     </header>
 
     <div id="rhPop">
@@ -812,6 +832,18 @@
       <div class="rh-row"><i style="background:var(--waiting)"></i>waiting</div>
       <div class="rh-row"><i style="background:var(--error)"></i>error</div>
       <div class="rh-row"><i style="background:var(--done)"></i>done</div>
+    </div>
+
+    <div id="gearPop">
+      <div class="gp-sec">显示</div>
+      <div class="gp-row" id="gpTheme">主题 <b id="gpThemeV"></b></div>
+      <div class="gp-row" id="gpDensity">列表密度 <b id="gpDensityV"></b></div>
+      <div class="gp-row" id="gpFont">正文字号 <b id="gpFontV"></b></div>
+      <div class="gp-row" id="gpThink">思考过程 <b id="gpThinkV"></b></div>
+      <div class="gp-row" id="gpIdle" style="display:none">折叠空闲 <b id="gpIdleV"></b></div>
+      <div class="gp-sec">关于</div>
+      <div class="gp-row gp-static">CC Deck 控制台 <b id="gpVer"></b></div>
+      <div class="gp-links"><a href="https://github.com/humumu130/cc-deck/releases" target="_blank" rel="noopener">下载 / 更新</a><a href="https://github.com/humumu130/cc-deck/issues" target="_blank" rel="noopener">反馈</a></div>
     </div>
 
     <div class="panel" id="connPanel">
@@ -2734,11 +2766,37 @@ $("connChip").onclick = () => {
   const open = $("connPanel").classList.contains("open");
   openPanel(open ? "none" : "conn");
 };
-// 状态图例浮窗：点 ？ 开合，点外部收起（rhHelp 随 runhint 重建，走事件委托）
+// 状态图例浮窗 + ⚙ 设置浮窗：点外部收起、两浮层互斥（rhHelp 随 runhint 重建，走事件委托）
 document.addEventListener("click", (ev) => {
-  if (ev.target.closest("#rhHelp")) { $("rhPop").classList.toggle("open"); return; }
-  if (!ev.target.closest("#rhPop")) $("rhPop").classList.remove("open");
+  if (ev.target.closest("#rhHelp")) { $("rhPop").classList.toggle("open"); $("gearPop").classList.remove("open"); return; }
+  if (ev.target.closest("#gearBtn")) {
+    const open = !$("gearPop").classList.contains("open");
+    $("rhPop").classList.remove("open");
+    $("gearPop").classList.toggle("open", open);
+    if (open) syncGearPop();
+    return;
+  }
+  if (!ev.target.closest("#rhPop") && !ev.target.closest("#gearPop")) { $("rhPop").classList.remove("open"); $("gearPop").classList.remove("open"); }
 });
+
+// ⚙ 设置浮层（#317）：显示项为散装开关的镜像（点行 = 触发原按钮再回读状态），
+// 服务器管理不进浮层——左栏常驻面板已是高频区，与手机抽屉同为一级入口
+const CONSOLE_VERSION = "0.3.14";
+function syncGearPop() {
+  $("gpThemeV").textContent = document.documentElement.classList.contains("light") ? "浅色" : "深色";
+  $("gpDensityV").textContent = ($("densityBtn").textContent.split("·")[1] || "").trim();
+  $("gpFontV").textContent = ($("fontBtn").textContent.split("·")[1] || "").trim();
+  $("gpThinkV").textContent = $("thinkBtn").textContent.includes("开") ? "开" : "关";
+  const idle = $("idleBtn");
+  $("gpIdle").style.display = idle.style.display === "none" ? "none" : "flex";
+  $("gpIdleV").textContent = idle.textContent.startsWith("展开") ? "已折叠" : "显示中";
+  $("gpVer").textContent = CONSOLE_VERSION;
+}
+$("gpTheme").onclick = () => { $("themeBtn").click(); syncGearPop(); };
+$("gpDensity").onclick = () => { $("densityBtn").click(); syncGearPop(); };
+$("gpFont").onclick = () => { $("fontBtn").click(); syncGearPop(); };
+$("gpThink").onclick = () => { $("thinkBtn").click(); syncGearPop(); };
+$("gpIdle").onclick = () => { $("idleBtn").click(); syncGearPop(); };
 $("addBtn").onclick = () => {
   const open = !$("newform").classList.contains("open");
   $("newform").classList.toggle("open", open);
