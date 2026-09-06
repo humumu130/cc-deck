@@ -128,8 +128,7 @@ export function buildAppleScript(pid: number, actions: string[]): string {
     "	delay 0.1",
     ...actions.map((a) => `	${a}`),
     "end tell",
-  ].join("
-");
+  ].join("\n");
 }
 
 const appleKeystroke = (text: string) => `keystroke "${escapeApple(text)}"`;
