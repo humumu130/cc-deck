@@ -17,6 +17,7 @@ const val FG_CHANNEL_ID = "relay_fg"
 const val ALERT_CHANNEL_ID = "relay_alert"
 const val FG_NOTIFICATION_ID = 1
 const val ALERT_NOTIFICATION_ID = 2
+const val FG_TITLE = "CC Deck" // #301 品牌统一（原 "Cloud Code Relay"）
 
 // 常驻前台服务：保活 WS 连接（用户也能从通知知晓后台运行）
 class RelayForegroundService : Service() {
@@ -24,17 +25,9 @@ class RelayForegroundService : Service() {
 
   override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
     val nm = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
-    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-      nm.createNotificationChannel(
-        NotificationChannel(FG_CHANNEL_ID, "后台连接", NotificationManager.IMPORTANCE_MIN)
-      )
-    }
-    val pi = PendingIntent.getActivity(
-      this, 0,
-      packageManager.getLaunchIntentForPackage(packageName),
-      PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
-    )
-    val notif = buildNotification(this, FG_CHANNEL_ID, "Cloud Code Relay", "保持与 PC 的连接中", pi, ongoing = true)
+    ensureChannel(nm, FG_CHANNEL_ID, "后台连接", NotificationManager.IMPORTANCE_MIN)
+    val pi = launchIntent(this, 0)
+    val notif = buildNotification(this, FG_CHANNEL_ID, FG_TITLE, "保持与 PC 的连接中", pi, ongoing = true)
     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
       startForeground(FG_NOTIFICATION_ID, notif, ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC)
     } else {
@@ -42,6 +35,22 @@ class RelayForegroundService : Service() {
     }
     return START_STICKY
   }
+}
+
+// 渠道创建幂等（已存在同名同重要性的渠道为 no-op）
+private fun ensureChannel(nm: NotificationManager, id: String, name: String, importance: Int) {
+  if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+    nm.createNotificationChannel(NotificationChannel(id, name, importance))
+  }
+}
+
+// 回到 App 的点击意图（requestCode 区分前台/提醒两处 PendingIntent）
+private fun launchIntent(ctx: Context, requestCode: Int): PendingIntent? {
+  return PendingIntent.getActivity(
+    ctx, requestCode,
+    ctx.packageManager.getLaunchIntentForPackage(ctx.packageName),
+    PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+  )
 }
 
 private fun buildNotification(ctx: Context, channelId: String, title: String, body: String, pi: PendingIntent?, ongoing: Boolean): Notification {
@@ -86,19 +95,22 @@ class RelayNotifyModule : Module() {
       val ctx = appContext.reactContext ?: return@Function
       val nm = ctx.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
       if (!nm.areNotificationsEnabled()) return@Function
-      if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-        nm.createNotificationChannel(
-          NotificationChannel(ALERT_CHANNEL_ID, "会话提醒", NotificationManager.IMPORTANCE_HIGH)
-        )
-      }
-      val pi = PendingIntent.getActivity(
-        ctx, 1,
-        ctx.packageManager.getLaunchIntentForPackage(ctx.packageName),
-        PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
-      )
-      val notif = buildNotification(ctx, ALERT_CHANNEL_ID, title, body, pi, ongoing = false)
+      ensureChannel(nm, ALERT_CHANNEL_ID, "会话提醒", NotificationManager.IMPORTANCE_HIGH)
+      val notif = buildNotification(ctx, ALERT_CHANNEL_ID, title, body, launchIntent(ctx, 1), ongoing = false)
       try {
         nm.notify(ALERT_NOTIFICATION_ID, notif)
+      } catch (_: SecurityException) {}
+    }
+
+    // #301 更新前台服务通知正文（App 侧按会话/连接态刷新文案）：同 channel/id 重建
+    // Notification 走 notify() 覆盖 startForeground 的常驻通知（标题/渠道与前台服务一致）
+    Function("update") { text: String ->
+      val ctx = appContext.reactContext ?: return@Function
+      val nm = ctx.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+      ensureChannel(nm, FG_CHANNEL_ID, "后台连接", NotificationManager.IMPORTANCE_MIN)
+      val notif = buildNotification(ctx, FG_CHANNEL_ID, FG_TITLE, text, launchIntent(ctx, 0), ongoing = true)
+      try {
+        nm.notify(FG_NOTIFICATION_ID, notif)
       } catch (_: SecurityException) {}
     }
   }

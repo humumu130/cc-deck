@@ -26,6 +26,14 @@ export function notifyAlert(title: string, body: string): void {
   } catch {}
 }
 
+// #301 更新前台服务通知正文（原生同 id 覆盖 startForeground 的常驻通知）；
+// 调用方需自行做变化比对，避免流式快照每秒重发
+export function updateForeground(text: string): void {
+  try {
+    mod?.update(text);
+  } catch {}
+}
+
 // API 33+ 运行时通知权限（拒绝则通知静默不显示，前台服务照常）
 export async function ensureNotifPermission(): Promise<void> {
   if (Platform.OS !== "android" || Platform.Version < 33) return;

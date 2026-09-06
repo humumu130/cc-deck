@@ -4,7 +4,8 @@ import { StatusBar } from "expo-status-bar";
 import { SafeAreaProvider, useSafeAreaInsets } from "react-native-safe-area-context";
 import { store, useRelay } from "./src/store";
 import type { TaskDoneReport } from "./src/store";
-import { ensureNotifPermission, fgSupported, notifyAlert, startForegroundService } from "./src/notify";
+import type { SessionState } from "./src/protocol";
+import { ensureNotifPermission, fgSupported, notifyAlert, startForegroundService, updateForeground } from "./src/notify";
 import { startWatchGateway } from "./src/watch";
 import { ThemeProvider, useTheme, useThemeStyles } from "./src/theme-context";
 import { useKbHeight } from "./src/kb";
@@ -329,11 +330,40 @@ function Shell() {
   }, []);
 
   // 连接成功后：请求通知权限 + 启动前台服务保活
+  // fgStarted：服务一旦起过就置位（stop 从不调用），后续文案刷新不再受连接态门控
+  const fgStarted = useRef(false);
   useEffect(() => {
     if (!snap.connected) return;
     void ensureNotifPermission();
-    if (fgSupported()) startForegroundService();
+    if (fgSupported()) {
+      startForegroundService();
+      fgStarted.current = true;
+    }
   }, [snap.connected]);
+
+  // #301 前台服务通知正文随会话/连接态刷新：格式「N 会话 · X 运行 · Y 等待 · Z 错误」
+  // （仅计非零项）。快照每秒都换引用，故按文案 key 比对——状态分布/连接态没变不重发
+  const fgText = useRef("");
+  useEffect(() => {
+    if (!fgStarted.current) return;
+    let text: string;
+    if (!snap.connected) {
+      text = snap.connState === "idle" ? "未连接 · 未配置" : "未连接 · 重连中";
+    } else if (!snap.sessions.length) {
+      text = "已连接 · 暂无会话";
+    } else {
+      const dist: Partial<Record<SessionState["status"], number>> = { WORKING: 0, WAITING: 0, ERROR: 0 };
+      for (const s of snap.sessions) if (s.status in dist) dist[s.status] = (dist[s.status] ?? 0) + 1;
+      const parts = [`${snap.sessions.length} 会话`];
+      if (dist.WORKING) parts.push(`${dist.WORKING} 运行`);
+      if (dist.WAITING) parts.push(`${dist.WAITING} 等待`);
+      if (dist.ERROR) parts.push(`${dist.ERROR} 错误`);
+      text = parts.join(" · ");
+    }
+    if (text === fgText.current) return;
+    fgText.current = text;
+    updateForeground(text);
+  }, [snap.sessions, snap.connected, snap.connState]);
 
   useEffect(() => {
     const sub = AppState.addEventListener("change", (st) => {
