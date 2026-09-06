@@ -171,6 +171,8 @@ class RelayStore {
   // taskViewed=用户点开看过的最新 ts（持久，挡重启后已看过项重新计未读）。
   // 均按 sid 键，sid 为 uuid 全局唯一，跨源无碰撞
   private reportedTaskTs = new Map<string, number>();
+  // 已被 user_message 回显消费的排队消息指纹（sid → keys）：拦截 SESSION_UPDATED 状态帧灌回（#323）
+  private consumedPending = new Map<string, Set<string>>();
   private taskSeen: Record<string, number> = {};
   private taskViewed: Record<string, number> = {};
   private taskDoneQueue: TaskDoneReport[] = [];
@@ -1041,7 +1043,15 @@ class RelayStore {
         if (msg.payload.todos) s.todos = msg.payload.todos;
         if (msg.payload.relay_session_id) s.relay_session_id = msg.payload.relay_session_id;
         if (msg.payload.permission_mode) s.permission_mode = msg.payload.permission_mode;
-        if (msg.payload.pending_inputs) s.pending_inputs = msg.payload.pending_inputs.length ? msg.payload.pending_inputs : undefined;
+        // 排队消息：已被 user_message 回显消费过的不再被状态帧灌回（#323 底部闪烁根因——
+        // relay 侧 pending 直到 CLI 晋升才清，期间每个 WORKING 状态帧都会把本地刚删的条目复原）
+        if (msg.payload.pending_inputs) {
+          const eaten = this.consumedPending.get(sid);
+          const list = eaten?.size
+            ? msg.payload.pending_inputs.filter((p: { text?: string }) => !eaten.has((p.text ?? "").trim().replace(/\s+/g, " ").slice(0, 200)))
+            : msg.payload.pending_inputs;
+          s.pending_inputs = list.length ? list : undefined;
+        }
         if (msg.payload.subagents) s.subagents = msg.payload.subagents;
         if (msg.payload.cron_tasks) s.cron_tasks = msg.payload.cron_tasks;
         s.updated_at = msg.ts;
@@ -1132,10 +1142,19 @@ class RelayStore {
     if (!s?.external || !s.pending_inputs?.length) return;
     const key = text.trim().replace(/\s+/g, " ");
     if (!key) return;
+    const eaten = this.consumedPending.get(sid) ?? new Set<string>();
     const kept = s.pending_inputs.filter((p) => {
       const pk = (p.text ?? "").trim().replace(/\s+/g, " ").slice(0, 200);
-      return !(pk && key.includes(pk));
+      if (pk && key.includes(pk)) {
+        eaten.add(pk);
+        return false;
+      }
+      return true;
     });
+    if (eaten.size) {
+      if (eaten.size > 60) for (const k of eaten) { eaten.delete(k); break; } // 粗截断防膨胀
+      this.consumedPending.set(sid, eaten);
+    }
     if (kept.length !== s.pending_inputs.length) {
       s.pending_inputs = kept.length ? kept : undefined;
       this.emit();

@@ -431,6 +431,9 @@ export default function DetailScreen({ sid, onBack, initialView, ref }: { sid: s
   const [slashCommands, setSlashCommands] = useState<SlashCommand[]>(BUILTIN_COMMANDS);
   const [renaming, setRenaming] = useState(false);
   const [view, setView] = useState<ViewKind>(initialView ?? "msg");
+  // 回到底部浮钮（#322）：距底超一屏时出现，点击滚底；切视图重置
+  const [showJump, setShowJump] = useState(false);
+  useEffect(() => { setShowJump(false); }, [view]);
   const [showThink, setShowThink] = useState(thinkShown);
   const [collapsed, setCollapsed] = useState(ctrlCollapsed);
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
@@ -1194,7 +1197,9 @@ export default function DetailScreen({ sid, onBack, initialView, ref }: { sid: s
         onTouchCancel={() => { touching.current = false; }}
         onScroll={(e) => {
           const { contentOffset, contentSize, layoutMeasurement } = e.nativeEvent;
-          atBottom.current = contentSize.height - contentOffset.y - layoutMeasurement.height < 80;
+          const near = contentSize.height - contentOffset.y - layoutMeasurement.height < 80;
+          atBottom.current = near;
+          setShowJump(!near && contentSize.height - layoutMeasurement.height > 300);
         }}
         scrollEventThrottle={120}
       >
@@ -1270,6 +1275,20 @@ export default function DetailScreen({ sid, onBack, initialView, ref }: { sid: s
         </View>
       ))}
       </ScrollView>
+
+      {/* 回到底部浮钮（#322）：距底超过一屏时出现，避让审批横幅 */}
+      {showJump && (view === "msg" || view === "all") ? (
+        <Pressable
+          style={[d.jumpFab, { bottom: (bannerVisible ? 208 : canCmd ? 104 : 68) + insets.bottom }]}
+          android_ripple={{ color: withA(c.working, 0.2), borderless: false, radius: 20 }}
+          onPress={() => {
+            (view === "msg" ? scrollRef : allScrollRef).current?.scrollToEnd({ animated: true });
+            setShowJump(false);
+          }}
+        >
+          <Text style={d.jumpFabT}>↓</Text>
+        </Pressable>
+      ) : null}
 
       {/* 底部栈：审批横幅（常驻可见，类似 CLI 权限提示）> 模板行 > 命令栏；整体随键盘抬升 */}
       <View pointerEvents="box-none" style={{ paddingBottom: kb > 0 ? 0 : insets.bottom, transform: [{ translateY: kb > 0 ? -kb : 0 }] }}>
@@ -1438,6 +1457,13 @@ function MicIcon({ color }: { color: string }) {
 
 const makeStyles = (c: ThemeColors) => StyleSheet.create({
   safe: { flex: 1, backgroundColor: c.bg },
+  // 回到底部浮钮（#322）
+  jumpFab: {
+    position: "absolute", right: 14, width: 40, height: 40, borderRadius: 20,
+    alignItems: "center", justifyContent: "center",
+    backgroundColor: c.panel2, borderWidth: 1, borderColor: c.line, elevation: 4,
+  },
+  jumpFabT: { color: c.dim, fontSize: 18, fontWeight: "700", marginTop: -1 },
   head: {
     flexDirection: "row", alignItems: "center", gap: 6,
     paddingHorizontal: 12, paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: c.line,
