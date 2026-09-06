@@ -22,8 +22,8 @@ import RenameModal from "./RenameModal";
 // 原"工具/系统"过滤 chips 与设置抽屉"过程消息·隐藏档"重叠，移除。
 const VIEWS = [
   { k: "msg", label: "消息" },
-  { k: "all", label: "全部" },
   { k: "todos", label: "任务" },
+  { k: "all", label: "全部" },
   { k: "cron", label: "定时" },
   { k: "stats", label: "统计" },
 ] as const;
