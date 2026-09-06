@@ -809,6 +809,12 @@ export class SessionManager {
   private agentCallbacks(managed: ManagedSession): AgentCallbacks {
     return {
         onInit: (sdkId, model, permissionMode) => {
+          // #307：托管子会话 sid 即时落盘 child-sessions.json——relay 在此刻之后
+          // 任意时点重启，孤儿扫描都认得它是自己的（不再被收养成"relay"垃圾会话）
+          if (!this.childSdkIds.has(sdkId)) {
+            this.childSdkIds.add(sdkId);
+            appendChildSession(this.cfg.dataDir, sdkId);
+          }
           managed.state.relay_session_id = sdkId;
           managed.state.model = model;
           if (isManagedMode(permissionMode)) managed.state.permission_mode = permissionMode;
@@ -916,6 +922,7 @@ export class SessionManager {
       { resume: sdkId, permissionMode: s.state.permission_mode ?? "default", images },
     );
     s.agent = agent;
+    // resume 的子 sid 同样经 onInit 回调登记（见 agentCallbacks.onInit 的 #307 落盘）
     s.state.status = "WORKING";
     s.state.historical = false;
     s.state.done_reason = undefined;
