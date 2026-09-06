@@ -11,7 +11,7 @@ import { useKbHeight } from "./src/kb";
 import { loadDisplaySettings } from "./src/display-settings";
 import { withA, type ThemeColors } from "./src/theme";
 import ListScreen, { type ListBackHandle } from "./src/screens/ListScreen";
-import DetailScreen from "./src/screens/DetailScreen";
+import DetailScreen, { type ViewKind } from "./src/screens/DetailScreen";
 import SetupScreen from "./src/screens/SetupScreen";
 import NewSessionModal from "./src/screens/NewSessionModal";
 
@@ -193,13 +193,16 @@ function Shell() {
   const [ready, setReady] = useState(false);
   const [hasCfg, setHasCfg] = useState(false);
   const [detail, setDetail] = useState<string | null>(null);
+  // 详情初始视图（#300）：待确认横幅跳转带 "todos" 直达任务 tab；普通打开缺省消息页
+  const [detailView, setDetailView] = useState<ViewKind>("msg");
   // 列表⇄详情过渡（#259）：entering=详情从右滑入（列表垫底，落定卸载列表）；
   // closing=详情右滑出（列表先挂回垫底，滑完卸载详情）。仅 transform+native 驱动
   const [navPhase, setNavPhase] = useState<"idle" | "entering" | "closing">("idle");
   const navX = useRef(new Animated.Value(0)).current;
   // 宽度调用时取（分屏/折叠屏变化后首帧窗口已换宽，冻结值会让滑入起点露边/滑出残留）
-  const openDetail = useCallback((sid: string): boolean => {
+  const openDetail = useCallback((sid: string, view?: ViewKind): boolean => {
     if (navPhase !== "idle") return false;
+    setDetailView(view ?? "msg");
     if (detail) {
       setDetail(sid); // 详情页内直接换会话（FAB 查看最新）：无动画
       return true;
@@ -374,7 +377,7 @@ function Shell() {
             <Animated.View
               style={[st.navLayer, { transform: [{ translateX: navX }] }]}
             >
-              <DetailScreen sid={detail} onBack={closeDetail} />
+              <DetailScreen sid={detail} initialView={detailView} onBack={closeDetail} />
             </Animated.View>
           ) : null}
           <NewSessionModal visible={sheet} onClose={() => setSheet(false)} />

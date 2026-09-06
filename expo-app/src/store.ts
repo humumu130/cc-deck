@@ -91,6 +91,10 @@ export interface Snapshot {
   cloudMsg: string | null;
   pairCode: { code: string; expiresAt: number } | null;
   taskDoneQueue: TaskDoneReport[];
+  // #300 [待确认] 横幅已读记忆（内存级）： dismissing 时记下当前待确认集合的
+  // key（sid+条数拼接）；集合一变（新增/完成/去标记）key 不匹配横幅自动重现。
+  // 不落盘——进程重启后重新提醒，符合"常驻提醒直到确认"语义
+  confirmDismissedKey: string | null;
 }
 
 // 任务完成汇报（#204/#254）：relay TASK_DONE 事件驱动，悬浮框 + 系统通知共用。
@@ -120,6 +124,7 @@ const emptySnapshot: Snapshot = {
   cloudMsg: null,
   pairCode: null,
   taskDoneQueue: [],
+  confirmDismissedKey: null,
 };
 
 const LAN_PROBE_MS = 4000;
@@ -1305,6 +1310,13 @@ class RelayStore {
   private pruneWatermark(m: Record<string, number>): Record<string, number> {
     const entries = Object.entries(m).sort((a, b) => b[1] - a[1]).slice(0, 60);
     return Object.fromEntries(entries);
+  }
+
+  // #300 待确认横幅 ✕ = 已读：记下当前集合 key（调用方按当前数据拼好传入），
+  // 数据变化后 key 不匹配横幅重现
+  dismissConfirm(key: string) {
+    if (this.snap.confirmDismissedKey === key) return;
+    this.emit({ confirmDismissedKey: key });
   }
 }
 

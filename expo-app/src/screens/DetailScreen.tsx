@@ -30,7 +30,7 @@ const VIEWS = [
 // tab 指示条几何参数：filterRow 左边距与 tab 间隙（JS 几何计算与 makeStyles 共用）
 const TAB_PAD_L = 4;
 const TAB_GAP = 6;
-type ViewKind = (typeof VIEWS)[number]["k"];
+export type ViewKind = (typeof VIEWS)[number]["k"];
 
 // SpeechRecognizer 错误码人话（反馈排查用；1/2/4 多为云识别服务连不上）
 const VOICE_ERR_NAMES: Record<number, string> = {
@@ -411,7 +411,9 @@ function AskBanner({ wr, sid }: { wr: WaitingPayload; sid: string }) {
   );
 }
 
-export default function DetailScreen({ sid, onBack }: { sid: string; onBack: () => void }) {
+// initialView（#300）：外部直达目标页（待确认横幅跳"任务" tab）——挂载即落位，
+// 不播 tab 切换动画；缺省 "msg" 与旧行为一致
+export default function DetailScreen({ sid, onBack, initialView }: { sid: string; onBack: () => void; initialView?: ViewKind }) {
   const { c } = useTheme();
   const d = useThemeStyles(makeStyles);
   const snap = useRelay();
@@ -423,7 +425,7 @@ export default function DetailScreen({ sid, onBack }: { sid: string; onBack: () 
   };
   const [slashCommands, setSlashCommands] = useState<SlashCommand[]>(BUILTIN_COMMANDS);
   const [renaming, setRenaming] = useState(false);
-  const [view, setView] = useState<ViewKind>("msg");
+  const [view, setView] = useState<ViewKind>(initialView ?? "msg");
   const [showThink, setShowThink] = useState(thinkShown);
   const [collapsed, setCollapsed] = useState(ctrlCollapsed);
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
@@ -658,6 +660,14 @@ export default function DetailScreen({ sid, onBack }: { sid: string; onBack: () 
     }
     pagerRef.current?.scrollTo({ x: i * pagerW, animated: true });
   };
+  // 外部直达目标页（#300）：view 初值即 initialView，但 pager 原生滚动位置仍在 0——
+  // 挂载后程序滚动落位（animated:false 不播切换动画）；宽度渲染时重读（分屏/旋转后
+  // 首帧窗口已换宽）。仅在挂载时执行一次，后续 initialView 变化不追（组件随 sid 换不重挂）
+  useEffect(() => {
+    const i = VIEWS.findIndex((v) => v.k === initialView);
+    if (i > 0) pagerRef.current?.scrollTo({ x: i * Dimensions.get("window").width, animated: false });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   // 指示条几何：tab 等宽分铺整行（TAB_PAD_L 左边距 + TAB_GAP 间隙），横杠宽 = 单 tab 宽，
   // 每滑一页平移 (tabW + gap)；滑到两页中间时轻微拉伸（1.3x）落位回缩，clamp 防 overscroll 过冲
   const tabW = tabRowW > 0 ? (tabRowW - TAB_PAD_L - TAB_GAP * (VIEWS.length - 1)) / VIEWS.length : 0;

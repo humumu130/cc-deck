@@ -28,6 +28,14 @@ export function fmtHM(ts: number): string {
   return `${p(t.getHours())}:${p(t.getMinutes())}`;
 }
 
+// #300 [待确认] 标记（含全角〔〕【】变体，与全局 hooks/网页端同款正则）：
+// CLI 任务标题约定带 "#NNN [待确认] …" 形态——标记与任务号前缀共存，故用包含
+// 匹配而非行首。pending + 含标记 = 等用户确认的事项，列表顶部常驻横幅的数据源
+const CONFIRM_RE = /[〔\[【]\s*待确认\s*[〕\]】]/;
+export function isConfirmTodo(t: { content?: string; status?: string }): boolean {
+  return t.status === "pending" && CONFIRM_RE.test(t.content ?? "");
+}
+
 // 跨天分隔线标签：MM-DD
 export function dayKey(ts: number): string {
   if (!ts) return "";
