@@ -33,6 +33,21 @@ export function setListCompact(v: boolean): void {
   notify();
 }
 
+// 多源聚合（#294 批4）：开 = 同时连接全部已配置源、列表合并展示；关 = 只连活动源。
+// 键名 cc.display.aggregate 与 store 启动读取（loadConfig）一致；连接行为切换由
+// 抽屉开关同时调 store.setAggregate 完成，本模块只管持久化与订阅
+let aggregate = false;
+
+export function getAggregate(): boolean {
+  return aggregate;
+}
+
+export function setAggregate(v: boolean): void {
+  aggregate = v;
+  void AsyncStorage.setItem("cc.display.aggregate", v ? "1" : "0");
+  notify();
+}
+
 // 语音输入（按住说话）：识别服务在部分机型不可用，默认关闭，需要者自行开启
 export function getVoiceInput(): boolean {
   return voiceInput;
@@ -68,6 +83,18 @@ export function useListCompact(): boolean {
   return v;
 }
 
+export function useAggregate(): boolean {
+  const [v, setV] = useState(aggregate);
+  useEffect(() => {
+    const l = () => setV(aggregate);
+    listeners.add(l);
+    return () => {
+      listeners.delete(l);
+    };
+  }, []);
+  return v;
+}
+
 export function useProcessFont(): ProcessFont {
   const [v, setV] = useState<ProcessFont>(processFont);
   useEffect(() => {
@@ -85,6 +112,7 @@ export async function loadDisplaySettings(): Promise<void> {
     const v = (await AsyncStorage.getItem("cc.display.processFont")) as ProcessFont | null;
     if (v === "compact" || v === "normal" || v === "hidden") processFont = v;
     listCompact = (await AsyncStorage.getItem("cc.display.listCompact")) === "1";
+    aggregate = (await AsyncStorage.getItem("cc.display.aggregate")) === "1";
     voiceInput = (await AsyncStorage.getItem("cc.display.voiceInput")) === "1";
   } catch {}
   notify();

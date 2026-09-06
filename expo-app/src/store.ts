@@ -78,8 +78,9 @@ export interface Snapshot {
   // 活动源 id（#294 批3）：单源 = 唯一在连源；聚合 = 当前"主"源（无 sid 命令的
   // 默认去向、配对/connInfo 口径）。NewSessionModal 选源默认值，批4 空态提示可复用
   activeSourceId: string | null;
-  // 聚合模式开关透出（#294 批2）：UI 据此切换聚合口径（源角标等）；默认 false，
-  // 设置项开关批4 上线，批1–3 联调经 adb 置 cc.display.aggregate=1
+  // 聚合模式开关透出（#294 批2）：UI 据此切换聚合口径（源角标/统计行/空态提示）；
+  // 持久化键 cc.display.aggregate，抽屉开关（批4）经 display-settings 写入、
+  // loadConfig 启动读取
   aggregate: boolean;
   sessions: SessionState[];
   lastErrorCmd: string | null;
@@ -437,7 +438,8 @@ class RelayStore {
       const v2 = await AsyncStorage.getItem("ccr_task_viewed");
       if (v2) this.taskViewed = JSON.parse(v2) as Record<string, number>;
     } catch {}
-    // 聚合开关（#294）：设置项 UI 批4 上线，批1–3 联调经 adb 直写 cc.display.aggregate=1
+    // 聚合开关（#294 批4）：抽屉「显示」区开关经 display-settings.setAggregate 持久化，
+    // 这里启动读取（早于 connect 分发，见 display-settings 同键注释）
     try {
       this.aggregate = (await AsyncStorage.getItem("cc.display.aggregate")) === "1";
     } catch {}

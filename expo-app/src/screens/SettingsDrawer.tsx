@@ -7,7 +7,7 @@ import * as Clipboard from "expo-clipboard";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useTheme, useThemeStyles } from "../theme-context";
 import { LogoMark } from "../brand";
-import { setProcessFont, useProcessFont, setListCompact, useListCompact, setVoiceInput, useVoiceInput, type ProcessFont } from "../display-settings";
+import { setProcessFont, useProcessFont, setListCompact, useListCompact, setVoiceInput, useVoiceInput, setAggregate as persistAggregate, useAggregate, type ProcessFont } from "../display-settings";
 import { store, useRelay, type ServerEntry } from "../store";
 import { withA, type ThemeColors } from "../theme";
 
@@ -57,6 +57,7 @@ export default function SettingsDrawer({
   ).current;
   const processFont = useProcessFont();
   const listCompact = useListCompact();
+  const aggregate = useAggregate();
   const voiceInput = useVoiceInput();
   const snap = useRelay();
   const [servers, setServers] = useState<ServerEntry[]>([]);
@@ -290,6 +291,21 @@ export default function SettingsDrawer({
             style={d.sw}
             value={listCompact}
             onValueChange={setListCompact}
+            trackColor={{ false: c.tintSoft, true: c.brandA }}
+            thumbColor="#fff"
+          />
+        </View>
+        {/* 多源聚合（#294 批4）：持久化（display-settings）+ 连接行为（store.setAggregate：
+            开 = 连全部已配置源；关 = 拆非活动源、保留缓存再开无感恢复） */}
+        <View style={[d.setItem, d.setRow]}>
+          <Text style={d.setLabel}>多源聚合</Text>
+          <Switch
+            style={d.sw}
+            value={aggregate}
+            onValueChange={(v) => {
+              persistAggregate(v);
+              store.setAggregate(v);
+            }}
             trackColor={{ false: c.tintSoft, true: c.brandA }}
             thumbColor="#fff"
           />

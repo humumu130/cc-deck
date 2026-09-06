@@ -518,6 +518,8 @@ export default function ListScreen({ sessions, connected, connText, onOpen, onNe
   // 聚合源角标（#294 批2）：仅聚合且源>1 时展示；id→名映射每渲染重建无妨——传入
   // SessionCard 的是查出的字符串（按值浅比较），不破坏 memo 行级重渲
   const badgeOn = snap.aggregate && snap.sources.length > 1;
+  // 聚合源在线数（#294 批4）：统计行「N 源聚合」与空态「online/total 源」共用
+  const onlineSrcs = snap.sources.filter((x) => x.state === "online").length;
   const srcNames = new Map(snap.sources.map((x) => [x.id, x.name] as const));
 
   const counts: Record<string, number> = {};
@@ -609,7 +611,10 @@ export default function ListScreen({ sessions, connected, connText, onOpen, onNe
         </Pressable>
       </View>
       <View style={styles.statRow}>
-        <Text style={styles.statTotal} numberOfLines={1}>{sessions.length > 0 ? `${sessions.length} 会话` : "暂无会话"}</Text>
+        <Text style={styles.statTotal} numberOfLines={1}>
+          {sessions.length > 0 ? `${sessions.length} 会话` : "暂无会话"}
+          {badgeOn ? ` · ${snap.sources.length} 源聚合` : ""}
+        </Text>
         <View style={styles.statChips}>
           {statusItems.map(({ k, n, color }) => (
             <View key={k} style={styles.statChip}>
@@ -680,8 +685,14 @@ export default function ListScreen({ sessions, connected, connText, onOpen, onNe
               {collapseIdle && idleCount > 0
                 ? "点上方「展开空闲」查看"
                 : !connected
-                  ? "未连接服务器，等待自动重连\n也可点左上角图标打开设置检查配置"
-                  : "点右下角 ＋ 启动新会话\n或在 PC 上打开 claude 接入外部会话"}
+                  ? badgeOn
+                    ? `${onlineSrcs}/${snap.sources.length} 源在线，等待自动重连\n也可点左上角图标打开设置检查配置`
+                    : "未连接服务器，等待自动重连\n也可点左上角图标打开设置检查配置"
+                  : badgeOn
+                    ? onlineSrcs < snap.sources.length
+                      ? `已连接 ${onlineSrcs}/${snap.sources.length} 源\n可在设置中检查离线服务器`
+                      : `已聚合 ${snap.sources.length} 源\n点右下角 ＋ 启动新会话`
+                    : "点右下角 ＋ 启动新会话\n或在 PC 上打开 claude 接入外部会话"}
             </Text>
           </View>
         }
