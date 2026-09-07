@@ -86,13 +86,24 @@
   }
 
   /* ---------- 顶栏（窄条，置于侧栏顶部，会话区顶到视口顶） ---------- */
+  /* #344：exe 无边框窗口下兼任自绘标题栏（data-tauri-drag-region 拖拽/双击最大化，
+     窗口控制钮仅桌面壳显示）；去掉 backdrop-filter——动画/滚动期间反复重合成是
+     设置面板开合掉帧的帮凶，改高不透明度纯色保证可读性 */
   header {
     display: flex; align-items: center; gap: 9px;
     padding: calc(12px + env(safe-area-inset-top)) 16px 12px;
-    background: var(--glass); backdrop-filter: blur(10px);
+    background: var(--bg-soft);
     border-bottom: 1px solid var(--border);
     flex: none;
   }
+  #winBtns { display: none; align-items: center; margin-right: -8px; }
+  #winBtns button {
+    width: 40px; height: 30px; border: none; background: none; cursor: pointer;
+    color: var(--dim); font-size: 12px; line-height: 1; border-radius: 6px;
+    display: flex; align-items: center; justify-content: center;
+  }
+  #winBtns button:hover { background: var(--hov); color: var(--text); }
+  #winBtns button[data-w="close"]:hover { background: #e81123; color: #fff; }
   .logo {
     width: 31px; height: 31px; border-radius: 10px;
     background: linear-gradient(180deg, #2B2433, #161221);
@@ -122,6 +133,19 @@
     padding: 11px 14px; box-shadow: 0 8px 28px rgba(0,0,0,.4);
   }
   #rhPop.open { display: flex; flex-direction: column; gap: 7px; }
+  /* #345 服务器状态悬浮窗：connChip 点击展开（锚定其下方），列表+在线状态+管理入口 */
+  #srvPop {
+    display: none; position: absolute; top: 54px; left: 16px; z-index: 44; min-width: 230px;
+    background: var(--panel); border: 1px solid var(--border); border-radius: 12px;
+    padding: 5px; box-shadow: 0 8px 28px rgba(0,0,0,.4);
+  }
+  #srvPop.open { display: flex; flex-direction: column; gap: 1px; }
+  .sp-row { display: flex; align-items: center; gap: 8px; font-size: 12.5px; color: var(--text); padding: 7px 9px; border-radius: 8px; }
+  .sp-row i { width: 8px; height: 8px; border-radius: 50%; flex: none; }
+  .sp-row .sp-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .sp-row .sp-state { color: var(--faint); font-size: 11.5px; flex: none; }
+  .sp-row.sp-manage { color: var(--brand); cursor: pointer; border-top: 1px solid var(--border); border-radius: 0 0 8px 8px; margin-top: 3px; }
+  .sp-row.sp-manage:hover { background: var(--hov); }
   .rh-row { display: flex; align-items: center; gap: 8px; font-size: 12.5px; color: var(--text); }
   .rh-row i { width: 8px; height: 8px; border-radius: 50%; flex: none; }
   /* 左下角双悬浮钮（＋ 新建在上、⚙ 设置在下）：裸图标无边框 */
@@ -143,26 +167,29 @@
   #gearPop {
     position: absolute; inset: 0; z-index: 45; display: flex; flex-direction: column;
     background: var(--bg-soft); border-right: 1px solid var(--border);
-    padding: 0 12px 14px; overflow-y: auto;
-    transform: translateX(-102%); visibility: hidden; transition: transform .22s ease, visibility .22s;
+    padding: 0 12px 58px; overflow-y: auto; will-change: transform;
+    transform: translateX(-102%); visibility: hidden; transition: transform .16s ease, visibility 0s .16s;
   }
-  #gearPop.open { transform: none; visibility: visible; }
+  #gearPop.open { transform: none; visibility: visible; transition: transform .18s ease, visibility 0s 0s; }
   #gearPop .panel { background: none; border: none; padding: 0; }
   .gp-head {
     display: flex; align-items: center; justify-content: space-between;
-    padding: 16px 6px 8px; font-size: 15px; font-weight: 700; color: var(--text);
+    padding: 14px 6px 6px; font-size: 15px; font-weight: 700; color: var(--text);
     position: sticky; top: 0; background: var(--bg-soft); z-index: 2;
   }
-  .gp-head button { border: none; background: none; color: var(--dim); font-size: 15px; cursor: pointer; padding: 4px 8px; }
-  .gp-head button:hover { color: var(--text); }
-  .gp-card { background: var(--panel); border: 1px solid var(--border); border-radius: 14px; padding: 2px 2px 8px; margin-bottom: 12px; }
-  .gp-sec { font-size: 11px; color: var(--dim); letter-spacing: .06em; padding: 10px 10px 4px; }
+  .gp-head button { border: none; background: none; color: var(--dim); font-size: 15px; cursor: pointer; padding: 4px 8px; border-radius: 8px; }
+  .gp-head button:hover { color: var(--text); background: var(--hov); }
+  .gp-card { background: var(--panel); border: 1px solid var(--border); border-radius: 14px; padding: 2px 2px 6px; margin-bottom: 9px; }
+  .gp-sec { font-size: 11px; color: var(--dim); letter-spacing: .06em; padding: 9px 10px 3px; }
   .gp-row {
-    display: flex; align-items: center; justify-content: space-between; gap: 10px;
-    font-size: 12.5px; color: var(--text); padding: 8px 10px; border-radius: 9px; cursor: pointer;
+    display: flex; align-items: center; gap: 8px;
+    font-size: 12.5px; color: var(--text); padding: 7px 10px; border-radius: 9px; cursor: pointer;
+    transition: background .12s ease;
   }
-  .gp-row:hover { background: rgba(127,127,127,.12); }
-  .gp-row b { font-weight: 600; color: var(--dim); font-size: 12px; }
+  .gp-row:hover { background: var(--hov); }
+  .gp-row:active { background: var(--hov2); }
+  .gp-row b { margin-left: auto; font-weight: 600; color: var(--dim); font-size: 12px; }
+  .gp-row .gi { width: 16px; text-align: center; color: var(--dim); font-size: 12px; flex: none; }
   .gp-static { cursor: default; }
   .gp-static:hover { background: none; }
   .gp-links { display: flex; gap: 10px; padding: 4px 10px 6px; }
@@ -220,7 +247,9 @@
   }
   .panel.open { display: flex; }
   /* 连接表单：五行纵排（类型/名称/地址/token/动作），前四行左对齐，动作行靠右 */
-  .conn-form { display: flex; flex-direction: column; gap: 9px; align-items: flex-start; }
+  /* #342 表单默认收起（面板免滚动）：编辑/添加时 .open 展开 */
+  .conn-form { display: none; flex-direction: column; gap: 9px; align-items: flex-start; }
+  .conn-form.open { display: flex; margin-top: 8px; }
   .conn-form input { width: 100%; align-self: stretch; }
   .conn-actions { display: flex; gap: 8px; margin-left: auto; }
   .seg { display: flex; border: 1px solid var(--border); border-radius: 10px; overflow: hidden; background: var(--panel-2); flex: none; }
@@ -486,6 +515,9 @@
   .card.historical { opacity: .75; }
   .card-top { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
   .elapsed { font-size: 12px; color: var(--dim); font-variant-numeric: tabular-nums; }
+  /* #341 WORKING 状态行合一（卡首行）：呼吸灯+回合秒+↓tokens 居左，会话总时长居右 */
+  .c-live.c-topline { margin: 0 0 5px; }
+  .c-live.c-topline .elapsed { margin-left: auto; }
   /* WORKING 实时工作行（App LiveStat 同构）：呼吸点 + 走秒 + ↓tokens + 动作摘要 */
   .c-live { display: flex; align-items: center; gap: 8px; margin: 6px 0 5px; font-size: 12px; color: var(--dim); font-variant-numeric: tabular-nums; min-width: 0; }
   .c-live .lv-dot { width: 9px; height: 9px; border-radius: 50%; background: var(--working); flex: none; animation: dot-breathe 2.4s ease-in-out infinite; }
@@ -494,7 +526,7 @@
   .c-live .lv-sum { color: var(--faint); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1; min-width: 0; }
   .cards-empty { align-items: center; text-align: center; color: var(--faint); font-size: 12.5px; padding: 46px 12px; }
   .cards-empty .ce-icon { font-size: 34px; opacity: .5; margin-bottom: 10px; }
-  .card-title { font-size: 15px; font-weight: 650; margin-top: 6px; display: flex; align-items: center; gap: 8px; }
+  .card-title { font-size: 15px; font-weight: 650; margin-top: 4px; display: flex; align-items: center; gap: 8px; }
   .his-badge {
     font-size: 10px; color: var(--faint); border: 1px solid var(--border);
     padding: 1px 7px; border-radius: 999px; flex: none; font-weight: 500;
@@ -911,7 +943,8 @@
   }
   #toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
 
-  /* 任务完成汇报悬浮框（#204）：右下角卡片，10s 后折叠为一行小条 */
+  /* 任务完成汇报悬浮框（#204/#348）：右下角卡片，到达即展开；10s 后缩为小方钮角标
+     （confirmFloat 同语言），点角标再展开；✓ 只标在具体任务项上，标题不放 */
   #taskDone {
     position: fixed; right: 16px; bottom: 76px; max-width: 340px;
     background: var(--toast-bg); border: 1px solid var(--border); color: var(--text);
@@ -919,6 +952,12 @@
     box-shadow: var(--toast-shadow); display: none; cursor: pointer;
   }
   #taskDone.show { display: block; }
+  #taskDone.mini {
+    width: 44px; height: 44px; max-width: none; padding: 0;
+    display: none; align-items: center; justify-content: center;
+    font-weight: 700; color: var(--done); font-size: 14px;
+  }
+  #taskDone.show.mini { display: flex; }
   #taskDone .td-head { display: flex; align-items: center; gap: 8px; }
   #taskDone .td-title { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1; }
   #taskDone .td-x { color: var(--faint); padding: 3px 6px; font-size: 14px; flex: none; }
@@ -992,17 +1031,22 @@
   <button id="sideToggle" title="收起 / 展开会话列表">‹</button>
   <div id="side">
     <div id="sideGrip" title="拖拽调整宽度"></div>
-    <header>
-      <div class="brand">
+    <header data-tauri-drag-region>
+      <div class="brand" data-tauri-drag-region>
         <div class="logo"><svg viewBox="0 0 24 24" fill="none"><defs><linearGradient id="lgA" x1="4" y1="4" x2="20" y2="20" gradientUnits="userSpaceOnUse"><stop stop-color="#E8985F"/><stop offset="1" stop-color="#C96442"/></linearGradient></defs><g><rect x="3.4" y="6.2" width="11" height="14" rx="2.8" transform="rotate(-11 8.9 13.2)" stroke="url(#lgA)" stroke-opacity=".5" stroke-width="1.5"/><rect x="9.6" y="5.4" width="11" height="14" rx="2.8" transform="rotate(10 15.1 12.4)" stroke="url(#lgA)" stroke-opacity=".85" stroke-width="1.5"/><rect x="6.5" y="4.2" width="11.4" height="15.2" rx="3" fill="url(#lgA)"/><path d="M9.2 8.7h6" stroke="#171220" stroke-width="1.7" stroke-linecap="round"/><path d="M9.2 12.2h4.2" stroke="#171220" stroke-opacity=".55" stroke-width="1.7" stroke-linecap="round"/></g></svg></div>
-        <div>
-          <h1>CC Deck</h1>
-          <div id="runhint">连接中…</div>
+        <div data-tauri-drag-region>
+          <h1 data-tauri-drag-region>CC Deck</h1>
+          <div id="runhint" data-tauri-drag-region>连接中…</div>
         </div>
       </div>
-      <div class="spacer"></div>
-      <div id="connChip" title="连接设置"><i></i><span id="connText">未连接</span></div>
+      <div class="spacer" data-tauri-drag-region></div>
+      <div id="connChip" title="服务器状态（点击查看列表）"><i></i><span id="connText">未连接</span></div>
       <button id="themeBtn" title="深浅色切换">☀️</button>
+      <div id="winBtns" style="display:none">
+        <button data-w="min" title="最小化">─</button>
+        <button data-w="max" title="最大化">▢</button>
+        <button data-w="close" title="关闭">✕</button>
+      </div>
     </header>
 
     <div id="rhPop">
@@ -1012,13 +1056,16 @@
       <div class="rh-row"><i style="background:var(--done)"></i>done</div>
     </div>
 
+    <div id="srvPop"></div>
+
     <aside id="gearPop">
       <div class="gp-head"><b>设置</b><button id="gearClose" title="收起">✕</button></div>
       <div class="gp-card">
         <div class="gp-sec">服务器</div>
-        <div class="gp-row" id="gpRelay" style="display:none">本机 relay <b id="gpRelayV"></b></div>
+        <div class="gp-row" id="gpRelay" style="display:none"><span class="gi">⌁</span>本机 relay <b id="gpRelayV"></b></div>
         <div class="panel" id="connPanel">
           <div id="srvList"></div>
+          <button id="addSrvBtn" class="hbtn" style="width:100%;margin-top:6px">＋ 添加服务器</button>
           <div class="conn-form">
             <div class="seg" id="cmodeSeg">
               <button type="button" data-m="lan">直连</button>
@@ -1038,20 +1085,20 @@
             <button id="loginQrBtn" title="手机 App 扫一下，免输码接入">📱 扫码登录</button>
             <button id="addPhoneBtn" title="手机 App 扫码直接接入本服务器">📲 添加手机</button>
           </div>
-          <div class="pair-hint" id="pairHint">云桥未配对时输入 <b>6 位配对码</b>（手机 App 或家里 PC 领取，5 分钟内有效、一次性），配对成功落成一条云源。或点「扫码登录」用手机微信式扫码免输码。</div>
+          <div class="pair-hint" id="pairHint">配对码：手机 App / PC 设置页领取，5 分钟内有效。</div>
         </div>
       </div>
       <div class="gp-card">
         <div class="gp-sec">显示</div>
-        <div class="gp-row" id="gpDensity">列表密度 <b id="gpDensityV"></b></div>
-        <div class="gp-row" id="gpFont">正文字号 <b id="gpFontV"></b></div>
-        <div class="gp-row" id="gpThink">思考过程 <b id="gpThinkV"></b></div>
-        <div class="gp-row" id="gpIdle" style="display:none">折叠空闲 <b id="gpIdleV"></b></div>
+        <div class="gp-row" id="gpDensity"><span class="gi">≡</span>列表密度 <b id="gpDensityV"></b></div>
+        <div class="gp-row" id="gpFont"><span class="gi">Aa</span>正文字号 <b id="gpFontV"></b></div>
+        <div class="gp-row" id="gpThink"><span class="gi">◐</span>思考过程 <b id="gpThinkV"></b></div>
+        <div class="gp-row" id="gpIdle" style="display:none"><span class="gi">▤</span>折叠空闲 <b id="gpIdleV"></b></div>
       </div>
       <div class="gp-card">
         <div class="gp-sec">关于</div>
-        <div class="gp-row gp-static">CC Deck 控制台 <b id="gpVer"></b></div>
-        <div class="gp-row" id="gpUpdate">检查更新 <b id="gpUpdateV"></b></div>
+        <div class="gp-row gp-static"><span class="gi">ⓘ</span>CC Deck 控制台 <b id="gpVer"></b></div>
+        <div class="gp-row" id="gpUpdate"><span class="gi">↻</span>检查更新 <b id="gpUpdateV"></b></div>
         <div class="gp-links"><a href="https://github.com/humumu130/cc-deck/issues" target="_blank" rel="noopener">反馈</a></div>
       </div>
     </aside>
@@ -1331,7 +1378,7 @@ function migrateLegacy() {
       id: uuid(), name: "公共桥（默认）", kind: "cloud", wsUrl: url, token: BAKED_BRIDGE_TOKEN,
       cloud: { url, token: BAKED_BRIDGE_TOKEN, rd: BAKED_RELAY.rd, rk: BAKED_RELAY.rk, paired: false },
     });
-    list.push({ id: uuid(), name: "本机直连", kind: "lan", wsUrl: "", token: "" });
+    list.push({ id: uuid(), name: "本机", kind: "lan", wsUrl: "", token: "" });
   }
   servers = list;
   saveServers();
@@ -1408,14 +1455,16 @@ function showTaskDone(ctx, sid, payload) {
   clearTimeout(tdFloat.timer);
   tdFloat.expanded = true;
   const renderTd = () => {
-    let html = '<div class="td-head"><span class="td-title">✓ ' + total + " 项任务完成 · " +
-      escapeHtml(title) + '</span><span class="td-x" data-td="x">✕</span></div>';
-    if (tdFloat.expanded) {
-      for (const d of done) html += '<div class="td-item">✓ ' + escapeHtml(d) + "</div>";
-      html += '<div class="td-remain">' + (remaining > 0 ? "剩余 " + remaining + " 项进行中" : "全部完成") + "</div>";
-    } else {
-      html += '<div class="td-remain">' + (remaining > 0 ? "剩余 " + remaining + " 项 · " : "") + "展开查看 ▾</div>";
+    el.classList.toggle("mini", !tdFloat.expanded);
+    if (!tdFloat.expanded) {
+      el.innerHTML = "✓" + total;
+      el.classList.add("show");
+      return;
     }
+    let html = '<div class="td-head"><span class="td-title">' + total + " 项完成 · " +
+      escapeHtml(title) + '</span><span class="td-x" data-td="x">✕</span></div>';
+    for (const d of done) html += '<div class="td-item">✓ ' + escapeHtml(d) + "</div>";
+    html += '<div class="td-remain">' + (remaining > 0 ? "剩余 " + remaining + " 项进行中" : "全部完成") + "</div>";
     el.innerHTML = html;
     el.classList.add("show");
   };
@@ -1425,6 +1474,7 @@ function showTaskDone(ctx, sid, payload) {
     if (e.target && e.target.dataset && e.target.dataset.td === "x") {
       clearTimeout(tdFloat.timer);
       el.classList.remove("show");
+      el.classList.remove("mini");
       return;
     }
     tdFloat.expanded = !tdFloat.expanded;
@@ -2295,7 +2345,7 @@ function srcColorKey(cfg) {
 function shortName(n) {
   n = String(n || "").trim();
   if (!n) return "?";
-  if (/^(localhost|127\.0\.0\.1|\[?::1\]?)(:\d+)?$/i.test(n)) return "本机";
+  if (/^(localhost|127\.0\.0\.1|\[?::1\]?)(:\d+)?$/i.test(n) || n === "本机直连") return "本机";
   const m = n.match(/^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})(:\d+)?$/);
   if (m) return "源" + m[4];
   return n;
@@ -2318,18 +2368,20 @@ function srcBadgeHtml(cfg) {
   return '<span class="src-badge" title="' + escapeHtml(cfg.name) + '"><i style="background:' + srcColorByKey(cfg) + '"></i><span class="sb-t">' + escapeHtml(srcDisplayName(cfg)) + '</span></span>';
 }
 
-// 列表上方源过滤 chips（单源时隐藏）；过滤目标被删/失效时自愈回"全部"
+// 列表上方源过滤 chips（#343）：默认只"全部"；源选项跟"下方出现该源的卡"走——
+// 有会话才亮出对应 chip（空源不占位）；选中源的会话清零时自愈回"全部"
 function renderSrcChips() {
-  if (filterSrc !== "all" && !servers.some((s) => s.id === filterSrc)) filterSrc = "all";
+  const live = servers.filter((s) => (ctxs.get(s.id)?.sessions.size || 0) > 0);
+  if (filterSrc !== "all" && !live.some((s) => s.id === filterSrc)) filterSrc = "all";
   const box = $("srcChips");
-  if (servers.length <= 1) { box.style.display = "none"; box.dataset.key = ""; box.innerHTML = ""; return; }
-  const parts = servers.map((s) => s.id + ":" + s.name + ":" + (ctxs.get(s.id)?.sessions.size || 0));
+  if (live.length <= 1) { box.style.display = "none"; box.dataset.key = ""; box.innerHTML = ""; return; }
+  const parts = live.map((s) => s.id + ":" + s.name + ":" + (ctxs.get(s.id)?.sessions.size || 0));
   const key = filterSrc + "|" + parts.join("|");
   if (box.dataset.key === key) return;
   box.dataset.key = key;
   box.style.display = "flex";
   box.innerHTML = '<button data-f="all" class="' + (filterSrc === "all" ? "on" : "") + '">全部 ' + allSessions().length + "</button>" +
-    servers.map((s) => {
+    live.map((s) => {
       const n = ctxs.get(s.id)?.sessions.size || 0;
       return '<button data-f="' + s.id + '" class="' + (filterSrc === s.id ? "on" : "") + '" title="' + escapeHtml(s.name) + '">' +
         '<i style="background:' + srcColorByKey(s) + '"></i><span>' + escapeHtml(srcDisplayName(s)) + " " + n + "</span></button>";
@@ -2422,14 +2474,23 @@ function render() {
       const opBtns =
         '<button class="card-edit" title="重命名">✎</button>' +
         '<button class="card-del' + (deletable ? "" : " off") + '" title="' + (deletable ? "删除会话" : "运行中，不能删除") + '">✕</button>';
-      const summaryRow = '<div class="card-summary' + (waiting ? " waiting" : "") + '">' + escapeHtml(waitingText) + "</div>";
-      const ctaRow = waiting && !s.historical && s.waiting_request?.decidable !== false ? '<div class="card-cta"><button>处理</button></div>' : "";
       const tok = s.usage && s.usage.output_tokens ? s.usage.output_tokens : 0;
-      const liveRow = s.status === "WORKING"
-        ? '<div class="c-live"><span class="lv-dot"></span><span class="lv-sec">' + Math.max(0, Math.floor((Date.now() - (s.turn_started_at ?? s.updated_at)) / 1000)) + 's</span>' +
+      // #341 去重：自动标题常与 action_summary 同文（title-gen 由动作生成）——同文时摘要不重复展示
+      const title = s.title || "";
+      const dupTitle = !!(waitingText && title && (waitingText === title || title.startsWith(waitingText) || waitingText.startsWith(title)));
+      // #341 状态行合一：WORKING 不再"chip 行 + live 行"两行两个呼吸灯——合成一行
+      // （呼吸灯+回合秒+↓tokens，摘要≠标题时内联；右侧=会话总时长），摘要行也随之取消
+      const topRow = s.status === "WORKING"
+        ? '<div class="c-live c-topline"><span class="lv-dot"></span><span class="lv-sec">' + Math.max(0, Math.floor((Date.now() - (s.turn_started_at ?? s.updated_at)) / 1000)) + 's</span>' +
           (tok ? '<span class="lv-tok">↓ ' + tokStr(tok) + "</span>" : "") +
-          (s.action_summary ? '<span class="lv-sum">' + escapeHtml(s.action_summary) + "</span>" : "") + "</div>"
+          (s.action_summary && !dupTitle ? '<span class="lv-sum">' + escapeHtml(s.action_summary) + "</span>" : "") +
+          '<span class="elapsed">' + fmtElapsed(sessionElapsed(s)) + "</span></div>"
+        : '<div class="card-top">' + chip(s.status) + '<span style="display:flex;align-items:center;gap:6px">' +
+          '<span class="elapsed">' + fmtElapsed(sessionElapsed(s)) + "</span></span></div>";
+      const summaryRow = waitingText && s.status !== "WORKING" && !dupTitle
+        ? '<div class="card-summary' + (waiting ? " waiting" : "") + '">' + escapeHtml(waitingText) + "</div>"
         : "";
+      const ctaRow = waiting && !s.historical && s.waiting_request?.decidable !== false ? '<div class="card-cta"><button>处理</button></div>' : "";
       if (listCompact) {
         // #279⑨ 紧凑卡（对齐手机）：状态点+标题+耗时 / 摘要 / 改动+水位 / 源角标独立末行
         d.innerHTML =
@@ -2442,9 +2503,7 @@ function render() {
           ctaRow;
       } else {
         d.innerHTML =
-          '<div class="card-top">' + chip(s.status) + '<span style="display:flex;align-items:center;gap:6px">' +
-            '<span class="elapsed">' + fmtElapsed(sessionElapsed(s)) + "</span></span></div>" +
-          liveRow +
+          topRow +
           '<div class="card-title">' + escapeHtml(s.title || "") + badges + opBtns + "</div>" +
           summaryRow +
           '<div class="card-stats">' + statsHtml(s.stats) + ctxHtml(s) + "</div>" +
@@ -3083,24 +3142,43 @@ function openPanel(which) {
   $("connPanel").classList.toggle("open", which === "conn");
   $("connChip").classList.toggle("open", which === "conn");
   $("gearPop").classList.toggle("open", which === "conn");
+  if (which === "conn") $("srvPop").classList.remove("open");
+}
+// #345 connChip 点击 → 服务器状态悬浮窗（在线/离线一览 + 管理入口），不再直接滑出设置面板
+function renderSrvPop() {
+  const rows = servers.map((s) => {
+    const st = ctxs.get(s.id)?.status;
+    const col = st === "online" ? "var(--done)" : st === "connecting" ? "var(--working)" : "var(--faint)";
+    const txt = st === "online" ? "在线" : st === "connecting" ? "连接中" : "离线";
+    return '<div class="sp-row"><i style="background:' + col + '"></i><span class="sp-name">' + escapeHtml(srcDisplayName(s)) + '</span><span class="sp-state">' + txt + "</span></div>";
+  }).join("");
+  $("srvPop").innerHTML = rows + '<div class="sp-row sp-manage" id="spManage">管理服务器 →</div>';
 }
 $("connChip").onclick = () => {
-  const open = $("connPanel").classList.contains("open");
-  openPanel(open ? "none" : "conn");
+  const p = $("srvPop");
+  const open = !p.classList.contains("open");
+  renderSrvPop();
+  p.classList.toggle("open", open);
+  $("rhPop").classList.remove("open");
 };
-// 状态图例浮窗 + ⚙ 设置浮窗：点外部收起、两浮层互斥（rhHelp 随 runhint 重建，走事件委托）
+$("srvPop").addEventListener("click", (ev) => {
+  if (ev.target.closest("#spManage")) { $("srvPop").classList.remove("open"); openPanel("conn"); }
+});
+// 状态图例浮窗 + ⚙ 设置浮窗 + 服务器悬浮窗：点外部收起、互斥（rhHelp 随 runhint 重建，走事件委托）
 document.addEventListener("click", (ev) => {
-  if (ev.target.closest("#rhHelp")) { $("rhPop").classList.toggle("open"); $("gearPop").classList.remove("open"); return; }
+  if (ev.target.closest("#rhHelp")) { $("rhPop").classList.toggle("open"); $("gearPop").classList.remove("open"); $("srvPop").classList.remove("open"); return; }
+  if (ev.target.closest("#connChip") || ev.target.closest("#srvPop")) return; // 各自 onclick 处理
   if (ev.target.closest("#gearBtn")) {
     const open = !$("gearPop").classList.contains("open");
     $("rhPop").classList.remove("open");
+    $("srvPop").classList.remove("open");
     $("gearPop").classList.toggle("open", open);
     $("connPanel").classList.toggle("open", open);
     $("connChip").classList.toggle("open", open);
     if (open) { syncGearPop(); refreshRelayRow(); }
     return;
   }
-  if (!ev.target.closest("#rhPop") && !ev.target.closest("#gearPop")) { $("rhPop").classList.remove("open"); $("gearPop").classList.remove("open"); }
+  if (!ev.target.closest("#rhPop") && !ev.target.closest("#gearPop")) { $("rhPop").classList.remove("open"); $("gearPop").classList.remove("open"); $("srvPop").classList.remove("open"); }
 });
 
 // ── 侧栏拖宽 + 收展（用户需求 2026-09-07）：宽度记 localStorage，卡片流式自适应 ──
@@ -3275,6 +3353,15 @@ $("themeBtn").onclick = () => {
   document.querySelector('meta[name="theme-color"]')?.setAttribute("content", light ? "#F3F5F9" : "#050B12");
   __ccShellTheme(light);
 };
+// #344 无边框窗口控制（仅桌面壳显示；浏览器隐藏，拖拽属性无害）
+if (window.__TAURI__ && window.__TAURI__.window) {
+  const wb = document.getElementById("winBtns");
+  wb.style.display = "flex";
+  const w = window.__TAURI__.window.getCurrentWindow();
+  wb.querySelector('[data-w="min"]').onclick = () => { try { w.minimize(); } catch {} };
+  wb.querySelector('[data-w="max"]').onclick = () => { try { w.toggleMaximize(); } catch {} };
+  wb.querySelector('[data-w="close"]').onclick = () => { try { w.close(); } catch {} };
+}
 // ---------- 服务器管理（多源：列表 + 添加/编辑表单） ----------
 let formKind = "lan";   // 表单当前类型（添加目标）
 let editId = "";        // 非空 = 正在编辑该 server
@@ -3288,6 +3375,9 @@ function setFormKind(kind, cfg) {
   $("srvName").value = cfg ? cfg.name : "";
   $("url").value = cfg ? cfg.wsUrl : "";
   $("token").value = cfg ? (cfg.token || "") : "";
+  // #342 表单默认收起（免滚动）：编辑已有源或点「＋ 添加」时展开
+  document.querySelector(".conn-form").classList.toggle("open", !!cfg || formForcedOpen);
+  $("addSrvBtn").style.display = cfg || formForcedOpen ? "none" : "";
   if (kind === "cloud") {
     $("url").placeholder = "wss://<云桥>/cloud";
     $("token").placeholder = "桥 token（可选，默认公共）";
@@ -3303,16 +3393,18 @@ function setFormKind(kind, cfg) {
   }
   $("cancelEdit").style.display = cfg ? "" : "none";
 }
+let formForcedOpen = false;
+$("addSrvBtn").onclick = () => { formForcedOpen = true; setFormKind(formKind, null); $("srvName").focus(); };
 
 document.querySelectorAll("#cmodeSeg button").forEach((b) => {
   b.onclick = () => { if (formKind !== b.dataset.m) setFormKind(b.dataset.m, editId ? cfgOf(editId) : null); };
 });
-$("cancelEdit").onclick = () => setFormKind(formKind, null);
+$("cancelEdit").onclick = () => { formForcedOpen = false; setFormKind(formKind, null); };
 
 // 每行 [状态点 + 名称 + 地址摘要（含状态）] + 编辑 + 删除；点行 = 设为活动源
 function renderServers() {
   const box = $("srvList");
-  if (!servers.length) { box.innerHTML = '<div class="pair-hint">还没有服务器，用下方表单添加</div>'; renderNewTarget(); return; }
+  if (!servers.length) { box.innerHTML = '<div class="pair-hint">还没有服务器，点下方「＋ 添加服务器」</div>'; renderNewTarget(); return; }
   box.innerHTML = servers.map((s) => {
     const ctx = ctxs.get(s.id);
     const stText = ctx ? ctx.statusText : (canAutoConnect(s) ? "未连接" : "未配置");
@@ -3368,6 +3460,7 @@ function deleteServer(id) {
 
 // 添加 / 保存（改动连接相关字段即重连该源）
 $("saveSrvBtn").onclick = () => {
+  formForcedOpen = false; // 保存后表单回落收起（#342）
   const kind = formKind;
   const url = $("url").value.trim();
   const token = $("token").value.trim();
