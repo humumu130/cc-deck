@@ -3145,7 +3145,9 @@ async function refreshRelayRow() {
   row.style.display = "flex";
   try {
     const st = await window.ccDeck.relayStatus();
-    $("gpRelayV").textContent = st.port ? (st.embedded ? "运行中 · 点击停止" : "已运行（外部）") : "未运行 · 点击启动";
+    $("gpRelayV").textContent = st.port
+      ? (st.embedded ? "内置 · 运行中 · 点击停止" : "已运行（外部）")
+      : (st.node ? "未运行 · 点击启动" : "未运行 · 缺 node");
     row.dataset.on = st.port ? "1" : "0";
     row.dataset.embedded = st.embedded ? "1" : "0";
     row.dataset.node = st.node ? "1" : "0";
@@ -3159,7 +3161,7 @@ $("gpRelay").onclick = async () => {
     await window.ccDeck.relayToggle(want);
     await refreshRelayRow();
     if (want && row.dataset.on === "1" && row.dataset.node !== "1") toast("本机 relay 已启动（未检测到 node 时为只读扫描模式）");
-    if (!want) toast("本机 relay 已停止");
+    if (!want) toast("本机 relay 已停止（下次启动 CC Deck 时会自动恢复）");
     // 启动后本机探测自动落源；停了则重连现有源
     setTimeout(() => location.reload(), 600);
   } catch (e) { $("gpRelayV").textContent = "失败"; toast(String(e).slice(0, 80), 4000); }
@@ -4221,7 +4223,9 @@ async function probeLocalRelay() {
     setFormKind("lan", s);
   }
   $("cwd").value = lsGet("ccr_cwd") || "";
-  // 空的直连占位：探测本机 relay，命中即补全（同机零配置）
+  // 空的直连占位：探测本机 relay，命中即补全（同机零配置）。
+  // 桌面壳（#334）启动自动拉起 relay 有冷启动竞态：首探落空 2.5s 后补试一次，
+  // 命中即落库 reload——避免向导抢跑破坏"无感"；仅桌面壳（relayCtl 标记）补试
   const ph = servers.find((s) => s.kind === "lan" && !s.wsUrl);
   if (ph) {
     const local = await probeLocalRelay();
@@ -4230,6 +4234,16 @@ async function probeLocalRelay() {
       ph.token = local.token;
       saveServers();
       toast("检测到本机 CC Deck Relay，已自动连接");
+    } else if (window.ccDeck?.relayCtl) {
+      setTimeout(async () => {
+        const again = await probeLocalRelay();
+        if (again && !ph.wsUrl) {
+          ph.wsUrl = "ws://127.0.0.1:8787/ws";
+          ph.token = again.token;
+          saveServers();
+          location.reload();
+        }
+      }, 2500);
     }
   }
   // 所有源同时保持连接（一处断另一处还在）

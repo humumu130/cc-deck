@@ -160,11 +160,11 @@ fn build_tray(app: &tauri::App) -> tauri::Result<()> {
     Ok(())
 }
 
-// ── #324 内嵌 relay（用户定稿：设置开关式，非自动抢跑）──
-// exe 只带 relay.mjs（1.9MB），node 用系统 PATH 的（装了 Claude Code 的机器必有）；
-// 端口 8787 已在服务 = 让位（插件 supervisor 或既有 relay），开关只作状态展示。
-// CCR_DESKTOP_RELAY_PORT/CCR_DESKTOP_RELAY_AUTOSTART：测试通道（家里 8787 被占时
-// 换端口验证启动分支；AUTOSTART 供无头自测，正常用户不感知）。
+// ── #324 内嵌 relay / #334 启动自动启用 ──
+// exe 只带 relay.mjs（1.9MB），node 用系统 PATH 的（装了 Claude Code 的机器必有）。
+// 启动即检测：8787 已在服务 = 让位（插件 supervisor 或既有 relay）；无服务则静默
+// 拉起内嵌 relay（用户无感，⚙ 设置行只作状态展示/手动停启）。
+// CCR_DESKTOP_RELAY_PORT：测试通道（本机 8787 被生产 relay 占时换端口验证启动分支）。
 static EMBEDDED_RELAY: std::sync::Mutex<Option<std::process::Child>> = std::sync::Mutex::new(None);
 
 fn relay_port() -> u16 {
@@ -176,11 +176,19 @@ fn port_listening(port: u16) -> bool {
 }
 
 // node 探测只做 PATH 查找（where.exe），不执行 node——Windows 商店的
-// WindowsApps 假别名 stub 会让 `node --version` 挂起不返回（"处理中"卡死根因）
+// WindowsApps 假别名 stub 会让 `node --version` 挂起不返回（"处理中"卡死根因）。
+// #334 审查：启动自动拉起后 spawn 必须用 where 解析出的绝对路径——裸名 "node"
+// 会被 CreateProcess 先搜 exe 所在目录/CWD，exe 旁预置的同名 exe 将被静默执行
+fn node_path() -> Option<std::path::PathBuf> {
+    let out = std::process::Command::new("where").arg("node").output().ok()?;
+    if !out.status.success() { return None; }
+    let first = String::from_utf8_lossy(&out.stdout).lines().next()?.trim().to_owned();
+    if first.is_empty() { return None; }
+    Some(std::path::PathBuf::from(first))
+}
+
 fn node_in_path() -> bool {
-    std::process::Command::new("where").arg("node").output()
-        .map(|o| o.status.success() && !String::from_utf8_lossy(&o.stdout).trim().is_empty())
-        .unwrap_or(false)
+    node_path().is_some()
 }
 
 #[tauri::command]
@@ -221,13 +229,16 @@ fn spawn_embedded_relay(app: &tauri::AppHandle) -> Result<(), String> {
     use std::os::windows::process::CommandExt;
     let log = data_dir.join("embedded-relay.log");
     let out = std::fs::File::create(&log).map_err(|e| e.to_string())?;
-    match std::process::Command::new("node")
+    let node = node_path().ok_or("未找到 node（装了 Claude Code 的机器应有；没装请先安装 Node.js）")?;
+    match std::process::Command::new(node)
         .arg(&script)
         .env("CCR_PORT", port.to_string())
         .env("CCR_DATA_DIR", &data_dir)
         .env("CCR_INJECT_CS", &inject_cs)
         .env("CCR_NOHOOK_IDLE_MS", "60000")
         .env("CCR_PARENT_PID", std::process::id().to_string())
+        // 子进程不继承 NODE_OPTIONS：能改用户环境变量者本已用户级权限，纵深防御一行
+        .env_remove("NODE_OPTIONS")
         .stdout(out.try_clone().map_err(|e| e.to_string())?)
         .stderr(out)
         .creation_flags(0x0800_0000) // CREATE_NO_WINDOW
@@ -260,6 +271,43 @@ fn relay_toggle(app: tauri::AppHandle, on: bool) -> Result<Value, String> {
     Ok(relay_status())
 }
 
+/// #334 自动启用后的就绪等待：端口可连即返回；子进程中途死掉（端口起不来）也
+/// 立即返回不空等。全程静默，最多拖慢开窗 wait_ms
+fn wait_port_ready(port: u16, wait_ms: u64) {
+    let t0 = std::time::Instant::now();
+    loop {
+        if port_listening(port) {
+            // 就绪收割：端口可连但若我方子进程已死（bind 竞态败给插件守护 relay/闪退），
+            // 摘掉句柄防 relay_status 的 embedded 虚报 true（审查#4）
+            let mut g = EMBEDDED_RELAY.lock().unwrap();
+            if let Some(c) = g.as_mut() {
+                if matches!(c.try_wait(), Ok(Some(_))) {
+                    *g = None;
+                    println!("[embedded-relay] child exited (lost bind race?) - detached");
+                }
+            }
+            drop(g);
+            println!("[embedded-relay] ready after {}ms", t0.elapsed().as_millis());
+            return;
+        }
+        let mut g = EMBEDDED_RELAY.lock().unwrap();
+        if let Some(c) = g.as_mut() {
+            if matches!(c.try_wait(), Ok(Some(_))) {
+                // 子进程已退出：摘掉句柄让 relay_status 回到未运行态，别等满超时
+                *g = None;
+                println!("[embedded-relay] child exited during startup wait");
+                return;
+            }
+        }
+        drop(g);
+        if t0.elapsed().as_millis() as u64 >= wait_ms {
+            println!("[embedded-relay] port not ready in {}ms, continue anyway", wait_ms);
+            return;
+        }
+        std::thread::sleep(std::time::Duration::from_millis(150));
+    }
+}
+
 fn kill_embedded_relay() {
     if let Some(mut c) = EMBEDDED_RELAY.lock().unwrap().take() {
         let _ = c.kill();
@@ -283,9 +331,12 @@ fn main() {
             if build_tray(app).is_ok() {
                 TRAY_OK.store(true, Ordering::SeqCst);
             }
-            if std::env::var("CCR_DESKTOP_RELAY_AUTOSTART").map(|v| v == "1").unwrap_or(false) {
-                if let Err(e) = spawn_embedded_relay(app.handle()) {
-                    println!("[embedded-relay] autostart failed: {e}");
+            // #334 启动自动启用：本地无 relay 在服务就静默拉起内嵌 relay（已有则让位），
+            // 等端口就绪再建窗口，保证页面首次探测（/local-info）即命中——用户全程无感
+            if !port_listening(relay_port()) {
+                match spawn_embedded_relay(app.handle()) {
+                    Ok(()) => wait_port_ready(relay_port(), 4000),
+                    Err(e) => println!("[embedded-relay] auto-enable failed: {e}"),
                 }
             }
             tauri::WebviewWindowBuilder::from_config(app.handle(), &app.config().app.windows[0])?

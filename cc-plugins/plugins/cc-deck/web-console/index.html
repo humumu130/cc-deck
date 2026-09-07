@@ -368,20 +368,24 @@
     cursor: col-resize; z-index: 30;
   }
   #sideGrip:hover, body.side-drag #sideGrip { background: rgba(217,119,87,.25); }
-  /* 收展钮：分界线中点的小胶囊 ‹/›，收起后钉在面板最左缘 */
+  /* 收展钮：分界线中点的小胶囊 ‹/›。挂在 main 层而非 #side 内——#side 的
+     overflow:hidden 会把探出面板外的半颗裁掉（efa38a1 引入起被切半的根因）；
+     left 跟 :root 的 --side-w，拖宽/收起即时同步，收起态钉在 main 最左缘 */
+  main { position: relative; }
   #sideToggle {
-    position: absolute; top: 50%; right: -13px; z-index: 31;
+    position: absolute; top: 50%; left: calc(var(--side-w, 380px) - 13px); z-index: 31;
     width: 26px; height: 44px; margin-top: -22px;
     border: 1px solid var(--border); border-left: none;
     border-radius: 0 10px 10px 0; background: var(--panel);
     color: var(--dim); cursor: pointer; padding: 0;
     display: flex; align-items: center; justify-content: center;
     font-size: 13px; line-height: 1;
+    transition: left .18s ease;
   }
   #sideToggle:hover { color: var(--text); background: var(--panel-2); }
+  body.side-drag #sideToggle { transition: none; }
   body.side-collapsed #sideToggle {
-    right: 0; border-radius: 0 10px 10px 0; border-left: 1px solid var(--border);
-    position: fixed; left: 0; margin-left: 0;
+    left: 0; border-radius: 0 10px 10px 0; border-left: 1px solid var(--border);
   }
   #side h3 {
     font-size: 11px; font-weight: 600; letter-spacing: 1.5px; color: var(--faint);
@@ -940,7 +944,6 @@
     /* #279⑦ 窄屏详情全屏（#side 隐藏）→ #dsub 行尾的 ctx 水位条补位显示 */
     #dsub .ctx-mini { display: inline-flex; }
     .srv-row .srv-edit, .srv-row .srv-del { opacity: 1; }
-    main { position: relative; }
     #side { width: 100%; border-right: none; }
     #detail {
       display: none; position: absolute; inset: 0; background: var(--bg);
@@ -967,9 +970,9 @@
 <body>
 
 <main>
+  <button id="sideToggle" title="收起 / 展开会话列表">‹</button>
   <div id="side">
     <div id="sideGrip" title="拖拽调整宽度"></div>
-    <button id="sideToggle" title="收起 / 展开会话列表">‹</button>
     <header>
       <div class="brand">
         <div class="logo"><svg viewBox="0 0 24 24" fill="none"><defs><linearGradient id="lgA" x1="4" y1="4" x2="20" y2="20" gradientUnits="userSpaceOnUse"><stop stop-color="#E8985F"/><stop offset="1" stop-color="#C96442"/></linearGradient></defs><g><rect x="3.4" y="6.2" width="11" height="14" rx="2.8" transform="rotate(-11 8.9 13.2)" stroke="url(#lgA)" stroke-opacity=".5" stroke-width="1.5"/><rect x="9.6" y="5.4" width="11" height="14" rx="2.8" transform="rotate(10 15.1 12.4)" stroke="url(#lgA)" stroke-opacity=".85" stroke-width="1.5"/><rect x="6.5" y="4.2" width="11.4" height="15.2" rx="3" fill="url(#lgA)"/><path d="M9.2 8.7h6" stroke="#171220" stroke-width="1.7" stroke-linecap="round"/><path d="M9.2 12.2h4.2" stroke="#171220" stroke-opacity=".55" stroke-width="1.7" stroke-linecap="round"/></g></svg></div>
@@ -3142,7 +3145,9 @@ async function refreshRelayRow() {
   row.style.display = "flex";
   try {
     const st = await window.ccDeck.relayStatus();
-    $("gpRelayV").textContent = st.port ? (st.embedded ? "运行中 · 点击停止" : "已运行（外部）") : "未运行 · 点击启动";
+    $("gpRelayV").textContent = st.port
+      ? (st.embedded ? "内置 · 运行中 · 点击停止" : "已运行（外部）")
+      : (st.node ? "未运行 · 点击启动" : "未运行 · 缺 node");
     row.dataset.on = st.port ? "1" : "0";
     row.dataset.embedded = st.embedded ? "1" : "0";
     row.dataset.node = st.node ? "1" : "0";
@@ -3156,7 +3161,7 @@ $("gpRelay").onclick = async () => {
     await window.ccDeck.relayToggle(want);
     await refreshRelayRow();
     if (want && row.dataset.on === "1" && row.dataset.node !== "1") toast("本机 relay 已启动（未检测到 node 时为只读扫描模式）");
-    if (!want) toast("本机 relay 已停止");
+    if (!want) toast("本机 relay 已停止（下次启动 CC Deck 时会自动恢复）");
     // 启动后本机探测自动落源；停了则重连现有源
     setTimeout(() => location.reload(), 600);
   } catch (e) { $("gpRelayV").textContent = "失败"; toast(String(e).slice(0, 80), 4000); }
@@ -4218,7 +4223,9 @@ async function probeLocalRelay() {
     setFormKind("lan", s);
   }
   $("cwd").value = lsGet("ccr_cwd") || "";
-  // 空的直连占位：探测本机 relay，命中即补全（同机零配置）
+  // 空的直连占位：探测本机 relay，命中即补全（同机零配置）。
+  // 桌面壳（#334）启动自动拉起 relay 有冷启动竞态：首探落空 2.5s 后补试一次，
+  // 命中即落库 reload——避免向导抢跑破坏"无感"；仅桌面壳（relayCtl 标记）补试
   const ph = servers.find((s) => s.kind === "lan" && !s.wsUrl);
   if (ph) {
     const local = await probeLocalRelay();
@@ -4227,6 +4234,16 @@ async function probeLocalRelay() {
       ph.token = local.token;
       saveServers();
       toast("检测到本机 CC Deck Relay，已自动连接");
+    } else if (window.ccDeck?.relayCtl) {
+      setTimeout(async () => {
+        const again = await probeLocalRelay();
+        if (again && !ph.wsUrl) {
+          ph.wsUrl = "ws://127.0.0.1:8787/ws";
+          ph.token = again.token;
+          saveServers();
+          location.reload();
+        }
+      }, 2500);
     }
   }
   // 所有源同时保持连接（一处断另一处还在）
