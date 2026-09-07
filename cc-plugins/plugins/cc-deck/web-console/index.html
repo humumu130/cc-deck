@@ -345,6 +345,22 @@
   }
   #wizTitle { font-size: 16px; font-weight: 700; color: var(--text); text-align: center; }
   #wizSub { font-size: 12px; color: var(--dim); text-align: center; margin: 6px 0 16px; }
+  /* #354 一码直达：大号 6 位码输入 + 主按钮，次级方式收一行小链接 */
+  #wizCodeRow { display: flex; gap: 8px; }
+  #wizCode {
+    flex: 1; min-width: 0; height: 46px; border-radius: 12px; text-align: center;
+    letter-spacing: 6px; font-size: 20px; font-weight: 700; font-family: var(--mono);
+  }
+  #wizGo {
+    flex: none; height: 46px; padding: 0 22px; border-radius: 12px; font-weight: 700; font-size: 14px;
+    background: var(--brand); color: #fff; border: none; cursor: pointer;
+  }
+  #wizGo:hover { filter: brightness(1.08); }
+  #wizAlt { margin-top: 12px; font-size: 12px; color: var(--faint); text-align: center; }
+  #wizAlt button {
+    border: none; background: none; color: var(--dim); font-size: 12px; cursor: pointer; padding: 2px 4px;
+  }
+  #wizAlt button:hover { color: var(--text); }
   .wiz-opt {
     display: flex; align-items: center; gap: 12px; width: 100%; margin-bottom: 9px;
     padding: 12px 14px; border-radius: 12px; cursor: pointer; text-align: left;
@@ -1243,20 +1259,13 @@
 
 <div id="wizPop">
     <div id="wizCard">
-      <div id="wizTitle">连接到 CC Deck</div>
-      <div id="wizSub">选一种方式接入你的 Claude Code</div>
-      <button class="wiz-opt reco" id="wizQr">
-        <span class="wiz-ic">📱</span>
-        <span class="wiz-tx"><b>手机扫码登录<span class="wiz-tag">推荐</span></b><i>手机 App 已连着某台服务器？让它扫一下，此浏览器免输码接入</i></span>
-      </button>
-      <button class="wiz-opt" id="wizPair">
-        <span class="wiz-ic">🔑</span>
-        <span class="wiz-tx"><b>输入配对码</b><i>手机 App 侧边栏「配对码」领取 6 位数字，5 分钟内有效</i></span>
-      </button>
-      <button class="wiz-opt" id="wizLan">
-        <span class="wiz-ic">🔗</span>
-        <span class="wiz-tx"><b>局域网直连</b><i>与 PC 同一 WiFi：填地址与令牌（PC 终端运行 /cc-deck 可见）</i></span>
-      </button>
+      <div id="wizTitle">连接到家里的电脑</div>
+      <div id="wizSub">手机 CC Deck App → 侧边栏「新设备配对」领 6 位码，输入即连</div>
+      <div id="wizCodeRow">
+        <input id="wizCode" inputmode="numeric" maxlength="6" placeholder="6 位配对码" autocomplete="off">
+        <button id="wizGo">连接</button>
+      </div>
+      <div id="wizAlt">其他方式：<button id="wizQr">📱 手机扫码</button> · <button id="wizLan">局域网直连</button></div>
       <button class="wiz-skip" id="wizSkip">稍后配置（左下角 ⚙ 里随时可加）</button>
     </div>
   </div>
@@ -4438,16 +4447,36 @@ async function addPhoneQr() {
 }
 $("addPhoneBtn").onclick = () => void addPhoneQr();
 
-// 首启连接向导（#325）：三选一分流到既有路径——扫码登录浮层 / 配对码表单 / 直连表单
+// 首启连接向导（#354 一码直达）：默认路径=输 6 位配对码即连家里（复用默认云桥+烘焙
+// 身份，配对成功 pair_ack 自动落源）；扫码/直连降为次级入口
 const closeWiz = () => $("wizPop").classList.remove("open");
-$("wizQr").onclick = () => { closeWiz(); startLoginQr(); };
-$("wizPair").onclick = () => {
+function wizSubmitPair() {
+  const code = $("wizCode").value.trim();
+  if (!/^\d{6}$/.test(code)) { toast("请输入 6 位数字配对码"); $("wizCode").focus(); return; }
+  loadCloudIdentity();
+  let cfg = servers.find((x) => x.kind === "cloud" && !x.cloud?.paired);
+  if (!cfg) {
+    const url = defaultCloudUrl();
+    cfg = { id: uuid(), name: "家里", kind: "cloud", wsUrl: url, token: BAKED_BRIDGE_TOKEN,
+      cloud: { url, token: BAKED_BRIDGE_TOKEN, rd: BAKED_RELAY.rd, rk: BAKED_RELAY.rk, paired: false } };
+    servers.push(cfg);
+  }
+  const c = cfg.cloud || (cfg.cloud = { url: cfg.wsUrl, token: serverBridgeToken(cfg), rd: BAKED_RELAY.rd, rk: BAKED_RELAY.rk, paired: false });
+  const src = c.rd && c.rk ? { rd: c.rd, rk: c.rk } : BAKED_RELAY;
+  if (!src.rd || !src.rk) { toast("缺少 relay 信息，请用配对链接"); return; }
+  const pair = { rd: src.rd, rk: src.rk, pc: code };
+  setPendingPair(cfg.id, pair);
+  const ctx = ensureCtx(cfg);
+  ctx.pendingPair = pair;
+  $("wizCode").value = "";
+  saveServers();
+  renderServers();
   closeWiz();
-  openPanel("conn");
-  const un = servers.find((s) => s.kind === "cloud" && !s.cloud?.paired);
-  if (un) setFormKind("cloud", un);
-  setTimeout(() => $("pairCode").focus(), 80);
-};
+  connectCloudFor(ctx, true);
+}
+$("wizGo").onclick = wizSubmitPair;
+$("wizCode").addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); wizSubmitPair(); } });
+$("wizQr").onclick = () => { closeWiz(); startLoginQr(); };
 $("wizLan").onclick = () => {
   closeWiz();
   openPanel("conn");
@@ -4557,7 +4586,7 @@ async function probeLocalRelay() {
   // 自动配对/直连正在进行，弹向导只会挡在前面
   const usable = servers.some((s) => (s.kind === "lan" ? (s.wsUrl && s.token) : !!s.cloud?.paired));
   const deepLinked = !!(h.get("pc") || params.get("token"));
-  if (!usable && !deepLinked) $("wizPop").classList.add("open");
+  if (!usable && !deepLinked) { $("wizPop").classList.add("open"); setTimeout(() => $("wizCode")?.focus(), 80); }
 })();
 </script>
 </body>
