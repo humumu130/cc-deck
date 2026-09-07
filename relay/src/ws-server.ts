@@ -138,6 +138,7 @@ export function startServer(
       : fileURLToPath(new URL("../../", import.meta.url)));
   const consoleHtml = join(webRoot, "web-console", "index.html");
   const naclJs = join(webRoot, "web-console", "nacl.js");
+  const qrJs = join(webRoot, "web-console", "qr.js");
   const mobileDir = join(webRoot, "mobile") + sep;
   // web-console PWA 资产白名单（manifest 引用的文件；此前 404 → 加主屏无图标/无 manifest）
   const PWA_ASSETS: Record<string, string> = {
@@ -178,7 +179,11 @@ export function startServer(
   const bridge = new Bridge(bus, mgr, {
     gateTools: parseGateTools(opts.gateToolsRaw ?? process.env.CCR_GATE_TOOLS),
     dataDir: cfg.dataDir,
-    hasClients: () => [...wss.clients].some((c) => c.readyState === WebSocket.OPEN) || !!opts.cloudHasPhones?.(),
+    // #316 审查修复：待配对手表连接未鉴权，不计入"手机在线"——否则配对连接会让
+    // 提问/权限门控误判有手机在场，挂起等一个不存在的审批方
+    hasClients: () =>
+      [...wss.clients].some((c) => c.readyState === WebSocket.OPEN && !(c as ClientWs).pairing) ||
+      !!opts.cloudHasPhones?.(),
     holdMs: opts.holdMs,
     questionHoldMs: opts.questionHoldMs,
   });
@@ -211,6 +216,16 @@ export function startServer(
         return;
       }
       res.writeHead(200, { "content-type": "text/javascript; charset=utf-8", "cache-control": "no-store" }).end(readFileSync(naclJs));
+      return;
+    }
+    if (req.method === "GET" && url.pathname === "/qr.js") {
+      // #325 扫码登录的二维码编码器（页面 <script src="/qr.js">）；此前白名单漏了
+      // 此路由 → 404 → QRCode 未定义 → 点击按钮静默抛错不弹窗（2026-09-07 用户实测踩中）
+      if (!existsSync(qrJs)) {
+        res.writeHead(503).end("web-console/qr.js 不存在");
+        return;
+      }
+      res.writeHead(200, { "content-type": "text/javascript; charset=utf-8", "cache-control": "no-store" }).end(readFileSync(qrJs));
       return;
     }
     if (req.method === "GET" && PWA_ASSETS[url.pathname]) {
@@ -367,13 +382,15 @@ export function startServer(
     console.log(`[pair] watch pairing ${requestId} -> ${decision}`);
   }
   function startWatchPairing(ws: WebSocket, url: URL): void {
+    // 未鉴权标记必须最先打：池满拒绝路径也要带着它走（close 握手可被扣住 ~30s，
+    // 期间 bus/lanBroadcast 会把全部会话事件漏给这条连接——#316 审查 Critical）
+    (ws as ClientWs).pairing = true;
     if (watchPairings.size >= 5) {
       // 并发待配对池上限：防 LAN 内恶意设备刷请求轰炸手机弹窗
       try { ws.send(JSON.stringify({ type: "PAIR_DENY", reason: "配对请求过多，请稍后再试" })); } catch {}
       try { ws.close(); } catch {}
       return;
     }
-    (ws as ClientWs).pairing = true;
     const requestId = randomUUID();
     const name = (url.searchParams.get("name") ?? "手表").slice(0, 24);
     const code = String(Math.floor(100000 + Math.random() * 900000));

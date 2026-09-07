@@ -1,6 +1,9 @@
 // QR 编码器（Kazuhiko Arase 经典实现，MIT——取自 qrcode-terminal vendor，拼为浏览器单文件）
 // 用法：const q = new QRCode(-1, QRErrorCorrectLevel.M); q.addData(text); q.make();
 // 常量表（原 vendor 单文件 module.exports 内联化）
+// CJS 垫片：拼装时保留了各模块尾部的 module.exports 语句，浏览器无 module 会在
+// 首个赋值处 ReferenceError 中断整个脚本（2026-09-07 桌面端扫码无反应根因）
+var module = { exports: {} };
 var QRErrorCorrectLevel = { L: 1, M: 0, Q: 3, H: 2 };
 var QRMode = { MODE_NUMBER: 1 << 0, MODE_ALPHA_NUM: 1 << 1, MODE_8BIT_BYTE: 1 << 2, MODE_KANJI: 1 << 3 };
 var QRMaskPattern = { PATTERN000: 0, PATTERN001: 1, PATTERN010: 2, PATTERN011: 3, PATTERN100: 4, PATTERN101: 5, PATTERN110: 6, PATTERN111: 7 };

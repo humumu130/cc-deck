@@ -5,7 +5,12 @@ import Bonjour from "bonjour-service";
 export function advertiseRelay(port: number, name: string): { stop: () => void } {
   try {
     const bonjour = new Bonjour();
+    // mDNS socket 的错误是异步 emit（组播被拦/地址被占），不监听会 unhandled——
+    // 广播失败只影响手表自动发现（可手输），静默吞掉
     const service = bonjour.publish({ name, type: "ccdeck", port, txt: { v: "1" } });
+    for (const emitter of [bonjour as unknown as NodeJS.EventEmitter, service as unknown as NodeJS.EventEmitter]) {
+      emitter.on?.("error", () => undefined);
+    }
     return {
       stop: () => {
         try {
