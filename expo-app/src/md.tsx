@@ -135,13 +135,14 @@ function parseInline(text: string): Span[] {
   return spans.length ? spans : [{ text }];
 }
 
-function InlineText({ text, small, header, outer, onLink, onTaskRef, sel }: {
+function InlineText({ text, small, header, outer, onLink, onTaskRef, onTaskRefOut, sel }: {
   text: string;
   small?: boolean;
   header?: boolean;
   outer?: TextStyle;
   onLink?: (url: string) => void;
-  onTaskRef?: (n: number) => void;
+  onTaskRef?: (n: number, hold?: boolean) => void;
+  onTaskRefOut?: () => void;
   sel?: boolean;
 }) {
   const { c } = useTheme();
@@ -151,12 +152,19 @@ function InlineText({ text, small, header, outer, onLink, onTaskRef, sel }: {
   const tapLink = (url: string) => onLink?.(url);
   // #264 补全：正文文本里的 #NNN 任务号拆为可点段（与 DetailScreen 摘要行同规则：
   // 1~3 位数字 + 词边界，品牌色粗体，点击回调 onTaskRef）。链接/行内码 span 不拆——
-  // 各有专属交互与样式；无 onTaskRef 时此分支不进，渲染零变化
+  // 各有专属交互与样式；无 onTaskRef 时此分支不进，渲染零变化。
+  // #332：长按弹钉住版浮窗（松手 onPressOut 解钉重新计 5s）
   const withTaskRefs = (s: Span) => {
     if (!onTaskRef || s.link || s.code || !/#\d{1,3}\b/.test(s.text)) return s.text;
     return s.text.split(/#(\d{1,3})\b/g).map((p, j) =>
       j % 2 === 1 ? (
-        <Text key={j} style={{ color: c.brandA, fontWeight: "700" }} onPress={() => onTaskRef(Number(p))}>
+        <Text
+          key={j}
+          style={{ color: c.brandA, fontWeight: "700" }}
+          onPress={() => onTaskRef(Number(p))}
+          onLongPress={() => onTaskRef(Number(p), true)}
+          onPressOut={onTaskRefOut}
+        >
           #{p}
         </Text>
       ) : (
@@ -225,7 +233,7 @@ function LinkSheet({ url, onClose }: { url: string; onClose: () => void }) {
   );
 }
 
-export function MdText({ src, style, selectable, onTaskRef }: { src: string; style?: TextStyle; selectable?: boolean; onTaskRef?: (n: number) => void }) {
+export function MdText({ src, style, selectable, onTaskRef, onTaskRefOut }: { src: string; style?: TextStyle; selectable?: boolean; onTaskRef?: (n: number, hold?: boolean) => void; onTaskRefOut?: () => void }) {
   const { c } = useTheme();
   const d = useThemeStyles(makeStyles);
   const blocks = useMemo(() => parseBlocks(src), [src]);
@@ -253,14 +261,14 @@ export function MdText({ src, style, selectable, onTaskRef }: { src: string; sty
               <View key={i} style={[d.li, { paddingLeft: 14 + b.depth * 14 }]}>
                 <Text style={[d.base, { color: c.dim }]}>{b.ord ? `${b.ord}. ` : "• "}</Text>
                 <View style={{ flex: 1 }}>
-                  <InlineText text={b.text} onLink={openLink} onTaskRef={onTaskRef} sel={selectable} />
+                  <InlineText text={b.text} onLink={openLink} onTaskRef={onTaskRef} onTaskRefOut={onTaskRefOut} sel={selectable} />
                 </View>
               </View>
             );
           case "quote":
             return (
               <View key={i} style={d.quote}>
-                <InlineText text={b.text} onLink={openLink} onTaskRef={onTaskRef} sel={selectable} />
+                <InlineText text={b.text} onLink={openLink} onTaskRef={onTaskRef} onTaskRefOut={onTaskRefOut} sel={selectable} />
               </View>
             );
           case "table": {
@@ -274,7 +282,7 @@ export function MdText({ src, style, selectable, onTaskRef }: { src: string; sty
                 <View style={d.trHead}>
                   {b.head.map((cell, j) => (
                     <View key={j} style={[d.td, { flex: w[j] }]}>
-                      <InlineText text={cell} small header onLink={openLink} onTaskRef={onTaskRef} sel={selectable} />
+                      <InlineText text={cell} small header onLink={openLink} onTaskRef={onTaskRef} onTaskRefOut={onTaskRefOut} sel={selectable} />
                     </View>
                   ))}
                 </View>
@@ -282,7 +290,7 @@ export function MdText({ src, style, selectable, onTaskRef }: { src: string; sty
                   <View key={ri} style={ri ? d.trSep : d.tr}>
                     {b.head.map((_, j) => (
                       <View key={j} style={[d.td, { flex: w[j] }]}>
-                        <InlineText text={r[j] ?? ""} small onLink={openLink} onTaskRef={onTaskRef} sel={selectable} />
+                        <InlineText text={r[j] ?? ""} small onLink={openLink} onTaskRef={onTaskRef} onTaskRefOut={onTaskRefOut} sel={selectable} />
                       </View>
                     ))}
                   </View>
@@ -293,7 +301,7 @@ export function MdText({ src, style, selectable, onTaskRef }: { src: string; sty
           case "hr":
             return <View key={i} style={d.hr} />;
           default:
-            return <InlineText key={i} text={b.text} outer={style} onLink={openLink} onTaskRef={onTaskRef} sel={selectable} />;
+            return <InlineText key={i} text={b.text} outer={style} onLink={openLink} onTaskRef={onTaskRef} onTaskRefOut={onTaskRefOut} sel={selectable} />;
         }
       })}
     </View>

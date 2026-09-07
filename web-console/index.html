@@ -249,6 +249,31 @@
     background: var(--panel-2); color: var(--dim); border: 1px solid var(--border); font-size: 12.5px;
   }
 
+  /* ---------- #332 任务明细浮卡：转录 #NNN 点击弹出（5s 自动淡出/点空白关/长按钉住） ---------- */
+  #taskPop {
+    position: fixed; inset: 0; z-index: 74; display: none;
+    align-items: center; justify-content: center; background: rgba(0,0,0,.5);
+    opacity: 0; transition: opacity .22s;
+  }
+  #taskPop.open { display: flex; }
+  #taskPop.show { opacity: 1; }
+  .tp-card {
+    background: var(--panel); border: 1px solid var(--border); border-radius: 14px;
+    padding: 14px 16px; max-width: 340px; width: calc(100% - 56px);
+    box-shadow: 0 12px 40px rgba(0,0,0,.5);
+  }
+  .tp-head { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+  .tp-mark { font-size: 17px; font-weight: 700; }
+  .tp-no { color: var(--brand); font-size: 15px; font-weight: 700; }
+  .tp-status { font-size: 12.5px; margin-left: auto; }
+  .tp-content { color: var(--text); font-size: 14px; line-height: 1.55; word-break: break-word; }
+  .tp-active { color: var(--working); font-size: 12.5px; margin-top: 6px; }
+  .tp-time { color: var(--faint); font-size: 11.5px; margin-top: 8px; text-align: right; }
+  .tp-foot { margin-top: 10px; display: flex; align-items: center; justify-content: space-between; }
+  .tp-hint { color: var(--faint); font-size: 11.5px; }
+  .tp-link { color: var(--brand); font-size: 12.5px; font-weight: 600; cursor: pointer; }
+  .tp-link:hover { text-decoration: underline; }
+
   /* ---------- 首启连接向导（#325）：无可用源时三选一，替代旧"直接弹配对码表单" ---------- */
   #wizPop {
     position: fixed; inset: 0; z-index: 72; display: none;
@@ -507,7 +532,7 @@
   .todo-item.pending .todo-tx { color: var(--dim); }
   .todo-empty { color: var(--faint); padding: 60px 4px; text-align: center; font-size: 13px; }
   /* #279④ 转录 #NNN 任务号可点段（对齐手机 TaskRefText：品牌色加粗） */
-  .task-ref { color: var(--brand); font-weight: 700; cursor: pointer; }
+  .task-ref { color: var(--brand); font-weight: 700; cursor: pointer; user-select: none; -webkit-user-select: none; }
   .task-ref:hover { text-decoration: underline; }
   /* #326 转录文件路径：可点（桌面壳打开/定位，浏览器复制） */
   .fpath { color: var(--brand); cursor: pointer; word-break: break-all; }
@@ -1143,6 +1168,7 @@
       <button id="loginQrCancel">取消</button>
     </div>
   </div>
+<div id="taskPop"><div class="tp-card" id="taskCard"></div></div>
 <div id="fpathPop"></div>
 <div id="toast"></div>
 <div id="taskDone"></div>
@@ -2684,7 +2710,7 @@ function todosTabHtml(s) {
     if (!items.length) continue;
     html += '<div class="todo-group"><div class="todo-gt ' + cls + '">' + label + "</div>";
     for (const t of items) {
-      const mark = t.status === "completed" ? "✓" : t.status === "in_progress" ? "◐" : "·";
+      const mark = t.status === "completed" ? "✓" : t.status === "in_progress" ? "◐" : "○";
       html += '<div class="todo-item ' + t.status + '"' + (t.id != null ? ' data-tid="' + t.id + '"' : "") + '>' +
         '<span class="todo-ck">' + mark + '</span><span class="todo-tx">' +
         escapeHtml(t.status === "in_progress" && t.active_form ? t.active_form : t.content) + "</span>" +
@@ -3793,7 +3819,8 @@ document.addEventListener("keydown", (ev) => {
 });
 
 // #279④ #NNN 点击 → 任务 tab 定位该条（闪高 1.5s，对齐手机 #264 jumpToTask）；
-// 任务未渲染（超出近 24h 窗口/封顶 15 条）或旧清单无号时只切 tab，无害回退
+// 任务未渲染（超出近 24h 窗口/封顶 15 条）或旧清单无号时只切 tab，无害回退。
+// #332 起此函数降级为浮卡「查看任务列表」次入口
 function jumpToTask(n) {
   switchTab("todos");
   const row = $("timeline").querySelector('.todo-item[data-tid="' + n + '"]');
@@ -3802,10 +3829,85 @@ function jumpToTask(n) {
   row.classList.add("flash");
   setTimeout(() => row.classList.remove("flash"), 1500);
 }
+
+// #332 任务明细浮卡：#NNN 点击弹出（方案二，替代直接跳转）——状态/内容/active_form
+// 一屏速览。生命周期（对齐手机端）：5s 无操作自动淡出；点空白立即关；长按 ≥450ms
+// 弹钉住版不计时，松开重新计 5s。数据取 selSession().todos 全量：已完成列表的
+// 近 24h 窗口截断不影响查明细（旧跳转对窗口外任务只能切 tab 空落）
+let taskPopTimer = null;
+function tpRel(ts) {
+  const s = Math.max(0, Math.floor((Date.now() - ts) / 1000));
+  if (s < 60) return s + "s";
+  if (s < 3600) return Math.floor(s / 60) + "m" + String(s % 60).padStart(2, "0") + "s";
+  return Math.floor(s / 3600) + "h" + String(Math.floor((s % 3600) / 60)).padStart(2, "0") + "m";
+}
+function armTaskPop() {
+  clearTimeout(taskPopTimer);
+  taskPopTimer = setTimeout(closeTaskPop, 5000);
+}
+function openTaskPop(n, pin) {
+  const sel = selSession();
+  const t = sel ? (sel.todos || []).find((x) => x && x.id === n) : undefined;
+  const mark = !t ? "·" : t.status === "completed" ? "✓" : t.status === "in_progress" ? "◐" : "○";
+  const color = !t ? "var(--faint)" : t.status === "completed" ? "var(--done)" : t.status === "in_progress" ? "var(--working)" : "var(--faint)";
+  const label = !t ? "不在当前清单" : t.status === "completed" ? "已完成" : t.status === "in_progress" ? "进行中" : "待开始";
+  $("taskCard").innerHTML =
+    '<div class="tp-head"><span class="tp-mark" style="color:' + color + '">' + mark + '</span>' +
+    '<span class="tp-no">#' + n + '</span><span class="tp-status" style="color:' + color + '">' + label + "</span></div>" +
+    (t
+      ? '<div class="tp-content">' + escapeHtml(t.content || "") + "</div>" +
+        (t.status === "in_progress" && t.active_form ? '<div class="tp-active">正在：' + escapeHtml(t.active_form) + "</div>" : "") +
+        (typeof t.updated_at === "number" && Number.isFinite(t.updated_at) ? '<div class="tp-time">' + tpRel(t.updated_at) + " 前更新</div>" : "")
+      : '<div class="tp-content">' + (sel ? "该任务已不在本会话的当前清单中" : "会话已不存在") + "</div>") +
+    '<div class="tp-foot"><span class="tp-hint">长按可固定</span><span class="tp-link" id="tpGoList">查看任务列表 →</span></div>';
+  $("tpGoList").onclick = () => { closeTaskPop(); jumpToTask(n); };
+  const el = $("taskPop");
+  el.classList.add("open");
+  requestAnimationFrame(() => el.classList.add("show"));
+  clearTimeout(taskPopTimer);
+  if (!pin) armTaskPop();
+}
+function closeTaskPop() {
+  clearTimeout(taskPopTimer);
+  const el = $("taskPop");
+  el.classList.remove("show");
+  setTimeout(() => { if (!el.classList.contains("show")) el.classList.remove("open"); }, 240);
+}
+// 点空白（卡外）立即关
+$("taskPop").addEventListener("click", (ev) => {
+  if (!ev.target.closest(".tp-card")) closeTaskPop();
+});
+// 短点弹出（5s 淡出）；按住 ≥450ms 弹钉住版，松开解钉重新计 5s。
+// pointerup 挂 document：按住后移出 #NNN 再松开也能正确结算。
+// 桌面右键/触屏长按系统菜单在 #NNN 上抑制（长按语义已被占用）
+let tpHoldTimer = null, tpHoldN = 0;
+$("timeline").addEventListener("pointerdown", (ev) => {
+  const ref = ev.target.closest(".task-ref");
+  if (!ref) return;
+  if (ev.button !== 0 || ev.isPrimary === false) return; // 只认主键/主指（右键、双指不触发）
+  tpHoldN = Number(ref.dataset.n);
+  clearTimeout(tpHoldTimer);
+  tpHoldTimer = setTimeout(() => { tpHoldTimer = null; openTaskPop(tpHoldN, true); }, 500);
+});
+$("timeline").addEventListener("contextmenu", (ev) => {
+  if (ev.target.closest(".task-ref")) ev.preventDefault();
+});
+// 触屏滚动抢走指针（pointercancel）或按住移出窗口松开（blur）：无 pointerup 可等，
+// 清掉按压计时防"无人按着却弹钉住卡"
+document.addEventListener("pointercancel", () => { clearTimeout(tpHoldTimer); tpHoldTimer = null; });
+window.addEventListener("blur", () => { clearTimeout(tpHoldTimer); tpHoldTimer = null; });
+document.addEventListener("pointerup", () => {
+  if (tpHoldTimer != null) {
+    clearTimeout(tpHoldTimer);
+    tpHoldTimer = null;
+    openTaskPop(tpHoldN, false);
+    return;
+  }
+  // 长按钉住中的松手：解钉重新计 5s（浮窗已关的普通 pointerup 无副作用）
+  if ($("taskPop").classList.contains("open")) armTaskPop();
+});
 // #279④⑤ 事件委托（timeline innerHTML 全量重建，委托免重挂）
 $("timeline").addEventListener("click", (ev) => {
-  const ref = ev.target.closest(".task-ref");
-  if (ref) { jumpToTask(Number(ref.dataset.n)); return; }
   const fp = ev.target.closest(".fpath");
   if (fp) { openFpathPop(fp.dataset.p || "", ev.clientX, ev.clientY); return; }
   const del = ev.target.closest(".todo-del");
@@ -4045,10 +4147,11 @@ $("wizLan").onclick = () => {
   setTimeout(() => $("url").focus(), 80);
 };
 $("wizSkip").onclick = closeWiz;
-// Escape 关闭顶层浮层（向导/扫码登录）
+// Escape 关闭顶层浮层（任务浮卡/向导/扫码登录）
 document.addEventListener("keydown", (ev) => {
   if (ev.key !== "Escape") return;
-  if ($("loginQrPop").classList.contains("open")) closeLoginQr();
+  if ($("taskPop").classList.contains("open")) closeTaskPop();
+  else if ($("loginQrPop").classList.contains("open")) closeLoginQr();
   else if ($("wizPop").classList.contains("open")) closeWiz();
 });
 

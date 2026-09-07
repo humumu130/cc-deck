@@ -82,7 +82,7 @@ const PROC_FONT = {
   hidden: { tool: 8.5, sys: 8, result: 8.5, thinkHead: 8.5, think: 10, thinkLH: 14, op: 0.75 },
 } as const;
 
-function TranscriptRow({ e, open, onToggle, onContentMenu, onTaskRef }: { e: LogEntry; open: boolean; onToggle: () => void; onContentMenu?: (text: string) => void; onTaskRef?: (n: number) => void }) {
+function TranscriptRow({ e, open, onToggle, onContentMenu, onTaskRef, onTaskRefOut }: { e: LogEntry; open: boolean; onToggle: () => void; onContentMenu?: (text: string) => void; onTaskRef?: (n: number, hold?: boolean) => void; onTaskRefOut?: () => void }) {
   const { c } = useTheme();
   const d = useThemeStyles(makeStyles);
   const pf = PROC_FONT[useProcessFont()];
@@ -105,7 +105,7 @@ function TranscriptRow({ e, open, onToggle, onContentMenu, onTaskRef }: { e: Log
       >
         <Text style={[d.trThinkHead, { fontSize: pf.thinkHead }]}>{open ? "▾ 思考过程" : `▸ 思考过程 · ${src.length} 字`}{e.ts ? ` · ${fmtHM(e.ts)}` : ""}</Text>
         <Collapse open={open}>
-          <MdText src={src} selectable onTaskRef={onTaskRef} style={{ ...d.trThinkT, fontSize: pf.think, lineHeight: pf.thinkLH }} />
+          <MdText src={src} selectable onTaskRef={onTaskRef} onTaskRefOut={onTaskRefOut} style={{ ...d.trThinkT, fontSize: pf.think, lineHeight: pf.thinkLH }} />
         </Collapse>
       </Pressable>
     );
@@ -114,7 +114,7 @@ function TranscriptRow({ e, open, onToggle, onContentMenu, onTaskRef }: { e: Log
     return (
       <View style={d.trMsg}>
         {e.ts ? <Text style={d.trMsgTime}>{fmtHM(e.ts)}</Text> : null}
-        <MdText src={open ? (e.full ?? e.text) : e.text} selectable onTaskRef={onTaskRef} />
+        <MdText src={open ? (e.full ?? e.text) : e.text} selectable onTaskRef={onTaskRef} onTaskRefOut={onTaskRefOut} />
         {cursor}
         {e.full ? (
           <Pressable onPress={onToggle} hitSlop={6}>
@@ -131,7 +131,7 @@ function TranscriptRow({ e, open, onToggle, onContentMenu, onTaskRef }: { e: Log
           <View style={{ flex: 1 }}>
             <View style={{ flexDirection: "row", gap: 6, alignItems: "baseline" }}>
               <Text style={[d.trToolName, { fontSize: pf.tool }]}>⚙ {e.tool || "tool"}</Text>
-              <TaskRefText style={[d.trToolText, { fontSize: pf.tool }]} numberOfLines={1} text={e.text} onTaskRef={onTaskRef} />
+              <TaskRefText style={[d.trToolText, { fontSize: pf.tool }]} numberOfLines={1} text={e.text} onTaskRef={onTaskRef} onTaskRefOut={onTaskRefOut} />
             </View>
             <Collapse open={open}>
               <Text style={d.trDetail} selectable>{e.detail}</Text>
@@ -144,7 +144,7 @@ function TranscriptRow({ e, open, onToggle, onContentMenu, onTaskRef }: { e: Log
     return (
       <View style={[d.trTool, { opacity: pf.op }]}>
         <Text style={[d.trToolName, { fontSize: pf.tool }]}>⚙ {e.tool || "tool"}</Text>
-        <TaskRefText style={[d.trToolText, { fontSize: pf.tool }]} numberOfLines={2} text={e.text} onTaskRef={onTaskRef} />
+        <TaskRefText style={[d.trToolText, { fontSize: pf.tool }]} numberOfLines={2} text={e.text} onTaskRef={onTaskRef} onTaskRefOut={onTaskRefOut} />
       </View>
     );
   }
@@ -170,7 +170,7 @@ function TranscriptRow({ e, open, onToggle, onContentMenu, onTaskRef }: { e: Log
             text={`↳ ${e.text} `}
             suffix={open ? "收起 ▴" : "展开 ▾"}
             suffixStyle={d.tlExpand}
-            onTaskRef={onTaskRef}
+            onTaskRef={onTaskRef} onTaskRefOut={onTaskRefOut}
           />
           <Collapse open={open}>
             <Text style={d.trDetail} selectable>{e.detail}</Text>
@@ -178,7 +178,7 @@ function TranscriptRow({ e, open, onToggle, onContentMenu, onTaskRef }: { e: Log
         </Pressable>
       );
     }
-    return <TaskRefText style={[d.trResult, { fontSize: pf.result, opacity: pf.op }]} numberOfLines={2} text={`↳ ${e.text}`} onTaskRef={onTaskRef} />;
+    return <TaskRefText style={[d.trResult, { fontSize: pf.result, opacity: pf.op }]} numberOfLines={2} text={`↳ ${e.text}`} onTaskRef={onTaskRef} onTaskRefOut={onTaskRefOut} />;
   }
   return <Text style={[d.trSystem, { fontSize: pf.sys, opacity: pf.op }]}>{e.text}</Text>;
 }
@@ -204,7 +204,7 @@ function DiffBlock({ lines }: { lines: string[] }) {
 
 // #264：摘要文本里的 #NNN 任务号渲染成可点高亮段（1~3 位数字，避免误吞时间戳/长号），
 // 点击跳任务 tab 并定位该条。找不到对应任务时仍切到任务 tab（无害回退）
-function TaskRefText({ text, style, numberOfLines, suffix, suffixStyle, onTaskRef }: { text: string; style: StyleProp<TextStyle>; numberOfLines?: number; suffix?: string; suffixStyle?: StyleProp<TextStyle>; onTaskRef?: (n: number) => void }) {
+function TaskRefText({ text, style, numberOfLines, suffix, suffixStyle, onTaskRef, onTaskRefOut }: { text: string; style: StyleProp<TextStyle>; numberOfLines?: number; suffix?: string; suffixStyle?: StyleProp<TextStyle>; onTaskRef?: (n: number, hold?: boolean) => void; onTaskRefOut?: () => void }) {
   const { c } = useTheme();
   if (!onTaskRef || !/#\d{1,3}\b/.test(text)) {
     return (
@@ -219,7 +219,13 @@ function TaskRefText({ text, style, numberOfLines, suffix, suffixStyle, onTaskRe
     <Text style={style} numberOfLines={numberOfLines}>
       {parts.map((p, i) =>
         i % 2 === 1 ? (
-          <Text key={i} style={{ color: c.brandA, fontWeight: "700" }} onPress={() => onTaskRef(Number(p))}>
+          <Text
+            key={i}
+            style={{ color: c.brandA, fontWeight: "700" }}
+            onPress={() => onTaskRef(Number(p))}
+            onLongPress={() => onTaskRef(Number(p), true)}
+            onPressOut={onTaskRefOut}
+          >
             #{p}
           </Text>
         ) : (
@@ -266,6 +272,77 @@ function ContentMenu({ text, onClose }: { text: string; onClose: () => void }) {
               }}
             >
               <Text style={d.menuBtnPriT}>分享</Text>
+            </Pressable>
+          </View>
+        </Pressable>
+      </Pressable>
+    </Modal>
+  );
+}
+
+// #332 任务明细浮窗：转录 #NNN 点击弹出（方案二，替代 #264 直接跳转）——状态/内容/
+// active_form 一屏速览，「查看任务列表」作次入口沿用跳转定位。数据取 s.todos 全量：
+// 已完成列表的近 1 天窗口截断不影响查明细（旧跳转对窗口外任务只能切 tab 空落）。
+// 生命周期（用户定）：5s 无操作自动淡出；点空白立即关；长按 #NNN 钉住不计时（hold），
+// 松手（onPressOut → hold=false）重新计 5s。关闭统一走 doClose：先 visible=false 播
+// Modal fade 出场动画、280ms 后才真卸载（直接卸载是瞬消，审查#4）
+function TaskPop({ n, todo, goneSession, hold, onClose, onGoList }: { n: number; todo: TodoItem | undefined; goneSession: boolean; hold: boolean; onClose: () => void; onGoList: () => void }) {
+  const { c } = useTheme();
+  const d = useThemeStyles(makeStyles);
+  const [vis, setVis] = useState(true);
+  const closeRef = useRef(onClose);
+  closeRef.current = onClose;
+  const byeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => () => { if (byeTimer.current) clearTimeout(byeTimer.current); }, []);
+  const doClose = () => {
+    if (!vis) return;
+    setVis(false);
+    byeTimer.current = setTimeout(() => {
+      byeTimer.current = null;
+      closeRef.current();
+    }, 280);
+  };
+  useEffect(() => {
+    if (hold) return;
+    const t = setTimeout(doClose, 5000);
+    return () => clearTimeout(t);
+  }, [n, hold]);
+  const mark = todo ? (todo.status === "completed" ? "✓" : todo.status === "in_progress" ? "◐" : "○") : "·";
+  const markColor = !todo ? c.faint : todo.status === "completed" ? c.done : todo.status === "in_progress" ? c.working : c.faint;
+  const statusText = todo ? (todo.status === "completed" ? "已完成" : todo.status === "in_progress" ? "进行中" : "待开始") : "不在当前清单";
+  return (
+    <Modal visible={vis} transparent animationType="fade" onRequestClose={doClose}>
+      <Pressable style={d.menuScrim} onPress={doClose}>
+        <Pressable style={d.menuCard} onPress={() => undefined}>
+          <View style={d.tpHead}>
+            <Text style={[d.tpMark, { color: markColor }]}>{mark}</Text>
+            <Text style={d.tpNo}>#{n}</Text>
+            <Text style={[d.tpStatus, { color: markColor }]}>{statusText}</Text>
+          </View>
+          {todo ? (
+            <>
+              <Text style={d.tpContent}>{todo.content}</Text>
+              {todo.status === "in_progress" && todo.active_form ? (
+                <Text style={d.tpActive}>正在：{todo.active_form}</Text>
+              ) : null}
+              {typeof todo.updated_at === "number" && Number.isFinite(todo.updated_at) ? (
+                <Text style={d.tpTime}>{fmtElapsed(Math.max(0, Date.now() - todo.updated_at))} 前更新</Text>
+              ) : null}
+            </>
+          ) : (
+            <Text style={d.tpContent}>{goneSession ? "会话已不存在" : "该任务已不在本会话的当前清单中"}</Text>
+          )}
+          <View style={d.tpFoot}>
+            <Text style={d.tpHint}>长按可固定</Text>
+            <Pressable
+              hitSlop={6}
+              android_ripple={{ color: c.tintSoft, borderless: false, radius: 9 }}
+              onPress={() => {
+                doClose();
+                onGoList();
+              }}
+            >
+              <Text style={d.tpLink}>查看任务列表 →</Text>
             </Pressable>
           </View>
         </Pressable>
@@ -605,9 +682,17 @@ export default function DetailScreen({ sid, onBack, initialView, ref }: { sid: s
   );
 
   // #264：转录 #NNN 点击 → 任务 tab 定位该条（行 y 由 onLayout 记账，落点闪高 1.5s；
-  // 任务不在近 3 天窗口（未渲染）时只切 tab 不滚——y 无记录为无害回退）
+  // 任务不在近 3 天窗口（未渲染）时只切 tab 不滚——y 无记录为无害回退）。
+  // #332：点击先弹任务明细浮窗（方案二），jumpToTask 降级为浮窗内「查看任务列表」入口
   const todoY = useRef(new Map<number, number>());
   const [flashTodo, setFlashTodo] = useState<number | null>(null);
+  const [taskPop, setTaskPop] = useState<number | null>(null);
+  const [taskHold, setTaskHold] = useState(false);
+  const openTaskRef = (n: number, hold = false) => {
+    setTaskPop(n);
+    setTaskHold(hold);
+  };
+  const outTaskRef = () => setTaskHold(false);
   const flashTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   useEffect(() => () => { if (flashTimer.current) clearTimeout(flashTimer.current); }, []);
   const jumpToTask = (n: number) => {
@@ -1225,7 +1310,7 @@ export default function DetailScreen({ sid, onBack, initialView, ref }: { sid: s
               nodes.push(<Text key={`day-${key}`} style={d.daySep}>── {day} ──</Text>);
             }
             if (day) lastDay = day;
-            nodes.push(<TranscriptRow key={key} e={e} open={!!expanded[key]} onToggle={() => toggle(key)} onContentMenu={setMenuText} onTaskRef={jumpToTask} />);
+            nodes.push(<TranscriptRow key={key} e={e} open={!!expanded[key]} onToggle={() => toggle(key)} onContentMenu={setMenuText} onTaskRef={openTaskRef} onTaskRefOut={outTaskRef} />);
             return nodes;
           })
         )}
@@ -1428,6 +1513,18 @@ export default function DetailScreen({ sid, onBack, initialView, ref }: { sid: s
       />
 
       {menuText ? <ContentMenu text={menuText} onClose={() => setMenuText(null)} /> : null}
+      {taskPop != null ? (
+        <TaskPop
+          n={taskPop}
+          todo={(s?.todos ?? []).find((t) => t.id === taskPop)}
+          goneSession={!s}
+          hold={taskHold}
+          onClose={() => setTaskPop(null)}
+          onGoList={() => {
+            if (taskPop != null) jumpToTask(taskPop);
+          }}
+        />
+      ) : null}
       </View>
     </SafeAreaView>
   );
@@ -1754,4 +1851,15 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
   menuBtnPri: { backgroundColor: c.brandA, borderColor: "transparent" },
   menuBtnT: { color: c.dim, fontSize: 14, fontWeight: "600" },
   menuBtnPriT: { color: "#fff", fontSize: 14, fontWeight: "600" },
+  // #332 任务明细浮窗（TaskPop，复用 menuScrim/menuCard 容器）
+  tpHead: { flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 8 },
+  tpMark: { fontSize: 17, fontWeight: "700" },
+  tpNo: { color: c.brandA, fontSize: 15, fontWeight: "700" },
+  tpStatus: { fontSize: 12.5, flex: 1, textAlign: "right" },
+  tpContent: { color: c.text, fontSize: 14, lineHeight: 21 },
+  tpActive: { color: c.working, fontSize: 12.5, marginTop: 6 },
+  tpTime: { color: c.faint, fontSize: 11.5, marginTop: 8, alignSelf: "flex-end" },
+  tpFoot: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginTop: 10 },
+  tpHint: { color: c.faint, fontSize: 11.5 },
+  tpLink: { color: c.brandA, fontSize: 12.5, fontWeight: "600", paddingVertical: 4, paddingHorizontal: 8, borderRadius: 9 },
 });
