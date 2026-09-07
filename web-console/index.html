@@ -125,7 +125,8 @@
   .rh-row { display: flex; align-items: center; gap: 8px; font-size: 12.5px; color: var(--text); }
   .rh-row i { width: 8px; height: 8px; border-radius: 50%; flex: none; }
   /* 左下角双悬浮钮（＋ 新建在上、⚙ 设置在下）：裸图标无边框 */
-  #sideFabs { position: absolute; left: 14px; bottom: 72px; z-index: 46; display: flex; flex-direction: column; gap: 10px; }
+  #sideFabs { position: absolute; left: 14px; bottom: var(--fabs-bottom, 72px); z-index: 46; display: flex; flex-direction: column; gap: 10px; transition: bottom .18s ease; }
+  body.newform-open #sideFabs { --fabs-bottom: calc(var(--newform-h, 180px) + 84px); }
   .sfab {
     width: 42px; height: 42px; border: none; background: none; cursor: pointer;
     display: flex; align-items: center; justify-content: center; position: relative;
@@ -135,6 +136,9 @@
   .sfab svg { width: 28px; height: 28px; display: block; }
   #addBtn svg { transition: transform .2s ease; }
   #addBtn.on svg { transform: rotate(45deg); }
+  /* 抽屉打开（gearPop.open 在 DOM 前于 sideFabs）：＋ 让位隐藏、⚙ 高亮为关闭钮 */
+  #gearPop.open ~ #sideFabs #addBtn { display: none; }
+  #gearPop.open ~ #sideFabs #gearBtn { color: var(--text); background: rgba(127,127,127,.16); }
   /* 设置抽屉：从整个面板左侧滑出、覆盖会话栏（对齐 App SettingsDrawer 形态），齿轮悬浮其上 */
   #gearPop {
     position: absolute; inset: 0; z-index: 45; display: flex; flex-direction: column;
@@ -1128,6 +1132,7 @@ const cfgOf = (id) => servers.find((s) => s.id === id);
 
 function saveServers() {
   try { localStorage.setItem(SERVERS_KEY, JSON.stringify(servers)); } catch {}
+  try { sessionStorage.setItem("ccd_servers", JSON.stringify(servers)); } catch {}
 }
 // Safari 无痕模式 setItem 抛 QuotaExceeded、getItem 极端环境也可能抛：
 // 统一走安全封装，避免顶层脚本中断白板 / connectAll 循环被打断
@@ -1139,6 +1144,9 @@ function lsSet(k, v) { try { localStorage.setItem(k, v); } catch {} }
 function migrateLegacy() {
   let list = null;
   try { list = JSON.parse(localStorage.getItem(SERVERS_KEY) || "null"); } catch {}
+  // 硬刷新兜底：个别浏览器/隐私策略清 localStorage——sessionStorage 同源冗余恢复
+  //（ckp 丢 = 浏览器换了新设备号，relay 视为未配对；此处两处一起救回来）
+  if (!Array.isArray(list)) { try { list = JSON.parse(sessionStorage.getItem("ccd_servers") || "null"); } catch {} }
   if (Array.isArray(list)) { servers = list.filter((e) => e && e.id && e.kind); return; }
   list = [];
   const mode = lsGet("ccr_mode");
@@ -1676,9 +1684,10 @@ function onCloudText(ctx, text) {
 }
 
 function loadCloudIdentity() {
-  try { ckp = JSON.parse(localStorage.getItem("ccr_cloud_kp") || "null"); } catch { ckp = null; }
+  try { ckp = JSON.parse(localStorage.getItem("ccr_cloud_kp") || sessionStorage.getItem("ccr_cloud_kp") || "null"); } catch { ckp = null; }
   if (!ckp || !ckp.publicKey || !ckp.secretKey) {
     ckp = genKp();
+  try { sessionStorage.setItem("ccr_cloud_kp", JSON.stringify(ckp)); } catch {}
     lsSet("ccr_cloud_kp", JSON.stringify(ckp));
   }
 }
@@ -2907,6 +2916,14 @@ document.addEventListener("click", (ev) => {
   };
   setCollapsed(localStorage.getItem(SIDE_COL_KEY) === "1");
   toggleBtn.onclick = () => setCollapsed(!document.body.classList.contains("side-collapsed"));
+  // 新建表单打开时悬浮钮上移避让（量实际高度，表单内容可变）
+  const newformEl = $("newform");
+  if (newformEl && typeof ResizeObserver !== "undefined") {
+    new ResizeObserver(() => {
+      document.body.classList.toggle("newform-open", newformEl.classList.contains("open"));
+      document.documentElement.style.setProperty("--newform-h", Math.round(newformEl.getBoundingClientRect().height) + "px");
+    }).observe(newformEl);
+  }
   const grip = $("sideGrip");
   grip.addEventListener("mousedown", (e) => {
     e.preventDefault();
