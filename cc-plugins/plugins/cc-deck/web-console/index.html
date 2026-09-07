@@ -898,6 +898,7 @@
       <div class="gp-head"><b>设置</b><button id="gearClose" title="收起">✕</button></div>
       <div class="gp-card">
         <div class="gp-sec">服务器</div>
+        <div class="gp-row" id="gpRelay" style="display:none">本机 relay <b id="gpRelayV"></b></div>
         <div class="panel" id="connPanel">
           <div id="srvList"></div>
           <div class="conn-form">
@@ -2896,7 +2897,7 @@ document.addEventListener("click", (ev) => {
     $("gearPop").classList.toggle("open", open);
     $("connPanel").classList.toggle("open", open);
     $("connChip").classList.toggle("open", open);
-    if (open) syncGearPop();
+    if (open) { syncGearPop(); refreshRelayRow(); }
     return;
   }
   if (!ev.target.closest("#rhPop") && !ev.target.closest("#gearPop")) { $("rhPop").classList.remove("open"); $("gearPop").classList.remove("open"); }
@@ -2955,6 +2956,34 @@ function syncGearPop() {
 }
 $("gpTheme") && ($("gpTheme").onclick = () => { $("themeBtn").click(); syncGearPop(); });
 $("gearClose").onclick = () => openPanel("none");
+// 本机 relay 开关（#324，仅桌面壳）：relayCtl 标记由 Tauri INIT_SCRIPT 注入；
+// 状态三态：端口已服务（可能是插件 relay——只展示）/ 内置运行中（可停）/ 未运行（可启）
+async function refreshRelayRow() {
+  const row = $("gpRelay");
+  if (!window.ccDeck || !window.ccDeck.relayCtl) { row.style.display = "none"; return; }
+  row.style.display = "flex";
+  try {
+    const st = await window.ccDeck.relayStatus();
+    $("gpRelayV").textContent = st.port ? (st.embedded ? "运行中 · 点击停止" : "已运行（外部）") : "未运行 · 点击启动";
+    row.dataset.on = st.port ? "1" : "0";
+    row.dataset.embedded = st.embedded ? "1" : "0";
+    row.dataset.node = st.node ? "1" : "0";
+  } catch { $("gpRelayV").textContent = "状态未知"; }
+}
+$("gpRelay").onclick = async () => {
+  const row = $("gpRelay");
+  const want = row.dataset.on !== "1";
+  $("gpRelayV").textContent = "处理中…";
+  try {
+    await window.ccDeck.relayToggle(want);
+    await refreshRelayRow();
+    if (want && row.dataset.on === "1" && row.dataset.node !== "1") toast("本机 relay 已启动（未检测到 node 时为只读扫描模式）");
+    if (!want) toast("本机 relay 已停止");
+    // 启动后本机探测自动落源；停了则重连现有源
+    setTimeout(() => location.reload(), 600);
+  } catch (e) { $("gpRelayV").textContent = "失败"; toast(String(e).slice(0, 80), 4000); }
+};
+
 $("emptyNewBtn").onclick = () => {
   if (!$("newform").classList.contains("open")) $("addBtn").click();
   setTimeout(() => $("cwd").focus(), 60);

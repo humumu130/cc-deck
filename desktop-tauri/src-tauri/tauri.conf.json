@@ -34,7 +34,11 @@
       "icons/128x128.png",
       "icons/icon.ico"
     ],
-    "createUpdaterArtifacts": true
+    "createUpdaterArtifacts": true,
+    "resources": [
+      "resources/relay.mjs",
+      "resources/bin/inject.cs"
+    ]
   },
   "plugins": {
     "updater": {

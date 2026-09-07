@@ -38,6 +38,9 @@ if (!window.ccDeck) {
   window.ccDeck = {
     probeLocal: () => window.__TAURI__.core.invoke("probe_local"),
     openExternal: (url) => window.__TAURI__.core.invoke("open_external", { url }),
+    relayCtl: true, // 标记：内置 relay 开关能力存在（网页端据此显示设置行）
+    relayStatus: () => window.__TAURI__.core.invoke("relay_status"),
+    relayToggle: (on) => window.__TAURI__.core.invoke("relay_toggle", { on }),
   };
 }
 document.addEventListener("click", (e) => {
@@ -136,6 +139,92 @@ fn build_tray(app: &tauri::App) -> tauri::Result<()> {
     Ok(())
 }
 
+// ── #324 内嵌 relay（用户定稿：设置开关式，非自动抢跑）──
+// exe 只带 relay.mjs（1.9MB），node 用系统 PATH 的（装了 Claude Code 的机器必有）；
+// 端口 8787 已在服务 = 让位（插件 supervisor 或既有 relay），开关只作状态展示。
+// 无插件机器开开关 → 拉起内置 relay，孤儿扫描只读接入本机 Claude 会话。
+static EMBEDDED_RELAY: std::sync::Mutex<Option<std::process::Child>> = std::sync::Mutex::new(None);
+
+fn port_listening(port: u16) -> bool {
+    std::net::TcpStream::connect(("127.0.0.1", port)).is_ok()
+}
+
+fn system_node() -> Option<String> {
+    std::process::Command::new("node").arg("--version").output().ok().filter(|o| o.status.success()).map(|_| "node".to_string())
+}
+
+#[tauri::command]
+fn relay_status() -> Value {
+    serde_json::json!({
+        "port": port_listening(8787),
+        "embedded": EMBEDDED_RELAY.lock().unwrap().is_some(),
+        "node": system_node().is_some(),
+    })
+}
+
+#[tauri::command]
+fn relay_toggle(app: tauri::AppHandle, on: bool) -> Result<Value, String> {
+    if !on {
+        if let Some(mut c) = EMBEDDED_RELAY.lock().unwrap().take() {
+            let _ = c.kill();
+            let _ = c.wait();
+            println!("[embedded-relay] stopped by user");
+        }
+        return Ok(relay_status());
+    }
+    if port_listening(8787) {
+        println!("[embedded-relay] port 8787 already serving - nothing to do");
+        return Ok(relay_status()); // 已有 relay（插件/手动），视为"开启"状态
+    }
+    if EMBEDDED_RELAY.lock().unwrap().is_some() {
+        return Ok(relay_status());
+    }
+    let Some(_node) = system_node() else {
+        return Err("未找到 node（装了 Claude Code 的机器应自带；或安装 Node ≥ 20 后重试）".into());
+    };
+    let Ok(res) = app.path().resource_dir() else {
+        return Err("资源目录不可用".into());
+    };
+    let script = res.join("resources").join("relay.mjs");
+    let inject_cs = res.join("resources").join("bin").join("inject.cs");
+    if !script.exists() {
+        return Err("内置 relay.mjs 缺失（安装包损坏？重装试试）".into());
+    }
+    let Ok(home) = std::env::var("USERPROFILE").or_else(|_| std::env::var("HOME")) else {
+        return Err("无法定位用户目录".into());
+    };
+    let data_dir = std::path::Path::new(&home).join(".cc-deck").join("data");
+    let _ = std::fs::create_dir_all(&data_dir);
+    use std::os::windows::process::CommandExt;
+    let log = data_dir.join("embedded-relay.log");
+    let out = std::fs::File::create(&log).map_err(|e| e.to_string())?;
+    match std::process::Command::new("node")
+        .arg(&script)
+        .env("CCR_DATA_DIR", &data_dir)
+        .env("CCR_INJECT_CS", &inject_cs)
+        .env("CCR_NOHOOK_IDLE_MS", "60000")
+        .stdout(out.try_clone().map_err(|e| e.to_string())?)
+        .stderr(out)
+        .creation_flags(0x0800_0000) // CREATE_NO_WINDOW
+        .spawn()
+    {
+        Ok(child) => {
+            println!("[embedded-relay] spawned pid={} data={}", child.id(), data_dir.display());
+            *EMBEDDED_RELAY.lock().unwrap() = Some(child);
+            Ok(relay_status())
+        }
+        Err(e) => Err(format!("relay 启动失败：{e}")),
+    }
+}
+
+fn kill_embedded_relay() {
+    if let Some(mut c) = EMBEDDED_RELAY.lock().unwrap().take() {
+        let _ = c.kill();
+        let _ = c.wait();
+        println!("[embedded-relay] stopped on app exit");
+    }
+}
+
 fn main() {
     tauri::Builder::default()
         // 单实例插件须最先注册；二次启动（含参数不同）不另起窗口，唤起已有主窗口
@@ -146,7 +235,7 @@ fn main() {
         // 在线更新（#319）：检查/下载/安装由 web-console ⚙ 关于区经 __TAURI__.updater 调用，
         // 签名公钥在 tauri.conf.json plugins.updater，签名的私钥经 CI Secrets 注入
         .plugin(tauri_plugin_updater::Builder::new().build())
-        .invoke_handler(tauri::generate_handler![probe_local, open_external])
+        .invoke_handler(tauri::generate_handler![probe_local, open_external, relay_status, relay_toggle])
         .setup(|app| {
             if build_tray(app).is_ok() {
                 TRAY_OK.store(true, Ordering::SeqCst);
@@ -158,15 +247,29 @@ fn main() {
                 .build()?;
             Ok(())
         })
-        // 关窗到托盘（等价 Electron 的 close -> preventDefault + hide）
+        // 关窗到托盘（等价 Electron 的 close -> preventDefault + hide）；
+        // 真退出（托盘退出/无托盘直关）时带走内嵌 relay，不留孤儿 node
         .on_window_event(|window, event| {
             if let tauri::WindowEvent::CloseRequested { api, .. } = event {
                 if !QUITTING.load(Ordering::SeqCst) && TRAY_OK.load(Ordering::SeqCst) {
                     api.prevent_close();
                     let _ = window.hide();
+                } else {
+                    kill_embedded_relay();
+                }
+            }
+            if let tauri::WindowEvent::Destroyed = event {
+                if QUITTING.load(Ordering::SeqCst) {
+                    kill_embedded_relay();
                 }
             }
         })
-        .run(tauri::generate_context!())
-        .expect("CC Deck Tauri 壳启动失败");
+        .build(tauri::generate_context!())
+        .expect("CC Deck Tauri 壳构建失败")
+        .run(|app_handle, event| {
+            if let tauri::RunEvent::Exit = event {
+                kill_embedded_relay();
+                let _ = app_handle;
+            }
+        });
 }
