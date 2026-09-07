@@ -712,7 +712,13 @@ function Shell() {
     fgText.current = text;
     if (text.startsWith("S|")) {
       const [, w, wa, e, dn] = text.split("|").map(Number);
-      updateForegroundStats(w, wa, e, dn);
+      // #370 title=状态概览（去软件名防展开双标题）：有活跃态列计数，全空闲列完成数
+      const bits: string[] = [];
+      if (w) bits.push(`工作${w}`);
+      if (wa) bits.push(`等待${wa}`);
+      if (e) bits.push(`错误${e}`);
+      const title = bits.length ? `${bits.join(" · ")}｜共${w + wa + e + dn}会话` : `空闲｜${dn} 会话`;
+      updateForegroundStats(w, wa, e, dn, title);
     } else {
       updateForeground(text);
     }

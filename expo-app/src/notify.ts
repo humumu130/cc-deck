@@ -34,10 +34,11 @@ export function updateForeground(text: string): void {
   } catch {}
 }
 
-// #355 前台通知彩点版：working/waiting/error/done 计数 → 原生 Spannable 彩色灯点
-export function updateForegroundStats(working: number, waiting: number, error: number, done: number): void {
+// #355/#364/#370 前台通知：emoji 彩点计数（低重要度渠道系统剥离文字着色）+ title=状态概览
+// （展开态系统头部已显 App 名，自设软件名会双标题）
+export function updateForegroundStats(working: number, waiting: number, error: number, done: number, title: string): void {
   try {
-    mod?.updateStats?.(working, waiting, error, done);
+    mod?.updateStats?.(working, waiting, error, done, title);
   } catch {}
 }
 

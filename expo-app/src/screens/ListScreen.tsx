@@ -102,7 +102,8 @@ function BlinkDot({ color }: { color: string }) {
   );
 }
 
-// 黄灯旁的实时工作状态：回合耗时 · ↓输出tokens · 当前动作（每秒走秒）
+// 黄灯旁的实时工作状态：回合耗时 · ↓输出tokens · 当前动作（每秒走秒）；
+// #363 压缩中：⟳ 明示（CLI "Compacting conversation..."），不显示旧摘要防误判卡死
 function LiveStat({ s }: { s: SessionState }) {
   const { c } = useTheme();
   const styles = useThemeStyles(makeStyles);
@@ -113,11 +114,11 @@ function LiveStat({ s }: { s: SessionState }) {
   }, []);
   const secs = Math.max(0, Math.floor((Date.now() - (s.turn_started_at ?? s.updated_at)) / 1000));
   const tok = s.usage?.output_tokens ?? 0;
-  const head = tok > 0 ? `${secs}s · ↓ ${fmtTok(tok)}` : `${secs}s`;
+  const head = (s.compacting ? "⟳ 压缩上下文 · " : "") + (tok > 0 ? `${secs}s · ↓ ${fmtTok(tok)}` : `${secs}s`);
   return (
     <Text style={styles.liveStat} numberOfLines={1}>
       <Text style={{ color: c.working }}>{head}</Text>
-      {s.action_summary ? ` · ${s.action_summary}` : ""}
+      {s.action_summary && !s.compacting ? ` · ${s.action_summary}` : ""}
     </Text>
   );
 }
@@ -356,28 +357,26 @@ const SessionCard = memo(function SessionCard({
         </>
       ) : (
         <>
-          {s.status === "WORKING" ? (
-            <View style={styles.row1}>
+          {/* #362 标题恒第一行（灯+名称+时长）：WORKING/空闲同构，状态切换不跳行；
+              工作实时行/摘要 occupy 第二行可变位 */}
+          <View style={styles.titleRow}>
+            {s.status === "WORKING" ? (
               <BlinkDot color={color} />
-              <LiveStat s={s} />
-              <Elapsed s={s} />
-            </View>
-          ) : (
-            // #286：空闲卡点+标题同行（点在标题前，耗时右对齐）——省一行高度
-            <View style={styles.titleRow}>
+            ) : (
               <View style={[styles.dot, { backgroundColor: color }]} />
-              <Text style={styles.title} numberOfLines={1}>
-                {s.title || "未命名会话"}
-              </Text>
-              <Elapsed s={s} />
-            </View>
-          )}
-          {s.status === "WORKING" ? (
+            )}
             <Text style={styles.title} numberOfLines={1}>
               {s.title || "未命名会话"}
             </Text>
-          ) : null}
-          {s.status !== "WORKING" ? <Text style={styles.sum} numberOfLines={1}>{s.action_summary || "…"}</Text> : null}
+            <Elapsed s={s} />
+          </View>
+          {s.status === "WORKING" ? (
+            <View style={styles.liveRow}>
+              <LiveStat s={s} />
+            </View>
+          ) : (
+            <Text style={styles.sum} numberOfLines={1}>{s.action_summary || "…"}</Text>
+          )}
           <View style={styles.foot}>
             <Text style={[styles.tag, s.external ? styles.tagExt : null]}>{s.external ? "外部 CLI" : "托管"}</Text>
             {s.cwd ? <Text style={styles.folderTag} numberOfLines={1}>📁 {folderOf(s.cwd)}</Text> : null}
@@ -867,12 +866,13 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
   },
   cardC: { borderRadius: 13, padding: 9 },
   rowC: { flexDirection: "row", alignItems: "center", gap: 7 },
+  // #362 WORKING 实时工作行独立成第二行（标题让位第一行），与 sum 同底距
+  liveRow: { flexDirection: "row", alignItems: "center", marginBottom: 5 },
   titleC: { color: c.text, fontSize: 14, fontWeight: "600", flexShrink: 1 },
   sumC: { color: c.faint, fontSize: 11, marginTop: 2 },
   footC: { flexDirection: "row", alignItems: "center", gap: 8, marginTop: 4 },
   folderC: { fontSize: 10, color: c.dim, flexShrink: 1, maxWidth: 120 },
   statsC: { fontSize: 10, color: c.faint, fontVariant: ["tabular-nums"] },
-  row1: { flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 6 },
   dot: {
     width: 11, height: 11, borderRadius: 6, opacity: 1,
     alignItems: "center", justifyContent: "center",

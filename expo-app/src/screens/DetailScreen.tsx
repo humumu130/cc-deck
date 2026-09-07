@@ -1364,10 +1364,10 @@ export default function DetailScreen({ sid, onBack, initialView, ref }: { sid: s
         {s.status === "WORKING" ? (
           <View style={d.liveRow}>
             <LiveStatusLine
-              summary={s.action_summary}
+              summary={s.compacting ? "⟳ 正在压缩上下文…" : s.action_summary}
               startedAt={s.turn_started_at ?? s.updated_at}
               color={c.working}
-              tok={s.context_usage ? fmtTok(s.context_usage) + "/" + fmtTok(s.context_limit ?? CONTEXT_LIMIT_FALLBACK) : undefined}
+              tok={s.compacting ? undefined : s.context_usage ? fmtTok(s.context_usage) + "/" + fmtTok(s.context_limit ?? CONTEXT_LIMIT_FALLBACK) : undefined}
             />
             <Pressable
               style={[d.stripBtnWarn, d.opRipple]}

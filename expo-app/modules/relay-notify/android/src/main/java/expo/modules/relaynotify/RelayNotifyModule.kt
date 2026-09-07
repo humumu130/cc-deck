@@ -123,26 +123,25 @@ class RelayNotifyModule : Module() {
       } catch (_: SecurityException) {}
     }
 
-    Function("updateStats") { working: Int, waiting: Int, error: Int, done: Int ->
+    // #364 真机彩点全灰：FGS 渠道 IMPORTANCE_MIN 下系统按单色模式渲染通知，
+    // ForegroundColorSpan 被剥离——改用自带颜色的 emoji 圆点（🟡working/🔴waiting/
+    // 🟠error/🟢done），零计数档不显示，同列表 statChips 语义
+    // #370 title 由 App 侧传状态概览（展开态系统头部已显 App 名，自设 CC Deck 会双标题）
+    Function("updateStats") { working: Int, waiting: Int, error: Int, done: Int, title: String ->
       val ctx = appContext.reactContext ?: return@Function
       val nm = ctx.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
       ensureChannel(nm, FG_CHANNEL_ID, "后台连接", NotificationManager.IMPORTANCE_MIN)
-      val span = android.text.SpannableStringBuilder()
       val parts = listOf(
-        "●" to working to 0xFFFFC53D.toInt(), // working 琥珀
-        "●" to waiting to 0xFFF0524F.toInt(), // waiting 红
-        "●" to error to 0xFFFF7849.toInt(),   // error 橙
-        "●" to done to 0xFF2BD98F.toInt(),    // done 绿
-      )
-      for ((pair, col) in parts) {
-        val (dot, n) = pair
-        val start = span.length
-        span.append(dot).append(n.toString()).append("  ")
-        span.setSpan(android.text.style.ForegroundColorSpan(col), start, start + 1, android.text.Spannable.SPAN_EXCLUSIVE_EXCLUSIVE)
+        "🟡" to working,
+        "🔴" to waiting,
+        "🟠" to error,
+        "🟢" to done,
+      ).filter { it.second > 0 }
+      val body = buildString {
+        for ((dot, n) in parts) append(dot).append(n).append(" ")
+        append("· 共 ").append(working + waiting + error + done).append(" 会话")
       }
-      val total = working + waiting + error + done
-      span.append("共 $total 会话")
-      val notif = buildNotification(ctx, FG_CHANNEL_ID, FG_TITLE, span, launchIntent(ctx, 0), ongoing = true)
+      val notif = buildNotification(ctx, FG_CHANNEL_ID, title.ifBlank { FG_TITLE }, body, launchIntent(ctx, 0), ongoing = true)
       try {
         nm.notify(FG_NOTIFICATION_ID, notif)
       } catch (_: SecurityException) {}

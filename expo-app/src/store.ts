@@ -1160,6 +1160,7 @@ class RelayStore {
         }
         if (msg.payload.subagents) s.subagents = msg.payload.subagents;
         if (msg.payload.cron_tasks) s.cron_tasks = msg.payload.cron_tasks;
+        if (msg.payload.compacting !== undefined) s.compacting = msg.payload.compacting;
         s.updated_at = msg.ts;
         break;
       }
