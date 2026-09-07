@@ -1,7 +1,17 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
-  "description": "主窗口最小暴露面：core:default 打通 IPC 通道（应用自有命令 probe_local 不在 ACL 管控范围，无远程页面可复用本能力）；updater:default 供 ⚙ 设置抽屉检查/安装更新",
+  "description": "主窗口最小暴露面：core:default 打通 IPC 通道；updater:default 供 ⚙ 设置抽屉检查/安装更新；窗口控制（#365）：无边框拖拽区 + 最小化/最大化/关闭/主题同步需逐项授权（core:default 不含这些，Tauri 2 ACL 默认拒绝——此前拖不动/按钮无效的根因）",
   "windows": ["main"],
-  "permissions": ["core:default", "updater:default"]
+  "permissions": [
+    "core:default",
+    "updater:default",
+    "core:window:allow-start-dragging",
+    "core:window:allow-minimize",
+    "core:window:allow-maximize",
+    "core:window:allow-unmaximize",
+    "core:window:allow-toggle-maximize",
+    "core:window:allow-close",
+    "core:window:allow-set-theme"
+  ]
 }
