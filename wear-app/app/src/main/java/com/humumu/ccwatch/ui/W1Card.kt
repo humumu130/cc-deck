@@ -8,9 +8,11 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -22,10 +24,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.text.SpanStyle
-import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -68,7 +67,8 @@ fun W1Card(
         StatusBadge(s.status, iconSize = 18.dp, fontSize = 12)
         Spacer(Modifier.height(6.dp))
         Text(
-            s.title,
+            // #371 路径型标题（外部会话 cwd 全路径）取 basename，圆盘上不被超长路径吃掉
+            displayTitle(s.title),
             color = C.textPrimary,
             fontSize = 16.sp,
             fontWeight = FontWeight.Medium,
@@ -124,42 +124,74 @@ private fun WorkingBody(s: SessionState, events: List<RecentEvent>) {
         )
     }
     Spacer(Modifier.height(10.dp))
-    ActivityDots(activityIntensity(events, s), statusColor(s.status))
-    Spacer(Modifier.height(10.dp))
-    StatsRow(s)
     WorkingMetaRow(s)
 }
 
-/** 运行中元信息：耗时 · 输出 tokens · 任务进度 · 上下文水位（快照间隔内静态，不逐秒跳动） */
+/** #371 元信息重排：一行数字（耗时·tokens·文件改动，活动点/独立统计行已并此）+
+ * 任务口径改"◐进行中 ○待办"（总完成数 227/238 对抬腕无意义）+ ctx 独立行（细水位条+百分比） */
 @Composable
 private fun WorkingMetaRow(s: SessionState) {
     val todos = s.todos
-    val done = todos.count { it.isDone }
+    val inprog = todos.count { !it.isDone && it.status == "in_progress" }
+    val pend = todos.count { !it.isDone && it.status != "in_progress" }
     val tok = s.usage?.outputTokens ?: 0L
+    val st = s.stats
     val base = buildList {
         add(formatDuration(System.currentTimeMillis() - s.startedAt))
         if (tok > 0) add("↓${formatTokens(tok)}")
-        if (todos.isNotEmpty()) add("☑$done/${todos.size}")
+        if (st.filesChanged > 0) add("${st.filesChanged}文件 +${st.linesAdded} -${st.linesDeleted}")
     }
-    // 上下文水位（#288 A 类③）：马拉松会话期间"还能跑多久"的抬腕速览数
+    if (base.isNotEmpty()) {
+        Text(
+            base.joinToString(" · "),
+            color = C.textSecondary,
+            fontSize = 10.sp,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            textAlign = TextAlign.Center,
+        )
+    }
+    if (todos.isNotEmpty()) {
+        Spacer(Modifier.height(3.dp))
+        Text("◐$inprog · ○$pend 待办", color = C.working.copy(alpha = 0.9f), fontSize = 10.sp, maxLines = 1)
+    }
+    // 上下文水位（#288 A 类③ + #371 独立行）：水位条 + 百分比
     val ctx = s.contextUsage?.takeIf { it > 0 }
-    Spacer(Modifier.height(4.dp))
-    Text(
-        buildAnnotatedString {
-            append(base.joinToString(" · "))
-            if (ctx != null) {
-                val limit = s.contextLimit?.takeIf { it > 0 } ?: 200_000L
-                val pct = Math.round(ctx * 100.0 / limit).toInt().coerceAtMost(100)
-                if (base.isNotEmpty()) append(" · ")
-                withStyle(SpanStyle(color = ctxLevelColor(ctx, limit))) { append("ctx $pct%") }
+    if (ctx != null) {
+        val limit = s.contextLimit?.takeIf { it > 0 } ?: 200_000L
+        val pct = Math.round(ctx * 100.0 / limit).toInt().coerceAtMost(100)
+        val lc = ctxLevelColor(ctx, limit)
+        Spacer(Modifier.height(6.dp))
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
+        ) {
+            Box(
+                Modifier
+                    .width(30.dp)
+                    .height(3.dp)
+                    .clip(RoundedCornerShape(1.5.dp))
+                    .background(C.textPrimary.copy(alpha = 0.15f)),
+            ) {
+                Box(
+                    Modifier
+                        .fillMaxHeight()
+                        .width((30 * pct / 100).dp)
+                        .clip(RoundedCornerShape(1.5.dp))
+                        .background(lc),
+                )
             }
-        },
-        color = C.textSecondary,
-        fontSize = 10.sp,
-        maxLines = 1,
-        overflow = TextOverflow.Ellipsis,
-        textAlign = TextAlign.Center,
-    )
+            Text("ctx $pct%", color = lc, fontSize = 9.sp, maxLines = 1)
+        }
+    }
+}
+
+/** 绝对路径型标题取 basename（仅路径特征开头才动，普通名原样返回） */
+private fun displayTitle(title: String): String {
+    val t = title.trim()
+    val isPath = t.startsWith("/") || t.startsWith("\\") || (t.length > 2 && t[1] == ':' && (t[2] == '\\' || t[2] == '/'))
+    if (!isPath) return t
+    return t.substringAfterLast('\\').substringAfterLast('/').ifEmpty { t }
 }
 
 /** 水位分级配色（阈值同手机 fmt.ts/网页端）：<60% 绿 / <85% 黄 / ≥85% 红 */
@@ -387,7 +419,7 @@ private fun DoneBody(s: SessionState) {
     }
 }
 
-/** 统计行：文件 / +新增 / -删除（规范 §5）。 */
+/** 统计行：文件 / +新增 / -删除（Done 卡用；Working 卡已并入元信息行 #371）。 */
 @Composable
 fun StatsRow(s: SessionState) {
     val st = s.stats
@@ -400,11 +432,4 @@ fun StatsRow(s: SessionState) {
         Spacer(Modifier.padding(horizontal = 5.dp))
         Text("-${st.linesDeleted}", color = C.waiting, fontSize = 13.sp, fontWeight = FontWeight.Medium)
     }
-}
-
-/** 活动强度 = 最近 3 分钟事件数；无时间线数据时按状态降级推导。 */
-fun activityIntensity(events: List<RecentEvent>, s: SessionState): Int {
-    if (events.isEmpty()) return if (s.status == SessionStatus.WORKING) 3 else 0
-    val cutoff = System.currentTimeMillis() - 3 * 60_000
-    return events.count { it.ts >= cutoff }.coerceIn(0, 7)
 }
