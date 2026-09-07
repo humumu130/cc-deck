@@ -702,7 +702,7 @@ export default function ListScreen({ sessions, connected, connText, onOpen, onNe
         ListFooterComponent={
           visible.length > 0 ? (
             <Pressable style={styles.footHint} disabled={refreshing} onPress={refresh} hitSlop={{ top: 10, bottom: 16 }}>
-              <Text style={styles.footHintT}>{refreshing ? "刷新中…" : "↻ 上滑更新"}</Text>
+              <Text style={styles.footHintT}>{refreshing ? "刷新中…" : "↻ 下滑更新"}</Text>
             </Pressable>
           ) : null
         }
@@ -800,10 +800,11 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
     width: 34, height: 34, borderRadius: 10, alignItems: "center", justifyContent: "center",
     backgroundColor: "#1D1726", borderWidth: 1, borderColor: "rgba(255,255,255,0.09)",
   },
+  // #381 去框化：连接 chip 纯"点+文字"，不套胶囊框（同抽屉去框语言）
   connChip: {
-    flexDirection: "row", alignItems: "center", gap: 5, borderWidth: 1,
-    borderRadius: 999, height: 28, paddingHorizontal: 10,
-    backgroundColor: c.tintSoft, marginLeft: "auto",
+    flexDirection: "row", alignItems: "center", gap: 5,
+    height: 28, paddingHorizontal: 4,
+    marginLeft: "auto",
   },
   connDot: { width: 6, height: 6, borderRadius: 3 },
   connText: { fontSize: 11 },

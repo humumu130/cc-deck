@@ -428,7 +428,7 @@ export default function SettingsDrawer({
             style={d.sw}
             value={listCompact}
             onValueChange={setListCompact}
-            trackColor={{ false: c.tintSoft, true: c.brandA }}
+            trackColor={{ false: "rgba(128,134,140,0.55)", true: c.brandA }}
             thumbColor="#fff"
           />
         </View>
@@ -443,7 +443,7 @@ export default function SettingsDrawer({
               persistAggregate(v);
               store.setAggregate(v);
             }}
-            trackColor={{ false: c.tintSoft, true: c.brandA }}
+            trackColor={{ false: "rgba(128,134,140,0.55)", true: c.brandA }}
             thumbColor="#fff"
           />
         </View>
@@ -504,9 +504,9 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
   srvDel: { width: 36, height: 42, alignItems: "center", justifyContent: "center" },
   srvDelT: { color: c.faint, fontSize: 14 },
   addRowWrap: { flexDirection: "row", gap: 8, marginBottom: 8 },
+  // #378 去框化二期：添加入口去虚线框，纯文字链接式（品牌色 + 可点热区）
   addRow: {
-    flex: 1, borderWidth: 1, borderColor: withA(c.brandA, 0.45), borderStyle: "dashed", borderRadius: 12,
-    alignItems: "center", justifyContent: "center", paddingVertical: 10, overflow: "hidden",
+    flex: 1, alignItems: "center", justifyContent: "center", paddingVertical: 10,
   },
   addT: { color: c.brandA, fontSize: 13, fontWeight: "700" },
   cloudHint: {
@@ -530,9 +530,9 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
     backgroundColor: c.tintStrong, borderWidth: 1, borderColor: withA(c.brandA, 0.45),
   },
   pairGenT: { color: c.brandA, fontSize: 13, fontWeight: "700" },
+  // #378 配对码平铺去框（对齐网页 #352）：大字码 + 右侧倒计时/刷新，无外框
   pairBox: {
-    backgroundColor: c.panel, borderWidth: 1, borderColor: withA(c.brandA, 0.45),
-    borderRadius: 12, paddingVertical: 12, paddingHorizontal: 14, marginBottom: 8,
+    paddingVertical: 10, paddingHorizontal: 2, marginBottom: 8,
   },
   pairTop: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
   pairSide: { flexDirection: "row", alignItems: "center", gap: 6 },
@@ -565,7 +565,7 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
   leverOpt: { flex: 1, alignItems: "center", justifyContent: "center", zIndex: 1 },
   leverT: { color: c.dim, fontSize: 12 },
   leverTOn: { color: c.text, fontWeight: "600" },
-  sw: { transform: [{ scale: 0.85 }] },
+  sw: {},
   segFull: { flexDirection: "row", gap: 6, marginTop: 8 },
   segOptF: {
     flex: 1, alignItems: "center", paddingVertical: 6, borderRadius: 10,
