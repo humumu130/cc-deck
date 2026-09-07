@@ -124,7 +124,7 @@
   #rhPop.open { display: flex; flex-direction: column; gap: 7px; }
   .rh-row { display: flex; align-items: center; gap: 8px; font-size: 12.5px; color: var(--text); }
   .rh-row i { width: 8px; height: 8px; border-radius: 50%; flex: none; }
-  /* 左下角双悬浮钮（＋ 新建在上、⚙ 设置在下）：裸图标无边框，齿轮中心方向箭头随抽屉开合旋转 */
+  /* 左下角双悬浮钮（＋ 新建在上、⚙ 设置在下）：裸图标无边框 */
   #sideFabs { position: absolute; left: 14px; bottom: 72px; z-index: 46; display: flex; flex-direction: column; gap: 10px; }
   .sfab {
     width: 42px; height: 42px; border: none; background: none; cursor: pointer;
@@ -135,14 +135,6 @@
   .sfab svg { width: 28px; height: 28px; display: block; }
   #addBtn svg { transition: transform .2s ease; }
   #addBtn.on svg { transform: rotate(45deg); }
-  #gearBtn .gchev {
-    position: absolute; top: 50%; left: 50%;
-    font-style: normal; font-size: 12px; line-height: 1; font-weight: 700;
-    transform: translate(-50%, -54%); transition: transform .2s ease;
-    text-shadow: 0 0 5px var(--bg), 0 0 5px var(--bg);
-  }
-  #gearBtn .gchev::after { content: "›"; }
-  #gearBtn.on .gchev { transform: translate(-50%, -54%) rotate(90deg); }
   /* 设置抽屉：从整个面板左侧滑出、覆盖会话栏（对齐 App SettingsDrawer 形态），齿轮悬浮其上 */
   #gearPop {
     position: absolute; inset: 0; z-index: 45; display: flex; flex-direction: column;
@@ -931,7 +923,7 @@
 
     <div id="sideFabs">
       <button id="addBtn" class="sfab" title="新建会话"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></button>
-      <button id="gearBtn" class="sfab" title="设置"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M19.14,12.94c0.04-0.3,0.06-0.61,0.06-0.94c0-0.32-0.02-0.64-0.07-0.94l2.03-1.58c0.18-0.14,0.23-0.41,0.12-0.61 l-1.92-3.32c-0.12-0.22-0.37-0.29-0.59-0.22l-2.39,0.96c-0.5-0.38-1.03-0.7-1.62-0.94l-0.36-2.54C14.36,2.18,14.16,2,13.92,2 h-3.84c-0.24,0-0.43,0.18-0.47,0.41L9.25,4.95C8.66,5.19,8.12,5.51,7.63,5.88L5.24,4.92c-0.22-0.08-0.47,0-0.59,0.22L2.74,8.47 c-0.12,0.21-0.08,0.47,0.12,0.61l2.03,1.58c-0.05,0.3-0.09,0.63-0.09,0.94s0.02,0.64,0.07,0.94l-2.03,1.58 c-0.18,0.14-0.23,0.41-0.12,0.61l1.92,3.32c0.12,0.22,0.37,0.29,0.59,0.22l2.39-0.96c0.5,0.38,1.03,0.7,1.62,0.94l0.36,2.54 c0.05,0.24,0.24,0.41,0.48,0.41h3.84c0.24,0,0.44-0.17,0.47-0.41l0.36-2.54c0.59-0.24,1.13-0.56,1.62-0.94l2.39,0.96 c0.22,0.08,0.47,0,0.59-0.22l1.92-3.32c0.12-0.22,0.07-0.47-0.12-0.61L19.14,12.94z M12,15.6c-1.98,0-3.6-1.62-3.6-3.6 s1.62-3.6,3.6-3.6s3.6,1.62,3.6,3.6S13.98,15.6,12,15.6z"/></svg><i class="gchev"></i></button>
+      <button id="gearBtn" class="sfab" title="设置"><svg viewBox="0 0 24 24" fill="currentColor" style="width:26px;height:26px"><path d="M19.14,12.94c0.04-0.3,0.06-0.61,0.06-0.94c0-0.32-0.02-0.64-0.07-0.94l2.03-1.58c0.18-0.14,0.23-0.41,0.12-0.61 l-1.92-3.32c-0.12-0.22-0.37-0.29-0.59-0.22l-2.39,0.96c-0.5-0.38-1.03-0.7-1.62-0.94l-0.36-2.54C14.36,2.18,14.16,2,13.92,2 h-3.84c-0.24,0-0.43,0.18-0.47,0.41L9.25,4.95C8.66,5.19,8.12,5.51,7.63,5.88L5.24,4.92c-0.22-0.08-0.47,0-0.59,0.22L2.74,8.47 c-0.12,0.21-0.08,0.47,0.12,0.61l2.03,1.58c-0.05,0.3-0.09,0.63-0.09,0.94s0.02,0.64,0.07,0.94l-2.03,1.58 c-0.18,0.14-0.23,0.41-0.12,0.61l1.92,3.32c0.12,0.22,0.37,0.29,0.59,0.22l2.39-0.96c0.5,0.38,1.03,0.7,1.62,0.94l0.36,2.54 c0.05,0.24,0.24,0.41,0.48,0.41h3.84c0.24,0,0.44-0.17,0.47-0.41l0.36-2.54c0.59-0.24,1.13-0.56,1.62-0.94l2.39,0.96 c0.22,0.08,0.47,0,0.59-0.22l1.92-3.32c0.12-0.22,0.07-0.47-0.12-0.61L19.14,12.94z M12,15.6c-1.98,0-3.6-1.62-3.6-3.6 s1.62-3.6,3.6-3.6s3.6,1.62,3.6,3.6S13.98,15.6,12,15.6z"/></svg></button>
     </div>
   </div>
 
@@ -1761,7 +1753,6 @@ function setConn(ctx, status, text) {
     $("connPanel").classList.remove("open");
     $("gearPop").classList.remove("open");
     $("connChip").classList.remove("open");
-    $("gearBtn").classList.remove("on");
   }
   renderServers();
   renderConnChip();
@@ -2854,7 +2845,6 @@ function openPanel(which) {
   $("connPanel").classList.toggle("open", which === "conn");
   $("connChip").classList.toggle("open", which === "conn");
   $("gearPop").classList.toggle("open", which === "conn");
-  $("gearBtn").classList.toggle("on", which === "conn");
 }
 $("connChip").onclick = () => {
   const open = $("connPanel").classList.contains("open");
@@ -2869,11 +2859,10 @@ document.addEventListener("click", (ev) => {
     $("gearPop").classList.toggle("open", open);
     $("connPanel").classList.toggle("open", open);
     $("connChip").classList.toggle("open", open);
-    $("gearBtn").classList.toggle("on", open);
     if (open) syncGearPop();
     return;
   }
-  if (!ev.target.closest("#rhPop") && !ev.target.closest("#gearPop")) { $("rhPop").classList.remove("open"); $("gearPop").classList.remove("open"); $("gearBtn").classList.remove("on"); }
+  if (!ev.target.closest("#rhPop") && !ev.target.closest("#gearPop")) { $("rhPop").classList.remove("open"); $("gearPop").classList.remove("open"); }
 });
 
 // ⚙ 设置浮层（#317）：显示项为散装开关的镜像（点行 = 触发原按钮再回读状态），
