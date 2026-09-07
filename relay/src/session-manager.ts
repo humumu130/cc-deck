@@ -389,12 +389,16 @@ export class SessionManager {
     });
   }
 
-  // 外部会话标题升级（CC 会话名 / 首个 prompt 摘要）；initialPrompt 只在缺失时补记
+  // 外部会话标题升级（CC 会话名 / 首个 prompt 摘要）；initialPrompt 只在缺失时补记。
+  // #347：title_locked（用户手动命名）在此兜底——bridge 的首个 prompt 升级路径
+  //（relay 重启后 initial_prompt 已丢、named 集合清空）会带着派生标题进来，
+  // 无条件覆盖会把用户改的名冲掉（"几小时后恢复原名"根因）
   setExternalTitle(id: string, title: string, initialPrompt?: string): void {
     const s = this.sessions.get(id);
     if (!s || !s.state.external) return;
-    s.state.title = title;
     if (initialPrompt && !s.state.initial_prompt) s.state.initial_prompt = initialPrompt;
+    if (s.state.title_locked) return;
+    s.state.title = title;
     s.state.updated_at = Date.now();
     this.bus.emit(id, "SESSION_UPDATED", {
       status: s.state.status,
