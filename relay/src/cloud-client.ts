@@ -32,6 +32,7 @@ export class CloudClient {
   private stopped = false;
   private timer: ReturnType<typeof setTimeout> | null = null;
   private lastRecv = 0;
+  private lastPingAt = 0;
   private hbTimer: ReturnType<typeof setInterval> | null = null;
   // 桥闪断时记录断线前 active 的设备，重连后主动补发（见 connect 的 open 处理）
   private resumeOnOpen = new Set<string>();
@@ -107,13 +108,18 @@ export class CloudClient {
     this.hbTimer = setInterval(() => {
       const ws = this.ws;
       if (!ws || ws.readyState !== WebSocket.OPEN) return;
-      if (Date.now() - this.lastRecv > 25_000) {
-        console.log("[cloud] heartbeat timeout (>25s no traffic), terminating for reconnect");
+      // 只在「ping 出去但 pong 没回来」时判死：业务空闲（手机挂另一座桥、网页后台
+      // 冻结）不算链路死——此前按任意收包计时，安静 25s 即掐线，CF 桥闪断循环根因
+      if (this.lastPingAt > 0 && Date.now() - this.lastPingAt > 24_000 && Date.now() - this.lastRecv > 24_000) {
+        console.log("[cloud] heartbeat timeout (pong missing >24s), terminating for reconnect");
         ws.terminate();
         return;
       }
-      ws.ping();
-    }, 10_000);
+      if (this.lastPingAt === 0 || Date.now() - this.lastPingAt >= 10_000) {
+        this.lastPingAt = Date.now();
+        ws.ping();
+      }
+    }, 5_000);
     this.hbTimer.unref?.();
   }
 
