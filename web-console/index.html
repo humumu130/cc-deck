@@ -1160,6 +1160,7 @@
     <div id="cards"></div>
     <div id="newbox">
       <div id="newform">
+        <div class="seg" id="newSrcSeg" style="display:none"></div>
         <input id="cwd" placeholder="工作目录（如 D:\dev\my-project）">
         <textarea id="prompt" rows="2" placeholder="初始指令，如：帮我看看当前项目结构并总结"></textarea>
         <div class="pair-hint" id="newTarget"></div>
@@ -3554,12 +3555,36 @@ function renderServers() {
     row.querySelector(".srv-del").onclick = (e) => { e.stopPropagation(); deleteServer(row.dataset.id); };
   });
   renderNewTarget();
+  renderNewSrcSeg();
 }
 
 // 多源时提示新建会话发往哪个源
 function renderNewTarget() {
   const cfg = cfgOf(activeServerId) || servers[0];
   $("newTarget").textContent = servers.length > 1 && cfg ? "新建会话将发送至：" + cfg.name : "";
+}
+// #369 多源新建源选择：表单顶部 chips（默认=上次选择/活动源，localStorage 记忆）
+function renderNewSrcSeg() {
+  const seg = $("newSrcSeg");
+  if (!seg) return;
+  if (servers.length < 2) { seg.style.display = "none"; seg.innerHTML = ""; return; }
+  const remembered = localStorage.getItem("ccd_new_target") || "";
+  if (remembered && cfgOf(remembered)) activeServerId = remembered;
+  seg.style.display = "flex";
+  seg.innerHTML = "";
+  for (const cfg of servers) {
+    const b = document.createElement("button");
+    b.type = "button";
+    b.textContent = shortName(cfg.name);
+    b.classList.toggle("on", cfg.id === activeServerId);
+    b.onclick = () => {
+      activeServerId = cfg.id;
+      try { localStorage.setItem("ccd_new_target", cfg.id); } catch {}
+      renderNewSrcSeg();
+      renderNewTarget();
+    };
+    seg.appendChild(b);
+  }
 }
 
 function deleteServer(id) {

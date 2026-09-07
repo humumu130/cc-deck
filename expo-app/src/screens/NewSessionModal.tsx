@@ -22,9 +22,9 @@ export default function NewSessionModal({ visible, onClose }: { visible: boolean
   const [err, setErr] = useState<string | null>(null);
   const [loadedInit, setLoadedInit] = useState(false);
 
-  // 目标源（#294 批3）：聚合且多源时 chips 选发送目标，默认跟随活动源；本次打开
-  // 内记住手选，重开回到活动源。单源/未聚合零变化——不渲染选择、不传 sourceId，
-  // COMMAND_CREATE 照旧走活动源
+  // 目标源（#294 批3 + #369 记忆）：聚合且多源时 chips 选发送目标，默认=上次选择
+  //（AsyncStorage 跨次记忆，对齐网页端 ccd_new_target），无记忆回落活动源。
+  // 单源/未聚合零变化——不渲染选择、不传 sourceId，COMMAND_CREATE 照旧走活动源
   const multi = snap.aggregate && snap.sources.length > 1;
   const [targetId, setTargetId] = useState<string | null>(null);
   const effTarget = multi
@@ -38,6 +38,9 @@ export default function NewSessionModal({ visible, onClose }: { visible: boolean
     setErr(null);
     setTargetId(null);
     void AsyncStorage.getItem("ccr_cwd").then((v) => v && setCwd(v));
+    void AsyncStorage.getItem("ccr_new_target").then((v) => {
+      if (v && snap.sources.some((x) => x.id === v)) setTargetId(v);
+    });
   }
   if (!visible && loadedInit) setLoadedInit(false);
 
@@ -78,7 +81,10 @@ export default function NewSessionModal({ visible, onClose }: { visible: boolean
                         key={src.id}
                         style={[m.srcChip, on && m.srcChipOn]}
                         android_ripple={{ color: c.tintSoft, borderless: false, radius: 12 }}
-                        onPress={() => setTargetId(src.id)}
+                        onPress={() => {
+                          setTargetId(src.id);
+                          void AsyncStorage.setItem("ccr_new_target", src.id);
+                        }}
                       >
                         <View style={[m.srcDot, { backgroundColor: online ? c.done : c.faint }]} />
                         <Text style={[m.srcChipT, on && m.srcChipTOn, !online && !on && { color: c.faint }]} numberOfLines={1}>
