@@ -368,20 +368,24 @@
     cursor: col-resize; z-index: 30;
   }
   #sideGrip:hover, body.side-drag #sideGrip { background: rgba(217,119,87,.25); }
-  /* 收展钮：分界线中点的小胶囊 ‹/›，收起后钉在面板最左缘 */
+  /* 收展钮：分界线中点的小胶囊 ‹/›。挂在 main 层而非 #side 内——#side 的
+     overflow:hidden 会把探出面板外的半颗裁掉（efa38a1 引入起被切半的根因）；
+     left 跟 :root 的 --side-w，拖宽/收起即时同步，收起态钉在 main 最左缘 */
+  main { position: relative; }
   #sideToggle {
-    position: absolute; top: 50%; right: -13px; z-index: 31;
+    position: absolute; top: 50%; left: calc(var(--side-w, 380px) - 13px); z-index: 31;
     width: 26px; height: 44px; margin-top: -22px;
     border: 1px solid var(--border); border-left: none;
     border-radius: 0 10px 10px 0; background: var(--panel);
     color: var(--dim); cursor: pointer; padding: 0;
     display: flex; align-items: center; justify-content: center;
     font-size: 13px; line-height: 1;
+    transition: left .18s ease;
   }
   #sideToggle:hover { color: var(--text); background: var(--panel-2); }
+  body.side-drag #sideToggle { transition: none; }
   body.side-collapsed #sideToggle {
-    right: 0; border-radius: 0 10px 10px 0; border-left: 1px solid var(--border);
-    position: fixed; left: 0; margin-left: 0;
+    left: 0; border-radius: 0 10px 10px 0; border-left: 1px solid var(--border);
   }
   #side h3 {
     font-size: 11px; font-weight: 600; letter-spacing: 1.5px; color: var(--faint);
@@ -940,7 +944,6 @@
     /* #279⑦ 窄屏详情全屏（#side 隐藏）→ #dsub 行尾的 ctx 水位条补位显示 */
     #dsub .ctx-mini { display: inline-flex; }
     .srv-row .srv-edit, .srv-row .srv-del { opacity: 1; }
-    main { position: relative; }
     #side { width: 100%; border-right: none; }
     #detail {
       display: none; position: absolute; inset: 0; background: var(--bg);
@@ -967,9 +970,9 @@
 <body>
 
 <main>
+  <button id="sideToggle" title="收起 / 展开会话列表">‹</button>
   <div id="side">
     <div id="sideGrip" title="拖拽调整宽度"></div>
-    <button id="sideToggle" title="收起 / 展开会话列表">‹</button>
     <header>
       <div class="brand">
         <div class="logo"><svg viewBox="0 0 24 24" fill="none"><defs><linearGradient id="lgA" x1="4" y1="4" x2="20" y2="20" gradientUnits="userSpaceOnUse"><stop stop-color="#E8985F"/><stop offset="1" stop-color="#C96442"/></linearGradient></defs><g><rect x="3.4" y="6.2" width="11" height="14" rx="2.8" transform="rotate(-11 8.9 13.2)" stroke="url(#lgA)" stroke-opacity=".5" stroke-width="1.5"/><rect x="9.6" y="5.4" width="11" height="14" rx="2.8" transform="rotate(10 15.1 12.4)" stroke="url(#lgA)" stroke-opacity=".85" stroke-width="1.5"/><rect x="6.5" y="4.2" width="11.4" height="15.2" rx="3" fill="url(#lgA)"/><path d="M9.2 8.7h6" stroke="#171220" stroke-width="1.7" stroke-linecap="round"/><path d="M9.2 12.2h4.2" stroke="#171220" stroke-opacity=".55" stroke-width="1.7" stroke-linecap="round"/></g></svg></div>
