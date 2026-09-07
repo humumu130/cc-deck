@@ -943,7 +943,7 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
   wpTitle: { color: c.text, fontSize: 15.5, fontWeight: "800" },
   wpName: { color: c.dim, fontSize: 12.5, marginTop: 5 },
   wpCode: {
-    color: c.brandA, fontSize: 40, fontWeight: "800", letterSpacing: 8,
+    color: c.brandA, fontSize: 40, fontWeight: "800", letterSpacing: 8, paddingLeft: 8,
     marginTop: 14, fontVariant: ["tabular-nums"],
   },
   wpHint: { color: c.faint, fontSize: 11.5, marginTop: 10, textAlign: "center", lineHeight: 16 },

@@ -1148,22 +1148,30 @@ class RelayStore {
       // #316 手表配对（瞬态帧，不落 seq 账本）：请求 → 全局弹窗比对 6 位码；
       // 结果（allow/deny/timeout，含手表放弃断开）→ 收弹窗
       case "PAIR_REQUEST": {
-        const p = msg.payload as { request_id?: unknown; name?: unknown; code?: unknown };
+        const p = msg.payload as { request_id?: unknown; name?: unknown; code?: unknown; expires_in?: unknown };
         if (typeof p.request_id === "string" && typeof p.code === "string" && /^\d{6}$/.test(p.code)) {
+          const rid = p.request_id;
           this.emit({
             watchPair: {
-              requestId: p.request_id,
+              requestId: rid,
               name: typeof p.name === "string" ? p.name.slice(0, 24) : "手表",
               code: p.code,
               sourceId: conn.entry.id,
             },
           });
+          // 本地过期兜底：瞬态帧不重放，断线瞬间的 PAIR_RESOLVED 丢了弹窗会滞留——
+          // 到 relay 给的过期时间自行收起（只清同 id，新请求顶旧计时）
+          const ttl = typeof p.expires_in === "number" ? p.expires_in * 1000 : 120_000;
+          setTimeout(() => {
+            if (this.snap.watchPair?.requestId === rid) this.emit({ watchPair: null });
+          }, ttl + 3000);
         }
         break;
       }
       case "PAIR_RESOLVED": {
         const p = msg.payload as { request_id?: unknown };
-        if (typeof p.request_id !== "string" || this.snap.watchPair?.requestId === p.request_id) {
+        // 严格匹配当前弹窗才清：畸形帧（缺 request_id）不响应，别的请求的结果不误伤
+        if (typeof p.request_id === "string" && this.snap.watchPair?.requestId === p.request_id) {
           this.emit({ watchPair: null });
         }
         break;
