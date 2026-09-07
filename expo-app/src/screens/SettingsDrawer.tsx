@@ -26,6 +26,15 @@ const FONT_OPTS: { k: ProcessFont; label: string }[] = [
   { k: "hidden", label: "隐藏" },
 ];
 
+// #337 服务器色点=身份色：登记后固定（id 哈希取色板），不随选中/连接状态变——
+// 选中由 srvRowOn 外侧亮边框表达；此前点染连接状态导致"切到谁谁绿、另一台红"的误导
+const SRV_COLORS = ["#D97757", "#4D9FFF", "#2BD98F", "#A78BFA", "#22D3EE", "#F472B6", "#FBBF24"] as const;
+const srvColor = (id: string) => {
+  let h = 0;
+  for (let i = 0; i < id.length; i++) h = (h * 31 + id.charCodeAt(i)) >>> 0;
+  return SRV_COLORS[h % SRV_COLORS.length];
+};
+
 // #313 关于弹窗：底部滑上卡片（NewSessionModal 同款视觉语言——全宽贴底、只上圆角）。
 // 版本信息（LogoMark + 版本号）+ 本版特性摘要（VERSION_NOTES 逐条）+ 检查更新
 // （原 #312 抽屉行迁入：结果行内反馈，有新版经 announceUpdate 弹 App 层 UpdateBanner）
@@ -294,14 +303,9 @@ export default function SettingsDrawer({
               <View key={e.id} style={[d.srvRow, active && d.srvRowOn]}>
                 <Pressable style={d.srvMain} android_ripple={{ color: c.tintSoft, borderless: false }} onPress={() => pick(e)}>
                   <View style={d.srvHead}>
-                    {/* 绿点=连接状态（在线绿/连接中黄/离线红）；当前选中由 srvRowOn 底色表达。
-                        无状态数据的源（单源模式下未连接的）不显示点，避免误读 */}
-                    {(() => {
-                      const st = snap.sources.find((x) => x.id === e.id)?.state;
-                      if (!st) return null;
-                      const col = st === "online" ? c.done : st === "offline" ? c.waiting : c.working;
-                      return <View style={[d.srvDot, { backgroundColor: col }]} />;
-                    })()}
+                    {/* #337 身份色点：登记后固定（id 哈希取色板），与选中/在线状态解耦；
+                        当前选中由 srvRowOn 外侧亮边框表达 */}
+                    <View style={[d.srvDot, { backgroundColor: srvColor(e.id) }]} />
                     <Text style={d.srvName} numberOfLines={1}>{e.name}</Text>
                     {e.cloud ? <Text style={d.srvCloud}>☁</Text> : null}
                   </View>
