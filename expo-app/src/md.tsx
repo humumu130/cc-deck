@@ -2,7 +2,7 @@
 // 覆盖标题/粗斜体/行内码/围栏码块/无序有序列表/引用/分割线/GFM 表格/链接（可点击浮窗复制/打开），零依赖子集实现，
 // 截断产生的残缺标记按字面渲染（解析器对不匹配标记容错）。
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Linking, Modal, Pressable, StyleSheet, Text, View, type TextStyle } from "react-native";
+import { Linking, Modal, Pressable, StyleSheet, Text, View, type GestureResponderEvent, type TextStyle } from "react-native";
 import * as Clipboard from "expo-clipboard";
 import { withA, type ThemeColors } from "./theme";
 import { useTheme, useThemeStyles } from "./theme-context";
@@ -135,13 +135,19 @@ function parseInline(text: string): Span[] {
   return spans.length ? spans : [{ text }];
 }
 
+// #340 触点即气泡锚点（#NNN 数字处）
+const tpPt = (e: GestureResponderEvent): { x: number; y: number } | undefined => {
+  const t = e.nativeEvent.changedTouches?.[0] ?? e.nativeEvent.touches?.[0];
+  return t ? { x: t.pageX, y: t.pageY } : undefined;
+};
+
 function InlineText({ text, small, header, outer, onLink, onTaskRef, onTaskRefOut, sel }: {
   text: string;
   small?: boolean;
   header?: boolean;
   outer?: TextStyle;
   onLink?: (url: string) => void;
-  onTaskRef?: (n: number, hold?: boolean) => void;
+  onTaskRef?: (n: number, hold?: boolean, anchor?: { x: number; y: number }) => void;
   onTaskRefOut?: () => void;
   sel?: boolean;
 }) {
@@ -161,8 +167,8 @@ function InlineText({ text, small, header, outer, onLink, onTaskRef, onTaskRefOu
         <Text
           key={j}
           style={{ color: c.brandA, fontWeight: "700" }}
-          onPress={() => onTaskRef(Number(p))}
-          onLongPress={() => onTaskRef(Number(p), true)}
+          onPress={(e) => onTaskRef(Number(p), false, tpPt(e))}
+          onLongPress={(e) => onTaskRef(Number(p), true, tpPt(e))}
           onPressOut={onTaskRefOut}
         >
           #{p}
@@ -233,7 +239,7 @@ function LinkSheet({ url, onClose }: { url: string; onClose: () => void }) {
   );
 }
 
-export function MdText({ src, style, selectable, onTaskRef, onTaskRefOut }: { src: string; style?: TextStyle; selectable?: boolean; onTaskRef?: (n: number, hold?: boolean) => void; onTaskRefOut?: () => void }) {
+export function MdText({ src, style, selectable, onTaskRef, onTaskRefOut }: { src: string; style?: TextStyle; selectable?: boolean; onTaskRef?: (n: number, hold?: boolean, anchor?: { x: number; y: number }) => void; onTaskRefOut?: () => void }) {
   const { c } = useTheme();
   const d = useThemeStyles(makeStyles);
   const blocks = useMemo(() => parseBlocks(src), [src]);

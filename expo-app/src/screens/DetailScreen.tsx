@@ -1,5 +1,5 @@
 import { Fragment, useEffect, useImperativeHandle, useRef, useState, type Ref } from "react";
-import { Animated, Dimensions, Image, Modal, PermissionsAndroid, Pressable, RefreshControl, ScrollView, Share, StyleSheet, Text, TextInput, Vibration, View, type NativeScrollEvent, type NativeSyntheticEvent, type NativeTouchEvent, type StyleProp, type TextStyle } from "react-native";
+import { Animated, Dimensions, Image, Modal, PermissionsAndroid, Pressable, RefreshControl, ScrollView, Share, StyleSheet, Text, TextInput, Vibration, View, type GestureResponderEvent, type NativeScrollEvent, type NativeSyntheticEvent, type NativeTouchEvent, type StyleProp, type TextStyle } from "react-native";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import * as ImagePicker from "expo-image-picker";
 import * as ImageManipulator from "expo-image-manipulator";
@@ -82,7 +82,7 @@ const PROC_FONT = {
   hidden: { tool: 8.5, sys: 8, result: 8.5, thinkHead: 8.5, think: 10, thinkLH: 14, op: 0.75 },
 } as const;
 
-function TranscriptRow({ e, open, onToggle, onContentMenu, onTaskRef, onTaskRefOut }: { e: LogEntry; open: boolean; onToggle: () => void; onContentMenu?: (text: string) => void; onTaskRef?: (n: number, hold?: boolean) => void; onTaskRefOut?: () => void }) {
+function TranscriptRow({ e, open, onToggle, onContentMenu, onTaskRef, onTaskRefOut }: { e: LogEntry; open: boolean; onToggle: () => void; onContentMenu?: (text: string) => void; onTaskRef?: (n: number, hold?: boolean, anchor?: { x: number; y: number }) => void; onTaskRefOut?: () => void }) {
   const { c } = useTheme();
   const d = useThemeStyles(makeStyles);
   const pf = PROC_FONT[useProcessFont()];
@@ -204,7 +204,13 @@ function DiffBlock({ lines }: { lines: string[] }) {
 
 // #264：摘要文本里的 #NNN 任务号渲染成可点高亮段（1~3 位数字，避免误吞时间戳/长号），
 // 点击跳任务 tab 并定位该条。找不到对应任务时仍切到任务 tab（无害回退）
-function TaskRefText({ text, style, numberOfLines, suffix, suffixStyle, onTaskRef, onTaskRefOut }: { text: string; style: StyleProp<TextStyle>; numberOfLines?: number; suffix?: string; suffixStyle?: StyleProp<TextStyle>; onTaskRef?: (n: number, hold?: boolean) => void; onTaskRefOut?: () => void }) {
+// #340 触点即气泡锚点（#NNN 数字处）：短点/长按事件都带 changedTouches
+const tpPt = (e: GestureResponderEvent): { x: number; y: number } | undefined => {
+  const t = e.nativeEvent.changedTouches?.[0] ?? e.nativeEvent.touches?.[0];
+  return t ? { x: t.pageX, y: t.pageY } : undefined;
+};
+
+function TaskRefText({ text, style, numberOfLines, suffix, suffixStyle, onTaskRef, onTaskRefOut }: { text: string; style: StyleProp<TextStyle>; numberOfLines?: number; suffix?: string; suffixStyle?: StyleProp<TextStyle>; onTaskRef?: (n: number, hold?: boolean, anchor?: { x: number; y: number }) => void; onTaskRefOut?: () => void }) {
   const { c } = useTheme();
   if (!onTaskRef || !/#\d{1,3}\b/.test(text)) {
     return (
@@ -222,8 +228,8 @@ function TaskRefText({ text, style, numberOfLines, suffix, suffixStyle, onTaskRe
           <Text
             key={i}
             style={{ color: c.brandA, fontWeight: "700" }}
-            onPress={() => onTaskRef(Number(p))}
-            onLongPress={() => onTaskRef(Number(p), true)}
+            onPress={(e) => onTaskRef(Number(p), false, tpPt(e))}
+            onLongPress={(e) => onTaskRef(Number(p), true, tpPt(e))}
             onPressOut={onTaskRefOut}
           >
             #{p}
@@ -283,13 +289,30 @@ function ContentMenu({ text, onClose }: { text: string; onClose: () => void }) {
 // #332 任务明细浮窗：转录 #NNN 点击弹出（方案二，替代 #264 直接跳转）——状态/内容/
 // active_form 一屏速览，「查看任务列表」作次入口沿用跳转定位。数据取 s.todos 全量：
 // 已完成列表的近 1 天窗口截断不影响查明细（旧跳转对窗口外任务只能切 tab 空落）。
-// 生命周期（用户定）：5s 无操作自动淡出；点空白立即关；长按 #NNN 钉住不计时（hold），
-// 松手（onPressOut → hold=false）重新计 5s。关闭统一走 doClose：先 visible=false 播
-// Modal fade 出场动画、280ms 后才真卸载（直接卸载是瞬消，审查#4）
-function TaskPop({ n, todo, goneSession, hold, onClose, onGoList }: { n: number; todo: TodoItem | undefined; goneSession: boolean; hold: boolean; onClose: () => void; onGoList: () => void }) {
+// 生命周期（用户定）：3s 无操作自动淡出；点空白立即关；长按 #NNN 钉住不计时（hold），
+// 松手（onPressOut → hold=false）重新计 3s。关闭统一走 doClose：先 visible=false 播
+// Modal fade 出场动画、280ms 后才真卸载（直接卸载是瞬消，审查#4）。
+// #340 气泡化：卡按触摸点（#NNN 处）锚定在其下方，尾巴小方块指向数字；弹出动画
+// scale 0.6→1 + translateY(-10)→0 模拟"从数字头顶冒出来"（RN 无 transform-origin，
+// 顶边锚定 + 上移起点近似）。卡高 onLayout 后 clamp：下方放不下翻数字上方
+function TaskPop({ n, todo, goneSession, hold, anchor, onClose, onGoList }: { n: number; todo: TodoItem | undefined; goneSession: boolean; hold: boolean; anchor?: { x: number; y: number }; onClose: () => void; onGoList: () => void }) {
   const { c } = useTheme();
   const d = useThemeStyles(makeStyles);
   const [vis, setVis] = useState(true);
+  const [h, setH] = useState(0);
+  const win = Dimensions.get("window");
+  const cardW = Math.min(340, win.width - 24);
+  const ax = anchor?.x ?? win.width / 2;
+  const ay = anchor?.y ?? win.height / 2;
+  const left = Math.min(Math.max(12, ax - cardW / 2), Math.max(12, win.width - cardW - 12));
+  const below = ay + 18;
+  const flip = h > 0 && below + h > win.height - 12;
+  const top = h > 0 ? (flip ? Math.max(12, ay - h - 18) : Math.min(below, win.height - h - 12)) : below;
+  const tailX = Math.min(cardW - 18, Math.max(18, ax - left)) - 6;
+  const ap = useRef(new Animated.Value(0)).current;
+  useEffect(() => {
+    Animated.timing(ap, { toValue: 1, duration: 170, useNativeDriver: true }).start();
+  }, [ap]);
   const closeRef = useRef(onClose);
   closeRef.current = onClose;
   const byeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -304,7 +327,7 @@ function TaskPop({ n, todo, goneSession, hold, onClose, onGoList }: { n: number;
   };
   useEffect(() => {
     if (hold) return;
-    const t = setTimeout(doClose, 5000);
+    const t = setTimeout(doClose, 3000);
     return () => clearTimeout(t);
   }, [n, hold]);
   const mark = todo ? (todo.status === "completed" ? "✓" : todo.status === "in_progress" ? "◐" : "○") : "·";
@@ -313,39 +336,54 @@ function TaskPop({ n, todo, goneSession, hold, onClose, onGoList }: { n: number;
   return (
     <Modal visible={vis} transparent animationType="fade" onRequestClose={doClose}>
       <Pressable style={d.menuScrim} onPress={doClose}>
-        <Pressable style={d.menuCard} onPress={() => undefined}>
-          <View style={d.tpHead}>
-            <Text style={[d.tpMark, { color: markColor }]}>{mark}</Text>
-            <Text style={d.tpNo}>#{n}</Text>
-            <Text style={[d.tpStatus, { color: markColor }]}>{statusText}</Text>
-          </View>
-          {todo ? (
-            <>
-              <Text style={d.tpContent}>{todo.content}</Text>
-              {todo.status === "in_progress" && todo.active_form ? (
-                <Text style={d.tpActive}>正在：{todo.active_form}</Text>
-              ) : null}
-              {typeof todo.updated_at === "number" && Number.isFinite(todo.updated_at) ? (
-                <Text style={d.tpTime}>{fmtElapsed(Math.max(0, Date.now() - todo.updated_at))} 前更新</Text>
-              ) : null}
-            </>
-          ) : (
-            <Text style={d.tpContent}>{goneSession ? "会话已不存在" : "该任务已不在本会话的当前清单中"}</Text>
-          )}
-          <View style={d.tpFoot}>
-            <Text style={d.tpHint}>长按可固定</Text>
-            <Pressable
-              hitSlop={6}
-              android_ripple={{ color: c.tintSoft, borderless: false, radius: 9 }}
-              onPress={() => {
-                doClose();
-                onGoList();
-              }}
-            >
-              <Text style={d.tpLink}>查看任务列表 →</Text>
-            </Pressable>
-          </View>
-        </Pressable>
+        <Animated.View
+          style={[
+            d.tpWrap,
+            {
+              left, top, width: cardW,
+              transform: [
+                { translateY: ap.interpolate({ inputRange: [0, 1], outputRange: [-10, 0] }) },
+                { scale: ap.interpolate({ inputRange: [0, 1], outputRange: [0.6, 1] }) },
+              ],
+            },
+          ]}
+          onLayout={(e) => { const nh = e.nativeEvent.layout.height; if (nh !== h) setH(nh); }}
+        >
+          <View style={[d.tpTail, { left: tailX, top: flip ? undefined : -6, bottom: flip ? -6 : undefined, borderTopWidth: flip ? 0 : 1, borderLeftWidth: flip ? 0 : 1, borderBottomWidth: flip ? 1 : 0, borderRightWidth: flip ? 1 : 0 }]} />
+          <Pressable style={d.menuCard} onPress={() => undefined}>
+            <View style={d.tpHead}>
+              <Text style={[d.tpMark, { color: markColor }]}>{mark}</Text>
+              <Text style={d.tpNo}>#{n}</Text>
+              <Text style={[d.tpStatus, { color: markColor }]}>{statusText}</Text>
+            </View>
+            {todo ? (
+              <>
+                <Text style={d.tpContent}>{todo.content}</Text>
+                {todo.status === "in_progress" && todo.active_form ? (
+                  <Text style={d.tpActive}>正在：{todo.active_form}</Text>
+                ) : null}
+                {typeof todo.updated_at === "number" && Number.isFinite(todo.updated_at) ? (
+                  <Text style={d.tpTime}>{fmtElapsed(Math.max(0, Date.now() - todo.updated_at))} 前更新</Text>
+                ) : null}
+              </>
+            ) : (
+              <Text style={d.tpContent}>{goneSession ? "会话已不存在" : "该任务已不在本会话的当前清单中"}</Text>
+            )}
+            <View style={d.tpFoot}>
+              <Text style={d.tpHint}>长按可固定</Text>
+              <Pressable
+                hitSlop={6}
+                android_ripple={{ color: c.tintSoft, borderless: false, radius: 9 }}
+                onPress={() => {
+                  doClose();
+                  onGoList();
+                }}
+              >
+                <Text style={d.tpLink}>查看任务列表 →</Text>
+              </Pressable>
+            </View>
+          </Pressable>
+        </Animated.View>
       </Pressable>
     </Modal>
   );
@@ -688,9 +726,11 @@ export default function DetailScreen({ sid, onBack, initialView, ref }: { sid: s
   const [flashTodo, setFlashTodo] = useState<number | null>(null);
   const [taskPop, setTaskPop] = useState<number | null>(null);
   const [taskHold, setTaskHold] = useState(false);
-  const openTaskRef = (n: number, hold = false) => {
+  const [taskAnchor, setTaskAnchor] = useState<{ x: number; y: number } | undefined>(undefined);
+  const openTaskRef = (n: number, hold = false, anchor?: { x: number; y: number }) => {
     setTaskPop(n);
     setTaskHold(hold);
+    setTaskAnchor(anchor);
   };
   const outTaskRef = () => setTaskHold(false);
   const flashTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -1519,6 +1559,7 @@ export default function DetailScreen({ sid, onBack, initialView, ref }: { sid: s
           todo={(s?.todos ?? []).find((t) => t.id === taskPop)}
           goneSession={!s}
           hold={taskHold}
+          anchor={taskAnchor}
           onClose={() => setTaskPop(null)}
           onGoList={() => {
             if (taskPop != null) jumpToTask(taskPop);
@@ -1851,7 +1892,13 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
   menuBtnPri: { backgroundColor: c.brandA, borderColor: "transparent" },
   menuBtnT: { color: c.dim, fontSize: 14, fontWeight: "600" },
   menuBtnPriT: { color: "#fff", fontSize: 14, fontWeight: "600" },
-  // #332 任务明细浮窗（TaskPop，复用 menuScrim/menuCard 容器）
+  // #340 任务明细气泡：锚点定位容器 + 指向 #NNN 的尾巴（旋转小方块，边框与卡相接）
+  tpWrap: { position: "absolute" },
+  tpTail: {
+    position: "absolute", width: 12, height: 12,
+    backgroundColor: c.panel, borderColor: c.line,
+    transform: [{ rotate: "45deg" }], borderRadius: 2,
+  },
   tpHead: { flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 8 },
   tpMark: { fontSize: 17, fontWeight: "700" },
   tpNo: { color: c.brandA, fontSize: 15, fontWeight: "700" },

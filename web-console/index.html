@@ -249,18 +249,37 @@
     background: var(--panel-2); color: var(--dim); border: 1px solid var(--border); font-size: 12.5px;
   }
 
-  /* ---------- #332 任务明细浮卡：转录 #NNN 点击弹出（5s 自动淡出/点空白关/长按钉住） ---------- */
+  /* ---------- #332/#340 任务明细气泡：从 #NNN 数字头顶冒出（scale 源在数字）+ 漫画尾巴尖；3s 自动淡出/点空白关/长按钉住 ---------- */
   #taskPop {
     position: fixed; inset: 0; z-index: 74; display: none;
-    align-items: center; justify-content: center; background: rgba(0,0,0,.5);
-    opacity: 0; transition: opacity .22s;
+    background: rgba(0,0,0,.5);
+    opacity: 0; transition: opacity .18s;
   }
-  #taskPop.open { display: flex; }
+  #taskPop.open { display: block; }
   #taskPop.show { opacity: 1; }
   .tp-card {
+    position: absolute; /* JS 按 #NNN rect 锚点落位（数字下方，放不下翻上方） */
     background: var(--panel); border: 1px solid var(--border); border-radius: 14px;
-    padding: 14px 16px; max-width: 340px; width: calc(100% - 56px);
+    padding: 14px 16px; max-width: 340px; width: min(340px, calc(100vw - 24px));
     box-shadow: 0 12px 40px rgba(0,0,0,.5);
+    transform-origin: 50% 0; /* 从头顶（任务号）冒出 */
+  }
+  #taskPop.open .tp-card { animation: tp-pop .18s ease-out; }
+  @keyframes tp-pop {
+    from { opacity: 0; transform: translateY(-8px) scale(.55); }
+    to { opacity: 1; transform: none; }
+  }
+  /* 漫画尾巴：卡顶旋转小方块，边框与卡片相接；--tp-tail 由 JS 对准数字中心（翻上时 .tail-up） */
+  .tp-card::after {
+    content: ""; position: absolute; top: -6px; left: var(--tp-tail, 50%);
+    width: 11px; height: 11px; transform: translateX(-50%) rotate(45deg);
+    background: var(--panel); border-top: 1px solid var(--border); border-left: 1px solid var(--border);
+    border-radius: 3px 0 0 0;
+  }
+  .tp-card.tail-up::after {
+    top: auto; bottom: -6px;
+    border: none; border-bottom: 1px solid var(--border); border-right: 1px solid var(--border);
+    border-radius: 0 0 3px 0;
   }
   .tp-head { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
   .tp-mark { font-size: 17px; font-weight: 700; }
@@ -3848,7 +3867,7 @@ function tpRel(ts) {
 }
 function armTaskPop() {
   clearTimeout(taskPopTimer);
-  taskPopTimer = setTimeout(closeTaskPop, 5000);
+  taskPopTimer = setTimeout(closeTaskPop, 3000);
 }
 function openTaskPop(n, pin) {
   const sel = selSession();
@@ -3866,8 +3885,22 @@ function openTaskPop(n, pin) {
       : '<div class="tp-content">' + (sel ? "该任务已不在本会话的当前清单中" : "会话已不存在") + "</div>") +
     '<div class="tp-foot"><span class="tp-hint">长按可固定</span><span class="tp-link" id="tpGoList">查看任务列表 →</span></div>';
   $("tpGoList").onclick = () => { closeTaskPop(); jumpToTask(n); };
-  const el = $("taskPop");
+  const el = $("taskPop"), card = $("taskCard");
   el.classList.add("open");
+  // #340 气泡落位：卡在数字下方冒出（放不下翻上方），尾巴尖对准数字中心
+  if (tpAnchor) {
+    card.classList.remove("tail-up");
+    const vw = innerWidth, vh = innerHeight;
+    const w = card.offsetWidth || 340, h = card.offsetHeight || 160;
+    const cx = tpAnchor.left + tpAnchor.width / 2;
+    const left = Math.min(Math.max(8, cx - w / 2), vw - w - 8);
+    const below = tpAnchor.bottom + 12;
+    const up = below + h > vh - 8;
+    card.style.left = left + "px";
+    card.style.top = (up ? Math.max(8, tpAnchor.top - h - 12) : below) + "px";
+    card.classList.toggle("tail-up", up);
+    card.style.setProperty("--tp-tail", Math.min(w - 14, Math.max(14, cx - left)) + "px");
+  }
   requestAnimationFrame(() => el.classList.add("show"));
   clearTimeout(taskPopTimer);
   if (!pin) armTaskPop();
@@ -3885,12 +3918,13 @@ $("taskPop").addEventListener("click", (ev) => {
 // 短点弹出（5s 淡出）；按住 ≥450ms 弹钉住版，松开解钉重新计 5s。
 // pointerup 挂 document：按住后移出 #NNN 再松开也能正确结算。
 // 桌面右键/触屏长按系统菜单在 #NNN 上抑制（长按语义已被占用）
-let tpHoldTimer = null, tpHoldN = 0;
+let tpHoldTimer = null, tpHoldN = 0, tpAnchor = null;
 $("timeline").addEventListener("pointerdown", (ev) => {
   const ref = ev.target.closest(".task-ref");
   if (!ref) return;
   if (ev.button !== 0 || ev.isPrimary === false) return; // 只认主键/主指（右键、双指不触发）
   tpHoldN = Number(ref.dataset.n);
+  tpAnchor = ref.getBoundingClientRect(); // #340 冒泡锚点：数字的屏幕位置
   clearTimeout(tpHoldTimer);
   tpHoldTimer = setTimeout(() => { tpHoldTimer = null; openTaskPop(tpHoldN, true); }, 500);
 });
