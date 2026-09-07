@@ -766,6 +766,10 @@ export class SessionManager {
           this.loginGranter(dev, pk, String(p.name ?? "web").slice(0, 32) || "web");
           return { command_id: cmd.command_id, ok: true };
         }
+        case "COMMAND_WATCH_GRANT":
+          // #316 手表配对授权在 ws-server 层处理（持有待配对连接池）；云信道走到这里
+          // 说明命令被路由错了——明确报错而非静默
+          return { command_id: cmd.command_id, ok: false, error: "手表配对授权仅限局域网信道" };
       }
     } catch (e) {
       return {
