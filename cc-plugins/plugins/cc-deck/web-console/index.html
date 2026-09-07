@@ -271,9 +271,33 @@
   /* ---------- 主体 ---------- */
   main { flex: 1; display: flex; overflow: hidden; }
   #side {
-    width: 380px; flex: none; border-right: 1px solid var(--border);
+    width: var(--side-w, 380px); flex: none; border-right: 1px solid var(--border);
     display: flex; flex-direction: column; background: var(--side-bg);
-    position: relative;
+    position: relative; transition: width .18s ease;
+    overflow: hidden; min-width: 0;
+  }
+  body.side-drag #side { transition: none; }
+  body.side-collapsed #side { width: 0 !important; border-right: none; }
+  /* 拖拽把手：贴分界线 6px 热区（hover 亮起提示可拖） */
+  #sideGrip {
+    position: absolute; top: 0; right: -3px; bottom: 0; width: 7px;
+    cursor: col-resize; z-index: 30;
+  }
+  #sideGrip:hover, body.side-drag #sideGrip { background: rgba(217,119,87,.25); }
+  /* 收展钮：分界线中点的小胶囊 ‹/›，收起后钉在面板最左缘 */
+  #sideToggle {
+    position: absolute; top: 50%; right: -13px; z-index: 31;
+    width: 26px; height: 44px; margin-top: -22px;
+    border: 1px solid var(--border); border-left: none;
+    border-radius: 0 10px 10px 0; background: var(--panel);
+    color: var(--dim); cursor: pointer; padding: 0;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 13px; line-height: 1;
+  }
+  #sideToggle:hover { color: var(--text); background: var(--panel-2); }
+  body.side-collapsed #sideToggle {
+    right: 0; border-radius: 0 10px 10px 0; border-left: 1px solid var(--border);
+    position: fixed; left: 0; margin-left: 0;
   }
   #side h3 {
     font-size: 11px; font-weight: 600; letter-spacing: 1.5px; color: var(--faint);
@@ -804,6 +828,8 @@
 
   /* ---------- 移动端 ---------- */
   @media (max-width: 720px) {
+    #sideGrip, #sideToggle { display: none !important; }
+    #side { width: 100% !important; transition: none; }
     header { padding: calc(10px + env(safe-area-inset-top)) 12px 10px; }
     #runhint { display: none; }
     #timeline { font-size: calc(14px * var(--tl-scale, 1)); }
@@ -842,6 +868,8 @@
 
 <main>
   <div id="side">
+    <div id="sideGrip" title="拖拽调整宽度"></div>
+    <button id="sideToggle" title="收起 / 展开会话列表">‹</button>
     <header>
       <div class="brand">
         <div class="logo"><svg viewBox="0 0 24 24" fill="none"><defs><linearGradient id="lgA" x1="4" y1="4" x2="20" y2="20" gradientUnits="userSpaceOnUse"><stop stop-color="#E8985F"/><stop offset="1" stop-color="#C96442"/></linearGradient></defs><g><rect x="3.4" y="6.2" width="11" height="14" rx="2.8" transform="rotate(-11 8.9 13.2)" stroke="url(#lgA)" stroke-opacity=".5" stroke-width="1.5"/><rect x="9.6" y="5.4" width="11" height="14" rx="2.8" transform="rotate(10 15.1 12.4)" stroke="url(#lgA)" stroke-opacity=".85" stroke-width="1.5"/><rect x="6.5" y="4.2" width="11.4" height="15.2" rx="3" fill="url(#lgA)"/><path d="M9.2 8.7h6" stroke="#171220" stroke-width="1.7" stroke-linecap="round"/><path d="M9.2 12.2h4.2" stroke="#171220" stroke-opacity=".55" stroke-width="1.7" stroke-linecap="round"/></g></svg></div>
@@ -2864,6 +2892,36 @@ document.addEventListener("click", (ev) => {
   }
   if (!ev.target.closest("#rhPop") && !ev.target.closest("#gearPop")) { $("rhPop").classList.remove("open"); $("gearPop").classList.remove("open"); }
 });
+
+// ── 侧栏拖宽 + 收展（用户需求 2026-09-07）：宽度记 localStorage，卡片流式自适应 ──
+  const SIDE_W_KEY = "ccd_side_w", SIDE_COL_KEY = "ccd_side_collapsed";
+  const sideEl = $("side");
+  const applySideW = (w) => document.documentElement.style.setProperty("--side-w", Math.max(220, Math.min(560, w)) + "px");
+  const savedW = Number(localStorage.getItem(SIDE_W_KEY) || 0);
+  if (savedW >= 220 && savedW <= 560) applySideW(savedW);
+  const toggleBtn = $("sideToggle");
+  const setCollapsed = (c) => {
+    document.body.classList.toggle("side-collapsed", c);
+    toggleBtn.textContent = c ? "›" : "‹";
+    localStorage.setItem(SIDE_COL_KEY, c ? "1" : "0");
+  };
+  setCollapsed(localStorage.getItem(SIDE_COL_KEY) === "1");
+  toggleBtn.onclick = () => setCollapsed(!document.body.classList.contains("side-collapsed"));
+  const grip = $("sideGrip");
+  grip.addEventListener("mousedown", (e) => {
+    e.preventDefault();
+    document.body.classList.add("side-drag");
+    const startX = e.clientX, startW = sideEl.getBoundingClientRect().width;
+    const onMove = (ev) => applySideW(startW + ev.clientX - startX);
+    const onUp = () => {
+      document.body.classList.remove("side-drag");
+      localStorage.setItem(SIDE_W_KEY, String(Math.round(sideEl.getBoundingClientRect().width)));
+      document.removeEventListener("mousemove", onMove);
+      document.removeEventListener("mouseup", onUp);
+    };
+    document.addEventListener("mousemove", onMove);
+    document.addEventListener("mouseup", onUp);
+  });
 
 // ⚙ 设置浮层（#317）：显示项为散装开关的镜像（点行 = 触发原按钮再回读状态），
 // 服务器管理不进浮层——左栏常驻面板已是高频区，与手机抽屉同为一级入口
