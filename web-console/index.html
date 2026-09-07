@@ -85,36 +85,37 @@
     display: flex; flex-direction: column; height: 100vh; overflow: hidden;
   }
 
-  /* ---------- 顶栏（#344 修正：拉通窗口全宽的自绘标题栏——网易云式融合） ---------- */
-  /* body 为 column：header 全宽横条（品牌/统计居左，连接+主题+窗口钮居右），
-     main 占余高。exe 无边框下 header 即拖拽区（data-tauri-drag-region）；
-     去 backdrop-filter（重合成掉帧帮凶），纯色底 */
+  /* ---------- 顶栏（#365 收敛：只留品牌+窗口钮的细条标题栏，exe 拖拽区） ---------- */
+  /* 状态统计/在线灯/深浅切换归位会话列头（#sideHead）；浏览器无窗口钮 */
   header {
-    display: flex; align-items: center; gap: 9px;
-    padding: calc(10px + env(safe-area-inset-top)) 16px 10px;
+    display: flex; align-items: center; gap: 8px;
+    padding: calc(5px + env(safe-area-inset-top)) 10px 5px;
     background: var(--bg-soft);
     border-bottom: 1px solid var(--border);
     flex: none; width: 100%;
   }
-  #winBtns { display: none; align-items: center; margin-right: -8px; }
+  /* #365 会话列头：状态统计（左，runhint）+ 在线灯/深浅切换（右） */
+  #sideHead { display: flex; align-items: center; gap: 8px; padding: 9px 14px 4px; flex: none; }
+  #sideHead #runhint { flex: 1; min-width: 0; }
+  #winBtns { display: none; align-items: center; margin-right: -6px; }
   #winBtns button {
-    width: 40px; height: 30px; border: none; background: none; cursor: pointer;
-    color: var(--dim); font-size: 12px; line-height: 1; border-radius: 6px;
+    width: 34px; height: 26px; border: none; background: none; cursor: pointer;
+    color: var(--dim); font-size: 11px; line-height: 1; border-radius: 6px;
     display: flex; align-items: center; justify-content: center;
   }
   #winBtns button:hover { background: var(--hov); color: var(--text); }
   #winBtns button[data-w="close"]:hover { background: #e81123; color: #fff; }
   .logo {
-    width: 31px; height: 31px; border-radius: 10px;
+    width: 22px; height: 22px; border-radius: 7px;
     background: linear-gradient(180deg, #2B2433, #161221);
     border: 1px solid rgba(255,255,255,.09);
     display: flex; align-items: center; justify-content: center;
     box-shadow: 0 2px 12px rgba(0,0,0,.35), inset 0 1px 0 rgba(255,255,255,.06); flex: none;
   }
-  .logo svg { width: 19px; height: 19px; }
+  .logo svg { width: 13px; height: 13px; }
   #empty .logo svg { width: 30px; height: 30px; }
   .brand { display: flex; align-items: center; gap: 8px; min-width: 0; }
-  .brand h1 { font-size: 15px; font-weight: 700; letter-spacing: .3px; white-space: nowrap; }
+  .brand h1 { font-size: 13px; font-weight: 700; letter-spacing: .3px; white-space: nowrap; }
   #runhint { font-size: 11.5px; color: var(--dim); white-space: nowrap; }
   /* 状态统计（灯+数字，无文字标签）；? 呼出图例浮窗 */
   #runhint .rh-total { font-variant-numeric: tabular-nums; }
@@ -128,14 +129,14 @@
   }
   #runhint .rh-help:hover { color: var(--dim); border-color: var(--hov); }
   #rhPop {
-    display: none; position: absolute; top: 60px; left: 16px; z-index: 40;
+    display: none; position: absolute; top: 74px; left: 14px; z-index: 40;
     background: var(--panel); border: 1px solid var(--border); border-radius: 12px;
     padding: 11px 14px; box-shadow: 0 8px 28px rgba(0,0,0,.4);
   }
   #rhPop.open { display: flex; flex-direction: column; gap: 7px; }
-  /* #345 服务器状态悬浮窗：connChip 点击展开（锚定其下方），列表+在线状态+管理入口 */
+  /* #345 服务器状态悬浮窗：connChip（#sideHead 右端）点击展开，锚其下方 */
   #srvPop {
-    display: none; position: absolute; top: 54px; left: 16px; z-index: 44; min-width: 230px;
+    display: none; position: absolute; top: 74px; left: calc(var(--side-w, 380px) - 242px); z-index: 44; min-width: 230px;
     background: var(--panel); border: 1px solid var(--border); border-radius: 12px;
     padding: 5px; box-shadow: 0 8px 28px rgba(0,0,0,.4);
   }
@@ -149,8 +150,12 @@
   .rh-row { display: flex; align-items: center; gap: 8px; font-size: 12.5px; color: var(--text); }
   .rh-row i { width: 8px; height: 8px; border-radius: 50%; flex: none; }
   /* 左下角双悬浮钮（＋ 新建在上、⚙ 设置在下）：裸图标无边框 */
-  #sideFabs { position: absolute; left: 14px; bottom: var(--fabs-bottom, 72px); z-index: 46; display: flex; flex-direction: column; gap: 10px; transition: bottom .18s ease; }
-  body.newform-open #sideFabs { --fabs-bottom: calc(var(--newform-h, 180px) + 84px); }
+  /* #366 FAB：默认 ＋/⚙ 纵排左下；新建表单开时 ＋ 变 ✕、两钮横排挪到表单底部
+     左侧空白（创建按钮行的左半边），morph 类过场避免纵横切换生硬 */
+  #sideFabs { position: absolute; left: 14px; bottom: var(--fabs-bottom, 72px); z-index: 46; display: flex; flex-direction: column; gap: 10px; transition: bottom .22s cubic-bezier(.4,.9,.3,1), gap .22s ease; }
+  .sfab { transition: transform .24s cubic-bezier(.34,1.35,.64,1), opacity .16s ease; }
+  .sfab.morph { transform: scale(.55) rotate(75deg); opacity: .3; }
+  body.newform-open #sideFabs { --fabs-bottom: 16px; flex-direction: row; gap: 8px; }
   .sfab {
     width: 42px; height: 42px; border: none; background: none; cursor: pointer;
     display: flex; align-items: center; justify-content: center; position: relative;
@@ -421,13 +426,13 @@
     cursor: col-resize; z-index: 30;
   }
   #sideGrip:hover, body.side-drag #sideGrip { background: rgba(217,119,87,.25); }
-  /* 收展钮：分界线中点的小胶囊 ‹/›。挂在 main 层而非 #side 内——#side 的
-     overflow:hidden 会把探出面板外的半颗裁掉（efa38a1 引入起被切半的根因）；
+  /* 收展钮：分界线中点的书签页签 ‹/›。挂在 main 层而非 #side 内——#side 的
+     overflow:hidden 会把探出面板外的半颗裁掉；#365 左缘贴分界线（不再压会话卡），
      left 跟 :root 的 --side-w，拖宽/收起即时同步，收起态钉在 main 最左缘 */
   main { position: relative; }
   #sideToggle {
-    position: absolute; top: 50%; left: calc(var(--side-w, 380px) - 13px); z-index: 31;
-    width: 26px; height: 44px; margin-top: -22px;
+    position: absolute; top: 50%; left: calc(var(--side-w, 380px) - 1px); z-index: 31;
+    width: 22px; height: 42px; margin-top: -21px;
     border: 1px solid var(--border); border-left: none;
     border-radius: 0 10px 10px 0; background: var(--panel);
     color: var(--dim); cursor: pointer; padding: 0;
@@ -520,9 +525,12 @@
   .card.historical { opacity: .75; }
   .card-top { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
   .elapsed { font-size: 12px; color: var(--dim); font-variant-numeric: tabular-nums; }
-  /* #341 WORKING 状态行合一（卡首行）：呼吸灯+回合秒+↓tokens 居左，会话总时长居右 */
-  .c-live.c-topline { margin: 0 0 5px; }
-  .c-live.c-topline .elapsed { margin-left: auto; }
+  /* #362 标题恒第一行（灯+标题+总时长）：WORKING/空闲同构，状态切换不跳行；
+     WORKING 实时行退居第二行（灯在标题行），空闲第二行=摘要（App 卡同构） */
+  .c-head { display: flex; align-items: center; gap: 8px; min-width: 0; }
+  .c-head .card-title { flex: 1; min-width: 0; margin-top: 0; }
+  .c-head .c-tt { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .c-head .elapsed { flex: none; }
   /* WORKING 实时工作行（App LiveStat 同构）：呼吸点 + 走秒 + ↓tokens + 动作摘要 */
   .c-live { display: flex; align-items: center; gap: 8px; margin: 6px 0 5px; font-size: 12px; color: var(--dim); font-variant-numeric: tabular-nums; min-width: 0; }
   .c-live .lv-dot { width: 9px; height: 9px; border-radius: 50%; background: var(--working); flex: none; animation: dot-breathe 2.4s ease-in-out infinite; }
@@ -558,7 +566,7 @@
     flex: 1; min-width: 0; font-size: 13.5px; font-weight: 600; padding: 3px 8px; border-radius: 7px;
   }
   /* #279⑨ 紧凑卡（对齐手机"简洁列表"三行）：状态点+标题+耗时 / 摘要 / 角标+改动+水位 */
-  .card.compact { padding: 8px 12px 9px; border-radius: 11px; }
+  .card.compact { padding: 7px 11px 8px; border-radius: 10px; }
   .card.compact .c-row1 { display: flex; align-items: center; gap: 7px; }
   .c-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--sc, var(--dim)); flex: none; }
   .c-dot.run { animation: dot-breathe 2.4s ease-in-out infinite; }
@@ -625,11 +633,11 @@
   .cron-meta { font-size: 11.5px; color: var(--faint); margin-top: 1px; font-variant-numeric: tabular-nums; }
   .card-summary { color: var(--dim); font-size: 12.5px; margin-top: 3px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .card-summary.waiting { color: var(--working); }
-  .card-stats { font-size: 12px; color: var(--faint); margin-top: 5px; display: flex; gap: 10px; font-variant-numeric: tabular-nums; }
+  .card-stats { font-size: 12px; color: var(--faint); margin-top: 5px; display: flex; align-items: center; gap: 10px; font-variant-numeric: tabular-nums; }
   .card-stats .add { color: var(--done); }
   .card-stats .del { color: var(--error); }
-  /* #302 源角标独立行：卡片最底部左对齐（不再与耗时/±行数/ctx 同行，对齐手机端） */
-  .card-src { margin-top: 4px; text-align: right; }
+  /* #367 源标签内联：stats 行最右（margin-left:auto 推到底），不再独立成行留白 */
+  .card-stats .src-badge { margin-left: auto; flex: none; }
   .card-cta { margin-top: 10px; display: flex; justify-content: flex-end; }
   .card-cta button {
     background: rgba(245,184,65,.12); border: 1px solid rgba(245,184,65,.45); color: var(--working);
@@ -948,10 +956,11 @@
   }
   #toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
 
-  /* 任务完成汇报悬浮框（#204/#348）：右下角卡片，到达即展开；10s 后缩为小方钮角标
-     （confirmFloat 同语言），点角标再展开；✓ 只标在具体任务项上，标题不放 */
+  /* 任务完成汇报悬浮框（#204/#348/#365）：右下角卡片，右/下距窗口边等距（14px），
+     到达即展开；10s 后缩为小方钮角标（confirmFloat 同语言），点角标再展开、
+     点外部收起；✓ 只标在具体任务项上，标题不放 */
   #taskDone {
-    position: fixed; right: 16px; bottom: 76px; max-width: 340px;
+    position: fixed; right: 14px; bottom: 14px; max-width: 340px;
     background: var(--toast-bg); border: 1px solid var(--border); color: var(--text);
     border-radius: 12px; padding: 10px 12px; font-size: 13px; z-index: 98;
     box-shadow: var(--toast-shadow); display: none; cursor: pointer;
@@ -999,6 +1008,7 @@
     #side { width: 100% !important; transition: none; }
     header { padding: calc(10px + env(safe-area-inset-top)) 12px 10px; }
     #runhint { display: none; }
+    #srvPop { left: auto; right: 10px; }
     #timeline { font-size: calc(14px * var(--tl-scale, 1)); }
     .brand h1 { font-size: 14px; }
     #cards { padding: 4px 10px 12px; }
@@ -1035,14 +1045,9 @@
 <header data-tauri-drag-region>
   <div class="brand" data-tauri-drag-region>
     <div class="logo"><svg viewBox="0 0 24 24" fill="none"><defs><linearGradient id="lgA" x1="4" y1="4" x2="20" y2="20" gradientUnits="userSpaceOnUse"><stop stop-color="#E8985F"/><stop offset="1" stop-color="#C96442"/></linearGradient></defs><g><rect x="3.4" y="6.2" width="11" height="14" rx="2.8" transform="rotate(-11 8.9 13.2)" stroke="url(#lgA)" stroke-opacity=".5" stroke-width="1.5"/><rect x="9.6" y="5.4" width="11" height="14" rx="2.8" transform="rotate(10 15.1 12.4)" stroke="url(#lgA)" stroke-opacity=".85" stroke-width="1.5"/><rect x="6.5" y="4.2" width="11.4" height="15.2" rx="3" fill="url(#lgA)"/><path d="M9.2 8.7h6" stroke="#171220" stroke-width="1.7" stroke-linecap="round"/><path d="M9.2 12.2h4.2" stroke="#171220" stroke-opacity=".55" stroke-width="1.7" stroke-linecap="round"/></g></svg></div>
-    <div data-tauri-drag-region>
-      <h1 data-tauri-drag-region>CC Deck</h1>
-      <div id="runhint" data-tauri-drag-region>连接中…</div>
-    </div>
+    <h1 data-tauri-drag-region>CC Deck</h1>
   </div>
   <div class="spacer" data-tauri-drag-region></div>
-  <div id="connChip" title="服务器状态（点击查看列表）"><i></i><span id="connText">未连接</span></div>
-  <button id="themeBtn" title="深浅色切换">☀️</button>
   <div id="winBtns" style="display:none">
     <button data-w="min" title="最小化">─</button>
     <button data-w="max" title="最大化">▢</button>
@@ -1063,6 +1068,12 @@
   <button id="sideToggle" title="收起 / 展开会话列表">‹</button>
   <div id="side">
     <div id="sideGrip" title="拖拽调整宽度"></div>
+
+    <div id="sideHead">
+      <div id="runhint">连接中…</div>
+      <div id="connChip" title="服务器状态（点击查看列表）"><i></i><span id="connText">未连接</span></div>
+      <button id="themeBtn" title="深浅色切换">☀️</button>
+    </div>
 
     <aside id="gearPop">
       <div class="gp-head"><b>设置</b><button id="gearClose" title="收起">✕</button></div>
@@ -1450,7 +1461,15 @@ function toast(msg, ms = 2600) {
 
 // 任务完成汇报悬浮框（#204）：新报告展开列出完成项，10s 后自动折叠为一行小条，
 // 点卡片再展开；✕ 关闭（多源共用一个浮框，哪个源来报都弹）
-const tdFloat = { expanded: true, timer: 0 };
+const tdFloat = { expanded: true, timer: 0, render: null };
+// #365 任务通知点外收起：展开态点击卡片外部 → 缩回小方钮
+document.addEventListener("click", (e) => {
+  const el = $("taskDone");
+  if (!el.classList.contains("show") || !tdFloat.expanded) return;
+  if (el.contains(e.target)) return;
+  tdFloat.expanded = false;
+  if (tdFloat.render) tdFloat.render();
+});
 function showTaskDone(ctx, sid, payload) {
   const s = ctx.sessions.get(sid);
   const total = Array.isArray(payload?.done) ? payload.done.length : 0;
@@ -1475,6 +1494,7 @@ function showTaskDone(ctx, sid, payload) {
     el.classList.add("show");
   };
   renderTd();
+  tdFloat.render = renderTd;
   tdFloat.timer = setTimeout(() => { tdFloat.expanded = false; renderTd(); }, 10000);
   el.onclick = (e) => {
     if (e.target && e.target.dataset && e.target.dataset.td === "x") {
@@ -2081,6 +2101,7 @@ function onEvent(ctx, msg) {
         ctx.timelines.set(s.session_id, msg.payload.logs[s.session_id] || []);
       }
       ctx.lastSeq = Math.max(ctx.lastSeq, msg.seq);
+      if (msg.payload.homedir) ctx.homedir = msg.payload.homedir; // #368 新建表单默认目录
       // 重连快照里已没有挂起删除的会话 = 别处已删/服务器侧已终结：取消挂起，
       // 免得 4s 后对不存在的会话发命令弹"会话不存在"误报
       if (pendingDel.sid && !ctx.sessions.has(pendingDel.sid)) cancelPendingDel();
@@ -2108,7 +2129,7 @@ function onEvent(ctx, msg) {
       if (msg.payload.stats) s.stats = msg.payload.stats;
       // 其余可选字段：出现即覆盖（与手机端 store 对齐）
       for (const f of ["remote_mode", "title", "title_locked", "model", "turn_started_at",
-        "usage", "context_usage", "context_limit", "todos", "subagents", "permission_mode", "pending_inputs", "relay_session_id", "cron_tasks"]) {
+        "usage", "context_usage", "context_limit", "todos", "subagents", "permission_mode", "pending_inputs", "relay_session_id", "cron_tasks", "compacting"]) {
         if (msg.payload[f] !== undefined) s[f] = msg.payload[f];
       }
       s.updated_at = msg.ts;
@@ -2484,36 +2505,43 @@ function render() {
       // #341 去重：自动标题常与 action_summary 同文（title-gen 由动作生成）——同文时摘要不重复展示
       const title = s.title || "";
       const dupTitle = !!(waitingText && title && (waitingText === title || title.startsWith(waitingText) || waitingText.startsWith(title)));
-      // #341 状态行合一：WORKING 不再"chip 行 + live 行"两行两个呼吸灯——合成一行
-      // （呼吸灯+回合秒+↓tokens，摘要≠标题时内联；右侧=会话总时长），摘要行也随之取消
-      const topRow = s.status === "WORKING"
-        ? '<div class="c-live c-topline"><span class="lv-dot"></span><span class="lv-sec">' + Math.max(0, Math.floor((Date.now() - (s.turn_started_at ?? s.updated_at)) / 1000)) + 's</span>' +
+      // #362 标题恒第一行：灯（WORKING 呼吸）+标题+总时长同构一行，状态切换不跳行；
+      // WORKING 实时行（回合秒+↓tokens+动作摘要）退居第二行，空闲第二行=摘要
+      const headRow =
+        '<div class="c-head"><span class="c-dot' + (s.status === "WORKING" ? " run" : "") + '" style="--sc:var(--' + s.status.toLowerCase() + ')"></span>' +
+          '<span class="card-title"><span class="c-tt">' + escapeHtml(s.title || "") + "</span>" + badges + opBtns + "</span>" +
+          '<span class="elapsed">' + fmtElapsed(sessionElapsed(s)) + "</span></div>";
+      const liveRow = s.status === "WORKING"
+        ? '<div class="c-live">' +
+          (s.compacting ? '<span class="lv-tok">⟳ 压缩上下文</span>' : "") +
+          '<span class="lv-sec">' + Math.max(0, Math.floor((Date.now() - (s.turn_started_at ?? s.updated_at)) / 1000)) + 's</span>' +
           (tok ? '<span class="lv-tok">↓ ' + tokStr(tok) + "</span>" : "") +
-          (s.action_summary && !dupTitle ? '<span class="lv-sum">' + escapeHtml(s.action_summary) + "</span>" : "") +
-          '<span class="elapsed">' + fmtElapsed(sessionElapsed(s)) + "</span></div>"
-        : '<div class="card-top">' + chip(s.status) + '<span style="display:flex;align-items:center;gap:6px">' +
-          '<span class="elapsed">' + fmtElapsed(sessionElapsed(s)) + "</span></span></div>";
+          (s.action_summary && !dupTitle && !s.compacting ? '<span class="lv-sum">' + escapeHtml(s.action_summary) + "</span>" : "") +
+          "</div>"
+        : "";
       const summaryRow = waitingText && s.status !== "WORKING" && !dupTitle
         ? '<div class="card-summary' + (waiting ? " waiting" : "") + '">' + escapeHtml(waitingText) + "</div>"
         : "";
       const ctaRow = waiting && !s.historical && s.waiting_request?.decidable !== false ? '<div class="card-cta"><button>处理</button></div>' : "";
+      // #367 源标签内联进 stats 行右侧（多源才有；不再独立占一整行留白）；
+      // 全空时整行不渲染，卡片底部不再拖一条空白
+      const srcTag = ctxs.size > 1 ? srcBadgeHtml(ctx.cfg) : "";
+      const statsInner = statsHtml(s.stats) + ctxHtml(s) + (srcTag || "");
+      const statsBlock = statsInner ? '<div class="card-stats">' + statsInner + "</div>" : "";
       if (listCompact) {
-        // #279⑨ 紧凑卡（对齐手机）：状态点+标题+耗时 / 摘要 / 改动+水位 / 源角标独立末行
+        // #279⑨ 紧凑卡（对齐手机）：状态点+标题+耗时 / 摘要 / 改动+水位+源标签
         d.innerHTML =
           '<div class="c-row1"><span class="c-dot' + (s.status === "WORKING" ? " run" : "") + '" style="--sc:var(--' + s.status.toLowerCase() + ')"></span>' +
             '<span class="card-title"><span class="c-tt">' + escapeHtml(s.title || "") + "</span>" + badges + opBtns + "</span>" +
             '<span class="elapsed">' + fmtElapsed(sessionElapsed(s)) + "</span></div>" +
           summaryRow +
-          '<div class="card-stats">' + statsHtml(s.stats) + ctxHtml(s) + "</div>" +
-          '<div class="card-src">' + srcBadgeHtml(ctx.cfg) + "</div>" +
+          statsBlock +
           ctaRow;
       } else {
         d.innerHTML =
-          topRow +
-          '<div class="card-title">' + escapeHtml(s.title || "") + badges + opBtns + "</div>" +
-          summaryRow +
-          '<div class="card-stats">' + statsHtml(s.stats) + ctxHtml(s) + "</div>" +
-          '<div class="card-src">' + srcBadgeHtml(ctx.cfg) + "</div>" +
+          headRow +
+          (s.status === "WORKING" ? liveRow : summaryRow) +
+          statsBlock +
           ctaRow;
       }
       d.onclick = () => select(s.session_id, ctx.cfg.id);
@@ -3323,15 +3351,39 @@ setTimeout(() => {
     }
   } catch (e) {}
 }, 5000);
+// #366/#368 新建表单交互：开=＋变✕（morph 过场）、cwd 预填活动源用户根目录、
+// 焦点落初始指令；初始指令回车（无 Shift）直接创建，工作目录回车跳初始指令
+const ADD_PLUS_SVG = $("addBtn").innerHTML;
+const ADD_X_SVG = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg>';
+function morphAddBtn(open) {
+  const b = $("addBtn");
+  b.classList.add("morph");
+  setTimeout(() => {
+    b.innerHTML = open ? ADD_X_SVG : ADD_PLUS_SVG;
+    b.classList.remove("morph");
+  }, 110);
+}
 $("addBtn").onclick = () => {
   const open = !$("newform").classList.contains("open");
   $("newform").classList.toggle("open", open);
   $("addBtn").classList.toggle("on", open);
-  if (open) $("prompt").focus();
+  morphAddBtn(open);
+  if (open) {
+    if (!$("cwd").value.trim()) {
+      const actx = ctxs.get(activeServerId) || ctxs.get(servers[0]?.id);
+      if (actx && actx.homedir) $("cwd").value = actx.homedir;
+    }
+    $("prompt").focus();
+  }
 };
+$("cwd").addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); $("prompt").focus(); } });
+$("prompt").addEventListener("keydown", (e) => {
+  if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); $("createBtn").click(); }
+});
 function closeNewForm() {
   $("newform").classList.remove("open");
   $("addBtn").classList.remove("on");
+  morphAddBtn(false);
 }
 // #279⑨ 列表密度 / 折叠空闲：会话标题行两个小开关（localStorage 持久化，render 内联动卡片与计数）
 function syncDensityBtn() {
