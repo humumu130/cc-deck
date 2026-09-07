@@ -38,13 +38,14 @@ export const DARK: ThemeColors = {
 };
 
 export const LIGHT: ThemeColors = {
-  bg: "#EEF1F5",
-  panel: "#F7F9FB",
-  panel2: "#E5EAF1",
-  line: "rgba(38,64,96,0.12)",
-  text: "#22303E",
-  dim: "#5A6B7E",
-  faint: "#8697A9",
+  // #351 浅色降刺眼：冷白偏暖灰（蓝灰相→暖灰相），整体压暗半档；panel 从近纯白降为暖白
+  bg: "#E9EAE4",
+  panel: "#F2F3EE",
+  panel2: "#E2E4DC",
+  line: "rgba(52,58,50,0.13)",
+  text: "#29302A",
+  dim: "#5D665C",
+  faint: "#8B938A",
   brandA: "#2F7FE8",
   brandB: "#6F5FE8",
   // 浅色状态四色与网页端 CSS 浅色变量对齐（两端风格一致）
@@ -54,7 +55,7 @@ export const LIGHT: ThemeColors = {
   done: "#047857",
   tintSoft: "rgba(47,127,232,0.06)",
   tintStrong: "rgba(47,127,232,0.13)",
-  overlay: "rgba(244,246,249,0.97)",
+  overlay: "rgba(240,241,236,0.97)",
 };
 
 // #RRGGBB + alpha -> #RRGGBBAA（RN 支持 8 位 hex）
