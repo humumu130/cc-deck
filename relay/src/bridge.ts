@@ -400,6 +400,11 @@ export class Bridge {
     if (ev.transcript_path) {
       this.transcriptPaths.set(this.extId(ev), ev.transcript_path);
       this.ensureQueuePoll();
+      // #361 任务清单时效：TodoWrite/Task 系列 PostToolUse 到达即读转录增量
+      //（含 taskOps 解析→setTodos），不等 5s 轮询节拍
+      if (ev.event === "PostToolUse" && /^(TodoWrite|TaskCreate|TaskUpdate)$/.test(ev.tool_name ?? "")) {
+        this.pushAssistantTexts(this.extId(ev), ev.transcript_path);
+      }
     }
     this.correctEscMark(this.extId(ev), ev);
     // #363 任何新事件都意味着压缩已结束（压缩后继续回合 → 新 prompt/工具事件）；
