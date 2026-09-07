@@ -7,6 +7,9 @@ import type { SessionState } from "./protocol";
 // 手表命令翻译成 relay 命令发回 store（PATH_CMD）。契约见 wear-app protocol/Protocol.kt。
 
 const PATH_SESSIONS = "/ccr/sessions";
+// #373 /ccr/cfg：下发手表连接配置——活动源走云时发 wan 透传地址，走 LAN 发直连地址
+const PATH_CFG = "/ccr/cfg";
+let lastCfg = "";
 const PATH_CMD = "/ccr/cmd";
 const THROTTLE_MS = 5000;   // 常规更新（action_summary 等）最短下发间隔
 const KEEPALIVE_MS = 30000; // 兜底重发：手表晚于手机启动时也能在 30s 内拿到快照
@@ -61,6 +64,23 @@ export function startWatchGateway(): void {
     lastFingerprint = fingerprint(list);
     try {
       void mod!.send(PATH_SESSIONS, JSON.stringify(list)).catch(() => undefined);
+    } catch {}
+    // #373 连接配置跟随活动源（变化才发）：wan 透传 / LAN 直连
+    try {
+      const sid = snap.activeSourceId;
+      const info = sid ? store.sourceInfoOf(sid) : null;
+      let cfg: string = "";
+      if (info?.channel === "cloud" && info.cloudUrl && info.relayDev) {
+        const base = info.cloudUrl.replace(/\/cloud.*$/, "");
+        const t = encodeURIComponent(info.cloudToken ?? "");
+        cfg = JSON.stringify({ mode: "RELAY", url: `${base}/wan?token=${t}&dev=wt-app1&to=${info.relayDev}`, wan: true });
+      } else if (info?.wsUrl && info.channel === "lan") {
+        cfg = JSON.stringify({ mode: "RELAY", url: `${info.wsUrl}${info.wsUrl.includes("?") ? "&" : "?"}token=${encodeURIComponent(info.token)}` });
+      }
+      if (cfg && cfg !== lastCfg) {
+        lastCfg = cfg;
+        void mod!.send(PATH_CFG, cfg).catch(() => undefined);
+      }
     } catch {}
   };
 

@@ -1336,10 +1336,14 @@ class RelayStore {
   // 按源查连接参数与通道（#294 审查修复）：slash 联想等按"会话所属源"取数，
   // 不再一律走活动源口径（聚合下活动源走云时会误判会话源不可拉命令表）；
   // 源未知/从未建连（无 cfg）返回 null
-  sourceInfoOf(srcId: string): { wsUrl: string; token: string; channel: "lan" | "cloud" | null } | null {
+  sourceInfoOf(srcId: string): { wsUrl: string; token: string; channel: "lan" | "cloud" | null; cloudUrl?: string; cloudToken?: string; relayDev?: string } | null {
     const conn = this.conns.get(srcId);
     if (!conn?.cfg) return null;
-    return { wsUrl: conn.cfg.wsUrl, token: conn.cfg.token, channel: conn.channel };
+    const c = conn.cloudCfg;
+    return {
+      wsUrl: conn.cfg.wsUrl, token: conn.cfg.token, channel: conn.channel,
+      ...(c ? { cloudUrl: c.url, cloudToken: c.token, relayDev: c.relayDev } : {}),
+    };
   }
 
   // 命令路由（#294 批1/批3）：按 payload.session_id 经 sidIndex 定位源（sid 为 uuid
