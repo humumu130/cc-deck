@@ -26,14 +26,42 @@ const FONT_OPTS: { k: ProcessFont; label: string }[] = [
   { k: "hidden", label: "隐藏" },
 ];
 
-// #337 服务器色点=身份色：登记后固定（id 哈希取色板），不随选中/连接状态变——
-// 选中由 srvRowOn 外侧亮边框表达；此前点染连接状态导致"切到谁谁绿、另一台红"的误导
+// #337 服务器色点=身份色：登记后固定，不随选中/连接状态变——选中由 srvRowOn 外侧
+// 亮边框表达。#356 哈希取色会撞色（书房电脑/Mac 同黄）——改同网页 srcColorByKey：
+// 按当前服务器 id 集合稳定排序分配色板序号，源数≤7 必不重
 const SRV_COLORS = ["#D97757", "#4D9FFF", "#2BD98F", "#A78BFA", "#22D3EE", "#F472B6", "#FBBF24"] as const;
-const srvColor = (id: string) => {
-  let h = 0;
-  for (let i = 0; i < id.length; i++) h = (h * 31 + id.charCodeAt(i)) >>> 0;
-  return SRV_COLORS[h % SRV_COLORS.length];
+let srvColorOrder: string[] = [];
+let srvColorMap = new Map<string, string>();
+const rebuildSrvColors = (ids: string[]) => {
+  const sorted = [...ids].sort();
+  if (sorted.length === srvColorOrder.length && sorted.every((v, i) => v === srvColorOrder[i])) return;
+  srvColorOrder = sorted;
+  srvColorMap = new Map(sorted.map((id, i) => [id, SRV_COLORS[i % SRV_COLORS.length]]));
 };
+
+// #353 拨杆档位选择器（过程消息 标准/紧凑/隐藏）：一条胶囊轨道 + 带阴影滑块，
+// spring 弹拨到选中档；点任意档位标签即拨过去
+function FontLever({ value, onChange }: { value: ProcessFont; onChange: (v: ProcessFont) => void }) {
+  const { c } = useTheme();
+  const d = useThemeStyles(makeStyles);
+  const idx = Math.max(0, FONT_OPTS.findIndex((o) => o.k === value));
+  const [w] = useState(174);
+  const seg = w / FONT_OPTS.length;
+  const x = useRef(new Animated.Value(idx * seg)).current;
+  useEffect(() => {
+    Animated.spring(x, { toValue: idx * seg, velocity: 4, friction: 9, useNativeDriver: true }).start();
+  }, [idx, x, seg]);
+  return (
+    <View style={[d.leverTrack, { width: w }]} onLayout={(e) => { const nw = e.nativeEvent.layout.width; if (nw > 0 && Math.abs(nw - w) < 1) return; }}>
+      <Animated.View style={[d.leverThumb, { width: seg - 6, transform: [{ translateX: x.interpolate({ inputRange: [0, seg * (FONT_OPTS.length - 1)], outputRange: [3, seg * (FONT_OPTS.length - 1) + 3] }) }] }]} />
+      {FONT_OPTS.map((o, i) => (
+        <Pressable key={o.k} style={d.leverOpt} onPress={() => onChange(o.k)} hitSlop={{ top: 4, bottom: 4 }}>
+          <Text style={[d.leverT, i === idx && d.leverTOn]}>{o.label}</Text>
+        </Pressable>
+      ))}
+    </View>
+  );
+}
 
 // #313 关于弹窗：底部滑上卡片（NewSessionModal 同款视觉语言——全宽贴底、只上圆角）。
 // 版本信息（LogoMark + 版本号）+ 本版特性摘要（VERSION_NOTES 逐条）+ 检查更新
@@ -145,6 +173,7 @@ export default function SettingsDrawer({
   const aggregate = useAggregate();
   const snap = useRelay();
   const [servers, setServers] = useState<ServerEntry[]>([]);
+  rebuildSrvColors(servers.map((s) => s.id));
   const [activeId, setActiveId] = useState<string | null>(null);
   // 服务器列表折叠：多服务器时腾出空间（记忆上次选择）
   const [srvCollapsed, setSrvCollapsed] = useState(false);
@@ -304,7 +333,7 @@ export default function SettingsDrawer({
                   <View style={d.srvHead}>
                     {/* #337 身份色点：登记后固定（id 哈希取色板），与选中/在线状态解耦；
                         当前选中由 srvRowOn 外侧亮边框表达 */}
-                    <View style={[d.srvDot, { backgroundColor: srvColor(e.id) }]} />
+                    <View style={[d.srvDot, { backgroundColor: srvColorMap.get(e.id) ?? c.faint }]} />
                     <Text style={d.srvName} numberOfLines={1}>{e.name}</Text>
                     {e.cloud ? <Text style={d.srvCloud}>☁</Text> : null}
                   </View>
@@ -389,18 +418,8 @@ export default function SettingsDrawer({
         <>
         <View style={d.setItem}>
           <Text style={d.setLabel}><Text style={d.rowIconT}>▤ </Text>过程消息</Text>
-          <View style={d.segFull}>
-            {FONT_OPTS.map((o) => (
-              <Pressable
-                key={o.k}
-                style={[d.segOptF, processFont === o.k && d.segOptOn]}
-                android_ripple={{ color: c.tintSoft, borderless: false, radius: 10 }}
-                onPress={() => setProcessFont(o.k)}
-              >
-                <Text style={[d.segT, processFont === o.k && d.segTOn]}>{o.label}</Text>
-              </Pressable>
-            ))}
-          </View>
+          {/* #353 拨杆档位选择器：整条轨道一个胶囊，滑块弹拨到选中档（替代三框点选） */}
+          <FontLever value={processFont} onChange={setProcessFont} />
         </View>
         {/* #350 深色模式开关移主面板顶（连接 chip 旁）；语音输入开关整体下线 */}
         <View style={[d.setItem, d.setRow]}>
@@ -533,6 +552,19 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
   setRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
   setLabel: { color: c.text, fontSize: 13.5, fontWeight: "600" },
   rowIconT: { color: c.dim, fontSize: 12, fontWeight: "400" },
+  // #353 拨杆：胶囊轨道 + 浮起滑块（阴影），标签盖在轨道上层
+  leverTrack: {
+    flexDirection: "row", alignSelf: "stretch", marginTop: 9, height: 34, borderRadius: 17,
+    backgroundColor: c.tintSoft, borderWidth: 1, borderColor: c.line, overflow: "hidden",
+  },
+  leverThumb: {
+    position: "absolute", top: 3, left: 0, bottom: 3, borderRadius: 14,
+    backgroundColor: c.panel2, borderWidth: 1, borderColor: withA(c.brandA, 0.4),
+    elevation: 2,
+  },
+  leverOpt: { flex: 1, alignItems: "center", justifyContent: "center", zIndex: 1 },
+  leverT: { color: c.dim, fontSize: 12 },
+  leverTOn: { color: c.text, fontWeight: "600" },
   sw: { transform: [{ scale: 0.85 }] },
   segFull: { flexDirection: "row", gap: 6, marginTop: 8 },
   segOptF: {

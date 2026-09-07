@@ -56,7 +56,7 @@ private fun launchIntent(ctx: Context, requestCode: Int): PendingIntent? {
   )
 }
 
-private fun buildNotification(ctx: Context, channelId: String, title: String, body: String, pi: PendingIntent?, ongoing: Boolean): Notification {
+private fun buildNotification(ctx: Context, channelId: String, title: String, body: CharSequence, pi: PendingIntent?, ongoing: Boolean): Notification {
   val icon = ctx.applicationInfo.icon
   return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
     Notification.Builder(ctx, channelId)
@@ -110,13 +110,39 @@ class RelayNotifyModule : Module() {
       } catch (_: SecurityException) {}
     }
 
-    // #301 更新前台服务通知正文（App 侧按会话/连接态刷新文案）：同 channel/id 重建
-    // Notification 走 notify() 覆盖 startForeground 的常驻通知（标题/渠道与前台服务一致）
+    // #301/#355 更新前台服务通知正文（App 侧按会话/连接态刷新）：同 channel/id 重建
+    // Notification 覆盖常驻通知。#355 stats 版用彩色灯点+数字（working 琥珀/waiting 红/
+    // error 橙/done 绿，同列表 statChips 语言）——SpannableString 着色，纯文本通知做不到
     Function("update") { text: String ->
       val ctx = appContext.reactContext ?: return@Function
       val nm = ctx.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
       ensureChannel(nm, FG_CHANNEL_ID, "后台连接", NotificationManager.IMPORTANCE_MIN)
       val notif = buildNotification(ctx, FG_CHANNEL_ID, FG_TITLE, text, launchIntent(ctx, 0), ongoing = true)
+      try {
+        nm.notify(FG_NOTIFICATION_ID, notif)
+      } catch (_: SecurityException) {}
+    }
+
+    Function("updateStats") { working: Int, waiting: Int, error: Int, done: Int ->
+      val ctx = appContext.reactContext ?: return@Function
+      val nm = ctx.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+      ensureChannel(nm, FG_CHANNEL_ID, "后台连接", NotificationManager.IMPORTANCE_MIN)
+      val span = android.text.SpannableStringBuilder()
+      val parts = listOf(
+        "●" to working to 0xFFFFC53D.toInt(), // working 琥珀
+        "●" to waiting to 0xFFF0524F.toInt(), // waiting 红
+        "●" to error to 0xFFFF7849.toInt(),   // error 橙
+        "●" to done to 0xFF2BD98F.toInt(),    // done 绿
+      )
+      for ((pair, col) in parts) {
+        val (dot, n) = pair
+        val start = span.length
+        span.append(dot).append(n.toString()).append("  ")
+        span.setSpan(android.text.style.ForegroundColorSpan(col), start, start + 1, android.text.Spannable.SPAN_EXCLUSIVE_EXCLUSIVE)
+      }
+      val total = working + waiting + error + done
+      span.append("共 $total 会话")
+      val notif = buildNotification(ctx, FG_CHANNEL_ID, FG_TITLE, span, launchIntent(ctx, 0), ongoing = true)
       try {
         nm.notify(FG_NOTIFICATION_ID, notif)
       } catch (_: SecurityException) {}

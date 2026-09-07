@@ -555,12 +555,12 @@ export default function ListScreen({ sessions, connected, connText, onOpen, onNe
     .filter((k) => (counts[k] ?? 0) > 0)
     .map((k) => ({ k, n: counts[k], color: statusColor(k, c) }));
 
-  // 连接 chip 配色按 store 连接阶段：连接中/重连中 = 中性 dim（正常过程不着红色），断开才红
+  // #357 连接 chip 三态色（用户定）：已连接=绿 / 连接中·重连中=黄 / 连不上=红
   const connColor =
     connected || snap.connState === "online"
-      ? c.working
+      ? c.done
       : snap.connState === "connecting" || snap.connState === "reconnecting"
-        ? c.dim
+        ? c.working
         : c.waiting;
 
   const [collapseIdle, setCollapseIdle] = useState(false);

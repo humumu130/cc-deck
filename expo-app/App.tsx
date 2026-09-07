@@ -9,7 +9,7 @@ import type { TaskDoneReport } from "./src/store";
 import { isConfirmTodo, displaySrcName } from "./src/fmt";
 import type { DetailBackHandle } from "./src/screens/DetailScreen";
 import type { SessionState } from "./src/protocol";
-import { ensureNotifPermission, fgSupported, notifyAlert, startForegroundService, updateForeground } from "./src/notify";
+import { ensureNotifPermission, fgSupported, notifyAlert, startForegroundService, updateForeground, updateForegroundStats } from "./src/notify";
 import { startWatchGateway } from "./src/watch";
 import { ThemeProvider, useTheme, useThemeStyles } from "./src/theme-context";
 import { useKbHeight } from "./src/kb";
@@ -693,8 +693,8 @@ function Shell() {
     }
   }, [snap.connected]);
 
-  // #301 前台服务通知正文随会话/连接态刷新：格式「N 会话 · X 运行 · Y 等待 · Z 错误」
-  // （仅计非零项）。快照每秒都换引用，故按文案 key 比对——状态分布/连接态没变不重发
+  // #301/#355 前台服务通知正文随会话/连接态刷新：彩点+数字（working 琥珀/waiting 红/
+  // error 橙/done 绿，同列表 statChips；原生 Spannable 着色）。按分布 key 比对防重发
   const fgText = useRef("");
   useEffect(() => {
     if (!fgStarted.current) return;
@@ -704,17 +704,18 @@ function Shell() {
     } else if (!snap.sessions.length) {
       text = "已连接 · 暂无会话";
     } else {
-      const dist: Partial<Record<SessionState["status"], number>> = { WORKING: 0, WAITING: 0, ERROR: 0 };
+      const dist: Partial<Record<SessionState["status"], number>> = { WORKING: 0, WAITING: 0, ERROR: 0, DONE: 0 };
       for (const s of snap.sessions) if (s.status in dist) dist[s.status] = (dist[s.status] ?? 0) + 1;
-      const parts = [`${snap.sessions.length} 会话`];
-      if (dist.WORKING) parts.push(`${dist.WORKING} 运行`);
-      if (dist.WAITING) parts.push(`${dist.WAITING} 等待`);
-      if (dist.ERROR) parts.push(`${dist.ERROR} 错误`);
-      text = parts.join(" · ");
+      text = `S|${dist.WORKING ?? 0}|${dist.WAITING ?? 0}|${dist.ERROR ?? 0}|${dist.DONE ?? 0}`;
     }
     if (text === fgText.current) return;
     fgText.current = text;
-    updateForeground(text);
+    if (text.startsWith("S|")) {
+      const [, w, wa, e, dn] = text.split("|").map(Number);
+      updateForegroundStats(w, wa, e, dn);
+    } else {
+      updateForeground(text);
+    }
   }, [snap.sessions, snap.connected, snap.connState]);
 
   useEffect(() => {

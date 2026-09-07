@@ -684,10 +684,20 @@ export default function DetailScreen({ sid, onBack, initialView, ref }: { sid: s
     return () => clearInterval(t);
   }, [agRunning]);
 
+  // #358 任务条目去 ✕：左滑 ≥50dp 移除（touch 位移判定，垂直滚动不受影响）
+  const todoTouchX = useRef<number | null>(null);
   const renderTodo = (t: TodoItem, i: number, grouped: boolean) => (
     <View
       style={[d.todoRow, grouped && { borderTopWidth: 0, marginTop: 0 }, t.id != null && t.id === flashTodo && d.todoFlash]}
       onLayout={t.id != null ? (ev) => todoY.current.set(t.id!, ev.nativeEvent.layout.y) : undefined}
+      onTouchStart={(e) => { const tc = e.nativeEvent.changedTouches?.[0] ?? e.nativeEvent.touches?.[0]; todoTouchX.current = tc ? tc.pageX : null; }}
+      onTouchEnd={(e) => {
+        const sx = todoTouchX.current;
+        todoTouchX.current = null;
+        const tc = e.nativeEvent.changedTouches?.[0] ?? e.nativeEvent.touches?.[0];
+        if (sx == null || !tc) return;
+        if (sx - tc.pageX > 50) hideTodo(t.content);
+      }}
     >
       <Text
         style={[
@@ -701,7 +711,7 @@ export default function DetailScreen({ sid, onBack, initialView, ref }: { sid: s
       <Text
         style={[
           d.todoT,
-          t.status === "pending" && { color: c.faint },
+          t.status === "pending" && { color: c.dim },
           t.status === "in_progress" && { color: c.text, fontWeight: "700" },
           t.status === "completed" && { color: c.dim },
         ]}
@@ -709,13 +719,6 @@ export default function DetailScreen({ sid, onBack, initialView, ref }: { sid: s
       >
         {t.status === "in_progress" && t.active_form ? t.active_form : t.content}
       </Text>
-      <Pressable
-        style={d.todoDel}
-        android_ripple={{ color: c.tintSoft, borderless: false, radius: 11 }}
-        onPress={() => hideTodo(t.content)}
-      >
-        <Text style={d.todoDelT}>✕</Text>
-      </Pressable>
     </View>
   );
 
@@ -1184,6 +1187,7 @@ export default function DetailScreen({ sid, onBack, initialView, ref }: { sid: s
             <ScrollView
               ref={todoScrollRef}
               style={{ flex: 1 }}
+              contentContainerStyle={{ paddingHorizontal: 14 }}
               showsVerticalScrollIndicator={false}
               scrollEventThrottle={16}
               nestedScrollEnabled
@@ -1244,7 +1248,7 @@ export default function DetailScreen({ sid, onBack, initialView, ref }: { sid: s
                 );
               })}
               <Pressable style={d.todoFootHint} disabled={todoSpin} onPress={refreshTodos} hitSlop={{ top: 10, bottom: 16 }}>
-                <Text style={d.todoFootHintT}>{todoSpin ? "刷新中…" : "↻ 上滑更新"}</Text>
+                <Text style={d.todoFootHintT}>{todoSpin ? "刷新中…" : "↻ 上滑更新 · 条目左滑移除"}</Text>
               </Pressable>
             </ScrollView>
             {/* 常驻自绘滑块：系统 scrollbar 在两端都不可见（VM/API28、真机/API16 实测） */}

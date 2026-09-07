@@ -34,6 +34,13 @@ export function updateForeground(text: string): void {
   } catch {}
 }
 
+// #355 前台通知彩点版：working/waiting/error/done 计数 → 原生 Spannable 彩色灯点
+export function updateForegroundStats(working: number, waiting: number, error: number, done: number): void {
+  try {
+    mod?.updateStats?.(working, waiting, error, done);
+  } catch {}
+}
+
 // API 33+ 运行时通知权限（拒绝则通知静默不显示，前台服务照常）
 export async function ensureNotifPermission(): Promise<void> {
   if (Platform.OS !== "android" || Platform.Version < 33) return;
