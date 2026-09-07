@@ -96,6 +96,8 @@ export interface Snapshot {
   // （新增/完成/去标记）指纹不匹配即自动重现。不落盘——进程重启后重新提醒，
   // 符合"常驻提醒直到确认"语义
   confirmDismissedKey: string | null;
+  // #316 手表配对请求（LAN 源瞬态事件）：非空 = 全局弹窗显示名称+6 位比对码
+  watchPair: { requestId: string; name: string; code: string; sourceId: string } | null;
 }
 
 // 任务完成汇报（#204/#254）：relay TASK_DONE 事件驱动，悬浮框 + 系统通知共用。
@@ -126,6 +128,7 @@ const emptySnapshot: Snapshot = {
   pairCode: null,
   taskDoneQueue: [],
   confirmDismissedKey: null,
+  watchPair: null,
 };
 
 const LAN_PROBE_MS = 4000;
@@ -152,6 +155,8 @@ const CMD_LABEL: Record<string, string> = {
   COMMAND_TODO_HIDE: "任务隐藏",
   COMMAND_PAIR_CODE: "配对码",
   COMMAND_PAIR_START: "云桥配对",
+  COMMAND_WATCH_GRANT: "手表配对",
+  COMMAND_LOGIN_GRANT: "扫码授权",
 };
 
 class RelayStore {
@@ -985,6 +990,15 @@ class RelayStore {
     return "命令发送失败";
   }
 
+  // #316 手表配对授权：回给发 PAIR_REQUEST 的那个源（多源下不串台），发完收弹窗
+  decideWatchPair(allow: boolean): void {
+    const w = this.snap.watchPair;
+    if (!w) return;
+    const sent = this.send("COMMAND_WATCH_GRANT", { request_id: w.requestId, allow }, w.sourceId);
+    this.emit({ watchPair: null });
+    if (!sent) this.emit({ lastErrorCmd: "未能回复手表配对（连接已断开）" });
+  }
+
   private onEvent(conn: SourceConn, msg: Envelope) {
     const sid = msg.session_id;
     switch (msg.type) {
@@ -1129,6 +1143,29 @@ class RelayStore {
         conn.sessions.delete(sid);
         conn.timelines.delete(sid);
         if (this.sidIndex.get(sid) === conn) this.sidIndex.delete(sid);
+        break;
+      }
+      // #316 手表配对（瞬态帧，不落 seq 账本）：请求 → 全局弹窗比对 6 位码；
+      // 结果（allow/deny/timeout，含手表放弃断开）→ 收弹窗
+      case "PAIR_REQUEST": {
+        const p = msg.payload as { request_id?: unknown; name?: unknown; code?: unknown };
+        if (typeof p.request_id === "string" && typeof p.code === "string" && /^\d{6}$/.test(p.code)) {
+          this.emit({
+            watchPair: {
+              requestId: p.request_id,
+              name: typeof p.name === "string" ? p.name.slice(0, 24) : "手表",
+              code: p.code,
+              sourceId: conn.entry.id,
+            },
+          });
+        }
+        break;
+      }
+      case "PAIR_RESOLVED": {
+        const p = msg.payload as { request_id?: unknown };
+        if (typeof p.request_id !== "string" || this.snap.watchPair?.requestId === p.request_id) {
+          this.emit({ watchPair: null });
+        }
         break;
       }
     }

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Animated, AppState, BackHandler, Dimensions, Easing, Pressable, ScrollView, StyleSheet, Text, View, Vibration } from "react-native";
+import { Animated, AppState, BackHandler, Dimensions, Easing, Modal, Pressable, ScrollView, StyleSheet, Text, View, Vibration } from "react-native";
 import { StatusBar } from "expo-status-bar";
 import * as FileSystem from "expo-file-system/legacy";
 import * as IntentLauncher from "expo-intent-launcher";
@@ -205,6 +205,39 @@ function ConfirmText({ text }: { text: string }) {
         i % 2 === 1 ? <Text key={i} style={st.cfRef}>#{p}</Text> : <Text key={i}>{p}</Text>,
       )}
     </Text>
+  );
+}
+
+// #316 手表配对授权弹窗：手表经 mDNS 发现 relay 后发起待配对连接，手机屏弹
+// 6 位比对码——与手表屏上的码一致才允许（防 LAN 内恶意连接骗授权：用户没在
+// 手表上操作就无码可核对）。超时/手表放弃由 relay 广播 PAIR_RESOLVED 自动收起
+function WatchPairModal({
+  req,
+  onDecide,
+}: {
+  req: { requestId: string; name: string; code: string };
+  onDecide: (allow: boolean) => void;
+}) {
+  const st = useThemeStyles(makeStyles);
+  return (
+    <Modal visible transparent animationType="fade" onRequestClose={() => onDecide(false)}>
+      <View style={st.wpMask}>
+        <View style={st.wpCard}>
+          <Text style={st.wpTitle}>⌚ 手表请求接入</Text>
+          <Text style={st.wpName}>{req.name}</Text>
+          <Text style={st.wpCode}>{req.code}</Text>
+          <Text style={st.wpHint}>与手表屏幕上的 6 位码核对一致再允许</Text>
+          <View style={st.wpBtns}>
+            <Pressable style={st.wpDeny} android_ripple={{ color: "rgba(255,255,255,0.12)", borderless: false }} onPress={() => onDecide(false)}>
+              <Text style={st.wpDenyT}>拒绝</Text>
+            </Pressable>
+            <Pressable style={st.wpAllow} android_ripple={{ color: "rgba(255,255,255,0.18)", borderless: false }} onPress={() => onDecide(true)}>
+              <Text style={st.wpAllowT}>允许</Text>
+            </Pressable>
+          </View>
+        </View>
+      </View>
+    </Modal>
   );
 }
 
@@ -752,6 +785,7 @@ function Shell() {
               if (openDetail(sid, "todos")) openCf(false);
             }}
           />
+          {snap.watchPair ? <WatchPairModal req={snap.watchPair} onDecide={(a) => store.decideWatchPair(a)} /> : null}
         </>
       ) : (
         <SetupScreen
@@ -900,4 +934,28 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
     backgroundColor: withA(c.brandA, 0.14), borderWidth: 1, borderColor: withA(c.brandA, 0.35),
   },
   ubGoT: { color: c.brandA, fontSize: 12, fontWeight: "600" },
+  // #316 手表配对授权弹窗：居中卡片，6 位码大字便于与手表屏核对
+  wpMask: { flex: 1, backgroundColor: "rgba(0,0,0,0.55)", alignItems: "center", justifyContent: "center", padding: 30 },
+  wpCard: {
+    width: "100%", maxWidth: 300, backgroundColor: c.panel, borderWidth: 1, borderColor: c.line,
+    borderRadius: 18, paddingVertical: 22, paddingHorizontal: 20, alignItems: "center",
+  },
+  wpTitle: { color: c.text, fontSize: 15.5, fontWeight: "800" },
+  wpName: { color: c.dim, fontSize: 12.5, marginTop: 5 },
+  wpCode: {
+    color: c.brandA, fontSize: 40, fontWeight: "800", letterSpacing: 8,
+    marginTop: 14, fontVariant: ["tabular-nums"],
+  },
+  wpHint: { color: c.faint, fontSize: 11.5, marginTop: 10, textAlign: "center", lineHeight: 16 },
+  wpBtns: { flexDirection: "row", gap: 10, marginTop: 18, alignSelf: "stretch" },
+  wpDeny: {
+    flex: 1, height: 40, borderRadius: 12, alignItems: "center", justifyContent: "center",
+    backgroundColor: c.panel2, borderWidth: 1, borderColor: c.line, overflow: "hidden",
+  },
+  wpDenyT: { color: c.dim, fontSize: 14, fontWeight: "600" },
+  wpAllow: {
+    flex: 1, height: 40, borderRadius: 12, alignItems: "center", justifyContent: "center",
+    backgroundColor: c.brandA, overflow: "hidden",
+  },
+  wpAllowT: { color: "#fff", fontSize: 14, fontWeight: "700" },
 });
