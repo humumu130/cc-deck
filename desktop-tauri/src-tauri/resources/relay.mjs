@@ -41118,6 +41118,17 @@ ${label}`);
 
 // src/index.ts
 var cfg = loadConfig();
+var parentPid = Number(process.env.CCR_PARENT_PID ?? 0);
+if (parentPid > 0) {
+  setInterval(() => {
+    try {
+      process.kill(parentPid, 0);
+    } catch {
+      console.log("[relay] parent process gone, exiting embedded relay");
+      process.exit(0);
+    }
+  }, 3e3);
+}
 function lanIps() {
   const out = [];
   for (const [name, list] of Object.entries(networkInterfaces2())) {

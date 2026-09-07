@@ -1,6 +1,6 @@
 {
   "name": "cc-deck-desktop-tauri",
-  "version": "0.3.18",
+  "version": "0.3.19",
   "description": "CC Deck 桌面客户端（Tauri 壳，与 Electron 壳共存）：本地加载控制台，默认连本机 relay",
   "author": "humumu130",
   "license": "MIT",

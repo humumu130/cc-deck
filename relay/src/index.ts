@@ -15,6 +15,20 @@ import { printQr } from "./qr.js";
 
 const cfg = loadConfig();
 
+// #324 选装生命周期：被桌面壳拉起（CCR_PARENT_PID 注入）时随壳退出——壳被强杀
+// （任务管理器/崩溃）收不到清理事件，这里轮询父进程存活，死了自行退出，不留孤儿 relay
+const parentPid = Number(process.env.CCR_PARENT_PID ?? 0);
+if (parentPid > 0) {
+  setInterval(() => {
+    try {
+      process.kill(parentPid, 0);
+    } catch {
+      console.log("[relay] parent process gone, exiting embedded relay");
+      process.exit(0);
+    }
+  }, 3000);
+}
+
 function lanIps(): string[] {
   const out: string[] = [];
   for (const [name, list] of Object.entries(networkInterfaces())) {

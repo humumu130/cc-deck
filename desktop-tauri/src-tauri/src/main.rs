@@ -142,24 +142,83 @@ fn build_tray(app: &tauri::App) -> tauri::Result<()> {
 // ── #324 内嵌 relay（用户定稿：设置开关式，非自动抢跑）──
 // exe 只带 relay.mjs（1.9MB），node 用系统 PATH 的（装了 Claude Code 的机器必有）；
 // 端口 8787 已在服务 = 让位（插件 supervisor 或既有 relay），开关只作状态展示。
-// 无插件机器开开关 → 拉起内置 relay，孤儿扫描只读接入本机 Claude 会话。
+// CCR_DESKTOP_RELAY_PORT/CCR_DESKTOP_RELAY_AUTOSTART：测试通道（家里 8787 被占时
+// 换端口验证启动分支；AUTOSTART 供无头自测，正常用户不感知）。
 static EMBEDDED_RELAY: std::sync::Mutex<Option<std::process::Child>> = std::sync::Mutex::new(None);
+
+fn relay_port() -> u16 {
+    std::env::var("CCR_DESKTOP_RELAY_PORT").ok().and_then(|v| v.parse().ok()).unwrap_or(8787)
+}
 
 fn port_listening(port: u16) -> bool {
     std::net::TcpStream::connect(("127.0.0.1", port)).is_ok()
 }
 
-fn system_node() -> Option<String> {
-    std::process::Command::new("node").arg("--version").output().ok().filter(|o| o.status.success()).map(|_| "node".to_string())
+// node 探测只做 PATH 查找（where.exe），不执行 node——Windows 商店的
+// WindowsApps 假别名 stub 会让 `node --version` 挂起不返回（"处理中"卡死根因）
+fn node_in_path() -> bool {
+    std::process::Command::new("where").arg("node").output()
+        .map(|o| o.status.success() && !String::from_utf8_lossy(&o.stdout).trim().is_empty())
+        .unwrap_or(false)
 }
 
 #[tauri::command]
 fn relay_status() -> Value {
     serde_json::json!({
-        "port": port_listening(8787),
+        "port": port_listening(relay_port()),
         "embedded": EMBEDDED_RELAY.lock().unwrap().is_some(),
-        "node": system_node().is_some(),
+        "node": node_in_path(),
     })
+}
+
+fn spawn_embedded_relay(app: &tauri::AppHandle) -> Result<(), String> {
+    if EMBEDDED_RELAY.lock().unwrap().is_some() {
+        return Ok(());
+    }
+    let port = relay_port();
+    let res = app.path().resource_dir().map_err(|e| e.to_string())?;
+    // resource_dir 可能给盘符相对路径（"D:..."），CreateProcess 传参会被 node 解析成
+    // 纯盘符 EISDIR——canonicalize 成 \?\ 绝对路径，一劳永逸
+    // canonicalize 后剥掉 \?\ verbatim 前缀：node 的 realpathSync 不认它（剥成盘符 EISDIR）
+    let abs = |p: std::path::PathBuf| {
+        let c = std::fs::canonicalize(&p).unwrap_or(p);
+        let mut s = c.to_string_lossy().into_owned();
+        if let Some(t) = s.strip_prefix("\\\\?\\") {
+            s = t.to_string();
+        }
+        std::path::PathBuf::from(s)
+    };
+    let script = abs(res.join("resources").join("relay.mjs"));
+    let inject_cs = abs(res.join("resources").join("bin").join("inject.cs"));
+    println!("[embedded-relay] script={}", script.display());
+    if !script.exists() {
+        return Err("内置 relay.mjs 缺失（安装包损坏？重装试试）".into());
+    }
+    let home = std::env::var("USERPROFILE").or_else(|_| std::env::var("HOME")).map_err(|_| "无法定位用户目录".to_string())?;
+    let data_dir = std::path::Path::new(&home).join(".cc-deck").join("data");
+    let _ = std::fs::create_dir_all(&data_dir);
+    use std::os::windows::process::CommandExt;
+    let log = data_dir.join("embedded-relay.log");
+    let out = std::fs::File::create(&log).map_err(|e| e.to_string())?;
+    match std::process::Command::new("node")
+        .arg(&script)
+        .env("CCR_PORT", port.to_string())
+        .env("CCR_DATA_DIR", &data_dir)
+        .env("CCR_INJECT_CS", &inject_cs)
+        .env("CCR_NOHOOK_IDLE_MS", "60000")
+        .env("CCR_PARENT_PID", std::process::id().to_string())
+        .stdout(out.try_clone().map_err(|e| e.to_string())?)
+        .stderr(out)
+        .creation_flags(0x0800_0000) // CREATE_NO_WINDOW
+        .spawn()
+    {
+        Ok(child) => {
+            println!("[embedded-relay] spawned pid={} port={}", child.id(), port);
+            *EMBEDDED_RELAY.lock().unwrap() = Some(child);
+            Ok(())
+        }
+        Err(e) => Err(format!("relay 启动失败（node 不在 PATH？）：{e}")),
+    }
 }
 
 #[tauri::command]
@@ -172,49 +231,12 @@ fn relay_toggle(app: tauri::AppHandle, on: bool) -> Result<Value, String> {
         }
         return Ok(relay_status());
     }
-    if port_listening(8787) {
-        println!("[embedded-relay] port 8787 already serving - nothing to do");
+    if port_listening(relay_port()) {
+        println!("[embedded-relay] port {} already serving - nothing to do", relay_port());
         return Ok(relay_status()); // 已有 relay（插件/手动），视为"开启"状态
     }
-    if EMBEDDED_RELAY.lock().unwrap().is_some() {
-        return Ok(relay_status());
-    }
-    let Some(_node) = system_node() else {
-        return Err("未找到 node（装了 Claude Code 的机器应自带；或安装 Node ≥ 20 后重试）".into());
-    };
-    let Ok(res) = app.path().resource_dir() else {
-        return Err("资源目录不可用".into());
-    };
-    let script = res.join("resources").join("relay.mjs");
-    let inject_cs = res.join("resources").join("bin").join("inject.cs");
-    if !script.exists() {
-        return Err("内置 relay.mjs 缺失（安装包损坏？重装试试）".into());
-    }
-    let Ok(home) = std::env::var("USERPROFILE").or_else(|_| std::env::var("HOME")) else {
-        return Err("无法定位用户目录".into());
-    };
-    let data_dir = std::path::Path::new(&home).join(".cc-deck").join("data");
-    let _ = std::fs::create_dir_all(&data_dir);
-    use std::os::windows::process::CommandExt;
-    let log = data_dir.join("embedded-relay.log");
-    let out = std::fs::File::create(&log).map_err(|e| e.to_string())?;
-    match std::process::Command::new("node")
-        .arg(&script)
-        .env("CCR_DATA_DIR", &data_dir)
-        .env("CCR_INJECT_CS", &inject_cs)
-        .env("CCR_NOHOOK_IDLE_MS", "60000")
-        .stdout(out.try_clone().map_err(|e| e.to_string())?)
-        .stderr(out)
-        .creation_flags(0x0800_0000) // CREATE_NO_WINDOW
-        .spawn()
-    {
-        Ok(child) => {
-            println!("[embedded-relay] spawned pid={} data={}", child.id(), data_dir.display());
-            *EMBEDDED_RELAY.lock().unwrap() = Some(child);
-            Ok(relay_status())
-        }
-        Err(e) => Err(format!("relay 启动失败：{e}")),
-    }
+    spawn_embedded_relay(&app)?;
+    Ok(relay_status())
 }
 
 fn kill_embedded_relay() {
@@ -239,6 +261,11 @@ fn main() {
         .setup(|app| {
             if build_tray(app).is_ok() {
                 TRAY_OK.store(true, Ordering::SeqCst);
+            }
+            if std::env::var("CCR_DESKTOP_RELAY_AUTOSTART").map(|v| v == "1").unwrap_or(false) {
+                if let Err(e) = spawn_embedded_relay(app.handle()) {
+                    println!("[embedded-relay] autostart failed: {e}");
+                }
             }
             tauri::WebviewWindowBuilder::from_config(app.handle(), &app.config().app.windows[0])?
                 .initialization_script(INIT_SCRIPT)
