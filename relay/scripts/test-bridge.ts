@@ -9,6 +9,7 @@ import { SessionManager } from "../src/session-manager.js";
 import { loadConfig } from "../src/config.js";
 import { startServer } from "../src/ws-server.js";
 import { createPairingCodes } from "../src/pairing.js";
+import { devId, generateKeyPair } from "../src/e2e.js";
 import type { BridgeEvent, Command, CommandAckPayload, Envelope, WaitingPayload } from "../src/types.js";
 
 function assert(cond: boolean, msg: string): void {
@@ -1068,6 +1069,24 @@ assert(ack24.ok === false, "empty rename rejected");
   assert((mapAppleError("execution error: ... (-1743)") ?? "").includes("Terminal"), "42 -1743 translated to Terminal-host hint");
   assert((mapAppleError("execution error: ... (-1719)") ?? "").includes("辅助功能"), "42 -1719 keeps legacy accessibility hint");
   assert(mapAppleError("execution error: other (-1750)") === undefined, "42 other osascript errors pass through");
+}
+
+// ── 43 段：#325 扫码登录 COMMAND_LOGIN_GRANT——devId 一致性 / 格式上界 / name 截断 / 云桥未启用
+{
+  const grants: Array<{ dev: string; pk: string; name: string }> = [];
+  mgr.setCloud({ keypair: { publicKey: "stub" }, relayDev: "rl-stub", peers: new Map(), addPeer: () => {} });
+  mgr.setLoginGranter((dev, pk, name) => { grants.push({ dev, pk, name }); return true; });
+  const call = (payload: unknown) =>
+    mgr.handleCommand({ command_id: randomUUID(), type: "COMMAND_LOGIN_GRANT", ts: Date.now(), payload } as Command, "t43");
+  const kp = generateKeyPair();
+  const dev = devId(kp.publicKey, "wb");
+  assert(call({ session_dev: "wb-deadbeefdeadbeef", session_pk: kp.publicKey }).ok === false, "43 dev/pk mismatch rejected");
+  assert(call({ session_dev: dev, session_pk: "short" }).ok === false, "43 malformed pk rejected");
+  assert(call({ session_dev: dev, session_pk: kp.publicKey, name: "长".repeat(50) }).ok === true, "43 valid grant ok");
+  assert(grants.at(-1)!.dev === dev && grants.at(-1)!.name.length === 32, "43 granter got dev + name truncated to 32");
+  (mgr as unknown as { cloud: unknown }).cloud = null;
+  const off = call({ session_dev: dev, session_pk: kp.publicKey });
+  assert(off.ok === false && (off.error ?? "").includes("云桥未启用"), "43 cloud-off rejected with hint");
 }
 
 wsCur!.close();

@@ -159,6 +159,23 @@ export class CloudClient {
     this.send({ to: dev, data: { t: "pair_nack", error: reason } });
   }
 
+  // #325 扫码登录：已配对手机扫了网页端出示的二维码后，经此方法把会话公钥升格为
+  // 新已配对 peer 并主动推 pair_ack（与 6 位码 pair_req 成功路径同构——网页端
+  // 收到即落成云源，全程免输码）。多桥场景各桥都发：页面只连了其中一座，
+  // 未命中桥的帧自然丢弃；addPeer 在共享 identity 上做幂等
+  grantLogin(dev: string, pubkey: string, name: string): boolean {
+    if (!this.identity.peers.get(dev)) {
+      this.identity.addPeer(dev, { pubkey, name, paired_at: Date.now() });
+      console.log(`[cloud] login granted dev=${dev} name=${name} via ${this.tag}`);
+    }
+    this.sendSealed(dev, {
+      t: "pair_ack",
+      relay_dev: this.identity.relayDev,
+      relay_pubkey: this.identity.keypair.publicKey,
+    });
+    return true;
+  }
+
   // 手机激活/恢复：缓冲内按 last_seq 补发，否则全量 SNAPSHOT（hello 与 ping-resume 共用）。
   // 全量恢复时 SNAPSHOT 只带会话状态不带时间线日志，日志随后逐条 SESSION_LOG 密文流式补发
   // （手机端 SESSION_LOG 处理器即 pushLog 追加，旧 APK 直接兼容）——所有日志塞进单帧会随

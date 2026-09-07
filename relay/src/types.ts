@@ -269,6 +269,7 @@ export type CommandType =
   | "COMMAND_ANSWER"
   | "COMMAND_PAIR_START"
   | "COMMAND_PAIR_CODE"
+  | "COMMAND_LOGIN_GRANT"
   | "COMMAND_PERM"
   | "COMMAND_REFRESH_TODOS"
   | "COMMAND_TODO_HIDE";
@@ -354,6 +355,13 @@ export interface PairCodeCommand extends CommandBase {
   payload: Record<string, never>;
 }
 
+// #325 扫码登录：手机扫了网页端出示的二维码后授权该会话——relay 把
+// session_pk 升格为已配对 peer 并主动推 pair_ack，网页端免输码落成云源
+export interface LoginGrantCommand extends CommandBase {
+  type: "COMMAND_LOGIN_GRANT";
+  payload: { session_dev: string; session_pk: string; name?: string };
+}
+
 export type Command =
   | CreateCommand
   | MessageCommand
@@ -368,6 +376,7 @@ export type Command =
   | AnswerCommand
   | PairStartCommand
   | PairCodeCommand
+  | LoginGrantCommand
   | PermCommand
   | RefreshTodosCommand
   | TodoHideCommand;

@@ -227,8 +227,63 @@
   .seg button { border: none; border-radius: 0; padding: 7px 13px; background: transparent; color: var(--dim); font-size: 12.5px; font-weight: 500; }
   .seg button + button { border-left: 1px solid var(--border); }
   .seg button.on { background: var(--grad); color: #fff; font-weight: 600; }
-  #pairBox { display: none; align-items: center; gap: 8px; }
+  #pairBox { display: none; align-items: center; gap: 8px; flex-wrap: wrap; }
   #pairBox input { width: 150px; letter-spacing: 3px; font-size: 15px; text-align: center; }
+  /* #325 扫码登录浮层：居中卡片 + 二维码画布 + 等待/成功态 */
+  #loginQrPop {
+    position: fixed; inset: 0; z-index: 70; display: none;
+    align-items: center; justify-content: center; background: rgba(0,0,0,.45);
+  }
+  #loginQrPop.open { display: flex; }
+  #loginQrCard {
+    background: var(--panel); border: 1px solid var(--border); border-radius: 16px;
+    padding: 22px 26px; text-align: center; max-width: 320px;
+    box-shadow: 0 12px 40px rgba(0,0,0,.5);
+  }
+  #loginQrTitle { font-size: 15px; font-weight: 700; color: var(--text); }
+  #loginQrSub { font-size: 12px; color: var(--dim); margin: 6px 0 14px; line-height: 1.6; }
+  #loginQrCanvas { background: #fff; padding: 10px; border-radius: 10px; display: inline-block; }
+  #loginQrState { font-size: 12.5px; color: var(--faint); margin-top: 12px; }
+  #loginQrCancel {
+    margin-top: 14px; padding: 6px 18px; border-radius: 9px; cursor: pointer;
+    background: var(--panel-2); color: var(--dim); border: 1px solid var(--border); font-size: 12.5px;
+  }
+
+  /* ---------- 首启连接向导（#325）：无可用源时三选一，替代旧"直接弹配对码表单" ---------- */
+  #wizPop {
+    position: fixed; inset: 0; z-index: 72; display: none;
+    align-items: center; justify-content: center; background: rgba(0,0,0,.5);
+  }
+  #wizPop.open { display: flex; }
+  #wizCard {
+    background: var(--panel); border: 1px solid var(--border); border-radius: 16px;
+    padding: 24px 22px 16px; width: min(400px, calc(100vw - 44px));
+    box-shadow: 0 12px 40px rgba(0,0,0,.5);
+  }
+  #wizTitle { font-size: 16px; font-weight: 700; color: var(--text); text-align: center; }
+  #wizSub { font-size: 12px; color: var(--dim); text-align: center; margin: 6px 0 16px; }
+  .wiz-opt {
+    display: flex; align-items: center; gap: 12px; width: 100%; margin-bottom: 9px;
+    padding: 12px 14px; border-radius: 12px; cursor: pointer; text-align: left;
+    background: var(--panel-2); border: 1px solid var(--border);
+    transition: border-color .15s, box-shadow .15s;
+  }
+  .wiz-opt:hover { border-color: var(--hov); }
+  .wiz-opt.reco { border-color: var(--brand); }
+  .wiz-ic { font-size: 21px; line-height: 1; flex: none; }
+  .wiz-tx { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+  .wiz-tx b { font-size: 13.5px; color: var(--text); font-weight: 600; }
+  .wiz-tag {
+    display: inline-block; margin-left: 7px; padding: 1px 8px; border-radius: 8px;
+    font-size: 10.5px; font-weight: 600; color: var(--brand);
+    border: 1px solid var(--brand); vertical-align: 1px;
+  }
+  .wiz-tx i { font-style: normal; font-size: 11.5px; color: var(--faint); line-height: 1.5; }
+  .wiz-skip {
+    display: block; margin: 6px auto 0; padding: 10px 18px; border-radius: 9px; cursor: pointer;
+    background: none; color: var(--faint); border: none; font-size: 12px;
+  }
+  .wiz-skip:hover { color: var(--dim); }
   .pair-hint { font-size: 11.5px; color: var(--dim); }
   .pair-hint b { color: var(--text); font-weight: 600; }
 
@@ -917,8 +972,9 @@
           <div id="pairBox">
             <input id="pairCode" inputmode="numeric" maxlength="6" placeholder="6 位配对码" autocomplete="off">
             <button id="pairBtn" class="primary">配对</button>
+            <button id="loginQrBtn" title="手机 App 扫一下，免输码接入">📱 扫码登录</button>
           </div>
-          <div class="pair-hint" id="pairHint">云桥未配对时输入 <b>6 位配对码</b>（手机 App 或家里 PC 领取，5 分钟内有效、一次性），配对成功落成一条云源</div>
+          <div class="pair-hint" id="pairHint">云桥未配对时输入 <b>6 位配对码</b>（手机 App 或家里 PC 领取，5 分钟内有效、一次性），配对成功落成一条云源。或点「扫码登录」用手机微信式扫码免输码。</div>
         </div>
       </div>
       <div class="gp-card">
@@ -1042,12 +1098,41 @@
   </div>
 </main>
 
+<div id="wizPop">
+    <div id="wizCard">
+      <div id="wizTitle">连接到 CC Deck</div>
+      <div id="wizSub">选一种方式接入你的 Claude Code</div>
+      <button class="wiz-opt reco" id="wizQr">
+        <span class="wiz-ic">📱</span>
+        <span class="wiz-tx"><b>手机扫码登录<span class="wiz-tag">推荐</span></b><i>手机 App 已连着某台服务器？让它扫一下，此浏览器免输码接入</i></span>
+      </button>
+      <button class="wiz-opt" id="wizPair">
+        <span class="wiz-ic">🔑</span>
+        <span class="wiz-tx"><b>输入配对码</b><i>手机 App 侧边栏「配对码」领取 6 位数字，5 分钟内有效</i></span>
+      </button>
+      <button class="wiz-opt" id="wizLan">
+        <span class="wiz-ic">🔗</span>
+        <span class="wiz-tx"><b>局域网直连</b><i>与 PC 同一 WiFi：填地址与令牌（PC 终端运行 /cc-deck 可见）</i></span>
+      </button>
+      <button class="wiz-skip" id="wizSkip">稍后配置（左下角 ⚙ 里随时可加）</button>
+    </div>
+  </div>
+<div id="loginQrPop">
+    <div id="loginQrCard">
+      <div id="loginQrTitle">扫码登录</div>
+      <div id="loginQrSub">手机 CC Deck App 扫下方二维码<br/>确认后此浏览器自动接入——免输配对码</div>
+      <div id="loginQrCanvas"><canvas id="loginQrCv" width="200" height="200"></canvas></div>
+      <div id="loginQrState">等待手机扫码…</div>
+      <button id="loginQrCancel">取消</button>
+    </div>
+  </div>
 <div id="toast"></div>
 <div id="taskDone"></div>
 <div id="confirmFloat"></div>
 <div id="undoBar"><span class="ub-t" id="undoTitle"></span><button class="ub-btn" id="undoBtn" title="撤销删除">撤销</button></div>
 
 <script src="nacl.js"></script>
+<script src="qr.js"></script>
 <script>
 "use strict";
 const $ = (id) => document.getElementById(id);
@@ -1450,14 +1535,19 @@ function startPairWatchdog(ctx) {
         // 不能静默 return——否则状态永久卡"配对中…"直到 F5
         setConn(ctx, "offline", "配对无应答");
         scheduleReconnect(ctx);
-        toast("配对请求一直没回音：按 F12 看 Console 的 [cloud] 日志和 Network 里 cloud-poll 请求，截图发家里", 6000);
+        if (ctx.pendingPair && ctx.pendingPair.pc === "") {
+          // #325 扫码登录态：等的是手机授权而非配对码应答，F12 排查提示不适用
+          toast("relay 长时间无应答：确认手机能连上这台服务器后，重新点「扫码登录」", 6000);
+        } else {
+          toast("配对请求一直没回音：按 F12 看 Console 的 [cloud] 日志和 Network 里 cloud-poll 请求，截图发家里", 6000);
+        }
         console.log("[cloud:" + ctx.cfg.name + "] 配对看门狗耗尽：pair_req 已重发 3 次无 pair_ack");
       }
       return;
     }
     const pair = ctx.pendingPair || pendingPairOf(ctx.cfg.id);
     if (!pair) { clearInterval(ctx.pairTimer); return; }
-    sendPairReq(ctx, pair, devId(ckp.publicKey, "wb"));
+    if (pair.pc) sendPairReq(ctx, pair, devId(ckp.publicKey, "wb")); // 扫码登录态（pc 空）不发 pair_req，只等授权
   }, 8000);
 }
 
@@ -1539,7 +1629,7 @@ function onCloudText(ctx, text) {
       ctx.pendingPair = { rd: BAKED_RELAY.rd, rk: BAKED_RELAY.rk, pc: pair.pc };
       setPendingPair(cfg.id, ctx.pendingPair);
       console.log("[cloud:" + cfg.name + "] 配对 ROUTE_MISS，改用烘焙 relay 身份重试");
-      sendPairReq(ctx, ctx.pendingPair, devId(ckp.publicKey, "wb"));
+      if (ctx.pendingPair.pc) sendPairReq(ctx, ctx.pendingPair, devId(ckp.publicKey, "wb")); // 扫码登录态不发 pair_req，只等授权
       startPairWatchdog(ctx); // 重置看门狗：换 rd 重试不与旧 rd 共享 3 次预算
       return;
     }
@@ -1600,7 +1690,7 @@ function onCloudText(ctx, text) {
         console.log("[cloud:" + cfg.name + "] relay " + pick.dev + " 已回在线，重发配对请求");
       }
       setConn(ctx, "connecting", "配对中…");
-      sendPairReq(ctx, ctx.pendingPair, devId(ckp.publicKey, "wb"));
+      if (ctx.pendingPair.pc) sendPairReq(ctx, ctx.pendingPair, devId(ckp.publicKey, "wb")); // 扫码登录态不发 pair_req，只等授权
       startPairWatchdog(ctx);
       return;
     }
@@ -1656,12 +1746,14 @@ function onCloudText(ctx, text) {
       console.log("[cloud:" + cfg.name + "] pair_ack 身份错位（" + inner.relay_dev + " ≠ " + target.rd + "），丢弃");
       return;
     }
+    const wasLoginQr = !!target && target.pc === ""; // #325 扫码登录会话：ack 即授权成功
     cfg.cloud = { url: cfg.wsUrl, token: serverBridgeToken(cfg), rd: inner.relay_dev, rk: inner.relay_pubkey, paired: true };
     saveServers();
     setPendingPair(cfg.id, null);
     ctx.pendingPair = null;
     setConn(ctx, "online", ctx.transport === "poll" ? "已连接 ☁(轮询)" : "已连接 ☁");
-    toast("配对成功");
+    toast(wasLoginQr ? "扫码登录成功" : "配对成功");
+    if (wasLoginQr) closeLoginQr();
     sendCloud(ctx, { t: "hello", last_seq: ctx.sessions.size > 0 ? ctx.lastSeq : 0 });
     startCloudPing(ctx);
     return;
@@ -3732,6 +3824,100 @@ function submitPairCode() {
   renderServers();
   connectCloudFor(ctx, true);
 }
+
+// ── #325 扫码登录：建/复用云源占位 → 连桥发现 relay → 出二维码等手机授权。
+// 授权成功走既有 pair_ack 处理器落源并直接收起浮层（identity 检查用 pendingPair.rd
+// =发现身份，与输码路径完全同构）；120s 无响应自动收起。QR 不携带桥 token（防拍照泄露）
+let loginQrTimer = 0, loginQrTimeout = 0;
+function drawLoginQr(text) {
+  const cv = $("loginQrCv"), g = cv.getContext("2d");
+  const q = new QRCode(0, QRErrorCorrectLevel.M);
+  q.addData(text); q.make();
+  const n = q.getModuleCount(), cell = Math.floor(200 / n), off = Math.floor((200 - cell * n) / 2);
+  g.fillStyle = "#fff"; g.fillRect(0, 0, 200, 200);
+  g.fillStyle = "#111";
+  for (let r = 0; r < n; r++) for (let c = 0; c < n; c++) if (q.isDark(r, c)) g.fillRect(off + c * cell, off + r * cell, cell, cell);
+}
+function startLoginQr() {
+  loadCloudIdentity();
+  const dev = devId(ckp.publicKey, "wb");
+  let cfg = editId ? cfgOf(editId) : null;
+  if (cfg && cfg.kind !== "cloud") { toast("仅云桥类型支持扫码登录"); return; }
+  if (!cfg) {
+    const url = $("url").value.trim() || defaultCloudUrl();
+    const token = $("token").value.trim() || BAKED_BRIDGE_TOKEN;
+    // 复用同地址的未配对云源（首启自种的「公共桥」等），反复重试不堆积重复源
+    cfg = servers.find((s) => s.kind === "cloud" && !s.cloud?.paired && s.wsUrl === url)
+      || { id: uuid(), name: $("srvName").value.trim() || "云桥", kind: "cloud", wsUrl: url, token,
+        cloud: { url, token, rd: BAKED_RELAY.rd, rk: BAKED_RELAY.rk, paired: false } };
+    if (!servers.includes(cfg)) servers.push(cfg);
+    saveServers(); renderServers();
+  }
+  const c = cfg.cloud || (cfg.cloud = { url: cfg.wsUrl, token: serverBridgeToken(cfg), rd: BAKED_RELAY.rd, rk: BAKED_RELAY.rk, paired: false });
+  // 先出占位二维码（烘焙身份），发现帧会把 pendingPair 换成新对象——payload 里 rd 必须活取
+  const ctx = ensureCtx(cfg);
+  const makePayload = () => JSON.stringify({
+    t: "ccdeck-login", v: 1,
+    bridge: cfg.wsUrl.replace(/\/$/, "").replace(/^http/, "ws") + "/cloud",
+    rd: (ctx.pendingPair && ctx.pendingPair.rd) || c.rd || BAKED_RELAY.rd, dev, pk: ckp.publicKey,
+    name: (cfg.name || "浏览器").slice(0, 24),
+  });
+  $("loginQrState").textContent = "等待手机扫码…";
+  drawLoginQr(makePayload());
+  $("loginQrPop").classList.add("open");
+  // 授权应答走 pair_ack：置 pendingPair（login 态 pc 空串），身份检查与输码路径同构
+  const pair = { rd: c.rd || BAKED_RELAY.rd, rk: c.rk || BAKED_RELAY.rk, pc: "" };
+  setPendingPair(cfg.id, pair);
+  ctx.pendingPair = pair;
+  ctx.discTried = false; // 允许重新发现刷新 rd
+  connectCloudFor(ctx, true);
+  const redraw = () => { if ($("loginQrPop").classList.contains("open")) { drawLoginQr(makePayload()); } };
+  clearInterval(loginQrTimer);
+  loginQrTimer = setInterval(redraw, 3000); // relay 身份经发现帧刷新后二维码随之更新
+  clearTimeout(loginQrTimeout);
+  loginQrTimeout = setTimeout(() => { if ($("loginQrPop").classList.contains("open")) { closeLoginQr("超时未授权，已取消（可重试或改用配对码）"); } }, 120000);
+}
+function closeLoginQr(msg) {
+  $("loginQrPop").classList.remove("open");
+  clearInterval(loginQrTimer); loginQrTimer = 0;
+  clearTimeout(loginQrTimeout); loginQrTimeout = 0;
+  for (const ctx of ctxs.values()) {
+    if (ctx.pendingPair && ctx.pendingPair.pc === "") {
+      ctx.pendingPair = null; setPendingPair(ctx.cfg.id, null);
+      // 登录态未等到 ack：断开避免状态永久卡「配对中…」（成功路径 pendingPair 已被
+      // pair_ack 处理器清空，不会进这里，连接保持）
+      if (ctx.status === "connecting") disconnectCtx(ctx, "已取消");
+    }
+  }
+  if (msg) toast(msg, 4000);
+}
+$("loginQrBtn").onclick = startLoginQr;
+$("loginQrCancel").onclick = () => closeLoginQr();
+
+// 首启连接向导（#325）：三选一分流到既有路径——扫码登录浮层 / 配对码表单 / 直连表单
+const closeWiz = () => $("wizPop").classList.remove("open");
+$("wizQr").onclick = () => { closeWiz(); startLoginQr(); };
+$("wizPair").onclick = () => {
+  closeWiz();
+  openPanel("conn");
+  const un = servers.find((s) => s.kind === "cloud" && !s.cloud?.paired);
+  if (un) setFormKind("cloud", un);
+  setTimeout(() => $("pairCode").focus(), 80);
+};
+$("wizLan").onclick = () => {
+  closeWiz();
+  openPanel("conn");
+  setFormKind("lan", servers.find((s) => s.kind === "lan") || null);
+  setTimeout(() => $("url").focus(), 80);
+};
+$("wizSkip").onclick = closeWiz;
+// Escape 关闭顶层浮层（向导/扫码登录）
+document.addEventListener("keydown", (ev) => {
+  if (ev.key !== "Escape") return;
+  if ($("loginQrPop").classList.contains("open")) closeLoginQr();
+  else if ($("wizPop").classList.contains("open")) closeWiz();
+});
+
 $("pairBtn").onclick = submitPairCode;
 $("pairCode").addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); submitPairCode(); } });
 
@@ -3809,13 +3995,12 @@ async function probeLocalRelay() {
   // 所有源同时保持连接（一处断另一处还在）
   connectAll();
   renderServers(); renderConnChip(); render();
-  // 引导：没有任何可用源（云源未配对且无可用直连）→ 打开面板聚焦配对码
+  // 引导（#325 改版）：没有任何可用源（云源未配对且无可用直连）→ 首启向导三选一，
+  // 不再直接把用户丢进配对码表单。深链（#pc 配对链 / ?token= 直连）不走向导——
+  // 自动配对/直连正在进行，弹向导只会挡在前面
   const usable = servers.some((s) => (s.kind === "lan" ? (s.wsUrl && s.token) : !!s.cloud?.paired));
-  if (!usable) {
-    openPanel("conn");
-    const un = servers.find((s) => s.kind === "cloud" && !s.cloud?.paired);
-    if (un) { setFormKind("cloud", un); setTimeout(() => $("pairCode").focus(), 80); }
-  }
+  const deepLinked = !!(h.get("pc") || params.get("token"));
+  if (!usable && !deepLinked) $("wizPop").classList.add("open");
 })();
 </script>
 </body>

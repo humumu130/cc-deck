@@ -196,6 +196,10 @@ if (cfg.cloudUrls.length) {
   cloudIdentity = loadOrCreateIdentity(cfg.dataDir);
   mgr.setCloud(cloudIdentity);
   mgr.setPairIssuer(() => pairCodes.issue());
+  mgr.setLoginGranter((dev, pk, name) => {
+    for (const c of cloudClients) c.grantLogin(dev, pk, name);
+    return true;
+  });
   if (cfg.cloudToken) {
     for (const url of cfg.cloudUrls) {
       const c = new CloudClient(bus, mgr, cfg, cloudIdentity, pairCodes, url);

@@ -284,6 +284,13 @@ export class SessionManager {
     this.pairIssuer = fn;
   }
 
+  // #325 扫码登录授权器（index.ts 注入，转发各云桥客户端 grantLogin）
+  private loginGranter: ((dev: string, pubkey: string, name: string) => boolean) | null = null;
+
+  setLoginGranter(fn: (dev: string, pubkey: string, name: string) => boolean): void {
+    this.loginGranter = fn;
+  }
+
   // 不存在则注册外部会话（bridge.ts 调用）；startedAt：真实起点（孤儿收养时取自
   // transcript 首条时间戳，#321——否则收养时刻会冒充会话时长起点，老会话显示 55s）
   ensureExternal(id: string, cwd: string, prompt: string, cliSessionId = "", startedAt = 0): SessionState {
@@ -743,6 +750,21 @@ export class SessionManager {
             return { command_id: cmd.command_id, ok: false, error: "云桥未启用（PC 侧未设置 CCR_CLOUD_URL）" };
           }
           return { command_id: cmd.command_id, ok: true, pair_code: this.pairIssuer() };
+        }
+        case "COMMAND_LOGIN_GRANT": {
+          // #325 扫码登录：手机（信任信道）授权网页端出示的会话公钥，relay 配对并回 ack。
+          // dev 必须与公钥派生值一致（与 pair_req 路径同款校验，防冒名占位）
+          const p = cmd.payload as { session_dev?: string; session_pk?: string; name?: string };
+          const dev = String(p.session_dev ?? "");
+          const pk = String(p.session_pk ?? "");
+          if (!this.cloud || !this.loginGranter) {
+            return { command_id: cmd.command_id, ok: false, error: "云桥未启用（PC 侧未设置 CCR_CLOUD_URL）" };
+          }
+          if (!/^wb-[0-9a-f]{6,64}$/.test(dev) || !/^[A-Za-z0-9+/=]{40,200}$/.test(pk) || devId(pk, "wb") !== dev) {
+            return { command_id: cmd.command_id, ok: false, error: "会话参数格式无效" };
+          }
+          this.loginGranter(dev, pk, String(p.name ?? "web").slice(0, 32) || "web");
+          return { command_id: cmd.command_id, ok: true };
         }
       }
     } catch (e) {

@@ -11,13 +11,29 @@ import { withA, type ThemeColors } from "../theme";
 export interface ScanResult {
   wsUrl: string;
   token: string;
+  // #325 扫码登录（微信式）：网页/exe 端出示的授权请求——不是添加服务器，
+  // 消费方应发 COMMAND_LOGIN_GRANT 给当前活动 relay
+  login?: { dev: string; pk: string; name: string; rd?: string };
 }
 
-// 解析扫码内容：v1 JSON（relay 出码）为主，兼容裸 ws(s) 地址带 ?token= 的形式
+// 解析扫码内容：v1 JSON（relay 出码）为主，兼容裸 ws(s) 地址带 ?token= 的形式；
+// t=ccdeck-login 是网页端扫码登录会话（#325），走 login 分支
 export function parseScanPayload(raw: string): ScanResult | null {
   const s = raw.trim();
   try {
-    const j = JSON.parse(s) as { v?: number; url?: unknown; token?: unknown };
+    const j = JSON.parse(s) as {
+      v?: number; url?: unknown; token?: unknown;
+      t?: unknown; dev?: unknown; pk?: unknown; name?: unknown; rd?: unknown;
+    };
+    if (j?.t === "ccdeck-login") {
+      const dev = typeof j.dev === "string" ? j.dev : "";
+      const pk = typeof j.pk === "string" ? j.pk : "";
+      if (/^wb-[0-9a-f]{6,64}$/.test(dev) && /^[A-Za-z0-9+/=]{40,200}$/.test(pk)) {
+        const rd = typeof j.rd === "string" ? j.rd : "";
+        return { wsUrl: "", token: "", login: { dev, pk, name: typeof j.name === "string" ? j.name : "浏览器", rd: rd || undefined } };
+      }
+      return null;
+    }
     const url = typeof j?.url === "string" ? j.url : "";
     const token = typeof j?.token === "string" ? j.token : "";
     if (url && token && /^wss?:\/\//.test(url)) {
@@ -118,9 +134,9 @@ export default function ScanScreen({
             </View>
             <View style={[d.hintWrap, { bottom: 40 + insets.bottom }]} pointerEvents="none">
               <Text style={d.hintT}>
-                {badCode ? "不是 CC Deck 的连接码（需含地址与令牌）" : "对准 PC 终端上的「App 直连」二维码"}
+                {badCode ? "不是 CC Deck 的连接码或登录码" : "对准 PC 终端「App 直连」码或网页端「扫码登录」码"}
               </Text>
-              <Text style={d.hintSubT}>PC 上运行 /cc-deck 或 --qr 出码</Text>
+              <Text style={d.hintSubT}>PC 上运行 /cc-deck 出码，网页端在设置里出登录码</Text>
             </View>
           </>
         ) : (

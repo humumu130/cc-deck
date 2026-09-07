@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
+import { Alert, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { LinearGradient } from "expo-linear-gradient";
 import { SafeAreaView } from "react-native-safe-area-context";
@@ -161,8 +161,36 @@ export default function SetupScreen({ onClose, editId, initialScan }: Props) {
     void store.deleteServer(e.id).then(() => reload());
   };
 
-  // 扫码结果回填：地址 + 令牌 + 默认名 host（用户已手输名称则尊重，不覆盖）
+  // 扫码结果分发（#325）：ccdeck-login = 网页端出示的登录码——rd 对得上活动服务器才弹
+  // 确认（防钓鱼码把授权发给别的 relay），确认后发授权指令给活动 relay（LAN/云信道皆可，
+  // 手机是信任锚）；连接码 → 回填表单（用户已手输名称则尊重）
   const applyScan = (r: ScanResult) => {
+    if (r.login) {
+      const { dev, pk, rd } = r.login;
+      const who = r.login.name.length > 16 ? `${r.login.name.slice(0, 16)}…` : r.login.name;
+      const active = servers.find((e) => e.id === activeId);
+      if (rd && active?.cloud?.relayDev && rd !== active.cloud.relayDev) {
+        setErr("这个登录码属于另一台服务器：请切到对应服务器的连接再扫码");
+        return;
+      }
+      Alert.alert(
+        "扫码登录",
+        `允许「${who}」接入这台服务器？\n授权后它可查看会话并发送指令。`,
+        [
+          { text: "取消", style: "cancel" },
+          {
+            text: "允许",
+            onPress: () => {
+              if (!store.send("COMMAND_LOGIN_GRANT", { session_dev: dev, session_pk: pk, name: who })) {
+                setErr("未连接 relay：先连接服务器，再扫码授权网页端");
+              }
+            },
+          },
+        ],
+        { cancelable: true },
+      );
+      return;
+    }
     setWsUrl(r.wsUrl);
     setToken(r.token);
     setErr(null);
