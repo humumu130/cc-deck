@@ -143,7 +143,6 @@ export default function SettingsDrawer({
   const processFont = useProcessFont();
   const listCompact = useListCompact();
   const aggregate = useAggregate();
-  const voiceInput = useVoiceInput();
   const snap = useRelay();
   const [servers, setServers] = useState<ServerEntry[]>([]);
   const [activeId, setActiveId] = useState<string | null>(null);
@@ -403,16 +402,7 @@ export default function SettingsDrawer({
             ))}
           </View>
         </View>
-        <View style={[d.setItem, d.setRow]}>
-          <Text style={d.setLabel}><Text style={d.rowIconT}>◐ </Text>深色模式</Text>
-          <Switch
-            style={d.sw}
-            value={mode === "dark"}
-            onValueChange={() => toggle()}
-            trackColor={{ false: c.tintSoft, true: c.brandA }}
-            thumbColor="#fff"
-          />
-        </View>
+        {/* #350 深色模式开关移主面板顶（连接 chip 旁）；语音输入开关整体下线 */}
         <View style={[d.setItem, d.setRow]}>
           <Text style={d.setLabel}><Text style={d.rowIconT}>☰ </Text>简洁列表</Text>
           <Switch
@@ -434,16 +424,6 @@ export default function SettingsDrawer({
               persistAggregate(v);
               store.setAggregate(v);
             }}
-            trackColor={{ false: c.tintSoft, true: c.brandA }}
-            thumbColor="#fff"
-          />
-        </View>
-        <View style={[d.setItem, d.setRow]}>
-          <Text style={d.setLabel}><Text style={d.rowIconT}>◉ </Text>语音输入</Text>
-          <Switch
-            style={d.sw}
-            value={voiceInput}
-            onValueChange={setVoiceInput}
             trackColor={{ false: c.tintSoft, true: c.brandA }}
             thumbColor="#fff"
           />

@@ -405,6 +405,7 @@ const SessionCard = memo(function SessionCard({
 
 export default function ListScreen({ sessions, connected, connText, onOpen, onNew, onSetup, onScanServer, onEditServer, ref }: Props) {
   const { c } = useTheme();
+  const { mode, toggle } = useTheme();
   const styles = useThemeStyles(makeStyles);
   const insets = useSafeAreaInsets();
   const snap = useRelay();
@@ -640,6 +641,16 @@ export default function ListScreen({ sessions, connected, connText, onOpen, onNe
           <View style={[styles.connDot, { backgroundColor: connColor }]} />
           <Text style={[styles.connText, { color: connColor }]}>{connText}</Text>
         </Pressable>
+        {/* #350 主题切换从设置抽屉迁入主面板顶：连接 chip 旁，与状态信息同区 */}
+        <Pressable
+          style={styles.themeBtn}
+          android_ripple={{ color: c.tintSoft, borderless: false, radius: 13 }}
+          hitSlop={4}
+          accessibilityLabel={mode === "dark" ? "深色主题，点击切浅色" : "浅色主题，点击切深色"}
+          onPress={toggle}
+        >
+          <Text style={styles.themeBtnT}>{mode === "dark" ? "🌙" : "☀️"}</Text>
+        </Pressable>
       </View>
       <View style={styles.statRow}>
         <Text style={styles.statTotal} numberOfLines={1}>
@@ -797,6 +808,12 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
   },
   connDot: { width: 6, height: 6, borderRadius: 3 },
   connText: { fontSize: 11 },
+  // #350 主题钮（深浅切换迁入）：与连接 chip 同高同族形制
+  themeBtn: {
+    width: 28, height: 28, borderRadius: 9, alignItems: "center", justifyContent: "center",
+    backgroundColor: c.tintSoft, borderWidth: 1, borderColor: c.line, overflow: "hidden",
+  },
+  themeBtnT: { fontSize: 13 },
   titleWrap: { flexShrink: 1, marginRight: "auto" },
   titleT: { color: c.text, fontSize: 16, fontWeight: "700", letterSpacing: 0.2 },
   titleSub: { color: c.faint, fontSize: 11, marginTop: 0.5 },

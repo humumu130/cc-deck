@@ -14,7 +14,10 @@ import expo.modules.kotlin.modules.Module
 import expo.modules.kotlin.modules.ModuleDefinition
 
 const val FG_CHANNEL_ID = "relay_fg"
-const val ALERT_CHANNEL_ID = "relay_alert"
+// #349：渠道重要性在创建时锁定（同 id 重建改不动）——早期版本若以低级别建过
+// relay_alert，heads-up 永远不弹。换新 id 并删旧渠道；IMPORTANCE_HIGH 才有横幅直弹
+const val ALERT_CHANNEL_ID = "relay_alert_hu"
+const val LEGACY_ALERT_CHANNEL_ID = "relay_alert"
 const val FG_NOTIFICATION_ID = 1
 const val ALERT_NOTIFICATION_ID = 2
 const val FG_TITLE = "CC Deck" // #301 品牌统一（原 "Cloud Code Relay"）
@@ -65,6 +68,8 @@ private fun buildNotification(ctx: Context, channelId: String, title: String, bo
     Notification.Builder(ctx)
       .setContentTitle(title).setContentText(body).setSmallIcon(icon)
       .setContentIntent(pi).setOngoing(ongoing).setAutoCancel(!ongoing)
+      // #349 pre-O：heads-up 走 notification priority（O+ 由渠道重要性决定）
+      .setPriority(if (ongoing) Notification.PRIORITY_MIN else Notification.PRIORITY_HIGH)
       .build()
   }
 }
@@ -90,11 +95,14 @@ class RelayNotifyModule : Module() {
       true
     }
 
-    // 高优先级提醒（WAITING 等确认）；无通知权限时静默跳过
+    // 高优先级提醒（WAITING 等确认/任务完成）；无通知权限时静默跳过
     Function("notify") { title: String, body: String ->
       val ctx = appContext.reactContext ?: return@Function
       val nm = ctx.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
       if (!nm.areNotificationsEnabled()) return@Function
+      if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+        nm.deleteNotificationChannel(LEGACY_ALERT_CHANNEL_ID) // #349 清掉低级别旧渠道
+      }
       ensureChannel(nm, ALERT_CHANNEL_ID, "会话提醒", NotificationManager.IMPORTANCE_HIGH)
       val notif = buildNotification(ctx, ALERT_CHANNEL_ID, title, body, launchIntent(ctx, 1), ongoing = false)
       try {
