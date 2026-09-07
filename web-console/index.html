@@ -19,7 +19,7 @@
     --panel: #0B141F;
     --panel-2: #101B2B;
     --border: #1B2739;
-    --text: #E8EDF5;
+    --text: #C9D3E0;
     --dim: #7E8BA3;
     --faint: #55617A;
     --brand: #D97757;
@@ -688,7 +688,7 @@
   }
   .think .th-head { color: var(--faint); font-weight: 600; cursor: pointer; font-size: 11.5px; user-select: none; }
   .think .th-head:hover { color: var(--dim); }
-  .think .th-body { margin-top: 7px; color: var(--dim); }
+  .think .th-body { margin-top: 7px; color: #9AA7BD; }
   /* 工具行（过程消息：轻量行式，WorkBuddy 风格：图标 + 名称 + 摘要 + 折叠） */
   .trow { margin: 5px 0; font-size: .8em; opacity: .88; }
   .tline {
@@ -739,6 +739,8 @@
 
   /* 轻量 Markdown（assistant_text/thinking，与手机端 md.tsx 同构）。
      assistant 正文无卡片直接排版（WorkBuddy 式，靠头像行区分发言者）；字号随时间线档位缩放 */
+  /* #328 阅读舒适度（对比终端观感）：正文行距/字距放宽、字号微增——纯白降为柔和灰白在 :root --text */
+  .txt.md { line-height: 1.72; letter-spacing: .2px; font-size: 14.5px; }
   .ai-body > .txt.md { min-width: 0; }
   .ai-body > .txt.md > :first-child { margin-top: 0; }
   .ai-body > .txt.md > :last-child { margin-bottom: 0; }
