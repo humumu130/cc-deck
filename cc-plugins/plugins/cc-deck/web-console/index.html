@@ -1697,10 +1697,12 @@ function onCloudText(ctx, text) {
     }
     if (pair) {
       // 配对期：rk 空回落记忆值（旧 relay），dev/rk 有变即换代——换身份携同码重发，
-      // 一致则是闪断竞态（relay 刚回），重发一次让看门狗接管
+      // 一致则是闪断竞态（relay 刚回），重发一次让看门狗接管。fresh：rd 来自发现帧
+      // （真实在线身份），扫码登录 QR 只携带带 fresh 的 rd（#329——烘焙 rd 随 relay
+      // 换代过期，曾致手机端误判"另一台服务器"）
       const rk = pick.rk || pair.rk;
       if (pick.dev !== pair.rd || rk !== pair.rk) {
-        ctx.pendingPair = { rd: pick.dev, rk, pc: pair.pc };
+        ctx.pendingPair = { rd: pick.dev, rk, pc: pair.pc, fresh: true };
         setPendingPair(cfg.id, ctx.pendingPair);
         console.log("[cloud:" + cfg.name + "] 发现 relay 身份 " + pick.dev + "，重发配对请求");
       } else {
@@ -1759,11 +1761,15 @@ function onCloudText(ctx, text) {
     // ack 身份必须对应当次请求目标：公共桥上假 relay 可自演自唱（自有密钥解得开），
     // 采信错位身份会把后续 seal 永久指向攻击者公钥
     const target = ctx.pendingPair || pendingPairOf(cfg.id);
-    if (target && inner.relay_dev !== target.rd) {
+    const wasLoginQr = !!target && target.pc === ""; // #325 扫码登录会话：ack 即授权成功
+    // 身份检查：输码态必比对 rd（pair_req 明文广播过公钥，公共桥上假 relay 可自演自唱，
+    // 采信错位身份会把后续 seal 永久指向攻击者公钥）。扫码登录态豁免——页面从未暴露
+    // 自己的公钥，能对页面密封 pair_ack 的只有经手机授权拿到 pk 的目标 relay，密封本身
+    // 即身份证明；且烘焙 rd 会随 relay 换代过期，比对反而误杀合法 ack（#329 实测踩中）
+    if (target && !wasLoginQr && inner.relay_dev !== target.rd) {
       console.log("[cloud:" + cfg.name + "] pair_ack 身份错位（" + inner.relay_dev + " ≠ " + target.rd + "），丢弃");
       return;
     }
-    const wasLoginQr = !!target && target.pc === ""; // #325 扫码登录会话：ack 即授权成功
     cfg.cloud = { url: cfg.wsUrl, token: serverBridgeToken(cfg), rd: inner.relay_dev, rk: inner.relay_pubkey, paired: true };
     saveServers();
     setPendingPair(cfg.id, null);
@@ -3933,12 +3939,16 @@ function startLoginQr() {
     saveServers(); renderServers();
   }
   const c = cfg.cloud || (cfg.cloud = { url: cfg.wsUrl, token: serverBridgeToken(cfg), rd: BAKED_RELAY.rd, rk: BAKED_RELAY.rk, paired: false });
-  // 先出占位二维码（烘焙身份），发现帧会把 pendingPair 换成新对象——payload 里 rd 必须活取
+  // rd 只在可信时携带（发现帧 fresh / 本源历史配对过）——烘焙兜底值随 relay 换代会
+  // 过期，塞进 QR 曾被手机端当真服务器比对误杀登录；手机对无 rd 的码直接走已连源授权
   const ctx = ensureCtx(cfg);
+  const trustedRd = () =>
+    (ctx.pendingPair && ctx.pendingPair.fresh && ctx.pendingPair.rd) ||
+    (c.paired && c.rd ? c.rd : "");
   const makePayload = () => JSON.stringify({
     t: "ccdeck-login", v: 1,
     bridge: cfg.wsUrl.replace(/\/$/, "").replace(/^http/, "ws") + "/cloud",
-    rd: (ctx.pendingPair && ctx.pendingPair.rd) || c.rd || BAKED_RELAY.rd, dev, pk: ckp.publicKey,
+    ...(trustedRd() ? { rd: trustedRd() } : {}), dev, pk: ckp.publicKey,
     name: (cfg.name || "浏览器").slice(0, 24),
   });
   $("loginQrState").textContent = "等待手机扫码…";

@@ -999,6 +999,15 @@ class RelayStore {
     if (!sent) this.emit({ lastErrorCmd: "未能回复手表配对（连接已断开）" });
   }
 
+  // #329 扫码登录路由：找 relayDev 与登录码 rd 匹配的已连接云源（授权发给目标服务器
+  // 本体而非凑合活动源）；找不到返回 undefined 由调用方回落活动源——扫码即登录，不阻断
+  sourceIdForRelay(rd: string): string | undefined {
+    for (const [id, conn] of this.conns) {
+      if (conn.entry.cloud?.relayDev === rd && conn.ws && conn.ws.readyState === WebSocket.OPEN) return id;
+    }
+    return undefined;
+  }
+
   private onEvent(conn: SourceConn, msg: Envelope) {
     const sid = msg.session_id;
     switch (msg.type) {

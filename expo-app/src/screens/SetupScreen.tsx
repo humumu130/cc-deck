@@ -161,27 +161,25 @@ export default function SetupScreen({ onClose, editId, initialScan }: Props) {
     void store.deleteServer(e.id).then(() => reload());
   };
 
-  // 扫码结果分发（#325）：ccdeck-login = 网页端出示的登录码——rd 对得上活动服务器才弹
-  // 确认（防钓鱼码把授权发给别的 relay），确认后发授权指令给活动 relay（LAN/云信道皆可，
-  // 手机是信任锚）；连接码 → 回填表单（用户已手输名称则尊重）
+  // 扫码结果分发（#325，#329 纠偏）：ccdeck-login = 网页端出示的登录码——扫码即登录，
+  // 手机不要求预先连接/切换到对应服务器：授权优先发给 relayDev 与码中 rd 匹配的已连接
+  // 源（多服务器下不串台），没有匹配则走活动源（手机是信任锚，网页端 pair_ack 的密封
+  // 本身即身份证明）；连接码 → 回填表单（用户已手输名称则尊重）
   const applyScan = (r: ScanResult) => {
     if (r.login) {
       const { dev, pk, rd } = r.login;
       const who = r.login.name.length > 16 ? `${r.login.name.slice(0, 16)}…` : r.login.name;
-      const active = servers.find((e) => e.id === activeId);
-      if (rd && active?.cloud?.relayDev && rd !== active.cloud.relayDev) {
-        setErr("这个登录码属于另一台服务器：请切到对应服务器的连接再扫码");
-        return;
-      }
+      const viaId = rd ? store.sourceIdForRelay(rd) : undefined;
+      const viaName = (viaId ? servers.find((e) => e.id === viaId) : servers.find((e) => e.id === activeId))?.name;
       Alert.alert(
         "扫码登录",
-        `允许「${who}」接入这台服务器？\n授权后它可查看会话并发送指令。`,
+        `允许「${who}」接入${viaName ? `「${viaName}」` : "这台服务器"}？\n授权后它可查看会话并发送指令。`,
         [
           { text: "取消", style: "cancel" },
           {
             text: "允许",
             onPress: () => {
-              if (!store.send("COMMAND_LOGIN_GRANT", { session_dev: dev, session_pk: pk, name: who })) {
+              if (!store.send("COMMAND_LOGIN_GRANT", { session_dev: dev, session_pk: pk, name: who }, viaId)) {
                 setErr("未连接 relay：先连接服务器，再扫码授权网页端");
               }
             },
