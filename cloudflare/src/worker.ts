@@ -7,6 +7,7 @@ import { CloudRouter } from "../../cloud-bridge/src/router.ts";
 
 interface Env {
   CLOUD_TOKEN: string;
+  DL?: KVNamespace;
   PUBLIC_TOKEN?: string; // 可选：开源公共桥场景的公开 token（与 CLOUD_TOKEN 任一匹配即放行，连接统一受 DO 内限流保护）
   ROUTER: DurableObjectNamespace<RouterDO>;
 }
@@ -18,6 +19,22 @@ export default {
       // 转发进 DO 拿设备列表（与 Node 形态 /health 对齐；会唤醒 DO，无连接时即刻再休眠）
       const stub = env.ROUTER.get(env.ROUTER.idFromName("main"));
       return stub.fetch(new Request("https://router/health"));
+    }
+    // 安装包分发（/dl/<file>）：文件放 KV（ECS 镜像对 CF 境外出口 403），
+    // 全程不出 Cloudflare——公司只需能开本域即可下载。文件名白名单防滥用
+    if (url.pathname.startsWith("/dl/")) {
+      const name = url.pathname.slice(4);
+      if (!/^[\w.-]+$/.test(name) || !env.DL) return new Response("bad name", { status: 400 });
+      const obj = await env.DL.get(name, { type: "arrayBuffer" });
+      if (!obj) return new Response("not found", { status: 404 });
+      return new Response(obj, {
+        status: 200,
+        headers: {
+          "content-type": "application/octet-stream",
+          "content-disposition": `attachment; filename="${name}"`,
+          "cache-control": "public, max-age=3600",
+        },
+      });
     }
     if (url.pathname !== "/cloud" && url.pathname !== "/cloud-poll") {
       return new Response("not found", { status: 404 });

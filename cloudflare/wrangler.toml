@@ -25,3 +25,7 @@ bindings = [
 [[migrations]]
 tag = "v1"
 new_sqlite_classes = ["RouterDO"]
+
+[[kv_namespaces]]
+binding = "DL"
+id = "d9b9bb1768324fb1b71907ca72de7aa6"
