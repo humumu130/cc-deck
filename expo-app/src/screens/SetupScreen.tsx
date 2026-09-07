@@ -189,10 +189,44 @@ export default function SetupScreen({ onClose, editId, initialScan }: Props) {
       );
       return;
     }
-    setWsUrl(r.wsUrl);
+    // #330 云源接入邀请：电脑端「添加手机」出的码——确认后 pair_req 落库自动连接
+    if (r.invite) {
+      const inv = r.invite;
+      Alert.alert(
+        "接入云服务器",
+        `扫码接入「${hostOf(inv.bridge)}」？\n将使用一次性配对码自动完成。`,
+        [
+          { text: "取消", style: "cancel" },
+          {
+            text: "接入",
+            onPress: () => {
+              void store.addCloudByInvite(inv).then((err) => {
+                if (err) setErr(err);
+                else if (onClose) onClose();
+              });
+            },
+          },
+        ],
+        { cancelable: true },
+      );
+      return;
+    }
+    // #330 直连码即扫即连：码里已含完整 url+token，直接建/复用条目连接
+    //（此前回填表单让用户手点「连接」，多一步且易漏）
+    const base = r.wsUrl.replace(/\/+$/, "");
+    setWsUrl(base);
     setToken(r.token);
     setErr(null);
-    if (!name.trim()) setName(hostOf(r.wsUrl));
+    if (!name.trim()) setName(hostOf(base));
+    const dup = servers.find((e) => e.wsUrl === base);
+    const entry: ServerEntry = dup
+      ? { ...dup, token: r.token }
+      : { id: uuid(), name: name.trim() || hostOf(base), wsUrl: base, token: r.token };
+    void store.connectServer(entry, r.token).then(() => {
+      setActiveId(entry.id);
+      reload();
+      if (onClose) onClose();
+    });
   };
 
   // 云桥区块针对的服务器：编辑模式=被编辑的条目，否则=当前活动条目；配对走当前 LAN 连接，故要求该条目已激活

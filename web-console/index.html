@@ -989,6 +989,7 @@
             <input id="pairCode" inputmode="numeric" maxlength="6" placeholder="6 位配对码" autocomplete="off">
             <button id="pairBtn" class="primary">配对</button>
             <button id="loginQrBtn" title="手机 App 扫一下，免输码接入">📱 扫码登录</button>
+            <button id="addPhoneBtn" title="手机 App 扫码直接接入本服务器">📲 添加手机</button>
           </div>
           <div class="pair-hint" id="pairHint">云桥未配对时输入 <b>6 位配对码</b>（手机 App 或家里 PC 领取，5 分钟内有效、一次性），配对成功落成一条云源。或点「扫码登录」用手机微信式扫码免输码。</div>
         </div>
@@ -1945,10 +1946,23 @@ function sendCommandTo(ctx, type, payload) {
   } else {
     ctx.ws.send(JSON.stringify(cmd));
   }
-  return true;
+  return cmd.command_id;
 }
 
+// #330 命令回执等待：sendCommandTo 返回 command_id（真值），等 ACK 解出结果
+function commandAck(ctx, type, payload, timeoutMs = 8000) {
+  return new Promise((resolve) => {
+    const id = sendCommandTo(ctx, type, payload);
+    if (!id) { resolve(null); return; }
+    const t = setTimeout(() => { ackWaiters.delete(id); resolve(null); }, timeoutMs);
+    ackWaiters.set(id, { res: resolve, t });
+  });
+}
+const ackWaiters = new Map();
+
 function onAck(ack) {
+  const w = ackWaiters.get(ack.command_id);
+  if (w) { ackWaiters.delete(ack.command_id); clearTimeout(w.t); w.res(ack); return; }
   if (!ack.ok && ack.error && !ack.error.startsWith("duplicate")) toast("命令失败: " + ack.error);
 }
 
@@ -3982,6 +3996,37 @@ function closeLoginQr(msg) {
 }
 $("loginQrBtn").onclick = startLoginQr;
 $("loginQrCancel").onclick = () => closeLoginQr();
+
+// #330 反向扫码：本端出码、手机 App 扫一下直接接入本服务器。LAN 源出 v1 直连码
+// （url+token，App 即扫即连）；云源领一次性配对码出 ccdeck-add 码（App 临时连桥
+// pair_req 落库自动连接）。浮层复用 loginQrPop（无 pendingPair 会话，关层无副作用）
+async function addPhoneQr() {
+  const ctx = ctxs.get(activeServerId) || null;
+  if (!ctx || ctx.status !== "online") { toast("请先连接服务器，再添加手机"); return; }
+  const cfg = ctx.cfg;
+  let payload;
+  if (cfg.kind === "lan") {
+    if (!cfg.token) { toast("本源未存令牌，无法生成手机直连码"); return; }
+    payload = JSON.stringify({ v: 1, url: cfg.wsUrl, token: cfg.token });
+  } else {
+    const c = cfg.cloud || {};
+    const rd = (ctx.pendingPair && ctx.pendingPair.fresh && ctx.pendingPair.rd) || (c.paired && c.rd ? c.rd : "");
+    if (!rd || !c.rk) { toast("正在定位服务器身份，几秒后再试"); return; }
+    const ack = await commandAck(ctx, "COMMAND_PAIR_CODE", {});
+    if (!ack || !ack.ok || !ack.pair_code) { toast((ack && ack.error) || "领配对码失败"); return; }
+    payload = JSON.stringify({
+      t: "ccdeck-add", v: 1,
+      bridge: cfg.wsUrl.replace(/\/$/, "").replace(/^http/, "ws"),
+      bt: serverBridgeToken(cfg), rd, rk: c.rk, code: ack.pair_code.code,
+    });
+  }
+  $("loginQrTitle").textContent = "添加手机";
+  $("loginQrSub").innerHTML = "手机 CC Deck App 扫下方二维码<br/>自动接入本服务器（一次性码 5 分钟内有效）";
+  $("loginQrState").textContent = "等待手机扫码…";
+  drawLoginQr(payload);
+  $("loginQrPop").classList.add("open");
+}
+$("addPhoneBtn").onclick = () => void addPhoneQr();
 
 // 首启连接向导（#325）：三选一分流到既有路径——扫码登录浮层 / 配对码表单 / 直连表单
 const closeWiz = () => $("wizPop").classList.remove("open");

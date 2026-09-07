@@ -14,16 +14,21 @@ export interface ScanResult {
   // #325 扫码登录（微信式）：网页/exe 端出示的授权请求——不是添加服务器，
   // 消费方应发 COMMAND_LOGIN_GRANT 给当前活动 relay
   login?: { dev: string; pk: string; name: string; rd?: string };
+  // #330 云源接入邀请（电脑端「添加手机」出的码）：一次性配对码+桥地址+relay 身份，
+  // 消费方走 pair_req 流程落成云源条目
+  invite?: { bridge: string; bt: string; rd: string; rk: string; code: string };
 }
 
 // 解析扫码内容：v1 JSON（relay 出码）为主，兼容裸 ws(s) 地址带 ?token= 的形式；
-// t=ccdeck-login 是网页端扫码登录会话（#325），走 login 分支
+// t=ccdeck-login 是网页端扫码登录会话（#325）走 login 分支；t=ccdeck-add 是
+// 电脑端「添加手机」出的一次性接入码（#330）走 invite 分支
 export function parseScanPayload(raw: string): ScanResult | null {
   const s = raw.trim();
   try {
     const j = JSON.parse(s) as {
       v?: number; url?: unknown; token?: unknown;
       t?: unknown; dev?: unknown; pk?: unknown; name?: unknown; rd?: unknown;
+      bridge?: unknown; bt?: unknown; rk?: unknown; code?: unknown;
     };
     if (j?.t === "ccdeck-login") {
       const dev = typeof j.dev === "string" ? j.dev : "";
@@ -31,6 +36,17 @@ export function parseScanPayload(raw: string): ScanResult | null {
       if (/^wb-[0-9a-f]{6,64}$/.test(dev) && /^[A-Za-z0-9+/=]{40,200}$/.test(pk)) {
         const rd = typeof j.rd === "string" ? j.rd : "";
         return { wsUrl: "", token: "", login: { dev, pk, name: typeof j.name === "string" ? j.name : "浏览器", rd: rd || undefined } };
+      }
+      return null;
+    }
+    if (j?.t === "ccdeck-add") {
+      const bridge = typeof j.bridge === "string" ? j.bridge.replace(/\/+$/, "") : "";
+      const bt = typeof j.bt === "string" ? j.bt : "";
+      const rd = typeof j.rd === "string" ? j.rd : "";
+      const rk = typeof j.rk === "string" ? j.rk : "";
+      const code = typeof j.code === "string" ? j.code : "";
+      if (/^wss?:\/\//.test(bridge) && rd.startsWith("rl-") && rk && /^\d{6}$/.test(code)) {
+        return { wsUrl: "", token: "", invite: { bridge, bt, rd, rk, code } };
       }
       return null;
     }

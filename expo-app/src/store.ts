@@ -1008,6 +1008,89 @@ class RelayStore {
     return undefined;
   }
 
+  // #330 云源扫码接入：扫电脑端 ccdeck-add 码——临时连桥向目标 relay 发
+  // pair_req(一次性码+手机公钥)，pair_ack 携带真实身份 → 落成云源条目自动连接。
+  // 返回 null=成功；字符串=错误文案（码错/过期 relay 回明文 pair_nack）
+  async addCloudByInvite(inv: {
+    bridge: string; bt: string; rd: string; rk: string; code: string;
+  }): Promise<string | null> {
+    const keys = await this.deviceKeys();
+    const dev = devId(keys.publicKey, "ph");
+    const url =
+      inv.bridge + (inv.bridge.includes("?") ? "&" : "?") +
+      "token=" + encodeURIComponent(inv.bt) + "&dev=" + encodeURIComponent(dev);
+    return new Promise((resolve) => {
+      let ws: WebSocket;
+      try {
+        ws = new WebSocket(url);
+      } catch {
+        resolve("云桥地址无效");
+        return;
+      }
+      let settled = false;
+      const done = (err: string | null) => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timer);
+        try { ws.close(); } catch {}
+        resolve(err);
+      };
+      const timer = setTimeout(() => done("接入超时，请重试"), 12_000);
+      ws.onopen = () => {
+        ws.send(JSON.stringify({
+          to: inv.rd,
+          data: { t: "pair_req", code: inv.code, pubkey: keys.publicKey, name: "手机-" + dev.slice(3, 9) },
+        }));
+      };
+      ws.onerror = () => done("连不上云桥（检查网络）");
+      ws.onclose = () => done("连接中断，请重试");
+      ws.onmessage = (ev: WebSocketMessageEvent) => {
+        let f: { data?: SealedBox | { t?: unknown; error?: unknown; n?: unknown } };
+        try {
+          f = JSON.parse(String(ev.data));
+        } catch {
+          return;
+        }
+        if (!f.data) return;
+        // 明文 nack（无 n 字段）：码无效/过期——relay 不知道我方公钥无法加密
+        if (typeof f.data === "object" && (f.data as { t?: unknown }).t === "pair_nack" && (f.data as { n?: unknown }).n === undefined) {
+          const err = (f.data as { error?: unknown }).error;
+          done(typeof err === "string" && err ? `配对失败：${err}` : "配对码无效或已过期");
+          return;
+        }
+        const inner = unseal<{ t?: string; relay_dev?: string; relay_pubkey?: string; error?: string }>(
+          f.data as SealedBox, inv.rk, keys.secretKey,
+        );
+        if (!inner) return;
+        if (inner.t === "pair_ack" && inner.relay_dev && inner.relay_pubkey) {
+          const host = (() => {
+            try {
+              return new URL(inv.bridge.replace(/^ws/, "http")).host;
+            } catch {
+              return inv.bridge;
+            }
+          })();
+          void this.connectServer({
+            id: uuid(),
+            name: host,
+            wsUrl: inv.bridge,
+            token: inv.bt,
+            cloud: {
+              url: inv.bridge,
+              token: inv.bt,
+              relayDev: inner.relay_dev,
+              relayPubkey: inner.relay_pubkey,
+            },
+          }).then(() => done(null), () => done("已配对，但连接失败（稍后自动重连）"));
+          return;
+        }
+        if (inner.t === "pair_nack") {
+          done(inner.error ? `配对失败：${inner.error}` : "配对失败，请重新领码");
+        }
+      };
+    });
+  }
+
   private onEvent(conn: SourceConn, msg: Envelope) {
     const sid = msg.session_id;
     switch (msg.type) {
