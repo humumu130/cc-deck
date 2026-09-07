@@ -290,7 +290,7 @@ export default function SettingsDrawer({
           <Text style={d.connReT}>↻ 重连</Text>
         </Pressable>
         <View style={d.secHead}>
-          <Text style={d.secTitleT}>服务器列表{srvCollapsed && servers.length ? ` · ${servers.length}` : ""}</Text>
+          <Text style={d.secTitleT}><Text style={d.secIconT}>◫ </Text>服务器列表{srvCollapsed && servers.length ? ` · ${servers.length}` : ""}</Text>
           <Pressable style={d.secToggle} hitSlop={10} onPress={toggleSrv} android_ripple={{ color: c.tintSoft, borderless: true, radius: 12 }}>
             <Text style={d.secToggleT}>{srvCollapsed ? "▸" : "▾"}</Text>
           </Pressable>
@@ -348,7 +348,7 @@ export default function SettingsDrawer({
         ) : null}
         {!srvCollapsed && servers.length === 0 ? <Text style={d.srvEmpty}>还没有服务器，点下方新增</Text> : null}
 
-        <Text style={d.secT}>新设备配对</Text>
+        <Text style={d.secT}><Text style={d.secIconT}>⇄ </Text>新设备配对</Text>
         {pc ? (
           // pc 存在即显示码框：到期 0:00 到续领回包之间不闪「已过期」按钮（抽屉常开时每 TTL 闪一次）
           <View style={d.pairBox}>
@@ -381,7 +381,7 @@ export default function SettingsDrawer({
 
         {/* #313 显示区可折叠：服务器列表同款 secHead + ▾/▸，AsyncStorage 记忆（默认展开） */}
         <View style={d.secHead}>
-          <Text style={d.secTitleT}>显示{dispCollapsed ? " · 常用" : ""}</Text>
+          <Text style={d.secTitleT}><Text style={d.secIconT}>≡ </Text>显示{dispCollapsed ? " · 常用" : ""}</Text>
           <Pressable style={d.secToggle} hitSlop={10} onPress={toggleDisp} android_ripple={{ color: c.tintSoft, borderless: true, radius: 12 }}>
             <Text style={d.secToggleT}>{dispCollapsed ? "▸" : "▾"}</Text>
           </Pressable>
@@ -389,7 +389,7 @@ export default function SettingsDrawer({
         {!dispCollapsed ? (
         <>
         <View style={d.setItem}>
-          <Text style={d.setLabel}>过程消息</Text>
+          <Text style={d.setLabel}><Text style={d.rowIconT}>▤ </Text>过程消息</Text>
           <View style={d.segFull}>
             {FONT_OPTS.map((o) => (
               <Pressable
@@ -404,7 +404,7 @@ export default function SettingsDrawer({
           </View>
         </View>
         <View style={[d.setItem, d.setRow]}>
-          <Text style={d.setLabel}>深色模式</Text>
+          <Text style={d.setLabel}><Text style={d.rowIconT}>◐ </Text>深色模式</Text>
           <Switch
             style={d.sw}
             value={mode === "dark"}
@@ -414,7 +414,7 @@ export default function SettingsDrawer({
           />
         </View>
         <View style={[d.setItem, d.setRow]}>
-          <Text style={d.setLabel}>简洁列表</Text>
+          <Text style={d.setLabel}><Text style={d.rowIconT}>☰ </Text>简洁列表</Text>
           <Switch
             style={d.sw}
             value={listCompact}
@@ -426,7 +426,7 @@ export default function SettingsDrawer({
         {/* 多源聚合（#294 批4）：持久化（display-settings）+ 连接行为（store.setAggregate：
             开 = 连全部已配置源；关 = 拆非活动源、保留缓存再开无感恢复） */}
         <View style={[d.setItem, d.setRow]}>
-          <Text style={d.setLabel}>多源聚合</Text>
+          <Text style={d.setLabel}><Text style={d.rowIconT}>⧉ </Text>多源聚合</Text>
           <Switch
             style={d.sw}
             value={aggregate}
@@ -439,7 +439,7 @@ export default function SettingsDrawer({
           />
         </View>
         <View style={[d.setItem, d.setRow]}>
-          <Text style={d.setLabel}>语音输入</Text>
+          <Text style={d.setLabel}><Text style={d.rowIconT}>◉ </Text>语音输入</Text>
           <Switch
             style={d.sw}
             value={voiceInput}
@@ -481,9 +481,11 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
   },
   nameT: { color: c.text, fontSize: 16, fontWeight: "700" },
   verT: { color: c.faint, fontSize: 11.5, marginTop: 1 },
-  secT: { color: c.faint, fontSize: 11, fontWeight: "700", marginTop: 20, marginBottom: 6, letterSpacing: 1 },
-  secHead: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginTop: 20, marginBottom: 6 },
+  secT: { color: c.faint, fontSize: 11, fontWeight: "700", marginTop: 18, marginBottom: 6, letterSpacing: 1 },
+  secHead: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginTop: 18, marginBottom: 6 },
   secTitleT: { color: c.faint, fontSize: 11, fontWeight: "700", letterSpacing: 1 },
+  // #346 分区/行前缀小图标（与网页设置面板 gi 同语言）：色弱一档、字号小一档
+  secIconT: { color: c.dim, fontSize: 10.5 },
   secToggle: { width: 24, height: 24, alignItems: "center", justifyContent: "center", marginVertical: -6 },
   secToggleT: { color: c.dim, fontSize: 11 },
   srvScroll: { maxHeight: 236 },
@@ -550,6 +552,7 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
   },
   setRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
   setLabel: { color: c.text, fontSize: 13.5, fontWeight: "600" },
+  rowIconT: { color: c.dim, fontSize: 12, fontWeight: "400" },
   sw: { transform: [{ scale: 0.85 }] },
   segFull: { flexDirection: "row", gap: 6, marginTop: 8 },
   segOptF: {
