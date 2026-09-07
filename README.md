@@ -69,7 +69,7 @@ claude plugin install cc-deck@cc-deck-plugins
 
 装好重启 Claude Code，在任意会话里执行 `/cc-deck`：后台启动 relay，终端打出三张二维码（App 下载 / App 直连 / 网页控制台）。插件自带的 hooks 会自动桥接**新开的** Claude Code 会话；已运行的会话需重开。数据目录 `~/.cc-deck/data/`，与插件升级解耦。
 
-配套命令：`/cc-deck-pair` 领 6 位云桥配对码（20 分钟内有效、一次性），`/cc-deck-stop` 停止后台 relay。
+配套命令：`/cc-deck-pair` 领 6 位云桥配对码（5 分钟内有效、一次性），`/cc-deck-stop` 停止后台 relay。
 
 ### 场景 A · 同一网络（局域网）
 
