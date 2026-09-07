@@ -28,6 +28,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.geometry.CornerRadius
@@ -64,8 +65,8 @@ import java.util.UUID
 fun W3Menu(
     s: SessionState,
     onCommand: (WatchCommand) -> Unit,
-    onVoice: () -> Unit,
-    onMore: () -> Unit,
+    onTasks: () -> Unit,
+    onOverview: () -> Unit,
     onClose: () -> Unit,
 ) {
     var confirmStop by remember { mutableStateOf(false) }
@@ -114,17 +115,27 @@ fun W3Menu(
                     onClose()
                 }
             }
+            // #372 重设计：解释→关闭会话（仅 DONE/ERROR 可用）；语音（无 GMS 无用）→任务
+            // （直达 W2 的 TodosCard/CronCard，空清单置灰）；更多→概览（多会话切换）
             RingSlot(angle = 30f) {
-                MenuBtn("解释", C.textSecondary, MenuIconKind.HELP) {
-                    onCommand(WatchCommand.Message(cid(), s.sessionId, "请简要解释当前状态和进度"))
+                val deletable = s.status != SessionStatus.WORKING && s.status != SessionStatus.WAITING
+                MenuBtn("关闭", if (deletable) C.waiting else C.faintLabel, MenuIconKind.TRASH, enabled = deletable) {
+                    onCommand(WatchCommand.Delete(cid(), s.sessionId))
                     onClose()
                 }
             }
             RingSlot(angle = 90f) {
-                MenuBtn("语音", C.primary, MenuIconKind.MIC, glow = true, onClick = onVoice)
+                val hasTodos = s.todos.isNotEmpty()
+                MenuBtn("任务", if (hasTodos) C.primary else C.faintLabel, MenuIconKind.LIST, glow = hasTodos, enabled = hasTodos) {
+                    onTasks()
+                    onClose()
+                }
             }
             RingSlot(angle = 150f) {
-                MenuBtn("更多", C.textSecondary, MenuIconKind.DOTS, onClick = onMore)
+                MenuBtn("概览", C.textSecondary, MenuIconKind.GRID) {
+                    onOverview()
+                    onClose()
+                }
             }
             // 中心枢纽：状态图标 + Session 名，状态色描边呼应当前状态，点击关闭
             Column(
@@ -156,6 +167,16 @@ fun W3Menu(
                     textAlign = TextAlign.Center,
                     modifier = Modifier.padding(horizontal = 9.dp),
                 )
+                // #372 中心完成度（todos 空不占位）
+                if (s.todos.isNotEmpty()) {
+                    Spacer(Modifier.height(2.dp))
+                    Text(
+                        "☑ ${s.todos.count { it.isDone }}/${s.todos.size}",
+                        color = C.textSecondary,
+                        fontSize = 9.sp,
+                        maxLines = 1,
+                    )
+                }
             }
         }
         if (confirmStop) {
@@ -188,13 +209,14 @@ private fun BoxScope.RingSlot(angle: Float, content: @Composable BoxScope.() -> 
     }
 }
 
-/** 菜单钮：深底圆钮 + 语义色图标/描边，按压缩放 + 微光反馈；语音等强调钮外加辉光。 */
+/** 菜单钮：深底圆钮 + 语义色图标/描边，按压缩放 + 微光反馈；任务等强调钮外加辉光；不可用态降透明。 */
 @Composable
 private fun MenuBtn(
     label: String,
     accent: Color,
     icon: MenuIconKind,
     glow: Boolean = false,
+    enabled: Boolean = true,
     onClick: () -> Unit,
 ) {
     val interaction = remember { MutableInteractionSource() }
@@ -205,6 +227,7 @@ private fun MenuBtn(
         modifier = Modifier
             .size(50.dp)
             .scale(btnScale)
+            .let { m -> if (enabled) m else m.alpha(0.42f) }
             .clip(CircleShape)
             .background(
                 Brush.verticalGradient(
@@ -216,7 +239,7 @@ private fun MenuBtn(
                 color = accent.copy(alpha = if (pressed) 1f else 0.75f),
                 shape = CircleShape,
             )
-            .clickable(interactionSource = interaction, indication = null, onClick = onClick),
+            .clickable(interactionSource = interaction, indication = null, enabled = enabled, onClick = onClick),
     ) {
         if (glow && !pressed) {
             Box(
@@ -240,7 +263,7 @@ private fun MenuBtn(
     }
 }
 
-private enum class MenuIconKind { PLAY, STOP, RETRY, HELP, MIC, DOTS }
+private enum class MenuIconKind { PLAY, STOP, RETRY, TRASH, LIST, GRID }
 
 /** 纯 Canvas 矢量小图标：文字字形在 ColorOS Watch 字体覆盖不稳，一律用基本图形绘制。 */
 @Composable
@@ -284,33 +307,40 @@ private fun MenuIcon(kind: MenuIconKind, color: Color, size: Dp) {
                 }
                 drawPath(p, color)
             }
-            MenuIconKind.HELP -> {
-                drawArc(
-                    color, startAngle = 140f, sweepAngle = 230f, useCenter = false,
-                    topLeft = Offset(w * 0.16f, h * 0.06f), size = Size(w * 0.68f, h * 0.60f),
-                    style = Stroke(w * 0.14f, cap = StrokeCap.Round),
-                )
-                drawCircle(color, radius = w * 0.085f, center = Offset(c.x, h * 0.86f))
-            }
-            MenuIconKind.MIC -> {
+            MenuIconKind.TRASH -> {
+                // 桶盖横线 + 提手 + 圆角桶身描边 + 中缝
+                drawLine(color, Offset(w * 0.20f, h * 0.22f), Offset(w * 0.80f, h * 0.22f), w * 0.11f, StrokeCap.Round)
+                drawLine(color, Offset(c.x, h * 0.10f), Offset(c.x, h * 0.22f), w * 0.09f, StrokeCap.Round)
                 drawRoundRect(
                     color,
-                    topLeft = Offset(w * 0.34f, h * 0.06f),
-                    size = Size(w * 0.32f, h * 0.40f),
-                    cornerRadius = CornerRadius(w * 0.16f),
+                    topLeft = Offset(w * 0.28f, h * 0.28f),
+                    size = Size(w * 0.44f, h * 0.60f),
+                    cornerRadius = CornerRadius(w * 0.10f),
+                    style = Stroke(w * 0.11f),
                 )
-                drawArc(
-                    color, startAngle = 0f, sweepAngle = 180f, useCenter = false,
-                    topLeft = Offset(w * 0.20f, h * 0.24f), size = Size(w * 0.60f, h * 0.52f),
-                    style = Stroke(w * 0.09f, cap = StrokeCap.Round),
-                )
-                drawLine(color, Offset(c.x, h * 0.76f), Offset(c.x, h * 0.86f), w * 0.09f, StrokeCap.Round)
-                drawLine(color, Offset(w * 0.31f, h * 0.92f), Offset(w * 0.69f, h * 0.92f), w * 0.09f, StrokeCap.Round)
+                drawLine(color, Offset(c.x, h * 0.42f), Offset(c.x, h * 0.76f), w * 0.09f, StrokeCap.Round)
             }
-            MenuIconKind.DOTS -> {
-                drawCircle(color, radius = w * 0.085f, center = Offset(c.x, h * 0.18f))
-                drawCircle(color, radius = w * 0.085f, center = Offset(c.x, h * 0.50f))
-                drawCircle(color, radius = w * 0.085f, center = Offset(c.x, h * 0.82f))
+            MenuIconKind.LIST -> {
+                // 三行勾选清单：左小点 + 右横线
+                for (i in 0..2) {
+                    val y = h * (0.22f + i * 0.28f)
+                    drawCircle(color, radius = w * 0.07f, center = Offset(w * 0.20f, y))
+                    drawLine(color, Offset(w * 0.34f, y), Offset(w * 0.82f, y), w * 0.10f, StrokeCap.Round)
+                }
+            }
+            MenuIconKind.GRID -> {
+                // 四宫格（会话总览）
+                val cell = w * 0.30f
+                val gap = w * 0.10f
+                val o0 = (w - cell * 2 - gap) / 2f
+                for (i in 0..1) for (j in 0..1) {
+                    drawRoundRect(
+                        color,
+                        topLeft = Offset(o0 + i * (cell + gap), o0 + j * (cell + gap)),
+                        size = Size(cell, cell),
+                        cornerRadius = CornerRadius(w * 0.07f),
+                    )
+                }
             }
         }
     }
@@ -343,63 +373,6 @@ fun StopConfirm(s: SessionState, onCancel: () -> Unit, onConfirm: () -> Unit) {
         Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
             RoundButton("取消", C.textSecondary, size = 54.dp, onClick = onCancel)
             RoundButton("停止", C.waiting, size = 54.dp, onClick = onConfirm)
-        }
-    }
-}
-
-/**
- * W3-2 · 更多操作（规范 §8）。复制/导出需手机协同（v0.3 规划），当前提示不可用。
- */
-@Composable
-fun W3More(
-    s: SessionState,
-    onCommand: (WatchCommand) -> Unit,
-    onOpenTimeline: () -> Unit,
-    onBack: () -> Unit,
-) {
-    var hint by remember { mutableStateOf<String?>(null) }
-    val deletable = s.status != SessionStatus.WORKING && s.status != SessionStatus.WAITING
-    ScalingLazyColumn(
-        modifier = Modifier.fillMaxSize().background(C.bg),
-        horizontalAlignment = Alignment.CenterHorizontally,
-    ) {
-        item { MenuHeader("更多操作") }
-        item {
-          MoreItem("查看日志") { onOpenTimeline() }
-        }
-        item {
-          MoreItem("查看统计") { hint = "${s.stats.filesChanged} 文件 · +${s.stats.linesAdded} -${s.stats.linesDeleted} · ${formatDuration((s.durationMs ?: s.elapsedHint) ?: (System.currentTimeMillis() - s.startedAt))}" }
-        }
-        item {
-          MoreItem("复制内容") { hint = "需手机端协同，暂不可用" }
-        }
-        item {
-          MoreItem("导出结果") { hint = "需手机端协同，暂不可用" }
-        }
-        item {
-          MoreItem(
-              "关闭会话",
-              color = C.waiting,
-              enabled = deletable,
-          ) {
-              if (deletable) onCommand(WatchCommand.Delete(UUID.randomUUID().toString(), s.sessionId))
-          }
-        }
-        hint?.let { h ->
-            item {
-                Text(
-                    h,
-                    color = C.textSecondary,
-                    fontSize = 10.sp,
-                    textAlign = TextAlign.Center,
-                    modifier = Modifier.padding(horizontal = 30.dp, vertical = 4.dp),
-                )
-            }
-        }
-        item {
-            Text("‹ 返回", color = C.faintLabel, fontSize = 11.sp, modifier = Modifier
-                .padding(top = 6.dp)
-                .clickable { onBack() })
         }
     }
 }

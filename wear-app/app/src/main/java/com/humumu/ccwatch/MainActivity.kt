@@ -51,9 +51,7 @@ import com.humumu.ccwatch.ui.SourceMode
 import com.humumu.ccwatch.ui.W1Card
 import com.humumu.ccwatch.ui.W2Timeline
 import com.humumu.ccwatch.ui.W3Menu
-import com.humumu.ccwatch.ui.W3More
 import com.humumu.ccwatch.ui.W4Overview
-import com.humumu.ccwatch.ui.W5Voice
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
@@ -115,9 +113,7 @@ class MainActivity : ComponentActivity() {
 private sealed class Screen {
     data object Home : Screen()
     data class Menu(val sid: String) : Screen()
-    data class More(val sid: String) : Screen()
     data object Overview : Screen()
-    data class Voice(val sid: String) : Screen()
     data object Settings : Screen()
 }
 
@@ -228,10 +224,7 @@ fun App(
     // 返回层级：W2时间线 -> W1会话卡 -> W4总览 -> 退出（详情页右滑可回"列表"）
     BackHandler(enabled = screen != Screen.Overview) {
         when {
-            screen != Screen.Home -> screen = when (val s = screen) {
-                is Screen.More -> Screen.Menu(s.sid)
-                else -> Screen.Home
-            }
+            screen != Screen.Home -> screen = Screen.Home
             vPager.currentPage == 1 -> scope.launch { vPager.animateScrollToPage(0) }
             else -> screen = Screen.Overview
         }
@@ -316,22 +309,13 @@ fun App(
                 else W3Menu(
                     s = session,
                     onCommand = ::onCommand,
-                    onVoice = { screen = Screen.Voice(session.sessionId) },
-                    onMore = { screen = Screen.More(session.sessionId) },
-                    onClose = { screen = Screen.Home },
-                )
-            }
-            is Screen.More -> {
-                val session = sessions.firstOrNull { it.sessionId == s.sid }
-                if (session == null) screen = Screen.Home
-                else W3More(
-                    s = session,
-                    onCommand = ::onCommand,
-                    onOpenTimeline = {
+                    onTasks = {
+                        // #372 任务入口：直达 W2 详情页（头部即 TodosCard/CronCard）
                         screen = Screen.Home
                         scope.launch { vPager.animateScrollToPage(1) }
                     },
-                    onBack = { screen = Screen.Menu(s.sid) },
+                    onOverview = { screen = Screen.Overview },
+                    onClose = { screen = Screen.Home },
                 )
             }
             Screen.Overview -> {
@@ -346,15 +330,6 @@ fun App(
                         }
                     },
                     onSettings = { screen = Screen.Settings },
-                )
-            }
-            is Screen.Voice -> {
-                val session = sessions.firstOrNull { it.sessionId == s.sid }
-                if (session == null) screen = Screen.Home
-                else W5Voice(
-                    s = session,
-                    onCommand = ::onCommand,
-                    onDone = { screen = Screen.Home },
                 )
             }
             Screen.Settings -> {
