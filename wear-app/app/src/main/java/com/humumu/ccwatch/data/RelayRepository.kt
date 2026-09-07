@@ -62,6 +62,10 @@ class RelayRepository(private val host: String, private val token: String) : Ses
         override fun onOpen(webSocket: WebSocket, response: Response) {
             reconnectDelay = 1000L
             _connected.value = true
+            // #373 /wan 云桥透传：明文帧需 hello 握手（relay 侧 wt- 设备据此推 SNAPSHOT/事件流）
+            if (host.contains("/wan")) {
+                webSocket.send("""{"t":"hello","last_seq":$lastSeq}""")
+            }
         }
 
         override fun onMessage(webSocket: WebSocket, text: String) {
@@ -85,6 +89,8 @@ class RelayRepository(private val host: String, private val token: String) : Ses
     }
 
     private fun url(): String {
+        // #373 /wan 透传：host 即完整 URL（自带 token/dev/to query），原样直连不拼 /ws
+        if (host.contains("/wan")) return host
         val base = if (host.startsWith("ws://") || host.startsWith("wss://")) host else "ws://$host"
         val trimmed = base.trimEnd('/')
         return "$trimmed/ws?token=${java.net.URLEncoder.encode(token, "UTF-8")}" +
