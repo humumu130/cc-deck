@@ -12,6 +12,9 @@ const HEARTBEAT_MS = 30_000;
 
 // Node 形态云桥：HTTP upgrade 鉴权（/cloud?token=&dev=）后交 CloudRouter。
 // 桥不持久化任何状态，重启即清空（补发由 relay 的 seq 机制负责）。
+// #373 /wan：手表明文透传通道——手表连 /wan?token=&dev=wt-*&to=rl-*，桥把它的
+// 明文 relay 帧包成 {to, data:{t:"wan",from,frame}} 信封交路由；relay→手表方向
+// 解信封还原明文帧。信任模型：桥可信（自家部署），仅此通道不走端到端密文。
 export function startCloudServer(port: number, token: string, extraPorts: number[] = []): {
   port: number;
   close: () => Promise<void>;
@@ -19,15 +22,28 @@ export function startCloudServer(port: number, token: string, extraPorts: number
 } {
   const wss = new WebSocketServer({ noServer: true });
   const socks = new Map<string, WebSocket>();
+  const wanConns = new Map<string, { ws: WebSocket; to: string }>();
   let nextId = 0;
 
   const router = new CloudRouter({
     hooks: {
       send: (connId, frame) => {
+        const wan = wanConns.get(connId);
+        if (wan) {
+          // 下行解信封：{to,from,data:{t:"wan",frame:"<明文帧JSON文本>"}} → 明文帧
+          try {
+            const env = JSON.parse(frame) as { data?: { t?: string; frame?: unknown } };
+            if (env?.data?.t === "wan" && typeof env.data.frame === "string") {
+              wan.ws.send(env.data.frame);
+              return;
+            }
+          } catch { /* 非信封帧按原样发 */ }
+        }
         const ws = socks.get(connId);
         if (ws?.readyState === WebSocket.OPEN) ws.send(frame);
       },
       close: (connId, code, reason) => {
+        wanConns.get(connId)?.ws.close(code, reason);
         socks.get(connId)?.close(code, reason);
       },
     },
@@ -70,11 +86,12 @@ export function startCloudServer(port: number, token: string, extraPorts: number
     const url = new URL(req.url ?? "/", "http://localhost");
     const dev = url.searchParams.get("dev") ?? "";
     const rk = url.searchParams.get("rk") ?? ""; // relay 连接上报公钥（发现帧下发，浏览器无需预知）
+    const okToken = (url.searchParams.get("token") ?? "") === token;
+    // #373 /wan：手表透传通道，to=目标 relay dev（rl-*）为该连接固定投递目标
+    const isWan = url.pathname === "/wan";
+    const wanTo = url.searchParams.get("to") ?? "";
     if (
-      url.pathname !== "/cloud" ||
-      (url.searchParams.get("token") ?? "") !== token ||
-      dev.length < 1 ||
-      dev.length > 64
+      !(okToken && dev.length >= 1 && dev.length <= 64 && (url.pathname === "/cloud" || (isWan && wanTo.length >= 1 && wanTo.length <= 64)))
     ) {
       console.log(`[cloud-bridge] reject upgrade from=${req.socket.remoteAddress} path=${url.pathname}`);
       socket.write("HTTP/1.1 401 Unauthorized\r\n\r\n");
@@ -84,6 +101,7 @@ export function startCloudServer(port: number, token: string, extraPorts: number
     wss.handleUpgrade(req, socket, head, (ws) => {
       const connId = `c${++nextId}`;
       socks.set(connId, ws);
+      if (isWan) wanConns.set(connId, { ws, to: wanTo });
       (ws as HbWs).isAlive = true;
       ws.on("pong", () => {
         (ws as HbWs).isAlive = true;
@@ -91,10 +109,16 @@ export function startCloudServer(port: number, token: string, extraPorts: number
       ws.on("error", () => undefined);
       ws.on("close", () => {
         socks.delete(connId);
+        wanConns.delete(connId);
         router.unregister(connId);
       });
       ws.on("message", (data, isBinary) => {
         if (isBinary) return;
+        if (isWan) {
+          // 上行包信封：明文帧 → {to:rd, data:{t:"wan",from,frame}}
+          router.handleFrame(connId, JSON.stringify({ to: wanTo, data: { t: "wan", from: dev, frame: data.toString() } }));
+          return;
+        }
         router.handleFrame(connId, data.toString());
       });
       router.register(connId, dev, rk || undefined);

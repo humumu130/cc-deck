@@ -25,6 +25,8 @@ interface CloudFrame {
 export class CloudClient {
   private ws: WebSocket | null = null;
   private phones = new Map<string, PhoneState>();
+  // #373 /wan 手表明文透传设备（wt-*）：桥可信通道，无密钥对；状态机与 phones 同构
+  private wanWatches = new Map<string, { lastSeq: number; active: boolean }>();
   private unpairedNotice = new Map<string, number>();
   // 配对码爆破限流：10 分钟有效窗口内连续错码的 dev 直接静默丢弃（码空间 10^6）
   private pairFails = new Map<string, { n: number; until: number }>();
@@ -76,7 +78,10 @@ export class CloudClient {
         const devs = [...this.resumeOnOpen];
         this.resumeOnOpen.clear();
         console.log(`[cloud] auto-resume ${devs.length} device(s) after bridge reconnect: ${devs.join(",")}`);
-        for (const dev of devs) this.resumePhone(dev, this.phones.get(dev)?.lastSeq ?? 0);
+        for (const dev of devs) {
+          if (this.phones.has(dev)) this.resumePhone(dev, this.phones.get(dev)?.lastSeq ?? 0);
+          else if (this.wanWatches.has(dev)) this.resumeWan(dev, this.wanWatches.get(dev)?.lastSeq ?? 0);
+        }
       }
     });
     ws.on("message", (raw) => {
@@ -91,6 +96,10 @@ export class CloudClient {
       if (this.ws === ws) {
         console.log(`[cloud] bridge disconnected ${this.tag}, retry in ${this.delayMs}ms`);
         for (const [dev, st] of this.phones) {
+          if (st.active) this.resumeOnOpen.add(dev);
+          st.active = false;
+        }
+        for (const [dev, st] of this.wanWatches) {
           if (st.active) this.resumeOnOpen.add(dev);
           st.active = false;
         }
@@ -222,11 +231,17 @@ export class CloudClient {
     }
     // 桥告知目标手机不在线：标记下线等对方 ping/hello 恢复，避免持续向虚空加密下发
     if (f.type === "ROUTE_MISS" && f.to) {
-      const st = this.phones.get(f.to);
+      const st = this.phones.get(f.to) ?? this.wanWatches.get(f.to);
       if (st?.active) {
         st.active = false;
         console.log(`[cloud] route miss dev=${f.to}, mark inactive`);
       }
+      return;
+    }
+    // #373 /wan 手表明文透传信封（桥可信通道）：{t:"wan", from, frame:"<relay协议明文JSON文本>"}
+    const wanEnv = f.data as { t?: unknown; frame?: unknown } | undefined;
+    if (f.from && wanEnv && typeof wanEnv === "object" && wanEnv.t === "wan" && typeof wanEnv.frame === "string") {
+      this.handleWan(f.from, wanEnv.frame);
       return;
     }
     // 网页端等远端设备的一次性配对：data 为明文 {t:"pair_req", code, pubkey}（未配对设备
@@ -319,6 +334,76 @@ export class CloudClient {
       // 推进 lastSeq：桥闪断后 auto-resume 按 seq 补发，服务端必须知道已推到哪
       // （否则只能等设备 ping 上报，回补会重复下发已收事件）
       if (st.active && this.sendSealed(dev, env)) st.lastSeq = env.seq;
+    }
+    for (const [dev, st] of this.wanWatches) {
+      if (st.active) {
+        this.sendWan(dev, env);
+        st.lastSeq = env.seq;
+      }
+    }
+  }
+
+  // ---------- #373 /wan 手表明文透传 ----------
+  private sendWan(dev: string, obj: unknown): void {
+    this.send({ to: dev, data: { t: "wan", frame: JSON.stringify(obj) } });
+  }
+
+  // 手表上行帧：hello（连接/重连，带 last_seq 增量恢复）或 Command（ACK 明文信封回发）
+  private handleWan(dev: string, frameText: string): void {
+    if (!dev.startsWith("wt-")) {
+      console.log(`[cloud] wan frame from non-watch dev=${dev}, drop`);
+      return;
+    }
+    let obj: unknown;
+    try {
+      obj = JSON.parse(frameText);
+    } catch {
+      this.sendWan(dev, { type: "COMMAND_ACK", command_id: "?", ok: false, error: "bad json" });
+      return;
+    }
+    const o = obj as { t?: unknown; last_seq?: unknown };
+    if (o && o.t === "hello") {
+      this.resumeWan(dev, typeof o.last_seq === "number" ? o.last_seq : 0);
+      return;
+    }
+    const cmd = obj as Command;
+    if (typeof cmd === "object" && cmd && typeof cmd.command_id === "string" && typeof cmd.type === "string") {
+      const ack: CommandAckPayload = this.mgr.handleCommand(cmd, `wan-${dev}`);
+      this.sendWan(dev, { type: "COMMAND_ACK", ...ack });
+      return;
+    }
+    this.sendWan(dev, { type: "COMMAND_ACK", command_id: "?", ok: false, error: "invalid command shape" });
+  }
+
+  // 手表恢复：与 resumePhone 同构（缓冲内增量补发 / 全量 SNAPSHOT+流式日志），明文信封下发
+  private resumeWan(dev: string, lastSeq: number): void {
+    const known = this.wanWatches.has(dev);
+    this.wanWatches.set(dev, { lastSeq, active: true });
+    if (!known) console.log(`[cloud] watch ${dev} online via wan`);
+    const replay = lastSeq > 0 && !this.bus.isBeyondBuffer(lastSeq) ? this.bus.replayAfter(lastSeq) : null;
+    if (replay && replay.length <= 200) {
+      for (const env of replay) this.sendWan(dev, env);
+      return;
+    }
+    const snapSeq = this.bus.lastSeq();
+    const snapshot: Envelope = {
+      seq: snapSeq,
+      session_id: "",
+      ts: Date.now(),
+      type: "SNAPSHOT",
+      payload: { sessions: this.mgr.snapshot(), logs: {}, server_time: Date.now() },
+    };
+    this.sendWan(dev, snapshot);
+    for (const [sid, logs] of Object.entries(this.mgr.snapshotLogs())) {
+      for (const entry of logs) {
+        this.sendWan(dev, {
+          seq: snapSeq,
+          session_id: sid,
+          ts: entry.ts ?? Date.now(),
+          type: "SESSION_LOG",
+          payload: entry,
+        } as Envelope);
+      }
     }
   }
 

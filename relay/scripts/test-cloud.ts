@@ -396,6 +396,29 @@ assert(
   "web 端命令密文往返收到 ACK",
 );
 
+// ---------- #373 /wan 手表明文透传：桥信封 → relay hello/SNAPSHOT → 命令 ACK → 实时事件 ----------
+{
+  const watchWs = new WebSocket(`ws://127.0.0.1:${BRIDGE_PORT}/wan?token=${BRIDGE_TOKEN}&dev=wt-test1&to=${identity.relayDev}`);
+  const wInbox: Record<string, unknown>[] = [];
+  watchWs.on("message", (raw) => {
+    try { wInbox.push(JSON.parse(String(raw))); } catch {}
+  });
+  watchWs.on("error", () => undefined);
+  await new Promise<void>((r) => watchWs.on("open", r));
+  // 错 token 的 /wan 必须被 401 拒绝
+  const badWs = new WebSocket(`ws://127.0.0.1:${BRIDGE_PORT}/wan?token=wrong&dev=wt-x&to=${identity.relayDev}`);
+  await new Promise<void>((r) => badWs.on("error", () => r(undefined)));
+  badWs.close?.();
+  assert(true, "错 token /wan 连接被拒");
+  watchWs.send(JSON.stringify({ t: "hello", last_seq: 0 }));
+  assert(await waitFor(() => wInbox.some((m) => m.type === "SNAPSHOT")), "wan 手表 hello 收到明文 SNAPSHOT");
+  watchWs.send(JSON.stringify({ command_id: "wan-cmd-1", type: "COMMAND_REFRESH_TODOS", payload: { session_id: seedId }, ts: Date.now() }));
+  assert(await waitFor(() => wInbox.some((m) => m.type === "COMMAND_ACK" && (m as { command_id?: string }).command_id === "wan-cmd-1")), "wan 命令明文往返 ACK");
+  bus.emit(seedId, "SESSION_UPDATED", { status: "WORKING", action_summary: "wan 实时事件测试", stats: { files_changed: 0, lines_added: 0, lines_deleted: 0 } });
+  assert(await waitFor(() => wInbox.some((m) => m.type === "SESSION_UPDATED")), "wan 收到实时事件流");
+  watchWs.close();
+}
+
 // ---------- 清理 ----------
 phoneWs4.close();
 webWs.close();

@@ -36,7 +36,7 @@ export default {
         },
       });
     }
-    if (url.pathname !== "/cloud" && url.pathname !== "/cloud-poll") {
+    if (url.pathname !== "/cloud" && url.pathname !== "/cloud-poll" && url.pathname !== "/wan") {
       return new Response("not found", { status: 404 });
     }
     const tok = url.searchParams.get("token") ?? "";
@@ -82,7 +82,13 @@ export class RouterDO extends DurableObject {
         }
         for (const ws of this.ctx.getWebSockets(connId)) {
           try {
-            ws.send(frame);
+            // #373 下行解信封：目标为 /wan 手表时 {to,from,data:{t:"wan",frame}} → 明文 frame
+            let out = frame;
+            try {
+              const env = JSON.parse(frame) as { data?: { t?: string; frame?: unknown } };
+              if (env?.data?.t === "wan" && typeof env.data.frame === "string") out = env.data.frame;
+            } catch { /* 非信封帧原样发 */ }
+            ws.send(out);
           } catch (e) {
             // 目标连接濒死时 send 会抛；不兜住会沿 webSocketMessage 冒泡，
             // 把发送方连接一起 1011 踢掉（桥无缓冲，此帧只能丢弃）
@@ -119,7 +125,10 @@ export class RouterDO extends DurableObject {
       // 也没必要向任意访客暴露在线设备元数据
       return Response.json({ ok: true, bridge: "cloudflare", devices: this.router.devs().length });
     }
-    if (url.pathname !== "/cloud" && url.pathname !== "/cloud-poll") return new Response("not found", { status: 404 });
+    if (url.pathname !== "/cloud" && url.pathname !== "/cloud-poll" && url.pathname !== "/wan") return new Response("not found", { status: 404 });
+    // #373 /wan 手表明文透传：to=目标 relay dev 必填（该连接的固定投递目标）
+    const wanTo = url.pathname === "/wan" ? url.searchParams.get("to") ?? "" : "";
+    if (url.pathname === "/wan" && (wanTo.length < 1 || wanTo.length > 64)) return new Response("bad to", { status: 400 });
     const dev = url.searchParams.get("dev") ?? "";
     const rk = url.searchParams.get("rk") ?? ""; // relay 连接上报公钥（发现帧下发；浏览器连接不带）
     if (dev.length < 1 || dev.length > 64) return new Response("bad dev", { status: 400 });
@@ -187,7 +196,7 @@ export class RouterDO extends DurableObject {
     const pair = new WebSocketPair();
     this.ctx.acceptWebSocket(pair[1], [dev, connId]);
     // rk 进 attachment：DO 休眠唤醒 rehydrate 重建路由表时带回，发现帧不因唤醒丢公钥
-    pair[1].serializeAttachment(JSON.stringify({ dev, connId, rk, ip: req.headers.get("CF-Connecting-IP") }));
+    pair[1].serializeAttachment(JSON.stringify({ dev, connId, rk, wanTo: wanTo || undefined, ip: req.headers.get("CF-Connecting-IP") }));
     this.router.register(connId, dev, rk || undefined);
     return new Response(null, { status: 101, webSocket: pair[0] });
   }
@@ -247,11 +256,11 @@ export class RouterDO extends DurableObject {
   // 本地 workerd 的 webSocketMessage 里 ws.tags 未暴露（undefined），
   // 但 serializeAttachment/deserializeAttachment 可用——connId 存附件；
   // getWebSockets(tag) 的 tag 过滤仍然有效（顶替/定向发送用它）
-  private attachOf(ws: WebSocket): { dev?: string; connId?: string; rk?: string; ip?: string } | undefined {
+  private attachOf(ws: WebSocket): { dev?: string; connId?: string; rk?: string; ip?: string; wanTo?: string } | undefined {
     const raw = (ws as { deserializeAttachment?: () => unknown }).deserializeAttachment?.();
     if (typeof raw !== "string") return undefined;
     try {
-      return JSON.parse(raw) as { dev?: string; connId?: string; rk?: string; ip?: string };
+      return JSON.parse(raw) as { dev?: string; connId?: string; rk?: string; ip?: string; wanTo?: string };
     } catch {
       return undefined;
     }
@@ -277,6 +286,14 @@ export class RouterDO extends DurableObject {
     if (!this.rateOk(a.ip ?? a.dev ?? "?")) {
       try { ws.close(4291, "rate limited"); } catch { /* 已在关闭流程 */ }
       this.router.unregister(a.connId);
+      return;
+    }
+    // #373 /wan 上行包信封：手表明文帧 → {to:wanTo, data:{t:"wan",from,frame}}
+    if (a.wanTo) {
+      this.router.handleFrame(
+        a.connId,
+        JSON.stringify({ to: a.wanTo, data: { t: "wan", from: a.dev, frame: message } }),
+      );
       return;
     }
     this.router.handleFrame(a.connId, message);
