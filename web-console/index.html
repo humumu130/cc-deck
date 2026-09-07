@@ -622,8 +622,23 @@
   .todo-del:hover { color: var(--dim); background: var(--bg-soft); }
   /* #279④ #NNN 跳转落点闪高 1.5s（对齐手机 todoFlash） */
   .todo-item.flash { background: rgba(217,119,87,.14); border-radius: 8px; }
+  /* #374 拖动排序：未完成条目可拖（grip 常隐 hover 显） */
+  .todo-item[data-odr] { cursor: grab; }
+  .todo-grip { flex: none; color: var(--faint); opacity: .4; font-size: 12px; }
+  .todo-item[data-odr]:hover .todo-grip { opacity: 1; color: var(--dim); }
+  .todo-item.dragging { opacity: .55; background: var(--bg-soft); border-radius: 8px; }
   /* ---------- 定时任务（详情页"定时" tab） ---------- */
-  .cron-item { display: flex; align-items: flex-start; gap: 9px; padding: 9px 2px; border-bottom: 1px solid var(--border); }
+  .cron-item { display: flex; align-items: flex-start; gap: 9px; padding: 9px 2px; border-bottom: 1px solid var(--border); cursor: pointer; }
+  /* #376 cron 展开态：原文小字 + prompt 全文（折叠隐藏） */
+  .cron-raw { display: none; font-family: var(--mono); font-size: 10.5px; color: var(--faint); margin-top: 2px; }
+  .cron-prompt { display: none; font-size: 12px; line-height: 1.55; color: var(--dim); margin-top: 5px; white-space: pre-wrap; }
+  .cron-item.open .cron-raw, .cron-item.open .cron-prompt { display: block; }
+  /* #375 分组跳转 chips（todo-head 内） */
+  .todo-jump {
+    flex: none; border: 1px solid var(--border); background: transparent; color: var(--dim);
+    font-size: 11px; line-height: 1; border-radius: 6px; padding: 3px 6px; cursor: pointer;
+  }
+  .todo-jump:hover { color: var(--text); border-color: var(--hov); }
   .cron-item:last-child { border-bottom: none; }
   .cron-mark { flex: none; color: var(--working); font-size: 13px; padding-top: 1px; }
   .cron-item.paused .cron-mark { color: var(--faint); }
@@ -2809,8 +2824,16 @@ function todosTabHtml(s) {
   const doneNote = doneList.length < doneAll.length
     ? (doneHasTs ? " · 近1天" + (doneWindow.length > 15 ? "·最新15" : "") : " · 最新15")
     : "";
-  const ip = all.filter((t) => t.status === "in_progress");
-  const pd = all.filter((t) => t.status === "pending");
+  // #374 拖动排序：未完成区（进行中+待办）按本地 todoOrder 重排（空 = relay 原序）
+  const open0 = all.filter((t) => t.status !== "completed");
+  const ord = todoOrder.get(s.session_id);
+  let open = [...open0];
+  if (ord && ord.length) {
+    const rank = new Map(ord.map((k, i) => [k, i]));
+    open.sort((a, b) => (rank.get(todoKeyOf(a)) ?? 999) - (rank.get(todoKeyOf(b)) ?? 999));
+  }
+  const ip = open.filter((t) => t.status === "in_progress");
+  const pd = open.filter((t) => t.status === "pending");
   // 分组顺序对齐手机端：已完成置顶，进行中/待办在下方
   const groups = [
     ["已完成 " + doneList.length + "/" + doneAll.length + doneNote, doneList, "dn"],
@@ -2820,13 +2843,21 @@ function todosTabHtml(s) {
   let html =
     '<div class="todo-head"><div class="todo-bar"><i style="width:' + Math.round((doneAll.length / all.length) * 100) + '%"></i></div>' +
     '<span class="todo-pct">' + doneAll.length + " / " + all.length + '</span>' +
+    // #375 分组跳转 chips：列表长时直达三段（组空不亮）
+    (doneList.length ? '<button class="todo-jump" data-sec="dn" title="直达已完成">✓</button>' : "") +
+    (ip.length ? '<button class="todo-jump" data-sec="ip" title="直达进行中">◐</button>' : "") +
+    (pd.length ? '<button class="todo-jump" data-sec="pd" title="直达待办">○</button>' : "") +
     '<button id="todoRefresh" class="ghost" title="重读 CLI 任务存储"><span class="tr-ico">↻</span> 刷新</button></div>';
   for (const [label, items, cls] of groups) {
     if (!items.length) continue;
-    html += '<div class="todo-group"><div class="todo-gt ' + cls + '">' + label + "</div>";
+    html += '<div class="todo-group" data-sec="' + cls + '"><div class="todo-gt ' + cls + '">' + label + "</div>";
     for (const t of items) {
       const mark = t.status === "completed" ? "✓" : t.status === "in_progress" ? "◐" : "○";
-      html += '<div class="todo-item ' + t.status + '"' + (t.id != null ? ' data-tid="' + t.id + '"' : "") + '>' +
+      const dragAttrs = t.status === "completed"
+        ? ""
+        : ' draggable="true" data-odr="' + escapeHtml(todoKeyOf(t)) + '"';
+      html += '<div class="todo-item ' + t.status + '"' + (t.id != null ? ' data-tid="' + t.id + '"' : "") + dragAttrs + '>' +
+        (t.status !== "completed" ? '<span class="todo-grip" title="拖动调整执行优先级">⠿</span>' : "") +
         '<span class="todo-ck">' + mark + '</span><span class="todo-tx">' +
         escapeHtml(t.status === "in_progress" && t.active_form ? t.active_form : t.content) + "</span>" +
         '<button class="todo-del" data-c="' + escapeHtml(t.content) + '" title="隐藏该条">✕</button></div>';
@@ -2837,17 +2868,40 @@ function todosTabHtml(s) {
 }
 
 // 定时任务 tab（详情页"定时"，与手机端 cron 面板同构）
+// #376 cron 表达式人话（与手机端 cronDesc 同逻辑；未识别返回 null 走原文+下次时间）
+function cronDesc(sch0) {
+  const sch = String(sch0 || "").trim();
+  if (sch === "@daily" || sch === "@midnight") return "每天 00:00";
+  if (sch === "@hourly") return "每小时";
+  if (sch === "@weekly") return "每周日";
+  const m = /^(\S+) (\S+) (\S+) (\S+) (\S+)$/.exec(sch);
+  if (!m) return null;
+  const [min, hour, dom, mon, dow] = [m[1], m[2], m[3], m[4], m[5]];
+  const p2 = (x) => String(x).padStart(2, "0");
+  if (min.startsWith("*/") && hour === "*" && dom === "*" && mon === "*" && dow === "*") return "每 " + min.slice(2) + " 分钟";
+  if (min === "*" && hour.startsWith("*/") && dom === "*" && mon === "*" && dow === "*") return "每 " + hour.slice(2) + " 小时";
+  if (/^\d+$/.test(min) && /^\d+$/.test(hour) && dom === "*" && mon === "*" && dow === "*") return "每天 " + p2(hour) + ":" + p2(min);
+  if (/^\d+$/.test(min) && /^\d+$/.test(hour) && dom === "*" && mon === "*" && /^\d+$/.test(dow)) return "每周" + ["日", "一", "二", "三", "四", "五", "六"][Number(dow) % 7] + " " + p2(hour) + ":" + p2(min);
+  if (/^\d+$/.test(min) && /^\d+$/.test(hour) && /^\d+$/.test(dom) && mon === "*" && dow === "*") return "每月 " + dom + " 日 " + p2(hour) + ":" + p2(min);
+  return null;
+}
 function cronTabHtml(s) {
   const tasks = s.cron_tasks ?? [];
   if (!tasks.length) return '<div class="todo-empty">暂无定时任务<br><span style="font-size:12px">CLI 里创建 durable 定时任务后，这里 30s 内显示</span></div>';
-  return tasks.map((t) =>
-    '<div class="cron-item' + (t.paused ? " paused" : "") + '">' +
+  // #376：meta 行配人话频率；点条目展开 prompt 全文（.open）
+  return tasks.map((t) => {
+    const desc = cronDesc(t.schedule);
+    return '<div class="cron-item' + (t.paused ? " paused" : "") + '" title="点击展开/收起">' +
       '<span class="cron-mark">' + (t.paused ? "⏸" : "⏰") + "</span>" +
       '<div class="cron-main"><div class="cron-name">' + escapeHtml(t.name) + "</div>" +
-      '<div class="cron-meta">' + escapeHtml(t.schedule) +
+      '<div class="cron-meta">' + escapeHtml(desc ?? t.schedule) +
         (t.recurring === false ? " · 一次性" : "") +
         (t.next_run_at ? " · 下次 " + fmtDT(t.next_run_at) : "") +
-      "</div></div></div>").join("");
+      "</div>" +
+      (desc ? '<div class="cron-raw">cron: ' + escapeHtml(t.schedule) + "</div>" : "") +
+      '<div class="cron-prompt">' + escapeHtml(t.prompt || "") + "</div>" +
+    "</div></div>";
+  }).join("");
 }
 
 function escapeHtml(s) {
@@ -4102,7 +4156,71 @@ $("timeline").addEventListener("click", (ev) => {
   if (fp) { openFpathPop(fp.dataset.p || "", ev.clientX, ev.clientY); return; }
   const del = ev.target.closest(".todo-del");
   if (del) { hideTodo(del.dataset.c); return; }
+  // #375 分组跳转 / #376 cron 展开收起
+  const jump = ev.target.closest(".todo-jump");
+  if (jump) {
+    $("timeline").querySelector('.todo-group[data-sec="' + jump.dataset.sec + '"]')?.scrollIntoView({ behavior: "smooth", block: "start" });
+    return;
+  }
+  const cron = ev.target.closest(".cron-item");
+  if (cron && !ev.target.closest(".todo-del")) cron.classList.toggle("open");
 });
+// #374 任务拖动排序（未完成区）：HTML5 DnD 委托——drop 换位本地重排 + 注入调序指令
+const todoKeyOf = (t) => String(t.id ?? t.content);
+const todoOrder = new Map(); // sid -> 未完成 key 顺序（会话级内存态，relay 回流后一致）
+let dragOdrKey = "";
+$("timeline").addEventListener("dragstart", (ev) => {
+  const row = ev.target.closest(".todo-item[data-odr]");
+  if (!row) return;
+  dragOdrKey = row.dataset.odr;
+  row.classList.add("dragging");
+  try { ev.dataTransfer.setData("text/plain", dragOdrKey); } catch {}
+  ev.dataTransfer.effectAllowed = "move";
+});
+$("timeline").addEventListener("dragend", (ev) => {
+  const row = ev.target.closest && ev.target.closest(".todo-item");
+  if (row) row.classList.remove("dragging");
+});
+$("timeline").addEventListener("dragover", (ev) => {
+  const row = ev.target.closest(".todo-item[data-odr]");
+  if (!row || !dragOdrKey || row.dataset.odr === dragOdrKey) return;
+  ev.preventDefault();
+  ev.dataTransfer.dropEffect = "move";
+});
+$("timeline").addEventListener("drop", (ev) => {
+  const row = ev.target.closest(".todo-item[data-odr]");
+  if (!row || !dragOdrKey || row.dataset.odr === dragOdrKey) return;
+  ev.preventDefault();
+  const hit = selSession();
+  if (hit) reorderTodo(hit.s, dragOdrKey, row.dataset.odr);
+  dragOdrKey = "";
+});
+function reorderTodo(s, fromKey, toKey) {
+  if (!s) return;
+  const hidden = todoHiddenOf(s.session_id);
+  const openList = (s.todos ?? []).filter((t) => t.status !== "completed" && !hidden.includes(t.content));
+  const cur = todoOrder.get(s.session_id);
+  const order = cur && cur.length ? [...cur] : openList.map(todoKeyOf);
+  const fi = order.indexOf(fromKey), ti = order.indexOf(toKey);
+  if (fi < 0 || ti < 0 || fi === ti) return;
+  order.splice(ti, 0, ...order.splice(fi, 1));
+  todoOrder.set(s.session_id, order);
+  renderDetail();
+  // 注入调序指令：CLI 重新 TodoWrite + 按新顺序取任务（外部会话忙时 relay 自动排队）
+  const ctx = selSession()?.ctx;
+  const byKey = new Map(openList.map((t) => [todoKeyOf(t), t]));
+  const list = order.filter((k) => byKey.has(k)).map((k) => {
+    const t = byKey.get(k);
+    return (t.status === "in_progress" ? "[进行中] " : "") + t.content;
+  });
+  if (list.length < 2) return;
+  const text =
+    "【任务优先级已由用户手动调整】请立即用 TodoWrite 按新顺序重写未完成任务清单（已完成条目保持不动），" +
+    "之后严格按此顺序执行——从第 1 条未完成任务开始。新顺序：\n" +
+    list.map((x, n) => n + 1 + ". " + x).join("\n");
+  if (ctx) sendCommandTo(ctx, s.external ? "COMMAND_EXT_INPUT" : "COMMAND_MESSAGE", { session_id: s.session_id, text });
+  toast("已发送调序指令，CLI 将按新顺序执行");
+}
 
 // #326 路径点击浮窗：桌面壳（window.ccDeck.openPath，Tauri/Electron 同形）给
 // 打开文件/所在目录两项；浏览器只有复制。点外部收起
