@@ -85,16 +85,16 @@
     display: flex; flex-direction: column; height: 100vh; overflow: hidden;
   }
 
-  /* ---------- 顶栏（窄条，置于侧栏顶部，会话区顶到视口顶） ---------- */
-  /* #344：exe 无边框窗口下兼任自绘标题栏（data-tauri-drag-region 拖拽/双击最大化，
-     窗口控制钮仅桌面壳显示）；去掉 backdrop-filter——动画/滚动期间反复重合成是
-     设置面板开合掉帧的帮凶，改高不透明度纯色保证可读性 */
+  /* ---------- 顶栏（#344 修正：拉通窗口全宽的自绘标题栏——网易云式融合） ---------- */
+  /* body 为 column：header 全宽横条（品牌/统计居左，连接+主题+窗口钮居右），
+     main 占余高。exe 无边框下 header 即拖拽区（data-tauri-drag-region）；
+     去 backdrop-filter（重合成掉帧帮凶），纯色底 */
   header {
     display: flex; align-items: center; gap: 9px;
-    padding: calc(12px + env(safe-area-inset-top)) 16px 12px;
+    padding: calc(10px + env(safe-area-inset-top)) 16px 10px;
     background: var(--bg-soft);
     border-bottom: 1px solid var(--border);
-    flex: none;
+    flex: none; width: 100%;
   }
   #winBtns { display: none; align-items: center; margin-right: -8px; }
   #winBtns button {
@@ -179,8 +179,10 @@
   }
   .gp-head button { border: none; background: none; color: var(--dim); font-size: 15px; cursor: pointer; padding: 4px 8px; border-radius: 8px; }
   .gp-head button:hover { color: var(--text); background: var(--hov); }
-  .gp-card { background: var(--panel); border: 1px solid var(--border); border-radius: 14px; padding: 2px 2px 6px; margin-bottom: 9px; }
-  .gp-sec { font-size: 11px; color: var(--dim); letter-spacing: .06em; padding: 9px 10px 3px; }
+  /* #352 分区去卡片框：直接落在面板底上，分区标题上加分隔线（首区免） */
+  .gp-card { background: none; border: none; border-radius: 0; padding: 0 0 4px; margin-bottom: 6px; }
+  .gp-card + .gp-card .gp-sec { border-top: 1px solid var(--border); margin: 0 4px; padding-top: 10px; }
+  .gp-sec { font-size: 11px; color: var(--dim); letter-spacing: .06em; padding: 9px 10px 5px; }
   .gp-row {
     display: flex; align-items: center; gap: 8px;
     font-size: 12.5px; color: var(--text); padding: 7px 10px; border-radius: 9px; cursor: pointer;
@@ -256,8 +258,11 @@
   .seg button { border: none; border-radius: 0; padding: 7px 13px; background: transparent; color: var(--dim); font-size: 12.5px; font-weight: 500; }
   .seg button + button { border-left: 1px solid var(--border); }
   .seg button.on { background: var(--grad); color: #fff; font-weight: 600; }
-  #pairBox { display: none; align-items: center; gap: 8px; flex-wrap: wrap; }
-  #pairBox input { width: 150px; letter-spacing: 3px; font-size: 15px; text-align: center; }
+  /* #352 配对区去框化：码以大号等宽字平铺（点即复制），无输入框/卡片底 */
+  #pairBox { display: none; align-items: center; gap: 12px; flex-wrap: wrap; padding: 2px 10px; }
+  #pairCode { border: none; background: none; width: auto; letter-spacing: 6px; font-size: 22px; font-weight: 700; font-family: var(--mono); color: var(--text); text-align: left; padding: 2px 0; cursor: pointer; }
+  #pairCode:focus { outline: none; }
+  #pairBox .primary, #pairBox button { border: none; background: none; color: var(--brand); font-weight: 600; box-shadow: none; padding: 4px 2px; }
   /* #325 扫码登录浮层：居中卡片 + 二维码画布 + 等待/成功态 */
   #loginQrPop {
     position: fixed; inset: 0; z-index: 70; display: none;
@@ -1027,36 +1032,37 @@
 </head>
 <body>
 
+<header data-tauri-drag-region>
+  <div class="brand" data-tauri-drag-region>
+    <div class="logo"><svg viewBox="0 0 24 24" fill="none"><defs><linearGradient id="lgA" x1="4" y1="4" x2="20" y2="20" gradientUnits="userSpaceOnUse"><stop stop-color="#E8985F"/><stop offset="1" stop-color="#C96442"/></linearGradient></defs><g><rect x="3.4" y="6.2" width="11" height="14" rx="2.8" transform="rotate(-11 8.9 13.2)" stroke="url(#lgA)" stroke-opacity=".5" stroke-width="1.5"/><rect x="9.6" y="5.4" width="11" height="14" rx="2.8" transform="rotate(10 15.1 12.4)" stroke="url(#lgA)" stroke-opacity=".85" stroke-width="1.5"/><rect x="6.5" y="4.2" width="11.4" height="15.2" rx="3" fill="url(#lgA)"/><path d="M9.2 8.7h6" stroke="#171220" stroke-width="1.7" stroke-linecap="round"/><path d="M9.2 12.2h4.2" stroke="#171220" stroke-opacity=".55" stroke-width="1.7" stroke-linecap="round"/></g></svg></div>
+    <div data-tauri-drag-region>
+      <h1 data-tauri-drag-region>CC Deck</h1>
+      <div id="runhint" data-tauri-drag-region>连接中…</div>
+    </div>
+  </div>
+  <div class="spacer" data-tauri-drag-region></div>
+  <div id="connChip" title="服务器状态（点击查看列表）"><i></i><span id="connText">未连接</span></div>
+  <button id="themeBtn" title="深浅色切换">☀️</button>
+  <div id="winBtns" style="display:none">
+    <button data-w="min" title="最小化">─</button>
+    <button data-w="max" title="最大化">▢</button>
+    <button data-w="close" title="关闭">✕</button>
+  </div>
+</header>
+
+<div id="rhPop">
+  <div class="rh-row"><i style="background:var(--working)"></i>working</div>
+  <div class="rh-row"><i style="background:var(--waiting)"></i>waiting</div>
+  <div class="rh-row"><i style="background:var(--error)"></i>error</div>
+  <div class="rh-row"><i style="background:var(--done)"></i>done</div>
+</div>
+
+<div id="srvPop"></div>
+
 <main>
   <button id="sideToggle" title="收起 / 展开会话列表">‹</button>
   <div id="side">
     <div id="sideGrip" title="拖拽调整宽度"></div>
-    <header data-tauri-drag-region>
-      <div class="brand" data-tauri-drag-region>
-        <div class="logo"><svg viewBox="0 0 24 24" fill="none"><defs><linearGradient id="lgA" x1="4" y1="4" x2="20" y2="20" gradientUnits="userSpaceOnUse"><stop stop-color="#E8985F"/><stop offset="1" stop-color="#C96442"/></linearGradient></defs><g><rect x="3.4" y="6.2" width="11" height="14" rx="2.8" transform="rotate(-11 8.9 13.2)" stroke="url(#lgA)" stroke-opacity=".5" stroke-width="1.5"/><rect x="9.6" y="5.4" width="11" height="14" rx="2.8" transform="rotate(10 15.1 12.4)" stroke="url(#lgA)" stroke-opacity=".85" stroke-width="1.5"/><rect x="6.5" y="4.2" width="11.4" height="15.2" rx="3" fill="url(#lgA)"/><path d="M9.2 8.7h6" stroke="#171220" stroke-width="1.7" stroke-linecap="round"/><path d="M9.2 12.2h4.2" stroke="#171220" stroke-opacity=".55" stroke-width="1.7" stroke-linecap="round"/></g></svg></div>
-        <div data-tauri-drag-region>
-          <h1 data-tauri-drag-region>CC Deck</h1>
-          <div id="runhint" data-tauri-drag-region>连接中…</div>
-        </div>
-      </div>
-      <div class="spacer" data-tauri-drag-region></div>
-      <div id="connChip" title="服务器状态（点击查看列表）"><i></i><span id="connText">未连接</span></div>
-      <button id="themeBtn" title="深浅色切换">☀️</button>
-      <div id="winBtns" style="display:none">
-        <button data-w="min" title="最小化">─</button>
-        <button data-w="max" title="最大化">▢</button>
-        <button data-w="close" title="关闭">✕</button>
-      </div>
-    </header>
-
-    <div id="rhPop">
-      <div class="rh-row"><i style="background:var(--working)"></i>working</div>
-      <div class="rh-row"><i style="background:var(--waiting)"></i>waiting</div>
-      <div class="rh-row"><i style="background:var(--error)"></i>error</div>
-      <div class="rh-row"><i style="background:var(--done)"></i>done</div>
-    </div>
-
-    <div id="srvPop"></div>
 
     <aside id="gearPop">
       <div class="gp-head"><b>设置</b><button id="gearClose" title="收起">✕</button></div>
