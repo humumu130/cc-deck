@@ -402,6 +402,9 @@ export class Bridge {
       this.ensureQueuePoll();
     }
     this.correctEscMark(this.extId(ev), ev);
+    // #363 任何新事件都意味着压缩已结束（压缩后继续回合 → 新 prompt/工具事件）；
+    // PreCompact 自身是置位事件不清
+    if (ev.event !== "PreCompact") this.mgr.setExternalCompacting(this.extId(ev), false);
     return decision;
   }
 
@@ -477,7 +480,7 @@ export class Bridge {
         this.turnShape.delete(id);
         continue;
       }
-      if (st.status !== "WORKING" || this.pending.has(id)) continue;
+      if (st.status !== "WORKING" || st.compacting || this.pending.has(id)) continue;
       const last = this.lastGrow.get(id) ?? 0;
       const shape = this.turnShape.get(id) ?? "gen";
       if (!last || now - last <= (shape === "end" ? idleMs : 600_000)) continue;
@@ -502,7 +505,7 @@ export class Bridge {
     for (const s of this.mgr.snapshot()) {
       if (!s.external || s.status !== "WORKING") continue;
       const id = s.session_id;
-      if (this.noHookIds.has(id) || this.pending.has(id)) continue; // 无 hook 会话有专属扫描；审批挂起中不动
+      if (this.noHookIds.has(id) || s.compacting || this.pending.has(id)) continue; // 无 hook 会话有专属扫描；压缩中/审批挂起中不动
       const idleSince = Math.max(
         this.lastGrow.get(id) ?? 0,
         this.lastHookAt.get(id) ?? 0,
@@ -644,6 +647,18 @@ export class Bridge {
     this.mgr.setExternalPending(id, pending);
   }
 
+  // #363 PreCompact（手动 /compact 或上下文将满自动压缩）：CLI 进入
+  // "Compacting conversation..."，转录静默可达分钟级——置 compacting 标志 +
+  // 摘要明示，端上不误判卡死；仅对已建档会话生效（不从压缩事件新建档案）
+  private onPreCompact(ev: BridgeEvent): BridgeDecision {
+    const id = this.extId(ev);
+    if (!this.mgr.getExternal(id)) return { decision: "pass" };
+    this.mgr.setExternalStatus(id, "WORKING", "正在压缩上下文…", Date.now());
+    this.mgr.setExternalCompacting(id, true);
+    this.mgr.pushExternalLog(id, "system", "上下文接近上限，正在压缩对话历史");
+    return { decision: "pass" };
+  }
+
   private async dispatch(ev: BridgeEvent): Promise<BridgeDecision> {
     switch (ev.event) {
       case "UserPromptSubmit":
@@ -658,6 +673,8 @@ export class Bridge {
         return this.onStop(ev);
       case "SessionEnd":
         return this.onSessionEnd(ev);
+      case "PreCompact":
+        return this.onPreCompact(ev);
       default:
         return { decision: "pass" };
     }
@@ -1002,6 +1019,8 @@ export class Bridge {
       if (!firstRead) {
         if (this.lastGrow.size > 200) this.lastGrow.clear(); // 兜底上限（普通会话也在记账）
         this.lastGrow.set(id, Date.now());
+        // #363 压缩完继续回合 → 转录恢复增长即清压缩标志（自动压缩后 hook 事件可能迟到）
+        this.mgr.setExternalCompacting(id, false);
         const st0 = this.mgr.getExternal(id);
         // 增量增长落在 DONE 态 = 无 hook 会话（hook 会话回合首事件 UserPromptSubmit
         // 早已翻 WORKING）：翻 WORKING 让手机呼吸灯/工作状态随转录实时走。

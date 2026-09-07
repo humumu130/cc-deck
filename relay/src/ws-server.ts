@@ -439,7 +439,7 @@ export function startServer(
         session_id: "",
         ts: Date.now(),
         type: "SNAPSHOT",
-        payload: { sessions: mgr.snapshot(), logs: mgr.snapshotLogs(), server_time: Date.now() },
+        payload: { sessions: mgr.snapshot(), logs: mgr.snapshotLogs(), server_time: Date.now(), homedir: homedir() },
       };
       ws.send(JSON.stringify(snapshot));
     }

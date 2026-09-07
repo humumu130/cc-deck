@@ -84,6 +84,7 @@ export interface SessionState {
   permission_mode?: ManagedPermissionMode; // 托管会话当前权限模式
   pending_inputs?: PendingInput[]; // external 会话已发送未处理的注入消息（客户端显示在工作指示器下方，处理/回合结束时晋升为正式消息）
   cron_tasks?: CronTask[];   // 会话目录的定时任务快照（30s 轮询，变化才下发；[] = 已清空）
+  compacting?: boolean;      // #363 true = CLI 正在压缩上下文（PreCompact hook 置位，Compacting conversation…）；下一事件/转录增长/8min 兜底清位
   // 最近一次任务完成汇报（#254）：TASK_DONE 是瞬态事件，客户端断线/进程被杀时收不到；
   // 记入会话状态仅随 SNAPSHOT 下发（SESSION_UPDATED 增量帧不携带），端上按 ts 去重后恢复
   // 未读汇报。remaining_count 为数字（剩余条数）——TASK_DONE 事件的 remaining 是 TodoItem[]，

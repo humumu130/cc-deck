@@ -21,6 +21,7 @@ cfg.hooks ??= {};
 const EVENTS = {
   Notification: {},
   PostToolUse: { matcher: "*" },
+  PreCompact: {}, // #363 上下文压缩可见：Compacting conversation… 期间置位端上展示
   PreToolUse: { matcher: "*", timeout: 620 },
   SessionEnd: {},
   Stop: {},

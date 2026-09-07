@@ -351,6 +351,22 @@ export class SessionManager {
     }
   }
 
+  // #363 上下文压缩状态：PreCompact 置位（压缩期转录静默，端上据此区分"卡死"与
+  // "压缩中"）；8 分钟兜底自动清——清位事件丢失时不永久卡标志
+  setExternalCompacting(id: string, on: boolean): void {
+    const s = this.sessions.get(id);
+    if (!s || s.state.compacting === on) return;
+    s.state.compacting = on;
+    s.state.updated_at = Date.now();
+    if (on) {
+      const t = setTimeout(() => {
+        if (s.state.compacting) this.setExternalCompacting(id, false);
+      }, 480_000);
+      t.unref?.();
+    }
+    this.bus.emit(id, "SESSION_UPDATED", { compacting: on });
+  }
+
   // pid 对账/解锁等纯状态修复后强制下发：emitUpdated 携带 historical 等字段，
   // 否则客户端要等下次 SNAPSHOT 才摘掉"仅可查看"
   emitExternalSync(id: string): void {
@@ -1009,6 +1025,7 @@ export class SessionManager {
       ...(s.state.relay_session_id ? { relay_session_id: s.state.relay_session_id } : {}),
       ...(s.state.permission_mode ? { permission_mode: s.state.permission_mode } : {}),
       ...(s.state.cron_tasks ? { cron_tasks: s.state.cron_tasks.map((t) => ({ ...t })) } : {}),
+      ...(s.state.compacting ? { compacting: true } : {}),
       // last_task_done 不随增量帧下发（#254）：手机/网页都不消费该路径，只在
       // SNAPSHOT 里用于断线恢复，增量携带纯属带宽浪费
       // historical 增删必须实时下发：转录自愈/pid 对账解锁后，已连接的客户端
