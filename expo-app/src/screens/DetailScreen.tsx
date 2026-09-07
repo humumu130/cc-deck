@@ -1,5 +1,5 @@
 import { Fragment, useEffect, useImperativeHandle, useRef, useState, type Ref } from "react";
-import { Animated, Dimensions, Image, Modal, PermissionsAndroid, Pressable, RefreshControl, ScrollView, Share, StyleSheet, Text, TextInput, Vibration, View, type GestureResponderEvent, type NativeScrollEvent, type NativeSyntheticEvent, type NativeTouchEvent, type StyleProp, type TextStyle } from "react-native";
+import { Animated, Dimensions, Image, Modal, PanResponder, PermissionsAndroid, Pressable, RefreshControl, ScrollView, Share, StyleSheet, Text, TextInput, Vibration, View, type GestureResponderEvent, type NativeScrollEvent, type NativeSyntheticEvent, type NativeTouchEvent, type StyleProp, type TextStyle } from "react-native";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import * as ImagePicker from "expo-image-picker";
 import * as ImageManipulator from "expo-image-manipulator";
@@ -64,6 +64,25 @@ let ctrlCollapsed = false;
 
 // 输入草稿跨进出保留：按 session_id 暂存（app 生命周期内，发送即清）
 const drafts = new Map<string, string>();
+
+// #376 cron 表达式人话（常见模式；未识别返回 null 只显原文+下次时间兜底）
+const WEEK_CN = ["日", "一", "二", "三", "四", "五", "六"];
+function cronDesc(s: string): string | null {
+  const sch = (s || "").trim();
+  if (sch === "@daily" || sch === "@midnight") return "每天 00:00";
+  if (sch === "@hourly") return "每小时";
+  if (sch === "@weekly") return "每周日";
+  const m = /^(\S+) (\S+) (\S+) (\S+) (\S+)$/.exec(sch);
+  if (!m) return null;
+  const [min, hour, dom, mon, dow] = [m[1], m[2], m[3], m[4], m[5]];
+  const p2 = (x: string) => x.padStart(2, "0");
+  if (min.startsWith("*/") && hour === "*" && dom === "*" && mon === "*" && dow === "*") return `每 ${min.slice(2)} 分钟`;
+  if (min === "*" && hour.startsWith("*/") && dom === "*" && mon === "*" && dow === "*") return `每 ${hour.slice(2)} 小时`;
+  if (/^\d+$/.test(min) && /^\d+$/.test(hour) && dom === "*" && mon === "*" && dow === "*") return `每天 ${p2(hour)}:${p2(min)}`;
+  if (/^\d+$/.test(min) && /^\d+$/.test(hour) && dom === "*" && mon === "*" && /^\d+$/.test(dow)) return `每周${WEEK_CN[Number(dow) % 7]} ${p2(hour)}:${p2(min)}`;
+  if (/^\d+$/.test(min) && /^\d+$/.test(hour) && /^\d+$/.test(dom) && mon === "*" && dow === "*") return `每月 ${dom} 日 ${p2(hour)}:${p2(min)}`;
+  return null;
+}
 
 // 定时任务下次运行时间：MM-dd HH:mm（毫秒时间戳）
 const fmtDT = (ts: number) => {
@@ -555,6 +574,10 @@ export default function DetailScreen({ sid, onBack, initialView, ref }: { sid: s
   const [showThink, setShowThink] = useState(thinkShown);
   const [collapsed, setCollapsed] = useState(ctrlCollapsed);
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
+  // #376 定时任务条目展开态（按任务 id）；#375 任务分组锚点 y + 当前段
+  const [cronOpen, setCronOpen] = useState<Record<string, boolean>>({});
+  const secY = useRef(new Map<string, number>());
+  const [secNow, setSecNow] = useState("completed");
   // 内容长按菜单（#249）：非空即弹 ContentMenu
   const [menuText, setMenuText] = useState<string | null>(null);
   const todoScrollRef = useRef<ScrollView>(null);
@@ -655,6 +678,15 @@ export default function DetailScreen({ sid, onBack, initialView, ref }: { sid: s
   // 无时间戳的旧数据直接取最新 15 条。进行中/待办是可操作项，全保留
   const todoRank = (t: TodoItem) => (t.status === "completed" ? 0 : t.status === "in_progress" ? 1 : 2);
   const allTodos = (s?.todos ?? []).filter((t) => !todoHidden.includes(t.content));
+  // #374 拖动排序：仅未完成区可调——openOrder 为空 = relay 原序；拖动后本地乐观重排，
+  // 松手注入调序指令让 CLI 重新 TodoWrite（transcript 回流后三端一致）
+  const [openOrder, setOpenOrder] = useState<string[]>([]);
+  const pendKeyOf = (t: TodoItem) => String(t.id ?? t.content);
+  let openTodos = allTodos.filter((t) => t.status !== "completed");
+  if (openOrder.length) {
+    const rank = new Map(openOrder.map((k, i) => [k, i] as const));
+    openTodos = [...openTodos].sort((a, b) => (rank.get(pendKeyOf(a)) ?? 999) - (rank.get(pendKeyOf(b)) ?? 999));
+  }
   const doneAll = allTodos.filter((t) => t.status === "completed");
   const doneHasTs = doneAll.length > 0 && doneAll.every((t) => typeof t.updated_at === "number");
   const doneWindow = doneHasTs
@@ -667,7 +699,7 @@ export default function DetailScreen({ sid, onBack, initialView, ref }: { sid: s
         ? ` · 近1天${doneWindow.length > 15 ? "·最新15" : ""}`
         : " · 最新15"
       : "";
-  const sortedTodos = [...doneList, ...allTodos.filter((t) => t.status !== "completed")].sort(
+  const sortedTodos = [...doneList, ...openTodos].sort(
     (a, b) => todoRank(a) - todoRank(b),
   );
   const todoGroups = [
@@ -685,19 +717,80 @@ export default function DetailScreen({ sid, onBack, initialView, ref }: { sid: s
   }, [agRunning]);
 
   // #358 任务条目去 ✕：左滑 ≥50dp 移除（touch 位移判定，垂直滚动不受影响）
+  // #374 拖动排序：长按 ≥350ms 且纵向占优 → PanResponder 捕获阶段抢过 ScrollView，
+  // 跟手 translateY + 每 46dp 跨一行换位（本地乐观 openOrder），松手注入调序指令
+  // （外部会话忙时自动排队）；与左滑互斥（拖动态吞掉滑删判定）
   const todoTouchX = useRef<number | null>(null);
-  const renderTodo = (t: TodoItem, i: number, grouped: boolean) => (
-    <View
-      style={[d.todoRow, grouped && { borderTopWidth: 0, marginTop: 0 }, t.id != null && t.id === flashTodo && d.todoFlash]}
+  const touchStartAt = useRef(0);
+  const dragFromIdx = useRef(0);
+  const [dragKey, setDragKey] = useState<string | null>(null);
+  const dragY = useRef(new Animated.Value(0)).current;
+  const commitReorder = () => {
+    setDragKey(null);
+    dragY.setValue(0);
+    if (!openOrder.length) return;
+    const list = openTodos.map((t) => (t.status === "in_progress" ? `[进行中] ${t.content}` : t.content));
+    if (list.length < 2) return;
+    const instruction =
+      `【任务优先级已由用户手动调整】请立即用 TodoWrite 按新顺序重写未完成任务清单（已完成条目保持不动），` +
+      `之后严格按此顺序执行——从第 1 条未完成任务开始。新顺序：\n` +
+      list.map((x, n) => `${n + 1}. ${x}`).join("\n");
+    store.send(external ? "COMMAND_EXT_INPUT" : "COMMAND_MESSAGE", { session_id: sid, text: instruction });
+    flashQueuedHint();
+  };
+  const renderTodo = (t: TodoItem, i: number, grouped: boolean) => {
+    const key = pendKeyOf(t);
+    const dragging = dragKey === key;
+    const rowPan = PanResponder.create({
+      onStartShouldSetPanResponder: () => false,
+      // 捕获阶段判定：按住超 350ms 且纵向占优才接管（快速竖滑仍是列表滚动）
+      onMoveShouldSetPanResponderCapture: (_e, g) =>
+        t.status !== "completed" &&
+        Date.now() - touchStartAt.current > 350 &&
+        Math.abs(g.dy) > 6 && Math.abs(g.dy) > Math.abs(g.dx),
+      onPanResponderGrant: () => {
+        try { Vibration.vibrate(15); } catch {}
+        dragY.setValue(0);
+        dragFromIdx.current = Math.max(0, openTodos.findIndex((x) => pendKeyOf(x) === key));
+        if (!openOrder.length) setOpenOrder(openTodos.map(pendKeyOf));
+        setDragKey(key);
+      },
+      onPanResponderMove: (_e, g) => {
+        dragY.setValue(g.dy);
+        const delta = Math.round(g.dy / 46) - dragFromIdx.current;
+        if (delta !== 0 && openTodos.length > 1) {
+          const from = Math.max(0, openTodos.findIndex((x) => pendKeyOf(x) === key));
+          const to = Math.min(openTodos.length - 1, Math.max(0, from + delta));
+          if (from !== to) {
+            const next = openOrder.length ? [...openOrder] : openTodos.map(pendKeyOf);
+            const [moved] = next.splice(from, 1);
+            next.splice(to, 0, moved);
+            setOpenOrder(next);
+            dragFromIdx.current = to;
+          }
+        }
+      },
+      onPanResponderRelease: commitReorder,
+      onPanResponderTerminate: commitReorder,
+    });
+    return (
+    <Animated.View
+      style={[d.todoRow, grouped && { borderTopWidth: 0, marginTop: 0 }, t.id != null && t.id === flashTodo && d.todoFlash, dragging && d.todoRowDrag, dragging && { transform: [{ translateY: dragY }] }]}
       onLayout={t.id != null ? (ev) => todoY.current.set(t.id!, ev.nativeEvent.layout.y) : undefined}
-      onTouchStart={(e) => { const tc = e.nativeEvent.changedTouches?.[0] ?? e.nativeEvent.touches?.[0]; todoTouchX.current = tc ? tc.pageX : null; }}
+      onTouchStart={(e) => {
+        const tc = e.nativeEvent.changedTouches?.[0] ?? e.nativeEvent.touches?.[0];
+        todoTouchX.current = tc ? tc.pageX : null;
+        touchStartAt.current = Date.now();
+      }}
       onTouchEnd={(e) => {
         const sx = todoTouchX.current;
         todoTouchX.current = null;
+        if (dragKey) return;
         const tc = e.nativeEvent.changedTouches?.[0] ?? e.nativeEvent.touches?.[0];
         if (sx == null || !tc) return;
         if (sx - tc.pageX > 50) hideTodo(t.content);
       }}
+      {...rowPan.panHandlers}
     >
       <Text
         style={[
@@ -719,8 +812,10 @@ export default function DetailScreen({ sid, onBack, initialView, ref }: { sid: s
       >
         {t.status === "in_progress" && t.active_form ? t.active_form : t.content}
       </Text>
-    </View>
+      {t.status !== "completed" ? <Text style={d.todoDragT}>⠿</Text> : null}
+    </Animated.View>
   );
+  };
 
   // #264：转录 #NNN 点击 → 任务 tab 定位该条（行 y 由 onLayout 记账，落点闪高 1.5s；
   // 任务不在近 3 天窗口（未渲染）时只切 tab 不滚——y 无记录为无害回退）。
@@ -1212,6 +1307,14 @@ export default function DetailScreen({ sid, onBack, initialView, ref }: { sid: s
                 const { contentOffset, contentSize, layoutMeasurement } = e.nativeEvent;
                 todoAtBottom.current = contentOffset.y + layoutMeasurement.height >= contentSize.height - 24;
                 todoScrollY.setValue(contentOffset.y);
+                // #375 当前段高亮：视口顶以下最近的分组头
+                const sy = contentOffset.y + 130;
+                let cur = "completed";
+                for (const k of ["completed", "in_progress", "pending"]) {
+                  const yy = secY.current.get(k);
+                  if (yy !== undefined && yy <= sy) cur = k;
+                }
+                if (cur !== secNow) setSecNow(cur);
               }}
               onLayout={(e) => {
                 const h = e.nativeEvent.layout.height;
@@ -1228,7 +1331,7 @@ export default function DetailScreen({ sid, onBack, initialView, ref }: { sid: s
                 return (
                   <Fragment key={i}>
                     {head ? (
-                      <View style={d.todoSec}>
+                      <View style={d.todoSec} onLayout={(ev) => secY.current.set(t.status, ev.nativeEvent.layout.y)}>
                         <View style={d.todoSecLine} />
                         <Text
                           style={[
@@ -1271,28 +1374,68 @@ export default function DetailScreen({ sid, onBack, initialView, ref }: { sid: s
                 ]}
               />
             ) : null}
+            {/* #375 三段式快速导航：右缘细轨（✓/◐/○），点击直达分组头，当前段高亮 */}
+            {(() => {
+              const secs = ([
+                { k: "completed", mark: "✓", color: c.done },
+                { k: "in_progress", mark: "◐", color: c.working },
+                { k: "pending", mark: "○", color: c.dim },
+              ] as const).filter((x) =>
+                x.k === "completed" ? doneList.length > 0 : allTodos.some((t) => t.status === x.k),
+              );
+              if (secs.length < 2) return null;
+              return (
+                <View style={d.todoNav}>
+                  {secs.map((x) => (
+                    <Pressable
+                      key={x.k}
+                      hitSlop={8}
+                      onPress={() => todoScrollRef.current?.scrollTo({ y: Math.max(0, (secY.current.get(x.k) ?? 0) - 6), animated: true })}
+                    >
+                      <Text style={[d.todoNavT, { color: x.color }, secNow === x.k && d.todoNavOn]}>{x.mark}</Text>
+                    </Pressable>
+                  ))}
+                </View>
+              );
+            })()}
           </View>
           )}
         </View>
       ) : v.k === "cron" ? (
-        /* 定时任务视图：会话目录 .claude/scheduled_tasks.json 快照（relay 30s 轮询下发） */
+        /* 定时任务视图：会话目录 .claude/scheduled_tasks.json 快照（relay 30s 轮询下发）。
+           #376 条目点击展开看 prompt 全文；cron 表达式配人话频率（未识别模式显原文） */
         <ScrollView style={{ flex: 1 }} contentContainerStyle={{ padding: 14, paddingBottom: 40 + insets.bottom }} showsVerticalScrollIndicator={false}>
           {(s.cron_tasks?.length ?? 0) === 0 ? (
             <Text style={d.empty}>暂无定时任务{"\n"}CLI 里创建 durable 定时任务后，这里 30s 内显示</Text>
           ) : (
-            s.cron_tasks!.map((t, i) => (
-              <View key={t.id + "|" + i} style={[d.cronRow, i === 0 && { borderTopWidth: 0, marginTop: 0 }]}>
-                <Text style={[d.cronMark, t.paused && { color: c.faint }]}>{t.paused ? "⏸" : "⏰"}</Text>
-                <View style={{ flex: 1, minWidth: 0 }}>
-                  <Text style={[d.cronName, t.paused && { color: c.dim }]} numberOfLines={1}>{t.name}</Text>
-                  <Text style={d.cronMeta} numberOfLines={1}>
-                    {t.schedule}
-                    {t.recurring === false ? " · 一次性" : ""}
-                    {t.next_run_at ? " · 下次 " + fmtDT(t.next_run_at) : ""}
-                  </Text>
-                </View>
-              </View>
-            ))
+            s.cron_tasks!.map((t, i) => {
+              const open = !!cronOpen[t.id];
+              const desc = cronDesc(t.schedule);
+              return (
+                <Pressable
+                  key={t.id + "|" + i}
+                  style={[d.cronRow, i === 0 && { borderTopWidth: 0, marginTop: 0 }]}
+                  android_ripple={{ color: c.tintSoft, borderless: false }}
+                  onPress={() => setCronOpen((m) => ({ ...m, [t.id]: !m[t.id] }))}
+                >
+                  <Text style={[d.cronMark, t.paused && { color: c.faint }]}>{t.paused ? "⏸" : "⏰"}</Text>
+                  <View style={{ flex: 1, minWidth: 0 }}>
+                    <Text style={[d.cronName, t.paused && { color: c.dim }]} numberOfLines={1}>{t.name}</Text>
+                    <Text style={d.cronMeta} numberOfLines={open ? undefined : 1}>
+                      {desc ?? t.schedule}
+                      {t.recurring === false ? " · 一次性" : ""}
+                      {t.next_run_at ? " · 下次 " + fmtDT(t.next_run_at) : ""}
+                    </Text>
+                    {open ? (
+                      <>
+                        {desc ? <Text style={d.cronRaw}>cron: {t.schedule}</Text> : null}
+                        <Text style={d.cronPrompt} selectable>{t.prompt}</Text>
+                      </>
+                    ) : null}
+                  </View>
+                </Pressable>
+              );
+            })
           )}
         </ScrollView>
       ) : v.k === "stats" ? (
@@ -1710,6 +1853,12 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
   todoFootHint: { alignItems: "center", paddingVertical: 10 },
   todoFootHintT: { color: c.faint, fontSize: 12 },
   todoThumb: { position: "absolute", right: 1, top: 2, width: 3, borderRadius: 2, backgroundColor: withA(c.text, 0.28) },
+  // #375 三段导航右缘细轨；#376 cron 展开态原文/prompt
+  todoNav: { position: "absolute", right: 7, top: "36%", alignItems: "center", gap: 11, zIndex: 6 },
+  todoNavT: { fontSize: 12, lineHeight: 16, opacity: 0.5 },
+  todoNavOn: { opacity: 1, fontWeight: "800" },
+  cronRaw: { color: c.faint, fontSize: 10.5, fontFamily: "monospace", marginTop: 2 },
+  cronPrompt: { color: c.dim, fontSize: 12, lineHeight: 17, marginTop: 5 },
   // 定时任务视图行（原 cronScroll/cronBox 折叠面板平铺化）
   cronRow: { flexDirection: "row", gap: 8, alignItems: "flex-start", paddingVertical: 6, borderTopWidth: 1, borderTopColor: c.line, marginTop: 4 },
   cronMark: { color: c.working, fontSize: 12, width: 16, textAlign: "center", lineHeight: 17 },
@@ -1719,6 +1868,12 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
   todoSecLine: { flex: 1, height: 1, backgroundColor: c.line },
   todoSecT: { fontSize: 10.5, fontWeight: "700", letterSpacing: 0.5 },
   todoRow: { flexDirection: "row", gap: 8, alignItems: "flex-start", paddingVertical: 5, borderTopWidth: 1, borderTopColor: c.line, marginTop: 5 },
+  // #374 拖动态：浮起阴影 + 品牌描边 + 压过同行
+  todoRowDrag: {
+    backgroundColor: c.panel, borderRadius: 10, borderWidth: 1, borderColor: withA(c.brandA, 0.5),
+    paddingHorizontal: 8, elevation: 6, zIndex: 9,
+  },
+  todoDragT: { color: c.faint, fontSize: 12, lineHeight: 17, paddingLeft: 2 },
   todoFlash: { backgroundColor: withA(c.brandA, 0.32), borderRadius: 8, borderWidth: 1, borderColor: withA(c.brandA, 0.55) },
   todoScroll: { maxHeight: 400, flexGrow: 0 },
   todoMark: { color: c.faint, fontSize: 12, width: 16, textAlign: "center", lineHeight: 17 },
