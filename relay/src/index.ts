@@ -1,4 +1,4 @@
-import { networkInterfaces, homedir } from "node:os";
+import { networkInterfaces, homedir, hostname } from "node:os";
 import { join } from "node:path";
 import { writeFileSync, openSync, readFileSync, rmSync, existsSync } from "node:fs";
 import { spawn, execFileSync } from "node:child_process";
@@ -12,6 +12,7 @@ import { loadOrCreateIdentity } from "./cloud-identity.js";
 import { CloudClient } from "./cloud-client.js";
 import { createPairingCodes } from "./pairing.js";
 import { printQr } from "./qr.js";
+import { advertiseRelay } from "./mdns.js";
 
 const cfg = loadConfig();
 
@@ -216,6 +217,8 @@ startServer(bus, mgr, cfg, {
   ...(cloudClients.length ? { pairCodes } : {}),
   // daemon 子进程 listen 成功后自写 pid（父进程不预写，端口被占时不留死 pid）
   onReady: () => {
+    // #316 mDNS 广播（_ccdeck._tcp）：手表同 WiFi 零配置发现；失败静默（组播被拦不影响其余）
+    advertiseRelay(cfg.port, `CC Deck Relay (${hostname()})`);
     if (process.env.CC_DECK_DAEMON === "1") {
       writeFileSync(join(cfg.dataDir, "relay.pid"), String(process.pid), "utf-8");
     }

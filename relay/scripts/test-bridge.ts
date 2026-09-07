@@ -765,9 +765,10 @@ assert(ack24.ok === false, "empty rename rejected");
   assert(mgr.getExternal(id36)?.status === "DONE", "36 adopted as DONE");
   // 等一轮轮询（5s）完成首读建 offset 基线，之后的追加才算增量增长
   await wait(5500);
-  // CLI 正在写转录（增量）→ 下一轮轮询（5s）翻 WORKING
+  // CLI 正在写转录（增量）→ 下一轮轮询（5s）翻 WORKING（等两个轮询窗：单窗只有
+  // 一拍余量，轮询相位漂移时偶发假阴性——2026-09-07 连续两天在 36 段 flaky）
   appendFileSync(f36, JSON.stringify({ type: "assistant", message: { content: [{ type: "text", text: "streaming" }] } }) + "\n");
-  await wait(6500);
+  await wait(11500);
   const st36 = mgr.getExternal(id36);
   assert(st36?.status === "WORKING" && st36?.action_summary === "转录活跃（无 hook 会话）", "36 transcript growth flips WORKING");
   // 转录静默（idle 阈值压到 1s）→ 回合视作结束回落 DONE；再增长能重新翻回 WORKING
@@ -776,8 +777,14 @@ assert(ack24.ok === false, "empty rename rejected");
     await wait(6500);
     assert(mgr.getExternal(id36)?.status === "DONE", "36 idle falls back to DONE");
     appendFileSync(f36, JSON.stringify({ type: "assistant", message: { content: [{ type: "text", text: "new turn" }] } }) + "\n");
-    await wait(6500);
-    assert(mgr.getExternal(id36)?.status === "WORKING", "36 regrowth flips WORKING again");
+    // regrowth 的 WORKING 窗口很短：idle=1s + 末条 end 形态 → 下一拍 sweep（≤5s）即回落
+    // DONE，单点断言碰相位（2026-09-07 连续 flaky 根因）——轮询采样：窗口内出现过即过
+    let sawWorking = false;
+    for (let i = 0; i < 22; i++) {
+      if (mgr.getExternal(id36)?.status === "WORKING") { sawWorking = true; break; }
+      await wait(500);
+    }
+    assert(sawWorking, "36 regrowth flips WORKING again");
     // 末条为 tool_use（工具执行中）：静默超过 idle 阈值也不回落——真实转录整条落盘，
     // 工具/长思考静默分钟级，短窗必误判（曾致 WORKING→DONE 来回跳 + 刷系统日志）
     appendFileSync(f36, JSON.stringify({ type: "assistant", message: { content: [{ type: "tool_use", id: "tu1", name: "Bash", input: {} }] } }) + "\n");
@@ -1087,6 +1094,39 @@ assert(ack24.ok === false, "empty rename rejected");
   (mgr as unknown as { cloud: unknown }).cloud = null;
   const off = call({ session_dev: dev, session_pk: kp.publicKey });
   assert(off.ok === false && (off.error ?? "").includes("云桥未启用"), "43 cloud-off rejected with hint");
+}
+
+// ── 44 段：#316 手表配对信道——PAIR_PENDING 同码广播、待配对连接不收事件、
+// 授权后手表拿 token、PAIR_RESOLVED 广播、未知 request_id 拒绝。
+// 手机侧用新鲜 token 连接（同 40 段先例：不依赖前面段落遗留的 socket 存活）
+{
+  const w44 = new WebSocket(`ws://127.0.0.1:${cfg.port}/ws?token=${cfg.token}`);
+  const phoneFrames: Array<{ type?: string; payload?: { code?: string; decision?: string } }> = [];
+  w44.on("message", (d) => phoneFrames.push(JSON.parse(String(d))));
+  attach(w44);
+  await new Promise((r) => w44.once("open", r));
+  await wait(200);
+  const wframes: Array<{ type?: string; code?: string; token?: string; request_id?: string; seq?: number }> = [];
+  const watch = new WebSocket(`ws://127.0.0.1:${cfg.port}/ws?pair=1&name=${encodeURIComponent("测试表")}`);
+  watch.on("message", (d) => wframes.push(JSON.parse(String(d))));
+  await new Promise((r) => watch.once("open", r));
+  await wait(400);
+  const pend = wframes.find((f) => f.type === "PAIR_PENDING");
+  assert(!!pend && /^\d{6}$/.test(pend.code ?? ""), "44 watch got PAIR_PENDING with 6-digit code");
+  const reqEv = phoneFrames.find((f) => f.type === "PAIR_REQUEST");
+  assert(!!reqEv && reqEv.payload?.code === pend?.code, "44 LAN clients got PAIR_REQUEST with same code");
+  assert(!wframes.some((f) => f.type === "SNAPSHOT" || (f.seq ?? 0) > 0), "44 pairing socket receives no session events");
+  const idBad = send("COMMAND_WATCH_GRANT", { request_id: randomUUID(), allow: true });
+  assert((await waitAck(idBad)).ok === false, "44 unknown request_id rejected");
+  const idOk = send("COMMAND_WATCH_GRANT", { request_id: pend?.request_id ?? "", allow: true });
+  assert((await waitAck(idOk)).ok === true, "44 grant ack ok");
+  await wait(700);
+  assert(wframes.some((f) => f.type === "PAIR_OK" && f.token === cfg.token), "44 watch got token after allow");
+  assert(
+    phoneFrames.some((f) => f.type === "PAIR_RESOLVED" && f.payload?.decision === "allow"),
+    "44 PAIR_RESOLVED allow broadcast",
+  );
+  try { watch.close(); } catch {}
 }
 
 wsCur!.close();

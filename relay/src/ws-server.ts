@@ -1,4 +1,5 @@
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
+import { randomUUID } from "node:crypto";
 import { readFileSync, existsSync, readdirSync, type Dirent } from "node:fs";
 import { join, sep } from "node:path";
 import { homedir, networkInterfaces } from "node:os";
@@ -313,15 +314,88 @@ export function startServer(
       socket.destroy();
       return;
     }
-    if ((url.searchParams.get("token") ?? "") !== cfg.token) {
+    // #316 手表配对信道：?pair=1 无 token（手表 mDNS 发现后走此路，等手机比对 6 位码授权）。
+    // 连接标记 pairing=true：不订事件、不收命令，授权通过才把 token 发给它自行重连正规信道
+    const pairing = url.searchParams.get("pair") === "1";
+    if (!pairing && (url.searchParams.get("token") ?? "") !== cfg.token) {
       console.log(`[ws-upgrade] reject: token mismatch`);
       socket.write("HTTP/1.1 401 Unauthorized\r\n\r\n");
       socket.destroy();
       return;
     }
-    console.log(`[ws-upgrade] accepted`);
+    console.log(`[ws-upgrade] accepted${pairing ? " (pairing)" : ""}`);
     wss.handleUpgrade(req, socket, head, (ws) => wss.emit("connection", ws, url));
   });
+
+  // ── #316 手表配对池：PAIR_REQUEST/PAIR_RESOLVED 是瞬态帧（seq:0 不进 EventBus，
+  // 不落 events.ndjson），只直播给 LAN 已鉴权客户端；授权命令同样只在 ws-server 层消化
+  const PAIR_TTL_MS = 120_000;
+  const watchPairings = new Map<
+    string,
+    { name: string; code: string; ws: WebSocket; timer: ReturnType<typeof setTimeout> }
+  >();
+  const lanBroadcast = (obj: unknown): void => {
+    const text = JSON.stringify(obj);
+    for (const client of wss.clients) {
+      if ((client as ClientWs).pairing) continue;
+      if (client.readyState === WebSocket.OPEN) client.send(text);
+    }
+  };
+  const pairResolvedFrame = (requestId: string, decision: "allow" | "deny" | "timeout") =>
+    lanBroadcast({ seq: 0, session_id: "", ts: Date.now(), type: "PAIR_RESOLVED", payload: { request_id: requestId, decision } });
+  function resolvePairing(requestId: string, decision: "allow" | "deny" | "timeout"): void {
+    const p = watchPairings.get(requestId);
+    if (!p) return;
+    watchPairings.delete(requestId);
+    clearTimeout(p.timer);
+    try {
+      if (decision === "allow") p.ws.send(JSON.stringify({ type: "PAIR_OK", token: cfg.token }));
+      else if (decision === "deny") p.ws.send(JSON.stringify({ type: "PAIR_DENY" }));
+      else p.ws.send(JSON.stringify({ type: "PAIR_TIMEOUT" }));
+    } catch {}
+    // 给帧留出 flush 时间再关；watch 拿到 token 自行断开重连正规信道
+    setTimeout(() => {
+      try {
+        p.ws.close();
+      } catch {
+        try {
+          p.ws.terminate();
+        } catch {}
+      }
+    }, 400);
+    pairResolvedFrame(requestId, decision);
+    console.log(`[pair] watch pairing ${requestId} -> ${decision}`);
+  }
+  function startWatchPairing(ws: WebSocket, url: URL): void {
+    if (watchPairings.size >= 5) {
+      // 并发待配对池上限：防 LAN 内恶意设备刷请求轰炸手机弹窗
+      try { ws.send(JSON.stringify({ type: "PAIR_DENY", reason: "配对请求过多，请稍后再试" })); } catch {}
+      try { ws.close(); } catch {}
+      return;
+    }
+    (ws as ClientWs).pairing = true;
+    const requestId = randomUUID();
+    const name = (url.searchParams.get("name") ?? "手表").slice(0, 24);
+    const code = String(Math.floor(100000 + Math.random() * 900000));
+    const entry = { name, code, ws, timer: setTimeout(() => resolvePairing(requestId, "timeout"), PAIR_TTL_MS) };
+    watchPairings.set(requestId, entry);
+    ws.on("close", () => {
+      // 手表放弃（断开）：清池并通知手机收弹窗
+      if (watchPairings.get(requestId)?.ws === ws) {
+        watchPairings.delete(requestId);
+        clearTimeout(entry.timer);
+        pairResolvedFrame(requestId, "timeout");
+      }
+    });
+    try {
+      ws.send(JSON.stringify({ type: "PAIR_PENDING", request_id: requestId, code, expires_in: Math.floor(PAIR_TTL_MS / 1000) }));
+    } catch {}
+    lanBroadcast({
+      seq: 0, session_id: "", ts: Date.now(), type: "PAIR_REQUEST",
+      payload: { request_id: requestId, name, code, expires_in: Math.floor(PAIR_TTL_MS / 1000) },
+    });
+    console.log(`[pair] watch pairing request id=${requestId} name=${name}`);
+  }
 
   wss.on("connection", (ws: WebSocket, url: URL) => {
     const clientId = `web-${connectionCounter++}`;
@@ -330,6 +404,11 @@ export function startServer(
       (ws as ClientWs).isAlive = true;
     });
     ws.on("error", () => undefined);
+
+    if (url.searchParams.get("pair") === "1") {
+      startWatchPairing(ws, url);
+      return;
+    }
 
     const lastSeq = Number(url.searchParams.get("last_seq") ?? "0") || 0;
     const replay = lastSeq > 0 && !bus.isBeyondBuffer(lastSeq) ? bus.replayAfter(lastSeq) : null;
@@ -379,15 +458,28 @@ export function startServer(
         );
         return;
       }
+      // #316 手表配对授权：ws-server 层消化（持有待配对池），不进 mgr
+      if (cmd.type === "COMMAND_WATCH_GRANT") {
+        const p = cmd.payload as { request_id?: unknown; allow?: unknown };
+        const rid = typeof p.request_id === "string" ? p.request_id : "";
+        if (!watchPairings.has(rid)) {
+          ws.send(JSON.stringify({ type: "COMMAND_ACK", command_id: cmd.command_id, ok: false, error: "配对请求不存在或已过期" }));
+          return;
+        }
+        resolvePairing(rid, p.allow ? "allow" : "deny");
+        ws.send(JSON.stringify({ type: "COMMAND_ACK", command_id: cmd.command_id, ok: true }));
+        return;
+      }
       const ack = mgr.handleCommand(cmd, clientId);
       ws.send(JSON.stringify({ type: "COMMAND_ACK", ...ack }));
     });
   });
 
-  // 全局事件广播
+  // 全局事件广播（#316：待配对手表未鉴权，不收事件）
   const unsubscribe = bus.subscribe((env) => {
     const text = JSON.stringify(env);
     for (const client of wss.clients) {
+      if ((client as ClientWs).pairing) continue;
       if (client.readyState === WebSocket.OPEN) client.send(text);
     }
   });
