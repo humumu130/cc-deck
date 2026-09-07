@@ -33,6 +33,7 @@ const COMMAND_TYPES = new Set([
   "COMMAND_PAIR_START",
   "COMMAND_PAIR_CODE",
   "COMMAND_LOGIN_GRANT",
+  "COMMAND_WATCH_GRANT",
   "COMMAND_PERM",
   "COMMAND_REFRESH_TODOS",
   "COMMAND_TODO_HIDE",
@@ -447,6 +448,7 @@ async function handleBridgeHook(
 
 interface ClientWs extends WebSocket {
   isAlive: boolean;
+  pairing?: boolean; // #316 待配对手表（/ws?pair=1）：未鉴权，不收事件、不发命令
 }
 
 let connectionCounter = 0;

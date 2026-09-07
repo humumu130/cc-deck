@@ -38,6 +38,7 @@ if (!window.ccDeck) {
   window.ccDeck = {
     probeLocal: () => window.__TAURI__.core.invoke("probe_local"),
     openExternal: (url) => window.__TAURI__.core.invoke("open_external", { url }),
+    openPath: (path, reveal) => window.__TAURI__.core.invoke("open_path", { path, reveal }),
     relayCtl: true, // 标记：内置 relay 开关能力存在（网页端据此显示设置行）
     relayStatus: () => window.__TAURI__.core.invoke("relay_status"),
     relayToggle: (on) => window.__TAURI__.core.invoke("relay_toggle", { on }),
@@ -90,6 +91,26 @@ fn open_external(app: tauri::AppHandle, url: String) -> Result<(), String> {
         return Ok(());
     }
     app.opener().open_url(url, None::<&str>).map_err(|e| e.to_string())
+}
+
+/// #326 打开转录里的本地文件：reveal=true 在文件管理器中定位该项，false 用系统默认
+/// 程序打开。只接受绝对路径（盘符/UNC/斜杠开头）且拒含 ".."，防相对路径歧义与穿越；
+/// opener 走系统 API 不经 shell，无注入面
+#[tauri::command]
+fn open_path(app: tauri::AppHandle, path: String, reveal: bool) -> Result<(), String> {
+    let p = path.trim();
+    let b = p.as_bytes();
+    let is_abs = (b.len() >= 3 && b[0].is_ascii_alphabetic() && b[1] == b':' && (b[2] == b'\\' || b[2] == b'/'))
+        || p.starts_with("\\\\")
+        || p.starts_with('/');
+    if !is_abs || p.contains("..") {
+        return Err("仅支持绝对路径".into());
+    }
+    if reveal {
+        app.opener().reveal_item_in_dir(p).map_err(|e| e.to_string())
+    } else {
+        app.opener().open_path(p, None::<&str>).map_err(|e| e.to_string())
+    }
 }
 
 /// 唤起主窗口：show + unminimize + focus（等价 Electron 的 showWin）
@@ -257,7 +278,7 @@ fn main() {
         // 在线更新（#319）：检查/下载/安装由 web-console ⚙ 关于区经 __TAURI__.updater 调用，
         // 签名公钥在 tauri.conf.json plugins.updater，签名的私钥经 CI Secrets 注入
         .plugin(tauri_plugin_updater::Builder::new().build())
-        .invoke_handler(tauri::generate_handler![probe_local, open_external, relay_status, relay_toggle])
+        .invoke_handler(tauri::generate_handler![probe_local, open_external, open_path, relay_status, relay_toggle])
         .setup(|app| {
             if build_tray(app).is_ok() {
                 TRAY_OK.store(true, Ordering::SeqCst);

@@ -106,6 +106,21 @@ ipcMain.handle("cc-deck:probe-local", async () => {
   }
 });
 
+// #326 打开转录里的本地文件：reveal=true 在文件管理器中定位，false 系统默认程序打开。
+// 与 Tauri open_path 同校验：仅绝对路径、拒 ".."；shell API 不经命令行，无注入面
+ipcMain.handle("cc-deck:open-path", async (_e, path, reveal) => {
+  const p = String(path ?? "").trim();
+  const isAbs = /^(?:[A-Za-z]:[\\/]|\\\\|\/)/.test(p);
+  if (!isAbs || p.includes("..")) return { error: "仅支持绝对路径" };
+  try {
+    if (reveal) return { ok: await shell.showItemInFolder(p) };
+    const msg = await shell.openPath(p);
+    return msg ? { error: msg } : { ok: true };
+  } catch (err) {
+    return { error: String(err?.message || err) };
+  }
+});
+
 // 应用内主题 ↔ 原生标题栏同步：web-console 默认深色，Windows 应用模式为浅色时
 // 原生标题栏会浅一块；页面切换主题时经 preload 通知，themeSource 驱动标题栏变色
 ipcMain.on("cc-deck:set-native-theme", (_e, dark) => {

@@ -228,7 +228,9 @@ export type EventType =
   | "SESSION_LOG"
   | "TASK_DONE"
   | "SESSION_DELETED"
-  | "SNAPSHOT";
+  | "SNAPSHOT"
+  | "PAIR_REQUEST"
+  | "PAIR_RESOLVED";
 
 export type EventPayloadMap = {
   SESSION_CREATED: SessionCreatedPayload;
@@ -242,10 +244,28 @@ export type EventPayloadMap = {
   TASK_DONE: TaskDonePayload;
   SESSION_DELETED: SessionDeletedPayload;
   SNAPSHOT: SnapshotPayload;
+  PAIR_REQUEST: PairRequestPayload;
+  PAIR_RESOLVED: PairResolvedPayload;
 };
 
 export interface SessionDeletedPayload {
   session_id: string;
+}
+
+// #316 手表配对请求：手表经 mDNS 发现 relay 后走 /ws?pair=1 待配对信道，relay 生成
+// 6 位码发给手表屏显示，同时向 LAN 已鉴权客户端广播本事件——手机弹窗比对码后授权。
+// 瞬态事件不走 EventBus（不落 events.ndjson），仅 ws-server 直播给 LAN 客户端
+export interface PairRequestPayload {
+  request_id: string;
+  name: string;        // 手表上报名称（如 "OPPO Watch"）
+  code: string;        // 6 位比对码（手表屏同显）
+  expires_in: number;  // 秒
+}
+
+// 配对结果通知（授权/拒绝/过期）：手机端据此收起弹窗
+export interface PairResolvedPayload {
+  request_id: string;
+  decision: "allow" | "deny" | "timeout";
 }
 
 export type TypedEnvelope<T extends EventType = EventType> = Envelope<
@@ -270,6 +290,7 @@ export type CommandType =
   | "COMMAND_PAIR_START"
   | "COMMAND_PAIR_CODE"
   | "COMMAND_LOGIN_GRANT"
+  | "COMMAND_WATCH_GRANT"
   | "COMMAND_PERM"
   | "COMMAND_REFRESH_TODOS"
   | "COMMAND_TODO_HIDE";
@@ -362,6 +383,12 @@ export interface LoginGrantCommand extends CommandBase {
   payload: { session_dev: string; session_pk: string; name?: string };
 }
 
+// #316 手表配对授权：手机对 PAIR_REQUEST 弹窗的允许/拒绝（LAN 鉴权信道发来）
+export interface WatchGrantCommand extends CommandBase {
+  type: "COMMAND_WATCH_GRANT";
+  payload: { request_id: string; allow: boolean };
+}
+
 export type Command =
   | CreateCommand
   | MessageCommand
@@ -377,6 +404,7 @@ export type Command =
   | PairStartCommand
   | PairCodeCommand
   | LoginGrantCommand
+  | WatchGrantCommand
   | PermCommand
   | RefreshTodosCommand
   | TodoHideCommand;
