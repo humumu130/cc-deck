@@ -37,8 +37,8 @@ import androidx.wear.compose.material.TimeText
 import androidx.wear.compose.material.Vignette
 import androidx.wear.compose.material.VignettePosition
 
-/** 数据源：演示 / 直连 Relay（主通道）/ 手机网关（GMS 表） */
-enum class SourceMode { DEMO, RELAY, GMS }
+/** 数据源：蓝牙经手机（#380 主通道，零配置）/ 直连 Relay / 手机网关（GMS 表）/ 演示 */
+enum class SourceMode { DEMO, RELAY, GMS, BT }
 
 private val hostPresets = listOf("192.168.0.101:8787", "192.168.0.105:8787")
 private val tokenPresets = listOf("devtoken")
@@ -76,9 +76,23 @@ fun SettingsScreen(
             item { MenuHeader("设置") }
             item {
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    SourceChip("演示", m == SourceMode.DEMO) { m = SourceMode.DEMO }
+                    SourceChip("蓝牙", m == SourceMode.BT) { m = SourceMode.BT }
                     SourceChip("直连", m == SourceMode.RELAY) { m = SourceMode.RELAY }
-                    SourceChip("手机", m == SourceMode.GMS) { m = SourceMode.GMS }
+                }
+            }
+            if (m == SourceMode.BT) {
+                item {
+                    Text(
+                        "数据经手机蓝牙中继，手表免联网免配置。手机 App 连着即可，无需在此输入任何内容。",
+                        color = C.textSecondary, fontSize = 10.sp, textAlign = TextAlign.Center,
+                        modifier = Modifier.padding(horizontal = 26.dp, vertical = 2.dp),
+                    )
+                }
+            }
+            item {
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    SourceChip("手机GMS", m == SourceMode.GMS) { m = SourceMode.GMS }
+                    SourceChip("演示", m == SourceMode.DEMO) { m = SourceMode.DEMO }
                 }
             }
             if (m == SourceMode.RELAY) {

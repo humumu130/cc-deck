@@ -21,7 +21,15 @@ interface WearNative {
   addListener(event: string, cb: (ev: { path?: string; text?: string }) => void): void;
 }
 
+// #380 WearLink：蓝牙 RFCOMM 直连手表（OPPO 等无 GMS 表的主通道；行式 JSON）
+interface WearLinkNative {
+  start(): Promise<boolean>;
+  send(text: string): boolean;
+  addListener(event: string, cb: (ev: { text?: string; connected?: boolean; name?: string }) => void): void;
+}
+
 const mod = Platform.OS === "android" ? requireOptionalNativeModule<WearNative>("Wear") : null;
+const bt = Platform.OS === "android" ? requireOptionalNativeModule<WearLinkNative>("WearLink") : null;
 
 // 手表可见会话（#294 批4 + 审查修复）：聚合模式下手表保持单源口径——只发活动源的
 // 会话；src 字段无条件剥离（手表协议无此字段，聚合→单源切回后懒盖章残留也不外泄，
@@ -40,14 +48,31 @@ function fingerprint(list: SessionState[]): string {
 }
 
 export function startWatchGateway(): void {
-  if (!mod || started) return;
+  if ((!mod && !bt) || started) return;
   started = true;
 
-  mod.addListener("onMessage", (ev: { path?: string; text?: string }) => {
-    if (ev.path !== PATH_CMD || !ev.text) return;
-    handleWatchCommand(ev.text);
-  });
-  void mod.start().catch(() => undefined);
+  if (mod) {
+    mod.addListener("onMessage", (ev: { path?: string; text?: string }) => {
+      if (ev.path !== PATH_CMD || !ev.text) return;
+      handleWatchCommand(ev.text);
+    });
+    void mod.start().catch(() => undefined);
+  }
+
+  // #380 蓝牙通道：手表命令行 JSON 直达（无 path 概念）；未连上/未授权时周期重试
+  let btReady = false;
+  if (bt) {
+    bt.addListener("onMessage", (ev: { text?: string }) => {
+      if (ev.text) handleWatchCommand(ev.text);
+    });
+    bt.addListener("onStatus", (ev: { connected?: boolean }) => {
+      btReady = !!ev.connected;
+      if (btReady) flush(); // 手表刚连上：立即补一帧快照
+    });
+    const retryBt = () => void bt!.start().catch(() => undefined);
+    retryBt();
+    setInterval(retryBt, 8000);
+  }
 
   let lastSentAt = 0;
   let lastFingerprint: string | null = null; // null = 首帧必发（此前误写字面 NUL 字节，git 判了二进制）
@@ -63,8 +88,17 @@ export function startWatchGateway(): void {
     lastSentAt = Date.now();
     lastFingerprint = fingerprint(list);
     try {
-      void mod!.send(PATH_SESSIONS, JSON.stringify(list)).catch(() => undefined);
+      void mod?.send(PATH_SESSIONS, JSON.stringify(list)).catch(() => undefined);
     } catch {}
+    // #380 蓝牙通道：SNAPSHOT Envelope（sessions + 每会话近 20 条日志喂时间线），
+    // 手表 ProtocolEngine 幂等重建；seq 置 0（手表 BT 通道不消费增量 seq）
+    if (bt && btReady) {
+      try {
+        const logs: Record<string, unknown[]> = {};
+        for (const s of list) logs[s.session_id] = (store.timelineOf(s.session_id) ?? []).slice(-20);
+        bt.send(JSON.stringify({ seq: 0, session_id: "", ts: Date.now(), type: "SNAPSHOT", payload: { sessions: list, logs } }));
+      } catch {}
+    }
     // #373 连接配置跟随活动源（变化才发）：wan 透传 / LAN 直连
     try {
       const sid = snap.activeSourceId;

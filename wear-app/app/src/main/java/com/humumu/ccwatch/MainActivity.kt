@@ -34,6 +34,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.wear.compose.material.Text
 import androidx.wear.compose.material.TimeText
+import com.humumu.ccwatch.data.BluetoothRepository
 import com.humumu.ccwatch.data.DataLayerRepository
 import com.humumu.ccwatch.data.DemoRepository
 import com.humumu.ccwatch.data.RelayRepository
@@ -71,7 +72,7 @@ class MainActivity : ComponentActivity() {
             var mode by remember {
                 mutableStateOf(
                     prefs.getString("mode", null)?.let { runCatching { SourceMode.valueOf(it) }.getOrNull() }
-                        ?: if (BuildConfig.DEMO_DEFAULT) SourceMode.DEMO else SourceMode.GMS
+                        ?: if (BuildConfig.DEMO_DEFAULT) SourceMode.DEMO else SourceMode.BT
                 )
             }
             var host by remember { mutableStateOf(prefs.getString("host", "192.168.0.105:8787") ?: "") }
@@ -81,6 +82,7 @@ class MainActivity : ComponentActivity() {
                     SourceMode.DEMO -> DemoRepository()
                     SourceMode.RELAY -> RelayRepository(host, token)
                     SourceMode.GMS -> DataLayerRepository(applicationContext)
+                    SourceMode.BT -> BluetoothRepository()
                 }
             }
             DisposableEffect(repo) { onDispose { repo.close() } }
