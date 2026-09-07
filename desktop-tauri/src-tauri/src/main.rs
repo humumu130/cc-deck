@@ -191,13 +191,22 @@ fn node_in_path() -> bool {
     node_path().is_some()
 }
 
-#[tauri::command]
-fn relay_status() -> Value {
+// node 探测结果进程内缓存：where.exe 首跑可能被 Defender 实时扫描拖 1-2s，
+// 每次状态查询都 spawn 会把设置面板开合卡出可感知延迟（#342 卡顿主因之一）
+static NODE_OK: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
+
+fn relay_status_value() -> Value {
+    let node = *NODE_OK.get_or_init(node_in_path);
     serde_json::json!({
         "port": port_listening(relay_port()),
         "embedded": EMBEDDED_RELAY.lock().unwrap().is_some(),
-        "node": node_in_path(),
+        "node": node,
     })
+}
+
+#[tauri::command]
+async fn relay_status() -> Value {
+    relay_status_value()
 }
 
 fn spawn_embedded_relay(app: &tauri::AppHandle) -> Result<(), String> {
@@ -261,14 +270,14 @@ fn relay_toggle(app: tauri::AppHandle, on: bool) -> Result<Value, String> {
             let _ = c.wait();
             println!("[embedded-relay] stopped by user");
         }
-        return Ok(relay_status());
+        return Ok(relay_status_value());
     }
     if port_listening(relay_port()) {
         println!("[embedded-relay] port {} already serving - nothing to do", relay_port());
-        return Ok(relay_status()); // 已有 relay（插件/手动），视为"开启"状态
+        return Ok(relay_status_value()); // 已有 relay（插件/手动），视为"开启"状态
     }
     spawn_embedded_relay(&app)?;
-    Ok(relay_status())
+    Ok(relay_status_value())
 }
 
 /// #334 自动启用后的就绪等待：端口可连即返回；子进程中途死掉（端口起不来）也
@@ -339,11 +348,14 @@ fn main() {
                     Err(e) => println!("[embedded-relay] auto-enable failed: {e}"),
                 }
             }
-            tauri::WebviewWindowBuilder::from_config(app.handle(), &app.config().app.windows[0])?
+            let win = tauri::WebviewWindowBuilder::from_config(app.handle(), &app.config().app.windows[0])?
                 .initialization_script(INIT_SCRIPT)
                 // 只允许壳内源；等价 Electron will-navigate 的本地白名单（防页面被导航带离）
                 .on_navigation(|url| url.host_str() == Some("tauri.localhost"))
                 .build()?;
+            // #344 网易云式无边框：conf 的 decorations=false 在 from_config 路径实测未生效
+            //（窗口样式仍带 WS_CAPTION），此处显式去框兜底；标题栏职责移交网页自绘
+            let _ = win.set_decorations(false);
             Ok(())
         })
         // 关窗到托盘（等价 Electron 的 close -> preventDefault + hide）；
