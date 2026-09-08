@@ -38,6 +38,8 @@ export class CloudClient {
   private hbTimer: ReturnType<typeof setInterval> | null = null;
   // 桥闪断时记录断线前 active 的设备，重连后主动补发（见 connect 的 open 处理）
   private resumeOnOpen = new Set<string>();
+  // #384b 近 60s 内 grant 过的登录设备：桥断连丢 ack 后重连补发（定时整体清空）
+  private pendingGrantAcks = new Map<string, number>();
   private unsubscribe: () => void;
 
   constructor(
@@ -82,6 +84,18 @@ export class CloudClient {
           if (this.phones.has(dev)) this.resumePhone(dev, this.phones.get(dev)?.lastSeq ?? 0);
           else if (this.wanWatches.has(dev)) this.resumeWan(dev, this.wanWatches.get(dev)?.lastSeq ?? 0);
         }
+      }
+      // #384b 扫码登录 ack 补发：grant 命令到达时若本桥恰好断连（桥闪断/部署踢连接），
+      // pair_ack 静默丢失，电脑端永远等不到。桥重连 open 后对近 60s 的 grant 补发一次
+      // （幂等：手机重复授权/网页重复收 ack 都无害）
+      if (this.pendingGrantAcks.size) {
+        const acks = [...this.pendingGrantAcks.keys()];
+        console.log(`[cloud] replay ${acks.length} login ack(s) after bridge reconnect`);
+        for (const dev of acks) this.sendSealed(dev, {
+          t: "pair_ack",
+          relay_dev: this.identity.relayDev,
+          relay_pubkey: this.identity.keypair.publicKey,
+        });
       }
     });
     ws.on("message", (raw) => {
@@ -176,6 +190,11 @@ export class CloudClient {
     if (!this.identity.peers.get(dev)) {
       this.identity.addPeer(dev, { pubkey, name, paired_at: Date.now() });
       console.log(`[cloud] login granted dev=${dev} name=${name} via ${this.tag}`);
+    }
+    this.pendingGrantAcks.set(dev, Date.now());
+    if (this.pendingGrantAcks.size > 50) {
+      const now = Date.now();
+      for (const [d, ts] of this.pendingGrantAcks) if (now - ts > 60_000) this.pendingGrantAcks.delete(d);
     }
     this.sendSealed(dev, {
       t: "pair_ack",
