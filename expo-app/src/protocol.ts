@@ -147,6 +147,7 @@ export type CommandType =
   | "COMMAND_LOGIN_GRANT"
   | "COMMAND_WATCH_GRANT"
   | "COMMAND_PERM"
+  | "COMMAND_MODEL"
   | "COMMAND_REFRESH_TODOS";
 
 // 云桥配对信息：relay 经可信 LAN 信道下发，手机落盘后即可走云通道
