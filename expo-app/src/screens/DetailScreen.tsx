@@ -603,6 +603,10 @@ export default function DetailScreen({ sid, onBack, initialView, ref }: { sid: s
   // 回到底部浮钮（#322 第四轮定位，用户拍板）：对话区顶部居中小胶囊（ChatGPT 手机端
   // 样式，带下箭头），上滑离开底部即出现，吸顶浮动不占布局、不与 App 壳悬浮钮打架
   const [showJump, setShowJump] = useState(false);
+  // 回到底部浮钮（第五轮）：滚动中隐藏、停止 ~300ms 后浮现；atBottom/jumpScrollable 由 onScroll 维护
+  const jumpIdleTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const jumpScrollable = useRef(false);
+  useEffect(() => () => { if (jumpIdleTimer.current) clearTimeout(jumpIdleTimer.current); }, []);
   useEffect(() => { setShowJump(false); }, [view]);
   const [showThink, setShowThink] = useState(thinkShown);
   const [collapsed, setCollapsed] = useState(ctrlCollapsed);
@@ -1532,7 +1536,13 @@ export default function DetailScreen({ sid, onBack, initialView, ref }: { sid: s
           const { contentOffset, contentSize, layoutMeasurement } = e.nativeEvent;
           const near = contentSize.height - contentOffset.y - layoutMeasurement.height < 80;
           atBottom.current = near;
-          setShowJump(!near && contentSize.height - layoutMeasurement.height > 300);
+          jumpScrollable.current = contentSize.height - layoutMeasurement.height > 300;
+          // 用户拍板：滚动进行中立即隐藏，停止 ~300ms 后才浮现（防滚动期间闪现）
+          setShowJump(false);
+          if (jumpIdleTimer.current) clearTimeout(jumpIdleTimer.current);
+          jumpIdleTimer.current = setTimeout(() => {
+            if (!atBottom.current && jumpScrollable.current) setShowJump(true);
+          }, 300);
         }}
         scrollEventThrottle={120}
       >
@@ -1609,13 +1619,14 @@ export default function DetailScreen({ sid, onBack, initialView, ref }: { sid: s
       ))}
       </ScrollView>
 
-      {/* 回到底部浮钮（#322 第四轮定位）：上滑离开底部后出现，对话区顶部居中小胶囊（ChatGPT
-          手机端样式）带下箭头，吸顶浮动——绝对定位不占布局，短横向尺寸少遮内容 */}
+      {/* 回到底部浮钮（#322 第五轮，用户拍板）：对话区底部居中、输入框正上方，
+          正圆形；滚动进行中隐藏、停止 ~300ms 才浮现——绝对定位不占布局 */}
       {showJump && (view === "msg" || view === "all") ? (
         <Pressable
           style={d.jumpFab}
-          android_ripple={{ color: withA(c.working, 0.2), borderless: false, radius: 14 }}
+          android_ripple={{ color: withA(c.working, 0.2), borderless: false, radius: 17 }}
           onPress={() => {
+            if (jumpIdleTimer.current) clearTimeout(jumpIdleTimer.current);
             (view === "msg" ? scrollRef : allScrollRef).current?.scrollToEnd({ animated: true });
             setShowJump(false);
           }}
@@ -1813,14 +1824,14 @@ function MicIcon({ color }: { color: string }) {
 
 const makeStyles = (c: ThemeColors) => StyleSheet.create({
   safe: { flex: 1, backgroundColor: c.bg },
-  // 回到底部浮钮（#322 第四轮定位）：对话区顶部居中小胶囊（ChatGPT 手机端样式），带下箭头
+  // 回到底部浮钮（#322 第五轮，用户拍板）：对话区底部居中、输入框上方，正圆形
   jumpFab: {
-    position: "absolute", top: 8, alignSelf: "center",
-    height: 28, paddingHorizontal: 11, borderRadius: 14,
-    flexDirection: "row", alignItems: "center", justifyContent: "center",
+    position: "absolute", bottom: 10, alignSelf: "center",
+    width: 34, height: 34, borderRadius: 17,
+    alignItems: "center", justifyContent: "center",
     backgroundColor: c.panel, borderWidth: 1, borderColor: c.line, elevation: 4,
   },
-  jumpFabT: { color: c.dim, fontSize: 15, fontWeight: "700", lineHeight: 17, marginTop: -1 },
+  jumpFabT: { color: c.dim, fontSize: 16, fontWeight: "700", lineHeight: 18, marginTop: -1 },
   head: {
     flexDirection: "row", alignItems: "center", gap: 6,
     paddingHorizontal: 12, paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: c.line,

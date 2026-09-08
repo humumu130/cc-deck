@@ -824,7 +824,7 @@ export default function ListScreen({ sessions, connected, connText, onOpen, onNe
         ListFooterComponent={
           visible.length > 0 ? (
             <Pressable style={styles.footHint} disabled={refreshing} onPress={refresh} hitSlop={{ top: 10, bottom: 16 }}>
-              <Text style={styles.footHintT}>{refreshing ? "刷新中…" : "↻ 下滑更新"}</Text>
+              <Text style={styles.footHintT}>{refreshing ? "刷新中…" : "↻ 下拉更新"}</Text>
             </Pressable>
           ) : null
         }
