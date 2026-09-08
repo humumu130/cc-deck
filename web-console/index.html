@@ -4659,27 +4659,38 @@ async function probeLocalRelay() {
     const exists = servers.some((s) => s.kind === "lan" && /127\.0\.0\.1|localhost/.test(s.wsUrl));
     if (exists) { if (manual) toast("本机源已存在"); return; }
     let done = false;
-    const finish = (ok, why) => {
+    const finish = (port, token, why) => {
       if (done) return;
       done = true;
-      console.log("[ccdeck] local relay probe:", ok ? "hit" : "miss", why || "");
-      if (ok) {
-        servers.push({ id: uuid(), name: "本机", kind: "lan", wsUrl: "ws://127.0.0.1:8787/ws", token: "devtoken" });
+      console.log("[ccdeck] local relay probe:", port ? "hit :" + port : "miss", why || "");
+      if (port) {
+        servers.push({ id: uuid(), name: "本机", kind: "lan", wsUrl: `ws://127.0.0.1:${port}/ws`, token });
         saveServers();
         renderServers(); render();
         connectAll();
         if ($("wizPop").classList.contains("open")) $("wizPop").classList.remove("open");
         toast("已发现并连接本机 relay");
       } else if (manual) {
-        toast("本机 8787 未发现 relay（确认这台电脑在跑 relay，且 token 为默认 devtoken）", 5000);
+        toast("本机 8787 未发现 relay（确认这台电脑在跑 relay）", 5000);
       }
     };
-    try {
-      const ws = new WebSocket("ws://127.0.0.1:8787/ws?token=devtoken");
-      const t = setTimeout(() => { try { ws.close(); } catch {} finish(false, "timeout"); }, 3000);
-      ws.onopen = () => { clearTimeout(t); try { ws.close(); } catch {} finish(true); };
-      ws.onerror = () => { clearTimeout(t); finish(false, "error(被浏览器策略拦或端口无服务)"); };
-    } catch (e) { finish(false, "exc:" + e); }
+    // ① exe 内嵌 relay 自报家门：/local-info 返回 {port, token}（token 由 exe 生成，
+    //    不一定是 devtoken——嗅探拿真实值，硬编码 devtoken 对 exe 场景必 401）
+    fetch("http://127.0.0.1:8787/local-info", { signal: AbortSignal.timeout ? AbortSignal.timeout(1500) : undefined })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((j) => {
+        if (j && j.ok && j.port && j.token) { finish(j.port, j.token, "via local-info"); return; }
+        finish(0, 0, "local-info no body");
+      })
+      .catch(() => {
+        // ② 手动跑的生产 relay 无 local-info：回退 ws+devtoken 探测（家用默认 token）
+        try {
+          const ws = new WebSocket("ws://127.0.0.1:8787/ws?token=devtoken");
+          const t = setTimeout(() => { try { ws.close(); } catch {} finish(0, 0, "ws timeout"); }, 2500);
+          ws.onopen = () => { clearTimeout(t); try { ws.close(); } catch {} finish(8787, "devtoken", "via ws"); };
+          ws.onerror = () => { clearTimeout(t); finish(0, 0, "ws error(端口无服务或非 devtoken)"); };
+        } catch (e) { finish(0, 0, "exc:" + e); }
+      });
   };
   setTimeout(() => probeLocalRelay(false), 800);
   window.__ccdeckProbeLocal = () => probeLocalRelay(true);
