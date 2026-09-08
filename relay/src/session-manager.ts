@@ -378,6 +378,21 @@ export class SessionManager {
     if (s) this.emitUpdated(s, true);
   }
 
+  // #393 手动通知注入（/api/notify）：把一段文字作为 TASK_DONE 汇报推给指定/最新会话，
+  // 悬浮框当即弹出（拖图原理答疑/联调实测用）；同时落 last_task_done 供断线恢复
+  notifyDone(sessionId: string, done: string[], remainingCount: number): boolean {
+    const s = this.sessions.get(sessionId);
+    if (!s) return false;
+    const report = { done: done.slice(0, 10), remaining_count: remainingCount, ts: Date.now() };
+    s.state.last_task_done = report;
+    this.bus.emit(sessionId, "TASK_DONE", {
+      done: done.slice(0, 10),
+      remaining: [],
+      ts: report.ts,
+    });
+    return true;
+  }
+
   // 任务清单更新（TodoWrite；managed 与 external 两条路径共用）。
   // 单一咽喉点：hook 路径 / transcript 轮询 / COMMAND_REFRESH_TODOS 重发全部经此，
   // 隐藏条目（COMMAND_TODO_HIDE 记入 todo-hidden.json）在这里统一过滤
@@ -1115,12 +1130,24 @@ export class SessionManager {
       if (!force && prevStr === next) continue;
       this.lastStoreTodos.set(s.state.session_id, next);
       // 任务完成汇报（#204）：前快照未完成 → 后快照已完成的项即本次完成。
-      // 首见（prevStr 空，冷启动/SNAPSHOT 重建）不报，避免重启刷一屏假完成
+      // 首见（prevStr 空，冷启动/SNAPSHOT 重建）不报，避免重启刷一屏假完成。
+      // #393 补充：创建+完成落在同一轮询窗（30s）内的任务，首见时已是 completed——
+      // 此前被上面"首见不报"一并吞掉，TASK_DONE 几乎不触发（悬浮框长期沉默根因）。
+      // 会话已在轮询中（prevStr 存在）时，本轮新出现且已完成、且 updated_at 距今
+      // 10 分钟内的条目按完成上报；无近期 mtime 的历史完成条目（resume 场景）仍不报
       if (prevStr) {
         try {
           const prev = JSON.parse(prevStr) as TodoItem[];
+          const prevByContent = new Set(prev.map((t) => t.content));
           const prevOpen = new Set(prev.filter((t) => t.status !== "completed").map((t) => t.content));
-          const done = visible.filter((t) => t.status === "completed" && prevOpen.has(t.content)).map((t) => t.content);
+          const done = visible
+            .filter(
+              (t) =>
+                t.status === "completed" &&
+                (prevOpen.has(t.content) ||
+                  (!prevByContent.has(t.content) && typeof t.updated_at === "number" && Date.now() - t.updated_at < 10 * 60_000)),
+            )
+            .map((t) => t.content);
           if (done.length) {
             // 汇报同时记入会话状态（#254）：TASK_DONE 瞬态事件在客户端断线/进程被杀时
             // 丢失，落状态后 SNAPSHOT 可恢复未读汇报（端上按 ts 与已清除位去重）。

@@ -298,6 +298,12 @@ export function startServer(
       res.writeHead(200, { "content-type": "application/json" }).end(JSON.stringify(opts.pairCodes.issue()));
       return;
     }
+    // #393 手动通知（LAN token 鉴权）：body {session_id?, done: string[]} → 该会话（缺省
+    // 取最新 WORKING/外部会话）悬浮框弹 TASK_DONE。答疑/联调实测悬浮框用
+    if (req.method === "POST" && url.pathname === "/api/notify") {
+      void handleNotify(req, res, mgr, cfg);
+      return;
+    }
     // Slash 命令列表（手机/网页输入联想）：内置表 + 用户级 ~/.claude/commands +
     // 项目级 <cwd>/.claude/commands（cwd 经 LAN token 鉴权后信任，与 WS 命令同信任级）
     if (req.method === "GET" && url.pathname === "/api/commands") {
@@ -528,6 +534,40 @@ export function startServer(
         wss.close(() => server.close(() => resolve()));
       }),
   };
+}
+
+// #393 /api/notify：手动注入 TASK_DONE（悬浮框通知），LAN token 鉴权
+async function handleNotify(
+  req: IncomingMessage,
+  res: ServerResponse,
+  mgr: SessionManager,
+  cfg: RelayConfig,
+): Promise<void> {
+  const url = new URL(req.url ?? "/", "http://localhost");
+  if ((url.searchParams.get("token") ?? "") !== cfg.token) {
+    res.writeHead(401).end("unauthorized");
+    return;
+  }
+  let body = "";
+  req.setEncoding("utf-8");
+  for await (const chunk of req) body += chunk;
+  try {
+    const p = JSON.parse(body) as { session_id?: string; done?: unknown };
+    const items = Array.isArray(p.done) ? p.done.filter((x): x is string => typeof x === "string" && !!x).slice(0, 10) : [];
+    if (!items.length) { res.writeHead(400).end('{"error":"done 不能为空"}'); return; }
+    const sessions = mgr.snapshot();
+    const target =
+      (p.session_id ? sessions.find((s) => s.session_id === p.session_id) : undefined) ||
+      sessions.find((s) => s.status === "WORKING" && s.external) ||
+      sessions.find((s) => s.external) ||
+      sessions[0];
+    if (!target) { res.writeHead(503).end('{"error":"无可投递会话"}'); return; }
+    const remaining = target.todos ? target.todos.filter((t) => t.status !== "completed").length : 0;
+    mgr.notifyDone(target.session_id, items, remaining);
+    res.writeHead(200, { "content-type": "application/json" }).end(JSON.stringify({ ok: true, session_id: target.session_id }));
+  } catch {
+    res.writeHead(400).end('{"error":"bad json"}');
+  }
 }
 
 // hooks 桥接入口：仅本机回环 + bridge token；PreToolUse 可能长轮询挂起
