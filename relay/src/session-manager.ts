@@ -393,6 +393,17 @@ export class SessionManager {
     return true;
   }
 
+  // #393 黄色 [待确认] 悬浮框推送（/api/notify mode=confirm）：往目标会话 todos
+  // 追加一条 pending [待确认] 条目——客户端 #300/#306 确认提醒链路天然接住（弹黄框，
+  // 用户逐条 ✕ / 全部已读即消，会话任务面板同步可见）
+  notifyConfirm(sessionId: string, text: string): boolean {
+    const s = this.sessions.get(sessionId);
+    if (!s) return false;
+    const todos = [...(s.state.todos ?? []), { content: `[待确认] ${text}`, status: "pending" as const }];
+    this.setTodos(sessionId, todos);
+    return true;
+  }
+
   // 任务清单更新（TodoWrite；managed 与 external 两条路径共用）。
   // 单一咽喉点：hook 路径 / transcript 轮询 / COMMAND_REFRESH_TODOS 重发全部经此，
   // 隐藏条目（COMMAND_TODO_HIDE 记入 todo-hidden.json）在这里统一过滤

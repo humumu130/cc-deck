@@ -552,7 +552,22 @@ async function handleNotify(
   req.setEncoding("utf-8");
   for await (const chunk of req) body += chunk;
   try {
-    const p = JSON.parse(body) as { session_id?: string; done?: unknown };
+    const p = JSON.parse(body) as { session_id?: string; done?: unknown; mode?: string; text?: unknown };
+    // #393 mode=confirm：黄框 [待确认] 推送（text 单条），否则绿框 TASK_DONE（done 列表）
+    if (p.mode === "confirm") {
+      const text = typeof p.text === "string" ? p.text.trim().slice(0, 120) : "";
+      if (!text) { res.writeHead(400).end('{"error":"text 不能为空"}'); return; }
+      const sessions = mgr.snapshot();
+      const target =
+        (p.session_id ? sessions.find((s) => s.session_id === p.session_id) : undefined) ||
+        sessions.find((s) => s.status === "WORKING" && s.external) ||
+        sessions.find((s) => s.external) ||
+        sessions[0];
+      if (!target) { res.writeHead(503).end('{"error":"无可投递会话"}'); return; }
+      mgr.notifyConfirm(target.session_id, text);
+      res.writeHead(200, { "content-type": "application/json" }).end(JSON.stringify({ ok: true, mode: "confirm", session_id: target.session_id }));
+      return;
+    }
     const items = Array.isArray(p.done) ? p.done.filter((x): x is string => typeof x === "string" && !!x).slice(0, 10) : [];
     if (!items.length) { res.writeHead(400).end('{"error":"done 不能为空"}'); return; }
     const sessions = mgr.snapshot();
