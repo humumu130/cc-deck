@@ -1027,6 +1027,7 @@
   }
   #cmdbar > * { width: 100%; max-width: min(1040px, 100%); margin: 0 auto; }
   #inputcard {
+    position: relative; z-index: 21; /* 层级约束：回到底部浮钮（z 20）压在内容上、输入卡下 */
     background: var(--panel); border: 1px solid var(--border); border-radius: 16px;
     padding: 7px 10px 8px 12px; transition: border-color .15s, box-shadow .15s;
   }
@@ -1034,6 +1035,24 @@
     border-color: var(--brand);
     box-shadow: 0 0 0 3px rgba(217,119,87,.13), 0 2px 18px rgba(217,119,87,.08);
   }
+  /* ---------- 回到底部浮钮（对齐手机端形态）：消息 tab 下滚动停止且距底 >80px 才浮现；
+     绝对定位挂 #cmdbar（不随 #timeline 滚动），bottom:100%+10px 即悬停于输入区上方 10px ---------- */
+  #cmdbar > #toBottomBtn {
+    position: absolute; bottom: calc(100% + 10px); left: 50%;
+    width: 34px; height: 34px; margin: 0; padding: 0; border-radius: 50%; flex: none;
+    display: flex; align-items: center; justify-content: center;
+    background: var(--panel); border: 1px solid var(--border); color: var(--dim);
+    box-shadow: 0 2px 10px rgba(0,0,0,.22);
+    z-index: 20; cursor: pointer;
+    opacity: 0; visibility: hidden; pointer-events: none;
+    transform: translateX(-50%) translateY(4px);
+    transition: opacity .16s ease, transform .16s ease, visibility .16s;
+  }
+  #cmdbar > #toBottomBtn.show {
+    opacity: 1; visibility: visible; pointer-events: auto;
+    transform: translateX(-50%) translateY(0);
+  }
+  #cmdbar > #toBottomBtn:hover { color: var(--text); border-color: var(--brand); }
   #inputcard .ic-top { display: flex; align-items: flex-start; gap: 8px; }
   #inputcard .ic-at { color: var(--faint); font-weight: 700; font-size: 15px; line-height: 30px; flex: none; cursor: pointer; user-select: none; }
   #inputcard .ic-at:hover { color: var(--dim); }
@@ -1406,6 +1425,7 @@
           <button id="sendBtn" title="发送（Enter）">➤</button>
         </div>
       </div>
+      <button id="toBottomBtn" title="回到底部" aria-label="回到底部"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5.5 12.5 12 19l6.5-6.5"/></svg></button>
     </div>
   </div>
 
@@ -4434,6 +4454,7 @@ function switchTab(name) {
   activeTab = name;
   document.querySelectorAll(".tabs button.tab").forEach((x) => x.classList.toggle("active", x.dataset.tab === name));
   moveTabInd(); // #279③ 指示条平移到新 active（renderDetail 内也会补一次）
+  hideToBottom(); // 回到底部浮钮仅消息 tab 生效，切页即收
   const tl = $("timeline");
   tl.dataset.count = "";
   renderDetail();
@@ -4469,6 +4490,31 @@ document.addEventListener("keydown", (ev) => {
   if (n < 0 || n >= tabs.length) return;
   ev.preventDefault();
   switchTab(tabs[n].dataset.tab);
+});
+
+// ===== 回到底部浮钮（对齐手机端形态）：上滑离底 >80px 且滚动停止 ~300ms 后浮现 =====
+// 滚动进行中立即隐藏（防闪现）；距底 ≤80px（含新消息自动跟随在底）不显示；点击平滑滚底并收钮
+const toBottomBtn = $("toBottomBtn");
+let tlStopTimer = 0;
+function hideToBottom() {
+  clearTimeout(tlStopTimer);
+  toBottomBtn.classList.remove("show");
+}
+$("timeline").addEventListener("scroll", () => {
+  hideToBottom(); // 滚动中先收，停止判定通过后再浮
+  if (activeTab !== "activity") return;
+  const tl = $("timeline");
+  if (tl.scrollHeight - tl.scrollTop - tl.clientHeight <= 80) return;
+  tlStopTimer = setTimeout(() => {
+    if (activeTab !== "activity") return;
+    const t = $("timeline");
+    if (t.scrollHeight - t.scrollTop - t.clientHeight > 80) toBottomBtn.classList.add("show");
+  }, 300); // 停止 300ms 复核：仍离底 >80px 才浮现
+});
+toBottomBtn.addEventListener("click", () => {
+  hideToBottom();
+  const tl = $("timeline");
+  tl.scrollTo({ top: tl.scrollHeight, behavior: "smooth" });
 });
 
 // #279④ #NNN 点击 → 任务 tab 定位该条（闪高 1.5s，对齐手机 #264 jumpToTask）；
