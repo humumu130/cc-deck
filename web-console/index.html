@@ -157,11 +157,11 @@
   .sfab.morph { transform: scale(.55) rotate(75deg); opacity: .3; }
   body.newform-open #sideFabs { --fabs-bottom: 16px; flex-direction: row; gap: 8px; }
   .sfab {
-    width: 42px; height: 42px; border: none; background: none; cursor: pointer;
+    width: 42px; height: 42px; border: 1px solid var(--border); background: var(--panel); cursor: pointer;
     display: flex; align-items: center; justify-content: center; position: relative;
     color: var(--dim); border-radius: 50%; padding: 0;
   }
-  .sfab:hover { color: var(--text); background: rgba(127,127,127,.14); }
+  .sfab:hover { color: var(--text); border-color: var(--hov); }
   .sfab svg { width: 28px; height: 28px; display: block; }
   #addBtn svg { transition: transform .2s ease; }
   #addBtn.on svg { transform: rotate(45deg); }
@@ -172,7 +172,7 @@
   #gearPop {
     position: absolute; inset: 0; z-index: 45; display: flex; flex-direction: column;
     background: var(--bg-soft); border-right: 1px solid var(--border);
-    padding: 0 12px 58px; overflow-y: auto; will-change: transform;
+    padding: 0 12px 58px; overflow-y: auto;
     transform: translateX(-102%); visibility: hidden; transition: transform .16s ease, visibility 0s .16s;
   }
   #gearPop.open { transform: none; visibility: visible; transition: transform .18s ease, visibility 0s 0s; }
@@ -349,8 +349,11 @@
   #wizCodeRow { display: flex; gap: 8px; }
   #wizCode {
     flex: 1; min-width: 0; height: 46px; border-radius: 12px; text-align: center;
-    letter-spacing: 6px; font-size: 20px; font-weight: 700; font-family: var(--mono);
+    letter-spacing: 8px; font-size: 22px; font-weight: 800; font-family: var(--mono);
+    background: var(--panel-2); border: 1px solid var(--border); color: var(--text);
+    padding-left: 8px;
   }
+  #wizCode:focus { outline: none; border-color: var(--brand); box-shadow: 0 0 0 2px rgba(217,119,87,.18); }
   #wizGo {
     flex: none; height: 46px; padding: 0 22px; border-radius: 12px; font-weight: 700; font-size: 14px;
     background: var(--brand); color: #fff; border: none; cursor: pointer;
@@ -667,8 +670,9 @@
   .card-stats { font-size: 12px; color: var(--faint); margin-top: 5px; display: flex; align-items: center; gap: 10px; font-variant-numeric: tabular-nums; }
   .card-stats .add { color: var(--done); }
   .card-stats .del { color: var(--error); }
-  /* #367 源标签内联：stats 行最右（margin-left:auto 推到底），不再独立成行留白 */
-  .card-stats .src-badge { margin-left: auto; flex: none; }
+  /* #383 源标签居 stats 行最左（与上两行左对齐）；ctx 水位推最右 */
+  .card-stats .src-badge { flex: none; }
+  .card-stats .ctx-mini { margin-left: auto; }
   .card-cta { margin-top: 10px; display: flex; justify-content: flex-end; }
   .card-cta button {
     background: rgba(245,184,65,.12); border: 1px solid rgba(245,184,65,.45); color: var(--working);
@@ -1130,7 +1134,7 @@
           <div id="pairBox">
             <input id="pairCode" inputmode="numeric" maxlength="6" placeholder="6 位配对码" autocomplete="off">
             <button id="pairBtn" class="primary">配对</button>
-            <button id="loginQrBtn" title="手机 App 扫一下，免输码接入">📱 扫码登录</button>
+            <button id="loginQrBtn" title="手机扫一下，这台电脑直接接入你的 CC Deck"><svg viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:-1px"><rect x="7" y="2.5" width="10" height="19" rx="2.2"/><path d="M10.5 18.5h3"/></svg> 手机扫码接入</button>
             <button id="addPhoneBtn" title="手机 App 扫码直接接入本服务器">📲 添加手机</button>
           </div>
           <div class="pair-hint" id="pairHint">配对码：手机 App / PC 设置页领取，5 分钟内有效。</div>
@@ -1266,14 +1270,14 @@
         <input id="wizCode" inputmode="numeric" maxlength="6" placeholder="6 位配对码" autocomplete="off">
         <button id="wizGo">连接</button>
       </div>
-      <div id="wizAlt">其他方式：<button id="wizQr">📱 手机扫码</button> · <button id="wizLan">局域网直连</button></div>
+      <div id="wizAlt">其他方式：<button id="wizQr"><svg viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:-1px"><rect x="7" y="2.5" width="10" height="19" rx="2.2"/><path d="M10.5 18.5h3"/></svg> 手机扫码</button> · <button id="wizLan">局域网直连</button></div>
       <button class="wiz-skip" id="wizSkip">稍后配置（左下角 ⚙ 里随时可加）</button>
     </div>
   </div>
 <div id="loginQrPop">
     <div id="loginQrCard">
       <div id="loginQrTitle">扫码登录</div>
-      <div id="loginQrSub">手机 CC Deck App 扫下方二维码<br/>确认后此浏览器自动接入——免输配对码</div>
+      <div id="loginQrSub">手机 CC Deck App 扫下方二维码<br/>确认后自动进入——免输配对码</div>
       <div id="loginQrCanvas"><canvas id="loginQrCv" width="200" height="200"></canvas></div>
       <div id="loginQrState">等待手机扫码…</div>
       <button id="loginQrCancel">取消</button>
@@ -2550,8 +2554,9 @@ function render() {
       const ctaRow = waiting && !s.historical && s.waiting_request?.decidable !== false ? '<div class="card-cta"><button>处理</button></div>' : "";
       // #367 源标签内联进 stats 行右侧（多源才有；不再独立占一整行留白）；
       // 全空时整行不渲染，卡片底部不再拖一条空白
+      // #383 源标签移最左与上两行左对齐；ctx 水位条压到最右（不再悬中间）
       const srcTag = ctxs.size > 1 ? srcBadgeHtml(ctx.cfg) : "";
-      const statsInner = statsHtml(s.stats) + ctxHtml(s) + (srcTag || "");
+      const statsInner = srcTag + statsHtml(s.stats) + ctxHtml(s);
       const statsBlock = statsInner ? '<div class="card-stats">' + statsInner + "</div>" : "";
       if (listCompact) {
         // #279⑨ 紧凑卡（对齐手机）：状态点+标题+耗时 / 摘要 / 改动+水位+源标签
@@ -4407,7 +4412,9 @@ function startLoginQr() {
     t: "ccdeck-login", v: 1,
     bridge: cfg.wsUrl.replace(/\/$/, "").replace(/^http/, "ws") + "/cloud",
     ...(trustedRd() ? { rd: trustedRd() } : {}), dev, pk: ckp.publicKey,
-    name: (cfg.name || "浏览器").slice(0, 24),
+    // #383 QR 库对非 ASCII 不做 UTF-8 编码（源名含中文→扫码乱码→手机端识别失败）：
+    // name 一律 encodeURIComponent（手机端解码）
+    name: encodeURIComponent((cfg.name || "浏览器").slice(0, 24)),
   });
   $("loginQrState").textContent = "等待手机扫码…";
   drawLoginQr(makePayload());

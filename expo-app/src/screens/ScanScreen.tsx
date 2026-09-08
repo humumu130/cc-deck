@@ -35,7 +35,12 @@ export function parseScanPayload(raw: string): ScanResult | null {
       const pk = typeof j.pk === "string" ? j.pk : "";
       if (/^wb-[0-9a-f]{6,64}$/.test(dev) && /^[A-Za-z0-9+/=]{40,200}$/.test(pk)) {
         const rd = typeof j.rd === "string" ? j.rd : "";
-        return { wsUrl: "", token: "", login: { dev, pk, name: typeof j.name === "string" ? j.name : "浏览器", rd: rd || undefined } };
+        // #383 网页端 QR 库不编码 UTF-8：name 是 encodeURIComponent 过的，这里解码
+        let name = "浏览器";
+        if (typeof j.name === "string" && j.name) {
+          try { name = decodeURIComponent(j.name); } catch { name = j.name; }
+        }
+        return { wsUrl: "", token: "", login: { dev, pk, name, rd: rd || undefined } };
       }
       return null;
     }
