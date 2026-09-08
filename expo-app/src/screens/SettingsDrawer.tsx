@@ -8,7 +8,7 @@ import * as Clipboard from "expo-clipboard";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useTheme, useThemeStyles } from "../theme-context";
 import { LogoMark } from "../brand";
-import { setProcessFont, useProcessFont, setListCompact, useListCompact, setVoiceInput, useVoiceInput, setAggregate as persistAggregate, useAggregate, type ProcessFont } from "../display-settings";
+import { setProcessFont, useProcessFont, setListDensity, useListDensity, setVoiceInput, useVoiceInput, setAggregate as persistAggregate, useAggregate, type ProcessFont, type ListDensity } from "../display-settings";
 import { checkUpdate, announceUpdate, VERSION_NOTES } from "../updates";
 import { store, useRelay, type ServerEntry, type SourceStatus } from "../store";
 import { withA, type ThemeColors } from "../theme";
@@ -36,6 +36,13 @@ const FONT_OPTS: { k: ProcessFont; label: string }[] = [
   { k: "hidden", label: "隐藏" },
 ];
 
+// 列表布局三档（原"简洁列表"布尔开关扩展）：标准=完整卡 / 紧凑=三行卡 / 极简=单行卡
+const LIST_DENSITY_OPTS: { k: ListDensity; label: string }[] = [
+  { k: "std", label: "标准" },
+  { k: "compact", label: "紧凑" },
+  { k: "minimal", label: "极简" },
+];
+
 // #337 服务器色点=身份色：登记后固定，不随选中/连接状态变——选中由 srvRowOn 外侧
 // 亮边框表达。#356 哈希取色会撞色（书房电脑/Mac 同黄）——改同网页 srcColorByKey：
 // 按当前服务器 id 集合稳定排序分配色板序号，源数≤7 必不重
@@ -49,22 +56,26 @@ const rebuildSrvColors = (ids: string[]) => {
   srvColorMap = new Map(sorted.map((id, i) => [id, SRV_COLORS[i % SRV_COLORS.length]]));
 };
 
-// #353 拨杆档位选择器（过程消息 标准/紧凑/隐藏）：一条胶囊轨道 + 带阴影滑块，
-// spring 弹拨到选中档；点任意档位标签即拨过去
-function FontLever({ value, onChange }: { value: ProcessFont; onChange: (v: ProcessFont) => void }) {
+// #353 拨杆档位选择器（通用）：一条胶囊轨道 + 带阴影滑块，spring 弹拨到选中档；
+// 点任意档位标签即拨过去（过程消息 标准/紧凑/隐藏 与 列表布局 标准/紧凑/极简 共用）
+function Lever<T extends string>({ options, value, onChange }: {
+  options: { k: T; label: string }[];
+  value: T;
+  onChange: (v: T) => void;
+}) {
   const { c } = useTheme();
   const d = useThemeStyles(makeStyles);
-  const idx = Math.max(0, FONT_OPTS.findIndex((o) => o.k === value));
+  const idx = Math.max(0, options.findIndex((o) => o.k === value));
   const [w] = useState(174);
-  const seg = w / FONT_OPTS.length;
+  const seg = w / options.length;
   const x = useRef(new Animated.Value(idx * seg)).current;
   useEffect(() => {
     Animated.spring(x, { toValue: idx * seg, velocity: 4, friction: 9, useNativeDriver: true }).start();
   }, [idx, x, seg]);
   return (
     <View style={[d.leverTrack, { width: w }]} onLayout={(e) => { const nw = e.nativeEvent.layout.width; if (nw > 0 && Math.abs(nw - w) < 1) return; }}>
-      <Animated.View style={[d.leverThumb, { width: seg - 6, transform: [{ translateX: x.interpolate({ inputRange: [0, seg * (FONT_OPTS.length - 1)], outputRange: [3, seg * (FONT_OPTS.length - 1) + 3] }) }] }]} />
-      {FONT_OPTS.map((o, i) => (
+      <Animated.View style={[d.leverThumb, { width: seg - 6, transform: [{ translateX: x.interpolate({ inputRange: [0, seg * (options.length - 1)], outputRange: [3, seg * (options.length - 1) + 3] }) }] }]} />
+      {options.map((o, i) => (
         <Pressable key={o.k} style={d.leverOpt} onPress={() => onChange(o.k)} hitSlop={{ top: 4, bottom: 4 }}>
           <Text style={[d.leverT, i === idx && d.leverTOn]}>{o.label}</Text>
         </Pressable>
@@ -185,7 +196,7 @@ export default function SettingsDrawer({
     }),
   ).current;
   const processFont = useProcessFont();
-  const listCompact = useListCompact();
+  const listDensity = useListDensity();
   const aggregate = useAggregate();
   const snap = useRelay();
   const [servers, setServers] = useState<ServerEntry[]>([]);
@@ -464,18 +475,12 @@ export default function SettingsDrawer({
         <View style={d.setItem}>
           <Text style={d.setLabel}><Text style={d.rowIconT}>▤ </Text>过程消息</Text>
           {/* #353 拨杆档位选择器：整条轨道一个胶囊，滑块弹拨到选中档（替代三框点选） */}
-          <FontLever value={processFont} onChange={setProcessFont} />
+          <Lever options={FONT_OPTS} value={processFont} onChange={setProcessFont} />
         </View>
-        {/* #350 深色模式开关移主面板顶（连接 chip 旁）；语音输入开关整体下线 */}
-        <View style={[d.setItem, d.setRow]}>
-          <Text style={d.setLabel}><Text style={d.rowIconT}>☰ </Text>简洁列表</Text>
-          <Switch
-            style={d.sw}
-            value={listCompact}
-            onValueChange={setListCompact}
-            trackColor={{ false: "rgba(128,134,140,0.55)", true: c.brandA }}
-            thumbColor="#fff"
-          />
+        {/* 列表布局三档（原"简洁列表"开关升级）：标准/紧凑/极简，与过程消息同款拨杆 */}
+        <View style={d.setItem}>
+          <Text style={d.setLabel}><Text style={d.rowIconT}>☰ </Text>列表布局</Text>
+          <Lever options={LIST_DENSITY_OPTS} value={listDensity} onChange={setListDensity} />
         </View>
         {/* 多源聚合（#294 批4）：持久化（display-settings）+ 连接行为（store.setAggregate：
             开 = 连全部已配置源；关 = 拆非活动源、保留缓存再开无感恢复） */}
@@ -630,7 +635,8 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
   leverThumb: {
     position: "absolute", top: 3, left: 0, bottom: 3, borderRadius: 14,
     backgroundColor: c.panel2, borderWidth: 1, borderColor: withA(c.brandA, 0.4),
-    elevation: 2,
+    // 勿加 elevation：Android 上 elevation 压过后续兄弟的 zIndex，会把选中档
+    // 标签整个盖住（标签须渲染在滑块上层，靠 JSX 顺序即可）
   },
   leverOpt: { flex: 1, alignItems: "center", justifyContent: "center", zIndex: 1 },
   leverT: { color: c.dim, fontSize: 12 },

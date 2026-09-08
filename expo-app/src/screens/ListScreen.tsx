@@ -6,7 +6,7 @@ import { statusColor, withA, type ThemeColors } from "../theme";
 import { useTheme, useThemeStyles } from "../theme-context";
 import { LogoMark } from "../brand";
 import { sessionElapsed, fmtElapsed, fmtTok, contextPct, contextLevel, CONTEXT_LIMIT_FALLBACK, displaySrcName } from "../fmt";
-import { useListCompact } from "../display-settings";
+import { useListDensity, type ListDensity } from "../display-settings";
 import { store, useRelay } from "../store";
 import { FadeIn, PressScale } from "../motion";
 import type { SessionState } from "../protocol";
@@ -36,9 +36,18 @@ function folderOf(cwd: string): string {
   return parts[parts.length - 1] ?? cwd;
 }
 
-// 源角标配色（#294 批2 + 审查修复）：色板/哈希与网页端 SRC_COLORS/srcColor 逐字节
-// 对齐；哈希键用跨端稳定身份（store SourceStatus.colorKey：云源 relay 设备 id、
-// LAN 源 wsUrl），同一台服务器在两端取到同色——本地 uuid 两端各异不可用
+// 沉寂会话判定（列表降噪）：DONE 且最近更新不在今天——名称色降一档，
+// 让活跃/当日会话在长列表中先跳出来；详情页信息不受影响
+function isSameDay(a: number, b: number): boolean {
+  const x = new Date(a);
+  const y = new Date(b);
+  return x.getFullYear() === y.getFullYear() && x.getMonth() === y.getMonth() && x.getDate() === y.getDate();
+}
+
+// 源配色（#294 批2 + 审查修复，信息层级重设计后由源分组头沿用）：色板/哈希与
+// 网页端 SRC_COLORS/srcColor 逐字节对齐；哈希键用跨端稳定身份（store
+// SourceStatus.colorKey：云源 relay 设备 id、LAN 源 wsUrl），同一台服务器在两端
+// 取到同色——本地 uuid 两端各异不可用
 const SRC_COLORS = ["#D97757", "#5B9DFF", "#2BD98F", "#FFC53D", "#C792EA", "#F06292", "#4DD0E1", "#7E57C2"];
 function srcColor(id: string): string {
   let h = 0;
@@ -46,18 +55,31 @@ function srcColor(id: string): string {
   return SRC_COLORS[h % SRC_COLORS.length];
 }
 
-// 源角标（#294 批2）：聚合且多源时区分会话归属——色点 + 源名胶囊（tag/tagExt 形态：
-// 描边 + 轻染底，染底/描边按源色）；单源模式不渲染（ListScreen 侧把关）。
-// #302：独立成行放卡片最底部左对齐，不与时长/±行数/ctx% 挤同行。
-function SrcBadge({ color, name }: { color: string; name: string }) {
+// 源分组头（信息层级重设计）：聚合多源时列表按源分区——源色竖条 + 源名 + 在线
+// 状态点 + 会话计数，下衬 hairline（对齐设置页「标记+标题+细线」的分区语言）；
+// 组内卡不再逐卡带源角标（分组头已交代归属，避免重复）。取代 #294 批2 逐卡角标。
+// memo：props 全原始值，快照刷新重建行包装对象时属性未变的组头不重渲
+const GroupHeader = memo(function GroupHeader({ name, color, online, count }: {
+  name: string;
+  color: string;
+  online: boolean;
+  count: number;
+}) {
+  const { c } = useTheme();
   const styles = useThemeStyles(makeStyles);
   return (
-    <View style={[styles.srcTag, { borderColor: withA(color, 0.28), backgroundColor: withA(color, 0.1) }]}>
-      <View style={[styles.srcDot, { backgroundColor: color }]} />
-      <Text style={styles.srcTagT} numberOfLines={1}>{name}</Text>
+    <View
+      style={styles.grpHead}
+      accessibilityLabel={`${name}，${online ? "在线" : "离线"}，${count} 个会话`}
+    >
+      <View style={[styles.grpBar, { backgroundColor: color }]} />
+      <Text style={styles.grpName} numberOfLines={1}>{name}</Text>
+      <View style={[styles.grpDot, { backgroundColor: online ? c.done : withA(c.dim, 0.45) }]} />
+      <View style={{ flex: 1 }} />
+      <Text style={styles.grpCount}>{count} 会话</Text>
     </View>
   );
-}
+});
 
 // 新增会话 ＋：圆头细条十字，与品牌星芒同线条语言
 function PlusMark({ size = 20, color = "#D97757" }: { size?: number; color?: string }) {
@@ -72,6 +94,12 @@ function PlusMark({ size = 20, color = "#D97757" }: { size?: number; color?: str
 
 const ACT_W = 78;    // 单个操作按钮宽
 const FULL_W = 156;  // 操作面板总宽（重命名 + 删除）
+
+// 列表行模型（信息层级重设计）：聚合多源时插源分组头行，会话行原样引用
+// SessionState 对象（分组/包装不改写会话，行级 memo 依赖引用不变）
+type ListRow =
+  | { h: true; key: string; name: string; color: string; online: boolean; count: number }
+  | { h: false; key: string; s: SessionState };
 
 // cc light 风格：运行中黄灯呼吸（亮度+缩放联动，2.4s 一拍，对齐网页端呼吸灯）
 function BlinkDot({ color }: { color: string }) {
@@ -137,9 +165,10 @@ function Elapsed({ s }: { s: SessionState }) {
 }
 
 // 左滑露出操作面板（重命名 + 删除；DONE/ERROR 才可删）。
-// 面板做成独立圆角小胶囊（上下留 3px），从卡片后面滑出，避免直角贴圆角的接缝
+// 面板做成独立圆角小胶囊（上下留 3px），从卡片后面滑出，避免直角贴圆角的接缝。
+// minimal（极简单行卡）：面板只留图标不出文字标签（行高太矮叠不下两行字）
 function SwipeRow({
-  sid, deletable, onPress, onRename, onDelete, revealSid, onReveal, compact, children,
+  sid, deletable, onPress, onRename, onDelete, revealSid, onReveal, compact, minimal, children,
 }: {
   sid: string;
   deletable: boolean;
@@ -149,6 +178,7 @@ function SwipeRow({
   revealSid: string | null;
   onReveal: (v: string | null) => void;
   compact?: boolean;
+  minimal?: boolean;
   children: React.ReactNode;
 }) {
   const { c } = useTheme();
@@ -188,8 +218,8 @@ function SwipeRow({
     }),
   ).current;
   return (
-    <View style={[styles.swipeWrap, compact && styles.swipeWrapC]}>
-      <View style={styles.actPanel}>
+    <View style={[styles.swipeWrap, compact && styles.swipeWrapC, minimal && styles.swipeWrapM]}>
+      <View style={[styles.actPanel, minimal && styles.actPanelM]}>
         <Pressable
           style={[styles.actBtn, styles.actRen]}
           android_ripple={{ color: "rgba(255,255,255,0.18)", borderless: false }}
@@ -199,7 +229,7 @@ function SwipeRow({
           }}
         >
           <Text style={styles.actT}>✎</Text>
-          <Text style={styles.actT2}>重命名</Text>
+          {!minimal ? <Text style={styles.actT2}>重命名</Text> : null}
         </Pressable>
         <Pressable
           style={[styles.actBtn, !deletable && styles.actOff]}
@@ -210,12 +240,12 @@ function SwipeRow({
           }}
         >
           <Text style={styles.actT}>✕</Text>
-          <Text style={styles.actT2}>{deletable ? "删除" : "运行中"}</Text>
+          {!minimal ? <Text style={styles.actT2}>{deletable ? "删除" : "运行中"}</Text> : null}
         </Pressable>
       </View>
       <Animated.View style={[styles.swipeCard, { transform: [{ translateX: x }] }]} {...pan.panHandlers}>
         <Pressable
-          style={[styles.card, compact && styles.cardC]}
+          style={[styles.card, compact && styles.cardC, minimal && styles.cardM]}
           android_ripple={{ color: c.tintSoft, borderless: false }}
           onPress={() => {
             if (open.current) close();
@@ -292,10 +322,22 @@ function CtxMini({ s }: { s: SessionState }) {
   );
 }
 
+// 上下文水位纯数字（极简行专用）：只出 "39%" 百分比，色随水位分级；无数据不渲染
+function CtxPct({ s }: { s: SessionState }) {
+  const { c } = useTheme();
+  const styles = useThemeStyles(makeStyles);
+  const used = s.context_usage ?? 0;
+  if (!used) return null;
+  const limit = s.context_limit ?? CONTEXT_LIMIT_FALLBACK;
+  const pct = contextPct(used, limit);
+  const lv = contextLevel(used, limit);
+  return <Text style={[styles.ctxPct, { color: c[lv] }]}>{pct}%</Text>;
+}
+
 // memo：流式刷新只重渲变化的那一行（onRename/onReveal/onDelete 均为稳定引用；
-// srcName 为字符串原始值，浅比较按值相等，Map 重建不触发未变行重渲）
+// 源归属改由分组头承担，卡片不再带源角标 props——会话对象引用不变即不重渲）
 const SessionCard = memo(function SessionCard({
-  s, onOpen, onRename, onDelete, revealSid, onReveal, compact, srcName, srcKey,
+  s, onOpen, onRename, onDelete, revealSid, onReveal, density,
 }: {
   s: SessionState;
   onOpen: (sid: string) => void;
@@ -303,14 +345,16 @@ const SessionCard = memo(function SessionCard({
   onDelete: (sid: string) => void;
   revealSid: string | null;
   onReveal: (v: string | null) => void;
-  compact?: boolean;
-  srcName?: string | null; // 归属源名（聚合且多源时非空，#294 批2）
-  srcKey?: string | null;  // 归属源配色（调用方已去重，直传 SrcBadge）
+  density: ListDensity;
 }) {
   const { c } = useTheme();
   const styles = useThemeStyles(makeStyles);
+  const compact = density === "compact";
+  const minimal = density === "minimal";
   const color = statusColor(s.status, c);
   const deletable = s.status === "DONE" || s.status === "ERROR";
+  // 沉寂会话（DONE 且非今日更新）：名称色降一档，长列表里让位给活跃会话
+  const idle = s.status === "DONE" && !isSameDay(s.updated_at ?? s.started_at, Date.now());
   return (
     <SwipeRow
       sid={s.session_id}
@@ -321,8 +365,24 @@ const SessionCard = memo(function SessionCard({
       revealSid={revealSid}
       onReveal={onReveal}
       compact={compact}
+      minimal={minimal}
     >
-      {compact ? (
+      {minimal ? (
+        // 极简行：状态灯 + 名称（单行）+ 上下文水位百分比，其余全部隐藏；
+        // 点击/左滑交互与其他档一致
+        <View style={styles.rowM}>
+          {s.status === "WORKING" ? (
+            <BlinkDot color={color} />
+          ) : (
+            <View style={[styles.dot, { backgroundColor: color }]} />
+          )}
+          <Text style={[styles.titleM, idle && styles.titleIdle]} numberOfLines={1}>
+            {s.title || "未命名会话"}
+          </Text>
+          <View style={{ flex: 1 }} />
+          <CtxPct s={s} />
+        </View>
+      ) : compact ? (
         // 紧凑卡：状态点+标题+时长一行、动作摘要一行、目录/改动/水位一行——省高度但不丢信息
         <>
           <View style={styles.rowC}>
@@ -331,7 +391,7 @@ const SessionCard = memo(function SessionCard({
             ) : (
               <View style={[styles.dot, { backgroundColor: color }]} />
             )}
-            <Text style={styles.titleC} numberOfLines={1}>{s.title || "未命名会话"}</Text>
+            <Text style={[styles.titleC, idle && styles.titleIdle]} numberOfLines={1}>{s.title || "未命名会话"}</Text>
             <View style={{ flex: 1 }} />
             <Elapsed s={s} />
           </View>
@@ -348,12 +408,6 @@ const SessionCard = memo(function SessionCard({
             ) : null}
             <CtxMini s={s} />
           </View>
-          {/* #302 源角标独立成行：卡片最底部左对齐，永不与时长/±行数/ctx% 同行 */}
-          {srcName && s.src ? (
-            <View style={styles.srcRow}>
-              <SrcBadge color={srcKey ?? srcColor(s.src)} name={srcName} />
-            </View>
-          ) : null}
         </>
       ) : (
         <>
@@ -365,7 +419,7 @@ const SessionCard = memo(function SessionCard({
             ) : (
               <View style={[styles.dot, { backgroundColor: color }]} />
             )}
-            <Text style={styles.title} numberOfLines={1}>
+            <Text style={[styles.title, idle && styles.titleIdle]} numberOfLines={1}>
               {s.title || "未命名会话"}
             </Text>
             <Elapsed s={s} />
@@ -377,10 +431,14 @@ const SessionCard = memo(function SessionCard({
           ) : (
             <Text style={styles.sum} numberOfLines={1}>{s.action_summary || "…"}</Text>
           )}
+          {/* 次要信息合并行（降噪）：托管/外部 · 目录 · 历史 一行小字（原 tag 胶囊 +
+              目录/历史分散多段 → 单段 faint 尾截断），右侧 ±行数(降一档)与 ctx 水位 */}
           <View style={styles.foot}>
-            <Text style={[styles.tag, s.external ? styles.tagExt : null]}>{s.external ? "外部 CLI" : "托管"}</Text>
-            {s.cwd ? <Text style={styles.folderTag} numberOfLines={1}>📁 {folderOf(s.cwd)}</Text> : null}
-            {s.historical && !s.external ? <Text style={styles.tag}>历史</Text> : null}
+            <Text style={styles.meta} numberOfLines={1}>
+              {s.external ? "外部 CLI" : "托管"}
+              {s.cwd ? ` · 📁 ${folderOf(s.cwd)}` : ""}
+              {s.historical && !s.external ? " · 历史" : ""}
+            </Text>
             <View style={{ flex: 1 }} />
             {s.stats && s.stats.files_changed > 0 ? (
               <Text style={styles.stats}>
@@ -391,11 +449,6 @@ const SessionCard = memo(function SessionCard({
             ) : null}
             <CtxMini s={s} />
           </View>
-          {srcName && s.src ? (
-            <View style={styles.srcRow}>
-              <SrcBadge color={srcKey ?? srcColor(s.src)} name={srcName} />
-            </View>
-          ) : null}
         </>
       )}
     </SwipeRow>
@@ -408,7 +461,7 @@ export default function ListScreen({ sessions, connected, connText, onOpen, onNe
   const styles = useThemeStyles(makeStyles);
   const insets = useSafeAreaInsets();
   const snap = useRelay();
-  const compact = useListCompact();
+  const density = useListDensity();
   const [revealSid, setRevealSid] = useState<string | null>(null);
   const [renameSid, setRenameSid] = useState<string | null>(null);
   const renameTarget = useMemo(
@@ -526,8 +579,8 @@ export default function ListScreen({ sessions, connected, connText, onOpen, onNe
   const sorted = useMemo(() => {
     // 活跃（等待/运行/错误）置顶，其余按最近更新倒序：
     // 新完成的会话紧跟活跃段，不再"闪现后跳到 20 个会话底部"像消失。
-    // #294 批2：聚合时 sessions 已是全源平铺，同一比较器作用于合并列表 =
-    // 源内规则保持（活跃置顶+updated_at 倒序）、源间按更新时间全局混排
+    // #294 批2：聚合时 sessions 已是全源平铺，同一比较器作用于合并列表；
+    // 分组态在下方 rows memo 里按 src 分区（组间按组内最近活动排序），组内沿用本排序
     const rank = (s: SessionState) =>
       s.status === "WORKING" || s.status === "WAITING" || s.status === "ERROR" ? 0 : 1;
     return [...sessions].sort(
@@ -535,16 +588,11 @@ export default function ListScreen({ sessions, connected, connText, onOpen, onNe
     );
   }, [sessions]);
 
-  // 聚合源角标（#294 批2）：仅聚合且源>1 时展示；id→名映射每渲染重建无妨——传入
-  // SessionCard 的是查出的字符串（按值浅比较），不破坏 memo 行级重渲
+  // 聚合多源 = 分组态（信息层级重设计：#294 批2 逐卡源角标改为分组头归属）；
+  // 统计行「N 源聚合」/空态文案/顶栏副标题沿用同一开关
   const badgeOn = snap.aggregate && snap.sources.length > 1;
   // 聚合源在线数（#294 批4）：统计行「N 源聚合」与空态「online/total 源」共用
   const onlineSrcs = snap.sources.filter((x) => x.state === "online").length;
-  const srcNames = new Map(snap.sources.map((x) => [x.id, displaySrcName(x.name)] as const));
-  // 源跨端配色键（#294 审查修复）：id→colorKey 同款按值传参，不破坏 memo
-  // 同屏配色去重：按 colorKey 稳定排序分配调色板序号——哈希法双源 1/8 撞色（实测 PC/Mac 同紫）
-  const sortedSrcs = [...snap.sources].sort((a, b) => (a.colorKey ?? a.id).localeCompare(b.colorKey ?? b.id));
-  const srcColors = new Map(sortedSrcs.map((x, i) => [x.id, SRC_COLORS[i % SRC_COLORS.length]] as const));
 
   const counts: Record<string, number> = {};
   for (const s of sessions) {
@@ -578,6 +626,47 @@ export default function ListScreen({ sessions, connected, connText, onOpen, onNe
       .filter((s) => s.session_id !== pendingDel && !deleting.includes(s.session_id)),
     [sorted, collapseIdle, pendingDel, deleting],
   );
+
+  // 分组态行模型：按源分区渲染（组头：源色条+源名+在线点+计数 → 组内会话卡）；
+  // 组序按组内最近活动倒序，组内保持全局排序（活跃置顶+更新倒序）。非分组态
+  // （单源/聚合单源）原样平铺，渲染不变。行包装对象每快照重建无妨——会话对象
+  // 引用原样透传，SessionCard memo 的行级重渲不受影响；映射在 memo 内构建，
+  // 依赖稳定（snap.sources 快照粒度变化）
+  const rows = useMemo<ListRow[]>(() => {
+    if (!badgeOn) return visible.map((s) => ({ h: false as const, key: s.session_id, s }));
+    // 源跨端配色键（#294 审查修复）：同屏配色去重——按 colorKey 稳定排序分配调色板
+    // 序号（哈希法双源 1/8 撞色，实测 PC/Mac 同紫）
+    const sortedSrcs = [...snap.sources].sort((a, b) => (a.colorKey ?? a.id).localeCompare(b.colorKey ?? b.id));
+    const nameOf = new Map(snap.sources.map((x) => [x.id, displaySrcName(x.name)] as const));
+    const colorOf = new Map(sortedSrcs.map((x, i) => [x.id, SRC_COLORS[i % SRC_COLORS.length]] as const));
+    const onlineOf = new Map(snap.sources.map((x) => [x.id, x.state === "online"] as const));
+    const buckets = new Map<string, SessionState[]>();
+    for (const s of visible) {
+      const k = s.src ?? "";
+      const b = buckets.get(k);
+      if (b) b.push(s);
+      else buckets.set(k, [s]);
+    }
+    // 组序 = 组内最近活动（活跃源在上，与列表全局"最近优先"同原则）
+    const lastTs = (s: SessionState) => s.updated_at ?? s.started_at;
+    const order = [...buckets.entries()].sort(
+      (a, b) => Math.max(...b[1].map(lastTs)) - Math.max(...a[1].map(lastTs)),
+    );
+    const out: ListRow[] = [];
+    for (const [src, list] of order) {
+      // src 不在源表（源已移除但会话还在快照里）：兜底"其他"+哈希色
+      out.push({
+        h: true,
+        key: `src:${src || "unknown"}`,
+        name: nameOf.get(src) ?? "其他",
+        color: colorOf.get(src) ?? srcColor(src),
+        online: onlineOf.get(src) ?? false,
+        count: list.length,
+      });
+      for (const s of list) out.push({ h: false, key: s.session_id, s });
+    }
+    return out;
+  }, [badgeOn, visible, snap.sources]);
 
   // 下拉刷新 = 断开重连一次（重走快照），在线即收起转圈；3s 兜底
   const [refreshing, setRefreshing] = useState(false);
@@ -683,8 +772,8 @@ export default function ListScreen({ sessions, connected, connText, onOpen, onNe
       </View>
 
       <FlatList
-        data={visible}
-        keyExtractor={(x) => x.session_id}
+        data={rows}
+        keyExtractor={(r) => r.key}
         showsVerticalScrollIndicator={false}
         refreshControl={
           <RefreshControl
@@ -706,19 +795,21 @@ export default function ListScreen({ sessions, connected, connText, onOpen, onNe
             </Pressable>
           ) : null
         }
-        renderItem={({ item }) => (
-          <SessionCard
-            s={item}
-            onOpen={onOpen}
-            onRename={handleRename}
-            onDelete={requestDelete}
-            revealSid={revealSid}
-            onReveal={setRevealSid}
-            compact={compact}
-            srcName={badgeOn && item.src ? srcNames.get(item.src) ?? null : null}
-            srcKey={badgeOn && item.src ? srcColors.get(item.src) ?? null : null}
-          />
-        )}
+        renderItem={({ item }) =>
+          item.h ? (
+            <GroupHeader name={item.name} color={item.color} online={item.online} count={item.count} />
+          ) : (
+            <SessionCard
+              s={item.s}
+              onOpen={onOpen}
+              onRename={handleRename}
+              onDelete={requestDelete}
+              revealSid={revealSid}
+              onReveal={setRevealSid}
+              density={density}
+            />
+          )
+        }
         ListEmptyComponent={
           <View style={styles.empty}>
             <Text style={styles.emptyIcon}>⚡</Text>
@@ -841,7 +932,17 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
   legendRow: { flexDirection: "row", alignItems: "center", gap: 8 },
   legendDot: { width: 8, height: 8, borderRadius: 4 },
   legendT: { color: c.text, fontSize: 12.5 },
-  folderTag: { fontSize: 10, color: c.dim, maxWidth: 130 },
+  // 源分组头：源色竖条+源名+在线点+会话计数，下衬 hairline 分区线（组间距 =
+  // 头部上下留白 + 卡片自身 marginBottom，形成"区隔靠间距"的分区节奏）
+  grpHead: {
+    flexDirection: "row", alignItems: "center", gap: 7,
+    marginTop: 10, marginBottom: 9, paddingBottom: 7,
+    borderBottomWidth: 1, borderBottomColor: c.line,
+  },
+  grpBar: { width: 3, height: 13, borderRadius: 1.5 },
+  grpName: { color: c.dim, fontSize: 12, fontWeight: "700", letterSpacing: 0.2, flexShrink: 1 },
+  grpDot: { width: 6, height: 6, borderRadius: 3 },
+  grpCount: { color: c.faint, fontSize: 11, fontVariant: ["tabular-nums"] },
   collapseBtn: {
     marginLeft: "auto", flexShrink: 1, borderRadius: 999, borderWidth: 1, borderColor: c.line, backgroundColor: c.tintSoft,
     paddingHorizontal: 10, paddingVertical: 3,
@@ -851,11 +952,14 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
   collapseTOn: { color: c.brandA },
   swipeWrap: { marginBottom: 9, borderRadius: 16, overflow: "hidden" },
   swipeWrapC: { marginBottom: 7 },
+  // 极简行距再收一档（单行卡密集铺排）
+  swipeWrapM: { marginBottom: 5 },
   swipeCard: { borderRadius: 16, overflow: "hidden", backgroundColor: c.panel },
   actPanel: {
     position: "absolute", top: 3, bottom: 3, right: 0, width: FULL_W,
     flexDirection: "row", borderRadius: 16, overflow: "hidden",
   },
+  actPanelM: { top: 2, bottom: 2, borderRadius: 12 },
   actBtn: { width: ACT_W, alignItems: "center", justifyContent: "center", gap: 3, backgroundColor: withA(c.waiting, 0.9) },
   actRen: { backgroundColor: c.brandB },
   actOff: { backgroundColor: withA(c.dim, 0.3) },
@@ -866,7 +970,13 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
     borderRadius: 16, paddingVertical: 11, paddingHorizontal: 13,
   },
   cardC: { borderRadius: 13, padding: 9 },
+  // 极简单行卡：纵向 padding 显著收紧（11/9 → 6），行高远低于紧凑卡
+  cardM: { borderRadius: 12, paddingVertical: 6, paddingHorizontal: 11 },
   rowC: { flexDirection: "row", alignItems: "center", gap: 7 },
+  rowM: { flexDirection: "row", alignItems: "center", gap: 7 },
+  titleM: { color: c.text, fontSize: 13.5, fontWeight: "600", flexShrink: 1 },
+  // 极简行水位百分比：minWidth 定宽右对齐，有无水位各行右缘不跳
+  ctxPct: { fontSize: 11.5, fontVariant: ["tabular-nums"], minWidth: 32, textAlign: "right" },
   // #362 WORKING 实时工作行独立成第二行（标题让位第一行），与 sum 同底距
   liveRow: { flexDirection: "row", alignItems: "center", marginBottom: 5 },
   titleC: { color: c.text, fontSize: 14, fontWeight: "600", flexShrink: 1 },
@@ -882,24 +992,13 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
   liveStat: { flex: 1, fontSize: 12, color: c.dim, fontVariant: ["tabular-nums"] },
   titleRow: { flexDirection: "row", alignItems: "center", gap: 7 },
   title: { color: c.text, fontSize: 15, fontWeight: "600", marginBottom: 3, flexShrink: 1 },
+  // 沉寂会话（DONE 非今日更新）名称降档：覆盖 title/titleC 的 color
+  titleIdle: { color: c.dim },
   sum: { color: c.dim, fontSize: 13, marginBottom: 5 },
   foot: { flexDirection: "row", alignItems: "center", gap: 8 },
-  tag: {
-    fontSize: 10, color: c.dim, backgroundColor: c.tintSoft,
-    borderWidth: 1, borderColor: c.line, borderRadius: 6,
-    paddingHorizontal: 7, paddingVertical: 2, overflow: "hidden",
-  },
-  tagExt: { color: c.brandB, backgroundColor: withA(c.brandB, 0.12), borderColor: withA(c.brandB, 0.25) },
-  // 源角标（#294 批2）：tag 形态的胶囊版，染底/描边色由组件按源色注入；
-  // #302 独立行容器：卡片最底部左对齐
-  srcRow: { flexDirection: "row", marginTop: 4, justifyContent: "flex-end" },
-  srcTag: {
-    flexDirection: "row", alignItems: "center", gap: 4, maxWidth: 96, flexShrink: 1,
-    borderWidth: 1, borderRadius: 999, paddingHorizontal: 7, paddingVertical: 2, overflow: "hidden",
-  },
-  srcDot: { width: 6, height: 6, borderRadius: 3 },
-  srcTagT: { fontSize: 10, color: c.dim, flexShrink: 1 },
-  stats: { fontSize: 12, fontVariant: ["tabular-nums"] },
+  // 次要信息合并行（降噪）：托管/外部 · 目录 · 历史 一行 faint 小字，替代原 tag 胶囊
+  meta: { fontSize: 10, color: c.faint, flexShrink: 1 },
+  stats: { fontSize: 10, fontVariant: ["tabular-nums"] },
   // 上下文占用 mini（foot 最右）：30px 微型条 + 百分比
   ctxMini: { flexDirection: "row", alignItems: "center", gap: 4 },
   ctxMiniBar: { width: 30, height: 3, borderRadius: 1.5, backgroundColor: c.tintSoft, overflow: "hidden" },

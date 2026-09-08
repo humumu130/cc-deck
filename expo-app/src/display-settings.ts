@@ -4,8 +4,13 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 
 export type ProcessFont = "compact" | "normal" | "hidden";
 
+// 列表布局三档：标准 / 紧凑 / 极简（极简=状态灯+名称+水位百分比的单行卡）。
+// 键沿用 cc.display.listCompact：旧版存布尔（"1"=紧凑 / "0"=标准），读取时迁移；
+// 新值直接写 "std"/"compact"/"minimal"，老用户设置无损升级
+export type ListDensity = "std" | "compact" | "minimal";
+
 let processFont: ProcessFont = "compact";
-let listCompact = false;
+let listDensity: ListDensity = "std";
 let voiceInput = false;
 const listeners = new Set<() => void>();
 
@@ -23,13 +28,13 @@ export function setProcessFont(v: ProcessFont): void {
   notify();
 }
 
-export function getListCompact(): boolean {
-  return listCompact;
+export function getListDensity(): ListDensity {
+  return listDensity;
 }
 
-export function setListCompact(v: boolean): void {
-  listCompact = v;
-  void AsyncStorage.setItem("cc.display.listCompact", v ? "1" : "0");
+export function setListDensity(v: ListDensity): void {
+  listDensity = v;
+  void AsyncStorage.setItem("cc.display.listCompact", v);
   notify();
 }
 
@@ -71,10 +76,10 @@ export function useVoiceInput(): boolean {
   return v;
 }
 
-export function useListCompact(): boolean {
-  const [v, setV] = useState(listCompact);
+export function useListDensity(): ListDensity {
+  const [v, setV] = useState<ListDensity>(listDensity);
   useEffect(() => {
-    const l = () => setV(listCompact);
+    const l = () => setV(listDensity);
     listeners.add(l);
     return () => {
       listeners.delete(l);
@@ -111,7 +116,10 @@ export async function loadDisplaySettings(): Promise<void> {
   try {
     const v = (await AsyncStorage.getItem("cc.display.processFont")) as ProcessFont | null;
     if (v === "compact" || v === "normal" || v === "hidden") processFont = v;
-    listCompact = (await AsyncStorage.getItem("cc.display.listCompact")) === "1";
+    // 布局三档向后兼容：字符串新值直接用；旧布尔 "1"=紧凑、"0"/未设置=标准
+    const ld = await AsyncStorage.getItem("cc.display.listCompact");
+    if (ld === "std" || ld === "compact" || ld === "minimal") listDensity = ld;
+    else listDensity = ld === "1" ? "compact" : "std";
     aggregate = (await AsyncStorage.getItem("cc.display.aggregate")) === "1";
     voiceInput = (await AsyncStorage.getItem("cc.display.voiceInput")) === "1";
   } catch {}
