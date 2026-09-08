@@ -4647,6 +4647,32 @@ async function probeLocalRelay() {
   const usable = servers.some((s) => (s.kind === "lan" ? (s.wsUrl && s.token) : !!s.cloud?.paired));
   const deepLinked = !!(h.get("pc") || params.get("token"));
   if (!usable && !deepLinked) { $("wizPop").classList.add("open"); setTimeout(() => $("wizCode")?.focus(), 80); }
+
+  // #386 网页自动嗅探本机 relay：回环 ws 不受 https 混合内容限制，8787 端口固定、
+  // 家用部署 token 默认 devtoken——命中即静默加「本机」源（向导存在则收起并直连）。
+  // 1.5s 超时静默放弃；已有同址源不重复加。exe 内嵌 relay / 同机跑 relay 的场景零配置直进
+  const probeLocalRelay = () => {
+    const exists = servers.some((s) => s.kind === "lan" && /127\.0\.0\.1|localhost/.test(s.wsUrl));
+    if (exists) return;
+    let done = false;
+    const finish = (ok) => {
+      if (done) return;
+      done = true;
+      if (!ok) return;
+      servers.push({ id: uuid(), name: "本机", kind: "lan", wsUrl: "ws://127.0.0.1:8787/ws", token: "devtoken" });
+      saveServers();
+      renderServers(); render();
+      connectAll();
+      if ($("wizPop").classList.contains("open")) { $("wizPop").classList.remove("open"); toast("已连上本机 relay"); }
+    };
+    try {
+      const ws = new WebSocket("ws://127.0.0.1:8787/ws?token=devtoken");
+      const t = setTimeout(() => { try { ws.close(); } catch {} finish(false); }, 1500);
+      ws.onopen = () => { clearTimeout(t); try { ws.close(); } catch {} finish(true); };
+      ws.onerror = () => { clearTimeout(t); finish(false); };
+    } catch { finish(false); }
+  };
+  setTimeout(probeLocalRelay, 800);
 })();
 </script>
 </body>
