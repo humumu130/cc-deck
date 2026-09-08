@@ -201,7 +201,8 @@
   /* #352 分区去卡片框：直接落在面板底上，分区标题上加分隔线（首区免） */
   .gp-card { background: none; border: none; border-radius: 0; padding: 0 0 4px; margin-bottom: 6px; }
   .gp-card + .gp-card .gp-sec { border-top: 1px solid var(--border); margin: 0 4px; padding-top: 10px; }
-  .gp-sec { font-size: 11px; color: var(--dim); letter-spacing: .06em; padding: 9px 10px 5px; }
+  .gp-sec { display: flex; align-items: center; gap: 6px; font-size: 11px; color: var(--dim); letter-spacing: .06em; padding: 9px 10px 5px; }
+  .gp-sec svg { flex: none; color: var(--faint); }
   .gp-row {
     display: flex; align-items: center; gap: 8px;
     font-size: 12.5px; color: var(--text); padding: 7px 10px; border-radius: 9px; cursor: pointer;
@@ -210,7 +211,23 @@
   .gp-row:hover { background: var(--hov); }
   .gp-row:active { background: var(--hov2); }
   .gp-row b { margin-left: auto; font-weight: 600; color: var(--dim); font-size: 12px; }
-  .gp-row .gi { width: 16px; text-align: center; color: var(--dim); font-size: 12px; flex: none; }
+  .gp-row .gi { width: 16px; display: flex; align-items: center; justify-content: center; color: var(--dim); flex: none; }
+  .gp-row .gi svg { display: block; }
+  /* 连接状态卡：活动源一览（状态点 + 名称 + 通道/状态副行），与下方服务器列表同语言 */
+  .gp-status {
+    display: flex; align-items: center; gap: 10px; min-width: 0;
+    margin: 3px 4px 8px; padding: 10px 12px;
+    background: var(--panel); border: 1px solid var(--border); border-radius: 10px;
+  }
+  .gp-sdot { width: 9px; height: 9px; border-radius: 50%; flex: none; background: var(--faint); --sc: var(--faint); }
+  .gp-sdot.on { background: var(--done); --sc: var(--done); }
+  .gp-sdot.wait { background: var(--working); --sc: var(--working); animation: dot-breathe 2.4s ease-in-out infinite; }
+  .gp-sdot.off { background: var(--error); --sc: var(--error); }
+  .gp-stx { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
+  .gp-stx b { font-size: 12.5px; font-weight: 700; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .gp-stx span { font-size: 11px; color: var(--dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  /* 配对独立卡：说明小字对齐码行的 10px 内边距 */
+  #gearPop .pair-hint { padding: 0 10px 8px; }
   .gp-static { cursor: default; }
   .gp-static:hover { background: none; }
   .gp-links { display: flex; gap: 10px; padding: 4px 10px 6px; }
@@ -1136,9 +1153,13 @@
     <aside id="gearPop">
       <div class="gp-head"><b>设置</b><button id="gearClose" title="收起">✕</button></div>
       <div class="gp-card">
-        <div class="gp-sec">服务器</div>
-        <div class="gp-row" id="gpRelay" style="display:none"><span class="gi">⌁</span>本机 relay <b id="gpRelayV"></b></div>
-        <div class="gp-row" id="gpProbe"><span class="gi">◎</span>探测本机 relay <b>点击扫描 ›</b></div>
+        <div class="gp-sec"><svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9 2.8v4.2M15 2.8v4.2"/><path d="M6.5 7h11v4.2a5.5 5.5 0 0 1-11 0V7Z"/><path d="M12 16.7v4.5"/></svg>连接</div>
+        <div class="gp-status" id="gpStatus">
+          <span class="gp-sdot" id="gpStatusDot"></span>
+          <span class="gp-stx"><b id="gpStatusName">未配置</b><span id="gpStatusSub">添加服务器开始使用</span></span>
+        </div>
+        <div class="gp-row" id="gpRelay" style="display:none"><span class="gi"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3.5" y="4.5" width="17" height="6" rx="1.8"/><rect x="3.5" y="13.5" width="17" height="6" rx="1.8"/><path d="M7 7.5h.01M7 16.5h.01"/></svg></span>本机 relay <b id="gpRelayV"></b></div>
+        <div class="gp-row" id="gpProbe"><span class="gi"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="7.6"/><path d="M12 2.2v3.4M12 18.4v3.4M2.2 12h3.4M18.4 12h3.4"/></svg></span>探测本机 relay <b>点击扫描 ›</b></div>
         <div class="panel" id="connPanel">
           <div id="srvList"></div>
           <button id="addSrvBtn" class="hbtn" style="width:100%;margin-top:6px">＋ 添加服务器</button>
@@ -1155,31 +1176,34 @@
               <button id="saveSrvBtn" class="primary">添加直连</button>
             </div>
           </div>
-          <div id="pairBox">
-            <div class="pair-code-line">
-              <input id="pairCode" inputmode="numeric" maxlength="6" placeholder="6 位配对码" autocomplete="off">
-              <button id="pairBtn" class="primary">连接</button>
-            </div>
-            <div class="pair-acts">
-              <button id="loginQrBtn" title="手机扫一下，这台电脑直接接入你的 CC Deck"><svg viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:-1px"><rect x="7" y="2.5" width="10" height="19" rx="2.2"/><path d="M10.5 18.5h3"/></svg> 手机扫码接入</button>
-              <span class="pair-dot">·</span>
-              <button id="addPhoneBtn" title="手机 App 扫码直接接入本服务器"><svg viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:-1px"><path d="M3 8V5a2 2 0 0 1 2-2h3M16 3h3a2 2 0 0 1 2 2v3M21 16v3a2 2 0 0 1-2 2h-3M8 21H5a2 2 0 0 1-2-2v-3"/><path d="M7 12h10"/></svg> 添加手机</button>
-            </div>
-          </div>
-          <div class="pair-hint" id="pairHint">手机 App 侧边栏领码，5 分钟内有效</div>
         </div>
       </div>
-      <div class="gp-card">
-        <div class="gp-sec">显示</div>
-        <div class="gp-row" id="gpDensity"><span class="gi">≡</span>列表密度 <b id="gpDensityV"></b></div>
-        <div class="gp-row" id="gpFont"><span class="gi">Aa</span>正文字号 <b id="gpFontV"></b></div>
-        <div class="gp-row" id="gpThink"><span class="gi">◐</span>思考过程 <b id="gpThinkV"></b></div>
-        <div class="gp-row" id="gpIdle" style="display:none"><span class="gi">▤</span>折叠空闲 <b id="gpIdleV"></b></div>
+      <div class="gp-card" id="gpPairCard">
+        <div class="gp-sec"><svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>配对</div>
+        <div id="pairBox">
+          <div class="pair-code-line">
+            <input id="pairCode" inputmode="numeric" maxlength="6" placeholder="6 位配对码" autocomplete="off">
+            <button id="pairBtn" class="primary">连接</button>
+          </div>
+          <div class="pair-acts">
+            <button id="loginQrBtn" title="手机扫一下，这台电脑直接接入你的 CC Deck"><svg viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:-1px"><rect x="7" y="2.5" width="10" height="19" rx="2.2"/><path d="M10.5 18.5h3"/></svg> 手机扫码接入</button>
+            <span class="pair-dot">·</span>
+            <button id="addPhoneBtn" title="手机 App 扫码直接接入本服务器"><svg viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:-1px"><path d="M3 8V5a2 2 0 0 1 2-2h3M16 3h3a2 2 0 0 1 2 2v3M21 16v3a2 2 0 0 1-2 2h-3M8 21H5a2 2 0 0 1-2-2v-3"/><path d="M7 12h10"/></svg> 添加手机</button>
+          </div>
+        </div>
+        <div class="pair-hint" id="pairHint">手机 App 侧边栏领码，5 分钟内有效</div>
       </div>
       <div class="gp-card">
-        <div class="gp-sec">关于</div>
-        <div class="gp-row gp-static"><span class="gi">ⓘ</span>CC Deck 控制台 <b id="gpVer"></b></div>
-        <div class="gp-row" id="gpUpdate"><span class="gi">↻</span>检查更新 <b id="gpUpdateV"></b></div>
+        <div class="gp-sec"><svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M2.6 12S6 5.8 12 5.8 21.4 12 21.4 12 18 18.2 12 18.2 2.6 12 2.6 12Z"/><circle cx="12" cy="12" r="2.9"/></svg>显示</div>
+        <div class="gp-row" id="gpDensity"><span class="gi"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M4 6.4h16M4 12h16M4 17.6h16"/></svg></span>列表密度 <b id="gpDensityV"></b></div>
+        <div class="gp-row" id="gpFont"><span class="gi"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M5 19.2 11.6 5.4l6.6 13.8"/><path d="M7.6 14.4h8"/></svg></span>正文字号 <b id="gpFontV"></b></div>
+        <div class="gp-row" id="gpThink"><span class="gi"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="8.4"/><path d="M12 3.6a8.4 8.4 0 0 1 0 16.8Z" fill="currentColor" stroke="none" opacity=".45"/></svg></span>思考过程 <b id="gpThinkV"></b></div>
+        <div class="gp-row" id="gpIdle" style="display:none"><span class="gi"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3.4 20.6 8 12 12.6 3.4 8Z"/><path d="m3.4 12.4 8.6 4.6 8.6-4.6"/><path d="m3.4 16.6 8.6 4.6 8.6-4.6"/></svg></span>折叠空闲 <b id="gpIdleV"></b></div>
+      </div>
+      <div class="gp-card">
+        <div class="gp-sec"><svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="12" cy="12" r="8.6"/><path d="M12 11v4.6"/><path d="M12 7.6h.01"/></svg>关于</div>
+        <div class="gp-row gp-static"><span class="gi"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="4.5" width="16" height="15" rx="3.6"/><path d="M4 9.2h16"/><path d="M9.4 9.2v10.3"/></svg></span>CC Deck 控制台 <b id="gpVer"></b></div>
+        <div class="gp-row" id="gpUpdate"><span class="gi"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-9-9c2.52 0 4.93 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/></svg></span>检查更新 <b id="gpUpdateV"></b></div>
         <div class="gp-links"><a href="https://github.com/humumu130/cc-deck/issues" target="_blank" rel="noopener">反馈</a></div>
       </div>
     </aside>
@@ -2113,6 +2137,18 @@ function renderConnChip() {
   const open = $("connPanel").classList.contains("open");
   $("connChip").className = (on > 0 ? "on" : conn > 0 ? "wait" : "") + (open ? " open" : "");
   $("connText").textContent = list.length === 0 ? "未配置" : on + "/" + list.length + " 在线";
+  renderGpStatus();
+}
+
+// 设置抽屉·连接状态卡：活动源优先（如实反映在线/连接中/离线），
+// 无活动源退让任一在线源，一个源都没有则显示"未配置"
+function renderGpStatus() {
+  const dot = $("gpStatusDot"), name = $("gpStatusName"), sub = $("gpStatusSub");
+  const ctx = (activeServerId && ctxs.get(activeServerId)) || firstOnlineCtx() || [...ctxs.values()][0] || null;
+  if (!ctx) { dot.className = "gp-sdot"; name.textContent = "未配置"; sub.textContent = "添加服务器开始使用"; return; }
+  dot.className = "gp-sdot " + (ctx.status === "online" ? "on" : ctx.status === "connecting" || ctx.status === "reconnecting" ? "wait" : ctx.status === "offline" ? "off" : "");
+  name.textContent = srcDisplayName(ctx.cfg);
+  sub.textContent = (ctx.cfg.kind === "cloud" ? "云桥" : "LAN") + " · " + (ctx.statusText || "");
 }
 
 // 选中会话（按源寻址）
@@ -3378,6 +3414,7 @@ function syncGearPop() {
   $("gpIdle").style.display = idle.style.display === "none" ? "none" : "flex";
   $("gpIdleV").textContent = idle.textContent.startsWith("展开") ? "已折叠" : "显示中";
   $("gpVer").textContent = CONSOLE_VERSION;
+  renderGpStatus();
 }
 $("gpTheme") && ($("gpTheme").onclick = () => { $("themeBtn").click(); syncGearPop(); });
 $("gearClose").onclick = () => openPanel("none");
@@ -3566,12 +3603,14 @@ function setFormKind(kind, cfg) {
     $("token").placeholder = "桥 token（可选，默认公共）";
     $("pairBox").style.display = "flex";
     $("pairHint").style.display = "block";
+    $("gpPairCard").style.display = "block";
     $("saveSrvBtn").textContent = cfg ? "保存修改" : "添加云桥";
   } else {
     $("url").placeholder = "ws://<pc-ip>:8787/ws";
     $("token").placeholder = "token";
     $("pairBox").style.display = "none";
     $("pairHint").style.display = "none";
+    $("gpPairCard").style.display = "none";
     $("saveSrvBtn").textContent = cfg ? "保存修改" : "添加直连";
   }
   $("cancelEdit").style.display = cfg ? "" : "none";
@@ -3587,7 +3626,7 @@ $("cancelEdit").onclick = () => { formForcedOpen = false; setFormKind(formKind, 
 // 每行 [状态点 + 名称 + 地址摘要（含状态）] + 编辑 + 删除；点行 = 设为活动源
 function renderServers() {
   const box = $("srvList");
-  if (!servers.length) { box.innerHTML = '<div class="pair-hint">还没有服务器，点下方「＋ 添加服务器」</div>'; renderNewTarget(); return; }
+  if (!servers.length) { box.innerHTML = '<div class="pair-hint">还没有服务器，点下方「＋ 添加服务器」</div>'; renderNewTarget(); renderGpStatus(); return; }
   box.innerHTML = servers.map((s) => {
     const ctx = ctxs.get(s.id);
     const stText = ctx ? ctx.statusText : (canAutoConnect(s) ? "未连接" : "未配置");
@@ -3617,6 +3656,7 @@ function renderServers() {
   });
   renderNewTarget();
   renderNewSrcSeg();
+  renderGpStatus();
 }
 
 // 多源时提示新建会话发往哪个源
