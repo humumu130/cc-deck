@@ -1121,6 +1121,7 @@
       <div class="gp-card">
         <div class="gp-sec">服务器</div>
         <div class="gp-row" id="gpRelay" style="display:none"><span class="gi">⌁</span>本机 relay <b id="gpRelayV"></b></div>
+        <div class="gp-row" id="gpProbe"><span class="gi">◎</span>探测本机 relay <b>点击扫描 ›</b></div>
         <div class="panel" id="connPanel">
           <div id="srvList"></div>
           <button id="addSrvBtn" class="hbtn" style="width:100%;margin-top:6px">＋ 添加服务器</button>
@@ -3386,6 +3387,8 @@ $("gpDensity").onclick = () => { $("densityBtn").click(); syncGearPop(); };
 $("gpFont").onclick = () => { $("fontBtn").click(); syncGearPop(); };
 $("gpThink").onclick = () => { $("thinkBtn").click(); syncGearPop(); };
 $("gpIdle").onclick = () => { $("idleBtn").click(); syncGearPop(); };
+// #386b 手动探测本机 relay（自动嗅探被浏览器策略/无服务挡住时兜底）
+$("gpProbe").onclick = () => { if (window.__ccdeckProbeLocal) window.__ccdeckProbeLocal(); syncGearPop(); };
 
 // 检查更新（#319）：Electron 走 preload IPC，Tauri 走 updater 插件全局 API；
 // 浏览器无桥接时提示网页随仓库更新。Tauri 侧启动时静默检查并后台下载（退出时安装）
@@ -4650,29 +4653,36 @@ async function probeLocalRelay() {
 
   // #386 网页自动嗅探本机 relay：回环 ws 不受 https 混合内容限制，8787 端口固定、
   // 家用部署 token 默认 devtoken——命中即静默加「本机」源（向导存在则收起并直连）。
-  // 1.5s 超时静默放弃；已有同址源不重复加。exe 内嵌 relay / 同机跑 relay 的场景零配置直进
-  const probeLocalRelay = () => {
+  // #386b 强化：3s 超时 + console 诊断（浏览器 PNA/混合内容策略差异排查）+ 设置面板
+  // 手动重探行；本机没跑 relay（纯远程浏览）探测正确失败属预期
+  const probeLocalRelay = (manual) => {
     const exists = servers.some((s) => s.kind === "lan" && /127\.0\.0\.1|localhost/.test(s.wsUrl));
-    if (exists) return;
+    if (exists) { if (manual) toast("本机源已存在"); return; }
     let done = false;
-    const finish = (ok) => {
+    const finish = (ok, why) => {
       if (done) return;
       done = true;
-      if (!ok) return;
-      servers.push({ id: uuid(), name: "本机", kind: "lan", wsUrl: "ws://127.0.0.1:8787/ws", token: "devtoken" });
-      saveServers();
-      renderServers(); render();
-      connectAll();
-      if ($("wizPop").classList.contains("open")) { $("wizPop").classList.remove("open"); toast("已连上本机 relay"); }
+      console.log("[ccdeck] local relay probe:", ok ? "hit" : "miss", why || "");
+      if (ok) {
+        servers.push({ id: uuid(), name: "本机", kind: "lan", wsUrl: "ws://127.0.0.1:8787/ws", token: "devtoken" });
+        saveServers();
+        renderServers(); render();
+        connectAll();
+        if ($("wizPop").classList.contains("open")) $("wizPop").classList.remove("open");
+        toast("已发现并连接本机 relay");
+      } else if (manual) {
+        toast("本机 8787 未发现 relay（确认这台电脑在跑 relay，且 token 为默认 devtoken）", 5000);
+      }
     };
     try {
       const ws = new WebSocket("ws://127.0.0.1:8787/ws?token=devtoken");
-      const t = setTimeout(() => { try { ws.close(); } catch {} finish(false); }, 1500);
+      const t = setTimeout(() => { try { ws.close(); } catch {} finish(false, "timeout"); }, 3000);
       ws.onopen = () => { clearTimeout(t); try { ws.close(); } catch {} finish(true); };
-      ws.onerror = () => { clearTimeout(t); finish(false); };
-    } catch { finish(false); }
+      ws.onerror = () => { clearTimeout(t); finish(false, "error(被浏览器策略拦或端口无服务)"); };
+    } catch (e) { finish(false, "exc:" + e); }
   };
-  setTimeout(probeLocalRelay, 800);
+  setTimeout(() => probeLocalRelay(false), 800);
+  window.__ccdeckProbeLocal = () => probeLocalRelay(true);
 })();
 </script>
 </body>
