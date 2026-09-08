@@ -8,7 +8,7 @@ import * as Clipboard from "expo-clipboard";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useTheme, useThemeStyles } from "../theme-context";
 import { LogoMark } from "../brand";
-import { setProcessFont, useProcessFont, setListDensity, useListDensity, setVoiceInput, useVoiceInput, setAggregate as persistAggregate, useAggregate, type ProcessFont, type ListDensity } from "../display-settings";
+import { setProcessFont, useProcessFont, setVoiceInput, useVoiceInput, setAggregate as persistAggregate, useAggregate, type ProcessFont } from "../display-settings";
 import { checkUpdate, announceUpdate, VERSION_NOTES } from "../updates";
 import { store, useRelay, type ServerEntry, type SourceStatus } from "../store";
 import { withA, type ThemeColors } from "../theme";
@@ -36,13 +36,6 @@ const FONT_OPTS: { k: ProcessFont; label: string }[] = [
   { k: "hidden", label: "隐藏" },
 ];
 
-// 列表布局三档（原"简洁列表"布尔开关扩展）：标准=完整卡 / 紧凑=三行卡 / 极简=单行卡
-const LIST_DENSITY_OPTS: { k: ListDensity; label: string }[] = [
-  { k: "std", label: "标准" },
-  { k: "compact", label: "紧凑" },
-  { k: "minimal", label: "极简" },
-];
-
 // #337 服务器色点=身份色：登记后固定，不随选中/连接状态变——选中由 srvRowOn 外侧
 // 亮边框表达。#356 哈希取色会撞色（书房电脑/Mac 同黄）——改同网页 srcColorByKey：
 // 按当前服务器 id 集合稳定排序分配色板序号，源数≤7 必不重
@@ -57,7 +50,7 @@ const rebuildSrvColors = (ids: string[]) => {
 };
 
 // #353 拨杆档位选择器（通用）：一条胶囊轨道 + 带阴影滑块，spring 弹拨到选中档；
-// 点任意档位标签即拨过去（过程消息 标准/紧凑/隐藏 与 列表布局 标准/紧凑/极简 共用）
+// 点任意档位标签即拨过去（现仅过程消息使用；列表布局三档已迁列表页统计行胶囊）
 function Lever<T extends string>({ options, value, onChange }: {
   options: { k: T; label: string }[];
   value: T;
@@ -196,7 +189,6 @@ export default function SettingsDrawer({
     }),
   ).current;
   const processFont = useProcessFont();
-  const listDensity = useListDensity();
   const aggregate = useAggregate();
   const snap = useRelay();
   const [servers, setServers] = useState<ServerEntry[]>([]);
@@ -476,11 +468,6 @@ export default function SettingsDrawer({
           <Text style={d.setLabel}><Text style={d.rowIconT}>▤ </Text>过程消息</Text>
           {/* #353 拨杆档位选择器：整条轨道一个胶囊，滑块弹拨到选中档（替代三框点选） */}
           <Lever options={FONT_OPTS} value={processFont} onChange={setProcessFont} />
-        </View>
-        {/* 列表布局三档（原"简洁列表"开关升级）：标准/紧凑/极简，与过程消息同款拨杆 */}
-        <View style={d.setItem}>
-          <Text style={d.setLabel}><Text style={d.rowIconT}>☰ </Text>列表布局</Text>
-          <Lever options={LIST_DENSITY_OPTS} value={listDensity} onChange={setListDensity} />
         </View>
         {/* 多源聚合（#294 批4）：持久化（display-settings）+ 连接行为（store.setAggregate：
             开 = 连全部已配置源；关 = 拆非活动源、保留缓存再开无感恢复） */}

@@ -6,7 +6,7 @@ import { statusColor, withA, type ThemeColors } from "../theme";
 import { useTheme, useThemeStyles } from "../theme-context";
 import { LogoMark } from "../brand";
 import { sessionElapsed, fmtElapsed, fmtTok, contextPct, contextLevel, CONTEXT_LIMIT_FALLBACK, displaySrcName } from "../fmt";
-import { useListDensity, type ListDensity } from "../display-settings";
+import { setListDensity, useListDensity, type ListDensity } from "../display-settings";
 import { store, useRelay } from "../store";
 import { FadeIn, PressScale } from "../motion";
 import type { SessionState } from "../protocol";
@@ -54,6 +54,11 @@ function srcColor(id: string): string {
   for (const ch of String(id)) h = ((h * 31) + ch.charCodeAt(0)) >>> 0;
   return SRC_COLORS[h % SRC_COLORS.length];
 }
+
+// 列表密度三档循环胶囊（统计行，原抽屉「列表布局」拨杆迁入）：标准→紧凑→极简→标准；
+// 存储仍走 display-settings（cc.display.listCompact 三档不动），仅入口换位置
+const DENSITY_ORDER: ListDensity[] = ["std", "compact", "minimal"];
+const DENSITY_LABEL: Record<ListDensity, string> = { std: "标准", compact: "紧凑", minimal: "极简" };
 
 // 源分组头（信息层级重设计）：聚合多源时列表按源分区——源色竖条 + 源名 + 在线
 // 状态点 + 会话计数，下衬 hairline（对齐设置页「标记+标题+细线」的分区语言）；
@@ -243,7 +248,7 @@ function SwipeRow({
           {!minimal ? <Text style={styles.actT2}>{deletable ? "删除" : "运行中"}</Text> : null}
         </Pressable>
       </View>
-      <Animated.View style={[styles.swipeCard, { transform: [{ translateX: x }] }]} {...pan.panHandlers}>
+      <Animated.View style={[styles.swipeCard, minimal && styles.swipeCardM, { transform: [{ translateX: x }] }]} {...pan.panHandlers}>
         <Pressable
           style={[styles.card, compact && styles.cardC, minimal && styles.cardM]}
           android_ripple={{ color: c.tintSoft, borderless: false }}
@@ -322,16 +327,24 @@ function CtxMini({ s }: { s: SessionState }) {
   );
 }
 
-// 上下文水位纯数字（极简行专用）：只出 "39%" 百分比，色随水位分级；无数据不渲染
-function CtxPct({ s }: { s: SessionState }) {
+// 上下文水位区（极简行专用，常显）：右端固定 64px 区 = 3px 细条（宽按水位比例、
+// contextLevel 分级色）+ 下方 9px tabular 百分比；无数据出灰色 "–" 占位——右缘不空缺不跳位
+function CtxCell({ s }: { s: SessionState }) {
   const { c } = useTheme();
   const styles = useThemeStyles(makeStyles);
   const used = s.context_usage ?? 0;
-  if (!used) return null;
+  const has = used > 0;
   const limit = s.context_limit ?? CONTEXT_LIMIT_FALLBACK;
   const pct = contextPct(used, limit);
   const lv = contextLevel(used, limit);
-  return <Text style={[styles.ctxPct, { color: c[lv] }]}>{pct}%</Text>;
+  return (
+    <View style={styles.ctxCell}>
+      <View style={styles.ctxCellBar}>
+        {has ? <View style={{ width: `${pct}%`, height: 3, borderRadius: 1.5, backgroundColor: c[lv] }} /> : null}
+      </View>
+      <Text style={[styles.ctxCellT, has && { color: c[lv] }]}>{has ? `${pct}%` : "–"}</Text>
+    </View>
+  );
 }
 
 // memo：流式刷新只重渲变化的那一行（onRename/onReveal/onDelete 均为稳定引用；
@@ -368,7 +381,8 @@ const SessionCard = memo(function SessionCard({
       minimal={minimal}
     >
       {minimal ? (
-        // 极简行：状态灯 + 名称（单行）+ 上下文水位百分比，其余全部隐藏；
+        // 极简行：状态灯 + 名称（单行）+ 右端常显水位区（细条+百分比，无数据 "–" 占位），
+        // 其余全部隐藏；行间分隔由 swipeWrapM 的极淡 hairline 承担（平铺行，不再堆卡间距）；
         // 点击/左滑交互与其他档一致
         <View style={styles.rowM}>
           {s.status === "WORKING" ? (
@@ -380,7 +394,7 @@ const SessionCard = memo(function SessionCard({
             {s.title || "未命名会话"}
           </Text>
           <View style={{ flex: 1 }} />
-          <CtxPct s={s} />
+          <CtxCell s={s} />
         </View>
       ) : compact ? (
         // 紧凑卡：状态点+标题+时长一行、动作摘要一行、目录/改动/水位一行——省高度但不丢信息
@@ -462,6 +476,11 @@ export default function ListScreen({ sessions, connected, connText, onOpen, onNe
   const insets = useSafeAreaInsets();
   const snap = useRelay();
   const density = useListDensity();
+  // 布局循环切换（统计行胶囊）：标准→紧凑→极简→标准，点击即写回 display-settings
+  const cycleDensity = useCallback(() => {
+    const i = DENSITY_ORDER.indexOf(density);
+    setListDensity(DENSITY_ORDER[(i + 1) % DENSITY_ORDER.length]);
+  }, [density]);
   const [revealSid, setRevealSid] = useState<string | null>(null);
   const [renameSid, setRenameSid] = useState<string | null>(null);
   const renameTarget = useMemo(
@@ -758,6 +777,16 @@ export default function ListScreen({ sessions, connected, connText, onOpen, onNe
             </Pressable>
           ) : null}
         </View>
+        {/* 布局三档循环胶囊（原抽屉「列表布局」拨杆迁入）：折叠空闲同款形制，随手切密度 */}
+        <Pressable
+          style={styles.densityBtn}
+          android_ripple={{ color: c.tintSoft, borderless: false, radius: 16 }}
+          onPress={cycleDensity}
+          hitSlop={4}
+          accessibilityLabel={`列表布局${DENSITY_LABEL[density]}，点击切换`}
+        >
+          <Text style={styles.densityT} numberOfLines={1}>布局·{DENSITY_LABEL[density]}</Text>
+        </Pressable>
         {idleCount > 0 ? (
           <Pressable
             style={[styles.collapseBtn, collapseIdle && styles.collapseBtnOn]}
@@ -944,17 +973,25 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
   grpDot: { width: 6, height: 6, borderRadius: 3 },
   grpCount: { color: c.faint, fontSize: 11, fontVariant: ["tabular-nums"] },
   collapseBtn: {
-    marginLeft: "auto", flexShrink: 1, borderRadius: 999, borderWidth: 1, borderColor: c.line, backgroundColor: c.tintSoft,
+    flexShrink: 1, borderRadius: 999, borderWidth: 1, borderColor: c.line, backgroundColor: c.tintSoft,
     paddingHorizontal: 10, paddingVertical: 3,
   },
   collapseBtnOn: { backgroundColor: c.tintStrong, borderColor: withA(c.brandA, 0.4) },
   collapseT: { fontSize: 11, color: c.dim },
   collapseTOn: { color: c.brandA },
+  // 布局循环胶囊：折叠空闲同款形制，负责把右侧按钮组推到行尾（collapseBtn 不再自带 auto）
+  densityBtn: {
+    marginLeft: "auto", flexShrink: 1, borderRadius: 999, borderWidth: 1, borderColor: c.line, backgroundColor: c.tintSoft,
+    paddingHorizontal: 10, paddingVertical: 3,
+  },
+  densityT: { fontSize: 11, color: c.dim },
   swipeWrap: { marginBottom: 9, borderRadius: 16, overflow: "hidden" },
   swipeWrapC: { marginBottom: 7 },
-  // 极简行距再收一档（单行卡密集铺排）
-  swipeWrapM: { marginBottom: 5 },
+  // 极简平铺行：去卡间距堆叠，行间以极淡 hairline 分隔（c.line 本身即低透明度，
+  // 深浅主题均"极淡"）；圆角归零配合无框卡成表状铺排
+  swipeWrapM: { borderRadius: 0, marginBottom: 0, borderBottomWidth: 1, borderBottomColor: c.line },
   swipeCard: { borderRadius: 16, overflow: "hidden", backgroundColor: c.panel },
+  swipeCardM: { borderRadius: 0 },
   actPanel: {
     position: "absolute", top: 3, bottom: 3, right: 0, width: FULL_W,
     flexDirection: "row", borderRadius: 16, overflow: "hidden",
@@ -970,13 +1007,17 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
     borderRadius: 16, paddingVertical: 11, paddingHorizontal: 13,
   },
   cardC: { borderRadius: 13, padding: 9 },
-  // 极简单行卡：纵向 padding 显著收紧（11/9 → 6），行高远低于紧凑卡
-  cardM: { borderRadius: 12, paddingVertical: 6, paddingHorizontal: 11 },
+  // 极简平铺行：去框（hairline 分隔接管分隔职责），纵向 8 呼吸感比 6 松一点，
+  // 行高仍远低于紧凑卡（单行 vs 三行）
+  cardM: { borderRadius: 0, borderWidth: 0, paddingVertical: 8, paddingHorizontal: 11 },
   rowC: { flexDirection: "row", alignItems: "center", gap: 7 },
   rowM: { flexDirection: "row", alignItems: "center", gap: 7 },
   titleM: { color: c.text, fontSize: 13.5, fontWeight: "600", flexShrink: 1 },
-  // 极简行水位百分比：minWidth 定宽右对齐，有无水位各行右缘不跳
-  ctxPct: { fontSize: 11.5, fontVariant: ["tabular-nums"], minWidth: 32, textAlign: "right" },
+  // 极简行水位区（常显）：固定 64px 右对齐 = 细条轨道（44px）+ 9px 百分比/占位，
+  // 有无水位各行右缘恒定不跳
+  ctxCell: { width: 64, alignItems: "flex-end", gap: 2.5 },
+  ctxCellBar: { width: 44, height: 3, borderRadius: 1.5, backgroundColor: c.tintSoft, overflow: "hidden" },
+  ctxCellT: { fontSize: 9, lineHeight: 11, fontVariant: ["tabular-nums"], color: c.faint },
   // #362 WORKING 实时工作行独立成第二行（标题让位第一行），与 sum 同底距
   liveRow: { flexDirection: "row", alignItems: "center", marginBottom: 5 },
   titleC: { color: c.text, fontSize: 14, fontWeight: "600", flexShrink: 1 },
