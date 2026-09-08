@@ -184,11 +184,13 @@
   /* 抽屉打开（gearPop.open 在 DOM 前于 sideFabs）：＋ 让位隐藏、⚙ 高亮为关闭钮 */
   #gearPop.open ~ #sideFabs #addBtn { display: none; }
   #gearPop.open ~ #sideFabs #gearBtn { color: var(--text); background: rgba(127,127,127,.16); }
-  /* 设置抽屉：从整个面板左侧滑出、覆盖会话栏（对齐 App SettingsDrawer 形态），齿轮悬浮其上 */
+  /* 设置抽屉：从整个面板左侧滑出、覆盖会话栏（对齐 App SettingsDrawer 形态），齿轮悬浮其上。
+     #40x 两栏改版：顶部标题跨两栏，下左竖排菜单（~110px 固定）+右内容滚动区，
+     菜单选中=圆角浅底胶囊（var(--hov) 级）+亮字，不用橙；抽屉本身不滚（内容区滚） */
   #gearPop {
     position: absolute; inset: 0; z-index: 45; display: flex; flex-direction: column;
     background: var(--bg-soft); border-right: 1px solid var(--border);
-    padding: 0 12px 58px; overflow-y: auto;
+    padding: 0 12px 58px; overflow: hidden;
     transform: translateX(-102%); visibility: hidden; transition: transform .16s ease, visibility 0s .16s;
   }
   #gearPop.open { transform: none; visibility: visible; transition: transform .18s ease, visibility 0s 0s; }
@@ -196,13 +198,26 @@
   .gp-head {
     display: flex; align-items: center; justify-content: space-between;
     padding: 14px 6px 6px; font-size: 15px; font-weight: 700; color: var(--text);
-    position: sticky; top: 0; background: var(--bg-soft); z-index: 2;
+    flex: none;
   }
   .gp-head button { border: none; background: none; color: var(--dim); font-size: 15px; cursor: pointer; padding: 4px 8px; border-radius: 8px; }
   .gp-head button:hover { color: var(--text); background: var(--hov); }
-  /* #352 分区去卡片框：直接落在面板底上，分区标题上加分隔线（首区免） */
-  .gp-card { background: none; border: none; border-radius: 0; padding: 0 0 4px; margin-bottom: 6px; }
-  .gp-card + .gp-card .gp-sec { border-top: 1px solid var(--border); margin: 0 4px; padding-top: 10px; }
+  /* 两栏骨架：.gp-body 左菜单+右内容；内容区自滚（头与菜单常驻） */
+  .gp-body { display: flex; gap: 8px; flex: 1; min-height: 0; }
+  .gp-nav { width: 110px; flex: none; display: flex; flex-direction: column; gap: 3px; padding-top: 8px; }
+  .gp-nav-item {
+    display: flex; align-items: center; gap: 8px; width: 100%; text-align: left; flex: none;
+    border: none; background: none; box-shadow: none; padding: 8px 10px; border-radius: 10px;
+    color: var(--dim); font-size: 12.5px; font-weight: 500; cursor: pointer;
+    transition: background .13s ease, color .13s ease;
+  }
+  .gp-nav-item svg { flex: none; display: block; }
+  .gp-nav-item:hover { color: var(--text); background: rgba(127,127,127,.12); }
+  .gp-nav-item.on { background: var(--hov); color: var(--text-strong); font-weight: 600; }
+  .gp-content { flex: 1; min-width: 0; overflow-y: auto; padding: 8px 2px 6px 0; }
+  .gp-page { display: block; padding-bottom: 4px; }
+  .gp-page.off { display: none; }
+  /* #352 分区去卡片框：直接落在面板底上（两栏改版后 .gp-card 卡壳退役，分区标题直接落页） */
   .gp-sec { display: flex; align-items: center; gap: 6px; font-size: 11px; color: var(--dim); letter-spacing: .06em; padding: 9px 10px 5px; }
   .gp-sec svg { flex: none; color: var(--faint); }
   .gp-row {
@@ -215,21 +230,26 @@
   .gp-row b { margin-left: auto; font-weight: 600; color: var(--dim); font-size: 12px; }
   .gp-row .gi { width: 16px; display: flex; align-items: center; justify-content: center; color: var(--dim); flex: none; }
   .gp-row .gi svg { display: block; }
-  /* #396 拨杆分段选择器：胶囊轨道 + 品牌色滑块，档位标签平分轨道；
+  /* #396 拨杆分段选择器：胶囊轨道 + 滑块，档位标签平分轨道；
      滑块 z 层在文字下方（opt z-index:1 > thumb z-index:0），不遮挡选中档文字；
-     切换只动滑块 transform（transition 平滑），点任意档即落该档 */
+     切换只动滑块 transform（transition 平滑），点任意档即落该档。
+     #40x 视觉对齐手机端（去橙去渐变）：轨道=细灰底（--code-bg 级）+细边框，
+     滑块=--panel-2 底+细边框（hover 微亮），选中档=品牌色文字+600 字重 */
   .lever {
     position: relative; margin-left: auto; display: flex; flex: none;
-    background: var(--panel-2); border: 1px solid var(--border); border-radius: 999px; padding: 2px;
+    background: var(--code-bg); border: 1px solid var(--border); border-radius: 999px; padding: 2px;
     user-select: none;
   }
   .lever-thumb {
     position: absolute; top: 2px; bottom: 2px; left: 2px; z-index: 0;
     width: calc((100% - 4px) / var(--n, 2));
-    border-radius: 999px; background: var(--grad);
+    border-radius: 999px; background: var(--panel-2);
+    border: 1px solid var(--border);
+    box-shadow: 0 1px 4px rgba(0,0,0,.22);
     transform: translateX(calc(var(--i, 0) * 100%));
-    transition: transform .18s ease;
+    transition: transform .18s ease, border-color .15s ease;
   }
+  .lever:hover .lever-thumb { border-color: var(--hov); }
   .lever-opt {
     position: relative; z-index: 1; border: none; background: none; cursor: pointer;
     color: var(--dim); font-size: 11px; font-weight: 500; line-height: 1;
@@ -237,7 +257,7 @@
     transition: color .15s ease;
   }
   .lever-opt:hover { color: var(--text); }
-  .lever-opt.on { color: #fff; font-weight: 600; }
+  .lever-opt.on { color: var(--brand); font-weight: 600; }
   /* 连接状态卡：活动源一览（状态点 + 名称 + 通道/状态副行），与下方服务器列表同语言 */
   .gp-status {
     display: flex; align-items: center; gap: 10px; min-width: 0;
@@ -257,6 +277,22 @@
   .gp-static:hover { background: none; }
   .gp-links { display: flex; gap: 10px; padding: 4px 10px 6px; }
   .gp-links a { font-size: 12px; color: var(--brand, #D97757); text-decoration: none; }
+  /* #40x relay 页：本机 relay 状态行（绿点=运行中·端口 N / 灰点=未检测到）+ 竖排动作钮组 */
+  .gp-relay-stat {
+    display: flex; align-items: center; gap: 8px; min-width: 0;
+    margin: 3px 4px 8px; padding: 10px 12px;
+    background: var(--panel); border: 1px solid var(--border); border-radius: 10px;
+    font-size: 12.5px; color: var(--text);
+  }
+  .gp-relay-stat i { width: 8px; height: 8px; border-radius: 50%; flex: none; background: var(--faint); }
+  .gp-relay-stat.on i { background: var(--done); }
+  .gp-relay-stat span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .gp-acts { display: flex; flex-direction: column; gap: 7px; padding: 0 4px; }
+  .gp-acts button {
+    display: flex; align-items: center; gap: 8px; width: 100%; text-align: left;
+    padding: 9px 12px; font-size: 12.5px; border-radius: 10px;
+  }
+  .gp-acts button svg { flex: none; }
   /* 空详情态 CTA：直达新建表单 */
   #emptyNewBtn {
     margin-top: 16px; padding: 9px 22px; border-radius: 12px; cursor: pointer;
@@ -367,8 +403,8 @@
   .pd-adv-toggle .pd-adv-arrow::before { content: "▸"; }
   .conn-form.cloud.adv-open .pd-adv-arrow::before { content: "▾"; }
   .pd-adv-toggle:hover .pd-adv-t { color: var(--brand); }
-  /* #352 配对区去框化 → #39x 回归小输入框：码行收敛为 110px 小码框 + 小号「连接」钮 */
-  /* #384 配对区两行：码行（码+连接钮）+ 次级动作行（扫码/添加手机文字链接） */
+  /* #352 配对区去框化 → #39x 回归小输入框：码行收敛为 110px 小码框 + 小号「连接」钮。
+     #40x pairBox（码+连接钮）随云桥态置顶进 conn-form；扫码/领码/添加手机迁去 relay 页 */
   #pairBox { display: none; flex-direction: column; gap: 2px; padding: 2px 10px; }
   .pair-code-line { display: flex; align-items: center; gap: 8px; }
   #pairCode {
@@ -379,8 +415,6 @@
   }
   #pairCode:focus { outline: none; border-color: var(--brand); box-shadow: 0 0 0 3px rgba(217,119,87,.15); }
   #pairBtn { height: 27px; padding: 0 14px; font-size: 12px; border-radius: 8px; flex: none; }
-  #pairBox button:not(#pairBtn) { border: none; background: none; color: var(--brand); font-weight: 600; box-shadow: none; padding: 4px 2px; }
-  .pair-acts { display: flex; align-items: center; flex-wrap: wrap; gap: 4px 8px; font-size: 12px; }
   /* #39x 本机领码临时行：大号等宽 6 位码 + 倒计时，expires_in 归零自动消失 */
   .pd-code-show { display: flex; align-items: baseline; justify-content: center; gap: 8px; padding: 5px 0 3px; }
   .pd-code-show b {
@@ -388,9 +422,6 @@
     color: var(--brand); font-variant-numeric: tabular-nums;
   }
   .pd-code-show span { font-size: 11px; color: var(--faint); }
-  .pair-acts button { font-size: 12px; color: var(--dim); }
-  .pair-acts button:hover { color: var(--text); }
-  .pair-dot { color: var(--faint); }
   /* #325 扫码登录浮层：居中卡片 + 二维码画布 + 等待/成功态 */
   #loginQrPop {
     position: fixed; inset: 0; z-index: 70; display: none;
@@ -1262,69 +1293,80 @@
 
     <aside id="gearPop">
       <div class="gp-head"><b>设置</b><button id="gearClose" title="收起">✕</button></div>
-      <div class="gp-card">
-        <div class="gp-sec"><svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9 2.8v4.2M15 2.8v4.2"/><path d="M6.5 7h11v4.2a5.5 5.5 0 0 1-11 0V7Z"/><path d="M12 16.7v4.5"/></svg>连接</div>
-        <div class="gp-status" id="gpStatus">
-          <span class="gp-sdot" id="gpStatusDot"></span>
-          <span class="gp-stx"><b id="gpStatusName">未配置</b><span id="gpStatusSub">添加服务器开始使用</span></span>
-        </div>
-        <div class="panel" id="connPanel">
-          <div id="srvList"></div>
-          <button id="addSrvBtn" class="hbtn" style="width:100%;margin-top:6px">＋ 添加服务器</button>
-          <div class="conn-form">
-            <div class="seg" id="cmodeSeg">
-              <button type="button" data-m="lan">直连</button>
-              <button type="button" data-m="cloud">云桥</button>
+      <div class="gp-body">
+        <nav class="gp-nav" id="gpNav">
+          <button type="button" class="gp-nav-item on" data-sec="conn"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9 2.8v4.2M15 2.8v4.2"/><path d="M6.5 7h11v4.2a5.5 5.5 0 0 1-11 0V7Z"/><path d="M12 16.7v4.5"/></svg>连接</button>
+          <button type="button" class="gp-nav-item" data-sec="relay"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><rect x="3.2" y="3.8" width="17.6" height="6.6" rx="2"/><rect x="3.2" y="13.6" width="17.6" height="6.6" rx="2"/><path d="M7 7.1h.01M7 16.9h.01"/></svg>relay</button>
+          <button type="button" class="gp-nav-item" data-sec="disp"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M2.6 12S6 5.8 12 5.8 21.4 12 21.4 12 18 18.2 12 18.2 2.6 12 2.6 12Z"/><circle cx="12" cy="12" r="2.9"/></svg>显示</button>
+          <button type="button" class="gp-nav-item" data-sec="about"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="12" cy="12" r="8.6"/><path d="M12 11v4.6"/><path d="M12 7.6h.01"/></svg>关于</button>
+        </nav>
+        <div class="gp-content">
+          <section class="gp-page" id="gpPageConn">
+            <div class="gp-sec"><svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9 2.8v4.2M15 2.8v4.2"/><path d="M6.5 7h11v4.2a5.5 5.5 0 0 1-11 0V7Z"/><path d="M12 16.7v4.5"/></svg>连接</div>
+            <div class="gp-status" id="gpStatus">
+              <span class="gp-sdot" id="gpStatusDot"></span>
+              <span class="gp-stx"><b id="gpStatusName">未配置</b><span id="gpStatusSub">添加服务器开始使用</span></span>
             </div>
-            <div class="cf-box" id="cfBox">
-              <button type="button" class="pd-adv-toggle" id="pdAdvToggle"><span class="pd-adv-t">高级选项</span><span class="pd-adv-sub">自建云桥部署者选项</span><i class="pd-adv-arrow"></i></button>
-              <div class="pd-adv-body" id="pdAdvBody">
-                <div class="cf-sec">云桥地址</div>
-                <input id="url" placeholder="ws://<pc-ip>:8787/ws">
-                <div class="cf-sec">配对 Key</div>
-                <input id="token" placeholder="token">
-                <div class="cf-sec cf-sec-sub">名称（可选）</div>
-                <input id="srvName" placeholder="名称（可选）">
-                <div class="cf-note">Key 留空用公共桥</div>
+            <div class="panel" id="connPanel">
+              <div id="srvList"></div>
+              <button id="addSrvBtn" class="hbtn" style="width:100%;margin-top:6px">＋ 添加服务器</button>
+              <div class="conn-form">
+                <div class="seg" id="cmodeSeg">
+                  <button type="button" data-m="lan">直连</button>
+                  <button type="button" data-m="cloud">云桥</button>
+                </div>
+                <div id="pairBox">
+                  <div class="pair-code-line">
+                    <input id="pairCode" inputmode="numeric" maxlength="6" placeholder="6 位配对码" autocomplete="off">
+                    <button id="pairBtn" class="primary">连接</button>
+                  </div>
+                </div>
+                <div class="cf-box" id="cfBox">
+                  <button type="button" class="pd-adv-toggle" id="pdAdvToggle"><span class="pd-adv-t">高级选项</span><span class="pd-adv-sub">自建云桥部署者选项</span><i class="pd-adv-arrow"></i></button>
+                  <div class="pd-adv-body" id="pdAdvBody">
+                    <div class="cf-sec">云桥地址</div>
+                    <input id="url" placeholder="ws://<pc-ip>:8787/ws">
+                    <div class="cf-sec">配对 Key</div>
+                    <input id="token" placeholder="token">
+                    <div class="cf-sec cf-sec-sub">名称（可选）</div>
+                    <input id="srvName" placeholder="名称（可选）">
+                    <div class="cf-note">Key 留空用公共桥</div>
+                  </div>
+                </div>
+                <div class="conn-actions">
+                  <button id="cancelEdit" style="display:none">取消</button>
+                  <button id="saveSrvBtn" class="primary">添加直连</button>
+                </div>
               </div>
             </div>
-            <div class="conn-actions">
-              <button id="cancelEdit" style="display:none">取消</button>
-              <button id="saveSrvBtn" class="primary">添加直连</button>
+          </section>
+          <section class="gp-page off" id="gpPageRelay">
+            <div class="gp-sec"><svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><rect x="3.2" y="3.8" width="17.6" height="6.6" rx="2"/><rect x="3.2" y="13.6" width="17.6" height="6.6" rx="2"/><path d="M7 7.1h.01M7 16.9h.01"/></svg>relay</div>
+            <div class="gp-relay-stat" id="gpRelayStat"><i></i><span id="gpRelayStatTxt">检测中…</span></div>
+            <div class="gp-acts">
+              <button id="loginQrBtn" title="手机扫一下，这台电脑直接接入你的 CC Deck"><svg viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" stroke-width="2"><rect x="7" y="2.5" width="10" height="19" rx="2.2"/><path d="M10.5 18.5h3"/></svg> 手机扫码接入</button>
+              <button id="pdLocalCodeBtn" title="没绑手机时，在这台电脑上直接领一枚配对码（本机 relay 签发）"><svg viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M9.5 4 7.5 20M16.5 4l-2 16M4.5 9h16M3.5 15h16"/></svg> 本机显示配对码</button>
             </div>
-          </div>
+            <div class="pd-code-show" id="pdCodeLine" style="display:none"><b id="pdCodeVal"></b><span id="pdCodeExp"></span></div>
+            <div class="gp-acts">
+              <button id="addPhoneBtn" title="手机 App 扫码直接接入本服务器"><svg viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 8V5a2 2 0 0 1 2-2h3M16 3h3a2 2 0 0 1 2 2v3M21 16v3a2 2 0 0 1-2 2h-3M8 21H5a2 2 0 0 1-2-2v-3"/><path d="M7 12h10"/></svg> 添加手机</button>
+            </div>
+            <div class="pair-hint" id="pairHint">手机 App 侧边栏领码，5 分钟内有效</div>
+          </section>
+          <section class="gp-page off" id="gpPageDisp">
+            <div class="gp-sec"><svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M2.6 12S6 5.8 12 5.8 21.4 12 21.4 12 18 18.2 12 18.2 2.6 12 2.6 12Z"/><circle cx="12" cy="12" r="2.9"/></svg>显示</div>
+            <div class="gp-row" id="gpDensity"><span class="gi"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M4 6.4h16M4 12h16M4 17.6h16"/></svg></span>列表密度<div class="lever" id="gpDensityLever" style="--n:2"><i class="lever-thumb"></i><button type="button" class="lever-opt" data-i="0">标准</button><button type="button" class="lever-opt" data-i="1">紧凑</button></div></div>
+            <div class="gp-row" id="gpFont"><span class="gi"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M5 19.2 11.6 5.4l6.6 13.8"/><path d="M7.6 14.4h8"/></svg></span>正文字号<div class="lever" id="gpFontLever" style="--n:3"><i class="lever-thumb"></i><button type="button" class="lever-opt" data-i="0">紧凑</button><button type="button" class="lever-opt" data-i="1">标准</button><button type="button" class="lever-opt" data-i="2">大</button></div></div>
+            <div class="gp-row" id="gpThink"><span class="gi"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="8.4"/><path d="M12 3.6a8.4 8.4 0 0 1 0 16.8Z" fill="currentColor" stroke="none" opacity=".45"/></svg></span>思考过程<div class="lever" id="gpThinkLever" style="--n:2"><i class="lever-thumb"></i><button type="button" class="lever-opt" data-i="0">关</button><button type="button" class="lever-opt" data-i="1">开</button></div></div>
+            <div class="gp-row" id="gpIdle" style="display:none"><span class="gi"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3.4 20.6 8 12 12.6 3.4 8Z"/><path d="m3.4 12.4 8.6 4.6 8.6-4.6"/><path d="m3.4 16.6 8.6 4.6 8.6-4.6"/></svg></span>折叠空闲<div class="lever" id="gpIdleLever" style="--n:2"><i class="lever-thumb"></i><button type="button" class="lever-opt" data-i="0">显示</button><button type="button" class="lever-opt" data-i="1">折叠</button></div></div>
+          </section>
+          <section class="gp-page off" id="gpPageAbout">
+            <div class="gp-sec"><svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="12" cy="12" r="8.6"/><path d="M12 11v4.6"/><path d="M12 7.6h.01"/></svg>关于</div>
+            <div class="gp-row gp-static"><span class="gi"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="4.5" width="16" height="15" rx="3.6"/><path d="M4 9.2h16"/><path d="M9.4 9.2v10.3"/></svg></span>CC Deck 控制台 <b id="gpVer"></b></div>
+            <div class="gp-row" id="gpUpdate"><span class="gi"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-9-9c2.52 0 4.93 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/></svg></span>检查更新 <b id="gpUpdateV"></b></div>
+            <div class="gp-links"><a href="https://github.com/humumu130/cc-deck/issues" target="_blank" rel="noopener">反馈</a></div>
+          </section>
         </div>
-      </div>
-      <div class="gp-card" id="gpPairCard">
-        <div class="gp-sec"><svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>配对</div>
-        <div id="pairBox">
-          <div class="pd-code-show" id="pdCodeLine" style="display:none"><b id="pdCodeVal"></b><span id="pdCodeExp"></span></div>
-          <div class="pair-code-line">
-            <input id="pairCode" inputmode="numeric" maxlength="6" placeholder="6 位配对码" autocomplete="off">
-            <button id="pairBtn" class="primary">连接</button>
-          </div>
-          <div class="pair-acts">
-            <button id="loginQrBtn" title="手机扫一下，这台电脑直接接入你的 CC Deck"><svg viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:-1px"><rect x="7" y="2.5" width="10" height="19" rx="2.2"/><path d="M10.5 18.5h3"/></svg> 手机扫码接入</button>
-            <span class="pair-dot">·</span>
-            <button id="addPhoneBtn" title="手机 App 扫码直接接入本服务器"><svg viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:-1px"><path d="M3 8V5a2 2 0 0 1 2-2h3M16 3h3a2 2 0 0 1 2 2v3M21 16v3a2 2 0 0 1-2 2h-3M8 21H5a2 2 0 0 1-2-2v-3"/><path d="M7 12h10"/></svg> 添加手机</button>
-            <span class="pair-dot">·</span>
-            <button id="pdLocalCodeBtn" title="没绑手机时，在这台电脑上直接领一枚配对码（本机 relay 签发）">本机显示配对码</button>
-          </div>
-        </div>
-        <div class="pair-hint" id="pairHint">手机 App 侧边栏领码，5 分钟内有效</div>
-      </div>
-      <div class="gp-card">
-        <div class="gp-sec"><svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M2.6 12S6 5.8 12 5.8 21.4 12 21.4 12 18 18.2 12 18.2 2.6 12 2.6 12Z"/><circle cx="12" cy="12" r="2.9"/></svg>显示</div>
-        <div class="gp-row" id="gpDensity"><span class="gi"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M4 6.4h16M4 12h16M4 17.6h16"/></svg></span>列表密度<div class="lever" id="gpDensityLever" style="--n:2"><i class="lever-thumb"></i><button type="button" class="lever-opt" data-i="0">标准</button><button type="button" class="lever-opt" data-i="1">紧凑</button></div></div>
-        <div class="gp-row" id="gpFont"><span class="gi"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M5 19.2 11.6 5.4l6.6 13.8"/><path d="M7.6 14.4h8"/></svg></span>正文字号<div class="lever" id="gpFontLever" style="--n:3"><i class="lever-thumb"></i><button type="button" class="lever-opt" data-i="0">紧凑</button><button type="button" class="lever-opt" data-i="1">标准</button><button type="button" class="lever-opt" data-i="2">大</button></div></div>
-        <div class="gp-row" id="gpThink"><span class="gi"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="8.4"/><path d="M12 3.6a8.4 8.4 0 0 1 0 16.8Z" fill="currentColor" stroke="none" opacity=".45"/></svg></span>思考过程<div class="lever" id="gpThinkLever" style="--n:2"><i class="lever-thumb"></i><button type="button" class="lever-opt" data-i="0">关</button><button type="button" class="lever-opt" data-i="1">开</button></div></div>
-        <div class="gp-row" id="gpIdle" style="display:none"><span class="gi"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3.4 20.6 8 12 12.6 3.4 8Z"/><path d="m3.4 12.4 8.6 4.6 8.6-4.6"/><path d="m3.4 16.6 8.6 4.6 8.6-4.6"/></svg></span>折叠空闲<div class="lever" id="gpIdleLever" style="--n:2"><i class="lever-thumb"></i><button type="button" class="lever-opt" data-i="0">显示</button><button type="button" class="lever-opt" data-i="1">折叠</button></div></div>
-      </div>
-      <div class="gp-card">
-        <div class="gp-sec"><svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="12" cy="12" r="8.6"/><path d="M12 11v4.6"/><path d="M12 7.6h.01"/></svg>关于</div>
-        <div class="gp-row gp-static"><span class="gi"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="4.5" width="16" height="15" rx="3.6"/><path d="M4 9.2h16"/><path d="M9.4 9.2v10.3"/></svg></span>CC Deck 控制台 <b id="gpVer"></b></div>
-        <div class="gp-row" id="gpUpdate"><span class="gi"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-9-9c2.52 0 4.93 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/></svg></span>检查更新 <b id="gpUpdateV"></b></div>
-        <div class="gp-links"><a href="https://github.com/humumu130/cc-deck/issues" target="_blank" rel="noopener">反馈</a></div>
       </div>
     </aside>
 
@@ -3581,7 +3623,7 @@ function openPanel(which) {
   $("connPanel").classList.toggle("open", which === "conn");
   $("connChip").classList.toggle("open", which === "conn");
   $("gearPop").classList.toggle("open", which === "conn");
-  if (which === "conn") $("srvPop").classList.remove("open");
+  if (which === "conn") { $("srvPop").classList.remove("open"); setGearSection("conn"); } // 连接相关入口直达连接页
 }
 // #345 connChip 点击 → 服务器状态悬浮窗（在线/离线一览 + 管理入口），不再直接滑出设置面板
 function renderSrvPop() {
@@ -3614,7 +3656,7 @@ document.addEventListener("click", (ev) => {
     $("gearPop").classList.toggle("open", open);
     $("connPanel").classList.toggle("open", open);
     $("connChip").classList.toggle("open", open);
-    if (open) syncGearPop();
+    if (open) { syncGearPop(); setGearSection(gpSavedSec()); probeRelayStat(); } // 记住最后所在页 + 静默刷新 relay 状态行
     return;
   }
   if (!ev.target.closest("#rhPop") && !ev.target.closest("#gearPop")) { $("rhPop").classList.remove("open"); $("gearPop").classList.remove("open"); $("srvPop").classList.remove("open"); }
@@ -3680,6 +3722,23 @@ function syncGearPop() {
 }
 $("gpTheme") && ($("gpTheme").onclick = () => { $("themeBtn").click(); syncGearPop(); });
 $("gearClose").onclick = () => openPanel("none");
+// #40x 设置两栏：左菜单单 active 切页（display 切换），记住最后所在页（cc.gear.section）；
+// relay 页被看到时静默补探一次本机 relay（状态行绿点/灰点）
+const GP_SECS = ["conn", "relay", "disp", "about"];
+const GP_SEC_KEY = "cc.gear.section";
+const gpSavedSec = () => { try { return localStorage.getItem(GP_SEC_KEY) || "conn"; } catch { return "conn"; } };
+function setGearSection(sec) {
+  if (!GP_SECS.includes(sec)) sec = "conn";
+  for (const s of GP_SECS) {
+    const on = s === sec;
+    $("gpPage" + s.charAt(0).toUpperCase() + s.slice(1)).classList.toggle("off", !on);
+    const nav = document.querySelector('.gp-nav-item[data-sec="' + s + '"]');
+    if (nav) nav.classList.toggle("on", on);
+  }
+  try { localStorage.setItem(GP_SEC_KEY, sec); } catch {}
+  if (sec === "relay") probeRelayStat();
+}
+document.querySelectorAll(".gp-nav-item").forEach((b) => { b.onclick = () => setGearSection(b.dataset.sec); });
 // 本机 relay 行已移除（对用户完全透明）：启停全靠启动自动探测，见 init 尾部 probeLocalRelay
 
 $("emptyNewBtn").onclick = () => {
@@ -3856,17 +3915,13 @@ function setFormKind(kind, cfg) {
     $("url").placeholder = "wss://<云桥>/cloud";
     $("token").placeholder = "桥 token（可选，默认公共）";
     $("srvName").placeholder = "如：公司云桥";
-    $("pairBox").style.display = "flex";
-    $("pairHint").style.display = "block";
-    $("gpPairCard").style.display = "block";
+    $("pairBox").style.display = "flex"; // #40x pairBox 已入表单（配对码+连接钮置顶，URL/Key 在高级选项）
     $("saveSrvBtn").textContent = cfg ? "保存修改" : "添加云桥";
   } else {
     $("url").placeholder = "ws://<pc-ip>:8787/ws";
     $("token").placeholder = "token";
     $("srvName").placeholder = "名称（可选）";
     $("pairBox").style.display = "none";
-    $("pairHint").style.display = "none";
-    $("gpPairCard").style.display = "none";
     $("saveSrvBtn").textContent = cfg ? "保存修改" : "添加直连";
   }
   $("cancelEdit").style.display = cfg ? "" : "none";
@@ -4966,33 +5021,57 @@ $("pairBtn").onclick = submitPairCode;
 $("pairCode").addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); submitPairCode(); } });
 
 // #39x 本机显示配对码：没绑手机的用户在自己电脑上直接领一枚云桥码。
-// 复用启动探测（probeLocalRelay / local-info）拿到的本机 port+token，
-// POST /api/pair-code → { code, expires_in }，展示到 expires_in 归零自动消失
+// POST /api/pair-code → { code, expires_in }，展示到 expires_in 归零自动消失。
+// #40x 领码修复：凭据一律以 local-info 实测优先——源列表 token 可能随 relay 换代过期，
+// 内网 IP 条目还可能是「别的机器」的 relay（端口/token 拿来打 127.0.0.1 必 401），
+// 这就是「本机探测成功仍领码失败」的主因；loopback 条目只作 local-info 不可用时的退让，
+// 且 401 时改用实测 token 自动重试一轮。
 let pdCodeTimer = 0, pdCodeTick = 0;
+async function localInfoAt(port) {
+  try {
+    const r = await fetch("http://127.0.0.1:" + port + "/local-info", { signal: AbortSignal.timeout?.(1500) });
+    if (!r.ok) return null;
+    const j = await r.json().catch(() => null);
+    return j && j.ok && j.port && j.token ? j : null;
+  } catch { return null; }
+}
 async function pdLocalRelayCreds() {
-  // 已落库的本机源（探测命中时写入）优先——token 是 local-info 返回的真实值
-  const s = servers.find((x) => x.kind === "lan" && x.token && localEp(x.wsUrl)); // #398 内网IP 写法的本机条目也算
-  if (s) { const m = String(s.wsUrl).match(/:(\d+)/); if (m) return { port: +m[1], token: s.token }; }
-  // 库里没有（纯远程浏览/探测落空）：现场再探一次，本机 relay 在跑即可领码
-  const j = await probeLocalRelay();
-  return j && j.port && j.token ? { port: j.port, token: j.token } : null;
+  // 端口候选：固定 8787 + 已存 loopback 条目端口（自定义端口部署也能探到）
+  const ports = [8787];
+  for (const x of servers) {
+    const ep = localEp(x.wsUrl);
+    if (x.kind === "lan" && ep?.loop && !ports.includes(ep.port)) ports.push(ep.port);
+  }
+  for (const p of ports) { const j = await localInfoAt(p); if (j) return { port: j.port, token: j.token }; }
+  // local-info 全落空（Safari 不豁免 loopback 混合内容等）：退让已存 loopback 条目（非 loop 条目一概不信）
+  const s = servers.find((x) => x.kind === "lan" && x.token && localEp(x.wsUrl)?.loop);
+  return s ? { port: localEp(s.wsUrl).port, token: s.token } : null;
 }
 $("pdLocalCodeBtn").onclick = async () => {
-  const creds = await pdLocalRelayCreds();
+  let creds = await pdLocalRelayCreds();
   if (!creds) { toast("未检测到本机 relay"); return; }
-  const q = "?token=" + encodeURIComponent(creds.token);
-  // 页面恰由本机 relay 托管（同端口）时走相对路径＝同源，避开跨源读响应的限制
-  const urls = [];
-  if (location.protocol.startsWith("http") && location.port === String(creds.port)) urls.push("/api/pair-code" + q);
-  urls.push("http://127.0.0.1:" + creds.port + "/api/pair-code" + q);
-  let j = null, err = "";
-  for (const u of urls) {
-    try {
-      const r = await fetch(u, { method: "POST", signal: AbortSignal.timeout?.(4000) });
-      const body = await r.json().catch(() => null);
-      if (r.ok && body && body.code) { j = body; break; }
-      err = r.status === 501 ? "本机 relay 未启用云桥" : r.status === 401 ? "token 校验失败" : "HTTP " + r.status;
-    } catch (e) { err = String((e && e.message) || e).slice(0, 60); }
+  let j = null, err = "", retried = false;
+  while (!j) {
+    const q = "?token=" + encodeURIComponent(creds.token);
+    // 页面恰由本机 relay 托管（同端口）时走相对路径＝同源，避开跨源读响应的限制
+    const urls = [];
+    if (location.protocol.startsWith("http") && location.port === String(creds.port)) urls.push("/api/pair-code" + q);
+    urls.push("http://127.0.0.1:" + creds.port + "/api/pair-code" + q);
+    for (const u of urls) {
+      try {
+        const r = await fetch(u, { method: "POST", signal: AbortSignal.timeout?.(4000) });
+        const body = await r.json().catch(() => null);
+        if (r.ok && body && body.code) { j = body; break; }
+        err = r.status === 501 ? "本机 relay 未启用云桥" : r.status === 401 ? "token 校验失败" : "HTTP " + r.status;
+      } catch (e) { err = String((e && e.message) || e).slice(0, 60); }
+    }
+    if (j) break;
+    // token 被拒（源列表值过期/错拿别的源）：改用 local-info 实测 token 重试一轮（仅一次）
+    if (err !== "token 校验失败" || retried) break;
+    const fresh = await localInfoAt(creds.port);
+    retried = true;
+    if (fresh && fresh.token !== creds.token) { creds = { port: fresh.port, token: fresh.token }; continue; }
+    break;
   }
   if (!j) { toast("领码失败（" + err + "）", 5000); return; }
   const ttl = Math.max(1, Math.floor(Number(j.expires_in) || 60));
@@ -5008,6 +5087,31 @@ $("pdLocalCodeBtn").onclick = async () => {
   }, 1000);
   pdCodeTimer = setTimeout(() => { line.style.display = "none"; }, ttl * 1000 + 300);
 };
+
+// #40x relay 页状态行：本机 relay 静默探测（复用 local-info / 桌面壳 probeLocal），
+// 有=「运行中 · 端口 N」绿点，无=「未检测到」灰点；开抽屉/切到 relay 页时都会补探
+let localRelayInfo = null, relayStatProbing = false;
+async function probeRelayStat() {
+  if (relayStatProbing) return;
+  relayStatProbing = true;
+  try {
+    let j = null;
+    if (window.ccDeck?.probeLocal) { try { j = await window.ccDeck.probeLocal(); } catch {} }
+    if (!j || !j.port || !j.token) {
+      const ports = [8787];
+      for (const x of servers) {
+        const ep = localEp(x.wsUrl);
+        if (x.kind === "lan" && ep?.loop && !ports.includes(ep.port)) ports.push(ep.port);
+      }
+      for (const p of ports) { j = await localInfoAt(p); if (j) break; }
+    }
+    localRelayInfo = j && j.port && j.token ? { port: j.port, token: j.token } : null;
+  } finally { relayStatProbing = false; }
+  const txt = $("gpRelayStatTxt");
+  if (!txt) return;
+  $("gpRelayStat").classList.toggle("on", !!localRelayInfo);
+  txt.textContent = localRelayInfo ? "运行中 · 端口 " + localRelayInfo.port : "未检测到";
+}
 
 // 同机零配置直连：探测本机 relay（/local-info 仅 loopback 可访问，Chrome/Edge 豁免 loopback 混合内容）
 async function probeLocalRelay() {
@@ -5071,53 +5175,14 @@ async function probeLocalRelay() {
     setFormKind("lan", s);
   }
   $("cwd").value = lsGet("ccr_cwd") || "";
-  // 空的直连占位：探测本机 relay，命中即补全（同机零配置）。
-  // 桌面壳（#334）启动自动拉起 relay 有冷启动竞态：首探落空 2.5s 后补试一次，
-  // 命中即落库 reload——避免向导抢跑破坏"无感"；仅桌面壳（relayCtl 标记）补试
-  const ph = servers.find((s) => s.kind === "lan" && !s.wsUrl);
-  if (ph) {
-    const local = await probeLocalRelay();
-    if (local) {
-      // #398 已有等价本机条目（内网IP/localhost 写法）：刷新该条目，空占位剔除防探测后双条目
-      const ex = findLocalEntry("ws://127.0.0.1:" + (local.port || 8787) + "/ws", local.token);
-      if (ex && ex !== ph) {
-        if (local.token) ex.token = local.token;
-        ex.name = "本机";
-        servers.splice(servers.indexOf(ph), 1);
-        if (activeServerId === ph.id) activeServerId = ex.id;
-      } else {
-        ph.wsUrl = "ws://127.0.0.1:8787/ws";
-        ph.token = local.token;
-      }
-      saveServers();
-      toast("检测到本机 CC Deck Relay，已自动连接");
-    } else if (window.ccDeck?.relayCtl) {
-      setTimeout(async () => {
-        const again = await probeLocalRelay();
-        if (again && !ph.wsUrl) {
-          ph.wsUrl = "ws://127.0.0.1:8787/ws";
-          ph.token = again.token;
-          saveServers();
-          location.reload();
-        }
-      }, 2500);
-    }
-  }
-  // 所有源同时保持连接（一处断另一处还在）
-  connectAll();
-  renderServers(); renderConnChip(); render();
-  // 引导（#325 改版）：没有任何可用源（云源未配对且无可用直连）→ 首启向导三选一，
-  // 不再直接把用户丢进配对码表单。深链（#pc 配对链 / ?token= 直连）不走向导——
-  // 自动配对/直连正在进行，弹向导只会挡在前面
-  const usable = servers.some((s) => (s.kind === "lan" ? (s.wsUrl && s.token) : !!s.cloud?.paired));
-  const deepLinked = !!(h.get("pc") || params.get("token"));
-  if (!usable && !deepLinked) { $("wizPop").classList.add("open"); setTimeout(() => $("wizCode")?.focus(), 80); }
-
   // #386 网页自动嗅探本机 relay：回环 ws 不受 https 混合内容限制，8787 端口固定、
   // 家用部署 token 默认 devtoken——命中即静默加「本机」源（向导存在则收起并直连）。
   // 探测全程对用户不可见：仅未配置时状态卡副行短暂显示"正在探测本机…"；
   // 失败静默（本机没跑 relay 的纯远程浏览场景，探测正确失败属预期）。
-  // 3s 超时 + console 诊断（浏览器 PNA/混合内容策略差异排查）
+  // 3s 超时 + console 诊断（浏览器 PNA/混合内容策略差异排查）。
+  // #40x 声明上移：首启空占位（migrateLegacy 播种）在下方 ph 块就要调用本函数，
+  // 原先定义落后于调用点（同作用域 const TDZ）→ 首启 init 直接 ReferenceError 中断
+  // （connectAll/向导全不跑）——一个隐藏很深的首启破坏点
   const probeLocalRelay = () => {
     // 已有带 token 的 loopback 条目：无需再探（#398 归并后等价本机条目只剩一条）
     if (servers.some((s) => s.kind === "lan" && s.token && localEp(s.wsUrl)?.loop)) return;
@@ -5160,7 +5225,51 @@ async function probeLocalRelay() {
         } catch (e) { finish(0, 0, "exc:" + e); }
       });
   };
+  // 空的直连占位：探测本机 relay，命中即补全（同机零配置）。
+  // 桌面壳（#334）启动自动拉起 relay 有冷启动竞态：首探落空 2.5s 后补试一次，
+  // 命中即落库 reload——避免向导抢跑破坏"无感"；仅桌面壳（relayCtl 标记）补试
+  const ph = servers.find((s) => s.kind === "lan" && !s.wsUrl);
+  if (ph) {
+    const local = await probeLocalRelay();
+    if (local) {
+      // #398 已有等价本机条目（内网IP/localhost 写法）：刷新该条目，空占位剔除防探测后双条目
+      const ex = findLocalEntry("ws://127.0.0.1:" + (local.port || 8787) + "/ws", local.token);
+      if (ex && ex !== ph) {
+        if (local.token) ex.token = local.token;
+        ex.name = "本机";
+        servers.splice(servers.indexOf(ph), 1);
+        if (activeServerId === ph.id) activeServerId = ex.id;
+      } else {
+        ph.wsUrl = "ws://127.0.0.1:8787/ws";
+        ph.token = local.token;
+      }
+      saveServers();
+      toast("检测到本机 CC Deck Relay，已自动连接");
+    } else if (window.ccDeck?.relayCtl) {
+      setTimeout(async () => {
+        const again = await probeLocalRelay();
+        if (again && !ph.wsUrl) {
+          ph.wsUrl = "ws://127.0.0.1:8787/ws";
+          ph.token = again.token;
+          saveServers();
+          location.reload();
+        }
+      }, 2500);
+    }
+  }
+  // 所有源同时保持连接（一处断另一处还在）
+  connectAll();
+  renderServers(); renderConnChip(); render();
+  // 引导（#325 改版）：没有任何可用源（云源未配对且无可用直连）→ 首启向导三选一，
+  // 不再直接把用户丢进配对码表单。深链（#pc 配对链 / ?token= 直连）不走向导——
+  // 自动配对/直连正在进行，弹向导只会挡在前面
+  const usable = servers.some((s) => (s.kind === "lan" ? (s.wsUrl && s.token) : !!s.cloud?.paired));
+  const deepLinked = !!(h.get("pc") || params.get("token"));
+  if (!usable && !deepLinked) { $("wizPop").classList.add("open"); setTimeout(() => $("wizCode")?.focus(), 80); }
+
   setTimeout(probeLocalRelay, 800);
+  // #40x relay 页状态行：启动后静默探一次（结果落到 gpRelayStat，打开抽屉/切页时再补探）
+  setTimeout(probeRelayStat, 1100);
 })();
 </script>
 </body>
