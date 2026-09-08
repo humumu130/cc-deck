@@ -1,0 +1,9 @@
+#!/bin/sh
+# 版本一致性强制校验：任一落点与 VERSION 不一致即拒绝提交（#394）
+node scripts/version.mjs --check || {
+  echo ""
+  echo ">>> 提交被拦截：版本号不同步。修复方式："
+  echo ">>>   1) 发版改版本：改 VERSION 文件后运行 node scripts/version.mjs --write"
+  echo ">>>   2) 误改了某处：把该处改回 VERSION 的值"
+  exit 1
+}
