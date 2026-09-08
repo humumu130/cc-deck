@@ -29,7 +29,7 @@ const VIEWS = [
 ] as const;
 // tab 指示条几何参数：tabWrap 左边距与 tab 间隙（JS 几何计算与 makeStyles 共用）
 const TAB_PAD_L = 4;
-const TAB_GAP = 5;
+const TAB_GAP = 6;
 export type ViewKind = (typeof VIEWS)[number]["k"];
 
 // SpeechRecognizer 错误码人话（反馈排查用；1/2/4 多为云识别服务连不上）
@@ -949,7 +949,7 @@ export default function DetailScreen({ sid, onBack, initialView, ref }: { sid: s
     if (i > 0) pagerRef.current?.scrollTo({ x: i * Dimensions.get("window").width, animated: false });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
-  // 指示条几何：tab 等宽分铺 tabWrap（TAB_PAD_L 左边距 + TAB_GAP 间隙，不含右侧模型 chip），横杠宽 = 单 tab 宽，
+  // 指示条几何：tab 等宽分铺 tabWrap（TAB_PAD_L 左边距 + TAB_GAP 间隙），横杠宽 = 单 tab 宽，
   // 每滑一页平移 (tabW + gap)；滑到两页中间时轻微拉伸（1.3x）落位回缩，clamp 防 overscroll 过冲
   const tabW = tabRowW > 0 ? (tabRowW - TAB_PAD_L - TAB_GAP * (VIEWS.length - 1)) / VIEWS.length : 0;
   const indX = scrollX.interpolate({
@@ -1169,9 +1169,22 @@ export default function DetailScreen({ sid, onBack, initialView, ref }: { sid: s
         </Pressable>
         <View style={{ flex: 1, minWidth: 0 }}>
           <Text style={d.title} numberOfLines={1}>{s.title || "未命名会话"}</Text>
-          <Text style={d.sub} numberOfLines={1}>
-            {(external ? "外部 CLI" : "托管") + (s.historical && !external ? " · 历史" : "") + (srcName ? ` · ${srcName}` : "") + " · " + fmtElapsed(sessionElapsed(s))}
-          </Text>
+          {/* 副信息行 + 模型 chip（#388/#391 返工挪回头部）：chip 行内最右小胶囊
+              （filterChip 缩小版），去「模型·」前缀直接显模型名，无模型显「默认」 */}
+          <View style={d.subRow}>
+            <Text style={d.sub} numberOfLines={1}>
+              {(external ? "外部 CLI" : "托管") + (s.historical && !external ? " · 历史" : "") + (srcName ? ` · ${srcName}` : "") + " · " + fmtElapsed(sessionElapsed(s))}
+            </Text>
+            {canCmd && snap.models.length > 0 ? (
+              <Pressable
+                style={d.modelChip}
+                android_ripple={{ color: c.tintSoft, borderless: false, radius: 12 }}
+                onPress={() => setModelPick(true)}
+              >
+                <Text style={d.modelChipT} numberOfLines={1} ellipsizeMode="tail">{s.model ? s.model.split(/[\/:]/).pop() : "默认"}</Text>
+              </Pressable>
+            ) : null}
+          </View>
           {ctxUsed > 0 ? (
             <View style={d.ctxRow}>
               <Text style={d.ctxLabel}>ctx</Text>
@@ -1233,8 +1246,7 @@ export default function DetailScreen({ sid, onBack, initialView, ref }: { sid: s
               )}
             </View>
           ) : null}
-          {/* tab 行 + 模型 chip 同排：tabWrap 自测宽（指示条几何只算 tab 区，chip 挤不进来）；
-              模型 chip 去「模型·」前缀直接显模型名（#388 弹窗交互不变），无模型显「默认」 */}
+          {/* tab 行：模型 chip 已挪头部副信息行（#391 返工）；tabWrap 自测宽供指示条几何 */}
           <View style={d.filterRow}>
             <View style={d.tabWrap} onLayout={(e) => setTabRowW(e.nativeEvent.layout.width)}>
               {VIEWS.map((v, i) => (
@@ -1249,15 +1261,6 @@ export default function DetailScreen({ sid, onBack, initialView, ref }: { sid: s
               ))}
               <Animated.View style={[d.tabInd, { width: tabW, transform: [{ translateX: indX }, { scaleX: indS }] }]} />
             </View>
-            {canCmd && snap.models.length > 0 ? (
-              <Pressable
-                style={d.modelChip}
-                android_ripple={{ color: c.tintSoft, borderless: false, radius: 12 }}
-                onPress={() => setModelPick(true)}
-              >
-                <Text style={d.modelChipT} numberOfLines={1} ellipsizeMode="tail">{s.model ? s.model.split(/[\/:]/).pop() : "默认"}</Text>
-              </Pressable>
-            ) : null}
           </View>
           {!external && canCmd && !s.historical ? (
           <View style={d.subFilterRow}>
@@ -1821,7 +1824,9 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
   backText: { color: c.dim, fontSize: 18, marginTop: -1 },
   hintText: { color: c.faint },
   title: { color: c.text, fontSize: 15, fontWeight: "600" },
-  sub: { color: c.dim, fontSize: 11, marginTop: 1 },
+  // 副信息行（头部）：小字占满 + 行内最右模型 chip，垂直居中
+  subRow: { flexDirection: "row", alignItems: "center", gap: 6, marginTop: 1 },
+  sub: { flex: 1, color: c.dim, fontSize: 11 },
   // 上下文占用条（头部副行下）：标签 + 3px 细条 + 百分比，颜色按占用分级
   ctxRow: { flexDirection: "row", alignItems: "center", gap: 6, marginTop: 3 },
   ctxLabel: { color: c.faint, fontSize: 10, fontWeight: "600" },
@@ -1883,17 +1888,16 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
     borderRadius: 12, borderTopRightRadius: 4, paddingHorizontal: 10, paddingVertical: 7,
   },
   pendT: { color: c.dim, fontSize: 12.5, lineHeight: 17 },
-  // 视图 tab 行：下划线式（与网页端 tabs 同风格）+ 最右模型 chip 同排（紧凑档：
-  // 字号 11 / padding 3 / 间隙 5，5 tab + chip 一排放得下）；tabWrap 自测宽供指示条几何
-  filterRow: { flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 8 },
+  // 视图 tab 行：下划线式（与网页端 tabs 同风格）；tabWrap 自测宽供指示条几何（chip 已挪头部）
+  filterRow: { flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 10 },
   tabWrap: { flex: 1, position: "relative", flexDirection: "row", gap: TAB_GAP, paddingLeft: TAB_PAD_L },
-  tabBtn: { flex: 1, alignItems: "center", paddingVertical: 3, borderBottomWidth: 2, borderBottomColor: "transparent" },
+  tabBtn: { flex: 1, alignItems: "center", paddingVertical: 4, borderBottomWidth: 2, borderBottomColor: "transparent" },
   tabInd: { position: "absolute", left: TAB_PAD_L, bottom: 0, height: 2.5, borderRadius: 1.5, backgroundColor: c.brandA },
-  tabT: { fontSize: 11, color: c.dim },
+  tabT: { fontSize: 12, color: c.dim },
   tabTOn: { color: c.text, fontWeight: "600" },
-  // 模型 chip（tab 行最右）：去「模型·」前缀直接显模型名减宽；长名封顶截尾防挤 tab
+  // 模型 chip（头部副信息行最右）：filterChip 缩小版小胶囊；长名封顶截尾防挤副信息文字
   modelChip: {
-    paddingHorizontal: 8, paddingVertical: 3, borderRadius: 10, maxWidth: 118,
+    paddingHorizontal: 8, paddingVertical: 3, borderRadius: 10, maxWidth: 96,
     backgroundColor: c.tintSoft, borderWidth: 1, borderColor: c.line,
   },
   modelChipT: { fontSize: 10.5, color: c.dim },

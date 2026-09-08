@@ -40,7 +40,7 @@ class WearLinkModule : Module() {
         // 首次弹出系统授权（S+ 运行时蓝牙权限）；watch.ts 会周期重试 start
         val act = appContext.currentActivity
         if (act != null) {
-          act.requestPermissions(arrayOf(Manifest.permission.BLUETOOTH_CONNECT), 4280)
+          act.requestPermissions(arrayOf(Manifest.permission.BLUETOOTH_CONNECT, Manifest.permission.BLUETOOTH_SCAN), 4280)
         }
         return@AsyncFunction false
       }
@@ -69,7 +69,10 @@ class WearLinkModule : Module() {
   private fun hasConnectPermission(): Boolean {
     if (Build.VERSION.SDK_INT < 31) return true
     val ctx = appContext.reactContext ?: return false
-    return ContextCompat.checkSelfPermission(ctx, Manifest.permission.BLUETOOTH_CONNECT) == PackageManager.PERMISSION_GRANTED
+    // CONNECT 管建连，SCAN 管 cancelDiscovery（缺 SCAN 时每次尝试都会被
+    // SecurityException 打断，表现为永远连不上）——两者齐备才开循环
+    return ContextCompat.checkSelfPermission(ctx, Manifest.permission.BLUETOOTH_CONNECT) == PackageManager.PERMISSION_GRANTED &&
+      ContextCompat.checkSelfPermission(ctx, Manifest.permission.BLUETOOTH_SCAN) == PackageManager.PERMISSION_GRANTED
   }
 
   private fun stop() {
@@ -84,11 +87,13 @@ class WearLinkModule : Module() {
     while (!stopped) {
       val adapter = BluetoothAdapter.getDefaultAdapter()
       if (adapter == null || !adapter.isEnabled) {
+        Log.i(TAG, "adapter off, wait")
         sendStatus(false, "蓝牙未开启")
         sleepQuiet(5000)
         continue
       }
-      val devices: List<BluetoothDevice> = try { adapter.bondedDevices.toList() } catch (e: SecurityException) { emptyList() }
+      val devices: List<BluetoothDevice> = try { adapter.bondedDevices.toList() } catch (e: SecurityException) { Log.w(TAG, "bondedDevices: ${e.message}"); emptyList() }
+      Log.i(TAG, "scan cycle: ${devices.size} bonded") // 诊断：确认循环活着与可见设备数
       var connectedSock: BluetoothSocket? = null
       for (d in devices) {
         if (stopped) return
@@ -100,6 +105,7 @@ class WearLinkModule : Module() {
           connectedSock = sock
           break
         } catch (e: Exception) {
+          Log.i(TAG, "miss ${d.name}: ${e.message?.take(60)}") // 诊断：逐台失败原因
           runCatching { sock?.close() }
         }
       }
