@@ -295,7 +295,22 @@ export function startServer(
         res.writeHead(501).end("pairing not enabled");
         return;
       }
-      res.writeHead(200, { "content-type": "application/json" }).end(JSON.stringify(opts.pairCodes.issue()));
+      // #397 CORS：网页端「本机显示配对码」从云桥域页面跨源读本机响应——
+      // 与 /local-info 同款可信 origin 白名单（我们的部署域/本机/本机 LAN IP），
+      // 否则浏览器静默拦截响应，领码按钮在 cc.humumu.online 页面必失败
+      const origin = (req.headers.origin ?? "").trim();
+      const ips = localIps();
+      const hostOk = (h: string) => h === "localhost" || h === "127.0.0.1" || ips.has(h);
+      let acao = "";
+      if (origin) {
+        try {
+          const u = new URL(origin);
+          if (u.origin === "https://cc.humumu.online" || hostOk(u.hostname)) acao = origin;
+        } catch {}
+      }
+      const headers: Record<string, string> = { "content-type": "application/json" };
+      if (acao) headers["access-control-allow-origin"] = acao;
+      res.writeHead(200, headers).end(JSON.stringify(opts.pairCodes.issue()));
       return;
     }
     // #393 手动通知（LAN token 鉴权）：body {session_id?, done: string[]} → 该会话（缺省

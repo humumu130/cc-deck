@@ -255,6 +255,19 @@
   #connChip i { width: 8px; height: 8px; border-radius: 50%; background: var(--error); flex: none; }
   #connChip.on i { background: var(--done); }
   #connChip.wait i { background: var(--working); --sc: var(--working); animation: dot-breathe 2.4s ease-in-out infinite; }
+  /* #39x 配对中/连接中：文字后三点依次出现循环（0%→1点 33%→2点 66%→3点 清空重来），
+     JS 按状态文本（配对中、连接中）挂 .pairing；::after content 逐帧切换 + steps 保持 */
+  @keyframes pd-dots {
+    0% { content: "·"; }
+    33% { content: "··"; }
+    66% { content: "···"; }
+    85% { content: ""; }
+    100% { content: ""; }
+  }
+  .pairing::after {
+    content: "·"; display: inline-block; width: 1.25em; text-align: left;
+    animation: pd-dots 1.4s steps(1, end) infinite;
+  }
 
   button {
     background: var(--panel-2); color: var(--text);
@@ -317,6 +330,20 @@
   .conn-form:not(.cloud) #srvName { order: 1; }
   .conn-form:not(.cloud) #url { order: 2; }
   .conn-form:not(.cloud) #token { order: 3; }
+  /* #39x 云桥态折叠：URL/Key/名称收进「高级选项」，默认只露配对码+连接（LAN 态字段区常开不受影响） */
+  .pd-adv-body { display: flex; flex-direction: column; gap: 9px; width: 100%; }
+  .conn-form.cloud:not(.adv-open) .pd-adv-body { display: none; }
+  .pd-adv-toggle { display: none; }
+  .conn-form.cloud .pd-adv-toggle {
+    display: flex; align-items: baseline; gap: 6px; width: 100%; text-align: left;
+    border: none; background: none; box-shadow: none; padding: 2px 0; cursor: pointer;
+  }
+  .pd-adv-toggle .pd-adv-t { font-size: 12px; font-weight: 600; color: var(--text); }
+  .pd-adv-toggle .pd-adv-sub { font-size: 11px; color: var(--faint); }
+  .pd-adv-toggle .pd-adv-arrow { font-style: normal; color: var(--faint); }
+  .pd-adv-toggle .pd-adv-arrow::before { content: "▸"; }
+  .conn-form.cloud.adv-open .pd-adv-arrow::before { content: "▾"; }
+  .pd-adv-toggle:hover .pd-adv-t { color: var(--brand); }
   /* #352 配对区去框化 → #39x 回归小输入框：码行收敛为 110px 小码框 + 小号「连接」钮 */
   /* #384 配对区两行：码行（码+连接钮）+ 次级动作行（扫码/添加手机文字链接） */
   #pairBox { display: none; flex-direction: column; gap: 2px; padding: 2px 10px; }
@@ -330,7 +357,14 @@
   #pairCode:focus { outline: none; border-color: var(--brand); box-shadow: 0 0 0 3px rgba(217,119,87,.15); }
   #pairBtn { height: 27px; padding: 0 14px; font-size: 12px; border-radius: 8px; flex: none; }
   #pairBox button:not(#pairBtn) { border: none; background: none; color: var(--brand); font-weight: 600; box-shadow: none; padding: 4px 2px; }
-  .pair-acts { display: flex; align-items: center; gap: 8px; font-size: 12px; }
+  .pair-acts { display: flex; align-items: center; flex-wrap: wrap; gap: 4px 8px; font-size: 12px; }
+  /* #39x 本机领码临时行：大号等宽 6 位码 + 倒计时，expires_in 归零自动消失 */
+  .pd-code-show { display: flex; align-items: baseline; justify-content: center; gap: 8px; padding: 5px 0 3px; }
+  .pd-code-show b {
+    font-family: var(--mono); font-size: 22px; font-weight: 700; letter-spacing: 4px;
+    color: var(--brand); font-variant-numeric: tabular-nums;
+  }
+  .pd-code-show span { font-size: 11px; color: var(--faint); }
   .pair-acts button { font-size: 12px; color: var(--dim); }
   .pair-acts button:hover { color: var(--text); }
   .pair-dot { color: var(--faint); }
@@ -1190,7 +1224,6 @@
           <span class="gp-sdot" id="gpStatusDot"></span>
           <span class="gp-stx"><b id="gpStatusName">未配置</b><span id="gpStatusSub">添加服务器开始使用</span></span>
         </div>
-        <div class="gp-row" id="gpRelay" style="display:none"><span class="gi"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3.5" y="4.5" width="17" height="6" rx="1.8"/><rect x="3.5" y="13.5" width="17" height="6" rx="1.8"/><path d="M7 7.5h.01M7 16.5h.01"/></svg></span>本机 relay <b id="gpRelayV"></b></div>
         <div class="panel" id="connPanel">
           <div id="srvList"></div>
           <button id="addSrvBtn" class="hbtn" style="width:100%;margin-top:6px">＋ 添加服务器</button>
@@ -1200,13 +1233,16 @@
               <button type="button" data-m="cloud">云桥</button>
             </div>
             <div class="cf-box" id="cfBox">
-              <div class="cf-sec">云桥地址</div>
-              <input id="url" placeholder="ws://<pc-ip>:8787/ws">
-              <div class="cf-sec">配对 Key</div>
-              <input id="token" placeholder="token">
-              <div class="cf-sec cf-sec-sub">名称（可选）</div>
-              <input id="srvName" placeholder="名称（可选）">
-              <div class="cf-note">Key 留空用公共桥</div>
+              <button type="button" class="pd-adv-toggle" id="pdAdvToggle"><span class="pd-adv-t">高级选项</span><span class="pd-adv-sub">自建云桥部署者选项</span><i class="pd-adv-arrow"></i></button>
+              <div class="pd-adv-body" id="pdAdvBody">
+                <div class="cf-sec">云桥地址</div>
+                <input id="url" placeholder="ws://<pc-ip>:8787/ws">
+                <div class="cf-sec">配对 Key</div>
+                <input id="token" placeholder="token">
+                <div class="cf-sec cf-sec-sub">名称（可选）</div>
+                <input id="srvName" placeholder="名称（可选）">
+                <div class="cf-note">Key 留空用公共桥</div>
+              </div>
             </div>
             <div class="conn-actions">
               <button id="cancelEdit" style="display:none">取消</button>
@@ -1218,6 +1254,7 @@
       <div class="gp-card" id="gpPairCard">
         <div class="gp-sec"><svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>配对</div>
         <div id="pairBox">
+          <div class="pd-code-show" id="pdCodeLine" style="display:none"><b id="pdCodeVal"></b><span id="pdCodeExp"></span></div>
           <div class="pair-code-line">
             <input id="pairCode" inputmode="numeric" maxlength="6" placeholder="6 位配对码" autocomplete="off">
             <button id="pairBtn" class="primary">连接</button>
@@ -1226,6 +1263,8 @@
             <button id="loginQrBtn" title="手机扫一下，这台电脑直接接入你的 CC Deck"><svg viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:-1px"><rect x="7" y="2.5" width="10" height="19" rx="2.2"/><path d="M10.5 18.5h3"/></svg> 手机扫码接入</button>
             <span class="pair-dot">·</span>
             <button id="addPhoneBtn" title="手机 App 扫码直接接入本服务器"><svg viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:-1px"><path d="M3 8V5a2 2 0 0 1 2-2h3M16 3h3a2 2 0 0 1 2 2v3M21 16v3a2 2 0 0 1-2 2h-3M8 21H5a2 2 0 0 1-2-2v-3"/><path d="M7 12h10"/></svg> 添加手机</button>
+            <span class="pair-dot">·</span>
+            <button id="pdLocalCodeBtn" title="没绑手机时，在这台电脑上直接领一枚配对码（本机 relay 签发）">本机显示配对码</button>
           </div>
         </div>
         <div class="pair-hint" id="pairHint">手机 App 侧边栏领码，5 分钟内有效</div>
@@ -1758,7 +1797,7 @@ function connectCloudFor(ctx, manual) {
   clearTimeout(ctx.reconnectTimer); ctx.reconnectTimer = 0;
   try { ctx.ws && ctx.ws.close(); } catch {}
   ctx.ws = null;
-  setConn(ctx, "connecting", peer && !pair ? "连接中 ☁" : "配对中…");
+  setConn(ctx, "connecting", peer && !pair ? "连接中" : "配对中");
   if (ctx.transport === "poll") { startPollTransport(ctx, base, serverBridgeToken(cfg), dev, pair); return; }
   // 手填 https://…/cloud 也能连：统一归一到 ws/wss scheme
   const wsBase = base.replace(/^http:\/\//i, "ws://").replace(/^https:\/\//i, "wss://");
@@ -1889,7 +1928,7 @@ function startPollTransport(ctx, base, token, dev, pair) {
   ctx.reconnectDelay = 1000;
   const peer = cloudPeerOf(ctx.cfg);
   if (!peer || pair) {
-    setConn(ctx, "connecting", "配对中…(轮询)");
+    setConn(ctx, "connecting", "配对中(轮询)");
     sendPairReq(ctx, pair, dev);
     startPairWatchdog(ctx);
   } else {
@@ -2019,7 +2058,7 @@ function onCloudText(ctx, text) {
       } else {
         console.log("[cloud:" + cfg.name + "] relay " + pick.dev + " 已回在线，重发配对请求");
       }
-      setConn(ctx, "connecting", "配对中…");
+      setConn(ctx, "connecting", "配对中");
       if (ctx.pendingPair.pc) sendPairReq(ctx, ctx.pendingPair, devId(ckp.publicKey, "wb")); // 扫码登录态不发 pair_req，只等授权
       startPairWatchdog(ctx);
       return;
@@ -2223,6 +2262,9 @@ function setConn(ctx, status, text) {
   render();
 }
 
+// #39x 配对中/连接中的状态文字带省略号逐点动效（.pairing::after CSS steps 循环）
+function pdPairingAnim(t) { return (t || "").startsWith("配对中") || t === "连接中"; }
+
 // 汇总徽标：N/M 源在线（多源同连的核心反馈）。
 // className 整体覆写会抹掉 .open——折叠箭头状态以面板实际开合为准重建
 function renderConnChip() {
@@ -2246,6 +2288,7 @@ function renderGpStatus() {
   dot.className = "gp-sdot " + (ctx.status === "online" ? "on" : ctx.status === "connecting" || ctx.status === "reconnecting" ? "wait" : ctx.status === "offline" ? "off" : "");
   name.textContent = srcDisplayName(ctx.cfg);
   sub.textContent = (ctx.cfg.kind === "cloud" ? "云桥" : "LAN") + " · " + (ctx.statusText || "");
+  sub.classList.toggle("pairing", pdPairingAnim(ctx.statusText));
 }
 
 // 选中会话（按源寻址）
@@ -3430,7 +3473,7 @@ function renderSrvPop() {
     const st = ctxs.get(s.id)?.status;
     const col = st === "online" ? "var(--done)" : st === "connecting" ? "var(--working)" : "var(--faint)";
     const txt = st === "online" ? "在线" : st === "connecting" ? "连接中" : "离线";
-    return '<div class="sp-row"><i style="background:' + col + '"></i><span class="sp-name">' + escapeHtml(srcDisplayName(s)) + '</span><span class="sp-state">' + txt + "</span></div>";
+    return '<div class="sp-row"><i style="background:' + col + '"></i><span class="sp-name">' + escapeHtml(srcDisplayName(s)) + '</span><span class="sp-state' + (st === "connecting" ? " pairing" : "") + '">' + txt + "</span></div>";
   }).join("");
   $("srvPop").innerHTML = rows + '<div class="sp-row sp-manage" id="spManage">管理服务器 →</div>';
 }
@@ -3455,7 +3498,7 @@ document.addEventListener("click", (ev) => {
     $("gearPop").classList.toggle("open", open);
     $("connPanel").classList.toggle("open", open);
     $("connChip").classList.toggle("open", open);
-    if (open) { syncGearPop(); refreshRelayRow(); }
+    if (open) syncGearPop();
     return;
   }
   if (!ev.target.closest("#rhPop") && !ev.target.closest("#gearPop")) { $("rhPop").classList.remove("open"); $("gearPop").classList.remove("open"); $("srvPop").classList.remove("open"); }
@@ -3515,35 +3558,7 @@ function syncGearPop() {
 }
 $("gpTheme") && ($("gpTheme").onclick = () => { $("themeBtn").click(); syncGearPop(); });
 $("gearClose").onclick = () => openPanel("none");
-// 本机 relay 开关（#324，仅桌面壳）：relayCtl 标记由 Tauri INIT_SCRIPT 注入；
-// 状态三态：端口已服务（可能是插件 relay——只展示）/ 内置运行中（可停）/ 未运行（可启）
-async function refreshRelayRow() {
-  const row = $("gpRelay");
-  if (!window.ccDeck || !window.ccDeck.relayCtl) { row.style.display = "none"; return; }
-  row.style.display = "flex";
-  try {
-    const st = await window.ccDeck.relayStatus();
-    $("gpRelayV").textContent = st.port
-      ? (st.embedded ? "内置 · 运行中 · 点击停止" : "已运行（外部）")
-      : (st.node ? "未运行 · 点击启动" : "未运行 · 缺 node");
-    row.dataset.on = st.port ? "1" : "0";
-    row.dataset.embedded = st.embedded ? "1" : "0";
-    row.dataset.node = st.node ? "1" : "0";
-  } catch { $("gpRelayV").textContent = "状态未知"; }
-}
-$("gpRelay").onclick = async () => {
-  const row = $("gpRelay");
-  const want = row.dataset.on !== "1";
-  $("gpRelayV").textContent = "处理中…";
-  try {
-    await window.ccDeck.relayToggle(want);
-    await refreshRelayRow();
-    if (want && row.dataset.on === "1" && row.dataset.node !== "1") toast("本机 relay 已启动（未检测到 node 时为只读扫描模式）");
-    if (!want) toast("本机 relay 已停止（下次启动 CC Deck 时会自动恢复）");
-    // 启动后本机探测自动落源；停了则重连现有源
-    setTimeout(() => location.reload(), 600);
-  } catch (e) { $("gpRelayV").textContent = "失败"; toast(String(e).slice(0, 80), 4000); }
-};
+// 本机 relay 行已移除（对用户完全透明）：启停全靠启动自动探测，见 init 尾部 probeLocalRelay
 
 $("emptyNewBtn").onclick = () => {
   if (!$("newform").classList.contains("open")) $("addBtn").click();
@@ -3695,6 +3710,8 @@ function setFormKind(kind, cfg) {
   const formEl = document.querySelector(".conn-form");
   formEl.classList.toggle("open", !!cfg || formForcedOpen);
   formEl.classList.toggle("cloud", kind === "cloud"); // 云桥态字段收进分组卡（cf-box）
+  // #39x 云桥态高级选项（URL/Key/名称）默认收起：只露配对码；编辑已有云源时展开方便改地址
+  formEl.classList.toggle("adv-open", kind === "cloud" && !!cfg);
   $("addSrvBtn").style.display = cfg || formForcedOpen ? "none" : "";
   if (kind === "cloud") {
     $("url").placeholder = "wss://<云桥>/cloud";
@@ -3716,7 +3733,13 @@ function setFormKind(kind, cfg) {
   $("cancelEdit").style.display = cfg ? "" : "none";
 }
 let formForcedOpen = false;
-$("addSrvBtn").onclick = () => { formForcedOpen = true; setFormKind(formKind, null); $(formKind === "cloud" ? "url" : "srvName").focus(); };
+$("addSrvBtn").onclick = () => {
+  formForcedOpen = true;
+  setFormKind(formKind, null);
+  if (formKind === "cloud") { document.querySelector(".conn-form").classList.add("adv-open"); $("url").focus(); } // 手动加桥=部署者，展开高级区直落地址
+  else $("srvName").focus();
+};
+$("pdAdvToggle").onclick = () => document.querySelector(".conn-form").classList.toggle("adv-open");
 
 document.querySelectorAll("#cmodeSeg button").forEach((b) => {
   b.onclick = () => { if (formKind !== b.dataset.m) setFormKind(b.dataset.m, editId ? cfgOf(editId) : null); };
@@ -3730,12 +3753,13 @@ function renderServers() {
   box.innerHTML = servers.map((s) => {
     const ctx = ctxs.get(s.id);
     const stText = ctx ? ctx.statusText : (canAutoConnect(s) ? "未连接" : "未配置");
+    // #39x 配对进行中（connecting）不再缀「未配对」——配对态只显示"配对中"，避免同屏两个未配对字样
     const addr = s.kind === "cloud"
-      ? hostOf(s.wsUrl) + " · 云桥" + (s.cloud?.paired ? "" : " · 未配对")
+      ? hostOf(s.wsUrl) + " · 云桥" + (s.cloud?.paired || (ctx && ctx.status === "connecting") ? "" : " · 未配对")
       : (hostOf(s.wsUrl) || "未配置") + " · 直连";
     return '<div class="srv-row' + (s.id === activeServerId ? " active" : "") + '" data-id="' + s.id + '">' +
       '<i class="dot ' + (ctx ? ctx.status : "offline") + '"></i>' +
-      '<div class="srv-main"><b>' + escapeHtml(s.name) + '</b><span class="srv-addr">' + escapeHtml(addr + " · " + stText) + "</span></div>" +
+      '<div class="srv-main"><b>' + escapeHtml(s.name) + '</b><span class="srv-addr' + (pdPairingAnim(stText) ? " pairing" : "") + '">' + escapeHtml(addr + " · " + stText) + "</span></div>" +
       '<button class="srv-edit" title="查看/编辑">✎</button>' +
       '<button class="srv-del" title="删除">✕</button>' +
       "</div>";
@@ -4763,6 +4787,50 @@ document.addEventListener("keydown", (ev) => {
 
 $("pairBtn").onclick = submitPairCode;
 $("pairCode").addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); submitPairCode(); } });
+
+// #39x 本机显示配对码：没绑手机的用户在自己电脑上直接领一枚云桥码。
+// 复用启动探测（probeLocalRelay / local-info）拿到的本机 port+token，
+// POST /api/pair-code → { code, expires_in }，展示到 expires_in 归零自动消失
+let pdCodeTimer = 0, pdCodeTick = 0;
+async function pdLocalRelayCreds() {
+  // 已落库的本机源（探测命中时写入）优先——token 是 local-info 返回的真实值
+  const s = servers.find((x) => x.kind === "lan" && x.token && /127\.0\.0\.1|localhost/.test(x.wsUrl || ""));
+  if (s) { const m = String(s.wsUrl).match(/:(\d+)/); if (m) return { port: +m[1], token: s.token }; }
+  // 库里没有（纯远程浏览/探测落空）：现场再探一次，本机 relay 在跑即可领码
+  const j = await probeLocalRelay();
+  return j && j.port && j.token ? { port: j.port, token: j.token } : null;
+}
+$("pdLocalCodeBtn").onclick = async () => {
+  const creds = await pdLocalRelayCreds();
+  if (!creds) { toast("未检测到本机 relay"); return; }
+  const q = "?token=" + encodeURIComponent(creds.token);
+  // 页面恰由本机 relay 托管（同端口）时走相对路径＝同源，避开跨源读响应的限制
+  const urls = [];
+  if (location.protocol.startsWith("http") && location.port === String(creds.port)) urls.push("/api/pair-code" + q);
+  urls.push("http://127.0.0.1:" + creds.port + "/api/pair-code" + q);
+  let j = null, err = "";
+  for (const u of urls) {
+    try {
+      const r = await fetch(u, { method: "POST", signal: AbortSignal.timeout?.(4000) });
+      const body = await r.json().catch(() => null);
+      if (r.ok && body && body.code) { j = body; break; }
+      err = r.status === 501 ? "本机 relay 未启用云桥" : r.status === 401 ? "token 校验失败" : "HTTP " + r.status;
+    } catch (e) { err = String((e && e.message) || e).slice(0, 60); }
+  }
+  if (!j) { toast("领码失败（" + err + "）", 5000); return; }
+  const ttl = Math.max(1, Math.floor(Number(j.expires_in) || 60));
+  const line = $("pdCodeLine");
+  $("pdCodeVal").textContent = j.code;
+  $("pdCodeExp").textContent = ttl + "s 内有效 · 一次性";
+  line.style.display = "flex";
+  clearInterval(pdCodeTick); clearTimeout(pdCodeTimer);
+  let left = ttl;
+  pdCodeTick = setInterval(() => {
+    if (--left <= 0) { clearInterval(pdCodeTick); line.style.display = "none"; return; }
+    $("pdCodeExp").textContent = left + "s 内有效 · 一次性";
+  }, 1000);
+  pdCodeTimer = setTimeout(() => { line.style.display = "none"; }, ttl * 1000 + 300);
+};
 
 // 同机零配置直连：探测本机 relay（/local-info 仅 loopback 可访问，Chrome/Edge 豁免 loopback 混合内容）
 async function probeLocalRelay() {
