@@ -248,7 +248,7 @@ function SwipeRow({
           {!minimal ? <Text style={styles.actT2}>{deletable ? "删除" : "运行中"}</Text> : null}
         </Pressable>
       </View>
-      <Animated.View style={[styles.swipeCard, minimal && styles.swipeCardM, { transform: [{ translateX: x }] }]} {...pan.panHandlers}>
+      <Animated.View style={[styles.swipeCard, { transform: [{ translateX: x }] }]} {...pan.panHandlers}>
         <Pressable
           style={[styles.card, compact && styles.cardC, minimal && styles.cardM]}
           android_ripple={{ color: c.tintSoft, borderless: false }}
@@ -991,11 +991,9 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
   densityT: { fontSize: 11, color: c.dim },
   swipeWrap: { marginBottom: 9, borderRadius: 16, overflow: "hidden" },
   swipeWrapC: { marginBottom: 7 },
-  // 极简平铺行：去卡间距堆叠，行间以极淡 hairline 分隔（c.line 本身即低透明度，
-  // 深浅主题均"极淡"）；圆角归零配合无框卡成表状铺排
-  swipeWrapM: { borderRadius: 0, marginBottom: 0, borderBottomWidth: 1, borderBottomColor: c.line },
+  // 极简行（用户拍板圆角统一）：同标准/紧凑的圆角卡语言，仅行高更矮、间距更密
+  swipeWrapM: { marginBottom: 5 },
   swipeCard: { borderRadius: 16, overflow: "hidden", backgroundColor: c.panel },
-  swipeCardM: { borderRadius: 0 },
   actPanel: {
     position: "absolute", top: 3, bottom: 3, right: 0, width: FULL_W,
     flexDirection: "row", borderRadius: 16, overflow: "hidden",
@@ -1013,7 +1011,7 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
   cardC: { borderRadius: 13, padding: 9 },
   // 极简平铺行：去框（hairline 分隔接管分隔职责），纵向 8 呼吸感比 6 松一点，
   // 行高仍远低于紧凑卡（单行 vs 三行）
-  cardM: { borderRadius: 0, borderWidth: 0, paddingVertical: 8, paddingHorizontal: 11 },
+  cardM: { borderRadius: 13, borderWidth: 0, paddingVertical: 8, paddingHorizontal: 11 },
   rowC: { flexDirection: "row", alignItems: "center", gap: 7 },
   rowM: { flexDirection: "row", alignItems: "center", gap: 7 },
   titleM: { color: c.text, fontSize: 13.5, fontWeight: "600", flexShrink: 1 },
