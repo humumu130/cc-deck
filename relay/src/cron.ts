@@ -9,6 +9,11 @@ import type { CronTask } from "./types.js";
 const str = (v: unknown): string | undefined =>
   typeof v === "string" && v.trim() ? v : undefined;
 
+// 一次性任务过期宽限：next_run_at 早于 now-10min 才判定过期隐藏，
+// 防设备/时钟偏差误杀刚触发的一次性任务（循环任务 CLI 自会刷新
+// next_run_at，不做时间过滤）
+const EXPIRED_ONE_SHOT_GRACE_MS = 10 * 60 * 1000;
+
 // 毫秒时间戳：数字直用；ISO 字符串 Date.parse；纯数字字符串 Number
 function tsNum(v: unknown): number | undefined {
   if (typeof v === "number" && Number.isFinite(v) && v > 0) return v;
@@ -36,6 +41,10 @@ function normalizeTask(raw: unknown, fallbackId: string): CronTask | null {
     o.paused === true || o.enabled === false || o.active === false ||
     status === "paused" || status === "expired";
   const next = tsNum(o.next_run_at ?? o.nextRunAt ?? o.next_run ?? o.nextExecutionAt);
+  // 过期一次性任务不下发（面板隐藏）：仅显式 recurring===false 判定一次性，
+  // 字段缺失保守放行（宁漏勿误杀循环任务）；next 解析不出同样放行
+  if (o.recurring === false && next !== undefined &&
+      next < Date.now() - EXPIRED_ONE_SHOT_GRACE_MS) return null;
   return {
     id: rawId ?? fallbackId,
     name: name ?? (prompt ? prompt.slice(0, 40) : schedule || "未命名任务"),
