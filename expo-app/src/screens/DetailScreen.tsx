@@ -611,10 +611,8 @@ export default function DetailScreen({ sid, onBack, initialView, ref }: { sid: s
   const [showThink, setShowThink] = useState(thinkShown);
   const [collapsed, setCollapsed] = useState(ctrlCollapsed);
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
-  // #376 定时任务条目展开态（按任务 id）；#375 任务分组锚点 y + 当前段
+  // #376 定时任务条目展开态（按任务 id）
   const [cronOpen, setCronOpen] = useState<Record<string, boolean>>({});
-  const secY = useRef(new Map<string, number>());
-  const [secNow, setSecNow] = useState("completed");
   // 内容长按菜单（#249）：非空即弹 ContentMenu
   const [menuText, setMenuText] = useState<string | null>(null);
   // #388 模型选择弹窗开关
@@ -1366,14 +1364,6 @@ export default function DetailScreen({ sid, onBack, initialView, ref }: { sid: s
                 const { contentOffset, contentSize, layoutMeasurement } = e.nativeEvent;
                 todoAtBottom.current = contentOffset.y + layoutMeasurement.height >= contentSize.height - 24;
                 todoScrollY.setValue(contentOffset.y);
-                // #375 当前段高亮：视口顶以下最近的分组头
-                const sy = contentOffset.y + 130;
-                let cur = "completed";
-                for (const k of ["completed", "in_progress", "pending"]) {
-                  const yy = secY.current.get(k);
-                  if (yy !== undefined && yy <= sy) cur = k;
-                }
-                if (cur !== secNow) setSecNow(cur);
               }}
               onLayout={(e) => {
                 const h = e.nativeEvent.layout.height;
@@ -1390,7 +1380,7 @@ export default function DetailScreen({ sid, onBack, initialView, ref }: { sid: s
                 return (
                   <Fragment key={i}>
                     {head ? (
-                      <View style={d.todoSec} onLayout={(ev) => secY.current.set(t.status, ev.nativeEvent.layout.y)}>
+                      <View style={d.todoSec}>
                         <View style={d.todoSecLine} />
                         <Text
                           style={[
@@ -1433,30 +1423,6 @@ export default function DetailScreen({ sid, onBack, initialView, ref }: { sid: s
                 ]}
               />
             ) : null}
-            {/* #375 三段式快速导航：右缘细轨（✓/◐/○），点击直达分组头，当前段高亮 */}
-            {(() => {
-              const secs = ([
-                { k: "completed", mark: "✓", color: c.done },
-                { k: "in_progress", mark: "◐", color: c.working },
-                { k: "pending", mark: "○", color: c.dim },
-              ] as const).filter((x) =>
-                x.k === "completed" ? doneList.length > 0 : allTodos.some((t) => t.status === x.k),
-              );
-              if (secs.length < 2) return null;
-              return (
-                <View style={d.todoNav}>
-                  {secs.map((x) => (
-                    <Pressable
-                      key={x.k}
-                      hitSlop={8}
-                      onPress={() => todoScrollRef.current?.scrollTo({ y: Math.max(0, (secY.current.get(x.k) ?? 0) - 6), animated: true })}
-                    >
-                      <Text style={[d.todoNavT, { color: x.color }, secNow === x.k && d.todoNavOn]}>{x.mark}</Text>
-                    </Pressable>
-                  ))}
-                </View>
-              );
-            })()}
           </View>
           )}
         </View>
@@ -1939,10 +1905,7 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
   todoFootHint: { alignItems: "center", paddingVertical: 10 },
   todoFootHintT: { color: c.faint, fontSize: 12 },
   todoThumb: { position: "absolute", right: 1, top: 2, width: 3, borderRadius: 2, backgroundColor: withA(c.text, 0.28) },
-  // #375 三段导航右缘细轨；#376 cron 展开态原文/prompt
-  todoNav: { position: "absolute", right: 7, top: "36%", alignItems: "center", gap: 11, zIndex: 6 },
-  todoNavT: { fontSize: 12, lineHeight: 16, opacity: 0.5 },
-  todoNavOn: { opacity: 1, fontWeight: "800" },
+  // #376 cron 展开态原文/prompt
   cronRaw: { color: c.faint, fontSize: 10.5, fontFamily: "monospace", marginTop: 2 },
   cronPrompt: { color: c.dim, fontSize: 12, lineHeight: 17, marginTop: 5 },
   // 定时任务视图行（原 cronScroll/cronBox 折叠面板平铺化）

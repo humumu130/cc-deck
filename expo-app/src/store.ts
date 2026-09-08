@@ -377,23 +377,42 @@ class RelayStore {
     return (await AsyncStorage.getItem("ccr_active")) ?? null;
   }
 
-  // entry 持久化（token 可为空 = 不记住令牌）；connectToken = 本次实际连接用的令牌
+  // entry 持久化（token 可为空 = 不记住令牌）；connectToken = 本次实际连接用的令牌。
+  // #398 同目标归并（addCloudByInvite 落盘也经此入口）：id 命中照旧整条替换；
+  // id 未命中但目标等价（127.0.0.1/localhost/内网 IP 写法差异、同机重复添加/重复
+  // 扫码）时复用既有条目——刷新名称/token/cloud 并沿用旧 id，不再 push 新条目，
+  // 连接缓存与活动指针因 id 不变天然连续
   async connectServer(entry: ServerEntry, connectToken?: string): Promise<void> {
     const list = await this.readServers();
+    let target = entry;
     const idx = list.findIndex((e) => e.id === entry.id);
-    if (idx >= 0) list[idx] = entry;
-    else list.push(entry);
+    if (idx >= 0) {
+      list[idx] = entry;
+    } else {
+      const dup = list.findIndex((e) => sameTargetEntry(e, entry));
+      if (dup >= 0) {
+        target = {
+          ...list[dup],
+          name: entry.name || list[dup].name,
+          token: entry.token || list[dup].token,
+          cloud: entry.cloud ?? list[dup].cloud ?? null,
+        };
+        list[dup] = target;
+      } else {
+        list.push(entry);
+      }
+    }
     this.servers = list;
     await AsyncStorage.setItem("ccr_conns", JSON.stringify(list));
-    await AsyncStorage.setItem("ccr_active", entry.id);
-    const prevId = this.activeId && this.activeId !== entry.id ? this.activeId : null;
-    this.activeId = entry.id;
-    const tk = connectToken ?? entry.token;
-    const conn = this.ensureConn(entry);
+    await AsyncStorage.setItem("ccr_active", target.id);
+    const prevId = this.activeId && this.activeId !== target.id ? this.activeId : null;
+    this.activeId = target.id;
+    const tk = connectToken ?? target.token;
+    const conn = this.ensureConn(target);
     if (tk) {
       // 聚合时只建/换该源不拆其他源并设 active（applyConfig 天然满足）；活动源
       // 目标一致且在连则被幂等跳过，不拆重建
-      this.applyConfig(conn, entry, tk);
+      this.applyConfig(conn, target, tk);
       // 单源带令牌切源：旧活动源连接同步拆掉防僵尸（#294 审查修复——此前 tk 分支
       // 漏拆，切源后旧源 socket 仍在后台收事件）。connDisconnect 保留 sessions/
       // timelines/lastSeq 缓存，回切按 last_seq 续传，与下方无令牌分支同语义
@@ -477,7 +496,18 @@ class RelayStore {
     try {
       this.aggregate = (await AsyncStorage.getItem("cc.display.aggregate")) === "1";
     } catch {}
-    const list = await this.readServers();
+    // #398 启动归并清理：已存列表里的同目标重复条目（历史多写法/LAN+云桥双条）
+    // 只留先出现的，后出现的 token/cloud 并入幸存者后丢弃；清理结果落盘，活动
+    // 指针指向被并条目时改指幸存者
+    const read = await this.readServers();
+    const dedup = dedupeServers(read);
+    const list = dedup.list;
+    if (list !== read) {
+      await AsyncStorage.setItem("ccr_conns", JSON.stringify(list));
+      const aid = await AsyncStorage.getItem("ccr_active");
+      const fixed = aid ? dedup.remap.get(aid) : undefined;
+      if (fixed) await AsyncStorage.setItem("ccr_active", fixed);
+    }
     this.servers = list;
     const activeId = await AsyncStorage.getItem("ccr_active");
     const active = list.find((e) => e.id === activeId) ?? list[0];
@@ -1533,6 +1563,56 @@ function sameCloud(a: CloudConfig | null, b: CloudConfig | null): boolean {
     a === b ||
     (!!a && !!b && a.url === b.url && a.token === b.token && a.relayDev === b.relayDev && a.relayPubkey === b.relayPubkey)
   );
+}
+
+// ---------- 服务器条目同目标归并（#398：同一台 relay 因写法不同被存成多条） ----------
+
+// wsUrl → LAN 目标（host 归一化：localhost / ::1 / [::1] 与 127.0.0.1 视为同一回环；
+// 端口缺省按协议补齐，ws://x 与 ws://x:80 等价）。解析失败返回 null（不可比）
+function lanTargetOf(wsUrl: string): { host: string; port: string } | null {
+  try {
+    const u = new URL(wsUrl);
+    const host =
+      u.hostname === "localhost" || u.hostname === "::1" || u.hostname === "[::1]"
+        ? "127.0.0.1"
+        : u.hostname;
+    return { host, port: u.port || (u.protocol === "wss:" ? "443" : "80") };
+  } catch {
+    return null;
+  }
+}
+
+// 两个条目是否指向同一台服务器（名称不参与——同机改名/换写法仍算重复）：
+// - 双方都带云桥 → cloud.relayDev 相同即同源（relay 设备 id 全局唯一，最强证据）
+// - 否则按 LAN 口径：wsUrl 的 host+port 相同（回环三写法归一后比较）
+// - 一方只有 LAN、另一方只有云桥：无法证明同一台机器，不算等价（宁漏勿误删；
+//   LAN 条目配对拿到 cloud.relayDev 后，下一次 connectServer/启动清理即能并掉）
+function sameTargetEntry(a: ServerEntry, b: ServerEntry): boolean {
+  const rdA = a.cloud?.relayDev;
+  const rdB = b.cloud?.relayDev;
+  if (rdA && rdB) return rdA === rdB;
+  const la = lanTargetOf(a.wsUrl);
+  const lb = lanTargetOf(b.wsUrl);
+  return !!la && !!lb && la.host === lb.host && la.port === lb.port;
+}
+
+// 启动归并清理：同目标重复条目只保留先出现的（列表序稳定），后出现的 token/cloud
+// 补进幸存者（幸存者已有值不覆盖）后丢弃。remap 记录被并条目 id → 幸存者 id，
+// 供调用方修正 ccr_active 指针；无重复时原样返回同一引用（调用方据此跳过落盘）
+function dedupeServers(list: ServerEntry[]): { list: ServerEntry[]; remap: Map<string, string> } {
+  const out: ServerEntry[] = [];
+  const remap = new Map<string, string>();
+  for (const e of list) {
+    const hit = out.find((x) => sameTargetEntry(x, e));
+    if (!hit) {
+      out.push(e);
+      continue;
+    }
+    remap.set(e.id, hit.id);
+    if (!hit.token) hit.token = e.token;
+    if (!hit.cloud) hit.cloud = e.cloud ?? null;
+  }
+  return { list: out.length === list.length ? list : out, remap };
 }
 
 // ws://192.168.0.105:8787/ws -> 192.168.0.105
