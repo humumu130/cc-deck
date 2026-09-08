@@ -5389,7 +5389,13 @@ async function probeLocalRelay() {
         // #398 命中等价条目（内网IP/localhost 写法）只刷新 token/name 不新增，防"本机"裂成多条
         const ex = findLocalEntry(`ws://127.0.0.1:${port}/ws`, token);
         if (ex) { if (token) ex.token = token; ex.name = "本机"; }
-        else servers.push({ id: uuid(), name: "本机", kind: "lan", wsUrl: `ws://127.0.0.1:${port}/ws`, token });
+        else {
+          // #398b 种子空占位（lan+空 wsUrl+空 token）就地补全——本探测闭包不返回结果，
+          // 5424 路径的"命中即补全"等不到回值，占位无人接管时会 push 出第二条「本机」
+          const ph = servers.find((s) => s.kind === "lan" && !s.wsUrl && !s.token);
+          if (ph) { ph.wsUrl = `ws://127.0.0.1:${port}/ws`; ph.token = token; }
+          else servers.push({ id: uuid(), name: "本机", kind: "lan", wsUrl: `ws://127.0.0.1:${port}/ws`, token });
+        }
         saveServers();
         renderServers(); render();
         connectAll();
