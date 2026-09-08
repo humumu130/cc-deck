@@ -1,4 +1,5 @@
-// 设置抽屉：首页左上角图标呼出，也支持左缘右滑呼出 / 面板上左滑收起；收纳服务器列表、快捷短语与显示设置
+// 设置抽屉：首页左上角图标呼出，也支持左缘右滑呼出 / 面板上左滑收起；
+// 分区收纳连接（状态卡+服务器列表）、配对、显示与关于
 import { useEffect, useRef, useState } from "react";
 import { Animated, Linking, Modal, PanResponder, Pressable, ScrollView, StyleSheet, Switch, Text, View } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
@@ -9,7 +10,7 @@ import { useTheme, useThemeStyles } from "../theme-context";
 import { LogoMark } from "../brand";
 import { setProcessFont, useProcessFont, setListCompact, useListCompact, setVoiceInput, useVoiceInput, setAggregate as persistAggregate, useAggregate, type ProcessFont } from "../display-settings";
 import { checkUpdate, announceUpdate, VERSION_NOTES } from "../updates";
-import { store, useRelay, type ServerEntry } from "../store";
+import { store, useRelay, type ServerEntry, type SourceStatus } from "../store";
 import { withA, type ThemeColors } from "../theme";
 
 const FILL = { position: "absolute", left: 0, right: 0, top: 0, bottom: 0 } as const;
@@ -19,6 +20,15 @@ const APP_VER = "v" + (Constants.nativeApplicationVersion ?? Constants.expoConfi
 
 // #313 反馈入口：关于弹窗「✎ 反馈」跳 GitHub Issues
 const FEEDBACK_URL = "https://github.com/humumu130/cc-deck/issues";
+
+// 连接状态卡副行的源状态文案（store connState → 中文）
+const SRC_STATE_TEXT: Record<SourceStatus["state"], string> = {
+  idle: "未连接",
+  connecting: "连接中",
+  online: "在线",
+  reconnecting: "重连中",
+  offline: "已断开",
+};
 
 const FONT_OPTS: { k: ProcessFont; label: string }[] = [
   { k: "normal", label: "标准" },
@@ -67,10 +77,9 @@ function FontLever({ value, onChange }: { value: ProcessFont; onChange: (v: Proc
 // 版本信息（LogoMark + 版本号）+ 本版特性摘要（VERSION_NOTES 逐条）+ 检查更新
 // （原 #312 抽屉行迁入：结果行内反馈，有新版经 announceUpdate 弹 App 层 UpdateBanner）
 // + 反馈入口（GitHub Issues）
-function AboutModal({ visible, onClose }: { visible: boolean; onClose: () => void }) {
-  const { c } = useTheme();
-  const m = useThemeStyles(makeStyles);
-  // 手动检查：loading 态禁用按钮；无新版"已是最新 ✓"，有新版行内提示 + 顶部横幅
+// 手动检查更新（关于弹窗按钮与抽屉关于区行共用）：loading 态防抖；无新版"已是最新 ✓"，
+// 有新版行内提示 + announceUpdate 弹 App 层 UpdateBanner
+function useUpdateCheck() {
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
   const checkNow = async () => {
@@ -86,6 +95,13 @@ function AboutModal({ visible, onClose }: { visible: boolean; onClose: () => voi
       setMsg(`已是最新 ✓ ${APP_VER}`);
     }
   };
+  return { busy, msg, checkNow };
+}
+
+function AboutModal({ visible, onClose }: { visible: boolean; onClose: () => void }) {
+  const { c } = useTheme();
+  const m = useThemeStyles(makeStyles);
+  const { busy, msg, checkNow } = useUpdateCheck();
   return (
     <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
       <Pressable style={m.abMask} onPress={onClose}>
@@ -285,6 +301,35 @@ export default function SettingsDrawer({
     });
   };
 
+  // 连接状态卡（对齐设置原型）：活动源 = activeSourceId 命中项 → 缺失退第一个在线源 →
+  // 再退任一源；无源显示"未配置"。状态点按源 state 取色，副行 = 通道（cloud=云桥/LAN）
+  // + 状态文案
+  const activeSrc =
+    snap.sources.find((s) => s.id === snap.activeSourceId) ??
+    snap.sources.find((s) => s.state === "online") ??
+    snap.sources[0] ??
+    null;
+  const connDotColor = !activeSrc
+    ? c.faint
+    : activeSrc.state === "online"
+      ? c.done
+      : activeSrc.state === "connecting" || activeSrc.state === "reconnecting"
+        ? c.waiting
+        : activeSrc.state === "offline"
+          ? c.error
+          : c.faint;
+  const connSubText = activeSrc
+    ? [
+        activeSrc.channel === "cloud" ? "云桥" : activeSrc.channel === "lan" ? "LAN" : null,
+        SRC_STATE_TEXT[activeSrc.state],
+      ]
+        .filter(Boolean)
+        .join(" · ")
+    : "";
+
+  // 关于区检查更新行：与关于弹窗共用同一套检查逻辑（行内反馈）
+  const upd = useUpdateCheck();
+
   return (
     <View style={d.root} pointerEvents={visible ? "auto" : "none"}>
       <Animated.View style={[d.scrim, { opacity: scrimOp }]}>
@@ -302,27 +347,27 @@ export default function SettingsDrawer({
         </View>
 
         <ScrollView style={d.body} nestedScrollEnabled showsVerticalScrollIndicator={false}>
-        <Pressable
-          style={d.connRow}
-          android_ripple={{ color: c.tintSoft, borderless: false, radius: 12 }}
-          onPress={() => store.connect()}
-          accessibilityLabel={`连接状态 ${snap.connText}，点击立即重连`}
-        >
-          <View
-            style={[
-              d.connDot,
-              { backgroundColor: snap.connState === "online" ? c.done : snap.connState === "offline" ? c.waiting : c.dim },
-            ]}
-          />
-          <Text style={d.connT} numberOfLines={1}>{snap.connText}</Text>
-          <Text style={d.connReT}>↻ 重连</Text>
-        </Pressable>
+        {/* 连接区（对齐设置原型）：区头（可折叠收起服务器列表）+ 状态卡 + 列表/添加入口 */}
         <View style={d.secHead}>
-          <Text style={d.secTitleT}><Text style={d.secIconT}>◫ </Text>服务器列表{srvCollapsed && servers.length ? ` · ${servers.length}` : ""}</Text>
+          <Text style={d.secTitleT}><Text style={d.secIconT}>◫ </Text>连接{srvCollapsed && servers.length ? ` · ${servers.length}` : ""}</Text>
           <Pressable style={d.secToggle} hitSlop={10} onPress={toggleSrv} android_ripple={{ color: c.tintSoft, borderless: true, radius: 12 }}>
             <Text style={d.secToggleT}>{srvCollapsed ? "▸" : "▾"}</Text>
           </Pressable>
         </View>
+        {/* 状态卡：活动源状态点 + 名称粗体 + 通道/状态副行；整卡点击重连（原顶部连接行迁入） */}
+        <Pressable
+          style={d.connCard}
+          android_ripple={{ color: c.tintSoft, borderless: false, radius: 12 }}
+          onPress={() => store.connect()}
+          accessibilityLabel={`连接状态${activeSrc ? ` ${activeSrc.name} ${connSubText}` : " 未配置"}，点击立即重连`}
+        >
+          <View style={[d.connDot, { backgroundColor: connDotColor }]} />
+          <View style={d.connMain}>
+            <Text style={d.connNameT} numberOfLines={1}>{activeSrc ? activeSrc.name : "未配置"}</Text>
+            {connSubText ? <Text style={d.connSubT} numberOfLines={1}>{connSubText}</Text> : null}
+          </View>
+          <Text style={d.connReT}>↻ 重连</Text>
+        </Pressable>
         {!srvCollapsed ? (
         <ScrollView style={d.srvScroll} nestedScrollEnabled showsVerticalScrollIndicator={false}>
           {servers.map((e) => {
@@ -376,7 +421,7 @@ export default function SettingsDrawer({
         ) : null}
         {!srvCollapsed && servers.length === 0 ? <Text style={d.srvEmpty}>还没有服务器，点下方新增</Text> : null}
 
-        <Text style={d.secT}><Text style={d.secIconT}>⇄ </Text>新设备配对</Text>
+        <Text style={d.secT}><Text style={d.secIconT}>⇄ </Text>配对</Text>
         {pc ? (
           // pc 存在即显示码框：到期 0:00 到续领回包之间不闪「已过期」按钮（抽屉常开时每 TTL 闪一次）
           <View style={d.pairBox}>
@@ -449,16 +494,38 @@ export default function SettingsDrawer({
         </View>
         </>
         ) : null}
-        {/* #313 关于：检查更新从抽屉行迁入弹窗承载（版本信息/特性摘要/检查更新/反馈） */}
+        {/* #313 关于区（对齐设置原型）：版本（呼出弹窗看本版特性/检查更新/反馈）、检查更新
+            （行内反馈，与弹窗共用 useUpdateCheck）、反馈三行列表 + 底部弱化 Build 行 */}
+        <Text style={d.secT}><Text style={d.secIconT}>ⓘ </Text>关于</Text>
         <Pressable
           style={[d.setItem, d.setRow]}
           android_ripple={{ color: c.tintSoft, borderless: false }}
           onPress={() => setAboutOpen(true)}
-          accessibilityLabel="关于"
+          accessibilityLabel="版本与本版特性"
         >
-          <Text style={d.setLabel}>ⓘ 关于</Text>
+          <Text style={d.setLabel}><Text style={d.rowIconT}>◈ </Text>版本</Text>
+          <Text style={d.aboutVerT}>{APP_VER} ›</Text>
+        </Pressable>
+        <Pressable
+          style={[d.setItem, d.setRow]}
+          android_ripple={{ color: c.tintSoft, borderless: false }}
+          disabled={upd.busy}
+          onPress={() => void upd.checkNow()}
+          accessibilityLabel="检查更新"
+        >
+          <Text style={d.setLabel}><Text style={d.rowIconT}>↻ </Text>检查更新</Text>
+          <Text style={d.aboutVerT} numberOfLines={1}>{upd.busy ? "检查中…" : (upd.msg ?? "›")}</Text>
+        </Pressable>
+        <Pressable
+          style={[d.setItem, d.setRow]}
+          android_ripple={{ color: c.tintSoft, borderless: false }}
+          onPress={() => void Linking.openURL(FEEDBACK_URL).catch(() => {})}
+          accessibilityLabel="反馈"
+        >
+          <Text style={d.setLabel}><Text style={d.rowIconT}>✎ </Text>反馈</Text>
           <Text style={d.aboutT}>›</Text>
         </Pressable>
+        <Text style={d.aboutBuildT}>CC Deck · Build {APP_VER.replace(/^v/, "")}</Text>
         </ScrollView>
       </Animated.View>
       <AboutModal visible={aboutOpen} onClose={() => setAboutOpen(false)} />
@@ -516,14 +583,17 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
   cloudHintT: { color: c.working, fontSize: 11.5, fontWeight: "600" },
   srvEmpty: { color: c.faint, fontSize: 11, marginTop: 2 },
   body: { flex: 1 },
-  // 连接状态行（抽屉顶）：状态点 + 文案 + 手动重连；点击整行重连
-  connRow: {
-    flexDirection: "row", alignItems: "center", gap: 7,
-    paddingVertical: 8, paddingHorizontal: 10, borderRadius: 12,
-    backgroundColor: c.panel, borderWidth: 1, borderColor: c.line,
+  // 连接状态卡（连接区顶，对齐设置原型）：状态点 + 源名称粗体 + 通道/状态副行小字；
+  // 与服务器行同语言（圆角 12 / 细边框 / panel 底）；整卡点击重连
+  connCard: {
+    flexDirection: "row", alignItems: "center", gap: 8,
+    paddingVertical: 10, paddingHorizontal: 11, borderRadius: 12,
+    backgroundColor: c.panel, borderWidth: 1, borderColor: c.line, overflow: "hidden",
   },
   connDot: { width: 7, height: 7, borderRadius: 4 },
-  connT: { flex: 1, color: c.dim, fontSize: 12.5 },
+  connMain: { flex: 1, minWidth: 0 },
+  connNameT: { color: c.text, fontSize: 13.5, fontWeight: "700" },
+  connSubT: { color: c.faint, fontSize: 10.5, marginTop: 1.5 },
   connReT: { color: c.brandA, fontSize: 12, fontWeight: "600" },
   pairGen: {
     alignItems: "center", paddingVertical: 10, borderRadius: 12, marginBottom: 8,
@@ -576,6 +646,10 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
   segTOn: { color: c.brandA },
   // #313 关于行右侧箭头
   aboutT: { color: c.faint, fontSize: 14 },
+  // 关于区行右值（版本号/检查结果，弱一档小字）
+  aboutVerT: { color: c.dim, fontSize: 11.5, flexShrink: 1, paddingLeft: 8 },
+  // 关于区底部弱化 Build 行（面板元信息收尾，最暗一档）
+  aboutBuildT: { color: c.faint, fontSize: 10, marginTop: 14 },
   // #313 关于弹窗（ab = about）：NewSessionModal 同款贴底卡片视觉语言
   abMask: { flex: 1, backgroundColor: withA("#02050A", 0.65), justifyContent: "flex-end" },
   abSheet: {
