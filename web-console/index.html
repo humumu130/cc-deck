@@ -20,6 +20,7 @@
     --panel-2: #101B2B;
     --border: #1B2739;
     --text: #C9D3E0;
+    --text-strong: #E7EEF8;
     --dim: #7E8BA3;
     --faint: #55617A;
     --brand: #D97757;
@@ -51,6 +52,7 @@
     --panel-2: #F1F4F9;
     --border: #D9DFE9;
     --text: #1C2637;
+    --text-strong: #101B2E;
     --dim: #5F6C84;
     --faint: #8D99AE;
     --brand: #C2603E;
@@ -294,6 +296,26 @@
   .seg button { border: none; border-radius: 0; padding: 7px 13px; background: transparent; color: var(--dim); font-size: 12.5px; font-weight: 500; }
   .seg button + button { border-left: 1px solid var(--border); }
   .seg button.on { background: var(--grad); color: #fff; font-weight: 600; }
+  /* 云桥表单（设置稿语言）：字段收进一张分组卡，小节标签上置、说明小字弱化；
+     LAN（直连）态去卡化保持原平铺简洁——同一组输入，按 .cloud 切形态 */
+  .cf-box { display: flex; flex-direction: column; gap: 9px; width: 100%; }
+  .cf-sec, .cf-note { display: none; }
+  .conn-form.cloud #cfBox {
+    gap: 6px; padding: 11px 12px 12px;
+    background: var(--panel); border: 1px solid var(--border); border-radius: 12px;
+  }
+  .conn-form.cloud .cf-sec {
+    display: block; font-size: 11px; font-weight: 600; letter-spacing: .05em;
+    color: var(--dim); margin: 3px 0 -1px;
+  }
+  .conn-form.cloud .cf-sec:first-child { margin-top: 0; }
+  .conn-form.cloud .cf-sec-sub { color: var(--faint); font-weight: 500; }
+  .conn-form.cloud input { background: var(--bg-soft); border-radius: 9px; }
+  .conn-form.cloud .cf-note { display: block; margin-top: 3px; font-size: 11px; line-height: 1.5; color: var(--faint); }
+  /* LAN 态字段顺序还原：名称 → 地址 → token（云桥态为 DOM 序：地址 → Key → 名称） */
+  .conn-form:not(.cloud) #srvName { order: 1; }
+  .conn-form:not(.cloud) #url { order: 2; }
+  .conn-form:not(.cloud) #token { order: 3; }
   /* #352 配对区去框化：码以大号等宽字平铺（点即复制），无输入框/卡片底 */
   /* #384 配对区两行：大码行（码+连接钮）+ 次级动作行（扫码/添加手机文字链接） */
   #pairBox { display: none; flex-direction: column; gap: 2px; padding: 2px 10px; }
@@ -586,6 +608,8 @@
   .c-head { display: flex; align-items: center; gap: 8px; min-width: 0; }
   .c-head .card-title { flex: 1; min-width: 0; margin-top: 0; }
   .c-head .c-tt { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  /* 会话卡标题提对比（--text-strong ≈ 提亮 15%）：标题行是扫读锚点，弱于正文层级 */
+  .c-tt { color: var(--text-strong); }
   .c-head .elapsed { flex: none; }
   /* WORKING 实时工作行（App LiveStat 同构）：呼吸点 + 走秒 + ↓tokens + 动作摘要 */
   .c-live { display: flex; align-items: center; gap: 8px; margin: 6px 0 5px; font-size: 12px; color: var(--dim); font-variant-numeric: tabular-nums; min-width: 0; }
@@ -629,8 +653,8 @@
   .card.compact .card-title { flex: 1; min-width: 0; margin-top: 0; font-size: 13px; gap: 6px; }
   .card.compact .c-tt { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .card.compact .card-title input { font-size: 12.5px; }
-  .card.compact .card-summary { font-size: 11.5px; margin-top: 2px; }
-  .card.compact .card-stats { font-size: 10.5px; margin-top: 4px; gap: 8px; }
+  .card.compact .card-summary { font-size: 11.5px; margin-top: 3px; }
+  .card.compact .card-stats { font-size: 10.5px; margin-top: 5px; gap: 8px; }
 
   /* ---------- 任务面板（详情页"任务" tab） ---------- */
   .todo-head { display: flex; align-items: center; gap: 10px; padding: 16px 4px 6px; }
@@ -702,9 +726,9 @@
   .cron-name { font-size: 13.5px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .cron-item.paused .cron-name { color: var(--dim); font-weight: 500; }
   .cron-meta { font-size: 11.5px; color: var(--faint); margin-top: 1px; font-variant-numeric: tabular-nums; }
-  .card-summary { color: var(--dim); font-size: 12.5px; margin-top: 3px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .card-summary { color: var(--dim); font-size: 12.5px; margin-top: 4px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .card-summary.waiting { color: var(--working); }
-  .card-stats { font-size: 12px; color: var(--faint); margin-top: 5px; display: flex; align-items: center; gap: 10px; font-variant-numeric: tabular-nums; }
+  .card-stats { font-size: 12px; color: var(--faint); margin-top: 6px; display: flex; align-items: center; gap: 10px; font-variant-numeric: tabular-nums; }
   .card-stats .add { color: var(--done); }
   .card-stats .del { color: var(--error); }
   /* #383 源标签居 stats 行最左（与上两行左对齐）；ctx 水位推最右 */
@@ -1028,14 +1052,15 @@
   }
   #toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
 
-  /* 任务完成汇报悬浮框（#204/#348/#365）：右下角卡片，右/下距窗口边等距（14px），
+  /* 任务完成汇报悬浮框（#204/#348/#365）：右下角卡片，默认右/下距窗口边 14px、
+     下再 +8px 缓冲上移（少压输入区），可拖动（位置存 cc.tdfloat.pos）；
      到达即展开；10s 后缩为小方钮角标（confirmFloat 同语言），点角标再展开、
-     点外部收起；✓ 只标在具体任务项上，标题不放 */
+     点外部收起；✓ 只标在具体任务项上，标题不放；touch-action:none 供触屏拖动 */
   #taskDone {
-    position: fixed; right: 14px; bottom: 14px; max-width: 340px;
+    position: fixed; right: 14px; bottom: 22px; max-width: 340px;
     background: var(--toast-bg); border: 1px solid var(--border); color: var(--text);
     border-radius: 12px; padding: 10px 12px; font-size: 13px; z-index: 98;
-    box-shadow: var(--toast-shadow); display: none; cursor: pointer;
+    box-shadow: var(--toast-shadow); display: none; cursor: pointer; touch-action: none;
   }
   #taskDone.show { display: block; }
   #taskDone.mini {
@@ -1097,7 +1122,7 @@
     body.detail-open #side { display: none; }
     body.detail-open #detail { display: flex; }
     body.detail-open #backBtn { display: inline-block; }
-    #taskDone { right: 10px; bottom: 84px; max-width: calc(100vw - 20px); }
+    #taskDone { right: 10px; bottom: 92px; max-width: calc(100vw - 20px); }
     #undoBar { right: 10px; bottom: 84px; max-width: calc(100vw - 20px); }
     #confirmFloat { right: 10px; bottom: 158px; }
     .cf-card { max-width: calc(100vw - 20px); }
@@ -1159,7 +1184,6 @@
           <span class="gp-stx"><b id="gpStatusName">未配置</b><span id="gpStatusSub">添加服务器开始使用</span></span>
         </div>
         <div class="gp-row" id="gpRelay" style="display:none"><span class="gi"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3.5" y="4.5" width="17" height="6" rx="1.8"/><rect x="3.5" y="13.5" width="17" height="6" rx="1.8"/><path d="M7 7.5h.01M7 16.5h.01"/></svg></span>本机 relay <b id="gpRelayV"></b></div>
-        <div class="gp-row" id="gpProbe"><span class="gi"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="7.6"/><path d="M12 2.2v3.4M12 18.4v3.4M2.2 12h3.4M18.4 12h3.4"/></svg></span>探测本机 relay <b>点击扫描 ›</b></div>
         <div class="panel" id="connPanel">
           <div id="srvList"></div>
           <button id="addSrvBtn" class="hbtn" style="width:100%;margin-top:6px">＋ 添加服务器</button>
@@ -1168,9 +1192,15 @@
               <button type="button" data-m="lan">直连</button>
               <button type="button" data-m="cloud">云桥</button>
             </div>
-            <input id="srvName" placeholder="名称（可选）">
-            <input id="url" placeholder="ws://<pc-ip>:8787/ws">
-            <input id="token" placeholder="token">
+            <div class="cf-box" id="cfBox">
+              <div class="cf-sec">云桥地址</div>
+              <input id="url" placeholder="ws://<pc-ip>:8787/ws">
+              <div class="cf-sec">配对 Key</div>
+              <input id="token" placeholder="token">
+              <div class="cf-sec cf-sec-sub">名称（可选）</div>
+              <input id="srvName" placeholder="名称（可选）">
+              <div class="cf-note">Key 留空走公共桥；添加后可在下方「配对」区领码接入手机</div>
+            </div>
             <div class="conn-actions">
               <button id="cancelEdit" style="display:none">取消</button>
               <button id="saveSrvBtn" class="primary">添加直连</button>
@@ -1552,7 +1582,7 @@ function toast(msg, ms = 2600) {
 
 // 任务完成汇报悬浮框（#204）：新报告展开列出完成项，10s 后自动折叠为一行小条，
 // 点卡片再展开；✕ 关闭（多源共用一个浮框，哪个源来报都弹）
-const tdFloat = { expanded: true, timer: 0, render: null };
+const tdFloat = { expanded: true, timer: 0, render: null, dragged: false };
 // #365 任务通知点外收起：展开态点击卡片外部 → 缩回小方钮
 document.addEventListener("click", (e) => {
   const el = $("taskDone");
@@ -1561,6 +1591,61 @@ document.addEventListener("click", (e) => {
   tdFloat.expanded = false;
   if (tdFloat.render) tdFloat.render();
 });
+// 浮框可拖（用户反馈默认位遮住会话页发送按钮）：pointerdown→move 位移超 5px 判定
+// 拖动（否则算点击展开/收起）；位置存 localStorage(cc.tdfloat.pos) 恢复并 clamp 进视口，
+// 无存档时保持 CSS 默认右下角
+const TD_POS_KEY = "cc.tdfloat.pos";
+function tdApplyPos(x, y) {
+  const el = $("taskDone");
+  const w = el.offsetWidth || 44, h = el.offsetHeight || 44;
+  x = Math.max(4, Math.min(x, window.innerWidth - w - 4));
+  y = Math.max(4, Math.min(y, window.innerHeight - h - 4));
+  el.style.left = x + "px"; el.style.top = y + "px";
+  el.style.right = "auto"; el.style.bottom = "auto";
+}
+// 展开前后尺寸变化（mini↔卡片），显示后按当前尺寸重新收边
+function tdReclamp() {
+  const el = $("taskDone");
+  if (el.style.left) tdApplyPos(parseFloat(el.style.left), parseFloat(el.style.top));
+}
+function tdRestorePos() {
+  try {
+    const pos = JSON.parse(localStorage.getItem(TD_POS_KEY) || "null");
+    if (typeof pos?.x === "number" && typeof pos?.y === "number") tdApplyPos(pos.x, pos.y);
+  } catch {}
+}
+tdRestorePos();
+window.addEventListener("resize", tdRestorePos);
+(function initTdDrag() {
+  const el = $("taskDone");
+  let sx = 0, sy = 0, rx = 0, ry = 0, dragging = false, pid = null;
+  el.addEventListener("pointerdown", (e) => {
+    if (e.pointerType === "mouse" && e.button !== 0) return;
+    pid = e.pointerId; dragging = false; tdFloat.dragged = false;
+    sx = e.clientX; sy = e.clientY;
+    const r = el.getBoundingClientRect();
+    rx = r.left; ry = r.top;
+    try { el.setPointerCapture(pid); } catch {}
+  });
+  el.addEventListener("pointermove", (e) => {
+    if (pid === null) return;
+    const dx = e.clientX - sx, dy = e.clientY - sy;
+    if (!dragging && Math.hypot(dx, dy) <= 5) return; // ≤5px 仍算点击
+    dragging = true;
+    tdApplyPos(rx + dx, ry + dy);
+  });
+  const end = () => {
+    if (pid === null) return;
+    try { el.releasePointerCapture(pid); } catch {}
+    pid = null;
+    if (!dragging) return;
+    tdFloat.dragged = true; // 吞掉紧随其后的 click，避免拖完误触展开/收起
+    const r = el.getBoundingClientRect();
+    try { localStorage.setItem(TD_POS_KEY, JSON.stringify({ x: Math.round(r.left), y: Math.round(r.top) })); } catch {}
+  };
+  el.addEventListener("pointerup", end);
+  el.addEventListener("pointercancel", end);
+})();
 function showTaskDone(ctx, sid, payload) {
   const s = ctx.sessions.get(sid);
   const total = Array.isArray(payload?.done) ? payload.done.length : 0;
@@ -1575,6 +1660,7 @@ function showTaskDone(ctx, sid, payload) {
     if (!tdFloat.expanded) {
       el.innerHTML = "✓" + total;
       el.classList.add("show");
+      tdReclamp();
       return;
     }
     let html = '<div class="td-head"><span class="td-title">' + total + " 项完成 · " +
@@ -1583,11 +1669,13 @@ function showTaskDone(ctx, sid, payload) {
     html += '<div class="td-remain">' + (remaining > 0 ? "剩余 " + remaining + " 项进行中" : "全部完成") + "</div>";
     el.innerHTML = html;
     el.classList.add("show");
+    tdReclamp();
   };
   renderTd();
   tdFloat.render = renderTd;
   tdFloat.timer = setTimeout(() => { tdFloat.expanded = false; renderTd(); }, 10000);
   el.onclick = (e) => {
+    if (tdFloat.dragged) { tdFloat.dragged = false; return; } // 刚拖完，不算点击
     if (e.target && e.target.dataset && e.target.dataset.td === "x") {
       clearTimeout(tdFloat.timer);
       el.classList.remove("show");
@@ -2142,10 +2230,12 @@ function renderConnChip() {
 
 // 设置抽屉·连接状态卡：活动源优先（如实反映在线/连接中/离线），
 // 无活动源退让任一在线源，一个源都没有则显示"未配置"
+// probingLocal：启动自动探测本机 relay 期间，副行短暂提示（仅未配置态可见），失败静默回收
+let probingLocal = false;
 function renderGpStatus() {
   const dot = $("gpStatusDot"), name = $("gpStatusName"), sub = $("gpStatusSub");
   const ctx = (activeServerId && ctxs.get(activeServerId)) || firstOnlineCtx() || [...ctxs.values()][0] || null;
-  if (!ctx) { dot.className = "gp-sdot"; name.textContent = "未配置"; sub.textContent = "添加服务器开始使用"; return; }
+  if (!ctx) { dot.className = "gp-sdot"; name.textContent = "未配置"; sub.textContent = probingLocal ? "正在探测本机 relay…" : "添加服务器开始使用"; return; }
   dot.className = "gp-sdot " + (ctx.status === "online" ? "on" : ctx.status === "connecting" || ctx.status === "reconnecting" ? "wait" : ctx.status === "offline" ? "off" : "");
   name.textContent = srcDisplayName(ctx.cfg);
   sub.textContent = (ctx.cfg.kind === "cloud" ? "云桥" : "LAN") + " · " + (ctx.statusText || "");
@@ -3456,8 +3546,7 @@ $("gpDensity").onclick = () => { $("densityBtn").click(); syncGearPop(); };
 $("gpFont").onclick = () => { $("fontBtn").click(); syncGearPop(); };
 $("gpThink").onclick = () => { $("thinkBtn").click(); syncGearPop(); };
 $("gpIdle").onclick = () => { $("idleBtn").click(); syncGearPop(); };
-// #386b 手动探测本机 relay（自动嗅探被浏览器策略/无服务挡住时兜底）
-$("gpProbe").onclick = () => { if (window.__ccdeckProbeLocal) window.__ccdeckProbeLocal(); syncGearPop(); };
+// 本机 relay 探测已去手动化（#386b 手动行移除）：init 启动即自动静默探测，见 init 尾部 probeLocalRelay
 
 // 检查更新（#319）：Electron 走 preload IPC，Tauri 走 updater 插件全局 API；
 // 浏览器无桥接时提示网页随仓库更新。Tauri 侧启动时静默检查并后台下载（退出时安装）
@@ -3596,11 +3685,14 @@ function setFormKind(kind, cfg) {
   $("url").value = cfg ? cfg.wsUrl : "";
   $("token").value = cfg ? (cfg.token || "") : "";
   // #342 表单默认收起（免滚动）：编辑已有源或点「＋ 添加」时展开
-  document.querySelector(".conn-form").classList.toggle("open", !!cfg || formForcedOpen);
+  const formEl = document.querySelector(".conn-form");
+  formEl.classList.toggle("open", !!cfg || formForcedOpen);
+  formEl.classList.toggle("cloud", kind === "cloud"); // 云桥态字段收进分组卡（cf-box）
   $("addSrvBtn").style.display = cfg || formForcedOpen ? "none" : "";
   if (kind === "cloud") {
     $("url").placeholder = "wss://<云桥>/cloud";
     $("token").placeholder = "桥 token（可选，默认公共）";
+    $("srvName").placeholder = "如：公司云桥";
     $("pairBox").style.display = "flex";
     $("pairHint").style.display = "block";
     $("gpPairCard").style.display = "block";
@@ -3608,6 +3700,7 @@ function setFormKind(kind, cfg) {
   } else {
     $("url").placeholder = "ws://<pc-ip>:8787/ws";
     $("token").placeholder = "token";
+    $("srvName").placeholder = "名称（可选）";
     $("pairBox").style.display = "none";
     $("pairHint").style.display = "none";
     $("gpPairCard").style.display = "none";
@@ -3616,7 +3709,7 @@ function setFormKind(kind, cfg) {
   $("cancelEdit").style.display = cfg ? "" : "none";
 }
 let formForcedOpen = false;
-$("addSrvBtn").onclick = () => { formForcedOpen = true; setFormKind(formKind, null); $("srvName").focus(); };
+$("addSrvBtn").onclick = () => { formForcedOpen = true; setFormKind(formKind, null); $(formKind === "cloud" ? "url" : "srvName").focus(); };
 
 document.querySelectorAll("#cmodeSeg button").forEach((b) => {
   b.onclick = () => { if (formKind !== b.dataset.m) setFormKind(b.dataset.m, editId ? cfgOf(editId) : null); };
@@ -4759,15 +4852,18 @@ async function probeLocalRelay() {
 
   // #386 网页自动嗅探本机 relay：回环 ws 不受 https 混合内容限制，8787 端口固定、
   // 家用部署 token 默认 devtoken——命中即静默加「本机」源（向导存在则收起并直连）。
-  // #386b 强化：3s 超时 + console 诊断（浏览器 PNA/混合内容策略差异排查）+ 设置面板
-  // 手动重探行；本机没跑 relay（纯远程浏览）探测正确失败属预期
-  const probeLocalRelay = (manual) => {
+  // 探测全程对用户不可见：仅未配置时状态卡副行短暂显示"正在探测本机…"；
+  // 失败静默（本机没跑 relay 的纯远程浏览场景，探测正确失败属预期）。
+  // 3s 超时 + console 诊断（浏览器 PNA/混合内容策略差异排查）
+  const probeLocalRelay = () => {
     const exists = servers.some((s) => s.kind === "lan" && /127\.0\.0\.1|localhost/.test(s.wsUrl));
-    if (exists) { if (manual) toast("本机源已存在"); return; }
+    if (exists) return;
+    probingLocal = true; renderGpStatus();
     let done = false;
     const finish = (port, token, why) => {
       if (done) return;
       done = true;
+      probingLocal = false;
       console.log("[ccdeck] local relay probe:", port ? "hit :" + port : "miss", why || "");
       if (port) {
         servers.push({ id: uuid(), name: "本机", kind: "lan", wsUrl: `ws://127.0.0.1:${port}/ws`, token });
@@ -4776,8 +4872,8 @@ async function probeLocalRelay() {
         connectAll();
         if ($("wizPop").classList.contains("open")) $("wizPop").classList.remove("open");
         toast("已发现并连接本机 relay");
-      } else if (manual) {
-        toast("本机 8787 未发现 relay（确认这台电脑在跑 relay）", 5000);
+      } else {
+        renderGpStatus(); // 落空静默：仅把副行探测提示收回
       }
     };
     // ① exe 内嵌 relay 自报家门：/local-info 返回 {port, token}（token 由 exe 生成，
@@ -4798,8 +4894,7 @@ async function probeLocalRelay() {
         } catch (e) { finish(0, 0, "exc:" + e); }
       });
   };
-  setTimeout(() => probeLocalRelay(false), 800);
-  window.__ccdeckProbeLocal = () => probeLocalRelay(true);
+  setTimeout(probeLocalRelay, 800);
 })();
 </script>
 </body>
