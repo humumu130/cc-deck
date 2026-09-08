@@ -547,8 +547,9 @@
   /* #399 源徽章实底填色：整胶囊即源色（去圆点），字色由 JS 按源色亮度内联指定 */
   .src-badge {
     display: inline-flex; align-items: center; flex: none;
-    font-size: 11.5px; font-weight: 600; color: #fff;
-    padding: 2px 9px; border-radius: 999px;
+    /* #403 回调：胶囊总高贴平同行统计字行高——9px 字（比 10px 统计字小一档）+1/5 内边距，行高 1.2 */
+    font-size: 9px; font-weight: 600; color: #fff;
+    padding: 1px 5px; border-radius: 999px; line-height: 1.2;
   }
   .src-badge .sb-t { max-width: 96px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
@@ -2922,8 +2923,7 @@ function render() {
     // 仅刷新选中态
     for (const el of box.children) el.classList.toggle("sel", !!selected && el.dataset.src === selected.src && el.dataset.sid === selected.sid);
   }
-  const lbH3 = document.querySelector("#listBar h3");
-  if (lbH3) lbH3.textContent = list.length ? list.length + " 会话" : "会话";
+  // #404 列表头不再写"N 会话"（runhint 彩点统计行已有总数，重复显示）——h3 保持静态"会话"
   renderDetail();
 }
 
