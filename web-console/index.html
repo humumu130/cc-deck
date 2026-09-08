@@ -3389,16 +3389,19 @@ $("gpIdle").onclick = () => { $("idleBtn").click(); syncGearPop(); };
 
 // 检查更新（#319）：Electron 走 preload IPC，Tauri 走 updater 插件全局 API；
 // 浏览器无桥接时提示网页随仓库更新。Tauri 侧启动时静默检查并后台下载（退出时安装）
+// #385 网络黑洞超时：updater.check 无内置超时，公司网连不上 GitHub endpoint 时
+// Promise 永挂（按钮永远"检查中…"）——外层 10s race 兜底并给手动下载入口
 async function shellCheckUpdate() {
+  const withTimeout = (p, ms) => Promise.race([p, new Promise((_, rej) => setTimeout(() => rej(new Error("网络超时")), ms))]);
   if (window.ccDeck && window.ccDeck.checkUpdate) {
-    const r = await window.ccDeck.checkUpdate();
+    const r = await withTimeout(window.ccDeck.checkUpdate(), 12000);
     if (r.error) throw new Error(r.error);
     return { available: !!r.available, version: r.version, current: r.current };
   }
   if (window.__TAURI__ && window.__TAURI__.updater) {
-    const u = await window.__TAURI__.updater.check();
+    const u = await withTimeout(window.__TAURI__.updater.check(), 10000);
     if (u && u.available) {
-      await u.downloadAndInstall();
+      await withTimeout(u.downloadAndInstall(), 120000);
       return { available: true, version: u.version, current: u.currentVersion, installed: true };
     }
     return { available: false, version: u && u.currentVersion };
@@ -3414,8 +3417,15 @@ $("gpUpdate").onclick = async () => {
     else if (r.available) v.textContent = r.installed ? "已装·重启生效" : `→ ${r.version}`;
     else v.textContent = "已是最新";
   } catch (e) {
+    const msg = e && e.message ? e.message : String(e);
     v.textContent = "失败";
-    toast("检查更新失败：" + (e && e.message ? e.message : e));
+    // 超时/网络失败给手动下载兜底（exe 更新 endpoint 在 GitHub，国内/公司网常连不上）
+    if (/超时|timeout|network|fetch/i.test(msg)) {
+      toast("检查超时（网络受限），可手动下载新版本", 6000);
+      try { window.open("https://cc.humumu.online/dl/", "_blank"); } catch {}
+    } else {
+      toast("检查更新失败：" + msg);
+    }
   }
   setTimeout(() => { v.textContent = ""; }, 4000);
 };
