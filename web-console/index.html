@@ -544,12 +544,12 @@
   #srcChips button span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   #srcChips button.on { color: var(--text); border-color: rgba(217,119,87,.6); background: rgba(217,119,87,.12); }
   #srcChips button i { width: 7px; height: 7px; border-radius: 50%; flex: none; }
+  /* #399 源徽章实底填色：整胶囊即源色（去圆点），字色由 JS 按源色亮度内联指定 */
   .src-badge {
-    display: inline-flex; align-items: center; gap: 5px; flex: none;
-    font-size: 11.5px; font-weight: 600; color: var(--dim);
-    border: 1px solid var(--border); padding: 2px 9px; border-radius: 999px;
+    display: inline-flex; align-items: center; flex: none;
+    font-size: 11.5px; font-weight: 600; color: #fff;
+    padding: 2px 9px; border-radius: 999px;
   }
-  .src-badge i { width: 9px; height: 9px; border-radius: 50%; flex: none; }
   .src-badge .sb-t { max-width: 96px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
   /* ---------- 主体 ---------- */
@@ -675,8 +675,9 @@
   /* 会话卡标题提对比（--text-strong ≈ 提亮 15%）：标题行是扫读锚点，弱于正文层级 */
   .c-tt { color: var(--text-strong); }
   .c-head .elapsed { flex: none; }
-  /* WORKING 实时工作行（App LiveStat 同构）：呼吸点 + 走秒 + ↓tokens + 动作摘要 */
-  .c-live { display: flex; align-items: center; gap: 8px; margin: 6px 0 5px; font-size: 12px; color: var(--dim); font-variant-numeric: tabular-nums; min-width: 0; }
+  /* WORKING 实时工作行（App LiveStat 同构）：呼吸点 + 走秒 + ↓tokens + 动作摘要；
+     #399 第二行悬挂缩进至名称起点（灯 8px + c-head gap 8px），与首行文字块成组 */
+  .c-live { display: flex; align-items: center; gap: 8px; margin: 6px 0 5px; padding-left: 16px; font-size: 12px; color: var(--dim); font-variant-numeric: tabular-nums; min-width: 0; }
   .c-live .lv-dot { width: 9px; height: 9px; border-radius: 50%; background: var(--working); flex: none; animation: dot-breathe 2.4s ease-in-out infinite; }
   .c-live .lv-sec { color: var(--working); flex: none; }
   .c-live .lv-tok { flex: none; }
@@ -717,7 +718,7 @@
   .card.compact .card-title { flex: 1; min-width: 0; margin-top: 0; font-size: 13px; gap: 6px; }
   .card.compact .c-tt { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .card.compact .card-title input { font-size: 12.5px; }
-  .card.compact .card-summary { font-size: 11.5px; margin-top: 3px; }
+  .card.compact .card-summary { font-size: 11.5px; margin-top: 3px; padding-left: 15px; } /* #399 compact 灯列 = 8px 点 + 7px gap */
   .card.compact .card-stats { font-size: 10.5px; margin-top: 5px; gap: 8px; }
 
   /* ---------- 任务面板（详情页"任务" tab） ---------- */
@@ -790,7 +791,7 @@
   .cron-name { font-size: 13.5px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .cron-item.paused .cron-name { color: var(--dim); font-weight: 500; }
   .cron-meta { font-size: 11.5px; color: var(--faint); margin-top: 1px; font-variant-numeric: tabular-nums; }
-  .card-summary { color: var(--dim); font-size: 12.5px; margin-top: 4px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .card-summary { color: var(--dim); font-size: 12.5px; margin-top: 4px; padding-left: 16px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; } /* #399 悬挂缩进对齐灯列 */
   .card-summary.waiting { color: var(--working); }
   .card-stats { font-size: 12px; color: var(--faint); margin-top: 6px; display: flex; align-items: center; gap: 10px; font-variant-numeric: tabular-nums; }
   .card-stats .add { color: var(--done); }
@@ -1739,6 +1740,16 @@ function tdRestorePos() {
     if (typeof pos?.x === "number" && typeof pos?.y === "number") tdApplyPos(pos.x, pos.y);
   } catch {}
 }
+// #400 收起跳位修复：收起回小钮时不继承展开卡 clamp 后的 inline left/top（那会把钮
+// 锚到刚消失弹窗的左上角），改为恢复 localStorage 拖动存档并仅按视口 reclamp；
+// 无存档才清 inline 定位回 CSS 默认右下角
+function tdCollapsePos() {
+  let pos = null;
+  try { pos = JSON.parse(localStorage.getItem(TD_POS_KEY) || "null"); } catch {}
+  if (typeof pos?.x === "number" && typeof pos?.y === "number") { tdApplyPos(pos.x, pos.y); return; }
+  const el = $("taskDone");
+  el.style.left = ""; el.style.top = ""; el.style.right = ""; el.style.bottom = "";
+}
 tdRestorePos();
 window.addEventListener("resize", tdRestorePos);
 (function initTdDrag() {
@@ -1785,7 +1796,7 @@ function showTaskDone(ctx, sid, payload) {
     if (!tdFloat.expanded) {
       el.innerHTML = "✓" + total;
       el.classList.add("show");
-      tdReclamp();
+      tdCollapsePos(); // #400 收起走存档位，不继承展开卡锚点
       return;
     }
     let html = '<div class="td-head"><span class="td-title">' + total + " 项完成 · " +
@@ -2715,7 +2726,13 @@ function srcColorByKey(cfg) {
   return srcColorCache.get(key);
 }
 function srcBadgeHtml(cfg) {
-  return '<span class="src-badge" title="' + escapeHtml(cfg.name) + '"><i style="background:' + srcColorByKey(cfg) + '"></i><span class="sb-t">' + escapeHtml(srcDisplayName(cfg)) + '</span></span>';
+  // #399 徽章填色：整胶囊填源色实底、去圆点；字色按源色亮度自适应（亮色源用深字，
+  // 其余白字），#FFC53D 黄等亮源白字会糊，深字保可读
+  const c = srcColorByKey(cfg);
+  const m = /^#([0-9a-f]{6})$/i.exec(c);
+  const lum = m ? (0.299 * parseInt(m[1].slice(0, 2), 16) + 0.587 * parseInt(m[1].slice(2, 4), 16) + 0.114 * parseInt(m[1].slice(4, 6), 16)) : 128;
+  const fg = lum > 150 ? "rgba(24,20,16,.88)" : "#fff";
+  return '<span class="src-badge" title="' + escapeHtml(cfg.name) + '" style="background:' + c + ';color:' + fg + '"><span class="sb-t">' + escapeHtml(srcDisplayName(cfg)) + '</span></span>';
 }
 
 // 列表上方源过滤 chips（#343）：默认只"全部"；源选项跟"下方出现该源的卡"走——
