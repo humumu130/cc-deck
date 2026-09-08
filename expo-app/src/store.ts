@@ -995,6 +995,33 @@ class RelayStore {
     this.emit({ cloudBusy: false, cloudMsg: "云桥配对成功，外出时自动经云通道连接" });
   }
 
+  // 同源条目合并（relay_dev 证明）：relay 启用云桥时把自身设备 id（devId(relayPubkey,"rl")，
+  // 即 CloudConfig.relayDev 同源值）随 SNAPSHOT 下发。本连接快照携带的 relay_dev 与
+  // 另一条目 cloud.relayDev 相同 = 两条目指向同一台 relay（此前 LAN 直连条目无 cloud
+  // 字段，无法证明同机所以两条并存）。合并方向：保留当前连接条目，对方 cloud 并入
+  // （缺失时）后删除对方条目与连接缓存。只处理 id 不同的条目——快照重复到达时
+  // servers 已无重复项，find 落空直接返回，不会反复触发
+  private async mergeByRelayDev(conn: SourceConn, relayDev: string): Promise<void> {
+    const dup = this.servers.find((e) => e.cloud?.relayDev === relayDev && e.id !== conn.id);
+    if (!dup) return;
+    if (!conn.entry.cloud && dup.cloud) {
+      conn.entry = { ...conn.entry, cloud: dup.cloud };
+      conn.cloudCfg = dup.cloud; // LAN 掉线当轮即可转云通道，不必等重连读 entry
+    }
+    const list = this.servers.filter((e) => e.id !== dup.id).map((e) => (e.id === conn.id ? conn.entry : e));
+    this.servers = list;
+    try {
+      await AsyncStorage.setItem("ccr_conns", JSON.stringify(list));
+      if ((await AsyncStorage.getItem("ccr_active")) === dup.id) {
+        await AsyncStorage.setItem("ccr_active", conn.id);
+      }
+    } catch {}
+    if (this.activeId === dup.id) this.activeId = conn.id;
+    this.destroyConn(dup.id);
+    this.emit();
+    console.log(`[merge] relay_dev=${relayDev} 同源合并：条目 ${dup.name}(${dup.id}) 并入 ${conn.name}(${conn.id})`);
+  }
+
   // 在已连接的 LAN 信道上发起云桥配对（信任锚 = LAN token）。配对是 per-server
   // 行为：走活动源，语义与单源时代一致
   async pairCloud(): Promise<void> {
@@ -1135,6 +1162,11 @@ class RelayStore {
     const sid = msg.session_id;
     switch (msg.type) {
       case "SNAPSHOT": {
+        // relay_dev（云桥设备 id，云桥启用的 relay 随快照下发）：与另一条目的
+        // cloud.relayDev 相同 = 同一台 relay 的密码学证明 → 先合并重复条目再装配会话
+        //（合并可能销毁别的源连接，须在 conn.sessions 清空重建前发起）
+        const relayDev = (msg.payload as { relay_dev?: unknown } | undefined)?.relay_dev;
+        if (typeof relayDev === "string" && relayDev) void this.mergeByRelayDev(conn, relayDev);
         for (const old of conn.sessions.keys()) {
           if (this.sidIndex.get(old) === conn) this.sidIndex.delete(old);
         }

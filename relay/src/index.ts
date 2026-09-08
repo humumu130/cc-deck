@@ -215,6 +215,9 @@ if (cfg.cloudUrls.length) {
 startServer(bus, mgr, cfg, {
   cloudHasPhones: () => cloudClients.some((c) => c.hasActivePhones()),
   ...(cloudClients.length ? { pairCodes } : {}),
+  // relay_dev 随 SNAPSHOT 下发（云桥启用即有身份，含未设 cloudToken 的仅配对场景）：
+  // 客户端据此证明 LAN 直连条目与云桥条目是同一台 relay，自动合并重复条目
+  ...(cloudIdentity ? { cloudRelayDev: () => cloudIdentity!.relayDev } : {}),
   // daemon 子进程 listen 成功后自写 pid（父进程不预写，端口被占时不留死 pid）
   onReady: () => {
     // #316 mDNS 广播（_ccdeck._tcp）：手表同 WiFi 零配置发现；失败静默（组播被拦不影响其余）

@@ -119,6 +119,7 @@ export interface StartServerOptions {
   questionHoldMs?: number;  // AskUserQuestion 挂起窗口（测试用短值）
   cloudHasPhones?: () => boolean; // 云通道是否有活跃手机（计入"手机在线"门控）
   pairCodes?: { issue(): { code: string; expires_in: number } }; // 云桥配对码（网页端领码）
+  cloudRelayDev?: () => string; // 云桥设备 id：随 SNAPSHOT relay_dev 下发，客户端据此合并同机 LAN/云条目
   onReady?: () => void;     // listen 成功后回调（daemon 模式在此时写 pid 文件，防端口被占时留下死 pid）
 }
 
@@ -462,7 +463,16 @@ export function startServer(
         session_id: "",
         ts: Date.now(),
         type: "SNAPSHOT",
-        payload: { sessions: mgr.snapshot(), logs: mgr.snapshotLogs(), server_time: Date.now(), homedir: homedir(), models: listModels(mgr.cfg.model) },
+        payload: {
+          sessions: mgr.snapshot(),
+          logs: mgr.snapshotLogs(),
+          server_time: Date.now(),
+          homedir: homedir(),
+          models: listModels(mgr.cfg.model),
+          // 云桥启用的 relay 附带自身设备 id（= CloudConfig.relayDev 同源值）：
+          // 客户端据此密码学匹配"LAN 直连条目"与"云桥条目"是同一台 relay，自动合并
+          ...(opts.cloudRelayDev?.() ? { relay_dev: opts.cloudRelayDev() } : {}),
+        },
       };
       ws.send(JSON.stringify(snapshot));
     }
