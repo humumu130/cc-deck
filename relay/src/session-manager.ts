@@ -158,10 +158,14 @@ export class SessionManager {
   private childSdkIds: Set<string>;
   private deletedExtIds: Set<string>;
 
+  /** #388 供 ws-server 读默认模型（快照 payload.models 聚合用） */
+  readonly cfg: RelayConfig;
+
   constructor(
     private bus: EventBus,
-    private cfg: RelayConfig,
+    cfg: RelayConfig,
   ) {
+    this.cfg = cfg;
     this.childSdkIds = new Set(readChildSessions(cfg.dataDir));
     this.deletedExtIds = new Set(readDeletedExts(cfg.dataDir));
     const t = setInterval(() => this.heartbeat(), HEARTBEAT_INTERVAL_MS);
@@ -568,6 +572,31 @@ export class SessionManager {
             s.state.status = "WORKING";
           }
           s.agent.sendMessage(cmd.payload.text, sanitizeImages(cmd.payload.images));
+          this.emitUpdated(s, true);
+          return { command_id: cmd.command_id, ok: true };
+        }
+        case "COMMAND_MODEL": {
+          // #388 模型切换：注入 CLI 原生 /model slash 命令（托管 sendMessage / 外部 EXT_INPUT，
+          // CLI 下一回合生效）；state.model 立即更新供端上显示（以 CLI 实际回报为准）
+          const sid = String(cmd.payload.session_id ?? "");
+          const model = String(cmd.payload.model ?? "").replace(/\[1m\]$/, "").trim();
+          if (!model || !/^[\w.\/-]{1,80}$/.test(model)) {
+            return { command_id: cmd.command_id, ok: false, error: "无效模型名" };
+          }
+          const s = this.sessions.get(sid) ?? this.sessions.get(`ext-${sid}`);
+          if (!s) return { command_id: cmd.command_id, ok: false, error: "会话不存在" };
+          if (s.state.external) {
+            if (!this.bridge) return { command_id: cmd.command_id, ok: false, error: "外部会话通道未就绪" };
+            const r = this.bridge.extInput(s.state.session_id, `/model ${model}`);
+            if (!r.ok) return { command_id: cmd.command_id, ok: false, error: r.error ?? "注入失败" };
+          } else if (s.agent && !s.agent.ended) {
+            s.agent.sendMessage(`/model ${model}`);
+          } else {
+            return { command_id: cmd.command_id, ok: false, error: "会话不可操作（已结束）" };
+          }
+          s.state.model = model;
+          s.state.updated_at = Date.now();
+          this.pushExternalLog(s.state.session_id, "system", `模型切换: ${model}`);
           this.emitUpdated(s, true);
           return { command_id: cmd.command_id, ok: true };
         }

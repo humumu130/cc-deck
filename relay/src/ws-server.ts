@@ -3,6 +3,7 @@ import { randomUUID } from "node:crypto";
 import { readFileSync, existsSync, readdirSync, type Dirent } from "node:fs";
 import { join, sep } from "node:path";
 import { homedir, networkInterfaces } from "node:os";
+import { listModels } from "./models.js";
 import { fileURLToPath } from "node:url";
 import { WebSocketServer, WebSocket } from "ws";
 import type { EventBus } from "./event-bus.js";
@@ -36,6 +37,7 @@ const COMMAND_TYPES = new Set([
   "COMMAND_LOGIN_GRANT",
   "COMMAND_WATCH_GRANT",
   "COMMAND_PERM",
+  "COMMAND_MODEL",
   "COMMAND_REFRESH_TODOS",
   "COMMAND_TODO_HIDE",
 ]);
@@ -439,7 +441,7 @@ export function startServer(
         session_id: "",
         ts: Date.now(),
         type: "SNAPSHOT",
-        payload: { sessions: mgr.snapshot(), logs: mgr.snapshotLogs(), server_time: Date.now(), homedir: homedir() },
+        payload: { sessions: mgr.snapshot(), logs: mgr.snapshotLogs(), server_time: Date.now(), homedir: homedir(), models: listModels(mgr.cfg.model) },
       };
       ws.send(JSON.stringify(snapshot));
     }

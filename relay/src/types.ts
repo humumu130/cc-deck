@@ -293,6 +293,7 @@ export type CommandType =
   | "COMMAND_LOGIN_GRANT"
   | "COMMAND_WATCH_GRANT"
   | "COMMAND_PERM"
+  | "COMMAND_MODEL"
   | "COMMAND_REFRESH_TODOS"
   | "COMMAND_TODO_HIDE";
 
@@ -408,12 +409,19 @@ export type Command =
   | WatchGrantCommand
   | PermCommand
   | RefreshTodosCommand
-  | TodoHideCommand;
+  | TodoHideCommand
+  | ModelCommand;
 
 // 托管会话权限模式切换（default=每次确认 / acceptEdits=自动接受编辑 / plan=只读规划）
 export interface PermCommand extends CommandBase {
   type: "COMMAND_PERM";
   payload: { session_id: string; mode: ManagedPermissionMode };
+}
+
+// #388 会话模型切换：注入 CLI 原生 /model 命令，下一回合生效
+export interface ModelCommand extends CommandBase {
+  type: "COMMAND_MODEL";
+  payload: { session_id: string; model: string };
 }
 
 // 手动刷新任务清单：外部会话强制重读 CLI 任务存储并重发；托管会话重发当前值
