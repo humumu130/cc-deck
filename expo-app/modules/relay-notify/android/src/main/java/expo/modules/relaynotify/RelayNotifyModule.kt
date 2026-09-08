@@ -137,10 +137,10 @@ class RelayNotifyModule : Module() {
         "🟠" to error,
         "🟢" to done,
       ).filter { it.second > 0 }
+      // 尾部不再重复"共 N 会话"（title 第一行已含总数），只留彩点+数量
       val body = buildString {
         for ((dot, n) in parts) append(dot).append(n).append(" ")
-        append("· 共 ").append(working + waiting + error + done).append(" 会话")
-      }
+      }.trimEnd()
       val notif = buildNotification(ctx, FG_CHANNEL_ID, title.ifBlank { FG_TITLE }, body, launchIntent(ctx, 0), ongoing = true)
       try {
         nm.notify(FG_NOTIFICATION_ID, notif)
