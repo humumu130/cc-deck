@@ -1380,6 +1380,9 @@ let ckp = null;                // 本浏览器固定 box 密钥对（跨源共�
 
 function serverBridgeToken(cfg) { return cfg.token || BAKED_BRIDGE_TOKEN; }
 function defaultCloudUrl() {
+  // Tauri 宿主页面跑在 tauri.localhost——按页面域名推导会得到死地址
+  // ws://tauri.localhost/cloud（exe 首启扫码登录全链路不亮的根因），回落公共桥
+  if (window.__TAURI__ || /tauri\.localhost/i.test(location.host)) return BAKED_BRIDGE_URL;
   return location.protocol.startsWith("http")
     ? (location.protocol === "https:" ? "wss://" : "ws://") + location.host + "/cloud"
     : BAKED_BRIDGE_URL;
@@ -1404,7 +1407,12 @@ function migrateLegacy() {
   // 硬刷新兜底：个别浏览器/隐私策略清 localStorage——sessionStorage 同源冗余恢复
   //（ckp 丢 = 浏览器换了新设备号，relay 视为未配对；此处两处一起救回来）
   if (!Array.isArray(list)) { try { list = JSON.parse(sessionStorage.getItem("ccd_servers") || "null"); } catch {} }
-  if (Array.isArray(list)) { servers = list.filter((e) => e && e.id && e.kind); return; }
+  if (Array.isArray(list)) {
+    // #384c 清历史坏源：Tauri 宿主曾按页面域名推导出 ws://tauri.localhost/cloud
+    // 死地址存进列表（连接永远失败且堵住向导/扫码）——载入即剔除
+    servers = list.filter((e) => e && e.id && e.kind && !/tauri\.localhost/i.test(e.wsUrl || ""));
+    return;
+  }
   list = [];
   const mode = lsGet("ccr_mode");
   let peer = null;
