@@ -464,9 +464,9 @@ function UpdateBanner({ info, onSkip }: { info: UpdateInfo; onSkip: () => void }
       if (!ok) throw new Error("download failed");
       // 完整性校验：截断/被劫持成 HTML 的"成功"下载会在安装器处报"无签名"——
       // 拉文件头验 ZIP magic + 最小体积，不合法直接删档报错（#384）
-      const info = await FileSystem.getInfoAsync(dest);
-      const head = info.exists && info.size > 4 ? await FileSystem.readAsStringAsync(dest, { length: 4, encoding: FileSystem.EncodingType.Base64 }) : "";
-      if (!info.exists || (info.size ?? 0) < 30_000_000 || head !== "UEsDBg==") {
+      const finfo = await FileSystem.getInfoAsync(dest);
+      const head = finfo.exists && finfo.size > 4 ? await FileSystem.readAsStringAsync(dest, { length: 4, encoding: FileSystem.EncodingType.Base64 }) : "";
+      if (!finfo.exists || (finfo.size ?? 0) < 30_000_000 || head !== "UEsDBg==") {
         void FileSystem.deleteAsync(dest, { idempotent: true });
         throw new Error("bad file");
       }
