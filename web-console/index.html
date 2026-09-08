@@ -215,6 +215,29 @@
   .gp-row b { margin-left: auto; font-weight: 600; color: var(--dim); font-size: 12px; }
   .gp-row .gi { width: 16px; display: flex; align-items: center; justify-content: center; color: var(--dim); flex: none; }
   .gp-row .gi svg { display: block; }
+  /* #396 拨杆分段选择器：胶囊轨道 + 品牌色滑块，档位标签平分轨道；
+     滑块 z 层在文字下方（opt z-index:1 > thumb z-index:0），不遮挡选中档文字；
+     切换只动滑块 transform（transition 平滑），点任意档即落该档 */
+  .lever {
+    position: relative; margin-left: auto; display: flex; flex: none;
+    background: var(--panel-2); border: 1px solid var(--border); border-radius: 999px; padding: 2px;
+    user-select: none;
+  }
+  .lever-thumb {
+    position: absolute; top: 2px; bottom: 2px; left: 2px; z-index: 0;
+    width: calc((100% - 4px) / var(--n, 2));
+    border-radius: 999px; background: var(--grad);
+    transform: translateX(calc(var(--i, 0) * 100%));
+    transition: transform .18s ease;
+  }
+  .lever-opt {
+    position: relative; z-index: 1; border: none; background: none; cursor: pointer;
+    color: var(--dim); font-size: 11px; font-weight: 500; line-height: 1;
+    padding: 5px 8px; border-radius: 999px; white-space: nowrap;
+    transition: color .15s ease;
+  }
+  .lever-opt:hover { color: var(--text); }
+  .lever-opt.on { color: #fff; font-weight: 600; }
   /* 连接状态卡：活动源一览（状态点 + 名称 + 通道/状态副行），与下方服务器列表同语言 */
   .gp-status {
     display: flex; align-items: center; gap: 10px; min-width: 0;
@@ -1271,10 +1294,10 @@
       </div>
       <div class="gp-card">
         <div class="gp-sec"><svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M2.6 12S6 5.8 12 5.8 21.4 12 21.4 12 18 18.2 12 18.2 2.6 12 2.6 12Z"/><circle cx="12" cy="12" r="2.9"/></svg>显示</div>
-        <div class="gp-row" id="gpDensity"><span class="gi"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M4 6.4h16M4 12h16M4 17.6h16"/></svg></span>列表密度 <b id="gpDensityV"></b></div>
-        <div class="gp-row" id="gpFont"><span class="gi"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M5 19.2 11.6 5.4l6.6 13.8"/><path d="M7.6 14.4h8"/></svg></span>正文字号 <b id="gpFontV"></b></div>
-        <div class="gp-row" id="gpThink"><span class="gi"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="8.4"/><path d="M12 3.6a8.4 8.4 0 0 1 0 16.8Z" fill="currentColor" stroke="none" opacity=".45"/></svg></span>思考过程 <b id="gpThinkV"></b></div>
-        <div class="gp-row" id="gpIdle" style="display:none"><span class="gi"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3.4 20.6 8 12 12.6 3.4 8Z"/><path d="m3.4 12.4 8.6 4.6 8.6-4.6"/><path d="m3.4 16.6 8.6 4.6 8.6-4.6"/></svg></span>折叠空闲 <b id="gpIdleV"></b></div>
+        <div class="gp-row" id="gpDensity"><span class="gi"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M4 6.4h16M4 12h16M4 17.6h16"/></svg></span>列表密度<div class="lever" id="gpDensityLever" style="--n:2"><i class="lever-thumb"></i><button type="button" class="lever-opt" data-i="0">标准</button><button type="button" class="lever-opt" data-i="1">紧凑</button></div></div>
+        <div class="gp-row" id="gpFont"><span class="gi"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M5 19.2 11.6 5.4l6.6 13.8"/><path d="M7.6 14.4h8"/></svg></span>正文字号<div class="lever" id="gpFontLever" style="--n:3"><i class="lever-thumb"></i><button type="button" class="lever-opt" data-i="0">紧凑</button><button type="button" class="lever-opt" data-i="1">标准</button><button type="button" class="lever-opt" data-i="2">大</button></div></div>
+        <div class="gp-row" id="gpThink"><span class="gi"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="8.4"/><path d="M12 3.6a8.4 8.4 0 0 1 0 16.8Z" fill="currentColor" stroke="none" opacity=".45"/></svg></span>思考过程<div class="lever" id="gpThinkLever" style="--n:2"><i class="lever-thumb"></i><button type="button" class="lever-opt" data-i="0">关</button><button type="button" class="lever-opt" data-i="1">开</button></div></div>
+        <div class="gp-row" id="gpIdle" style="display:none"><span class="gi"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3.4 20.6 8 12 12.6 3.4 8Z"/><path d="m3.4 12.4 8.6 4.6 8.6-4.6"/><path d="m3.4 16.6 8.6 4.6 8.6-4.6"/></svg></span>折叠空闲<div class="lever" id="gpIdleLever" style="--n:2"><i class="lever-thumb"></i><button type="button" class="lever-opt" data-i="0">显示</button><button type="button" class="lever-opt" data-i="1">折叠</button></div></div>
       </div>
       <div class="gp-card">
         <div class="gp-sec"><svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="12" cy="12" r="8.6"/><path d="M12 11v4.6"/><path d="M12 7.6h.01"/></svg>关于</div>
@@ -1507,6 +1530,62 @@ function defaultCloudUrl() {
 }
 function hostOf(u) { try { return new URL(String(u).replace(/^ws/i, "http")).host; } catch { return u || ""; } }
 const cfgOf = (id) => servers.find((s) => s.id === id);
+// #398 本机条目等价判断：wsUrl → {loop, port}（loopback = 127.0.0.1/localhost/::1）或 null（非本机地址）。
+// 等价规则：loopback 三写法同端口即同一台 relay；内网 IP 写法须同端口且同 token 才视为同源
+function localEp(wsUrl) {
+  const u = String(wsUrl || "");
+  const defPort = /wss:/i.test(u.slice(0, 4)) ? 443 : 80;
+  let m = /^wss?:\/\/(?:127\.0\.0\.1|localhost|\[::1\])(?::(\d+))?(?:[/?#]|$)/i.exec(u);
+  if (m) return { loop: true, port: m[1] ? +m[1] : defPort };
+  m = /^wss?:\/\/\d{1,3}(?:\.\d{1,3}){3}(?::(\d+))?(?:[/?#]|$)/i.exec(u);
+  return m && !/^wss?:\/\/127\./i.test(u) ? { loop: false, port: m[1] ? +m[1] : defPort } : null;
+}
+// 在 servers 里找与给定地址等价的既有条目（命中即复用刷新，不新增）
+function findLocalEntry(wsUrl, token) {
+  const ep = localEp(wsUrl);
+  if (!ep) return null;
+  return servers.find((s) => {
+    if (s.kind !== "lan" || !s.wsUrl) return false;
+    const e2 = localEp(s.wsUrl);
+    if (!e2 || e2.port !== ep.port) return false;
+    if (ep.loop && e2.loop) return true; // loopback 同端口＝同一台 relay（token 可能待补/待刷新）
+    return !!token && !!s.token && s.token === token; // 其余（含内网 IP）必须同 token
+  }) || null;
+}
+// 启动归并：同一台本机 relay 的多种写法（127.0.0.1/localhost/::1/内网IP+同token）只保留一条，
+// 名字统一「本机」；地址优先留内网 IP 写法（浏览器不在 relay 机器上时 loopback 连不通）。
+// 空占位（wsUrl=""）在已有 loopback 条目时剔除——留着会被启动探测填充成第二条。返回是否有变更
+function mergeLocalEntries() {
+  let changed = false;
+  const drop = (s, keep) => {
+    servers.splice(servers.indexOf(s), 1);
+    if (activeServerId === s.id && keep) activeServerId = keep.id;
+    if (editId === s.id && keep) editId = keep.id;
+    changed = true;
+  };
+  const groups = [];
+  for (const s of servers) {
+    if (s.kind !== "lan") continue;
+    const ep = localEp(s.wsUrl);
+    if (!ep) continue; // 空占位/主机名写法不参与归并
+    let g = groups.find((g) => g.port === ep.port && ((ep.loop && g.loop) || (g.token && s.token && g.token === s.token)));
+    if (!g) groups.push(g = { port: ep.port, loop: ep.loop, token: s.token, items: [s] });
+    else {
+      g.items.push(s);
+      if (ep.loop) { g.loop = true; if (!g.token && s.token) g.token = s.token; }
+    }
+  }
+  for (const g of groups) {
+    if (g.items.length < 2) continue;
+    const keep = g.items.find((s) => !localEp(s.wsUrl).loop) || g.items[0];
+    for (const s of g.items) if (s !== keep) drop(s, keep);
+    if (keep.name !== "本机") { keep.name = "本机"; changed = true; }
+    if (!keep.token && g.token) { keep.token = g.token; changed = true; }
+  }
+  const hasLoop = servers.some((s) => s.kind === "lan" && localEp(s.wsUrl)?.loop);
+  if (hasLoop) for (const s of servers.filter((s) => s.kind === "lan" && !s.wsUrl)) drop(s, null);
+  return changed;
+}
 
 function saveServers() {
   try { localStorage.setItem(SERVERS_KEY, JSON.stringify(servers)); } catch {}
@@ -3545,14 +3624,20 @@ document.addEventListener("click", (ev) => {
 // ⚙ 设置浮层（#317）：显示项为散装开关的镜像（点行 = 触发原按钮再回读状态），
 // 服务器管理不进浮层——左栏常驻面板已是高频区，与手机抽屉同为一级入口
 const CONSOLE_VERSION = "0.3.26";
+// #396 拨杆同步：滑块移到 idx 档（transform 过渡），选中档文字加 .on（白字压品牌色滑块上）
+function setLever(el, idx) {
+  if (!el) return;
+  el.style.setProperty("--i", String(idx));
+  el.querySelectorAll(".lever-opt").forEach((b) => b.classList.toggle("on", b.dataset.i === String(idx)));
+}
 function syncGearPop() {
   $("gpThemeV") && ($("gpThemeV").textContent = document.documentElement.classList.contains("light") ? "浅色" : "深色");
-  $("gpDensityV").textContent = ($("densityBtn").textContent.split("·")[1] || "").trim();
-  $("gpFontV").textContent = ($("fontBtn").textContent.split("·")[1] || "").trim();
-  $("gpThinkV").textContent = $("thinkBtn").textContent.includes("开") ? "开" : "关";
+  setLever($("gpDensityLever"), listCompact ? 1 : 0);
+  setLever($("gpFontLever"), tlScaleIdx);
+  setLever($("gpThinkLever"), thinkShown ? 1 : 0);
+  setLever($("gpIdleLever"), collapseIdle ? 1 : 0);
   const idle = $("idleBtn");
   $("gpIdle").style.display = idle.style.display === "none" ? "none" : "flex";
-  $("gpIdleV").textContent = idle.textContent.startsWith("展开") ? "已折叠" : "显示中";
   $("gpVer").textContent = CONSOLE_VERSION;
   renderGpStatus();
 }
@@ -3564,10 +3649,27 @@ $("emptyNewBtn").onclick = () => {
   if (!$("newform").classList.contains("open")) $("addBtn").click();
   setTimeout(() => $("cwd").focus(), 60);
 };
-$("gpDensity").onclick = () => { $("densityBtn").click(); syncGearPop(); };
-$("gpFont").onclick = () => { $("fontBtn").click(); syncGearPop(); };
-$("gpThink").onclick = () => { $("thinkBtn").click(); syncGearPop(); };
-$("gpIdle").onclick = () => { $("idleBtn").click(); syncGearPop(); };
+// #396 拨杆点档直落：与原按钮同一状态变量/持久化键（不再点行循环），换 UI 形态不换逻辑
+$("gpDensityLever").querySelectorAll(".lever-opt").forEach((b) => {
+  b.onclick = () => {
+    listCompact = b.dataset.i === "1";
+    lsSet("ccd_list_compact", listCompact ? "1" : "0");
+    syncDensityBtn(); render(); syncGearPop();
+  };
+});
+$("gpFontLever").querySelectorAll(".lever-opt").forEach((b) => {
+  b.onclick = () => { tlScaleIdx = +b.dataset.i; applyTlScale(); syncGearPop(); };
+});
+$("gpThinkLever").querySelectorAll(".lever-opt").forEach((b) => {
+  b.onclick = () => { thinkShown = b.dataset.i === "1"; renderDetail(); syncGearPop(); };
+});
+$("gpIdleLever").querySelectorAll(".lever-opt").forEach((b) => {
+  b.onclick = () => {
+    collapseIdle = b.dataset.i === "1";
+    lsSet("ccd_collapse_idle", collapseIdle ? "1" : "0");
+    render(); syncGearPop();
+  };
+});
 // 本机 relay 探测已去手动化（#386b 手动行移除）：init 启动即自动静默探测，见 init 尾部 probeLocalRelay
 
 // 检查更新（#319）：Electron 走 preload IPC，Tauri 走 updater 插件全局 API；
@@ -3859,6 +3961,18 @@ $("saveSrvBtn").onclick = () => {
     if (kind === "cloud") {
       const dup = servers.find((s) => s.kind === "cloud" && s.wsUrl === url);
       if (dup) { toast("已有同地址云源「" + dup.name + "」，同桥两条源会互踢断连"); return; }
+    }
+    // #398 本机条目去重：新地址与既有条目等价（loopback 同端口 / 内网IP同端口同token）→ 只刷新该条目不新增
+    const dupLan = kind === "lan" ? findLocalEntry(url, token) : null;
+    if (dupLan) {
+      dupLan.token = token;
+      dupLan.name = "本机";
+      saveServers();
+      setFormKind(kind, null);
+      if (canAutoConnect(dupLan)) connectServer(dupLan);
+      toast("与既有本机连接等价，已合并为「本机」");
+      renderServers(); renderConnChip();
+      return;
     }
     const cfg = { id: uuid(), name, kind, wsUrl: url, token };
     if (kind === "cloud") cfg.cloud = { url, token: token || BAKED_BRIDGE_TOKEN, rd: BAKED_RELAY.rd, rk: BAKED_RELAY.rk, paired: false };
@@ -4794,7 +4908,7 @@ $("pairCode").addEventListener("keydown", (e) => { if (e.key === "Enter") { e.pr
 let pdCodeTimer = 0, pdCodeTick = 0;
 async function pdLocalRelayCreds() {
   // 已落库的本机源（探测命中时写入）优先——token 是 local-info 返回的真实值
-  const s = servers.find((x) => x.kind === "lan" && x.token && /127\.0\.0\.1|localhost/.test(x.wsUrl || ""));
+  const s = servers.find((x) => x.kind === "lan" && x.token && localEp(x.wsUrl)); // #398 内网IP 写法的本机条目也算
   if (s) { const m = String(s.wsUrl).match(/:(\d+)/); if (m) return { port: +m[1], token: s.token }; }
   // 库里没有（纯远程浏览/探测落空）：现场再探一次，本机 relay 在跑即可领码
   const j = await probeLocalRelay();
@@ -4852,6 +4966,8 @@ async function probeLocalRelay() {
   migrateLegacy();
   activeServerId = lsGet(ACTIVE_KEY) || "";
   if (!cfgOf(activeServerId)) activeServerId = servers[0]?.id || "";
+  // #398 历史遗留归并：localStorage 里 127.0.0.1/localhost/内网IP 多条本机条目并成一条「本机」
+  if (mergeLocalEntries()) saveServers();
   setFormKind("lan", null);
   // 配对链接：#bt=<桥token>&rd=<relay dev>&rk=<relay 公钥>&pc=<一次性配对码>。
   // 参数走 fragment（不落服务器日志/Referer），捕获后立刻从地址栏抹掉；
@@ -4899,8 +5015,17 @@ async function probeLocalRelay() {
   if (ph) {
     const local = await probeLocalRelay();
     if (local) {
-      ph.wsUrl = "ws://127.0.0.1:8787/ws";
-      ph.token = local.token;
+      // #398 已有等价本机条目（内网IP/localhost 写法）：刷新该条目，空占位剔除防探测后双条目
+      const ex = findLocalEntry("ws://127.0.0.1:" + (local.port || 8787) + "/ws", local.token);
+      if (ex && ex !== ph) {
+        if (local.token) ex.token = local.token;
+        ex.name = "本机";
+        servers.splice(servers.indexOf(ph), 1);
+        if (activeServerId === ph.id) activeServerId = ex.id;
+      } else {
+        ph.wsUrl = "ws://127.0.0.1:8787/ws";
+        ph.token = local.token;
+      }
       saveServers();
       toast("检测到本机 CC Deck Relay，已自动连接");
     } else if (window.ccDeck?.relayCtl) {
@@ -4931,8 +5056,8 @@ async function probeLocalRelay() {
   // 失败静默（本机没跑 relay 的纯远程浏览场景，探测正确失败属预期）。
   // 3s 超时 + console 诊断（浏览器 PNA/混合内容策略差异排查）
   const probeLocalRelay = () => {
-    const exists = servers.some((s) => s.kind === "lan" && /127\.0\.0\.1|localhost/.test(s.wsUrl));
-    if (exists) return;
+    // 已有带 token 的 loopback 条目：无需再探（#398 归并后等价本机条目只剩一条）
+    if (servers.some((s) => s.kind === "lan" && s.token && localEp(s.wsUrl)?.loop)) return;
     probingLocal = true; renderGpStatus();
     let done = false;
     const finish = (port, token, why) => {
@@ -4941,7 +5066,10 @@ async function probeLocalRelay() {
       probingLocal = false;
       console.log("[ccdeck] local relay probe:", port ? "hit :" + port : "miss", why || "");
       if (port) {
-        servers.push({ id: uuid(), name: "本机", kind: "lan", wsUrl: `ws://127.0.0.1:${port}/ws`, token });
+        // #398 命中等价条目（内网IP/localhost 写法）只刷新 token/name 不新增，防"本机"裂成多条
+        const ex = findLocalEntry(`ws://127.0.0.1:${port}/ws`, token);
+        if (ex) { if (token) ex.token = token; ex.name = "本机"; }
+        else servers.push({ id: uuid(), name: "本机", kind: "lan", wsUrl: `ws://127.0.0.1:${port}/ws`, token });
         saveServers();
         renderServers(); render();
         connectAll();
