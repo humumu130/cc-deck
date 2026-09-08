@@ -66,10 +66,11 @@ class WearLinkModule : Module() {
     Function("stop") { stop() }
   }
 
-  private fun hasConnectPermission(): Boolean =
-    Build.VERSION.SDK_INT < 31 || ContextCompat.checkSelfPermission(
-      appContext.reactContext ?: return false, Manifest.permission.BLUETOOTH_CONNECT
-    ) == PackageManager.PERMISSION_GRANTED
+  private fun hasConnectPermission(): Boolean {
+    if (Build.VERSION.SDK_INT < 31) return true
+    val ctx = appContext.reactContext ?: return false
+    return ContextCompat.checkSelfPermission(ctx, Manifest.permission.BLUETOOTH_CONNECT) == PackageManager.PERMISSION_GRANTED
+  }
 
   private fun stop() {
     stopped = true
