@@ -1169,30 +1169,35 @@ export default function DetailScreen({ sid, onBack, initialView, ref }: { sid: s
         </Pressable>
         <View style={{ flex: 1, minWidth: 0 }}>
           <Text style={d.title} numberOfLines={1}>{s.title || "未命名会话"}</Text>
-          {/* 副信息行 + 模型 chip（#388/#391 返工挪回头部）：chip 行内最右小胶囊
-              （filterChip 缩小版），去「模型·」前缀直接显模型名，无模型显「默认」 */}
+          {/* 副信息行（外部/历史/源 · 时长）——模型 chip 不在此行（用户拍板：
+              挪去水位行右端，见下） */}
           <View style={d.subRow}>
             <Text style={d.sub} numberOfLines={1}>
               {(external ? "外部 CLI" : "托管") + (s.historical && !external ? " · 历史" : "") + (srcName ? ` · ${srcName}` : "") + " · " + fmtElapsed(sessionElapsed(s))}
             </Text>
-            {canCmd && snap.models.length > 0 ? (
-              <Pressable
-                style={d.modelChip}
-                android_ripple={{ color: c.tintSoft, borderless: false, radius: 12 }}
-                onPress={() => setModelPick(true)}
-              >
-                <Text style={d.modelChipT} numberOfLines={1} ellipsizeMode="tail">{s.model ? s.model.split(/[\/:]/).pop() : "默认"}</Text>
-              </Pressable>
-            ) : null}
           </View>
-          {ctxUsed > 0 ? (
+          {/* ctx 水位行 + 模型 chip 共行（用户拍板）：进度条让位缩短，chip 放在
+              水位条原占的右端位置；无水位数据时该行只出 chip */}
+          {ctxUsed > 0 || (canCmd && snap.models.length > 0) ? (
             <View style={d.ctxRow}>
-              <Text style={d.ctxLabel}>ctx</Text>
-              <View style={d.ctxBar}>
-                <View style={{ width: `${ctxPct}%`, height: 3, borderRadius: 1.5, backgroundColor: c[contextLevel(ctxUsed, ctxLimit)] }} />
-              </View>
-              <Text style={[d.ctxPct, { color: c[contextLevel(ctxUsed, ctxLimit)] }]}>{ctxPct}%</Text>
-              <View style={{ flex: 0.25 }} />
+              {ctxUsed > 0 ? (
+                <>
+                  <Text style={d.ctxLabel}>ctx</Text>
+                  <View style={d.ctxBar}>
+                    <View style={{ width: `${ctxPct}%`, height: 3, borderRadius: 1.5, backgroundColor: c[contextLevel(ctxUsed, ctxLimit)] }} />
+                  </View>
+                  <Text style={[d.ctxPct, { color: c[contextLevel(ctxUsed, ctxLimit)] }]}>{ctxPct}%</Text>
+                </>
+              ) : null}
+              {canCmd && snap.models.length > 0 ? (
+                <Pressable
+                  style={d.modelChip}
+                  android_ripple={{ color: c.tintSoft, borderless: false, radius: 12 }}
+                  onPress={() => setModelPick(true)}
+                >
+                  <Text style={d.modelChipT} numberOfLines={1} ellipsizeMode="tail">{s.model ? s.model.split(/[\/:]/).pop() : "默认"}</Text>
+                </Pressable>
+              ) : <View style={{ flex: 0.25 }} />}
             </View>
           ) : null}
         </View>

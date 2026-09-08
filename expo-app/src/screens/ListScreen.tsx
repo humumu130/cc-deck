@@ -801,6 +801,10 @@ export default function ListScreen({ sessions, connected, connText, onOpen, onNe
       </View>
 
       <FlatList
+        // 密度切换强制重挂载：行高在极简(~40px)↔标准(~90px)间剧变时，
+        // VirtualizedList 复用旧 cell 的陈旧布局度量导致整列空白（#392 回归，
+        // 冷启动正常、仅切换路径复现）。key 换代即整体重建，窗口/度量全新
+        key={density}
         data={rows}
         keyExtractor={(r) => r.key}
         showsVerticalScrollIndicator={false}
