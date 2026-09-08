@@ -27,9 +27,9 @@ const VIEWS = [
   { k: "cron", label: "定时" },
   { k: "stats", label: "统计" },
 ] as const;
-// tab 指示条几何参数：filterRow 左边距与 tab 间隙（JS 几何计算与 makeStyles 共用）
+// tab 指示条几何参数：tabWrap 左边距与 tab 间隙（JS 几何计算与 makeStyles 共用）
 const TAB_PAD_L = 4;
-const TAB_GAP = 6;
+const TAB_GAP = 5;
 export type ViewKind = (typeof VIEWS)[number]["k"];
 
 // SpeechRecognizer 错误码人话（反馈排查用；1/2/4 多为云识别服务连不上）
@@ -600,12 +600,10 @@ export default function DetailScreen({ sid, onBack, initialView, ref }: { sid: s
   const [slashCommands, setSlashCommands] = useState<SlashCommand[]>(BUILTIN_COMMANDS);
   const [renaming, setRenaming] = useState(false);
   const [view, setView] = useState<ViewKind>(initialView ?? "msg");
-  // 回到底部浮钮（#322 第三轮定位，用户拍板）：与任务完成/待确认悬浮钮同列（right 12、
-  // 44×44 r14 同族形制），其在场时纵向叠上方——复算 App 壳同款落位公式保证不错位
+  // 回到底部浮钮（#322 第四轮定位，用户拍板）：对话区顶部居中小胶囊（ChatGPT 手机端
+  // 样式，带下箭头），上滑离开底部即出现，吸顶浮动不占布局、不与 App 壳悬浮钮打架
   const [showJump, setShowJump] = useState(false);
   useEffect(() => { setShowJump(false); }, [view]);
-  const hasTdFloat = (snap.taskDoneQueue?.length ?? 0) > 0;
-  const hasCfFloat = snap.sessions.some((s) => (s.todos ?? []).some((t) => /待确认/.test(t.content ?? "")));
   const [showThink, setShowThink] = useState(thinkShown);
   const [collapsed, setCollapsed] = useState(ctrlCollapsed);
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
@@ -647,9 +645,6 @@ export default function DetailScreen({ sid, onBack, initialView, ref }: { sid: s
   const touching = useRef(false);
   const kb = useKbHeight();
   const insets = useSafeAreaInsets();
-  // ↓ 钮落位：App 壳悬浮钮同款基线（键盘贴沿 / insets+74），td/cf 在场各 +52 纵排
-  const jumpBottom =
-    (kb > 0 ? kb + 80 : insets.bottom + 74) + (hasTdFloat ? 52 : 0) + (hasCfFloat ? 52 : 0);
   const s: SessionState | undefined = snap.sessions.find((x) => x.session_id === sid);
 
   // 手动刷新任务清单：↻ 发命令，等下一帧 todos 引用变化（或 2.5s 超时）结束等待态
@@ -954,7 +949,7 @@ export default function DetailScreen({ sid, onBack, initialView, ref }: { sid: s
     if (i > 0) pagerRef.current?.scrollTo({ x: i * Dimensions.get("window").width, animated: false });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
-  // 指示条几何：tab 等宽分铺整行（TAB_PAD_L 左边距 + TAB_GAP 间隙），横杠宽 = 单 tab 宽，
+  // 指示条几何：tab 等宽分铺 tabWrap（TAB_PAD_L 左边距 + TAB_GAP 间隙，不含右侧模型 chip），横杠宽 = 单 tab 宽，
   // 每滑一页平移 (tabW + gap)；滑到两页中间时轻微拉伸（1.3x）落位回缩，clamp 防 overscroll 过冲
   const tabW = tabRowW > 0 ? (tabRowW - TAB_PAD_L - TAB_GAP * (VIEWS.length - 1)) / VIEWS.length : 0;
   const indX = scrollX.interpolate({
@@ -1238,22 +1233,34 @@ export default function DetailScreen({ sid, onBack, initialView, ref }: { sid: s
               )}
             </View>
           ) : null}
-          <View style={d.filterRow} onLayout={(e) => setTabRowW(e.nativeEvent.layout.width)}>
-            {VIEWS.map((v, i) => (
+          {/* tab 行 + 模型 chip 同排：tabWrap 自测宽（指示条几何只算 tab 区，chip 挤不进来）；
+              模型 chip 去「模型·」前缀直接显模型名（#388 弹窗交互不变），无模型显「默认」 */}
+          <View style={d.filterRow}>
+            <View style={d.tabWrap} onLayout={(e) => setTabRowW(e.nativeEvent.layout.width)}>
+              {VIEWS.map((v, i) => (
+                <Pressable
+                  key={v.k}
+                  style={d.tabBtn}
+                  onPress={() => gotoView(i)}
+                  hitSlop={{ top: 6, bottom: 2 }}
+                >
+                  <Text style={[d.tabT, view === v.k && d.tabTOn]}>{v.label}</Text>
+                </Pressable>
+              ))}
+              <Animated.View style={[d.tabInd, { width: tabW, transform: [{ translateX: indX }, { scaleX: indS }] }]} />
+            </View>
+            {canCmd && snap.models.length > 0 ? (
               <Pressable
-                key={v.k}
-                style={d.tabBtn}
-                onPress={() => gotoView(i)}
-                hitSlop={{ top: 6, bottom: 2 }}
+                style={d.modelChip}
+                android_ripple={{ color: c.tintSoft, borderless: false, radius: 12 }}
+                onPress={() => setModelPick(true)}
               >
-                <Text style={[d.tabT, view === v.k && d.tabTOn]}>{v.label}</Text>
+                <Text style={d.modelChipT} numberOfLines={1} ellipsizeMode="tail">{s.model ? s.model.split(/[\/:]/).pop() : "默认"}</Text>
               </Pressable>
-            ))}
-            <Animated.View style={[d.tabInd, { width: tabW, transform: [{ translateX: indX }, { scaleX: indS }] }]} />
+            ) : null}
           </View>
-          {(!external && canCmd && !s.historical) || (canCmd && snap.models.length > 0) ? (
+          {!external && canCmd && !s.historical ? (
           <View style={d.subFilterRow}>
-            {!external && !s.historical ? (
             <Pressable
               style={[d.filterChip, (s.permission_mode ?? "default") !== "default" && d.filterChipOn]}
               android_ripple={{ color: c.tintSoft, borderless: false, radius: 12 }}
@@ -1265,23 +1272,15 @@ export default function DetailScreen({ sid, onBack, initialView, ref }: { sid: s
             >
               <Text style={[d.filterT, (s.permission_mode ?? "default") !== "default" && d.filterTOn]}>权限·{PERM_LABEL[s.permission_mode ?? "default"]}</Text>
             </Pressable>
-            ) : null}
-            {snap.models.length > 0 ? (
-            <Pressable
-              style={d.filterChip}
-              android_ripple={{ color: c.tintSoft, borderless: false, radius: 12 }}
-              onPress={() => setModelPick(true)}
-            >
-              <Text style={d.filterT} numberOfLines={1}>模型·{s.model ? s.model.split(/[\/:]/).pop() : "默认"}</Text>
-            </Pressable>
-            ) : null}
           </View>
           ) : null}
       </View>
       ) : null}
 
       {/* 五视图横向翻页（#250/#252）：面板上左右滑动切换，懒渲染相邻 ±1 页（远跳飞行中临时全渲染）；
-          滚动位置原生驱动 tab 指示条逐像素跟手。任务视图：整屏列表（网页端"任务" tab 同构） */}
+          滚动位置原生驱动 tab 指示条逐像素跟手。任务视图：整屏列表（网页端"任务" tab 同构）。
+          外包一层作回到底部浮钮的定位锚（吸顶于对话区顶部，不随头部高度变化） */}
+      <View style={{ flex: 1 }}>
       <ScrollView
         ref={pagerRef}
         style={{ flex: 1 }}
@@ -1602,10 +1601,11 @@ export default function DetailScreen({ sid, onBack, initialView, ref }: { sid: s
       ))}
       </ScrollView>
 
-      {/* 回到底部浮钮（#322）：距底超过一屏时出现，避让审批横幅 */}
+      {/* 回到底部浮钮（#322 第四轮定位）：上滑离开底部后出现，对话区顶部居中小胶囊（ChatGPT
+          手机端样式）带下箭头，吸顶浮动——绝对定位不占布局，短横向尺寸少遮内容 */}
       {showJump && (view === "msg" || view === "all") ? (
         <Pressable
-          style={[d.jumpFab, { bottom: jumpBottom }]}
+          style={d.jumpFab}
           android_ripple={{ color: withA(c.working, 0.2), borderless: false, radius: 14 }}
           onPress={() => {
             (view === "msg" ? scrollRef : allScrollRef).current?.scrollToEnd({ animated: true });
@@ -1615,6 +1615,7 @@ export default function DetailScreen({ sid, onBack, initialView, ref }: { sid: s
           <Text style={d.jumpFabT}>↓</Text>
         </Pressable>
       ) : null}
+      </View>
 
       {/* 底部栈：审批横幅（常驻可见，类似 CLI 权限提示）> 模板行 > 命令栏；整体随键盘抬升 */}
       <View pointerEvents="box-none" style={{ paddingBottom: kb > 0 ? 0 : insets.bottom, transform: [{ translateY: kb > 0 ? -kb : 0 }] }}>
@@ -1804,13 +1805,14 @@ function MicIcon({ color }: { color: string }) {
 
 const makeStyles = (c: ThemeColors) => StyleSheet.create({
   safe: { flex: 1, backgroundColor: c.bg },
-  // 回到底部浮钮（#322）：贴屏幕左侧（右侧与任务完成/待确认悬浮钮打架，用户拍板挪左侧）
+  // 回到底部浮钮（#322 第四轮定位）：对话区顶部居中小胶囊（ChatGPT 手机端样式），带下箭头
   jumpFab: {
-    position: "absolute", right: 12, width: 44, height: 44, borderRadius: 14,
-    alignItems: "center", justifyContent: "center",
+    position: "absolute", top: 8, alignSelf: "center",
+    height: 28, paddingHorizontal: 11, borderRadius: 14,
+    flexDirection: "row", alignItems: "center", justifyContent: "center",
     backgroundColor: c.panel, borderWidth: 1, borderColor: c.line, elevation: 4,
   },
-  jumpFabT: { color: c.dim, fontSize: 19, fontWeight: "700", marginTop: -1 },
+  jumpFabT: { color: c.dim, fontSize: 15, fontWeight: "700", lineHeight: 17, marginTop: -1 },
   head: {
     flexDirection: "row", alignItems: "center", gap: 6,
     paddingHorizontal: 12, paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: c.line,
@@ -1881,12 +1883,20 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
     borderRadius: 12, borderTopRightRadius: 4, paddingHorizontal: 10, paddingVertical: 7,
   },
   pendT: { color: c.dim, fontSize: 12.5, lineHeight: 17 },
-  // 视图 tab 行：下划线式（与网页端 tabs 同风格，去掉边框底色更轻）
-  filterRow: { position: "relative", flexDirection: "row", gap: 6, marginBottom: 10, paddingLeft: 4 },
-  tabBtn: { flex: 1, alignItems: "center", paddingVertical: 4, borderBottomWidth: 2, borderBottomColor: "transparent" },
+  // 视图 tab 行：下划线式（与网页端 tabs 同风格）+ 最右模型 chip 同排（紧凑档：
+  // 字号 11 / padding 3 / 间隙 5，5 tab + chip 一排放得下）；tabWrap 自测宽供指示条几何
+  filterRow: { flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 8 },
+  tabWrap: { flex: 1, position: "relative", flexDirection: "row", gap: TAB_GAP, paddingLeft: TAB_PAD_L },
+  tabBtn: { flex: 1, alignItems: "center", paddingVertical: 3, borderBottomWidth: 2, borderBottomColor: "transparent" },
   tabInd: { position: "absolute", left: TAB_PAD_L, bottom: 0, height: 2.5, borderRadius: 1.5, backgroundColor: c.brandA },
-  tabT: { fontSize: 12, color: c.dim },
+  tabT: { fontSize: 11, color: c.dim },
   tabTOn: { color: c.text, fontWeight: "600" },
+  // 模型 chip（tab 行最右）：去「模型·」前缀直接显模型名减宽；长名封顶截尾防挤 tab
+  modelChip: {
+    paddingHorizontal: 8, paddingVertical: 3, borderRadius: 10, maxWidth: 118,
+    backgroundColor: c.tintSoft, borderWidth: 1, borderColor: c.line,
+  },
+  modelChipT: { fontSize: 10.5, color: c.dim },
   filterChip: {
     paddingHorizontal: 10, paddingVertical: 4, borderRadius: 10,
     backgroundColor: c.tintSoft, borderWidth: 1, borderColor: c.line,

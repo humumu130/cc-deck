@@ -2712,7 +2712,7 @@ function renderDetail() {
   const modelBtn = $("modelBtn");
   if ((sel.ctx.models?.length || 0) > 0 && !s.historical) {
     modelBtn.style.display = "";
-    modelBtn.textContent = "模型·" + (s.model ? s.model.split(/[/:]/).pop() : "默认");
+    modelBtn.textContent = s.model ? s.model.split(/[/:]/).pop() : "默认";
   } else { modelBtn.style.display = "none"; closeModelPop(); }
 
   // WAITING 处理框
