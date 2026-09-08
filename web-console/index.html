@@ -141,6 +141,20 @@
     padding: 5px; box-shadow: 0 8px 28px rgba(0,0,0,.4);
   }
   #srvPop.open { display: flex; flex-direction: column; gap: 1px; }
+  /* #388 模型选择弹层：服务器悬浮窗同款视觉 */
+  #modelPop {
+    display: none; position: fixed; z-index: 60; min-width: 190px; max-width: 320px; max-height: 300px; overflow-y: auto;
+    background: var(--panel); border: 1px solid var(--border); border-radius: 12px;
+    padding: 5px; box-shadow: 0 8px 28px rgba(0,0,0,.4);
+  }
+  #modelPop.open { display: block; }
+  .mp-row {
+    display: flex; align-items: center; justify-content: space-between; gap: 10px;
+    font-size: 12.5px; color: var(--text); padding: 7px 10px; border-radius: 8px; cursor: pointer;
+  }
+  .mp-row:hover { background: var(--hov); }
+  .mp-row.cur { color: var(--brand); font-weight: 700; }
+  .mp-row .mp-cur { color: var(--brand); font-size: 11px; flex: none; }
   .sp-row { display: flex; align-items: center; gap: 8px; font-size: 12.5px; color: var(--text); padding: 7px 9px; border-radius: 8px; }
   .sp-row i { width: 8px; height: 8px; border-radius: 50%; flex: none; }
   .sp-row .sp-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -1105,6 +1119,9 @@
 
 <div id="srvPop"></div>
 
+<!-- #388 模型选择弹层：锚在 modelBtn 下方（fixed 定位，JS 设坐标） -->
+<div id="modelPop"></div>
+
 <main>
   <button id="sideToggle" title="收起 / 展开会话列表">‹</button>
   <div id="side">
@@ -1218,6 +1235,7 @@
         <button id="fontBtn" class="mini" title="正文字号（点按切换）">字·标准</button>
         <button id="thinkBtn" class="mini" title="显示思考过程">思考 ·关</button>
         <button id="permBtn" class="mini" style="display:none">权限·标准</button>
+        <button id="modelBtn" class="mini" style="display:none" title="切换模型（下一回合生效）">模型</button>
         <span class="tab-ind" id="tabInd"></span>
       </div>
     </div>
@@ -1459,7 +1477,7 @@ function ensureCtx(cfg) {
   if (!c) {
     c = {
       cfg, status: "offline", statusText: "未连接",
-      sessions: new Map(), timelines: new Map(), lastSeq: 0,
+      sessions: new Map(), timelines: new Map(), lastSeq: 0, models: [],
       ws: null, reconnectDelay: 1000, reconnectTimer: 0,
       pendingPair: null, pairTimer: 0, pingTimer: null, lastPong: 0,
       transport: "ws", pollGen: 0, pollSid: "", pollBase: "",
@@ -2150,6 +2168,7 @@ function onEvent(ctx, msg) {
         ctx.timelines.set(s.session_id, msg.payload.logs[s.session_id] || []);
       }
       ctx.lastSeq = Math.max(ctx.lastSeq, msg.seq);
+      ctx.models = Array.isArray(msg.payload.models) ? msg.payload.models : []; // #388 模型清单（旧版 relay 无字段=空）
       if (msg.payload.homedir) ctx.homedir = msg.payload.homedir; // #368 新建表单默认目录
       // 重连快照里已没有挂起删除的会话 = 别处已删/服务器侧已终结：取消挂起，
       // 免得 4s 后对不存在的会话发命令弹"会话不存在"误报
@@ -2645,7 +2664,7 @@ function renderDetail() {
   $("delapsed").textContent = "⏱ " + fmtElapsed(sessionElapsed(s));
   $("dctx").innerHTML = ctxHtml(s); // #279⑦ 窄屏详情全屏时的水位条（桌面 CSS 隐藏，不与列表卡重复）
 
-  // 思考开关 / 权限模式 chip
+  // 思考开关 / 权限模式 chip / 模型切换 chip（#388）
   $("thinkBtn").classList.toggle("on", thinkShown);
   const permBtn = $("permBtn");
   if (!s.external && !s.historical) {
@@ -2654,6 +2673,11 @@ function renderDetail() {
     permBtn.textContent = "权限·" + (PERM_LABEL[pm] ?? pm);
     permBtn.classList.toggle("on", pm !== "default");
   } else permBtn.style.display = "none";
+  const modelBtn = $("modelBtn");
+  if ((sel.ctx.models?.length || 0) > 0 && !s.historical) {
+    modelBtn.style.display = "";
+    modelBtn.textContent = "模型·" + (s.model ? s.model.split(/[/:]/).pop() : "默认");
+  } else { modelBtn.style.display = "none"; closeModelPop(); }
 
   // WAITING 处理框
   const wb = $("waitbox");
@@ -4077,6 +4101,40 @@ $("permBtn").onclick = () => {
   const next = PERM_CYCLE[(PERM_CYCLE.indexOf(cur) + 1) % PERM_CYCLE.length];
   sendCommandTo(sel.ctx, "COMMAND_PERM", { session_id: selected.sid, mode: next });
 };
+// #388 模型选择弹层：锚在按钮下方，点选即发 COMMAND_MODEL（下一回合生效）
+function closeModelPop() {
+  const p = $("modelPop");
+  if (p.classList.contains("open")) { p.classList.remove("open"); p.innerHTML = ""; }
+}
+$("modelBtn").onclick = () => {
+  const sel = selSession();
+  if (!sel || sel.s.historical) return;
+  const models = sel.ctx.models || [];
+  if (!models.length) return;
+  const pop = $("modelPop");
+  if (pop.classList.contains("open")) { closeModelPop(); return; }
+  pop.innerHTML = models.map((m) =>
+    '<div class="mp-row' + (m === sel.s.model ? " cur" : "") + '" data-m="' + encodeURIComponent(m) + '">' +
+    '<span>' + m + "</span>" + (m === sel.s.model ? '<span class="mp-cur">当前</span>' : "") + "</div>",
+  ).join("");
+  pop.classList.add("open");
+  const r = $("modelBtn").getBoundingClientRect();
+  const pw = Math.min(320, Math.max(190, r.width));
+  pop.style.left = Math.max(8, Math.min(r.right - pw, window.innerWidth - pw - 8)) + "px";
+  pop.style.top = Math.min(r.bottom + 6, window.innerHeight - 120) + "px";
+  pop.querySelectorAll(".mp-row").forEach((row) => {
+    row.onclick = (ev) => {
+      ev.stopPropagation();
+      const m = decodeURIComponent(row.dataset.m);
+      closeModelPop();
+      if (m !== sel.s.model) sendCommandTo(sel.ctx, "COMMAND_MODEL", { session_id: sel.s.session_id, model: m });
+    };
+  });
+};
+window.addEventListener("click", (ev) => {
+  const pop = $("modelPop");
+  if (pop.classList.contains("open") && !pop.contains(ev.target) && ev.target !== $("modelBtn")) closeModelPop();
+ }, true);
 function switchTab(name) {
   activeTab = name;
   document.querySelectorAll(".tabs button.tab").forEach((x) => x.classList.toggle("active", x.dataset.tab === name));
