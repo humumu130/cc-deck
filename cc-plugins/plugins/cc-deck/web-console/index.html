@@ -186,8 +186,10 @@
   main:has(#gearPop.open) #sideFabs { display: none; }
   /* ===== 设置抽屉 #405（按设计稿返工：独立竖排菜单栏 + 完整宽度内容区）=====
      DOM 位置改挂 main 层（#side overflow:hidden 会裁掉超宽抽屉）。
-     打开宽度 min(680px,100%)：左=.gp-rail 独立菜单栏 172px（自着色+右边界），
-     右=.gp-main（Header 固定 + .gp-content 滚动，内容内宽 ≈460px）。
+     #40x 收窄（用户反馈"菜单栏跟抽屉都太宽、右侧大片空白"）：
+     打开宽度 min(528px,100%)：左=.gp-rail 独立菜单栏 128px（自着色+右边界），
+     右=.gp-main（Header 固定 + .gp-content 滚动，内容区 ≈400px、内宽 ≈368px）。
+     行内 label 与右值/拨杆间距随收窄自然收拢，不再出现大留白。
      Token（设计说明 §6，抽屉局部变量，不动全应用）：
      背景 #060D16 / 侧栏 #08111D / 卡片 #0D1827 / 输入 #101D2D / 边框 #1D3046 /
      主文字 #E5EDF7 / 次要 #8EA3BA / 弱 #53677E / Accent #F1844F / 成功 #55D98A；
@@ -199,7 +201,7 @@
     --gp-accent: #F1844F; --gp-done: #55D98A;
     --gp-hov: rgba(142,163,186,.09); --gp-hov2: rgba(142,163,186,.16);
     position: absolute; top: 0; bottom: 0; left: 0; z-index: 45;
-    width: min(680px, 100%); display: flex;
+    width: min(528px, 100%); display: flex;
     background: var(--gp-bg); border-right: 1px solid var(--gp-border);
     box-shadow: 12px 0 36px rgba(0,0,0,.4);
     color: var(--gp-text); overflow: hidden;
@@ -216,17 +218,17 @@
   #gearPop .panel { background: none; border: none; padding: 0; }
   /* ── 左：独立竖排菜单栏（参考整页视图左栏：大标题+图标菜单+底部弱化版本） ── */
   .gp-rail {
-    width: 172px; flex: none; display: flex; flex-direction: column; min-height: 0;
+    width: 128px; flex: none; display: flex; flex-direction: column; min-height: 0;
     background: var(--gp-rail); border-right: 1px solid var(--gp-border);
-    padding: 20px 14px 16px;
+    padding: 18px 10px 14px;
   }
-  .gp-rail-title { font-size: 19px; font-weight: 700; color: var(--gp-text); padding: 2px 8px 20px; }
-  .gp-rail-foot { margin-top: auto; padding: 0 8px; font-size: 11px; color: var(--gp-faint); white-space: nowrap; }
+  .gp-rail-title { font-size: 17px; font-weight: 700; color: var(--gp-text); padding: 2px 6px 16px; }
+  .gp-rail-foot { margin-top: auto; padding: 0 6px; font-size: 10px; color: var(--gp-faint); white-space: nowrap; }
   .gp-nav { display: flex; flex-direction: column; gap: 4px; }
   .gp-nav-item {
-    position: relative; display: flex; align-items: center; gap: 10px; width: 100%; text-align: left; flex: none;
-    border: 1px solid transparent; background: none; box-shadow: none; padding: 10px 12px; border-radius: 8px;
-    color: var(--gp-dim); font-size: 13px; font-weight: 500; cursor: pointer;
+    position: relative; display: flex; align-items: center; gap: 8px; width: 100%; text-align: left; flex: none;
+    border: 1px solid transparent; background: none; box-shadow: none; padding: 9px 10px; border-radius: 8px;
+    color: var(--gp-dim); font-size: 12.5px; font-weight: 500; cursor: pointer;
     transition: background .15s ease, color .15s ease, border-color .15s ease;
   }
   .gp-nav-item svg { flex: none; display: block; }
@@ -242,7 +244,7 @@
   .gp-main { flex: 1; min-width: 0; display: flex; flex-direction: column; min-height: 0; }
   .gp-head {
     display: flex; align-items: center; justify-content: space-between; flex: none;
-    padding: 15px 24px 13px; border-bottom: 1px solid var(--gp-border);
+    padding: 12px 16px 11px; border-bottom: 1px solid var(--gp-border);
   }
   .gp-head-t { display: flex; align-items: center; gap: 9px; font-size: 15px; font-weight: 700; color: var(--gp-text); }
   .gp-head-t svg { color: var(--gp-dim); flex: none; }
@@ -253,7 +255,7 @@
   .gp-head button:hover { color: var(--gp-text); background: var(--gp-hov); }
   .gp-head button:active { background: var(--gp-hov2); }
   .gp-content {
-    flex: 1; min-height: 0; overflow-y: auto; padding: 18px 24px 26px;
+    flex: 1; min-height: 0; overflow-y: auto; padding: 14px 16px 22px;
     /* 滚动条按设计稿 §7：4px 低存在感，默认透明，hover/拖动时才显形（视觉验收 P1-3） */
     scrollbar-width: thin; scrollbar-color: transparent transparent;
   }
@@ -377,7 +379,7 @@
   .gp-pair { display: flex; gap: 14px; align-items: stretch; }
   .gp-pair-info { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 6px; }
   .gp-pair-t { font-size: 12px; color: var(--gp-dim); }
-  .gp-pair-acts { width: 170px; flex: none; justify-content: center; }
+  .gp-pair-acts { width: 148px; flex: none; justify-content: center; }
   #gearPop .pd-code-show { align-items: baseline; justify-content: flex-start; gap: 10px; padding: 2px 0 0; }
   #gearPop .pd-code-show b {
     font-family: var(--mono); font-size: 24px; font-weight: 700; letter-spacing: 4px;
@@ -864,7 +866,8 @@
   .c-live .lv-sec { color: var(--working); flex: none; }
   .c-live .lv-tok { flex: none; }
   .c-live .lv-sum { color: var(--faint); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1; min-width: 0; }
-  .cards-empty { align-items: center; text-align: center; color: var(--faint); font-size: 12.5px; padding: 46px 12px; }
+  /* #12 空态提示垂直居中：#cards 为纵排 flex，flex:1 撑满 + justify-content:center 垂直居中 */
+  .cards-empty { flex: 1; display: flex; flex-direction: column; justify-content: center; align-items: center; text-align: center; color: var(--faint); font-size: 12.5px; padding: 46px 12px; }
   .cards-empty .ce-icon { font-size: 34px; opacity: .5; margin-bottom: 10px; }
   .card-title { font-size: 15px; font-weight: 650; margin-top: 4px; display: flex; align-items: center; gap: 8px; }
   .his-badge {
@@ -925,7 +928,12 @@
   .todo-item.completed .todo-tx { color: var(--faint); text-decoration: line-through; text-decoration-color: rgba(255,255,255,.22); }
   .todo-item.in_progress .todo-tx { color: var(--text); }
   .todo-item.pending .todo-tx { color: var(--dim); }
-  .todo-empty { color: var(--faint); padding: 60px 4px; text-align: center; font-size: 13px; }
+  /* #12 空态提示垂直居中（任务/定时 tab，均为 #timeline 唯一子元素）：min-height:100% 撑满
+     可视区 + flex 纵排居中；<br> 在 flex 化后不再生成盒，两行仍按匿名 item 自然堆叠 */
+  .todo-empty, .tl-empty {
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    min-height: 100%; color: var(--faint); padding: 40px 4px; text-align: center; font-size: 13px;
+  }
   /* #279④ 转录 #NNN 任务号可点段（对齐手机 TaskRefText：品牌色加粗） */
   .task-ref { color: var(--brand); font-weight: 700; cursor: pointer; user-select: none; -webkit-user-select: none; }
   .task-ref:hover { text-decoration: underline; }
@@ -1019,14 +1027,17 @@
   #renameBtn { padding: 3px 9px; font-size: 13px; color: var(--dim); }
   #dsub { color: var(--dim); font-size: 12px; margin-top: 5px; display: flex; gap: 12px; flex-wrap: wrap; }
   #dsub .elapsed { color: var(--text); }
-  /* 上下文水位：列表卡常显（详情页与列表同屏不重复，与手机端同口径）；
-     #279⑦ ≤720px 详情全屏盖住列表 → #dsub 行尾补一条，仅窄屏显示（桌面布局不动） */
+  /* 上下文水位：列表卡固定 30px 短条常显（口径不动）；详情头概况区走 #dctxrow 水位行 */
   .ctx-mini { display: inline-flex; align-items: center; gap: 4px; }
   .card-stats .ctx-mini { margin-left: auto; }
   .ctx-mini-bar { width: 30px; height: 3px; border-radius: 1.5px; background: rgba(128,134,148,.28); overflow: hidden; }
   .ctx-mini-bar i { display: block; height: 100%; border-radius: 1.5px; }
   .ctx-mini-t { font-size: 10px; font-variant-numeric: tabular-nums; }
-  #dsub .ctx-mini { display: none; }
+  /* #392web 概况区水位行：水位条 flex 让位缩短（chip 在场时收窄），chip 贴行尾（手机 f35c7ce 同形态） */
+  #dctxrow { display: none; align-items: center; gap: 8px; margin-top: 6px; min-width: 0; }
+  #dctxrow .ctx-mini { flex: 1; min-width: 0; }
+  #dctxrow .ctx-mini-bar { flex: 1; width: auto; min-width: 30px; }
+  #dctxrow button.mini { flex: none; }
 
   .tabs { display: flex; gap: 2px; margin-top: 10px; align-items: center; position: relative; }
   .tabs .spacer { flex: 1; }
@@ -1041,11 +1052,11 @@
     background: var(--brand); pointer-events: none;
     transition: transform .22s ease, width .22s ease;
   }
-  .tabs button.mini {
+  .tabs button.mini, #dctxrow button.mini {
     font-size: 11.5px; padding: 5px 11px; border-radius: 999px; color: var(--dim);
     border: 1px dashed var(--border); background: transparent;
   }
-  .tabs button.mini.on { color: var(--brand); border-color: rgba(217,119,87,.55); border-style: solid; }
+  .tabs button.mini.on, #dctxrow button.mini.on { color: var(--brand); border-color: rgba(217,119,87,.55); border-style: solid; }
 
   /* 工作状态行（类 CLI，置于输入卡上方）：✶ 摘要 · 回合耗时；宽度与时间线会话列对齐 */
   #liverow {
@@ -1377,8 +1388,6 @@
     #cards { padding: 4px 10px 12px; }
     #srcChips { padding: 0 10px 4px; }
     #listBar { padding: 10px 10px 4px; }
-    /* #279⑦ 窄屏详情全屏（#side 隐藏）→ #dsub 行尾的 ctx 水位条补位显示 */
-    #dsub .ctx-mini { display: inline-flex; }
     .srv-row .srv-edit, .srv-row .srv-del { opacity: 1; }
     #side { width: 100%; border-right: none; }
     #detail {
@@ -1467,7 +1476,7 @@
   </div>
 
   <!-- #405 设置抽屉改挂 main 层（原在 #side 内：overflow:hidden 会把超宽抽屉裁掉）。
-       左 .gp-rail=独立竖排菜单栏，右 .gp-main=Header 固定+内容滚动；打开宽 min(680px,100%) -->
+       左 .gp-rail=独立竖排菜单栏，右 .gp-main=Header 固定+内容滚动；打开宽 min(528px,100%) -->
   <aside id="gearPop">
     <div class="gp-rail">
       <div class="gp-rail-title">设置</div>
@@ -1558,6 +1567,8 @@
           <div class="gp-card gp-rows">
             <div class="gp-row gp-static"><span class="gi"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="4.5" width="16" height="15" rx="3.6"/><path d="M4 9.2h16"/><path d="M9.4 9.2v10.3"/></svg></span>CC Deck 控制台 <b id="gpVer"></b><span class="gp-chev">›</span></div>
             <div class="gp-row" id="gpUpdate"><span class="gi"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-9-9c2.52 0 4.93 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/></svg></span>检查更新 <b id="gpUpdateV"></b><span class="gp-chev">›</span></div>
+            <a class="gp-row" href="https://cc.humumu.online/dl/cc-deck-desktop-setup.exe" target="_blank" rel="noopener"><span class="gi"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3.6v10.6"/><path d="m7.9 10.7 4.1 4.1 4.1-4.1"/><path d="M4.4 20.4h15.2"/></svg></span>下载桌面端安装包<span class="gp-chev">›</span></a>
+            <a class="gp-row" href="http://8.133.211.170:8888/cc-deck.apk" target="_blank" rel="noopener"><span class="gi"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="7" y="2.5" width="10" height="19" rx="2.2"/><path d="M10.5 18.5h3"/></svg></span>下载手机 App<span class="gp-chev">›</span></a>
             <a class="gp-row" href="https://github.com/humumu130/cc-deck/issues" target="_blank" rel="noopener"><span class="gi"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3.2" y="5" width="17.6" height="14" rx="2.6"/><path d="m4.4 7.4 7.6 5.4 7.6-5.4"/></svg></span>反馈<span class="gp-chev">›</span></a>
           </div>
         </section>
@@ -1577,9 +1588,13 @@
       <div id="dsub">
         <span id="dsrc"></span>
         <span id="dcwd"></span>
-        <span id="dmodel"></span>
         <span class="elapsed" id="delapsed"></span>
+      </div>
+      <!-- #392web 概况区水位行（对齐手机端 f35c7ce 拍板形态）：ctx 水位条 flex 让位缩短，
+           模型 chip 贴行尾；副信息行回归纯文本（模型名收进 chip 的 title，不再单独占位） -->
+      <div id="dctxrow" style="display:none">
         <span id="dctx"></span>
+        <button id="modelBtn" class="mini" style="display:none" title="切换模型（下一回合生效）">模型</button>
       </div>
       <div class="tabs" title="点击或 ←/→ 键切换视图">
         <button data-tab="activity" class="tab active">消息</button>
@@ -1591,7 +1606,6 @@
         <button id="fontBtn" class="mini" title="正文字号（点按切换）">字·标准</button>
         <button id="thinkBtn" class="mini" title="显示思考过程">思考 ·关</button>
         <button id="permBtn" class="mini" style="display:none">权限·标准</button>
-        <button id="modelBtn" class="mini" style="display:none" title="切换模型（下一回合生效）">模型</button>
         <span class="tab-ind" id="tabInd"></span>
       </div>
     </div>
@@ -1819,6 +1833,92 @@ function mergeLocalEntries() {
   const hasLoop = servers.some((s) => s.kind === "lan" && localEp(s.wsUrl)?.loop);
   if (hasLoop) for (const s of servers.filter((s) => s.kind === "lan" && !s.wsUrl)) drop(s, null);
   return changed;
+}
+
+// #40x 存量档去重（纯函数，可在 node 里单测）：老版本写进 localStorage 的重复条目——
+// 两条「公共桥」（一条已连一条未连）、两条「本机」（同样状态各异）——加载后规则化归并成一条。
+// 与 mergeLocalEntries（只管 lan、非 loop 组合要求同 token）互补：这里管 cloud 同桥归并、
+// 无 token 同端口的 lan 兜底归并、空占位剔除。规则：
+// · cloud：wsUrl 归一化到 host:port（协议/路径/query 全忽略）相同＝同桥 → 择优保留一条
+//   （cloud.paired=true 优先，其次 token 非空），字段择优合并：paired 取或、token 取非空、
+//   rd/rk 取已配对侧、cloud.url 同步保留条 wsUrl、名称取更具体侧（「云桥」等专名 > 「公共桥（默认）」）
+// · lan：同端口即并——loopback 三写法（127.0.0.1/localhost/[::1]）恒等价；内网 IP/域名写法
+//   须同 token 或其中一侧无 token。保留有 token 的（同有 token 时优先非 loopback 写法，
+//   浏览器不在 relay 机器上也能连），归并后统一名「本机」
+// · 空占位（lan 且 wsUrl==""&&token==""）在存在任何非空 wsUrl 的 lan 实体时剔除
+// 返回 { list, idMap, changed }：list=归并后新数组（不改动入参），idMap=被删id→保留id
+// （供 activeServerId 重映射），changed=是否发生过归并
+function normBridge(wsUrl) {
+  try {
+    const u = new URL(String(wsUrl || "").replace(/^ws/i, "http"));
+    if (u.protocol !== "http:" && u.protocol !== "https:") return "";
+    return u.hostname + ":" + (u.port || (u.protocol === "https:" ? "443" : "80"));
+  } catch { return ""; }
+}
+function dedupeServers(list) {
+  const items = (list || []).filter(Boolean).map((s) => ({ ...s, cloud: s.cloud ? { ...s.cloud } : s.cloud }));
+  const idMap = new Map();
+  const dropped = new Set();
+  const genericName = (n) => !n || n === "公共桥（默认）";
+  const absorb = (keeper, extra) => {
+    dropped.add(extra.id);
+    idMap.set(extra.id, keeper.id);
+    keeper.token = keeper.token || extra.token || "";
+    if (keeper.kind === "cloud") {
+      const kc = keeper.cloud || (keeper.cloud = { url: keeper.wsUrl, token: keeper.token, rd: BAKED_RELAY.rd, rk: BAKED_RELAY.rk, paired: false });
+      const dc = extra.cloud || {};
+      const base = dc.paired && !kc.paired ? dc : kc; // rd/rk 取已配对侧
+      keeper.cloud = {
+        url: keeper.wsUrl,
+        token: base.token || kc.token || dc.token || keeper.token,
+        rd: base.rd || kc.rd || dc.rd || BAKED_RELAY.rd,
+        rk: base.rk || kc.rk || dc.rk || BAKED_RELAY.rk,
+        paired: !!(kc.paired || dc.paired),
+      };
+      if (genericName(keeper.name) && !genericName(extra.name)) keeper.name = extra.name;
+    } else keeper.name = "本机";
+  };
+  // cloud：按归一化桥地址分组
+  const seen = new Map(); // bridgeKey -> keeper
+  for (const s of items) {
+    if (s.kind !== "cloud") continue;
+    const key = normBridge(s.wsUrl);
+    if (!key) continue;
+    const prev = seen.get(key);
+    if (!prev) { seen.set(key, s); continue; }
+    const score = (x) => ((x.cloud?.paired ? 2 : 0) + (x.token ? 1 : 0));
+    if (score(s) > score(prev)) { absorb(s, prev); seen.set(key, s); }
+    else absorb(prev, s);
+  }
+  // lan：同端口分组（loopback 恒等价；其余须同 token 或一侧无 token）
+  const lanGroups = [];
+  for (const s of items) {
+    if (s.kind !== "lan" || !s.wsUrl) continue;
+    const ep = localEp(s.wsUrl);
+    if (!ep) continue; // 空占位/主机名写法不参与归并
+    const g = lanGroups.find((g) => g.port === ep.port &&
+      ((ep.loop && g.loop) || !g.token || !s.token || g.token === s.token));
+    if (!g) { lanGroups.push({ port: ep.port, token: s.token, loop: ep.loop, keeper: s }); continue; }
+    const cur = g.keeper;
+    // 同有 token 时优先非 loopback 写法（浏览器不在 relay 机器上也能连）；有/无混合保留有 token 的
+    const prefer = s.token && cur.token
+      ? (!ep.loop && localEp(cur.wsUrl).loop ? s : cur)
+      : (s.token ? s : cur);
+    if (prefer === s) { absorb(s, cur); g.keeper = s; } else absorb(cur, s);
+    g.token = g.keeper.token;
+    g.loop = localEp(g.keeper.wsUrl).loop;
+  }
+  // 空占位：存在任何非空 wsUrl 的 lan 实体时剔除（重映射到首条实体，探测定时接管的是同一条）
+  const hasLanEntity = items.some((s) => s.kind === "lan" && s.wsUrl);
+  if (hasLanEntity) {
+    let anchor = null;
+    for (const s of items) {
+      if (s.kind !== "lan" || s.wsUrl) continue;
+      if (!anchor) anchor = items.find((x) => x.kind === "lan" && x.wsUrl && !dropped.has(x.id)) || null;
+      if (anchor) { idMap.set(s.id, anchor.id); dropped.add(s.id); }
+    }
+  }
+  return { list: items.filter((s) => !dropped.has(s.id)), idMap, changed: dropped.size > 0 };
 }
 
 function saveServers() {
@@ -3178,9 +3278,8 @@ function renderDetail() {
   $("dbadge").innerHTML = chip(s.status);
   $("dsrc").innerHTML = srcBadgeHtml(sel.ctx.cfg);
   $("dcwd").textContent = s.cwd;
-  $("dmodel").textContent = s.model || "";
   $("delapsed").textContent = "⏱ " + fmtElapsed(sessionElapsed(s));
-  $("dctx").innerHTML = ctxHtml(s); // #279⑦ 窄屏详情全屏时的水位条（桌面 CSS 隐藏，不与列表卡重复）
+  $("dctx").innerHTML = ctxHtml(s); // 概况区水位行（#dctxrow）：桌面/窄屏统一在此显示
 
   // 思考开关 / 权限模式 chip / 模型切换 chip（#388）
   $("thinkBtn").classList.toggle("on", thinkShown);
@@ -3192,10 +3291,14 @@ function renderDetail() {
     permBtn.classList.toggle("on", pm !== "default");
   } else permBtn.style.display = "none";
   const modelBtn = $("modelBtn");
-  if ((sel.ctx.models?.length || 0) > 0 && !s.historical) {
+  const canModel = (sel.ctx.models?.length || 0) > 0 && !s.historical;
+  if (canModel) {
     modelBtn.style.display = "";
     modelBtn.textContent = s.model ? s.model.split(/[/:]/).pop() : "默认";
+    modelBtn.title = "切换模型（下一回合生效）" + (s.model ? " · 当前 " + s.model : "");
   } else { modelBtn.style.display = "none"; closeModelPop(); }
+  // #392web 水位行随内容显隐（对齐手机：无水位且无 chip 时不留空行）
+  $("dctxrow").style.display = (s.context_usage || canModel) ? "flex" : "none";
 
   // WAITING 处理框
   const wb = $("waitbox");
@@ -3323,7 +3426,7 @@ function renderDetail() {
     const nearBottom = tl.scrollHeight - tl.scrollTop - tl.clientHeight < 80;
     tl.dataset.count = renderKey;
     tl.innerHTML = list.length === 0
-      ? '<div style="color:var(--faint);padding:40px 4px;text-align:center">（暂无内容）</div>'
+      ? '<div class="tl-empty">（暂无内容）</div>'
       : renderTimeline(list);
     if (nearBottom || list.length <= 5) tl.scrollTop = tl.scrollHeight;
   }
@@ -3886,7 +3989,7 @@ document.addEventListener("click", (ev) => {
 
 // ⚙ 设置浮层（#317）：显示项为散装开关的镜像（点行 = 触发原按钮再回读状态），
 // 服务器管理不进浮层——左栏常驻面板已是高频区，与手机抽屉同为一级入口
-const CONSOLE_VERSION = "0.3.31";
+const CONSOLE_VERSION = "0.3.32";
 // #396 拨杆同步：滑块移到 idx 档（transform 过渡），选中档文字加 .on（白字压品牌色滑块上）
 function setLever(el, idx) {
   if (!el) return;
@@ -5325,6 +5428,18 @@ async function probeLocalRelay() {
   migrateLegacy();
   activeServerId = lsGet(ACTIVE_KEY) || "";
   if (!cfgOf(activeServerId)) activeServerId = servers[0]?.id || "";
+  // #40x 存量档去重：老版本留下的双「公共桥」/双「本机」加载即归并（规则见 dedupeServers），
+  // activeServerId 指向被删条目时重映射到保留条目；有归并才回写一次
+  {
+    const dd = dedupeServers(servers);
+    if (dd.changed) {
+      servers = dd.list;
+      const remap = dd.idMap.get(activeServerId);
+      if (remap) activeServerId = remap;
+      else if (!cfgOf(activeServerId)) activeServerId = servers[0]?.id || "";
+      saveServers();
+    }
+  }
   // #398 历史遗留归并：localStorage 里 127.0.0.1/localhost/内网IP 多条本机条目并成一条「本机」
   if (mergeLocalEntries()) saveServers();
   setFormKind("lan", null);
