@@ -20,20 +20,18 @@ export default {
     // cc.humumu.online = 旧域（文档路径 301 平移；/cloud /cloud-poll /wan /health 的 ws/API 通道双域常驻，
     // ws upgrade 不跟随 301——relay 与手机正在用的桥连接绝不能断，烘焙地址收口留给后续版本）
     const NEW_HOST = "cc-deck.humumu.online";
-    const host = url.hostname;
-    if (host === NEW_HOST) {
-      // 新域根路径 = 项目主页：内部重写到 /dl/ 复用落地页逻辑（零搬运大段字符串）
-      if (url.pathname === "/" || url.pathname === "/index.html") url.pathname = "/dl/";
-      // 新域 /app(|/app/*) = 网页控制台：剥掉 /app 前缀交 ASSETS 静态托管（/app → /，/app/nacl.js → /nacl.js）
-      else if (url.pathname === "/app" || url.pathname.startsWith("/app/")) {
-        if (!env.ASSETS) return new Response("assets unavailable", { status: 503 });
-        const inner = url.pathname.slice(4) || "/";
-        return env.ASSETS.fetch(new Request("https://assets.local" + inner + url.search, req));
-      }
-    } else if (url.pathname === "/" || url.pathname === "/index.html") {
-      // 旧域文档根：301 到新域 /app（旧 tab 内部资源仍直出不断链）
-      return Response.redirect("https://" + NEW_HOST + "/app", 301);
+    // 双域统一：根路径 = 项目主页（#24a 起 /dl/ 保留为别名）；/app = 网页控制台。
+    // 旧域根不再 301 到控制台——根是门面，控制台是工具（配对链接已改 /app#…）
+    if (url.pathname === "/" || url.pathname === "/index.html") {
+      if (!env.ASSETS) return new Response("assets unavailable", { status: 503 });
+      return env.ASSETS.fetch(new Request("https://assets.local/site/index.html"));
     }
+    if (url.pathname === "/app" || url.pathname.startsWith("/app/")) {
+      if (!env.ASSETS) return new Response("assets unavailable", { status: 503 });
+      const inner = url.pathname.slice(4) || "/";
+      return env.ASSETS.fetch(new Request("https://assets.local" + inner + url.search, req));
+    }
+
     if (url.pathname === "/health") {
       // 转发进 DO 拿设备列表（与 Node 形态 /health 对齐；会唤醒 DO，无连接时即刻再休眠）
       const stub = env.ROUTER.get(env.ROUTER.idFromName("main"));
@@ -52,7 +50,7 @@ export default {
         if (!env.ASSETS) return new Response("assets unavailable", { status: 503 });
         return env.ASSETS.fetch(new Request("https://assets.local/site/index.html"));
       }
-      if (!/^[w.-]+$/.test(name) || !env.DL) return new Response("bad name", { status: 400 });
+      if (!/^[\w.-]+$/.test(name) || !env.DL) return new Response("bad name", { status: 400 });
       const obj = await env.DL.get(name, { type: "arrayBuffer" });
       if (!obj) return new Response("not found", { status: 404 });
       // no-store：/dl/<file> 是稳定地址，KV 换新版后二次下载必须拿到新文件，

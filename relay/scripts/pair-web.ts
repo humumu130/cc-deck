@@ -46,4 +46,5 @@ const frag = [
 ].join("&");
 
 console.log(`配对链接（${Math.floor(expires_in / 60)} 分钟内有效，一次性）：`);
-console.log(`${httpBase}/#${frag}`);
+// /app=网页控制台入口（根路径已改项目主页，锚点配对只在控制台页解析）
+console.log(`${httpBase}/app#${frag}`);
