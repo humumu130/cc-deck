@@ -10,11 +10,30 @@ interface Env {
   DL?: KVNamespace;
   PUBLIC_TOKEN?: string; // 可选：开源公共桥场景的公开 token（与 CLOUD_TOKEN 任一匹配即放行，连接统一受 DO 内限流保护）
   ROUTER: DurableObjectNamespace<RouterDO>;
+  ASSETS?: Fetcher; // [assets] 静态托管绑定：/app 路径映射网页控制台
 }
 
 export default {
   async fetch(req: Request, env: Env): Promise<Response> {
     const url = new URL(req.url);
+    // #24 域名分层：cc-deck.humumu.online = 新主域（/=项目主页、/app=网页控制台、/dl=下载）；
+    // cc.humumu.online = 旧域（文档路径 301 平移；/cloud /cloud-poll /wan /health 的 ws/API 通道双域常驻，
+    // ws upgrade 不跟随 301——relay 与手机正在用的桥连接绝不能断，烘焙地址收口留给后续版本）
+    const NEW_HOST = "cc-deck.humumu.online";
+    const host = url.hostname;
+    if (host === NEW_HOST) {
+      // 新域根路径 = 项目主页：内部重写到 /dl/ 复用落地页逻辑（零搬运大段字符串）
+      if (url.pathname === "/" || url.pathname === "/index.html") url.pathname = "/dl/";
+      // 新域 /app(|/app/*) = 网页控制台：剥掉 /app 前缀交 ASSETS 静态托管（/app → /，/app/nacl.js → /nacl.js）
+      else if (url.pathname === "/app" || url.pathname.startsWith("/app/")) {
+        if (!env.ASSETS) return new Response("assets unavailable", { status: 503 });
+        const inner = url.pathname.slice(4) || "/";
+        return env.ASSETS.fetch(new Request("https://assets.local" + inner + url.search, req));
+      }
+    } else if (url.pathname === "/" || url.pathname === "/index.html") {
+      // 旧域文档根：301 到新域 /app（旧 tab 内部资源仍直出不断链）
+      return Response.redirect("https://" + NEW_HOST + "/app", 301);
+    }
     if (url.pathname === "/health") {
       // 转发进 DO 拿设备列表（与 Node 形态 /health 对齐；会唤醒 DO，无连接时即刻再休眠）
       const stub = env.ROUTER.get(env.ROUTER.idFromName("main"));
@@ -451,7 +470,7 @@ export default {
           '</div>' +
           '<p>浏览器打开即用，可添加到主屏幕；跨网时输入 6 位配对码即接入。</p>' +
           '<div class="dl-btns">' +
-          '<a class="btn btn-pri" href="/" target="_blank" rel="noopener">打开网页控制台</a>' +
+          '<a class="btn btn-pri" href="/app" target="_blank" rel="noopener">打开网页控制台</a>' +
           '<a class="btn btn-ghost btn-sm-block" href="https://github.com/humumu130/cc-deck" target="_blank" rel="noopener">查看源码 · 自行部署</a>' +
           '</div>' +
           '</article>' +
@@ -475,7 +494,7 @@ export default {
           '<a href="https://github.com/humumu130/cc-deck" target="_blank" rel="noopener">GitHub</a>' +
           '<a href="https://github.com/humumu130/cc-deck/releases" target="_blank" rel="noopener">Releases</a>' +
           '<a href="https://github.com/humumu130/cc-deck/blob/main/LICENSE" target="_blank" rel="noopener">License</a>' +
-          '<a href="/" target="_blank" rel="noopener">网页控制台</a>' +
+          '<a href="/app" target="_blank" rel="noopener">网页控制台</a>' +
           '</div>' +
           '<span class="foot-note">可自建 · 端到端加密中转</span>' +
           '</footer>' +

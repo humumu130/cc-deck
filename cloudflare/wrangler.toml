@@ -16,7 +16,8 @@ routes = [
 # 网页端静态托管：/ 与 /nacl.js 直接出文件；/cloud /cloud-poll /health 先进 Worker
 [assets]
 directory = "../web-console"
-run_worker_first = ["/cloud", "/cloud-poll", "/health"]
+binding = "ASSETS"
+run_worker_first = ["/cloud", "/cloud-poll", "/health", "/", "/index.html"]
 
 [durable_objects]
 bindings = [
