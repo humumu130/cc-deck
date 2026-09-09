@@ -24,6 +24,10 @@ export interface ServerEntry {
   wsUrl: string;
   token: string;
   cloud?: CloudConfig | null;
+  // LAN 直连身份标记（#401 补强）：从 SNAPSHOT relay_dev 学到的 relay 设备 id（与
+  // cloud.relayDev 同源同值）。纯 LAN 条目（从未配对云桥）也能凭它与云桥条目密码学
+  // 对上同一台 relay。单源模式下闲置 LAN 条目永不建连、收不到快照，靠身份探测补盖
+  relayDev?: string | null;
 }
 
 // 源运行态（#294 批1，对齐网页端 ensureCtx 的 ctx）：单连接状态机按源实例化。
@@ -391,11 +395,18 @@ class RelayStore {
     } else {
       const dup = list.findIndex((e) => sameTargetEntry(e, entry));
       if (dup >= 0) {
+        const old = list[dup];
+        // 身份等价但地址形态不同（桥地址 ↔ 内网直连）：wsUrl/token 是配套对（内网地址
+        // 配 LAN 令牌、桥地址配桥令牌），保留既有地址对、只吸收名称与云桥配置，防
+        // 「LAN 地址挂桥令牌」的错配；同地址（写法差异/重复添加）则照旧 token 互补
+        const la = lanTargetOf(entry.wsUrl);
+        const lb = lanTargetOf(old.wsUrl);
+        const crossKind = !(la && lb && la.host === lb.host && la.port === lb.port);
         target = {
-          ...list[dup],
-          name: entry.name || list[dup].name,
-          token: entry.token || list[dup].token,
-          cloud: entry.cloud ?? list[dup].cloud ?? null,
+          ...old,
+          name: entry.name || old.name,
+          ...(crossKind ? {} : { token: entry.token || old.token }),
+          cloud: entry.cloud ?? old.cloud ?? null,
         };
         list[dup] = target;
       } else {
@@ -457,13 +468,16 @@ class RelayStore {
   // 编辑服务器条目（名称/地址/令牌/云桥）：不切活动指针；连接相关字段变化时只重连被改的源
   async updateServer(
     id: string,
-    patch: { name?: string; wsUrl?: string; token?: string; cloud?: CloudConfig | null },
+    patch: { name?: string; wsUrl?: string; token?: string; cloud?: CloudConfig | null; relayDev?: string | null },
   ): Promise<void> {
     const list = await this.readServers();
     const idx = list.findIndex((e) => e.id === id);
     if (idx < 0) return;
     const before = list[idx];
-    list[idx] = { ...before, ...patch };
+    // 改地址 = 可能换指另一台 relay：旧 LAN 身份标记随之失效，清掉防凭旧身份误并（#401）
+    const eff: typeof patch =
+      patch.wsUrl !== undefined && patch.wsUrl !== before.wsUrl ? { ...patch, relayDev: null } : patch;
+    list[idx] = { ...before, ...eff };
     this.servers = list;
     await AsyncStorage.setItem("ccr_conns", JSON.stringify(list));
     const conn = this.conns.get(id);
@@ -496,22 +510,28 @@ class RelayStore {
     try {
       this.aggregate = (await AsyncStorage.getItem("cc.display.aggregate")) === "1";
     } catch {}
-    // #398 启动归并清理：已存列表里的同目标重复条目（历史多写法/LAN+云桥双条）
-    // 只留先出现的，后出现的 token/cloud 并入幸存者后丢弃；清理结果落盘，活动
-    // 指针指向被并条目时改指幸存者
+    // #398 启动归并清理（同目标：历史多写法/重复添加）+ #401 补强同源身份归并（跨
+    // LAN/云桥双条目）：先按身份合一——「云桥条目 + 曾连过的 LAN 条目」凭 relay_dev
+    // 等价追溯合并（在线/已配对者优先保留，字段互补）；再走同目标归并。结果一次
+    // 落盘，活动指针指向被并条目时改指幸存者
     const read = await this.readServers();
-    const dedup = dedupeServers(read);
+    const ident = mergeByIdentity(read);
+    const dedup = dedupeServers(ident.list);
+    const remap = new Map([...ident.remap, ...dedup.remap]);
     const list = dedup.list;
     if (list !== read) {
       await AsyncStorage.setItem("ccr_conns", JSON.stringify(list));
       const aid = await AsyncStorage.getItem("ccr_active");
-      const fixed = aid ? dedup.remap.get(aid) : undefined;
+      const fixed = aid ? remap.get(aid) : undefined;
       if (fixed) await AsyncStorage.setItem("ccr_active", fixed);
     }
     this.servers = list;
     const activeId = await AsyncStorage.getItem("ccr_active");
     const active = list.find((e) => e.id === activeId) ?? list[0];
     this.activeId = active ? active.id : null;
+    // 无标记的 LAN 闲置条目主动补身份（在家即能把「云桥 + LAN 直连」存量双条目并掉；
+    // 探测异步进行，不阻塞启动连接）
+    this.probeIdleLanIdentity();
     // 活动服务器没记令牌（勾了不记住）：单源停在设置页，列表里点它补输令牌；
     // 聚合模式回落任一有令牌源（#294 审查修复——聚合本就逐源建连，不能因活动源
     // 缺令牌把整个 App 卡在设置页；活动指针仍指向用户选的源）
@@ -817,6 +837,9 @@ class RelayStore {
           data: seal({ t: "hello", last_seq: conn.lastSeq }, cloud.relayPubkey, keys.secretKey),
         }),
       );
+      // #401 补强：云通道在线（自身身份已知）即主动为无标记的 LAN 闲置条目补身份——
+      // 在家时探测可达，「云桥 + LAN 直连」双条目无需用户点选即自动合一
+      this.probeIdleLanIdentity();
     };
     ws.onclose = () => {
       if (conn.ws !== ws) return;
@@ -892,6 +915,9 @@ class RelayStore {
       if (!this.aggregate && conn.id !== this.activeId) continue;
       this.connResumeProbe(conn);
     }
+    // #401 补强：回前台顺带为无标记的 LAN 闲置条目补身份（到家抬腕即触发归并，
+    // 10 分钟冷却防反复探测）
+    this.probeIdleLanIdentity();
   }
 
   private connResumeProbe(conn: SourceConn) {
@@ -995,31 +1021,115 @@ class RelayStore {
     this.emit({ cloudBusy: false, cloudMsg: "云桥配对成功，外出时自动经云通道连接" });
   }
 
-  // 同源条目合并（relay_dev 证明）：relay 启用云桥时把自身设备 id（devId(relayPubkey,"rl")，
-  // 即 CloudConfig.relayDev 同源值）随 SNAPSHOT 下发。本连接快照携带的 relay_dev 与
-  // 另一条目 cloud.relayDev 相同 = 两条目指向同一台 relay（此前 LAN 直连条目无 cloud
-  // 字段，无法证明同机所以两条并存）。合并方向：保留当前连接条目，对方 cloud 并入
-  // （缺失时）后删除对方条目与连接缓存。只处理 id 不同的条目——快照重复到达时
-  // servers 已无重复项，find 落空直接返回，不会反复触发
-  private async mergeByRelayDev(conn: SourceConn, relayDev: string): Promise<void> {
-    const dup = this.servers.find((e) => e.cloud?.relayDev === relayDev && e.id !== conn.id);
-    if (!dup) return;
-    if (!conn.entry.cloud && dup.cloud) {
-      conn.entry = { ...conn.entry, cloud: dup.cloud };
-      conn.cloudCfg = dup.cloud; // LAN 掉线当轮即可转云通道，不必等重连读 entry
-    }
-    const list = this.servers.filter((e) => e.id !== dup.id).map((e) => (e.id === conn.id ? conn.entry : e));
+  // ---------- #401 补强：同源身份归并（规则化，无论条目何时产生） ----------
+  // relay 启用云桥时把自身设备 id（devId(relayPubkey,"rl")，= CloudConfig.relayDev
+  // 同源值）随 SNAPSHOT 下发（LAN 快照 0.3.30+，云通道快照 0.3.32+）。条目身份 =
+  // cloud.relayDev ?? relayDev 标记：同身份 = 同一台 relay 的密码学证明 → 合一。
+  // 旧实现只在「本连接快照 relay_dev 与另一条目 cloud.relayDev 相同」时合并，漏了
+  // 两个场景：a) 单源模式下闲置 LAN 条目永不建连，收不到快照、标记无从盖章；
+  // b) 云通道快照此前不带 relay_dev，云在线时证据链断裂。这里改为规则化归并 +
+  // 主动身份探测补盖
+
+  // SNAPSHOT 学到 relay_dev：盖章本源条目并按身份归并（preferId=本在线源，保留其
+  // 连接/会话上下文连续）。快照重复到达时 applyIdentity 幂等（已盖章且无组可并即
+  // 空转）。合并可能销毁别的源连接，须在 conn.sessions 清空重建前发起（调用点保证）
+  private learnRelayDev(conn: SourceConn, relayDev: string): void {
+    void this.applyIdentity(conn.id, relayDev, conn.id);
+    // 在线身份确认后顺手为无标记的 LAN 闲置条目补身份（在家即自动合并双条目）
+    this.probeIdleLanIdentity();
+  }
+
+  private onlineConnId(): string | null {
+    for (const c of this.conns.values()) if (c.state === "online") return c.id;
+    return null;
+  }
+
+  // 身份盖章 + 归并公共尾巴：给条目记下 relay 身份（必要时），再按身份合一（无论
+  // 条目何时产生——加载/快照/探测三处共用）。落盘一次；活动指针与被并条目的连接
+  // 上下文重映射到幸存者；幸存连接刷新条目（LAN 源并入云桥后 cloudCfg 即时生效：
+  // 掉线当轮即可转云通道，不必等重连读 entry）
+  private async applyIdentity(entryId: string, relayDev: string, preferId: string | null): Promise<void> {
+    let stamped = false;
+    const stampedList = this.servers.map((e) => {
+      if (e.id !== entryId || e.relayDev === relayDev) return e;
+      stamped = true;
+      return { ...e, relayDev };
+    });
+    const { list, remap } = mergeByIdentity(stampedList, preferId);
+    if (list === stampedList && !stamped) return;
     this.servers = list;
     try {
       await AsyncStorage.setItem("ccr_conns", JSON.stringify(list));
-      if ((await AsyncStorage.getItem("ccr_active")) === dup.id) {
-        await AsyncStorage.setItem("ccr_active", conn.id);
-      }
+      const aid = await AsyncStorage.getItem("ccr_active");
+      const fixed = aid ? remap.get(aid) : undefined;
+      if (fixed) await AsyncStorage.setItem("ccr_active", fixed);
     } catch {}
-    if (this.activeId === dup.id) this.activeId = conn.id;
-    this.destroyConn(dup.id);
+    if (this.activeId && remap.has(this.activeId)) this.activeId = remap.get(this.activeId)!;
+    for (const gone of remap.keys()) this.destroyConn(gone);
+    for (const c of this.conns.values()) {
+      const ent = this.servers.find((e) => e.id === c.id);
+      if (!ent) continue;
+      if (c.entry !== ent) {
+        c.entry = ent;
+        c.name = ent.name;
+      }
+      if (ent.cloud && !c.cloudCfg) c.cloudCfg = ent.cloud;
+    }
     this.emit();
-    console.log(`[merge] relay_dev=${relayDev} 同源合并：条目 ${dup.name}(${dup.id}) 并入 ${conn.name}(${conn.id})`);
+    const pairs = [...remap.entries()].map(([from, to]) => `${from}→${to}`).join("、");
+    console.log(`[merge] relay_dev=${relayDev} 同源归并${pairs ? `：${pairs}` : "（仅盖章）"}`);
+  }
+
+  // 主动身份探测入口（启动/云在线/快照学身份后调用）：扫「无 cloud、无标记、有令牌、
+  // 内网直连」且当前不在连的条目——它们在单源模式下永不建连、快照身份永不到达（旧
+  // 机制漏盖根因）。每条目 10 分钟冷却，防重连风暴下反复探测
+  private probeTriedAt = new Map<string, number>();
+
+  probeIdleLanIdentity(): void {
+    for (const e of this.servers) {
+      if (e.cloud || e.relayDev || !e.token || !isLanUrl(e.wsUrl)) continue;
+      const c = this.conns.get(e.id);
+      if (c?.ws && c.ws.readyState === WebSocket.OPEN) continue; // 在连：它自己的快照会盖章
+      if (Date.now() - (this.probeTriedAt.get(e.id) ?? 0) < 600_000) continue;
+      this.probeTriedAt.set(e.id, Date.now());
+      void this.probeLanIdentity(e.id, e.wsUrl, e.token);
+    }
+  }
+
+  // 一次性身份探测：连目标条目的 LAN 地址，等首帧 SNAPSHOT（服务端连上即推）读
+  // relay_dev 后立即断开——不建 SourceConn、不进事件装配。同身份即归并（preferId=
+  // 当前在线源），不同只落标记，连不上（不在家/旧版 relay 无字段）静默
+  private async probeLanIdentity(id: string, wsUrl: string, token: string): Promise<void> {
+    const relayDev = await new Promise<string | null>((resolve) => {
+      let ws: WebSocket;
+      try {
+        ws = new WebSocket(wsUrl + "?token=" + encodeURIComponent(token));
+      } catch {
+        resolve(null);
+        return;
+      }
+      let settled = false;
+      const timer = setTimeout(() => done(null), LAN_PROBE_MS);
+      const done = (v: string | null) => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timer);
+        killWs(ws);
+        resolve(v);
+      };
+      ws.onerror = () => done(null);
+      ws.onclose = () => done(null);
+      ws.onmessage = (ev: WebSocketMessageEvent) => {
+        try {
+          const m = JSON.parse(String(ev.data)) as { type?: string; payload?: { relay_dev?: unknown } };
+          if (m.type === "SNAPSHOT") {
+            const rd = m.payload?.relay_dev;
+            done(typeof rd === "string" && rd ? rd : null);
+          }
+        } catch {}
+      };
+    });
+    if (relayDev) void this.applyIdentity(id, relayDev, this.onlineConnId());
   }
 
   // 在已连接的 LAN 信道上发起云桥配对（信任锚 = LAN token）。配对是 per-server
@@ -1162,11 +1272,11 @@ class RelayStore {
     const sid = msg.session_id;
     switch (msg.type) {
       case "SNAPSHOT": {
-        // relay_dev（云桥设备 id，云桥启用的 relay 随快照下发）：与另一条目的
-        // cloud.relayDev 相同 = 同一台 relay 的密码学证明 → 先合并重复条目再装配会话
-        //（合并可能销毁别的源连接，须在 conn.sessions 清空重建前发起）
+        // relay_dev（云桥设备 id，云桥启用的 relay 随快照下发，LAN/云通道均携）：
+        // 盖章本源条目身份并按身份归并同机重复条目——先归并再装配会话（合并可能
+        // 销毁别的源连接，须在 conn.sessions 清空重建前发起）
         const relayDev = (msg.payload as { relay_dev?: unknown } | undefined)?.relay_dev;
-        if (typeof relayDev === "string" && relayDev) void this.mergeByRelayDev(conn, relayDev);
+        if (typeof relayDev === "string" && relayDev) this.learnRelayDev(conn, relayDev);
         for (const old of conn.sessions.keys()) {
           if (this.sidIndex.get(old) === conn) this.sidIndex.delete(old);
         }
@@ -1597,7 +1707,7 @@ function sameCloud(a: CloudConfig | null, b: CloudConfig | null): boolean {
   );
 }
 
-// ---------- 服务器条目同目标归并（#398：同一台 relay 因写法不同被存成多条） ----------
+// ---------- 服务器条目归并（#398 同目标写法归并 + #401 补强同源身份归并） ----------
 
 // wsUrl → LAN 目标（host 归一化：localhost / ::1 / [::1] 与 127.0.0.1 视为同一回环；
 // 端口缺省按协议补齐，ws://x 与 ws://x:80 等价）。解析失败返回 null（不可比）
@@ -1614,18 +1724,81 @@ function lanTargetOf(wsUrl: string): { host: string; port: string } | null {
   }
 }
 
+// 条目的 relay 身份：云桥配对 id 优先（配对即证明），LAN 直连标记（SNAPSHOT
+// relay_dev 学到，见 ServerEntry.relayDev 注释）次之。两者同源同值——relay 设备
+// id 全局唯一，等价即可断定同一台 relay（跨 LAN/云桥双条目合并的密码学依据）
+function identityOf(e: ServerEntry): string | null {
+  return e.cloud?.relayDev || e.relayDev || null;
+}
+
+// 内网直连地址（身份探测/归并取 LAN 写法用）：RFC1918 + 回环 + localhost
+function isLanUrl(wsUrl: string): boolean {
+  return /^wss?:\/\/(10\.|192\.168\.|172\.(1[6-9]|2\d|3[01])\.|127\.|localhost)/i.test(wsUrl);
+}
+
 // 两个条目是否指向同一台服务器（名称不参与——同机改名/换写法仍算重复）：
-// - 双方都带云桥 → cloud.relayDev 相同即同源（relay 设备 id 全局唯一，最强证据）
+// - 双方身份已知（云桥配对或 LAN 标记）→ relay 设备 id 相同即同源（最强证据）
 // - 否则按 LAN 口径：wsUrl 的 host+port 相同（回环三写法归一后比较）
 // - 一方只有 LAN、另一方只有云桥：无法证明同一台机器，不算等价（宁漏勿误删；
-//   LAN 条目配对拿到 cloud.relayDev 后，下一次 connectServer/启动清理即能并掉）
+//   LAN 条目连上/被探测拿到标记后，connectServer/启动清理即能并掉）
 function sameTargetEntry(a: ServerEntry, b: ServerEntry): boolean {
-  const rdA = a.cloud?.relayDev;
-  const rdB = b.cloud?.relayDev;
+  const rdA = identityOf(a);
+  const rdB = identityOf(b);
   if (rdA && rdB) return rdA === rdB;
   const la = lanTargetOf(a.wsUrl);
   const lb = lanTargetOf(b.wsUrl);
   return !!la && !!lb && la.host === lb.host && la.port === lb.port;
+}
+
+// 同源身份归并（规则化，无论条目何时产生；加载/快照/探测三处执行）：identityOf
+// 相同的条目合一。幸存者优先级 = preferId 命中（在线方，保连接/会话连续）> 已配对
+// 云桥者 > 组内先出现。字段合成：wsUrl/token 取 LAN 直连写法（在家走 LAN 低延迟，
+// 离家落云通道——桥地址条目的 wsUrl 本探不了 LAN）；cloud 取幸存者优先的组内
+// 首个非空；幸存者名是自动 host 名而组内另有具名时取具名。remap 记录被并条目
+// id → 幸存者 id；无归并时原样返回同一引用（调用方据此跳过落盘）
+function mergeByIdentity(list: ServerEntry[], preferId?: string | null): { list: ServerEntry[]; remap: Map<string, string> } {
+  const remap = new Map<string, string>();
+  const survivorOf = new Map<string, ServerEntry>();
+  const dropped = new Set<string>();
+  const groups = new Map<string, ServerEntry[]>();
+  for (const e of list) {
+    const id = identityOf(e);
+    if (!id) continue;
+    const g = groups.get(id);
+    if (g) g.push(e);
+    else groups.set(id, [e]);
+  }
+  for (const g of groups.values()) {
+    if (g.length < 2) continue;
+    const prefer =
+      (preferId ? g.find((e) => e.id === preferId) : undefined) ??
+      g.find((e) => !!e.cloud) ??
+      g[0];
+    const lanSrc = isLanUrl(prefer.wsUrl) ? prefer : g.find((e) => isLanUrl(e.wsUrl)) ?? prefer;
+    const cloud = prefer.cloud ?? g.find((e) => e.cloud)?.cloud ?? null;
+    const autoNamed = !prefer.name || prefer.name === hostOf(prefer.wsUrl);
+    const named = autoNamed ? g.find((e) => e.name && e.name !== hostOf(e.wsUrl)) : undefined;
+    survivorOf.set(prefer.id, {
+      ...prefer,
+      name: named?.name ?? prefer.name,
+      wsUrl: lanSrc.wsUrl,
+      token: lanSrc.token,
+      cloud,
+      relayDev: identityOf(prefer),
+    });
+    for (const e of g) {
+      if (e.id === prefer.id) continue;
+      dropped.add(e.id);
+      remap.set(e.id, prefer.id);
+    }
+  }
+  if (!dropped.size) return { list, remap };
+  const out: ServerEntry[] = [];
+  for (const e of list) {
+    if (dropped.has(e.id)) continue;
+    out.push(survivorOf.get(e.id) ?? e);
+  }
+  return { list: out, remap };
 }
 
 // 启动归并清理：同目标重复条目只保留先出现的（列表序稳定），后出现的 token/cloud

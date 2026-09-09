@@ -225,7 +225,10 @@ export class CloudClient {
       session_id: "",
       ts: Date.now(),
       type: "SNAPSHOT",
-      payload: { sessions: this.mgr.snapshot(), logs: {}, server_time: Date.now() },
+      // relay_dev 随云通道快照自报（与 ws-server 的 LAN 快照同源，#401 补强）：客户端
+      // 据此确认/补齐条目身份标记——云桥在线时同机的 LAN/云桥双条目也能归并
+      //（旧客户端忽略多余字段，向前兼容）
+      payload: { sessions: this.mgr.snapshot(), logs: {}, server_time: Date.now(), relay_dev: this.identity.relayDev },
     };
     this.sendSealed(dev, snapshot);
     for (const [sid, logs] of Object.entries(this.mgr.snapshotLogs())) {
