@@ -273,7 +273,7 @@ export default {
           '<a class="btn btn-sm btn-pri" href="#download">下载客户端</a></div></div></nav>' +
           '<main id="top">' +
           '<header class="hero wrap">' +
-          '<a class="hero-badge reveal" href="https://github.com/humumu130/cc-deck/releases" target="_blank" rel="noopener"><i class="pulse"></i>v0.3.32<span class="hero-badge-sep">·</span>支持 Wear OS 手表<svg viewBox="0 0 24 24" width="13" height="13" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg></a>' +
+          '<a class="hero-badge reveal" href="https://github.com/humumu130/cc-deck/releases" target="_blank" rel="noopener"><i class="pulse"></i>v0.3.33<span class="hero-badge-sep">·</span>支持 Wear OS 手表<svg viewBox="0 0 24 24" width="13" height="13" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg></a>' +
           '<h1 class="reveal" style="--d:.06s">把 Claude Code 会话<br><em>装进口袋</em></h1>' +
           '<p class="hero-tagline reveal" style="--d:.12s">手机、网页、桌面与手表实时同步 PC 端会话——出门在外也能看到它卡在哪一步审批，顺手点 Allow、把新想法塞进队列，任务跑完主动来汇报。</p>' +
           '<div class="hero-cta reveal" style="--d:.18s">' +
@@ -438,7 +438,7 @@ export default {
           '<section class="wrap section" id="download">' +
           '<p class="kicker reveal">DOWNLOAD</p>' +
           '<h2 class="reveal" style="--d:.06s">下载客户端</h2>' +
-          '<p class="lead reveal" style="--d:.12s">当前版本 v0.3.32 · 四端免费开源，连入同一个 relay 即可互通。</p>' +
+          '<p class="lead reveal" style="--d:.12s">当前版本 v0.3.33 · 四端免费开源，连入同一个 relay 即可互通。</p>' +
           '<div class="dl-grid">' +
           '<article class="dl-card reveal">' +
           '<div class="dl-head">' +
@@ -455,7 +455,7 @@ export default {
           '<span class="dl-flag">推荐</span>' +
           '<div class="dl-head">' +
           '<div class="ic"><svg viewBox="0 0 24 24" width="20" height="20"><rect x="2.5" y="4" width="19" height="12.5" rx="2"/><path d="M9 20.5h6M12 16.5v4"/></svg></div>' +
-          '<h3>桌面端<span>Windows · v0.3.32 · Tauri 约 3.4MB</span></h3>' +
+          '<h3>桌面端<span>Windows · v0.3.33 · Tauri 约 3.4MB</span></h3>' +
           '</div>' +
           '<p>轻量原生客户端，托盘常驻、内建更新，与网页端同一套界面。</p>' +
           '<div class="dl-btns">' +

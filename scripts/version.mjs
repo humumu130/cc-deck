@@ -44,6 +44,18 @@ const targets = [
     get: (s) => /"version":\s*"(.+?)"/.exec(s)?.[1],
     set: (s) => s.replace(/("version":\s*)"(?:.+?)"/, `$1"${canonical}"`),
   },
+  {
+    // 主页（cloudflare worker /dl/）三处版本展示：hero 徽章 / lead 行 / 桌面卡副标——
+    // 用户定立的发版纪律：每次发版主页版本信息必须同步（2026-09-09），纳入单一事实源自动化
+    name: "cloudflare homepage version",
+    file: "cloudflare/src/worker.ts",
+    get: (s) => /<i class="pulse"><\/i>v([\d.]+)</.exec(s)?.[1],
+    set: (s) =>
+      s
+        .replace(/(<i class="pulse"><\/i>)v[\d.]+/, `$1v${canonical}`)
+        .replace(/当前版本 v[\d.]+/, `当前版本 v${canonical}`)
+        .replace(/Windows · v[\d.]+ · Tauri/, `Windows · v${canonical} · Tauri`),
+  },
 ];
 
 const mode = process.argv[2] ?? "";
