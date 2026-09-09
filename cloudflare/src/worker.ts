@@ -24,6 +24,20 @@ export default {
     // 全程不出 Cloudflare——公司只需能开本域即可下载。文件名白名单防滥用
     if (url.pathname.startsWith("/dl/")) {
       const name = url.pathname.slice(4);
+      // /dl/ 无文件名：极简下载索引页（桌面端走 KV；APK 超 KV 单值 25MB 上限，指 Releases 与国内镜像）
+      if (name === "") {
+        return new Response(
+          '<!DOCTYPE html><html lang="zh-CN"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">' +
+            '<title>CC Deck 下载</title><style>body{font:15px/1.7 system-ui,sans-serif;background:#0b1220;color:#e7eefb;max-width:640px;margin:48px auto;padding:0 20px}' +
+            'a{color:#7cb1ff}h1{font-size:20px}li{margin:12px 0}</style><h1>CC Deck 下载</h1><ul>' +
+            '<li>📱 手机 App（APK）：<a href="https://github.com/humumu130/cc-deck/releases/latest">GitHub Releases</a> · ' +
+            '国内直链 <a href="http://8.133.211.170:8888/cc-deck.apk">镜像</a></li>' +
+            '<li>💻 桌面端（Windows）：<a href="/dl/cc-deck-desktop-setup.exe">cc-deck-desktop-setup.exe</a></li>' +
+            '<li>🌐 网页控制台：<a href="/">cc.humumu.online</a></li></ul>' +
+            '<p style="color:#8ea3ba;font-size:13px">桌面安装包经 Cloudflare KV 分发；APK 体积超出 KV 单键上限，走 Releases 与镜像。</p>',
+          { status: 200, headers: { "content-type": "text/html; charset=utf-8", "cache-control": "public, max-age=300" } },
+        );
+      }
       if (!/^[\w.-]+$/.test(name) || !env.DL) return new Response("bad name", { status: 400 });
       const obj = await env.DL.get(name, { type: "arrayBuffer" });
       if (!obj) return new Response("not found", { status: 404 });
