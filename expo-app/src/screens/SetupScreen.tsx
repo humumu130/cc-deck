@@ -8,6 +8,7 @@ import { LogoMark } from "../brand";
 import { useTheme, useThemeStyles } from "../theme-context";
 import { store, useRelay, type ServerEntry } from "../store";
 import { uuid } from "../fmt";
+import { currentVersion } from "../updates";
 import { useKbHeight } from "../kb";
 import ScanScreen, { routeScanResult, type ScanResult } from "./ScanScreen";
 import ImportPicker, { type ImportTarget } from "./ImportPicker";
@@ -126,11 +127,11 @@ export default function SetupScreen({ onClose, editId, initialScan }: Props) {
       return;
     }
     if (cd && !/^\d{6,8}$/.test(cd)) {
-      setErr("配对码为 6-8 位数字（家里 PC 网页端/终端处领取）");
+      setErr("配对码为 6-8 位数字（电脑端 CC Deck 设置→relay 页领取）");
       return;
     }
     if (!editId && !cd) {
-      setErr("请填写 8 位配对码（家里 PC 网页端/终端处领取）");
+      setErr("请填写 8 位配对码（电脑端 CC Deck 设置→relay 页领取）");
       return;
     }
     setErr(null);
@@ -297,7 +298,7 @@ export default function SetupScreen({ onClose, editId, initialScan }: Props) {
 
   // ④ 连接失败反馈三态分流：connecting/reconnecting 是传输层问题（杀网/断桥），自动
   // 重试自愈，文案绝不提配对码；unpaired（relay 明确拒绝身份）才引导输码重新配对；
-  // failNote（桥不可达/家里 relay 离线等诊断）优先透出
+  // failNote（桥不可达/电脑端 relay 离线等诊断）优先透出
   const activeEntry = servers.find((e) => e.id === activeId);
   const connDotColor =
     snap.connState === "connecting" || snap.connState === "reconnecting" ? c.working : c.waiting;
@@ -322,7 +323,7 @@ export default function SetupScreen({ onClose, editId, initialScan }: Props) {
     connSub = bits.join("；");
   } else if (snap.connState === "unpaired") {
     connMain = "配对已失效：relay 不再认可这台手机的身份";
-    connSub = `${snap.failNote ? `${snap.failNote}；` : ""}需重新配对——上方选「云桥 · 远程」，填家里 PC 领取的新配对码后点「配对并连接」`;
+    connSub = `${snap.failNote ? `${snap.failNote}；` : ""}需重新配对——上方选「云桥 · 远程」，填电脑端 CC Deck 领取的新配对码后点「配对并连接」`;
   }
 
   return (
@@ -336,6 +337,7 @@ export default function SetupScreen({ onClose, editId, initialScan }: Props) {
             <LogoMark size={34} />
           </View>
           <Text style={s.h2}>CC Deck</Text>
+          <Text style={s.ver}>v{currentVersion()}</Text>
           <Text style={s.sub}>{editId ? "编辑服务器配置" : "连接到 PC Relay"}</Text>
 
           {!editId ? (
@@ -404,7 +406,7 @@ export default function SetupScreen({ onClose, editId, initialScan }: Props) {
                   <Text style={s.pairMsg} numberOfLines={2}>{snap.cloudMsg}</Text>
                 </Pressable>
               ) : !cloudReady ? (
-                <Text style={s.pairHint}>{cloudEntry && cloudEntry.id !== activeId ? "该服务器未连接：先在列表中点选连接它（同一 WiFi 直连）再配对" : "云桥配对需先连接该服务器（同一 WiFi 直连）；不在家可用下方表单的云桥方式远程添加"}</Text>
+                <Text style={s.pairHint}>{cloudEntry && cloudEntry.id !== activeId ? "该服务器未连接：先在列表中点选连接它（同一 WiFi 直连）再配对" : "云桥配对需先连接该服务器（同一 WiFi 直连）；不在同一网络时可用下方表单的云桥方式远程添加"}</Text>
               ) : null}
             </View>
           ) : null}
@@ -415,7 +417,7 @@ export default function SetupScreen({ onClose, editId, initialScan }: Props) {
               style={s.input}
               value={name}
               onChangeText={setName}
-              placeholder="书房电脑"
+              placeholder="我的电脑"
               placeholderTextColor={c.faint}
             />
           </View>
@@ -456,7 +458,7 @@ export default function SetupScreen({ onClose, editId, initialScan }: Props) {
             <>
               <View style={s.field}>
                 <Text style={s.label}>
-                  {editId ? "配对码（留空 = 仅改地址，不重新配对）" : "配对码（家里 PC 领取的 8 位码）"}
+                  {editId ? "配对码（留空 = 仅改地址，不重新配对）" : "配对码（电脑端 CC Deck 领取的 8 位码）"}
                 </Text>
                 <TextInput
                   style={[s.input, err && !editId && !/^\d{6,8}$/.test(code.trim()) && s.inputErr]}
@@ -552,7 +554,7 @@ export default function SetupScreen({ onClose, editId, initialScan }: Props) {
           <Text style={s.hint}>
             {kind === "cloud"
               ? "远程首选云桥：填桥地址 + 6 位配对码，无需与 PC 同一网络；同一 WiFi 下也可切「直连」"
-              : `直连需手机与 PC 在同一 WiFi，地址填 PC 上的 ${LAN_URL_DEFAULT}；不在家请用云桥`}
+              : `直连需手机与 PC 在同一 WiFi，地址填 PC 上的 ${LAN_URL_DEFAULT}；不在同一网络请用云桥`}
           </Text>
           {onClose ? (
             <Pressable style={s.back} android_ripple={{ color: c.tintSoft, borderless: false, radius: 20 }} onPress={onClose}>
@@ -575,6 +577,8 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
     backgroundColor: "#1D1726", borderWidth: 1, borderColor: "rgba(255,255,255,0.09)",
   },
   h2: { color: c.text, fontSize: 21, fontWeight: "700" },
+  // 品牌名下版本号小字（弱化灰），对齐副信息行的弱视觉语言
+  ver: { color: c.faint, fontSize: 11, marginTop: 3 },
   sub: { color: c.dim, fontSize: 13, marginTop: 4, marginBottom: 24 },
   // 扫码添加入口行（#276）：左侧图标+主文案，右侧灰色提示；点击拉起全屏扫码
   scanRow: {

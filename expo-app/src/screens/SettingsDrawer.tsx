@@ -40,7 +40,7 @@ const FONT_OPTS: { k: ProcessFont; label: string }[] = [
 ];
 
 // #337 服务器色点=身份色：登记后固定，不随选中/连接状态变——选中由 srvRowOn 外侧
-// 亮边框表达。#356 哈希取色会撞色（书房电脑/Mac 同黄）——改同网页 srcColorByKey：
+// 亮边框表达。#356 哈希取色会撞色（我的电脑/Mac 同黄）——改同网页 srcColorByKey：
 // 按当前服务器 id 集合稳定排序分配色板序号，源数≤7 必不重
 const SRV_COLORS = ["#D97757", "#4D9FFF", "#2BD98F", "#A78BFA", "#22D3EE", "#F472B6", "#FBBF24"] as const;
 let srvColorOrder: string[] = [];
@@ -454,7 +454,7 @@ export default function SettingsDrawer({
               <Text style={d.addT}>▣ 扫码添加</Text>
             </Pressable>
           </View>
-          {/* #308：活动源是局域网地址且未配云桥——离家即断线，温和引导去编辑页配对 */}
+          {/* #308：活动源是局域网地址且未配云桥——跨网即断线，温和引导去编辑页配对 */}
           {(() => {
             const cur = servers.find((e) => e.id === activeId) ?? servers[0];
             const lanOnly = cur && /^ws:\/\/(10\.|192\.168\.|172\.(1[6-9]|2\d|3[01])\.|127\.)/.test(cur.wsUrl) && !cur.cloud;
@@ -465,7 +465,7 @@ export default function SettingsDrawer({
                 android_ripple={{ color: c.tintSoft, borderless: false }}
                 onPress={() => edit(cur)}
               >
-                <Text style={d.cloudHintT}>🌤 离家也能用：为此源配对云桥 ›</Text>
+                <Text style={d.cloudHintT}>🌤 不在同一网络也能用：为此源配对云桥 ›</Text>
               </Pressable>
             );
           })()}

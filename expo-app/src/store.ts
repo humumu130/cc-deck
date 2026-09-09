@@ -51,7 +51,7 @@ export interface SourceConn {
   channel: "lan" | "cloud" | null;
   state: Snapshot["connState"];
   stateText: string | null; // 单源模式下透出的动态文案（"重试中…下次 5s"），非 reconnecting 时为 null
-  // 失败诊断备注（三态拆分 ④）：最近一轮失败的原因（桥不可达/家里 relay 离线/未配对
+  // 失败诊断备注（三态拆分 ④）：最近一轮失败的原因（桥不可达/电脑端 relay 离线/未配对
   // 原因等），连上即清。UI 据此给诊断文案，而非一律引导输码
   failNote: string | null;
   lastSeq: number;
@@ -102,7 +102,7 @@ export interface Snapshot {
   // 身份失效），是唯一该进配对引导的态，且不再自动重试（重试只会反复吃 nack）
   connState: "idle" | "connecting" | "online" | "reconnecting" | "offline" | "unpaired";
   channel: "lan" | "cloud" | null;
-  // 活动源失败诊断（④）：reconnecting/unpaired 时的原因备注（桥不可达/家里 relay
+  // 活动源失败诊断（④）：reconnecting/unpaired 时的原因备注（桥不可达/电脑端 relay
   // 离线/配对失效原因），online/idle 为 null——失败 UI 据此分流诊断文案 vs 配对引导
   failNote: string | null;
   sources: SourceStatus[];
@@ -166,7 +166,7 @@ const emptySnapshot: Snapshot = {
 const LAN_PROBE_MS = 4000;
 
 // 自动重试退避（连接状态机 ③）：失败后 3s 起步、指数 ×2、30s 封顶；连上即归零。
-// 覆盖杀网/断桥/家里断电的长故障窗口，低频重试也避免与桥侧限流互相放大成风暴
+// 覆盖杀网/断桥/电脑端断电的长故障窗口，低频重试也避免与桥侧限流互相放大成风暴
 const RECONNECT_BASE_MS = 3000;
 const RECONNECT_MAX_MS = 30000;
 
@@ -568,7 +568,7 @@ class RelayStore {
     const activeId = await AsyncStorage.getItem("ccr_active");
     const active = list.find((e) => e.id === activeId) ?? list[0];
     this.activeId = active ? active.id : null;
-    // 无标记的 LAN 闲置条目主动补身份（在家即能把「云桥 + LAN 直连」存量双条目并掉；
+    // 无标记的 LAN 闲置条目主动补身份（同一 WiFi 下即能把「云桥 + LAN 直连」存量双条目并掉；
     // 探测异步进行，不阻塞启动连接）
     this.probeIdleLanIdentity();
     // 活动服务器没记令牌（勾了不记住）：单源停在设置页，列表里点它补输令牌；
@@ -812,7 +812,7 @@ class RelayStore {
     conn.ws = null;
     conn.channel = null;
     // 纯云桥条目（wsUrl 即桥地址，非内网直连）跳过 LAN 探测：桥 upgrade 强制要求
-    // dev 参数，探它必 401，白耗一轮握手；LAN 直连地址照旧先探（在家低延迟）
+    // dev 参数，探它必 401，白耗一轮握手；LAN 直连地址照旧先探（同一 WiFi 下低延迟）
     const lanWs = conn.cloudCfg && !isLanUrl(cfg.wsUrl) ? null : await this.probeLan(conn, cfg);
     if (ep !== conn.epoch) {
       try {
@@ -948,7 +948,7 @@ class RelayStore {
         }),
       );
       // #401 补强：云通道在线（自身身份已知）即主动为无标记的 LAN 闲置条目补身份——
-      // 在家时探测可达，「云桥 + LAN 直连」双条目无需用户点选即自动合一
+      // 同一 WiFi 时探测可达，「云桥 + LAN 直连」双条目无需用户点选即自动合一
       this.probeIdleLanIdentity();
     };
     ws.onclose = () => {
@@ -974,9 +974,9 @@ class RelayStore {
         return;
       }
       if (frame.type === "ROUTE_MISS") {
-        // relay 暂时掉线：断开走重连循环（每轮仍先试 LAN）。桥已通、家里离线——
+        // relay 暂时掉线：断开走重连循环（每轮仍先试 LAN）。桥已通、电脑端离线——
         // 恢复后自动连上，绝不引导输码
-        conn.failNote = "已连上云桥，但家里 relay 离线（恢复后自动连上）";
+        conn.failNote = "已连上云桥，但电脑端 relay 离线（恢复后自动连上）";
         try {
           ws.close();
         } catch {}
@@ -1211,7 +1211,7 @@ class RelayStore {
   // 空转）。合并可能销毁别的源连接，须在 conn.sessions 清空重建前发起（调用点保证）
   private learnRelayDev(conn: SourceConn, relayDev: string): void {
     void this.applyIdentity(conn.id, relayDev, conn.id);
-    // 在线身份确认后顺手为无标记的 LAN 闲置条目补身份（在家即自动合并双条目）
+    // 在线身份确认后顺手为无标记的 LAN 闲置条目补身份（同一 WiFi 下即自动合并双条目）
     this.probeIdleLanIdentity();
   }
 
@@ -1274,7 +1274,7 @@ class RelayStore {
 
   // 一次性身份探测：连目标条目的 LAN 地址，等首帧 SNAPSHOT（服务端连上即推）读
   // relay_dev 后立即断开——不建 SourceConn、不进事件装配。同身份即归并（preferId=
-  // 当前在线源），不同只落标记，连不上（不在家/旧版 relay 无字段）静默
+  // 当前在线源），不同只落标记，连不上（非同一网络/旧版 relay 无字段）静默
   private async probeLanIdentity(id: string, wsUrl: string, token: string): Promise<void> {
     const relayDev = await new Promise<string | null>((resolve) => {
       let ws: WebSocket;
@@ -1365,7 +1365,7 @@ class RelayStore {
   // 临时连桥完成 pair_req → pair_ack：手机以 "wb-" 身份注册（relay 对 pair_req 有
   // 防冒名校验：帧 from 必须 = devId(pubkey,"wb")，"ph-" 身份会被静默丢弃——手机旧
   // 实现栽在这里）；rd/rk 未知时先发发现帧（{to:"*",t:"disc"} → 桥回在线 relay 列表）
-  // 运行时定位家里 relay。pair_req 6s 一拍最多发 3 次（pair_ack 随桥闪断丢失时 relay
+  // 运行时定位目标 relay。pair_req 6s 一拍最多发 3 次（pair_ack 随桥闪断丢失时 relay
   // 幂等补 ack，重发即自愈），~24s 无果报超时。成功返回 {rd, rk, dev}（dev = 本次
   // 配对身份，落 CloudConfig.dev 供 openCloud 沿用），失败返回错误文案。
   // 码只在 relay 校验通过时才消耗：输错可改码重试；连续错 5 次进 relay 侧 10 分钟静默期。
@@ -1436,7 +1436,7 @@ class RelayStore {
             done(
               rd ? "云桥长时间无应答，请重试"
                 : bc ? "未找到持有该配对码的 relay：请核对配对码，或确认目标电脑已连上云桥"
-                  : "未能定位家里的 relay，请重试",
+                  : "未能定位电脑端的 relay，请重试",
             );
             return;
           }
@@ -1467,7 +1467,7 @@ class RelayStore {
         }
         if (f.type === "ROUTE_MISS") {
           // pair_req 目标不在线：码未被 relay 消费，可稍后原码重试
-          done("家里 relay 不在线（配对码未消耗），确认家里 PC 已连上云桥后再试");
+          done("目标 relay 不在线（配对码未消耗），确认电脑端 CC Deck 已连上云桥后再试");
           return;
         }
         if (f.type === "RELAYS") {
@@ -1490,7 +1490,7 @@ class RelayStore {
               if (fresh) kick();
               return;
             }
-            done("云桥上没有在线的 relay（家里 PC 离线）");
+            done("云桥上没有在线的 relay（电脑端离线）");
             return;
           }
           const changed = pick.dev !== rd || (!!pick.rk && pick.rk !== rk);
@@ -1578,7 +1578,7 @@ class RelayStore {
     return this.saveCloudEntry(inv.bridge, inv.bt, undefined, r);
   }
 
-  // 纯远程添加云桥（无「同一 WiFi」前置）：手机直接填桥地址 + 家里领的 6 位配对码。
+  // 纯远程添加云桥（无「同一 WiFi」前置）：手机直接填桥地址 + 电脑端 CC Deck 领取的 6 位配对码。
   // rd/rk 未知 → pairViaBridge 先向桥发现在线 relay 身份。reuseId = 编辑模式复用既有
   // 条目（原 id 整条替换，不另起新条目）。返回 null=成功；字符串=错误文案
   async addCloudManual(bridge: string, bt: string, code: string, reuseId?: string): Promise<string | null> {
@@ -2085,8 +2085,8 @@ function sameTargetEntry(a: ServerEntry, b: ServerEntry): boolean {
 
 // 同源身份归并（规则化，无论条目何时产生；加载/快照/探测三处执行）：identityOf
 // 相同的条目合一。幸存者优先级 = preferId 命中（在线方，保连接/会话连续）> 已配对
-// 云桥者 > 组内先出现。字段合成：wsUrl/token 取 LAN 直连写法（在家走 LAN 低延迟，
-// 离家落云通道——桥地址条目的 wsUrl 本探不了 LAN）；cloud 取幸存者优先的组内
+// 云桥者 > 组内先出现。字段合成：wsUrl/token 取 LAN 直连写法（同一 WiFi 下走 LAN 低延迟，
+// 跨网落云通道——桥地址条目的 wsUrl 本探不了 LAN）；cloud 取幸存者优先的组内
 // 首个非空；幸存者名是自动 host 名而组内另有具名时取具名。remap 记录被并条目
 // id → 幸存者 id；无归并时原样返回同一引用（调用方据此跳过落盘）
 function mergeByIdentity(list: ServerEntry[], preferId?: string | null): { list: ServerEntry[]; remap: Map<string, string> } {

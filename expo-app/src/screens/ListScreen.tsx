@@ -557,7 +557,7 @@ export default function ListScreen({ sessions, connected, connText, onOpen, onNe
   const [drawerOpen, setDrawerOpen] = useState(false);
   // 状态图例浮窗（统计行 ？ 呼出）
   const [legendOpen, setLegendOpen] = useState(false);
-  // 顶栏品牌区副标题：当前连接的服务器名（多源场景区分家里/公司）。
+  // 顶栏品牌区副标题：当前连接的服务器名（多源场景区分不同来源）。
   // 抽屉关上时重读——切服务器不重挂载本页，副标题要跟着换
   const [activeName, setActiveName] = useState("");
   useEffect(() => {
@@ -612,6 +612,10 @@ export default function ListScreen({ sessions, connected, connText, onOpen, onNe
   const badgeOn = snap.aggregate && snap.sources.length > 1;
   // 聚合源在线数（#294 批4）：统计行「N 源聚合」与空态「online/total 源」共用
   const onlineSrcs = snap.sources.filter((x) => x.state === "online").length;
+  // 唯一在线源（在线源=1 时列表平铺单源视图）：唯一在线源即"当前源"，顶栏副标题
+  // 点名该源（「源：X」）替代「N 源聚合」概览——连接 chip 的「1/N 在线」仍交代聚合态
+  const soloOnline = onlineSrcs === 1 ? snap.sources.find((x) => x.state === "online") ?? null : null;
+  const soloName = soloOnline ? displaySrcName(soloOnline.name) : "";
 
   const counts: Record<string, number> = {};
   for (const s of sessions) {
@@ -652,9 +656,11 @@ export default function ListScreen({ sessions, connected, connText, onOpen, onNe
   // 引用原样透传，SessionCard memo 的行级重渲不受影响；映射在 memo 内构建，
   // 依赖稳定（snap.sources 快照粒度变化）
   const rows = useMemo<ListRow[]>(() => {
-    // 聚合开启但可见内容全来自单一源（如源筛选后只剩一家）：平铺渲染，
-    // 不再渲染与内容冗余的单一组头（对齐网页端 #26 源徽章隐藏逻辑）
-    const grouped = badgeOn && new Set(visible.map((s) => s.src ?? "")).size > 1;
+    // 聚合开启但视图本质是单源时平铺渲染，不再渲染与内容冗余的源组头：
+    // 1) 可见内容全来自单一源（如源筛选后只剩一家，对齐网页端 #26 源徽章隐藏逻辑）
+    // 2) 在线源数=1（其余源离线）——唯一在线源即"当前源"，顶栏副标题已点名（「源：X」），
+    //    再按源分区（含离线源缓存残组）对逐卡标注冗余
+    const grouped = badgeOn && onlineSrcs > 1 && new Set(visible.map((s) => s.src ?? "")).size > 1;
     if (!grouped) return visible.map((s) => ({ h: false as const, key: s.session_id, s }));
     // 源跨端配色键（#294 审查修复）：同屏配色去重——按 colorKey 稳定排序分配调色板
     // 序号（哈希法双源 1/8 撞色，实测 PC/Mac 同紫）
@@ -688,7 +694,7 @@ export default function ListScreen({ sessions, connected, connText, onOpen, onNe
       for (const s of list) out.push({ h: false, key: s.session_id, s });
     }
     return out;
-  }, [badgeOn, visible, snap.sources]);
+  }, [badgeOn, visible, snap.sources, onlineSrcs]);
 
   // 下拉刷新 = 断开重连一次（重走快照），在线即收起转圈；3s 兜底
   const [refreshing, setRefreshing] = useState(false);
@@ -733,10 +739,16 @@ export default function ListScreen({ sessions, connected, connText, onOpen, onNe
         <View style={styles.titleWrap}>
           <Text style={styles.titleT}>CC Deck</Text>
           {snap.aggregate && snap.sources.length > 1 ? (
-            // 聚合模式副标题：不再显示单一活动源（误导），改显"· N 源 · M 在线"概览
-            <Text style={styles.titleSub} numberOfLines={1}>
-              {snap.sources.length} 源聚合 · {snap.sources.filter((x) => x.state === "online").length} 在线
-            </Text>
+            // 聚合模式副标题：唯一在线源时点名当前源（「源：X」，弱化 faint 小字——
+            // 列表已平铺单源视图，副标题是顶部唯一明确的当前源指示）；多源在线仍出
+            // 「N 源聚合 · M 在线」概览（点名单一活动源会误导，沿用 #294 的决定）
+            onlineSrcs === 1 && soloName ? (
+              <Text style={styles.titleSub} numberOfLines={1}>源：{soloName}</Text>
+            ) : (
+              <Text style={styles.titleSub} numberOfLines={1}>
+                {snap.sources.length} 源聚合 · {onlineSrcs} 在线
+              </Text>
+            )
           ) : activeName ? (
             <Text style={styles.titleSub} numberOfLines={1}>{activeName}</Text>
           ) : null}
