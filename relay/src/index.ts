@@ -75,7 +75,9 @@ if (cliArgs.has("--pair")) {
     const d = (await r.json()) as { code: string; expires_in: number };
     console.log("");
     console.log("════════════════════════════");
-    console.log(`  云桥配对码：${d.code.slice(0, 3)} ${d.code.slice(3)}`);
+    // 8 位码居中分两段（旧 6 位同款式样）；分钟数动态读 expires_in
+    const half = Math.floor(d.code.length / 2);
+    console.log(`  云桥配对码：${d.code.slice(0, half)} ${d.code.slice(half)}`);
     console.log("════════════════════════════");
     console.log(`${Math.round(d.expires_in / 60)} 分钟内有效、一次性。在异地网页端（${cfg.cloudUrls[0] ?? "云桥"}）或`);
     console.log("手机 App「配对码」入口输入即可接入本机 relay。");
@@ -196,10 +198,16 @@ const pairCodes = createPairingCodes();
 if (cfg.cloudUrls.length) {
   cloudIdentity = loadOrCreateIdentity(cfg.dataDir);
   mgr.setCloud(cloudIdentity);
-  mgr.setPairIssuer(() => pairCodes.issue());
+  mgr.setPairIssuer((o) => pairCodes.issue(o));
   mgr.setLoginGranter((dev, pk, name) => {
     for (const c of cloudClients) c.grantLogin(dev, pk, name);
     return true;
+  });
+  // 议题①踢除执行器：先移除 peers（写穿落盘），再各桥发明文 pair_nack 令其立即
+  // 停止重连 + 停发下行——多桥场景设备连着哪座桥都能收到失联通知
+  mgr.setPeerKicker((dev) => {
+    cloudIdentity?.removePeer(dev);
+    for (const c of cloudClients) c.kickPeer(dev);
   });
   if (cfg.cloudToken) {
     for (const url of cfg.cloudUrls) {
@@ -216,8 +224,10 @@ startServer(bus, mgr, cfg, {
   cloudHasPhones: () => cloudClients.some((c) => c.hasActivePhones()),
   ...(cloudClients.length ? { pairCodes } : {}),
   // relay_dev 随 SNAPSHOT 下发（云桥启用即有身份，含未设 cloudToken 的仅配对场景）：
-  // 客户端据此证明 LAN 直连条目与云桥条目是同一台 relay，自动合并重复条目
+  // 客户端据此证明 LAN 直连条目与云桥条目是同一台 relay，自动合并重复条目。
+  // wan_dev（F7）：手表 /wan 凭据 dev，手机端拼进手表连接配置（旧客户端自动忽略）
   ...(cloudIdentity ? { cloudRelayDev: () => cloudIdentity!.relayDev } : {}),
+  ...(cloudIdentity ? { cloudWanDev: () => cloudIdentity!.wanDev } : {}),
   // daemon 子进程 listen 成功后自写 pid（父进程不预写，端口被占时不留死 pid）
   onReady: () => {
     // #316 mDNS 广播（_ccdeck._tcp）：手表同 WiFi 零配置发现；失败静默（组播被拦不影响其余）

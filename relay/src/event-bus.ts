@@ -55,6 +55,21 @@ export class EventBus {
     return env;
   }
 
+  // 瞬态事件（2026-09-09 议题①）：只直播给当前在线订阅者，不占 seq、不进缓冲、
+  // 不落盘、重连不补发（PAIR_REQUEST/PAIR_RESOLVED 在 ws-server 的同款语义抽到总
+  // 线层）——PAIRED_DEVICE 新配对提醒若走 emit 落 ndjson，掉线重连会按 last_seq
+  // 补发历史提醒，重复弹通知。消费方（CloudClient.onEnv）以 seq>lastSeq 守卫推进
+  emitTransient(type: EventType, payload: unknown): void {
+    const env: Envelope = { seq: 0, session_id: "", ts: Date.now(), type, payload };
+    for (const l of this.listeners) {
+      try {
+        l(env);
+      } catch {
+        // 单个监听者异常不影响广播
+      }
+    }
+  }
+
   subscribe(l: Listener): () => void {
     this.listeners.add(l);
     return () => this.listeners.delete(l);

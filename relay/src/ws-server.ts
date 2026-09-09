@@ -36,6 +36,8 @@ const COMMAND_TYPES = new Set([
   "COMMAND_PAIR_CODE",
   "COMMAND_LOGIN_GRANT",
   "COMMAND_WATCH_GRANT",
+  "COMMAND_PEERS",
+  "COMMAND_PEER_KICK",
   "COMMAND_PERM",
   "COMMAND_MODEL",
   "COMMAND_REFRESH_TODOS",
@@ -118,8 +120,9 @@ export interface StartServerOptions {
   holdMs?: number;          // PreToolUse 挂起上限（测试用短值）
   questionHoldMs?: number;  // AskUserQuestion 挂起窗口（测试用短值）
   cloudHasPhones?: () => boolean; // 云通道是否有活跃手机（计入"手机在线"门控）
-  pairCodes?: { issue(): { code: string; expires_in: number } }; // 云桥配对码（网页端领码）
+  pairCodes?: { issue(opts?: { code?: string; ttlMs?: number }): { code: string; expires_in: number } }; // 云桥配对码（网页端领码；管理员可指定码值/时长）
   cloudRelayDev?: () => string; // 云桥设备 id：随 SNAPSHOT relay_dev 下发，客户端据此合并同机 LAN/云条目
+  cloudWanDev?: () => string; // F7 /wan 手表凭据 dev：随 SNAPSHOT wan_dev 下发，手机据此拼手表连接配置
   onReady?: () => void;     // listen 成功后回调（daemon 模式在此时写 pid 文件，防端口被占时留下死 pid）
 }
 
@@ -286,7 +289,8 @@ export function startServer(
       res.writeHead(200, { "content-type": "application/json" }).end(JSON.stringify(opts.pairCodes.issue()));
       return;
     }
-    // 云桥配对码（网页端首次配对用）：LAN token 鉴权，码一次性 1 分钟有效（pairing.ts 默认 TTL）
+    // 云桥配对码（网页端首次配对用）：LAN token 鉴权，码一次性短时效
+    //（pairing.ts 默认 5 分钟/CCR_PAIR_TTL_MS 可配；expires_in 随响应下发，端上动态渲染）
     if (req.method === "POST" && url.pathname === "/api/pair-code") {
       if ((url.searchParams.get("token") ?? "") !== cfg.token) {
         res.writeHead(401).end("unauthorized");
@@ -476,8 +480,10 @@ export function startServer(
           homedir: homedir(),
           models: listModels(mgr.cfg.model),
           // 云桥启用的 relay 附带自身设备 id（= CloudConfig.relayDev 同源值）：
-          // 客户端据此密码学匹配"LAN 直连条目"与"云桥条目"是同一台 relay，自动合并
+          // 客户端据此密码学匹配"LAN 直连条目"与"云桥条目"是同一台 relay，自动合并。
+          // wan_dev（F7）：手表 /wan 透传通道的凭据 dev，手机侧写进手表连接配置
           ...(opts.cloudRelayDev?.() ? { relay_dev: opts.cloudRelayDev() } : {}),
+          ...(opts.cloudWanDev?.() ? { wan_dev: opts.cloudWanDev() } : {}),
         },
       };
       ws.send(JSON.stringify(snapshot));

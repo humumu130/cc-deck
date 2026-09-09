@@ -711,9 +711,20 @@ function Shell() {
       }
       notifyAlert(`任务完成 · ${r.title}`, r.remaining > 0 ? `完成 ${r.done.length} 项，剩余 ${r.remaining} 项` : `全部完成（${r.done.length} 项）`);
     };
+    // 议题①补偿告警（2026-09-09）：新设备配对成功——非阻断安全提醒（本地通知，
+    // 前台加一次轻震动）。不认识的新设备出现在这里 = 立刻去网页端设备清单核查/踢除
+    store.onPairedDevice = (p) => {
+      if (appState.current === "active") {
+        try {
+          Vibration.vibrate([0, 70]);
+        } catch {}
+      }
+      notifyAlert("新设备已配对", (p.name ? p.name + " · " : "") + p.dev);
+    };
     return () => {
       store.onWaiting = null;
       store.onTaskDone = null;
+      store.onPairedDevice = null;
     };
   }, []);
 

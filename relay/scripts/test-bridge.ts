@@ -741,7 +741,7 @@ assert(ack24.ok === false, "empty rename rejected");
   assert(r501.status === 501, "35 pair-issue 501 without cloud pairing");
   const pcs = createPairingCodes(1);
   const { code, expires_in } = pcs.issue();
-  assert(/^\d{6}$/.test(code) && expires_in === 0, "35 issue returns 6-digit code");
+  assert(/^\d{8}$/.test(code) && expires_in === 0, "35 issue returns 8-digit code（2026-09-09 P0-B）");
   assert(!pcs.consume("000000"), "35 unknown code rejected");
   await wait(20);
   assert(!pcs.consume(code), "35 expired code rejected");

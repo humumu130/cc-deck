@@ -97,6 +97,45 @@ function makeRouter(): { router: CloudRouter; rec: Recorded } {
   );
 }
 
+// ---------- A3) 配对码定位广播路由（多 relay 桥凭码定位） ----------
+{
+  const { router, rec } = makeRouter();
+  router.register("ra", "rl-a", "RKA");
+  router.register("rb", "rl-b", "RKB");
+  router.register("w1", "wb-1");
+  router.register("p1", "ph-1");
+  router.handleFrame("w1", JSON.stringify({ to: "*", data: { t: "pair_req", code: "123456", pubkey: "PK1", name: "m", bc: true } }));
+  const fwd = rec.sent
+    .map(([, f]) => JSON.parse(f) as { to?: string; from?: string; data?: { t?: string; code?: string; bc?: boolean } })
+    .filter((p) => p.data?.t === "pair_req");
+  assert(fwd.length === 2, "广播 pair_req 转发给所有在线 rl-（恰好 2 份）");
+  assert(
+    fwd.every((p) => p.from === "wb-1" && p.data?.code === "123456" && p.data?.bc === true && (p.to === "rl-a" || p.to === "rl-b")),
+    "广播帧 to=各 relay / from=发送者 / data 原样透传",
+  );
+  assert(
+    !rec.sent.some(([, f]) => f.includes('"ERROR"')) && !rec.sent.some(([, f]) => f.includes("RELAYS")),
+    "广播 pair_req 不回 ERROR / 不触发 RELAYS",
+  );
+
+  // 旧形态单播 pair_req 不回归：仍按 to 直达单一目标，不扩散
+  rec.sent.length = 0;
+  router.handleFrame("w1", JSON.stringify({ to: "rl-a", data: { t: "pair_req", code: "1", pubkey: "PK1" } }));
+  const uni = rec.sent.map(([, f]) => JSON.parse(f) as { to?: string; data?: { t?: string } }).filter((p) => p.data?.t === "pair_req");
+  assert(uni.length === 1 && uni[0].to === "rl-a", "单播 pair_req 仍直达单一目标（不回归）");
+
+  // 零 relay 在线：广播无接收者，也不报错（手机侧靠看门狗超时）
+  router.unregister("ra");
+  router.unregister("rb");
+  rec.sent.length = 0;
+  router.handleFrame("w1", JSON.stringify({ to: "*", data: { t: "pair_req", code: "9", pubkey: "PK1", bc: true } }));
+  assert(rec.sent.length === 0, "无在线 relay 时广播静默（无 ERROR/无投递）");
+
+  // 通配未知类型仍拒：disc/pair_req 之外的 to:"*" 不放行
+  router.handleFrame("w1", JSON.stringify({ to: "*", data: { t: "other" } }));
+  assert(rec.sent.some(([, f]) => f.includes("bad frame")), "其他通配帧仍回 bad frame");
+}
+
 // ---------- B) 真实服务冒烟（与 Cloudflare 形态共用 bridgeSmoke） ----------
 
 {

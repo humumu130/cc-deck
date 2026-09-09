@@ -376,6 +376,25 @@
   .gp-relay-stat i { width: 8px; height: 8px; border-radius: 50%; flex: none; background: var(--gp-faint); }
   .gp-relay-stat.on i { background: var(--gp-done); }
   .gp-relay-stat span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  /* 已配对设备清单（议题① 2026-09-09）：行 = 在线点/kind 徽章/名称/dev/配对时间/移除 */
+  .gp-peers-list { display: flex; flex-direction: column; gap: 2px; }
+  .gp-peer-row { display: flex; align-items: center; gap: 8px; padding: 8px 10px; border-radius: 8px; font-size: 12.5px; color: var(--gp-text); min-width: 0; }
+  .gp-peer-row:hover { background: var(--gp-input); }
+  .gp-peer-row .gp-pd { width: 7px; height: 7px; border-radius: 50%; flex: none; background: var(--gp-faint); }
+  .gp-peer-row .gp-pd.on { background: var(--gp-done); }
+  .gp-peer-kind { flex: none; font-size: 10px; font-weight: 600; border: 1px solid var(--gp-border); color: var(--gp-dim); border-radius: 5px; padding: 1px 5px; }
+  .gp-peer-row .gp-pname { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; }
+  .gp-peer-row .gp-pdev { flex: none; font-family: var(--mono); font-size: 10px; color: var(--gp-faint); }
+  .gp-peer-when { margin-left: auto; flex: none; font-size: 11px; color: var(--gp-faint); }
+  .gp-peer-kick { flex: none; font-size: 11px; color: #E5484D; background: none; border: 1px solid transparent; border-radius: 6px; padding: 3px 8px; cursor: pointer; transition: border-color .12s ease, background .12s ease; }
+  .gp-peer-kick:hover { border-color: rgba(229,72,77,.45); background: rgba(229,72,77,.08); }
+  .gp-peer-kick:disabled { opacity: .5; cursor: default; }
+  .gp-peers-empty { padding: 10px 4px; font-size: 12px; color: var(--gp-faint); text-align: center; }
+  .gp-peers-foot { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 8px 4px 2px; }
+  #gpPeersCount { font-size: 11px; color: var(--gp-faint); min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .gp-peers-acts { display: flex; gap: 6px; flex: none; }
+  .gp-mini-btn { font-size: 11px; color: var(--gp-dim); background: var(--gp-input); border: 1px solid var(--gp-border); border-radius: 6px; padding: 3px 9px; cursor: pointer; }
+  .gp-mini-btn:hover { color: var(--gp-text); border-color: rgba(142,163,186,.42); }
   /* 配对卡：左大码 + 右动作钮列（设计稿 §4） */
   .gp-pair { display: flex; gap: 14px; align-items: stretch; }
   .gp-pair-info { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 6px; }
@@ -386,10 +405,10 @@
     font-family: var(--mono); font-size: 24px; font-weight: 700; letter-spacing: 4px;
     color: var(--gp-text); font-variant-numeric: tabular-nums;
   }
-  /* 配对码占位（视觉验收 P2-6）：空态显 6 个等宽格位，真实码到位后逐位填充、格位自动让位 */
-  .gp-code-ph { display: none; flex: none; gap: 7px; align-items: center; align-self: center; }
+  /* 配对码占位（视觉验收 P2-6）：空态显 8 个等宽格位（2026-09-09 6→8 位），真实码到位后逐位填充、格位自动让位 */
+  .gp-code-ph { display: none; flex: none; gap: 6px; align-items: center; align-self: center; }
   .pd-code-show:has(b:empty) .gp-code-ph { display: inline-flex; }
-  .gp-code-ph i { width: 22px; height: 30px; border: 1px solid var(--gp-border); border-radius: 6px; background: var(--gp-input); }
+  .gp-code-ph i { width: 18px; height: 30px; border: 1px solid var(--gp-border); border-radius: 6px; background: var(--gp-input); }
   #gearPop .pd-code-show span { font-size: 11px; color: var(--gp-faint); }
   .gp-acts { display: flex; flex-direction: column; gap: 8px; padding: 0; }
   .gp-acts button {
@@ -568,7 +587,7 @@
   }
   #pairCode:focus { outline: none; border-color: var(--brand); box-shadow: 0 0 0 3px rgba(217,119,87,.15); }
   #pairBtn { height: 27px; padding: 0 14px; font-size: 12px; border-radius: 8px; flex: none; }
-  /* #39x 本机领码临时行：大号等宽 6 位码 + 倒计时，expires_in 归零自动消失 */
+  /* #39x 本机领码临时行：大号等宽 8 位码 + 倒计时，expires_in 归零自动消失 */
   .pd-code-show { display: flex; align-items: baseline; justify-content: center; gap: 8px; padding: 5px 0 3px; }
   .pd-code-show b {
     font-family: var(--mono); font-size: 22px; font-weight: 700; letter-spacing: 4px;
@@ -652,7 +671,7 @@
   }
   #wizTitle { font-size: 16px; font-weight: 700; color: var(--text); text-align: center; }
   #wizSub { font-size: 12px; color: var(--dim); text-align: center; margin: 6px 0 16px; }
-  /* #354 一码直达：大号 6 位码输入 + 主按钮，次级方式收一行小链接 */
+  /* #354 一码直达：大号 8 位码输入 + 主按钮，次级方式收一行小链接 */
   #wizCodeRow { display: flex; gap: 8px; }
   #wizCode {
     flex: 1; min-width: 0; height: 46px; border-radius: 12px; text-align: center;
@@ -1517,7 +1536,7 @@
               <div id="pairBox">
                 <div class="cf-sec">配对码接入</div>
                 <div class="pair-code-line">
-                  <input id="pairCode" inputmode="numeric" maxlength="6" placeholder="6 位配对码" autocomplete="off">
+                  <input id="pairCode" inputmode="numeric" maxlength="8" placeholder="8 位配对码" autocomplete="off">
                   <button id="pairBtn" class="primary">连接</button>
                 </div>
               </div>
@@ -1546,14 +1565,25 @@
           <div class="gp-sec"><svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 8V5a2 2 0 0 1 2-2h3M16 3h3a2 2 0 0 1 2 2v3M21 16v3a2 2 0 0 1-2 2h-3M8 21H5a2 2 0 0 1-2-2v-3"/><path d="M7 12h10"/></svg>配对</div>
           <div class="gp-card gp-pair">
             <div class="gp-pair-info">
-              <div class="gp-pair-t">6 位配对码</div>
-              <div class="pd-code-show" id="pdCodeLine"><b id="pdCodeVal"></b><span class="gp-code-ph" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i><i></i></span><span id="pdCodeExp"></span></div>
-              <div class="pair-hint" id="pairHint">手机 App 侧边栏领码，5 分钟内有效</div>
+              <div class="gp-pair-t">8 位配对码</div>
+              <div class="pd-code-show" id="pdCodeLine"><b id="pdCodeVal"></b><span class="gp-code-ph" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></span><span id="pdCodeExp"></span></div>
+              <div class="pair-hint" id="pairHint">手机 App 侧边栏领码 · 一次性短时效</div>
             </div>
             <div class="gp-acts gp-pair-acts">
               <button id="loginQrBtn" title="手机扫一下，这台电脑直接接入你的 CC Deck"><svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 8V5a2 2 0 0 1 2-2h3M16 3h3a2 2 0 0 1 2 2v3M21 16v3a2 2 0 0 1-2 2h-3M8 21H5a2 2 0 0 1-2-2v-3"/><path d="M7 12h10"/></svg>扫码接入</button>
               <button id="pdLocalCodeBtn" title="没绑手机时，在这台电脑上直接领一枚配对码（本机 relay 签发）"><svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M9.5 4 7.5 20M16.5 4l-2 16M4.5 9h16M3.5 15h16"/></svg>本机显示配对码</button>
               <button id="addPhoneBtn" title="手机 App 扫码直接接入本服务器"><svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="7" y="2.5" width="10" height="19" rx="2.2"/><path d="M12 9.2v5.6M9.2 12h5.6"/></svg>添加手机</button>
+            </div>
+          </div>
+          <div class="gp-sec"><svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9 5.5 10.5 4h3L15 5.5"/><rect x="4" y="5.5" width="16" height="15" rx="3"/><path d="M8.5 11h7M8.5 15h4.5"/></svg>已配对设备</div>
+          <div class="gp-card gp-peers">
+            <div id="gpPeersList" class="gp-peers-list"><div class="gp-peers-empty">连接服务器后可管理</div></div>
+            <div class="gp-peers-foot">
+              <span id="gpPeersCount"></span>
+              <div class="gp-peers-acts">
+                <button id="gpPeersExport" class="gp-mini-btn" title="下载设备清单 JSON（含公钥，重装 relay 后可粘回 data/cloud-peers.json 恢复配对）">导出备份</button>
+                <button id="gpPeersRefresh" class="gp-mini-btn">刷新</button>
+              </div>
             </div>
           </div>
         </section>
@@ -1670,9 +1700,9 @@
 <div id="wizPop">
     <div id="wizCard">
       <div id="wizTitle">连接到家里的电脑</div>
-      <div id="wizSub">手机 CC Deck App → 侧边栏「新设备配对」领 6 位码，输入即连</div>
+      <div id="wizSub">手机 CC Deck App → 侧边栏「新设备配对」领 8 位码，输入即连</div>
       <div id="wizCodeRow">
-        <input id="wizCode" inputmode="numeric" maxlength="6" placeholder="6 位配对码" autocomplete="off">
+        <input id="wizCode" inputmode="numeric" maxlength="8" placeholder="8 位配对码" autocomplete="off">
         <button id="wizGo">连接</button>
       </div>
       <div id="wizAlt">其他方式：<button id="wizQr"><svg viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:-1px"><rect x="7" y="2.5" width="10" height="19" rx="2.2"/><path d="M10.5 18.5h3"/></svg> 手机扫码</button> · <button id="wizLan">局域网直连</button></div>
@@ -2197,7 +2227,7 @@ function connectLan(ctx) {
 }
 
 // 云桥：浏览器 → 桥(ws) → 家里 relay，帧全部 tweetnacl box 密封（桥只见密文）。
-// 配对走一次性配对链接（#bt=&rd=&rk=&pc=）或 6 位配对码，成功后写回本源 cloud.rd/rk。
+// 配对走一次性配对链接（#bt=&rd=&rk=&pc=）或 8 位配对码，成功后写回本源 cloud.rd/rk。
 // WS 升级被公司 TLS 解密代理掐断时（握手返回 200 非 101）自动降级 HTTP 长轮询。
 function connectCloudFor(ctx, manual) {
   const cfg = ctx.cfg;
@@ -2457,11 +2487,11 @@ function onCloudText(ctx, text) {
   }
   if (f.type === "RELAYS") {
     // 发现帧回包：桥下发在线 relay {dev, rk}。公共桥上 rl- 注册无鉴权——
-    // 假 relay 可混入列表截获 pair_req 里的 6 位码，因此只自动采用两种结果：
+    // 假 relay 可混入列表截获 pair_req 里的明文码，因此只自动采用两种结果：
     //   ① 可信命中：dev = 本源记忆 / 烘焙值 / 当前配对目标（上次成功配对或部署锚定，
     //      rk 允许为空 = 旧版 relay 未上报，沿用记忆 rk）
     //   ② 列表唯一：relay 换代后的新身份（自家部署只有一条）
-    // 多条且无可信命中：手上有 6 位码时改走配对码定位广播（凭码找持码者，见
+    // 多条且无可信命中：手上有配对码时改走配对码定位广播（凭码找持码者，见
     // !pick 分支）；无码流程（扫码登录/运行中）维持歧义即停——交用户决断
     clearTimeout(ctx.discTimer); ctx.discTimer = 0;
     const all = (Array.isArray(f.relays) ? f.relays : [])
@@ -2910,6 +2940,18 @@ function onEvent(ctx, msg) {
     }
     case "TASK_DONE": {
       showTaskDone(ctx, sid, msg.payload);
+      break;
+    }
+    // 议题①（2026-09-09）配对设备变更（瞬态帧 seq:0）：新配对 = 补偿告警（公共桥
+    // 广播定位的 race 攻击即便得手，攻击设备立刻出现在这里）；踢除 = 刷新清单。
+    // 旧事件里没有——此 case 只对新 relay 生效，老客户端/老 relay 互不干扰
+    case "PAIRED_DEVICE": {
+      const p = msg.payload || {};
+      const nm = p.name || p.dev || "未知设备";
+      if (p.action === "add") toast("新设备已配对：" + nm + (p.dev ? "（" + p.dev + "）" : ""), 5000);
+      else if (p.action === "kick") toast("已移除设备：" + nm + (p.dev ? "（" + p.dev + "）" : ""), 4000);
+      const relayPage = $("gpPageRelay");
+      if (relayPage && !relayPage.classList.contains("off")) refreshPeers();
       break;
     }
   }
@@ -4137,7 +4179,7 @@ function setGearSection(sec) {
     if (nav) nav.classList.toggle("on", on);
   }
   try { if (!window.__ccGearPin) localStorage.setItem(GP_SEC_KEY, sec); } catch {} // ?gear=1 深链会话不污染分页记忆（顺手项①）
-  if (sec === "relay") probeRelayStat();
+  if (sec === "relay") { probeRelayStat(); refreshPeers(); } // 设备清单随 relay 页可见时静默刷新（议题①）
 }
 document.querySelectorAll(".gp-nav-item").forEach((b) => { b.onclick = () => setGearSection(b.dataset.sec); });
 // 本机 relay 行已移除（对用户完全透明）：启停全靠启动自动探测，见 init 尾部 probeLocalRelay
@@ -5284,7 +5326,8 @@ setInterval(() => { if (selected) renderDetail(); }, 1000);
 // 提交后走与配对链接完全相同的 pair_req → pair_ack 流程。
 function submitPairCode() {
   const code = $("pairCode").value.trim();
-  if (!/^\d{6}$/.test(code)) { toast("请输入 6 位数字配对码"); $("pairCode").focus(); return; }
+  // 2026-09-09 起签发 8 位码；6 位仍放行（管理员自定义 6 位码过渡兼容），旧 relay 也如此
+  if (!/^\d{6,8}$/.test(code)) { toast("请输入 6-8 位数字配对码"); $("pairCode").focus(); return; }
   loadCloudIdentity();
   let cfg = editId ? cfgOf(editId) : null;
   if (cfg && cfg.kind !== "cloud") { toast("仅云桥类型支持配对码"); return; }
@@ -5435,19 +5478,19 @@ async function addPhoneQr() {
     });
   }
   $("loginQrTitle").textContent = "添加手机";
-  $("loginQrSub").innerHTML = "手机 CC Deck App 扫下方二维码<br/>自动接入本服务器（一次性码 5 分钟内有效）";
+  $("loginQrSub").innerHTML = "手机 CC Deck App 扫下方二维码<br/>自动接入本服务器（一次性码 · 短时效）";
   $("loginQrState").textContent = "等待手机扫码…";
   drawLoginQr(payload);
   $("loginQrPop").classList.add("open");
 }
 $("addPhoneBtn").onclick = () => void addPhoneQr();
 
-// 首启连接向导（#354 一码直达）：默认路径=输 6 位配对码即连家里（复用默认云桥+烘焙
+// 首启连接向导（#354 一码直达）：默认路径=输配对码即连家里（复用默认云桥+烘焙
 // 身份，配对成功 pair_ack 自动落源）；扫码/直连降为次级入口
 const closeWiz = () => $("wizPop").classList.remove("open");
 function wizSubmitPair() {
   const code = $("wizCode").value.trim();
-  if (!/^\d{6}$/.test(code)) { toast("请输入 6 位数字配对码"); $("wizCode").focus(); return; }
+  if (!/^\d{6,8}$/.test(code)) { toast("请输入 6-8 位数字配对码"); $("wizCode").focus(); return; }
   loadCloudIdentity();
   let cfg = servers.find((x) => x.kind === "cloud" && !x.cloud?.paired);
   if (!cfg) {
@@ -5555,13 +5598,118 @@ $("pdLocalCodeBtn").onclick = async () => {
   }, 1000);
   pdCodeTimer = setTimeout(pdCodeExpire, ttl * 1000 + 300);
 };
-// #405 配对码过期统一回「六格占位」空态（与初始空态同款），不再整行 display:none（视觉验收顺手项②）
+// #405 配对码过期统一回「格位占位」空态（与初始空态同款），不再整行 display:none（视觉验收顺手项②）
 function pdCodeExpire() {
   clearInterval(pdCodeTick); clearTimeout(pdCodeTimer);
   const v = $("pdCodeVal"), e = $("pdCodeExp");
   if (v) v.textContent = "";
   if (e) e.textContent = "";
 }
+
+// ── 议题①（2026-09-09）已配对设备管理：COMMAND_PEERS 拉清单 + PAIRED_DEVICE 实时
+// 刷新 + 踢除（COMMAND_PEER_KICK，两次点按确认）+ 导出备份（含 pubkey 的 JSON，
+// 重装 relay 后粘回 data/cloud-peers.json 可恢复配对关系——预信任的廉价替代）
+const PEER_KIND_TXT = { phone: "手机", web: "网页", watch: "手表", other: "设备" };
+let gpPeers = null;         // 最近一次 COMMAND_PEERS 结果
+let gpPeersBusy = false;    // 并发守卫（开关抽屉/事件刷新叠加时只跑一次）
+let gpKickArm = null;       // 两次确认：已 armed 的 dev
+let gpKickTimer = 0;
+function fmtPeerTime(ts) {
+  if (!ts) return "";
+  const s = Math.floor((Date.now() - ts) / 1000);
+  if (s < 60) return "刚刚";
+  if (s < 3600) return Math.floor(s / 60) + " 分钟前";
+  if (s < 86400) return Math.floor(s / 3600) + " 小时前";
+  return Math.floor(s / 86400) + " 天前";
+}
+async function refreshPeers() {
+  if (gpPeersBusy) return;
+  const ctx = firstOnlineCtx();
+  if (!ctx) {
+    gpPeers = null;
+    $("gpPeersList").innerHTML = '<div class="gp-peers-empty">连接服务器后可管理</div>';
+    $("gpPeersCount").textContent = "";
+    return;
+  }
+  gpPeersBusy = true;
+  try {
+    const ack = await commandAck(ctx, "COMMAND_PEERS", {});
+    if (!ack || !ack.ok || !Array.isArray(ack.peers)) {
+      gpPeers = null;
+      $("gpPeersList").innerHTML = '<div class="gp-peers-empty">' + (!ack ? "服务器无应答" : "此 relay 版本不支持设备管理（升级后可用）") + "</div>";
+      $("gpPeersCount").textContent = "";
+      return;
+    }
+    gpPeers = ack.peers;
+    renderPeers();
+  } finally {
+    gpPeersBusy = false;
+  }
+}
+function renderPeers() {
+  const box = $("gpPeersList");
+  if (!box) return;
+  gpKickArm = null;
+  if (!gpPeers || !gpPeers.length) {
+    box.innerHTML = '<div class="gp-peers-empty">暂无已配对设备</div>';
+    $("gpPeersCount").textContent = "0 台设备";
+    return;
+  }
+  $("gpPeersCount").textContent = gpPeers.length + " 台设备";
+  box.innerHTML = gpPeers.map(function (p) {
+    const online = p.last_seen && Date.now() - p.last_seen < 90_000;
+    return '<div class="gp-peer-row">' +
+      '<i class="gp-pd' + (online ? " on" : "") + '" title="' + (online ? "在线" : "离线/未知") + '"></i>' +
+      '<span class="gp-peer-kind">' + (PEER_KIND_TXT[p.kind] || "设备") + "</span>" +
+      '<span class="gp-pname" title="' + escapeHtml(p.name || p.dev) + '">' + escapeHtml(p.name || p.dev) + "</span>" +
+      '<span class="gp-pdev">' + escapeHtml(p.dev) + "</span>" +
+      '<span class="gp-peer-when" title="配对于 ' + (p.paired_at ? new Date(p.paired_at).toLocaleString() : "未知") + '">' + fmtPeerTime(p.paired_at) + "</span>" +
+      '<button class="gp-peer-kick" data-dev="' + escapeHtml(p.dev) + '">移除</button>' +
+      "</div>";
+  }).join("");
+}
+$("gpPeersList").addEventListener("click", function (ev) {
+  const btn = ev.target.closest(".gp-peer-kick");
+  if (!btn) return;
+  const dev = btn.dataset.dev;
+  if (gpKickArm !== dev) {
+    // 两次点按确认：第一次 arm + 3s 内再点执行（弹层级确认对抽屉内列表过重）
+    gpKickArm = dev;
+    btn.textContent = "确认移除？";
+    clearTimeout(gpKickTimer);
+    gpKickTimer = setTimeout(function () {
+      if (gpKickArm === dev) {
+        gpKickArm = null;
+        const b = document.querySelector('.gp-peer-kick[data-dev="' + dev + '"]');
+        if (b) b.textContent = "移除";
+      }
+    }, 3000);
+    return;
+  }
+  gpKickArm = null;
+  clearTimeout(gpKickTimer);
+  btn.disabled = true;
+  btn.textContent = "移除中…";
+  void (async function () {
+    const ctx = firstOnlineCtx();
+    const ack = ctx && await commandAck(ctx, "COMMAND_PEER_KICK", { dev: dev });
+    if (!ack || !ack.ok) { toast((ack && ack.error) || "移除失败"); refreshPeers(); return; }
+    toast("已移除 " + dev + "（该设备将立即失联）");
+    refreshPeers();
+  })();
+});
+$("gpPeersExport").onclick = function () {
+  if (!gpPeers || !gpPeers.length) { toast("暂无设备清单可导出"); return; }
+  // 备份含 pubkey：重装 relay 后手工粘回 data/cloud-peers.json（重启生效）可免重配
+  const blob = new Blob([JSON.stringify({ v: 1, exported_at: new Date().toISOString(), peers: gpPeers }, null, 2)], { type: "application/json" });
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = "ccdeck-peers-" + new Date().toISOString().slice(0, 10) + ".json";
+  a.click();
+  setTimeout(function () { URL.revokeObjectURL(a.href); }, 1000);
+  toast("设备清单已下载（含公钥，妥善保管）");
+};
+$("gpPeersRefresh").onclick = function () { refreshPeers(); };
 
 // #40x relay 页状态行：本机 relay 静默探测（复用 local-info / 桌面壳 probeLocal），
 // 有=「运行中 · 端口 N」绿点，无=「未检测到」灰点；开抽屉/切到 relay 页时都会补探

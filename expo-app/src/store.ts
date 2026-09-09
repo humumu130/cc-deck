@@ -59,6 +59,9 @@ export interface SourceConn {
   lastDownAt: number;
   epoch: number;
   pendingCmds: Map<string, PendingCmd>;
+  // F7（2026-09-09）手表 /wan 透传凭据 dev（wt-<hash>，随 SNAPSHOT wan_dev 下发）：
+  // 手表网关拼手表连接配置用（旧 relay 无字段 = 回落 wt-app1，自建宽松桥不受影响）
+  wanDev?: string | null;
 }
 
 // 已发出未回执的命令（ACK 追踪，按源隔离）：断开时静默清空，靠重连快照对账
@@ -198,6 +201,10 @@ class RelayStore {
 
   onWaiting: ((s: SessionState) => void) | null = null;
   onTaskDone: ((r: TaskDoneReport) => void) | null = null;
+  // 议题①/④补偿告警（2026-09-09）：relay 侧新设备配对成功（输码/扫码/手机授权）时
+  // 经 PAIRED_DEVICE 瞬态帧广播，App 弹本地通知——公共桥广播定位的 race 攻击即便
+  // 得手，攻击设备立刻出现在持有者手机上。kick 动作不回调（无需打扰）
+  onPairedDevice: ((p: { dev: string; name: string }) => void) | null = null;
 
   subscribe = (fn: () => void) => {
     this.listeners.add(fn);
@@ -1209,7 +1216,10 @@ class RelayStore {
   // 运行时定位家里 relay。pair_req 6s 一拍最多发 3 次（pair_ack 随桥闪断丢失时 relay
   // 幂等补 ack，重发即自愈），~24s 无果报超时。成功返回 {rd, rk, dev}（dev = 本次
   // 配对身份，落 CloudConfig.dev 供 openCloud 沿用），失败返回错误文案。
-  // 码只在 relay 校验通过时才消耗：输错可改码重试；连续错 5 次进 relay 侧 10 分钟静默期
+  // 码只在 relay 校验通过时才消耗：输错可改码重试；连续错 5 次进 relay 侧 10 分钟静默期。
+  // 多台 relay 同时在线且无可信 rd 时走「配对码即定位凭据」：pair_req 以 to:"*" 广播
+  //（data 带 bc:true），持码 relay 才回 pair_ack、其余静默——不再要求扫码。
+  // 广播态不知道目标公钥，ack 用发现列表里的 rk 逐个试解，且 ack 身份必须落在列表内。
   private async pairViaBridge(o: {
     bridge: string; bt: string; code: string; rd?: string; rk?: string;
   }): Promise<{ rd: string; rk: string; dev: string } | string> {
@@ -1229,6 +1239,9 @@ class RelayStore {
       let settled = false;
       let rd = o.rd ?? "";
       let rk = o.rk ?? "";
+      // 广播定位态：在线 relay 候选（ack 试解公钥 + 身份核对），进入即不再猜单一目标
+      let bc = false;
+      let cands: { dev: string; rk: string }[] = [];
       let timer: ReturnType<typeof setInterval> | null = null;
       let beat = 0;
       const done = (r: { rd: string; rk: string; dev: string } | string) => {
@@ -1240,25 +1253,36 @@ class RelayStore {
       };
       const sendPairReq = () => {
         ws.send(JSON.stringify({
-          to: rd,
-          data: { t: "pair_req", code: o.code, pubkey: keys.publicKey, name: "手机-" + dev.slice(3, 9) },
+          to: rd || "*",
+          data: rd
+            ? { t: "pair_req", code: o.code, pubkey: keys.publicKey, name: "手机-" + dev.slice(3, 9) }
+            // bc 标记：未持码 relay 静默（码不归它管），持码者照常 ack
+            : { t: "pair_req", code: o.code, pubkey: keys.publicKey, name: "手机-" + dev.slice(3, 9), bc: true },
         }));
       };
       const sendDisc = () => {
         ws.send(JSON.stringify({ to: "*", data: { t: "disc" } }));
       };
-      // 看门狗：缺 rd/rk 补发现帧，齐了补发 pair_req；换目标时 kick() 重置拍数
+      // 看门狗：缺 rd/rk 补发现帧，齐了补发 pair_req；广播态持续广播并刷新候选
+      //（晚连上的 relay 也要能收到/应答）；换目标时 kick() 重置拍数
       const kick = () => {
         beat = 0;
         if (timer) clearInterval(timer);
         timer = setInterval(() => {
           if (settled) return;
           if (++beat > 3) {
-            done(rd ? "云桥长时间无应答，请重试" : "未能定位家里的 relay，请重试");
+            done(
+              rd ? "云桥长时间无应答，请重试"
+                : bc ? "未找到持有该配对码的 relay：请核对配对码，或确认目标电脑已连上云桥"
+                  : "未能定位家里的 relay，请重试",
+            );
             return;
           }
-          if (!rd || !rk) sendDisc();
-          else sendPairReq();
+          if (rd && rk) sendPairReq();
+          else if (bc) {
+            sendPairReq();
+            sendDisc();
+          } else sendDisc();
         }, 6000);
       };
       ws.onopen = () => {
@@ -1285,8 +1309,8 @@ class RelayStore {
           return;
         }
         if (f.type === "RELAYS") {
-          // 发现回包：桥下发在线 relay {dev, rk}。自家部署通常唯一即采信；多台时绝不
-          // 自动猜（公共桥上假 relay 可混入列表截获配对码，与网页端同纪律）
+          // 发现回包：桥下发在线 relay {dev, rk}。可信 rd 命中或唯一在线即采信；
+          // 多台且无可信 rd 时不再拒绝——配对码即定位凭据，广播 pair_req 由持码者应答
           const all = (Array.isArray(f.relays) ? f.relays : []).filter(
             (x): x is { dev: string; rk?: string } =>
               !!x && typeof (x as { dev?: unknown }).dev === "string" &&
@@ -1294,40 +1318,60 @@ class RelayStore {
           );
           const pick = all.find((x) => x.dev === rd) ?? (all.length === 1 ? all[0] : null);
           if (!pick) {
-            done(
-              all.length > 1
-                ? "桥上有多台 relay 在线，无法自动定位，请用扫码接入"
-                : "云桥上没有在线的 relay（家里 PC 离线）",
-            );
+            if (all.length > 1) {
+              // 广播定位态：记候选（ack 试解 + 身份核对），立即广播一拍；仅首次进入
+              // 时 kick()——后续发现刷新若再 kick 会把看门狗拍数清零、永不超时
+              const fresh = !bc;
+              bc = true;
+              cands = all.filter((x): x is { dev: string; rk: string } => !!x.rk);
+              sendPairReq();
+              if (fresh) kick();
+              return;
+            }
+            done("云桥上没有在线的 relay（家里 PC 离线）");
             return;
           }
           const changed = pick.dev !== rd || (!!pick.rk && pick.rk !== rk);
           rd = pick.dev;
           rk = pick.rk || rk;
+          bc = false; // 拿到确定目标即回单播路径
           // 无条件立即发 pair_req（relay 幂等，多发无害）——别让首次发现也干等一拍
           sendPairReq();
           if (changed) kick();
           return;
         }
         if (!f.data) return;
-        // 明文 nack（无 n 字段）：码无效/过期——relay 不知道我方公钥无法加密
+        // 明文 nack（无 n 字段）：码无效/过期——relay 不知道我方公钥无法加密。
+        // 广播态忽略：新 relay 未持码时静默、旧 relay 的密文 nack 此处本就解不开，
+        // 真到得了明文 nack 的只有单播态
         if (typeof f.data === "object" && (f.data as { t?: unknown }).t === "pair_nack" && (f.data as { n?: unknown }).n === undefined) {
+          if (!rd) return;
           const err = (f.data as { error?: unknown }).error;
           done(typeof err === "string" && err ? `配对失败：${err}` : "配对码无效或已过期");
           return;
         }
-        const inner = unseal<{ t?: string; relay_dev?: string; relay_pubkey?: string; error?: string }>(
-          f.data as SealedBox, rk, keys.secretKey,
-        );
+        // 广播态不知道 ack 由哪台 relay 密封（rk 未知），拿候选公钥逐个试解
+        let inner: { t?: string; relay_dev?: string; relay_pubkey?: string; error?: string } | null =
+          rk ? unseal(f.data as SealedBox, rk, keys.secretKey) : null;
+        if (!inner && !rd) {
+          for (const c of cands) {
+            inner = unseal(f.data as SealedBox, c.rk, keys.secretKey);
+            if (inner) break;
+          }
+        }
         if (!inner) return;
         if (inner.t === "pair_ack" && inner.relay_dev && inner.relay_pubkey) {
           // 身份比对（与网页端同款）：能解开封 ≠ 目标 relay（公共桥假 relay 可自演自唱），
-          // 回执身份须与配对目标一致，错位丢弃
+          // 回执身份须与配对目标一致，错位丢弃；广播态无 rd 可比，至少要求 ack 来自
+          // 发现列表内的 relay（只有桥上 rl- 收得到广播）
           if (rd && inner.relay_dev !== rd) return;
+          if (!rd && !cands.some((c) => c.dev === inner!.relay_dev)) return;
           done({ rd: inner.relay_dev, rk: inner.relay_pubkey, dev });
           return;
         }
         if (inner.t === "pair_nack") {
+          // 广播态的密文 nack 全是噪音：未持码 relay（含旧版）的例行拒绝，不是错码
+          if (!rd) return;
           done(inner.error ? `配对失败：${inner.error}` : "配对失败，请重新领码");
         }
       };
@@ -1390,6 +1434,9 @@ class RelayStore {
         // 销毁别的源连接，须在 conn.sessions 清空重建前发起）
         const relayDev = (msg.payload as { relay_dev?: unknown } | undefined)?.relay_dev;
         if (typeof relayDev === "string" && relayDev) this.learnRelayDev(conn, relayDev);
+        // F7 手表凭据 dev：仅云桥启用的 relay 携带；LAN/云快照同源同值，学到即存
+        const wanDev = (msg.payload as { wan_dev?: unknown } | undefined)?.wan_dev;
+        if (typeof wanDev === "string" && wanDev) conn.wanDev = wanDev;
         for (const old of conn.sessions.keys()) {
           if (this.sidIndex.get(old) === conn) this.sidIndex.delete(old);
         }
@@ -1568,6 +1615,15 @@ class RelayStore {
         }
         break;
       }
+      // 议题①（2026-09-09）配对设备变更（瞬态帧，seq:0 不补发）：add = 新设备获得
+      // 全权的瞬间，回调通知持有者；kick = 管理员移除设备，手机端无需动作
+      case "PAIRED_DEVICE": {
+        const p = msg.payload as { dev?: unknown; name?: unknown; action?: unknown };
+        if (p.action === "add" && typeof p.dev === "string" && p.dev) {
+          this.onPairedDevice?.({ dev: p.dev, name: typeof p.name === "string" ? p.name : "" });
+        }
+        break;
+      }
     }
   }
 
@@ -1635,13 +1691,14 @@ class RelayStore {
   // 按源查连接参数与通道（#294 审查修复）：slash 联想等按"会话所属源"取数，
   // 不再一律走活动源口径（聚合下活动源走云时会误判会话源不可拉命令表）；
   // 源未知/从未建连（无 cfg）返回 null
-  sourceInfoOf(srcId: string): { wsUrl: string; token: string; channel: "lan" | "cloud" | null; cloudUrl?: string; cloudToken?: string; relayDev?: string } | null {
+  sourceInfoOf(srcId: string): { wsUrl: string; token: string; channel: "lan" | "cloud" | null; cloudUrl?: string; cloudToken?: string; relayDev?: string; wanDev?: string } | null {
     const conn = this.conns.get(srcId);
     if (!conn?.cfg) return null;
     const c = conn.cloudCfg;
     return {
       wsUrl: conn.cfg.wsUrl, token: conn.cfg.token, channel: conn.channel,
       ...(c ? { cloudUrl: c.url, cloudToken: c.token, relayDev: c.relayDev } : {}),
+      ...(conn.wanDev ? { wanDev: conn.wanDev } : {}),
     };
   }
 

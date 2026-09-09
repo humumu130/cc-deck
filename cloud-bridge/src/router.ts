@@ -91,18 +91,36 @@ export class CloudRouter {
       this.reply(connId, { type: "ERROR", error: "bad frame" });
       return;
     }
-    // 发现帧 {to:"*", data:{t:"disc"}}：回在线 relay 列表（dev+公钥）。
-    // 网页烘焙的 relay 指纹在 relay 换 keypair 后失配，ROUTE_MISS 前先发现真实身份
+    // 通配帧（to:"*"）：disc = 发现在线 relay；pair_req = 配对码定位广播。
+    // wb 未配对时与 relay 无共享密钥，pair_req 本就是「明文信封 + wb 公钥」形态，
+    // 广播按同规则转发（桥不解析 data 内容）。
     if (m.to === "*") {
       const d = m.data as { t?: unknown } | null;
-      if (!d || typeof d !== "object" || d.t !== "disc") {
+      if (!d || typeof d !== "object" || typeof d.t !== "string") {
         this.reply(connId, { type: "ERROR", error: "bad frame" });
         return;
       }
-      const relays = this.devs()
-        .filter((dev) => dev.startsWith("rl-"))
-        .map((dev) => ({ dev, rk: this.keyOf.get(dev) ?? "" }));
-      this.reply(connId, { type: "RELAYS", relays });
+      // 发现帧：回在线 relay 列表（dev+公钥）。网页烘焙的 relay 指纹在 relay 换
+      // keypair 后失配，ROUTE_MISS 前先发现真实身份
+      if (d.t === "disc") {
+        const relays = this.devs()
+          .filter((dev) => dev.startsWith("rl-"))
+          .map((dev) => ({ dev, rk: this.keyOf.get(dev) ?? "" }));
+        this.reply(connId, { type: "RELAYS", relays });
+        return;
+      }
+      // 配对码定位广播：转发给所有在线 rl- 设备（data 不透明原样）。多台 relay 挂
+      // 同一座桥时，手机不预知 rd 也能凭码定位——持码 relay 回 pair_ack，未持码者
+      // 静默。旧 relay 不识别 bc 标记也只是当普通 pair_req 处理：持码照常 ack，
+      // 未持码回的密文 nack 手机在广播态无 rk 可解、天然忽略，混跑不炸
+      if (d.t === "pair_req") {
+        for (const [dev, target] of this.connOf) {
+          if (!dev.startsWith("rl-") || target === connId) continue;
+          this.opts.hooks.send(target, JSON.stringify({ to: dev, from, data: m.data }));
+        }
+        return;
+      }
+      this.reply(connId, { type: "ERROR", error: "bad frame" });
       return;
     }
     const target = this.connOf.get(m.to);

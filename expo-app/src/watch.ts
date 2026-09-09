@@ -99,7 +99,10 @@ export function startWatchGateway(): void {
         bt.send(JSON.stringify({ seq: 0, session_id: "", ts: Date.now(), type: "SNAPSHOT", payload: { sessions: list, logs } }));
       } catch {}
     }
-    // #373 连接配置跟随活动源（变化才发）：wan 透传 / LAN 直连
+    // #373 连接配置跟随活动源（变化才发）：wan 透传 / LAN 直连。
+    // F7（2026-09-09）：dev 段用 SNAPSHOT wan_dev 下发的凭据 dev（wt-<hash>）——
+    // 公共桥严格模式下 relay 只认本机 wan-secret 派生值；旧 relay（无 wan_dev 字段）
+    // 回落 wt-app1 原值，自建宽松桥两可全兼容。手表端零改动（配置由本网关下发）
     try {
       const sid = snap.activeSourceId;
       const info = sid ? store.sourceInfoOf(sid) : null;
@@ -107,7 +110,7 @@ export function startWatchGateway(): void {
       if (info?.channel === "cloud" && info.cloudUrl && info.relayDev) {
         const base = info.cloudUrl.replace(/\/cloud.*$/, "");
         const t = encodeURIComponent(info.cloudToken ?? "");
-        cfg = JSON.stringify({ mode: "RELAY", url: `${base}/wan?token=${t}&dev=wt-app1&to=${info.relayDev}`, wan: true });
+        cfg = JSON.stringify({ mode: "RELAY", url: `${base}/wan?token=${t}&dev=${info.wanDev || "wt-app1"}&to=${info.relayDev}`, wan: true });
       } else if (info?.wsUrl && info.channel === "lan") {
         cfg = JSON.stringify({ mode: "RELAY", url: `${info.wsUrl}${info.wsUrl.includes("?") ? "&" : "?"}token=${encodeURIComponent(info.token)}` });
       }

@@ -98,6 +98,38 @@ export async function bridgeSmoke(base: string, token: string, assert: Assert): 
     "发现帧回 RELAYS 带 relay 公钥",
   );
 
+  // 配对码定位广播：wb 广播 pair_req（to:"*" + bc 标记）→ 桥转发给所有在线 rl-，
+  // 非 relay 设备与发送者自身不收；disc 语义不变
+  const relay2 = connect("rl-relay2", token, "&rk=RkRelayPubkey2");
+  assert((await relay2.open), "广播: 第二台 relay 连接成功");
+  const bcBody = { t: "pair_req", code: "123456", pubkey: "PK1", name: "m", bc: true };
+  phone.ws.send(JSON.stringify({ to: "*", data: bcBody }));
+  assert(
+    await waitFor(() =>
+      relay.frames.some(
+        (f) =>
+          (f as { to?: string }).to === "rl-relay1" &&
+          (f as { from?: string }).from === "phone1" &&
+          JSON.stringify((f as { data?: unknown }).data) === JSON.stringify(bcBody),
+      ) &&
+      relay2.frames.some(
+        (f) =>
+          (f as { to?: string }).to === "rl-relay2" &&
+          (f as { from?: string }).from === "phone1" &&
+          JSON.stringify((f as { data?: unknown }).data) === JSON.stringify(bcBody),
+      ),
+    ),
+    "广播 pair_req 转发给所有在线 relay（to/from/data 正确）",
+  );
+  await wait(200);
+  assert(
+    !phone.frames.some((f) => (f as { data?: { t?: string } }).data?.t === "pair_req") &&
+      !phone.frames.some((f) => (f as { type?: string }).type === "ERROR"),
+    "广播不回发给发送者、不回 ERROR",
+  );
+  relay2.ws.close();
+  await wait(100);
+
   // 同 dev 顶替：旧连接被踢，新连接接管路由
   const phone2 = connect("phone1");
   assert(await phone2.open, "同 dev 新连接可建立");

@@ -120,12 +120,12 @@ export default function SetupScreen({ onClose, editId, initialScan }: Props) {
       setErr(`此地址已保存（${dup.name || hostOf(base)}），去改那条或换个地址`);
       return;
     }
-    if (cd && !/^\d{6}$/.test(cd)) {
-      setErr("配对码为 6 位数字（家里 PC 网页端/终端处领取）");
+    if (cd && !/^\d{6,8}$/.test(cd)) {
+      setErr("配对码为 6-8 位数字（家里 PC 网页端/终端处领取）");
       return;
     }
     if (!editId && !cd) {
-      setErr("请填写 6 位配对码（家里 PC 网页端/终端处领取）");
+      setErr("请填写 8 位配对码（家里 PC 网页端/终端处领取）");
       return;
     }
     setErr(null);
@@ -454,17 +454,17 @@ export default function SetupScreen({ onClose, editId, initialScan }: Props) {
             <>
               <View style={s.field}>
                 <Text style={s.label}>
-                  {editId ? "配对码（留空 = 仅改地址，不重新配对）" : "配对码（家里 PC 领取的 6 位码）"}
+                  {editId ? "配对码（留空 = 仅改地址，不重新配对）" : "配对码（家里 PC 领取的 8 位码）"}
                 </Text>
                 <TextInput
-                  style={[s.input, err && !editId && !/^\d{6}$/.test(code.trim()) && s.inputErr]}
+                  style={[s.input, err && !editId && !/^\d{6,8}$/.test(code.trim()) && s.inputErr]}
                   value={code}
-                  onChangeText={(v) => { setCode(v.replace(/\D/g, "").slice(0, 6)); setErr(null); }}
-                  placeholder="123456"
+                  onChangeText={(v) => { setCode(v.replace(/\D/g, "").slice(0, 8)); setErr(null); }}
+                  placeholder="8 位数字"
                   placeholderTextColor={c.faint}
                   keyboardType="number-pad"
                   textContentType="oneTimeCode"
-                  maxLength={6}
+                  maxLength={8}
                 />
               </View>
               <Pressable style={s.advRow} hitSlop={6} onPress={() => setAdvOpen((v) => !v)}>

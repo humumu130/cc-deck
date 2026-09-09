@@ -28,8 +28,20 @@ export class CloudClient {
   // #373 /wan 手表明文透传设备（wt-*）：桥可信通道，无密钥对；状态机与 phones 同构
   private wanWatches = new Map<string, { lastSeq: number; active: boolean }>();
   private unpairedNotice = new Map<string, number>();
-  // 配对码爆破限流：10 分钟有效窗口内连续错码的 dev 直接静默丢弃（码空间 10^6）
+  // 配对码爆破限流（双层）：①按 dev——10 分钟窗口内连续 5 次错码的 dev 静默丢弃；
+  // ②全局预算（2026-09-09 F2 修复）——按 dev 计数可被「每 5 次换一个密钥对」绕过，
+  // 故全部 dev 合计错码超预算后本窗口内任何 pair_req（含正码）一律静默丢弃，
+  // 在线穷举速率坍缩到预算值（50 次/10min ≈ 0.083rps，任何码空间都安全）。
+  // 窗口过期自动重置：正常用户偶尔输错远够不着预算
   private pairFails = new Map<string, { n: number; until: number }>();
+  private pairBudgetN = 0;
+  private pairBudgetStart = 0;
+  private pairBudgetUntil = 0;
+  // 实例字段而非常量：测试可收紧（test-cloud.ts 全局预算用例）
+  private pairBudgetMax = 50;
+  private pairBudgetWindowMs = 600_000;
+  // F7 /wan 拒绝日志限频：未持凭据手表的帧在严格模式下静默丢弃，日志 30s 一条防刷屏
+  private wanDropLoggedAt = 0;
   private delayMs = 1000;
   private stopped = false;
   private timer: ReturnType<typeof setTimeout> | null = null;
@@ -190,6 +202,8 @@ export class CloudClient {
     if (!this.identity.peers.get(dev)) {
       this.identity.addPeer(dev, { pubkey, name, paired_at: Date.now() });
       console.log(`[cloud] login granted dev=${dev} name=${name} via ${this.tag}`);
+      // 议题①/§6.3 补偿：扫码授权也是新设备获得全权——同样广播提醒持有者
+      this.bus.emitTransient("PAIRED_DEVICE", { dev, name, action: "add" });
     }
     this.pendingGrantAcks.set(dev, Date.now());
     if (this.pendingGrantAcks.size > 50) {
@@ -204,6 +218,18 @@ export class CloudClient {
     return true;
   }
 
+  // 议题①踢除联动：先发明文 pair_nack 让设备立即「失联 + 停止重连」（复用未配对
+  // 提示协议，但不吃 notifyUnpaired 的 60s 节流——管理员动作必须直达；设备此刻
+  // 离线则帧自然丢失，它下次心跳会落入 drop-frame 分支再收一条），再停发下行。
+  // peers 移除在 index.ts 的 kicker 里先做（identity.removePeer），这里只管通道侧。
+  // 幂等：对不在 peers/phones 的 dev 调用无副作用（桥回 ROUTE_MISS 丢弃）
+  kickPeer(dev: string): void {
+    this.send({ to: dev, data: { t: "pair_nack", error: "已被管理员移除，请重新配对" } });
+    this.phones.delete(dev);
+    this.wanWatches.delete(dev);
+    this.resumeOnOpen.delete(dev);
+  }
+
   // 手机激活/恢复：缓冲内按 last_seq 补发，否则全量 SNAPSHOT（hello 与 ping-resume 共用）。
   // 全量恢复时 SNAPSHOT 只带会话状态不带时间线日志，日志随后逐条 SESSION_LOG 密文流式补发
   // （手机端 SESSION_LOG 处理器即 pushLog 追加，旧 APK 直接兼容）——所有日志塞进单帧会随
@@ -212,6 +238,7 @@ export class CloudClient {
   // 补发从该 seq 之后开始，不会与已流式补发的旧日志重复。
   private resumePhone(dev: string, lastSeq: number): void {
     this.phones.set(dev, { lastSeq, active: true });
+    this.identity.touchPeer(dev); // 议题①：last_seen 内存态更新（设备清单在线点）
     const replay = lastSeq > 0 && !this.bus.isBeyondBuffer(lastSeq) ? this.bus.replayAfter(lastSeq) : null;
     // 落后太多 = 设备冷启动（内存空但持久化了旧 seq）：增量事件只能更新已知会话、
     // 建不出列表，且上千帧补发挤占桥带宽——超过阈值直接 SNAPSHOT 全量重建
@@ -226,9 +253,16 @@ export class CloudClient {
       ts: Date.now(),
       type: "SNAPSHOT",
       // relay_dev 随云通道快照自报（与 ws-server 的 LAN 快照同源，#401 补强）：客户端
-      // 据此确认/补齐条目身份标记——云桥在线时同机的 LAN/云桥双条目也能归并
-      //（旧客户端忽略多余字段，向前兼容）
-      payload: { sessions: this.mgr.snapshot(), logs: {}, server_time: Date.now(), relay_dev: this.identity.relayDev },
+      // 据此确认/补齐条目身份标记——云桥在线时同机的 LAN/云桥双条目也能归并。
+      // wan_dev（F7）：手机据此拼手表 /wan 连接配置的 dev 段（凭据即 dev）；
+      // 旧客户端忽略多余字段，向前兼容
+      payload: {
+        sessions: this.mgr.snapshot(),
+        logs: {},
+        server_time: Date.now(),
+        relay_dev: this.identity.relayDev,
+        wan_dev: this.identity.wanDev,
+      },
     };
     this.sendSealed(dev, snapshot);
     for (const [sid, logs] of Object.entries(this.mgr.snapshotLogs())) {
@@ -269,9 +303,14 @@ export class CloudClient {
     // 网页端等远端设备的一次性配对：data 为明文 {t:"pair_req", code, pubkey}（未配对设备
     // 尚无法加密；公钥本就公开，码一次性 10 分钟）。dev 必须与公钥派生值一致（防冒名），
     // 校验通过即 addPeer 并回密封 pair_ack。
+    // bc=true 为配对码定位广播（多台 relay 挂同一座桥，手机不预知 rd、凭码找持码者）：
+    // 码不归本机管 ≠ 错码——未持码时静默丢弃，绝不回 nack（桥上每台各回一份会把手机
+    // 淹没）；错码计数照常累计（广播若不计错会被当爆破旁路）。旧手机/网页不发 bc，
+    // 单播路径行为与从前完全一致。
     const pairReq = f.data as { t?: unknown } | undefined;
     if (f.from && pairReq && typeof pairReq === "object" && pairReq.t === "pair_req") {
-      const pr = f.data as unknown as { code?: unknown; pubkey?: unknown; name?: unknown };
+      const pr = f.data as unknown as { code?: unknown; pubkey?: unknown; name?: unknown; bc?: unknown };
+      const bc = pr.bc === true;
       const pubkey = typeof pr.pubkey === "string" ? pr.pubkey : "";
       const dev = pubkey ? devId(pubkey, "wb") : "";
       if (!pubkey || dev !== f.from) {
@@ -285,19 +324,42 @@ export class CloudClient {
         return;
       }
       if (pf) this.pairFails.delete(dev); // 静默期满：计数归零重来（否则手误 5 次后永久一触即锁）
+      // 全局预算（F2）：耗尽后窗口内静默丢弃一切 pair_req（含正码——否则爆破第 51
+      // 次猜中就穿门），且必须先于 consume 判定（否则会把用户的正码烧掉）
+      if (now - this.pairBudgetStart >= this.pairBudgetWindowMs) {
+        this.pairBudgetStart = now;
+        this.pairBudgetN = 0;
+      }
+      if (this.pairBudgetUntil > now) {
+        console.log(`[cloud] pair_req dropped dev=${dev}（全局错码预算耗尽，${Math.ceil((this.pairBudgetUntil - now) / 1000)}s 后重置）`);
+        return;
+      }
       if (this.pairCodes?.consume(String(pr.code ?? ""))) {
         this.identity.addPeer(dev, { pubkey, name: typeof pr.name === "string" ? pr.name : "web", paired_at: Date.now() });
-        console.log(`[cloud] paired web dev=${dev}`);
+        console.log(`[cloud] paired web dev=${dev}${bc ? " via broadcast" : ""}`);
+        // 议题①/§6.3 补偿告警：新设备获得全权的瞬间通知全部在线已配对设备——
+        // 公共桥广播定位的 race 攻击即便得手，攻击设备立刻出现在持有者屏幕上
+        this.bus.emitTransient("PAIRED_DEVICE", {
+          dev,
+          name: typeof pr.name === "string" ? pr.name : "web",
+          action: "add",
+        });
       } else if (!this.identity.peers.get(dev)) {
-        // 码无效且未配对过：真拒绝；连续 5 次错码进入 10 分钟静默期（防爆破枚举）。
+        // 码无效且未配对过：真拒绝；连续 5 次错码进入 10 分钟静默期（防爆破枚举），
+        // 同时计入全局预算（广播 miss 同样计入——把广播当爆破旁路的路也封掉）。
         // 清理只删已过期条目，不清仍在静默期内的（全清会给爆破者开窗）
         const n = (pf?.n ?? 0) + 1;
         this.pairFails.set(dev, { n, until: n >= 5 ? now + 600_000 : 0 });
+        if (++this.pairBudgetN >= this.pairBudgetMax) {
+          this.pairBudgetUntil = this.pairBudgetStart + this.pairBudgetWindowMs;
+          console.log(`[cloud] 全局错码预算耗尽（${this.pairBudgetMax} 次/窗口），静默至预算窗口结束`);
+        }
         if (this.pairFails.size > 100) {
           for (const [d, v] of this.pairFails) if (v.until <= now) this.pairFails.delete(d);
         }
-        console.log(`[cloud] pair_req rejected dev=${f.from}`);
-        this.send({ to: f.from, data: seal({ t: "pair_nack", error: "配对码无效或已过期" }, pubkey, this.identity.keypair.secretKey) });
+        console.log(`[cloud] pair_req ${bc ? "broadcast miss" : "rejected"} dev=${f.from}`);
+        // 广播未命中静默：码是别的 relay 签发的，与本机无关
+        if (!bc) this.send({ to: f.from, data: seal({ t: "pair_nack", error: "配对码无效或已过期" }, pubkey, this.identity.keypair.secretKey) });
         return;
       }
       // 码已消费但设备已配对：幂等补发 ack——首包 ack 可能随桥连接闪断一起丢失，
@@ -336,6 +398,7 @@ export class CloudClient {
         this.resumePhone(f.from, lastSeq);
       } else {
         st.lastSeq = lastSeq;
+        this.identity.touchPeer(f.from); // 议题①：活跃心跳同样推进 last_seen
       }
       this.sendSealed(f.from, { t: "pong", ts: Date.now() });
       return;
@@ -354,13 +417,14 @@ export class CloudClient {
     if (!this.ws || this.ws.readyState !== WebSocket.OPEN) return;
     for (const [dev, st] of this.phones) {
       // 推进 lastSeq：桥闪断后 auto-resume 按 seq 补发，服务端必须知道已推到哪
-      // （否则只能等设备 ping 上报，回补会重复下发已收事件）
-      if (st.active && this.sendSealed(dev, env)) st.lastSeq = env.seq;
+      // （否则只能等设备 ping 上报，回补会重复下发已收事件）。
+      // seq 单调守卫：瞬态帧（seq:0，如 PAIRED_DEVICE）不回拨 lastSeq
+      if (st.active && this.sendSealed(dev, env) && env.seq > st.lastSeq) st.lastSeq = env.seq;
     }
     for (const [dev, st] of this.wanWatches) {
       if (st.active) {
         this.sendWan(dev, env);
-        st.lastSeq = env.seq;
+        if (env.seq > st.lastSeq) st.lastSeq = env.seq;
       }
     }
   }
@@ -370,10 +434,35 @@ export class CloudClient {
     this.send({ to: dev, data: { t: "wan", frame: JSON.stringify(obj) } });
   }
 
+  // F7 收口：公共桥（token 公开，任意人可注册任意 dev）上 /wan 明文通道等于无鉴权
+  // 全权信道——默认拒绝未持本机 wan 凭据（identity.wanDev，data/wan-secret 派生）
+  // 的手表；自建桥维持「桥可信」原语义（手表仍可用 wt-app1 等任意 dev）。
+  // CCR_WAN_STRICT=1 强制全桥严格 / =0 强制全桥放开（自建公共桥运营者可选严格）
+  private get wanStrict(): boolean {
+    const v = process.env.CCR_WAN_STRICT;
+    if (v === "1") return true;
+    if (v === "0") return false;
+    try {
+      const h = new URL(this.url ?? this.cfg.cloudUrl).hostname;
+      return h === "cc.humumu.online" || h === "cc-deck.humumu.online";
+    } catch {
+      return true;
+    }
+  }
+
   // 手表上行帧：hello（连接/重连，带 last_seq 增量恢复）或 Command（ACK 明文信封回发）
   private handleWan(dev: string, frameText: string): void {
     if (!dev.startsWith("wt-")) {
       console.log(`[cloud] wan frame from non-watch dev=${dev}, drop`);
+      return;
+    }
+    if (this.wanStrict && dev !== this.identity.wanDev) {
+      // 默认拒绝：不回包（不确认凭据有效性）、不烧任何状态；日志限频防刷屏
+      const now = Date.now();
+      if (now - this.wanDropLoggedAt > 30_000) {
+        this.wanDropLoggedAt = now;
+        console.log(`[cloud] wan frame from untrusted watch dev=${dev} dropped（严格模式，凭据 dev=${this.identity.wanDev}，bridge=${this.tag}）`);
+      }
       return;
     }
     let obj: unknown;

@@ -264,28 +264,37 @@ export class SessionManager {
     this.bridge = b;
   }
 
-  // 云桥身份（index.ts 在云桥启用时注入；PAIR_START 依赖）
+  // 云桥身份（index.ts 在云桥启用时注入；PAIR_START/PEERS 依赖）
   private cloud: {
     keypair: { publicKey: string };
     relayDev: string;
-    peers: Map<string, { pubkey: string; name?: string; paired_at: number }>;
+    peers: Map<string, { pubkey: string; name?: string; paired_at: number; last_seen?: number }>;
     addPeer: (dev: string, entry: { pubkey: string; name?: string; paired_at: number }) => void;
   } | null = null;
 
   setCloud(c: {
     keypair: { publicKey: string };
     relayDev: string;
-    peers: Map<string, { pubkey: string; name?: string; paired_at: number }>;
+    peers: Map<string, { pubkey: string; name?: string; paired_at: number; last_seen?: number }>;
     addPeer: (dev: string, entry: { pubkey: string; name?: string; paired_at: number }) => void;
   }): void {
     this.cloud = c;
   }
 
-  // 配对码签发器（index.ts 注入，与 /api/pair-code 同源）：COMMAND_PAIR_CODE 依赖
-  private pairIssuer: (() => { code: string; expires_in: number }) | null = null;
+  // 配对码签发器（index.ts 注入，与 /api/pair-code 同源）：COMMAND_PAIR_CODE 依赖。
+  // opts.ttlMs = 按次长码（≤30min，pairing.ts 夹逼；F4）
+  private pairIssuer: ((opts?: { ttlMs?: number }) => { code: string; expires_in: number }) | null = null;
 
-  setPairIssuer(fn: () => { code: string; expires_in: number }): void {
+  setPairIssuer(fn: (opts?: { ttlMs?: number }) => { code: string; expires_in: number }): void {
     this.pairIssuer = fn;
+  }
+
+  // 议题①踢除执行器（index.ts 注入：identity.removePeer + 各桥 CloudClient.kickPeer
+  // 发 pair_nack 停其重连）：COMMAND_PEER_KICK 依赖
+  private peerKicker: ((dev: string) => void) | null = null;
+
+  setPeerKicker(fn: (dev: string) => void): void {
+    this.peerKicker = fn;
   }
 
   // #325 扫码登录授权器（index.ts 注入，转发各云桥客户端 grantLogin）
@@ -807,7 +816,10 @@ export class SessionManager {
             return { command_id: cmd.command_id, ok: false, error: "bad pubkey" };
           }
           const dev = devId(pubkey, "ph");
-          this.cloud.addPeer(dev, { pubkey, name: cmd.payload.name, paired_at: Date.now() });
+          const name = cmd.payload.name || "手机";
+          this.cloud.addPeer(dev, { pubkey, name, paired_at: Date.now() });
+          // 议题①：手机扫码配对同样是新设备入册（全权）——广播提醒其余在线设备
+          this.bus.emitTransient("PAIRED_DEVICE", { dev, name, action: "add" });
           return {
             command_id: cmd.command_id,
             ok: true,
@@ -820,11 +832,45 @@ export class SessionManager {
           };
         }
         case "COMMAND_PAIR_CODE": {
-          // 信任设备（已配对手机，LAN token / 云 E2E 任一信道）为网页端新设备签发一次性配对码
+          // 信任设备（已配对手机，LAN token / 云 E2E 任一信道）为网页端新设备签发一次性配对码。
+          // ttl_ms 可选：按次长码（F4；签发端夹逼 60s~30min，见 pairing.ts）
           if (!this.cloud || !this.pairIssuer) {
             return { command_id: cmd.command_id, ok: false, error: "云桥未启用（PC 侧未设置 CCR_CLOUD_URL）" };
           }
-          return { command_id: cmd.command_id, ok: true, pair_code: this.pairIssuer() };
+          const ttlRaw = (cmd.payload as { ttl_ms?: unknown }).ttl_ms;
+          const opts =
+            typeof ttlRaw === "number" && Number.isFinite(ttlRaw) && ttlRaw > 0 ? { ttlMs: ttlRaw } : undefined;
+          return { command_id: cmd.command_id, ok: true, pair_code: this.pairIssuer(opts) };
+        }
+        case "COMMAND_PEERS": {
+          // 议题①可信设备清单：kind 按 dev 前缀派生（rl- 是 relay 自己，不在 peers）；
+          // 云桥未启用时 peers 恒空，返回空清单而非报错（网页端 UI 直接显示「暂无」）
+          const peers = this.cloud
+            ? [...this.cloud.peers.entries()].map(([dev, e]) => ({
+                dev,
+                name: e.name || dev.slice(0, 11),
+                pubkey: e.pubkey,
+                kind: dev.startsWith("ph-") ? ("phone" as const) : dev.startsWith("wb-") ? ("web" as const) : dev.startsWith("wt-") ? ("watch" as const) : ("other" as const),
+                paired_at: e.paired_at,
+                last_seen: e.last_seen ?? 0,
+              }))
+            : [];
+          return { command_id: cmd.command_id, ok: true, peers };
+        }
+        case "COMMAND_PEER_KICK": {
+          // 议题①踢除：幂等（dev 不存在也回 ok）；先广播 kick 让在线设备刷新清单，
+          // 再执行移除（peers 写穿落盘 + 各桥发 pair_nack 令其立即停止重连）
+          if (!this.cloud || !this.peerKicker) {
+            return { command_id: cmd.command_id, ok: false, error: "云桥未启用（PC 侧未设置 CCR_CLOUD_URL）" };
+          }
+          const dev = String((cmd.payload as { dev?: unknown }).dev ?? "");
+          if (!/^[a-z]{2}-[0-9a-f]{6,64}$/.test(dev)) {
+            return { command_id: cmd.command_id, ok: false, error: "无效的设备号" };
+          }
+          const name = this.cloud.peers.get(dev)?.name || dev.slice(0, 11);
+          this.peerKicker(dev);
+          this.bus.emitTransient("PAIRED_DEVICE", { dev, name, action: "kick" });
+          return { command_id: cmd.command_id, ok: true };
         }
         case "COMMAND_LOGIN_GRANT": {
           // #325 扫码登录：手机（信任信道）授权网页端出示的会话公钥，relay 配对并回 ack。

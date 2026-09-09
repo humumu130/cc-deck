@@ -231,7 +231,8 @@ export type EventType =
   | "SESSION_DELETED"
   | "SNAPSHOT"
   | "PAIR_REQUEST"
-  | "PAIR_RESOLVED";
+  | "PAIR_RESOLVED"
+  | "PAIRED_DEVICE";
 
 export type EventPayloadMap = {
   SESSION_CREATED: SessionCreatedPayload;
@@ -247,6 +248,7 @@ export type EventPayloadMap = {
   SNAPSHOT: SnapshotPayload;
   PAIR_REQUEST: PairRequestPayload;
   PAIR_RESOLVED: PairResolvedPayload;
+  PAIRED_DEVICE: PairedDevicePayload;
 };
 
 export interface SessionDeletedPayload {
@@ -267,6 +269,29 @@ export interface PairRequestPayload {
 export interface PairResolvedPayload {
   request_id: string;
   decision: "allow" | "deny" | "timeout";
+}
+
+// 议题①可信设备变更（2026-09-09，与 PAIR_REQUEST 同为瞬态：seq:0 不进 EventBus
+// 缓冲、不落 events.ndjson、重连不补发——新配对提醒不该在掉线重连后重弹）。
+// 新设备配对成功（pair_req 消费码 / 扫码授权 / 手机 LAN 配对）广播 add：补偿公共桥
+// 广播定位暴露——race 攻击即便得手，攻击设备立刻出现在已配对手机的通知里；
+// 管理员踢除广播 kick：在线客户端据此刷新设备清单。老客户端未知类型自动忽略
+export interface PairedDevicePayload {
+  dev: string;
+  name: string;
+  action: "add" | "kick";
+}
+
+// COMMAND_PEERS 返回的设备条目（议题①）：kind 按 dev 前缀派生（rl- 是 relay 自己，
+// 不会出现在 peers）。pubkey 一并返回——公钥本就公开（发现帧 rk 同源），使「导出
+// 设备清单备份」具备重装修复配对关系的完整材料（重装后粘回 data/cloud-peers.json）
+export interface PairedDeviceInfo {
+  dev: string;
+  name: string;
+  pubkey: string;
+  kind: "phone" | "web" | "watch" | "other";
+  paired_at: number;
+  last_seen: number; // 0 = 未知（relay 重启后 last_seen 是内存态，重启即清零）
 }
 
 export type TypedEnvelope<T extends EventType = EventType> = Envelope<
@@ -292,6 +317,8 @@ export type CommandType =
   | "COMMAND_PAIR_CODE"
   | "COMMAND_LOGIN_GRANT"
   | "COMMAND_WATCH_GRANT"
+  | "COMMAND_PEERS"
+  | "COMMAND_PEER_KICK"
   | "COMMAND_PERM"
   | "COMMAND_MODEL"
   | "COMMAND_REFRESH_TODOS"
@@ -372,10 +399,12 @@ export interface PairStartCommand extends CommandBase {
   payload: { pubkey: string; name?: string };
 }
 
-// 已配对的信任设备（手机）请求签发网页端配对码，ACK 携带 pair_code
+// 已配对的信任设备（手机）请求签发网页端配对码，ACK 携带 pair_code。
+// ttl_ms 可选：按次长码（≤30min，pairing.ts 夹逼；F4——此前命令无参数，长码只能
+// 走 HTTP ?ttl。手机抽屉「长码」入口为 P2，本期先通协议）
 export interface PairCodeCommand extends CommandBase {
   type: "COMMAND_PAIR_CODE";
-  payload: Record<string, never>;
+  payload: { ttl_ms?: number };
 }
 
 // #325 扫码登录：手机扫了网页端出示的二维码后授权该会话——relay 把
@@ -389,6 +418,18 @@ export interface LoginGrantCommand extends CommandBase {
 export interface WatchGrantCommand extends CommandBase {
   type: "COMMAND_WATCH_GRANT";
   payload: { request_id: string; allow: boolean };
+}
+
+// 议题①可信设备清单：LAN token / 云 E2E 已配对信道均可发（Command 双信道通用）
+export interface PeersCommand extends CommandBase {
+  type: "COMMAND_PEERS";
+  payload: Record<string, never>;
+}
+
+// 议题①踢除已配对设备：移除 peers + 各桥发明文 pair_nack 令其立即停止重连；幂等
+export interface PeerKickCommand extends CommandBase {
+  type: "COMMAND_PEER_KICK";
+  payload: { dev: string };
 }
 
 export type Command =
@@ -407,6 +448,8 @@ export type Command =
   | PairCodeCommand
   | LoginGrantCommand
   | WatchGrantCommand
+  | PeersCommand
+  | PeerKickCommand
   | PermCommand
   | RefreshTodosCommand
   | TodoHideCommand
@@ -471,4 +514,5 @@ export interface CommandAckPayload {
   error?: string;
   cloud?: CloudPairInfo; // 仅 COMMAND_PAIR_START 成功时携带
   pair_code?: { code: string; expires_in: number }; // 仅 COMMAND_PAIR_CODE 成功时携带
+  peers?: PairedDeviceInfo[]; // 仅 COMMAND_PEERS 成功时携带（议题①）
 }
