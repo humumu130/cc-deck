@@ -85,6 +85,12 @@ export interface SessionState {
   pending_inputs?: PendingInput[]; // external 会话已发送未处理的注入消息（客户端显示在工作指示器下方，处理/回合结束时晋升为正式消息）
   cron_tasks?: CronTask[];   // 会话目录的定时任务快照（30s 轮询，变化才下发；[] = 已清空）
   compacting?: boolean;      // #363 true = CLI 正在压缩上下文（PreCompact hook 置位，Compacting conversation…）；下一事件/转录增长/8min 兜底清位
+  // #49 置顶会话：pinned = 用户置顶（写穿 data/pinned-sessions.json，跨重启保留）。
+  // saved = 休眠标记：relay 重启后置顶会话只登记不拉起（agent 为空、可见不可操作），
+  // 端上渲染「已保存」卡片，点击发 COMMAND_RESUME_SESSION 按需 resume 拉起；
+  // 恢复成功即清除，失败保留（卡片标「恢复失败」，可重试）
+  pinned?: boolean;
+  saved?: boolean;
   // 最近一次任务完成汇报（#254）：TASK_DONE 是瞬态事件，客户端断线/进程被杀时收不到；
   // 记入会话状态仅随 SNAPSHOT 下发（SESSION_UPDATED 增量帧不携带），端上按 ts 去重后恢复
   // 未读汇报。remaining_count 为数字（剩余条数）——TASK_DONE 事件的 remaining 是 TodoItem[]，
@@ -150,6 +156,8 @@ export interface SessionUpdatedPayload {
   permission_mode?: ManagedPermissionMode; // 权限模式变化时携带
   pending_inputs?: PendingInput[]; // 排队注入消息增减时携带（[] = 清空）
   cron_tasks?: CronTask[];    // 定时任务变化时携带（[] = 清空）
+  pinned?: boolean;           // #49 置顶状态变化时携带（true/false 都显式下发，端上直改）
+  saved?: boolean;            // #49 休眠标记变化时携带（恢复成功清位 / unpin 摘除）
 }
 
 export interface SessionHeartbeatPayload {
@@ -237,7 +245,8 @@ export type EventType =
   | "SNAPSHOT"
   | "PAIR_REQUEST"
   | "PAIR_RESOLVED"
-  | "PAIRED_DEVICE";
+  | "PAIRED_DEVICE"
+  | "USER_NOTE";
 
 export type EventPayloadMap = {
   SESSION_CREATED: SessionCreatedPayload;
@@ -254,6 +263,7 @@ export type EventPayloadMap = {
   PAIR_REQUEST: PairRequestPayload;
   PAIR_RESOLVED: PairResolvedPayload;
   PAIRED_DEVICE: PairedDevicePayload;
+  USER_NOTE: UserNotePayload;
 };
 
 export interface SessionDeletedPayload {
@@ -285,6 +295,15 @@ export interface PairedDevicePayload {
   dev: string;
   name: string;
   action: "add" | "kick";
+}
+
+// #52 插入问答通知全端化（/api/notify mode=confirm）：黄框 [待确认] todo 注入之外，
+// 同时以瞬态事件直播给全部在线端（web/exe/手机），各端据此弹系统通知/横幅。
+// 与 PAIRED_DEVICE 同款瞬态语义：seq:0、不进 EventBus 缓冲、不落 events.ndjson、
+// 重连不补发——离线端由 [待确认] todo（落会话状态随 SNAPSHOT）兜底，不重复弹
+export interface UserNotePayload {
+  text: string;   // 通知原文（/api/notify text，≤120 字）
+  ts: number;     // Date.now()（端上通知去重/展示时间用）
 }
 
 // #42 设备身份元数据：pair_req 帧的可选自报字段，配对方各端按自身形态填——
@@ -341,7 +360,9 @@ export type CommandType =
   | "COMMAND_PERM"
   | "COMMAND_MODEL"
   | "COMMAND_REFRESH_TODOS"
-  | "COMMAND_TODO_HIDE";
+  | "COMMAND_TODO_HIDE"
+  | "COMMAND_PIN_SESSION"
+  | "COMMAND_RESUME_SESSION";
 
 export interface CommandBase {
   command_id: string;   // 客户端生成（uuid），Relay 按此去重
@@ -472,7 +493,9 @@ export type Command =
   | PermCommand
   | RefreshTodosCommand
   | TodoHideCommand
-  | ModelCommand;
+  | ModelCommand
+  | PinSessionCommand
+  | ResumeSessionCommand;
 
 // 托管会话权限模式切换（default=每次确认 / acceptEdits=自动接受编辑 / plan=只读规划）
 export interface PermCommand extends CommandBase {
@@ -497,6 +520,21 @@ export interface RefreshTodosCommand extends CommandBase {
 export interface TodoHideCommand extends CommandBase {
   type: "COMMAND_TODO_HIDE";
   payload: { session_id: string; content: string }; // content = 条目原文（TodoItem.content）
+}
+
+// #49 托管会话置顶（写穿 data/pinned-sessions.json，跨重启保留）。pin 后 relay 重启
+// 该会话以休眠态登记（saved），unpin 随时可发（含休眠态——摘除休眠卡）
+export interface PinSessionCommand extends CommandBase {
+  type: "COMMAND_PIN_SESSION";
+  payload: { session_id: string; pinned: boolean };
+}
+
+// #49 按需恢复：点击「已保存」休眠卡时触发，relay 用 transcript resume（SDK 会话 id）
+// 拉起 AgentSession，不注入任何用户消息（恢复后停在等待输入）。成功→saved 清除、
+// 会话正常在线；失败→ERROR + last_error（卡片标「恢复失败」），saved 保留可重试
+export interface ResumeSessionCommand extends CommandBase {
+  type: "COMMAND_RESUME_SESSION";
+  payload: { session_id: string };
 }
 
 // hooks 桥接：bridge-hook.mjs -> POST /bridge/hook 的请求体（token 走 x-bridge-token header）

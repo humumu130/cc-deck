@@ -10,7 +10,8 @@ import { loadConfig } from "../src/config.js";
 import { startServer } from "../src/ws-server.js";
 import { createPairingCodes } from "../src/pairing.js";
 import { devId, generateKeyPair } from "../src/e2e.js";
-import type { BridgeEvent, Command, CommandAckPayload, Envelope, WaitingPayload } from "../src/types.js";
+import type { BridgeEvent, Command, CommandAckPayload, Envelope, LogEntry, SessionState, WaitingPayload } from "../src/types.js";
+import type { AgentCallbacks, AgentLike } from "../src/agent-adapter.js";
 
 function assert(cond: boolean, msg: string): void {
   if (!cond) {
@@ -1316,6 +1317,196 @@ assert(ack24.ok === false, "empty rename rejected");
     rmSync(T45, { force: true });
     rmSync(PEEK, { force: true });
   }
+}
+
+// 46. #49 置顶会话：pin 命令往返 / 写穿 pinned-sessions.json / SNAPSHOT 带 pinned /
+//     重启休眠登记（saved，不拉起）/ 按需恢复（COMMAND_RESUME_SESSION）/ 失败与重试
+{
+  const PIN_FILE = join(cfg.dataDir, "pinned-sessions.json");
+  rmSync(PIN_FILE, { force: true });
+
+  // 假 agent 工厂（测试缝）：不拉真 CLI。initMode 在构造时刻读取——
+  // init = 20ms 后回 onInit（正常 ready）；noinit = 永不 ready（无 relay_session_id）；
+  // die = 10ms 后流关闭（恢复失败路径）
+  let initMode: "init" | "noinit" | "die" = "init";
+  const created: { prompt: string | undefined; resume?: string; cb: AgentCallbacks }[] = [];
+  const makeFakeFactory = () => (cwd: string, model: string, cb: AgentCallbacks, prompt: string | undefined, opts?: { resume?: string }): AgentLike => {
+    const rec = { prompt, resume: opts?.resume, cb };
+    created.push(rec);
+    const mode = initMode;
+    const a: AgentLike = {
+      id: randomUUID(),
+      startedAt: Date.now(),
+      ended: false,
+      sendMessage: () => {},
+      allow: () => false,
+      deny: () => false,
+      answer: () => false,
+      stop: async () => { a.ended = true; cb.onSessionEnd("stopped"); },
+      setPermissionMode: async () => {},
+    };
+    if (mode === "init") {
+      setTimeout(() => {
+        if (a.ended) return;
+        cb.onInit("sdk-" + a.id.slice(0, 8), model, "default");
+        // 有首条消息（create/消息式 resume）才有回合；parked 恢复停在等待输入
+        if (prompt !== undefined) setTimeout(() => { if (!a.ended) cb.onTurnEnd(true, "success", 12); }, 10);
+      }, 20);
+    } else if (mode === "noinit") {
+      // 不回 init（无 relay_session_id）但回合完成 → 终态 DONE：真实世界里这是
+      // "init 前被杀" 的会话（重启后会被重放标 ERROR），这里用于可删除路径
+      setTimeout(() => { if (!a.ended) cb.onTurnEnd(true, "success", 8); }, 20);
+    } else if (mode === "die") setTimeout(() => { if (!a.ended) { a.ended = true; cb.onSessionEnd("stream closed"); } }, 10);
+    return a;
+  };
+  const readPinnedForTest = (p: string): string[] => {
+    try { return JSON.parse(readFileSync(p, "utf-8")) as string[]; } catch { return []; }
+  };
+  const waitFor2 = async (fn: () => boolean, ms = 3000, every = 25): Promise<boolean> => {
+    const end = Date.now() + ms;
+    while (Date.now() < end) { if (fn()) return true; await wait(every); }
+    return fn();
+  };
+
+  // a) 创建两个托管会话：A 正常 init；B 不 init（无 relay_session_id 的恢复拒绝路径）
+  mgr.setAgentFactory(makeFakeFactory());
+  const createA = send("COMMAND_CREATE", { cwd: process.cwd(), prompt: "#49 置顶会话 A" });
+  const ackA = await waitAck(createA);
+  assert(ackA.ok === true && typeof ackA.session_id === "string", "46a 托管会话 A 创建（工厂缝，无真 CLI）");
+  const sidA = ackA.session_id!;
+  assert(await waitFor2(() => events.some((e) => e.type === "SESSION_UPDATED" && e.session_id === sidA && typeof (e.payload as { relay_session_id?: string }).relay_session_id === "string")), "46a onInit 落 relay_session_id（SESSION_UPDATED 可见）");
+  const sdkA = mgr.snapshot().find((s) => s.session_id === sidA)!.relay_session_id!;
+  assert(!!sdkA, "46a relay_session_id 已登记");
+
+  initMode = "noinit";
+  const createB = send("COMMAND_CREATE", { cwd: process.cwd(), prompt: "#49 置顶会话 B" });
+  const ackB = await waitAck(createB);
+  assert(ackB.ok === true && typeof ackB.session_id === "string", "46b 托管会话 B 创建（不 init 形态）");
+  const sidB = ackB.session_id!;
+  initMode = "init";
+
+  // b) pin 往返：on → 写穿文件 + 事件带 pinned；off → 文件移除 + 事件带 pinned:false
+  assert((await waitAck(send("COMMAND_PIN_SESSION", { session_id: sidA, pinned: true }))).ok, "46b pin A ack ok");
+  assert(
+    (() => { try { return (JSON.parse(readFileSync(PIN_FILE, "utf-8")) as string[]).includes(sidA); } catch { return false; } })(),
+    "46b pinned-sessions.json 写穿含 A",
+  );
+  assert(events.some((e) => e.type === "SESSION_UPDATED" && e.session_id === sidA && (e.payload as { pinned?: boolean }).pinned === true), "46b SESSION_UPDATED 带 pinned:true");
+  // SNAPSHOT 带 pinned（新客户端全量路径）
+  {
+    const snapWs = new WebSocket(`ws://127.0.0.1:${cfg.port}/ws?token=${cfg.token}`);
+    const snap = (await new Promise<Record<string, unknown>>((resolve) => snapWs.once("message", (d) => resolve(JSON.parse(String(d)) as Record<string, unknown>))));
+    snapWs.close();
+    const sessions = (snap.payload as { sessions?: { session_id: string; pinned?: boolean }[] }).sessions ?? [];
+    assert(snap.type === "SNAPSHOT" && sessions.find((s) => s.session_id === sidA)?.pinned === true, "46b SNAPSHOT 会话携带 pinned");
+  }
+  assert((await waitAck(send("COMMAND_PIN_SESSION", { session_id: sidA, pinned: false }))).ok, "46b unpin A ack ok");
+  assert(
+    (() => { try { return !(JSON.parse(readFileSync(PIN_FILE, "utf-8")) as string[]).includes(sidA); } catch { return true; } })(),
+    "46b unpin 后文件移除 A",
+  );
+  assert(events.some((e) => e.type === "SESSION_UPDATED" && e.session_id === sidA && (e.payload as { pinned?: boolean }).pinned === false), "46b SESSION_UPDATED 带 pinned:false");
+  // 外部会话 pin → 拒绝
+  assert((await waitAck(send("COMMAND_PIN_SESSION", { session_id: extId("cli-1"), pinned: true }))).ok === false, "46b 外部会话 pin 被拒");
+
+  // c) 重启休眠登记：新 mgr（同 dataDir）收养历史 → applyPinned 只标 saved 不拉起
+  assert((await waitAck(send("COMMAND_PIN_SESSION", { session_id: sidA, pinned: true }))).ok, "46c 重新 pin A（供重启模拟）");
+  assert((await waitAck(send("COMMAND_PIN_SESSION", { session_id: sidB, pinned: true }))).ok, "46c pin B（无 sdk id 形态）");
+  const replayedFor = (source: SessionManager): Map<string, { state: SessionState; logs: LogEntry[] }> => {
+    const m = new Map<string, { state: SessionState; logs: LogEntry[] }>();
+    for (const st of source.snapshot()) m.set(st.session_id, { state: JSON.parse(JSON.stringify(st)) as SessionState, logs: [] });
+    return m;
+  };
+  // 先污染一个失联条目：applyPinned 应清理
+  writeFileSync(PIN_FILE, JSON.stringify([...readPinnedForTest(PIN_FILE), "ghost-session-id"]));
+  const bus2 = new EventBus();
+  const mgr2 = new SessionManager(bus2, cfg);
+  let created2 = 0;
+  mgr2.setAgentFactory((cwd, model, cb, prompt, opts) => { created2++; return makeFakeFactory()(cwd, model, cb, prompt, opts); });
+  mgr2.adopt(replayedFor(mgr));
+  const applied = mgr2.applyPinned();
+  assert(applied.saved === 2, "46c applyPinned 休眠登记 2 个置顶会话（不拉起）");
+  assert(created2 === 0, "46c 重启登记零 SDK 拉起（工厂未被调用）");
+  const stA2 = mgr2.snapshot().find((s) => s.session_id === sidA)!;
+  assert(stA2.pinned === true && stA2.saved === true, "46c 休眠卡 pinned+saved");
+  assert(stA2.status === "DONE" && stA2.done_reason === "已保存（重启休眠）", "46c 休眠状态 DONE/已保存");
+  assert(stA2.historical === true, "46c 休眠卡保留 historical（旧端仅可查看语义）");
+  assert(
+    (() => { try { return !(JSON.parse(readFileSync(PIN_FILE, "utf-8")) as string[]).includes("ghost-session-id"); } catch { return true; } })(),
+    "46c 失联条目（无会话）从清单清理",
+  );
+
+  // d) 按需恢复：RESUME A → resume 原 sdk id、不注入消息、saved/historical 清除
+  const ackResume = mgr2.handleCommand({ command_id: "resume-a1", type: "COMMAND_RESUME_SESSION", payload: { session_id: sidA }, ts: Date.now() }, "test") as CommandAckPayload;
+  assert(ackResume.ok === true, "46d COMMAND_RESUME_SESSION 受理");
+  assert(created[created.length - 1].resume === sdkA, "46d resume 引用原 SDK 会话 id");
+  assert(created[created.length - 1].prompt === undefined, "46d 恢复不注入用户消息（parked）");
+  assert(await waitFor2(() => {
+    const st = mgr2.snapshot().find((s) => s.session_id === sidA);
+    return st?.status === "DONE" && st?.saved === undefined && !st?.historical;
+  }), "46d init 后 saved/historical 清除、停在等待输入（DONE）");
+  // 已在线幂等：再 RESUME 不新建 agent
+  const before2 = created2;
+  assert((mgr2.handleCommand({ command_id: "resume-a2", type: "COMMAND_RESUME_SESSION", payload: { session_id: sidA }, ts: Date.now() }, "test") as CommandAckPayload).ok === true, "46d 在线会话 RESUME 幂等 ok");
+  assert(created2 === before2, "46d 幂等 RESUME 不重复拉起");
+
+  // e) 无 SDK 记录的休眠卡：RESUME 同步拒绝（ack error）
+  const ackResumeB = mgr2.handleCommand({ command_id: "resume-b1", type: "COMMAND_RESUME_SESSION", payload: { session_id: sidB }, ts: Date.now() }, "test") as CommandAckPayload;
+  assert(ackResumeB.ok === false && (ackResumeB.error ?? "").includes("无 SDK 会话记录"), "46e 无 relay_session_id 的休眠卡恢复被拒（可读错误）");
+
+  // f) 恢复失败（流 pre-init 关闭）→ ERROR「恢复失败」+ saved 保留 → 换好工厂重试成功
+  const bus3 = new EventBus();
+  const mgr3 = new SessionManager(bus3, cfg);
+  let factory3 = "die";
+  mgr3.setAgentFactory((cwd, model, cb, prompt, opts) => { const f = makeFakeFactory(); initMode = factory3 as "init" | "noinit" | "die"; const a = f(cwd, model, cb, prompt, opts); initMode = "init"; return a; });
+  mgr3.adopt(replayedFor(mgr));
+  mgr3.applyPinned();
+  assert((mgr3.handleCommand({ command_id: "resume-a3", type: "COMMAND_RESUME_SESSION", payload: { session_id: sidA }, ts: Date.now() }, "test") as CommandAckPayload).ok === true, "46f 恢复命令受理（异步成败走事件）");
+  assert(await waitFor2(() => {
+    const st = mgr3.snapshot().find((s) => s.session_id === sidA);
+    return st?.status === "ERROR" && (st?.last_error ?? "").startsWith("恢复失败") && st?.saved === true;
+  }), "46f init 前流关闭 → ERROR 恢复失败 + saved 保留（可重试）");
+  factory3 = "init";
+  assert((mgr3.handleCommand({ command_id: "resume-a4", type: "COMMAND_RESUME_SESSION", payload: { session_id: sidA }, ts: Date.now() }, "test") as CommandAckPayload).ok === true, "46f 重试受理");
+  assert(await waitFor2(() => {
+    const st = mgr3.snapshot().find((s) => s.session_id === sidA);
+    return st?.status === "DONE" && st?.saved === undefined;
+  }), "46f 重试恢复成功");
+
+  // g) 休眠态 unpin：saved 摘除 + 文件移除
+  assert((mgr3.handleCommand({ command_id: "unpin-a", type: "COMMAND_PIN_SESSION", payload: { session_id: sidA, pinned: false }, ts: Date.now() }, "test") as CommandAckPayload).ok === true, "46g 休眠态 unpin ack ok");
+  assert(mgr3.snapshot().find((s) => s.session_id === sidA)?.saved === undefined, "46g unpin 摘除 saved（卡片回普通历史态）");
+
+  // h) 删除置顶会话联动清单（先等 B 的假回合完成 → DONE 才可删）
+  assert((await waitAck(send("COMMAND_PIN_SESSION", { session_id: sidB, pinned: true }))).ok, "46h 重 pin B（走 mgr）");
+  assert(await waitFor2(() => mgr.snapshot().find((s) => s.session_id === sidB)?.status === "DONE"), "46h B 假回合完成（DONE 可删除）");
+  assert((await waitAck(send("COMMAND_DELETE", { session_id: sidB }))).ok, "46h 删除 B");
+  assert(
+    (() => { try { return !(JSON.parse(readFileSync(PIN_FILE, "utf-8")) as string[]).includes(sidB); } catch { return true; } })(),
+    "46h 删除置顶会话同步摘除清单",
+  );
+
+  mgr.setAgentFactory(null);
+  rmSync(PIN_FILE, { force: true });
+}
+
+// 47. #52 插入问答通知全端化：/api/notify mode=confirm → [待确认] todo 照旧 + USER_NOTE 瞬态事件
+{
+  const r = await fetch(`${http}/api/notify?token=${cfg.token}`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ mode: "confirm", session_id: extId("cli-1"), text: "#52 通知通路测试" }),
+  });
+  assert(r.ok, "47 notify confirm 200");
+  const note = events.find((e) => e.type === "USER_NOTE") as Envelope<"USER_NOTE", { text?: string; ts?: number }> | undefined;
+  assert(!!note, "47 USER_NOTE 事件下发（ws 客户端实时收到）");
+  assert(note!.payload.text === "#52 通知通路测试" && typeof note!.payload.ts === "number", "47 USER_NOTE payload {text, ts}");
+  assert(note!.seq === 0, "47 USER_NOTE 为瞬态（seq:0，不占总线序号）");
+  // 既有行为不回归：[待确认] todo 仍注入目标会话
+  assert(
+    events.some((e) => e.type === "SESSION_UPDATED" && e.session_id === extId("cli-1") && (e.payload as { todos?: { content?: string }[] }).todos?.some((t) => t.content === "[待确认] #52 通知通路测试")),
+    "47 [待确认] todo 照旧注入目标会话",
+  );
 }
 
 wsCur!.close();

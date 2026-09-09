@@ -63,6 +63,8 @@ const COMMAND_TYPES = new Set([
   "COMMAND_MODEL",
   "COMMAND_REFRESH_TODOS",
   "COMMAND_TODO_HIDE",
+  "COMMAND_PIN_SESSION",
+  "COMMAND_RESUME_SESSION",
 ]);
 
 const HEARTBEAT_MS = 30_000;
@@ -367,7 +369,7 @@ export function startServer(
     // #393 手动通知（LAN token 鉴权）：body {session_id?, done: string[]} → 该会话（缺省
     // 取最新 WORKING/外部会话）悬浮框弹 TASK_DONE。答疑/联调实测悬浮框用
     if (req.method === "POST" && url.pathname === "/api/notify") {
-      void handleNotify(req, res, mgr, cfg);
+      void handleNotify(req, res, mgr, cfg, bus);
       return;
     }
     // #448 插件可选能力配置（设置「插件」页三开关）：读写 ~/.cc-deck/config.json 的
@@ -715,11 +717,14 @@ async function handlePluginConfig(req: IncomingMessage, res: ServerResponse): Pr
 }
 
 // #393 /api/notify：手动注入 TASK_DONE（悬浮框通知），LAN token 鉴权
+// bus（#52）：mode=confirm 时除注入 [待确认] todo 外，同步 emitTransient USER_NOTE
+// 直播全部在线端（web/exe/手机弹通知；seq:0 不落盘不补发，离线端由 todo 兜底）
 async function handleNotify(
   req: IncomingMessage,
   res: ServerResponse,
   mgr: SessionManager,
   cfg: RelayConfig,
+  bus: EventBus,
 ): Promise<void> {
   const url = new URL(req.url ?? "/", "http://localhost");
   if ((url.searchParams.get("token") ?? "") !== cfg.token) {
@@ -747,6 +752,9 @@ async function handleNotify(
         sessions[0];
       if (!target) { res.writeHead(503).end('{"error":"无可投递会话"}'); return; }
       mgr.notifyConfirm(target.session_id, text);
+      // #52 全端化：确认提醒除落目标会话 todos 外，瞬态 USER_NOTE 直播全部在线端
+      //（web/exe 据此弹横幅/系统通知；PAIRED_DEVICE 同款 seq:0 语义，不补发防重复弹）
+      bus.emitTransient("USER_NOTE", { text, ts: Date.now() });
       res.writeHead(200, { "content-type": "application/json" }).end(JSON.stringify({ ok: true, mode: "confirm", session_id: target.session_id }));
       return;
     }

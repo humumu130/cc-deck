@@ -11,6 +11,7 @@ import { generateTitle } from "./title-gen.js";
 import { cronTasksKey, readCronTasks } from "./cron.js";
 import { readTaskStoreTodos } from "./task-store.js";
 import { normKey, truncate } from "./summarizer.js";
+import type { AgentLike } from "./agent-adapter.js";
 
 // 上下文窗口上限按模型区分：集中在此维护并随 context_usage 下发，客户端不存映射表
 function contextLimitOf(model: string | undefined): number {
@@ -138,8 +139,32 @@ function appendDeletedExt(dataDir: string, id: string): void {
   } catch {}
 }
 
+// #49 置顶会话清单：写穿 data/pinned-sessions.json（relay session_id 数组）。
+// 置顶 = 跨重启保留：重启后 applyPinned 把清单内托管会话登记为休眠（saved，
+// 可见不可操作），用户点卡片发 COMMAND_RESUME_SESSION 才用 transcript resume 拉起
+const PINNED_SESSIONS_CAP = 50;
+
+function pinnedSessionsPath(dataDir: string): string {
+  return join(dataDir, "pinned-sessions.json");
+}
+
+function readPinnedSessions(dataDir: string): string[] {
+  try {
+    const raw = JSON.parse(readFileSync(pinnedSessionsPath(dataDir), "utf-8")) as unknown;
+    return Array.isArray(raw) ? raw.filter((x): x is string => typeof x === "string") : [];
+  } catch {
+    return [];
+  }
+}
+
+function writePinnedSessions(dataDir: string, ids: string[]): void {
+  try {
+    writeFileSync(pinnedSessionsPath(dataDir), JSON.stringify(ids.slice(-PINNED_SESSIONS_CAP)));
+  } catch {} // 写穿失败静默降级：置顶只影响重启后的休眠登记，运行期状态不受影响
+}
+
 interface ManagedSession {
-  agent: AgentSession | null;   // null = Relay 重启遗留的历史会话，不可操作
+  agent: AgentLike | null;      // null = Relay 重启遗留的历史会话，不可操作
   state: SessionState;
   logs: LogEntry[];             // 供 SNAPSHOT 下发的时间线
   lastUpdateEmit: number;
@@ -171,6 +196,29 @@ export class SessionManager {
 
   /** #388 供 ws-server 读默认模型（快照 payload.models 聚合用） */
   readonly cfg: RelayConfig;
+
+  // #49 测试缝：托管 AgentSession 工厂。生产恒为 null（直接 new AgentSession，
+  // 行为与从前逐字节一致）；test-bridge/test-cloud 注入假 agent 验证置顶/按需恢复
+  // 与休眠登记路径，免拉真 CLI 子进程
+  private agentFactory: ((cwd: string, model: string, cb: AgentCallbacks, initialPrompt: string | undefined, opts?: { resume?: string; permissionMode?: ManagedPermissionMode; images?: string[] }) => AgentLike) | null = null;
+
+  setAgentFactory(
+    fn: ((cwd: string, model: string, cb: AgentCallbacks, initialPrompt: string | undefined, opts?: { resume?: string; permissionMode?: ManagedPermissionMode; images?: string[] }) => AgentLike) | null,
+  ): void {
+    this.agentFactory = fn;
+  }
+
+  private newAgent(
+    cwd: string,
+    model: string,
+    cb: AgentCallbacks,
+    initialPrompt: string | undefined,
+    opts?: { resume?: string; permissionMode?: ManagedPermissionMode; images?: string[] },
+  ): AgentLike {
+    return this.agentFactory
+      ? this.agentFactory(cwd, model, cb, initialPrompt, opts)
+      : new AgentSession(cwd, model, cb, initialPrompt, opts);
+  }
 
   constructor(
     private bus: EventBus,
@@ -835,6 +883,13 @@ export class SessionManager {
             this.deletedExtIds.add(cmd.payload.session_id);
             appendDeletedExt(this.cfg.dataDir, cmd.payload.session_id);
           }
+          // #49 删除置顶会话同步摘除清单（否则重启后被当作休眠卡登记回来）
+          if (s.state.pinned) {
+            writePinnedSessions(
+              this.cfg.dataDir,
+              readPinnedSessions(this.cfg.dataDir).filter((x) => x !== cmd.payload.session_id),
+            );
+          }
           this.bus.emit(cmd.payload.session_id, "SESSION_DELETED", { session_id: cmd.payload.session_id });
           return { command_id: cmd.command_id, ok: true };
         }
@@ -937,6 +992,50 @@ export class SessionManager {
           this.loginGranter(dev, pk, String(p.name ?? "web").slice(0, 32) || "web");
           return { command_id: cmd.command_id, ok: true };
         }
+        case "COMMAND_PIN_SESSION": {
+          // #49 置顶/取消置顶：写穿 pinned-sessions.json。托管会话专用（外部 CLI 会话
+          // 生命周期由用户终端自管，重启后 hooks 重新接入，无需休眠恢复）。休眠态
+          // （saved）也可 unpin——摘掉 saved 让卡片退回普通历史会话
+          const s = this.require(cmd.payload.session_id);
+          if (s.state.external) {
+            return { command_id: cmd.command_id, ok: false, error: "外部会话不支持置顶（由 CLI 自身维护）" };
+          }
+          const pinned = cmd.payload.pinned === true;
+          s.state.pinned = pinned || undefined;
+          if (!pinned) s.state.saved = undefined;
+          s.state.updated_at = Date.now();
+          writePinnedSessions(
+            this.cfg.dataDir,
+            [...readPinnedSessions(this.cfg.dataDir).filter((x) => x !== cmd.payload.session_id), ...(pinned ? [cmd.payload.session_id] : [])],
+          );
+          // 显式带 pinned/saved 布尔（含 false）：端上据此直接改卡片，不等快照
+          this.bus.emit(cmd.payload.session_id, "SESSION_UPDATED", {
+            status: s.state.status,
+            action_summary: s.state.action_summary,
+            stats: { ...s.state.stats },
+            pinned,
+            saved: !!s.state.saved,
+          });
+          return { command_id: cmd.command_id, ok: true };
+        }
+        case "COMMAND_RESUME_SESSION": {
+          // #49 按需恢复：点击「已保存」休眠卡触发。已在线会话幂等成功（顺手清残留
+          // 休眠标记）；失败同步抛错回 ACK，异步失败（流断/超时）走 SESSION_ERROR，
+          // saved 保留可重试
+          const s = this.require(cmd.payload.session_id);
+          if (s.state.external) {
+            return { command_id: cmd.command_id, ok: false, error: "外部会话不支持恢复" };
+          }
+          if (s.agent && !s.agent.ended) {
+            if (s.state.saved) {
+              s.state.saved = undefined;
+              this.emitUpdated(s, true);
+            }
+            return { command_id: cmd.command_id, ok: true };
+          }
+          this.reviveSaved(s);
+          return { command_id: cmd.command_id, ok: true };
+        }
         case "COMMAND_WATCH_GRANT":
           // #316 手表配对授权在 ws-server 层处理（持有待配对连接池）；云信道走到这里
           // 说明命令被路由错了——明确报错而非静默
@@ -977,7 +1076,7 @@ export class SessionManager {
       lastUpdateEmit: 0,
     };
 
-    const agent = new AgentSession(
+    const agent = this.newAgent(
       cwd,
       this.cfg.model,
       this.agentCallbacks(managed),
@@ -1113,7 +1212,7 @@ export class SessionManager {
     if (!sdkId) {
       throw new Error("会话已结束且无 SDK 会话记录，无法恢复（模型尚未完成初始化）");
     }
-    const agent = new AgentSession(
+    const agent = this.newAgent(
       s.state.cwd,
       s.state.model,
       this.agentCallbacks(s),
@@ -1124,6 +1223,7 @@ export class SessionManager {
     // resume 的子 sid 同样经 onInit 回调登记（见 agentCallbacks.onInit 的 #307 落盘）
     s.state.status = "WORKING";
     s.state.historical = false;
+    s.state.saved = undefined;
     s.state.done_reason = undefined;
     s.state.last_error = undefined;
     s.state.turn_started_at = Date.now();
@@ -1133,20 +1233,126 @@ export class SessionManager {
     this.emitUpdated(s, true);
   }
 
+  // #49 按需拉起（COMMAND_RESUME_SESSION）：不带首条消息的 parked resume——
+  // transcript 重放完成后 CLI 停在等待输入，首个回合由后续 COMMAND_MESSAGE 开启。
+  // 成功判定 = init 消息到达（SDK 会话就绪）；init 前流关闭 / 30s 超时 = 恢复失败
+  // （ERROR + last_error，saved 保留让卡片可重试）。回调包裹仅在此路径生效，
+  // resumeAgent（消息驱动）行为保持原样不动
+  private reviveSaved(s: ManagedSession): void {
+    const sdkId = s.state.relay_session_id;
+    if (!sdkId) {
+      throw new Error("无 SDK 会话记录（首次回合未完成即中断），无法恢复");
+    }
+    let inited = false;
+    let timer: ReturnType<typeof setTimeout> | null = null;
+    const base = this.agentCallbacks(s);
+    const fail = (reason: string): void => {
+      if (inited) return;
+      inited = true; // 流关闭与超时可能先后到，双触发只记一次
+      if (timer) clearTimeout(timer);
+      s.state.status = "ERROR";
+      s.state.last_error = `恢复失败: ${reason}`;
+      s.state.done_reason = undefined;
+      s.state.action_summary = "恢复失败";
+      s.state.saved = true; // 休眠卡保留：端上标「恢复失败」，可重试
+      s.state.updated_at = Date.now();
+      this.pushExternalLog(s.state.session_id, "system", s.state.last_error);
+      this.bus.emit(s.state.session_id, "SESSION_ERROR", { message: s.state.last_error });
+      this.emitUpdated(s, true);
+    };
+    const cb: AgentCallbacks = {
+      ...base,
+      onInit: (sdkIdNew, model, permissionMode) => {
+        inited = true;
+        if (timer) clearTimeout(timer);
+        // 先清休眠标记再走 base 的 emitUpdated，让首帧就带最终状态
+        s.state.saved = undefined;
+        s.state.historical = false;
+        base.onInit(sdkIdNew, model, permissionMode);
+        s.state.status = "DONE";
+        s.state.done_reason = "已恢复（等待输入）";
+        s.state.action_summary = "已恢复，等待输入";
+        s.state.turn_started_at = undefined;
+        this.pushExternalLog(s.state.session_id, "system", `已恢复 SDK 会话（resume ${sdkId.slice(0, 8)}…）`);
+        this.emitUpdated(s, true);
+      },
+      onSessionEnd: (reason) => {
+        if (!inited) {
+          fail(reason);
+          return;
+        }
+        base.onSessionEnd(reason);
+      },
+    };
+    // 初始化看门狗：CLI 卡住不吐 init 时不让会话永远吊在「恢复中」
+    timer = setTimeout(() => {
+      timer = null;
+      fail("初始化超时（30s）");
+      void s.agent?.stop();
+    }, 30_000);
+    timer.unref?.();
+    const agent = this.newAgent(s.state.cwd, s.state.model, cb, undefined, {
+      resume: sdkId,
+      permissionMode: s.state.permission_mode ?? "default",
+    });
+    s.agent = agent;
+    s.state.status = "WORKING";
+    s.state.action_summary = "恢复中";
+    s.state.done_reason = undefined;
+    s.state.last_error = undefined;
+    s.state.updated_at = Date.now();
+    this.emitUpdated(s, true);
+  }
+
+  // #49 开机置顶登记（不自动拉起，2026-09-09 用户拍板）：pinned-sessions.json 是
+  // 权威清单（历史事件里的 pinned 可能过时——unpin 落盘后重启的兜底，一律按文件
+  // 归一）。清单内托管会话标 pinned+saved 休眠（可见、状态 DONE「已保存」、不可
+  // 操作，点卡走 COMMAND_RESUME_SESSION）；查无会话的条目（压缩丢失/已删）静默清理
+  applyPinned(): { saved: number } {
+    const file = readPinnedSessions(this.cfg.dataDir);
+    const keep: string[] = [];
+    let saved = 0;
+    for (const s of this.sessions.values()) {
+      const pinned = file.includes(s.state.session_id);
+      if (pinned && !s.state.external) {
+        keep.push(s.state.session_id);
+        const was = s.state.pinned;
+        s.state.pinned = true;
+        if (!s.agent) {
+          // 休眠登记：relay 刚启动，置顶会话一律无 agent
+          s.state.saved = true;
+          s.state.status = "DONE";
+          s.state.done_reason = "已保存（重启休眠）";
+          s.state.action_summary = "已保存，点击恢复";
+          s.state.last_error = undefined;
+          s.state.waiting_request = undefined;
+          saved++;
+        }
+        if (!was) this.emitUpdated(s, true);
+      } else if (s.state.pinned) {
+        // 文件已无此 id（unpin 已落盘但历史事件仍带 pinned=true）
+        s.state.pinned = undefined;
+        this.emitUpdated(s, true);
+      }
+    }
+    if (keep.length !== file.length) writePinnedSessions(this.cfg.dataDir, keep);
+    return { saved };
+  }
+
   private require(sessionId: string): ManagedSession {
     const s = this.sessions.get(sessionId);
     if (!s) throw new Error(`会话不存在: ${sessionId}`);
     return s;
   }
 
-  private requireLive(sessionId: string): ManagedSession & { agent: AgentSession } {
+  private requireLive(sessionId: string): ManagedSession & { agent: AgentLike } {
     const s = this.require(sessionId);
     if (!s.agent) {
       throw new Error(
         s.state.external ? "外部会话不支持该命令（hooks 单向桥接）" : "历史会话不可操作（Relay 重启前遗留）",
       );
     }
-    return s as ManagedSession & { agent: AgentSession };
+    return s as ManagedSession & { agent: AgentLike };
   }
 
   // 外部会话远程决定后的收尾（清 WAITING、回 WORKING）；answered = PC 端本地已作答
@@ -1177,6 +1383,11 @@ export class SessionManager {
       ...(s.state.permission_mode ? { permission_mode: s.state.permission_mode } : {}),
       ...(s.state.cron_tasks ? { cron_tasks: s.state.cron_tasks.map((t) => ({ ...t })) } : {}),
       ...(s.state.compacting ? { compacting: true } : {}),
+      // #49 置顶/休眠标记恒随增量帧显式携带布尔：saved 的清除点（恢复成功 onInit/
+      // 幂等恢复）不在命令回执路径上，只在为真时携带会让其他在线端一直挂着休眠卡
+      //（SNAPSHOT 恒为全量权威，这里保证增量也能实时收口）
+      pinned: !!s.state.pinned,
+      saved: !!s.state.saved,
       // last_task_done 不随增量帧下发（#254）：手机/网页都不消费该路径，只在
       // SNAPSHOT 里用于断线恢复，增量携带纯属带宽浪费
       // historical 增删必须实时下发：转录自愈/pid 对账解锁后，已连接的客户端
@@ -1282,7 +1493,8 @@ export class SessionManager {
   private evictOldSessions(): void {
     if (this.sessions.size < MAX_SESSIONS) return;
     const finished = [...this.sessions.values()]
-      .filter((s) => s.state.status === "DONE" || s.state.status === "ERROR")
+      // #49 置顶会话豁免驱逐：置顶的意义就是跨重启存活，容量满时先挤普通会话
+      .filter((s) => (s.state.status === "DONE" || s.state.status === "ERROR") && !s.state.pinned)
       .sort((a, b) => a.state.started_at - b.state.started_at);
     for (const s of finished) {
       if (this.sessions.size < MAX_SESSIONS) break;

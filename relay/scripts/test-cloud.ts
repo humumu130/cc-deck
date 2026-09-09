@@ -5,6 +5,7 @@
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { randomUUID } from "node:crypto";
 import { WebSocket } from "ws";
 import { startCloudServer } from "../../cloud-bridge/src/index.js";
 import { loadConfig } from "../src/config.js";
@@ -15,6 +16,7 @@ import { loadOrCreateIdentity } from "../src/cloud-identity.js";
 import { createPairingCodes } from "../src/pairing.js";
 import { devId, generateKeyPair, seal, unseal, type SealedBox } from "../src/e2e.js";
 import type { CommandAckPayload, Envelope } from "../src/types.js";
+import type { AgentCallbacks, AgentLike } from "../src/agent-adapter.js";
 
 let failures = 0;
 function assert(cond: boolean, msg: string): void {
@@ -882,6 +884,87 @@ assert(
     const e4 = id4.peers.get("wb-0123456789abcdef");
     assert(!!e4 && e4.name === "旧设备" && e4.meta === undefined, "存量 cloud-peers.json 无 meta 照常加载（读取兼容）");
   }
+}
+
+// ---------- 21) #49 置顶会话经云通道：pin 实时帧 + SNAPSHOT 携带 pinned ----------
+// ---------- 22) #52 USER_NOTE 瞬态事件：云通道实时直播 + 重连不补发 ----------
+{
+  // 假 agent 工厂（测试缝）：托管会话免拉真 CLI；20ms 后回 init 模拟 CLI ready
+  mgr.setAgentFactory((_cwd: string, model: string, cb: AgentCallbacks, _prompt: string | undefined): AgentLike => {
+    const a: AgentLike = {
+      id: randomUUID(),
+      startedAt: Date.now(),
+      ended: false,
+      sendMessage: () => {},
+      allow: () => false,
+      deny: () => false,
+      answer: () => false,
+      stop: async () => { a.ended = true; },
+      setPermissionMode: async () => {},
+    };
+    setTimeout(() => { if (!a.ended) cb.onInit("sdk-cloud-" + a.id.slice(0, 8), model, "default"); }, 10);
+    return a;
+  });
+  const createAck = mgr.handleCommand(
+    { command_id: "pin-create-1", type: "COMMAND_CREATE", payload: { cwd: dataDir, prompt: "#49 云通道置顶测试" }, ts: Date.now() },
+    "cloud-test",
+  ) as CommandAckPayload;
+  assert(createAck.ok === true && typeof createAck.session_id === "string", "21 托管会话创建（工厂缝，无真 CLI）");
+  const sid = createAck.session_id!;
+  assert(
+    await waitFor(() => typeof mgr.snapshot().find((s) => s.session_id === sid)?.relay_session_id === "string"),
+    "21 onInit 落 relay_session_id",
+  );
+  const pinAck = mgr.handleCommand(
+    { command_id: "pin-1", type: "COMMAND_PIN_SESSION", payload: { session_id: sid, pinned: true }, ts: Date.now() },
+    "cloud-test",
+  ) as CommandAckPayload;
+  assert(pinAck.ok === true, "21 COMMAND_PIN_SESSION 受理（云侧与 LAN 同一 handleCommand）");
+  // 手机（inbox4，已 hello active）实时收到 pinned 帧
+  assert(
+    await waitFor(() => inbox4.some((m) => m.type === "SESSION_UPDATED" && m.session_id === sid && (m.payload as { pinned?: boolean }).pinned === true)),
+    "21 云通道实时收到 pinned:true SESSION_UPDATED",
+  );
+
+  // #52 USER_NOTE：瞬态事件经云通道实时下发到在线手机（seq:0 不回拨 lastSeq）
+  inbox4.length = 0;
+  bus.emitTransient("USER_NOTE", { text: "#52 云通道通知测试", ts: Date.now() });
+  assert(
+    await waitFor(() => inbox4.some((m) => m.type === "USER_NOTE" && typeof (m.payload as { ts?: number }).ts === "number")),
+    "22 USER_NOTE 瞬态事件实时下发云通道手机",
+  );
+  assert(
+    (inbox4.find((m) => m.type === "USER_NOTE") as unknown as { seq?: number } | undefined)?.seq === 0,
+    "22 USER_NOTE seq:0（瞬态，不占总线序号、不回拨 lastSeq）",
+  );
+
+  // 重连（hello last_seq=0 → 全量 SNAPSHOT）：SNAPSHOT 携带 pinned；瞬态事件不补发。
+  // 先断 phoneWs4（同 dev 顶号会踢旧连接，沿用本文件既有换班模式）
+  phoneWs4.close();
+  await wait(300);
+  const phoneWs5 = new WebSocket(`ws://127.0.0.1:${BRIDGE_PORT}/cloud?token=${BRIDGE_TOKEN}&dev=${phoneDev}`);
+  const inbox5: Record<string, unknown>[] = [];
+  phoneWs5.on("message", (raw) => {
+    const f = JSON.parse(String(raw)) as { data?: SealedBox };
+    if (f.data) {
+      const inner = unseal<Record<string, unknown>>(f.data, relayPubkey, phoneKp.secretKey);
+      if (inner) inbox5.push(inner);
+    }
+  });
+  phoneWs5.on("error", () => undefined);
+  await new Promise<void>((r) => phoneWs5.on("open", r));
+  phoneWs5.send(JSON.stringify({ to: identity.relayDev, data: seal({ t: "hello", last_seq: 0 }, relayPubkey, phoneKp.secretKey) }));
+  assert(
+    await waitFor(() => {
+      const snap = inbox5.find((m) => m.type === "SNAPSHOT") as unknown as { seq?: number; payload?: { sessions?: { session_id: string; pinned?: boolean }[] } } | undefined;
+      return snap?.payload?.sessions?.some((s) => s.session_id === sid && s.pinned === true) === true;
+    }),
+    "21 重连全量 SNAPSHOT 携带 pinned 会话",
+  );
+  await wait(600); // 留出补发窗口
+  assert(!inbox5.some((m) => m.type === "USER_NOTE"), "22 USER_NOTE 不随重连补发（瞬态语义，防重复弹通知）");
+  phoneWs5.close();
+  mgr.setAgentFactory(null);
 }
 
 // ---------- 清理 ----------

@@ -190,6 +190,11 @@ for (const s of mgr.snapshot()) {
   });
 }
 
+// #49 置顶会话休眠登记（2026-09-09 用户拍板：开机不自动 resume）：pinned-sessions.json
+// 清单内会话只标 saved（可见不可操作、卡片「已保存」），用户点卡发 COMMAND_RESUME_SESSION
+// 才用 transcript resume 按需拉起——不拉 SDK 子进程，启动零成本
+const pinned = mgr.applyPinned();
+
 // 云桥：CCR_CLOUD_URL 配置了才启用（出站连桥，公司网络友好）。
 // 逗号分隔多桥并行：每桥一个 CloudClient，手机/网页各自连任一桥都能互通
 let cloudIdentity: ReturnType<typeof loadOrCreateIdentity> | null = null;
@@ -253,6 +258,9 @@ console.log("CC Deck Relay 已启动");
 console.log(`  模型:   ${cfg.model}`);
 console.log(`  端口:   ${cfg.port}`);
 console.log(`  历史:   ${persistPath}（恢复 ${adopted} 个会话）`);
+if (pinned.saved > 0) {
+  console.log(`  置顶:   ${pinned.saved} 个会话已休眠登记（点卡片按需恢复，不自动拉起）`);
+}
 console.log(`  桥接:   ${join(cfg.dataDir, "bridge.json")}（外部 CLI 会话经 hooks 接入）`);
 console.log(
   cloudIdentity

@@ -108,6 +108,20 @@ interface CanUseToolOpts {
   displayName?: string;
 }
 
+// SessionManager 依赖的最小 agent 形状（#49）：AgentSession 结构性满足；测试可注入
+// 假实现验证置顶/按需恢复路径，免拉真 CLI 子进程
+export interface AgentLike {
+  readonly id: string;
+  readonly startedAt: number;
+  ended: boolean;
+  sendMessage(text: string, images?: string[]): void;
+  allow(requestId: string, by?: string): boolean;
+  deny(requestId: string, reason?: string, by?: string): boolean;
+  answer(requestId: string, answers: string[], by?: string): boolean;
+  stop(): Promise<void>;
+  setPermissionMode(mode: "default" | "acceptEdits" | "plan"): Promise<void>;
+}
+
 // 单个 Agent 会话 = 一次 query() streaming 调用。
 // 注意：result 消息是"每回合"一条，不是会话终局——DONE 语义 = 当前任务完成，
 // 之后 sendMessage 可再开新回合（会话保持打开直到 stop()）。
@@ -137,10 +151,15 @@ export class AgentSession {
     readonly cwd: string,
     private readonly model: string,
     private readonly cb: AgentCallbacks,
-    initialPrompt: string,
+    // undefined = 不注入任何用户消息：#49 按需恢复的 parked 形态（resume 拉起后停在
+    // 等待输入，首个回合由后续 sendMessage 开启）。空串与 undefined 语义不同：
+    // 空串照旧推送（保持既有 create/resume 调用行为逐字节不变）
+    initialPrompt: string | undefined,
     opts?: { resume?: string; permissionMode?: "default" | "acceptEdits" | "plan"; images?: string[] },
   ) {
-    this.pushUserMessage(initialPrompt, opts?.images);
+    if (initialPrompt !== undefined || (opts?.images?.length ?? 0) > 0) {
+      this.pushUserMessage(initialPrompt ?? "", opts?.images);
+    }
     this.q = query({
       prompt: this.queue.iterable,
       options: {
