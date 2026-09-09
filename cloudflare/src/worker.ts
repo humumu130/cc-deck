@@ -22,7 +22,7 @@ export default {
     const NEW_HOST = "cc-deck.humumu.online";
     // 双域统一：根路径 = 项目主页（#24a 起 /dl/ 保留为别名）；/app = 网页控制台。
     // 旧域根不再 301 到控制台——根是门面，控制台是工具（配对链接已改 /app#…）
-    if (url.pathname === "/" || url.pathname === "/index.html") {
+    if (url.pathname === "/" || url.pathname === "/index.html" || url.pathname === "/index") {
       if (!env.ASSETS) return new Response("assets unavailable", { status: 503 });
       return env.ASSETS.fetch(new Request("https://assets.local/site/index.html"));
     }
@@ -31,6 +31,8 @@ export default {
       const inner = url.pathname.slice(4) || "/";
       return env.ASSETS.fetch(new Request("https://assets.local" + inner + url.search, req));
     }
+    // #36 URL 正名：/download/ 为规范路径，/dl/ 保留为永久别名（已烘进 0.3.33 各端的旧链接零破坏）
+    if (url.pathname.startsWith("/download/")) url.pathname = "/dl/" + url.pathname.slice(10);
 
     if (url.pathname === "/health") {
       // 转发进 DO 拿设备列表（与 Node 形态 /health 对齐；会唤醒 DO，无连接时即刻再休眠）
