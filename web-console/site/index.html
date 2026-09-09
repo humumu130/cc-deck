@@ -13,6 +13,24 @@
 <title>CC Deck — Claude Code 的随身控制台</title>
 <link rel="icon" type="image/svg+xml" href="/site/favicon.svg">
 <link rel="stylesheet" href="/site/assets/style.css">
+<style>
+  /* 顶栏平衡 + 版本徽章并入顶栏（本页局部覆盖，共享基底见 assets/style.css） */
+  .nav-inner { justify-content: space-between; }
+  .nav-left { display: flex; align-items: center; gap: 12px; min-width: 0; }
+  .nav-ver {
+    display: inline-flex; align-items: center; gap: 7px; height: 25px; padding: 0 11px 0 9px;
+    border: 1px solid var(--line); border-radius: 999px;
+    background: rgba(13, 24, 39, .45); font: 600 11.5px var(--mono); color: var(--muted);
+    letter-spacing: .3px;
+    transition: color .15s, border-color .15s;
+  }
+  .nav-ver:hover { color: var(--text); border-color: rgba(241, 132, 79, .5); }
+  .nav-ver .pulse { width: 6px; height: 6px; }
+  @media (max-width: 620px) {
+    .nav-inner { gap: 14px; }
+    .nav-ver { display: none; }
+  }
+</style>
 </head>
 <body>
 
@@ -24,10 +42,13 @@
 
 <nav class="nav" id="nav">
   <div class="wrap nav-inner">
-    <a class="brand" href="#top">
-      <span class="brand-mark">CC</span>
-      <span class="brand-name">CC Deck</span>
-    </a>
+    <div class="nav-left">
+      <a class="brand" href="#top">
+        <span class="brand-mark">CC</span>
+        <span class="brand-name">CC Deck</span>
+      </a>
+      <a class="nav-ver" href="https://github.com/humumu130/cc-deck/releases" target="_blank" rel="noopener"><i class="pulse"></i>v0.4.3</a>
+    </div>
     <div class="nav-actions">
       <a class="nav-gh" href="https://github.com/humumu130/cc-deck" target="_blank" rel="noopener">
         <svg class="st" viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path d="M12 .5C5.65.5.5 5.65.5 12c0 5.08 3.29 9.39 7.86 10.91.58.11.79-.25.79-.55v-2.17c-3.2.7-3.87-1.36-3.87-1.36-.52-1.33-1.28-1.69-1.28-1.69-1.04-.71.08-.7.08-.7 1.15.08 1.76 1.19 1.76 1.19 1.03 1.76 2.69 1.25 3.35.96.1-.75.4-1.25.72-1.54-2.55-.29-5.23-1.28-5.23-5.68 0-1.26.45-2.28 1.19-3.09-.12-.29-.52-1.46.11-3.05 0 0 .97-.31 3.18 1.18a11 11 0 0 1 5.79 0c2.2-1.49 3.17-1.18 3.17-1.18.63 1.59.24 2.76.12 3.05.74.81 1.18 1.83 1.18 3.09 0 4.41-2.69 5.38-5.25 5.67.41.35.77 1.05.77 2.12v3.14c0 .3.21.67.8.55A11.51 11.51 0 0 0 23.5 12C23.5 5.65 18.35.5 12 .5z"/></svg>
@@ -49,12 +70,7 @@
 
   <!-- ======================= HERO ======================= -->
   <header class="hero wrap">
-    <a class="hero-badge reveal" href="https://github.com/humumu130/cc-deck/releases" target="_blank" rel="noopener">
-      <i class="pulse"></i>v0.4.3
-      <svg viewBox="0 0 24 24" width="13" height="13" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg>
-    </a>
-
-    <h1 class="reveal" style="--d:.06s">把 <span class="nb">Claude Code</span> 会话<br><em>装进口袋</em></h1>
+    <h1 class="reveal">把 <span class="nb">Claude Code</span> 会话<br><em>装进口袋</em></h1>
 
     <p class="hero-tagline reveal" style="--d:.12s">手机、网页、桌面与手表随身掌控——桌面端能做的远程都能做：注入指令、批准权限、切换模型、跟踪任务，任务完成主动推送汇报。</p>
 
