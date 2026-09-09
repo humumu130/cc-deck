@@ -9,7 +9,8 @@ compatibility_date = "2025-06-01"
 
 # 部署后自动绑定自定义域（需 zone 在同一 CF 账号；Workers Routes/DNS 权限）
 routes = [
-  { pattern = "cc.humumu.online", custom_domain = true }
+  { pattern = "cc.humumu.online", custom_domain = true },
+  { pattern = "cc-deck.humumu.online", custom_domain = true }
 ]
 
 # 网页端静态托管：/ 与 /nacl.js 直接出文件；/cloud /cloud-poll /health 先进 Worker
