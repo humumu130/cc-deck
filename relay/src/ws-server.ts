@@ -275,11 +275,23 @@ export function startServer(
         if (hostTrusted(host)) allowOrigin = `http://${req.headers.host}`;
       }
       if (!isLoopback || !allowOrigin) { res.writeHead(404).end(); return; }
+      // #44 lanIp：本机 relay 直出添加手机二维码用（exe 本地打开的页面拿不到自身 LAN IP）。
+      // 按网卡名过滤虚拟适配器（VMware/VirtualBox/Hyper-V/WSL 的 host-only 网段手机不可达）
+      const virtualNic = /vmware|virtual|vethernet|wsl|loopback|tap|bluetooth/i;
+      let lanIp = "";
+      for (const [name, list] of Object.entries(networkInterfaces())) {
+        if (virtualNic.test(name)) continue;
+        for (const ni of list ?? []) {
+          if (ni.family !== "IPv4" || /^(127\.|169\.254\.)/.test(ni.address)) continue;
+          if (/^(192\.168|10\.|172\.(1[6-9]|2\d|3[01]))\./.test(ni.address)) { lanIp = ni.address; break; }
+        }
+        if (lanIp) break;
+      }
       res.writeHead(200, {
         "content-type": "application/json",
         "access-control-allow-origin": allowOrigin,
         "cache-control": "no-store",
-      }).end(JSON.stringify({ ok: true, port: cfg.port, token: cfg.token }));
+      }).end(JSON.stringify({ ok: true, port: cfg.port, token: cfg.token, lan_ip: lanIp }));
       return;
     }
     // 领取配对码（--pair CLI / /cc-deck-pair 用）：loopback + bridgeToken，

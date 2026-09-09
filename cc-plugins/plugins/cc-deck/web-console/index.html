@@ -1612,7 +1612,7 @@
               <div class="gp-pair-t">8 位配对码</div>
               <div class="gp-code-cells" id="pdCodeCells" aria-label="8 位配对码"></div>
               <div class="pd-code-meta"><span id="pdCodeExp"></span><button type="button" class="gp-mini-btn" id="pdCodeRefresh" title="立即换一枚新码">刷新</button></div>
-              <div class="pair-hint" id="pairHint">进页自动领码 · 到期自动换新</div>
+              <div class="pair-hint" id="pairHint"></div>
             </div>
             <div class="gp-acts gp-pair-acts">
               <button id="loginQrBtn" title="手机扫一下，这台电脑直接接入你的 CC Deck"><svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 8V5a2 2 0 0 1 2-2h3M16 3h3a2 2 0 0 1 2 2v3M21 16v3a2 2 0 0 1-2 2h-3M8 21H5a2 2 0 0 1-2-2v-3"/><path d="M7 12h10"/></svg>扫码接入</button>
@@ -5627,7 +5627,23 @@ $("loginQrCancel").onclick = () => closeLoginQr();
 // pair_req 落库自动连接）。浮层复用 loginQrPop（无 pendingPair 会话，关层无副作用）
 async function addPhoneQr() {
   const ctx = ctxs.get(activeServerId) || null;
-  if (!ctx || ctx.status !== "online") { toast("请先连接服务器，再添加手机"); return; }
+  // #44 概念解耦：本机 relay 在跑时（状态卡「运行中」），添加手机直接走本机——
+  // 不依赖任何服务器条目在线。LAN IP 取页面地址（exe 本地打开时回退探测），端口/token 用 local-info 实测值
+  if ((!ctx || ctx.status !== "online") && localRelayInfo) {
+    const host = location.hostname && !/^(127\.|localhost|\[::)/.test(location.hostname)
+      ? location.hostname
+      : (localRelayInfo.lanIp || "");
+    if (host) {
+      const p = JSON.stringify({ v: 1, url: `ws://${host}:${localRelayInfo.port}/ws`, token: localRelayInfo.token });
+      $("loginQrTitle").textContent = "添加手机";
+      $("loginQrSub").innerHTML = "手机 CC Deck App 扫下方二维码<br/>自动接入本机 relay（同一 WiFi）";
+      $("loginQrState").textContent = "等待手机扫码…";
+      drawLoginQr(p);
+      $("loginQrPop").classList.add("open");
+      return;
+    }
+  }
+  if (!ctx || ctx.status !== "online") { toast(ctx ? "当前活动源未在线（重试中…），连上后即可添加手机" : "请先添加/连接服务器，再添加手机"); return; }
   const cfg = ctx.cfg;
   let payload;
   if (cfg.kind === "lan") {
@@ -5941,7 +5957,7 @@ async function probeRelayStat() {
       }
       for (const p of ports) { j = await localInfoAt(p); if (j) break; }
     }
-    localRelayInfo = j && j.port && j.token ? { port: j.port, token: j.token } : null;
+    localRelayInfo = j && j.port && j.token ? { port: j.port, token: j.token, lanIp: j.lan_ip || "" } : null;
   } finally { relayStatProbing = false; }
   const txt = $("gpRelayStatTxt");
   if (!txt) return;
