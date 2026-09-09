@@ -24,17 +24,114 @@ export default {
     // 全程不出 Cloudflare——公司只需能开本域即可下载。文件名白名单防滥用
     if (url.pathname.startsWith("/dl/")) {
       const name = url.pathname.slice(4);
-      // /dl/ 无文件名：极简下载索引页（桌面端走 KV；APK 超 KV 单值 25MB 上限，指 Releases 与国内镜像）
+      // /dl/ 无文件名：开源项目落地页（hero / 特性 / 原理 / 下载 / 页脚，与 web 控制台同品牌 Token）。
+      // 桌面端走 KV；APK 超 KV 单值 25MB 上限，指 Releases 与国内镜像
       if (name === "") {
         return new Response(
-          '<!DOCTYPE html><html lang="zh-CN"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">' +
-            '<title>CC Deck 下载</title><style>body{font:15px/1.7 system-ui,sans-serif;background:#0b1220;color:#e7eefb;max-width:640px;margin:48px auto;padding:0 20px}' +
-            'a{color:#7cb1ff}h1{font-size:20px}li{margin:12px 0}</style><h1>CC Deck 下载</h1><ul>' +
-            '<li>📱 手机 App（APK）：<a href="https://github.com/humumu130/cc-deck/releases/latest">GitHub Releases</a> · ' +
-            '国内直链 <a href="http://8.133.211.170:8888/cc-deck.apk">镜像</a></li>' +
-            '<li>💻 桌面端（Windows）：<a href="/dl/cc-deck-desktop-setup.exe">cc-deck-desktop-setup.exe</a></li>' +
-            '<li>🌐 网页控制台：<a href="/">cc.humumu.online</a></li></ul>' +
-            '<p style="color:#8ea3ba;font-size:13px">桌面安装包经 Cloudflare KV 分发；APK 体积超出 KV 单键上限，走 Releases 与镜像。</p>',
+          '<!DOCTYPE html><html lang="zh-CN"><head>' +
+            '<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">' +
+            '<meta name="color-scheme" content="dark"><meta name="theme-color" content="#060D16">' +
+            '<meta name="description" content="CC Deck——Claude Code 的随身控制台：在手机、手表、网页与桌面上远程查看会话、批准权限、注入指令、接收任务汇报。可自建 relay，端到端加密。">' +
+            '<meta property="og:title" content="CC Deck — Claude Code 的随身控制台">' +
+            '<meta property="og:description" content="远程掌控 PC 端 Claude Code：会话速览、权限审批、任务通知。多端可用、可自建、端到端加密。">' +
+            '<title>CC Deck — Claude Code 的随身控制台</title>' +
+            '<link rel="icon" href="data:image/svg+xml,%3Csvg%20xmlns=%22http://www.w3.org/2000/svg%22%20viewBox=%220%200%2064%2064%22%3E%3Crect%20width=%2264%22%20height=%2264%22%20rx=%2214%22%20fill=%22%23F1844F%22/%3E%3Ctext%20x=%2232%22%20y=%2244%22%20font-size=%2230%22%20font-weight=%22700%22%20text-anchor=%22middle%22%20fill=%22%231A0D06%22%3ECC%3C/text%3E%3C/svg%3E">' +
+            '<style>' +
+            '*{box-sizing:border-box;margin:0;padding:0}html{scroll-behavior:smooth}' +
+            'body{background:#060D16;color:#E5EDF7;font:15px/1.7 system-ui,-apple-system,"Segoe UI",Roboto,"PingFang SC","Microsoft YaHei",sans-serif;min-height:100vh}' +
+            'main{max-width:880px;margin:0 auto;padding:64px 24px 40px}a{color:inherit;text-decoration:none}' +
+            'svg{fill:none;stroke:currentColor;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round;flex:none}svg.st{fill:currentColor;stroke:none}' +
+            'h1{font-size:36px;font-weight:800;letter-spacing:.5px;line-height:1.25}h2{font-size:21px;font-weight:700;margin:6px 0 8px}' +
+            '.kicker{font-size:11.5px;font-weight:700;letter-spacing:2.5px;color:#F1844F}.lead{color:#8EA3BA;font-size:14.5px;max-width:680px}' +
+            'section{margin-top:24px}.hero{text-align:center;padding-bottom:36px}' +
+            '.tagline{color:#8EA3BA;font-size:16px;max-width:640px;margin:14px auto 0}' +
+            '.pills{display:flex;gap:8px;justify-content:center;margin-top:20px;flex-wrap:wrap}' +
+            '.pill{display:inline-flex;align-items:center;gap:7px;height:26px;padding:0 12px;border-radius:999px;background:#101D2D;border:1px solid #1D3046;color:#8EA3BA;font-size:12.5px;transition:color .12s,border-color .12s}' +
+            'a.pill:hover{color:#E5EDF7;border-color:#2E4A66}.dot{width:6px;height:6px;border-radius:50%;background:#55D98A}' +
+            '.cta{display:flex;gap:12px;justify-content:center;margin-top:22px;flex-wrap:wrap}' +
+            '.btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;border-radius:8px;font-weight:600;border:1px solid transparent;transition:background .12s,border-color .12s,color .12s}' +
+            '.btn.pri{background:#F1844F;color:#1A0D06;height:42px;padding:0 20px;font-size:14.5px}.btn.pri:hover{background:#F6976C}' +
+            '.btn.ghost{background:#101D2D;border-color:#1D3046;color:#E5EDF7;height:42px;padding:0 20px;font-size:14.5px}.btn.ghost:hover{border-color:#2E4A66;background:#12202F}' +
+            '.card .pri{width:100%;min-height:38px;padding:0 12px;font-size:13px;line-height:1.4}' +
+            '.card .sec{width:100%;min-height:34px;padding:0 12px;font-size:12.5px;line-height:1.4;background:transparent;border-color:#1D3046;color:#8EA3BA}.card .sec:hover{color:#E5EDF7;border-color:#2E4A66}' +
+            '.grid{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin-top:20px}' +
+            '.feat{background:#0D1827;border:1px solid #1D3046;border-radius:10px;padding:16px;display:flex;flex-direction:column;gap:8px;transition:border-color .12s}.feat:hover{border-color:#2E4A66}' +
+            '.ic{width:34px;height:34px;border-radius:8px;background:#101D2D;border:1px solid #1D3046;display:flex;align-items:center;justify-content:center;color:#F1844F;flex:none}' +
+            '.feat b{font-size:14.5px;font-weight:600}.feat p{font-size:13px;color:#8EA3BA;line-height:1.65}' +
+            '.flow{display:flex;align-items:stretch;justify-content:center;gap:12px;margin-top:20px;flex-wrap:wrap}' +
+            '.node{background:#0D1827;border:1px solid #1D3046;border-radius:10px;padding:14px 16px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;text-align:center;flex:1;min-width:168px;max-width:230px;transition:border-color .12s}.node:hover{border-color:#2E4A66}' +
+            '.node .ic{margin-bottom:5px}.node b{font-size:13.5px;font-weight:600}.node span{font-size:12px;color:#53677E;line-height:1.5}' +
+            '.hop{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:5px;color:#53677E;font-size:11px;letter-spacing:1px}' +
+            '.cap{color:#53677E;font-size:12.5px;text-align:center;margin-top:16px;line-height:1.8}' +
+            '.cards{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin-top:20px}' +
+            '.card{background:#0D1827;border:1px solid #1D3046;border-radius:10px;padding:16px;display:flex;flex-direction:column;gap:10px;transition:border-color .12s}.card:hover{border-color:#2E4A66}' +
+            '.card .ic{width:38px;height:38px}.card h3{font-size:15.5px;font-weight:600}.card h3 span{display:block;font-size:12px;color:#53677E;font-weight:400;margin-top:2px}' +
+            '.card p{font-size:13px;color:#8EA3BA;line-height:1.65;flex:1}' +
+            '.note{color:#53677E;font-size:12px;margin-top:14px;text-align:center;line-height:1.7}' +
+            'footer{margin-top:40px;padding-top:18px;border-top:1px solid #1D3046;display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;color:#53677E;font-size:12.5px}' +
+            'footer a{color:#8EA3BA;transition:color .12s}footer a:hover{color:#E5EDF7}' +
+            '.logo{position:relative;width:60px;height:60px;margin:0 auto 22px}' +
+            '.logo i{position:absolute;inset:0;border-radius:12px;border:1.5px solid #1D3046;background:#0D1827}' +
+            '.logo i:first-child{transform:rotate(-10deg) translate(-6px,2px)}.logo i:nth-child(2){transform:rotate(10deg) translate(6px,2px)}' +
+            '.logo i:last-child{background:#F1844F;border-color:#F1844F;display:flex;align-items:center;justify-content:center}' +
+            '.logo b{font-size:21px;font-weight:800;color:#1A0D06;letter-spacing:.5px}' +
+            '@media(max-width:720px){h1{font-size:30px}.grid{grid-template-columns:1fr 1fr}.cards{grid-template-columns:1fr}' +
+            '.flow{flex-direction:column;align-items:stretch}.node{max-width:none;align-items:flex-start;text-align:left}.node .ic{margin-bottom:2px}' +
+            '.hop{margin:16px 0}.hop span{display:none}.hop svg{transform:rotate(90deg)}}' +
+            '@media(max-width:460px){.grid{grid-template-columns:1fr}.cta .btn{width:100%}}' +
+            '</style></head><body><main>' +
+            '<header class="hero">' +
+            '<div class="logo" aria-hidden="true"><i></i><i></i><i><b>CC</b></i></div>' +
+            '<h1>CC Deck</h1>' +
+            '<p class="tagline">Claude Code 的随身控制台——在手机、手表、网页与桌面上远程查看会话、批准权限、注入指令、接收任务汇报。</p>' +
+            '<div class="pills"><span class="pill"><i class="dot"></i>v0.3.32 最新版</span>' +
+            '<a class="pill" href="https://github.com/humumu130/cc-deck/blob/main/LICENSE" target="_blank" rel="noopener">MIT License</a>' +
+            '<span class="pill">可自建</span></div>' +
+            '<div class="cta"><a class="btn pri" href="https://github.com/humumu130/cc-deck" target="_blank" rel="noopener">' +
+            '<svg class="st" width="15" height="15" viewBox="0 0 24 24"><path d="M12 2l3.1 6.3 6.9 1-5 4.9 1.2 6.8L12 17.8 5.8 21l1.2-6.8-5-4.9 6.9-1z"/></svg>Star on GitHub</a>' +
+            '<a class="btn ghost" href="#download"><svg width="15" height="15" viewBox="0 0 24 24"><path d="M12 3v12M6.5 10.5L12 16l5.5-5.5M4 21h16"/></svg>下载客户端</a></div>' +
+            '</header>' +
+            '<section><p class="kicker">WHY CC DECK</p><h2>把 CLI 会话装进口袋</h2>' +
+            '<p class="lead">在 PC 端装一个插件，Claude Code 的会话就实时同步到随身设备：出门在外也能看到它卡在哪一步审批，顺手点 Allow、把新想法塞进队列，任务跑完主动来汇报。适合把 Claude Code 当主力工作流、离开电脑也不想掉线的开发者。</p>' +
+            '<div class="grid">' +
+            '<div class="feat"><div class="ic"><svg width="18" height="18" viewBox="0 0 24 24"><rect x="7" y="2.5" width="10" height="19" rx="2.5"/><path d="M10.5 18.5h3"/></svg></div><b>随身掌控会话</b><p>多会话实时同步：四态速览、上下文水位、完整转录，断线自动补发不丢帧。</p></div>' +
+            '<div class="feat"><div class="ic"><svg width="18" height="18" viewBox="0 0 24 24"><path d="M22 2L11 13"/><path d="M22 2l-7 20-4-9-9-4z"/></svg></div><b>注入与审批</b><p>权限审批与提问远程点选；发消息、传图片、远程切模型，随时打断或续聊。</p></div>' +
+            '<div class="feat"><div class="ic"><svg width="18" height="18" viewBox="0 0 24 24"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.7 21a2 2 0 0 1-3.4 0"/></svg></div><b>任务通知随身</b><p>任务完成主动汇报：App 通知 + 手表轻震，点按直达；定时任务随身可查。</p></div>' +
+            '<div class="feat"><div class="ic"><svg width="18" height="18" viewBox="0 0 24 24"><path d="M12 2l10 5.5L12 13 2 7.5z"/><path d="M2 12.5L12 18l10-5.5"/></svg></div><b>多源多端</b><p>Android / Wear OS / 网页 PWA / Windows 四端；多台 PC 聚合同屏，角标区分来源。</p></div>' +
+            '<div class="feat"><div class="ic"><svg width="18" height="18" viewBox="0 0 24 24"><path d="M12 2.5l7.5 3v5.5c0 4.8-3.1 8.3-7.5 10-4.4-1.7-7.5-5.2-7.5-10V5.5z"/><path d="M9 12l2 2 4-4.5"/></svg></div><b>端到端加密</b><p>密钥不出你的设备：LAN 直连不经第三方，云桥只见密文。</p></div>' +
+            '<div class="feat"><div class="ic"><svg width="18" height="18" viewBox="0 0 24 24"><rect x="3" y="3.5" width="18" height="7" rx="1.5"/><rect x="3" y="13.5" width="18" height="7" rx="1.5"/><path d="M7 7h.01M7 17h.01"/></svg></div><b>可自建</b><p>relay 一行命令起，也提供 Cloudflare Worker 形态；数据只流经你自己的设施。</p></div>' +
+            '</div></section>' +
+            '<section><p class="kicker">HOW IT WORKS</p><h2>三段链路，端到端加密</h2>' +
+            '<div class="flow">' +
+            '<div class="node"><div class="ic"><svg width="18" height="18" viewBox="0 0 24 24"><rect x="7" y="2.5" width="10" height="19" rx="2.5"/><path d="M10.5 18.5h3"/></svg></div><b>手机 · 手表 · 网页 · 桌面</b><span>客户端 · 持有密钥</span></div>' +
+            '<div class="hop"><span>E2E 加密</span><svg width="46" height="12" viewBox="0 0 46 12"><path d="M1 6h40M36 1.5L41 6l-5 4.5"/></svg></div>' +
+            '<div class="node"><div class="ic"><svg width="18" height="18" viewBox="0 0 24 24"><path d="M18 10h-1.26A8 8 0 1 0 9 20h9a4 4 0 0 0 0-8z"/></svg></div><b>云桥 / LAN</b><span>自建中转 · 只见密文</span></div>' +
+            '<div class="hop"><span>密文直达</span><svg width="46" height="12" viewBox="0 0 46 12"><path d="M1 6h40M36 1.5L41 6l-5 4.5"/></svg></div>' +
+            '<div class="node"><div class="ic"><svg width="18" height="18" viewBox="0 0 24 24"><path d="M4 17l6-5-6-5"/><path d="M12 19h8"/></svg></div><b>你的电脑</b><span>Claude Code CLI · 持有密钥</span></div>' +
+            '</div>' +
+            '<p class="cap">同一局域网自动直连（LAN）；跨网络经自建云桥中继——密钥只存在于你自己的设备上，中继与公网看到的都只是密文。</p></section>' +
+            '<section id="download"><p class="kicker">DOWNLOAD</p><h2>下载客户端</h2>' +
+            '<p class="lead">当前版本 v0.3.32 · 四端免费开源，连入同一个 relay 即可互通。</p>' +
+            '<div class="cards">' +
+            '<div class="card"><div class="ic"><svg width="20" height="20" viewBox="0 0 24 24"><rect x="7" y="2.5" width="10" height="19" rx="2.5"/><path d="M10.5 18.5h3"/></svg></div>' +
+            '<h3>手机 App<span>Android APK · Wear OS 手表跟装</span></h3>' +
+            '<p>扫码配对即连：会话速览、远程审批、语音发消息；任务完成推送通知，手表抬腕即看。</p>' +
+            '<a class="btn pri" href="https://github.com/humumu130/cc-deck/releases/latest" target="_blank" rel="noopener">前往 GitHub Releases</a>' +
+            '<a class="btn sec" href="http://8.133.211.170:8888/cc-deck.apk">国内镜像直链 APK</a></div>' +
+            '<div class="card"><div class="ic"><svg width="20" height="20" viewBox="0 0 24 24"><rect x="2.5" y="4" width="19" height="12.5" rx="2"/><path d="M9 20.5h6M12 16.5v4"/></svg></div>' +
+            '<h3>桌面端<span>Windows · v0.3.32 · Tauri 约 3.4MB</span></h3>' +
+            '<p>轻量原生客户端，托盘常驻、内建更新，与网页端同一套界面。</p>' +
+            '<a class="btn pri" href="/dl/cc-deck-desktop-setup.exe">下载 cc-deck-desktop-setup.exe</a>' +
+            '<a class="btn sec" href="https://github.com/humumu130/cc-deck/releases" target="_blank" rel="noopener">查看全部历史版本</a></div>' +
+            '<div class="card"><div class="ic"><svg width="20" height="20" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a14.2 14.2 0 0 1 0 18 14.2 14.2 0 0 1 0-18z"/></svg></div>' +
+            '<h3>网页控制台<span>PWA · 免安装 · 全平台</span></h3>' +
+            '<p>浏览器打开即用，可添加到主屏幕；跨网时输入 6 位配对码即接入。</p>' +
+            '<a class="btn pri" href="/" target="_blank" rel="noopener">打开网页控制台</a>' +
+            '<a class="btn sec" href="https://github.com/humumu130/cc-deck" target="_blank" rel="noopener">查看源码 · 自行部署</a></div>' +
+            '</div>' +
+            '<p class="note">桌面安装包经 Cloudflare KV 边缘分发；APK 超出 KV 单值上限，走 GitHub Releases 或国内镜像。</p></section>' +
+            '<footer><span>© 2026 CC Deck · MIT License</span><span>可自建 · 端到端加密中转 · <a href="https://github.com/humumu130/cc-deck" target="_blank" rel="noopener">GitHub</a></span></footer>' +
+            '</main></body></html>',
           { status: 200, headers: { "content-type": "text/html; charset=utf-8", "cache-control": "public, max-age=300" } },
         );
       }
