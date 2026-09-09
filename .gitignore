@@ -26,3 +26,8 @@ web-console/.wrangler/
 cc-watch-relay-office.zip
 relay/scripts/office-start.local.bat
 docs-internal/
+
+# 开源兜底：防误提交内部产物
+/*.png
+/HANDOFF-*.md
+/hi.txt
