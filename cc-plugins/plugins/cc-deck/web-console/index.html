@@ -44,6 +44,9 @@
     --hov: #33436B;
     --hov2: #2C3D63;
     --on-accent: #0B141F;
+    /* #54 会话卡动作行色阶：介于 --dim 与标题色 --text-strong 之间（原 --dim 过淡回调一档），
+       卡内三层级 = 标题 --text-strong > 动作 --card-sub > 元信息 --faint */
+    --card-sub: #A9B5C7;
   }
   html.light {
     --bg: #F3F5F9;
@@ -74,6 +77,7 @@
     --hov: #B9C4D6;
     --hov2: #B4C0D4;
     --on-accent: #fff;
+    --card-sub: #4A5670;
   }
   * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
   html, body { height: 100%; }
@@ -178,16 +182,25 @@
   .sfab { transition: transform .24s cubic-bezier(.34,1.35,.64,1), opacity .16s ease; }
   .sfab.morph { transform: scale(.55) rotate(75deg); opacity: .3; }
   body.newform-open #sideFabs { --fabs-bottom: 16px; flex-direction: row; gap: 8px; }
+  /* #54/D 悬浮钮降噪（原 #52 品牌橙实底实锤存在感过强）：
+     42→38px；非 hover 态改「半透明品牌底 + 品牌色图标 + 细品牌描边」（降饱和不降可达），
+     hover/聚焦才回到品牌橙实底深图标；投影去橙改中性深色小扩散，与列表底色更融合。
+     闲置淡出（.idle opacity .35）与 morph 过场不变 */
   .sfab {
-    width: 42px; height: 42px; border: 1px solid transparent; background: var(--brand); cursor: pointer;
+    width: 38px; height: 38px; border: 1px solid rgba(217,119,87,.38);
+    background: rgba(217,119,87,.13); color: var(--brand); cursor: pointer;
     display: flex; align-items: center; justify-content: center; position: relative;
-    color: #171220; border-radius: 50%; padding: 0;
-    box-shadow: 0 2px 12px rgba(217,119,87,.30);
+    border-radius: 50%; padding: 0;
+    box-shadow: 0 1px 6px rgba(0,0,0,.24);
   }
-  .sfab:hover { background: var(--brand-2); color: #171220; }
+  .sfab:hover, .sfab:focus-visible {
+    background: var(--brand); border-color: var(--brand); color: #171220;
+    box-shadow: 0 2px 10px rgba(217,119,87,.30);
+  }
+  html.light .sfab { background: rgba(194,96,62,.10); border-color: rgba(194,96,62,.34); }
   .sfab:active { filter: brightness(.93); }
   .sfab:focus-visible { outline: 2px solid var(--text); outline-offset: 2px; }
-  .sfab svg { width: 28px; height: 28px; display: block; }
+  .sfab svg { width: 19px; height: 19px; display: block; }
   #addBtn svg { transition: transform .2s ease; }
   #addBtn.on svg { transform: rotate(45deg); }
   /* 抽屉打开（#405 起 #gearPop 挂 main 层，:has 探测开态）：浮动钮整组让位隐藏。
@@ -699,10 +712,13 @@
     border-radius: 0 0 3px 0;
   }
   .tp-head { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
-  .tp-mark { font-size: 17px; font-weight: 700; }
+  /* #34 状态三态图标（SVG：待开始空圈 / 进行中半饼 / 已完成实心勾），替代原字符 mark */
+  .tp-mark { display: inline-flex; align-items: center; flex: none; }
+  .tp-mark svg { width: 16px; height: 16px; display: block; }
   .tp-no { color: var(--brand); font-size: 15px; font-weight: 700; }
   .tp-status { font-size: 12.5px; margin-left: auto; }
-  .tp-content { color: var(--text); font-size: 14px; line-height: 1.55; word-break: break-word; }
+  /* #34 描述只露首两行（超出省略），全文点行展开后看 title/任务列表 */
+  .tp-content { color: var(--text); font-size: 14px; line-height: 1.55; word-break: break-word; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
   .tp-active { color: var(--working); font-size: 12.5px; margin-top: 6px; }
   .tp-time { color: var(--faint); font-size: 11.5px; margin-top: 8px; text-align: right; }
   .tp-foot { margin-top: 10px; display: flex; align-items: center; justify-content: space-between; }
@@ -952,11 +968,13 @@
   .c-head .elapsed { flex: none; }
   /* WORKING 实时工作行（App LiveStat 同构）：呼吸点 + 走秒 + ↓tokens + 动作摘要；
      #399 第二行悬挂缩进至名称起点（灯 8px + c-head gap 8px），与首行文字块成组 */
-  .c-live { display: flex; align-items: center; gap: 8px; margin: 6px 0 5px; padding-left: 16px; font-size: 12px; color: var(--dim); font-variant-numeric: tabular-nums; min-width: 0; }
+  /* #54 三行卡层级：标题行（15px/--text-strong）不动；动作行降一档 12→11px、
+     色从 --dim 回调到 --card-sub（介于原值与标题色之间）；元信息行 12→11px 保持 --faint */
+  .c-live { display: flex; align-items: center; gap: 8px; margin: 6px 0 5px; padding-left: 16px; font-size: 11px; color: var(--card-sub); font-variant-numeric: tabular-nums; min-width: 0; }
   .c-live .lv-dot { width: 9px; height: 9px; border-radius: 50%; background: var(--working); flex: none; animation: dot-breathe 2.4s ease-in-out infinite; }
   .c-live .lv-sec { color: var(--working); flex: none; }
   .c-live .lv-tok { flex: none; }
-  .c-live .lv-sum { color: var(--faint); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1; min-width: 0; }
+  .c-live .lv-sum { color: var(--card-sub); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1; min-width: 0; }
   /* #12 空态提示垂直居中：#cards 为纵排 flex，flex:1 撑满 + justify-content:center 垂直居中 */
   .cards-empty { flex: 1; display: flex; flex-direction: column; justify-content: center; align-items: center; text-align: center; color: var(--faint); font-size: 12.5px; padding: 46px 12px; }
   .cards-empty .ce-icon { font-size: 34px; opacity: .5; margin-bottom: 10px; }
@@ -986,6 +1004,30 @@
   .card-title input {
     flex: 1; min-width: 0; font-size: 13.5px; font-weight: 600; padding: 3px 8px; border-radius: 7px;
   }
+  /* #49 保存恢复（pinned）：卡标题行左端 10px 级锚形徽章（状态点之前=左上角），悬停说明 */
+  .pin-flag { flex: none; display: inline-flex; align-items: center; color: var(--brand); }
+  .pin-flag svg { width: 11px; height: 11px; display: block; }
+  /* #49 休眠态（已保存未恢复的 pinned 会话，重启后出现）：视觉弱化 + 点击恢复 */
+  .card.dormant { opacity: .62; }
+  .card.dormant:hover { opacity: .8; border-color: rgba(217,119,87,.4); }
+  .card.dormant .card-title { color: var(--dim); }
+  .card.dormant .c-tt { color: var(--dim); }
+  /* #49 会话卡右键菜单：复用浮层语言（#fpathPop/#modelPop 同款深底圆角细边框投影），
+     行 hover；点外/Esc/滚动收起。fixed 定位 JS 按右键坐标设（视口内 clamp） */
+  #cardMenu {
+    position: fixed; z-index: 96; display: none; min-width: 176px;
+    background: var(--panel); border: 1px solid var(--border); border-radius: 12px;
+    padding: 5px; box-shadow: 0 8px 28px rgba(0,0,0,.45);
+  }
+  #cardMenu.open { display: flex; flex-direction: column; gap: 1px; }
+  #cardMenu button {
+    all: unset; cursor: pointer; display: flex; align-items: center; gap: 9px;
+    padding: 7px 11px; border-radius: 8px; color: var(--dim); font-size: 12.5px; line-height: 1.35;
+  }
+  #cardMenu button:hover { background: var(--hov); color: var(--text); }
+  #cardMenu button svg { flex: none; display: block; opacity: .8; }
+  #cardMenu button.danger:hover { background: rgba(255,120,73,.12); color: var(--error); }
+  #cardMenu .cm-sep { height: 1px; background: var(--border); margin: 3px 6px; flex: none; }
   /* #279⑨ 紧凑卡（对齐手机"简洁列表"三行）：状态点+标题+耗时 / 摘要 / 角标+改动+水位 */
   .card.compact { padding: 7px 11px 8px; border-radius: 10px; }
   .card.compact .c-row1 { display: flex; align-items: center; gap: 7px; }
@@ -994,8 +1036,8 @@
   .card.compact .card-title { flex: 1; min-width: 0; margin-top: 0; font-size: 13px; gap: 6px; }
   .card.compact .c-tt { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .card.compact .card-title input { font-size: 12.5px; }
-  .card.compact .card-summary { font-size: 11.5px; margin-top: 3px; padding-left: 15px; } /* #399 compact 灯列 = 8px 点 + 7px gap */
-  .card.compact .card-stats { font-size: 10.5px; margin-top: 5px; gap: 8px; }
+  .card.compact .card-summary { font-size: 11px; margin-top: 3px; padding-left: 15px; } /* #399 compact 灯列 = 8px 点 + 7px gap；#54 11.5→11 */
+  .card.compact .card-stats { font-size: 10px; margin-top: 5px; gap: 8px; } /* #54 10.5→10 */
 
   /* ---------- 任务面板（详情页"任务" tab） ---------- */
   .todo-head { display: flex; align-items: center; gap: 10px; padding: 16px 4px 6px; }
@@ -1072,9 +1114,9 @@
   .cron-name { font-size: 13.5px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .cron-item.paused .cron-name { color: var(--dim); font-weight: 500; }
   .cron-meta { font-size: 11.5px; color: var(--faint); margin-top: 1px; font-variant-numeric: tabular-nums; }
-  .card-summary { color: var(--dim); font-size: 12.5px; margin-top: 4px; padding-left: 16px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; } /* #399 悬挂缩进对齐灯列 */
+  .card-summary { color: var(--card-sub); font-size: 11.5px; margin-top: 4px; padding-left: 16px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; } /* #399 悬挂缩进对齐灯列；#54 动作行降档 12.5→11.5 + 提色 */
   .card-summary.waiting { color: var(--working); }
-  .card-stats { font-size: 12px; color: var(--faint); margin-top: 6px; display: flex; align-items: center; gap: 10px; font-variant-numeric: tabular-nums; }
+  .card-stats { font-size: 11px; color: var(--faint); margin-top: 6px; display: flex; align-items: center; gap: 10px; font-variant-numeric: tabular-nums; } /* #54 元信息行降档 12→11 */
   .card-stats .add { color: var(--done); }
   .card-stats .del { color: var(--error); }
   /* #383 源标签居 stats 行最左（与上两行左对齐）；ctx 水位推最右 */
@@ -1471,6 +1513,25 @@
   }
   #undoBar .ub-btn:hover { background: rgba(217,119,87,.24); }
 
+  /* #52 web 通知悬浮框（USER_NOTE）：taskDone 绿框上方的同语言通知卡——右下浮框
+     （toast-bg/细边框/圆角12/投影）默认占 undoBar 槽位（绿框小钮 44px 上缘 + 10px 空隙）；
+     实际 bottom 由 placeNoteBar() 动态让位（绿框展开时抬到其上缘、撤销条在显时上抬）。
+     显隐 transform 对齐 #toast/#undoBar（上移淡入），8s 自动淡出，✕ 即关 */
+  #noteBar {
+    position: fixed; right: 16px; bottom: 76px; max-width: 340px;
+    display: flex; align-items: flex-start; gap: 9px;
+    background: var(--toast-bg); border: 1px solid var(--border); color: var(--text);
+    border-radius: 12px; padding: 9px 12px; font-size: 13px; z-index: 98;
+    box-shadow: var(--toast-shadow);
+    opacity: 0; transform: translateY(14px); pointer-events: none;
+    transition: opacity .18s, transform .18s;
+  }
+  #noteBar.show { opacity: 1; transform: translateY(0); pointer-events: auto; }
+  #noteBar .nb-ico { color: var(--brand); flex: none; display: inline-flex; margin-top: 1px; }
+  #noteBar .nb-t { flex: 1; min-width: 0; word-break: break-word; white-space: pre-wrap; max-height: 132px; overflow-y: auto; }
+  #noteBar .nb-x { color: var(--faint); padding: 2px 4px; font-size: 13px; cursor: pointer; flex: none; }
+  #noteBar .nb-x:hover { color: var(--text); }
+
   ::-webkit-scrollbar { width: 8px; height: 8px; }
   ::-webkit-scrollbar-thumb { background: var(--scroll); border-radius: 4px; }
   ::-webkit-scrollbar-track { background: transparent; }
@@ -1538,6 +1599,9 @@
 <!-- #388 模型选择弹层：锚在 modelBtn 下方（fixed 定位，JS 设坐标） -->
 <div id="modelPop"></div>
 
+<!-- #49 会话卡右键菜单（fixed 定位 JS 设坐标；菜单项 JS 生成——托管/外部会话菜单不同） -->
+<div id="cardMenu"></div>
+
 <main>
   <button id="sideToggle" title="收起 / 展开会话列表">‹</button>
   <div id="side">
@@ -1570,7 +1634,7 @@
 
     <div id="sideFabs">
       <button id="addBtn" class="sfab" title="新建会话"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></button>
-      <button id="gearBtn" class="sfab" title="设置"><svg viewBox="0 0 24 24" fill="currentColor" style="width:26px;height:26px"><path d="M19.14,12.94c0.04-0.3,0.06-0.61,0.06-0.94c0-0.32-0.02-0.64-0.07-0.94l2.03-1.58c0.18-0.14,0.23-0.41,0.12-0.61 l-1.92-3.32c-0.12-0.22-0.37-0.29-0.59-0.22l-2.39,0.96c-0.5-0.38-1.03-0.7-1.62-0.94l-0.36-2.54C14.36,2.18,14.16,2,13.92,2 h-3.84c-0.24,0-0.43,0.18-0.47,0.41L9.25,4.95C8.66,5.19,8.12,5.51,7.63,5.88L5.24,4.92c-0.22-0.08-0.47,0-0.59,0.22L2.74,8.47 c-0.12,0.21-0.08,0.47,0.12,0.61l2.03,1.58c-0.05,0.3-0.09,0.63-0.09,0.94s0.02,0.64,0.07,0.94l-2.03,1.58 c-0.18,0.14-0.23,0.41-0.12,0.61l1.92,3.32c0.12,0.22,0.37,0.29,0.59,0.22l2.39-0.96c0.5,0.38,1.03,0.7,1.62,0.94l0.36,2.54 c0.05,0.24,0.24,0.41,0.48,0.41h3.84c0.24,0,0.44-0.17,0.47-0.41l0.36-2.54c0.59-0.24,1.13-0.56,1.62-0.94l2.39,0.96 c0.22,0.08,0.47,0,0.59-0.22l1.92-3.32c0.12-0.22,0.07-0.47-0.12-0.61L19.14,12.94z M12,15.6c-1.98,0-3.6-1.62-3.6-3.6 s1.62-3.6,3.6-3.6s3.6,1.62,3.6,3.6S13.98,15.6,12,15.6z"/></svg></button>
+      <button id="gearBtn" class="sfab" title="设置"><svg viewBox="0 0 24 24" fill="currentColor" style="width:20px;height:20px"><path d="M19.14,12.94c0.04-0.3,0.06-0.61,0.06-0.94c0-0.32-0.02-0.64-0.07-0.94l2.03-1.58c0.18-0.14,0.23-0.41,0.12-0.61 l-1.92-3.32c-0.12-0.22-0.37-0.29-0.59-0.22l-2.39,0.96c-0.5-0.38-1.03-0.7-1.62-0.94l-0.36-2.54C14.36,2.18,14.16,2,13.92,2 h-3.84c-0.24,0-0.43,0.18-0.47,0.41L9.25,4.95C8.66,5.19,8.12,5.51,7.63,5.88L5.24,4.92c-0.22-0.08-0.47,0-0.59,0.22L2.74,8.47 c-0.12,0.21-0.08,0.47,0.12,0.61l2.03,1.58c-0.05,0.3-0.09,0.63-0.09,0.94s0.02,0.64,0.07,0.94l-2.03,1.58 c-0.18,0.14-0.23,0.41-0.12,0.61l1.92,3.32c0.12,0.22,0.37,0.29,0.59,0.22l2.39-0.96c0.5,0.38,1.03,0.7,1.62,0.94l0.36,2.54 c0.05,0.24,0.24,0.41,0.48,0.41h3.84c0.24,0,0.44-0.17,0.47-0.41l0.36-2.54c0.59-0.24,1.13-0.56,1.62-0.94l2.39,0.96 c0.22,0.08,0.47,0,0.59-0.22l1.92-3.32c0.12-0.22,0.07-0.47-0.12-0.61L19.14,12.94z M12,15.6c-1.98,0-3.6-1.62-3.6-3.6 s1.62-3.6,3.6-3.6s3.6,1.62,3.6,3.6S13.98,15.6,12,15.6z"/></svg></button>
     </div>
   </div>
 
@@ -1834,6 +1898,8 @@
 <div id="taskDone"></div>
 <div id="confirmFloat"></div>
 <div id="undoBar"><span class="ub-t" id="undoTitle"></span><button class="ub-btn" id="undoBtn" title="撤销删除">撤销</button></div>
+<!-- #52 web 通知悬浮框（USER_NOTE 帧）：taskDone 绿框上方同语言通知卡，8s 自动淡出 -->
+<div id="noteBar"><span class="nb-ico"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 9.4a6 6 0 1 0-12 0c0 6-2.2 7-2.2 7h16.4S18 15.4 18 9.4"/><path d="M10.3 20a2 2 0 0 0 3.4 0"/></svg></span><span class="nb-t" id="noteTx"></span><span class="nb-x" id="noteX" title="关闭">✕</span></div>
 
 <script src="nacl.js"></script>
 <script src="qr.js"></script>
@@ -2279,6 +2345,7 @@ function showTaskDone(ctx, sid, payload) {
       el.innerHTML = "✓" + total;
       el.classList.add("show");
       tdCollapsePos(); // #400 收起走存档位，不继承展开卡锚点
+      placeNoteBar(); // #52 通知卡让位重算（展开↔收起尺寸变化）
       return;
     }
     let html = '<div class="td-head"><span class="td-title">' + total + " 项完成 · " +
@@ -2288,6 +2355,7 @@ function showTaskDone(ctx, sid, payload) {
     el.innerHTML = html;
     el.classList.add("show");
     tdReclamp();
+    placeNoteBar(); // #52 展开卡变高，通知卡抬到其上
   };
   renderTd();
   tdFloat.render = renderTd;
@@ -3080,9 +3148,9 @@ function onEvent(ctx, msg) {
       s.status = msg.payload.status;
       s.action_summary = msg.payload.action_summary;
       if (msg.payload.stats) s.stats = msg.payload.stats;
-      // 其余可选字段：出现即覆盖（与手机端 store 对齐）
+      // 其余可选字段：出现即覆盖（与手机端 store 对齐）；pinned/saved 为 #49 保存恢复字段
       for (const f of ["remote_mode", "title", "title_locked", "model", "turn_started_at",
-        "usage", "context_usage", "context_limit", "todos", "subagents", "permission_mode", "pending_inputs", "relay_session_id", "cron_tasks", "compacting"]) {
+        "usage", "context_usage", "context_limit", "todos", "subagents", "permission_mode", "pending_inputs", "relay_session_id", "cron_tasks", "compacting", "pinned", "saved"]) {
         if (msg.payload[f] !== undefined) s[f] = msg.payload[f];
       }
       s.updated_at = msg.ts;
@@ -3138,6 +3206,12 @@ function onEvent(ctx, msg) {
     }
     case "TASK_DONE": {
       showTaskDone(ctx, sid, msg.payload);
+      break;
+    }
+    // #52 web 通知帧（relay 主动提醒，如插入问答/收工摘要）：弹右下通知悬浮框。
+    // payload 形状 { text, ts }；旧 relay 不发该帧，case 缺失也无副作用
+    case "USER_NOTE": {
+      showUserNote(msg.payload?.text);
       break;
     }
     // 议题①（2026-09-09）配对设备变更（瞬态帧 seq:0）：新配对 = 补偿告警（公共桥
@@ -3505,7 +3579,8 @@ function render() {
   const onlineSrcs = [...ctxs.values()].filter((c) => c.status === "online").length;
   const showSrcTag = onlineSrcs > 1 || (onlineSrcs === 0 && ctxs.size > 1);
   // key 含 filterSrc：切 chip 时徽章显隐随聚合/单源变化，强制重渲即时生效
-  const key = (listCompact ? "C|" : "") + filterSrc + "|" + (showSrcTag ? "b1|" : "b0|") + list.map((e) => e.ctx.cfg.id + ":" + e.s.session_id + ":" + e.s.status + ":" + (e.s.title || "") + ":" + (e.s.action_summary || "") + ":" + (e.s.waiting_request ? 1 : 0) + ":" + ctxPct(e.s)).join("|");
+  // #49 key 含 pinned/saved：保存恢复切换/恢复点击后徽章与休眠态即时重渲
+  const key = (listCompact ? "C|" : "") + filterSrc + "|" + (showSrcTag ? "b1|" : "b0|") + list.map((e) => e.ctx.cfg.id + ":" + e.s.session_id + ":" + e.s.status + ":" + (e.s.title || "") + ":" + (e.s.action_summary || "") + ":" + (e.s.waiting_request ? 1 : 0) + ":" + ctxPct(e.s) + ":" + (e.s.pinned ? 1 : 0) + (isDormant(e.s) ? "d" : "")).join("|");
   if (box.dataset.key !== key) {
     // 就地改名进行中：跳过重建（运行中会话 key 每秒变，会把编辑框冲掉）
     if (document.activeElement && document.activeElement.classList.contains("card-rename")) return;
@@ -3525,17 +3600,23 @@ function render() {
       box.appendChild(d2);
     }
     for (const { ctx, s } of list) {
+      const dormant = isDormant(s);
       const d = document.createElement("div");
       d.dataset.sid = s.session_id;
       d.dataset.src = ctx.cfg.id;
-      d.className = "card " + s.status + (listCompact ? " compact" : "") + (selected && selected.src === ctx.cfg.id && s.session_id === selected.sid ? " sel" : "") + (s.historical ? " historical" : "");
+      d.className = "card " + s.status + (listCompact ? " compact" : "") + (selected && selected.src === ctx.cfg.id && s.session_id === selected.sid ? " sel" : "") + (s.historical && !dormant ? " historical" : "") + (dormant ? " dormant" : "");
+      if (dormant) d.title = "已保存休眠 · 点击恢复";
       const waiting = !!s.waiting_request;
       const waitingText = waiting
         ? (s.waiting_request.questions?.length ? "Claude 在提问：" + (s.waiting_request.questions[0].header || "") : "需要确认 " + s.waiting_request.tool_name + " — " + (s.waiting_request.input_summary || ""))
         : (s.status === "ERROR" && s.last_error ? "⚠ " + s.last_error : s.action_summary || "");
       // 与手机 deletable 同口径：仅 DONE/ERROR 可删（relay 对运行中会话拒绝删除）
       const deletable = s.status === "DONE" || s.status === "ERROR";
-      const badges = s.historical ? '<span class="his-badge">历史</span>' : s.external ? '<span class="his-badge ext">终端</span>' : "";
+      // #49 徽章：休眠卡（已保存未恢复）出「休眠」徽；普通遗留出「历史」；外部 CLI 出「终端」
+      const badges = dormant ? '<span class="his-badge">休眠</span>' : s.historical ? '<span class="his-badge">历史</span>' : s.external ? '<span class="his-badge ext">终端</span>' : "";
+      // #49 保存恢复徽章：pinned 卡标题行左端 10px 级锚形小标（悬停说明与 toast 同口径：
+      // 重启后休眠保留，点击卡片恢复——不自动拉起，2026-09-09 拍板）
+      const pinFlag = s.pinned ? '<span class="pin-flag" title="已保存：重启后休眠保留，点击卡片恢复">' + PIN_ANCHOR_SVG + "</span>" : "";
       const opBtns =
         '<button class="card-edit" title="重命名">✎</button>' +
         '<button class="card-del' + (deletable ? "" : " off") + '" title="' + (deletable ? "删除会话" : "运行中，不能删除") + '">✕</button>';
@@ -3546,7 +3627,7 @@ function render() {
       // #362 标题恒第一行：灯（WORKING 呼吸）+标题+总时长同构一行，状态切换不跳行；
       // WORKING 实时行（回合秒+↓tokens+动作摘要）退居第二行，空闲第二行=摘要
       const headRow =
-        '<div class="c-head"><span class="c-dot' + (s.status === "WORKING" ? " run" : "") + '" style="--sc:var(--' + s.status.toLowerCase() + ')"></span>' +
+        '<div class="c-head">' + pinFlag + '<span class="c-dot' + (s.status === "WORKING" ? " run" : "") + '" style="--sc:var(--' + s.status.toLowerCase() + ')"></span>' +
           '<span class="card-title"><span class="c-tt">' + escapeHtml(s.title || "") + "</span>" + badges + opBtns + "</span>" +
           '<span class="elapsed">' + fmtElapsed(sessionElapsed(s)) + "</span></div>";
       const liveRow = s.status === "WORKING"
@@ -3573,7 +3654,7 @@ function render() {
       if (listCompact) {
         // #279⑨ 紧凑卡（对齐手机）：状态点+标题+耗时 / 摘要 / 改动+水位+源标签
         d.innerHTML =
-          '<div class="c-row1"><span class="c-dot' + (s.status === "WORKING" ? " run" : "") + '" style="--sc:var(--' + s.status.toLowerCase() + ')"></span>' +
+          '<div class="c-row1">' + pinFlag + '<span class="c-dot' + (s.status === "WORKING" ? " run" : "") + '" style="--sc:var(--' + s.status.toLowerCase() + ')"></span>' +
             '<span class="card-title"><span class="c-tt">' + escapeHtml(s.title || "") + "</span>" + badges + opBtns + "</span>" +
             '<span class="elapsed">' + fmtElapsed(sessionElapsed(s)) + "</span></div>" +
           summaryRow +
@@ -3586,7 +3667,11 @@ function render() {
           statsBlock +
           ctaRow;
       }
-      d.onclick = () => select(s.session_id, ctx.cfg.id);
+      // #49 休眠卡点击 = 发恢复命令（不进详情）；ACK 成功后本地转正常态，等 SNAPSHOT 回帧收口
+      d.onclick = () => {
+        if (dormant) { resumeDormantSession(ctx, s); return; }
+        select(s.session_id, ctx.cfg.id);
+      };
       const cta = d.querySelector(".card-cta button");
       if (cta) cta.onclick = (e) => { e.stopPropagation(); select(s.session_id, ctx.cfg.id); };
       const edit = d.querySelector(".card-edit");
@@ -3606,6 +3691,107 @@ function render() {
   // #404 列表头不再写"N 会话"（runhint 彩点统计行已有总数，重复显示）——h3 保持静态"会话"
   renderDetail();
 }
+
+// ---------- #49 保存恢复（pinned）/ 会话卡右键菜单 ----------
+// 锚形徽章 SVG：卡片左上角 pin-flag 与右键菜单「保存恢复」项共用
+const PIN_ANCHOR_SVG = '<svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="5" r="3"/><line x1="12" y1="22" x2="12" y2="8"/><path d="M5 12H2a10 10 0 0 0 20 0h-3"/></svg>';
+const MENU_RENAME_SVG = '<svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 3a2.83 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/></svg>';
+const MENU_COPY_SVG = '<svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>';
+const MENU_TRASH_SVG = '<svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>';
+// 托管会话 = CC Deck 创建（COMMAND_CREATE）；外部 CLI 会话（hooks 接入）SNAPSHOT 带 external:true。
+// 无独立 managed 字段，以 external 取反判定；外部会话右键只出「复制 ID」
+const isManagedSession = (s) => !s?.external;
+// 休眠态（#49 语义更正：开机不自动恢复）：已保存（saved）但尚未拉起的 pinned 会话。
+// relay 契约字段是 saved（SNAPSHOT 全量 + SESSION_UPDATED 增量恒带布尔）。休眠卡点击=发恢复命令
+function isDormant(s) {
+  if (!s?.pinned) return false;
+  return s.saved === true;
+}
+// 点击休眠卡：COMMAND_RESUME_SESSION {session_id}；ACK 成功先本地转正常态（徽章/弱化即时回），
+// relay 回帧收口；失败/超时 toast 说明
+async function resumeDormantSession(ctx, s) {
+  toast("正在恢复「" + (s.title || "会话") + "」…");
+  const ack = await commandAck(ctx, "COMMAND_RESUME_SESSION", { session_id: s.session_id }, 10000);
+  if (!ack) { toast("恢复指令未送达（源离线或超时）"); return; }
+  if (!ack.ok) { toast("恢复失败：" + (ack.error || "未知错误")); return; }
+  s.saved = false;
+  s.historical = false;
+  render();
+}
+// 保存恢复开关：COMMAND_PIN_SESSION { session_id, pinned }（契约由 relay 侧定义）；
+// 等 ACK，失败/超时 toast；成功才改本地 pinned 并重渲（徽章即时回）
+async function togglePinSession(ctx, s) {
+  const pinned = !s.pinned;
+  const ack = await commandAck(ctx, "COMMAND_PIN_SESSION", { session_id: s.session_id, pinned });
+  if (!ack) { toast((pinned ? "保存" : "取消保存") + "失败：指令未送达（源离线或超时）"); return; }
+  if (!ack.ok) { toast((pinned ? "保存" : "取消保存") + "失败：" + (ack.error || "未知错误")); return; }
+  s.pinned = pinned;
+  render();
+  toast(pinned ? "已保存，重启后将休眠显示、点击卡片恢复" : "已取消保存恢复");
+}
+// 右键菜单（#cards 事件委托，下方）：托管会话=保存恢复/重命名/复制 ID/删除；
+// 外部 CLI 会话只出「复制 ID」。菜单项不置灰——历史/运行中不可删等由 toast 说明，
+// 服务端仍是最终仲裁（ACK 失败统一 toast）
+let cardMenuCtx = null; // { cardEl, s, ctx }
+function closeCardMenu() {
+  $("cardMenu").classList.remove("open");
+  cardMenuCtx = null;
+}
+function openCardMenu(x, y, cardEl) {
+  const ctx = ctxs.get(cardEl.dataset.src);
+  const s = ctx?.sessions.get(cardEl.dataset.sid);
+  if (!ctx || !s) return;
+  cardMenuCtx = { cardEl, s, ctx };
+  const mi = (id, label, icon, cls) =>
+    '<button data-m="' + id + '"' + (cls ? ' class="' + cls + '"' : "") + ">" + icon + "<span>" + label + "</span></button>";
+  let html;
+  if (isManagedSession(s)) {
+    html = mi("pin", s.pinned ? "取消保存恢复" : "保存恢复", PIN_ANCHOR_SVG) +
+      mi("rename", "重命名", MENU_RENAME_SVG) +
+      mi("copyid", "复制 ID", MENU_COPY_SVG) +
+      '<div class="cm-sep"></div>' +
+      mi("del", "删除", MENU_TRASH_SVG, "danger");
+  } else {
+    html = mi("copyid", "复制 ID", MENU_COPY_SVG);
+  }
+  const el = $("cardMenu");
+  el.innerHTML = html;
+  el.classList.add("open");
+  // 视口内 clamp（贴边不裁切）
+  const r = el.getBoundingClientRect();
+  el.style.left = Math.max(6, Math.min(x, window.innerWidth - r.width - 6)) + "px";
+  el.style.top = Math.max(6, Math.min(y, window.innerHeight - r.height - 6)) + "px";
+}
+$("cards").addEventListener("contextmenu", (ev) => {
+  const card = ev.target.closest(".card");
+  if (!card) return;
+  ev.preventDefault();
+  openCardMenu(ev.clientX, ev.clientY, card);
+});
+$("cardMenu").addEventListener("click", (ev) => {
+  const b = ev.target.closest("button");
+  if (!b || !cardMenuCtx) return;
+  const { cardEl, s, ctx } = cardMenuCtx;
+  closeCardMenu();
+  if (b.dataset.m === "pin") togglePinSession(ctx, s);
+  else if (b.dataset.m === "rename") startCardRename(cardEl, s, ctx);
+  else if (b.dataset.m === "copyid") copyText(s.session_id);
+  else if (b.dataset.m === "del") {
+    if (s.status !== "DONE" && s.status !== "ERROR") { toast("会话运行中，不能删除"); return; }
+    requestDelete(ctx.cfg.id, s.session_id);
+  }
+});
+// 点外/滚动/失焦收起（capture 捕获列表内滚动）；Esc 关闭
+document.addEventListener("pointerdown", (ev) => {
+  const el = $("cardMenu");
+  if (!el.classList.contains("open")) return;
+  if (ev.target.closest && ev.target.closest("#cardMenu")) return;
+  closeCardMenu();
+}, true);
+document.addEventListener("keydown", (ev) => { if (ev.key === "Escape") closeCardMenu(); });
+window.addEventListener("blur", closeCardMenu);
+window.addEventListener("resize", closeCardMenu);
+window.addEventListener("scroll", closeCardMenu, true);
 
 // 每秒定点刷新（#320）：WORKING 卡耗时/实时工作行走秒，querySelector 级更新不触发整列重建
 setInterval(() => {
@@ -3920,15 +4106,25 @@ function cronDesc(sch0) {
   if (/^\d+$/.test(min) && /^\d+$/.test(hour) && /^\d+$/.test(dom) && mon === "*" && dow === "*") return "每月 " + dom + " 日 " + p2(hour) + ":" + p2(min);
   return null;
 }
+// 定时任务名称行摘要：只露 prompt 首行（截到第一个换行或 ① 序号前，「每日晨报：…」式），
+// 空则退回任务名。relay 对未命名任务的 name 是 prompt.slice(0,40) 硬截，同样不直接裸用；
+// prompt 全文收进行内 .cron-prompt（点行展开，默认折叠），名称行悬停 title 看完整摘要行
+function cronSummaryOf(t) {
+  const p = String(t.prompt || "");
+  const cut = p.search(/\n|①/);
+  const line = (cut >= 0 ? p.slice(0, cut) : p).trim();
+  return line || String(t.name || "").trim();
+}
 function cronTabHtml(s) {
   const tasks = s.cron_tasks ?? [];
   if (!tasks.length) return '<div class="todo-empty">暂无定时任务<br><span style="font-size:12px">CLI 里创建 durable 定时任务后，这里 30s 内显示</span></div>';
   // #376：meta 行配人话频率；点条目展开 prompt 全文（.open）
   return tasks.map((t) => {
     const desc = cronDesc(t.schedule);
+    const sum = cronSummaryOf(t);
     return '<div class="cron-item' + (t.paused ? " paused" : "") + '" title="点击展开/收起">' +
       '<span class="cron-mark">' + (t.paused ? "⏸" : "⏰") + "</span>" +
-      '<div class="cron-main"><div class="cron-name">' + escapeHtml(t.name) + "</div>" +
+      '<div class="cron-main"' + (sum ? ' title="' + escapeHtml(sum) + '"' : "") + '><div class="cron-name">' + escapeHtml(sum || "未命名任务") + "</div>" +
       '<div class="cron-meta">' + escapeHtml(desc ?? t.schedule) +
         (t.recurring === false ? " · 一次性" : "") +
         (t.next_run_at ? " · 下次 " + fmtDT(t.next_run_at) : "") +
@@ -3960,6 +4156,16 @@ function taskRefHtml(t) {
   if (!/#\d{1,3}\b/.test(s)) return fpathHtml(s);
   return s.split(/#(\d{1,3})\b/g).map((p, i) =>
     i % 2 === 1 ? '<span class="task-ref" data-n="' + p + '">#' + p + "</span>" : fpathHtml(p)
+  ).join("");
+}
+
+// #34 用户气泡文本里的 #NNN 任务号同样可点（弹任务明细浮卡）。
+// 同 taskRefHtml 口径：原文切分→逐段 escape，防注入（编号是纯数字，data-n 无逃逸面）
+function userMsgHtml(t) {
+  const s = String(t ?? "");
+  if (!/#\d{1,3}\b/.test(s)) return escapeHtml(s);
+  return s.split(/#(\d{1,3})\b/g).map((p, i) =>
+    i % 2 === 1 ? '<span class="task-ref" data-n="' + p + '">#' + p + "</span>" : escapeHtml(p)
   ).join("");
 }
 
@@ -4019,7 +4225,7 @@ function mdBlocks(src) {
   flush();
   return out;
 }
-const MD_INLINE_RE = /(\*\*[^*\n]+\*\*|__[^_\n]+__|\*[^*\n]+\*|_[^_\n\s]+_|`[^`\n]+`|\[[^\]\n]+\]\([^)\n]+\)|https?:\/\/[^\s（）【】，。；、！？：""''《》<>()\[\]{}一-鿿぀-ヿ]+|[A-Za-z]:[\\/][\w.\-\\/]+|\/(?:home|Users|root|mnt|opt|tmp|var)\/[\w.\-\\/]+)/g;
+const MD_INLINE_RE = /(\*\*[^*\n]+\*\*|__[^_\n]+__|\*[^*\n]+\*|_[^_\n\s]+_|`[^`\n]+`|\[[^\]\n]+\]\([^)\n]+\)|https?:\/\/[^\s（）【】，。；、！？：""''《》<>()\[\]{}一-鿿぀-ヿ]+|[A-Za-z]:[\\/][\w.\-\\/]+|\/(?:home|Users|root|mnt|opt|tmp|var)\/[\w.\-\\/]+|#\d{1,3}\b)/g;
 const URL_TRAIL_PUNCT = /[.,;:!?"']+$/;
 const HTTP_RE = /^https?:\/\//i;
 const FPATH_START_RE = /^(?:[A-Za-z]:[\\/]|\/(?:home|Users|root|mnt|opt|tmp|var)\/)/;
@@ -4045,6 +4251,9 @@ function mdInline(text) {
       const p = tok.replace(/[.,;:!?'"）】》]+$/, "");
       out += '<span class="fpath" data-p="' + escapeHtml(p) + '">' + escapeHtml(p) + "</span>";
       if (p.length < tok.length) out += escapeHtml(tok.slice(p.length));
+    } else if (tok.charAt(0) === "#") {
+      // #34 转录正文里的 #NNN 任务号（1~3 位）：与工具行同款可点段（弹任务明细浮卡）
+      out += '<span class="task-ref" data-n="' + tok.slice(1) + '">#' + tok.slice(1) + "</span>";
     }
     else out += "<i>" + escapeHtml(tok.slice(1, -1)) + "</i>";
     last = i + tok.length;
@@ -4093,7 +4302,7 @@ function entryHtml(e, prevDay) {
   const day = e.ts ? dayKey(e.ts) : "";
   if (day && day !== prevDay) html += '<div class="day-sep">── ' + day + " ──</div>";
   if (e.kind === "user_message") {
-    html += '<div class="msg-user"><div class="ub">' + escapeHtml(e.full ?? e.text) + "</div>" +
+    html += '<div class="msg-user"><div class="ub">' + userMsgHtml(e.full ?? e.text) + "</div>" +
       (hm ? '<div class="mt">' + hm + "</div>" : "") + "</div>";
   } else if (e.kind === "assistant_text") {
     html += '<div class="msg-ai"><div class="ai-head"><span class="ai-ava">✻</span><span class="ai-name">Claude</span>' +
@@ -4351,7 +4560,7 @@ document.addEventListener("click", (ev) => {
 
 // ⚙ 设置浮层（#317）：显示项为散装开关的镜像（点行 = 触发原按钮再回读状态），
 // 服务器管理不进浮层——左栏常驻面板已是高频区，与手机抽屉同为一级入口
-const CONSOLE_VERSION = "0.4.2";
+const CONSOLE_VERSION = "0.4.3";
 // #396 拨杆同步：滑块移到 idx 档（transform 过渡），选中档文字加 .on（白字压品牌色滑块上）
 function setLever(el, idx) {
   if (!el) return;
@@ -5140,14 +5349,39 @@ function requestDelete(src, sid) {
 // 撤销浮条：标题预截断 16 字（CSS 省略号会吃掉收尾引号，与手机 UndoBar 同处理）
 function renderUndoBar() {
   const bar = $("undoBar");
-  if (!pendingDel.sid) { bar.classList.remove("show"); return; }
+  if (!pendingDel.sid) { bar.classList.remove("show"); placeNoteBar(); return; }
   const s = ctxs.get(pendingDel.src)?.sessions.get(pendingDel.sid);
   let t = (s?.title || pendingDel.title || "").trim();
   if (t.length > 16) t = t.slice(0, 16) + "…";
   $("undoTitle").textContent = t ? "已删除「" + t + "」" : "已删除会话";
   bar.classList.add("show");
+  placeNoteBar();
 }
 $("undoBtn").onclick = (e) => { e.stopPropagation(); undoDelete(); };
+
+// #52 web 通知悬浮框（USER_NOTE 帧 { text, ts }）：taskDone 绿框上方同语言通知卡。
+// 单例复用（新通知顶替旧内容并重置计时），8s 自动淡出，✕ 即关；文本 textContent 注入防 XSS。
+// 位置动态让位：绿框在显（含展开卡）抬到其上缘之上，撤销条在显再让位，否则默认 undoBar 槽位
+let noteTimer = 0;
+function placeNoteBar() {
+  const bar = $("noteBar"), td = $("taskDone"), ub = $("undoBar");
+  let base = 76; // 默认 = 绿框 mini 钮（44px @ bottom:22）上缘 + 10px 空隙
+  if (td.classList.contains("show")) {
+    const top = td.getBoundingClientRect().top;
+    if (top > 0) base = Math.max(base, window.innerHeight - top + 10);
+  } else if (ub.classList.contains("show")) base = Math.max(base, 122);
+  bar.style.bottom = base + "px";
+}
+function showUserNote(text) {
+  const t = String(text ?? "").trim();
+  if (!t) return;
+  $("noteTx").textContent = t;
+  placeNoteBar();
+  $("noteBar").classList.add("show");
+  clearTimeout(noteTimer);
+  noteTimer = setTimeout(() => $("noteBar").classList.remove("show"), 8000);
+}
+$("noteX").onclick = () => { clearTimeout(noteTimer); $("noteBar").classList.remove("show"); };
 // 离开页面（关标签/跳转）时挂起的删除视为确认：立即提交（同手机离开列表页语义；
 // WS 同步入队通常可冲刷，轮询传输尽力而为）
 window.addEventListener("pagehide", () => {
@@ -5350,20 +5584,27 @@ function armTaskPop() {
   clearTimeout(taskPopTimer);
   taskPopTimer = setTimeout(closeTaskPop, 3000);
 }
+// #34 状态三态图标（SVG，替代原字符 mark）：待开始=空圈 / 进行中=右半饼 / 已完成=实心勾
+function tpStatusIco(status) {
+  if (status === "completed")
+    return '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9.5" fill="var(--done)"/><path d="M7.6 12.4l2.8 2.8 6-6.4" fill="none" stroke="var(--on-accent)" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+  if (status === "in_progress")
+    return '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.6" fill="none" stroke="var(--working)" stroke-width="2"/><path d="M12 12V3.4a8.6 8.6 0 0 1 0 17.2Z" fill="var(--working)"/></svg>';
+  return '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.6" fill="none" stroke="var(--faint)" stroke-width="2"/></svg>';
+}
 function openTaskPop(n, pin) {
   const sel = selSession();
   const t = sel ? (sel.todos || []).find((x) => x && x.id === n) : undefined;
-  const mark = !t ? "·" : t.status === "completed" ? "✓" : t.status === "in_progress" ? "◐" : "○";
   const color = !t ? "var(--faint)" : t.status === "completed" ? "var(--done)" : t.status === "in_progress" ? "var(--working)" : "var(--faint)";
   const label = !t ? "不在当前清单" : t.status === "completed" ? "已完成" : t.status === "in_progress" ? "进行中" : "待开始";
   $("taskCard").innerHTML =
-    '<div class="tp-head"><span class="tp-mark" style="color:' + color + '">' + mark + '</span>' +
+    '<div class="tp-head"><span class="tp-mark">' + tpStatusIco(t?.status) + "</span>" +
     '<span class="tp-no">#' + n + '</span><span class="tp-status" style="color:' + color + '">' + label + "</span></div>" +
     (t
-      ? '<div class="tp-content">' + escapeHtml(t.content || "") + "</div>" +
+      ? '<div class="tp-content" title="' + escapeHtml(t.content || "") + '">' + escapeHtml(t.content || "") + "</div>" +
         (t.status === "in_progress" && t.active_form ? '<div class="tp-active">正在：' + escapeHtml(t.active_form) + "</div>" : "") +
         (typeof t.updated_at === "number" && Number.isFinite(t.updated_at) ? '<div class="tp-time">' + tpRel(t.updated_at) + " 前更新</div>" : "")
-      : '<div class="tp-content">' + (sel ? "该任务已不在本会话的当前清单中" : "会话已不存在") + "</div>") +
+      : '<div class="tp-content">会话任务清单中无 #' + n + "</div>") +
     '<div class="tp-foot"><span class="tp-hint">长按可固定</span><span class="tp-link" id="tpGoList">查看任务列表 →</span></div>';
   $("tpGoList").onclick = () => { closeTaskPop(); jumpToTask(n); };
   const el = $("taskPop"), card = $("taskCard");
