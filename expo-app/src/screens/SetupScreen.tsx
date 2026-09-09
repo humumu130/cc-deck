@@ -329,6 +329,41 @@ export default function SetupScreen({ onClose, editId, initialScan }: Props) {
   const cloudEntry = editId ? servers.find((e) => e.id === editId) : servers.find((e) => e.id === activeId);
   const cloudReady = !!cloudEntry && cloudEntry.id === activeId && snap.connected && snap.channel === "lan";
 
+  // ① 已配对标识：本地存有云桥身份（entry.cloud = rd/rk/dev）=「已配对 ✓」，无 =「未
+  // 配对」——一眼知道自己要不要输码。relay 实测态叠加：unpaired（收到明确 pair_nack）
+  // 时翻成「配对失效」，与本地存档区分（存档还在，但 relay 已不认）
+  const srcState = new Map(snap.sources.map((x) => [x.id, x.state] as const));
+
+  // ④ 连接失败反馈三态分流：connecting/reconnecting 是传输层问题（杀网/断桥），自动
+  // 重试自愈，文案绝不提配对码；unpaired（relay 明确拒绝身份）才引导输码重新配对；
+  // failNote（桥不可达/家里 relay 离线等诊断）优先透出
+  const activeEntry = servers.find((e) => e.id === activeId);
+  const connDotColor =
+    snap.connState === "connecting" || snap.connState === "reconnecting" ? c.working : c.waiting;
+  let connMain = "";
+  let connSub: string | null = null;
+  let connRetryable = false;
+  if (snap.connState === "connecting") {
+    connMain = `正在连接 ${connHost || hostOf(wsUrl)}…`;
+  } else if (snap.connState === "reconnecting" || snap.connState === "offline") {
+    connRetryable = true;
+    connMain =
+      snap.connState === "reconnecting"
+        ? `连接失败，${snap.connText}`
+        : "连接失败，即将自动重试";
+    const bits: string[] = [];
+    if (snap.failNote) bits.push(snap.failNote);
+    bits.push(
+      activeEntry?.cloud
+        ? "已配对身份仍在，无需重新输码，恢复后自动连上"
+        : "直连需与 PC 同一 WiFi，远程请用「云桥」方式接入",
+    );
+    connSub = bits.join("；");
+  } else if (snap.connState === "unpaired") {
+    connMain = "配对已失效：relay 不再认可这台手机的身份";
+    connSub = `${snap.failNote ? `${snap.failNote}；` : ""}需重新配对——上方选「云桥 · 远程」，填家里 PC 领取的新配对码后点「配对并连接」`;
+  }
+
   return (
     <SafeAreaView style={s.safe} edges={onClose ? ["top"] : []}>
       <View style={{ flex: 1 }}>
@@ -366,7 +401,13 @@ export default function SetupScreen({ onClose, editId, initialScan }: Props) {
                       <View style={s.srvHead}>
                         {active ? <View style={[s.srvDot, { backgroundColor: c.done }]} /> : null}
                         <Text style={s.srvName} numberOfLines={1}>{e.name}</Text>
-                        {e.cloud ? <Text style={s.srvCloud}>☁</Text> : null}
+                        {srcState.get(e.id) === "unpaired" ? (
+                          <Text style={s.srvBadgeDead}>配对失效</Text>
+                        ) : e.cloud ? (
+                          <Text style={s.srvBadgeOk}>已配对 ✓</Text>
+                        ) : (
+                          <Text style={s.srvBadgeNo}>未配对</Text>
+                        )}
                       </View>
                       <Text style={s.srvUrl} numberOfLines={1}>{e.wsUrl}</Text>
                     </Pressable>
@@ -525,21 +566,26 @@ export default function SetupScreen({ onClose, editId, initialScan }: Props) {
               </Text>
             </LinearGradient>
           </Pressable>
-          {/* 连接过程反馈（仅首次配置页；从主界面进入时后台重连循环不该误报"连接失败"）：
-              host 固化于发起连接时，不随表单后续编辑漂移；offline 至多闪一帧，并入失败分支 */}
-          {!onClose && snap.connState !== "idle" && snap.connState !== "online" ? (
-            <View style={s.connStatRow}>
-              <View
-                style={[
-                  s.connStatDot,
-                  { backgroundColor: snap.connState === "connecting" ? c.working : c.waiting },
-                ]}
-              />
-              <Text style={s.connStatT} numberOfLines={2}>
-                {snap.connState === "connecting"
-                  ? `正在连接 ${connHost || hostOf(wsUrl)}…`
-                  : `连接失败，${snap.connText}。请检查地址/令牌；同一 WiFi 才能直连，远程请用云桥`}
-              </Text>
+          {/* 连接过程反馈（仅首次配置页；从主界面进入时后台重连循环不该误报）：host 固化
+              于发起连接时。④ 三态分流——connecting/reconnecting 只报网络重试（含②手动
+              重试钮），unpaired 才是配对引导；idle/online 无行 */}
+          {!onClose && connMain ? (
+            <View style={s.connCard}>
+              <View style={s.connStatRow}>
+                <View style={[s.connStatDot, { backgroundColor: connDotColor }]} />
+                <Text style={s.connStatT} numberOfLines={3}>{connMain}</Text>
+              </View>
+              {connSub ? <Text style={s.connSubT} numberOfLines={3}>{connSub}</Text> : null}
+              {connRetryable ? (
+                <Pressable
+                  style={s.retryBtn}
+                  android_ripple={{ color: c.tintSoft, borderless: false, radius: 15 }}
+                  accessibilityLabel="立即重试连接"
+                  onPress={() => store.retryNow()}
+                >
+                  <Text style={s.retryBtnT}>立即重试</Text>
+                </Pressable>
+              ) : null}
             </View>
           ) : null}
           <Text style={s.hint}>
@@ -592,7 +638,10 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
   srvUrl: { color: c.faint, fontSize: 11, marginTop: 2 },
   srvDel: { width: 40, height: 44, alignItems: "center", justifyContent: "center" },
   srvDelT: { color: c.faint, fontSize: 15 },
-  srvCloud: { color: c.done, fontSize: 12 },
+  // ① 配对状态徽标（替代旧 ☁ 图标，信息更明确）：已配对=绿 / 未配对=灰 / 配对失效=红
+  srvBadgeOk: { color: c.done, fontSize: 10.5, fontWeight: "700" },
+  srvBadgeNo: { color: c.faint, fontSize: 10.5, fontWeight: "600" },
+  srvBadgeDead: { color: c.waiting, fontSize: 10.5, fontWeight: "700" },
   pairRow: { marginTop: 4, alignSelf: "flex-start", flexDirection: "row", gap: 8 },
   pairBtn: {
     paddingHorizontal: 16, paddingVertical: 7, borderRadius: 17, borderWidth: 1,
@@ -637,9 +686,19 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
   checkT: { color: "#fff", fontSize: 13, fontWeight: "700" },
   checkLabel: { color: c.dim, fontSize: 13 },
   hint: { color: c.faint, fontSize: 12, marginTop: 16, textAlign: "center", maxWidth: 320 },
-  connStatRow: { flexDirection: "row", alignItems: "center", gap: 7, marginTop: 12, width: "100%", maxWidth: 340 },
+  // ④ 连接反馈卡：主行（点+文案）+ 诊断副行 + 重试钮（reconnecting 态）
+  connCard: { width: "100%", maxWidth: 340, marginTop: 12 },
+  connStatRow: { flexDirection: "row", alignItems: "center", gap: 7 },
   connStatDot: { width: 7, height: 7, borderRadius: 4 },
-  connStatT: { flex: 1, color: c.dim, fontSize: 12.5, minHeight: 34 },
+  connStatT: { flex: 1, color: c.dim, fontSize: 12.5, lineHeight: 18 },
+  connSubT: { color: c.faint, fontSize: 11.5, lineHeight: 16, marginTop: 4, paddingLeft: 14 },
+  // ② 手动重试钮：与 pairBtn 同形制（胶囊描边），amber 系呼应"重试"语义
+  retryBtn: {
+    marginTop: 8, alignSelf: "flex-start", paddingHorizontal: 14, paddingVertical: 6,
+    borderRadius: 15, borderWidth: 1, borderColor: withA(c.working, 0.5),
+    backgroundColor: withA(c.working, 0.08), overflow: "hidden",
+  },
+  retryBtnT: { color: c.working, fontSize: 12.5, fontWeight: "600" },
   back: { marginTop: 14, paddingHorizontal: 22, paddingVertical: 8, borderRadius: 20 },
   backT: { color: c.dim, fontSize: 14 },
 });

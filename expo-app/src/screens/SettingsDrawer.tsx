@@ -28,6 +28,7 @@ const SRC_STATE_TEXT: Record<SourceStatus["state"], string> = {
   online: "在线",
   reconnecting: "重连中",
   offline: "已断开",
+  unpaired: "未配对",
 };
 
 const FONT_OPTS: { k: ProcessFont; label: string }[] = [
@@ -318,7 +319,7 @@ export default function SettingsDrawer({
       ? c.done
       : activeSrc.state === "connecting" || activeSrc.state === "reconnecting"
         ? c.waiting
-        : activeSrc.state === "offline"
+        : activeSrc.state === "offline" || activeSrc.state === "unpaired"
           ? c.error
           : c.faint;
   const connSubText = activeSrc

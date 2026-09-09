@@ -29,6 +29,7 @@ import type {
   LogEntry,
   ManagedPermissionMode,
   PendingInput,
+  PeerMeta,
   SessionState,
   SubagentInfo,
   TodoItem,
@@ -149,6 +150,16 @@ const HEARTBEAT_INTERVAL_MS = 5000;
 const CRON_POLL_INTERVAL_MS = 30_000; // 定时任务文件轮询（无官方文件监听事件，读文件足够便宜）
 const MAX_SESSIONS = 20;
 
+// #408 SNAPSHOT 大帧根治（2026-09-09 事故）：客户端 last_seq 落到事件缓冲窗外走
+// 全量 SNAPSHOT，此前 LAN 快照把全部时间线日志塞单帧（随历史线性膨胀，实测 3 会话
+// 0.63MiB）、云通道瘦身后逐条密文流式（数千帧洪峰触发 CF 桥限流踢线 → 重连 →
+// auto-resume 再补 → 自喂养断连死循环；CF Workers ws 另有 1MiB 单帧硬限）。
+// 修法：LAN 与云共用同一预算装配——每会话只带最近 perSessionCap 条，且全帧日志
+// JSON 总量 ≤ budgetBytes。512KB 明文 → seal 后 base64 ≈ 4/3 膨胀 ~700KB，连同
+// sessions/信封余量充足（<900KB）；条数与字节双帽保证历史再大单帧也确定性有界。
+const SNAPSHOT_LOGS_BUDGET_BYTES = 512 * 1024;
+const SNAPSHOT_LOGS_PER_SESSION = 50;
+
 export class SessionManager {
   private sessions = new Map<string, ManagedSession>();
   private processedCommands = new Map<string, true>();
@@ -227,6 +238,42 @@ export class SessionManager {
     return out;
   }
 
+  // #408 快照日志预算装配（LAN ws-server 与云通道 cloud-client 共用，双端同语义）：
+  // 每会话取最近 perSessionCap 条，总量超 budgetBytes 时优先从条目最多的会话逐条
+  // 丢最旧（每会话保底 1 条），保证单帧确定性有界。返回被截断会话的省略条数——
+  // 客户端时间线接受截断语义（无更早分页拉取通道），标记仅供 UI 提示用。
+  buildSnapshotLogs(
+    budgetBytes: number = SNAPSHOT_LOGS_BUDGET_BYTES,
+    perSessionCap: number = SNAPSHOT_LOGS_PER_SESSION,
+  ): { logs: Record<string, LogEntry[]>; logs_truncated: Record<string, number> } {
+    const logs: Record<string, LogEntry[]> = {};
+    const logsTruncated: Record<string, number> = {};
+    // 每条字节量先算一次，预算裁剪纯算术推进，不反复整体序列化
+    const kept: { id: string; entries: { e: LogEntry; b: number }[] }[] = [];
+    let total = 0;
+    for (const [id, s] of this.sessions) {
+      const slice = s.logs.length > perSessionCap ? s.logs.slice(s.logs.length - perSessionCap) : s.logs;
+      if (slice.length < s.logs.length) logsTruncated[id] = s.logs.length - slice.length;
+      const entries = slice.map((e) => ({ e, b: Buffer.byteLength(JSON.stringify(e)) + 1 }));
+      if (entries.length) {
+        kept.push({ id, entries });
+        total += entries.reduce((acc, x) => acc + x.b, 0);
+      }
+    }
+    while (total > budgetBytes) {
+      // 条目最多的会话先丢最旧一条：活跃会话（条目已被 K 帽截到同量级）相对公平
+      let big: (typeof kept)[number] | null = null;
+      for (const k of kept) if (k.entries.length > 1 && (!big || k.entries.length > big.entries.length)) big = k;
+      if (!big) break; // 每会话只剩 1 条：物理下限（MAX_SESSIONS 条单条日志远小于预算）
+      const dropped = big.entries.shift();
+      if (!dropped) break;
+      total -= dropped.b;
+      logsTruncated[big.id] = (logsTruncated[big.id] ?? 0) + 1;
+    }
+    for (const k of kept) logs[k.id] = k.entries.map((x) => x.e);
+    return { logs, logs_truncated: logsTruncated };
+  }
+
   // Relay 重启后收养历史会话（agent 为空，仅展示不可操作）
   adopt(replayed: Map<string, ReplayedSession>): number {
     // 活跃度优先：按 updated_at 倒序收养，超出上限丢最久未动的
@@ -264,19 +311,20 @@ export class SessionManager {
     this.bridge = b;
   }
 
-  // 云桥身份（index.ts 在云桥启用时注入；PAIR_START/PEERS 依赖）
+  // 云桥身份（index.ts 在云桥启用时注入；PAIR_START/PEERS 依赖）。meta 为 #42 设备
+  // 自报身份元数据（可选，与 CloudIdentity.PeerEntry 对应字段同构）
   private cloud: {
     keypair: { publicKey: string };
     relayDev: string;
-    peers: Map<string, { pubkey: string; name?: string; paired_at: number; last_seen?: number }>;
-    addPeer: (dev: string, entry: { pubkey: string; name?: string; paired_at: number }) => void;
+    peers: Map<string, { pubkey: string; name?: string; meta?: PeerMeta; paired_at: number; last_seen?: number }>;
+    addPeer: (dev: string, entry: { pubkey: string; name?: string; meta?: PeerMeta; paired_at: number }) => void;
   } | null = null;
 
   setCloud(c: {
     keypair: { publicKey: string };
     relayDev: string;
-    peers: Map<string, { pubkey: string; name?: string; paired_at: number; last_seen?: number }>;
-    addPeer: (dev: string, entry: { pubkey: string; name?: string; paired_at: number }) => void;
+    peers: Map<string, { pubkey: string; name?: string; meta?: PeerMeta; paired_at: number; last_seen?: number }>;
+    addPeer: (dev: string, entry: { pubkey: string; name?: string; meta?: PeerMeta; paired_at: number }) => void;
   }): void {
     this.cloud = c;
   }
@@ -844,7 +892,8 @@ export class SessionManager {
         }
         case "COMMAND_PEERS": {
           // 议题①可信设备清单：kind 按 dev 前缀派生（rl- 是 relay 自己，不在 peers）；
-          // 云桥未启用时 peers 恒空，返回空清单而非报错（网页端 UI 直接显示「暂无」）
+          // 云桥未启用时 peers 恒空，返回空清单而非报错（网页端 UI 直接显示「暂无」。
+          // #42 e.meta 自报身份元数据随条目下发，存量设备无该字段 → 端上降级「未知设备」）
           const peers = this.cloud
             ? [...this.cloud.peers.entries()].map(([dev, e]) => ({
                 dev,
@@ -853,6 +902,7 @@ export class SessionManager {
                 kind: dev.startsWith("ph-") ? ("phone" as const) : dev.startsWith("wb-") ? ("web" as const) : dev.startsWith("wt-") ? ("watch" as const) : ("other" as const),
                 paired_at: e.paired_at,
                 last_seen: e.last_seen ?? 0,
+                ...(e.meta ? { meta: e.meta } : {}),
               }))
             : [];
           return { command_id: cmd.command_id, ok: true, peers };

@@ -319,6 +319,23 @@
   .gp-badge.wait { color: var(--working); background: rgba(255,197,61,.10); border-color: rgba(255,197,61,.35); }
   /* 离线走中性灰（视觉验收 P3-7：橙色面积管控，品牌橙只留给选中态与主按钮） */
   .gp-badge.off { color: var(--gp-dim); background: rgba(142,163,186,.10); border-color: var(--gp-border); }
+  /* #40web ② 手动重试钮（状态卡右端，失败态/重试等待期可见；点击跳过退避立即重连） */
+  .gp-retry {
+    flex: none; font-size: 11px; font-weight: 600; line-height: 1; cursor: pointer;
+    padding: 5px 9px; border-radius: 6px; color: var(--gp-text);
+    background: var(--gp-input); border: 1px solid var(--gp-border);
+    transition: border-color .15s ease, color .15s ease;
+  }
+  .gp-retry:hover { color: var(--gp-accent); border-color: var(--gp-accent); }
+  /* #40web ① 已配对标识（状态卡）：绿=已配对（本地存有 relay 确认过的身份）；
+     红=配对失效（relay 明确否认）；灰=未配对（新装/配对流程中） */
+  .gp-pbadge {
+    flex: none; font-size: 10.5px; font-weight: 600; line-height: 1;
+    padding: 4px 8px; border-radius: 6px;
+    color: var(--gp-done); background: rgba(85,217,138,.10); border: 1px solid rgba(85,217,138,.32);
+  }
+  .gp-pbadge.dead { color: var(--error); background: rgba(239,90,90,.10); border-color: rgba(239,90,90,.32); }
+  .gp-pbadge.no { color: var(--gp-faint); background: transparent; border-color: var(--gp-border); }
   /* 连接页：源列表（用户钦点放连接页最上）+ 添加/连接表单卡 */
   #gearPop #srvList { display: flex; flex-direction: column; gap: 7px; }
   #gearPop .srv-row { background: var(--gp-card); border-color: var(--gp-border); border-radius: 10px; }
@@ -385,6 +402,7 @@
   .gp-peer-kind { flex: none; font-size: 10px; font-weight: 600; border: 1px solid var(--gp-border); color: var(--gp-dim); border-radius: 5px; padding: 1px 5px; }
   .gp-peer-row .gp-pname { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; }
   .gp-peer-row .gp-pdev { flex: none; font-family: var(--mono); font-size: 10px; color: var(--gp-faint); }
+  .gp-peer-meta { font-size: 10.5px; color: var(--gp-faint, #53677E); border: 1px solid var(--gp-border, #1D3046); border-radius: 6px; padding: 0 6px; line-height: 16px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 150px; }
   .gp-peer-when { margin-left: auto; flex: none; font-size: 11px; color: var(--gp-faint); }
   .gp-peer-kick { flex: none; font-size: 11px; color: #E5484D; background: none; border: 1px solid transparent; border-radius: 6px; padding: 3px 8px; cursor: pointer; transition: border-color .12s ease, background .12s ease; }
   .gp-peer-kick:hover { border-color: rgba(229,72,77,.45); background: rgba(229,72,77,.08); }
@@ -400,16 +418,24 @@
   .gp-pair-info { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 6px; }
   .gp-pair-t { font-size: 12px; color: var(--gp-dim); }
   .gp-pair-acts { width: 148px; flex: none; justify-content: center; }
-  #gearPop .pd-code-show { align-items: baseline; justify-content: flex-start; gap: 10px; padding: 2px 0 0; }
-  #gearPop .pd-code-show b {
-    font-family: var(--mono); font-size: 24px; font-weight: 700; letter-spacing: 4px;
+  /* #411 relay 页自动展码：8 格码位一行（grid 1fr 格宽自适应，窄容器自动收敛不下溢），
+     空格=占位格、领到码逐位填数字并亮边；下方 meta 行=倒计时文案 + 手动「刷新」小钮 */
+  .gp-code-cells { display: grid; grid-template-columns: repeat(8, minmax(0, 1fr)); gap: 4px; max-width: 196px; }
+  .gp-code-cells i {
+    display: flex; align-items: center; justify-content: center;
+    height: 30px; border: 1px solid var(--gp-border); border-radius: 6px; background: var(--gp-input);
+    font-family: var(--mono); font-size: 16px; font-weight: 700; font-style: normal;
     color: var(--gp-text); font-variant-numeric: tabular-nums;
   }
-  /* 配对码占位（视觉验收 P2-6）：空态显 8 个等宽格位（2026-09-09 6→8 位），真实码到位后逐位填充、格位自动让位 */
-  .gp-code-ph { display: none; flex: none; gap: 6px; align-items: center; align-self: center; }
-  .pd-code-show:has(b:empty) .gp-code-ph { display: inline-flex; }
-  .gp-code-ph i { width: 18px; height: 30px; border: 1px solid var(--gp-border); border-radius: 6px; background: var(--gp-input); }
-  #gearPop .pd-code-show span { font-size: 11px; color: var(--gp-faint); }
+  .gp-code-cells.on i { border-color: rgba(241,132,79,.40); }
+  html.light .gp-code-cells.on i { border-color: rgba(194,96,62,.40); }
+  .pd-code-meta { display: flex; align-items: center; gap: 8px; min-width: 0; }
+  .pd-code-meta span { font-size: 11px; color: var(--gp-dim); font-variant-numeric: tabular-nums; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .pd-code-meta span.err { color: #ff8f85; }
+  html.light .pd-code-meta span.err { color: #C2454F; }
+  .pd-code-meta .gp-mini-btn { flex: none; padding: 2px 8px; }
+  .pd-code-meta .gp-mini-btn.attn { color: #ff8f85; border-color: rgba(255,143,133,.55); }
+  html.light .pd-code-meta .gp-mini-btn.attn { color: #C2454F; border-color: rgba(194,69,79,.45); }
   .gp-acts { display: flex; flex-direction: column; gap: 8px; padding: 0; }
   .gp-acts button {
     display: flex; align-items: center; justify-content: center; gap: 8px; width: 100%; text-align: center;
@@ -587,13 +613,6 @@
   }
   #pairCode:focus { outline: none; border-color: var(--brand); box-shadow: 0 0 0 3px rgba(217,119,87,.15); }
   #pairBtn { height: 27px; padding: 0 14px; font-size: 12px; border-radius: 8px; flex: none; }
-  /* #39x 本机领码临时行：大号等宽 8 位码 + 倒计时，expires_in 归零自动消失 */
-  .pd-code-show { display: flex; align-items: baseline; justify-content: center; gap: 8px; padding: 5px 0 3px; }
-  .pd-code-show b {
-    font-family: var(--mono); font-size: 22px; font-weight: 700; letter-spacing: 4px;
-    color: var(--brand); font-variant-numeric: tabular-nums;
-  }
-  .pd-code-show span { font-size: 11px; color: var(--faint); }
   /* #325 扫码登录浮层：居中卡片 + 二维码画布 + 等待/成功态 */
   #loginQrPop {
     position: fixed; inset: 0; z-index: 70; display: none;
@@ -736,6 +755,21 @@
   }
   .srv-row:hover .srv-del, .srv-row .srv-del:focus { opacity: 1; }
   .srv-row .srv-del:hover { color: var(--error); background: var(--bg-soft); }
+  /* #40web ① 条目名旁的配对徽章（与状态卡同口径）：传输失败时「已配对」仍在场，
+     用户不会误以为要重新输码（#40 的误导根因） */
+  .srv-pbadge {
+    display: inline-block; vertical-align: 1px; margin-left: 6px;
+    font-size: 9.5px; font-weight: 600; line-height: 1; padding: 2.5px 6px; border-radius: 5px;
+    color: var(--done); background: rgba(85,217,138,.12); border: 1px solid rgba(85,217,138,.30);
+  }
+  .srv-pbadge.dead { color: var(--error); background: rgba(239,90,90,.10); border-color: rgba(239,90,90,.30); }
+  .srv-pbadge.no { color: var(--faint); background: transparent; border-color: var(--border); }
+  /* #40web ② 行内重试钮：仅失败态渲染（isRetryable），点击跳过退避立即重连 */
+  .srv-row .srv-retry {
+    flex: none; background: none; border: 1px solid var(--border); cursor: pointer;
+    color: var(--dim); font-size: 11.5px; padding: 4px 9px; border-radius: 7px;
+  }
+  .srv-row .srv-retry:hover { color: var(--brand); border-color: var(--brand); }
 
   /* ---------- 源过滤 chips + 卡片源角标 ---------- */
   /* #406 间距放松一档（对齐设置抽屉 Section 的呼吸感，不过头）：chips 横向 6→9
@@ -1048,19 +1082,27 @@
   .dhead-row { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
   #dtitle { font-size: 17px; font-weight: 700; }
   #renameBtn { padding: 3px 9px; font-size: 13px; color: var(--dim); }
-  #dsub { color: var(--dim); font-size: 12px; margin-top: 5px; display: flex; gap: 12px; flex-wrap: wrap; }
+  #dsub { color: var(--dim); font-size: 12px; margin-top: 5px; display: flex; gap: 12px; flex-wrap: wrap; align-items: center; }
   #dsub .elapsed { color: var(--text); }
-  /* 上下文水位：列表卡固定 30px 短条常显（口径不动）；详情头概况区走 #dctxrow 水位行 */
+  /* #41web 路径过长时不换行挤第三行，而是收缩省略（完整路径在 title），给右端水位/chip 让位 */
+  #dcwd { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  /* 上下文水位：列表卡固定 30px 短条常显（口径不动）；详情头并入元信息行右端（#dctxcell） */
   .ctx-mini { display: inline-flex; align-items: center; gap: 4px; }
   .card-stats .ctx-mini { margin-left: auto; }
   .ctx-mini-bar { width: 30px; height: 3px; border-radius: 1.5px; background: rgba(128,134,148,.28); overflow: hidden; }
   .ctx-mini-bar i { display: block; height: 100%; border-radius: 1.5px; }
   .ctx-mini-t { font-size: 10px; font-variant-numeric: tabular-nums; }
-  /* #392web 概况区水位行：水位条 flex 让位缩短（chip 在场时收窄），chip 贴行尾（手机 f35c7ce 同形态） */
-  #dctxrow { display: none; align-items: center; gap: 8px; margin-top: 6px; min-width: 0; }
-  #dctxrow .ctx-mini { flex: 1; min-width: 0; }
-  #dctxrow .ctx-mini-bar { flex: 1; width: auto; min-width: 30px; }
-  #dctxrow button.mini { flex: none; }
+  /* #41web 概况区水位并入元信息行右端：水位条可收缩（min 30px 保可读），chip 贴行尾；
+     窄屏整格回落独立一行（原 #dctxrow 三行态） */
+  #dctxcell { display: none; align-items: center; gap: 8px; min-width: 0; margin-left: auto; flex: 0 1 auto; }
+  #dctxcell .ctx-mini { flex: 0 1 auto; min-width: 0; }
+  #dctxcell .ctx-mini-bar { width: 72px; min-width: 30px; }
+  #dctxcell button.mini { flex: none; }
+  @media (max-width: 900px) {
+    #dctxcell { flex-basis: 100%; margin-left: 0; }
+    #dctxcell .ctx-mini { flex: 1; }
+    #dctxcell .ctx-mini-bar { flex: 1; width: auto; }
+  }
 
   .tabs { display: flex; gap: 2px; margin-top: 10px; align-items: center; position: relative; }
   .tabs .spacer { flex: 1; }
@@ -1075,11 +1117,11 @@
     background: var(--brand); pointer-events: none;
     transition: transform .22s ease, width .22s ease;
   }
-  .tabs button.mini, #dctxrow button.mini {
+  .tabs button.mini, #dctxcell button.mini {
     font-size: 11.5px; padding: 5px 11px; border-radius: 999px; color: var(--dim);
     border: 1px dashed var(--border); background: transparent;
   }
-  .tabs button.mini.on, #dctxrow button.mini.on { color: var(--brand); border-color: rgba(217,119,87,.55); border-style: solid; }
+  .tabs button.mini.on, #dctxcell button.mini.on { color: var(--brand); border-color: rgba(217,119,87,.55); border-style: solid; }
 
   /* 工作状态行（类 CLI，置于输入卡上方）：✶ 摘要 · 回合耗时；宽度与时间线会话列对齐 */
   #liverow {
@@ -1522,6 +1564,8 @@
           <div class="gp-status" id="gpStatus">
             <span class="gp-sdot" id="gpStatusDot"></span>
             <span class="gp-stx"><b id="gpStatusName">未配置</b><span id="gpStatusSub">添加服务器开始使用</span></span>
+            <button id="gpRetryBtn" class="gp-retry" style="display:none" title="跳过退避等待，立即重连">↻ 重试</button>
+            <span class="gp-pbadge" id="gpPairBadge" style="display:none"></span>
             <span class="gp-badge" id="gpStatusBadge">未配置</span>
           </div>
           <div class="panel" id="connPanel">
@@ -1566,12 +1610,12 @@
           <div class="gp-card gp-pair">
             <div class="gp-pair-info">
               <div class="gp-pair-t">8 位配对码</div>
-              <div class="pd-code-show" id="pdCodeLine"><b id="pdCodeVal"></b><span class="gp-code-ph" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></span><span id="pdCodeExp"></span></div>
-              <div class="pair-hint" id="pairHint">手机 App 侧边栏领码 · 一次性短时效</div>
+              <div class="gp-code-cells" id="pdCodeCells" aria-label="8 位配对码"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>
+              <div class="pd-code-meta"><span id="pdCodeExp"></span><button type="button" class="gp-mini-btn" id="pdCodeRefresh" title="立即换一枚新码">刷新</button></div>
+              <div class="pair-hint" id="pairHint">进页自动领码 · 到期自动换新</div>
             </div>
             <div class="gp-acts gp-pair-acts">
               <button id="loginQrBtn" title="手机扫一下，这台电脑直接接入你的 CC Deck"><svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 8V5a2 2 0 0 1 2-2h3M16 3h3a2 2 0 0 1 2 2v3M21 16v3a2 2 0 0 1-2 2h-3M8 21H5a2 2 0 0 1-2-2v-3"/><path d="M7 12h10"/></svg>扫码接入</button>
-              <button id="pdLocalCodeBtn" title="没绑手机时，在这台电脑上直接领一枚配对码（本机 relay 签发）"><svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M9.5 4 7.5 20M16.5 4l-2 16M4.5 9h16M3.5 15h16"/></svg>本机显示配对码</button>
               <button id="addPhoneBtn" title="手机 App 扫码直接接入本服务器"><svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="7" y="2.5" width="10" height="19" rx="2.2"/><path d="M12 9.2v5.6M9.2 12h5.6"/></svg>添加手机</button>
             </div>
           </div>
@@ -1602,7 +1646,8 @@
             <div class="gp-row gp-static"><span class="gi"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="4.5" width="16" height="15" rx="3.6"/><path d="M4 9.2h16"/><path d="M9.4 9.2v10.3"/></svg></span>CC Deck 控制台 <b id="gpVer"></b><span class="gp-chev">›</span></div>
             <div class="gp-row" id="gpUpdate"><span class="gi"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-9-9c2.52 0 4.93 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/></svg></span>检查更新 <b id="gpUpdateV"></b><span class="gp-chev">›</span></div>
             <a class="gp-row" href="https://cc.humumu.online/dl/cc-deck-desktop-setup.exe" target="_blank" rel="noopener"><span class="gi"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3.6v10.6"/><path d="m7.9 10.7 4.1 4.1 4.1-4.1"/><path d="M4.4 20.4h15.2"/></svg></span>下载桌面端安装包<span class="gp-chev">›</span></a>
-            <a class="gp-row" href="http://8.133.211.170:8888/cc-deck.apk" target="_blank" rel="noopener"><span class="gi"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="7" y="2.5" width="10" height="19" rx="2.2"/><path d="M10.5 18.5h3"/></svg></span>下载手机 App<span class="gp-chev">›</span></a>
+            <!-- #41web/#C 手机 App 下载走 GitHub Releases（用户界面不裸露云桥 IP；桌面安装包仍走 /dl/ 域名版） -->
+            <a class="gp-row" href="https://github.com/humumu130/cc-deck/releases/latest" target="_blank" rel="noopener"><span class="gi"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="7" y="2.5" width="10" height="19" rx="2.2"/><path d="M10.5 18.5h3"/></svg></span>下载手机 App<span class="gp-chev">›</span></a>
             <a class="gp-row" href="https://github.com/humumu130/cc-deck/issues" target="_blank" rel="noopener"><span class="gi"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3.2" y="5" width="17.6" height="14" rx="2.6"/><path d="m4.4 7.4 7.6 5.4 7.6-5.4"/></svg></span>反馈<span class="gp-chev">›</span></a>
           </div>
         </section>
@@ -1623,12 +1668,13 @@
         <span id="dsrc"></span>
         <span id="dcwd"></span>
         <span class="elapsed" id="delapsed"></span>
-      </div>
-      <!-- #392web 概况区水位行（对齐手机端 f35c7ce 拍板形态）：ctx 水位条 flex 让位缩短，
-           模型 chip 贴行尾；副信息行回归纯文本（模型名收进 chip 的 title，不再单独占位） -->
-      <div id="dctxrow" style="display:none">
-        <span id="dctx"></span>
-        <button id="modelBtn" class="mini" style="display:none" title="切换模型（下一回合生效）">模型</button>
+        <!-- #41web 水位+模型 chip 并入元信息行右端（flex 自然分布；元信息过长时水位条 flex 收缩保最小可读，
+             路径收缩省略完整路径看 title）。窄屏（≤900px 详情头放不下）整格 flex-basis:100% 自动回落
+             独立一行 = 原 #dctxrow 第三行形态（条 flex:1 + chip 行尾，手机 f35c7ce 同形态） -->
+        <span id="dctxcell">
+          <span id="dctx"></span>
+          <button id="modelBtn" class="mini" style="display:none" title="切换模型（下一回合生效）">模型</button>
+        </span>
       </div>
       <div class="tabs" title="点击或 ←/→ 键切换视图">
         <button data-tab="activity" class="tab active">消息</button>
@@ -2018,6 +2064,9 @@ function migrateLegacy() {
   }
 }
 
+// #40web 自动重试节奏（对齐手机端 ③）：3s 起指数退避至 30s 封顶，连上即归零重来
+const RETRY_BASE_MS = 3000, RETRY_MAX_MS = 30000;
+
 // 每源运行时上下文：连接状态、会话/时间线/序号、云桥传输（ws/poll）、配对看门狗全部按源隔离
 function ensureCtx(cfg) {
   let c = ctxs.get(cfg.id);
@@ -2025,7 +2074,8 @@ function ensureCtx(cfg) {
     c = {
       cfg, status: "offline", statusText: "未连接",
       sessions: new Map(), timelines: new Map(), lastSeq: 0, models: [],
-      ws: null, reconnectDelay: 1000, reconnectTimer: 0,
+      ws: null, reconnectDelay: RETRY_BASE_MS, reconnectTimer: 0,
+      failKind: "", retryAt: 0, retryNote: "", // #40web 失败归因/重试倒计时（见 setConn/scheduleReconnect）
       pendingPair: null, pairTimer: 0, pingTimer: null, lastPong: 0,
       transport: "ws", pollGen: 0, pollSid: "", pollBase: "",
       wsFails: 0, postFails: 0, hsTimer: 0, discTried: false, discTimer: 0,
@@ -2046,6 +2096,7 @@ function disconnectCtx(ctx, text) {
   ctx.ws = null;
   ctx.status = "offline";
   ctx.statusText = text || "已断开";
+  ctx.failKind = ""; ctx.retryAt = 0; ctx.retryNote = "";
 }
 
 function connectServer(cfg) {
@@ -2197,7 +2248,7 @@ function showTaskDone(ctx, sid, payload) {
 // ---------- 连接（每源独立状态机：一处断另一处还在） ----------
 function connectLan(ctx) {
   const cfg = ctx.cfg;
-  if (!cfg.wsUrl || !cfg.token) { ctx.status = "offline"; ctx.statusText = "未配置"; renderServers(); renderConnChip(); return; }
+  if (!cfg.wsUrl || !cfg.token) { ctx.status = "offline"; ctx.statusText = "未配置"; ctx.failKind = "none"; renderServers(); renderConnChip(); return; }
   clearTimeout(ctx.reconnectTimer);
   const url = cfg.wsUrl + "?token=" + encodeURIComponent(cfg.token) +
     (ctx.sessions.size > 0 && ctx.lastSeq > 0 ? "&last_seq=" + ctx.lastSeq : "");
@@ -2207,12 +2258,13 @@ function connectLan(ctx) {
   ctx.ws = w;
   w.onopen = () => {
     if (ctx.ws !== w) return;
-    ctx.reconnectDelay = 1000;
+    ctx.reconnectDelay = RETRY_BASE_MS; // #40web 连上即归零退避
     setConn(ctx, "online", "已连接");
   };
   w.onclose = () => {
     if (ctx.ws !== w) return;
-    setConn(ctx, "offline", "已断开");
+    // #40web 传输层失败：绝不引导配对码，归因 transport 走自动重试 + 手动重试钮
+    setConn(ctx, "offline", "已断开", "transport");
     scheduleReconnect(ctx);
   };
   w.onerror = () => {};
@@ -2232,13 +2284,14 @@ function connectLan(ctx) {
 function connectCloudFor(ctx, manual) {
   const cfg = ctx.cfg;
   const base = cfg.wsUrl;
-  if (!base) { ctx.status = "offline"; ctx.statusText = "未配置"; renderServers(); renderConnChip(); return; }
+  if (!base) { ctx.status = "offline"; ctx.statusText = "未配置"; ctx.failKind = "none"; renderServers(); renderConnChip(); return; }
   loadCloudIdentity();
   const peer = cloudPeerOf(cfg);
   const pair = ctx.pendingPair || pendingPairOf(cfg.id);
   ctx.pendingPair = pair;
   if (!peer && !pair) {
-    setConn(ctx, "offline", "未配对");
+    // #40web 明确无身份（新装/被清）：唯一的「引导输码」态之一
+    setConn(ctx, "offline", "未配对", "unpaired");
     if (manual) {
       toast("请输入配对码配对（家里 PC 领取）");
       openPanel("conn");
@@ -2287,7 +2340,7 @@ function connectCloudFor(ctx, manual) {
     if (ctx.ws !== w) return;
     opened = true;
     clearTimeout(ctx.hsTimer); ctx.hsTimer = 0;
-    ctx.reconnectDelay = 1000;
+    ctx.reconnectDelay = RETRY_BASE_MS; // #40web 连上即归零退避
     if (!peer || pair) {
       sendPairReq(ctx, pair, dev);
       startPairWatchdog(ctx);
@@ -2307,7 +2360,7 @@ function connectCloudFor(ctx, manual) {
     if (!opened) { switchToPoll("握手被拒 code=" + ev.code); return; }
     ctx.wsFails++; // 连上又断且一帧未收 → 疑似代理放行握手后掐连接
     if (ctx.wsFails >= 2) { switchToPoll("ws 反复闪断 x" + ctx.wsFails); return; }
-    setConn(ctx, "offline", "已断开 ☁");
+    setConn(ctx, "offline", "已断开 ☁", "transport"); // #40web 传输层失败，不引导配对码
     scheduleReconnect(ctx);
   };
   w.onerror = () => {};
@@ -2340,6 +2393,14 @@ function resetCloudPairing(cfg) {
 // relay 静默；否则经典单播（旧 relay 全兼容）
 function sendPairReq(ctx, pair, dev) {
   const body = { t: "pair_req", code: pair.pc, pubkey: ckp.publicKey, name: "web-" + dev.slice(3, 11) };
+  // #42 web 侧自报元数据：浏览器 UA 摘要 + 平台（relay 存入信任清单，管理卡可辨）
+  try {
+    const ua = navigator.userAgent;
+    const br = /Edg\//.test(ua) ? "Edge" : /Chrome\//.test(ua) ? "Chrome" : /Firefox\//.test(ua) ? "Firefox" : /Safari\//.test(ua) ? "Safari" : "浏览器";
+    const os = /Windows/.test(ua) ? "Windows" : /Android/.test(ua) ? "Android" : /Mac/.test(ua) ? "macOS" : /Linux/.test(ua) ? "Linux" : "";
+    const m = (br + " " + (ua.match(/(?:Edg|Chrome|Firefox)\/(\d+)/)?.[1] || "")).trim() + "·" + os;
+    body.meta = { platform: m.slice(0, 120), ua: ua.slice(0, 120) };
+  } catch {}
   sendCloudRaw(ctx, JSON.stringify({ to: pair.rd || "*", data: pair.rd ? body : Object.assign({ bc: true }, body) }));
 }
 // 发现帧：桥回 {type:"RELAYS", relays:[{dev,rk}]}（在线 relay 列表）。
@@ -2361,7 +2422,8 @@ function startPairWatchdog(ctx) {
         // 耗尽无新身份（含 relay 连续错码进入 pairFails 静默期）：offline + 退避重连，
         // 不能静默 return——否则状态永久卡"配对中…"直到 F5
         const bcMiss = ctx.pendingPair && !ctx.pendingPair.rd; // 广播态：码没找到持码者
-        setConn(ctx, "offline", bcMiss ? "未找到持码服务器" : "配对无应答");
+        // #40web 配对流程受挫（码无效/无应答）：归因 pair——引导换新码而非盲目重连
+        setConn(ctx, "offline", bcMiss ? "未找到持码服务器" : "配对无应答", "pair");
         scheduleReconnect(ctx);
         if (ctx.pendingPair && ctx.pendingPair.pc === "") {
           // #325 扫码登录态：等的是手机授权而非配对码应答，F12 排查提示不适用
@@ -2386,7 +2448,7 @@ function startPollTransport(ctx, base, token, dev, pair) {
   ctx.pollSid = uuid();
   ctx.pollBase = httpBase + "/cloud-poll?token=" + encodeURIComponent(token) +
     "&dev=" + encodeURIComponent(dev) + "&sid=" + ctx.pollSid;
-  ctx.reconnectDelay = 1000;
+  ctx.reconnectDelay = RETRY_BASE_MS; // #40web 连上即归零退避
   const peer = cloudPeerOf(ctx.cfg);
   if (!peer || pair) {
     setConn(ctx, "connecting", "配对中(轮询)");
@@ -2428,7 +2490,7 @@ async function pollLoop(ctx) {
           connectCloudFor(ctx, false);
           return;
         }
-        setConn(ctx, "offline", "云桥拒绝"); toast("云桥 token 无效（页面烘焙值也被拒）：桥已换代，需更新页面");
+        setConn(ctx, "offline", "云桥拒绝", "bridge"); toast("云桥 token 无效（页面烘焙值也被拒）：桥已换代，需更新页面");
       }
       break; // 其余 401/400：回到重连流程重建会话
     }
@@ -2440,7 +2502,12 @@ async function pollLoop(ctx) {
     for (const f of out.frames || []) onCloudText(ctx, f);
     if (out.closed) { console.log("[cloud:" + ctx.cfg.name + "] 轮询会话被关闭（顶替/超时），重建"); break; }
   }
-  if (gen === ctx.pollGen) { setConn(ctx, "offline", "已断开 ☁"); scheduleReconnect(ctx); }
+  // #40web 诊断态不覆写成通用断开文案：failKind=bridge 让 scheduleReconnect 带诊断前缀重试
+  //（「云桥拒绝 · 重试中·下次 8s」——用户同时看到病因与自愈节奏）
+  if (gen === ctx.pollGen) {
+    if (ctx.status !== "offline" || ctx.failKind !== "bridge") setConn(ctx, "offline", "已断开 ☁", "transport");
+    scheduleReconnect(ctx);
+  }
 }
 
 // 下行帧统一入口（ws onmessage 与轮询 GET 共用，按源）
@@ -2475,13 +2542,13 @@ function onCloudText(ctx, text) {
         ctx.discTimer = 0;
         if (ctx.status !== "connecting") return;
         clearInterval(ctx.pairTimer);
-        setConn(ctx, "offline", "家里 relay 离线");
+        setConn(ctx, "offline", "家里 relay 离线", "bridge"); // #40web 桥可达但 relay 不在：诊断态
         scheduleReconnect(ctx);
       }, 6000);
       return;
     }
     clearInterval(ctx.pairTimer);
-    setConn(ctx, "offline", "家里 relay 离线");
+    setConn(ctx, "offline", "家里 relay 离线", "bridge");
     scheduleReconnect(ctx);
     return;
   }
@@ -2517,7 +2584,8 @@ function onCloudText(ctx, text) {
         return;
       }
       clearInterval(ctx.pairTimer);
-      setConn(ctx, "offline", all.length > 1 ? "发现多个 relay，请重新领码" : "家里 relay 离线");
+      // #40web 多 relay 歧义=要用户重领码（pair）；仅 relay 掉线=诊断态（bridge）
+      setConn(ctx, "offline", all.length > 1 ? "发现多个 relay，请重新领码" : "家里 relay 离线", all.length > 1 ? "pair" : "bridge");
       scheduleReconnect(ctx);
       return;
     }
@@ -2551,7 +2619,7 @@ function onCloudText(ctx, text) {
     cfg.cloud = { url: cfg.wsUrl, token: serverBridgeToken(cfg), rd: pick.dev, rk: pick.rk || BAKED_RELAY.rk, paired: false };
     saveServers();
     clearInterval(ctx.pairTimer);
-    setConn(ctx, "offline", "未配对（relay 已换代）");
+    setConn(ctx, "offline", "未配对（relay 已换代）", "unpaired"); // #40web 旧身份被换代否定=真未配对
     return;
   }
   if (f.type === "ERROR") return;
@@ -2564,7 +2632,7 @@ function onCloudText(ctx, text) {
       setPendingPair(cfg.id, null);
       ctx.pendingPair = null;
       resetCloudPairing(cfg);
-      setConn(ctx, "offline", "未配对");
+      setConn(ctx, "offline", "未配对", "unpaired"); // #40web relay 明确否认身份：唯一引导输码的态
       toast("请输入配对码重新配对（家里 PC 领取）", 6000);
       console.log("[cloud:" + cfg.name + "] relay 判定未配对:", f.data.error);
       // relay 在线才回得出 nack：连接保持（发现帧需要活通道），顺手刷新 relay
@@ -2628,7 +2696,7 @@ function onCloudText(ctx, text) {
     setPendingPair(cfg.id, null);
     ctx.pendingPair = null;
     resetCloudPairing(cfg);
-    setConn(ctx, "offline", "未配对");
+    setConn(ctx, "offline", "未配对", "unpaired");
     toast("配对失败：" + (inner.error || "码无效") + "，请重新领码输入", 6000);
     openPanel("conn");
     setTimeout(() => { if (formKind === "cloud") $("pairCode").focus(); }, 80);
@@ -2669,14 +2737,14 @@ function sendCloudRaw(ctx, str) {
             connectCloudFor(ctx, false);
             return;
           }
-          setConn(ctx, "offline", "云桥拒绝"); toast("云桥 token 无效（页面烘焙值也被拒）：桥已换代，需更新页面"); return;
+          setConn(ctx, "offline", "云桥拒绝", "bridge"); toast("云桥 token 无效（页面烘焙值也被拒）：桥已换代，需更新页面"); return;
         }
-        if (ctx.postFails >= 3) setConn(ctx, "offline", "上行被拦 HTTP " + r.status);
+        if (ctx.postFails >= 3) setConn(ctx, "offline", "上行被拦 HTTP " + r.status, "transport");
       })
       .catch((e) => {
         ctx.postFails++;
         console.log("[cloud:" + ctx.cfg.name + "] 轮询 POST 失败 x" + ctx.postFails + ":", e && e.message);
-        if (ctx.postFails >= 3) setConn(ctx, "offline", "上行请求失败");
+        if (ctx.postFails >= 3) setConn(ctx, "offline", "上行请求失败", "transport");
       });
     return true;
   }
@@ -2698,7 +2766,7 @@ function startCloudPing(ctx) {
   ctx.pingTimer = setInterval(() => {
     if (ctx.status !== "online") return;
     if (Date.now() - ctx.lastPong > 45000) {
-      if (ctx.transport === "poll") { ctx.pollGen++; setConn(ctx, "offline", "已断开 ☁"); scheduleReconnect(ctx); }
+      if (ctx.transport === "poll") { ctx.pollGen++; setConn(ctx, "offline", "已断开 ☁", "transport"); scheduleReconnect(ctx); }
       else { try { ctx.ws && ctx.ws.close(); } catch {} }
       return;
     }
@@ -2721,26 +2789,78 @@ document.addEventListener("visibilitychange", () => {
     setTimeout(() => {
       if (ctx.status !== "online" || document.visibilityState !== "visible" || ctx.lastPong >= t0) return;
       console.log("[cloud:" + ctx.cfg.name + "] 回前台探测 8s 无回包，判定链路死，强制重连");
-      if (ctx.transport === "poll") { ctx.pollGen++; setConn(ctx, "offline", "已断开 ☁"); scheduleReconnect(ctx); }
+      if (ctx.transport === "poll") { ctx.pollGen++; setConn(ctx, "offline", "已断开 ☁", "transport"); scheduleReconnect(ctx); }
       else { try { ctx.ws && ctx.ws.close(); } catch {} }
     }, 8000);
   }
 });
 
+// #40web 失败归因兜底：调用点基本都显式传 kind，漏网的离线态按文案关键词归类
+function classifyFail(t) {
+  const s = t || "";
+  if (s.includes("未配置")) return "none";
+  if (s.includes("配对") || s.includes("领码")) return "unpaired";
+  if (s.includes("云桥") || s.includes("桥") || s.includes("relay")) return "bridge";
+  return "transport";
+}
+
+// #40web ③ 自动重试：3s 起指数退避至 30s 封顶；等待期文案「重试中·下次 Ns」每秒倒计时
+//（对齐手机端 store.ts 节拍——让用户看到系统在自愈，而不是误以为要去输码）。
+// 真未配对不重试（重连无意义，等输码）；桥不可达把诊断文案保留为前缀
+//（「家里 relay 离线 · 重试中·下次 8s」），绝不把传输失败包装成配对问题
 function scheduleReconnect(ctx) {
   const cfg = ctx.cfg;
   if (!cfg.wsUrl || (cfg.kind === "lan" && !cfg.token)) return;
-  const delay = ctx.reconnectDelay;
-  ctx.reconnectDelay = Math.min(ctx.reconnectDelay * 2, 10000);
-  setConn(ctx, "connecting", delay / 1000 + "s 后重连");
+  if (ctx.failKind === "unpaired") return;
+  const delay = ctx.reconnectDelay || RETRY_BASE_MS;
+  ctx.reconnectDelay = Math.min(delay * 2, RETRY_MAX_MS);
+  const note = ctx.failKind === "bridge" && ctx.statusText ? ctx.statusText + " · " : "";
+  setConn(ctx, "connecting", note + "重试中·下次 " + Math.round(delay / 1000) + "s");
+  ctx.retryNote = note;
+  ctx.retryAt = Date.now() + delay;
   clearTimeout(ctx.reconnectTimer);
   ctx.reconnectTimer = setTimeout(() => connectServer(cfg), delay);
 }
 
+// 重试等待期倒计时（1Hz）：只改文字，走轻量刷新——不整块重建 #srvList（打断抽屉内编辑），状态卡纯文本更新
+setInterval(() => {
+  for (const ctx of ctxs.values()) {
+    if (ctx.status !== "connecting" || !ctx.retryAt) continue;
+    const left = Math.ceil((ctx.retryAt - Date.now()) / 1000);
+    if (left <= 0) continue; // 归零：重连定时器即将触发，等 connect 翻状态
+    const text = (ctx.retryNote || "") + "重试中·下次 " + left + "s";
+    if (text === ctx.statusText) continue;
+    ctx.statusText = text;
+    const row = document.querySelector('#srvList .srv-row[data-id="' + ctx.cfg.id + '"] .srv-addr');
+    if (row) { const sv = cfgOf(ctx.cfg.id); if (sv) row.textContent = srvAddrText(sv, ctx); }
+    renderGpStatus();
+  }
+}, 1000);
+
+// #40web ② 手动重试：跳过退避等待立即重连（重试等待期与传输/桥失败终态可用）
+function manualRetry(ctx) {
+  ctx.reconnectDelay = RETRY_BASE_MS;
+  ctx.retryAt = 0; ctx.retryNote = "";
+  connectServer(ctx.cfg);
+}
+// 手动重试钮可见性：重试等待期（提前重连）或传输层/桥不可达失败终态；
+// 真未配对/配对受挫不显示——那需要换新配对码而非重连（与「传输失败绝不引导输码」互为镜像）
+function isRetryable(ctx) {
+  if (!ctx) return false;
+  if (ctx.status === "connecting") return !!ctx.retryAt;
+  if (ctx.status !== "offline") return false;
+  return ctx.failKind === "transport" || ctx.failKind === "bridge";
+}
+
 // 每源状态落点：刷新服务器列表 / 汇总连接徽标 / 会话区
-function setConn(ctx, status, text) {
+function setConn(ctx, status, text, kind) {
   ctx.status = status;
   ctx.statusText = text;
+  // #40web 失败归因（仅 offline 携带）：connecting/online 即清除；kind=transport（传输层失败，
+  // 自动重试+手动重试，绝不引导配对码）/ unpaired（真未配对，才引导输码）/ pair（配对流程受挫，
+  // 换码）/ bridge（桥不可达，诊断文案）/ none（未配置）
+  ctx.failKind = status === "offline" ? (kind || classifyFail(text)) : "";
+  if (status !== "connecting") { ctx.retryAt = 0; ctx.retryNote = ""; }
   // 任一源首次连接成功自动收起设置抽屉，把视线还给会话区（仅首次——重连不中断用户操作）
   // ?gear=1 验收/深链时钉住抽屉不自动收（window.__ccGearPin 仅该参数置位，正常使用无感）
   if (status === "online" && !ctx._everOnline) {
@@ -2775,9 +2895,13 @@ function renderConnChip() {
 // 无活动源退让任一在线源，一个源都没有则显示"未配置"
 // probingLocal：启动自动探测本机 relay 期间，副行短暂提示（仅未配置态可见），失败静默回收
 let probingLocal = false;
+function gpStatusCtx() {
+  return (activeServerId && ctxs.get(activeServerId)) || firstOnlineCtx() || [...ctxs.values()][0] || null;
+}
 function renderGpStatus() {
   const dot = $("gpStatusDot"), name = $("gpStatusName"), sub = $("gpStatusSub"), badge = $("gpStatusBadge");
-  const ctx = (activeServerId && ctxs.get(activeServerId)) || firstOnlineCtx() || [...ctxs.values()][0] || null;
+  const pairB = $("gpPairBadge"), retryB = $("gpRetryBtn");
+  const ctx = gpStatusCtx();
   // #405 状态 Badge 与点同源同色：on=运行中 wait=连接中 off=离线 空=未配置
   const st = !ctx ? "" : ctx.status === "online" ? "on" : ctx.status === "connecting" || ctx.status === "reconnecting" ? "wait" : ctx.status === "offline" ? "off" : "";
   if (!ctx) {
@@ -2790,11 +2914,21 @@ function renderGpStatus() {
     sub.textContent = (ctx.cfg.kind === "cloud" ? "云桥" : "LAN") + " · " + (ctx.statusText || "");
     sub.classList.toggle("pairing", pdPairingAnim(ctx.statusText));
   }
+  // #40web ① 已配对标识 + ② 手动重试钮：三态分流——传输失败/桥不可达可重试；
+  // 真未配对（配对失效）引导输码，不给无效的重试钮
+  const pb = ctx && pairBadgeOf(ctx.cfg, ctx);
+  if (pb && pairB) { pairB.style.display = ""; pairB.textContent = pb.t; pairB.className = "gp-pbadge " + pb.c; }
+  else if (pairB) pairB.style.display = "none";
+  if (retryB) retryB.style.display = isRetryable(ctx) ? "" : "none";
   if (badge) {
-    badge.textContent = { on: "运行中", wait: "连接中", off: "离线", "": "未配置" }[st];
+    // #40web 重试等待期徽标如实叫「重试中」（连接中家族的琥珀色不动，副行带倒计时）
+    badge.textContent = st === "wait" && ctx && ctx.retryAt ? "重试中"
+      : { on: "运行中", wait: "连接中", off: "离线", "": "未配置" }[st];
     badge.className = "gp-badge" + (st ? " " + st : "");
   }
 }
+// #40web ② 状态卡 ↻ 钮：重试当前指向的源
+$("gpRetryBtn").onclick = () => { const ctx = gpStatusCtx(); if (ctx) manualRetry(ctx); };
 
 // 选中会话（按源寻址）
 function selSession() {
@@ -3428,8 +3562,9 @@ function renderDetail() {
   $("dbadge").innerHTML = chip(s.status);
   $("dsrc").innerHTML = srcBadgeHtml(sel.ctx.cfg);
   $("dcwd").textContent = s.cwd;
+  $("dcwd").title = s.cwd; // #41web 收缩省略后完整路径看 title
   $("delapsed").textContent = "⏱ " + fmtElapsed(sessionElapsed(s));
-  $("dctx").innerHTML = ctxHtml(s); // 概况区水位行（#dctxrow）：桌面/窄屏统一在此显示
+  $("dctx").innerHTML = ctxHtml(s); // 概况区水位（#dctxcell，并入元信息行右端；窄屏媒询自动回落整行）
 
   // 思考开关 / 权限模式 chip / 模型切换 chip（#388）
   $("thinkBtn").classList.toggle("on", thinkShown);
@@ -3447,8 +3582,8 @@ function renderDetail() {
     modelBtn.textContent = s.model ? s.model.split(/[/:]/).pop() : "默认";
     modelBtn.title = "切换模型（下一回合生效）" + (s.model ? " · 当前 " + s.model : "");
   } else { modelBtn.style.display = "none"; closeModelPop(); }
-  // #392web 水位行随内容显隐（对齐手机：无水位且无 chip 时不留空行）
-  $("dctxrow").style.display = (s.context_usage || canModel) ? "flex" : "none";
+  // #392web 水位随内容显隐（对齐手机：无水位且无 chip 时不占位）；#41web 并入元信息行
+  $("dctxcell").style.display = (s.context_usage || canModel) ? "flex" : "none";
 
   // WAITING 处理框
   const wb = $("waitbox");
@@ -4065,9 +4200,11 @@ function openPanel(which) {
 // #345 connChip 点击 → 服务器状态悬浮窗（在线/离线一览 + 管理入口），不再直接滑出设置面板
 function renderSrvPop() {
   const rows = servers.map((s) => {
-    const st = ctxs.get(s.id)?.status;
+    const c = ctxs.get(s.id);
+    const st = c && c.status;
     const col = st === "online" ? "var(--done)" : st === "connecting" ? "var(--working)" : "var(--faint)";
-    const txt = st === "online" ? "在线" : st === "connecting" ? "连接中" : "离线";
+    // #40web 重试等待期如实叫「重试中」，不与主动连接混称
+    const txt = st === "online" ? "在线" : st === "connecting" ? (c.retryAt ? "重试中" : "连接中") : "离线";
     return '<div class="sp-row"><i style="background:' + col + '"></i><span class="sp-name">' + escapeHtml(srcDisplayName(s)) + '</span><span class="sp-state' + (st === "connecting" ? " pairing" : "") + '">' + txt + "</span></div>";
   }).join("");
   $("srvPop").innerHTML = rows + '<div class="sp-row sp-manage" id="spManage">管理服务器 →</div>';
@@ -4144,7 +4281,7 @@ document.addEventListener("click", (ev) => {
 
 // ⚙ 设置浮层（#317）：显示项为散装开关的镜像（点行 = 触发原按钮再回读状态），
 // 服务器管理不进浮层——左栏常驻面板已是高频区，与手机抽屉同为一级入口
-const CONSOLE_VERSION = "0.3.33";
+const CONSOLE_VERSION = "0.3.34";
 // #396 拨杆同步：滑块移到 idx 档（transform 过渡），选中档文字加 .on（白字压品牌色滑块上）
 function setLever(el, idx) {
   if (!el) return;
@@ -4180,6 +4317,7 @@ function setGearSection(sec) {
   }
   try { if (!window.__ccGearPin) localStorage.setItem(GP_SEC_KEY, sec); } catch {} // ?gear=1 深链会话不污染分页记忆（顺手项①）
   if (sec === "relay") { probeRelayStat(); refreshPeers(); } // 设备清单随 relay 页可见时静默刷新（议题①）
+  pdAutoSync(); // #411 自动展码随 relay 页可见性启停（进页领码/离页停轮询）
 }
 document.querySelectorAll(".gp-nav-item").forEach((b) => { b.onclick = () => setGearSection(b.dataset.sec); });
 // 本机 relay 行已移除（对用户完全透明）：启停全靠启动自动探测，见 init 尾部 probeLocalRelay
@@ -4340,6 +4478,28 @@ let editId = "";        // 非空 = 正在编辑该 server
 
 function canAutoConnect(cfg) { return !!cfg.wsUrl && (cfg.kind === "cloud" || !!cfg.token); }
 
+// #40web ① 配对徽章（服务器条目 + 状态卡共用口径，对齐手机端 SetupScreen 三态）：
+//   已配对=本地存有 relay 确认过的身份（pair_ack 落盘的 cloud.paired）→ 绿徽，连接失败也只是
+//   传输层问题，条目依然亮「已配对」，用户不会误以为要重新输码（#40 的误导根因）；
+//   配对失效=relay 明确否认（pair_nack/换代清除后 failKind=unpaired）→ 红徽，才引导输码；
+//   未配对=云源其余态（新装/配对流程中）→ 灰徽。LAN 源无配对概念不标
+function pairBadgeOf(s, ctx) {
+  if (!s || s.kind !== "cloud" || !s.wsUrl) return null;
+  if (s.cloud && s.cloud.paired && s.cloud.rd && s.cloud.rk) return { t: "已配对", c: "ok" };
+  if (ctx && ctx.failKind === "unpaired") return { t: "配对失效", c: "dead" };
+  return { t: "未配对", c: "no" };
+}
+// 条目地址摘要：整绘与重试倒计时轻刷新共用同一拼装，防两处口径漂移。
+// 状态词与徽章/占位重复时不再缀尾（#405 去重口径延续）
+function srvAddrText(s, ctx) {
+  const stText = ctx ? ctx.statusText : (canAutoConnect(s) ? "未连接" : "未配置");
+  const cloud = s.kind === "cloud";
+  const base = cloud ? hostOf(s.wsUrl) + " · 云桥" : (hostOf(s.wsUrl) || "未配置") + " · 直连";
+  const pb = pairBadgeOf(s, ctx);
+  const dup = (!cloud && base.includes(stText)) || stText === (pb && pb.t);
+  return base + (stText && !dup ? " · " + stText : "");
+}
+
 function setFormKind(kind, cfg) {
   formKind = kind;
   editId = cfg ? cfg.id : "";
@@ -4389,22 +4549,23 @@ document.querySelectorAll("#cmodeSeg button").forEach((b) => {
 });
 $("cancelEdit").onclick = () => { formForcedOpen = false; setFormKind(formKind, null); };
 
-// 每行 [状态点 + 名称 + 地址摘要（含状态）] + 删除；点行 = 设为活动源 + 下方就地展开编辑表单（#406，抽屉不收）
+// 每行 [状态点 + 名称 + 配对徽章 + 地址摘要（含状态）+ 失败态重试钮] + 删除；
+// 点行 = 设为活动源 + 下方就地展开编辑表单（#406，抽屉不收）
 function renderServers() {
   const box = $("srvList");
   if (!servers.length) { box.innerHTML = '<div class="pair-hint">还没有服务器，点下方「＋ 添加服务器」</div>'; renderNewTarget(); renderGpStatus(); return; }
   box.innerHTML = servers.map((s) => {
     const ctx = ctxs.get(s.id);
     const stText = ctx ? ctx.statusText : (canAutoConnect(s) ? "未连接" : "未配置");
-    // #39x 配对进行中（connecting）不再缀「未配对」——配对态只显示"配对中"，避免同屏两个未配对字样
-    const addr = s.kind === "cloud"
-      ? hostOf(s.wsUrl) + " · 云桥" + (s.cloud?.paired || (ctx && ctx.status === "connecting") ? "" : " · 未配对")
-      : (hostOf(s.wsUrl) || "未配置") + " · 直连";
-    // #405 副行去重：状态词与前面已拼的元数据重复（未配对/未配置）时不再缀尾，杜绝「· 未配对 · 未配对」
-    const dupTail = (stText === "未配对" && addr.includes("未配对")) || (stText === "未配置" && addr.includes("未配置"));
+    // #40web ① 配对徽章独立成徽（已配对/配对失效/未配对），不再拼进地址摘要——
+    // 传输失败时「已配对」徽仍在场，连接失败 ≠ 需要重新输码
+    const pb = pairBadgeOf(s, ctx);
+    const addr = srvAddrText(s, ctx);
     return '<div class="srv-row' + (s.id === activeServerId ? " active" : "") + (s.id === editId ? " editing" : "") + '" data-id="' + s.id + '" title="点击设为活动源，并在下方展开编辑">' +
       '<i class="dot ' + (ctx ? ctx.status : "offline") + '"></i>' +
-      '<div class="srv-main"><b>' + escapeHtml(s.name) + '</b><span class="srv-addr' + (pdPairingAnim(stText) ? " pairing" : "") + '">' + escapeHtml(addr + (stText && !dupTail ? " · " + stText : "")) + "</span></div>" +
+      '<div class="srv-main"><b>' + escapeHtml(s.name) + (pb ? '<span class="srv-pbadge ' + pb.c + '">' + pb.t + '</span>' : "") + '</b>' +
+      '<span class="srv-addr' + (pdPairingAnim(stText) ? " pairing" : "") + '">' + escapeHtml(addr) + "</span></div>" +
+      (isRetryable(ctx) ? '<button class="srv-retry" title="跳过退避等待，立即重连">↻ 重试</button>' : "") +
       '<button class="srv-del" title="删除">✕</button>' +
       "</div>";
   }).join("");
@@ -4425,6 +4586,13 @@ function renderServers() {
       if (cfg && editId !== row.dataset.id) setFormKind(cfg.kind, cfg);
       renderServers();
       if (cfg) document.querySelector(".conn-form")?.scrollIntoView({ block: "nearest", behavior: "smooth" });
+    };
+    // #40web ② 行内重试：只对该源跳过退避立即重连，不切活动源/不展开编辑
+    const rb = row.querySelector(".srv-retry");
+    if (rb) rb.onclick = (e) => {
+      e.stopPropagation();
+      const c = ctxs.get(row.dataset.id);
+      if (c) manualRetry(c);
     };
     row.querySelector(".srv-del").onclick = (e) => { e.stopPropagation(); deleteServer(row.dataset.id); };
   });
@@ -5533,13 +5701,14 @@ document.addEventListener("keydown", (ev) => {
 $("pairBtn").onclick = submitPairCode;
 $("pairCode").addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); submitPairCode(); } });
 
-// #39x 本机显示配对码：没绑手机的用户在自己电脑上直接领一枚云桥码。
-// POST /api/pair-code → { code, expires_in }，展示到 expires_in 归零自动消失。
+// #39x 本机配对码：POST /api/pair-code → { code, expires_in }。
+// #411 relay 页自动展码：进 relay 页自动领码、8 格码位展示、倒计时读 expires_in，
+// 归零自动循环领新码；离开 relay 页（切页/收抽屉）即停，不后台空转。手动「刷新」小钮保留。
 // #40x 领码修复：凭据一律以 local-info 实测优先——源列表 token 可能随 relay 换代过期，
 // 内网 IP 条目还可能是「别的机器」的 relay（端口/token 拿来打 127.0.0.1 必 401），
 // 这就是「本机探测成功仍领码失败」的主因；loopback 条目只作 local-info 不可用时的退让，
 // 且 401 时改用实测 token 自动重试一轮。
-let pdCodeTimer = 0, pdCodeTick = 0;
+let pdCodeTick = 0, pdRetryTimer = 0, pdDeadline = 0, pdAutoOn = false, pdCodeBusy = false;
 async function localInfoAt(port) {
   try {
     const r = await fetch("http://127.0.0.1:" + port + "/local-info", { signal: AbortSignal.timeout?.(1500) });
@@ -5560,51 +5729,93 @@ async function pdLocalRelayCreds() {
   const s = servers.find((x) => x.kind === "lan" && x.token && localEp(x.wsUrl)?.loop);
   return s ? { port: localEp(s.wsUrl).port, token: s.token } : null;
 }
-$("pdLocalCodeBtn").onclick = async () => {
-  let creds = await pdLocalRelayCreds();
-  if (!creds) { toast("未检测到本机 relay"); return; }
-  let j = null, err = "", retried = false;
-  while (!j) {
-    const q = "?token=" + encodeURIComponent(creds.token);
-    // 页面恰由本机 relay 托管（同端口）时走相对路径＝同源，避开跨源读响应的限制
-    const urls = [];
-    if (location.protocol.startsWith("http") && location.port === String(creds.port)) urls.push("/api/pair-code" + q);
-    urls.push("http://127.0.0.1:" + creds.port + "/api/pair-code" + q);
-    for (const u of urls) {
-      try {
-        const r = await fetch(u, { method: "POST", signal: AbortSignal.timeout?.(4000) });
-        const body = await r.json().catch(() => null);
-        if (r.ok && body && body.code) { j = body; break; }
-        err = r.status === 501 ? "本机 relay 未启用云桥" : r.status === 401 ? "token 校验失败" : "HTTP " + r.status;
-      } catch (e) { err = String((e && e.message) || e).slice(0, 60); }
-    }
-    if (j) break;
-    // token 被拒（源列表值过期/错拿别的源）：改用 local-info 实测 token 重试一轮（仅一次）
-    if (err !== "token 校验失败" || retried) break;
-    const fresh = await localInfoAt(creds.port);
-    retried = true;
-    if (fresh && fresh.token !== creds.token) { creds = { port: fresh.port, token: fresh.token }; continue; }
-    break;
-  }
-  if (!j) { toast("领码失败（" + err + "）", 5000); return; }
-  const ttl = Math.max(1, Math.floor(Number(j.expires_in) || 60));
-  $("pdCodeVal").textContent = j.code;
-  $("pdCodeExp").textContent = ttl + "s 内有效 · 一次性";
-  clearInterval(pdCodeTick); clearTimeout(pdCodeTimer);
-  let left = ttl;
-  pdCodeTick = setInterval(() => {
-    if (--left <= 0) { pdCodeExpire(); return; }
-    $("pdCodeExp").textContent = left + "s 内有效 · 一次性";
-  }, 1000);
-  pdCodeTimer = setTimeout(pdCodeExpire, ttl * 1000 + 300);
-};
-// #405 配对码过期统一回「格位占位」空态（与初始空态同款），不再整行 display:none（视觉验收顺手项②）
-function pdCodeExpire() {
-  clearInterval(pdCodeTick); clearTimeout(pdCodeTimer);
-  const v = $("pdCodeVal"), e = $("pdCodeExp");
-  if (v) v.textContent = "";
-  if (e) e.textContent = "";
+// —— 展示态：码位 8 格逐位填，meta 行 = 倒计时文案（N 分 N 秒内有效与倒计时合一）/ 失败重试态 ——
+function pdSetMeta(txt, isErr) {
+  const el = $("pdCodeExp");
+  if (el) { el.textContent = txt; el.title = txt; el.classList.toggle("err", !!isErr); } // title：窄卡截断时悬停看全文
+  const btn = $("pdCodeRefresh");
+  if (btn) btn.classList.toggle("attn", !!isErr);
 }
+function pdFillCells(code) {
+  const box = $("pdCodeCells");
+  if (!box) return;
+  box.classList.toggle("on", !!code);
+  Array.from(box.children).forEach((c, i) => { c.textContent = code ? (code[i] ?? "") : ""; });
+}
+function pdRenderLeft() {
+  const left = Math.max(0, Math.ceil((pdDeadline - Date.now()) / 1000));
+  pdSetMeta((left >= 60 ? Math.floor(left / 60) + ":" + String(left % 60).padStart(2, "0") : left + "s") + " 内有效 · 一次性");
+}
+function pdStartTick() {
+  clearInterval(pdCodeTick);
+  pdCodeTick = setInterval(() => {
+    if (Date.now() >= pdDeadline) {
+      clearInterval(pdCodeTick);
+      if (pdAutoOn) pdIssueCode(); // 循环：到期自动领新码（仅在 relay 页可见时）
+      else { pdFillCells(""); pdSetMeta(""); } // 不可见残留的最后一次：回占位空态
+      return;
+    }
+    pdRenderLeft();
+  }, 500);
+}
+// 失败可见重试态：meta 行红字标因 + 刷新钮 attention；页面可见时 15s 自动重试（手动刷新随时可点）
+function pdFail(msg) {
+  pdSetMeta(msg + (pdAutoOn ? " · 15s 后自动重试" : ""), true);
+  clearTimeout(pdRetryTimer);
+  if (pdAutoOn) pdRetryTimer = setTimeout(() => { clearTimeout(pdRetryTimer); if (pdAutoOn) pdIssueCode(); }, 15000);
+}
+async function pdIssueCode() {
+  if (pdCodeBusy) return;
+  pdCodeBusy = true;
+  clearTimeout(pdRetryTimer);
+  if (!pdDeadline || pdDeadline <= Date.now()) pdSetMeta("领码中…");
+  try {
+    let creds = await pdLocalRelayCreds();
+    if (!creds) { pdFail("未检测到本机 relay"); return; }
+    let j = null, err = "", retried = false;
+    while (!j) {
+      const q = "?token=" + encodeURIComponent(creds.token);
+      // 页面恰由本机 relay 托管（同端口）时走相对路径＝同源，避开跨源读响应的限制
+      const urls = [];
+      if (location.protocol.startsWith("http") && location.port === String(creds.port)) urls.push("/api/pair-code" + q);
+      urls.push("http://127.0.0.1:" + creds.port + "/api/pair-code" + q);
+      for (const u of urls) {
+        try {
+          const r = await fetch(u, { method: "POST", signal: AbortSignal.timeout?.(4000) });
+          const body = await r.json().catch(() => null);
+          if (r.ok && body && body.code) { j = body; break; }
+          err = r.status === 501 ? "本机 relay 未启用云桥" : r.status === 401 ? "token 校验失败" : "HTTP " + r.status;
+        } catch (e) { err = String((e && e.message) || e).slice(0, 60); }
+      }
+      if (j) break;
+      // token 被拒（源列表值过期/错拿别的源）：改用 local-info 实测 token 重试一轮（仅一次）
+      if (err !== "token 校验失败" || retried) break;
+      const fresh = await localInfoAt(creds.port);
+      retried = true;
+      if (fresh && fresh.token !== creds.token) { creds = { port: fresh.port, token: fresh.token }; continue; }
+      break;
+    }
+    if (!j) { pdFail("领码失败（" + err + "）"); return; }
+    const ttl = Math.max(1, Math.floor(Number(j.expires_in) || 60));
+    pdDeadline = Date.now() + ttl * 1000;
+    pdFillCells(String(j.code));
+    pdRenderLeft();
+    pdStartTick();
+  } finally { pdCodeBusy = false; }
+}
+// —— 自动展码生命周期：relay 页可见（抽屉开 + relay 分页）才领码/倒计时，离页即停。
+// 切页走 setGearSection 钩子；开合抽屉（含点外部/✕ 收起）走 MutationObserver 兜底 ——
+function pdAutoSync() {
+  const visible = $("gearPop").classList.contains("open") && !$("gpPageRelay").classList.contains("off");
+  if (visible === pdAutoOn) return;
+  pdAutoOn = visible;
+  clearTimeout(pdRetryTimer);
+  if (!visible) { clearInterval(pdCodeTick); return; } // 离页只停计时：码保留，期内回来续跑不重领
+  if (pdDeadline > Date.now()) { pdStartTick(); return; }
+  pdIssueCode();
+}
+try { new MutationObserver(pdAutoSync).observe($("gearPop"), { attributes: true, attributeFilter: ["class"] }); } catch {}
+$("pdCodeRefresh").onclick = () => { clearTimeout(pdRetryTimer); pdDeadline = 0; pdIssueCode(); };
 
 // ── 议题①（2026-09-09）已配对设备管理：COMMAND_PEERS 拉清单 + PAIRED_DEVICE 实时
 // 刷新 + 踢除（COMMAND_PEER_KICK，两次点按确认）+ 导出备份（含 pubkey 的 JSON，
@@ -5662,6 +5873,7 @@ function renderPeers() {
       '<i class="gp-pd' + (online ? " on" : "") + '" title="' + (online ? "在线" : "离线/未知") + '"></i>' +
       '<span class="gp-peer-kind">' + (PEER_KIND_TXT[p.kind] || "设备") + "</span>" +
       '<span class="gp-pname" title="' + escapeHtml(p.name || p.dev) + '">' + escapeHtml(p.name || p.dev) + "</span>" +
+      (p.meta && (p.meta.platform || p.meta.app) ? '<span class="gp-peer-meta" title="' + escapeHtml([p.meta.platform, p.meta.app].filter(Boolean).join(" · ")) + '">' + escapeHtml(p.meta.app || p.meta.platform || "") + "</span>" : "") +
       '<span class="gp-pdev">' + escapeHtml(p.dev) + "</span>" +
       '<span class="gp-peer-when" title="配对于 ' + (p.paired_at ? new Date(p.paired_at).toLocaleString() : "未知") + '">' + fmtPeerTime(p.paired_at) + "</span>" +
       '<button class="gp-peer-kick" data-dev="' + escapeHtml(p.dev) + '">移除</button>' +

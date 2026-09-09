@@ -20,6 +20,11 @@ function localIps(): Set<string> {
   return out;
 }
 
+// 浏览器 CORS 可信域白名单：网页控制台部署域。cc-deck.humumu.online 为新域（#411 根修）——
+// 旧白名单只认 cc.humumu.online，网页开在新域时跨源读本机 /local-info、/api/pair-code
+// 响应被浏览器静默拦截，「本机领码」必失败。新增部署域只需在此追加。
+const TRUSTED_WEB_ORIGINS: readonly string[] = ["https://cc.humumu.online", "https://cc-deck.humumu.online"];
+
 const COMMAND_TYPES = new Set([
   "COMMAND_CREATE",
   "COMMAND_MESSAGE",
@@ -259,7 +264,7 @@ export function startServer(
       if (origin) {
         try {
           const u = new URL(origin);
-          if (u.origin === "https://cc.humumu.online" || hostTrusted(u.hostname)) allowOrigin = origin;
+          if (TRUSTED_WEB_ORIGINS.includes(u.origin) || hostTrusted(u.hostname)) allowOrigin = origin;
         } catch {}
       } else {
         const host = (req.headers.host ?? "").split(":")[0];
@@ -302,7 +307,7 @@ export function startServer(
       }
       // #397 CORS：网页端「本机显示配对码」从云桥域页面跨源读本机响应——
       // 与 /local-info 同款可信 origin 白名单（我们的部署域/本机/本机 LAN IP），
-      // 否则浏览器静默拦截响应，领码按钮在 cc.humumu.online 页面必失败
+      // 否则浏览器静默拦截响应，领码在部署域页面必失败（#411：新域 cc-deck.* 已入白名单）
       const origin = (req.headers.origin ?? "").trim();
       const ips = localIps();
       const hostOk = (h: string) => h === "localhost" || h === "127.0.0.1" || ips.has(h);
@@ -310,7 +315,7 @@ export function startServer(
       if (origin) {
         try {
           const u = new URL(origin);
-          if (u.origin === "https://cc.humumu.online" || hostOk(u.hostname)) acao = origin;
+          if (TRUSTED_WEB_ORIGINS.includes(u.origin) || hostOk(u.hostname)) acao = origin;
         } catch {}
       }
       const headers: Record<string, string> = { "content-type": "application/json" };
@@ -468,6 +473,10 @@ export function startServer(
     if (replay && replay.length <= 200) {
       for (const env of replay) ws.send(JSON.stringify(env));
     } else {
+      // #408 大帧根治：日志不再全量内联（随历史膨胀，实测 3 会话即 0.63MiB，规模
+      // 上去必撞 CF 桥 1MiB 单帧硬限），改预算装配（每会话最近 K 条 + 总字节上限，
+      // 与云通道同一构建）。客户端 timelines 接受截断语义；logs_truncated 标记供 UI 提示
+      const snapLogs = mgr.buildSnapshotLogs();
       const snapshot: Envelope = {
         seq: bus.lastSeq(),
         session_id: "",
@@ -475,7 +484,8 @@ export function startServer(
         type: "SNAPSHOT",
         payload: {
           sessions: mgr.snapshot(),
-          logs: mgr.snapshotLogs(),
+          logs: snapLogs.logs,
+          ...(Object.keys(snapLogs.logs_truncated).length ? { logs_truncated: snapLogs.logs_truncated } : {}),
           server_time: Date.now(),
           homedir: homedir(),
           models: listModels(mgr.cfg.model),

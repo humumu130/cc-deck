@@ -251,14 +251,28 @@ assert(
   "SNAPSHOT 恢复后实时事件继续下发",
 );
 
-// ---------- 8) 全量恢复：瘦身 SNAPSHOT + SESSION_LOG 流式补发 ----------
-// 线上事故：时间线日志涨大后全量 SNAPSHOT 密文超桥 1MB 帧上限，桥把 relay 连接
-// 1009 踢掉 → 重连循环，手机列表永远为空。现改为 SNAPSHOT 只带会话状态、日志逐条流式。
+// ---------- 8) 全量恢复：预算内单帧 SNAPSHOT（#408 大帧根治） ----------
+// 线上事故：① 全量 SNAPSHOT 日志内联，密文超 1MB 帧上限（桥 1009 踢线 / CF
+// Workers ws 单帧硬限）→ 重连循环；② 瘦身改逐条密文流式后，历史涨到数千条又成
+// 洪峰触发 CF 桥限流踢线 → 重连 → auto-resume 再补 → 自喂养断连死循环。现改为
+// SNAPSHOT 单帧携带预算内日志（每会话最近 50 条 + 全帧日志 ≤512KB，与 LAN 的
+// ws-server 同一构建）：无流式洪峰、单帧确定性有界。
 phoneWs2.close();
+// 播种前把手机置 inactive：播种的 1500 条 live 事件经 onEnv 灌进旧 dev 连接的管道，
+// 同 dev 换线（ws3 注册顶替 ws2）后未排空的尾巴帧会改道投给新连接，污染下方
+// "无流式补发"断言（生产语义无害：live 事件本就该送达该 dev 的当前连接）
+ccInternal.phones.get(phoneDev)!.active = false;
 const seedId = "ext-stream-test";
 mgr.ensureExternal(seedId, "/tmp", "流式补发验证");
-const SEED_N = 5;
-for (let i = 1; i <= SEED_N; i++) mgr.pushExternalLog(seedId, "assistant_text", `stream-${i}`);
+for (let i = 1; i <= 5; i++) mgr.pushExternalLog(seedId, "assistant_text", `stream-${i}`);
+// 构造 >1MiB 场景：每会话 500 条（内存上限）× ~4KB 文本 × 3 会话 ≈ 6MB 原始日志，
+// 50 条 K 帽后仍 ≈ 600KB > 512KB 预算——K 帽与字节预算两道裁剪都被触发
+const bigIds = ["ext-snap-big1", "ext-snap-big2", "ext-snap-big3"];
+const PAD = "x".repeat(4000);
+for (const sid of bigIds) {
+  mgr.ensureExternal(sid, "/tmp", `大帧验证 ${sid}`);
+  for (let i = 1; i <= 500; i++) mgr.pushExternalLog(sid, "assistant_text", `log-${i} ${PAD}`);
+}
 
 const phoneWs3 = new WebSocket(`ws://127.0.0.1:${BRIDGE_PORT}/cloud?token=${BRIDGE_TOKEN}&dev=${phoneDev}`);
 const inbox3: Record<string, unknown>[] = [];
@@ -276,24 +290,36 @@ await new Promise<void>((r) => phoneWs3.on("open", r));
 phoneWs3.send(JSON.stringify({ to: identity.relayDev, data: seal({ t: "hello", last_seq: 0 }, relayPubkey, phoneKp.secretKey) }));
 
 const snap3 = (await waitFor(() => inbox3.some((m) => m.type === "SNAPSHOT")))
-  ? (inbox3.find((m) => m.type === "SNAPSHOT") as unknown as { seq: number; payload: { sessions: { session_id: string }[]; logs?: Record<string, unknown[]> } })
+  ? (inbox3.find((m) => m.type === "SNAPSHOT") as unknown as {
+      seq: number;
+      payload: {
+        sessions: { session_id: string }[];
+        logs?: Record<string, { text?: string }[]>;
+        logs_truncated?: Record<string, number>;
+      };
+    })
   : undefined;
 assert(!!snap3, "全量恢复收到 SNAPSHOT");
-assert(Object.keys(snap3?.payload.logs ?? {}).length === 0, "SNAPSHOT 已瘦身（不带时间线日志）");
 assert(!!snap3?.payload.sessions.some((s) => s.session_id === seedId), "SNAPSHOT 携带会话状态");
-assert(
-  await waitFor(() => inbox3.filter((m) => m.type === "SESSION_LOG" && m.session_id === seedId).length === SEED_N),
-  "时间线以 SESSION_LOG 逐条流式补发",
-);
 {
-  const texts = inbox3
-    .filter((m) => m.type === "SESSION_LOG" && m.session_id === seedId)
-    .map((m) => (m.payload as { text?: string }).text);
-  assert(texts.join(",") === Array.from({ length: SEED_N }, (_, i) => `stream-${i + 1}`).join(","), "流式补发顺序正确");
-  assert(snapFrameLen > 0 && snapFrameLen < 256 * 1024, "SNAPSHOT 单帧远低于 1MB 桥上限");
+  const pl = snap3!.payload;
+  // 单帧有界：原始桥帧（信封 + 密文 base64 ~4/3 膨胀）< 900KB（CF 1MiB 硬限留余量）
+  assert(snapFrameLen > 0 && snapFrameLen < 900 * 1024, "SNAPSHOT 单帧 < 900KB（1MiB 硬限余量，修复前该场景单帧 >6MB）");
+  // 日志随帧携带：客户端按 payload.logs 重建时间线（原始内联语义回归，旧 APK 天然兼容）
+  assert(Object.keys(pl.logs ?? {}).length > 0, "SNAPSHOT 携带预算内时间线日志");
+  for (const sid of bigIds) {
+    const arr = pl.logs?.[sid] ?? [];
+    assert(arr.length > 0 && arr.length <= 50, `${sid} 日志 ≤ 50 条（K 帽生效）`);
+    assert((pl.logs_truncated ?? {})[sid] >= 450, `${sid} logs_truncated 标记省略条数（≥450）`);
+    assert(String(arr[arr.length - 1]?.text ?? "").startsWith("log-500"), `${sid} 保留最新后缀（截断语义：丢旧留新）`);
+  }
+  // 预算生效：全帧日志 JSON 总量 ≤ 512KB（K 帽后 ~600KB，预算二道裁剪压回）
+  assert(Buffer.byteLength(JSON.stringify(pl.logs ?? {})) <= 512 * 1024 + 1024, "日志总量在 512KB 预算内");
+  // 洪峰根除：全量恢复不再有逐条 SESSION_LOG 流式补发
+  assert(!inbox3.some((m) => m.type === "SESSION_LOG"), "无逐条 SESSION_LOG 流式补发（断连死循环根因拔除）");
 }
 
-// 用流式帧统一过的 seq 重新 hello：bus 补发从该 seq 之后开始，不与已流式的旧日志重复
+// 用快照 seq 重新 hello：bus 补发从该 seq 之后开始，不会与快照内联的旧日志重复
 phoneWs3.close();
 await wait(200);
 const phoneWs4 = new WebSocket(`ws://127.0.0.1:${BRIDGE_PORT}/cloud?token=${BRIDGE_TOKEN}&dev=${phoneDev}`);
@@ -315,7 +341,7 @@ assert(
 );
 assert(
   inbox4.filter((m) => m.type === "SESSION_LOG" && m.session_id === seedId).length === 0,
-  "last_seq 补发不与流式补发的旧日志重复",
+  "last_seq 补发不与快照内联的旧日志重复",
 );
 
 // ---------- 9) 网页端一次性配对码（pair_req → pair_ack → hello 可用） ----------
@@ -766,6 +792,96 @@ assert(
   assert(await waitFor(() => goodInbox.some((m) => m.type === "SNAPSHOT")), "严格模式：持凭据手表（SNAPSHOT wan_dev 下发的派生 dev）照常放行");
   goodWs.close();
   delete process.env.CCR_WAN_STRICT;
+}
+
+// ---------- 14) #42 设备身份元数据：pair_req meta 自报 → 入册 / PEERS 回显 / 截断 / 兼容 ----------
+{
+  // 配对一个小工具：带/不带 meta 的 pair_req，返回 dev（配对成功断言内置）
+  const pairWithMeta = async (
+    meta: Record<string, unknown> | undefined,
+    label: string,
+  ): Promise<string> => {
+    const kp = generateKeyPair();
+    const dv = devId(kp.publicKey, "wb");
+    const ws = new WebSocket(`ws://127.0.0.1:${BRIDGE_PORT}/cloud?token=${BRIDGE_TOKEN}&dev=${dv}`);
+    const got: { t?: string }[] = [];
+    ws.on("message", (raw) => {
+      try {
+        const f = JSON.parse(String(raw)) as { data?: SealedBox };
+        if (!f.data) return;
+        const inner = unseal<Record<string, unknown>>(f.data, relayPubkey, kp.secretKey);
+        if (inner) got.push(inner as { t?: string });
+      } catch {}
+    });
+    ws.on("error", () => undefined);
+    await new Promise<void>((r) => ws.on("open", r));
+    const { code } = pairCodes.issue();
+    const req: Record<string, unknown> = { t: "pair_req", code, pubkey: kp.publicKey, name: "手机-meta" };
+    if (meta !== undefined) req.meta = meta;
+    ws.send(JSON.stringify({ to: identity.relayDev, data: req }));
+    assert(await waitFor(() => got.some((m) => m.t === "pair_ack")), `pair_req 配对成功（${label}）`);
+    ws.close();
+    return dv;
+  };
+
+  // ① 新客户端带 meta：四字段齐全入库
+  const metaDev = await pairWithMeta(
+    { name: "cc.example.com", platform: "android·Pixel 8", app: "CC Deck 0.3.35", ua: "" },
+    "带 meta",
+  );
+  // ② 脏 meta：ua 超长（300 字符）截到 120；platform 非字符串、app 纯空白 → 丢弃
+  const truncDev = await pairWithMeta(
+    { ua: "x".repeat(300), platform: 123, app: "   " },
+    "超长/非字符串 meta",
+  );
+  // ③ 旧客户端不带 meta：照常配对，条目无 meta
+  const plainDev = await pairWithMeta(undefined, "无 meta（旧客户端）");
+
+  const peersAck = mgr.handleCommand(
+    { command_id: "peers-meta-1", type: "COMMAND_PEERS", payload: {}, ts: Date.now() },
+    "web-test",
+  ) as CommandAckPayload;
+  assert(peersAck.ok === true && Array.isArray(peersAck.peers), "COMMAND_PEERS 返回清单（meta 场景）");
+  {
+    const peers = peersAck.peers!;
+    const m = peers.find((p) => p.dev === metaDev);
+    assert(
+      !!m && m.meta?.name === "cc.example.com" && m.meta?.platform === "android·Pixel 8" && m.meta?.app === "CC Deck 0.3.35" && m.meta?.ua === undefined,
+      "meta 随 PEERS 回显（name/platform/app 入库，空白 ua 丢弃）",
+    );
+    const t = peers.find((p) => p.dev === truncDev);
+    assert(
+      !!t && t.meta?.ua?.length === 120 && t.meta?.platform === undefined && t.meta?.app === undefined,
+      "超长 ua 截到 120 字符，非字符串/空白字段丢弃",
+    );
+    const p = peers.find((x) => x.dev === plainDev);
+    assert(!!p && p.meta === undefined, "无 meta 的旧客户端照常配对（meta 缺省）");
+  }
+
+  // 写穿落盘：addPeer 持久化进 cloud-peers.json（重启后 meta 仍在）
+  {
+    const { readFileSync } = await import("node:fs");
+    const disk = JSON.parse(readFileSync(identity.peersPath, "utf-8")) as Record<
+      string,
+      { meta?: { platform?: string; app?: string } }
+    >;
+    assert(disk[metaDev]?.meta?.platform === "android·Pixel 8", "meta 随 addPeer 写穿落盘（cloud-peers.json）");
+  }
+
+  // 存量文件兼容：无 meta 的 cloud-peers.json 照常加载（读取旧格式不炸、meta 缺省）
+  {
+    const { mkdirSync, writeFileSync } = await import("node:fs");
+    const dir4 = join(dataDir, "relay4");
+    mkdirSync(dir4, { recursive: true });
+    const oldPk = generateKeyPair().publicKey;
+    writeFileSync(
+      join(dir4, "cloud-peers.json"),
+      JSON.stringify({ "wb-0123456789abcdef": { pubkey: oldPk, name: "旧设备", paired_at: 1 } }),
+    );
+    const id4 = loadOrCreateIdentity(dir4);
+    const e4 = id4.peers.get("wb-0123456789abcdef");
+    assert(!!e4 && e4.name === "旧设备" && e4.meta === undefined, "存量 cloud-peers.json 无 meta 照常加载（读取兼容）");
+  }
 }
 
 // ---------- 清理 ----------

@@ -2,6 +2,7 @@ import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { createHash, randomBytes } from "node:crypto";
 import { devId, generateKeyPair, type BoxKeyPair } from "./e2e.js";
+import type { PeerMeta } from "./types.js";
 
 // relay 侧云身份：box 密钥对（data/cloud-keypair.json，首启生成后固定）
 // + 已配对手机（data/cloud-peers.json，公钥来自 LAN 信道上的 COMMAND_PAIR_START）。
@@ -13,6 +14,7 @@ import { devId, generateKeyPair, type BoxKeyPair } from "./e2e.js";
 export interface PeerEntry {
   pubkey: string;
   name?: string;
+  meta?: PeerMeta; // #42 设备自报身份元数据（pair_req 校验后入库；存量文件无此字段 = 缺省，读取兼容）
   paired_at: number;
   last_seen?: number; // 内存态（不落盘）：最近一次 hello/ping，重启清零
 }

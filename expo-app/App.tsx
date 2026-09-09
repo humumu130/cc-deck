@@ -1,8 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Animated, AppState, BackHandler, Dimensions, Easing, Modal, Pressable, ScrollView, StyleSheet, Text, View, Vibration } from "react-native";
+import { Animated, AppState, BackHandler, Dimensions, Easing, Linking, Modal, Pressable, ScrollView, StyleSheet, Text, View, Vibration } from "react-native";
 import { StatusBar } from "expo-status-bar";
-import * as FileSystem from "expo-file-system/legacy";
-import * as IntentLauncher from "expo-intent-launcher";
 import { SafeAreaProvider, useSafeAreaInsets } from "react-native-safe-area-context";
 import { store, useRelay } from "./src/store";
 import type { TaskDoneReport } from "./src/store";
@@ -15,7 +13,23 @@ import { ThemeProvider, useTheme, useThemeStyles } from "./src/theme-context";
 import { useKbHeight } from "./src/kb";
 import { loadDisplaySettings } from "./src/display-settings";
 import { withA, type ThemeColors } from "./src/theme";
-import { checkUpdate, getSkippedVersion, skipVersion, setUpdateListener, type UpdateInfo } from "./src/updates";
+import {
+  VERSION_NOTES,
+  cancelDownload,
+  checkUpdate,
+  getDownloadSnapshot,
+  getSkippedVersion,
+  launchInstaller,
+  noteLines,
+  resumePendingDownload,
+  retryDownload,
+  setDownloadListener,
+  setUpdateListener,
+  skipVersion,
+  startDownload,
+  type DownloadSnapshot,
+  type UpdateInfo,
+} from "./src/updates";
 import ListScreen, { type ListBackHandle } from "./src/screens/ListScreen";
 import DetailScreen, { type ViewKind } from "./src/screens/DetailScreen";
 import SetupScreen from "./src/screens/SetupScreen";
@@ -420,79 +434,48 @@ function ConfirmFloat({
 }
 
 // #312/#387 更新弹窗：发现新版居中 Modal（置顶可直接点，不再顶部横幅躲图层后）。
-// 版本说明 + 立即更新 = 下载 APK（ECS 镜像优先 / GitHub asset 回落，行内百分比进度）→
-// getContentUriAsync 换 content:// → ACTION_VIEW 唤起系统安装器（用户确认安装，
-// APK 签名校验由安装器兜底）。忽略此版持久化 cc_update_skipped，该版不再弹。
+// 正文只列真实新特性：manifest notes（latest.json 中文摘要）逐条，缺则 VERSION_NOTES
+// 兜底；GitHub 完整 changelog 降级为「查看完整变更」次级链接，正文不铺长文与裸地址。
+// 下载在 updates.ts 模块级管理器里跑（弹窗只是快照订阅者）：关弹窗/息屏不中断，
+// 解锁自动续传、失败指数退避重试、.part 断点续传（Range 206 才续，200 全量重下）。
+// 忽略此版持久化 cc_update_skipped 并弃未完成的下载。
 // #387 弹窗内禁用 emoji（用户反馈显廉价），全部纯文字
 function UpdateBanner({ info, onSkip }: { info: UpdateInfo; onSkip: () => void }) {
   const { c } = useTheme();
   const st = useThemeStyles(makeStyles);
-  const [phase, setPhase] = useState<"idle" | "dl" | "err">("idle");
-  const [pct, setPct] = useState(0);
   const [gone, setGone] = useState(false);
+  const [dl, setDl] = useState<DownloadSnapshot | null>(() => getDownloadSnapshot());
   const op = useRef(new Animated.Value(0)).current;
-  const busy = useRef(false);
 
   useEffect(() => {
     Animated.timing(op, { toValue: 1, duration: 170, useNativeDriver: true }).start();
   }, [op]);
+
+  // 订阅下载管理器快照（模块级状态，弹窗关了再开进度不丢）
+  useEffect(() => {
+    setDownloadListener(setDl);
+    return () => setDownloadListener(null);
+  }, []);
+
+  const mine = dl && dl.version === info.version ? dl : null;
+  const phase: DownloadSnapshot["phase"] = mine?.phase ?? "idle";
 
   const close = () => {
     setGone(true);
     Animated.timing(op, { toValue: 0, duration: 160, useNativeDriver: true }).start(() => onSkip());
   };
 
-  const doUpdate = async () => {
-    if (busy.current) return;
-    busy.current = true;
-    setPhase("dl");
-    setPct(0);
-    try {
-      const dest = FileSystem.cacheDirectory + "cc-deck-update.apk";
-      let ok = false;
-      for (const url of [info.apkUrl, info.ghUrl]) {
-        try {
-          const r = await FileSystem.createDownloadResumable(url, dest, {}, (d) => {
-            if (d.totalBytesExpectedToWrite > 0) {
-              setPct(Math.floor((d.totalBytesWritten / d.totalBytesExpectedToWrite) * 100));
-            }
-          }).downloadAsync();
-          if (r?.status === 200) {
-            ok = true;
-            break;
-          }
-        } catch {}
-      }
-      if (!ok) throw new Error("download failed");
-      // 完整性校验：截断/被劫持成 HTML 的"成功"下载会在安装器处报"无签名"——
-      // 拉文件头验 ZIP magic + 最小体积，不合法直接删档报错（#384）
-      const finfo = await FileSystem.getInfoAsync(dest);
-      const head = finfo.exists && finfo.size > 4 ? await FileSystem.readAsStringAsync(dest, { length: 4, encoding: FileSystem.EncodingType.Base64 }) : "";
-      if (!finfo.exists || (finfo.size ?? 0) < 30_000_000 || head !== "UEsDBg==") {
-        void FileSystem.deleteAsync(dest, { idempotent: true });
-        throw new Error("bad file");
-      }
-      const uri = await FileSystem.getContentUriAsync(dest);
-      // flags:1 = FLAG_GRANT_READ_URI_PERMISSION，授权系统安装器读缓存里的 content:// 文件
-      await IntentLauncher.startActivityAsync("android.intent.action.VIEW", {
-        data: uri,
-        type: "application/vnd.android.package-archive",
-        flags: 1,
-      });
-      setPhase("idle"); // 用户从安装器返回（装完/取消）：弹窗保留，可再点
-    } catch {
-      setPhase("err");
-    } finally {
-      busy.current = false;
-    }
+  const skip = () => {
+    void skipVersion(info.version);
+    if (mine) cancelDownload(); // 在下/已下完仍忽略：弃 .part 与安装包
+    close();
   };
 
-  // release body 逐行说明（去 markdown 井号头与空行，最多 6 行防溢出）
-  const noteLines = info.notes
-    .split("\n")
-    .map((l) => l.trim().replace(/^#+\s*/, ""))
-    .filter(Boolean)
-    .slice(0, 6);
+  const mb = (n: number) => `${(n / 1048576).toFixed(1)} MB`;
+  const pct = mine && mine.total > 0 ? Math.min(100, Math.floor((mine.bytes / mine.total) * 100)) : 0;
+  // 特性条目：manifest notes 优先，缺失兜底本版摘要（GitHub body 不进正文）
+  const lines = noteLines(info.notes);
+  const noteItems = lines.length ? lines : VERSION_NOTES;
 
   return (
     <Modal visible={!gone} transparent animationType="fade" onRequestClose={close}>
@@ -501,46 +484,69 @@ function UpdateBanner({ info, onSkip }: { info: UpdateInfo; onSkip: () => void }
           <Pressable onPress={(e) => e.stopPropagation()}>
             <Text style={st.udTitle}>发现新版本</Text>
             <Text style={st.udVer}>v{info.version}</Text>
-            {noteLines.length ? (
-              <View style={st.udNotes}>
-                {noteLines.map((l, i) => (
-                  <View key={i} style={st.udNoteRow}>
-                    <View style={st.udNoteDot} />
-                    <Text style={st.udNoteT}>{l}</Text>
-                  </View>
-                ))}
-              </View>
-            ) : null}
-            {phase === "dl" ? (
+            <View style={st.udNotes}>
+              {noteItems.map((l, i) => (
+                <View key={i} style={st.udNoteRow}>
+                  <View style={st.udNoteDot} />
+                  <Text style={st.udNoteT}>{l}</Text>
+                </View>
+              ))}
+            </View>
+            <Pressable
+              style={st.udLinkRow}
+              hitSlop={{ top: 6, bottom: 6 }}
+              onPress={() => void Linking.openURL(info.fullUrl).catch(() => {})}
+            >
+              <Text style={st.udLink}>查看完整变更</Text>
+            </Pressable>
+            {phase === "running" || phase === "retrying" ? (
               <View style={st.udProg}>
                 <View style={st.udProgBar}>
-                  <View style={{ width: `${pct}%`, height: 3, borderRadius: 1.5, backgroundColor: c.brandA }} />
-                </View>
-                <Text style={st.udPct}>下载中 {pct}%</Text>
-              </View>
-            ) : (
-              <>
-                {phase === "err" ? <Text style={st.udErr}>下载失败，请重试</Text> : null}
-                <View style={st.udBtnRow}>
-                  <Pressable
-                    style={st.udSkip}
-                    android_ripple={{ color: c.tintSoft, borderless: false, radius: 8 }}
-                    onPress={() => {
-                      void skipVersion(info.version);
-                      close();
+                  <View
+                    style={{
+                      width: `${mine && mine.total > 0 ? pct : 100}%`,
+                      height: 3,
+                      borderRadius: 1.5,
+                      backgroundColor: phase === "retrying" ? c.dim : c.brandA,
+                      opacity: mine && mine.total > 0 ? 1 : 0.4,
                     }}
-                  >
-                    <Text style={st.udSkipT}>忽略此版</Text>
-                  </Pressable>
-                  <Pressable
-                    style={st.udGo}
-                    android_ripple={{ color: withA(c.brandA, 0.18), borderless: false, radius: 8 }}
-                    onPress={() => void doUpdate()}
-                  >
-                    <Text style={st.udGoT}>{phase === "err" ? "重试更新" : "立即更新"}</Text>
-                  </Pressable>
+                  />
                 </View>
-              </>
+                <Text style={st.udPct}>
+                  {phase === "running"
+                    ? mine && mine.total > 0
+                      ? `下载中 ${pct}%`
+                      : `下载中 · 已下 ${mb(mine?.bytes ?? 0)}`
+                    : `网络中断 · 第 ${mine?.attempt ?? 1} 次自动重试中`}
+                </Text>
+                {phase === "running" ? <Text style={st.udHint}>息屏或切到后台会自动续传</Text> : null}
+              </View>
+            ) : phase === "done" ? (
+              <Text style={st.udDone}>安装包已就绪（{mb(mine?.bytes ?? 0)}），可立即安装</Text>
+            ) : phase === "failed" ? (
+              <Text style={st.udErr}>多次下载失败，请检查网络后重试</Text>
+            ) : null}
+            {phase === "running" || phase === "retrying" ? null : (
+              <View style={st.udBtnRow}>
+                <Pressable
+                  style={st.udSkip}
+                  android_ripple={{ color: c.tintSoft, borderless: false, radius: 8 }}
+                  onPress={skip}
+                >
+                  <Text style={st.udSkipT}>忽略此版</Text>
+                </Pressable>
+                <Pressable
+                  style={st.udGo}
+                  android_ripple={{ color: withA(c.brandA, 0.18), borderless: false, radius: 8 }}
+                  onPress={() => {
+                    if (phase === "done") launchInstaller();
+                    else if (phase === "failed") retryDownload(info);
+                    else startDownload(info);
+                  }}
+                >
+                  <Text style={st.udGoT}>{phase === "done" ? "立即安装" : phase === "failed" ? "重试更新" : "立即更新"}</Text>
+                </Pressable>
+              </View>
             )}
           </Pressable>
         </Animated.View>
@@ -668,6 +674,8 @@ function Shell() {
       setHasCfg(!!cfg);
       if (cfg) store.connect();
       setReady(true);
+      // 下载管理器：恢复上次未完成的更新下载（.part 断点续传 + AppState 解锁自动续）
+      void resumePendingDownload();
       // #312/#387 启动自动检查更新：每次启动都查（不再 24h 窗口），发现新版弹中央
       // 版本弹窗（忽略此版后不再弹）；检查失败静默不打扰
       {
@@ -747,7 +755,13 @@ function Shell() {
     if (!fgStarted.current) return;
     let text: string;
     if (!snap.connected) {
-      text = snap.connState === "idle" ? "未连接 · 未配置" : "未连接 · 重连中";
+      // 三态拆分：unpaired 不会自动重试（relay 拒绝身份），别在常驻通知里写"重连中"误导
+      text =
+        snap.connState === "idle"
+          ? "未连接 · 未配置"
+          : snap.connState === "unpaired"
+            ? "未连接 · 未配对"
+            : "未连接 · 重连中";
     } else if (!snap.sessions.length) {
       text = "已连接 · 暂无会话";
     } else {
@@ -967,7 +981,7 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
   },
   cfAllT: { color: c.brandA, fontSize: 11.5, fontWeight: "600" },
   // #387 更新弹窗（ud = update dialog）：居中 Modal 置顶可直接点（AboutModal 同视觉
-  // 语言），版本说明逐行 + 下载进度条 + 忽略/立即双钮；纯文字无 emoji
+  // 语言），特性摘要逐行 + 「查看完整变更」次级链接 + 下载进度条 + 忽略/立即双钮；纯文字无 emoji
   udMask: { flex: 1, backgroundColor: "rgba(0,0,0,0.55)", alignItems: "center", justifyContent: "center", padding: 30 },
   udCard: {
     width: "100%", maxWidth: 340, backgroundColor: c.panel,
@@ -979,9 +993,13 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
   udNoteRow: { flexDirection: "row", alignItems: "flex-start", gap: 8, paddingVertical: 3 },
   udNoteDot: { width: 5, height: 5, borderRadius: 3, backgroundColor: c.brandA, marginTop: 6 },
   udNoteT: { flex: 1, color: c.dim, fontSize: 12.5, lineHeight: 18 },
+  udLinkRow: { marginTop: 10, alignItems: "center" },
+  udLink: { color: c.brandA, fontSize: 12, fontWeight: "600" },
   udProg: { marginTop: 14 },
   udProgBar: { height: 3, borderRadius: 1.5, backgroundColor: c.tintSoft, overflow: "hidden" },
   udPct: { color: c.dim, fontSize: 12, marginTop: 6, textAlign: "center", fontVariant: ["tabular-nums"] },
+  udHint: { color: c.faint, fontSize: 11, marginTop: 5, textAlign: "center" },
+  udDone: { color: c.done, fontSize: 12, marginTop: 14, textAlign: "center" },
   udErr: { color: c.waiting, fontSize: 12, marginTop: 8, textAlign: "center" },
   udBtnRow: { flexDirection: "row", gap: 10, marginTop: 16 },
   udSkip: {

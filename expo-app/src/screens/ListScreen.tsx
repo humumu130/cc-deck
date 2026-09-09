@@ -745,8 +745,13 @@ export default function ListScreen({ sessions, connected, connText, onOpen, onNe
           style={[styles.connChip, { borderColor: withA(connColor, 0.33) }]}
           android_ripple={{ color: c.tintSoft, borderless: false, radius: 14 }}
           hitSlop={6}
-          accessibilityLabel={`连接状态 ${connText}，点击立即重连`}
-          onPress={() => { if (!connected) store.connect(); }}
+          accessibilityLabel={`连接状态 ${connText}，点击${snap.connState === "unpaired" ? "去设置重新配对" : "立即重连"}`}
+          onPress={() => {
+            // 三态分流：unpaired 是配对问题（重试无解），引导去设置重新配对；
+            // 其余断连态点按 = 重置退避立即重试
+            if (snap.connState === "unpaired") setDrawerOpen(true);
+            else if (!connected) store.retryNow();
+          }}
         >
           <View style={[styles.connDot, { backgroundColor: connColor }]} />
           <Text style={[styles.connText, { color: connColor }]}>{connText}</Text>
@@ -854,9 +859,11 @@ export default function ListScreen({ sessions, connected, connText, onOpen, onNe
               {collapseIdle && idleCount > 0
                 ? "点上方「展开空闲」查看"
                 : !connected
-                  ? badgeOn
-                    ? `${onlineSrcs}/${snap.sources.length} 源在线，等待自动重连\n也可点左上角图标打开设置检查配置`
-                    : "未连接服务器，等待自动重连\n也可点左上角图标打开设置检查配置"
+                  ? snap.connState === "unpaired"
+                    ? "配对已失效：点左上角图标打开设置\n在服务器列表中重新配对"
+                    : badgeOn
+                      ? `${onlineSrcs}/${snap.sources.length} 源在线，等待自动重连\n也可点左上角图标打开设置检查配置`
+                      : "未连接服务器，等待自动重连\n也可点左上角图标打开设置检查配置"
                   : badgeOn
                     ? onlineSrcs < snap.sources.length
                       ? `已连接 ${onlineSrcs}/${snap.sources.length} 源\n可在设置中检查离线服务器`

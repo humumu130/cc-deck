@@ -205,8 +205,13 @@ export interface SessionDonePayload {
 
 export interface SnapshotPayload {
   sessions: SessionState[];
-  logs: Record<string, LogEntry[]>;   // session_id -> 时间线（重启用历史补齐）
+  logs: Record<string, LogEntry[]>;   // session_id -> 时间线（重启用历史补齐；#408 预算截断：每会话最近 K 条 + 总字节上限）
   server_time: number;
+  // #408 大帧根治截断标记：session_id -> 被裁掉的更早条数（未截断的会话不出现）。
+  // LogEntry 无独立 seq（seq 在 Envelope 层，日志条目本身不存），无法给出可续传的
+  // earliest_seq 序号，改用"被省略条数"表达截断；旧客户端忽略未知字段，新客户端
+  // 可据此提示"仅显示最近 N 条"
+  logs_truncated?: Record<string, number>;
 }
 
 // 时间线条目（M1 调试台用；压缩/截断后的一行文本，不推原始日志流）
@@ -282,6 +287,19 @@ export interface PairedDevicePayload {
   action: "add" | "kick";
 }
 
+// #42 设备身份元数据：pair_req 帧的可选自报字段，配对方各端按自身形态填——
+// 浏览器报 UA 截断摘要+平台（"Chrome·Windows" 式），App 报 OS+型号+版本
+//（"android·Pixel 8 · CC Deck 0.3.35" 式）。桥不解析透传；relay 只做长度校验
+//（各字段非空字符串 ≤120 字符，超长截断，非字符串丢弃）后随 addPeer 持久化。
+// 全字段可选：旧客户端不带 meta 一切照旧；存量 cloud-peers.json 无该字段读取天然
+// 兼容（端上对无 meta 设备降级显示「未知设备」）
+export interface PeerMeta {
+  name?: string;      // 设备自报名（App 用服务器条目名，如 "cc.humumu.online"；浏览器沿用设备名）
+  platform?: string;  // App：OS+型号（"android·Pixel 8"）；浏览器：平台（"Windows"）
+  ua?: string;        // 浏览器 UA 截断摘要（"Chrome·Windows" 式；App 不报）
+  app?: string;       // 应用标识+版本（"CC Deck 0.3.35" / 网页控制台标识）
+}
+
 // COMMAND_PEERS 返回的设备条目（议题①）：kind 按 dev 前缀派生（rl- 是 relay 自己，
 // 不会出现在 peers）。pubkey 一并返回——公钥本就公开（发现帧 rk 同源），使「导出
 // 设备清单备份」具备重装修复配对关系的完整材料（重装后粘回 data/cloud-peers.json）
@@ -292,6 +310,7 @@ export interface PairedDeviceInfo {
   kind: "phone" | "web" | "watch" | "other";
   paired_at: number;
   last_seen: number; // 0 = 未知（relay 重启后 last_seen 是内存态，重启即清零）
+  meta?: PeerMeta;   // #42 自报身份元数据（配对时随 pair_req 入库；存量设备无此字段）
 }
 
 export type TypedEnvelope<T extends EventType = EventType> = Envelope<

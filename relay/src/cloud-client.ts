@@ -5,7 +5,7 @@ import type { RelayConfig } from "./config.js";
 import type { CloudIdentity } from "./cloud-identity.js";
 import type { PairingCodes } from "./pairing.js";
 import { devId, seal, unseal, type SealedBox } from "./e2e.js";
-import type { Command, CommandAckPayload, Envelope } from "./types.js";
+import type { Command, CommandAckPayload, Envelope, PeerMeta } from "./types.js";
 
 interface PhoneState {
   lastSeq: number; // hello 时上报，用于补发
@@ -17,6 +17,27 @@ interface CloudFrame {
   from?: string;
   data?: SealedBox;
   type?: string;
+}
+
+// #42 设备身份元数据校验：pair_req 的 meta 由配对方自报（浏览器 UA 摘要 / App 型号
+// 版本），桥不解析透传，入库前的唯一防线在这里——只认四个已知键，值 trim 后非空且
+// 为字符串才收，超长（>120 字符）截断；全部无效则视为不带 meta（旧客户端等价）
+const PEER_META_MAX = 120;
+const PEER_META_KEYS = ["name", "platform", "ua", "app"] as const;
+function sanitizePeerMeta(raw: unknown): PeerMeta | undefined {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return undefined;
+  const src = raw as Record<string, unknown>;
+  const out: PeerMeta = {};
+  let n = 0;
+  for (const k of PEER_META_KEYS) {
+    const v = src[k];
+    if (typeof v !== "string") continue;
+    const s = v.trim();
+    if (!s) continue;
+    out[k] = s.length > PEER_META_MAX ? s.slice(0, PEER_META_MAX) : s;
+    n++;
+  }
+  return n > 0 ? out : undefined;
 }
 
 // 云桥上行客户端：出站连桥（CCR_CLOUD_URL，公司网络友好），把 EventBus 事件
@@ -231,11 +252,11 @@ export class CloudClient {
   }
 
   // 手机激活/恢复：缓冲内按 last_seq 补发，否则全量 SNAPSHOT（hello 与 ping-resume 共用）。
-  // 全量恢复时 SNAPSHOT 只带会话状态不带时间线日志，日志随后逐条 SESSION_LOG 密文流式补发
-  // （手机端 SESSION_LOG 处理器即 pushLog 追加，旧 APK 直接兼容）——所有日志塞进单帧会随
-  // 历史增长无限膨胀，迟早再次撞上桥的帧上限；流式每帧只有单条日志大小。
-  // 流式帧 seq 统一取 snapshot 时的 lastSeq：手机 lastSeq 不会因此前移，下次重连的 bus
-  // 补发从该 seq 之后开始，不会与已流式补发的旧日志重复。
+  // 全量恢复 = 单帧 SNAPSHOT 携带预算内日志（每会话最近 K 条 + 总字节上限，与 LAN 的
+  // ws-server 同一构建）。#408（2026-09-09 断连死循环根因）：此前日志逐条 SESSION_LOG
+  // 密文流式补发，历史涨到数千条时恢复即洪峰——CF 桥限流器把 relay 连接踢掉 → 重连 →
+  // auto-resume 再补 → 自喂养死循环；更早版本全量内联单帧则撞 CF Workers ws 1MiB 单帧
+  // 硬限。预算单帧两头都封死：无洪峰、帧有界（明文 ≤512KB → 密文 ~700KB < 900KB）。
   private resumePhone(dev: string, lastSeq: number): void {
     this.phones.set(dev, { lastSeq, active: true });
     this.identity.touchPeer(dev); // 议题①：last_seen 内存态更新（设备清单在线点）
@@ -247,6 +268,7 @@ export class CloudClient {
       return;
     }
     const snapSeq = this.bus.lastSeq();
+    const snapLogs = this.mgr.buildSnapshotLogs();
     const snapshot: Envelope = {
       seq: snapSeq,
       session_id: "",
@@ -258,24 +280,14 @@ export class CloudClient {
       // 旧客户端忽略多余字段，向前兼容
       payload: {
         sessions: this.mgr.snapshot(),
-        logs: {},
+        logs: snapLogs.logs,
+        ...(Object.keys(snapLogs.logs_truncated).length ? { logs_truncated: snapLogs.logs_truncated } : {}),
         server_time: Date.now(),
         relay_dev: this.identity.relayDev,
         wan_dev: this.identity.wanDev,
       },
     };
     this.sendSealed(dev, snapshot);
-    for (const [sid, logs] of Object.entries(this.mgr.snapshotLogs())) {
-      for (const entry of logs) {
-        this.sendSealed(dev, {
-          seq: snapSeq,
-          session_id: sid,
-          ts: entry.ts ?? Date.now(),
-          type: "SESSION_LOG",
-          payload: entry,
-        } as Envelope);
-      }
-    }
   }
 
   private onFrame(text: string): void {
@@ -309,7 +321,7 @@ export class CloudClient {
     // 单播路径行为与从前完全一致。
     const pairReq = f.data as { t?: unknown } | undefined;
     if (f.from && pairReq && typeof pairReq === "object" && pairReq.t === "pair_req") {
-      const pr = f.data as unknown as { code?: unknown; pubkey?: unknown; name?: unknown; bc?: unknown };
+      const pr = f.data as unknown as { code?: unknown; pubkey?: unknown; name?: unknown; bc?: unknown; meta?: unknown };
       const bc = pr.bc === true;
       const pubkey = typeof pr.pubkey === "string" ? pr.pubkey : "";
       const dev = pubkey ? devId(pubkey, "wb") : "";
@@ -335,7 +347,14 @@ export class CloudClient {
         return;
       }
       if (this.pairCodes?.consume(String(pr.code ?? ""))) {
-        this.identity.addPeer(dev, { pubkey, name: typeof pr.name === "string" ? pr.name : "web", paired_at: Date.now() });
+        // #42 可选自报 meta：校验/截断后随条目持久化（旧客户端无 meta = 字段缺省）
+        const meta = sanitizePeerMeta(pr.meta);
+        this.identity.addPeer(dev, {
+          pubkey,
+          name: typeof pr.name === "string" ? pr.name : "web",
+          paired_at: Date.now(),
+          ...(meta ? { meta } : {}),
+        });
         console.log(`[cloud] paired web dev=${dev}${bc ? " via broadcast" : ""}`);
         // 议题①/§6.3 补偿告警：新设备获得全权的瞬间通知全部在线已配对设备——
         // 公共桥广播定位的 race 攻击即便得手，攻击设备立刻出现在持有者屏幕上
@@ -486,7 +505,8 @@ export class CloudClient {
     this.sendWan(dev, { type: "COMMAND_ACK", command_id: "?", ok: false, error: "invalid command shape" });
   }
 
-  // 手表恢复：与 resumePhone 同构（缓冲内增量补发 / 全量 SNAPSHOT+流式日志），明文信封下发
+  // 手表恢复：与 resumePhone 同构（缓冲内增量补发 / 全量 SNAPSHOT 单帧带预算日志），
+  // 明文信封下发。#408：流式日志洪峰在 /wan 通道同样会踢桥，与云手机路径一并根治
   private resumeWan(dev: string, lastSeq: number): void {
     const known = this.wanWatches.has(dev);
     this.wanWatches.set(dev, { lastSeq, active: true });
@@ -497,25 +517,20 @@ export class CloudClient {
       return;
     }
     const snapSeq = this.bus.lastSeq();
+    const snapLogs = this.mgr.buildSnapshotLogs();
     const snapshot: Envelope = {
       seq: snapSeq,
       session_id: "",
       ts: Date.now(),
       type: "SNAPSHOT",
-      payload: { sessions: this.mgr.snapshot(), logs: {}, server_time: Date.now() },
+      payload: {
+        sessions: this.mgr.snapshot(),
+        logs: snapLogs.logs,
+        ...(Object.keys(snapLogs.logs_truncated).length ? { logs_truncated: snapLogs.logs_truncated } : {}),
+        server_time: Date.now(),
+      },
     };
     this.sendWan(dev, snapshot);
-    for (const [sid, logs] of Object.entries(this.mgr.snapshotLogs())) {
-      for (const entry of logs) {
-        this.sendWan(dev, {
-          seq: snapSeq,
-          session_id: sid,
-          ts: entry.ts ?? Date.now(),
-          type: "SESSION_LOG",
-          payload: entry,
-        } as Envelope);
-      }
-    }
   }
 
   close(): void {

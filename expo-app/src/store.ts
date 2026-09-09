@@ -1,8 +1,11 @@
 import { useSyncExternalStore } from "react";
+import { Platform } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import Constants from "expo-constants";
 import { getRandomBytes } from "expo-crypto";
 import type { CloudPairInfo, CommandAck, Envelope, LogEntry, SessionState } from "./protocol";
 import { uuid } from "./fmt";
+import { currentVersion } from "./updates";
 import { devId, generateKeyPair, seal, unseal, setRandomBytes, type BoxKeyPair, type SealedBox } from "./e2e";
 
 export interface ConnConfig {
@@ -47,13 +50,19 @@ export interface SourceConn {
   ws: WebSocket | null;
   channel: "lan" | "cloud" | null;
   state: Snapshot["connState"];
-  stateText: string | null; // 单源模式下透出的动态文案（"3s后重连"），非 reconnecting 时为 null
+  stateText: string | null; // 单源模式下透出的动态文案（"重试中…下次 5s"），非 reconnecting 时为 null
+  // 失败诊断备注（三态拆分 ④）：最近一轮失败的原因（桥不可达/家里 relay 离线/未配对
+  // 原因等），连上即清。UI 据此给诊断文案，而非一律引导输码
+  failNote: string | null;
   lastSeq: number;
   models: string[];    // #388 该源 SNAPSHOT.models 携带的可用模型清单
   sessions: Map<string, SessionState>;
   timelines: Map<string, LogEntry[]>;
   reconnectDelay: number;
   reconnectTimer: ReturnType<typeof setTimeout> | null;
+  // 自动重试倒计时（③）：reconnecting 期间每秒刷新 stateText（"重试中…下次 Ns"）
+  countdownTimer: ReturnType<typeof setInterval> | null;
+  retryAt: number; // 下次自动重试时刻（倒计时基准）
   hbTimer: ReturnType<typeof setInterval> | null;
   probeTimer: ReturnType<typeof setTimeout> | null;
   lastDownAt: number;
@@ -87,9 +96,15 @@ export interface Snapshot {
   version: number;
   connected: boolean;
   connText: string;
-  // 连接阶段（供 UI 配色/文案判断，不靠 connText 字符串匹配）
-  connState: "idle" | "connecting" | "online" | "reconnecting" | "offline";
+  // 连接阶段（供 UI 配色/文案判断，不靠 connText 字符串匹配）。
+  // 三态拆分（④）：connecting/reconnecting/offline 都是传输层问题（杀网/断桥/断电），
+  // 自动重试自愈，绝不引导输码；unpaired = relay 明确回 pair_nack（未配对/被踢/
+  // 身份失效），是唯一该进配对引导的态，且不再自动重试（重试只会反复吃 nack）
+  connState: "idle" | "connecting" | "online" | "reconnecting" | "offline" | "unpaired";
   channel: "lan" | "cloud" | null;
+  // 活动源失败诊断（④）：reconnecting/unpaired 时的原因备注（桥不可达/家里 relay
+  // 离线/配对失效原因），online/idle 为 null——失败 UI 据此分流诊断文案 vs 配对引导
+  failNote: string | null;
   sources: SourceStatus[];
   // 活动源 id（#294 批3）：单源 = 唯一在连源；聚合 = 当前"主"源（无 sid 命令的
   // 默认去向、配对/connInfo 口径）。NewSessionModal 选源默认值，批4 空态提示可复用
@@ -133,6 +148,7 @@ const emptySnapshot: Snapshot = {
   connText: "未配置",
   connState: "idle",
   channel: null,
+  failNote: null,
   sources: [],
   activeSourceId: null,
   aggregate: false,
@@ -148,6 +164,11 @@ const emptySnapshot: Snapshot = {
 };
 
 const LAN_PROBE_MS = 4000;
+
+// 自动重试退避（连接状态机 ③）：失败后 3s 起步、指数 ×2、30s 封顶；连上即归零。
+// 覆盖杀网/断桥/家里断电的长故障窗口，低频重试也避免与桥侧限流互相放大成风暴
+const RECONNECT_BASE_MS = 3000;
+const RECONNECT_MAX_MS = 30000;
 
 // 命令 ACK 追踪：无回执超时（首等 4s）→ 重发同 id 一次（relay 按 command_id 幂等去重，
 // 重复送达回 ok:true "duplicate"，不会双执行）→ 再等 6s 仍无回执才报失败。
@@ -257,7 +278,7 @@ class RelayStore {
   // 连接状态聚合（#294 批1）：单源 = 活动源直出（既有文案/字段逐字不变）；
   // 聚合 = any-online 派生，connText `${online}/${total} 在线`（connected/connState 供
   // App.tsx 通知权限/前台服务/回前台重连取此口径，调用方零改动）
-  private connStatusPatch(): Pick<Snapshot, "connected" | "connText" | "connState" | "channel" | "sources" | "activeSourceId" | "aggregate" | "models"> {
+  private connStatusPatch(): Pick<Snapshot, "connected" | "connText" | "connState" | "channel" | "failNote" | "sources" | "activeSourceId" | "aggregate" | "models"> {
     const sources: SourceStatus[] = [...this.conns.values()].map((c) => ({
       id: c.id,
       name: c.name,
@@ -272,7 +293,7 @@ class RelayStore {
       : this.activeId
         ? [this.conns.get(this.activeId)].filter((c): c is SourceConn => !!c)
         : [];
-    if (!inPlay.length) return { connected: false, connText: "未配置", connState: "idle", channel: null, sources, activeSourceId: this.activeId, aggregate: this.aggregate, models: [] };
+    if (!inPlay.length) return { connected: false, connText: "未配置", connState: "idle", channel: null, failNote: null, sources, activeSourceId: this.activeId, aggregate: this.aggregate, models: [] };
     if (this.aggregate) {
       const online = inPlay.filter((c) => c.state === "online");
       const connState = online.length
@@ -281,13 +302,16 @@ class RelayStore {
           ? "connecting"
           : inPlay.some((c) => c.state === "reconnecting")
             ? "reconnecting"
-            : "offline";
+            : inPlay.some((c) => c.state === "unpaired")
+              ? "unpaired"
+              : "offline";
       const ref = online.find((c) => c.id === this.activeId) ?? online[0] ?? null;
       return {
         connected: online.length > 0,
         connText: `${online.length}/${inPlay.length} 在线`,
         connState,
         channel: ref ? ref.channel : null,
+        failNote: (inPlay.find((c) => c.state !== "online") ?? null)?.failNote ?? null,
         sources,
         activeSourceId: this.activeId,
         aggregate: this.aggregate,
@@ -300,6 +324,7 @@ class RelayStore {
       connText: c.stateText ?? singleConnText(c),
       connState: c.state,
       channel: c.state === "online" ? c.channel : null,
+      failNote: c.failNote,
       sources,
       activeSourceId: this.activeId,
       aggregate: this.aggregate,
@@ -601,12 +626,15 @@ class RelayStore {
         channel: null,
         state: "idle",
         stateText: null,
+        failNote: null,
         lastSeq: 0,
         models: [],
         sessions: new Map(),
         timelines: new Map(),
-        reconnectDelay: 1000,
+        reconnectDelay: RECONNECT_BASE_MS,
         reconnectTimer: null,
+        countdownTimer: null,
+        retryAt: 0,
         hbTimer: null,
         probeTimer: null,
         lastDownAt: 0,
@@ -635,6 +663,13 @@ class RelayStore {
       conn.cfg.token === token &&
       sameCloud(conn.cloudCfg, entry.cloud ?? null);
     if (sameTarget && (conn.state === "connecting" || conn.state === "online")) return;
+    if (sameTarget && conn.state === "unpaired") {
+      // 未配对终态下的显式重连（重新配对完成/用户点选连接）：强制重走连接周期验证
+      // 身份——connDisconnect 把状态复位 offline，connConnect 的 unpaired 门放行
+      this.connDisconnect(conn);
+      this.connConnect(conn);
+      return;
+    }
     if (!sameTarget) {
       for (const sid of conn.sessions.keys()) {
         if (this.sidIndex.get(sid) === conn) this.sidIndex.delete(sid);
@@ -653,11 +688,12 @@ class RelayStore {
   // hbTimer 不在此清（对齐旧 disconnect）：残留一拍后由 startHb 的 ws 守卫自清
   private connDisconnect(conn: SourceConn) {
     conn.epoch++;
-    conn.reconnectDelay = 1000;
+    conn.reconnectDelay = RECONNECT_BASE_MS;
     if (conn.reconnectTimer) {
       clearTimeout(conn.reconnectTimer);
       conn.reconnectTimer = null;
     }
+    this.clearCountdown(conn);
     if (conn.probeTimer) {
       clearTimeout(conn.probeTimer);
       conn.probeTimer = null;
@@ -668,6 +704,14 @@ class RelayStore {
     conn.channel = null;
     conn.state = "offline";
     conn.stateText = null;
+    conn.failNote = null;
+  }
+
+  private clearCountdown(conn: SourceConn) {
+    if (conn.countdownTimer) {
+      clearInterval(conn.countdownTimer);
+      conn.countdownTimer = null;
+    }
   }
 
   // 彻底销毁（仅 deleteServer 触达）：拆连接 + 清缓存 + 出 Map + 摘 sidIndex
@@ -692,17 +736,39 @@ class RelayStore {
   }
 
   // 对外连接入口（启动自动连/回前台重连/手动重连按钮共用）：内部按 aggregate 分发
-  // 聚合逐源建连 / 单源只连活动源
+  // 聚合逐源建连 / 单源只连活动源。unpaired 终态不自动重试（relay 已明确不认此
+  // 身份，重试只会反复吃 pair_nack）——重配对走 applyConfig 的强制重连分支
   connect() {
     if (this.aggregate) {
       for (const e of this.servers) {
         if (!e.token && !e.cloud) continue;
+        if (this.conns.get(e.id)?.state === "unpaired") continue;
         this.applyConfig(this.ensureConn(e), e, e.token);
       }
       return;
     }
     const conn = this.activeConn();
-    if (conn) this.connConnect(conn);
+    if (conn && conn.state !== "unpaired") this.connConnect(conn);
+  }
+
+  // 手动重试（②：失败态「立即重试」按钮）：重置退避到起步值并立刻重走连接周期，
+  // 之后失败仍按 3s→30s 指数退避续跑。unpaired 终态不受理——配对问题重试无解，
+  // UI 在该态显示重新配对引导而非重试钮
+  retryNow() {
+    if (this.aggregate) {
+      for (const e of this.servers) {
+        if (!e.token && !e.cloud) continue;
+        const conn = this.ensureConn(e);
+        conn.reconnectDelay = RECONNECT_BASE_MS;
+        if (conn.state === "unpaired") continue;
+        this.applyConfig(conn, e, e.token);
+      }
+      return;
+    }
+    const conn = this.activeConn();
+    if (!conn || conn.state === "unpaired") return;
+    conn.reconnectDelay = RECONNECT_BASE_MS;
+    this.connConnect(conn);
   }
 
   disconnect() {
@@ -718,16 +784,20 @@ class RelayStore {
     if (conn) this.connDisconnect(conn);
   }
 
-  // 连接周期：先 LAN 直连（探测超时），失败且已配对云桥则本轮转云通道。每源独立循环
+  // 连接周期：先 LAN 直连（探测超时），失败且已配对云桥则本轮转云通道。每源独立循环。
+  // unpaired 门：未配对终态不再发起（自动路径 connect/scheduleReconnect 均已拦；
+  // 显式重连经 applyConfig→connDisconnect 先复位 offline 再进来，不受影响）
   private connConnect(conn: SourceConn) {
     if (!conn.cfg) return;
     // 无令牌的纯云桥条目（公共桥 token 留空）也放行：凭 cloudCfg 走云通道；
     // 既无令牌也无云桥配置才无从建连
     if (!conn.cfg.token && !conn.cloudCfg) return;
+    if (conn.state === "unpaired") return;
     if (conn.reconnectTimer) {
       clearTimeout(conn.reconnectTimer);
       conn.reconnectTimer = null;
     }
+    this.clearCountdown(conn);
     const ep = ++conn.epoch;
     conn.state = "connecting";
     conn.stateText = null;
@@ -754,12 +824,21 @@ class RelayStore {
       this.adoptLan(conn, lanWs);
       return;
     }
+    if (conn.cloudCfg && !this.devKeys) {
+      // 冷启动首轮 keys 还没从 AsyncStorage 就绪（connConnect 里是 fire-and-forget 预取，
+      // 微任务级）：等一拍再判，消除「首轮必 offline」的假失败（旧版靠下一轮重连兜底，
+      // 退避起步 3s 后这个空窗会被放大成可见的假诊断）
+      await this.deviceKeys();
+      if (ep !== conn.epoch) return;
+    }
     if (conn.cloudCfg && this.devKeys) {
       this.openCloud(conn, conn.cloudCfg);
       return;
     }
     conn.state = "offline";
     conn.stateText = null;
+    // LAN 探测失败且无云通道可转：纯 LAN 条目不可达（PC 离线/不在同一 WiFi）
+    conn.failNote = conn.cloudCfg ? "云桥凭据未就绪，稍后自动重试" : "直连失败：确认 PC 在线且与手机同一 WiFi，远程请用云桥";
     this.emit();
     this.scheduleReconnect(conn);
   }
@@ -796,9 +875,10 @@ class RelayStore {
   private adoptLan(conn: SourceConn, ws: WebSocket) {
     conn.ws = ws;
     conn.channel = "lan";
-    conn.reconnectDelay = 1000;
+    conn.reconnectDelay = RECONNECT_BASE_MS;
     conn.state = "online";
     conn.stateText = null;
+    conn.failNote = null;
     this.emit();
     this.startHb(conn, ws);
     ws.onclose = () => {
@@ -842,17 +922,23 @@ class RelayStore {
     } catch {
       conn.state = "offline";
       conn.stateText = null;
+      conn.failNote = "云桥地址无效";
       this.emit();
       this.scheduleReconnect(conn);
       return;
     }
     conn.ws = ws;
     conn.channel = "cloud";
+    // 开门标记：区分「桥都连不上」（地址错/断网/封锁 → 传输层，自动重试）与开门后的
+    // 各种断开（relay 离线/桥闪断）。三态拆分 ④c 的诊断依据
+    let opened = false;
     ws.onopen = () => {
       if (conn.ws !== ws) return;
-      conn.reconnectDelay = 1000;
+      opened = true;
+      conn.reconnectDelay = RECONNECT_BASE_MS;
       conn.state = "online";
       conn.stateText = null;
+      conn.failNote = null;
       this.emit();
       this.startHb(conn, ws, cloud, keys);
       ws.send(
@@ -871,6 +957,8 @@ class RelayStore {
       this.clearPendingCmds(conn);
       conn.state = "offline";
       conn.stateText = null;
+      // 从未开过门 = 桥不可达（桥地址错/网络断/封锁），不是配对问题——继续自动重试
+      if (!opened) conn.failNote = "连不上云桥：检查网络或桥地址";
       conn.channel = null;
       this.emit();
       this.scheduleReconnect(conn);
@@ -886,17 +974,58 @@ class RelayStore {
         return;
       }
       if (frame.type === "ROUTE_MISS") {
-        // relay 暂时掉线：断开走重连循环（每轮仍先试 LAN）
+        // relay 暂时掉线：断开走重连循环（每轮仍先试 LAN）。桥已通、家里离线——
+        // 恢复后自动连上，绝不引导输码
+        conn.failNote = "已连上云桥，但家里 relay 离线（恢复后自动连上）";
         try {
           ws.close();
         } catch {}
         return;
       }
       if (!frame.data) return;
+      // 明文 pair_nack（无 n 字段 = 未密封）：relay 明确不认本机身份——未配对/被踢/
+      // relay 侧配对信息丢失（判定同 pairViaBridge 的 nack 处理）。进未配对终态并停
+      // 止重试：这是三态里唯一该输码解决的态，网络类失败永远到不了这里
+      const plain = frame.data as { t?: unknown; error?: unknown; n?: unknown };
+      if (typeof plain === "object" && plain.t === "pair_nack" && plain.n === undefined) {
+        this.markUnpaired(conn, typeof plain.error === "string" && plain.error ? plain.error : "设备不在 relay 配对列表中");
+        return;
+      }
       const inner = unseal<Envelope | CommandAck>(frame.data, cloud.relayPubkey, keys.secretKey);
       if (!inner) return;
+      // 密文 nack（防御位：现行 relay 对已建连设备只发明文，预留同判定）
+      const sealedNack = inner as { t?: unknown; error?: unknown };
+      if (sealedNack.t === "pair_nack") {
+        this.markUnpaired(conn, typeof sealedNack.error === "string" && sealedNack.error ? sealedNack.error : "设备不在 relay 配对列表中");
+        return;
+      }
       this.onMessage(conn, inner);
     };
+  }
+
+  // 未配对终态（④b）：relay 明确回 pair_nack（新装未配对用例不会走到这——那是没
+  // 配置；这里是「曾有身份但 relay 不认了」= 被踢/relay 侧丢失）。停自动重试、拆
+  // 连接置 unpaired，等用户重新配对（addCloudManual/点选连接会经 applyConfig 复位）
+  private markUnpaired(conn: SourceConn, reason: string) {
+    conn.epoch++;
+    conn.state = "unpaired";
+    conn.stateText = "未配对";
+    conn.failNote = reason;
+    if (conn.reconnectTimer) {
+      clearTimeout(conn.reconnectTimer);
+      conn.reconnectTimer = null;
+    }
+    this.clearCountdown(conn);
+    if (conn.probeTimer) {
+      clearTimeout(conn.probeTimer);
+      conn.probeTimer = null;
+    }
+    this.stopHb(conn);
+    this.clearPendingCmds(conn);
+    killWs(conn.ws);
+    conn.ws = null;
+    conn.channel = null;
+    this.emit();
   }
 
   // 应用层心跳：15s 一拍保持链路流量（防公司网络 idle 掐 NAT），55s 无任何下行
@@ -976,15 +1105,38 @@ class RelayStore {
     }, 4000);
   }
 
+  // 失败后自动重试调度（③）：3s 起指数退避至 30s 封顶，重试等待期每秒刷新倒计时
+  // 文案（"重试中…下次 Ns"）——用户能看到系统在自愈，而不是误以为要去输码。
+  // 连上（adoptLan/openCloud onopen）即把 reconnectDelay 归零重来
   private scheduleReconnect(conn: SourceConn) {
     if (!conn.cfg) return;
+    if (conn.state === "unpaired") return;
     const delay = conn.reconnectDelay;
-    conn.reconnectDelay = Math.min(conn.reconnectDelay * 2, 10000);
+    conn.reconnectDelay = Math.min(conn.reconnectDelay * 2, RECONNECT_MAX_MS);
     conn.state = "reconnecting";
-    conn.stateText = `${Math.round(delay / 1000)}s后重连`;
+    conn.retryAt = Date.now() + delay;
+    conn.stateText = `重试中…下次 ${Math.round(delay / 1000)}s`;
     this.emit();
     if (conn.reconnectTimer) clearTimeout(conn.reconnectTimer);
     conn.reconnectTimer = setTimeout(() => this.connConnect(conn), delay);
+    this.clearCountdown(conn);
+    conn.countdownTimer = setInterval(() => {
+      if (conn.state !== "reconnecting") {
+        this.clearCountdown(conn);
+        return;
+      }
+      const left = Math.ceil((conn.retryAt - Date.now()) / 1000);
+      if (left <= 0) {
+        // 计时归零：重试定时器已触发/即将触发，等状态翻 connecting 由 connConnect 清理
+        this.clearCountdown(conn);
+        return;
+      }
+      const text = `重试中…下次 ${left}s`;
+      if (text !== conn.stateText) {
+        conn.stateText = text;
+        this.emit();
+      }
+    }, 1000);
   }
 
   // ---------- 下行处理（LAN 与云通道共用，云侧已解密；按源隔离） ----------
@@ -1252,12 +1404,22 @@ class RelayStore {
         resolve(r);
       };
       const sendPairReq = () => {
+        // #42 设备身份元数据自报（可选字段，旧 relay 忽略未知字段天然兼容）：
+        // platform=OS+型号（"android·Pixel 8"），app=应用+版本（"CC Deck 0.3.35"），
+        // name=服务器条目名（配对落库后条目就叫这个，hostOf(bridge) 同源）。relay 校验
+        // 各字段 ≤120 字符后随 addPeer 持久化，设备清单据此展示型号/版本
+        const ver = currentVersion();
+        const meta = {
+          name: hostOf(o.bridge),
+          platform: [Platform.OS, Constants.deviceName].filter(Boolean).join("·"),
+          app: ver ? "CC Deck " + ver : "CC Deck",
+        };
         ws.send(JSON.stringify({
           to: rd || "*",
           data: rd
-            ? { t: "pair_req", code: o.code, pubkey: keys.publicKey, name: "手机-" + dev.slice(3, 9) }
+            ? { t: "pair_req", code: o.code, pubkey: keys.publicKey, name: "手机-" + dev.slice(3, 9), meta }
             // bc 标记：未持码 relay 静默（码不归它管），持码者照常 ack
-            : { t: "pair_req", code: o.code, pubkey: keys.publicKey, name: "手机-" + dev.slice(3, 9), bc: true },
+            : { t: "pair_req", code: o.code, pubkey: keys.publicKey, name: "手机-" + dev.slice(3, 9), bc: true, meta },
         }));
       };
       const sendDisc = () => {
@@ -1840,13 +2002,14 @@ class RelayStore {
 
 export const store = new RelayStore();
 
-// 单源模式连接文案（conn.state → connText，逐字保持旧版语义）
+// 单源模式连接文案（conn.state → connText，逐字保持旧版语义；unpaired 新增）
 function singleConnText(c: SourceConn): string {
   switch (c.state) {
     case "online": return c.channel === "cloud" ? "已连接 ☁" : "已连接";
     case "connecting": return "连接中";
     case "reconnecting": return "重连中"; // stateText 缺失时的兜底（理论不达）
     case "offline": return "已断开";
+    case "unpaired": return "未配对"; // stateText 常态已有「未配对」，此为兜底
     default: return "未配置";
   }
 }
