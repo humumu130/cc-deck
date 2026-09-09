@@ -5,22 +5,30 @@
 // 「配对码无效」的根因；防爆破不靠 TTL 短窗——码空间 10^6 + cloud-client 连续错码
 // 限流 + 手机端自动续领足够）。手机端倒计时读 expires_in，无需改动自动跟随。
 export interface PairingCodes {
-  issue(): { code: string; expires_in: number };
+  // 2026-09-09：默认 TTL 5→20 分钟（用户反馈窗口太短）；issue 支持管理员指定码值/时长
+  // （POST /api/pair-code?code=xxx&ttl=ms，LAN token 鉴权）——用户要固定码场景
+  issue(opts?: { code?: string; ttlMs?: number }): { code: string; expires_in: number };
   consume(code: string): boolean;
 }
 
-export function createPairingCodes(ttlMs = 5 * 60 * 1000): PairingCodes {
+export function createPairingCodes(ttlMs = 20 * 60 * 1000): PairingCodes {
   const codes = new Map<string, { expires: number }>();
   return {
-    issue() {
+    issue(o = {}) {
       const now = Date.now();
+      const eff = o.ttlMs && o.ttlMs >= 60_000 ? o.ttlMs : ttlMs;
       for (const [c, v] of codes) if (v.expires < now) codes.delete(c);
+      // 指定码（须 6 位数字）：重发同码=刷新有效期；与随机码共用一次性消费语义
+      if (o.code && /^\d{6}$/.test(o.code)) {
+        codes.set(o.code, { expires: now + eff });
+        return { code: o.code, expires_in: Math.floor(eff / 1000) };
+      }
       let code = "";
       do {
         code = String(Math.floor(100000 + Math.random() * 900000));
       } while (codes.has(code));
-      codes.set(code, { expires: now + ttlMs });
-      return { code, expires_in: Math.floor(ttlMs / 1000) };
+      codes.set(code, { expires: now + eff });
+      return { code, expires_in: Math.floor(eff / 1000) };
     },
     consume(code: string) {
       const v = codes.get(code);

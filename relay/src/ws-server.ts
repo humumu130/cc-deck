@@ -311,7 +311,13 @@ export function startServer(
       }
       const headers: Record<string, string> = { "content-type": "application/json" };
       if (acao) headers["access-control-allow-origin"] = acao;
-      res.writeHead(200, headers).end(JSON.stringify(opts.pairCodes.issue()));
+      // 管理员可指定码值/时长（2026-09-09）：?code=789321&ttl=1200000（毫秒，下限 60s）
+      const qCode = url.searchParams.get("code") ?? undefined;
+      const qTtlRaw = Number(url.searchParams.get("ttl"));
+      const qTtl = Number.isFinite(qTtlRaw) && qTtlRaw > 0 ? qTtlRaw : undefined;
+      res
+        .writeHead(200, headers)
+        .end(JSON.stringify(opts.pairCodes.issue(qCode || qTtl ? { code: qCode, ttlMs: qTtl } : undefined)));
       return;
     }
     // #393 手动通知（LAN token 鉴权）：body {session_id?, done: string[]} → 该会话（缺省

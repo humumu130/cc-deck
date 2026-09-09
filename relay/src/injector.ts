@@ -1,9 +1,9 @@
 // 终端按键注入：Windows 走 bin/inject.cs 产物（SendInput/AttachConsole，不抢焦点）；
 // macOS 走 osascript + System Events keystroke（#305，需辅助功能一次性授权）
 import { spawn, execFileSync } from "node:child_process";
-import { existsSync, mkdirSync, appendFileSync } from "node:fs";
+import { existsSync, mkdirSync, appendFileSync, readFileSync, writeFileSync, rmSync } from "node:fs";
 import path, { join } from "node:path";
-import { homedir } from "node:os";
+import { homedir, tmpdir } from "node:os";
 import { fileURLToPath } from "node:url";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
@@ -25,7 +25,17 @@ function useAppleInjector(): boolean {
 }
 
 // 测试用：CCR_INJECT_CMD=node 脚本路径 时改走假注入器（记录参数）；运行时读取以兼容测试先 import 后设 env
-let ready = existsSync(exe);
+let ready = false;
+
+// inject.cs 源是否含 --peek 只读快照（防抢发检测用）。旧版产物收到 --peek 会把它当
+// 正文打进 CLI——所以只有"源支持 + 编译成功后落了版本标记"才允许发 --peek。
+function peekCapableSource(): boolean {
+  try {
+    return readFileSync(injectCs, "utf8").includes("--peek");
+  } catch {
+    return false;
+  }
+}
 
 // inject.exe 只在 Windows 存在（csc 编译 + AttachConsole）；macOS 用系统自带 osascript 无需准备；
 // CCR_INJECT_CMD 假注入器平台无关（CI 在 Linux 跑测试用）
@@ -34,13 +44,28 @@ export function ensureInjector(): boolean {
   if (isDarwin()) return true;
   if (process.platform !== "win32") return false;
   if (ready) return true;
+  const srcPeek = peekCapableSource();
   try {
     mkdirSync(binDir, { recursive: true });
-    execFileSync(CSC, ["-nologo", `-out:${exe}`, injectCs], { timeout: 30_000, windowsHide: true });
-    ready = true;
+    // 旧版产物升级：exe 在而版本标记不在 = 升级部署后首跑。删除重编以获得 --peek；
+    // 删除/编译失败都不阻断注入（保留/重建 exe 照常可用，仅防抢发快照禁用）
+    if (existsSync(exe) && !existsSync(exe + ".v2") && srcPeek) {
+      try { rmSync(exe, { force: true }); } catch {}
+    }
+    let compiled = false;
+    if (!existsSync(exe)) {
+      // csc 对正斜杠路径参数会静默截断（D:/a/b.cs → d:\a.cs）：统一反斜杠再传
+      const src = injectCs.replace(/\//g, "\\");
+      execFileSync(CSC, ["-nologo", `-out:${exe}`, src], { timeout: 30_000, windowsHide: true });
+      compiled = true;
+    }
+    if (compiled && srcPeek) {
+      try { writeFileSync(exe + ".v2", "1"); } catch {}
+    }
   } catch (e) {
     console.warn("[injector] compile failed:", e instanceof Error ? e.message : e);
   }
+  ready = existsSync(exe);
   return ready;
 }
 
@@ -75,6 +100,7 @@ const ERR_BY_CODE: Record<number, string> = {
   3: "bad-args",
   4: "conin-fail",
   5: "internal-error",
+  6: "peek-fail",
 };
 
 function run(args: string[]): Promise<InjectResult> {
@@ -257,4 +283,88 @@ export async function injectEnter(pid: number): Promise<InjectResult> {
   }
   if (!targetIsCliHost(pid)) return { ok: false, error: "pid-reuse" };
   return run([String(pid), ""]);
+}
+
+// ---------- 控制台输入框快照（防抢发 type guard 用，只读不注入） ----------
+
+// 当前注入器是否具备 --peek 能力。Windows 必须是"源支持 + 本次编译成功落过
+// exe.v2 标记"的产物（旧版产物会把 --peek 当正文打进 CLI，绝不能发）；
+// macOS osascript 每次组装脚本不存在版本问题；假注入器（CCR_INJECT_CMD）跟随代码
+export function peekSupported(): boolean {
+  if (process.env.CCR_INJECT_CMD) return true;
+  if (isDarwin()) return true;
+  if (process.platform !== "win32") return false;
+  return existsSync(exe) && existsSync(exe + ".v2");
+}
+
+// Terminal 标签页文本快照脚本（导出供测试断言结构）：按 tty 定位标签页后取
+// contents（整段含滚回，调用方截末尾行）。与 buildDoScriptExpr 同一定位方式。
+export function buildCaptureScript(pid: number): string {
+  return [
+    "tell application \"Terminal\"",
+    `	set targetTty to do shell script "ps -o tty= -p ${pid}"`,
+    "	repeat with w in windows",
+    "		repeat with t in tabs of w",
+    "			try",
+    "				if tty of t ends with targetTty then",
+    "					return contents of t",
+    "				end if",
+    "			end try",
+    "		end repeat",
+    "	end repeat",
+    "end tell",
+  ].join("\n");
+}
+
+// osascript 变体：收集 stdout（contents of tab 的返回值走 stdout，与 do script 不同）
+function runAppleScriptOut(script: string): Promise<{ ok: boolean; text: string; error?: string }> {
+  return new Promise((resolve) => {
+    const fake = process.env.CCR_OSASCRIPT_CMD;
+    const child = fake
+      ? spawn(process.execPath, [fake, "-e", script], { windowsHide: true })
+      : spawn("osascript", ["-e", script]);
+    let out = "";
+    let err = "";
+    child.stdout?.on("data", (c) => (out += c));
+    child.stderr?.on("data", (c) => (err += c));
+    const timer = setTimeout(() => {
+      child.kill();
+      resolve({ ok: false, text: "", error: "timeout" });
+    }, 10_000);
+    child.on("error", (e) => {
+      clearTimeout(timer);
+      resolve({ ok: false, text: "", error: e.message });
+    });
+    child.on("close", (code) => {
+      clearTimeout(timer);
+      resolve({ ok: code === 0, text: out, error: code === 0 ? undefined : (err.trim() || `exit ${code}`) });
+    });
+  });
+}
+
+// 快照目标控制台可见区末尾 rows 行（默认 20，覆盖 CLI 输入框 + 状态行）。
+// Windows: inject.exe --peek 读屏幕缓冲写临时文件；macOS: Terminal contents。
+// 失败返回 null——调用方 fail-open（维持补发回车的旧行为），绝不因快照不可用卡死排队消息。
+export async function captureConsoleBottom(pid: number, rows = 20): Promise<string[] | null> {
+  if (!injectSupported()) return null;
+  if (useAppleInjector()) {
+    if (!macTargetIsCliHost(pid)) return null;
+    const r = await runAppleScriptOut(buildCaptureScript(pid));
+    if (!r.ok || !r.text.trim()) return null;
+    return r.text.split(/\r?\n/).map((l) => l.replace(/\0+$/, "").trimEnd()).slice(-rows);
+  }
+  if (!ensureInjector() || !peekSupported()) return null;
+  if (!targetIsCliHost(pid)) return null;
+  const tmp = join(tmpdir(), `ccr-peek-${pid}-${process.pid}-${Date.now().toString(36)}.txt`);
+  const r = await run([String(pid), "--peek", tmp, String(rows)]);
+  if (!r.ok) return null;
+  try {
+    const text = readFileSync(tmp, "utf8");
+    const lines = text.split(/\r?\n/).map((l) => l.replace(/\0+$/, "").trimEnd());
+    return lines.length ? lines : null;
+  } catch {
+    return null;
+  } finally {
+    try { rmSync(tmp, { force: true }); } catch {}
+  }
 }

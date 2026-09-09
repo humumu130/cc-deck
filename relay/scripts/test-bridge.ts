@@ -1050,13 +1050,13 @@ assert(ack24.ok === false, "empty rename rejected");
       assert((await injectText(5555, String.raw`带"引号"与\反斜杠`)).ok, "42 darwin injectText ok via fake osascript");
       const s1 = appleLog().at(-1)!;
       assert(s1.includes("ps -o tty= -p 5555"), "42 resolves tty by pid");
-      assert(s1.includes("tty of selected tab of w ends with targetTty"), "42 selects tab by tty");
-      assert(s1.includes(String.raw`do script ("带\"引号\"与\\反斜杠") in selected tab of w`), "42 do script literal escapes quotes and backslashes");
+      assert(s1.includes("tty of t ends with targetTty"), "42 selects tab by tty");
+      assert(s1.includes(String.raw`do script ("带\"引号\"与\\反斜杠") in t`), "42 do script literal escapes quotes and backslashes");
       assert(!s1.includes("System Events") && !s1.includes("keystroke"), "42 no System Events / keystroke");
       assert(!s1.includes("frontmost") && !s1.includes("activate"), "42 no focus stealing");
       // ② 换行折叠为单行 do script
       assert((await injectText(5555, "第一行\n第二行")).ok, "42 multiline inject ok");
-      assert(appleLog().at(-1)!.includes('do script ("第一行 第二行") in selected tab of w'), "42 newlines folded to single do script");
+      assert(appleLog().at(-1)!.includes('do script ("第一行 第二行") in t'), "42 newlines folded to single do script");
       // ③ 超长文本单次注入（do script 无 keystroke 的可靠性切分问题）
       const before3 = appleLog().length;
       assert((await injectText(5555, "长".repeat(801) + "尾")).ok, "42 long text inject ok");
@@ -1127,6 +1127,195 @@ assert(ack24.ok === false, "empty rename rejected");
     "44 PAIR_RESOLVED allow broadcast",
   );
   try { watch.close(); } catch {}
+}
+
+// ── 45 段：防抢发（type guard）——看门狗补发回车前快照 CLI 输入框：
+//     框内只有滞留消息→照常补发；有疑似人工输入→等停手再补；持续输入→本轮放弃；
+//     框内已无滞留消息→跳过；快照不可用→fail-open 直接补发；CCR_TYPE_GUARD=off→不快照。
+//     纯逻辑部分用真实 CLI 控制台快照样本（Windows Terminal + Claude CLI 2.1.x 实测采集）
+{
+  const { extractInputBox, foreignResidual, anyKnownPresent, guardCompensateEnter, guardConfig } = await import("../src/type-guard.js");
+
+  // 样本：空闲 CLI + 输入框里有滞留消息（边框为全宽 ─ 行，此处截短为 40 列）
+  const B = "─".repeat(40);
+  const MSG1 = "手机排队消息：请继续上面的任务";
+  const CAP_TEXT = [
+    "  … +36 completed",
+    "                          new task? /clear to save 186.7k tokens",
+    B,
+    `❯ ${MSG1}`,
+    B,
+    "  [glm-5.3[1m]] ██░░░░░░░░ 18%",
+    "  ⏵⏵ bypass permissions on · 1 shell",
+  ];
+  // 样本：长消息折行（CJK 无空格断行）——干净版与带人工追加输入版
+  const MSG2 = "其次这条是很长的排队消息用来测试输入框换行渲染的场景请务必撑开到多行我们看看CLI如何折叠长文本";
+  const FOREIGN = "另外我手动补一句";
+  const wrapRows = (tail: string) => [
+    `❯ ${MSG1}其次这条是很长的排队消息用来测试输入框换行渲染`,
+    `  的场景请务必撑开到多行我们看看CLI如何折叠长文本${tail}`,
+  ];
+  const CAP_WRAP_CLEAN = ["✶ Embellishing…", B, ...wrapRows(""), B, "  ⏵⏵ bypass permissions on · 1 shell"];
+  const CAP_WRAP = ["✶ Embellishing…", B, ...wrapRows(FOREIGN), B, "  ⏵⏵ bypass permissions on · 1 shell"];
+  // 样本：框空（消息已被提交/清空）；busy 时 spinner 在边框外，框内只剩 ❯
+  const CAP_EMPTY = [B, "❯", B, "  ⏵⏵ bypass permissions on · 1 shell"];
+
+  // ① 框提取：边框对之间含 ❯ 的内容行；spinner/状态行不进框
+  const box1 = extractInputBox(CAP_TEXT)!;
+  assert(box1.length === 1 && box1[0] === `❯ ${MSG1}`, "45 extract box rows between borders");
+  const boxW = extractInputBox(CAP_WRAP)!;
+  assert(boxW.length === 2, "45 extract keeps wrapped continuation rows");
+  // ② 框内只有我们的消息 → 无外来内容（含折行跨行拼接形态）
+  assert(foreignResidual(box1, [MSG1]) === "", "45 own message only → no residual");
+  assert(foreignResidual(extractInputBox(CAP_WRAP_CLEAN)!, [MSG1, MSG2]) === "", "45 wrapped CJK join removes known texts");
+  assert(anyKnownPresent(box1, [MSG1]), "45 known text detected present");
+  // ③ 人工输入（含折行尾部追加）→ 检出外来内容
+  const res = foreignResidual(boxW, [MSG1, MSG2]);
+  assert(res.includes(FOREIGN), `45 foreign typing detected across wrap (residual=${res})`);
+  // ④ 右侧 n/m 计数与 ❯ 是渲染噪音，不算人工输入
+  assert(foreignResidual(["❯ 继续执行 2/3"], ["继续执行"]) === "", "45 n/m counter masked as noise");
+  // ⑤ 框空 → 滞留消息不在（skip 判定）；busy 的 spinner 不误伤
+  assert(!anyKnownPresent(extractInputBox(CAP_EMPTY)!, [MSG1, MSG2]), "45 empty box → known absent");
+  assert(extractInputBox(["✶ Working…", B, "❯", B])!.length === 1, "45 busy spinner row stays outside box");
+  // ⑥ 无法识别（无边框对/无 ❯，如权限弹窗盖住）→ null → fail-open
+  assert(extractInputBox(["  ? Allow Bash", "  1. Yes  2. No"]) === null, "45 unrecognizable screen → null");
+
+  // ⑦ 守门判定（快照序列注入，短时钟）：干净→enter；人工→停手后 enter-after-wait；
+  //    持续变化→timeout；框空→skip-absent；快照不可用→unknown；等待中状态变化→aborted
+  const cfg45 = { enabled: true, pollMs: 10, stableMs: 60, maxMs: 400 };
+  const cap = (rows: string[] | null) => async () => rows;
+  assert((await guardCompensateEnter([MSG1], cap(CAP_TEXT), { cfg: cfg45 })).kind === "enter", "45 clean box → enter now");
+  const vWait = await guardCompensateEnter([MSG1, MSG2], cap(CAP_WRAP), { cfg: cfg45 });
+  assert(vWait.kind === "enter-after-wait", "45 typing then idle → enter after wait");
+  let i = 0;
+  const CHAOS_A = ["✶ Working…", B, `❯ ${MSG1}人工输入甲`, B];
+  const CHAOS_B = ["✶ Working…", B, `❯ ${MSG1}人工输入乙`, B];
+  const vChaos = await guardCompensateEnter([MSG1], async () => (i++ % 2 ? CHAOS_A : CHAOS_B), { cfg: cfg45 });
+  assert(vChaos.kind === "timeout", "45 continuously changing box → give up this round");
+  assert((await guardCompensateEnter([MSG1], cap(CAP_EMPTY), { cfg: cfg45 })).kind === "skip-absent", "45 known absent → skip");
+  assert((await guardCompensateEnter([MSG1], cap(null), { cfg: cfg45 })).kind === "unknown", "45 capture unavailable → unknown (fail-open)");
+  let aborted = false;
+  assert(
+    (await guardCompensateEnter([MSG1, MSG2], cap(CAP_WRAP), { cfg: cfg45, abort: () => aborted })).kind === "enter-after-wait",
+    "45 abort=false does not interfere",
+  );
+  aborted = true;
+  assert((await guardCompensateEnter([MSG1, MSG2], cap(CAP_WRAP), { cfg: cfg45, abort: () => aborted })).kind === "aborted", "45 abort during wait → aborted");
+  const savedOff = process.env.CCR_TYPE_GUARD;
+  process.env.CCR_TYPE_GUARD = "off";
+  assert(guardConfig().enabled === false, "45 CCR_TYPE_GUARD=off disables guard");
+  process.env.CCR_TYPE_GUARD = "0";
+  assert(guardConfig().enabled === false, "45 CCR_TYPE_GUARD=0 disables guard");
+  if (savedOff === undefined) delete process.env.CCR_TYPE_GUARD;
+  else process.env.CCR_TYPE_GUARD = savedOff;
+
+  // ⑧ macOS 快照通道：Terminal contents 走 stdout（假 osascript 回 CCR_FAKE_PEEK_FILE）
+  {
+    const savedCmd = process.env.CCR_INJECT_CMD;
+    delete process.env.CCR_INJECT_CMD;
+    process.env.CCR_TEST_PLATFORM = "darwin";
+    process.env.CCR_OSASCRIPT_CMD = fileURLToPath(new URL("./fake-injector.mjs", import.meta.url));
+    const PEEK8 = fileURLToPath(new URL("../data/test-peek.txt", import.meta.url));
+    process.env.CCR_FAKE_PEEK_FILE = PEEK8;
+    writeFileSync(PEEK8, Array.from({ length: 30 }, (_, k) => `row${k}`).join("\n"));
+    try {
+      const { captureConsoleBottom, buildCaptureScript } = await import("../src/injector.js");
+      const cap8 = await captureConsoleBottom(5555, 5);
+      assert(cap8?.length === 5 && cap8[0] === "row25" && cap8[4] === "row29", "45 mac capture takes tail rows via contents");
+      assert(buildCaptureScript(5555).includes("return contents of t") && buildCaptureScript(5555).includes("tty of t"), "45 mac capture script locates tab by tty");
+    } finally {
+      delete process.env.CCR_TEST_PLATFORM;
+      delete process.env.CCR_OSASCRIPT_CMD;
+      delete process.env.CCR_FAKE_PEEK_FILE;
+      if (savedCmd !== undefined) process.env.CCR_INJECT_CMD = savedCmd;
+      rmSync(PEEK8, { force: true });
+    }
+  }
+
+  // ⑨ 看门狗集成（真 Bridge 节拍 + 假注入器/假快照，短阈值）
+  const PEEK = fileURLToPath(new URL("../data/test-peek.txt", import.meta.url));
+  const T45 = fileURLToPath(new URL("../data/test-transcript.jsonl", import.meta.url));
+  rmSync(T45, { force: true });
+  writeFileSync(T45, JSON.stringify({ type: "assistant", message: { role: "assistant", content: [{ type: "text", text: "基线45" }] } }) + "\n");
+  const sid = extId("cli-10");
+  const enters45 = () => fakeLog().filter((a) => a[0] === "12121" && a[1] === "").length;
+  const peeks45 = () => fakeLog().filter((a) => a[0] === "12121" && a[1] === "--peek").length;
+  const logs45 = () => events.filter((e) => e.type === "SESSION_LOG" && e.session_id === sid).map((e) => String((e.payload as { text: string }).text));
+  await hook({ event: "UserPromptSubmit", prompt: "看门狗45", session_id: "cli-10", cli_pid: 12121, transcript_path: T45 });
+  process.env.CCR_TYPE_GUARD_POLL_MS = "60";
+  process.env.CCR_TYPE_GUARD_STABLE_MS = "250";
+  process.env.CCR_FAKE_PEEK_FILE = PEEK;
+  const settle = async () => {
+    mgr.setExternalPending(sid, []);
+    await wait(5600); // 一个 5s 节拍看到 pending 清空 → 看门狗重置
+  };
+  try {
+    // a. 框内只有滞留消息 → 守门通过立即补发（文案同旧版）
+    mgr.setExternalStatus(sid, "WORKING", "跑");
+    mgr.setExternalPending(sid, [{ text: MSG1, ts: Date.now() - 9000 }]);
+    writeFileSync(PEEK, CAP_TEXT.join("\n"));
+    await wait(8000);
+    assert(enters45() >= 1, "45a clean box still gets compensating enter");
+    assert(logs45().some((t) => t.includes("已补发回车") && !t.includes("等停手")), "45a legacy enter log preserved");
+    assert(peeks45() > 0, "45a watchdog peeks the console before enter");
+    await settle();
+    // b. 框内有疑似人工输入（静止=已停手）→ 等停手窗口后补发
+    const before = enters45();
+    mgr.setExternalPending(sid, [{ text: MSG1, ts: Date.now() - 9000 }, { text: MSG2, ts: Date.now() - 9000 }]);
+    writeFileSync(PEEK, CAP_WRAP.join("\n"));
+    await wait(8000);
+    assert(enters45() > before, "45b typing detected then idle → enter after wait");
+    assert(logs45().some((t) => t.includes("等停手")), "45b enter-after-wait log emitted");
+    await settle();
+    // c. 持续人工输入（快照内容不断变化）→ 本轮放弃、不补发
+    //    假注入器 CHAOS 模式：%T% 每次快照替换为当前时间戳，确定性模拟"一直在打字"
+    process.env.CCR_TYPE_GUARD_MAX_MS = "400";
+    process.env.CCR_FAKE_PEEK_CHAOS = "1";
+    const beforeC = enters45();
+    mgr.setExternalPending(sid, [{ text: MSG1, ts: Date.now() - 9000 }]);
+    writeFileSync(PEEK, ["✶ Working…", "─".repeat(40), `❯ ${MSG1}人工输入%T%`, "─".repeat(40)].join("\n"));
+    await wait(8000);
+    delete process.env.CCR_FAKE_PEEK_CHAOS;
+    assert(enters45() === beforeC, "45c continuous typing → no enter this round");
+    assert(logs45().some((t) => t.includes("本轮暂缓补发回车")), "45c defer log emitted");
+    delete process.env.CCR_TYPE_GUARD_MAX_MS;
+    await settle();
+    // d. 框内已无滞留消息（被人工提交/清空）→ 跳过补发
+    const beforeD = enters45();
+    mgr.setExternalPending(sid, [{ text: MSG1, ts: Date.now() - 9000 }]);
+    writeFileSync(PEEK, CAP_EMPTY.join("\n"));
+    await wait(8000);
+    assert(enters45() === beforeD, "45d message gone from box → skip enter");
+    assert(logs45().some((t) => t.includes("跳过本次补发回车")), "45d skip log emitted");
+    await settle();
+    // e. 快照不可用（旧注入器/识别失败）→ fail-open 维持旧行为直接补发
+    const beforeE = enters45();
+    delete process.env.CCR_FAKE_PEEK_FILE;
+    mgr.setExternalPending(sid, [{ text: MSG1, ts: Date.now() - 9000 }]);
+    await wait(8000);
+    assert(enters45() > beforeE, "45e capture unavailable → legacy direct enter (fail-open)");
+    process.env.CCR_FAKE_PEEK_FILE = PEEK;
+    await settle();
+    // f. CCR_TYPE_GUARD=off → 不快照直接补发
+    process.env.CCR_TYPE_GUARD = "off";
+    const beforeF = enters45();
+    const pkF = peeks45();
+    mgr.setExternalPending(sid, [{ text: MSG1, ts: Date.now() - 9000 }]);
+    writeFileSync(PEEK, CAP_WRAP.join("\n")); // 有"人工输入"也不该拦
+    await wait(8000);
+    assert(enters45() > beforeF, "45f guard off → enter despite foreign content");
+    assert(peeks45() === pkF, "45f guard off → no console peek");
+    await hook({ event: "SessionEnd", session_id: "cli-10", reason: "clear" });
+  } finally {
+    delete process.env.CCR_TYPE_GUARD;
+    delete process.env.CCR_TYPE_GUARD_POLL_MS;
+    delete process.env.CCR_TYPE_GUARD_STABLE_MS;
+    delete process.env.CCR_TYPE_GUARD_MAX_MS;
+    delete process.env.CCR_FAKE_PEEK_FILE;
+    delete process.env.CCR_FAKE_PEEK_CHAOS;
+    rmSync(T45, { force: true });
+    rmSync(PEEK, { force: true });
+  }
 }
 
 wsCur!.close();

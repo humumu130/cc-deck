@@ -7,7 +7,8 @@ import { fileURLToPath } from "node:url";
 import type { EventBus } from "./event-bus.js";
 import type { SessionManager } from "./session-manager.js";
 import type { BridgeEvent, PendingInput, WaitingPayload, TodoItem, SubagentInfo, AskQuestion } from "./types.js";
-import { injectText, injectEsc, injectEnter, ensureInjector, injectSupported } from "./injector.js";
+import { injectText, injectEsc, injectEnter, ensureInjector, injectSupported, captureConsoleBottom } from "./injector.js";
+import { guardConfig, guardCompensateEnter } from "./type-guard.js";
 import {
   addHiddenTodoKey,
 } from "./todo-hidden.js";
@@ -105,8 +106,10 @@ export class Bridge {
   private healTimer: NodeJS.Timeout | null = null;
   private extFileStats = new Map<string, { files: Set<string>; added: number; deleted: number }>();
   private extUsage = new Map<string, { input: number; output: number; cacheRead: number; cacheWrite: number; model: string; ctx: number }>();
-  // 排队消息滞留看门狗：ext id -> { 最近补发时间, 连续补发次数, 是否已放弃 }
-  private stuckWatch = new Map<string, { lastTry: number; tries: number; given_up: boolean }>();
+  // 排队消息滞留看门狗：ext id -> { 最近补发时间, 连续补发次数, 连续跳过次数, 是否已放弃 }
+  private stuckWatch = new Map<string, { lastTry: number; tries: number; skips: number; given_up: boolean }>();
+  // 防抢发守门进行中的会话（等待人工停手期间，看门狗节拍跳过防重入）
+  private stuckGuarding = new Set<string>();
   private subagentSeq = 0; // hook 未带 tool_use_id 时的合成 id 序号（ag-N）
   private askFallback = new Map<string, { requestId: string; questions: AskQuestion[] }>(); // 提问超时放行本地选择器后的兜底（手机晚答仍可送达）
   // 无 hook 会话（CLI 早于插件启动，无 Stop/UserPromptSubmit 事件）：
@@ -1787,6 +1790,9 @@ export class Bridge {
   // 现象：注入的回车在回合切换瞬间被 CLI 界面层吞掉，文字滞留输入框未提交，
   // 直到下一条消息的回车才把两条一起冲出去。补发一个空回车（injectEnter）补救。
   // WAITING 严禁补发——回车会误触权限弹窗。
+  // 防抢发（type guard）：补发回车前快照 CLI 输入框，框内有非我们注入的内容
+  // （真人正在打字/半截输入）则暂缓，等停手后再补——否则会把用户打到一半的
+  // 输入连同滞留消息一起抢发出去。CCR_TYPE_GUARD=off 可关。
   private sweepStuckInputs(): void {
     const now = Date.now();
     // 首检快窗：注入后 10s（env 短值时遵从 env）未提交也未进 CLI 队列即补发——
@@ -1797,16 +1803,16 @@ export class Bridge {
       const id = s.session_id;
       const w0 = this.stuckWatch.get(id);
       const threshold = w0 && w0.tries > 0 ? this.stuckAfterMs : firstMs;
-      const stuck = (s.pending_inputs ?? []).some((p) => {
+      const stuckTexts = (s.pending_inputs ?? []).filter((p) => {
         if (now - p.ts <= threshold) return false;
         if (this.isEnqueued(id, p.text)) return false;
         // 60s 内晋升过同文本：pending 条目早于晋升记录 = 已处理过的残留，跳过；
         // 条目更新 = 用户重发（"继续"这类高频词）再滞留，照常补发
         const rec = this.recentUserMsgs.get(id)?.get(normKey(p.text));
         return !(rec && now - rec.ts < 60_000 && rec.ts >= p.ts);
-      });
+      }).map((p) => p.text);
       if (
-        !stuck ||
+        stuckTexts.length === 0 ||
         !s.cli_pid ||
         (s.status !== "WORKING" && s.status !== "DONE") ||
         this.flushing.has(id) ||
@@ -1818,18 +1824,67 @@ export class Bridge {
       const w = this.stuckWatch.get(id);
       if (w?.given_up) continue; // 连续 3 次仍滞留：放弃，防无限打转
       if (w && now - w.lastTry < this.stuckRetryMs) continue; // 每会话限速
-      const tries = (w?.tries ?? 0) + 1;
       const pid = s.cli_pid;
-      this.stuckWatch.set(id, { lastTry: now, tries, given_up: tries >= 3 });
-      if (tries >= 3) {
-        this.mgr.pushExternalLog(id, "system", "排队消息疑似滞留输入框，已补发 3 次回车仍滞留，暂停自动补发（下次发送消息时会一并提交）");
-      } else {
-        this.mgr.pushExternalLog(id, "system", "排队消息疑似滞留输入框，已补发回车");
+      // 防抢发守门（异步等待期间占位限速防重入；补发计数只在真正发回车时增加）
+      if (guardConfig().enabled) {
+        if (this.stuckGuarding.has(id)) continue; // 守门等待中：绝不旁路直发
+        this.stuckWatch.set(id, { lastTry: now, tries: w?.tries ?? 0, skips: w?.skips ?? 0, given_up: w?.given_up ?? false });
+        this.stuckGuarding.add(id);
+        void this.guardedStuckEnter(id, pid, stuckTexts).finally(() => this.stuckGuarding.delete(id));
+        continue;
       }
-      void injectEnter(pid).then((r) => {
-        if (!r.ok) this.onInjectFail(id, r.error);
-      });
+      this.fireStuckEnter(id, pid);
     }
+  }
+
+  // 真正补发回车（守门通过 / 守门关闭 / 快照不可用 fail-open 都走到这里）
+  private fireStuckEnter(id: string, pid: number, msg?: string): void {
+    const w = this.stuckWatch.get(id);
+    const tries = (w?.tries ?? 0) + 1;
+    this.stuckWatch.set(id, { lastTry: Date.now(), tries, skips: w?.skips ?? 0, given_up: tries >= 3 });
+    if (tries >= 3) {
+      this.mgr.pushExternalLog(id, "system", "排队消息疑似滞留输入框，已补发 3 次回车仍滞留，暂停自动补发（下次发送消息时会一并提交）");
+    } else {
+      this.mgr.pushExternalLog(id, "system", msg ?? "排队消息疑似滞留输入框，已补发回车");
+    }
+    void injectEnter(pid).then((r) => {
+      if (!r.ok) this.onInjectFail(id, r.error);
+    });
+  }
+
+  // 守门后的跳过（框内已无滞留消息）：不补发、不计数补发次数；连续跳过多次后停手，
+  // 防无 hook 会话 pending 永不晋升时每 60s 刷一条日志
+  private bumpStuckSkips(id: string, msg: string): void {
+    const w = this.stuckWatch.get(id);
+    const skips = (w?.skips ?? 0) + 1;
+    this.stuckWatch.set(id, { lastTry: Date.now(), tries: w?.tries ?? 0, skips, given_up: (w?.given_up ?? false) || skips >= 3 });
+    this.mgr.pushExternalLog(id, "system", skips >= 3 ? "输入框多次未见该排队消息，暂停自动补发（下次发送消息时会一并提交）" : msg);
+  }
+
+  // 补发回车前的防抢发守门：快照 CLI 输入框，有疑似人工输入则等停手再补。
+  // 快照不可用（旧注入器/弹窗盖住/识别失败）fail-open 维持旧行为直接补发。
+  private async guardedStuckEnter(id: string, pid: number, texts: string[]): Promise<void> {
+    const v = await guardCompensateEnter(texts, () => captureConsoleBottom(pid), {
+      abort: () => {
+        // 等待期间状态翻 WAITING（回车会误触弹窗）/ flush 进行中 / 会话消失：放弃本轮
+        const st = this.mgr.getExternal(id);
+        return !st || (st.status !== "WORKING" && st.status !== "DONE") || this.flushing.has(id) || (this.inputQueue.get(id)?.length ?? 0) > 0;
+      },
+    });
+    if (v.kind === "skip-absent") {
+      this.bumpStuckSkips(id, "输入框已无该排队消息（可能已随人工输入提交或被清空），跳过本次补发回车");
+      return;
+    }
+    if (v.kind === "timeout") {
+      this.mgr.pushExternalLog(id, "system", "输入框检测到持续人工输入，本轮暂缓补发回车（停手后下一轮自动再试）");
+      return;
+    }
+    if (v.kind === "aborted") return; // 状态变化，静默退出（下轮看门狗重判）
+    if (v.kind === "enter-after-wait") {
+      this.fireStuckEnter(id, pid, `已补发回车（检测到输入框有其他输入，等停手 ${Math.round(v.waitedMs / 100) / 10}s 后补发）`);
+      return;
+    }
+    this.fireStuckEnter(id, pid); // enter / unknown（快照不可用 fail-open，行为同旧版）
   }
 }
 
