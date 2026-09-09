@@ -1,0 +1,437 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="color-scheme" content="dark">
+<meta name="theme-color" content="#05080F">
+<meta name="description" content="CC Deck——Claude Code 的随身控制台：在手机、网页、桌面与手表上远程完成桌面端的几乎一切——注入指令、批准权限、切换模型、跟踪任务、接收汇报，外加主动通知等随身增强。云桥可自建，端到端加密。">
+<meta property="og:title" content="CC Deck — Claude Code 的随身控制台">
+<meta property="og:description" content="远程掌控 PC 端 Claude Code：会话速览、权限审批、任务通知。多端可用、云桥可自建、端到端加密。">
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://cc-deck.humumu.online/">
+<title>CC Deck — Claude Code 的随身控制台</title>
+<link rel="icon" type="image/svg+xml" href="/site/favicon.svg">
+<link rel="stylesheet" href="/site/assets/style.css">
+</head>
+<body>
+
+<div class="bg" aria-hidden="true">
+  <div class="glow glow-a"></div>
+  <div class="glow glow-b"></div>
+  <div class="grid-overlay"></div>
+</div>
+
+<nav class="nav" id="nav">
+  <div class="wrap nav-inner">
+    <a class="brand" href="#top">
+      <span class="brand-mark">CC</span>
+      <span class="brand-name">CC Deck</span>
+    </a>
+    <div class="nav-actions">
+      <a class="nav-gh" href="https://github.com/humumu130/cc-deck" target="_blank" rel="noopener">
+        <svg class="st" viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path d="M12 .5C5.65.5.5 5.65.5 12c0 5.08 3.29 9.39 7.86 10.91.58.11.79-.25.79-.55v-2.17c-3.2.7-3.87-1.36-3.87-1.36-.52-1.33-1.28-1.69-1.28-1.69-1.04-.71.08-.7.08-.7 1.15.08 1.76 1.19 1.76 1.19 1.03 1.76 2.69 1.25 3.35.96.1-.75.4-1.25.72-1.54-2.55-.29-5.23-1.28-5.23-5.68 0-1.26.45-2.28 1.19-3.09-.12-.29-.52-1.46.11-3.05 0 0 .97-.31 3.18 1.18a11 11 0 0 1 5.79 0c2.2-1.49 3.17-1.18 3.17-1.18.63 1.59.24 2.76.12 3.05.74.81 1.18 1.83 1.18 3.09 0 4.41-2.69 5.38-5.25 5.67.41.35.77 1.05.77 2.12v3.14c0 .3.21.67.8.55A11.51 11.51 0 0 0 23.5 12C23.5 5.65 18.35.5 12 .5z"/></svg>
+        <span>GitHub</span>
+      </a>
+      <a class="btn btn-sm btn-pri" href="#download">下载客户端</a>
+    </div>
+  </div>
+</nav>
+
+<nav class="side-nav" aria-label="页面区块导航">
+  <a href="#top" data-label="首页"><i></i></a>
+  <a href="#features" data-label="特性"><i></i></a>
+  <a href="#how" data-label="工作原理"><i></i></a>
+  <a href="#download" data-label="下载"><i></i></a>
+</nav>
+
+<main id="top">
+
+  <!-- ======================= HERO ======================= -->
+  <header class="hero wrap">
+    <a class="hero-badge reveal" href="https://github.com/humumu130/cc-deck/releases" target="_blank" rel="noopener">
+      <i class="pulse"></i>v0.3.33
+      <svg viewBox="0 0 24 24" width="13" height="13" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg>
+    </a>
+
+    <h1 class="reveal" style="--d:.06s">把 <span class="nb">Claude Code</span> 会话<br><em>装进口袋</em></h1>
+
+    <p class="hero-tagline reveal" style="--d:.12s">手机、网页、桌面与手表随身掌控——桌面端能做的远程都能做：注入指令、批准权限、切换模型、跟踪任务，任务完成主动推送汇报。</p>
+
+    <div class="hero-cta reveal" style="--d:.18s">
+      <a class="btn btn-pri btn-lg" href="#download">
+        <svg viewBox="0 0 24 24" width="17" height="17" aria-hidden="true"><path d="M12 3v12M6.5 10.5L12 16l5.5-5.5M4 21h16"/></svg>
+        下载客户端
+      </a>
+      <a class="btn btn-ghost btn-lg" href="https://github.com/humumu130/cc-deck" target="_blank" rel="noopener">
+        <svg class="st" viewBox="0 0 24 24" width="17" height="17" aria-hidden="true"><path d="M12 2l3.1 6.3 6.9 1-5 4.9 1.2 6.8L12 17.8 5.8 21l1.2-6.8-5-4.9 6.9-1z"/></svg>
+        Star on GitHub
+      </a>
+    </div>
+
+    <div class="hero-chips reveal" style="--d:.24s">
+      <span class="chip"><i class="dot dot-green"></i>Android</span>
+      <span class="chip"><i class="dot dot-orange"></i>Wear OS</span>
+      <span class="chip"><i class="dot dot-blue"></i>网页 PWA</span>
+      <span class="chip"><i class="dot dot-violet"></i>Windows</span>
+      <span class="chip chip-soft">MIT 开源</span>
+    </div>
+
+    <!-- ============ 主视觉：CLI（服务端）× 手机 × 桌面端（客户端） ============ -->
+    <div class="stage reveal" style="--d:.3s" aria-hidden="true">
+      <div class="terminal cli">
+        <div class="term-bar">
+          <i></i><i></i><i></i>
+          <span class="term-title">Terminal · claude · D:\code\cc-deck</span>
+        </div>
+        <div class="term-body">
+          <p class="t-user"><span class="t-prompt">❯</span>把登录改成 OAuth，写好测试</p>
+          <p class="t-ai"><span class="t-caret">⏺</span>先看一下现有的认证实现…</p>
+          <p class="t-tool">Read <span>src/auth/session.ts</span><em>128 行</em></p>
+          <p class="t-tool">Write <span>src/auth/oauth.ts</span><em>+96 行</em></p>
+          <div class="t-perm">
+            <p class="t-perm-q">⚠ 允许写入 src/auth/oauth.ts？</p>
+            <div class="t-opts">
+              <p class="t-opt t-opt-sel"><i>❯</i>1. 允许</p>
+              <p class="t-opt">2. 允许，本会话不再询问</p>
+              <p class="t-opt">3. 拒绝 <em>esc</em></p>
+            </div>
+          </div>
+        </div>
+        <div class="float-chip fc-a">
+          <svg class="st" viewBox="0 0 24 24" width="14" height="14"><path d="M20 6L9 17l-5-5"/></svg>
+          已远程允许 · oauth.ts
+        </div>
+      </div>
+
+      <div class="e2e-link">
+        <span class="e2e-chip">
+          <svg viewBox="0 0 24 24" width="13" height="13"><rect x="4.5" y="10.5" width="15" height="10" rx="2"/><path d="M8 10.5V7a4 4 0 0 1 8 0v3.5"/></svg>
+          端到端加密
+        </span>
+        <i class="e2e-dash"></i>
+      </div>
+
+      <div class="phone">
+        <div class="phone-notch"></div>
+        <div class="phone-screen">
+          <div class="app-head">
+            <div class="app-id">
+              <i class="app-logo">CC</i>
+              <div class="app-id-t"><b>CC Deck</b><span>书房电脑</span></div>
+            </div>
+            <span class="app-live"><i class="dot dot-green"></i>已连接</span>
+          </div>
+          <div class="app-meta">
+            <span class="app-legend"><b>3 会话</b><i class="dot dot-orange"></i><em>1</em><i class="dot dot-green"></i><em>2</em></span>
+            <span class="app-fold">折叠空闲 ▾</span>
+          </div>
+          <div class="app-list">
+            <div class="app-card">
+              <div class="ac-top"><i class="dot dot-orange"></i><span>8586s · ↓ 250.3k · 子代理 UI/UX</span><em>353h32m</em></div>
+              <div class="ac-name">移动端体验优化</div>
+              <div class="ac-meta">
+                <span class="ac-chip">外部 CLI</span>
+                <span class="ac-dir"><svg viewBox="0 0 24 24" width="10" height="10"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7z" fill="#E8B64C"/></svg>app</span>
+                <span class="ac-diff"><b>+107</b><u>-4</u></span><span class="ac-bar"><i style="width:15%"></i></span><span class="ac-pct">15%</span>
+              </div>
+            </div>
+            <div class="app-card">
+              <div class="ac-top"><i class="dot dot-green"></i><span>1m00s · 转录活跃</span><em>刚刚</em></div>
+              <div class="ac-name">修复配对码过期提示</div>
+              <div class="ac-meta">
+                <span class="ac-chip">外部 CLI</span>
+                <span class="ac-dir"><svg viewBox="0 0 24 24" width="10" height="10"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7z" fill="#E8B64C"/></svg>relay</span>
+                <span class="ac-diff"><b>+18</b><u>-1</u></span><span class="ac-bar"><i style="width:11%"></i></span><span class="ac-pct">11%</span>
+              </div>
+            </div>
+            <div class="app-card">
+              <div class="ac-top"><i class="dot dot-green"></i><span>55s · 子代理 前端还原</span><em>1m 前</em></div>
+              <div class="ac-name">深色主题对比度调整</div>
+              <div class="ac-meta">
+                <span class="ac-chip">外部 CLI</span>
+                <span class="ac-dir"><svg viewBox="0 0 24 24" width="10" height="10"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7z" fill="#E8B64C"/></svg>web</span>
+                <span class="ac-diff"><b>+7</b><u>-4</u></span><span class="ac-bar"><i style="width:16%"></i></span><span class="ac-pct">16%</span>
+              </div>
+            </div>
+          </div>
+          <div class="app-approve">
+            <p>Write <span>src/auth/oauth.ts</span></p>
+            <div class="app-approve-btns">
+              <span class="t-btn t-btn-yes">✓ 允许</span>
+              <span class="t-btn">拒绝</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="terminal desk">
+        <div class="term-bar">
+          <i></i><i></i><i></i>
+          <span class="term-title">CC Deck · 桌面端</span>
+          <span class="term-live"><i class="dot dot-green"></i>已连接</span>
+        </div>
+        <div class="desk-body">
+          <aside class="desk-side">
+            <div class="ds-cap">12 会话 <i class="dot dot-orange"></i><i class="dot dot-green"></i><i class="dot dot-green"></i></div>
+            <div class="ds-row ds-hot"><i class="dot dot-orange"></i><div><b>storefront</b><span>WORKING · 4h10m · 10%</span></div></div>
+            <div class="ds-row"><i class="dot dot-green"></i><div><b>payment-api</b><span>59s · 46%</span></div></div>
+            <div class="ds-row"><i class="dot dot-green"></i><div><b>ml-analysis</b><span>思考中 · 62%</span></div></div>
+            <div class="ds-row"><i class="dot dot-dim"></i><div><b>blog</b><span>历史 · 只读</span></div></div>
+          </aside>
+          <div class="desk-main">
+            <div class="dm-head"><b>cc-deck</b><em>● WORKING</em><span>glm-5.3-flash</span></div>
+            <div class="dm-tabs"><span class="on">消息</span><span>任务</span><span>定时</span><span>统计</span></div>
+            <div class="term-body">
+              <p class="t-tool">Read <span>src/auth/session.ts</span><em>128 行</em></p>
+              <p class="t-tool">Write <span>src/auth/oauth.ts</span><em>+96 行</em></p>
+              <div class="t-perm dm-perm">
+                <p class="t-perm-q">⚠ 允许写入 oauth.ts？</p>
+                <div class="dm-perm-btns">
+                  <span class="t-btn t-btn-yes">✓ 允许</span>
+                  <span class="t-btn">拒绝</span>
+                </div>
+              </div>
+            </div>
+            <div class="dm-inject"><span>注入到终端 · 空闲即发</span><b>⏎</b></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </header>
+
+  <!-- ======================= FEATURES ======================= -->
+  <section class="wrap section" id="features">
+    <p class="kicker reveal">WHY CC DECK</p>
+    <h2 class="reveal" style="--d:.06s">离开电脑，会话不掉线</h2>
+    <p class="lead reveal" style="--d:.12s">在 PC 端装一个插件，Claude Code 的会话就实时同步到随身设备。适合把 Claude Code 当主力工作流、离开电脑也不想掉线的开发者。</p>
+
+    <div class="bento">
+      <article class="cell cell-wide reveal">
+        <div class="cell-text">
+          <div class="ic"><svg viewBox="0 0 24 24" width="17" height="17"><rect x="7" y="2.5" width="10" height="19" rx="2.5"/><path d="M10.5 18.5h3"/></svg></div>
+          <h3>随身掌控会话</h3>
+          <p>多会话四态速览，上下文水位三端同色；权限审批与提问远程点选，发消息、传图片、切换模型，随时打断或续聊。</p>
+        </div>
+        <div class="cell-art sessions">
+          <div class="s-row"><i class="dot dot-green"></i><span>api · 重构登录</span><em>运行中</em></div>
+          <div class="s-row s-hot"><i class="dot dot-orange"></i><span>web · 修复表单</span><em>等待输入</em></div>
+          <div class="s-row s-done"><i class="dot dot-dim"></i><span>docs · 整理文档</span><em>✓ 完成</em></div>
+          <div class="s-meter"><span style="width:62%"></span></div>
+          <div class="s-cap">上下文水位 · 三端同色</div>
+        </div>
+      </article>
+
+      <article class="cell reveal" style="--d:.08s">
+        <div class="cell-text">
+          <div class="ic"><svg viewBox="0 0 24 24" width="17" height="17"><path d="M22 2L11 13"/><path d="M22 2l-7 20-4-9-9-4z"/></svg></div>
+          <h3>注入与审批</h3>
+          <p>权限审批与 AskUserQuestion 提问远程点选；发消息、传图片，远程切换模型，随时打断或续聊。</p>
+        </div>
+        <div class="cell-art approve-art">
+          <span class="t-btn t-btn-yes">✓ 允许</span>
+          <span class="t-btn">拒绝</span>
+          <span class="t-btn t-btn-soft">回一句「先跑测试」</span>
+        </div>
+      </article>
+
+      <article class="cell reveal">
+        <div class="cell-text">
+          <div class="ic"><svg viewBox="0 0 24 24" width="17" height="17"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.7 21a2 2 0 0 1-3.4 0"/></svg></div>
+          <h3>任务通知随身</h3>
+          <p>任务完成主动汇报：悬浮框、App 通知、手表轻震；cron 表达式自动转换为易读时间。</p>
+        </div>
+        <div class="cell-art toast-art">
+          <div class="toast"><i class="dot dot-green"></i>任务完成 · 已跑通 12 个测试</div>
+        </div>
+      </article>
+
+      <article class="cell reveal" style="--d:.08s">
+        <div class="cell-text">
+          <div class="ic"><svg viewBox="0 0 24 24" width="17" height="17"><path d="M12 2.5l7.5 3v5.5c0 4.8-3.1 8.3-7.5 10-4.4-1.7-7.5-5.2-7.5-10V5.5z"/><path d="M9 12l2 2 4-4.5"/></svg></div>
+          <h3>端到端加密 · 云桥可自建</h3>
+          <p>tweetnacl 端到端加密，云桥只路由不落盘；云桥支持 Cloudflare Worker / Docker 自建，数据只流经你自己的设施。</p>
+        </div>
+        <div class="cell-art key-art">
+          <span class="kbd">本地密钥</span>
+          <svg viewBox="0 0 24 24" width="14" height="14"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
+          <span class="kbd kbd-dim">密文</span>
+        </div>
+      </article>
+
+      <article class="cell reveal" style="--d:.16s">
+        <div class="cell-text">
+          <div class="ic"><svg viewBox="0 0 24 24" width="17" height="17"><path d="M12 2l10 5.5L12 13 2 7.5z"/><path d="M2 12.5L12 18l10-5.5"/></svg></div>
+          <h3>多源多端</h3>
+          <p>四端接入同一 relay 即互通；客户端也可同时连接多个 relay——书房与公司的会话聚合同屏，详情标注来源。</p>
+        </div>
+        <div class="cell-art multi-src">
+          <div class="ms-src"><i class="dot dot-blue"></i>书房电脑<span>3 个会话</span></div>
+          <div class="ms-src"><i class="dot dot-violet"></i>公司电脑<span>2 个会话</span></div>
+          <div class="ms-merge"><svg viewBox="0 0 24 24" width="13" height="13"><path d="M5 12h14M13 6l6 6-6 6"/></svg>聚合同屏 · 详情标注来源</div>
+        </div>
+      </article>
+
+      <article class="cell cell-full reveal">
+        <div class="cell-text">
+          <div class="ic"><svg viewBox="0 0 24 24" width="17" height="17"><path d="M3.5 5l1.5 1.5L8 3.5"/><path d="M3.5 11l1.5 1.5L8 9.5"/><path d="M3.5 17l1.5 1.5L8 15.5"/><path d="M12 5h8.5M12 11h8.5M12 17h8.5"/></svg></div>
+          <h3>任务面板</h3>
+          <p>任务清单实时同步手机与网页：已完成 / 进行中 / 待办分组速览，长按拖动排序并回传 CLI，转录里的 #NNN 任务号点按直达明细。</p>
+        </div>
+        <div class="cell-art tasks-art">
+          <div class="tk-bar"><span class="bar"><i></i></span><b>3 / 5</b></div>
+          <div class="tk-sec tk-sec-done">已完成 3 · 近 1 天</div>
+          <div class="tk-row done"><span class="mark">✓</span><span class="no">#11</span><span class="txt">会话列表间距微调</span><span class="tk-tag">subAgent</span></div>
+          <div class="tk-row done"><span class="mark">✓</span><span class="no">#12</span><span class="txt">下载链接稳定性修复</span></div>
+          <div class="tk-row done"><span class="mark">✓</span><span class="no">#13</span><span class="txt">域名梳理：主域 + 旧域 301</span></div>
+          <div class="tk-sec tk-sec-run">进行中 1</div>
+          <div class="tk-row run"><span class="mark">◐</span><span class="no">#14</span><span class="txt">注入防抢发：检测 CLI 打字中状态</span></div>
+          <div class="tk-sec tk-sec-todo">待办 1</div>
+          <div class="tk-row todo"><span class="mark">○</span><span class="no">#15</span><span class="txt">云桥地址迁移：双桥并行互为备份</span></div>
+        </div>
+      </article>
+    </div>
+  </section>
+
+  <!-- ======================= HOW IT WORKS ======================= -->
+  <section class="wrap section" id="how">
+    <p class="kicker reveal">HOW IT WORKS</p>
+    <h2 class="reveal" style="--d:.06s">三步接入，端到端加密</h2>
+
+    <div class="steps">
+      <div class="step reveal">
+        <div class="step-head"><span class="step-no">01</span><h3>PC 侧启用 relay</h3></div>
+        <div class="step-code">
+          <code>claude plugin marketplace add humumu130/cc-deck</code>
+          <code>claude plugin install cc-deck@cc-deck-plugins</code>
+          <button class="copy-btn" type="button" data-copy="claude plugin marketplace add humumu130/cc-deck&#10;claude plugin install cc-deck@cc-deck-plugins" aria-label="复制安装命令">
+            <svg viewBox="0 0 24 24" width="14" height="14"><rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg>
+          </button>
+        </div>
+        <p>两种方式任选其一：<br>① Claude Code 插件——重启后执行 <b>/cc-deck</b>，relay 后台即起；<br>② 桌面端 EXE——已内置 relay，装好即用。</p>
+      </div>
+      <div class="step-line reveal" aria-hidden="true"></div>
+      <div class="step reveal" style="--d:.1s">
+        <div class="step-head"><span class="step-no">02</span><h3>扫码配对</h3></div>
+        <p>同网 App 直接扫终端二维码即连。<br>跨网在面板一键领取 6 位配对码，输入即连。</p>
+        <div class="step-art">
+          <span class="qr-mock" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></span>
+          <em>或</em>
+          <span class="pair-code" aria-hidden="true"><i>8</i><i>4</i><i>1</i><i>6</i><i>0</i><i>9</i></span>
+        </div>
+      </div>
+      <div class="step-line reveal" style="--d:.1s" aria-hidden="true"></div>
+      <div class="step reveal" style="--d:.2s">
+        <div class="step-head"><span class="step-no">03</span><h3>随身掌控</h3></div>
+        <p>审批、注入、模型切换随身同步；任务完成后主动推送到手机与手表。</p>
+        <div class="step-tags">
+          <span>远程审批</span><span>消息注入</span><span>模型切换</span><span>完成推送</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="flow reveal" style="--d:.15s">
+      <div class="fnode">
+        <div class="ic"><svg viewBox="0 0 24 24" width="18" height="18"><rect x="7" y="2.5" width="10" height="19" rx="2.5"/><path d="M10.5 18.5h3"/></svg></div>
+        <b>手机 · 手表 · 网页 · 桌面</b>
+        <span>客户端 · 持有密钥</span>
+      </div>
+      <div class="fhop">
+        <svg viewBox="0 0 46 12" width="46" height="12"><path d="M1 6h40M36 1.5L41 6l-5 4.5"/></svg>
+        <span>E2E 加密</span>
+      </div>
+      <div class="fnode fnode-mid">
+        <div class="ic"><svg viewBox="0 0 24 24" width="18" height="18"><path d="M18 10h-1.26A8 8 0 1 0 9 20h9a4 4 0 0 0 0-8z"/></svg></div>
+        <b>云桥 / LAN</b>
+        <span>自建中转 · 只见密文</span>
+      </div>
+      <div class="fhop">
+        <svg viewBox="0 0 46 12" width="46" height="12"><path d="M1 6h40M36 1.5L41 6l-5 4.5"/></svg>
+        <span>密文直达</span>
+      </div>
+      <div class="fnode">
+        <div class="ic"><svg viewBox="0 0 24 24" width="18" height="18"><path d="M4 17l6-5-6-5"/><path d="M12 19h8"/></svg></div>
+        <b>你的电脑</b>
+        <span>Claude Code CLI · 持有密钥</span>
+      </div>
+    </div>
+    <p class="cap reveal" style="--d:.2s">密钥只存在于你自己的设备上，中继与公网看到的都只是密文。本项目提供默认公共桥（带限流）；如担心元数据暴露，可按文档四条命令自建云桥。</p>
+  </section>
+
+  <!-- ======================= DOWNLOAD ======================= -->
+  <section class="wrap section" id="download">
+    <p class="kicker reveal">DOWNLOAD</p>
+    <h2 class="reveal" style="--d:.06s">下载客户端</h2>
+    <p class="lead reveal" style="--d:.12s">当前版本 v0.3.33 · 连入同一个 relay 即可互通。</p>
+
+    <div class="dl-grid">
+      <article class="dl-card reveal">
+        <div class="dl-head">
+          <div class="ic"><svg viewBox="0 0 24 24" width="20" height="20"><rect x="7" y="2.5" width="10" height="19" rx="2.5"/><path d="M10.5 18.5h3"/></svg></div>
+          <h3>手机 App<span>Android APK · Wear OS 手表跟装</span></h3>
+        </div>
+        <p>扫码配对即连：会话速览、远程审批、消息注入；任务完成推送通知，手表同步提醒。</p>
+        <div class="dl-btns">
+          <a class="btn btn-pri" href="https://github.com/humumu130/cc-deck/releases/latest" target="_blank" rel="noopener">前往 GitHub Releases</a>
+          <a class="btn btn-ghost btn-sm-block" href="https://github.com/humumu130/cc-deck" target="_blank" rel="noopener">查看源码</a>
+        </div>
+      </article>
+
+      <article class="dl-card dl-card-hot reveal" style="--d:.08s">
+        <div class="dl-head">
+          <div class="ic"><svg viewBox="0 0 24 24" width="20" height="20"><rect x="2.5" y="4" width="19" height="12.5" rx="2"/><path d="M9 20.5h6M12 16.5v4"/></svg></div>
+          <h3>桌面端<span>Windows · v0.3.33 · Tauri 约 3.4MB</span></h3>
+        </div>
+        <p>轻量原生客户端，托盘常驻、内建更新，与网页端同一套界面。</p>
+        <div class="dl-btns">
+          <a class="btn btn-pri" href="/dl/cc-deck-desktop-setup.exe">下载 cc-deck-desktop-setup.exe</a>
+          <a class="btn btn-ghost btn-sm-block" href="https://github.com/humumu130/cc-deck/releases" target="_blank" rel="noopener">查看全部历史版本</a>
+        </div>
+      </article>
+
+      <article class="dl-card reveal" style="--d:.16s">
+        <div class="dl-head">
+          <div class="ic"><svg viewBox="0 0 24 24" width="20" height="20"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a14.2 14.2 0 0 1 0 18 14.2 14.2 0 0 1 0-18z"/></svg></div>
+          <h3>网页控制台<span>PWA · 免安装 · 全平台</span></h3>
+        </div>
+        <p>浏览器打开即用，可添加到主屏幕；跨网时输入 6 位配对码即接入。</p>
+        <div class="dl-btns">
+          <a class="btn btn-pri" href="https://cc-deck.humumu.online/app" target="_blank" rel="noopener">打开网页控制台</a>
+          <a class="btn btn-ghost btn-sm-block" href="https://github.com/humumu130/cc-deck" target="_blank" rel="noopener">查看源码 · 自行部署</a>
+        </div>
+      </article>
+    </div>
+  </section>
+
+  <!-- ======================= FINAL CTA ======================= -->
+  <section class="wrap section">
+    <div class="cta-band reveal">
+      <div class="cta-glow" aria-hidden="true"></div>
+      <h2>准备好把会话装进口袋了吗？</h2>
+      <p>五分钟接入，数据只流经你自己的设备。</p>
+      <div class="hero-cta">
+        <a class="btn btn-pri btn-lg" href="#download">下载客户端</a>
+        <a class="btn btn-ghost btn-lg" href="https://github.com/humumu130/cc-deck" target="_blank" rel="noopener">GitHub 查看源码</a>
+      </div>
+    </div>
+  </section>
+
+  <footer class="wrap">
+    <div class="foot-brand">
+      <span class="brand-mark brand-mark-sm">CC</span>
+      <span>© 2026 CC Deck · MIT License</span>
+    </div>
+    <div class="foot-links">
+      <a href="https://github.com/humumu130/cc-deck" target="_blank" rel="noopener">GitHub</a>
+      <a href="https://github.com/humumu130/cc-deck/releases" target="_blank" rel="noopener">Releases</a>
+      <a href="https://github.com/humumu130/cc-deck/blob/main/LICENSE" target="_blank" rel="noopener">License</a>
+      <a href="https://cc-deck.humumu.online/app" target="_blank" rel="noopener">网页控制台</a>
+    </div>
+    <span class="foot-note">云桥可自建 · 端到端加密中转</span>
+  </footer>
+
+</main>
+
+<script src="/site/assets/main.js" defer></script>
+</body>
+</html>
