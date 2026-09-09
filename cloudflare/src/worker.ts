@@ -233,7 +233,10 @@ export class RouterDO extends DurableObject {
 
   // 每 source（源 IP，本地 dev 兜底）令牌桶帧率限流（上行帧/轮询请求）；
   // 超限返回 false，调用方踢连接/拒请求
-  private rateOk(source: string): boolean {
+  // 2026-09-09 断连风暴根因：relay auto-resume 给落后设备补帧是合法洪峰（几百帧/秒级），
+  // 通用 30/s 限流直接 ws.close(4291) 杀连接 → 重连再补帧 → 自喂养死循环（ECS 桥无限流器独稳）。
+  // 修：rl- 中继按枢纽配额（150/s，突发 500）；其余维持防滥用档；超限仍断（真滥用兜底）
+  private rateOk(source: string, hubBudget = false): boolean {
     const now = Date.now();
     if (this.buckets.size > 2000) {
       for (const [k, b] of this.buckets) {
@@ -241,13 +244,15 @@ export class RouterDO extends DurableObject {
       }
     }
     let b = this.buckets.get(source);
+    const cap = hubBudget ? 500 : RouterDO.RATE_BURST;
+    const rate = hubBudget ? 150 : RouterDO.RATE_PER_SEC;
     if (!b) {
-      b = { tokens: RouterDO.RATE_BURST, last: now };
+      b = { tokens: cap, last: now };
       this.buckets.set(source, b);
     }
-    // Math.max 防 CF 边缘时钟回拨把 elapsed 算成负、桶被扣穿
+    // Math.max 防 CF 边缘时钟回拨把 elapsed 算成负、桶被扣穿；换档时按新 cap 取 min
     const elapsed = Math.max(0, now - b.last);
-    b.tokens = Math.min(RouterDO.RATE_BURST, b.tokens + (elapsed / 1000) * RouterDO.RATE_PER_SEC);
+    b.tokens = Math.min(cap, b.tokens + (elapsed / 1000) * rate);
     b.last = now;
     if (b.tokens < 1) return false;
     b.tokens -= 1;
@@ -313,7 +318,7 @@ export class RouterDO extends DurableObject {
     this.rehydrate();
     const a = this.attachOf(ws);
     if (!a?.connId) return;
-    if (!this.rateOk(a.ip ?? a.dev ?? "?")) {
+    if (!this.rateOk(a.ip ?? a.dev ?? "?", (a.dev ?? "").startsWith("rl-"))) {
       try { ws.close(4291, "rate limited"); } catch { /* 已在关闭流程 */ }
       this.router.unregister(a.connId);
       return;
