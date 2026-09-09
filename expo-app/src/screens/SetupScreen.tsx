@@ -25,6 +25,11 @@ function hostOf(wsUrl: string): string {
   }
 }
 
+// 两种接入形态的地址占位（#406 纯远程添加云桥）：云桥置顶（人在外面也能配对），
+// LAN 直连降为次要路径
+const LAN_URL_DEFAULT = "ws://192.168.0.105:8787/ws";
+const CLOUD_URL_DEFAULT = "wss://cc.humumu.online/cloud";
+
 export default function SetupScreen({ onClose, editId, initialScan }: Props) {
   const { c } = useTheme();
   const s = useThemeStyles(makeStyles);
@@ -32,7 +37,12 @@ export default function SetupScreen({ onClose, editId, initialScan }: Props) {
   const [servers, setServers] = useState<ServerEntry[]>([]);
   const [activeId, setActiveId] = useState<string | null>(null);
   const [name, setName] = useState("");
-  const [wsUrl, setWsUrl] = useState("ws://192.168.0.105:8787/ws");
+  // 接入形态（#406）：cloud=云桥地址+配对码（远程可用，默认选中），lan=同一 WiFi 直连
+  const [kind, setKind] = useState<"cloud" | "lan">("cloud");
+  const [wsUrl, setWsUrl] = useState(CLOUD_URL_DEFAULT);
+  const [code, setCode] = useState("");
+  const [advOpen, setAdvOpen] = useState(false);
+  const [pairing, setPairing] = useState(false);
   const [token, setToken] = useState("");
   const [remember, setRemember] = useState(true);
   const [err, setErr] = useState<string | null>(null);
@@ -54,7 +64,7 @@ export default function SetupScreen({ onClose, editId, initialScan }: Props) {
       if (v === "0") setRemember(false);
     });
   }, []);
-  // 编辑模式：预填该服务器现有配置
+  // 编辑模式：预填该服务器现有配置；纯云桥条目（地址=桥地址）按云桥形态预填
   useEffect(() => {
     if (!editId) return;
     void store.loadServers().then((list) => {
@@ -64,6 +74,7 @@ export default function SetupScreen({ onClose, editId, initialScan }: Props) {
       setWsUrl(e.wsUrl);
       setToken(e.token);
       setRemember(!!e.token);
+      setKind(e.cloud && e.wsUrl === e.cloud.url ? "cloud" : "lan");
     });
   }, [editId]);
   // 配对完成后 store 已更新条目，这里同步刷新列表（显示 ☁ 徽标）
@@ -79,6 +90,88 @@ export default function SetupScreen({ onClose, editId, initialScan }: Props) {
       void AsyncStorage.setItem("ccr_remember_token", v ? "0" : "1");
       return !v;
     });
+  };
+
+  // 形态分段切换：仅当地址还停在另一形态的默认占位时才替换成新占位，用户已输入的值不动
+  const switchKind = (k: "cloud" | "lan") => {
+    if (k === kind) return;
+    setKind(k);
+    setErr(null);
+    setCode("");
+    setWsUrl((u) =>
+      u === (k === "cloud" ? LAN_URL_DEFAULT : CLOUD_URL_DEFAULT)
+        ? k === "cloud" ? CLOUD_URL_DEFAULT : LAN_URL_DEFAULT
+        : u,
+    );
+  };
+
+  // 云桥形态提交（#406）：新增=凭 6 位配对码远程配对（pairViaBridge 链路，无需同一
+  // WiFi）；编辑=填码则重新配对，留空则只改地址/名称/桥令牌（身份保留，不强制重新配对）
+  const submitCloud = () => {
+    const base = wsUrl.trim().replace(/\/+$/, "");
+    const bt = token.trim();
+    const cd = code.trim();
+    if (!/^wss?:\/\//.test(base)) {
+      setErr("云桥地址需以 ws:// 或 wss:// 开头");
+      return;
+    }
+    const dup = servers.find((e) => e.wsUrl === base && e.id !== editId);
+    if (editId && dup) {
+      setErr(`此地址已保存（${dup.name || hostOf(base)}），去改那条或换个地址`);
+      return;
+    }
+    if (cd && !/^\d{6}$/.test(cd)) {
+      setErr("配对码为 6 位数字（家里 PC 网页端/终端处领取）");
+      return;
+    }
+    if (!editId && !cd) {
+      setErr("请填写 6 位配对码（家里 PC 网页端/终端处领取）");
+      return;
+    }
+    setErr(null);
+    setPairing(true);
+    const fin = (e2: string | null) => {
+      setPairing(false);
+      if (e2) {
+        setErr(e2);
+        return;
+      }
+      void reload();
+      if (onClose) onClose();
+    };
+    if (editId && !cd) {
+      // 不填码的编辑：同步 cloud.url/token 随 wsUrl 更新，relayDev/relayPubkey/dev
+      // 原样保留——换桥域名（如 ECS 直连地址换 Cloudflare wss）直接可用，无需重新配对
+      const cur = servers.find((e) => e.id === editId);
+      if (!cur?.cloud) {
+        // 本就无云桥配置的条目改到云桥形态却不填码：无处可验身份，落库只会是死条目
+        setErr("该服务器尚未配对云桥，请填配对码完成配对");
+        return;
+      }
+      void store
+        .updateServer(editId, {
+          name: name.trim() || hostOf(base),
+          wsUrl: base,
+          token: bt,
+          cloud: cur?.cloud ? { ...cur.cloud, url: base, token: bt } : null,
+        })
+        .then(
+          () => fin(null),
+          () => fin("保存失败，请重试"),
+        );
+      return;
+    }
+    void store.addCloudManual(base, bt, cd, editId ?? undefined).then(fin);
+  };
+
+  const submit = () => {
+    if (pairing) return;
+    if (kind === "cloud") {
+      submitCloud();
+      return;
+    }
+    if (editId) saveEdit();
+    else add();
   };
 
   const add = () => {
@@ -141,9 +234,11 @@ export default function SetupScreen({ onClose, editId, initialScan }: Props) {
   };
 
   const connect = (e: ServerEntry) => {
-    if (!e.token) {
-      // 没记令牌：预填表单让用户补输，聚焦令牌框直接唤起键盘
+    if (!e.token && !e.cloud) {
+      // 没记令牌的 LAN 条目：预填表单让用户补输，聚焦令牌框直接唤起键盘。
+      // 纯云桥条目（公共桥 token 留空）不进这里——cloud 配置即建连凭据，直接连
       setName(e.name);
+      setKind("lan");
       setWsUrl(e.wsUrl);
       setToken("");
       setErr("该服务器未记住令牌，补输后点下方按钮连接");
@@ -216,6 +311,7 @@ export default function SetupScreen({ onClose, editId, initialScan }: Props) {
     const base = r.wsUrl.replace(/\/+$/, "");
     setWsUrl(base);
     setToken(r.token);
+    setKind("lan"); // 直连码扫到的是 LAN 地址：表单形态随之对齐（连接失败停留本页时不误导）
     setErr(null);
     if (!name.trim()) setName(hostOf(base));
     const dup = servers.find((e) => e.wsUrl === base);
@@ -306,7 +402,7 @@ export default function SetupScreen({ onClose, editId, initialScan }: Props) {
                   <Text style={s.pairMsg} numberOfLines={2}>{snap.cloudMsg}</Text>
                 </Pressable>
               ) : !cloudReady ? (
-                <Text style={s.pairHint}>{cloudEntry && cloudEntry.id !== activeId ? "该服务器未连接：先在列表中点选连接它（需同局域网）再配对云桥" : "云桥配对需先在同一局域网内连接"}</Text>
+                <Text style={s.pairHint}>{cloudEntry && cloudEntry.id !== activeId ? "该服务器未连接：先在列表中点选连接它（同一 WiFi 直连）再配对" : "云桥配对需先连接该服务器（同一 WiFi 直连）；不在家可用下方表单的云桥方式远程添加"}</Text>
               ) : null}
             </View>
           ) : null}
@@ -321,44 +417,112 @@ export default function SetupScreen({ onClose, editId, initialScan }: Props) {
               placeholderTextColor={c.faint}
             />
           </View>
+          {/* 形态分段（#406）：云桥置顶（人在外面也能配对），LAN 直连降为次要 */}
+          <View style={s.segRow}>
+            <Pressable
+              style={[s.segBtn, kind === "cloud" && s.segBtnOn]}
+              android_ripple={{ color: c.tintSoft, borderless: false }}
+              onPress={() => switchKind("cloud")}
+              accessibilityLabel="使用云桥远程接入"
+            >
+              <Text style={[s.segT, kind === "cloud" && s.segTOn]}>云桥 · 远程</Text>
+            </Pressable>
+            <Pressable
+              style={[s.segBtn, kind === "lan" && s.segBtnOn]}
+              android_ripple={{ color: c.tintSoft, borderless: false }}
+              onPress={() => switchKind("lan")}
+              accessibilityLabel="同一 WiFi 直连"
+            >
+              <Text style={[s.segT, kind === "lan" && s.segTOn]}>同一 WiFi 直连</Text>
+            </Pressable>
+          </View>
+
           <View style={s.field}>
-            <Text style={s.label}>Relay 地址</Text>
+            <Text style={s.label}>{kind === "cloud" ? "云桥地址" : "Relay 地址"}</Text>
             <TextInput
               style={[s.input, err && !/^wss?:\/\//.test(wsUrl.trim()) && s.inputErr]}
               value={wsUrl}
               onChangeText={(v) => { setWsUrl(v); setErr(null); }}
-              placeholder="ws://192.168.0.105:8787/ws"
+              placeholder={kind === "cloud" ? CLOUD_URL_DEFAULT : LAN_URL_DEFAULT}
               placeholderTextColor={c.faint}
               autoCapitalize="none"
               autoCorrect={false}
               spellCheck={false}
             />
           </View>
-          <View style={s.field}>
-            <Text style={s.label}>访问令牌</Text>
-            <TextInput
-              ref={tokenInputRef}
-              style={[s.input, err && !token.trim() && s.inputErr]}
-              value={token}
-              onChangeText={(v) => { setToken(v); setErr(null); }}
-              placeholder="token"
-              placeholderTextColor={c.faint}
-              autoCapitalize="none"
-              autoCorrect={false}
-              spellCheck={false}
-              secureTextEntry
-            />
-          </View>
-          <Pressable style={s.checkRow} onPress={toggleRemember} hitSlop={6}>
-            <View style={[s.checkBox, remember && s.checkBoxOn]}>
-              {remember ? <Text style={s.checkT}>✓</Text> : null}
-            </View>
-            <Text style={s.checkLabel}>记住令牌（下次免输入）</Text>
-          </Pressable>
+          {kind === "cloud" ? (
+            <>
+              <View style={s.field}>
+                <Text style={s.label}>
+                  {editId ? "配对码（留空 = 仅改地址，不重新配对）" : "配对码（家里 PC 领取的 6 位码）"}
+                </Text>
+                <TextInput
+                  style={[s.input, err && !editId && !/^\d{6}$/.test(code.trim()) && s.inputErr]}
+                  value={code}
+                  onChangeText={(v) => { setCode(v.replace(/\D/g, "").slice(0, 6)); setErr(null); }}
+                  placeholder="123456"
+                  placeholderTextColor={c.faint}
+                  keyboardType="number-pad"
+                  textContentType="oneTimeCode"
+                  maxLength={6}
+                />
+              </View>
+              <Pressable style={s.advRow} hitSlop={6} onPress={() => setAdvOpen((v) => !v)}>
+                <Text style={s.advT}>{advOpen ? "▾" : "▸"} 高级（云桥令牌，公共桥留空）</Text>
+              </Pressable>
+              {advOpen ? (
+                <View style={s.field}>
+                  <TextInput
+                    style={s.input}
+                    value={token}
+                    onChangeText={(v) => { setToken(v); setErr(null); }}
+                    placeholder="桥 token（自家部署填，公共桥留空）"
+                    placeholderTextColor={c.faint}
+                    autoCapitalize="none"
+                    autoCorrect={false}
+                    spellCheck={false}
+                    secureTextEntry
+                  />
+                </View>
+              ) : null}
+            </>
+          ) : (
+            <>
+              <View style={s.field}>
+                <Text style={s.label}>访问令牌</Text>
+                <TextInput
+                  ref={tokenInputRef}
+                  style={[s.input, err && !token.trim() && s.inputErr]}
+                  value={token}
+                  onChangeText={(v) => { setToken(v); setErr(null); }}
+                  placeholder="token"
+                  placeholderTextColor={c.faint}
+                  autoCapitalize="none"
+                  autoCorrect={false}
+                  spellCheck={false}
+                  secureTextEntry
+                />
+              </View>
+              <Pressable style={s.checkRow} onPress={toggleRemember} hitSlop={6}>
+                <View style={[s.checkBox, remember && s.checkBoxOn]}>
+                  {remember ? <Text style={s.checkT}>✓</Text> : null}
+                </View>
+                <Text style={s.checkLabel}>记住令牌（下次免输入）</Text>
+              </Pressable>
+            </>
+          )}
           {err ? <Text style={s.errT}>{err}</Text> : null}
-          <Pressable style={s.btn} android_ripple={{ color: "rgba(255,255,255,0.15)", borderless: false }} onPress={editId ? saveEdit : add}>
+          <Pressable style={s.btn} android_ripple={{ color: "rgba(255,255,255,0.15)", borderless: false }} onPress={submit}>
             <LinearGradient colors={[c.brandA, c.brandB]} style={s.btnGrad}>
-              <Text style={s.btnText}>{editId ? "保存修改" : servers.length > 0 ? "添加并连接" : "连接"}</Text>
+              <Text style={s.btnText}>
+                {pairing
+                  ? "配对中…"
+                  : kind === "cloud"
+                    ? editId
+                      ? code.trim() ? "重新配对并保存" : "保存修改"
+                      : "配对并连接"
+                    : editId ? "保存修改" : servers.length > 0 ? "添加并连接" : "连接"}
+              </Text>
             </LinearGradient>
           </Pressable>
           {/* 连接过程反馈（仅首次配置页；从主界面进入时后台重连循环不该误报"连接失败"）：
@@ -374,11 +538,15 @@ export default function SetupScreen({ onClose, editId, initialScan }: Props) {
               <Text style={s.connStatT} numberOfLines={2}>
                 {snap.connState === "connecting"
                   ? `正在连接 ${connHost || hostOf(wsUrl)}…`
-                  : `连接失败，${snap.connText}。请检查地址/令牌，手机需与 PC 同一 WiFi`}
+                  : `连接失败，${snap.connText}。请检查地址/令牌；同一 WiFi 才能直连，远程请用云桥`}
               </Text>
             </View>
           ) : null}
-          <Text style={s.hint}>手机需与 PC 在同一 WiFi；地址填 PC 上的 ws://IP:8787/ws</Text>
+          <Text style={s.hint}>
+            {kind === "cloud"
+              ? "远程首选云桥：填桥地址 + 6 位配对码，无需与 PC 同一网络；同一 WiFi 下也可切「直连」"
+              : `直连需手机与 PC 在同一 WiFi，地址填 PC 上的 ${LAN_URL_DEFAULT}；不在家请用云桥`}
+          </Text>
           {onClose ? (
             <Pressable style={s.back} android_ripple={{ color: c.tintSoft, borderless: false, radius: 20 }} onPress={onClose}>
               <Text style={s.backT}>返回</Text>
@@ -440,6 +608,17 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
   pairMsg: { color: c.dim, fontSize: 12, marginTop: 8 },
   pairHint: { color: c.faint, fontSize: 12, marginTop: 8 },
   field: { width: "100%", maxWidth: 340, marginBottom: 12 },
+  // 形态分段（#406）：云桥置顶 / LAN 直连次之——尺寸与 srvRow 圆角语言一致
+  segRow: { flexDirection: "row", gap: 8, width: "100%", maxWidth: 340, marginBottom: 14 },
+  segBtn: {
+    flex: 1, paddingVertical: 9, borderRadius: 12, borderWidth: 1, borderColor: c.line,
+    alignItems: "center", backgroundColor: c.panel2, overflow: "hidden",
+  },
+  segBtnOn: { borderColor: withA(c.brandA, 0.6), backgroundColor: withA(c.brandA, 0.1) },
+  segT: { color: c.faint, fontSize: 13, fontWeight: "600" },
+  segTOn: { color: c.brandA },
+  advRow: { alignSelf: "flex-start", marginBottom: 10, paddingVertical: 2 },
+  advT: { color: c.dim, fontSize: 12.5 },
   input: {
     backgroundColor: c.panel2, borderWidth: 1, borderColor: c.line, borderRadius: 12,
     paddingHorizontal: 13, paddingVertical: 11, color: c.text, fontSize: 15,

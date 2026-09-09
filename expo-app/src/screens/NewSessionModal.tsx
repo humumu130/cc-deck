@@ -60,6 +60,10 @@ export default function NewSessionModal({ visible, onClose }: { visible: boolean
     if (store.send("COMMAND_CREATE", { cwd: cc, prompt: p }, multi ? effTarget ?? undefined : undefined)) {
       setPrompt("");
       onClose();
+    } else {
+      // 失败必须内联报错：全局 Toast 被 RN Modal 原生层压住，store.send 发出的
+      // lastErrorCmd 在本弹窗里永远看不见，表现为「点了没反应」
+      setErr(multi ? "该源未连接，命令未发送" : "未连接服务器，命令未发送");
     }
   };
 

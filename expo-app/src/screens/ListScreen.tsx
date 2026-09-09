@@ -652,7 +652,10 @@ export default function ListScreen({ sessions, connected, connText, onOpen, onNe
   // 引用原样透传，SessionCard memo 的行级重渲不受影响；映射在 memo 内构建，
   // 依赖稳定（snap.sources 快照粒度变化）
   const rows = useMemo<ListRow[]>(() => {
-    if (!badgeOn) return visible.map((s) => ({ h: false as const, key: s.session_id, s }));
+    // 聚合开启但可见内容全来自单一源（如源筛选后只剩一家）：平铺渲染，
+    // 不再渲染与内容冗余的单一组头（对齐网页端 #26 源徽章隐藏逻辑）
+    const grouped = badgeOn && new Set(visible.map((s) => s.src ?? "")).size > 1;
+    if (!grouped) return visible.map((s) => ({ h: false as const, key: s.session_id, s }));
     // 源跨端配色键（#294 审查修复）：同屏配色去重——按 colorKey 稳定排序分配调色板
     // 序号（哈希法双源 1/8 撞色，实测 PC/Mac 同紫）
     const sortedSrcs = [...snap.sources].sort((a, b) => (a.colorKey ?? a.id).localeCompare(b.colorKey ?? b.id));

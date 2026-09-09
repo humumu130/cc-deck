@@ -16,6 +16,11 @@ export interface CloudConfig {
   token: string;
   relayDev: string;
   relayPubkey: string;
+  // 本机在桥上的设备 id（relay peers 里的键）。relay 对 pair_req 有防冒名校验
+  //（from 必须 = devId(pubkey,"wb")），凭配对码远程配对的条目以 "wb-" 身份入列，
+  // openCloud 必须用同一身份 hello 才会被认；LAN 配对（COMMAND_PAIR_START）落的是
+  // "ph-" 身份，缺省回落之（旧条目无此字段 = "ph-"，行为不变）
+  dev?: string;
 }
 
 export interface ServerEntry {
@@ -420,7 +425,9 @@ class RelayStore {
     this.activeId = target.id;
     const tk = connectToken ?? target.token;
     const conn = this.ensureConn(target);
-    if (tk) {
+    if (tk || target.cloud) {
+      // 纯云桥条目（公共桥 token 留空）也在此建连：tk 为空串但 target.cloud 存在，
+      // applyConfig→connConnect 按 cloudCfg 走云通道（connConnect 门控同步放行）。
       // 聚合时只建/换该源不拆其他源并设 active（applyConfig 天然满足）；活动源
       // 目标一致且在连则被幂等跳过，不拆重建
       this.applyConfig(conn, target, tk);
@@ -453,7 +460,7 @@ class RelayStore {
       this.activeId = next ? next.id : null;
       if (next) {
         const nc = this.ensureConn(next);
-        if (next.token) this.applyConfig(nc, next, next.token);
+        if (next.token || next.cloud) this.applyConfig(nc, next, next.token);
       } else {
         // 删光全部服务器：清空全局汇报状态，避免列表空了却仍显示"已连接"的幽灵连接
         this.taskDoneQueue = [];
@@ -493,7 +500,7 @@ class RelayStore {
     // 单源模式只重连活动源（非活动源本就不在连）；聚合模式重连被改源
     if (!this.aggregate && id !== this.activeId) return;
     const tk = list[idx].token;
-    if (tk) this.applyConfig(conn, list[idx], tk);
+    if (tk || list[idx].cloud) this.applyConfig(conn, list[idx], tk);
   }
 
   async loadConfig(): Promise<ConnConfig | null> {
@@ -533,11 +540,13 @@ class RelayStore {
     // 探测异步进行，不阻塞启动连接）
     this.probeIdleLanIdentity();
     // 活动服务器没记令牌（勾了不记住）：单源停在设置页，列表里点它补输令牌；
-    // 聚合模式回落任一有令牌源（#294 审查修复——聚合本就逐源建连，不能因活动源
+    // 已配对云桥的条目例外——桥 token 本就允许留空（公共桥），cloud 配置即建连凭据。
+    // 聚合模式回落任一可连源（#294 审查修复——聚合本就逐源建连，不能因活动源
     // 缺令牌把整个 App 卡在设置页；活动指针仍指向用户选的源）
-    if (!active || !active.token) {
+    const connectable = (e: ServerEntry) => !!e.token || !!e.cloud;
+    if (!active || !connectable(active)) {
       if (!this.aggregate) return null;
-      const any = list.find((e) => e.token);
+      const any = list.find(connectable);
       if (!any) return null;
       const fc = this.ensureConn(any);
       fc.cfg = { wsUrl: any.wsUrl, token: any.token };
@@ -558,7 +567,7 @@ class RelayStore {
     this.aggregate = v;
     if (v) {
       for (const e of this.servers) {
-        if (!e.token) continue;
+        if (!e.token && !e.cloud) continue;
         this.applyConfig(this.ensureConn(e), e, e.token);
       }
     } else {
@@ -680,7 +689,7 @@ class RelayStore {
   connect() {
     if (this.aggregate) {
       for (const e of this.servers) {
-        if (!e.token) continue;
+        if (!e.token && !e.cloud) continue;
         this.applyConfig(this.ensureConn(e), e, e.token);
       }
       return;
@@ -704,7 +713,10 @@ class RelayStore {
 
   // 连接周期：先 LAN 直连（探测超时），失败且已配对云桥则本轮转云通道。每源独立循环
   private connConnect(conn: SourceConn) {
-    if (!conn.cfg || !conn.cfg.token) return;
+    if (!conn.cfg) return;
+    // 无令牌的纯云桥条目（公共桥 token 留空）也放行：凭 cloudCfg 走云通道；
+    // 既无令牌也无云桥配置才无从建连
+    if (!conn.cfg.token && !conn.cloudCfg) return;
     if (conn.reconnectTimer) {
       clearTimeout(conn.reconnectTimer);
       conn.reconnectTimer = null;
@@ -722,7 +734,9 @@ class RelayStore {
     killWs(conn.ws);
     conn.ws = null;
     conn.channel = null;
-    const lanWs = await this.probeLan(conn, cfg);
+    // 纯云桥条目（wsUrl 即桥地址，非内网直连）跳过 LAN 探测：桥 upgrade 强制要求
+    // dev 参数，探它必 401，白耗一轮握手；LAN 直连地址照旧先探（在家低延迟）
+    const lanWs = conn.cloudCfg && !isLanUrl(cfg.wsUrl) ? null : await this.probeLan(conn, cfg);
     if (ep !== conn.epoch) {
       try {
         lanWs?.close();
@@ -806,7 +820,10 @@ class RelayStore {
 
   private openCloud(conn: SourceConn, cloud: CloudConfig) {
     const keys = this.devKeys!;
-    const dev = devId(keys.publicKey, "ph");
+    // 本机在桥上的身份须与 relay peers 里的登记一致（relay 按 dev 查 peers 取公钥
+    // 验密）：配对码远程配对落的是 "wb-" 身份（见 CloudConfig.dev），LAN 配对落
+    // "ph-"。旧条目无 dev 字段回落 "ph-"，行为不变
+    const dev = cloud.dev ?? devId(keys.publicKey, "ph");
     const url =
       cloud.url +
       (cloud.url.includes("?") ? "&" : "?") +
@@ -1185,17 +1202,22 @@ class RelayStore {
     return undefined;
   }
 
-  // #330 云源扫码接入：扫电脑端 ccdeck-add 码——临时连桥向目标 relay 发
-  // pair_req(一次性码+手机公钥)，pair_ack 携带真实身份 → 落成云源条目自动连接。
-  // 返回 null=成功；字符串=错误文案（码错/过期 relay 回明文 pair_nack）
-  async addCloudByInvite(inv: {
-    bridge: string; bt: string; rd: string; rk: string; code: string;
-  }): Promise<string | null> {
+  // ---------- 云桥配对码远程接入（输码 / 扫邀请码共用链路） ----------
+  // 临时连桥完成 pair_req → pair_ack：手机以 "wb-" 身份注册（relay 对 pair_req 有
+  // 防冒名校验：帧 from 必须 = devId(pubkey,"wb")，"ph-" 身份会被静默丢弃——手机旧
+  // 实现栽在这里）；rd/rk 未知时先发发现帧（{to:"*",t:"disc"} → 桥回在线 relay 列表）
+  // 运行时定位家里 relay。pair_req 6s 一拍最多发 3 次（pair_ack 随桥闪断丢失时 relay
+  // 幂等补 ack，重发即自愈），~24s 无果报超时。成功返回 {rd, rk, dev}（dev = 本次
+  // 配对身份，落 CloudConfig.dev 供 openCloud 沿用），失败返回错误文案。
+  // 码只在 relay 校验通过时才消耗：输错可改码重试；连续错 5 次进 relay 侧 10 分钟静默期
+  private async pairViaBridge(o: {
+    bridge: string; bt: string; code: string; rd?: string; rk?: string;
+  }): Promise<{ rd: string; rk: string; dev: string } | string> {
     const keys = await this.deviceKeys();
-    const dev = devId(keys.publicKey, "ph");
+    const dev = devId(keys.publicKey, "wb");
     const url =
-      inv.bridge + (inv.bridge.includes("?") ? "&" : "?") +
-      "token=" + encodeURIComponent(inv.bt) + "&dev=" + encodeURIComponent(dev);
+      o.bridge + (o.bridge.includes("?") ? "&" : "?") +
+      "token=" + encodeURIComponent(o.bt) + "&dev=" + encodeURIComponent(dev);
     return new Promise((resolve) => {
       let ws: WebSocket;
       try {
@@ -1205,27 +1227,86 @@ class RelayStore {
         return;
       }
       let settled = false;
-      const done = (err: string | null) => {
+      let rd = o.rd ?? "";
+      let rk = o.rk ?? "";
+      let timer: ReturnType<typeof setInterval> | null = null;
+      let beat = 0;
+      const done = (r: { rd: string; rk: string; dev: string } | string) => {
         if (settled) return;
         settled = true;
-        clearTimeout(timer);
+        if (timer) clearInterval(timer);
         try { ws.close(); } catch {}
-        resolve(err);
+        resolve(r);
       };
-      const timer = setTimeout(() => done("接入超时，请重试"), 12_000);
-      ws.onopen = () => {
+      const sendPairReq = () => {
         ws.send(JSON.stringify({
-          to: inv.rd,
-          data: { t: "pair_req", code: inv.code, pubkey: keys.publicKey, name: "手机-" + dev.slice(3, 9) },
+          to: rd,
+          data: { t: "pair_req", code: o.code, pubkey: keys.publicKey, name: "手机-" + dev.slice(3, 9) },
         }));
       };
-      ws.onerror = () => done("连不上云桥（检查网络）");
+      const sendDisc = () => {
+        ws.send(JSON.stringify({ to: "*", data: { t: "disc" } }));
+      };
+      // 看门狗：缺 rd/rk 补发现帧，齐了补发 pair_req；换目标时 kick() 重置拍数
+      const kick = () => {
+        beat = 0;
+        if (timer) clearInterval(timer);
+        timer = setInterval(() => {
+          if (settled) return;
+          if (++beat > 3) {
+            done(rd ? "云桥长时间无应答，请重试" : "未能定位家里的 relay，请重试");
+            return;
+          }
+          if (!rd || !rk) sendDisc();
+          else sendPairReq();
+        }, 6000);
+      };
+      ws.onopen = () => {
+        if (!rd || !rk) sendDisc();
+        else sendPairReq();
+        kick();
+      };
+      ws.onerror = () => done("连不上云桥（检查网络与云桥令牌）");
       ws.onclose = () => done("连接中断，请重试");
       ws.onmessage = (ev: WebSocketMessageEvent) => {
-        let f: { data?: SealedBox | { t?: unknown; error?: unknown; n?: unknown } };
+        let f: {
+          type?: string;
+          relays?: unknown;
+          data?: SealedBox | { t?: unknown; error?: unknown; n?: unknown };
+        };
         try {
           f = JSON.parse(String(ev.data));
         } catch {
+          return;
+        }
+        if (f.type === "ROUTE_MISS") {
+          // pair_req 目标不在线：码未被 relay 消费，可稍后原码重试
+          done("家里 relay 不在线（配对码未消耗），确认家里 PC 已连上云桥后再试");
+          return;
+        }
+        if (f.type === "RELAYS") {
+          // 发现回包：桥下发在线 relay {dev, rk}。自家部署通常唯一即采信；多台时绝不
+          // 自动猜（公共桥上假 relay 可混入列表截获配对码，与网页端同纪律）
+          const all = (Array.isArray(f.relays) ? f.relays : []).filter(
+            (x): x is { dev: string; rk?: string } =>
+              !!x && typeof (x as { dev?: unknown }).dev === "string" &&
+              String((x as { dev?: unknown }).dev).startsWith("rl-"),
+          );
+          const pick = all.find((x) => x.dev === rd) ?? (all.length === 1 ? all[0] : null);
+          if (!pick) {
+            done(
+              all.length > 1
+                ? "桥上有多台 relay 在线，无法自动定位，请用扫码接入"
+                : "云桥上没有在线的 relay（家里 PC 离线）",
+            );
+            return;
+          }
+          const changed = pick.dev !== rd || (!!pick.rk && pick.rk !== rk);
+          rd = pick.dev;
+          rk = pick.rk || rk;
+          // 无条件立即发 pair_req（relay 幂等，多发无害）——别让首次发现也干等一拍
+          sendPairReq();
+          if (changed) kick();
           return;
         }
         if (!f.data) return;
@@ -1236,29 +1317,14 @@ class RelayStore {
           return;
         }
         const inner = unseal<{ t?: string; relay_dev?: string; relay_pubkey?: string; error?: string }>(
-          f.data as SealedBox, inv.rk, keys.secretKey,
+          f.data as SealedBox, rk, keys.secretKey,
         );
         if (!inner) return;
         if (inner.t === "pair_ack" && inner.relay_dev && inner.relay_pubkey) {
-          const host = (() => {
-            try {
-              return new URL(inv.bridge.replace(/^ws/, "http")).host;
-            } catch {
-              return inv.bridge;
-            }
-          })();
-          void this.connectServer({
-            id: uuid(),
-            name: host,
-            wsUrl: inv.bridge,
-            token: inv.bt,
-            cloud: {
-              url: inv.bridge,
-              token: inv.bt,
-              relayDev: inner.relay_dev,
-              relayPubkey: inner.relay_pubkey,
-            },
-          }).then(() => done(null), () => done("已配对，但连接失败（稍后自动重连）"));
+          // 身份比对（与网页端同款）：能解开封 ≠ 目标 relay（公共桥假 relay 可自演自唱），
+          // 回执身份须与配对目标一致，错位丢弃
+          if (rd && inner.relay_dev !== rd) return;
+          done({ rd: inner.relay_dev, rk: inner.relay_pubkey, dev });
           return;
         }
         if (inner.t === "pair_nack") {
@@ -1266,6 +1332,53 @@ class RelayStore {
         }
       };
     });
+  }
+
+  // 配对成功后的统一落库：桥地址即条目地址（纯云源，无 LAN 前置），cloud 携全量
+  // 身份（rd/rk/dev），connectServer 负责落盘 + 设活动指针 + 立即建连
+  private async saveCloudEntry(
+    bridge: string, bt: string, id: string | undefined, r: { rd: string; rk: string; dev: string },
+  ): Promise<string | null> {
+    try {
+      await this.connectServer({
+        id: id ?? uuid(),
+        name: hostOf(bridge),
+        wsUrl: bridge,
+        token: bt,
+        cloud: {
+          url: bridge,
+          token: bt,
+          relayDev: r.rd,
+          relayPubkey: r.rk,
+          dev: r.dev,
+        },
+      });
+      return null;
+    } catch {
+      return "已配对，但连接失败（稍后自动重连）";
+    }
+  }
+
+  // #330 云源扫码接入：扫电脑端 ccdeck-add 码——码里已带桥地址/桥 token/relay 身份
+  //（rd/rk），pairViaBridge 配对后落成云源条目自动连接。
+  // 返回 null=成功；字符串=错误文案（码错/过期 relay 回 pair_nack）
+  async addCloudByInvite(inv: {
+    bridge: string; bt: string; rd: string; rk: string; code: string;
+  }): Promise<string | null> {
+    const r = await this.pairViaBridge({
+      bridge: inv.bridge, bt: inv.bt, code: inv.code, rd: inv.rd, rk: inv.rk,
+    });
+    if (typeof r === "string") return r;
+    return this.saveCloudEntry(inv.bridge, inv.bt, undefined, r);
+  }
+
+  // 纯远程添加云桥（无「同一 WiFi」前置）：手机直接填桥地址 + 家里领的 6 位配对码。
+  // rd/rk 未知 → pairViaBridge 先向桥发现在线 relay 身份。reuseId = 编辑模式复用既有
+  // 条目（原 id 整条替换，不另起新条目）。返回 null=成功；字符串=错误文案
+  async addCloudManual(bridge: string, bt: string, code: string, reuseId?: string): Promise<string | null> {
+    const r = await this.pairViaBridge({ bridge, bt, code });
+    if (typeof r === "string") return r;
+    return this.saveCloudEntry(bridge, bt, reuseId, r);
   }
 
   private onEvent(conn: SourceConn, msg: Envelope) {
