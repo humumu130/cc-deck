@@ -1688,21 +1688,21 @@
           <div class="gp-card gp-rows gp-plug-rows off" id="gpPlugRows">
             <div class="gp-row gp-plug-row">
               <span class="gi"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6.4l1.4 1.4L8 5.2"/><path d="M4 12.4l1.4 1.4L8 11.2"/><path d="M4 18.4l1.4 1.4L8 17.2"/><path d="M11 6.4h9M11 12.4h9M11 18.4h9"/></svg></span>
-              <span class="gp-plug-t"><span class="gp-plug-n">任务调度强化</span><span class="gp-plug-d">收工拦截未完成待办（60 秒内再停一次放行），每条消息注入待办摘要与分诊纪律</span></span>
+              <span class="gp-plug-t"><span class="gp-plug-n">任务调度强化</span><span class="gp-plug-d">收工时拦住未完成待办；消息自动附上待办摘要</span></span>
               <div class="lever" id="gpPlugTaskLever" style="--n:2"><i class="lever-thumb"></i><button type="button" class="lever-opt" data-i="0">关</button><button type="button" class="lever-opt" data-i="1">开</button></div>
             </div>
             <div class="gp-row gp-plug-row">
               <span class="gi"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M18 9.4a6 6 0 1 0-12 0c0 6-2.2 7-2.2 7h16.4S18 15.4 18 9.4"/><path d="M13.7 19.6a2 2 0 0 1-3.4 0"/></svg></span>
-              <span class="gp-plug-t"><span class="gp-plug-n">插入问答通知</span><span class="gp-plug-d">会话忙碌时在电脑上插入提问，手机弹通知框提醒（滚动防丢）</span></span>
+              <span class="gp-plug-t"><span class="gp-plug-n">插入问答通知</span><span class="gp-plug-d">会话忙碌时收到插入提问，各端通知悬浮框即时提醒（防滚动丢失）</span></span>
               <div class="lever" id="gpPlugQnotifyLever" style="--n:2"><i class="lever-thumb"></i><button type="button" class="lever-opt" data-i="0">关</button><button type="button" class="lever-opt" data-i="1">开</button></div>
             </div>
             <div class="gp-row gp-plug-row">
               <span class="gi"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3.6 12a8.4 8.4 0 1 0 2.5-6L3.6 8.4"/><path d="M3.6 3.6v4.8h4.8"/><path d="M12 7.6V12l3 1.8"/></svg></span>
-              <span class="gp-plug-t"><span class="gp-plug-n">恢复点</span><span class="gp-plug-d">收工把未完成任务落 .cc-deck/state.md，下次会话自动注入遗留待办提示</span></span>
+              <span class="gp-plug-t"><span class="gp-plug-n">恢复点</span><span class="gp-plug-d">会话收工时保存未完成事项，下次自动提醒接续</span></span>
               <div class="lever" id="gpPlugRestoreLever" style="--n:2"><i class="lever-thumb"></i><button type="button" class="lever-opt" data-i="0">关</button><button type="button" class="lever-opt" data-i="1">开</button></div>
             </div>
           </div>
-          <div class="gp-plug-note">仅对桥接给 CC Deck 的会话生效；开关写入本机 ~/.cc-deck/config.json。</div>
+          <div class="gp-plug-note">仅对桥接给 CC Deck 的会话生效。</div>
         </section>
         <section class="gp-page off" id="gpPageAbout">
           <div class="gp-sec"><svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="12" cy="12" r="8.6"/><path d="M12 11v4.6"/><path d="M12 7.6h.01"/></svg>关于</div>
@@ -4351,7 +4351,7 @@ document.addEventListener("click", (ev) => {
 
 // ⚙ 设置浮层（#317）：显示项为散装开关的镜像（点行 = 触发原按钮再回读状态），
 // 服务器管理不进浮层——左栏常驻面板已是高频区，与手机抽屉同为一级入口
-const CONSOLE_VERSION = "0.4.1";
+const CONSOLE_VERSION = "0.4.2";
 // #396 拨杆同步：滑块移到 idx 档（transform 过渡），选中档文字加 .on（白字压品牌色滑块上）
 function setLever(el, idx) {
   if (!el) return;
@@ -6268,7 +6268,7 @@ async function loadPluginCfg() {
     if (!j) { plugFail("读取失败（" + err + "）"); return; }
     plugCfg = j;
     plugRender();
-    plugSetStat("本机 relay · 端口 " + creds.port, true);
+    plugSetStat("已连接本机 CC Deck", true);
   } finally { plugBusy = false; }
 }
 async function savePluginCfg(key, want) {
