@@ -1,7 +1,7 @@
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 import { randomUUID } from "node:crypto";
-import { readFileSync, existsSync, readdirSync, type Dirent } from "node:fs";
-import { join, sep } from "node:path";
+import { readFileSync, writeFileSync, mkdirSync, existsSync, readdirSync, type Dirent } from "node:fs";
+import { join, dirname, sep } from "node:path";
 import { homedir, networkInterfaces } from "node:os";
 import { listModels } from "./models.js";
 import { fileURLToPath } from "node:url";
@@ -24,6 +24,22 @@ function localIps(): Set<string> {
 // 旧白名单只认 cc.humumu.online，网页开在新域时跨源读本机 /local-info、/api/pair-code
 // 响应被浏览器静默拦截，「本机领码」必失败。新增部署域只需在此追加。
 const TRUSTED_WEB_ORIGINS: readonly string[] = ["https://cc.humumu.online", "https://cc-deck.humumu.online"];
+
+// #448 插件可选能力配置：~/.cc-deck/config.json 三键（guard-stop/guard-context hooks 与
+// /api/plugin-config 端点共用）。缺省值与 hooks 侧 guard-lib.mjs 的 CONFIG_DEFAULTS 一致
+const PLUGIN_CFG_KEYS = ["taskGuard", "qNotify", "restorePoint"] as const;
+type PluginConfig = { taskGuard: boolean; qNotify: boolean; restorePoint: boolean };
+function pluginConfigPath(): string {
+  return join(homedir(), ".cc-deck", "config.json");
+}
+function readPluginConfig(): PluginConfig {
+  const out: PluginConfig = { taskGuard: false, qNotify: true, restorePoint: false };
+  try {
+    const raw = JSON.parse(readFileSync(pluginConfigPath(), "utf-8")) as Record<string, unknown>;
+    for (const k of PLUGIN_CFG_KEYS) if (typeof raw[k] === "boolean") out[k] = raw[k] as boolean;
+  } catch {}
+  return out;
+}
 
 const COMMAND_TYPES = new Set([
   "COMMAND_CREATE",
@@ -354,6 +370,19 @@ export function startServer(
       void handleNotify(req, res, mgr, cfg);
       return;
     }
+    // #448 插件可选能力配置（设置「插件」页三开关）：读写 ~/.cc-deck/config.json 的
+    // taskGuard/qNotify/restorePoint。hooks（guard-stop/guard-context）与本端点共用该
+    // 文件为单一事实源；缺省 taskGuard=false / qNotify=true / restorePoint=false。
+    // 鉴权与 CORS 与 /api/pair-code 同款（LAN token + 部署域白名单 + #43 回环豁免）；
+    // POST 参数走 query（?taskGuard=1）避免跨源 JSON body 触发预检。
+    if ((req.method === "GET" || req.method === "POST") && url.pathname === "/api/plugin-config") {
+      if ((url.searchParams.get("token") ?? "") !== cfg.token) {
+        res.writeHead(401).end("unauthorized");
+        return;
+      }
+      void handlePluginConfig(req, res);
+      return;
+    }
     // Slash 命令列表（手机/网页输入联想）：内置表 + 用户级 ~/.claude/commands +
     // 项目级 <cwd>/.claude/commands（cwd 经 LAN token 鉴权后信任，与 WS 命令同信任级）
     if (req.method === "GET" && url.pathname === "/api/commands") {
@@ -612,6 +641,79 @@ export function startServer(
   };
 }
 
+// #448 /api/plugin-config：GET 读三键；POST query/body 布尔值合并写（未知键保留、
+// 无效值忽略）。token 鉴权在路由层完成；CORS 与 /api/pair-code 同款
+async function handlePluginConfig(req: IncomingMessage, res: ServerResponse): Promise<void> {
+  const url = new URL(req.url ?? "/", "http://localhost");
+  const origin = (req.headers.origin ?? "").trim();
+  const ips = localIps();
+  const hostOk = (h: string) => h === "localhost" || h === "127.0.0.1" || ips.has(h);
+  let acao = "";
+  // #43 回环豁免（同 /local-info、/api/pair-code）：exe webview Origin:null 直通
+  const reqLb = (req.headers.host ?? "").split(":")[0] === "127.0.0.1" || (req.headers.host ?? "").split(":")[0] === "localhost";
+  if (origin && reqLb) acao = origin === "null" ? "*" : origin;
+  else if (origin) {
+    try {
+      const u = new URL(origin);
+      if (TRUSTED_WEB_ORIGINS.includes(u.origin) || hostOk(u.hostname)) acao = origin;
+    } catch {}
+  }
+  const headers: Record<string, string> = {
+    "content-type": "application/json",
+    "cache-control": "no-store",
+    ...(acao ? { "access-control-allow-origin": acao } : {}),
+  };
+  if (req.method === "GET") {
+    res.writeHead(200, headers).end(JSON.stringify({ ok: true, config: readPluginConfig() }));
+    return;
+  }
+  // POST：吸掉 body（可能为空/JSON）后合并 query 参数写入；只认三键布尔，其余忽略
+  let body = "";
+  req.setEncoding("utf-8");
+  for await (const chunk of req) body += chunk;
+  let parsed: Record<string, unknown> = {};
+  try {
+    if (body.trim()) parsed = JSON.parse(body) as Record<string, unknown>;
+  } catch {}
+  const next = readPluginConfig();
+  let changed = false;
+  // query 值只认 1/true/0/false（缺参/空串/垃圾值视为未传），body 值必须是布尔
+  const parseQBool = (v: string): boolean | undefined => {
+    if (v === "1" || v === "true") return true;
+    if (v === "0" || v === "false") return false;
+    return undefined;
+  };
+  for (const k of PLUGIN_CFG_KEYS) {
+    const raw = url.searchParams.get(k);
+    const qb = raw === null ? undefined : parseQBool(raw);
+    const bv = parsed[k];
+    if (qb !== undefined) {
+      next[k] = qb;
+      changed = true;
+    } else if (typeof bv === "boolean") {
+      next[k] = bv;
+      changed = true;
+    }
+  }
+  if (changed) {
+    try {
+      // 保留文件里的未知键（前向兼容），写完回读返回生效值。
+      // dev 形态 dataDir=relay/data，~/.cc-deck 可能还不存在——先建目录再写
+      let full: Record<string, unknown> = {};
+      try {
+        full = JSON.parse(readFileSync(pluginConfigPath(), "utf-8")) as Record<string, unknown>;
+      } catch {}
+      for (const k of PLUGIN_CFG_KEYS) full[k] = next[k];
+      mkdirSync(dirname(pluginConfigPath()), { recursive: true });
+      writeFileSync(pluginConfigPath(), JSON.stringify(full, null, 2) + "\n", "utf-8");
+    } catch {
+      res.writeHead(500, headers).end(JSON.stringify({ ok: false, error: "config.json 写入失败" }));
+      return;
+    }
+  }
+  res.writeHead(200, headers).end(JSON.stringify({ ok: true, config: readPluginConfig() }));
+}
+
 // #393 /api/notify：手动注入 TASK_DONE（悬浮框通知），LAN token 鉴权
 async function handleNotify(
   req: IncomingMessage,
@@ -634,8 +736,12 @@ async function handleNotify(
       const text = typeof p.text === "string" ? p.text.trim().slice(0, 120) : "";
       if (!text) { res.writeHead(400).end('{"error":"text 不能为空"}'); return; }
       const sessions = mgr.snapshot();
+      // session_id 兼容裸 CLI id：外部会话 relay id = "ext-"+<cli_sid>（#448 守卫 hook 直传裸 sid）
       const target =
-        (p.session_id ? sessions.find((s) => s.session_id === p.session_id) : undefined) ||
+        (p.session_id
+          ? (sessions.find((s) => s.session_id === p.session_id) ??
+            sessions.find((s) => s.session_id === "ext-" + p.session_id))
+          : undefined) ||
         sessions.find((s) => s.status === "WORKING" && s.external) ||
         sessions.find((s) => s.external) ||
         sessions[0];

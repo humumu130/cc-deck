@@ -165,19 +165,28 @@
   .sp-row.sp-manage:hover { background: var(--hov); }
   .rh-row { display: flex; align-items: center; gap: 8px; font-size: 12.5px; color: var(--text); }
   .rh-row i { width: 8px; height: 8px; border-radius: 50%; flex: none; }
-  /* 左下角双悬浮钮（＋ 新建在上、⚙ 设置在下）：裸图标无边框 */
+  /* 左下角双悬浮钮（＋ 新建在上、⚙ 设置在下）：#52 品牌橙实底 + 深色图标 */
   /* #366 FAB：默认 ＋/⚙ 纵排左下；新建表单开时 ＋ 变 ✕、两钮横排挪到表单底部
      左侧空白（创建按钮行的左半边），morph 类过场避免纵横切换生硬 */
-  #sideFabs { position: absolute; left: 14px; bottom: var(--fabs-bottom, 72px); z-index: 46; display: flex; flex-direction: column; gap: 10px; transition: bottom .22s cubic-bezier(.4,.9,.3,1), gap .22s ease; }
+  #sideFabs { position: absolute; left: 14px; bottom: var(--fabs-bottom, 72px); z-index: 46; display: flex; flex-direction: column; gap: 10px; transition: bottom .22s cubic-bezier(.4,.9,.3,1), gap .22s ease, opacity .6s ease; }
+  /* #52 闲置淡出：3s 无输入整组渐至 .35（600ms ease，只动 opacity 不抢点击）；
+     hover/键盘聚焦立即回 1。淡出加在 #sideFabs 容器上，不干扰子钮 morph 的
+     160ms 透明度过场；设置抽屉打开期间整组本就隐藏（下方 main:has 规则），
+     JS 侧另有开抽屉态不进 idle 的保险（见 sideFabs idle 监听段） */
+  #sideFabs.idle { opacity: .35; }
+  #sideFabs.idle:hover, #sideFabs.idle:focus-within { opacity: 1; }
   .sfab { transition: transform .24s cubic-bezier(.34,1.35,.64,1), opacity .16s ease; }
   .sfab.morph { transform: scale(.55) rotate(75deg); opacity: .3; }
   body.newform-open #sideFabs { --fabs-bottom: 16px; flex-direction: row; gap: 8px; }
   .sfab {
-    width: 42px; height: 42px; border: 1px solid var(--border); background: var(--panel); cursor: pointer;
+    width: 42px; height: 42px; border: 1px solid transparent; background: var(--brand); cursor: pointer;
     display: flex; align-items: center; justify-content: center; position: relative;
-    color: var(--dim); border-radius: 50%; padding: 0;
+    color: #171220; border-radius: 50%; padding: 0;
+    box-shadow: 0 2px 12px rgba(217,119,87,.30);
   }
-  .sfab:hover { color: var(--text); border-color: var(--hov); }
+  .sfab:hover { background: var(--brand-2); color: #171220; }
+  .sfab:active { filter: brightness(.93); }
+  .sfab:focus-visible { outline: 2px solid var(--text); outline-offset: 2px; }
   .sfab svg { width: 28px; height: 28px; display: block; }
   #addBtn svg { transition: transform .2s ease; }
   #addBtn.on svg { transform: rotate(45deg); }
@@ -405,6 +414,13 @@
   .gp-relay-stat i { width: 8px; height: 8px; border-radius: 50%; flex: none; background: var(--gp-faint); }
   .gp-relay-stat.on i { background: var(--gp-done); }
   .gp-relay-stat span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  /* #448 插件页：三组件卡片 = 设置行变体（标题+一句话说明左，开关拨杆右）；
+     不可用态（无本机 relay / 版本过旧）整组拨杆压灰禁点 */
+  .gp-plug-row .gp-plug-t { display: flex; flex-direction: column; gap: 2px; min-width: 0; flex: 1; }
+  .gp-plug-row .gp-plug-t .gp-plug-n { font-size: 13px; font-weight: 600; color: var(--gp-text); }
+  .gp-plug-row .gp-plug-d { font-size: 11px; color: var(--gp-dim); line-height: 1.45; }
+  .gp-plug-rows.off .lever { opacity: .45; pointer-events: none; }
+  .gp-plug-note { font-size: 11px; color: var(--gp-faint); padding: 0 4px; line-height: 1.5; }
   /* 已配对设备清单（议题① 2026-09-09）：行 = 在线点/kind 徽章/名称/dev/配对时间/移除 */
   .gp-peers-list { display: flex; flex-direction: column; gap: 2px; }
   .gp-peer-row { display: flex; align-items: center; gap: 8px; padding: 8px 10px; border-radius: 8px; font-size: 12.5px; color: var(--gp-text); min-width: 0; }
@@ -848,7 +864,8 @@
     font-size: 11px; font-weight: 600; letter-spacing: 1.5px; color: var(--faint);
     text-transform: uppercase; padding: 10px 16px 4px;
   }
-  #cards { flex: 1; overflow-y: auto; padding: 4px 14px 10px; display: flex; flex-direction: column; gap: 9px; }
+  /* #51 首卡上距：4→8px（与 chips 行 12px 底距合计 20px），只推首卡、卡间 gap 9px 不动 */
+  #cards { flex: 1; overflow-y: auto; padding: 8px 14px 10px; display: flex; flex-direction: column; gap: 9px; }
   /* #279⑨ 列表工具行：折叠空闲 + 密度切换（网页无设置抽屉，放"会话"标题行，视觉同 tabs mini chips） */
   #listBar { display: flex; align-items: center; gap: 6px; padding: 10px 16px 4px; }
   #listBar h3 { padding: 0; flex: none; }
@@ -1467,7 +1484,7 @@
     #srvPop { left: auto; right: 10px; }
     #timeline { font-size: calc(14px * var(--tl-scale, 1)); }
     .brand h1 { font-size: 14px; }
-    #cards { padding: 4px 10px 12px; }
+    #cards { padding: 8px 10px 12px; }
     #srcChips { padding: 6px 10px 12px; }
     #listBar { padding: 10px 10px 4px; }
     .srv-row .srv-del { opacity: 1; }
@@ -1566,6 +1583,7 @@
         <button type="button" class="gp-nav-item on" data-sec="conn"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9 2.8v4.2M15 2.8v4.2"/><path d="M6.5 7h11v4.2a5.5 5.5 0 0 1-11 0V7Z"/><path d="M12 16.7v4.5"/></svg>连接</button>
         <button type="button" class="gp-nav-item" data-sec="relay"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><rect x="3.2" y="3.8" width="17.6" height="6.6" rx="2"/><rect x="3.2" y="13.6" width="17.6" height="6.6" rx="2"/><path d="M7 7.1h.01M7 16.9h.01"/></svg>relay</button>
         <button type="button" class="gp-nav-item" data-sec="disp"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M2.6 12S6 5.8 12 5.8 21.4 12 21.4 12 18 18.2 12 18.2 2.6 12 2.6 12Z"/><circle cx="12" cy="12" r="2.9"/></svg>显示</button>
+        <button type="button" class="gp-nav-item" data-sec="plug"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M10.2 5.5a1.8 1.8 0 0 1 3.6 0L16.5 5.5Q18.5 5.5 18.5 7.5V10.2a1.8 1.8 0 0 1 0 3.6V16.5Q18.5 18.5 16.5 18.5H7.5Q5.5 18.5 5.5 16.5V7.5Q5.5 5.5 7.5 5.5H10.2Z"/></svg>插件</button>
         <button type="button" class="gp-nav-item" data-sec="about"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="12" cy="12" r="8.6"/><path d="M12 11v4.6"/><path d="M12 7.6h.01"/></svg>关于</button>
       </nav>
       <div class="gp-rail-foot">CC Deck · Build <span id="gpBuild"></span></div>
@@ -1661,6 +1679,30 @@
             <div class="gp-row" id="gpThink"><span class="gi"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="8.4"/><path d="M12 3.6a8.4 8.4 0 0 1 0 16.8Z" fill="currentColor" stroke="none" opacity=".45"/></svg></span>思考过程<div class="lever" id="gpThinkLever" style="--n:2"><i class="lever-thumb"></i><button type="button" class="lever-opt" data-i="0">关</button><button type="button" class="lever-opt" data-i="1">开</button></div></div>
             <div class="gp-row" id="gpIdle" style="display:none"><span class="gi"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3.4 20.6 8 12 12.6 3.4 8Z"/><path d="m3.4 12.4 8.6 4.6 8.6-4.6"/><path d="m3.4 16.6 8.6 4.6 8.6-4.6"/></svg></span>折叠空闲<div class="lever" id="gpIdleLever" style="--n:2"><i class="lever-thumb"></i><button type="button" class="lever-opt" data-i="0">显示</button><button type="button" class="lever-opt" data-i="1">折叠</button></div></div>
           </div>
+        </section>
+        <!-- #448 插件页：CC Deck 插件可选能力三开关（任务调度强化/插入问答通知/恢复点），
+             读写本机 relay /api/plugin-config（~/.cc-deck/config.json，与 hooks 守卫共用） -->
+        <section class="gp-page off" id="gpPagePlug">
+          <div class="gp-sec"><svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M10.2 5.5a1.8 1.8 0 0 1 3.6 0L16.5 5.5Q18.5 5.5 18.5 7.5V10.2a1.8 1.8 0 0 1 0 3.6V16.5Q18.5 18.5 16.5 18.5H7.5Q5.5 18.5 5.5 16.5V7.5Q5.5 5.5 7.5 5.5H10.2Z"/></svg>插件</div>
+          <div class="gp-relay-stat" id="gpPlugStat"><i></i><span id="gpPlugStatTxt">检测中…</span></div>
+          <div class="gp-card gp-rows gp-plug-rows off" id="gpPlugRows">
+            <div class="gp-row gp-plug-row">
+              <span class="gi"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6.4l1.4 1.4L8 5.2"/><path d="M4 12.4l1.4 1.4L8 11.2"/><path d="M4 18.4l1.4 1.4L8 17.2"/><path d="M11 6.4h9M11 12.4h9M11 18.4h9"/></svg></span>
+              <span class="gp-plug-t"><span class="gp-plug-n">任务调度强化</span><span class="gp-plug-d">收工拦截未完成待办（60 秒内再停一次放行），每条消息注入待办摘要与分诊纪律</span></span>
+              <div class="lever" id="gpPlugTaskLever" style="--n:2"><i class="lever-thumb"></i><button type="button" class="lever-opt" data-i="0">关</button><button type="button" class="lever-opt" data-i="1">开</button></div>
+            </div>
+            <div class="gp-row gp-plug-row">
+              <span class="gi"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M18 9.4a6 6 0 1 0-12 0c0 6-2.2 7-2.2 7h16.4S18 15.4 18 9.4"/><path d="M13.7 19.6a2 2 0 0 1-3.4 0"/></svg></span>
+              <span class="gp-plug-t"><span class="gp-plug-n">插入问答通知</span><span class="gp-plug-d">会话忙碌时在电脑上插入提问，手机弹通知框提醒（滚动防丢）</span></span>
+              <div class="lever" id="gpPlugQnotifyLever" style="--n:2"><i class="lever-thumb"></i><button type="button" class="lever-opt" data-i="0">关</button><button type="button" class="lever-opt" data-i="1">开</button></div>
+            </div>
+            <div class="gp-row gp-plug-row">
+              <span class="gi"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3.6 12a8.4 8.4 0 1 0 2.5-6L3.6 8.4"/><path d="M3.6 3.6v4.8h4.8"/><path d="M12 7.6V12l3 1.8"/></svg></span>
+              <span class="gp-plug-t"><span class="gp-plug-n">恢复点</span><span class="gp-plug-d">收工把未完成任务落 .cc-deck/state.md，下次会话自动注入遗留待办提示</span></span>
+              <div class="lever" id="gpPlugRestoreLever" style="--n:2"><i class="lever-thumb"></i><button type="button" class="lever-opt" data-i="0">关</button><button type="button" class="lever-opt" data-i="1">开</button></div>
+            </div>
+          </div>
+          <div class="gp-plug-note">仅对桥接给 CC Deck 的会话生效；开关写入本机 ~/.cc-deck/config.json。</div>
         </section>
         <section class="gp-page off" id="gpPageAbout">
           <div class="gp-sec"><svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="12" cy="12" r="8.6"/><path d="M12 11v4.6"/><path d="M12 7.6h.01"/></svg>关于</div>
@@ -1767,7 +1809,7 @@
 
 <div id="wizPop">
     <div id="wizCard">
-      <div id="wizTitle">连接到家里的电脑</div>
+      <div id="wizTitle">连接到电脑端 CC Deck</div>
       <div id="wizSub">手机 CC Deck App → 侧边栏「新设备配对」领 8 位码，输入即连</div>
       <div id="wizCodeRow">
         <input id="wizCode" inputmode="numeric" maxlength="8" placeholder="8 位配对码" autocomplete="off">
@@ -2300,7 +2342,7 @@ function connectLan(ctx) {
   };
 }
 
-// 云桥：浏览器 → 桥(ws) → 家里 relay，帧全部 tweetnacl box 密封（桥只见密文）。
+// 云桥：浏览器 → 桥(ws) → 电脑端 relay，帧全部 tweetnacl box 密封（桥只见密文）。
 // 配对走一次性配对链接（#bt=&rd=&rk=&pc=）或 8 位配对码，成功后写回本源 cloud.rd/rk。
 // WS 升级被公司 TLS 解密代理掐断时（握手返回 200 非 101）自动降级 HTTP 长轮询。
 function connectCloudFor(ctx, manual) {
@@ -2315,7 +2357,7 @@ function connectCloudFor(ctx, manual) {
     // #40web 明确无身份（新装/被清）：唯一的「引导输码」态之一
     setConn(ctx, "offline", "未配对", "unpaired");
     if (manual) {
-      toast("请输入配对码配对（家里 PC 领取）");
+      toast("请输入配对码配对（电脑端 CC Deck 设置→relay 页领取）");
       openPanel("conn");
       setTimeout(() => { if (formKind === "cloud") $("pairCode").focus(); }, 80);
     }
@@ -2451,7 +2493,7 @@ function startPairWatchdog(ctx) {
           // #325 扫码登录态：等的是手机授权而非配对码应答，F12 排查提示不适用
           toast("relay 长时间无应答：确认手机能连上这台服务器后，重新点「扫码登录」", 6000);
         } else {
-          toast("配对请求一直没回音：按 F12 看 Console 的 [cloud] 日志和 Network 里 cloud-poll 请求，截图发家里", 6000);
+          toast("配对请求一直没回音：按 F12 看 Console 的 [cloud] 日志和 Network 里 cloud-poll 请求，截图备查", 6000);
         }
         console.log("[cloud:" + ctx.cfg.name + "] 配对看门狗耗尽：pair_req 已重发 3 次无 pair_ack");
       }
@@ -2564,13 +2606,13 @@ function onCloudText(ctx, text) {
         ctx.discTimer = 0;
         if (ctx.status !== "connecting") return;
         clearInterval(ctx.pairTimer);
-        setConn(ctx, "offline", "家里 relay 离线", "bridge"); // #40web 桥可达但 relay 不在：诊断态
+        setConn(ctx, "offline", "电脑端 relay 离线", "bridge"); // #40web 桥可达但 relay 不在：诊断态
         scheduleReconnect(ctx);
       }, 6000);
       return;
     }
     clearInterval(ctx.pairTimer);
-    setConn(ctx, "offline", "家里 relay 离线", "bridge");
+    setConn(ctx, "offline", "电脑端 relay 离线", "bridge");
     scheduleReconnect(ctx);
     return;
   }
@@ -2607,7 +2649,7 @@ function onCloudText(ctx, text) {
       }
       clearInterval(ctx.pairTimer);
       // #40web 多 relay 歧义=要用户重领码（pair）；仅 relay 掉线=诊断态（bridge）
-      setConn(ctx, "offline", all.length > 1 ? "发现多个 relay，请重新领码" : "家里 relay 离线", all.length > 1 ? "pair" : "bridge");
+      setConn(ctx, "offline", all.length > 1 ? "发现多个 relay，请重新领码" : "电脑端 relay 离线", all.length > 1 ? "pair" : "bridge");
       scheduleReconnect(ctx);
       return;
     }
@@ -2655,7 +2697,7 @@ function onCloudText(ctx, text) {
       ctx.pendingPair = null;
       resetCloudPairing(cfg);
       setConn(ctx, "offline", "未配对", "unpaired"); // #40web relay 明确否认身份：唯一引导输码的态
-      toast("请输入配对码重新配对（家里 PC 领取）", 6000);
+      toast("请输入配对码重新配对（电脑端 CC Deck 设置→relay 页领取）", 6000);
       console.log("[cloud:" + cfg.name + "] relay 判定未配对:", f.data.error);
       // relay 在线才回得出 nack：连接保持（发现帧需要活通道），顺手刷新 relay
       // 真实身份——烘焙 rd 可能已随换代过期，刷新后输码直达、省一轮往返
@@ -2829,7 +2871,7 @@ function classifyFail(t) {
 // #40web ③ 自动重试：3s 起指数退避至 30s 封顶；等待期文案「重试中·下次 Ns」每秒倒计时
 //（对齐手机端 store.ts 节拍——让用户看到系统在自愈，而不是误以为要去输码）。
 // 真未配对不重试（重连无意义，等输码）；桥不可达把诊断文案保留为前缀
-//（「家里 relay 离线 · 重试中·下次 8s」），绝不把传输失败包装成配对问题
+//（「电脑端 relay 离线 · 重试中·下次 8s」），绝不把传输失败包装成配对问题
 function scheduleReconnect(ctx) {
   const cfg = ctx.cfg;
   if (!cfg.wsUrl || (cfg.kind === "lan" && !cfg.token)) return;
@@ -3457,8 +3499,13 @@ function render() {
   entries = entries.filter((e) => e.s.session_id !== pendingDel.sid && !deleting.has(e.s.session_id));
   const list = entries.sort((a, b) =>
     (order[a.s.status] - order[b.s.status]) || ((b.s.updated_at || b.s.started_at) - (a.s.updated_at || a.s.started_at)));
+  // #50 徽章显隐按「在线源数」判定：唯一在线源时无归属歧义，全部视图下也不渲染；
+  // 全部离线时回落按配置源数>1（旧行为，离线卡的来源仍可辨）。
+  // 显隐因子入 key：源上下线会翻转显隐，key 不含则不重渲、徽章残留/缺失
+  const onlineSrcs = [...ctxs.values()].filter((c) => c.status === "online").length;
+  const showSrcTag = onlineSrcs > 1 || (onlineSrcs === 0 && ctxs.size > 1);
   // key 含 filterSrc：切 chip 时徽章显隐随聚合/单源变化，强制重渲即时生效
-  const key = (listCompact ? "C|" : "") + filterSrc + "|" + list.map((e) => e.ctx.cfg.id + ":" + e.s.session_id + ":" + e.s.status + ":" + (e.s.title || "") + ":" + (e.s.action_summary || "") + ":" + (e.s.waiting_request ? 1 : 0) + ":" + ctxPct(e.s)).join("|");
+  const key = (listCompact ? "C|" : "") + filterSrc + "|" + (showSrcTag ? "b1|" : "b0|") + list.map((e) => e.ctx.cfg.id + ":" + e.s.session_id + ":" + e.s.status + ":" + (e.s.title || "") + ":" + (e.s.action_summary || "") + ":" + (e.s.waiting_request ? 1 : 0) + ":" + ctxPct(e.s)).join("|");
   if (box.dataset.key !== key) {
     // 就地改名进行中：跳过重建（运行中会话 key 每秒变，会把编辑框冲掉）
     if (document.activeElement && document.activeElement.classList.contains("card-rename")) return;
@@ -3519,7 +3566,8 @@ function render() {
       // #383 源标签移最左与上两行左对齐；ctx 水位条压到最右（不再悬中间）
       // 源徽章仅在聚合视图（全部）显示：筛选到单一源时 chip 已表明来源，整枚不渲染
       // （省 DOM，非 visibility 隐藏）；详情页头部 #dsrc 徽章不受此影响
-      const srcTag = filterSrc === "all" && ctxs.size > 1 ? srcBadgeHtml(ctx.cfg) : "";
+      // #50 在线源唯一时同样不渲染（showSrcTag，见上）
+      const srcTag = filterSrc === "all" && showSrcTag ? srcBadgeHtml(ctx.cfg) : "";
       const statsInner = srcTag + statsHtml(s.stats) + ctxHtml(s);
       const statsBlock = statsInner ? '<div class="card-stats">' + statsInner + "</div>" : "";
       if (listCompact) {
@@ -4303,7 +4351,7 @@ document.addEventListener("click", (ev) => {
 
 // ⚙ 设置浮层（#317）：显示项为散装开关的镜像（点行 = 触发原按钮再回读状态），
 // 服务器管理不进浮层——左栏常驻面板已是高频区，与手机抽屉同为一级入口
-const CONSOLE_VERSION = "0.4.0";
+const CONSOLE_VERSION = "0.4.1";
 // #396 拨杆同步：滑块移到 idx 档（transform 过渡），选中档文字加 .on（白字压品牌色滑块上）
 function setLever(el, idx) {
   if (!el) return;
@@ -4326,7 +4374,7 @@ $("gpTheme") && ($("gpTheme").onclick = () => { $("themeBtn").click(); syncGearP
 $("gearClose").onclick = () => openPanel("none");
 // #40x 设置两栏：左菜单单 active 切页（display 切换），记住最后所在页（cc.gear.section）；
 // relay 页被看到时静默补探一次本机 relay（状态行绿点/灰点）
-const GP_SECS = ["conn", "relay", "disp", "about"];
+const GP_SECS = ["conn", "relay", "disp", "plug", "about"];
 const GP_SEC_KEY = "cc.gear.section";
 const gpSavedSec = () => { try { return localStorage.getItem(GP_SEC_KEY) || "conn"; } catch { return "conn"; } };
 function setGearSection(sec) {
@@ -4339,6 +4387,7 @@ function setGearSection(sec) {
   }
   try { if (!window.__ccGearPin) localStorage.setItem(GP_SEC_KEY, sec); } catch {} // ?gear=1 深链会话不污染分页记忆（顺手项①）
   if (sec === "relay") { probeRelayStat(); refreshPeers(); } // 设备清单随 relay 页可见时静默刷新（议题①）
+  if (sec === "plug") loadPluginCfg(); // #448 插件三开关随插件页可见时拉取本机配置
   pdAutoSync(); // #411 自动展码随 relay 页可见性启停（进页领码/离页停轮询）
 }
 document.querySelectorAll(".gp-nav-item").forEach((b) => { b.onclick = () => setGearSection(b.dataset.sec); });
@@ -4459,6 +4508,23 @@ function closeNewForm() {
   $("addBtn").classList.remove("on");
   morphAddBtn(false);
 }
+// #52 悬浮钮闲置淡出：任意 pointermove/pointerdown/scroll（capture，滚动不冒泡）/
+// wheel/keydown 重置 3s 计时并立即回 1；到点整组加 .idle（CSS 600ms ease 渐至 .35）。
+// 设置抽屉开着时不进 idle——#405 起抽屉打开整组已 display:none，齿轮不存在淡出态
+(() => {
+  const fabs = $("sideFabs");
+  let idleT = 0;
+  const wake = () => {
+    fabs.classList.remove("idle");
+    clearTimeout(idleT);
+    idleT = setTimeout(() => {
+      if (!$("gearPop").classList.contains("open")) fabs.classList.add("idle");
+    }, 3000);
+  };
+  for (const ev of ["pointermove", "pointerdown", "scroll", "wheel", "keydown"])
+    document.addEventListener(ev, wake, { passive: true, capture: true });
+  wake();
+})();
 // #279⑨ 列表密度 / 折叠空闲：会话标题行两个小开关（localStorage 持久化，render 内联动卡片与计数）
 function syncDensityBtn() {
   const b = $("densityBtn");
@@ -5851,7 +5917,7 @@ function onImportEntry(e) {
   closeLoginQr("已导入：" + name);
 }
 
-// 首启连接向导（#354 一码直达）：默认路径=输配对码即连家里（复用默认云桥+烘焙
+// 首启连接向导（#354 一码直达）：默认路径=输配对码即连电脑端（复用默认云桥+烘焙
 // 身份，配对成功 pair_ack 自动落源）；扫码/直连降为次级入口
 const closeWiz = () => $("wizPop").classList.remove("open");
 function wizSubmitPair() {
@@ -5861,7 +5927,7 @@ function wizSubmitPair() {
   let cfg = servers.find((x) => x.kind === "cloud" && !x.cloud?.paired);
   if (!cfg) {
     const url = defaultCloudUrl();
-    cfg = { id: uuid(), name: "家里", kind: "cloud", wsUrl: url, token: BAKED_BRIDGE_TOKEN,
+    cfg = { id: uuid(), name: "电脑端", kind: "cloud", wsUrl: url, token: BAKED_BRIDGE_TOKEN,
       cloud: { url, token: BAKED_BRIDGE_TOKEN, rd: BAKED_RELAY.rd, rk: BAKED_RELAY.rk, paired: false } };
     servers.push(cfg);
   }
@@ -6145,6 +6211,94 @@ async function probeRelayStat() {
   if (!txt) return;
   $("gpRelayStat").classList.toggle("on", !!localRelayInfo);
   txt.textContent = localRelayInfo ? "运行中 · 端口 " + localRelayInfo.port : "未检测到";
+}
+
+// ── #448 设置「插件」页：三开关（任务调度强化/插入问答通知/恢复点）读写本机 relay
+//    /api/plugin-config（背后是 ~/.cc-deck/config.json，guard hooks 的单一事实源）。
+//    凭据与 URL 回退完全复用领码链路（local-info 实测优先 + 同端口走相对路径同源免跨源）；
+//    无本机 relay / 旧版 relay（404）→ 状态行灰点说明原因 + 拨杆整组禁点 ──
+const PLUG_KEYS = ["taskGuard", "qNotify", "restorePoint"];
+const PLUG_LEVERS = { taskGuard: "gpPlugTaskLever", qNotify: "gpPlugQnotifyLever", restorePoint: "gpPlugRestoreLever" };
+let plugCfg = null;        // null = 未加载/不可用；否则 {taskGuard,qNotify,restorePoint}
+let plugBusy = false;      // 加载/保存并发守卫
+function plugSetStat(txt2, on) {
+  const t = $("gpPlugStatTxt");
+  if (t) t.textContent = txt2;
+  $("gpPlugStat").classList.toggle("on", !!on);
+}
+function plugRender() {
+  $("gpPlugRows").classList.toggle("off", !plugCfg);
+  if (!plugCfg) return;
+  for (const k of PLUG_KEYS) setLever($(PLUG_LEVERS[k]), plugCfg[k] ? 1 : 0);
+}
+function plugFail(msg) {
+  plugCfg = null;
+  plugRender();
+  plugSetStat(msg, false);
+}
+async function plugFetchCreds() {
+  if (!localRelayInfo) await probeRelayStat();
+  return localRelayInfo || await pdLocalRelayCreds();
+}
+// 同源相对路径优先（页面恰由本机 relay 托管时免跨源），回退 127.0.0.1 直打。
+// extra 追加在 token 后（如 taskGuard=1）
+function plugUrls(creds, extra) {
+  const q = "token=" + encodeURIComponent(creds.token) + (extra ? "&" + extra : "");
+  const urls = [];
+  if (location.protocol.startsWith("http") && location.port === String(creds.port)) urls.push("/api/plugin-config?" + q);
+  urls.push("http://127.0.0.1:" + creds.port + "/api/plugin-config?" + q);
+  return urls;
+}
+async function loadPluginCfg() {
+  if (plugBusy) return;
+  plugBusy = true;
+  try {
+    plugSetStat("读取中…", false);
+    const creds = await plugFetchCreds();
+    if (!creds) { plugFail("未检测到本机 relay"); return; }
+    let j = null, err = "";
+    for (const u of plugUrls(creds, "")) {
+      try {
+        const r = await fetch(u, { signal: AbortSignal.timeout?.(4000) });
+        const body = await r.json().catch(() => null);
+        if (r.ok && body && body.ok && body.config) { j = body.config; break; }
+        err = r.status === 401 ? "token 校验失败" : r.status === 404 ? "旧版 relay 不支持" : "HTTP " + r.status;
+      } catch (e) { err = String((e && e.message) || e).slice(0, 60); }
+    }
+    if (!j) { plugFail("读取失败（" + err + "）"); return; }
+    plugCfg = j;
+    plugRender();
+    plugSetStat("本机 relay · 端口 " + creds.port, true);
+  } finally { plugBusy = false; }
+}
+async function savePluginCfg(key, want) {
+  const creds = await plugFetchCreds();
+  if (!creds) { plugFail("未检测到本机 relay"); return; }
+  // 开关走 query 参数（无 body）：跨源 POST 不触发预检，部署域页面直打本机免 OPTIONS
+  let j = null, err = "";
+  for (const u of plugUrls(creds, key + "=" + (want ? "1" : "0"))) {
+    try {
+      const r = await fetch(u, { method: "POST", signal: AbortSignal.timeout?.(4000) });
+      const body = await r.json().catch(() => null);
+      if (r.ok && body && body.ok && body.config) { j = body.config; break; }
+      err = r.status === 401 ? "token 校验失败" : r.status === 404 ? "旧版 relay 不支持" : "HTTP " + r.status;
+    } catch (e) { err = String((e && e.message) || e).slice(0, 60); }
+  }
+  if (!j) { toast("插件开关保存失败（" + err + "）"); return; }
+  plugCfg = j;
+  plugRender();
+}
+for (const k of PLUG_KEYS) {
+  const el = $(PLUG_LEVERS[k]);
+  el && el.querySelectorAll(".lever-opt").forEach((b) => {
+    b.onclick = async () => {
+      if (!plugCfg || plugBusy) return;
+      const want = b.dataset.i === "1";
+      if (plugCfg[k] === want) return;
+      plugBusy = true;
+      try { await savePluginCfg(k, want); } finally { plugBusy = false; }
+    };
+  });
 }
 
 // 同机零配置直连：探测本机 relay（/local-info 仅 loopback 可访问，Chrome/Edge 豁免 loopback 混合内容）

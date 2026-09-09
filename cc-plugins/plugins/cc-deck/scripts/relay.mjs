@@ -10278,7 +10278,7 @@ var require_dist = __commonJS({
 // src/index.ts
 import { networkInterfaces as networkInterfaces2, homedir as homedir8, hostname } from "node:os";
 import { join as join12 } from "node:path";
-import { writeFileSync as writeFileSync8, openSync as openSync3, readFileSync as readFileSync13, rmSync as rmSync3, existsSync as existsSync8 } from "node:fs";
+import { writeFileSync as writeFileSync9, openSync as openSync3, readFileSync as readFileSync13, rmSync as rmSync3, existsSync as existsSync8 } from "node:fs";
 import { spawn as spawn3, execFileSync as execFileSync2 } from "node:child_process";
 import { fileURLToPath as fileURLToPath4 } from "node:url";
 
@@ -42130,8 +42130,8 @@ var SessionManager = class {
 // src/ws-server.ts
 import { createServer } from "node:http";
 import { randomUUID as randomUUID5 } from "node:crypto";
-import { readFileSync as readFileSync11, existsSync as existsSync6, readdirSync as readdirSync4 } from "node:fs";
-import { join as join10, sep as sep5 } from "node:path";
+import { readFileSync as readFileSync11, writeFileSync as writeFileSync7, mkdirSync as mkdirSync6, existsSync as existsSync6, readdirSync as readdirSync4 } from "node:fs";
+import { join as join10, dirname as dirname5, sep as sep5 } from "node:path";
 import { homedir as homedir7, networkInterfaces } from "node:os";
 
 // src/models.ts
@@ -44183,6 +44183,19 @@ function localIps() {
   return out;
 }
 var TRUSTED_WEB_ORIGINS = ["https://cc.humumu.online", "https://cc-deck.humumu.online"];
+var PLUGIN_CFG_KEYS = ["taskGuard", "qNotify", "restorePoint"];
+function pluginConfigPath() {
+  return join10(homedir7(), ".cc-deck", "config.json");
+}
+function readPluginConfig() {
+  const out = { taskGuard: false, qNotify: true, restorePoint: false };
+  try {
+    const raw = JSON.parse(readFileSync11(pluginConfigPath(), "utf-8"));
+    for (const k3 of PLUGIN_CFG_KEYS) if (typeof raw[k3] === "boolean") out[k3] = raw[k3];
+  } catch {
+  }
+  return out;
+}
 var COMMAND_TYPES = /* @__PURE__ */ new Set([
   "COMMAND_CREATE",
   "COMMAND_MESSAGE",
@@ -44382,11 +44395,24 @@ function startServer(bus2, mgr2, cfg2, opts = {}) {
         res.writeHead(404).end();
         return;
       }
+      const virtualNic = /vmware|virtual|vethernet|wsl|loopback|tap|bluetooth/i;
+      let lanIp = "";
+      for (const [name, list] of Object.entries(networkInterfaces())) {
+        if (virtualNic.test(name)) continue;
+        for (const ni of list ?? []) {
+          if (ni.family !== "IPv4" || /^(127\.|169\.254\.)/.test(ni.address)) continue;
+          if (/^(192\.168|10\.|172\.(1[6-9]|2\d|3[01]))\./.test(ni.address)) {
+            lanIp = ni.address;
+            break;
+          }
+        }
+        if (lanIp) break;
+      }
       res.writeHead(200, {
         "content-type": "application/json",
         "access-control-allow-origin": allowOrigin,
         "cache-control": "no-store"
-      }).end(JSON.stringify({ ok: true, port: cfg2.port, token: cfg2.token }));
+      }).end(JSON.stringify({ ok: true, port: cfg2.port, token: cfg2.token, lan_ip: lanIp }));
       return;
     }
     if (req.method === "POST" && url.pathname === "/api/pair-issue") {
@@ -44435,6 +44461,14 @@ function startServer(bus2, mgr2, cfg2, opts = {}) {
     }
     if (req.method === "POST" && url.pathname === "/api/notify") {
       void handleNotify(req, res, mgr2, cfg2);
+      return;
+    }
+    if ((req.method === "GET" || req.method === "POST") && url.pathname === "/api/plugin-config") {
+      if ((url.searchParams.get("token") ?? "") !== cfg2.token) {
+        res.writeHead(401).end("unauthorized");
+        return;
+      }
+      void handlePluginConfig(req, res);
       return;
     }
     if (req.method === "GET" && url.pathname === "/api/commands") {
@@ -44597,6 +44631,14 @@ function startServer(bus2, mgr2, cfg2, opts = {}) {
         ws2.send('{"type":"PONG"}');
         return;
       }
+      if (cmd && cmd.t === "ccdeck-import-resp") {
+        const raw = JSON.stringify(cmd);
+        for (const c of wss.clients) {
+          if (c !== ws2 && c.readyState === import_websocket.default.OPEN) c.send(raw);
+        }
+        ws2.send('{"t":"ccdeck-import-resp-ack"}');
+        return;
+      }
       if (!cmd || typeof cmd.command_id !== "string" || typeof cmd.type !== "string" || !COMMAND_TYPES.has(cmd.type) || typeof cmd.payload !== "object" || cmd.payload === null) {
         ws2.send(
           JSON.stringify({
@@ -44653,6 +44695,74 @@ function startServer(bus2, mgr2, cfg2, opts = {}) {
     })
   };
 }
+async function handlePluginConfig(req, res) {
+  const url = new URL(req.url ?? "/", "http://localhost");
+  const origin = (req.headers.origin ?? "").trim();
+  const ips = localIps();
+  const hostOk = (h) => h === "localhost" || h === "127.0.0.1" || ips.has(h);
+  let acao = "";
+  const reqLb = (req.headers.host ?? "").split(":")[0] === "127.0.0.1" || (req.headers.host ?? "").split(":")[0] === "localhost";
+  if (origin && reqLb) acao = origin === "null" ? "*" : origin;
+  else if (origin) {
+    try {
+      const u = new URL(origin);
+      if (TRUSTED_WEB_ORIGINS.includes(u.origin) || hostOk(u.hostname)) acao = origin;
+    } catch {
+    }
+  }
+  const headers = {
+    "content-type": "application/json",
+    "cache-control": "no-store",
+    ...acao ? { "access-control-allow-origin": acao } : {}
+  };
+  if (req.method === "GET") {
+    res.writeHead(200, headers).end(JSON.stringify({ ok: true, config: readPluginConfig() }));
+    return;
+  }
+  let body = "";
+  req.setEncoding("utf-8");
+  for await (const chunk of req) body += chunk;
+  let parsed = {};
+  try {
+    if (body.trim()) parsed = JSON.parse(body);
+  } catch {
+  }
+  const next = readPluginConfig();
+  let changed = false;
+  const parseQBool = (v) => {
+    if (v === "1" || v === "true") return true;
+    if (v === "0" || v === "false") return false;
+    return void 0;
+  };
+  for (const k3 of PLUGIN_CFG_KEYS) {
+    const raw = url.searchParams.get(k3);
+    const qb2 = raw === null ? void 0 : parseQBool(raw);
+    const bv2 = parsed[k3];
+    if (qb2 !== void 0) {
+      next[k3] = qb2;
+      changed = true;
+    } else if (typeof bv2 === "boolean") {
+      next[k3] = bv2;
+      changed = true;
+    }
+  }
+  if (changed) {
+    try {
+      let full = {};
+      try {
+        full = JSON.parse(readFileSync11(pluginConfigPath(), "utf-8"));
+      } catch {
+      }
+      for (const k3 of PLUGIN_CFG_KEYS) full[k3] = next[k3];
+      mkdirSync6(dirname5(pluginConfigPath()), { recursive: true });
+      writeFileSync7(pluginConfigPath(), JSON.stringify(full, null, 2) + "\n", "utf-8");
+    } catch {
+      res.writeHead(500, headers).end(JSON.stringify({ ok: false, error: "config.json \u5199\u5165\u5931\u8D25" }));
+      return;
+    }
+  }
+  res.writeHead(200, headers).end(JSON.stringify({ ok: true, config: readPluginConfig() }));
+}
 async function handleNotify(req, res, mgr2, cfg2) {
   const url = new URL(req.url ?? "/", "http://localhost");
   if ((url.searchParams.get("token") ?? "") !== cfg2.token) {
@@ -44671,7 +44781,7 @@ async function handleNotify(req, res, mgr2, cfg2) {
         return;
       }
       const sessions2 = mgr2.snapshot();
-      const target2 = (p.session_id ? sessions2.find((s) => s.session_id === p.session_id) : void 0) || sessions2.find((s) => s.status === "WORKING" && s.external) || sessions2.find((s) => s.external) || sessions2[0];
+      const target2 = (p.session_id ? sessions2.find((s) => s.session_id === p.session_id) ?? sessions2.find((s) => s.session_id === "ext-" + p.session_id) : void 0) || sessions2.find((s) => s.status === "WORKING" && s.external) || sessions2.find((s) => s.external) || sessions2[0];
       if (!target2) {
         res.writeHead(503).end('{"error":"\u65E0\u53EF\u6295\u9012\u4F1A\u8BDD"}');
         return;
@@ -44721,7 +44831,7 @@ async function handleBridgeHook(req, res, bridge, cfg2) {
 var connectionCounter = 0;
 
 // src/cloud-identity.ts
-import { existsSync as existsSync7, readFileSync as readFileSync12, writeFileSync as writeFileSync7 } from "node:fs";
+import { existsSync as existsSync7, readFileSync as readFileSync12, writeFileSync as writeFileSync8 } from "node:fs";
 import { join as join11 } from "node:path";
 import { createHash, randomBytes } from "node:crypto";
 function loadOrCreateIdentity(dataDir2) {
@@ -44732,14 +44842,14 @@ function loadOrCreateIdentity(dataDir2) {
     if (!keypair.publicKey || !keypair.secretKey) throw new Error("cloud-keypair.json \u635F\u574F\uFF0C\u8BF7\u5220\u9664\u540E\u91CD\u542F\u91CD\u65B0\u751F\u6210\uFF08\u5DF2\u914D\u5BF9\u624B\u673A\u9700\u91CD\u65B0\u914D\u5BF9\uFF09");
   } else {
     keypair = generateKeyPair();
-    writeFileSync7(kpPath, JSON.stringify(keypair), "utf-8");
+    writeFileSync8(kpPath, JSON.stringify(keypair), "utf-8");
   }
   const wanSecretPath = join11(dataDir2, "wan-secret");
   let wanSecret = "";
   if (existsSync7(wanSecretPath)) wanSecret = readFileSync12(wanSecretPath, "utf-8").trim();
   if (!/^[0-9a-f]{32}$/.test(wanSecret)) {
     wanSecret = randomBytes(16).toString("hex");
-    writeFileSync7(wanSecretPath, wanSecret, "utf-8");
+    writeFileSync8(wanSecretPath, wanSecret, "utf-8");
   }
   const wanDev = "wt-" + createHash("sha256").update(wanSecret).digest("hex").slice(0, 16);
   const peersPath = join11(dataDir2, "cloud-peers.json");
@@ -44754,7 +44864,7 @@ function loadOrCreateIdentity(dataDir2) {
   const persistPeers = () => {
     const obj = {};
     for (const [k3, v] of peers) obj[k3] = v;
-    writeFileSync7(peersPath, JSON.stringify(obj, null, 2), "utf-8");
+    writeFileSync8(peersPath, JSON.stringify(obj, null, 2), "utf-8");
   };
   return {
     keypair,
@@ -45495,14 +45605,14 @@ startServer(bus, mgr, cfg, {
   onReady: () => {
     advertiseRelay(cfg.port, `CC Deck Relay (${hostname()})`);
     if (process.env.CC_DECK_DAEMON === "1") {
-      writeFileSync8(join12(cfg.dataDir, "relay.pid"), String(process.pid), "utf-8");
+      writeFileSync9(join12(cfg.dataDir, "relay.pid"), String(process.pid), "utf-8");
     }
     const bridgeJson = JSON.stringify({ port: cfg.port, token: cfg.bridgeToken });
-    writeFileSync8(join12(cfg.dataDir, "bridge.json"), bridgeJson, "utf-8");
+    writeFileSync9(join12(cfg.dataDir, "bridge.json"), bridgeJson, "utf-8");
     const hookHome = join12(homedir8(), ".cc-deck", "data");
     if (cfg.dataDir !== hookHome && existsSync8(hookHome)) {
       try {
-        writeFileSync8(join12(hookHome, "bridge.json"), bridgeJson, "utf-8");
+        writeFileSync9(join12(hookHome, "bridge.json"), bridgeJson, "utf-8");
       } catch {
       }
     }
