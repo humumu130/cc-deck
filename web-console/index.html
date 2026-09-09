@@ -324,7 +324,8 @@
   #gearPop .srv-row { background: var(--gp-card); border-color: var(--gp-border); border-radius: 10px; }
   #gearPop .srv-row:hover { border-color: rgba(142,163,186,.42); }
   #gearPop .srv-row.active { border-color: var(--gp-accent); box-shadow: 0 0 0 1px var(--gp-accent); }
-  #gearPop .srv-row .srv-edit:hover { background: var(--gp-input); }
+  /* #406 行点击即编辑：正在编辑的行铺输入底色，与下方展开的编辑表单卡视觉成对（活动橙边不受影响） */
+  #gearPop .srv-row.editing { background: var(--gp-input); }
   #gearPop .srv-row .srv-del:hover { background: var(--gp-input); }
   #gearPop .pair-hint { padding: 0; font-size: 11.5px; color: var(--gp-faint); }
   #gearPop .conn-form { gap: 10px; padding: 13px 14px 14px; background: var(--gp-card); border: 1px solid var(--gp-border); border-radius: 10px; }
@@ -710,12 +711,11 @@
   .srv-main { flex: 1; min-width: 0; }
   .srv-main b { display: block; font-size: 13px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .srv-addr { display: block; font-size: 11px; color: var(--dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  .srv-row .srv-edit, .srv-row .srv-del {
+  .srv-row .srv-del {
     flex: none; background: none; border: none; cursor: pointer; color: var(--faint);
     font-size: 12px; padding: 4px 5px; border-radius: 7px; opacity: 0; transition: opacity .12s;
   }
-  .srv-row:hover .srv-edit, .srv-row:hover .srv-del, .srv-row .srv-edit:focus, .srv-row .srv-del:focus { opacity: 1; }
-  .srv-row .srv-edit:hover { color: var(--dim); background: var(--bg-soft); }
+  .srv-row:hover .srv-del, .srv-row .srv-del:focus { opacity: 1; }
   .srv-row .srv-del:hover { color: var(--error); background: var(--bg-soft); }
 
   /* ---------- 源过滤 chips + 卡片源角标 ---------- */
@@ -1392,7 +1392,7 @@
     #cards { padding: 4px 10px 12px; }
     #srcChips { padding: 6px 10px 12px; }
     #listBar { padding: 10px 10px 4px; }
-    .srv-row .srv-edit, .srv-row .srv-del { opacity: 1; }
+    .srv-row .srv-del { opacity: 1; }
     #side { width: 100%; border-right: none; }
     #detail {
       display: none; position: absolute; inset: 0; background: var(--bg);
@@ -1509,7 +1509,7 @@
             <div id="srvList"></div>
             <button id="addSrvBtn" class="hbtn" style="width:100%;margin-top:6px">＋ 添加服务器</button>
             <div class="conn-form">
-              <div class="gp-form-t">连接方式</div>
+              <div class="gp-form-t" id="cfTitle">添加服务器</div>
               <div class="seg" id="cmodeSeg">
                 <button type="button" data-m="lan">直连<i>局域网直连本机 / PC</i></button>
                 <button type="button" data-m="cloud">云桥<i>公网中转 · 支持配对码</i></button>
@@ -2305,9 +2305,12 @@ function resetCloudPairing(cfg) {
   saveServers();
 }
 
-// pair_req 明文帧（relay 校验 code 后回密封 pair_ack；已配对设备发错码也幂等补 ack）
+// pair_req 明文帧（relay 校验 code 后回密封 pair_ack；已配对设备发错码也幂等补 ack）。
+// rd 空串 = 配对码定位广播态（多 relay 桥凭码找持码者）：to:"*" + bc 标记，未持码
+// relay 静默；否则经典单播（旧 relay 全兼容）
 function sendPairReq(ctx, pair, dev) {
-  sendCloudRaw(ctx, JSON.stringify({ to: pair.rd, data: { t: "pair_req", code: pair.pc, pubkey: ckp.publicKey, name: "web-" + dev.slice(3, 11) } }));
+  const body = { t: "pair_req", code: pair.pc, pubkey: ckp.publicKey, name: "web-" + dev.slice(3, 11) };
+  sendCloudRaw(ctx, JSON.stringify({ to: pair.rd || "*", data: pair.rd ? body : Object.assign({ bc: true }, body) }));
 }
 // 发现帧：桥回 {type:"RELAYS", relays:[{dev,rk}]}（在线 relay 列表）。
 // relay 换 keypair 后本地记忆/烘焙的 rd/rk 全部过期，只能运行时向桥发现真实身份
@@ -2327,7 +2330,8 @@ function startPairWatchdog(ctx) {
       if (!peer || peer.relay_dev === peerBefore) {
         // 耗尽无新身份（含 relay 连续错码进入 pairFails 静默期）：offline + 退避重连，
         // 不能静默 return——否则状态永久卡"配对中…"直到 F5
-        setConn(ctx, "offline", "配对无应答");
+        const bcMiss = ctx.pendingPair && !ctx.pendingPair.rd; // 广播态：码没找到持码者
+        setConn(ctx, "offline", bcMiss ? "未找到持码服务器" : "配对无应答");
         scheduleReconnect(ctx);
         if (ctx.pendingPair && ctx.pendingPair.pc === "") {
           // #325 扫码登录态：等的是手机授权而非配对码应答，F12 排查提示不适用
@@ -2416,9 +2420,10 @@ function onCloudText(ctx, text) {
   const cfg = ctx.cfg;
   if (f.type === "ROUTE_MISS") {
     // 配对期 ROUTE_MISS：待配对 rd 不在线——本源记忆的 relay 身份失效
-    //（relay 换过密钥对）时清掉，换烘焙 rd/rk 携同一配对码重试（一次性自愈）
+    //（relay 换过密钥对）时清掉，换烘焙 rd/rk 携同一配对码重试（一次性自愈）。
+    // 广播态（pair.rd 空串）不适用：换烘焙 rd 会退回单播猜目标
     const pair = ctx.pendingPair || pendingPairOf(cfg.id);
-    if (pair && BAKED_RELAY.rd && BAKED_RELAY.rd !== pair.rd) {
+    if (pair && pair.rd && BAKED_RELAY.rd && BAKED_RELAY.rd !== pair.rd) {
       resetCloudPairing(cfg);
       ctx.pendingPair = { rd: BAKED_RELAY.rd, rk: BAKED_RELAY.rk, pc: pair.pc };
       setPendingPair(cfg.id, ctx.pendingPair);
@@ -2455,8 +2460,9 @@ function onCloudText(ctx, text) {
     // 假 relay 可混入列表截获 pair_req 里的 6 位码，因此只自动采用两种结果：
     //   ① 可信命中：dev = 本源记忆 / 烘焙值 / 当前配对目标（上次成功配对或部署锚定，
     //      rk 允许为空 = 旧版 relay 未上报，沿用记忆 rk）
-    //   ② 列表唯一：relay 换代后的新身份（自家部署只有一条；注入假条目会变成
-    //      多条 → 歧义，绝不自动配对，交用户重新领码决断）
+    //   ② 列表唯一：relay 换代后的新身份（自家部署只有一条）
+    // 多条且无可信命中：手上有 6 位码时改走配对码定位广播（凭码找持码者，见
+    // !pick 分支）；无码流程（扫码登录/运行中）维持歧义即停——交用户决断
     clearTimeout(ctx.discTimer); ctx.discTimer = 0;
     const all = (Array.isArray(f.relays) ? f.relays : [])
       .filter((x) => x && typeof x.dev === "string" && x.dev.startsWith("rl-"));
@@ -2467,6 +2473,19 @@ function onCloudText(ctx, text) {
     const hit = all.find((x) => known.includes(x.dev));
     const pick = hit || (all.length === 1 ? all[0] : null);
     if (!pick) {
+      // 输码态 + 多台在线且无可信锚点：配对码即定位凭据——改广播 pair_req，持码
+      // relay 才回 pair_ack、其余静默；ack 由哪台密封未知，候选公钥逐个试解
+      //（cands 随 pendingPair 落 sessionStorage，刷新页面也能续）。无码流程
+      //（扫码登录态 pc 空 / 运行中 hello）没有定位凭据，维持原提示
+      if (pair && pair.pc && all.length > 1) {
+        ctx.pendingPair = { rd: "", rk: "", pc: pair.pc, bc: true, cands: all.filter((x) => x.rk) };
+        setPendingPair(cfg.id, ctx.pendingPair);
+        console.log("[cloud:" + cfg.name + "] 多 relay 无锚点，转配对码广播定位（候选 " + all.length + " 台）");
+        setConn(ctx, "connecting", "定位持码服务器…");
+        sendPairReq(ctx, ctx.pendingPair, devId(ckp.publicKey, "wb"));
+        startPairWatchdog(ctx);
+        return;
+      }
       clearInterval(ctx.pairTimer);
       setConn(ctx, "offline", all.length > 1 ? "发现多个 relay，请重新领码" : "家里 relay 离线");
       scheduleReconnect(ctx);
@@ -2527,24 +2546,36 @@ function onCloudText(ctx, text) {
     return;
   }
   if (!f.data) return;
-  // 配对期优先 pendingPair.rk：已配对身份可能是换代前旧公钥，拿它解 pair_nack 会静默失败（用户看到"点了没反应"）
-  const senderPk = ctx.pendingPair ? ctx.pendingPair.rk : (cloudPeerOf(cfg)?.relay_pubkey || "");
-  if (!senderPk) return;
-  const inner = unseal(f.data, senderPk, ckp.secretKey);
+  // 配对期优先 pendingPair.rk：已配对身份可能是换代前旧公钥，拿它解 pair_nack 会静默失败（用户看到"点了没反应"）。
+  // 广播态（rd 空串）rk 未知：拿发现候选公钥逐个试解
+  const target = ctx.pendingPair || pendingPairOf(cfg.id);
+  const senderPk = target ? target.rk : (cloudPeerOf(cfg)?.relay_pubkey || "");
+  let inner = null;
+  if (senderPk) inner = unseal(f.data, senderPk, ckp.secretKey);
+  if (!inner && target && !target.rd && target.cands) {
+    for (const cand of target.cands) {
+      inner = unseal(f.data, cand.rk, ckp.secretKey);
+      if (inner) break;
+    }
+  }
   if (!inner) return;
   ctx.wsFails = 0; // 收到有效密封帧 = 传输链路健康
   if (inner.t === "pair_ack") {
     clearInterval(ctx.pairTimer);
     // ack 身份必须对应当次请求目标：公共桥上假 relay 可自演自唱（自有密钥解得开），
     // 采信错位身份会把后续 seal 永久指向攻击者公钥
-    const target = ctx.pendingPair || pendingPairOf(cfg.id);
     const wasLoginQr = !!target && target.pc === ""; // #325 扫码登录会话：ack 即授权成功
     // 身份检查：输码态必比对 rd（pair_req 明文广播过公钥，公共桥上假 relay 可自演自唱，
     // 采信错位身份会把后续 seal 永久指向攻击者公钥）。扫码登录态豁免——页面从未暴露
     // 自己的公钥，能对页面密封 pair_ack 的只有经手机授权拿到 pk 的目标 relay，密封本身
-    // 即身份证明；且烘焙 rd 会随 relay 换代过期，比对反而误杀合法 ack（#329 实测踩中）
-    if (target && !wasLoginQr && inner.relay_dev !== target.rd) {
+    // 即身份证明；且烘焙 rd 会随 relay 换代过期，比对反而误杀合法 ack（#329 实测踩中）。
+    // 广播态无 rd 可比：回落到发现列表（只有桥上 rl- 收得到广播）
+    if (target && !wasLoginQr && target.rd && inner.relay_dev !== target.rd) {
       console.log("[cloud:" + cfg.name + "] pair_ack 身份错位（" + inner.relay_dev + " ≠ " + target.rd + "），丢弃");
+      return;
+    }
+    if (target && !wasLoginQr && !target.rd && target.cands && !target.cands.some((c) => c.dev === inner.relay_dev)) {
+      console.log("[cloud:" + cfg.name + "] pair_ack 来自发现列表之外的 relay（" + inner.relay_dev + "），丢弃");
       return;
     }
     cfg.cloud = { url: cfg.wsUrl, token: serverBridgeToken(cfg), rd: inner.relay_dev, rk: inner.relay_pubkey, paired: true };
@@ -2559,6 +2590,9 @@ function onCloudText(ctx, text) {
     return;
   }
   if (inner.t === "pair_nack") {
+    // 广播态的 nack 是噪音：码不归这台 relay 管 ≠ 错码（含旧版 relay 的例行拒绝），
+    // 只有持码者/单播目标才作数——忽略，等看门狗超时提示
+    if (target && !target.rd) return;
     clearInterval(ctx.pairTimer);
     // 码一次性：失败即作废，清掉避免刷新后拿废码反复重试
     setPendingPair(cfg.id, null);
@@ -4020,7 +4054,12 @@ document.addEventListener("click", (ev) => {
     if (open) { syncGearPop(); setGearSection(gpSavedSec()); probeRelayStat(); } // 记住最后所在页 + 静默刷新 relay 状态行
     return;
   }
-  if (!ev.target.closest("#rhPop") && !ev.target.closest("#gearPop")) { $("rhPop").classList.remove("open"); $("gearPop").classList.remove("open"); $("srvPop").classList.remove("open"); }
+  // #406 「点外部收抽屉」必须用派发时刻的祖先链判定：抽屉内控件若在自己的 handler 里
+  // 整块重绘（如点源行 → renderServers 替换 #srvList innerHTML），事件冒泡到 document 时
+  // target 已脱离 DOM，closest("#gearPop") 变 null → 被误判点外部把抽屉收掉
+  //（用户反馈的"切到哪个就收起面板"根因）。composedPath 在 dispatch 时定格，仍含抽屉
+  const inGearPop = ev.target.closest("#gearPop") || ev.composedPath().some((n) => n && n.id === "gearPop");
+  if (!ev.target.closest("#rhPop") && !inGearPop) { $("rhPop").classList.remove("open"); $("gearPop").classList.remove("open"); $("srvPop").classList.remove("open"); }
 });
 
 // ── 侧栏拖宽 + 收展（用户需求 2026-09-07）：宽度记 localStorage，卡片流式自适应 ──
@@ -4272,7 +4311,13 @@ function setFormKind(kind, cfg) {
   formEl.classList.toggle("cloud", kind === "cloud"); // 云桥态字段收进分组卡（cf-box）
   // #39x 云桥态高级选项（URL/Key/名称）默认收起：只露配对码；编辑已有云源时展开方便改地址
   formEl.classList.toggle("adv-open", kind === "cloud" && !!cfg);
-  $("addSrvBtn").style.display = cfg || formForcedOpen ? "none" : "";
+  // #406 行点击即编辑：表单标题点明当前对象（编辑哪条 / 添加新源）；「＋ 添加服务器」
+  // 仅添加态让位——编辑选中源时加钮保留，浏览源列表不再吞掉添加入口
+  const cfTitle = $("cfTitle");
+  if (cfTitle) cfTitle.textContent = cfg ? "编辑 · " + cfg.name : "添加服务器";
+  $("addSrvBtn").style.display = formForcedOpen ? "none" : "";
+  // 选中联动：编辑中的行就地补 .editing 高亮（不全表重绘，避免打断正在输入的焦点）
+  document.querySelectorAll("#srvList .srv-row").forEach((r) => r.classList.toggle("editing", r.dataset.id === editId));
   if (kind === "cloud") {
     $("url").placeholder = "wss://<云桥>/cloud";
     $("token").placeholder = "桥 token（可选，默认公共）";
@@ -4302,7 +4347,7 @@ document.querySelectorAll("#cmodeSeg button").forEach((b) => {
 });
 $("cancelEdit").onclick = () => { formForcedOpen = false; setFormKind(formKind, null); };
 
-// 每行 [状态点 + 名称 + 地址摘要（含状态）] + 编辑 + 删除；点行 = 设为活动源
+// 每行 [状态点 + 名称 + 地址摘要（含状态）] + 删除；点行 = 设为活动源 + 下方就地展开编辑表单（#406，抽屉不收）
 function renderServers() {
   const box = $("srvList");
   if (!servers.length) { box.innerHTML = '<div class="pair-hint">还没有服务器，点下方「＋ 添加服务器」</div>'; renderNewTarget(); renderGpStatus(); return; }
@@ -4315,14 +4360,16 @@ function renderServers() {
       : (hostOf(s.wsUrl) || "未配置") + " · 直连";
     // #405 副行去重：状态词与前面已拼的元数据重复（未配对/未配置）时不再缀尾，杜绝「· 未配对 · 未配对」
     const dupTail = (stText === "未配对" && addr.includes("未配对")) || (stText === "未配置" && addr.includes("未配置"));
-    return '<div class="srv-row' + (s.id === activeServerId ? " active" : "") + '" data-id="' + s.id + '">' +
+    return '<div class="srv-row' + (s.id === activeServerId ? " active" : "") + (s.id === editId ? " editing" : "") + '" data-id="' + s.id + '" title="点击设为活动源，并在下方展开编辑">' +
       '<i class="dot ' + (ctx ? ctx.status : "offline") + '"></i>' +
       '<div class="srv-main"><b>' + escapeHtml(s.name) + '</b><span class="srv-addr' + (pdPairingAnim(stText) ? " pairing" : "") + '">' + escapeHtml(addr + (stText && !dupTail ? " · " + stText : "")) + "</span></div>" +
-      '<button class="srv-edit" title="查看/编辑">✎</button>' +
       '<button class="srv-del" title="删除">✕</button>' +
       "</div>";
   }).join("");
   box.querySelectorAll(".srv-row").forEach((row) => {
+    // #406 行点击即编辑（✎ 并入行点击）：点行 = 切活动源 + 列表下方就地展开该条编辑表单，
+    // 抽屉不收——编辑某条不再依赖 hover 找 ✎。点别行表单内容跟随切换；再点同一行不回填，
+    // 保留正在输入的内容。newTargetTouched 先置位（#27 目标记忆回拽豁免），见 renderNewSrcSeg
     row.onclick = (e) => {
       if (e.target.closest("button")) return;
       newTargetTouched = true;
@@ -4331,12 +4378,11 @@ function renderServers() {
       // 新建目标记忆同步：列表行也是一次目标选择，ccd_new_target 与 ACTIVE_KEY
       // 分叉会让下次新建发往用户没有选过的源
       try { localStorage.setItem("ccd_new_target", activeServerId); } catch {}
-      renderServers();
-    };
-    row.querySelector(".srv-edit").onclick = (e) => {
-      e.stopPropagation();
+      formForcedOpen = false; // 从「＋ 添加」态切进编辑态
       const cfg = cfgOf(row.dataset.id);
-      if (cfg) { setFormKind(cfg.kind, cfg); $("url").focus(); }
+      if (cfg && editId !== row.dataset.id) setFormKind(cfg.kind, cfg);
+      renderServers();
+      if (cfg) document.querySelector(".conn-form")?.scrollIntoView({ block: "nearest", behavior: "smooth" });
     };
     row.querySelector(".srv-del").onclick = (e) => { e.stopPropagation(); deleteServer(row.dataset.id); };
   });
