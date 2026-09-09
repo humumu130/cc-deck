@@ -29,7 +29,7 @@ Cloud Code Relay 电脑端 使用说明
 - 不用管它。开机自动在后台运行，关机自动退出。
 - 手机/手表填写格式：
     地址:  http://<安装时打印的IP>:8787   （手表设置里只填 IP:8787）
-    Token: 安装时打印的那串（默认 devtoken）
+    Token: relay 首启随机生成并打印的那串（存于 data	oken，扫码配对会自动携带无需手输）
 - 提示：家里路由器重新分配过 IP 的话地址会变，
   跑一遍 scripts\relay-status.ps1 就能看到当前可用 IP。
 

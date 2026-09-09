@@ -13,7 +13,7 @@ if not exist node_modules (
   )
 )
 echo [2/2] Starting relay (LAN :8787 + cloud bridge)...
-set CCR_TOKEN=devtoken
+rem 开源安全（#22）：不写死 devtoken——CCR_TOKEN 缺省时 relay 首启随机生成并落盘 data\token
 if "%CCR_CLOUD_URL%"=="" set CCR_CLOUD_URL=wss://cc.humumu.online/cloud
 if "%CCR_CLOUD_TOKEN%"=="" set CCR_CLOUD_TOKEN=ccdeck-public-9f3k2m7v
 node node_modules\tsx\dist\cli.mjs src\index.ts
