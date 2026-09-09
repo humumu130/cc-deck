@@ -8,7 +8,7 @@
 
 在手机上使用 PC 端的 Claude Code：查看会话状态、批准权限、发送消息、切换模型、接收任务汇报。自建 relay，不经过任何第三方云服务；不在同一网络时走 Cloudflare 中继，端到端加密。
 
-[网页控制台](https://cc.humumu.online) · [下载最新版](https://github.com/humumu130/cc-deck/releases/latest) · [直链下载页](https://cc.humumu.online/dl/)
+[🏠 项目主页](https://cc-deck.humumu.online/) · [网页控制台](https://cc-deck.humumu.online/app) · [下载最新版](https://github.com/humumu130/cc-deck/releases/latest) · [直链下载页](https://cc-deck.humumu.online/download/)
 
 <!-- TODO(截图占位)：三端三联图，源图在内部归档不随仓库发布，补拍后放 docs/screenshots/ 替换
      1. 手机 App：会话列表（源徽章 + ctx 水位条）+ 设置抽屉
