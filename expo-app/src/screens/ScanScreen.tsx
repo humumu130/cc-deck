@@ -1,12 +1,16 @@
-// 扫码直连（#276）：全屏相机扫 PC 终端上 relay --qr 打出的「App 直连」码，
-// 解析 JSON {v:1,url,token} 自动填入设置表单。权限照语音输入的 PermissionsAndroid
-// 模式容错（拒绝/异常都降级为提示文案，不崩不阻塞）；网页端跳过原生申请走浏览器弹窗
+// 扫码（#276 起逐码演进）：全屏相机扫电脑端出的各种 CC Deck 码，parseScanPayload
+// 统一解析分发，routeScanResult 统一路由执行——设置页（表单语境）与设置抽屉（全局
+// 语境）共用同一条链路。权限照语音输入的 PermissionsAndroid 模式容错（拒绝/异常都
+// 降级为提示文案，不崩不阻塞）；网页端跳过原生申请走浏览器弹窗
 import { useEffect, useRef, useState } from "react";
-import { Modal, PermissionsAndroid, Platform, Pressable, StyleSheet, Text, Vibration, View } from "react-native";
+import { Alert, Modal, PermissionsAndroid, Platform, Pressable, StyleSheet, Text, Vibration, View } from "react-native";
 import { CameraView, type BarcodeScanningResult } from "expo-camera";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useTheme, useThemeStyles } from "../theme-context";
 import { withA, type ThemeColors } from "../theme";
+import { store, type ServerEntry } from "../store";
+import { uuid } from "../fmt";
+import type { ImportTarget } from "./ImportPicker";
 
 export interface ScanResult {
   wsUrl: string;
@@ -17,11 +21,17 @@ export interface ScanResult {
   // #330 云源接入邀请（电脑端「添加手机」出的码）：一次性配对码+桥地址+relay 身份，
   // 消费方走 pair_req 流程落成云源条目
   invite?: { bridge: string; bt: string; rd: string; rk: string; code: string };
+  // 连接导入请求（电脑端「分享连接」出的码）：方向反转——手机是连接数据源，rt 是
+  // 电脑端临时收件 WebSocket，消费方经 routeScanResult 弹连接选择器（ImportPicker）
+  // 把本地连接回传给电脑；临时通道用完即断，不进手机连接列表
+  import?: ImportTarget;
 }
 
 // 解析扫码内容：v1 JSON（relay 出码）为主，兼容裸 ws(s) 地址带 ?token= 的形式；
 // t=ccdeck-login 是网页端扫码登录会话（#325）走 login 分支；t=ccdeck-add 是
-// 电脑端「添加手机」出的一次性接入码（#330）走 invite 分支
+// 电脑端「添加手机」出的一次性接入码（#330）走 invite 分支（电脑端「分享连接」
+// 出的码同构，天然同分支兼容）；t=ccdeck-import 是电脑端请求导入手机连接（手机侧
+// 反向出数据）走 import 分支
 export function parseScanPayload(raw: string): ScanResult | null {
   const s = raw.trim();
   try {
@@ -29,6 +39,7 @@ export function parseScanPayload(raw: string): ScanResult | null {
       v?: number; url?: unknown; token?: unknown;
       t?: unknown; dev?: unknown; pk?: unknown; name?: unknown; rd?: unknown;
       bridge?: unknown; bt?: unknown; rk?: unknown; code?: unknown;
+      rt?: unknown;
     };
     if (j?.t === "ccdeck-login") {
       const dev = typeof j.dev === "string" ? j.dev : "";
@@ -55,6 +66,18 @@ export function parseScanPayload(raw: string): ScanResult | null {
       }
       return null;
     }
+    if (j?.t === "ccdeck-import") {
+      // rt = 电脑端临时收件通道：url 须是 ws(s)://、token 非空才可信
+      const rt = (typeof j.rt === "object" && j.rt !== null ? j.rt : {}) as {
+        url?: unknown; token?: unknown;
+      };
+      const ru = typeof rt.url === "string" ? rt.url.replace(/\/+$/, "") : "";
+      const rtk = typeof rt.token === "string" ? rt.token : "";
+      if (/^wss?:\/\//.test(ru) && rtk) {
+        return { wsUrl: "", token: "", import: { url: ru, token: rtk } };
+      }
+      return null;
+    }
     const url = typeof j?.url === "string" ? j.url : "";
     const token = typeof j?.token === "string" ? j.token : "";
     if (url && token && /^wss?:\/\//.test(url)) {
@@ -66,6 +89,98 @@ export function parseScanPayload(raw: string): ScanResult | null {
     return { wsUrl: s.slice(0, q).replace(/\/+$/, ""), token: new URL(s).searchParams.get("token") ?? "" };
   }
   return null;
+}
+
+// ---------- 扫码结果统一路由（#325/#330/#40 逐码演进后收敛为一个入口） ----------
+// 设置页（表单语境）与设置抽屉（全局语境）共用：消费方只注入文案出口/收尾钩子，
+// 四种码的分发与执行只有这一份实现，不再两地各写一份互相漂移
+
+export interface ScanRouteCtx {
+  // 失败/引导文案出口：设置页=表单 err 行；抽屉=Alert 弹窗
+  onError: (msg: string) => void;
+  // 接入/连接落库成功后的收尾（设置页=刷新列表+关页；抽屉=刷新列表）
+  onDone?: () => void;
+  // import 码消费：挂载方拉起连接选择器（ImportPicker 完成选定+回发）
+  onImport: (t: ImportTarget) => void;
+  // 直连码表单回填钩子（仅设置页需要表单同步，连接失败停留本页时不误导；缺省跳过）。
+  // 返回值=新条目采用的显示名（表单已手输名称则尊重；空/缺省回落 host）
+  onDirect?: (base: string, token: string) => string | undefined;
+}
+
+function hostOf(wsUrl: string): string {
+  try {
+    return new URL(wsUrl).host;
+  } catch {
+    return wsUrl;
+  }
+}
+
+export async function routeScanResult(r: ScanResult, ctx: ScanRouteCtx): Promise<void> {
+  const servers = await store.loadServers();
+  // ccdeck-login = 网页端出示的登录码——扫码即登录，手机不要求预先连接/切换到对应
+  // 服务器：授权优先发给 relayDev 与码中 rd 匹配的已连接源（多服务器下不串台），
+  // 没有匹配则走活动源（手机是信任锚，网页端 pair_ack 的密封本身即身份证明）
+  if (r.login) {
+    const { dev, pk, rd } = r.login;
+    const who = r.login.name.length > 16 ? `${r.login.name.slice(0, 16)}…` : r.login.name;
+    const viaId = rd ? store.sourceIdForRelay(rd) : undefined;
+    const activeId = await store.activeServerId();
+    const viaName = (viaId ? servers.find((e) => e.id === viaId) : servers.find((e) => e.id === activeId))?.name;
+    Alert.alert(
+      "扫码登录",
+      `允许「${who}」接入${viaName ? `「${viaName}」` : "这台服务器"}？\n授权后它可查看会话并发送指令。`,
+      [
+        { text: "取消", style: "cancel" },
+        {
+          text: "允许",
+          onPress: () => {
+            if (!store.send("COMMAND_LOGIN_GRANT", { session_dev: dev, session_pk: pk, name: who }, viaId)) {
+              ctx.onError("未连接 relay：先连接服务器，再扫码授权网页端");
+            }
+          },
+        },
+      ],
+      { cancelable: true },
+    );
+    return;
+  }
+  // ccdeck-add = 云源接入邀请（#330，电脑端「分享连接」出的码同构兼容）：确认后
+  // pair_req 落库自动连接
+  if (r.invite) {
+    const inv = r.invite;
+    Alert.alert(
+      "接入云服务器",
+      `扫码接入「${hostOf(inv.bridge)}」？\n将使用一次性配对码自动完成。`,
+      [
+        { text: "取消", style: "cancel" },
+        {
+          text: "接入",
+          onPress: () => {
+            void store.addCloudByInvite(inv).then((err) => {
+              if (err) ctx.onError(err);
+              else ctx.onDone?.();
+            });
+          },
+        },
+      ],
+      { cancelable: true },
+    );
+    return;
+  }
+  // ccdeck-import = 电脑端请求导入手机连接：弹连接选择器由用户挑一条回发
+  if (r.import) {
+    ctx.onImport(r.import);
+    return;
+  }
+  // 直连码即扫即连：码里已含完整 url+token，直接建/复用条目连接
+  //（此前回填表单让用户手点「连接」，多一步且易漏）
+  const base = r.wsUrl.replace(/\/+$/, "");
+  const named = ctx.onDirect?.(base, r.token);
+  const dup = servers.find((e) => e.wsUrl === base);
+  const entry: ServerEntry = dup
+    ? { ...dup, token: r.token }
+    : { id: uuid(), name: (named && named.trim()) || hostOf(base), wsUrl: base, token: r.token };
+  void store.connectServer(entry, r.token).then(() => ctx.onDone?.());
 }
 
 export default function ScanScreen({
@@ -139,7 +254,7 @@ export default function ScanScreen({
           <Pressable style={d.closeBtn} hitSlop={10} onPress={onClose} accessibilityLabel="关闭扫码">
             <Text style={d.closeT}>✕</Text>
           </Pressable>
-          <Text style={d.topT}>扫码添加服务器</Text>
+          <Text style={d.topT}>扫码连接</Text>
         </View>
 
         {perm === "ok" ? (
@@ -155,7 +270,7 @@ export default function ScanScreen({
             </View>
             <View style={[d.hintWrap, { bottom: 40 + insets.bottom }]} pointerEvents="none">
               <Text style={d.hintT}>
-                {badCode ? "不是 CC Deck 的连接码或登录码" : "对准 PC 终端「App 直连」码或网页端「扫码登录」码"}
+                {badCode ? "不是 CC Deck 的连接码" : "对准电脑端出的 CC Deck 码（直连 / 登录 / 导入）"}
               </Text>
               <Text style={d.hintSubT}>PC 上运行 /cc-deck 出码，网页端在设置里出登录码</Text>
             </View>

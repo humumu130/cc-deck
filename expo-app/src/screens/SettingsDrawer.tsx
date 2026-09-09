@@ -1,7 +1,7 @@
 // 设置抽屉：首页左上角图标呼出，也支持左缘右滑呼出 / 面板上左滑收起；
 // 分区收纳连接（状态卡+服务器列表）、配对、显示与关于
 import { useEffect, useRef, useState } from "react";
-import { Animated, Linking, Modal, PanResponder, Pressable, ScrollView, StyleSheet, Switch, Text, View } from "react-native";
+import { Alert, Animated, Linking, Modal, PanResponder, Pressable, ScrollView, StyleSheet, Switch, Text, View } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import Constants from "expo-constants";
 import * as Clipboard from "expo-clipboard";
@@ -12,6 +12,8 @@ import { setProcessFont, useProcessFont, setVoiceInput, useVoiceInput, setAggreg
 import { checkUpdate, announceUpdate, VERSION_NOTES } from "../updates";
 import { store, useRelay, type ServerEntry, type SourceStatus } from "../store";
 import { withA, type ThemeColors } from "../theme";
+import ScanScreen, { routeScanResult, type ScanResult } from "./ScanScreen";
+import ImportPicker, { type ImportTarget } from "./ImportPicker";
 
 const FILL = { position: "absolute", left: 0, right: 0, top: 0, bottom: 0 } as const;
 
@@ -74,6 +76,21 @@ function Lever<T extends string>({ options, value, onChange }: {
           <Text style={[d.leverT, i === idx && d.leverTOn]}>{o.label}</Text>
         </Pressable>
       ))}
+    </View>
+  );
+}
+
+// 扫描框角标（ScanScreen 取景框同语言 mini 版）：四角 L 亮角 + 中部扫描横线，
+// 纯 View 线条绘制（App 无 svg 依赖，与既有图形语言一致）
+function ScanGlyph({ color }: { color: string }) {
+  const corner = { position: "absolute", width: 5, height: 5, borderColor: color } as const;
+  return (
+    <View style={{ width: 16, height: 16 }}>
+      <View style={[corner, { top: 0, left: 0, borderTopWidth: 1.6, borderLeftWidth: 1.6 }]} />
+      <View style={[corner, { top: 0, right: 0, borderTopWidth: 1.6, borderRightWidth: 1.6 }]} />
+      <View style={[corner, { bottom: 0, left: 0, borderBottomWidth: 1.6, borderLeftWidth: 1.6 }]} />
+      <View style={[corner, { bottom: 0, right: 0, borderBottomWidth: 1.6, borderRightWidth: 1.6 }]} />
+      <View style={{ position: "absolute", left: 2, right: 2, top: 7, height: 2, borderRadius: 1, backgroundColor: color }} />
     </View>
   );
 }
@@ -195,6 +212,25 @@ export default function SettingsDrawer({
   const [servers, setServers] = useState<ServerEntry[]>([]);
   rebuildSrvColors(servers.map((s) => s.id));
   const [activeId, setActiveId] = useState<string | null>(null);
+  // 全局扫码（直连/登录/导入三码统一入口）：头部右上扫码钮呼出，与设置页共用
+  // ScanScreen.routeScanResult 同一条链路；错误走 Alert（抽屉无表单 err 行），
+  // import 码在抽屉内弹 ImportPicker 选条目回发
+  const [scanOpen, setScanOpen] = useState(false);
+  const [importOpen, setImportOpen] = useState(false);
+  const [importTarget, setImportTarget] = useState<ImportTarget | null>(null);
+  const applyScan = (r: ScanResult) => {
+    void routeScanResult(r, {
+      onError: (msg) => Alert.alert("扫码未完成", msg),
+      onDone: () => {
+        void store.loadServers().then(setServers);
+        void store.activeServerId().then(setActiveId);
+      },
+      onImport: (t) => {
+        setImportTarget(t);
+        setImportOpen(true);
+      },
+    });
+  };
   // 服务器列表折叠：多服务器时腾出空间（记忆上次选择）
   const [srvCollapsed, setSrvCollapsed] = useState(false);
   useEffect(() => {
@@ -273,9 +309,11 @@ export default function SettingsDrawer({
     } catch {}
   };
   const pairing = useRef(false);
-  // 抽屉打开即领码；开着期间码到期（pairLeft 归零）自动续领
+  // 抽屉打开即领码；开着期间码到期（pairLeft 归零）自动续领。importOpen 时暂停：
+  // ImportPicker 正按用户选定的源领码（认快照里新出现的 pairCode），抽屉若同时为
+  // 活动源续领会抢出另一个码、有串到别的 relay 的风险
   useEffect(() => {
-    if (!visible || !snap.connected) return;
+    if (!visible || !snap.connected || importOpen) return;
     if (pc && pc.expiresAt - Date.now() > 2000) return;
     if (pairing.current) return;
     pairing.current = true;
@@ -285,7 +323,7 @@ export default function SettingsDrawer({
       .finally(() => {
         pairing.current = false;
       });
-  }, [visible, snap.connected, pc, pairLeft === 0]);
+  }, [visible, snap.connected, pc, pairLeft === 0, importOpen]);
 
   // #313 关于弹窗：抽屉「ⓘ 关于」行呼出；检查更新从抽屉行迁入弹窗。抽屉收起时一并收弹窗
   const [aboutOpen, setAboutOpen] = useState(false);
@@ -348,6 +386,16 @@ export default function SettingsDrawer({
             <Text style={d.nameT}>CC Deck</Text>
             <Text style={d.verT}>{APP_VER}</Text>
           </View>
+          {/* 全局扫码入口（直连/登录/导入统一扫）：头部右侧角标钮，与设置页同一链路 */}
+          <Pressable
+            style={d.scanBtn}
+            hitSlop={8}
+            android_ripple={{ color: c.tintSoft, borderless: false, radius: 15 }}
+            onPress={() => setScanOpen(true)}
+            accessibilityLabel="扫码（直连 / 登录 / 导入）"
+          >
+            <ScanGlyph color={c.brandA} />
+          </Pressable>
         </View>
 
         <ScrollView style={d.body} nestedScrollEnabled showsVerticalScrollIndicator={false}>
@@ -522,6 +570,8 @@ export default function SettingsDrawer({
         </ScrollView>
       </Animated.View>
       <AboutModal visible={aboutOpen} onClose={() => setAboutOpen(false)} />
+      <ScanScreen visible={scanOpen} onClose={() => setScanOpen(false)} onResult={applyScan} />
+      <ImportPicker visible={importOpen} target={importTarget} onClose={() => setImportOpen(false)} />
     </View>
   );
 }
@@ -540,6 +590,11 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
   },
   nameT: { color: c.text, fontSize: 16, fontWeight: "700" },
   verT: { color: c.faint, fontSize: 11.5, marginTop: 1 },
+  // 头部右上全局扫码钮：abClose 同形制（tintSoft 圆角方 + 细边框），角标式扫描图标
+  scanBtn: {
+    width: 30, height: 30, borderRadius: 10, alignItems: "center", justifyContent: "center",
+    backgroundColor: c.tintSoft, borderWidth: 1, borderColor: c.line, overflow: "hidden",
+  },
   secT: { color: c.faint, fontSize: 11, fontWeight: "700", marginTop: 18, marginBottom: 6, letterSpacing: 1 },
   secHead: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginTop: 18, marginBottom: 6 },
   secTitleT: { color: c.faint, fontSize: 11, fontWeight: "700", letterSpacing: 1 },

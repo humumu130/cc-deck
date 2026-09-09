@@ -384,6 +384,18 @@
   #gearPop #cancelEdit { background: var(--gp-input); border-color: var(--gp-border); color: var(--gp-dim); }
   #gearPop #addSrvBtn { border-color: var(--gp-border); color: var(--gp-dim); border-radius: 8px; padding: 9px; font-size: 12.5px; }
   #gearPop #addSrvBtn:hover { color: var(--gp-text); border-color: rgba(142,163,186,.42); border-style: solid; }
+  /* 议题②/③（2026-09-09）表单内二维码入口：编辑态=「分享到手机」（目标源未在线 .off 置灰，
+     点击 toast 提示），添加态=「扫码从手机导入」；次要视觉（灰底描边小钮 + 12px 图标），
+     独占表单流末行，不挤进 conn-actions 的保存/取消行 */
+  #gearPop .cf-qr-btn {
+    display: inline-flex; align-items: center; gap: 6px;
+    background: var(--gp-input); border: 1px solid var(--gp-border); border-radius: 8px;
+    color: var(--gp-dim); font-size: 12px; padding: 7px 12px;
+  }
+  #gearPop .cf-qr-btn svg { flex: none; }
+  #gearPop .cf-qr-btn:hover { color: var(--gp-text); border-color: rgba(142,163,186,.42); }
+  #gearPop .cf-qr-btn.off { opacity: .45; }
+  #gearPop .cf-qr-btn.off:hover { color: var(--gp-dim); border-color: var(--gp-border); }
   /* relay 页：本机 relay 状态行（绿点=运行中·端口 N / 灰点=未检测到） */
   .gp-relay-stat {
     display: flex; align-items: center; gap: 9px; min-width: 0;
@@ -484,8 +496,13 @@
   @media (max-width: 640px) {
     #gearPop { flex-direction: column; }
     .gp-rail { width: 100%; flex-direction: row; align-items: center; gap: 12px; padding: 12px 16px; border-right: none; border-bottom: 1px solid var(--gp-border); }
-    .gp-rail-title { padding: 0; font-size: 16px; }
-    .gp-nav { flex-direction: row; overflow-x: auto; }
+    /* #40web 修复（2026-09-09）：竖排栏基线的 .gp-nav-item{width:100%} 在横排下未重置，
+       每项都按导航条全宽解析 → 首项占满一行、其余被顶出屏外，标题被挤到竖排换行。
+       横排菜单条必须收回自然宽度（flex:none+width:auto），nav 自身留 min-width:0 可收缩横滑。 */
+    .gp-rail-title { padding: 0; font-size: 16px; flex: none; white-space: nowrap; }
+    .gp-nav { flex-direction: row; overflow-x: auto; flex: 1; min-width: 0; gap: 6px; scrollbar-width: none; }
+    .gp-nav::-webkit-scrollbar { display: none; }
+    .gp-nav-item { width: auto; flex: none; white-space: nowrap; }
     .gp-nav-item.on::before { left: 7px; right: 7px; top: -1px; bottom: auto; width: auto; height: 3px; }
     .gp-rail-foot { display: none; }
     .gp-pair { flex-direction: column; }
@@ -1600,6 +1617,11 @@
                 <button id="cancelEdit" style="display:none">取消</button>
                 <button id="saveSrvBtn" class="primary">添加直连</button>
               </div>
+              <!-- 议题②/③ 三码体系（2026-09-09）：编辑态出「分享连接到手机」码（LAN 直连码 /
+                   云源 ccdeck-add 一次性码），添加态出「从手机导入连接」码（ccdeck-import，
+                   手机扫码后反挑一条连接回传本机 relay）。可见态由 syncFormQrBtns 按 编辑/添加 切换 -->
+              <button type="button" id="shareSrvBtn" class="cf-qr-btn" style="display:none" title="手机扫一下，把这条连接导入手机 CC Deck"><svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="7" y="2.5" width="10" height="19" rx="2.2"/><path d="M10.5 18.5h3"/></svg>分享到手机</button>
+              <button type="button" id="importSrvBtn" class="cf-qr-btn" title="手机 CC Deck App 扫码后，选择要分享的连接"><svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 8V5a2 2 0 0 1 2-2h3M16 3h3a2 2 0 0 1 2 2v3M21 16v3a2 2 0 0 1-2 2h-3M8 21H5a2 2 0 0 1-2-2v-3"/><path d="M7 12h10"/></svg>扫码从手机导入</button>
             </div>
           </div>
         </section>
@@ -4534,6 +4556,22 @@ function setFormKind(kind, cfg) {
     $("saveSrvBtn").textContent = cfg ? "保存修改" : "添加直连";
   }
   $("cancelEdit").style.display = cfg ? "" : "none";
+  syncFormQrBtns();
+}
+// 议题②/③ 表单内两枚二维码入口的可见/置灰（setFormKind 换编辑对象、renderServers 随
+// 连接状态刷新都会走一遍）：编辑态只露「分享到手机」（目标源未在线 .off 置灰，点击 toast），
+// 添加态只露「扫码从手机导入」——两态互斥，表单同一时刻只有一个二维码动作可讲
+function syncFormQrBtns() {
+  const cfg = editId ? cfgOf(editId) : null;
+  const share = $("shareSrvBtn");
+  if (share) {
+    share.style.display = cfg ? "" : "none";
+    const online = !!(cfg && ctxs.get(cfg.id) && ctxs.get(cfg.id).status === "online");
+    share.classList.toggle("off", !online);
+    share.title = online ? "手机扫一下，把这条连接导入手机 CC Deck" : "该源未在线";
+  }
+  const imp = $("importSrvBtn");
+  if (imp) imp.style.display = cfg ? "none" : "";
 }
 let formForcedOpen = false;
 $("addSrvBtn").onclick = () => {
@@ -4552,6 +4590,7 @@ $("cancelEdit").onclick = () => { formForcedOpen = false; setFormKind(formKind, 
 // 每行 [状态点 + 名称 + 配对徽章 + 地址摘要（含状态）+ 失败态重试钮] + 删除；
 // 点行 = 设为活动源 + 下方就地展开编辑表单（#406，抽屉不收）
 function renderServers() {
+  syncFormQrBtns(); // #41web② 分享钮置灰随连接状态实时刷新（setConn → renderServers 必经）
   const box = $("srvList");
   if (!servers.length) { box.innerHTML = '<div class="pair-hint">还没有服务器，点下方「＋ 添加服务器」</div>'; renderNewTarget(); renderGpStatus(); return; }
   box.innerHTML = servers.map((s) => {
@@ -5607,6 +5646,7 @@ function startLoginQr() {
 }
 function closeLoginQr(msg) {
   $("loginQrPop").classList.remove("open");
+  importListenStop(); // 议题③：导入码的回传 ws 与浮层同生命周期，关层即断
   clearInterval(loginQrTimer); loginQrTimer = 0;
   clearTimeout(loginQrTimeout); loginQrTimeout = 0;
   for (const ctx of ctxs.values()) {
@@ -5668,6 +5708,148 @@ async function addPhoneQr() {
   $("loginQrPop").classList.add("open");
 }
 $("addPhoneBtn").onclick = () => void addPhoneQr();
+
+// ── 议题②/③ 三码体系补全（2026-09-09）：桌面端把已有连接递给手机 / 从手机收回连接。
+// 码形态沿用 App 已认识的两种：LAN 源 = {v:1,url,token} 直连码；云源 = ccdeck-add 一次性码
+// （App 领码连桥 pair_req 落库，与「添加手机」同链路）。新增第三种 t:"ccdeck-import"——
+// 桌面出码携带本机 relay 的 rt（url+token），手机扫码后反挑一条连接回传
+// {t:"ccdeck-import-resp", entry:{kind,wsUrl,token,cloud}}，桌面收到即落库并连接。
+// 浮层统一复用 loginQrPop；import 的临时回传 ws 与浮层生命周期绑定（关层即断）
+
+// 议题② 分享连接：编辑表单里的「分享到手机」。目标源必须在线（按钮未在线时已置灰，
+// 这里再兜一层：状态变化与点击之间有间隙）。云源领码走 COMMAND_PAIR_CODE，失败 toast
+async function shareSrvQr() {
+  const cfg = editId ? cfgOf(editId) : null;
+  if (!cfg) return;
+  const ctx = ctxs.get(cfg.id) || null;
+  if (!ctx || ctx.status !== "online") { toast("该源未在线"); return; }
+  let payload;
+  if (cfg.kind === "lan") {
+    if (!cfg.token) { toast("本源未存令牌，无法生成分享码"); return; }
+    let url = cfg.wsUrl, token = cfg.token;
+    // loopback 地址手机扫了连不通（#44 同因）：条目指的就是本机 relay 时换成
+    // lan-ip 实测端点，token 同步用实测值——源列表 token 可能随 relay 换代过期
+    const ep = localEp(url);
+    if (ep && ep.loop && localRelayInfo && localRelayInfo.port === ep.port) {
+      const host = localRelayInfo.lanIp ||
+        (location.hostname && !/^(127\.|localhost|\[::)/.test(location.hostname) ? location.hostname : "");
+      if (host) { url = "ws://" + host + ":" + localRelayInfo.port + "/ws"; token = localRelayInfo.token; }
+    }
+    payload = JSON.stringify({ v: 1, url, token });
+  } else {
+    const c = cfg.cloud || {};
+    // rd/rk 取条目 cloud 配置（配对/发现帧都会写回最新身份），缺了只能等身份刷新
+    const rd = c.rd || (ctx.pendingPair && ctx.pendingPair.fresh && ctx.pendingPair.rd) || "";
+    if (!rd || !c.rk) { toast("正在定位服务器身份，几秒后再试"); return; }
+    const ack = await commandAck(ctx, "COMMAND_PAIR_CODE", {});
+    if (!ack || !ack.ok || !ack.pair_code) { toast((ack && ack.error) || "领配对码失败"); return; }
+    payload = JSON.stringify({
+      t: "ccdeck-add", v: 1,
+      bridge: cfg.wsUrl.replace(/\/$/, "").replace(/^http/, "ws"),
+      bt: serverBridgeToken(cfg), rd, rk: c.rk, code: ack.pair_code.code,
+    });
+  }
+  $("loginQrTitle").textContent = "分享连接到手机";
+  $("loginQrSub").innerHTML = "手机 CC Deck App 扫下方二维码<br/>自动导入这条连接";
+  $("loginQrState").textContent = "等待手机扫码…";
+  drawLoginQr(payload);
+  $("loginQrPop").classList.add("open");
+}
+$("shareSrvBtn").onclick = () => void shareSrvQr();
+
+// 议题③ 从手机导入：添加服务器表单里的「扫码从手机导入」。码内 rt = 本机 relay
+//（lan-ip + 实测端口/token，一律 localRelayInfo 实测优先，同 #40x 领码教训）；
+// 出码同时向同一 relay 开一条临时回传 ws，等手机选好连接推 import-resp 帧
+let importWs = null;
+async function importSrvQr() {
+  if (!localRelayInfo) await probeRelayStat(); // relay 页没开过也能出码：先补一次实测探测
+  if (!localRelayInfo) { toast("本机 relay 未运行"); return; }
+  const host = localRelayInfo.lanIp ||
+    (location.hostname && !/^(127\.|localhost|\[::)/.test(location.hostname) ? location.hostname : "");
+  if (!host) { toast("本机 relay 未运行"); return; }
+  const url = "ws://" + host + ":" + localRelayInfo.port + "/ws";
+  $("loginQrTitle").textContent = "从手机导入连接";
+  $("loginQrSub").innerHTML = "手机 CC Deck App 扫码后<br/>选择要分享的连接";
+  $("loginQrState").textContent = "等待手机扫码…";
+  drawLoginQr(JSON.stringify({ t: "ccdeck-import", v: 1, rt: { url, token: localRelayInfo.token } }));
+  $("loginQrPop").classList.add("open");
+  importListenStart(url, localRelayInfo.token); // 码内容与监听同生命周期：开浮层=开监听
+}
+$("importSrvBtn").onclick = () => void importSrvQr();
+
+function importListenStart(url, token) {
+  importListenStop();
+  try {
+    const w = new WebSocket(url + (url.includes("?") ? "&" : "?") + "token=" + encodeURIComponent(token));
+    importWs = w;
+    w.onmessage = (ev) => {
+      if (importWs !== w) return;
+      let m; try { m = JSON.parse(ev.data); } catch { return; }
+      if (m && m.t === "ccdeck-import-resp" && m.entry) onImportEntry(m.entry);
+    };
+    w.onclose = () => { if (importWs === w) importWs = null; };
+    w.onerror = () => {};
+  } catch { importWs = null; }
+}
+function importListenStop() {
+  const w = importWs;
+  importWs = null;
+  if (!w) return;
+  w.onmessage = null; w.onclose = null; w.onerror = null;
+  try { w.close(); } catch {}
+}
+// 回传落地：走现有 saveServers 语义（去重复用 / 新建）→ 设为活动源 → 立即连接 →
+// 关浮层（closeLoginQr 内顺带断开回传 ws）+ toast 点名
+function onImportEntry(e) {
+  const kind = e && e.kind === "cloud" ? "cloud" : "lan";
+  const wsUrl = String((e && e.wsUrl) || "").trim();
+  const token = String((e && e.token) || "").trim();
+  if (!wsUrl) { toast("回传的连接缺少地址，已忽略"); return; }
+  if (kind === "lan" && !token) { toast("回传的直连缺少令牌，已忽略"); return; }
+  const cloud = kind === "cloud" && e.cloud && typeof e.cloud === "object" ? e.cloud : null;
+  // 去重复用：云源按桥归一同址（同桥双源会互踢，必须收编进同一条）；
+  // 直连同字面地址，或 loopback 同端口（本机条目多写法归并的同一口径）
+  let ex;
+  if (kind === "cloud") {
+    const bk = normBridge(wsUrl);
+    ex = servers.find((s) => s.kind === "cloud" && (s.wsUrl === wsUrl || (bk && normBridge(s.wsUrl) === bk))) || null;
+  } else {
+    const ep = localEp(wsUrl);
+    ex = servers.find((s) => s.kind === "lan" && s.wsUrl &&
+      (s.wsUrl === wsUrl || (ep && ep.loop && localEp(s.wsUrl)?.loop && localEp(s.wsUrl).port === ep.port))) || null;
+  }
+  const name = (ex && ex.name) || (kind === "cloud" ? "云桥" : hostOf(wsUrl));
+  if (ex) {
+    ex.wsUrl = wsUrl;
+    if (token) ex.token = token;
+    if (kind === "cloud") {
+      // 回传带成对 rd/rk 的已配对身份才覆写；否则保留原身份，只刷新地址/token
+      const c = cloud && cloud.paired && cloud.rd && cloud.rk
+        ? { url: wsUrl, token: token || serverBridgeToken(ex), rd: cloud.rd, rk: cloud.rk, paired: true }
+        : (ex.cloud || { url: wsUrl, token: token || BAKED_BRIDGE_TOKEN, rd: BAKED_RELAY.rd, rk: BAKED_RELAY.rk, paired: false });
+      c.url = wsUrl;
+      if (token) c.token = token;
+      ex.cloud = c;
+    } else ex.cloud = undefined;
+  } else {
+    ex = { id: uuid(), name, kind, wsUrl, token };
+    if (kind === "cloud") {
+      ex.cloud = cloud && cloud.paired && cloud.rd && cloud.rk
+        ? { url: wsUrl, token: token || BAKED_BRIDGE_TOKEN, rd: cloud.rd, rk: cloud.rk, paired: true }
+        : { url: wsUrl, token: token || BAKED_BRIDGE_TOKEN, rd: BAKED_RELAY.rd, rk: BAKED_RELAY.rk, paired: false };
+    }
+    servers.push(ex);
+  }
+  saveServers();
+  // 设为活动源 + 新建目标记忆同步（同源列表行点击的口径，防记忆回拽）
+  activeServerId = ex.id;
+  newTargetTouched = true;
+  try { localStorage.setItem(ACTIVE_KEY, activeServerId); } catch {}
+  try { localStorage.setItem("ccd_new_target", activeServerId); } catch {}
+  if (canAutoConnect(ex)) connectServer(ex);
+  renderServers(); renderConnChip(); render();
+  closeLoginQr("已导入：" + name);
+}
 
 // 首启连接向导（#354 一码直达）：默认路径=输配对码即连家里（复用默认云桥+烘焙
 // 身份，配对成功 pair_ack 自动落源）；扫码/直连降为次级入口

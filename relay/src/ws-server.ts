@@ -531,6 +531,16 @@ export function startServer(
         ws.send('{"type":"PONG"}');
         return;
       }
+      // #45 三码体系·客户端间转发：手机「从手机导入」的回发帧（t=ccdeck-import-resp）
+      // 不是命令——原样转发给同 relay 的其他已认证 ws 客户端（网页/exe 的导入监听器）
+      if (cmd && (cmd as { t?: string }).t === "ccdeck-import-resp") {
+        const raw = JSON.stringify(cmd);
+        for (const c of wss.clients) {
+          if (c !== ws && c.readyState === WebSocket.OPEN) c.send(raw);
+        }
+        ws.send('{"t":"ccdeck-import-resp-ack"}');
+        return;
+      }
       if (
         !cmd ||
         typeof cmd.command_id !== "string" ||

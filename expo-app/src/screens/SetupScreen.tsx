@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { Alert, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
+import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { LinearGradient } from "expo-linear-gradient";
 import { SafeAreaView } from "react-native-safe-area-context";
@@ -9,7 +9,8 @@ import { useTheme, useThemeStyles } from "../theme-context";
 import { store, useRelay, type ServerEntry } from "../store";
 import { uuid } from "../fmt";
 import { useKbHeight } from "../kb";
-import ScanScreen, { type ScanResult } from "./ScanScreen";
+import ScanScreen, { routeScanResult, type ScanResult } from "./ScanScreen";
+import ImportPicker, { type ImportTarget } from "./ImportPicker";
 
 interface Props {
   onClose?: () => void; // 有值 = 从主界面进入（可返回）
@@ -49,6 +50,10 @@ export default function SetupScreen({ onClose, editId, initialScan }: Props) {
   // 扫码直连（#276）：initialScan（抽屉扫码入口）进页即开扫码；扫得连接码自动填表单，
   // 预览确认后仍走下方 add() 既有流程
   const [scanOpen, setScanOpen] = useState(!!initialScan);
+  // 连接导入（ccdeck-import）：电脑端「分享连接」码扫入后弹 ImportPicker，选定条目
+  // 由选择器向码中 rt 临时通道回发（本页表单不参与）
+  const [importOpen, setImportOpen] = useState(false);
+  const [importTarget, setImportTarget] = useState<ImportTarget | null>(null);
   const tokenInputRef = useRef<TextInput>(null);
   // 状态行显示的主机名：发起连接时固化，不随表单后续编辑漂移
   const [connHost, setConnHost] = useState("");
@@ -256,72 +261,28 @@ export default function SetupScreen({ onClose, editId, initialScan }: Props) {
     void store.deleteServer(e.id).then(() => reload());
   };
 
-  // 扫码结果分发（#325，#329 纠偏）：ccdeck-login = 网页端出示的登录码——扫码即登录，
-  // 手机不要求预先连接/切换到对应服务器：授权优先发给 relayDev 与码中 rd 匹配的已连接
-  // 源（多服务器下不串台），没有匹配则走活动源（手机是信任锚，网页端 pair_ack 的密封
-  // 本身即身份证明）；连接码 → 回填表单（用户已手输名称则尊重）
+  // 扫码结果分发（#325，#329 纠偏；与设置抽屉共用 ScanScreen.routeScanResult 同一条
+  // 链路）：本页只注入表单语境的钩子——错误落到表单 err 行、连接/接入成功后刷新列表
+  // 并关页、直连码同步回填表单（用户已手输名称则尊重，连接失败停留本页时不误导）
   const applyScan = (r: ScanResult) => {
-    if (r.login) {
-      const { dev, pk, rd } = r.login;
-      const who = r.login.name.length > 16 ? `${r.login.name.slice(0, 16)}…` : r.login.name;
-      const viaId = rd ? store.sourceIdForRelay(rd) : undefined;
-      const viaName = (viaId ? servers.find((e) => e.id === viaId) : servers.find((e) => e.id === activeId))?.name;
-      Alert.alert(
-        "扫码登录",
-        `允许「${who}」接入${viaName ? `「${viaName}」` : "这台服务器"}？\n授权后它可查看会话并发送指令。`,
-        [
-          { text: "取消", style: "cancel" },
-          {
-            text: "允许",
-            onPress: () => {
-              if (!store.send("COMMAND_LOGIN_GRANT", { session_dev: dev, session_pk: pk, name: who }, viaId)) {
-                setErr("未连接 relay：先连接服务器，再扫码授权网页端");
-              }
-            },
-          },
-        ],
-        { cancelable: true },
-      );
-      return;
-    }
-    // #330 云源接入邀请：电脑端「添加手机」出的码——确认后 pair_req 落库自动连接
-    if (r.invite) {
-      const inv = r.invite;
-      Alert.alert(
-        "接入云服务器",
-        `扫码接入「${hostOf(inv.bridge)}」？\n将使用一次性配对码自动完成。`,
-        [
-          { text: "取消", style: "cancel" },
-          {
-            text: "接入",
-            onPress: () => {
-              void store.addCloudByInvite(inv).then((err) => {
-                if (err) setErr(err);
-                else if (onClose) onClose();
-              });
-            },
-          },
-        ],
-        { cancelable: true },
-      );
-      return;
-    }
-    // #330 直连码即扫即连：码里已含完整 url+token，直接建/复用条目连接
-    //（此前回填表单让用户手点「连接」，多一步且易漏）
-    const base = r.wsUrl.replace(/\/+$/, "");
-    setWsUrl(base);
-    setToken(r.token);
-    setKind("lan"); // 直连码扫到的是 LAN 地址：表单形态随之对齐（连接失败停留本页时不误导）
-    setErr(null);
-    if (!name.trim()) setName(hostOf(base));
-    const dup = servers.find((e) => e.wsUrl === base);
-    const entry: ServerEntry = dup
-      ? { ...dup, token: r.token }
-      : { id: uuid(), name: name.trim() || hostOf(base), wsUrl: base, token: r.token };
-    void store.connectServer(entry, r.token).then(() => {
-      setActiveId(entry.id);
-      reload();
-      if (onClose) onClose();
+    void routeScanResult(r, {
+      onError: setErr,
+      onDone: () => {
+        void reload();
+        if (onClose) onClose();
+      },
+      onImport: (t) => {
+        setImportTarget(t);
+        setImportOpen(true);
+      },
+      onDirect: (base, tk) => {
+        setWsUrl(base);
+        setToken(tk);
+        setKind("lan"); // 直连码扫到的是 LAN 地址：表单形态随之对齐
+        setErr(null);
+        if (!name.trim()) setName(hostOf(base));
+        return name.trim() || undefined; // 新条目名：表单已手输名称则尊重
+      },
     });
   };
 
@@ -601,6 +562,7 @@ export default function SetupScreen({ onClose, editId, initialScan }: Props) {
         </ScrollView>
       </View>
       <ScanScreen visible={scanOpen} onClose={() => setScanOpen(false)} onResult={applyScan} />
+      <ImportPicker visible={importOpen} target={importTarget} onClose={() => setImportOpen(false)} />
     </SafeAreaView>
   );
 }
