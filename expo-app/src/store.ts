@@ -79,6 +79,9 @@ interface PendingCmd {
   tries: number;
   timer: ReturnType<typeof setTimeout>;
   wire: () => boolean;
+  // 0.4.4 跨网回传等需要结果语义的调用方注入（send 第 4 参）：ACK 到达/超时收摊时回调，
+  // 断连清场不回调（调用方自带兜底超时）
+  onAck?: (r: { ok: boolean; err: string | null }) => void;
 }
 
 // 按源连接状态（#294 批1：聚合视图数据源；单源模式仅活动源在连，UI 暂不消费）
@@ -195,6 +198,7 @@ const CMD_LABEL: Record<string, string> = {
   COMMAND_PAIR_START: "云桥配对",
   COMMAND_WATCH_GRANT: "手表配对",
   COMMAND_LOGIN_GRANT: "扫码授权",
+  COMMAND_IMPORT_PUSH: "连接回传",
 };
 
 class RelayStore {
@@ -1149,6 +1153,12 @@ class RelayStore {
         clearTimeout(p.timer);
         conn.pendingCmds.delete(ack.command_id);
       }
+      // 0.4.4 结果语义回调：duplicate（重发命中幂等去重=早已执行过）按成功口径回，
+      // 其余按 ACK 原样；p 不存在（已被超时收摊）则丢弃
+      if (p?.onAck) {
+        const dup = !ack.ok && !!ack.error && ack.error.startsWith("duplicate");
+        try { p.onAck({ ok: ack.ok === true || dup, err: ack.ok || dup ? null : String(ack.error ?? "未知错误") }); } catch {}
+      }
       if (ack.cloud) void this.saveCloudPairing(conn, ack.cloud);
       if (ack.pair_code) {
         this.emit({ pairCode: { code: ack.pair_code.code, expiresAt: Date.now() + ack.pair_code.expires_in * 1000 } });
@@ -1868,8 +1878,8 @@ class RelayStore {
   // 全局唯一，可作跨源主键）——会话命令永远发往该会话的源，不改协议；无 sid 时取
   // 显式 sourceId（批3 新建会话选目标源），再退活动源（COMMAND_CREATE / PAIR_*）。
   // ACK 追踪按源隔离（pendingCmds 在 conn 上）：超时重发同源同 command_id，
-  // relay 幂等去重兜底，不跨源串扰
-  send(type: string, payload: Record<string, unknown>, sourceId?: string): boolean {
+  // relay 幂等去重兜底，不跨源串扰。onAck（0.4.4）：需要结果语义的调用方注入
+  send(type: string, payload: Record<string, unknown>, sourceId?: string, onAck?: (r: { ok: boolean; err: string | null }) => void): boolean {
     const sid = typeof payload.session_id === "string" ? (payload.session_id as string) : null;
     // sid 已给但 sidIndex 未命中（#294 审查修复：会话已删/所属源换目标清缓存）：
     // 明确报"会话不存在"，不再回落活动源——回落会把命令发给另一台服务器
@@ -1906,6 +1916,7 @@ class RelayStore {
       tries: 0,
       timer: null as unknown as ReturnType<typeof setTimeout>,
       wire,
+      ...(onAck ? { onAck } : {}),
     };
     entry.timer = setTimeout(() => this.onCmdTimeout(conn, id), ACK_TIMEOUT_MS);
     conn.pendingCmds.set(id, entry);
@@ -1922,6 +1933,9 @@ class RelayStore {
       return;
     }
     conn.pendingCmds.delete(id);
+    if (p.onAck) {
+      try { p.onAck({ ok: false, err: "服务器未确认，可能未送达" }); } catch {}
+    }
     this.emit({ lastErrorCmd: `${CMD_LABEL[p.type] ?? "命令"}重发后仍未确认，可能未送达` });
   }
 

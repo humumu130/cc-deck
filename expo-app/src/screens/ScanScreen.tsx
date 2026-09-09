@@ -16,8 +16,9 @@ export interface ScanResult {
   wsUrl: string;
   token: string;
   // #325 扫码登录（微信式）：网页/exe 端出示的授权请求——不是添加服务器，
-  // 消费方应发 COMMAND_LOGIN_GRANT 给当前活动 relay
-  login?: { dev: string; pk: string; name: string; rd?: string };
+  // 消费方应发 COMMAND_LOGIN_GRANT 给当前活动 relay。imp=0.4.4 合并码标记：
+  // 出码端还接受「挑一条连接回传」（COMMAND_IMPORT_PUSH 跨网中转），双选呈现
+  login?: { dev: string; pk: string; name: string; rd?: string; imp?: boolean };
   // #330 云源接入邀请（电脑端「添加手机」出的码）：一次性配对码+桥地址+relay 身份，
   // 消费方走 pair_req 流程落成云源条目
   invite?: { bridge: string; bt: string; rd: string; rk: string; code: string };
@@ -39,7 +40,7 @@ export function parseScanPayload(raw: string): ScanResult | null {
       v?: number; url?: unknown; token?: unknown;
       t?: unknown; dev?: unknown; pk?: unknown; name?: unknown; rd?: unknown;
       bridge?: unknown; bt?: unknown; rk?: unknown; code?: unknown;
-      rt?: unknown;
+      rt?: unknown; imp?: unknown;
     };
     if (j?.t === "ccdeck-login") {
       const dev = typeof j.dev === "string" ? j.dev : "";
@@ -51,7 +52,7 @@ export function parseScanPayload(raw: string): ScanResult | null {
         if (typeof j.name === "string" && j.name) {
           try { name = decodeURIComponent(j.name); } catch { name = j.name; }
         }
-        return { wsUrl: "", token: "", login: { dev, pk, name, rd: rd || undefined } };
+        return { wsUrl: "", token: "", login: { dev, pk, name, rd: rd || undefined, ...(j.imp === 1 || j.imp === true ? { imp: true } : {}) } };
       }
       return null;
     }
@@ -126,6 +127,29 @@ export async function routeScanResult(r: ScanResult, ctx: ScanRouteCtx): Promise
     const viaId = rd ? store.sourceIdForRelay(rd) : undefined;
     const activeId = await store.activeServerId();
     const viaName = (viaId ? servers.find((e) => e.id === viaId) : servers.find((e) => e.id === activeId))?.name;
+    const grant = () => {
+      if (!store.send("COMMAND_LOGIN_GRANT", { session_dev: dev, session_pk: pk, name: who }, viaId)) {
+        ctx.onError("未连接 relay：先连接服务器，再扫码授权网页端");
+      }
+    };
+    // 0.4.4 合并码：授权入网 / 挑一条连接回传 双选（回传经 relay 加密中转，跨网络可用）。
+    // 普通登录码保持单选授权；三钮 Alert 中性钮居左、主操作居右（RN 平台约定）
+    if (r.login.imp) {
+      Alert.alert(
+        "扫码接入",
+        `「${who}」想接入这台手机上的 CC Deck。\n可授权它直接入网，或挑一条连接给它回传。`,
+        [
+          { text: "取消", style: "cancel" },
+          {
+            text: "回传连接",
+            onPress: () => ctx.onImport({ cloudPush: { dev, pk, ...(viaId ? { viaId } : {}) } }),
+          },
+          { text: "授权入网", onPress: grant },
+        ],
+        { cancelable: true },
+      );
+      return;
+    }
     Alert.alert(
       "扫码登录",
       `允许「${who}」接入${viaName ? `「${viaName}」` : "这台服务器"}？\n授权后它可查看会话并发送指令。`,
@@ -133,11 +157,7 @@ export async function routeScanResult(r: ScanResult, ctx: ScanRouteCtx): Promise
         { text: "取消", style: "cancel" },
         {
           text: "允许",
-          onPress: () => {
-            if (!store.send("COMMAND_LOGIN_GRANT", { session_dev: dev, session_pk: pk, name: who }, viaId)) {
-              ctx.onError("未连接 relay：先连接服务器，再扫码授权网页端");
-            }
-          },
+          onPress: grant,
         },
       ],
       { cancelable: true },

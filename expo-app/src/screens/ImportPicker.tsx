@@ -13,11 +13,13 @@ import { withA, type ThemeColors } from "../theme";
 import { useTheme, useThemeStyles } from "../theme-context";
 import { store, useRelay, type ServerEntry } from "../store";
 
-// 电脑端临时收件通道（码中 rt 字段）：url + 一次性收件令牌
-export interface ImportTarget {
-  url: string;
-  token: string;
-}
+// 回传目标两形态：
+//   LAN rt（旧）：电脑端临时收件通道（码中 rt 字段）——url + 一次性收件令牌，同一 WiFi
+//   cloudPush（0.4.4 合并码）：经 relay 加密中转（COMMAND_IMPORT_PUSH，跨网络）——
+//     dev/pk = 出码端身份，viaId = 授权源（rd 匹配的已连源，缺省活动源）
+export type ImportTarget =
+  | { url: string; token: string }
+  | { cloudPush: { dev: string; pk: string; viaId?: string } };
 
 type SendState =
   | { phase: "idle" }
@@ -55,9 +57,10 @@ function fetchPairCode(sourceId: string): Promise<string | null> {
   });
 }
 
-// 临时 WebSocket 回发：8s 内必须完成 open+send；发出后收到任意回帧即算送达并关闭，
+// 临时 WebSocket 回发（LAN rt 通道专用；云中转走 pick 内的 COMMAND_IMPORT_PUSH）：
+// 8s 内必须完成 open+send；发出后收到任意回帧即算送达并关闭，
 // 2s 无回帧也收摊（电脑端处理完即断开属正常）。发出前的 close/error 都算失败
-function sendToTarget(rt: ImportTarget, resp: unknown): Promise<void> {
+function sendToTarget(rt: { url: string; token: string }, resp: unknown): Promise<void> {
   return new Promise((resolve, reject) => {
     const url = rt.url + (rt.url.includes("?") ? "&" : "?") + "token=" + encodeURIComponent(rt.token);
     let ws: WebSocket;
@@ -182,10 +185,34 @@ export default function ImportPicker({
         } else {
           entry = { kind: "lan", wsUrl: e.wsUrl, token: shareTokenOf(e) };
         }
-        const resp: Record<string, unknown> = { t: "ccdeck-import-resp", entry };
-        if (note) resp.note = note;
         setLive({ phase: "busy", text: "正在发送给电脑…" });
-        await sendToTarget(target, resp);
+        if ("cloudPush" in target) {
+          // 0.4.4 云中转：relay 校验后用出码端公钥密封投递（跨网络）。ACK 带结果
+          // 语义（离线/格式等同步报错）；断连清场不回调，15s 兜底收摊
+          const cp = target.cloudPush;
+          const sent = await new Promise<{ ok: boolean; err: string | null }>((resolve) => {
+            let done = false;
+            const fin = (r: { ok: boolean; err: string | null }) => {
+              if (done) return;
+              done = true;
+              clearTimeout(timer);
+              resolve(r);
+            };
+            const timer = setTimeout(() => fin({ ok: false, err: "等待服务器确认超时" }), 15000);
+            const queued = store.send(
+              "COMMAND_IMPORT_PUSH",
+              { target_dev: cp.dev, target_pk: cp.pk, entry, ...(note ? { note } : {}) },
+              cp.viaId,
+              (r) => fin(r),
+            );
+            if (!queued) fin({ ok: false, err: "未连接，未发送" });
+          });
+          if (!sent.ok) throw new Error(sent.err ?? "未知错误");
+        } else {
+          const resp: Record<string, unknown> = { t: "ccdeck-import-resp", entry };
+          if (note) resp.note = note;
+          await sendToTarget(target, resp);
+        }
         setLive({ phase: "ok", text: note ? `已发送给电脑（${note}）` : "已发送给电脑" });
         setTimeout(() => {
           if (aliveRef.current) onClose();
@@ -205,7 +232,11 @@ export default function ImportPicker({
           <Pressable style={m.sheet} onPress={(e) => e.stopPropagation()}>
             <Text style={m.h3}>分享连接给电脑</Text>
             <Text style={m.sub}>
-              {target ? `电脑 ${hostOf(target.url)} ` : "电脑 "}
+              {target && "url" in target
+                ? `电脑 ${hostOf(target.url)} `
+                : target
+                  ? "电脑经服务器中转接收（跨网络可用）"
+                  : "电脑 "}
               请求导入手机上的连接，点选要分享的一条
             </Text>
             {shareable.length === 0 ? (
@@ -251,7 +282,7 @@ export default function ImportPicker({
                 {st.text}
               </Text>
             ) : null}
-            <Pressable style={m.cancel} android_ripple={{ color: c.tintSoft, borderless: false, radius: 21 }} onPress={onClose}>
+            <Pressable style={m.cancel} android_ripple={{ color: c.tintSoft, borderless: false, radius: 21 }} disabled={busyRef.current} onPress={onClose}>
               <Text style={m.cancelT}>{st.phase === "fail" ? "关闭" : "取消"}</Text>
             </Pressable>
           </Pressable>
