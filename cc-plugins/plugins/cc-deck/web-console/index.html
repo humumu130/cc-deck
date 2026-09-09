@@ -486,8 +486,8 @@
   }
   .gp-acts button svg { flex: none; }
   .gp-acts button:hover { border-color: rgba(142,163,186,.42); }
-  #gearPop #loginQrBtn { background: var(--gp-accent); border-color: transparent; color: #fff; font-weight: 600; }
-  #gearPop #loginQrBtn:hover { filter: brightness(1.07); border-color: transparent; }
+  /* 0.4.4 配对区两钮并一钮：原「扫码接入」（授权能力）并入连接表单的「扫码从手机导入」，
+     本区只剩手机接入本服务器一键（gp-acts 通用样式即够，无需专属规则） */
   /* #396 拨杆分段选择器：胶囊轨道 + 滑块，档位标签平分轨道；
      滑块 z 层在文字下方（opt z-index:1 > thumb z-index:0），不遮挡选中档文字；
      切换只动滑块 transform（transition 平滑），点任意档即落该档。
@@ -1719,8 +1719,7 @@
               <div class="pair-hint" id="pairHint"></div>
             </div>
             <div class="gp-acts gp-pair-acts">
-              <button id="loginQrBtn" title="手机扫一下，这台电脑直接接入你的 CC Deck"><svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 8V5a2 2 0 0 1 2-2h3M16 3h3a2 2 0 0 1 2 2v3M21 16v3a2 2 0 0 1-2 2h-3M8 21H5a2 2 0 0 1-2-2v-3"/><path d="M7 12h10"/></svg>扫码接入</button>
-              <button id="addPhoneBtn" title="手机 App 扫码直接接入本服务器"><svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="7" y="2.5" width="10" height="19" rx="2.2"/><path d="M12 9.2v5.6M9.2 12h5.6"/></svg>添加手机</button>
+              <button id="addPhoneBtn" title="手机 App 扫码直接接入本服务器"><svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="7" y="2.5" width="10" height="19" rx="2.2"/><path d="M12 9.2v5.6M9.2 12h5.6"/></svg>扫码接入</button>
             </div>
           </div>
           <div class="gp-sec"><svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9 5.5 10.5 4h3L15 5.5"/><rect x="4" y="5.5" width="16" height="15" rx="3"/><path d="M8.5 11h7M8.5 15h4.5"/></svg>已配对设备</div>
@@ -2782,13 +2781,25 @@ function onCloudText(ctx, text) {
   const senderPk = target ? target.rk : (cloudPeerOf(cfg)?.relay_pubkey || "");
   let inner = null;
   if (senderPk) inner = unseal(f.data, senderPk, ckp.secretKey);
-  if (!inner && target && !target.rd && target.cands) {
-    for (const cand of target.cands) {
-      inner = unseal(f.data, cand.rk, ckp.secretKey);
-      if (inner) break;
+  if (!inner) {
+    // 0.4.4 回传帧兜底试解：主锚（pendingPair.rk，login 态可能停在烘焙旧值）解不开时，
+    // 依次尝试已配对身份与发现候选——回传由手机侧源 relay 密封，未必与出码锚一致
+    const alt = cloudPeerOf(cfg)?.relay_pubkey;
+    if (alt && alt !== senderPk) inner = unseal(f.data, alt, ckp.secretKey);
+    if (!inner && target && target.cands) {
+      for (const cand of target.cands) {
+        if (cand.rk === senderPk || cand.rk === alt) continue;
+        inner = unseal(f.data, cand.rk, ckp.secretKey);
+        if (inner) break;
+      }
     }
   }
-  if (!inner) return;
+  if (!inner) {
+    // 合并码回传的可见失败（#384 同族黑洞防线）：出码浮层开着却解不开 = 手机端已显示
+    // 「已发送」而这端永远收不到——toast 明示改道，不再静默吞帧
+    if ($("loginQrPop").classList.contains("open")) toast("收到回传但无法解密（服务器身份不匹配），请重试或改用配对码", 5000);
+    return;
+  }
   ctx.wsFails = 0; // 收到有效密封帧 = 传输链路健康
   if (inner.t === "pair_ack") {
     clearInterval(ctx.pairTimer);
@@ -2835,6 +2846,12 @@ function onCloudText(ctx, text) {
     return;
   }
   if (inner.t === "pong") { ctx.lastPong = Date.now(); return; }
+  if (inner.t === "ccdeck-import-resp") {
+    // 0.4.4 跨网回传：手机经桥密封推来的连接条目（授权码上 imp:1 的合并扫码路径）。
+    // 与 LAN rt 通道同构收口——onImportEntry 内含去重落库/设活动源/关层后连接/toast（note 附注随 toast 呈现）
+    if (inner.entry && typeof inner.entry === "object") onImportEntry(inner.entry, typeof inner.note === "string" ? inner.note : undefined);
+    return;
+  }
   if (inner.type === "COMMAND_ACK") { onAck(inner); return; }
   if (inner.seq !== undefined) ctx.lastSeq = Math.max(ctx.lastSeq, inner.seq);
   onEvent(ctx, inner);
@@ -5891,7 +5908,9 @@ function drawLoginQr(text) {
   g.fillStyle = "#111";
   for (let r = 0; r < n; r++) for (let c = 0; c < n; c++) if (q.isDark(r, c)) g.fillRect(off + c * cell, off + r * cell, cell, cell);
 }
-function startLoginQr() {
+// imp=true：0.4.4 合并码（「扫码从手机导入」云桥语境唤起）——授权入网/回传连接二选一，
+// 码带 imp:1（旧 App 忽略未知字段仍可纯授权，新 App 识别后给双选）；回传经桥密封投递
+function startLoginQr(imp) {
   loadCloudIdentity();
   const dev = devId(ckp.publicKey, "wb");
   let cfg = editId ? cfgOf(editId) : null;
@@ -5923,21 +5942,33 @@ function startLoginQr() {
     (c.paired && c.rd ? c.rd : "");
   const makePayload = () => JSON.stringify({
     t: "ccdeck-login", v: 1,
+    ...(imp ? { imp: 1 } : {}),
     bridge: cfg.wsUrl.replace(/\/$/, "").replace(/^http/, "ws") + "/cloud",
     ...(trustedRd() ? { rd: trustedRd() } : {}), dev, pk: ckp.publicKey,
     // #383 QR 库对非 ASCII 不做 UTF-8 编码（源名含中文→扫码乱码→手机端识别失败）：
     // name 一律 encodeURIComponent（手机端解码）
     name: encodeURIComponent((cfg.name || "浏览器").slice(0, 24)),
   });
+  $("loginQrTitle").textContent = imp ? "从手机添加" : "扫码登录";
+  $("loginQrSub").innerHTML = imp
+    ? "手机 CC Deck App 扫码后可选：<br/>授权这台电脑入网 / 挑一条连接回传"
+    : "手机 CC Deck App 扫下方二维码<br/>确认后自动进入——免输配对码";
   $("loginQrState").textContent = trustedRd() ? "等待手机扫码…" : "正在确认服务器身份…请稍候";
   drawLoginQr(makePayload());
   $("loginQrPop").classList.add("open");
-  // 授权应答走 pair_ack：置 pendingPair（login 态 pc 空串），身份检查与输码路径同构
-  const pair = { rd: c.rd || BAKED_RELAY.rd, rk: c.rk || BAKED_RELAY.rk, pc: "" };
-  setPendingPair(cfg.id, pair);
-  ctx.pendingPair = pair;
-  ctx.discTried = false; // 允许重新发现刷新 rd
-  connectCloudFor(ctx, true);
+  // 授权应答走 pair_ack：置 pendingPair（login 态 pc 空串），身份检查与输码路径同构。
+  // 例外（0.4.4）：imp 合并码出在已配对源上时免配对会话——onopen 的空码 pair_req 会命中
+  // relay 幂等 ack 分支，被 wasLoginQr 当登录成功收场（浮层 1 个 RTT 内自毁）。已配对
+  // 直接常连接，回传帧走已配对解密锚（cloudPeerOf.relay_pubkey）
+  if (imp && c.paired && cloudPeerOf(cfg)?.relay_pubkey) {
+    connectCloudFor(ctx, true);
+  } else {
+    const pair = { rd: c.rd || BAKED_RELAY.rd, rk: c.rk || BAKED_RELAY.rk, pc: "" };
+    setPendingPair(cfg.id, pair);
+    ctx.pendingPair = pair;
+    ctx.discTried = false; // 允许重新发现刷新 rd
+    connectCloudFor(ctx, true);
+  }
   // #384 授权黑洞根因：码无 rd 时手机把授权发往自己的活动源——活动源≠本电脑
   // 所连 relay 时 pair_ack 永远到不了这里。发现帧到达（rd fresh）前不出码：
   // 状态行明示等待；rd 就位立即换码并提示可扫
@@ -5949,7 +5980,7 @@ function startLoginQr() {
   clearInterval(loginQrTimer);
   loginQrTimer = setInterval(redraw, 3000); // relay 身份经发现帧刷新后二维码随之更新
   clearTimeout(loginQrTimeout);
-  loginQrTimeout = setTimeout(() => { if ($("loginQrPop").classList.contains("open")) { closeLoginQr("超时未授权，已取消（可重试或改用配对码）"); } }, 120000);
+  loginQrTimeout = setTimeout(() => { if ($("loginQrPop").classList.contains("open")) { closeLoginQr(imp ? "超时未完成，已取消（可重试）" : "超时未授权，已取消（可重试或改用配对码）"); } }, 120000);
 }
 function closeLoginQr(msg) {
   $("loginQrPop").classList.remove("open");
@@ -5966,7 +5997,7 @@ function closeLoginQr(msg) {
   }
   if (msg) toast(msg, 4000);
 }
-$("loginQrBtn").onclick = startLoginQr;
+// 0.4.4：relay 页「扫码接入」按钮已撤（授权能力并入 importSrvQr 合并码），此处仅留取消绑定
 $("loginQrCancel").onclick = () => closeLoginQr();
 
 // #330 反向扫码：本端出码、手机 App 扫一下直接接入本服务器。LAN 源出 v1 直连码
@@ -5982,7 +6013,7 @@ async function addPhoneQr() {
       : (localRelayInfo.lanIp || "");
     if (host) {
       const p = JSON.stringify({ v: 1, url: `ws://${host}:${localRelayInfo.port}/ws`, token: localRelayInfo.token });
-      $("loginQrTitle").textContent = "添加手机";
+      $("loginQrTitle").textContent = "扫码接入";
       $("loginQrSub").innerHTML = "手机 CC Deck App 扫下方二维码<br/>自动接入本机 relay（同一 WiFi）";
       $("loginQrState").textContent = "等待手机扫码…";
       drawLoginQr(p);
@@ -5990,7 +6021,7 @@ async function addPhoneQr() {
       return;
     }
   }
-  if (!ctx || ctx.status !== "online") { toast(ctx ? "当前活动源未在线（重试中…），连上后即可添加手机" : "请先添加/连接服务器，再添加手机"); return; }
+  if (!ctx || ctx.status !== "online") { toast(ctx ? "当前活动源未在线（重试中…），连上后即可扫码接入" : "请先添加/连接服务器，再扫码接入手机"); return; }
   const cfg = ctx.cfg;
   let payload;
   if (cfg.kind === "lan") {
@@ -6008,7 +6039,7 @@ async function addPhoneQr() {
       bt: serverBridgeToken(cfg), rd, rk: c.rk, code: ack.pair_code.code,
     });
   }
-  $("loginQrTitle").textContent = "添加手机";
+  $("loginQrTitle").textContent = "扫码接入";
   $("loginQrSub").innerHTML = "手机 CC Deck App 扫下方二维码<br/>自动接入本服务器（一次性码 · 短时效）";
   $("loginQrState").textContent = "等待手机扫码…";
   drawLoginQr(payload);
@@ -6069,6 +6100,15 @@ $("shareSrvBtn").onclick = () => void shareSrvQr();
 // 出码同时向同一 relay 开一条临时回传 ws，等手机选好连接推 import-resp 帧
 let importWs = null;
 async function importSrvQr() {
+  // 0.4.4 合并扫码：云桥语境出跨网合并码（手机扫后可选授权这台电脑入网 / 挑一条连接
+  // 回传——经桥密封投递，不受同一 WiFi 限制）；直连语境无桥可走，维持下方旧 rt 局域网
+  // 回传通道（本机 relay 在跑 + 手机同一 WiFi）。授权能力原在 relay 页「扫码接入」钮，
+  // 0.4.4 起并到这里，relay 页只剩手机接入一键
+  const editCfg = editId ? cfgOf(editId) : null;
+  if (formKind === "cloud" || (editCfg && editCfg.kind === "cloud")) {
+    startLoginQr(true);
+    return;
+  }
   if (!localRelayInfo) await probeRelayStat(); // relay 页没开过也能出码：先补一次实测探测
   if (!localRelayInfo) { toast("本机 relay 未运行"); return; }
   const host = localRelayInfo.lanIp ||
@@ -6092,7 +6132,7 @@ function importListenStart(url, token) {
     w.onmessage = (ev) => {
       if (importWs !== w) return;
       let m; try { m = JSON.parse(ev.data); } catch { return; }
-      if (m && m.t === "ccdeck-import-resp" && m.entry) onImportEntry(m.entry);
+      if (m && m.t === "ccdeck-import-resp" && m.entry) onImportEntry(m.entry, typeof m.note === "string" ? m.note : undefined);
     };
     w.onclose = () => { if (importWs === w) importWs = null; };
     w.onerror = () => {};
@@ -6105,9 +6145,11 @@ function importListenStop() {
   w.onmessage = null; w.onclose = null; w.onerror = null;
   try { w.close(); } catch {}
 }
-// 回传落地：走现有 saveServers 语义（去重复用 / 新建）→ 设为活动源 → 立即连接 →
-// 关浮层（closeLoginQr 内顺带断开回传 ws）+ toast 点名
-function onImportEntry(e) {
+// 回传落地：走现有 saveServers 语义（去重复用 / 新建）→ 设为活动源 → 关浮层（清扫
+// 合并码的 pendingPair 登录会话）→ 再对去重后的条目发起正式连接 + toast 点名。
+// 顺序关键（web 审查问题1）：closeLoginQr 会把 pendingPair.pc==="" 且 connecting 的
+// ctx 断开——同桥回传去重命中出码 cfg 本身时，先连后关会把刚起步的连接掐死成「已取消」
+function onImportEntry(e, note) {
   const kind = e && e.kind === "cloud" ? "cloud" : "lan";
   const wsUrl = String((e && e.wsUrl) || "").trim();
   const token = String((e && e.token) || "").trim();
@@ -6153,9 +6195,9 @@ function onImportEntry(e) {
   newTargetTouched = true;
   try { localStorage.setItem(ACTIVE_KEY, activeServerId); } catch {}
   try { localStorage.setItem("ccd_new_target", activeServerId); } catch {}
+  closeLoginQr("已导入：" + name + (note ? "（" + note + "）" : ""));
   if (canAutoConnect(ex)) connectServer(ex);
   renderServers(); renderConnChip(); render();
-  closeLoginQr("已导入：" + name);
 }
 
 // 首启连接向导（#354 一码直达）：默认路径=输配对码即连电脑端（复用默认云桥+烘焙
