@@ -36,10 +36,43 @@ import type {
   TodoItem,
   TokenUsage,
   WaitingPayload,
+  ImportPushEntry,
 } from "./types.js";
 
 function isManagedMode(m: unknown): m is ManagedPermissionMode {
   return m === "default" || m === "acceptEdits" || m === "plan";
+}
+
+// COMMAND_IMPORT_PUSH 条目校验（relay 不解释语义，只卡形状与尺寸——条目含令牌，
+// 长度上限压到防滥用档；cloud 子对象是出码端 pair 所需的全套身份，字段齐才放行）
+function sanitizeImportPushEntry(raw: unknown): ImportPushEntry | null {
+  if (!raw || typeof raw !== "object") return null;
+  const e = raw as Record<string, unknown>;
+  const kind = e.kind === "cloud" ? "cloud" : e.kind === "lan" ? "lan" : null;
+  if (!kind) return null;
+  const wsUrl = typeof e.wsUrl === "string" ? e.wsUrl : "";
+  if (!/^wss?:\/\/.{3,200}$/.test(wsUrl)) return null;
+  const token = typeof e.token === "string" ? e.token.slice(0, 200) : "";
+  if (kind === "lan" && !token) return null;
+  let cloud: ImportPushEntry["cloud"];
+  if (kind === "cloud") {
+    const c = (e.cloud && typeof e.cloud === "object" ? e.cloud : null) as Record<string, unknown> | null;
+    if (!c) return null;
+    const url = typeof c.url === "string" ? c.url : "";
+    const bt = typeof c.token === "string" ? c.token : "";
+    const rd = typeof c.rd === "string" ? c.rd : "";
+    const rk = typeof c.rk === "string" ? c.rk : "";
+    if (!/^(wss?|https?):\/\//.test(url) || !bt || !rd.startsWith("rl-") || rk.length < 40) return null;
+    cloud = {
+      url: url.slice(0, 200),
+      token: bt.slice(0, 200),
+      rd: rd.slice(0, 40),
+      rk: rk.slice(0, 100),
+      paired: true,
+      ...(typeof c.code === "string" && /^\d{6,8}$/.test(c.code) ? { code: c.code } : {}),
+    };
+  }
+  return { kind, wsUrl, ...(token ? { token } : {}), ...(cloud ? { cloud } : {}) };
 }
 
 // #293 新增会话工作目录三级回落：手机指定目录 → 默认目录（CCR_CWD）→ 用户主目录。
@@ -187,7 +220,9 @@ const SNAPSHOT_LOGS_PER_SESSION = 50;
 
 export class SessionManager {
   private sessions = new Map<string, ManagedSession>();
-  private processedCommands = new Map<string, true>();
+  // 幂等去重存首次回执（0.4.4 起）：旧实现重复固定回 ok:true——失败后的同 id 重试
+  //（ACK 丢失重发等）会拿到假成功；缓存真实结果重放，语义对全部命令成立
+  private processedCommands = new Map<string, CommandAckPayload>();
   private titleRequested = new Set<string>();   // 已请求过自动命名的会话
   // relay 自拉的一次性 SDK 子会话（标题生成）的 CLI session_id：
   // 无 hook 但 transcript 活跃，孤儿扫描必须排除，否则被误收养成垃圾外部会话
@@ -395,9 +430,15 @@ export class SessionManager {
 
   // #325 扫码登录授权器（index.ts 注入，转发各云桥客户端 grantLogin）
   private loginGranter: ((dev: string, pubkey: string, name: string) => boolean) | null = null;
+  // 0.4.4 跨网回传执行器（云层注册）：密封 payload 投给目标 dev，目标离线返回 false
+  private importPusher: ((dev: string, pubkey: string, payload: Record<string, unknown>) => boolean) | null = null;
 
   setLoginGranter(fn: (dev: string, pubkey: string, name: string) => boolean): void {
     this.loginGranter = fn;
+  }
+
+  setImportPusher(fn: (dev: string, pubkey: string, payload: Record<string, unknown>) => boolean): void {
+    this.importPusher = fn;
   }
 
   // 不存在则注册外部会话（bridge.ts 调用）；startedAt：真实起点（孤儿收养时取自
@@ -673,16 +714,21 @@ export class SessionManager {
   }
 
   handleCommand(cmd: Command, by: string): CommandAckPayload {
-    // 幂等去重：重复 command_id 直接返回已受理
-    if (this.processedCommands.has(cmd.command_id)) {
-      return { command_id: cmd.command_id, ok: true, error: "duplicate: already processed" };
+    // 幂等去重：重复 command_id 重放首次回执（防失败后同 id 重试假成功）
+    const seen = this.processedCommands.get(cmd.command_id);
+    if (seen) {
+      return seen;
     }
-    this.processedCommands.set(cmd.command_id, true);
+    const ack = this.execCommand(cmd, by);
+    this.processedCommands.set(cmd.command_id, ack);
     if (this.processedCommands.size > 1000) {
       const first = this.processedCommands.keys().next().value;
       if (first !== undefined) this.processedCommands.delete(first);
     }
+    return ack;
+  }
 
+  private execCommand(cmd: Command, by: string): CommandAckPayload {
     try {
       switch (cmd.type) {
         case "COMMAND_CREATE": {
@@ -990,6 +1036,27 @@ export class SessionManager {
             return { command_id: cmd.command_id, ok: false, error: "会话参数格式无效" };
           }
           this.loginGranter(dev, pk, String(p.name ?? "web").slice(0, 32) || "web");
+          return { command_id: cmd.command_id, ok: true };
+        }
+        case "COMMAND_IMPORT_PUSH": {
+          // 0.4.4 合并扫码跨网回传：手机把一条连接条目推给出示合并码的网页/exe 端。
+          // 校验后交云层密封投递；pusher 返回 false = 目标端离线（码浮层已关/断线）
+          const p = cmd.payload as { target_dev?: string; target_pk?: string; entry?: unknown; note?: unknown };
+          const dev = String(p.target_dev ?? "");
+          const pk = String(p.target_pk ?? "");
+          if (!this.cloud || !this.importPusher) {
+            return { command_id: cmd.command_id, ok: false, error: "云桥未启用（PC 侧未设置 CCR_CLOUD_URL）" };
+          }
+          if (!/^wb-[0-9a-f]{6,64}$/.test(dev) || !/^[A-Za-z0-9+/=]{40,200}$/.test(pk) || devId(pk, "wb") !== dev) {
+            return { command_id: cmd.command_id, ok: false, error: "目标设备参数无效" };
+          }
+          const entry = sanitizeImportPushEntry(p.entry);
+          if (!entry) {
+            return { command_id: cmd.command_id, ok: false, error: "回传条目格式无效" };
+          }
+          if (!this.importPusher(dev, pk, { t: "ccdeck-import-resp", entry, ...(p.note ? { note: String(p.note).slice(0, 80) } : {}) })) {
+            return { command_id: cmd.command_id, ok: false, error: "电脑端不在线（二维码可能已关闭）" };
+          }
           return { command_id: cmd.command_id, ok: true };
         }
         case "COMMAND_PIN_SESSION": {

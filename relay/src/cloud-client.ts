@@ -23,6 +23,8 @@ interface CloudFrame {
 // 版本），桥不解析透传，入库前的唯一防线在这里——只认四个已知键，值 trim 后非空且
 // 为字符串才收，超长（>120 字符）截断；全部无效则视为不带 meta（旧客户端等价）
 const PEER_META_MAX = 120;
+// 0.4.4 出码端在场证明 TTL：覆盖合并码浮层 120s 生命周期 + 重连空档（180s）
+const SIGHTING_TTL_MS = 180_000;
 const PEER_META_KEYS = ["name", "platform", "ua", "app"] as const;
 function sanitizePeerMeta(raw: unknown): PeerMeta | undefined {
   if (!raw || typeof raw !== "object" || Array.isArray(raw)) return undefined;
@@ -49,6 +51,11 @@ export class CloudClient {
   // #373 /wan 手表明文透传设备（wt-*）：桥可信通道，无密钥对；状态机与 phones 同构
   private wanWatches = new Map<string, { lastSeq: number; active: boolean }>();
   private unpairedNotice = new Map<string, number>();
+  // 0.4.4 跨网回传的出码端在线判定：未配对网页端不发 hello（phones 无记录），但
+  // 连接 onopen 必发一帧 pair_req（空码=在场信标）。TTL 取 180s：覆盖合并码浮层的
+  // 120s 生命周期 + 重连空档（看门狗 32s 放弃→退避重连→再发信标）；过期 sighting
+  // 由 pair_req 路径与 pushImportTo 的超限清扫回收
+  private wbSightings = new Map<string, number>();
   // 配对码爆破限流（双层）：①按 dev——10 分钟窗口内连续 5 次错码的 dev 静默丢弃；
   // ②全局预算（2026-09-09 F2 修复）——按 dev 计数可被「每 5 次换一个密钥对」绕过，
   // 故全部 dev 合计错码超预算后本窗口内任何 pair_req（含正码）一律静默丢弃，
@@ -133,7 +140,13 @@ export class CloudClient {
     });
     ws.on("message", (raw) => {
       this.lastRecv = Date.now();
-      this.onFrame(String(raw));
+      // 帧处理整体兜底（L3）：onFrame 内任意 throw（如非法 base64 公钥进 devId）
+      // 会沿 ws 回调裸抛崩进程（公共桥上一帧即可触发重启循环）——吞掉并记日志
+      try {
+        this.onFrame(String(raw));
+      } catch (err) {
+        console.log(`[cloud] frame handler error via ${this.tag}:`, err);
+      }
     });
     ws.on("pong", () => {
       this.lastRecv = Date.now();
@@ -213,6 +226,32 @@ export class CloudClient {
     if (now - (this.unpairedNotice.get(dev) ?? 0) < 60_000) return;
     this.unpairedNotice.set(dev, now);
     this.send({ to: dev, data: { t: "pair_nack", error: reason } });
+  }
+
+  // 0.4.4 跨网回传（COMMAND_IMPORT_PUSH 的云层执行器）：把手机挑的连接条目密封后
+  // 投给出示合并码的网页/exe 端。目标端此时多半未配对——没有 peer 条目，但码内
+  // 公钥就是收件人钥匙（手机侧已校验 dev=pk 派生），直接对 pk 密封。在线判定 =
+  // phones 活跃（已 hello）或 SIGHTING_TTL_MS 内有 pair_req 信标；离线返回 false 让
+  // 手机端 ACK 得到人话错误。多桥排序由 index.ts 两遍扫描负责（活跃桥优先）
+  pushImportTo(dev: string, pubkey: string, payload: Record<string, unknown>): boolean {
+    // 桥断开时 send() 是静默 no-op——不检查就返回 true 会让多桥循环短路出假成功
+    if (this.ws?.readyState !== WebSocket.OPEN) return false;
+    const st = this.phones.get(dev);
+    const seen = this.wbSightings.get(dev) ?? 0;
+    const online = !!st?.active || Date.now() - seen < SIGHTING_TTL_MS;
+    if (!online) return false;
+    if (this.wbSightings.size > 200) {
+      const now = Date.now();
+      for (const [d, ts] of this.wbSightings) if (now - ts > SIGHTING_TTL_MS) this.wbSightings.delete(d);
+    }
+    this.send({ to: dev, data: seal(payload, pubkey, this.identity.keypair.secretKey) });
+    return true;
+  }
+
+  // 多桥投递排序用（index.ts 两遍扫描）：目标是否在本桥持有活跃 hello 连接——
+  // 活跃桥必发必达，sighting 桥只代表"近期见过"，排后兜底
+  hasActiveDev(dev: string): boolean {
+    return this.phones.get(dev)?.active === true;
   }
 
   // #325 扫码登录：已配对手机扫了网页端出示的二维码后，经此方法把会话公钥升格为
@@ -304,6 +343,9 @@ export class CloudClient {
         st.active = false;
         console.log(`[cloud] route miss dev=${f.to}, mark inactive`);
       }
+      // 0.4.4：sighting 也一并作废——目标已不在线，别让 180s 窗口内的推送假成功
+      //（页面 pending 期会重发信标，误删可快速自愈）
+      this.wbSightings.delete(f.to);
       return;
     }
     // #373 /wan 手表明文透传信封（桥可信通道）：{t:"wan", from, frame:"<relay协议明文JSON文本>"}
@@ -329,6 +371,17 @@ export class CloudClient {
         console.log(`[cloud] pair_req rejected dev=${f.from}`);
         return;
       }
+      // 0.4.4 出码端 sighting：pair_req 到达（码对错不论）= 该 wb- 设备此刻连着本桥，
+      // pushImportTo 的在线判定据此放行（见 wbSightings 注释）。
+      // 空码 pair_req（0.4.4 起）= 纯在场信标：网页端合并码/登录态的 onopen 例行帧（该态
+      // 看门狗不重发），只记 sighting 即收——不计错码、不烧全局预算、不回 nack（nack 会
+      // 让网页端清掉 pendingPair，之后的跨网回传帧就没人接了）。正常配对永远带真码
+      this.wbSightings.set(dev, Date.now());
+      if (this.wbSightings.size > 200) {
+        const sweep = Date.now();
+        for (const [d, ts] of this.wbSightings) if (sweep - ts > SIGHTING_TTL_MS) this.wbSightings.delete(d);
+      }
+      if (!String(pr.code ?? "")) return;
       const now = Date.now();
       const pf = this.pairFails.get(dev);
       if (pf && pf.until > now) {

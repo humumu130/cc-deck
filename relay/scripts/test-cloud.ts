@@ -84,6 +84,8 @@ const pairCodes = createPairingCodes();
   delete process.env.CCR_PAIR_TTL_MS;
 }
 const cloud = new CloudClient(bus, mgr, cfg, identity, pairCodes);
+// 0.4.4 跨网回传接线（对齐 index.ts：pusher 交给云层按 phones/sighting 判定投递）
+mgr.setImportPusher((dev, pk, payload) => cloud.pushImportTo(dev, pk, payload));
 cloud.start();
 await wait(300);
 
@@ -965,6 +967,109 @@ assert(
   assert(!inbox5.some((m) => m.type === "USER_NOTE"), "22 USER_NOTE 不随重连补发（瞬态语义，防重复弹通知）");
   phoneWs5.close();
   mgr.setAgentFactory(null);
+}
+
+// ---------- 23) 0.4.4 COMMAND_IMPORT_PUSH 跨网回传：云中转密封投递 ----------
+{
+  // 新手机连接（22 号已关 phoneWs4）：密封命令 → relay 校验+投递 → 双端断言
+  const phoneWs6 = new WebSocket(`ws://127.0.0.1:${BRIDGE_PORT}/cloud?token=${BRIDGE_TOKEN}&dev=${phoneDev}`);
+  const inbox6: Record<string, unknown>[] = [];
+  phoneWs6.on("message", (raw) => {
+    const f = JSON.parse(String(raw)) as { data?: SealedBox };
+    if (f.data) {
+      const inner = unseal<Record<string, unknown>>(f.data, relayPubkey, phoneKp.secretKey);
+      if (inner) inbox6.push(inner);
+    }
+  });
+  phoneWs6.on("error", () => undefined);
+  await new Promise<void>((r) => phoneWs6.on("open", r));
+  const phoneCmd = (obj: Record<string, unknown>) =>
+    phoneWs6.send(JSON.stringify({ to: identity.relayDev, data: seal(obj, relayPubkey, phoneKp.secretKey) }));
+
+  // 目标 = 已配对网页端 webDev：早段的 pair_req sighting 已过 30s 窗口，先补发一次
+  // pair_req 刷新在场证明（已配对设备错码走幂等 ack 分支，无副作用）。条目带全套 cloud 身份
+  webInbox.length = 0;
+  webSend({ t: "pair_req", code: "000000", pubkey: webKp.publicKey, name: "web-test" }, true);
+  await wait(200);
+  const cmdId = "import-push-1";
+  const entry = {
+    kind: "cloud",
+    wsUrl: "wss://cc.humumu.online/cloud",
+    token: "bt-test",
+    cloud: { url: "https://cc.humumu.online", token: "bt-test", rd: `rl-${"a".repeat(16)}`, rk: relayPubkey, paired: true, code: "123456" },
+  };
+  phoneCmd({ command_id: cmdId, type: "COMMAND_IMPORT_PUSH", payload: { target_dev: webDev, target_pk: webKp.publicKey, entry }, ts: Date.now() });
+  assert(
+    await waitFor(() => inbox6.some((m) => m.type === "COMMAND_ACK" && (m as { command_id?: string }).command_id === cmdId && (m as { ok?: boolean }).ok === true)),
+    "23 IMPORT_PUSH ACK ok（sighting 在线判定放行）",
+  );
+  assert(
+    await waitFor(() => webInbox.some((m) => m.t === "ccdeck-import-resp" && ((m as { entry?: { kind?: string } }).entry?.kind === "cloud"))),
+    "23 目标网页端收到密封 ccdeck-import-resp（含 cloud 条目）",
+  );
+
+  // 主路径补验（H1/L5）：未配对出码端（生产真实形态）——连桥发空码 pair_req 信标
+  //（不计错/不回 nack/sighting 放行），随后推送成功且目标收到密封帧
+  {
+    const kpU = generateKeyPair();
+    const devU = devId(kpU.publicKey, "wb");
+    const wsU = new WebSocket(`ws://127.0.0.1:${BRIDGE_PORT}/cloud?token=${BRIDGE_TOKEN}&dev=${devU}`);
+    const inU: Record<string, unknown>[] = [];
+    wsU.on("message", (raw) => {
+      const f = JSON.parse(String(raw)) as { data?: SealedBox };
+      if (f.data) {
+        const inner = unseal<Record<string, unknown>>(f.data, relayPubkey, kpU.secretKey);
+        if (inner) inU.push(inner);
+      }
+    });
+    wsU.on("error", () => undefined);
+    await new Promise<void>((r) => wsU.on("open", r));
+    // 空码信标（明文单播）：relay 应只记 sighting、静默——绝不回 pair_nack
+    wsU.send(JSON.stringify({ to: identity.relayDev, data: { t: "pair_req", code: "", pubkey: kpU.publicKey, name: "unpaired-issuer" } }));
+    await wait(400);
+    assert(!inU.some((m) => m.t === "pair_nack"), "23 空码信标不回 pair_nack（防杀 pendingPair）");
+    const cmdIdU = "import-push-u";
+    phoneCmd({ command_id: cmdIdU, type: "COMMAND_IMPORT_PUSH", payload: { target_dev: devU, target_pk: kpU.publicKey, entry }, ts: Date.now() });
+    assert(
+      await waitFor(() => inbox6.some((m) => m.type === "COMMAND_ACK" && (m as { command_id?: string }).command_id === cmdIdU && (m as { ok?: boolean }).ok === true)),
+      "23 未配对出码端经空码信标放行投递（主路径）",
+    );
+    assert(
+      await waitFor(() => inU.some((m) => m.t === "ccdeck-import-resp")),
+      "23 未配对出码端收到密封回传帧",
+    );
+    wsU.close();
+  }
+
+  // 反例1 目标离线：合法身份对（公钥派生一致）但从未上线 → ACK 人话错误
+  const offKp = generateKeyPair();
+  const cmdId2 = "import-push-2";
+  phoneCmd({ command_id: cmdId2, type: "COMMAND_IMPORT_PUSH", payload: { target_dev: devId(offKp.publicKey, "wb"), target_pk: offKp.publicKey, entry }, ts: Date.now() });
+  assert(
+    await waitFor(() => inbox6.some((m) => m.type === "COMMAND_ACK" && (m as { command_id?: string }).command_id === cmdId2 && (m as { ok?: boolean }).ok !== true)),
+    "23 离线目标 ACK 失败",
+  );
+  assert(
+    (inbox6.find((m) => m.type === "COMMAND_ACK" && (m as { command_id?: string }).command_id === cmdId2) as { error?: string } | undefined)?.error?.includes("不在线") === true,
+    "23 离线目标错误文案含「不在线」",
+  );
+
+  // 反例2 dev 与 pk 派生不一致（冒名）→ 格式拒绝
+  const cmdId3 = "import-push-3";
+  phoneCmd({ command_id: cmdId3, type: "COMMAND_IMPORT_PUSH", payload: { target_dev: webDev, target_pk: offKp.publicKey, entry }, ts: Date.now() });
+  assert(
+    await waitFor(() => inbox6.some((m) => m.type === "COMMAND_ACK" && (m as { command_id?: string }).command_id === cmdId3 && (m as { ok?: boolean }).ok !== true)),
+    "23 冒名 dev/pk 不一致 ACK 拒绝",
+  );
+
+  // 反例3 条目形状坏（lan 缺 token）→ 校验拒绝
+  const cmdId4 = "import-push-4";
+  phoneCmd({ command_id: cmdId4, type: "COMMAND_IMPORT_PUSH", payload: { target_dev: webDev, target_pk: webKp.publicKey, entry: { kind: "lan", wsUrl: "ws://1.2.3.4:8787/ws" } }, ts: Date.now() });
+  assert(
+    await waitFor(() => inbox6.some((m) => m.type === "COMMAND_ACK" && (m as { command_id?: string }).command_id === cmdId4 && (m as { ok?: boolean }).ok !== true)),
+    "23 坏条目（lan 缺 token）ACK 拒绝",
+  );
+  phoneWs6.close();
 }
 
 // ---------- 清理 ----------

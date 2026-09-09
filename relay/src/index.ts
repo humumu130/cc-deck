@@ -208,6 +208,14 @@ if (cfg.cloudUrls.length) {
     for (const c of cloudClients) c.grantLogin(dev, pk, name);
     return true;
   });
+  // 0.4.4 跨网回传：两遍扫描——先试目标持活跃连接（hello 在线）的桥（必发必达），
+  // 再回落 sighting 桥（近期见过信标，发送后靠桥 ROUTE_MISS 兜底）；防 sighting 桥
+  // 排前遮蔽真正连着目标页的桥
+  mgr.setImportPusher((dev, pk, payload) => {
+    for (const c of cloudClients) if (c.hasActiveDev(dev) && c.pushImportTo(dev, pk, payload)) return true;
+    for (const c of cloudClients) if (!c.hasActiveDev(dev) && c.pushImportTo(dev, pk, payload)) return true;
+    return false;
+  });
   // 议题①踢除执行器：先移除 peers（写穿落盘），再各桥发明文 pair_nack 令其立即
   // 停止重连 + 停发下行——多桥场景设备连着哪座桥都能收到失联通知
   mgr.setPeerKicker((dev) => {

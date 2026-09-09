@@ -362,7 +362,8 @@ export type CommandType =
   | "COMMAND_REFRESH_TODOS"
   | "COMMAND_TODO_HIDE"
   | "COMMAND_PIN_SESSION"
-  | "COMMAND_RESUME_SESSION";
+  | "COMMAND_RESUME_SESSION"
+  | "COMMAND_IMPORT_PUSH";
 
 export interface CommandBase {
   command_id: string;   // 客户端生成（uuid），Relay 按此去重
@@ -495,7 +496,8 @@ export type Command =
   | TodoHideCommand
   | ModelCommand
   | PinSessionCommand
-  | ResumeSessionCommand;
+  | ResumeSessionCommand
+  | ImportPushCommand;
 
 // 托管会话权限模式切换（default=每次确认 / acceptEdits=自动接受编辑 / plan=只读规划）
 export interface PermCommand extends CommandBase {
@@ -513,6 +515,36 @@ export interface ModelCommand extends CommandBase {
 export interface RefreshTodosCommand extends CommandBase {
   type: "COMMAND_REFRESH_TODOS";
   payload: { session_id: string };
+}
+
+// 0.4.4 合并扫码（跨网导入）：手机扫合并码后选「回传连接」，经此命令把一条连接
+// 条目推给出示二维码的网页/exe 端（target_dev/pk 来自码内）。relay 校验形状后用
+// target_pk 密封 {t:"ccdeck-import-resp"} 经桥投递——目标端未配对也能收（解密用它
+// 自己 keypair 的 secretKey，验证发件方用其已知的 relay 公钥 rk）。与旧 LAN rt 回传
+// 通道并存：云路径跨网络，rt 路径限同一 WiFi
+export interface ImportPushCommand extends CommandBase {
+  type: "COMMAND_IMPORT_PUSH";
+  payload: {
+    target_dev: string;      // 出码端 dev（wb-…，须与 target_pk 派生值一致）
+    target_pk: string;       // 出码端公钥（seal 收件人）
+    entry: ImportPushEntry;  // 回传的连接条目（手机侧 ImportPicker 构建）
+    note?: string;           // 附注（"未在线，未附码" 等；relay 截 80 字透传出码端 toast）
+  };
+}
+
+// 回传条目形状（与旧 rt 通道的 ccdeck-import-resp.entry 同构，relay 只做校验不解释）
+export interface ImportPushEntry {
+  kind: "lan" | "cloud";
+  wsUrl: string;
+  token?: string;            // lan 必填；cloud 为桥令牌
+  cloud?: {                  // cloud 必带：出码端凭此免输码 pair
+    url: string;
+    token: string;
+    rd: string;              // relay dev（rl-…）
+    rk: string;              // relay 公钥（出码端 pair 后验证帧用）
+    paired: true;            // 常量 true：手机侧有 cloud 配置才出云条目，relay 强制置 true
+    code?: string;           // 一次性配对码（在线源现领，6-8 位）
+  };
 }
 
 // 隐藏任务清单条目：CLI 任务存储无法外部真删，relay 按 content 归一化匹配在
