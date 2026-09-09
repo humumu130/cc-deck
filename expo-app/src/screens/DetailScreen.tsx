@@ -371,7 +371,14 @@ function TaskPop({ n, todo, goneSession, hold, anchor, onClose, onGoList }: { n:
           <View style={[d.tpTail, { left: tailX, top: flip ? undefined : -6, bottom: flip ? -6 : undefined, borderTopWidth: flip ? 0 : 1, borderLeftWidth: flip ? 0 : 1, borderBottomWidth: flip ? 1 : 0, borderRightWidth: flip ? 1 : 0 }]} />
           <Pressable style={d.menuCard} onPress={() => undefined}>
             <View style={d.tpHead}>
-              <Text style={[d.tpMark, { color: markColor }]}>{mark}</Text>
+              {/* #410 同任务行：处理中用自绘等径圆圈，避免 ◐ 字形在真机偏小 */}
+              {todo?.status === "in_progress" ? (
+                <View style={d.tpMarkRun}>
+                  <View style={d.tpMarkRunF} />
+                </View>
+              ) : (
+                <Text style={[d.tpMark, { color: markColor }]}>{mark}</Text>
+              )}
               <Text style={d.tpNo}>#{n}</Text>
               <Text style={[d.tpStatus, { color: markColor }]}>{statusText}</Text>
             </View>
@@ -826,15 +833,19 @@ export default function DetailScreen({ sid, onBack, initialView, ref }: { sid: s
       }}
       {...rowPan.panHandlers}
     >
-      <Text
-        style={[
-          d.todoMark,
-          t.status === "completed" && { color: c.done },
-          t.status === "in_progress" && { color: c.working },
-        ]}
-      >
-        {t.status === "completed" ? "✓" : t.status === "in_progress" ? "◐" : "○"}
-      </Text>
+      {/* #410 处理中不再用 ◐ 字形：真机回退字体里它远小于 ○/✓（两字形走不同回退字体），
+          改自绘等径圆环+左半填充，直径锁定=○ 的视觉直径，跨设备一致；颜色仍走 c.working token */}
+      {t.status === "in_progress" ? (
+        <View style={d.todoMarkRun}>
+          <View style={d.todoMarkRunC}>
+            <View style={d.todoMarkRunF} />
+          </View>
+        </View>
+      ) : (
+        <Text style={[d.todoMark, t.status === "completed" && { color: c.done }]}>
+          {t.status === "completed" ? "✓" : "○"}
+        </Text>
+      )}
       <Text
         style={[
           d.todoT,
@@ -1333,7 +1344,9 @@ export default function DetailScreen({ sid, onBack, initialView, ref }: { sid: s
             </Pressable>
           </View>
           {sortedTodos.length === 0 ? (
-            <Text style={d.empty}>暂无任务清单{"\n"}CLI 里使用 TodoWrite 工具后，这里会显示任务进度</Text>
+            // 空态垂直居中：父容器 viewCol(flex:1) 里头部之下剩余区域由文本撑满，
+            // textAlignVertical 让文字在盒内垂直居中（paddingVertical 对称不偏移）
+            <Text style={[d.empty, { flex: 1, textAlignVertical: "center" }]}>暂无任务清单{"\n"}CLI 里使用 TodoWrite 工具后，这里会显示任务进度</Text>
           ) : (
           <View style={d.todoScrollWrap}>
             <ScrollView
@@ -1429,7 +1442,9 @@ export default function DetailScreen({ sid, onBack, initialView, ref }: { sid: s
       ) : v.k === "cron" ? (
         /* 定时任务视图：会话目录 .claude/scheduled_tasks.json 快照（relay 30s 轮询下发）。
            #376 条目点击展开看 prompt 全文；cron 表达式配人话频率（未识别模式显原文） */
-        <ScrollView style={{ flex: 1 }} contentContainerStyle={{ padding: 14, paddingBottom: 40 + insets.bottom }} showsVerticalScrollIndicator={false}>
+        <ScrollView style={{ flex: 1 }} contentContainerStyle={{ padding: 14, paddingBottom: 40 + insets.bottom, ...((s.cron_tasks?.length ?? 0) === 0 ? { flexGrow: 1, justifyContent: "center", paddingBottom: 14 + insets.bottom } : null) }} showsVerticalScrollIndicator={false}>
+          {/* 空态垂直居中：内容容器 flexGrow 撑满可视面板 + justifyContent 居中提示组；
+              底部 40+insets 的滚动余量在空态无意义，收成与顶部对称（14+insets）防中心偏上 */}
           {(s.cron_tasks?.length ?? 0) === 0 ? (
             <Text style={d.empty}>暂无定时任务{"\n"}CLI 里创建 durable 定时任务后，这里 30s 内显示</Text>
           ) : (
@@ -1494,7 +1509,10 @@ export default function DetailScreen({ sid, onBack, initialView, ref }: { sid: s
         ref={v.k === "msg" ? scrollRef : allScrollRef}
         style={{ flex: 1 }}
         showsVerticalScrollIndicator={false}
-        contentContainerStyle={{ padding: 14, paddingBottom: 14 + (bannerVisible ? 200 : canCmd ? 96 : 60) + insets.bottom }}
+        // 空态垂直居中（同定时视图手法）：仅 list 为空时容器撑满可视面板并居中提示组，
+        // 底部大 padding（横幅/命令条的滚动余量）在空态收对称，否则中心会偏上一两百 px；
+        // 非空分支样式零变化
+        contentContainerStyle={{ padding: 14, paddingBottom: 14 + (bannerVisible ? 200 : canCmd ? 96 : 60) + insets.bottom, ...(list.length === 0 ? { flexGrow: 1, justifyContent: "center", paddingBottom: 14 + insets.bottom } : null) }}
         onTouchStart={() => { touching.current = true; }}
         onTouchEnd={() => { touching.current = false; }}
         onTouchCancel={() => { touching.current = false; }}
@@ -1805,10 +1823,11 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
   back: { width: 32, height: 32, borderRadius: 10, backgroundColor: c.tintSoft, alignItems: "center", justifyContent: "center" },
   backText: { color: c.dim, fontSize: 18, marginTop: -1 },
   hintText: { color: c.faint },
-  title: { color: c.text, fontSize: 15, fontWeight: "600" },
-  // 副信息行（头部）：小字占满 + 行内最右模型 chip，垂直居中
+  title: { color: c.text, fontSize: 16, fontWeight: "600" },
+  // 副信息行（头部）：小字占满 + 行内最右模型 chip，垂直居中。
+  // 字号与下行 ctx 水位行（ctxLabel/ctxPct 均 10）拉平，同为次级信息统一档
   subRow: { flexDirection: "row", alignItems: "center", gap: 6, marginTop: 1 },
-  sub: { flex: 1, color: c.dim, fontSize: 11 },
+  sub: { flex: 1, color: c.dim, fontSize: 10 },
   // 上下文占用条（头部副行下）：标签 + 3px 细条 + 百分比，颜色按占用分级
   ctxRow: { flexDirection: "row", alignItems: "center", gap: 6, marginTop: 3 },
   ctxLabel: { color: c.faint, fontSize: 10, fontWeight: "600" },
@@ -1878,11 +1897,12 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
   tabT: { fontSize: 12, color: c.dim },
   tabTOn: { color: c.text, fontWeight: "600" },
   // 模型 chip（头部副信息行最右）：filterChip 缩小版小胶囊；长名封顶截尾防挤副信息文字
+  // 高度收敛一档：padV 3→2 + 文字显式 lineHeight 12，总高 ~21→18px；宽度/位置不动
   modelChip: {
-    paddingHorizontal: 8, paddingVertical: 3, borderRadius: 10, maxWidth: 96,
+    paddingHorizontal: 8, paddingVertical: 2, borderRadius: 8, maxWidth: 96,
     backgroundColor: c.tintSoft, borderWidth: 1, borderColor: c.line,
   },
-  modelChipT: { fontSize: 10.5, color: c.dim },
+  modelChipT: { fontSize: 10, lineHeight: 12, color: c.dim },
   filterChip: {
     paddingHorizontal: 10, paddingVertical: 4, borderRadius: 10,
     backgroundColor: c.tintSoft, borderWidth: 1, borderColor: c.line,
@@ -1926,6 +1946,11 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
   todoFlash: { backgroundColor: withA(c.brandA, 0.32), borderRadius: 8, borderWidth: 1, borderColor: withA(c.brandA, 0.55) },
   todoScroll: { maxHeight: 400, flexGrow: 0 },
   todoMark: { color: c.faint, fontSize: 12, width: 16, textAlign: "center", lineHeight: 17 },
+  // #410 处理中自绘 ◐（仅样式）：外径 11dp=○ 字形视觉直径，描边 1.5 同 ○ 笔画；
+  // 占位仍 16dp 宽列居中、marginTop 3 在 17dp 行高里垂直居中，位置不变
+  todoMarkRun: { width: 16, alignItems: "center", marginTop: 3 },
+  todoMarkRunC: { width: 11, height: 11, borderRadius: 5.5, borderWidth: 1.5, borderColor: c.working, overflow: "hidden" },
+  todoMarkRunF: { width: "50%", height: "100%", backgroundColor: c.working },
   todoT: { flex: 1, color: c.text, fontSize: 12.5, lineHeight: 17 },
   todoDel: { width: 24, height: 22, alignItems: "center", justifyContent: "center" },
   todoDelT: { color: c.faint, fontSize: 12 },
@@ -2122,6 +2147,9 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
   },
   tpHead: { flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 8 },
   tpMark: { fontSize: 17, fontWeight: "700" },
+  // #410 浮窗头部处理中自绘 ◐：外径 14dp=tpMark 17sp 下 ○ 的视觉直径（12sp 时 11dp 等比放大），描边 2
+  tpMarkRun: { width: 14, height: 14, borderRadius: 7, borderWidth: 2, borderColor: c.working, overflow: "hidden" },
+  tpMarkRunF: { width: "50%", height: "100%", backgroundColor: c.working },
   tpNo: { color: c.brandA, fontSize: 15, fontWeight: "700" },
   tpStatus: { fontSize: 12.5, flex: 1, textAlign: "right" },
   tpContent: { color: c.text, fontSize: 14, lineHeight: 21 },
