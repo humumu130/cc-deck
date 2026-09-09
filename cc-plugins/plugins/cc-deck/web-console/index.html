@@ -719,7 +719,10 @@
   .srv-row .srv-del:hover { color: var(--error); background: var(--bg-soft); }
 
   /* ---------- 源过滤 chips + 卡片源角标 ---------- */
-  #srcChips { display: none; flex-wrap: wrap; gap: 6px; padding: 0 16px 4px; }
+  /* #406 间距放松一档（对齐设置抽屉 Section 的呼吸感，不过头）：chips 横向 6→9
+     （贴卡片列 9px 沟槽语言）；上下留白 0/4 → 6/12——head→chips 4→10px、
+     chips→卡片组 8→16px。间距全落在本条（display:none 时零副作用） */
+  #srcChips { display: none; flex-wrap: wrap; gap: 9px; padding: 6px 16px 12px; }
   #srcChips button {
     font-size: 11.5px; padding: 3px 10px; border-radius: 999px; color: var(--dim);
     display: inline-flex; align-items: center; gap: 5px; max-width: 150px;
@@ -787,28 +790,29 @@
   .hbtn.on { color: var(--brand); border-color: rgba(217,119,87,.55); border-style: solid; }
   #densityBtn { margin-left: auto; }
 
-  /* #306 [待确认] 悬浮清单（taskDone 同款右下浮框语言，#300 横幅改形）：小方钮
-     常驻（数字角标 = 未读条目数），点开上方展开卡逐条列出；位置与 taskDone/
-     undoBar 错开（bottom 抬到其折叠条之上）。点行开详情"任务" tab，✕ 逐条已读、
-     全部已读（localStorage 记已读条目 key，内容变化重现） */
+  /* #306/#406 [待确认] 悬浮清单（taskDone 同款右下浮框语言，#300 横幅改形）：44px
+     小方钮常驻（中心数字 = 未读条目数，尺寸/字号/中心数字形态对齐 taskDone.mini），
+     可拖动（位置存 cc.cffloat.pos，与绿框 cc.tdfloat.pos 各自记忆）；点开上方展开卡
+     逐条列出；位置与 taskDone/undoBar 错开（bottom 抬到其折叠条之上）。点行开详情
+     "任务" tab，✕ 逐条已读、全部已读（localStorage 记已读条目 key，内容变化重现）。
+     容器不设 z-index（不建 stacking context），钮/卡分层进根层：钮 97（绿框之下），
+     明细卡 100（内容窗最顶层，盖过绿框 98 / toast 99；全屏弹窗 70/72/74 与 modelPop
+     60 本就在浮层体系之下，不变） */
   #confirmFloat {
-    position: fixed; right: 16px; bottom: 150px; z-index: 97;
+    position: fixed; right: 16px; bottom: 150px;
     display: none; flex-direction: column; align-items: flex-end; gap: 8px;
   }
   #confirmFloat.show { display: flex; }
   .cf-btn {
-    position: relative; width: 36px; height: 36px; border-radius: 12px;
+    position: relative; z-index: 97; width: 44px; height: 44px; border-radius: 12px;
     border: 1px solid rgba(217,119,87,.55); background: var(--toast-bg); color: var(--brand);
-    font-size: 15px; font-weight: 800; cursor: pointer; box-shadow: var(--toast-shadow); flex: none;
+    font-size: 14px; font-weight: 700; cursor: pointer; box-shadow: var(--toast-shadow); flex: none;
+    display: inline-flex; align-items: center; justify-content: center;
+    font-variant-numeric: tabular-nums; touch-action: none;
   }
   .cf-btn:hover { border-color: rgba(217,119,87,.9); }
-  .cf-badge {
-    position: absolute; top: -7px; right: -7px; min-width: 17px; height: 17px; padding: 0 4px;
-    border-radius: 9px; background: var(--brand); color: #241209; font-size: 10px; font-weight: 800;
-    display: inline-flex; align-items: center; justify-content: center; font-variant-numeric: tabular-nums;
-  }
   .cf-card {
-    display: none; max-width: 340px; max-height: min(46vh, 380px); overflow-y: auto;
+    position: relative; z-index: 100; display: none; max-width: 340px; max-height: min(46vh, 380px); overflow-y: auto;
     background: var(--toast-bg); border: 1px solid var(--border); color: var(--text);
     border-radius: 12px; padding: 10px 12px; font-size: 13px; box-shadow: var(--toast-shadow);
   }
@@ -1386,7 +1390,7 @@
     #timeline { font-size: calc(14px * var(--tl-scale, 1)); }
     .brand h1 { font-size: 14px; }
     #cards { padding: 4px 10px 12px; }
-    #srcChips { padding: 0 10px 4px; }
+    #srcChips { padding: 6px 10px 12px; }
     #listBar { padding: 10px 10px 4px; }
     .srv-row .srv-edit, .srv-row .srv-del { opacity: 1; }
     #side { width: 100%; border-right: none; }
@@ -2743,7 +2747,13 @@ function firstOnlineCtx() {
   return null;
 }
 function sendCommandTo(ctx, type, payload) {
-  if (!ctx || ctx.status !== "online") { toast("该源未连接，命令未发送"); openPanel("conn"); return false; }
+  // 报错点名目标源：多源时"该源未连接"不指名，用户对着另一盏在线绿灯排查不出
+  // 命令其实发往了别的源（幽灵源/目标错乱时的关键诊断信息）
+  if (!ctx || ctx.status !== "online") {
+    toast((ctx && ctx.cfg && ctx.cfg.name ? "「" + ctx.cfg.name + "」" : "该源") + "未连接，命令未发送");
+    openPanel("conn");
+    return false;
+  }
   const cmd = { command_id: uuid(), type, payload, ts: Date.now() };
   if (ctx.cfg.kind === "cloud") {
     if (!sendCloud(ctx, cmd)) return false;
@@ -2988,7 +2998,7 @@ function confirmReadMap() {
 }
 // #306 悬浮清单渲染（key 守卫同 cards 口径：快照流式重渲不重建 DOM；展开态走
 // .open class 不参与 key，避免开合闪重绘）
-const cfFloat = { open: false };
+const cfFloat = { open: false, dragged: false };
 function renderConfirmFloat() {
   const box = $("confirmFloat");
   const read = confirmReadMap();
@@ -3015,8 +3025,8 @@ function renderConfirmFloat() {
     shown.push({ ...r, items });
   }
   const overflow = total - shown.reduce((a, r) => a + r.items.length, 0);
-  let html = '<button class="cf-btn" title="待你确认的事项">?' +
-    '<span class="cf-badge">' + (total > 9 ? "9+" : total) + "</span></button>";
+  // #406 数字形态对齐 taskDone.mini：中心大字（? + 未读数），去右上角角标
+  let html = '<button class="cf-btn" title="待你确认的事项">?' + (total > 9 ? "9+" : total) + "</button>";
   html += '<div class="cf-card">' +
     '<div class="cf-head"><span class="cf-title">' + total + " 项待你确认</span>" +
     '<button class="cf-all" title="当前集合全部已读（内容变化后重新提醒）">全部已读</button>' +
@@ -3036,6 +3046,67 @@ function renderConfirmFloat() {
   box.classList.add("show");
   box.classList.toggle("open", cfFloat.open);
 }
+// #406 橙框可拖（对齐绿框 taskDone 的 pointer 拖动）：只在 .cf-btn 上起拖（明细卡要
+// 滚动/点行，整卡可拖会抢手势）；位移 >5px 判拖动，吞掉紧随的 click 防拖完误开合。
+// 位置存 localStorage(cc.cffloat.pos)，与绿框 cc.tdfloat.pos 各自记忆；用 window 级
+// move/up 跟踪而非 setPointerCapture（capture 会把后续 click 重定向到容器，砸掉
+// .cf-btn 的委托开合）；开合/resize 后按当前总高重收边
+const CF_POS_KEY = "cc.cffloat.pos";
+function cfApplyPos(x, y) {
+  const box = $("confirmFloat");
+  const w = box.offsetWidth || 44, h = box.offsetHeight || 44;
+  x = Math.max(4, Math.min(x, window.innerWidth - w - 4));
+  y = Math.max(4, Math.min(y, window.innerHeight - h - 4));
+  box.style.left = x + "px"; box.style.top = y + "px";
+  box.style.right = "auto"; box.style.bottom = "auto";
+}
+// 展开前后容器总高变化（钮 ↔ 钮+卡），显示后按当前尺寸重新收边（同 tdReclamp）
+function cfReclamp() {
+  const box = $("confirmFloat");
+  if (box.style.left) cfApplyPos(parseFloat(box.style.left), parseFloat(box.style.top));
+}
+function cfRestorePos() {
+  try {
+    const pos = JSON.parse(lsGet(CF_POS_KEY) || "null");
+    if (typeof pos?.x === "number" && typeof pos?.y === "number") cfApplyPos(pos.x, pos.y);
+  } catch {}
+}
+cfRestorePos();
+window.addEventListener("resize", cfRestorePos);
+(function initCfDrag() {
+  const box = $("confirmFloat");
+  let sx = 0, sy = 0, rx = 0, ry = 0, dragging = false, pid = null;
+  const move = (e) => {
+    if (pid === null || e.pointerId !== pid) return;
+    const dx = e.clientX - sx, dy = e.clientY - sy;
+    if (!dragging && Math.hypot(dx, dy) <= 5) return; // ≤5px 仍算点击
+    dragging = true;
+    cfApplyPos(rx + dx, ry + dy);
+    e.preventDefault();
+  };
+  const end = (e) => {
+    if (pid === null || (e && e.pointerId !== pid)) return;
+    window.removeEventListener("pointermove", move);
+    window.removeEventListener("pointerup", end);
+    window.removeEventListener("pointercancel", end);
+    pid = null;
+    if (!dragging) return;
+    cfFloat.dragged = true; // 吞掉紧随其后的 click，避免拖完误触开合
+    const r = box.getBoundingClientRect();
+    lsSet(CF_POS_KEY, JSON.stringify({ x: Math.round(r.left), y: Math.round(r.top) }));
+  };
+  box.addEventListener("pointerdown", (e) => {
+    if (!e.target.closest(".cf-btn")) return;
+    if (e.pointerType === "mouse" && e.button !== 0) return;
+    pid = e.pointerId; dragging = false; cfFloat.dragged = false;
+    sx = e.clientX; sy = e.clientY;
+    const r = box.getBoundingClientRect();
+    rx = r.left; ry = r.top;
+    window.addEventListener("pointermove", move, { passive: false });
+    window.addEventListener("pointerup", end);
+    window.addEventListener("pointercancel", end);
+  });
+})();
 const SRC_COLORS = ["#D97757", "#5B9DFF", "#2BD98F", "#FFC53D", "#C792EA", "#F06292", "#4DD0E1", "#7E57C2"];
 function srcColor(id) {
   let h = 0;
@@ -3154,7 +3225,8 @@ function render() {
   entries = entries.filter((e) => e.s.session_id !== pendingDel.sid && !deleting.has(e.s.session_id));
   const list = entries.sort((a, b) =>
     (order[a.s.status] - order[b.s.status]) || ((b.s.updated_at || b.s.started_at) - (a.s.updated_at || a.s.started_at)));
-  const key = (listCompact ? "C|" : "") + list.map((e) => e.ctx.cfg.id + ":" + e.s.session_id + ":" + e.s.status + ":" + (e.s.title || "") + ":" + (e.s.action_summary || "") + ":" + (e.s.waiting_request ? 1 : 0) + ":" + ctxPct(e.s)).join("|");
+  // key 含 filterSrc：切 chip 时徽章显隐随聚合/单源变化，强制重渲即时生效
+  const key = (listCompact ? "C|" : "") + filterSrc + "|" + list.map((e) => e.ctx.cfg.id + ":" + e.s.session_id + ":" + e.s.status + ":" + (e.s.title || "") + ":" + (e.s.action_summary || "") + ":" + (e.s.waiting_request ? 1 : 0) + ":" + ctxPct(e.s)).join("|");
   if (box.dataset.key !== key) {
     // 就地改名进行中：跳过重建（运行中会话 key 每秒变，会把编辑框冲掉）
     if (document.activeElement && document.activeElement.classList.contains("card-rename")) return;
@@ -3213,7 +3285,9 @@ function render() {
       // #367 源标签内联进 stats 行右侧（多源才有；不再独立占一整行留白）；
       // 全空时整行不渲染，卡片底部不再拖一条空白
       // #383 源标签移最左与上两行左对齐；ctx 水位条压到最右（不再悬中间）
-      const srcTag = ctxs.size > 1 ? srcBadgeHtml(ctx.cfg) : "";
+      // 源徽章仅在聚合视图（全部）显示：筛选到单一源时 chip 已表明来源，整枚不渲染
+      // （省 DOM，非 visibility 隐藏）；详情页头部 #dsrc 徽章不受此影响
+      const srcTag = filterSrc === "all" && ctxs.size > 1 ? srcBadgeHtml(ctx.cfg) : "";
       const statsInner = srcTag + statsHtml(s.stats) + ctxHtml(s);
       const statsBlock = statsInner ? '<div class="card-stats">' + statsInner + "</div>" : "";
       if (listCompact) {
@@ -3989,7 +4063,7 @@ document.addEventListener("click", (ev) => {
 
 // ⚙ 设置浮层（#317）：显示项为散装开关的镜像（点行 = 触发原按钮再回读状态），
 // 服务器管理不进浮层——左栏常驻面板已是高频区，与手机抽屉同为一级入口
-const CONSOLE_VERSION = "0.3.32";
+const CONSOLE_VERSION = "0.3.33";
 // #396 拨杆同步：滑块移到 idx 档（transform 过渡），选中档文字加 .on（白字压品牌色滑块上）
 function setLever(el, idx) {
   if (!el) return;
@@ -4251,8 +4325,12 @@ function renderServers() {
   box.querySelectorAll(".srv-row").forEach((row) => {
     row.onclick = (e) => {
       if (e.target.closest("button")) return;
+      newTargetTouched = true;
       activeServerId = row.dataset.id;
       try { localStorage.setItem(ACTIVE_KEY, activeServerId); } catch {}
+      // 新建目标记忆同步：列表行也是一次目标选择，ccd_new_target 与 ACTIVE_KEY
+      // 分叉会让下次新建发往用户没有选过的源
+      try { localStorage.setItem("ccd_new_target", activeServerId); } catch {}
       renderServers();
     };
     row.querySelector(".srv-edit").onclick = (e) => {
@@ -4273,12 +4351,16 @@ function renderNewTarget() {
   $("newTarget").textContent = servers.length > 1 && cfg ? "新建会话将发送至：" + cfg.name : "";
 }
 // #369 多源新建源选择：表单顶部 chips（默认=上次选择/活动源，localStorage 记忆）
+// 记忆只在本会话首次渲染时生效：曾发生"点列表行选了 A 源，任一源状态刷新把
+// activeServerId 回拽到 ccd_new_target 记忆的 B 源"——用户以为发往 A（在线），
+// 实际发往 B（离线），弹"该源未连接"而 UI 显示 A 在线（新建会话目标错乱根因）
+let newTargetTouched = false; // 用户本会话点过 chips/源列表行后，记忆不再回拽
 function renderNewSrcSeg() {
   const seg = $("newSrcSeg");
   if (!seg) return;
   if (servers.length < 2) { seg.style.display = "none"; seg.innerHTML = ""; return; }
   const remembered = localStorage.getItem("ccd_new_target") || "";
-  if (remembered && cfgOf(remembered)) activeServerId = remembered;
+  if (!newTargetTouched && remembered && cfgOf(remembered)) activeServerId = remembered;
   seg.style.display = "flex";
   seg.innerHTML = "";
   for (const cfg of servers) {
@@ -4287,6 +4369,7 @@ function renderNewSrcSeg() {
     b.textContent = shortName(cfg.name);
     b.classList.toggle("on", cfg.id === activeServerId);
     b.onclick = () => {
+      newTargetTouched = true;
       activeServerId = cfg.id;
       try { localStorage.setItem("ccd_new_target", cfg.id); } catch {}
       renderNewSrcSeg();
@@ -4371,10 +4454,27 @@ $("createBtn").onclick = () => {
   const prompt = $("prompt").value.trim();
   if (!prompt) { toast("请输入初始指令"); return; }
   const ctx = ctxs.get(activeServerId) || firstOnlineCtx();
-  if (sendCommandTo(ctx, "COMMAND_CREATE", { cwd: cwd || ".", prompt })) {
+  const id = sendCommandTo(ctx, "COMMAND_CREATE", { cwd: cwd || ".", prompt });
+  if (id) {
     lsSet("ccr_cwd", cwd);
     $("prompt").value = "";
     closeNewForm();
+    // 回执看门狗：客户端"在线"最长可比 relay 真实离线晚 ~45s（ping 判死窗口），
+    // 期间发出的命令经桥路由到离线 relay 会被静默丢弃（桥只回 ROUTE_MISS 给
+    // ping 的处理链，命令帧无 ack 无事件）——不盯 ack 就成了"点了没反应"
+    const wd = setTimeout(() => {
+      if (ackWaiters.has(id)) {
+        ackWaiters.delete(id);
+        toast("新建会话 10s 无回执，可能未送达（目标源或已离线）", 4200);
+      }
+    }, 10000);
+    ackWaiters.set(id, {
+      res: (ack) => {
+        clearTimeout(wd);
+        if (ack && !ack.ok) toast("新建会话失败: " + (ack.error || "未知错误"), 6000);
+      },
+      t: wd,
+    });
   }
 };
 // ---------- #279 批次3 图片发送（对齐手机 DetailScreen 图片链路） ----------
@@ -5074,17 +5174,20 @@ document.addEventListener("click", (ev) => {
   if (!ev.target.closest("#fpathPop")) $("fpathPop").classList.remove("open");
 });
 
-// #306 待确认悬浮清单交互（同上委托口径）：✕ → 该条已读（localStorage 记已读条目
-// key，内容变化后自动重现）；全部已读 → 当前集合全标（顺手清掉已消亡会话的残留
-// 条目防 map 无限增长）；行 → 开该会话详情"任务" tab；小方钮/✕ 开合卡
+// #306/#406 待确认悬浮清单交互（同上委托口径）：✕ → 该条已读（localStorage 记已读
+// 条目 key，内容变化后自动重现）；全部已读 → 当前集合全标+关窗（顺手清掉已消亡会话
+// 的残留条目防 map 无限增长）；行 → 开该会话详情"任务" tab；小方钮/✕ 开合卡。
+// 强制重渲必须用 removeAttribute 而非 dataset.key=""：全部读完时新 key 恰好也是 ""，
+// 空串哨兵会被 key 守卫当"没变化"吞掉，明细窗带着旧内容留在屏上（#406 用户报障根因）
 $("confirmFloat").addEventListener("click", (ev) => {
   const box = $("confirmFloat");
+  if (cfFloat.dragged) { cfFloat.dragged = false; return; } // 刚拖完，不算点击
   const x = ev.target.closest(".cf-x");
   if (x) {
     const read = confirmReadMap();
     (read[x.dataset.sid] = read[x.dataset.sid] || []).push(x.dataset.key);
     lsSet("ccr_confirm_read", JSON.stringify(read));
-    box.dataset.key = "";
+    box.removeAttribute("data-key");
     renderConfirmFloat();
     return;
   }
@@ -5092,7 +5195,8 @@ $("confirmFloat").addEventListener("click", (ev) => {
     const read = {};
     for (const r of confirmRows()) read[r.s.session_id] = r.items.map(confirmItemKey);
     lsSet("ccr_confirm_read", JSON.stringify(read));
-    box.dataset.key = "";
+    cfFloat.open = false; // 全部已读 = 未读清零 + 关窗（无未读后整个浮框隐藏）
+    box.removeAttribute("data-key");
     renderConfirmFloat();
     return;
   }
@@ -5112,7 +5216,17 @@ $("confirmFloat").addEventListener("click", (ev) => {
   if (ev.target.closest(".cf-btn")) {
     cfFloat.open = !cfFloat.open;
     box.classList.toggle("open", cfFloat.open);
+    if (cfFloat.open) cfReclamp(); // 拖动存档位下展开，按钮+卡总高重收边防出屏
   }
+});
+// #406 明细窗点外收起（对齐 taskDone/srvPop 的 document 点击委托口径）：展开态点击
+// 钮与卡之外 → 收卡；内部点击（已读/关窗/行跳转）冒泡到 document 时被 contains 挡掉
+document.addEventListener("click", (ev) => {
+  const box = $("confirmFloat");
+  if (!box.classList.contains("open")) return;
+  if (box.contains(ev.target)) return;
+  cfFloat.open = false;
+  box.classList.remove("open");
 });
 
 // 秒级走时：已等待/耗时/回合计时每秒刷新（innerHTML 由 key 守卫，代价极小）
@@ -5131,9 +5245,21 @@ function submitPairCode() {
   if (!cfg) {
     const url = $("url").value.trim() || defaultCloudUrl();
     const token = $("token").value.trim() || BAKED_BRIDGE_TOKEN;
-    cfg = { id: uuid(), name: $("srvName").value.trim() || "云桥", kind: "cloud", wsUrl: url, token,
-      cloud: { url, token, rd: BAKED_RELAY.rd, rk: BAKED_RELAY.rk, paired: false } };
-    servers.push(cfg);
+    // 复用同桥的未配对云源（按桥 host:port 归一匹配，不再逐字比对 URL）：
+    // 每次输码都无条件新建一条「云桥」是幽灵源的主产地——首启自种的
+    // 「公共桥（默认）」地址写法不同（旧版 tauri.localhost 域名推导等）时
+    // 既复用不上又删不掉，源列表越积越多
+    const bk = normBridge(url);
+    cfg = servers.find((s) => s.kind === "cloud" && !s.cloud?.paired &&
+      (s.wsUrl === url || normBridge(s.wsUrl) === bk)) || null;
+    if (cfg) {
+      cfg.wsUrl = url;
+      cfg.token = token;
+    } else {
+      cfg = { id: uuid(), name: $("srvName").value.trim() || "云桥", kind: "cloud", wsUrl: url, token,
+        cloud: { url, token, rd: BAKED_RELAY.rd, rk: BAKED_RELAY.rk, paired: false } };
+      servers.push(cfg);
+    }
   }
   const c = cfg.cloud || (cfg.cloud = { url: cfg.wsUrl, token: serverBridgeToken(cfg), rd: BAKED_RELAY.rd, rk: BAKED_RELAY.rk, paired: false });
   // rd/rk 只要有就优先（发现帧刷新的新鲜身份 paired=false 也要用），烘焙值仅兜底
@@ -5170,11 +5296,19 @@ function startLoginQr() {
   if (!cfg) {
     const url = $("url").value.trim() || defaultCloudUrl();
     const token = $("token").value.trim() || BAKED_BRIDGE_TOKEN;
-    // 复用同地址的未配对云源（首启自种的「公共桥」等），反复重试不堆积重复源
-    cfg = servers.find((s) => s.kind === "cloud" && !s.cloud?.paired && s.wsUrl === url)
-      || { id: uuid(), name: $("srvName").value.trim() || "云桥", kind: "cloud", wsUrl: url, token,
+    // 复用同桥的未配对云源（首启自种的「公共桥」等；按桥 host:port 归一匹配，
+    // 旧版条目的死地址写法也随之刷新），反复重试不堆积重复源
+    const bk = normBridge(url);
+    cfg = servers.find((s) => s.kind === "cloud" && !s.cloud?.paired &&
+      (s.wsUrl === url || normBridge(s.wsUrl) === bk)) || null;
+    if (cfg) {
+      cfg.wsUrl = url;
+      cfg.token = token;
+    } else {
+      cfg = { id: uuid(), name: $("srvName").value.trim() || "云桥", kind: "cloud", wsUrl: url, token,
         cloud: { url, token, rd: BAKED_RELAY.rd, rk: BAKED_RELAY.rk, paired: false } };
-    if (!servers.includes(cfg)) servers.push(cfg);
+      servers.push(cfg);
+    }
     saveServers(); renderServers();
   }
   const c = cfg.cloud || (cfg.cloud = { url: cfg.wsUrl, token: serverBridgeToken(cfg), rd: BAKED_RELAY.rd, rk: BAKED_RELAY.rk, paired: false });
