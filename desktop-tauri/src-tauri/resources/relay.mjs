@@ -4498,7 +4498,7 @@ var require_websocket = __commonJS({
     var http = __require("http");
     var net = __require("net");
     var tls = __require("tls");
-    var { randomBytes, createHash } = __require("crypto");
+    var { randomBytes: randomBytes2, createHash: createHash2 } = __require("crypto");
     var { Duplex, Readable } = __require("stream");
     var { URL: URL2 } = __require("url");
     var PerMessageDeflate2 = require_permessage_deflate();
@@ -5036,7 +5036,7 @@ var require_websocket = __commonJS({
         }
       }
       const defaultPort = isSecure ? 443 : 80;
-      const key = randomBytes(16).toString("base64");
+      const key = randomBytes2(16).toString("base64");
       const request = isSecure ? https.request : http.request;
       const protocolSet = /* @__PURE__ */ new Set();
       let perMessageDeflate;
@@ -5166,7 +5166,7 @@ var require_websocket = __commonJS({
           abortHandshake(websocket, socket, "Invalid Upgrade header");
           return;
         }
-        const digest = createHash("sha1").update(key + GUID).digest("base64");
+        const digest = createHash2("sha1").update(key + GUID).digest("base64");
         if (res.headers["sec-websocket-accept"] !== digest) {
           abortHandshake(websocket, socket, "Invalid Sec-WebSocket-Accept header");
           return;
@@ -5535,7 +5535,7 @@ var require_websocket_server = __commonJS({
     var EventEmitter = __require("events");
     var http = __require("http");
     var { Duplex } = __require("stream");
-    var { createHash } = __require("crypto");
+    var { createHash: createHash2 } = __require("crypto");
     var extension2 = require_extension();
     var PerMessageDeflate2 = require_permessage_deflate();
     var subprotocol2 = require_subprotocol();
@@ -5842,7 +5842,7 @@ var require_websocket_server = __commonJS({
           );
         }
         if (this._state > RUNNING) return abortHandshake(socket, 503);
-        const digest = createHash("sha1").update(key + GUID).digest("base64");
+        const digest = createHash2("sha1").update(key + GUID).digest("base64");
         const headers = [
           "HTTP/1.1 101 Switching Protocols",
           "Upgrade: websocket",
@@ -6999,10 +6999,3286 @@ var require_main = __commonJS({
   }
 });
 
+// node_modules/bonjour-service/dist/lib/utils/dns-equal.js
+var require_dns_equal = __commonJS({
+  "node_modules/bonjour-service/dist/lib/utils/dns-equal.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.default = dnsEqual;
+    var capitalLetterRegex = /[A-Z]/g;
+    function toLowerCase(input) {
+      return input.toLowerCase();
+    }
+    function dnsEqual(a, b) {
+      const aFormatted = a.replace(capitalLetterRegex, toLowerCase);
+      const bFormatted = b.replace(capitalLetterRegex, toLowerCase);
+      return aFormatted === bFormatted;
+    }
+  }
+});
+
+// node_modules/bonjour-service/dist/lib/dns-txt.js
+var require_dns_txt = __commonJS({
+  "node_modules/bonjour-service/dist/lib/dns-txt.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.DnsTxt = void 0;
+    var DnsTxt = class {
+      constructor(opts = {}) {
+        this.binary = opts ? opts.binary : false;
+      }
+      encode(data = {}) {
+        return Object.entries(data).map(([key, value]) => {
+          let item = `${key}=${value}`;
+          return Buffer.from(item);
+        });
+      }
+      decode(buffer) {
+        var data = {};
+        try {
+          let format = buffer.toString();
+          let parts = format.split(/=(.+)/);
+          let key = parts[0];
+          let value = parts[1];
+          data[key] = value;
+        } catch (_) {
+        }
+        return data;
+      }
+      decodeAll(buffer) {
+        return buffer.filter((i) => i.length > 1).map((i) => this.decode(i)).reduce((prev, curr) => {
+          var obj = prev;
+          let [key] = Object.keys(curr);
+          let [value] = Object.values(curr);
+          obj[key] = value;
+          return obj;
+        }, {});
+      }
+    };
+    exports.DnsTxt = DnsTxt;
+    exports.default = DnsTxt;
+  }
+});
+
+// node_modules/bonjour-service/dist/lib/service-types.js
+var require_service_types = __commonJS({
+  "node_modules/bonjour-service/dist/lib/service-types.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.toType = exports.toString = void 0;
+    var Prefix = (name) => {
+      return "_" + name;
+    };
+    var AllowedProp = (key) => {
+      let keys = ["name", "protocol", "subtype"];
+      return keys.includes(key);
+    };
+    var toString = (data) => {
+      let formatted = {
+        name: data.name,
+        protocol: data.protocol,
+        subtype: data.subtype
+      };
+      let entries = Object.entries(formatted);
+      return entries.filter(([key, val]) => AllowedProp(key) && val !== void 0).reduce((prev, [key, val]) => {
+        switch (typeof val) {
+          case "object":
+            val.map((i) => prev.push(Prefix(i)));
+            break;
+          default:
+            prev.push(Prefix(val));
+            break;
+        }
+        return prev;
+      }, []).join(".");
+    };
+    exports.toString = toString;
+    var toType = (string) => {
+      let parts = string.split(".");
+      let subtype;
+      for (let i in parts) {
+        if (parts[i][0] !== "_")
+          continue;
+        parts[i] = parts[i].slice(1);
+      }
+      if (parts.includes("sub")) {
+        subtype = parts.shift();
+        parts.shift();
+      }
+      return {
+        name: parts.shift(),
+        protocol: parts.shift() || null,
+        subtype
+      };
+    };
+    exports.toType = toType;
+  }
+});
+
+// node_modules/bonjour-service/dist/lib/service.js
+var require_service = __commonJS({
+  "node_modules/bonjour-service/dist/lib/service.js"(exports) {
+    "use strict";
+    var __importDefault = exports && exports.__importDefault || function(mod) {
+      return mod && mod.__esModule ? mod : { "default": mod };
+    };
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.Service = void 0;
+    var os_1 = __importDefault(__require("os"));
+    var dns_txt_1 = __importDefault(require_dns_txt());
+    var events_1 = __require("events");
+    var service_types_1 = require_service_types();
+    var TLD = ".local";
+    var Service = class extends events_1.EventEmitter {
+      constructor(config, start, stop) {
+        super();
+        this.start = start;
+        this.stop = stop;
+        this.probe = true;
+        this.published = false;
+        this.activated = false;
+        this.destroyed = false;
+        this.txtService = new dns_txt_1.default();
+        if (!config.name)
+          throw new Error("ServiceConfig requires `name` property to be set");
+        if (!config.type)
+          throw new Error("ServiceConfig requires `type` property to be set");
+        if (!config.port)
+          throw new Error("ServiceConfig requires `port` property to be set");
+        this.name = config.name.split(".").join("-");
+        this.protocol = config.protocol || "tcp";
+        this.type = (0, service_types_1.toString)({ name: config.type, protocol: this.protocol });
+        this.port = config.port;
+        this.host = config.host || os_1.default.hostname();
+        this.fqdn = `${this.name}.${this.type}${TLD}`;
+        this.txt = config.txt;
+        this.subtypes = config.subtypes;
+        this.disableIPv6 = !!config.disableIPv6;
+      }
+      records() {
+        var records = [
+          this.RecordPTR(this),
+          this.RecordSRV(this),
+          this.RecordTXT(this),
+          this.RecordServicePTR(this)
+        ];
+        for (let subtype of this.subtypes || []) {
+          records.push(this.RecordSubtypePTR(this, subtype));
+        }
+        let ifaces = Object.values(os_1.default.networkInterfaces());
+        for (let iface of ifaces) {
+          let addrs = iface;
+          for (let addr of addrs) {
+            if (addr.internal || addr.mac === "00:00:00:00:00:00")
+              continue;
+            switch (addr.family) {
+              case "IPv4":
+                records.push(this.RecordA(this, addr.address));
+                break;
+              case "IPv6":
+                if (this.disableIPv6)
+                  break;
+                records.push(this.RecordAAAA(this, addr.address));
+                break;
+            }
+          }
+        }
+        return records;
+      }
+      RecordPTR(service) {
+        return {
+          name: `${service.type}${TLD}`,
+          type: "PTR",
+          ttl: 28800,
+          data: service.fqdn
+        };
+      }
+      RecordServicePTR(service) {
+        return {
+          name: `_services._dns-sd._udp${TLD}`,
+          type: "PTR",
+          ttl: 120,
+          data: `${service.type}${TLD}`
+        };
+      }
+      RecordSubtypePTR(service, subtype) {
+        return {
+          name: `_${subtype}._sub.${service.type}${TLD}`,
+          type: "PTR",
+          ttl: 28800,
+          data: `${service.name}.${service.type}${TLD}`
+        };
+      }
+      RecordSRV(service) {
+        return {
+          name: service.fqdn,
+          type: "SRV",
+          ttl: 120,
+          data: {
+            port: service.port,
+            target: service.host
+          }
+        };
+      }
+      RecordTXT(service) {
+        return {
+          name: service.fqdn,
+          type: "TXT",
+          ttl: 4500,
+          data: this.txtService.encode(service.txt)
+        };
+      }
+      RecordA(service, ip2) {
+        return {
+          name: service.host,
+          type: "A",
+          ttl: 120,
+          data: ip2
+        };
+      }
+      RecordAAAA(service, ip2) {
+        return {
+          name: service.host,
+          type: "AAAA",
+          ttl: 120,
+          data: ip2
+        };
+      }
+    };
+    exports.Service = Service;
+    exports.default = Service;
+  }
+});
+
+// node_modules/bonjour-service/dist/lib/registry.js
+var require_registry = __commonJS({
+  "node_modules/bonjour-service/dist/lib/registry.js"(exports) {
+    "use strict";
+    var __importDefault = exports && exports.__importDefault || function(mod) {
+      return mod && mod.__esModule ? mod : { "default": mod };
+    };
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.Registry = void 0;
+    var dns_equal_1 = __importDefault(require_dns_equal());
+    var service_1 = __importDefault(require_service());
+    var REANNOUNCE_MAX_MS = 60 * 60 * 1e3;
+    var REANNOUNCE_FACTOR = 3;
+    var noop = function() {
+    };
+    var Registry = class {
+      constructor(server) {
+        this.services = [];
+        this.server = server;
+      }
+      publish(config) {
+        const configProbe = config.probe !== false;
+        const service = new service_1.default(config, start.bind(null, this), stop.bind(null, this));
+        function start(registry, { probe = configProbe } = {}) {
+          if (service.activated)
+            return;
+          service.activated = true;
+          registry.services.push(service);
+          if (!(service instanceof service_1.default))
+            return;
+          if (probe) {
+            registry.probe(registry.server.mdns, service, (exists) => {
+              if (exists) {
+                if (service.stop !== void 0)
+                  service.stop();
+                console.log(new Error("Service name is already in use on the network"));
+                return;
+              }
+              registry.announce(registry.server, service);
+            });
+          } else {
+            registry.announce(registry.server, service);
+          }
+        }
+        function stop(registry, callback) {
+          if (!callback)
+            callback = noop;
+          if (!service.activated)
+            return process.nextTick(callback);
+          if (!(service instanceof service_1.default))
+            return process.nextTick(callback);
+          registry.teardown(registry.server, service, callback);
+          const index = registry.services.indexOf(service);
+          if (index !== -1)
+            registry.services.splice(index, 1);
+        }
+        service.start();
+        return service;
+      }
+      unpublishAll(callback) {
+        this.teardown(this.server, this.services, callback);
+        this.services = [];
+      }
+      destroy() {
+        this.services.map((service) => service.destroyed = true);
+      }
+      probe(mdns, service, callback) {
+        var sent = false;
+        var retries = 0;
+        var timer;
+        const send = () => {
+          if (!service.activated || service.destroyed)
+            return;
+          mdns.query(service.fqdn, "ANY", function() {
+            sent = true;
+            timer = setTimeout(++retries < 3 ? send : done, 250);
+            timer.unref();
+          });
+        };
+        const onresponse = (packet) => {
+          if (!sent)
+            return;
+          if (packet.answers.some(matchRR) || packet.additionals.some(matchRR))
+            done(true);
+        };
+        const matchRR = (rr2) => {
+          return (0, dns_equal_1.default)(rr2.name, service.fqdn);
+        };
+        const done = (exists) => {
+          mdns.removeListener("response", onresponse);
+          clearTimeout(timer);
+          callback(!!exists);
+        };
+        mdns.on("response", onresponse);
+        setTimeout(send, Math.random() * 250);
+      }
+      announce(server, service) {
+        var delay = 1e3;
+        var packet = service.records();
+        server.register(packet);
+        const broadcast = () => {
+          if (!service.activated || service.destroyed)
+            return;
+          server.mdns.respond(packet, function() {
+            if (!service.published) {
+              service.activated = true;
+              service.published = true;
+              service.emit("up");
+            }
+            delay = delay * REANNOUNCE_FACTOR;
+            if (delay < REANNOUNCE_MAX_MS && !service.destroyed) {
+              setTimeout(broadcast, delay).unref();
+            }
+          });
+        };
+        broadcast();
+      }
+      teardown(server, services, callback) {
+        if (!Array.isArray(services))
+          services = [services];
+        services = services.filter((service) => service.activated);
+        var records = services.flatMap(function(service) {
+          service.activated = false;
+          var records2 = service.records();
+          records2.forEach((record) => {
+            record.ttl = 0;
+          });
+          return records2;
+        });
+        if (records.length === 0)
+          return callback && process.nextTick(callback);
+        server.unregister(records);
+        server.mdns.respond(records, function() {
+          services.forEach(function(service) {
+            service.published = false;
+          });
+          if (typeof callback === "function") {
+            callback.apply(null, arguments);
+          }
+        });
+      }
+    };
+    exports.Registry = Registry;
+    exports.default = Registry;
+  }
+});
+
+// node_modules/dns-packet/types.js
+var require_types = __commonJS({
+  "node_modules/dns-packet/types.js"(exports) {
+    "use strict";
+    exports.toString = function(type) {
+      switch (type) {
+        case 1:
+          return "A";
+        case 10:
+          return "NULL";
+        case 28:
+          return "AAAA";
+        case 18:
+          return "AFSDB";
+        case 42:
+          return "APL";
+        case 257:
+          return "CAA";
+        case 60:
+          return "CDNSKEY";
+        case 59:
+          return "CDS";
+        case 37:
+          return "CERT";
+        case 5:
+          return "CNAME";
+        case 49:
+          return "DHCID";
+        case 32769:
+          return "DLV";
+        case 39:
+          return "DNAME";
+        case 48:
+          return "DNSKEY";
+        case 43:
+          return "DS";
+        case 55:
+          return "HIP";
+        case 13:
+          return "HINFO";
+        case 45:
+          return "IPSECKEY";
+        case 25:
+          return "KEY";
+        case 36:
+          return "KX";
+        case 29:
+          return "LOC";
+        case 15:
+          return "MX";
+        case 35:
+          return "NAPTR";
+        case 2:
+          return "NS";
+        case 47:
+          return "NSEC";
+        case 50:
+          return "NSEC3";
+        case 51:
+          return "NSEC3PARAM";
+        case 12:
+          return "PTR";
+        case 46:
+          return "RRSIG";
+        case 17:
+          return "RP";
+        case 24:
+          return "SIG";
+        case 6:
+          return "SOA";
+        case 99:
+          return "SPF";
+        case 33:
+          return "SRV";
+        case 44:
+          return "SSHFP";
+        case 32768:
+          return "TA";
+        case 249:
+          return "TKEY";
+        case 52:
+          return "TLSA";
+        case 250:
+          return "TSIG";
+        case 16:
+          return "TXT";
+        case 252:
+          return "AXFR";
+        case 251:
+          return "IXFR";
+        case 41:
+          return "OPT";
+        case 255:
+          return "ANY";
+      }
+      return "UNKNOWN_" + type;
+    };
+    exports.toType = function(name) {
+      switch (name.toUpperCase()) {
+        case "A":
+          return 1;
+        case "NULL":
+          return 10;
+        case "AAAA":
+          return 28;
+        case "AFSDB":
+          return 18;
+        case "APL":
+          return 42;
+        case "CAA":
+          return 257;
+        case "CDNSKEY":
+          return 60;
+        case "CDS":
+          return 59;
+        case "CERT":
+          return 37;
+        case "CNAME":
+          return 5;
+        case "DHCID":
+          return 49;
+        case "DLV":
+          return 32769;
+        case "DNAME":
+          return 39;
+        case "DNSKEY":
+          return 48;
+        case "DS":
+          return 43;
+        case "HIP":
+          return 55;
+        case "HINFO":
+          return 13;
+        case "IPSECKEY":
+          return 45;
+        case "KEY":
+          return 25;
+        case "KX":
+          return 36;
+        case "LOC":
+          return 29;
+        case "MX":
+          return 15;
+        case "NAPTR":
+          return 35;
+        case "NS":
+          return 2;
+        case "NSEC":
+          return 47;
+        case "NSEC3":
+          return 50;
+        case "NSEC3PARAM":
+          return 51;
+        case "PTR":
+          return 12;
+        case "RRSIG":
+          return 46;
+        case "RP":
+          return 17;
+        case "SIG":
+          return 24;
+        case "SOA":
+          return 6;
+        case "SPF":
+          return 99;
+        case "SRV":
+          return 33;
+        case "SSHFP":
+          return 44;
+        case "TA":
+          return 32768;
+        case "TKEY":
+          return 249;
+        case "TLSA":
+          return 52;
+        case "TSIG":
+          return 250;
+        case "TXT":
+          return 16;
+        case "AXFR":
+          return 252;
+        case "IXFR":
+          return 251;
+        case "OPT":
+          return 41;
+        case "ANY":
+          return 255;
+        case "*":
+          return 255;
+      }
+      if (name.toUpperCase().startsWith("UNKNOWN_")) return parseInt(name.slice(8));
+      return 0;
+    };
+  }
+});
+
+// node_modules/dns-packet/rcodes.js
+var require_rcodes = __commonJS({
+  "node_modules/dns-packet/rcodes.js"(exports) {
+    "use strict";
+    exports.toString = function(rcode) {
+      switch (rcode) {
+        case 0:
+          return "NOERROR";
+        case 1:
+          return "FORMERR";
+        case 2:
+          return "SERVFAIL";
+        case 3:
+          return "NXDOMAIN";
+        case 4:
+          return "NOTIMP";
+        case 5:
+          return "REFUSED";
+        case 6:
+          return "YXDOMAIN";
+        case 7:
+          return "YXRRSET";
+        case 8:
+          return "NXRRSET";
+        case 9:
+          return "NOTAUTH";
+        case 10:
+          return "NOTZONE";
+        case 11:
+          return "RCODE_11";
+        case 12:
+          return "RCODE_12";
+        case 13:
+          return "RCODE_13";
+        case 14:
+          return "RCODE_14";
+        case 15:
+          return "RCODE_15";
+      }
+      return "RCODE_" + rcode;
+    };
+    exports.toRcode = function(code) {
+      switch (code.toUpperCase()) {
+        case "NOERROR":
+          return 0;
+        case "FORMERR":
+          return 1;
+        case "SERVFAIL":
+          return 2;
+        case "NXDOMAIN":
+          return 3;
+        case "NOTIMP":
+          return 4;
+        case "REFUSED":
+          return 5;
+        case "YXDOMAIN":
+          return 6;
+        case "YXRRSET":
+          return 7;
+        case "NXRRSET":
+          return 8;
+        case "NOTAUTH":
+          return 9;
+        case "NOTZONE":
+          return 10;
+        case "RCODE_11":
+          return 11;
+        case "RCODE_12":
+          return 12;
+        case "RCODE_13":
+          return 13;
+        case "RCODE_14":
+          return 14;
+        case "RCODE_15":
+          return 15;
+      }
+      return 0;
+    };
+  }
+});
+
+// node_modules/dns-packet/opcodes.js
+var require_opcodes = __commonJS({
+  "node_modules/dns-packet/opcodes.js"(exports) {
+    "use strict";
+    exports.toString = function(opcode) {
+      switch (opcode) {
+        case 0:
+          return "QUERY";
+        case 1:
+          return "IQUERY";
+        case 2:
+          return "STATUS";
+        case 3:
+          return "OPCODE_3";
+        case 4:
+          return "NOTIFY";
+        case 5:
+          return "UPDATE";
+        case 6:
+          return "OPCODE_6";
+        case 7:
+          return "OPCODE_7";
+        case 8:
+          return "OPCODE_8";
+        case 9:
+          return "OPCODE_9";
+        case 10:
+          return "OPCODE_10";
+        case 11:
+          return "OPCODE_11";
+        case 12:
+          return "OPCODE_12";
+        case 13:
+          return "OPCODE_13";
+        case 14:
+          return "OPCODE_14";
+        case 15:
+          return "OPCODE_15";
+      }
+      return "OPCODE_" + opcode;
+    };
+    exports.toOpcode = function(code) {
+      switch (code.toUpperCase()) {
+        case "QUERY":
+          return 0;
+        case "IQUERY":
+          return 1;
+        case "STATUS":
+          return 2;
+        case "OPCODE_3":
+          return 3;
+        case "NOTIFY":
+          return 4;
+        case "UPDATE":
+          return 5;
+        case "OPCODE_6":
+          return 6;
+        case "OPCODE_7":
+          return 7;
+        case "OPCODE_8":
+          return 8;
+        case "OPCODE_9":
+          return 9;
+        case "OPCODE_10":
+          return 10;
+        case "OPCODE_11":
+          return 11;
+        case "OPCODE_12":
+          return 12;
+        case "OPCODE_13":
+          return 13;
+        case "OPCODE_14":
+          return 14;
+        case "OPCODE_15":
+          return 15;
+      }
+      return 0;
+    };
+  }
+});
+
+// node_modules/dns-packet/classes.js
+var require_classes = __commonJS({
+  "node_modules/dns-packet/classes.js"(exports) {
+    "use strict";
+    exports.toString = function(klass) {
+      switch (klass) {
+        case 1:
+          return "IN";
+        case 2:
+          return "CS";
+        case 3:
+          return "CH";
+        case 4:
+          return "HS";
+        case 255:
+          return "ANY";
+      }
+      return "UNKNOWN_" + klass;
+    };
+    exports.toClass = function(name) {
+      switch (name.toUpperCase()) {
+        case "IN":
+          return 1;
+        case "CS":
+          return 2;
+        case "CH":
+          return 3;
+        case "HS":
+          return 4;
+        case "ANY":
+          return 255;
+      }
+      return 0;
+    };
+  }
+});
+
+// node_modules/dns-packet/optioncodes.js
+var require_optioncodes = __commonJS({
+  "node_modules/dns-packet/optioncodes.js"(exports) {
+    "use strict";
+    exports.toString = function(type) {
+      switch (type) {
+        // list at
+        // https://www.iana.org/assignments/dns-parameters/dns-parameters.xhtml#dns-parameters-11
+        case 1:
+          return "LLQ";
+        case 2:
+          return "UL";
+        case 3:
+          return "NSID";
+        case 5:
+          return "DAU";
+        case 6:
+          return "DHU";
+        case 7:
+          return "N3U";
+        case 8:
+          return "CLIENT_SUBNET";
+        case 9:
+          return "EXPIRE";
+        case 10:
+          return "COOKIE";
+        case 11:
+          return "TCP_KEEPALIVE";
+        case 12:
+          return "PADDING";
+        case 13:
+          return "CHAIN";
+        case 14:
+          return "KEY_TAG";
+        case 26946:
+          return "DEVICEID";
+      }
+      if (type < 0) {
+        return null;
+      }
+      return `OPTION_${type}`;
+    };
+    exports.toCode = function(name) {
+      if (typeof name === "number") {
+        return name;
+      }
+      if (!name) {
+        return -1;
+      }
+      switch (name.toUpperCase()) {
+        case "OPTION_0":
+          return 0;
+        case "LLQ":
+          return 1;
+        case "UL":
+          return 2;
+        case "NSID":
+          return 3;
+        case "OPTION_4":
+          return 4;
+        case "DAU":
+          return 5;
+        case "DHU":
+          return 6;
+        case "N3U":
+          return 7;
+        case "CLIENT_SUBNET":
+          return 8;
+        case "EXPIRE":
+          return 9;
+        case "COOKIE":
+          return 10;
+        case "TCP_KEEPALIVE":
+          return 11;
+        case "PADDING":
+          return 12;
+        case "CHAIN":
+          return 13;
+        case "KEY_TAG":
+          return 14;
+        case "DEVICEID":
+          return 26946;
+        case "OPTION_65535":
+          return 65535;
+      }
+      const m = name.match(/_(\d+)$/);
+      if (m) {
+        return parseInt(m[1], 10);
+      }
+      return -1;
+    };
+  }
+});
+
+// node_modules/@leichtgewicht/ip-codec/index.cjs
+var require_ip_codec = __commonJS({
+  "node_modules/@leichtgewicht/ip-codec/index.cjs"(exports, module) {
+    var ipCodec = (function(exports2) {
+      "use strict";
+      Object.defineProperty(exports2, "__esModule", {
+        value: true
+      });
+      exports2.decode = decode;
+      exports2.encode = encode;
+      exports2.familyOf = familyOf;
+      exports2.name = void 0;
+      exports2.sizeOf = sizeOf;
+      exports2.v6 = exports2.v4 = void 0;
+      const v4Regex = /^(\d{1,3}\.){3,3}\d{1,3}$/;
+      const v4Size = 4;
+      const v6Regex = /^(::)?(((\d{1,3}\.){3}(\d{1,3}){1})?([0-9a-f]){0,4}:{0,2}){1,8}(::)?$/i;
+      const v6Size = 16;
+      const v4 = {
+        name: "v4",
+        size: v4Size,
+        isFormat: (ip2) => v4Regex.test(ip2),
+        encode(ip2, buff, offset) {
+          offset = ~~offset;
+          buff = buff || new Uint8Array(offset + v4Size);
+          const max = ip2.length;
+          let n = 0;
+          for (let i = 0; i < max; ) {
+            const c = ip2.charCodeAt(i++);
+            if (c === 46) {
+              buff[offset++] = n;
+              n = 0;
+            } else {
+              n = n * 10 + (c - 48);
+            }
+          }
+          buff[offset] = n;
+          return buff;
+        },
+        decode(buff, offset) {
+          offset = ~~offset;
+          return `${buff[offset++]}.${buff[offset++]}.${buff[offset++]}.${buff[offset]}`;
+        }
+      };
+      exports2.v4 = v4;
+      const v62 = {
+        name: "v6",
+        size: v6Size,
+        isFormat: (ip2) => ip2.length > 0 && v6Regex.test(ip2),
+        encode(ip2, buff, offset) {
+          offset = ~~offset;
+          let end = offset + v6Size;
+          let fill = -1;
+          let hexN = 0;
+          let decN = 0;
+          let prevColon = true;
+          let useDec = false;
+          buff = buff || new Uint8Array(offset + v6Size);
+          for (let i = 0; i < ip2.length; i++) {
+            let c = ip2.charCodeAt(i);
+            if (c === 58) {
+              if (prevColon) {
+                if (fill !== -1) {
+                  if (offset < end) buff[offset] = 0;
+                  if (offset < end - 1) buff[offset + 1] = 0;
+                  offset += 2;
+                } else if (offset < end) {
+                  fill = offset;
+                }
+              } else {
+                if (useDec === true) {
+                  if (offset < end) buff[offset] = decN;
+                  offset++;
+                } else {
+                  if (offset < end) buff[offset] = hexN >> 8;
+                  if (offset < end - 1) buff[offset + 1] = hexN & 255;
+                  offset += 2;
+                }
+                hexN = 0;
+                decN = 0;
+              }
+              prevColon = true;
+              useDec = false;
+            } else if (c === 46) {
+              if (offset < end) buff[offset] = decN;
+              offset++;
+              decN = 0;
+              hexN = 0;
+              prevColon = false;
+              useDec = true;
+            } else {
+              prevColon = false;
+              if (c >= 97) {
+                c -= 87;
+              } else if (c >= 65) {
+                c -= 55;
+              } else {
+                c -= 48;
+                decN = decN * 10 + c;
+              }
+              hexN = (hexN << 4) + c;
+            }
+          }
+          if (prevColon === false) {
+            if (useDec === true) {
+              if (offset < end) buff[offset] = decN;
+              offset++;
+            } else {
+              if (offset < end) buff[offset] = hexN >> 8;
+              if (offset < end - 1) buff[offset + 1] = hexN & 255;
+              offset += 2;
+            }
+          } else if (fill === 0) {
+            if (offset < end) buff[offset] = 0;
+            if (offset < end - 1) buff[offset + 1] = 0;
+            offset += 2;
+          } else if (fill !== -1) {
+            offset += 2;
+            for (let i = Math.min(offset - 1, end - 1); i >= fill + 2; i--) {
+              buff[i] = buff[i - 2];
+            }
+            buff[fill] = 0;
+            buff[fill + 1] = 0;
+            fill = offset;
+          }
+          if (fill !== offset && fill !== -1) {
+            if (offset > end - 2) {
+              offset = end - 2;
+            }
+            while (end > fill) {
+              buff[--end] = offset < end && offset > fill ? buff[--offset] : 0;
+            }
+          } else {
+            while (offset < end) {
+              buff[offset++] = 0;
+            }
+          }
+          return buff;
+        },
+        decode(buff, offset) {
+          offset = ~~offset;
+          let result = "";
+          for (let i = 0; i < v6Size; i += 2) {
+            if (i !== 0) {
+              result += ":";
+            }
+            result += (buff[offset + i] << 8 | buff[offset + i + 1]).toString(16);
+          }
+          return result.replace(/(^|:)0(:0)*:0(:|$)/, "$1::$3").replace(/:{3,4}/, "::");
+        }
+      };
+      exports2.v6 = v62;
+      const name = "ip";
+      exports2.name = name;
+      function sizeOf(ip2) {
+        if (v4.isFormat(ip2)) return v4.size;
+        if (v62.isFormat(ip2)) return v62.size;
+        throw Error(`Invalid ip address: ${ip2}`);
+      }
+      function familyOf(string) {
+        return sizeOf(string) === v4.size ? 1 : 2;
+      }
+      function encode(ip2, buff, offset) {
+        offset = ~~offset;
+        const size = sizeOf(ip2);
+        if (typeof buff === "function") {
+          buff = buff(offset + size);
+        }
+        if (size === v4.size) {
+          return v4.encode(ip2, buff, offset);
+        }
+        return v62.encode(ip2, buff, offset);
+      }
+      function decode(buff, offset, length) {
+        offset = ~~offset;
+        length = length || buff.length - offset;
+        if (length === v4.size) {
+          return v4.decode(buff, offset, length);
+        }
+        if (length === v62.size) {
+          return v62.decode(buff, offset, length);
+        }
+        throw Error(`Invalid buffer size needs to be ${v4.size} for v4 or ${v62.size} for v6.`);
+      }
+      return "default" in exports2 ? exports2.default : exports2;
+    })({});
+    if (typeof define === "function" && define.amd) define([], function() {
+      return ipCodec;
+    });
+    else if (typeof module === "object" && typeof exports === "object") module.exports = ipCodec;
+  }
+});
+
+// node_modules/dns-packet/index.js
+var require_dns_packet = __commonJS({
+  "node_modules/dns-packet/index.js"(exports) {
+    "use strict";
+    var Buffer2 = __require("buffer").Buffer;
+    var types = require_types();
+    var rcodes = require_rcodes();
+    var opcodes = require_opcodes();
+    var classes = require_classes();
+    var optioncodes = require_optioncodes();
+    var ip2 = require_ip_codec();
+    var QUERY_FLAG = 0;
+    var RESPONSE_FLAG = 1 << 15;
+    var FLUSH_MASK = 1 << 15;
+    var NOT_FLUSH_MASK = ~FLUSH_MASK;
+    var QU_MASK = 1 << 15;
+    var NOT_QU_MASK = ~QU_MASK;
+    var name = exports.name = {};
+    name.encode = function(str2, buf, offset, { mail = false } = {}) {
+      if (!buf) buf = Buffer2.alloc(name.encodingLength(str2));
+      if (!offset) offset = 0;
+      const oldOffset = offset;
+      const n = str2.replace(/^\.|\.$/gm, "");
+      if (n.length) {
+        let list = [];
+        if (mail) {
+          let localPart = "";
+          n.split(".").forEach((label) => {
+            if (label.endsWith("\\")) {
+              localPart += (localPart.length ? "." : "") + label.slice(0, -1);
+            } else {
+              if (list.length === 0 && localPart.length) {
+                list.push(localPart + "." + label);
+              } else {
+                list.push(label);
+              }
+            }
+          });
+        } else {
+          list = n.split(".");
+        }
+        for (let i = 0; i < list.length; i++) {
+          const len = buf.write(list[i], offset + 1);
+          buf[offset] = len;
+          offset += len + 1;
+        }
+      }
+      buf[offset++] = 0;
+      name.encode.bytes = offset - oldOffset;
+      return buf;
+    };
+    name.encode.bytes = 0;
+    name.decode = function(buf, offset, { mail = false } = {}) {
+      if (!offset) offset = 0;
+      const list = [];
+      let oldOffset = offset;
+      let totalLength = 0;
+      let consumedBytes = 0;
+      let jumped = false;
+      while (true) {
+        if (offset >= buf.length) {
+          throw new Error("Cannot decode name (buffer overflow)");
+        }
+        const len = buf[offset++];
+        consumedBytes += jumped ? 0 : 1;
+        if (len === 0) {
+          break;
+        } else if ((len & 192) === 0) {
+          if (offset + len > buf.length) {
+            throw new Error("Cannot decode name (buffer overflow)");
+          }
+          totalLength += len + 1;
+          if (totalLength > 254) {
+            throw new Error("Cannot decode name (name too long)");
+          }
+          let label = buf.toString("utf-8", offset, offset + len);
+          if (mail) {
+            label = label.replace(/\./g, "\\.");
+          }
+          list.push(label);
+          offset += len;
+          consumedBytes += jumped ? 0 : len;
+        } else if ((len & 192) === 192) {
+          if (offset + 1 > buf.length) {
+            throw new Error("Cannot decode name (buffer overflow)");
+          }
+          const jumpOffset = buf.readUInt16BE(offset - 1) - 49152;
+          if (jumpOffset >= oldOffset) {
+            throw new Error("Cannot decode name (bad pointer)");
+          }
+          offset = jumpOffset;
+          oldOffset = jumpOffset;
+          consumedBytes += jumped ? 0 : 1;
+          jumped = true;
+        } else {
+          throw new Error("Cannot decode name (bad label)");
+        }
+      }
+      name.decode.bytes = consumedBytes;
+      return list.length === 0 ? "." : list.join(".");
+    };
+    name.decode.bytes = 0;
+    name.encodingLength = function(n) {
+      if (n === "." || n === "..") return 1;
+      return Buffer2.byteLength(n.replace(/^\.|\.$/gm, "")) + 2;
+    };
+    var string = {};
+    string.encode = function(s, buf, offset) {
+      if (!buf) buf = Buffer2.alloc(string.encodingLength(s));
+      if (!offset) offset = 0;
+      const len = buf.write(s, offset + 1);
+      buf[offset] = len;
+      string.encode.bytes = len + 1;
+      return buf;
+    };
+    string.encode.bytes = 0;
+    string.decode = function(buf, offset) {
+      if (!offset) offset = 0;
+      const len = buf[offset];
+      const s = buf.toString("utf-8", offset + 1, offset + 1 + len);
+      string.decode.bytes = len + 1;
+      return s;
+    };
+    string.decode.bytes = 0;
+    string.encodingLength = function(s) {
+      return Buffer2.byteLength(s) + 1;
+    };
+    var header = {};
+    header.encode = function(h, buf, offset) {
+      if (!buf) buf = header.encodingLength(h);
+      if (!offset) offset = 0;
+      const flags = (h.flags || 0) & 32767;
+      const type = h.type === "response" ? RESPONSE_FLAG : QUERY_FLAG;
+      buf.writeUInt16BE(h.id || 0, offset);
+      buf.writeUInt16BE(flags | type, offset + 2);
+      buf.writeUInt16BE(h.questions.length, offset + 4);
+      buf.writeUInt16BE(h.answers.length, offset + 6);
+      buf.writeUInt16BE(h.authorities.length, offset + 8);
+      buf.writeUInt16BE(h.additionals.length, offset + 10);
+      return buf;
+    };
+    header.encode.bytes = 12;
+    header.decode = function(buf, offset) {
+      if (!offset) offset = 0;
+      if (buf.length < 12) throw new Error("Header must be 12 bytes");
+      const flags = buf.readUInt16BE(offset + 2);
+      return {
+        id: buf.readUInt16BE(offset),
+        type: flags & RESPONSE_FLAG ? "response" : "query",
+        flags: flags & 32767,
+        flag_qr: (flags >> 15 & 1) === 1,
+        opcode: opcodes.toString(flags >> 11 & 15),
+        flag_aa: (flags >> 10 & 1) === 1,
+        flag_tc: (flags >> 9 & 1) === 1,
+        flag_rd: (flags >> 8 & 1) === 1,
+        flag_ra: (flags >> 7 & 1) === 1,
+        flag_z: (flags >> 6 & 1) === 1,
+        flag_ad: (flags >> 5 & 1) === 1,
+        flag_cd: (flags >> 4 & 1) === 1,
+        rcode: rcodes.toString(flags & 15),
+        questions: new Array(buf.readUInt16BE(offset + 4)),
+        answers: new Array(buf.readUInt16BE(offset + 6)),
+        authorities: new Array(buf.readUInt16BE(offset + 8)),
+        additionals: new Array(buf.readUInt16BE(offset + 10))
+      };
+    };
+    header.decode.bytes = 12;
+    header.encodingLength = function() {
+      return 12;
+    };
+    var runknown = exports.unknown = {};
+    runknown.encode = function(data, buf, offset) {
+      if (!buf) buf = Buffer2.alloc(runknown.encodingLength(data));
+      if (!offset) offset = 0;
+      buf.writeUInt16BE(data.length, offset);
+      data.copy(buf, offset + 2);
+      runknown.encode.bytes = data.length + 2;
+      return buf;
+    };
+    runknown.encode.bytes = 0;
+    runknown.decode = function(buf, offset) {
+      if (!offset) offset = 0;
+      const len = buf.readUInt16BE(offset);
+      const data = buf.slice(offset + 2, offset + 2 + len);
+      runknown.decode.bytes = len + 2;
+      return data;
+    };
+    runknown.decode.bytes = 0;
+    runknown.encodingLength = function(data) {
+      return data.length + 2;
+    };
+    var rns = exports.ns = {};
+    rns.encode = function(data, buf, offset) {
+      if (!buf) buf = Buffer2.alloc(rns.encodingLength(data));
+      if (!offset) offset = 0;
+      name.encode(data, buf, offset + 2);
+      buf.writeUInt16BE(name.encode.bytes, offset);
+      rns.encode.bytes = name.encode.bytes + 2;
+      return buf;
+    };
+    rns.encode.bytes = 0;
+    rns.decode = function(buf, offset) {
+      if (!offset) offset = 0;
+      const len = buf.readUInt16BE(offset);
+      const dd2 = name.decode(buf, offset + 2);
+      rns.decode.bytes = len + 2;
+      return dd2;
+    };
+    rns.decode.bytes = 0;
+    rns.encodingLength = function(data) {
+      return name.encodingLength(data) + 2;
+    };
+    var rsoa = exports.soa = {};
+    rsoa.encode = function(data, buf, offset) {
+      if (!buf) buf = Buffer2.alloc(rsoa.encodingLength(data));
+      if (!offset) offset = 0;
+      const oldOffset = offset;
+      offset += 2;
+      name.encode(data.mname, buf, offset);
+      offset += name.encode.bytes;
+      name.encode(data.rname, buf, offset, { mail: true });
+      offset += name.encode.bytes;
+      buf.writeUInt32BE(data.serial || 0, offset);
+      offset += 4;
+      buf.writeUInt32BE(data.refresh || 0, offset);
+      offset += 4;
+      buf.writeUInt32BE(data.retry || 0, offset);
+      offset += 4;
+      buf.writeUInt32BE(data.expire || 0, offset);
+      offset += 4;
+      buf.writeUInt32BE(data.minimum || 0, offset);
+      offset += 4;
+      buf.writeUInt16BE(offset - oldOffset - 2, oldOffset);
+      rsoa.encode.bytes = offset - oldOffset;
+      return buf;
+    };
+    rsoa.encode.bytes = 0;
+    rsoa.decode = function(buf, offset) {
+      if (!offset) offset = 0;
+      const oldOffset = offset;
+      const data = {};
+      offset += 2;
+      data.mname = name.decode(buf, offset);
+      offset += name.decode.bytes;
+      data.rname = name.decode(buf, offset, { mail: true });
+      offset += name.decode.bytes;
+      data.serial = buf.readUInt32BE(offset);
+      offset += 4;
+      data.refresh = buf.readUInt32BE(offset);
+      offset += 4;
+      data.retry = buf.readUInt32BE(offset);
+      offset += 4;
+      data.expire = buf.readUInt32BE(offset);
+      offset += 4;
+      data.minimum = buf.readUInt32BE(offset);
+      offset += 4;
+      rsoa.decode.bytes = offset - oldOffset;
+      return data;
+    };
+    rsoa.decode.bytes = 0;
+    rsoa.encodingLength = function(data) {
+      return 22 + name.encodingLength(data.mname) + name.encodingLength(data.rname);
+    };
+    var rtxt = exports.txt = {};
+    rtxt.encode = function(data, buf, offset) {
+      if (!Array.isArray(data)) data = [data];
+      for (let i = 0; i < data.length; i++) {
+        if (typeof data[i] === "string") {
+          data[i] = Buffer2.from(data[i]);
+        }
+        if (!Buffer2.isBuffer(data[i])) {
+          throw new Error("Must be a Buffer");
+        }
+      }
+      if (!buf) buf = Buffer2.alloc(rtxt.encodingLength(data));
+      if (!offset) offset = 0;
+      const oldOffset = offset;
+      offset += 2;
+      data.forEach(function(d2) {
+        buf[offset++] = d2.length;
+        d2.copy(buf, offset, 0, d2.length);
+        offset += d2.length;
+      });
+      buf.writeUInt16BE(offset - oldOffset - 2, oldOffset);
+      rtxt.encode.bytes = offset - oldOffset;
+      return buf;
+    };
+    rtxt.encode.bytes = 0;
+    rtxt.decode = function(buf, offset) {
+      if (!offset) offset = 0;
+      const oldOffset = offset;
+      let remaining = buf.readUInt16BE(offset);
+      offset += 2;
+      let data = [];
+      while (remaining > 0) {
+        const len = buf[offset++];
+        --remaining;
+        if (remaining < len) {
+          throw new Error("Buffer overflow");
+        }
+        data.push(buf.slice(offset, offset + len));
+        offset += len;
+        remaining -= len;
+      }
+      rtxt.decode.bytes = offset - oldOffset;
+      return data;
+    };
+    rtxt.decode.bytes = 0;
+    rtxt.encodingLength = function(data) {
+      if (!Array.isArray(data)) data = [data];
+      let length = 2;
+      data.forEach(function(buf) {
+        if (typeof buf === "string") {
+          length += Buffer2.byteLength(buf) + 1;
+        } else {
+          length += buf.length + 1;
+        }
+      });
+      return length;
+    };
+    var rnull = exports.null = {};
+    rnull.encode = function(data, buf, offset) {
+      if (!buf) buf = Buffer2.alloc(rnull.encodingLength(data));
+      if (!offset) offset = 0;
+      if (typeof data === "string") data = Buffer2.from(data);
+      if (!data) data = Buffer2.alloc(0);
+      const oldOffset = offset;
+      offset += 2;
+      const len = data.length;
+      data.copy(buf, offset, 0, len);
+      offset += len;
+      buf.writeUInt16BE(offset - oldOffset - 2, oldOffset);
+      rnull.encode.bytes = offset - oldOffset;
+      return buf;
+    };
+    rnull.encode.bytes = 0;
+    rnull.decode = function(buf, offset) {
+      if (!offset) offset = 0;
+      const oldOffset = offset;
+      const len = buf.readUInt16BE(offset);
+      offset += 2;
+      const data = buf.slice(offset, offset + len);
+      offset += len;
+      rnull.decode.bytes = offset - oldOffset;
+      return data;
+    };
+    rnull.decode.bytes = 0;
+    rnull.encodingLength = function(data) {
+      if (!data) return 2;
+      return (Buffer2.isBuffer(data) ? data.length : Buffer2.byteLength(data)) + 2;
+    };
+    var rhinfo = exports.hinfo = {};
+    rhinfo.encode = function(data, buf, offset) {
+      if (!buf) buf = Buffer2.alloc(rhinfo.encodingLength(data));
+      if (!offset) offset = 0;
+      const oldOffset = offset;
+      offset += 2;
+      string.encode(data.cpu, buf, offset);
+      offset += string.encode.bytes;
+      string.encode(data.os, buf, offset);
+      offset += string.encode.bytes;
+      buf.writeUInt16BE(offset - oldOffset - 2, oldOffset);
+      rhinfo.encode.bytes = offset - oldOffset;
+      return buf;
+    };
+    rhinfo.encode.bytes = 0;
+    rhinfo.decode = function(buf, offset) {
+      if (!offset) offset = 0;
+      const oldOffset = offset;
+      const data = {};
+      offset += 2;
+      data.cpu = string.decode(buf, offset);
+      offset += string.decode.bytes;
+      data.os = string.decode(buf, offset);
+      offset += string.decode.bytes;
+      rhinfo.decode.bytes = offset - oldOffset;
+      return data;
+    };
+    rhinfo.decode.bytes = 0;
+    rhinfo.encodingLength = function(data) {
+      return string.encodingLength(data.cpu) + string.encodingLength(data.os) + 2;
+    };
+    var rptr = exports.ptr = {};
+    var rcname = exports.cname = rptr;
+    var rdname = exports.dname = rptr;
+    rptr.encode = function(data, buf, offset) {
+      if (!buf) buf = Buffer2.alloc(rptr.encodingLength(data));
+      if (!offset) offset = 0;
+      name.encode(data, buf, offset + 2);
+      buf.writeUInt16BE(name.encode.bytes, offset);
+      rptr.encode.bytes = name.encode.bytes + 2;
+      return buf;
+    };
+    rptr.encode.bytes = 0;
+    rptr.decode = function(buf, offset) {
+      if (!offset) offset = 0;
+      const data = name.decode(buf, offset + 2);
+      rptr.decode.bytes = name.decode.bytes + 2;
+      return data;
+    };
+    rptr.decode.bytes = 0;
+    rptr.encodingLength = function(data) {
+      return name.encodingLength(data) + 2;
+    };
+    var rsrv = exports.srv = {};
+    rsrv.encode = function(data, buf, offset) {
+      if (!buf) buf = Buffer2.alloc(rsrv.encodingLength(data));
+      if (!offset) offset = 0;
+      buf.writeUInt16BE(data.priority || 0, offset + 2);
+      buf.writeUInt16BE(data.weight || 0, offset + 4);
+      buf.writeUInt16BE(data.port || 0, offset + 6);
+      name.encode(data.target, buf, offset + 8);
+      const len = name.encode.bytes + 6;
+      buf.writeUInt16BE(len, offset);
+      rsrv.encode.bytes = len + 2;
+      return buf;
+    };
+    rsrv.encode.bytes = 0;
+    rsrv.decode = function(buf, offset) {
+      if (!offset) offset = 0;
+      const len = buf.readUInt16BE(offset);
+      const data = {};
+      data.priority = buf.readUInt16BE(offset + 2);
+      data.weight = buf.readUInt16BE(offset + 4);
+      data.port = buf.readUInt16BE(offset + 6);
+      data.target = name.decode(buf, offset + 8);
+      rsrv.decode.bytes = len + 2;
+      return data;
+    };
+    rsrv.decode.bytes = 0;
+    rsrv.encodingLength = function(data) {
+      return 8 + name.encodingLength(data.target);
+    };
+    var rcaa = exports.caa = {};
+    rcaa.ISSUER_CRITICAL = 1 << 7;
+    rcaa.encode = function(data, buf, offset) {
+      const len = rcaa.encodingLength(data);
+      if (!buf) buf = Buffer2.alloc(rcaa.encodingLength(data));
+      if (!offset) offset = 0;
+      if (data.issuerCritical) {
+        data.flags = rcaa.ISSUER_CRITICAL;
+      }
+      buf.writeUInt16BE(len - 2, offset);
+      offset += 2;
+      buf.writeUInt8(data.flags || 0, offset);
+      offset += 1;
+      string.encode(data.tag, buf, offset);
+      offset += string.encode.bytes;
+      buf.write(data.value, offset);
+      offset += Buffer2.byteLength(data.value);
+      rcaa.encode.bytes = len;
+      return buf;
+    };
+    rcaa.encode.bytes = 0;
+    rcaa.decode = function(buf, offset) {
+      if (!offset) offset = 0;
+      const len = buf.readUInt16BE(offset);
+      offset += 2;
+      const oldOffset = offset;
+      const data = {};
+      data.flags = buf.readUInt8(offset);
+      offset += 1;
+      data.tag = string.decode(buf, offset);
+      offset += string.decode.bytes;
+      data.value = buf.toString("utf-8", offset, oldOffset + len);
+      data.issuerCritical = !!(data.flags & rcaa.ISSUER_CRITICAL);
+      rcaa.decode.bytes = len + 2;
+      return data;
+    };
+    rcaa.decode.bytes = 0;
+    rcaa.encodingLength = function(data) {
+      return string.encodingLength(data.tag) + string.encodingLength(data.value) + 2;
+    };
+    var rmx = exports.mx = {};
+    rmx.encode = function(data, buf, offset) {
+      if (!buf) buf = Buffer2.alloc(rmx.encodingLength(data));
+      if (!offset) offset = 0;
+      const oldOffset = offset;
+      offset += 2;
+      buf.writeUInt16BE(data.preference || 0, offset);
+      offset += 2;
+      name.encode(data.exchange, buf, offset);
+      offset += name.encode.bytes;
+      buf.writeUInt16BE(offset - oldOffset - 2, oldOffset);
+      rmx.encode.bytes = offset - oldOffset;
+      return buf;
+    };
+    rmx.encode.bytes = 0;
+    rmx.decode = function(buf, offset) {
+      if (!offset) offset = 0;
+      const oldOffset = offset;
+      const data = {};
+      offset += 2;
+      data.preference = buf.readUInt16BE(offset);
+      offset += 2;
+      data.exchange = name.decode(buf, offset);
+      offset += name.decode.bytes;
+      rmx.decode.bytes = offset - oldOffset;
+      return data;
+    };
+    rmx.encodingLength = function(data) {
+      return 4 + name.encodingLength(data.exchange);
+    };
+    var ra = exports.a = {};
+    ra.encode = function(host, buf, offset) {
+      if (!buf) buf = Buffer2.alloc(ra.encodingLength(host));
+      if (!offset) offset = 0;
+      buf.writeUInt16BE(4, offset);
+      offset += 2;
+      ip2.v4.encode(host, buf, offset);
+      ra.encode.bytes = 6;
+      return buf;
+    };
+    ra.encode.bytes = 0;
+    ra.decode = function(buf, offset) {
+      if (!offset) offset = 0;
+      offset += 2;
+      const host = ip2.v4.decode(buf, offset);
+      ra.decode.bytes = 6;
+      return host;
+    };
+    ra.decode.bytes = 0;
+    ra.encodingLength = function() {
+      return 6;
+    };
+    var raaaa = exports.aaaa = {};
+    raaaa.encode = function(host, buf, offset) {
+      if (!buf) buf = Buffer2.alloc(raaaa.encodingLength(host));
+      if (!offset) offset = 0;
+      buf.writeUInt16BE(16, offset);
+      offset += 2;
+      ip2.v6.encode(host, buf, offset);
+      raaaa.encode.bytes = 18;
+      return buf;
+    };
+    raaaa.encode.bytes = 0;
+    raaaa.decode = function(buf, offset) {
+      if (!offset) offset = 0;
+      offset += 2;
+      const host = ip2.v6.decode(buf, offset);
+      raaaa.decode.bytes = 18;
+      return host;
+    };
+    raaaa.decode.bytes = 0;
+    raaaa.encodingLength = function() {
+      return 18;
+    };
+    var roption = exports.option = {};
+    roption.encode = function(option, buf, offset) {
+      if (!buf) buf = Buffer2.alloc(roption.encodingLength(option));
+      if (!offset) offset = 0;
+      const oldOffset = offset;
+      const code = optioncodes.toCode(option.code);
+      buf.writeUInt16BE(code, offset);
+      offset += 2;
+      if (option.data) {
+        buf.writeUInt16BE(option.data.length, offset);
+        offset += 2;
+        option.data.copy(buf, offset);
+        offset += option.data.length;
+      } else {
+        switch (code) {
+          // case 3: NSID.  No encode makes sense.
+          // case 5,6,7: Not implementable
+          case 8:
+            const spl = option.sourcePrefixLength || 0;
+            const fam = option.family || ip2.familyOf(option.ip);
+            const ipBuf = ip2.encode(option.ip, Buffer2.alloc);
+            const ipLen = Math.ceil(spl / 8);
+            buf.writeUInt16BE(ipLen + 4, offset);
+            offset += 2;
+            buf.writeUInt16BE(fam, offset);
+            offset += 2;
+            buf.writeUInt8(spl, offset++);
+            buf.writeUInt8(option.scopePrefixLength || 0, offset++);
+            ipBuf.copy(buf, offset, 0, ipLen);
+            offset += ipLen;
+            break;
+          // case 9: EXPIRE (experimental)
+          // case 10: COOKIE.  No encode makes sense.
+          case 11:
+            if (option.timeout) {
+              buf.writeUInt16BE(2, offset);
+              offset += 2;
+              buf.writeUInt16BE(option.timeout, offset);
+              offset += 2;
+            } else {
+              buf.writeUInt16BE(0, offset);
+              offset += 2;
+            }
+            break;
+          case 12:
+            const len = option.length || 0;
+            buf.writeUInt16BE(len, offset);
+            offset += 2;
+            buf.fill(0, offset, offset + len);
+            offset += len;
+            break;
+          // case 13:  CHAIN.  Experimental.
+          case 14:
+            const tagsLen = option.tags.length * 2;
+            buf.writeUInt16BE(tagsLen, offset);
+            offset += 2;
+            for (const tag of option.tags) {
+              buf.writeUInt16BE(tag, offset);
+              offset += 2;
+            }
+            break;
+          default:
+            throw new Error(`Unknown roption code: ${option.code}`);
+        }
+      }
+      roption.encode.bytes = offset - oldOffset;
+      return buf;
+    };
+    roption.encode.bytes = 0;
+    roption.decode = function(buf, offset) {
+      if (!offset) offset = 0;
+      const option = {};
+      option.code = buf.readUInt16BE(offset);
+      option.type = optioncodes.toString(option.code);
+      offset += 2;
+      const len = buf.readUInt16BE(offset);
+      offset += 2;
+      option.data = buf.slice(offset, offset + len);
+      switch (option.code) {
+        // case 3: NSID.  No decode makes sense.
+        case 8:
+          option.family = buf.readUInt16BE(offset);
+          offset += 2;
+          option.sourcePrefixLength = buf.readUInt8(offset++);
+          option.scopePrefixLength = buf.readUInt8(offset++);
+          const padded = Buffer2.alloc(option.family === 1 ? 4 : 16);
+          buf.copy(padded, 0, offset, offset + len - 4);
+          option.ip = ip2.decode(padded);
+          break;
+        // case 12: Padding.  No decode makes sense.
+        case 11:
+          if (len > 0) {
+            option.timeout = buf.readUInt16BE(offset);
+            offset += 2;
+          }
+          break;
+        case 14:
+          option.tags = [];
+          for (let i = 0; i < len; i += 2) {
+            option.tags.push(buf.readUInt16BE(offset));
+            offset += 2;
+          }
+      }
+      roption.decode.bytes = len + 4;
+      return option;
+    };
+    roption.decode.bytes = 0;
+    roption.encodingLength = function(option) {
+      if (option.data) {
+        return option.data.length + 4;
+      }
+      const code = optioncodes.toCode(option.code);
+      switch (code) {
+        case 8:
+          const spl = option.sourcePrefixLength || 0;
+          return Math.ceil(spl / 8) + 8;
+        case 11:
+          return typeof option.timeout === "number" ? 6 : 4;
+        case 12:
+          return option.length + 4;
+        case 14:
+          return 4 + option.tags.length * 2;
+      }
+      throw new Error(`Unknown roption code: ${option.code}`);
+    };
+    var ropt = exports.opt = {};
+    ropt.encode = function(options, buf, offset) {
+      if (!buf) buf = Buffer2.alloc(ropt.encodingLength(options));
+      if (!offset) offset = 0;
+      const oldOffset = offset;
+      const rdlen = encodingLengthList(options, roption);
+      buf.writeUInt16BE(rdlen, offset);
+      offset = encodeList(options, roption, buf, offset + 2);
+      ropt.encode.bytes = offset - oldOffset;
+      return buf;
+    };
+    ropt.encode.bytes = 0;
+    ropt.decode = function(buf, offset) {
+      if (!offset) offset = 0;
+      const oldOffset = offset;
+      const options = [];
+      let rdlen = buf.readUInt16BE(offset);
+      offset += 2;
+      let o = 0;
+      while (rdlen > 0) {
+        options[o++] = roption.decode(buf, offset);
+        offset += roption.decode.bytes;
+        rdlen -= roption.decode.bytes;
+      }
+      ropt.decode.bytes = offset - oldOffset;
+      return options;
+    };
+    ropt.decode.bytes = 0;
+    ropt.encodingLength = function(options) {
+      return 2 + encodingLengthList(options || [], roption);
+    };
+    var rdnskey = exports.dnskey = {};
+    rdnskey.PROTOCOL_DNSSEC = 3;
+    rdnskey.ZONE_KEY = 128;
+    rdnskey.SECURE_ENTRYPOINT = 32768;
+    rdnskey.encode = function(key, buf, offset) {
+      if (!buf) buf = Buffer2.alloc(rdnskey.encodingLength(key));
+      if (!offset) offset = 0;
+      const oldOffset = offset;
+      const keydata = key.key;
+      if (!Buffer2.isBuffer(keydata)) {
+        throw new Error("Key must be a Buffer");
+      }
+      offset += 2;
+      buf.writeUInt16BE(key.flags, offset);
+      offset += 2;
+      buf.writeUInt8(rdnskey.PROTOCOL_DNSSEC, offset);
+      offset += 1;
+      buf.writeUInt8(key.algorithm, offset);
+      offset += 1;
+      keydata.copy(buf, offset, 0, keydata.length);
+      offset += keydata.length;
+      rdnskey.encode.bytes = offset - oldOffset;
+      buf.writeUInt16BE(rdnskey.encode.bytes - 2, oldOffset);
+      return buf;
+    };
+    rdnskey.encode.bytes = 0;
+    rdnskey.decode = function(buf, offset) {
+      if (!offset) offset = 0;
+      const oldOffset = offset;
+      var key = {};
+      var length = buf.readUInt16BE(offset);
+      offset += 2;
+      key.flags = buf.readUInt16BE(offset);
+      offset += 2;
+      if (buf.readUInt8(offset) !== rdnskey.PROTOCOL_DNSSEC) {
+        throw new Error("Protocol must be 3");
+      }
+      offset += 1;
+      key.algorithm = buf.readUInt8(offset);
+      offset += 1;
+      key.key = buf.slice(offset, oldOffset + length + 2);
+      offset += key.key.length;
+      rdnskey.decode.bytes = offset - oldOffset;
+      return key;
+    };
+    rdnskey.decode.bytes = 0;
+    rdnskey.encodingLength = function(key) {
+      return 6 + Buffer2.byteLength(key.key);
+    };
+    var rrrsig = exports.rrsig = {};
+    rrrsig.encode = function(sig, buf, offset) {
+      if (!buf) buf = Buffer2.alloc(rrrsig.encodingLength(sig));
+      if (!offset) offset = 0;
+      const oldOffset = offset;
+      const signature = sig.signature;
+      if (!Buffer2.isBuffer(signature)) {
+        throw new Error("Signature must be a Buffer");
+      }
+      offset += 2;
+      buf.writeUInt16BE(types.toType(sig.typeCovered), offset);
+      offset += 2;
+      buf.writeUInt8(sig.algorithm, offset);
+      offset += 1;
+      buf.writeUInt8(sig.labels, offset);
+      offset += 1;
+      buf.writeUInt32BE(sig.originalTTL, offset);
+      offset += 4;
+      buf.writeUInt32BE(sig.expiration, offset);
+      offset += 4;
+      buf.writeUInt32BE(sig.inception, offset);
+      offset += 4;
+      buf.writeUInt16BE(sig.keyTag, offset);
+      offset += 2;
+      name.encode(sig.signersName, buf, offset);
+      offset += name.encode.bytes;
+      signature.copy(buf, offset, 0, signature.length);
+      offset += signature.length;
+      rrrsig.encode.bytes = offset - oldOffset;
+      buf.writeUInt16BE(rrrsig.encode.bytes - 2, oldOffset);
+      return buf;
+    };
+    rrrsig.encode.bytes = 0;
+    rrrsig.decode = function(buf, offset) {
+      if (!offset) offset = 0;
+      const oldOffset = offset;
+      var sig = {};
+      var length = buf.readUInt16BE(offset);
+      offset += 2;
+      sig.typeCovered = types.toString(buf.readUInt16BE(offset));
+      offset += 2;
+      sig.algorithm = buf.readUInt8(offset);
+      offset += 1;
+      sig.labels = buf.readUInt8(offset);
+      offset += 1;
+      sig.originalTTL = buf.readUInt32BE(offset);
+      offset += 4;
+      sig.expiration = buf.readUInt32BE(offset);
+      offset += 4;
+      sig.inception = buf.readUInt32BE(offset);
+      offset += 4;
+      sig.keyTag = buf.readUInt16BE(offset);
+      offset += 2;
+      sig.signersName = name.decode(buf, offset);
+      offset += name.decode.bytes;
+      sig.signature = buf.slice(offset, oldOffset + length + 2);
+      offset += sig.signature.length;
+      rrrsig.decode.bytes = offset - oldOffset;
+      return sig;
+    };
+    rrrsig.decode.bytes = 0;
+    rrrsig.encodingLength = function(sig) {
+      return 20 + name.encodingLength(sig.signersName) + Buffer2.byteLength(sig.signature);
+    };
+    var rrp = exports.rp = {};
+    rrp.encode = function(data, buf, offset) {
+      if (!buf) buf = Buffer2.alloc(rrp.encodingLength(data));
+      if (!offset) offset = 0;
+      const oldOffset = offset;
+      offset += 2;
+      name.encode(data.mbox || ".", buf, offset, { mail: true });
+      offset += name.encode.bytes;
+      name.encode(data.txt || ".", buf, offset);
+      offset += name.encode.bytes;
+      rrp.encode.bytes = offset - oldOffset;
+      buf.writeUInt16BE(rrp.encode.bytes - 2, oldOffset);
+      return buf;
+    };
+    rrp.encode.bytes = 0;
+    rrp.decode = function(buf, offset) {
+      if (!offset) offset = 0;
+      const oldOffset = offset;
+      const data = {};
+      offset += 2;
+      data.mbox = name.decode(buf, offset, { mail: true }) || ".";
+      offset += name.decode.bytes;
+      data.txt = name.decode(buf, offset) || ".";
+      offset += name.decode.bytes;
+      rrp.decode.bytes = offset - oldOffset;
+      return data;
+    };
+    rrp.decode.bytes = 0;
+    rrp.encodingLength = function(data) {
+      return 2 + name.encodingLength(data.mbox || ".") + name.encodingLength(data.txt || ".");
+    };
+    var typebitmap = {};
+    typebitmap.encode = function(typelist, buf, offset) {
+      if (!buf) buf = Buffer2.alloc(typebitmap.encodingLength(typelist));
+      if (!offset) offset = 0;
+      const oldOffset = offset;
+      var typesByWindow = [];
+      for (var i = 0; i < typelist.length; i++) {
+        var typeid = types.toType(typelist[i]);
+        if (typesByWindow[typeid >> 8] === void 0) {
+          typesByWindow[typeid >> 8] = [];
+        }
+        typesByWindow[typeid >> 8][typeid >> 3 & 31] |= 1 << 7 - (typeid & 7);
+      }
+      for (i = 0; i < typesByWindow.length; i++) {
+        if (typesByWindow[i] !== void 0) {
+          var windowBuf = Buffer2.from(typesByWindow[i]);
+          buf.writeUInt8(i, offset);
+          offset += 1;
+          buf.writeUInt8(windowBuf.length, offset);
+          offset += 1;
+          windowBuf.copy(buf, offset);
+          offset += windowBuf.length;
+        }
+      }
+      typebitmap.encode.bytes = offset - oldOffset;
+      return buf;
+    };
+    typebitmap.encode.bytes = 0;
+    typebitmap.decode = function(buf, offset, length) {
+      if (!offset) offset = 0;
+      const oldOffset = offset;
+      var typelist = [];
+      while (offset - oldOffset < length) {
+        var window2 = buf.readUInt8(offset);
+        offset += 1;
+        var windowLength = buf.readUInt8(offset);
+        offset += 1;
+        for (var i = 0; i < windowLength; i++) {
+          var b = buf.readUInt8(offset + i);
+          for (var j2 = 0; j2 < 8; j2++) {
+            if (b & 1 << 7 - j2) {
+              var typeid = types.toString(window2 << 8 | i << 3 | j2);
+              typelist.push(typeid);
+            }
+          }
+        }
+        offset += windowLength;
+      }
+      typebitmap.decode.bytes = offset - oldOffset;
+      return typelist;
+    };
+    typebitmap.decode.bytes = 0;
+    typebitmap.encodingLength = function(typelist) {
+      var extents = [];
+      for (var i = 0; i < typelist.length; i++) {
+        var typeid = types.toType(typelist[i]);
+        extents[typeid >> 8] = Math.max(extents[typeid >> 8] || 0, typeid & 255);
+      }
+      var len = 0;
+      for (i = 0; i < extents.length; i++) {
+        if (extents[i] !== void 0) {
+          len += 2 + Math.ceil((extents[i] + 1) / 8);
+        }
+      }
+      return len;
+    };
+    var rnsec = exports.nsec = {};
+    rnsec.encode = function(record, buf, offset) {
+      if (!buf) buf = Buffer2.alloc(rnsec.encodingLength(record));
+      if (!offset) offset = 0;
+      const oldOffset = offset;
+      offset += 2;
+      name.encode(record.nextDomain, buf, offset);
+      offset += name.encode.bytes;
+      typebitmap.encode(record.rrtypes, buf, offset);
+      offset += typebitmap.encode.bytes;
+      rnsec.encode.bytes = offset - oldOffset;
+      buf.writeUInt16BE(rnsec.encode.bytes - 2, oldOffset);
+      return buf;
+    };
+    rnsec.encode.bytes = 0;
+    rnsec.decode = function(buf, offset) {
+      if (!offset) offset = 0;
+      const oldOffset = offset;
+      var record = {};
+      var length = buf.readUInt16BE(offset);
+      offset += 2;
+      record.nextDomain = name.decode(buf, offset);
+      offset += name.decode.bytes;
+      record.rrtypes = typebitmap.decode(buf, offset, length - (offset - oldOffset));
+      offset += typebitmap.decode.bytes;
+      rnsec.decode.bytes = offset - oldOffset;
+      return record;
+    };
+    rnsec.decode.bytes = 0;
+    rnsec.encodingLength = function(record) {
+      return 2 + name.encodingLength(record.nextDomain) + typebitmap.encodingLength(record.rrtypes);
+    };
+    var rnsec3 = exports.nsec3 = {};
+    rnsec3.encode = function(record, buf, offset) {
+      if (!buf) buf = Buffer2.alloc(rnsec3.encodingLength(record));
+      if (!offset) offset = 0;
+      const oldOffset = offset;
+      const salt = record.salt;
+      if (!Buffer2.isBuffer(salt)) {
+        throw new Error("salt must be a Buffer");
+      }
+      const nextDomain = record.nextDomain;
+      if (!Buffer2.isBuffer(nextDomain)) {
+        throw new Error("nextDomain must be a Buffer");
+      }
+      offset += 2;
+      buf.writeUInt8(record.algorithm, offset);
+      offset += 1;
+      buf.writeUInt8(record.flags, offset);
+      offset += 1;
+      buf.writeUInt16BE(record.iterations, offset);
+      offset += 2;
+      buf.writeUInt8(salt.length, offset);
+      offset += 1;
+      salt.copy(buf, offset, 0, salt.length);
+      offset += salt.length;
+      buf.writeUInt8(nextDomain.length, offset);
+      offset += 1;
+      nextDomain.copy(buf, offset, 0, nextDomain.length);
+      offset += nextDomain.length;
+      typebitmap.encode(record.rrtypes, buf, offset);
+      offset += typebitmap.encode.bytes;
+      rnsec3.encode.bytes = offset - oldOffset;
+      buf.writeUInt16BE(rnsec3.encode.bytes - 2, oldOffset);
+      return buf;
+    };
+    rnsec3.encode.bytes = 0;
+    rnsec3.decode = function(buf, offset) {
+      if (!offset) offset = 0;
+      const oldOffset = offset;
+      var record = {};
+      var length = buf.readUInt16BE(offset);
+      offset += 2;
+      record.algorithm = buf.readUInt8(offset);
+      offset += 1;
+      record.flags = buf.readUInt8(offset);
+      offset += 1;
+      record.iterations = buf.readUInt16BE(offset);
+      offset += 2;
+      const saltLength = buf.readUInt8(offset);
+      offset += 1;
+      record.salt = buf.slice(offset, offset + saltLength);
+      offset += saltLength;
+      const hashLength = buf.readUInt8(offset);
+      offset += 1;
+      record.nextDomain = buf.slice(offset, offset + hashLength);
+      offset += hashLength;
+      record.rrtypes = typebitmap.decode(buf, offset, length - (offset - oldOffset));
+      offset += typebitmap.decode.bytes;
+      rnsec3.decode.bytes = offset - oldOffset;
+      return record;
+    };
+    rnsec3.decode.bytes = 0;
+    rnsec3.encodingLength = function(record) {
+      return 8 + record.salt.length + record.nextDomain.length + typebitmap.encodingLength(record.rrtypes);
+    };
+    var rds = exports.ds = {};
+    rds.encode = function(digest, buf, offset) {
+      if (!buf) buf = Buffer2.alloc(rds.encodingLength(digest));
+      if (!offset) offset = 0;
+      const oldOffset = offset;
+      const digestdata = digest.digest;
+      if (!Buffer2.isBuffer(digestdata)) {
+        throw new Error("Digest must be a Buffer");
+      }
+      offset += 2;
+      buf.writeUInt16BE(digest.keyTag, offset);
+      offset += 2;
+      buf.writeUInt8(digest.algorithm, offset);
+      offset += 1;
+      buf.writeUInt8(digest.digestType, offset);
+      offset += 1;
+      digestdata.copy(buf, offset, 0, digestdata.length);
+      offset += digestdata.length;
+      rds.encode.bytes = offset - oldOffset;
+      buf.writeUInt16BE(rds.encode.bytes - 2, oldOffset);
+      return buf;
+    };
+    rds.encode.bytes = 0;
+    rds.decode = function(buf, offset) {
+      if (!offset) offset = 0;
+      const oldOffset = offset;
+      var digest = {};
+      var length = buf.readUInt16BE(offset);
+      offset += 2;
+      digest.keyTag = buf.readUInt16BE(offset);
+      offset += 2;
+      digest.algorithm = buf.readUInt8(offset);
+      offset += 1;
+      digest.digestType = buf.readUInt8(offset);
+      offset += 1;
+      digest.digest = buf.slice(offset, oldOffset + length + 2);
+      offset += digest.digest.length;
+      rds.decode.bytes = offset - oldOffset;
+      return digest;
+    };
+    rds.decode.bytes = 0;
+    rds.encodingLength = function(digest) {
+      return 6 + Buffer2.byteLength(digest.digest);
+    };
+    var rsshfp = exports.sshfp = {};
+    rsshfp.getFingerprintLengthForHashType = function getFingerprintLengthForHashType(hashType) {
+      switch (hashType) {
+        case 1:
+          return 20;
+        case 2:
+          return 32;
+      }
+    };
+    rsshfp.encode = function encode(record, buf, offset) {
+      if (!buf) buf = Buffer2.alloc(rsshfp.encodingLength(record));
+      if (!offset) offset = 0;
+      const oldOffset = offset;
+      offset += 2;
+      buf[offset] = record.algorithm;
+      offset += 1;
+      buf[offset] = record.hash;
+      offset += 1;
+      const fingerprintBuf = Buffer2.from(record.fingerprint.toUpperCase(), "hex");
+      if (fingerprintBuf.length !== rsshfp.getFingerprintLengthForHashType(record.hash)) {
+        throw new Error("Invalid fingerprint length");
+      }
+      fingerprintBuf.copy(buf, offset);
+      offset += fingerprintBuf.byteLength;
+      rsshfp.encode.bytes = offset - oldOffset;
+      buf.writeUInt16BE(rsshfp.encode.bytes - 2, oldOffset);
+      return buf;
+    };
+    rsshfp.encode.bytes = 0;
+    rsshfp.decode = function decode(buf, offset) {
+      if (!offset) offset = 0;
+      const oldOffset = offset;
+      const record = {};
+      offset += 2;
+      record.algorithm = buf[offset];
+      offset += 1;
+      record.hash = buf[offset];
+      offset += 1;
+      const fingerprintLength = rsshfp.getFingerprintLengthForHashType(record.hash);
+      record.fingerprint = buf.slice(offset, offset + fingerprintLength).toString("hex").toUpperCase();
+      offset += fingerprintLength;
+      rsshfp.decode.bytes = offset - oldOffset;
+      return record;
+    };
+    rsshfp.decode.bytes = 0;
+    rsshfp.encodingLength = function(record) {
+      return 4 + Buffer2.from(record.fingerprint, "hex").byteLength;
+    };
+    var rnaptr = exports.naptr = {};
+    rnaptr.encode = function(data, buf, offset) {
+      if (!buf) buf = Buffer2.alloc(rnaptr.encodingLength(data));
+      if (!offset) offset = 0;
+      const oldOffset = offset;
+      offset += 2;
+      buf.writeUInt16BE(data.order || 0, offset);
+      offset += 2;
+      buf.writeUInt16BE(data.preference || 0, offset);
+      offset += 2;
+      string.encode(data.flags, buf, offset);
+      offset += string.encode.bytes;
+      string.encode(data.services, buf, offset);
+      offset += string.encode.bytes;
+      string.encode(data.regexp, buf, offset);
+      offset += string.encode.bytes;
+      name.encode(data.replacement, buf, offset);
+      offset += name.encode.bytes;
+      rnaptr.encode.bytes = offset - oldOffset;
+      buf.writeUInt16BE(rnaptr.encode.bytes - 2, oldOffset);
+      return buf;
+    };
+    rnaptr.encode.bytes = 0;
+    rnaptr.decode = function(buf, offset) {
+      if (!offset) offset = 0;
+      const oldOffset = offset;
+      const data = {};
+      offset += 2;
+      data.order = buf.readUInt16BE(offset);
+      offset += 2;
+      data.preference = buf.readUInt16BE(offset);
+      offset += 2;
+      data.flags = string.decode(buf, offset);
+      offset += string.decode.bytes;
+      data.services = string.decode(buf, offset);
+      offset += string.decode.bytes;
+      data.regexp = string.decode(buf, offset);
+      offset += string.decode.bytes;
+      data.replacement = name.decode(buf, offset);
+      offset += name.decode.bytes;
+      rnaptr.decode.bytes = offset - oldOffset;
+      return data;
+    };
+    rnaptr.decode.bytes = 0;
+    rnaptr.encodingLength = function(data) {
+      return string.encodingLength(data.flags) + string.encodingLength(data.services) + string.encodingLength(data.regexp) + name.encodingLength(data.replacement) + 6;
+    };
+    var rtlsa = exports.tlsa = {};
+    rtlsa.encode = function(cert, buf, offset) {
+      if (!buf) buf = Buffer2.alloc(rtlsa.encodingLength(cert));
+      if (!offset) offset = 0;
+      const oldOffset = offset;
+      const certdata = cert.certificate;
+      if (!Buffer2.isBuffer(certdata)) {
+        throw new Error("Certificate must be a Buffer");
+      }
+      offset += 2;
+      buf.writeUInt8(cert.usage, offset);
+      offset += 1;
+      buf.writeUInt8(cert.selector, offset);
+      offset += 1;
+      buf.writeUInt8(cert.matchingType, offset);
+      offset += 1;
+      certdata.copy(buf, offset, 0, certdata.length);
+      offset += certdata.length;
+      rtlsa.encode.bytes = offset - oldOffset;
+      buf.writeUInt16BE(rtlsa.encode.bytes - 2, oldOffset);
+      return buf;
+    };
+    rtlsa.encode.bytes = 0;
+    rtlsa.decode = function(buf, offset) {
+      if (!offset) offset = 0;
+      const oldOffset = offset;
+      const cert = {};
+      const length = buf.readUInt16BE(offset);
+      offset += 2;
+      cert.usage = buf.readUInt8(offset);
+      offset += 1;
+      cert.selector = buf.readUInt8(offset);
+      offset += 1;
+      cert.matchingType = buf.readUInt8(offset);
+      offset += 1;
+      cert.certificate = buf.slice(offset, oldOffset + length + 2);
+      offset += cert.certificate.length;
+      rtlsa.decode.bytes = offset - oldOffset;
+      return cert;
+    };
+    rtlsa.decode.bytes = 0;
+    rtlsa.encodingLength = function(cert) {
+      return 5 + Buffer2.byteLength(cert.certificate);
+    };
+    var renc = exports.record = function(type) {
+      switch (type.toUpperCase()) {
+        case "A":
+          return ra;
+        case "PTR":
+          return rptr;
+        case "CNAME":
+          return rcname;
+        case "DNAME":
+          return rdname;
+        case "TXT":
+          return rtxt;
+        case "NULL":
+          return rnull;
+        case "AAAA":
+          return raaaa;
+        case "SRV":
+          return rsrv;
+        case "HINFO":
+          return rhinfo;
+        case "CAA":
+          return rcaa;
+        case "NS":
+          return rns;
+        case "SOA":
+          return rsoa;
+        case "MX":
+          return rmx;
+        case "OPT":
+          return ropt;
+        case "DNSKEY":
+          return rdnskey;
+        case "RRSIG":
+          return rrrsig;
+        case "RP":
+          return rrp;
+        case "NSEC":
+          return rnsec;
+        case "NSEC3":
+          return rnsec3;
+        case "SSHFP":
+          return rsshfp;
+        case "DS":
+          return rds;
+        case "NAPTR":
+          return rnaptr;
+        case "TLSA":
+          return rtlsa;
+      }
+      return runknown;
+    };
+    var answer = exports.answer = {};
+    answer.encode = function(a, buf, offset) {
+      if (!buf) buf = Buffer2.alloc(answer.encodingLength(a));
+      if (!offset) offset = 0;
+      const oldOffset = offset;
+      name.encode(a.name, buf, offset);
+      offset += name.encode.bytes;
+      buf.writeUInt16BE(types.toType(a.type), offset);
+      if (a.type.toUpperCase() === "OPT") {
+        if (a.name !== ".") {
+          throw new Error("OPT name must be root.");
+        }
+        buf.writeUInt16BE(a.udpPayloadSize || 4096, offset + 2);
+        buf.writeUInt8(a.extendedRcode || 0, offset + 4);
+        buf.writeUInt8(a.ednsVersion || 0, offset + 5);
+        buf.writeUInt16BE(a.flags || 0, offset + 6);
+        offset += 8;
+        ropt.encode(a.options || [], buf, offset);
+        offset += ropt.encode.bytes;
+      } else {
+        let klass = classes.toClass(a.class === void 0 ? "IN" : a.class);
+        if (a.flush) klass |= FLUSH_MASK;
+        buf.writeUInt16BE(klass, offset + 2);
+        buf.writeUInt32BE(a.ttl || 0, offset + 4);
+        offset += 8;
+        const enc = renc(a.type);
+        enc.encode(a.data, buf, offset);
+        offset += enc.encode.bytes;
+      }
+      answer.encode.bytes = offset - oldOffset;
+      return buf;
+    };
+    answer.encode.bytes = 0;
+    answer.decode = function(buf, offset) {
+      if (!offset) offset = 0;
+      const a = {};
+      const oldOffset = offset;
+      a.name = name.decode(buf, offset);
+      offset += name.decode.bytes;
+      a.type = types.toString(buf.readUInt16BE(offset));
+      if (a.type === "OPT") {
+        a.udpPayloadSize = buf.readUInt16BE(offset + 2);
+        a.extendedRcode = buf.readUInt8(offset + 4);
+        a.ednsVersion = buf.readUInt8(offset + 5);
+        a.flags = buf.readUInt16BE(offset + 6);
+        a.flag_do = (a.flags >> 15 & 1) === 1;
+        a.options = ropt.decode(buf, offset + 8);
+        offset += 8 + ropt.decode.bytes;
+      } else {
+        const klass = buf.readUInt16BE(offset + 2);
+        a.ttl = buf.readUInt32BE(offset + 4);
+        a.class = classes.toString(klass & NOT_FLUSH_MASK);
+        a.flush = !!(klass & FLUSH_MASK);
+        const enc = renc(a.type);
+        a.data = enc.decode(buf, offset + 8);
+        offset += 8 + enc.decode.bytes;
+      }
+      answer.decode.bytes = offset - oldOffset;
+      return a;
+    };
+    answer.decode.bytes = 0;
+    answer.encodingLength = function(a) {
+      const data = a.data !== null && a.data !== void 0 ? a.data : a.options;
+      return name.encodingLength(a.name) + 8 + renc(a.type).encodingLength(data);
+    };
+    var question = exports.question = {};
+    question.encode = function(q2, buf, offset) {
+      if (!buf) buf = Buffer2.alloc(question.encodingLength(q2));
+      if (!offset) offset = 0;
+      const oldOffset = offset;
+      name.encode(q2.name, buf, offset);
+      offset += name.encode.bytes;
+      buf.writeUInt16BE(types.toType(q2.type), offset);
+      offset += 2;
+      buf.writeUInt16BE(classes.toClass(q2.class === void 0 ? "IN" : q2.class), offset);
+      offset += 2;
+      question.encode.bytes = offset - oldOffset;
+      return q2;
+    };
+    question.encode.bytes = 0;
+    question.decode = function(buf, offset) {
+      if (!offset) offset = 0;
+      const oldOffset = offset;
+      const q2 = {};
+      q2.name = name.decode(buf, offset);
+      offset += name.decode.bytes;
+      q2.type = types.toString(buf.readUInt16BE(offset));
+      offset += 2;
+      q2.class = classes.toString(buf.readUInt16BE(offset));
+      offset += 2;
+      const qu2 = !!(q2.class & QU_MASK);
+      if (qu2) q2.class &= NOT_QU_MASK;
+      question.decode.bytes = offset - oldOffset;
+      return q2;
+    };
+    question.decode.bytes = 0;
+    question.encodingLength = function(q2) {
+      return name.encodingLength(q2.name) + 4;
+    };
+    exports.AUTHORITATIVE_ANSWER = 1 << 10;
+    exports.TRUNCATED_RESPONSE = 1 << 9;
+    exports.RECURSION_DESIRED = 1 << 8;
+    exports.RECURSION_AVAILABLE = 1 << 7;
+    exports.AUTHENTIC_DATA = 1 << 5;
+    exports.CHECKING_DISABLED = 1 << 4;
+    exports.DNSSEC_OK = 1 << 15;
+    exports.encode = function(result, buf, offset) {
+      const allocing = !buf;
+      if (allocing) buf = Buffer2.alloc(exports.encodingLength(result));
+      if (!offset) offset = 0;
+      const oldOffset = offset;
+      if (!result.questions) result.questions = [];
+      if (!result.answers) result.answers = [];
+      if (!result.authorities) result.authorities = [];
+      if (!result.additionals) result.additionals = [];
+      header.encode(result, buf, offset);
+      offset += header.encode.bytes;
+      offset = encodeList(result.questions, question, buf, offset);
+      offset = encodeList(result.answers, answer, buf, offset);
+      offset = encodeList(result.authorities, answer, buf, offset);
+      offset = encodeList(result.additionals, answer, buf, offset);
+      exports.encode.bytes = offset - oldOffset;
+      if (allocing && exports.encode.bytes !== buf.length) {
+        return buf.slice(0, exports.encode.bytes);
+      }
+      return buf;
+    };
+    exports.encode.bytes = 0;
+    exports.decode = function(buf, offset) {
+      if (!offset) offset = 0;
+      const oldOffset = offset;
+      const result = header.decode(buf, offset);
+      offset += header.decode.bytes;
+      offset = decodeList(result.questions, question, buf, offset);
+      offset = decodeList(result.answers, answer, buf, offset);
+      offset = decodeList(result.authorities, answer, buf, offset);
+      offset = decodeList(result.additionals, answer, buf, offset);
+      exports.decode.bytes = offset - oldOffset;
+      return result;
+    };
+    exports.decode.bytes = 0;
+    exports.encodingLength = function(result) {
+      return header.encodingLength(result) + encodingLengthList(result.questions || [], question) + encodingLengthList(result.answers || [], answer) + encodingLengthList(result.authorities || [], answer) + encodingLengthList(result.additionals || [], answer);
+    };
+    exports.streamEncode = function(result) {
+      const buf = exports.encode(result);
+      const sbuf = Buffer2.alloc(2);
+      sbuf.writeUInt16BE(buf.byteLength);
+      const combine = Buffer2.concat([sbuf, buf]);
+      exports.streamEncode.bytes = combine.byteLength;
+      return combine;
+    };
+    exports.streamEncode.bytes = 0;
+    exports.streamDecode = function(sbuf) {
+      const len = sbuf.readUInt16BE(0);
+      if (sbuf.byteLength < len + 2) {
+        return null;
+      }
+      const result = exports.decode(sbuf.slice(2));
+      exports.streamDecode.bytes = exports.decode.bytes;
+      return result;
+    };
+    exports.streamDecode.bytes = 0;
+    function encodingLengthList(list, enc) {
+      let len = 0;
+      for (let i = 0; i < list.length; i++) len += enc.encodingLength(list[i]);
+      return len;
+    }
+    function encodeList(list, enc, buf, offset) {
+      for (let i = 0; i < list.length; i++) {
+        enc.encode(list[i], buf, offset);
+        offset += enc.encode.bytes;
+      }
+      return offset;
+    }
+    function decodeList(list, enc, buf, offset) {
+      for (let i = 0; i < list.length; i++) {
+        list[i] = enc.decode(buf, offset);
+        offset += enc.decode.bytes;
+      }
+      return offset;
+    }
+  }
+});
+
+// node_modules/thunky/index.js
+var require_thunky = __commonJS({
+  "node_modules/thunky/index.js"(exports, module) {
+    "use strict";
+    var nextTick = nextTickArgs;
+    process.nextTick(upgrade, 42);
+    module.exports = thunky;
+    function thunky(fn) {
+      var state = run2;
+      return thunk;
+      function thunk(callback) {
+        state(callback || noop);
+      }
+      function run2(callback) {
+        var stack = [callback];
+        state = wait;
+        fn(done);
+        function wait(callback2) {
+          stack.push(callback2);
+        }
+        function done(err) {
+          var args = arguments;
+          state = isError(err) ? run2 : finished;
+          while (stack.length) finished(stack.shift());
+          function finished(callback2) {
+            nextTick(apply, callback2, args);
+          }
+        }
+      }
+    }
+    function isError(err) {
+      return Object.prototype.toString.call(err) === "[object Error]";
+    }
+    function noop() {
+    }
+    function apply(callback, args) {
+      callback.apply(null, args);
+    }
+    function upgrade(val) {
+      if (val === 42) nextTick = process.nextTick;
+    }
+    function nextTickArgs(fn, a, b) {
+      process.nextTick(function() {
+        fn(a, b);
+      });
+    }
+  }
+});
+
+// node_modules/multicast-dns/index.js
+var require_multicast_dns = __commonJS({
+  "node_modules/multicast-dns/index.js"(exports, module) {
+    var packet = require_dns_packet();
+    var dgram = __require("dgram");
+    var thunky = require_thunky();
+    var events = __require("events");
+    var os2 = __require("os");
+    var noop = function() {
+    };
+    module.exports = function(opts) {
+      if (!opts) opts = {};
+      var that = new events.EventEmitter();
+      var port = typeof opts.port === "number" ? opts.port : 5353;
+      var type = opts.type || "udp4";
+      var ip2 = opts.ip || opts.host || (type === "udp4" ? "224.0.0.251" : null);
+      var me2 = { address: ip2, port };
+      var memberships = {};
+      var destroyed = false;
+      var interval = null;
+      if (type === "udp6" && (!ip2 || !opts.interface)) {
+        throw new Error("For IPv6 multicast you must specify `ip` and `interface`");
+      }
+      var socket = opts.socket || dgram.createSocket({
+        type,
+        reuseAddr: opts.reuseAddr !== false,
+        toString: function() {
+          return type;
+        }
+      });
+      socket.on("error", function(err) {
+        if (err.code === "EACCES" || err.code === "EADDRINUSE") that.emit("error", err);
+        else that.emit("warning", err);
+      });
+      socket.on("message", function(message, rinfo) {
+        try {
+          message = packet.decode(message);
+        } catch (err) {
+          that.emit("warning", err);
+          return;
+        }
+        that.emit("packet", message, rinfo);
+        if (message.type === "query") that.emit("query", message, rinfo);
+        if (message.type === "response") that.emit("response", message, rinfo);
+      });
+      socket.on("listening", function() {
+        if (!port) port = me2.port = socket.address().port;
+        if (opts.multicast !== false) {
+          that.update();
+          interval = setInterval(that.update, 5e3);
+          socket.setMulticastTTL(opts.ttl || 255);
+          socket.setMulticastLoopback(opts.loopback !== false);
+        }
+      });
+      var bind = thunky(function(cb2) {
+        if (!port || opts.bind === false) return cb2(null);
+        socket.once("error", cb2);
+        socket.bind(port, opts.bind || opts.interface, function() {
+          socket.removeListener("error", cb2);
+          cb2(null);
+        });
+      });
+      bind(function(err) {
+        if (err) return that.emit("error", err);
+        that.emit("ready");
+      });
+      that.send = function(value, rinfo, cb2) {
+        if (typeof rinfo === "function") return that.send(value, null, rinfo);
+        if (!cb2) cb2 = noop;
+        if (!rinfo) rinfo = me2;
+        else if (!rinfo.host && !rinfo.address) rinfo.address = me2.address;
+        bind(onbind);
+        function onbind(err) {
+          if (destroyed) return cb2();
+          if (err) return cb2(err);
+          var message = packet.encode(value);
+          socket.send(message, 0, message.length, rinfo.port, rinfo.address || rinfo.host, cb2);
+        }
+      };
+      that.response = that.respond = function(res, rinfo, cb2) {
+        if (Array.isArray(res)) res = { answers: res };
+        res.type = "response";
+        res.flags = (res.flags || 0) | packet.AUTHORITATIVE_ANSWER;
+        that.send(res, rinfo, cb2);
+      };
+      that.query = function(q2, type2, rinfo, cb2) {
+        if (typeof type2 === "function") return that.query(q2, null, null, type2);
+        if (typeof type2 === "object" && type2 && type2.port) return that.query(q2, null, type2, rinfo);
+        if (typeof rinfo === "function") return that.query(q2, type2, null, rinfo);
+        if (!cb2) cb2 = noop;
+        if (typeof q2 === "string") q2 = [{ name: q2, type: type2 || "ANY" }];
+        if (Array.isArray(q2)) q2 = { type: "query", questions: q2 };
+        q2.type = "query";
+        that.send(q2, rinfo, cb2);
+      };
+      that.destroy = function(cb2) {
+        if (!cb2) cb2 = noop;
+        if (destroyed) return process.nextTick(cb2);
+        destroyed = true;
+        clearInterval(interval);
+        for (var iface in memberships) {
+          try {
+            socket.dropMembership(ip2, iface);
+          } catch (e) {
+          }
+        }
+        memberships = {};
+        socket.close(cb2);
+      };
+      that.update = function() {
+        var ifaces = opts.interface ? [].concat(opts.interface) : allInterfaces();
+        var updated = false;
+        for (var i = 0; i < ifaces.length; i++) {
+          var addr = ifaces[i];
+          if (memberships[addr]) continue;
+          try {
+            socket.addMembership(ip2, addr);
+            memberships[addr] = true;
+            updated = true;
+          } catch (err) {
+            that.emit("warning", err);
+          }
+        }
+        if (updated) {
+          if (socket.setMulticastInterface) {
+            try {
+              socket.setMulticastInterface(opts.interface || defaultInterface());
+            } catch (err) {
+              that.emit("warning", err);
+            }
+          }
+          that.emit("networkInterface");
+        }
+      };
+      return that;
+    };
+    function defaultInterface() {
+      var networks = os2.networkInterfaces();
+      var names = Object.keys(networks);
+      for (var i = 0; i < names.length; i++) {
+        var net = networks[names[i]];
+        for (var j2 = 0; j2 < net.length; j2++) {
+          var iface = net[j2];
+          if (isIPv4(iface.family) && !iface.internal) {
+            if (os2.platform() === "darwin" && names[i] === "en0") return iface.address;
+            return "0.0.0.0";
+          }
+        }
+      }
+      return "127.0.0.1";
+    }
+    function allInterfaces() {
+      var networks = os2.networkInterfaces();
+      var names = Object.keys(networks);
+      var res = [];
+      for (var i = 0; i < names.length; i++) {
+        var net = networks[names[i]];
+        for (var j2 = 0; j2 < net.length; j2++) {
+          var iface = net[j2];
+          if (isIPv4(iface.family)) {
+            res.push(iface.address);
+            break;
+          }
+        }
+      }
+      return res;
+    }
+    function isIPv4(family) {
+      return family === 4 || family === "IPv4";
+    }
+  }
+});
+
+// node_modules/fast-deep-equal/es6/index.js
+var require_es6 = __commonJS({
+  "node_modules/fast-deep-equal/es6/index.js"(exports, module) {
+    "use strict";
+    module.exports = function equal(a, b) {
+      if (a === b) return true;
+      if (a && b && typeof a == "object" && typeof b == "object") {
+        if (a.constructor !== b.constructor) return false;
+        var length, i, keys;
+        if (Array.isArray(a)) {
+          length = a.length;
+          if (length != b.length) return false;
+          for (i = length; i-- !== 0; )
+            if (!equal(a[i], b[i])) return false;
+          return true;
+        }
+        if (a instanceof Map && b instanceof Map) {
+          if (a.size !== b.size) return false;
+          for (i of a.entries())
+            if (!b.has(i[0])) return false;
+          for (i of a.entries())
+            if (!equal(i[1], b.get(i[0]))) return false;
+          return true;
+        }
+        if (a instanceof Set && b instanceof Set) {
+          if (a.size !== b.size) return false;
+          for (i of a.entries())
+            if (!b.has(i[0])) return false;
+          return true;
+        }
+        if (ArrayBuffer.isView(a) && ArrayBuffer.isView(b)) {
+          length = a.length;
+          if (length != b.length) return false;
+          for (i = length; i-- !== 0; )
+            if (a[i] !== b[i]) return false;
+          return true;
+        }
+        if (a.constructor === RegExp) return a.source === b.source && a.flags === b.flags;
+        if (a.valueOf !== Object.prototype.valueOf) return a.valueOf() === b.valueOf();
+        if (a.toString !== Object.prototype.toString) return a.toString() === b.toString();
+        keys = Object.keys(a);
+        length = keys.length;
+        if (length !== Object.keys(b).length) return false;
+        for (i = length; i-- !== 0; )
+          if (!Object.prototype.hasOwnProperty.call(b, keys[i])) return false;
+        for (i = length; i-- !== 0; ) {
+          var key = keys[i];
+          if (!equal(a[key], b[key])) return false;
+        }
+        return true;
+      }
+      return a !== a && b !== b;
+    };
+  }
+});
+
+// node_modules/bonjour-service/dist/lib/mdns-server.js
+var require_mdns_server = __commonJS({
+  "node_modules/bonjour-service/dist/lib/mdns-server.js"(exports) {
+    "use strict";
+    var __importDefault = exports && exports.__importDefault || function(mod) {
+      return mod && mod.__esModule ? mod : { "default": mod };
+    };
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.Server = void 0;
+    var multicast_dns_1 = __importDefault(require_multicast_dns());
+    var es6_1 = __importDefault(require_es6());
+    var dns_equal_1 = __importDefault(require_dns_equal());
+    var Server = class {
+      constructor(opts, errorCallback) {
+        this.registry = {};
+        this.mdns = (0, multicast_dns_1.default)(opts);
+        this.mdns.setMaxListeners(0);
+        this.mdns.on("query", this.respondToQuery.bind(this));
+        this.errorCallback = errorCallback !== null && errorCallback !== void 0 ? errorCallback : function(err) {
+          throw err;
+        };
+      }
+      register(records) {
+        const shouldRegister = (record) => {
+          var subRegistry = this.registry[record.type];
+          if (!subRegistry) {
+            subRegistry = this.registry[record.type] = [];
+          } else if (subRegistry.some(this.isDuplicateRecord(record))) {
+            return;
+          }
+          subRegistry.push(record);
+        };
+        if (Array.isArray(records)) {
+          records.forEach(shouldRegister);
+        } else {
+          shouldRegister(records);
+        }
+      }
+      unregister(records) {
+        const shouldUnregister = (record) => {
+          let type = record.type;
+          if (!(type in this.registry)) {
+            return;
+          }
+          this.registry[type] = this.registry[type].filter((i) => i.name !== record.name);
+        };
+        if (Array.isArray(records)) {
+          records.forEach(shouldUnregister);
+        } else {
+          shouldUnregister(records);
+        }
+      }
+      respondToQuery(query) {
+        let self2 = this;
+        query.questions.forEach((question) => {
+          var type = question.type;
+          var name = question.name;
+          var answers = type === "ANY" ? Object.keys(self2.registry).map(self2.recordsFor.bind(self2, name)).flat(1) : self2.recordsFor(name, type);
+          if (answers.length === 0)
+            return;
+          var additionals = [];
+          if (type !== "ANY") {
+            answers.forEach((answer) => {
+              if (answer.type !== "PTR")
+                return;
+              additionals = additionals.concat(self2.recordsFor(answer.data, "SRV")).concat(self2.recordsFor(answer.data, "TXT"));
+            });
+            additionals.filter(function(record) {
+              return record.type === "SRV";
+            }).map(function(record) {
+              return record.data.target;
+            }).filter(this.unique()).forEach(function(target) {
+              additionals = additionals.concat(self2.recordsFor(target, "A")).concat(self2.recordsFor(target, "AAAA"));
+            });
+          }
+          self2.mdns.respond({ answers, additionals }, (err) => {
+            if (err) {
+              this.errorCallback(err);
+            }
+          });
+        });
+      }
+      recordsFor(name, type) {
+        if (!(type in this.registry)) {
+          return [];
+        }
+        return this.registry[type].filter((record) => {
+          var _name = ~name.indexOf(".") ? record.name : record.name.split(".")[0];
+          return (0, dns_equal_1.default)(_name, name);
+        });
+      }
+      isDuplicateRecord(a) {
+        return (b) => {
+          return a.type === b.type && a.name === b.name && (0, es6_1.default)(a.data, b.data);
+        };
+      }
+      unique() {
+        var set = [];
+        return (obj) => {
+          if (~set.indexOf(obj))
+            return false;
+          set.push(obj);
+          return true;
+        };
+      }
+    };
+    exports.Server = Server;
+    exports.default = Server;
+  }
+});
+
+// node_modules/bonjour-service/dist/lib/utils/filter-service.js
+var require_filter_service = __commonJS({
+  "node_modules/bonjour-service/dist/lib/utils/filter-service.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.default = (service, txtQuery) => {
+      if (txtQuery === void 0)
+        return true;
+      let serviceTxt = service.txt;
+      let query = Object.entries(txtQuery).map(([key, value]) => {
+        let queryValue = serviceTxt[key];
+        if (queryValue === void 0)
+          return false;
+        if (value != queryValue)
+          return false;
+        return true;
+      });
+      if (query.length == 0)
+        return true;
+      if (query.includes(false))
+        return false;
+      return true;
+    };
+  }
+});
+
+// node_modules/bonjour-service/dist/lib/utils/filter-txt.js
+var require_filter_txt = __commonJS({
+  "node_modules/bonjour-service/dist/lib/utils/filter-txt.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.default = (data) => Object.keys(data).filter((key) => !key.includes("binary")).reduce((cur, key) => {
+      return Object.assign(cur, { [key]: data[key] });
+    }, {});
+  }
+});
+
+// node_modules/bonjour-service/dist/lib/utils/equal-txt.js
+var require_equal_txt = __commonJS({
+  "node_modules/bonjour-service/dist/lib/utils/equal-txt.js"(exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.default = equalTxt;
+    function equalTxt(a, b) {
+      if (a === void 0 || b === void 0)
+        return false;
+      let aKeys = Object.keys(a);
+      let bKeys = Object.keys(b);
+      if (aKeys.length != bKeys.length)
+        return false;
+      for (let key of aKeys) {
+        if (a[key] != b[key])
+          return false;
+      }
+      return true;
+    }
+  }
+});
+
+// node_modules/bonjour-service/dist/lib/browser.js
+var require_browser = __commonJS({
+  "node_modules/bonjour-service/dist/lib/browser.js"(exports) {
+    "use strict";
+    var __importDefault = exports && exports.__importDefault || function(mod) {
+      return mod && mod.__esModule ? mod : { "default": mod };
+    };
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.Browser = void 0;
+    var dns_txt_1 = __importDefault(require_dns_txt());
+    var dns_equal_1 = __importDefault(require_dns_equal());
+    var events_1 = __require("events");
+    var service_types_1 = require_service_types();
+    var filter_service_1 = __importDefault(require_filter_service());
+    var filter_txt_1 = __importDefault(require_filter_txt());
+    var equal_txt_1 = __importDefault(require_equal_txt());
+    var TLD = ".local";
+    var WILDCARD = "_services._dns-sd._udp" + TLD;
+    var Browser = class _Browser extends events_1.EventEmitter {
+      constructor(mdns, opts, onup) {
+        super();
+        this.onresponse = void 0;
+        this.serviceMap = {};
+        this.wildcard = false;
+        this._services = [];
+        if (typeof opts === "function")
+          return new _Browser(mdns, null, opts);
+        this.mdns = mdns;
+        this.txt = new dns_txt_1.default(opts !== null && opts.txt != null ? opts.txt : void 0);
+        if (opts === null || opts.type === void 0) {
+          this.name = WILDCARD;
+          this.wildcard = true;
+        } else {
+          this.name = (0, service_types_1.toString)({ name: opts.type, protocol: opts.protocol || "tcp" }) + TLD;
+          if (opts.name)
+            this.name = opts.name + "." + this.name;
+          this.wildcard = false;
+        }
+        if (opts != null && opts.txt !== void 0)
+          this.txtQuery = (0, filter_txt_1.default)(opts.txt);
+        if (onup)
+          this.on("up", onup);
+        this.start();
+      }
+      start() {
+        if (this.onresponse || this.name === void 0)
+          return;
+        var self2 = this;
+        var nameMap = {};
+        if (!this.wildcard)
+          nameMap[this.name] = true;
+        this.onresponse = (packet, rinfo) => {
+          if (self2.wildcard) {
+            packet.answers.forEach((answer) => {
+              if (answer.type !== "PTR" || answer.name !== self2.name || answer.name in nameMap)
+                return;
+              nameMap[answer.data] = true;
+              self2.mdns.query(answer.data, "PTR");
+            });
+          }
+          const receiveTime = Date.now();
+          Object.keys(nameMap).forEach(function(name) {
+            self2.goodbyes(name, packet).forEach(self2.removeService.bind(self2));
+            var matches = self2.buildServicesFor(name, packet, self2.txt, rinfo, receiveTime);
+            if (matches.length === 0)
+              return;
+            matches.forEach((service) => {
+              const existingService = self2._services.find((s) => (0, dns_equal_1.default)(s.fqdn, service.fqdn));
+              if (existingService) {
+                self2.updateServiceSrv(existingService, service);
+                self2.updateServiceTxt(existingService, service);
+                return;
+              }
+              self2.addService(service);
+            });
+          });
+        };
+        this.mdns.on("response", this.onresponse);
+        this.update();
+      }
+      stop() {
+        if (!this.onresponse)
+          return;
+        this.mdns.removeListener("response", this.onresponse);
+        this.onresponse = void 0;
+      }
+      update() {
+        this.mdns.query(this.name, "PTR");
+      }
+      expire() {
+        const currentTime = Date.now();
+        this._services = this._services.filter((service) => {
+          if (!service.ttl || service.lastSeen === void 0)
+            return true;
+          const expireTime = service.lastSeen + service.ttl * 1e3;
+          if (expireTime < currentTime) {
+            this.emit("down", service);
+            return false;
+          }
+          return true;
+        });
+      }
+      get services() {
+        return this._services;
+      }
+      addService(service) {
+        if ((0, filter_service_1.default)(service, this.txtQuery) === false)
+          return;
+        this._services.push(service);
+        this.serviceMap[service.fqdn] = true;
+        this.emit("up", service);
+      }
+      updateServiceSrv(existingService, newService) {
+        if (existingService.name !== newService.name || existingService.host !== newService.host || existingService.port !== newService.port || existingService.type !== newService.type || existingService.protocol !== newService.protocol) {
+          this.replaceService(newService);
+          this.emit("srv-update", newService, existingService);
+        }
+      }
+      updateServiceTxt(existingService, service) {
+        if ((0, equal_txt_1.default)(service.txt, (existingService === null || existingService === void 0 ? void 0 : existingService.txt) || {}))
+          return;
+        if (!(0, filter_service_1.default)(service, this.txtQuery)) {
+          this.removeService(service.fqdn);
+          return;
+        }
+        this.replaceService(service);
+        this.emit("txt-update", service, existingService);
+      }
+      replaceService(service) {
+        this._services = this._services.map((s) => {
+          if (!(0, dns_equal_1.default)(s.fqdn, service.fqdn))
+            return s;
+          return service;
+        });
+      }
+      removeService(fqdn) {
+        var service, index;
+        this._services.some(function(s, i) {
+          if ((0, dns_equal_1.default)(s.fqdn, fqdn)) {
+            service = s;
+            index = i;
+            return true;
+          }
+        });
+        if (!service || index === void 0)
+          return;
+        this._services.splice(index, 1);
+        delete this.serviceMap[fqdn];
+        this.emit("down", service);
+      }
+      goodbyes(name, packet) {
+        return packet.answers.concat(packet.additionals).filter((rr2) => rr2.type === "PTR" && rr2.ttl === 0 && (0, dns_equal_1.default)(rr2.name, name)).map((rr2) => rr2.data);
+      }
+      buildServicesFor(name, packet, txt, referer, receiveTime) {
+        var records = packet.answers.concat(packet.additionals).filter((rr2) => rr2.ttl > 0);
+        return records.filter((rr2) => rr2.type === "PTR" && (0, dns_equal_1.default)(rr2.name, name)).map((ptr) => {
+          const service = {
+            addresses: [],
+            subtypes: [],
+            ttl: ptr.ttl,
+            lastSeen: receiveTime
+          };
+          records.filter((rr2) => {
+            return rr2.type === "PTR" && (0, dns_equal_1.default)(rr2.data, ptr.data) && rr2.name.includes("._sub");
+          }).forEach((rr2) => {
+            const types = (0, service_types_1.toType)(rr2.name);
+            service.subtypes.push(types.subtype);
+          });
+          records.filter((rr2) => {
+            return (rr2.type === "SRV" || rr2.type === "TXT") && (0, dns_equal_1.default)(rr2.name, ptr.data);
+          }).forEach((rr2) => {
+            if (rr2.type === "SRV") {
+              var parts = rr2.name.split(".");
+              var name2 = parts[0];
+              var types = (0, service_types_1.toType)(parts.slice(1, -1).join("."));
+              service.name = name2;
+              service.fqdn = rr2.name;
+              service.host = rr2.data.target;
+              service.referer = referer;
+              service.port = rr2.data.port;
+              service.type = types.name;
+              service.protocol = types.protocol;
+            } else if (rr2.type === "TXT") {
+              service.rawTxt = rr2.data;
+              service.txt = this.txt.decodeAll(rr2.data);
+            }
+          });
+          if (!service.name)
+            return;
+          records.filter((rr2) => (rr2.type === "A" || rr2.type === "AAAA") && (0, dns_equal_1.default)(rr2.name, service.host)).forEach((rr2) => service.addresses.push(rr2.data));
+          return service;
+        }).filter((rr2) => !!rr2);
+      }
+    };
+    exports.Browser = Browser;
+    exports.default = Browser;
+  }
+});
+
+// node_modules/bonjour-service/dist/lib/bonjour.js
+var require_bonjour = __commonJS({
+  "node_modules/bonjour-service/dist/lib/bonjour.js"(exports) {
+    "use strict";
+    var __importDefault = exports && exports.__importDefault || function(mod) {
+      return mod && mod.__esModule ? mod : { "default": mod };
+    };
+    Object.defineProperty(exports, "__esModule", { value: true });
+    exports.Browser = exports.Service = void 0;
+    var registry_1 = __importDefault(require_registry());
+    var mdns_server_1 = __importDefault(require_mdns_server());
+    var browser_1 = __importDefault(require_browser());
+    exports.Browser = browser_1.default;
+    var service_1 = __importDefault(require_service());
+    exports.Service = service_1.default;
+    var Bonjour2 = class {
+      constructor(opts = {}, errorCallback) {
+        this.server = new mdns_server_1.default(opts, errorCallback);
+        this.registry = new registry_1.default(this.server);
+      }
+      publish(opts) {
+        return this.registry.publish(opts);
+      }
+      unpublishAll(callback) {
+        return this.registry.unpublishAll(callback);
+      }
+      find(opts = null, onup) {
+        return new browser_1.default(this.server.mdns, opts, onup);
+      }
+      findOne(opts = null, timeout = 1e4, callback) {
+        const browser = new browser_1.default(this.server.mdns, opts);
+        var timer;
+        browser.once("up", (service) => {
+          if (timer !== void 0)
+            clearTimeout(timer);
+          browser.stop();
+          if (callback)
+            callback(service);
+        });
+        timer = setTimeout(() => {
+          browser.stop();
+          if (callback)
+            callback(null);
+        }, timeout);
+        return browser;
+      }
+      destroy(callback) {
+        this.registry.destroy();
+        this.server.mdns.destroy(callback);
+      }
+    };
+    exports.default = Bonjour2;
+  }
+});
+
+// node_modules/bonjour-service/dist/index.js
+var require_dist = __commonJS({
+  "node_modules/bonjour-service/dist/index.js"(exports, module) {
+    "use strict";
+    var __createBinding = exports && exports.__createBinding || (Object.create ? (function(o, m, k3, k22) {
+      if (k22 === void 0) k22 = k3;
+      var desc = Object.getOwnPropertyDescriptor(m, k3);
+      if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
+        desc = { enumerable: true, get: function() {
+          return m[k3];
+        } };
+      }
+      Object.defineProperty(o, k22, desc);
+    }) : (function(o, m, k3, k22) {
+      if (k22 === void 0) k22 = k3;
+      o[k22] = m[k3];
+    }));
+    var __setModuleDefault = exports && exports.__setModuleDefault || (Object.create ? (function(o, v) {
+      Object.defineProperty(o, "default", { enumerable: true, value: v });
+    }) : function(o, v) {
+      o["default"] = v;
+    });
+    var __importStar = exports && exports.__importStar || /* @__PURE__ */ (function() {
+      var ownKeys = function(o) {
+        ownKeys = Object.getOwnPropertyNames || function(o3) {
+          var ar2 = [];
+          for (var k3 in o3) if (Object.prototype.hasOwnProperty.call(o3, k3)) ar2[ar2.length] = k3;
+          return ar2;
+        };
+        return ownKeys(o);
+      };
+      return function(mod) {
+        if (mod && mod.__esModule) return mod;
+        var result = {};
+        if (mod != null) {
+          for (var k3 = ownKeys(mod), i = 0; i < k3.length; i++) if (k3[i] !== "default") __createBinding(result, mod, k3[i]);
+        }
+        __setModuleDefault(result, mod);
+        return result;
+      };
+    })();
+    var __importDefault = exports && exports.__importDefault || function(mod) {
+      return mod && mod.__esModule ? mod : { "default": mod };
+    };
+    var bonjour_1 = __importDefault(require_bonjour());
+    var imported = __importStar(require_bonjour());
+    var Bonjour2 = class extends bonjour_1.default {
+    };
+    var BonjourClass = Bonjour2;
+    (function(Bonjour3) {
+      Bonjour3.Bonjour = BonjourClass;
+      Bonjour3.Service = imported.Service;
+      Bonjour3.Browser = imported.Browser;
+    })(Bonjour2 || (Bonjour2 = {}));
+    Object.defineProperty(Bonjour2, "default", {
+      enumerable: true,
+      value: Bonjour2
+    });
+    module.exports.Bonjour = Bonjour2;
+    module.exports.Service = imported.Service;
+    module.exports.Browser = imported.Browser;
+    module.exports.default = Bonjour2;
+    module.exports = Bonjour2;
+  }
+});
+
 // src/index.ts
-import { networkInterfaces as networkInterfaces2, homedir as homedir7 } from "node:os";
-import { join as join11 } from "node:path";
-import { writeFileSync as writeFileSync7, openSync as openSync3, readFileSync as readFileSync11, rmSync as rmSync2, existsSync as existsSync7 } from "node:fs";
+import { networkInterfaces as networkInterfaces2, homedir as homedir8, hostname } from "node:os";
+import { join as join12 } from "node:path";
+import { writeFileSync as writeFileSync8, openSync as openSync3, readFileSync as readFileSync13, rmSync as rmSync3, existsSync as existsSync8 } from "node:fs";
 import { spawn as spawn3, execFileSync as execFileSync2 } from "node:child_process";
 import { fileURLToPath as fileURLToPath4 } from "node:url";
 
@@ -7279,6 +10555,19 @@ var EventBus = class {
       }
     }
     return env;
+  }
+  // 瞬态事件（2026-09-09 议题①）：只直播给当前在线订阅者，不占 seq、不进缓冲、
+  // 不落盘、重连不补发（PAIR_REQUEST/PAIR_RESOLVED 在 ws-server 的同款语义抽到总
+  // 线层）——PAIRED_DEVICE 新配对提醒若走 emit 落 ndjson，掉线重连会按 last_seq
+  // 补发历史提醒，重复弹通知。消费方（CloudClient.onEnv）以 seq>lastSeq 守卫推进
+  emitTransient(type, payload) {
+    const env = { seq: 0, session_id: "", ts: Date.now(), type, payload };
+    for (const l of this.listeners) {
+      try {
+        l(env);
+      } catch {
+      }
+    }
   }
   subscribe(l) {
     this.listeners.add(l);
@@ -37617,6 +40906,7 @@ async function generateTitle(task, model, onSid, cwd) {
 import { readFileSync as readFileSync4 } from "node:fs";
 import { join as join6 } from "node:path";
 var str = (v) => typeof v === "string" && v.trim() ? v : void 0;
+var EXPIRED_ONE_SHOT_GRACE_MS = 10 * 60 * 1e3;
 function tsNum(v) {
   if (typeof v === "number" && Number.isFinite(v) && v > 0) return v;
   if (typeof v === "string" && v.trim()) {
@@ -37639,6 +40929,7 @@ function normalizeTask(raw, fallbackId) {
   if (!prompt && !schedule && !name && !rawId) return null;
   const paused = o.paused === true || o.enabled === false || o.active === false || status === "paused" || status === "expired";
   const next = tsNum(o.next_run_at ?? o.nextRunAt ?? o.next_run ?? o.nextExecutionAt);
+  if (o.recurring === false && next !== void 0 && next < Date.now() - EXPIRED_ONE_SHOT_GRACE_MS) return null;
   return {
     id: rawId ?? fallbackId,
     name: name ?? (prompt ? prompt.slice(0, 40) : schedule || "\u672A\u547D\u540D\u4EFB\u52A1"),
@@ -37848,6 +41139,8 @@ var UPDATE_THROTTLE_MS = 2e3;
 var HEARTBEAT_INTERVAL_MS = 5e3;
 var CRON_POLL_INTERVAL_MS = 3e4;
 var MAX_SESSIONS = 20;
+var SNAPSHOT_LOGS_BUDGET_BYTES = 512 * 1024;
+var SNAPSHOT_LOGS_PER_SESSION = 50;
 var SessionManager = class {
   constructor(bus2, cfg2) {
     this.bus = bus2;
@@ -37863,7 +41156,6 @@ var SessionManager = class {
     c.unref();
   }
   bus;
-  cfg;
   sessions = /* @__PURE__ */ new Map();
   processedCommands = /* @__PURE__ */ new Map();
   titleRequested = /* @__PURE__ */ new Set();
@@ -37872,6 +41164,8 @@ var SessionManager = class {
   // 无 hook 但 transcript 活跃，孤儿扫描必须排除，否则被误收养成垃圾外部会话
   childSdkIds;
   deletedExtIds;
+  /** #388 供 ws-server 读默认模型（快照 payload.models 聚合用） */
+  cfg;
   // 该 CLI session_id 是否归 relay 自己管（托管会话的 relay_session_id / 一次性子会话）
   ownsCliSession(cliSid) {
     if (this.childSdkIds.has(cliSid)) return true;
@@ -37917,6 +41211,36 @@ var SessionManager = class {
     for (const [id2, s] of this.sessions) out[id2] = s.logs;
     return out;
   }
+  // #408 快照日志预算装配（LAN ws-server 与云通道 cloud-client 共用，双端同语义）：
+  // 每会话取最近 perSessionCap 条，总量超 budgetBytes 时优先从条目最多的会话逐条
+  // 丢最旧（每会话保底 1 条），保证单帧确定性有界。返回被截断会话的省略条数——
+  // 客户端时间线接受截断语义（无更早分页拉取通道），标记仅供 UI 提示用。
+  buildSnapshotLogs(budgetBytes = SNAPSHOT_LOGS_BUDGET_BYTES, perSessionCap = SNAPSHOT_LOGS_PER_SESSION) {
+    const logs = {};
+    const logsTruncated = {};
+    const kept2 = [];
+    let total = 0;
+    for (const [id2, s] of this.sessions) {
+      const slice = s.logs.length > perSessionCap ? s.logs.slice(s.logs.length - perSessionCap) : s.logs;
+      if (slice.length < s.logs.length) logsTruncated[id2] = s.logs.length - slice.length;
+      const entries = slice.map((e) => ({ e, b: Buffer.byteLength(JSON.stringify(e)) + 1 }));
+      if (entries.length) {
+        kept2.push({ id: id2, entries });
+        total += entries.reduce((acc, x) => acc + x.b, 0);
+      }
+    }
+    while (total > budgetBytes) {
+      let big = null;
+      for (const k3 of kept2) if (k3.entries.length > 1 && (!big || k3.entries.length > big.entries.length)) big = k3;
+      if (!big) break;
+      const dropped = big.entries.shift();
+      if (!dropped) break;
+      total -= dropped.b;
+      logsTruncated[big.id] = (logsTruncated[big.id] ?? 0) + 1;
+    }
+    for (const k3 of kept2) logs[k3.id] = k3.entries.map((x) => x.e);
+    return { logs, logs_truncated: logsTruncated };
+  }
   // Relay 重启后收养历史会话（agent 为空，仅展示不可操作）
   adopt(replayed2) {
     const entries = [...replayed2.entries()].sort((a, b) => b[1].state.updated_at - a[1].state.updated_at);
@@ -37934,15 +41258,28 @@ var SessionManager = class {
   setBridge(b) {
     this.bridge = b;
   }
-  // 云桥身份（index.ts 在云桥启用时注入；PAIR_START 依赖）
+  // 云桥身份（index.ts 在云桥启用时注入；PAIR_START/PEERS 依赖）。meta 为 #42 设备
+  // 自报身份元数据（可选，与 CloudIdentity.PeerEntry 对应字段同构）
   cloud = null;
   setCloud(c) {
     this.cloud = c;
   }
-  // 配对码签发器（index.ts 注入，与 /api/pair-code 同源）：COMMAND_PAIR_CODE 依赖
+  // 配对码签发器（index.ts 注入，与 /api/pair-code 同源）：COMMAND_PAIR_CODE 依赖。
+  // opts.ttlMs = 按次长码（≤30min，pairing.ts 夹逼；F4）
   pairIssuer = null;
   setPairIssuer(fn) {
     this.pairIssuer = fn;
+  }
+  // 议题①踢除执行器（index.ts 注入：identity.removePeer + 各桥 CloudClient.kickPeer
+  // 发 pair_nack 停其重连）：COMMAND_PEER_KICK 依赖
+  peerKicker = null;
+  setPeerKicker(fn) {
+    this.peerKicker = fn;
+  }
+  // #325 扫码登录授权器（index.ts 注入，转发各云桥客户端 grantLogin）
+  loginGranter = null;
+  setLoginGranter(fn) {
+    this.loginGranter = fn;
   }
   // 不存在则注册外部会话（bridge.ts 调用）；startedAt：真实起点（孤儿收养时取自
   // transcript 首条时间戳，#321——否则收养时刻会冒充会话时长起点，老会话显示 55s）
@@ -38000,11 +41337,50 @@ var SessionManager = class {
       });
     }
   }
+  // #363 上下文压缩状态：PreCompact 置位（压缩期转录静默，端上据此区分"卡死"与
+  // "压缩中"）；8 分钟兜底自动清——清位事件丢失时不永久卡标志
+  setExternalCompacting(id2, on2) {
+    const s = this.sessions.get(id2);
+    if (!s || s.state.compacting === on2) return;
+    s.state.compacting = on2;
+    s.state.updated_at = Date.now();
+    if (on2) {
+      const t = setTimeout(() => {
+        if (s.state.compacting) this.setExternalCompacting(id2, false);
+      }, 48e4);
+      t.unref?.();
+    }
+    this.bus.emit(id2, "SESSION_UPDATED", { compacting: on2 });
+  }
   // pid 对账/解锁等纯状态修复后强制下发：emitUpdated 携带 historical 等字段，
   // 否则客户端要等下次 SNAPSHOT 才摘掉"仅可查看"
   emitExternalSync(id2) {
     const s = this.sessions.get(id2);
     if (s) this.emitUpdated(s, true);
+  }
+  // #393 手动通知注入（/api/notify）：把一段文字作为 TASK_DONE 汇报推给指定/最新会话，
+  // 悬浮框当即弹出（拖图原理答疑/联调实测用）；同时落 last_task_done 供断线恢复
+  notifyDone(sessionId, done, remainingCount) {
+    const s = this.sessions.get(sessionId);
+    if (!s) return false;
+    const report = { done: done.slice(0, 10), remaining_count: remainingCount, ts: Date.now() };
+    s.state.last_task_done = report;
+    this.bus.emit(sessionId, "TASK_DONE", {
+      done: done.slice(0, 10),
+      remaining: [],
+      ts: report.ts
+    });
+    return true;
+  }
+  // #393 黄色 [待确认] 悬浮框推送（/api/notify mode=confirm）：往目标会话 todos
+  // 追加一条 pending [待确认] 条目——客户端 #300/#306 确认提醒链路天然接住（弹黄框，
+  // 用户逐条 ✕ / 全部已读即消，会话任务面板同步可见）
+  notifyConfirm(sessionId, text) {
+    const s = this.sessions.get(sessionId);
+    if (!s) return false;
+    const todos = [...s.state.todos ?? [], { content: `[\u5F85\u786E\u8BA4] ${text}`, status: "pending" }];
+    this.setTodos(sessionId, todos);
+    return true;
   }
   // 任务清单更新（TodoWrite；managed 与 external 两条路径共用）。
   // 单一咽喉点：hook 路径 / transcript 轮询 / COMMAND_REFRESH_TODOS 重发全部经此，
@@ -38035,12 +41411,16 @@ var SessionManager = class {
       subagents: list
     });
   }
-  // 外部会话标题升级（CC 会话名 / 首个 prompt 摘要）；initialPrompt 只在缺失时补记
+  // 外部会话标题升级（CC 会话名 / 首个 prompt 摘要）；initialPrompt 只在缺失时补记。
+  // #347：title_locked（用户手动命名）在此兜底——bridge 的首个 prompt 升级路径
+  //（relay 重启后 initial_prompt 已丢、named 集合清空）会带着派生标题进来，
+  // 无条件覆盖会把用户改的名冲掉（"几小时后恢复原名"根因）
   setExternalTitle(id2, title, initialPrompt) {
     const s = this.sessions.get(id2);
     if (!s || !s.state.external) return;
-    s.state.title = title;
     if (initialPrompt && !s.state.initial_prompt) s.state.initial_prompt = initialPrompt;
+    if (s.state.title_locked) return;
+    s.state.title = title;
     s.state.updated_at = Date.now();
     this.bus.emit(id2, "SESSION_UPDATED", {
       status: s.state.status,
@@ -38175,6 +41555,29 @@ var SessionManager = class {
             s.state.status = "WORKING";
           }
           s.agent.sendMessage(cmd.payload.text, sanitizeImages(cmd.payload.images));
+          this.emitUpdated(s, true);
+          return { command_id: cmd.command_id, ok: true };
+        }
+        case "COMMAND_MODEL": {
+          const sid = String(cmd.payload.session_id ?? "");
+          const model = String(cmd.payload.model ?? "").replace(/\[1m\]$/, "").trim();
+          if (!model || !/^[\w.\/-]{1,80}$/.test(model)) {
+            return { command_id: cmd.command_id, ok: false, error: "\u65E0\u6548\u6A21\u578B\u540D" };
+          }
+          const s = this.sessions.get(sid) ?? this.sessions.get(`ext-${sid}`);
+          if (!s) return { command_id: cmd.command_id, ok: false, error: "\u4F1A\u8BDD\u4E0D\u5B58\u5728" };
+          if (s.state.external) {
+            if (!this.bridge) return { command_id: cmd.command_id, ok: false, error: "\u5916\u90E8\u4F1A\u8BDD\u901A\u9053\u672A\u5C31\u7EEA" };
+            const r = this.bridge.extInput(s.state.session_id, `/model ${model}`);
+            if (!r.ok) return { command_id: cmd.command_id, ok: false, error: r.error ?? "\u6CE8\u5165\u5931\u8D25" };
+          } else if (s.agent && !s.agent.ended) {
+            s.agent.sendMessage(`/model ${model}`);
+          } else {
+            return { command_id: cmd.command_id, ok: false, error: "\u4F1A\u8BDD\u4E0D\u53EF\u64CD\u4F5C\uFF08\u5DF2\u7ED3\u675F\uFF09" };
+          }
+          s.state.model = model;
+          s.state.updated_at = Date.now();
+          this.pushExternalLog(s.state.session_id, "system", `\u6A21\u578B\u5207\u6362: ${model}`);
           this.emitUpdated(s, true);
           return { command_id: cmd.command_id, ok: true };
         }
@@ -38351,7 +41754,9 @@ var SessionManager = class {
             return { command_id: cmd.command_id, ok: false, error: "bad pubkey" };
           }
           const dev = devId(pubkey, "ph");
-          this.cloud.addPeer(dev, { pubkey, name: cmd.payload.name, paired_at: Date.now() });
+          const name = cmd.payload.name || "\u624B\u673A";
+          this.cloud.addPeer(dev, { pubkey, name, paired_at: Date.now() });
+          this.bus.emitTransient("PAIRED_DEVICE", { dev, name, action: "add" });
           return {
             command_id: cmd.command_id,
             ok: true,
@@ -38367,8 +41772,50 @@ var SessionManager = class {
           if (!this.cloud || !this.pairIssuer) {
             return { command_id: cmd.command_id, ok: false, error: "\u4E91\u6865\u672A\u542F\u7528\uFF08PC \u4FA7\u672A\u8BBE\u7F6E CCR_CLOUD_URL\uFF09" };
           }
-          return { command_id: cmd.command_id, ok: true, pair_code: this.pairIssuer() };
+          const ttlRaw = cmd.payload.ttl_ms;
+          const opts = typeof ttlRaw === "number" && Number.isFinite(ttlRaw) && ttlRaw > 0 ? { ttlMs: ttlRaw } : void 0;
+          return { command_id: cmd.command_id, ok: true, pair_code: this.pairIssuer(opts) };
         }
+        case "COMMAND_PEERS": {
+          const peers = this.cloud ? [...this.cloud.peers.entries()].map(([dev, e]) => ({
+            dev,
+            name: e.name || dev.slice(0, 11),
+            pubkey: e.pubkey,
+            kind: dev.startsWith("ph-") ? "phone" : dev.startsWith("wb-") ? "web" : dev.startsWith("wt-") ? "watch" : "other",
+            paired_at: e.paired_at,
+            last_seen: e.last_seen ?? 0,
+            ...e.meta ? { meta: e.meta } : {}
+          })) : [];
+          return { command_id: cmd.command_id, ok: true, peers };
+        }
+        case "COMMAND_PEER_KICK": {
+          if (!this.cloud || !this.peerKicker) {
+            return { command_id: cmd.command_id, ok: false, error: "\u4E91\u6865\u672A\u542F\u7528\uFF08PC \u4FA7\u672A\u8BBE\u7F6E CCR_CLOUD_URL\uFF09" };
+          }
+          const dev = String(cmd.payload.dev ?? "");
+          if (!/^[a-z]{2}-[0-9a-f]{6,64}$/.test(dev)) {
+            return { command_id: cmd.command_id, ok: false, error: "\u65E0\u6548\u7684\u8BBE\u5907\u53F7" };
+          }
+          const name = this.cloud.peers.get(dev)?.name || dev.slice(0, 11);
+          this.peerKicker(dev);
+          this.bus.emitTransient("PAIRED_DEVICE", { dev, name, action: "kick" });
+          return { command_id: cmd.command_id, ok: true };
+        }
+        case "COMMAND_LOGIN_GRANT": {
+          const p = cmd.payload;
+          const dev = String(p.session_dev ?? "");
+          const pk2 = String(p.session_pk ?? "");
+          if (!this.cloud || !this.loginGranter) {
+            return { command_id: cmd.command_id, ok: false, error: "\u4E91\u6865\u672A\u542F\u7528\uFF08PC \u4FA7\u672A\u8BBE\u7F6E CCR_CLOUD_URL\uFF09" };
+          }
+          if (!/^wb-[0-9a-f]{6,64}$/.test(dev) || !/^[A-Za-z0-9+/=]{40,200}$/.test(pk2) || devId(pk2, "wb") !== dev) {
+            return { command_id: cmd.command_id, ok: false, error: "\u4F1A\u8BDD\u53C2\u6570\u683C\u5F0F\u65E0\u6548" };
+          }
+          this.loginGranter(dev, pk2, String(p.name ?? "web").slice(0, 32) || "web");
+          return { command_id: cmd.command_id, ok: true };
+        }
+        case "COMMAND_WATCH_GRANT":
+          return { command_id: cmd.command_id, ok: false, error: "\u624B\u8868\u914D\u5BF9\u6388\u6743\u4EC5\u9650\u5C40\u57DF\u7F51\u4FE1\u9053" };
       }
     } catch (e) {
       return {
@@ -38583,6 +42030,7 @@ var SessionManager = class {
       ...s.state.relay_session_id ? { relay_session_id: s.state.relay_session_id } : {},
       ...s.state.permission_mode ? { permission_mode: s.state.permission_mode } : {},
       ...s.state.cron_tasks ? { cron_tasks: s.state.cron_tasks.map((t) => ({ ...t })) } : {},
+      ...s.state.compacting ? { compacting: true } : {},
       // last_task_done 不随增量帧下发（#254）：手机/网页都不消费该路径，只在
       // SNAPSHOT 里用于断线恢复，增量携带纯属带宽浪费
       // historical 增删必须实时下发：转录自愈/pid 对账解锁后，已连接的客户端
@@ -38639,8 +42087,11 @@ var SessionManager = class {
       if (prevStr) {
         try {
           const prev = JSON.parse(prevStr);
+          const prevByContent = new Set(prev.map((t) => t.content));
           const prevOpen = new Set(prev.filter((t) => t.status !== "completed").map((t) => t.content));
-          const done = visible.filter((t) => t.status === "completed" && prevOpen.has(t.content)).map((t) => t.content);
+          const done = visible.filter(
+            (t) => t.status === "completed" && (prevOpen.has(t.content) || !prevByContent.has(t.content) && typeof t.updated_at === "number" && Date.now() - t.updated_at < 10 * 6e4)
+          ).map((t) => t.content);
           if (done.length) {
             const report = {
               done: done.slice(0, 10),
@@ -38678,9 +42129,42 @@ var SessionManager = class {
 
 // src/ws-server.ts
 import { createServer } from "node:http";
-import { readFileSync as readFileSync9, existsSync as existsSync5, readdirSync as readdirSync4 } from "node:fs";
-import { join as join9, sep as sep5 } from "node:path";
-import { homedir as homedir6, networkInterfaces } from "node:os";
+import { randomUUID as randomUUID5 } from "node:crypto";
+import { readFileSync as readFileSync11, existsSync as existsSync6, readdirSync as readdirSync4 } from "node:fs";
+import { join as join10, sep as sep5 } from "node:path";
+import { homedir as homedir7, networkInterfaces } from "node:os";
+
+// src/models.ts
+import { existsSync as existsSync4, readFileSync as readFileSync8 } from "node:fs";
+import { homedir as homedir4 } from "node:os";
+import { join as join8 } from "node:path";
+var DEFAULT_MODEL = "glm-5.3";
+function readClaudeSettings() {
+  try {
+    return JSON.parse(readFileSync8(join8(homedir4(), ".claude", "settings.json"), "utf8"));
+  } catch {
+    return {};
+  }
+}
+function listModels(fallbackDefault) {
+  const s = existsSync4(join8(homedir4(), ".claude", "settings.json")) ? readClaudeSettings() : {};
+  const env = s.env ?? {};
+  const out = [];
+  const add = (m) => {
+    if (typeof m !== "string") return;
+    const base = m.replace(/\[1m\]$/, "").trim();
+    if (base && !out.includes(base)) out.push(base);
+  };
+  for (const m of (process.env.CCR_MODELS ?? "").split(",")) add(m);
+  add(s.model);
+  add(env.ANTHROPIC_DEFAULT_SONNET_MODEL);
+  add(env.ANTHROPIC_DEFAULT_HAIKU_MODEL);
+  add(env.ANTHROPIC_DEFAULT_OPUS_MODEL);
+  add(fallbackDefault || DEFAULT_MODEL);
+  return out;
+}
+
+// src/ws-server.ts
 import { fileURLToPath as fileURLToPath3 } from "node:url";
 
 // node_modules/ws/wrapper.mjs
@@ -38696,15 +42180,15 @@ var wrapper_default = import_websocket.default;
 
 // src/bridge.ts
 import { randomUUID as randomUUID4 } from "node:crypto";
-import { closeSync as closeSync2, openSync as openSync2, readSync as readSync2, readFileSync as readFileSync8, readdirSync as readdirSync3, statSync as statSync4, writeFileSync as writeFileSync5 } from "node:fs";
-import { homedir as homedir5 } from "node:os";
+import { closeSync as closeSync2, openSync as openSync2, readSync as readSync2, readFileSync as readFileSync10, readdirSync as readdirSync3, statSync as statSync4, writeFileSync as writeFileSync6 } from "node:fs";
+import { homedir as homedir6 } from "node:os";
 import path4 from "node:path";
 
 // src/injector.ts
 import { spawn as spawn2, execFileSync } from "node:child_process";
-import { existsSync as existsSync4, mkdirSync as mkdirSync5, appendFileSync as appendFileSync2 } from "node:fs";
-import path3, { join as join8 } from "node:path";
-import { homedir as homedir4 } from "node:os";
+import { existsSync as existsSync5, mkdirSync as mkdirSync5, appendFileSync as appendFileSync2, readFileSync as readFileSync9, writeFileSync as writeFileSync5, rmSync as rmSync2 } from "node:fs";
+import path3, { join as join9 } from "node:path";
+import { homedir as homedir5, tmpdir } from "node:os";
 import { fileURLToPath as fileURLToPath2 } from "node:url";
 var here = path3.dirname(fileURLToPath2(import.meta.url));
 var dataDir = process.env.CCR_DATA_DIR ?? path3.join(here, "..", "data");
@@ -38718,19 +42202,44 @@ function isDarwin() {
 function useAppleInjector() {
   return !process.env.CCR_INJECT_CMD && isDarwin();
 }
-var ready = existsSync4(exe2);
+var ready = false;
+function peekCapableSource() {
+  try {
+    return readFileSync9(injectCs, "utf8").includes("--peek");
+  } catch {
+    return false;
+  }
+}
 function ensureInjector() {
   if (process.env.CCR_INJECT_CMD) return true;
   if (isDarwin()) return true;
   if (process.platform !== "win32") return false;
   if (ready) return true;
+  const srcPeek = peekCapableSource();
   try {
     mkdirSync5(binDir, { recursive: true });
-    execFileSync(CSC, ["-nologo", `-out:${exe2}`, injectCs], { timeout: 3e4, windowsHide: true });
-    ready = true;
+    if (existsSync5(exe2) && !existsSync5(exe2 + ".v2") && srcPeek) {
+      try {
+        rmSync2(exe2, { force: true });
+      } catch {
+      }
+    }
+    let compiled = false;
+    if (!existsSync5(exe2)) {
+      const src = injectCs.replace(/\//g, "\\");
+      execFileSync(CSC, ["-nologo", `-out:${exe2}`, src], { timeout: 3e4, windowsHide: true });
+      compiled = true;
+    }
+    if (compiled && srcPeek) {
+      try {
+        writeFileSync5(exe2 + ".v2", "1");
+      } catch {
+      }
+    }
   } catch (e) {
     console.warn("[injector] compile failed:", e instanceof Error ? e.message : e);
   }
+  ready = existsSync5(exe2);
   return ready;
 }
 var VALID_TARGET = /^(claude|node)(\.exe)?$/i;
@@ -38753,7 +42262,8 @@ var ERR_BY_CODE = {
   2: "write-fail",
   3: "bad-args",
   4: "conin-fail",
-  5: "internal-error"
+  5: "internal-error",
+  6: "peek-fail"
 };
 function run(args) {
   return new Promise((resolve6) => {
@@ -38788,12 +42298,14 @@ function buildDoScriptExpr(pid, expr) {
     'tell application "Terminal"',
     `	set targetTty to do shell script "ps -o tty= -p ${pid}"`,
     "	repeat with w in windows",
-    "		try",
-    "			if tty of selected tab of w ends with targetTty then",
-    `				do script (${expr}) in selected tab of w`,
-    "				exit repeat",
-    "			end if",
-    "		end try",
+    "		repeat with t in tabs of w",
+    "			try",
+    "				if tty of t ends with targetTty then",
+    `					do script (${expr}) in t`,
+    "					exit repeat",
+    "				end if",
+    "			end try",
+    "		end repeat",
     "	end repeat",
     "end tell"
   ].join("\n");
@@ -38819,7 +42331,7 @@ function runAppleScript(script) {
       clearTimeout(timer);
       if (code === 0) return resolve6({ ok: true });
       try {
-        appendFileSync2(join8(homedir4(), "inject-debug.log"), `[${(/* @__PURE__ */ new Date()).toISOString()}] code=${code} err=${err} |n`);
+        appendFileSync2(join9(homedir5(), "inject-debug.log"), `[${(/* @__PURE__ */ new Date()).toISOString()}] code=${code} err=${err} |n`);
       } catch {
       }
       resolve6({ ok: false, error: mapAppleError(err) ?? (err.trim() || `exit ${code}`) });
@@ -38886,6 +42398,171 @@ async function injectEnter(pid) {
   if (!targetIsCliHost(pid)) return { ok: false, error: "pid-reuse" };
   return run([String(pid), ""]);
 }
+function peekSupported() {
+  if (process.env.CCR_INJECT_CMD) return true;
+  if (isDarwin()) return true;
+  if (process.platform !== "win32") return false;
+  return existsSync5(exe2) && existsSync5(exe2 + ".v2");
+}
+function buildCaptureScript(pid) {
+  return [
+    'tell application "Terminal"',
+    `	set targetTty to do shell script "ps -o tty= -p ${pid}"`,
+    "	repeat with w in windows",
+    "		repeat with t in tabs of w",
+    "			try",
+    "				if tty of t ends with targetTty then",
+    "					return contents of t",
+    "				end if",
+    "			end try",
+    "		end repeat",
+    "	end repeat",
+    "end tell"
+  ].join("\n");
+}
+function runAppleScriptOut(script) {
+  return new Promise((resolve6) => {
+    const fake = process.env.CCR_OSASCRIPT_CMD;
+    const child = fake ? spawn2(process.execPath, [fake, "-e", script], { windowsHide: true }) : spawn2("osascript", ["-e", script]);
+    let out = "";
+    let err = "";
+    child.stdout?.on("data", (c) => out += c);
+    child.stderr?.on("data", (c) => err += c);
+    const timer = setTimeout(() => {
+      child.kill();
+      resolve6({ ok: false, text: "", error: "timeout" });
+    }, 1e4);
+    child.on("error", (e) => {
+      clearTimeout(timer);
+      resolve6({ ok: false, text: "", error: e.message });
+    });
+    child.on("close", (code) => {
+      clearTimeout(timer);
+      resolve6({ ok: code === 0, text: out, error: code === 0 ? void 0 : err.trim() || `exit ${code}` });
+    });
+  });
+}
+async function captureConsoleBottom(pid, rows = 20) {
+  if (!injectSupported()) return null;
+  if (useAppleInjector()) {
+    if (!macTargetIsCliHost(pid)) return null;
+    const r2 = await runAppleScriptOut(buildCaptureScript(pid));
+    if (!r2.ok || !r2.text.trim()) return null;
+    return r2.text.split(/\r?\n/).map((l) => l.replace(/\0+$/, "").trimEnd()).slice(-rows);
+  }
+  if (!ensureInjector() || !peekSupported()) return null;
+  if (!targetIsCliHost(pid)) return null;
+  const tmp = join9(tmpdir(), `ccr-peek-${pid}-${process.pid}-${Date.now().toString(36)}.txt`);
+  const r = await run([String(pid), "--peek", tmp, String(rows)]);
+  if (!r.ok) return null;
+  try {
+    const text = readFileSync9(tmp, "utf8");
+    const lines = text.split(/\r?\n/).map((l) => l.replace(/\0+$/, "").trimEnd());
+    return lines.length ? lines : null;
+  } catch {
+    return null;
+  } finally {
+    try {
+      rmSync2(tmp, { force: true });
+    } catch {
+    }
+  }
+}
+
+// src/type-guard.ts
+function guardConfig() {
+  const num = (v, def) => Number(v) > 0 ? Number(v) : def;
+  return {
+    enabled: !/^(off|0|false)$/i.test(process.env.CCR_TYPE_GUARD ?? ""),
+    pollMs: num(process.env.CCR_TYPE_GUARD_POLL_MS, 500),
+    stableMs: num(process.env.CCR_TYPE_GUARD_STABLE_MS, 1e3),
+    maxMs: num(process.env.CCR_TYPE_GUARD_MAX_MS, 3e4)
+  };
+}
+var isBorderRow = (l) => {
+  const t = l.trim();
+  return t.length >= 20 && /^[─━═]{6,}$/.test(t);
+};
+function extractInputBox(lines) {
+  let bottom = -1;
+  for (let i = lines.length - 1; i >= 0; i--) {
+    if (isBorderRow(lines[i])) {
+      bottom = i;
+      break;
+    }
+  }
+  if (bottom === -1) return null;
+  let top = -1;
+  for (let i = bottom - 1; i >= 0; i--) {
+    if (isBorderRow(lines[i])) {
+      top = i;
+      break;
+    }
+  }
+  if (top === -1) return null;
+  const inner = lines.slice(top + 1, bottom);
+  if (!inner.length || !inner.some((l) => l.includes("\u276F"))) return null;
+  return inner;
+}
+function anyKnownPresent(box, knownTexts) {
+  const flat = box.join("").replace(/\s+/g, "");
+  return knownTexts.some((t) => {
+    const k3 = t.replace(/\s+/g, "");
+    if (!k3) return false;
+    if (flat.includes(k3)) return true;
+    if (k3.length < 12) return false;
+    return flat.includes(k3.slice(0, 8)) || flat.includes(k3.slice(-8));
+  });
+}
+function maskNoise(s) {
+  return s.replace(/[▌█░⏎⇥❯]/g, " ").replace(/\d+\s*\/\s*\d+/g, " ").replace(/\s+/g, " ").trim();
+}
+function removeKnownTexts(s, known) {
+  let out = s;
+  for (const t of known) {
+    for (const v of /* @__PURE__ */ new Set([t, t.replace(/\s+/g, "")])) {
+      if (!v) continue;
+      let prev = "";
+      while (prev !== out) {
+        prev = out;
+        out = out.split(v).join(" ");
+      }
+    }
+  }
+  return out;
+}
+function foreignResidual(box, knownTexts) {
+  const stripped = box.map((l, i) => i === 0 ? l.replace(/^\s*❯\s*/, "") : l.replace(/^\s+/, ""));
+  const residuals = ["", " "].map((sep6) => maskNoise(removeKnownTexts(stripped.join(sep6), knownTexts)));
+  return residuals.every((r) => r) ? residuals[0] ?? "" : "";
+}
+var sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+async function guardCompensateEnter(knownTexts, capture, opts = {}) {
+  const cfg2 = opts.cfg ?? guardConfig();
+  const abort = opts.abort ?? (() => false);
+  const t02 = Date.now();
+  let lastKey = "";
+  let stableSince = 0;
+  let held = false;
+  while (true) {
+    const lines = await capture();
+    const box = lines ? extractInputBox(lines) : null;
+    if (!box) return { kind: "unknown" };
+    if (!anyKnownPresent(box, knownTexts)) return { kind: "skip-absent" };
+    if (!foreignResidual(box, knownTexts)) return held ? { kind: "enter-after-wait", waitedMs: Date.now() - t02 } : { kind: "enter" };
+    held = true;
+    const key = JSON.stringify(box);
+    if (key !== lastKey) {
+      lastKey = key;
+      stableSince = Date.now();
+    } else if (stableSince && Date.now() - stableSince >= cfg2.stableMs) {
+      return { kind: "enter-after-wait", waitedMs: Date.now() - t02 };
+    }
+    if (Date.now() - t02 >= cfg2.maxMs) return { kind: "timeout", waitedMs: Date.now() - t02 };
+    if (abort()) return { kind: "aborted" };
+    await sleep(cfg2.pollMs);
+  }
+}
 
 // src/bridge.ts
 function transcriptFirstTs(p) {
@@ -38909,7 +42586,7 @@ function transcriptFirstTs(p) {
 }
 var DEFAULT_HOLD_MS = 59e4;
 var QUESTION_HOLD_MS = 9e4;
-var sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+var sleep2 = (ms) => new Promise((r) => setTimeout(r, ms));
 function pidAlive(pid) {
   try {
     process.kill(pid, 0);
@@ -38965,8 +42642,10 @@ var Bridge = class _Bridge {
   healTimer = null;
   extFileStats = /* @__PURE__ */ new Map();
   extUsage = /* @__PURE__ */ new Map();
-  // 排队消息滞留看门狗：ext id -> { 最近补发时间, 连续补发次数, 是否已放弃 }
+  // 排队消息滞留看门狗：ext id -> { 最近补发时间, 连续补发次数, 连续跳过次数, 是否已放弃 }
   stuckWatch = /* @__PURE__ */ new Map();
+  // 防抢发守门进行中的会话（等待人工停手期间，看门狗节拍跳过防重入）
+  stuckGuarding = /* @__PURE__ */ new Set();
   subagentSeq = 0;
   // hook 未带 tool_use_id 时的合成 id 序号（ag-N）
   askFallback = /* @__PURE__ */ new Map();
@@ -39009,7 +42688,7 @@ var Bridge = class _Bridge {
   // 该 CLI 重启后 hook 生效即获得完整功能
   adoptOrphans() {
     try {
-      const root = process.env.CCR_PROJECTS_ROOT ?? path4.join(homedir5(), ".claude", "projects");
+      const root = process.env.CCR_PROJECTS_ROOT ?? path4.join(homedir6(), ".claude", "projects");
       const cutoff = Date.now() - 30 * 6e4;
       for (const dir of readdirSync3(root, { withFileTypes: true })) {
         if (!dir.isDirectory()) continue;
@@ -39141,7 +42820,7 @@ var Bridge = class _Bridge {
   // 从 hook 侧缓存文件补回（key=CLI session_id，CLI 存活期不变）
   hydratePidsFromCache() {
     try {
-      const cache = JSON.parse(readFileSync8(this.pidCacheFile, "utf-8"));
+      const cache = JSON.parse(readFileSync10(this.pidCacheFile, "utf-8"));
       for (const s of this.mgr.snapshot()) {
         if (!s.external || s.cli_pid) continue;
         const pid = cache[s.relay_session_id || s.session_id.slice(4)];
@@ -39158,7 +42837,7 @@ var Bridge = class _Bridge {
   // 补定位顺带清 historical：活 pid 即会话真实存活的证明。
   reconcilePidsFromSessions() {
     try {
-      const dir = process.env.CCR_SESSIONS_ROOT || path4.join(homedir5(), ".claude", "sessions");
+      const dir = process.env.CCR_SESSIONS_ROOT || path4.join(homedir6(), ".claude", "sessions");
       let files;
       try {
         files = readdirSync3(dir);
@@ -39171,7 +42850,7 @@ var Bridge = class _Bridge {
         if (!Number.isInteger(pid) || pid <= 0) continue;
         let sid = "";
         try {
-          const d2 = JSON.parse(readFileSync8(path4.join(dir, f), "utf-8"));
+          const d2 = JSON.parse(readFileSync10(path4.join(dir, f), "utf-8"));
           if (typeof d2.sessionId === "string" && d2.sessionId) sid = d2.sessionId;
         } catch {
         }
@@ -39210,8 +42889,12 @@ var Bridge = class _Bridge {
     if (ev2.transcript_path) {
       this.transcriptPaths.set(this.extId(ev2), ev2.transcript_path);
       this.ensureQueuePoll();
+      if (ev2.event === "PostToolUse" && /^(TodoWrite|TaskCreate|TaskUpdate)$/.test(ev2.tool_name ?? "")) {
+        this.pushAssistantTexts(this.extId(ev2), ev2.transcript_path);
+      }
     }
     this.correctEscMark(this.extId(ev2), ev2);
+    if (ev2.event !== "PreCompact") this.mgr.setExternalCompacting(this.extId(ev2), false);
     return decision;
   }
   // Esc 乐观置 DONE 的自我纠正：Esc 打断不触发 Stop hook，置 DONE 后若仍有工具活动，
@@ -39281,7 +42964,7 @@ var Bridge = class _Bridge {
         this.turnShape.delete(id2);
         continue;
       }
-      if (st2.status !== "WORKING" || this.pending.has(id2)) continue;
+      if (st2.status !== "WORKING" || st2.compacting || this.pending.has(id2)) continue;
       const last = this.lastGrow.get(id2) ?? 0;
       const shape = this.turnShape.get(id2) ?? "gen";
       if (!last || now - last <= (shape === "end" ? idleMs : 6e5)) continue;
@@ -39305,7 +42988,7 @@ var Bridge = class _Bridge {
     for (const s of this.mgr.snapshot()) {
       if (!s.external || s.status !== "WORKING") continue;
       const id2 = s.session_id;
-      if (this.noHookIds.has(id2) || this.pending.has(id2)) continue;
+      if (this.noHookIds.has(id2) || s.compacting || this.pending.has(id2)) continue;
       const idleSince = Math.max(
         this.lastGrow.get(id2) ?? 0,
         this.lastHookAt.get(id2) ?? 0,
@@ -39428,6 +43111,17 @@ var Bridge = class _Bridge {
     while (count-- > 0 && pending.length) pending.shift();
     this.mgr.setExternalPending(id2, pending);
   }
+  // #363 PreCompact（手动 /compact 或上下文将满自动压缩）：CLI 进入
+  // "Compacting conversation..."，转录静默可达分钟级——置 compacting 标志 +
+  // 摘要明示，端上不误判卡死；仅对已建档会话生效（不从压缩事件新建档案）
+  onPreCompact(ev2) {
+    const id2 = this.extId(ev2);
+    if (!this.mgr.getExternal(id2)) return { decision: "pass" };
+    this.mgr.setExternalStatus(id2, "WORKING", "\u6B63\u5728\u538B\u7F29\u4E0A\u4E0B\u6587\u2026", Date.now());
+    this.mgr.setExternalCompacting(id2, true);
+    this.mgr.pushExternalLog(id2, "system", "\u4E0A\u4E0B\u6587\u63A5\u8FD1\u4E0A\u9650\uFF0C\u6B63\u5728\u538B\u7F29\u5BF9\u8BDD\u5386\u53F2");
+    return { decision: "pass" };
+  }
   async dispatch(ev2) {
     switch (ev2.event) {
       case "UserPromptSubmit":
@@ -39442,6 +43136,8 @@ var Bridge = class _Bridge {
         return this.onStop(ev2);
       case "SessionEnd":
         return this.onSessionEnd(ev2);
+      case "PreCompact":
+        return this.onPreCompact(ev2);
       default:
         return { decision: "pass" };
     }
@@ -39490,7 +43186,7 @@ var Bridge = class _Bridge {
         this.onInjectFail(sessionId, r.error);
         return;
       }
-      await sleep(400);
+      await sleep2(400);
       const pid2 = this.mgr.getExternal(sessionId)?.cli_pid;
       if (!pid2) return;
       const r2 = await injectText(pid2, msg);
@@ -39612,7 +43308,7 @@ var Bridge = class _Bridge {
           this.onInjectFail(sessionId, r.error);
           return;
         }
-        await sleep(400);
+        await sleep2(400);
       }
     } finally {
       this.flushing.delete(sessionId);
@@ -39638,9 +43334,9 @@ var Bridge = class _Bridge {
   // hook 侧 pid 缓存（relay 会话 id = "ext-" + CLI session_id）
   clearPidCache(sessionId) {
     try {
-      const raw = JSON.parse(readFileSync8(this.pidCacheFile, "utf-8"));
+      const raw = JSON.parse(readFileSync10(this.pidCacheFile, "utf-8"));
       delete raw[sessionId.slice(4)];
-      writeFileSync5(this.pidCacheFile, JSON.stringify(raw));
+      writeFileSync6(this.pidCacheFile, JSON.stringify(raw));
     } catch {
     }
   }
@@ -39698,11 +43394,11 @@ var Bridge = class _Bridge {
   }
   readCcSessionName(cliSessionId) {
     try {
-      const dir = path4.join(homedir5(), ".claude", "sessions");
+      const dir = path4.join(homedir6(), ".claude", "sessions");
       for (const f of readdirSync3(dir)) {
         if (!f.endsWith(".json")) continue;
         try {
-          const d2 = JSON.parse(readFileSync8(path4.join(dir, f), "utf-8"));
+          const d2 = JSON.parse(readFileSync10(path4.join(dir, f), "utf-8"));
           if (d2.sessionId === cliSessionId) return d2.name?.trim() || null;
         } catch {
         }
@@ -39749,6 +43445,7 @@ var Bridge = class _Bridge {
       if (!firstRead) {
         if (this.lastGrow.size > 200) this.lastGrow.clear();
         this.lastGrow.set(id2, Date.now());
+        this.mgr.setExternalCompacting(id2, false);
         const st0 = this.mgr.getExternal(id2);
         if (st0 && (st0.status === "DONE" || st0.status === "ERROR")) {
           this.noHookIds.add(id2);
@@ -40390,6 +44087,9 @@ var Bridge = class _Bridge {
   // 现象：注入的回车在回合切换瞬间被 CLI 界面层吞掉，文字滞留输入框未提交，
   // 直到下一条消息的回车才把两条一起冲出去。补发一个空回车（injectEnter）补救。
   // WAITING 严禁补发——回车会误触权限弹窗。
+  // 防抢发（type guard）：补发回车前快照 CLI 输入框，框内有非我们注入的内容
+  // （真人正在打字/半截输入）则暂缓，等停手后再补——否则会把用户打到一半的
+  // 输入连同滞留消息一起抢发出去。CCR_TYPE_GUARD=off 可关。
   sweepStuckInputs() {
     const now = Date.now();
     const firstMs = Math.min(1e4, this.stuckAfterMs);
@@ -40398,31 +44098,75 @@ var Bridge = class _Bridge {
       const id2 = s.session_id;
       const w02 = this.stuckWatch.get(id2);
       const threshold = w02 && w02.tries > 0 ? this.stuckAfterMs : firstMs;
-      const stuck = (s.pending_inputs ?? []).some((p) => {
+      const stuckTexts = (s.pending_inputs ?? []).filter((p) => {
         if (now - p.ts <= threshold) return false;
         if (this.isEnqueued(id2, p.text)) return false;
         const rec = this.recentUserMsgs.get(id2)?.get(normKey(p.text));
         return !(rec && now - rec.ts < 6e4 && rec.ts >= p.ts);
-      });
-      if (!stuck || !s.cli_pid || s.status !== "WORKING" && s.status !== "DONE" || this.flushing.has(id2) || (this.inputQueue.get(id2)?.length ?? 0) > 0) {
+      }).map((p) => p.text);
+      if (stuckTexts.length === 0 || !s.cli_pid || s.status !== "WORKING" && s.status !== "DONE" || this.flushing.has(id2) || (this.inputQueue.get(id2)?.length ?? 0) > 0) {
         this.stuckWatch.delete(id2);
         continue;
       }
       const w2 = this.stuckWatch.get(id2);
       if (w2?.given_up) continue;
       if (w2 && now - w2.lastTry < this.stuckRetryMs) continue;
-      const tries = (w2?.tries ?? 0) + 1;
       const pid = s.cli_pid;
-      this.stuckWatch.set(id2, { lastTry: now, tries, given_up: tries >= 3 });
-      if (tries >= 3) {
-        this.mgr.pushExternalLog(id2, "system", "\u6392\u961F\u6D88\u606F\u7591\u4F3C\u6EDE\u7559\u8F93\u5165\u6846\uFF0C\u5DF2\u8865\u53D1 3 \u6B21\u56DE\u8F66\u4ECD\u6EDE\u7559\uFF0C\u6682\u505C\u81EA\u52A8\u8865\u53D1\uFF08\u4E0B\u6B21\u53D1\u9001\u6D88\u606F\u65F6\u4F1A\u4E00\u5E76\u63D0\u4EA4\uFF09");
-      } else {
-        this.mgr.pushExternalLog(id2, "system", "\u6392\u961F\u6D88\u606F\u7591\u4F3C\u6EDE\u7559\u8F93\u5165\u6846\uFF0C\u5DF2\u8865\u53D1\u56DE\u8F66");
+      if (guardConfig().enabled) {
+        if (this.stuckGuarding.has(id2)) continue;
+        this.stuckWatch.set(id2, { lastTry: now, tries: w2?.tries ?? 0, skips: w2?.skips ?? 0, given_up: w2?.given_up ?? false });
+        this.stuckGuarding.add(id2);
+        void this.guardedStuckEnter(id2, pid, stuckTexts).finally(() => this.stuckGuarding.delete(id2));
+        continue;
       }
-      void injectEnter(pid).then((r) => {
-        if (!r.ok) this.onInjectFail(id2, r.error);
-      });
+      this.fireStuckEnter(id2, pid);
     }
+  }
+  // 真正补发回车（守门通过 / 守门关闭 / 快照不可用 fail-open 都走到这里）
+  fireStuckEnter(id2, pid, msg) {
+    const w2 = this.stuckWatch.get(id2);
+    const tries = (w2?.tries ?? 0) + 1;
+    this.stuckWatch.set(id2, { lastTry: Date.now(), tries, skips: w2?.skips ?? 0, given_up: tries >= 3 });
+    if (tries >= 3) {
+      this.mgr.pushExternalLog(id2, "system", "\u6392\u961F\u6D88\u606F\u7591\u4F3C\u6EDE\u7559\u8F93\u5165\u6846\uFF0C\u5DF2\u8865\u53D1 3 \u6B21\u56DE\u8F66\u4ECD\u6EDE\u7559\uFF0C\u6682\u505C\u81EA\u52A8\u8865\u53D1\uFF08\u4E0B\u6B21\u53D1\u9001\u6D88\u606F\u65F6\u4F1A\u4E00\u5E76\u63D0\u4EA4\uFF09");
+    } else {
+      this.mgr.pushExternalLog(id2, "system", msg ?? "\u6392\u961F\u6D88\u606F\u7591\u4F3C\u6EDE\u7559\u8F93\u5165\u6846\uFF0C\u5DF2\u8865\u53D1\u56DE\u8F66");
+    }
+    void injectEnter(pid).then((r) => {
+      if (!r.ok) this.onInjectFail(id2, r.error);
+    });
+  }
+  // 守门后的跳过（框内已无滞留消息）：不补发、不计数补发次数；连续跳过多次后停手，
+  // 防无 hook 会话 pending 永不晋升时每 60s 刷一条日志
+  bumpStuckSkips(id2, msg) {
+    const w2 = this.stuckWatch.get(id2);
+    const skips = (w2?.skips ?? 0) + 1;
+    this.stuckWatch.set(id2, { lastTry: Date.now(), tries: w2?.tries ?? 0, skips, given_up: (w2?.given_up ?? false) || skips >= 3 });
+    this.mgr.pushExternalLog(id2, "system", skips >= 3 ? "\u8F93\u5165\u6846\u591A\u6B21\u672A\u89C1\u8BE5\u6392\u961F\u6D88\u606F\uFF0C\u6682\u505C\u81EA\u52A8\u8865\u53D1\uFF08\u4E0B\u6B21\u53D1\u9001\u6D88\u606F\u65F6\u4F1A\u4E00\u5E76\u63D0\u4EA4\uFF09" : msg);
+  }
+  // 补发回车前的防抢发守门：快照 CLI 输入框，有疑似人工输入则等停手再补。
+  // 快照不可用（旧注入器/弹窗盖住/识别失败）fail-open 维持旧行为直接补发。
+  async guardedStuckEnter(id2, pid, texts) {
+    const v = await guardCompensateEnter(texts, () => captureConsoleBottom(pid), {
+      abort: () => {
+        const st2 = this.mgr.getExternal(id2);
+        return !st2 || st2.status !== "WORKING" && st2.status !== "DONE" || this.flushing.has(id2) || (this.inputQueue.get(id2)?.length ?? 0) > 0;
+      }
+    });
+    if (v.kind === "skip-absent") {
+      this.bumpStuckSkips(id2, "\u8F93\u5165\u6846\u5DF2\u65E0\u8BE5\u6392\u961F\u6D88\u606F\uFF08\u53EF\u80FD\u5DF2\u968F\u4EBA\u5DE5\u8F93\u5165\u63D0\u4EA4\u6216\u88AB\u6E05\u7A7A\uFF09\uFF0C\u8DF3\u8FC7\u672C\u6B21\u8865\u53D1\u56DE\u8F66");
+      return;
+    }
+    if (v.kind === "timeout") {
+      this.mgr.pushExternalLog(id2, "system", "\u8F93\u5165\u6846\u68C0\u6D4B\u5230\u6301\u7EED\u4EBA\u5DE5\u8F93\u5165\uFF0C\u672C\u8F6E\u6682\u7F13\u8865\u53D1\u56DE\u8F66\uFF08\u505C\u624B\u540E\u4E0B\u4E00\u8F6E\u81EA\u52A8\u518D\u8BD5\uFF09");
+      return;
+    }
+    if (v.kind === "aborted") return;
+    if (v.kind === "enter-after-wait") {
+      this.fireStuckEnter(id2, pid, `\u5DF2\u8865\u53D1\u56DE\u8F66\uFF08\u68C0\u6D4B\u5230\u8F93\u5165\u6846\u6709\u5176\u4ED6\u8F93\u5165\uFF0C\u7B49\u505C\u624B ${Math.round(v.waitedMs / 100) / 10}s \u540E\u8865\u53D1\uFF09`);
+      return;
+    }
+    this.fireStuckEnter(id2, pid);
   }
 };
 function parseGateTools(raw) {
@@ -40438,6 +44182,7 @@ function localIps() {
   }
   return out;
 }
+var TRUSTED_WEB_ORIGINS = ["https://cc.humumu.online", "https://cc-deck.humumu.online"];
 var COMMAND_TYPES = /* @__PURE__ */ new Set([
   "COMMAND_CREATE",
   "COMMAND_MESSAGE",
@@ -40452,7 +44197,12 @@ var COMMAND_TYPES = /* @__PURE__ */ new Set([
   "COMMAND_ANSWER",
   "COMMAND_PAIR_START",
   "COMMAND_PAIR_CODE",
+  "COMMAND_LOGIN_GRANT",
+  "COMMAND_WATCH_GRANT",
+  "COMMAND_PEERS",
+  "COMMAND_PEER_KICK",
   "COMMAND_PERM",
+  "COMMAND_MODEL",
   "COMMAND_REFRESH_TODOS",
   "COMMAND_TODO_HIDE"
 ]);
@@ -40492,7 +44242,7 @@ function listCustomCommands(dir, source) {
   }
   const descOf = (p) => {
     try {
-      const head = readFileSync9(p, "utf-8").slice(0, 400);
+      const head = readFileSync11(p, "utf-8").slice(0, 400);
       const m = /^description:\s*(.+)$/m.exec(head);
       if (m) return m[1].trim().slice(0, 80);
       const line = head.split(/\r?\n/).find((l) => l.trim() && !l.startsWith("---"));
@@ -40504,11 +44254,11 @@ function listCustomCommands(dir, source) {
   const out = [];
   for (const e of entries) {
     if (e.isFile() && e.name.endsWith(".md")) {
-      out.push({ name: e.name.slice(0, -3), desc: descOf(join9(dir, e.name)), source });
+      out.push({ name: e.name.slice(0, -3), desc: descOf(join10(dir, e.name)), source });
     } else if (e.isDirectory()) {
       try {
-        for (const g2 of readdirSync4(join9(dir, e.name))) {
-          if (g2.endsWith(".md")) out.push({ name: `${e.name}:${g2.slice(0, -3)}`, desc: descOf(join9(dir, e.name, g2)), source });
+        for (const g2 of readdirSync4(join10(dir, e.name))) {
+          if (g2.endsWith(".md")) out.push({ name: `${e.name}:${g2.slice(0, -3)}`, desc: descOf(join10(dir, e.name, g2)), source });
         }
       } catch {
       }
@@ -40518,9 +44268,10 @@ function listCustomCommands(dir, source) {
 }
 function startServer(bus2, mgr2, cfg2, opts = {}) {
   const webRoot = process.env.CCR_WEB_ROOT ?? ("1" ? fileURLToPath3(new URL("../", import.meta.url)) : fileURLToPath3(new URL("../../", import.meta.url)));
-  const consoleHtml = join9(webRoot, "web-console", "index.html");
-  const naclJs = join9(webRoot, "web-console", "nacl.js");
-  const mobileDir = join9(webRoot, "mobile") + sep5;
+  const consoleHtml = join10(webRoot, "web-console", "index.html");
+  const naclJs = join10(webRoot, "web-console", "nacl.js");
+  const qrJs = join10(webRoot, "web-console", "qr.js");
+  const mobileDir = join10(webRoot, "mobile") + sep5;
   const PWA_ASSETS = {
     "/manifest.json": "application/manifest+json; charset=utf-8",
     "/apple-touch-icon.png": "image/png",
@@ -40544,19 +44295,21 @@ function startServer(bus2, mgr2, cfg2, opts = {}) {
       return true;
     }
     const file = mobileDir + rel;
-    if (!existsSync5(file)) {
+    if (!existsSync6(file)) {
       res.writeHead(404).end("not found");
       return true;
     }
     const ext = rel.slice(rel.lastIndexOf("."));
-    res.writeHead(200, { "content-type": MIME[ext] ?? "application/octet-stream" }).end(readFileSync9(file));
+    res.writeHead(200, { "content-type": MIME[ext] ?? "application/octet-stream" }).end(readFileSync11(file));
     return true;
   };
   const wss = new import_websocket_server.default({ noServer: true });
   const bridge = new Bridge(bus2, mgr2, {
     gateTools: parseGateTools(opts.gateToolsRaw ?? process.env.CCR_GATE_TOOLS),
     dataDir: cfg2.dataDir,
-    hasClients: () => [...wss.clients].some((c) => c.readyState === import_websocket.default.OPEN) || !!opts.cloudHasPhones?.(),
+    // #316 审查修复：待配对手表连接未鉴权，不计入"手机在线"——否则配对连接会让
+    // 提问/权限门控误判有手机在场，挂起等一个不存在的审批方
+    hasClients: () => [...wss.clients].some((c) => c.readyState === import_websocket.default.OPEN && !c.pairing) || !!opts.cloudHasPhones?.(),
     holdMs: opts.holdMs,
     questionHoldMs: opts.questionHoldMs
   });
@@ -40569,29 +44322,37 @@ function startServer(bus2, mgr2, cfg2, opts = {}) {
     }
     if (req.method === "GET" && serveMobile(url, res)) return;
     if (req.method === "GET" && url.pathname === "/") {
-      if (!existsSync5(consoleHtml)) {
+      if (!existsSync6(consoleHtml)) {
         res.writeHead(503).end("web-console/index.html \u4E0D\u5B58\u5728\uFF08\u6B65\u9AA4 6 \u751F\u6210\uFF09");
         return;
       }
-      const html = readFileSync9(consoleHtml);
+      const html = readFileSync11(consoleHtml);
       res.writeHead(200, { "content-type": "text/html; charset=utf-8", "cache-control": "no-store" }).end(html);
       return;
     }
     if (req.method === "GET" && url.pathname === "/nacl.js") {
-      if (!existsSync5(naclJs)) {
+      if (!existsSync6(naclJs)) {
         res.writeHead(503).end("web-console/nacl.js \u4E0D\u5B58\u5728\uFF08cp node_modules/tweetnacl/nacl-fast.min.js\uFF09");
         return;
       }
-      res.writeHead(200, { "content-type": "text/javascript; charset=utf-8", "cache-control": "no-store" }).end(readFileSync9(naclJs));
+      res.writeHead(200, { "content-type": "text/javascript; charset=utf-8", "cache-control": "no-store" }).end(readFileSync11(naclJs));
+      return;
+    }
+    if (req.method === "GET" && url.pathname === "/qr.js") {
+      if (!existsSync6(qrJs)) {
+        res.writeHead(503).end("web-console/qr.js \u4E0D\u5B58\u5728");
+        return;
+      }
+      res.writeHead(200, { "content-type": "text/javascript; charset=utf-8", "cache-control": "no-store" }).end(readFileSync11(qrJs));
       return;
     }
     if (req.method === "GET" && PWA_ASSETS[url.pathname]) {
-      const file = join9(webRoot, "web-console", url.pathname.slice(1));
-      if (!existsSync5(file)) {
+      const file = join10(webRoot, "web-console", url.pathname.slice(1));
+      if (!existsSync6(file)) {
         res.writeHead(404).end("not found");
         return;
       }
-      res.writeHead(200, { "content-type": PWA_ASSETS[url.pathname] }).end(readFileSync9(file));
+      res.writeHead(200, { "content-type": PWA_ASSETS[url.pathname] }).end(readFileSync11(file));
       return;
     }
     if (req.method === "GET" && url.pathname === "/health") {
@@ -40605,10 +44366,12 @@ function startServer(bus2, mgr2, cfg2, opts = {}) {
       const ips = localIps();
       const hostTrusted = (h) => h === "localhost" || h === "127.0.0.1" || ips.has(h);
       let allowOrigin = "";
-      if (origin) {
+      const reqLb = (req.headers.host ?? "").split(":")[0] === "127.0.0.1" || (req.headers.host ?? "").split(":")[0] === "localhost";
+      if (origin && reqLb) allowOrigin = origin === "null" ? "*" : origin;
+      else if (origin) {
         try {
           const u = new URL(origin);
-          if (u.origin === "https://cc.humumu.online" || hostTrusted(u.hostname)) allowOrigin = origin;
+          if (TRUSTED_WEB_ORIGINS.includes(u.origin) || hostTrusted(u.hostname)) allowOrigin = origin;
         } catch {
         }
       } else {
@@ -40649,7 +44412,29 @@ function startServer(bus2, mgr2, cfg2, opts = {}) {
         res.writeHead(501).end("pairing not enabled");
         return;
       }
-      res.writeHead(200, { "content-type": "application/json" }).end(JSON.stringify(opts.pairCodes.issue()));
+      const origin = (req.headers.origin ?? "").trim();
+      const ips = localIps();
+      const hostOk = (h) => h === "localhost" || h === "127.0.0.1" || ips.has(h);
+      let acao = "";
+      const reqLb2 = (req.headers.host ?? "").split(":")[0] === "127.0.0.1" || (req.headers.host ?? "").split(":")[0] === "localhost";
+      if (origin && reqLb2) acao = origin === "null" ? "*" : origin;
+      else if (origin) {
+        try {
+          const u = new URL(origin);
+          if (TRUSTED_WEB_ORIGINS.includes(u.origin) || hostOk(u.hostname)) acao = origin;
+        } catch {
+        }
+      }
+      const headers = { "content-type": "application/json" };
+      if (acao) headers["access-control-allow-origin"] = acao;
+      const qCode = url.searchParams.get("code") ?? void 0;
+      const qTtlRaw = Number(url.searchParams.get("ttl"));
+      const qTtl = Number.isFinite(qTtlRaw) && qTtlRaw > 0 ? qTtlRaw : void 0;
+      res.writeHead(200, headers).end(JSON.stringify(opts.pairCodes.issue(qCode || qTtl ? { code: qCode, ttlMs: qTtl } : void 0)));
+      return;
+    }
+    if (req.method === "POST" && url.pathname === "/api/notify") {
+      void handleNotify(req, res, mgr2, cfg2);
       return;
     }
     if (req.method === "GET" && url.pathname === "/api/commands") {
@@ -40659,8 +44444,8 @@ function startServer(bus2, mgr2, cfg2, opts = {}) {
       }
       const cwd = url.searchParams.get("cwd") ?? "";
       const custom = [
-        ...listCustomCommands(join9(homedir6(), ".claude", "commands"), "user"),
-        ...cwd ? listCustomCommands(join9(cwd, ".claude", "commands"), "project") : []
+        ...listCustomCommands(join10(homedir7(), ".claude", "commands"), "user"),
+        ...cwd ? listCustomCommands(join10(cwd, ".claude", "commands"), "project") : []
       ];
       const seen = new Set(custom.map((c) => c.name));
       const commands = [
@@ -40680,15 +44465,88 @@ function startServer(bus2, mgr2, cfg2, opts = {}) {
       socket.destroy();
       return;
     }
-    if ((url.searchParams.get("token") ?? "") !== cfg2.token) {
+    const pairing = url.searchParams.get("pair") === "1";
+    if (!pairing && (url.searchParams.get("token") ?? "") !== cfg2.token) {
       console.log(`[ws-upgrade] reject: token mismatch`);
       socket.write("HTTP/1.1 401 Unauthorized\r\n\r\n");
       socket.destroy();
       return;
     }
-    console.log(`[ws-upgrade] accepted`);
+    console.log(`[ws-upgrade] accepted${pairing ? " (pairing)" : ""}`);
     wss.handleUpgrade(req, socket, head, (ws2) => wss.emit("connection", ws2, url));
   });
+  const PAIR_TTL_MS = 12e4;
+  const watchPairings = /* @__PURE__ */ new Map();
+  const lanBroadcast = (obj) => {
+    const text = JSON.stringify(obj);
+    for (const client of wss.clients) {
+      if (client.pairing) continue;
+      if (client.readyState === import_websocket.default.OPEN) client.send(text);
+    }
+  };
+  const pairResolvedFrame = (requestId, decision) => lanBroadcast({ seq: 0, session_id: "", ts: Date.now(), type: "PAIR_RESOLVED", payload: { request_id: requestId, decision } });
+  function resolvePairing(requestId, decision) {
+    const p = watchPairings.get(requestId);
+    if (!p) return;
+    watchPairings.delete(requestId);
+    clearTimeout(p.timer);
+    try {
+      if (decision === "allow") p.ws.send(JSON.stringify({ type: "PAIR_OK", token: cfg2.token }));
+      else if (decision === "deny") p.ws.send(JSON.stringify({ type: "PAIR_DENY" }));
+      else p.ws.send(JSON.stringify({ type: "PAIR_TIMEOUT" }));
+    } catch {
+    }
+    setTimeout(() => {
+      try {
+        p.ws.close();
+      } catch {
+        try {
+          p.ws.terminate();
+        } catch {
+        }
+      }
+    }, 400);
+    pairResolvedFrame(requestId, decision);
+    console.log(`[pair] watch pairing ${requestId} -> ${decision}`);
+  }
+  function startWatchPairing(ws2, url) {
+    ws2.pairing = true;
+    if (watchPairings.size >= 5) {
+      try {
+        ws2.send(JSON.stringify({ type: "PAIR_DENY", reason: "\u914D\u5BF9\u8BF7\u6C42\u8FC7\u591A\uFF0C\u8BF7\u7A0D\u540E\u518D\u8BD5" }));
+      } catch {
+      }
+      try {
+        ws2.close();
+      } catch {
+      }
+      return;
+    }
+    const requestId = randomUUID5();
+    const name = (url.searchParams.get("name") ?? "\u624B\u8868").slice(0, 24);
+    const code = String(Math.floor(1e5 + Math.random() * 9e5));
+    const entry = { name, code, ws: ws2, timer: setTimeout(() => resolvePairing(requestId, "timeout"), PAIR_TTL_MS) };
+    watchPairings.set(requestId, entry);
+    ws2.on("close", () => {
+      if (watchPairings.get(requestId)?.ws === ws2) {
+        watchPairings.delete(requestId);
+        clearTimeout(entry.timer);
+        pairResolvedFrame(requestId, "timeout");
+      }
+    });
+    try {
+      ws2.send(JSON.stringify({ type: "PAIR_PENDING", request_id: requestId, code, expires_in: Math.floor(PAIR_TTL_MS / 1e3) }));
+    } catch {
+    }
+    lanBroadcast({
+      seq: 0,
+      session_id: "",
+      ts: Date.now(),
+      type: "PAIR_REQUEST",
+      payload: { request_id: requestId, name, code, expires_in: Math.floor(PAIR_TTL_MS / 1e3) }
+    });
+    console.log(`[pair] watch pairing request id=${requestId} name=${name}`);
+  }
   wss.on("connection", (ws2, url) => {
     const clientId = `web-${connectionCounter++}`;
     ws2.isAlive = true;
@@ -40696,17 +44554,34 @@ function startServer(bus2, mgr2, cfg2, opts = {}) {
       ws2.isAlive = true;
     });
     ws2.on("error", () => void 0);
+    if (url.searchParams.get("pair") === "1") {
+      startWatchPairing(ws2, url);
+      return;
+    }
     const lastSeq = Number(url.searchParams.get("last_seq") ?? "0") || 0;
     const replay = lastSeq > 0 && !bus2.isBeyondBuffer(lastSeq) ? bus2.replayAfter(lastSeq) : null;
     if (replay && replay.length <= 200) {
       for (const env of replay) ws2.send(JSON.stringify(env));
     } else {
+      const snapLogs = mgr2.buildSnapshotLogs();
       const snapshot = {
         seq: bus2.lastSeq(),
         session_id: "",
         ts: Date.now(),
         type: "SNAPSHOT",
-        payload: { sessions: mgr2.snapshot(), logs: mgr2.snapshotLogs(), server_time: Date.now() }
+        payload: {
+          sessions: mgr2.snapshot(),
+          logs: snapLogs.logs,
+          ...Object.keys(snapLogs.logs_truncated).length ? { logs_truncated: snapLogs.logs_truncated } : {},
+          server_time: Date.now(),
+          homedir: homedir7(),
+          models: listModels(mgr2.cfg.model),
+          // 云桥启用的 relay 附带自身设备 id（= CloudConfig.relayDev 同源值）：
+          // 客户端据此密码学匹配"LAN 直连条目"与"云桥条目"是同一台 relay，自动合并。
+          // wan_dev（F7）：手表 /wan 透传通道的凭据 dev，手机侧写进手表连接配置
+          ...opts.cloudRelayDev?.() ? { relay_dev: opts.cloudRelayDev() } : {},
+          ...opts.cloudWanDev?.() ? { wan_dev: opts.cloudWanDev() } : {}
+        }
       };
       ws2.send(JSON.stringify(snapshot));
     }
@@ -40733,6 +44608,17 @@ function startServer(bus2, mgr2, cfg2, opts = {}) {
         );
         return;
       }
+      if (cmd.type === "COMMAND_WATCH_GRANT") {
+        const p = cmd.payload;
+        const rid = typeof p.request_id === "string" ? p.request_id : "";
+        if (!watchPairings.has(rid)) {
+          ws2.send(JSON.stringify({ type: "COMMAND_ACK", command_id: cmd.command_id, ok: false, error: "\u914D\u5BF9\u8BF7\u6C42\u4E0D\u5B58\u5728\u6216\u5DF2\u8FC7\u671F" }));
+          return;
+        }
+        resolvePairing(rid, p.allow ? "allow" : "deny");
+        ws2.send(JSON.stringify({ type: "COMMAND_ACK", command_id: cmd.command_id, ok: true }));
+        return;
+      }
       const ack = mgr2.handleCommand(cmd, clientId);
       ws2.send(JSON.stringify({ type: "COMMAND_ACK", ...ack }));
     });
@@ -40740,6 +44626,7 @@ function startServer(bus2, mgr2, cfg2, opts = {}) {
   const unsubscribe = bus2.subscribe((env) => {
     const text = JSON.stringify(env);
     for (const client of wss.clients) {
+      if (client.pairing) continue;
       if (client.readyState === import_websocket.default.OPEN) client.send(text);
     }
   });
@@ -40766,6 +44653,51 @@ function startServer(bus2, mgr2, cfg2, opts = {}) {
     })
   };
 }
+async function handleNotify(req, res, mgr2, cfg2) {
+  const url = new URL(req.url ?? "/", "http://localhost");
+  if ((url.searchParams.get("token") ?? "") !== cfg2.token) {
+    res.writeHead(401).end("unauthorized");
+    return;
+  }
+  let body = "";
+  req.setEncoding("utf-8");
+  for await (const chunk of req) body += chunk;
+  try {
+    const p = JSON.parse(body);
+    if (p.mode === "confirm") {
+      const text = typeof p.text === "string" ? p.text.trim().slice(0, 120) : "";
+      if (!text) {
+        res.writeHead(400).end('{"error":"text \u4E0D\u80FD\u4E3A\u7A7A"}');
+        return;
+      }
+      const sessions2 = mgr2.snapshot();
+      const target2 = (p.session_id ? sessions2.find((s) => s.session_id === p.session_id) : void 0) || sessions2.find((s) => s.status === "WORKING" && s.external) || sessions2.find((s) => s.external) || sessions2[0];
+      if (!target2) {
+        res.writeHead(503).end('{"error":"\u65E0\u53EF\u6295\u9012\u4F1A\u8BDD"}');
+        return;
+      }
+      mgr2.notifyConfirm(target2.session_id, text);
+      res.writeHead(200, { "content-type": "application/json" }).end(JSON.stringify({ ok: true, mode: "confirm", session_id: target2.session_id }));
+      return;
+    }
+    const items = Array.isArray(p.done) ? p.done.filter((x) => typeof x === "string" && !!x).slice(0, 10) : [];
+    if (!items.length) {
+      res.writeHead(400).end('{"error":"done \u4E0D\u80FD\u4E3A\u7A7A"}');
+      return;
+    }
+    const sessions = mgr2.snapshot();
+    const target = (p.session_id ? sessions.find((s) => s.session_id === p.session_id) : void 0) || sessions.find((s) => s.status === "WORKING" && s.external) || sessions.find((s) => s.external) || sessions[0];
+    if (!target) {
+      res.writeHead(503).end('{"error":"\u65E0\u53EF\u6295\u9012\u4F1A\u8BDD"}');
+      return;
+    }
+    const remaining = target.todos ? target.todos.filter((t) => t.status !== "completed").length : 0;
+    mgr2.notifyDone(target.session_id, items, remaining);
+    res.writeHead(200, { "content-type": "application/json" }).end(JSON.stringify({ ok: true, session_id: target.session_id }));
+  } catch {
+    res.writeHead(400).end('{"error":"bad json"}');
+  }
+}
 async function handleBridgeHook(req, res, bridge, cfg2) {
   const remote = req.socket.remoteAddress ?? "";
   const isLoopback = remote === "127.0.0.1" || remote === "::1" || remote === "::ffff:127.0.0.1";
@@ -40789,42 +44721,83 @@ async function handleBridgeHook(req, res, bridge, cfg2) {
 var connectionCounter = 0;
 
 // src/cloud-identity.ts
-import { existsSync as existsSync6, readFileSync as readFileSync10, writeFileSync as writeFileSync6 } from "node:fs";
-import { join as join10 } from "node:path";
+import { existsSync as existsSync7, readFileSync as readFileSync12, writeFileSync as writeFileSync7 } from "node:fs";
+import { join as join11 } from "node:path";
+import { createHash, randomBytes } from "node:crypto";
 function loadOrCreateIdentity(dataDir2) {
-  const kpPath = join10(dataDir2, "cloud-keypair.json");
+  const kpPath = join11(dataDir2, "cloud-keypair.json");
   let keypair;
-  if (existsSync6(kpPath)) {
-    keypair = JSON.parse(readFileSync10(kpPath, "utf-8"));
+  if (existsSync7(kpPath)) {
+    keypair = JSON.parse(readFileSync12(kpPath, "utf-8"));
     if (!keypair.publicKey || !keypair.secretKey) throw new Error("cloud-keypair.json \u635F\u574F\uFF0C\u8BF7\u5220\u9664\u540E\u91CD\u542F\u91CD\u65B0\u751F\u6210\uFF08\u5DF2\u914D\u5BF9\u624B\u673A\u9700\u91CD\u65B0\u914D\u5BF9\uFF09");
   } else {
     keypair = generateKeyPair();
-    writeFileSync6(kpPath, JSON.stringify(keypair), "utf-8");
+    writeFileSync7(kpPath, JSON.stringify(keypair), "utf-8");
   }
-  const peersPath = join10(dataDir2, "cloud-peers.json");
+  const wanSecretPath = join11(dataDir2, "wan-secret");
+  let wanSecret = "";
+  if (existsSync7(wanSecretPath)) wanSecret = readFileSync12(wanSecretPath, "utf-8").trim();
+  if (!/^[0-9a-f]{32}$/.test(wanSecret)) {
+    wanSecret = randomBytes(16).toString("hex");
+    writeFileSync7(wanSecretPath, wanSecret, "utf-8");
+  }
+  const wanDev = "wt-" + createHash("sha256").update(wanSecret).digest("hex").slice(0, 16);
+  const peersPath = join11(dataDir2, "cloud-peers.json");
   const peers = /* @__PURE__ */ new Map();
-  if (existsSync6(peersPath)) {
+  if (existsSync7(peersPath)) {
     try {
-      const raw = JSON.parse(readFileSync10(peersPath, "utf-8"));
+      const raw = JSON.parse(readFileSync12(peersPath, "utf-8"));
       for (const [dev, entry] of Object.entries(raw)) peers.set(dev, entry);
     } catch {
     }
   }
+  const persistPeers = () => {
+    const obj = {};
+    for (const [k3, v] of peers) obj[k3] = v;
+    writeFileSync7(peersPath, JSON.stringify(obj, null, 2), "utf-8");
+  };
   return {
     keypair,
     relayDev: devId(keypair.publicKey, "rl"),
+    wanDev,
     peersPath,
     peers,
     addPeer(dev, entry) {
       peers.set(dev, entry);
-      const obj = {};
-      for (const [k3, v] of peers) obj[k3] = v;
-      writeFileSync6(peersPath, JSON.stringify(obj, null, 2), "utf-8");
+      persistPeers();
+    },
+    // 议题①踢除：Map 删 + 写穿落盘；幂等（不存在也成功）。通道侧联动见 CloudClient.kickPeer
+    removePeer(dev) {
+      if (!peers.delete(dev)) return;
+      persistPeers();
+    },
+    // last_seen 内存态：hello/ping 每次都 touch，不写盘（高频操作落盘没有意义，
+    // 重启清零 = 「未知」，UI 显示离线即可）
+    touchPeer(dev) {
+      const e = peers.get(dev);
+      if (e) e.last_seen = Date.now();
     }
   };
 }
 
 // src/cloud-client.ts
+var PEER_META_MAX = 120;
+var PEER_META_KEYS = ["name", "platform", "ua", "app"];
+function sanitizePeerMeta(raw) {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return void 0;
+  const src = raw;
+  const out = {};
+  let n = 0;
+  for (const k3 of PEER_META_KEYS) {
+    const v = src[k3];
+    if (typeof v !== "string") continue;
+    const s = v.trim();
+    if (!s) continue;
+    out[k3] = s.length > PEER_META_MAX ? s.slice(0, PEER_META_MAX) : s;
+    n++;
+  }
+  return n > 0 ? out : void 0;
+}
 var CloudClient = class {
   constructor(bus2, mgr2, cfg2, identity, pairCodes2, url) {
     this.bus = bus2;
@@ -40843,9 +44816,23 @@ var CloudClient = class {
   url;
   ws = null;
   phones = /* @__PURE__ */ new Map();
+  // #373 /wan 手表明文透传设备（wt-*）：桥可信通道，无密钥对；状态机与 phones 同构
+  wanWatches = /* @__PURE__ */ new Map();
   unpairedNotice = /* @__PURE__ */ new Map();
-  // 配对码爆破限流：10 分钟有效窗口内连续错码的 dev 直接静默丢弃（码空间 10^6）
+  // 配对码爆破限流（双层）：①按 dev——10 分钟窗口内连续 5 次错码的 dev 静默丢弃；
+  // ②全局预算（2026-09-09 F2 修复）——按 dev 计数可被「每 5 次换一个密钥对」绕过，
+  // 故全部 dev 合计错码超预算后本窗口内任何 pair_req（含正码）一律静默丢弃，
+  // 在线穷举速率坍缩到预算值（50 次/10min ≈ 0.083rps，任何码空间都安全）。
+  // 窗口过期自动重置：正常用户偶尔输错远够不着预算
   pairFails = /* @__PURE__ */ new Map();
+  pairBudgetN = 0;
+  pairBudgetStart = 0;
+  pairBudgetUntil = 0;
+  // 实例字段而非常量：测试可收紧（test-cloud.ts 全局预算用例）
+  pairBudgetMax = 50;
+  pairBudgetWindowMs = 6e5;
+  // F7 /wan 拒绝日志限频：未持凭据手表的帧在严格模式下静默丢弃，日志 30s 一条防刷屏
+  wanDropLoggedAt = 0;
   delayMs = 1e3;
   stopped = false;
   timer = null;
@@ -40854,6 +44841,8 @@ var CloudClient = class {
   hbTimer = null;
   // 桥闪断时记录断线前 active 的设备，重连后主动补发（见 connect 的 open 处理）
   resumeOnOpen = /* @__PURE__ */ new Set();
+  // #384b 近 60s 内 grant 过的登录设备：桥断连丢 ack 后重连补发（定时整体清空）
+  pendingGrantAcks = /* @__PURE__ */ new Map();
   unsubscribe;
   start() {
     this.connect();
@@ -40876,7 +44865,19 @@ var CloudClient = class {
         const devs = [...this.resumeOnOpen];
         this.resumeOnOpen.clear();
         console.log(`[cloud] auto-resume ${devs.length} device(s) after bridge reconnect: ${devs.join(",")}`);
-        for (const dev of devs) this.resumePhone(dev, this.phones.get(dev)?.lastSeq ?? 0);
+        for (const dev of devs) {
+          if (this.phones.has(dev)) this.resumePhone(dev, this.phones.get(dev)?.lastSeq ?? 0);
+          else if (this.wanWatches.has(dev)) this.resumeWan(dev, this.wanWatches.get(dev)?.lastSeq ?? 0);
+        }
+      }
+      if (this.pendingGrantAcks.size) {
+        const acks = [...this.pendingGrantAcks.keys()];
+        console.log(`[cloud] replay ${acks.length} login ack(s) after bridge reconnect`);
+        for (const dev of acks) this.sendSealed(dev, {
+          t: "pair_ack",
+          relay_dev: this.identity.relayDev,
+          relay_pubkey: this.identity.keypair.publicKey
+        });
       }
     });
     ws2.on("message", (raw) => {
@@ -40891,6 +44892,10 @@ var CloudClient = class {
       if (this.ws === ws2) {
         console.log(`[cloud] bridge disconnected ${this.tag}, retry in ${this.delayMs}ms`);
         for (const [dev, st2] of this.phones) {
+          if (st2.active) this.resumeOnOpen.add(dev);
+          st2.active = false;
+        }
+        for (const [dev, st2] of this.wanWatches) {
           if (st2.active) this.resumeOnOpen.add(dev);
           st2.active = false;
         }
@@ -40950,39 +44955,74 @@ var CloudClient = class {
     this.unpairedNotice.set(dev, now);
     this.send({ to: dev, data: { t: "pair_nack", error: reason } });
   }
+  // #325 扫码登录：已配对手机扫了网页端出示的二维码后，经此方法把会话公钥升格为
+  // 新已配对 peer 并主动推 pair_ack（与 6 位码 pair_req 成功路径同构——网页端
+  // 收到即落成云源，全程免输码）。多桥场景各桥都发：页面只连了其中一座，
+  // 未命中桥的帧自然丢弃；addPeer 在共享 identity 上做幂等
+  grantLogin(dev, pubkey, name) {
+    if (!this.identity.peers.get(dev)) {
+      this.identity.addPeer(dev, { pubkey, name, paired_at: Date.now() });
+      console.log(`[cloud] login granted dev=${dev} name=${name} via ${this.tag}`);
+      this.bus.emitTransient("PAIRED_DEVICE", { dev, name, action: "add" });
+    }
+    this.pendingGrantAcks.set(dev, Date.now());
+    if (this.pendingGrantAcks.size > 50) {
+      const now = Date.now();
+      for (const [d2, ts2] of this.pendingGrantAcks) if (now - ts2 > 6e4) this.pendingGrantAcks.delete(d2);
+    }
+    this.sendSealed(dev, {
+      t: "pair_ack",
+      relay_dev: this.identity.relayDev,
+      relay_pubkey: this.identity.keypair.publicKey
+    });
+    return true;
+  }
+  // 议题①踢除联动：先发明文 pair_nack 让设备立即「失联 + 停止重连」（复用未配对
+  // 提示协议，但不吃 notifyUnpaired 的 60s 节流——管理员动作必须直达；设备此刻
+  // 离线则帧自然丢失，它下次心跳会落入 drop-frame 分支再收一条），再停发下行。
+  // peers 移除在 index.ts 的 kicker 里先做（identity.removePeer），这里只管通道侧。
+  // 幂等：对不在 peers/phones 的 dev 调用无副作用（桥回 ROUTE_MISS 丢弃）
+  kickPeer(dev) {
+    this.send({ to: dev, data: { t: "pair_nack", error: "\u5DF2\u88AB\u7BA1\u7406\u5458\u79FB\u9664\uFF0C\u8BF7\u91CD\u65B0\u914D\u5BF9" } });
+    this.phones.delete(dev);
+    this.wanWatches.delete(dev);
+    this.resumeOnOpen.delete(dev);
+  }
   // 手机激活/恢复：缓冲内按 last_seq 补发，否则全量 SNAPSHOT（hello 与 ping-resume 共用）。
-  // 全量恢复时 SNAPSHOT 只带会话状态不带时间线日志，日志随后逐条 SESSION_LOG 密文流式补发
-  // （手机端 SESSION_LOG 处理器即 pushLog 追加，旧 APK 直接兼容）——所有日志塞进单帧会随
-  // 历史增长无限膨胀，迟早再次撞上桥的帧上限；流式每帧只有单条日志大小。
-  // 流式帧 seq 统一取 snapshot 时的 lastSeq：手机 lastSeq 不会因此前移，下次重连的 bus
-  // 补发从该 seq 之后开始，不会与已流式补发的旧日志重复。
+  // 全量恢复 = 单帧 SNAPSHOT 携带预算内日志（每会话最近 K 条 + 总字节上限，与 LAN 的
+  // ws-server 同一构建）。#408（2026-09-09 断连死循环根因）：此前日志逐条 SESSION_LOG
+  // 密文流式补发，历史涨到数千条时恢复即洪峰——CF 桥限流器把 relay 连接踢掉 → 重连 →
+  // auto-resume 再补 → 自喂养死循环；更早版本全量内联单帧则撞 CF Workers ws 1MiB 单帧
+  // 硬限。预算单帧两头都封死：无洪峰、帧有界（明文 ≤512KB → 密文 ~700KB < 900KB）。
   resumePhone(dev, lastSeq) {
     this.phones.set(dev, { lastSeq, active: true });
+    this.identity.touchPeer(dev);
     const replay = lastSeq > 0 && !this.bus.isBeyondBuffer(lastSeq) ? this.bus.replayAfter(lastSeq) : null;
     if (replay && replay.length <= 200) {
       for (const env of replay) this.sendSealed(dev, env);
       return;
     }
     const snapSeq = this.bus.lastSeq();
+    const snapLogs = this.mgr.buildSnapshotLogs();
     const snapshot = {
       seq: snapSeq,
       session_id: "",
       ts: Date.now(),
       type: "SNAPSHOT",
-      payload: { sessions: this.mgr.snapshot(), logs: {}, server_time: Date.now() }
+      // relay_dev 随云通道快照自报（与 ws-server 的 LAN 快照同源，#401 补强）：客户端
+      // 据此确认/补齐条目身份标记——云桥在线时同机的 LAN/云桥双条目也能归并。
+      // wan_dev（F7）：手机据此拼手表 /wan 连接配置的 dev 段（凭据即 dev）；
+      // 旧客户端忽略多余字段，向前兼容
+      payload: {
+        sessions: this.mgr.snapshot(),
+        logs: snapLogs.logs,
+        ...Object.keys(snapLogs.logs_truncated).length ? { logs_truncated: snapLogs.logs_truncated } : {},
+        server_time: Date.now(),
+        relay_dev: this.identity.relayDev,
+        wan_dev: this.identity.wanDev
+      }
     };
     this.sendSealed(dev, snapshot);
-    for (const [sid, logs] of Object.entries(this.mgr.snapshotLogs())) {
-      for (const entry of logs) {
-        this.sendSealed(dev, {
-          seq: snapSeq,
-          session_id: sid,
-          ts: entry.ts ?? Date.now(),
-          type: "SESSION_LOG",
-          payload: entry
-        });
-      }
-    }
   }
   onFrame(text) {
     let f;
@@ -40992,16 +45032,22 @@ var CloudClient = class {
       return;
     }
     if (f.type === "ROUTE_MISS" && f.to) {
-      const st2 = this.phones.get(f.to);
+      const st2 = this.phones.get(f.to) ?? this.wanWatches.get(f.to);
       if (st2?.active) {
         st2.active = false;
         console.log(`[cloud] route miss dev=${f.to}, mark inactive`);
       }
       return;
     }
+    const wanEnv = f.data;
+    if (f.from && wanEnv && typeof wanEnv === "object" && wanEnv.t === "wan" && typeof wanEnv.frame === "string") {
+      this.handleWan(f.from, wanEnv.frame);
+      return;
+    }
     const pairReq = f.data;
     if (f.from && pairReq && typeof pairReq === "object" && pairReq.t === "pair_req") {
       const pr2 = f.data;
+      const bc2 = pr2.bc === true;
       const pubkey = typeof pr2.pubkey === "string" ? pr2.pubkey : "";
       const dev = pubkey ? devId(pubkey, "wb") : "";
       if (!pubkey || dev !== f.from) {
@@ -41015,17 +45061,40 @@ var CloudClient = class {
         return;
       }
       if (pf) this.pairFails.delete(dev);
+      if (now - this.pairBudgetStart >= this.pairBudgetWindowMs) {
+        this.pairBudgetStart = now;
+        this.pairBudgetN = 0;
+      }
+      if (this.pairBudgetUntil > now) {
+        console.log(`[cloud] pair_req dropped dev=${dev}\uFF08\u5168\u5C40\u9519\u7801\u9884\u7B97\u8017\u5C3D\uFF0C${Math.ceil((this.pairBudgetUntil - now) / 1e3)}s \u540E\u91CD\u7F6E\uFF09`);
+        return;
+      }
       if (this.pairCodes?.consume(String(pr2.code ?? ""))) {
-        this.identity.addPeer(dev, { pubkey, name: typeof pr2.name === "string" ? pr2.name : "web", paired_at: Date.now() });
-        console.log(`[cloud] paired web dev=${dev}`);
+        const meta = sanitizePeerMeta(pr2.meta);
+        this.identity.addPeer(dev, {
+          pubkey,
+          name: typeof pr2.name === "string" ? pr2.name : "web",
+          paired_at: Date.now(),
+          ...meta ? { meta } : {}
+        });
+        console.log(`[cloud] paired web dev=${dev}${bc2 ? " via broadcast" : ""}`);
+        this.bus.emitTransient("PAIRED_DEVICE", {
+          dev,
+          name: typeof pr2.name === "string" ? pr2.name : "web",
+          action: "add"
+        });
       } else if (!this.identity.peers.get(dev)) {
         const n = (pf?.n ?? 0) + 1;
         this.pairFails.set(dev, { n, until: n >= 5 ? now + 6e5 : 0 });
+        if (++this.pairBudgetN >= this.pairBudgetMax) {
+          this.pairBudgetUntil = this.pairBudgetStart + this.pairBudgetWindowMs;
+          console.log(`[cloud] \u5168\u5C40\u9519\u7801\u9884\u7B97\u8017\u5C3D\uFF08${this.pairBudgetMax} \u6B21/\u7A97\u53E3\uFF09\uFF0C\u9759\u9ED8\u81F3\u9884\u7B97\u7A97\u53E3\u7ED3\u675F`);
+        }
         if (this.pairFails.size > 100) {
           for (const [d2, v] of this.pairFails) if (v.until <= now) this.pairFails.delete(d2);
         }
-        console.log(`[cloud] pair_req rejected dev=${f.from}`);
-        this.send({ to: f.from, data: seal({ t: "pair_nack", error: "\u914D\u5BF9\u7801\u65E0\u6548\u6216\u5DF2\u8FC7\u671F" }, pubkey, this.identity.keypair.secretKey) });
+        console.log(`[cloud] pair_req ${bc2 ? "broadcast miss" : "rejected"} dev=${f.from}`);
+        if (!bc2) this.send({ to: f.from, data: seal({ t: "pair_nack", error: "\u914D\u5BF9\u7801\u65E0\u6548\u6216\u5DF2\u8FC7\u671F" }, pubkey, this.identity.keypair.secretKey) });
         return;
       }
       this.sendSealed(f.from, { t: "pair_ack", relay_dev: this.identity.relayDev, relay_pubkey: this.identity.keypair.publicKey });
@@ -41058,6 +45127,7 @@ var CloudClient = class {
         this.resumePhone(f.from, lastSeq);
       } else {
         st2.lastSeq = lastSeq;
+        this.identity.touchPeer(f.from);
       }
       this.sendSealed(f.from, { t: "pong", ts: Date.now() });
       return;
@@ -41073,8 +45143,94 @@ var CloudClient = class {
   onEnv(env) {
     if (!this.ws || this.ws.readyState !== wrapper_default.OPEN) return;
     for (const [dev, st2] of this.phones) {
-      if (st2.active && this.sendSealed(dev, env)) st2.lastSeq = env.seq;
+      if (st2.active && this.sendSealed(dev, env) && env.seq > st2.lastSeq) st2.lastSeq = env.seq;
     }
+    for (const [dev, st2] of this.wanWatches) {
+      if (st2.active) {
+        this.sendWan(dev, env);
+        if (env.seq > st2.lastSeq) st2.lastSeq = env.seq;
+      }
+    }
+  }
+  // ---------- #373 /wan 手表明文透传 ----------
+  sendWan(dev, obj) {
+    this.send({ to: dev, data: { t: "wan", frame: JSON.stringify(obj) } });
+  }
+  // F7 收口：公共桥（token 公开，任意人可注册任意 dev）上 /wan 明文通道等于无鉴权
+  // 全权信道——默认拒绝未持本机 wan 凭据（identity.wanDev，data/wan-secret 派生）
+  // 的手表；自建桥维持「桥可信」原语义（手表仍可用 wt-app1 等任意 dev）。
+  // CCR_WAN_STRICT=1 强制全桥严格 / =0 强制全桥放开（自建公共桥运营者可选严格）
+  get wanStrict() {
+    const v = process.env.CCR_WAN_STRICT;
+    if (v === "1") return true;
+    if (v === "0") return false;
+    try {
+      const h = new URL(this.url ?? this.cfg.cloudUrl).hostname;
+      return h === "cc.humumu.online" || h === "cc-deck.humumu.online";
+    } catch {
+      return true;
+    }
+  }
+  // 手表上行帧：hello（连接/重连，带 last_seq 增量恢复）或 Command（ACK 明文信封回发）
+  handleWan(dev, frameText) {
+    if (!dev.startsWith("wt-")) {
+      console.log(`[cloud] wan frame from non-watch dev=${dev}, drop`);
+      return;
+    }
+    if (this.wanStrict && dev !== this.identity.wanDev) {
+      const now = Date.now();
+      if (now - this.wanDropLoggedAt > 3e4) {
+        this.wanDropLoggedAt = now;
+        console.log(`[cloud] wan frame from untrusted watch dev=${dev} dropped\uFF08\u4E25\u683C\u6A21\u5F0F\uFF0C\u51ED\u636E dev=${this.identity.wanDev}\uFF0Cbridge=${this.tag}\uFF09`);
+      }
+      return;
+    }
+    let obj;
+    try {
+      obj = JSON.parse(frameText);
+    } catch {
+      this.sendWan(dev, { type: "COMMAND_ACK", command_id: "?", ok: false, error: "bad json" });
+      return;
+    }
+    const o = obj;
+    if (o && o.t === "hello") {
+      this.resumeWan(dev, typeof o.last_seq === "number" ? o.last_seq : 0);
+      return;
+    }
+    const cmd = obj;
+    if (typeof cmd === "object" && cmd && typeof cmd.command_id === "string" && typeof cmd.type === "string") {
+      const ack = this.mgr.handleCommand(cmd, `wan-${dev}`);
+      this.sendWan(dev, { type: "COMMAND_ACK", ...ack });
+      return;
+    }
+    this.sendWan(dev, { type: "COMMAND_ACK", command_id: "?", ok: false, error: "invalid command shape" });
+  }
+  // 手表恢复：与 resumePhone 同构（缓冲内增量补发 / 全量 SNAPSHOT 单帧带预算日志），
+  // 明文信封下发。#408：流式日志洪峰在 /wan 通道同样会踢桥，与云手机路径一并根治
+  resumeWan(dev, lastSeq) {
+    const known = this.wanWatches.has(dev);
+    this.wanWatches.set(dev, { lastSeq, active: true });
+    if (!known) console.log(`[cloud] watch ${dev} online via wan`);
+    const replay = lastSeq > 0 && !this.bus.isBeyondBuffer(lastSeq) ? this.bus.replayAfter(lastSeq) : null;
+    if (replay && replay.length <= 200) {
+      for (const env of replay) this.sendWan(dev, env);
+      return;
+    }
+    const snapSeq = this.bus.lastSeq();
+    const snapLogs = this.mgr.buildSnapshotLogs();
+    const snapshot = {
+      seq: snapSeq,
+      session_id: "",
+      ts: Date.now(),
+      type: "SNAPSHOT",
+      payload: {
+        sessions: this.mgr.snapshot(),
+        logs: snapLogs.logs,
+        ...Object.keys(snapLogs.logs_truncated).length ? { logs_truncated: snapLogs.logs_truncated } : {},
+        server_time: Date.now()
+      }
+    };
+    this.sendWan(dev, snapshot);
   }
   close() {
     this.stopped = true;
@@ -41086,18 +45242,38 @@ var CloudClient = class {
 };
 
 // src/pairing.ts
-function createPairingCodes(ttlMs = 5 * 60 * 1e3) {
+import { randomInt } from "node:crypto";
+var TTL_FLOOR_MS = 6e4;
+var TTL_CEIL_MS = 30 * 6e4;
+function clampTtl(ms) {
+  return Math.min(Math.max(Math.round(ms), TTL_FLOOR_MS), TTL_CEIL_MS);
+}
+function defaultTtlFromEnv() {
+  const raw = Number(process.env.CCR_PAIR_TTL_MS);
+  return Number.isFinite(raw) && raw > 0 ? clampTtl(raw) : 5 * 6e4;
+}
+function isWeakCode(code) {
+  if (/^(\d)\1+$/.test(code)) return true;
+  return "0123456789".includes(code) || "9876543210".includes(code);
+}
+function createPairingCodes(ttlMs) {
+  const baseTtl = ttlMs ?? defaultTtlFromEnv();
   const codes = /* @__PURE__ */ new Map();
   return {
-    issue() {
+    issue(o = {}) {
       const now = Date.now();
+      const eff = o.ttlMs && o.ttlMs > 0 ? clampTtl(o.ttlMs) : baseTtl;
       for (const [c, v] of codes) if (v.expires < now) codes.delete(c);
+      if (o.code && /^\d{6,8}$/.test(o.code) && !isWeakCode(o.code)) {
+        codes.set(o.code, { expires: now + eff });
+        return { code: o.code, expires_in: Math.floor(eff / 1e3) };
+      }
       let code = "";
       do {
-        code = String(Math.floor(1e5 + Math.random() * 9e5));
+        code = String(randomInt(1e7, 1e8));
       } while (codes.has(code));
-      codes.set(code, { expires: now + ttlMs });
-      return { code, expires_in: Math.floor(ttlMs / 1e3) };
+      codes.set(code, { expires: now + eff });
+      return { code, expires_in: Math.floor(eff / 1e3) };
     },
     consume(code) {
       const v = codes.get(code);
@@ -41114,6 +45290,30 @@ function printQr(text, label) {
   console.log(`
 ${label}`);
   import_qrcode_terminal.default.generate(text, { small: true });
+}
+
+// src/mdns.ts
+var import_bonjour_service = __toESM(require_dist(), 1);
+function advertiseRelay(port, name) {
+  try {
+    const bonjour = new import_bonjour_service.default();
+    const service = bonjour.publish({ name, type: "ccdeck", port, txt: { v: "1" } });
+    for (const emitter of [bonjour, service]) {
+      emitter.on?.("error", () => void 0);
+    }
+    return {
+      stop: () => {
+        try {
+          service.stop();
+          bonjour.destroy();
+        } catch {
+        }
+      }
+    };
+  } catch {
+    return { stop: () => {
+    } };
+  }
 }
 
 // src/index.ts
@@ -41145,7 +45345,7 @@ if (cliArgs.has("--pair")) {
   let port = cfg.port;
   let bridgeToken = cfg.bridgeToken;
   try {
-    const b = JSON.parse(readFileSync11(join11(cfg.dataDir, "bridge.json"), "utf-8"));
+    const b = JSON.parse(readFileSync13(join12(cfg.dataDir, "bridge.json"), "utf-8"));
     if (b.port) port = b.port;
     if (b.token) bridgeToken = b.token;
   } catch {
@@ -41166,7 +45366,8 @@ if (cliArgs.has("--pair")) {
     const d2 = await r.json();
     console.log("");
     console.log("\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550");
-    console.log(`  \u4E91\u6865\u914D\u5BF9\u7801\uFF1A${d2.code.slice(0, 3)} ${d2.code.slice(3)}`);
+    const half = Math.floor(d2.code.length / 2);
+    console.log(`  \u4E91\u6865\u914D\u5BF9\u7801\uFF1A${d2.code.slice(0, half)} ${d2.code.slice(half)}`);
     console.log("\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550");
     console.log(`${Math.round(d2.expires_in / 60)} \u5206\u949F\u5185\u6709\u6548\u3001\u4E00\u6B21\u6027\u3002\u5728\u5F02\u5730\u7F51\u9875\u7AEF\uFF08${cfg.cloudUrls[0] ?? "\u4E91\u6865"}\uFF09\u6216`);
     console.log("\u624B\u673A App\u300C\u914D\u5BF9\u7801\u300D\u5165\u53E3\u8F93\u5165\u5373\u53EF\u63A5\u5165\u672C\u673A relay\u3002");
@@ -41195,14 +45396,14 @@ if (cliArgs.has("--daemon")) {
     process.exit(1);
   }
   const rest = process.argv.slice(2).filter((a) => a !== "--daemon");
-  const logFd = openSync3(join11(cfg.dataDir, "relay.log"), "a");
+  const logFd = openSync3(join12(cfg.dataDir, "relay.log"), "a");
   const child = spawn3(process.execPath, [fileURLToPath4(import.meta.url), ...rest], {
     detached: true,
     stdio: ["ignore", logFd, logFd],
     env: { ...process.env, CC_DECK_DAEMON: "1" }
   });
   child.unref();
-  console.log(`CC Deck Relay \u5DF2\u8F6C\u540E\u53F0\u8FD0\u884C\uFF08\u65E5\u5FD7: ${join11(cfg.dataDir, "relay.log")}\uFF09`);
+  console.log(`CC Deck Relay \u5DF2\u8F6C\u540E\u53F0\u8FD0\u884C\uFF08\u65E5\u5FD7: ${join12(cfg.dataDir, "relay.log")}\uFF09`);
   process.exit(0);
 }
 function pidIsNode(pid) {
@@ -41215,7 +45416,7 @@ function pidIsNode(pid) {
       });
       return /node/i.test(out);
     }
-    if (existsSync7("/proc")) return readFileSync11(`/proc/${pid}/comm`, "utf-8").includes("node");
+    if (existsSync8("/proc")) return readFileSync13(`/proc/${pid}/comm`, "utf-8").includes("node");
     return "node" === execFileSync2("ps", ["-o", "comm=", "-p", String(pid)], {
       encoding: "utf-8",
       timeout: 5e3
@@ -41225,9 +45426,9 @@ function pidIsNode(pid) {
   }
 }
 if (cliArgs.has("--stop")) {
-  const pidFile = join11(cfg.dataDir, "relay.pid");
+  const pidFile = join12(cfg.dataDir, "relay.pid");
   try {
-    const pid = Number(readFileSync11(pidFile, "utf-8").trim());
+    const pid = Number(readFileSync13(pidFile, "utf-8").trim());
     if (pid > 0 && pidIsNode(pid)) {
       process.kill(pid);
       console.log(`CC Deck Relay \u5DF2\u505C\u6B62\uFF08pid ${pid}\uFF09`);
@@ -41238,12 +45439,12 @@ if (cliArgs.has("--stop")) {
     console.log("\u672A\u53D1\u73B0\u8FD0\u884C\u4E2D\u7684 CC Deck Relay");
   }
   try {
-    rmSync2(pidFile);
+    rmSync3(pidFile);
   } catch {
   }
   process.exit(0);
 }
-var persistPath = join11(cfg.dataDir, "events.ndjson");
+var persistPath = join12(cfg.dataDir, "events.ndjson");
 var prior = loadEvents(persistPath);
 var kept = compactEvents(prior);
 if (prior.length !== kept.length) rewriteFile(persistPath, kept);
@@ -41265,7 +45466,15 @@ var pairCodes = createPairingCodes();
 if (cfg.cloudUrls.length) {
   cloudIdentity = loadOrCreateIdentity(cfg.dataDir);
   mgr.setCloud(cloudIdentity);
-  mgr.setPairIssuer(() => pairCodes.issue());
+  mgr.setPairIssuer((o) => pairCodes.issue(o));
+  mgr.setLoginGranter((dev, pk2, name) => {
+    for (const c of cloudClients) c.grantLogin(dev, pk2, name);
+    return true;
+  });
+  mgr.setPeerKicker((dev) => {
+    cloudIdentity?.removePeer(dev);
+    for (const c of cloudClients) c.kickPeer(dev);
+  });
   if (cfg.cloudToken) {
     for (const url of cfg.cloudUrls) {
       const c = new CloudClient(bus, mgr, cfg, cloudIdentity, pairCodes, url);
@@ -41277,17 +45486,23 @@ if (cfg.cloudUrls.length) {
 startServer(bus, mgr, cfg, {
   cloudHasPhones: () => cloudClients.some((c) => c.hasActivePhones()),
   ...cloudClients.length ? { pairCodes } : {},
+  // relay_dev 随 SNAPSHOT 下发（云桥启用即有身份，含未设 cloudToken 的仅配对场景）：
+  // 客户端据此证明 LAN 直连条目与云桥条目是同一台 relay，自动合并重复条目。
+  // wan_dev（F7）：手表 /wan 凭据 dev，手机端拼进手表连接配置（旧客户端自动忽略）
+  ...cloudIdentity ? { cloudRelayDev: () => cloudIdentity.relayDev } : {},
+  ...cloudIdentity ? { cloudWanDev: () => cloudIdentity.wanDev } : {},
   // daemon 子进程 listen 成功后自写 pid（父进程不预写，端口被占时不留死 pid）
   onReady: () => {
+    advertiseRelay(cfg.port, `CC Deck Relay (${hostname()})`);
     if (process.env.CC_DECK_DAEMON === "1") {
-      writeFileSync7(join11(cfg.dataDir, "relay.pid"), String(process.pid), "utf-8");
+      writeFileSync8(join12(cfg.dataDir, "relay.pid"), String(process.pid), "utf-8");
     }
     const bridgeJson = JSON.stringify({ port: cfg.port, token: cfg.bridgeToken });
-    writeFileSync7(join11(cfg.dataDir, "bridge.json"), bridgeJson, "utf-8");
-    const hookHome = join11(homedir7(), ".cc-deck", "data");
-    if (cfg.dataDir !== hookHome && existsSync7(hookHome)) {
+    writeFileSync8(join12(cfg.dataDir, "bridge.json"), bridgeJson, "utf-8");
+    const hookHome = join12(homedir8(), ".cc-deck", "data");
+    if (cfg.dataDir !== hookHome && existsSync8(hookHome)) {
       try {
-        writeFileSync7(join11(hookHome, "bridge.json"), bridgeJson, "utf-8");
+        writeFileSync8(join12(hookHome, "bridge.json"), bridgeJson, "utf-8");
       } catch {
       }
     }
@@ -41297,7 +45512,7 @@ console.log("CC Deck Relay \u5DF2\u542F\u52A8");
 console.log(`  \u6A21\u578B:   ${cfg.model}`);
 console.log(`  \u7AEF\u53E3:   ${cfg.port}`);
 console.log(`  \u5386\u53F2:   ${persistPath}\uFF08\u6062\u590D ${adopted} \u4E2A\u4F1A\u8BDD\uFF09`);
-console.log(`  \u6865\u63A5:   ${join11(cfg.dataDir, "bridge.json")}\uFF08\u5916\u90E8 CLI \u4F1A\u8BDD\u7ECF hooks \u63A5\u5165\uFF09`);
+console.log(`  \u6865\u63A5:   ${join12(cfg.dataDir, "bridge.json")}\uFF08\u5916\u90E8 CLI \u4F1A\u8BDD\u7ECF hooks \u63A5\u5165\uFF09`);
 console.log(
   cloudIdentity ? `  \u4E91\u6865:   ${cfg.cloudUrls.join(" + ")}\uFF08dev=${cloudIdentity.relayDev}\uFF0C\u5DF2\u914D\u5BF9 ${cloudIdentity.peers.size} \u53F0\u8BBE\u5907${cfg.cloudToken ? "" : "\uFF1B\u672A\u8BBE CCR_CLOUD_TOKEN\uFF0C\u4EC5\u53EF\u914D\u5BF9\u4E0D\u53EF\u8FDE\u6865"}\uFF09` : `  \u4E91\u6865:   \u672A\u542F\u7528\uFF08\u672A\u8BBE\u7F6E CCR_CLOUD_URL\uFF09`
 );

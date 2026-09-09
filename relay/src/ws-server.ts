@@ -261,7 +261,11 @@ export function startServer(
       // 带 Origin（跨源页面）：白名单回显放行；无 Origin：同源 fetch / 本机进程，认 Host。
       // Host 浏览器不可伪造；能伪造的非浏览器进程本来就能直接读 token 文件，非此端点威胁面。
       let allowOrigin = "";
-      if (origin) {
+      // #43 回环豁免：请求落在本机（Host=loopback）时 Origin 一律放行——本机页面/
+      // webview（tauri/electron 的 Origin:null）领码 Failed to fetch 根修；本机到本机的跨源检查无安全意义
+      const reqLb = (req.headers.host ?? "").split(":")[0] === "127.0.0.1" || (req.headers.host ?? "").split(":")[0] === "localhost";
+      if (origin && reqLb) allowOrigin = origin === "null" ? "*" : origin;
+      else if (origin) {
         try {
           const u = new URL(origin);
           if (TRUSTED_WEB_ORIGINS.includes(u.origin) || hostTrusted(u.hostname)) allowOrigin = origin;
@@ -312,7 +316,10 @@ export function startServer(
       const ips = localIps();
       const hostOk = (h: string) => h === "localhost" || h === "127.0.0.1" || ips.has(h);
       let acao = "";
-      if (origin) {
+      // #43 回环豁免（同 /local-info）：exe webview Origin:null 直通
+      const reqLb2 = (req.headers.host ?? "").split(":")[0] === "127.0.0.1" || (req.headers.host ?? "").split(":")[0] === "localhost";
+      if (origin && reqLb2) acao = origin === "null" ? "*" : origin;
+      else if (origin) {
         try {
           const u = new URL(origin);
           if (TRUSTED_WEB_ORIGINS.includes(u.origin) || hostOk(u.hostname)) acao = origin;

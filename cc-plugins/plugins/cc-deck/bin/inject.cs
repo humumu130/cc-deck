@@ -1,10 +1,14 @@
 // 终端按键注入器：AttachConsole + CONIN$ + WriteConsoleInput（不抢焦点）
 // 用法: inject.exe <pid> <text> [noenter]   正常文本+回车（noenter=只打字不提交）
 //       inject.exe <pid> --esc              发送一个 Esc 键（打断生成）
-// 退出码: 0=成功 1=attach 失败（进程不存在/无控制台） 2=写失败 3=参数错 4=CONIN$ 打开失败 5=内部异常
+//       inject.exe <pid> --peek <file> [rows]  只读快照：读目标控制台可见区末尾 rows 行
+//                                              （默认 20）写入 file（UTF-8，每行一行，
+//                                              行尾空格已裁）。用于「防抢发」检测 CLI
+//                                              输入框是否有人工输入，不向目标写任何按键。
+// 退出码: 0=成功 1=attach 失败（进程不存在/无控制台） 2=写失败 3=参数错 4=CONIN$/CONOUT$ 打开失败 5=内部异常 6=屏幕缓冲读取失败
 // 关键教训：本进程做过 FreeConsole/AttachConsole 切换后绝不能再碰 System.Console——
 // 句柄状态不一致会引爆 .NET 运行时且连异常都打印不出来（实测"无法打印异常字符串"崩溃），
-// 因此结果只用退出码表达，不输出任何文字。
+// 因此结果只用退出码表达，不输出任何文字（--peek 的结果走文件，同样不碰 Console）。
 // 编译: csc -nologo -out:inject.exe inject.cs（由 relay/src/injector.ts 自动完成）
 using System;
 using System.Collections.Generic;
@@ -17,6 +21,24 @@ class CcrInject
     [DllImport("kernel32.dll", SetLastError = true, CharSet = CharSet.Unicode)] static extern IntPtr CreateFileW(string name, uint access, uint share, IntPtr sa, uint disp, uint flags, IntPtr template);
     // 必须显式 W 版：默认会解析到 A 版（按 1 字节 ANSI 解释字符），中文被截断成低字节
     [DllImport("kernel32.dll", SetLastError = true, CharSet = CharSet.Unicode)] static extern bool WriteConsoleInputW(IntPtr h, INPUT_RECORD[] rec, uint n, out uint written);
+    [DllImport("kernel32.dll", SetLastError = true)] static extern bool GetConsoleScreenBufferInfo(IntPtr h, out CONSOLE_SCREEN_BUFFER_INFO info);
+    [DllImport("kernel32.dll", SetLastError = true, CharSet = CharSet.Unicode)] static extern bool ReadConsoleOutputCharacterW(IntPtr h, System.Text.StringBuilder chars, uint len, COORD origin, out uint read);
+
+    [StructLayout(LayoutKind.Sequential)]
+    struct COORD { public short X, Y; }
+
+    [StructLayout(LayoutKind.Sequential)]
+    struct SMALL_RECT { public short Left, Top, Right, Bottom; }
+
+    [StructLayout(LayoutKind.Sequential)]
+    struct CONSOLE_SCREEN_BUFFER_INFO
+    {
+        public COORD dwSize;
+        public COORD dwCursorPosition;
+        public ushort wAttributes;
+        public SMALL_RECT srWindow;
+        public short dwMaximumWindowSizeX, dwMaximumWindowSizeY;
+    }
 
     // 字段全部用 Blittable 类型（int 代 BOOL、ushort 代 WCHAR）：bool/char 是非 Blittable，
     // marshaler 会按 DllImport 的 CharSet（默认 Ansi）转换整个结构体导致布局错乱
@@ -52,6 +74,39 @@ class CcrInject
         return r;
     }
 
+    // --peek：只读快照目标控制台可见区末尾 N 行（防抢发检测用）。结果写文件（全程
+    // 不碰 System.Console），文件写在 FreeConsole 之后，避免句柄状态问题。
+    static int Peek(uint pid, string outfile, string rowsArg)
+    {
+        int rows = 20;
+        if (rowsArg != null && (!int.TryParse(rowsArg, out rows) || rows < 1 || rows > 200)) return 3;
+        FreeConsole();
+        if (!AttachConsole(pid)) return 1;
+        IntPtr h = CreateFileW("CONOUT$", 0x80000000, 0x00000003, IntPtr.Zero, 3, 0, IntPtr.Zero); // GENERIC_READ, share rw
+        if (h == IntPtr.Zero || h == new IntPtr(-1)) { FreeConsole(); return 4; }
+        CONSOLE_SCREEN_BUFFER_INFO info;
+        if (!GetConsoleScreenBufferInfo(h, out info)) { FreeConsole(); return 6; }
+        short top = (short)(info.srWindow.Bottom - (rows - 1));
+        if (top < info.srWindow.Top) top = info.srWindow.Top;
+        short width = (short)(info.srWindow.Right - info.srWindow.Left + 1);
+        if (width < 1) { FreeConsole(); return 6; }
+        var sb = new System.Text.StringBuilder();
+        for (short r = top; r <= info.srWindow.Bottom; r++)
+        {
+            var line = new System.Text.StringBuilder(width + 1);
+            uint read;
+            if (!ReadConsoleOutputCharacterW(h, line, (uint)width, new COORD { X = info.srWindow.Left, Y = r }, out read))
+            {
+                FreeConsole();
+                return 6;
+            }
+            sb.AppendLine(line.ToString(0, (int)read).TrimEnd());
+        }
+        FreeConsole();
+        System.IO.File.WriteAllText(outfile, sb.ToString(), new System.Text.UTF8Encoding(false));
+        return 0;
+    }
+
     static int Main(string[] args)
     {
         try
@@ -59,6 +114,7 @@ class CcrInject
             if (args.Length < 2) return 3;
             uint pid;
             if (!uint.TryParse(args[0], out pid)) return 3;
+            if (args.Length >= 3 && args[1] == "--peek") return Peek(pid, args[2], args.Length >= 4 ? args[3] : null);
             bool esc = args[1] == "--esc";
             string text = args[1];
             bool enter = !esc && (args.Length < 3 || args[2] != "noenter");

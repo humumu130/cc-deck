@@ -420,7 +420,7 @@
   .gp-pair-acts { width: 148px; flex: none; justify-content: center; }
   /* #411 relay 页自动展码：8 格码位一行（grid 1fr 格宽自适应，窄容器自动收敛不下溢），
      空格=占位格、领到码逐位填数字并亮边；下方 meta 行=倒计时文案 + 手动「刷新」小钮 */
-  .gp-code-cells { display: grid; grid-template-columns: repeat(8, minmax(0, 1fr)); gap: 4px; max-width: 196px; }
+  .gp-code-cells { font: 700 26px/1.15 var(--mono, ui-monospace, Consolas, monospace); letter-spacing: 3px; color: var(--text); max-width: 220px; white-space: nowrap; }
   .gp-code-cells i {
     display: flex; align-items: center; justify-content: center;
     height: 30px; border: 1px solid var(--gp-border); border-radius: 6px; background: var(--gp-input);
@@ -1610,7 +1610,7 @@
           <div class="gp-card gp-pair">
             <div class="gp-pair-info">
               <div class="gp-pair-t">8 位配对码</div>
-              <div class="gp-code-cells" id="pdCodeCells" aria-label="8 位配对码"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>
+              <div class="gp-code-cells" id="pdCodeCells" aria-label="8 位配对码"></div>
               <div class="pd-code-meta"><span id="pdCodeExp"></span><button type="button" class="gp-mini-btn" id="pdCodeRefresh" title="立即换一枚新码">刷新</button></div>
               <div class="pair-hint" id="pairHint">进页自动领码 · 到期自动换新</div>
             </div>
@@ -4281,7 +4281,7 @@ document.addEventListener("click", (ev) => {
 
 // ⚙ 设置浮层（#317）：显示项为散装开关的镜像（点行 = 触发原按钮再回读状态），
 // 服务器管理不进浮层——左栏常驻面板已是高频区，与手机抽屉同为一级入口
-const CONSOLE_VERSION = "0.3.34";
+const CONSOLE_VERSION = "0.4.0";
 // #396 拨杆同步：滑块移到 idx 档（transform 过渡），选中档文字加 .on（白字压品牌色滑块上）
 function setLever(el, idx) {
   if (!el) return;
@@ -5737,10 +5737,11 @@ function pdSetMeta(txt, isErr) {
   if (btn) btn.classList.toggle("attn", !!isErr);
 }
 function pdFillCells(code) {
+  // 用户拍板（2026-09-09）：去八格框，直接平铺大字
   const box = $("pdCodeCells");
   if (!box) return;
   box.classList.toggle("on", !!code);
-  Array.from(box.children).forEach((c, i) => { c.textContent = code ? (code[i] ?? "") : ""; });
+  box.textContent = code || "";
 }
 function pdRenderLeft() {
   const left = Math.max(0, Math.ceil((pdDeadline - Date.now()) / 1000));
