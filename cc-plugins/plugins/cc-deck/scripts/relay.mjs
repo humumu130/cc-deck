@@ -10289,7 +10289,7 @@ import { join } from "node:path";
 import { homedir } from "node:os";
 function loadConfig() {
   const port = Number(process.env.CCR_PORT ?? 8787);
-  const dataDir2 = process.env.CCR_DATA_DIR ?? ("1" ? join(homedir(), ".cc-deck", "data") : join(process.cwd(), "data"));
+  const dataDir2 = process.env.CCR_DATA_DIR ?? (process.env.CC_DECK_PLUGIN ? join(homedir(), ".cc-deck", "data") : join(process.cwd(), "data"));
   mkdirSync(dataDir2, { recursive: true });
   const envToken = process.env.CCR_TOKEN;
   const tokenFile = join(dataDir2, "token");
@@ -39008,7 +39008,7 @@ var vLt = D(() => $Y(sm()));
 var sP = D(() => A({ source: bu().describe("Where to fetch the marketplace from"), installLocation: g().optional().describe("Local cache path where marketplace manifest is stored (auto-generated if not provided)"), autoUpdate: R().optional().describe("Whether to automatically update this marketplace and its installed plugins on startup") }));
 var xb = D(() => A({ serverName: g().regex(/^[a-zA-Z0-9_-]+$/, "Server name can only contain letters, numbers, hyphens, and underscores").optional().describe("Name of the MCP server that users are allowed to configure"), serverCommand: I(g()).min(1, "Server command must have at least one element (the command)").optional().describe("Command array [command, ...args] to match exactly for allowed stdio servers"), serverUrl: g().optional().describe('URL pattern with wildcard support (e.g., "https://*.example.com/*") for allowed remote MCP servers') }).refine((e) => Ap([e.serverName !== void 0, e.serverCommand !== void 0, e.serverUrl !== void 0], Boolean) === 1, { message: 'Entry must have exactly one of "serverName", "serverCommand", or "serverUrl"' }));
 var vb = D(() => A({ serverName: g().min(1, "Server name must be non-empty").refine((e) => e.trim().length > 0, { message: "Server name must not be whitespace-only" }).refine((e) => e === e.trim(), { message: "Server name has leading or trailing whitespace and will never match (names are compared verbatim)" }).optional().describe("Name of the MCP server that is explicitly blocked"), serverCommand: I(g()).min(1, "Server command must have at least one element (the command)").optional().describe("Command array [command, ...args] to match exactly for blocked stdio servers"), serverUrl: g().optional().describe('URL pattern with wildcard support (e.g., "https://*.example.com/*") for blocked remote MCP servers') }).refine((e) => Ap([e.serverName !== void 0, e.serverCommand !== void 0, e.serverUrl !== void 0], Boolean) === 1, { message: 'Entry must have exactly one of "serverName", "serverCommand", or "serverUrl"' }));
-var AVe = new RegExp("[\\x00-\\x1f\\x7f-\\x9f\\u2028\\u2029]|\\p{DI}", "u");
+var AVe = /[\x00-\x1f\x7f-\x9f\u2028\u2029]|\p{DI}/u;
 function TVe(e) {
   let t = e.replaceAll("/", "\\");
   if (Ha(t)) return false;
@@ -43341,8 +43341,14 @@ var Bridge = class _Bridge {
     const pending = state.pending_inputs ?? [];
     const covered = pending.some((p) => key.includes(normKey(p.text)));
     if (covered) {
-      for (const p of pending) if (key.includes(normKey(p.text))) this.noteEnqueuedKey(id2, normKey(p.text));
-      this.noteEnqueuedKey(id2, key);
+      const hits = pending.filter((p) => key.includes(normKey(p.text)));
+      const kept2 = pending.filter((p) => !key.includes(normKey(p.text)));
+      this.mgr.setExternalPending(id2, kept2);
+      for (const p of hits) {
+        this.dropEnqueuedKey(id2, p.text);
+        this.noteUserMsg(id2, p.text, "promote");
+        this.mgr.pushExternalLog(id2, "user_message", truncate(p.text, 300), void 0, { full: truncate(p.text, 2e3) });
+      }
       return;
     }
     this.mgr.setExternalPending(id2, [...pending, { text, ts: Date.now() }]);
@@ -43378,11 +43384,11 @@ var Bridge = class _Bridge {
     const consumed = this.consumePendingTexts(id2, text);
     if (consumed.length) {
       for (const t of consumed) {
-        if (!this.recentlyLogged(id2, t)) this.mgr.pushExternalLog(id2, "user_message", truncate(t, 300));
+        if (!this.recentlyLogged(id2, t)) this.mgr.pushExternalLog(id2, "user_message", truncate(t, 300), void 0, { full: truncate(t, 2e3) });
         this.noteUserMsg(id2, t, "promote");
       }
     } else {
-      this.mgr.pushExternalLog(id2, "user_message", text);
+      this.mgr.pushExternalLog(id2, "user_message", text, void 0, { full: truncate(prompt, 2e3) });
     }
     this.noteUserMsg(id2, text, "promote");
   }
@@ -43522,7 +43528,7 @@ var Bridge = class _Bridge {
       this.mgr.setExternalPending(sessionId, list);
       this.dropEnqueuedKey(sessionId, promoted.text);
       this.noteUserMsg(sessionId, promoted.text, "promote");
-      this.mgr.pushExternalLog(sessionId, "user_message", truncate(promoted.text, 300));
+      this.mgr.pushExternalLog(sessionId, "user_message", truncate(promoted.text, 300), void 0, { full: truncate(promoted.text, 2e3) });
       return true;
     }
     for (let s = 0; s < list.length; s++) {
@@ -43537,21 +43543,24 @@ var Bridge = class _Bridge {
           for (const h of hits) {
             this.dropEnqueuedKey(sessionId, h.text);
             this.noteUserMsg(sessionId, h.text, "promote");
-            this.mgr.pushExternalLog(sessionId, "user_message", truncate(h.text, 300));
+            this.mgr.pushExternalLog(sessionId, "user_message", truncate(h.text, 300), void 0, { full: truncate(h.text, 2e3) });
           }
           this.noteUserMsg(sessionId, prompt, "promote");
           return true;
         }
       }
     }
-    const subHits = list.filter((p) => key.includes(normKey(p.text)));
+    const subHits = list.filter((p) => {
+      const pk2 = normKey(p.text);
+      return key.includes(pk2) || pk2.length > 120 && key.includes(pk2.slice(0, 120));
+    });
     if (subHits.length) {
       const keptList = list.filter((p) => !key.includes(normKey(p.text)));
       this.mgr.setExternalPending(sessionId, keptList);
       for (const h of subHits) {
         this.dropEnqueuedKey(sessionId, h.text);
         this.noteUserMsg(sessionId, h.text, "promote");
-        this.mgr.pushExternalLog(sessionId, "user_message", truncate(h.text, 300));
+        this.mgr.pushExternalLog(sessionId, "user_message", truncate(h.text, 300), void 0, { full: truncate(h.text, 2e3) });
       }
       return true;
     }
@@ -43665,7 +43674,7 @@ var Bridge = class _Bridge {
     if (!this.promotePending(id2, rawPrompt)) {
       if (!this.coveredByRecentPromote(id2, rawPrompt)) {
         this.noteUserMsg(id2, rawPrompt, "prompt");
-        this.mgr.pushExternalLog(id2, "user_message", truncate(rawPrompt, 300));
+        this.mgr.pushExternalLog(id2, "user_message", truncate(rawPrompt, 300), void 0, { full: truncate(rawPrompt, 2e3) });
       }
     }
     void state;
@@ -44255,7 +44264,7 @@ var Bridge = class _Bridge {
       const qi2 = avail.findIndex((t) => normKey(t) === normKey(p.text));
       if (qi2 === -1) {
         this.noteUserMsg(id2, p.text, "promote");
-        this.mgr.pushExternalLog(id2, "user_message", truncate(p.text, 300));
+        this.mgr.pushExternalLog(id2, "user_message", truncate(p.text, 300), void 0, { full: truncate(p.text, 2e3) });
       } else {
         avail.splice(qi2, 1);
         kept2.push(p);
@@ -44578,7 +44587,7 @@ function listCustomCommands(dir, source) {
   return out;
 }
 function startServer(bus2, mgr2, cfg2, opts = {}) {
-  const webRoot = process.env.CCR_WEB_ROOT ?? ("1" ? fileURLToPath3(new URL("../", import.meta.url)) : fileURLToPath3(new URL("../../", import.meta.url)));
+  const webRoot = process.env.CCR_WEB_ROOT ?? (process.env.CC_DECK_PLUGIN ? fileURLToPath3(new URL("../", import.meta.url)) : fileURLToPath3(new URL("../../", import.meta.url)));
   const consoleHtml = join10(webRoot, "web-console", "index.html");
   const naclJs = join10(webRoot, "web-console", "nacl.js");
   const qrJs = join10(webRoot, "web-console", "qr.js");
@@ -45173,6 +45182,12 @@ function loadOrCreateIdentity(dataDir2) {
     touchPeer(dev) {
       const e = peers.get(dev);
       if (e) e.last_seen = Date.now();
+    },
+    renamePeer(dev, name) {
+      const e = peers.get(dev);
+      if (!e || !name || e.name === name) return;
+      e.name = name;
+      persistPeers();
     }
   };
 }
@@ -45553,6 +45568,8 @@ var CloudClient = class {
     if (inner.t === "hello") {
       const lastSeq = Number(inner.last_seq ?? 0) || 0;
       console.log(`[cloud] phone ${f.from} hello last_seq=${lastSeq}`);
+      const helloName = typeof inner.name === "string" ? inner.name.trim().slice(0, 32) : "";
+      if (helloName) this.identity.renamePeer(f.from, helloName);
       this.resumePhone(f.from, lastSeq);
       return;
     }
@@ -45864,7 +45881,7 @@ if (cliArgs.has("--qr")) {
   process.exit(0);
 }
 if (cliArgs.has("--daemon")) {
-  if (false) {
+  if (!process.env.CC_DECK_PLUGIN) {
     console.log("dev \u6A21\u5F0F\uFF08tsx \u524D\u53F0\u8DD1 TS \u6E90\u7801\uFF09\u4E0D\u652F\u6301 --daemon\uFF0C\u8BF7\u76F4\u63A5\u524D\u53F0\u8FD0\u884C");
     process.exit(1);
   }
