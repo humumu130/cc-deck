@@ -331,7 +331,7 @@ class RelayStore {
       const ref = online.find((c) => c.id === this.activeId) ?? online[0] ?? null;
       return {
         connected: online.length > 0,
-        connText: `${online.length}/${inPlay.length} 在线`,
+        connText: `${online.length}/${inPlay.length}`,
         connState,
         channel: ref ? ref.channel : null,
         failNote: (inPlay.find((c) => c.state !== "online") ?? null)?.failNote ?? null,

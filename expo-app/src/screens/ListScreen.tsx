@@ -6,7 +6,7 @@ import { statusColor, withA, type ThemeColors } from "../theme";
 import { useTheme, useThemeStyles } from "../theme-context";
 import { LogoMark } from "../brand";
 import { sessionElapsed, fmtElapsed, fmtTok, contextPct, contextLevel, CONTEXT_LIMIT_FALLBACK, displaySrcName } from "../fmt";
-import { setListDensity, useListDensity, type ListDensity } from "../display-settings";
+import { setListDensity, useListDensity, setAggregate as persistAggregate, type ListDensity } from "../display-settings";
 import { store, useRelay } from "../store";
 import { FadeIn, PressScale } from "../motion";
 import type { SessionState } from "../protocol";
@@ -484,6 +484,12 @@ export default function ListScreen({ sessions, connected, connText, onOpen, onNe
     const i = DENSITY_ORDER.indexOf(density);
     setListDensity(DENSITY_ORDER[(i + 1) % DENSITY_ORDER.length]);
   }, [density]);
+  // #52 聚合胶囊开关：与设置抽屉拨杆同款双写（持久化 + store 生效）
+  const toggleAggregate = useCallback(() => {
+    const next = !snap.aggregate;
+    persistAggregate(next);
+    store.setAggregate(next);
+  }, [snap.aggregate]);
   const [revealSid, setRevealSid] = useState<string | null>(null);
   const [renameSid, setRenameSid] = useState<string | null>(null);
   const renameTarget = useMemo(
@@ -769,12 +775,9 @@ export default function ListScreen({ sessions, connected, connText, onOpen, onNe
             else if (!connected) store.retryNow();
           }}
         >
-          <View style={[styles.connDot, { backgroundColor: connColor }]} />
-          <Text style={[styles.connText, { color: connColor }]}>
-            {connText}
-            {/* #46 通道后缀（用户定稿）：云桥 ·☁️ / 局域网 · LAN / 直连不显示 */}
-            {snap.channel === "cloud" ? " ·☁️" : snap.channel === "lan" ? " · LAN" : ""}
-          </Text>
+          {/* #52 chip 精简：去状态色点与通道后缀（多源混合通道无法单一展示），
+              文案颜色仍承载连接状态（绿/黄/红） */}
+          <Text style={[styles.connText, { color: connColor }]}>{connText}</Text>
         </Pressable>
         {/* #350 主题切换从设置抽屉迁入主面板顶：连接 chip 旁，与状态信息同区 */}
         <Pressable
@@ -788,14 +791,19 @@ export default function ListScreen({ sessions, connected, connText, onOpen, onNe
         </Pressable>
       </View>
       <View style={styles.statRow}>
-        {/* #26 统计行精简+全视图可见（用户点单）：去「N 会话」；源数改电脑图标+数量，
-            聚合时任何视图（含源筛选面板）都显示在线源数——不止「全部」面板 */}
-        {snap.aggregate && snap.sources.length > 0 ? (
-          <View style={styles.statSrc}>
-            <DesktopGlyph size={11} color={c.dim} />
-            <Text style={styles.statTotal} numberOfLines={1}>{onlineSrcs}</Text>
-          </View>
-        ) : null}
+        {/* #52 聚合胶囊（替代 #26 电脑图标）：开关与数量合一——聚合开=「聚合 · N」
+            品牌色高亮可点切回；关=「单源」中性色。即当前面板展示范围的自述 */}
+        <Pressable
+          style={[styles.aggBtn, snap.aggregate && styles.aggBtnOn]}
+          android_ripple={{ color: c.tintSoft, borderless: false, radius: 14 }}
+          hitSlop={4}
+          accessibilityLabel={snap.aggregate ? `聚合模式，展示 ${snap.sources.length} 台电脑，点击切回单源` : "单源模式，点击开启聚合"}
+          onPress={toggleAggregate}
+        >
+          <Text style={[styles.aggT, snap.aggregate && styles.aggTOn]} numberOfLines={1}>
+            {snap.aggregate ? `聚合 · ${snap.sources.length}` : "单源"}
+          </Text>
+        </Pressable>
         <View style={styles.statChips}>
           {statusItems.map(({ k, n, color }) => (
             <View key={k} style={styles.statChip}>
@@ -946,17 +954,6 @@ export default function ListScreen({ sessions, connected, connText, onOpen, onNe
   );
 }
 
-// #35 线条电脑图标（替代 🖥 emoji）：圆角矩形屏 + 短底座线，
-// 与 CloudGlyph（设置抽屉）同一图形语言——View 边框绘制、1.4px 线宽
-function DesktopGlyph({ size = 11, color }: { size?: number; color: string }) {
-  return (
-    <View style={{ width: size, alignItems: "center" }}>
-      <View style={{ width: size, height: size * 0.68, borderWidth: 1.4, borderColor: color, borderRadius: 2.5 }} />
-      <View style={{ width: size * 0.45, height: 1.4, backgroundColor: color, marginTop: 1.5, borderRadius: 1 }} />
-    </View>
-  );
-}
-
 const makeStyles = (c: ThemeColors) => StyleSheet.create({
   safe: { flex: 1, backgroundColor: c.bg },
   topbar: {
@@ -1035,6 +1032,14 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
     paddingHorizontal: 10, paddingVertical: 3,
   },
   densityT: { fontSize: 11, color: c.dim },
+  // #52 聚合胶囊（替代电脑图标）：densityBtn 同款形制；开=品牌色高亮
+  aggBtn: {
+    borderRadius: 999, borderWidth: 1, borderColor: withA(c.dim, 0.35),
+    paddingHorizontal: 10, paddingVertical: 3, flexShrink: 1,
+  },
+  aggBtnOn: { borderColor: withA(c.brandA, 0.65), backgroundColor: withA(c.brandA, 0.1) },
+  aggT: { fontSize: 11, color: c.dim },
+  aggTOn: { color: c.brandA, fontWeight: "700" },
   swipeWrap: { marginBottom: 9, borderRadius: 16, overflow: "hidden" },
   swipeWrapC: { marginBottom: 7 },
   // 极简行（用户拍板圆角统一）：同标准/紧凑的圆角卡语言，仅行高更矮、间距更密

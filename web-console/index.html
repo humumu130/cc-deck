@@ -3114,13 +3114,8 @@ function renderConnChip() {
   const conn = list.filter((c) => c.status === "connecting").length;
   const open = $("connPanel").classList.contains("open");
   $("connChip").className = (on > 0 ? "on" : conn > 0 ? "wait" : "") + (open ? " open" : "");
-  // #48 通道后缀（与 App 同规则）：活动源在线时拼 ·☁️ / · LAN（手动直连不显示）
-  const actx = list.find((c) => c.cfg.id === activeServerId) ?? list.find((c) => c.status === "online");
-  const actSrv = actx ? servers.find((s) => s.id === actx.cfg.id) : null;
-  const chan = actx && actx.status === "online" && actSrv
-    ? actSrv.kind === "cloud" ? " ·☁️" : actSrv.kind === "lan" ? " · LAN" : ""
-    : "";
-  $("connText").textContent = list.length === 0 ? "未配置" : on + "/" + list.length + " 在线" + chan;
+  // #52 与 App 对齐：x/n 纯数字（去「在线」字样与通道后缀——多源混合通道无法单一展示）
+  $("connText").textContent = list.length === 0 ? "未配置" : on + "/" + list.length;
   renderGpStatus();
 }
 
