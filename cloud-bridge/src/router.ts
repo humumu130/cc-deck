@@ -52,6 +52,17 @@ export class CloudRouter {
     if (rk) this.keyOf.set(dev, rk);
     else this.keyOf.delete(dev);
     this.opts.log?.(`register dev=${dev} conn=${connId}`);
+    // #34 relay 上线广播：新 relay 连接（首连/顶替重连/DO 休眠唤醒重建）时通知
+    // 全体在线连接——手机「待唤醒」态（relay 死但桥 ws 未断）收到 rd 匹配的
+    // 此帧即在原连接补发 hello 恢复，替代盲目重试。幂等 register（DO 每请求
+    // 重挂/poll touch，old === connId）不重播，防轮询风暴
+    if (dev.startsWith("rl-") && old !== connId) {
+      const frame = JSON.stringify({ type: "relay-online", rd: dev });
+      for (const [d, target] of this.connOf) {
+        if (d === dev) continue; // 上线的 relay 自己无需唤醒
+        this.opts.hooks.send(target, frame);
+      }
+    }
   }
 
   unregister(connId: string): void {

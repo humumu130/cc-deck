@@ -151,8 +151,10 @@ await wait(200);
 const inboxBefore = inbox.length;
 const phoneWs2 = new WebSocket(`ws://127.0.0.1:${BRIDGE_PORT}/cloud?token=${BRIDGE_TOKEN}&dev=${phoneDev}`);
 const inbox2: Record<string, unknown>[] = [];
+const bare2: { type?: string; rd?: string }[] = []; // 桥直发裸帧（#34 relay-online 广播等）
 phoneWs2.on("message", (raw) => {
-  const f = JSON.parse(String(raw)) as { data?: SealedBox };
+  const f = JSON.parse(String(raw)) as { data?: SealedBox; type?: string; rd?: string };
+  if (f.type) bare2.push(f);
   if (f.data) {
     const inner = unseal<Record<string, unknown>>(f.data, relayPubkey, phoneKp.secretKey);
     if (inner) inbox2.push(inner);
@@ -254,6 +256,40 @@ assert(
   await waitFor(() => inbox2.some((m) => m.type === "SESSION_LOG" && (m.payload as { text?: string })?.text === "legacy-ping-resume")),
   "SNAPSHOT 恢复后实时事件继续下发",
 );
+
+// ---------- 7.5) #34 relay 上线广播唤醒 ----------
+// relay 重连桥（register rl-*）→ 在线手机收到桥直发 {type:"relay-online", rd}——
+// App 待唤醒态（桥通 relay 离线，不再盲目断连重试）靠此帧在同连接补发 hello 恢复。
+// 幂等 register（同 dev 同 connId 重挂，DO 每请求/poll touch 形态）不重播。
+assert(
+  await waitFor(() => bare2.some((f) => f.type === "relay-online" && f.rd === identity.relayDev)),
+  "relay 重连桥时手机收到 relay-online 广播（rd 匹配）",
+);
+{
+  // 第 7 段 relay 重连只发生一次，此刻广播帧恰有一条；幂等重挂不再播
+  const cnt = () => bare2.filter((f) => f.type === "relay-online" && f.rd === identity.relayDev).length;
+  assert(cnt() === 1, "relay-online 恰好广播一次（重连一次性）");
+  // 幂等/顶替语义用假 relay dev 直捣 router（不经适配器）：不碰真 relay 连接，
+  // 后续段（8+）依赖它在桥上
+  const routerInternal = bridge.router as unknown as {
+    register: (connId: string, dev: string, rk?: string) => void;
+  };
+  const fakeCnt = () => bare2.filter((f) => f.type === "relay-online" && f.rd === "rl-fake-34").length;
+  routerInternal.register("fake-34-a", "rl-fake-34");
+  assert(
+    await waitFor(() => fakeCnt() >= 1, 2000),
+    "另一台 relay 上线也广播（新 dev 首连）",
+  );
+  const fakeBase = fakeCnt();
+  routerInternal.register("fake-34-a", "rl-fake-34"); // 同 connId 幂等（DO 每请求重挂/poll touch 形态）
+  await wait(200);
+  assert(fakeCnt() === fakeBase, "幂等 register（同 connId）不重复广播");
+  routerInternal.register("fake-34-b", "rl-fake-34"); // 顶替式重连（新 connId 同 dev）
+  assert(
+    await waitFor(() => fakeCnt() > fakeBase, 2000),
+    "顶替式重连（新 connId）再次广播",
+  );
+}
 
 // ---------- 8) 全量恢复：预算内单帧 SNAPSHOT（#408 大帧根治） ----------
 // 线上事故：① 全量 SNAPSHOT 日志内联，密文超 1MB 帧上限（桥 1009 踢线 / CF

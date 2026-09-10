@@ -68,6 +68,13 @@ export interface SourceConn {
   lastDownAt: number;
   epoch: number;
   pendingCmds: Map<string, PendingCmd>;
+  // #34 待唤醒（云通道专属）：桥通但 relay 离线（ROUTE_MISS）——不断桥 ws、停重连
+  // 循环，等桥广播 relay-online（rd 匹配）再在同连接补发 hello 恢复；桥 ws 断开
+  // （onclose）才回落旧重连。心跳照跑（ROUTE_MISS 回帧兼当桥活性探测，55s 无
+  // 任何下行=桥死 → 自动断开走重连）。wakePings 为待唤醒期心跳计数（旧桥无广播
+  // 的混跑兜底：40 拍无唤醒强制断开回落重连）
+  awaitWake?: boolean;
+  wakePings?: number;
   // F7（2026-09-09）手表 /wan 透传凭据 dev（wt-<hash>，随 SNAPSHOT wan_dev 下发）：
   // 手表网关拼手表连接配置用（旧 relay 无字段 = 回落 wt-app1，自建宽松桥不受影响）
   wanDev?: string | null;
@@ -953,6 +960,7 @@ class RelayStore {
       if (conn.ws !== ws) return;
       this.stopHb(conn);
       this.clearPendingCmds(conn);
+      conn.awaitWake = false; // #34 桥 ws 断了：待唤醒作废，回落旧重连循环
       conn.state = "offline";
       conn.stateText = null;
       // 从未开过门 = 桥不可达（桥地址错/网络断/封锁），不是配对问题——继续自动重试
@@ -972,12 +980,41 @@ class RelayStore {
         return;
       }
       if (frame.type === "ROUTE_MISS") {
-        // relay 暂时掉线：断开走重连循环（每轮仍先试 LAN）。桥已通、电脑端离线——
-        // 恢复后自动连上，绝不引导输码
-        conn.failNote = "已连上云桥，但电脑端 relay 离线（恢复后自动连上）";
-        try {
-          ws.close();
-        } catch {}
+        // #34 待唤醒：桥通、relay 离线。旧版断 ws 盲目重连（每轮开门→hello→
+        // ROUTE_MISS→断开循环空耗，relay 关机整夜手机跟着跑整夜）。现保持桥连接
+        // 置待唤醒，等桥广播 relay-online 再补 hello 恢复；桥 ws 自身断开才走
+        // 旧重连。心跳照跑——ROUTE_MISS 回帧刷新 lastDownAt 兼当桥活性探测。
+        // P2：仅首次进入重置计数——每 15s ping 都会回一条 ROUTE_MISS 走到这里，
+        // 重复进待唤醒不能把 wakePings 累穿（否则二次窗口被首次已计拍数挤占）
+        if (!conn.awaitWake) {
+          conn.awaitWake = true;
+          conn.wakePings = 0;
+        }
+        conn.state = "offline";
+        conn.stateText = null;
+        conn.failNote = "已连上云桥，电脑端离线（上线后自动恢复）";
+        this.emit();
+        return;
+      }
+      // #34 桥广播 relay 上线：待唤醒态且 rd 匹配本源 relay → 同连接补发 hello
+      // 恢复（非待唤醒态忽略——在线连接由 relay 侧 auto-resume 补帧，无需动作）
+      if (frame.type === "relay-online") {
+        const rd = (frame as { rd?: unknown }).rd;
+        if (conn.awaitWake && rd === cloud.relayDev) {
+          conn.awaitWake = false;
+          conn.state = "connecting";
+          conn.stateText = "等待电脑端响应";
+          conn.failNote = null;
+          this.emit();
+          try {
+            ws.send(
+              JSON.stringify({
+                to: cloud.relayDev,
+                data: seal({ t: "hello", last_seq: conn.lastSeq }, cloud.relayPubkey, keys.secretKey),
+              }),
+            );
+          } catch {}
+        }
         return;
       }
       if (!frame.data) return;
@@ -1031,12 +1068,22 @@ class RelayStore {
   private startHb(conn: SourceConn, ws: WebSocket, cloud?: CloudConfig, keys?: BoxKeyPair) {
     this.stopHb(conn);
     conn.lastDownAt = Date.now();
+    conn.wakePings = 0;
     conn.hbTimer = setInterval(() => {
       if (conn.ws !== ws) {
         this.stopHb(conn);
         return;
       }
       if (Date.now() - conn.lastDownAt > 55_000) {
+        try { ws.close(); } catch {}
+        return;
+      }
+      // #34 旧桥兼容兜底：待唤醒态下 ROUTE_MISS 回帧会持续刷新 lastDownAt，
+      // 55s 判死永不触发；桥不升级就没有 relay-online 广播 → 永久卡待唤醒。
+      // 待唤醒累计 40 拍（≈10 分钟）无唤醒即强制断开，回落旧重连循环（新版
+      // 桥下正常秒级唤醒，此路径只在混跑期走到）
+      if (conn.awaitWake && ++conn.wakePings! >= 40) {
+        conn.awaitWake = false;
         try { ws.close(); } catch {}
         return;
       }
@@ -1145,6 +1192,14 @@ class RelayStore {
     if (conn.channel === "cloud" && conn.state !== "online") {
       conn.state = "online";
       conn.stateText = null;
+      // #34 P1：relay 首帧也是"已恢复在线"的证明（旧桥无广播时靠 ping-pong 自愈
+      // 走到这里）——清待唤醒标记与计数，否则 wakePings 继续累计会在 40 拍后
+      // 把一条已恢复健康的连接强断（白挨一次断连+重连+快照重建）
+      if (conn.awaitWake) {
+        conn.awaitWake = false;
+        conn.wakePings = 0;
+        conn.failNote = null;
+      }
     }
     if ((msg as CommandAck).type === "COMMAND_ACK") {
       const ack = msg as CommandAck;
