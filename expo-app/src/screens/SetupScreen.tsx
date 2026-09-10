@@ -127,7 +127,7 @@ export default function SetupScreen({ onClose, editId, initialScan }: Props) {
       return;
     }
     if (cd && !/^\d{6,8}$/.test(cd)) {
-      setErr("配对码为 6-8 位数字（电脑端 CC Deck 设置→relay 页领取）");
+      setErr("配对码为 8 位数字（电脑端 CC Deck 设置→relay 页领取）");
       return;
     }
     if (!editId && !cd) {
@@ -555,8 +555,8 @@ export default function SetupScreen({ onClose, editId, initialScan }: Props) {
           ) : null}
           <Text style={s.hint}>
             {kind === "cloud"
-              ? "远程首选云桥：填桥地址 + 6 位配对码，无需与 PC 同一网络；同一 WiFi 下也可切「直连」"
-              : `直连需手机与 PC 在同一 WiFi，地址填 PC 上的 ${LAN_URL_DEFAULT}；不在同一网络请用云桥`}
+              ? "远程填云桥地址和配对码即可接入；同一 WiFi 也可切「直连」"
+              : `需与电脑同一 WiFi，地址填 ${LAN_URL_DEFAULT}`}
           </Text>
           {onClose ? (
             <Pressable style={s.back} android_ripple={{ color: c.tintSoft, borderless: false, radius: 20 }} onPress={onClose}>
