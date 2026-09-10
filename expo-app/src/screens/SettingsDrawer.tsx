@@ -415,6 +415,15 @@ export default function SettingsDrawer({
         {/* 连接区（对齐设置原型）：区头（可折叠收起服务器列表）+ 状态卡 + 列表/添加入口 */}
         <View style={d.secHead}>
           <Text style={d.secTitleT}><Text style={d.secIconT}>◫ </Text>连接{srvCollapsed && servers.length ? ` · ${servers.length}` : ""}</Text>
+          {/* #48 通道含义问号：☁️/LAN/插头三态解释 */}
+          <Pressable
+            hitSlop={8}
+            onPress={() => Alert.alert("图标含义",
+              "☁️ 经云桥中转（跨网络可用）\n\nLAN 同一网络直连\n\n插头：绿色=已连接，灰色=未连接（点击可触发连接），黄色闪烁=连接中")}
+            accessibilityLabel="连接图标含义说明"
+          >
+            <Text style={d.secHelpT}>?</Text>
+          </Pressable>
           <Pressable style={d.secToggle} hitSlop={10} onPress={toggleSrv} android_ripple={{ color: c.tintSoft, borderless: true, radius: 12 }}>
             <Text style={d.secToggleT}>{srvCollapsed ? "▸" : "▾"}</Text>
           </Pressable>
@@ -664,6 +673,8 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
   secIconT: { color: c.dim, fontSize: 10.5 },
   secToggle: { width: 24, height: 24, alignItems: "center", justifyContent: "center", marginVertical: -6 },
   secToggleT: { color: c.dim, fontSize: 11 },
+  // #48 通道含义问号（连接区标题旁，点击弹解释）
+  secHelpT: { color: c.dim, fontSize: 11, borderWidth: 1, borderColor: withA(c.dim, 0.4), borderRadius: 8, width: 16, height: 16, textAlign: "center", lineHeight: 14, overflow: "hidden" },
   srvScroll: { maxHeight: 236 },
   srvRow: {
     flexDirection: "row", alignItems: "center", borderWidth: 1, borderColor: c.line,
