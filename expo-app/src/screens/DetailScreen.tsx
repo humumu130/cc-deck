@@ -387,13 +387,17 @@ function TaskPop({ n, todo, goneSession, hold, anchor, onClose, onGoList }: { n:
             </View>
             {todo ? (
               <>
-                {/* #39a 浮窗同款拆尾缀：subAgent 标签化（与列表行一致） */}
+                {/* #39a 浮窗同款拆尾缀：subAgent 标签化（与列表行一致）；
+                    #56a 头部已有 #N 编号列，content 自带的同号前缀剥掉（「#54 #54」双显根治） */}
                 <Text style={d.tpContent}>
                   {(() => {
+                    let body = todo.content;
+                    const own = new RegExp(`^#${n}\\s+`);
+                    if (own.test(body)) body = body.replace(own, "");
                     const tag = "「subAgent」";
-                    return todo.content.endsWith(tag) ? (
-                      <>{todo.content.slice(0, -tag.length).trimEnd()}<Text style={d.todoSubTag}>subAgent</Text></>
-                    ) : todo.content;
+                    return body.endsWith(tag) ? (
+                      <>{body.slice(0, -tag.length).trimEnd()}<Text style={d.todoSubTag}>subAgent</Text></>
+                    ) : body;
                   })()}
                 </Text>
                 {todo.status === "in_progress" && todo.active_form ? (

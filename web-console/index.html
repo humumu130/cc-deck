@@ -5858,7 +5858,8 @@ function openTaskPop(n, pin) {
     '<div class="tp-head"><span class="tp-mark">' + tpStatusIco(t?.status) + "</span>" +
     '<span class="tp-no">#' + n + '</span><span class="tp-status" style="color:' + color + '">' + label + "</span></div>" +
     (t
-      ? '<div class="tp-content" title="' + escapeHtml(t.content || "") + '">' + escapeHtml(t.content || "") + "</div>" +
+      ? // #56a 头部已有 #N 编号，content 自带同号前缀剥掉（「#54 #54」双显根治，与 App TaskPop 同修）
+        '<div class="tp-content" title="' + escapeHtml(t.content || "") + '">' + escapeHtml((t.content || "").replace(new RegExp("^#" + n + "\\s+"), "")) + "</div>" +
         (t.status === "in_progress" && t.active_form ? '<div class="tp-active">正在：' + escapeHtml(t.active_form) + "</div>" : "") +
         (typeof t.updated_at === "number" && Number.isFinite(t.updated_at) ? '<div class="tp-time">' + tpRel(t.updated_at) + " 前更新</div>" : "")
       : '<div class="tp-content">会话任务清单中无 #' + n + "</div>") +
