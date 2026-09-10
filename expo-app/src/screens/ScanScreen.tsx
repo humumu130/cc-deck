@@ -62,7 +62,9 @@ export function parseScanPayload(raw: string): ScanResult | null {
       const rd = typeof j.rd === "string" ? j.rd : "";
       const rk = typeof j.rk === "string" ? j.rk : "";
       const code = typeof j.code === "string" ? j.code : "";
-      if (/^wss?:\/\//.test(bridge) && rd.startsWith("rl-") && rk && /^\d{6}$/.test(code)) {
+      // #22：配对码硬化（#22 批）后 relay 领的码是 8 位——原 ^\d{6}$ 把 8 位码拒成
+      //「不是 CC Deck 的连接码」，放宽到 6-8 与 SetupScreen 手输口径一致
+      if (/^wss?:\/\//.test(bridge) && rd.startsWith("rl-") && rk && /^\d{6,8}$/.test(code)) {
         return { wsUrl: "", token: "", invite: { bridge, bt, rd, rk, code } };
       }
       return null;

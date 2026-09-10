@@ -6890,8 +6890,9 @@ async function probeLocalRelay() {
   // #21 改名 autoConnectLocal（原名 probeLocalRelay 遮蔽顶层同名信息函数——空占位
   // 补全块 await 恒 undefined，整块死代码；这也是新装 exe 不自动连的帮凶之一）
   const autoConnectLocal = () => {
-    // 已有带 token 的 loopback 条目：无需再探（#398 归并后等价本机条目只剩一条）
-    if (servers.some((s) => s.kind === "lan" && s.token && localEp(s.wsUrl)?.loop)) return;
+    // #21 二修：不再因「已有带 token 的本机条目」跳过探测——relay 换代/令牌轮换后
+    // 旧 token 会被 401 拒（实测：token 变更后 exe 旧条目连不上且永不自愈）。总是探
+    // 一次（壳桥本地调用，毫秒级），finish() 对等价条目只刷 token 不新增
     probingLocal = true; renderGpStatus();
     let done = false;
     const finish = (port, token, why) => {

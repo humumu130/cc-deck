@@ -233,7 +233,9 @@ export default function SetupScreen({ onClose, editId, initialScan }: Props) {
     void store.updateServer(editId, {
       name: name.trim() || hostOf(base),
       wsUrl: base,
-      token: remember && tk ? tk : "",
+      // #22 改名保连接：表单 token 为空（未记住/未显示）时不再把存量令牌抹成空串——
+      // 旧实现改名即断链（updateServer 见 token 变化触发带空令牌重连）
+      ...(remember && tk ? { token: tk } : {}),
     }).then(() => {
       if (onClose) onClose();
     });
