@@ -8,6 +8,7 @@ import { LogoMark } from "../brand";
 import { sessionElapsed, fmtElapsed, fmtTok, contextPct, contextLevel, CONTEXT_LIMIT_FALLBACK, displaySrcName } from "../fmt";
 import { setListDensity, useListDensity, type ListDensity } from "../display-settings";
 import { store, useRelay } from "../store";
+import { CloudGlyph } from "./SettingsDrawer";
 import { FadeIn, PressScale } from "../motion";
 import type { SessionState } from "../protocol";
 import RenameModal from "./RenameModal";
@@ -770,6 +771,8 @@ export default function ListScreen({ sessions, connected, connText, onOpen, onNe
         >
           <View style={[styles.connDot, { backgroundColor: connColor }]} />
           <Text style={[styles.connText, { color: connColor }]}>{connText}</Text>
+          {/* #37 云通道指示：连接 chip 尾部线条云（替代「已连接 ☁」文案内嵌 emoji） */}
+          {snap.channel === "cloud" ? <CloudGlyph size={11} color={withA(connColor, 0.8)} /> : null}
         </Pressable>
         {/* #350 主题切换从设置抽屉迁入主面板顶：连接 chip 旁，与状态信息同区 */}
         <Pressable

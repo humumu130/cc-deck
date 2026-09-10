@@ -2094,7 +2094,9 @@ export const store = new RelayStore();
 // 单源模式连接文案（conn.state → connText，逐字保持旧版语义；unpaired 新增）
 function singleConnText(c: SourceConn): string {
   switch (c.state) {
-    case "online": return c.channel === "cloud" ? "已连接 ☁" : "已连接";
+    case "online":
+      // #37 云通道指示去 emoji：文案统一「已连接」，云图标（线条云）由连接 chip 呈现
+      return "已连接";
     case "connecting": return "连接中";
     case "reconnecting": return "重连中"; // stateText 缺失时的兜底（理论不达）
     case "offline": return "已断开";

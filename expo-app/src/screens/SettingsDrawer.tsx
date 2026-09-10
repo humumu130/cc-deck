@@ -557,7 +557,8 @@ export default function SettingsDrawer({
 
 // #36 线条云图标（View 边框绘制，替代拟物 ☁）：三段圆弧底 + 短底线的极简云形。
 // 不引 svg 库——项目图形语言纯 View/Text，1.4px 边框与整体线条风一致
-function CloudGlyph({ size = 12, color }: { size?: number; color: string }) {
+// #37 起导出共享：主面板连接 chip（云通道指示）复用同款
+export function CloudGlyph({ size = 12, color }: { size?: number; color: string }) {
   const b = { borderColor: color };
   const r = size * 0.42;
   return (
