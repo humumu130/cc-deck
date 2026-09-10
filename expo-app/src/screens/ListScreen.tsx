@@ -173,7 +173,7 @@ function Elapsed({ s }: { s: SessionState }) {
 // 面板做成独立圆角小胶囊（上下留 3px），从卡片后面滑出，避免直角贴圆角的接缝。
 // minimal（极简单行卡）：面板只留图标不出文字标签（行高太矮叠不下两行字）
 function SwipeRow({
-  sid, deletable, onPress, onRename, onDelete, revealSid, onReveal, compact, minimal, children,
+  sid, deletable, onPress, onRename, onDelete, revealSid, onReveal, compact, minimal, dim, children,
 }: {
   sid: string;
   deletable: boolean;
@@ -184,6 +184,7 @@ function SwipeRow({
   onReveal: (v: string | null) => void;
   compact?: boolean;
   minimal?: boolean;
+  dim?: boolean; // #32 离线源降权（缓存会话与在线视觉区分）
   children: React.ReactNode;
 }) {
   const { c } = useTheme();
@@ -248,9 +249,9 @@ function SwipeRow({
           {!minimal ? <Text style={styles.actT2}>{deletable ? "删除" : "运行中"}</Text> : null}
         </Pressable>
       </View>
-      <Animated.View style={[styles.swipeCard, { transform: [{ translateX: x }] }]} {...pan.panHandlers}>
+      <Animated.View style={[styles.swipeCard, { transform: [{ translateX: x }] }, dim && styles.dimRow]} {...pan.panHandlers}>
         <Pressable
-          style={[styles.card, compact && styles.cardC, minimal && styles.cardM]}
+          style={[styles.card, compact && styles.cardC, minimal && styles.cardM, dim && styles.dimRow]}
           android_ripple={{ color: c.tintSoft, borderless: false }}
           onPress={() => {
             if (open.current) close();
@@ -350,7 +351,7 @@ function CtxCell({ s }: { s: SessionState }) {
 // memo：流式刷新只重渲变化的那一行（onRename/onReveal/onDelete 均为稳定引用；
 // 源归属改由分组头承担，卡片不再带源角标 props——会话对象引用不变即不重渲）
 const SessionCard = memo(function SessionCard({
-  s, onOpen, onRename, onDelete, revealSid, onReveal, density,
+  s, onOpen, onRename, onDelete, revealSid, onReveal, density, dim,
 }: {
   s: SessionState;
   onOpen: (sid: string) => void;
@@ -359,6 +360,7 @@ const SessionCard = memo(function SessionCard({
   revealSid: string | null;
   onReveal: (v: string | null) => void;
   density: ListDensity;
+  dim?: boolean; // #32 离线源降权
 }) {
   const { c } = useTheme();
   const styles = useThemeStyles(makeStyles);
@@ -379,6 +381,7 @@ const SessionCard = memo(function SessionCard({
       onReveal={onReveal}
       compact={compact}
       minimal={minimal}
+      dim={dim}
     >
       {minimal ? (
         // 极简行：状态灯 + 名称（单行）+ 右端常显水位区（细条+百分比，无数据 "–" 占位），
@@ -1017,6 +1020,8 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
   // 极简行（用户拍板圆角统一）：同标准/紧凑的圆角卡语言，仅行高更矮、间距更密
   swipeWrapM: { marginBottom: 5 },
   swipeCard: { borderRadius: 16, overflow: "hidden", backgroundColor: c.panel },
+  // #32 离线源降权：整卡透明度 0.55（含左滑动作排，因为包在同 Animated.View）
+  dimRow: { opacity: 0.55 },
   actPanel: {
     position: "absolute", top: 3, bottom: 3, right: 0, width: FULL_W,
     flexDirection: "row", borderRadius: 16, overflow: "hidden",
