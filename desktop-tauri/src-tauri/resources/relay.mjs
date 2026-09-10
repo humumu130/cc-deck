@@ -42897,6 +42897,7 @@ var Bridge = class _Bridge {
       this.reconcilePidsFromSessions();
       this.healExternal();
       this.adoptOrphans();
+      this.sweepIdleArchive();
     }, 6e4);
     this.healTimer.unref?.();
   }
@@ -42950,6 +42951,21 @@ var Bridge = class _Bridge {
   // 否则插件形态下（bundle 在插件缓存目录）按模块路径解析会读错文件，
   // relay 重启后 cli_pid 补水失效、远程发消息全被拒
   pidCacheFile = "";
+  // #50 idle 归档：DONE 且长时间（默认 12h，CCR_IDLE_ARCHIVE_MS 可调）无事件无增长的
+  // ext 会话标 historical（沉底降权 + 旧端仅查看）。同 cwd 挂着旧终端的会话不再
+  // 跟当前工作会话抢列表焦点（用户实测「CC-watch-ba」旧身挂了一天双显示）。
+  // 回到那个终端继续用时，hook 事件/转录增长路径自动翻活（清 historical）
+  sweepIdleArchive() {
+    const idleMs = Number(process.env.CCR_IDLE_ARCHIVE_MS) > 0 ? Number(process.env.CCR_IDLE_ARCHIVE_MS) : 12 * 36e5;
+    const now = Date.now();
+    for (const s of this.mgr.snapshot()) {
+      if (!s.external || s.historical || s.status !== "DONE") continue;
+      const last = Math.max(s.updated_at ?? 0, this.lastHookAt.get(s.session_id) ?? 0);
+      if (!last || now - last < idleMs) continue;
+      const st2 = this.mgr.getExternal(s.session_id);
+      if (st2) st2.historical = true;
+    }
+  }
   // 外部会话 ERROR 自愈：外部 CLI 是独立进程，relay 重启/重放把它标成 ERROR 属误伤
   // （空闲 ext 会话没有 hook 事件来翻状态，就永久锁死在"错误"）。pid 仍在跑 → 翻回
   // WORKING；pid 已死则维持 ERROR（真终态）。注入失败自愈链（onInjectFail）会在
@@ -43168,7 +43184,17 @@ var Bridge = class _Bridge {
     this.noHookIds.delete(this.extId(ev2));
     this.lastHookAt.set(this.extId(ev2), Date.now());
     const decision = await this.dispatch(ev2);
-    if (ev2.cli_pid && ev2.cli_pid > 0) this.mgr.setExternalCliPid(this.extId(ev2), ev2.cli_pid);
+    if (ev2.cli_pid && ev2.cli_pid > 0) {
+      const id2 = this.extId(ev2);
+      for (const s of this.mgr.snapshot()) {
+        if (!s.external || s.session_id === id2 || s.cli_pid !== ev2.cli_pid) continue;
+        this.mgr.finishExternal(s.session_id, "completed", 0);
+        const old = this.mgr.getExternal(s.session_id);
+        if (old) old.historical = true;
+        this.mgr.pushExternalLog(s.session_id, "system", "\u4E0A\u4E0B\u6587\u5DF2\u538B\u7F29\uFF0C\u7EED\u63A5\u4E3A\u65B0\u4F1A\u8BDD\uFF08\u672C\u6761\u76EE\u5F52\u6863\uFF09");
+      }
+      this.mgr.setExternalCliPid(id2, ev2.cli_pid);
+    }
     if (ev2.transcript_path) {
       this.transcriptPaths.set(this.extId(ev2), ev2.transcript_path);
       this.ensureQueuePoll();
@@ -44234,6 +44260,9 @@ var Bridge = class _Bridge {
       const m = /to use (\S+)/i.exec(msg);
       const rawName = m ? m[1].replace(/[.,;:!?)+]+$/, "") : "";
       const toolName = /^(the|a|an|this|that)$/i.test(rawName) ? "" : rawName;
+      if (state.waiting_request?.questions?.length) {
+        return { decision: "pass" };
+      }
       this.mgr.setExternalWaiting(id2, {
         request_id: randomUUID4(),
         tool_name: toolName,
