@@ -983,7 +983,7 @@
   /* #12 空态提示垂直居中：#cards 为纵排 flex，flex:1 撑满 + justify-content:center 垂直居中 */
   .cards-empty { flex: 1; display: flex; flex-direction: column; justify-content: center; align-items: center; text-align: center; color: var(--faint); font-size: 12.5px; padding: 46px 12px; }
   .cards-empty .ce-icon { font-size: 34px; opacity: .5; margin-bottom: 10px; }
-  .card-title { font-size: 15px; font-weight: 650; margin-top: 4px; display: flex; align-items: center; gap: 8px; }
+  .card-title { font-size: 16px; font-weight: 650; margin-top: 4px; display: flex; align-items: center; gap: 8px; } /* #40 标题加大一号（用户点单） */
   .his-badge {
     font-size: 10px; color: var(--faint); border: 1px solid var(--border);
     padding: 1px 7px; border-radius: 999px; flex: none; font-weight: 500;
@@ -1291,6 +1291,8 @@
   .msg-ai .ai-body { padding-left: 37px; min-width: 0; }
   .msg-ai .mt { color: var(--faint); font-size: 10.5px; font-variant-numeric: tabular-nums; }
   .msg-sys { text-align: center; color: var(--faint); font-size: .8em; margin: 10px 0; }
+  /* #44 注入回显（已注入终端…）：恒一行省略号——长内容不换行挤占面板 */
+  .msg-sys.one-line { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   /* 思考过程：折叠卡（默认收起，与手机端一致）；左缘对齐消息体（.ai-body 同款 37px 缩进） */
   .think {
     margin: 8px 0 8px 37px; background: var(--panel-2); border: 1px solid var(--border);
@@ -4395,7 +4397,8 @@ function entryHtml(e, prevDay) {
       html += '<div class="trow"><div class="tline"><span class="tico">↳</span><span class="tres">' + taskRefHtml(e.text) + "</span></div></div>";
     }
   } else {
-    html += '<div class="msg-sys">' + escapeHtml(e.text) + "</div>";
+    // #44 注入回显单行化：内容可长，加省略号；其余系统行（接入/完成/错误）本就短，同待遇无害
+    html += '<div class="msg-sys one-line">' + escapeHtml(e.text) + "</div>";
   }
   return html;
 }
