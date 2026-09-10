@@ -414,16 +414,19 @@ export default function SettingsDrawer({
         <ScrollView style={d.body} nestedScrollEnabled showsVerticalScrollIndicator={false}>
         {/* 连接区（对齐设置原型）：区头（可折叠收起服务器列表）+ 状态卡 + 列表/添加入口 */}
         <View style={d.secHead}>
-          <Text style={d.secTitleT}><Text style={d.secIconT}>◫ </Text>连接{srvCollapsed && servers.length ? ` · ${servers.length}` : ""}</Text>
-          {/* #48 通道含义问号：☁️/LAN/插头三态解释 */}
-          <Pressable
-            hitSlop={8}
-            onPress={() => Alert.alert("图标含义",
-              "☁️ 经云桥中转（跨网络可用）\n\nLAN 同一网络直连\n\n插头：绿色=已连接，灰色=未连接（点击可触发连接），黄色闪烁=连接中")}
-            accessibilityLabel="连接图标含义说明"
-          >
-            <Text style={d.secHelpT}>?</Text>
-          </Pressable>
+          {/* #51 问号左靠：紧跟「连接」标题成左组（原 space-between 三元素被推中） */}
+          <View style={d.secTitleRow}>
+            <Text style={d.secTitleT}><Text style={d.secIconT}>◫ </Text>连接{srvCollapsed && servers.length ? ` · ${servers.length}` : ""}</Text>
+            {/* #48 通道含义问号：☁️/LAN/插头三态解释 */}
+            <Pressable
+              hitSlop={8}
+              onPress={() => Alert.alert("图标含义",
+                "☁️ 经云桥中转（跨网络可用）\n\nLAN 同一网络直连\n\n插头：绿色=已连接，灰色=未连接（点击可触发连接），黄色闪烁=连接中")}
+              accessibilityLabel="连接图标含义说明"
+            >
+              <Text style={d.secHelpT}>?</Text>
+            </Pressable>
+          </View>
           <Pressable style={d.secToggle} hitSlop={10} onPress={toggleSrv} android_ripple={{ color: c.tintSoft, borderless: true, radius: 12 }}>
             <Text style={d.secToggleT}>{srvCollapsed ? "▸" : "▾"}</Text>
           </Pressable>
@@ -668,6 +671,8 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
   },
   secT: { color: c.faint, fontSize: 11, fontWeight: "700", marginTop: 18, marginBottom: 6, letterSpacing: 1 },
   secHead: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginTop: 18, marginBottom: 6 },
+  // #51 标题左组：标题+问号同行靠左（原问号被 space-between 推中）
+  secTitleRow: { flexDirection: "row", alignItems: "center", gap: 7 },
   secTitleT: { color: c.faint, fontSize: 11, fontWeight: "700", letterSpacing: 1 },
   // #346 分区/行前缀小图标（与网页设置面板 gi 同语言）：色弱一档、字号小一档
   secIconT: { color: c.dim, fontSize: 10.5 },
@@ -682,9 +687,11 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
   },
   srvRowOn: { borderColor: withA(c.done, 0.45), backgroundColor: withA(c.done, 0.08) },
   srvMain: { flex: 1, paddingVertical: 9, paddingLeft: 11, paddingRight: 4 },
-  srvHead: { flexDirection: "row", alignItems: "center", gap: 6 },
+  // #51 行头：名称占满剩余空间（flex:1）——通道标记+插头图标恒右对齐（原 flexShrink
+  // 随名称长短漂移：短名靠左长名靠右不齐）；图标间距收小 6→4
+  srvHead: { flexDirection: "row", alignItems: "center", gap: 4 },
   srvDot: { width: 7, height: 7, borderRadius: 4 },
-  srvName: { color: c.text, fontSize: 13.5, fontWeight: "600", flexShrink: 1 },
+  srvName: { color: c.text, fontSize: 13.5, fontWeight: "600", flex: 1 },
   srvUrl: { color: c.faint, fontSize: 10.5, marginTop: 1.5 },
   // #46 通道标记：☁️ emoji 与 LAN 小字两态
   chanCloudT: { fontSize: 10.5, lineHeight: 14 },
