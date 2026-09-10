@@ -6136,7 +6136,9 @@ function startLoginQr(imp) {
   const makePayload = () => JSON.stringify({
     t: "ccdeck-login", v: 1,
     ...(imp ? { imp: 1 } : {}),
-    bridge: cfg.wsUrl.replace(/\/$/, "").replace(/^http/, "ws") + "/cloud",
+    // 实捕发现（三码测试）：云源 wsUrl 本以 /cloud 结尾，再拼 +"/cloud" 双写成
+    // /cloud/cloud——当前 App 不读该字段故无害，但属口径炸弹，与 addPhoneQr 对齐不追加
+    bridge: cfg.wsUrl.replace(/\/$/, "").replace(/^http/, "ws").replace(/\/cloud$/, "") + "/cloud",
     ...(trustedRd() ? { rd: trustedRd() } : {}), dev, pk: ckp.publicKey,
     // #383 QR 库对非 ASCII 不做 UTF-8 编码（源名含中文→扫码乱码→手机端识别失败）：
     // name 一律 encodeURIComponent（手机端解码）
