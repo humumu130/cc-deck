@@ -5,7 +5,8 @@
 //    去 [待确认] 前排与任务面板滞后检测）
 //  组件二 qNotify（默认开）：会话忙碌期间用户插入提问（回合状态机忙碌 + CLI 进程
 //    仍存活，即上一事件是 prompt 而非放行的 Stop）→ POST 本机 relay
-//    /api/notify mode=confirm「用户插入提问（滚动防丢）」，手机弹 [待确认] 通知框
+//    /api/notify mode=confirm（各端通知悬浮框弹「插入的提问已排队」——不露内部
+//    机制措辞，2026-09-10 用户纠错：旧文案「用户插入提问（滚动防丢）」泄露实现术语）
 //  组件三 restorePoint（默认关）：项目目录存在 24h 内、非本会话写入的
 //    .cc-deck/state.md → 注入一行「上次会话遗留待办」提示并消费该文件（只注入一次）
 // stdout 整块注入上下文；通知 POST 与本地读取并行、最后收尾 await；异常全程静默。
@@ -89,7 +90,7 @@ async function notifyInsert(sidRaw) {
     const body = JSON.stringify({
       mode: "confirm",
       session_id: "ext-" + sidRaw,
-      text: "用户插入提问（滚动防丢）",
+      text: "你在电脑上插入的提问已排队，当前回合结束后处理",
     });
     const res = await Promise.race([
       fetch(`http://127.0.0.1:${b.port}/api/notify?token=${encodeURIComponent(lanToken)}`, {
