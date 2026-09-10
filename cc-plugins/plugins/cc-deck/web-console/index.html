@@ -4612,7 +4612,7 @@ document.addEventListener("click", (ev) => {
 
 // ⚙ 设置浮层（#317）：显示项为散装开关的镜像（点行 = 触发原按钮再回读状态），
 // 服务器管理不进浮层——左栏常驻面板已是高频区，与手机抽屉同为一级入口
-const CONSOLE_VERSION = "0.4.10";
+const CONSOLE_VERSION = "0.4.11";
 // #396 拨杆同步：滑块移到 idx 档（transform 过渡），选中档文字加 .on（白字压品牌色滑块上）
 function setLever(el, idx) {
   if (!el) return;
@@ -6200,23 +6200,48 @@ $("loginQrCancel").onclick = () => closeLoginQr();
 // pair_req 落库自动连接）。浮层复用 loginQrPop（无 pendingPair 会话，关层无副作用）
 async function addPhoneQr() {
   const ctx = ctxs.get(activeServerId) || null;
-  // #10 修正（2026-09-10 二次收严）：LAN 直连码只认「私网 IP 字面量」——页面源是
-  // tauri.localhost（exe）/127.0.0.1（本地网页）/公网域名（CF 托管页）时，拿这些当
-  // 地址发给手机全是废码（解析不到或指错机器）。页面地址合格用页面地址（手机同网
-  // 可达），否则用 relay 实测 lan_ip；都拿不到就落云桥分支，云桥也不在线明确报错
+  // #25b（2026-09-10 移动网络实测第四课）：relay 页「扫码接入」语义=手机接入本机 relay。
+  // 手机可能不在本机局域网（用户实测移动网络）——优先级：本机 relay 的云码（任何网络
+  // 可连）> LAN 直连码（仅同网）> 活动源云码（别家 relay，仅当本机无 relay）。
+  // 本机 relay 云码=COMMAND_CLOUD_INFO 拿身份 + COMMAND_PAIR_CODE 领码，问的本机
+  //（127.0.0.1 的 ctx），不再依赖「控制台有没有本机云源条目」（此前真空洞）
   const PRIV_IP = /^(192\.168|10|172\.(1[6-9]|2\d|3[01]))\./;
-  if ((!ctx || ctx.status !== "online") && localRelayInfo) {
-    const lanHost =
-      PRIV_IP.test(location.hostname || "")
-        ? location.hostname
-        : (localRelayInfo.lanIp && PRIV_IP.test(localRelayInfo.lanIp) ? localRelayInfo.lanIp : "");
-    if (lanHost) {
-      const p = JSON.stringify({ v: 1, url: `ws://${lanHost}:${localRelayInfo.port}/ws`, token: localRelayInfo.token });
-      $("loginQrTitle").textContent = "扫码接入";
-      $("loginQrSub").innerHTML = "手机 CC Deck App 扫下方二维码<br/>自动接入本机 relay（同一 WiFi）";
-      $("loginQrState").textContent = "等待手机扫码…";
-      drawLoginQr(p);
-      $("loginQrPop").classList.add("open");
+  if (localRelayInfo) {
+    const localCtx = [...ctxs.values()].find(
+      (c) => c.cfg.kind === "lan" && localEp(c.cfg.wsUrl)?.loop && c.cfg.token === localRelayInfo.token && c.status === "online",
+    ) || [...ctxs.values()].find((c) => c.cfg.kind === "lan" && localEp(c.cfg.wsUrl)?.loop && c.status === "online");
+    if (localCtx) {
+      const ci = await commandAck(localCtx, "COMMAND_CLOUD_INFO", {});
+      if (ci && ci.ok && ci.cloudInfo && ci.cloudInfo.cloud && ci.cloudInfo.bridge && ci.cloudInfo.rd && ci.cloudInfo.rk) {
+        const pc = await commandAck(localCtx, "COMMAND_PAIR_CODE", {});
+        if (pc && pc.ok && pc.pair_code) {
+          drawLoginQr(JSON.stringify({
+            t: "ccdeck-add", v: 1,
+            bridge: ci.cloudInfo.bridge, bt: ci.cloudInfo.bt, rd: ci.cloudInfo.rd, rk: ci.cloudInfo.rk,
+            code: pc.pair_code.code,
+          }));
+          $("loginQrTitle").textContent = "扫码接入";
+          $("loginQrSub").innerHTML = "手机 CC Deck App 扫下方二维码<br/>经云桥接入本机（任何网络可用）";
+          $("loginQrState").textContent = "等待手机扫码…";
+          $("loginQrPop").classList.add("open");
+          return;
+        }
+      }
+      // 无云桥/领码失败 → LAN 直连码（#10 收严：只认私网 IP 字面量）
+      const lanHost =
+        PRIV_IP.test(location.hostname || "")
+          ? location.hostname
+          : (localRelayInfo.lanIp && PRIV_IP.test(localRelayInfo.lanIp) ? localRelayInfo.lanIp : "");
+      if (lanHost) {
+        const p = JSON.stringify({ v: 1, url: `ws://${lanHost}:${localRelayInfo.port}/ws`, token: localRelayInfo.token });
+        $("loginQrTitle").textContent = "扫码接入";
+        $("loginQrSub").innerHTML = "手机 CC Deck App 扫下方二维码<br/>直连本机 relay（需同一 WiFi；远程接入需本机配云桥）";
+        $("loginQrState").textContent = "等待手机扫码…";
+        drawLoginQr(p);
+        $("loginQrPop").classList.add("open");
+        return;
+      }
+      toast("本机 relay 未配云桥且无法确定局域网地址：手机仅能同网直连（远程接入请在电脑端配置云桥）");
       return;
     }
   }

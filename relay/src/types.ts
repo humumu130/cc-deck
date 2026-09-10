@@ -357,6 +357,7 @@ export type CommandType =
   | "COMMAND_WATCH_GRANT"
   | "COMMAND_PEERS"
   | "COMMAND_PEER_KICK"
+  | "COMMAND_CLOUD_INFO"
   | "COMMAND_PERM"
   | "COMMAND_MODEL"
   | "COMMAND_REFRESH_TODOS"
@@ -467,6 +468,13 @@ export interface PeersCommand extends CommandBase {
   payload: Record<string, never>;
 }
 
+// #25b 本机 relay 云桥身份自述（移动网络手机接入用）：回 {cloud:false} 或
+// {cloud:true, bridge, bt, rd, rk}——控制台据此给手机发本机 relay 的 ccdeck-add 码
+export interface CloudInfoCommand extends CommandBase {
+  type: "COMMAND_CLOUD_INFO";
+  payload: Record<string, never>;
+}
+
 // 议题①踢除已配对设备：移除 peers + 各桥发明文 pair_nack 令其立即停止重连；幂等
 export interface PeerKickCommand extends CommandBase {
   type: "COMMAND_PEER_KICK";
@@ -491,6 +499,7 @@ export type Command =
   | WatchGrantCommand
   | PeersCommand
   | PeerKickCommand
+  | CloudInfoCommand
   | PermCommand
   | RefreshTodosCommand
   | TodoHideCommand
@@ -604,4 +613,6 @@ export interface CommandAckPayload {
   cloud?: CloudPairInfo; // 仅 COMMAND_PAIR_START 成功时携带
   pair_code?: { code: string; expires_in: number }; // 仅 COMMAND_PAIR_CODE 成功时携带
   peers?: PairedDeviceInfo[]; // 仅 COMMAND_PEERS 成功时携带（议题①）
+  // #25b 仅 COMMAND_CLOUD_INFO：本机 relay 云桥身份（cloud:false = 未配云桥）
+  cloudInfo?: { cloud: boolean; bridge?: string; bt?: string; rd?: string; rk?: string };
 }

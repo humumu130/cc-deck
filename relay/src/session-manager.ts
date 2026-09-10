@@ -1023,6 +1023,25 @@ export class SessionManager {
           this.bus.emitTransient("PAIRED_DEVICE", { dev, name, action: "kick" });
           return { command_id: cmd.command_id, ok: true };
         }
+        case "COMMAND_CLOUD_INFO": {
+          // #25b（2026-09-10 移动网络场景）：本机 relay 的云桥身份自述——控制台据此
+          // 给手机发「本机 relay 的云码」（手机在任何网络可连）。LAN token 鉴权内含
+          //（能发命令即受信端）。bt 只给首桥（多桥并发码留待需要时再扩）
+          if (!this.cloud) {
+            return { command_id: cmd.command_id, ok: true, cloudInfo: { cloud: false } };
+          }
+          return {
+            command_id: cmd.command_id,
+            ok: true,
+            cloudInfo: {
+              cloud: true,
+              bridge: (this.cfg.cloudUrls[0] ?? "").replace(/\/$/, "").replace(/^http/, "ws"),
+              bt: this.cfg.cloudToken,
+              rd: this.cloud.relayDev,
+              rk: this.cloud.keypair.publicKey,
+            },
+          };
+        }
         case "COMMAND_LOGIN_GRANT": {
           // #325 扫码登录：手机（信任信道）授权网页端出示的会话公钥，relay 配对并回 ack。
           // dev 必须与公钥派生值一致（与 pair_req 路径同款校验，防冒名占位）
