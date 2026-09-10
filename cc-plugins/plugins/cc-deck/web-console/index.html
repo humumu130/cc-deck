@@ -4612,7 +4612,7 @@ document.addEventListener("click", (ev) => {
 
 // ⚙ 设置浮层（#317）：显示项为散装开关的镜像（点行 = 触发原按钮再回读状态），
 // 服务器管理不进浮层——左栏常驻面板已是高频区，与手机抽屉同为一级入口
-const CONSOLE_VERSION = "0.4.8";
+const CONSOLE_VERSION = "0.4.9";
 // #396 拨杆同步：滑块移到 idx 档（transform 过渡），选中档文字加 .on（白字压品牌色滑块上）
 function setLever(el, idx) {
   if (!el) return;
@@ -6231,8 +6231,23 @@ async function addPhoneQr() {
   const cfg = ctx.cfg;
   let payload;
   if (cfg.kind === "lan") {
-    if (!cfg.token) { toast("本源未存令牌，无法生成手机直连码"); return; }
-    payload = JSON.stringify({ v: 1, url: cfg.wsUrl, token: cfg.token });
+    // #25 在线 LAN 分支同样要改写 loopback（活动源=本机 127.0.0.1 时原样进码=废码，
+    // 用户实测两通道皆中招）。改写优先 relay 实测 lan_ip+实测 token（条目 token 可能
+    // 随 relay 换代过期）；条目本身就是外网/私网 IP 直写时按原样（用户手填的可路由地址）
+    let url = cfg.wsUrl;
+    let tk = cfg.token;
+    const ep = localEp(url);
+    if (ep && ep.loop) {
+      const lanHost = (localRelayInfo && PRIV_IP.test(localRelayInfo.lanIp || "") && localRelayInfo.lanIp) || "";
+      if (!lanHost || !localRelayInfo) {
+        toast("无法确定本机局域网地址：手机与本机需同一 WiFi（跨网络请用云桥源的「扫码接入」）");
+        return;
+      }
+      url = `ws://${lanHost}:${localRelayInfo.port}/ws`;
+      tk = localRelayInfo.token || tk;
+    }
+    if (!tk) { toast("本源未存令牌，无法生成手机直连码"); return; }
+    payload = JSON.stringify({ v: 1, url, token: tk });
   } else {
     const c = cfg.cloud || {};
     const rd = (ctx.pendingPair && ctx.pendingPair.fresh && ctx.pendingPair.rd) || (c.paired && c.rd ? c.rd : "");
@@ -6272,12 +6287,17 @@ async function shareSrvQr() {
     if (!cfg.token) { toast("本源未存令牌，无法生成分享码"); return; }
     let url = cfg.wsUrl, token = cfg.token;
     // loopback 地址手机扫了连不通（#44 同因）：条目指的就是本机 relay 时换成
-    // lan-ip 实测端点，token 同步用实测值——源列表 token 可能随 relay 换代过期
+    // lan-ip 实测端点，token 同步用实测值——源列表 token 可能随 relay 换代过期。
+    // #25 修正：旧改写会把 location.hostname 当备选——exe 页面源 tauri.localhost
+    // 不匹配回环正则被当 LAN 地址发出（用户实测中招）。只认私网 IP 字面量
     const ep = localEp(url);
     if (ep && ep.loop && localRelayInfo && localRelayInfo.port === ep.port) {
-      const host = localRelayInfo.lanIp ||
-        (location.hostname && !/^(127\.|localhost|\[::)/.test(location.hostname) ? location.hostname : "");
+      const PRIV_IP2 = /^(192\.168|10\.|172\.(1[6-9]|2\d|3[01]))\./;
+      const host =
+        (PRIV_IP2.test(localRelayInfo.lanIp || "") && localRelayInfo.lanIp) ||
+        (PRIV_IP2.test(location.hostname || "") ? location.hostname : "");
       if (host) { url = "ws://" + host + ":" + localRelayInfo.port + "/ws"; token = localRelayInfo.token; }
+      else { toast("无法确定本机局域网地址：手机与本机需同一 WiFi（跨网络请用云桥源分享）"); return; }
     }
     payload = JSON.stringify({ v: 1, url, token });
   } else {
@@ -6317,9 +6337,12 @@ async function importSrvQr() {
   }
   if (!localRelayInfo) await probeRelayStat(); // relay 页没开过也能出码：先补一次实测探测
   if (!localRelayInfo) { toast("本机 relay 未运行"); return; }
-  const host = localRelayInfo.lanIp ||
-    (location.hostname && !/^(127\.|localhost|\[::)/.test(location.hostname) ? location.hostname : "");
-  if (!host) { toast("本机 relay 未运行"); return; }
+  // #25 同款守卫：rt 是手机直连回传地址，tauri.localhost/回环/域名都不可达——只认私网 IP
+  const PRIV_IP3 = /^(192\.168|10\.|172\.(1[6-9]|2\d|3[01]))\./;
+  const host =
+    (PRIV_IP3.test(localRelayInfo.lanIp || "") && localRelayInfo.lanIp) ||
+    (PRIV_IP3.test(location.hostname || "") ? location.hostname : "");
+  if (!host) { toast("无法确定本机局域网地址：手机与本机需同一 WiFi（跨网络请用云桥形态的「从手机添加」）"); return; }
   const url = "ws://" + host + ":" + localRelayInfo.port + "/ws";
   $("loginQrTitle").textContent = "从手机导入连接";
   $("loginQrSub").innerHTML = "手机 CC Deck App 扫码后<br/>选择要分享的连接";
