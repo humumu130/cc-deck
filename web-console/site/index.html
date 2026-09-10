@@ -47,7 +47,7 @@
         <span class="brand-mark">CC</span>
         <span class="brand-name">CC Deck</span>
       </a>
-      <a class="nav-ver" href="https://github.com/humumu130/cc-deck/releases" target="_blank" rel="noopener"><i class="pulse"></i>v0.4.4</a>
+      <a class="nav-ver" href="https://github.com/humumu130/cc-deck/releases" target="_blank" rel="noopener"><i class="pulse"></i>v0.4.5</a>
     </div>
     <div class="nav-actions">
       <a class="nav-gh" href="https://github.com/humumu130/cc-deck" target="_blank" rel="noopener">
@@ -380,7 +380,7 @@
   <section class="wrap section" id="download">
     <p class="kicker reveal">DOWNLOAD</p>
     <h2 class="reveal" style="--d:.06s">下载客户端</h2>
-    <p class="lead reveal" style="--d:.12s">当前版本 v0.4.4 · 连入同一个 relay 即可互通。</p>
+    <p class="lead reveal" style="--d:.12s">当前版本 v0.4.5 · 连入同一个 relay 即可互通。</p>
 
     <div class="dl-grid">
       <article class="dl-card reveal">
@@ -389,16 +389,19 @@
           <h3>手机 App<span>Android APK · Wear OS 手表跟装</span></h3>
         </div>
         <p>扫码配对即连：会话速览、远程审批、消息注入；任务完成推送通知，手表同步提醒。</p>
-        <div class="dl-btns">
-          <a class="btn btn-pri" href="https://github.com/humumu130/cc-deck/releases/latest" target="_blank" rel="noopener">前往 GitHub Releases</a>
-          <a class="btn btn-ghost btn-sm-block" href="http://8.133.211.170:8888/cc-deck.apk">国内镜像直链 APK</a>
+        <div class="dl-foot">
+          <div class="dl-btns">
+            <a class="btn btn-pri" href="https://github.com/humumu130/cc-deck/releases/latest" target="_blank" rel="noopener">前往 GitHub Releases</a>
+            <a class="btn btn-ghost btn-sm-block" href="http://8.133.211.170:8888/cc-deck.apk">国内镜像直链 APK</a>
+          </div>
+          <div class="dl-qr"><canvas id="qrApk" width="104" height="104"></canvas><span>手机扫码下载</span></div>
         </div>
       </article>
 
       <article class="dl-card dl-card-hot reveal" style="--d:.08s">
         <div class="dl-head">
           <div class="ic"><svg viewBox="0 0 24 24" width="20" height="20"><rect x="2.5" y="4" width="19" height="12.5" rx="2"/><path d="M9 20.5h6M12 16.5v4"/></svg></div>
-          <h3>桌面端<span>Windows · v0.4.4 · Tauri 约 3.4MB</span></h3>
+          <h3>桌面端<span>Windows · v0.4.5 · Tauri 约 3.4MB</span></h3>
         </div>
         <p>轻量原生客户端，托盘常驻、内建更新，与网页端同一套界面。</p>
         <div class="dl-btns">
@@ -413,9 +416,12 @@
           <h3>网页控制台<span>PWA · 免安装 · 全平台</span></h3>
         </div>
         <p>浏览器打开即用，可添加到主屏幕；跨网时输入 6 位配对码即接入。</p>
-        <div class="dl-btns">
-          <a class="btn btn-pri" href="https://cc-deck.humumu.online/app" target="_blank" rel="noopener">打开网页控制台</a>
-          <a class="btn btn-ghost btn-sm-block" href="https://github.com/humumu130/cc-deck" target="_blank" rel="noopener">查看源码 · 自行部署</a>
+        <div class="dl-foot">
+          <div class="dl-btns">
+            <a class="btn btn-pri" href="https://cc-deck.humumu.online/app" target="_blank" rel="noopener">打开网页控制台</a>
+            <a class="btn btn-ghost btn-sm-block" href="https://github.com/humumu130/cc-deck" target="_blank" rel="noopener">获取源码 · 私有部署</a>
+          </div>
+          <div class="dl-qr"><canvas id="qrWeb" width="104" height="104"></canvas><span>手机扫码打开</span></div>
         </div>
       </article>
     </div>
@@ -451,5 +457,28 @@
 </main>
 
 <script src="/site/assets/main.js" defer></script>
+<script src="/site/assets/qr.js"></script>
+<script>
+// #11 下载卡扫码块：APK 直链 / 控制台页 两个二维码（qr.js 为同源自有资产，零外部请求）
+(function () {
+  function draw(id, text) {
+    var cv = document.getElementById(id);
+    if (!cv || typeof QRCode === "undefined") return;
+    try {
+      var q = new QRCode(-1, QRErrorCorrectLevel.M);
+      q.addData(text);
+      q.make();
+      var n = q.getModuleCount(), S = cv.width, pad = 6, cell = Math.floor((S - pad * 2) / n);
+      var ctx = cv.getContext("2d");
+      ctx.fillStyle = "#fff";
+      ctx.fillRect(0, 0, S, S);
+      ctx.fillStyle = "#0B141F";
+      for (var r = 0; r < n; r++) for (var c = 0; c < n; c++) if (q.isDark(r, c)) ctx.fillRect(pad + c * cell, pad + r * cell, cell, cell);
+    } catch (e) {}
+  }
+  draw("qrApk", "http://8.133.211.170:8888/cc-deck.apk");
+  draw("qrWeb", "https://cc-deck.humumu.online/app");
+})();
+</script>
 </body>
 </html>
