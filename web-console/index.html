@@ -989,6 +989,8 @@
     padding: 1px 7px; border-radius: 999px; flex: none; font-weight: 500;
   }
   .his-badge.ext { color: var(--brand-2); border-color: rgba(201,100,66,.4); }
+  /* #23 托管会话（控制台新建，无终端窗口）徽章：中性弱化，悬停解释 */
+  .his-badge.bg { cursor: help; }
   .card-edit {
     margin-left: auto; flex: none; background: none; border: none; cursor: pointer;
     color: var(--faint); font-size: 12px; padding: 2px 4px; border-radius: 6px; opacity: 0;
@@ -1649,6 +1651,8 @@
         <input id="cwd" placeholder="工作目录（如 D:\dev\my-project）">
         <textarea id="prompt" rows="2" placeholder="初始指令，如：帮我看看当前项目结构并总结"></textarea>
         <div class="pair-hint" id="newTarget"></div>
+        <!-- #23 认知引导：面板新建的是后台会话（无终端窗口）；想在终端里看到对话需装 CLI 插件 -->
+        <div class="pair-hint">此为后台会话（无终端窗口）。想在终端里看到对话？给电脑端 CLI 装 CC Deck 插件后用「终端」会话。</div>
         <div class="row">
           <button id="createBtn" class="primary">创建会话</button>
         </div>
@@ -3659,7 +3663,9 @@ function render() {
       // 与手机 deletable 同口径：仅 DONE/ERROR 可删（relay 对运行中会话拒绝删除）
       const deletable = s.status === "DONE" || s.status === "ERROR";
       // #49 徽章：休眠卡（已保存未恢复）出「休眠」徽；普通遗留出「历史」；外部 CLI 出「终端」
-      const badges = dormant ? '<span class="his-badge">休眠</span>' : s.historical ? '<span class="his-badge">历史</span>' : s.external ? '<span class="his-badge ext">终端</span>' : "";
+      // #23 徽章四态：休眠/历史/终端（外部 CLI 会话）/后台（控制台新建的托管会话——
+      // 无终端窗口，消息只在面板可见；降低与终端会话的混淆）
+      const badges = dormant ? '<span class="his-badge">休眠</span>' : s.historical ? '<span class="his-badge">历史</span>' : s.external ? '<span class="his-badge ext">终端</span>' : '<span class="his-badge bg">后台</span>';
       // #49 保存恢复徽章：pinned 卡标题行左端 10px 级锚形小标（悬停说明与 toast 同口径：
       // 重启后休眠保留，点击卡片恢复——不自动拉起，2026-09-09 拍板）
       const pinFlag = s.pinned ? '<span class="pin-flag" title="已保存：重启后休眠保留，点击卡片恢复">' + PIN_ANCHOR_SVG + "</span>" : "";
