@@ -171,7 +171,9 @@ const LAN_PROBE_MS = 4000;
 // 自动重试退避（连接状态机 ③）：失败后 3s 起步、指数 ×2、30s 封顶；连上即归零。
 // 覆盖杀网/断桥/电脑端断电的长故障窗口，低频重试也避免与桥侧限流互相放大成风暴
 const RECONNECT_BASE_MS = 3000;
-const RECONNECT_MAX_MS = 30000;
+// #33（2026-09-10 用户反馈重连太频）：上限 30s→300s——云通道断的是「桥 ws」，
+// relay 长时间关机（下班/合盖）时 30s 一轮纯属空转；300s 对齐 relay 云客户端口径
+const RECONNECT_MAX_MS = 300000;
 
 // 命令 ACK 追踪：无回执超时（首等 4s）→ 重发同 id 一次（relay 按 command_id 幂等去重，
 // 重复送达回 ok:true "duplicate"，不会双执行）→ 再等 6s 仍无回执才报失败。
@@ -929,8 +931,11 @@ class RelayStore {
       if (conn.ws !== ws) return;
       opened = true;
       conn.reconnectDelay = RECONNECT_BASE_MS;
-      conn.state = "online";
-      conn.stateText = null;
+      // #33 假在线修正：桥 ws 开门 ≠ relay 在线（手机云通道连的是桥，relay 关机时
+      // 桥照样开门）。真在线 = 收到 relay 首帧（SNAPSHOT/pong，onMessage 置位）；
+      // 开门态标 connecting + 「等待电脑端响应」，用户不再看到关机电脑「在线」
+      conn.state = "connecting";
+      conn.stateText = "等待电脑端响应";
       conn.failNote = null;
       this.emit();
       this.startHb(conn, ws, cloud, keys);
@@ -1135,6 +1140,12 @@ class RelayStore {
   // ---------- 下行处理（LAN 与云通道共用，云侧已解密；按源隔离） ----------
 
   private onMessage(conn: SourceConn, msg: Envelope | CommandAck) {
+    // #33：relay 首帧 = 真在线（云通道开门只标 connecting）。LAN adoptLan 无此问题
+    // （ws 直连 relay，开门即在线），只在云通道补位
+    if (conn.channel === "cloud" && conn.state !== "online") {
+      conn.state = "online";
+      conn.stateText = null;
+    }
     if ((msg as CommandAck).type === "COMMAND_ACK") {
       const ack = msg as CommandAck;
       const p = conn.pendingCmds.get(ack.command_id);
