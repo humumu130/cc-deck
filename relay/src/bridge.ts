@@ -606,7 +606,7 @@ export class Bridge {
         // 登记了 isEnqueued 会永久跳过补发，39 段回归（晋升后重滞留）正挂在这
         this.dropEnqueuedKey(id, p.text);
         this.noteUserMsg(id, p.text, "promote");
-        this.mgr.pushExternalLog(id, "user_message", truncate(p.text, 300));
+        this.mgr.pushExternalLog(id, "user_message", truncate(p.text, 300), undefined, { full: truncate(p.text, 2000) });
       }
       return;
     }
@@ -649,11 +649,11 @@ export class Bridge {
     const consumed = this.consumePendingTexts(id, text);
     if (consumed.length) {
       for (const t of consumed) {
-        if (!this.recentlyLogged(id, t)) this.mgr.pushExternalLog(id, "user_message", truncate(t, 300));
+        if (!this.recentlyLogged(id, t)) this.mgr.pushExternalLog(id, "user_message", truncate(t, 300), undefined, { full: truncate(t, 2000) });
         this.noteUserMsg(id, t, "promote");
       }
     } else {
-      this.mgr.pushExternalLog(id, "user_message", text);
+      this.mgr.pushExternalLog(id, "user_message", text, undefined, { full: truncate(prompt, 2000) });
     }
     this.noteUserMsg(id, text, "promote");
   }
@@ -810,7 +810,7 @@ export class Bridge {
       this.mgr.setExternalPending(sessionId, list);
       this.dropEnqueuedKey(sessionId, promoted.text);
       this.noteUserMsg(sessionId, promoted.text, "promote");
-      this.mgr.pushExternalLog(sessionId, "user_message", truncate(promoted.text, 300));
+      this.mgr.pushExternalLog(sessionId, "user_message", truncate(promoted.text, 300), undefined, { full: truncate(promoted.text, 2000) });
       return true;
     }
     // CLI 回合结束会把整队排队消息合并成一条 "A\rB" prompt 提交：连续段拼接匹配则整批晋升
@@ -826,7 +826,7 @@ export class Bridge {
           for (const h of hits) {
             this.dropEnqueuedKey(sessionId, h.text);
             this.noteUserMsg(sessionId, h.text, "promote");
-            this.mgr.pushExternalLog(sessionId, "user_message", truncate(h.text, 300));
+            this.mgr.pushExternalLog(sessionId, "user_message", truncate(h.text, 300), undefined, { full: truncate(h.text, 2000) });
           }
           this.noteUserMsg(sessionId, prompt, "promote"); // 合并形态也记账：后续同形态到达直接跳过
           return true;
@@ -853,7 +853,7 @@ export class Bridge {
       for (const h of subHits) {
         this.dropEnqueuedKey(sessionId, h.text);
         this.noteUserMsg(sessionId, h.text, "promote");
-        this.mgr.pushExternalLog(sessionId, "user_message", truncate(h.text, 300));
+        this.mgr.pushExternalLog(sessionId, "user_message", truncate(h.text, 300), undefined, { full: truncate(h.text, 2000) });
       }
       return true;
     }
@@ -985,7 +985,7 @@ export class Bridge {
       // 60s 内已被晋升记录覆盖 → 跳过；PC 手敲重发（上一条也走 prompt 记录）不受影响
       if (!this.coveredByRecentPromote(id, rawPrompt)) {
         this.noteUserMsg(id, rawPrompt, "prompt");
-        this.mgr.pushExternalLog(id, "user_message", truncate(rawPrompt, 300));
+        this.mgr.pushExternalLog(id, "user_message", truncate(rawPrompt, 300), undefined, { full: truncate(rawPrompt, 2000) });
       }
     }
     void state;
@@ -1686,7 +1686,7 @@ export class Bridge {
       const qi = avail.findIndex((t) => normKey(t) === normKey(p.text));
       if (qi === -1) {
         this.noteUserMsg(id, p.text, "promote");
-        this.mgr.pushExternalLog(id, "user_message", truncate(p.text, 300));
+        this.mgr.pushExternalLog(id, "user_message", truncate(p.text, 300), undefined, { full: truncate(p.text, 2000) });
       } else {
         avail.splice(qi, 1); // 只做匹配记账，不动原队列（flushQueue 随后要注入）
         kept.push(p);
