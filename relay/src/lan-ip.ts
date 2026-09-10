@@ -4,7 +4,7 @@
 import * as os from "node:os";
 
 export interface NicLike {
-  family?: string;
+  family?: string | number;
   internal?: boolean;
   address?: string;
 }
@@ -18,9 +18,10 @@ export const VIRTUAL_NIC_RE =
 // （用户公司机 10.123.90.5 探测为空的真凶，2026-09-10）
 const PRIV_RE = /^(192\.168|10|172\.(1[6-9]|2\d|3[01]))\./;
 
-function pickFrom(list: NicLike[] | undefined): string {
+function pickFrom(list: readonly NicLike[] | undefined): string {
   for (const ni of list ?? []) {
-    if ((ni.family ?? "IPv4") !== "IPv4" && ni.family !== 4) continue;
+    const fam = ni.family ?? "IPv4";
+    if (fam !== "IPv4" && fam !== 4) continue;
     const a = ni.address ?? "";
     if (ni.internal || /^(127\.|169\.254\.)/.test(a)) continue;
     if (PRIV_RE.test(a)) return a;
@@ -31,7 +32,9 @@ function pickFrom(list: NicLike[] | undefined): string {
 /// 两段式：先只认物理网卡；一无所获时回退全网卡（Hyper-V/WSL2 开发机的宿主网常跑在
 /// vEthernet 上——严格过滤会把唯一可用地址滤掉，用户公司机实测中招 #25）。
 /// 回退仍排除 internal/回环/链路本地/非私网——地址本身可达性让手机侧连接超时兜底。
-export function detectLanIp(interfaces: Record<string, NicLike[]> = os.networkInterfaces()): string {
+export function detectLanIp(
+  interfaces: Record<string, readonly NicLike[] | undefined> = os.networkInterfaces() as Record<string, readonly NicLike[]>,
+): string {
   let ip = "";
   for (const [name, list] of Object.entries(interfaces)) {
     if (VIRTUAL_NIC_RE.test(name)) continue;
