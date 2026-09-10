@@ -3,6 +3,7 @@ import { randomUUID } from "node:crypto";
 import { readFileSync, writeFileSync, mkdirSync, existsSync, readdirSync, type Dirent } from "node:fs";
 import { join, dirname, sep } from "node:path";
 import { homedir, networkInterfaces } from "node:os";
+import { detectLanIp } from "./lan-ip.js";
 import { listModels } from "./models.js";
 import { fileURLToPath } from "node:url";
 import { WebSocketServer, WebSocket } from "ws";
@@ -294,18 +295,9 @@ export function startServer(
         if (hostTrusted(host)) allowOrigin = `http://${req.headers.host}`;
       }
       if (!isLoopback || !allowOrigin) { res.writeHead(404).end(); return; }
-      // #44 lanIp：本机 relay 直出添加手机二维码用（exe 本地打开的页面拿不到自身 LAN IP）。
-      // 按网卡名过滤虚拟适配器（VMware/VirtualBox/Hyper-V/WSL 的 host-only 网段手机不可达）
-      const virtualNic = /vmware|virtual|vethernet|wsl|loopback|tap|bluetooth/i;
-      let lanIp = "";
-      for (const [name, list] of Object.entries(networkInterfaces())) {
-        if (virtualNic.test(name)) continue;
-        for (const ni of list ?? []) {
-          if (ni.family !== "IPv4" || /^(127\.|169\.254\.)/.test(ni.address)) continue;
-          if (/^(192\.168|10\.|172\.(1[6-9]|2\d|3[01]))\./.test(ni.address)) { lanIp = ni.address; break; }
-        }
-        if (lanIp) break;
-      }
+      // #25：探测抽到 lan-ip.ts（两段式）——用户公司机实测 lan_ip:""（网卡名撞过滤词
+      // 吃光全部地址），回退段无视网卡名取私网 IP。单测 scripts/test-lanip.mjs
+      const lanIp = detectLanIp(networkInterfaces());
       res.writeHead(200, {
         "content-type": "application/json",
         "access-control-allow-origin": allowOrigin,

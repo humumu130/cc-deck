@@ -4612,7 +4612,7 @@ document.addEventListener("click", (ev) => {
 
 // ⚙ 设置浮层（#317）：显示项为散装开关的镜像（点行 = 触发原按钮再回读状态），
 // 服务器管理不进浮层——左栏常驻面板已是高频区，与手机抽屉同为一级入口
-const CONSOLE_VERSION = "0.4.9";
+const CONSOLE_VERSION = "0.4.10";
 // #396 拨杆同步：滑块移到 idx 档（transform 过渡），选中档文字加 .on（白字压品牌色滑块上）
 function setLever(el, idx) {
   if (!el) return;
@@ -6204,7 +6204,7 @@ async function addPhoneQr() {
   // tauri.localhost（exe）/127.0.0.1（本地网页）/公网域名（CF 托管页）时，拿这些当
   // 地址发给手机全是废码（解析不到或指错机器）。页面地址合格用页面地址（手机同网
   // 可达），否则用 relay 实测 lan_ip；都拿不到就落云桥分支，云桥也不在线明确报错
-  const PRIV_IP = /^(192\.168|10\.|172\.(1[6-9]|2\d|3[01]))\./;
+  const PRIV_IP = /^(192\.168|10|172\.(1[6-9]|2\d|3[01]))\./;
   if ((!ctx || ctx.status !== "online") && localRelayInfo) {
     const lanHost =
       PRIV_IP.test(location.hostname || "")
@@ -6292,7 +6292,7 @@ async function shareSrvQr() {
     // 不匹配回环正则被当 LAN 地址发出（用户实测中招）。只认私网 IP 字面量
     const ep = localEp(url);
     if (ep && ep.loop && localRelayInfo && localRelayInfo.port === ep.port) {
-      const PRIV_IP2 = /^(192\.168|10\.|172\.(1[6-9]|2\d|3[01]))\./;
+      const PRIV_IP2 = /^(192\.168|10|172\.(1[6-9]|2\d|3[01]))\./;
       const host =
         (PRIV_IP2.test(localRelayInfo.lanIp || "") && localRelayInfo.lanIp) ||
         (PRIV_IP2.test(location.hostname || "") ? location.hostname : "");
@@ -6338,7 +6338,7 @@ async function importSrvQr() {
   if (!localRelayInfo) await probeRelayStat(); // relay 页没开过也能出码：先补一次实测探测
   if (!localRelayInfo) { toast("本机 relay 未运行"); return; }
   // #25 同款守卫：rt 是手机直连回传地址，tauri.localhost/回环/域名都不可达——只认私网 IP
-  const PRIV_IP3 = /^(192\.168|10\.|172\.(1[6-9]|2\d|3[01]))\./;
+  const PRIV_IP3 = /^(192\.168|10|172\.(1[6-9]|2\d|3[01]))\./;
   const host =
     (PRIV_IP3.test(localRelayInfo.lanIp || "") && localRelayInfo.lanIp) ||
     (PRIV_IP3.test(location.hostname || "") ? location.hostname : "");

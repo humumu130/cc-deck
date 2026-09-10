@@ -9563,7 +9563,7 @@ var require_multicast_dns = __commonJS({
     var dgram = __require("dgram");
     var thunky = require_thunky();
     var events = __require("events");
-    var os2 = __require("os");
+    var os3 = __require("os");
     var noop = function() {
     };
     module.exports = function(opts) {
@@ -9693,14 +9693,14 @@ var require_multicast_dns = __commonJS({
       return that;
     };
     function defaultInterface() {
-      var networks = os2.networkInterfaces();
+      var networks = os3.networkInterfaces();
       var names = Object.keys(networks);
       for (var i = 0; i < names.length; i++) {
         var net = networks[names[i]];
         for (var j2 = 0; j2 < net.length; j2++) {
           var iface = net[j2];
           if (isIPv4(iface.family) && !iface.internal) {
-            if (os2.platform() === "darwin" && names[i] === "en0") return iface.address;
+            if (os3.platform() === "darwin" && names[i] === "en0") return iface.address;
             return "0.0.0.0";
           }
         }
@@ -9708,7 +9708,7 @@ var require_multicast_dns = __commonJS({
       return "127.0.0.1";
     }
     function allInterfaces() {
-      var networks = os2.networkInterfaces();
+      var networks = os3.networkInterfaces();
       var names = Object.keys(networks);
       var res = [];
       for (var i = 0; i < names.length; i++) {
@@ -10276,7 +10276,7 @@ var require_dist = __commonJS({
 });
 
 // src/index.ts
-import { networkInterfaces as networkInterfaces2, homedir as homedir8, hostname } from "node:os";
+import { networkInterfaces as networkInterfaces3, homedir as homedir8, hostname } from "node:os";
 import { join as join12 } from "node:path";
 import { writeFileSync as writeFileSync9, openSync as openSync3, readFileSync as readFileSync13, rmSync as rmSync3, existsSync as existsSync8 } from "node:fs";
 import { spawn as spawn3, execFileSync as execFileSync2 } from "node:child_process";
@@ -42371,7 +42371,34 @@ import { createServer } from "node:http";
 import { randomUUID as randomUUID5 } from "node:crypto";
 import { readFileSync as readFileSync11, writeFileSync as writeFileSync7, mkdirSync as mkdirSync6, existsSync as existsSync6, readdirSync as readdirSync4 } from "node:fs";
 import { join as join10, dirname as dirname5, sep as sep5 } from "node:path";
-import { homedir as homedir7, networkInterfaces } from "node:os";
+import { homedir as homedir7, networkInterfaces as networkInterfaces2 } from "node:os";
+
+// src/lan-ip.ts
+import * as os2 from "node:os";
+var VIRTUAL_NIC_RE = /vmware|virtual|vethernet|wsl|loopback|tap|bluetooth|hyper-v|docker|tailscale|zerotier|wireguard|wintun|openvpn|vpn/i;
+var PRIV_RE = /^(192\.168|10|172\.(1[6-9]|2\d|3[01]))\./;
+function pickFrom(list) {
+  for (const ni of list ?? []) {
+    if ((ni.family ?? "IPv4") !== "IPv4" && ni.family !== 4) continue;
+    const a = ni.address ?? "";
+    if (ni.internal || /^(127\.|169\.254\.)/.test(a)) continue;
+    if (PRIV_RE.test(a)) return a;
+  }
+  return "";
+}
+function detectLanIp(interfaces = os2.networkInterfaces()) {
+  let ip2 = "";
+  for (const [name, list] of Object.entries(interfaces)) {
+    if (VIRTUAL_NIC_RE.test(name)) continue;
+    ip2 = pickFrom(list);
+    if (ip2) return ip2;
+  }
+  for (const list of Object.values(interfaces)) {
+    ip2 = pickFrom(list);
+    if (ip2) return ip2;
+  }
+  return "";
+}
 
 // src/models.ts
 import { existsSync as existsSync4, readFileSync as readFileSync8 } from "node:fs";
@@ -44427,7 +44454,7 @@ function parseGateTools(raw) {
 // src/ws-server.ts
 function localIps() {
   const out = /* @__PURE__ */ new Set();
-  for (const list of Object.values(networkInterfaces())) {
+  for (const list of Object.values(networkInterfaces2())) {
     for (const ni of list ?? []) if (ni.family === "IPv4") out.add(ni.address);
   }
   return out;
@@ -44648,19 +44675,7 @@ function startServer(bus2, mgr2, cfg2, opts = {}) {
         res.writeHead(404).end();
         return;
       }
-      const virtualNic = /vmware|virtual|vethernet|wsl|loopback|tap|bluetooth/i;
-      let lanIp = "";
-      for (const [name, list] of Object.entries(networkInterfaces())) {
-        if (virtualNic.test(name)) continue;
-        for (const ni of list ?? []) {
-          if (ni.family !== "IPv4" || /^(127\.|169\.254\.)/.test(ni.address)) continue;
-          if (/^(192\.168|10\.|172\.(1[6-9]|2\d|3[01]))\./.test(ni.address)) {
-            lanIp = ni.address;
-            break;
-          }
-        }
-        if (lanIp) break;
-      }
+      const lanIp = detectLanIp(networkInterfaces2());
       res.writeHead(200, {
         "content-type": "application/json",
         "access-control-allow-origin": allowOrigin,
@@ -45735,7 +45750,7 @@ if (parentPid > 0) {
 }
 function lanIps() {
   const out = [];
-  for (const [name, list] of Object.entries(networkInterfaces2())) {
+  for (const [name, list] of Object.entries(networkInterfaces3())) {
     if (/vmware|virtualbox|wsl|loopback|hyper-v|docker|vethernet|tailscale|zerotier|wireguard|wintun|openvpn|vpn|tap/i.test(name)) continue;
     for (const net of list ?? []) {
       if (net.family !== "IPv4" || net.internal) continue;
@@ -45935,7 +45950,7 @@ if (process.env.CC_DECK_DAEMON === "1") {
   if (cfg.tokenGenerated) {
     console.log(`  token:  ${cfg.token}  (\u672A\u8BBE\u7F6E CCR_TOKEN\uFF0C\u672C\u6B21\u968F\u673A\u751F\u6210)`);
   }
-  for (const list of Object.values(networkInterfaces2())) {
+  for (const list of Object.values(networkInterfaces3())) {
     for (const net of list ?? []) {
       if (net.family === "IPv4" && !net.internal) {
         console.log(`  \u63A7\u5236\u53F0: http://${net.address}:${cfg.port}/?token=${cfg.token}`);
