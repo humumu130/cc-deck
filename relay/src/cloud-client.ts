@@ -455,6 +455,10 @@ export class CloudClient {
     if (inner.t === "hello") {
       const lastSeq = Number(inner.last_seq ?? 0) || 0;
       console.log(`[cloud] phone ${f.from} hello last_seq=${lastSeq}`);
+      // #42 hello 顺带实名化：新版 App 每次连接上报机型名（旧版无 name 字段=不动）。
+      // 存量「手机」硬编码名在设备更新后首次连接即替换为实名，无需重新配对
+      const helloName = typeof inner.name === "string" ? inner.name.trim().slice(0, 32) : "";
+      if (helloName) this.identity.renamePeer(f.from, helloName);
       this.resumePhone(f.from, lastSeq);
       return;
     }

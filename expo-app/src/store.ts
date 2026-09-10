@@ -8,6 +8,16 @@ import { uuid } from "./fmt";
 import { currentVersion } from "./updates";
 import { devId, generateKeyPair, seal, unseal, setRandomBytes, type BoxKeyPair, type SealedBox } from "./e2e";
 
+// #42 设备实名上报（配对时）：expo-constants 的 deviceName（Android = Build.MODEL，
+// 如 "Find X8"）优先，回落 RN Platform.constants.Model；都无 → "手机"。
+// 旧版硬编码「手机」是设备列表无实名的根因
+export function deviceDisplayName(): string {
+  const dn = (Constants as { deviceName?: string | null }).deviceName;
+  if (dn && dn.trim()) return dn.trim();
+  const model = (Platform.constants as { Model?: string } | undefined)?.Model;
+  return (model && model.trim()) || "手机";
+}
+
 export interface ConnConfig {
   wsUrl: string;
   token: string;
@@ -1390,7 +1400,7 @@ class RelayStore {
       this.emit({ cloudBusy: false, cloudMsg: "设备密钥生成失败" });
       return;
     }
-    const sent = this.send("COMMAND_PAIR_START", { pubkey: keys.publicKey, name: "手机" });
+    const sent = this.send("COMMAND_PAIR_START", { pubkey: keys.publicKey, name: deviceDisplayName() });
     if (!sent) this.emit({ cloudBusy: false, cloudMsg: "配对命令发送失败" });
   }
 

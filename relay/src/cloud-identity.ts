@@ -30,6 +30,8 @@ export interface CloudIdentity {
   addPeer(dev: string, entry: PeerEntry): void;
   removePeer(dev: string): void;
   touchPeer(dev: string): void;
+  // #42 设备改名（hello 顺带实名化用）：同名不写盘，改名即持久化
+  renamePeer(dev: string, name: string): void;
 }
 
 export function loadOrCreateIdentity(dataDir: string): CloudIdentity {
@@ -92,6 +94,12 @@ export function loadOrCreateIdentity(dataDir: string): CloudIdentity {
     touchPeer(dev) {
       const e = peers.get(dev);
       if (e) e.last_seen = Date.now();
+    },
+    renamePeer(dev, name) {
+      const e = peers.get(dev);
+      if (!e || !name || e.name === name) return;
+      e.name = name;
+      persistPeers();
     },
   };
 }
