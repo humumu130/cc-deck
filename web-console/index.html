@@ -1778,7 +1778,7 @@
              读写本机 relay /api/plugin-config（~/.cc-deck/config.json，与 hooks 守卫共用） -->
         <section class="gp-page off" id="gpPagePlug">
           <div class="gp-sec"><svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M10.2 5.5a1.8 1.8 0 0 1 3.6 0L16.5 5.5Q18.5 5.5 18.5 7.5V10.2a1.8 1.8 0 0 1 0 3.6V16.5Q18.5 18.5 16.5 18.5H7.5Q5.5 18.5 5.5 16.5V7.5Q5.5 5.5 7.5 5.5H10.2Z"/></svg>插件</div>
-          <div class="gp-relay-stat" id="gpPlugStat"><i></i><span id="gpPlugStatTxt">检测中…</span></div>
+          <div class="gp-relay-stat" id="gpPlugStat" style="display:none"><i></i><span id="gpPlugStatTxt">检测中…</span></div>
           <div class="gp-card gp-rows gp-plug-rows off" id="gpPlugRows">
             <div class="gp-row gp-plug-row">
               <span class="gi"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6.4l1.4 1.4L8 5.2"/><path d="M4 12.4l1.4 1.4L8 11.2"/><path d="M4 18.4l1.4 1.4L8 17.2"/><path d="M11 6.4h9M11 12.4h9M11 18.4h9"/></svg></span>
@@ -6782,9 +6782,14 @@ const PLUG_LEVERS = { taskGuard: "gpPlugTaskLever", qNotify: "gpPlugQnotifyLever
 let plugCfg = null;        // null = 未加载/不可用；否则 {taskGuard,qNotify,restorePoint}
 let plugBusy = false;      // 加载/保存并发守卫
 function plugSetStat(txt2, on) {
+  // #30 异常告警制：正常（已连接）不显示——状态行只在异常时出现（未连 relay=插件
+  // 功能全停，必须让用户看见）；on=true 仅作文案色态用
+  const row = $("gpPlugStat");
+  if (on) { row.style.display = "none"; return; }
+  row.style.display = "flex";
   const t = $("gpPlugStatTxt");
   if (t) t.textContent = txt2;
-  $("gpPlugStat").classList.toggle("on", !!on);
+  row.classList.remove("on");
 }
 function plugRender() {
   $("gpPlugRows").classList.toggle("off", !plugCfg);
