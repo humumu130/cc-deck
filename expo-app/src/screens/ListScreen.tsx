@@ -785,9 +785,12 @@ export default function ListScreen({ sessions, connected, connText, onOpen, onNe
       <View style={styles.statRow}>
         {/* #26 统计行精简+全视图可见（用户点单）：去「N 会话」；源数改电脑图标+数量，
             聚合时任何视图（含源筛选面板）都显示在线源数——不止「全部」面板 */}
-        <Text style={styles.statTotal} numberOfLines={1}>
-          {snap.aggregate && snap.sources.length > 0 ? `🖥 ${onlineSrcs}` : ""}
-        </Text>
+        {snap.aggregate && snap.sources.length > 0 ? (
+          <View style={styles.statSrc}>
+            <DesktopGlyph size={11} color={c.dim} />
+            <Text style={styles.statTotal} numberOfLines={1}>{onlineSrcs}</Text>
+          </View>
+        ) : null}
         <View style={styles.statChips}>
           {statusItems.map(({ k, n, color }) => (
             <View key={k} style={styles.statChip}>
@@ -938,6 +941,17 @@ export default function ListScreen({ sessions, connected, connText, onOpen, onNe
   );
 }
 
+// #35 线条电脑图标（替代 🖥 emoji）：圆角矩形屏 + 短底座线，
+// 与 CloudGlyph（设置抽屉）同一图形语言——View 边框绘制、1.4px 线宽
+function DesktopGlyph({ size = 11, color }: { size?: number; color: string }) {
+  return (
+    <View style={{ width: size, alignItems: "center" }}>
+      <View style={{ width: size, height: size * 0.68, borderWidth: 1.4, borderColor: color, borderRadius: 2.5 }} />
+      <View style={{ width: size * 0.45, height: 1.4, backgroundColor: color, marginTop: 1.5, borderRadius: 1 }} />
+    </View>
+  );
+}
+
 const makeStyles = (c: ThemeColors) => StyleSheet.create({
   safe: { flex: 1, backgroundColor: c.bg },
   topbar: {
@@ -971,6 +985,7 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
     flexDirection: "row", alignItems: "center", gap: 9,
     paddingHorizontal: 18, paddingTop: 8, paddingBottom: 4,
   },
+  statSrc: { flexDirection: "row", alignItems: "center", gap: 5, flexShrink: 1 },
   statTotal: { color: c.dim, fontSize: 12.5, fontWeight: "600", flexShrink: 1 },
   statChips: { flexDirection: "row", gap: 9 },
   statChip: { flexDirection: "row", alignItems: "center", gap: 3.5 },

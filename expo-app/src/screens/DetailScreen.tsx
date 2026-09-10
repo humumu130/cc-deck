@@ -51,9 +51,12 @@ const PERM_LABEL: Record<(typeof PERM_CYCLE)[number], string> = {
   plan: "规划",
 };
 
-function matchFilter(kind: string, f: ViewKind): boolean {
+function matchFilter(kind: string, f: ViewKind, tool?: string): boolean {
   if (f !== "msg") return true;
-  return kind === "assistant_text" || kind === "user_message" || kind === "thinking";
+  if (kind === "assistant_text" || kind === "user_message" || kind === "thinking") return true;
+  // #41 任务操作（TaskCreate/TaskUpdate/TodoWrite）在消息面板可见：只放行任务类
+  // 工具行，其余工具噪声仍留「全部」视图；字号随过程消息档（procVisible 咽喉）
+  return kind === "tool_use" && !!tool && /^(TaskCreate|TaskUpdate|TodoWrite)$/.test(tool);
 }
 
 // 思考过程显示开关：app 生命周期内记忆（跨页面切换，不落盘）
@@ -384,7 +387,15 @@ function TaskPop({ n, todo, goneSession, hold, anchor, onClose, onGoList }: { n:
             </View>
             {todo ? (
               <>
-                <Text style={d.tpContent}>{todo.content}</Text>
+                {/* #39a 浮窗同款拆尾缀：subAgent 标签化（与列表行一致） */}
+                <Text style={d.tpContent}>
+                  {(() => {
+                    const tag = "「subAgent」";
+                    return todo.content.endsWith(tag) ? (
+                      <>{todo.content.slice(0, -tag.length).trimEnd()}<Text style={d.todoSubTag}>subAgent</Text></>
+                    ) : todo.content;
+                  })()}
+                </Text>
                 {todo.status === "in_progress" && todo.active_form ? (
                   <Text style={d.tpActive}>正在：{todo.active_form}</Text>
                 ) : null}
@@ -787,8 +798,8 @@ export default function DetailScreen({ sid, onBack, initialView, ref }: { sid: s
       // 捕获阶段判定：按住超 350ms 且纵向占优才接管（快速竖滑仍是列表滚动）
       onMoveShouldSetPanResponderCapture: (_e, g) =>
         t.status !== "completed" &&
-        Date.now() - touchStartAt.current > 350 &&
-        Math.abs(g.dy) > 6 && Math.abs(g.dy) > Math.abs(g.dx),
+        Date.now() - touchStartAt.current > 220 &&
+        Math.abs(g.dy) > 5 && Math.abs(g.dy) > Math.abs(g.dx),
       onPanResponderGrant: () => {
         try { Vibration.vibrate(15); } catch {}
         dragY.setValue(0);
@@ -855,7 +866,18 @@ export default function DetailScreen({ sid, onBack, initialView, ref }: { sid: s
         ]}
         numberOfLines={2}
       >
-        {t.status === "in_progress" && t.active_form ? t.active_form : t.content}
+        {/* #39a subject 尾缀「subAgent」拆出渲染成小标签（委托任务标注约定），
+            主体文字不带引号串，视觉弱化为 chip 形态 */}
+        {(() => {
+          const body = t.status === "in_progress" && t.active_form ? t.active_form : t.content;
+          const tag = "「subAgent」";
+          return body.endsWith(tag) ? (
+            <>
+              {body.slice(0, -tag.length).trimEnd()}
+              <Text style={d.todoSubTag}>subAgent</Text>
+            </>
+          ) : body;
+        })()}
       </Text>
       {t.status !== "completed" ? <Text style={d.todoDragT}>⠿</Text> : null}
     </Animated.View>
@@ -903,7 +925,7 @@ export default function DetailScreen({ sid, onBack, initialView, ref }: { sid: s
       (e.kind !== "thinking" || showThink) &&
       !(procFont === "hidden" && (e.kind === "tool_use" || e.kind === "tool_result" || e.kind === "system")),
   );
-  const shownMsg = procVisible.filter((e) => matchFilter(e.kind, "msg"));
+  const shownMsg = procVisible.filter((e) => matchFilter(e.kind, "msg", e.tool));
   const shownAll = procVisible;
   const pageShown = view === "msg" ? shownMsg : view === "all" ? shownAll : [];
   const lastEntry = pageShown.length ? pageShown[pageShown.length - 1] : null;
@@ -1391,7 +1413,9 @@ export default function DetailScreen({ sid, onBack, initialView, ref }: { sid: s
                 const g = todoGroups.find((x) => x.status === t.status)!;
                 const head = i === 0 || sortedTodos[i - 1].status !== t.status ? g : null;
                 return (
-                  <Fragment key={i}>
+                  /* #39b 拖动丝滑：key 索引→稳定 key——重排时 React 按内容对齐行、
+                     不再整列重建闪烁（拖动跟手的前提） */
+                  <Fragment key={pendKeyOf(t)}>
                     {head ? (
                       <View style={d.todoSec}>
                         <View style={d.todoSecLine} />
@@ -1952,6 +1976,12 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
   todoMarkRunC: { width: 11, height: 11, borderRadius: 5.5, borderWidth: 1.5, borderColor: c.working, overflow: "hidden" },
   todoMarkRunF: { width: "50%", height: "100%", backgroundColor: c.working },
   todoT: { flex: 1, color: c.text, fontSize: 12.5, lineHeight: 17 },
+  // #39a subAgent 标注 chip：小号弱色，浅底圆角贴行内（Text 行内嵌套，无独立边框）
+  todoSubTag: {
+    fontSize: 9, color: c.faint, backgroundColor: withA(c.dim, 0.13),
+    paddingHorizontal: 5, paddingVertical: 1, borderRadius: 6, overflow: "hidden",
+    marginLeft: 6, letterSpacing: 0.3, lineHeight: 13,
+  },
   todoDel: { width: 24, height: 22, alignItems: "center", justifyContent: "center" },
   todoDelT: { color: c.faint, fontSize: 12 },
   // 子 Agent 状态块：紧贴筛选行下方，与 todoBox 同宽同圆角
