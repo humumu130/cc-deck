@@ -6625,7 +6625,24 @@ async function probeRelayStat() {
   const txt = $("gpRelayStatTxt");
   if (!txt) return;
   $("gpRelayStat").classList.toggle("on", !!localRelayInfo);
-  txt.textContent = localRelayInfo ? "运行中 · 端口 " + localRelayInfo.port : "未检测到";
+  if (localRelayInfo) {
+    txt.textContent = "运行中 · 端口 " + localRelayInfo.port;
+    return;
+  }
+  // #13 桌面壳上 relay 起不来的头号原因=系统缺 Node.js（内嵌 relay 只带脚本不带运行时；
+  // VS Code 扩展版 Claude Code 自带运行时也算「没装」）。问壳要 node 探测结果给明确引导
+  if (window.ccDeck?.relayStatus) {
+    try {
+      const st = await window.ccDeck.relayStatus();
+      if (st && st.node === false && !st.port) {
+        txt.textContent = "缺少 Node.js 运行时 · 点击查看安装方法";
+        txt.title = "内置 relay 需要 Node.js（Claude Code 的 VS Code 扩展不算——它自带运行时不进系统 PATH）";
+        $("gpRelayStat").onclick = () => { window.ccDeck.openExternal("https://nodejs.org/zh-cn").catch(() => {}); };
+        return;
+      }
+    } catch {}
+  }
+  txt.textContent = "未检测到";
 }
 
 // ── #448 设置「插件」页：三开关（任务调度强化/插入问答通知/恢复点）读写本机 relay

@@ -227,14 +227,17 @@ fn port_listening(port: u16) -> bool {
 
 // node 探测只做 PATH 查找（where.exe），不执行 node——Windows 商店的
 // WindowsApps 假别名 stub 会让 `node --version` 挂起不返回（"处理中"卡死根因）。
-// #334 审查：启动自动拉起后 spawn 必须用 where 解析出的绝对路径——裸名 "node"
-// 会被 CreateProcess 先搜 exe 所在目录/CWD，exe 旁预置的同名 exe 将被静默执行
+// #13（2026-09-10）：where 会命中未安装机器上的商店 stub（0 字节假别名）——路径含
+// WindowsApps 一律视为未装，否则 spawn 出僵尸进程、端口永远起不来还报 node:true
 fn node_path() -> Option<std::path::PathBuf> {
     let out = std::process::Command::new("where").arg("node").output().ok()?;
     if !out.status.success() { return None; }
-    let first = String::from_utf8_lossy(&out.stdout).lines().next()?.trim().to_owned();
-    if first.is_empty() { return None; }
-    Some(std::path::PathBuf::from(first))
+    for line in String::from_utf8_lossy(&out.stdout).lines() {
+        let first = line.trim();
+        if first.is_empty() || first.to_ascii_lowercase().contains("windowsapps") { continue; }
+        return Some(std::path::PathBuf::from(first));
+    }
+    None
 }
 
 fn node_in_path() -> bool {
@@ -288,7 +291,9 @@ fn spawn_embedded_relay(app: &tauri::AppHandle) -> Result<(), String> {
     use std::os::windows::process::CommandExt;
     let log = data_dir.join("embedded-relay.log");
     let out = std::fs::File::create(&log).map_err(|e| e.to_string())?;
-    let node = node_path().ok_or("未找到 node（装了 Claude Code 的机器应有；没装请先安装 Node.js）")?;
+    let node = node_path().ok_or(
+        "未检测到 Node.js 运行时——内置 relay 需要它（VS Code 的 Claude Code 扩展自带运行时，不算已装）。请到 nodejs.org 安装 Node.js 后重启 CC Deck",
+    )?;
     match std::process::Command::new(node)
         .arg(&script)
         .env("CCR_PORT", port.to_string())
