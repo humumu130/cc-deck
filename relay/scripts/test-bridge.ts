@@ -285,6 +285,8 @@ assert((await waitAck(fId)).ok, "EXT_INPUT acked (immediate inject will fail)");
 await hook({ event: "Stop", session_id: "cli-3" });
 await waitLog(() => fakeLog().some((a) => a[0] === "424242"));
 assert(fakeLog().some((a) => a[0] === "424242"), "inject attempted on dead pid");
+// 注入尝试落盘后失败清理链（clearPid + 失败日志）异步一拍——高负载下同拍断言偶发假阴性
+await waitLog(() => mgr.snapshot().find((s) => s.session_id === extId("cli-3"))?.cli_pid === undefined);
 assert(mgr.snapshot().find((s) => s.session_id === extId("cli-3"))?.cli_pid === undefined, "pid cleared on failure");
 assert(events.some((e) => e.type === "SESSION_LOG" && String((e.payload as { text: string }).text).includes("注入失败")), "failure logged");
 
@@ -563,6 +565,16 @@ assert(ack24.ok === false, "empty rename rejected");
   assert(sB?.status === "WAITING" && !!sB?.waiting_request, "30 banner kept after timeout");
   const rbId = sB!.waiting_request!.request_id;
   assert(!events.some((e) => e.type === "SESSION_WAITING_RESOLVED" && (e.payload as { request_id: string }).request_id === rbId), "30 no timeout resolved for question");
+  // 30b.5 #47：超时放行后 CLI 对本地选择器发 permission 通知——不得把 questions
+  // 横幅覆盖成 passive（真实事故：手机/桌面从可作答塌缩成「请在电脑上处理」，
+  // 晚答兜底断链）。横幅原样保留（request_id 与 questions 都不变）
+  await hook({ event: "Notification", message: "Claude needs your permission to use AskUserQuestion" });
+  await wait(150);
+  const sB5 = st();
+  assert(
+    sB5?.status === "WAITING" && sB5?.waiting_request?.request_id === rbId && !!sB5?.waiting_request?.questions?.length && sB5?.waiting_request?.decidable === true,
+    "30 permission notification does not override question banner (#47)",
+  );
 
   // 30c. 晚答（兜底）→ Esc 关本地选择器 + 答案文本注入
   const bId = send("COMMAND_ANSWER", { session_id: extId("cli-1"), request_id: rbId, answers: ["B"] });
@@ -1517,6 +1529,25 @@ assert(ack24.ok === false, "empty rename rejected");
     events.some((e) => e.type === "SESSION_UPDATED" && e.session_id === extId("cli-1") && (e.payload as { todos?: { content?: string }[] }).todos?.some((t) => t.content === "[待确认] #52 通知通路测试")),
     "47 [待确认] todo 照旧注入目标会话",
   );
+}
+
+// 48. #50 compact 换代归档：CLI /compact 开新 session_id（进程不变）→ 同 cli_pid
+//     新 ext 会话出现时旧身立即归档（DONE+historical+系统日志），不再双显示
+//（2026-09-11 用户实测：「CC-watch-ba」+「0.4.3 memory 恢复点接力」同进程两条）
+{
+  const oldId = extId("cli-9");
+  const newId = extId("cli-9b");
+  await hook({ event: "UserPromptSubmit", prompt: "旧世代会话", session_id: "cli-9", cli_pid: 999001 });
+  await wait(150);
+  assert(!!mgr.getExternal(oldId), "48 old-gen session established");
+  await hook({ event: "UserPromptSubmit", prompt: "压缩后新世代", session_id: "cli-9b", cli_pid: 999001 });
+  await wait(200);
+  const old = mgr.getExternal(oldId);
+  assert(old?.status === "DONE" && old?.historical === true, "48 old-gen archived (DONE + historical)");
+  const cur = mgr.getExternal(newId);
+  assert(!!cur && cur.historical !== true && cur.cli_pid === 999001, "48 new-gen active with pid");
+  await hook({ event: "SessionEnd", session_id: "cli-9b", reason: "clear" });
+  await hook({ event: "SessionEnd", session_id: "cli-9", reason: "clear" });
 }
 
 wsCur!.close();
