@@ -821,6 +821,22 @@ export class Bridge {
         }
       }
     }
+    // #12 包含式回退（2026-09-10）：注入文与用户手打文被 CLI 合并成一条提交时，前两式
+    // 皆脱靶（不连续/掺入其他文本），pending 条目滞留到回合结束仍在队里（Stop 兜底跳过
+    // 在队项）→ 客户端永远排队闪烁。提交文本完整包含 pending 原文即视为已处理（与
+    // consumePendingTexts 的口径一致）；误伤面仅限旧 pending 恰为后续更长提交的子串，
+    // 晋升一条本就该出的旧条目，无害
+    const subHits = list.filter((p) => key.includes(normKey(p.text)));
+    if (subHits.length) {
+      const keptList = list.filter((p) => !key.includes(normKey(p.text)));
+      this.mgr.setExternalPending(sessionId, keptList);
+      for (const h of subHits) {
+        this.dropEnqueuedKey(sessionId, h.text);
+        this.noteUserMsg(sessionId, h.text, "promote");
+        this.mgr.pushExternalLog(sessionId, "user_message", truncate(h.text, 300));
+      }
+      return true;
+    }
     return false;
   }
 
