@@ -7043,6 +7043,32 @@ async function probeLocalRelay() {
   // #40x relay 页状态行：启动后静默探一次（结果落到 gpRelayStat，打开抽屉/切页时再补探）
   setTimeout(probeRelayStat, 1100);
 
+  // 桌面壳启动自动检查更新（用户 2026-09-10 点单）：静默 check-only（绝不自动装——
+  // 不走 shellCheckUpdate，其在无 ccDeck.checkUpdate 桥时会落到 updater 的自动
+  // downloadAndInstall 分支），有新版 toast 一句 + 关于页版本位预填「→ vX」；
+  // 失败零打扰。24h 内不重复（localStorage）
+  if (window.ccDeck && window.__TAURI__ && window.__TAURI__.updater) {
+    try {
+      const lastAuto = Number(localStorage.getItem("ccd_auto_upd_chk") || 0);
+      if (Date.now() - lastAuto > 24 * 3600 * 1000) {
+        localStorage.setItem("ccd_auto_upd_chk", String(Date.now()));
+        setTimeout(async () => {
+          try {
+            const u = await Promise.race([
+              window.__TAURI__.updater.check(),
+              new Promise((_, rej) => setTimeout(() => rej(new Error("timeout")), 10_000)),
+            ]);
+            if (u && u.available) {
+              const v = $("gpUpdateV");
+              if (v) v.textContent = "→ " + u.version;
+              toast("发现新版 v" + u.version + "：设置 → 关于 → 检查更新", 6000);
+            }
+          } catch {}
+        }, 5000);
+      }
+    } catch {}
+  }
+
   // #17 桌面壳自愈：首探未命中时 90s 内每 6s 重探——Defender 冷扫描 2MB relay.mjs
   // 可让内嵌 relay 起过壳的 4s 就绪窗口，稍后起来了页面却已判「未检测到」；重探
   // 命中即刷新 localRelayInfo 与状态行（probeRelayStat 幂等）。同事实机：有 Node
