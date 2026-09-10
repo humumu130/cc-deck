@@ -62,7 +62,9 @@ function Lever<T extends string>({ options, value, onChange }: {
   const { c } = useTheme();
   const d = useThemeStyles(makeStyles);
   const idx = Math.max(0, options.findIndex((o) => o.k === value));
-  const [w] = useState(174);
+  // #37 同行化后拨杆整体缩小：174→118 宽、34→24 高（与「过程消息」标题同一行，
+  // 侧边栏纵向空间紧张——用户点单）
+  const [w] = useState(118);
   const seg = w / options.length;
   const x = useRef(new Animated.Value(idx * seg)).current;
   useEffect(() => {
@@ -351,23 +353,8 @@ export default function SettingsDrawer({
     snap.sources.find((s) => s.state === "online") ??
     snap.sources[0] ??
     null;
-  const connDotColor = !activeSrc
-    ? c.faint
-    : activeSrc.state === "online"
-      ? c.done
-      : activeSrc.state === "connecting" || activeSrc.state === "reconnecting"
-        ? c.waiting
-        : activeSrc.state === "offline" || activeSrc.state === "unpaired"
-          ? c.error
-          : c.faint;
-  const connSubText = activeSrc
-    ? [
-        activeSrc.channel === "cloud" ? "云桥" : activeSrc.channel === "lan" ? "LAN" : null,
-        SRC_STATE_TEXT[activeSrc.state],
-      ]
-        .filter(Boolean)
-        .join(" · ")
-    : "";
+  // （#36 状态卡已删：connDotColor/connSubText 随之退役）
+
 
   // 关于区检查更新行：与关于弹窗共用同一套检查逻辑（行内反馈）
   const upd = useUpdateCheck();
@@ -406,35 +393,43 @@ export default function SettingsDrawer({
             <Text style={d.secToggleT}>{srvCollapsed ? "▸" : "▾"}</Text>
           </Pressable>
         </View>
-        {/* 状态卡：活动源状态点 + 名称粗体 + 通道/状态副行；整卡点击重连（原顶部连接行迁入） */}
-        <Pressable
-          style={d.connCard}
-          android_ripple={{ color: c.tintSoft, borderless: false, radius: 12 }}
-          onPress={() => store.connect()}
-          accessibilityLabel={`连接状态${activeSrc ? ` ${activeSrc.name} ${connSubText}` : " 未配置"}，点击立即重连`}
-        >
-          <View style={[d.connDot, { backgroundColor: connDotColor }]} />
-          <View style={d.connMain}>
-            <Text style={d.connNameT} numberOfLines={1}>{activeSrc ? activeSrc.name : "未配置"}</Text>
-            {connSubText ? <Text style={d.connSubT} numberOfLines={1}>{connSubText}</Text> : null}
-          </View>
-          <Text style={d.connReT}>↻ 重连</Text>
-        </Pressable>
+        {/* 状态卡已删（#36 用户点单）：常驻首行撤销——状态与重连并入下方各连接行。
+            未配置任何源时仍需一个入口（否则空态无路可走），保留仅此场景的引导行 */}
+        {!srvCollapsed && servers.length === 0 ? (
+          <Pressable style={d.connCard} android_ripple={{ color: c.tintSoft, borderless: false, radius: 12 }} onPress={() => { onClose(); onSetup(); }}>
+            <View style={[d.connDot, { backgroundColor: c.faint }]} />
+            <View style={d.connMain}>
+              <Text style={d.connNameT}>未配置</Text>
+              <Text style={d.connSubT}>点此添加第一台电脑</Text>
+            </View>
+          </Pressable>
+        ) : null}
         {!srvCollapsed ? (
         <ScrollView style={d.srvScroll} nestedScrollEnabled showsVerticalScrollIndicator={false}>
           {servers.map((e) => {
             const active = e.id === activeId;
+            const st = snap.sources.find((x) => x.id === e.id);
+            const online = st?.state === "online";
+            const chans = online ? (st?.channel ?? null) : null;
             return (
               <View key={e.id} style={[d.srvRow, active && d.srvRowOn]}>
                 <Pressable style={d.srvMain} android_ripple={{ color: c.tintSoft, borderless: false }} onPress={() => pick(e)}>
                   <View style={d.srvHead}>
                     {/* #337 身份色点：登记后固定（id 哈希取色板），与选中/在线状态解耦；
-                        当前选中由 srvRowOn 外侧亮边框表达 */}
+                        当前选中由 srvRowOn 外侧亮边框表达。#36 状态并行走尾：
+                        离线=点行重连（store.connect 活动源）/在线=云桥或 LAN 通道小图标 */}
                     <View style={[d.srvDot, { backgroundColor: srvColorMap.get(e.id) ?? c.faint }]} />
                     <Text style={d.srvName} numberOfLines={1}>{e.name}</Text>
-                    {e.cloud ? <Text style={d.srvCloud}>☁</Text> : null}
+                    {e.cloud ? <CloudGlyph size={12} color={online ? c.done : c.faint} /> : null}
+                    {online ? (
+                      chans === "cloud" ? <CloudGlyph size={11} color={c.dim} /> : null
+                    ) : (
+                      <Pressable hitSlop={6} onPress={() => { pick(e); store.connect(); }} accessibilityLabel={`${e.name} 离线，点击重连`}>
+                        <Text style={[d.srvRe, { color: c.waiting }]}>↻</Text>
+                      </Pressable>
+                    )}
                   </View>
-                  <Text style={d.srvUrl} numberOfLines={1}>{e.wsUrl}</Text>
+                  <Text style={d.srvUrl} numberOfLines={1}>{online ? (chans === "cloud" ? "云桥在线" : chans === "lan" ? "LAN 在线" : e.wsUrl) : e.wsUrl}</Text>
                 </Pressable>
                 <Pressable style={d.srvEdit} android_ripple={{ color: c.tintSoft, borderless: false, radius: 13 }} onPress={() => edit(e)}>
                   <Text style={d.srvEditT}>✎</Text>
@@ -445,30 +440,14 @@ export default function SettingsDrawer({
               </View>
             );
           })}
-          {/* 新增入口两格（#276）：手动添表单 / 扫 PC 终端码一步填——同一虚线风格并排 */}
+          {/* 新增入口（#276/#36）：仅手动添加——扫码入口在顶栏 APP 名旁已有，此处删除重复按钮 */}
           <View style={d.addRowWrap}>
             <Pressable style={d.addRow} android_ripple={{ color: c.tintSoft, borderless: false }} onPress={() => { onClose(); onSetup(); }}>
               <Text style={d.addT}>＋ 手动添加</Text>
             </Pressable>
-            <Pressable style={d.addRow} android_ripple={{ color: c.tintSoft, borderless: false }} onPress={() => { onClose(); onScan(); }}>
-              <Text style={d.addT}>▣ 扫码添加</Text>
-            </Pressable>
           </View>
-          {/* #308：活动源是局域网地址且未配云桥——跨网即断线，温和引导去编辑页配对 */}
-          {(() => {
-            const cur = servers.find((e) => e.id === activeId) ?? servers[0];
-            const lanOnly = cur && /^ws:\/\/(10\.|192\.168\.|172\.(1[6-9]|2\d|3[01])\.|127\.)/.test(cur.wsUrl) && !cur.cloud;
-            if (!lanOnly || srvCollapsed) return null;
-            return (
-              <Pressable
-                style={d.cloudHint}
-                android_ripple={{ color: c.tintSoft, borderless: false }}
-                onPress={() => edit(cur)}
-              >
-                <Text style={d.cloudHintT}>🌤 不在同一网络也能用：为此源配对云桥 ›</Text>
-              </Pressable>
-            );
-          })()}
+          {/* #308 云桥引导已删（#36 用户点单）：提示框啰嗦+太阳云图标无意义——
+              配对入口在连接详情（点行进去）已有，此引导框整块移除 */}
         </ScrollView>
         ) : null}
         {!srvCollapsed && servers.length === 0 ? <Text style={d.srvEmpty}>还没有服务器，点下方新增</Text> : null}
@@ -513,9 +492,9 @@ export default function SettingsDrawer({
         </View>
         {!dispCollapsed ? (
         <>
-        <View style={d.setItem}>
+        <View style={[d.setItem, d.setRow]}>
           <Text style={d.setLabel}><Text style={d.rowIconT}>▤ </Text>过程消息</Text>
-          {/* #353 拨杆档位选择器：整条轨道一个胶囊，滑块弹拨到选中档（替代三框点选） */}
+          {/* #37 同行化：缩小版拨杆（118×24）与标题同行（原两行占位） */}
           <Lever options={FONT_OPTS} value={processFont} onChange={setProcessFont} />
         </View>
         {/* 多源聚合（#294 批4）：持久化（display-settings）+ 连接行为（store.setAggregate：
@@ -576,6 +555,19 @@ export default function SettingsDrawer({
   );
 }
 
+// #36 线条云图标（View 边框绘制，替代拟物 ☁）：三段圆弧底 + 短底线的极简云形。
+// 不引 svg 库——项目图形语言纯 View/Text，1.4px 边框与整体线条风一致
+function CloudGlyph({ size = 12, color }: { size?: number; color: string }) {
+  const b = { borderColor: color };
+  const r = size * 0.42;
+  return (
+    <View style={{ width: size, height: size * 0.62, flexDirection: "row", alignItems: "flex-end", justifyContent: "center" }}>
+      <View style={{ width: r * 2, height: r * 2, borderRadius: r, borderWidth: 1.4, ...b, marginRight: -r * 0.35 }} />
+      <View style={{ width: r * 1.5, height: r * 1.5, borderRadius: r * 0.75, borderWidth: 1.4, ...b, marginBottom: r * 0.2 }} />
+    </View>
+  );
+}
+
 const makeStyles = (c: ThemeColors) => StyleSheet.create({
   root: { ...FILL, zIndex: 60, flexDirection: "row" },
   scrim: { ...FILL, backgroundColor: "#000" },
@@ -614,6 +606,7 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
   srvName: { color: c.text, fontSize: 13.5, fontWeight: "600", flexShrink: 1 },
   srvUrl: { color: c.faint, fontSize: 10.5, marginTop: 1.5 },
   srvCloud: { color: c.done, fontSize: 11.5 },
+  srvRe: { fontSize: 13, fontWeight: "700", paddingHorizontal: 2 },
   srvEdit: { width: 34, height: 42, alignItems: "center", justifyContent: "center" },
   srvEditT: { color: c.dim, fontSize: 13.5 },
   srvDel: { width: 36, height: 42, alignItems: "center", justifyContent: "center" },
@@ -670,19 +663,20 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
   setRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
   setLabel: { color: c.text, fontSize: 13.5, fontWeight: "600" },
   rowIconT: { color: c.dim, fontSize: 12, fontWeight: "400" },
-  // #353 拨杆：胶囊轨道 + 浮起滑块（阴影），标签盖在轨道上层
+  // #353 拨杆：胶囊轨道 + 浮起滑块（阴影），标签盖在轨道上层。
+  // #37 同行缩小版：24 高（原 34），拨杆随行尾布局（setRow 已有 space-between）
   leverTrack: {
-    flexDirection: "row", alignSelf: "stretch", marginTop: 9, height: 34, borderRadius: 17,
+    flexDirection: "row", height: 24, borderRadius: 12,
     backgroundColor: c.tintSoft, borderWidth: 1, borderColor: c.line, overflow: "hidden",
   },
   leverThumb: {
-    position: "absolute", top: 3, left: 0, bottom: 3, borderRadius: 14,
+    position: "absolute", top: 2, left: 0, bottom: 2, borderRadius: 10,
     backgroundColor: c.panel2, borderWidth: 1, borderColor: withA(c.brandA, 0.4),
     // 勿加 elevation：Android 上 elevation 压过后续兄弟的 zIndex，会把选中档
     // 标签整个盖住（标签须渲染在滑块上层，靠 JSX 顺序即可）
   },
   leverOpt: { flex: 1, alignItems: "center", justifyContent: "center", zIndex: 1 },
-  leverT: { color: c.dim, fontSize: 12 },
+  leverT: { color: c.dim, fontSize: 11 },
   leverTOn: { color: c.text, fontWeight: "600" },
   sw: {},
   segFull: { flexDirection: "row", gap: 6, marginTop: 8 },
