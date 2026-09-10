@@ -780,9 +780,10 @@ export default function ListScreen({ sessions, connected, connText, onOpen, onNe
         </Pressable>
       </View>
       <View style={styles.statRow}>
+        {/* #26 统计行精简+全视图可见（用户点单）：去「N 会话」；源数改电脑图标+数量，
+            聚合时任何视图（含源筛选面板）都显示在线源数——不止「全部」面板 */}
         <Text style={styles.statTotal} numberOfLines={1}>
-          {sessions.length > 0 ? `${sessions.length} 会话` : "暂无会话"}
-          {badgeOn ? ` · ${snap.sources.length} 源聚合` : ""}
+          {snap.aggregate && snap.sources.length > 0 ? `🖥 ${onlineSrcs}` : ""}
         </Text>
         <View style={styles.statChips}>
           {statusItems.map(({ k, n, color }) => (
@@ -805,7 +806,7 @@ export default function ListScreen({ sessions, connected, connText, onOpen, onNe
           hitSlop={4}
           accessibilityLabel={`列表布局${DENSITY_LABEL[density]}，点击切换`}
         >
-          <Text style={styles.densityT} numberOfLines={1}>布局·{DENSITY_LABEL[density]}</Text>
+          <Text style={styles.densityT} numberOfLines={1}>{DENSITY_LABEL[density]}</Text>
         </Pressable>
         {idleCount > 0 ? (
           <Pressable

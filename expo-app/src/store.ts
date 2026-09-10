@@ -1555,6 +1555,16 @@ class RelayStore {
   private async saveCloudEntry(
     bridge: string, bt: string, id: string | undefined, r: { rd: string; rk: string; dev: string },
   ): Promise<string | null> {
+    // #26：扫码接入新源时若单源模式，自动转聚合——旧实现 connectServer 单源切源会
+    // 同步拆掉原活动源（家里被下线，用户实测）。扫码接入的本质是"多加一台电脑"，
+    // 多源并存才是预期；聚合开启后 connectServer 不再拆其他源
+    if (!id && !this.aggregate) {
+      const list = await this.readServers();
+      if (list.length > 0) {
+        await AsyncStorage.setItem("cc.display.aggregate", "1");
+        this.aggregate = true;
+      }
+    }
     try {
       await this.connectServer({
         id: id ?? uuid(),
