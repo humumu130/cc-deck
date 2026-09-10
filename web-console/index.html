@@ -4582,7 +4582,7 @@ document.addEventListener("click", (ev) => {
 
 // ⚙ 设置浮层（#317）：显示项为散装开关的镜像（点行 = 触发原按钮再回读状态），
 // 服务器管理不进浮层——左栏常驻面板已是高频区，与手机抽屉同为一级入口
-const CONSOLE_VERSION = "0.4.4";
+const CONSOLE_VERSION = "0.4.5";
 // #396 拨杆同步：滑块移到 idx 档（transform 过渡），选中档文字加 .on（白字压品牌色滑块上）
 function setLever(el, idx) {
   if (!el) return;
@@ -6127,14 +6127,17 @@ $("loginQrCancel").onclick = () => closeLoginQr();
 // pair_req 落库自动连接）。浮层复用 loginQrPop（无 pendingPair 会话，关层无副作用）
 async function addPhoneQr() {
   const ctx = ctxs.get(activeServerId) || null;
-  // #44 概念解耦：本机 relay 在跑时（状态卡「运行中」），添加手机直接走本机——
-  // 不依赖任何服务器条目在线。LAN IP 取页面地址（exe 本地打开时回退探测），端口/token 用 local-info 实测值
+  // #10 修正（2026-09-10）：LAN 直连码只在拿到「有效非回环」地址时才出——旧实现
+  // lanIp 探测失败（回环）也照发，公司电脑网页端 ctx 离线时会扫出 127.0.0.1 的废码
+  //（正确形态：云桥码经云接入）。回环/拿不到 LAN IP 时落到云桥分支，云桥也不在线
+  // 则明确报错引导，绝不出废码
   if ((!ctx || ctx.status !== "online") && localRelayInfo) {
-    const host = location.hostname && !/^(127\.|localhost|\[::)/.test(location.hostname)
-      ? location.hostname
-      : (localRelayInfo.lanIp || "");
-    if (host) {
-      const p = JSON.stringify({ v: 1, url: `ws://${host}:${localRelayInfo.port}/ws`, token: localRelayInfo.token });
+    const lanHost =
+      location.hostname && !/^(127\.|localhost|\[::)/.test(location.hostname)
+        ? location.hostname
+        : (localRelayInfo.lanIp && !/^127\./.test(localRelayInfo.lanIp) ? localRelayInfo.lanIp : "");
+    if (lanHost) {
+      const p = JSON.stringify({ v: 1, url: `ws://${lanHost}:${localRelayInfo.port}/ws`, token: localRelayInfo.token });
       $("loginQrTitle").textContent = "扫码接入";
       $("loginQrSub").innerHTML = "手机 CC Deck App 扫下方二维码<br/>自动接入本机 relay（同一 WiFi）";
       $("loginQrState").textContent = "等待手机扫码…";
@@ -6143,7 +6146,14 @@ async function addPhoneQr() {
       return;
     }
   }
-  if (!ctx || ctx.status !== "online") { toast(ctx ? "当前活动源未在线（重试中…），连上后即可扫码接入" : "请先添加/连接服务器，再扫码接入手机"); return; }
+  if (!ctx || ctx.status !== "online") {
+    toast(ctx
+      ? "当前活动源未在线（重试中…），连上后即可扫码接入"
+      : localRelayInfo
+        ? "手机扫码接入需要有效连接：本页先连上云桥（或手机与本机同一 WiFi 后重试）"
+        : "请先添加/连接服务器，再扫码接入手机");
+    return;
+  }
   const cfg = ctx.cfg;
   let payload;
   if (cfg.kind === "lan") {
