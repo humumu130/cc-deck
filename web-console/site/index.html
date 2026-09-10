@@ -461,11 +461,11 @@
 <script>
 // #11 下载卡扫码块：APK 直链 / 控制台页 两个二维码（qr.js 为同源自有资产，零外部请求）
 (function () {
-  function draw(id, text) {
+  function draw(id, text, level) {
     var cv = document.getElementById(id);
     if (!cv || typeof QRCode === "undefined") return;
     try {
-      var q = new QRCode(-1, QRErrorCorrectLevel.M);
+      var q = new QRCode(-1, level || QRErrorCorrectLevel.M);
       q.addData(text);
       q.make();
       // #18 暖米色浅底 + 深蓝灰码点：去纯白突兀感，对比度仍 >10:1（保扫码）；
@@ -480,7 +480,8 @@
     } catch (e) {}
   }
   draw("qrApk", "https://cc-deck.humumu.online/dl/cc-deck.apk");
-  draw("qrWeb", "https://cc-deck.humumu.online/app");
+  // 短 URL 用 Q 纠错档升版本（33 模块），与 APK 码（M 档 33）同密度——两码视觉一致大
+  draw("qrWeb", "https://cc-deck.humumu.online/app", QRErrorCorrectLevel.Q);
 })();
 </script>
 </body>
