@@ -24,12 +24,18 @@ use std::sync::atomic::{AtomicBool, Ordering};
 
 use serde_json::Value;
 use tauri::Manager;
+use tauri_plugin_global_shortcut::GlobalShortcutExt;
 use tauri_plugin_opener::OpenerExt;
 
 /// 托盘菜单“退出”置位（否则关窗一律隐藏到托盘）
 static QUITTING: AtomicBool = AtomicBool::new(false);
 /// 托盘是否建成：图标缺失等失败时关窗直退，不留“隐身无出口”状态
 static TRAY_OK: AtomicBool = AtomicBool::new(false);
+/// #8 呼出/收起快捷键当前注册态（换绑时先注销旧的；None=已注销）
+static TOGGLE_SHORTCUT: std::sync::Mutex<Option<tauri_plugin_global_shortcut::Shortcut>> =
+    std::sync::Mutex::new(None);
+/// #8 默认呼出/收起键：网页侧可用 set_toggle_shortcut 改绑（localStorage 记忆）
+const DEFAULT_TOGGLE_KEY: &str = "alt+shift+d";
 
 /// 页面启动前注入的桥（等价 desktop/preload.js）：probeLocal 优先走 window.ccDeck；
 /// 外链兜底：捕获阶段拦 target=_blank 与 window.open，转交壳侧系统浏览器打开
@@ -120,6 +126,50 @@ fn show_main(app: &tauri::AppHandle) {
         let _ = w.unminimize();
         let _ = w.set_focus();
     }
+}
+
+/// #8 呼出/收起切换：可见（且未最小化）→ 隐藏；否则唤起。快捷键/托盘语义共用
+fn toggle_main(app: &tauri::AppHandle) {
+    if let Some(w) = app.get_webview_window("main") {
+        let visible = w.is_visible().unwrap_or(true) && !w.is_minimized().unwrap_or(false);
+        if visible {
+            let _ = w.hide();
+        } else {
+            show_main(app);
+        }
+    }
+}
+
+/// #8 注册呼出/收起快捷键（换绑语义）：先注销旧键再注册新键；combo 空 = 注销。
+/// 键位被其他应用占用时 register 报错上抛，网页侧 toast 提示
+fn register_toggle_shortcut(app: &tauri::AppHandle, combo: &str) -> Result<(), String> {
+    use tauri_plugin_global_shortcut::ShortcutState;
+    let gs = app.global_shortcut();
+    let mut cur = TOGGLE_SHORTCUT.lock().unwrap();
+    if let Some(old) = cur.take() {
+        let _ = gs.unregister(old);
+    }
+    if combo.trim().is_empty() {
+        return Ok(());
+    }
+    let shortcut: tauri_plugin_global_shortcut::Shortcut =
+        combo.parse().map_err(|e| format!("快捷键格式无效：{e:?}"))?;
+    gs.on_shortcut(shortcut, |app, _s, event| {
+        if event.state == ShortcutState::Pressed {
+            toggle_main(app);
+        }
+    })
+    .map_err(|e| format!("快捷键注册失败（可能被其他应用占用）：{e}"))?;
+    *cur = Some(shortcut);
+    Ok(())
+}
+
+/// #8 网页侧改绑呼出/收起键：combo=null/空串注销。返回生效键位（空串=无快捷键）
+#[tauri::command]
+fn set_toggle_shortcut(app: tauri::AppHandle, combo: Option<String>) -> Result<String, String> {
+    let c = combo.unwrap_or_default();
+    register_toggle_shortcut(&app, &c)?;
+    Ok(c)
 }
 
 /// 托盘（等价 Electron 的 createTray）：默认窗口图标 + “显示主窗口/退出”菜单，双击唤起；
@@ -335,10 +385,17 @@ fn main() {
         // 在线更新（#319）：检查/下载/安装由 web-console ⚙ 关于区经 __TAURI__.updater 调用，
         // 签名公钥在 tauri.conf.json plugins.updater，签名的私钥经 CI Secrets 注入
         .plugin(tauri_plugin_updater::Builder::new().build())
-        .invoke_handler(tauri::generate_handler![probe_local, open_external, open_path, relay_status, relay_toggle])
+        // #8 全局快捷键（呼出/收起）：默认键在 setup 注册，网页侧可经 set_toggle_shortcut 改绑
+        .plugin(tauri_plugin_global_shortcut::Builder::new().build())
+        .invoke_handler(tauri::generate_handler![probe_local, open_external, open_path, relay_status, relay_toggle, set_toggle_shortcut])
         .setup(|app| {
             if build_tray(app).is_ok() {
                 TRAY_OK.store(true, Ordering::SeqCst);
+            }
+            // #8 默认呼出/收起键（占用冲突不致命）：网页侧启动后按 localStorage 纠正
+            //（改绑/清空都经 set_toggle_shortcut 覆盖这里的默认注册）
+            if let Err(e) = register_toggle_shortcut(app.handle(), DEFAULT_TOGGLE_KEY) {
+                println!("[shortcut] default {} 注册失败: {e}", DEFAULT_TOGGLE_KEY);
             }
             // #334 启动自动启用：本地无 relay 在服务就静默拉起内嵌 relay（已有则让位），
             // 等端口就绪再建窗口，保证页面首次探测（/local-info）即命中——用户全程无感

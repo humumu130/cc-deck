@@ -19,6 +19,8 @@ tauri-plugin-single-instance = "2"
 tauri-plugin-opener = "2"
 # 在线更新（v2 官方插件）：签名校验走 TAURI_SIGNING_PRIVATE_KEY，CI 注入
 tauri-plugin-updater = "2"
+# #8 全局快捷键（呼出/收起主窗口，键位网页侧可改）：Rust 侧注册不经 IPC，无需 ACL
+tauri-plugin-global-shortcut = "2"
 serde_json = "1"
 # 探测只走明文 http://127.0.0.1:8787，不需要 TLS 栈（关默认特性控体积）
 reqwest = { version = "0.12", default-features = false, features = ["json"] }
