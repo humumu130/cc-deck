@@ -34,8 +34,8 @@ static TRAY_OK: AtomicBool = AtomicBool::new(false);
 /// #8 呼出/收起快捷键当前注册态（换绑时先注销旧的；None=已注销）
 static TOGGLE_SHORTCUT: std::sync::Mutex<Option<tauri_plugin_global_shortcut::Shortcut>> =
     std::sync::Mutex::new(None);
-/// #8 默认呼出/收起键：网页侧可用 set_toggle_shortcut 改绑（localStorage 记忆）
-const DEFAULT_TOGGLE_KEY: &str = "alt+shift+d";
+/// #19 默认呼出/收起键（2026-09-10 用户定）：网页侧可用 set_toggle_shortcut 改绑（localStorage 记忆）
+const DEFAULT_TOGGLE_KEY: &str = "alt+d";
 
 /// 页面启动前注入的桥（等价 desktop/preload.js）：probeLocal 优先走 window.ccDeck；
 /// 外链兜底：捕获阶段拦 target=_blank 与 window.open，转交壳侧系统浏览器打开
@@ -125,6 +125,9 @@ fn show_main(app: &tauri::AppHandle) {
         let _ = w.show();
         let _ = w.unminimize();
         let _ = w.set_focus();
+        // #19 呼出即打字：WebView2 键盘焦点不经点击直达页面——eval 补发 focus 事件，
+        // 页面监听里把焦点放进消息输入框（真实 focus 事件偶发不派发时的兜底）
+        let _ = w.eval("window.dispatchEvent(new Event('focus'))");
     }
 }
 
