@@ -457,7 +457,6 @@ class RelayStore {
     this.servers = list;
     await AsyncStorage.setItem("ccr_conns", JSON.stringify(list));
     await AsyncStorage.setItem("ccr_active", target.id);
-    const prevId = this.activeId && this.activeId !== target.id ? this.activeId : null;
     this.activeId = target.id;
     const tk = connectToken ?? target.token;
     const conn = this.ensureConn(target);
@@ -467,20 +466,10 @@ class RelayStore {
       // 聚合时只建/换该源不拆其他源并设 active（applyConfig 天然满足）；活动源
       // 目标一致且在连则被幂等跳过，不拆重建
       this.applyConfig(conn, target, tk);
-      // 单源带令牌切源：旧活动源连接同步拆掉防僵尸（#294 审查修复——此前 tk 分支
-      // 漏拆，切源后旧源 socket 仍在后台收事件）。connDisconnect 保留 sessions/
-      // timelines/lastSeq 缓存，回切按 last_seq 续传，与下方无令牌分支同语义
-      if (!this.aggregate && prevId) {
-        const prev = this.conns.get(prevId);
-        if (prev) this.connDisconnect(prev);
-        this.emit();
-      }
-    } else if (!this.aggregate && prevId) {
-      // 单源切到无令牌源：无新连接可建，旧连接同步拆掉防僵尸（#291 纪律），
-      // 状态落到"未配置"引导补输令牌
-      const prev = this.conns.get(prevId);
-      if (prev) this.connDisconnect(prev);
-      this.emit();
+      // #27（2026-09-10 用户定则）：单源模式切源不再拆旧源连接——「单源」是视图
+      // 过滤（列表只显示选中源），不是连接独占。旧实现（#291/#294 防僵尸）拆掉
+      // 其他源致用户切源后家里失连；僵尸风险由 deleteServer/换绑地址的显式
+      // connDisconnect 兜底，普通切源留下的连接是活跃 socket 不是僵尸
     }
   }
 
