@@ -1,6 +1,6 @@
 // 设置抽屉：首页左上角图标呼出，也支持左缘右滑呼出 / 面板上左滑收起；
 // 分区收纳连接（状态卡+服务器列表）、配对、显示与关于
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { Alert, Animated, Linking, Modal, PanResponder, Pressable, ScrollView, StyleSheet, Switch, Text, View } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import Constants from "expo-constants";
@@ -281,6 +281,8 @@ export default function SettingsDrawer({
 
   // #46 长按删除：条目长按亮出「删除」按钮（替原常驻 ✕），3.5s 无操作自动收回
   const [delArm, setDelArm] = useState<string | null>(null);
+  // #53 图例弹窗开关
+  const [legendOpen, setLegendOpen] = useState(false);
   const delArmTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const armDelete = (id: string) => {
     if (delArmTimer.current) clearTimeout(delArmTimer.current);
@@ -417,11 +419,10 @@ export default function SettingsDrawer({
           {/* #51 问号左靠：紧跟「连接」标题成左组（原 space-between 三元素被推中） */}
           <View style={d.secTitleRow}>
             <Text style={d.secTitleT}><Text style={d.secIconT}>◫ </Text>连接{srvCollapsed && servers.length ? ` · ${servers.length}` : ""}</Text>
-            {/* #48 通道含义问号：☁️/LAN/插头三态解释 */}
+            {/* #48/#53 通道含义问号：自绘图例弹窗（AboutModal 同款 sheet + 图标行） */}
             <Pressable
               hitSlop={8}
-              onPress={() => Alert.alert("图标含义",
-                "☁️ 经云桥中转（跨网络可用）\n\nLAN 同一网络直连\n\n插头：绿色=已连接，灰色=未连接（点击可触发连接），黄色闪烁=连接中")}
+              onPress={() => setLegendOpen(true)}
               accessibilityLabel="连接图标含义说明"
             >
               <Text style={d.secHelpT}>?</Text>
@@ -450,7 +451,8 @@ export default function SettingsDrawer({
             const online = st?.state === "online";
             const connecting = st?.state === "connecting" || st?.state === "reconnecting";
             // #46 通道标记（用户定稿）：云桥条目 ☁️ / LAN 源 LAN / 手动直连不显示
-            const chanTag = e.cloud ? "☁️" : isLanUrl(e.wsUrl) ? "LAN" : "";
+            // #53 通道标记：云桥 ☁️ / LAN 源 LanGlyph 胶囊（与插头/云同风格统一）/ 直连不显示
+            const chanTag = e.cloud ? "cloud" : isLanUrl(e.wsUrl) ? "lan" : "";
             return (
               <View key={e.id} style={[d.srvRow, active && d.srvRowOn]}>
                 <Pressable
@@ -469,8 +471,10 @@ export default function SettingsDrawer({
                         状态文案类元素全撤（云桥在线/↻ 重连等）——失败原因走弹窗 */}
                     <View style={[d.srvDot, { backgroundColor: srvColorMap.get(e.id) ?? c.faint }]} />
                     <Text style={d.srvName} numberOfLines={1}>{e.name}</Text>
-                    {chanTag ? (
-                      <Text style={chanTag === "LAN" ? d.chanLanT : d.chanCloudT}>{chanTag}</Text>
+                    {chanTag === "cloud" ? (
+                      <Text style={d.chanCloudT}>☁️</Text>
+                    ) : chanTag === "lan" ? (
+                      <LanGlyph color={c.dim} />
                     ) : null}
                     {connecting ? (
                       (() => {
@@ -566,7 +570,7 @@ export default function SettingsDrawer({
         {/* 多源聚合（#294 批4）：持久化（display-settings）+ 连接行为（store.setAggregate：
             开 = 连全部已配置源；关 = 拆非活动源、保留缓存再开无感恢复） */}
         <View style={[d.setItem, d.setRow]}>
-          <Text style={d.setLabel}><Text style={d.rowIconT}>⧉ </Text>多源聚合</Text>
+          <Text style={d.setLabel}><Text style={d.rowIconT}>⧉ </Text>聚合显示</Text>
           <Switch
             style={d.sw}
             value={aggregate}
@@ -616,8 +620,55 @@ export default function SettingsDrawer({
       </Animated.View>
       <AboutModal visible={aboutOpen} onClose={() => setAboutOpen(false)} />
       <ScanScreen visible={scanOpen} onClose={() => setScanOpen(false)} onResult={applyScan} />
+      {/* #53 连接图标图例（问号入口）：AboutModal 同款底部 sheet */}
+      <ConnLegendModal visible={legendOpen} onClose={() => setLegendOpen(false)} />
       <ImportPicker visible={importOpen} target={importTarget} onClose={() => setImportOpen(false)} />
     </View>
+  );
+}
+
+// #53 LAN 通道标记图标化（用户点单）：描边小胶囊内写 LAN——与插头/☁️ 同风格统一，
+// 列表条目与图例弹窗共用
+export function LanGlyph({ color, fontSize = 8.5 }: { color: string; fontSize?: number }) {
+  return (
+    <View style={{ borderWidth: 1, borderColor: color, borderRadius: 4, paddingHorizontal: 3.5, paddingVertical: 1 }}>
+      <Text style={{ color, fontSize, fontWeight: "700", letterSpacing: 0.4, lineHeight: fontSize + 2 }}>LAN</Text>
+    </View>
+  );
+}
+
+// #53 连接图标图例弹窗（替代 Alert）：AboutModal 同款底部 sheet + 图标行自解释
+// （不写「黄色/绿色」字样——直接画对应颜色的插头/标记），通道组与状态组分块
+function ConnLegendModal({ visible, onClose }: { visible: boolean; onClose: () => void }) {
+  const { c } = useTheme();
+  const m = useThemeStyles(makeStyles);
+  const row = (icon: ReactNode, text: string) => (
+    <View style={m.legRow}>
+      <View style={m.legIcon}>{icon}</View>
+      <Text style={m.legT}>{text}</Text>
+    </View>
+  );
+  return (
+    <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
+      <Pressable style={m.abMask} onPress={onClose}>
+        <View style={{ width: "100%" }}>
+          <Pressable style={m.abSheet} onPress={(e) => e.stopPropagation()}>
+            <View style={m.legHead}>
+              <Text style={m.legHeadT}>图标含义</Text>
+              <Pressable onPress={onClose} hitSlop={8} accessibilityLabel="关闭">
+                <Text style={m.legCloseT}>✕</Text>
+              </Pressable>
+            </View>
+            {row(<Text style={{ fontSize: 13, lineHeight: 16 }}>☁️</Text>, "云桥中转 · 跨网络可用")}
+            {row(<LanGlyph color={c.dim} fontSize={9} />, "局域网直连")}
+            <View style={m.legSep} />
+            {row(<PlugGlyph size={15} color={c.done} />, "已连接")}
+            {row(<PlugGlyph size={15} color={c.working} />, "连接中")}
+            {row(<PlugGlyph size={15} color={c.faint} />, "未连接 · 点击可连接")}
+          </Pressable>
+        </View>
+      </Pressable>
+    </Modal>
   );
 }
 
@@ -693,9 +744,16 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
   srvDot: { width: 7, height: 7, borderRadius: 4 },
   srvName: { color: c.text, fontSize: 13.5, fontWeight: "600", flex: 1 },
   srvUrl: { color: c.faint, fontSize: 10.5, marginTop: 1.5 },
-  // #46 通道标记：☁️ emoji 与 LAN 小字两态
+  // #46/#53 通道标记：☁️ emoji 与 LanGlyph 胶囊两态
   chanCloudT: { fontSize: 10.5, lineHeight: 14 },
-  chanLanT: { color: c.dim, fontSize: 8.5, lineHeight: 12, fontWeight: "700", letterSpacing: 0.4 },
+  // #53 图例弹窗：图标列固定宽左对齐 + 文字；组间距（legSep）大于行距
+  legHead: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 12 },
+  legHeadT: { color: c.text, fontSize: 15, fontWeight: "700" },
+  legCloseT: { color: c.dim, fontSize: 15 },
+  legRow: { flexDirection: "row", alignItems: "center", gap: 12, marginBottom: 9 },
+  legIcon: { width: 30, alignItems: "center", justifyContent: "center" },
+  legT: { color: c.text, fontSize: 13.5, flex: 1 },
+  legSep: { height: 14 },
   srvEdit: { width: 34, height: 42, alignItems: "center", justifyContent: "center" },
   srvEditT: { color: c.dim, fontSize: 13.5 },
   // #46 长按亮出的删除按钮（替常驻 ✕）

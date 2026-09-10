@@ -748,17 +748,11 @@ export default function ListScreen({ sessions, connected, connText, onOpen, onNe
         <View style={styles.titleWrap}>
           <Text style={styles.titleT}>CC Deck</Text>
           {snap.aggregate && snap.sources.length > 1 ? (
-            // 聚合模式副标题：唯一在线源时点名当前源（「源：X」，弱化 faint 小字——
-            // 列表已平铺单源视图，副标题是顶部唯一明确的当前源指示）；多源在线仍出
-            // 「N 源聚合 · M 在线」概览（点名单一活动源会误导，沿用 #294 的决定）
-            onlineSrcs === 1 && soloName ? (
-              // #46 去「源：」前缀，直接显示源名
-              <Text style={styles.titleSub} numberOfLines={1}>{soloName}</Text>
-            ) : (
-              <Text style={styles.titleSub} numberOfLines={1}>
-                {snap.sources.length} 源聚合 · {onlineSrcs} 在线
-              </Text>
-            )
+            // #53 副标题与聚合胶囊去重：数量/聚合态信息归统计行胶囊独占，副标题
+            // 统一点名当前活动源（命令默认去向）；无活动源时回退唯一在线源点名
+            (activeName || soloName) ? (
+              <Text style={styles.titleSub} numberOfLines={1}>{activeName || soloName}</Text>
+            ) : null
           ) : activeName ? (
             <Text style={styles.titleSub} numberOfLines={1}>{activeName}</Text>
           ) : null}
