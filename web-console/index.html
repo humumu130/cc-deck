@@ -315,6 +315,9 @@
   .gp-row .gi svg { display: block; }
   .gp-chev { flex: none; color: var(--gp-faint); font-size: 14px; line-height: 1; }
   .gp-row b + .gp-chev { margin-left: 0; }
+  /* #8 快捷键值 chip：录制态品牌色提示（闪烁呼吸） */
+  .gp-hk.rec { color: var(--gp-accent, #D97757); animation: gp-hk-rec 1.1s ease-in-out infinite; }
+  @keyframes gp-hk-rec { 0%, 100% { opacity: 1; } 50% { opacity: .45; } }
   a.gp-row { text-decoration: none; }
   a.gp-row .gp-chev { margin-left: auto; }
   .gp-row.gp-static { cursor: default; }
@@ -1741,6 +1744,8 @@
             <div class="gp-row" id="gpFont"><span class="gi"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M5 19.2 11.6 5.4l6.6 13.8"/><path d="M7.6 14.4h8"/></svg></span>正文字号<div class="lever" id="gpFontLever" style="--n:3"><i class="lever-thumb"></i><button type="button" class="lever-opt" data-i="0">紧凑</button><button type="button" class="lever-opt" data-i="1">标准</button><button type="button" class="lever-opt" data-i="2">大</button></div></div>
             <div class="gp-row" id="gpThink"><span class="gi"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="8.4"/><path d="M12 3.6a8.4 8.4 0 0 1 0 16.8Z" fill="currentColor" stroke="none" opacity=".45"/></svg></span>思考过程<div class="lever" id="gpThinkLever" style="--n:2"><i class="lever-thumb"></i><button type="button" class="lever-opt" data-i="0">关</button><button type="button" class="lever-opt" data-i="1">开</button></div></div>
             <div class="gp-row" id="gpIdle" style="display:none"><span class="gi"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3.4 20.6 8 12 12.6 3.4 8Z"/><path d="m3.4 12.4 8.6 4.6 8.6-4.6"/><path d="m3.4 16.6 8.6 4.6 8.6-4.6"/></svg></span>折叠空闲<div class="lever" id="gpIdleLever" style="--n:2"><i class="lever-thumb"></i><button type="button" class="lever-opt" data-i="0">显示</button><button type="button" class="lever-opt" data-i="1">折叠</button></div></div>
+            <!-- #8 桌面端呼出/收起快捷键（浏览器隐藏）：点击行进入录制，Esc 取消、Backspace 清空注销 -->
+            <div class="gp-row" id="gpHotkey" style="display:none"><span class="gi"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="6.2" width="18" height="11.6" rx="2.2"/><path d="M7 10v3.6M7 10.1v.1"/><path d="M11 10v3.6M14.5 10v3.6M18 10v3.6"/></svg></span>呼出/收起快捷键<b class="gp-hk" id="gpHotkeyVal">—</b></div>
           </div>
         </section>
         <!-- #448 插件页：CC Deck 插件可选能力三开关（任务调度强化/插入问答通知/恢复点），
@@ -4594,8 +4599,110 @@ function syncGearPop() {
   $("gpIdle").style.display = idle.style.display === "none" ? "none" : "flex";
   $("gpVer").textContent = CONSOLE_VERSION;
   $("gpBuild") && ($("gpBuild").textContent = CONSOLE_VERSION); // #405 左栏底部弱化 Build 号（设计稿 §5）
+  $("gpHotkey") && ($("gpHotkey").style.display = window.ccDeck ? "flex" : "none"); // #8 桌面端专属
   renderGpStatus();
 }
+
+// ---------- #8 桌面端呼出/收起快捷键 + Ctrl+↑↓ 切换会话 ----------
+// 壳侧 set_toggle_shortcut 持有注册态（换绑=先注销旧键）；localStorage 记忆用户键位
+//（null=默认 Alt+Shift+D；""=已清空不注册）。浏览器无 ccDeck 桥，整组不启用
+const HK_KEY = "ccd_toggle_key";
+const HK_DEFAULT = "Alt+Shift+D";
+const hkInvoke = (combo) =>
+  window.__TAURI__.core.invoke("set_toggle_shortcut", { combo }).then((r) => String(r ?? ""));
+const hkApply = async (combo, display) => {
+  try {
+    await hkInvoke(combo);
+    $("gpHotkeyVal").textContent = display;
+    return true;
+  } catch (e) {
+    toast(String(e && e.message ? e.message : e) || "快捷键注册失败", 5000);
+    return false;
+  }
+};
+if (window.ccDeck && window.__TAURI__) {
+  const saved = localStorage.getItem(HK_KEY);
+  const combo = saved === null ? HK_DEFAULT : saved;
+  $("gpHotkeyVal").textContent = combo === "" ? "未设置" : combo;
+  if (combo) void hkInvoke(combo).catch(() => {}); // 启动纠正壳侧默认注册（占用冲突等失败静默，行内仍显示目标值）
+  $("gpHotkey").onclick = () => {
+    const val = $("gpHotkeyVal");
+    if (val.classList.contains("rec")) return; // 已在录制
+    const prevText = val.textContent;
+    const prevSaved = localStorage.getItem(HK_KEY);
+    val.classList.add("rec");
+    val.textContent = "按下组合键…";
+    const onKey = (ev) => {
+      ev.preventDefault();
+      ev.stopImmediatePropagation();
+      if (ev.key === "Escape") { cleanup(); return; } // 取消
+      if (ev.key === "Backspace") { // 清空注销
+        cleanup();
+        localStorage.setItem(HK_KEY, "");
+        if (hkApply(null, "未设置")) toast("已注销呼出快捷键");
+        return;
+      }
+      const c = comboFromEvent(ev);
+      if (!c) { val.textContent = "需含修饰键的组合（Alt/Ctrl/Shift+…）"; return; }
+      cleanup();
+      void (async () => {
+        if (await hkApply(c.combo, c.display)) {
+          localStorage.setItem(HK_KEY, c.combo);
+        } else {
+          // 注册失败（键位被占）：回退显示原键位，不落库
+          $("gpHotkeyVal").textContent = prevSaved === null ? HK_DEFAULT : prevSaved === "" ? "未设置" : prevSaved;
+        }
+      })();
+    };
+    const cleanup = () => {
+      val.classList.remove("rec");
+      document.removeEventListener("keydown", onKey, true);
+      document.removeEventListener("pointerdown", cancelByPointer, true);
+    };
+    const cancelByPointer = (ev) => {
+      if (ev.target.closest && ev.target.closest("#gpHotkey")) return;
+      cleanup();
+      $("gpHotkeyVal").textContent = prevText;
+    };
+    document.addEventListener("keydown", onKey, true);
+    document.addEventListener("pointerdown", cancelByPointer, true);
+  };
+}
+// 组合键归一：display 形如 Alt+Shift+D，combo 形如 alt+shift+d（Tauri 解析用）；
+// 只收字母/数字/F1-12/空格 且必须带修饰键——防吞普通输入、防与 Ctrl+方向切换会话冲突
+function comboFromEvent(ev) {
+  const mods = [];
+  if (ev.altKey) mods.push("alt");
+  if (ev.ctrlKey) mods.push("ctrl");
+  if (ev.shiftKey) mods.push("shift");
+  if (ev.metaKey) mods.push("meta");
+  if (!mods.length) return null;
+  if (["Alt", "Control", "Shift", "Meta"].includes(ev.key)) return null;
+  let key = null;
+  if (/^F([1-9]|1[0-2])$/.test(ev.key)) key = ev.key.toLowerCase();
+  else if (ev.key === " ") key = "space";
+  else if (ev.key.length === 1) key = ev.key.toLowerCase();
+  if (!key) return null;
+  return { combo: [...mods, key].join("+"), display: [...mods.map((m) => m[0].toUpperCase() + m.slice(1)), key === "space" ? "Space" : key.toUpperCase()].join("+") };
+}
+// Ctrl+↑/↓ 切换会话（#8，桌面端专属）：列表内上下移动选中卡并跟进滚动；
+// 输入框聚焦/浮层打开（设置/右键菜单/登录码）时不抢键
+document.addEventListener("keydown", (ev) => {
+  if (!window.ccDeck || !ev.ctrlKey || (ev.key !== "ArrowUp" && ev.key !== "ArrowDown")) return;
+  const t = ev.target;
+  if (t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.isContentEditable)) return;
+  if ($("gearPop").classList.contains("open") || $("cardMenu").classList.contains("open") || $("loginQrPop").classList.contains("open")) return;
+  const items = [...$("cards").querySelectorAll(".card")];
+  if (!items.length) return;
+  const cur = items.findIndex((d) => d.classList.contains("sel"));
+  const idx = cur < 0 ? (ev.key === "ArrowDown" ? 0 : items.length - 1)
+    : ev.key === "ArrowDown" ? Math.min(items.length - 1, cur + 1) : Math.max(0, cur - 1);
+  if (idx === cur) return;
+  ev.preventDefault();
+  const d = items[idx];
+  select(d.dataset.sid, d.dataset.src);
+  d.scrollIntoView({ block: "nearest" });
+});
 $("gpTheme") && ($("gpTheme").onclick = () => { $("themeBtn").click(); syncGearPop(); });
 $("gearClose").onclick = () => openPanel("none");
 // #40x 设置两栏：左菜单单 active 切页（display 切换），记住最后所在页（cc.gear.section）；
@@ -5597,9 +5704,13 @@ function tpRel(ts) {
   if (s < 3600) return Math.floor(s / 60) + "m" + String(s % 60).padStart(2, "0") + "s";
   return Math.floor(s / 3600) + "h" + String(Math.floor((s % 3600) / 60)).padStart(2, "0") + "m";
 }
+// #9b 浮窗关闭策略分环境：触屏（粗指针）维持 3s 自动淡出（防挡内容，长按可钉住）；
+// 鼠标环境（exe/桌面浏览器）常驻——点空白/Esc/滚动时间线 关闭，不再自动消失
+const TP_COARSE = typeof matchMedia === "function" && matchMedia("(pointer: coarse)").matches;
+let tpPinned = false; // 长按钉住态（滚动不关）
 function armTaskPop() {
   clearTimeout(taskPopTimer);
-  taskPopTimer = setTimeout(closeTaskPop, 3000);
+  if (TP_COARSE) taskPopTimer = setTimeout(closeTaskPop, 3000);
 }
 // #34 状态三态图标（SVG，替代原字符 mark）：待开始=空圈 / 进行中=右半饼 / 已完成=实心勾
 function tpStatusIco(status) {
@@ -5610,8 +5721,10 @@ function tpStatusIco(status) {
   return '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.6" fill="none" stroke="var(--faint)" stroke-width="2"/></svg>';
 }
 function openTaskPop(n, pin) {
+  // #9a 修复：selSession() 返回 {ctx, s} 包装——旧代码读 sel.todos 恒为 undefined，
+  // 任何编号都落「不在当前清单」（全仓仅此一处误用，其余调用点均 sel.s/sel.ctx）
   const sel = selSession();
-  const t = sel ? (sel.todos || []).find((x) => x && x.id === n) : undefined;
+  const t = sel ? (sel.s.todos || []).find((x) => x && x.id === n) : undefined;
   const color = !t ? "var(--faint)" : t.status === "completed" ? "var(--done)" : t.status === "in_progress" ? "var(--working)" : "var(--faint)";
   const label = !t ? "不在当前清单" : t.status === "completed" ? "已完成" : t.status === "in_progress" ? "进行中" : "待开始";
   $("taskCard").innerHTML =
@@ -5642,6 +5755,7 @@ function openTaskPop(n, pin) {
   }
   requestAnimationFrame(() => el.classList.add("show"));
   clearTimeout(taskPopTimer);
+  tpPinned = !!pin;
   if (!pin) armTaskPop();
 }
 function closeTaskPop() {
@@ -5650,10 +5764,18 @@ function closeTaskPop() {
   el.classList.remove("show");
   setTimeout(() => { if (!el.classList.contains("show")) el.classList.remove("open"); }, 240);
 }
-// 点空白（卡外）立即关
+// 点空白（卡外）立即关；鼠标环境（#9b）Esc 即关、滚动时间线关非钉住浮窗
 $("taskPop").addEventListener("click", (ev) => {
   if (!ev.target.closest(".tp-card")) closeTaskPop();
 });
+if (!TP_COARSE) {
+  document.addEventListener("keydown", (ev) => {
+    if (ev.key === "Escape") closeTaskPop();
+  });
+  $("timeline").addEventListener("scroll", () => {
+    if (!tpPinned) closeTaskPop();
+  }, { passive: true });
+}
 // 短点弹出（5s 淡出）；按住 ≥450ms 弹钉住版，松开解钉重新计 5s。
 // pointerup 挂 document：按住后移出 #NNN 再松开也能正确结算。
 // 桌面右键/触屏长按系统菜单在 #NNN 上抑制（长按语义已被占用）
