@@ -594,8 +594,20 @@ export class Bridge {
     // 同时登记"已进 CLI 队列"：看门狗的滞留判定跳过（CLI 忙时排队是正常路径，非滞留）
     const covered = pending.some((p) => key.includes(normKey(p.text)));
     if (covered) {
-      for (const p of pending) if (key.includes(normKey(p.text))) this.noteEnqueuedKey(id, normKey(p.text));
-      this.noteEnqueuedKey(id, key);
+      // #43 根治（2026-09-10 深夜）：transcript 的 enqueue 行 = CLI 已收到该消息的回执——
+      // 不再只登记等 UserPromptSubmit 晋升（CLI 忙时合并提交的 UPS prompt 与 pending
+      // 原文经 normKey 300 截断后互不包含，800 字长消息三式全脱靶 → 永久滞留闪烁，
+      // 用户实测中招）。收到回执即晋升出队 + 写正式消息日志（enqueued 语义本就是已处理）
+      const hits = pending.filter((p) => key.includes(normKey(p.text)));
+      const kept = pending.filter((p) => !key.includes(normKey(p.text)));
+      this.mgr.setExternalPending(id, kept);
+      for (const p of hits) {
+        // 晋升即出队：清进队标记（同文本再次滞留时看门狗仍要管），不重新登记——
+        // 登记了 isEnqueued 会永久跳过补发，39 段回归（晋升后重滞留）正挂在这
+        this.dropEnqueuedKey(id, p.text);
+        this.noteUserMsg(id, p.text, "promote");
+        this.mgr.pushExternalLog(id, "user_message", truncate(p.text, 300));
+      }
       return;
     }
     this.mgr.setExternalPending(id, [...pending, { text, ts: Date.now() }]);
@@ -825,8 +837,16 @@ export class Bridge {
     // 皆脱靶（不连续/掺入其他文本），pending 条目滞留到回合结束仍在队里（Stop 兜底跳过
     // 在队项）→ 客户端永远排队闪烁。提交文本完整包含 pending 原文即视为已处理（与
     // consumePendingTexts 的口径一致）；误伤面仅限旧 pending 恰为后续更长提交的子串，
-    // 晋升一条本就该出的旧条目，无害
-    const subHits = list.filter((p) => key.includes(normKey(p.text)));
+    // 晋升一条本就该出的旧条目，无害。
+    // #43 超长脱靶补（2026-09-10 深夜实测）：normKey 双侧截 300——CLI 合并提交时该条
+    // 排在中段（前面有其他消息），300 字窗口里既不完整包含也不被包含 → 三式全脱靶，长
+    // 消息永远滞留（用户 800 字侧边栏反馈实测中招）。改用前缀窗口：取 pending 压空白后
+    // 前 120 字做 key 的 includes——合并形态只要含该条开头 120 字即命中（CLI 提交原文
+    // 必完整含每条排队消息的全文，前缀 120 字必在其中）
+    const subHits = list.filter((p) => {
+      const pk = normKey(p.text);
+      return key.includes(pk) || (pk.length > 120 && key.includes(pk.slice(0, 120)));
+    });
     if (subHits.length) {
       const keptList = list.filter((p) => !key.includes(normKey(p.text)));
       this.mgr.setExternalPending(sessionId, keptList);

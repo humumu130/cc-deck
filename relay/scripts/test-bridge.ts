@@ -22,6 +22,12 @@ function assert(cond: boolean, msg: string): void {
 }
 
 const wait = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
+// 等注入落盘用轮询而非固定 wait：高负载下 fake-injector 子进程 spawn 可达秒级，
+// 固定窗口（800/1500ms）反复偶发假阴性（18/21/30/31/32 段连续 flake 实录）
+const waitLog = async (pred: () => boolean, ms = 4000): Promise<void> => {
+  const end = Date.now() + ms;
+  while (Date.now() < end && !pred()) await wait(100);
+};
 
 const fakeLog = (): string[][] => {
   try {
@@ -209,7 +215,7 @@ assert(mgr.snapshot().find((s) => s.session_id === extId("cli-1"))?.cli_pid === 
 // 16. WORKING 时 EXT_INPUT → 立即注入（CLI 原生排队），带"已注入终端"日志
 const busyId = send("COMMAND_EXT_INPUT", { session_id: extId("cli-1"), text: "忙时直发A" });
 assert((await waitAck(busyId)).ok, "EXT_INPUT while WORKING acked");
-await wait(800);
+await waitLog(() => fakeLog().some((a) => a[1] === "忙时直发A"));
 const fl16 = fakeLog().filter((a) => a[1] === "忙时直发A");
 assert(fl16.length === 1 && fl16[0][0] === "4321" && !fl16[0].includes("noenter"), "busy injection direct with enter");
 assert(events.some((e) => e.type === "SESSION_LOG" && String((e.payload as { text: string }).text).includes("已注入终端")), "busy injection logged");
@@ -219,7 +225,7 @@ assert(pendOf(extId("cli-1")).some((p) => p.text === "忙时直发A"), "busy inj
 // 17. EXT_STOP（WORKING）→ 注入 Esc
 const escId = send("COMMAND_EXT_STOP", { session_id: extId("cli-1") });
 assert((await waitAck(escId)).ok, "EXT_STOP acked");
-await wait(300);
+await waitLog(() => fakeLog().some((a) => a[0] === "4321" && a[1] === "--esc"));
 assert(fakeLog().some((a) => a[0] === "4321" && a[1] === "--esc"), "esc injected");
 
 // 17.5 WAITING（远程审批挂起）时 EXT_INPUT → relay 侧排队，不注入
@@ -240,7 +246,7 @@ assert((await held17).body.decision === "allow", "17.5 hook got allow");
 // 18. Stop → DONE 后自动 flush 队列（末条带回车）
 //    steering 消息（忙时直发A，已注入）晋升为正式消息；仍在队列的（排队消息A）保留 pending 等 UPS 晋升
 await hook({ event: "Stop" });
-await wait(800);
+await waitLog(() => fakeLog().some((a) => a[1] === "排队消息A"));
 const fl18 = fakeLog().filter((a) => a[1] === "排队消息A");
 assert(fl18.length === 1 && fl18[0][0] === "4321" && !fl18[0].includes("noenter"), "queued msg flushed with enter");
 const umLogs = (t: string) => events.filter((e) => e.type === "SESSION_LOG" && (e.payload as { kind: string; text: string }).kind === "user_message" && (e.payload as { text: string }).text === t).length;
@@ -251,7 +257,7 @@ assert(pendOf(extId("cli-1")).some((p) => p.text === "排队消息A"), "still-qu
 // 19. 空闲直达：DONE 状态 EXT_INPUT 立即注入
 const dId = send("COMMAND_EXT_INPUT", { session_id: extId("cli-1"), text: "空闲直发" });
 assert((await waitAck(dId)).ok, "EXT_INPUT idle acked");
-await wait(800);
+await waitLog(() => fakeLog().some((a) => a[1] === "空闲直发"));
 assert(fakeLog().some((a) => a[1] === "空闲直发"), "idle injection direct");
 assert(pendOf(extId("cli-1")).some((p) => p.text === "空闲直发"), "idle inject echoed in pending_inputs");
 
@@ -277,7 +283,7 @@ await wait(150);
 const fId = send("COMMAND_EXT_INPUT", { session_id: extId("cli-3"), text: "会失败" });
 assert((await waitAck(fId)).ok, "EXT_INPUT acked (immediate inject will fail)");
 await hook({ event: "Stop", session_id: "cli-3" });
-await wait(800);
+await waitLog(() => fakeLog().some((a) => a[0] === "424242"));
 assert(fakeLog().some((a) => a[0] === "424242"), "inject attempted on dead pid");
 assert(mgr.snapshot().find((s) => s.session_id === extId("cli-3"))?.cli_pid === undefined, "pid cleared on failure");
 assert(events.some((e) => e.type === "SESSION_LOG" && String((e.payload as { text: string }).text).includes("注入失败")), "failure logged");
@@ -352,10 +358,11 @@ assert(ack24.ok === false, "empty rename rejected");
   }
   await wait(1500); // 等 flushQueue 把两条都注入完（每条 400ms 间隔），Stop 时队列为空才走晋升
   assert(pendTexts().length === 2, "26 two phone msgs in pending");
-  // ① CLI 合并形态 enqueue（A 折叠空格 + "\r" + B）→ 不得回塞第三条 pending
+  // ① CLI 合并形态 enqueue（A 折叠空格 + "\r" + B）→ 不得回塞第三条 pending；
+  // #43 起 enqueue=CLI 已收到的回执，直接晋升出队（不再等 UPS）——两条 pending 全清
   appendFileSync(T, JSON.stringify({ type: "queue-operation", operation: "enqueue", content: A.replace(/\n/g, " ") + "\r" + B }) + "\n");
   await hook({ event: "PostToolUse", tool_name: "Bash", tool_response: "ok", transcript_path: T });
-  assert(pendTexts().length === 2, "26 merged enqueue does not add a 3rd pending");
+  assert(pendTexts().length === 0, "26 merged enqueue promotes (no 3rd pending, queue cleared)");
   // ② Stop 晋升：A、B 各记一条 user_message，pending 清空
   await hook({ event: "Stop", transcript_path: T });
   await wait(200);
@@ -560,8 +567,9 @@ assert(ack24.ok === false, "empty rename rejected");
   // 30c. 晚答（兜底）→ Esc 关本地选择器 + 答案文本注入
   const bId = send("COMMAND_ANSWER", { session_id: extId("cli-1"), request_id: rbId, answers: ["B"] });
   assert((await waitAck(bId)).ok, "30 late answer acked via fallback");
-  await wait(1500);
+  await waitLog(() => fakeLog().some((a) => a[0] === "4321" && a[1] === "--esc"));
   assert(fakeLog().some((a) => a[0] === "4321" && a[1] === "--esc"), "30 esc closes local picker");
+  await waitLog(() => fakeLog().some((a) => a[0] === "4321" && String(a[1]).includes("「B」")));
   assert(fakeLog().some((a) => a[0] === "4321" && String(a[1]).includes("「B」")), "30 answer text injected");
 
   // 30d. PC 端先答 → 横幅收起（answered by cli）
@@ -593,8 +601,9 @@ assert(ack24.ok === false, "empty rename rejected");
   await wait(200);
   const aId = send("COMMAND_ANSWER", { session_id: extId("cli-1"), request_id: s!.waiting_request!.request_id, answers: ["X"] });
   assert((await waitAck(aId)).ok, "31 late answer after reconnect acked");
-  await wait(1500);
+  await waitLog(() => fakeLog().some((a) => a[0] === "4321" && a[1] === "--esc"));
   assert(fakeLog().some((a) => a[0] === "4321" && a[1] === "--esc"), "31 esc injected for late answer");
+  await waitLog(() => fakeLog().some((a) => a[0] === "4321" && String(a[1]).includes("「X」")));
   assert(fakeLog().some((a) => a[0] === "4321" && String(a[1]).includes("「X」")), "31 answer text injected");
 }
 
@@ -615,8 +624,9 @@ assert(ack24.ok === false, "empty rename rejected");
   (bridge as unknown as { askFallback: Map<string, unknown> }).askFallback.clear(); // 模拟 relay 重启
   const aId = send("COMMAND_ANSWER", { session_id: extId("cli-1"), request_id: ridA, answers: ["M"] });
   assert((await waitAck(aId)).ok, "32 late answer recovered after restart-wipe");
-  await wait(1500);
+  await waitLog(() => fakeLog().some((a) => a[0] === "4321" && a[1] === "--esc"));
   assert(fakeLog().some((a) => a[0] === "4321" && a[1] === "--esc"), "32 esc injected via state recovery");
+  await waitLog(() => fakeLog().some((a) => a[0] === "4321" && String(a[1]).includes("「M」")));
   assert(fakeLog().some((a) => a[0] === "4321" && String(a[1]).includes("「M」")), "32 answer text injected via state recovery");
   assert(events.some((e) => e.type === "SESSION_WAITING_RESOLVED" && (e.payload as { request_id: string }).request_id === ridA), "32 resolved event emitted");
 
