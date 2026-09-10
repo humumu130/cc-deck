@@ -10278,7 +10278,7 @@ var require_dist = __commonJS({
 // src/index.ts
 import { networkInterfaces as networkInterfaces2, homedir as homedir8, hostname } from "node:os";
 import { join as join12 } from "node:path";
-import { writeFileSync as writeFileSync8, openSync as openSync3, readFileSync as readFileSync13, rmSync as rmSync3, existsSync as existsSync8 } from "node:fs";
+import { writeFileSync as writeFileSync9, openSync as openSync3, readFileSync as readFileSync13, rmSync as rmSync3, existsSync as existsSync8 } from "node:fs";
 import { spawn as spawn3, execFileSync as execFileSync2 } from "node:child_process";
 import { fileURLToPath as fileURLToPath4 } from "node:url";
 
@@ -40557,7 +40557,9 @@ var AgentSession = class {
     this.cwd = cwd;
     this.model = model;
     this.cb = cb2;
-    this.pushUserMessage(initialPrompt, opts?.images);
+    if (initialPrompt !== void 0 || (opts?.images?.length ?? 0) > 0) {
+      this.pushUserMessage(initialPrompt ?? "", opts?.images);
+    }
     this.q = NUt({
       prompt: this.queue.iterable,
       options: {
@@ -41062,6 +41064,35 @@ function contextLimitOf(model) {
 function isManagedMode(m) {
   return m === "default" || m === "acceptEdits" || m === "plan";
 }
+function sanitizeImportPushEntry(raw) {
+  if (!raw || typeof raw !== "object") return null;
+  const e = raw;
+  const kind = e.kind === "cloud" ? "cloud" : e.kind === "lan" ? "lan" : null;
+  if (!kind) return null;
+  const wsUrl = typeof e.wsUrl === "string" ? e.wsUrl : "";
+  if (!/^wss?:\/\/.{3,200}$/.test(wsUrl)) return null;
+  const token = typeof e.token === "string" ? e.token.slice(0, 200) : "";
+  if (kind === "lan" && !token) return null;
+  let cloud;
+  if (kind === "cloud") {
+    const c = e.cloud && typeof e.cloud === "object" ? e.cloud : null;
+    if (!c) return null;
+    const url = typeof c.url === "string" ? c.url : "";
+    const bt = typeof c.token === "string" ? c.token : "";
+    const rd2 = typeof c.rd === "string" ? c.rd : "";
+    const rk2 = typeof c.rk === "string" ? c.rk : "";
+    if (!/^(wss?|https?):\/\//.test(url) || !bt || !rd2.startsWith("rl-") || rk2.length < 40) return null;
+    cloud = {
+      url: url.slice(0, 200),
+      token: bt.slice(0, 200),
+      rd: rd2.slice(0, 40),
+      rk: rk2.slice(0, 100),
+      paired: true,
+      ...typeof c.code === "string" && /^\d{6,8}$/.test(c.code) ? { code: c.code } : {}
+    };
+  }
+  return { kind, wsUrl, ...token ? { token } : {}, ...cloud ? { cloud } : {} };
+}
 function resolveCreateCwd(rawCwd, defaultCwd) {
   const isUsableDir = (p) => {
     if (!p) return false;
@@ -41135,6 +41166,24 @@ function appendDeletedExt(dataDir2, id2) {
   } catch {
   }
 }
+var PINNED_SESSIONS_CAP = 50;
+function pinnedSessionsPath(dataDir2) {
+  return join7(dataDir2, "pinned-sessions.json");
+}
+function readPinnedSessions(dataDir2) {
+  try {
+    const raw = JSON.parse(readFileSync7(pinnedSessionsPath(dataDir2), "utf-8"));
+    return Array.isArray(raw) ? raw.filter((x) => typeof x === "string") : [];
+  } catch {
+    return [];
+  }
+}
+function writePinnedSessions(dataDir2, ids) {
+  try {
+    writeFileSync4(pinnedSessionsPath(dataDir2), JSON.stringify(ids.slice(-PINNED_SESSIONS_CAP)));
+  } catch {
+  }
+}
 var UPDATE_THROTTLE_MS = 2e3;
 var HEARTBEAT_INTERVAL_MS = 5e3;
 var CRON_POLL_INTERVAL_MS = 3e4;
@@ -41157,6 +41206,8 @@ var SessionManager = class {
   }
   bus;
   sessions = /* @__PURE__ */ new Map();
+  // 幂等去重存首次回执（0.4.4 起）：旧实现重复固定回 ok:true——失败后的同 id 重试
+  //（ACK 丢失重发等）会拿到假成功；缓存真实结果重放，语义对全部命令成立
   processedCommands = /* @__PURE__ */ new Map();
   titleRequested = /* @__PURE__ */ new Set();
   // 已请求过自动命名的会话
@@ -41166,6 +41217,16 @@ var SessionManager = class {
   deletedExtIds;
   /** #388 供 ws-server 读默认模型（快照 payload.models 聚合用） */
   cfg;
+  // #49 测试缝：托管 AgentSession 工厂。生产恒为 null（直接 new AgentSession，
+  // 行为与从前逐字节一致）；test-bridge/test-cloud 注入假 agent 验证置顶/按需恢复
+  // 与休眠登记路径，免拉真 CLI 子进程
+  agentFactory = null;
+  setAgentFactory(fn) {
+    this.agentFactory = fn;
+  }
+  newAgent(cwd, model, cb2, initialPrompt, opts) {
+    return this.agentFactory ? this.agentFactory(cwd, model, cb2, initialPrompt, opts) : new AgentSession(cwd, model, cb2, initialPrompt, opts);
+  }
   // 该 CLI session_id 是否归 relay 自己管（托管会话的 relay_session_id / 一次性子会话）
   ownsCliSession(cliSid) {
     if (this.childSdkIds.has(cliSid)) return true;
@@ -41278,8 +41339,13 @@ var SessionManager = class {
   }
   // #325 扫码登录授权器（index.ts 注入，转发各云桥客户端 grantLogin）
   loginGranter = null;
+  // 0.4.4 跨网回传执行器（云层注册）：密封 payload 投给目标 dev，目标离线返回 false
+  importPusher = null;
   setLoginGranter(fn) {
     this.loginGranter = fn;
+  }
+  setImportPusher(fn) {
+    this.importPusher = fn;
   }
   // 不存在则注册外部会话（bridge.ts 调用）；startedAt：真实起点（孤儿收养时取自
   // transcript 首条时间戳，#321——否则收养时刻会冒充会话时长起点，老会话显示 55s）
@@ -41528,14 +41594,19 @@ var SessionManager = class {
     if (s) s.state.cli_pid = void 0;
   }
   handleCommand(cmd, by) {
-    if (this.processedCommands.has(cmd.command_id)) {
-      return { command_id: cmd.command_id, ok: true, error: "duplicate: already processed" };
+    const seen = this.processedCommands.get(cmd.command_id);
+    if (seen) {
+      return seen;
     }
-    this.processedCommands.set(cmd.command_id, true);
+    const ack = this.execCommand(cmd, by);
+    this.processedCommands.set(cmd.command_id, ack);
     if (this.processedCommands.size > 1e3) {
       const first = this.processedCommands.keys().next().value;
       if (first !== void 0) this.processedCommands.delete(first);
     }
+    return ack;
+  }
+  execCommand(cmd, by) {
     try {
       switch (cmd.type) {
         case "COMMAND_CREATE": {
@@ -41726,6 +41797,12 @@ var SessionManager = class {
             this.deletedExtIds.add(cmd.payload.session_id);
             appendDeletedExt(this.cfg.dataDir, cmd.payload.session_id);
           }
+          if (s.state.pinned) {
+            writePinnedSessions(
+              this.cfg.dataDir,
+              readPinnedSessions(this.cfg.dataDir).filter((x) => x !== cmd.payload.session_id)
+            );
+          }
           this.bus.emit(cmd.payload.session_id, "SESSION_DELETED", { session_id: cmd.payload.session_id });
           return { command_id: cmd.command_id, ok: true };
         }
@@ -41814,6 +41891,62 @@ var SessionManager = class {
           this.loginGranter(dev, pk2, String(p.name ?? "web").slice(0, 32) || "web");
           return { command_id: cmd.command_id, ok: true };
         }
+        case "COMMAND_IMPORT_PUSH": {
+          const p = cmd.payload;
+          const dev = String(p.target_dev ?? "");
+          const pk2 = String(p.target_pk ?? "");
+          if (!this.cloud || !this.importPusher) {
+            return { command_id: cmd.command_id, ok: false, error: "\u4E91\u6865\u672A\u542F\u7528\uFF08PC \u4FA7\u672A\u8BBE\u7F6E CCR_CLOUD_URL\uFF09" };
+          }
+          if (!/^wb-[0-9a-f]{6,64}$/.test(dev) || !/^[A-Za-z0-9+/=]{40,200}$/.test(pk2) || devId(pk2, "wb") !== dev) {
+            return { command_id: cmd.command_id, ok: false, error: "\u76EE\u6807\u8BBE\u5907\u53C2\u6570\u65E0\u6548" };
+          }
+          const entry = sanitizeImportPushEntry(p.entry);
+          if (!entry) {
+            return { command_id: cmd.command_id, ok: false, error: "\u56DE\u4F20\u6761\u76EE\u683C\u5F0F\u65E0\u6548" };
+          }
+          if (!this.importPusher(dev, pk2, { t: "ccdeck-import-resp", entry, ...p.note ? { note: String(p.note).slice(0, 80) } : {} })) {
+            return { command_id: cmd.command_id, ok: false, error: "\u7535\u8111\u7AEF\u4E0D\u5728\u7EBF\uFF08\u4E8C\u7EF4\u7801\u53EF\u80FD\u5DF2\u5173\u95ED\uFF09" };
+          }
+          return { command_id: cmd.command_id, ok: true };
+        }
+        case "COMMAND_PIN_SESSION": {
+          const s = this.require(cmd.payload.session_id);
+          if (s.state.external) {
+            return { command_id: cmd.command_id, ok: false, error: "\u5916\u90E8\u4F1A\u8BDD\u4E0D\u652F\u6301\u7F6E\u9876\uFF08\u7531 CLI \u81EA\u8EAB\u7EF4\u62A4\uFF09" };
+          }
+          const pinned2 = cmd.payload.pinned === true;
+          s.state.pinned = pinned2 || void 0;
+          if (!pinned2) s.state.saved = void 0;
+          s.state.updated_at = Date.now();
+          writePinnedSessions(
+            this.cfg.dataDir,
+            [...readPinnedSessions(this.cfg.dataDir).filter((x) => x !== cmd.payload.session_id), ...pinned2 ? [cmd.payload.session_id] : []]
+          );
+          this.bus.emit(cmd.payload.session_id, "SESSION_UPDATED", {
+            status: s.state.status,
+            action_summary: s.state.action_summary,
+            stats: { ...s.state.stats },
+            pinned: pinned2,
+            saved: !!s.state.saved
+          });
+          return { command_id: cmd.command_id, ok: true };
+        }
+        case "COMMAND_RESUME_SESSION": {
+          const s = this.require(cmd.payload.session_id);
+          if (s.state.external) {
+            return { command_id: cmd.command_id, ok: false, error: "\u5916\u90E8\u4F1A\u8BDD\u4E0D\u652F\u6301\u6062\u590D" };
+          }
+          if (s.agent && !s.agent.ended) {
+            if (s.state.saved) {
+              s.state.saved = void 0;
+              this.emitUpdated(s, true);
+            }
+            return { command_id: cmd.command_id, ok: true };
+          }
+          this.reviveSaved(s);
+          return { command_id: cmd.command_id, ok: true };
+        }
         case "COMMAND_WATCH_GRANT":
           return { command_id: cmd.command_id, ok: false, error: "\u624B\u8868\u914D\u5BF9\u6388\u6743\u4EC5\u9650\u5C40\u57DF\u7F51\u4FE1\u9053" };
       }
@@ -41848,7 +41981,7 @@ var SessionManager = class {
       logs: [],
       lastUpdateEmit: 0
     };
-    const agent = new AgentSession(
+    const agent = this.newAgent(
       cwd,
       this.cfg.model,
       this.agentCallbacks(managed),
@@ -41972,7 +42105,7 @@ var SessionManager = class {
     if (!sdkId) {
       throw new Error("\u4F1A\u8BDD\u5DF2\u7ED3\u675F\u4E14\u65E0 SDK \u4F1A\u8BDD\u8BB0\u5F55\uFF0C\u65E0\u6CD5\u6062\u590D\uFF08\u6A21\u578B\u5C1A\u672A\u5B8C\u6210\u521D\u59CB\u5316\uFF09");
     }
-    const agent = new AgentSession(
+    const agent = this.newAgent(
       s.state.cwd,
       s.state.model,
       this.agentCallbacks(s),
@@ -41982,6 +42115,7 @@ var SessionManager = class {
     s.agent = agent;
     s.state.status = "WORKING";
     s.state.historical = false;
+    s.state.saved = void 0;
     s.state.done_reason = void 0;
     s.state.last_error = void 0;
     s.state.turn_started_at = Date.now();
@@ -41989,6 +42123,106 @@ var SessionManager = class {
     this.pushExternalLog(s.state.session_id, "user_message", truncate(firstMessage, 200) + marker);
     this.pushExternalLog(s.state.session_id, "system", `\u5DF2\u6062\u590D SDK \u4F1A\u8BDD\uFF08resume ${sdkId.slice(0, 8)}\u2026\uFF09`);
     this.emitUpdated(s, true);
+  }
+  // #49 按需拉起（COMMAND_RESUME_SESSION）：不带首条消息的 parked resume——
+  // transcript 重放完成后 CLI 停在等待输入，首个回合由后续 COMMAND_MESSAGE 开启。
+  // 成功判定 = init 消息到达（SDK 会话就绪）；init 前流关闭 / 30s 超时 = 恢复失败
+  // （ERROR + last_error，saved 保留让卡片可重试）。回调包裹仅在此路径生效，
+  // resumeAgent（消息驱动）行为保持原样不动
+  reviveSaved(s) {
+    const sdkId = s.state.relay_session_id;
+    if (!sdkId) {
+      throw new Error("\u65E0 SDK \u4F1A\u8BDD\u8BB0\u5F55\uFF08\u9996\u6B21\u56DE\u5408\u672A\u5B8C\u6210\u5373\u4E2D\u65AD\uFF09\uFF0C\u65E0\u6CD5\u6062\u590D");
+    }
+    let inited = false;
+    let timer = null;
+    const base = this.agentCallbacks(s);
+    const fail = (reason) => {
+      if (inited) return;
+      inited = true;
+      if (timer) clearTimeout(timer);
+      s.state.status = "ERROR";
+      s.state.last_error = `\u6062\u590D\u5931\u8D25: ${reason}`;
+      s.state.done_reason = void 0;
+      s.state.action_summary = "\u6062\u590D\u5931\u8D25";
+      s.state.saved = true;
+      s.state.updated_at = Date.now();
+      this.pushExternalLog(s.state.session_id, "system", s.state.last_error);
+      this.bus.emit(s.state.session_id, "SESSION_ERROR", { message: s.state.last_error });
+      this.emitUpdated(s, true);
+    };
+    const cb2 = {
+      ...base,
+      onInit: (sdkIdNew, model, permissionMode) => {
+        inited = true;
+        if (timer) clearTimeout(timer);
+        s.state.saved = void 0;
+        s.state.historical = false;
+        base.onInit(sdkIdNew, model, permissionMode);
+        s.state.status = "DONE";
+        s.state.done_reason = "\u5DF2\u6062\u590D\uFF08\u7B49\u5F85\u8F93\u5165\uFF09";
+        s.state.action_summary = "\u5DF2\u6062\u590D\uFF0C\u7B49\u5F85\u8F93\u5165";
+        s.state.turn_started_at = void 0;
+        this.pushExternalLog(s.state.session_id, "system", `\u5DF2\u6062\u590D SDK \u4F1A\u8BDD\uFF08resume ${sdkId.slice(0, 8)}\u2026\uFF09`);
+        this.emitUpdated(s, true);
+      },
+      onSessionEnd: (reason) => {
+        if (!inited) {
+          fail(reason);
+          return;
+        }
+        base.onSessionEnd(reason);
+      }
+    };
+    timer = setTimeout(() => {
+      timer = null;
+      fail("\u521D\u59CB\u5316\u8D85\u65F6\uFF0830s\uFF09");
+      void s.agent?.stop();
+    }, 3e4);
+    timer.unref?.();
+    const agent = this.newAgent(s.state.cwd, s.state.model, cb2, void 0, {
+      resume: sdkId,
+      permissionMode: s.state.permission_mode ?? "default"
+    });
+    s.agent = agent;
+    s.state.status = "WORKING";
+    s.state.action_summary = "\u6062\u590D\u4E2D";
+    s.state.done_reason = void 0;
+    s.state.last_error = void 0;
+    s.state.updated_at = Date.now();
+    this.emitUpdated(s, true);
+  }
+  // #49 开机置顶登记（不自动拉起，2026-09-09 用户拍板）：pinned-sessions.json 是
+  // 权威清单（历史事件里的 pinned 可能过时——unpin 落盘后重启的兜底，一律按文件
+  // 归一）。清单内托管会话标 pinned+saved 休眠（可见、状态 DONE「已保存」、不可
+  // 操作，点卡走 COMMAND_RESUME_SESSION）；查无会话的条目（压缩丢失/已删）静默清理
+  applyPinned() {
+    const file = readPinnedSessions(this.cfg.dataDir);
+    const keep = [];
+    let saved = 0;
+    for (const s of this.sessions.values()) {
+      const pinned2 = file.includes(s.state.session_id);
+      if (pinned2 && !s.state.external) {
+        keep.push(s.state.session_id);
+        const was = s.state.pinned;
+        s.state.pinned = true;
+        if (!s.agent) {
+          s.state.saved = true;
+          s.state.status = "DONE";
+          s.state.done_reason = "\u5DF2\u4FDD\u5B58\uFF08\u91CD\u542F\u4F11\u7720\uFF09";
+          s.state.action_summary = "\u5DF2\u4FDD\u5B58\uFF0C\u70B9\u51FB\u6062\u590D";
+          s.state.last_error = void 0;
+          s.state.waiting_request = void 0;
+          saved++;
+        }
+        if (!was) this.emitUpdated(s, true);
+      } else if (s.state.pinned) {
+        s.state.pinned = void 0;
+        this.emitUpdated(s, true);
+      }
+    }
+    if (keep.length !== file.length) writePinnedSessions(this.cfg.dataDir, keep);
+    return { saved };
   }
   require(sessionId) {
     const s = this.sessions.get(sessionId);
@@ -42031,6 +42265,11 @@ var SessionManager = class {
       ...s.state.permission_mode ? { permission_mode: s.state.permission_mode } : {},
       ...s.state.cron_tasks ? { cron_tasks: s.state.cron_tasks.map((t) => ({ ...t })) } : {},
       ...s.state.compacting ? { compacting: true } : {},
+      // #49 置顶/休眠标记恒随增量帧显式携带布尔：saved 的清除点（恢复成功 onInit/
+      // 幂等恢复）不在命令回执路径上，只在为真时携带会让其他在线端一直挂着休眠卡
+      //（SNAPSHOT 恒为全量权威，这里保证增量也能实时收口）
+      pinned: !!s.state.pinned,
+      saved: !!s.state.saved,
       // last_task_done 不随增量帧下发（#254）：手机/网页都不消费该路径，只在
       // SNAPSHOT 里用于断线恢复，增量携带纯属带宽浪费
       // historical 增删必须实时下发：转录自愈/pid 对账解锁后，已连接的客户端
@@ -42114,7 +42353,7 @@ var SessionManager = class {
   lastStoreTodos = /* @__PURE__ */ new Map();
   evictOldSessions() {
     if (this.sessions.size < MAX_SESSIONS) return;
-    const finished = [...this.sessions.values()].filter((s) => s.state.status === "DONE" || s.state.status === "ERROR").sort((a, b) => a.state.started_at - b.state.started_at);
+    const finished = [...this.sessions.values()].filter((s) => (s.state.status === "DONE" || s.state.status === "ERROR") && !s.state.pinned).sort((a, b) => a.state.started_at - b.state.started_at);
     for (const s of finished) {
       if (this.sessions.size < MAX_SESSIONS) break;
       void s.agent?.stop();
@@ -42130,8 +42369,8 @@ var SessionManager = class {
 // src/ws-server.ts
 import { createServer } from "node:http";
 import { randomUUID as randomUUID5 } from "node:crypto";
-import { readFileSync as readFileSync11, existsSync as existsSync6, readdirSync as readdirSync4 } from "node:fs";
-import { join as join10, sep as sep5 } from "node:path";
+import { readFileSync as readFileSync11, writeFileSync as writeFileSync7, mkdirSync as mkdirSync6, existsSync as existsSync6, readdirSync as readdirSync4 } from "node:fs";
+import { join as join10, dirname as dirname5, sep as sep5 } from "node:path";
 import { homedir as homedir7, networkInterfaces } from "node:os";
 
 // src/models.ts
@@ -43261,6 +43500,17 @@ var Bridge = class _Bridge {
         }
       }
     }
+    const subHits = list.filter((p) => key.includes(normKey(p.text)));
+    if (subHits.length) {
+      const keptList = list.filter((p) => !key.includes(normKey(p.text)));
+      this.mgr.setExternalPending(sessionId, keptList);
+      for (const h of subHits) {
+        this.dropEnqueuedKey(sessionId, h.text);
+        this.noteUserMsg(sessionId, h.text, "promote");
+        this.mgr.pushExternalLog(sessionId, "user_message", truncate(h.text, 300));
+      }
+      return true;
+    }
     return false;
   }
   // 注入 Esc 打断当前回合
@@ -44183,6 +44433,19 @@ function localIps() {
   return out;
 }
 var TRUSTED_WEB_ORIGINS = ["https://cc.humumu.online", "https://cc-deck.humumu.online"];
+var PLUGIN_CFG_KEYS = ["taskGuard", "qNotify", "restorePoint"];
+function pluginConfigPath() {
+  return join10(homedir7(), ".cc-deck", "config.json");
+}
+function readPluginConfig() {
+  const out = { taskGuard: false, qNotify: true, restorePoint: false };
+  try {
+    const raw = JSON.parse(readFileSync11(pluginConfigPath(), "utf-8"));
+    for (const k3 of PLUGIN_CFG_KEYS) if (typeof raw[k3] === "boolean") out[k3] = raw[k3];
+  } catch {
+  }
+  return out;
+}
 var COMMAND_TYPES = /* @__PURE__ */ new Set([
   "COMMAND_CREATE",
   "COMMAND_MESSAGE",
@@ -44204,7 +44467,10 @@ var COMMAND_TYPES = /* @__PURE__ */ new Set([
   "COMMAND_PERM",
   "COMMAND_MODEL",
   "COMMAND_REFRESH_TODOS",
-  "COMMAND_TODO_HIDE"
+  "COMMAND_TODO_HIDE",
+  "COMMAND_PIN_SESSION",
+  "COMMAND_RESUME_SESSION",
+  "COMMAND_IMPORT_PUSH"
 ]);
 var HEARTBEAT_MS = 3e4;
 var BUILTIN_COMMANDS = [
@@ -44382,11 +44648,24 @@ function startServer(bus2, mgr2, cfg2, opts = {}) {
         res.writeHead(404).end();
         return;
       }
+      const virtualNic = /vmware|virtual|vethernet|wsl|loopback|tap|bluetooth/i;
+      let lanIp = "";
+      for (const [name, list] of Object.entries(networkInterfaces())) {
+        if (virtualNic.test(name)) continue;
+        for (const ni of list ?? []) {
+          if (ni.family !== "IPv4" || /^(127\.|169\.254\.)/.test(ni.address)) continue;
+          if (/^(192\.168|10\.|172\.(1[6-9]|2\d|3[01]))\./.test(ni.address)) {
+            lanIp = ni.address;
+            break;
+          }
+        }
+        if (lanIp) break;
+      }
       res.writeHead(200, {
         "content-type": "application/json",
         "access-control-allow-origin": allowOrigin,
         "cache-control": "no-store"
-      }).end(JSON.stringify({ ok: true, port: cfg2.port, token: cfg2.token }));
+      }).end(JSON.stringify({ ok: true, port: cfg2.port, token: cfg2.token, lan_ip: lanIp }));
       return;
     }
     if (req.method === "POST" && url.pathname === "/api/pair-issue") {
@@ -44434,7 +44713,15 @@ function startServer(bus2, mgr2, cfg2, opts = {}) {
       return;
     }
     if (req.method === "POST" && url.pathname === "/api/notify") {
-      void handleNotify(req, res, mgr2, cfg2);
+      void handleNotify(req, res, mgr2, cfg2, bus2);
+      return;
+    }
+    if ((req.method === "GET" || req.method === "POST") && url.pathname === "/api/plugin-config") {
+      if ((url.searchParams.get("token") ?? "") !== cfg2.token) {
+        res.writeHead(401).end("unauthorized");
+        return;
+      }
+      void handlePluginConfig(req, res);
       return;
     }
     if (req.method === "GET" && url.pathname === "/api/commands") {
@@ -44597,6 +44884,14 @@ function startServer(bus2, mgr2, cfg2, opts = {}) {
         ws2.send('{"type":"PONG"}');
         return;
       }
+      if (cmd && cmd.t === "ccdeck-import-resp") {
+        const raw = JSON.stringify(cmd);
+        for (const c of wss.clients) {
+          if (c !== ws2 && c.readyState === import_websocket.default.OPEN) c.send(raw);
+        }
+        ws2.send('{"t":"ccdeck-import-resp-ack"}');
+        return;
+      }
       if (!cmd || typeof cmd.command_id !== "string" || typeof cmd.type !== "string" || !COMMAND_TYPES.has(cmd.type) || typeof cmd.payload !== "object" || cmd.payload === null) {
         ws2.send(
           JSON.stringify({
@@ -44653,7 +44948,75 @@ function startServer(bus2, mgr2, cfg2, opts = {}) {
     })
   };
 }
-async function handleNotify(req, res, mgr2, cfg2) {
+async function handlePluginConfig(req, res) {
+  const url = new URL(req.url ?? "/", "http://localhost");
+  const origin = (req.headers.origin ?? "").trim();
+  const ips = localIps();
+  const hostOk = (h) => h === "localhost" || h === "127.0.0.1" || ips.has(h);
+  let acao = "";
+  const reqLb = (req.headers.host ?? "").split(":")[0] === "127.0.0.1" || (req.headers.host ?? "").split(":")[0] === "localhost";
+  if (origin && reqLb) acao = origin === "null" ? "*" : origin;
+  else if (origin) {
+    try {
+      const u = new URL(origin);
+      if (TRUSTED_WEB_ORIGINS.includes(u.origin) || hostOk(u.hostname)) acao = origin;
+    } catch {
+    }
+  }
+  const headers = {
+    "content-type": "application/json",
+    "cache-control": "no-store",
+    ...acao ? { "access-control-allow-origin": acao } : {}
+  };
+  if (req.method === "GET") {
+    res.writeHead(200, headers).end(JSON.stringify({ ok: true, config: readPluginConfig() }));
+    return;
+  }
+  let body = "";
+  req.setEncoding("utf-8");
+  for await (const chunk of req) body += chunk;
+  let parsed = {};
+  try {
+    if (body.trim()) parsed = JSON.parse(body);
+  } catch {
+  }
+  const next = readPluginConfig();
+  let changed = false;
+  const parseQBool = (v) => {
+    if (v === "1" || v === "true") return true;
+    if (v === "0" || v === "false") return false;
+    return void 0;
+  };
+  for (const k3 of PLUGIN_CFG_KEYS) {
+    const raw = url.searchParams.get(k3);
+    const qb2 = raw === null ? void 0 : parseQBool(raw);
+    const bv2 = parsed[k3];
+    if (qb2 !== void 0) {
+      next[k3] = qb2;
+      changed = true;
+    } else if (typeof bv2 === "boolean") {
+      next[k3] = bv2;
+      changed = true;
+    }
+  }
+  if (changed) {
+    try {
+      let full = {};
+      try {
+        full = JSON.parse(readFileSync11(pluginConfigPath(), "utf-8"));
+      } catch {
+      }
+      for (const k3 of PLUGIN_CFG_KEYS) full[k3] = next[k3];
+      mkdirSync6(dirname5(pluginConfigPath()), { recursive: true });
+      writeFileSync7(pluginConfigPath(), JSON.stringify(full, null, 2) + "\n", "utf-8");
+    } catch {
+      res.writeHead(500, headers).end(JSON.stringify({ ok: false, error: "config.json \u5199\u5165\u5931\u8D25" }));
+      return;
+    }
+  }
+  res.writeHead(200, headers).end(JSON.stringify({ ok: true, config: readPluginConfig() }));
+}
+async function handleNotify(req, res, mgr2, cfg2, bus2) {
   const url = new URL(req.url ?? "/", "http://localhost");
   if ((url.searchParams.get("token") ?? "") !== cfg2.token) {
     res.writeHead(401).end("unauthorized");
@@ -44671,12 +45034,13 @@ async function handleNotify(req, res, mgr2, cfg2) {
         return;
       }
       const sessions2 = mgr2.snapshot();
-      const target2 = (p.session_id ? sessions2.find((s) => s.session_id === p.session_id) : void 0) || sessions2.find((s) => s.status === "WORKING" && s.external) || sessions2.find((s) => s.external) || sessions2[0];
+      const target2 = (p.session_id ? sessions2.find((s) => s.session_id === p.session_id) ?? sessions2.find((s) => s.session_id === "ext-" + p.session_id) : void 0) || sessions2.find((s) => s.status === "WORKING" && s.external) || sessions2.find((s) => s.external) || sessions2[0];
       if (!target2) {
         res.writeHead(503).end('{"error":"\u65E0\u53EF\u6295\u9012\u4F1A\u8BDD"}');
         return;
       }
       mgr2.notifyConfirm(target2.session_id, text);
+      bus2.emitTransient("USER_NOTE", { text, ts: Date.now() });
       res.writeHead(200, { "content-type": "application/json" }).end(JSON.stringify({ ok: true, mode: "confirm", session_id: target2.session_id }));
       return;
     }
@@ -44721,7 +45085,7 @@ async function handleBridgeHook(req, res, bridge, cfg2) {
 var connectionCounter = 0;
 
 // src/cloud-identity.ts
-import { existsSync as existsSync7, readFileSync as readFileSync12, writeFileSync as writeFileSync7 } from "node:fs";
+import { existsSync as existsSync7, readFileSync as readFileSync12, writeFileSync as writeFileSync8 } from "node:fs";
 import { join as join11 } from "node:path";
 import { createHash, randomBytes } from "node:crypto";
 function loadOrCreateIdentity(dataDir2) {
@@ -44732,14 +45096,14 @@ function loadOrCreateIdentity(dataDir2) {
     if (!keypair.publicKey || !keypair.secretKey) throw new Error("cloud-keypair.json \u635F\u574F\uFF0C\u8BF7\u5220\u9664\u540E\u91CD\u542F\u91CD\u65B0\u751F\u6210\uFF08\u5DF2\u914D\u5BF9\u624B\u673A\u9700\u91CD\u65B0\u914D\u5BF9\uFF09");
   } else {
     keypair = generateKeyPair();
-    writeFileSync7(kpPath, JSON.stringify(keypair), "utf-8");
+    writeFileSync8(kpPath, JSON.stringify(keypair), "utf-8");
   }
   const wanSecretPath = join11(dataDir2, "wan-secret");
   let wanSecret = "";
   if (existsSync7(wanSecretPath)) wanSecret = readFileSync12(wanSecretPath, "utf-8").trim();
   if (!/^[0-9a-f]{32}$/.test(wanSecret)) {
     wanSecret = randomBytes(16).toString("hex");
-    writeFileSync7(wanSecretPath, wanSecret, "utf-8");
+    writeFileSync8(wanSecretPath, wanSecret, "utf-8");
   }
   const wanDev = "wt-" + createHash("sha256").update(wanSecret).digest("hex").slice(0, 16);
   const peersPath = join11(dataDir2, "cloud-peers.json");
@@ -44754,7 +45118,7 @@ function loadOrCreateIdentity(dataDir2) {
   const persistPeers = () => {
     const obj = {};
     for (const [k3, v] of peers) obj[k3] = v;
-    writeFileSync7(peersPath, JSON.stringify(obj, null, 2), "utf-8");
+    writeFileSync8(peersPath, JSON.stringify(obj, null, 2), "utf-8");
   };
   return {
     keypair,
@@ -44782,6 +45146,7 @@ function loadOrCreateIdentity(dataDir2) {
 
 // src/cloud-client.ts
 var PEER_META_MAX = 120;
+var SIGHTING_TTL_MS = 18e4;
 var PEER_META_KEYS = ["name", "platform", "ua", "app"];
 function sanitizePeerMeta(raw) {
   if (!raw || typeof raw !== "object" || Array.isArray(raw)) return void 0;
@@ -44819,6 +45184,11 @@ var CloudClient = class {
   // #373 /wan 手表明文透传设备（wt-*）：桥可信通道，无密钥对；状态机与 phones 同构
   wanWatches = /* @__PURE__ */ new Map();
   unpairedNotice = /* @__PURE__ */ new Map();
+  // 0.4.4 跨网回传的出码端在线判定：未配对网页端不发 hello（phones 无记录），但
+  // 连接 onopen 必发一帧 pair_req（空码=在场信标）。TTL 取 180s：覆盖合并码浮层的
+  // 120s 生命周期 + 重连空档（看门狗 32s 放弃→退避重连→再发信标）；过期 sighting
+  // 由 pair_req 路径与 pushImportTo 的超限清扫回收
+  wbSightings = /* @__PURE__ */ new Map();
   // 配对码爆破限流（双层）：①按 dev——10 分钟窗口内连续 5 次错码的 dev 静默丢弃；
   // ②全局预算（2026-09-09 F2 修复）——按 dev 计数可被「每 5 次换一个密钥对」绕过，
   // 故全部 dev 合计错码超预算后本窗口内任何 pair_req（含正码）一律静默丢弃，
@@ -44882,7 +45252,11 @@ var CloudClient = class {
     });
     ws2.on("message", (raw) => {
       this.lastRecv = Date.now();
-      this.onFrame(String(raw));
+      try {
+        this.onFrame(String(raw));
+      } catch (err) {
+        console.log(`[cloud] frame handler error via ${this.tag}:`, err);
+      }
     });
     ws2.on("pong", () => {
       this.lastRecv = Date.now();
@@ -44954,6 +45328,29 @@ var CloudClient = class {
     if (now - (this.unpairedNotice.get(dev) ?? 0) < 6e4) return;
     this.unpairedNotice.set(dev, now);
     this.send({ to: dev, data: { t: "pair_nack", error: reason } });
+  }
+  // 0.4.4 跨网回传（COMMAND_IMPORT_PUSH 的云层执行器）：把手机挑的连接条目密封后
+  // 投给出示合并码的网页/exe 端。目标端此时多半未配对——没有 peer 条目，但码内
+  // 公钥就是收件人钥匙（手机侧已校验 dev=pk 派生），直接对 pk 密封。在线判定 =
+  // phones 活跃（已 hello）或 SIGHTING_TTL_MS 内有 pair_req 信标；离线返回 false 让
+  // 手机端 ACK 得到人话错误。多桥排序由 index.ts 两遍扫描负责（活跃桥优先）
+  pushImportTo(dev, pubkey, payload) {
+    if (this.ws?.readyState !== wrapper_default.OPEN) return false;
+    const st2 = this.phones.get(dev);
+    const seen = this.wbSightings.get(dev) ?? 0;
+    const online = !!st2?.active || Date.now() - seen < SIGHTING_TTL_MS;
+    if (!online) return false;
+    if (this.wbSightings.size > 200) {
+      const now = Date.now();
+      for (const [d2, ts2] of this.wbSightings) if (now - ts2 > SIGHTING_TTL_MS) this.wbSightings.delete(d2);
+    }
+    this.send({ to: dev, data: seal(payload, pubkey, this.identity.keypair.secretKey) });
+    return true;
+  }
+  // 多桥投递排序用（index.ts 两遍扫描）：目标是否在本桥持有活跃 hello 连接——
+  // 活跃桥必发必达，sighting 桥只代表"近期见过"，排后兜底
+  hasActiveDev(dev) {
+    return this.phones.get(dev)?.active === true;
   }
   // #325 扫码登录：已配对手机扫了网页端出示的二维码后，经此方法把会话公钥升格为
   // 新已配对 peer 并主动推 pair_ack（与 6 位码 pair_req 成功路径同构——网页端
@@ -45037,6 +45434,7 @@ var CloudClient = class {
         st2.active = false;
         console.log(`[cloud] route miss dev=${f.to}, mark inactive`);
       }
+      this.wbSightings.delete(f.to);
       return;
     }
     const wanEnv = f.data;
@@ -45054,6 +45452,12 @@ var CloudClient = class {
         console.log(`[cloud] pair_req rejected dev=${f.from}`);
         return;
       }
+      this.wbSightings.set(dev, Date.now());
+      if (this.wbSightings.size > 200) {
+        const sweep = Date.now();
+        for (const [d2, ts2] of this.wbSightings) if (sweep - ts2 > SIGHTING_TTL_MS) this.wbSightings.delete(d2);
+      }
+      if (!String(pr2.code ?? "")) return;
       const now = Date.now();
       const pf = this.pairFails.get(dev);
       if (pf && pf.until > now) {
@@ -45460,6 +45864,7 @@ for (const s of mgr.snapshot()) {
     ...s.usage ? { usage: s.usage } : {}
   });
 }
+var pinned = mgr.applyPinned();
 var cloudIdentity = null;
 var cloudClients = [];
 var pairCodes = createPairingCodes();
@@ -45470,6 +45875,11 @@ if (cfg.cloudUrls.length) {
   mgr.setLoginGranter((dev, pk2, name) => {
     for (const c of cloudClients) c.grantLogin(dev, pk2, name);
     return true;
+  });
+  mgr.setImportPusher((dev, pk2, payload) => {
+    for (const c of cloudClients) if (c.hasActiveDev(dev) && c.pushImportTo(dev, pk2, payload)) return true;
+    for (const c of cloudClients) if (!c.hasActiveDev(dev) && c.pushImportTo(dev, pk2, payload)) return true;
+    return false;
   });
   mgr.setPeerKicker((dev) => {
     cloudIdentity?.removePeer(dev);
@@ -45495,14 +45905,14 @@ startServer(bus, mgr, cfg, {
   onReady: () => {
     advertiseRelay(cfg.port, `CC Deck Relay (${hostname()})`);
     if (process.env.CC_DECK_DAEMON === "1") {
-      writeFileSync8(join12(cfg.dataDir, "relay.pid"), String(process.pid), "utf-8");
+      writeFileSync9(join12(cfg.dataDir, "relay.pid"), String(process.pid), "utf-8");
     }
     const bridgeJson = JSON.stringify({ port: cfg.port, token: cfg.bridgeToken });
-    writeFileSync8(join12(cfg.dataDir, "bridge.json"), bridgeJson, "utf-8");
+    writeFileSync9(join12(cfg.dataDir, "bridge.json"), bridgeJson, "utf-8");
     const hookHome = join12(homedir8(), ".cc-deck", "data");
     if (cfg.dataDir !== hookHome && existsSync8(hookHome)) {
       try {
-        writeFileSync8(join12(hookHome, "bridge.json"), bridgeJson, "utf-8");
+        writeFileSync9(join12(hookHome, "bridge.json"), bridgeJson, "utf-8");
       } catch {
       }
     }
@@ -45512,6 +45922,9 @@ console.log("CC Deck Relay \u5DF2\u542F\u52A8");
 console.log(`  \u6A21\u578B:   ${cfg.model}`);
 console.log(`  \u7AEF\u53E3:   ${cfg.port}`);
 console.log(`  \u5386\u53F2:   ${persistPath}\uFF08\u6062\u590D ${adopted} \u4E2A\u4F1A\u8BDD\uFF09`);
+if (pinned.saved > 0) {
+  console.log(`  \u7F6E\u9876:   ${pinned.saved} \u4E2A\u4F1A\u8BDD\u5DF2\u4F11\u7720\u767B\u8BB0\uFF08\u70B9\u5361\u7247\u6309\u9700\u6062\u590D\uFF0C\u4E0D\u81EA\u52A8\u62C9\u8D77\uFF09`);
+}
 console.log(`  \u6865\u63A5:   ${join12(cfg.dataDir, "bridge.json")}\uFF08\u5916\u90E8 CLI \u4F1A\u8BDD\u7ECF hooks \u63A5\u5165\uFF09`);
 console.log(
   cloudIdentity ? `  \u4E91\u6865:   ${cfg.cloudUrls.join(" + ")}\uFF08dev=${cloudIdentity.relayDev}\uFF0C\u5DF2\u914D\u5BF9 ${cloudIdentity.peers.size} \u53F0\u8BBE\u5907${cfg.cloudToken ? "" : "\uFF1B\u672A\u8BBE CCR_CLOUD_TOKEN\uFF0C\u4EC5\u53EF\u914D\u5BF9\u4E0D\u53EF\u8FDE\u6865"}\uFF09` : `  \u4E91\u6865:   \u672A\u542F\u7528\uFF08\u672A\u8BBE\u7F6E CCR_CLOUD_URL\uFF09`

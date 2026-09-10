@@ -6681,14 +6681,20 @@ async function probeRelayStat() {
     txt.textContent = "运行中 · 端口 " + localRelayInfo.port;
     return;
   }
-  // #13 桌面壳上 relay 起不来的头号原因=系统缺 Node.js（内嵌 relay 只带脚本不带运行时；
-  // VS Code 扩展版 Claude Code 自带运行时也算「没装」）。问壳要 node 探测结果给明确引导
+  // #13/#17 桌面壳上 relay 起不来的两类原因给明确引导：壳侧透出的启动错误（node 过旧
+  // SyntaxError / spawn 失败）优先；否则无 node（内嵌 relay 只带脚本不带运行时，VS Code
+  // 扩展版 Claude Code 自带运行时也算「没装」）。点击都跳 nodejs.org
   if (window.ccDeck?.relayStatus) {
     try {
       const st = await window.ccDeck.relayStatus();
-      if (st && st.node === false && !st.port) {
-        txt.textContent = "缺少 Node.js 运行时 · 点击查看安装方法";
-        txt.title = "内置 relay 需要 Node.js（Claude Code 的 VS Code 扩展不算——它自带运行时不进系统 PATH）";
+      if (st && !st.port && (st.err || st.node === false)) {
+        if (st.err) {
+          txt.textContent = String(st.err).slice(0, 64);
+          txt.title = String(st.err);
+        } else {
+          txt.textContent = "缺少 Node.js 运行时 · 点击查看安装方法";
+          txt.title = "内置 relay 需要 Node.js（Claude Code 的 VS Code 扩展不算——它自带运行时不进系统 PATH）";
+        }
         $("gpRelayStat").onclick = () => { window.ccDeck.openExternal("https://nodejs.org/zh-cn").catch(() => {}); };
         return;
       }

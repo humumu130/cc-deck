@@ -216,6 +216,9 @@ fn build_tray(app: &tauri::App) -> tauri::Result<()> {
 // 拉起内嵌 relay（用户无感，⚙ 设置行只作状态展示/手动停启）。
 // CCR_DESKTOP_RELAY_PORT：测试通道（本机 8787 被生产 relay 占时换端口验证启动分支）。
 static EMBEDDED_RELAY: std::sync::Mutex<Option<std::process::Child>> = std::sync::Mutex::new(None);
+// #17 内嵌 relay 启动/引导失败原因（node 过旧 SyntaxError / spawn 失败 / 起后即退）——
+// relay_status 透出给网页状态行展示，替代死板的「未检测到」
+static EMBEDDED_RELAY_ERR: std::sync::Mutex<Option<String>> = std::sync::Mutex::new(None);
 
 fn relay_port() -> u16 {
     std::env::var("CCR_DESKTOP_RELAY_PORT").ok().and_then(|v| v.parse().ok()).unwrap_or(8787)
@@ -250,10 +253,12 @@ static NODE_OK: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
 
 fn relay_status_value() -> Value {
     let node = *NODE_OK.get_or_init(node_in_path);
+    let err = EMBEDDED_RELAY_ERR.lock().unwrap().clone();
     serde_json::json!({
         "port": port_listening(relay_port()),
         "embedded": EMBEDDED_RELAY.lock().unwrap().is_some(),
         "node": node,
+        "err": err,
     })
 }
 
@@ -407,10 +412,22 @@ fn main() {
             if !port_listening(relay_port()) {
                 match spawn_embedded_relay(app.handle()) {
                     // #17 首启预算 4s→9s：全新安装机器上 Defender 冷扫描 2MB relay.mjs
-                    // + node 冷启动可超 4s（同事实机：有 Node 仍显示未检测到的头号候选）；
-                    // 页面侧另有 90s 自愈重探兜底
-                    Ok(()) => wait_port_ready(relay_port(), 9000),
-                    Err(e) => println!("[embedded-relay] auto-enable failed: {e}"),
+                    // + node 冷启动可超 4s；页面侧另有 90s 自愈重探兜底
+                    Ok(()) => {
+                        wait_port_ready(relay_port(), 9000);
+                        // 起后即退（#17 同事实机：Node14 跑 node20 目标包 SyntaxError）——
+                        // 原因透给状态行，不再只有「未检测到」
+                        let died = EMBEDDED_RELAY.lock().unwrap().is_none() && !port_listening(relay_port());
+                        if died {
+                            *EMBEDDED_RELAY_ERR.lock().unwrap() = Some(
+                                "内置 relay 启动后即退出——多为 Node.js 版本过旧，请升级到 20 LTS 后重启 CC Deck（详见 ~/.cc-deck/data/embedded-relay.log）".into(),
+                            );
+                        }
+                    }
+                    Err(e) => {
+                        println!("[embedded-relay] auto-enable failed: {e}");
+                        *EMBEDDED_RELAY_ERR.lock().unwrap() = Some(e);
+                    }
                 }
             }
             let win = tauri::WebviewWindowBuilder::from_config(app.handle(), &app.config().app.windows[0])?

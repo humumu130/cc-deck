@@ -17,7 +17,7 @@ await build({
   bundle: true,
   platform: "node",
   format: "esm",
-  target: "node20",
+  target: "node18", // #17（2026-09-10）：内嵌 relay 真实下限=18（源码用 top-level await + 全局 fetch，node14 转译救不了）；老 Node 由壳侧 err 引导升级（见 main.rs EMBEDDED_RELAY_ERR）
   outfile: join(out, "scripts", "relay.mjs"),
   external: ["bufferutil", "utf-8-validate"],
   define: { "process.env.CC_DECK_PLUGIN": '"1"' },
