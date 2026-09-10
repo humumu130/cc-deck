@@ -675,7 +675,13 @@
   }
   #loginQrTitle { font-size: 15px; font-weight: 700; color: var(--text); }
   #loginQrSub { font-size: 12px; color: var(--dim); margin: 6px 0 14px; line-height: 1.6; }
-  #loginQrCanvas { background: #fff; padding: 10px; border-radius: 10px; display: inline-block; }
+  /* #15 控制台二维码磁贴（与主页同语言）：白底只为扫码对比度，细边+内衬光+小投影
+     弱化白纸突兀感；画布尺寸不动（扫码分辨率余量） */
+  #loginQrCanvas {
+    background: rgba(255, 255, 255, .94); padding: 10px; border-radius: 12px; display: inline-block;
+    border: 1px solid var(--border);
+    box-shadow: inset 0 0 0 3px rgba(255, 255, 255, .94), 0 2px 10px rgba(0, 0, 0, .22);
+  }
   #loginQrState { font-size: 12.5px; color: var(--faint); margin-top: 12px; }
   #loginQrCancel {
     margin-top: 14px; padding: 6px 18px; border-radius: 9px; cursor: pointer;
@@ -1031,6 +1037,25 @@
   #cardMenu button svg { flex: none; display: block; opacity: .8; }
   #cardMenu button.danger:hover { background: rgba(255,120,73,.12); color: var(--error); }
   #cardMenu .cm-sep { height: 1px; background: var(--border); margin: 3px 6px; flex: none; }
+  /* #16 关于页「下载手机 App」扫码浮层：小卡片居中（#cardMenu 同语言），
+     点任意处关闭；二维码磁贴与主页/登录码同款软化白底 */
+  #apkQrPop {
+    position: fixed; inset: 0; z-index: 97; display: none;
+    align-items: center; justify-content: center; background: rgba(2, 5, 10, .45);
+  }
+  #apkQrPop.open { display: flex; }
+  #apkQrPop .aq-card {
+    background: var(--panel); border: 1px solid var(--border); border-radius: 14px;
+    padding: 18px 20px 14px; display: flex; flex-direction: column; align-items: center; gap: 10px;
+    box-shadow: 0 10px 34px rgba(0, 0, 0, .5);
+  }
+  #apkQrPop canvas {
+    background: rgba(255, 255, 255, .94); padding: 9px; border-radius: 12px;
+    border: 1px solid var(--border);
+    box-shadow: inset 0 0 0 3px rgba(255, 255, 255, .94), 0 2px 10px rgba(0, 0, 0, .22);
+  }
+  #apkQrPop .aq-t { color: var(--text); font-size: 13px; font-weight: 600; }
+  #apkQrPop .aq-u { color: var(--faint); font-size: 11px; }
   /* #279⑨ 紧凑卡（对齐手机"简洁列表"三行）：状态点+标题+耗时 / 摘要 / 角标+改动+水位 */
   .card.compact { padding: 7px 11px 8px; border-radius: 10px; }
   .card.compact .c-row1 { display: flex; align-items: center; gap: 7px; }
@@ -1605,6 +1630,9 @@
 <!-- #49 会话卡右键菜单（fixed 定位 JS 设坐标；菜单项 JS 生成——托管/外部会话菜单不同） -->
 <div id="cardMenu"></div>
 
+<!-- #16 关于页「下载手机 App」扫码浮层：手机扫域名直链码下载，点任意处关 -->
+<div id="apkQrPop"><div class="aq-card"><canvas id="apkQrCv" width="200" height="200"></canvas><div class="aq-t">手机扫码下载 App</div><div class="aq-u">cc-deck.humumu.online/dl/cc-deck.apk</div></div></div>
+
 <main>
   <button id="sideToggle" title="收起 / 展开会话列表">‹</button>
   <div id="side">
@@ -1746,6 +1774,8 @@
             <div class="gp-row" id="gpIdle" style="display:none"><span class="gi"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3.4 20.6 8 12 12.6 3.4 8Z"/><path d="m3.4 12.4 8.6 4.6 8.6-4.6"/><path d="m3.4 16.6 8.6 4.6 8.6-4.6"/></svg></span>折叠空闲<div class="lever" id="gpIdleLever" style="--n:2"><i class="lever-thumb"></i><button type="button" class="lever-opt" data-i="0">显示</button><button type="button" class="lever-opt" data-i="1">折叠</button></div></div>
             <!-- #8 桌面端呼出/收起快捷键（浏览器隐藏）：点击行进入录制，Esc 取消、Backspace 清空注销 -->
             <div class="gp-row" id="gpHotkey" style="display:none"><span class="gi"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="6.2" width="18" height="11.6" rx="2.2"/><path d="M7 10v3.6M7 10.1v.1"/><path d="M11 10v3.6M14.5 10v3.6M18 10v3.6"/></svg></span>呼出/收起快捷键<b class="gp-hk" id="gpHotkeyVal">—</b></div>
+            <!-- #16 会话切换快捷键展示行（键位暂固定）：与呼出/收起同组，桌面专属 -->
+            <div class="gp-row gp-static" id="gpSwitchKey" style="display:none"><span class="gi"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19.5 5 12l7-7.5"/><path d="M19 19.5 12 12l7-7.5"/></svg></span>上一个 / 下一个会话<b class="gp-hk">Ctrl+↑ / Ctrl+↓</b></div>
           </div>
         </section>
         <!-- #448 插件页：CC Deck 插件可选能力三开关（任务调度强化/插入问答通知/恢复点），
@@ -1779,7 +1809,9 @@
             <div class="gp-row" id="gpUpdate"><span class="gi"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-9-9c2.52 0 4.93 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/></svg></span>检查更新 <b id="gpUpdateV"></b><span class="gp-chev">›</span></div>
             <a class="gp-row" href="https://cc.humumu.online/dl/cc-deck-desktop-setup.exe" target="_blank" rel="noopener"><span class="gi"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3.6v10.6"/><path d="m7.9 10.7 4.1 4.1 4.1-4.1"/><path d="M4.4 20.4h15.2"/></svg></span>下载桌面端安装包<span class="gp-chev">›</span></a>
             <!-- #41web/#C 手机 App 下载走 GitHub Releases（用户界面不裸露云桥 IP；桌面安装包仍走 /dl/ 域名版） -->
-            <a class="gp-row" href="https://github.com/humumu130/cc-deck/releases/latest" target="_blank" rel="noopener"><span class="gi"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="7" y="2.5" width="10" height="19" rx="2.2"/><path d="M10.5 18.5h3"/></svg></span>下载手机 App<span class="gp-chev">›</span></a>
+            <!-- #16 下载手机 App：点行出二维码浮层（手机扫码走域名直链下载，不跳 GitHub） -->
+            <div class="gp-row" id="gpApkQr"><span class="gi"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="7" y="2.5" width="10" height="19" rx="2.2"/><path d="M10.5 18.5h3"/></svg></span>下载手机 App<span class="gp-chev">›</span></div>
+            <a class="gp-row" href="https://cc-deck.humumu.online/" target="_blank" rel="noopener"><span class="gi"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a14.2 14.2 0 0 1 0 18 14.2 14.2 0 0 1 0-18z"/></svg></span>项目主页<span class="gp-chev">›</span></a>
             <a class="gp-row" href="https://github.com/humumu130/cc-deck/issues" target="_blank" rel="noopener"><span class="gi"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3.2" y="5" width="17.6" height="14" rx="2.6"/><path d="m4.4 7.4 7.6 5.4 7.6-5.4"/></svg></span>反馈<span class="gp-chev">›</span></a>
           </div>
         </section>
@@ -4582,7 +4614,7 @@ document.addEventListener("click", (ev) => {
 
 // ⚙ 设置浮层（#317）：显示项为散装开关的镜像（点行 = 触发原按钮再回读状态），
 // 服务器管理不进浮层——左栏常驻面板已是高频区，与手机抽屉同为一级入口
-const CONSOLE_VERSION = "0.4.5";
+const CONSOLE_VERSION = "0.4.6";
 // #396 拨杆同步：滑块移到 idx 档（transform 过渡），选中档文字加 .on（白字压品牌色滑块上）
 function setLever(el, idx) {
   if (!el) return;
@@ -4600,6 +4632,7 @@ function syncGearPop() {
   $("gpVer").textContent = CONSOLE_VERSION;
   $("gpBuild") && ($("gpBuild").textContent = CONSOLE_VERSION); // #405 左栏底部弱化 Build 号（设计稿 §5）
   $("gpHotkey") && ($("gpHotkey").style.display = window.ccDeck ? "flex" : "none"); // #8 桌面端专属
+  $("gpSwitchKey") && ($("gpSwitchKey").style.display = window.ccDeck ? "flex" : "none"); // #16 同组展示
   renderGpStatus();
 }
 
@@ -6030,6 +6063,24 @@ function drawLoginQr(text) {
   g.fillStyle = "#111";
   for (let r = 0; r < n; r++) for (let c = 0; c < n; c++) if (q.isDark(r, c)) g.fillRect(off + c * cell, off + r * cell, cell, cell);
 }
+// #16 关于页「下载手机 App」扫码浮层：域名直链码（worker 流式代理，不露镜像裸 IP），
+// 点行开关、点浮层任意处收起
+$("gpApkQr").onclick = () => {
+  const pop = $("apkQrPop");
+  if (pop.classList.contains("open")) { pop.classList.remove("open"); return; }
+  const cv = $("apkQrCv"), g = cv.getContext("2d");
+  try {
+    const q = new QRCode(0, QRErrorCorrectLevel.M);
+    q.addData("https://cc-deck.humumu.online/dl/cc-deck.apk");
+    q.make();
+    const n = q.getModuleCount(), cell = Math.floor(200 / n), off = Math.floor((200 - cell * n) / 2);
+    g.fillStyle = "#fff"; g.fillRect(0, 0, 200, 200);
+    g.fillStyle = "#111";
+    for (let r = 0; r < n; r++) for (let c = 0; c < n; c++) if (q.isDark(r, c)) g.fillRect(off + c * cell, off + r * cell, cell, cell);
+  } catch {}
+  pop.classList.add("open");
+};
+$("apkQrPop").onclick = () => $("apkQrPop").classList.remove("open");
 // imp=true：0.4.4 合并码（「扫码从手机导入」云桥语境唤起）——授权入网/回传连接二选一，
 // 码带 imp:1（旧 App 忽略未知字段仍可纯授权，新 App 识别后给双选）；回传经桥密封投递
 function startLoginQr(imp) {
@@ -6127,15 +6178,16 @@ $("loginQrCancel").onclick = () => closeLoginQr();
 // pair_req 落库自动连接）。浮层复用 loginQrPop（无 pendingPair 会话，关层无副作用）
 async function addPhoneQr() {
   const ctx = ctxs.get(activeServerId) || null;
-  // #10 修正（2026-09-10）：LAN 直连码只在拿到「有效非回环」地址时才出——旧实现
-  // lanIp 探测失败（回环）也照发，公司电脑网页端 ctx 离线时会扫出 127.0.0.1 的废码
-  //（正确形态：云桥码经云接入）。回环/拿不到 LAN IP 时落到云桥分支，云桥也不在线
-  // 则明确报错引导，绝不出废码
+  // #10 修正（2026-09-10 二次收严）：LAN 直连码只认「私网 IP 字面量」——页面源是
+  // tauri.localhost（exe）/127.0.0.1（本地网页）/公网域名（CF 托管页）时，拿这些当
+  // 地址发给手机全是废码（解析不到或指错机器）。页面地址合格用页面地址（手机同网
+  // 可达），否则用 relay 实测 lan_ip；都拿不到就落云桥分支，云桥也不在线明确报错
+  const PRIV_IP = /^(192\.168|10\.|172\.(1[6-9]|2\d|3[01]))\./;
   if ((!ctx || ctx.status !== "online") && localRelayInfo) {
     const lanHost =
-      location.hostname && !/^(127\.|localhost|\[::)/.test(location.hostname)
+      PRIV_IP.test(location.hostname || "")
         ? location.hostname
-        : (localRelayInfo.lanIp && !/^127\./.test(localRelayInfo.lanIp) ? localRelayInfo.lanIp : "");
+        : (localRelayInfo.lanIp && PRIV_IP.test(localRelayInfo.lanIp) ? localRelayInfo.lanIp : "");
     if (lanHost) {
       const p = JSON.stringify({ v: 1, url: `ws://${lanHost}:${localRelayInfo.port}/ws`, token: localRelayInfo.token });
       $("loginQrTitle").textContent = "扫码接入";

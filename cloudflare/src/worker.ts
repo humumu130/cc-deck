@@ -53,6 +53,24 @@ export default {
         return env.ASSETS.fetch(new Request("https://assets.local/site/index.html"));
       }
       if (!/^[\w.-]+$/.test(name) || !env.DL) return new Response("bad name", { status: 400 });
+      // #15 APK（95MB）超 KV 25MiB 值上限放不进——专用流式回源 ECS 8888 直链：
+      // 用户侧只见本域 TLS 地址（不露裸 IP），全程 CF 边缘转发；no-store 防拿到旧包
+      if (name === "cc-deck.apk") {
+        try {
+          const upstream = await fetch("http://8.133.211.170:8888/cc-deck.apk", { redirect: "follow" } as RequestInit);
+          if (!upstream.ok || !upstream.body) return new Response("mirror unavailable", { status: 502 });
+          return new Response(upstream.body, {
+            status: 200,
+            headers: {
+              "content-type": "application/vnd.android.package-archive",
+              "content-disposition": 'attachment; filename="cc-deck.apk"',
+              "cache-control": "no-store",
+            },
+          });
+        } catch {
+          return new Response("mirror unavailable", { status: 502 });
+        }
+      }
       const obj = await env.DL.get(name, { type: "arrayBuffer" });
       if (!obj) return new Response("not found", { status: 404 });
       // no-store：/dl/<file> 是稳定地址，KV 换新版后二次下载必须拿到新文件，
