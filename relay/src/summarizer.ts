@@ -109,6 +109,15 @@ export function summarizeToolUse(tool: string, input: Record<string, unknown>): 
       return `联网搜索 ${truncate(String(input.query ?? ""), 50)}`;
     case "Agent":
       return `子代理 ${truncate(String(input.description ?? input.prompt ?? ""), 40)}`;
+    // #54 折叠行带任务编号（用户点单）：Update 的 taskId 直接可用；Create 的编号
+    // 在 result 回填（此处只能给 subject 概要），编号由端上任务浮窗/清单承载
+    case "TaskCreate":
+      return `新建 ${truncate(String(input.subject ?? ""), 40)}`;
+    case "TaskUpdate": {
+      const id = input.taskId ?? input.task_id;
+      const what = input.status ? `状态→${input.status}` : input.subject ? "改标题" : "更新";
+      return `#${typeof id === "number" ? id : ""} ${what}`.trim();
+    }
     default:
       return tool;
   }
