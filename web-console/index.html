@@ -4606,7 +4606,7 @@ document.addEventListener("click", (ev) => {
 
 // ⚙ 设置浮层（#317）：显示项为散装开关的镜像（点行 = 触发原按钮再回读状态），
 // 服务器管理不进浮层——左栏常驻面板已是高频区，与手机抽屉同为一级入口
-const CONSOLE_VERSION = "0.4.6";
+const CONSOLE_VERSION = "0.4.7";
 // #396 拨杆同步：滑块移到 idx 档（transform 过渡），选中档文字加 .on（白字压品牌色滑块上）
 function setLever(el, idx) {
   if (!el) return;
@@ -6887,7 +6887,9 @@ async function probeLocalRelay() {
   // #40x 声明上移：首启空占位（migrateLegacy 播种）在下方 ph 块就要调用本函数，
   // 原先定义落后于调用点（同作用域 const TDZ）→ 首启 init 直接 ReferenceError 中断
   // （connectAll/向导全不跑）——一个隐藏很深的首启破坏点
-  const probeLocalRelay = () => {
+  // #21 改名 autoConnectLocal（原名 probeLocalRelay 遮蔽顶层同名信息函数——空占位
+  // 补全块 await 恒 undefined，整块死代码；这也是新装 exe 不自动连的帮凶之一）
+  const autoConnectLocal = () => {
     // 已有带 token 的 loopback 条目：无需再探（#398 归并后等价本机条目只剩一条）
     if (servers.some((s) => s.kind === "lan" && s.token && localEp(s.wsUrl)?.loop)) return;
     probingLocal = true; renderGpStatus();
@@ -6917,23 +6919,33 @@ async function probeLocalRelay() {
         renderGpStatus(); // 落空静默：仅把副行探测提示收回
       }
     };
-    // ① exe 内嵌 relay 自报家门：/local-info 返回 {port, token}（token 由 exe 生成，
-    //    不一定是 devtoken——嗅探拿真实值，硬编码 devtoken 对 exe 场景必 401）
-    fetch("http://127.0.0.1:8787/local-info", { signal: AbortSignal.timeout ? AbortSignal.timeout(1500) : undefined })
-      .then((r) => (r.ok ? r.json() : null))
-      .then((j) => {
-        if (j && j.ok && j.port && j.token) { finish(j.port, j.token, "via local-info"); return; }
-        finish(0, 0, "local-info no body");
-      })
-      .catch(() => {
-        // ② 手动跑的生产 relay 无 local-info：回退 ws+devtoken 探测（家用默认 token）
-        try {
-          const ws = new WebSocket("ws://127.0.0.1:8787/ws?token=devtoken");
-          const t = setTimeout(() => { try { ws.close(); } catch {} finish(0, 0, "ws timeout"); }, 2500);
-          ws.onopen = () => { clearTimeout(t); try { ws.close(); } catch {} finish(8787, "devtoken", "via ws"); };
-          ws.onerror = () => { clearTimeout(t); finish(0, 0, "ws error(端口无服务或非 devtoken)"); };
-        } catch (e) { finish(0, 0, "exc:" + e); }
-      });
+    // ① exe（#21 根修）：页面源是 tauri.localhost，裸 fetch /local-info 被 relay CORS
+    //    拦死——壳侧 probeLocal 桥（initialization_script 注入）同进程发请求不带 Origin，
+    //    必须先用它；拿不到再走页面路径（浏览器场景）
+    (async () => {
+      try {
+        if (window.ccDeck?.probeLocal) {
+          const j = await window.ccDeck.probeLocal();
+          if (j && j.ok && j.port && j.token) { finish(j.port, j.token, "via shell probe"); return; }
+        }
+      } catch {}
+      // ② 浏览器/兜底：local-info 直探（token 由 exe 生成，不一定是 devtoken）
+      fetch("http://127.0.0.1:8787/local-info", { signal: AbortSignal.timeout ? AbortSignal.timeout(1500) : undefined })
+        .then((r) => (r.ok ? r.json() : null))
+        .then((j) => {
+          if (j && j.ok && j.port && j.token) { finish(j.port, j.token, "via local-info"); return; }
+          finish(0, 0, "local-info no body");
+        })
+        .catch(() => {
+          // ③ 手动跑的生产 relay 无 local-info：回退 ws+devtoken 探测（家用默认 token）
+          try {
+            const ws = new WebSocket("ws://127.0.0.1:8787/ws?token=devtoken");
+            const t = setTimeout(() => { try { ws.close(); } catch {} finish(0, 0, "ws timeout"); }, 2500);
+            ws.onopen = () => { clearTimeout(t); try { ws.close(); } catch {} finish(8787, "devtoken", "via ws"); };
+            ws.onerror = () => { clearTimeout(t); finish(0, 0, "ws error(端口无服务或非 devtoken)"); };
+          } catch (e) { finish(0, 0, "exc:" + e); }
+        });
+    })();
   };
   // 空的直连占位：探测本机 relay，命中即补全（同机零配置）。
   // 桌面壳（#334）启动自动拉起 relay 有冷启动竞态：首探落空 2.5s 后补试一次，
@@ -6995,7 +7007,7 @@ async function probeLocalRelay() {
   const deepLinked = !!(h.get("pc") || params.get("token") || params.get("gear") === "1"); // ?gear=1 同属深链：不弹首启向导
   if (!usable && !deepLinked) { $("wizPop").classList.add("open"); setTimeout(() => $("wizCode")?.focus(), 80); }
 
-  setTimeout(probeLocalRelay, 800);
+  setTimeout(autoConnectLocal, 800);
   // #40x relay 页状态行：启动后静默探一次（结果落到 gpRelayStat，打开抽屉/切页时再补探）
   setTimeout(probeRelayStat, 1100);
 
