@@ -8,7 +8,6 @@ import { LogoMark } from "../brand";
 import { sessionElapsed, fmtElapsed, fmtTok, contextPct, contextLevel, CONTEXT_LIMIT_FALLBACK, displaySrcName } from "../fmt";
 import { setListDensity, useListDensity, type ListDensity } from "../display-settings";
 import { store, useRelay } from "../store";
-import { CloudGlyph } from "./SettingsDrawer";
 import { FadeIn, PressScale } from "../motion";
 import type { SessionState } from "../protocol";
 import RenameModal from "./RenameModal";
@@ -747,7 +746,8 @@ export default function ListScreen({ sessions, connected, connText, onOpen, onNe
             // 列表已平铺单源视图，副标题是顶部唯一明确的当前源指示）；多源在线仍出
             // 「N 源聚合 · M 在线」概览（点名单一活动源会误导，沿用 #294 的决定）
             onlineSrcs === 1 && soloName ? (
-              <Text style={styles.titleSub} numberOfLines={1}>源：{soloName}</Text>
+              // #46 去「源：」前缀，直接显示源名
+              <Text style={styles.titleSub} numberOfLines={1}>{soloName}</Text>
             ) : (
               <Text style={styles.titleSub} numberOfLines={1}>
                 {snap.sources.length} 源聚合 · {onlineSrcs} 在线
@@ -770,9 +770,11 @@ export default function ListScreen({ sessions, connected, connText, onOpen, onNe
           }}
         >
           <View style={[styles.connDot, { backgroundColor: connColor }]} />
-          <Text style={[styles.connText, { color: connColor }]}>{connText}</Text>
-          {/* #37 云通道指示：连接 chip 尾部线条云（替代「已连接 ☁」文案内嵌 emoji） */}
-          {snap.channel === "cloud" ? <CloudGlyph size={11} color={withA(connColor, 0.8)} /> : null}
+          <Text style={[styles.connText, { color: connColor }]}>
+            {connText}
+            {/* #46 通道后缀（用户定稿）：云桥 ·☁️ / 局域网 · LAN / 直连不显示 */}
+            {snap.channel === "cloud" ? " ·☁️" : snap.channel === "lan" ? " · LAN" : ""}
+          </Text>
         </Pressable>
         {/* #350 主题切换从设置抽屉迁入主面板顶：连接 chip 旁，与状态信息同区 */}
         <Pressable

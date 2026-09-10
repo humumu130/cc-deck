@@ -10,7 +10,7 @@ import { useTheme, useThemeStyles } from "../theme-context";
 import { LogoMark } from "../brand";
 import { setProcessFont, useProcessFont, setVoiceInput, useVoiceInput, setAggregate as persistAggregate, useAggregate, type ProcessFont } from "../display-settings";
 import { checkUpdate, announceUpdate, VERSION_NOTES } from "../updates";
-import { store, useRelay, type ServerEntry, type SourceStatus } from "../store";
+import { store, useRelay, type ServerEntry, type SourceStatus, isLanUrl } from "../store";
 import { withA, type ThemeColors } from "../theme";
 import ScanScreen, { routeScanResult, type ScanResult } from "./ScanScreen";
 import ImportPicker, { type ImportTarget } from "./ImportPicker";
@@ -279,6 +279,32 @@ export default function SettingsDrawer({
     });
   };
 
+  // #46 长按删除：条目长按亮出「删除」按钮（替原常驻 ✕），3.5s 无操作自动收回
+  const [delArm, setDelArm] = useState<string | null>(null);
+  const delArmTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const armDelete = (id: string) => {
+    if (delArmTimer.current) clearTimeout(delArmTimer.current);
+    setDelArm(id);
+    delArmTimer.current = setTimeout(() => setDelArm((cur) => (cur === id ? null : cur)), 3500);
+  };
+
+  // #46 云桥连不上弹窗：点灰图标触发连接后 8s 仍未连上、failNote 指向云桥不可达
+  // → Alert 提示（不在条目上堆状态文案）。snap 闭包防旧：ref 持最新快照
+  const snapRef = useRef(snap);
+  snapRef.current = snap;
+  const triggerConnect = (e: ServerEntry) => {
+    pick(e);
+    store.connect();
+    if (!e.cloud) return;
+    setTimeout(() => {
+      const st = snapRef.current.sources.find((x) => x.id === e.id);
+      const fn = snapRef.current.failNote;
+      if (st && st.state !== "online" && fn && fn.includes("云桥")) {
+        Alert.alert("云桥连不上", `${fn}。可检查网络后重试，或改用局域网直连。`);
+      }
+    }, 8000);
+  };
+
   const translateX = x.interpolate({ inputRange: [0, 1], outputRange: [-240, 0] });
   const scrimOp = x.interpolate({ inputRange: [0, 1], outputRange: [0, 0.55] });
 
@@ -410,33 +436,61 @@ export default function SettingsDrawer({
             const active = e.id === activeId;
             const st = snap.sources.find((x) => x.id === e.id);
             const online = st?.state === "online";
-            const chans = online ? (st?.channel ?? null) : null;
+            const connecting = st?.state === "connecting" || st?.state === "reconnecting";
+            // #46 通道标记（用户定稿）：云桥条目 ☁️ / LAN 源 LAN / 手动直连不显示
+            const chanTag = e.cloud ? "☁️" : isLanUrl(e.wsUrl) ? "LAN" : "";
             return (
               <View key={e.id} style={[d.srvRow, active && d.srvRowOn]}>
-                <Pressable style={d.srvMain} android_ripple={{ color: c.tintSoft, borderless: false }} onPress={() => pick(e)}>
+                <Pressable
+                  style={d.srvMain}
+                  android_ripple={{ color: c.tintSoft, borderless: false }}
+                  onLongPress={() => armDelete(e.id)}
+                  delayLongPress={400}
+                  onPress={() => {
+                    if (delArm === e.id) setDelArm(null);
+                    pick(e);
+                  }}
+                >
                   <View style={d.srvHead}>
-                    {/* #337 身份色点：登记后固定（id 哈希取色板），与选中/在线状态解耦；
-                        当前选中由 srvRowOn 外侧亮边框表达。#36 状态并行走尾：
-                        离线=点行重连（store.connect 活动源）/在线=云桥或 LAN 通道小图标 */}
+                    {/* #337 身份色点（登记后固定，与状态解耦）+ #46 双元素：
+                        通道标记 + 连接状态插头（绿=已连/灰=可点触发/黄闪=连接中），
+                        状态文案类元素全撤（云桥在线/↻ 重连等）——失败原因走弹窗 */}
                     <View style={[d.srvDot, { backgroundColor: srvColorMap.get(e.id) ?? c.faint }]} />
                     <Text style={d.srvName} numberOfLines={1}>{e.name}</Text>
-                    {e.cloud ? <CloudGlyph size={12} color={online ? c.done : c.faint} /> : null}
-                    {online ? (
-                      chans === "cloud" ? <CloudGlyph size={11} color={c.dim} /> : null
+                    {chanTag ? (
+                      <Text style={chanTag === "LAN" ? d.chanLanT : d.chanCloudT}>{chanTag}</Text>
+                    ) : null}
+                    {connecting ? (
+                      (() => {
+                        ensurePlugBlink();
+                        return (
+                          <Animated.View style={{ opacity: plugBlink }}>
+                            <PlugGlyph size={13} color={c.working} />
+                          </Animated.View>
+                        );
+                      })()
                     ) : (
-                      <Pressable hitSlop={6} onPress={() => { pick(e); store.connect(); }} accessibilityLabel={`${e.name} 离线，点击重连`}>
-                        <Text style={[d.srvRe, { color: c.waiting }]}>↻</Text>
+                      <Pressable
+                        hitSlop={8}
+                        onPress={() => { if (!online) triggerConnect(e); }}
+                        accessibilityLabel={`${e.name} ${online ? "已连接" : "点击连接"}`}
+                      >
+                        <PlugGlyph size={13} color={online ? c.done : c.faint} />
                       </Pressable>
                     )}
                   </View>
-                  <Text style={d.srvUrl} numberOfLines={1}>{online ? (chans === "cloud" ? "云桥在线" : chans === "lan" ? "LAN 在线" : e.wsUrl) : e.wsUrl}</Text>
+                  <Text style={d.srvUrl} numberOfLines={1}>{e.cloud ? e.cloud.url : e.wsUrl}</Text>
                 </Pressable>
-                <Pressable style={d.srvEdit} android_ripple={{ color: c.tintSoft, borderless: false, radius: 13 }} onPress={() => edit(e)}>
-                  <Text style={d.srvEditT}>✎</Text>
-                </Pressable>
-                <Pressable style={d.srvDel} android_ripple={{ color: withA(c.waiting, 0.15), borderless: false, radius: 13 }} onPress={() => remove(e)}>
-                  <Text style={d.srvDelT}>✕</Text>
-                </Pressable>
+                {delArm === e.id ? (
+                  /* #46 长按亮删除（替常驻 ✕）：确认按钮 3.5s 自动收回 */
+                  <Pressable style={d.srvDelArm} android_ripple={{ color: withA(c.waiting, 0.15), borderless: false, radius: 13 }} onPress={() => { setDelArm(null); remove(e); }}>
+                    <Text style={d.srvDelArmT}>删除</Text>
+                  </Pressable>
+                ) : (
+                  <Pressable style={d.srvEdit} android_ripple={{ color: c.tintSoft, borderless: false, radius: 13 }} onPress={() => edit(e)}>
+                    <Text style={d.srvEditT}>✎</Text>
+                  </Pressable>
+                )}
               </View>
             );
           })}
@@ -555,18 +609,33 @@ export default function SettingsDrawer({
   );
 }
 
-// #36 线条云图标（View 边框绘制，替代拟物 ☁）：三段圆弧底 + 短底线的极简云形。
-// 不引 svg 库——项目图形语言纯 View/Text，1.4px 边框与整体线条风一致
-// #37 起导出共享：主面板连接 chip（云通道指示）复用同款
-export function CloudGlyph({ size = 12, color }: { size?: number; color: string }) {
-  const b = { borderColor: color };
-  const r = size * 0.42;
+// #46 连接状态图标（用户定稿素材：线缆+插头体+两插脚，描边风）。三态由调用方
+// 染色：绿=已连接 / 灰=未连接（可点触发连接）/ 黄+外层 opacity 闪烁=连接中
+function PlugGlyph({ size = 13, color }: { size?: number; color: string }) {
   return (
-    <View style={{ width: size, height: size * 0.62, flexDirection: "row", alignItems: "flex-end", justifyContent: "center" }}>
-      <View style={{ width: r * 2, height: r * 2, borderRadius: r, borderWidth: 1.4, ...b, marginRight: -r * 0.35 }} />
-      <View style={{ width: r * 1.5, height: r * 1.5, borderRadius: r * 0.75, borderWidth: 1.4, ...b, marginBottom: r * 0.2 }} />
+    <View style={{ flexDirection: "row", alignItems: "center", height: size * 0.72 }}>
+      <View style={{ width: size * 0.42, height: 1.4, backgroundColor: color }} />
+      <View style={{ width: size * 0.32, height: size * 0.72, borderWidth: 1.4, borderColor: color, borderRadius: 2.5 }} />
+      <View style={{ marginLeft: -0.5, height: size * 0.72, justifyContent: "space-evenly", paddingVertical: size * 0.13 }}>
+        <View style={{ width: size * 0.26, height: 1.4, backgroundColor: color }} />
+        <View style={{ width: size * 0.26, height: 1.4, backgroundColor: color }} />
+      </View>
     </View>
   );
+}
+
+// 连接中黄闪节拍（共享一个 loop，bridgeless 下 JS 驱动，低频 450ms 往返）
+const plugBlink = new Animated.Value(1);
+let plugBlinkStarted = false;
+function ensurePlugBlink() {
+  if (plugBlinkStarted) return;
+  plugBlinkStarted = true;
+  Animated.loop(
+    Animated.sequence([
+      Animated.timing(plugBlink, { toValue: 0.25, duration: 450, useNativeDriver: false }),
+      Animated.timing(plugBlink, { toValue: 1, duration: 450, useNativeDriver: false }),
+    ]),
+  ).start();
 }
 
 const makeStyles = (c: ThemeColors) => StyleSheet.create({
@@ -606,16 +675,18 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
   srvDot: { width: 7, height: 7, borderRadius: 4 },
   srvName: { color: c.text, fontSize: 13.5, fontWeight: "600", flexShrink: 1 },
   srvUrl: { color: c.faint, fontSize: 10.5, marginTop: 1.5 },
-  srvCloud: { color: c.done, fontSize: 11.5 },
-  srvRe: { fontSize: 13, fontWeight: "700", paddingHorizontal: 2 },
+  // #46 通道标记：☁️ emoji 与 LAN 小字两态
+  chanCloudT: { fontSize: 10.5, lineHeight: 14 },
+  chanLanT: { color: c.dim, fontSize: 8.5, lineHeight: 12, fontWeight: "700", letterSpacing: 0.4 },
   srvEdit: { width: 34, height: 42, alignItems: "center", justifyContent: "center" },
   srvEditT: { color: c.dim, fontSize: 13.5 },
-  srvDel: { width: 36, height: 42, alignItems: "center", justifyContent: "center" },
-  srvDelT: { color: c.faint, fontSize: 14 },
-  addRowWrap: { flexDirection: "row", gap: 8, marginBottom: 8 },
-  // #378 去框化二期：添加入口去虚线框，纯文字链接式（品牌色 + 可点热区）
+  // #46 长按亮出的删除按钮（替常驻 ✕）
+  srvDelArm: { paddingHorizontal: 10, height: 42, alignItems: "center", justifyContent: "center" },
+  srvDelArmT: { color: c.waiting, fontSize: 12.5, fontWeight: "700" },
+  addRowWrap: { flexDirection: "row", justifyContent: "flex-end", marginBottom: 8 },
+  // #378 去框化二期：添加入口纯文字链接式；#46 移右下角（原居中）
   addRow: {
-    flex: 1, alignItems: "center", justifyContent: "center", paddingVertical: 10,
+    alignItems: "center", justifyContent: "center", paddingVertical: 10, paddingHorizontal: 8,
   },
   addT: { color: c.brandA, fontSize: 13, fontWeight: "700" },
   cloudHint: {

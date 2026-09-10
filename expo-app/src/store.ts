@@ -2156,7 +2156,7 @@ function identityOf(e: ServerEntry): string | null {
 }
 
 // 内网直连地址（身份探测/归并取 LAN 写法用）：RFC1918 + 回环 + localhost
-function isLanUrl(wsUrl: string): boolean {
+export function isLanUrl(wsUrl: string): boolean {
   return /^wss?:\/\/(10\.|192\.168\.|172\.(1[6-9]|2\d|3[01])\.|127\.|localhost)/i.test(wsUrl);
 }
 
