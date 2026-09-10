@@ -16,6 +16,42 @@ import { advertiseRelay } from "./mdns.js";
 
 const cfg = loadConfig();
 
+// #28（2026-09-10 用户机实测根因）：同数据目录双 relay 进程（CLI 插件 supervisor +
+// exe 内嵌共用 ~/.cc-deck/data，同身份连桥）被桥按 dev 顶号互踢——闪断循环、重启
+// 才恢复。数据目录级单实例锁：锁内有活进程则本进程退出（先到先得，覆盖所有入口）
+{
+  const lockPath = join(cfg.dataDir, "relay.lock");
+  try {
+    const prev = Number(readFileSync(lockPath, "utf8").trim());
+    if (Number.isFinite(prev) && prev > 0 && prev !== process.pid) {
+      process.kill(prev, 0); // 活着会抛？不——活着不抛，死了抛 ESRCH
+      // 走到这 = 旧进程还活着：让位退出（exe 内嵌场景另一进程正服务 8787）。
+      // 压 5s 再退：supervisor bat 循环重启，立即退出会热旋（每秒拉起即退烧 CPU）。
+      // 顶层 await 永挂阻断后续初始化，5s 后由 timer 收走进程
+      console.log(`[relay] 数据目录已被 pid=${prev} 的 relay 占用（单实例锁），5s 后让位退出`);
+      setTimeout(() => process.exit(0), 5_000);
+      await new Promise<never>(() => {});
+    }
+  } catch (e) {
+    // ESRCH=旧进程已死（陈旧锁）/ ENOENT=无锁：正常继续，下方接管
+    if ((e as NodeJS.ErrnoException).code !== "ENOENT" && (e as NodeJS.ErrnoException).code !== "ESRCH") {
+      // 权限等其他错误：不阻断启动（锁是加固不是门槛），仅记日志
+      console.log("[relay] 单实例锁检查异常（忽略继续）:", (e as Error).message);
+    }
+  }
+  try {
+    writeFileSync(lockPath, String(process.pid));
+  } catch {}
+  const wipe = () => {
+    try {
+      if (Number(readFileSync(lockPath, "utf8").trim()) === process.pid) rmSync(lockPath);
+    } catch {}
+  };
+  process.on("exit", wipe);
+  process.on("SIGINT", () => { wipe(); process.exit(0); });
+  process.on("SIGTERM", () => { wipe(); process.exit(0); });
+}
+
 // #324 选装生命周期：被桌面壳拉起（CCR_PARENT_PID 注入）时随壳退出——壳被强杀
 // （任务管理器/崩溃）收不到清理事件，这里轮询父进程存活，死了自行退出，不留孤儿 relay
 const parentPid = Number(process.env.CCR_PARENT_PID ?? 0);
