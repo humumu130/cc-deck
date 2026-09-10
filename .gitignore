@@ -38,3 +38,5 @@ docs-internal/
 !.dev.vars.example
 .env*
 !.env.example
+.cc-deck/
+.tmp-043/
