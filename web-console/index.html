@@ -6978,6 +6978,18 @@ async function probeLocalRelay() {
   setTimeout(probeLocalRelay, 800);
   // #40x relay 页状态行：启动后静默探一次（结果落到 gpRelayStat，打开抽屉/切页时再补探）
   setTimeout(probeRelayStat, 1100);
+
+  // #17 桌面壳自愈：首探未命中时 90s 内每 6s 重探——Defender 冷扫描 2MB relay.mjs
+  // 可让内嵌 relay 起过壳的 4s 就绪窗口，稍后起来了页面却已判「未检测到」；重探
+  // 命中即刷新 localRelayInfo 与状态行（probeRelayStat 幂等）。同事实机：有 Node
+  // 仍显示未检测到的头号候选
+  if (window.ccDeck) {
+    let healTries = 0;
+    const heal = setInterval(async () => {
+      if (localRelayInfo || ++healTries > 15) { clearInterval(heal); return; }
+      await probeRelayStat();
+    }, 6000);
+  }
 })();
 </script>
 </body>

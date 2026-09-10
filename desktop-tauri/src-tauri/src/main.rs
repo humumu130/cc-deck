@@ -406,7 +406,10 @@ fn main() {
             // 等端口就绪再建窗口，保证页面首次探测（/local-info）即命中——用户全程无感
             if !port_listening(relay_port()) {
                 match spawn_embedded_relay(app.handle()) {
-                    Ok(()) => wait_port_ready(relay_port(), 4000),
+                    // #17 首启预算 4s→9s：全新安装机器上 Defender 冷扫描 2MB relay.mjs
+                    // + node 冷启动可超 4s（同事实机：有 Node 仍显示未检测到的头号候选）；
+                    // 页面侧另有 90s 自愈重探兜底
+                    Ok(()) => wait_port_ready(relay_port(), 9000),
                     Err(e) => println!("[embedded-relay] auto-enable failed: {e}"),
                 }
             }
