@@ -152,8 +152,25 @@ export class Bridge {
       this.reconcilePidsFromSessions();
       this.healExternal();
       this.adoptOrphans();
+      this.sweepIdleArchive();
     }, 60_000);
     this.healTimer.unref?.();
+  }
+
+  // #50 idle 归档：DONE 且长时间（默认 12h，CCR_IDLE_ARCHIVE_MS 可调）无事件无增长的
+  // ext 会话标 historical（沉底降权 + 旧端仅查看）。同 cwd 挂着旧终端的会话不再
+  // 跟当前工作会话抢列表焦点（用户实测「CC-watch-ba」旧身挂了一天双显示）。
+  // 回到那个终端继续用时，hook 事件/转录增长路径自动翻活（清 historical）
+  private sweepIdleArchive(): void {
+    const idleMs = Number(process.env.CCR_IDLE_ARCHIVE_MS) > 0 ? Number(process.env.CCR_IDLE_ARCHIVE_MS) : 12 * 3600_000;
+    const now = Date.now();
+    for (const s of this.mgr.snapshot()) {
+      if (!s.external || s.historical || s.status !== "DONE") continue;
+      const last = Math.max(s.updated_at ?? 0, this.lastHookAt.get(s.session_id) ?? 0);
+      if (!last || now - last < idleMs) continue;
+      const st = this.mgr.getExternal(s.session_id);
+      if (st) st.historical = true;
+    }
   }
 
   // 外部会话 ERROR 自愈：外部 CLI 是独立进程，relay 重启/重放把它标成 ERROR 属误伤

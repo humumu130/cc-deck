@@ -1550,6 +1550,25 @@ assert(ack24.ok === false, "empty rename rejected");
   await hook({ event: "SessionEnd", session_id: "cli-9", reason: "clear" });
 }
 
+// 49. #50 idle 归档（同 cwd 旧终端残留的通用兜底）：DONE 且超时无活动 → historical
+//     沉底；hook 事件回归自动翻活。阈值 CCR_IDLE_ARCHIVE_MS 短值驱动
+{
+  const sid = extId("cli-11");
+  await hook({ event: "UserPromptSubmit", prompt: "挂起旧终端", session_id: "cli-11", cli_pid: 999002 });
+  await hook({ event: "Stop", session_id: "cli-11" });
+  await wait(150);
+  assert(mgr.getExternal(sid)?.status === "DONE" && mgr.getExternal(sid)?.historical !== true, "49 old terminal session DONE, not archived yet");
+  process.env.CCR_IDLE_ARCHIVE_MS = "200";
+  await wait(400); // 等 updated_at 距今超过短阈值（Stop 刚刷新过，立即 sweep 不会命中）
+  (bridge as unknown as { sweepIdleArchive(): void }).sweepIdleArchive();
+  assert(mgr.getExternal(sid)?.historical === true, "49 idle DONE archived after threshold");
+  await hook({ event: "UserPromptSubmit", prompt: "回到旧终端继续", session_id: "cli-11", cli_pid: 999002 });
+  await wait(150);
+  assert(mgr.getExternal(sid)?.historical !== true && mgr.getExternal(sid)?.status === "WORKING", "49 hook event revives archived session");
+  delete process.env.CCR_IDLE_ARCHIVE_MS;
+  await hook({ event: "SessionEnd", session_id: "cli-11", reason: "clear" });
+}
+
 wsCur!.close();
 await wait(300);
 console.log("\nBRIDGE TESTS PASSED");
