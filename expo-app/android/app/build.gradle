@@ -105,6 +105,23 @@ android {
             keyPassword 'android'
         }
     }
+    // APK 瘦身（2026-09-10 用户问询 95MB）：ABI splits 出每架构独立包。
+    // 分发用 app-armeabi-v7a-release.apk（~31MB，全部真机兼容——arm64 CPU 向下兼容
+    // 32 位库；x86 仅模拟器需要，不分发）。VM 调试装 release：-PccrApkAllAbi=1 走全架构
+    // universal；ndk.abiFilters/react architectures 旋钮对新 RN 插件均无效（实测），
+    // packagingOptions 只能裁 expo AAR 层裁不掉 RN 核心库
+    splits {
+        abi {
+            if ((findProperty('ccrApkAllAbi') ?: 'false').toBoolean()) {
+                enable false
+            } else {
+                enable true
+                reset()
+                include "armeabi-v7a", "arm64-v8a"
+                universalApk true
+            }
+        }
+    }
     buildTypes {
         debug {
             signingConfig signingConfigs.debug
@@ -125,6 +142,12 @@ android {
         jniLibs {
             def enableLegacyPackaging = findProperty('expo.useLegacyPackaging') ?: 'false'
             useLegacyPackaging enableLegacyPackaging.toBoolean()
+            // APK 瘦身（2026-09-10）：x86/x86_64 是模拟器/VM 专用（42MB 白背），
+            // ndk.abiFilters 被 RN 插件无视（defaultConfig/buildTypes 均实测无效），
+            // 打包层硬排除。VM 调试要装 release 时：-PccrApkAllAbi=1
+            if (!(findProperty('ccrApkAllAbi') ?: 'false').toBoolean()) {
+                excludes += ["lib/x86/**", "lib/x86_64/**"]
+            }
         }
     }
     androidResources {
