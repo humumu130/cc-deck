@@ -27,6 +27,7 @@ import {
   setUpdateListener,
   skipVersion,
   startDownload,
+  openInstallPermSettings,
   type DownloadSnapshot,
   type UpdateInfo,
 } from "./src/updates";
@@ -522,7 +523,21 @@ function UpdateBanner({ info, onSkip }: { info: UpdateInfo; onSkip: () => void }
                 {phase === "running" ? <Text style={st.udHint}>息屏或切到后台会自动续传</Text> : null}
               </View>
             ) : phase === "done" ? (
-              <Text style={st.udDone}>安装包已就绪（{mb(mine?.bytes ?? 0)}），可立即安装</Text>
+              <View>
+                <Text style={st.udDone}>安装包已就绪（{mb(mine?.bytes ?? 0)}），可立即安装</Text>
+                {mine?.installFail ? (
+                  <>
+                    <Text style={st.udErr}>系统未允许 CC Deck 安装应用，安装器拉不起来。去授权后回来再点「立即安装」。</Text>
+                    <Pressable
+                      style={st.udLinkRow}
+                      hitSlop={{ top: 6, bottom: 6 }}
+                      onPress={() => void openInstallPermSettings()}
+                    >
+                      <Text style={st.udLink}>去系统授权 ›</Text>
+                    </Pressable>
+                  </>
+                ) : null}
+              </View>
             ) : phase === "failed" ? (
               <Text style={st.udErr}>多次下载失败，请检查网络后重试</Text>
             ) : null}

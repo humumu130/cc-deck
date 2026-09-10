@@ -196,6 +196,7 @@ export type DownloadSnapshot = {
   bytes: number; // 已落盘字节（.part / 完成包大小；弹窗重开据此接着显示进度）
   total: number; // 预期总字节；0=未知（进度条退化为已下 MB 数）
   attempt: number; // 自动重试轮次（1 起；0=首发/非重试态）
+  installFail?: boolean; // #6 安装器拉起失败（典型：ColorOS 未授「安装未知应用」）——弹窗出指引
 };
 
 const KEY_DL_META = "cc_update_dl_meta";
@@ -227,10 +228,11 @@ let retryTimer: ReturnType<typeof setTimeout> | null = null;
 let expedite: (() => void) | null = null; // 退避等待的提前唤醒（解锁即重试）
 let appStateHooked = false;
 let ghAssetCache: string | null = null;
+let installFail = false; // #6 安装器拉起失败标记（catch 静默是 0.4.4 卡 100% 无后续的根因之一）
 
 function snapshot(): DownloadSnapshot | null {
   if (phase === "idle" || !version) return null;
-  return { version, phase, bytes, total, attempt };
+  return { version, phase, bytes, total, attempt, ...(installFail ? { installFail: true } : {}) };
 }
 
 function emit(): void {
@@ -324,6 +326,7 @@ async function verifyAndFinalize(url: string): Promise<boolean> {
   bytes = size;
   total = size;
   phase = "done";
+  installFail = false; // 新一轮完成：清上一轮的失败标记
   emit();
   void maybeLaunchInstaller();
   return true;
@@ -550,11 +553,14 @@ export function cancelDownload(): void {
   bytes = 0;
   total = 0;
   attempt = 0;
+  installFail = false;
   emit();
   void clearFiles();
 }
 
-async function doLaunchInstaller(): Promise<void> {
+async function doLaunchInstaller(): Promise<boolean> {
+  // #6：安装器拉起失败不再静默——ColorOS 未授「安装未知应用」时意图被系统拦掉，
+  // 旧实现 catch{} 吞掉后用户只见 100% 无后续。失败置标记，弹窗给指引+去授权入口
   try {
     const uri = await FileSystem.getContentUriAsync(APK_PATH);
     // flags:1 = FLAG_GRANT_READ_URI_PERMISSION，授权系统安装器读缓存里的 content:// 文件
@@ -563,7 +569,27 @@ async function doLaunchInstaller(): Promise<void> {
       type: "application/vnd.android.package-archive",
       flags: 1,
     });
-  } catch {}
+    installFail = false;
+  } catch {
+    installFail = true;
+  }
+  emit();
+  return !installFail;
+}
+
+// 「去授权」直达系统设置页（安装未知应用 · 本应用）：失败兜底打开应用详情页
+export async function openInstallPermSettings(): Promise<void> {
+  try {
+    await IntentLauncher.startActivityAsync("android.settings.MANAGE_UNKNOWN_APP_SOURCES", {
+      data: "package:com.humumu.ccwatch",
+    });
+  } catch {
+    try {
+      await IntentLauncher.startActivityAsync("android.settings.APPLICATION_DETAILS_SETTINGS", {
+        data: "package:com.humumu.ccwatch",
+      });
+    } catch {}
+  }
 }
 
 // 手动拉安装器（弹窗「立即安装」）：无条件尝试（自动拉过一次后仍可再拉）
@@ -574,21 +600,13 @@ export function launchInstaller(): void {
 }
 
 // 自动拉安装器：仅在 App 前台时（Android 10+ 后台禁止启动 Activity）；
-// 完成时在后台没拉成的，等回前台（onAppActive）补拉
+// 完成时在后台没拉成的，等回前台（onAppActive）补拉。失败回滚 launched 允许下轮
+// 前台再试（doLaunchInstaller 已置 installFail 供弹窗指引）
 async function maybeLaunchInstaller(): Promise<void> {
   if (phase !== "done" || launched) return;
   if (AppState.currentState !== "active") return;
   launched = true;
-  try {
-    const uri = await FileSystem.getContentUriAsync(APK_PATH);
-    await IntentLauncher.startActivityAsync("android.intent.action.VIEW", {
-      data: uri,
-      type: "application/vnd.android.package-archive",
-      flags: 1,
-    });
-  } catch {
-    launched = false;
-  }
+  if (!(await doLaunchInstaller())) launched = false;
 }
 
 // 解锁/回前台三件事：done 未拉成的安装器补拉；退避等待中的立即重试；
