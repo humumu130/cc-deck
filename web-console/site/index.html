@@ -468,12 +468,15 @@
       var q = new QRCode(-1, QRErrorCorrectLevel.M);
       q.addData(text);
       q.make();
-      var n = q.getModuleCount(), S = cv.width, pad = 6, cell = Math.floor((S - pad * 2) / n);
+      // #18 暖米色浅底 + 深蓝灰码点：去纯白突兀感，对比度仍 >10:1（保扫码）；
+      // quiet zone 8px，居中取整，画布撑满（圆角裁切交给 CSS）
+      var n = q.getModuleCount(), S = cv.width, m = 8;
+      var cell = Math.floor((S - m * 2) / n), off = m + Math.floor((S - m * 2 - cell * n) / 2);
       var ctx = cv.getContext("2d");
-      ctx.fillStyle = "#fff";
+      ctx.fillStyle = "#F2ECE4";
       ctx.fillRect(0, 0, S, S);
-      ctx.fillStyle = "#0B141F";
-      for (var r = 0; r < n; r++) for (var c = 0; c < n; c++) if (q.isDark(r, c)) ctx.fillRect(pad + c * cell, pad + r * cell, cell, cell);
+      ctx.fillStyle = "#27303C";
+      for (var r = 0; r < n; r++) for (var c = 0; c < n; c++) if (q.isDark(r, c)) ctx.fillRect(off + c * cell, off + r * cell, cell, cell);
     } catch (e) {}
   }
   draw("qrApk", "https://cc-deck.humumu.online/dl/cc-deck.apk");
