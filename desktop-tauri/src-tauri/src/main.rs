@@ -131,12 +131,14 @@ fn show_main(app: &tauri::AppHandle) {
     }
 }
 
-/// #8 呼出/收起切换：可见（且未最小化）→ 隐藏；否则唤起。快捷键/托盘语义共用
+/// #8/#66 呼出/收起切换：可见（且未最小化）→ 最小化；否则唤起。快捷键/托盘语义共用。
+/// #66 起收起用 minimize 而非 hide——Windows 上 SW_HIDE 连任务栏图标一起藏
+/// （用户实测收起后图标消失、失去唤回锚点），最小化保留任务栏图标可点击唤回
 fn toggle_main(app: &tauri::AppHandle) {
     if let Some(w) = app.get_webview_window("main") {
         let visible = w.is_visible().unwrap_or(true) && !w.is_minimized().unwrap_or(false);
         if visible {
-            let _ = w.hide();
+            let _ = w.minimize();
         } else {
             show_main(app);
         }
