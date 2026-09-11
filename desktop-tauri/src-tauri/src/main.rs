@@ -298,25 +298,45 @@ fn spawn_embedded_relay(app: &tauri::AppHandle) -> Result<(), String> {
     let home = std::env::var("USERPROFILE").or_else(|_| std::env::var("HOME")).map_err(|_| "无法定位用户目录".to_string())?;
     let data_dir = std::path::Path::new(&home).join(".cc-deck").join("data");
     let _ = std::fs::create_dir_all(&data_dir);
-    use std::os::windows::process::CommandExt;
+    // #71 跨平台：CREATE_NO_WINDOW 是 Windows 专属（防 node 子进程闪 cmd 窗），
+    // mac 上无此概念——cfg 门控按平台分流
+    #[cfg(target_os = "windows")]
+    fn spawn_relay(node: &std::path::Path, script: &std::path::Path, port: u16, data_dir: &std::path::Path, inject_cs: &std::path::Path, log: &std::path::Path) -> std::io::Result<std::process::Child> {
+        use std::os::windows::process::CommandExt;
+        let out = std::fs::File::create(log)?;
+        std::process::Command::new(node)
+            .arg(script)
+            .env("CCR_PORT", port.to_string())
+            .env("CCR_DATA_DIR", data_dir)
+            .env("CCR_INJECT_CS", inject_cs)
+            .env("CCR_NOHOOK_IDLE_MS", "60000")
+            .env("CCR_PARENT_PID", std::process::id().to_string())
+            .env_remove("NODE_OPTIONS")
+            .stdout(out.try_clone()?)
+            .stderr(out)
+            .creation_flags(0x0800_0000) // CREATE_NO_WINDOW
+            .spawn()
+    }
+    #[cfg(not(target_os = "windows"))]
+    fn spawn_relay(node: &std::path::Path, script: &std::path::Path, port: u16, data_dir: &std::path::Path, inject_cs: &std::path::Path, log: &std::path::Path) -> std::io::Result<std::process::Child> {
+        let out = std::fs::File::create(log)?;
+        std::process::Command::new(node)
+            .arg(script)
+            .env("CCR_PORT", port.to_string())
+            .env("CCR_DATA_DIR", data_dir)
+            .env("CCR_INJECT_CS", inject_cs)
+            .env("CCR_NOHOOK_IDLE_MS", "60000")
+            .env("CCR_PARENT_PID", std::process::id().to_string())
+            .env_remove("NODE_OPTIONS")
+            .stdout(out.try_clone()?)
+            .stderr(out)
+            .spawn()
+    }
     let log = data_dir.join("embedded-relay.log");
-    let out = std::fs::File::create(&log).map_err(|e| e.to_string())?;
     let node = node_path().ok_or(
         "未检测到 Node.js 运行时——内置 relay 需要它（VS Code 的 Claude Code 扩展自带运行时，不算已装）。请到 nodejs.org 安装 Node.js 后重启 CC Deck",
     )?;
-    match std::process::Command::new(node)
-        .arg(&script)
-        .env("CCR_PORT", port.to_string())
-        .env("CCR_DATA_DIR", &data_dir)
-        .env("CCR_INJECT_CS", &inject_cs)
-        .env("CCR_NOHOOK_IDLE_MS", "60000")
-        .env("CCR_PARENT_PID", std::process::id().to_string())
-        // 子进程不继承 NODE_OPTIONS：能改用户环境变量者本已用户级权限，纵深防御一行
-        .env_remove("NODE_OPTIONS")
-        .stdout(out.try_clone().map_err(|e| e.to_string())?)
-        .stderr(out)
-        .creation_flags(0x0800_0000) // CREATE_NO_WINDOW
-        .spawn()
+    match spawn_relay(&node, &script, port, &data_dir, &inject_cs, &log)
     {
         Ok(child) => {
             println!("[embedded-relay] spawned pid={} port={}", child.id(), port);
