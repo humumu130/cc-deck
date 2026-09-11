@@ -8,6 +8,7 @@ import { AppState } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import Constants from "expo-constants";
 import * as FileSystem from "expo-file-system/legacy";
+import { fetch as expoFetch } from "expo/fetch";
 import * as IntentLauncher from "expo-intent-launcher";
 import { fgSupported, startForegroundService } from "./notify";
 
@@ -221,7 +222,7 @@ let running = false;
 let launched = false; // 本次 done 是否已自动拉过安装器（重启恢复的 done 不自动拉）
 let gen = 0; // 代数计数：取消/换目标时 +1，旧循环在每个 await 后自查退出
 let nextInfo: UpdateInfo | null = null; // 运行中收到新目标：旧循环退出后自动接续
-let currentTask: ReturnType<typeof FileSystem.createDownloadResumable> | null = null;
+let currentAbort: AbortController | null = null;
 let lastProgressAt = 0;
 let lastEmitAt = 0;
 let retryTimer: ReturnType<typeof setTimeout> | null = null;
@@ -275,36 +276,99 @@ async function clearFiles(): Promise<void> {
   } catch {}
 }
 
-// Range 支持探测：GET + Range: bytes=0-0（1 字节），响应头到达即 abort——无 Range 的
-// 服务器会答 200 并开始灌整包，abort 挡在头部阶段不进内存。
-// 206=支持续传 / 200=不支持（全量重下）/ "net"=探测本身失败（按网络问题退避重试）
-function probeRangeSupport(url: string): Promise<boolean | "net"> {
-  return new Promise((resolve) => {
-    let settled = false;
-    let xhr: XMLHttpRequest | null = null;
-    const finish = (v: boolean | "net") => {
-      if (settled) return;
-      settled = true;
-      try {
-        xhr?.abort();
-      } catch {}
-      resolve(v);
-    };
-    try {
-      xhr = new XMLHttpRequest();
-      xhr.open("GET", url, true);
-      xhr.setRequestHeader("Range", "bytes=0-0");
-      xhr.onreadystatechange = () => {
-        if (xhr && xhr.readyState === 2) finish(xhr.status === 206);
-      };
-      xhr.onerror = () => finish("net");
-      xhr.ontimeout = () => finish("net");
-      xhr.send();
-    } catch {
-      finish("net");
+// #6 流式分块下载（2026-09-11 重写，替代 createDownloadResumable + Range 预探测）：
+// expo 下载器内置 OkHttp 读超时不可配——ECS 共享带宽被挤时 >10s 无数据即断连
+//（服务器日志实证：手机 10 轮请求每 3-4 分钟全量重下全中途断，服务器侧 200/206
+// 全正常）。改 expo/fetch 流式读：块级活跃时钟自管（STALL_CHUNK_MS 无块才断）、
+// Range 续传由本层拼头（免独立探测请求——200/206 语义在响应上直接判），
+// 块 base64 追加写 .part（每次断点都可续，不再每轮全量归零）。
+const STALL_CHUNK_MS = 30_000; // 块级判死：持续无数据超过此时长断连走退避重试
+const B64_ALPHABET = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+function base64FromBytes(u8: Uint8Array): string {
+  let out = "";
+  const n = u8.length;
+  for (let i = 0; i < n; i += 3) {
+    const b0 = u8[i]!;
+    const b1 = i + 1 < n ? u8[i + 1]! : undefined;
+    const b2 = i + 2 < n ? u8[i + 2]! : undefined;
+    out += B64_ALPHABET[b0 >> 2];
+    out += B64_ALPHABET[((b0 & 3) << 4) | ((b1 ?? 0) >> 4)];
+    out += b1 === undefined ? "=" : B64_ALPHABET[((b1 & 15) << 2) | ((b2 ?? 0) >> 6)];
+    out += b2 === undefined ? "=" : B64_ALPHABET[b2 & 63];
+  }
+  return out;
+}
+
+async function streamDownload(url: string, partSize: number, myGen: number): Promise<TryResult> {
+  const ctrl = new AbortController();
+  currentAbort = ctrl;
+  // .part 起步非空（跨轮续传）先清一次写指针：FileSystem 追加写以 append:true 语义
+  // 顺序落盘，partSize>0 时 .part 保留直接续（不清不删）；partSize=0 时外层已删
+  try {
+    const res = await expoFetch(url, {
+      headers: partSize > 0 ? { Range: `bytes=${partSize}-` } : {},
+      signal: ctrl.signal,
+    });
+    if (myGen !== gen) return "net";
+    // 续传请求被答 200（服务端/中间层无视 Range）：.part 不能续——当场弃之，
+    // 下一轮全量重下（不删会陷入「带 .part 请求 → 200 → corrupt」死循环）
+    if (partSize > 0 && res.status !== 206) {
+      await FileSystem.deleteAsync(PART_PATH, { idempotent: true });
+      total = 0;
+      return "corrupt";
     }
-    setTimeout(() => finish("net"), 6000);
-  });
+    if (res.status !== 200 && res.status !== 206) return "net";
+    const len = Number(res.headers.get("content-length") ?? 0);
+    if (partSize === 0 && len > 0 && len !== total) {
+      total = len;
+      void persistMeta(url);
+    }
+    if (partSize > 0 && len > 0 && total <= 0) {
+      total = partSize + len;
+      void persistMeta(url);
+    }
+    if (!res.body) return "net";
+    const reader = (res.body as ReadableStream<Uint8Array>).getReader();
+    bytes = partSize;
+    phase = "running";
+    lastProgressAt = Date.now();
+    emit();
+    // 块级 watchdog：STALl_CHUNK_MS 无新块 → abort（快速进退避重试，替代不可配的
+    // OkHttp read timeout；带宽饿死场景 30s 判死比 10s 宽容三倍）
+    let stallTimer: ReturnType<typeof setTimeout> | null = null;
+    const armStall = () => {
+      if (stallTimer) clearTimeout(stallTimer);
+      stallTimer = setTimeout(() => ctrl.abort("stall"), STALL_CHUNK_MS);
+    };
+    armStall();
+    try {
+      for (;;) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        if (myGen !== gen) {
+          ctrl.abort("cancel");
+          return "net";
+        }
+        if (!value || value.byteLength === 0) continue;
+        armStall();
+        await FileSystem.writeAsStringAsync(PART_PATH, base64FromBytes(value), {
+          encoding: FileSystem.EncodingType.Base64,
+          append: true,
+        });
+        bytes += value.byteLength;
+        lastProgressAt = Date.now();
+        if (AppState.currentState === "active") emitProgress();
+      }
+    } finally {
+      if (stallTimer) clearTimeout(stallTimer);
+    }
+    if (myGen !== gen) return "net";
+    return (await verifyAndFinalize(url)) ? "ok" : "corrupt";
+  } catch {
+    return "net";
+  } finally {
+    if (currentAbort === ctrl) currentAbort = null;
+  }
 }
 
 // 完整性校验（#384 同款 ZIP magic + 体积下限 + 总量精确比对）→ .part 转正 APK → done
@@ -346,71 +410,19 @@ async function tryDownload(url: string, myGen: number): Promise<TryResult> {
   if (partSize > 0 && total > 0 && partSize >= total) {
     // .part 已达预期总量（上次恰在收尾后崩溃）：直接校验转正，免再请求
     if (await verifyAndFinalize(url)) return "ok";
-  } else if (partSize > 0 && total > 0) {
-    // 断点续传：半截 .part → 先探测 Range。206 → 从 partSize 续；
-    // 200 → 服务端不支持 Range，弃 .part 全量重下（进度从头）
-    const probe = await probeRangeSupport(url);
-    if (myGen !== gen) return "net";
-    if (probe === "net") return "net";
-    if (probe) {
-      phase = "running";
-      bytes = partSize;
-      emit();
-      // createDownloadResumable 的 resumeData=已下字节数：原生层发 Range: bytes=N- 并追加写
-      return await runResumable(url, String(partSize), myGen);
-    }
+  }
+  // 断点续传/全新下载统一走流式：Range 头由 streamDownload 拼，200/206 在响应上
+  // 直接判（续传被答 200 返回 corrupt 由外层删 .part 重下——免探测请求往返）
+  if (partSize <= 0) {
     await FileSystem.deleteAsync(PART_PATH, { idempotent: true });
-    partSize = 0;
-    total = 0;
+    bytes = 0;
+    total = meta?.total && meta.url === url ? meta.total : 0;
+  } else {
+    if (total <= 0) total = meta?.total ?? 0;
   }
   phase = "running";
-  bytes = 0;
   emit();
-  return await runResumable(url, undefined, myGen);
-}
-
-async function runResumable(url: string, resumeData: string | undefined, myGen: number): Promise<TryResult> {
-  if (total <= 0) total = meta?.total ?? 0;
-  lastProgressAt = Date.now();
-  emit();
-  const task = FileSystem.createDownloadResumable(
-    url,
-    PART_PATH,
-    {},
-    (d) => {
-      bytes = Math.floor(d.totalBytesWritten);
-      if (d.totalBytesExpectedToWrite > 0 && d.totalBytesExpectedToWrite !== total) {
-        total = Math.floor(d.totalBytesExpectedToWrite);
-        void persistMeta(url);
-      }
-      lastProgressAt = Date.now();
-      // 后台期间事件不派发（expo 文档明示），前台才刷 UI；字节/看门狗时钟照常记账
-      if (AppState.currentState === "active") emitProgress();
-    },
-    resumeData
-  );
-  currentTask = task;
-  let result: Awaited<ReturnType<typeof task.downloadAsync>>;
-  try {
-    result = await task.downloadAsync();
-  } catch {
-    return "net";
-  } finally {
-    if (currentTask === task) currentTask = null;
-  }
-  if (myGen !== gen) return "net";
-  if (!result) return "net"; // 被取消（看门狗掐死停滞任务/换目标）
-  const status = result.status ?? 0;
-  // 续传请求却被答 200：服务端无视 Range（探测后被替换/代理改写）——原生层已把整包
-  // 追加进 .part，文件已污染。弃之重来，绝不把 200 当 206
-  if (resumeData && status !== 206) {
-    await FileSystem.deleteAsync(PART_PATH, { idempotent: true });
-    total = 0;
-    return "corrupt";
-  }
-  if (status !== 200 && status !== 206) return "net";
-  if (await verifyAndFinalize(url)) return "ok";
-  return "corrupt";
+  return await streamDownload(url, partSize, myGen);
 }
 
 function backoffDelay(ms: number): Promise<void> {
@@ -494,7 +506,7 @@ async function attemptLoop(info: UpdateInfo, myGen: number): Promise<void> {
 function bumpGen(): void {
   gen++;
   try {
-    currentTask?.cancelAsync().catch(() => {});
+    currentAbort?.abort("cancel");
   } catch {}
   if (expedite) expedite();
 }
@@ -614,16 +626,16 @@ async function maybeLaunchInstaller(): Promise<void> {
 function onAppActive(): void {
   if (phase === "done") void maybeLaunchInstaller();
   if (expedite) expedite();
-  if (running && currentTask) {
+  if (running && currentAbort) {
     setTimeout(() => {
       if (
         AppState.currentState === "active" &&
         running &&
-        currentTask &&
+        currentAbort &&
         Date.now() - lastProgressAt > STALL_GRACE_MS
       ) {
         try {
-          currentTask.cancelAsync().catch(() => {});
+          currentAbort.abort("stall");
         } catch {}
       }
     }, STALL_GRACE_MS);
