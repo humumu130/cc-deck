@@ -3114,13 +3114,8 @@ function renderConnChip() {
   const conn = list.filter((c) => c.status === "connecting").length;
   const open = $("connPanel").classList.contains("open");
   $("connChip").className = (on > 0 ? "on" : conn > 0 ? "wait" : "") + (open ? " open" : "");
-  // #48 通道后缀（与 App 同规则）：活动源在线时拼 ·☁️ / · LAN（手动直连不显示）
-  const actx = list.find((c) => c.cfg.id === activeServerId) ?? list.find((c) => c.status === "online");
-  const actSrv = actx ? servers.find((s) => s.id === actx.cfg.id) : null;
-  const chan = actx && actx.status === "online" && actSrv
-    ? actSrv.kind === "cloud" ? " ·☁️" : actSrv.kind === "lan" ? " · LAN" : ""
-    : "";
-  $("connText").textContent = list.length === 0 ? "未配置" : on + "/" + list.length + " 在线" + chan;
+  // #52 与 App 对齐：x/n 纯数字（去「在线」字样与通道后缀——多源混合通道无法单一展示）
+  $("connText").textContent = list.length === 0 ? "未配置" : on + "/" + list.length;
   renderGpStatus();
 }
 
@@ -4671,7 +4666,7 @@ document.addEventListener("click", (ev) => {
 
 // ⚙ 设置浮层（#317）：显示项为散装开关的镜像（点行 = 触发原按钮再回读状态），
 // 服务器管理不进浮层——左栏常驻面板已是高频区，与手机抽屉同为一级入口
-const CONSOLE_VERSION = "0.4.15";
+const CONSOLE_VERSION = "0.4.16";
 // #396 拨杆同步：滑块移到 idx 档（transform 过渡），选中档文字加 .on（白字压品牌色滑块上）
 function setLever(el, idx) {
   if (!el) return;
@@ -5863,7 +5858,8 @@ function openTaskPop(n, pin) {
     '<div class="tp-head"><span class="tp-mark">' + tpStatusIco(t?.status) + "</span>" +
     '<span class="tp-no">#' + n + '</span><span class="tp-status" style="color:' + color + '">' + label + "</span></div>" +
     (t
-      ? '<div class="tp-content" title="' + escapeHtml(t.content || "") + '">' + escapeHtml(t.content || "") + "</div>" +
+      ? // #56a 头部已有 #N 编号，content 自带同号前缀剥掉（「#54 #54」双显根治，与 App TaskPop 同修）
+        '<div class="tp-content" title="' + escapeHtml(t.content || "") + '">' + escapeHtml((t.content || "").replace(new RegExp("^#" + n + "\\s+"), "")) + "</div>" +
         (t.status === "in_progress" && t.active_form ? '<div class="tp-active">正在：' + escapeHtml(t.active_form) + "</div>" : "") +
         (typeof t.updated_at === "number" && Number.isFinite(t.updated_at) ? '<div class="tp-time">' + tpRel(t.updated_at) + " 前更新</div>" : "")
       : '<div class="tp-content">会话任务清单中无 #' + n + "</div>") +

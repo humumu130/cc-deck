@@ -40194,6 +40194,15 @@ function summarizeToolUse(tool, input) {
       return `\u8054\u7F51\u641C\u7D22 ${truncate(String(input.query ?? ""), 50)}`;
     case "Agent":
       return `\u5B50\u4EE3\u7406 ${truncate(String(input.description ?? input.prompt ?? ""), 40)}`;
+    // #54 折叠行带任务编号（用户点单）：Update 的 taskId 直接可用；Create 的编号
+    // 在 result 回填（此处只能给 subject 概要），编号由端上任务浮窗/清单承载
+    case "TaskCreate":
+      return `\u65B0\u5EFA ${truncate(String(input.subject ?? ""), 40)}`;
+    case "TaskUpdate": {
+      const id2 = input.taskId ?? input.task_id;
+      const what = input.status ? `\u72B6\u6001\u2192${input.status}` : input.subject ? "\u6539\u6807\u9898" : "\u66F4\u65B0";
+      return `#${typeof id2 === "number" ? id2 : ""} ${what}`.trim();
+    }
     default:
       return tool;
   }
