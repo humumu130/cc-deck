@@ -350,8 +350,19 @@ function CtxCell({ s }: { s: SessionState }) {
 
 // memo：流式刷新只重渲变化的那一行（onRename/onReveal/onDelete 均为稳定引用；
 // 源归属改由分组头承担，卡片不再带源角标 props——会话对象引用不变即不重渲）
+// #59 聚合源归属角标：源身份色点+源名（各密度档通用，行内右端）
+function SrcBadge({ name, color }: { name: string; color: string }) {
+  const styles = useThemeStyles(makeStyles);
+  return (
+    <View style={styles.srcBadge}>
+      <View style={[styles.srcBadgeDot, { backgroundColor: color }]} />
+      <Text style={styles.srcBadgeT} numberOfLines={1}>{name}</Text>
+    </View>
+  );
+}
+
 const SessionCard = memo(function SessionCard({
-  s, onOpen, onRename, onDelete, revealSid, onReveal, density, dim,
+  s, onOpen, onRename, onDelete, revealSid, onReveal, density, dim, srcBadge,
 }: {
   s: SessionState;
   onOpen: (sid: string) => void;
@@ -361,6 +372,7 @@ const SessionCard = memo(function SessionCard({
   onReveal: (v: string | null) => void;
   density: ListDensity;
   dim?: boolean; // #32 离线源降权
+  srcBadge?: { name: string; color: string } | null; // #59 聚合模式源归属角标
 }) {
   const { c } = useTheme();
   const styles = useThemeStyles(makeStyles);
@@ -397,6 +409,7 @@ const SessionCard = memo(function SessionCard({
             {s.title || "未命名会话"}
           </Text>
           <View style={{ flex: 1 }} />
+          {srcBadge ? <SrcBadge {...srcBadge} /> : null}
           <CtxCell s={s} />
         </View>
       ) : compact ? (
@@ -410,6 +423,7 @@ const SessionCard = memo(function SessionCard({
             )}
             <Text style={[styles.titleC, idle && styles.titleIdle]} numberOfLines={1}>{s.title || "未命名会话"}</Text>
             <View style={{ flex: 1 }} />
+            {srcBadge ? <SrcBadge {...srcBadge} /> : null}
             <Elapsed s={s} />
           </View>
           <Text style={styles.sumC} numberOfLines={1}>{s.action_summary || "…"}</Text>
@@ -439,6 +453,8 @@ const SessionCard = memo(function SessionCard({
             <Text style={[styles.title, idle && styles.titleIdle]} numberOfLines={1}>
               {s.title || "未命名会话"}
             </Text>
+            <View style={{ flex: 1 }} />
+            {srcBadge ? <SrcBadge {...srcBadge} /> : null}
             <Elapsed s={s} />
           </View>
           {s.status === "WORKING" ? (
@@ -705,6 +721,21 @@ export default function ListScreen({ sessions, connected, connText, onOpen, onNe
     return out;
   }, [badgeOn, visible, snap.sources, onlineSrcs]);
 
+  // #59 逐卡源归属角标（用户点单：聚合模式卡片要能分辨哪台电脑）：聚合开启即恒显
+  // （分组头只在多在线源时出现——单源在线/离线源缓存混排时卡片曾全裸奔）；
+  // 配色与分组头同调色板，同屏稳定
+  const srcBadgeMap = useMemo(() => {
+    if (!badgeOn) return null;
+    const sortedSrcs = [...snap.sources].sort((a, b) => (a.colorKey ?? a.id).localeCompare(b.colorKey ?? b.id));
+    const nameOf = new Map(snap.sources.map((x) => [x.id, displaySrcName(x.name)] as const));
+    const colorOf = new Map(sortedSrcs.map((x, i) => [x.id, SRC_COLORS[i % SRC_COLORS.length]] as const));
+    return (src: string | undefined): { name: string; color: string } | null => {
+      if (!src) return null;
+      return { name: nameOf.get(src) ?? "其他", color: colorOf.get(src) ?? srcColor(src) };
+    };
+  }, [badgeOn, snap.sources]);
+  const srcBadgeOf = srcBadgeMap ?? (() => null);
+
   // 下拉刷新 = 断开重连一次（重走快照），在线即收起转圈；3s 兜底
   const [refreshing, setRefreshing] = useState(false);
   useEffect(() => {
@@ -874,6 +905,7 @@ export default function ListScreen({ sessions, connected, connText, onOpen, onNe
               revealSid={revealSid}
               onReveal={setRevealSid}
               density={density}
+              srcBadge={srcBadgeOf(item.s.src)}
             />
           )
         }
@@ -1012,6 +1044,10 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
   grpBar: { width: 3, height: 13, borderRadius: 1.5 },
   grpName: { color: c.dim, fontSize: 12, fontWeight: "700", letterSpacing: 0.2, flexShrink: 1 },
   grpDot: { width: 6, height: 6, borderRadius: 3 },
+  // #59 源归属角标：色点+源名小字（弱化色，行内右端、时长左侧）
+  srcBadge: { flexDirection: "row", alignItems: "center", gap: 4, flexShrink: 1, marginRight: 6 },
+  srcBadgeDot: { width: 6, height: 6, borderRadius: 3 },
+  srcBadgeT: { color: c.dim, fontSize: 10.5, fontWeight: "600", maxWidth: 84 },
   grpCount: { color: c.faint, fontSize: 11, fontVariant: ["tabular-nums"] },
   collapseBtn: {
     flexShrink: 1, borderRadius: 999, borderWidth: 1, borderColor: c.line, backgroundColor: c.tintSoft,
