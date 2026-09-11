@@ -1025,7 +1025,7 @@
   /* #12 空态提示垂直居中：#cards 为纵排 flex，flex:1 撑满 + justify-content:center 垂直居中 */
   .cards-empty { flex: 1; display: flex; flex-direction: column; justify-content: center; align-items: center; text-align: center; color: var(--faint); font-size: 12.5px; padding: 46px 12px; }
   .cards-empty .ce-icon { font-size: 34px; opacity: .5; margin-bottom: 10px; }
-  .card-title { font-size: 16px; font-weight: 650; margin-top: 4px; display: flex; align-items: center; gap: 8px; } /* #40 标题加大一号（用户点单） */
+  .card-title { font-size: 15px; font-weight: 650; margin-top: 4px; display: flex; align-items: center; gap: 8px; } /* #40→#67漏项 16 回落 15（用户点单调小） */
   .his-badge {
     font-size: 10px; color: var(--faint); border: 1px solid var(--border);
     padding: 1px 7px; border-radius: 999px; flex: none; font-weight: 500;
@@ -1220,7 +1220,7 @@
   #dhead { padding: 12px 20px 0; border-bottom: 1px solid var(--border); background: var(--glass-soft); flex: none; }
   #backBtn { display: none; margin-left: -8px; margin-bottom: 6px; }
   .dhead-row { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
-  #dtitle { font-size: 17px; font-weight: 700; }
+  #dtitle { font-size: 16px; font-weight: 700; } /* #67漏项 17→16 调小一号 */
   #renameBtn { padding: 3px 9px; font-size: 13px; color: var(--dim); }
   #dsub { color: var(--dim); font-size: 12px; margin-top: 5px; display: flex; gap: 12px; flex-wrap: wrap; align-items: center; }
   #dsub .elapsed { color: var(--text); }
@@ -1722,6 +1722,7 @@
         <button type="button" class="gp-nav-item on" data-sec="conn"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9 2.8v4.2M15 2.8v4.2"/><path d="M6.5 7h11v4.2a5.5 5.5 0 0 1-11 0V7Z"/><path d="M12 16.7v4.5"/></svg>连接</button>
         <button type="button" class="gp-nav-item" data-sec="relay"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><rect x="3.2" y="3.8" width="17.6" height="6.6" rx="2"/><rect x="3.2" y="13.6" width="17.6" height="6.6" rx="2"/><path d="M7 7.1h.01M7 16.9h.01"/></svg>relay</button>
         <button type="button" class="gp-nav-item" data-sec="disp"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M2.6 12S6 5.8 12 5.8 21.4 12 21.4 12 18 18.2 12 18.2 2.6 12 2.6 12Z"/><circle cx="12" cy="12" r="2.9"/></svg>显示</button>
+        <button type="button" class="gp-nav-item" data-sec="kb"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="6.2" width="18" height="11.6" rx="2.2"/><path d="M7 10v3.6M7 10.1v.1"/><path d="M11 10v3.6M14.5 10v3.6M18 10v3.6"/></svg>快捷键</button>
         <button type="button" class="gp-nav-item" data-sec="plug"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M10.2 5.5a1.8 1.8 0 0 1 3.6 0L16.5 5.5Q18.5 5.5 18.5 7.5V10.2a1.8 1.8 0 0 1 0 3.6V16.5Q18.5 18.5 16.5 18.5H7.5Q5.5 18.5 5.5 16.5V7.5Q5.5 5.5 7.5 5.5H10.2Z"/></svg>插件</button>
         <button type="button" class="gp-nav-item" data-sec="about"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="12" cy="12" r="8.6"/><path d="M12 11v4.6"/><path d="M12 7.6h.01"/></svg>关于</button>
       </nav>
@@ -1816,14 +1817,21 @@
             <div class="gp-row" id="gpFont"><span class="gi"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M5 19.2 11.6 5.4l6.6 13.8"/><path d="M7.6 14.4h8"/></svg></span>正文字号<div class="lever" id="gpFontLever" style="--n:3"><i class="lever-thumb"></i><button type="button" class="lever-opt" data-i="0">紧凑</button><button type="button" class="lever-opt" data-i="1">标准</button><button type="button" class="lever-opt" data-i="2">大</button></div></div>
             <div class="gp-row" id="gpThink"><span class="gi"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="8.4"/><path d="M12 3.6a8.4 8.4 0 0 1 0 16.8Z" fill="currentColor" stroke="none" opacity=".45"/></svg></span>思考过程<div class="lever" id="gpThinkLever" style="--n:2"><i class="lever-thumb"></i><button type="button" class="lever-opt" data-i="0">关</button><button type="button" class="lever-opt" data-i="1">开</button></div></div>
             <div class="gp-row" id="gpIdle" style="display:none"><span class="gi"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3.4 20.6 8 12 12.6 3.4 8Z"/><path d="m3.4 12.4 8.6 4.6 8.6-4.6"/><path d="m3.4 16.6 8.6 4.6 8.6-4.6"/></svg></span>折叠空闲<div class="lever" id="gpIdleLever" style="--n:2"><i class="lever-thumb"></i><button type="button" class="lever-opt" data-i="0">显示</button><button type="button" class="lever-opt" data-i="1">折叠</button></div></div>
-            <!-- #8 桌面端呼出/收起快捷键（浏览器隐藏）：点击行进入录制，Esc 取消、Backspace 清空注销 -->
-            <div class="gp-row" id="gpHotkey" style="display:none"><span class="gi"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="6.2" width="18" height="11.6" rx="2.2"/><path d="M7 10v3.6M7 10.1v.1"/><path d="M11 10v3.6M14.5 10v3.6M18 10v3.6"/></svg></span>呼出/收起快捷键<b class="gp-hk" id="gpHotkeyVal">—</b></div>
-            <!-- #16/#19 会话切换快捷键展示行（键位暂固定）：与呼出/收起同组，桌面专属 -->
-            <div class="gp-row gp-static" id="gpSwitchKey" style="display:none"><span class="gi"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19.5 5 12l7-7.5"/><path d="M19 19.5 12 12l7-7.5"/></svg></span>切换会话<b class="gp-hk">Alt+↑↓ / 空输入时 ↑↓</b></div>
+            <!-- #8/#67 呼出/收起与切换会话行已迁独立「快捷键」栏 -->
           </div>
         </section>
-        <!-- #448 插件页：CC Deck 插件可选能力三开关（任务调度强化/插入问答通知/恢复点），
-             读写本机 relay /api/plugin-config（~/.cc-deck/config.json，与 hooks 守卫共用） -->
+        <!-- #67 快捷键独立栏（从「显示」拆出——三组键+录制入口自成一块，显示栏已四拨杆） -->
+        <section class="gp-page off" id="gpPageKb">
+          <div class="gp-sec"><svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="6.2" width="18" height="11.6" rx="2.2"/><path d="M7 10v3.6M7 10.1v.1"/><path d="M11 10v3.6M14.5 10v3.6M18 10v3.6"/></svg>快捷键</div>
+          <div class="gp-card gp-rows">
+            <!-- 呼出/收起（Tauri 层录制，桌面专属）：自显示栏迁入 -->
+            <div class="gp-row" id="gpHotkey" style="display:none"><span class="gi"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="6.2" width="18" height="11.6" rx="2.2"/><path d="M7 10v3.6M7 10.1v.1"/><path d="M11 10v3.6M14.5 10v3.6M18 10v3.6"/></svg></span>呼出/收起<b class="gp-hk" id="gpHotkeyVal">—</b></div>
+            <!-- #67 方向键修饰键可配置：影响「切会话 ↑↓」与「切源 ←→」两组 -->
+            <div class="gp-row" id="gpKbMod"><span class="gi"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M15.4 7.5a5 5 0 1 0 2.2 6.7H12"/></svg></span>方向键修饰<div class="lever" id="gpKbModLever" style="--n:2"><i class="lever-thumb"></i><button type="button" class="lever-opt" data-i="0">Alt</button><button type="button" class="lever-opt" data-i="1">Ctrl</button></div></div>
+            <div class="gp-row gp-static"><span class="gi"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19.5 5 12l7-7.5"/><path d="M19 19.5 12 12l7-7.5"/></svg></span>切换会话<b class="gp-hk" id="gpKbSessTxt">修饰键+↑↓</b></div>
+            <div class="gp-row gp-static"><span class="gi"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4.5 12h15"/><path d="m9.5 7-5 5 5 5"/><path d="m14.5 7 5 5-5 5"/></svg></span>切换数据源<b class="gp-hk" id="gpKbSrcTxt">修饰键+←→</b></div>
+          </div>
+        </section>
         <section class="gp-page off" id="gpPagePlug">
           <div class="gp-sec"><svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M10.2 5.5a1.8 1.8 0 0 1 3.6 0L16.5 5.5Q18.5 5.5 18.5 7.5V10.2a1.8 1.8 0 0 1 0 3.6V16.5Q18.5 18.5 16.5 18.5H7.5Q5.5 18.5 5.5 16.5V7.5Q5.5 5.5 7.5 5.5H10.2Z"/></svg>插件</div>
           <div class="gp-relay-stat" id="gpPlugStat" style="display:none"><i></i><span id="gpPlugStatTxt">检测中…</span></div>
@@ -4669,7 +4677,7 @@ document.addEventListener("click", (ev) => {
 
 // ⚙ 设置浮层（#317）：显示项为散装开关的镜像（点行 = 触发原按钮再回读状态），
 // 服务器管理不进浮层——左栏常驻面板已是高频区，与手机抽屉同为一级入口
-const CONSOLE_VERSION = "0.4.17";
+const CONSOLE_VERSION = "0.4.18";
 // #396 拨杆同步：滑块移到 idx 档（transform 过渡），选中档文字加 .on（白字压品牌色滑块上）
 function setLever(el, idx) {
   if (!el) return;
@@ -4686,8 +4694,7 @@ function syncGearPop() {
   $("gpIdle").style.display = idle.style.display === "none" ? "none" : "flex";
   $("gpVer").textContent = CONSOLE_VERSION;
   $("gpBuild") && ($("gpBuild").textContent = CONSOLE_VERSION); // #405 左栏底部弱化 Build 号（设计稿 §5）
-  $("gpHotkey") && ($("gpHotkey").style.display = window.ccDeck ? "flex" : "none"); // #8 桌面端专属
-  $("gpSwitchKey") && ($("gpSwitchKey").style.display = window.ccDeck ? "flex" : "none"); // #16 同组展示
+  $("gpHotkey") && ($("gpHotkey").style.display = window.ccDeck ? "flex" : "none"); // #8 桌面端专属（#67 迁独立快捷键栏）
   renderGpStatus();
 }
 
@@ -4784,17 +4791,59 @@ function focusMsgInput() {
 window.addEventListener("focus", () => {
   if (window.ccDeck) setTimeout(focusMsgInput, 60);
 });
+// #67 方向键修饰键可配置（Alt/Ctrl，localStorage ccd_kb_mod，默认 alt）：
+// 影响「切会话 ↑↓」与「切源 ←→」两组——呼出/收起键独立录制（Tauri 层）不受影响
+const KB_MOD_KEY = "ccd_kb_mod";
+const kbMod = () => (localStorage.getItem(KB_MOD_KEY) === "ctrl" ? "ctrl" : "alt");
+const kbModHit = (ev) => (kbMod() === "ctrl" ? ev.ctrlKey && !ev.altKey : ev.altKey && !ev.ctrlKey) && !ev.metaKey;
+function syncKbModLever() {
+  const idx = kbMod() === "ctrl" ? 1 : 0;
+  $("gpKbModLever").querySelectorAll(".lever-opt").forEach((b) => b.classList.toggle("on", +b.dataset.i === idx));
+  $("gpKbModLever").querySelector(".lever-thumb").style.setProperty("--i", idx);
+  const name = kbMod() === "ctrl" ? "Ctrl" : "Alt";
+  $("gpKbSessTxt").textContent = name + "+↑↓";
+  $("gpKbSrcTxt").textContent = name + "+←→";
+}
+$("gpKbModLever").querySelectorAll(".lever-opt").forEach((b) => {
+  b.onclick = () => {
+    localStorage.setItem(KB_MOD_KEY, +b.dataset.i === 1 ? "ctrl" : "alt");
+    syncKbModLever();
+  };
+});
+syncKbModLever();
+
+// #67 修饰键+←/→ 切换数据源（会话列表顶部源筛选 chips 循环选中）：
+// 与切会话同守卫（浮层打开/输入框内不抢键；裸 ←→ 不启用——输入框内移动光标是高频原生行为）
+document.addEventListener("keydown", (ev) => {
+  if (!window.ccDeck || (ev.key !== "ArrowLeft" && ev.key !== "ArrowRight")) return;
+  if (!kbModHit(ev) || ev.shiftKey) return;
+  const t = ev.target;
+  if (t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.isContentEditable)) return;
+  if ($("gearPop").classList.contains("open") || $("cardMenu").classList.contains("open") || $("loginQrPop").classList.contains("open")) return;
+  const chips = [...$("srcChips").querySelectorAll("button")];
+  if (chips.length < 2) return; // 单源/无源：无可切
+  ev.preventDefault();
+  const cur = chips.findIndex((c) => c.classList.contains("on"));
+  const next = ev.key === "ArrowRight"
+    ? (cur + 1 + chips.length) % chips.length
+    : (cur - 1 + chips.length) % chips.length;
+  filterSrc = chips[next].dataset.f;
+  renderSrcChips();
+  render();
+  chips[next].scrollIntoView({ block: "nearest", inline: "center" });
+  focusMsgInput();
+});
+
 // Alt+↑/↓ 切换会话（#8→#19 改 Alt，桌面端专属）+ 微信式裸 ↑/↓（#19 补：输入框为空时
 // 不带修饰键的上下键直接切换）：列表内上下移动选中卡并跟进滚动，切完焦点进输入框
-// 直接打字；浮层打开（设置/右键菜单/登录码）时不抢键
+// 直接打字；浮层打开（设置/右键菜单/登录码）时不抢键。
+// #67 起 Alt/Ctrl 修饰键可配置（与切源 ←→ 同一处选择）
 document.addEventListener("keydown", (ev) => {
   if (!window.ccDeck || (ev.key !== "ArrowUp" && ev.key !== "ArrowDown")) return;
   const t = ev.target;
-  const isMsgInput = t === $("msginput");
-  // 两种合法触发：Alt 组合（任意位置）；或微信式——焦点在消息输入框且内容为空时的裸方向键
-  const altCombo = ev.altKey && !ev.ctrlKey && !ev.metaKey;
-  const bareEmpty = !ev.altKey && !ev.ctrlKey && !ev.metaKey && !ev.shiftKey && isMsgInput && t.value === "";
-  if (!altCombo && !bareEmpty) return;
+  // 触发：可配置修饰键组合（任意位置）——微信式裸 ↑↓ 已按用户要求移除（2026-09-11）
+  const altCombo = kbModHit(ev);
+  if (!altCombo) return;
   if (altCombo && t && t !== $("msginput") && (t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.isContentEditable)) return;
   if ($("gearPop").classList.contains("open") || $("cardMenu").classList.contains("open") || $("loginQrPop").classList.contains("open")) return;
   const items = [...$("cards").querySelectorAll(".card")];
@@ -4813,7 +4862,7 @@ $("gpTheme") && ($("gpTheme").onclick = () => { $("themeBtn").click(); syncGearP
 $("gearClose").onclick = () => openPanel("none");
 // #40x 设置两栏：左菜单单 active 切页（display 切换），记住最后所在页（cc.gear.section）；
 // relay 页被看到时静默补探一次本机 relay（状态行绿点/灰点）
-const GP_SECS = ["conn", "relay", "disp", "plug", "about"];
+const GP_SECS = ["conn", "relay", "disp", "kb", "plug", "about"];
 const GP_SEC_KEY = "cc.gear.section";
 const gpSavedSec = () => { try { return localStorage.getItem(GP_SEC_KEY) || "conn"; } catch { return "conn"; } };
 function setGearSection(sec) {
@@ -5782,9 +5831,12 @@ function moveTabInd() {
   ind.style.transform = "translateX(" + btn.offsetLeft + "px)";
 }
 window.addEventListener("resize", moveTabInd);
-// #279③ 键盘 ←/→ 切 tab（桌面加分项）：输入控件聚焦时不抢键
+// #279③ 键盘 ←/→ 切 tab（桌面加分项）：输入控件聚焦时不抢键；
+// #67修：带修饰键（Alt/Ctrl 等）不响应——那是「修饰键+←→ 切数据源」的组合，
+// 旧版不排除导致 Alt+←→ 详情页内切的是 tab 而非源（用户实测冲突）
 document.addEventListener("keydown", (ev) => {
   if (ev.key !== "ArrowLeft" && ev.key !== "ArrowRight") return;
+  if (ev.altKey || ev.ctrlKey || ev.metaKey || ev.shiftKey) return;
   if (!selected) return;
   const ae = document.activeElement;
   if (ae && (ae.tagName === "INPUT" || ae.tagName === "TEXTAREA" || ae.isContentEditable)) return;
