@@ -107,6 +107,37 @@ type ListRow =
   | { h: false; key: string; s: SessionState };
 
 // cc light 风格：运行中黄灯呼吸（亮度+缩放联动，2.4s 一拍，对齐网页端呼吸灯）
+// #67漏项补：主题钮线条图标（对齐桌面 THEME_ICONS）——深色显太阳（点击切浅）、
+// 浅色显月牙。太阳=圆环+四向射线；月牙=描边圆+偏移实心圆（按钮底色遮出弯月），
+// 全 View 绘制（项目无 svg 库），1.4px 描边与插头/云/电脑图标同语言
+function ThemeGlyph({ dark }: { dark: boolean }) {
+  const { c } = useTheme();
+  const styles = useThemeStyles(makeStyles);
+  if (dark) {
+    return (
+      <View style={styles.tgWrap}>
+        <View style={[styles.tgSun, { borderColor: c.dim }]} />
+        {[0, 90, 180, 270].map((r) => (
+          <View
+            key={r}
+            style={{
+              position: "absolute", width: 1.4, height: 3.5,
+              left: 16 / 2 - 0.7, top: 0.5, backgroundColor: c.dim,
+              transform: [{ rotate: `${r}deg` }, { translateY: -6.2 }],
+            }}
+          />
+        ))}
+      </View>
+    );
+  }
+  return (
+    <View style={styles.tgWrap}>
+      <View style={[styles.tgMoon, { borderColor: c.dim }]} />
+      <View style={[styles.tgMoonMask, { backgroundColor: c.tintSoft }]} />
+    </View>
+  );
+}
+
 function BlinkDot({ color }: { color: string }) {
   const op = useRef(new Animated.Value(1)).current;
   const sc = useRef(new Animated.Value(1)).current;
@@ -812,7 +843,9 @@ export default function ListScreen({ sessions, connected, connText, onOpen, onNe
           accessibilityLabel={mode === "dark" ? "深色主题，点击切浅色" : "浅色主题，点击切深色"}
           onPress={toggle}
         >
-          <Text style={styles.themeBtnT}>{mode === "dark" ? "🌙" : "☀️"}</Text>
+          {/* #67漏项补：主题钮对齐桌面端——emoji → 线条 SVG（太阳/月牙 stroke 线稿，
+              与 web THEME_ICONS 同款；深色显太阳=点击切浅、浅色显月牙） */}
+          <ThemeGlyph dark={mode === "dark"} />
         </Pressable>
       </View>
       <View style={styles.statRow}>
@@ -1006,6 +1039,12 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
     backgroundColor: c.tintSoft, borderWidth: 1, borderColor: c.line, overflow: "hidden",
   },
   themeBtnT: { fontSize: 13 },
+  // #67漏项补：线条太阳（View 圆环+四向射线，与插头/云同 1.4px 描边语言）
+  tgWrap: { width: 16, height: 16, alignItems: "center", justifyContent: "center" },
+  tgSun: { width: 8, height: 8, borderRadius: 4, borderWidth: 1.4 },
+  // 线条月牙：描边圆 + 偏移实心圆（按钮底色 tintSoft 遮出弯月）
+  tgMoon: { width: 12, height: 12, borderRadius: 6, borderWidth: 1.4 },
+  tgMoonMask: { position: "absolute", width: 10, height: 10, borderRadius: 5, left: 4.5, top: -2.5 },
   titleWrap: { flexShrink: 1, marginRight: "auto" },
   titleT: { color: c.text, fontSize: 16, fontWeight: "700", letterSpacing: 0.2 },
   titleSub: { color: c.faint, fontSize: 11, marginTop: 0.5 },
