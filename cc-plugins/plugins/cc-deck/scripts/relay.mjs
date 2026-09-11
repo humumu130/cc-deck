@@ -42879,6 +42879,15 @@ function transcriptFirstTs(p) {
 var DEFAULT_HOLD_MS = 59e4;
 var QUESTION_HOLD_MS = 9e4;
 var sleep2 = (ms) => new Promise((r) => setTimeout(r, ms));
+function cliSessionIdle(pid) {
+  try {
+    const f = path4.join(homedir6(), ".claude", "sessions", `${pid}.json`);
+    const d2 = JSON.parse(readFileSync10(f, "utf-8"));
+    return d2.status === "idle";
+  } catch {
+    return false;
+  }
+}
 function pidAlive(pid) {
   try {
     process.kill(pid, 0);
@@ -43313,7 +43322,16 @@ var Bridge = class _Bridge {
         s.updated_at ?? 0
       );
       const shape = this.turnShape.get(id2) ?? "gen";
-      if (!idleSince || now - idleSince <= (shape === "end" ? idleMs : 6e5)) continue;
+      if (!idleSince || now - idleSince <= (shape === "end" ? idleMs : 6e5)) {
+        if (now - idleSince > idleMs && s.cli_pid && cliSessionIdle(s.cli_pid)) {
+          const turn2 = this.turnStart.get(id2) ?? s.started_at;
+          this.turnStart.delete(id2);
+          this.mgr.finishExternal(id2, "completed", now - turn2);
+          this.mgr.pushExternalLog(id2, "system", "CLI \u5DF2\u7A7A\u95F2\uFF08\u8FDB\u7A0B\u72B6\u6001 idle\uFF09\uFF0C\u56DE\u5408\u89C6\u4F5C\u7ED3\u675F");
+          if ((this.inputQueue.get(id2)?.length ?? 0) > 0) void this.flushQueue(id2);
+        }
+        continue;
+      }
       const turn = this.turnStart.get(id2) ?? s.started_at;
       this.turnStart.delete(id2);
       this.mgr.finishExternal(id2, "completed", now - turn);
