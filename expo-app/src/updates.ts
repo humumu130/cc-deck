@@ -363,6 +363,11 @@ async function streamDownload(url: string, partSize: number, myGen: number): Pro
       if (stallTimer) clearTimeout(stallTimer);
     }
     if (myGen !== gen) return "net";
+    // 流提前结束守卫（#60：4 断 1 续根因）：服务器/中间层掐断连接发 TCP FIN，
+    // fetch 的 reader 把它当「正常流结束」（done=true）而非错误——不守卫会走
+    // verifyAndFinalize 的总量校验失败路径删掉半截 .part（corrupt 全量重下）。
+    // 字节未达标 = 传输被掐：按网络失败退避重试，.part 保留给下一轮 Range 续传
+    if (total > 0 && bytes < total) return "net";
     return (await verifyAndFinalize(url)) ? "ok" : "corrupt";
   } catch {
     return "net";
