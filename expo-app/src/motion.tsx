@@ -49,54 +49,29 @@ export function PressScale({
   );
 }
 
-// 展开/收起高度动画（#248）：关闭时内容不挂载（时间线可到 500 条，保性能）；
-// 展开先在 0 高度 overflow:hidden 容器里挂载测出自然高度 → 动画 0→H → 全开后切
-// auto 高度（流式追加内容可自然生长）；收起从实测高度动画回 0 再卸载。
-// 新架构无 LayoutAnimation，高度也不能原生驱动——180ms 短时长保证 JS 驱动不卡
+// 展开/收起（#248 → #54 重写）：关闭时内容不挂载（时间线可到 500 条，保性能）；
+// 展开直接 auto 高度 + opacity 淡入。旧实现「0 高 overflow:hidden 容器内 onLayout
+// 测自然高度→动画 0→H」在真机上 onLayout 报 0 高（#54 实锤：任务行点击箭头翻转
+// 但内容永不渲染，四个展开点全受累）——放弃高度测量路径，高度直切保功能，
+// 动效退化为原生驱动的 opacity（不依赖布局测量，无 JS 帧驱动负担）
 export function Collapse({ open, children, dur = 180 }: { open: boolean; children: ReactNode; dur?: number }) {
   const [mounted, setMounted] = useState(false);
-  const [auto, setAuto] = useState(false);
-  const [tick, setTick] = useState(0);
-  const h = useRef(new Animated.Value(0)).current;
-  const measured = useRef(0);
+  const op = useRef(new Animated.Value(0)).current;
   const openRef = useRef(open);
   useEffect(() => {
     openRef.current = open;
     if (open) {
-      if (!mounted) {
-        setMounted(true);
-        setAuto(false);
-        h.setValue(0);
-      }
+      if (!mounted) setMounted(true);
+      op.setValue(0);
+      Animated.timing(op, { toValue: 1, duration: dur, useNativeDriver: true }).start();
     } else if (mounted) {
-      setAuto(false);
-      // auto 阶段 h 里是陈旧目标值，从实测高度起跳（流式增长后测量值始终新鲜）
-      h.setValue(measured.current);
-      Animated.timing(h, { toValue: 0, duration: dur, useNativeDriver: false }).start(({ finished }) => {
-        // 快速关-开竞态：动画进行中 open 又翻 true（effect2 会打断收起动画），
-        // 回调若仍晚到不得卸载，否则 open=true 却空白
+      Animated.timing(op, { toValue: 0, duration: Math.round(dur * 0.6), useNativeDriver: true }).start(({ finished }) => {
+        // 快速关-开竞态：收起动画中 open 又翻 true——晚到的回调不得卸载
         if (finished && !openRef.current) setMounted(false);
       });
     }
-  }, [open]);
-  useEffect(() => {
-    if (!open || !mounted || auto || measured.current <= 0) return;
-    Animated.timing(h, { toValue: measured.current, duration: dur, useNativeDriver: false }).start(({ finished }) => {
-      if (finished) setAuto(true);
-    });
-  }, [open, mounted, auto, tick]);
-  useEffect(() => () => { h.stopAnimation(); }, [h]);
+  }, [open]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => () => { op.stopAnimation(); }, [op]);
   if (!mounted) return null;
-  return (
-    <Animated.View style={{ height: auto ? undefined : h, overflow: "hidden" }}>
-      <View
-        onLayout={(e) => {
-          measured.current = e.nativeEvent.layout.height;
-          setTick((t) => t + 1);
-        }}
-      >
-        {children}
-      </View>
-    </Animated.View>
-  );
+  return <Animated.View style={{ opacity: op }}>{children}</Animated.View>;
 }
