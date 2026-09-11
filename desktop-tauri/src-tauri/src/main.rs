@@ -233,10 +233,12 @@ fn port_listening(port: u16) -> bool {
     std::net::TcpStream::connect(("127.0.0.1", port)).is_ok()
 }
 
-// node 探测只做 PATH 查找（where.exe），不执行 node——Windows 商店的
-// WindowsApps 假别名 stub 会让 `node --version` 挂起不返回（"处理中"卡死根因）。
-// #13（2026-09-10）：where 会命中未安装机器上的商店 stub（0 字节假别名）——路径含
-// WindowsApps 一律视为未装，否则 spawn 出僵尸进程、端口永远起不来还报 node:true
+// node 探测只做 PATH 查找（不执行 node——Windows 商店的 WindowsApps 假别名 stub
+// 会让 `node --version` 挂起不返回）。按平台分流：
+// - Windows：where.exe；#13 路径含 WindowsApps（商店 stub）一律视为未装
+// - macOS（#72）：GUI app 的 PATH 不含用户 shell 的自定义路径（~/node/bin 等），
+//   which 大概率落空——枚举常见安装位置 + which 双通道
+#[cfg(target_os = "windows")]
 fn node_path() -> Option<std::path::PathBuf> {
     let out = std::process::Command::new("where").arg("node").output().ok()?;
     if !out.status.success() { return None; }
@@ -244,6 +246,32 @@ fn node_path() -> Option<std::path::PathBuf> {
         let first = line.trim();
         if first.is_empty() || first.to_ascii_lowercase().contains("windowsapps") { continue; }
         return Some(std::path::PathBuf::from(first));
+    }
+    None
+}
+#[cfg(not(target_os = "windows"))]
+fn node_path() -> Option<std::path::PathBuf> {
+    // ① which（系统安装位通常在 GUI PATH 内：/usr/local/bin、/opt/homebrew/bin）
+    if let Ok(out) = std::process::Command::new("which").arg("node").output() {
+        if out.status.success() {
+            for line in String::from_utf8_lossy(&out.stdout).lines() {
+                let first = line.trim();
+                if !first.is_empty() { return Some(std::path::PathBuf::from(first)); }
+            }
+        }
+    }
+    // ② GUI PATH 摸不到的用户安装位（zshrc 自定义 PATH 的常见形态）
+    let home = std::env::var("HOME").unwrap_or_default();
+    let candidates = [
+        format!("{home}/node/bin/node"),
+        format!("{home}/.nvm/current/bin/node"),
+        "/usr/local/bin/node".to_string(),
+        "/opt/homebrew/bin/node".to_string(),
+        "/opt/local/bin/node".to_string(),
+    ];
+    for c in candidates {
+        let p = std::path::PathBuf::from(&c);
+        if p.exists() { return Some(p); }
     }
     None
 }
@@ -457,8 +485,16 @@ fn main() {
             }
             let win = tauri::WebviewWindowBuilder::from_config(app.handle(), &app.config().app.windows[0])?
                 .initialization_script(INIT_SCRIPT)
-                // 只允许壳内源；等价 Electron will-navigate 的本地白名单（防页面被导航带离）
-                .on_navigation(|url| url.host_str() == Some("tauri.localhost"))
+                // 只允许壳内源；等价 Electron will-navigate 的本地白名单（防页面被导航带离）。
+                // 平台差异（#72 mac 白屏根因）：Windows/Linux 是 http://tauri.localhost
+                // （host=tauri.localhost），macOS 是 tauri://localhost（scheme=tauri、
+                // host=localhost）——旧写法只认前者，mac 首次导航即被拦 → WebView
+                // 透明不渲染，窗口只剩壁纸
+                .on_navigation(|url| match url.host_str() {
+                    Some("tauri.localhost") => true,
+                    Some("localhost") => url.scheme() == "tauri",
+                    _ => false,
+                })
                 .build()?;
             // #344 网易云式无边框：conf 的 decorations=false 在 from_config 路径实测未生效
             //（窗口样式仍带 WS_CAPTION），此处显式去框兜底；标题栏职责移交网页自绘
