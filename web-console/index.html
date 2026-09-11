@@ -827,23 +827,27 @@
   .srv-row .dot.connecting { background: var(--working); --sc: var(--working); animation: dot-breathe 2.4s ease-in-out infinite; }
   /* #48 插头形连接状态图标（与 App PlugGlyph 同素材同语义）：绿=已连 / 灰=未连 /
      黄闪=连接中。替代状态圆点 */
-  .srv-row .plug { flex: none; display: inline-flex; align-items: center; width: 17px; justify-content: center; color: var(--faint); }
+  .srv-row .plug { flex: none; display: inline-flex; align-items: center; width: 18px; justify-content: center; color: var(--faint); }
   .srv-row .plug svg { display: block; }
   .srv-row .plug.online { color: var(--done); }
   .srv-row .plug.connecting { color: var(--working); animation: plug-blink .9s ease-in-out infinite; }
   @keyframes plug-blink { 0%, 100% { opacity: 1; } 50% { opacity: .25; } }
-  /* #48 通道标记（名称后小字）：LAN 小字 / ☁️ emoji 原样 */
-  .srv-chan { display: inline-block; vertical-align: 1px; margin-left: 6px; font-size: 9px; font-weight: 700; line-height: 1; padding: 2.5px 5px; border-radius: 5px; color: var(--dim); background: rgba(142,163,186,.10); border: 1px solid rgba(142,163,186,.22); letter-spacing: .4px; }
-  .srv-chan.cloud { font-size: 10px; padding: 1.5px 3px; background: none; border: none; }
+  /* #48 通道标记（名称后小字）：LAN 小字胶囊 / #64 云桥线性云朵 SVG（与抽屉图标/插头同语言，
+     替换彩色 emoji——emoji 是右列唯一实心彩色元素，视觉重量倒挂且字面溢出字框） */
+  .srv-chan { display: inline-block; vertical-align: 1px; margin-left: 6px; font-size: 9px; font-weight: 700; line-height: 1; padding: 2px 6px; border-radius: 5px; color: var(--dim); background: rgba(142,163,186,.10); border: 1px solid rgba(142,163,186,.22); letter-spacing: .4px; }
+  .srv-chan.cloud { display: inline-flex; align-items: center; padding: 0 1px; background: none; border: none; color: var(--dim); }
   .srv-main { flex: 1; min-width: 0; }
   .srv-main b { display: block; font-size: 13px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  /* #64 行尾右列：通道标记+配对徽章+插头恒右对齐（对齐手机端 #46/#51），组内间距收紧 */
-  .srv-right { display: flex; align-items: center; gap: 4px; flex: none; margin-left: 6px; }
-  .srv-right .srv-chan, .srv-right .srv-chan.cloud { margin-left: 0; }
+  /* #64 行尾右列：通道标记+配对徽章+插头恒右对齐（对齐手机端 #46/#51），组内间距收紧。
+     徽章的 inline 时代 margin-left:6px 在 flex 列里没被清零过（只清了 srv-chan 的），
+     曾把「☁️→徽章」间距撑到 10px（视觉 ~13px），是组内 3 倍节奏差的元凶 */
+  .srv-right { display: flex; align-items: center; gap: 5px; flex: none; margin-left: 6px; }
+  .srv-right .srv-chan, .srv-right .srv-chan.cloud, .srv-right .srv-pbadge { margin-left: 0; }
   .srv-addr { display: block; font-size: 11px; color: var(--dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .srv-row .srv-del {
     flex: none; background: none; border: none; cursor: pointer; color: var(--faint);
-    font-size: 12px; padding: 4px 5px; border-radius: 7px; opacity: 0; transition: opacity .12s;
+    font-size: 12px; padding: 4px 2px; min-width: 18px; min-height: 20px; margin-left: -3px;
+    border-radius: 7px; opacity: 0; transition: opacity .12s;
   }
   .srv-row:hover .srv-del, .srv-row .srv-del:focus { opacity: 1; }
   .srv-row .srv-del:hover { color: var(--error); background: var(--bg-soft); }
@@ -851,7 +855,7 @@
      用户不会误以为要重新输码（#40 的误导根因） */
   .srv-pbadge {
     display: inline-block; vertical-align: 1px; margin-left: 6px;
-    font-size: 9.5px; font-weight: 600; line-height: 1; padding: 2.5px 6px; border-radius: 5px;
+    font-size: 9.5px; font-weight: 600; line-height: 1; padding: 2px 6px; border-radius: 5px;
     color: var(--done); background: rgba(85,217,138,.12); border: 1px solid rgba(85,217,138,.30);
   }
   .srv-pbadge.dead { color: var(--error); background: rgba(239,90,90,.10); border-color: rgba(239,90,90,.30); }
@@ -5100,8 +5104,11 @@ $("cancelEdit").onclick = () => { formForcedOpen = false; setFormKind(formKind, 
 // 每行 [插头状态 + 名称 + 通道标记 + 配对徽章 + 地址摘要（含状态）+ 失败态重试钮] + 删除；
 // 点行 = 设为活动源 + 下方就地展开编辑表单（#406，抽屉不收）
 // #48 状态点换插头形图标（与 App PlugGlyph 同素材）：绿=已连/灰=未连/黄闪=连接中；
-// 名称后通道标记（☁️/LAN/直连无）
-const PLUG_SVG = '<svg viewBox="0 0 20 14" width="16" height="11" fill="none"><path d="M1 7h6" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/><rect x="7" y="3" width="5.6" height="8" rx="1.7" stroke="currentColor" stroke-width="1.4"/><path d="M12.6 5.2h4.2M12.6 8.8h4.2" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>';
+// 名称后通道标记（云朵 SVG/LAN 胶囊/直连无）
+const PLUG_SVG = '<svg viewBox="0 0 20 14" width="17" height="12" fill="none"><path d="M1 7h6" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/><rect x="7" y="3" width="5.6" height="8" rx="1.7" stroke="currentColor" stroke-width="1.4"/><path d="M12.6 5.2h4.2M12.6 8.8h4.2" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>';
+// #64 云桥通道标记：线性云朵（同抽屉 gp-sec 图标语言 + 插头 stroke 同族），替代彩色 ☁️ emoji；
+// 连接帮助浮层（initConnHelpPop）与行内 chanTag 共用同一素材，保证「说明=所见」
+const CLOUD_SVG = '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M17.5 19H9a7 7 0 1 1 6.71-9h1.79a4.5 4.5 0 1 1 0 9Z"/></svg>';
 // #63/#64 连接图标含义（设置连接区问号 hover 悬浮）：内容预填，显示由 CSS hover 控制；
 // 插头用连接列表同款三色、LAN 用 srv-chan 同款胶囊；一行一条+分块（对齐手机端 #53）
 (function initConnHelpPop() {
@@ -5110,7 +5117,7 @@ const PLUG_SVG = '<svg viewBox="0 0 20 14" width="16" height="11" fill="none"><p
   const plug = (color) => '<svg viewBox="0 0 20 14" width="17" height="12" fill="none"><path d="M1 7h6" stroke="' + color + '" stroke-width="1.6" stroke-linecap="round"/><rect x="7" y="3" width="5.6" height="8" rx="1.7" stroke="' + color + '" stroke-width="1.4"/><path d="M12.6 5.2h4.2M12.6 8.8h4.2" stroke="' + color + '" stroke-width="1.6" stroke-linecap="round"/></svg>';
   card.innerHTML =
     '<div class="chp-title">图标含义</div>' +
-    '<div class="chp-row"><span class="chp-ico" style="font-size:13px">☁️</span><span class="chp-t">云桥中转 · 跨网络可用</span></div>' +
+    '<div class="chp-row"><span class="chp-ico">' + CLOUD_SVG + '</span><span class="chp-t">云桥中转 · 跨网络可用</span></div>' +
     '<div class="chp-row"><span class="chp-ico"><span class="srv-chan" style="margin:0">LAN</span></span><span class="chp-t">局域网直连</span></div>' +
     '<div class="chp-sep"></div>' +
     '<div class="chp-row"><span class="chp-ico">' + plug("var(--done)") + '</span><span class="chp-t">已连接</span></div>' +
@@ -5128,8 +5135,8 @@ function renderServers() {
     // 传输失败时「已配对」徽仍在场，连接失败 ≠ 需要重新输码
     const pb = pairBadgeOf(s, ctx);
     const addr = srvAddrText(s, ctx);
-    // #48 通道标记：云桥 ☁️ / LAN 源小字 / 手动直连不显示
-    const chanTag = s.kind === "cloud" ? '<span class="srv-chan cloud">☁️</span>' : s.kind === "lan" ? '<span class="srv-chan">LAN</span>' : "";
+    // #48 通道标记：云桥线性云朵（#64 去 emoji）/ LAN 源小字 / 手动直连不显示
+    const chanTag = s.kind === "cloud" ? '<span class="srv-chan cloud">' + CLOUD_SVG + '</span>' : s.kind === "lan" ? '<span class="srv-chan">LAN</span>' : "";
     return '<div class="srv-row' + (s.id === activeServerId ? " active" : "") + (s.id === editId ? " editing" : "") + '" data-id="' + s.id + '" title="点击设为活动源，并在下方展开编辑">' +
       '<div class="srv-main"><b>' + escapeHtml(s.name) + '</b>' +
       '<span class="srv-addr' + (pdPairingAnim(stText) ? " pairing" : "") + '">' + escapeHtml(addr) + "</span></div>" +
