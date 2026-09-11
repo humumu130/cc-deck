@@ -1722,6 +1722,7 @@
         <button type="button" class="gp-nav-item on" data-sec="conn"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9 2.8v4.2M15 2.8v4.2"/><path d="M6.5 7h11v4.2a5.5 5.5 0 0 1-11 0V7Z"/><path d="M12 16.7v4.5"/></svg>连接</button>
         <button type="button" class="gp-nav-item" data-sec="relay"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><rect x="3.2" y="3.8" width="17.6" height="6.6" rx="2"/><rect x="3.2" y="13.6" width="17.6" height="6.6" rx="2"/><path d="M7 7.1h.01M7 16.9h.01"/></svg>relay</button>
         <button type="button" class="gp-nav-item" data-sec="disp"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M2.6 12S6 5.8 12 5.8 21.4 12 21.4 12 18 18.2 12 18.2 2.6 12 2.6 12Z"/><circle cx="12" cy="12" r="2.9"/></svg>显示</button>
+        <button type="button" class="gp-nav-item" data-sec="kb"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="6.2" width="18" height="11.6" rx="2.2"/><path d="M7 10v3.6M7 10.1v.1"/><path d="M11 10v3.6M14.5 10v3.6M18 10v3.6"/></svg>快捷键</button>
         <button type="button" class="gp-nav-item" data-sec="plug"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M10.2 5.5a1.8 1.8 0 0 1 3.6 0L16.5 5.5Q18.5 5.5 18.5 7.5V10.2a1.8 1.8 0 0 1 0 3.6V16.5Q18.5 18.5 16.5 18.5H7.5Q5.5 18.5 5.5 16.5V7.5Q5.5 5.5 7.5 5.5H10.2Z"/></svg>插件</button>
         <button type="button" class="gp-nav-item" data-sec="about"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="12" cy="12" r="8.6"/><path d="M12 11v4.6"/><path d="M12 7.6h.01"/></svg>关于</button>
       </nav>
@@ -1816,14 +1817,22 @@
             <div class="gp-row" id="gpFont"><span class="gi"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M5 19.2 11.6 5.4l6.6 13.8"/><path d="M7.6 14.4h8"/></svg></span>正文字号<div class="lever" id="gpFontLever" style="--n:3"><i class="lever-thumb"></i><button type="button" class="lever-opt" data-i="0">紧凑</button><button type="button" class="lever-opt" data-i="1">标准</button><button type="button" class="lever-opt" data-i="2">大</button></div></div>
             <div class="gp-row" id="gpThink"><span class="gi"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="8.4"/><path d="M12 3.6a8.4 8.4 0 0 1 0 16.8Z" fill="currentColor" stroke="none" opacity=".45"/></svg></span>思考过程<div class="lever" id="gpThinkLever" style="--n:2"><i class="lever-thumb"></i><button type="button" class="lever-opt" data-i="0">关</button><button type="button" class="lever-opt" data-i="1">开</button></div></div>
             <div class="gp-row" id="gpIdle" style="display:none"><span class="gi"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3.4 20.6 8 12 12.6 3.4 8Z"/><path d="m3.4 12.4 8.6 4.6 8.6-4.6"/><path d="m3.4 16.6 8.6 4.6 8.6-4.6"/></svg></span>折叠空闲<div class="lever" id="gpIdleLever" style="--n:2"><i class="lever-thumb"></i><button type="button" class="lever-opt" data-i="0">显示</button><button type="button" class="lever-opt" data-i="1">折叠</button></div></div>
-            <!-- #8 桌面端呼出/收起快捷键（浏览器隐藏）：点击行进入录制，Esc 取消、Backspace 清空注销 -->
-            <div class="gp-row" id="gpHotkey" style="display:none"><span class="gi"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="6.2" width="18" height="11.6" rx="2.2"/><path d="M7 10v3.6M7 10.1v.1"/><path d="M11 10v3.6M14.5 10v3.6M18 10v3.6"/></svg></span>呼出/收起快捷键<b class="gp-hk" id="gpHotkeyVal">—</b></div>
-            <!-- #16/#19 会话切换快捷键展示行（键位暂固定）：与呼出/收起同组，桌面专属 -->
-            <div class="gp-row gp-static" id="gpSwitchKey" style="display:none"><span class="gi"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19.5 5 12l7-7.5"/><path d="M19 19.5 12 12l7-7.5"/></svg></span>切换会话<b class="gp-hk">Alt+↑↓ / 空输入时 ↑↓</b></div>
+            <!-- #8/#67 呼出/收起与切换会话行已迁独立「快捷键」栏 -->
           </div>
         </section>
-        <!-- #448 插件页：CC Deck 插件可选能力三开关（任务调度强化/插入问答通知/恢复点），
-             读写本机 relay /api/plugin-config（~/.cc-deck/config.json，与 hooks 守卫共用） -->
+        <!-- #67 快捷键独立栏（从「显示」拆出——三组键+录制入口自成一块，显示栏已四拨杆） -->
+        <section class="gp-page off" id="gpPageKb">
+          <div class="gp-sec"><svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="6.2" width="18" height="11.6" rx="2.2"/><path d="M7 10v3.6M7 10.1v.1"/><path d="M11 10v3.6M14.5 10v3.6M18 10v3.6"/></svg>快捷键</div>
+          <div class="gp-card gp-rows">
+            <!-- 呼出/收起（Tauri 层录制，桌面专属）：自显示栏迁入 -->
+            <div class="gp-row" id="gpHotkey" style="display:none"><span class="gi"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="6.2" width="18" height="11.6" rx="2.2"/><path d="M7 10v3.6M7 10.1v.1"/><path d="M11 10v3.6M14.5 10v3.6M18 10v3.6"/></svg></span>呼出/收起<b class="gp-hk" id="gpHotkeyVal">—</b></div>
+            <!-- #67 方向键修饰键可配置：影响「切会话 ↑↓」与「切源 ←→」两组 -->
+            <div class="gp-row" id="gpKbMod"><span class="gi"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M15.4 7.5a5 5 0 1 0 2.2 6.7H12"/></svg></span>方向键修饰<div class="lever" id="gpKbModLever" style="--n:2"><i class="lever-thumb"></i><button type="button" class="lever-opt" data-i="0">Alt</button><button type="button" class="lever-opt" data-i="1">Ctrl</button></div></div>
+            <div class="gp-row gp-static"><span class="gi"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19.5 5 12l7-7.5"/><path d="M19 19.5 12 12l7-7.5"/></svg></span>切换会话<b class="gp-hk" id="gpKbSessTxt">修饰键+↑↓</b></div>
+            <div class="gp-row gp-static"><span class="gi"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4.5 12h15"/><path d="m9.5 7-5 5 5 5"/><path d="m14.5 7 5 5-5 5"/></svg></span>切换数据源<b class="gp-hk" id="gpKbSrcTxt">修饰键+←→</b></div>
+            <div class="gp-hint" style="padding:2px 4px 0">消息输入框为空时，裸 ↑↓ 也可切换会话（微信式）</div>
+          </div>
+        </section>
         <section class="gp-page off" id="gpPagePlug">
           <div class="gp-sec"><svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M10.2 5.5a1.8 1.8 0 0 1 3.6 0L16.5 5.5Q18.5 5.5 18.5 7.5V10.2a1.8 1.8 0 0 1 0 3.6V16.5Q18.5 18.5 16.5 18.5H7.5Q5.5 18.5 5.5 16.5V7.5Q5.5 5.5 7.5 5.5H10.2Z"/></svg>插件</div>
           <div class="gp-relay-stat" id="gpPlugStat" style="display:none"><i></i><span id="gpPlugStatTxt">检测中…</span></div>
@@ -4686,8 +4695,7 @@ function syncGearPop() {
   $("gpIdle").style.display = idle.style.display === "none" ? "none" : "flex";
   $("gpVer").textContent = CONSOLE_VERSION;
   $("gpBuild") && ($("gpBuild").textContent = CONSOLE_VERSION); // #405 左栏底部弱化 Build 号（设计稿 §5）
-  $("gpHotkey") && ($("gpHotkey").style.display = window.ccDeck ? "flex" : "none"); // #8 桌面端专属
-  $("gpSwitchKey") && ($("gpSwitchKey").style.display = window.ccDeck ? "flex" : "none"); // #16 同组展示
+  $("gpHotkey") && ($("gpHotkey").style.display = window.ccDeck ? "flex" : "none"); // #8 桌面端专属（#67 迁独立快捷键栏）
   renderGpStatus();
 }
 
@@ -4784,15 +4792,59 @@ function focusMsgInput() {
 window.addEventListener("focus", () => {
   if (window.ccDeck) setTimeout(focusMsgInput, 60);
 });
+// #67 方向键修饰键可配置（Alt/Ctrl，localStorage ccd_kb_mod，默认 alt）：
+// 影响「切会话 ↑↓」与「切源 ←→」两组——呼出/收起键独立录制（Tauri 层）不受影响
+const KB_MOD_KEY = "ccd_kb_mod";
+const kbMod = () => (localStorage.getItem(KB_MOD_KEY) === "ctrl" ? "ctrl" : "alt");
+const kbModHit = (ev) => (kbMod() === "ctrl" ? ev.ctrlKey && !ev.altKey : ev.altKey && !ev.ctrlKey) && !ev.metaKey;
+function syncKbModLever() {
+  const idx = kbMod() === "ctrl" ? 1 : 0;
+  $("gpKbModLever").querySelectorAll(".lever-opt").forEach((b) => b.classList.toggle("on", +b.dataset.i === idx));
+  $("gpKbModLever").querySelector(".lever-thumb").style.setProperty("--i", idx);
+  const name = kbMod() === "ctrl" ? "Ctrl" : "Alt";
+  $("gpKbSessTxt").textContent = name + "+↑↓";
+  $("gpKbSrcTxt").textContent = name + "+←→";
+}
+$("gpKbModLever").querySelectorAll(".lever-opt").forEach((b) => {
+  b.onclick = () => {
+    localStorage.setItem(KB_MOD_KEY, +b.dataset.i === 1 ? "ctrl" : "alt");
+    syncKbModLever();
+  };
+});
+syncKbModLever();
+
+// #67 修饰键+←/→ 切换数据源（会话列表顶部源筛选 chips 循环选中）：
+// 与切会话同守卫（浮层打开/输入框内不抢键；裸 ←→ 不启用——输入框内移动光标是高频原生行为）
+document.addEventListener("keydown", (ev) => {
+  if (!window.ccDeck || (ev.key !== "ArrowLeft" && ev.key !== "ArrowRight")) return;
+  if (!kbModHit(ev) || ev.shiftKey) return;
+  const t = ev.target;
+  if (t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.isContentEditable)) return;
+  if ($("gearPop").classList.contains("open") || $("cardMenu").classList.contains("open") || $("loginQrPop").classList.contains("open")) return;
+  const chips = [...$("srcChips").querySelectorAll("button")];
+  if (chips.length < 2) return; // 单源/无源：无可切
+  ev.preventDefault();
+  const cur = chips.findIndex((c) => c.classList.contains("on"));
+  const next = ev.key === "ArrowRight"
+    ? (cur + 1 + chips.length) % chips.length
+    : (cur - 1 + chips.length) % chips.length;
+  filterSrc = chips[next].dataset.f;
+  renderSrcChips();
+  render();
+  chips[next].scrollIntoView({ block: "nearest", inline: "center" });
+  focusMsgInput();
+});
+
 // Alt+↑/↓ 切换会话（#8→#19 改 Alt，桌面端专属）+ 微信式裸 ↑/↓（#19 补：输入框为空时
 // 不带修饰键的上下键直接切换）：列表内上下移动选中卡并跟进滚动，切完焦点进输入框
-// 直接打字；浮层打开（设置/右键菜单/登录码）时不抢键
+// 直接打字；浮层打开（设置/右键菜单/登录码）时不抢键。
+// #67 起 Alt/Ctrl 修饰键可配置（与切源 ←→ 同一处选择）
 document.addEventListener("keydown", (ev) => {
   if (!window.ccDeck || (ev.key !== "ArrowUp" && ev.key !== "ArrowDown")) return;
   const t = ev.target;
   const isMsgInput = t === $("msginput");
-  // 两种合法触发：Alt 组合（任意位置）；或微信式——焦点在消息输入框且内容为空时的裸方向键
-  const altCombo = ev.altKey && !ev.ctrlKey && !ev.metaKey;
+  // 两种合法触发：可配置修饰键组合（任意位置）；或微信式——输入框空时裸方向键
+  const altCombo = kbModHit(ev);
   const bareEmpty = !ev.altKey && !ev.ctrlKey && !ev.metaKey && !ev.shiftKey && isMsgInput && t.value === "";
   if (!altCombo && !bareEmpty) return;
   if (altCombo && t && t !== $("msginput") && (t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.isContentEditable)) return;
@@ -4813,7 +4865,7 @@ $("gpTheme") && ($("gpTheme").onclick = () => { $("themeBtn").click(); syncGearP
 $("gearClose").onclick = () => openPanel("none");
 // #40x 设置两栏：左菜单单 active 切页（display 切换），记住最后所在页（cc.gear.section）；
 // relay 页被看到时静默补探一次本机 relay（状态行绿点/灰点）
-const GP_SECS = ["conn", "relay", "disp", "plug", "about"];
+const GP_SECS = ["conn", "relay", "disp", "kb", "plug", "about"];
 const GP_SEC_KEY = "cc.gear.section";
 const gpSavedSec = () => { try { return localStorage.getItem(GP_SEC_KEY) || "conn"; } catch { return "conn"; } };
 function setGearSection(sec) {
