@@ -83,6 +83,19 @@ const DEFAULT_HOLD_MS = 590_000;
 const QUESTION_HOLD_MS = 90_000;
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
+// #65 CLI 自写会话状态文件（~/.claude/sessions/<pid>.json）的 status 探针：
+// "idle"=CLI 空闲（回合结束的权威信号，hook 无关）；busy/缺失/读失败=false。
+// 只在 WORKING 高疑会话（静默 90s+）上调用，频次低
+function cliSessionIdle(pid: number): boolean {
+  try {
+    const f = path.join(homedir(), ".claude", "sessions", `${pid}.json`);
+    const d = JSON.parse(readFileSync(f, "utf-8")) as { status?: string };
+    return d.status === "idle";
+  } catch {
+    return false;
+  }
+}
+
 function pidAlive(pid: number): boolean {
   try {
     process.kill(pid, 0);
@@ -553,7 +566,19 @@ export class Bridge {
       // 末条形态分档（与 sweepNoHookIdle 同参）：end=纯文本收尾 90s 即回落，
       // 其余（工具执行中/生成中）给 10 分钟长窗——先判全局 600s 会让 90s 档变死代码
       const shape = this.turnShape.get(id) ?? "gen";
-      if (!idleSince || now - idleSince <= (shape === "end" ? idleMs : 600_000)) continue;
+      if (!idleSince || now - idleSince <= (shape === "end" ? idleMs : 600_000)) {
+        // #65（2026-09-11 用户实测公司机 10 分钟不回落）：gen/tool 档静默 90s+ 且
+        // CLI 自写的会话状态文件报 idle → 权威快速回落（不等 10 分钟窗。生成中
+        // CLI 报 busy，长思考不误伤；hook 失联时这是唯一可靠快信号）
+        if (now - idleSince > idleMs && s.cli_pid && cliSessionIdle(s.cli_pid)) {
+          const turn = this.turnStart.get(id) ?? s.started_at;
+          this.turnStart.delete(id);
+          this.mgr.finishExternal(id, "completed", now - turn);
+          this.mgr.pushExternalLog(id, "system", "CLI 已空闲（进程状态 idle），回合视作结束");
+          if ((this.inputQueue.get(id)?.length ?? 0) > 0) void this.flushQueue(id);
+        }
+        continue;
+      }
       const turn = this.turnStart.get(id) ?? s.started_at;
       this.turnStart.delete(id);
       this.mgr.finishExternal(id, "completed", now - turn);
