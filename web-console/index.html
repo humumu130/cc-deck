@@ -5076,9 +5076,11 @@ function canAutoConnect(cfg) { return !!cfg.wsUrl && (cfg.kind === "cloud" || !!
 //   未配对=云源其余态（新装/配对流程中）→ 灰徽。LAN 源无配对概念不标
 function pairBadgeOf(s, ctx) {
   if (!s || s.kind !== "cloud" || !s.wsUrl) return null;
-  if (s.cloud && s.cloud.paired && s.cloud.rd && s.cloud.rk) return { t: "已配对", c: "ok" };
+  // #69 正常态「已配对」徽章撤（绿插头已承载连接态，徽章冗余）；
+  // 异常态保留——配对失效有诊断价值，未配对保留引导价值
   if (ctx && ctx.failKind === "unpaired") return { t: "配对失效", c: "dead" };
-  return { t: "未配对", c: "no" };
+  if (!(s.cloud && s.cloud.paired && s.cloud.rd && s.cloud.rk)) return { t: "未配对", c: "no" };
+  return null;
 }
 // 条目地址摘要：整绘与重试倒计时轻刷新共用同一拼装，防两处口径漂移。
 // 状态词与徽章/占位重复时不再缀尾（#405 去重口径延续）
