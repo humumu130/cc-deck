@@ -1830,7 +1830,6 @@
             <div class="gp-row" id="gpKbMod"><span class="gi"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M15.4 7.5a5 5 0 1 0 2.2 6.7H12"/></svg></span>方向键修饰<div class="lever" id="gpKbModLever" style="--n:2"><i class="lever-thumb"></i><button type="button" class="lever-opt" data-i="0">Alt</button><button type="button" class="lever-opt" data-i="1">Ctrl</button></div></div>
             <div class="gp-row gp-static"><span class="gi"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19.5 5 12l7-7.5"/><path d="M19 19.5 12 12l7-7.5"/></svg></span>切换会话<b class="gp-hk" id="gpKbSessTxt">修饰键+↑↓</b></div>
             <div class="gp-row gp-static"><span class="gi"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4.5 12h15"/><path d="m9.5 7-5 5 5 5"/><path d="m14.5 7 5 5-5 5"/></svg></span>切换数据源<b class="gp-hk" id="gpKbSrcTxt">修饰键+←→</b></div>
-            <div class="gp-hint" style="padding:2px 4px 0">消息输入框为空时，裸 ↑↓ 也可切换会话（微信式）</div>
           </div>
         </section>
         <section class="gp-page off" id="gpPagePlug">
@@ -4842,11 +4841,9 @@ document.addEventListener("keydown", (ev) => {
 document.addEventListener("keydown", (ev) => {
   if (!window.ccDeck || (ev.key !== "ArrowUp" && ev.key !== "ArrowDown")) return;
   const t = ev.target;
-  const isMsgInput = t === $("msginput");
-  // 两种合法触发：可配置修饰键组合（任意位置）；或微信式——输入框空时裸方向键
+  // 触发：可配置修饰键组合（任意位置）——微信式裸 ↑↓ 已按用户要求移除（2026-09-11）
   const altCombo = kbModHit(ev);
-  const bareEmpty = !ev.altKey && !ev.ctrlKey && !ev.metaKey && !ev.shiftKey && isMsgInput && t.value === "";
-  if (!altCombo && !bareEmpty) return;
+  if (!altCombo) return;
   if (altCombo && t && t !== $("msginput") && (t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.isContentEditable)) return;
   if ($("gearPop").classList.contains("open") || $("cardMenu").classList.contains("open") || $("loginQrPop").classList.contains("open")) return;
   const items = [...$("cards").querySelectorAll(".card")];

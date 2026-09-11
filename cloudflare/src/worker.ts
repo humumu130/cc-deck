@@ -62,6 +62,8 @@ export default {
           headers: { location: "http://8.133.211.170:8888/cc-deck.apk", "cache-control": "no-store" },
         });
       }
+      // #67 测试包 cc-deck-test.exe：走 KV 通用直出（exe 5MB < 25MiB 上限；
+      // ECS 回源被阿里云对 CF 境外出口 403 挡死，302 后公司又屏蔽裸 IP——KV 是唯一全通路径）
       const obj = await env.DL.get(name, { type: "arrayBuffer" });
       if (!obj) return new Response("not found", { status: 404 });
       // no-store：/dl/<file> 是稳定地址，KV 换新版后二次下载必须拿到新文件，
