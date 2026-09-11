@@ -145,3 +145,69 @@ jobs:
             desktop-tauri/src-tauri/target/release/bundle/nsis/latest.json
             desktop-tauri/src-tauri/target/release/bundle/latest.json
           generate_release_notes: true
+
+  build-tauri-mac:
+    # #71 Mac 桌面端：Tauri 代码全平台通用，仅打包目标不同（dmg/app）。
+    # 不签名不公证——无 Apple 账号永久可用（首次右键→打开绕 Gatekeeper），
+    # 有账号后可加 Developer ID 签名 + notarize 消除首次摩擦
+    name: Tauri dmg（macOS-aarch64，未签名）
+    runs-on: macos-14
+    timeout-minutes: 40
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: desktop-tauri/package-lock.json
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-apple-darwin
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: desktop-tauri/src-tauri
+
+      - name: Install tauri-cli
+        working-directory: desktop-tauri
+        run: npm ci --no-audit --no-fund
+
+      - name: Regenerate icons
+        working-directory: desktop-tauri
+        run: npx tauri icon ../desktop/build/icon.png
+
+      - name: Sync version from tag
+        if: startsWith(github.ref, 'refs/tags/')
+        working-directory: desktop-tauri
+        run: npm version --no-git-tag-version --allow-same-version "${GITHUB_REF_NAME#v}"
+
+      - name: Build dmg
+        working-directory: desktop-tauri
+        shell: bash
+        env:
+          # updater 签名与 Windows 共用（密钥对平台无关）；macOS 应用签名留空 = ad-hoc
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        run: npx tauri build --bundles dmg --target aarch64-apple-darwin
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: CC-Deck-Desktop-Tauri-Mac-${{ github.ref_name }}
+          path: |
+            desktop-tauri/src-tauri/target/aarch64-apple-darwin/release/bundle/dmg/*.dmg
+            desktop-tauri/src-tauri/target/aarch64-apple-darwin/release/bundle/dmg/*.dmg.sig
+            desktop-tauri/src-tauri/target/aarch64-apple-darwin/release/bundle/macos/*.app.tar.gz*
+          if-no-files-found: error
+
+      - name: Attach to GitHub Release
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            desktop-tauri/src-tauri/target/aarch64-apple-darwin/release/bundle/dmg/*.dmg
+            desktop-tauri/src-tauri/target/aarch64-apple-darwin/release/bundle/dmg/*.dmg.sig
+          generate_release_notes: true
