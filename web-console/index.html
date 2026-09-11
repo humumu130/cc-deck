@@ -105,31 +105,28 @@
   #sideHead #runhint { flex: 1; min-width: 0; }
   /* #39 主题钮线条图标：SVG 居中（去 emoji 基线抖动） */
   #themeBtn { display: flex; align-items: center; justify-content: center; }
-  /* #63 通道含义问号（设置连接区标题旁）+ 图例弹层（taskPop 同款居中卡片） */
+  /* #63/#64 通道含义问号（设置连接区标题旁）：hover 悬浮显示旁侧说明卡（不点击不居中——
+     桌面鼠标交互习惯，问号锚定相对定位，浮层 absolute 跟随） */
+  .gp-sec { position: relative; }
   .gp-sec-help {
     flex: none; width: 15px; height: 15px; border-radius: 50%; border: 1px solid rgba(142,163,186,.4);
-    background: none; color: var(--gp-dim); font-size: 10px; line-height: 1; cursor: pointer;
+    background: none; color: var(--gp-dim); font-size: 10px; line-height: 1; cursor: help;
     display: inline-flex; align-items: center; justify-content: center; padding: 0;
     margin-left: 7px; vertical-align: 1px;
   }
   .gp-sec-help:hover { color: var(--text); border-color: var(--hov); }
-  #connHelpPop {
-    position: fixed; inset: 0; z-index: 300; display: none;
-    align-items: center; justify-content: center; background: rgba(2,5,10,.55);
+  #connHelpPop { display: none; }
+  .gp-sec:hover #connHelpPop {
+    display: block; position: absolute; top: 26px; left: 0; z-index: 320;
+    background: var(--panel); border: 1px solid var(--border); border-radius: 12px;
+    padding: 13px 15px; min-width: 236px; max-width: min(300px, calc(100vw - 48px));
+    box-shadow: 0 10px 34px rgba(0,0,0,.5);
   }
-  #connHelpPop.open { display: flex; }
-  #connHelpPop .chp-card {
-    background: var(--panel); border: 1px solid var(--border); border-radius: 14px;
-    padding: 16px 18px; min-width: 240px; max-width: min(320px, calc(100vw - 32px));
-    box-shadow: 0 12px 40px rgba(0,0,0,.5);
-  }
-  .chp-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; }
-  .chp-title { color: var(--text); font-size: 14.5px; font-weight: 700; }
-  .chp-close { background: none; border: none; color: var(--dim); font-size: 14px; cursor: pointer; padding: 2px 4px; }
-  .chp-row { display: flex; align-items: center; gap: 11px; margin-bottom: 9px; }
-  .chp-ico { width: 30px; display: flex; align-items: center; justify-content: center; flex: none; }
-  .chp-t { color: var(--text); font-size: 13px; }
-  .chp-sep { height: 13px; }
+  .chp-title { color: var(--text); font-size: 12.5px; font-weight: 700; margin-bottom: 10px; }
+  .chp-row { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; }
+  .chp-ico { width: 28px; display: flex; align-items: center; justify-content: center; flex: none; }
+  .chp-t { color: var(--text); font-size: 12.5px; }
+  .chp-sep { height: 11px; }
   #winBtns { display: none; align-items: center; margin-right: -6px; }
   #winBtns button {
     width: 34px; height: 26px; border: none; background: none; cursor: pointer;
@@ -840,6 +837,9 @@
   .srv-chan.cloud { font-size: 10px; padding: 1.5px 3px; background: none; border: none; }
   .srv-main { flex: 1; min-width: 0; }
   .srv-main b { display: block; font-size: 13px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  /* #64 行尾右列：通道标记+配对徽章+插头恒右对齐（对齐手机端 #46/#51），组内间距收紧 */
+  .srv-right { display: flex; align-items: center; gap: 4px; flex: none; margin-left: 6px; }
+  .srv-right .srv-chan, .srv-right .srv-chan.cloud { margin-left: 0; }
   .srv-addr { display: block; font-size: 11px; color: var(--dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .srv-row .srv-del {
     flex: none; background: none; border: none; cursor: pointer; color: var(--faint);
@@ -1730,7 +1730,7 @@
       </div>
       <div class="gp-content">
         <section class="gp-page" id="gpPageConn">
-          <div class="gp-sec"><svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9 2.8v4.2M15 2.8v4.2"/><path d="M6.5 7h11v4.2a5.5 5.5 0 0 1-11 0V7Z"/><path d="M12 16.7v4.5"/></svg>连接<!-- #63 图标含义问号：设置连接区标题旁（对齐手机端，原误放主面板顶栏） --><button id="connHelp" class="gp-sec-help" title="连接图标含义">?</button></div>
+          <div class="gp-sec"><svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9 2.8v4.2M15 2.8v4.2"/><path d="M6.5 7h11v4.2a5.5 5.5 0 0 1-11 0V7Z"/><path d="M12 16.7v4.5"/></svg>连接<!-- #63/#64 图标含义问号：hover 悬浮旁侧说明（对齐手机端入口位置） --><span id="connHelp" class="gp-sec-help">?</span><div id="connHelpPop"><div class="chp-card" id="connHelpCard"></div></div></div>
           <div class="gp-status" id="gpStatus">
             <span class="gp-sdot" id="gpStatusDot"></span>
             <span class="gp-stx"><b id="gpStatusName">未配置</b><span id="gpStatusSub">添加服务器开始使用</span></span>
@@ -1969,9 +1969,6 @@
     </div>
   </div>
 <div id="taskPop"><div class="tp-card" id="taskCard"></div></div>
-<!-- #63 连接图标含义弹层（设置连接区问号入口）：图标行自解释——插头用连接列表
-     同款 PLUG_SVG 三色、LAN 用 srv-chan 同款胶囊；一行一条，通道组/状态组分块 -->
-<div id="connHelpPop"><div class="chp-card" id="connHelpCard"></div></div>
 <div id="fpathPop"></div>
 <div id="toast"></div>
 <div id="taskDone"></div>
@@ -5030,12 +5027,9 @@ function pairBadgeOf(s, ctx) {
 // 条目地址摘要：整绘与重试倒计时轻刷新共用同一拼装，防两处口径漂移。
 // 状态词与徽章/占位重复时不再缀尾（#405 去重口径延续）
 function srvAddrText(s, ctx) {
-  const stText = ctx ? ctx.statusText : (canAutoConnect(s) ? "未连接" : "未配置");
-  const cloud = s.kind === "cloud";
-  const base = cloud ? hostOf(s.wsUrl) + " · 云桥" : (hostOf(s.wsUrl) || "未配置") + " · 直连";
-  const pb = pairBadgeOf(s, ctx);
-  const dup = (!cloud && base.includes(stText)) || stText === (pb && pb.t);
-  return base + (stText && !dup ? " · " + stText : "");
+  // #64 副行纯地址：状态汉字撤（插头三色承载状态，行内右侧），「云桥/直连」文字撤
+  //（通道标记 ☁️/LAN 已在行内），未配置态保底提示
+  return hostOf(s.wsUrl) || (s.kind === "cloud" ? "云桥" : "未配置");
 }
 
 function setFormKind(kind, cfg) {
@@ -5108,24 +5102,20 @@ $("cancelEdit").onclick = () => { formForcedOpen = false; setFormKind(formKind, 
 // #48 状态点换插头形图标（与 App PlugGlyph 同素材）：绿=已连/灰=未连/黄闪=连接中；
 // 名称后通道标记（☁️/LAN/直连无）
 const PLUG_SVG = '<svg viewBox="0 0 20 14" width="16" height="11" fill="none"><path d="M1 7h6" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/><rect x="7" y="3" width="5.6" height="8" rx="1.7" stroke="currentColor" stroke-width="1.4"/><path d="M12.6 5.2h4.2M12.6 8.8h4.2" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>';
-// #63 连接图标含义弹层（设置连接区问号入口）：插头用连接列表同款 PLUG_SVG 三色、
-// LAN 用 srv-chan 同款胶囊；一行一条（通道组/状态组分块，对齐手机端 #53）
+// #63/#64 连接图标含义（设置连接区问号 hover 悬浮）：内容预填，显示由 CSS hover 控制；
+// 插头用连接列表同款三色、LAN 用 srv-chan 同款胶囊；一行一条+分块（对齐手机端 #53）
 (function initConnHelpPop() {
-  const pop = $("connHelpPop");
-  if (!pop) return;
-  const plug = (color) => '<span style="color:' + color + '"><svg viewBox="0 0 20 14" width="17" height="12" fill="none"><path d="M1 7h6" stroke="' + color + '" stroke-width="1.6" stroke-linecap="round"/><rect x="7" y="3" width="5.6" height="8" rx="1.7" stroke="' + color + '" stroke-width="1.4"/><path d="M12.6 5.2h4.2M12.6 8.8h4.2" stroke="' + color + '" stroke-width="1.6" stroke-linecap="round"/></svg></span>';
-  $("connHelpCard").innerHTML =
-    '<div class="chp-head"><span class="chp-title">图标含义</span><button class="chp-close" aria-label="关闭">✕</button></div>' +
+  const card = $("connHelpCard");
+  if (!card) return;
+  const plug = (color) => '<svg viewBox="0 0 20 14" width="17" height="12" fill="none"><path d="M1 7h6" stroke="' + color + '" stroke-width="1.6" stroke-linecap="round"/><rect x="7" y="3" width="5.6" height="8" rx="1.7" stroke="' + color + '" stroke-width="1.4"/><path d="M12.6 5.2h4.2M12.6 8.8h4.2" stroke="' + color + '" stroke-width="1.6" stroke-linecap="round"/></svg>';
+  card.innerHTML =
+    '<div class="chp-title">图标含义</div>' +
     '<div class="chp-row"><span class="chp-ico" style="font-size:13px">☁️</span><span class="chp-t">云桥中转 · 跨网络可用</span></div>' +
     '<div class="chp-row"><span class="chp-ico"><span class="srv-chan" style="margin:0">LAN</span></span><span class="chp-t">局域网直连</span></div>' +
     '<div class="chp-sep"></div>' +
     '<div class="chp-row"><span class="chp-ico">' + plug("var(--done)") + '</span><span class="chp-t">已连接</span></div>' +
     '<div class="chp-row"><span class="chp-ico">' + plug("var(--working)") + '</span><span class="chp-t">连接中</span></div>' +
     '<div class="chp-row"><span class="chp-ico">' + plug("var(--dim)") + '</span><span class="chp-t">未连接 · 点击可连接</span></div>';
-  $("connHelp").onclick = (e) => { e.stopPropagation(); pop.classList.add("open"); };
-  pop.onclick = () => pop.classList.remove("open");
-  pop.querySelector(".chp-card").onclick = (e) => e.stopPropagation();
-  pop.querySelector(".chp-close").onclick = () => pop.classList.remove("open");
 })();
 function renderServers() {
   syncFormQrBtns(); // #41web② 分享钮置灰随连接状态实时刷新（setConn → renderServers 必经）
@@ -5141,9 +5131,12 @@ function renderServers() {
     // #48 通道标记：云桥 ☁️ / LAN 源小字 / 手动直连不显示
     const chanTag = s.kind === "cloud" ? '<span class="srv-chan cloud">☁️</span>' : s.kind === "lan" ? '<span class="srv-chan">LAN</span>' : "";
     return '<div class="srv-row' + (s.id === activeServerId ? " active" : "") + (s.id === editId ? " editing" : "") + '" data-id="' + s.id + '" title="点击设为活动源，并在下方展开编辑">' +
-      '<span class="plug ' + (ctx ? ctx.status : "offline") + '">' + PLUG_SVG + "</span>" +
-      '<div class="srv-main"><b>' + escapeHtml(s.name) + chanTag + (pb ? '<span class="srv-pbadge ' + pb.c + '">' + pb.t + '</span>' : "") + '</b>' +
+      '<div class="srv-main"><b>' + escapeHtml(s.name) + '</b>' +
       '<span class="srv-addr' + (pdPairingAnim(stText) ? " pairing" : "") + '">' + escapeHtml(addr) + "</span></div>" +
+      // #64 状态/模式图标恒右对齐（对齐手机端 #46/#51：名称 flex 占满，[通道标记][配对徽章][插头] 右列；
+      // 副行纯地址——状态汉字撤，状态由插头三色承载）
+      '<span class="srv-right">' + chanTag + (pb ? '<span class="srv-pbadge ' + pb.c + '">' + pb.t + '</span>' : "") +
+      '<span class="plug ' + (ctx ? ctx.status : "offline") + '">' + PLUG_SVG + "</span></span>" +
       (isRetryable(ctx) ? '<button class="srv-retry" title="跳过退避等待，立即重连">↻ 重试</button>' : "") +
       '<button class="srv-del" title="删除">✕</button>' +
       "</div>";
