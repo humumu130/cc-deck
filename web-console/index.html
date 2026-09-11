@@ -5834,9 +5834,12 @@ function moveTabInd() {
   ind.style.transform = "translateX(" + btn.offsetLeft + "px)";
 }
 window.addEventListener("resize", moveTabInd);
-// #279③ 键盘 ←/→ 切 tab（桌面加分项）：输入控件聚焦时不抢键
+// #279③ 键盘 ←/→ 切 tab（桌面加分项）：输入控件聚焦时不抢键；
+// #67修：带修饰键（Alt/Ctrl 等）不响应——那是「修饰键+←→ 切数据源」的组合，
+// 旧版不排除导致 Alt+←→ 详情页内切的是 tab 而非源（用户实测冲突）
 document.addEventListener("keydown", (ev) => {
   if (ev.key !== "ArrowLeft" && ev.key !== "ArrowRight") return;
+  if (ev.altKey || ev.ctrlKey || ev.metaKey || ev.shiftKey) return;
   if (!selected) return;
   const ae = document.activeElement;
   if (ae && (ae.tagName === "INPUT" || ae.tagName === "TEXTAREA" || ae.isContentEditable)) return;
