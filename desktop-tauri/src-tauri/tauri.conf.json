@@ -28,7 +28,7 @@
   "bundle": {
     "active": true,
     "targets": [
-      "nsis", "dmg", "app", "updater"
+      "nsis", "dmg", "app"
     ],
     "icon": [
       "icons/32x32.png",
