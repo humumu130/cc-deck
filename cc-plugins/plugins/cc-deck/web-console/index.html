@@ -4813,12 +4813,15 @@ $("gpKbModLever").querySelectorAll(".lever-opt").forEach((b) => {
 syncKbModLever();
 
 // #67 修饰键+←/→ 切换数据源（会话列表顶部源筛选 chips 循环选中）：
-// 与切会话同守卫（浮层打开/输入框内不抢键；裸 ←→ 不启用——输入框内移动光标是高频原生行为）
+// 浮层打开不抢键；其他输入控件（设置表单等）聚焦不抢——消息输入框豁免
+// （#68 根因：切源后 focusMsgInput 把焦点放进输入框，第二下被 INPUT 守卫
+// 全拦 → 只能切一次；与切会话监听器同款例外）。keydown 自带按住连发
+// （ev.repeat），守卫放行后长按即持续切换
 document.addEventListener("keydown", (ev) => {
   if (!window.ccDeck || (ev.key !== "ArrowLeft" && ev.key !== "ArrowRight")) return;
   if (!kbModHit(ev) || ev.shiftKey) return;
   const t = ev.target;
-  if (t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.isContentEditable)) return;
+  if (t && t !== $("msginput") && (t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.isContentEditable)) return;
   if ($("gearPop").classList.contains("open") || $("cardMenu").classList.contains("open") || $("loginQrPop").classList.contains("open")) return;
   const chips = [...$("srcChips").querySelectorAll("button")];
   if (chips.length < 2) return; // 单源/无源：无可切
@@ -5073,9 +5076,11 @@ function canAutoConnect(cfg) { return !!cfg.wsUrl && (cfg.kind === "cloud" || !!
 //   未配对=云源其余态（新装/配对流程中）→ 灰徽。LAN 源无配对概念不标
 function pairBadgeOf(s, ctx) {
   if (!s || s.kind !== "cloud" || !s.wsUrl) return null;
-  if (s.cloud && s.cloud.paired && s.cloud.rd && s.cloud.rk) return { t: "已配对", c: "ok" };
+  // #69 正常态「已配对」徽章撤（绿插头已承载连接态，徽章冗余）；
+  // 异常态保留——配对失效有诊断价值，未配对保留引导价值
   if (ctx && ctx.failKind === "unpaired") return { t: "配对失效", c: "dead" };
-  return { t: "未配对", c: "no" };
+  if (!(s.cloud && s.cloud.paired && s.cloud.rd && s.cloud.rk)) return { t: "未配对", c: "no" };
+  return null;
 }
 // 条目地址摘要：整绘与重试倒计时轻刷新共用同一拼装，防两处口径漂移。
 // 状态词与徽章/占位重复时不再缀尾（#405 去重口径延续）

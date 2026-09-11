@@ -13,8 +13,8 @@ const read = (p) => readFileSync(join(root, p), "utf8");
 const write = (p, s) => writeFileSync(join(root, p), s);
 
 const canonical = read("VERSION").trim();
-if (!/^\d+\.\d+\.\d+$/.test(canonical)) {
-  console.error(`VERSION 文件不是三段 semver：${canonical}`);
+if (!/^\d+\.\d+\.\d+(\.\d+)?$/.test(canonical)) {
+  console.error(`VERSION 文件不是 semver（三段或四段，如 0.3.26 / 0.3.26.1）：${canonical}`);
   process.exit(1);
 }
 
