@@ -509,9 +509,7 @@ fn main() {
             #[cfg(target_os = "macos")]
             {
                 use tauri_plugin_decorum::WebviewWindowExt;
-                let _ = win.set_traffic_lights_position(tauri::Position::Logical(
-                    tauri::LogicalPosition::new(16.0, 18.0),
-                ));
+                let _ = win.set_traffic_lights_inset(16.0, 18.0);
             }
             Ok(())
         })
