@@ -503,6 +503,16 @@ fn main() {
             if !cfg!(target_os = "macos") {
                 let _ = win.set_decorations(false);
             }
+            // #74 第七轮：红黄绿圆点离窗口角（用户两轮反馈「太靠左上」）——系统默认
+            // origin(7,6) 贴角；decorum 编程重定位到侧栏头部留白区（Electron app 同款
+            // 手法）。网页侧 #sideHead 让位高度 38px 与此对应，改动需联动
+            #[cfg(target_os = "macos")]
+            {
+                use tauri_plugin_decorum::WebviewWindowExt;
+                let _ = win.set_traffic_lights_position(tauri::Position::Logical(
+                    tauri::LogicalPosition::new(16.0, 18.0),
+                ));
+            }
             Ok(())
         })
         // 关窗到托盘（等价 Electron 的 close -> preventDefault + hide）；

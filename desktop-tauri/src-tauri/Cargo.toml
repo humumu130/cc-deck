@@ -25,6 +25,10 @@ serde_json = "1"
 # 探测只走明文 http://127.0.0.1:8787，不需要 TLS 栈（关默认特性控体积）
 reqwest = { version = "0.12", default-features = false, features = ["json"] }
 
+# #74 第七轮：红黄绿圆点编程定位（系统默认 7,6 贴窗口角观感差）；仅 mac 拉此依赖
+[target.'cfg(target_os = "macos")'.dependencies]
+tauri-plugin-decorum = "1"
+
 [profile.release]
 # 换壳动机是体积（Electron 106MB → ~10MB），按 Tauri 官方体积优化档配置
 strip = true
