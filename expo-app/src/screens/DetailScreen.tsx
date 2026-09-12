@@ -1212,7 +1212,9 @@ export default function DetailScreen({ sid, onBack, initialView, ref }: { sid: s
               挪去水位行右端，见下） */}
           <View style={d.subRow}>
             <Text style={d.sub} numberOfLines={1}>
-              {(external ? "外部 CLI" : "托管") + (s.historical && !external ? " · 历史" : "") + (srcName ? ` · ${srcName}` : "") + " · " + fmtElapsed(sessionElapsed(s))}
+              {/* 用户点单（重提）：去「外部 CLI ·」前缀——外部会话副行只留源名+时长；
+                  托管会话的「托管」标注保留（区分两类仍有价值）+ 历史/时长不变 */}
+              {[external ? "" : "托管", s.historical && !external ? "历史" : "", srcName, fmtElapsed(sessionElapsed(s))].filter(Boolean).join(" · ")}
             </Text>
           </View>
           {/* ctx 水位行 + 模型 chip 共行（用户拍板）：进度条让位缩短，chip 放在
@@ -1981,10 +1983,11 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
   todoMarkRunF: { width: "50%", height: "100%", backgroundColor: c.working },
   todoT: { flex: 1, color: c.text, fontSize: 12.5, lineHeight: 17 },
   // #39a subAgent 标注 chip：小号弱色，浅底圆角贴行内（Text 行内嵌套，无独立边框）
+  // #79 用户反馈：角标更像圆角矩形（纵 padding 提到 2）+ 与任务末字拉开（marginLeft 9）
   todoSubTag: {
     fontSize: 9, color: c.faint, backgroundColor: withA(c.dim, 0.13),
-    paddingHorizontal: 5, paddingVertical: 1, borderRadius: 6, overflow: "hidden",
-    marginLeft: 6, letterSpacing: 0.3, lineHeight: 13,
+    paddingHorizontal: 5, paddingVertical: 2, borderRadius: 7, overflow: "hidden",
+    marginLeft: 9, letterSpacing: 0.3, lineHeight: 14,
   },
   todoDel: { width: 24, height: 22, alignItems: "center", justifyContent: "center" },
   todoDelT: { color: c.faint, fontSize: 12 },
