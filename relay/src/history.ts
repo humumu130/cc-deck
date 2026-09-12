@@ -188,13 +188,32 @@ export function reduceHistory(events: Envelope[]): Map<string, ReplayedSession> 
     }
   }
 
-  // 非终态会话：Relay 重启时被中断，标记 ERROR
+  // 非终态会话：Relay 重启时被中断。托管会话 agent 真随 relay 死了——ERROR 合理；
+  // 外部 CLI 是独立进程：pid 还活就保持 WORKING（hook/转录随后自会收敛），pid 已死
+  // 也只是「CLI 先于 relay 退出」（claude -p 收工即此形态，转录尾巴还常把 DONE 翻回
+  // WORKING），归 DONE 而非 ERROR——#82（2026-09-12 Mac 实录 6 个假 error：每轮
+  // 构建装机 pkill App → 内嵌 relay 重启重放，把转录尾巴翻转的 WORKING 全误标）
   for (const rs of out.values()) {
     if (rs.state.status === "WORKING" || rs.state.status === "WAITING") {
-      rs.state.status = "ERROR";
-      rs.state.last_error = "Relay 重启，会话中断";
-      rs.state.historical = true;
-      rs.logs.push({ ts: Date.now(), kind: "system", text: "Relay 重启，会话中断" });
+      if (rs.state.external) {
+        let alive = false;
+        if (rs.state.cli_pid) {
+          try { process.kill(rs.state.cli_pid, 0); alive = true; } catch { alive = false; }
+        }
+        if (alive) {
+          rs.logs.push({ ts: Date.now(), kind: "system", text: "Relay 重启，CLI 进程仍在运行" });
+        } else {
+          rs.state.status = "DONE";
+          rs.state.done_reason = "ended";
+          rs.state.historical = true;
+          rs.logs.push({ ts: Date.now(), kind: "system", text: "Relay 重启时 CLI 已退出，回合视作结束" });
+        }
+      } else {
+        rs.state.status = "ERROR";
+        rs.state.last_error = "Relay 重启，会话中断";
+        rs.state.historical = true;
+        rs.logs.push({ ts: Date.now(), kind: "system", text: "Relay 重启，会话中断" });
+      }
     }
     // 重放后不存在仍可决的等待（进程已随重启断开）：残留 waiting_request 会让
     // 手机端给死会话渲染可操作的审批面板；外部会话重连后会重新下发真实状态
