@@ -1159,7 +1159,7 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
   ctxCellBar: { width: 44, height: 3, borderRadius: 1.5, backgroundColor: c.tintSoft, overflow: "hidden" },
   ctxCellT: { fontSize: 9, lineHeight: 11, fontVariant: ["tabular-nums"], color: c.faint },
   // #362 WORKING 实时工作行独立成第二行（标题让位第一行），与 sum 同底距
-  liveRow: { flexDirection: "row", alignItems: "center", marginBottom: 5 },
+  liveRow: { flexDirection: "row", alignItems: "center", marginBottom: 5, paddingLeft: 18 }, /* #83 二/三行缩进对齐标题文字（灯 11+gap 7） */
   titleC: { color: c.text, fontSize: 14, fontWeight: "600", flexShrink: 1 },
   sumC: { color: c.faint, fontSize: 11, marginTop: 2 },
   footC: { flexDirection: "row", alignItems: "center", gap: 8, marginTop: 4 },
@@ -1175,8 +1175,8 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
   title: { color: c.text, fontSize: 15, fontWeight: "600", marginBottom: 3, flexShrink: 1 },
   // 沉寂会话（DONE 非今日更新）名称降档：覆盖 title/titleC 的 color
   titleIdle: { color: c.dim },
-  sum: { color: c.dim, fontSize: 13, marginBottom: 5 },
-  foot: { flexDirection: "row", alignItems: "center", gap: 8 },
+  sum: { color: c.dim, fontSize: 13, marginBottom: 5, paddingLeft: 18 }, /* #83 同缩进 */
+  foot: { flexDirection: "row", alignItems: "center", gap: 8, paddingLeft: 18 }, /* #83 同缩进 */
   // 次要信息合并行（降噪）：托管/外部 · 目录 · 历史 一行 faint 小字，替代原 tag 胶囊
   meta: { fontSize: 10, color: c.faint, flexShrink: 1 },
   stats: { fontSize: 10, fontVariant: ["tabular-nums"] },
