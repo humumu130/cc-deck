@@ -5238,7 +5238,10 @@ function renderServers() {
     const pb = pairBadgeOf(s, ctx);
     const addr = srvAddrText(s, ctx);
     // #48 通道标记：云桥线性云朵（#64 去 emoji）/ LAN 源小字 / 手动直连不显示
-    const chanTag = s.kind === "cloud" ? '<span class="srv-chan cloud">' + CLOUD_SVG + '</span>' : s.kind === "lan" ? '<span class="srv-chan">LAN</span>' : "";
+    // #81 同步手机端定稿：通道只在已连接时显示（通道=怎么连上的，未连接时显示
+    // 只能是过期/预告信息，徒增「灰色云」式噪音）；web 端无动态通道，kind 即实际
+    const chanOn = ctx && ctx.status === "online";
+    const chanTag = !chanOn ? "" : s.kind === "cloud" ? '<span class="srv-chan cloud">' + CLOUD_SVG + '</span>' : s.kind === "lan" ? '<span class="srv-chan">LAN</span>' : "";
     return '<div class="srv-row' + (s.id === activeServerId ? " active" : "") + (s.id === editId ? " editing" : "") + '" data-id="' + s.id + '" title="点击设为活动源，并在下方展开编辑">' +
       '<div class="srv-main"><b>' + escapeHtml(s.name) + '</b>' +
       '<span class="srv-addr' + (pdPairingAnim(stText) ? " pairing" : "") + '">' + escapeHtml(addr) + "</span></div>" +
