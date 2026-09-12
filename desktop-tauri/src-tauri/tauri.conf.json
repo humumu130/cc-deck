@@ -1,6 +1,6 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "CC Deck Tauri",
+  "productName": "CC Deck",
   "version": "../package.json",
   "identifier": "online.humumu.ccdeck.tauri",
   "build": {

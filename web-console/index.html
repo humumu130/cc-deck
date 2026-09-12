@@ -102,9 +102,12 @@
   }
   /* #365 会话列头：状态统计（左，runhint）+ 在线灯/深浅切换（右） */
   #sideHead { display: flex; align-items: center; gap: 8px; padding: 9px 14px 4px; flex: none; }
-  /* #74 macOS 壳：系统红黄绿叠加在左上（tauri.macos.conf 的 Overlay 模式），标题栏
-     左侧留安全区防 brand 被圆点盖住；右侧自绘 Windows 风按钮撤（有原生三圆点了） */
-  html.mac-tauri header { padding-left: 78px; }
+  /* #74 macOS 壳：系统红黄绿叠加在左上（tauri.macos.conf 的 Overlay 模式）。
+     第四轮定稿（用户对照 Slack/Notion）：mac 上整个顶栏撤掉——无标题栏设计，
+     圆点浮在内容上；侧栏头（#sideHead）接棒窗口拖拽并让出圆点安全区；
+     右侧自绘 Windows 风按钮撤。Windows/web 不受影响 */
+  html.mac-tauri header { display: none; }
+  html.mac-tauri #sideHead { padding-left: 78px; padding-top: 18px; }
   html.mac-tauri #winBtns { display: none !important; }
   #sideHead #runhint { flex: 1; min-width: 0; }
   /* #39 主题钮线条图标：SVG 居中（去 emoji 基线抖动） */
@@ -5065,6 +5068,8 @@ if (window.__TAURI__ && window.__TAURI__.window) {
   const wb = document.getElementById("winBtns");
   if (/Mac/i.test(navigator.userAgent)) {
     document.documentElement.classList.add("mac-tauri");
+    // 顶栏撤掉后窗口拖拽区移交侧栏头（Tauri 壳内属性才生效；Windows 布局不变）
+    document.getElementById("sideHead")?.setAttribute("data-tauri-drag-region", "");
   } else {
     wb.style.display = "flex";
     const w = window.__TAURI__.window.getCurrentWindow();
