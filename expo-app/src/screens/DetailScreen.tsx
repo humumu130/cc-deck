@@ -6,7 +6,7 @@ import * as ImageManipulator from "expo-image-manipulator";
 import * as Clipboard from "expo-clipboard";
 import { withA, type ThemeColors } from "../theme";
 import { useTheme, useThemeStyles } from "../theme-context";
-import { fmtElapsed, sessionElapsed, fmtHM, dayKey, fmtClock, fmtTok, contextPct, contextLevel, CONTEXT_LIMIT_FALLBACK } from "../fmt";
+import { fmtElapsed, sessionElapsed, fmtHM, dayKey, fmtClock, fmtTok, contextPct, contextLevel, CONTEXT_LIMIT_FALLBACK, isVerifyTodo } from "../fmt";
 import { store, useRelay } from "../store";
 import type { CronTask, LogEntry, SessionState, TodoItem, WaitingPayload } from "../protocol";
 import { useKbHeight } from "../kb";
@@ -732,7 +732,8 @@ export default function DetailScreen({ sid, onBack, initialView, ref }: { sid: s
   // 任务号顺序（旧→新，稳定排序不动组内先后）——整列从上往下时间感单调。
   // 已完成历史不无限堆：带 mtime 只展示近 24h，再封顶最新 15 条（防马拉松日爆量）；
   // 无时间戳的旧数据直接取最新 15 条。进行中/待办是可操作项，全保留
-  const todoRank = (t: TodoItem) => (t.status === "completed" ? 0 : t.status === "in_progress" ? 1 : 2);
+  // #85 待验证档（in_progress 的第四态细分）：进行中 → 待验证 → 待办
+  const todoRank = (t: TodoItem) => (t.status === "completed" ? 0 : isVerifyTodo(t) ? 2 : t.status === "in_progress" ? 1 : 3);
   const allTodos = (s?.todos ?? []).filter((t) => !todoHidden.includes(t.content));
   // #374 拖动排序：仅未完成区可调——openOrder 为空 = relay 原序；拖动后本地乐观重排，
   // 松手注入调序指令让 CLI 重新 TodoWrite（transcript 回流后三端一致）
@@ -760,7 +761,8 @@ export default function DetailScreen({ sid, onBack, initialView, ref }: { sid: s
   );
   const todoGroups = [
     { status: "completed", label: `已完成 ${doneList.length}/${doneAll.length}${doneNote}` },
-    { status: "in_progress", label: `进行中 ${allTodos.filter((t) => t.status === "in_progress").length}` },
+    { status: "in_progress", label: `进行中 ${allTodos.filter((t) => t.status === "in_progress" && !isVerifyTodo(t)).length}` },
+    { status: "verify", label: `待验证 ${allTodos.filter((t) => isVerifyTodo(t)).length}` },
     { status: "pending", label: `待开始 ${allTodos.filter((t) => t.status === "pending").length}` },
   ] as const;
   // 子 Agent 运行中时本地走秒（relay 只在状态变化时推，秒数由端上自算）
@@ -1416,8 +1418,9 @@ export default function DetailScreen({ sid, onBack, initialView, ref }: { sid: s
               }}
             >
               {sortedTodos.map((t, i) => {
-                const g = todoGroups.find((x) => x.status === t.status)!;
-                const head = i === 0 || sortedTodos[i - 1].status !== t.status ? g : null;
+                const grpOf = (x: TodoItem) => (isVerifyTodo(x) ? "verify" : x.status);
+                const g = todoGroups.find((x) => x.status === grpOf(t))!;
+                const head = i === 0 || grpOf(sortedTodos[i - 1]) !== grpOf(t) ? g : null;
                 return (
                   /* #39b 拖动丝滑：key 索引→稳定 key——重排时 React 按内容对齐行、
                      不再整列重建闪烁（拖动跟手的前提） */
@@ -1429,6 +1432,7 @@ export default function DetailScreen({ sid, onBack, initialView, ref }: { sid: s
                           style={[
                             d.todoSecT,
                             t.status === "completed" && { color: c.done },
+                            isVerifyTodo(t) && { color: "#5B9DFF" },
                             t.status === "in_progress" && { color: c.working },
                             t.status === "pending" && { color: c.faint },
                           ]}

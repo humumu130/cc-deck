@@ -32,6 +32,13 @@ export function fmtHM(ts: number): string {
 // CLI 任务标题约定带 "#NNN [待确认] …" 形态——标记与任务号前缀共存，故用包含
 // 匹配而非行首。pending + 含标记 = 等用户确认的事项，列表顶部常驻横幅的数据源
 const CONFIRM_RE = /[〔\[【]\s*待确认\s*[〕\]】]/;
+// #85 [待验证] 标记（同 CONFIRM_RE 形态）：CLI 三态不可扩展，任务生命周期第四态
+// 「待验证」用前缀约定——in_progress + 含标记 = 代码完成等装机/等用户验收
+const VERIFY_RE = /[〔\[【]\s*待验证\s*[〕\]】]/;
+export function isVerifyTodo(t: { content?: string; status?: string }): boolean {
+  return t.status === "in_progress" && VERIFY_RE.test(t.content ?? "");
+}
+
 export function isConfirmTodo(t: { content?: string; status?: string }): boolean {
   return t.status === "pending" && CONFIRM_RE.test(t.content ?? "");
 }
