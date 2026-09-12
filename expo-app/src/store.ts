@@ -76,6 +76,10 @@ export interface SourceConn {
   // #100 relay 侧自定义名称（SNAPSHOT relay_name）：连接列表的默认显示名——端上
   // 手动改过名（name ≠ 默认 hostOf）时优先本地名
   relayName: string;
+  // #95 同网直连：SNAPSHOT lan_hint（relay 的 LAN ip:port）与换到的 LAN token
+  lanHint: string;
+  lanToken: string;
+  lanUpgrading: boolean; // #95 云→LAN 升级切换进行中（防重复握手）
   hbTimer: ReturnType<typeof setInterval> | null;
   probeTimer: ReturnType<typeof setTimeout> | null;
   lastDownAt: number;
@@ -653,6 +657,9 @@ class RelayStore {
         countdownTimer: null,
         retryAt: 0,
         relayName: "",
+        lanHint: "",
+        lanToken: "",
+        lanUpgrading: false,
         hbTimer: null,
         probeTimer: null,
         lastDownAt: 0,
@@ -830,14 +837,62 @@ class RelayStore {
     void this.connCycle(conn, ep);
   }
 
+  // #95 云身份 LAN 回箱握手：hello 拿 nonce（校验 relay_dev 防连错机）→
+  // box{dev,nonce} 给 relay → 回箱（用本机 dev 公钥加密的 token）解开
+  private async lanHandshake(conn: SourceConn): Promise<string> {
+    if (!conn.lanHint || !conn.cloudCfg) return "";
+    const keys = await this.deviceKeys();
+    // dev 身份与云通道 openCloud 同口径：配对码配对的 wb-、其余 ph-
+    const dev = conn.cloudCfg.dev ?? devId(keys.publicKey, "ph");
+    try {
+      const base = `http://${conn.lanHint}`;
+      const h = await (await fetch(`${base}/api/lan-hello`, { signal: AbortSignal.timeout(2000) })).json() as { ok?: boolean; relay_dev?: string; nonce?: string };
+      if (!h?.ok || !h.nonce || h.relay_dev !== conn.cloudCfg.relayDev) return "";
+      const box = seal({ dev, nonce: h.nonce }, conn.cloudCfg.relayPubkey, keys.secretKey);
+      const r = await (await fetch(`${base}/api/lan-auth`, {
+        method: "POST", headers: { "content-type": "application/json" },
+        body: JSON.stringify({ box }), signal: AbortSignal.timeout(2500),
+      })).json() as { ok?: boolean; box?: { n: string; c: string } };
+      if (!r?.ok || !r.box) return "";
+      const out = unseal<{ token?: string }>(r.box, keys.publicKey, keys.secretKey);
+      return out?.token ?? "";
+    } catch { return ""; }
+  }
+
+  // 短超时 WS 试连（握手换 token 后的同网直连探测；失败抛异常由调用方回落）
+  private tryWs(url: string, token: string, timeoutMs: number): Promise<WebSocket> {
+    return new Promise((resolve, reject) => {
+      let ws: WebSocket;
+      const timer = setTimeout(() => { try { ws?.close(); } catch {} reject(new Error("timeout")); }, timeoutMs);
+      try { ws = new WebSocket(`${url}?token=${encodeURIComponent(token)}`); } catch { clearTimeout(timer); reject(new Error("bad url")); return; }
+      ws.onopen = () => { clearTimeout(timer); resolve(ws); };
+      ws.onerror = () => { clearTimeout(timer); reject(new Error("ws error")); };
+      ws.onclose = () => { clearTimeout(timer); reject(new Error("closed")); };
+    });
+  }
+
   private async connCycle(conn: SourceConn, ep: number) {
     const cfg = conn.cfg!;
     killWs(conn.ws);
     conn.ws = null;
     conn.channel = null;
-    // 纯云桥条目（wsUrl 即桥地址，非内网直连）跳过 LAN 探测：桥 upgrade 强制要求
-    // dev 参数，探它必 401，白耗一轮握手；LAN 直连地址照旧先探（同一 WiFi 下低延迟）
-    const lanWs = conn.cloudCfg && !isLanUrl(cfg.wsUrl) ? null : await this.probeLan(conn, cfg);
+    // #95 云条目同网直连：SNAPSHOT lan_hint 指路，云身份回箱握手换 LAN token 后
+    // 直连（channel=lan 低延迟）。握手/探测任一步失败静默回落云桥——行为与旧版一致
+    let lanWs: WebSocket | null = null;
+    if (conn.cloudCfg && !isLanUrl(cfg.wsUrl)) {
+      if (conn.lanHint && conn.cloudCfg) {
+        const token = conn.lanToken || await this.lanHandshake(conn);
+        if (token) {
+          conn.lanToken = token;
+          try {
+            lanWs = await this.tryWs(`ws://${conn.lanHint}/ws`, token, 1800);
+          } catch { lanWs = null; }
+          if (!lanWs) conn.lanToken = ""; // 握到的 token 连不上（relay 关了/换网段）→ 下轮重握手
+        }
+      }
+    } else {
+      lanWs = await this.probeLan(conn, cfg);
+    }
     if (ep !== conn.epoch) {
       try {
         lanWs?.close();
@@ -1691,6 +1746,20 @@ class RelayStore {
     switch (msg.type) {
       case "SNAPSHOT": {
         if ((msg.payload as { relay_name?: string }).relay_name) conn.relayName = (msg.payload as { relay_name?: string }).relay_name!; // #100
+        const lanHint = (msg.payload as { lan_hint?: string }).lan_hint; // #95
+        if (lanHint && conn.lanHint !== lanHint) { conn.lanHint = lanHint; conn.lanToken = ""; }
+        // #95 升级切换：云通道活着但拿到同网 lan_hint——后台握手，成功即断开当前
+        // 云连接走一轮重连（下一周期 connCycle 直连 LAN）。失败静默留云（异网常态）
+        if (lanHint && conn.channel === "cloud" && !conn.lanToken && !conn.lanUpgrading) {
+          conn.lanUpgrading = true;
+          void this.lanHandshake(conn).then((token) => {
+            conn.lanUpgrading = false;
+            if (token) {
+              conn.lanToken = token;
+              try { conn.ws?.close(); } catch {}
+            }
+          });
+        }
         // relay_dev（云桥设备 id，云桥启用的 relay 随快照下发，LAN/云通道均携）：
         // 盖章本源条目身份并按身份归并同机重复条目——先归并再装配会话（合并可能
         // 销毁别的源连接，须在 conn.sessions 清空重建前发起）
