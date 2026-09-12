@@ -2151,7 +2151,7 @@ function lanTargetOf(wsUrl: string): { host: string; port: string } | null {
 // 条目的 relay 身份：云桥配对 id 优先（配对即证明），LAN 直连标记（SNAPSHOT
 // relay_dev 学到，见 ServerEntry.relayDev 注释）次之。两者同源同值——relay 设备
 // id 全局唯一，等价即可断定同一台 relay（跨 LAN/云桥双条目合并的密码学依据）
-function identityOf(e: ServerEntry): string | null {
+export function identityOf(e: ServerEntry): string | null {
   return e.cloud?.relayDev || e.relayDev || null;
 }
 

@@ -6,7 +6,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { withA, type ThemeColors } from "../theme";
 import { LogoMark } from "../brand";
 import { useTheme, useThemeStyles } from "../theme-context";
-import { store, useRelay, type ServerEntry } from "../store";
+import { store, useRelay, identityOf, type ServerEntry } from "../store";
 import { uuid } from "../fmt";
 import { currentVersion } from "../updates";
 import { useKbHeight } from "../kb";
@@ -174,7 +174,15 @@ export default function SetupScreen({ onClose, editId, initialScan }: Props) {
       setErr("云桥地址需以 ws:// 或 wss:// 开头");
       return;
     }
-    const dup = servers.find((e) => e.wsUrl === base && e.id !== editId);
+    // #88 同云桥多设备合法形态：公司机+Mac 同桥地址不同 relay 身份——双方身份
+    // 已知且不同则不算重复（身份未知才按裸地址判重）
+    const e0 = servers.find((e) => e.id === editId);
+    const rd0 = e0 ? identityOf(e0) : null;
+    const dup = servers.find((e) => {
+      if (e.id === editId || e.wsUrl !== base) return false;
+      const rd = identityOf(e);
+      return !(rd0 && rd && rd0 !== rd);
+    });
     if (editId && dup) {
       setErr(`此地址已保存（${dup.name || hostOf(base)}），去改那条或换个地址`);
       return;
