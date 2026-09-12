@@ -517,6 +517,10 @@
   .gp-pair-info { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 6px; }
   .gp-pair-t { font-size: 12px; color: var(--gp-dim); }
   .gp-pair-acts { width: 148px; flex: none; justify-content: center; }
+  .gp-qr-inline { width: 168px; flex: none; display: flex; flex-direction: column; align-items: center; gap: 4px; }
+  .gp-qr-inline canvas { width: 148px; height: 148px; border-radius: 10px; border: 1px solid var(--gp-border); }
+  .gp-qr-inline-t { font-size: 11.5px; font-weight: 700; color: var(--gp-text); }
+  .gp-qr-inline-s { font-size: 10px; color: var(--gp-dim); text-align: center; line-height: 1.4; }
   /* #411 relay 页自动展码：8 格码位一行（grid 1fr 格宽自适应，窄容器自动收敛不下溢），
      空格=占位格、领到码逐位填数字并亮边；下方 meta 行=倒计时文案 + 手动「刷新」小钮 */
   .gp-code-cells { font: 700 26px/1.15 var(--mono, ui-monospace, Consolas, monospace); letter-spacing: 3px; color: var(--text); max-width: 220px; white-space: nowrap; }
@@ -592,7 +596,7 @@
     .gp-nav-item.on::before { left: 7px; right: 7px; top: -1px; bottom: auto; width: auto; height: 3px; }
     .gp-rail-foot { display: none; }
     .gp-pair { flex-direction: column; }
-    .gp-pair-acts { width: 100%; }
+    .gp-pair-acts, .gp-qr-inline { width: 100%; }
   }
   /* 空详情态 CTA：直达新建表单 */
   #emptyNewBtn {
@@ -1830,8 +1834,10 @@
               <div class="pd-code-meta"><span id="pdCodeExp"></span><button type="button" class="gp-mini-btn" id="pdCodeRefresh" title="立即换一枚新码">刷新</button></div>
               <div class="pair-hint" id="pairHint"></div>
             </div>
-            <div class="gp-acts gp-pair-acts">
-              <button id="addPhoneBtn" title="手机 App 扫码直接接入本服务器"><svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="7" y="2.5" width="10" height="19" rx="2.2"/><path d="M12 9.2v5.6M9.2 12h5.6"/></svg>扫码接入</button>
+            <div class="gp-qr-inline">
+              <canvas id="relayAddQrCv" width="160" height="160" title="手机 CC Deck App 扫此码接入本机"></canvas>
+              <div class="gp-qr-inline-t">手机扫码接入</div>
+              <div class="gp-qr-inline-s" id="relayAddQrState">生成中…</div>
             </div>
           </div>
           <div class="gp-sec"><svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9 5.5 10.5 4h3L15 5.5"/><rect x="4" y="5.5" width="16" height="15" rx="3"/><path d="M8.5 11h7M8.5 15h4.5"/></svg>已配对设备</div>
@@ -3371,7 +3377,7 @@ function onEvent(ctx, msg) {
       if (p.action === "add") toast("新设备已配对：" + nm + (p.dev ? "（" + p.dev + "）" : ""), 5000);
       else if (p.action === "kick") toast("已移除设备：" + nm + (p.dev ? "（" + p.dev + "）" : ""), 4000);
       const relayPage = $("gpPageRelay");
-      if (relayPage && !relayPage.classList.contains("off")) refreshPeers();
+      if (relayPage && !relayPage.classList.contains("off")) { refreshPeers(); void addPhoneQr(); }
       break;
     }
   }
@@ -4928,7 +4934,7 @@ function setGearSection(sec) {
   if (sec === "plug") loadPluginCfg(); // #448 插件三开关随插件页可见时拉取本机配置
   pdAutoSync(); // #411 自动展码随 relay 页可见性启停（进页领码/离页停轮询）
 }
-document.querySelectorAll(".gp-nav-item").forEach((b) => { b.onclick = () => setGearSection(b.dataset.sec); });
+document.querySelectorAll(".gp-nav-item").forEach((b) => { b.onclick = () => { setGearSection(b.dataset.sec); if (b.dataset.sec === "relay") void addPhoneQr(); }; });
 // 本机 relay 行已移除（对用户完全透明）：启停全靠启动自动探测，见 init 尾部 probeLocalRelay
 
 $("emptyNewBtn").onclick = () => {
@@ -6283,17 +6289,18 @@ function submitPairCode() {
 // 授权成功走既有 pair_ack 处理器落源并直接收起浮层（identity 检查用 pendingPair.rd
 // =发现身份，与输码路径完全同构）；120s 无响应自动收起。QR 不携带桥 token（防拍照泄露）
 let loginQrTimer = 0, loginQrTimeout = 0;
-function drawLoginQr(text) {
-  const cv = $("loginQrCv"), g = cv.getContext("2d");
+function drawQrTo(cv, text, size) {
+  const g = cv.getContext("2d");
   const q = new QRCode(0, QRErrorCorrectLevel.M);
   q.addData(text); q.make();
   // #18 暖米底+深蓝灰码点（对比度 >10:1），quiet zone 12px 居中
   const n = q.getModuleCount(), m = 12;
-  const cell = Math.floor((200 - m * 2) / n), off = m + Math.floor((200 - m * 2 - cell * n) / 2);
-  g.fillStyle = "#F2ECE4"; g.fillRect(0, 0, 200, 200);
+  const cell = Math.floor((size - m * 2) / n), off = m + Math.floor((size - m * 2 - cell * n) / 2);
+  g.fillStyle = "#F2ECE4"; g.fillRect(0, 0, size, size);
   g.fillStyle = "#27303C";
   for (let r = 0; r < n; r++) for (let c = 0; c < n; c++) if (q.isDark(r, c)) g.fillRect(off + c * cell, off + r * cell, cell, cell);
 }
+function drawLoginQr(text) { drawQrTo($("loginQrCv"), text, 200); }
 // #16 关于页「下载手机 App」扫码浮层：域名直链码（worker 流式代理，不露镜像裸 IP），
 // 点行开关、点浮层任意处收起
 $("gpApkQr").onclick = () => {
@@ -6408,6 +6415,13 @@ function closeLoginQr(msg) {
 // 0.4.4：relay 页「扫码接入」按钮已撤（授权能力并入 importSrvQr 合并码），此处仅留取消绑定
 $("loginQrCancel").onclick = () => closeLoginQr();
 
+// #94 relay 页二维码常显：进页自动出码、云码到期前 30s 自动续（免点击）
+let relayQrTimer = null;
+function scheduleRelayQrRenew(ttlMs) {
+  if (relayQrTimer) { clearTimeout(relayQrTimer); relayQrTimer = null; }
+  if (ttlMs > 40_000) relayQrTimer = setTimeout(() => { relayQrTimer = null; void addPhoneQr(); }, ttlMs - 30_000);
+}
+
 // #330 反向扫码：本端出码、手机 App 扫一下直接接入本服务器。LAN 源出 v1 直连码
 // （url+token，App 即扫即连）；云源领一次性配对码出 ccdeck-add 码（App 临时连桥
 // pair_req 落库自动连接）。浮层复用 loginQrPop（无 pendingPair 会话，关层无副作用）
@@ -6433,10 +6447,13 @@ async function addPhoneQr() {
             bridge: ci.cloudInfo.bridge, bt: ci.cloudInfo.bt, rd: ci.cloudInfo.rd, rk: ci.cloudInfo.rk,
             code: pc.pair_code.code,
           }));
-          $("loginQrTitle").textContent = "扫码接入";
-          $("loginQrSub").innerHTML = "手机 CC Deck App 扫下方二维码<br/>经云桥接入本机（任何网络可用）";
-          $("loginQrState").textContent = "等待手机扫码…";
-          $("loginQrPop").classList.add("open");
+          drawQrTo($("relayAddQrCv"), JSON.stringify({
+            t: "ccdeck-add", v: 1,
+            bridge: ci.cloudInfo.bridge, bt: ci.cloudInfo.bt, rd: ci.cloudInfo.rd, rk: ci.cloudInfo.rk,
+            code: pc.pair_code.code,
+          }), 160);
+          $("relayAddQrState").textContent = "经云桥接入 · 任何网络可用";
+          scheduleRelayQrRenew((pc.pair_code.expires_in || 300) * 1000);
           return;
         }
       }
@@ -6447,14 +6464,12 @@ async function addPhoneQr() {
           : (localRelayInfo.lanIp && PRIV_IP.test(localRelayInfo.lanIp) ? localRelayInfo.lanIp : "");
       if (lanHost) {
         const p = JSON.stringify({ v: 1, url: `ws://${lanHost}:${localRelayInfo.port}/ws`, token: localRelayInfo.token });
-        $("loginQrTitle").textContent = "扫码接入";
-        $("loginQrSub").innerHTML = "手机 CC Deck App 扫下方二维码<br/>直连本机 relay（需同一 WiFi；远程接入需本机配云桥）";
-        $("loginQrState").textContent = "等待手机扫码…";
-        drawLoginQr(p);
-        $("loginQrPop").classList.add("open");
+        drawQrTo($("relayAddQrCv"), p, 160);
+        $("relayAddQrState").textContent = "同网直连 · 需同一 WiFi";
+        scheduleRelayQrRenew(0); // LAN 码不过期，无需续
         return;
       }
-      toast("本机 relay 未配云桥且无法确定局域网地址：手机仅能同网直连（远程接入请在电脑端配置云桥）");
+      $("relayAddQrState").textContent = "未配云桥且无局域网地址，暂不可扫码";
       return;
     }
   }
@@ -6504,7 +6519,7 @@ async function addPhoneQr() {
   drawLoginQr(payload);
   $("loginQrPop").classList.add("open");
 }
-$("addPhoneBtn").onclick = () => void addPhoneQr();
+// #94 常显：进 relay 页自动出码（免点击）；离页不杀续期定时器（回页会重取覆盖）
 
 // ── 议题②/③ 三码体系补全（2026-09-09）：桌面端把已有连接递给手机 / 从手机收回连接。
 // 码形态沿用 App 已认识的两种：LAN 源 = {v:1,url,token} 直连码；云源 = ccdeck-add 一次性码
