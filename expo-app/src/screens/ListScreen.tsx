@@ -1,5 +1,5 @@
 import { memo, useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState, type Ref } from "react";
-import { Animated, Easing, FlatList, PanResponder, Pressable, RefreshControl, StyleSheet, Text, Vibration, View } from "react-native";
+import { Animated, Easing, FlatList, Image, PanResponder, Pressable, RefreshControl, StyleSheet, Text, Vibration, View } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { statusColor, withA, type ThemeColors } from "../theme";
@@ -107,10 +107,13 @@ type ListRow =
   | { h: false; key: string; s: SessionState };
 
 // cc light 风格：运行中黄灯呼吸（亮度+缩放联动，2.4s 一拍，对齐网页端呼吸灯）
-// #77 返工（用户反馈「对齐桌面端」）：太阳补齐 8 向射线（桌面 sun 图形是圆+八方
-// 射线，此前只有四向不像）；形制改裸图标（去底色块，见 themeBtn 样式）。深色显
-// 太阳（点击切浅）、浅色显月牙；月牙=描边圆+偏移实心圆（按钮底色遮出弯月），
-// 全 View 绘制（项目无 svg 库），1.4px 描边与插头/云/电脑图标同语言
+// #77 终版（用户三连反馈后）：桌面端 THEME_ICONS 同款 SVG 渲染成 PNG 资产
+// （resvg 生成，黑色线条），Image tintColor 运行时染色适配深浅模式——像素级
+// 同款，View 手绘近似已弃（比例/月牙弧度两次不像）。深色显太阳=点击切浅、
+// 浅色显月牙
+const THEME_SUN = require("../assets/theme/theme-sun.png");
+const THEME_MOON = require("../assets/theme/theme-moon.png");
+
 // #80 连接 chip 电脑图标：桌面端 DESK_SVG 同款（16x13 viewBox，rect+底座横线），
 // View 绘制 1.4 描边，颜色随连接态（绿/黄/红）
 function DeskGlyph({ color }: { color: string }) {
@@ -124,30 +127,11 @@ function DeskGlyph({ color }: { color: string }) {
 
 function ThemeGlyph({ dark }: { dark: boolean }) {
   const { c } = useTheme();
-  const styles = useThemeStyles(makeStyles);
-  if (dark) {
-    return (
-      <View style={styles.tgWrap}>
-        <View style={[styles.tgSun, { borderColor: c.dim }]} />
-        {[0, 45, 90, 135, 180, 225, 270, 315].map((r) => (
-          <View
-            key={r}
-            style={{
-              position: "absolute", width: 1.4, height: 3.5,
-              left: 16 / 2 - 0.7, top: 0.5, backgroundColor: c.dim,
-              transform: [{ rotate: `${r}deg` }, { translateY: -6.2 }],
-            }}
-          />
-        ))}
-      </View>
-    );
-  }
   return (
-    <View style={styles.tgWrap}>
-      <View style={[styles.tgMoon, { borderColor: c.dim }]} />
-      {/* #77 裸图标形制后按钮无底色，遮罩圆改用页面底色（c.bg）才隐形遮出弯月 */}
-      <View style={[styles.tgMoonMask, { backgroundColor: c.bg }]} />
-    </View>
+    <Image
+      source={dark ? THEME_SUN : THEME_MOON}
+      style={{ width: 15, height: 15, tintColor: c.dim }}
+    />
   );
 }
 
