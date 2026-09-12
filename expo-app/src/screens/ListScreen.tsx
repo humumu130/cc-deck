@@ -498,7 +498,6 @@ const SessionCard = memo(function SessionCard({
               {s.title || "未命名会话"}
             </Text>
             <View style={{ flex: 1 }} />
-            {srcBadge ? <SrcBadge {...srcBadge} /> : null}
             <Elapsed s={s} />
           </View>
           {s.status === "WORKING" ? (
@@ -511,6 +510,8 @@ const SessionCard = memo(function SessionCard({
           {/* 次要信息合并行（降噪）：托管/外部 · 目录 · 历史 一行小字（原 tag 胶囊 +
               目录/历史分散多段 → 单段 faint 尾截断），右侧 ±行数(降一档)与 ctx 水位 */}
           <View style={styles.foot}>
+            {/* #86 多源源标签独立放左下（对齐桌面端卡底统计行形态），不再挤标题行 */}
+            {srcBadge ? <SrcBadge {...srcBadge} /> : null}
             <Text style={styles.meta} numberOfLines={1}>
               {s.external ? "外部 CLI" : "托管"}
               {s.cwd ? ` · 📁 ${folderOf(s.cwd)}` : ""}
