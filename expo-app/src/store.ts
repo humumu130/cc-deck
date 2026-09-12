@@ -747,6 +747,12 @@ class RelayStore {
     conn.pendingCmds.clear();
   }
 
+  // #90 回前台退避重置：后台期间累积的长退避（可达 300s）在用户回到前台后不应
+  // 继续生效——重置为起步值，配合 connect() 的清 timer 语义实现「回前台即快连」
+  resetBackoff() {
+    for (const conn of this.conns.values()) conn.reconnectDelay = RECONNECT_BASE_MS;
+  }
+
   // 对外连接入口（启动自动连/回前台重连/手动重连按钮共用）：内部按 aggregate 分发
   // 聚合逐源建连 / 单源只连活动源。unpaired 终态不自动重试（relay 已明确不认此
   // 身份，重试只会反复吃 pair_nack）——重配对走 applyConfig 的强制重连分支
@@ -1138,7 +1144,9 @@ class RelayStore {
       conn.probeTimer = null;
     }
     const t0 = conn.lastDownAt;
-    if (Date.now() - t0 > 55_000) {
+    // #90 回前台提速：55s→30s——正常心跳 15s 一拍 PONG，前台服务存活时 lastDownAt
+    // 必新鲜；后台期间停摆超 30s 即死透，直接 close 走重连省一整轮探测等待
+    if (Date.now() - t0 > 30_000) {
       try { ws.close(); } catch {}
       return;
     }
@@ -1157,7 +1165,7 @@ class RelayStore {
       if (conn.ws === ws && conn.lastDownAt === t0) {
         try { ws.close(); } catch {}
       }
-    }, 4000);
+    }, 2500); // #90 4s→2.5s：云链路 PONG <1s，2.5s 无回即判死
   }
 
   // 失败后自动重试调度（③）：3s 起指数退避至 30s 封顶，重试等待期每秒刷新倒计时

@@ -807,6 +807,7 @@ function Shell() {
       // 半开连接即时体检（#258）：后台期间 socket 可能已死而 connected 仍真，
       // 先探测判死再走既有重连/恢复链；已断线则直接重连
       store.resumeProbe();
+      store.resetBackoff(); // #90 后台累积的长退避（≤300s）回前台即失效
       if (hasCfg && !snap.connected) store.connect();
     });
     return () => sub.remove();
