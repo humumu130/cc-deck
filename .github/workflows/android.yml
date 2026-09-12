@@ -42,7 +42,7 @@ jobs:
         run: ./gradlew assembleRelease --stacktrace
 
       - name: Rename APK for release
-        if: startsWith(github.ref, 'refs/tags/')
+        if: startsWith(github.ref, 'refs/tags/') && !contains(github.ref, '-snap')
         working-directory: expo-app/android/app/build/outputs/apk/release
         # 瘦身（2026-09-10）：splits 后无 app-release.apk——正式分发包取 arm64 单架构
         #（34.8MB；v7a 首选版翻车：新款国产机（OPPO 等）固件纯 64 位拒装 32 位包）；
@@ -59,7 +59,7 @@ jobs:
           if-no-files-found: error
 
       - name: Create GitHub Release with APK
-        if: startsWith(github.ref, 'refs/tags/')
+        if: startsWith(github.ref, 'refs/tags/') && !contains(github.ref, '-snap')
         uses: softprops/action-gh-release@v2
         with:
           # 默认 GITHUB_TOKEN 即 github.token（token 参数缺省值），无需任何 secrets

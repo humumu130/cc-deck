@@ -48,7 +48,7 @@ jobs:
       - name: Sync version from tag
         # 产物版本号跟随 tag：electron-builder 从 package.json 读版本烙进 exe 元数据/文件名，
         # 本地手动构建回落到 package.json 里的checked-in 值
-        if: startsWith(github.ref, 'refs/tags/')
+        if: startsWith(github.ref, 'refs/tags/') && !contains(github.ref, '-snap')
         working-directory: desktop
         shell: bash
         run: npm version --no-git-tag-version --allow-same-version "${GITHUB_REF_NAME#v}"
@@ -68,7 +68,7 @@ jobs:
           if-no-files-found: error
 
       - name: Attach to GitHub Release
-        if: startsWith(github.ref, 'refs/tags/')
+        if: startsWith(github.ref, 'refs/tags/') && !contains(github.ref, '-snap')
         uses: softprops/action-gh-release@v2
         with:
           files: |
@@ -108,7 +108,7 @@ jobs:
 
       - name: Sync version from tag
         # tauri.conf.json 的 version 指向 ../package.json，同步它即可
-        if: startsWith(github.ref, 'refs/tags/')
+        if: startsWith(github.ref, 'refs/tags/') && !contains(github.ref, '-snap')
         working-directory: desktop-tauri
         shell: bash
         run: npm version --no-git-tag-version --allow-same-version "${GITHUB_REF_NAME#v}"
@@ -136,7 +136,7 @@ jobs:
           if-no-files-found: error
 
       - name: Attach to GitHub Release
-        if: startsWith(github.ref, 'refs/tags/')
+        if: startsWith(github.ref, 'refs/tags/') && !contains(github.ref, '-snap')
         uses: softprops/action-gh-release@v2
         with:
           files: |
@@ -180,7 +180,7 @@ jobs:
         run: npx tauri icon ../desktop/build/icon.png
 
       - name: Sync version from tag
-        if: startsWith(github.ref, 'refs/tags/')
+        if: startsWith(github.ref, 'refs/tags/') && !contains(github.ref, '-snap')
         working-directory: desktop-tauri
         run: npm version --no-git-tag-version --allow-same-version "${GITHUB_REF_NAME#v}"
 
@@ -204,7 +204,7 @@ jobs:
           if-no-files-found: error
 
       - name: Attach to GitHub Release
-        if: startsWith(github.ref, 'refs/tags/')
+        if: startsWith(github.ref, 'refs/tags/') && !contains(github.ref, '-snap')
         uses: softprops/action-gh-release@v2
         with:
           files: |
