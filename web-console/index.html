@@ -124,6 +124,9 @@
   html.mac-tauri #sideHead { padding: 38px 14px 4px; }
   html.mac-tauri #detail { padding-top: 28px; }
   html.mac-tauri #winBtns { display: none !important; }
+  /* 第九轮：右侧顶部 28px 留白也要可拖窗口（全宽透明拖拽条，与 #sideHead 的
+     drag-region 无冲突；z 低于弹窗层不挡交互） */
+  html.mac-tauri #macDragBar { position: fixed; top: 0; left: 0; right: 0; height: 28px; z-index: 45; }
   /* 用户反馈 mac 字体显大（PingFang 渲染磅值偏大）：会话名称两处各降一档 */
   html.mac-tauri .card-title { font-size: 14px; }
   html.mac-tauri #dtitle { font-size: 15px; }
@@ -5095,6 +5098,11 @@ if (window.__TAURI__ && window.__TAURI__.window) {
     document.documentElement.classList.add("mac-tauri");
     // 顶栏撤掉后窗口拖拽区移交侧栏头（Tauri 壳内属性才生效；Windows 布局不变）
     document.getElementById("sideHead")?.setAttribute("data-tauri-drag-region", "");
+    // 第九轮：右侧内容区顶部留白同样可拖——全宽透明拖拽条（侧栏侧同属 drag 区无冲突）
+    const macBar = document.createElement("div");
+    macBar.id = "macDragBar";
+    macBar.setAttribute("data-tauri-drag-region", "");
+    document.body.appendChild(macBar);
   } else {
     wb.style.display = "flex";
     const w = window.__TAURI__.window.getCurrentWindow();
