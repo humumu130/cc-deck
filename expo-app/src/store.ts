@@ -854,7 +854,8 @@ class RelayStore {
         body: JSON.stringify({ box }), signal: AbortSignal.timeout(2500),
       })).json() as { ok?: boolean; box?: { n: string; c: string } };
       if (!r?.ok || !r.box) return "";
-      const out = unseal<{ token?: string }>(r.box, keys.publicKey, keys.secretKey);
+      // 回箱发送方是 relay：unseal 用 relay 公钥（rk）配本机私钥——曾误传自己公钥
+      const out = unseal<{ token?: string }>(r.box, conn.cloudCfg!.relayPubkey, keys.secretKey);
       return out?.token ?? "";
     } catch { return ""; }
   }
