@@ -764,10 +764,12 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
   srvUrl: { color: c.faint, fontSize: 10.5, marginTop: 1.5 },
   // #46/#53 通道标记：☁️ emoji 与 LanGlyph 胶囊两态
   chanCloudT: { fontSize: 10.5, lineHeight: 14 },
-  // #96 插头右下角通道角标：不独立占位，缩到 7px 级（云=☁ 字符 / LAN=微字）
+  // #96 返工（用户几何定稿）：角标垂直中线=插头底边、水平在插头右缘之外（不重叠）。
+  // 插头 13px 在 wrap(18x16) 居中：右缘 x≈15.5 / 底 y≈14.5 → 角标 left 17 起、
+  // top = 14.5 − 行高/2（云 9/2 → 10；LAN 8/2 → 10.5）
   plugWrap: { position: "relative", width: 18, height: 16, alignItems: "center", justifyContent: "center" },
-  plugBadgeCloud: { position: "absolute", right: 0, bottom: -3, fontSize: 7.5, lineHeight: 9 },
-  plugBadgeLan: { position: "absolute", right: -4, bottom: -4, fontSize: 6.5, lineHeight: 8, color: "#5B9DFF", fontWeight: "700", letterSpacing: 0.2 },
+  plugBadgeCloud: { position: "absolute", left: 17, top: 10, fontSize: 7.5, lineHeight: 9 },
+  plugBadgeLan: { position: "absolute", left: 17, top: 10.5, fontSize: 6.5, lineHeight: 8, color: "#5B9DFF", fontWeight: "700", letterSpacing: 0.2 },
   // #53 图例弹窗：图标列固定宽左对齐 + 文字；组间距（legSep）大于行距
   legHead: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 12 },
   legHeadT: { color: c.text, fontSize: 15, fontWeight: "700" },
