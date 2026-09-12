@@ -10498,6 +10498,13 @@ function reduceHistory(events) {
     }
   }
   for (const rs2 of out.values()) {
+    if (rs2.state.external && rs2.state.status === "ERROR" && !rs2.state.last_error) {
+      rs2.state.status = "DONE";
+      if (!rs2.state.done_reason) rs2.state.done_reason = "ended";
+      rs2.logs.push({ ts: Date.now(), kind: "system", text: "\u5386\u53F2\u8BEF\u6807\u9519\u8BEF\u5DF2\u81EA\u52A8\u77EB\u6B63\u4E3A\u5B8C\u6210" });
+    }
+  }
+  for (const rs2 of out.values()) {
     if (rs2.state.status === "WORKING" || rs2.state.status === "WAITING") {
       if (rs2.state.external) {
         let alive = false;
