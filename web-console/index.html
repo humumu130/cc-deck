@@ -103,15 +103,14 @@
   /* #365 会话列头：状态统计（左，runhint）+ 在线灯/深浅切换（右） */
   #sideHead { display: flex; align-items: center; gap: 8px; padding: 9px 14px 4px; flex: none; }
   /* #74 macOS 壳：系统红黄绿叠加在左上（tauri.macos.conf 的 Overlay 模式）。
-     第五轮（用户目验反馈定稿）：header 化身 28px 隐形拖拽带——圆点行有专属高度
-     （VS Code 同款，消除贴边感），侧栏/内容从带下开始、统计行恢复最左；brand 与
-     自绘按钮撤（macOS 规范窗口内无图标标题，title 已在 macos.conf 置空）。
-     Windows/web 不受影响 */
-  html.mac-tauri header {
-    height: 28px; min-height: 28px; padding: 0;
-    align-items: center;
-  }
-  html.mac-tauri header .brand, html.mac-tauri #winBtns { display: none !important; }
+     第六轮（用户目验定稿）：header 完全撤掉、无边框无线——Slack 真形态：侧栏
+     背景直达窗口顶，圆点浮在侧栏头部空白行上；#sideHead 仅垂直让位（顶部留
+     圆点行高度，水平保持原 padding 统计最左），拖拽区移交 sideHead；右侧内容
+     区全幅到顶（圆点只占左上角不冲突）。Windows/web 不受影响 */
+  html.mac-tauri header { display: none; }
+  html.mac-tauri #sideHead { padding: 38px 14px 4px; }
+  html.mac-tauri #detail { padding-top: 28px; }
+  html.mac-tauri #winBtns { display: none !important; }
   #sideHead #runhint { flex: 1; min-width: 0; }
   /* #39 主题钮线条图标：SVG 居中（去 emoji 基线抖动） */
   #themeBtn { display: flex; align-items: center; justify-content: center; }
@@ -5071,6 +5070,8 @@ if (window.__TAURI__ && window.__TAURI__.window) {
   const wb = document.getElementById("winBtns");
   if (/Mac/i.test(navigator.userAgent)) {
     document.documentElement.classList.add("mac-tauri");
+    // 顶栏撤掉后窗口拖拽区移交侧栏头（Tauri 壳内属性才生效；Windows 布局不变）
+    document.getElementById("sideHead")?.setAttribute("data-tauri-drag-region", "");
   } else {
     wb.style.display = "flex";
     const w = window.__TAURI__.window.getCurrentWindow();
