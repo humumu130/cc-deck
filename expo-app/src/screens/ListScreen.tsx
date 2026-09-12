@@ -107,8 +107,9 @@ type ListRow =
   | { h: false; key: string; s: SessionState };
 
 // cc light 风格：运行中黄灯呼吸（亮度+缩放联动，2.4s 一拍，对齐网页端呼吸灯）
-// #67漏项补：主题钮线条图标（对齐桌面 THEME_ICONS）——深色显太阳（点击切浅）、
-// 浅色显月牙。太阳=圆环+四向射线；月牙=描边圆+偏移实心圆（按钮底色遮出弯月），
+// #77 返工（用户反馈「对齐桌面端」）：太阳补齐 8 向射线（桌面 sun 图形是圆+八方
+// 射线，此前只有四向不像）；形制改裸图标（去底色块，见 themeBtn 样式）。深色显
+// 太阳（点击切浅）、浅色显月牙；月牙=描边圆+偏移实心圆（按钮底色遮出弯月），
 // 全 View 绘制（项目无 svg 库），1.4px 描边与插头/云/电脑图标同语言
 function ThemeGlyph({ dark }: { dark: boolean }) {
   const { c } = useTheme();
@@ -117,7 +118,7 @@ function ThemeGlyph({ dark }: { dark: boolean }) {
     return (
       <View style={styles.tgWrap}>
         <View style={[styles.tgSun, { borderColor: c.dim }]} />
-        {[0, 90, 180, 270].map((r) => (
+        {[0, 45, 90, 135, 180, 225, 270, 315].map((r) => (
           <View
             key={r}
             style={{
@@ -133,7 +134,8 @@ function ThemeGlyph({ dark }: { dark: boolean }) {
   return (
     <View style={styles.tgWrap}>
       <View style={[styles.tgMoon, { borderColor: c.dim }]} />
-      <View style={[styles.tgMoonMask, { backgroundColor: c.tintSoft }]} />
+      {/* #77 裸图标形制后按钮无底色，遮罩圆改用页面底色（c.bg）才隐形遮出弯月 */}
+      <View style={[styles.tgMoonMask, { backgroundColor: c.bg }]} />
     </View>
   );
 }
@@ -1033,10 +1035,10 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
   },
   connDot: { width: 6, height: 6, borderRadius: 3 },
   connText: { fontSize: 11 },
-  // #350 主题钮（深浅切换迁入）：与连接 chip 同高同族形制
+  // #77 返工（用户反馈）：对齐桌面端裸图标形制——无底色无边框纯线条 glyph
+  //（桌面 #themeBtn 无背景，hover 底是 web 特有交互；点击区 28 保留好按）
   themeBtn: {
-    width: 28, height: 28, borderRadius: 9, alignItems: "center", justifyContent: "center",
-    backgroundColor: c.tintSoft, borderWidth: 1, borderColor: c.line, overflow: "hidden",
+    width: 28, height: 28, alignItems: "center", justifyContent: "center",
   },
   themeBtnT: { fontSize: 13 },
   // #67漏项补：线条太阳（View 圆环+四向射线，与插头/云同 1.4px 描边语言）
