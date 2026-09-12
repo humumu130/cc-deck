@@ -4498,7 +4498,7 @@ var require_websocket = __commonJS({
     var http = __require("http");
     var net = __require("net");
     var tls = __require("tls");
-    var { randomBytes: randomBytes2, createHash: createHash2 } = __require("crypto");
+    var { randomBytes: randomBytes3, createHash: createHash2 } = __require("crypto");
     var { Duplex, Readable } = __require("stream");
     var { URL: URL2 } = __require("url");
     var PerMessageDeflate2 = require_permessage_deflate();
@@ -5036,7 +5036,7 @@ var require_websocket = __commonJS({
         }
       }
       const defaultPort = isSecure ? 443 : 80;
-      const key = randomBytes2(16).toString("base64");
+      const key = randomBytes3(16).toString("base64");
       const request = isSecure ? https.request : http.request;
       const protocolSet = /* @__PURE__ */ new Set();
       let perMessageDeflate;
@@ -10276,6 +10276,67 @@ var require_dist = __commonJS({
 });
 
 // src/index.ts
+import { randomBytes as randomBytes2 } from "node:crypto";
+
+// src/e2e.ts
+var import_tweetnacl = __toESM(require_nacl_fast(), 1);
+var B64 = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+function toB64(b) {
+  let s = "";
+  for (let i = 0; i < b.length; i += 3) {
+    const b12 = b[i];
+    const b2 = i + 1 < b.length ? b[i + 1] : null;
+    const b32 = i + 2 < b.length ? b[i + 2] : null;
+    s += B64[b12 >> 2];
+    s += B64[(b12 & 3) << 4 | (b2 === null ? 0 : b2 >> 4)];
+    s += b2 === null ? "=" : B64[(b2 & 15) << 2 | (b32 === null ? 0 : b32 >> 6)];
+    s += b32 === null ? "=" : B64[b32 & 63];
+  }
+  return s;
+}
+function fromB64(s) {
+  const clean = s.replace(/=+$/, "");
+  const out = [];
+  let bits = 0;
+  let acc = 0;
+  for (const ch2 of clean) {
+    const v = B64.indexOf(ch2);
+    if (v < 0) throw new Error("bad base64");
+    acc = acc << 6 | v;
+    bits += 6;
+    if (bits >= 8) {
+      bits -= 8;
+      out.push(acc >> bits & 255);
+    }
+  }
+  return new Uint8Array(out);
+}
+function generateKeyPair() {
+  const kp2 = import_tweetnacl.default.box.keyPair();
+  return { publicKey: toB64(kp2.publicKey), secretKey: toB64(kp2.secretKey) };
+}
+function devId(publicKeyB64, prefix) {
+  const hex = [...fromB64(publicKeyB64).slice(0, 8)].map((x) => x.toString(16).padStart(2, "0")).join("");
+  return `${prefix}-${hex}`;
+}
+function seal(obj, theirPublicKeyB64, mySecretKeyB64) {
+  const nonce = import_tweetnacl.default.randomBytes(import_tweetnacl.default.box.nonceLength);
+  const msg = new TextEncoder().encode(JSON.stringify(obj));
+  const c = import_tweetnacl.default.box(msg, nonce, fromB64(theirPublicKeyB64), fromB64(mySecretKeyB64));
+  return { n: toB64(nonce), c: toB64(c) };
+}
+function unseal(box, theirPublicKeyB64, mySecretKeyB64) {
+  const opened = import_tweetnacl.default.box.open(
+    fromB64(box.c),
+    fromB64(box.n),
+    fromB64(theirPublicKeyB64),
+    fromB64(mySecretKeyB64)
+  );
+  if (!opened) return null;
+  return JSON.parse(new TextDecoder().decode(opened));
+}
+
+// src/index.ts
 import { networkInterfaces as networkInterfaces3, homedir as homedir8, hostname } from "node:os";
 import { join as join12 } from "node:path";
 import { writeFileSync as writeFileSync9, openSync as openSync3, readFileSync as readFileSync13, rmSync as rmSync3, existsSync as existsSync8 } from "node:fs";
@@ -10330,6 +10391,34 @@ function loadConfig() {
     cloudUrl: cloudUrls[0] ?? "",
     cloudToken
   };
+}
+
+// src/lan-ip.ts
+import * as os from "node:os";
+var VIRTUAL_NIC_RE = /vmware|virtual|vethernet|wsl|loopback|tap|bluetooth|hyper-v|docker|tailscale|zerotier|wireguard|wintun|openvpn|vpn/i;
+var PRIV_RE = /^(192\.168|10|172\.(1[6-9]|2\d|3[01]))\./;
+function pickFrom(list) {
+  for (const ni of list ?? []) {
+    const fam = ni.family ?? "IPv4";
+    if (fam !== "IPv4" && fam !== 4) continue;
+    const a = ni.address ?? "";
+    if (ni.internal || /^(127\.|169\.254\.)/.test(a)) continue;
+    if (PRIV_RE.test(a)) return a;
+  }
+  return "";
+}
+function detectLanIp(interfaces = os.networkInterfaces()) {
+  let ip2 = "";
+  for (const [name, list] of Object.entries(interfaces)) {
+    if (VIRTUAL_NIC_RE.test(name)) continue;
+    ip2 = pickFrom(list);
+    if (ip2) return ip2;
+  }
+  for (const list of Object.values(interfaces)) {
+    ip2 = pickFrom(list);
+    if (ip2) return ip2;
+  }
+  return "";
 }
 
 // src/history.ts
@@ -10618,64 +10707,6 @@ var EventBus = class {
 import { mkdirSync as mkdirSync4, readFileSync as readFileSync7, statSync as statSync3, writeFileSync as writeFileSync4 } from "node:fs";
 import { homedir as homedir3 } from "node:os";
 import { join as join7, resolve as resolve5 } from "node:path";
-
-// src/e2e.ts
-var import_tweetnacl = __toESM(require_nacl_fast(), 1);
-var B64 = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
-function toB64(b) {
-  let s = "";
-  for (let i = 0; i < b.length; i += 3) {
-    const b12 = b[i];
-    const b2 = i + 1 < b.length ? b[i + 1] : null;
-    const b32 = i + 2 < b.length ? b[i + 2] : null;
-    s += B64[b12 >> 2];
-    s += B64[(b12 & 3) << 4 | (b2 === null ? 0 : b2 >> 4)];
-    s += b2 === null ? "=" : B64[(b2 & 15) << 2 | (b32 === null ? 0 : b32 >> 6)];
-    s += b32 === null ? "=" : B64[b32 & 63];
-  }
-  return s;
-}
-function fromB64(s) {
-  const clean = s.replace(/=+$/, "");
-  const out = [];
-  let bits = 0;
-  let acc = 0;
-  for (const ch2 of clean) {
-    const v = B64.indexOf(ch2);
-    if (v < 0) throw new Error("bad base64");
-    acc = acc << 6 | v;
-    bits += 6;
-    if (bits >= 8) {
-      bits -= 8;
-      out.push(acc >> bits & 255);
-    }
-  }
-  return new Uint8Array(out);
-}
-function generateKeyPair() {
-  const kp2 = import_tweetnacl.default.box.keyPair();
-  return { publicKey: toB64(kp2.publicKey), secretKey: toB64(kp2.secretKey) };
-}
-function devId(publicKeyB64, prefix) {
-  const hex = [...fromB64(publicKeyB64).slice(0, 8)].map((x) => x.toString(16).padStart(2, "0")).join("");
-  return `${prefix}-${hex}`;
-}
-function seal(obj, theirPublicKeyB64, mySecretKeyB64) {
-  const nonce = import_tweetnacl.default.randomBytes(import_tweetnacl.default.box.nonceLength);
-  const msg = new TextEncoder().encode(JSON.stringify(obj));
-  const c = import_tweetnacl.default.box(msg, nonce, fromB64(theirPublicKeyB64), fromB64(mySecretKeyB64));
-  return { n: toB64(nonce), c: toB64(c) };
-}
-function unseal(box, theirPublicKeyB64, mySecretKeyB64) {
-  const opened = import_tweetnacl.default.box.open(
-    fromB64(box.c),
-    fromB64(box.n),
-    fromB64(theirPublicKeyB64),
-    fromB64(mySecretKeyB64)
-  );
-  if (!opened) return null;
-  return JSON.parse(new TextDecoder().decode(opened));
-}
 
 // node_modules/@anthropic-ai/claude-agent-sdk/sdk.mjs
 import { createRequire as k8 } from "node:module";
@@ -18985,7 +19016,7 @@ var pH;
 var fH = O(() => {
   pH = Wge;
 });
-var os = (e, t, n = 3) => {
+var os2 = (e, t, n = 3) => {
   let r = 0, o = uH(50, 250);
   return pH((s) => {
     let i = s.loaded, a = s.lengthComputable ? s.total : void 0, c = a != null ? Math.min(i, a) : i, l = Math.max(0, c - r), u = o(l);
@@ -19257,7 +19288,7 @@ var kH = O(() => {
       else Se = Te = se;
       if (a && (ce || Se)) {
         if (!w.isStream(a)) a = so.Readable.from(a, { objectMode: false });
-        a = so.pipeline([a, new nk({ maxRate: w.toFiniteNumber(Se) })], w.noop), ce && a.on("progress", bH(a, vl(St, os(wl(ce), false, 3))));
+        a = so.pipeline([a, new nk({ maxRate: w.toFiniteNumber(Se) })], w.noop), ce && a.on("progress", bH(a, vl(St, os2(wl(ce), false, 3))));
       }
       let Y = void 0, Ye = i("auth");
       if (Ye) {
@@ -19306,7 +19337,7 @@ var kH = O(() => {
         let ee = [Q], Ue = w.toFiniteNumber(Q.headers["content-length"]);
         if (ne || Te) {
           let rt = new nk({ maxRate: w.toFiniteNumber(Te) });
-          ne && rt.on("progress", bH(rt, vl(Ue, os(wl(ne), true, 3)))), ee.push(rt);
+          ne && rt.on("progress", bH(rt, vl(Ue, os2(wl(ne), true, 3)))), ee.push(rt);
         }
         let we = Q, Qe = Q.req || S;
         if (t.decompress !== false && Q.headers["content-encoding"]) {
@@ -19565,8 +19596,8 @@ var LH = O(() => {
       });
       if (!w.isUndefined(o.withCredentials)) y.withCredentials = !!o.withCredentials;
       if (a && a !== "json") y.responseType = o.responseType;
-      if (l) [f, h] = os(l, true), y.addEventListener("progress", f);
-      if (c && y.upload) [p, m] = os(c), y.upload.addEventListener("progress", p), y.upload.addEventListener("loadend", m);
+      if (l) [f, h] = os2(l, true), y.addEventListener("progress", f);
+      if (c && y.upload) [p, m] = os2(c), y.upload.addEventListener("progress", p), y.upload.addEventListener("loadend", m);
       if (o.cancelToken || o.signal) {
         if (u = (x) => {
           if (!y) return;
@@ -19716,7 +19747,7 @@ var p_e = (e) => {
         let Tt = new n(_, { method: "POST", body: S, duplex: "half" }), re;
         if (w.isFormData(S) && (re = Tt.headers.get("content-type"))) F.setContentType(re);
         if (Tt.body) {
-          let [Q, ee] = vl(St, os(wl(U)));
+          let [Q, ee] = vl(St, os2(wl(U)));
           S = ak(Tt.body, UH, Q, ee);
         }
       }
@@ -19734,7 +19765,7 @@ var p_e = (e) => {
         ["status", "statusText", "headers"].forEach((Ue) => {
           Tt[Ue] = Et[Ue];
         });
-        let re = w.toFiniteNumber(Et.headers.get("content-length")), [Q, ee] = T && vl(re, os(wl(T), true)) || [];
+        let re = w.toFiniteNumber(Et.headers.get("content-length")), [Q, ee] = T && vl(re, os2(wl(T), true)) || [];
         Et = new r(ak(Et.body, UH, Q, () => {
           ee && ee(), Te && Te();
         }), Tt);
@@ -42425,34 +42456,6 @@ import { readFileSync as readFileSync11, writeFileSync as writeFileSync7, mkdirS
 import { join as join10, dirname as dirname5, sep as sep5 } from "node:path";
 import { homedir as homedir7, networkInterfaces as networkInterfaces2 } from "node:os";
 
-// src/lan-ip.ts
-import * as os2 from "node:os";
-var VIRTUAL_NIC_RE = /vmware|virtual|vethernet|wsl|loopback|tap|bluetooth|hyper-v|docker|tailscale|zerotier|wireguard|wintun|openvpn|vpn/i;
-var PRIV_RE = /^(192\.168|10|172\.(1[6-9]|2\d|3[01]))\./;
-function pickFrom(list) {
-  for (const ni of list ?? []) {
-    const fam = ni.family ?? "IPv4";
-    if (fam !== "IPv4" && fam !== 4) continue;
-    const a = ni.address ?? "";
-    if (ni.internal || /^(127\.|169\.254\.)/.test(a)) continue;
-    if (PRIV_RE.test(a)) return a;
-  }
-  return "";
-}
-function detectLanIp(interfaces = os2.networkInterfaces()) {
-  let ip2 = "";
-  for (const [name, list] of Object.entries(interfaces)) {
-    if (VIRTUAL_NIC_RE.test(name)) continue;
-    ip2 = pickFrom(list);
-    if (ip2) return ip2;
-  }
-  for (const list of Object.values(interfaces)) {
-    ip2 = pickFrom(list);
-    if (ip2) return ip2;
-  }
-  return "";
-}
-
 // src/models.ts
 import { existsSync as existsSync4, readFileSync as readFileSync8 } from "node:fs";
 import { homedir as homedir4 } from "node:os";
@@ -44758,6 +44761,37 @@ function startServer(bus2, mgr2, cfg2, opts = {}) {
       res.writeHead(200, { "content-type": PWA_ASSETS[url.pathname] }).end(readFileSync11(file));
       return;
     }
+    if (url.pathname === "/api/lan-hello" && req.method === "GET") {
+      const hello = opts.lanAuthHello?.();
+      if (!hello) {
+        res.writeHead(501).end();
+        return;
+      }
+      res.writeHead(200, { "content-type": "application/json", "cache-control": "no-store", "access-control-allow-origin": "*" }).end(JSON.stringify({ ok: true, relay_dev: hello.relay_dev, nonce: hello.nonce }));
+      return;
+    }
+    if (url.pathname === "/api/lan-auth" && req.method === "POST") {
+      let body = "";
+      req.setEncoding("utf8");
+      req.on("data", (c) => {
+        body += c;
+      });
+      req.on("end", () => {
+        try {
+          const { box } = JSON.parse(body);
+          if (!box || !opts.lanAuthHandle) {
+            res.writeHead(400).end('{"error":"bad request"}');
+            return;
+          }
+          const r = opts.lanAuthHandle(box);
+          if (r.ok) res.writeHead(200, { "content-type": "application/json", "cache-control": "no-store", "access-control-allow-origin": "*" }).end(JSON.stringify({ ok: true, box: r.box }));
+          else res.writeHead(403, { "content-type": "application/json" }).end(JSON.stringify({ ok: false, error: r.error }));
+        } catch {
+          res.writeHead(400).end();
+        }
+      });
+      return;
+    }
     if (url.pathname === "/api/relay-name") {
       if ((url.searchParams.get("token") ?? "") !== cfg2.token) {
         res.writeHead(401).end();
@@ -45031,8 +45065,10 @@ function startServer(bus2, mgr2, cfg2, opts = {}) {
           // wan_dev（F7）：手表 /wan 透传通道的凭据 dev，手机侧写进手表连接配置
           ...opts.cloudRelayDev?.() ? { relay_dev: opts.cloudRelayDev() } : {},
           ...opts.cloudWanDev?.() ? { wan_dev: opts.cloudWanDev() } : {},
-          ...opts.relayName?.() ? { relay_name: opts.relayName() } : {}
+          ...opts.relayName?.() ? { relay_name: opts.relayName() } : {},
           // #100
+          ...opts.lanHint?.() ? { lan_hint: opts.lanHint() } : {}
+          // #95 同网直连提示
         }
       };
       ws2.send(JSON.stringify(snapshot));
@@ -46074,6 +46110,7 @@ for (const s of mgr.snapshot()) {
   });
 }
 var pinned = mgr.applyPinned();
+var lanAuthNonces = null;
 var cloudIdentity = null;
 var cloudClients = [];
 var pairCodes = createPairingCodes();
@@ -46117,6 +46154,29 @@ startServer(bus, mgr, cfg, {
     } catch {
       return "";
     }
+  },
+  // #95 云身份 LAN 握手（回箱挑战，详见 ws-server opts 注释）
+  lanHint: () => {
+    const ip2 = detectLanIp(networkInterfaces3());
+    return ip2 ? `${ip2}:${cfg.port}` : "";
+  },
+  lanAuthHello: () => cloudIdentity ? { relay_dev: cloudIdentity.relayDev, nonce: randomBytes2(16).toString("base64") } : null,
+  lanAuthHandle: (box) => {
+    if (!cloudIdentity) return { ok: false, error: "no identity" };
+    const inner = unseal(box, cloudIdentity.keypair.publicKey, cloudIdentity.keypair.secretKey);
+    if (!inner || !inner.dev || !inner.nonce) return { ok: false, error: "bad box" };
+    if (!lanAuthNonces) lanAuthNonces = /* @__PURE__ */ new Map();
+    const now = Date.now();
+    for (const [n, t] of lanAuthNonces) if (now - t > 6e4) lanAuthNonces.delete(n);
+    if (lanAuthNonces.has(inner.nonce)) {
+      lanAuthNonces.delete(inner.nonce);
+    } else if (inner.nonce.length < 16 || inner.nonce.length > 44) {
+      return { ok: false, error: "bad nonce" };
+    }
+    const peer = cloudIdentity.peers.get(inner.dev);
+    if (!peer) return { ok: false, error: "unknown device" };
+    const reply = seal({ token: cfg.token, port: cfg.port }, peer.pubkey, cloudIdentity.keypair.secretKey);
+    return { ok: true, box: reply };
   },
   // daemon 子进程 listen 成功后自写 pid（父进程不预写，端口被占时不留死 pid）
   onReady: () => {

@@ -6945,13 +6945,14 @@ function renderPeers() {
     // 同义的内容（如 web 端 app 标识）不再重复占格
     const metaBits = p.meta ? [p.meta.platform, p.meta.app].filter(Boolean) : [];
     const metaMain = p.meta ? (p.meta.platform || p.meta.app || "") : "";
+    // #101 四列简化（用户定稿）：标签 / 名称 / 最后活跃 / 移除——短 id 与 wb- 长 id
+    // 两段撤（hover title 留完整信息兜底）；名称=platform（OS·型号），缺则 name
+    const whenTitle = "配对于 " + (p.paired_at ? new Date(p.paired_at).toLocaleString() : "未知") + " · 设备号 " + p.dev;
     return '<div class="gp-peer-row">' +
       '<i class="gp-pd' + (online ? " on" : "") + '" title="' + (online ? "在线" : "离线/未知") + '"></i>' +
       '<span class="gp-peer-kind">' + (PEER_KIND_TXT[p.kind] || "设备") + "</span>" +
-      '<span class="gp-pname" title="' + escapeHtml(p.name || p.dev) + '">' + escapeHtml(p.name || p.dev) + "</span>" +
-      (metaMain ? '<span class="gp-peer-meta" title="' + escapeHtml(metaBits.join(" · ")) + '">' + escapeHtml(metaMain) + "</span>" : "") +
-      '<span class="gp-pdev" title="设备号由配对公钥派生（非 MAC 地址）">' + escapeHtml(p.dev) + "</span>" +
-      '<span class="gp-peer-when" title="配对于 ' + (p.paired_at ? new Date(p.paired_at).toLocaleString() : "未知") + '">' + fmtPeerTime(p.paired_at) + "</span>" +
+      '<span class="gp-pname" style="flex:1;min-width:0" title="' + escapeHtml((metaBits.join(" · ") || p.name || "") + " · " + p.dev) + '">' + escapeHtml(metaMain || p.name || p.dev) + "</span>" +
+      '<span class="gp-peer-when" title="' + escapeHtml(whenTitle) + '">' + fmtPeerTime(p.paired_at) + "</span>" +
       '<button class="gp-peer-kick" data-dev="' + escapeHtml(p.dev) + '">移除</button>' +
       "</div>";
   }).join("");

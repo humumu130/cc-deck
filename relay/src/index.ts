@@ -1,9 +1,12 @@
+import { randomBytes } from "node:crypto";
+import { seal, unseal } from "./e2e.js";
 import { networkInterfaces, homedir, hostname } from "node:os";
 import { join } from "node:path";
 import { writeFileSync, openSync, readFileSync, rmSync, existsSync } from "node:fs";
 import { spawn, execFileSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { loadConfig } from "./config.js";
+import { detectLanIp } from "./lan-ip.js";
 import { EventBus } from "./event-bus.js";
 import { SessionManager } from "./session-manager.js";
 import { startServer } from "./ws-server.js";
@@ -233,6 +236,7 @@ const pinned = mgr.applyPinned();
 
 // 云桥：CCR_CLOUD_URL 配置了才启用（出站连桥，公司网络友好）。
 // 逗号分隔多桥并行：每桥一个 CloudClient，手机/网页各自连任一桥都能互通
+let lanAuthNonces: Map<string, number> | null = null;
 let cloudIdentity: ReturnType<typeof loadOrCreateIdentity> | null = null;
 const cloudClients: CloudClient[] = [];
 const pairCodes = createPairingCodes();
@@ -280,6 +284,29 @@ startServer(bus, mgr, cfg, {
   // #100 relay 自定义名称：dataDir/relay-name 单行文件（web 设置 relay 页可写）
   relayName: () => {
     try { return readFileSync(join(cfg.dataDir, "relay-name"), "utf8").trim().slice(0, 40) || ""; } catch { return ""; }
+  },
+  // #95 云身份 LAN 握手（回箱挑战，详见 ws-server opts 注释）
+  lanHint: () => {
+    const ip = detectLanIp(networkInterfaces());
+    return ip ? `${ip}:${cfg.port}` : "";
+  },
+  lanAuthHello: () => (cloudIdentity ? { relay_dev: cloudIdentity.relayDev, nonce: randomBytes(16).toString("base64") } : null),
+  lanAuthHandle: (box) => {
+    if (!cloudIdentity) return { ok: false as const, error: "no identity" };
+    const inner = unseal<{ dev?: string; nonce?: string }>(box, cloudIdentity.keypair.publicKey, cloudIdentity.keypair.secretKey);
+    if (!inner || !inner.dev || !inner.nonce) return { ok: false as const, error: "bad box" };
+    if (!lanAuthNonces) lanAuthNonces = new Map();
+    const now = Date.now();
+    for (const [n, t] of lanAuthNonces) if (now - t > 60_000) lanAuthNonces.delete(n);
+    if (lanAuthNonces.has(inner.nonce)) {
+      lanAuthNonces.delete(inner.nonce);
+    } else if (inner.nonce.length < 16 || inner.nonce.length > 44) {
+      return { ok: false as const, error: "bad nonce" };
+    }
+    const peer = cloudIdentity.peers.get(inner.dev);
+    if (!peer) return { ok: false as const, error: "unknown device" };
+    const reply = seal({ token: cfg.token, port: cfg.port }, peer.pubkey, cloudIdentity.keypair.secretKey);
+    return { ok: true as const, box: reply };
   },
   // daemon 子进程 listen 成功后自写 pid（父进程不预写，端口被占时不留死 pid）
   onReady: () => {

@@ -150,6 +150,11 @@ export interface StartServerOptions {
   cloudRelayDev?: () => string; // 云桥设备 id：随 SNAPSHOT relay_dev 下发，客户端据此合并同机 LAN/云条目
   cloudWanDev?: () => string; // F7 /wan 手表凭据 dev：随 SNAPSHOT wan_dev 下发，手机据此拼手表连接配置
   relayName?: () => string; // #100 relay 自定义名称（dataDir/relay-name）：随 SNAPSHOT 下发，客户端默认显示名
+  // #95 云身份 LAN 握手：同网云配对设备凭回箱挑战换 LAN token（免输码直连）。
+  // lanHint 给 SNAPSHOT（ip:port）；authHello/authHandle 由 index 注入（持 identity）
+  lanHint?: () => string;
+  lanAuthHello?: () => { relay_dev: string; nonce: string } | null;
+  lanAuthHandle?: (box: { n: string; c: string }) => { ok: true; box: { n: string; c: string } } | { ok: false; error: string };
   onReady?: () => void;     // listen 成功后回调（daemon 模式在此时写 pid 文件，防端口被占时留下死 pid）
 }
 
@@ -265,6 +270,29 @@ export function startServer(
       const file = join(webRoot, "web-console", url.pathname.slice(1));
       if (!existsSync(file)) { res.writeHead(404).end("not found"); return; }
       res.writeHead(200, { "content-type": PWA_ASSETS[url.pathname] }).end(readFileSync(file));
+      return;
+    }
+    // #95 云身份 LAN 握手（同网直连，详见 opts.lanAuth* 注释）
+    if (url.pathname === "/api/lan-hello" && req.method === "GET") {
+      const hello = opts.lanAuthHello?.();
+      if (!hello) { res.writeHead(501).end(); return; }
+      res.writeHead(200, { "content-type": "application/json", "cache-control": "no-store", "access-control-allow-origin": "*" })
+        .end(JSON.stringify({ ok: true, relay_dev: hello.relay_dev, nonce: hello.nonce }));
+      return;
+    }
+    if (url.pathname === "/api/lan-auth" && req.method === "POST") {
+      let body = "";
+      req.setEncoding("utf8");
+      req.on("data", (c) => { body += c; });
+      req.on("end", () => {
+        try {
+          const { box } = JSON.parse(body) as { box?: { n: string; c: string } };
+          if (!box || !opts.lanAuthHandle) { res.writeHead(400).end('{"error":"bad request"}'); return; }
+          const r = opts.lanAuthHandle(box);
+          if (r.ok) res.writeHead(200, { "content-type": "application/json", "cache-control": "no-store", "access-control-allow-origin": "*" }).end(JSON.stringify({ ok: true, box: r.box }));
+          else res.writeHead(403, { "content-type": "application/json" }).end(JSON.stringify({ ok: false, error: r.error }));
+        } catch { res.writeHead(400).end(); }
+      });
       return;
     }
     // #100 relay 自定义名称读写：GET 回显 / POST 保存（dataDir/relay-name，SNAPSHOT 随发）
@@ -566,6 +594,7 @@ export function startServer(
           ...(opts.cloudRelayDev?.() ? { relay_dev: opts.cloudRelayDev() } : {}),
           ...(opts.cloudWanDev?.() ? { wan_dev: opts.cloudWanDev() } : {}),
           ...(opts.relayName?.() ? { relay_name: opts.relayName() } : {}), // #100
+          ...(opts.lanHint?.() ? { lan_hint: opts.lanHint() } : {}), // #95 同网直连提示
         },
       };
       ws.send(JSON.stringify(snapshot));
