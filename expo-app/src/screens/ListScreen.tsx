@@ -111,6 +111,17 @@ type ListRow =
 // 射线，此前只有四向不像）；形制改裸图标（去底色块，见 themeBtn 样式）。深色显
 // 太阳（点击切浅）、浅色显月牙；月牙=描边圆+偏移实心圆（按钮底色遮出弯月），
 // 全 View 绘制（项目无 svg 库），1.4px 描边与插头/云/电脑图标同语言
+// #80 连接 chip 电脑图标：桌面端 DESK_SVG 同款（16x13 viewBox，rect+底座横线），
+// View 绘制 1.4 描边，颜色随连接态（绿/黄/红）
+function DeskGlyph({ color }: { color: string }) {
+  return (
+    <View style={{ width: 14, height: 12, marginRight: 4 }}>
+      <View style={{ position: "absolute", left: 1.2, top: 0.8, width: 11.6, height: 8, borderRadius: 1.6, borderWidth: 1.4, borderColor: color }} />
+      <View style={{ position: "absolute", left: 5, top: 10, width: 4, height: 1.4, borderRadius: 0.7, backgroundColor: color }} />
+    </View>
+  );
+}
+
 function ThemeGlyph({ dark }: { dark: boolean }) {
   const { c } = useTheme();
   const styles = useThemeStyles(makeStyles);
@@ -835,6 +846,8 @@ export default function ListScreen({ sessions, connected, connText, onOpen, onNe
         >
           {/* #52 chip 精简：去状态色点与通道后缀（多源混合通道无法单一展示），
               文案颜色仍承载连接状态（绿/黄/红） */}
+          {/* #80 统计前配电脑图标（桌面端同款），颜色随连接态 */}
+          <DeskGlyph color={connColor} />
           <Text style={[styles.connText, { color: connColor }]}>{connText}</Text>
         </Pressable>
         {/* #350 主题切换从设置抽屉迁入主面板顶：连接 chip 旁，与状态信息同区 */}
@@ -861,7 +874,8 @@ export default function ListScreen({ sessions, connected, connText, onOpen, onNe
           onPress={toggleAggregate}
         >
           <Text style={[styles.aggT, snap.aggregate && styles.aggTOn]} numberOfLines={1}>
-            {snap.aggregate ? `聚合 · ${snap.sources.length}` : "单源"}
+            {/* #80 去数量：右上角统计（x/n+电脑图标）已承载源数，聚合胶囊只报模式 */}
+            {snap.aggregate ? "聚合" : "单源"}
           </Text>
         </Pressable>
         <View style={styles.statChips}>

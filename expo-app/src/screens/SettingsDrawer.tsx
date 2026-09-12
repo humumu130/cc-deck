@@ -471,10 +471,15 @@ export default function SettingsDrawer({
                         状态文案类元素全撤（云桥在线/↻ 重连等）——失败原因走弹窗 */}
                     <View style={[d.srvDot, { backgroundColor: srvColorMap.get(e.id) ?? c.faint }]} />
                     <Text style={d.srvName} numberOfLines={1}>{e.name}</Text>
-                    {chanTag === "cloud" ? (
-                      <Text style={d.chanCloudT}>☁️</Text>
-                    ) : chanTag === "lan" ? (
-                      <LanGlyph color={c.dim} />
+                    {/* #81 通道图标语义重设计（用户定稿）：通道是动态属性——只在已连接时
+                        显示真实通道（连接上报的 channel 优先，缺数据退配置推断）；
+                        离线/连接中不显示，杜绝「灰色云」与过期通道误导 */}
+                    {online ? (
+                      (st?.channel ?? chanTag) === "cloud" ? (
+                        <Text style={d.chanCloudT}>☁️</Text>
+                      ) : (st?.channel ?? chanTag) === "lan" ? (
+                        <LanGlyph color={c.dim} />
+                      ) : null
                     ) : null}
                     {connecting ? (
                       (() => {
