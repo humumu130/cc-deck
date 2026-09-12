@@ -73,6 +73,9 @@ export interface SourceConn {
   // 自动重试倒计时（③）：reconnecting 期间每秒刷新 stateText（"重试中…下次 Ns"）
   countdownTimer: ReturnType<typeof setInterval> | null;
   retryAt: number; // 下次自动重试时刻（倒计时基准）
+  // #100 relay 侧自定义名称（SNAPSHOT relay_name）：连接列表的默认显示名——端上
+  // 手动改过名（name ≠ 默认 hostOf）时优先本地名
+  relayName: string;
   hbTimer: ReturnType<typeof setInterval> | null;
   probeTimer: ReturnType<typeof setTimeout> | null;
   lastDownAt: number;
@@ -110,6 +113,7 @@ export interface SourceStatus {
   // 跨端稳定配色键（#294 审查修复）：云源 = relay 设备 id（cloud.relayDev）、LAN 源
   // = wsUrl——同一台服务器在手机/网页两端取到同色（本地 uuid 两端各异不可用）
   colorKey: string;
+  relayName?: string; // #100 relay 侧自定义名（客户端未手动改名时的默认显示）
 }
 
 export interface Snapshot {
@@ -307,6 +311,7 @@ class RelayStore {
       name: c.name,
       state: c.state,
       channel: c.channel,
+      relayName: c.relayName || undefined, // #100 relay 侧自定义名（未手动改名时的默认显示）
       colorKey: c.entry.cloud?.relayDev || c.entry.wsUrl,
     }));
     // #388 模型清单取活动源口径（模型切换命令无 sid 路由也走活动源）
@@ -647,6 +652,7 @@ class RelayStore {
         reconnectTimer: null,
         countdownTimer: null,
         retryAt: 0,
+        relayName: "",
         hbTimer: null,
         probeTimer: null,
         lastDownAt: 0,
@@ -1684,6 +1690,7 @@ class RelayStore {
     const sid = msg.session_id;
     switch (msg.type) {
       case "SNAPSHOT": {
+        if ((msg.payload as { relay_name?: string }).relay_name) conn.relayName = (msg.payload as { relay_name?: string }).relay_name!; // #100
         // relay_dev（云桥设备 id，云桥启用的 relay 随快照下发，LAN/云通道均携）：
         // 盖章本源条目身份并按身份归并同机重复条目——先归并再装配会话（合并可能
         // 销毁别的源连接，须在 conn.sessions 清空重建前发起）

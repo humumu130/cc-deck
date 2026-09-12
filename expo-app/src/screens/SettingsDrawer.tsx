@@ -15,6 +15,10 @@ import { withA, type ThemeColors } from "../theme";
 import ScanScreen, { routeScanResult, type ScanResult } from "./ScanScreen";
 import ImportPicker, { type ImportTarget } from "./ImportPicker";
 
+// #100 默认名口径（与 store 建连时一致）：host 部分——e.name 等于它=用户没改过名
+function defaultHostName(e: { wsUrl: string }): string {
+  try { return new URL(e.wsUrl).host; } catch { return e.wsUrl; }
+}
 const FILL = { position: "absolute", left: 0, right: 0, top: 0, bottom: 0 } as const;
 
 // 版本号读原生 versionName（build.gradle），杜绝手写硬编码再漏更
@@ -470,7 +474,7 @@ export default function SettingsDrawer({
                         通道标记 + 连接状态插头（绿=已连/灰=可点触发/黄闪=连接中），
                         状态文案类元素全撤（云桥在线/↻ 重连等）——失败原因走弹窗 */}
                     <View style={[d.srvDot, { backgroundColor: srvColorMap.get(e.id) ?? c.faint }]} />
-                    <Text style={d.srvName} numberOfLines={1}>{e.name}</Text>
+  <Text style={d.srvName} numberOfLines={1}>{(() => { const st = snap.sources.find((x) => x.id === e.id); return st?.relayName && e.name === defaultHostName(e) ? st.relayName : e.name; })()}</Text>
                     {/* #81+#96 通道=动态属性，仅已连接显示真实通道（上报 channel 优先、
                         配置推断兜底）；#96 起不独立占位——缩成插头右下角小角标 */}
                     {(() => {

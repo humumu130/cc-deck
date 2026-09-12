@@ -277,6 +277,10 @@ startServer(bus, mgr, cfg, {
   // wan_dev（F7）：手表 /wan 凭据 dev，手机端拼进手表连接配置（旧客户端自动忽略）
   ...(cloudIdentity ? { cloudRelayDev: () => cloudIdentity!.relayDev } : {}),
   ...(cloudIdentity ? { cloudWanDev: () => cloudIdentity!.wanDev } : {}),
+  // #100 relay 自定义名称：dataDir/relay-name 单行文件（web 设置 relay 页可写）
+  relayName: () => {
+    try { return readFileSync(join(cfg.dataDir, "relay-name"), "utf8").trim().slice(0, 40) || ""; } catch { return ""; }
+  },
   // daemon 子进程 listen 成功后自写 pid（父进程不预写，端口被占时不留死 pid）
   onReady: () => {
     // #316 mDNS 广播（_ccdeck._tcp）：手表同 WiFi 零配置发现；失败静默（组播被拦不影响其余）

@@ -106,6 +106,16 @@ type ListRow =
   | { h: true; key: string; name: string; color: string; online: boolean; count: number }
   | { h: false; key: string; s: SessionState };
 
+// #102 源胶囊限长：按视觉宽度截断（英文/数字 1、中文等全角 2），上限 6 英文宽
+function clipSrcName(name: string): string {
+  let w = 0;
+  for (let i = 0; i < name.length; i++) {
+    w += name.charCodeAt(i) > 0xff ? 2 : 1;
+    if (w > 6) return name.slice(0, i > 0 ? i : 1).trimEnd() + "…";
+  }
+  return name;
+}
+
 // cc light 风格：运行中黄灯呼吸（亮度+缩放联动，2.4s 一拍，对齐网页端呼吸灯）
 // #77 终版（用户三连反馈后）：桌面端 THEME_ICONS 同款 SVG 渲染成 PNG 资产
 // （resvg 生成，黑色线条），Image tintColor 运行时染色适配深浅模式——像素级
@@ -383,7 +393,8 @@ function SrcBadge({ name, color }: { name: string; color: string }) {
   // #98 桌面版同款胶囊：源色底+白字圆角（原为色点+灰字）
   return (
     <View style={{ backgroundColor: color + "E6", borderRadius: 4.5, paddingHorizontal: 5.5, paddingVertical: 1.5 }}>
-      <Text style={{ color: "#fff", fontSize: 8.5, fontWeight: "700", letterSpacing: 0.3 }} numberOfLines={1}>{name}</Text>
+      {/* #102 源胶囊限长：≤6 英文字符宽（中文 1 字≈2 英文宽），超长截断省略 */}
+      <Text style={{ color: "#fff", fontSize: 8.5, fontWeight: "700", letterSpacing: 0.3 }} numberOfLines={1}>{clipSrcName(name)}</Text>
     </View>
   );
 }

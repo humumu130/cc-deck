@@ -149,6 +149,7 @@ export interface StartServerOptions {
   pairCodes?: { issue(opts?: { code?: string; ttlMs?: number }): { code: string; expires_in: number } }; // 云桥配对码（网页端领码；管理员可指定码值/时长）
   cloudRelayDev?: () => string; // 云桥设备 id：随 SNAPSHOT relay_dev 下发，客户端据此合并同机 LAN/云条目
   cloudWanDev?: () => string; // F7 /wan 手表凭据 dev：随 SNAPSHOT wan_dev 下发，手机据此拼手表连接配置
+  relayName?: () => string; // #100 relay 自定义名称（dataDir/relay-name）：随 SNAPSHOT 下发，客户端默认显示名
   onReady?: () => void;     // listen 成功后回调（daemon 模式在此时写 pid 文件，防端口被占时留下死 pid）
 }
 
@@ -265,6 +266,32 @@ export function startServer(
       if (!existsSync(file)) { res.writeHead(404).end("not found"); return; }
       res.writeHead(200, { "content-type": PWA_ASSETS[url.pathname] }).end(readFileSync(file));
       return;
+    }
+    // #100 relay 自定义名称读写：GET 回显 / POST 保存（dataDir/relay-name，SNAPSHOT 随发）
+    if (url.pathname === "/api/relay-name") {
+      if ((url.searchParams.get("token") ?? "") !== cfg.token) { res.writeHead(401).end(); return; }
+      const file = join(cfg.dataDir, "relay-name");
+      if (req.method === "GET") {
+        let name = "";
+        try { name = readFileSync(file, "utf8").trim().slice(0, 40); } catch {}
+        res.writeHead(200, { "content-type": "application/json", "cache-control": "no-store" }).end(JSON.stringify({ ok: true, name }));
+        return;
+      }
+      if (req.method === "POST") {
+        let body = "";
+        req.setEncoding("utf8");
+        req.on("data", (c) => { body += c; });
+        req.on("end", () => {
+          try {
+            const { name } = JSON.parse(body) as { name?: string };
+            const clean = (name ?? "").trim().slice(0, 40);
+            if (!clean || /[\r\n<>]/.test(clean)) { res.writeHead(400).end('{"error":"名称需 1-40 字且不含换行/尖括号"}'); return; }
+            writeFileSync(file, clean, "utf8");
+            res.writeHead(200, { "content-type": "application/json" }).end(JSON.stringify({ ok: true, name: clean }));
+          } catch { res.writeHead(400).end(); }
+        });
+        return;
+      }
     }
     if (req.method === "GET" && url.pathname === "/health") {
       res.writeHead(200, { "content-type": "application/json" }).end('{"ok":true}');
@@ -538,6 +565,7 @@ export function startServer(
           // wan_dev（F7）：手表 /wan 透传通道的凭据 dev，手机侧写进手表连接配置
           ...(opts.cloudRelayDev?.() ? { relay_dev: opts.cloudRelayDev() } : {}),
           ...(opts.cloudWanDev?.() ? { wan_dev: opts.cloudWanDev() } : {}),
+          ...(opts.relayName?.() ? { relay_name: opts.relayName() } : {}), // #100
         },
       };
       ws.send(JSON.stringify(snapshot));

@@ -44758,6 +44758,44 @@ function startServer(bus2, mgr2, cfg2, opts = {}) {
       res.writeHead(200, { "content-type": PWA_ASSETS[url.pathname] }).end(readFileSync11(file));
       return;
     }
+    if (url.pathname === "/api/relay-name") {
+      if ((url.searchParams.get("token") ?? "") !== cfg2.token) {
+        res.writeHead(401).end();
+        return;
+      }
+      const file = join10(cfg2.dataDir, "relay-name");
+      if (req.method === "GET") {
+        let name = "";
+        try {
+          name = readFileSync11(file, "utf8").trim().slice(0, 40);
+        } catch {
+        }
+        res.writeHead(200, { "content-type": "application/json", "cache-control": "no-store" }).end(JSON.stringify({ ok: true, name }));
+        return;
+      }
+      if (req.method === "POST") {
+        let body = "";
+        req.setEncoding("utf8");
+        req.on("data", (c) => {
+          body += c;
+        });
+        req.on("end", () => {
+          try {
+            const { name } = JSON.parse(body);
+            const clean = (name ?? "").trim().slice(0, 40);
+            if (!clean || /[\r\n<>]/.test(clean)) {
+              res.writeHead(400).end('{"error":"\u540D\u79F0\u9700 1-40 \u5B57\u4E14\u4E0D\u542B\u6362\u884C/\u5C16\u62EC\u53F7"}');
+              return;
+            }
+            writeFileSync7(file, clean, "utf8");
+            res.writeHead(200, { "content-type": "application/json" }).end(JSON.stringify({ ok: true, name: clean }));
+          } catch {
+            res.writeHead(400).end();
+          }
+        });
+        return;
+      }
+    }
     if (req.method === "GET" && url.pathname === "/health") {
       res.writeHead(200, { "content-type": "application/json" }).end('{"ok":true}');
       return;
@@ -44992,7 +45030,9 @@ function startServer(bus2, mgr2, cfg2, opts = {}) {
           // 客户端据此密码学匹配"LAN 直连条目"与"云桥条目"是同一台 relay，自动合并。
           // wan_dev（F7）：手表 /wan 透传通道的凭据 dev，手机侧写进手表连接配置
           ...opts.cloudRelayDev?.() ? { relay_dev: opts.cloudRelayDev() } : {},
-          ...opts.cloudWanDev?.() ? { wan_dev: opts.cloudWanDev() } : {}
+          ...opts.cloudWanDev?.() ? { wan_dev: opts.cloudWanDev() } : {},
+          ...opts.relayName?.() ? { relay_name: opts.relayName() } : {}
+          // #100
         }
       };
       ws2.send(JSON.stringify(snapshot));
@@ -46070,6 +46110,14 @@ startServer(bus, mgr, cfg, {
   // wan_dev（F7）：手表 /wan 凭据 dev，手机端拼进手表连接配置（旧客户端自动忽略）
   ...cloudIdentity ? { cloudRelayDev: () => cloudIdentity.relayDev } : {},
   ...cloudIdentity ? { cloudWanDev: () => cloudIdentity.wanDev } : {},
+  // #100 relay 自定义名称：dataDir/relay-name 单行文件（web 设置 relay 页可写）
+  relayName: () => {
+    try {
+      return readFileSync13(join12(cfg.dataDir, "relay-name"), "utf8").trim().slice(0, 40) || "";
+    } catch {
+      return "";
+    }
+  },
   // daemon 子进程 listen 成功后自写 pid（父进程不预写，端口被占时不留死 pid）
   onReady: () => {
     advertiseRelay(cfg.port, `CC Deck Relay (${hostname()})`);
