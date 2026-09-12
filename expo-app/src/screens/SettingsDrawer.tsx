@@ -399,6 +399,7 @@ export default function SettingsDrawer({
           </View>
           <View style={{ flex: 1, minWidth: 0 }}>
             <Text style={d.nameT}>CC Deck</Text>
+            <Text style={d.verT}>{APP_VER}</Text>
           </View>
           {/* 全局扫码入口（直连/登录/导入统一扫）：头部右侧角标钮，与设置页同一链路 */}
           <Pressable
@@ -520,7 +521,7 @@ export default function SettingsDrawer({
           })}
           {/* 新增入口（#276/#36）：仅手动添加——扫码入口在顶栏 APP 名旁已有，此处删除重复按钮 */}
           <View style={d.addRowWrap}>
-            <Pressable style={d.addRow} hitSlop={{ top: 6, bottom: 6 }} android_ripple={{ color: c.tintSoft, borderless: false }} onPress={() => { onClose(); onSetup(); }}>
+            <Pressable style={d.addRow} android_ripple={{ color: c.tintSoft, borderless: false }} onPress={() => { onClose(); onSetup(); }}>
               <Text style={d.addT}>＋ 手动添加</Text>
             </Pressable>
           </View>
@@ -534,7 +535,7 @@ export default function SettingsDrawer({
             同字号字重字色、同 18/6 上下节奏、同 24×24 右占位（行高一致）但不渲染箭头 */}
         <View style={d.secHead}>
           <Text style={d.secTitleT}><Text style={d.secIconT}>⇄ </Text>配对</Text>
-          <View style={{ width: 1 }} />
+          <View style={d.secToggle} />
         </View>
         {pc ? (
           // pc 存在即显示码框：到期 0:00 到续领回包之间不闪「已过期」按钮（抽屉常开时每 TTL 闪一次）
@@ -631,7 +632,7 @@ export default function SettingsDrawer({
           <Text style={d.setLabel}><Text style={d.rowIconT}>✎ </Text>反馈</Text>
           <Text style={d.aboutT}>›</Text>
         </Pressable>
-
+        <Text style={d.aboutBuildT}>CC Deck · Build {APP_VER.replace(/^v/, "")}</Text>
         </ScrollView>
       </Animated.View>
       <AboutModal visible={aboutOpen} onClose={() => setAboutOpen(false)} />
@@ -736,9 +737,8 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
     width: 30, height: 30, borderRadius: 10, alignItems: "center", justifyContent: "center",
     backgroundColor: c.tintSoft, borderWidth: 1, borderColor: c.line, overflow: "hidden",
   },
-  // L6 四个段头统一走 secHead 行结构：可折叠段加 ▾/▸，配对/关于等纯段头只渲染
-  // 同规格空占位（secToggle 形状）不渲染箭头——18/6 节奏与行高完全一致
-  secHead: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginTop: 16, marginBottom: 1 },
+  secT: { color: c.faint, fontSize: 11, fontWeight: "700", marginTop: 18, marginBottom: 6, letterSpacing: 1 },
+  secHead: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginTop: 18, marginBottom: 6 },
   // #51 标题左组：标题+问号同行靠左（原问号被 space-between 推中）
   secTitleRow: { flexDirection: "row", alignItems: "center", gap: 7 },
   secTitleT: { color: c.faint, fontSize: 11, fontWeight: "700", letterSpacing: 1 },
@@ -769,6 +769,7 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
   plugWrap: { position: "relative", width: 18, height: 16, alignItems: "center", justifyContent: "center" },
   plugBadgeCloud: { position: "absolute", left: 17, top: 10, fontSize: 7.5, lineHeight: 9 },
   plugBadgeLan: { position: "absolute", left: 17, top: 10.5, fontSize: 6.5, lineHeight: 8, color: "#5B9DFF", fontWeight: "700", letterSpacing: 0.2 },
+  // #96 插头右下角通道角标：不独立占位，缩到 7px 级（云=☁ 字符 / LAN=微字）
   // #53 图例弹窗：图标列固定宽左对齐 + 文字；组间距（legSep）大于行距
   legHead: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 12 },
   legHeadT: { color: c.text, fontSize: 15, fontWeight: "700" },
@@ -782,13 +783,10 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
   // #46 长按亮出的删除按钮（替常驻 ✕）
   srvDelArm: { paddingHorizontal: 10, height: 42, alignItems: "center", justifyContent: "center" },
   srvDelArmT: { color: c.waiting, fontSize: 12.5, fontWeight: "700" },
-  // L6 手动添加→配对空档收紧：原 10(padBottom)+8(wrap margin)+18(secHead margin)
-  // 尾距 ≈36dp、加 8+10 头距整段空 ≈72dp 显空。改 6+0 后尾距 24dp、头距 14dp，
-  // 与段间 18dp 节奏衔接（tap 面积由 hitSlop 6 补回）
-  addRowWrap: { flexDirection: "row", justifyContent: "flex-end" },
+  addRowWrap: { flexDirection: "row", justifyContent: "flex-end", marginBottom: 8 },
   // #378 去框化二期：添加入口纯文字链接式；#46 移右下角（原居中）
   addRow: {
-    alignItems: "center", justifyContent: "center", paddingVertical: 6, paddingHorizontal: 8,
+    alignItems: "center", justifyContent: "center", paddingVertical: 10, paddingHorizontal: 8,
   },
   addT: { color: c.brandA, fontSize: 13, fontWeight: "700" },
   cloudHint: {
@@ -815,11 +813,9 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
     backgroundColor: c.tintStrong, borderWidth: 1, borderColor: withA(c.brandA, 0.45),
   },
   pairGenT: { color: c.brandA, fontSize: 13, fontWeight: "700" },
-  // #92 重做：配对码容器化（#378 裸平铺在窄抽屉里漂浮感强、下方空档大）——
-  // 同款卡片语言（面板底+描边+圆角），padding 收紧段内垂直节奏
+  // #378 配对码平铺去框（对齐网页 #352）：大字码 + 右侧倒计时/刷新，无外框
   pairBox: {
-    paddingVertical: 8, paddingHorizontal: 12, marginBottom: 2,
-    backgroundColor: c.panel, borderWidth: 1, borderColor: c.line, borderRadius: 12,
+    paddingVertical: 10, paddingHorizontal: 2, marginBottom: 8,
   },
   pairTop: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
   pairSide: { flexDirection: "row", alignItems: "center", gap: 6 },
