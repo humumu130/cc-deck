@@ -10289,7 +10289,7 @@ import { join } from "node:path";
 import { homedir } from "node:os";
 function loadConfig() {
   const port = Number(process.env.CCR_PORT ?? 8787);
-  const dataDir2 = process.env.CCR_DATA_DIR ?? (process.env.CC_DECK_PLUGIN ? join(homedir(), ".cc-deck", "data") : join(process.cwd(), "data"));
+  const dataDir2 = process.env.CCR_DATA_DIR ?? ("1" ? join(homedir(), ".cc-deck", "data") : join(process.cwd(), "data"));
   mkdirSync(dataDir2, { recursive: true });
   const envToken = process.env.CCR_TOKEN;
   const tokenFile = join(dataDir2, "token");
@@ -10499,10 +10499,30 @@ function reduceHistory(events) {
   }
   for (const rs2 of out.values()) {
     if (rs2.state.status === "WORKING" || rs2.state.status === "WAITING") {
-      rs2.state.status = "ERROR";
-      rs2.state.last_error = "Relay \u91CD\u542F\uFF0C\u4F1A\u8BDD\u4E2D\u65AD";
-      rs2.state.historical = true;
-      rs2.logs.push({ ts: Date.now(), kind: "system", text: "Relay \u91CD\u542F\uFF0C\u4F1A\u8BDD\u4E2D\u65AD" });
+      if (rs2.state.external) {
+        let alive = false;
+        if (rs2.state.cli_pid) {
+          try {
+            process.kill(rs2.state.cli_pid, 0);
+            alive = true;
+          } catch {
+            alive = false;
+          }
+        }
+        if (alive) {
+          rs2.logs.push({ ts: Date.now(), kind: "system", text: "Relay \u91CD\u542F\uFF0CCLI \u8FDB\u7A0B\u4ECD\u5728\u8FD0\u884C" });
+        } else {
+          rs2.state.status = "DONE";
+          rs2.state.done_reason = "ended";
+          rs2.state.historical = true;
+          rs2.logs.push({ ts: Date.now(), kind: "system", text: "Relay \u91CD\u542F\u65F6 CLI \u5DF2\u9000\u51FA\uFF0C\u56DE\u5408\u89C6\u4F5C\u7ED3\u675F" });
+        }
+      } else {
+        rs2.state.status = "ERROR";
+        rs2.state.last_error = "Relay \u91CD\u542F\uFF0C\u4F1A\u8BDD\u4E2D\u65AD";
+        rs2.state.historical = true;
+        rs2.logs.push({ ts: Date.now(), kind: "system", text: "Relay \u91CD\u542F\uFF0C\u4F1A\u8BDD\u4E2D\u65AD" });
+      }
     }
     rs2.state.waiting_request = void 0;
   }
@@ -39008,7 +39028,7 @@ var vLt = D(() => $Y(sm()));
 var sP = D(() => A({ source: bu().describe("Where to fetch the marketplace from"), installLocation: g().optional().describe("Local cache path where marketplace manifest is stored (auto-generated if not provided)"), autoUpdate: R().optional().describe("Whether to automatically update this marketplace and its installed plugins on startup") }));
 var xb = D(() => A({ serverName: g().regex(/^[a-zA-Z0-9_-]+$/, "Server name can only contain letters, numbers, hyphens, and underscores").optional().describe("Name of the MCP server that users are allowed to configure"), serverCommand: I(g()).min(1, "Server command must have at least one element (the command)").optional().describe("Command array [command, ...args] to match exactly for allowed stdio servers"), serverUrl: g().optional().describe('URL pattern with wildcard support (e.g., "https://*.example.com/*") for allowed remote MCP servers') }).refine((e) => Ap([e.serverName !== void 0, e.serverCommand !== void 0, e.serverUrl !== void 0], Boolean) === 1, { message: 'Entry must have exactly one of "serverName", "serverCommand", or "serverUrl"' }));
 var vb = D(() => A({ serverName: g().min(1, "Server name must be non-empty").refine((e) => e.trim().length > 0, { message: "Server name must not be whitespace-only" }).refine((e) => e === e.trim(), { message: "Server name has leading or trailing whitespace and will never match (names are compared verbatim)" }).optional().describe("Name of the MCP server that is explicitly blocked"), serverCommand: I(g()).min(1, "Server command must have at least one element (the command)").optional().describe("Command array [command, ...args] to match exactly for blocked stdio servers"), serverUrl: g().optional().describe('URL pattern with wildcard support (e.g., "https://*.example.com/*") for blocked remote MCP servers') }).refine((e) => Ap([e.serverName !== void 0, e.serverCommand !== void 0, e.serverUrl !== void 0], Boolean) === 1, { message: 'Entry must have exactly one of "serverName", "serverCommand", or "serverUrl"' }));
-var AVe = /[\x00-\x1f\x7f-\x9f\u2028\u2029]|\p{DI}/u;
+var AVe = new RegExp("[\\x00-\\x1f\\x7f-\\x9f\\u2028\\u2029]|\\p{DI}", "u");
 function TVe(e) {
   let t = e.replaceAll("/", "\\");
   if (Ha(t)) return false;
@@ -44643,7 +44663,7 @@ function listCustomCommands(dir, source) {
   return out;
 }
 function startServer(bus2, mgr2, cfg2, opts = {}) {
-  const webRoot = process.env.CCR_WEB_ROOT ?? (process.env.CC_DECK_PLUGIN ? fileURLToPath3(new URL("../", import.meta.url)) : fileURLToPath3(new URL("../../", import.meta.url)));
+  const webRoot = process.env.CCR_WEB_ROOT ?? ("1" ? fileURLToPath3(new URL("../", import.meta.url)) : fileURLToPath3(new URL("../../", import.meta.url)));
   const consoleHtml = join10(webRoot, "web-console", "index.html");
   const naclJs = join10(webRoot, "web-console", "nacl.js");
   const qrJs = join10(webRoot, "web-console", "qr.js");
@@ -45937,7 +45957,7 @@ if (cliArgs.has("--qr")) {
   process.exit(0);
 }
 if (cliArgs.has("--daemon")) {
-  if (!process.env.CC_DECK_PLUGIN) {
+  if (false) {
     console.log("dev \u6A21\u5F0F\uFF08tsx \u524D\u53F0\u8DD1 TS \u6E90\u7801\uFF09\u4E0D\u652F\u6301 --daemon\uFF0C\u8BF7\u76F4\u63A5\u524D\u53F0\u8FD0\u884C");
     process.exit(1);
   }

@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<meta name="theme-color" content="#050B12">
+<meta name="theme-color" content="#04080E">
 <title>CC Deck</title>
 <!-- PWA：相对引用解析到站点根（控制台只托管在 /；/m 是旧移动壳的跳转页） -->
 <link rel="manifest" href="manifest.json">
@@ -13,12 +13,19 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="CC Deck">
 <style>
+  /* #78 侧栏/内容区背景分层（macOS 侧栏范式）：侧栏+标题栏归 --side-bg 实色（原半透明叠底
+     几乎与内容区同色，只剩一条 border 撑分区），内容区走新 --bg-main 并保留品牌辐射光晕；
+     侧栏右缘 --border 全强度线弱化为 --side-line 极淡线。--bg 保留为窗口底色（不再上屏） */
   :root {
     --bg: #050B12;
     --bg-soft: #07101A;
+    /* #78 内容区（#detail/body 底色）主背景：比旧 --bg 提一档，与更深一档的侧栏成对拉开 */
+    --bg-main: #0A0F17;
     --panel: #0B141F;
     --panel-2: #101B2B;
     --border: #1B2739;
+    /* #78 侧栏右缘弱化分隔线：色差已分区，线只留结构暗示（约旧 --border 一半对比） */
+    --side-line: rgba(148,163,190,.08);
     --text: #C9D3E0;
     --text-strong: #E7EEF8;
     --dim: #7E8BA3;
@@ -34,7 +41,8 @@
     --mono: Consolas, "Cascadia Mono", "JetBrains Mono", monospace;
     --glass: rgba(9,15,25,.8);
     --glass-soft: rgba(9,15,25,.55);
-    --side-bg: rgba(8,13,22,.5);
+    /* #78 侧栏/标题栏实色：比内容区 --bg-main 深一档（原 rgba 半透明叠 --bg ≈ #060C14 无分层） */
+    --side-bg: #04080E;
     --code-bg: rgba(148,163,190,.14);
     --mdcode-bg: rgba(148,163,190,.07);
     --th-bg: rgba(148,163,190,.12);
@@ -51,9 +59,13 @@
   html.light {
     --bg: #F3F5F9;
     --bg-soft: #EAEEF4;
+    /* #78 内容区近白（macOS 浅色内容区），与灰调侧栏成对拉开一档 */
+    --bg-main: #FCFDFE;
     --panel: #FFFFFF;
     --panel-2: #F1F4F9;
     --border: #D9DFE9;
+    /* #78 侧栏右缘弱化分隔线（≈8% 墨色，弱于 --border） */
+    --side-line: rgba(16,24,40,.08);
     --text: #1C2637;
     --text-strong: #101B2E;
     --dim: #5F6C84;
@@ -67,7 +79,8 @@
     --done: #047857;
     --glass: rgba(255,255,255,.82);
     --glass-soft: rgba(255,255,255,.6);
-    --side-bg: rgba(238,242,248,.55);
+    /* #78 侧栏/标题栏灰调实色（macOS 浅色侧栏档位，--bg-soft #EAEEF4 仍作其上的 hover/输入底） */
+    --side-bg: #F1F2F5;
     --code-bg: rgba(100,116,139,.14);
     --mdcode-bg: rgba(100,116,139,.06);
     --th-bg: rgba(100,116,139,.10);
@@ -85,7 +98,7 @@
     background:
       radial-gradient(1200px 500px at 80% -10%, rgba(217,119,87,.08), transparent 60%),
       radial-gradient(900px 400px at -10% 110%, rgba(201,100,66,.05), transparent 60%),
-      var(--bg);
+      var(--bg-main);
     color: var(--text);
     font: 14px/1.55 "Segoe UI", system-ui, -apple-system, "PingFang SC", "Microsoft YaHei UI", "Microsoft YaHei", sans-serif;
     display: flex; flex-direction: column; height: 100vh; overflow: hidden;
@@ -96,12 +109,33 @@
   header {
     display: flex; align-items: center; gap: 8px;
     padding: calc(5px + env(safe-area-inset-top)) 10px 5px;
-    background: var(--bg-soft);
+    background: var(--side-bg); /* #78 标题栏并入侧栏底色，与左列连成整块 chrome（macOS 统一工具栏形态） */
     border-bottom: 1px solid var(--border);
     flex: none; width: 100%;
   }
   /* #365 会话列头：状态统计（左，runhint）+ 在线灯/深浅切换（右） */
   #sideHead { display: flex; align-items: center; gap: 8px; padding: 9px 14px 4px; flex: none; }
+  /* #74 macOS 壳：系统红黄绿叠加在左上（tauri.macos.conf 的 Overlay 模式）。
+     第六轮（用户目验定稿）：header 完全撤掉、无边框无线——Slack 真形态：侧栏
+     背景直达窗口顶，圆点浮在侧栏头部空白行上；#sideHead 仅垂直让位（顶部留
+     圆点行高度，水平保持原 padding 统计最左），拖拽区移交 sideHead；右侧内容
+     区全幅到顶（圆点只占左上角不冲突）。Windows/web 不受影响 */
+  html.mac-tauri header { display: none; }
+  html.mac-tauri #sideHead { padding: 38px 14px 4px; }
+  html.mac-tauri #detail { padding-top: 28px; }
+  html.mac-tauri #winBtns { display: none !important; }
+  /* 第九轮：右侧顶部 28px 留白也要可拖窗口（全宽透明拖拽条，与 #sideHead 的
+     drag-region 无冲突；z 低于弹窗层不挡交互） */
+  html.mac-tauri #macDragBar { position: fixed; top: 0; left: 0; right: 0; height: 28px; z-index: 45; }
+  /* 第九轮补：用户看到的「像选中的丑底色」实为拖窗时文字被拖选——drag-region
+     只认挂属性的元素本身，文字子节点拖动即触发选择高亮；标题栏类区域禁选字 */
+  html.mac-tauri #sideHead, html.mac-tauri .hbtn { user-select: none; -webkit-user-select: none; }
+  /* #84 mac：设置栏顶部给圆点让位（一级标题已撤，nav 首项防重叠） */
+  html.mac-tauri #gearPop .gp-rail { padding-top: 40px; }
+  html.mac-tauri #gearPop .gp-head { padding-top: 26px; }
+  /* 用户反馈 mac 字体显大（PingFang 渲染磅值偏大）：会话名称两处各降一档 */
+  html.mac-tauri .card-title { font-size: 14px; }
+  html.mac-tauri #dtitle { font-size: 15px; }
   #sideHead #runhint { flex: 1; min-width: 0; }
   /* #39 主题钮线条图标：SVG 居中（去 emoji 基线抖动） */
   #themeBtn { display: flex; align-items: center; justify-content: center; }
@@ -268,7 +302,6 @@
     background: var(--gp-rail); border-right: 1px solid var(--gp-border);
     padding: 18px 10px 14px;
   }
-  .gp-rail-title { font-size: 17px; font-weight: 700; color: var(--gp-text); padding: 2px 6px 16px; }
   .gp-rail-foot { margin-top: auto; padding: 0 6px; font-size: 10px; color: var(--gp-faint); white-space: nowrap; }
   .gp-nav { display: flex; flex-direction: column; gap: 4px; }
   .gp-nav-item {
@@ -292,8 +325,6 @@
     display: flex; align-items: center; justify-content: space-between; flex: none;
     padding: 12px 16px 11px; border-bottom: 1px solid var(--gp-border);
   }
-  .gp-head-t { display: flex; align-items: center; gap: 9px; font-size: 15px; font-weight: 700; color: var(--gp-text); }
-  .gp-head-t svg { color: var(--gp-dim); flex: none; }
   .gp-head button {
     border: none; background: none; color: var(--gp-dim); font-size: 14px; cursor: pointer;
     padding: 5px 9px; border-radius: 8px; transition: background .12s ease, color .12s ease;
@@ -555,7 +586,6 @@
     /* #40web 修复（2026-09-09）：竖排栏基线的 .gp-nav-item{width:100%} 在横排下未重置，
        每项都按导航条全宽解析 → 首项占满一行、其余被顶出屏外，标题被挤到竖排换行。
        横排菜单条必须收回自然宽度（flex:none+width:auto），nav 自身留 min-width:0 可收缩横滑。 */
-    .gp-rail-title { padding: 0; font-size: 16px; flex: none; white-space: nowrap; }
     .gp-nav { flex-direction: row; overflow-x: auto; flex: 1; min-width: 0; gap: 6px; scrollbar-width: none; }
     .gp-nav::-webkit-scrollbar { display: none; }
     .gp-nav-item { width: auto; flex: none; white-space: nowrap; }
@@ -891,7 +921,7 @@
   /* ---------- 主体 ---------- */
   main { flex: 1; display: flex; overflow: hidden; }
   #side {
-    width: var(--side-w, 380px); flex: none; border-right: 1px solid var(--border);
+    width: var(--side-w, 380px); flex: none; border-right: 1px solid var(--side-line); /* #78 分区靠色差，线弱化 */
     display: flex; flex-direction: column; background: var(--side-bg);
     position: relative; transition: width .18s ease;
     overflow: hidden; min-width: 0;
@@ -1216,7 +1246,14 @@
   @keyframes riseIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
 
   /* ---------- 详情 ---------- */
-  #detail { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
+  /* #78 内容区主背景：--bg-main 之上仍叠品牌辐射光晕（原光晕只挂在 body，被实色侧栏/内容区盖住会丢） */
+  #detail {
+    flex: 1; display: flex; flex-direction: column; overflow: hidden;
+    background:
+      radial-gradient(1200px 500px at 80% -10%, rgba(217,119,87,.08), transparent 60%),
+      radial-gradient(900px 400px at -10% 110%, rgba(201,100,66,.05), transparent 60%),
+      var(--bg-main);
+  }
   #dhead { padding: 12px 20px 0; border-bottom: 1px solid var(--border); background: var(--glass-soft); flex: none; }
   #backBtn { display: none; margin-left: -8px; margin-bottom: 6px; }
   .dhead-row { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
@@ -1620,7 +1657,7 @@
     .srv-row .srv-del { opacity: 1; }
     #side { width: 100%; border-right: none; }
     #detail {
-      display: none; position: absolute; inset: 0; background: var(--bg);
+      display: none; position: absolute; inset: 0; /* #78 背景继承基础规则（光晕 + --bg-main），不再整层覆盖 */
       z-index: 5; padding-top: env(safe-area-inset-top);
     }
     body.detail-open #side { display: none; }
@@ -1717,7 +1754,6 @@
        左 .gp-rail=独立竖排菜单栏，右 .gp-main=Header 固定+内容滚动；打开宽 min(528px,100%) -->
   <aside id="gearPop">
     <div class="gp-rail">
-      <div class="gp-rail-title">设置</div>
       <nav class="gp-nav" id="gpNav">
         <button type="button" class="gp-nav-item on" data-sec="conn"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9 2.8v4.2M15 2.8v4.2"/><path d="M6.5 7h11v4.2a5.5 5.5 0 0 1-11 0V7Z"/><path d="M12 16.7v4.5"/></svg>连接</button>
         <button type="button" class="gp-nav-item" data-sec="relay"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><rect x="3.2" y="3.8" width="17.6" height="6.6" rx="2"/><rect x="3.2" y="13.6" width="17.6" height="6.6" rx="2"/><path d="M7 7.1h.01M7 16.9h.01"/></svg>relay</button>
@@ -1730,7 +1766,6 @@
     </div>
     <div class="gp-main">
       <div class="gp-head">
-        <div class="gp-head-t"><svg viewBox="0 0 24 24" width="15" height="15" fill="currentColor"><path d="M19.14,12.94c0.04-0.3,0.06-0.61,0.06-0.94c0-0.32-0.02-0.64-0.07-0.94l2.03-1.58c0.18-0.14,0.23-0.41,0.12-0.61 l-1.92-3.32c-0.12-0.22-0.37-0.29-0.59-0.22l-2.39,0.96c-0.5-0.38-1.03-0.7-1.62-0.94l-0.36-2.54C14.36,2.18,14.16,2,13.92,2 h-3.84c-0.24,0-0.43,0.18-0.47,0.41L9.25,4.95C8.66,5.19,8.12,5.51,7.63,5.88L5.24,4.92c-0.22-0.08-0.47,0-0.59,0.22L2.74,8.47 c-0.12,0.21-0.08,0.47,0.12,0.61l2.03,1.58c-0.05,0.3-0.09,0.63-0.09,0.94s0.02,0.64,0.07,0.94l-2.03,1.58 c-0.18,0.14-0.23,0.41-0.12,0.61l1.92,3.32c0.12,0.22,0.37,0.29,0.59,0.22l2.39-0.96c0.5,0.38,1.03,0.7,1.62,0.94l0.36,2.54 c0.05,0.24,0.24,0.41,0.48,0.41h3.84c0.24,0,0.44-0.17,0.47-0.41l0.36-2.54c0.59-0.24,1.13-0.56,1.62-0.94l2.39,0.96 c0.22,0.08,0.47,0,0.59-0.22l1.92-3.32c0.12-0.22,0.07-0.47-0.12-0.61L19.14,12.94z M12,15.6c-1.98,0-3.6-1.62-3.6-3.6 s1.62-3.6,3.6-3.6s3.6,1.62,3.6,3.6S13.98,15.6,12,15.6z"/></svg><span>设置</span></div>
         <button id="gearClose" title="收起">✕</button>
       </div>
       <div class="gp-content">
@@ -4677,7 +4712,7 @@ document.addEventListener("click", (ev) => {
 
 // ⚙ 设置浮层（#317）：显示项为散装开关的镜像（点行 = 触发原按钮再回读状态），
 // 服务器管理不进浮层——左栏常驻面板已是高频区，与手机抽屉同为一级入口
-const CONSOLE_VERSION = "0.4.18";
+const CONSOLE_VERSION = "0.4.20";
 // #396 拨杆同步：滑块移到 idx 档（transform 过渡），选中档文字加 .on（白字压品牌色滑块上）
 function setLever(el, idx) {
   if (!el) return;
@@ -5048,20 +5083,33 @@ $("themeBtn").onclick = () => {
   document.documentElement.classList.toggle("light", light);
   try { localStorage.setItem("ccr_theme", light ? "light" : "dark"); } catch {}
   setThemeIcon();
-  document.querySelector('meta[name="theme-color"]')?.setAttribute("content", light ? "#F3F5F9" : "#050B12");
+  document.querySelector('meta[name="theme-color"]')?.setAttribute("content", light ? "#F1F2F5" : "#04080E");
   __ccShellTheme(light);
 };
 // #63 通道含义问号初始化挪至 PLUG_SVG 定义之后（renderServers 区）；connChip 电脑图标同批
 const DESK_SVG = '<svg viewBox="0 0 16 13" width="13" height="11" fill="none" stroke="currentColor" stroke-width="1.4"><rect x="1.2" y="1.5" width="13.6" height="9" rx="1.6"/><path d="M5.5 12.5h5" stroke-linecap="round"/></svg>';
 (function initConnChipDesk() { const d = $("connChipDesk"); if (d) d.innerHTML = DESK_SVG; })();
 // #344 无边框窗口控制（仅桌面壳显示；浏览器隐藏，拖拽属性无害）
+// #74 mac 壳例外：窗口控制由系统红黄绿承载（Overlay），右侧按钮组不显示，只挂
+// mac-tauri class 让 CSS 留出圆点安全区；浏览器版 Mac（无 __TAURI__）不受影响
 if (window.__TAURI__ && window.__TAURI__.window) {
   const wb = document.getElementById("winBtns");
-  wb.style.display = "flex";
-  const w = window.__TAURI__.window.getCurrentWindow();
-  wb.querySelector('[data-w="min"]').onclick = () => { try { w.minimize(); } catch {} };
-  wb.querySelector('[data-w="max"]').onclick = () => { try { w.toggleMaximize(); } catch {} };
-  wb.querySelector('[data-w="close"]').onclick = () => { try { w.close(); } catch {} };
+  if (/Mac/i.test(navigator.userAgent)) {
+    document.documentElement.classList.add("mac-tauri");
+    // 顶栏撤掉后窗口拖拽区移交侧栏头（Tauri 壳内属性才生效；Windows 布局不变）
+    document.getElementById("sideHead")?.setAttribute("data-tauri-drag-region", "");
+    // 第九轮：右侧内容区顶部留白同样可拖——全宽透明拖拽条（侧栏侧同属 drag 区无冲突）
+    const macBar = document.createElement("div");
+    macBar.id = "macDragBar";
+    macBar.setAttribute("data-tauri-drag-region", "");
+    document.body.appendChild(macBar);
+  } else {
+    wb.style.display = "flex";
+    const w = window.__TAURI__.window.getCurrentWindow();
+    wb.querySelector('[data-w="min"]').onclick = () => { try { w.minimize(); } catch {} };
+    wb.querySelector('[data-w="max"]').onclick = () => { try { w.toggleMaximize(); } catch {} };
+    wb.querySelector('[data-w="close"]').onclick = () => { try { w.close(); } catch {} };
+  }
 }
 // ---------- 服务器管理（多源：列表 + 添加/编辑表单） ----------
 let formKind = "lan";   // 表单当前类型（添加目标）
@@ -5190,7 +5238,10 @@ function renderServers() {
     const pb = pairBadgeOf(s, ctx);
     const addr = srvAddrText(s, ctx);
     // #48 通道标记：云桥线性云朵（#64 去 emoji）/ LAN 源小字 / 手动直连不显示
-    const chanTag = s.kind === "cloud" ? '<span class="srv-chan cloud">' + CLOUD_SVG + '</span>' : s.kind === "lan" ? '<span class="srv-chan">LAN</span>' : "";
+    // #81 同步手机端定稿：通道只在已连接时显示（通道=怎么连上的，未连接时显示
+    // 只能是过期/预告信息，徒增「灰色云」式噪音）；web 端无动态通道，kind 即实际
+    const chanOn = ctx && ctx.status === "online";
+    const chanTag = !chanOn ? "" : s.kind === "cloud" ? '<span class="srv-chan cloud">' + CLOUD_SVG + '</span>' : s.kind === "lan" ? '<span class="srv-chan">LAN</span>' : "";
     return '<div class="srv-row' + (s.id === activeServerId ? " active" : "") + (s.id === editId ? " editing" : "") + '" data-id="' + s.id + '" title="点击设为活动源，并在下方展开编辑">' +
       '<div class="srv-main"><b>' + escapeHtml(s.name) + '</b>' +
       '<span class="srv-addr' + (pdPairingAnim(stText) ? " pairing" : "") + '">' + escapeHtml(addr) + "</span></div>" +
@@ -5767,7 +5818,7 @@ $("fontBtn").onclick = () => {
 applyTlScale();
 setThemeIcon(); // #39 初始图标（线条版）
 document.querySelector('meta[name="theme-color"]')?.setAttribute(
-  "content", document.documentElement.classList.contains("light") ? "#F3F5F9" : "#050B12");
+  "content", document.documentElement.classList.contains("light") ? "#F1F2F5" : "#04080E");
 $("permBtn").onclick = () => {
   const sel = selSession();
   if (!sel || sel.s.external || sel.s.historical) return;
