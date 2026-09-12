@@ -291,10 +291,13 @@ startServer(bus, mgr, cfg, {
     return ip ? `${ip}:${cfg.port}` : "";
   },
   lanAuthHello: () => (cloudIdentity ? { relay_dev: cloudIdentity.relayDev, nonce: randomBytes(16).toString("base64") } : null),
-  lanAuthHandle: (box) => {
+  lanAuthHandle: (dev, box) => {
     if (!cloudIdentity) return { ok: false as const, error: "no identity" };
-    const inner = unseal<{ dev?: string; nonce?: string }>(box, cloudIdentity.keypair.publicKey, cloudIdentity.keypair.secretKey);
-    if (!inner || !inner.dev || !inner.nonce) return { ok: false as const, error: "bad box" };
+    // dev 为明文路由键：用该 dev 的配对公钥作发送者公钥解 box（天然验持钥者身份）
+    const peer = cloudIdentity.peers.get(dev);
+    if (!peer) return { ok: false as const, error: "unknown device" };
+    const inner = unseal<{ nonce?: string }>(box, peer.pubkey, cloudIdentity.keypair.secretKey);
+    if (!inner || !inner.nonce) return { ok: false as const, error: "bad box" };
     if (!lanAuthNonces) lanAuthNonces = new Map();
     const now = Date.now();
     for (const [n, t] of lanAuthNonces) if (now - t > 60_000) lanAuthNonces.delete(n);
@@ -303,8 +306,6 @@ startServer(bus, mgr, cfg, {
     } else if (inner.nonce.length < 16 || inner.nonce.length > 44) {
       return { ok: false as const, error: "bad nonce" };
     }
-    const peer = cloudIdentity.peers.get(inner.dev);
-    if (!peer) return { ok: false as const, error: "unknown device" };
     const reply = seal({ token: cfg.token, port: cfg.port }, peer.pubkey, cloudIdentity.keypair.secretKey);
     return { ok: true as const, box: reply };
   },

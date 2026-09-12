@@ -154,7 +154,7 @@ export interface StartServerOptions {
   // lanHint 给 SNAPSHOT（ip:port）；authHello/authHandle 由 index 注入（持 identity）
   lanHint?: () => string;
   lanAuthHello?: () => { relay_dev: string; nonce: string } | null;
-  lanAuthHandle?: (box: { n: string; c: string }) => { ok: true; box: { n: string; c: string } } | { ok: false; error: string };
+  lanAuthHandle?: (dev: string, box: { n: string; c: string }) => { ok: true; box: { n: string; c: string } } | { ok: false; error: string };
   onReady?: () => void;     // listen 成功后回调（daemon 模式在此时写 pid 文件，防端口被占时留下死 pid）
 }
 
@@ -286,9 +286,11 @@ export function startServer(
       req.on("data", (c) => { body += c; });
       req.on("end", () => {
         try {
-          const { box } = JSON.parse(body) as { box?: { n: string; c: string } };
-          if (!box || !opts.lanAuthHandle) { res.writeHead(400).end('{"error":"bad request"}'); return; }
-          const r = opts.lanAuthHandle(box);
+          // #95 修正：nacl.box 需发送者公钥解密，dev 藏密文里则无从获取——dev 提为
+          // 明文路由键（伪造无用：box 须用 peers[dev] 公钥+真私钥才能构造/解开）
+          const { dev, box } = JSON.parse(body) as { dev?: string; box?: { n: string; c: string } };
+          if (!dev || !box || !opts.lanAuthHandle) { res.writeHead(400).end('{"error":"bad request"}'); return; }
+          const r = opts.lanAuthHandle(dev, box);
           if (r.ok) res.writeHead(200, { "content-type": "application/json", "cache-control": "no-store", "access-control-allow-origin": "*" }).end(JSON.stringify({ ok: true, box: r.box }));
           else res.writeHead(403, { "content-type": "application/json" }).end(JSON.stringify({ ok: false, error: r.error }));
         } catch { res.writeHead(400).end(); }

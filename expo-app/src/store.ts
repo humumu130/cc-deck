@@ -848,10 +848,11 @@ class RelayStore {
       const base = `http://${conn.lanHint}`;
       const h = await (await fetch(`${base}/api/lan-hello`, { signal: AbortSignal.timeout(2000) })).json() as { ok?: boolean; relay_dev?: string; nonce?: string };
       if (!h?.ok || !h.nonce || h.relay_dev !== conn.cloudCfg.relayDev) return "";
-      const box = seal({ dev, nonce: h.nonce }, conn.cloudCfg.relayPubkey, keys.secretKey);
+      // #95 修正：dev 明文路由键 + box 内只放 nonce（relay 用 peers[dev] 公钥验解）
+      const box = seal({ nonce: h.nonce }, conn.cloudCfg.relayPubkey, keys.secretKey);
       const r = await (await fetch(`${base}/api/lan-auth`, {
         method: "POST", headers: { "content-type": "application/json" },
-        body: JSON.stringify({ box }), signal: AbortSignal.timeout(2500),
+        body: JSON.stringify({ dev, box }), signal: AbortSignal.timeout(2500),
       })).json() as { ok?: boolean; box?: { n: string; c: string } };
       if (!r?.ok || !r.box) return "";
       // 回箱发送方是 relay：unseal 用 relay 公钥（rk）配本机私钥——曾误传自己公钥
