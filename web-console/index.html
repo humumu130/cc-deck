@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<meta name="theme-color" content="#050B12">
+<meta name="theme-color" content="#04080E">
 <title>CC Deck</title>
 <!-- PWA：相对引用解析到站点根（控制台只托管在 /；/m 是旧移动壳的跳转页） -->
 <link rel="manifest" href="manifest.json">
@@ -13,12 +13,19 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="CC Deck">
 <style>
+  /* #78 侧栏/内容区背景分层（macOS 侧栏范式）：侧栏+标题栏归 --side-bg 实色（原半透明叠底
+     几乎与内容区同色，只剩一条 border 撑分区），内容区走新 --bg-main 并保留品牌辐射光晕；
+     侧栏右缘 --border 全强度线弱化为 --side-line 极淡线。--bg 保留为窗口底色（不再上屏） */
   :root {
     --bg: #050B12;
     --bg-soft: #07101A;
+    /* #78 内容区（#detail/body 底色）主背景：比旧 --bg 提一档，与更深一档的侧栏成对拉开 */
+    --bg-main: #0A0F17;
     --panel: #0B141F;
     --panel-2: #101B2B;
     --border: #1B2739;
+    /* #78 侧栏右缘弱化分隔线：色差已分区，线只留结构暗示（约旧 --border 一半对比） */
+    --side-line: rgba(148,163,190,.08);
     --text: #C9D3E0;
     --text-strong: #E7EEF8;
     --dim: #7E8BA3;
@@ -34,7 +41,8 @@
     --mono: Consolas, "Cascadia Mono", "JetBrains Mono", monospace;
     --glass: rgba(9,15,25,.8);
     --glass-soft: rgba(9,15,25,.55);
-    --side-bg: rgba(8,13,22,.5);
+    /* #78 侧栏/标题栏实色：比内容区 --bg-main 深一档（原 rgba 半透明叠 --bg ≈ #060C14 无分层） */
+    --side-bg: #04080E;
     --code-bg: rgba(148,163,190,.14);
     --mdcode-bg: rgba(148,163,190,.07);
     --th-bg: rgba(148,163,190,.12);
@@ -51,9 +59,13 @@
   html.light {
     --bg: #F3F5F9;
     --bg-soft: #EAEEF4;
+    /* #78 内容区近白（macOS 浅色内容区），与灰调侧栏成对拉开一档 */
+    --bg-main: #FCFDFE;
     --panel: #FFFFFF;
     --panel-2: #F1F4F9;
     --border: #D9DFE9;
+    /* #78 侧栏右缘弱化分隔线（≈8% 墨色，弱于 --border） */
+    --side-line: rgba(16,24,40,.08);
     --text: #1C2637;
     --text-strong: #101B2E;
     --dim: #5F6C84;
@@ -67,7 +79,8 @@
     --done: #047857;
     --glass: rgba(255,255,255,.82);
     --glass-soft: rgba(255,255,255,.6);
-    --side-bg: rgba(238,242,248,.55);
+    /* #78 侧栏/标题栏灰调实色（macOS 浅色侧栏档位，--bg-soft #EAEEF4 仍作其上的 hover/输入底） */
+    --side-bg: #F1F2F5;
     --code-bg: rgba(100,116,139,.14);
     --mdcode-bg: rgba(100,116,139,.06);
     --th-bg: rgba(100,116,139,.10);
@@ -85,7 +98,7 @@
     background:
       radial-gradient(1200px 500px at 80% -10%, rgba(217,119,87,.08), transparent 60%),
       radial-gradient(900px 400px at -10% 110%, rgba(201,100,66,.05), transparent 60%),
-      var(--bg);
+      var(--bg-main);
     color: var(--text);
     font: 14px/1.55 "Segoe UI", system-ui, -apple-system, "PingFang SC", "Microsoft YaHei UI", "Microsoft YaHei", sans-serif;
     display: flex; flex-direction: column; height: 100vh; overflow: hidden;
@@ -96,7 +109,7 @@
   header {
     display: flex; align-items: center; gap: 8px;
     padding: calc(5px + env(safe-area-inset-top)) 10px 5px;
-    background: var(--bg-soft);
+    background: var(--side-bg); /* #78 标题栏并入侧栏底色，与左列连成整块 chrome（macOS 统一工具栏形态） */
     border-bottom: 1px solid var(--border);
     flex: none; width: 100%;
   }
@@ -111,6 +124,9 @@
   html.mac-tauri #sideHead { padding: 38px 14px 4px; }
   html.mac-tauri #detail { padding-top: 28px; }
   html.mac-tauri #winBtns { display: none !important; }
+  /* 用户反馈 mac 字体显大（PingFang 渲染磅值偏大）：会话名称两处各降一档 */
+  html.mac-tauri .card-title { font-size: 14px; }
+  html.mac-tauri #dtitle { font-size: 15px; }
   #sideHead #runhint { flex: 1; min-width: 0; }
   /* #39 主题钮线条图标：SVG 居中（去 emoji 基线抖动） */
   #themeBtn { display: flex; align-items: center; justify-content: center; }
@@ -900,7 +916,7 @@
   /* ---------- 主体 ---------- */
   main { flex: 1; display: flex; overflow: hidden; }
   #side {
-    width: var(--side-w, 380px); flex: none; border-right: 1px solid var(--border);
+    width: var(--side-w, 380px); flex: none; border-right: 1px solid var(--side-line); /* #78 分区靠色差，线弱化 */
     display: flex; flex-direction: column; background: var(--side-bg);
     position: relative; transition: width .18s ease;
     overflow: hidden; min-width: 0;
@@ -1225,7 +1241,14 @@
   @keyframes riseIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
 
   /* ---------- 详情 ---------- */
-  #detail { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
+  /* #78 内容区主背景：--bg-main 之上仍叠品牌辐射光晕（原光晕只挂在 body，被实色侧栏/内容区盖住会丢） */
+  #detail {
+    flex: 1; display: flex; flex-direction: column; overflow: hidden;
+    background:
+      radial-gradient(1200px 500px at 80% -10%, rgba(217,119,87,.08), transparent 60%),
+      radial-gradient(900px 400px at -10% 110%, rgba(201,100,66,.05), transparent 60%),
+      var(--bg-main);
+  }
   #dhead { padding: 12px 20px 0; border-bottom: 1px solid var(--border); background: var(--glass-soft); flex: none; }
   #backBtn { display: none; margin-left: -8px; margin-bottom: 6px; }
   .dhead-row { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
@@ -1629,7 +1652,7 @@
     .srv-row .srv-del { opacity: 1; }
     #side { width: 100%; border-right: none; }
     #detail {
-      display: none; position: absolute; inset: 0; background: var(--bg);
+      display: none; position: absolute; inset: 0; /* #78 背景继承基础规则（光晕 + --bg-main），不再整层覆盖 */
       z-index: 5; padding-top: env(safe-area-inset-top);
     }
     body.detail-open #side { display: none; }
@@ -5057,7 +5080,7 @@ $("themeBtn").onclick = () => {
   document.documentElement.classList.toggle("light", light);
   try { localStorage.setItem("ccr_theme", light ? "light" : "dark"); } catch {}
   setThemeIcon();
-  document.querySelector('meta[name="theme-color"]')?.setAttribute("content", light ? "#F3F5F9" : "#050B12");
+  document.querySelector('meta[name="theme-color"]')?.setAttribute("content", light ? "#F1F2F5" : "#04080E");
   __ccShellTheme(light);
 };
 // #63 通道含义问号初始化挪至 PLUG_SVG 定义之后（renderServers 区）；connChip 电脑图标同批
@@ -5784,7 +5807,7 @@ $("fontBtn").onclick = () => {
 applyTlScale();
 setThemeIcon(); // #39 初始图标（线条版）
 document.querySelector('meta[name="theme-color"]')?.setAttribute(
-  "content", document.documentElement.classList.contains("light") ? "#F3F5F9" : "#050B12");
+  "content", document.documentElement.classList.contains("light") ? "#F1F2F5" : "#04080E");
 $("permBtn").onclick = () => {
   const sel = selSession();
   if (!sel || sel.s.external || sel.s.historical) return;
