@@ -130,6 +130,9 @@
   /* 第九轮补：用户看到的「像选中的丑底色」实为拖窗时文字被拖选——drag-region
      只认挂属性的元素本身，文字子节点拖动即触发选择高亮；标题栏类区域禁选字 */
   html.mac-tauri #sideHead, html.mac-tauri .hbtn { user-select: none; -webkit-user-select: none; }
+  /* #84 mac：设置栏顶部给圆点让位（一级标题已撤，nav 首项防重叠） */
+  html.mac-tauri #gearPop .gp-rail { padding-top: 40px; }
+  html.mac-tauri #gearPop .gp-head { padding-top: 26px; }
   /* 用户反馈 mac 字体显大（PingFang 渲染磅值偏大）：会话名称两处各降一档 */
   html.mac-tauri .card-title { font-size: 14px; }
   html.mac-tauri #dtitle { font-size: 15px; }
@@ -299,7 +302,6 @@
     background: var(--gp-rail); border-right: 1px solid var(--gp-border);
     padding: 18px 10px 14px;
   }
-  .gp-rail-title { font-size: 17px; font-weight: 700; color: var(--gp-text); padding: 2px 6px 16px; }
   .gp-rail-foot { margin-top: auto; padding: 0 6px; font-size: 10px; color: var(--gp-faint); white-space: nowrap; }
   .gp-nav { display: flex; flex-direction: column; gap: 4px; }
   .gp-nav-item {
@@ -323,8 +325,6 @@
     display: flex; align-items: center; justify-content: space-between; flex: none;
     padding: 12px 16px 11px; border-bottom: 1px solid var(--gp-border);
   }
-  .gp-head-t { display: flex; align-items: center; gap: 9px; font-size: 15px; font-weight: 700; color: var(--gp-text); }
-  .gp-head-t svg { color: var(--gp-dim); flex: none; }
   .gp-head button {
     border: none; background: none; color: var(--gp-dim); font-size: 14px; cursor: pointer;
     padding: 5px 9px; border-radius: 8px; transition: background .12s ease, color .12s ease;
@@ -586,7 +586,6 @@
     /* #40web 修复（2026-09-09）：竖排栏基线的 .gp-nav-item{width:100%} 在横排下未重置，
        每项都按导航条全宽解析 → 首项占满一行、其余被顶出屏外，标题被挤到竖排换行。
        横排菜单条必须收回自然宽度（flex:none+width:auto），nav 自身留 min-width:0 可收缩横滑。 */
-    .gp-rail-title { padding: 0; font-size: 16px; flex: none; white-space: nowrap; }
     .gp-nav { flex-direction: row; overflow-x: auto; flex: 1; min-width: 0; gap: 6px; scrollbar-width: none; }
     .gp-nav::-webkit-scrollbar { display: none; }
     .gp-nav-item { width: auto; flex: none; white-space: nowrap; }
@@ -1755,7 +1754,6 @@
        左 .gp-rail=独立竖排菜单栏，右 .gp-main=Header 固定+内容滚动；打开宽 min(528px,100%) -->
   <aside id="gearPop">
     <div class="gp-rail">
-      <div class="gp-rail-title">设置</div>
       <nav class="gp-nav" id="gpNav">
         <button type="button" class="gp-nav-item on" data-sec="conn"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9 2.8v4.2M15 2.8v4.2"/><path d="M6.5 7h11v4.2a5.5 5.5 0 0 1-11 0V7Z"/><path d="M12 16.7v4.5"/></svg>连接</button>
         <button type="button" class="gp-nav-item" data-sec="relay"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><rect x="3.2" y="3.8" width="17.6" height="6.6" rx="2"/><rect x="3.2" y="13.6" width="17.6" height="6.6" rx="2"/><path d="M7 7.1h.01M7 16.9h.01"/></svg>relay</button>
@@ -1768,7 +1766,6 @@
     </div>
     <div class="gp-main">
       <div class="gp-head">
-        <div class="gp-head-t"><svg viewBox="0 0 24 24" width="15" height="15" fill="currentColor"><path d="M19.14,12.94c0.04-0.3,0.06-0.61,0.06-0.94c0-0.32-0.02-0.64-0.07-0.94l2.03-1.58c0.18-0.14,0.23-0.41,0.12-0.61 l-1.92-3.32c-0.12-0.22-0.37-0.29-0.59-0.22l-2.39,0.96c-0.5-0.38-1.03-0.7-1.62-0.94l-0.36-2.54C14.36,2.18,14.16,2,13.92,2 h-3.84c-0.24,0-0.43,0.18-0.47,0.41L9.25,4.95C8.66,5.19,8.12,5.51,7.63,5.88L5.24,4.92c-0.22-0.08-0.47,0-0.59,0.22L2.74,8.47 c-0.12,0.21-0.08,0.47,0.12,0.61l2.03,1.58c-0.05,0.3-0.09,0.63-0.09,0.94s0.02,0.64,0.07,0.94l-2.03,1.58 c-0.18,0.14-0.23,0.41-0.12,0.61l1.92,3.32c0.12,0.22,0.37,0.29,0.59,0.22l2.39-0.96c0.5,0.38,1.03,0.7,1.62,0.94l0.36,2.54 c0.05,0.24,0.24,0.41,0.48,0.41h3.84c0.24,0,0.44-0.17,0.47-0.41l0.36-2.54c0.59-0.24,1.13-0.56,1.62-0.94l2.39,0.96 c0.22,0.08,0.47,0,0.59-0.22l1.92-3.32c0.12-0.22,0.07-0.47-0.12-0.61L19.14,12.94z M12,15.6c-1.98,0-3.6-1.62-3.6-3.6 s1.62-3.6,3.6-3.6s3.6,1.62,3.6,3.6S13.98,15.6,12,15.6z"/></svg><span>设置</span></div>
         <button id="gearClose" title="收起">✕</button>
       </div>
       <div class="gp-content">
@@ -4715,7 +4712,7 @@ document.addEventListener("click", (ev) => {
 
 // ⚙ 设置浮层（#317）：显示项为散装开关的镜像（点行 = 触发原按钮再回读状态），
 // 服务器管理不进浮层——左栏常驻面板已是高频区，与手机抽屉同为一级入口
-const CONSOLE_VERSION = "0.4.19";
+const CONSOLE_VERSION = "0.4.20";
 // #396 拨杆同步：滑块移到 idx 档（transform 过渡），选中档文字加 .on（白字压品牌色滑块上）
 function setLever(el, idx) {
   if (!el) return;
