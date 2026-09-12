@@ -188,6 +188,17 @@ export function reduceHistory(events: Envelope[]): Map<string, ReplayedSession> 
     }
   }
 
+  // #82 存量矫正（2026-09-13 用户再报）：旧版重放误标的 ERROR 已成事件流终态，忠实
+  // 重放永远复活它们——ERROR 且无 last_error（真错误路径 hook 会报 error 消息进来）
+  // 的外部会话一律归 DONE：正常收工形态（有 SESSION_DONE 取其 reason，缺省 ended）
+  for (const rs of out.values()) {
+    if (rs.state.external && rs.state.status === "ERROR" && !rs.state.last_error) {
+      rs.state.status = "DONE";
+      if (!rs.state.done_reason) rs.state.done_reason = "ended";
+      rs.logs.push({ ts: Date.now(), kind: "system", text: "历史误标错误已自动矫正为完成" });
+    }
+  }
+
   // 非终态会话：Relay 重启时被中断。托管会话 agent 真随 relay 死了——ERROR 合理；
   // 外部 CLI 是独立进程：pid 还活就保持 WORKING（hook/转录随后自会收敛），pid 已死
   // 也只是「CLI 先于 relay 退出」（claude -p 收工即此形态，转录尾巴还常把 DONE 翻回

@@ -399,7 +399,6 @@ export default function SettingsDrawer({
           </View>
           <View style={{ flex: 1, minWidth: 0 }}>
             <Text style={d.nameT}>CC Deck</Text>
-            <Text style={d.verT}>{APP_VER}</Text>
           </View>
           {/* 全局扫码入口（直连/登录/导入统一扫）：头部右侧角标钮，与设置页同一链路 */}
           <Pressable
@@ -535,7 +534,7 @@ export default function SettingsDrawer({
             同字号字重字色、同 18/6 上下节奏、同 24×24 右占位（行高一致）但不渲染箭头 */}
         <View style={d.secHead}>
           <Text style={d.secTitleT}><Text style={d.secIconT}>⇄ </Text>配对</Text>
-          <View style={d.secToggle} />
+          <View style={{ width: 1 }} />
         </View>
         {pc ? (
           // pc 存在即显示码框：到期 0:00 到续领回包之间不闪「已过期」按钮（抽屉常开时每 TTL 闪一次）
@@ -632,7 +631,7 @@ export default function SettingsDrawer({
           <Text style={d.setLabel}><Text style={d.rowIconT}>✎ </Text>反馈</Text>
           <Text style={d.aboutT}>›</Text>
         </Pressable>
-        <Text style={d.aboutBuildT}>CC Deck · Build {APP_VER.replace(/^v/, "")}</Text>
+
         </ScrollView>
       </Animated.View>
       <AboutModal visible={aboutOpen} onClose={() => setAboutOpen(false)} />
@@ -739,7 +738,7 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
   },
   // L6 四个段头统一走 secHead 行结构：可折叠段加 ▾/▸，配对/关于等纯段头只渲染
   // 同规格空占位（secToggle 形状）不渲染箭头——18/6 节奏与行高完全一致
-  secHead: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginTop: 18, marginBottom: 6 },
+  secHead: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginTop: 16, marginBottom: 1 },
   // #51 标题左组：标题+问号同行靠左（原问号被 space-between 推中）
   secTitleRow: { flexDirection: "row", alignItems: "center", gap: 7 },
   secTitleT: { color: c.faint, fontSize: 11, fontWeight: "700", letterSpacing: 1 },
@@ -816,9 +815,11 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
     backgroundColor: c.tintStrong, borderWidth: 1, borderColor: withA(c.brandA, 0.45),
   },
   pairGenT: { color: c.brandA, fontSize: 13, fontWeight: "700" },
-  // #378 配对码平铺去框（对齐网页 #352）：大字码 + 右侧倒计时/刷新，无外框
+  // #92 重做：配对码容器化（#378 裸平铺在窄抽屉里漂浮感强、下方空档大）——
+  // 同款卡片语言（面板底+描边+圆角），padding 收紧段内垂直节奏
   pairBox: {
-    paddingVertical: 10, paddingHorizontal: 2, marginBottom: 8,
+    paddingVertical: 8, paddingHorizontal: 12, marginBottom: 2,
+    backgroundColor: c.panel, borderWidth: 1, borderColor: c.line, borderRadius: 12,
   },
   pairTop: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
   pairSide: { flexDirection: "row", alignItems: "center", gap: 6 },
