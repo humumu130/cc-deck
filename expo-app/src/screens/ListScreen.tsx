@@ -380,11 +380,10 @@ function CtxCell({ s }: { s: SessionState }) {
 // 源归属改由分组头承担，卡片不再带源角标 props——会话对象引用不变即不重渲）
 // #59 聚合源归属角标：源身份色点+源名（各密度档通用，行内右端）
 function SrcBadge({ name, color }: { name: string; color: string }) {
-  const styles = useThemeStyles(makeStyles);
+  // #98 桌面版同款胶囊：源色底+白字圆角（原为色点+灰字）
   return (
-    <View style={styles.srcBadge}>
-      <View style={[styles.srcBadgeDot, { backgroundColor: color }]} />
-      <Text style={styles.srcBadgeT} numberOfLines={1}>{name}</Text>
+    <View style={{ backgroundColor: color + "E6", borderRadius: 4.5, paddingHorizontal: 5.5, paddingVertical: 1.5 }}>
+      <Text style={{ color: "#fff", fontSize: 8.5, fontWeight: "700", letterSpacing: 0.3 }} numberOfLines={1}>{name}</Text>
     </View>
   );
 }
@@ -734,19 +733,10 @@ export default function ListScreen({ sessions, connected, connText, onOpen, onNe
     const order = [...buckets.entries()].sort(
       (a, b) => Math.max(...b[1].map(lastTs)) - Math.max(...a[1].map(lastTs)),
     );
+    // #98 聚合平铺（对齐电脑端）：不再按源插分组头，全部会话合一个列表
+    //（全局排序仍按最近活动；源归属由每卡左下角胶囊标签承载）
     const out: ListRow[] = [];
-    for (const [src, list] of order) {
-      // src 不在源表（源已移除但会话还在快照里）：兜底"其他"+哈希色
-      out.push({
-        h: true,
-        key: `src:${src || "unknown"}`,
-        name: nameOf.get(src) ?? "其他",
-        color: colorOf.get(src) ?? srcColor(src),
-        online: onlineOf.get(src) ?? false,
-        count: list.length,
-      });
-      for (const s of list) out.push({ h: false, key: s.session_id, s });
-    }
+    for (const [, list] of order) for (const s of list) out.push({ h: false, key: s.session_id, s });
     return out;
   }, [badgeOn, visible, snap.sources, onlineSrcs]);
 
