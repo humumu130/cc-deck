@@ -3055,6 +3055,11 @@ function stopCloudPing(ctx) { if (ctx.pingTimer) { clearInterval(ctx.pingTimer);
 //（带 last_seq，relay 会按需补发漏掉的事件）；顺带探测半开连接：8s 无回包即强制重连。
 document.addEventListener("visibilitychange", () => {
   if (document.visibilityState !== "visible") return;
+  // #90 对齐手机端：切回标签时断线退避中的源立即重连（跳过剩余退避）——
+  // 标签页隐藏期间定时器节流，退避计时早已失真，等满毫无意义
+  for (const ctx of ctxs.values()) {
+    if (ctx.status === "reconnecting" || ctx.status === "offline") manualRetry(ctx); // #40web 手动重试同款（跳退避立即重连）
+  }
   for (const ctx of ctxs.values()) {
     if (ctx.cfg.kind !== "cloud" || ctx.status !== "online") continue;
     if (!cloudPeerOf(ctx.cfg) || ctx.pendingPair) continue;
