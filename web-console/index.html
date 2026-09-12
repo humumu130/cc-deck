@@ -877,6 +877,10 @@
      曾把「☁️→徽章」间距撑到 10px（视觉 ~13px），是组内 3 倍节奏差的元凶 */
   .srv-right { display: flex; align-items: center; gap: 5px; flex: none; margin-left: 6px; }
   .srv-right .srv-chan, .srv-right .srv-chan.cloud, .srv-right .srv-pbadge { margin-left: 0; }
+  /* #96 通道角标（与手机端同几何）：垂直中线=插头底边、水平在插头右缘之外 */
+  .plug { position: relative; }
+  .pchan { position: absolute; left: calc(100% + 1.5px); top: 8.5px; font-style: normal; font-size: 7px; line-height: 9px; color: var(--dim); }
+  .pchan.lan { font-size: 6.5px; font-weight: 700; color: #5B9DFF; top: 9px; letter-spacing: .2px; }
   .srv-addr { display: block; font-size: 11px; color: var(--dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .srv-row .srv-del {
     flex: none; background: none; border: none; cursor: pointer; color: var(--faint);
@@ -5255,18 +5259,18 @@ function renderServers() {
     // 传输失败时「已配对」徽仍在场，连接失败 ≠ 需要重新输码
     const pb = pairBadgeOf(s, ctx);
     const addr = srvAddrText(s, ctx);
-    // #48 通道标记：云桥线性云朵（#64 去 emoji）/ LAN 源小字 / 手动直连不显示
-    // #81 同步手机端定稿：通道只在已连接时显示（通道=怎么连上的，未连接时显示
-    // 只能是过期/预告信息，徒增「灰色云」式噪音）；web 端无动态通道，kind 即实际
+    // #48 通道标记：云桥/ LAN / 手动直连不显示
+    // #81+#96 与手机端同款几何：仅已连接显示；不独立占位——缩成插头右下外侧
+    // 小角标（垂直中线=插头底边、水平在插头右缘外不重叠）
     const chanOn = ctx && ctx.status === "online";
-    const chanTag = !chanOn ? "" : s.kind === "cloud" ? '<span class="srv-chan cloud">' + CLOUD_SVG + '</span>' : s.kind === "lan" ? '<span class="srv-chan">LAN</span>' : "";
+    const chanBadge = !chanOn ? "" : s.kind === "cloud" ? '<i class="pchan">☁</i>' : s.kind === "lan" ? '<i class="pchan lan">LAN</i>' : "";
     return '<div class="srv-row' + (s.id === activeServerId ? " active" : "") + (s.id === editId ? " editing" : "") + '" data-id="' + s.id + '" title="点击设为活动源，并在下方展开编辑">' +
       '<div class="srv-main"><b>' + escapeHtml(s.name) + '</b>' +
       '<span class="srv-addr' + (pdPairingAnim(stText) ? " pairing" : "") + '">' + escapeHtml(addr) + "</span></div>" +
       // #64 状态/模式图标恒右对齐（对齐手机端 #46/#51：名称 flex 占满，[通道标记][配对徽章][插头] 右列；
       // 副行纯地址——状态汉字撤，状态由插头三色承载）
-      '<span class="srv-right">' + chanTag + (pb ? '<span class="srv-pbadge ' + pb.c + '">' + pb.t + '</span>' : "") +
-      '<span class="plug ' + (ctx ? ctx.status : "offline") + '">' + PLUG_SVG + "</span></span>" +
+      '<span class="srv-right">' + (pb ? '<span class="srv-pbadge ' + pb.c + '">' + pb.t + '</span>' : "") +
+      '<span class="plug ' + (ctx ? ctx.status : "offline") + '">' + PLUG_SVG + chanBadge + "</span></span>" +
       (isRetryable(ctx) ? '<button class="srv-retry" title="跳过退避等待，立即重连">↻ 重试</button>' : "") +
       '<button class="srv-del" title="删除">✕</button>' +
       "</div>";
