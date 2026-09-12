@@ -1732,8 +1732,12 @@ class RelayStore {
         break;
       }
       case "SESSION_UPDATED": {
-        const s = conn.sessions.get(sid);
+        let s = conn.sessions.get(sid);
         if (!s) break;
+        // #91 状态更新走对象替换而非原地突变：卡行是 memo（浅比较 props.s 引用），
+        // 突变不触发重渲——统计行 5s 变而卡灯拖 30-40s 的根因
+        s = { ...s };
+        conn.sessions.set(sid, s);
         s.status = msg.payload.status;
         s.action_summary = msg.payload.action_summary;
         // 状态离开 WAITING 却没等来 RESOLVED 事件（relay 重启重放等场景）：清掉残留的审批面板数据
@@ -1772,16 +1776,20 @@ class RelayStore {
         break;
       }
       case "SESSION_WAITING": {
-        const s = conn.sessions.get(sid);
+        let s = conn.sessions.get(sid);
         if (!s) break;
+        s = { ...s }; // #91 同款替换
+        conn.sessions.set(sid, s);
         s.status = "WAITING";
         s.waiting_request = { ...msg.payload, received_at: msg.ts };
         if (msg.payload.decidable !== false && this.onWaiting) this.onWaiting(s);
         break;
       }
       case "SESSION_WAITING_RESOLVED": {
-        const s = conn.sessions.get(sid);
+        let s = conn.sessions.get(sid);
         if (!s) break;
+        s = { ...s }; // #91 同款替换
+        conn.sessions.set(sid, s);
         s.status = "WORKING";
         s.waiting_request = null;
         const d = msg.payload.decision;
