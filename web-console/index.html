@@ -102,6 +102,10 @@
   }
   /* #365 会话列头：状态统计（左，runhint）+ 在线灯/深浅切换（右） */
   #sideHead { display: flex; align-items: center; gap: 8px; padding: 9px 14px 4px; flex: none; }
+  /* #74 macOS 壳：系统红黄绿叠加在左上（tauri.macos.conf 的 Overlay 模式），标题栏
+     左侧留安全区防 brand 被圆点盖住；右侧自绘 Windows 风按钮撤（有原生三圆点了） */
+  html.mac-tauri header { padding-left: 78px; }
+  html.mac-tauri #winBtns { display: none !important; }
   #sideHead #runhint { flex: 1; min-width: 0; }
   /* #39 主题钮线条图标：SVG 居中（去 emoji 基线抖动） */
   #themeBtn { display: flex; align-items: center; justify-content: center; }
@@ -5055,13 +5059,19 @@ $("themeBtn").onclick = () => {
 const DESK_SVG = '<svg viewBox="0 0 16 13" width="13" height="11" fill="none" stroke="currentColor" stroke-width="1.4"><rect x="1.2" y="1.5" width="13.6" height="9" rx="1.6"/><path d="M5.5 12.5h5" stroke-linecap="round"/></svg>';
 (function initConnChipDesk() { const d = $("connChipDesk"); if (d) d.innerHTML = DESK_SVG; })();
 // #344 无边框窗口控制（仅桌面壳显示；浏览器隐藏，拖拽属性无害）
+// #74 mac 壳例外：窗口控制由系统红黄绿承载（Overlay），右侧按钮组不显示，只挂
+// mac-tauri class 让 CSS 留出圆点安全区；浏览器版 Mac（无 __TAURI__）不受影响
 if (window.__TAURI__ && window.__TAURI__.window) {
   const wb = document.getElementById("winBtns");
-  wb.style.display = "flex";
-  const w = window.__TAURI__.window.getCurrentWindow();
-  wb.querySelector('[data-w="min"]').onclick = () => { try { w.minimize(); } catch {} };
-  wb.querySelector('[data-w="max"]').onclick = () => { try { w.toggleMaximize(); } catch {} };
-  wb.querySelector('[data-w="close"]').onclick = () => { try { w.close(); } catch {} };
+  if (/Mac/i.test(navigator.userAgent)) {
+    document.documentElement.classList.add("mac-tauri");
+  } else {
+    wb.style.display = "flex";
+    const w = window.__TAURI__.window.getCurrentWindow();
+    wb.querySelector('[data-w="min"]').onclick = () => { try { w.minimize(); } catch {} };
+    wb.querySelector('[data-w="max"]').onclick = () => { try { w.toggleMaximize(); } catch {} };
+    wb.querySelector('[data-w="close"]').onclick = () => { try { w.close(); } catch {} };
+  }
 }
 // ---------- 服务器管理（多源：列表 + 添加/编辑表单） ----------
 let formKind = "lan";   // 表单当前类型（添加目标）
