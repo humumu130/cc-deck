@@ -521,7 +521,7 @@ export default function SettingsDrawer({
           })}
           {/* 新增入口（#276/#36）：仅手动添加——扫码入口在顶栏 APP 名旁已有，此处删除重复按钮 */}
           <View style={d.addRowWrap}>
-            <Pressable style={d.addRow} android_ripple={{ color: c.tintSoft, borderless: false }} onPress={() => { onClose(); onSetup(); }}>
+            <Pressable style={d.addRow} hitSlop={{ top: 6, bottom: 6 }} android_ripple={{ color: c.tintSoft, borderless: false }} onPress={() => { onClose(); onSetup(); }}>
               <Text style={d.addT}>＋ 手动添加</Text>
             </Pressable>
           </View>
@@ -737,7 +737,8 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
     width: 30, height: 30, borderRadius: 10, alignItems: "center", justifyContent: "center",
     backgroundColor: c.tintSoft, borderWidth: 1, borderColor: c.line, overflow: "hidden",
   },
-  secT: { color: c.faint, fontSize: 11, fontWeight: "700", marginTop: 18, marginBottom: 6, letterSpacing: 1 },
+  // L6 四个段头统一走 secHead 行结构：可折叠段加 ▾/▸，配对/关于等纯段头只渲染
+  // 同规格空占位（secToggle 形状）不渲染箭头——18/6 节奏与行高完全一致
   secHead: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginTop: 18, marginBottom: 6 },
   // #51 标题左组：标题+问号同行靠左（原问号被 space-between 推中）
   secTitleRow: { flexDirection: "row", alignItems: "center", gap: 7 },
@@ -780,10 +781,13 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
   // #46 长按亮出的删除按钮（替常驻 ✕）
   srvDelArm: { paddingHorizontal: 10, height: 42, alignItems: "center", justifyContent: "center" },
   srvDelArmT: { color: c.waiting, fontSize: 12.5, fontWeight: "700" },
-  addRowWrap: { flexDirection: "row", justifyContent: "flex-end", marginBottom: 8 },
+  // L6 手动添加→配对空档收紧：原 10(padBottom)+8(wrap margin)+18(secHead margin)
+  // 尾距 ≈36dp、加 8+10 头距整段空 ≈72dp 显空。改 6+0 后尾距 24dp、头距 14dp，
+  // 与段间 18dp 节奏衔接（tap 面积由 hitSlop 6 补回）
+  addRowWrap: { flexDirection: "row", justifyContent: "flex-end" },
   // #378 去框化二期：添加入口纯文字链接式；#46 移右下角（原居中）
   addRow: {
-    alignItems: "center", justifyContent: "center", paddingVertical: 10, paddingHorizontal: 8,
+    alignItems: "center", justifyContent: "center", paddingVertical: 6, paddingHorizontal: 8,
   },
   addT: { color: c.brandA, fontSize: 13, fontWeight: "700" },
   cloudHint: {
