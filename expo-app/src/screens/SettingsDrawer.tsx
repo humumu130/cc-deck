@@ -471,34 +471,38 @@ export default function SettingsDrawer({
                         状态文案类元素全撤（云桥在线/↻ 重连等）——失败原因走弹窗 */}
                     <View style={[d.srvDot, { backgroundColor: srvColorMap.get(e.id) ?? c.faint }]} />
                     <Text style={d.srvName} numberOfLines={1}>{e.name}</Text>
-                    {/* #81 通道图标语义重设计（用户定稿）：通道是动态属性——只在已连接时
-                        显示真实通道（连接上报的 channel 优先，缺数据退配置推断）；
-                        离线/连接中不显示，杜绝「灰色云」与过期通道误导 */}
-                    {online ? (
-                      (st?.channel ?? chanTag) === "cloud" ? (
-                        <Text style={d.chanCloudT}>☁️</Text>
-                      ) : (st?.channel ?? chanTag) === "lan" ? (
-                        <LanGlyph color={c.dim} />
-                      ) : null
-                    ) : null}
-                    {connecting ? (
-                      (() => {
-                        ensurePlugBlink();
-                        return (
-                          <Animated.View style={{ opacity: plugBlink }}>
-                            <PlugGlyph size={13} color={c.working} />
-                          </Animated.View>
-                        );
-                      })()
-                    ) : (
-                      <Pressable
-                        hitSlop={8}
-                        onPress={() => { if (!online) triggerConnect(e); }}
-                        accessibilityLabel={`${e.name} ${online ? "已连接" : "点击连接"}`}
-                      >
-                        <PlugGlyph size={13} color={online ? c.done : c.faint} />
-                      </Pressable>
-                    )}
+                    {/* #81+#96 通道=动态属性，仅已连接显示真实通道（上报 channel 优先、
+                        配置推断兜底）；#96 起不独立占位——缩成插头右下角小角标 */}
+                    {(() => {
+                      const chan = online ? (st?.channel ?? chanTag) : "";
+                      const badge = chan === "cloud" ? "☁" : chan === "lan" ? "LAN" : "";
+                      const body = connecting ? (
+                        (() => {
+                          ensurePlugBlink();
+                          return (
+                            <Animated.View style={{ opacity: plugBlink }}>
+                              <PlugGlyph size={13} color={c.working} />
+                            </Animated.View>
+                          );
+                        })()
+                      ) : (
+                        <Pressable
+                          hitSlop={8}
+                          onPress={() => { if (!online) triggerConnect(e); }}
+                          accessibilityLabel={`${e.name} ${online ? "已连接" : "点击连接"}${badge ? `（${badge === "LAN" ? "局域网直连" : "云桥中转"}）` : ""}`}
+                        >
+                          <PlugGlyph size={13} color={online ? c.done : c.faint} />
+                        </Pressable>
+                      );
+                      return (
+                        <View style={d.plugWrap}>
+                          {body}
+                          {badge ? (
+                            <Text style={badge === "LAN" ? d.plugBadgeLan : d.plugBadgeCloud}>{badge}</Text>
+                          ) : null}
+                        </View>
+                      );
+                    })()}
                   </View>
                   <Text style={d.srvUrl} numberOfLines={1}>{e.cloud ? e.cloud.url : e.wsUrl}</Text>
                 </Pressable>
@@ -527,7 +531,12 @@ export default function SettingsDrawer({
         ) : null}
         {!srvCollapsed && servers.length === 0 ? <Text style={d.srvEmpty}>还没有服务器，点下方新增</Text> : null}
 
-        <Text style={d.secT}><Text style={d.secIconT}>⇄ </Text>配对</Text>
+        {/* L6 段头统一：纯段头（不可折叠）与可折叠段头（secHead+▾/▸）同结构同规格——
+            同字号字重字色、同 18/6 上下节奏、同 24×24 右占位（行高一致）但不渲染箭头 */}
+        <View style={d.secHead}>
+          <Text style={d.secTitleT}><Text style={d.secIconT}>⇄ </Text>配对</Text>
+          <View style={d.secToggle} />
+        </View>
         {pc ? (
           // pc 存在即显示码框：到期 0:00 到续领回包之间不闪「已过期」按钮（抽屉常开时每 TTL 闪一次）
           <View style={d.pairBox}>
@@ -591,7 +600,10 @@ export default function SettingsDrawer({
         ) : null}
         {/* #313 关于区（对齐设置原型）：版本（呼出弹窗看本版特性/检查更新/反馈）、检查更新
             （行内反馈，与弹窗共用 useUpdateCheck）、反馈三行列表 + 底部弱化 Build 行 */}
-        <Text style={d.secT}><Text style={d.secIconT}>ⓘ </Text>关于</Text>
+        <View style={d.secHead}>
+          <Text style={d.secTitleT}><Text style={d.secIconT}>ⓘ </Text>关于</Text>
+          <View style={d.secToggle} />
+        </View>
         <Pressable
           style={[d.setItem, d.setRow]}
           android_ripple={{ color: c.tintSoft, borderless: false }}
@@ -751,6 +763,10 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
   srvUrl: { color: c.faint, fontSize: 10.5, marginTop: 1.5 },
   // #46/#53 通道标记：☁️ emoji 与 LanGlyph 胶囊两态
   chanCloudT: { fontSize: 10.5, lineHeight: 14 },
+  // #96 插头右下角通道角标：不独立占位，缩到 7px 级（云=☁ 字符 / LAN=微字）
+  plugWrap: { position: "relative", width: 18, height: 16, alignItems: "center", justifyContent: "center" },
+  plugBadgeCloud: { position: "absolute", right: 0, bottom: -3, fontSize: 7.5, lineHeight: 9 },
+  plugBadgeLan: { position: "absolute", right: -4, bottom: -4, fontSize: 6.5, lineHeight: 8, color: "#5B9DFF", fontWeight: "700", letterSpacing: 0.2 },
   // #53 图例弹窗：图标列固定宽左对齐 + 文字；组间距（legSep）大于行距
   legHead: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 12 },
   legHeadT: { color: c.text, fontSize: 15, fontWeight: "700" },
