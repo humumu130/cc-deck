@@ -35,9 +35,9 @@ var __toESM = (mod, isNodeMode, target) => (target = mod != null ? __create(__ge
   mod
 ));
 
-// node_modules/tweetnacl/nacl-fast.js
+// relay/node_modules/tweetnacl/nacl-fast.js
 var require_nacl_fast = __commonJS({
-  "node_modules/tweetnacl/nacl-fast.js"(exports, module) {
+  "relay/node_modules/tweetnacl/nacl-fast.js"(exports, module) {
     (function(nacl2) {
       "use strict";
       var gf2 = function(init) {
@@ -2259,9 +2259,9 @@ var require_nacl_fast = __commonJS({
   }
 });
 
-// node_modules/ws/lib/constants.js
+// relay/node_modules/ws/lib/constants.js
 var require_constants = __commonJS({
-  "node_modules/ws/lib/constants.js"(exports, module) {
+  "relay/node_modules/ws/lib/constants.js"(exports, module) {
     "use strict";
     var BINARY_TYPES = ["nodebuffer", "arraybuffer", "fragments"];
     var hasBlob = typeof Blob !== "undefined";
@@ -2282,9 +2282,9 @@ var require_constants = __commonJS({
   }
 });
 
-// node_modules/ws/lib/buffer-util.js
+// relay/node_modules/ws/lib/buffer-util.js
 var require_buffer_util = __commonJS({
-  "node_modules/ws/lib/buffer-util.js"(exports, module) {
+  "relay/node_modules/ws/lib/buffer-util.js"(exports, module) {
     "use strict";
     var { EMPTY_BUFFER } = require_constants();
     var FastBuffer = Buffer[Symbol.species];
@@ -2357,9 +2357,9 @@ var require_buffer_util = __commonJS({
   }
 });
 
-// node_modules/ws/lib/limiter.js
+// relay/node_modules/ws/lib/limiter.js
 var require_limiter = __commonJS({
-  "node_modules/ws/lib/limiter.js"(exports, module) {
+  "relay/node_modules/ws/lib/limiter.js"(exports, module) {
     "use strict";
     var kDone = /* @__PURE__ */ Symbol("kDone");
     var kRun = /* @__PURE__ */ Symbol("kRun");
@@ -2407,9 +2407,9 @@ var require_limiter = __commonJS({
   }
 });
 
-// node_modules/ws/lib/permessage-deflate.js
+// relay/node_modules/ws/lib/permessage-deflate.js
 var require_permessage_deflate = __commonJS({
-  "node_modules/ws/lib/permessage-deflate.js"(exports, module) {
+  "relay/node_modules/ws/lib/permessage-deflate.js"(exports, module) {
     "use strict";
     var zlib = __require("zlib");
     var bufferUtil = require_buffer_util();
@@ -2790,9 +2790,9 @@ var require_permessage_deflate = __commonJS({
   }
 });
 
-// node_modules/ws/lib/validation.js
+// relay/node_modules/ws/lib/validation.js
 var require_validation = __commonJS({
-  "node_modules/ws/lib/validation.js"(exports, module) {
+  "relay/node_modules/ws/lib/validation.js"(exports, module) {
     "use strict";
     var { isUtf8 } = __require("buffer");
     var { hasBlob } = require_constants();
@@ -2991,9 +2991,9 @@ var require_validation = __commonJS({
   }
 });
 
-// node_modules/ws/lib/receiver.js
+// relay/node_modules/ws/lib/receiver.js
 var require_receiver = __commonJS({
-  "node_modules/ws/lib/receiver.js"(exports, module) {
+  "relay/node_modules/ws/lib/receiver.js"(exports, module) {
     "use strict";
     var { Writable } = __require("stream");
     var PerMessageDeflate2 = require_permessage_deflate();
@@ -3614,9 +3614,9 @@ var require_receiver = __commonJS({
   }
 });
 
-// node_modules/ws/lib/sender.js
+// relay/node_modules/ws/lib/sender.js
 var require_sender = __commonJS({
-  "node_modules/ws/lib/sender.js"(exports, module) {
+  "relay/node_modules/ws/lib/sender.js"(exports, module) {
     "use strict";
     var { Duplex } = __require("stream");
     var { randomFillSync } = __require("crypto");
@@ -4107,9 +4107,9 @@ var require_sender = __commonJS({
   }
 });
 
-// node_modules/ws/lib/event-target.js
+// relay/node_modules/ws/lib/event-target.js
 var require_event_target = __commonJS({
-  "node_modules/ws/lib/event-target.js"(exports, module) {
+  "relay/node_modules/ws/lib/event-target.js"(exports, module) {
     "use strict";
     var { kForOnEventAttribute, kListener } = require_constants();
     var kCode = /* @__PURE__ */ Symbol("kCode");
@@ -4336,9 +4336,9 @@ var require_event_target = __commonJS({
   }
 });
 
-// node_modules/ws/lib/extension.js
+// relay/node_modules/ws/lib/extension.js
 var require_extension = __commonJS({
-  "node_modules/ws/lib/extension.js"(exports, module) {
+  "relay/node_modules/ws/lib/extension.js"(exports, module) {
     "use strict";
     var { tokenChars } = require_validation();
     function push(dest, name, elem) {
@@ -4489,16 +4489,16 @@ var require_extension = __commonJS({
   }
 });
 
-// node_modules/ws/lib/websocket.js
+// relay/node_modules/ws/lib/websocket.js
 var require_websocket = __commonJS({
-  "node_modules/ws/lib/websocket.js"(exports, module) {
+  "relay/node_modules/ws/lib/websocket.js"(exports, module) {
     "use strict";
     var EventEmitter = __require("events");
     var https = __require("https");
     var http = __require("http");
     var net = __require("net");
     var tls = __require("tls");
-    var { randomBytes: randomBytes2, createHash: createHash2 } = __require("crypto");
+    var { randomBytes: randomBytes3, createHash: createHash2 } = __require("crypto");
     var { Duplex, Readable } = __require("stream");
     var { URL: URL2 } = __require("url");
     var PerMessageDeflate2 = require_permessage_deflate();
@@ -5036,7 +5036,7 @@ var require_websocket = __commonJS({
         }
       }
       const defaultPort = isSecure ? 443 : 80;
-      const key = randomBytes2(16).toString("base64");
+      const key = randomBytes3(16).toString("base64");
       const request = isSecure ? https.request : http.request;
       const protocolSet = /* @__PURE__ */ new Set();
       let perMessageDeflate;
@@ -5385,9 +5385,9 @@ var require_websocket = __commonJS({
   }
 });
 
-// node_modules/ws/lib/stream.js
+// relay/node_modules/ws/lib/stream.js
 var require_stream = __commonJS({
-  "node_modules/ws/lib/stream.js"(exports, module) {
+  "relay/node_modules/ws/lib/stream.js"(exports, module) {
     "use strict";
     var WebSocket3 = require_websocket();
     var { Duplex } = __require("stream");
@@ -5483,9 +5483,9 @@ var require_stream = __commonJS({
   }
 });
 
-// node_modules/ws/lib/subprotocol.js
+// relay/node_modules/ws/lib/subprotocol.js
 var require_subprotocol = __commonJS({
-  "node_modules/ws/lib/subprotocol.js"(exports, module) {
+  "relay/node_modules/ws/lib/subprotocol.js"(exports, module) {
     "use strict";
     var { tokenChars } = require_validation();
     function parse3(header) {
@@ -5528,9 +5528,9 @@ var require_subprotocol = __commonJS({
   }
 });
 
-// node_modules/ws/lib/websocket-server.js
+// relay/node_modules/ws/lib/websocket-server.js
 var require_websocket_server = __commonJS({
-  "node_modules/ws/lib/websocket-server.js"(exports, module) {
+  "relay/node_modules/ws/lib/websocket-server.js"(exports, module) {
     "use strict";
     var EventEmitter = __require("events");
     var http = __require("http");
@@ -5929,9 +5929,9 @@ var require_websocket_server = __commonJS({
   }
 });
 
-// node_modules/qrcode-terminal/vendor/QRCode/QRMode.js
+// relay/node_modules/qrcode-terminal/vendor/QRCode/QRMode.js
 var require_QRMode = __commonJS({
-  "node_modules/qrcode-terminal/vendor/QRCode/QRMode.js"(exports, module) {
+  "relay/node_modules/qrcode-terminal/vendor/QRCode/QRMode.js"(exports, module) {
     module.exports = {
       MODE_NUMBER: 1 << 0,
       MODE_ALPHA_NUM: 1 << 1,
@@ -5941,9 +5941,9 @@ var require_QRMode = __commonJS({
   }
 });
 
-// node_modules/qrcode-terminal/vendor/QRCode/QR8bitByte.js
+// relay/node_modules/qrcode-terminal/vendor/QRCode/QR8bitByte.js
 var require_QR8bitByte = __commonJS({
-  "node_modules/qrcode-terminal/vendor/QRCode/QR8bitByte.js"(exports, module) {
+  "relay/node_modules/qrcode-terminal/vendor/QRCode/QR8bitByte.js"(exports, module) {
     var QRMode = require_QRMode();
     function QR8bitByte(data) {
       this.mode = QRMode.MODE_8BIT_BYTE;
@@ -5963,9 +5963,9 @@ var require_QR8bitByte = __commonJS({
   }
 });
 
-// node_modules/qrcode-terminal/vendor/QRCode/QRMath.js
+// relay/node_modules/qrcode-terminal/vendor/QRCode/QRMath.js
 var require_QRMath = __commonJS({
-  "node_modules/qrcode-terminal/vendor/QRCode/QRMath.js"(exports, module) {
+  "relay/node_modules/qrcode-terminal/vendor/QRCode/QRMath.js"(exports, module) {
     var QRMath = {
       glog: function(n) {
         if (n < 1) {
@@ -6001,9 +6001,9 @@ var require_QRMath = __commonJS({
   }
 });
 
-// node_modules/qrcode-terminal/vendor/QRCode/QRPolynomial.js
+// relay/node_modules/qrcode-terminal/vendor/QRCode/QRPolynomial.js
 var require_QRPolynomial = __commonJS({
-  "node_modules/qrcode-terminal/vendor/QRCode/QRPolynomial.js"(exports, module) {
+  "relay/node_modules/qrcode-terminal/vendor/QRCode/QRPolynomial.js"(exports, module) {
     var QRMath = require_QRMath();
     function QRPolynomial(num, shift) {
       if (num.length === void 0) {
@@ -6053,9 +6053,9 @@ var require_QRPolynomial = __commonJS({
   }
 });
 
-// node_modules/qrcode-terminal/vendor/QRCode/QRMaskPattern.js
+// relay/node_modules/qrcode-terminal/vendor/QRCode/QRMaskPattern.js
 var require_QRMaskPattern = __commonJS({
-  "node_modules/qrcode-terminal/vendor/QRCode/QRMaskPattern.js"(exports, module) {
+  "relay/node_modules/qrcode-terminal/vendor/QRCode/QRMaskPattern.js"(exports, module) {
     module.exports = {
       PATTERN000: 0,
       PATTERN001: 1,
@@ -6069,9 +6069,9 @@ var require_QRMaskPattern = __commonJS({
   }
 });
 
-// node_modules/qrcode-terminal/vendor/QRCode/QRUtil.js
+// relay/node_modules/qrcode-terminal/vendor/QRCode/QRUtil.js
 var require_QRUtil = __commonJS({
-  "node_modules/qrcode-terminal/vendor/QRCode/QRUtil.js"(exports, module) {
+  "relay/node_modules/qrcode-terminal/vendor/QRCode/QRUtil.js"(exports, module) {
     var QRMode = require_QRMode();
     var QRPolynomial = require_QRPolynomial();
     var QRMath = require_QRMath();
@@ -6293,9 +6293,9 @@ var require_QRUtil = __commonJS({
   }
 });
 
-// node_modules/qrcode-terminal/vendor/QRCode/QRErrorCorrectLevel.js
+// relay/node_modules/qrcode-terminal/vendor/QRCode/QRErrorCorrectLevel.js
 var require_QRErrorCorrectLevel = __commonJS({
-  "node_modules/qrcode-terminal/vendor/QRCode/QRErrorCorrectLevel.js"(exports, module) {
+  "relay/node_modules/qrcode-terminal/vendor/QRCode/QRErrorCorrectLevel.js"(exports, module) {
     module.exports = {
       L: 1,
       M: 0,
@@ -6305,9 +6305,9 @@ var require_QRErrorCorrectLevel = __commonJS({
   }
 });
 
-// node_modules/qrcode-terminal/vendor/QRCode/QRRSBlock.js
+// relay/node_modules/qrcode-terminal/vendor/QRCode/QRRSBlock.js
 var require_QRRSBlock = __commonJS({
-  "node_modules/qrcode-terminal/vendor/QRCode/QRRSBlock.js"(exports, module) {
+  "relay/node_modules/qrcode-terminal/vendor/QRCode/QRRSBlock.js"(exports, module) {
     var QRErrorCorrectLevel = require_QRErrorCorrectLevel();
     function QRRSBlock(totalCount, dataCount) {
       this.totalCount = totalCount;
@@ -6554,9 +6554,9 @@ var require_QRRSBlock = __commonJS({
   }
 });
 
-// node_modules/qrcode-terminal/vendor/QRCode/QRBitBuffer.js
+// relay/node_modules/qrcode-terminal/vendor/QRCode/QRBitBuffer.js
 var require_QRBitBuffer = __commonJS({
-  "node_modules/qrcode-terminal/vendor/QRCode/QRBitBuffer.js"(exports, module) {
+  "relay/node_modules/qrcode-terminal/vendor/QRCode/QRBitBuffer.js"(exports, module) {
     function QRBitBuffer() {
       this.buffer = [];
       this.length = 0;
@@ -6589,9 +6589,9 @@ var require_QRBitBuffer = __commonJS({
   }
 });
 
-// node_modules/qrcode-terminal/vendor/QRCode/index.js
+// relay/node_modules/qrcode-terminal/vendor/QRCode/index.js
 var require_QRCode = __commonJS({
-  "node_modules/qrcode-terminal/vendor/QRCode/index.js"(exports, module) {
+  "relay/node_modules/qrcode-terminal/vendor/QRCode/index.js"(exports, module) {
     var QR8bitByte = require_QR8bitByte();
     var QRUtil = require_QRUtil();
     var QRPolynomial = require_QRPolynomial();
@@ -6909,9 +6909,9 @@ var require_QRCode = __commonJS({
   }
 });
 
-// node_modules/qrcode-terminal/lib/main.js
+// relay/node_modules/qrcode-terminal/lib/main.js
 var require_main = __commonJS({
-  "node_modules/qrcode-terminal/lib/main.js"(exports, module) {
+  "relay/node_modules/qrcode-terminal/lib/main.js"(exports, module) {
     var QRCode = require_QRCode();
     var QRErrorCorrectLevel = require_QRErrorCorrectLevel();
     var black = "\x1B[40m  \x1B[0m";
@@ -6999,9 +6999,9 @@ var require_main = __commonJS({
   }
 });
 
-// node_modules/bonjour-service/dist/lib/utils/dns-equal.js
+// relay/node_modules/bonjour-service/dist/lib/utils/dns-equal.js
 var require_dns_equal = __commonJS({
-  "node_modules/bonjour-service/dist/lib/utils/dns-equal.js"(exports) {
+  "relay/node_modules/bonjour-service/dist/lib/utils/dns-equal.js"(exports) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     exports.default = dnsEqual;
@@ -7017,9 +7017,9 @@ var require_dns_equal = __commonJS({
   }
 });
 
-// node_modules/bonjour-service/dist/lib/dns-txt.js
+// relay/node_modules/bonjour-service/dist/lib/dns-txt.js
 var require_dns_txt = __commonJS({
-  "node_modules/bonjour-service/dist/lib/dns-txt.js"(exports) {
+  "relay/node_modules/bonjour-service/dist/lib/dns-txt.js"(exports) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     exports.DnsTxt = void 0;
@@ -7060,9 +7060,9 @@ var require_dns_txt = __commonJS({
   }
 });
 
-// node_modules/bonjour-service/dist/lib/service-types.js
+// relay/node_modules/bonjour-service/dist/lib/service-types.js
 var require_service_types = __commonJS({
-  "node_modules/bonjour-service/dist/lib/service-types.js"(exports) {
+  "relay/node_modules/bonjour-service/dist/lib/service-types.js"(exports) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     exports.toType = exports.toString = void 0;
@@ -7115,9 +7115,9 @@ var require_service_types = __commonJS({
   }
 });
 
-// node_modules/bonjour-service/dist/lib/service.js
+// relay/node_modules/bonjour-service/dist/lib/service.js
 var require_service = __commonJS({
-  "node_modules/bonjour-service/dist/lib/service.js"(exports) {
+  "relay/node_modules/bonjour-service/dist/lib/service.js"(exports) {
     "use strict";
     var __importDefault = exports && exports.__importDefault || function(mod) {
       return mod && mod.__esModule ? mod : { "default": mod };
@@ -7250,9 +7250,9 @@ var require_service = __commonJS({
   }
 });
 
-// node_modules/bonjour-service/dist/lib/registry.js
+// relay/node_modules/bonjour-service/dist/lib/registry.js
 var require_registry = __commonJS({
-  "node_modules/bonjour-service/dist/lib/registry.js"(exports) {
+  "relay/node_modules/bonjour-service/dist/lib/registry.js"(exports) {
     "use strict";
     var __importDefault = exports && exports.__importDefault || function(mod) {
       return mod && mod.__esModule ? mod : { "default": mod };
@@ -7397,9 +7397,9 @@ var require_registry = __commonJS({
   }
 });
 
-// node_modules/dns-packet/types.js
+// relay/node_modules/dns-packet/types.js
 var require_types = __commonJS({
-  "node_modules/dns-packet/types.js"(exports) {
+  "relay/node_modules/dns-packet/types.js"(exports) {
     "use strict";
     exports.toString = function(type) {
       switch (type) {
@@ -7593,9 +7593,9 @@ var require_types = __commonJS({
   }
 });
 
-// node_modules/dns-packet/rcodes.js
+// relay/node_modules/dns-packet/rcodes.js
 var require_rcodes = __commonJS({
-  "node_modules/dns-packet/rcodes.js"(exports) {
+  "relay/node_modules/dns-packet/rcodes.js"(exports) {
     "use strict";
     exports.toString = function(rcode) {
       switch (rcode) {
@@ -7674,9 +7674,9 @@ var require_rcodes = __commonJS({
   }
 });
 
-// node_modules/dns-packet/opcodes.js
+// relay/node_modules/dns-packet/opcodes.js
 var require_opcodes = __commonJS({
-  "node_modules/dns-packet/opcodes.js"(exports) {
+  "relay/node_modules/dns-packet/opcodes.js"(exports) {
     "use strict";
     exports.toString = function(opcode) {
       switch (opcode) {
@@ -7755,9 +7755,9 @@ var require_opcodes = __commonJS({
   }
 });
 
-// node_modules/dns-packet/classes.js
+// relay/node_modules/dns-packet/classes.js
 var require_classes = __commonJS({
-  "node_modules/dns-packet/classes.js"(exports) {
+  "relay/node_modules/dns-packet/classes.js"(exports) {
     "use strict";
     exports.toString = function(klass) {
       switch (klass) {
@@ -7792,9 +7792,9 @@ var require_classes = __commonJS({
   }
 });
 
-// node_modules/dns-packet/optioncodes.js
+// relay/node_modules/dns-packet/optioncodes.js
 var require_optioncodes = __commonJS({
-  "node_modules/dns-packet/optioncodes.js"(exports) {
+  "relay/node_modules/dns-packet/optioncodes.js"(exports) {
     "use strict";
     exports.toString = function(type) {
       switch (type) {
@@ -7886,9 +7886,9 @@ var require_optioncodes = __commonJS({
   }
 });
 
-// node_modules/@leichtgewicht/ip-codec/index.cjs
+// relay/node_modules/@leichtgewicht/ip-codec/index.cjs
 var require_ip_codec = __commonJS({
-  "node_modules/@leichtgewicht/ip-codec/index.cjs"(exports, module) {
+  "relay/node_modules/@leichtgewicht/ip-codec/index.cjs"(exports, module) {
     var ipCodec = (function(exports2) {
       "use strict";
       Object.defineProperty(exports2, "__esModule", {
@@ -8079,9 +8079,9 @@ var require_ip_codec = __commonJS({
   }
 });
 
-// node_modules/dns-packet/index.js
+// relay/node_modules/dns-packet/index.js
 var require_dns_packet = __commonJS({
-  "node_modules/dns-packet/index.js"(exports) {
+  "relay/node_modules/dns-packet/index.js"(exports) {
     "use strict";
     var Buffer2 = __require("buffer").Buffer;
     var types = require_types();
@@ -9507,9 +9507,9 @@ var require_dns_packet = __commonJS({
   }
 });
 
-// node_modules/thunky/index.js
+// relay/node_modules/thunky/index.js
 var require_thunky = __commonJS({
-  "node_modules/thunky/index.js"(exports, module) {
+  "relay/node_modules/thunky/index.js"(exports, module) {
     "use strict";
     var nextTick = nextTickArgs;
     process.nextTick(upgrade, 42);
@@ -9556,9 +9556,9 @@ var require_thunky = __commonJS({
   }
 });
 
-// node_modules/multicast-dns/index.js
+// relay/node_modules/multicast-dns/index.js
 var require_multicast_dns = __commonJS({
-  "node_modules/multicast-dns/index.js"(exports, module) {
+  "relay/node_modules/multicast-dns/index.js"(exports, module) {
     var packet = require_dns_packet();
     var dgram = __require("dgram");
     var thunky = require_thunky();
@@ -9729,9 +9729,9 @@ var require_multicast_dns = __commonJS({
   }
 });
 
-// node_modules/fast-deep-equal/es6/index.js
+// relay/node_modules/fast-deep-equal/es6/index.js
 var require_es6 = __commonJS({
-  "node_modules/fast-deep-equal/es6/index.js"(exports, module) {
+  "relay/node_modules/fast-deep-equal/es6/index.js"(exports, module) {
     "use strict";
     module.exports = function equal(a, b) {
       if (a === b) return true;
@@ -9785,9 +9785,9 @@ var require_es6 = __commonJS({
   }
 });
 
-// node_modules/bonjour-service/dist/lib/mdns-server.js
+// relay/node_modules/bonjour-service/dist/lib/mdns-server.js
 var require_mdns_server = __commonJS({
-  "node_modules/bonjour-service/dist/lib/mdns-server.js"(exports) {
+  "relay/node_modules/bonjour-service/dist/lib/mdns-server.js"(exports) {
     "use strict";
     var __importDefault = exports && exports.__importDefault || function(mod) {
       return mod && mod.__esModule ? mod : { "default": mod };
@@ -9896,9 +9896,9 @@ var require_mdns_server = __commonJS({
   }
 });
 
-// node_modules/bonjour-service/dist/lib/utils/filter-service.js
+// relay/node_modules/bonjour-service/dist/lib/utils/filter-service.js
 var require_filter_service = __commonJS({
-  "node_modules/bonjour-service/dist/lib/utils/filter-service.js"(exports) {
+  "relay/node_modules/bonjour-service/dist/lib/utils/filter-service.js"(exports) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     exports.default = (service, txtQuery) => {
@@ -9922,9 +9922,9 @@ var require_filter_service = __commonJS({
   }
 });
 
-// node_modules/bonjour-service/dist/lib/utils/filter-txt.js
+// relay/node_modules/bonjour-service/dist/lib/utils/filter-txt.js
 var require_filter_txt = __commonJS({
-  "node_modules/bonjour-service/dist/lib/utils/filter-txt.js"(exports) {
+  "relay/node_modules/bonjour-service/dist/lib/utils/filter-txt.js"(exports) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     exports.default = (data) => Object.keys(data).filter((key) => !key.includes("binary")).reduce((cur, key) => {
@@ -9933,9 +9933,9 @@ var require_filter_txt = __commonJS({
   }
 });
 
-// node_modules/bonjour-service/dist/lib/utils/equal-txt.js
+// relay/node_modules/bonjour-service/dist/lib/utils/equal-txt.js
 var require_equal_txt = __commonJS({
-  "node_modules/bonjour-service/dist/lib/utils/equal-txt.js"(exports) {
+  "relay/node_modules/bonjour-service/dist/lib/utils/equal-txt.js"(exports) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     exports.default = equalTxt;
@@ -9955,9 +9955,9 @@ var require_equal_txt = __commonJS({
   }
 });
 
-// node_modules/bonjour-service/dist/lib/browser.js
+// relay/node_modules/bonjour-service/dist/lib/browser.js
 var require_browser = __commonJS({
-  "node_modules/bonjour-service/dist/lib/browser.js"(exports) {
+  "relay/node_modules/bonjour-service/dist/lib/browser.js"(exports) {
     "use strict";
     var __importDefault = exports && exports.__importDefault || function(mod) {
       return mod && mod.__esModule ? mod : { "default": mod };
@@ -10154,9 +10154,9 @@ var require_browser = __commonJS({
   }
 });
 
-// node_modules/bonjour-service/dist/lib/bonjour.js
+// relay/node_modules/bonjour-service/dist/lib/bonjour.js
 var require_bonjour = __commonJS({
-  "node_modules/bonjour-service/dist/lib/bonjour.js"(exports) {
+  "relay/node_modules/bonjour-service/dist/lib/bonjour.js"(exports) {
     "use strict";
     var __importDefault = exports && exports.__importDefault || function(mod) {
       return mod && mod.__esModule ? mod : { "default": mod };
@@ -10209,9 +10209,9 @@ var require_bonjour = __commonJS({
   }
 });
 
-// node_modules/bonjour-service/dist/index.js
+// relay/node_modules/bonjour-service/dist/index.js
 var require_dist = __commonJS({
-  "node_modules/bonjour-service/dist/index.js"(exports, module) {
+  "relay/node_modules/bonjour-service/dist/index.js"(exports, module) {
     "use strict";
     var __createBinding = exports && exports.__createBinding || (Object.create ? (function(o, m, k3, k22) {
       if (k22 === void 0) k22 = k3;
@@ -10275,21 +10275,82 @@ var require_dist = __commonJS({
   }
 });
 
-// src/index.ts
+// relay/src/index.ts
+import { randomBytes as randomBytes2 } from "node:crypto";
+
+// relay/src/e2e.ts
+var import_tweetnacl = __toESM(require_nacl_fast(), 1);
+var B64 = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+function toB64(b) {
+  let s = "";
+  for (let i = 0; i < b.length; i += 3) {
+    const b12 = b[i];
+    const b2 = i + 1 < b.length ? b[i + 1] : null;
+    const b32 = i + 2 < b.length ? b[i + 2] : null;
+    s += B64[b12 >> 2];
+    s += B64[(b12 & 3) << 4 | (b2 === null ? 0 : b2 >> 4)];
+    s += b2 === null ? "=" : B64[(b2 & 15) << 2 | (b32 === null ? 0 : b32 >> 6)];
+    s += b32 === null ? "=" : B64[b32 & 63];
+  }
+  return s;
+}
+function fromB64(s) {
+  const clean = s.replace(/=+$/, "");
+  const out = [];
+  let bits = 0;
+  let acc = 0;
+  for (const ch2 of clean) {
+    const v = B64.indexOf(ch2);
+    if (v < 0) throw new Error("bad base64");
+    acc = acc << 6 | v;
+    bits += 6;
+    if (bits >= 8) {
+      bits -= 8;
+      out.push(acc >> bits & 255);
+    }
+  }
+  return new Uint8Array(out);
+}
+function generateKeyPair() {
+  const kp2 = import_tweetnacl.default.box.keyPair();
+  return { publicKey: toB64(kp2.publicKey), secretKey: toB64(kp2.secretKey) };
+}
+function devId(publicKeyB64, prefix) {
+  const hex = [...fromB64(publicKeyB64).slice(0, 8)].map((x) => x.toString(16).padStart(2, "0")).join("");
+  return `${prefix}-${hex}`;
+}
+function seal(obj, theirPublicKeyB64, mySecretKeyB64) {
+  const nonce = import_tweetnacl.default.randomBytes(import_tweetnacl.default.box.nonceLength);
+  const msg = new TextEncoder().encode(JSON.stringify(obj));
+  const c = import_tweetnacl.default.box(msg, nonce, fromB64(theirPublicKeyB64), fromB64(mySecretKeyB64));
+  return { n: toB64(nonce), c: toB64(c) };
+}
+function unseal(box, theirPublicKeyB64, mySecretKeyB64) {
+  const opened = import_tweetnacl.default.box.open(
+    fromB64(box.c),
+    fromB64(box.n),
+    fromB64(theirPublicKeyB64),
+    fromB64(mySecretKeyB64)
+  );
+  if (!opened) return null;
+  return JSON.parse(new TextDecoder().decode(opened));
+}
+
+// relay/src/index.ts
 import { networkInterfaces as networkInterfaces3, homedir as homedir8, hostname } from "node:os";
 import { join as join12 } from "node:path";
 import { writeFileSync as writeFileSync9, openSync as openSync3, readFileSync as readFileSync13, rmSync as rmSync3, existsSync as existsSync8 } from "node:fs";
 import { spawn as spawn3, execFileSync as execFileSync2 } from "node:child_process";
 import { fileURLToPath as fileURLToPath4 } from "node:url";
 
-// src/config.ts
+// relay/src/config.ts
 import { randomUUID } from "node:crypto";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { homedir } from "node:os";
 function loadConfig() {
   const port = Number(process.env.CCR_PORT ?? 8787);
-  const dataDir2 = process.env.CCR_DATA_DIR ?? (process.env.CC_DECK_PLUGIN ? join(homedir(), ".cc-deck", "data") : join(process.cwd(), "data"));
+  const dataDir2 = process.env.CCR_DATA_DIR ?? ("1" ? join(homedir(), ".cc-deck", "data") : join(process.cwd(), "data"));
   mkdirSync(dataDir2, { recursive: true });
   const envToken = process.env.CCR_TOKEN;
   const tokenFile = join(dataDir2, "token");
@@ -10332,7 +10393,35 @@ function loadConfig() {
   };
 }
 
-// src/history.ts
+// relay/src/lan-ip.ts
+import * as os from "node:os";
+var VIRTUAL_NIC_RE = /vmware|virtual|vethernet|wsl|loopback|tap|bluetooth|hyper-v|docker|tailscale|zerotier|wireguard|wintun|openvpn|vpn/i;
+var PRIV_RE = /^(192\.168|10|172\.(1[6-9]|2\d|3[01]))\./;
+function pickFrom(list) {
+  for (const ni of list ?? []) {
+    const fam = ni.family ?? "IPv4";
+    if (fam !== "IPv4" && fam !== 4) continue;
+    const a = ni.address ?? "";
+    if (ni.internal || /^(127\.|169\.254\.)/.test(a)) continue;
+    if (PRIV_RE.test(a)) return a;
+  }
+  return "";
+}
+function detectLanIp(interfaces = os.networkInterfaces()) {
+  let ip2 = "";
+  for (const [name, list] of Object.entries(interfaces)) {
+    if (VIRTUAL_NIC_RE.test(name)) continue;
+    ip2 = pickFrom(list);
+    if (ip2) return ip2;
+  }
+  for (const list of Object.values(interfaces)) {
+    ip2 = pickFrom(list);
+    if (ip2) return ip2;
+  }
+  return "";
+}
+
+// relay/src/history.ts
 import { readFileSync as readFileSync2, writeFileSync as writeFileSync2, existsSync as existsSync2, mkdirSync as mkdirSync2 } from "node:fs";
 import { dirname } from "node:path";
 var MAX_SESSIONS_KEPT = 30;
@@ -10498,11 +10587,38 @@ function reduceHistory(events) {
     }
   }
   for (const rs2 of out.values()) {
+    if (rs2.state.external && rs2.state.status === "ERROR" && !rs2.state.last_error) {
+      rs2.state.status = "DONE";
+      if (!rs2.state.done_reason) rs2.state.done_reason = "ended";
+      rs2.logs.push({ ts: Date.now(), kind: "system", text: "\u5386\u53F2\u8BEF\u6807\u9519\u8BEF\u5DF2\u81EA\u52A8\u77EB\u6B63\u4E3A\u5B8C\u6210" });
+    }
+  }
+  for (const rs2 of out.values()) {
     if (rs2.state.status === "WORKING" || rs2.state.status === "WAITING") {
-      rs2.state.status = "ERROR";
-      rs2.state.last_error = "Relay \u91CD\u542F\uFF0C\u4F1A\u8BDD\u4E2D\u65AD";
-      rs2.state.historical = true;
-      rs2.logs.push({ ts: Date.now(), kind: "system", text: "Relay \u91CD\u542F\uFF0C\u4F1A\u8BDD\u4E2D\u65AD" });
+      if (rs2.state.external) {
+        let alive = false;
+        if (rs2.state.cli_pid) {
+          try {
+            process.kill(rs2.state.cli_pid, 0);
+            alive = true;
+          } catch {
+            alive = false;
+          }
+        }
+        if (alive) {
+          rs2.logs.push({ ts: Date.now(), kind: "system", text: "Relay \u91CD\u542F\uFF0CCLI \u8FDB\u7A0B\u4ECD\u5728\u8FD0\u884C" });
+        } else {
+          rs2.state.status = "DONE";
+          rs2.state.done_reason = "ended";
+          rs2.state.historical = true;
+          rs2.logs.push({ ts: Date.now(), kind: "system", text: "Relay \u91CD\u542F\u65F6 CLI \u5DF2\u9000\u51FA\uFF0C\u56DE\u5408\u89C6\u4F5C\u7ED3\u675F" });
+        }
+      } else {
+        rs2.state.status = "ERROR";
+        rs2.state.last_error = "Relay \u91CD\u542F\uFF0C\u4F1A\u8BDD\u4E2D\u65AD";
+        rs2.state.historical = true;
+        rs2.logs.push({ ts: Date.now(), kind: "system", text: "Relay \u91CD\u542F\uFF0C\u4F1A\u8BDD\u4E2D\u65AD" });
+      }
     }
     rs2.state.waiting_request = void 0;
   }
@@ -10515,7 +10631,7 @@ function deriveTitle(prompt) {
   return t || "\u672A\u547D\u540D\u4F1A\u8BDD";
 }
 
-// src/event-bus.ts
+// relay/src/event-bus.ts
 var EventBus = class {
   constructor(opts = {}) {
     this.opts = opts;
@@ -10587,70 +10703,12 @@ var EventBus = class {
   }
 };
 
-// src/session-manager.ts
+// relay/src/session-manager.ts
 import { mkdirSync as mkdirSync4, readFileSync as readFileSync7, statSync as statSync3, writeFileSync as writeFileSync4 } from "node:fs";
 import { homedir as homedir3 } from "node:os";
 import { join as join7, resolve as resolve5 } from "node:path";
 
-// src/e2e.ts
-var import_tweetnacl = __toESM(require_nacl_fast(), 1);
-var B64 = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
-function toB64(b) {
-  let s = "";
-  for (let i = 0; i < b.length; i += 3) {
-    const b12 = b[i];
-    const b2 = i + 1 < b.length ? b[i + 1] : null;
-    const b32 = i + 2 < b.length ? b[i + 2] : null;
-    s += B64[b12 >> 2];
-    s += B64[(b12 & 3) << 4 | (b2 === null ? 0 : b2 >> 4)];
-    s += b2 === null ? "=" : B64[(b2 & 15) << 2 | (b32 === null ? 0 : b32 >> 6)];
-    s += b32 === null ? "=" : B64[b32 & 63];
-  }
-  return s;
-}
-function fromB64(s) {
-  const clean = s.replace(/=+$/, "");
-  const out = [];
-  let bits = 0;
-  let acc = 0;
-  for (const ch2 of clean) {
-    const v = B64.indexOf(ch2);
-    if (v < 0) throw new Error("bad base64");
-    acc = acc << 6 | v;
-    bits += 6;
-    if (bits >= 8) {
-      bits -= 8;
-      out.push(acc >> bits & 255);
-    }
-  }
-  return new Uint8Array(out);
-}
-function generateKeyPair() {
-  const kp2 = import_tweetnacl.default.box.keyPair();
-  return { publicKey: toB64(kp2.publicKey), secretKey: toB64(kp2.secretKey) };
-}
-function devId(publicKeyB64, prefix) {
-  const hex = [...fromB64(publicKeyB64).slice(0, 8)].map((x) => x.toString(16).padStart(2, "0")).join("");
-  return `${prefix}-${hex}`;
-}
-function seal(obj, theirPublicKeyB64, mySecretKeyB64) {
-  const nonce = import_tweetnacl.default.randomBytes(import_tweetnacl.default.box.nonceLength);
-  const msg = new TextEncoder().encode(JSON.stringify(obj));
-  const c = import_tweetnacl.default.box(msg, nonce, fromB64(theirPublicKeyB64), fromB64(mySecretKeyB64));
-  return { n: toB64(nonce), c: toB64(c) };
-}
-function unseal(box, theirPublicKeyB64, mySecretKeyB64) {
-  const opened = import_tweetnacl.default.box.open(
-    fromB64(box.c),
-    fromB64(box.n),
-    fromB64(theirPublicKeyB64),
-    fromB64(mySecretKeyB64)
-  );
-  if (!opened) return null;
-  return JSON.parse(new TextDecoder().decode(opened));
-}
-
-// node_modules/@anthropic-ai/claude-agent-sdk/sdk.mjs
+// relay/node_modules/@anthropic-ai/claude-agent-sdk/sdk.mjs
 import { createRequire as k8 } from "node:module";
 import * as ur from "node:fs/promises";
 import * as An from "node:path";
@@ -18958,7 +19016,7 @@ var pH;
 var fH = O(() => {
   pH = Wge;
 });
-var os = (e, t, n = 3) => {
+var os2 = (e, t, n = 3) => {
   let r = 0, o = uH(50, 250);
   return pH((s) => {
     let i = s.loaded, a = s.lengthComputable ? s.total : void 0, c = a != null ? Math.min(i, a) : i, l = Math.max(0, c - r), u = o(l);
@@ -19230,7 +19288,7 @@ var kH = O(() => {
       else Se = Te = se;
       if (a && (ce || Se)) {
         if (!w.isStream(a)) a = so.Readable.from(a, { objectMode: false });
-        a = so.pipeline([a, new nk({ maxRate: w.toFiniteNumber(Se) })], w.noop), ce && a.on("progress", bH(a, vl(St, os(wl(ce), false, 3))));
+        a = so.pipeline([a, new nk({ maxRate: w.toFiniteNumber(Se) })], w.noop), ce && a.on("progress", bH(a, vl(St, os2(wl(ce), false, 3))));
       }
       let Y = void 0, Ye = i("auth");
       if (Ye) {
@@ -19279,7 +19337,7 @@ var kH = O(() => {
         let ee = [Q], Ue = w.toFiniteNumber(Q.headers["content-length"]);
         if (ne || Te) {
           let rt = new nk({ maxRate: w.toFiniteNumber(Te) });
-          ne && rt.on("progress", bH(rt, vl(Ue, os(wl(ne), true, 3)))), ee.push(rt);
+          ne && rt.on("progress", bH(rt, vl(Ue, os2(wl(ne), true, 3)))), ee.push(rt);
         }
         let we = Q, Qe = Q.req || S;
         if (t.decompress !== false && Q.headers["content-encoding"]) {
@@ -19538,8 +19596,8 @@ var LH = O(() => {
       });
       if (!w.isUndefined(o.withCredentials)) y.withCredentials = !!o.withCredentials;
       if (a && a !== "json") y.responseType = o.responseType;
-      if (l) [f, h] = os(l, true), y.addEventListener("progress", f);
-      if (c && y.upload) [p, m] = os(c), y.upload.addEventListener("progress", p), y.upload.addEventListener("loadend", m);
+      if (l) [f, h] = os2(l, true), y.addEventListener("progress", f);
+      if (c && y.upload) [p, m] = os2(c), y.upload.addEventListener("progress", p), y.upload.addEventListener("loadend", m);
       if (o.cancelToken || o.signal) {
         if (u = (x) => {
           if (!y) return;
@@ -19689,7 +19747,7 @@ var p_e = (e) => {
         let Tt = new n(_, { method: "POST", body: S, duplex: "half" }), re;
         if (w.isFormData(S) && (re = Tt.headers.get("content-type"))) F.setContentType(re);
         if (Tt.body) {
-          let [Q, ee] = vl(St, os(wl(U)));
+          let [Q, ee] = vl(St, os2(wl(U)));
           S = ak(Tt.body, UH, Q, ee);
         }
       }
@@ -19707,7 +19765,7 @@ var p_e = (e) => {
         ["status", "statusText", "headers"].forEach((Ue) => {
           Tt[Ue] = Et[Ue];
         });
-        let re = w.toFiniteNumber(Et.headers.get("content-length")), [Q, ee] = T && vl(re, os(wl(T), true)) || [];
+        let re = w.toFiniteNumber(Et.headers.get("content-length")), [Q, ee] = T && vl(re, os2(wl(T), true)) || [];
         Et = new r(ak(Et.body, UH, Q, () => {
           ee && ee(), Te && Te();
         }), Tt);
@@ -39008,7 +39066,7 @@ var vLt = D(() => $Y(sm()));
 var sP = D(() => A({ source: bu().describe("Where to fetch the marketplace from"), installLocation: g().optional().describe("Local cache path where marketplace manifest is stored (auto-generated if not provided)"), autoUpdate: R().optional().describe("Whether to automatically update this marketplace and its installed plugins on startup") }));
 var xb = D(() => A({ serverName: g().regex(/^[a-zA-Z0-9_-]+$/, "Server name can only contain letters, numbers, hyphens, and underscores").optional().describe("Name of the MCP server that users are allowed to configure"), serverCommand: I(g()).min(1, "Server command must have at least one element (the command)").optional().describe("Command array [command, ...args] to match exactly for allowed stdio servers"), serverUrl: g().optional().describe('URL pattern with wildcard support (e.g., "https://*.example.com/*") for allowed remote MCP servers') }).refine((e) => Ap([e.serverName !== void 0, e.serverCommand !== void 0, e.serverUrl !== void 0], Boolean) === 1, { message: 'Entry must have exactly one of "serverName", "serverCommand", or "serverUrl"' }));
 var vb = D(() => A({ serverName: g().min(1, "Server name must be non-empty").refine((e) => e.trim().length > 0, { message: "Server name must not be whitespace-only" }).refine((e) => e === e.trim(), { message: "Server name has leading or trailing whitespace and will never match (names are compared verbatim)" }).optional().describe("Name of the MCP server that is explicitly blocked"), serverCommand: I(g()).min(1, "Server command must have at least one element (the command)").optional().describe("Command array [command, ...args] to match exactly for blocked stdio servers"), serverUrl: g().optional().describe('URL pattern with wildcard support (e.g., "https://*.example.com/*") for blocked remote MCP servers') }).refine((e) => Ap([e.serverName !== void 0, e.serverCommand !== void 0, e.serverUrl !== void 0], Boolean) === 1, { message: 'Entry must have exactly one of "serverName", "serverCommand", or "serverUrl"' }));
-var AVe = /[\x00-\x1f\x7f-\x9f\u2028\u2029]|\p{DI}/u;
+var AVe = new RegExp("[\\x00-\\x1f\\x7f-\\x9f\\u2028\\u2029]|\\p{DI}", "u");
 function TVe(e) {
   let t = e.replaceAll("/", "\\");
   if (Ha(t)) return false;
@@ -40107,10 +40165,10 @@ function VJ(e, t) {
   return null;
 }
 
-// src/agent-adapter.ts
+// relay/src/agent-adapter.ts
 import { randomUUID as randomUUID3 } from "node:crypto";
 
-// src/summarizer.ts
+// relay/src/summarizer.ts
 var MAX_SUMMARY = 80;
 function basename3(p) {
   if (typeof p !== "string") return "";
@@ -40526,7 +40584,7 @@ var TaskTracker = class {
   }
 };
 
-// src/agent-adapter.ts
+// relay/src/agent-adapter.ts
 var AsyncQueue = class {
   values = [];
   resolvers = [];
@@ -40865,7 +40923,7 @@ var AgentSession = class {
   }
 };
 
-// src/title-gen.ts
+// relay/src/title-gen.ts
 async function generateTitle(task, model, onSid, cwd) {
   const trimmed = task.trim().slice(0, 600);
   if (!trimmed) return { title: null };
@@ -40913,7 +40971,7 @@ async function generateTitle(task, model, onSid, cwd) {
   }
 }
 
-// src/cron.ts
+// relay/src/cron.ts
 import { readFileSync as readFileSync4 } from "node:fs";
 import { join as join6 } from "node:path";
 var str = (v) => typeof v === "string" && v.trim() ? v : void 0;
@@ -40984,7 +41042,7 @@ function cronTasksKey(tasks) {
   return JSON.stringify(tasks);
 }
 
-// src/task-store.ts
+// relay/src/task-store.ts
 import { readdirSync as readdirSync2, readFileSync as readFileSync5, statSync as statSync2 } from "node:fs";
 import { homedir as homedir2 } from "node:os";
 import path from "node:path";
@@ -41016,7 +41074,7 @@ function readTaskStoreTodos(cliSessionId) {
   return out;
 }
 
-// src/todo-hidden.ts
+// relay/src/todo-hidden.ts
 import { readFileSync as readFileSync6, writeFileSync as writeFileSync3 } from "node:fs";
 import path2 from "node:path";
 import { fileURLToPath } from "node:url";
@@ -41064,7 +41122,7 @@ function addHiddenTodoKey(sessionId, key) {
   }
 }
 
-// src/session-manager.ts
+// relay/src/session-manager.ts
 function contextLimitOf(model) {
   const m = (model || "").toLowerCase();
   if (/glm[-_]?5/.test(m)) return 1e6;
@@ -42391,42 +42449,14 @@ var SessionManager = class {
   }
 };
 
-// src/ws-server.ts
+// relay/src/ws-server.ts
 import { createServer } from "node:http";
 import { randomUUID as randomUUID5 } from "node:crypto";
 import { readFileSync as readFileSync11, writeFileSync as writeFileSync7, mkdirSync as mkdirSync6, existsSync as existsSync6, readdirSync as readdirSync4 } from "node:fs";
 import { join as join10, dirname as dirname5, sep as sep5 } from "node:path";
 import { homedir as homedir7, networkInterfaces as networkInterfaces2 } from "node:os";
 
-// src/lan-ip.ts
-import * as os2 from "node:os";
-var VIRTUAL_NIC_RE = /vmware|virtual|vethernet|wsl|loopback|tap|bluetooth|hyper-v|docker|tailscale|zerotier|wireguard|wintun|openvpn|vpn/i;
-var PRIV_RE = /^(192\.168|10|172\.(1[6-9]|2\d|3[01]))\./;
-function pickFrom(list) {
-  for (const ni of list ?? []) {
-    const fam = ni.family ?? "IPv4";
-    if (fam !== "IPv4" && fam !== 4) continue;
-    const a = ni.address ?? "";
-    if (ni.internal || /^(127\.|169\.254\.)/.test(a)) continue;
-    if (PRIV_RE.test(a)) return a;
-  }
-  return "";
-}
-function detectLanIp(interfaces = os2.networkInterfaces()) {
-  let ip2 = "";
-  for (const [name, list] of Object.entries(interfaces)) {
-    if (VIRTUAL_NIC_RE.test(name)) continue;
-    ip2 = pickFrom(list);
-    if (ip2) return ip2;
-  }
-  for (const list of Object.values(interfaces)) {
-    ip2 = pickFrom(list);
-    if (ip2) return ip2;
-  }
-  return "";
-}
-
-// src/models.ts
+// relay/src/models.ts
 import { existsSync as existsSync4, readFileSync as readFileSync8 } from "node:fs";
 import { homedir as homedir4 } from "node:os";
 import { join as join8 } from "node:path";
@@ -42456,10 +42486,10 @@ function listModels(fallbackDefault) {
   return out;
 }
 
-// src/ws-server.ts
+// relay/src/ws-server.ts
 import { fileURLToPath as fileURLToPath3 } from "node:url";
 
-// node_modules/ws/wrapper.mjs
+// relay/node_modules/ws/wrapper.mjs
 var import_stream5 = __toESM(require_stream(), 1);
 var import_extension = __toESM(require_extension(), 1);
 var import_permessage_deflate = __toESM(require_permessage_deflate(), 1);
@@ -42470,13 +42500,13 @@ var import_websocket = __toESM(require_websocket(), 1);
 var import_websocket_server = __toESM(require_websocket_server(), 1);
 var wrapper_default = import_websocket.default;
 
-// src/bridge.ts
+// relay/src/bridge.ts
 import { randomUUID as randomUUID4 } from "node:crypto";
 import { closeSync as closeSync2, openSync as openSync2, readSync as readSync2, readFileSync as readFileSync10, readdirSync as readdirSync3, statSync as statSync4, writeFileSync as writeFileSync6 } from "node:fs";
 import { homedir as homedir6 } from "node:os";
 import path4 from "node:path";
 
-// src/injector.ts
+// relay/src/injector.ts
 import { spawn as spawn2, execFileSync } from "node:child_process";
 import { existsSync as existsSync5, mkdirSync as mkdirSync5, appendFileSync as appendFileSync2, readFileSync as readFileSync9, writeFileSync as writeFileSync5, rmSync as rmSync2 } from "node:fs";
 import path3, { join as join9 } from "node:path";
@@ -42761,7 +42791,7 @@ async function captureConsoleBottom(pid, rows = 20) {
   }
 }
 
-// src/type-guard.ts
+// relay/src/type-guard.ts
 function guardConfig() {
   const num = (v, def) => Number(v) > 0 ? Number(v) : def;
   return {
@@ -42856,7 +42886,7 @@ async function guardCompensateEnter(knownTexts, capture, opts = {}) {
   }
 }
 
-// src/bridge.ts
+// relay/src/bridge.ts
 function transcriptFirstTs(p) {
   let fd2;
   try {
@@ -42948,6 +42978,9 @@ var Bridge = class _Bridge {
   stuckWatch = /* @__PURE__ */ new Map();
   // 防抢发守门进行中的会话（等待人工停手期间，看门狗节拍跳过防重入）
   stuckGuarding = /* @__PURE__ */ new Set();
+  // #111 注入后主动验证：ext id -> { 定时器, 最后注入的文本 }。注入成功 ≠ 提交成功
+  //（回车被 TUI 重渲吞掉），不被动等 10s 看门狗——3s 后快照确认，仍滞留输入框即守门补发
+  verifyTimers = /* @__PURE__ */ new Map();
   subagentSeq = 0;
   // hook 未带 tool_use_id 时的合成 id 序号（ag-N）
   askFallback = /* @__PURE__ */ new Map();
@@ -43402,6 +43435,7 @@ var Bridge = class _Bridge {
         this.noteUserMsg(id2, p.text, "promote");
         this.mgr.pushExternalLog(id2, "user_message", truncate(p.text, 300), void 0, { full: truncate(p.text, 2e3) });
       }
+      this.resetStuckWatch(id2);
       return;
     }
     this.mgr.setExternalPending(id2, [...pending, { text, ts: Date.now() }]);
@@ -43440,6 +43474,7 @@ var Bridge = class _Bridge {
         if (!this.recentlyLogged(id2, t)) this.mgr.pushExternalLog(id2, "user_message", truncate(t, 300), void 0, { full: truncate(t, 2e3) });
         this.noteUserMsg(id2, t, "promote");
       }
+      this.resetStuckWatch(id2);
     } else {
       this.mgr.pushExternalLog(id2, "user_message", text, void 0, { full: truncate(prompt, 2e3) });
     }
@@ -43582,6 +43617,7 @@ var Bridge = class _Bridge {
       this.dropEnqueuedKey(sessionId, promoted.text);
       this.noteUserMsg(sessionId, promoted.text, "promote");
       this.mgr.pushExternalLog(sessionId, "user_message", truncate(promoted.text, 300), void 0, { full: truncate(promoted.text, 2e3) });
+      this.resetStuckWatch(sessionId);
       return true;
     }
     for (let s = 0; s < list.length; s++) {
@@ -43599,6 +43635,7 @@ var Bridge = class _Bridge {
             this.mgr.pushExternalLog(sessionId, "user_message", truncate(h.text, 300), void 0, { full: truncate(h.text, 2e3) });
           }
           this.noteUserMsg(sessionId, prompt, "promote");
+          this.resetStuckWatch(sessionId);
           return true;
         }
       }
@@ -43615,6 +43652,7 @@ var Bridge = class _Bridge {
         this.noteUserMsg(sessionId, h.text, "promote");
         this.mgr.pushExternalLog(sessionId, "user_message", truncate(h.text, 300), void 0, { full: truncate(h.text, 2e3) });
       }
+      this.resetStuckWatch(sessionId);
       return true;
     }
     return false;
@@ -43664,6 +43702,7 @@ var Bridge = class _Bridge {
           this.onInjectFail(sessionId, r.error);
           return;
         }
+        this.armVerify(sessionId, text);
         await sleep2(400);
       }
     } finally {
@@ -44327,6 +44366,7 @@ var Bridge = class _Bridge {
       }
     }
     if ((state.pending_inputs?.length ?? 0) !== kept2.length) this.mgr.setExternalPending(id2, kept2);
+    this.resetStuckWatch(id2);
     const turn = this.turnStart.get(id2) ?? state.started_at;
     this.turnStart.delete(id2);
     this.mgr.finishExternal(id2, "completed", Date.now() - turn);
@@ -44442,7 +44482,59 @@ var Bridge = class _Bridge {
       if (kept2.length !== s.subagents.length) this.mgr.setExternalSubagents(s.session_id, kept2);
     }
   }
-  // ---------- 排队消息滞留输入框看门狗 ----------
+  // ---------- 注入后主动验证（#111）+ 排队消息滞留输入框看门狗 ----------
+  // #111 注入成功 ≠ 提交成功：回车在回合切换/重渲窗口被 CLI 界面层吞掉时，文字滞留
+  // 输入框，原看门狗要等 10s 首窗 + 5s 轮询才补发（实测滞留 13~94s，用户「放在输入框
+  // 很久才发出去」的根因）。这里改为注入后 3s 主动验证：仍在 pending（未晋升）→ 快照
+  // 输入框，框内只有我们的文本即立即补发回车；已晋升/框净（CLI 原生排队）则无事发生。
+  // 补发的回车本身也可能被吞——最多补验 2 轮（round），其余交看门狗兜底。
+  // 守门关闭（CCR_TYPE_GUARD=off）时退回纯看门狗路径。
+  armVerify(sessionId, text, round = 0) {
+    this.disarmVerify(sessionId);
+    if (!guardConfig().enabled) return;
+    const ms = Number(process.env.CCR_VERIFY_MS) > 0 ? Number(process.env.CCR_VERIFY_MS) : 3e3;
+    const timer = setTimeout(() => {
+      this.verifyTimers.delete(sessionId);
+      this.runVerify(sessionId, text, round);
+    }, ms);
+    timer.unref?.();
+    this.verifyTimers.set(sessionId, { timer, text });
+  }
+  disarmVerify(sessionId) {
+    const v = this.verifyTimers.get(sessionId);
+    if (v) {
+      clearTimeout(v.timer);
+      this.verifyTimers.delete(sessionId);
+    }
+  }
+  runVerify(sessionId, text, round) {
+    const st2 = this.mgr.getExternal(sessionId);
+    if (!st2?.cli_pid) return;
+    if (!(st2.pending_inputs ?? []).some((p) => normKey(p.text) === normKey(text))) return;
+    if (st2.status !== "WORKING" && st2.status !== "DONE" || this.flushing.has(sessionId) || this.stuckGuarding.has(sessionId) || (this.inputQueue.get(sessionId)?.length ?? 0) > 0) return;
+    const pid = st2.cli_pid;
+    const known = (st2.pending_inputs ?? []).map((p) => p.text);
+    this.stuckGuarding.add(sessionId);
+    void guardCompensateEnter(known, () => captureConsoleBottom(pid), {
+      abort: () => {
+        const s2 = this.mgr.getExternal(sessionId);
+        return !s2 || s2.status !== "WORKING" && s2.status !== "DONE" || this.flushing.has(sessionId) || (this.inputQueue.get(sessionId)?.length ?? 0) > 0;
+      }
+    }).then((v) => {
+      if (v.kind === "enter" || v.kind === "enter-after-wait") {
+        const s2 = this.mgr.getExternal(sessionId);
+        if (this.flushing.has(sessionId) || (this.inputQueue.get(sessionId)?.length ?? 0) > 0) return;
+        if (!s2 || !(s2.pending_inputs ?? []).some((p) => normKey(p.text) === normKey(text))) return;
+        this.fireStuckEnter(sessionId, pid, v.kind === "enter-after-wait" ? `\u5DF2\u8865\u53D1\u56DE\u8F66\uFF08\u68C0\u6D4B\u5230\u8F93\u5165\u6846\u6709\u5176\u4ED6\u8F93\u5165\uFF0C\u7B49\u505C\u624B ${Math.round(v.waitedMs / 100) / 10}s \u540E\u8865\u53D1\uFF09` : "\u6CE8\u5165\u540E 3 \u79D2\u4ECD\u6EDE\u7559\u8F93\u5165\u6846\uFF0C\u5DF2\u8865\u53D1\u56DE\u8F66\uFF08#111 \u4E3B\u52A8\u9A8C\u8BC1\uFF09");
+        if (round < 1) this.armVerify(sessionId, text, round + 1);
+      }
+    }).finally(() => this.stuckGuarding.delete(sessionId));
+  }
+  // #111 晋升成功即重置滞留看门狗：补发生效说明链路活着，下一条滞留消息应继续享受
+  // 10s 快窗——原实现 tries>0 后阈值跳回 90s（stuckAfterMs），连续第二条滞留要等 90s+
+  resetStuckWatch(sessionId) {
+    this.stuckWatch.delete(sessionId);
+  }
   // 现象：注入的回车在回合切换瞬间被 CLI 界面层吞掉，文字滞留输入框未提交，
   // 直到下一条消息的回车才把两条一起冲出去。补发一个空回车（injectEnter）补救。
   // WAITING 严禁补发——回车会误触权限弹窗。
@@ -44486,9 +44578,9 @@ var Bridge = class _Bridge {
     const w2 = this.stuckWatch.get(id2);
     const tries = (w2?.tries ?? 0) + 1;
     this.stuckWatch.set(id2, { lastTry: Date.now(), tries, skips: w2?.skips ?? 0, given_up: tries >= 3 });
-    if (tries >= 3) {
+    if (tries === 3) {
       this.mgr.pushExternalLog(id2, "system", "\u6392\u961F\u6D88\u606F\u7591\u4F3C\u6EDE\u7559\u8F93\u5165\u6846\uFF0C\u5DF2\u8865\u53D1 3 \u6B21\u56DE\u8F66\u4ECD\u6EDE\u7559\uFF0C\u6682\u505C\u81EA\u52A8\u8865\u53D1\uFF08\u4E0B\u6B21\u53D1\u9001\u6D88\u606F\u65F6\u4F1A\u4E00\u5E76\u63D0\u4EA4\uFF09");
-    } else {
+    } else if (tries < 3) {
       this.mgr.pushExternalLog(id2, "system", msg ?? "\u6392\u961F\u6D88\u606F\u7591\u4F3C\u6EDE\u7559\u8F93\u5165\u6846\uFF0C\u5DF2\u8865\u53D1\u56DE\u8F66");
     }
     void injectEnter(pid).then((r) => {
@@ -44533,7 +44625,7 @@ function parseGateTools(raw) {
   return new Set((raw ?? def).split(",").map((s) => s.trim()).filter(Boolean));
 }
 
-// src/ws-server.ts
+// relay/src/ws-server.ts
 function localIps() {
   const out = /* @__PURE__ */ new Set();
   for (const list of Object.values(networkInterfaces2())) {
@@ -44643,7 +44735,7 @@ function listCustomCommands(dir, source) {
   return out;
 }
 function startServer(bus2, mgr2, cfg2, opts = {}) {
-  const webRoot = process.env.CCR_WEB_ROOT ?? (process.env.CC_DECK_PLUGIN ? fileURLToPath3(new URL("../", import.meta.url)) : fileURLToPath3(new URL("../../", import.meta.url)));
+  const webRoot = process.env.CCR_WEB_ROOT ?? ("1" ? fileURLToPath3(new URL("../", import.meta.url)) : fileURLToPath3(new URL("../../", import.meta.url)));
   const consoleHtml = join10(webRoot, "web-console", "index.html");
   const naclJs = join10(webRoot, "web-console", "nacl.js");
   const qrJs = join10(webRoot, "web-console", "qr.js");
@@ -44730,6 +44822,75 @@ function startServer(bus2, mgr2, cfg2, opts = {}) {
       }
       res.writeHead(200, { "content-type": PWA_ASSETS[url.pathname] }).end(readFileSync11(file));
       return;
+    }
+    if (url.pathname === "/api/lan-hello" && req.method === "GET") {
+      const hello = opts.lanAuthHello?.();
+      if (!hello) {
+        res.writeHead(501).end();
+        return;
+      }
+      res.writeHead(200, { "content-type": "application/json", "cache-control": "no-store", "access-control-allow-origin": "*" }).end(JSON.stringify({ ok: true, relay_dev: hello.relay_dev, nonce: hello.nonce }));
+      return;
+    }
+    if (url.pathname === "/api/lan-auth" && req.method === "POST") {
+      let body = "";
+      req.setEncoding("utf8");
+      req.on("data", (c) => {
+        body += c;
+      });
+      req.on("end", () => {
+        try {
+          const { dev, box } = JSON.parse(body);
+          if (!dev || !box || !opts.lanAuthHandle) {
+            res.writeHead(400).end('{"error":"bad request"}');
+            return;
+          }
+          const r = opts.lanAuthHandle(dev, box);
+          if (r.ok) res.writeHead(200, { "content-type": "application/json", "cache-control": "no-store", "access-control-allow-origin": "*" }).end(JSON.stringify({ ok: true, box: r.box }));
+          else res.writeHead(403, { "content-type": "application/json" }).end(JSON.stringify({ ok: false, error: r.error }));
+        } catch {
+          res.writeHead(400).end();
+        }
+      });
+      return;
+    }
+    if (url.pathname === "/api/relay-name") {
+      if ((url.searchParams.get("token") ?? "") !== cfg2.token) {
+        res.writeHead(401).end();
+        return;
+      }
+      const file = join10(cfg2.dataDir, "relay-name");
+      if (req.method === "GET") {
+        let name = "";
+        try {
+          name = readFileSync11(file, "utf8").trim().slice(0, 40);
+        } catch {
+        }
+        res.writeHead(200, { "content-type": "application/json", "cache-control": "no-store" }).end(JSON.stringify({ ok: true, name }));
+        return;
+      }
+      if (req.method === "POST") {
+        let body = "";
+        req.setEncoding("utf8");
+        req.on("data", (c) => {
+          body += c;
+        });
+        req.on("end", () => {
+          try {
+            const { name } = JSON.parse(body);
+            const clean = (name ?? "").trim().slice(0, 40);
+            if (!clean || /[\r\n<>]/.test(clean)) {
+              res.writeHead(400).end('{"error":"\u540D\u79F0\u9700 1-40 \u5B57\u4E14\u4E0D\u542B\u6362\u884C/\u5C16\u62EC\u53F7"}');
+              return;
+            }
+            writeFileSync7(file, clean, "utf8");
+            res.writeHead(200, { "content-type": "application/json" }).end(JSON.stringify({ ok: true, name: clean }));
+          } catch {
+            res.writeHead(400).end();
+          }
+        });
+        return;
+      }
     }
     if (req.method === "GET" && url.pathname === "/health") {
       res.writeHead(200, { "content-type": "application/json" }).end('{"ok":true}');
@@ -44965,7 +45126,11 @@ function startServer(bus2, mgr2, cfg2, opts = {}) {
           // 客户端据此密码学匹配"LAN 直连条目"与"云桥条目"是同一台 relay，自动合并。
           // wan_dev（F7）：手表 /wan 透传通道的凭据 dev，手机侧写进手表连接配置
           ...opts.cloudRelayDev?.() ? { relay_dev: opts.cloudRelayDev() } : {},
-          ...opts.cloudWanDev?.() ? { wan_dev: opts.cloudWanDev() } : {}
+          ...opts.cloudWanDev?.() ? { wan_dev: opts.cloudWanDev() } : {},
+          ...opts.relayName?.() ? { relay_name: opts.relayName() } : {},
+          // #100
+          ...opts.lanHint?.() ? { lan_hint: opts.lanHint() } : {}
+          // #95 同网直连提示
         }
       };
       ws2.send(JSON.stringify(snapshot));
@@ -45182,7 +45347,7 @@ async function handleBridgeHook(req, res, bridge, cfg2) {
 }
 var connectionCounter = 0;
 
-// src/cloud-identity.ts
+// relay/src/cloud-identity.ts
 import { existsSync as existsSync7, readFileSync as readFileSync12, writeFileSync as writeFileSync8 } from "node:fs";
 import { join as join11 } from "node:path";
 import { createHash, randomBytes } from "node:crypto";
@@ -45248,7 +45413,7 @@ function loadOrCreateIdentity(dataDir2) {
   };
 }
 
-// src/cloud-client.ts
+// relay/src/cloud-client.ts
 var PEER_META_MAX = 120;
 var SIGHTING_TTL_MS = 18e4;
 var PEER_META_KEYS = ["name", "platform", "ua", "app"];
@@ -45751,7 +45916,7 @@ var CloudClient = class {
   }
 };
 
-// src/pairing.ts
+// relay/src/pairing.ts
 import { randomInt } from "node:crypto";
 var TTL_FLOOR_MS = 6e4;
 var TTL_CEIL_MS = 30 * 6e4;
@@ -45794,7 +45959,7 @@ function createPairingCodes(ttlMs) {
   };
 }
 
-// src/qr.ts
+// relay/src/qr.ts
 var import_qrcode_terminal = __toESM(require_main(), 1);
 function printQr(text, label) {
   console.log(`
@@ -45802,7 +45967,7 @@ ${label}`);
   import_qrcode_terminal.default.generate(text, { small: true });
 }
 
-// src/mdns.ts
+// relay/src/mdns.ts
 var import_bonjour_service = __toESM(require_dist(), 1);
 function advertiseRelay(port, name) {
   try {
@@ -45826,7 +45991,7 @@ function advertiseRelay(port, name) {
   }
 }
 
-// src/index.ts
+// relay/src/index.ts
 var cfg = loadConfig();
 {
   const lockPath = join12(cfg.dataDir, "relay.lock");
@@ -45937,7 +46102,7 @@ if (cliArgs.has("--qr")) {
   process.exit(0);
 }
 if (cliArgs.has("--daemon")) {
-  if (!process.env.CC_DECK_PLUGIN) {
+  if (false) {
     console.log("dev \u6A21\u5F0F\uFF08tsx \u524D\u53F0\u8DD1 TS \u6E90\u7801\uFF09\u4E0D\u652F\u6301 --daemon\uFF0C\u8BF7\u76F4\u63A5\u524D\u53F0\u8FD0\u884C");
     process.exit(1);
   }
@@ -46007,6 +46172,7 @@ for (const s of mgr.snapshot()) {
   });
 }
 var pinned = mgr.applyPinned();
+var lanAuthNonces = null;
 var cloudIdentity = null;
 var cloudClients = [];
 var pairCodes = createPairingCodes();
@@ -46043,6 +46209,37 @@ startServer(bus, mgr, cfg, {
   // wan_dev（F7）：手表 /wan 凭据 dev，手机端拼进手表连接配置（旧客户端自动忽略）
   ...cloudIdentity ? { cloudRelayDev: () => cloudIdentity.relayDev } : {},
   ...cloudIdentity ? { cloudWanDev: () => cloudIdentity.wanDev } : {},
+  // #100 relay 自定义名称：dataDir/relay-name 单行文件（web 设置 relay 页可写）
+  relayName: () => {
+    try {
+      return readFileSync13(join12(cfg.dataDir, "relay-name"), "utf8").trim().slice(0, 40) || "";
+    } catch {
+      return "";
+    }
+  },
+  // #95 云身份 LAN 握手（回箱挑战，详见 ws-server opts 注释）
+  lanHint: () => {
+    const ip2 = detectLanIp(networkInterfaces3());
+    return ip2 ? `${ip2}:${cfg.port}` : "";
+  },
+  lanAuthHello: () => cloudIdentity ? { relay_dev: cloudIdentity.relayDev, nonce: randomBytes2(16).toString("base64") } : null,
+  lanAuthHandle: (dev, box) => {
+    if (!cloudIdentity) return { ok: false, error: "no identity" };
+    const peer = cloudIdentity.peers.get(dev);
+    if (!peer) return { ok: false, error: "unknown device" };
+    const inner = unseal(box, peer.pubkey, cloudIdentity.keypair.secretKey);
+    if (!inner || !inner.nonce) return { ok: false, error: "bad box" };
+    if (!lanAuthNonces) lanAuthNonces = /* @__PURE__ */ new Map();
+    const now = Date.now();
+    for (const [n, t] of lanAuthNonces) if (now - t > 6e4) lanAuthNonces.delete(n);
+    if (lanAuthNonces.has(inner.nonce)) {
+      lanAuthNonces.delete(inner.nonce);
+    } else if (inner.nonce.length < 16 || inner.nonce.length > 44) {
+      return { ok: false, error: "bad nonce" };
+    }
+    const reply = seal({ token: cfg.token, port: cfg.port }, peer.pubkey, cloudIdentity.keypair.secretKey);
+    return { ok: true, box: reply };
+  },
   // daemon 子进程 listen 成功后自写 pid（父进程不预写，端口被占时不留死 pid）
   onReady: () => {
     advertiseRelay(cfg.port, `CC Deck Relay (${hostname()})`);
