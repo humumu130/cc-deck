@@ -2,7 +2,7 @@
   "expo": {
     "name": "CC Deck",
     "slug": "cc-deck",
-    "version": "0.4.22",
+    "version": "0.4.22-test",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "dark",
@@ -11,7 +11,7 @@
       [
         "expo-camera",
         {
-          "cameraPermission": "允许 $(PRODUCT_NAME) 访问摄像头，用于扫描 PC 端 relay 的连接二维码",
+          "cameraPermission": "\u5141\u8bb8 $(PRODUCT_NAME) \u8bbf\u95ee\u6444\u50cf\u5934\uff0c\u7528\u4e8e\u626b\u63cf PC \u7aef relay \u7684\u8fde\u63a5\u4e8c\u7ef4\u7801",
           "recordAudioAndroid": false,
           "barcodeScannerEnabled": true
         }
