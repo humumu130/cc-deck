@@ -239,23 +239,44 @@ export function cliHostAlive(pid: number): boolean {
   }
 }
 
-// 服务端主动恢复（异常断开的会话）：新开 Terminal 标签，cd 回原工作目录后续跑同 id 会话，
-// 触发消息作为初始 prompt 一并提交。恢复进程起来后 hooks 上报自动把会话翻回 WORKING
-// 并重定位 pid（同 session_id，无需迁移）。权限模式镜像原始会话启动参数：原来带
-// skip/权限模式的恢复也带（无人值守恢复若回落默认确认门控，等于恢复了个寂寞）。
-// 仅 macOS；shell 单引号转义防命令注入，AppleScript 字面量走 escapeApple。
+// 服务端主动恢复（异常断开的会话）：新开终端窗口/标签，cd 回原工作目录后续跑同 id
+// 会话，触发消息作为初始 prompt 一并提交。恢复进程起来后 hooks 上报自动把会话翻回
+// WORKING 并重定位 pid（同 session_id，无需迁移）。权限模式镜像原始会话启动参数：
+// 原来带 skip/权限模式的恢复也带（无人值守恢复若回落默认确认门控，等于恢复了个寂寞）。
+// 双端实现：macOS 走 Terminal do script（单引号转义防注入）；Windows 新开 cmd 窗口
+// （start /D 指工作目录，双引号包裹防御 & |，内部引号 \" 转义）。⚠ Windows 分支
+// 结构对称但无真机验证（Windows 主力机 2026-09-13 损坏）——恢复功能对 Windows 的
+// 首次真实验证依赖用户修复机器后回测；逻辑保持最小以降低风险面。
 export async function resumeSession(
   cwd: string,
   sessionId: string,
   text: string,
   permMode?: string,
 ): Promise<InjectResult> {
-  if (!isDarwin()) return { ok: false, error: "会话恢复目前仅支持 macOS" };
-  const shq = (v: string) => "'" + v.replace(/'/g, "'\\''") + "'";
-  const perm = permMode ? ` --permission-mode ${shq(permMode)}` : "";
-  const cmd = `cd ${shq(cwd)} && claude --resume ${shq(sessionId)}${perm} ${shq(text)}`;
-  const script = ["tell application \"Terminal\"", `	do script "${escapeApple(cmd)}"`, "end tell"].join("\n");
-  return runAppleScript(script);
+  if (isDarwin()) {
+    const shq = (v: string) => "'" + v.replace(/'/g, "'\\''") + "'";
+    const perm = permMode ? ` --permission-mode ${shq(permMode)}` : "";
+    const cmd = `cd ${shq(cwd)} && claude --resume ${shq(sessionId)}${perm} ${shq(text)}`;
+    const script = ["tell application \"Terminal\"", `	do script "${escapeApple(cmd)}"`, "end tell"].join("\n");
+    return runAppleScript(script);
+  }
+  if (process.platform === "win32" && !process.env.CCR_OSASCRIPT_CMD) {
+    const q = (v: string) => '"' + v.replace(/"/g, '\\"') + '"';
+    const perm = permMode ? ` --permission-mode ${q(permMode)}` : "";
+    const inner = `claude --resume ${q(sessionId)}${perm} ${q(text)}`;
+    // start "title" /D <dir> cmd /k <cmd>：可见窗口（用户能看到恢复的会话），/D 定 cwd
+    return new Promise((resolve) => {
+      const child = spawn("cmd.exe", ["/c", "start", "cc-deck-resume", "/D", cwd, "cmd", "/k", inner], {
+        windowsHide: true,
+        detached: true,
+        stdio: "ignore",
+      });
+      child.on("error", (e) => resolve({ ok: false, error: e.message }));
+      child.on("spawn", () => resolve({ ok: true }));
+      child.unref?.();
+    });
+  }
+  return { ok: false, error: "当前平台不支持会话恢复（仅 Windows/macOS）" };
 }
 
 async function injectTextMac(pid: number, rawText: string): Promise<InjectResult> {

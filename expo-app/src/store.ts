@@ -81,6 +81,8 @@ export interface SourceConn {
   lanToken: string;
   lanUpgrading: boolean; // #95 云→LAN 升级切换进行中（防重复握手）
   lanUpgradeCool: number; // #103 升级失败冷却至（10min 内不再试，防断云-回云循环）
+  lanProbeCool: number; // 断网提速：LAN-first 探测失败冷却至——冷却内 connCycle 跳过 LAN 串行探测直连云桥（Wi-Fi 断后每轮省 2~6s；云在线后 #95 SNAPSHOT 升级路径会在 LAN 恢复时自动换回直连）
+  fastRetry: boolean; // 刚在线过又断（突发断网）：首轮重试快发（800ms），不空等 3s 基线
   hbTimer: ReturnType<typeof setInterval> | null;
   probeTimer: ReturnType<typeof setTimeout> | null;
   lastDownAt: number;
@@ -706,6 +708,8 @@ class RelayStore {
         lanToken: "",
         lanUpgrading: false,
         lanUpgradeCool: 0,
+        lanProbeCool: 0,
+        fastRetry: false,
         hbTimer: null,
         probeTimer: null,
         lastDownAt: 0,
@@ -930,7 +934,7 @@ class RelayStore {
     // 直连（channel=lan 低延迟）。握手/探测任一步失败静默回落云桥——行为与旧版一致
     let lanWs: WebSocket | null = null;
     if (conn.cloudCfg && !isLanUrl(cfg.wsUrl)) {
-      if (conn.lanHint && conn.cloudCfg) {
+      if (conn.lanHint && conn.cloudCfg && Date.now() >= conn.lanProbeCool) {
         const token = conn.lanToken || await this.lanHandshake(conn);
         if (token) {
           conn.lanToken = token;
@@ -939,6 +943,9 @@ class RelayStore {
           } catch { lanWs = null; }
           if (!lanWs) conn.lanToken = ""; // 握到的 token 连不上（relay 关了/换网段）→ 下轮重握手
         }
+        // 断网提速：LAN 握手/试连整链失败 → 60s 冷却内下轮直连云桥，不再每轮串行空探
+        //（Wi-Fi 断后 2~6s/轮 × 指数退避轮次 = 用户实测 20~30s"连接中"的主因之一）
+        if (!lanWs) conn.lanProbeCool = Date.now() + 60_000;
       }
     } else {
       lanWs = await this.probeLan(conn, cfg);
@@ -1005,6 +1012,7 @@ class RelayStore {
     conn.ws = ws;
     conn.channel = "lan";
     conn.reconnectDelay = RECONNECT_BASE_MS;
+    conn.fastRetry = true;
     conn.state = "online";
     conn.stateText = null;
     conn.failNote = null;
@@ -1065,6 +1073,7 @@ class RelayStore {
       if (conn.ws !== ws) return;
       opened = true;
       conn.reconnectDelay = RECONNECT_BASE_MS;
+      conn.fastRetry = true;
       // #33 假在线修正：桥 ws 开门 ≠ relay 在线（手机云通道连的是桥，relay 关机时
       // 桥照样开门）。真在线 = 收到 relay 首帧（SNAPSHOT/pong，onMessage 置位）；
       // 开门态标 connecting + 「等待电脑端响应」，用户不再看到关机电脑「在线」
@@ -1285,7 +1294,10 @@ class RelayStore {
   private scheduleReconnect(conn: SourceConn) {
     if (!conn.cfg) return;
     if (conn.state === "unpaired") return;
-    const delay = conn.reconnectDelay;
+    // 断网提速：刚在线过又断（fastRetry）→ 首轮 800ms 快发——突发断网（Wi-Fi 切换/
+    // 桥闪断）多为瞬时故障，快发一轮即恢复；失败后回落常规指数退避不受影响
+    const delay = conn.fastRetry ? Math.min(conn.reconnectDelay, 800) : conn.reconnectDelay;
+    conn.fastRetry = false;
     conn.reconnectDelay = Math.min(conn.reconnectDelay * 2, RECONNECT_MAX_MS);
     conn.state = "reconnecting";
     conn.retryAt = Date.now() + delay;
@@ -1800,7 +1812,7 @@ class RelayStore {
       case "SNAPSHOT": {
         if ((msg.payload as { relay_name?: string }).relay_name) conn.relayName = (msg.payload as { relay_name?: string }).relay_name!; // #100
         const lanHint = (msg.payload as { lan_hint?: string }).lan_hint; // #95
-        if (lanHint && conn.lanHint !== lanHint) { conn.lanHint = lanHint; conn.lanToken = ""; }
+        if (lanHint && conn.lanHint !== lanHint) { conn.lanHint = lanHint; conn.lanToken = ""; conn.lanProbeCool = 0; }
         // #95 升级切换（#103 修正版）：预握手+LAN 试连**全部成功**才断云切换——
         // 首版只握手成功就断云，LAN 试连失败时回云→SNAPSHOT→再断云死循环
         // （实测手机反复 hello 云通道）。失败进 10min 冷却（lanUpgradeCool），

@@ -758,6 +758,21 @@ export class Bridge {
     return { decision: "pass" };
   }
 
+  // 模型显示名覆盖（读一次缓存）：模型别名接入（如 claude-* 别名路由 GLM）时 CLI 上报
+  // 的模型名与实际服务不符——~/.cc-deck/data/model-display 放一行显示名即全端生效
+  private static modelDisplay: string | null | undefined;
+
+  private static modelDisplayName(): string | null {
+    if (Bridge.modelDisplay === undefined) {
+      try {
+        Bridge.modelDisplay = readFileSync(path.join(homedir(), ".cc-deck", "data", "model-display"), "utf8").trim() || null;
+      } catch {
+        Bridge.modelDisplay = null;
+      }
+    }
+    return Bridge.modelDisplay;
+  }
+
   private async dispatch(ev: BridgeEvent): Promise<BridgeDecision> {
     const decision = await this.dispatchInner(ev);
     // 权限模式跟随：CLI 上报什么存什么（恢复会话时镜像原始启动参数的依据）。
@@ -1291,7 +1306,7 @@ export class Bridge {
             usageSeen = true;
             ctxLast = inc(mu.input_tokens) + inc(mu.cache_read_input_tokens) + inc(mu.cache_creation_input_tokens);
           }
-          if (typeof j.message?.model === "string" && j.message.model) model = j.message.model;
+          if (typeof j.message?.model === "string" && j.message.model) model = Bridge.modelDisplayName() ?? j.message.model;
           const content = j.message?.content;
           if (!Array.isArray(content)) continue;
           Bridge.collectTaskOps(content, taskOps, creates);
@@ -1958,7 +1973,11 @@ export class Bridge {
   private armVerify(sessionId: string, text: string, round = 0): void {
     this.disarmVerify(sessionId);
     if (!guardConfig().enabled) return;
-    const ms = Number(process.env.CCR_VERIFY_MS) > 0 ? Number(process.env.CCR_VERIFY_MS) : 3000;
+    // 1s（原 3s）：手机实测注入→发出全程 ~10s 的主因——do script 的 Return 偶被 TUI
+    // 粘贴检测吞掉后，滞留补偿链（首验→读屏判定→补发→兜验）每轮 ~3s 起步。首验
+    // 提前到 1s 只影响「框内文本=我们的注入」场景；用户开始打字仍由 capture 判定
+    // foreignResidual 跳过（45 段红线，本参数不触碰）
+    const ms = Number(process.env.CCR_VERIFY_MS) > 0 ? Number(process.env.CCR_VERIFY_MS) : 1000;
     const timer = setTimeout(() => {
       this.verifyTimers.delete(sessionId);
       this.runVerify(sessionId, text, round);
@@ -2012,7 +2031,7 @@ export class Bridge {
           this.fireStuckEnter(sessionId, pid, v.kind === "enter-after-wait"
             ? `已补发回车（检测到输入框有其他输入，等停手 ${Math.round(v.waitedMs / 100) / 10}s 后补发）`
             : "注入后 3 秒仍滞留输入框，已补发回车（#111 主动验证）");
-          if (round < 1) this.armVerify(sessionId, text, round + 1); // 回车再被吞的兜验
+          if (round < 2) this.armVerify(sessionId, text, round + 1); // 回车再被吞的兜验（3 轮总窗 ~4s，超窗交看门狗）
         }
       })
       .finally(() => this.stuckGuarding.delete(sessionId));

@@ -37,6 +37,17 @@ jobs:
         working-directory: expo-app
         run: npm ci --no-audit --no-fund
 
+      - name: Sync version from tag (snapshot 通道标识)
+        # -snap tag 构建把 tag 名烙进 versionName（如 0.4.23-snap.2）：关于页/设置抽屉
+        # 显示完整通道版本 + "快照版"角标，用户可区分快照包与正式包（正式 tag 无后缀，
+        # versionName 保持仓库 checked-in 值，两者互不干扰）
+        if: startsWith(github.ref, 'refs/tags/') && contains(github.ref, '-snap')
+        working-directory: expo-app
+        run: |
+          V="${GITHUB_REF_NAME#v}"
+          sed -i "s/versionName \"[^\"]*\"/versionName \"$V\"/" android/app/build.gradle
+          sed -i "s/\"version\": \"[^\"]*\"/\"version\": \"$V\"/" app.json
+
       - name: Build release APK
         working-directory: expo-app/android
         run: ./gradlew assembleRelease --stacktrace

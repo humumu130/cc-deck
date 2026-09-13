@@ -23,6 +23,10 @@ const FILL = { position: "absolute", left: 0, right: 0, top: 0, bottom: 0 } as c
 
 // 版本号读原生 versionName（build.gradle），杜绝手写硬编码再漏更
 const APP_VER = "v" + (Constants.nativeApplicationVersion ?? Constants.expoConfig?.version ?? "-");
+// 通道标识：CI 对 -snap tag 把 tag 后缀烙进 versionName（如 v0.4.23-snap.2）——
+// 后缀存在即非正式通道包，版本号旁给显眼角标；稳定版用户可一眼区分快照/预发布包
+const VER_SUFFIX = (Constants.nativeApplicationVersion ?? "").replace(/^v?[\d.]+/, "");
+const CHANNEL_TAG: string | null = /snap/i.test(VER_SUFFIX) ? "快照版" : VER_SUFFIX ? "预发布" : null;
 
 // #313 反馈入口：关于弹窗「✎ 反馈」跳 GitHub Issues
 const FEEDBACK_URL = "https://github.com/humumu130/cc-deck/issues";
@@ -141,7 +145,10 @@ function AboutModal({ visible, onClose }: { visible: boolean; onClose: () => voi
               </View>
               <View style={{ flex: 1, minWidth: 0 }}>
                 <Text style={m.abNameT}>CC Deck</Text>
-                <Text style={m.abVerT}>{APP_VER}</Text>
+                <View style={m.abVerRow}>
+                  <Text style={m.abVerT}>{APP_VER}</Text>
+                  {CHANNEL_TAG != null && <Text style={m.abChanT}>{CHANNEL_TAG}</Text>}
+                </View>
               </View>
               <Pressable style={m.abClose} hitSlop={8} onPress={onClose} accessibilityLabel="关闭关于">
                 <Text style={m.abCloseT}>✕</Text>
@@ -403,7 +410,7 @@ export default function SettingsDrawer({
           </View>
           <View style={{ flex: 1, minWidth: 0 }}>
             <Text style={d.nameT}>CC Deck</Text>
-            <Text style={d.verT}>{APP_VER}</Text>
+            <Text style={d.verT}>{APP_VER}{CHANNEL_TAG ? ` · ${CHANNEL_TAG}` : ""}</Text>
           </View>
           {/* 全局扫码入口（直连/登录/导入统一扫）：头部右侧角标钮，与设置页同一链路 */}
           <Pressable
@@ -615,7 +622,7 @@ export default function SettingsDrawer({
           accessibilityLabel="版本与本版特性"
         >
           <Text style={d.setLabel}><Text style={d.rowIconT}>◈ </Text>版本</Text>
-          <Text style={d.aboutVerT}>{APP_VER} ›</Text>
+          <Text style={d.aboutVerT}>{APP_VER}{CHANNEL_TAG ? ` · ${CHANNEL_TAG}` : ""} ›</Text>
         </Pressable>
         <Pressable
           style={[d.setItem, d.setRow]}
@@ -883,6 +890,13 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
   },
   abNameT: { color: c.text, fontSize: 16.5, fontWeight: "700" },
   abVerT: { color: c.faint, fontSize: 11.5, marginTop: 1 },
+  abVerRow: { flexDirection: "row", alignItems: "center", gap: 6 },
+  // 通道角标（快照版/预发布）：细边框小胶囊，与版本号同行
+  abChanT: {
+    color: c.dim, fontSize: 9.5, fontWeight: "700", letterSpacing: 1,
+    paddingHorizontal: 5, paddingVertical: 1.5, borderRadius: 5,
+    borderWidth: 1, borderColor: c.line, overflow: "hidden",
+  },
   abClose: {
     width: 30, height: 30, borderRadius: 15, alignItems: "center", justifyContent: "center",
     backgroundColor: c.tintSoft, borderWidth: 1, borderColor: c.line,
