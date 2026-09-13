@@ -84,12 +84,13 @@ const ackB = mgr.handleCommand(
 );
 assert(ackB.ok, `session B created (${ackB.session_id})`);
 
-// 幂等去重：重发 B 的创建命令（同 command_id）
+// 幂等去重：重发 B 的创建命令（同 command_id）→ 重放首次回执（不报错、不建新会话）
 const dupAck = mgr.handleCommand(
   { type: "COMMAND_CREATE", command_id: ackB.command_id, ts: Date.now(), payload: { cwd: tmpDir, prompt: "x" } } as Command,
   "test-client",
 );
-assert(dupAck.ok && dupAck.error === "duplicate: already processed", "duplicate command deduped");
+assert(dupAck.ok && dupAck.session_id === ackB.session_id, "duplicate command replays first ack (idempotent)");
+assert(mgr.snapshot().filter((s) => s.session_id === ackB.session_id).length === 1, "duplicate creates no extra session");
 
 // 等两个会话到达终态（最多 150s）
 const deadline = Date.now() + 150_000;

@@ -30,11 +30,22 @@ const waitLog = async (pred: () => boolean, ms = 4000): Promise<void> => {
 };
 
 const fakeLog = (): string[][] => {
+  // 逐行容错：子进程 appendFileSync 与本读取竞态时会读到半行，整文件 try/catch 会把
+  // 已完整的行一并丢掉（29 段 got -1 假阴性的根因）——半行跳过，完整行照收
+  let raw: string;
   try {
-    return readFileSync(INJECT_LOG, "utf-8").trim().split(/\r?\n/).filter(Boolean).map((l) => JSON.parse(l));
+    raw = readFileSync(INJECT_LOG, "utf-8");
   } catch {
     return [];
   }
+  const out: string[][] = [];
+  for (const l of raw.split(/\r?\n/)) {
+    if (!l) continue;
+    try {
+      out.push(JSON.parse(l));
+    } catch {}
+  }
+  return out;
 };
 
 process.env.CCR_PORT = "8798";
