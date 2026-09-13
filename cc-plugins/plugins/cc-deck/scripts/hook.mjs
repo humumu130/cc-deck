@@ -187,30 +187,37 @@ async function main() {
   // PreToolUse 等远程审批（最长 600s，须 < settings.json 里该 hook 的 timeout 620s）
   const waitMs = event === "PreToolUse" ? 600_000 : 1500;
   // 逐候选上报：403（token 失配）/连不上（relay 未起或换班）就试下一目录的
-  // bridge.json；命中 2xx 即止。多数时候首轮即成功，失配期多花一次本地请求
+  // bridge.json；命中 2xx 即止。多数时候首轮即成功，失配期多花一次本地请求。
+  // 外层补 3 轮整体重试（2s/4s 退避，仅旁路事件）：relay 热替换重启窗口约 5~8s，
+  // 旁路事件 1.5s 短等撞上即丢（审批/通知在手机端凭空消失的根因之一）；PreToolUse
+  // 的 600s 长等天然覆盖重启窗口，无需多轮
+  const rounds = event === "PreToolUse" ? 1 : 3;
   let res = null;
-  for (let i = 0; i < cfgs.length; i++) {
-    const c = cfgs[i];
-    try {
-      res = await Promise.race([
-        fetch(`http://127.0.0.1:${c.port}/bridge/hook`, {
-          method: "POST",
-          headers: { "content-type": "application/json", "x-bridge-token": c.token },
-          body: JSON.stringify(body),
-        }),
-        new Promise((_, rej) => setTimeout(() => rej(new Error("timeout")), waitMs).unref?.()),
-      ]);
-    } catch (e) {
-      diag(`post fail (${i}): ` + (e?.message ?? e));
+  for (let round = 0; round < rounds && !res; round++) {
+    if (round) await new Promise((r) => setTimeout(r, 2000 * round).unref?.());
+    for (let i = 0; i < cfgs.length; i++) {
+      const c = cfgs[i];
+      try {
+        res = await Promise.race([
+          fetch(`http://127.0.0.1:${c.port}/bridge/hook`, {
+            method: "POST",
+            headers: { "content-type": "application/json", "x-bridge-token": c.token },
+            body: JSON.stringify(body),
+          }),
+          new Promise((_, rej) => setTimeout(() => rej(new Error("timeout")), waitMs).unref?.()),
+        ]);
+      } catch (e) {
+        diag(`post fail (r${round} ${i}): ` + (e?.message ?? e));
+        res = null;
+        continue;
+      }
+      if (res && res.ok) {
+        diag(`post ok (r${round} ${i})`);
+        break;
+      }
+      diag(`post ${res ? res.status : "?"} (r${round} ${i})，回退下一候选`);
       res = null;
-      continue;
     }
-    if (res && res.ok) {
-      diag(`post ok (${i})`);
-      break;
-    }
-    diag(`post ${res ? res.status : "?"} (${i})，回退下一候选`);
-    res = null;
   }
 
   // 仅 PreToolUse 需要把决定回给 CLI；其余事件纯旁路
