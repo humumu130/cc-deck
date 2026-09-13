@@ -517,8 +517,8 @@
   .gp-pair-info { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 6px; }
   .gp-pair-t { font-size: 12px; color: var(--gp-dim); }
   .gp-pair-acts { width: 148px; flex: none; justify-content: center; }
-  .gp-qr-inline { width: 168px; flex: none; display: flex; flex-direction: column; align-items: center; gap: 4px; }
-  .gp-qr-inline canvas { width: 148px; height: 148px; border-radius: 10px; border: 1px solid var(--gp-border); }
+  .gp-qr-inline { width: 128px; flex: none; display: flex; flex-direction: column; align-items: center; gap: 4px; }
+  .gp-qr-inline canvas { width: 104px; height: 104px; border-radius: 8px; border: 1px solid var(--gp-border); }
   .gp-qr-inline-t { font-size: 11.5px; font-weight: 700; color: var(--gp-text); }
   .gp-qr-inline-s { font-size: 10px; color: var(--gp-dim); text-align: center; line-height: 1.4; }
   /* #411 relay 页自动展码：8 格码位一行（grid 1fr 格宽自适应，窄容器自动收敛不下溢），
@@ -1055,7 +1055,7 @@
      #399 第二行悬挂缩进至名称起点（灯 8px + c-head gap 8px），与首行文字块成组 */
   /* #54 三行卡层级：标题行（15px/--text-strong）不动；动作行降一档 12→11px、
      色从 --dim 回调到 --card-sub（介于原值与标题色之间）；元信息行 12→11px 保持 --faint */
-  .c-live { display: flex; align-items: center; gap: 8px; margin: 6px 0 5px; padding-left: 16px; font-size: 11px; color: var(--card-sub); font-variant-numeric: tabular-nums; min-width: 0; }
+  .c-live { display: flex; align-items: center; gap: 8px; margin: 6px 0 5px; padding-left: 6px; font-size: 11px; color: var(--card-sub); font-variant-numeric: tabular-nums; min-width: 0; }
   .c-live .lv-dot { width: 9px; height: 9px; border-radius: 50%; background: var(--working); flex: none; animation: dot-breathe 2.4s ease-in-out infinite; }
   .c-live .lv-sec { color: var(--working); flex: none; }
   .c-live .lv-tok { flex: none; }
@@ -1138,7 +1138,7 @@
   .card.compact .card-title { flex: 1; min-width: 0; margin-top: 0; font-size: 13px; gap: 6px; }
   .card.compact .c-tt { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .card.compact .card-title input { font-size: 12.5px; }
-  .card.compact .card-summary { font-size: 11px; margin-top: 3px; padding-left: 15px; } /* #399 compact 灯列 = 8px 点 + 7px gap；#54 11.5→11 */
+  .card.compact .card-summary { font-size: 11px; margin-top: 3px; padding-left: 6px; } /* #399 compact 灯列 = 8px 点 + 7px gap；#54 11.5→11 */
   .card.compact .card-stats { font-size: 10px; margin-top: 5px; gap: 8px; } /* #54 10.5→10 */
 
   /* ---------- 任务面板（详情页"任务" tab） ---------- */
@@ -1217,7 +1217,7 @@
   .cron-name { font-size: 13.5px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .cron-item.paused .cron-name { color: var(--dim); font-weight: 500; }
   .cron-meta { font-size: 11.5px; color: var(--faint); margin-top: 1px; font-variant-numeric: tabular-nums; }
-  .card-summary { color: var(--card-sub); font-size: 11.5px; margin-top: 4px; padding-left: 16px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; } /* #399 悬挂缩进对齐灯列；#54 动作行降档 12.5→11.5 + 提色 */
+  .card-summary { color: var(--card-sub); font-size: 11.5px; margin-top: 4px; padding-left: 6px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; } /* #399 悬挂缩进对齐灯列；#54 动作行降档 12.5→11.5 + 提色 */
   .card-summary.waiting { color: var(--working); }
   .card-stats { font-size: 11px; color: var(--faint); margin-top: 6px; display: flex; align-items: center; gap: 10px; font-variant-numeric: tabular-nums; } /* #54 元信息行降档 12→11 */
   .card-stats .add { color: var(--done); }
@@ -1829,12 +1829,16 @@
         </section>
         <section class="gp-page off" id="gpPageRelay">
           <div class="gp-sec"><svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><rect x="3.2" y="3.8" width="17.6" height="6.6" rx="2"/><rect x="3.2" y="13.6" width="17.6" height="6.6" rx="2"/><path d="M7 7.1h.01M7 16.9h.01"/></svg>relay</div>
-          <div class="gp-relay-stat" id="gpRelayStat"><i></i><span id="gpRelayStatTxt">检测中…</span></div>
-          <!-- #100 本机名称：relay 侧自定义名，SNAPSHOT 下发给客户端做默认显示名 -->
-          <div class="gp-card" style="margin-bottom:10px;padding:10px 12px;display:flex;align-items:center;gap:8px">
-            <span style="font-size:12px;color:var(--gp-dim);flex:none">本机名称</span>
-            <input id="gpRelayNameInput" maxlength="40" placeholder="如：书房电脑" style="flex:1;min-width:0;background:var(--gp-rail);border:1px solid var(--gp-border);border-radius:8px;color:var(--gp-text);font-size:13px;padding:5px 9px" />
-            <button id="gpRelayNameSave" class="gp-mini-btn" style="flex:none">保存</button>
+          <!-- #109 合一行：左=relay 运行状态，右=本机名称（默认名展示+铅笔编辑态，
+               非常驻输入框） -->
+          <div class="gp-card" id="gpRelayRow" style="margin-bottom:10px;padding:10px 12px;display:flex;align-items:center;gap:10px">
+            <div class="gp-relay-stat" id="gpRelayStat" style="flex:none"><i></i><span id="gpRelayStatTxt">检测中…</span></div>
+            <div style="flex:1"></div>
+            <span id="gpRelayNameView" title="点击修改本机名称（各端连接列表将显示此名）"
+              style="max-width:46%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:12.5px;color:var(--gp-text);cursor:pointer">本机</span>
+            <input id="gpRelayNameInput" maxlength="40" placeholder="如：书房电脑" style="display:none;flex:1;min-width:0;background:var(--gp-rail);border:1px solid var(--gp-border);border-radius:8px;color:var(--gp-text);font-size:13px;padding:5px 9px" />
+            <button id="gpRelayNameEdit" class="gp-mini-btn" style="flex:none" title="修改本机名称">✎</button>
+            <button id="gpRelayNameSave" class="gp-mini-btn" style="display:none;flex:none">保存</button>
           </div>
           <div class="gp-sec"><svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 8V5a2 2 0 0 1 2-2h3M16 3h3a2 2 0 0 1 2 2v3M21 16v3a2 2 0 0 1-2 2h-3M8 21H5a2 2 0 0 1-2-2v-3"/><path d="M7 12h10"/></svg>配对</div>
           <div class="gp-card gp-pair">
@@ -1845,9 +1849,8 @@
               <div class="pair-hint" id="pairHint"></div>
             </div>
             <div class="gp-qr-inline">
-              <canvas id="relayAddQrCv" width="160" height="160" title="手机 CC Deck App 扫此码接入本机"></canvas>
+              <canvas id="relayAddQrCv" width="112" height="112" title="手机 CC Deck App 扫此码接入本机"></canvas>
               <div class="gp-qr-inline-t">手机扫码接入</div>
-              <div class="gp-qr-inline-s" id="relayAddQrState">生成中…</div>
             </div>
           </div>
           <div class="gp-sec"><svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9 5.5 10.5 4h3L15 5.5"/><rect x="4" y="5.5" width="16" height="15" rx="3"/><path d="M8.5 11h7M8.5 15h4.5"/></svg>已配对设备</div>
@@ -4740,7 +4743,7 @@ document.addEventListener("click", (ev) => {
 
 // ⚙ 设置浮层（#317）：显示项为散装开关的镜像（点行 = 触发原按钮再回读状态），
 // 服务器管理不进浮层——左栏常驻面板已是高频区，与手机抽屉同为一级入口
-const CONSOLE_VERSION = "0.4.21";
+const CONSOLE_VERSION = "0.4.22-test";
 // #396 拨杆同步：滑块移到 idx 档（transform 过渡），选中档文字加 .on（白字压品牌色滑块上）
 function setLever(el, idx) {
   if (!el) return;
@@ -6426,30 +6429,49 @@ function closeLoginQr(msg) {
 $("loginQrCancel").onclick = () => closeLoginQr();
 
 // #100 本机名称：连本机 relay 时回显；保存写 relay 文件（SNAPSHOT 随发全端）
+let gpRelayNamed = false;
 async function refreshRelayName() {
-  const inp = $("gpRelayNameInput");
-  if (!inp || inp.dataset.loaded === "1") return;
-  const local = [...ctxs.values()].find((c) => c.cfg.kind === "lan" && localEp(c.cfg.wsUrl)?.loop && c.cfg.token === (localRelayInfo?.token ?? "") && c.status === "online")
-    || [...ctxs.values()].find((c) => c.cfg.kind === "lan" && localEp(c.cfg.wsUrl)?.loop && c.status === "online");
-  if (!local) return;
+  // #107：不查 ctx（web 连的源可能是 LAN IP 条目，loop 判定过窄误报未连）——
+  // localRelayInfo 本身就是页面探测机制的产物，直接用它
+  if (gpRelayNamed || !localRelayInfo) return;
   try {
-    const r = await fetch(`http://127.0.0.1:${localRelayInfo?.port ?? 8787}/api/relay-name?token=${encodeURIComponent(local.cfg.token ?? "")}`);
+    const r = await fetch(`http://127.0.0.1:${localRelayInfo.port}/api/relay-name?token=${encodeURIComponent(localRelayInfo.token)}`);
     const j = await r.json();
-    if (j.ok) { inp.value = j.name || ""; inp.dataset.loaded = "1"; }
+    if (j.ok) {
+      gpRelayNamed = true;
+      const view = $("gpRelayNameView");
+      const inp = $("gpRelayNameInput");
+      if (view) view.textContent = j.name || "本机";
+      if (inp) inp.value = j.name || "";
+    }
   } catch {}
 }
+// #109 编辑态：铅笔展开输入框+保存；ESC/失焦收起
+$("gpRelayNameEdit")?.addEventListener("click", () => {
+  const inp = $("gpRelayNameInput"), view = $("gpRelayNameView");
+  const edit = $("gpRelayNameEdit"), save = $("gpRelayNameSave");
+  if (!inp || !view) return;
+  inp.style.display = "block"; view.style.display = "none";
+  edit.style.display = "none"; save.style.display = "";
+  inp.focus();
+});
 $("gpRelayNameSave")?.addEventListener("click", async () => {
   const inp = $("gpRelayNameInput");
-  const local = [...ctxs.values()].find((c) => c.cfg.kind === "lan" && localEp(c.cfg.wsUrl)?.loop && c.status === "online");
-  if (!inp || !local) { toast("需先连接本机 relay"); return; }
+  const view = $("gpRelayNameView");
+  if (!inp || !localRelayInfo) { toast("本机 relay 未运行"); return; } // #107：不依赖源连接
   try {
-    const r = await fetch(`http://127.0.0.1:${localRelayInfo?.port ?? 8787}/api/relay-name?token=${encodeURIComponent(local.cfg.token ?? "")}`, {
+    const r = await fetch(`http://127.0.0.1:${localRelayInfo.port}/api/relay-name?token=${encodeURIComponent(localRelayInfo.token)}`, {
       method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ name: inp.value.trim() }),
     });
     const j = await r.json();
-    if (j.ok) { toast("已保存，各端将默认显示此名称"); render(); }
-    else toast(j.error || "保存失败");
-  } catch { toast("保存失败（本机 relay 未连）"); }
+    if (j.ok) {
+      gpRelayNamed = true;
+      if (view) view.textContent = j.name || "本机";
+      inp.style.display = "none"; if (view) view.style.display = "";
+      $("gpRelayNameEdit").style.display = ""; $("gpRelayNameSave").style.display = "none";
+      toast("已保存，各端将默认显示此名称");
+    } else toast(j.error || "保存失败");
+  } catch { toast("保存失败（本机 relay 未运行）"); }
 });
 
 // #94 relay 页二维码常显：进页自动出码、云码到期前 30s 自动续（免点击）
@@ -6488,8 +6510,8 @@ async function addPhoneQr() {
             t: "ccdeck-add", v: 1,
             bridge: ci.cloudInfo.bridge, bt: ci.cloudInfo.bt, rd: ci.cloudInfo.rd, rk: ci.cloudInfo.rk,
             code: pc.pair_code.code,
-          }), 160);
-          $("relayAddQrState").textContent = "经云桥接入 · 任何网络可用";
+          }), 112);
+          /* #104 状态行已撤 */
           scheduleRelayQrRenew((pc.pair_code.expires_in || 300) * 1000);
           return;
         }
@@ -6501,12 +6523,12 @@ async function addPhoneQr() {
           : (localRelayInfo.lanIp && PRIV_IP.test(localRelayInfo.lanIp) ? localRelayInfo.lanIp : "");
       if (lanHost) {
         const p = JSON.stringify({ v: 1, url: `ws://${lanHost}:${localRelayInfo.port}/ws`, token: localRelayInfo.token });
-        drawQrTo($("relayAddQrCv"), p, 160);
-        $("relayAddQrState").textContent = "同网直连 · 需同一 WiFi";
+        drawQrTo($("relayAddQrCv"), p, 112);
+        /* #104 状态行已撤 */
         scheduleRelayQrRenew(0); // LAN 码不过期，无需续
         return;
       }
-      $("relayAddQrState").textContent = "未配云桥且无局域网地址，暂不可扫码";
+      /* #104 状态行已撤 */
       return;
     }
   }
@@ -6811,7 +6833,7 @@ function pdFillCells(code) {
 }
 function pdRenderLeft() {
   const left = Math.max(0, Math.ceil((pdDeadline - Date.now()) / 1000));
-  pdSetMeta((left >= 60 ? Math.floor(left / 60) + ":" + String(left % 60).padStart(2, "0") : left + "s") + " 内有效 · 一次性");
+  pdSetMeta(left >= 60 ? Math.floor(left / 60) + ":" + String(left % 60).padStart(2, "0") : "0:" + String(left).padStart(2, "0")); // #106 纯倒计时，去「内有效·一次性」
 }
 function pdStartTick() {
   clearInterval(pdCodeTick);
