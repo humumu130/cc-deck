@@ -80,6 +80,7 @@ export interface SourceConn {
   lanHint: string;
   lanToken: string;
   lanUpgrading: boolean; // #95 云→LAN 升级切换进行中（防重复握手）
+  lanUpgradeCool: number; // #103 升级失败冷却至（10min 内不再试，防断云-回云循环）
   hbTimer: ReturnType<typeof setInterval> | null;
   probeTimer: ReturnType<typeof setTimeout> | null;
   lastDownAt: number;
@@ -660,6 +661,7 @@ class RelayStore {
         lanHint: "",
         lanToken: "",
         lanUpgrading: false,
+        lanUpgradeCool: 0,
         hbTimer: null,
         probeTimer: null,
         lastDownAt: 0,
@@ -1750,17 +1752,27 @@ class RelayStore {
         if ((msg.payload as { relay_name?: string }).relay_name) conn.relayName = (msg.payload as { relay_name?: string }).relay_name!; // #100
         const lanHint = (msg.payload as { lan_hint?: string }).lan_hint; // #95
         if (lanHint && conn.lanHint !== lanHint) { conn.lanHint = lanHint; conn.lanToken = ""; }
-        // #95 升级切换：云通道活着但拿到同网 lan_hint——后台握手，成功即断开当前
-        // 云连接走一轮重连（下一周期 connCycle 直连 LAN）。失败静默留云（异网常态）
-        if (lanHint && conn.channel === "cloud" && !conn.lanToken && !conn.lanUpgrading) {
+        // #95 升级切换（#103 修正版）：预握手+LAN 试连**全部成功**才断云切换——
+        // 首版只握手成功就断云，LAN 试连失败时回云→SNAPSHOT→再断云死循环
+        // （实测手机反复 hello 云通道）。失败进 10min 冷却（lanUpgradeCool），
+        // 到期前不再尝试；异网/握手失败零扰动云连接
+        if (lanHint && conn.channel === "cloud" && !conn.lanToken && !conn.lanUpgrading
+            && Date.now() - (conn.lanUpgradeCool || 0) > 600_000) {
           conn.lanUpgrading = true;
-          void this.lanHandshake(conn).then((token) => {
-            conn.lanUpgrading = false;
+          void (async () => {
+            const token = await this.lanHandshake(conn);
             if (token) {
-              conn.lanToken = token;
-              try { conn.ws?.close(); } catch {}
+              const probe = await this.tryWs(`ws://${conn.lanHint}/ws`, token, 2500).then((w) => { try { w.close(); } catch {} return true; }).catch(() => false);
+              if (probe) {
+                conn.lanToken = token;
+                conn.lanUpgrading = false;
+                try { conn.ws?.close(); } catch {}
+                return;
+              }
             }
-          });
+            conn.lanUpgrading = false;
+            conn.lanUpgradeCool = Date.now();
+          })();
         }
         // relay_dev（云桥设备 id，云桥启用的 relay 随快照下发，LAN/云通道均携）：
         // 盖章本源条目身份并按身份归并同机重复条目——先归并再装配会话（合并可能
