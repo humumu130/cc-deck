@@ -1714,7 +1714,10 @@ class RelayStore {
           token: bt,
           relayDev: r.rd,
           relayPubkey: r.rk,
-          dev: r.dev,
+          // #105：App 配对身份用本机 keys 的 ph-（手机）——沿用桥侧回执 dev 会落
+          // wb-（网页前缀），relay 已配对列表把手机误标「网页」（用户实测反馈）。
+          // 云通道验密只要求 dev 与 peers 公钥一致——deviceKeys 恒定，两侧天然同步
+          dev: devId(this.devKeys!.publicKey, "ph"),
         },
       });
       return null;
