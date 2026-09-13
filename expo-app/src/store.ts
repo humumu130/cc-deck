@@ -199,7 +199,10 @@ const LAN_PROBE_MS = 4000;
 const RECONNECT_BASE_MS = 3000;
 // #33（2026-09-10 用户反馈重连太频）：上限 30s→300s——云通道断的是「桥 ws」，
 // relay 长时间关机（下班/合盖）时 30s 一轮纯属空转；300s 对齐 relay 云客户端口径
-const RECONNECT_MAX_MS = 300000;
+// #110（务实版）：云源退避上限 300s→900s——#34 唤醒广播已保证 relay 上线秒级
+// 唤回（拉长退避不牺牲及时性），离线期手机尝试频率降 2/3；桥侧 rd 在线轻探
+// 端点（/api/relay-online）待后续迭代
+const RECONNECT_MAX_MS = 900000;
 
 // 命令 ACK 追踪：无回执超时（首等 4s）→ 重发同 id 一次（relay 按 command_id 幂等去重，
 // 重复送达回 ok:true "duplicate"，不会双执行）→ 再等 6s 仍无回执才报失败。
