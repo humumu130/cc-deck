@@ -1269,7 +1269,7 @@ await wait(150);
       const { captureConsoleBottom, buildCaptureScript } = await import("../src/injector.js");
       const cap8 = await captureConsoleBottom(5555, 5);
       assert(cap8?.length === 5 && cap8[0] === "row25" && cap8[4] === "row29", "45 mac capture takes tail rows via contents");
-      assert(buildCaptureScript(5555).includes("return contents of t") && buildCaptureScript(5555).includes("tty of t"), "45 mac capture script locates tab by tty");
+      assert(buildCaptureScript(5555).includes("return contents of (contents of t)") && buildCaptureScript(5555).includes("tty of t"), "45 mac capture script locates tab by tty (double deref for real value)");
     } finally {
       delete process.env.CCR_TEST_PLATFORM;
       delete process.env.CCR_OSASCRIPT_CMD;

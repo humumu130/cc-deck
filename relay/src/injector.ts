@@ -357,6 +357,10 @@ export function peekSupported(): boolean {
 
 // Terminal 标签页文本快照脚本（导出供测试断言结构）：按 tty 定位标签页后取
 // contents（整段含滚回，调用方截末尾行）。与 buildDoScriptExpr 同一定位方式。
+// ⚠ contents of (contents of t) 双层解引用：repeat with t in tabs 里的 t 是引用，
+// 单层 contents of t 只解到 tab 对象——osascript stdout 输出 "tab 1 of window id N"
+// 引用描述而非屏幕文本（capture 永远空 → verify verdict unknown → 静默，滞留只能
+// 等 90s 看门狗。45 段假 osascript 测不出，真机才暴露——2026-09-13 滞留 10s+ 根因）
 export function buildCaptureScript(pid: number): string {
   return [
     "tell application \"Terminal\"",
@@ -365,7 +369,7 @@ export function buildCaptureScript(pid: number): string {
     "		repeat with t in tabs of w",
     "			try",
     "				if tty of t ends with targetTty then",
-    "					return contents of t",
+    "					return contents of (contents of t)",
     "				end if",
     "			end try",
     "		end repeat",
