@@ -7,7 +7,7 @@ import { fileURLToPath } from "node:url";
 import type { EventBus } from "./event-bus.js";
 import type { SessionManager } from "./session-manager.js";
 import type { BridgeEvent, PendingInput, WaitingPayload, TodoItem, SubagentInfo, AskQuestion } from "./types.js";
-import { injectText, injectEsc, injectEnter, ensureInjector, injectSupported, captureConsoleBottom } from "./injector.js";
+import { injectText, injectEsc, injectEnter, ensureInjector, injectSupported, captureConsoleBottom, cliHostAlive, resumeSession } from "./injector.js";
 import { guardConfig, guardCompensateEnter } from "./type-guard.js";
 import {
   addHiddenTodoKey,
@@ -555,11 +555,29 @@ export class Bridge {
   // 长工具下一事件到达即翻回 WORKING；不兜底则是永久假 WORKING（更糟）。
   private sweepWorkingIdle(): void {
     const idleMs = Number(process.env.CCR_NOHOOK_IDLE_MS) > 0 ? Number(process.env.CCR_NOHOOK_IDLE_MS) : 90_000;
+    // 进程存活硬信号清扫开关（生产默认开；测试假 pid 世界在文件顶部整体关掉，46 段局部开）
+    const deadSweepOn = process.env.CCR_DEAD_SWEEP !== "0";
     const now = Date.now();
     if (this.lastHookAt.size > 200) this.lastHookAt.clear(); // 会话量上限兜底（与 lastGrow 同口径）
     for (const s of this.mgr.snapshot()) {
       if (!s.external || s.status !== "WORKING") continue;
       const id = s.session_id;
+      // 进程存活硬信号：cli_pid 已不是 CLI 宿主 → 异常断开（无 SessionEnd 的死亡：
+      // 死机/重启/崩溃；主动退出走 SessionEnd → 卡片已同步清除，到不了这里）。
+      // 不等静默窗口、不受 updated_at 刷新干扰（手机反复发消息会把 idleSince 一直
+      // 推新，纯静默判定对僵尸会话失效——#114 遗留面）。卡片保留（done_reason=
+      // disconnected），客户端发消息可触发服务端 claude --resume 恢复。
+      if (deadSweepOn && s.cli_pid && !cliHostAlive(s.cli_pid)) {
+        const turn = this.turnStart.get(id) ?? s.started_at;
+        this.turnStart.delete(id);
+        this.mgr.finishExternal(id, "disconnected", now - turn);
+        const dropped = this.inputQueue.get(id)?.length ?? 0;
+        this.inputQueue.delete(id);
+        this.disarmVerify(id);
+        if (s.pending_inputs?.length) this.mgr.setExternalPending(id, []);
+        this.mgr.pushExternalLog(id, "system", `CLI 进程已退出（未见主动结束上报），会话保留可恢复${dropped ? `，弃 ${dropped} 条排队消息` : ""}`);
+        continue;
+      }
       if (this.noHookIds.has(id) || s.compacting || this.pending.has(id)) continue; // 无 hook 会话有专属扫描；压缩中/审批挂起中不动
       const idleSince = Math.max(
         this.lastGrow.get(id) ?? 0,
@@ -741,6 +759,14 @@ export class Bridge {
   }
 
   private async dispatch(ev: BridgeEvent): Promise<BridgeDecision> {
+    const decision = await this.dispatchInner(ev);
+    // 权限模式跟随：CLI 上报什么存什么（恢复会话时镜像原始启动参数的依据）。
+    // 放事件处理之后——首事件时会话刚在 handler 里建卡，前置捕获会扑空
+    if (ev.permission_mode) this.mgr.setExternalPermMode(this.extId(ev), ev.permission_mode);
+    return decision;
+  }
+
+  private async dispatchInner(ev: BridgeEvent): Promise<BridgeDecision> {
     switch (ev.event) {
       case "UserPromptSubmit":
         return this.onPrompt(ev);
@@ -838,6 +864,12 @@ export class Bridge {
     if (!injectSupported()) {
       return { ok: false, error: "当前 relay 主机暂不支持向外部 CLI 会话注入输入（仅 Windows/macOS）；托管会话不受影响" };
     }
+    // 异常断开（进程死亡、无 SessionEnd）保留的会话：客户端发消息 → 服务端新开终端标签
+    // claude --resume 同 id 恢复，消息作为初始 prompt 投递；恢复进程的 hooks 上报后
+    // 会话自动翻回 WORKING、pid 重新定位，回到正常注入通路
+    if (state.status === "DONE" && state.done_reason === "disconnected") {
+      return this.resumeExternal(sessionId, text);
+    }
     if (!state.cli_pid) return { ok: false, error: "尚未定位 CLI 进程，等该会话下次活动后重试" };
 
     const q = this.inputQueue.get(sessionId) ?? [];
@@ -853,6 +885,23 @@ export class Bridge {
     } else {
       this.mgr.pushExternalLog(sessionId, "system", `已排队（等待确认/回合结束后自动发送）：${truncate(text, 80)}`);
     }
+    return { ok: true };
+  }
+
+  // 异常断开会话的恢复投递：pending 回显 + 新终端标签 claude --resume（权限模式镜像
+  // 原始会话）。fire-and-forget：恢复进程的 hooks 上报驱动后续状态翻正，失败落会话日志
+  private resumeExternal(sessionId: string, text: string): { ok: boolean; error?: string } {
+    const state = this.mgr.getExternal(sessionId);
+    if (!state) return { ok: false, error: `会话不存在: ${sessionId}` };
+    const cwd = state.cwd || homedir();
+    this.mgr.setExternalPending(sessionId, [...(state.pending_inputs ?? []), { text: text.trim(), ts: Date.now() }]);
+    this.mgr.pushExternalLog(sessionId, "system", `恢复会话中（新终端标签 claude --resume）并投递：${truncate(text, 80)}`);
+    void resumeSession(cwd, sessionId.slice(4), text, state.permission_mode).then((r) => {
+      if (!r.ok) {
+        this.mgr.setExternalPending(sessionId, []);
+        this.mgr.pushExternalLog(sessionId, "system", `恢复失败：${r.error ?? "未知错误"}`);
+      }
+    });
     return { ok: true };
   }
 
@@ -1787,6 +1836,9 @@ export class Bridge {
     const turn = this.turnStart.get(id) ?? state.started_at;
     this.turnStart.delete(id);
     this.mgr.finishExternal(id, ev.reason ?? "ended", Date.now() - turn);
+    // 主动关闭收口：同步清除客户端会话卡片（区别于异常断开的保留可恢复）。
+    // 用户随后手动 claude --resume 同 id 仍会经 hooks 重新登记（墓碑只挡历史重放）
+    this.mgr.deleteSession(id);
     return { decision: "pass" };
   }
 

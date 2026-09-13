@@ -41131,6 +41131,7 @@ function contextLimitOf(model) {
 function isManagedMode(m) {
   return m === "default" || m === "acceptEdits" || m === "plan";
 }
+var EXTERNAL_PERM_MODES = /* @__PURE__ */ new Set(["default", "acceptEdits", "plan", "bypassPermissions", "auto", "manual"]);
 function sanitizeImportPushEntry(raw) {
   if (!raw || typeof raw !== "object") return null;
   const e = raw;
@@ -41617,6 +41618,29 @@ var SessionManager = class {
     s.state.updated_at = Date.now();
     this.bus.emit(id2, "SESSION_WAITING", payload);
   }
+  // 外部会话记录 CLI 上报的最新权限模式——恢复会话（claude --resume）时镜像原始启动
+  // 参数用：原来带 skip/权限模式的，恢复也带，不回落默认确认门控
+  setExternalPermMode(id2, mode) {
+    const s = this.sessions.get(id2);
+    if (!s || !s.state.external || !EXTERNAL_PERM_MODES.has(mode)) return;
+    s.state.permission_mode = mode;
+  }
+  // 删除会话：外部会话写墓碑防历史重放复活（#34 断言的闭环），置顶清单同步摘除（#49）。
+  // COMMAND_DELETE 与 SessionEnd 主动关闭收口共用（主动退出 → 客户端卡片同步清除）
+  deleteSession(id2) {
+    const s = this.sessions.get(id2);
+    if (!s) return;
+    this.sessions.delete(id2);
+    this.lastStoreTodos.delete(id2);
+    if (s.state.external) {
+      this.deletedExtIds.add(id2);
+      appendDeletedExt(this.cfg.dataDir, id2);
+    }
+    if (s.state.pinned) {
+      writePinnedSessions(this.cfg.dataDir, readPinnedSessions(this.cfg.dataDir).filter((x) => x !== id2));
+    }
+    this.bus.emit(id2, "SESSION_DELETED", { session_id: id2 });
+  }
   finishExternal(id2, reason, durationMs) {
     const s = this.sessions.get(id2);
     if (!s) return;
@@ -41858,19 +41882,7 @@ var SessionManager = class {
           if (s.state.status === "WORKING" || s.state.status === "WAITING") {
             return { command_id: cmd.command_id, ok: false, error: "\u4F1A\u8BDD\u8FD0\u884C\u4E2D\uFF0C\u4E0D\u80FD\u5220\u9664" };
           }
-          this.sessions.delete(cmd.payload.session_id);
-          this.lastStoreTodos.delete(cmd.payload.session_id);
-          if (s.state.external) {
-            this.deletedExtIds.add(cmd.payload.session_id);
-            appendDeletedExt(this.cfg.dataDir, cmd.payload.session_id);
-          }
-          if (s.state.pinned) {
-            writePinnedSessions(
-              this.cfg.dataDir,
-              readPinnedSessions(this.cfg.dataDir).filter((x) => x !== cmd.payload.session_id)
-            );
-          }
-          this.bus.emit(cmd.payload.session_id, "SESSION_DELETED", { session_id: cmd.payload.session_id });
+          this.deleteSession(cmd.payload.session_id);
           return { command_id: cmd.command_id, ok: true };
         }
         case "COMMAND_RENAME": {
@@ -42670,6 +42682,25 @@ function macTargetIsCliHost(pid) {
     return false;
   }
 }
+function cliHostAlive(pid) {
+  if (process.platform === "win32") {
+    return process.env.CCR_INJECT_CMD ? true : targetIsCliHost(pid);
+  }
+  try {
+    const out = execFileSync("ps", ["-p", String(pid), "-o", "comm="], { encoding: "utf8", timeout: 5e3 });
+    return VALID_TARGET.test(out.trim().split("/").pop() ?? "");
+  } catch {
+    return false;
+  }
+}
+async function resumeSession(cwd, sessionId, text, permMode) {
+  if (!isDarwin()) return { ok: false, error: "\u4F1A\u8BDD\u6062\u590D\u76EE\u524D\u4EC5\u652F\u6301 macOS" };
+  const shq = (v) => "'" + v.replace(/'/g, "'\\''") + "'";
+  const perm = permMode ? ` --permission-mode ${shq(permMode)}` : "";
+  const cmd = `cd ${shq(cwd)} && claude --resume ${shq(sessionId)}${perm} ${shq(text)}`;
+  const script = ['tell application "Terminal"', `	do script "${escapeApple(cmd)}"`, "end tell"].join("\n");
+  return runAppleScript(script);
+}
 async function injectTextMac(pid, rawText) {
   if (!macTargetIsCliHost(pid)) return { ok: false, error: "pid-reuse" };
   const text = rawText.replace(/[\r\n]+/g, " ").trim();
@@ -43343,11 +43374,23 @@ var Bridge = class _Bridge {
   // 长工具下一事件到达即翻回 WORKING；不兜底则是永久假 WORKING（更糟）。
   sweepWorkingIdle() {
     const idleMs = Number(process.env.CCR_NOHOOK_IDLE_MS) > 0 ? Number(process.env.CCR_NOHOOK_IDLE_MS) : 9e4;
+    const deadSweepOn = process.env.CCR_DEAD_SWEEP !== "0";
     const now = Date.now();
     if (this.lastHookAt.size > 200) this.lastHookAt.clear();
     for (const s of this.mgr.snapshot()) {
       if (!s.external || s.status !== "WORKING") continue;
       const id2 = s.session_id;
+      if (deadSweepOn && s.cli_pid && !cliHostAlive(s.cli_pid)) {
+        const turn2 = this.turnStart.get(id2) ?? s.started_at;
+        this.turnStart.delete(id2);
+        this.mgr.finishExternal(id2, "disconnected", now - turn2);
+        const dropped = this.inputQueue.get(id2)?.length ?? 0;
+        this.inputQueue.delete(id2);
+        this.disarmVerify(id2);
+        if (s.pending_inputs?.length) this.mgr.setExternalPending(id2, []);
+        this.mgr.pushExternalLog(id2, "system", `CLI \u8FDB\u7A0B\u5DF2\u9000\u51FA\uFF08\u672A\u89C1\u4E3B\u52A8\u7ED3\u675F\u4E0A\u62A5\uFF09\uFF0C\u4F1A\u8BDD\u4FDD\u7559\u53EF\u6062\u590D${dropped ? `\uFF0C\u5F03 ${dropped} \u6761\u6392\u961F\u6D88\u606F` : ""}`);
+        continue;
+      }
       if (this.noHookIds.has(id2) || s.compacting || this.pending.has(id2)) continue;
       const idleSince = Math.max(
         this.lastGrow.get(id2) ?? 0,
@@ -43500,6 +43543,11 @@ var Bridge = class _Bridge {
     return { decision: "pass" };
   }
   async dispatch(ev2) {
+    const decision = await this.dispatchInner(ev2);
+    if (ev2.permission_mode) this.mgr.setExternalPermMode(this.extId(ev2), ev2.permission_mode);
+    return decision;
+  }
+  async dispatchInner(ev2) {
     switch (ev2.event) {
       case "UserPromptSubmit":
         return this.onPrompt(ev2);
@@ -43586,6 +43634,9 @@ var Bridge = class _Bridge {
     if (!injectSupported()) {
       return { ok: false, error: "\u5F53\u524D relay \u4E3B\u673A\u6682\u4E0D\u652F\u6301\u5411\u5916\u90E8 CLI \u4F1A\u8BDD\u6CE8\u5165\u8F93\u5165\uFF08\u4EC5 Windows/macOS\uFF09\uFF1B\u6258\u7BA1\u4F1A\u8BDD\u4E0D\u53D7\u5F71\u54CD" };
     }
+    if (state.status === "DONE" && state.done_reason === "disconnected") {
+      return this.resumeExternal(sessionId, text);
+    }
     if (!state.cli_pid) return { ok: false, error: "\u5C1A\u672A\u5B9A\u4F4D CLI \u8FDB\u7A0B\uFF0C\u7B49\u8BE5\u4F1A\u8BDD\u4E0B\u6B21\u6D3B\u52A8\u540E\u91CD\u8BD5" };
     const q2 = this.inputQueue.get(sessionId) ?? [];
     q2.push(text);
@@ -43599,6 +43650,22 @@ var Bridge = class _Bridge {
     } else {
       this.mgr.pushExternalLog(sessionId, "system", `\u5DF2\u6392\u961F\uFF08\u7B49\u5F85\u786E\u8BA4/\u56DE\u5408\u7ED3\u675F\u540E\u81EA\u52A8\u53D1\u9001\uFF09\uFF1A${truncate(text, 80)}`);
     }
+    return { ok: true };
+  }
+  // 异常断开会话的恢复投递：pending 回显 + 新终端标签 claude --resume（权限模式镜像
+  // 原始会话）。fire-and-forget：恢复进程的 hooks 上报驱动后续状态翻正，失败落会话日志
+  resumeExternal(sessionId, text) {
+    const state = this.mgr.getExternal(sessionId);
+    if (!state) return { ok: false, error: `\u4F1A\u8BDD\u4E0D\u5B58\u5728: ${sessionId}` };
+    const cwd = state.cwd || homedir6();
+    this.mgr.setExternalPending(sessionId, [...state.pending_inputs ?? [], { text: text.trim(), ts: Date.now() }]);
+    this.mgr.pushExternalLog(sessionId, "system", `\u6062\u590D\u4F1A\u8BDD\u4E2D\uFF08\u65B0\u7EC8\u7AEF\u6807\u7B7E claude --resume\uFF09\u5E76\u6295\u9012\uFF1A${truncate(text, 80)}`);
+    void resumeSession(cwd, sessionId.slice(4), text, state.permission_mode).then((r) => {
+      if (!r.ok) {
+        this.mgr.setExternalPending(sessionId, []);
+        this.mgr.pushExternalLog(sessionId, "system", `\u6062\u590D\u5931\u8D25\uFF1A${r.error ?? "\u672A\u77E5\u9519\u8BEF"}`);
+      }
+    });
     return { ok: true };
   }
   // UserPromptSubmit 到达：若与排队注入消息同文本 → 晋升该条（出 pending 区、入正式转录），
@@ -44386,6 +44453,7 @@ var Bridge = class _Bridge {
     const turn = this.turnStart.get(id2) ?? state.started_at;
     this.turnStart.delete(id2);
     this.mgr.finishExternal(id2, ev2.reason ?? "ended", Date.now() - turn);
+    this.mgr.deleteSession(id2);
     return { decision: "pass" };
   }
   // ---------- 子 Agent 工作状态（SessionState.subagents）----------

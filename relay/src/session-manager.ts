@@ -43,6 +43,10 @@ function isManagedMode(m: unknown): m is ManagedPermissionMode {
   return m === "default" || m === "acceptEdits" || m === "plan";
 }
 
+// 外部会话可携带的 CLI 权限模式全集：托管会话不许 bypass（门控语义），但用户自开
+// 终端会话可以是任意启动模式（bypass 常见）——恢复时需原样镜像，不复用 isManagedMode
+const EXTERNAL_PERM_MODES = new Set(["default", "acceptEdits", "plan", "bypassPermissions", "auto", "manual"]);
+
 // COMMAND_IMPORT_PUSH 条目校验（relay 不解释语义，只卡形状与尺寸——条目含令牌，
 // 长度上限压到防滥用档；cloud 子对象是出码端 pair 所需的全套身份，字段齐才放行）
 function sanitizeImportPushEntry(raw: unknown): ImportPushEntry | null {
@@ -659,6 +663,31 @@ export class SessionManager {
     this.bus.emit(id, "SESSION_WAITING", payload);
   }
 
+  // 外部会话记录 CLI 上报的最新权限模式——恢复会话（claude --resume）时镜像原始启动
+  // 参数用：原来带 skip/权限模式的，恢复也带，不回落默认确认门控
+  setExternalPermMode(id: string, mode: string): void {
+    const s = this.sessions.get(id);
+    if (!s || !s.state.external || !EXTERNAL_PERM_MODES.has(mode)) return;
+    s.state.permission_mode = mode as ManagedPermissionMode;
+  }
+
+  // 删除会话：外部会话写墓碑防历史重放复活（#34 断言的闭环），置顶清单同步摘除（#49）。
+  // COMMAND_DELETE 与 SessionEnd 主动关闭收口共用（主动退出 → 客户端卡片同步清除）
+  deleteSession(id: string): void {
+    const s = this.sessions.get(id);
+    if (!s) return;
+    this.sessions.delete(id);
+    this.lastStoreTodos.delete(id);
+    if (s.state.external) {
+      this.deletedExtIds.add(id);
+      appendDeletedExt(this.cfg.dataDir, id);
+    }
+    if (s.state.pinned) {
+      writePinnedSessions(this.cfg.dataDir, readPinnedSessions(this.cfg.dataDir).filter((x) => x !== id));
+    }
+    this.bus.emit(id, "SESSION_DELETED", { session_id: id });
+  }
+
   finishExternal(id: string, reason: string, durationMs: number): void {
     const s = this.sessions.get(id);
     if (!s) return;
@@ -923,20 +952,7 @@ export class SessionManager {
           if (s.state.status === "WORKING" || s.state.status === "WAITING") {
             return { command_id: cmd.command_id, ok: false, error: "会话运行中，不能删除" };
           }
-          this.sessions.delete(cmd.payload.session_id);
-          this.lastStoreTodos.delete(cmd.payload.session_id);
-          if (s.state.external) {
-            this.deletedExtIds.add(cmd.payload.session_id);
-            appendDeletedExt(this.cfg.dataDir, cmd.payload.session_id);
-          }
-          // #49 删除置顶会话同步摘除清单（否则重启后被当作休眠卡登记回来）
-          if (s.state.pinned) {
-            writePinnedSessions(
-              this.cfg.dataDir,
-              readPinnedSessions(this.cfg.dataDir).filter((x) => x !== cmd.payload.session_id),
-            );
-          }
-          this.bus.emit(cmd.payload.session_id, "SESSION_DELETED", { session_id: cmd.payload.session_id });
+          this.deleteSession(cmd.payload.session_id);
           return { command_id: cmd.command_id, ok: true };
         }
         case "COMMAND_RENAME": {

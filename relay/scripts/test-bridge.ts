@@ -58,6 +58,8 @@ process.env.CCR_STUCK_RETRY_MS = "1500";
 process.env.CCR_SUBAGENT_END_TTL_MS = "2000";
 process.env.CCR_SUBAGENT_RUN_TTL_MS = "3000";
 process.env.CCR_INJECT_CMD = fileURLToPath(new URL("./fake-injector.mjs", import.meta.url));
+// 进程存活硬信号清扫（46 段）：假 pid 世界整体关掉，46 段局部开启做专项验证
+process.env.CCR_DEAD_SWEEP = "0";
 const INJECT_LOG = fileURLToPath(new URL("../data/test-inject.log", import.meta.url));
 process.env.CCR_INJECT_LOG = INJECT_LOG;
 rmSync(INJECT_LOG, { force: true });
@@ -306,6 +308,11 @@ await hook({ event: "SessionEnd", reason: "clear" });
 await wait(150);
 assert(events.some((e) => e.type === "SESSION_LOG" && String((e.payload as { text: string }).text).includes("会话结束")), "SessionEnd logged");
 
+// 22.5 重登记：SessionEnd 现在主动关闭即清卡片（状态收口）——后续段落需要会话存在，
+//      hook 重登记模拟用户在同一终端开新一轮
+await hook({ event: "UserPromptSubmit", prompt: "收尾后重登记", cli_pid: 4321 });
+await wait(150);
+
 // 23. COMMAND_RENAME：改名 + 锁定（title_locked）
 const renId = send("COMMAND_RENAME", { session_id: extId("cli-1"), title: "我的会话" });
 const ack23 = await waitAck(renId);
@@ -435,6 +442,10 @@ assert(ack24.ok === false, "empty rename rejected");
   await hook({ event: "SessionEnd", reason: "clear" });
   rmSync(T, { force: true });
 }
+
+// 26.5 重登记：同 22.5——SessionEnd 清卡后 27 段需要 cli-1 存在
+await hook({ event: "UserPromptSubmit", prompt: "收尾后重登记", cli_pid: 4321 });
+await wait(150);
 
 // 27. COMMAND_TODO_HIDE：隐藏条目在 setTodos 咽喉点过滤 + 持久化（模拟重启）仍生效
 {
@@ -1663,6 +1674,51 @@ assert(ack24.ok === false, "empty rename rejected");
   delete process.env.CCR_FAKE_PEEK_FILE;
   rm111(T, { force: true });
   rm111(PEEK, { force: true });
+}
+
+// 46. 状态收口（Mac 接管）：异常断开 → 卡片保留可恢复（进程存活硬信号，不受
+//     updated_at 投毒）；主动关闭（SessionEnd）→ 卡片同步清除；disconnected 会话
+//     发消息 → 服务端新终端标签 claude --resume 恢复（权限模式镜像原始启动参数）
+{
+  const { spawn } = await import("node:child_process");
+  const appleLog = () => fakeLog().filter((a) => a[0] === "-e").map((a) => String(a[1]));
+
+  // ① 死 pid + 无 SessionEnd → disconnected（卡片保留）。cliHostAlive 是真探测，不吃假注入器逃生门
+  const dead = spawn(process.execPath, ["-e", "process.exit(0)"]);
+  await new Promise<void>((r) => dead.once("exit", () => r()));
+  await hook({ event: "UserPromptSubmit", session_id: "cli-46", prompt: "僵尸会话", cli_pid: dead.pid, cwd: "/tmp", permission_mode: "bypassPermissions" });
+  await wait(150);
+  assert(mgr.snapshot().find((s) => s.session_id === extId("cli-46"))?.status === "WORKING", "46 zombie starts WORKING");
+  process.env.CCR_DEAD_SWEEP = "1";
+  (bridge as unknown as { sweepWorkingIdle(): void }).sweepWorkingIdle();
+  process.env.CCR_DEAD_SWEEP = "0";
+  const z46 = mgr.snapshot().find((s) => s.session_id === extId("cli-46"));
+  assert(!!z46, "46 card kept after abnormal death");
+  assert(z46?.status === "DONE" && z46?.done_reason === "disconnected", "46 dead pid → done_reason=disconnected");
+  assert((z46?.permission_mode as string | undefined) === "bypassPermissions", "46 permission mode captured for resume mirror");
+
+  // ② disconnected 会话发消息 → claude --resume（原 cwd + 权限模式镜像）+ pending 回显
+  process.env.CCR_TEST_PLATFORM = "darwin";
+  process.env.CCR_OSASCRIPT_CMD = fileURLToPath(new URL("./fake-injector.mjs", import.meta.url));
+  const r46 = send("COMMAND_EXT_INPUT", { session_id: extId("cli-46"), text: "恢复一下" });
+  assert((await waitAck(r46)).ok, "46 resume EXT_INPUT acked");
+  await wait(150);
+  const sc46 = appleLog().find((x) => x.includes("claude --resume"));
+  assert(!!sc46, "46 resume spawns claude --resume in new Terminal tab");
+  assert(sc46!.includes("cd '/tmp' &&"), "46 resume cds to original cwd");
+  assert(sc46!.includes("--permission-mode 'bypassPermissions'"), "46 resume mirrors permission mode");
+  assert((mgr.snapshot().find((s) => s.session_id === extId("cli-46"))?.pending_inputs ?? []).some((p) => p.text === "恢复一下"), "46 resume msg echoed in pending");
+
+  // ③ 主动关闭（SessionEnd）→ 卡片同步清除 + SESSION_DELETED 广播（区别于异常断开保留）
+  await hook({ event: "UserPromptSubmit", session_id: "cli-46b", prompt: "主动退出", cli_pid: process.pid });
+  await wait(150);
+  await hook({ event: "SessionEnd", session_id: "cli-46b", reason: "clear" });
+  await wait(150);
+  assert(!mgr.snapshot().some((s) => s.session_id === extId("cli-46b")), "46 SessionEnd removes card (voluntary close)");
+  assert(events.some((e) => e.type === "SESSION_DELETED" && (e.payload as { session_id?: string }).session_id === extId("cli-46b")), "46 SessionEnd broadcasts SESSION_DELETED");
+
+  delete process.env.CCR_TEST_PLATFORM;
+  delete process.env.CCR_OSASCRIPT_CMD;
 }
 
 wsCur!.close();

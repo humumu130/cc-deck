@@ -224,6 +224,40 @@ function macTargetIsCliHost(pid: number): boolean {
   }
 }
 
+// CLI 宿主进程存活探测（bridge 状态收口用）：pid 已退出/映像不再是 claude|node → false。
+// 与注入前校验同源的 PID 复用防护语义。注意这里做"真实"探测：不吃 CCR_OSASCRIPT_CMD
+// 逃生门（假 osascript 只测注入脚本结构，不代表进程真死活），Windows 假注入器除外（无真实进程语义）。
+export function cliHostAlive(pid: number): boolean {
+  if (process.platform === "win32") {
+    return process.env.CCR_INJECT_CMD ? true : targetIsCliHost(pid);
+  }
+  try {
+    const out = execFileSync("ps", ["-p", String(pid), "-o", "comm="], { encoding: "utf8", timeout: 5000 });
+    return VALID_TARGET.test(out.trim().split("/").pop() ?? "");
+  } catch {
+    return false;
+  }
+}
+
+// 服务端主动恢复（异常断开的会话）：新开 Terminal 标签，cd 回原工作目录后续跑同 id 会话，
+// 触发消息作为初始 prompt 一并提交。恢复进程起来后 hooks 上报自动把会话翻回 WORKING
+// 并重定位 pid（同 session_id，无需迁移）。权限模式镜像原始会话启动参数：原来带
+// skip/权限模式的恢复也带（无人值守恢复若回落默认确认门控，等于恢复了个寂寞）。
+// 仅 macOS；shell 单引号转义防命令注入，AppleScript 字面量走 escapeApple。
+export async function resumeSession(
+  cwd: string,
+  sessionId: string,
+  text: string,
+  permMode?: string,
+): Promise<InjectResult> {
+  if (!isDarwin()) return { ok: false, error: "会话恢复目前仅支持 macOS" };
+  const shq = (v: string) => "'" + v.replace(/'/g, "'\\''") + "'";
+  const perm = permMode ? ` --permission-mode ${shq(permMode)}` : "";
+  const cmd = `cd ${shq(cwd)} && claude --resume ${shq(sessionId)}${perm} ${shq(text)}`;
+  const script = ["tell application \"Terminal\"", `	do script "${escapeApple(cmd)}"`, "end tell"].join("\n");
+  return runAppleScript(script);
+}
+
 async function injectTextMac(pid: number, rawText: string): Promise<InjectResult> {
   if (!macTargetIsCliHost(pid)) return { ok: false, error: "pid-reuse" };
   const text = rawText.replace(/[\r\n]+/g, " ").trim();
