@@ -42694,12 +42694,29 @@ function cliHostAlive(pid) {
   }
 }
 async function resumeSession(cwd, sessionId, text, permMode) {
-  if (!isDarwin()) return { ok: false, error: "\u4F1A\u8BDD\u6062\u590D\u76EE\u524D\u4EC5\u652F\u6301 macOS" };
-  const shq = (v) => "'" + v.replace(/'/g, "'\\''") + "'";
-  const perm = permMode ? ` --permission-mode ${shq(permMode)}` : "";
-  const cmd = `cd ${shq(cwd)} && claude --resume ${shq(sessionId)}${perm} ${shq(text)}`;
-  const script = ['tell application "Terminal"', `	do script "${escapeApple(cmd)}"`, "end tell"].join("\n");
-  return runAppleScript(script);
+  if (isDarwin()) {
+    const shq = (v) => "'" + v.replace(/'/g, "'\\''") + "'";
+    const perm = permMode ? ` --permission-mode ${shq(permMode)}` : "";
+    const cmd = `cd ${shq(cwd)} && claude --resume ${shq(sessionId)}${perm} ${shq(text)}`;
+    const script = ['tell application "Terminal"', `	do script "${escapeApple(cmd)}"`, "end tell"].join("\n");
+    return runAppleScript(script);
+  }
+  if (process.platform === "win32" && !process.env.CCR_OSASCRIPT_CMD) {
+    const q2 = (v) => '"' + v.replace(/"/g, '\\"') + '"';
+    const perm = permMode ? ` --permission-mode ${q2(permMode)}` : "";
+    const inner = `claude --resume ${q2(sessionId)}${perm} ${q2(text)}`;
+    return new Promise((resolve6) => {
+      const child = spawn2("cmd.exe", ["/c", "start", "cc-deck-resume", "/D", cwd, "cmd", "/k", inner], {
+        windowsHide: true,
+        detached: true,
+        stdio: "ignore"
+      });
+      child.on("error", (e) => resolve6({ ok: false, error: e.message }));
+      child.on("spawn", () => resolve6({ ok: true }));
+      child.unref?.();
+    });
+  }
+  return { ok: false, error: "\u5F53\u524D\u5E73\u53F0\u4E0D\u652F\u6301\u4F1A\u8BDD\u6062\u590D\uFF08\u4EC5 Windows/macOS\uFF09" };
 }
 async function injectTextMac(pid, rawText) {
   if (!macTargetIsCliHost(pid)) return { ok: false, error: "pid-reuse" };
@@ -43542,6 +43559,19 @@ var Bridge = class _Bridge {
     this.mgr.pushExternalLog(id2, "system", "\u4E0A\u4E0B\u6587\u63A5\u8FD1\u4E0A\u9650\uFF0C\u6B63\u5728\u538B\u7F29\u5BF9\u8BDD\u5386\u53F2");
     return { decision: "pass" };
   }
+  // 模型显示名覆盖（读一次缓存）：模型别名接入（如 claude-* 别名路由 GLM）时 CLI 上报
+  // 的模型名与实际服务不符——~/.cc-deck/data/model-display 放一行显示名即全端生效
+  static modelDisplay;
+  static modelDisplayName() {
+    if (_Bridge.modelDisplay === void 0) {
+      try {
+        _Bridge.modelDisplay = readFileSync10(path4.join(homedir6(), ".cc-deck", "data", "model-display"), "utf8").trim() || null;
+      } catch {
+        _Bridge.modelDisplay = null;
+      }
+    }
+    return _Bridge.modelDisplay;
+  }
   async dispatch(ev2) {
     const decision = await this.dispatchInner(ev2);
     if (ev2.permission_mode) this.mgr.setExternalPermMode(this.extId(ev2), ev2.permission_mode);
@@ -44001,7 +44031,7 @@ var Bridge = class _Bridge {
             usageSeen = true;
             ctxLast = inc(mu2.input_tokens) + inc(mu2.cache_read_input_tokens) + inc(mu2.cache_creation_input_tokens);
           }
-          if (typeof j2.message?.model === "string" && j2.message.model) model = j2.message.model;
+          if (typeof j2.message?.model === "string" && j2.message.model) model = _Bridge.modelDisplayName() ?? j2.message.model;
           const content = j2.message?.content;
           if (!Array.isArray(content)) continue;
           _Bridge.collectTaskOps(content, taskOps, creates);
@@ -44560,7 +44590,7 @@ var Bridge = class _Bridge {
   armVerify(sessionId, text, round = 0) {
     this.disarmVerify(sessionId);
     if (!guardConfig().enabled) return;
-    const ms = Number(process.env.CCR_VERIFY_MS) > 0 ? Number(process.env.CCR_VERIFY_MS) : 3e3;
+    const ms = Number(process.env.CCR_VERIFY_MS) > 0 ? Number(process.env.CCR_VERIFY_MS) : 1e3;
     const timer = setTimeout(() => {
       this.verifyTimers.delete(sessionId);
       this.runVerify(sessionId, text, round);
@@ -44594,7 +44624,7 @@ var Bridge = class _Bridge {
         if (this.flushing.has(sessionId) || (this.inputQueue.get(sessionId)?.length ?? 0) > 0) return;
         if (!s2 || !(s2.pending_inputs ?? []).some((p) => normKey(p.text) === normKey(text))) return;
         this.fireStuckEnter(sessionId, pid, v.kind === "enter-after-wait" ? `\u5DF2\u8865\u53D1\u56DE\u8F66\uFF08\u68C0\u6D4B\u5230\u8F93\u5165\u6846\u6709\u5176\u4ED6\u8F93\u5165\uFF0C\u7B49\u505C\u624B ${Math.round(v.waitedMs / 100) / 10}s \u540E\u8865\u53D1\uFF09` : "\u6CE8\u5165\u540E 3 \u79D2\u4ECD\u6EDE\u7559\u8F93\u5165\u6846\uFF0C\u5DF2\u8865\u53D1\u56DE\u8F66\uFF08#111 \u4E3B\u52A8\u9A8C\u8BC1\uFF09");
-        if (round < 1) this.armVerify(sessionId, text, round + 1);
+        if (round < 2) this.armVerify(sessionId, text, round + 1);
       }
     }).finally(() => this.stuckGuarding.delete(sessionId));
   }

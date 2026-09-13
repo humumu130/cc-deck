@@ -23,10 +23,18 @@ const FILL = { position: "absolute", left: 0, right: 0, top: 0, bottom: 0 } as c
 
 // 版本号读原生 versionName（build.gradle），杜绝手写硬编码再漏更
 const APP_VER = "v" + (Constants.nativeApplicationVersion ?? Constants.expoConfig?.version ?? "-");
-// 通道标识：CI 对 -snap tag 把 tag 后缀烙进 versionName（如 v0.4.23-snap.2）——
-// 后缀存在即非正式通道包，版本号旁给显眼角标；稳定版用户可一眼区分快照/预发布包
+// 通道标识（三通道全覆盖）：版本号后缀即通道来源——
+//   snap → 快照版（CI 对 -snap tag 烙 tag 名进 versionName，如 0.4.23-snap.3）
+//   test → 测试版（本地打包测试惯例：版本号带 -test 后缀）
+//   其他后缀（beta/alpha/rc 等）→ 预发布兜底；干净版本号 = 正式版，无角标
 const VER_SUFFIX = (Constants.nativeApplicationVersion ?? "").replace(/^v?[\d.]+/, "");
-const CHANNEL_TAG: string | null = /snap/i.test(VER_SUFFIX) ? "快照版" : VER_SUFFIX ? "预发布" : null;
+const CHANNEL_TAG: string | null = /snap/i.test(VER_SUFFIX)
+  ? "快照版"
+  : /test/i.test(VER_SUFFIX)
+    ? "测试版"
+    : VER_SUFFIX
+      ? "预发布"
+      : null;
 
 // #313 反馈入口：关于弹窗「✎ 反馈」跳 GitHub Issues
 const FEEDBACK_URL = "https://github.com/humumu130/cc-deck/issues";
