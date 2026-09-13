@@ -89,6 +89,9 @@ export class CloudClient {
     private identity: CloudIdentity,
     private pairCodes?: PairingCodes,
     private url?: string,
+    // #117 云侧快照补充字段（与 ws-server 直连快照同源）：lan_hint 驱动手机 #95
+    // LAN 升级（角标切 LAN）、relay_name 驱动 #100 默认显示名
+    private extra?: { lanHint?: () => string; relayName?: () => string },
   ) {
     this.unsubscribe = bus.subscribe((env) => this.onEnv(env));
   }
@@ -324,6 +327,10 @@ export class CloudClient {
         server_time: Date.now(),
         relay_dev: this.identity.relayDev,
         wan_dev: this.identity.wanDev,
+        // #117：云通道快照补 lan_hint/relay_name——#95/#100 此前只挂在 ws-server
+        // 直连快照上，云通道手机收不到（LAN 角标恒☁️、默认名不生效的根因）
+        ...(this.extra?.lanHint?.() ? { lan_hint: this.extra.lanHint() } : {}),
+        ...(this.extra?.relayName?.() ? { relay_name: this.extra.relayName() } : {}),
       },
     };
     this.sendSealed(dev, snapshot);

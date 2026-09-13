@@ -264,7 +264,17 @@ if (cfg.cloudUrls.length) {
   });
   if (cfg.cloudToken) {
     for (const url of cfg.cloudUrls) {
-      const c = new CloudClient(bus, mgr, cfg, cloudIdentity, pairCodes, url);
+      // #117：云通道 SNAPSHOT 同样下发 lan_hint/relay_name（与 ws-server 直连快照同
+      // 源）——此前只给了直连路径，云通道手机永远收不到 LAN 提示（角标恒☁️）
+      const c = new CloudClient(bus, mgr, cfg, cloudIdentity, pairCodes, url, {
+        lanHint: () => {
+          const ip = detectLanIp(networkInterfaces());
+          return ip ? `${ip}:${cfg.port}` : "";
+        },
+        relayName: () => {
+          try { return readFileSync(join(cfg.dataDir, "relay-name"), "utf8").trim().slice(0, 40) || ""; } catch { return ""; }
+        },
+      });
       cloudClients.push(c);
       c.start();
     }
