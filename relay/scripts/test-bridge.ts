@@ -1569,6 +1569,89 @@ assert(ack24.ok === false, "empty rename rejected");
   await hook({ event: "SessionEnd", session_id: "cli-11", reason: "clear" });
 }
 
+// 111. #111 注入后主动验证：短窗快照确认滞留即补发（先于看门狗路径）；框净（CLI 原生
+//      排队）静默不动 skips；持久滞留最多验证补发 2 轮；WAITING 严禁补发。注：本套件
+//      CCR_STUCK_AFTER_MS=2000 → 看门狗首窗 2s（非生产 10s），时钟断言以此为界
+{
+  const { writeFileSync, rmSync: rm111 } = await import("node:fs");
+  const T = fileURLToPath(new URL("../data/test-transcript.jsonl", import.meta.url));
+  rm111(T, { force: true });
+  writeFileSync(T, JSON.stringify({ type: "assistant", message: { role: "assistant", content: [{ type: "text", text: "基线111" }] } }) + "\n");
+  const PEEK = fileURLToPath(new URL("../data/test-peek-111.txt", import.meta.url));
+  const B = "─".repeat(40);
+  const sid = extId("cli-12");
+  const PID = "999003";
+  const enters111 = () => fakeLog().filter((a) => a[0] === PID && a[1] === "").length;
+  const sysLogFrom = (kw: string, since: number) =>
+    events.slice(since).some((e) => e.type === "SESSION_LOG" && (e.payload as { kind?: string }).kind === "system" && String((e.payload as { text: string }).text).includes(kw));
+  await hook({ event: "UserPromptSubmit", prompt: "验证回合111", session_id: "cli-12", cli_pid: 999003, transcript_path: T });
+  // 快时钟：验证 600ms 一轮
+  process.env.CCR_VERIFY_MS = "600";
+  process.env.CCR_FAKE_PEEK_FILE = PEEK;
+
+  // ① 滞留（框内只有我们的消息）→ 主动验证立即补发，先于看门狗最早可能触达（2s）。
+  //    时钟界含 fake-injector spawn 抖动余量（高负载秒级，见文件头注）
+  writeFileSync(PEEK, ["✶ Working…", B, "❯ 验证滞留甲", B, "  ⏵⏵ bypass permissions on"].join("\n"));
+  const t0 = Date.now();
+  const v1 = send("COMMAND_EXT_INPUT", { session_id: sid, text: "验证滞留甲" });
+  assert((await waitAck(v1)).ok, "111 EXT_INPUT acked (WORKING direct inject)");
+  await waitLog(() => enters111() >= 1, 5000);
+  assert(enters111() >= 1, "111 stuck text compensated by fast verify");
+  assert(Date.now() - t0 < 2500, `111 verify compensation is fast (${Date.now() - t0}ms < 2500ms, watchdog earliest 2s+phase)`);
+  assert(sysLogFrom("#111 主动验证", 0), "111 verify compensation logged");
+  // 持久滞留（不晋升、框不净空）→ 验证 2 轮是 #111 本体、时钟确定；第 3 发（看门狗，
+  // 共享 tries 计数）直接调 sweep 消 5s 节拍相位（49 段先例），3 次后 given_up 停手
+  await waitLog(() => enters111() >= 2, 5000);
+  await wait(1700); // 过看门狗 1.5s 限速（自第 2 发 lastTry 起）
+  (bridge as unknown as { sweepStuckInputs(): void }).sweepStuckInputs();
+  await waitLog(() => enters111() >= 3, 4000);
+  await wait(2500);
+  assert(enters111() === 3, `111 persistent stuck caps at 3 compensations (got ${enters111()})`);
+  const entersAfterCap = enters111();
+
+  // ② 框净（CLI 已原生排队）→ 不补发、不动 skips（后续滞留仍可补发，证明计数未被污染）
+  writeFileSync(PEEK, [B, "❯", B, "  ⏵⏵ bypass permissions on"].join("\n"));
+  const v2 = send("COMMAND_EXT_INPUT", { session_id: sid, text: "验证排队乙" });
+  assert((await waitAck(v2)).ok, "111 queued msg acked");
+  await wait(2200); // 覆盖验证 + 1 轮潜在重试的窗口
+  assert(enters111() === entersAfterCap, "111 natively-queued (clean box) never compensated");
+  //（skip 计数不动不再以日志断言：看门狗对未晋升旧条目也会发同款 skip 日志，文本无法
+  //  区分来源；③段补偿成功本身即 skips 未被毒化的行为证明）
+
+  // ③ 晋升后看门狗重置：新一条滞留消息仍走快路径。判别用日志而非计数——reset 生效则
+  // tries 回 1（打「#111 主动验证」新日志）；无 reset 则 tries=4（>3 不打日志）
+  await hook({ event: "UserPromptSubmit", prompt: "验证滞留甲", session_id: "cli-12", transcript_path: T });
+  await wait(200);
+  assert(!(mgr.getExternal(sid)?.pending_inputs ?? []).some((p) => p.text === "验证滞留甲"), "111 stuck msg promoted");
+  const evIdx3 = events.length;
+  writeFileSync(PEEK, ["✶ Working…", B, "❯ 验证滞留丙", B, "  ⏵⏵ bypass permissions on"].join("\n"));
+  const v3 = send("COMMAND_EXT_INPUT", { session_id: sid, text: "验证滞留丙" });
+  assert((await waitAck(v3)).ok, "111 third msg acked");
+  await waitLog(() => enters111() >= entersAfterCap + 1, 5000);
+  assert(enters111() >= entersAfterCap + 1, "111 post-promotion stuck still gets fast verify (watchdog reset)");
+  assert(sysLogFrom("#111 主动验证", evIdx3), "111 reset makes fresh verify log (tries back to 1)");
+
+  // ④ WAITING（权限弹窗/审批挂起）→ 主动验证严禁补发（回车会误触弹窗）。
+  //    验证窗拉到 1500ms 给注入→翻态留余量
+  process.env.CCR_VERIFY_MS = "1500";
+  writeFileSync(PEEK, ["✶ Working…", B, "❯ 验证滞留丁", B, "  ⏵⏵ bypass permissions on"].join("\n"));
+  const sid4 = extId("cli-13");
+  await hook({ event: "UserPromptSubmit", prompt: "验证回合111d", session_id: "cli-13", cli_pid: 999004, transcript_path: T });
+  const v4 = send("COMMAND_EXT_INPUT", { session_id: sid4, text: "验证滞留丁" });
+  assert((await waitAck(v4)).ok, "111 WAITING-case msg acked");
+  await waitLog(() => fakeLog().some((a) => a[0] === "999004" && a[1] === "验证滞留丁"), 4000);
+  mgr.setExternalStatus(sid4, "WAITING", "权限确认");
+  await wait(2600); // 覆盖 1500ms 验证窗 + 快照在途余量
+  assert(!fakeLog().some((a) => a[0] === "999004" && a[1] === ""), "111 no enter while WAITING (verify guard)");
+  await hook({ event: "SessionEnd", session_id: "cli-13", reason: "clear" });
+
+  await hook({ event: "SessionEnd", session_id: "cli-12", reason: "clear" });
+  delete process.env.CCR_VERIFY_MS;
+  delete process.env.CCR_FAKE_PEEK_FILE;
+  rm111(T, { force: true });
+  rm111(PEEK, { force: true });
+}
+
 wsCur!.close();
 await wait(300);
 console.log("\nBRIDGE TESTS PASSED");

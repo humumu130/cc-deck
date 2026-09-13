@@ -123,6 +123,9 @@ export class Bridge {
   private stuckWatch = new Map<string, { lastTry: number; tries: number; skips: number; given_up: boolean }>();
   // 防抢发守门进行中的会话（等待人工停手期间，看门狗节拍跳过防重入）
   private stuckGuarding = new Set<string>();
+  // #111 注入后主动验证：ext id -> { 定时器, 最后注入的文本 }。注入成功 ≠ 提交成功
+  //（回车被 TUI 重渲吞掉），不被动等 10s 看门狗——3s 后快照确认，仍滞留输入框即守门补发
+  private verifyTimers = new Map<string, { timer: NodeJS.Timeout; text: string }>();
   private subagentSeq = 0; // hook 未带 tool_use_id 时的合成 id 序号（ag-N）
   private askFallback = new Map<string, { requestId: string; questions: AskQuestion[] }>(); // 提问超时放行本地选择器后的兜底（手机晚答仍可送达）
   // 无 hook 会话（CLI 早于插件启动，无 Stop/UserPromptSubmit 事件）：
@@ -664,6 +667,7 @@ export class Bridge {
         this.noteUserMsg(id, p.text, "promote");
         this.mgr.pushExternalLog(id, "user_message", truncate(p.text, 300), undefined, { full: truncate(p.text, 2000) });
       }
+      this.resetStuckWatch(id); // #111：enqueue 回执晋升与 UPS 晋升同权，重置滞留快窗
       return;
     }
     this.mgr.setExternalPending(id, [...pending, { text, ts: Date.now() }]);
@@ -708,6 +712,7 @@ export class Bridge {
         if (!this.recentlyLogged(id, t)) this.mgr.pushExternalLog(id, "user_message", truncate(t, 300), undefined, { full: truncate(t, 2000) });
         this.noteUserMsg(id, t, "promote");
       }
+      this.resetStuckWatch(id); // #111：交付晋升同权，重置滞留快窗
     } else {
       this.mgr.pushExternalLog(id, "user_message", text, undefined, { full: truncate(prompt, 2000) });
     }
@@ -867,6 +872,7 @@ export class Bridge {
       this.dropEnqueuedKey(sessionId, promoted.text);
       this.noteUserMsg(sessionId, promoted.text, "promote");
       this.mgr.pushExternalLog(sessionId, "user_message", truncate(promoted.text, 300), undefined, { full: truncate(promoted.text, 2000) });
+      this.resetStuckWatch(sessionId);
       return true;
     }
     // CLI 回合结束会把整队排队消息合并成一条 "A\rB" prompt 提交：连续段拼接匹配则整批晋升
@@ -885,6 +891,7 @@ export class Bridge {
             this.mgr.pushExternalLog(sessionId, "user_message", truncate(h.text, 300), undefined, { full: truncate(h.text, 2000) });
           }
           this.noteUserMsg(sessionId, prompt, "promote"); // 合并形态也记账：后续同形态到达直接跳过
+          this.resetStuckWatch(sessionId);
           return true;
         }
       }
@@ -911,6 +918,7 @@ export class Bridge {
         this.noteUserMsg(sessionId, h.text, "promote");
         this.mgr.pushExternalLog(sessionId, "user_message", truncate(h.text, 300), undefined, { full: truncate(h.text, 2000) });
       }
+      this.resetStuckWatch(sessionId);
       return true;
     }
     return false;
@@ -966,6 +974,7 @@ export class Bridge {
           this.onInjectFail(sessionId, r.error);
           return;
         }
+        this.armVerify(sessionId, text);
         await sleep(400); // 等 UserPromptSubmit 翻状态/给连续注入留节奏
       }
     } finally {
@@ -1757,6 +1766,7 @@ export class Bridge {
       }
     }
     if ((state.pending_inputs?.length ?? 0) !== kept.length) this.mgr.setExternalPending(id, kept);
+    this.resetStuckWatch(id); // #111：Stop 出队晋升同权，重置滞留快窗
     const turn = this.turnStart.get(id) ?? state.started_at;
     this.turnStart.delete(id);
     this.mgr.finishExternal(id, "completed", Date.now() - turn);
@@ -1885,7 +1895,83 @@ export class Bridge {
     }
   }
 
-  // ---------- 排队消息滞留输入框看门狗 ----------
+  // ---------- 注入后主动验证（#111）+ 排队消息滞留输入框看门狗 ----------
+
+  // #111 注入成功 ≠ 提交成功：回车在回合切换/重渲窗口被 CLI 界面层吞掉时，文字滞留
+  // 输入框，原看门狗要等 10s 首窗 + 5s 轮询才补发（实测滞留 13~94s，用户「放在输入框
+  // 很久才发出去」的根因）。这里改为注入后 3s 主动验证：仍在 pending（未晋升）→ 快照
+  // 输入框，框内只有我们的文本即立即补发回车；已晋升/框净（CLI 原生排队）则无事发生。
+  // 补发的回车本身也可能被吞——最多补验 2 轮（round），其余交看门狗兜底。
+  // 守门关闭（CCR_TYPE_GUARD=off）时退回纯看门狗路径。
+  private armVerify(sessionId: string, text: string, round = 0): void {
+    this.disarmVerify(sessionId);
+    if (!guardConfig().enabled) return;
+    const ms = Number(process.env.CCR_VERIFY_MS) > 0 ? Number(process.env.CCR_VERIFY_MS) : 3000;
+    const timer = setTimeout(() => {
+      this.verifyTimers.delete(sessionId);
+      this.runVerify(sessionId, text, round);
+    }, ms);
+    timer.unref?.();
+    this.verifyTimers.set(sessionId, { timer, text });
+  }
+
+  private disarmVerify(sessionId: string): void {
+    const v = this.verifyTimers.get(sessionId);
+    if (v) {
+      clearTimeout(v.timer);
+      this.verifyTimers.delete(sessionId);
+    }
+  }
+
+  private runVerify(sessionId: string, text: string, round: number): void {
+    const st = this.mgr.getExternal(sessionId);
+    if (!st?.cli_pid) return;
+    // 已晋升（UserPromptSubmit 已到）：不是滞留，收工
+    if (!(st.pending_inputs ?? []).some((p) => normKey(p.text) === normKey(text))) return;
+    // 与看门狗同款前置：状态不适合补回车 / 正有 flush 或守门在跑 → 交回看门狗兜底
+    if (
+      (st.status !== "WORKING" && st.status !== "DONE") ||
+      this.flushing.has(sessionId) ||
+      this.stuckGuarding.has(sessionId) ||
+      (this.inputQueue.get(sessionId)?.length ?? 0) > 0
+    ) return;
+    const pid = st.cli_pid;
+    // known 用全部 pending 文本（不止本条）：连续多条滞留时 foreignResidual 才能
+    // 把框内全部内容解释为我们的，否则前一条会被误判"外来输入"而暂缓
+    const known = (st.pending_inputs ?? []).map((p) => p.text);
+    this.stuckGuarding.add(sessionId);
+    // verdict 语义与看门狗路径不同：skip-absent 在这里是「CLI 已原生排队、框已清」的
+    // 正常态（pending 等工具边界自然晋升）——静默收手，绝不动 skips 计数（否则 3 条
+    // 正常 WORKING 消息就把看门狗 given_up 弄死）；timeout（真人在打字）/快照不可用
+    // 同样静默交回看门狗。只有确认滞留（enter*）才真正补发。
+    void guardCompensateEnter(known, () => captureConsoleBottom(pid), {
+      abort: () => {
+        const s2 = this.mgr.getExternal(sessionId);
+        return !s2 || (s2.status !== "WORKING" && s2.status !== "DONE") || this.flushing.has(sessionId) || (this.inputQueue.get(sessionId)?.length ?? 0) > 0;
+      },
+    })
+      .then((v) => {
+        if (v.kind === "enter" || v.kind === "enter-after-wait") {
+          // 快照在途期间状态可能已变：新消息开始注入（分块进行中，此刻补回车会把长
+          // 消息劈成两半）或本条已晋升（UserPromptSubmit 到达）——弃发交回下一轮
+          const s2 = this.mgr.getExternal(sessionId);
+          if (this.flushing.has(sessionId) || (this.inputQueue.get(sessionId)?.length ?? 0) > 0) return;
+          if (!s2 || !(s2.pending_inputs ?? []).some((p) => normKey(p.text) === normKey(text))) return;
+          this.fireStuckEnter(sessionId, pid, v.kind === "enter-after-wait"
+            ? `已补发回车（检测到输入框有其他输入，等停手 ${Math.round(v.waitedMs / 100) / 10}s 后补发）`
+            : "注入后 3 秒仍滞留输入框，已补发回车（#111 主动验证）");
+          if (round < 1) this.armVerify(sessionId, text, round + 1); // 回车再被吞的兜验
+        }
+      })
+      .finally(() => this.stuckGuarding.delete(sessionId));
+  }
+
+  // #111 晋升成功即重置滞留看门狗：补发生效说明链路活着，下一条滞留消息应继续享受
+  // 10s 快窗——原实现 tries>0 后阈值跳回 90s（stuckAfterMs），连续第二条滞留要等 90s+
+  private resetStuckWatch(sessionId: string): void {
+    this.stuckWatch.delete(sessionId);
+  }
+
 
   // 现象：注入的回车在回合切换瞬间被 CLI 界面层吞掉，文字滞留输入框未提交，
   // 直到下一条消息的回车才把两条一起冲出去。补发一个空回车（injectEnter）补救。
@@ -1942,9 +2028,11 @@ export class Bridge {
     const w = this.stuckWatch.get(id);
     const tries = (w?.tries ?? 0) + 1;
     this.stuckWatch.set(id, { lastTry: Date.now(), tries, skips: w?.skips ?? 0, given_up: tries >= 3 });
-    if (tries >= 3) {
+    // 「暂停自动补发」只在 tries===3 跃迁时打一次：#111 主动验证不查 given_up 门槛，
+    // 后续消息仍会触发本函数（行为有界无害），反复打同款日志会与现实矛盾
+    if (tries === 3) {
       this.mgr.pushExternalLog(id, "system", "排队消息疑似滞留输入框，已补发 3 次回车仍滞留，暂停自动补发（下次发送消息时会一并提交）");
-    } else {
+    } else if (tries < 3) {
       this.mgr.pushExternalLog(id, "system", msg ?? "排队消息疑似滞留输入框，已补发回车");
     }
     void injectEnter(pid).then((r) => {
