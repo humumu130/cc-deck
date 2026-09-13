@@ -1014,6 +1014,10 @@ export default function ListScreen({ sessions, connected, connText, onOpen, onNe
                   <Text style={styles.legendT}>{k.toLowerCase()}</Text>
                 </View>
               ))}
+              {/* 图标化后补说明（2026-09-14 用户提）：左上电脑图标=单源/聚合切换 */}
+              <View style={[styles.legendRow, { borderTopWidth: 1, borderTopColor: c.line, paddingTop: 8, marginTop: 4 }]}>
+                <Text style={styles.legendT}>左上电脑图标：切换单源 / 聚合展示</Text>
+              </View>
             </View>
           </FadeIn>
         </Pressable>

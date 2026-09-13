@@ -1,5 +1,5 @@
 import { Fragment, useEffect, useImperativeHandle, useRef, useState, type Ref } from "react";
-import { Animated, Dimensions, Image, Modal, PanResponder, PermissionsAndroid, Pressable, RefreshControl, ScrollView, Share, StyleSheet, Text, TextInput, Vibration, View, type GestureResponderEvent, type NativeScrollEvent, type NativeSyntheticEvent, type NativeTouchEvent, type StyleProp, type TextStyle } from "react-native";
+import { Animated, Dimensions, Image, Linking, Modal, PanResponder, PermissionsAndroid, Pressable, RefreshControl, ScrollView, Share, StyleSheet, Text, TextInput, Vibration, View, type GestureResponderEvent, type NativeScrollEvent, type NativeSyntheticEvent, type NativeTouchEvent, type StyleProp, type TextStyle } from "react-native";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import Svg, { Path } from "react-native-svg";
 import * as ImagePicker from "expo-image-picker";
@@ -113,7 +113,16 @@ function TranscriptRow({ e, open, onToggle, onContentMenu, onTaskRef, onTaskRefO
   if (e.kind === "user_message") {
     return (
       <View style={d.trUser}>
-        <Text style={d.trUserText} selectable>{e.full ?? e.text}</Text>
+        {/* URL 链接化：拆段渲染，链接段品牌色+可点开系统浏览器（2026-09-14 用户提） */}
+        <Text style={d.trUserText} selectable>
+          {(e.full ?? e.text).split(/(https?:\/\/[^\s<>"')\]]+)/g).map((seg, i) =>
+            /^https?:\/\//.test(seg) ? (
+              <Text key={i} style={{ color: c.brandA }} onPress={() => { try { Linking.openURL(seg); } catch {} }}>{seg}</Text>
+            ) : (
+              <Text key={i}>{seg}</Text>
+            ),
+          )}
+        </Text>
         {e.ts ? <Text style={d.trUserTime}>{fmtHM(e.ts)}</Text> : null}
       </View>
     );
@@ -1217,79 +1226,53 @@ export default function DetailScreen({ sid, onBack, initialView, ref }: { sid: s
         <Pressable style={[d.back, d.opRipple]} android_ripple={{ color: c.tintSoft, borderless: false }} onPress={onBack} hitSlop={8}>
           <Text style={d.backText}>‹</Text>
         </Pressable>
-        <View style={{ flex: 1, minWidth: 0 }}>
-          <Text style={d.title} numberOfLines={1}>{s.title || "未命名会话"}</Text>
-          {/* 副信息行（外部/历史/源 · 时长）——模型 chip 不在此行（用户拍板：
-              挪去水位行右端，见下） */}
-          <View style={d.subRow}>
-            <Text style={d.sub} numberOfLines={1}>
-              {/* 用户点单（重提）：去「外部 CLI ·」前缀——外部会话副行只留源名+时长；
-                  托管会话的「托管」标注保留（区分两类仍有价值）+ 历史/时长不变 */}
-              {[external ? "" : "托管", s.historical && !external ? "历史" : "", srcName, fmtElapsed(sessionElapsed(s))].filter(Boolean).join(" · ")}
-            </Text>
+        <View style={{ flex: 1, minWidth: 0, marginHorizontal: 2 }}>
+          {/* 两行化重设计（2026-09-14 定稿）：R1=标题+计时；R2=副信息+ctx+模型 chip。
+              显式子行布局，避免 auto-margin 在收缩场景的排版怪癖 */}
+          <View style={{ flexDirection: "row", alignItems: "center" }}>
+            <Text style={[d.title, { flexShrink: 1 }]} numberOfLines={1}>{s.title || "未命名会话"}</Text>
+            <Text style={[d.sub, { marginLeft: 8, flexShrink: 0 }]} numberOfLines={1}>{fmtElapsed(sessionElapsed(s))}</Text>
           </View>
-          {/* ctx 水位行 + 模型 chip 共行（用户拍板）：进度条让位缩短，chip 放在
-              水位条原占的右端位置；无水位数据时该行只出 chip */}
-          {ctxUsed > 0 || (canCmd && snap.models.length > 0) ? (
-            <View style={d.ctxRow}>
-              {ctxUsed > 0 ? (
-                <>
-                  <Text style={d.ctxLabel}>ctx</Text>
-                  <View style={d.ctxBar}>
-                    <View style={{ width: `${ctxPct}%`, height: 3, borderRadius: 1.5, backgroundColor: c[contextLevel(ctxUsed, ctxLimit)] }} />
-                  </View>
-                  <Text style={[d.ctxPct, { color: c[contextLevel(ctxUsed, ctxLimit)] }]}>{ctxPct}%</Text>
-                </>
-              ) : null}
-              {canCmd && snap.models.length > 0 ? (
-                <Pressable
-                  style={d.modelChip}
-                  android_ripple={{ color: c.tintSoft, borderless: false, radius: 12 }}
-                  onPress={() => setModelPick(true)}
-                >
-                  <Text style={d.modelChipT} numberOfLines={1} ellipsizeMode="tail">{s.model ? s.model.split(/[\/:]/).pop() : "默认"}</Text>
-                </Pressable>
-              ) : <View style={{ flex: 0.25 }} />}
-            </View>
-          ) : null}
+          <View style={{ flexDirection: "row", alignItems: "center", marginTop: 3 }}>
+            <Text style={[d.sub, { flexShrink: 1 }]} numberOfLines={1}>
+              {[external ? "" : "托管", s.historical && !external ? "历史" : "", srcName].filter(Boolean).join(" · ") || " "}
+            </Text>
+            {ctxUsed > 0 ? (
+              <View style={{ flexDirection: "row", alignItems: "center", gap: 5, marginLeft: "auto" }}>
+                <Text style={d.ctxLabel}>ctx</Text>
+                <View style={d.ctxBar}>
+                  <View style={{ width: `${ctxPct}%`, height: 3, borderRadius: 1.5, backgroundColor: c[contextLevel(ctxUsed, ctxLimit)] }} />
+                </View>
+                <Text style={[d.ctxPct, { color: c[contextLevel(ctxUsed, ctxLimit)] }]}>{ctxPct}%</Text>
+              </View>
+            ) : null}
+            {canCmd && snap.models.length > 0 ? (
+              <Pressable style={d.modelChip} android_ripple={{ color: c.tintSoft, borderless: false, radius: 12 }} onPress={() => setModelPick(true)}>
+                <Text style={d.modelChipT} numberOfLines={1} ellipsizeMode="tail">{s.model ? s.model.split(/[\/:]/).pop() : "默认"}</Text>
+              </Pressable>
+            ) : null}
+          </View>
         </View>
-        <Pressable
-          style={[d.editBtn, d.opRipple]}
-          android_ripple={{ color: c.tintSoft, borderless: false }}
-          onPress={() => setRenaming(true)}
-          hitSlop={8}
-        >
-          {/* 直立铅笔 SVG（ui-review 方案 A）：替换 Unicode ✎——跨设备字形不一致且斜向
-              构图歪斜，矢量锚定直径与视觉重心 */}
+        <Pressable style={[d.editBtn, d.opRipple]} android_ripple={{ color: c.tintSoft, borderless: false }} onPress={() => setRenaming(true)} hitSlop={8}>
+          {/* 直立铅笔 SVG（ui-review 方案 A）：替换 Unicode ✎——跨设备字形不一致 */}
           <Svg width={15} height={15} viewBox="0 0 24 24" fill="none" stroke={c.dim} strokeWidth={2.1} strokeLinecap="round" strokeLinejoin="round">
             <Path d="M17 3a2.8 2.8 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z" />
           </Svg>
         </Pressable>
-        <Pressable
-          style={[d.foldBtn, d.opRipple]}
-          android_ripple={{ color: c.tintSoft, borderless: false }}
-          onPress={() => {
-            ctrlCollapsed = !ctrlCollapsed;
-            setCollapsed(ctrlCollapsed);
-          }}
-          hitSlop={6}
-        >
+        <Pressable style={[d.foldBtn, d.opRipple]} android_ripple={{ color: c.tintSoft, borderless: false }} onPress={() => { ctrlCollapsed = !ctrlCollapsed; setCollapsed(ctrlCollapsed); }} hitSlop={6}>
           <Text style={d.foldT}>{collapsed ? "▼" : "▲"}</Text>
         </Pressable>
+        {/* 思考=纯迷你开关（用户反馈去文字）：开=品牌色滑块，accessibilityLabel 承载语义 */}
         <Pressable
-          style={[d.thinkBtn, showThink && d.thinkBtnOn, d.opRipple]}
-          android_ripple={{ color: c.tintSoft, borderless: false, radius: 9 }}
-          onPress={() => {
-            thinkShown = !thinkShown;
-            setShowThink(thinkShown);
-          }}
-          hitSlop={6}
+          style={[d.thinkToggle, showThink && d.thinkToggleOn]}
+          android_ripple={{ color: c.tintSoft, borderless: false, radius: 14 }}
+          onPress={() => { thinkShown = !thinkShown; setShowThink(thinkShown); }}
+          hitSlop={8}
           accessibilityLabel={showThink ? "思考过程显示，已开" : "思考过程显示，已关"}
         >
-          <Text style={[d.thinkBtnT, showThink && d.thinkBtnTOn]}>思考</Text>
-          {/* 迷你开关（ui-review 定稿）：开=品牌色滑块，关闭=中性灰——状态一眼可读 */}
-          <View style={[d.thinkMini, showThink && { backgroundColor: c.brandA }]}>
-            <View style={[d.thinkMiniKnob, showThink && { alignSelf: "flex-end" }]} />
+          <Text style={[d.thinkToggleT, showThink && d.thinkToggleTOn]}>思考</Text>
+          <View style={[d.thinkToggleKnobWrap, showThink && d.thinkToggleKnobWrapOn]}>
+            <View style={[d.thinkToggleKnob, showThink && { alignSelf: "flex-end" }]} />
           </View>
         </Pressable>
       </View>
@@ -1757,18 +1740,32 @@ export default function DetailScreen({ sid, onBack, initialView, ref }: { sid: s
               <Text style={d.imgBtnT}>📷</Text>
             </Pressable>
           ) : null}
-          <TextInput
-            style={d.input}
-            value={input}
-            onChangeText={editInput}
-            placeholder={external ? "CLI忙时自动排队" : s.historical ? "继续对话（恢复会话）…" : "发送消息…"}
-            placeholderTextColor={c.faint}
-            editable={canCmd}
-            multiline
-            returnKeyType="send"
-            blurOnSubmit={false}
-            onSubmitEditing={() => send()}
-          />
+          <View style={{ flex: 1, position: "relative" }}>
+            {/* 模型切换（2026-09-14 从 header 水位行迁来）：输入框内部居左，ChatGPT 式——
+                点开模型选择弹层；文字区 paddingLeft 预留 chip 宽度 */}
+            {canCmd && snap.models.length > 0 ? (
+              <Pressable
+                style={d.modelInline}
+                android_ripple={{ color: c.tintSoft, borderless: false, radius: 8 }}
+                onPress={() => setModelPick(true)}
+                hitSlop={4}
+              >
+                <Text style={d.modelInlineT} numberOfLines={1}>{s.model ? s.model.split(/[\/:]/).pop() : "默认"} ▾</Text>
+              </Pressable>
+            ) : null}
+            <TextInput
+              style={[d.input, canCmd && snap.models.length > 0 && { paddingLeft: 104 }]}
+              value={input}
+              onChangeText={editInput}
+              placeholder={external ? "CLI忙时自动排队" : s.historical ? "继续对话（恢复会话）…" : "发送消息…"}
+              placeholderTextColor={c.faint}
+              editable={canCmd}
+              multiline
+              returnKeyType="send"
+              blurOnSubmit={false}
+              onSubmitEditing={() => send()}
+            />
+          </View>
           {voiceOn ? (
             <Pressable
               style={[d.imgBtn, listening && d.micOn, !canCmd && { opacity: 0.4 }]}
@@ -1874,16 +1871,16 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
   back: { width: 32, height: 32, borderRadius: 10, backgroundColor: c.tintSoft, alignItems: "center", justifyContent: "center" },
   backText: { color: c.dim, fontSize: 18, marginTop: -1 },
   hintText: { color: c.faint },
-  title: { color: c.text, fontSize: 16, fontWeight: "600" },
+  title: { color: c.text, fontSize: 15, fontWeight: "600" },
   // 副信息行（头部）：小字占满 + 行内最右模型 chip，垂直居中。
   // 字号与下行 ctx 水位行（ctxLabel/ctxPct 均 10）拉平，同为次级信息统一档
   subRow: { flexDirection: "row", alignItems: "center", gap: 6, marginTop: 1 },
-  sub: { flex: 1, color: c.dim, fontSize: 10 },
+  sub: { flex: 1, color: c.dim, fontSize: 9.5 },
   // 上下文占用条（头部副行下）：标签 + 3px 细条 + 百分比，颜色按占用分级
   ctxRow: { flexDirection: "row", alignItems: "center", gap: 6, marginTop: 3 },
-  ctxLabel: { color: c.faint, fontSize: 10, fontWeight: "600" },
+  ctxLabel: { color: c.faint, fontSize: 9.5, fontWeight: "600" },
   ctxBar: { flex: 1, height: 3, borderRadius: 1.5, backgroundColor: c.tintSoft, overflow: "hidden" },
-  ctxPct: { fontSize: 10, fontVariant: ["tabular-nums"], minWidth: 26, textAlign: "right" },
+  ctxPct: { fontSize: 9.5, fontVariant: ["tabular-nums"], minWidth: 22, textAlign: "right" },
   // 统计视图卡片（原 StatsModal 内容平铺）
   statsCard: {
     borderRadius: 14, backgroundColor: c.panel, borderWidth: 1, borderColor: c.line, padding: 16,
@@ -1891,26 +1888,35 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
   statRow: { flexDirection: "row", justifyContent: "space-between", gap: 14, paddingVertical: 8, borderTopWidth: 1, borderTopColor: withA(c.dim, 0.12) },
   statRowK: { color: c.dim, fontSize: 13 },
   statRowV: { color: c.text, fontSize: 13, fontVariant: ["tabular-nums"], textAlign: "right", flex: 1 },
+  // 头部三钮统一规格（2026-09-14 用户反馈风格大小不一）：同高 28 / 圆角 9 /
+  // tintSoft 底 + line 边框；选中/激活态 = 品牌描边 + 品牌色内容
   editBtn: {
-    width: 30, height: 30, borderRadius: 9, backgroundColor: c.tintSoft,
-    borderWidth: 1, borderColor: c.line, alignItems: "center", justifyContent: "center",
+    width: 26, height: 26, borderRadius: 9, backgroundColor: c.tintSoft,
+    alignItems: "center", justifyContent: "center",
   },
-  editT: { color: c.dim, fontSize: 14, marginTop: -1 },
+  editT: { color: c.dim, fontSize: 13, marginTop: -1 },
   // 折叠开关：用选中态视觉（品牌色）——它切换的是整个工具区，比 ✎ 更该被看见
   foldBtn: {
-    width: 30, height: 30, borderRadius: 9, backgroundColor: c.tintStrong,
-    borderWidth: 1, borderColor: withA(c.brandA, 0.4), alignItems: "center", justifyContent: "center",
+    height: 26, borderRadius: 9, paddingHorizontal: 9, backgroundColor: c.tintSoft,
+    alignItems: "center", justifyContent: "center",
   },
+  foldBtnOn: { backgroundColor: c.tintStrong },
   foldT: { color: c.brandA, fontSize: 11, marginTop: -1 },
-  // 思考开关（头部第三按钮）：与 ✎/▲ 同高 30；无文字后缀，选中态=品牌底/品牌字（同 chip 语言）
-  thinkBtn: {
-    height: 30, borderRadius: 9, paddingHorizontal: 8,
-    backgroundColor: c.tintSoft, borderWidth: 1, borderColor: c.line,
-    alignItems: "center", justifyContent: "center", flexDirection: "row", gap: 6,
+  // 思考：chip 内文字 + 迷你滑块合一（用户要求字进开关里），开/关换文字
+  thinkToggle: {
+    height: 28, borderRadius: 9, paddingHorizontal: 8, backgroundColor: c.tintSoft,
+    borderWidth: 1, borderColor: c.line, alignItems: "center", justifyContent: "center",
+    flexDirection: "row", gap: 6,
   },
-  thinkBtnOn: { backgroundColor: c.tintStrong, borderColor: withA(c.brandA, 0.4) },
-  thinkBtnT: { fontSize: 11, color: c.dim },
-  thinkBtnTOn: { color: c.brandA, fontWeight: "600" },
+  thinkToggleOn: { borderColor: withA(c.brandA, 0.4), backgroundColor: c.tintStrong },
+  thinkToggleT: { fontSize: 11, color: c.dim },
+  thinkToggleTOn: { color: c.brandA, fontWeight: "600" },
+  thinkToggleKnobWrap: {
+    width: 22, height: 12, borderRadius: 6, backgroundColor: c.line,
+    justifyContent: "center", paddingHorizontal: 1.5,
+  },
+  thinkToggleKnobWrapOn: { backgroundColor: c.brandA },
+  thinkToggleKnob: { width: 9, height: 9, borderRadius: 5, backgroundColor: "#fff" },
   // 思考迷你开关（ui-review 定稿）：开=品牌色滑块
   thinkMini: { width: 22, height: 13, borderRadius: 13, backgroundColor: c.line, justifyContent: "center", paddingHorizontal: 1.5 },
   thinkMiniKnob: { width: 10, height: 10, borderRadius: 5, backgroundColor: "#fff" },
@@ -2169,6 +2175,13 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
     backgroundColor: c.panel2, borderWidth: 1, borderColor: c.line,
     paddingHorizontal: 14, paddingVertical: 11, color: c.text, fontSize: 15,
   },
+  // 模型切换 chip：输入框内部居左（迁自 header 水位行右端，2026-09-14）
+  modelInline: {
+    position: "absolute", left: 9, bottom: 9, zIndex: 2, maxWidth: 92,
+    backgroundColor: c.tintSoft, borderRadius: 8, paddingHorizontal: 7, paddingVertical: 3.5,
+    borderWidth: 1, borderColor: withA(c.brandA, 0.35),
+  },
+  modelInlineT: { fontSize: 11, color: c.brandA, fontWeight: "600" },
   // 发送按钮对齐网页版 #sendBtn：品牌色实底方块 + 白色 ➤
   sendBtn: {
     width: 44, height: 44, borderRadius: 13, backgroundColor: c.brandA,
