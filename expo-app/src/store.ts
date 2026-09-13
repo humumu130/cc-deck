@@ -2162,6 +2162,14 @@ class RelayStore {
     };
     entry.timer = setTimeout(() => this.onCmdTimeout(conn, id), ACK_TIMEOUT_MS);
     conn.pendingCmds.set(id, entry);
+    // 首发立即上线（cd7c6fb 起曾缺失：wire() 只在 4s 超时重发里被调——所有命令先空等
+    // ACK_TIMEOUT_MS 才真正发出，用户实测"排队显示慢 3~4 秒"的根因）。timer 只兜丢 ACK
+    if (!wire()) {
+      clearTimeout(entry.timer);
+      conn.pendingCmds.delete(id);
+      this.emit({ lastErrorCmd: "未连接，命令未发送" });
+      return false;
+    }
     return true;
   }
 
