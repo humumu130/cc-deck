@@ -2,7 +2,7 @@
 // 打包 CC Deck 插件：bundle relay 成单文件 + 汇集静态资源到 cc-plugins/plugins/cc-deck/
 // 用法：node scripts/build-plugin.mjs（relay 目录下）
 import { build } from "esbuild";
-import { cpSync, mkdirSync, rmSync, readFileSync, writeFileSync } from "node:fs";
+import { cpSync, mkdirSync, rmSync, readFileSync, writeFileSync, existsSync } from "node:fs";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -36,8 +36,13 @@ copy(join(root, "web-console", "nacl.js"), join(out, "web-console", "nacl.js"));
 for (const f of ["manifest.json", "apple-touch-icon.png", "icon-192.png", "icon-512.png", "maskable-512.png"]) {
   copy(join(root, "web-console", f), join(out, "web-console", f));
 }
-for (const f of ["index.html", "manifest.webmanifest", "sw.js", "icon-192.png", "icon-512.png", "cc-deck.apk"]) {
+for (const f of ["index.html", "manifest.webmanifest", "sw.js", "icon-192.png", "icon-512.png"]) {
   copy(join(root, "mobile", f), join(out, "mobile", f));
+}
+// cc-deck.apk 是未跟踪的本地构建产物（Windows 时代习惯），缺失时跳过而非炸掉整个打包
+//（Mac 接管后常无此文件；插件里旧 APK 副本保留不动）
+if (existsSync(join(root, "mobile", "cc-deck.apk"))) {
+  copy(join(root, "mobile", "cc-deck.apk"), join(out, "mobile", "cc-deck.apk"));
 }
 copy(join(relayRoot, "bin", "inject.cs"), join(out, "bin", "inject.cs"));
 copy(join(relayRoot, "hooks", "bridge-hook.mjs"), join(out, "scripts", "hook.mjs"));

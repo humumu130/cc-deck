@@ -139,6 +139,9 @@ const CHUNK = 400;
 // 与真人敲键盘同路径），不经合成事件、不需要辅助功能权限、不抢焦点。
 // 注意：do script 一定追加 Return（整段文本一次调用正好=提交）；relay 需在 Terminal.app
 // 内运行（自己 tell 自己免 TCC；sshd/nohup 上下文会吃 Automation 拒绝）。
+// 坑（mac 接管后首测实测）：`ps -o tty=` 的输出右补一个空格（ttys005␠），do shell script
+// 只去尾换行不去空格——ends with 比对永远失配、循环静默空转后 exit 0，relay 误判注入
+// 成功（ACK ok / 无错误日志），消息永远滞留 pending。定位命令必须管道 tr -d '[:space:]'。
 
 // AppleScript 字符串字面量转义：反斜杠、双引号（do script 的 command 参数是字面量）
 function escapeApple(text: string): string {
@@ -155,7 +158,7 @@ export function buildDoScript(pid: number, command: string): string {
 export function buildDoScriptExpr(pid: number, expr: string): string {
   return [
     "tell application \"Terminal\"",
-    `	set targetTty to do shell script "ps -o tty= -p ${pid}"`,
+    `	set targetTty to do shell script "ps -o tty= -p ${pid} | tr -d '[:space:]'"`,
     "	repeat with w in windows",
     "		repeat with t in tabs of w",
     "			try",
@@ -302,7 +305,7 @@ export function peekSupported(): boolean {
 export function buildCaptureScript(pid: number): string {
   return [
     "tell application \"Terminal\"",
-    `	set targetTty to do shell script "ps -o tty= -p ${pid}"`,
+    `	set targetTty to do shell script "ps -o tty= -p ${pid} | tr -d '[:space:]'"`,
     "	repeat with w in windows",
     "		repeat with t in tabs of w",
     "			try",

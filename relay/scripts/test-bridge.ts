@@ -1084,6 +1084,8 @@ assert(ack24.ok === false, "empty rename rejected");
       assert((await injectText(5555, String.raw`带"引号"与\反斜杠`)).ok, "42 darwin injectText ok via fake osascript");
       const s1 = appleLog().at(-1)!;
       assert(s1.includes("ps -o tty= -p 5555"), "42 resolves tty by pid");
+      // ps 的 tty 列右补空格：定位命令必须 tr 掉，否则 ends with 永远失配（注入静默无效的根因）
+      assert(s1.includes(`ps -o tty= -p 5555 | tr -d '[:space:]'`), "42 strips ps trailing space before tty match");
       assert(s1.includes("tty of t ends with targetTty"), "42 selects tab by tty");
       assert(s1.includes(String.raw`do script ("带\"引号\"与\\反斜杠") in t`), "42 do script literal escapes quotes and backslashes");
       assert(!s1.includes("System Events") && !s1.includes("keystroke"), "42 no System Events / keystroke");
