@@ -853,25 +853,22 @@ export default function ListScreen({ sessions, connected, connText, onOpen, onNe
         {/* #52 聚合胶囊（替代 #26 电脑图标）：开关与数量合一——聚合开=「聚合 · N」
             品牌色高亮可点切回；关=「单源」中性色。即当前面板展示范围的自述 */}
         <Pressable
-          style={[styles.aggBtn, snap.aggregate && styles.aggBtnOn]}
-          android_ripple={{ color: c.tintSoft, borderless: false, radius: 14 }}
-          hitSlop={4}
+          style={{ paddingHorizontal: 7, paddingVertical: 6, borderRadius: 9 }}
+          android_ripple={{ color: c.tintSoft, borderless: false, radius: 16 }}
+          hitSlop={6}
           accessibilityLabel={snap.aggregate ? `聚合模式，展示 ${snap.sources.length} 台电脑，点击切回单源` : "单源模式，点击开启聚合"}
           onPress={toggleAggregate}
         >
-          {/* 2026-09-14 图标化：单元=单台电脑，聚合=双机半叠放（用户提案，方案已定稿） */}
-          <View style={{ flexDirection: "row", alignItems: "center", gap: 5, marginRight: 1 }}>
-            <View style={{ width: 15, height: 11, borderRadius: 2.5, borderWidth: 1.6, borderColor: snap.aggregate ? c.brandA || c.text : c.dim, justifyContent: "flex-end", alignItems: "center", paddingBottom: 1.5 }}>
-              <View style={{ width: 7, height: 1.6, borderRadius: 1, backgroundColor: snap.aggregate ? c.brandA || c.text : c.dim }} />
+          {/* 2026-09-14 纯图标版（用户反馈：用图标就不配汉字、去外框）——单源=单台灰
+              电脑；聚合=品牌色主电脑 + 右后灰副电脑半叠放 */}
+          <View style={{ flexDirection: "row", alignItems: "flex-end" }}>
+            <View style={{ width: 17, height: 13, borderRadius: 3, borderWidth: 2, borderColor: snap.aggregate ? c.brandA : c.dim, justifyContent: "flex-end", alignItems: "center", paddingBottom: 2.5 }}>
+              <View style={{ width: 9, height: 2, borderRadius: 1, backgroundColor: snap.aggregate ? c.brandA : c.dim }} />
             </View>
             {snap.aggregate && (
-              <View style={{ width: 12, height: 9, borderRadius: 2, borderWidth: 1.4, borderColor: c.dim, marginLeft: -10, marginTop: -6, opacity: 0.55 }} />
+              <View style={{ width: 14, height: 10.5, borderRadius: 2.6, borderWidth: 1.8, borderColor: c.dim, marginLeft: -8, marginBottom: 5, opacity: 0.5 }} />
             )}
           </View>
-          <Text style={[styles.aggT, snap.aggregate && styles.aggTOn]} numberOfLines={1}>
-            {/* #80 去数量：右上角统计（x/n+电脑图标）已承载源数，聚合胶囊只报模式 */}
-            {snap.aggregate ? "聚合" : "单源"}
-          </Text>
         </Pressable>
         <View style={styles.statChips}>
           {statusItems.map(({ k, n, color }) => (
