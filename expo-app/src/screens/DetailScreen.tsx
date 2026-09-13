@@ -1230,15 +1230,20 @@ export default function DetailScreen({ sid, onBack, initialView, ref }: { sid: s
           {/* 两行化重设计（2026-09-14 定稿）：R1=标题+计时；R2=副信息+ctx+模型 chip。
               显式子行布局，避免 auto-margin 在收缩场景的排版怪癖 */}
           <View style={{ flexDirection: "row", alignItems: "center" }}>
-            <Text style={[d.title, { flexShrink: 1 }]} numberOfLines={1}>{s.title || "未命名会话"}</Text>
+            <Text style={[d.title, { flexShrink: 1 }]} numberOfLines={1} ellipsizeMode="tail">{s.title || "未命名会话"}</Text>
             <Text style={[d.sub, { marginLeft: 8, flexShrink: 0 }]} numberOfLines={1}>{fmtElapsed(sessionElapsed(s))}</Text>
+            <Pressable style={[d.editBtn, d.opRipple]} android_ripple={{ color: c.tintSoft, borderless: false }} onPress={() => setRenaming(true)} hitSlop={8}>
+              <Svg width={13} height={13} viewBox="0 0 24 24" fill="none" stroke={c.dim} strokeWidth={2.1} strokeLinecap="round" strokeLinejoin="round">
+                <Path d="M17 3a2.8 2.8 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z" />
+              </Svg>
+            </Pressable>
           </View>
           <View style={{ flexDirection: "row", alignItems: "center", marginTop: 3 }}>
             <Text style={[d.sub, { flexShrink: 1 }]} numberOfLines={1}>
               {[external ? "" : "托管", s.historical && !external ? "历史" : "", srcName].filter(Boolean).join(" · ") || " "}
             </Text>
             {ctxUsed > 0 ? (
-              <View style={{ flexDirection: "row", alignItems: "center", gap: 5, marginLeft: "auto" }}>
+              <View style={{ flexDirection: "row", alignItems: "center", gap: 5, marginLeft: 10 }}>
                 <Text style={d.ctxLabel}>ctx</Text>
                 <View style={d.ctxBar}>
                   <View style={{ width: `${ctxPct}%`, height: 3, borderRadius: 1.5, backgroundColor: c[contextLevel(ctxUsed, ctxLimit)] }} />
@@ -1246,35 +1251,21 @@ export default function DetailScreen({ sid, onBack, initialView, ref }: { sid: s
                 <Text style={[d.ctxPct, { color: c[contextLevel(ctxUsed, ctxLimit)] }]}>{ctxPct}%</Text>
               </View>
             ) : null}
-            {canCmd && snap.models.length > 0 ? (
-              <Pressable style={d.modelChip} android_ripple={{ color: c.tintSoft, borderless: false, radius: 12 }} onPress={() => setModelPick(true)}>
-                <Text style={d.modelChipT} numberOfLines={1} ellipsizeMode="tail">{s.model ? s.model.split(/[\/:]/).pop() : "默认"}</Text>
-              </Pressable>
-            ) : null}
+            
+            <Pressable
+              style={[d.thinkToggle, showThink && d.thinkToggleOn]}
+              android_ripple={{ color: c.tintSoft, borderless: false, radius: 9 }}
+              onPress={() => { thinkShown = !thinkShown; setShowThink(thinkShown); }}
+              hitSlop={6}
+              accessibilityLabel={showThink ? "思考过程显示，已开" : "思考过程显示，已关"}
+            >
+              <Text style={[d.thinkToggleT, showThink && d.thinkToggleTOn]}>思考</Text>
+              <View style={[d.thinkSwitch, showThink && d.thinkSwitchOn]}>
+                <View style={[d.thinkSwitchKnob, showThink && { alignSelf: "flex-end" }]} />
+              </View>
+            </Pressable>
           </View>
         </View>
-        <Pressable style={[d.editBtn, d.opRipple]} android_ripple={{ color: c.tintSoft, borderless: false }} onPress={() => setRenaming(true)} hitSlop={8}>
-          {/* 直立铅笔 SVG（ui-review 方案 A）：替换 Unicode ✎——跨设备字形不一致 */}
-          <Svg width={15} height={15} viewBox="0 0 24 24" fill="none" stroke={c.dim} strokeWidth={2.1} strokeLinecap="round" strokeLinejoin="round">
-            <Path d="M17 3a2.8 2.8 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z" />
-          </Svg>
-        </Pressable>
-        <Pressable style={[d.foldBtn, d.opRipple]} android_ripple={{ color: c.tintSoft, borderless: false }} onPress={() => { ctrlCollapsed = !ctrlCollapsed; setCollapsed(ctrlCollapsed); }} hitSlop={6}>
-          <Text style={d.foldT}>{collapsed ? "▼" : "▲"}</Text>
-        </Pressable>
-        {/* 思考=纯迷你开关（用户反馈去文字）：开=品牌色滑块，accessibilityLabel 承载语义 */}
-        <Pressable
-          style={[d.thinkToggle, showThink && d.thinkToggleOn]}
-          android_ripple={{ color: c.tintSoft, borderless: false, radius: 14 }}
-          onPress={() => { thinkShown = !thinkShown; setShowThink(thinkShown); }}
-          hitSlop={8}
-          accessibilityLabel={showThink ? "思考过程显示，已开" : "思考过程显示，已关"}
-        >
-          <Text style={[d.thinkToggleT, showThink && d.thinkToggleTOn]}>思考</Text>
-          <View style={[d.thinkToggleKnobWrap, showThink && d.thinkToggleKnobWrapOn]}>
-            <View style={[d.thinkToggleKnob, showThink && { alignSelf: "flex-end" }]} />
-          </View>
-        </Pressable>
       </View>
 
       {/* 固定工具区：状态条 + 过滤 chips。不放进 ScrollView——RN Android 吸顶头有触点丢失问题，
@@ -1909,8 +1900,15 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
     flexDirection: "row", gap: 6,
   },
   thinkToggleOn: { borderColor: withA(c.brandA, 0.4), backgroundColor: c.tintStrong },
-  thinkToggleT: { fontSize: 11, color: c.dim },
+  thinkToggleT: { fontSize: 10, color: c.dim },
   thinkToggleTOn: { color: c.brandA, fontWeight: "600" },
+  // 矮宽开关条（方案 G：高 16、字嵌条内，与 ctx 同行）
+  thinkSwitch: {
+    width: 26, height: 14, borderRadius: 7, backgroundColor: c.line,
+    alignItems: "flex-start", justifyContent: "center", paddingHorizontal: 1.5,
+  },
+  thinkSwitchOn: { backgroundColor: c.brandA, alignItems: "flex-end" },
+  thinkSwitchKnob: { width: 11, height: 11, borderRadius: 6, backgroundColor: "#fff" },
   thinkToggleKnobWrap: {
     width: 22, height: 12, borderRadius: 6, backgroundColor: c.line,
     justifyContent: "center", paddingHorizontal: 1.5,
