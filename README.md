@@ -6,7 +6,7 @@
 [![release](https://img.shields.io/github/v/release/humumu130/cc-deck)](https://github.com/humumu130/cc-deck/releases/latest)
 [![license](https://img.shields.io/badge/license-MIT-blue)](./LICENSE)
 
-在手机上使用 PC 端的 Claude Code：查看会话状态、批准权限、发送消息、切换模型、接收任务汇报。自建 relay，不经过任何第三方云服务；不在同一网络时走 Cloudflare 中继，端到端加密。
+在手机上使用 PC 端的 Claude Code：查看会话状态、批准权限、发送消息、切换模型、接收任务汇报；电脑断网重启会话不丢，手机点一下即可远程恢复。自建 relay，不经过任何第三方云服务；不在同一网络时走 Cloudflare 中继，端到端加密。
 
 [🏠 项目主页](https://cc-deck.humumu.online/) · [网页控制台](https://cc-deck.humumu.online/app) · [下载最新版](https://github.com/humumu130/cc-deck/releases/latest) · [直链下载页](https://cc-deck.humumu.online/download/)
 
@@ -32,7 +32,14 @@
 - 多会话实时同步，四态徽标（运行中 / 等待输入 / 出错 / 完成），断线自动补发
 - 权限审批推到手机点 Allow / Reject；AskUserQuestion 提问远程点选；随时打断
 - 给会话发消息、传图片（App 支持语音输入）；历史会话可续聊
+- 消息即发即达：点发送立刻送达电脑（排队回显即时，注入后自动校验、回车被吞秒级补发）
 - 模型远程切换：下拉即切当前会话模型（注入 CLI 原生 `/model`），ctx 水位行内嵌当前模型，App / 网页 / 桌面三端一致
+
+**断线不怕**
+
+- 电脑死机 / 重启 / 意外断开，手机会话卡片保留不丢：点一下发消息，电脑自动原地恢复原会话（权限模式原样镜像，无人值守也不卡确认）
+- 电脑端正常退出的会话自动从手机列表清除，列表里留下的都是真正能用的会话
+- Wi-Fi 中断数秒内自动切云桥保持可用，网络恢复后自动切回更快的直连；LAN 探测失败进入短冷却，不再拖慢切换
 
 **替你盯着**
 
@@ -272,11 +279,11 @@ node scripts/version.mjs --check   # 校验（pre-commit 自动跑）
 
 ## Roadmap
 
-- v0.3.32（待发布）：网页空态提示居中、「关于」页内置下载入口
 - 手表 Tiles（不开 App 直接看状态）
 - 更多手表平台：OPPO ColorOS Watch 适配进行中
 - 多手机 / 多设备同时在线
 - LAN 直连 WSS / TLS 部署加固
+- 会话恢复扩展到更多桌面场景（当前支持 macOS Terminal / Windows cmd）
 
 ## License
 
