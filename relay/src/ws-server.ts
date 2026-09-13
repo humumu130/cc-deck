@@ -4,6 +4,7 @@ import { readFileSync, writeFileSync, mkdirSync, existsSync, readdirSync, type D
 import { join, dirname, sep } from "node:path";
 import { homedir, networkInterfaces } from "node:os";
 import { detectLanIp } from "./lan-ip.js";
+import { listArtifacts, serveArtifact } from "./artifacts.js";
 import { listModels } from "./models.js";
 import { fileURLToPath } from "node:url";
 import { WebSocketServer, WebSocket } from "ws";
@@ -60,6 +61,7 @@ const COMMAND_TYPES = new Set([
   "COMMAND_WATCH_GRANT",
   "COMMAND_PEERS",
   "COMMAND_PEER_KICK",
+  "COMMAND_PEERS_IMPORT",
   "COMMAND_CLOUD_INFO",
   "COMMAND_PERM",
   "COMMAND_MODEL",
@@ -421,6 +423,27 @@ export function startServer(
     // 取最新 WORKING/外部会话）悬浮框弹 TASK_DONE。答疑/联调实测悬浮框用
     if (req.method === "POST" && url.pathname === "/api/notify") {
       void handleNotify(req, res, mgr, cfg, bus);
+      return;
+    }
+    // Artifacts 产物中心（2026-09-14）：CLI 把输出物写 ~/.cc-deck/artifacts/ 即对全部
+    // 客户端可见——列表 JSON + 静态服务（ui-review 汇总页亦由此分发，外网经 ECS 转发）
+    if (req.method === "GET" && url.pathname === "/api/artifacts") {
+      if ((url.searchParams.get("token") ?? "") !== cfg.token) {
+        res.writeHead(401).end("unauthorized");
+        return;
+      }
+      res.writeHead(200, { "content-type": "application/json" })
+        .end(JSON.stringify({ ok: true, artifacts: listArtifacts() }));
+      return;
+    }
+    if (req.method === "GET" && url.pathname.startsWith("/artifacts/")) {
+      if ((url.searchParams.get("token") ?? "") !== cfg.token) {
+        res.writeHead(401).end("unauthorized");
+        return;
+      }
+      if (!serveArtifact(decodeURIComponent(url.pathname.slice("/artifacts/".length)), res)) {
+        res.writeHead(404).end("not found");
+      }
       return;
     }
     // #448 插件可选能力配置（设置「插件」页三开关）：读写 ~/.cc-deck/config.json 的

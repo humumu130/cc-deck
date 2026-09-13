@@ -1427,7 +1427,11 @@
     background: var(--panel-2); border: 1px dashed var(--border); color: var(--dim);
     border-radius: 12px; border-top-right-radius: 4px; padding: 6px 11px; font-size: 12px;
     max-width: 70%; animation: pendpulse 1.8s infinite;
+    /* 长消息默认折叠两行，点击展开全文（挤压会话显示的根治，2026-09-14） */
+    max-width: 70%; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
+    overflow: hidden; cursor: pointer; word-break: break-all;
   }
+  #pendbox span.open { -webkit-line-clamp: unset; overflow: visible; }
   @keyframes pendpulse { 50% { opacity: .45; } }
   /* 子 Agent 工作状态 */
   #agbox {
@@ -1859,8 +1863,10 @@
             <div class="gp-peers-foot">
               <span id="gpPeersCount"></span>
               <div class="gp-peers-acts">
-                <button id="gpPeersExport" class="gp-mini-btn" title="下载设备清单 JSON（含公钥，重装 relay 后可粘回 data/cloud-peers.json 恢复配对）">导出备份</button>
+                <button id="gpPeersExport" class="gp-mini-btn" title="下载设备清单 JSON（含公钥）">导出备份</button>
+                <button id="gpPeersImport" class="gp-mini-btn" title="导入备份 JSON，合并恢复配对（relay 换机/重装后免重新配对）">导入</button>
                 <button id="gpPeersRefresh" class="gp-mini-btn">刷新</button>
+                <input type="file" id="gpPeersImportFile" accept="application/json,.json" style="display:none">
               </div>
             </div>
           </div>
@@ -3190,12 +3196,13 @@ function renderConnChip() {
   renderGpStatus();
 }
 
-// 设置抽屉·连接状态卡：活动源优先（如实反映在线/连接中/离线），
-// 无活动源退让任一在线源，一个源都没有则显示"未配置"
+// 设置抽屉·连接状态卡：固定显示第一个在线源（不随列表选中跳动——选中只是打开会话，
+// 状态卡是稳定的连接健康视图，2026-09-14 用户反馈解除跟随），全部离线则退让任一源，
+// 一个源都没有则显示"未配置"
 // probingLocal：启动自动探测本机 relay 期间，副行短暂提示（仅未配置态可见），失败静默回收
 let probingLocal = false;
 function gpStatusCtx() {
-  return (activeServerId && ctxs.get(activeServerId)) || firstOnlineCtx() || [...ctxs.values()][0] || null;
+  return firstOnlineCtx() || [...ctxs.values()][0] || null;
 }
 function renderGpStatus() {
   const dot = $("gpStatusDot"), name = $("gpStatusName"), sub = $("gpStatusSub"), badge = $("gpStatusBadge");
@@ -4058,7 +4065,8 @@ function renderDetail() {
   const pi = s.pending_inputs ?? [];
   if (pi.length > 0) {
     pb.style.display = "flex";
-    pb.innerHTML = pi.map((p) => "<span>" + escapeHtml(p.text) + "</span>").join("");
+    pb.innerHTML = pi.map((p) => '<span title="点击展开/收起">' + escapeHtml(p.text) + "</span>").join("");
+    for (const sp of pb.children) sp.onclick = () => sp.classList.toggle("open");
   } else pb.style.display = "none";
 
   // #279B 历史会话续聊（对齐手机 resumable 口径）：relay_session_id 在即可发消息恢复（SDK resume）；
@@ -6306,8 +6314,9 @@ function drawQrTo(cv, text, size) {
   const g = cv.getContext("2d");
   const q = new QRCode(0, QRErrorCorrectLevel.M);
   q.addData(text); q.make();
-  // #18 暖米底+深蓝灰码点（对比度 >10:1），quiet zone 12px 居中
-  const n = q.getModuleCount(), m = 12;
+  // #18 暖米底+深蓝灰码点（对比度 >10:1），quiet zone 4px（12px 留白过大显丑，2026-09-14
+  // 收敛；M 级纠错下 4 模块留白仍充裕）
+  const n = q.getModuleCount(), m = 4;
   const cell = Math.floor((size - m * 2) / n), off = m + Math.floor((size - m * 2 - cell * n) / 2);
   g.fillStyle = "#F2ECE4"; g.fillRect(0, 0, size, size);
   g.fillStyle = "#27303C";
@@ -7018,6 +7027,35 @@ $("gpPeersExport").onclick = function () {
   a.download = "ccdeck-peers-" + new Date().toISOString().slice(0, 10) + ".json";
   a.click();
   setTimeout(function () { URL.revokeObjectURL(a.href); }, 1000);
+});
+// 导入配对备份（导出的逆操作）：解析 JSON → COMMAND_PEERS_IMPORT 合并入库（relay 侧
+// 已存在跳过）→ 刷新。兼容导出格式（{v,peers:[...]}）与磁盘格式（{dev: entry} map）
+$("gpPeersImport").onclick = function () { $("gpPeersImportFile").click(); };
+$("gpPeersImportFile").onchange = function () {
+  const f = this.files && this.files[0];
+  this.value = "";
+  if (!f) return;
+  const reader = new FileReader();
+  reader.onload = async function () {
+    let list = [];
+    try {
+      const data = JSON.parse(String(reader.result));
+      if (Array.isArray(data.peers)) list = data.peers;
+      else if (data && typeof data === "object" && !Array.isArray(data))
+        list = Object.entries(data).map(([dev, e]) => Object.assign({ dev: dev }, e));
+      else if (Array.isArray(data)) list = data;
+    } catch (e) { toast("备份文件解析失败"); return; }
+    list = list.filter(function (it) { return it && it.dev && it.pubkey; });
+    if (!list.length) { toast("备份中没有有效的设备条目"); return; }
+    if (!confirm("将导入 " + list.length + " 台设备（已存在的跳过），继续？")) return;
+    const ctx = firstOnlineCtx();
+    if (!ctx) { toast("无在线连接，无法导入"); return; }
+    const ack = await commandAck(ctx, "COMMAND_PEERS_IMPORT", { peers: list });
+    if (!ack || !ack.ok) { toast((ack && ack.error) || "导入失败"); return; }
+    toast("已导入 " + (ack.imported || 0) + " 台设备");
+    refreshPeers();
+  };
+  reader.readAsText(f);
   toast("设备清单已下载（含公钥，妥善保管）");
 };
 $("gpPeersRefresh").onclick = function () { refreshPeers(); };

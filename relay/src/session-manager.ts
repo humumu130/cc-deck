@@ -43,6 +43,19 @@ function isManagedMode(m: unknown): m is ManagedPermissionMode {
   return m === "default" || m === "acceptEdits" || m === "plan";
 }
 
+// 设备类型派生：meta 自报身份优先（CC Deck App / 移动 platform → phone，watch → watch），
+// 前缀派生兜底（ph-手机 wb-网页 wt-手表）——修正云桥配对手机被一律标"网页"的失真
+function peerKind(dev: string, meta?: PeerMeta): "phone" | "web" | "watch" | "other" {
+  const plat = (meta?.platform ?? "").toLowerCase();
+  const app = (meta?.app ?? "").toLowerCase();
+  if (app.includes("cc deck") || app.includes("ccdeck")) return "phone";
+  if (/wear|watch/.test(plat)) return "watch";
+  if (/android|ios/.test(plat)) return "phone";
+  if (dev.startsWith("ph-")) return "phone";
+  if (dev.startsWith("wt-")) return "watch";
+  return "web";
+}
+
 // 外部会话可携带的 CLI 权限模式全集：托管会话不许 bypass（门控语义），但用户自开
 // 终端会话可以是任意启动模式（bypass 常见）——恢复时需原样镜像，不复用 isManagedMode
 const EXTERNAL_PERM_MODES = new Set(["default", "acceptEdits", "plan", "bypassPermissions", "auto", "manual"]);
@@ -405,6 +418,7 @@ export class SessionManager {
     relayDev: string;
     peers: Map<string, { pubkey: string; name?: string; meta?: PeerMeta; paired_at: number; last_seen?: number }>;
     addPeer: (dev: string, entry: { pubkey: string; name?: string; meta?: PeerMeta; paired_at: number }) => void;
+    importPeers: (entries: { dev: string; pubkey: string; name?: string; meta?: PeerMeta; paired_at?: number }[]) => number;
   } | null = null;
 
   setCloud(c: {
@@ -412,6 +426,7 @@ export class SessionManager {
     relayDev: string;
     peers: Map<string, { pubkey: string; name?: string; meta?: PeerMeta; paired_at: number; last_seen?: number }>;
     addPeer: (dev: string, entry: { pubkey: string; name?: string; meta?: PeerMeta; paired_at: number }) => void;
+    importPeers: (entries: { dev: string; pubkey: string; name?: string; meta?: PeerMeta; paired_at?: number }[]) => number;
   }): void {
     this.cloud = c;
   }
@@ -1008,21 +1023,52 @@ export class SessionManager {
           return { command_id: cmd.command_id, ok: true, pair_code: this.pairIssuer(opts) };
         }
         case "COMMAND_PEERS": {
-          // 议题①可信设备清单：kind 按 dev 前缀派生（rl- 是 relay 自己，不在 peers）；
-          // 云桥未启用时 peers 恒空，返回空清单而非报错（网页端 UI 直接显示「暂无」。
-          // #42 e.meta 自报身份元数据随条目下发，存量设备无该字段 → 端上降级「未知设备」）
+          // 议题①可信设备清单：kind 优先采信 meta 自报身份（app/platform），前缀派生
+          // 降级为兜底——云桥配对的手机此前被一律按 wb- 前缀标成"网页"（前缀语义过时，
+          // 2026-09-14 用户实测设备列表标签失真）。云桥未启用时 peers 恒空，返回空清单
+          // 而非报错（网页端 UI 直接显示「暂无」。#42 e.meta 随条目下发）
           const peers = this.cloud
             ? [...this.cloud.peers.entries()].map(([dev, e]) => ({
                 dev,
                 name: e.name || dev.slice(0, 11),
                 pubkey: e.pubkey,
-                kind: dev.startsWith("ph-") ? ("phone" as const) : dev.startsWith("wb-") ? ("web" as const) : dev.startsWith("wt-") ? ("watch" as const) : ("other" as const),
+                kind: peerKind(dev, e.meta),
                 paired_at: e.paired_at,
                 last_seen: e.last_seen ?? 0,
                 ...(e.meta ? { meta: e.meta } : {}),
               }))
             : [];
           return { command_id: cmd.command_id, ok: true, peers };
+        }
+        case "COMMAND_PEERS_IMPORT": {
+          // 导入配对备份（导出的逆操作）：按 dev 合并入库（已存在跳过），返回导入数。
+          // 条目格式与 COMMAND_PEERS 下发一致（dev/pubkey 必填，name/meta/paired_at 可选）
+          if (!this.cloud) {
+            return { command_id: cmd.command_id, ok: false, error: "云桥未启用（PC 侧未设置 CCR_CLOUD_URL）" };
+          }
+          const raw = (cmd.payload as { peers?: unknown }).peers;
+          if (!Array.isArray(raw)) return { command_id: cmd.command_id, ok: false, error: "peers 必须是数组" };
+          const entries: { dev: string; pubkey: string; name?: string; meta?: PeerMeta; paired_at?: number }[] = [];
+          for (const item of raw.slice(0, 100)) {
+            const it = item as { dev?: unknown; pubkey?: unknown; name?: unknown; meta?: unknown; paired_at?: unknown };
+            const dev = typeof it.dev === "string" ? it.dev : "";
+            const pubkey = typeof it.pubkey === "string" ? it.pubkey : "";
+            if (!/^[a-z]{2}-[0-9a-f]{6,64}$/.test(dev) || !/^[A-Za-z0-9+/=]{40,200}$/.test(pubkey)) continue;
+            entries.push({
+              dev,
+              pubkey,
+              ...(typeof it.name === "string" && it.name.trim() ? { name: it.name.trim().slice(0, 32) } : {}),
+              ...(it.meta && typeof it.meta === "object" ? { meta: it.meta as import("./types.js").PeerMeta } : {}),
+              ...(typeof it.paired_at === "number" ? { paired_at: it.paired_at } : {}),
+            });
+          }
+          const imported = this.cloud.importPeers(entries);
+          for (const e of entries) {
+            if (this.cloud.peers.has(e.dev)) {
+              this.bus.emitTransient("PAIRED_DEVICE", { dev: e.dev, name: this.cloud.peers.get(e.dev)?.name ?? "", action: "add" });
+            }
+          }
+          return { command_id: cmd.command_id, ok: true, imported };
         }
         case "COMMAND_PEER_KICK": {
           // 议题①踢除：幂等（dev 不存在也回 ok）；先广播 kick 让在线设备刷新清单，

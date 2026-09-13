@@ -1128,7 +1128,7 @@ await wait(150);
 // ── 43 段：#325 扫码登录 COMMAND_LOGIN_GRANT——devId 一致性 / 格式上界 / name 截断 / 云桥未启用
 {
   const grants: Array<{ dev: string; pk: string; name: string }> = [];
-  mgr.setCloud({ keypair: { publicKey: "stub" }, relayDev: "rl-stub", peers: new Map(), addPeer: () => {} });
+  mgr.setCloud({ keypair: { publicKey: "stub" }, relayDev: "rl-stub", peers: new Map(), addPeer: () => {}, importPeers: () => 0 });
   mgr.setLoginGranter((dev, pk, name) => { grants.push({ dev, pk, name }); return true; });
   const call = (payload: unknown) =>
     mgr.handleCommand({ command_id: randomUUID(), type: "COMMAND_LOGIN_GRANT", ts: Date.now(), payload } as Command, "t43");

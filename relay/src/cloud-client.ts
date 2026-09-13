@@ -370,10 +370,16 @@ export class CloudClient {
     // 单播路径行为与从前完全一致。
     const pairReq = f.data as { t?: unknown } | undefined;
     if (f.from && pairReq && typeof pairReq === "object" && pairReq.t === "pair_req") {
-      const pr = f.data as unknown as { code?: unknown; pubkey?: unknown; name?: unknown; bc?: unknown; meta?: unknown };
+      const pr = f.data as unknown as { code?: unknown; pubkey?: unknown; name?: unknown; bc?: unknown; meta?: unknown; client_type?: unknown };
       const bc = pr.bc === true;
       const pubkey = typeof pr.pubkey === "string" ? pr.pubkey : "";
-      const dev = pubkey ? devId(pubkey, "wb") : "";
+      // 身份自报（2026-09-14）：客户端可带 client_type（phone|web|watch）声明终端类型，
+      // dev 前缀随之派生（ph-/wb-/wt-）——缺省 web 兼容旧客户端。f.from 校验天然防冒名
+      // （from 必须等于自报身份派生值，冒名者需持有对应私钥）。修正：云桥配对的手机
+      // 曾被一律登记为 wb-/网页（前缀语义过时），设备列表标签失真
+      const clientType = pr.client_type === "phone" ? "phone" : pr.client_type === "watch" ? "watch" : "web";
+      const prefix = clientType === "phone" ? "ph" : clientType === "watch" ? "wt" : "wb";
+      const dev = pubkey ? devId(pubkey, prefix) : "";
       if (!pubkey || dev !== f.from) {
         console.log(`[cloud] pair_req rejected dev=${f.from}`);
         return;
@@ -411,11 +417,11 @@ export class CloudClient {
         const meta = sanitizePeerMeta(pr.meta);
         this.identity.addPeer(dev, {
           pubkey,
-          name: typeof pr.name === "string" ? pr.name : "web",
+          name: typeof pr.name === "string" ? pr.name : clientType === "phone" ? "手机" : "web",
           paired_at: Date.now(),
           ...(meta ? { meta } : {}),
         });
-        console.log(`[cloud] paired web dev=${dev}${bc ? " via broadcast" : ""}`);
+        console.log(`[cloud] paired ${clientType} dev=${dev}${bc ? " via broadcast" : ""}`);
         // 议题①/§6.3 补偿告警：新设备获得全权的瞬间通知全部在线已配对设备——
         // 公共桥广播定位的 race 攻击即便得手，攻击设备立刻出现在持有者屏幕上
         this.bus.emitTransient("PAIRED_DEVICE", {

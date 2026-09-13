@@ -30,6 +30,8 @@ export interface CloudIdentity {
   addPeer(dev: string, entry: PeerEntry): void;
   removePeer(dev: string): void;
   touchPeer(dev: string): void;
+  // 配对导入（导出备份的逆操作）：按 dev 合并，已存在且公钥相同的跳过；返回实际导入数
+  importPeers(entries: { dev: string; pubkey: string; name?: string; meta?: PeerMeta; paired_at?: number }[]): number;
   // #42 设备改名（hello 顺带实名化用）：同名不写盘，改名即持久化
   renamePeer(dev: string, name: string): void;
 }
@@ -73,6 +75,7 @@ export function loadOrCreateIdentity(dataDir: string): CloudIdentity {
     for (const [k, v] of peers) obj[k] = v;
     writeFileSync(peersPath, JSON.stringify(obj, null, 2), "utf-8");
   };
+  let lastPeerFlush = 0;
 
   return {
     keypair,
@@ -89,11 +92,27 @@ export function loadOrCreateIdentity(dataDir: string): CloudIdentity {
       if (!peers.delete(dev)) return;
       persistPeers();
     },
-    // last_seen 内存态：hello/ping 每次都 touch，不写盘（高频操作落盘没有意义，
-    // 重启清零 = 「未知」，UI 显示离线即可）
+    // last_seen：hello/ping touch（内存即时），节流落盘（60s 一拍——高频操作写盘没有
+    // 意义，但完全不落盘会让 relay 重启后所有设备误灰 90s+，在线状态无从恢复）
     touchPeer(dev) {
       const e = peers.get(dev);
-      if (e) e.last_seen = Date.now();
+      if (!e) return;
+      e.last_seen = Date.now();
+      if (Date.now() - (lastPeerFlush ?? 0) > 60_000) {
+        lastPeerFlush = Date.now();
+        persistPeers();
+      }
+    },
+    importPeers(entries) {
+      let n = 0;
+      for (const { dev, ...entry } of entries) {
+        if (!entry.paired_at) entry.paired_at = Date.now();
+        if (!dev || !entry.pubkey || peers.has(dev)) continue;
+        peers.set(dev, { pubkey: entry.pubkey, name: entry.name, meta: entry.meta, paired_at: entry.paired_at ?? Date.now() });
+        n++;
+      }
+      if (n) persistPeers();
+      return n;
     },
     renamePeer(dev, name) {
       const e = peers.get(dev);

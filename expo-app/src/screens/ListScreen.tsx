@@ -859,6 +859,15 @@ export default function ListScreen({ sessions, connected, connText, onOpen, onNe
           accessibilityLabel={snap.aggregate ? `聚合模式，展示 ${snap.sources.length} 台电脑，点击切回单源` : "单源模式，点击开启聚合"}
           onPress={toggleAggregate}
         >
+          {/* 2026-09-14 图标化：单元=单台电脑，聚合=双机半叠放（用户提案，方案已定稿） */}
+          <View style={{ flexDirection: "row", alignItems: "center", gap: 5, marginRight: 1 }}>
+            <View style={{ width: 15, height: 11, borderRadius: 2.5, borderWidth: 1.6, borderColor: snap.aggregate ? c.brandA || c.text : c.dim, justifyContent: "flex-end", alignItems: "center", paddingBottom: 1.5 }}>
+              <View style={{ width: 7, height: 1.6, borderRadius: 1, backgroundColor: snap.aggregate ? c.brandA || c.text : c.dim }} />
+            </View>
+            {snap.aggregate && (
+              <View style={{ width: 12, height: 9, borderRadius: 2, borderWidth: 1.4, borderColor: c.dim, marginLeft: -10, marginTop: -6, opacity: 0.55 }} />
+            )}
+          </View>
           <Text style={[styles.aggT, snap.aggregate && styles.aggTOn]} numberOfLines={1}>
             {/* #80 去数量：右上角统计（x/n+电脑图标）已承载源数，聚合胶囊只报模式 */}
             {snap.aggregate ? "聚合" : "单源"}
@@ -948,20 +957,21 @@ export default function ListScreen({ sessions, connected, connText, onOpen, onNe
           <View style={styles.empty}>
             <Text style={styles.emptyIcon}>⚡</Text>
             <Text style={styles.emptyT}>{collapseIdle && idleCount > 0 ? "空闲会话已折叠" : "还没有会话"}</Text>
+            {/* 空态文案规范：一句状态 + 一句指引，各 ≤15 字 */}
             <Text style={styles.emptyS}>
               {collapseIdle && idleCount > 0
                 ? "点上方「展开空闲」查看"
                 : !connected
                   ? snap.connState === "unpaired"
-                    ? "配对已失效：点左上角图标打开设置\n在服务器列表中重新配对"
+                    ? "配对已失效\n点左上角图标重新配对"
                     : badgeOn
-                      ? `${onlineSrcs}/${snap.sources.length} 源在线，等待自动重连\n也可点左上角图标打开设置检查配置`
-                      : "未连接服务器，等待自动重连\n也可点左上角图标打开设置检查配置"
+                      ? `${onlineSrcs}/${snap.sources.length} 源在线 · 重连中`
+                      : "未连接 · 等待自动重连"
                   : badgeOn
                     ? onlineSrcs < snap.sources.length
-                      ? `已连接 ${onlineSrcs}/${snap.sources.length} 源\n可在设置中检查离线服务器`
-                      : `已聚合 ${snap.sources.length} 源\n点右下角 ＋ 启动新会话`
-                    : "点右下角 ＋ 启动新会话\n或在 PC 上打开 claude 接入外部会话"}
+                      ? `${snap.sources.length - onlineSrcs} 个源离线\n点右下角 ＋ 开始新会话`
+                      : "点右下角 ＋ 开始新会话"
+                    : "点右下角 ＋ 开始新会话"}
             </Text>
           </View>
         }

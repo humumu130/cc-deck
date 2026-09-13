@@ -1,6 +1,7 @@
 import { Fragment, useEffect, useImperativeHandle, useRef, useState, type Ref } from "react";
 import { Animated, Dimensions, Image, Modal, PanResponder, PermissionsAndroid, Pressable, RefreshControl, ScrollView, Share, StyleSheet, Text, TextInput, Vibration, View, type GestureResponderEvent, type NativeScrollEvent, type NativeSyntheticEvent, type NativeTouchEvent, type StyleProp, type TextStyle } from "react-native";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
+import Svg, { Path } from "react-native-svg";
 import * as ImagePicker from "expo-image-picker";
 import * as ImageManipulator from "expo-image-manipulator";
 import * as Clipboard from "expo-clipboard";
@@ -873,16 +874,24 @@ export default function DetailScreen({ sid, onBack, initialView, ref }: { sid: s
         numberOfLines={2}
       >
         {/* #39a subject 尾缀「subAgent」拆出渲染成小标签（委托任务标注约定），
-            主体文字不带引号串，视觉弱化为 chip 形态 */}
+            主体文字不带引号串，视觉弱化为 chip 形态。任务编号 #N 前缀显示（对齐
+            web 端 tp-num；权威任务存储的 id 由此可见，转录 #NNN 可点跳转的锚） */}
         {(() => {
           const body = t.status === "in_progress" && t.active_form ? t.active_form : t.content;
           const tag = "「subAgent」";
+          const num = t.id != null ? `#${t.id} ` : "";
           return body.endsWith(tag) ? (
             <>
+              {num}
               {body.slice(0, -tag.length).trimEnd()}
               <Text style={d.todoSubTag}>subAgent</Text>
             </>
-          ) : body;
+          ) : (
+            <>
+              {num}
+              {body}
+            </>
+          );
         })()}
       </Text>
       {t.status !== "completed" ? <Text style={d.todoDragT}>⠿</Text> : null}
@@ -1250,7 +1259,11 @@ export default function DetailScreen({ sid, onBack, initialView, ref }: { sid: s
           onPress={() => setRenaming(true)}
           hitSlop={8}
         >
-          <Text style={d.editT}>✎</Text>
+          {/* 直立铅笔 SVG（ui-review 方案 A）：替换 Unicode ✎——跨设备字形不一致且斜向
+              构图歪斜，矢量锚定直径与视觉重心 */}
+          <Svg width={15} height={15} viewBox="0 0 24 24" fill="none" stroke={c.dim} strokeWidth={2.1} strokeLinecap="round" strokeLinejoin="round">
+            <Path d="M17 3a2.8 2.8 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z" />
+          </Svg>
         </Pressable>
         <Pressable
           style={[d.foldBtn, d.opRipple]}
@@ -1274,6 +1287,10 @@ export default function DetailScreen({ sid, onBack, initialView, ref }: { sid: s
           accessibilityLabel={showThink ? "思考过程显示，已开" : "思考过程显示，已关"}
         >
           <Text style={[d.thinkBtnT, showThink && d.thinkBtnTOn]}>思考</Text>
+          {/* 迷你开关（ui-review 定稿）：开=品牌色滑块，关闭=中性灰——状态一眼可读 */}
+          <View style={[d.thinkMini, showThink && { backgroundColor: c.brandA }]}>
+            <View style={[d.thinkMiniKnob, showThink && { alignSelf: "flex-end" }]} />
+          </View>
         </Pressable>
       </View>
 
@@ -1376,7 +1393,7 @@ export default function DetailScreen({ sid, onBack, initialView, ref }: { sid: s
           {sortedTodos.length === 0 ? (
             // 空态垂直居中：父容器 viewCol(flex:1) 里头部之下剩余区域由文本撑满，
             // textAlignVertical 让文字在盒内垂直居中（paddingVertical 对称不偏移）
-            <Text style={[d.empty, { flex: 1, textAlignVertical: "center" }]}>暂无任务清单{"\n"}CLI 里使用 TodoWrite 工具后，这里会显示任务进度</Text>
+            <Text style={[d.empty, { flex: 1, textAlignVertical: "center" }]}>暂无任务清单{"\n"}在 CLI 里建任务后自动出现</Text>
           ) : (
           <View style={d.todoScrollWrap}>
             <ScrollView
@@ -1480,7 +1497,7 @@ export default function DetailScreen({ sid, onBack, initialView, ref }: { sid: s
           {/* 空态垂直居中：内容容器 flexGrow 撑满可视面板 + justifyContent 居中提示组；
               底部 40+insets 的滚动余量在空态无意义，收成与顶部对称（14+insets）防中心偏上 */}
           {(s.cron_tasks?.length ?? 0) === 0 ? (
-            <Text style={d.empty}>暂无定时任务{"\n"}CLI 里创建 durable 定时任务后，这里 30s 内显示</Text>
+            <Text style={d.empty}>暂无定时任务{"\n"}在 CLI 创建后自动出现</Text>
           ) : (
             s.cron_tasks!.map((t, i) => {
               const open = !!cronOpen[t.id];
@@ -1889,11 +1906,14 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
   thinkBtn: {
     height: 30, borderRadius: 9, paddingHorizontal: 8,
     backgroundColor: c.tintSoft, borderWidth: 1, borderColor: c.line,
-    alignItems: "center", justifyContent: "center",
+    alignItems: "center", justifyContent: "center", flexDirection: "row", gap: 6,
   },
   thinkBtnOn: { backgroundColor: c.tintStrong, borderColor: withA(c.brandA, 0.4) },
   thinkBtnT: { fontSize: 11, color: c.dim },
   thinkBtnTOn: { color: c.brandA, fontWeight: "600" },
+  // 思考迷你开关（ui-review 定稿）：开=品牌色滑块
+  thinkMini: { width: 22, height: 13, borderRadius: 13, backgroundColor: c.line, justifyContent: "center", paddingHorizontal: 1.5 },
+  thinkMiniKnob: { width: 10, height: 10, borderRadius: 5, backgroundColor: "#fff" },
   // 固定工具区：跟随头部、不随转录滚动，底部一条分隔线与头部呼应
   fixedBar: { paddingHorizontal: 14, paddingTop: 10, borderBottomWidth: 1, borderBottomColor: c.line },
   strip: {

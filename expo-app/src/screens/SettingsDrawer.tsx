@@ -600,21 +600,8 @@ export default function SettingsDrawer({
           {/* #37 同行化：缩小版拨杆（118×24）与标题同行（原两行占位） */}
           <Lever options={FONT_OPTS} value={processFont} onChange={setProcessFont} />
         </View>
-        {/* 多源聚合（#294 批4）：持久化（display-settings）+ 连接行为（store.setAggregate：
-            开 = 连全部已配置源；关 = 拆非活动源、保留缓存再开无感恢复） */}
-        <View style={[d.setItem, d.setRow]}>
-          <Text style={d.setLabel}><Text style={d.rowIconT}>⧉ </Text>聚合显示</Text>
-          <Switch
-            style={d.sw}
-            value={aggregate}
-            onValueChange={(v) => {
-              persistAggregate(v);
-              store.setAggregate(v);
-            }}
-            trackColor={{ false: "rgba(128,134,140,0.55)", true: c.brandA }}
-            thumbColor="#fff"
-          />
-        </View>
+        {/* 多源聚合（#294 批4）开关已移除（2026-09-14）：与会话列表上方「单源/聚合」
+            胶囊重复，收敛为单一入口（列表就近操作）；行为不变（store.setAggregate） */}
         </>
         ) : null}
         {/* #313 关于区（对齐设置原型）：版本（呼出弹窗看本版特性/检查更新/反馈）、检查更新

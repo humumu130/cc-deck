@@ -929,9 +929,16 @@ export class Bridge {
     const list = state?.pending_inputs ?? [];
     if (!list.length) return false;
     const key = normKey(prompt);
-    const i = list.findIndex((p) => normKey(p.text) === key);
+    // 同文本全部晋升：桌面端发消息会双入队（注入回显 + PC 敲字 transcript enqueue 各一条，
+    // 同文本同 ts 邻近）——只清第一条会留幽灵 pending 永久闪烁（2026-09-14 用户实测）
+    const matched = list.filter((p) => normKey(p.text) === key);
+    const i = matched.length ? list.indexOf(matched[0]) : -1;
     if (i !== -1) {
       const promoted = list.splice(i, 1)[0];
+      for (const dup of matched.slice(1)) {
+        const di = list.findIndex((p) => p === dup);
+        if (di !== -1) list.splice(di, 1);
+      }
       this.mgr.setExternalPending(sessionId, list);
       this.dropEnqueuedKey(sessionId, promoted.text);
       this.noteUserMsg(sessionId, promoted.text, "promote");

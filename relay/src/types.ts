@@ -357,6 +357,7 @@ export type CommandType =
   | "COMMAND_WATCH_GRANT"
   | "COMMAND_PEERS"
   | "COMMAND_PEER_KICK"
+  | "COMMAND_PEERS_IMPORT"
   | "COMMAND_CLOUD_INFO"
   | "COMMAND_PERM"
   | "COMMAND_MODEL"
@@ -481,6 +482,12 @@ export interface PeerKickCommand extends CommandBase {
   payload: { dev: string };
 }
 
+// 导入配对备份（导出的逆操作）：条目与 COMMAND_PEERS 下发一致，按 dev 合并（已存在跳过）
+export interface PeersImportCommand extends CommandBase {
+  type: "COMMAND_PEERS_IMPORT";
+  payload: { peers: { dev: string; pubkey: string; name?: string; meta?: PeerMeta; paired_at?: number }[] };
+}
+
 export type Command =
   | CreateCommand
   | MessageCommand
@@ -499,6 +506,7 @@ export type Command =
   | WatchGrantCommand
   | PeersCommand
   | PeerKickCommand
+  | PeersImportCommand
   | CloudInfoCommand
   | PermCommand
   | RefreshTodosCommand
@@ -613,6 +621,7 @@ export interface CommandAckPayload {
   cloud?: CloudPairInfo; // 仅 COMMAND_PAIR_START 成功时携带
   pair_code?: { code: string; expires_in: number }; // 仅 COMMAND_PAIR_CODE 成功时携带
   peers?: PairedDeviceInfo[]; // 仅 COMMAND_PEERS 成功时携带（议题①）
+  imported?: number; // 仅 COMMAND_PEERS_IMPORT 成功时携带：实际导入条数
   // #25b 仅 COMMAND_CLOUD_INFO：本机 relay 云桥身份（cloud:false = 未配云桥）
   cloudInfo?: { cloud: boolean; bridge?: string; bt?: string; rd?: string; rk?: string };
 }
