@@ -803,15 +803,13 @@ function Shell() {
   useEffect(() => {
     const sub = AppState.addEventListener("change", (st) => {
       appState.current = st;
-      if (st !== "active") return;
-      // 半开连接即时体检（#258）：后台期间 socket 可能已死而 connected 仍真，
-      // 先探测判死再走既有重连/恢复链；已断线则直接重连
-      store.resumeProbe();
-      store.resetBackoff(); // #90 后台累积的长退避（≤300s）回前台即失效
-      if (hasCfg && !snap.connected) store.connect();
+      // #114 回前台连接分诊已收口到 store 构造器的 onForeground（按 conn 实时
+      // 状态逐源体检/清退避/立即重试）：此处旧的 resumeProbe+resetBackoff+
+      // connect 会双重派发（白耗一轮 LAN 探测/桥拆建），且 snap.connected 是
+      // 陈旧闭包（后台期掉线、快照仍 online → connect 被跳过）——只记状态
     });
     return () => sub.remove();
-  }, [hasCfg, snap.connected]);
+  }, []);
 
   if (!ready) {
     return (

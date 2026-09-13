@@ -1,5 +1,5 @@
 import { useSyncExternalStore } from "react";
-import { Platform } from "react-native";
+import { AppState, Platform } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import Constants from "expo-constants";
 import { getRandomBytes } from "expo-crypto";
@@ -84,6 +84,9 @@ export interface SourceConn {
   hbTimer: ReturnType<typeof setInterval> | null;
   probeTimer: ReturnType<typeof setTimeout> | null;
   lastDownAt: number;
+  // #114 最近一次进入 connecting 的时刻：回前台判「挂死的 TCP connect」（后台期
+  // 发起、系统冻结后永悬 CONNECTING）——超 20s 掐掉重发
+  connectStartedAt: number;
   epoch: number;
   pendingCmds: Map<string, PendingCmd>;
   // #34 待唤醒（云通道专属）：桥通但 relay 离线（ROUTE_MISS）——不断桥 ws、停重连
@@ -261,6 +264,44 @@ class RelayStore {
   // 经 PAIRED_DEVICE 瞬态帧广播，App 弹本地通知——公共桥广播定位的 race 攻击即便
   // 得手，攻击设备立刻出现在持有者手机上。kick 动作不回调（无需打扰）
   onPairedDevice: ((p: { dev: string; name: string }) => void) | null = null;
+
+  constructor() {
+    // #114 后台恢复秒连：store 级 AppState→onForeground。App.tsx 既有监听（#90）有
+    // 三个盲区：①聚合模式 connect() 被「任一源在线=connected」挡住，卡死源的长退避
+    // 无人清；②resetBackoff 只改字段，已排定的长退避 timer 不取消照跑；③监听闭包
+    // 的 snap 可能陈旧（后台期连接已死、快照仍 online）→ connect 被跳过。此处按
+    // conn 实时状态分诊，不依赖渲染快照
+    AppState.addEventListener("change", (st) => {
+      if (st === "active") this.onForeground();
+    });
+  }
+
+  // 回前台体检（#114）：清全部退避 + 按态分诊——假在线（>30s 无下行）立即断开、
+  // 等待中的长退避立即重试、挂死的 connect（>20s）掐掉重发、离线态直接发起
+  private onForeground() {
+    this.resetBackoff();
+    for (const conn of this.conns.values()) {
+      if (!this.aggregate && conn.id !== this.activeId) continue;
+      if (conn.state === "online") {
+        this.connResumeProbe(conn); // 假在线复核：>30s 无下行断开走重连，否则 PING 2.5s 确认
+        continue;
+      }
+      if (conn.state === "reconnecting") {
+        this.connConnect(conn); // 清长退避 timer，网络已随前台恢复，立即重试
+        continue;
+      }
+      if (conn.state === "connecting" && conn.connectStartedAt && Date.now() - conn.connectStartedAt > 20_000) {
+        killWs(conn.ws); // 后台期发起的 TCP connect 冻结永悬——掐掉，epoch 递增弃旧周期
+        conn.ws = null;
+        this.connConnect(conn);
+        continue;
+      }
+      // awaitWake（桥活 relay 离线等广播）不动：桥 ws 由 55s 心跳判死兜底，回前台
+      // 重连只是白拆健康桥连接再原路回待唤醒（#34）
+      if ((conn.state === "offline" || conn.state === "idle") && conn.cfg && !conn.awaitWake) this.connConnect(conn);
+    }
+    this.probeIdleLanIdentity();
+  }
 
   subscribe = (fn: () => void) => {
     this.listeners.add(fn);
@@ -668,6 +709,7 @@ class RelayStore {
         hbTimer: null,
         probeTimer: null,
         lastDownAt: 0,
+        connectStartedAt: 0,
         epoch: 0,
         pendingCmds: new Map(),
       };
@@ -835,6 +877,7 @@ class RelayStore {
     }
     this.clearCountdown(conn);
     const ep = ++conn.epoch;
+    conn.connectStartedAt = Date.now();
     conn.state = "connecting";
     conn.stateText = null;
     this.emit();
