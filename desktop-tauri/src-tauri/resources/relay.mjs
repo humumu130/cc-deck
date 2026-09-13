@@ -42782,7 +42782,7 @@ function buildCaptureScript(pid) {
     "		repeat with t in tabs of w",
     "			try",
     "				if tty of t ends with targetTty then",
-    "					return contents of t",
+    "					return contents of (contents of t)",
     "				end if",
     "			end try",
     "		end repeat",
