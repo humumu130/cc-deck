@@ -1381,6 +1381,10 @@
   .msg-ai .ai-name { font-weight: 650; font-size: 13.5px; }
   .msg-ai .ai-body { padding-left: 37px; min-width: 0; }
   .msg-ai .mt { color: var(--faint); font-size: 10.5px; font-variant-numeric: tabular-nums; }
+  /* 命令行复制按钮：hover 行尾显现 */
+  .copy-btn { opacity: 0; cursor: pointer; color: var(--brand); font-size: 11px; padding: 2px 6px; border-radius: 6px; border: 1px solid var(--line); background: var(--panel); flex: none; transition: opacity .12s; }
+  .trow:hover .copy-btn, .copy-btn:hover { opacity: 1; }
+  .copy-btn:active { transform: scale(.94); }
   .msg-sys { text-align: center; color: var(--faint); font-size: .8em; margin: 10px 0; }
   /* #44 注入回显（已注入终端…）：恒一行省略号——长内容不换行挤占面板 */
   .msg-sys.one-line { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -4516,6 +4520,7 @@ function entryHtml(e, prevDay) {
     const t = e.tool || "";
     const tico = /^(Edit|Write|MultiEdit|NotebookEdit)$/.test(t) ? "✎" : t === "Bash" ? "❯_" : /^(Read|Glob|Grep|WebFetch|WebSearch)$/.test(t) ? "▤" : "⚙";
     html += '<div class="trow"><div class="tline"><span class="tico">' + tico + '</span><span class="tname">' + escapeHtml(t || "tool") + "</span><span>" + taskRefHtml(e.text) + "</span>" +
+      (t === "Bash" || t === "Write" ? '<span class="copy-btn" data-copy="' + escapeHtml(e.text || "").replace(/"/g, "&quot;") + '" title="复制命令">⧉</span>' : "") +
       (e.detail
         ? (open
           ? '<span class="x-full" data-x="' + k + '">收起 ▴</span>'
@@ -4647,6 +4652,7 @@ function select(sid, srcId) {
   if (selected) inputDrafts.set(selected.sid + "@" + selected.src, $("msginput").value);
   selected = { src: srcId, sid };
   $("msginput").value = inputDrafts.get(sid + "@" + srcId) ?? "";
+  undoReset($("msginput").value);
   document.body.classList.add("detail-open"); // ≤720px：详情覆盖层切换（桌面态该 class 无样式作用）
   activeTab = "activity";
   document.querySelectorAll(".tabs button.tab").forEach((b) => b.classList.toggle("active", b.dataset.tab === "activity"));
@@ -5667,16 +5673,54 @@ $("slashbox").addEventListener("mousedown", (e) => {
   if (!row) return;
   e.preventDefault(); // 不让输入框失焦
   $("msginput").value = "/" + row.dataset.n + " ";
+  undoReset($("msginput").value);
   syncSendState();
   updateSlashBox();
   $("msginput").focus();
+});
+// 命令复制按钮（事件委托，时间线重渲染免疫）
+document.addEventListener("click", (ev) => {
+  const btn = ev.target.closest && ev.target.closest(".copy-btn");
+  if (!btn) return;
+  ev.stopPropagation();
+  const txt = btn.dataset.copy || "";
+  (navigator.clipboard ? navigator.clipboard.writeText(txt) : Promise.reject()).then(
+    () => toast("已复制命令"),
+    () => { const ta = document.createElement("textarea"); ta.value = txt; document.body.appendChild(ta); ta.select(); document.execCommand("copy"); ta.remove(); toast("已复制命令"); },
+  );
 });
 $("msginput").addEventListener("input", () => {
   updateSlashBox();
   const v = $("msginput").value;
   if (v.startsWith("/") && !/\s/.test(v)) void slashFetch();
 });
+// 输入框撤销/重做栈（微信式分段：间隔>1s 或增删>8 字符为一段）
+const undoStack = [], redoStack = [];
+let undoLast = "", undoLastAt = 0;
+function undoReset(v) { undoStack.length = 0; redoStack.length = 0; undoLast = v; undoLastAt = Date.now(); }
+$("msginput").addEventListener("input", () => {
+  const v = $("msginput").value;
+  if (v === undoLast) return;
+  if (Date.now() - undoLastAt > 1000 || Math.abs(v.length - undoLast.length) > 8) {
+    undoStack.push(undoLast);
+    if (undoStack.length > 200) undoStack.shift();
+    redoStack.length = 0;
+    undoLastAt = Date.now();
+  }
+  undoLast = v;
+});
+function undoApply(v) { $("msginput").value = v; undoLast = v; undoLastAt = Date.now(); syncSendState(); updateSlashBox(); }
 $("msginput").addEventListener("keydown", (e) => {
+  if ((e.ctrlKey || e.metaKey) && !e.altKey && (e.key === "z" || e.key === "Z") && !e.shiftKey) {
+    e.preventDefault();
+    if (undoStack.length) { redoStack.push($("msginput").value); undoApply(undoStack.pop()); }
+    return;
+  }
+  if ((e.ctrlKey || e.metaKey) && !e.altKey && ((e.key === "z" || e.key === "Z") && e.shiftKey || e.key === "y" || e.key === "Y")) {
+    e.preventDefault();
+    if (redoStack.length) { undoStack.push($("msginput").value); undoApply(redoStack.pop()); }
+    return;
+  }
   if (e.key === "Tab" && $("slashbox").style.display === "block") {
     const ms = slashMatches($("msginput").value.slice(1));
     if (ms.length) {
