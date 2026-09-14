@@ -1221,40 +1221,19 @@ export default function DetailScreen({ sid, onBack, initialView, ref }: { sid: s
   return (
     <SafeAreaView style={d.safe} edges={["top"]}>
       <View style={{ flex: 1 }}>
-      {/* 头部：标题 + 状态副行 + 编辑/折叠/思考（三按钮同高 30；思考选中态=品牌色，同 chip 语言） */}
+      {/* 头部：R1=标题+计时+✎；R2=源名+ctx 左聚，思考开关右锚。✎/思考统一 26 高/圆角 8/tintSoft 底 */}
       <View style={d.head}>
         <Pressable style={[d.back, d.opRipple]} android_ripple={{ color: c.tintSoft, borderless: false }} onPress={onBack} hitSlop={8}>
           <Text style={d.backText}>‹</Text>
         </Pressable>
         <View style={{ flex: 1, minWidth: 0, marginHorizontal: 2 }}>
-          {/* 两行化重设计（2026-09-14 定稿）：R1=标题+计时；R2=副信息+ctx+模型 chip。
-              显式子行布局，避免 auto-margin 在收缩场景的排版怪癖 */}
+          {/* 两行化重设计（2026-09-14 精修）：R1 标题行高锁定 20 稳重心；R2 左聚信息簇 + 开关 marginLeft:auto 右锚 */}
           <View style={{ flexDirection: "row", alignItems: "center" }}>
             <Text style={[d.title, { flexShrink: 1 }]} numberOfLines={1} ellipsizeMode="tail">{s.title || "未命名会话"}</Text>
-            <Text style={[d.sub, { marginLeft: 8, flexShrink: 0 }]} numberOfLines={1}>{fmtElapsed(sessionElapsed(s))}</Text>
-            <Pressable style={[d.editBtn, d.opRipple]} android_ripple={{ color: c.tintSoft, borderless: false }} onPress={() => setRenaming(true)} hitSlop={8}>
-              <Svg width={13} height={13} viewBox="0 0 24 24" fill="none" stroke={c.dim} strokeWidth={2.1} strokeLinecap="round" strokeLinejoin="round">
-                <Path d="M17 3a2.8 2.8 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z" />
-              </Svg>
-            </Pressable>
-          </View>
-          <View style={{ flexDirection: "row", alignItems: "center", marginTop: 3 }}>
-            <Text style={[d.sub, { flexShrink: 1 }]} numberOfLines={1}>
-              {[external ? "" : "托管", s.historical && !external ? "历史" : "", srcName].filter(Boolean).join(" · ") || " "}
-            </Text>
-            {ctxUsed > 0 ? (
-              <View style={{ flexDirection: "row", alignItems: "center", gap: 5, marginLeft: 8 }}>
-                <Text style={d.ctxLabel}>ctx</Text>
-                <View style={[d.ctxBar, { flex: 0, width: 30 }]}>
-                  <View style={{ width: `${ctxPct}%`, height: 3, borderRadius: 1.5, backgroundColor: c[contextLevel(ctxUsed, ctxLimit)] }} />
-                </View>
-                <Text style={[d.ctxPct, { color: c[contextLevel(ctxUsed, ctxLimit)] }]}>{ctxPct}%</Text>
-              </View>
-            ) : null}
-            
+            <Text style={[d.sub, { marginLeft: 8, flexShrink: 0, fontSize: 10.5, fontVariant: ["tabular-nums"] }]} numberOfLines={1}>{fmtElapsed(sessionElapsed(s))}</Text>
             <Pressable
               style={[d.thinkToggle, showThink && d.thinkToggleOn]}
-              android_ripple={{ color: c.tintSoft, borderless: false, radius: 9 }}
+              android_ripple={{ color: c.tintSoft, borderless: false, radius: 8 }}
               onPress={() => { thinkShown = !thinkShown; setShowThink(thinkShown); }}
               hitSlop={6}
               accessibilityLabel={showThink ? "思考过程显示，已开" : "思考过程显示，已关"}
@@ -1264,12 +1243,31 @@ export default function DetailScreen({ sid, onBack, initialView, ref }: { sid: s
                 <View style={[d.thinkSwitchKnob, showThink && { alignSelf: "flex-end" }]} />
               </View>
             </Pressable>
+            <Pressable style={[d.editBtn, d.opRipple]} android_ripple={{ color: c.tintSoft, borderless: false }} onPress={() => setRenaming(true)} hitSlop={8}>
+              <Svg width={13} height={13} viewBox="0 0 24 24" fill="none" stroke={c.dim} strokeWidth={2.1} strokeLinecap="round" strokeLinejoin="round">
+                <Path d="M17 3a2.8 2.8 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z" />
+              </Svg>
+            </Pressable>
+          </View>
+          <View style={{ flexDirection: "row", alignItems: "center", marginTop: 2 }}>
+            <Text style={[d.sub, { flexShrink: 1 }]} numberOfLines={1}>
+              {[external ? "" : "托管", s.historical && !external ? "历史" : "", srcName].filter(Boolean).join(" · ") || " "}
+            </Text>
+            {ctxUsed > 0 ? (
+              <View style={{ flexDirection: "row", alignItems: "center", gap: 4, marginLeft: 8, flexShrink: 0 }}>
+                <Text style={d.ctxLabel}>ctx</Text>
+                <View style={[d.ctxBar, { flex: 0, width: 34 }]}>
+                  <View style={{ width: `${ctxPct}%`, height: 3, borderRadius: 1.5, backgroundColor: c[contextLevel(ctxUsed, ctxLimit)] }} />
+                </View>
+                <Text style={[d.ctxPct, { color: c[contextLevel(ctxUsed, ctxLimit)] }]}>{ctxPct}%</Text>
+              </View>
+            ) : null}
           </View>
         </View>
       </View>
 
       {/* 固定工具区：状态条 + 过滤 chips。不放进 ScrollView——RN Android 吸顶头有触点丢失问题，
-          且运行中自动滚底的跳变会打断按压；固定区根本不经过滚动手势系统。头部 ▴/▾ 可整体折叠 */}
+          且运行中自动滚底的跳变会打断按压；固定区根本不经过滚动手势系统 */}
       {!collapsed ? (
       <View style={d.fixedBar}>
         {showStrip ? (
@@ -1857,18 +1855,16 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
   jumpFabT: { color: c.dim, fontSize: 16, fontWeight: "700", lineHeight: 18, marginTop: -1 },
   head: {
     flexDirection: "row", alignItems: "center", gap: 6,
-    paddingHorizontal: 12, paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: c.line,
+    paddingHorizontal: 12, paddingVertical: 6, borderBottomWidth: 1, borderBottomColor: c.line,
   },
-  back: { width: 32, height: 32, borderRadius: 10, backgroundColor: c.tintSoft, alignItems: "center", justifyContent: "center" },
-  backText: { color: c.dim, fontSize: 18, marginTop: -1 },
+  // 返回钮（轻量 chevron 版）：去圆底色块，仅留 ‹ 字符；minWidth 保住触达区，圆角仅用于按压 ripple 裁剪
+  back: { minWidth: 26, borderRadius: 8, alignItems: "center", justifyContent: "center" },
+  backText: { color: c.dim, fontSize: 22, lineHeight: 24, marginTop: -2 },
   hintText: { color: c.faint },
-  title: { color: c.text, fontSize: 15, fontWeight: "600" },
-  // 副信息行（头部）：小字占满 + 行内最右模型 chip，垂直居中。
-  // 字号与下行 ctx 水位行（ctxLabel/ctxPct 均 10）拉平，同为次级信息统一档
-  subRow: { flexDirection: "row", alignItems: "center", gap: 6, marginTop: 1 },
-  sub: { flex: 1, color: c.dim, fontSize: 9.5 },
-  // 上下文占用条（头部副行下）：标签 + 3px 细条 + 百分比，颜色按占用分级
-  ctxRow: { flexDirection: "row", alignItems: "center", gap: 6, marginTop: 3 },
+  title: { color: c.text, fontSize: 15, fontWeight: "600", lineHeight: 20 },
+  // 副信息行（头部）：小字 + 行内 ctx 水位，同为次级信息统一档；flex 由调用处按布局给
+  sub: { color: c.dim, fontSize: 9.5, lineHeight: 13 },
+  // 上下文占用条（头部副行内）：标签 + 3px 细条 + 百分比，颜色按占用分级
   ctxLabel: { color: c.faint, fontSize: 9.5, fontWeight: "600" },
   ctxBar: { flex: 1, height: 3, borderRadius: 1.5, backgroundColor: c.tintSoft, overflow: "hidden" },
   ctxPct: { fontSize: 9.5, fontVariant: ["tabular-nums"], minWidth: 22, textAlign: "right" },
@@ -1879,24 +1875,17 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
   statRow: { flexDirection: "row", justifyContent: "space-between", gap: 14, paddingVertical: 8, borderTopWidth: 1, borderTopColor: withA(c.dim, 0.12) },
   statRowK: { color: c.dim, fontSize: 13 },
   statRowV: { color: c.text, fontSize: 13, fontVariant: ["tabular-nums"], textAlign: "right", flex: 1 },
-  // 头部三钮统一规格（2026-09-14 用户反馈风格大小不一）：同高 28 / 圆角 9 /
-  // tintSoft 底 + line 边框；选中/激活态 = 品牌描边 + 品牌色内容
+  // 头部按钮统一规格（2026-09-14 精修）：同高 26 / 圆角 8 / tintSoft 底无描边；
+  // 选中/激活态 = 品牌描边 + tintStrong 底（关态留透明描边占位防高度跳动）
   editBtn: {
-    width: 26, height: 26, borderRadius: 9, backgroundColor: c.tintSoft,
+    width: 26, height: 26, borderRadius: 8, marginLeft: 6, backgroundColor: c.tintSoft,
     alignItems: "center", justifyContent: "center",
   },
   editT: { color: c.dim, fontSize: 13, marginTop: -1 },
-  // 折叠开关：用选中态视觉（品牌色）——它切换的是整个工具区，比 ✎ 更该被看见
-  foldBtn: {
-    height: 26, borderRadius: 9, paddingHorizontal: 9, backgroundColor: c.tintSoft,
-    alignItems: "center", justifyContent: "center",
-  },
-  foldBtnOn: { backgroundColor: c.tintStrong },
-  foldT: { color: c.brandA, fontSize: 11, marginTop: -1 },
   // 思考：chip 内文字 + 迷你滑块合一（用户要求字进开关里），开/关换文字
   thinkToggle: {
-    height: 28, borderRadius: 9, paddingHorizontal: 8, backgroundColor: c.tintSoft,
-    borderWidth: 1, borderColor: c.line, alignItems: "center", justifyContent: "center",
+    height: 26, borderRadius: 8, paddingHorizontal: 8, backgroundColor: c.tintSoft,
+    borderWidth: 1, borderColor: "transparent", alignItems: "center", justifyContent: "center",
     flexDirection: "row", gap: 6,
   },
   thinkToggleOn: { borderColor: withA(c.brandA, 0.4), backgroundColor: c.tintStrong },
@@ -1918,12 +1907,12 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
   // 思考迷你开关（ui-review 定稿）：开=品牌色滑块
   thinkMini: { width: 22, height: 13, borderRadius: 13, backgroundColor: c.line, justifyContent: "center", paddingHorizontal: 1.5 },
   thinkMiniKnob: { width: 10, height: 10, borderRadius: 5, backgroundColor: "#fff" },
-  // 固定工具区：跟随头部、不随转录滚动，底部一条分隔线与头部呼应
-  fixedBar: { paddingHorizontal: 14, paddingTop: 10, borderBottomWidth: 1, borderBottomColor: c.line },
+  // 固定工具区：跟随头部、不随转录滚动，底部一条分隔线与头部呼应（paddingTop 收紧防 tab 行上下空白过大）
+  fixedBar: { paddingHorizontal: 14, paddingTop: 6, borderBottomWidth: 1, borderBottomColor: c.line },
   strip: {
     flexDirection: "row", alignItems: "center", gap: 8,
     backgroundColor: c.panel, borderWidth: 1, borderColor: c.line,
-    borderRadius: 12, paddingHorizontal: 11, paddingVertical: 8, marginBottom: 8,
+    borderRadius: 12, paddingHorizontal: 11, paddingVertical: 8, marginBottom: 6,
   },
   stripErr: { flex: 1, color: c.error, fontSize: 12.5, fontWeight: "600" },
   stripBtnWarn: {
@@ -1948,9 +1937,9 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
   },
   pendT: { color: c.dim, fontSize: 12.5, lineHeight: 17 },
   // 视图 tab 行：下划线式（与网页端 tabs 同风格）；tabWrap 自测宽供指示条几何（chip 已挪头部）
-  filterRow: { flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 10 },
+  filterRow: { flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 6 },
   tabWrap: { flex: 1, position: "relative", flexDirection: "row", gap: TAB_GAP, paddingLeft: TAB_PAD_L },
-  tabBtn: { flex: 1, alignItems: "center", paddingVertical: 4, borderBottomWidth: 2, borderBottomColor: "transparent" },
+  tabBtn: { flex: 1, alignItems: "center", paddingVertical: 2.5, borderBottomWidth: 2, borderBottomColor: "transparent" },
   tabInd: { position: "absolute", left: TAB_PAD_L, bottom: 0, height: 2.5, borderRadius: 1.5, backgroundColor: c.brandA },
   tabT: { fontSize: 12, color: c.dim },
   tabTOn: { color: c.text, fontWeight: "600" },
@@ -1967,7 +1956,7 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
   },
   filterChipOn: { backgroundColor: c.tintStrong, borderColor: withA(c.brandA, 0.4) },
   // tab 第二行：权限开关（思考开关已移头部）
-  subFilterRow: { flexDirection: "row", gap: 7, marginBottom: 10 },
+  subFilterRow: { flexDirection: "row", gap: 7, marginBottom: 8 },
   // 任务/定时/统计视图容器
   viewCol: { flex: 1 },
   filterT: { fontSize: 11, color: c.dim },
@@ -2176,10 +2165,9 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
   // 模型切换 chip：输入框内部居左（迁自 header 水位行右端，2026-09-14）
   modelInline: {
     position: "absolute", left: 9, bottom: 9, zIndex: 2, maxWidth: 92,
-    backgroundColor: c.tintSoft, borderRadius: 8, paddingHorizontal: 7, paddingVertical: 3.5,
-    borderWidth: 1, borderColor: withA(c.brandA, 0.35),
+    backgroundColor: c.tintSoft, borderRadius: 7, paddingHorizontal: 6, paddingVertical: 3,
   },
-  modelInlineT: { fontSize: 11, color: c.brandA, fontWeight: "600" },
+  modelInlineT: { fontSize: 10, color: c.brandA, fontWeight: "600" },
   // 发送按钮对齐网页版 #sendBtn：品牌色实底方块 + 白色 ➤
   sendBtn: {
     width: 44, height: 44, borderRadius: 13, backgroundColor: c.brandA,

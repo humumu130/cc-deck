@@ -7,7 +7,7 @@ import Constants from "expo-constants";
 import * as Clipboard from "expo-clipboard";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useTheme, useThemeStyles } from "../theme-context";
-import { LogoMark } from "../brand";
+import { LogoMark, PencilIcon } from "../brand";
 import { setProcessFont, useProcessFont, setVoiceInput, useVoiceInput, setAggregate as persistAggregate, useAggregate, type ProcessFont } from "../display-settings";
 import { checkUpdate, announceUpdate, VERSION_NOTES } from "../updates";
 import { store, useRelay, type ServerEntry, type SourceStatus, isLanUrl } from "../store";
@@ -532,7 +532,7 @@ export default function SettingsDrawer({
                   </Pressable>
                 ) : (
                   <Pressable style={d.srvEdit} android_ripple={{ color: c.tintSoft, borderless: false, radius: 13 }} onPress={() => edit(e)}>
-                    <Text style={d.srvEditT}>✎</Text>
+                    <View style={{ marginTop: 1 }}><PencilIcon size={13} color={c.dim} /></View>
                   </Pressable>
                 )}
               </View>

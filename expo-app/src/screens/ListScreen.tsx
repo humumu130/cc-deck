@@ -4,7 +4,7 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { statusColor, withA, type ThemeColors } from "../theme";
 import { useTheme, useThemeStyles } from "../theme-context";
-import { LogoMark } from "../brand";
+import { LogoMark, PencilIcon } from "../brand";
 import { sessionElapsed, fmtElapsed, fmtTok, contextPct, contextLevel, CONTEXT_LIMIT_FALLBACK, displaySrcName } from "../fmt";
 import { setListDensity, useListDensity, setAggregate as persistAggregate, type ListDensity } from "../display-settings";
 import { store, useRelay } from "../store";
@@ -272,7 +272,7 @@ function SwipeRow({
             close();
           }}
         >
-          <Text style={styles.actT}>✎</Text>
+          <View style={{ marginBottom: 2 }}><PencilIcon size={14} color="#fff" /></View>
           {!minimal ? <Text style={styles.actT2}>重命名</Text> : null}
         </Pressable>
         <Pressable
@@ -861,12 +861,12 @@ export default function ListScreen({ sessions, connected, connText, onOpen, onNe
         >
           {/* 2026-09-14 纯图标版（用户反馈：用图标就不配汉字、去外框）——单源=单台灰
               电脑；聚合=品牌色主电脑 + 右后灰副电脑半叠放 */}
-          <View style={{ flexDirection: "row", alignItems: "flex-end" }}>
-            <View style={{ width: 17, height: 13, borderRadius: 3, borderWidth: 2, borderColor: snap.aggregate ? c.brandA : c.dim, justifyContent: "flex-end", alignItems: "center", paddingBottom: 2.5 }}>
+          <View style={{ width: 20, height: 14, justifyContent: "flex-end", position: "relative" }}>
+            <View style={{ width: 17, height: 12.5, borderRadius: 3, borderWidth: 2, borderColor: snap.aggregate ? c.brandA : c.dim, justifyContent: "flex-end", alignItems: "center", paddingBottom: 2.5 }}>
               <View style={{ width: 9, height: 2, borderRadius: 1, backgroundColor: snap.aggregate ? c.brandA : c.dim }} />
             </View>
             {snap.aggregate && (
-              <View style={{ width: 14, height: 10.5, borderRadius: 2.6, borderWidth: 1.8, borderColor: c.dim, marginLeft: -8, marginBottom: 5, opacity: 0.5 }} />
+              <View style={{ position: "absolute", top: -2, right: -3, width: 12, height: 9, borderRadius: 2.4, borderWidth: 1.7, borderColor: c.dim, opacity: 0.55 }} />
             )}
           </View>
         </Pressable>
@@ -1064,6 +1064,7 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
   statRow: {
     flexDirection: "row", alignItems: "center", gap: 9,
     paddingHorizontal: 18, paddingTop: 8, paddingBottom: 4,
+    height: 34,
   },
   statSrc: { flexDirection: "row", alignItems: "center", gap: 5, flexShrink: 1 },
   statTotal: { color: c.dim, fontSize: 12.5, fontWeight: "600", flexShrink: 1 },

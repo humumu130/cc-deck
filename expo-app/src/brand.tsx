@@ -41,3 +41,27 @@ export function LogoMark({ size = 19, color = "#D97757" }: { size?: number; colo
     </View>
   );
 }
+
+// 直立铅笔编辑图标（ui-review 方案 A）：项目惯例纯 View 组合免 SVG 依赖
+export function PencilIcon({ size = 13, color = "#8B93A7" }: { size?: number; color?: string }) {
+  const stroke = Math.max(Math.round(size * 0.13), 1.4);
+  return (
+    <View style={{ width: size, height: size, justifyContent: "center", alignItems: "center" }}>
+      <View
+        style={{
+          width: size * 0.72, height: size * 0.72,
+          borderRightWidth: stroke, borderTopWidth: stroke,
+          borderColor: color,
+          transform: [{ rotate: "45deg" }],
+          borderTopRightRadius: 1,
+        }}
+      />
+      <View
+        style={{
+          position: "absolute", left: 0, bottom: 0,
+          width: stroke, height: size * 0.3, backgroundColor: color, borderRadius: stroke / 2,
+        }}
+      />
+    </View>
+  );
+}

@@ -121,8 +121,8 @@
      圆点行高度，水平保持原 padding 统计最左），拖拽区移交 sideHead；右侧内容
      区全幅到顶（圆点只占左上角不冲突）。Windows/web 不受影响 */
   html.mac-tauri header { display: none; }
-  html.mac-tauri #sideHead { padding: 38px 14px 4px; }
-  html.mac-tauri #detail { padding-top: 28px; }
+  html.mac-tauri #sideHead { padding: 16px 14px 4px; }
+  html.mac-tauri #detail { padding-top: 8px; }
   html.mac-tauri #winBtns { display: none !important; }
   /* 第九轮：右侧顶部 28px 留白也要可拖窗口（全宽透明拖拽条，与 #sideHead 的
      drag-region 无冲突；z 低于弹窗层不挡交互） */
@@ -1269,7 +1269,8 @@
   #dtitle { font-size: 16px; font-weight: 700; } /* #67漏项 17→16 调小一号 */
   #renameBtn { padding: 3px 9px; font-size: 13px; color: var(--dim); }
   #dsub { color: var(--dim); font-size: 12px; margin-top: 5px; display: flex; gap: 12px; flex-wrap: wrap; align-items: center; }
-  #dsub .elapsed { color: var(--text); }
+  /* R1 时长弱化小字（对齐手机 d.sub：跟在标题后，dim 不抢视觉） */
+  .dhead-row .elapsed { color: var(--dim); font-weight: 400; font-size: 12px; white-space: nowrap; }
   /* #41web 路径过长时不换行挤第三行，而是收缩省略（完整路径在 title），给右端水位/chip 让位 */
   #dcwd { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   /* 上下文水位：列表卡固定 30px 短条常显（口径不动）；详情头并入元信息行右端（#dctxcell） */
@@ -1281,8 +1282,9 @@
   /* #41web 概况区水位并入元信息行右端：水位条可收缩（min 30px 保可读），chip 贴行尾；
      窄屏整格回落独立一行（原 #dctxrow 三行态） */
   #dctxcell { display: none; align-items: center; gap: 8px; min-width: 0; margin-left: auto; flex: 0 1 auto; }
-  #dctxcell .ctx-mini { flex: 0 1 auto; min-width: 0; }
-  #dctxcell .ctx-mini-bar { width: 72px; min-width: 30px; }
+  /* 26px 定宽短条（任务口径，与手机两行化 R2 同款紧凑形态，不参与收缩） */
+  #dctxcell .ctx-mini { flex: none; }
+  #dctxcell .ctx-mini-bar { width: 26px; }
   #dctxcell button.mini { flex: none; }
   @media (max-width: 900px) {
     #dctxcell { flex-basis: 100%; margin-left: 0; }
@@ -1940,19 +1942,20 @@
   <div id="detail">
     <div id="dhead">
       <button id="backBtn" class="ghost">‹ 返回</button>
+      <!-- 两行化（对齐手机 2026-09-14 定稿）：R1=标题+时长（弱化小字）；R2=源名+路径+ctx 短条+模型名 -->
       <div class="dhead-row">
         <span id="dtitle"></span>
         <span id="dbadge" class="status-chip"></span>
+        <span class="elapsed" id="delapsed"></span>
         <span class="spacer"></span>
         <button id="renameBtn" class="ghost" title="重命名会话">✎</button>
       </div>
       <div id="dsub">
         <span id="dsrc"></span>
         <span id="dcwd"></span>
-        <span class="elapsed" id="delapsed"></span>
-        <!-- #41web 水位+模型 chip 并入元信息行右端（flex 自然分布；元信息过长时水位条 flex 收缩保最小可读，
+        <!-- #41web 水位+模型 chip 并入元信息行右端（26px 短条定宽，与手机同款紧凑形态；
              路径收缩省略完整路径看 title）。窄屏（≤900px 详情头放不下）整格 flex-basis:100% 自动回落
-             独立一行 = 原 #dctxrow 第三行形态（条 flex:1 + chip 行尾，手机 f35c7ce 同形态） -->
+             独立一行 = 原 #dctxrow 第三行形态（条 flex:1 + chip 行尾） -->
         <span id="dctxcell">
           <span id="dctx"></span>
           <button id="modelBtn" class="mini" style="display:none" title="切换模型（下一回合生效）">模型</button>
@@ -4003,8 +4006,9 @@ function renderDetail() {
   $("delapsed").textContent = "⏱ " + fmtElapsed(sessionElapsed(s));
   $("dctx").innerHTML = ctxHtml(s); // 概况区水位（#dctxcell，并入元信息行右端；窄屏媒询自动回落整行）
 
-  // 思考开关 / 权限模式 chip / 模型切换 chip（#388）
+  // 思考开关 / 权限模式 chip / 模型切换 chip（#388）；字嵌开关 + 状态随文字（对齐手机"开/关换文字"）
   $("thinkBtn").classList.toggle("on", thinkShown);
+  $("thinkBtn").textContent = "思考 ·" + (thinkShown ? "开" : "关");
   const permBtn = $("permBtn");
   if (!s.external && !s.historical) {
     permBtn.style.display = "";

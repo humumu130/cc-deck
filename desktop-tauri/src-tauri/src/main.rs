@@ -188,6 +188,16 @@ fn build_tray(app: &tauri::App) -> tauri::Result<()> {
     let quit = MenuItem::with_id(app, "quit", "退出", true, None::<&str>)?;
     let menu = Menu::with_items(app, &[&show, &sep, &quit])?;
 
+    // 托盘图标分平台（2026-09-14 用户反馈菜单栏风格不一致 + 只显示品牌叠卡元素）：
+    // macOS 用单色 template image（品牌重叠卡片剪影，系统自动适配深浅菜单栏）；
+    // Windows/Linux 保持彩色窗口图标
+    #[cfg(target_os = "macos")]
+    let icon = tauri::image::Image::from_bytes(include_bytes!(
+        "../icons/tray-template.png"
+    ))
+    .map_err(|e| tauri::Error::AssetNotFound(format!("tray-template: {e}")))?;
+
+    #[cfg(not(target_os = "macos"))]
     let icon = app
         .default_window_icon()
         .ok_or_else(|| tauri::Error::AssetNotFound("default_window_icon".into()))?
@@ -195,6 +205,7 @@ fn build_tray(app: &tauri::App) -> tauri::Result<()> {
 
     TrayIconBuilder::with_id("cc-deck-tray")
         .icon(icon)
+        .icon_as_template(cfg!(target_os = "macos"))
         .tooltip("CC Deck")
         .menu(&menu)
         .show_menu_on_left_click(false)
