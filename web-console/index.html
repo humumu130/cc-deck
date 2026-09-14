@@ -1876,6 +1876,7 @@
           <div class="gp-card gp-rows">
             <div class="gp-row" id="gpDensity"><span class="gi"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M4 6.4h16M4 12h16M4 17.6h16"/></svg></span>列表密度<div class="lever" id="gpDensityLever" style="--n:2"><i class="lever-thumb"></i><button type="button" class="lever-opt" data-i="0">标准</button><button type="button" class="lever-opt" data-i="1">紧凑</button></div></div>
             <div class="gp-row" id="gpFont"><span class="gi"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M5 19.2 11.6 5.4l6.6 13.8"/><path d="M7.6 14.4h8"/></svg></span>正文字号<div class="lever" id="gpFontLever" style="--n:3"><i class="lever-thumb"></i><button type="button" class="lever-opt" data-i="0">紧凑</button><button type="button" class="lever-opt" data-i="1">标准</button><button type="button" class="lever-opt" data-i="2">大</button></div></div>
+            <div class="gp-row" id="gpMono"><span class="gi"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3h8v18H8z"/><path d="M12 7v10"/></svg></span>等宽字体<div class="lever" id="gpMonoLever" style="--n:2"><i class="lever-thumb"></i><button type="button" class="lever-opt" data-i="0">默认</button><button type="button" class="lever-opt" data-i="1">圆角</button></div></div>
             <div class="gp-row" id="gpThink"><span class="gi"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="8.4"/><path d="M12 3.6a8.4 8.4 0 0 1 0 16.8Z" fill="currentColor" stroke="none" opacity=".45"/></svg></span>思考过程<div class="lever" id="gpThinkLever" style="--n:2"><i class="lever-thumb"></i><button type="button" class="lever-opt" data-i="0">关</button><button type="button" class="lever-opt" data-i="1">开</button></div></div>
             <div class="gp-row" id="gpIdle" style="display:none"><span class="gi"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3.4 20.6 8 12 12.6 3.4 8Z"/><path d="m3.4 12.4 8.6 4.6 8.6-4.6"/><path d="m3.4 16.6 8.6 4.6 8.6-4.6"/></svg></span>折叠空闲<div class="lever" id="gpIdleLever" style="--n:2"><i class="lever-thumb"></i><button type="button" class="lever-opt" data-i="0">显示</button><button type="button" class="lever-opt" data-i="1">折叠</button></div></div>
             <!-- #8/#67 呼出/收起与切换会话行已迁独立「快捷键」栏 -->
@@ -4975,6 +4976,22 @@ $("gpDensityLever").querySelectorAll(".lever-opt").forEach((b) => {
     syncDensityBtn(); render(); syncGearPop();
   };
 });
+// 等宽字体档位（2026-09-14）：默认系统栈 / Maple Mono 圆角（系统已装 NF CN 变体）
+const MONO_FONTS = [
+  ["默认", ''],
+  ["圆角", '"Maple Mono NF CN", "Maple Mono"'],
+];
+let monoIdx = Math.max(0, MONO_FONTS.findIndex(([, v]) => v === lsGet("ccr_mono_font")));
+function applyMonoFont() {
+  const [, v] = MONO_FONTS[monoIdx];
+  if (v) document.documentElement.style.setProperty("--mono", v + ", Consolas, monospace");
+  else document.documentElement.style.removeProperty("--mono");
+  lsSet("ccr_mono_font", v);
+  syncGearPop();
+}
+$("gpMonoLever").querySelectorAll(".lever-opt").forEach((b) => {
+  b.onclick = () => { monoIdx = +b.dataset.i; applyMonoFont(); syncGearPop(); };
+});
 $("gpFontLever").querySelectorAll(".lever-opt").forEach((b) => {
   b.onclick = () => { tlScaleIdx = +b.dataset.i; applyTlScale(); syncGearPop(); };
 });
@@ -5853,6 +5870,8 @@ $("thinkBtn").onclick = () => {
 const TL_SCALES = [["紧凑", 0.92], ["标准", 1], ["大", 1.15]];
 let tlScaleIdx = TL_SCALES.findIndex(([, v]) => String(v) === lsGet("ccr_tl_scale"));
 if (tlScaleIdx < 0) tlScaleIdx = 1;
+monoIdx = Math.max(0, MONO_FONTS.findIndex(([, v]) => v === lsGet("ccr_mono_font")));
+applyMonoFont();
 function applyTlScale() {
   const [label, v] = TL_SCALES[tlScaleIdx];
   document.documentElement.style.setProperty("--tl-scale", String(v));
