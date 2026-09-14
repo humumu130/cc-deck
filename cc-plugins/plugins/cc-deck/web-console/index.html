@@ -4346,11 +4346,16 @@ function taskRefHtml(t) {
 
 // #34 用户气泡文本里的 #NNN 任务号同样可点（弹任务明细浮卡）。
 // 同 taskRefHtml 口径：原文切分→逐段 escape，防注入（编号是纯数字，data-n 无逃逸面）
+// 裸 URL → 可点链接（escape 之后调用，target=_blank 由壳拦截走系统浏览器）
+function linkifyEscaped(escaped) {
+  return escaped.replace(/\bhttps?:\/\/[^\s<>"')\]]+/g, (u) =>
+    '<a href="' + u + '" target="_blank" rel="noopener noreferrer">' + u + "</a>");
+}
 function userMsgHtml(t) {
   const s = String(t ?? "");
-  if (!/#\d{1,3}\b/.test(s)) return escapeHtml(s);
+  if (!/#\d{1,3}\b/.test(s)) return linkifyEscaped(escapeHtml(s));
   return s.split(/#(\d{1,3})\b/g).map((p, i) =>
-    i % 2 === 1 ? '<span class="task-ref" data-n="' + p + '">#' + p + "</span>" : escapeHtml(p)
+    i % 2 === 1 ? '<span class="task-ref" data-n="' + p + '">#' + p + "</span>" : linkifyEscaped(escapeHtml(p))
   ).join("");
 }
 
@@ -4751,7 +4756,7 @@ document.addEventListener("click", (ev) => {
 
 // ⚙ 设置浮层（#317）：显示项为散装开关的镜像（点行 = 触发原按钮再回读状态），
 // 服务器管理不进浮层——左栏常驻面板已是高频区，与手机抽屉同为一级入口
-const CONSOLE_VERSION = "0.5.0";
+const CONSOLE_VERSION = "0.5.1";
 // #396 拨杆同步：滑块移到 idx 档（transform 过渡），选中档文字加 .on（白字压品牌色滑块上）
 function setLever(el, idx) {
   if (!el) return;
@@ -5822,11 +5827,15 @@ function startCardRename(cardEl, s, ctx) {
   };
   inp.onkeydown = (ev) => {
     ev.stopPropagation();
+    // IME 组合期守卫：中文输入法选词的 Enter（isComposing/keyCode 229）不触发提交，
+    // 否则"回车无反应"（组合态 key 是 Process，提交态判定被吞）
+    if (ev.isComposing || ev.keyCode === 229) return;
     if (ev.key === "Enter") { ev.preventDefault(); finish(true); }
     else if (ev.key === "Escape") finish(false);
   };
   inp.onclick = (ev) => ev.stopPropagation();
-  inp.onblur = () => finish(false);
+  // 失焦=自动保存并收起（原为放弃——点击外部改名静默丢失）
+  inp.onblur = () => finish(true);
 }
 $("renameBtn").onclick = () => {
   const sel = selSession();

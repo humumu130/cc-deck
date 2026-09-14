@@ -5827,11 +5827,15 @@ function startCardRename(cardEl, s, ctx) {
   };
   inp.onkeydown = (ev) => {
     ev.stopPropagation();
+    // IME 组合期守卫：中文输入法选词的 Enter（isComposing/keyCode 229）不触发提交，
+    // 否则"回车无反应"（组合态 key 是 Process，提交态判定被吞）
+    if (ev.isComposing || ev.keyCode === 229) return;
     if (ev.key === "Enter") { ev.preventDefault(); finish(true); }
     else if (ev.key === "Escape") finish(false);
   };
   inp.onclick = (ev) => ev.stopPropagation();
-  inp.onblur = () => finish(false);
+  // 失焦=自动保存并收起（原为放弃——点击外部改名静默丢失）
+  inp.onblur = () => finish(true);
 }
 $("renameBtn").onclick = () => {
   const sel = selSession();
