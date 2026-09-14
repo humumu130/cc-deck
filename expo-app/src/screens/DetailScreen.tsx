@@ -440,41 +440,6 @@ function TaskPop({ n, todo, goneSession, hold, anchor, onClose, onGoList }: { n:
   );
 }
 
-// #388 模型选择弹窗：列表来自活动源 SNAPSHOT.models（relay 聚合用户厂商配置），
-// 选中发 COMMAND_MODEL 注入 CLI 原生 /model 命令，下一回合生效（当前模型即时更新显示）
-function ModelPicker({ models, current, onClose, onPick }: { models: string[]; current: string; onClose: () => void; onPick: (m: string) => void }) {
-  const { c } = useTheme();
-  const d = useThemeStyles(makeStyles);
-  return (
-    <Modal visible transparent animationType="fade" onRequestClose={onClose}>
-      <Pressable style={d.menuScrim} onPress={onClose}>
-        <Pressable style={d.menuCard} onPress={() => undefined}>
-          <View style={d.mpHead}>
-            <Text style={d.mpTitle}>切换模型</Text>
-            <Text style={d.mpSub}>下一回合生效</Text>
-          </View>
-          <ScrollView style={d.mpList}>
-            {models.map((m) => (
-              <Pressable
-                key={m}
-                style={[d.mpRow, m === current && d.mpRowOn]}
-                android_ripple={{ color: c.tintSoft, borderless: false, radius: 10 }}
-                onPress={() => {
-                  onPick(m);
-                  onClose();
-                }}
-              >
-                <Text style={[d.mpRowT, m === current && d.mpRowTOn]} numberOfLines={1} ellipsizeMode="middle">{m}</Text>
-                {m === current ? <Text style={d.mpCur}>当前</Text> : null}
-              </Pressable>
-            ))}
-          </ScrollView>
-        </Pressable>
-      </Pressable>
-    </Modal>
-  );
-}
-
 const SPIN_FRAMES = ["✶", "✸", "✹", "✺", "✹", "✸"];
 
 // 类 Claude Code 状态行：✶ 摘要 · Ns（每秒走帧）。无边框，嵌入状态条内。
@@ -647,8 +612,6 @@ export default function DetailScreen({ sid, onBack, initialView, ref }: { sid: s
   const [cronOpen, setCronOpen] = useState<Record<string, boolean>>({});
   // 内容长按菜单（#249）：非空即弹 ContentMenu
   const [menuText, setMenuText] = useState<string | null>(null);
-  // #388 模型选择弹窗开关
-  const [modelPick, setModelPick] = useState(false);
   const todoScrollRef = useRef<ScrollView>(null);
   const todoAtBottom = useRef(true);
   // 任务面板常驻滑块：onScroll 里 setValue(contentOffset.y)（bridgeless 下 Animated.event
@@ -1729,21 +1692,9 @@ export default function DetailScreen({ sid, onBack, initialView, ref }: { sid: s
               <Text style={d.imgBtnT}>📷</Text>
             </Pressable>
           ) : null}
-          <View style={{ flex: 1, position: "relative" }}>
-            {/* 模型切换（2026-09-14 从 header 水位行迁来）：输入框内部居左，ChatGPT 式——
-                点开模型选择弹层；文字区 paddingLeft 预留 chip 宽度 */}
-            {canCmd && snap.models.length > 0 ? (
-              <Pressable
-                style={d.modelInline}
-                android_ripple={{ color: c.tintSoft, borderless: false, radius: 8 }}
-                onPress={() => setModelPick(true)}
-                hitSlop={4}
-              >
-                <Text style={d.modelInlineT} numberOfLines={1}>{s.model ? s.model.split(/[\/:]/).pop() : "默认"} ▾</Text>
-              </Pressable>
-            ) : null}
+          <View style={{ flex: 1 }}>
             <TextInput
-              style={[d.input, canCmd && snap.models.length > 0 && { paddingLeft: 52 }]}
+              style={d.input}
               value={input}
               onChangeText={editInput}
               placeholder={external ? "CLI忙时自动排队" : s.historical ? "继续对话（恢复会话）…" : "发送消息…"}
@@ -1789,14 +1740,6 @@ export default function DetailScreen({ sid, onBack, initialView, ref }: { sid: s
       />
 
       {menuText ? <ContentMenu text={menuText} onClose={() => setMenuText(null)} /> : null}
-      {modelPick ? (
-        <ModelPicker
-          models={snap.models}
-          current={s.model}
-          onClose={() => setModelPick(false)}
-          onPick={(m) => store.send("COMMAND_MODEL", { session_id: sid, model: m })}
-        />
-      ) : null}
       {taskPop != null ? (
         <TaskPop
           n={taskPop}
@@ -1927,20 +1870,13 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
     borderRadius: 12, borderTopRightRadius: 4, paddingHorizontal: 10, paddingVertical: 7,
   },
   pendT: { color: c.dim, fontSize: 12.5, lineHeight: 17 },
-  // 视图 tab 行：下划线式（与网页端 tabs 同风格）；tabWrap 自测宽供指示条几何（chip 已挪头部）
+  // 视图 tab 行：下划线式（与网页端 tabs 同风格）；tabWrap 自测宽供指示条几何
   filterRow: { flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 10 },
   tabWrap: { flex: 1, position: "relative", flexDirection: "row", gap: TAB_GAP, paddingLeft: TAB_PAD_L },
   tabBtn: { flex: 1, alignItems: "center", paddingVertical: 4, borderBottomWidth: 2, borderBottomColor: "transparent" },
   tabInd: { position: "absolute", left: TAB_PAD_L, bottom: 0, height: 2.5, borderRadius: 1.5, backgroundColor: c.brandA },
   tabT: { fontSize: 12, color: c.dim },
   tabTOn: { color: c.text, fontWeight: "600" },
-  // 模型 chip（头部副信息行最右）：filterChip 缩小版小胶囊；长名封顶截尾防挤副信息文字
-  // 高度收敛一档：padV 3→2 + 文字显式 lineHeight 12，总高 ~21→18px；宽度/位置不动
-  modelChip: {
-    paddingHorizontal: 8, paddingVertical: 2, borderRadius: 8, maxWidth: 96,
-    backgroundColor: c.tintSoft, borderWidth: 1, borderColor: c.line,
-  },
-  modelChipT: { fontSize: 10, lineHeight: 12, color: c.dim },
   filterChip: {
     paddingHorizontal: 10, paddingVertical: 4, borderRadius: 10,
     backgroundColor: c.tintSoft, borderWidth: 1, borderColor: c.line,
@@ -2153,12 +2089,6 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
     backgroundColor: c.panel2, borderWidth: 1, borderColor: c.line,
     paddingHorizontal: 14, paddingVertical: 11, color: c.text, fontSize: 15,
   },
-  // 模型切换 chip：输入框内部居左（迁自 header 水位行右端，2026-09-14）
-  modelInline: {
-    position: "absolute", left: 6, bottom: 5, zIndex: 2, maxWidth: 70,
-    paddingHorizontal: 3, paddingVertical: 1.5,
-  },
-  modelInlineT: { fontSize: 8.5, color: c.brandA, fontWeight: "600" },
   // 发送按钮对齐网页版 #sendBtn：品牌色实底方块 + 白色 ➤
   sendBtn: {
     width: 44, height: 44, borderRadius: 13, backgroundColor: c.brandA,
@@ -2176,19 +2106,6 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
   menuBtnPri: { backgroundColor: c.brandA, borderColor: "transparent" },
   menuBtnT: { color: c.dim, fontSize: 14, fontWeight: "600" },
   menuBtnPriT: { color: "#fff", fontSize: 14, fontWeight: "600" },
-  // #388 模型选择弹窗（沿用菜单视觉语言，列表可滚）
-  mpHead: { flexDirection: "row", alignItems: "baseline", justifyContent: "space-between", paddingHorizontal: 4, paddingTop: 2, paddingBottom: 8 },
-  mpTitle: { color: c.text, fontSize: 15, fontWeight: "700" },
-  mpSub: { color: c.faint, fontSize: 11 },
-  mpList: { maxHeight: 320 },
-  mpRow: {
-    flexDirection: "row", alignItems: "center", justifyContent: "space-between",
-    height: 40, paddingHorizontal: 12, borderRadius: 10, overflow: "hidden",
-  },
-  mpRowOn: { backgroundColor: c.tintSoft, borderWidth: 1, borderColor: withA(c.brandA, 0.4) },
-  mpRowT: { color: c.dim, fontSize: 13, fontWeight: "600", flexShrink: 1 },
-  mpRowTOn: { color: c.brandA },
-  mpCur: { color: c.brandA, fontSize: 11, marginLeft: 10 },
   // #340 任务明细气泡：锚点定位容器 + 指向 #NNN 的尾巴（旋转小方块，边框与卡相接）
   tpWrap: { position: "absolute" },
   tpTail: {
