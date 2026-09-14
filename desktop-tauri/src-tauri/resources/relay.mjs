@@ -43768,7 +43768,10 @@ var Bridge = class _Bridge {
     if (state.status === "DONE" && state.done_reason === "disconnected") {
       return this.resumeExternal(sessionId, text);
     }
-    if (!state.cli_pid) return { ok: false, error: "\u5C1A\u672A\u5B9A\u4F4D CLI \u8FDB\u7A0B\uFF0C\u7B49\u8BE5\u4F1A\u8BDD\u4E0B\u6B21\u6D3B\u52A8\u540E\u91CD\u8BD5" };
+    if (!state.cli_pid) {
+      console.log(`[extInput] no cli_pid sid=${sessionId} status=${state.status} reason=${state.done_reason ?? "-"} historical=${state.historical}`);
+      return { ok: false, error: "\u5C1A\u672A\u5B9A\u4F4D CLI \u8FDB\u7A0B\uFF0C\u7B49\u8BE5\u4F1A\u8BDD\u4E0B\u6B21\u6D3B\u52A8\u540E\u91CD\u8BD5" };
+    }
     const q2 = this.inputQueue.get(sessionId) ?? [];
     q2.push(text);
     this.inputQueue.set(sessionId, q2);
