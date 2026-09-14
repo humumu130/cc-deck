@@ -1227,9 +1227,9 @@ export default function DetailScreen({ sid, onBack, initialView, ref }: { sid: s
   return (
     <SafeAreaView style={d.safe} edges={["top"]}>
       <View style={{ flex: 1 }}>
-      {/* 头部（推倒重设计·方案 H）：R1 = ‹ + 标题主角 + 右侧操作簇（思考/✎）；R2 = 元信息次行
-          （源·计时 左聚，ctx 水位右锚）。全部可点元素统一 26 高/圆角 8/tintSoft 底无边框，参照
-          Telegram/ChatGPT 会话头：大标题一行、元信息次行、操作钮右聚 */}
+      {/* 头部（用户 22:14/22:20 拍板口径）：R1 = ‹ + 标题主角；R2 = 元信息行——源·时长·ctx 水位
+          左聚顺排（时长在水位前），思考开关（半高）右锚最右；编辑按钮移除。
+          可点元素统一圆角 8/tintSoft 底无边框 */}
       <View style={d.head}>
         <Pressable style={d.back} android_ripple={{ color: c.tintSoft, borderless: false }} onPress={onBack} hitSlop={8}>
           <Svg width={14} height={14} viewBox="0 0 24 24" fill="none" stroke={c.dim} strokeWidth={2.6} strokeLinecap="round" strokeLinejoin="round">
@@ -1237,28 +1237,7 @@ export default function DetailScreen({ sid, onBack, initialView, ref }: { sid: s
           </Svg>
         </Pressable>
         <View style={{ flex: 1, minWidth: 0 }}>
-          <View style={d.headTop}>
-            <Text style={[d.title, { flexShrink: 1 }]} numberOfLines={1} ellipsizeMode="tail">{s.title || "未命名会话"}</Text>
-            <View style={d.headActs}>
-              <Pressable
-                style={[d.thinkToggle, showThink && d.thinkToggleOn]}
-                android_ripple={{ color: c.tintSoft, borderless: false, radius: 8 }}
-                onPress={() => { thinkShown = !thinkShown; setShowThink(thinkShown); }}
-                hitSlop={6}
-                accessibilityLabel={showThink ? "思考过程显示，已开" : "思考过程显示，已关"}
-              >
-                <Text style={[d.thinkToggleT, showThink && d.thinkToggleTOn]}>思考</Text>
-                <View style={[d.thinkSwitch, showThink && d.thinkSwitchOn]}>
-                  <View style={[d.thinkSwitchKnob, showThink && { alignSelf: "flex-end" }]} />
-                </View>
-              </Pressable>
-              <Pressable style={d.editBtn} android_ripple={{ color: c.tintSoft, borderless: false }} onPress={() => setRenaming(true)} hitSlop={8}>
-                <Svg width={13} height={13} viewBox="0 0 24 24" fill="none" stroke={c.dim} strokeWidth={2.1} strokeLinecap="round" strokeLinejoin="round">
-                  <Path d="M17 3a2.8 2.8 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z" />
-                </Svg>
-              </Pressable>
-            </View>
-          </View>
+          <Text style={[d.title, { flexShrink: 1 }]} numberOfLines={1} ellipsizeMode="tail">{s.title || "未命名会话"}</Text>
           <View style={d.headMeta}>
             {srcMeta ? <Text style={[d.sub, { flexShrink: 1 }]} numberOfLines={1}>{srcMeta}</Text> : null}
             <Text style={[d.sub, { marginLeft: srcMeta ? 6 : 0, flexShrink: 0, fontVariant: ["tabular-nums"] }]}>{fmtElapsed(sessionElapsed(s))}</Text>
@@ -1271,12 +1250,24 @@ export default function DetailScreen({ sid, onBack, initialView, ref }: { sid: s
                 <Text style={[d.ctxPct, { color: c[contextLevel(ctxUsed, ctxLimit)] }]}>{ctxPct}%</Text>
               </View>
             ) : null}
+            <Pressable
+              style={[d.thinkToggle, { marginLeft: "auto" }, showThink && d.thinkToggleOn]}
+              android_ripple={{ color: c.tintSoft, borderless: false, radius: 8 }}
+              onPress={() => { thinkShown = !thinkShown; setShowThink(thinkShown); }}
+              hitSlop={6}
+              accessibilityLabel={showThink ? "思考过程显示，已开" : "思考过程显示，已关"}
+            >
+              <Text style={[d.thinkToggleT, showThink && d.thinkToggleTOn]}>思考</Text>
+              <View style={[d.thinkSwitch, showThink && d.thinkSwitchOn]}>
+                <View style={[d.thinkSwitchKnob, showThink && { alignSelf: "flex-end" }]} />
+              </View>
+            </Pressable>
           </View>
         </View>
       </View>
 
       {/* 固定工具区：状态条 + 过滤 chips。不放进 ScrollView——RN Android 吸顶头有触点丢失问题，
-          且运行中自动滚底的跳变会打断按压；固定区根本不经过滚动手势系统 */}
+          且运行中自动滚底的跳变会打断按压；固定区根本不经过滚动手势系统。头部 ▴/▾ 可整体折叠 */}
       {!collapsed ? (
       <View style={d.fixedBar}>
         {showStrip ? (
@@ -1752,7 +1743,7 @@ export default function DetailScreen({ sid, onBack, initialView, ref }: { sid: s
               </Pressable>
             ) : null}
             <TextInput
-              style={[d.input, canCmd && snap.models.length > 0 && { paddingLeft: 104 }]}
+              style={[d.input, canCmd && snap.models.length > 0 && { paddingLeft: 52 }]}
               value={input}
               onChangeText={editInput}
               placeholder={external ? "CLI忙时自动排队" : s.historical ? "继续对话（恢复会话）…" : "发送消息…"}
@@ -1862,28 +1853,24 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
     backgroundColor: c.panel, borderWidth: 1, borderColor: c.line, elevation: 4,
   },
   jumpFabT: { color: c.dim, fontSize: 16, fontWeight: "700", lineHeight: 18, marginTop: -1 },
-  // 头部（方案 H）：55px 双行——R1 标题+操作簇 26 高，R2 元信息 13 高；视觉重心在标题
+  // 头部（用户拍板口径）：R1 = 返回+标题；R2 = 元信息行（源·时长·ctx 左聚 + 半高思考右锚），总高 ~60px
   head: {
     flexDirection: "row", alignItems: "center", gap: 8,
     paddingHorizontal: 12, paddingVertical: 6, borderBottomWidth: 1, borderBottomColor: c.line,
   },
-  // 返回钮：与右侧操作簇同语言（26 方 / 圆角 8 / tintSoft 底），chevron 用 SVG 保笔画粗细一致；
-  // overflow hidden 供 ripple 按圆角裁剪（不再借 opRipple，避免其 radius 13 盖掉方圆角）
+  // 返回钮：圆角 8 / tintSoft 底（与思考开关同语言）；SVG chevron 保笔画一致；overflow hidden 裁 ripple
   back: {
     width: 26, height: 26, borderRadius: 8, backgroundColor: c.tintSoft, overflow: "hidden",
     alignItems: "center", justifyContent: "center",
   },
   hintText: { color: c.faint },
   title: { color: c.text, fontSize: 15, fontWeight: "600", lineHeight: 20 },
-  headTop: { flexDirection: "row", alignItems: "center" },
-  // R1 右侧操作簇：思考 + ✎ 同排同距（间距由 gap 统一供给，不再散落 marginLeft）
-  headActs: { flexDirection: "row", alignItems: "center", gap: 6, marginLeft: 8, flexShrink: 0 },
-  // R2 元信息次行：源·计时 左聚，ctx 水位 marginLeft:auto 右锚（仪表读数贴右缘，与操作簇对齐）
+  // R2 元信息行：源·时长·ctx 水位顺排左聚，思考开关 marginLeft:auto 右锚
   headMeta: { flexDirection: "row", alignItems: "center", marginTop: 3 },
   // 副信息行（头部专用）：次级信息统一档 10px dim
   sub: { color: c.dim, fontSize: 10, lineHeight: 13 },
-  // 上下文占用（右锚组）：标签 + 30px 细条 + 百分比，颜色按占用分级
-  ctxGroup: { flexDirection: "row", alignItems: "center", gap: 4, marginLeft: "auto", paddingLeft: 10, flexShrink: 0 },
+  // 上下文占用（行内组）：标签 + 30px 细条 + 百分比，颜色按占用分级
+  ctxGroup: { flexDirection: "row", alignItems: "center", gap: 4, marginLeft: 8, flexShrink: 0 },
   ctxLabel: { color: c.faint, fontSize: 9.5, fontWeight: "600" },
   ctxBar: { width: 30, height: 3, borderRadius: 1.5, backgroundColor: c.tintSoft, overflow: "hidden" },
   ctxPct: { fontSize: 9.5, fontVariant: ["tabular-nums"] },
@@ -1894,34 +1881,29 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
   statRow: { flexDirection: "row", justifyContent: "space-between", gap: 14, paddingVertical: 8, borderTopWidth: 1, borderTopColor: withA(c.dim, 0.12) },
   statRowK: { color: c.dim, fontSize: 13 },
   statRowV: { color: c.text, fontSize: 13, fontVariant: ["tabular-nums"], textAlign: "right", flex: 1 },
-  // 头部按钮统一规格（方案 H）：同高 26 / 圆角 8 / tintSoft 底无边框，与返回钮、思考开关同一语言；
-  // overflow hidden 自带 ripple 圆角裁剪（opRipple 的 radius 13 会盖掉方圆角，故弃用）
-  editBtn: {
-    width: 26, height: 26, borderRadius: 8, backgroundColor: c.tintSoft,
-    alignItems: "center", justifyContent: "center",
-  },
-  // 思考：chip 内文字 + 迷你滑块合一（用户要求字进开关里），开/关换文字
+  // 思考开关（R2 元信息行最右）：用户要求高度减半（26→14），文字 + 迷你滑块随档缩小；
+  // 触达靠 hitSlop 补偿，圆角 8/tintSoft 底与返回钮同语言
   thinkToggle: {
-    height: 26, borderRadius: 8, paddingHorizontal: 8, backgroundColor: c.tintSoft,
+    height: 14, borderRadius: 7, paddingHorizontal: 6, backgroundColor: c.tintSoft,
     borderWidth: 1, borderColor: "transparent", alignItems: "center", justifyContent: "center",
-    flexDirection: "row", gap: 6,
+    flexDirection: "row", gap: 4,
   },
   thinkToggleOn: { borderColor: withA(c.brandA, 0.4), backgroundColor: c.tintStrong },
-  thinkToggleT: { fontSize: 10, color: c.dim },
+  thinkToggleT: { fontSize: 9, lineHeight: 10, color: c.dim },
   thinkToggleTOn: { color: c.brandA, fontWeight: "600" },
-  // 矮宽开关条（方案 G：高 16、字嵌条内，与 ctx 同行）
+  // 开关条随 chip 减半同步缩（26x14 → 20x10）
   thinkSwitch: {
-    width: 26, height: 14, borderRadius: 7, backgroundColor: c.line,
-    alignItems: "flex-start", justifyContent: "center", paddingHorizontal: 1.5,
+    width: 20, height: 10, borderRadius: 5, backgroundColor: c.line,
+    alignItems: "flex-start", justifyContent: "center", paddingHorizontal: 1,
   },
   thinkSwitchOn: { backgroundColor: c.brandA, alignItems: "flex-end" },
-  thinkSwitchKnob: { width: 11, height: 11, borderRadius: 6, backgroundColor: "#fff" },
-  // 固定工具区：跟随头部、不随转录滚动，底部一条分隔线与头部呼应（paddingTop 收紧防 tab 行上下空白过大）
+  thinkSwitchKnob: { width: 8, height: 8, borderRadius: 4, backgroundColor: "#fff" },
+  // 固定工具区：跟随头部、不随转录滚动，底部一条分隔线与头部呼应（paddingTop 收紧贴头部）
   fixedBar: { paddingHorizontal: 14, paddingTop: 5, borderBottomWidth: 1, borderBottomColor: c.line },
   strip: {
     flexDirection: "row", alignItems: "center", gap: 8,
     backgroundColor: c.panel, borderWidth: 1, borderColor: c.line,
-    borderRadius: 12, paddingHorizontal: 11, paddingVertical: 8, marginBottom: 6,
+    borderRadius: 12, paddingHorizontal: 11, paddingVertical: 8, marginBottom: 8,
   },
   stripErr: { flex: 1, color: c.error, fontSize: 12.5, fontWeight: "600" },
   stripBtnWarn: {
@@ -1946,9 +1928,9 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
   },
   pendT: { color: c.dim, fontSize: 12.5, lineHeight: 17 },
   // 视图 tab 行：下划线式（与网页端 tabs 同风格）；tabWrap 自测宽供指示条几何（chip 已挪头部）
-  filterRow: { flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 5 },
+  filterRow: { flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 10 },
   tabWrap: { flex: 1, position: "relative", flexDirection: "row", gap: TAB_GAP, paddingLeft: TAB_PAD_L },
-  tabBtn: { flex: 1, alignItems: "center", paddingVertical: 2.5, borderBottomWidth: 2, borderBottomColor: "transparent" },
+  tabBtn: { flex: 1, alignItems: "center", paddingVertical: 4, borderBottomWidth: 2, borderBottomColor: "transparent" },
   tabInd: { position: "absolute", left: TAB_PAD_L, bottom: 0, height: 2.5, borderRadius: 1.5, backgroundColor: c.brandA },
   tabT: { fontSize: 12, color: c.dim },
   tabTOn: { color: c.text, fontWeight: "600" },
@@ -1965,7 +1947,7 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
   },
   filterChipOn: { backgroundColor: c.tintStrong, borderColor: withA(c.brandA, 0.4) },
   // tab 第二行：权限开关（思考开关已移头部）
-  subFilterRow: { flexDirection: "row", gap: 7, marginBottom: 8 },
+  subFilterRow: { flexDirection: "row", gap: 7, marginBottom: 10 },
   // 任务/定时/统计视图容器
   viewCol: { flex: 1 },
   filterT: { fontSize: 11, color: c.dim },
@@ -2173,10 +2155,10 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
   },
   // 模型切换 chip：输入框内部居左（迁自 header 水位行右端，2026-09-14）
   modelInline: {
-    position: "absolute", left: 9, bottom: 9, zIndex: 2, maxWidth: 92,
-    backgroundColor: c.tintSoft, borderRadius: 7, paddingHorizontal: 6, paddingVertical: 3,
+    position: "absolute", left: 6, bottom: 5, zIndex: 2, maxWidth: 70,
+    paddingHorizontal: 3, paddingVertical: 1.5,
   },
-  modelInlineT: { fontSize: 10, color: c.brandA, fontWeight: "600" },
+  modelInlineT: { fontSize: 8.5, color: c.brandA, fontWeight: "600" },
   // 发送按钮对齐网页版 #sendBtn：品牌色实底方块 + 白色 ➤
   sendBtn: {
     width: 44, height: 44, borderRadius: 13, backgroundColor: c.brandA,
