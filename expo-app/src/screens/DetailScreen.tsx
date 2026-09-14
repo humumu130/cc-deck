@@ -1897,7 +1897,7 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
   // 头部按钮统一规格（方案 H）：同高 26 / 圆角 8 / tintSoft 底无边框，与返回钮、思考开关同一语言；
   // overflow hidden 自带 ripple 圆角裁剪（opRipple 的 radius 13 会盖掉方圆角，故弃用）
   editBtn: {
-    width: 26, height: 26, borderRadius: 8, backgroundColor: c.tintSoft, overflow: "hidden",
+    width: 26, height: 26, borderRadius: 8, backgroundColor: c.tintSoft,
     alignItems: "center", justifyContent: "center",
   },
   // 思考：chip 内文字 + 迷你滑块合一（用户要求字进开关里），开/关换文字
