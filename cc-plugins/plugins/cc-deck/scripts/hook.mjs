@@ -187,10 +187,10 @@ async function main() {
   // PreToolUse 等远程审批（最长 600s，须 < settings.json 里该 hook 的 timeout 620s）
   const waitMs = event === "PreToolUse" ? 600_000 : 1500;
   // 逐候选上报：403（token 失配）/连不上（relay 未起或换班）就试下一目录的
-  // bridge.json；命中 2xx 即止。多数时候首轮即成功，失配期多花一次本地请求。
+  // bridge.json；命中 2xx 即止。多数时候首轮即成功，失配期多花一次本地请求
   // 外层补 3 轮整体重试（2s/4s 退避，仅旁路事件）：relay 热替换重启窗口约 5~8s，
-  // 旁路事件 1.5s 短等撞上即丢（审批/通知在手机端凭空消失的根因之一）；PreToolUse
-  // 的 600s 长等天然覆盖重启窗口，无需多轮
+  // 旁路事件 1.5s 短等撞上即丢（审批/通知凭空消失的根因之一）；PreToolUse 的
+  // 600s 长等天然覆盖重启窗口，无需多轮
   const rounds = event === "PreToolUse" ? 1 : 3;
   let res = null;
   for (let round = 0; round < rounds && !res; round++) {
