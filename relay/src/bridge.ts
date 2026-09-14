@@ -885,7 +885,11 @@ export class Bridge {
     if (state.status === "DONE" && state.done_reason === "disconnected") {
       return this.resumeExternal(sessionId, text);
     }
-    if (!state.cli_pid) return { ok: false, error: "尚未定位 CLI 进程，等该会话下次活动后重试" };
+    if (!state.cli_pid) {
+      // 诊断桩（2026-09-14 公司端"尚未定位"复现）：记录状态全貌定位补水断点
+      console.log(`[extInput] no cli_pid sid=${sessionId} status=${state.status} reason=${state.done_reason ?? "-"} historical=${state.historical}`);
+      return { ok: false, error: "尚未定位 CLI 进程，等该会话下次活动后重试" };
+    }
 
     const q = this.inputQueue.get(sessionId) ?? [];
     q.push(text);
