@@ -1243,9 +1243,9 @@ export default function DetailScreen({ sid, onBack, initialView, ref }: { sid: s
               {[external ? "" : "托管", s.historical && !external ? "历史" : "", srcName].filter(Boolean).join(" · ") || " "}
             </Text>
             {ctxUsed > 0 ? (
-              <View style={{ flexDirection: "row", alignItems: "center", gap: 5, marginLeft: 10 }}>
+              <View style={{ flexDirection: "row", alignItems: "center", gap: 5, marginLeft: 8 }}>
                 <Text style={d.ctxLabel}>ctx</Text>
-                <View style={d.ctxBar}>
+                <View style={[d.ctxBar, { flex: 0, width: 30 }]}>
                   <View style={{ width: `${ctxPct}%`, height: 3, borderRadius: 1.5, backgroundColor: c[contextLevel(ctxUsed, ctxLimit)] }} />
                 </View>
                 <Text style={[d.ctxPct, { color: c[contextLevel(ctxUsed, ctxLimit)] }]}>{ctxPct}%</Text>
