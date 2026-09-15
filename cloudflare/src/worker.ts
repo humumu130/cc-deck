@@ -69,6 +69,19 @@ export default {
           headers: { location: "http://8.133.211.170:8888/cc-deck-0.5.1-test.apk", "cache-control": "no-store" },
         });
       }
+      // 快照版最新（2026-09-15）：主页快照版按钮指向，302 ECS（每次 snap CI 后脚本更新 ECS 文件）
+      if (name === "cc-deck-snap-latest.apk") {
+        return new Response(null, {
+          status: 302,
+          headers: { location: "http://8.133.211.170:8888/cc-deck-snap-latest.apk", "cache-control": "no-store" },
+        });
+      }
+      if (name === "cc-deck-snap-latest-setup.exe") {
+        return new Response(null, {
+          status: 302,
+          headers: { location: "http://8.133.211.170:8888/cc-deck-snap-latest-setup.exe", "cache-control": "no-store" },
+        });
+      }
       // #67 测试包 cc-deck-test.exe：走 KV 通用直出（exe 5MB < 25MiB 上限；
       // ECS 回源被阿里云对 CF 境外出口 403 挡死，302 后公司又屏蔽裸 IP——KV 是唯一全通路径）
       const obj = await env.DL.get(name, { type: "arrayBuffer" });
