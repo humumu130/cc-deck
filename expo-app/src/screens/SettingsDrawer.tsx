@@ -526,15 +526,6 @@ export default function SettingsDrawer({
                   </View>
 
                 </Pressable>
-                <Pressable
-                  style={d.srvEditBtn}
-                  hitSlop={6}
-                  android_ripple={{ color: c.tintSoft, borderless: false, radius: 12 }}
-                  onPress={() => edit(e)}
-                  accessibilityLabel={`编辑 ${e.name}`}
-                >
-                  <View style={{ marginTop: 1 }}><PencilIcon size={13} color={c.dim} /></View>
-                </Pressable>
                 {delArm === e.id ? (
                   /* #46 长按亮删除（替常驻 ✕）：确认按钮 3.5s 自动收回 */
                   <Pressable style={d.srvDelArm} android_ripple={{ color: withA(c.waiting, 0.15), borderless: false, radius: 13 }} onPress={() => { setDelArm(null); remove(e); }}>
