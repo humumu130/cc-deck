@@ -893,10 +893,11 @@
   .srv-row .srv-share:hover:not(:disabled) { color: var(--brand); border-color: var(--brand); }
   .srv-row .srv-share:disabled { opacity: .38; cursor: default; }
   .srv-right .srv-chan, .srv-right .srv-chan.cloud, .srv-right .srv-pbadge { margin-left: 0; }
-  /* #96 通道标记（2026-09-16 收编进 ops 槽位）：内联小字，不再绝对定位外伸压分享钮 */
+  /* #96 通道角标=插头的角标（2026-09-16 回归本体）：贴插头左缘（插头已是行内
+     最右元素，右侧出界）——定宽槽位下的对齐不破坏 */
   .plug { position: relative; }
-  .pchan { font-style: normal; font-size: 8px; line-height: 10px; color: var(--dim); text-align: center; display: inline-block; width: 100%; }
-  .pchan.lan { font-size: 7px; font-weight: 700; color: #5B9DFF; letter-spacing: .2px; }
+  .pchan { position: absolute; right: calc(100% + 2px); top: 8.5px; font-style: normal; font-size: 8px; line-height: 10px; color: var(--dim); }
+  .pchan.lan { font-size: 7px; font-weight: 700; color: #5B9DFF; top: 9px; letter-spacing: .2px; }
   .srv-addr { display: block; font-size: 11px; color: var(--dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .srv-row .srv-del {
     flex: none; background: none; border: none; cursor: pointer; color: var(--faint);
@@ -5377,11 +5378,10 @@ function renderServers() {
       // 副行纯地址——状态汉字撤，状态由插头三色承载）
       '<span class="srv-right">' + (pb ? '<span class="srv-pbadge ' + pb.c + '">' + pb.t + '</span>' : "") + "</span>" +
       '<span class="srv-ops">' +
-      '<span class="op-slot op-chan">' + (chanOn ? chanBadge : "") + "</span>" +
       '<button class="srv-share"' + (ctx && ctx.status === "online" ? "" : " disabled") + ' title="' + (ctx && ctx.status === "online" ? "手机扫一下接入这台电脑（同网直连 · 跨网云桥，自动路由）" : "该源未在线") + '">分享</button>' +
       '<span class="op-slot op-retry">' + (isRetryable(ctx) ? '<button class="srv-retry" title="跳过退避等待，立即重连">↻</button>' : "") + "</span>" +
       '<span class="op-slot op-del">' + (isLocal ? "" : '<button class="srv-del" title="删除">✕</button>') + "</span>" +
-      '<span class="plug ' + (ctx ? ctx.status : "offline") + '">' + PLUG_SVG + "</span>" +
+      '<span class="plug ' + (ctx ? ctx.status : "offline") + '">' + PLUG_SVG + (chanOn ? chanBadge : "") + "</span>" +
       "</span>" +
       "</div>";
   }).join("");
