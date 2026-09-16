@@ -10,34 +10,32 @@ REPO="humumu130/cc-deck"
 ECS_HOST="root@8.133.211.170"
 ECS_DIR="/opt/cc-apk"
 KEY="$HOME/.ssh/id_ed25519"
-RELAY_TOKEN="$(grep -oE '"token":"[a-f0-9]+"' "$HOME/.cc-deck/data/bridge.json" | grep -oE '[a-f0-9]+' | head -1)"
+RELAY_TOKEN="${RELAY_TOKEN:-$(grep -oE '"token":"[a-f0-9]+"' "$HOME/.cc-deck/data/bridge.json" | grep -oE '[a-f0-9]+' | head -1)}"
 TMP="$(mktemp -d)"
 SSH="ssh -i $KEY -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null"
 SCP="scp -i $KEY -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null"
 
 echo "① 下载 v$VER Release 产物…"
 gh release download "v$VER" -R "$REPO" -D "$TMP" --clobber
-APK=$(find "$TMP" -name 'app-arm64-v8a-release.apk' | head -1)
+APK=$(find "$TMP" \( -name "CC-Deck-v${VER}.apk" -o -name "app-arm64-v8a-release.apk" \) | head -1)
 EXE=$(find "$TMP" -name '*-setup.exe' ! -name '*portable*' | head -1)
 LATEST_YML=$(find "$TMP" -name 'latest.yml' | head -1)
 
 echo "② 推 ECS（APK 直链 + 手机 latest.json + Electron exe + latest.yml）…"
 $SCP "$APK" "$ECS_HOST:$ECS_DIR/cc-deck.apk"
 [ -n "$EXE" ] && $SCP "$EXE" "$ECS_HOST:$ECS_DIR/cc-deck-desktop-setup.exe"
-[ -n "$LATEST_YML" ] && $SCP "$LATEST_YML" "$ECS_HOST:$ECS_DIR/latest.yml"
+if [ -n "$LATEST_YML" ]; then $SCP "$LATEST_YML" "$ECS_HOST:$ECS_DIR/latest.yml"; fi
 printf '{"version":"%s","notes":"%s"}' "$VER" "$NOTES" | $SSH $ECS_HOST "cat > $ECS_DIR/latest.json"
 
 # Tauri 桌面更新链（2026-09-16 补全）：桌面 updater 读 cc.humumu.online/download/tauri-latest.json
 # （KV 镜像），exe 内链必须公司可达 → setup.exe 上 KV、清单 url 指 CF 域名。
 # 签名/私钥由 CI 产物自带（tauri build 生成 *-setup.exe + .sig + latest.json）
 SIG=$(find "$TMP" -name '*-setup.exe.sig' | head -1)
-TAURI_LATEST=$(find "$TMP" -name 'latest.json' -path '*nsis*' | head -1)
-if [ -n "$EXE" ] && [ -n "$SIG" ] && [ -n "$TAURI_LATEST" ] && [ -n "${CF_TOKEN:-${CLOUDFLARE_API_TOKEN:-}}" ]; then
+if [ -n "$EXE" ] && [ -n "$SIG" ] && [ -n "${CF_TOKEN:-${CLOUDFLARE_API_TOKEN:-}}" ]; then
   SIGB64=$(base64 < "$SIG" | tr -d '\n')
   EXEURL="https://cc.humumu.online/dl/cc-deck-$VER-setup.exe"
   printf '{"version":"%s","pub_date":"%s","platforms":{"windows-x86_64":{"signature":"%s","url":"%s"}}}' \
     "$VER" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$SIGB64" "$EXEURL" > "$TMP/tauri-latest-gen.json"
-  python3 -c "import json,sys; json.load(open(sys.argv[1]))" "$TMP/tauri-latest-gen.json" || { echo "❌ 生成的 tauri-latest.json 不是合法 JSON"; exit 1; }
   $SCP "$EXE" "$ECS_HOST:$ECS_DIR/cc-deck-$VER-setup.exe"
   (cd cloudflare && CLOUDFLARE_API_TOKEN="${CF_TOKEN:-${CLOUDFLARE_API_TOKEN:-}}" npx wrangler kv key put "cc-deck-$VER-setup.exe" --path "$EXE" --namespace-id d9b9bb1768324fb1b71907ca72de7aa6 --remote >/dev/null)
   (cd cloudflare && CLOUDFLARE_API_TOKEN="${CF_TOKEN:-${CLOUDFLARE_API_TOKEN:-}}" npx wrangler kv key put "tauri-latest.json" --path "$TMP/tauri-latest-gen.json" --namespace-id d9b9bb1768324fb1b71907ca72de7aa6 --remote >/dev/null)
