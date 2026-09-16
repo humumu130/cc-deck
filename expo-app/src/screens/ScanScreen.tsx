@@ -22,6 +22,13 @@ export interface ScanResult {
   // #330 云源接入邀请（电脑端「添加手机」出的码）：一次性配对码+桥地址+relay 身份，
   // 消费方走 pair_req 流程落成云源条目
   invite?: { bridge: string; bt: string; rd: string; rk: string; code: string };
+  // v2 智能分享码（ccdeck-add v2）：LAN+云桥两路并存，手机扫码时自行路由——
+  // LAN 探测可达（同一局域网）走直连，不可达走云桥配对。桌面端无法感知手机网段，
+  // 路由决策只能在扫码端做
+  smart?: {
+    lan: { url: string; token: string } | null;
+    cloud: { bridge: string; bt: string; rd: string; rk: string; code: string } | null;
+  };
   // 连接导入请求（电脑端「分享连接」出的码）：方向反转——手机是连接数据源，rt 是
   // 电脑端临时收件 WebSocket，消费方经 routeScanResult 弹连接选择器（ImportPicker）
   // 把本地连接回传给电脑；临时通道用完即断，不进手机连接列表
@@ -40,7 +47,7 @@ export function parseScanPayload(raw: string): ScanResult | null {
       v?: number; url?: unknown; token?: unknown;
       t?: unknown; dev?: unknown; pk?: unknown; name?: unknown; rd?: unknown;
       bridge?: unknown; bt?: unknown; rk?: unknown; code?: unknown;
-      rt?: unknown; imp?: unknown;
+      rt?: unknown; imp?: unknown; lan?: unknown; cloud?: unknown;
     };
     if (j?.t === "ccdeck-login") {
       const dev = typeof j.dev === "string" ? j.dev : "";
@@ -57,6 +64,29 @@ export function parseScanPayload(raw: string): ScanResult | null {
       return null;
     }
     if (j?.t === "ccdeck-add") {
+      // v2 智能码：lan/cloud 两路并存（至少一路），手机端探测路由
+      if (j.v === 2) {
+        const lanJ = (typeof j.lan === "object" && j.lan !== null ? j.lan : {}) as {
+          url?: unknown; token?: unknown;
+        };
+        const cloudJ = (typeof j.cloud === "object" && j.cloud !== null ? j.cloud : {}) as {
+          bridge?: unknown; bt?: unknown; rd?: unknown; rk?: unknown; code?: unknown;
+        };
+        const lu = typeof lanJ.url === "string" ? lanJ.url.replace(/\/+$/, "") : "";
+        const lt = typeof lanJ.token === "string" ? lanJ.token : "";
+        const cb = typeof cloudJ.bridge === "string" ? cloudJ.bridge.replace(/\/+$/, "") : "";
+        const cbt = typeof cloudJ.bt === "string" ? cloudJ.bt : "";
+        const crd = typeof cloudJ.rd === "string" ? cloudJ.rd : "";
+        const crk = typeof cloudJ.rk === "string" ? cloudJ.rk : "";
+        const ccode = typeof cloudJ.code === "string" ? cloudJ.code : "";
+        const lan = lu && lt && /^wss?:\/\//.test(lu) ? { url: lu, token: lt } : null;
+        const cloud =
+          /^wss?:\/\//.test(cb) && crd.startsWith("rl-") && crk && /^\d{6,8}$/.test(ccode)
+            ? { bridge: cb, bt: cbt, rd: crd, rk: crk, code: ccode }
+            : null;
+        if (lan || cloud) return { wsUrl: "", token: "", smart: { lan, cloud } };
+        return null;
+      }
       const bridge = typeof j.bridge === "string" ? j.bridge.replace(/\/+$/, "") : "";
       const bt = typeof j.bt === "string" ? j.bt : "";
       const rd = typeof j.rd === "string" ? j.rd : "";
@@ -118,6 +148,35 @@ function hostOf(wsUrl: string): string {
   }
 }
 
+// LAN 可达性探测：带 token 的真实 ws 握手（无 token 会在升级阶段被拒，探测恒假阴）。
+// 2.5s 内 onopen = 同一局域网；超时/失败 = 跨网或防火墙，交给云桥路。探测连接随即
+// 关闭——relay 侧是常规客户端断连，无副作用
+function probeLanWs(base: string, token: string, ms = 2500): Promise<boolean> {
+  return new Promise((resolve) => {
+    let ws: WebSocket;
+    try {
+      ws = new WebSocket(base + "/ws?token=" + encodeURIComponent(token));
+    } catch {
+      resolve(false);
+      return;
+    }
+    let done = false;
+    const finish = (ok: boolean) => {
+      if (done) return;
+      done = true;
+      clearTimeout(timer);
+      try {
+        ws.close();
+      } catch {}
+      resolve(ok);
+    };
+    const timer = setTimeout(() => finish(false), ms);
+    ws.onopen = () => finish(true);
+    ws.onerror = () => finish(false);
+    ws.onclose = () => finish(false);
+  });
+}
+
 export async function routeScanResult(r: ScanResult, ctx: ScanRouteCtx): Promise<void> {
   const servers = await store.loadServers();
   // ccdeck-login = 网页端出示的登录码——扫码即登录，手机不要求预先连接/切换到对应
@@ -168,6 +227,49 @@ export async function routeScanResult(r: ScanResult, ctx: ScanRouteCtx): Promise
   }
   // ccdeck-add = 云源接入邀请（#330，电脑端「分享连接」出的码同构兼容）：确认后
   // pair_req 落库自动连接
+  if (r.smart) {
+    const { lan, cloud } = r.smart;
+    const directAdd = (url: string, token: string) => {
+      const base = url.replace(/\/+$/, "");
+      const named = ctx.onDirect?.(base, token);
+      const dup = servers.find((e) => e.wsUrl === base);
+      const entry: ServerEntry = dup
+        ? { ...dup, token }
+        : { id: uuid(), name: (named && named.trim()) || hostOf(base), wsUrl: base, token };
+      void store.connectServer(entry, token).then(() => ctx.onDone?.());
+    };
+    const cloudAdd = () => {
+      Alert.alert(
+        "接入云服务器",
+        `同网直连不可用，走云桥接入「${hostOf(cloud!.bridge)}」？\n将使用一次性配对码自动完成。`,
+        [
+          { text: "取消", style: "cancel" },
+          {
+            text: "接入",
+            onPress: () => {
+              void store.addCloudByInvite(cloud!).then((err) => {
+                if (err) ctx.onError(err);
+                else ctx.onDone?.();
+              });
+            },
+          },
+        ],
+        { cancelable: true },
+      );
+    };
+    void (async () => {
+      if (lan && (await probeLanWs(lan.url, lan.token))) {
+        directAdd(lan.url, lan.token);
+        return;
+      }
+      if (cloud) {
+        cloudAdd();
+        return;
+      }
+      if (lan) directAdd(lan.url, lan.token); // 只有 LAN 路：照旧直连，失败由连接态呈现
+    })();
+    return;
+  }
   if (r.invite) {
     const inv = r.invite;
     Alert.alert(

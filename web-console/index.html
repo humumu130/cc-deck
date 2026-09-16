@@ -6561,62 +6561,103 @@ $("gpRelayNameSave")?.addEventListener("click", async () => {
 
 // #94 relay 页二维码常显：进页自动出码、云码到期前 30s 自动续（免点击）
 let relayQrTimer = null;
-function scheduleRelayQrRenew(ttlMs) {
-  if (relayQrTimer) { clearTimeout(relayQrTimer); relayQrTimer = null; }
-  if (ttlMs > 40_000) relayQrTimer = setTimeout(() => { relayQrTimer = null; void addPhoneQr(); }, ttlMs - 30_000);
-}
+function scheduleRelayQrRenew(ttlMs) { /* 已并入 scheduleSmartRenew（统一智能分享码） */ }
 
 // #330 反向扫码：本端出码、手机 App 扫一下直接接入本服务器。LAN 源出 v1 直连码
 // （url+token，App 即扫即连）；云源领一次性配对码出 ccdeck-add 码（App 临时连桥
 // pair_req 落库自动连接）。浮层复用 loginQrPop（无 pendingPair 会话，关层无副作用）
-async function addPhoneQr() {
-  const ctx = ctxs.get(activeServerId) || null;
-  // #25b（2026-09-10 移动网络实测第四课）：relay 页「扫码接入」语义=手机接入本机 relay。
-  // 手机可能不在本机局域网（用户实测移动网络）——优先级：本机 relay 的云码（任何网络
-  // 可连）> LAN 直连码（仅同网）> 活动源云码（别家 relay，仅当本机无 relay）。
-  // 本机 relay 云码=COMMAND_CLOUD_INFO 拿身份 + COMMAND_PAIR_CODE 领码，问的本机
-  //（127.0.0.1 的 ctx），不再依赖「控制台有没有本机云源条目」（此前真空洞）
-  const PRIV_IP = /^(192\.168|10|172\.(1[6-9]|2\d|3[01]))\./;
-  if (localRelayInfo) {
-    const localCtx = [...ctxs.values()].find(
-      (c) => c.cfg.kind === "lan" && localEp(c.cfg.wsUrl)?.loop && c.cfg.token === localRelayInfo.token && c.status === "online",
-    ) || [...ctxs.values()].find((c) => c.cfg.kind === "lan" && localEp(c.cfg.wsUrl)?.loop && c.status === "online");
-    if (localCtx) {
-      const ci = await commandAck(localCtx, "COMMAND_CLOUD_INFO", {});
+// ===== 统一智能分享码（2026-09-16 整合三处出码面：relay 页「添加手机」+ 源编辑「分享到手机」）=====
+// 此前三处各自为政：本机源分享恒出 LAN 码（防火墙/终端隔离网络必死，用户公司机实测），
+// relay 页又"云码优先 LAN 兜底"二选一——手机网段桌面端根本感知不到，路由决策该在扫码端。
+// v2 码内 LAN+云桥两路并存，手机扫码自行探测路由：同网直连、跨网云桥，出码面不再分叉
+const PRIV_IP_RE = /^(192\.168|10|172\.(1[6-9]|2\d|3[01]))\./;
+
+// 为一条在线源构建两路分享件：lan（私网直连地址+token）/ cloud（桥+身份+一次性配对码）
+async function buildSmartShareParts(ctx, cfg) {
+  if (!ctx || ctx.status !== "online") return null;
+  let lan = null, cloud = null, ttl = 0;
+  if (cfg.kind === "lan") {
+    let url = cfg.wsUrl, token = cfg.token;
+    const ep = localEp(url);
+    // loopback 指向本机 relay：换 lan-ip 实测端点+实测 token（条目 token 可能随 relay 换代过期）
+    if (ep && ep.loop && localRelayInfo && localRelayInfo.port === ep.port) {
+      const host = (PRIV_IP_RE.test(localRelayInfo.lanIp || "") && localRelayInfo.lanIp)
+        || (PRIV_IP_RE.test(location.hostname || "") ? location.hostname : "");
+      if (host) { url = "ws://" + host + ":" + localRelayInfo.port + "/ws"; token = localRelayInfo.token; }
+    }
+    try {
+      if (token && PRIV_IP_RE.test(new URL(url).hostname)) lan = { url, token };
+    } catch {}
+  }
+  try {
+    const ep = localEp(cfg.wsUrl);
+    const isLocalLan = cfg.kind === "lan" && !!(ep && ep.loop && localRelayInfo && localRelayInfo.port === ep.port);
+    if (cfg.kind === "cloud" && cfg.cloud && cfg.cloud.rd && cfg.cloud.rk) {
+      // 云源：用自身身份领一次性配对码（rd/rk 由配对/发现帧写回，缺失时等身份刷新）
+      const ack = await commandAck(ctx, "COMMAND_PAIR_CODE", {});
+      if (ack && ack.ok && ack.pair_code) {
+        cloud = {
+          bridge: cfg.wsUrl.replace(/\/+$/, "").replace(/^http/, "ws"),
+          bt: serverBridgeToken(cfg), rd: cfg.cloud.rd, rk: cfg.cloud.rk, code: ack.pair_code.code,
+        };
+        ttl = (ack.pair_code.expires_in || 300) * 1000;
+      }
+    } else if (isLocalLan) {
+      // 本机 LAN 源：relay 若接了云桥，补云桥路（CLOUD_INFO 拿身份 + PAIR_CODE 领码）
+      const ci = await commandAck(ctx, "COMMAND_CLOUD_INFO", {});
       if (ci && ci.ok && ci.cloudInfo && ci.cloudInfo.cloud && ci.cloudInfo.bridge && ci.cloudInfo.rd && ci.cloudInfo.rk) {
-        const pc = await commandAck(localCtx, "COMMAND_PAIR_CODE", {});
+        const pc = await commandAck(ctx, "COMMAND_PAIR_CODE", {});
         if (pc && pc.ok && pc.pair_code) {
-          drawLoginQr(JSON.stringify({
-            t: "ccdeck-add", v: 1,
+          cloud = {
             bridge: ci.cloudInfo.bridge, bt: ci.cloudInfo.bt, rd: ci.cloudInfo.rd, rk: ci.cloudInfo.rk,
             code: pc.pair_code.code,
-          }));
-          drawQrTo($("relayAddQrCv"), JSON.stringify({
-            t: "ccdeck-add", v: 1,
-            bridge: ci.cloudInfo.bridge, bt: ci.cloudInfo.bt, rd: ci.cloudInfo.rd, rk: ci.cloudInfo.rk,
-            code: pc.pair_code.code,
-          }), 112);
-          /* #104 状态行已撤 */
-          scheduleRelayQrRenew((pc.pair_code.expires_in || 300) * 1000);
-          return;
+          };
+          ttl = (pc.pair_code.expires_in || 300) * 1000;
         }
       }
-      // 无云桥/领码失败 → LAN 直连码（#10 收严：只认私网 IP 字面量）
-      const lanHost =
-        PRIV_IP.test(location.hostname || "")
-          ? location.hostname
-          : (localRelayInfo.lanIp && PRIV_IP.test(localRelayInfo.lanIp) ? localRelayInfo.lanIp : "");
-      if (lanHost) {
-        const p = JSON.stringify({ v: 1, url: `ws://${lanHost}:${localRelayInfo.port}/ws`, token: localRelayInfo.token });
-        drawQrTo($("relayAddQrCv"), p, 112);
-        /* #104 状态行已撤 */
-        scheduleRelayQrRenew(0); // LAN 码不过期，无需续
-        return;
-      }
-      /* #104 状态行已撤 */
-      return;
     }
+  } catch {}
+  return lan || cloud ? { lan, cloud, ttl } : null;
+}
+
+function smartPayload(parts) {
+  const p = { t: "ccdeck-add", v: 2 };
+  if (parts.lan) p.lan = parts.lan;
+  if (parts.cloud) p.cloud = parts.cloud;
+  return JSON.stringify(p);
+}
+
+// 配对码 TTL 续期：到点重跑出码函数重领码；各出码面自定 rerun 前置条件（弹层仍开等）
+function scheduleSmartRenew(ttlMs, rerun) {
+  if (relayQrTimer) { clearTimeout(relayQrTimer); relayQrTimer = null; }
+  if (ttlMs > 40_000) relayQrTimer = setTimeout(() => { relayQrTimer = null; rerun(); }, ttlMs - 30_000);
+}
+
+function smartShareTexts(parts) {
+  $("loginQrTitle").textContent = "分享连接到手机" + (parts.cloud ? "（自动路由）" : "");
+  $("loginQrSub").innerHTML = "手机 CC Deck App 扫下方二维码<br/>" + (
+    parts.lan && parts.cloud ? "同一局域网自动直连 · 跨网络自动走云桥"
+      : parts.cloud ? "经云桥接入，任何网络可用"
+        : "与本机同一局域网时直连");
+  $("loginQrState").textContent = "等待手机扫码…";
+}
+
+async function addPhoneQr() {
+  // relay 页语义 = 手机接入本机 relay：找本机 loopback 源的在线 ctx（token 精确匹配优先）
+  const localCtx = [...ctxs.values()].find(
+    (c) => c.cfg.kind === "lan" && localEp(c.cfg.wsUrl)?.loop && c.cfg.token === localRelayInfo?.token && c.status === "online",
+  ) || [...ctxs.values()].find((c) => c.cfg.kind === "lan" && localEp(c.cfg.wsUrl)?.loop && c.status === "online");
+  if (localCtx) {
+    const parts = await buildSmartShareParts(localCtx, localCtx.cfg);
+    if (!parts) return;
+    const payload = smartPayload(parts);
+    drawLoginQr(payload);
+    drawQrTo($("relayAddQrCv"), payload, 112);
+    scheduleSmartRenew(parts.ttl, () => { void addPhoneQr(); });
+    return;
   }
+  // 无本机 relay 连接：退而求活动源（分享该源的连接，构建器同款）
+  const ctx = ctxs.get(activeServerId) || null;
   if (!ctx || ctx.status !== "online") {
     toast(ctx
       ? "当前活动源未在线（重试中…），连上后即可扫码接入"
@@ -6625,124 +6666,32 @@ async function addPhoneQr() {
         : "请先添加/连接服务器，再扫码接入手机");
     return;
   }
-  const cfg = ctx.cfg;
-  let payload;
-  if (cfg.kind === "lan") {
-    // #25 在线 LAN 分支同样要改写 loopback（活动源=本机 127.0.0.1 时原样进码=废码，
-    // 用户实测两通道皆中招）。改写优先 relay 实测 lan_ip+实测 token（条目 token 可能
-    // 随 relay 换代过期）；条目本身就是外网/私网 IP 直写时按原样（用户手填的可路由地址）
-    let url = cfg.wsUrl;
-    let tk = cfg.token;
-    const ep = localEp(url);
-    if (ep && ep.loop) {
-      const lanHost = (localRelayInfo && PRIV_IP.test(localRelayInfo.lanIp || "") && localRelayInfo.lanIp) || "";
-      if (!lanHost || !localRelayInfo) {
-        toast("无法确定本机局域网地址：手机与本机需同一 WiFi（跨网络请用云桥源的「扫码接入」）");
-        return;
-      }
-      url = `ws://${lanHost}:${localRelayInfo.port}/ws`;
-      tk = localRelayInfo.token || tk;
-    }
-    if (!tk) { toast("本源未存令牌，无法生成手机直连码"); return; }
-    payload = JSON.stringify({ v: 1, url, token: tk });
-  } else {
-    const c = cfg.cloud || {};
-    const rd = (ctx.pendingPair && ctx.pendingPair.fresh && ctx.pendingPair.rd) || (c.paired && c.rd ? c.rd : "");
-    if (!rd || !c.rk) { toast("正在定位服务器身份，几秒后再试"); return; }
-    const ack = await commandAck(ctx, "COMMAND_PAIR_CODE", {});
-    if (!ack || !ack.ok || !ack.pair_code) { toast((ack && ack.error) || "领配对码失败"); return; }
-    payload = JSON.stringify({
-      t: "ccdeck-add", v: 1,
-      bridge: cfg.wsUrl.replace(/\/$/, "").replace(/^http/, "ws"),
-      bt: serverBridgeToken(cfg), rd, rk: c.rk, code: ack.pair_code.code,
-    });
+  const parts = await buildSmartShareParts(ctx, ctx.cfg);
+  if (!parts) {
+    toast("无法生成分享码：该源既无可局域网直连的地址，也未接云桥");
+    return;
   }
-  $("loginQrTitle").textContent = "扫码接入";
-  $("loginQrSub").innerHTML = "手机 CC Deck App 扫下方二维码<br/>自动接入本服务器（一次性码 · 短时效）";
-  $("loginQrState").textContent = "等待手机扫码…";
-  drawLoginQr(payload);
-  $("loginQrPop").classList.add("open");
+  drawQrTo($("relayAddQrCv"), smartPayload(parts), 112);
+  scheduleSmartRenew(parts.ttl, () => { void addPhoneQr(); });
 }
-// #94 常显：进 relay 页自动出码（免点击）；离页不杀续期定时器（回页会重取覆盖）
 
-// ── 议题②/③ 三码体系补全（2026-09-09）：桌面端把已有连接递给手机 / 从手机收回连接。
-// 码形态沿用 App 已认识的两种：LAN 源 = {v:1,url,token} 直连码；云源 = ccdeck-add 一次性码
-// （App 领码连桥 pair_req 落库，与「添加手机」同链路）。新增第三种 t:"ccdeck-import"——
-// 桌面出码携带本机 relay 的 rt（url+token），手机扫码后反挑一条连接回传
-// {t:"ccdeck-import-resp", entry:{kind,wsUrl,token,cloud}}，桌面收到即落库并连接。
-// 浮层统一复用 loginQrPop；import 的临时回传 ws 与浮层生命周期绑定（关层即断）
-
-// 议题② 分享连接：编辑表单里的「分享到手机」。目标源必须在线（按钮未在线时已置灰，
-// 这里再兜一层：状态变化与点击之间有间隙）。云源领码走 COMMAND_PAIR_CODE，失败 toast
+// 源编辑表单「分享到手机」：与 relay 页同一构建器，每个连接只有一种分享码
 async function shareSrvQr() {
   const cfg = editId ? cfgOf(editId) : null;
   if (!cfg) return;
   const ctx = ctxs.get(cfg.id) || null;
   if (!ctx || ctx.status !== "online") { toast("该源未在线"); return; }
-  let payload;
-  if (cfg.kind === "lan") {
-    if (!cfg.token) { toast("本源未存令牌，无法生成分享码"); return; }
-    let url = cfg.wsUrl, token = cfg.token;
-    // loopback 地址手机扫了连不通（#44 同因）：条目指的就是本机 relay 时换成
-    // lan-ip 实测端点，token 同步用实测值——源列表 token 可能随 relay 换代过期。
-    // #25 修正：旧改写会把 location.hostname 当备选——exe 页面源 tauri.localhost
-    // 不匹配回环正则被当 LAN 地址发出（用户实测中招）。只认私网 IP 字面量
-    const ep = localEp(url);
-    // 本机 relay 云桥在线时优先出云码（2026-09-16）：LAN 直连码在防火墙/终端隔离网络
-    // 必死（用户公司机实测"扫码没反应"），云码跨网络可用——用户扫哪个码都不该拿到死码
-    if (ep && ep.loop && localRelayInfo && localRelayInfo.port === ep.port) {
-      const ci = await commandAck(ctx, "COMMAND_CLOUD_INFO", {});
-      if (ci && ci.ok && ci.cloudInfo && ci.cloudInfo.cloud && ci.cloudInfo.bridge && ci.cloudInfo.rd && ci.cloudInfo.rk) {
-        const pc = await commandAck(ctx, "COMMAND_PAIR_CODE", {});
-        if (pc && pc.ok && pc.pair_code) {
-          payload = JSON.stringify({
-            t: "ccdeck-add", v: 1,
-            bridge: ci.cloudInfo.bridge, bt: ci.cloudInfo.bt, rd: ci.cloudInfo.rd, rk: ci.cloudInfo.rk,
-            code: pc.pair_code.code,
-          });
-          $("loginQrTitle").textContent = "分享连接到手机（云桥）";
-          $("loginQrSub").innerHTML = "手机 CC Deck App 扫下方二维码<br/>经云桥接入本机，任何网络可用";
-          $("loginQrState").textContent = "等待手机扫码…";
-          drawLoginQr(payload);
-          $("loginQrPop").classList.add("open");
-          // 配对码带 TTL：弹层仍开着才续码（重跑分享重新领码重画），关层即停
-          if (relayQrTimer) clearTimeout(relayQrTimer);
-          relayQrTimer = setTimeout(() => {
-            relayQrTimer = null;
-            if ($("loginQrPop").classList.contains("open")) void shareSrvQr();
-          }, Math.max((pc.pair_code.expires_in || 300) - 30, 30) * 1000);
-          return;
-        }
-      }
-    }
-    if (ep && ep.loop && localRelayInfo && localRelayInfo.port === ep.port) {
-      const PRIV_IP2 = /^(192\.168|10|172\.(1[6-9]|2\d|3[01]))\./;
-      const host =
-        (PRIV_IP2.test(localRelayInfo.lanIp || "") && localRelayInfo.lanIp) ||
-        (PRIV_IP2.test(location.hostname || "") ? location.hostname : "");
-      if (host) { url = "ws://" + host + ":" + localRelayInfo.port + "/ws"; token = localRelayInfo.token; }
-      else { toast("无法确定本机局域网地址：手机与本机需同一 WiFi（跨网络请用云桥源分享）"); return; }
-    }
-    payload = JSON.stringify({ v: 1, url, token });
-  } else {
-    const c = cfg.cloud || {};
-    // rd/rk 取条目 cloud 配置（配对/发现帧都会写回最新身份），缺了只能等身份刷新
-    const rd = c.rd || (ctx.pendingPair && ctx.pendingPair.fresh && ctx.pendingPair.rd) || "";
-    if (!rd || !c.rk) { toast("正在定位服务器身份，几秒后再试"); return; }
-    const ack = await commandAck(ctx, "COMMAND_PAIR_CODE", {});
-    if (!ack || !ack.ok || !ack.pair_code) { toast((ack && ack.error) || "领配对码失败"); return; }
-    payload = JSON.stringify({
-      t: "ccdeck-add", v: 1,
-      bridge: cfg.wsUrl.replace(/\/$/, "").replace(/^http/, "ws"),
-      bt: serverBridgeToken(cfg), rd, rk: c.rk, code: ack.pair_code.code,
-    });
+  const parts = await buildSmartShareParts(ctx, cfg);
+  if (!parts) {
+    toast("无法生成分享码：该源既无可局域网直连的地址，也未接云桥");
+    return;
   }
-  $("loginQrTitle").textContent = "分享连接到手机";
-  $("loginQrSub").innerHTML = "手机 CC Deck App 扫下方二维码<br/>自动导入这条连接";
-  $("loginQrState").textContent = "等待手机扫码…";
-  drawLoginQr(payload);
+  smartShareTexts(parts);
+  drawLoginQr(smartPayload(parts));
   $("loginQrPop").classList.add("open");
+  scheduleSmartRenew(parts.ttl, () => { if ($("loginQrPop").classList.contains("open")) void shareSrvQr(); });
 }
+
 $("shareSrvBtn").onclick = () => void shareSrvQr();
 
 // 议题③ 从手机导入：添加服务器表单里的「扫码从手机导入」。码内 rt = 本机 relay

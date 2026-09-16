@@ -16,7 +16,7 @@ SSH="ssh -i $KEY -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null"
 SCP="scp -i $KEY -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null"
 
 echo "[1/5] base=$BASE, ECS 查已有 test 序号"
-EXISTING=$($SSH "ls $ECS_DIR 2>/dev/null | grep -E 'cc-deck-${BASE}-test\.[0-9]+\.apk' | grep -oE 'test\.[0-9]+' | grep -oE '[0-9]+' | sort -n | tail -1" 2>/dev/null || true)
+EXISTING=$($SSH "$ECS_HOST" "ls $ECS_DIR 2>/dev/null | grep -E 'cc-deck-${BASE}-test\.[0-9]+\.apk' | grep -oE 'test\.[0-9]+' | grep -oE '[0-9]+' | sort -n | tail -1" 2>/dev/null || true)
 N=$(( ${EXISTING:-0} + 1 ))
 VER="${BASE}-test.${N}"
 echo "    → ${VER}"
@@ -37,7 +37,7 @@ AAPT=$(ls "$HOME/Library/Android/sdk/build-tools/"*/aapt 2>/dev/null | tail -1)
 echo "[4/5] 推 ECS 版本化文件名"
 $SCP -q "$APK" "$ECS_HOST:$ECS_DIR/cc-deck-${VER}.apk"
 # 清掉旧固定名 test 包（今天之前的历史遗留，避免"分不清是哪个"的同类问题）
-$SSH "rm -f $ECS_DIR/cc-deck-${BASE}-test.apk" 2>/dev/null || true
+$SSH "$ECS_HOST" "rm -f $ECS_DIR/cc-deck-${BASE}-test.apk" 2>/dev/null || true
 
 echo "[5/5] 完成"
 SIZE=$(du -h "$APK" | cut -f1)
