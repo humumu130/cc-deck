@@ -139,10 +139,13 @@ jobs:
         if: startsWith(github.ref, 'refs/tags/') && (contains(github.ref, '-snap') || contains(github.ref, '-test'))
         working-directory: desktop-tauri
         shell: bash
+        # sed -i.bak：macOS BSD sed 的 -i 必须带备份后缀参数（GNU 写法在 mac runner
+        # 上把表达式当后缀 → "invalid command code ."，2026-09-16 test.1 mac job 教训）
         run: |
           V="${GITHUB_REF_NAME#v}"
           npm version --no-git-tag-version --allow-same-version "$V"
-          sed -i "s/const CONSOLE_VERSION = \"[^\"]*\"/const CONSOLE_VERSION = \"$V\"/" ../web-console/index.html
+          sed -i.bak "s/const CONSOLE_VERSION = \"[^\"]*\"/const CONSOLE_VERSION = \"$V\"/" ../web-console/index.html
+          rm -f ../web-console/index.html.bak
 
       - name: Build dmg
         working-directory: desktop-tauri
