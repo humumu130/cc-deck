@@ -43659,14 +43659,16 @@ var Bridge = class _Bridge {
         continue;
       }
       if (this.noHookIds.has(id2) || s.compacting || this.pending.has(id2)) continue;
+      const hooked = (this.lastHookAt.get(id2) ?? 0) > 0;
+      const effWin = hooked ? 9e5 : (this.turnShape.get(id2) ?? "gen") === "end" ? idleMs : 6e5;
       const idleSince = Math.max(
         this.lastGrow.get(id2) ?? 0,
         this.lastHookAt.get(id2) ?? 0,
         s.updated_at ?? 0
       );
       const shape = this.turnShape.get(id2) ?? "gen";
-      if (!idleSince || now - idleSince <= (shape === "end" ? idleMs : 6e5)) {
-        if (now - idleSince > idleMs && s.cli_pid && cliSessionIdle(s.cli_pid)) {
+      if (!idleSince || now - idleSince <= effWin) {
+        if (!hooked && now - idleSince > idleMs && s.cli_pid && cliSessionIdle(s.cli_pid)) {
           const turn2 = this.turnStart.get(id2) ?? s.started_at;
           this.turnStart.delete(id2);
           this.mgr.finishExternal(id2, "completed", now - turn2);

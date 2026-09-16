@@ -607,6 +607,12 @@ export class Bridge {
         continue;
       }
       if (this.noHookIds.has(id) || s.compacting || this.pending.has(id)) continue; // 无 hook 会话有专属扫描；压缩中/审批挂起中不动
+      // 有 hook 活动史的会话：长工具（后台 CI/长轮询）期间 hook 事件与转录双静默
+      // 数分钟是常态——60s/90s 档会把"工作中"误判成已完成（2026-09-16 16:16 用户实测
+      // 本会话正在跑长任务双端却显示空闲）。hook 会话的权威完成信号是 Stop hook，
+      // 静默兜底窗提到 15 分钟；从无 hook 事件的会话维持原启发式（#211/#65 场景）
+      const hooked = (this.lastHookAt.get(id) ?? 0) > 0;
+      const effWin = hooked ? 900_000 : (this.turnShape.get(id) ?? "gen") === "end" ? idleMs : 600_000;
       const idleSince = Math.max(
         this.lastGrow.get(id) ?? 0,
         this.lastHookAt.get(id) ?? 0,
@@ -615,11 +621,13 @@ export class Bridge {
       // 末条形态分档（与 sweepNoHookIdle 同参）：end=纯文本收尾 90s 即回落，
       // 其余（工具执行中/生成中）给 10 分钟长窗——先判全局 600s 会让 90s 档变死代码
       const shape = this.turnShape.get(id) ?? "gen";
-      if (!idleSince || now - idleSince <= (shape === "end" ? idleMs : 600_000)) {
+      if (!idleSince || now - idleSince <= effWin) {
         // #65（2026-09-11 用户实测公司机 10 分钟不回落）：gen/tool 档静默 90s+ 且
         // CLI 自写的会话状态文件报 idle → 权威快速回落（不等 10 分钟窗。生成中
         // CLI 报 busy，长思考不误伤；hook 失联时这是唯一可靠快信号）
-        if (now - idleSince > idleMs && s.cli_pid && cliSessionIdle(s.cli_pid)) {
+        // 2026-09-16：快速回落仅限从无 hook 事件的会话——有 hook 史的长工具执行期
+        // CLI 进程状态同样报 idle，60s 误判成"已完成"（本会话长 CI 等待实测中招）
+        if (!hooked && now - idleSince > idleMs && s.cli_pid && cliSessionIdle(s.cli_pid)) {
           const turn = this.turnStart.get(id) ?? s.started_at;
           this.turnStart.delete(id);
           this.mgr.finishExternal(id, "completed", now - turn);
