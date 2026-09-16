@@ -41342,6 +41342,19 @@ function appendDeletedExt(dataDir2, id2) {
   } catch {
   }
 }
+function readTitleOverrides(dataDir2) {
+  try {
+    const raw = JSON.parse(readFileSync7(join8(dataDir2, "title-overrides.json"), "utf-8"));
+    if (!raw || typeof raw !== "object" || Array.isArray(raw)) return {};
+    const out = {};
+    for (const [k3, v] of Object.entries(raw)) {
+      if (typeof v === "string" && v.trim()) out[k3] = v.trim().slice(0, 40);
+    }
+    return out;
+  } catch {
+    return {};
+  }
+}
 var PINNED_SESSIONS_CAP = 50;
 function pinnedSessionsPath(dataDir2) {
   return join8(dataDir2, "pinned-sessions.json");
@@ -41372,6 +41385,7 @@ var SessionManager = class {
     this.cfg = cfg2;
     this.childSdkIds = new Set(readChildSessions(cfg2.dataDir));
     this.deletedExtIds = new Set(readDeletedExts(cfg2.dataDir));
+    this.titleOverrides = readTitleOverrides(cfg2.dataDir);
     const t = setInterval(() => this.heartbeat(), HEARTBEAT_INTERVAL_MS);
     t.unref();
     const c = setInterval(() => {
@@ -41391,6 +41405,7 @@ var SessionManager = class {
   // 无 hook 但 transcript 活跃，孤儿扫描必须排除，否则被误收养成垃圾外部会话
   childSdkIds;
   deletedExtIds;
+  titleOverrides;
   /** #388 供 ws-server 读默认模型（快照 payload.models 聚合用） */
   cfg;
   // #49 测试缝：托管 AgentSession 工厂。生产恒为 null（直接 new AgentSession，
@@ -41547,6 +41562,11 @@ var SessionManager = class {
       external: true,
       remote_mode: false
     };
+    const ov2 = this.titleOverrides[id2];
+    if (ov2) {
+      state.title = ov2;
+      state.title_locked = true;
+    }
     this.sessions.set(id2, { agent: null, state, logs: [], lastUpdateEmit: 0 });
     this.bus.emit(id2, "SESSION_CREATED", {
       cwd: state.cwd,
@@ -42000,6 +42020,11 @@ var SessionManager = class {
           s.state.title = title;
           s.state.title_locked = true;
           s.state.updated_at = Date.now();
+          this.titleOverrides[s.state.session_id] = title;
+          try {
+            writeFileSync4(join8(this.cfg.dataDir, "title-overrides.json"), JSON.stringify(this.titleOverrides));
+          } catch {
+          }
           this.bus.emit(cmd.payload.session_id, "SESSION_UPDATED", {
             status: s.state.status,
             action_summary: s.state.action_summary,

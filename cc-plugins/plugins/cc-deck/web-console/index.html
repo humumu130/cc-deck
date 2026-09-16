@@ -5892,9 +5892,10 @@ function startCardRename(cardEl, s, ctx) {
   };
   inp.onkeydown = (ev) => {
     ev.stopPropagation();
-    // IME 组合期守卫：中文输入法选词的 Enter（isComposing/keyCode 229）不触发提交，
-    // 否则"回车无反应"（组合态 key 是 Process，提交态判定被吞）
-    if (ev.isComposing || ev.keyCode === 229) return;
+    // IME 组合期守卫：只看 isComposing（组合态回车=选词，不提交）。
+    // 勿加 keyCode 229 兜底——搜狗/QQ 拼音等在 WebView2 非组合态也常驻 229，
+    // 会把 Enter 永久吞掉，只剩失焦能保存（2026-09-16 公司机实测）
+    if (ev.isComposing) return;
     if (ev.key === "Enter") { ev.preventDefault(); finish(true); }
     else if (ev.key === "Escape") finish(false);
   };

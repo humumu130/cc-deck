@@ -69,23 +69,32 @@ export default {
           headers: { location: "http://8.133.211.170:8888/cc-deck-0.5.1-test.apk", "cache-control": "no-store" },
         });
       }
-      // 快照版最新（2026-09-15）：主页快照版按钮指向，302 ECS（每次 snap CI 后脚本更新 ECS 文件）
+      // 快照版最新（2026-09-15）：主页快照版按钮指向，302 ECS。2026-09-16 起指向
+      // 版本化文件名（KV 指针 snap-latest-version 提供，如 cc-deck-0.5.1-snap.7.apk）——
+      // 用户反馈"每次都叫 latest 没法区分"；指针缺失回落旧稳定名
       if (name === "cc-deck-snap-latest.apk") {
-        return new Response(null, {
-          status: 302,
-          headers: { location: "http://8.133.211.170:8888/cc-deck-snap-latest.apk", "cache-control": "no-store" },
-        });
+        let ver = "";
+        try {
+          ver = (await env.DL.get("snap-latest-version")) ?? "";
+        } catch {}
+        const target = /^[\w.-]+$/.test(ver)
+          ? `http://8.133.211.170:8888/cc-deck-${ver}.apk`
+          : "http://8.133.211.170:8888/cc-deck-snap-latest.apk";
+        return new Response(null, { status: 302, headers: { location: target, "cache-control": "no-store" } });
       }
       // 快照版 exe（2026-09-16）：KV 直出（2.5MB < 25MiB 上限）——公司网络屏蔽 ECS 裸 IP，
-      // 302 对公司死路（同 #67：KV 是唯一全通路径）；KV 未上传时 302 ECS 兜底
+      // 302 对公司死路（同 #67：KV 是唯一全通路径）；KV 未上传时 302 ECS 兜底。
+      // 下载文件名取 KV metadata.filename（版本化，如 "CC Deck_0.5.1-snap.7_x64-setup.exe"），
+      // 稳定 URL 换新版后用户落盘的文件不再都叫 snap-latest
       if (name === "cc-deck-snap-latest-setup.exe") {
-        const exe = await env.DL.get(name, { type: "arrayBuffer" });
+        const { value: exe, metadata } = await env.DL.getWithMetadata(name, { type: "arrayBuffer" });
         if (exe) {
+          const fn = (metadata as { filename?: string } | null)?.filename ?? name;
           return new Response(exe, {
             status: 200,
             headers: {
               "content-type": "application/octet-stream",
-              "content-disposition": `attachment; filename="${name}"`,
+              "content-disposition": `attachment; filename="${fn}"`,
               "cache-control": "no-store",
             },
           });

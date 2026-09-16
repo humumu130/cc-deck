@@ -189,6 +189,23 @@ function appendDeletedExt(dataDir: string, id: string): void {
   } catch {}
 }
 
+// 手动命名的跨重启持久化（2026-09-16）：外部会话重启后经 ensureExternal 从 transcript
+// 重新推导标题，内存里的 rename 全丢——"改好名字过一会变回去"根因。sid -> title 落盘，
+// ensureExternal 建卡时回放并打 title_locked（后续智能标题/桥接升级路径都尊重该锁）
+function readTitleOverrides(dataDir: string): Record<string, string> {
+  try {
+    const raw = JSON.parse(readFileSync(join(dataDir, "title-overrides.json"), "utf-8")) as unknown;
+    if (!raw || typeof raw !== "object" || Array.isArray(raw)) return {};
+    const out: Record<string, string> = {};
+    for (const [k, v] of Object.entries(raw)) {
+      if (typeof v === "string" && v.trim()) out[k] = v.trim().slice(0, 40);
+    }
+    return out;
+  } catch {
+    return {};
+  }
+}
+
 // #49 置顶会话清单：写穿 data/pinned-sessions.json（relay session_id 数组）。
 // 置顶 = 跨重启保留：重启后 applyPinned 把清单内托管会话登记为休眠（saved，
 // 可见不可操作），用户点卡片发 COMMAND_RESUME_SESSION 才用 transcript resume 拉起
@@ -245,6 +262,7 @@ export class SessionManager {
   // 无 hook 但 transcript 活跃，孤儿扫描必须排除，否则被误收养成垃圾外部会话
   private childSdkIds: Set<string>;
   private deletedExtIds: Set<string>;
+  private titleOverrides: Record<string, string>;
 
   /** #388 供 ws-server 读默认模型（快照 payload.models 聚合用） */
   readonly cfg: RelayConfig;
@@ -279,6 +297,7 @@ export class SessionManager {
     this.cfg = cfg;
     this.childSdkIds = new Set(readChildSessions(cfg.dataDir));
     this.deletedExtIds = new Set(readDeletedExts(cfg.dataDir));
+    this.titleOverrides = readTitleOverrides(cfg.dataDir);
     const t = setInterval(() => this.heartbeat(), HEARTBEAT_INTERVAL_MS);
     t.unref();
     const c = setInterval(() => {
@@ -485,6 +504,12 @@ export class SessionManager {
       external: true,
       remote_mode: false,
     };
+    // 手动命名回放（readTitleOverrides）：重启前的 rename 跨重启保留
+    const ov = this.titleOverrides[id];
+    if (ov) {
+      state.title = ov;
+      state.title_locked = true;
+    }
     this.sessions.set(id, { agent: null, state, logs: [], lastUpdateEmit: 0 });
     this.bus.emit(id, "SESSION_CREATED", {
       cwd: state.cwd,
@@ -977,6 +1002,12 @@ export class SessionManager {
           s.state.title = title;
           s.state.title_locked = true;
           s.state.updated_at = Date.now();
+          // 落盘（跨重启回放）：外部会话重启后 ensureExternal 会从 transcript 重推标题，
+          // 不落盘改名就静默丢失（"改好名字过一会变回去"）
+          this.titleOverrides[s.state.session_id] = title;
+          try {
+            writeFileSync(join(this.cfg.dataDir, "title-overrides.json"), JSON.stringify(this.titleOverrides));
+          } catch {}
           this.bus.emit(cmd.payload.session_id, "SESSION_UPDATED", {
             status: s.state.status,
             action_summary: s.state.action_summary,
