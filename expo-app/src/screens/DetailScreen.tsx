@@ -1608,8 +1608,8 @@ export default function DetailScreen({ sid, onBack, initialView, ref }: { sid: s
 
       {/* 底部栈：审批横幅（常驻可见，类似 CLI 权限提示）> 模板行 > 命令栏；整体随键盘抬升。
            外层通铺命令栏同色底（2026-09-16）：底部手势条区域不再露页面底色——输入栏
-           一气通到屏幕底边；抬升加 2px 余量防原生 IME insets 欠账遮住输入栏上沿 */}
-      <View pointerEvents="box-none" style={{ backgroundColor: c.overlay, paddingBottom: kb > 0 ? 2 : insets.bottom, transform: [{ translateY: kb > 0 ? -(kb + 2) : 0 }] }}>
+           一气通到屏幕底边；抬升加 8px 余量防原生 IME insets 欠账遮住输入栏上沿（一版 2px 仍差一点，2026-09-16 二测） */}
+      <View pointerEvents="box-none" style={{ backgroundColor: c.overlay, paddingBottom: kb > 0 ? 8 : insets.bottom, transform: [{ translateY: kb > 0 ? -(kb + 8) : 0 }] }}>
         {bannerVisible ? (
           wr!.questions?.length ? (
             <FadeIn><AskBanner wr={wr!} sid={sid} /></FadeIn>

@@ -292,8 +292,11 @@ class RelayStore {
         this.connConnect(conn); // 清长退避 timer，网络已随前台恢复，立即重试
         continue;
       }
-      if (conn.state === "connecting" && conn.connectStartedAt && Date.now() - conn.connectStartedAt > 20_000) {
-        killWs(conn.ws); // 后台期发起的 TCP connect 冻结永悬——掐掉，epoch 递增弃旧周期
+      if (conn.state === "connecting") {
+        // 回前台立即重启 connecting：后台期发起的 TCP connect 冻结永悬，等 20s 看门狗
+        // 就是用户看到的"回前台十几二十秒才连上"（2026-09-16 实测反馈）——resume 时刻
+        // 它必是冻结残骸，掐掉直接重连
+        killWs(conn.ws);
         conn.ws = null;
         this.connConnect(conn);
         continue;

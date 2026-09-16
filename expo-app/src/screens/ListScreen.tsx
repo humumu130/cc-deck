@@ -844,6 +844,7 @@ export default function ListScreen({ sessions, connected, connText, onOpen, onNe
           {/* #80 统计前配电脑图标（桌面端同款），颜色随连接态 */}
           <DeskGlyph color={connColor} />
           <Text style={[styles.connText, { color: connColor }]}>{connText}</Text>
+          {(snap.connState === "connecting" || snap.connState === "reconnecting") ? <ConnDots color={connColor} /> : null}
         </Pressable>
         {srcMenu ? (
           <Pressable style={StyleSheet.absoluteFill} onPress={() => setSrcMenu(false)} />
@@ -1268,3 +1269,19 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
     backgroundColor: "#1D1726", borderWidth: 1, borderColor: "rgba(255,255,255,0.09)",
   },
 });
+
+// 连接中三点脉动（2026-09-16）：与桌面端 conn-dots 同语言——让"正在连接"可被一眼识别
+function ConnDots({ color }: { color: string }) {
+  const op = useRef(new Animated.Value(0.15)).current;
+  useEffect(() => {
+    const l = Animated.loop(Animated.sequence([
+      Animated.timing(op, { toValue: 1, duration: 600, useNativeDriver: true }),
+      Animated.timing(op, { toValue: 0.15, duration: 600, useNativeDriver: true }),
+    ]));
+    l.start();
+    return () => l.stop();
+  }, [op]);
+  return (
+    <Animated.Text style={{ color, opacity: op, fontSize: 12, letterSpacing: 2, marginRight: -4 }}>···</Animated.Text>
+  );
+}
