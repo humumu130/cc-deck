@@ -5243,6 +5243,17 @@ function setFormKind(kind, cfg) {
     $("saveSrvBtn").textContent = cfg ? "保存修改" : "添加直连";
   }
   $("cancelEdit").style.display = cfg ? "" : "none";
+  // 本机条目只读（2026-09-16 用户定稿）：完全由软件自动嗅探接入，地址/令牌/名称/
+  // 形态均无编辑意义——字段禁用、隐藏保存/取消/形态切换；分享码照常可用
+  const ro = !!cfg && cfg.kind === "lan" && !!localEp(cfg.wsUrl)?.loop;
+  $("url").disabled = ro;
+  $("token").disabled = ro;
+  $("srvName").disabled = ro;
+  $("saveSrvBtn").style.display = ro ? "none" : "";
+  $("cancelEdit").style.display = ro ? "none" : $("cancelEdit").style.display;
+  const seg = document.querySelector("#cmodeSeg");
+  if (seg) seg.style.display = ro ? "none" : "";
+  if (ro && cfTitle) cfTitle.textContent = "本机 · 系统自动接入（不可编辑）";
   syncFormQrBtns();
 }
 // 议题②/③ 表单内两枚二维码入口的可见/置灰（setFormKind 换编辑对象、renderServers 随
