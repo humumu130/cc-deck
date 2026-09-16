@@ -43629,7 +43629,7 @@ var Bridge = class _Bridge {
       for (const s of this.mgr.snapshot()) {
         if (!s.external || s.status !== "WORKING" || !s.cli_pid) continue;
         if (this.pending.has(s.session_id)) continue;
-        if (now - (this.termCapAt.get(s.session_id) ?? 0) < 8e3) continue;
+        if (now - (this.termCapAt.get(s.session_id) ?? 0) < 5e3) continue;
         this.termCapAt.set(s.session_id, now);
         try {
           const rows = await captureConsoleBottom(s.cli_pid, 14);

@@ -568,7 +568,7 @@ export class Bridge {
       for (const s of this.mgr.snapshot()) {
         if (!s.external || s.status !== "WORKING" || !s.cli_pid) continue;
         if (this.pending.has(s.session_id)) continue; // 审批横幅优先展示
-        if (now - (this.termCapAt.get(s.session_id) ?? 0) < 8_000) continue;
+        if (now - (this.termCapAt.get(s.session_id) ?? 0) < 5_000) continue;
         this.termCapAt.set(s.session_id, now);
         try {
           const rows = await captureConsoleBottom(s.cli_pid, 14);
