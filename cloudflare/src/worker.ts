@@ -76,7 +76,20 @@ export default {
           headers: { location: "http://8.133.211.170:8888/cc-deck-snap-latest.apk", "cache-control": "no-store" },
         });
       }
+      // 快照版 exe（2026-09-16）：KV 直出（2.5MB < 25MiB 上限）——公司网络屏蔽 ECS 裸 IP，
+      // 302 对公司死路（同 #67：KV 是唯一全通路径）；KV 未上传时 302 ECS 兜底
       if (name === "cc-deck-snap-latest-setup.exe") {
+        const exe = await env.DL.get(name, { type: "arrayBuffer" });
+        if (exe) {
+          return new Response(exe, {
+            status: 200,
+            headers: {
+              "content-type": "application/octet-stream",
+              "content-disposition": `attachment; filename="${name}"`,
+              "cache-control": "no-store",
+            },
+          });
+        }
         return new Response(null, {
           status: 302,
           headers: { location: "http://8.133.211.170:8888/cc-deck-snap-latest-setup.exe", "cache-control": "no-store" },
