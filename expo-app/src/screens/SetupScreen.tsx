@@ -194,11 +194,11 @@ export default function SetupScreen({ onClose, editId, initialScan }: Props) {
       return;
     }
     if (cd && !/^\d{6,8}$/.test(cd)) {
-      setErr("配对码为 8 位数字（电脑端 CC Deck 设置→relay 页领取）");
+      setErr("配对码为 8 位数字（电脑端「连接 → 本机 → 分享」弹层领取）");
       return;
     }
     if (!editId && !cd) {
-      setErr("请填写 8 位配对码（电脑端 CC Deck 设置→relay 页领取）");
+      setErr("请填写 8 位配对码（电脑端「连接 → 本机 → 分享」弹层领取）");
       return;
     }
     setErr(null);
@@ -510,6 +510,7 @@ export default function SetupScreen({ onClose, editId, initialScan }: Props) {
 
           {manualOpen ? (
             <>
+              {editId ? <EditStatusLine editId={editId} /> : null}
               {editId ? (
                 <View style={s.field}>
                   <Text style={s.label}>名称（可选）</Text>
@@ -746,3 +747,32 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
   back: { marginTop: 14, paddingHorizontal: 22, paddingVertical: 8, borderRadius: 20 },
   backT: { color: c.dim, fontSize: 14 },
 });
+
+// 编辑态顶部状态行（2026-09-16 方案 A 对齐小优化①）：详情页不再只是表单——
+// 进页先看到这条源连没连上、走的哪条通道。数据取 useRelay 快照 sources（与
+// 设置抽屉列表同源，连接状态变化自动重渲染）
+function EditStatusLine({ editId }: { editId: string }) {
+  const { c } = useTheme();
+  const snap = useRelay();
+  const src = snap.sources.find((x) => x.id === editId);
+  if (!src) return null;
+  const MAP: Record<string, { color: string; text: string }> = {
+    online: { color: c.done, text: "已连接" },
+    connecting: { color: c.working, text: "连接中…" },
+    reconnecting: { color: c.working, text: "重连中…" },
+    offline: { color: c.error, text: "离线" },
+    unpaired: { color: c.faint, text: "未配对" },
+    idle: { color: c.faint, text: "未连接" },
+  };
+  const st = MAP[src.state] ?? MAP.idle;
+  const chan = src.channel === "cloud" ? "云桥" : src.channel === "lan" ? "直连" : "";
+  return (
+    <View style={{ flexDirection: "row", alignItems: "center", gap: 7, marginBottom: 12 }}>
+      <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: st.color }} />
+      <Text style={{ color: c.dim, fontSize: 12.5 }}>
+        {st.text}
+        {chan ? " · " + chan : ""}
+      </Text>
+    </View>
+  );
+}
