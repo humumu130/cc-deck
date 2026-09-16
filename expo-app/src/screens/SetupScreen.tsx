@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
+import { Alert, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { LinearGradient } from "expo-linear-gradient";
 import { SafeAreaView } from "react-native-safe-area-context";
@@ -103,8 +103,21 @@ export default function SetupScreen({ onClose, editId, initialScan }: Props) {
   const [token, setToken] = useState("");
   const [remember, setRemember] = useState(true);
   const [err, setErr] = useState<string | null>(null);
-  // 手动表单默认收起（重构：扫一扫是主入口），「手动添加」展开；编辑模式整页即表单
+  // 编辑页改版（2026-09-16 Flash 方案）：品牌区→导航行；表单常开；＋=页内切新建
+  const [newMode, setNewMode] = useState(false);
+  const [pairOpen, setPairOpen] = useState(false);
+  const [menuFor, setMenuFor] = useState<string | null>(null);
+  const [initialForm, setInitialForm] = useState("name||url||token||code");
+  // 单元=视图过滤（#27 同则）：手动表单常开
   const [manualOpen, setManualOpen] = useState(!!editId);
+  const effEditId: string | null = newMode ? null : (editId ?? null);
+  const dirty = (() => {
+    if (newMode) return !!wsUrl.trim();
+    if (!effEditId) return !!wsUrl.trim();
+    const e = servers.find((x) => x.id === effEditId);
+    if (!e) return false;
+    return `${e.name}|${e.wsUrl}|${e.token}` !== `${name}|${wsUrl}|${token}` || !!code.trim();
+  })();
   // 扫码（主入口）：initialScan（抽屉扫码入口）进页即开扫码；扫得连接码自动填表单，
   // 仍走 add() 既有流程
   const [scanOpen, setScanOpen] = useState(!!initialScan);
@@ -134,11 +147,13 @@ export default function SetupScreen({ onClose, editId, initialScan }: Props) {
     void store.loadServers().then((list) => {
       const e = list.find((x) => x.id === editId);
       if (!e) return;
-      setName(e.name);
+      // 名称预填清空（方案 A）：默认名=地址本身零信息量——仅保留用户自定义名
+      setName(e.name && e.name !== hostOf(e.wsUrl) ? e.name : "");
       setWsUrl(e.wsUrl);
       setToken(e.token);
       setRemember(!!e.token);
       setKind(e.cloud && e.wsUrl === e.cloud.url ? "cloud" : "lan");
+      setInitialForm(`${e.name}|${e.wsUrl}|${e.token}|`);
     });
   }, [editId]);
   // 配对完成后 store 已更新条目，这里同步刷新列表（显示 ☁ 徽标）
@@ -412,12 +427,19 @@ export default function SetupScreen({ onClose, editId, initialScan }: Props) {
           contentContainerStyle={{ ...s.wrap, paddingBottom: 36 + kb }}
           keyboardShouldPersistTaps="handled"
         >
-          <View style={s.logo}>
-            <LogoMark size={34} />
+          <View style={s.navRow}>
+            {onClose ? (
+              <Pressable style={s.navBtn} hitSlop={8} onPress={onClose} accessibilityLabel="返回">
+                <Text style={s.navBtnT}>←</Text>
+              </Pressable>
+            ) : null}
+            <Text style={s.navTitle} numberOfLines={1}>{newMode ? "添加电脑" : "编辑服务器"}</Text>
+            {editId ? (
+              <Pressable style={s.navBtn} hitSlop={8} onPress={() => { setNewMode(true); setName(""); setWsUrl(CLOUD_URL_DEFAULT); setToken(""); setCode(""); setKind("cloud"); setManualOpen(true); setErr(null); }} accessibilityLabel="新增一条连接">
+                <Text style={s.navBtnT}>＋</Text>
+              </Pressable>
+            ) : null}
           </View>
-          <Text style={s.h2}>CC Deck</Text>
-          <Text style={s.ver}>v{currentVersion()}</Text>
-          <Text style={s.sub}>{editId ? "编辑服务器配置" : "连接到 PC Relay"}</Text>
 
           {/* 主入口「扫一扫」：直连码/云码/导入码全形态统一走 ScanScreen 既有链路 */}
           {!editId ? (
@@ -441,26 +463,35 @@ export default function SetupScreen({ onClose, editId, initialScan }: Props) {
             <View style={s.savedBox}>
               <Text style={s.label}>已保存的服务器</Text>
               {servers.map((e) => {
-                const active = e.id === activeId;
+                const st = srcState.get(e.id);
+                const isEditTarget = effEditId === e.id;
+                // 状态单语言（方案 A）：点色=连接态（绿在线/琥珀未配对/灰其余），徽标=配对态文字
+                const dotColor = st === "online" ? c.done : st === "unpaired" ? c.waiting : c.faint;
+                const badge = st === "unpaired" ? "配对失效" : e.cloud ? "已配对" : "未配对";
+                const badgeStyle = st === "unpaired" ? s.srvBadgeDead : e.cloud ? s.srvBadgeOk : s.srvBadgeNo;
                 return (
-                  <View key={e.id} style={[s.srvRow, active && s.srvRowOn]}>
+                  <View key={e.id} style={[s.srvRow, isEditTarget && s.srvRowOn]}>
                     <Pressable style={s.srvMain} android_ripple={{ color: c.tintSoft, borderless: false }} onPress={() => connect(e)}>
                       <View style={s.srvHead}>
-                        {active ? <View style={[s.srvDot, { backgroundColor: c.done }]} /> : null}
+                        <View style={[s.srvDot, { backgroundColor: dotColor }]} />
                         <Text style={s.srvName} numberOfLines={1}>{e.name}</Text>
-                        {srcState.get(e.id) === "unpaired" ? (
-                          <Text style={s.srvBadgeDead}>配对失效</Text>
-                        ) : e.cloud ? (
-                          <Text style={s.srvBadgeOk}>已配对 ✓</Text>
-                        ) : (
-                          <Text style={s.srvBadgeNo}>未配对</Text>
-                        )}
+                        <Text style={badgeStyle}>{badge}</Text>
                       </View>
                       <Text style={s.srvUrl} numberOfLines={1}>{e.wsUrl}</Text>
                     </Pressable>
-                    <Pressable style={s.srvDel} android_ripple={{ color: withA(c.waiting, 0.15), borderless: false, radius: 14 }} onPress={() => remove(e)}>
-                      <Text style={s.srvDelT}>✕</Text>
+                    <Pressable style={s.srvDel} android_ripple={{ color: withA(c.waiting, 0.15), borderless: false, radius: 14 }} onPress={() => setMenuFor(menuFor === e.id ? null : e.id)}>
+                      <Text style={s.srvDelT}>⋯</Text>
                     </Pressable>
+                    {menuFor === e.id ? (
+                      <View style={s.srvMenu}>
+                        <Pressable style={s.srvMenuItem} onPress={() => { setMenuFor(null); setNewMode(false); setName(e.name && e.name !== hostOf(e.wsUrl) ? e.name : ""); setWsUrl(e.wsUrl); setToken(e.token ?? ""); setKind(e.cloud && e.wsUrl === e.cloud.url ? "cloud" : "lan"); setManualOpen(true); setErr(null); }}>
+                          <Text style={s.srvMenuItemT}>编辑</Text>
+                        </Pressable>
+                        <Pressable style={s.srvMenuItem} onPress={() => { setMenuFor(null); Alert.alert("删除服务器", `确定删除「${e.name}」？此操作不可撤销。`, [{ text: "取消", style: "cancel" }, { text: "删除", style: "destructive", onPress: () => remove(e) }]); }}>
+                          <Text style={[s.srvMenuItemT, { color: c.error }]}>删除</Text>
+                        </Pressable>
+                      </View>
+                    ) : null}
                   </View>
                 );
               })}
@@ -489,8 +520,6 @@ export default function SetupScreen({ onClose, editId, initialScan }: Props) {
                 <Pressable hitSlop={6} onPress={() => store.clearCloudMsg()}>
                   <Text style={s.pairMsg} numberOfLines={2}>{snap.cloudMsg}</Text>
                 </Pressable>
-              ) : !cloudReady ? (
-                <Text style={s.pairHint}>{cloudEntry && cloudEntry.id !== activeId ? "该服务器未连接：先在列表中点选连接它，再配对" : "配对需先连接该服务器；不在电脑旁时用「扫一扫」或手动填云桥地址+配对码即可远程接入"}</Text>
               ) : null}
             </View>
           ) : null}
@@ -541,9 +570,15 @@ export default function SetupScreen({ onClose, editId, initialScan }: Props) {
               </View>
               {kind === "cloud" ? (
                 <>
+                  {effEditId ? (
+                    <Pressable style={s.advRow} hitSlop={6} onPress={() => { setPairOpen((v) => !v); setErr(null); }}>
+                      <Text style={s.advT}>{pairOpen ? "▾" : "▸"} 重新配对（输入新的 8 位码）</Text>
+                    </Pressable>
+                  ) : null}
+                  {(pairOpen || !effEditId) ? (
                   <View style={s.field}>
                     <Text style={s.label}>
-                      {editId ? "配对码（留空 = 仅改地址，不重新配对）" : "配对码（电脑端 CC Deck 领取的 8 位码）"}
+                      {effEditId ? "配对码（留空 = 仅改地址，不重新配对）" : "配对码（电脑端 CC Deck 领取的 8 位码）"}
                     </Text>
                     <TextInput
                       style={[s.input, err && !editId && !/^\d{6,8}$/.test(code.trim()) && s.inputErr]}
@@ -556,6 +591,7 @@ export default function SetupScreen({ onClose, editId, initialScan }: Props) {
                       maxLength={8}
                     />
                   </View>
+                  ) : null}
                   <Pressable style={s.advRow} hitSlop={6} onPress={() => setAdvOpen((v) => !v)}>
                     <Text style={s.advT}>{advOpen ? "▾" : "▸"} 高级（云桥令牌，公共桥留空）</Text>
                   </Pressable>
@@ -603,21 +639,6 @@ export default function SetupScreen({ onClose, editId, initialScan }: Props) {
             </>
           ) : null}
           {err ? <Text style={s.errT}>{err}</Text> : null}
-          {manualOpen ? (
-            <Pressable style={s.btn} android_ripple={{ color: "rgba(255,255,255,0.15)", borderless: false }} onPress={submit}>
-              <LinearGradient colors={[ORANGE_HI, ORANGE]} style={s.btnGrad}>
-                <Text style={s.btnText}>
-                  {pairing
-                    ? "配对中…"
-                    : kind === "cloud"
-                      ? editId
-                        ? code.trim() ? "重新配对并保存" : "保存修改"
-                        : "配对并连接"
-                      : editId ? "保存修改" : servers.length > 0 ? "添加并连接" : "连接"}
-                </Text>
-              </LinearGradient>
-            </Pressable>
-          ) : null}
           {/* 连接过程反馈（仅首次配置页；从主界面进入时后台重连循环不该误报）：host 固化
               于发起连接时。④ 三态分流——connecting/reconnecting 只报网络重试（含②手动
               重试钮），unpaired 才是配对引导；idle/online 无行 */}
@@ -646,6 +667,24 @@ export default function SetupScreen({ onClose, editId, initialScan }: Props) {
             </Pressable>
           ) : null}
         </ScrollView>
+        <View style={s.saveBarFix}>
+          <Pressable
+            style={[s.saveBarBtn, !dirty && { opacity: 0.4 }]}
+            disabled={!dirty || pairing}
+            android_ripple={{ color: "rgba(255,255,255,0.15)", borderless: false }}
+            onPress={submit}
+          >
+            <LinearGradient colors={[ORANGE_HI, ORANGE]} style={s.saveBarGrad}>
+              <Text style={s.saveBarT}>
+                {pairing ? "配对中…" : kind === "cloud"
+                  ? effEditId
+                    ? code.trim() ? "重新配对并保存" : "保存修改"
+                    : "配对并连接"
+                  : effEditId ? "保存修改" : servers.length > 0 ? "添加并连接" : "连接"}
+              </Text>
+            </LinearGradient>
+          </Pressable>
+        </View>
       </View>
       <ScanScreen visible={scanOpen} onClose={() => setScanOpen(false)} onResult={applyScan} />
       <ImportPicker visible={importOpen} target={importTarget} onClose={() => setImportOpen(false)} />
@@ -654,6 +693,24 @@ export default function SetupScreen({ onClose, editId, initialScan }: Props) {
 }
 
 const makeStyles = (c: ThemeColors) => StyleSheet.create({
+  saveBarFix: {
+    paddingHorizontal: 18, paddingTop: 10, paddingBottom: 12,
+    backgroundColor: c.panel, borderTopWidth: 1, borderTopColor: c.line,
+  },
+  saveBarBtn: { borderRadius: 14, overflow: "hidden" },
+  saveBarGrad: { paddingVertical: 13, alignItems: "center" },
+  saveBarT: { color: "#fff", fontSize: 15, fontWeight: "700" },
+  navRow: { flexDirection: "row", alignItems: "center", gap: 10, alignSelf: "stretch", paddingHorizontal: 18, marginBottom: 12 },
+  navBtn: { width: 38, height: 38, borderRadius: 11, borderWidth: 1, borderColor: c.line, alignItems: "center", justifyContent: "center" },
+  navBtnT: { color: c.text, fontSize: 17 },
+  navTitle: { color: c.text, fontSize: 17, fontWeight: "600", flex: 1 },
+  srvMenu: {
+    position: "absolute", right: 10, top: 44, zIndex: 20, width: 120,
+    backgroundColor: c.panel, borderRadius: 10, borderWidth: 1, borderColor: c.line,
+    overflow: "hidden", elevation: 8,
+  },
+  srvMenuItem: { paddingHorizontal: 12, paddingVertical: 9 },
+  srvMenuItemT: { color: c.text, fontSize: 13 },
   safe: { flex: 1, backgroundColor: c.bg },
   wrap: { alignItems: "center", paddingTop: 72, paddingBottom: 36, paddingHorizontal: 28 },
   logo: {

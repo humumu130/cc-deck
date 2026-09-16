@@ -53,13 +53,9 @@ export default function NewSessionModal({ visible, onClose }: { visible: boolean
       setErr("请填写工作目录（PC 上的项目路径）");
       return;
     }
-    if (!p) {
-      setErr("请填写任务提示词");
-      return;
-    }
     setErr(null);
     void AsyncStorage.setItem("ccr_cwd", cc);
-    if (store.send("COMMAND_CREATE", { cwd: cc, prompt: p, ...(bypass ? { permissionMode: "bypassPermissions" as const } : {}) }, multi ? effTarget ?? undefined : undefined)) {
+    if (store.send("COMMAND_CREATE", { cwd: cc, prompt: "" + p, ...(bypass ? { permissionMode: "bypassPermissions" as const } : {}) }, multi ? effTarget ?? undefined : undefined)) {
       setPrompt("");
       onClose();
     } else {
@@ -113,29 +109,6 @@ export default function NewSessionModal({ visible, onClose }: { visible: boolean
                 autoCapitalize="none"
                 autoCorrect={false}
                 spellCheck={false}
-              />
-            </View>
-            <View style={m.field}>
-              <Text style={m.label}>任务提示词</Text>
-              <ScrollView horizontal showsHorizontalScrollIndicator={false} style={m.presetRow} contentContainerStyle={{ gap: 7 }}>
-                {PRESETS.map((p) => (
-                  <Pressable
-                    key={p.label}
-                    style={m.presetChip}
-                    android_ripple={{ color: c.tintSoft, borderless: false, radius: 12 }}
-                    onPress={() => setPrompt(p.text)}
-                  >
-                    <Text style={m.presetT}>{p.label}</Text>
-                  </Pressable>
-                ))}
-              </ScrollView>
-              <TextInput
-                style={[m.input, m.ta, err && !prompt.trim() && m.inputErr]}
-                value={prompt}
-                onChangeText={(v) => { setPrompt(v); setErr(null); }}
-                placeholder="描述要 Claude 做什么…"
-                placeholderTextColor={c.faint}
-                multiline
               />
             </View>
             {err ? <Text style={m.errT}>{err}</Text> : null}

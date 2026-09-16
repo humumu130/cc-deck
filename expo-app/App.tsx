@@ -757,14 +757,7 @@ function Shell() {
   // 连接成功后：请求通知权限 + 启动前台服务保活
   // fgStarted：服务一旦起过就置位（stop 从不调用），后续文案刷新不再受连接态门控
   const fgStarted = useRef(false);
-  useEffect(() => {
-    if (!snap.connected) return;
-    void ensureNotifPermission();
-    if (fgSupported()) {
-      startForegroundService();
-      fgStarted.current = true;
-    }
-  }, [snap.connected]);
+  // （已并入下方统计 effect：连接成功 → 启动服务 → 同帧刷新，消除覆盖竞态）
 
   // #301/#355 前台服务通知正文随会话/连接态刷新：彩点+数字（working 琥珀/waiting 红/
   // error 橙/done 绿，同列表 statChips；原生 Spannable 着色）。按分布 key 比对防重发

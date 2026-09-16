@@ -1262,7 +1262,8 @@ export class SessionManager {
       cwd,
       this.cfg.model,
       this.agentCallbacks(managed),
-      prompt,
+      // 空提示词 = parked 形态（#49）：会话建好等输入，不注入空消息
+      prompt.trim() ? prompt : undefined,
       permissionMode ? { permissionMode } : undefined,
     );
 
