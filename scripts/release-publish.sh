@@ -27,6 +27,25 @@ $SCP "$APK" "$ECS_HOST:$ECS_DIR/cc-deck.apk"
 [ -n "$LATEST_YML" ] && $SCP "$LATEST_YML" "$ECS_HOST:$ECS_DIR/latest.yml"
 printf '{"version":"%s","notes":"%s"}' "$VER" "$NOTES" | $SSH $ECS_HOST "cat > $ECS_DIR/latest.json"
 
+# Tauri 桌面更新链（2026-09-16 补全）：桌面 updater 读 cc.humumu.online/download/tauri-latest.json
+# （KV 镜像），exe 内链必须公司可达 → setup.exe 上 KV、清单 url 指 CF 域名。
+# 签名/私钥由 CI 产物自带（tauri build 生成 *-setup.exe + .sig + latest.json）
+SIG=$(find "$TMP" -name '*-setup.exe.sig' | head -1)
+TAURI_LATEST=$(find "$TMP" -name 'latest.json' -path '*nsis*' | head -1)
+if [ -n "$EXE" ] && [ -n "$SIG" ] && [ -n "$TAURI_LATEST" ] && [ -n "${CF_TOKEN:-${CLOUDFLARE_API_TOKEN:-}}" ]; then
+  SIGB64=$(base64 < "$SIG" | tr -d '\n')
+  EXEURL="https://cc.humumu.online/dl/cc-deck-$VER-setup.exe"
+  printf '{"version":"%s","pub_date":"%s","platforms":{"windows-x86_64":{"signature":"%s","url":"%s"}}}' \
+    "$VER" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$SIGB64" "$EXEURL" > "$TMP/tauri-latest-gen.json"
+  python3 -c "import json,sys; json.load(open(sys.argv[1]))" "$TMP/tauri-latest-gen.json" || { echo "❌ 生成的 tauri-latest.json 不是合法 JSON"; exit 1; }
+  $SCP "$EXE" "$ECS_HOST:$ECS_DIR/cc-deck-$VER-setup.exe"
+  (cd cloudflare && CLOUDFLARE_API_TOKEN="${CF_TOKEN:-${CLOUDFLARE_API_TOKEN:-}}" npx wrangler kv key put "cc-deck-$VER-setup.exe" --path "$EXE" --namespace-id d9b9bb1768324fb1b71907ca72de7aa6 --remote >/dev/null)
+  (cd cloudflare && CLOUDFLARE_API_TOKEN="${CF_TOKEN:-${CLOUDFLARE_API_TOKEN:-}}" npx wrangler kv key put "tauri-latest.json" --path "$TMP/tauri-latest-gen.json" --namespace-id d9b9bb1768324fb1b71907ca72de7aa6 --remote >/dev/null)
+  echo "   桌面更新链已推（KV manifest + exe，公司可达）"
+else
+  echo "   ⚠️ 缺 sig/latest.json/CF_TOKEN——桌面更新链未更新（CI 产物不全或未配 token）"
+fi
+
 echo "③ relay 广播发版通知给在线客户端…"
 curl -sS -X POST "http://127.0.0.1:8787/api/notify?token=$RELAY_TOKEN" \
   -H 'content-type: application/json' \
