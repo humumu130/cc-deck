@@ -576,7 +576,12 @@ export class Bridge {
           for (let i = rows.length - 1; i >= 0; i--) {
             const t = rows[i].trim();
             if (t.length < 12 || t.includes("❯")) continue;
-            if (/[✻✳✶✦✿✽]/.test(t) || /…\s*$/.test(t)) { line = t; break; }
+            if (/[✻✳✶✦✿✽]/.test(t) || /…\s*$/.test(t)) {
+              // 行首 CLI 装饰性转轮星剥掉：客户端状态行自带动画星（LiveStatusLine/
+              // conn-dots），双星重复且工具摘要行无星不统一（2026-09-16 用户反馈）
+              line = t.replace(/^[✻✳✶✦✿✽●]\s*/u, "");
+              break;
+            }
           }
           if (!line || line === this.termLine.get(s.session_id)) continue;
           this.termLine.set(s.session_id, line);

@@ -43635,7 +43635,7 @@ var Bridge = class _Bridge {
             const t = rows[i].trim();
             if (t.length < 12 || t.includes("\u276F")) continue;
             if (/[✻✳✶✦✿✽]/.test(t) || /…\s*$/.test(t)) {
-              line = t;
+              line = t.replace(/^[✻✳✶✦✿✽●]\s*/u, "");
               break;
             }
           }
