@@ -4077,8 +4077,10 @@ function renderDetail() {
   const lr = $("liverow");
   if (s.status === "WORKING") {
     lr.style.display = "flex";
-    $("livesum").textContent = s.action_summary || "思考中…";
-    $("liveel").textContent = "· " + fmtElapsed(Date.now() - (s.turn_started_at ?? s.updated_at))
+    // 终端实时行（\u200B 前缀）：自带活动时长/↓token——隐藏自家走秒+ctx（2026-09-16 反馈）
+    const liveLine = (s.action_summary ?? "").charAt(0) === "\u200B";
+    $("livesum").textContent = liveLine ? s.action_summary.slice(1) : (s.action_summary || "思考中…");
+    $("liveel").textContent = liveLine ? "" : "· " + fmtElapsed(Date.now() - (s.turn_started_at ?? s.updated_at))
       + (s.context_usage ? " · " + tokStr(s.context_usage) + "/" + tokStr(s.context_limit || 200000) : "");
   } else lr.style.display = "none";
 

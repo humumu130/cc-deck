@@ -43619,6 +43619,7 @@ var Bridge = class _Bridge {
   pollTerminalLineBusy = false;
   async pollTerminalLines() {
     if (this.pollTerminalLineBusy) return;
+    if (process.env.CCR_NO_TERM_LINE === "1") return;
     this.pollTerminalLineBusy = true;
     try {
       const now = Date.now();
@@ -43641,7 +43642,7 @@ var Bridge = class _Bridge {
           }
           if (!line || line === this.termLine.get(s.session_id)) continue;
           this.termLine.set(s.session_id, line);
-          this.mgr.setExternalStatus(s.session_id, "WORKING", truncate(line, 120));
+          this.mgr.setExternalStatus(s.session_id, "WORKING", "\u200B" + truncate(line, 120));
         } catch {
         }
       }
