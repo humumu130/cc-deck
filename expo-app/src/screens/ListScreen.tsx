@@ -188,11 +188,13 @@ function LiveStat({ s }: { s: SessionState }) {
   const secs = Math.max(0, Math.floor((Date.now() - (s.turn_started_at ?? s.updated_at)) / 1000));
   const tok = s.usage?.output_tokens ?? 0;
   // 终端实时行自带活动时长/↓token：隐藏自家计时，避免同屏重复（2026-09-16 用户反馈）
-  const head = live ? "" : (s.compacting ? "⟳ 压缩上下文 · " : "") + (tok > 0 ? `${secs}s · ↓ ${fmtTok(tok)}` : `${secs}s`);
+  // 排版对齐 CLI 转轮行：状态文案在前，计时/↓token 收进后方括号；
+  // 终端实时行自带括号信息，不重复叠加（2026-09-16 用户定稿）
+  const meta = `${secs}s${tok > 0 ? ` · ↓ ${fmtTok(tok)}` : ""}`;
   return (
     <Text style={styles.liveStat} numberOfLines={1}>
-      {head ? <Text style={{ color: c.working }}>{head}</Text> : null}
-      {summary && !s.compacting ? ` · ${summary}` : ""}
+      {s.compacting ? <Text style={{ color: c.working }}>⟳ 压缩上下文 · </Text> : null}
+      <Text style={{ color: c.working }}>{live ? summary : `${summary || ""}（${meta}）`}</Text>
     </Text>
   );
 }

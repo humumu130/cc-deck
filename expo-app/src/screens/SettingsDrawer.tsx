@@ -414,7 +414,8 @@ export default function SettingsDrawer({
           </View>
           <View style={{ flex: 1, minWidth: 0 }}>
             <Text style={d.nameT}>CC Deck</Text>
-            <Text style={d.verT}>{APP_VER}{CHANNEL_TAG ? ` · ${CHANNEL_TAG}` : ""}</Text>
+            <Text style={d.verT}>{CHANNEL_TAG ?? ""}</Text>
+            {/* 版本数字只在「关于」页展示（2026-09-16：侧栏版本号出现太多处，收敛） */}
           </View>
           {/* 全局扫码入口（直连/登录/导入统一扫）：头部右侧角标钮，与设置页同一链路 */}
           <Pressable

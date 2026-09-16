@@ -4141,7 +4141,8 @@ function renderDetail() {
   $("stopBtn").textContent = s.external ? "⏹ 注入 Esc" : "⏹ 停止";
   $("stopBtn").title = s.external ? "注入 Esc 打断" : "停止会话";
   // #279 批次3：图片入口仅托管会话（外部 CLI 会话发图入口隐藏，对齐手机端）
-  $("imgBtn").style.display = s.external || s.historical ? "none" : "";
+  // 可恢复的托管历史会话保留发图（SDK resume 支持图片）
+  $("imgBtn").style.display = s.external || (s.historical && !s.relay_session_id) ? "none" : "";
 
   // 时间线 / 统计（增量重建）
   const tl = $("timeline");

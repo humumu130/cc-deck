@@ -578,7 +578,9 @@ export class Bridge {
           for (let i = rows.length - 1; i >= 0; i--) {
             const t = rows[i].trim();
             if (t.length < 12 || t.includes("❯")) continue;
-            if (/[✻✳✶✦✿✽]/.test(t) || /…\s*$/.test(t)) {
+            // 必须含 CLI 转轮符号：通用 "Processing…" 行会混入（2026-09-16 实测），
+            // 且星符号在 relay 侧剥离，客户端动画星成为唯一指示不重复
+            if (/[✻✳✶✦✿✽]/.test(t)) {
               // 行首 CLI 装饰性转轮星剥掉：客户端状态行自带动画星（LiveStatusLine/
               // conn-dots），双星重复且工具摘要行无星不统一（2026-09-16 用户反馈）
               line = t.replace(/^[✻✳✶✦✿✽●]\s*/u, "");

@@ -453,15 +453,16 @@ function LiveStatusLine({ summary, startedAt, color, tok }: { summary: string; s
   const live = isLiveLine(summary);
   const text = stripLiveMark(summary);
   const secs = startedAt ? Math.max(0, Math.floor((Date.now() - startedAt) / 1000)) : 0;
-  // 终端实时行：隐藏自家转轮星+走秒（转轮行自带活动时长——叠加重复，2026-09-16）
-  const frame = live ? "" : SPIN_FRAMES[Math.floor(Date.now() / 500) % SPIN_FRAMES.length];
+  // 实时行照转动画星：CLI 行首星已在 relay 剥除，客户端星是唯一指示不重复；
+  // 走秒保留（本回合时长与转轮行内活动时长语义不同）；ctx 已按反馈移除
+  const frame = SPIN_FRAMES[Math.floor(Date.now() / 500) % SPIN_FRAMES.length];
   const m = Math.floor(secs / 60);
-  const timeText = live ? "" : m > 0 ? `${m}m${secs % 60}s` : `${secs}s`;
+  const timeText = m > 0 ? `${m}m${secs % 60}s` : `${secs}s`;
   return (
     <View style={d.statusLine}>
-      {frame ? <Text style={[d.statusSpin, { color }]}>{frame}</Text> : null}
+      <Text style={[d.statusSpin, { color }]}>{frame}</Text>
       <Text style={[d.statusText, { color }]} numberOfLines={1}>{text || "思考中…"}</Text>
-      {startedAt && !live ? <Text style={d.statusTime}>· {timeText}</Text> : null}
+      {startedAt ? <Text style={d.statusTime}>· {timeText}</Text> : null}
       {tok && !live ? <Text style={d.statusTime}>· {tok}</Text> : null}
     </View>
   );
@@ -1689,7 +1690,9 @@ export default function DetailScreen({ sid, onBack, initialView, ref }: { sid: s
           </FadeIn>
         ) : null}
         <View style={d.cmdbar}>
-          {!external && !s.historical ? (
+          {/* 可恢复的托管历史会话同样支持发图（SDK resume 支持图片，2026-09-16 反馈：
+              测试客户端创建的会话闲置转 historical 后发图入口消失） */}
+          {!external && (!s.historical || s.relay_session_id) ? (
             <Pressable
               style={[d.imgBtn, d.opRipple, (!canCmd || images.length >= 4) && { opacity: 0.4 }]}
               android_ripple={{ color: c.tintSoft, borderless: false, radius: 11 }}
