@@ -110,7 +110,8 @@ export default function SetupScreen({ onClose, editId, initialScan }: Props) {
   const [initialForm, setInitialForm] = useState("name||url||token||code");
   // 单元=视图过滤（#27 同则）：手动表单常开
   const [manualOpen, setManualOpen] = useState(!!editId);
-  const effEditId: string | null = newMode ? null : (editId ?? null);
+  const [editOverride, setEditOverride] = useState<string | null | undefined>(undefined);
+  const effEditId: string | null = newMode ? null : (editOverride !== undefined ? editOverride : (editId ?? null));
   const dirty = (() => {
     if (newMode) return !!wsUrl.trim();
     if (!effEditId) return !!wsUrl.trim();
@@ -331,6 +332,20 @@ export default function SetupScreen({ onClose, editId, initialScan }: Props) {
     });
   };
 
+  // 点另一张卡 = 切换编辑对象（停留本页，不退出不连接——2026-09-16 用户反馈③）
+  const switchEdit = (e: ServerEntry) => {
+    setNewMode(false);
+    setEditOverride(e.id);
+    setName(e.name && e.name !== hostOf(e.wsUrl) ? e.name : "");
+    setWsUrl(e.wsUrl);
+    setToken(e.token ?? "");
+    setKind(e.cloud && e.wsUrl === e.cloud.url ? "cloud" : "lan");
+    setCode("");
+    setErr(null);
+    setManualOpen(true);
+    setInitialForm(`${e.name}|${e.wsUrl}|${e.token ?? ""}|`);
+  };
+
   const connect = (e: ServerEntry) => {
     if (!e.token && !e.cloud) {
       // 没记令牌的 LAN 条目：展开表单预填让用户补输，聚焦令牌框直接唤起键盘。
@@ -471,7 +486,12 @@ export default function SetupScreen({ onClose, editId, initialScan }: Props) {
                 const badgeStyle = st === "unpaired" ? s.srvBadgeDead : e.cloud ? s.srvBadgeOk : s.srvBadgeNo;
                 return (
                   <View key={e.id} style={[s.srvRow, isEditTarget && s.srvRowOn]}>
-                    <Pressable style={s.srvMain} android_ripple={{ color: c.tintSoft, borderless: false }} onPress={() => connect(e)}>
+                    <Pressable
+                      style={s.srvMain}
+                      android_ripple={{ color: c.tintSoft, borderless: false }}
+                      onPress={() => switchEdit(e)}
+                      onLongPress={() => Alert.alert("删除服务器", `确定删除「${e.name}」？此操作不可撤销。`, [{ text: "取消", style: "cancel" }, { text: "删除", style: "destructive", onPress: () => remove(e) }])}
+                    >
                       <View style={s.srvHead}>
                         <View style={[s.srvDot, { backgroundColor: dotColor }]} />
                         <Text style={s.srvName} numberOfLines={1}>{e.name}</Text>
@@ -479,19 +499,7 @@ export default function SetupScreen({ onClose, editId, initialScan }: Props) {
                       </View>
                       <Text style={s.srvUrl} numberOfLines={1}>{e.wsUrl}</Text>
                     </Pressable>
-                    <Pressable style={s.srvDel} android_ripple={{ color: withA(c.waiting, 0.15), borderless: false, radius: 14 }} onPress={() => setMenuFor(menuFor === e.id ? null : e.id)}>
-                      <Text style={s.srvDelT}>⋯</Text>
-                    </Pressable>
-                    {menuFor === e.id ? (
-                      <View style={s.srvMenu}>
-                        <Pressable style={s.srvMenuItem} onPress={() => { setMenuFor(null); setNewMode(false); setName(e.name && e.name !== hostOf(e.wsUrl) ? e.name : ""); setWsUrl(e.wsUrl); setToken(e.token ?? ""); setKind(e.cloud && e.wsUrl === e.cloud.url ? "cloud" : "lan"); setManualOpen(true); setErr(null); }}>
-                          <Text style={s.srvMenuItemT}>编辑</Text>
-                        </Pressable>
-                        <Pressable style={s.srvMenuItem} onPress={() => { setMenuFor(null); Alert.alert("删除服务器", `确定删除「${e.name}」？此操作不可撤销。`, [{ text: "取消", style: "cancel" }, { text: "删除", style: "destructive", onPress: () => remove(e) }]); }}>
-                          <Text style={[s.srvMenuItemT, { color: c.error }]}>删除</Text>
-                        </Pressable>
-                      </View>
-                    ) : null}
+                  
                   </View>
                 );
               })}
@@ -539,7 +547,6 @@ export default function SetupScreen({ onClose, editId, initialScan }: Props) {
 
           {manualOpen ? (
             <>
-              {editId ? <EditStatusLine editId={editId} /> : null}
               {editId ? (
                 <View style={s.field}>
                   <Text style={s.label}>名称（可选）</Text>
@@ -661,11 +668,6 @@ export default function SetupScreen({ onClose, editId, initialScan }: Props) {
               ) : null}
             </View>
           ) : null}
-          {onClose ? (
-            <Pressable style={s.back} android_ripple={{ color: c.tintSoft, borderless: false, radius: 20 }} onPress={onClose}>
-              <Text style={s.backT}>返回</Text>
-            </Pressable>
-          ) : null}
         </ScrollView>
         <View style={s.saveBarFix}>
           <Pressable
@@ -700,7 +702,7 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
   saveBarBtn: { borderRadius: 14, overflow: "hidden" },
   saveBarGrad: { paddingVertical: 13, alignItems: "center" },
   saveBarT: { color: "#fff", fontSize: 15, fontWeight: "700" },
-  navRow: { flexDirection: "row", alignItems: "center", gap: 10, alignSelf: "stretch", paddingHorizontal: 18, marginBottom: 12 },
+  navRow: { flexDirection: "row", alignItems: "center", gap: 10, alignSelf: "stretch", paddingHorizontal: 2, marginBottom: 12 },
   navBtn: { width: 38, height: 38, borderRadius: 11, borderWidth: 1, borderColor: c.line, alignItems: "center", justifyContent: "center" },
   navBtnT: { color: c.text, fontSize: 17 },
   navTitle: { color: c.text, fontSize: 17, fontWeight: "600", flex: 1 },
@@ -712,7 +714,7 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
   srvMenuItem: { paddingHorizontal: 12, paddingVertical: 9 },
   srvMenuItemT: { color: c.text, fontSize: 13 },
   safe: { flex: 1, backgroundColor: c.bg },
-  wrap: { alignItems: "center", paddingTop: 72, paddingBottom: 36, paddingHorizontal: 28 },
+  wrap: { alignItems: "center", paddingTop: 10, paddingBottom: 24, paddingHorizontal: 16 },
   logo: {
     width: 64, height: 64, borderRadius: 19, alignItems: "center", justifyContent: "center", marginBottom: 16,
     backgroundColor: "#1D1726", borderWidth: 1, borderColor: "rgba(255,255,255,0.09)",
