@@ -1433,8 +1433,8 @@
     background: var(--panel-2); border: 1px dashed var(--border); color: var(--dim);
     border-radius: 12px; border-top-right-radius: 4px; padding: 6px 11px; font-size: 12px;
     max-width: 70%; animation: pendpulse 1.8s infinite;
-    /* 长消息默认折叠两行，点击展开全文（挤压会话显示的根治，2026-09-14） */
-    display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
+    /* 长消息默认折叠一行（省空间，用户 2026-09-16 拍板），点击展开全文 */
+    display: -webkit-box; -webkit-line-clamp: 1; -webkit-box-orient: vertical;
     overflow: hidden; cursor: pointer; word-break: break-all;
   }
   #pendbox span.open { -webkit-line-clamp: unset; overflow: visible; }
