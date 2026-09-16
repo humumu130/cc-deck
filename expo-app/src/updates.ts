@@ -69,16 +69,26 @@ export function currentVersion(): string {
 }
 
 // "v0.3.13" → [0,3,13]；非数字段按 0，预发布后缀（-beta 等）忽略
-function parseSemver(v: string): number[] {
-  const parts = v.replace(/^v/, "").split(/[.-]/).slice(0, 3);
-  return parts.map((p) => Number(p.replace(/\D.*/, "")) || 0);
-}
-
-export function isNewer(remote: string, local: string): boolean {
+// semver 解析：core 三段数值 + pre 预发布串（"0.5.1-test.17" → core [0,5,1], pre "test.17"）
+function parseSemver(v: string): { core: number[]; pre: string | null } {
+  const m = String(v).replace(/^v/, "").match(/^(\d+)\.(\d+)\.(\d+)(?:-([\w.]+))?$/);
+  if (!m) return { core: [0, 0, 0], pre: String(v) || null };
+  return { core: [Number(m[1]), Number(m[2]), Number(m[3])], pre: m[4] ?? null };
+}export function isNewer(remote: string, local: string): boolean {
   const r = parseSemver(remote);
   const l = parseSemver(local);
   for (let i = 0; i < 3; i++) {
-    if ((r[i] ?? 0) !== (l[i] ?? 0)) return (r[i] ?? 0) > (l[i] ?? 0);
+    if ((r.core[i] ?? 0) !== (l.core[i] ?? 0)) return (r.core[i] ?? 0) > (l.core[i] ?? 0);
+  }
+  // core 相等：semver 规则——正式版 > 预发布版（0.5.1 > 0.5.1-test.17）
+  if (!r.pre && l.pre) return true;
+  if (r.pre && !l.pre) return false;
+  if (r.pre && l.pre) {
+    // 同为预发布：通道序号比数值（test.17 > test.9）
+    const rn = Number((r.pre.match(/\d+/g) ?? ["0"]).pop());
+    const ln = Number((l.pre.match(/\d+/g) ?? ["0"]).pop());
+    if (rn !== ln) return rn > ln;
+    return r.pre > l.pre;
   }
   return false;
 }
