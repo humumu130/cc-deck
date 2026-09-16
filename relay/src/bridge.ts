@@ -538,12 +538,52 @@ export class Bridge {
         if (this.transcriptPaths.size > 120) this.transcriptPaths.clear(); // 兜底硬上限
       }
       for (const [id, p] of this.transcriptPaths) this.pushAssistantTexts(id, p);
+      void this.pollTerminalLines();
       this.sweepNoHookIdle();
       this.sweepWorkingIdle();
       this.sweepSubagents();
       this.sweepStuckInputs();
     }, 5000);
     this.queuePollTimer.unref();
+  }
+
+  // 终端实时状态行（2026-09-16 用户需求）：CLI 转轮文案（"✻ Crunched for 34s ●
+  // Agent … finished · Proofing… (9s · ↓ 1.5k tokens)"）不写入状态文件（只有
+  // busy/idle），唯一来源是终端屏幕本身——复用滞留验证的屏幕捕获（Windows
+  // inject --peek / macOS Terminal contents），取底部转轮行刷新 action_summary。
+  // WORKING 且有 cli_pid 的外部会话 8s 一采（每源独立限速）；文本变化才下发，
+  // hook 工具事件一来即被权威摘要覆盖（事件间隙的实时性补位）
+  private termLine = new Map<string, string>();
+  private termCapAt = new Map<string, number>();
+  private pollTerminalLineBusy = false;
+  private async pollTerminalLines(): Promise<void> {
+    if (this.pollTerminalLineBusy) return;
+    this.pollTerminalLineBusy = true;
+    try {
+      const now = Date.now();
+      for (const s of this.mgr.snapshot()) {
+        if (!s.external || s.status !== "WORKING" || !s.cli_pid) continue;
+        if (this.pending.has(s.session_id)) continue; // 审批横幅优先展示
+        if (now - (this.termCapAt.get(s.session_id) ?? 0) < 8_000) continue;
+        this.termCapAt.set(s.session_id, now);
+        try {
+          const rows = await captureConsoleBottom(s.cli_pid, 14);
+          if (!rows || !rows.length) continue;
+          // 转轮行启发式：底部向上找含 CLI 转轮动词符号或以 … 收尾的非输入行
+          let line = "";
+          for (let i = rows.length - 1; i >= 0; i--) {
+            const t = rows[i].trim();
+            if (t.length < 12 || t.includes("❯")) continue;
+            if (/[✻✳✶✦✿✽]/.test(t) || /…\s*$/.test(t)) { line = t; break; }
+          }
+          if (!line || line === this.termLine.get(s.session_id)) continue;
+          this.termLine.set(s.session_id, line);
+          this.mgr.setExternalStatus(s.session_id, "WORKING", truncate(line, 120));
+        } catch {}
+      }
+    } finally {
+      this.pollTerminalLineBusy = false;
+    }
   }
 
   // 无 hook 会话的回合结束：无 Stop 事件可依赖。纯文本收尾（turnShape="end"）静默
