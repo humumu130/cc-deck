@@ -43610,6 +43610,8 @@ var Bridge = class _Bridge {
   // Agent … finished · Proofing… (9s · ↓ 1.5k tokens)"）不写入状态文件（只有
   // busy/idle），唯一来源是终端屏幕本身——复用滞留验证的屏幕捕获（Windows
   // inject --peek / macOS Terminal contents），取底部转轮行刷新 action_summary。
+  // 两者读的都是内存文本缓冲——窗口最小化/遮挡不影响（2026-09-16 澄清：最小化
+  // 顾虑不成立）；仅 tmux/分离会话等非常规宿主抓不到，此时静默回退旧摘要。
   // WORKING 且有 cli_pid 的外部会话 8s 一采（每源独立限速）；文本变化才下发，
   // hook 工具事件一来即被权威摘要覆盖（事件间隙的实时性补位）
   termLine = /* @__PURE__ */ new Map();
