@@ -1775,7 +1775,7 @@
     <div class="gp-rail">
       <nav class="gp-nav" id="gpNav">
         <button type="button" class="gp-nav-item on" data-sec="conn"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9 2.8v4.2M15 2.8v4.2"/><path d="M6.5 7h11v4.2a5.5 5.5 0 0 1-11 0V7Z"/><path d="M12 16.7v4.5"/></svg>连接</button>
-        <button type="button" class="gp-nav-item" data-sec="relay"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><rect x="3.2" y="3.8" width="17.6" height="6.6" rx="2"/><rect x="3.2" y="13.6" width="17.6" height="6.6" rx="2"/><path d="M7 7.1h.01M7 16.9h.01"/></svg>relay</button>
+        <button type="button" class="gp-nav-item" data-sec="relay"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><rect x="3.2" y="3.8" width="17.6" height="6.6" rx="2"/><rect x="3.2" y="13.6" width="17.6" height="6.6" rx="2"/><path d="M7 7.1h.01M7 16.9h.01"/></svg>本机</button>
         <button type="button" class="gp-nav-item" data-sec="disp"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M2.6 12S6 5.8 12 5.8 21.4 12 21.4 12 18 18.2 12 18.2 2.6 12 2.6 12Z"/><circle cx="12" cy="12" r="2.9"/></svg>显示</button>
         <button type="button" class="gp-nav-item" data-sec="kb"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="6.2" width="18" height="11.6" rx="2.2"/><path d="M7 10v3.6M7 10.1v.1"/><path d="M11 10v3.6M14.5 10v3.6M18 10v3.6"/></svg>快捷键</button>
         <button type="button" class="gp-nav-item" data-sec="plug"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M10.2 5.5a1.8 1.8 0 0 1 3.6 0L16.5 5.5Q18.5 5.5 18.5 7.5V10.2a1.8 1.8 0 0 1 0 3.6V16.5Q18.5 18.5 16.5 18.5H7.5Q5.5 18.5 5.5 16.5V7.5Q5.5 5.5 7.5 5.5H10.2Z"/></svg>插件</button>
@@ -1802,27 +1802,27 @@
             <button id="addSrvBtn" class="hbtn" style="width:100%;margin-top:6px">＋ 添加服务器</button>
             <div class="conn-form">
               <div class="gp-form-t" id="cfTitle">添加服务器</div>
-              <div class="seg" id="cmodeSeg">
-                <button type="button" data-m="lan">直连<i>局域网直连本机 / PC</i></button>
-                <button type="button" data-m="cloud">云桥<i>公网中转 · 支持配对码</i></button>
-              </div>
               <div id="pairBox">
-                <div class="cf-sec">配对码接入</div>
+                <div class="cf-sec">电脑端 8 位配对码</div>
                 <div class="pair-code-line">
                   <input id="pairCode" inputmode="numeric" maxlength="8" placeholder="8 位配对码" autocomplete="off">
                   <button id="pairBtn" class="primary">连接</button>
                 </div>
               </div>
               <div class="cf-box" id="cfBox">
-                <button type="button" class="pd-adv-toggle" id="pdAdvToggle"><span class="pd-adv-t">高级选项</span><span class="pd-adv-sub">自建云桥部署者选项</span><i class="pd-adv-arrow"></i></button>
+                <button type="button" class="pd-adv-toggle" id="pdAdvToggle"><span class="pd-adv-t">高级选项</span><span class="pd-adv-sub">接入方式 / 令牌 / 名称（自动识别，可手动覆盖）</span><i class="pd-adv-arrow"></i></button>
                 <div class="pd-adv-body" id="pdAdvBody">
-                  <div class="cf-sec">云桥地址</div>
+                  <div class="seg" id="cmodeSeg">
+                    <button type="button" data-m="lan">直连<i>局域网直连本机 / PC</i></button>
+                    <button type="button" data-m="cloud">云桥<i>公网中转 · 支持配对码</i></button>
+                  </div>
+                  <div class="cf-sec">地址</div>
                   <input id="url" placeholder="ws://<pc-ip>:8787/ws">
-                  <div class="cf-sec">配对 Key</div>
+                  <div class="cf-sec">桥令牌（可选）</div>
                   <input id="token" placeholder="token">
                   <div class="cf-sec cf-sec-sub">名称（可选）</div>
                   <input id="srvName" placeholder="名称（可选）">
-                  <div class="cf-note">Key 留空用公共桥</div>
+                  <div class="cf-note">令牌留空用公共桥</div>
                 </div>
               </div>
               <div class="conn-actions">
@@ -1832,7 +1832,6 @@
               <!-- 议题②/③ 三码体系（2026-09-09）：编辑态出「分享连接到手机」码（LAN 直连码 /
                    云源 ccdeck-add 一次性码），添加态出「从手机导入连接」码（ccdeck-import，
                    手机扫码后反挑一条连接回传本机 relay）。可见态由 syncFormQrBtns 按 编辑/添加 切换 -->
-              <button type="button" id="shareSrvBtn" class="cf-qr-btn" style="display:none" title="手机扫一下，把这条连接导入手机 CC Deck"><svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="7" y="2.5" width="10" height="19" rx="2.2"/><path d="M10.5 18.5h3"/></svg>分享到手机</button>
               <button type="button" id="importSrvBtn" class="cf-qr-btn" title="手机 CC Deck App 扫码后，选择要分享的连接"><svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 8V5a2 2 0 0 1 2-2h3M16 3h3a2 2 0 0 1 2 2v3M21 16v3a2 2 0 0 1-2 2h-3M8 21H5a2 2 0 0 1-2-2v-3"/><path d="M7 12h10"/></svg>扫码从手机导入</button>
             </div>
           </div>
@@ -1849,19 +1848,6 @@
             <input id="gpRelayNameInput" maxlength="40" placeholder="如：书房电脑" style="display:none;flex:1;min-width:0;background:var(--gp-rail);border:1px solid var(--gp-border);border-radius:8px;color:var(--gp-text);font-size:13px;padding:5px 9px" />
             <button id="gpRelayNameEdit" class="gp-mini-btn" style="flex:none" title="修改本机名称">✎</button>
             <button id="gpRelayNameSave" class="gp-mini-btn" style="display:none;flex:none">保存</button>
-          </div>
-          <div class="gp-sec"><svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 8V5a2 2 0 0 1 2-2h3M16 3h3a2 2 0 0 1 2 2v3M21 16v3a2 2 0 0 1-2 2h-3M8 21H5a2 2 0 0 1-2-2v-3"/><path d="M7 12h10"/></svg>配对</div>
-          <div class="gp-card gp-pair">
-            <div class="gp-pair-info">
-              <div class="gp-pair-t">8 位配对码</div>
-              <div class="gp-code-cells" id="pdCodeCells" aria-label="8 位配对码"></div>
-              <div class="pd-code-meta"><span id="pdCodeExp"></span><button type="button" class="gp-mini-btn" id="pdCodeRefresh" title="立即换一枚新码">刷新</button></div>
-              <div class="pair-hint" id="pairHint"></div>
-            </div>
-            <div class="gp-qr-inline">
-              <canvas id="relayAddQrCv" width="112" height="112" title="手机 CC Deck App 扫此码接入本机"></canvas>
-              <div class="gp-qr-inline-t">手机扫码接入</div>
-            </div>
           </div>
           <div class="gp-sec"><svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9 5.5 10.5 4h3L15 5.5"/><rect x="4" y="5.5" width="16" height="15" rx="3"/><path d="M8.5 11h7M8.5 15h4.5"/></svg>已配对设备</div>
           <div class="gp-card gp-peers">
@@ -2044,7 +2030,12 @@
     <div id="loginQrCard">
       <div id="loginQrTitle">扫码登录</div>
       <div id="loginQrSub">手机 CC Deck App 扫下方二维码<br/>确认后自动进入——免输配对码</div>
-      <div id="loginQrCanvas"><canvas id="loginQrCv" width="200" height="200"></canvas></div>
+      <div id="loginQrCanvas"><canvas id="loginQrCv" width="224" height="224"></canvas></div>
+      <div id="shareCodeRow" style="display:none;margin-top:10px">
+        <div style="font-size:11.5px;color:var(--dim);text-align:left">扫不了码？手机「添加电脑 → 云桥」输入配对码：</div>
+        <div class="gp-code-cells" id="shareCodeCells" style="margin-top:4px;text-align:left"></div>
+        <div id="shareCodeMeta" style="font-size:10.5px;color:var(--dim);margin-top:2px;text-align:left"></div>
+      </div>
       <div id="loginQrState">等待手机扫码…</div>
       <button id="loginQrCancel">取消</button>
     </div>
@@ -3405,7 +3396,7 @@ function onEvent(ctx, msg) {
       if (p.action === "add") toast("新设备已配对：" + nm + (p.dev ? "（" + p.dev + "）" : ""), 5000);
       else if (p.action === "kick") toast("已移除设备：" + nm + (p.dev ? "（" + p.dev + "）" : ""), 4000);
       const relayPage = $("gpPageRelay");
-      if (relayPage && !relayPage.classList.contains("off")) { refreshPeers(); void addPhoneQr(); refreshRelayName(); }
+      if (relayPage && !relayPage.classList.contains("off")) { refreshPeers(); refreshRelayName(); }
       break;
     }
   }
@@ -4969,9 +4960,8 @@ function setGearSection(sec) {
   try { if (!window.__ccGearPin) localStorage.setItem(GP_SEC_KEY, sec); } catch {} // ?gear=1 深链会话不污染分页记忆（顺手项①）
   if (sec === "relay") { probeRelayStat(); refreshPeers(); } // 设备清单随 relay 页可见时静默刷新（议题①）
   if (sec === "plug") loadPluginCfg(); // #448 插件三开关随插件页可见时拉取本机配置
-  pdAutoSync(); // #411 自动展码随 relay 页可见性启停（进页领码/离页停轮询）
 }
-document.querySelectorAll(".gp-nav-item").forEach((b) => { b.onclick = () => { setGearSection(b.dataset.sec); if (b.dataset.sec === "relay") void addPhoneQr(); }; });
+document.querySelectorAll(".gp-nav-item").forEach((b) => { b.onclick = () => { setGearSection(b.dataset.sec); }; });
 // 本机 relay 行已移除（对用户完全透明）：启停全靠启动自动探测，见 init 尾部 probeLocalRelay
 
 $("emptyNewBtn").onclick = () => {
@@ -5209,6 +5199,26 @@ function srvAddrText(s, ctx) {
   return hostOf(s.wsUrl) || (s.kind === "cloud" ? "云桥" : "未配置");
 }
 
+// 地址自动识别接入方式（方案 A P3）：wss/域名或 /cloud → 云桥；ws://私网 → 直连。
+// 轻切：只切形态相关 UI（segment 高亮/pairBox/按钮文案/placeholder），不回填字段——
+// 用户正在输入的地址不能被 setFormKind 的值重置吞掉
+function wizDetectKind() {
+  const v = $("url").value.trim();
+  if (!/^wss?:\/\//i.test(v)) return;
+  const isCloud = /^wss:/i.test(v) || /\/cloud(\/|$)/i.test(v);
+  const want = isCloud ? "cloud" : "lan";
+  if (formKind === want) return;
+  formKind = want;
+  const formEl = document.querySelector(".conn-form");
+  formEl.classList.toggle("cloud", want === "cloud");
+  $("pairBox").style.display = want === "cloud" ? "flex" : "none";
+  document.querySelectorAll("#cmodeSeg button").forEach((b) => b.classList.toggle("on", b.dataset.m === want));
+  $("url").placeholder = want === "cloud" ? "wss://<云桥>/cloud" : "ws://<pc-ip>:8787/ws";
+  $("saveSrvBtn").textContent = editId ? "保存修改" : (want === "cloud" ? "添加云桥" : "添加直连");
+}
+$("url").addEventListener("input", wizDetectKind);
+$("url").addEventListener("change", wizDetectKind);
+
 function setFormKind(kind, cfg) {
   formKind = kind;
   editId = cfg ? cfg.id : "";
@@ -5260,16 +5270,8 @@ function setFormKind(kind, cfg) {
 // 连接状态刷新都会走一遍）：编辑态只露「分享到手机」（目标源未在线 .off 置灰，点击 toast），
 // 添加态只露「扫码从手机导入」——两态互斥，表单同一时刻只有一个二维码动作可讲
 function syncFormQrBtns() {
-  const cfg = editId ? cfgOf(editId) : null;
-  const share = $("shareSrvBtn");
-  if (share) {
-    share.style.display = cfg ? "" : "none";
-    const online = !!(cfg && ctxs.get(cfg.id) && ctxs.get(cfg.id).status === "online");
-    share.classList.toggle("off", !online);
-    share.title = online ? "手机扫一下，把这条连接导入手机 CC Deck" : "该源未在线";
-  }
   const imp = $("importSrvBtn");
-  if (imp) imp.style.display = cfg ? "none" : "";
+  if (imp) imp.style.display = editId ? "none" : ""; // 添加态才可从手机导入（分享已上卡片）
 }
 let formForcedOpen = false;
 $("addSrvBtn").onclick = () => {
@@ -5319,20 +5321,25 @@ function renderServers() {
     // 传输失败时「已配对」徽仍在场，连接失败 ≠ 需要重新输码
     const pb = pairBadgeOf(s, ctx);
     const addr = srvAddrText(s, ctx);
+    // 方案 A 卡片化（2026-09-16）：分享动作上卡（唯一出码入口），本机条目=系统卡
+    //（"自动接入"徽 + 无删除——软件自动嗅探，删了还会回来，徒增困惑）
+    const isLocal = s.kind === "lan" && !!localEp(s.wsUrl)?.loop;
+    const localBadge = isLocal ? '<span class="chip ro" style="margin-left:6px">自动接入</span>' : "";
     // #48 通道标记：云桥/ LAN / 手动直连不显示
     // #81+#96 与手机端同款几何：仅已连接显示；不独立占位——缩成插头右下外侧
     // 小角标（垂直中线=插头底边、水平在插头右缘外不重叠）
     const chanOn = ctx && ctx.status === "online";
     const chanBadge = !chanOn ? "" : s.kind === "cloud" ? '<i class="pchan">☁</i>' : s.kind === "lan" ? '<i class="pchan lan">LAN</i>' : "";
     return '<div class="srv-row' + (s.id === activeServerId ? " active" : "") + (s.id === editId ? " editing" : "") + '" data-id="' + s.id + '" title="点击设为活动源，并在下方展开编辑">' +
-      '<div class="srv-main"><b>' + escapeHtml(s.name) + '</b>' +
+      '<div class="srv-main"><b>' + escapeHtml(s.name) + '</b>' + localBadge +
       '<span class="srv-addr' + (pdPairingAnim(stText) ? " pairing" : "") + '">' + escapeHtml(addr) + "</span></div>" +
       // #64 状态/模式图标恒右对齐（对齐手机端 #46/#51：名称 flex 占满，[通道标记][配对徽章][插头] 右列；
       // 副行纯地址——状态汉字撤，状态由插头三色承载）
       '<span class="srv-right">' + (pb ? '<span class="srv-pbadge ' + pb.c + '">' + pb.t + '</span>' : "") +
       '<span class="plug ' + (ctx ? ctx.status : "offline") + '">' + PLUG_SVG + chanBadge + "</span></span>" +
       (isRetryable(ctx) ? '<button class="srv-retry" title="跳过退避等待，立即重连">↻ 重试</button>' : "") +
-      '<button class="srv-del" title="删除">✕</button>' +
+      (ctx && ctx.status === "online" ? '<button class="srv-share" title="手机扫一下接入这台电脑（同网直连 · 跨网云桥，自动路由）">分享</button>' : "") +
+      (isLocal ? "" : '<button class="srv-del" title="删除">✕</button>') +
       "</div>";
   }).join("");
   box.querySelectorAll(".srv-row").forEach((row) => {
@@ -5360,7 +5367,10 @@ function renderServers() {
       const c = ctxs.get(row.dataset.id);
       if (c) manualRetry(c);
     };
-    row.querySelector(".srv-del").onclick = (e) => { e.stopPropagation(); deleteServer(row.dataset.id); };
+    const sh = row.querySelector(".srv-share");
+    if (sh) sh.onclick = (e) => { e.stopPropagation(); void shareSrvQr(row.dataset.id); };
+    const delBtn = row.querySelector(".srv-del");
+    if (delBtn) delBtn.onclick = (e) => { e.stopPropagation(); deleteServer(row.dataset.id); };
   });
   renderNewTarget();
   renderNewSrcSeg();
@@ -6409,7 +6419,7 @@ function drawQrTo(cv, text, size) {
   g.fillStyle = "#27303C";
   for (let r = 0; r < n; r++) for (let c = 0; c < n; c++) if (q.isDark(r, c)) g.fillRect(off + c * cell, off + r * cell, cell, cell);
 }
-function drawLoginQr(text) { drawQrTo($("loginQrCv"), text, 200); }
+function drawLoginQr(text) { drawQrTo($("loginQrCv"), text, 224); }
 // #16 关于页「下载手机 App」扫码浮层：域名直链码（worker 流式代理，不露镜像裸 IP），
 // 点行开关、点浮层任意处收起
 $("gpApkQr").onclick = () => {
@@ -6466,7 +6476,7 @@ function startLoginQr(imp) {
     t: "ccdeck-login", v: 1,
     ...(imp ? { imp: 1 } : {}),
     // 实捕发现（三码测试）：云源 wsUrl 本以 /cloud 结尾，再拼 +"/cloud" 双写成
-    // /cloud/cloud——当前 App 不读该字段故无害，但属口径炸弹，与 addPhoneQr 对齐不追加
+    // /cloud/cloud——当前 App 不读该字段故无害，但属口径炸弹，与统一分享构建器对齐不追加
     bridge: cfg.wsUrl.replace(/\/$/, "").replace(/^http/, "ws").replace(/\/cloud$/, "") + "/cloud",
     ...(trustedRd() ? { rd: trustedRd() } : {}), dev, pk: ckp.publicKey,
     // #383 QR 库对非 ASCII 不做 UTF-8 编码（源名含中文→扫码乱码→手机端识别失败）：
@@ -6572,6 +6582,7 @@ $("gpRelayNameSave")?.addEventListener("click", async () => {
 
 // #94 relay 页二维码常显：进页自动出码、云码到期前 30s 自动续（免点击）
 let relayQrTimer = null;
+let shareCodeTick = 0;         // 分享弹层 8 位码倒计时器
 function scheduleRelayQrRenew(ttlMs) { /* 已并入 scheduleSmartRenew（统一智能分享码） */ }
 
 // #330 反向扫码：本端出码、手机 App 扫一下直接接入本服务器。LAN 源出 v1 直连码
@@ -6587,22 +6598,25 @@ const PRIV_IP_RE = /^(192\.168|10|172\.(1[6-9]|2\d|3[01]))\./;
 async function buildSmartShareParts(ctx, cfg) {
   if (!ctx || ctx.status !== "online") return null;
   let lan = null, cloud = null, ttl = 0;
+  const ep = localEp(cfg.wsUrl);
   if (cfg.kind === "lan") {
     let url = cfg.wsUrl, token = cfg.token;
-    const ep = localEp(url);
-    // loopback 指向本机 relay：换 lan-ip 实测端点+实测 token（条目 token 可能随 relay 换代过期）
-    if (ep && ep.loop && localRelayInfo && localRelayInfo.port === ep.port) {
-      const host = (PRIV_IP_RE.test(localRelayInfo.lanIp || "") && localRelayInfo.lanIp)
-        || (PRIV_IP_RE.test(location.hostname || "") ? location.hostname : "");
-      if (host) { url = "ws://" + host + ":" + localRelayInfo.port + "/ws"; token = localRelayInfo.token; }
+    // loopback 指向本机 relay：按该源自己端口实测 lan-ip+token（凭据按源探测，不依赖
+    // 全局 localRelayInfo——多 relay 机器上全局探测可能先应答另一个端口，冒烟实测踩坑）
+    if (ep && ep.loop) {
+      const li = (localRelayInfo && localRelayInfo.port === ep.port && localRelayInfo) || await localInfoAt(ep.port);
+      if (li) {
+        const lanIp = li.lanIp || li.lan_ip || "";
+        const host = (PRIV_IP_RE.test(lanIp) && lanIp) || (PRIV_IP_RE.test(location.hostname || "") ? location.hostname : "");
+        if (host) { url = "ws://" + host + ":" + ep.port + "/ws"; token = li.token || token; }
+      }
     }
     try {
       if (token && PRIV_IP_RE.test(new URL(url).hostname)) lan = { url, token };
     } catch {}
   }
   try {
-    const ep = localEp(cfg.wsUrl);
-    const isLocalLan = cfg.kind === "lan" && !!(ep && ep.loop && localRelayInfo && localRelayInfo.port === ep.port);
+    const isLocalLan = cfg.kind === "lan" && !!(ep && ep.loop); // loopback 源=本机 relay，无需旁证
     if (cfg.kind === "cloud" && cfg.cloud && cfg.cloud.rd && cfg.cloud.rk) {
       // 云源：用自身身份领一次性配对码（rd/rk 由配对/发现帧写回，缺失时等身份刷新）
       const ack = await commandAck(ctx, "COMMAND_PAIR_CODE", {});
@@ -6653,42 +6667,10 @@ function smartShareTexts(parts) {
   $("loginQrState").textContent = "等待手机扫码…";
 }
 
-async function addPhoneQr() {
-  // relay 页语义 = 手机接入本机 relay：找本机 loopback 源的在线 ctx（token 精确匹配优先）
-  const localCtx = [...ctxs.values()].find(
-    (c) => c.cfg.kind === "lan" && localEp(c.cfg.wsUrl)?.loop && c.cfg.token === localRelayInfo?.token && c.status === "online",
-  ) || [...ctxs.values()].find((c) => c.cfg.kind === "lan" && localEp(c.cfg.wsUrl)?.loop && c.status === "online");
-  if (localCtx) {
-    const parts = await buildSmartShareParts(localCtx, localCtx.cfg);
-    if (!parts) return;
-    const payload = smartPayload(parts);
-    drawLoginQr(payload);
-    drawQrTo($("relayAddQrCv"), payload, 112);
-    scheduleSmartRenew(parts.ttl, () => { void addPhoneQr(); });
-    return;
-  }
-  // 无本机 relay 连接：退而求活动源（分享该源的连接，构建器同款）
-  const ctx = ctxs.get(activeServerId) || null;
-  if (!ctx || ctx.status !== "online") {
-    toast(ctx
-      ? "当前活动源未在线（重试中…），连上后即可扫码接入"
-      : localRelayInfo
-        ? "手机扫码接入需要有效连接：本页先连上云桥（或手机与本机同一 WiFi 后重试）"
-        : "请先添加/连接服务器，再扫码接入手机");
-    return;
-  }
-  const parts = await buildSmartShareParts(ctx, ctx.cfg);
-  if (!parts) {
-    toast("无法生成分享码：该源既无可局域网直连的地址，也未接云桥");
-    return;
-  }
-  drawQrTo($("relayAddQrCv"), smartPayload(parts), 112);
-  scheduleSmartRenew(parts.ttl, () => { void addPhoneQr(); });
-}
 
 // 源编辑表单「分享到手机」：与 relay 页同一构建器，每个连接只有一种分享码
-async function shareSrvQr() {
-  const cfg = editId ? cfgOf(editId) : null;
+async function shareSrvQr(id) {
+  const cfg = cfgOf(id || editId);
   if (!cfg) return;
   const ctx = ctxs.get(cfg.id) || null;
   if (!ctx || ctx.status !== "online") { toast("该源未在线"); return; }
@@ -6699,11 +6681,29 @@ async function shareSrvQr() {
   }
   smartShareTexts(parts);
   drawLoginQr(smartPayload(parts));
+  // 云路在 => 并排 8 位配对码（手动输码兜底，公司防火墙场景亲测需要）；纯 LAN 码无码可输
+  const codeRow = $("shareCodeRow");
+  clearInterval(shareCodeTick);
+  if (parts.cloud) {
+    codeRow.style.display = "";
+    const cells = $("shareCodeCells");
+    cells.textContent = parts.cloud.code;
+    cells.classList.add("on");
+    const deadline = Date.now() + (parts.ttl || 300_000);
+    shareCodeTick = setInterval(() => {
+      const left = Math.max(0, Math.ceil((deadline - Date.now()) / 1000));
+      $("shareCodeMeta").textContent = left
+        ? "配对码 " + Math.floor(left / 60) + ":" + String(left % 60).padStart(2, "0") + " 内有效 · 到点自动换新"
+        : "";
+      if (left <= 0) clearInterval(shareCodeTick);
+    }, 500);
+  } else {
+    codeRow.style.display = "none";
+  }
   $("loginQrPop").classList.add("open");
-  scheduleSmartRenew(parts.ttl, () => { if ($("loginQrPop").classList.contains("open")) void shareSrvQr(); });
+  scheduleSmartRenew(parts.ttl, () => { if ($("loginQrPop").classList.contains("open")) void shareSrvQr(id); });
 }
 
-$("shareSrvBtn").onclick = () => void shareSrvQr();
 
 // 议题③ 从手机导入：添加服务器表单里的「扫码从手机导入」。码内 rt = 本机 relay
 //（lan-ip + 实测端口/token，一律 localRelayInfo 实测优先，同 #40x 领码教训）；
@@ -6861,14 +6861,8 @@ document.addEventListener("keydown", (ev) => {
 $("pairBtn").onclick = submitPairCode;
 $("pairCode").addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); submitPairCode(); } });
 
-// #39x 本机配对码：POST /api/pair-code → { code, expires_in }。
-// #411 relay 页自动展码：进 relay 页自动领码、8 格码位展示、倒计时读 expires_in，
-// 归零自动循环领新码；离开 relay 页（切页/收抽屉）即停，不后台空转。手动「刷新」小钮保留。
-// #40x 领码修复：凭据一律以 local-info 实测优先——源列表 token 可能随 relay 换代过期，
-// 内网 IP 条目还可能是「别的机器」的 relay（端口/token 拿来打 127.0.0.1 必 401），
-// 这就是「本机探测成功仍领码失败」的主因；loopback 条目只作 local-info 不可用时的退让，
-// 且 401 时改用实测 token 自动重试一轮。
-let pdCodeTick = 0, pdRetryTimer = 0, pdDeadline = 0, pdAutoOn = false, pdCodeBusy = false;
+// #39x 本机配对码展示机已撤（2026-09-16 方案 A：relay 页配对区移除，8 位码收口到分享弹层 shareCodeRow）。
+// 本机探测助手保留：probeRelayStat / 本机凭据兜底在用
 async function localInfoAt(port) {
   try {
     const r = await fetch("http://127.0.0.1:" + port + "/local-info", { signal: AbortSignal.timeout?.(1500) });
@@ -6878,105 +6872,15 @@ async function localInfoAt(port) {
   } catch { return null; }
 }
 async function pdLocalRelayCreds() {
-  // 端口候选：固定 8787 + 已存 loopback 条目端口（自定义端口部署也能探到）
   const ports = [8787];
   for (const x of servers) {
     const ep = localEp(x.wsUrl);
     if (x.kind === "lan" && ep?.loop && !ports.includes(ep.port)) ports.push(ep.port);
   }
-  for (const p of ports) { const j = await localInfoAt(p); if (j) return { port: j.port, token: j.token }; }
-  // local-info 全落空（Safari 不豁免 loopback 混合内容等）：退让已存 loopback 条目（非 loop 条目一概不信）
-  const s = servers.find((x) => x.kind === "lan" && x.token && localEp(x.wsUrl)?.loop);
-  return s ? { port: localEp(s.wsUrl).port, token: s.token } : null;
+  for (const p2 of ports) { const j = await localInfoAt(p2); if (j) return { port: j.port, token: j.token }; }
+  const s2 = servers.find((x) => x.kind === "lan" && x.token && localEp(x.wsUrl)?.loop);
+  return s2 ? { port: localEp(s2.wsUrl).port, token: s2.token } : null;
 }
-// —— 展示态：码位 8 格逐位填，meta 行 = 倒计时文案（N 分 N 秒内有效与倒计时合一）/ 失败重试态 ——
-function pdSetMeta(txt, isErr) {
-  const el = $("pdCodeExp");
-  if (el) { el.textContent = txt; el.title = txt; el.classList.toggle("err", !!isErr); } // title：窄卡截断时悬停看全文
-  const btn = $("pdCodeRefresh");
-  if (btn) btn.classList.toggle("attn", !!isErr);
-}
-function pdFillCells(code) {
-  // 用户拍板（2026-09-09）：去八格框，直接平铺大字
-  const box = $("pdCodeCells");
-  if (!box) return;
-  box.classList.toggle("on", !!code);
-  box.textContent = code || "";
-}
-function pdRenderLeft() {
-  const left = Math.max(0, Math.ceil((pdDeadline - Date.now()) / 1000));
-  pdSetMeta(left >= 60 ? Math.floor(left / 60) + ":" + String(left % 60).padStart(2, "0") : "0:" + String(left).padStart(2, "0")); // #106 纯倒计时，去「内有效·一次性」
-}
-function pdStartTick() {
-  clearInterval(pdCodeTick);
-  pdCodeTick = setInterval(() => {
-    if (Date.now() >= pdDeadline) {
-      clearInterval(pdCodeTick);
-      if (pdAutoOn) pdIssueCode(); // 循环：到期自动领新码（仅在 relay 页可见时）
-      else { pdFillCells(""); pdSetMeta(""); } // 不可见残留的最后一次：回占位空态
-      return;
-    }
-    pdRenderLeft();
-  }, 500);
-}
-// 失败可见重试态：meta 行红字标因 + 刷新钮 attention；页面可见时 15s 自动重试（手动刷新随时可点）
-function pdFail(msg) {
-  pdSetMeta(msg + (pdAutoOn ? " · 15s 后自动重试" : ""), true);
-  clearTimeout(pdRetryTimer);
-  if (pdAutoOn) pdRetryTimer = setTimeout(() => { clearTimeout(pdRetryTimer); if (pdAutoOn) pdIssueCode(); }, 15000);
-}
-async function pdIssueCode() {
-  if (pdCodeBusy) return;
-  pdCodeBusy = true;
-  clearTimeout(pdRetryTimer);
-  if (!pdDeadline || pdDeadline <= Date.now()) pdSetMeta("领码中…");
-  try {
-    let creds = await pdLocalRelayCreds();
-    if (!creds) { pdFail("未检测到本机 relay"); return; }
-    let j = null, err = "", retried = false;
-    while (!j) {
-      const q = "?token=" + encodeURIComponent(creds.token);
-      // 页面恰由本机 relay 托管（同端口）时走相对路径＝同源，避开跨源读响应的限制
-      const urls = [];
-      if (location.protocol.startsWith("http") && location.port === String(creds.port)) urls.push("/api/pair-code" + q);
-      urls.push("http://127.0.0.1:" + creds.port + "/api/pair-code" + q);
-      for (const u of urls) {
-        try {
-          const r = await fetch(u, { method: "POST", signal: AbortSignal.timeout?.(4000) });
-          const body = await r.json().catch(() => null);
-          if (r.ok && body && body.code) { j = body; break; }
-          err = r.status === 501 ? "本机 relay 未启用云桥" : r.status === 401 ? "token 校验失败" : "HTTP " + r.status;
-        } catch (e) { err = String((e && e.message) || e).slice(0, 60); }
-      }
-      if (j) break;
-      // token 被拒（源列表值过期/错拿别的源）：改用 local-info 实测 token 重试一轮（仅一次）
-      if (err !== "token 校验失败" || retried) break;
-      const fresh = await localInfoAt(creds.port);
-      retried = true;
-      if (fresh && fresh.token !== creds.token) { creds = { port: fresh.port, token: fresh.token }; continue; }
-      break;
-    }
-    if (!j) { pdFail("领码失败（" + err + "）"); return; }
-    const ttl = Math.max(1, Math.floor(Number(j.expires_in) || 60));
-    pdDeadline = Date.now() + ttl * 1000;
-    pdFillCells(String(j.code));
-    pdRenderLeft();
-    pdStartTick();
-  } finally { pdCodeBusy = false; }
-}
-// —— 自动展码生命周期：relay 页可见（抽屉开 + relay 分页）才领码/倒计时，离页即停。
-// 切页走 setGearSection 钩子；开合抽屉（含点外部/✕ 收起）走 MutationObserver 兜底 ——
-function pdAutoSync() {
-  const visible = $("gearPop").classList.contains("open") && !$("gpPageRelay").classList.contains("off");
-  if (visible === pdAutoOn) return;
-  pdAutoOn = visible;
-  clearTimeout(pdRetryTimer);
-  if (!visible) { clearInterval(pdCodeTick); return; } // 离页只停计时：码保留，期内回来续跑不重领
-  if (pdDeadline > Date.now()) { pdStartTick(); return; }
-  pdIssueCode();
-}
-try { new MutationObserver(pdAutoSync).observe($("gearPop"), { attributes: true, attributeFilter: ["class"] }); } catch {}
-$("pdCodeRefresh").onclick = () => { clearTimeout(pdRetryTimer); pdDeadline = 0; pdIssueCode(); };
 
 // ── 议题①（2026-09-09）已配对设备管理：COMMAND_PEERS 拉清单 + PAIRED_DEVICE 实时
 // 刷新 + 踢除（COMMAND_PEER_KICK，两次点按确认）+ 导出备份（含 pubkey 的 JSON，

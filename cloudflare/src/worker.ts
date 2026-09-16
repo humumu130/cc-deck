@@ -41,6 +41,18 @@ export default {
     }
     // 安装包分发（/dl/<file>）：文件放 KV（ECS 镜像对 CF 境外出口 403），
     // 全程不出 Cloudflare——公司只需能开本域即可下载。文件名白名单防滥用
+    if (url.pathname.startsWith("/view/")) {
+      // 文档/设计稿在线预览（KV 直出 text/html 内联打开；/dl/ 是 attachment 下载，
+      // HTML 设计稿要看不能下——2026-09-16 relay/连接区重设计提案走此通道）
+      const doc = url.pathname.slice(6);
+      if (!/^[\w.-]+$/.test(doc) || !env.DL) return new Response("bad name", { status: 400 });
+      const html = await env.DL.get(doc, { type: "text" });
+      if (!html) return new Response("not found", { status: 404 });
+      return new Response(html, {
+        status: 200,
+        headers: { "content-type": "text/html; charset=utf-8", "cache-control": "no-store" },
+      });
+    }
     if (url.pathname.startsWith("/dl/")) {
       const name = url.pathname.slice(4);
       // /dl/ 无文件名：开源项目落地页（2026-09-09 设计稿 v2 全量内联移植：吸顶导航+侧栏圆点 / 终端×手机
