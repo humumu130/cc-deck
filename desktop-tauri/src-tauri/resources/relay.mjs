@@ -42243,7 +42243,8 @@ var SessionManager = class {
       cwd,
       this.cfg.model,
       this.agentCallbacks(managed),
-      prompt,
+      // 空提示词 = parked 形态（#49）：会话建好等输入，不注入空消息
+      prompt.trim() ? prompt : void 0,
       permissionMode ? { permissionMode } : void 0
     );
     managed.agent = agent;
