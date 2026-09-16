@@ -1545,7 +1545,9 @@ export default function DetailScreen({ sid, onBack, initialView, ref }: { sid: s
               summary={s.compacting ? "⟳ 正在压缩上下文…" : s.action_summary}
               startedAt={s.turn_started_at ?? s.updated_at}
               color={c.working}
-              tok={s.compacting ? undefined : s.context_usage ? fmtTok(s.context_usage) + "/" + fmtTok(s.context_limit ?? CONTEXT_LIMIT_FALLBACK) : undefined}
+              // 手机屏窄：状态栏不显 ctx（2026-09-16 用户反馈）——终端转轮行长文案
+              // 只挤得下几个字，ctx 占用让位（桌面端不受限照常显示）
+              tok={undefined}
             />
             <Pressable
               style={[d.stripBtnWarn, d.opRipple]}
