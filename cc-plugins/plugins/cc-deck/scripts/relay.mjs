@@ -46174,11 +46174,23 @@ var CloudClient = class {
       return;
     }
     if (!f.from || !f.data || typeof f.from !== "string") return;
-    const peer = this.identity.peers.get(f.from);
+    let peer = this.identity.peers.get(f.from);
+    let peerDev = f.from;
     if (!peer) {
-      console.log(`[cloud] drop frame from unpaired dev=${f.from}`);
-      this.notifyUnpaired(f.from, "\u8BBE\u5907\u4E0D\u5728 relay \u914D\u5BF9\u5217\u8868\u4E2D\uFF08relay \u4FA7\u914D\u5BF9\u4FE1\u606F\u5DF2\u4E22\u5931\uFF09\uFF0C\u8BF7\u91CD\u65B0\u6253\u5F00\u914D\u5BF9\u94FE\u63A5");
-      return;
+      for (const [d2, p2] of this.identity.peers) {
+        if (unseal(f.data, p2.pubkey, this.identity.keypair.secretKey)) {
+          peer = p2;
+          peerDev = d2;
+          this.identity.addPeer(f.from, { ...p2, paired_at: p2.paired_at ?? Date.now() });
+          console.log(`[cloud] dev ${f.from.slice(0, 12)}\u2026 resolved to paired peer ${d2.slice(0, 12)}\u2026\uFF08\u53CC\u8EAB\u4EFD\u517C\u5BB9\uFF0C\u5DF2\u767B\u8BB0\u522B\u540D\uFF09`);
+          break;
+        }
+      }
+      if (!peer) {
+        console.log(`[cloud] drop frame from unpaired dev=${f.from}`);
+        this.notifyUnpaired(f.from, "\u8BBE\u5907\u4E0D\u5728 relay \u914D\u5BF9\u5217\u8868\u4E2D\uFF08relay \u4FA7\u914D\u5BF9\u4FE1\u606F\u5DF2\u4E22\u5931\uFF09\uFF0C\u8BF7\u91CD\u65B0\u6253\u5F00\u914D\u5BF9\u94FE\u63A5");
+        return;
+      }
     }
     const inner = unseal(f.data, peer.pubkey, this.identity.keypair.secretKey);
     if (!inner) {
@@ -46190,7 +46202,7 @@ var CloudClient = class {
       const lastSeq = Number(inner.last_seq ?? 0) || 0;
       console.log(`[cloud] phone ${f.from} hello last_seq=${lastSeq}`);
       const helloName = typeof inner.name === "string" ? inner.name.trim().slice(0, 32) : "";
-      if (helloName) this.identity.renamePeer(f.from, helloName);
+      if (helloName) this.identity.renamePeer(peerDev, helloName);
       this.resumePhone(f.from, lastSeq);
       return;
     }
@@ -46202,7 +46214,7 @@ var CloudClient = class {
         this.resumePhone(f.from, lastSeq);
       } else {
         st2.lastSeq = lastSeq;
-        this.identity.touchPeer(f.from);
+        this.identity.touchPeer(peerDev);
       }
       this.sendSealed(f.from, { t: "pong", ts: Date.now() });
       return;

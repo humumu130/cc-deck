@@ -453,11 +453,29 @@ export class CloudClient {
       return;
     }
     if (!f.from || !f.data || typeof f.from !== "string") return;
-    const peer = this.identity.peers.get(f.from);
+    let peer = this.identity.peers.get(f.from);
+    let peerDev = f.from;
     if (!peer) {
-      console.log(`[cloud] drop frame from unpaired dev=${f.from}`);
-      this.notifyUnpaired(f.from, "设备不在 relay 配对列表中（relay 侧配对信息已丢失），请重新打开配对链接");
-      return;
+      // 双身份兼容（2026-09-16）：#105 起手机持久连接用 ph-（同设备密钥派生，为修
+      // "手机被标网页"），而配对入列 dev=wb-——peers 按 dev 查必 miss，新配对的云源
+      // 永久卡"连接中"（公司机扫码实测）。按公钥试解定位真实身份：解得开即认。
+      // 路由回发仍用 f.from（手机当前注册 dev），peers 记账用 peerDev。
+      for (const [d, p2] of this.identity.peers) {
+        if (unseal(f.data, p2.pubkey, this.identity.keypair.secretKey)) {
+          peer = p2;
+          peerDev = d;
+          // 下行 sendSealed 同样按 dev 查 peers——当前连接 dev 不登记别名，
+          // SNAPSHOT/命令回执全部静默丢失（hello 都"处理"了手机也收不到一帧）
+          this.identity.addPeer(f.from, { ...p2, paired_at: p2.paired_at ?? Date.now() });
+          console.log(`[cloud] dev ${f.from.slice(0, 12)}… resolved to paired peer ${d.slice(0, 12)}…（双身份兼容，已登记别名）`);
+          break;
+        }
+      }
+      if (!peer) {
+        console.log(`[cloud] drop frame from unpaired dev=${f.from}`);
+        this.notifyUnpaired(f.from, "设备不在 relay 配对列表中（relay 侧配对信息已丢失），请重新打开配对链接");
+        return;
+      }
     }
     const inner = unseal<Record<string, unknown>>(f.data, peer.pubkey, this.identity.keypair.secretKey);
     if (!inner) {
@@ -471,7 +489,7 @@ export class CloudClient {
       // #42 hello 顺带实名化：新版 App 每次连接上报机型名（旧版无 name 字段=不动）。
       // 存量「手机」硬编码名在设备更新后首次连接即替换为实名，无需重新配对
       const helloName = typeof inner.name === "string" ? inner.name.trim().slice(0, 32) : "";
-      if (helloName) this.identity.renamePeer(f.from, helloName);
+      if (helloName) this.identity.renamePeer(peerDev, helloName);
       this.resumePhone(f.from, lastSeq);
       return;
     }
@@ -487,7 +505,7 @@ export class CloudClient {
         this.resumePhone(f.from, lastSeq);
       } else {
         st.lastSeq = lastSeq;
-        this.identity.touchPeer(f.from); // 议题①：活跃心跳同样推进 last_seen
+        this.identity.touchPeer(peerDev); // 议题①：活跃心跳同样推进 last_seen
       }
       this.sendSealed(f.from, { t: "pong", ts: Date.now() });
       return;
