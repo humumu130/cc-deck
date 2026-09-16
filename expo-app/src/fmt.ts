@@ -90,3 +90,13 @@ export function uuid(): string {
     return (c === "x" ? r : (r & 0x3) | 0x8).toString(16);
   });
 }
+
+// 终端实时行标记（relay 捕获的 CLI 转轮行带 \u200B 前缀）：
+// 客户端识别到即隐藏自家计时/走秒——转轮行自带活动时长与 ↓token，叠加即重复
+export const LIVE_MARK = "\u200B";
+export function isLiveLine(summary: string | undefined): boolean {
+  return !!summary && summary.charCodeAt(0) === 0x200b;
+}
+export function stripLiveMark(summary: string | undefined): string {
+  return isLiveLine(summary) ? (summary as string).slice(1) : (summary ?? "");
+}

@@ -560,6 +560,8 @@ export class Bridge {
   private pollTerminalLineBusy = false;
   private async pollTerminalLines(): Promise<void> {
     if (this.pollTerminalLineBusy) return;
+    // 测试环境关门：45f 段对控制台 peek 计数断言，后台采集器会多出真实 peek 干扰
+    if (process.env.CCR_NO_TERM_LINE === "1") return;
     this.pollTerminalLineBusy = true;
     try {
       const now = Date.now();
@@ -585,7 +587,9 @@ export class Bridge {
           }
           if (!line || line === this.termLine.get(s.session_id)) continue;
           this.termLine.set(s.session_id, line);
-          this.mgr.setExternalStatus(s.session_id, "WORKING", truncate(line, 120));
+          // \u200B 零宽前缀=「终端实时行」标记：客户端识别后隐藏自家计时/走秒
+          //（转轮行自带活动时长与 ↓token，再叠客户端计时就是重复——2026-09-16 用户反馈）
+          this.mgr.setExternalStatus(s.session_id, "WORKING", "\u200B" + truncate(line, 120));
         } catch {}
       }
     } finally {

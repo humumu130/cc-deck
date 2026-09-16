@@ -7,7 +7,7 @@ import * as ImageManipulator from "expo-image-manipulator";
 import * as Clipboard from "expo-clipboard";
 import { withA, type ThemeColors } from "../theme";
 import { useTheme, useThemeStyles } from "../theme-context";
-import { fmtElapsed, sessionElapsed, fmtHM, dayKey, fmtClock, fmtTok, contextPct, contextLevel, CONTEXT_LIMIT_FALLBACK, isVerifyTodo } from "../fmt";
+import { fmtElapsed, sessionElapsed, fmtHM, dayKey, fmtClock, fmtTok, contextPct, contextLevel, CONTEXT_LIMIT_FALLBACK, isVerifyTodo, isLiveLine, stripLiveMark } from "../fmt";
 import { store, useRelay } from "../store";
 import type { CronTask, LogEntry, SessionState, TodoItem, WaitingPayload } from "../protocol";
 import { useKbHeight } from "../kb";
@@ -450,16 +450,19 @@ function LiveStatusLine({ summary, startedAt, color, tok }: { summary: string; s
     const t = setInterval(() => tick((n) => n + 1), 500);
     return () => clearInterval(t);
   }, []);
+  const live = isLiveLine(summary);
+  const text = stripLiveMark(summary);
   const secs = startedAt ? Math.max(0, Math.floor((Date.now() - startedAt) / 1000)) : 0;
-  const frame = SPIN_FRAMES[Math.floor(Date.now() / 500) % SPIN_FRAMES.length];
+  // 终端实时行：隐藏自家转轮星+走秒（转轮行自带活动时长——叠加重复，2026-09-16）
+  const frame = live ? "" : SPIN_FRAMES[Math.floor(Date.now() / 500) % SPIN_FRAMES.length];
   const m = Math.floor(secs / 60);
-  const timeText = m > 0 ? `${m}m${secs % 60}s` : `${secs}s`;
+  const timeText = live ? "" : m > 0 ? `${m}m${secs % 60}s` : `${secs}s`;
   return (
     <View style={d.statusLine}>
-      <Text style={[d.statusSpin, { color }]}>{frame}</Text>
-      <Text style={[d.statusText, { color }]} numberOfLines={1}>{summary || "思考中…"}</Text>
-      {startedAt ? <Text style={d.statusTime}>· {timeText}</Text> : null}
-      {tok ? <Text style={d.statusTime}>· {tok}</Text> : null}
+      {frame ? <Text style={[d.statusSpin, { color }]}>{frame}</Text> : null}
+      <Text style={[d.statusText, { color }]} numberOfLines={1}>{text || "思考中…"}</Text>
+      {startedAt && !live ? <Text style={d.statusTime}>· {timeText}</Text> : null}
+      {tok && !live ? <Text style={d.statusTime}>· {tok}</Text> : null}
     </View>
   );
 }

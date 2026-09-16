@@ -5,7 +5,7 @@ import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context"
 import { statusColor, withA, type ThemeColors } from "../theme";
 import { useTheme, useThemeStyles } from "../theme-context";
 import { LogoMark, PencilIcon } from "../brand";
-import { sessionElapsed, fmtElapsed, fmtTok, contextPct, contextLevel, CONTEXT_LIMIT_FALLBACK, displaySrcName } from "../fmt";
+import { sessionElapsed, fmtElapsed, fmtTok, contextPct, contextLevel, CONTEXT_LIMIT_FALLBACK, displaySrcName, isLiveLine, stripLiveMark } from "../fmt";
 import { setListDensity, useListDensity, setAggregate as persistAggregate, type ListDensity } from "../display-settings";
 import { store, useRelay } from "../store";
 import { FadeIn, PressScale } from "../motion";
@@ -183,13 +183,16 @@ function LiveStat({ s }: { s: SessionState }) {
     const t = setInterval(() => tick((n) => n + 1), 1000);
     return () => clearInterval(t);
   }, []);
+  const live = !s.compacting && isLiveLine(s.action_summary);
+  const summary = stripLiveMark(s.action_summary);
   const secs = Math.max(0, Math.floor((Date.now() - (s.turn_started_at ?? s.updated_at)) / 1000));
   const tok = s.usage?.output_tokens ?? 0;
-  const head = (s.compacting ? "⟳ 压缩上下文 · " : "") + (tok > 0 ? `${secs}s · ↓ ${fmtTok(tok)}` : `${secs}s`);
+  // 终端实时行自带活动时长/↓token：隐藏自家计时，避免同屏重复（2026-09-16 用户反馈）
+  const head = live ? "" : (s.compacting ? "⟳ 压缩上下文 · " : "") + (tok > 0 ? `${secs}s · ↓ ${fmtTok(tok)}` : `${secs}s`);
   return (
     <Text style={styles.liveStat} numberOfLines={1}>
-      <Text style={{ color: c.working }}>{head}</Text>
-      {s.action_summary && !s.compacting ? ` · ${s.action_summary}` : ""}
+      {head ? <Text style={{ color: c.working }}>{head}</Text> : null}
+      {summary && !s.compacting ? ` · ${summary}` : ""}
     </Text>
   );
 }

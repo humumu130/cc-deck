@@ -60,6 +60,8 @@ process.env.CCR_SUBAGENT_RUN_TTL_MS = "3000";
 process.env.CCR_INJECT_CMD = fileURLToPath(new URL("./fake-injector.mjs", import.meta.url));
 // 进程存活硬信号清扫（46 段）：假 pid 世界整体关掉，46 段局部开启做专项验证
 process.env.CCR_DEAD_SWEEP = "0";
+// 终端转轮行采集器关门：45f 段 peek 计数断言不受后台采集干扰
+process.env.CCR_NO_TERM_LINE = "1";
 const INJECT_LOG = fileURLToPath(new URL("../data/test-inject.log", import.meta.url));
 process.env.CCR_INJECT_LOG = INJECT_LOG;
 rmSync(INJECT_LOG, { force: true });
