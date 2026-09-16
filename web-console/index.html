@@ -6688,6 +6688,33 @@ async function shareSrvQr() {
     // #25 修正：旧改写会把 location.hostname 当备选——exe 页面源 tauri.localhost
     // 不匹配回环正则被当 LAN 地址发出（用户实测中招）。只认私网 IP 字面量
     const ep = localEp(url);
+    // 本机 relay 云桥在线时优先出云码（2026-09-16）：LAN 直连码在防火墙/终端隔离网络
+    // 必死（用户公司机实测"扫码没反应"），云码跨网络可用——用户扫哪个码都不该拿到死码
+    if (ep && ep.loop && localRelayInfo && localRelayInfo.port === ep.port) {
+      const ci = await commandAck(ctx, "COMMAND_CLOUD_INFO", {});
+      if (ci && ci.ok && ci.cloudInfo && ci.cloudInfo.cloud && ci.cloudInfo.bridge && ci.cloudInfo.rd && ci.cloudInfo.rk) {
+        const pc = await commandAck(ctx, "COMMAND_PAIR_CODE", {});
+        if (pc && pc.ok && pc.pair_code) {
+          payload = JSON.stringify({
+            t: "ccdeck-add", v: 1,
+            bridge: ci.cloudInfo.bridge, bt: ci.cloudInfo.bt, rd: ci.cloudInfo.rd, rk: ci.cloudInfo.rk,
+            code: pc.pair_code.code,
+          });
+          $("loginQrTitle").textContent = "分享连接到手机（云桥）";
+          $("loginQrSub").innerHTML = "手机 CC Deck App 扫下方二维码<br/>经云桥接入本机，任何网络可用";
+          $("loginQrState").textContent = "等待手机扫码…";
+          drawLoginQr(payload);
+          $("loginQrPop").classList.add("open");
+          // 配对码带 TTL：弹层仍开着才续码（重跑分享重新领码重画），关层即停
+          if (relayQrTimer) clearTimeout(relayQrTimer);
+          relayQrTimer = setTimeout(() => {
+            relayQrTimer = null;
+            if ($("loginQrPop").classList.contains("open")) void shareSrvQr();
+          }, Math.max((pc.pair_code.expires_in || 300) - 30, 30) * 1000);
+          return;
+        }
+      }
+    }
     if (ep && ep.loop && localRelayInfo && localRelayInfo.port === ep.port) {
       const PRIV_IP2 = /^(192\.168|10|172\.(1[6-9]|2\d|3[01]))\./;
       const host =

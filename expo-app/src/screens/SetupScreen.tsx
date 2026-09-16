@@ -30,6 +30,9 @@ function hostOf(wsUrl: string): string {
 // 两种接入形态的地址占位：云桥为主（人在外面也能配对），LAN 直连次之
 const LAN_URL_DEFAULT = "ws://192.168.0.105:8787/ws";
 const CLOUD_URL_DEFAULT = "wss://cc.humumu.online/cloud";
+// 默认公共桥 token（与 web-console BAKED_BRIDGE_TOKEN 同源）：开源用户免填。
+// 2026-09-16 前手机端没兜底——token 留空连桥必 401，报"连不上云桥"误导成网络问题
+const BRIDGE_TOKEN_DEFAULT = "ccdeck-public-9f3k2m7v";
 
 // 品牌橙（LogoMark / 源色板同源）：主按钮色，主题无关
 const ORANGE = "#D97757";
@@ -168,14 +171,17 @@ export default function SetupScreen({ onClose, editId, initialScan }: Props) {
       return;
     }
     const base = normAddr(wsUrl);
-    const bt = token.trim();
+    const bt = token.trim() || BRIDGE_TOKEN_DEFAULT;
     const cd = code.trim();
     if (!/^wss?:\/\//.test(base)) {
       setErr("云桥地址需以 ws:// 或 wss:// 开头");
       return;
     }
     // #88 同云桥多设备合法形态：公司机+Mac 同桥地址不同 relay 身份——双方身份
-    // 已知且不同则不算重复（身份未知才按裸地址判重）
+    // 已知且不同则不算重复（身份未知才按裸地址判重）。
+    // 编辑无身份旧条目（如扫 LAN 码得来的）+ 用户填了配对码时同样放行：
+    // 配对本身会确立身份（公司 relay 的 rd 必异于已存条目），裸地址预判反成拦路虎
+    //（2026-09-16 用户实测：LAN 条目改云桥地址被"此地址已保存（mac）"卡死）
     const e0 = servers.find((e) => e.id === editId);
     const rd0 = e0 ? identityOf(e0) : null;
     const dup = servers.find((e) => {
@@ -183,7 +189,7 @@ export default function SetupScreen({ onClose, editId, initialScan }: Props) {
       const rd = identityOf(e);
       return !(rd0 && rd && rd0 !== rd);
     });
-    if (editId && dup) {
+    if (editId && dup && !(cd && !rd0)) {
       setErr(`此地址已保存（${dup.name || hostOf(base)}），去改那条或换个地址`);
       return;
     }
