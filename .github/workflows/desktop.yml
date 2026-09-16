@@ -54,7 +54,7 @@ jobs:
         # 用户无法区分快照/正式——对齐 android.yml 的 versionName 烙印模式）
         # ① package.json → tauri 版本/updater 元数据；② web-console CONSOLE_VERSION → 关于页显示
         # （frontendDist 构建期打包进二进制，sed 只改 CI 工作区副本，不回写仓库）
-        if: startsWith(github.ref, 'refs/tags/') && contains(github.ref, '-snap')
+        if: startsWith(github.ref, 'refs/tags/') && (contains(github.ref, '-snap') || contains(github.ref, '-test'))
         working-directory: desktop-tauri
         shell: bash
         run: |
@@ -85,7 +85,8 @@ jobs:
           if-no-files-found: error
 
       - name: Attach to GitHub Release
-        if: startsWith(github.ref, 'refs/tags/') && !contains(github.ref, '-snap')
+        # -test 包不建 Release（test 分发纪律：只走 ECS/KV，不污染 Release）
+        if: startsWith(github.ref, 'refs/tags/') && !contains(github.ref, '-snap') && !contains(github.ref, '-test')
         uses: softprops/action-gh-release@v2
         with:
           files: |
@@ -135,7 +136,7 @@ jobs:
 
       - name: Sync version from tag (snapshot 通道标识)
         # 同 Windows job：snap tag 烙印 package.json + 关于页 CONSOLE_VERSION
-        if: startsWith(github.ref, 'refs/tags/') && contains(github.ref, '-snap')
+        if: startsWith(github.ref, 'refs/tags/') && (contains(github.ref, '-snap') || contains(github.ref, '-test'))
         working-directory: desktop-tauri
         shell: bash
         run: |
@@ -163,7 +164,8 @@ jobs:
           if-no-files-found: error
 
       - name: Attach to GitHub Release
-        if: startsWith(github.ref, 'refs/tags/') && !contains(github.ref, '-snap')
+        # -test 包不建 Release（test 分发纪律：只走 ECS/KV，不污染 Release）
+        if: startsWith(github.ref, 'refs/tags/') && !contains(github.ref, '-snap') && !contains(github.ref, '-test')
         uses: softprops/action-gh-release@v2
         with:
           files: |

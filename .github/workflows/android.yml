@@ -41,7 +41,8 @@ jobs:
         # -snap tag 构建把 tag 名烙进 versionName（如 0.4.23-snap.2）：关于页/设置抽屉
         # 显示完整通道版本 + "快照版"角标，用户可区分快照包与正式包（正式 tag 无后缀，
         # versionName 保持仓库 checked-in 值，两者互不干扰）
-        if: startsWith(github.ref, 'refs/tags/') && contains(github.ref, '-snap')
+        # -test tag 同款烙印（2026-09-16）：本地 test 包版本化 test.N 与 snap 风格统一
+        if: startsWith(github.ref, 'refs/tags/') && (contains(github.ref, '-snap') || contains(github.ref, '-test'))
         working-directory: expo-app
         run: |
           V="${GITHUB_REF_NAME#v}"
@@ -70,7 +71,8 @@ jobs:
           if-no-files-found: error
 
       - name: Create GitHub Release with APK
-        if: startsWith(github.ref, 'refs/tags/') && !contains(github.ref, '-snap')
+        # -test 包不建 Release（test 分发纪律：只走 ECS 裸 IP，不污染 Release/CF 主域）
+        if: startsWith(github.ref, 'refs/tags/') && !contains(github.ref, '-snap') && !contains(github.ref, '-test')
         uses: softprops/action-gh-release@v2
         with:
           # 默认 GITHUB_TOKEN 即 github.token（token 参数缺省值），无需任何 secrets
