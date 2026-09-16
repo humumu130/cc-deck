@@ -1614,9 +1614,9 @@ export default function DetailScreen({ sid, onBack, initialView, ref }: { sid: s
 
       {/* 底部栈：审批横幅（常驻可见，类似 CLI 权限提示）> 模板行 > 命令栏；整体随键盘抬升。
            外层通铺命令栏同色底（2026-09-16）：底部手势条区域不再露页面底色——输入栏
-           一气通到屏幕底边；抬升=kb+10 与 paddingBottom=10 精确抵消：栈底正好压在键盘上沿（同色 pad 无缝透明），
-           多出的 10px 被键盘盖住不可见——IMR 欠账与缝隙同时解决（2026-09-16 三测） */}
-      <View pointerEvents="box-none" style={{ backgroundColor: c.overlay, paddingBottom: kb > 0 ? 10 : insets.bottom, transform: [{ translateY: kb > 0 ? -(kb + 10) : 0 }] }}>
+           一气通到屏幕底边；抬升=kb-2：多抬改欠抬 2px——栏下沿藏进键盘内 2px（是输入栏自己的 padding 区，
+           不可见），透明缝彻底消失（2026-09-16 四测：此前多抬 P 恰好等于缝宽，方向反了） */}
+      <View pointerEvents="box-none" style={{ backgroundColor: c.overlay, paddingBottom: kb > 0 ? 0 : insets.bottom, transform: [{ translateY: kb > 0 ? -(kb - 2) : 0 }] }}>
         {bannerVisible ? (
           wr!.questions?.length ? (
             <FadeIn><AskBanner wr={wr!} sid={sid} /></FadeIn>

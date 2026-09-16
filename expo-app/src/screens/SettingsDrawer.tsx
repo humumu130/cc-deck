@@ -276,10 +276,14 @@ export default function SettingsDrawer({
   }, [visible, snap.cloudMsg]);
 
   const pick = (e: ServerEntry) => {
-    // 方案 A（2026-09-16）：侧栏连接改纯查看/编辑，不再切换活动源——切换入口统一
-    // 收口到主面板顶栏设备图标（点行=进编辑页；连接动作在编辑页「连接」钮或顶栏菜单）
+    // 2026-09-16 二稿回退：行点击恢复「切换选中光标」（连接/切面板）；进编辑走行尾铅笔
+    if (!e.token && !e.cloud) {
+      onClose();
+      onEdit(e);
+      return;
+    }
+    void store.connectServer(e).then(() => setActiveId(e.id));
     onClose();
-    onEdit(e);
   };
 
   const edit = (e: ServerEntry) => {
@@ -522,6 +526,15 @@ export default function SettingsDrawer({
                   </View>
 
                 </Pressable>
+                <Pressable
+                  style={d.srvEditBtn}
+                  hitSlop={6}
+                  android_ripple={{ color: c.tintSoft, borderless: false, radius: 12 }}
+                  onPress={() => edit(e)}
+                  accessibilityLabel={`编辑 ${e.name}`}
+                >
+                  <View style={{ marginTop: 1 }}><PencilIcon size={13} color={c.dim} /></View>
+                </Pressable>
                 {delArm === e.id ? (
                   /* #46 长按亮删除（替常驻 ✕）：确认按钮 3.5s 自动收回 */
                   <Pressable style={d.srvDelArm} android_ripple={{ color: withA(c.waiting, 0.15), borderless: false, radius: 13 }} onPress={() => { setDelArm(null); remove(e); }}>
@@ -763,8 +776,10 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
   srvHead: { flexDirection: "row", alignItems: "center", gap: 4 },
   srvDot: { width: 7, height: 7, borderRadius: 4 },
   srvName: { color: c.text, fontSize: 13.5, fontWeight: "600", flex: 1 },
-  srvUrl: { color: c.faint, fontSize: 10.5, marginTop: 1.5 },
-  // #46/#53 通道标记：☁️ emoji 与 LanGlyph 胶囊两态
+  srvEditBtn: {
+    backgroundColor: "transparent", alignItems: "center", justifyContent: "center",
+    paddingHorizontal: 8, paddingVertical: 8, borderRadius: 9,
+  },  // #46/#53 通道标记：☁️ emoji 与 LanGlyph 胶囊两态
   chanCloudT: { fontSize: 10.5, lineHeight: 14 },
   // #96 返工（用户几何定稿）：角标垂直中线=插头底边、水平在插头右缘之外（不重叠）。
   // 插头 13px 在 wrap(18x16) 居中：右缘 x≈15.5 / 底 y≈14.5 → 角标 left 17 起、

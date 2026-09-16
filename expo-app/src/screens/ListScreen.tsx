@@ -874,7 +874,6 @@ export default function ListScreen({ sessions, connected, connText, onOpen, onNe
                   <View style={[styles.srcMenuDot, { backgroundColor: stc }]} />
                   <Text style={styles.srcMenuName} numberOfLines={1}>{src.name}</Text>
                   <Text style={styles.srcMenuChan}>{src.channel === "cloud" ? "云桥" : src.channel === "lan" ? "直连" : ""}</Text>
-                  {isActive ? <Text style={styles.srcMenuOn}>当前</Text> : null}
                 </Pressable>
               );
             })}
@@ -1083,7 +1082,7 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
   srcMenu: {
     position: "absolute", top: 52, right: 12, zIndex: 30, minWidth: 208,
     backgroundColor: c.panel, borderRadius: 12, borderWidth: 1, borderColor: c.line,
-    paddingVertical: 4, shadowColor: "#000", shadowOpacity: 0.35, shadowRadius: 12,
+    overflow: "hidden", shadowColor: "#000", shadowOpacity: 0.35, shadowRadius: 12,
     shadowOffset: { width: 0, height: 4 }, elevation: 8,
   },
   srcRow: { flexDirection: "row", alignItems: "center", gap: 8, paddingHorizontal: 12, paddingVertical: 10 },
