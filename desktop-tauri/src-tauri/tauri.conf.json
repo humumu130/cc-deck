@@ -42,7 +42,13 @@
     "resources": [
       "resources/relay.mjs",
       "resources/bin/inject.cs"
-    ]
+    ],
+    "windows": {
+      "nsis": {
+        "installMode": "perMachine",
+        "installerHooks": "./installer-hooks.nsh"
+      }
+    }
   },
   "plugins": {
     "updater": {
