@@ -1443,12 +1443,19 @@
   #pendbox span {
     background: var(--panel-2); border: 1px dashed var(--border); color: var(--dim);
     border-radius: 12px; border-top-right-radius: 4px; padding: 6px 11px; font-size: 12px;
-    max-width: 70%; animation: pendpulse 1.8s infinite;
-    /* 长消息默认折叠一行（省空间，用户 2026-09-16 拍板），点击展开全文 */
+    max-width: 70%; animation: pendpulse 1.8s infinite; position: relative; padding-right: 26px;
+    /* 长消息默认折叠一行：line-clamp 之外再钳 max-height——次行顶端会漏 1-2px
+       （2026-09-16 用户反馈①），高度钳到一行才真正只露一行；展开态解除 */
     display: -webkit-box; -webkit-line-clamp: 1; -webkit-box-orient: vertical;
-    overflow: hidden; cursor: pointer; word-break: break-all;
+    max-height: 29px; overflow: hidden; cursor: pointer; word-break: break-all;
   }
-  #pendbox span.open { -webkit-line-clamp: unset; overflow: visible; }
+  #pendbox span.open { -webkit-line-clamp: unset; max-height: none; }
+  /* 显式展开/收起箭头：无提示用户不知道可点（2026-09-16 反馈②） */
+  #pendbox span .pend-caret {
+    position: absolute; right: 8px; top: 6px; font-style: normal; font-size: 10px;
+    color: var(--faint); transition: transform .15s; transform-origin: 50% 40%;
+  }
+  #pendbox span.open .pend-caret { transform: rotate(180deg); color: var(--dim); }
   @keyframes pendpulse { 50% { opacity: .45; } }
   /* 子 Agent 工作状态 */
   #agbox {
@@ -3991,6 +3998,9 @@ setInterval(() => {
   }
 }, 1000);
 
+// 排队气泡展开态记忆（文本为键）：renderDetail 每秒重建排队区 DOM，无记忆则展开即被收回
+const pendOpen = new Set();
+
 function renderDetail() {
   const sel = selSession();
   const s = sel?.s;
@@ -4071,14 +4081,25 @@ function renderDetail() {
     }).join("");
   } else ag.style.display = "none";
 
-  // 排队注入消息（external 会话 CLI 忙时）
+  // 排队注入消息（external 会话 CLI 忙时）；pendOpen=跨重渲染的展开态记忆
   const pb = $("pendbox");
   const pi = s.pending_inputs ?? [];
   if (pi.length > 0) {
     pb.style.display = "flex";
-    pb.innerHTML = pi.map((p) => '<span title="点击展开/收起">' + escapeHtml(p.text) + "</span>").join("");
-    for (const sp of pb.children) sp.onclick = () => sp.classList.toggle("open");
-  } else pb.style.display = "none";
+    // 展开态按文本记忆（Set）：排队区随 SESSION_UPDATED 每秒重建 DOM——
+    // 旧实现重建即丢展开态，"点开马上又收起"（2026-09-16 用户反馈③）
+    pb.innerHTML = pi.map((p) => {
+      const open = pendOpen.has(p.text);
+      return '<span title="点击展开/收起" class="' + (open ? "open" : "") + '"><i class="pend-caret">▾</i>' + escapeHtml(p.text) + "</span>";
+    }).join("");
+    const kids = [...pb.children];
+    kids.forEach((sp, idx) => sp.onclick = () => {
+      sp.classList.toggle("open");
+      const key = pi[idx] ? pi[idx].text : "";
+      if (sp.classList.contains("open")) pendOpen.add(key);
+      else pendOpen.delete(key);
+    });
+  } else { pb.style.display = "none"; pendOpen.clear(); }
 
   // #279B 历史会话续聊（对齐手机 resumable 口径）：relay_session_id 在即可发消息恢复（SDK resume）；
   // 无可恢复记录的历史会话不再整个隐藏输入条——保持禁用态 + hisnote 说明（入口可见性对齐手机端）
