@@ -4,7 +4,9 @@
 //   未设时模拟快照不可用（exit 1 → capture null → 守门 fail-open）；
 //   CCR_FAKE_PEEK_CHAOS=1 时把模板里的 %T% 替换为当前时间戳——每次快照内容都不同，
 //   确定性模拟"持续打字"（不依赖测试进程里会被事件循环饿死的定时器）
-// 假 osascript（-e 脚本含 "return contents of t"）：同样回 CCR_FAKE_PEEK_FILE 内容
+// 假 osascript（-e 脚本含双层解引用 "return contents of (contents of t)"）：同样回 CCR_FAKE_PEEK_FILE 内容
+// （2026-09-16：双层解引用修复改了脚本文本，匹配串同步更新——旧串 "return contents of t"
+// 不再是子串，假 osascript 静默回空 → capture null → test:bridge 45⑧ 全天红）
 import { appendFileSync, copyFileSync, readFileSync, writeFileSync } from "node:fs";
 
 const args = process.argv.slice(2);
@@ -23,7 +25,7 @@ if (args[1] === "--peek") {
     process.exit(1);
   }
 }
-if (args[0] === "-e" && String(args[1]).includes("return contents of t") && process.env.CCR_FAKE_PEEK_FILE) {
+if (args[0] === "-e" && String(args[1]).includes("return contents of (contents of t)") && process.env.CCR_FAKE_PEEK_FILE) {
   try {
     process.stdout.write(readFileSync(process.env.CCR_FAKE_PEEK_FILE, "utf8"));
   } catch {}

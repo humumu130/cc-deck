@@ -1,6 +1,7 @@
 // 会话自动命名：首条 prompt -> 一次轻量模型调用生成短标题
 // （本机 CC 自己的 session name 生成在 GLM 环境基本不触发，Relay 兜底）
 import { query } from "@anthropic-ai/claude-agent-sdk";
+import { resolveClaudeCliPath } from "./cli-path.js";
 
 // 返回 title + 本次一次性 SDK 会话的 session_id（其 transcript 须被孤儿扫描排除，防误收养）；
 // onSid 在拿到首条消息（含 session_id）时立刻回调——不等 result，防 20s 超时把 sid 一起丢了
@@ -29,6 +30,8 @@ export async function generateTitle(
           // 专用 .tmp- 目录：transcript 不落用户项目区（.tmp- 前缀段被孤儿扫描/事件护栏
           // 排除，#283——此前 cwd=relay 进程目录，被收养成"relay"垃圾会话）
           cwd: cwd ?? process.cwd(),
+          // bundle 部署下 SDK 找不到包内平台二进制——标题生成尽力而为，解析失败静默放弃
+          ...(resolveClaudeCliPath() ? { pathToClaudeCodeExecutable: resolveClaudeCliPath()! } : {}),
           env: { ...process.env, CCR_RELAY_CHILD: "1" }, // 防止被全局 bridge hook 注册成外部会话
           permissionMode: "bypassPermissions",
           maxTurns: 1,

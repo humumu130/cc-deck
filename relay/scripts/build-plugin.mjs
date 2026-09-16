@@ -21,7 +21,10 @@ await build({
   outfile: join(out, "scripts", "relay.mjs"),
   external: ["bufferutil", "utf-8-validate"],
   define: { "process.env.CC_DECK_PLUGIN": '"1"' },
-  banner: { js: "import { createRequire } from 'node:module'; const require = createRequire(import.meta.url);" },
+  // banner 里不声明 createRequire 标识符——源码（如 cli-path.ts）静态 import { createRequire }
+  // 时 esbuild 会原样保留该 import，banner 再 import 一份 = 重复声明 SyntaxError，
+  // 整个 bundle 起不来（2026-09-16 事故）。动态取用无标识符冲突
+  banner: { js: "const require = (await import('node:module')).createRequire(import.meta.url);" },
   logLevel: "info",
 });
 

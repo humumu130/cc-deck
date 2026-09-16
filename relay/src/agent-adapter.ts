@@ -7,6 +7,7 @@ import type {
   SDKUserMessage,
 } from "@anthropic-ai/claude-agent-sdk";
 import { randomUUID } from "node:crypto";
+import { resolveClaudeCliPath } from "./cli-path.js";
 import type {
   FileChangeStats,
   SessionLogPayload,
@@ -160,11 +161,20 @@ export class AgentSession {
     if (initialPrompt !== undefined || (opts?.images?.length ?? 0) > 0) {
       this.pushUserMessage(initialPrompt ?? "", opts?.images);
     }
+    // 单文件 bundle 部署后 SDK 找不到包内平台二进制（见 cli-path.ts 头注释），
+    // 解析失败时给出可行动的中文报错（直通 create 的 ack.error → 客户端 toast）
+    const cliPath = resolveClaudeCliPath();
+    if (!cliPath) {
+      throw new Error(
+        "未找到可用的 Claude Code CLI：请先安装 Claude Code，或设置环境变量 CC_DECK_CLAUDE_PATH 指向 claude 可执行文件后重启",
+      );
+    }
     this.q = query({
       prompt: this.queue.iterable,
       options: {
         model: this.model,
         cwd: this.cwd,
+        pathToClaudeCodeExecutable: cliPath,
         // 标记为 Relay 子进程：全局 bridge hook 据此跳过上报（避免与 managed 会话双注册）
         env: { ...process.env, CCR_RELAY_CHILD: "1" },
         permissionMode: opts?.permissionMode ?? "default",

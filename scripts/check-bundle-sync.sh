@@ -26,6 +26,14 @@ if [ -f cc-plugins/plugins/cc-deck/scripts/relay.mjs ] && ! grep -q 'no cli_pid 
   FAIL=1
 fi
 
+# bundle 可加载性：语法检查（2026-09-16 createRequire 重复声明事故的防再犯——
+# md5 一致 + 诊断桩在，但 bundle 起不来的静态错误只有语法检查能逮住）
+if [ -f cc-plugins/plugins/cc-deck/scripts/relay.mjs ] && ! node --check cc-plugins/plugins/cc-deck/scripts/relay.mjs 2>/tmp/bundle-check.err; then
+  echo "❌ bundle 语法检查不过（加载即炸）："
+  head -3 /tmp/bundle-check.err
+  FAIL=1
+fi
+
 if [ "$FAIL" = "1" ]; then
   echo "——检查未通过，禁止打 tag/发版"
   exit 1
