@@ -276,14 +276,10 @@ export default function SettingsDrawer({
   }, [visible, snap.cloudMsg]);
 
   const pick = (e: ServerEntry) => {
-    if (!e.token) {
-      // 没存令牌：跳编辑页补输（预填地址/名称）
-      onClose();
-      onEdit(e);
-      return;
-    }
-    void store.connectServer(e).then(() => setActiveId(e.id));
+    // 方案 A（2026-09-16）：侧栏连接改纯查看/编辑，不再切换活动源——切换入口统一
+    // 收口到主面板顶栏设备图标（点行=进编辑页；连接动作在编辑页「连接」钮或顶栏菜单）
     onClose();
+    onEdit(e);
   };
 
   const edit = (e: ServerEntry) => {

@@ -1245,8 +1245,9 @@ class RelayStore {
   // 恢复链，错过的 TASK_DONE 由 last_task_done 状态兜回。
   // 聚合模式遍历 conns 逐个体检
   resumeProbe() {
+    // 2026-09-16 单元模式保活：非活动源同样体检——「单源」是视图过滤不是连接独占
+    //（#27 同则），后台源的假在线僵尸此前无人探测，切回时才暴露
     for (const conn of this.conns.values()) {
-      if (!this.aggregate && conn.id !== this.activeId) continue;
       this.connResumeProbe(conn);
     }
     // #401 补强：回前台顺带为无标记的 LAN 闲置条目补身份（到家抬腕即触发归并，

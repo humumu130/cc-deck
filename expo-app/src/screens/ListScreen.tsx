@@ -768,14 +768,23 @@ export default function ListScreen({ sessions, connected, connText, onOpen, onNe
 
   // 下拉刷新 = 断开重连一次（重走快照），在线即收起转圈；3s 兜底
   const [refreshing, setRefreshing] = useState(false);
+  // 顶栏设备图标源切换菜单（方案 A）：snap.sources 只含运行态摘要，connectServer
+  // 需要完整落库条目（token/cloud）——开菜单时载入一次
+  const [srcMenu, setSrcMenu] = useState(false);
+  const [srvEntries, setSrvEntries] = useState<import("../store").ServerEntry[]>([]);
+  useEffect(() => {
+    if (srcMenu) void store.loadServers().then(setSrvEntries);
+  }, [srcMenu]);
   useEffect(() => {
     if (refreshing && snap.connState === "online") setRefreshing(false);
   }, [refreshing, snap.connState]);
   const refresh = () => {
     if (refreshing) return;
     setRefreshing(true);
-    store.disconnect();
-    store.connect();
+    // 刷新 = 数据新鲜度，不是链路重启（2026-09-16 用户反馈：下拉把 2/2 在线全干断）。
+    // resumeProbe：在线源 ping-resume（relay 按 last_seq 补发漏掉的事件）、死链判死重连、
+    // 退避中的源立即重试——连接零扰动
+    store.resumeProbe();
     setTimeout(() => setRefreshing(false), 3000);
   };
   // 底部上拉刷新（#255）：滚到底即触发同一 refresh；冷却 8s 防连续滚动反复重连。
@@ -824,10 +833,10 @@ export default function ListScreen({ sessions, connected, connText, onOpen, onNe
           hitSlop={6}
           accessibilityLabel={`连接状态 ${connText}，点击${snap.connState === "unpaired" ? "去设置重新配对" : "立即重连"}`}
           onPress={() => {
-            // 三态分流：unpaired 是配对问题（重试无解），引导去设置重新配对；
-            // 其余断连态点按 = 重置退避立即重试
-            if (snap.connState === "unpaired") setDrawerOpen(true);
-            else if (!connected) store.retryNow();
+            // 方案 A（2026-09-16）：设备图标=源切换入口——点击展开源列表切换活动面板，
+            // 切换只动视图不拆连接（store #27 单源=视图过滤）。原三态分流（重试/去设置）
+            // 收进菜单：离线行点选即连接（connectServer 幂等）、菜单底部保留管理入口
+            setSrcMenu((v) => !v);
           }}
         >
           {/* #52 chip 精简：去状态色点与通道后缀（多源混合通道无法单一展示），
@@ -836,6 +845,42 @@ export default function ListScreen({ sessions, connected, connText, onOpen, onNe
           <DeskGlyph color={connColor} />
           <Text style={[styles.connText, { color: connColor }]}>{connText}</Text>
         </Pressable>
+        {srcMenu ? (
+          <Pressable style={StyleSheet.absoluteFill} onPress={() => setSrcMenu(false)} />
+        ) : null}
+        {srcMenu ? (
+          <View style={styles.srcMenu}>
+            {[...snap.sources].sort((a, b) => (b.id === snap.activeSourceId ? 1 : 0) - (a.id === snap.activeSourceId ? 1 : 0)).map((src) => {
+              const stc = src.state === "online" ? c.done : src.state === "offline" ? c.error : c.working;
+              const entry = srvEntries.find((e) => e.id === src.id);
+              const isActive = src.id === snap.activeSourceId;
+              return (
+                <Pressable
+                  key={src.id}
+                  style={[styles.srcRow, isActive && styles.srcRowOn]}
+                  android_ripple={{ color: c.tintSoft, borderless: false }}
+                  onPress={() => {
+                    setSrcMenu(false);
+                    if (entry) void store.connectServer(entry);
+                    else setDrawerOpen(true); // 快照有/落库无（异常态）：引导去设置看
+                  }}
+                >
+                  <View style={[styles.srcMenuDot, { backgroundColor: stc }]} />
+                  <Text style={styles.srcMenuName} numberOfLines={1}>{src.name}</Text>
+                  <Text style={styles.srcMenuChan}>{src.channel === "cloud" ? "云桥" : src.channel === "lan" ? "直连" : ""}</Text>
+                  {isActive ? <Text style={styles.srcMenuOn}>当前</Text> : null}
+                </Pressable>
+              );
+            })}
+            <Pressable
+              style={styles.srcMenuManage}
+              android_ripple={{ color: c.tintSoft, borderless: false }}
+              onPress={() => { setSrcMenu(false); setDrawerOpen(true); }}
+            >
+              <Text style={styles.srcMenuManageT}>管理连接（编辑 / 删除）…</Text>
+            </Pressable>
+          </View>
+        ) : null}
         {/* #350 主题切换从设置抽屉迁入主面板顶：连接 chip 旁，与状态信息同区 */}
         <Pressable
           style={styles.themeBtn}
@@ -1028,6 +1073,21 @@ export default function ListScreen({ sessions, connected, connText, onOpen, onNe
 
 const makeStyles = (c: ThemeColors) => StyleSheet.create({
   safe: { flex: 1, backgroundColor: c.bg },
+  // 顶栏设备图标源切换菜单（方案 A）：右上锚定小面板，行=色点+名称+通道+当前标
+  srcMenu: {
+    position: "absolute", top: 52, right: 12, zIndex: 30, minWidth: 208,
+    backgroundColor: c.panel, borderRadius: 12, borderWidth: 1, borderColor: c.line,
+    paddingVertical: 4, shadowColor: "#000", shadowOpacity: 0.35, shadowRadius: 12,
+    shadowOffset: { width: 0, height: 4 }, elevation: 8,
+  },
+  srcRow: { flexDirection: "row", alignItems: "center", gap: 8, paddingHorizontal: 12, paddingVertical: 10 },
+  srcRowOn: { backgroundColor: c.tintSoft },
+  srcMenuDot: { width: 8, height: 8, borderRadius: 4 },
+  srcMenuName: { color: c.text, fontSize: 13, flex: 1 },
+  srcMenuChan: { color: c.faint, fontSize: 11 },
+  srcMenuOn: { color: c.done, fontSize: 11, fontWeight: "600" },
+  srcMenuManage: { borderTopWidth: 1, borderTopColor: c.line, paddingHorizontal: 12, paddingVertical: 10, marginTop: 2 },
+  srcMenuManageT: { color: c.dim, fontSize: 12 },
   topbar: {
     flexDirection: "row", alignItems: "center", gap: 10,
     paddingHorizontal: 16, paddingTop: 10, paddingBottom: 8,
