@@ -69,6 +69,12 @@ process.env.CCR_PROJECTS_ROOT = PROOT;
 rmSync(PROOT, { recursive: true, force: true });
 // 34 段断言删除墓碑：先清上一轮残留，保证测试幂等
 rmSync(fileURLToPath(new URL("../data/deleted-ext.json", import.meta.url)), { force: true });
+// 数据目录隔离（2026-09-16 title-overrides 引爆）：改名持久化/child-sessions/墓碑等
+// 全部落 repo data/，与真实 ~/.cc-deck/data 互不可见——否则套件写入真实目录、下一轮
+// 建卡回放，"title from prompt" 断言失败（功能正确、测试污染）
+const TDATA = fileURLToPath(new URL("../data/test-datadir/", import.meta.url));
+process.env.CCR_DATA_DIR = TDATA;
+rmSync(TDATA, { recursive: true, force: true });
 const cfg = loadConfig();
 const bus = new EventBus();
 const mgr = new SessionManager(bus, cfg);
