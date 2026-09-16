@@ -400,7 +400,8 @@ class RelayStore {
     const c = inPlay[0];
     return {
       connected: c.state === "online",
-      connText: c.stateText ?? singleConnText(c),
+      // 单元模式与多元同口径：1/1（在线与否由文案颜色承载，#52 精简延续）
+      connText: `${c.state === "online" ? 1 : 0}/1`,
       connState: c.state,
       channel: c.state === "online" ? c.channel : null,
       failNote: c.failNote,
@@ -670,12 +671,9 @@ class RelayStore {
         if (!e.token && !e.cloud) continue;
         this.applyConfig(this.ensureConn(e), e, e.token);
       }
-    } else {
-      for (const conn of this.conns.values()) {
-        if (conn.id === this.activeId) continue;
-        this.connDisconnect(conn);
-      }
     }
+    // 多元→单元不拆非活动源（2026-09-16 保活原则）：切模式/切源都只切画面展示。
+    // 旧实现在此断开后台源，切回时必须从零重连（"连接中"迟迟不在线，用户实测）
     this.emit();
   }
 
@@ -2268,18 +2266,6 @@ class RelayStore {
 export const store = new RelayStore();
 
 // 单源模式连接文案（conn.state → connText，逐字保持旧版语义；unpaired 新增）
-function singleConnText(c: SourceConn): string {
-  switch (c.state) {
-    case "online":
-      // #37 云通道指示去 emoji：文案统一「已连接」，云图标（线条云）由连接 chip 呈现
-      return "已连接";
-    case "connecting": return "连接中";
-    case "reconnecting": return "重连中"; // stateText 缺失时的兜底（理论不达）
-    case "offline": return "已断开";
-    case "unpaired": return "未配对"; // stateText 常态已有「未配对」，此为兜底
-    default: return "未配置";
-  }
-}
 
 // 弃用旧 socket 统一走这里（#291 泄漏根因）：RN Android 原生侧只把已完成 onOpen 的
 // socket 登记进连接表，CONNECTING 期调 close() 是静默 no-op——握手照样完成，旧连接
