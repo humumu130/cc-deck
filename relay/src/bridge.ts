@@ -261,9 +261,22 @@ export class Bridge {
           // Windows 路径大小写不敏感，段比较需 lower（手工建 .TMP-TEST 会让护栏静默失效）
           // .tmp- 前缀泛化：.tmp-test 沙箱 + .tmp-titlegen 起标题子会话（#283）
           if (cwd.split(/[\\/]+/).some((seg) => seg.toLowerCase().startsWith(".tmp-"))) continue;
-          // 单发探针/一次性 print 模式 CLI（单回合无追问）不值得监控：全文件
-          // user 行 <2 条不收养——交互会话必然多回合（含工具结果的 user 行也算）
-          if (!this.hasMultiUserTurns(p)) continue;
+          // 单发探针/一次性 print 模式 CLI（单回合无追问）不值得监控：user<2 且
+          // 无工具调用时观察一轮文件增长再定（见 scanOrphanActivity 注释）；
+          // 仍在增长 → 穿透收养，否则记探针等下一轮
+          const act = this.scanOrphanActivity(p);
+          if (!act.adopt) {
+            const prev = this.orphanProbe.get(p);
+            if (prev === undefined || act.size <= prev.size) {
+              this.orphanProbe.set(p, { size: act.size, ts: Date.now() });
+              if (this.orphanProbe.size > 200) {
+                for (const [k, v] of this.orphanProbe) {
+                  if (Date.now() - v.ts > 30 * 60_000) this.orphanProbe.delete(k);
+                }
+              }
+              continue;
+            }
+          }
           this.mgr.ensureExternal(id, cwd, "", sid, transcriptFirstTs(p));
           this.transcriptPaths.set(id, p);
           this.mgr.setExternalStatus(id, "DONE", "扫描接入（只读）");
@@ -322,10 +335,19 @@ export class Bridge {
     }
   }
 
-  // transcript 是否有多条 user 行（含工具结果回填的 user 行）。流式分块扫全文件，
-  // 64KB 块 + 1KB carry 防跨界漏匹配；非末块的末 1KB 区域命中留给下一块计（避免重复
-  // 计数），只对孤儿候选（新发现、mtime 30min 内）执行，频次低
-  private hasMultiUserTurns(p: string): boolean {
+  // 孤儿候选交互性判定 + 文件大小（供"增长观察"用）。流式分块扫全文件，64KB 块 +
+  // 1KB carry 防跨界漏匹配；非末块的末 1KB 区域命中留给下一块计（避免重复计数），
+  // 只对孤儿候选（新发现、mtime 30min 内）执行，频次低。
+  // user≥2 → 收养（多回合；含工具结果回填的 user 行）。
+  // user=1 且 tool_use≥1 → 也收养（2026-09-16）：首回合已调工具（终端里等权限确认
+  //   时 transcript 恰好只有 1 user + 1 assistant，旧版硬性 ≥2-user 门槛让它永远
+  //   不收养——公司 Windows 机器"新会话几分钟不接入"根因）。一次性 print 若带工具
+  //   会被误收养，代价仅一张只读卡片（可删），可接受。
+  // 其余（纯文本首回合 / claude -p 单发）：不收养，返回 size 供调用方观察增长——
+  //   活跃会话下一轮必然变长，-p 单发不会。
+  private orphanProbe = new Map<string, { size: number; ts: number }>();
+
+  private scanOrphanActivity(p: string): { adopt: boolean; size: number } {
     let fd: number | undefined;
     try {
       fd = openSync(p, "r");
@@ -333,8 +355,16 @@ export class Bridge {
       const chunk = 64 * 1024;
       const buf = Buffer.alloc(chunk + 1024);
       let carry = Buffer.alloc(0);
-      let count = 0;
-      const re = /"type":\s*"user"/g;
+      let users = 0;
+      let toolUse = 0;
+      const reUser = /"type":\s*"user"/g;
+      const reTool = /"type":\s*"tool_use"/g;
+      const countIn = (text: string, limit: number, re: RegExp): number => {
+        let n = 0;
+        re.lastIndex = 0;
+        for (let m = re.exec(text); m && m.index < limit; m = re.exec(text)) n++;
+        return n;
+      };
       for (let pos = 0; pos < size; ) {
         const len = readSync(fd, buf, 0, chunk, pos);
         if (len <= 0) break;
@@ -342,15 +372,13 @@ export class Bridge {
         const isLast = pos >= size;
         const text = Buffer.concat([carry, buf.subarray(0, len)]).toString("latin1");
         const limit = isLast ? text.length : text.length - 1024;
-        re.lastIndex = 0;
-        for (let m = re.exec(text); m && m.index < limit; m = re.exec(text)) {
-          if (++count >= 2) return true;
-        }
+        users += countIn(text, limit, reUser);
+        toolUse += countIn(text, limit, reTool);
         carry = Buffer.from(text.slice(-1024), "latin1");
       }
-      return false;
+      return { adopt: users >= 2 || (users >= 1 && toolUse >= 1), size };
     } catch {
-      return false;
+      return { adopt: false, size: 0 };
     } finally {
       if (fd !== undefined) closeSync(fd);
     }

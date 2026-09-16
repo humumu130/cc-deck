@@ -753,6 +753,31 @@ await wait(150);
   assert(!mgr.getExternal("ext-bb11bb22-cc33-dd44-ee55-ff6677889900"), "34 stale transcript skipped");
   assert(!mgr.getExternal("ext-cc11bb22-cc33-dd44-ee55-ff6677889900"), "34 no-cwd transcript skipped");
   assert(!mgr.getExternal("ext-ee11bb22-cc33-dd44-ee55-ff6677889900"), "34 single-turn probe transcript skipped");
+  // 首回合已调工具（终端等权限确认形态：1 user + assistant tool_use）→ 收养
+  // （2026-09-16：旧 ≥2-user 门槛让它永不收养——公司 Windows "新会话几分钟不接入"根因）
+  const ddId = "ext-dd11bb22-cc33-dd44-ee55-ff6677889900";
+  writeFileSync(
+    join(PROOT, "proj-a", "dd11bb22-cc33-dd44-ee55-ff6677889900.jsonl"),
+    JSON.stringify({ type: "user", cwd: "D:\\perm-wait", message: { role: "user", content: "帮我删掉日志" } }) + "\n" +
+      JSON.stringify({ type: "assistant", cwd: "D:\\perm-wait", message: { role: "assistant", content: [{ type: "tool_use", name: "Bash", input: {} }] } }) + "\n",
+  );
+  ago(join(PROOT, "proj-a", "dd11bb22-cc33-dd44-ee55-ff6677889900.jsonl"), 60_000);
+  scan();
+  await wait(300);
+  assert(!!mgr.getExternal(ddId), "34 first-turn tool_use adopted (permission-wait form)");
+  // 纯文本首回合静止：不收养；文件增长后下一轮收养（-p 单发不会长，仍被排除）
+  const ffFile = join(PROOT, "proj-a", "ff11bb22-cc33-dd44-ee55-ff6677889900.jsonl");
+  const ffId = "ext-ff11bb22-cc33-dd44-ee55-ff6677889900";
+  writeFileSync(ffFile, JSON.stringify({ type: "user", cwd: "D:\\quiet-first", message: { role: "user", content: "讲个笑话" } }) + "\n");
+  ago(ffFile, 60_000);
+  scan();
+  await wait(100);
+  assert(!mgr.getExternal(ffId), "34 quiet first-turn held for growth probe");
+  appendFileSync(ffFile, JSON.stringify({ type: "assistant", cwd: "D:\\quiet-first", message: { role: "assistant", content: [{ type: "text", text: "好笑的" }] } }) + "\n");
+  ago(ffFile, 60_000);
+  scan();
+  await wait(100);
+  assert(!!mgr.getExternal(ffId), "34 quiet first-turn adopted after growth");
   // 已注册会话（模拟重启后恢复）重扫：不报错不重复创建，且 transcript 轮询必须（重）挂上
   // ——外部会话的 relay_session_id 也命中 ownsCliSession，分支顺序错了会跳过补挂，
   // 重启后手机只剩系统日志看不到正文（真实踩坑）

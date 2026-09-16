@@ -43322,7 +43322,19 @@ var Bridge = class _Bridge {
           if (!cwd) continue;
           if (this.isTitleGenTranscript(p)) continue;
           if (cwd.split(/[\\/]+/).some((seg) => seg.toLowerCase().startsWith(".tmp-"))) continue;
-          if (!this.hasMultiUserTurns(p)) continue;
+          const act = this.scanOrphanActivity(p);
+          if (!act.adopt) {
+            const prev = this.orphanProbe.get(p);
+            if (prev === void 0 || act.size <= prev.size) {
+              this.orphanProbe.set(p, { size: act.size, ts: Date.now() });
+              if (this.orphanProbe.size > 200) {
+                for (const [k3, v] of this.orphanProbe) {
+                  if (Date.now() - v.ts > 30 * 6e4) this.orphanProbe.delete(k3);
+                }
+              }
+              continue;
+            }
+          }
           this.mgr.ensureExternal(id2, cwd, "", sid, transcriptFirstTs(p));
           this.transcriptPaths.set(id2, p);
           this.mgr.setExternalStatus(id2, "DONE", "\u626B\u63CF\u63A5\u5165\uFF08\u53EA\u8BFB\uFF09");
@@ -43380,10 +43392,18 @@ var Bridge = class _Bridge {
       if (fd2 !== void 0) closeSync2(fd2);
     }
   }
-  // transcript 是否有多条 user 行（含工具结果回填的 user 行）。流式分块扫全文件，
-  // 64KB 块 + 1KB carry 防跨界漏匹配；非末块的末 1KB 区域命中留给下一块计（避免重复
-  // 计数），只对孤儿候选（新发现、mtime 30min 内）执行，频次低
-  hasMultiUserTurns(p) {
+  // 孤儿候选交互性判定 + 文件大小（供"增长观察"用）。流式分块扫全文件，64KB 块 +
+  // 1KB carry 防跨界漏匹配；非末块的末 1KB 区域命中留给下一块计（避免重复计数），
+  // 只对孤儿候选（新发现、mtime 30min 内）执行，频次低。
+  // user≥2 → 收养（多回合；含工具结果回填的 user 行）。
+  // user=1 且 tool_use≥1 → 也收养（2026-09-16）：首回合已调工具（终端里等权限确认
+  //   时 transcript 恰好只有 1 user + 1 assistant，旧版硬性 ≥2-user 门槛让它永远
+  //   不收养——公司 Windows 机器"新会话几分钟不接入"根因）。一次性 print 若带工具
+  //   会被误收养，代价仅一张只读卡片（可删），可接受。
+  // 其余（纯文本首回合 / claude -p 单发）：不收养，返回 size 供调用方观察增长——
+  //   活跃会话下一轮必然变长，-p 单发不会。
+  orphanProbe = /* @__PURE__ */ new Map();
+  scanOrphanActivity(p) {
     let fd2;
     try {
       fd2 = openSync2(p, "r");
@@ -43391,8 +43411,16 @@ var Bridge = class _Bridge {
       const chunk = 64 * 1024;
       const buf = Buffer.alloc(chunk + 1024);
       let carry = Buffer.alloc(0);
-      let count = 0;
-      const re = /"type":\s*"user"/g;
+      let users = 0;
+      let toolUse = 0;
+      const reUser = /"type":\s*"user"/g;
+      const reTool = /"type":\s*"tool_use"/g;
+      const countIn = (text, limit, re) => {
+        let n = 0;
+        re.lastIndex = 0;
+        for (let m = re.exec(text); m && m.index < limit; m = re.exec(text)) n++;
+        return n;
+      };
       for (let pos = 0; pos < size; ) {
         const len = readSync2(fd2, buf, 0, chunk, pos);
         if (len <= 0) break;
@@ -43400,15 +43428,13 @@ var Bridge = class _Bridge {
         const isLast = pos >= size;
         const text = Buffer.concat([carry, buf.subarray(0, len)]).toString("latin1");
         const limit = isLast ? text.length : text.length - 1024;
-        re.lastIndex = 0;
-        for (let m = re.exec(text); m && m.index < limit; m = re.exec(text)) {
-          if (++count >= 2) return true;
-        }
+        users += countIn(text, limit, reUser);
+        toolUse += countIn(text, limit, reTool);
         carry = Buffer.from(text.slice(-1024), "latin1");
       }
-      return false;
+      return { adopt: users >= 2 || users >= 1 && toolUse >= 1, size };
     } catch {
-      return false;
+      return { adopt: false, size: 0 };
     } finally {
       if (fd2 !== void 0) closeSync2(fd2);
     }
