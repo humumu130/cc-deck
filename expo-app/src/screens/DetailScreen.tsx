@@ -1,7 +1,7 @@
 import { Fragment, useEffect, useImperativeHandle, useRef, useState, type Ref } from "react";
 import { Animated, Dimensions, Image, Linking, Modal, PanResponder, PermissionsAndroid, Pressable, RefreshControl, ScrollView, Share, StyleSheet, Text, TextInput, Vibration, View, type GestureResponderEvent, type NativeScrollEvent, type NativeSyntheticEvent, type NativeTouchEvent, type StyleProp, type TextStyle } from "react-native";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
-import Svg, { Path } from "react-native-svg";
+import Svg, { Circle, Path, Rect } from "react-native-svg";
 import * as ImagePicker from "expo-image-picker";
 import * as ImageManipulator from "expo-image-manipulator";
 import * as Clipboard from "expo-clipboard";
@@ -1696,7 +1696,11 @@ export default function DetailScreen({ sid, onBack, initialView, ref }: { sid: s
               onPress={pickImages}
               disabled={!canCmd || images.length >= 4}
             >
-              <Text style={d.imgBtnT}>📷</Text>
+              <Svg width={19} height={19} viewBox="0 0 24 24" fill="none" stroke={c.dim} strokeWidth={1.7} strokeLinecap="round" strokeLinejoin="round">
+                <Rect x={3.5} y={4.5} width={17} height={15} rx={3} />
+                <Circle cx={9} cy={9.5} r={1.6} />
+                <Path d="M4.5 17l4.5-4.5 3.8 3.8 3-3 3.7 3.7" />
+              </Svg>
             </Pressable>
           ) : null}
           <View style={{ flex: 1 }}>

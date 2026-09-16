@@ -20,6 +20,8 @@ export default function NewSessionModal({ visible, onClose }: { visible: boolean
   const [cwd, setCwd] = useState("");
   const [prompt, setPrompt] = useState("");
   const [err, setErr] = useState<string | null>(null);
+  // 跳过权限确认（2026-09-16 用户需求）：新建时可选 bypass，免逐项审批
+  const [bypass, setBypass] = useState(false);
   const [loadedInit, setLoadedInit] = useState(false);
 
   // 目标源（#294 批3 + #369 记忆）：聚合且多源时 chips 选发送目标，默认=上次选择
@@ -57,7 +59,7 @@ export default function NewSessionModal({ visible, onClose }: { visible: boolean
     }
     setErr(null);
     void AsyncStorage.setItem("ccr_cwd", cc);
-    if (store.send("COMMAND_CREATE", { cwd: cc, prompt: p }, multi ? effTarget ?? undefined : undefined)) {
+    if (store.send("COMMAND_CREATE", { cwd: cc, prompt: p, ...(bypass ? { permissionMode: "bypassPermissions" as const } : {}) }, multi ? effTarget ?? undefined : undefined)) {
       setPrompt("");
       onClose();
     } else {
@@ -137,6 +139,12 @@ export default function NewSessionModal({ visible, onClose }: { visible: boolean
               />
             </View>
             {err ? <Text style={m.errT}>{err}</Text> : null}
+            <Pressable style={m.bypassRow} hitSlop={6} onPress={() => setBypass((v) => !v)}>
+              <View style={[m.bypassBox, bypass && m.bypassBoxOn]}>
+                {bypass ? <Text style={m.bypassCheck}>✓</Text> : null}
+              </View>
+              <Text style={m.bypassT}>跳过权限确认（工具调用不再逐项审批，慎用）</Text>
+            </Pressable>
             <Pressable style={m.createBtn} android_ripple={{ color: "rgba(255,255,255,0.15)", borderless: false }} onPress={create}>
               <Text style={m.createT}>启动会话</Text>
             </Pressable>
@@ -184,6 +192,14 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
   srcChipT: { fontSize: 12, color: c.dim, flexShrink: 1 },
   srcChipTOn: { color: c.brandA, fontWeight: "600" },
   srcDot: { width: 6, height: 6, borderRadius: 3 },
+  bypassRow: { flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 12 },
+  bypassBox: {
+    width: 18, height: 18, borderRadius: 5, borderWidth: 1, borderColor: c.line,
+    alignItems: "center", justifyContent: "center",
+  },
+  bypassBoxOn: { backgroundColor: c.brandA, borderColor: c.brandA },
+  bypassCheck: { color: "#fff", fontSize: 12, fontWeight: "700" },
+  bypassT: { color: c.dim, fontSize: 12.5, flex: 1 },
   createBtn: {
     height: 48, borderRadius: 14, marginTop: 4, backgroundColor: c.brandA,
     alignItems: "center", justifyContent: "center",

@@ -138,6 +138,7 @@ const PERM_MODE_ZH: Record<ManagedPermissionMode, string> = {
   default: "标准（每次确认）",
   acceptEdits: "自动接受编辑",
   plan: "规划（只读）",
+  bypassPermissions: "跳过权限确认",
 };
 
 // 图片消息清洗：最多 4 张、单张 8MB base64，剔除非法项
@@ -801,7 +802,9 @@ export class SessionManager {
     try {
       switch (cmd.type) {
         case "COMMAND_CREATE": {
-          const session_id = this.create(cmd.payload.cwd, cmd.payload.prompt);
+          // permissionMode: 客户端可选 bypassPermissions（新建时勾选"跳过权限确认"）
+          const pm = cmd.payload.permissionMode === "bypassPermissions" ? "bypassPermissions" : undefined;
+          const session_id = this.create(cmd.payload.cwd, cmd.payload.prompt, pm);
           return { command_id: cmd.command_id, ok: true, session_id };
         }
         case "COMMAND_MESSAGE": {
@@ -1229,7 +1232,7 @@ export class SessionManager {
     }
   }
 
-  private create(rawCwd: string, prompt: string): string {
+  private create(rawCwd: string, prompt: string, permissionMode?: ManagedPermissionMode): string {
     // #293 三级回落：指定/默认目录无效时回落用户主目录（说明进时间线），完全无可用目录才报错
     const { cwd, fallbackNote } = resolveCreateCwd(rawCwd, this.cfg.defaultCwd);
     if (!cwd) throw new Error(fallbackNote);
@@ -1260,6 +1263,7 @@ export class SessionManager {
       this.cfg.model,
       this.agentCallbacks(managed),
       prompt,
+      permissionMode ? { permissionMode } : undefined,
     );
 
     managed.agent = agent;

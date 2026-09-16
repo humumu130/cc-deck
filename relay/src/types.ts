@@ -115,7 +115,7 @@ export interface PendingInput {
 }
 
 // 托管会话权限模式（SDK PermissionMode 的安全子集：bypassPermissions 不开放远程切换）
-export type ManagedPermissionMode = "default" | "acceptEdits" | "plan";
+export type ManagedPermissionMode = "default" | "acceptEdits" | "plan" | "bypassPermissions";
 
 // 时间线历史条目（持久化 & 快照下发用）
 export interface LogEntry {
@@ -375,7 +375,7 @@ export interface CommandBase {
 
 export interface CreateCommand extends CommandBase {
   type: "COMMAND_CREATE";
-  payload: { cwd: string; prompt: string };
+  payload: { cwd: string; prompt: string; permissionMode?: ManagedPermissionMode };
 }
 
 export interface MessageCommand extends CommandBase {

@@ -41300,7 +41300,8 @@ function resolveCreateCwd(rawCwd, defaultCwd) {
 var PERM_MODE_ZH = {
   default: "\u6807\u51C6\uFF08\u6BCF\u6B21\u786E\u8BA4\uFF09",
   acceptEdits: "\u81EA\u52A8\u63A5\u53D7\u7F16\u8F91",
-  plan: "\u89C4\u5212\uFF08\u53EA\u8BFB\uFF09"
+  plan: "\u89C4\u5212\uFF08\u53EA\u8BFB\uFF09",
+  bypassPermissions: "\u8DF3\u8FC7\u6743\u9650\u786E\u8BA4"
 };
 function sanitizeImages(raw) {
   if (!Array.isArray(raw)) return void 0;
@@ -41829,7 +41830,8 @@ var SessionManager = class {
     try {
       switch (cmd.type) {
         case "COMMAND_CREATE": {
-          const session_id = this.create(cmd.payload.cwd, cmd.payload.prompt);
+          const pm2 = cmd.payload.permissionMode === "bypassPermissions" ? "bypassPermissions" : void 0;
+          const session_id = this.create(cmd.payload.cwd, cmd.payload.prompt, pm2);
           return { command_id: cmd.command_id, ok: true, session_id };
         }
         case "COMMAND_MESSAGE": {
@@ -42214,7 +42216,7 @@ var SessionManager = class {
       };
     }
   }
-  create(rawCwd, prompt) {
+  create(rawCwd, prompt, permissionMode) {
     const { cwd, fallbackNote } = resolveCreateCwd(rawCwd, this.cfg.defaultCwd);
     if (!cwd) throw new Error(fallbackNote);
     this.evictOldSessions();
@@ -42241,7 +42243,8 @@ var SessionManager = class {
       cwd,
       this.cfg.model,
       this.agentCallbacks(managed),
-      prompt
+      prompt,
+      permissionMode ? { permissionMode } : void 0
     );
     managed.agent = agent;
     managed.state.session_id = agent.id;

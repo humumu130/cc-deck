@@ -120,7 +120,7 @@ export interface AgentLike {
   deny(requestId: string, reason?: string, by?: string): boolean;
   answer(requestId: string, answers: string[], by?: string): boolean;
   stop(): Promise<void>;
-  setPermissionMode(mode: "default" | "acceptEdits" | "plan"): Promise<void>;
+  setPermissionMode(mode: "default" | "acceptEdits" | "plan" | "bypassPermissions"): Promise<void>;
 }
 
 // 单个 Agent 会话 = 一次 query() streaming 调用。
@@ -156,7 +156,7 @@ export class AgentSession {
     // 等待输入，首个回合由后续 sendMessage 开启）。空串与 undefined 语义不同：
     // 空串照旧推送（保持既有 create/resume 调用行为逐字节不变）
     initialPrompt: string | undefined,
-    opts?: { resume?: string; permissionMode?: "default" | "acceptEdits" | "plan"; images?: string[] },
+    opts?: { resume?: string; permissionMode?: "default" | "acceptEdits" | "plan" | "bypassPermissions"; images?: string[] },
   ) {
     if (initialPrompt !== undefined || (opts?.images?.length ?? 0) > 0) {
       this.pushUserMessage(initialPrompt ?? "", opts?.images);

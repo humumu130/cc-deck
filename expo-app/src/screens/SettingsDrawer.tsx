@@ -519,7 +519,7 @@ export default function SettingsDrawer({
                       );
                     })()}
                   </View>
-                  <Text style={d.srvUrl} numberOfLines={1}>{e.cloud ? e.cloud.url : e.wsUrl}</Text>
+
                 </Pressable>
                 {delArm === e.id ? (
                   /* #46 长按亮删除（替常驻 ✕）：确认按钮 3.5s 自动收回 */

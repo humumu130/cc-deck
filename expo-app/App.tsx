@@ -588,7 +588,10 @@ function Shell() {
     if (navPhase !== "idle") return false;
     setDetailView(view ?? "msg");
     if (detail) {
-      setDetail(sid); // 详情页内直接换会话（FAB 查看最新）：无动画
+      // 详情页内直接换会话：无动画，且保留当前视图 tab（2026-09-16 用户反馈——
+      // 旧实现重置回消息页，"从会话 A 进详情切到 B 得重新进一遍"）
+      setDetail(sid);
+      if (view) setDetailView(view);
       return true;
     }
     const w = Dimensions.get("window").width;
