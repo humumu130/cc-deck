@@ -1093,15 +1093,28 @@ export class Bridge {
   }
 
   // 异常断开会话的恢复投递：pending 回显 + 新终端标签 claude --resume（权限模式镜像
-  // 原始会话）。fire-and-forget：恢复进程的 hooks 上报驱动后续状态翻正，失败落会话日志
+  // 原始会话）。fire-and-forget：恢复进程的 hooks 上报驱动后续状态翻正，失败落会话日志。
+  // 同会话恢复去重（2026-09-17）：此前每条消息都各开一个"新终端标签"——CLI 死亡的
+  // 会话连发 N 条 = N 个重复标签（用户 Mac 一晚叠了 15 个）。窗口内后续消息只进
+  // pending，恢复进程空闲时 flushQueue 自动带上
+  private resumeSpawns = new Map<string, number>();
+
   private resumeExternal(sessionId: string, text: string): { ok: boolean; error?: string } {
     const state = this.mgr.getExternal(sessionId);
     if (!state) return { ok: false, error: `会话不存在: ${sessionId}` };
-    const cwd = state.cwd || homedir();
+    if (this.resumeSpawns.size > 60) this.resumeSpawns.clear();
+    const inWindow = Date.now() - (this.resumeSpawns.get(sessionId) ?? 0) < 120_000;
     this.mgr.setExternalPending(sessionId, [...(state.pending_inputs ?? []), { text: text.trim(), ts: Date.now() }]);
+    if (inWindow) {
+      this.mgr.pushExternalLog(sessionId, "system", `恢复进行中，消息已排队（恢复进程空闲后自动带上）：${truncate(text, 80)}`);
+      return { ok: true };
+    }
+    const cwd = state.cwd || homedir();
+    this.resumeSpawns.set(sessionId, Date.now());
     this.mgr.pushExternalLog(sessionId, "system", `恢复会话中（新终端标签 claude --resume）并投递：${truncate(text, 80)}`);
     void resumeSession(cwd, sessionId.slice(4), text, state.permission_mode).then((r) => {
       if (!r.ok) {
+        this.resumeSpawns.delete(sessionId); // 恢复失败解除窗口，下条消息可重试恢复
         this.mgr.setExternalPending(sessionId, []);
         this.mgr.pushExternalLog(sessionId, "system", `恢复失败：${r.error ?? "未知错误"}`);
       }
