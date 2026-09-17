@@ -43194,6 +43194,15 @@ function cliSessionIdle(pid) {
     return false;
   }
 }
+function cliSessionStatus(pid) {
+  try {
+    const f = path4.join(homedir8(), ".claude", "sessions", `${pid}.json`);
+    const d2 = JSON.parse(readFileSync11(f, "utf-8"));
+    return typeof d2.status === "string" ? d2.status : null;
+  } catch {
+    return null;
+  }
+}
 function pidAlive(pid) {
   try {
     process.kill(pid, 0);
@@ -43603,6 +43612,7 @@ var Bridge = class _Bridge {
       }
       for (const [id2, p] of this.transcriptPaths) this.pushAssistantTexts(id2, p);
       void this.pollTerminalLines();
+      this.pollCliStatus();
       this.sweepNoHookIdle();
       this.sweepWorkingIdle();
       this.sweepSubagents();
@@ -43618,6 +43628,42 @@ var Bridge = class _Bridge {
   // 顾虑不成立）；仅 tmux/分离会话等非常规宿主抓不到，此时静默回退旧摘要。
   // WORKING 且有 cli_pid 的外部会话 8s 一采（每源独立限速）；文本变化才下发，
   // hook 工具事件一来即被权威摘要覆盖（事件间隙的实时性补位）
+  cliStatusAt = /* @__PURE__ */ new Map();
+  // CLI 状态文件驱动外部会话状态（2026-09-16 用户实测"CLI 已空闲 10 分钟、软件
+  // 还显示工作中"）：公司机等无 hook 直读通道的会话，CLI 自报状态是最权威信号。
+  // busy → WORKING（自愈误 DONE）；idle 且转录/hook 静默 >20s（防工具间隙抖动）→
+  // completed。WAITING/审批挂起不动（等待审批时 CLI 可能报 idle）
+  pollCliStatus() {
+    const now = Date.now();
+    for (const s of this.mgr.snapshot()) {
+      if (!s.external || !s.cli_pid || s.historical) continue;
+      if (s.status !== "WORKING" && s.status !== "DONE" && s.status !== "ERROR") continue;
+      if ((s.pending_inputs?.length ?? 0) > 0) continue;
+      if (now - (this.cliStatusAt.get(s.session_id) ?? 0) < 5e3) continue;
+      this.cliStatusAt.set(s.session_id, now);
+      const st2 = cliSessionStatus(s.cli_pid);
+      if (!st2) continue;
+      try {
+        if (st2 === "busy") {
+          if (s.status !== "WORKING") {
+            this.mgr.setExternalStatus(s.session_id, "WORKING", s.action_summary || "CLI \u8FD0\u884C\u4E2D");
+            this.mgr.pushExternalLog(s.session_id, "system", "CLI \u72B6\u6001\u6062\u590D\u8FD0\u884C\uFF08\u72B6\u6001\u6587\u4EF6\uFF09");
+          }
+        } else if (st2 === "idle") {
+          const quiet = now - Math.max(
+            this.lastGrow.get(s.session_id) ?? 0,
+            this.lastHookAt.get(s.session_id) ?? 0,
+            0
+          );
+          if (s.status === "WORKING" && quiet > 2e4) {
+            const turn = this.turnStart.get(s.session_id) ?? s.started_at;
+            this.mgr.finishExternal(s.session_id, "completed", now - turn);
+          }
+        }
+      } catch {
+      }
+    }
+  }
   termLine = /* @__PURE__ */ new Map();
   termCapAt = /* @__PURE__ */ new Map();
   pollTerminalLineBusy = false;

@@ -3150,7 +3150,13 @@ function classifyFail(t) {
 function scheduleReconnect(ctx) {
   const cfg = ctx.cfg;
   if (!cfg.wsUrl || (cfg.kind === "lan" && !cfg.token)) return;
-  if (ctx.failKind === "unpaired") return;
+  // 未配对不永久停车（2026-09-16）：瞬时误判（桥/DO 抖动期的 nack）曾致重连永久
+  // 停摆、只能重启 App——改 5 分钟静默慢速重试（真未配对时重试无害：nack 幂等限频），
+  // 可见文案不变仍引导输码；桥/relay 恢复后自动连上
+  if (ctx.failKind === "unpaired") {
+    if (!ctx.reconnectTimer) ctx.reconnectTimer = setTimeout(() => connectServer(cfg), 300_000);
+    return;
+  }
   const delay = ctx.reconnectDelay || RETRY_BASE_MS;
   ctx.reconnectDelay = Math.min(delay * 2, RETRY_MAX_MS);
   const note = ctx.failKind === "bridge" && ctx.statusText ? ctx.statusText + " · " : "";
@@ -5966,12 +5972,18 @@ function startCardRename(cardEl, s, ctx) {
     if (submit && v && v !== old) sendCommandTo(ctx, "COMMAND_RENAME", { session_id: s.session_id, title: v });
     render();
   };
+  // IME 健壮版守卫（2026-09-16 二稿）：显式跟踪组词态 + 提交后 150ms 锁。
+  // 覆盖三类形态：①正常组词（isComposing/composition 活跃）→ 吞；
+  // ②搜狗/QQ 拼音在 WebView2 的"常驻 229 + isComposing 恒真"→ 组词事件未活跃
+  //   则不吞，Enter 正常提交；③组词提交 Enter 晚于 compositionend 到达的时序
+  //   抖动 → 150ms 锁吸收，不影响用户再次按 Enter 提交
+  let composing = false, commitLockUntil = 0;
+  inp.addEventListener("compositionstart", () => { composing = true; });
+  inp.addEventListener("compositionend", () => { composing = false; commitLockUntil = Date.now() + 150; });
   inp.onkeydown = (ev) => {
     ev.stopPropagation();
-    // IME 组合期守卫：只看 isComposing（组合态回车=选词，不提交）。
-    // 勿加 keyCode 229 兜底——搜狗/QQ 拼音等在 WebView2 非组合态也常驻 229，
-    // 会把 Enter 永久吞掉，只剩失焦能保存（2026-09-16 公司机实测）
-    if (ev.isComposing) return;
+    if (ev.isComposing || composing) return;
+    if (ev.keyCode === 229 && Date.now() - commitLockUntil < 400) return; // 组词尾疑似抖动窗
     if (ev.key === "Enter") { ev.preventDefault(); finish(true); }
     else if (ev.key === "Escape") finish(false);
   };

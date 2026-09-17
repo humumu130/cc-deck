@@ -96,6 +96,18 @@ function cliSessionIdle(pid: number): boolean {
   }
 }
 
+// CLI 状态原文（busy/idle）：外部会话状态的权威信号——CLI 自己说在忙就是忙，
+// 说空闲（且转录静默防抖）就是空闲。5s 轮询逐会话消费（pollCliStatus）
+function cliSessionStatus(pid: number): string | null {
+  try {
+    const f = path.join(homedir(), ".claude", "sessions", `${pid}.json`);
+    const d = JSON.parse(readFileSync(f, "utf-8")) as { status?: string };
+    return typeof d.status === "string" ? d.status : null;
+  } catch {
+    return null;
+  }
+}
+
 function pidAlive(pid: number): boolean {
   try {
     process.kill(pid, 0);
@@ -539,6 +551,7 @@ export class Bridge {
       }
       for (const [id, p] of this.transcriptPaths) this.pushAssistantTexts(id, p);
       void this.pollTerminalLines();
+      this.pollCliStatus();
       this.sweepNoHookIdle();
       this.sweepWorkingIdle();
       this.sweepSubagents();
@@ -555,6 +568,43 @@ export class Bridge {
   // 顾虑不成立）；仅 tmux/分离会话等非常规宿主抓不到，此时静默回退旧摘要。
   // WORKING 且有 cli_pid 的外部会话 8s 一采（每源独立限速）；文本变化才下发，
   // hook 工具事件一来即被权威摘要覆盖（事件间隙的实时性补位）
+  private cliStatusAt = new Map<string, number>();
+
+  // CLI 状态文件驱动外部会话状态（2026-09-16 用户实测"CLI 已空闲 10 分钟、软件
+  // 还显示工作中"）：公司机等无 hook 直读通道的会话，CLI 自报状态是最权威信号。
+  // busy → WORKING（自愈误 DONE）；idle 且转录/hook 静默 >20s（防工具间隙抖动）→
+  // completed。WAITING/审批挂起不动（等待审批时 CLI 可能报 idle）
+  private pollCliStatus(): void {
+    const now = Date.now();
+    for (const s of this.mgr.snapshot()) {
+      if (!s.external || !s.cli_pid || s.historical) continue;
+      if (s.status !== "WORKING" && s.status !== "DONE" && s.status !== "ERROR") continue;
+      if ((s.pending_inputs?.length ?? 0) > 0) continue; // 审批挂起中不动（等待审批时 CLI 可能报 idle）
+      if (now - (this.cliStatusAt.get(s.session_id) ?? 0) < 5_000) continue;
+      this.cliStatusAt.set(s.session_id, now);
+      const st = cliSessionStatus(s.cli_pid);
+      if (!st) continue;
+      try {
+        if (st === "busy") {
+          if (s.status !== "WORKING") {
+            this.mgr.setExternalStatus(s.session_id, "WORKING", s.action_summary || "CLI 运行中");
+            this.mgr.pushExternalLog(s.session_id, "system", "CLI 状态恢复运行（状态文件）");
+          }
+        } else if (st === "idle") {
+          const quiet = now - Math.max(
+            this.lastGrow.get(s.session_id) ?? 0,
+            this.lastHookAt.get(s.session_id) ?? 0,
+            0,
+          );
+          if (s.status === "WORKING" && quiet > 20_000) {
+            const turn = this.turnStart.get(s.session_id) ?? s.started_at;
+            this.mgr.finishExternal(s.session_id, "completed", now - turn);
+          }
+        }
+      } catch {}
+    }
+  }
+
   private termLine = new Map<string, string>();
   private termCapAt = new Map<string, number>();
   private pollTerminalLineBusy = false;
