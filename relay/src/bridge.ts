@@ -607,7 +607,44 @@ export class Bridge {
 
   private termLine = new Map<string, string>();
   private termCapAt = new Map<string, number>();
+  private titleScanned = new Set<string>();
   private pollTerminalLineBusy = false;
+  // 转录标题扫描（cc-light 借鉴）：custom-title（用户 /rename）> ai-title（CLI 自动
+  // 任务标题=终端标签名）——免 GLM 配额、与终端所见一致。头 32KB + 尾 64KB 两窗扫描
+  //（标题多在会话前段；长会话后期任务切换的新标题在尾部），取文件序最新一条
+  private scanTranscriptTitles(p: string): { custom?: string; ai?: string } {
+    try {
+      const size = statSync(p).size;
+      const buf = Buffer.alloc(Math.min(size, 96 * 1024));
+      const fd = openSync(p, "r");
+      try {
+        readSync(fd, buf, 0, buf.length, 0);
+        if (size > buf.length) readSync(fd, buf, buf.length / 2, size - buf.length, size - (size - buf.length) / 1 > 0 ? size - 64 * 1024 : 0);
+      } catch {}
+      finally { try { closeSync(fd); } catch {} }
+      const text = buf.toString("latin1");
+      let custom: string | undefined, ai: string | undefined;
+      const reC = /"type":"custom-title","customTitle":"((?:[^"\\]|\\.)*)"/g;
+      for (const m of text.matchAll(reC)) { try { custom = JSON.parse('"' + m[1] + '"'); } catch {} }
+      const reA = /"type":"ai-title","aiTitle":"((?:[^"\\]|\\.)*)"/g;
+      for (const m of text.matchAll(reA)) { try { ai = JSON.parse('"' + m[1] + '"'); } catch {} }
+      return { custom, ai };
+    } catch { return {}; }
+  }
+
+  // 标题回写：不锁 title_locked（CLI 会随任务切换更新标题，保持跟随）；用户后续
+  // 在 App 改名仍走 titleOverrides 最高优先
+  private applyTranscriptTitle(id: string, p: string): void {
+    if (this.titleScanned.has(id)) return;
+    const st = this.mgr.getExternal(id);
+    if (!st || st.title_locked) { this.titleScanned.add(id); return; }
+    const p2 = this.transcriptPaths.get(id) ?? p;
+    const { custom, ai } = this.scanTranscriptTitles(p2);
+    const t = custom || ai;
+    if (t && t.trim()) this.mgr.setExternalTitle(id, t.trim().slice(0, 120));
+    this.titleScanned.add(id);
+  }
+
   private async pollTerminalLines(): Promise<void> {
     if (this.pollTerminalLineBusy) return;
     // 测试环境关门：45f 段对控制台 peek 计数断言，后台采集器会多出真实 peek 干扰
@@ -618,7 +655,13 @@ export class Bridge {
       for (const s of this.mgr.snapshot()) {
         if (!s.external || s.status !== "WORKING" || !s.cli_pid) continue;
         if (this.pending.has(s.session_id)) continue; // 审批横幅优先展示
-        if (now - (this.termCapAt.get(s.session_id) ?? 0) < 5_000) continue;
+        // 转录标题扫描（cc-light 借鉴）：custom-title（用户 /rename）> ai-title（CLI 自动
+        // 任务标题=终端标签名）——免 GLM 配额、与终端所见一致；每会话扫一次即可
+        if (!this.titleScanned.has(s.session_id)) {
+          const tp = this.transcriptPaths.get(s.session_id);
+          if (tp) this.applyTranscriptTitle(s.session_id, tp);
+        }
+        if (now - (this.termCapAt.get(s.session_id) ?? 0) < 4_000) continue;
         this.termCapAt.set(s.session_id, now);
         try {
           const rows = await captureConsoleBottom(s.cli_pid, 14);

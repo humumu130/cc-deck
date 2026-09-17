@@ -43666,7 +43666,62 @@ var Bridge = class _Bridge {
   }
   termLine = /* @__PURE__ */ new Map();
   termCapAt = /* @__PURE__ */ new Map();
+  titleScanned = /* @__PURE__ */ new Set();
   pollTerminalLineBusy = false;
+  // 转录标题扫描（cc-light 借鉴）：custom-title（用户 /rename）> ai-title（CLI 自动
+  // 任务标题=终端标签名）——免 GLM 配额、与终端所见一致。头 32KB + 尾 64KB 两窗扫描
+  //（标题多在会话前段；长会话后期任务切换的新标题在尾部），取文件序最新一条
+  scanTranscriptTitles(p) {
+    try {
+      const size = statSync5(p).size;
+      const buf = Buffer.alloc(Math.min(size, 96 * 1024));
+      const fd2 = openSync2(p, "r");
+      try {
+        readSync2(fd2, buf, 0, buf.length, 0);
+        if (size > buf.length) readSync2(fd2, buf, buf.length / 2, size - buf.length, size - (size - buf.length) / 1 > 0 ? size - 64 * 1024 : 0);
+      } catch {
+      } finally {
+        try {
+          closeSync2(fd2);
+        } catch {
+        }
+      }
+      const text = buf.toString("latin1");
+      let custom, ai;
+      const reC = /"type":"custom-title","customTitle":"((?:[^"\\]|\\.)*)"/g;
+      for (const m of text.matchAll(reC)) {
+        try {
+          custom = JSON.parse('"' + m[1] + '"');
+        } catch {
+        }
+      }
+      const reA = /"type":"ai-title","aiTitle":"((?:[^"\\]|\\.)*)"/g;
+      for (const m of text.matchAll(reA)) {
+        try {
+          ai = JSON.parse('"' + m[1] + '"');
+        } catch {
+        }
+      }
+      return { custom, ai };
+    } catch {
+      return {};
+    }
+  }
+  // 标题回写：不锁 title_locked（CLI 会随任务切换更新标题，保持跟随）；用户后续
+  // 在 App 改名仍走 titleOverrides 最高优先
+  applyTranscriptTitle(id2, p) {
+    if (this.titleScanned.has(id2)) return;
+    const st2 = this.mgr.getExternal(id2);
+    if (!st2 || st2.title_locked) {
+      this.titleScanned.add(id2);
+      return;
+    }
+    const p2 = this.transcriptPaths.get(id2) ?? p;
+    const { custom, ai } = this.scanTranscriptTitles(p2);
+    const t = custom || ai;
+    if (t && t.trim()) this.mgr.setExternalTitle(id2, t.trim().slice(0, 120));
+    this.titleScanned.add(id2);
+  }
   async pollTerminalLines() {
     if (this.pollTerminalLineBusy) return;
     if (process.env.CCR_NO_TERM_LINE === "1") return;
@@ -43676,7 +43731,11 @@ var Bridge = class _Bridge {
       for (const s of this.mgr.snapshot()) {
         if (!s.external || s.status !== "WORKING" || !s.cli_pid) continue;
         if (this.pending.has(s.session_id)) continue;
-        if (now - (this.termCapAt.get(s.session_id) ?? 0) < 5e3) continue;
+        if (!this.titleScanned.has(s.session_id)) {
+          const tp2 = this.transcriptPaths.get(s.session_id);
+          if (tp2) this.applyTranscriptTitle(s.session_id, tp2);
+        }
+        if (now - (this.termCapAt.get(s.session_id) ?? 0) < 4e3) continue;
         this.termCapAt.set(s.session_id, now);
         try {
           const rows = await captureConsoleBottom(s.cli_pid, 14);
