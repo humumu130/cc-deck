@@ -407,19 +407,18 @@ async function streamDownload(url: string, partSize: number, myGen: number): Pro
   }
 }
 
-// 完整性校验（#384 同款 ZIP magic + 体积下限 + 总量精确比对）→ .part 转正 APK → done
+// 完整性校验（体积下限 + 总量精确比对）→ .part 转正 APK → done。
+// ZIP magic 比对移除（2026-09-17 实测定案，见下方 ok 注释）
 async function verifyAndFinalize(url: string): Promise<boolean> {
   const finfo = await FileSystem.getInfoAsync(PART_PATH);
   const size = finfo.exists ? (finfo.size ?? 0) : 0;
-  const head =
-    size > 4
-      ? await FileSystem.readAsStringAsync(PART_PATH, { length: 4, encoding: FileSystem.EncodingType.Base64 })
-      : "";
-  // ZIP magic = PK\x03\x04（50 4B 03 04）→ base64 "UEsDBA=="。旧常量 "UEsDBg==" 是
-  // 错的手算值（0x06 尾字节），对任何正常 APK 恒 False → 校验必败 → 下载完成即删
-  // 无限重下（2026-09-17 抓获：在线更新"99% 循环"的终极根因，更新器从未成功过）
-  const ok = finfo.exists && size >= APK_MIN_BYTES && (total <= 0 || size === total) && head === "UEsDBA==";
-  console.log(`[upd] verify: exists=${finfo.exists} size=${size} total=${total} head=${head || "(空)"} → ${ok ? "OK" : "FAIL"}`);
+  // ZIP magic 比对移除（2026-09-17 实测定案）：expo readAsStringAsync 的 length 选项
+  // 在 Android 上不生效（length:4 返回整文件 base64，数十万字符），任何 magic 常量
+  // 比对都恒 False——与错字常量（"UEsDBg=="）叠加构成"99% 循环"的两层根因。通道
+  // 完整性已由 size===total 精确比对（KV 直出 + 实测 md5 逐字节一致）+ 10MB 下限
+  // 保障，magic 属冗余装甲
+  const ok = finfo.exists && size >= APK_MIN_BYTES && (total <= 0 || size === total);
+  console.log(`[upd] verify: exists=${finfo.exists} size=${size} total=${total} → ${ok ? "OK" : "FAIL"}`);
   if (!ok) {
     await FileSystem.deleteAsync(PART_PATH, { idempotent: true });
     total = 0;
