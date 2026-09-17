@@ -335,6 +335,7 @@ async function streamDownload(url: string, partSize: number, myGen: number): Pro
       signal: ctrl.signal,
     });
     if (myGen !== gen) return "net";
+    console.log(`[upd] fetch: status=${res.status} partSize=${partSize} cl=${res.headers.get("content-length")} url=${url.slice(0, 60)}`);
     // 续传请求被答 200（服务端/中间层无视 Range）：.part 不能续——当场弃之，
     // 下一轮全量重下（不删会陷入「带 .part 请求 → 200 → corrupt」死循环）
     if (partSize > 0 && res.status !== 206) {
@@ -392,8 +393,13 @@ async function streamDownload(url: string, partSize: number, myGen: number): Pro
     // fetch 的 reader 把它当「正常流结束」（done=true）而非错误——不守卫会走
     // verifyAndFinalize 的总量校验失败路径删掉半截 .part（corrupt 全量重下）。
     // 字节未达标 = 传输被掐：按网络失败退避重试，.part 保留给下一轮 Range 续传
-    if (total > 0 && bytes < total) return "net";
-    return (await verifyAndFinalize(url)) ? "ok" : "corrupt";
+    if (total > 0 && bytes < total) {
+      console.log(`[upd] 流提前结束: bytes=${bytes} total=${total}（保留 .part 续传）`);
+      return "net";
+    }
+    const vr = await verifyAndFinalize(url);
+    console.log(`[upd] verify 返回: ${vr ? "ok" : "corrupt"}`);
+    return vr ? "ok" : "corrupt";
   } catch {
     return "net";
   } finally {
@@ -412,7 +418,9 @@ async function verifyAndFinalize(url: string): Promise<boolean> {
   // ZIP magic = PK\x03\x04（50 4B 03 04）→ base64 "UEsDBA=="。旧常量 "UEsDBg==" 是
   // 错的手算值（0x06 尾字节），对任何正常 APK 恒 False → 校验必败 → 下载完成即删
   // 无限重下（2026-09-17 抓获：在线更新"99% 循环"的终极根因，更新器从未成功过）
-  if (!finfo.exists || size < APK_MIN_BYTES || (total > 0 && size !== total) || head !== "UEsDBA==") {
+  const ok = finfo.exists && size >= APK_MIN_BYTES && (total <= 0 || size === total) && head === "UEsDBA==";
+  console.log(`[upd] verify: exists=${finfo.exists} size=${size} total=${total} head=${head || "(空)"} → ${ok ? "OK" : "FAIL"}`);
+  if (!ok) {
     await FileSystem.deleteAsync(PART_PATH, { idempotent: true });
     total = 0;
     return false;
