@@ -200,6 +200,8 @@ function LiveStat({ s }: { s: SessionState }) {
 }
 
 // 会话耗时：WORKING 时自带每秒 tick（简洁模式没有 LiveStat，耗时也要走秒）
+// 闲置置灰阈值：DONE/ERROR 静默超过该时长即蒙层置灰（用户定语义"闲置超时置灰"）
+const IDLE_DIM_MS = 30 * 60_000;
 function Elapsed({ s }: { s: SessionState }) {
   const styles = useThemeStyles(makeStyles);
   const [, tick] = useState(0);
@@ -427,8 +429,12 @@ const SessionCard = memo(function SessionCard({
   const minimal = density === "minimal";
   const color = statusColor(s.status, c);
   const deletable = s.status === "DONE" || s.status === "ERROR";
-  // 空闲超时置灰（cc-light 同款）：非活跃卡片降透明度
-  const isIdleCard = s.status === "DONE" || s.status === "ERROR";
+  // 空闲超时置灰（2026-09-17 名实对齐：此前 DONE 即灰没有超时，刚结束的会话瞬间
+  // 变暗被用户反馈"灰过头"）——DONE/ERROR 且静默 30 分钟才蒙层置灰，刚完成的保持
+  // 鲜亮让位更从容；阈值常量 IDLE_DIM_MS 可调
+  const isIdleCard =
+    (s.status === "DONE" || s.status === "ERROR") &&
+    Date.now() - (s.updated_at ?? s.started_at) > IDLE_DIM_MS;
   // 沉寂会话（DONE 且非今日更新）：名称色降一档，长列表里让位给活跃会话
   const idle = s.status === "DONE" && !isSameDay(s.updated_at ?? s.started_at, Date.now());
   return (
