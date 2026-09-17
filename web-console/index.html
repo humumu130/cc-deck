@@ -3758,7 +3758,8 @@ function render() {
     const key = total + "|" + chips;
     if ($("runhint").dataset.key !== key) {
       $("runhint").dataset.key = key;
-      $("runhint").innerHTML = '<span class="rh-total">' + total + " 会话</span>" + chips + '<span class="rh-help" id="rhHelp">?</span>';
+      // 总数“N 会话”不再显示（2026-09-16 用户反馈）：下方「全部 N」筛选 chip 已有总数，重复
+      $("runhint").innerHTML = chips + '<span class="rh-help" id="rhHelp">?</span>';
     }
   } else if ($("runhint").dataset.key !== "empty") {
     $("runhint").dataset.key = "empty";
