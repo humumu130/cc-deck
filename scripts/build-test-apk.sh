@@ -31,11 +31,16 @@ echo "[3/5] 构建 arm64 release APK"
   ./gradlew assembleRelease -PreactNativeArchitectures=arm64-v8a --console=plain -q)
 APK="expo-app/android/app/build/outputs/apk/release/app-arm64-v8a-release.apk"
 [ -f "$APK" ] || { echo "ERR: APK not found"; exit 1; }
+unzip -t "$APK" >/dev/null 2>&1 || { echo "ERR: APK zip 损坏，禁止出包"; exit 1; }
 AAPT=$(ls "$HOME/Library/Android/sdk/build-tools/"*/aapt 2>/dev/null | tail -1)
 [ -n "$AAPT" ] && "$AAPT" dump badging "$APK" 2>/dev/null | head -1 | grep -o "versionName='[^']*'"
 
 echo "[4/5] 推 ECS 版本化文件名"
 $SCP -q "$APK" "$ECS_HOST:$ECS_DIR/cc-deck-${VER}.apk"
+# 上传完整性校验（2026-09-17 KV 坏包事故防再犯：远端 md5 必须与本地一致）
+REMOTE_MD5=$($SSH "$ECS_HOST" "md5sum $ECS_DIR/cc-deck-${VER}.apk | cut -d' ' -f1" 2>/dev/null)
+[ "$REMOTE_MD5" = "$(md5 -q "$APK")" ] || { echo "ERR: ECS 远端 md5 不一致（local=$(md5 -q "$APK") remote=$REMOTE_MD5）"; exit 1; }
+echo "    ECS md5 校验一致"
 # 清掉旧固定名 test 包（今天之前的历史遗留，避免"分不清是哪个"的同类问题）
 $SSH "$ECS_HOST" "rm -f $ECS_DIR/cc-deck-${BASE}-test.apk" 2>/dev/null || true
 
