@@ -222,7 +222,8 @@ export type DownloadSnapshot = {
 const KEY_DL_META = "cc_update_dl_meta";
 const APK_PATH = FileSystem.cacheDirectory + "cc-deck-update.apk";
 const PART_PATH = APK_PATH + ".part";
-const APK_MIN_BYTES = 30_000_000; // #384 同款完整性体积下限（真包 ~90MB，HTML 假包过不去）
+const APK_MIN_BYTES = 10_000_000; // 完整性体积下限（防 HTML 假包）。2026-09-16：R8+压缩打包后真包 15.9MB，
+  // 旧 30MB 下限把每个正常包都判成假包 → 下载完成即删、无限重下（用户实测 99% 循环）。10MB 仍远高于假包体积
 const MAX_TRIES = 8; // 全源总尝试上限，超出转 failed（手动重试清零）
 const SWITCH_SOURCE_AFTER = 4; // 同源连续失败 N 次换源（跨源字节不可混续，弃 .part）
 const STALL_GRACE_MS = 6000; // 回前台后仍无进度的宽限，超时判死取消重试
