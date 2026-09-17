@@ -15,6 +15,9 @@ TMP="$(mktemp -d)"
 SSH="ssh -i $KEY -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null"
 SCP="scp -i $KEY -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null"
 
+echo "⓪ 版本一致性闸门（VERSION 单一事实源）…"
+node scripts/version.mjs --check
+
 echo "① 下载 v$VER Release 产物…"
 gh release download "v$VER" -R "$REPO" -D "$TMP" --clobber
 APK=$(find "$TMP" \( -name "CC-Deck-v${VER}.apk" -o -name "app-arm64-v8a-release.apk" \) | head -1)

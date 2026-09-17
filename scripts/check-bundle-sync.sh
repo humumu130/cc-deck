@@ -34,6 +34,13 @@ if [ -f cc-plugins/plugins/cc-deck/scripts/relay.mjs ] && ! node --check cc-plug
   FAIL=1
 fi
 
+# 版本一致性闸门（2026-09-17）：VERSION 单一事实源，五处落点漂移即拦
+if [ -f scripts/version.mjs ] && ! node scripts/version.mjs --check >/dev/null 2>&1; then
+  echo "❌ 版本号落点与 VERSION 不一致：node scripts/version.mjs --write 修正后再来"
+  node scripts/version.mjs --check
+  FAIL=1
+fi
+
 if [ "$FAIL" = "1" ]; then
   echo "——检查未通过，禁止打 tag/发版"
   exit 1
