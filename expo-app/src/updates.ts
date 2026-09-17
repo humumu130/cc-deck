@@ -409,7 +409,10 @@ async function verifyAndFinalize(url: string): Promise<boolean> {
     size > 4
       ? await FileSystem.readAsStringAsync(PART_PATH, { length: 4, encoding: FileSystem.EncodingType.Base64 })
       : "";
-  if (!finfo.exists || size < APK_MIN_BYTES || (total > 0 && size !== total) || head !== "UEsDBg==") {
+  // ZIP magic = PK\x03\x04（50 4B 03 04）→ base64 "UEsDBA=="。旧常量 "UEsDBg==" 是
+  // 错的手算值（0x06 尾字节），对任何正常 APK 恒 False → 校验必败 → 下载完成即删
+  // 无限重下（2026-09-17 抓获：在线更新"99% 循环"的终极根因，更新器从未成功过）
+  if (!finfo.exists || size < APK_MIN_BYTES || (total > 0 && size !== total) || head !== "UEsDBA==") {
     await FileSystem.deleteAsync(PART_PATH, { idempotent: true });
     total = 0;
     return false;
