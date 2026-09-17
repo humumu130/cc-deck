@@ -1064,13 +1064,11 @@ export class Bridge {
     // 异常断开（进程死亡、无 SessionEnd）保留的会话：客户端发消息 → 服务端新开终端标签
     // claude --resume 同 id 恢复，消息作为初始 prompt 投递；恢复进程的 hooks 上报后
     // 会话自动翻回 WORKING、pid 重新定位，回到正常注入通路
-    if (state.status === "DONE" && state.done_reason === "disconnected") {
+    // 恢复触发放宽（2026-09-17）：电脑重启后 CLI 全灭、relay 重启后 pid 丢失、
+    // done_reason 非 disconnected——只要 CLI 不可用就走恢复，不再限定断连
+    const cliDown = !state.cli_pid || !cliHostAlive(state.cli_pid);
+    if (state.status === "DONE" || cliDown) {
       return this.resumeExternal(sessionId, text);
-    }
-    if (!state.cli_pid) {
-      // 诊断桩（2026-09-14 公司端"尚未定位"复现）：记录状态全貌定位补水断点
-      console.log(`[extInput] no cli_pid sid=${sessionId} status=${state.status} reason=${state.done_reason ?? "-"} historical=${state.historical}`);
-      return { ok: false, error: "尚未定位 CLI 进程，等该会话下次活动后重试" };
     }
 
     const q = this.inputQueue.get(sessionId) ?? [];
