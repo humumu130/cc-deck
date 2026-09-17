@@ -1491,7 +1491,11 @@
   .md-h1 { font-size: 1.18em; } .md-h2 { font-size: 1.1em; } .md-h3 { font-size: 1.03em; } .md-h4 { font-size: 1em; }
   .txt.md code { background: var(--code-bg); border-radius: 4px; padding: 1px 5px; font-family: var(--mono); font-size: .88em; letter-spacing: 0; }
   .txt.md a { color: var(--brand); text-decoration: underline; word-break: break-all; }
-  .md-code { background: var(--mdcode-bg); border: 1px solid var(--border); border-radius: 10px; padding: 11px 13px; margin: 10px 0; overflow-x: auto; white-space: pre; font-family: var(--mono); font-size: .86em; line-height: 1.6; letter-spacing: 0; }
+  .md-code-wrap { position: relative; margin: 10px 0; }
+  .md-code-wrap .copy-btn { position: absolute; right: 8px; top: 7px; z-index: 2; opacity: 0; backdrop-filter: blur(4px); }
+  .md-code-wrap:hover .copy-btn, .md-code-wrap .copy-btn:focus { opacity: 1; }
+  .md-code-wrap:hover .md-code { border-color: var(--brand); }
+  .md-code { background: var(--mdcode-bg); border: 1px solid var(--border); border-radius: 10px; padding: 11px 13px; margin: 0; overflow-x: auto; white-space: pre; font-family: var(--mono); font-size: .86em; line-height: 1.6; letter-spacing: 0; }
   .md-li { margin: 5px 0; white-space: pre-wrap; }
   .md-bul { color: var(--faint); }
   .md-quote { border-left: 3px solid var(--brand); padding: 3px 12px; color: var(--faint); margin: 9px 0; }
@@ -4503,7 +4507,7 @@ function mdHtml(src) {
   let html = "";
   for (const b of mdBlocks(src)) {
     if (b.t === "h") html += '<div class="md-h' + b.level + '">' + mdInline(b.text) + "</div>";
-    else if (b.t === "code") html += '<pre class="md-code">' + escapeHtml(b.text) + "</pre>";
+    else if (b.t === "code") html += '<div class="md-code-wrap"><span class="copy-btn" data-copy="' + escapeHtml(b.text).replace(/"/g, "&quot;") + '" title="复制代码">⧉ 复制</span><pre class="md-code">' + escapeHtml(b.text) + "</pre></div>";
     else if (b.t === "li") html += '<div class="md-li" style="padding-left:' + (14 + b.depth * 14) + 'px"><span class="md-bul">' + (b.ord ? b.ord + "." : "•") + "</span> " + mdInline(b.text) + "</div>";
     else if (b.t === "quote") html += '<div class="md-quote">' + mdInline(b.text) + "</div>";
     else if (b.t === "table") html += '<div class="md-table-wrap"><table class="md-table"><thead><tr>' +
