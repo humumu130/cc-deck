@@ -1177,7 +1177,7 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
   swipeCard: { borderRadius: 16, overflow: "hidden", backgroundColor: c.panel },
   // #32 离线源降权 + 空闲置灰：向页面背景渐隐的蒙层（不用 opacity——会让底层
   // 动作排透出，2026-09-17 测试机截图实锤）
-  dimCover: { position: "absolute", top: 0, left: 0, right: 0, bottom: 0, backgroundColor: withA(c.bg, 0.62) },
+  dimCover: { position: "absolute", top: 0, left: 0, right: 0, bottom: 0, backgroundColor: withA(c.bg, 0.45) },
   actPanel: {
     position: "absolute", top: 3, bottom: 3, right: 0, width: FULL_W,
     flexDirection: "row", borderRadius: 16, overflow: "hidden",
