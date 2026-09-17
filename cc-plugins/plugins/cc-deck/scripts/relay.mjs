@@ -43858,14 +43858,18 @@ var Bridge = class _Bridge {
   }
   // 该文本是否被近期"晋升"记录覆盖（双向包含）：CLI 用合并形态（"A\rB"）重发已按单条
   // 晋升过的消息（或反之）时，任一方向包含即视为同批已展示；只认 promote 来源，
-  // PC 手敲 60s 内重发同一句（via=prompt）不吞
+  // PC 手敲重发（via=prompt 记录）不吞。
+  // 窗口 60s→10min（2026-09-17）：CLI 忙时排队消息从 enqueue 回执晋升到真正提交
+  // （UserPromptSubmit）经常超过 60s，护栏过期后提交帧再记一条 → 手机双气泡
+  // （用户实测 19:48/19:49 各一条）。promote 记录只来自客户端注入，10min 内的
+  // 提交帧都该视为同一条消息的回声
   coveredByRecentPromote(id2, text) {
     const m = this.recentUserMsgs.get(id2);
     if (!m) return false;
     const pk2 = normKey(text);
     const now = Date.now();
     for (const [k3, rec] of m) {
-      if (rec.via !== "promote" || now - rec.ts >= 6e4 || !k3) continue;
+      if (rec.via !== "promote" || now - rec.ts >= 6e5 || !k3) continue;
       if (k3 === pk2 || k3.includes(pk2) || pk2.includes(k3)) return true;
     }
     return false;
@@ -44088,15 +44092,27 @@ var Bridge = class _Bridge {
     return { ok: true };
   }
   // 异常断开会话的恢复投递：pending 回显 + 新终端标签 claude --resume（权限模式镜像
-  // 原始会话）。fire-and-forget：恢复进程的 hooks 上报驱动后续状态翻正，失败落会话日志
+  // 原始会话）。fire-and-forget：恢复进程的 hooks 上报驱动后续状态翻正，失败落会话日志。
+  // 同会话恢复去重（2026-09-17）：此前每条消息都各开一个"新终端标签"——CLI 死亡的
+  // 会话连发 N 条 = N 个重复标签（用户 Mac 一晚叠了 15 个）。窗口内后续消息只进
+  // pending，恢复进程空闲时 flushQueue 自动带上
+  resumeSpawns = /* @__PURE__ */ new Map();
   resumeExternal(sessionId, text) {
     const state = this.mgr.getExternal(sessionId);
     if (!state) return { ok: false, error: `\u4F1A\u8BDD\u4E0D\u5B58\u5728: ${sessionId}` };
-    const cwd = state.cwd || homedir8();
+    if (this.resumeSpawns.size > 60) this.resumeSpawns.clear();
+    const inWindow = Date.now() - (this.resumeSpawns.get(sessionId) ?? 0) < 12e4;
     this.mgr.setExternalPending(sessionId, [...state.pending_inputs ?? [], { text: text.trim(), ts: Date.now() }]);
+    if (inWindow) {
+      this.mgr.pushExternalLog(sessionId, "system", `\u6062\u590D\u8FDB\u884C\u4E2D\uFF0C\u6D88\u606F\u5DF2\u6392\u961F\uFF08\u6062\u590D\u8FDB\u7A0B\u7A7A\u95F2\u540E\u81EA\u52A8\u5E26\u4E0A\uFF09\uFF1A${truncate(text, 80)}`);
+      return { ok: true };
+    }
+    const cwd = state.cwd || homedir8();
+    this.resumeSpawns.set(sessionId, Date.now());
     this.mgr.pushExternalLog(sessionId, "system", `\u6062\u590D\u4F1A\u8BDD\u4E2D\uFF08\u65B0\u7EC8\u7AEF\u6807\u7B7E claude --resume\uFF09\u5E76\u6295\u9012\uFF1A${truncate(text, 80)}`);
     void resumeSession(cwd, sessionId.slice(4), text, state.permission_mode).then((r) => {
       if (!r.ok) {
+        this.resumeSpawns.delete(sessionId);
         this.mgr.setExternalPending(sessionId, []);
         this.mgr.pushExternalLog(sessionId, "system", `\u6062\u590D\u5931\u8D25\uFF1A${r.error ?? "\u672A\u77E5\u9519\u8BEF"}`);
       }
@@ -46040,9 +46056,24 @@ var CloudClient = class {
   }
   connect() {
     if (this.stopped) return;
-    const ws2 = new wrapper_default(this.bridgeUrl());
+    let ws2;
+    try {
+      ws2 = new wrapper_default(this.bridgeUrl());
+    } catch (err) {
+      console.log(`[cloud] bridge connect throw: ${err instanceof Error ? err.message : err}, retry in ${this.delayMs}ms`);
+      this.timer = setTimeout(() => this.connect(), this.delayMs);
+      this.delayMs = Math.min(this.delayMs * 2, 3e4);
+      return;
+    }
     this.ws = ws2;
+    const bootGuard = setTimeout(() => {
+      if (this.ws === ws2 && ws2.readyState === wrapper_default.CONNECTING) {
+        console.log("[cloud] bridge connect timeout (15s CONNECTING), terminating for retry");
+        ws2.terminate();
+      }
+    }, 15e3);
     ws2.on("open", () => {
+      clearTimeout(bootGuard);
       this.delayMs = 1e3;
       this.lastRecv = Date.now();
       console.log(`[cloud] bridge connected ${this.tag} (dev=${this.identity.relayDev})`);
@@ -46078,6 +46109,7 @@ var CloudClient = class {
     });
     ws2.on("error", () => void 0);
     ws2.on("close", () => {
+      clearTimeout(bootGuard);
       if (this.ws === ws2) {
         console.log(`[cloud] bridge disconnected ${this.tag}, retry in ${this.delayMs}ms`);
         for (const [dev, st2] of this.phones) {

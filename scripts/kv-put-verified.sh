@@ -28,7 +28,8 @@ echo "[1/3] put $KEY ← $(basename "$FILE") (${LOCAL_SIZE}B)"
 
 echo "[2/3] 回读校验"
 TMP=$(mktemp /tmp/kv-verify.XXXXXX)
-curl -sS --max-time 120 -o "$TMP" "$DOMAIN/dl/$KEY"
+# 家里到 CF 的下载速度波动大（实测 80KB/s~5.7MB/s），120s 曾把大文件校验误判成超时
+curl -sS --max-time 300 -o "$TMP" "$DOMAIN/dl/$KEY"
 REMOTE_MD5=$(md5 -q "$TMP"); REMOTE_SIZE=$(stat -f%z "$TMP"); rm -f "$TMP"
 
 echo "[3/3] 比对"
