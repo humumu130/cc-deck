@@ -812,14 +812,18 @@ export class Bridge {
 
   // 该文本是否被近期"晋升"记录覆盖（双向包含）：CLI 用合并形态（"A\rB"）重发已按单条
   // 晋升过的消息（或反之）时，任一方向包含即视为同批已展示；只认 promote 来源，
-  // PC 手敲 60s 内重发同一句（via=prompt）不吞
+  // PC 手敲重发（via=prompt 记录）不吞。
+  // 窗口 60s→10min（2026-09-17）：CLI 忙时排队消息从 enqueue 回执晋升到真正提交
+  // （UserPromptSubmit）经常超过 60s，护栏过期后提交帧再记一条 → 手机双气泡
+  // （用户实测 19:48/19:49 各一条）。promote 记录只来自客户端注入，10min 内的
+  // 提交帧都该视为同一条消息的回声
   private coveredByRecentPromote(id: string, text: string): boolean {
     const m = this.recentUserMsgs.get(id);
     if (!m) return false;
     const pk = normKey(text);
     const now = Date.now();
     for (const [k, rec] of m) {
-      if (rec.via !== "promote" || now - rec.ts >= 60_000 || !k) continue;
+      if (rec.via !== "promote" || now - rec.ts >= 600_000 || !k) continue;
       if (k === pk || k.includes(pk) || pk.includes(k)) return true;
     }
     return false;
