@@ -749,11 +749,9 @@ export default function ListScreen({ sessions, connected, connText, onOpen, onNe
     const order = [...buckets.entries()].sort(
       (a, b) => Math.max(...b[1].map(lastTs)) - Math.max(...a[1].map(lastTs)),
     );
-    // #98 聚合平铺（对齐电脑端）：不再按源插分组头，全部会话合一个列表
-    //（全局排序仍按最近活动；源归属由每卡左下角胶囊标签承载）
-    const out: ListRow[] = [];
-    for (const [, list] of order) for (const s of list) out.push({ h: false, key: s.session_id, s });
-    return out;
+    // 跨源全局排序（2026-09-17 用户反馈）：活跃置顶 + 最近优先，不看属于哪台电脑
+    //（源归属由每卡胶囊标签承载，不再按源分区打乱全局顺序）
+    return visible.map((s) => ({ h: false as const, key: s.session_id, s }));
   }, [badgeOn, visible, snap.sources, onlineSrcs]);
 
   // #59 逐卡源归属角标（用户点单：聚合模式卡片要能分辨哪台电脑）：聚合开启即恒显
