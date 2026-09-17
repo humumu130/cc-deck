@@ -288,12 +288,14 @@ await wait(200);
 assert(umLogs("空闲直发") === 1, "UPS promotes pending into single user_message");
 assert(!pendOf(extId("cli-1")).some((p) => p.text === "空闲直发"), "promoted msg removed from pending");
 
-// 20. 无 cli_pid → 拒绝（等该会话下次活动定位）
+// 20. 无 cli_pid（WORKING 中 pid 未定位）：不再硬拒（506a58c/60e2339 恢复语义放宽后
+//     旧断言过期）——ack 收下 + pending 回显兜底不静默丢失；flush 阶段弃队列并记系统日志
 await hook({ event: "UserPromptSubmit", prompt: "无 pid 会话", session_id: "cli-2" });
 await wait(150);
 const noPidId = send("COMMAND_EXT_INPUT", { session_id: extId("cli-2"), text: "x" });
 const ack20 = await waitAck(noPidId);
-assert(ack20.ok === false && (ack20.error ?? "").includes("CLI 进程"), "EXT_INPUT without pid rejected");
+assert(ack20.ok === true, "EXT_INPUT without pid acked (queued, not silently lost)");
+assert(pendOf(extId("cli-2")).some((p) => p.text === "x"), "no-pid msg echoed in pending_inputs");
 const noStopId = send("COMMAND_EXT_STOP", { session_id: extId("cli-2") });
 assert((await waitAck(noStopId)).ok === false, "EXT_STOP without pid rejected");
 await hook({ event: "SessionEnd", session_id: "cli-2", reason: "clear" });

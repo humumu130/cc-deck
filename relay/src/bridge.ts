@@ -556,7 +556,8 @@ export class Bridge {
       this.sweepWorkingIdle();
       this.sweepSubagents();
       this.sweepStuckInputs();
-    }, 5000);
+    }, 3000); // 5s→3s（2026-09-17 用户反馈转轮行仍偏慢）：转轮行秒数每秒都在变，
+    // 采样节奏就是用户可见的刷新率；3s 主循 + 2.5s 会话节流 ≈ 2.5~3s 级刷新
     this.queuePollTimer.unref();
   }
 
@@ -566,7 +567,8 @@ export class Bridge {
   // inject --peek / macOS Terminal contents），取底部转轮行刷新 action_summary。
   // 两者读的都是内存文本缓冲——窗口最小化/遮挡不影响（2026-09-16 澄清：最小化
   // 顾虑不成立）；仅 tmux/分离会话等非常规宿主抓不到，此时静默回退旧摘要。
-  // WORKING 且有 cli_pid 的外部会话 8s 一采（每源独立限速）；文本变化才下发，
+  // WORKING 且有 cli_pid 的外部会话按主循 3s + 每源 2.5s 节流采样（2026-09-17 调优：
+  // 5s 主循时用户实测转轮行秒数 5 秒一跳仍嫌慢）；文本变化才下发，
   // hook 工具事件一来即被权威摘要覆盖（事件间隙的实时性补位）
   private cliStatusAt = new Map<string, number>();
 
@@ -661,7 +663,7 @@ export class Bridge {
           const tp = this.transcriptPaths.get(s.session_id);
           if (tp) this.applyTranscriptTitle(s.session_id, tp);
         }
-        if (now - (this.termCapAt.get(s.session_id) ?? 0) < 4_000) continue;
+        if (now - (this.termCapAt.get(s.session_id) ?? 0) < 2_500) continue;
         this.termCapAt.set(s.session_id, now);
         try {
           const rows = await captureConsoleBottom(s.cli_pid, 14);
