@@ -292,9 +292,9 @@ function SwipeRow({
           {!minimal ? <Text style={styles.actT2}>{deletable ? "删除" : "运行中"}</Text> : null}
         </Pressable>
       </View>
-      <Animated.View style={[styles.swipeCard, { transform: [{ translateX: x }] }, dim && styles.dimRow]} {...pan.panHandlers}>
+      <Animated.View style={[styles.swipeCard, { transform: [{ translateX: x }] }]} {...pan.panHandlers}>
         <Pressable
-          style={[styles.card, compact && styles.cardC, minimal && styles.cardM, dim && styles.dimRow]}
+          style={[styles.card, compact && styles.cardC, minimal && styles.cardM]}
           android_ripple={{ color: c.tintSoft, borderless: false }}
           onPress={() => {
             if (open.current) close();
@@ -303,6 +303,10 @@ function SwipeRow({
         >
           {children}
         </Pressable>
+        {/* 置灰蒙层替代整卡降透明度（2026-09-17）：dimRow opacity 曾让常驻底层的
+            重命名/删除动作排透出（所有 DONE 卡同时"开盖"的假象）；蒙层盖在
+            swipeCard 内（overflow:hidden 自带圆角裁切），正面保持不透明 */}
+        {dim ? <View pointerEvents="none" style={styles.dimCover} /> : null}
       </Animated.View>
     </View>
   );
@@ -1171,8 +1175,9 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
   // 极简行（用户拍板圆角统一）：同标准/紧凑的圆角卡语言，仅行高更矮、间距更密
   swipeWrapM: { marginBottom: 5 },
   swipeCard: { borderRadius: 16, overflow: "hidden", backgroundColor: c.panel },
-  // #32 离线源降权：整卡透明度 0.55（含左滑动作排，因为包在同 Animated.View）
-  dimRow: { opacity: 0.55 },
+  // #32 离线源降权 + 空闲置灰：向页面背景渐隐的蒙层（不用 opacity——会让底层
+  // 动作排透出，2026-09-17 测试机截图实锤）
+  dimCover: { position: "absolute", top: 0, left: 0, right: 0, bottom: 0, backgroundColor: withA(c.bg, 0.62) },
   actPanel: {
     position: "absolute", top: 3, bottom: 3, right: 0, width: FULL_W,
     flexDirection: "row", borderRadius: 16, overflow: "hidden",
