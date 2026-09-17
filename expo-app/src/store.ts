@@ -276,6 +276,16 @@ class RelayStore {
     AppState.addEventListener("change", (st) => {
       if (st === "active") this.onForeground();
     });
+    // 前台重连看门狗（2026-09-17）：部分国产 ROM 回前台不派发 AppState change
+    // （或迟滞数秒），reconnecting 的长退避 timer 在用户已回到 app 时仍按原时刻
+    // 空等（上限 900s）。每 5s 巡检：前台态下把 >6s 后才到点的重试拉到立即执行
+    // （只动 reconnecting；connecting 由 connCycle 自身 20s 看门狗负责，不重复掐）
+    setInterval(() => {
+      if (AppState.currentState !== "active") return;
+      for (const conn of this.conns.values()) {
+        if (conn.state === "reconnecting" && conn.retryAt - Date.now() > 6000) this.connConnect(conn);
+      }
+    }, 5000);
   }
 
   // 回前台体检（#114）：清全部退避 + 按态分诊——假在线（>30s 无下行）立即断开、
@@ -301,8 +311,37 @@ class RelayStore {
         this.connConnect(conn);
         continue;
       }
-      // awaitWake（桥活 relay 离线等广播）不动：桥 ws 由 55s 心跳判死兜底，回前台
-      // 重连只是白拆健康桥连接再原路回待唤醒（#34）
+      if (conn.state === "unpaired") {
+        // 回前台立即重验一次配对（2026-09-17）：pair_nack 有桥抖动期的瞬时误判类，
+        // 10 分钟静默重试不该挡住前台——重验被真踢也只是再吃一次幂等 nack 回本态
+        if (conn.reconnectTimer) {
+          clearTimeout(conn.reconnectTimer);
+          conn.reconnectTimer = null;
+        }
+        conn.state = "offline";
+        this.connConnect(conn);
+        continue;
+      }
+      if (conn.state === "offline" && conn.awaitWake) {
+        // 待唤醒回前台立即补发一拍 hello 问 relay 在不在（2026-09-17）：原逻辑等
+        // 15s 心跳拍甚至 40 拍（≈10min）强制断开兜底——relay 已恢复时这就是用户
+        // 眼里的"回前台半天连不上"。桥 ws 健康时原连接补问零成本；问早了也只是
+        // 再吃一条 ROUTE_MISS 原路回待唤醒
+        const ws = conn.ws;
+        const cloud = conn.cloudCfg;
+        const keys = this.devKeys;
+        conn.wakePings = 0;
+        if (ws && cloud && keys && ws.readyState === WebSocket.OPEN) {
+          conn.state = "connecting";
+          conn.stateText = "等待电脑端响应";
+          this.emit();
+          try {
+            ws.send(JSON.stringify({ to: cloud.relayDev, data: seal({ t: "hello", last_seq: conn.lastSeq }, cloud.relayPubkey, keys.secretKey) }));
+          } catch {}
+        }
+        continue;
+      }
+      // offline/idle 且非待唤醒：直接发起
       if ((conn.state === "offline" || conn.state === "idle") && conn.cfg && !conn.awaitWake) this.connConnect(conn);
     }
     this.probeIdleLanIdentity();
