@@ -66,7 +66,7 @@ export default {
           "accept-ranges": "bytes",
           "content-length": String(obj.byteLength),
         };
-        const range = request.headers.get("range");
+        const range = req.headers.get("range");
         const m = range ? /^bytes=(\d+)-(\d*)$/.exec(range.trim()) : null;
         if (m) {
           const start = Number(m[1]);
