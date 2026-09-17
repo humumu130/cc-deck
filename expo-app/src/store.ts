@@ -1194,6 +1194,14 @@ class RelayStore {
     }
     this.stopHb(conn);
     this.clearPendingCmds(conn);
+    // 未配对不永久停车（2026-09-16）：瞬时误判（桥抖动期 nack）曾致重连永久停摆、
+    // 只能杀 App——改 10 分钟静默慢速重试（真被踢时重试无害：nack 幂等限频），
+    // 可见状态仍显示未配对引导输码
+    if (!conn.reconnectTimer) {
+      conn.reconnectTimer = setTimeout(() => {
+        if (conn.state === "unpaired") { conn.state = "offline"; this.connConnect(conn); }
+      }, 600_000);
+    }
     killWs(conn.ws);
     conn.ws = null;
     conn.channel = null;

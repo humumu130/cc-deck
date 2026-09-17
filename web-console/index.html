@@ -3150,7 +3150,13 @@ function classifyFail(t) {
 function scheduleReconnect(ctx) {
   const cfg = ctx.cfg;
   if (!cfg.wsUrl || (cfg.kind === "lan" && !cfg.token)) return;
-  if (ctx.failKind === "unpaired") return;
+  // 未配对不永久停车（2026-09-16）：瞬时误判（桥/DO 抖动期的 nack）曾致重连永久
+  // 停摆、只能重启 App——改 5 分钟静默慢速重试（真未配对时重试无害：nack 幂等限频），
+  // 可见文案不变仍引导输码；桥/relay 恢复后自动连上
+  if (ctx.failKind === "unpaired") {
+    if (!ctx.reconnectTimer) ctx.reconnectTimer = setTimeout(() => connectServer(cfg), 300_000);
+    return;
+  }
   const delay = ctx.reconnectDelay || RETRY_BASE_MS;
   ctx.reconnectDelay = Math.min(delay * 2, RETRY_MAX_MS);
   const note = ctx.failKind === "bridge" && ctx.statusText ? ctx.statusText + " · " : "";
