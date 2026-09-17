@@ -43617,7 +43617,7 @@ var Bridge = class _Bridge {
       this.sweepWorkingIdle();
       this.sweepSubagents();
       this.sweepStuckInputs();
-    }, 5e3);
+    }, 3e3);
     this.queuePollTimer.unref();
   }
   // 终端实时状态行（2026-09-16 用户需求）：CLI 转轮文案（"✻ Crunched for 34s ●
@@ -43626,7 +43626,8 @@ var Bridge = class _Bridge {
   // inject --peek / macOS Terminal contents），取底部转轮行刷新 action_summary。
   // 两者读的都是内存文本缓冲——窗口最小化/遮挡不影响（2026-09-16 澄清：最小化
   // 顾虑不成立）；仅 tmux/分离会话等非常规宿主抓不到，此时静默回退旧摘要。
-  // WORKING 且有 cli_pid 的外部会话 8s 一采（每源独立限速）；文本变化才下发，
+  // WORKING 且有 cli_pid 的外部会话按主循 3s + 每源 2.5s 节流采样（2026-09-17 调优：
+  // 5s 主循时用户实测转轮行秒数 5 秒一跳仍嫌慢）；文本变化才下发，
   // hook 工具事件一来即被权威摘要覆盖（事件间隙的实时性补位）
   cliStatusAt = /* @__PURE__ */ new Map();
   // CLI 状态文件驱动外部会话状态（2026-09-16 用户实测"CLI 已空闲 10 分钟、软件
@@ -43735,7 +43736,7 @@ var Bridge = class _Bridge {
           const tp2 = this.transcriptPaths.get(s.session_id);
           if (tp2) this.applyTranscriptTitle(s.session_id, tp2);
         }
-        if (now - (this.termCapAt.get(s.session_id) ?? 0) < 4e3) continue;
+        if (now - (this.termCapAt.get(s.session_id) ?? 0) < 2500) continue;
         this.termCapAt.set(s.session_id, now);
         try {
           const rows = await captureConsoleBottom(s.cli_pid, 14);
