@@ -727,31 +727,7 @@ export default function ListScreen({ sessions, connected, connText, onOpen, onNe
   // 引用原样透传，SessionCard memo 的行级重渲不受影响；映射在 memo 内构建，
   // 依赖稳定（snap.sources 快照粒度变化）
   const rows = useMemo<ListRow[]>(() => {
-    // 聚合开启但视图本质是单源时平铺渲染，不再渲染与内容冗余的源组头：
-    // 1) 可见内容全来自单一源（如源筛选后只剩一家，对齐网页端 #26 源徽章隐藏逻辑）
-    // 2) 在线源数=1（其余源离线）——唯一在线源即"当前源"，顶栏副标题已点名（「源：X」），
-    //    再按源分区（含离线源缓存残组）对逐卡标注冗余
-    const grouped = badgeOn && onlineSrcs > 1 && new Set(visible.map((s) => s.src ?? "")).size > 1;
-    if (!grouped) return visible.map((s) => ({ h: false as const, key: s.session_id, s }));
-    // 源跨端配色键（#294 审查修复）：同屏配色去重——按 colorKey 稳定排序分配调色板
-    // 序号（哈希法双源 1/8 撞色，实测 PC/Mac 同紫）
-    const sortedSrcs = [...snap.sources].sort((a, b) => (a.colorKey ?? a.id).localeCompare(b.colorKey ?? b.id));
-    const nameOf = new Map(snap.sources.map((x) => [x.id, displaySrcName(x.name)] as const));
-    const colorOf = new Map(sortedSrcs.map((x, i) => [x.id, SRC_COLORS[i % SRC_COLORS.length]] as const));
-    const onlineOf = new Map(snap.sources.map((x) => [x.id, x.state === "online"] as const));
-    const buckets = new Map<string, SessionState[]>();
-    for (const s of visible) {
-      const k = s.src ?? "";
-      const b = buckets.get(k);
-      if (b) b.push(s);
-      else buckets.set(k, [s]);
-    }
-    // 组序 = 组内最近活动（活跃源在上，与列表全局"最近优先"同原则）
-    const lastTs = (s: SessionState) => s.updated_at ?? s.started_at;
-    const order = [...buckets.entries()].sort(
-      (a, b) => Math.max(...b[1].map(lastTs)) - Math.max(...a[1].map(lastTs)),
-    );
-    // 跨源全局排序（2026-09-17 用户反馈）：活跃置顶 + 最近优先，不看属于哪台电脑
+    // 全局排序平铺（2026-09-17）：活跃置顶 + 最近优先，不分源组
     //（源归属由每卡胶囊标签承载，不再按源分区打乱全局顺序）
     return visible.map((s) => ({ h: false as const, key: s.session_id, s }));
   }, [badgeOn, visible, snap.sources, onlineSrcs]);
@@ -761,9 +737,7 @@ export default function ListScreen({ sessions, connected, connText, onOpen, onNe
   // 配色与分组头同调色板，同屏稳定
   const srcBadgeMap = useMemo(() => {
     if (!badgeOn) return null;
-    const sortedSrcs = [...snap.sources].sort((a, b) => (a.colorKey ?? a.id).localeCompare(b.colorKey ?? b.id));
     const nameOf = new Map(snap.sources.map((x) => [x.id, displaySrcName(x.name)] as const));
-    const colorOf = new Map(sortedSrcs.map((x, i) => [x.id, SRC_COLORS[i % SRC_COLORS.length]] as const));
     return (src: string | undefined): { name: string; color: string } | null => {
       if (!src) return null;
       return { name: nameOf.get(src) ?? "其他", color: colorOf.get(src) ?? srcColor(src) };

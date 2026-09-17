@@ -44070,8 +44070,7 @@ var Bridge = class _Bridge {
     if (!injectSupported()) {
       return { ok: false, error: "\u5F53\u524D relay \u4E3B\u673A\u6682\u4E0D\u652F\u6301\u5411\u5916\u90E8 CLI \u4F1A\u8BDD\u6CE8\u5165\u8F93\u5165\uFF08\u4EC5 Windows/macOS\uFF09\uFF1B\u6258\u7BA1\u4F1A\u8BDD\u4E0D\u53D7\u5F71\u54CD" };
     }
-    const cliDown = !state.cli_pid || !cliHostAlive(state.cli_pid);
-    if (state.status === "DONE" || cliDown) {
+    if (state.status === "DONE" && (!state.cli_pid || !cliHostAlive(state.cli_pid))) {
       return this.resumeExternal(sessionId, text);
     }
     const q2 = this.inputQueue.get(sessionId) ?? [];
