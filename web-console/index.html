@@ -1495,6 +1495,9 @@
   .md-code-wrap .copy-btn { position: absolute; right: 8px; top: 7px; z-index: 2; opacity: 0; backdrop-filter: blur(4px); }
   .md-code-wrap:hover .copy-btn, .md-code-wrap .copy-btn:focus { opacity: 1; }
   .md-code-wrap:hover .md-code { border-color: var(--brand); }
+  /* 改名框旁的显式 ✓ 保存钮：与 IME 彻底解耦的兜底提交路径 */
+  .rename-ok { flex: none; cursor: pointer; color: var(--done); font-size: 13px; font-weight: 700; padding: 1px 7px; border-radius: 6px; border: 1px solid var(--done); opacity: .92; }
+  .rename-ok:hover { opacity: 1; background: rgba(85,217,138,.12); }
   .md-code { background: var(--mdcode-bg); border: 1px solid var(--border); border-radius: 10px; padding: 11px 13px; margin: 0; overflow-x: auto; white-space: pre; font-family: var(--mono); font-size: .86em; line-height: 1.6; letter-spacing: 0; }
   .md-li { margin: 5px 0; white-space: pre-wrap; }
   .md-bul { color: var(--faint); }
@@ -5963,6 +5966,14 @@ function startCardRename(cardEl, s, ctx) {
   inp.className = "card-rename";
   inp.value = old;
   titleEl.appendChild(inp);
+  // 显式 ✓ 保存钮（2026-09-16）：与 IME 彻底解耦的兜底提交路径——键盘路径再怎么
+  // 被输入法吞，点击必成
+  const ok = document.createElement("span");
+  ok.className = "rename-ok";
+  ok.textContent = "✓";
+  ok.title = "保存";
+  titleEl.appendChild(ok);
+  ok.onclick = (ev) => { ev.stopPropagation(); finish(true); };
   inp.focus();
   inp.select();
   let done = false;
