@@ -738,6 +738,10 @@ export default function ListScreen({ sessions, connected, connText, onOpen, onNe
   const srcBadgeMap = useMemo(() => {
     if (!badgeOn) return null;
     const nameOf = new Map(snap.sources.map((x) => [x.id, displaySrcName(x.name)] as const));
+    // 源跨端配色键（#294 审查修复）：同屏配色去重——按 colorKey 稳定排序分配调色板
+    // （0014daa 补回 nameOf 时漏了 colorOf，release 包渲染即 ReferenceError 闪退）
+    const sortedSrcs = [...snap.sources].sort((a, b) => (a.colorKey ?? a.id).localeCompare(b.colorKey ?? b.id));
+    const colorOf = new Map(sortedSrcs.map((x, i) => [x.id, SRC_COLORS[i % SRC_COLORS.length]] as const));
     return (src: string | undefined): { name: string; color: string } | null => {
       if (!src) return null;
       return { name: nameOf.get(src) ?? "其他", color: colorOf.get(src) ?? srcColor(src) };
