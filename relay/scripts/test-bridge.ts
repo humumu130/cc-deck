@@ -229,16 +229,16 @@ const done = findEvt("SESSION_DONE") as Envelope<"SESSION_DONE", { duration_ms: 
 assert(!!done && done.payload.duration_ms >= 0, "Stop → DONE");
 
 // 15. cli_pid 捕获：事件携带 cli_pid → 状态存储（新回合 WORKING）
-await hook({ event: "UserPromptSubmit", prompt: "看看这个目录", cli_pid: 4321 });
+await hook({ event: "UserPromptSubmit", prompt: "看看这个目录", cli_pid: process.pid });
 await wait(150);
-assert(mgr.snapshot().find((s) => s.session_id === extId("cli-1"))?.cli_pid === 4321, "cli_pid captured");
+assert(mgr.snapshot().find((s) => s.session_id === extId("cli-1"))?.cli_pid === process.pid, "cli_pid captured");
 
 // 16. WORKING 时 EXT_INPUT → 立即注入（CLI 原生排队），带"已注入终端"日志
 const busyId = send("COMMAND_EXT_INPUT", { session_id: extId("cli-1"), text: "忙时直发A" });
 assert((await waitAck(busyId)).ok, "EXT_INPUT while WORKING acked");
 await waitLog(() => fakeLog().some((a) => a[1] === "忙时直发A"));
 const fl16 = fakeLog().filter((a) => a[1] === "忙时直发A");
-assert(fl16.length === 1 && fl16[0][0] === "4321" && !fl16[0].includes("noenter"), "busy injection direct with enter");
+assert(fl16.length === 1 && fl16[0][0] === String(process.pid) && !fl16[0].includes("noenter"), "busy injection direct with enter");
 assert(events.some((e) => e.type === "SESSION_LOG" && String((e.payload as { text: string }).text).includes("已注入终端")), "busy injection logged");
 const pendOf = (sid: string) => mgr.snapshot().find((s) => s.session_id === sid)?.pending_inputs ?? [];
 assert(pendOf(extId("cli-1")).some((p) => p.text === "忙时直发A"), "busy inject echoed in pending_inputs");
@@ -246,8 +246,8 @@ assert(pendOf(extId("cli-1")).some((p) => p.text === "忙时直发A"), "busy inj
 // 17. EXT_STOP（WORKING）→ 注入 Esc
 const escId = send("COMMAND_EXT_STOP", { session_id: extId("cli-1") });
 assert((await waitAck(escId)).ok, "EXT_STOP acked");
-await waitLog(() => fakeLog().some((a) => a[0] === "4321" && a[1] === "--esc"));
-assert(fakeLog().some((a) => a[0] === "4321" && a[1] === "--esc"), "esc injected");
+await waitLog(() => fakeLog().some((a) => a[0] === String(process.pid) && a[1] === "--esc"));
+assert(fakeLog().some((a) => a[0] === String(process.pid) && a[1] === "--esc"), "esc injected");
 
 // 17.5 WAITING（远程审批挂起）时 EXT_INPUT → relay 侧排队，不注入
 const held17 = hook({ event: "PreToolUse", tool_name: "Bash", tool_input: { command: "npm run build" }, permission_mode: "default" });
@@ -269,7 +269,7 @@ assert((await held17).body.decision === "allow", "17.5 hook got allow");
 await hook({ event: "Stop" });
 await waitLog(() => fakeLog().some((a) => a[1] === "排队消息A"));
 const fl18 = fakeLog().filter((a) => a[1] === "排队消息A");
-assert(fl18.length === 1 && fl18[0][0] === "4321" && !fl18[0].includes("noenter"), "queued msg flushed with enter");
+assert(fl18.length === 1 && fl18[0][0] === String(process.pid) && !fl18[0].includes("noenter"), "queued msg flushed with enter");
 const umLogs = (t: string) => events.filter((e) => e.type === "SESSION_LOG" && (e.payload as { kind: string; text: string }).kind === "user_message" && (e.payload as { text: string }).text === t).length;
 assert(umLogs("忙时直发A") === 1, "steering msg promoted on Stop");
 assert(!pendOf(extId("cli-1")).some((p) => p.text === "忙时直发A"), "promoted msg removed from pending");
@@ -318,7 +318,7 @@ assert(events.some((e) => e.type === "SESSION_LOG" && String((e.payload as { tex
 
 // 22.5 重登记：SessionEnd 现在主动关闭即清卡片（状态收口）——后续段落需要会话存在，
 //      hook 重登记模拟用户在同一终端开新一轮
-await hook({ event: "UserPromptSubmit", prompt: "收尾后重登记", cli_pid: 4321 });
+await hook({ event: "UserPromptSubmit", prompt: "收尾后重登记", cli_pid: process.pid });
 await wait(150);
 
 // 23. COMMAND_RENAME：改名 + 锁定（title_locked）
@@ -345,7 +345,7 @@ assert(ack24.ok === false, "empty rename rejected");
     events.filter((e) => e.type === "SESSION_LOG" && (e.payload as { kind?: string; text?: string }).kind === "user_message" && (e.payload as { text: string }).text === t).length;
   const before25 = umCount("PC敲字排队消息");
   // 首个带 transcript 的事件：建立偏移（首读只取最后一条正文）
-  await hook({ event: "UserPromptSubmit", prompt: "排队测试回合", cli_pid: 4321, transcript_path: T });
+  await hook({ event: "UserPromptSubmit", prompt: "排队测试回合", cli_pid: process.pid, transcript_path: T });
   await hook({ event: "PostToolUse", tool_name: "Bash", tool_response: "ok", transcript_path: T });
   // 用户在 PC 终端敲字 → CLI 写 enqueue 台账 → 下一次增量读补进 pending_inputs
   appendFileSync(T, JSON.stringify({ type: "queue-operation", operation: "enqueue", content: "PC敲字排队消息" }) + "\n");
@@ -376,7 +376,7 @@ assert(ack24.ok === false, "empty rename rejected");
     events.filter((e) => e.type === "SESSION_LOG" && (e.payload as { kind?: string; text?: string }).kind === "user_message" && (e.payload as { text: string }).text === t).length;
   const pendTexts = () => pendOf(extId("cli-1")).map((p) => p.text);
   // 手机连发两条（A 带内部换行，B 短句），CLI 忙 → 原生排队
-  await hook({ event: "UserPromptSubmit", prompt: "双显回归回合一", cli_pid: 4321, transcript_path: T });
+  await hook({ event: "UserPromptSubmit", prompt: "双显回归回合一", cli_pid: process.pid, transcript_path: T });
   await hook({ event: "PostToolUse", tool_name: "Bash", tool_response: "ok", transcript_path: T });
   const A = "任务清单太多了。\n具体显示逻辑你来定，可以参考近一天或前 N 条的方案";
   const B = "侧边栏手势保留现状即可";
@@ -404,7 +404,7 @@ assert(ack24.ok === false, "empty rename rejected");
   // ④ steering 中途交付合并形态（attachment "C\rD"）→ 按原句各记一条，pending 清空；随后 Stop 不再补记
   const C = "我发了两条消息都在排队，上去之后显示了两次";
   const D = "近三天的范围是不是太大了";
-  await hook({ event: "UserPromptSubmit", prompt: "双显回归回合二", cli_pid: 4321, transcript_path: T });
+  await hook({ event: "UserPromptSubmit", prompt: "双显回归回合二", cli_pid: process.pid, transcript_path: T });
   await hook({ event: "PostToolUse", tool_name: "Bash", tool_response: "ok", transcript_path: T });
   for (const t of [C, D]) {
     const xId = send("COMMAND_EXT_INPUT", { session_id: extId("cli-1"), text: t });
@@ -423,7 +423,7 @@ assert(ack24.ok === false, "empty rename rejected");
   // ⑤ 合并形态直接作为 UserPromptSubmit 先到（pending 未清）→ 整批晋升、各记一条
   const E = "第五条排队消息";
   const F = "第六条排队消息";
-  await hook({ event: "UserPromptSubmit", prompt: "双显回归回合三", cli_pid: 4321, transcript_path: T });
+  await hook({ event: "UserPromptSubmit", prompt: "双显回归回合三", cli_pid: process.pid, transcript_path: T });
   for (const t of [E, F]) {
     const xId = send("COMMAND_EXT_INPUT", { session_id: extId("cli-1"), text: t });
     await waitAck(xId);
@@ -438,7 +438,7 @@ assert(ack24.ok === false, "empty rename rejected");
   await hook({ event: "UserPromptSubmit", prompt: "手敲重发不吞测试", transcript_path: T });
   await wait(200);
   assert(umCount("手敲重发不吞测试") === 2, "26 PC retyped same prompt within 60s logs twice");
-  await hook({ event: "UserPromptSubmit", prompt: "双显回归回合四", cli_pid: 4321, transcript_path: T });
+  await hook({ event: "UserPromptSubmit", prompt: "双显回归回合四", cli_pid: process.pid, transcript_path: T });
   for (let k = 0; k < 2; k++) {
     const xId = send("COMMAND_EXT_INPUT", { session_id: extId("cli-1"), text: "手机重发同句" });
     await waitAck(xId);
@@ -452,7 +452,7 @@ assert(ack24.ok === false, "empty rename rejected");
 }
 
 // 26.5 重登记：同 22.5——SessionEnd 清卡后 27 段需要 cli-1 存在
-await hook({ event: "UserPromptSubmit", prompt: "收尾后重登记", cli_pid: 4321 });
+await hook({ event: "UserPromptSubmit", prompt: "收尾后重登记", cli_pid: process.pid });
 await wait(150);
 
 // 27. COMMAND_TODO_HIDE：隐藏条目在 setTodos 咽喉点过滤 + 持久化（模拟重启）仍生效
@@ -498,7 +498,7 @@ await wait(150);
   writeFileSync(T, JSON.stringify({ type: "assistant", message: { role: "assistant", content: [{ type: "text", text: "基线28" }] } }) + "\n");
   const sid = extId("cli-1");
   const subs = () => mgr.snapshot().find((s) => s.session_id === sid)?.subagents ?? [];
-  await hook({ event: "UserPromptSubmit", prompt: "子代理测试回合", cli_pid: 4321, transcript_path: T });
+  await hook({ event: "UserPromptSubmit", prompt: "子代理测试回合", cli_pid: process.pid, transcript_path: T });
   // ① 前台：Pre 建 running 条目，Post 按 tool_use_id 收尾
   await hook({ event: "PreToolUse", tool_name: "Agent", tool_use_id: "call_fg1", tool_input: { description: "前台子代理", subagent_type: "general", run_in_background: false }, permission_mode: "default" });
   const fg = subs()[0];
@@ -573,7 +573,7 @@ await wait(150);
 {
   const qInput = { questions: [{ header: "方案", question: "用哪个库?", options: [{ label: "A" }, { label: "B" }] }] };
   const st = () => mgr.snapshot().find((s) => s.session_id === extId("cli-1"));
-  await hook({ event: "UserPromptSubmit", prompt: "提问测试回合", cli_pid: 4321 });
+  await hook({ event: "UserPromptSubmit", prompt: "提问测试回合", cli_pid: process.pid });
 
   // 30a. 窗口内手机作答 → allow + updatedInput（CLI 不再弹本地选择器）
   const pA = hook({ event: "PreToolUse", tool_name: "AskUserQuestion", tool_input: qInput });
@@ -609,10 +609,10 @@ await wait(150);
   // 30c. 晚答（兜底）→ Esc 关本地选择器 + 答案文本注入
   const bId = send("COMMAND_ANSWER", { session_id: extId("cli-1"), request_id: rbId, answers: ["B"] });
   assert((await waitAck(bId)).ok, "30 late answer acked via fallback");
-  await waitLog(() => fakeLog().some((a) => a[0] === "4321" && a[1] === "--esc"));
-  assert(fakeLog().some((a) => a[0] === "4321" && a[1] === "--esc"), "30 esc closes local picker");
-  await waitLog(() => fakeLog().some((a) => a[0] === "4321" && String(a[1]).includes("「B」")));
-  assert(fakeLog().some((a) => a[0] === "4321" && String(a[1]).includes("「B」")), "30 answer text injected");
+  await waitLog(() => fakeLog().some((a) => a[0] === String(process.pid) && a[1] === "--esc"));
+  assert(fakeLog().some((a) => a[0] === String(process.pid) && a[1] === "--esc"), "30 esc closes local picker");
+  await waitLog(() => fakeLog().some((a) => a[0] === String(process.pid) && String(a[1]).includes("「B」")));
+  assert(fakeLog().some((a) => a[0] === String(process.pid) && String(a[1]).includes("「B」")), "30 answer text injected");
 
   // 30d. PC 端先答 → 横幅收起（answered by cli）
   const pC = hook({ event: "PreToolUse", tool_name: "AskUserQuestion", tool_input: qInput });
@@ -643,10 +643,10 @@ await wait(150);
   await wait(200);
   const aId = send("COMMAND_ANSWER", { session_id: extId("cli-1"), request_id: s!.waiting_request!.request_id, answers: ["X"] });
   assert((await waitAck(aId)).ok, "31 late answer after reconnect acked");
-  await waitLog(() => fakeLog().some((a) => a[0] === "4321" && a[1] === "--esc"));
-  assert(fakeLog().some((a) => a[0] === "4321" && a[1] === "--esc"), "31 esc injected for late answer");
-  await waitLog(() => fakeLog().some((a) => a[0] === "4321" && String(a[1]).includes("「X」")));
-  assert(fakeLog().some((a) => a[0] === "4321" && String(a[1]).includes("「X」")), "31 answer text injected");
+  await waitLog(() => fakeLog().some((a) => a[0] === String(process.pid) && a[1] === "--esc"));
+  assert(fakeLog().some((a) => a[0] === String(process.pid) && a[1] === "--esc"), "31 esc injected for late answer");
+  await waitLog(() => fakeLog().some((a) => a[0] === String(process.pid) && String(a[1]).includes("「X」")));
+  assert(fakeLog().some((a) => a[0] === String(process.pid) && String(a[1]).includes("「X」")), "31 answer text injected");
 }
 
 // 32. relay 重启丢内存兜底后的晚答恢复：waiting 状态（events 重放）里找回问题定义；
@@ -654,7 +654,7 @@ await wait(150);
 {
   const qInput = { questions: [{ header: "方案", question: "重启后的问题?", options: [{ label: "M" }, { label: "N" }] }] };
   const st = () => mgr.snapshot().find((s) => s.session_id === extId("cli-1"));
-  await hook({ event: "UserPromptSubmit", prompt: "重启恢复回合", cli_pid: 4321 });
+  await hook({ event: "UserPromptSubmit", prompt: "重启恢复回合", cli_pid: process.pid });
 
   // 32a. 提问超时进入兜底 → 模拟重启清空兜底表 → 手机晚答仍可从状态恢复注入
   const pA = hook({ event: "PreToolUse", tool_name: "AskUserQuestion", tool_input: qInput });
@@ -666,10 +666,10 @@ await wait(150);
   (bridge as unknown as { askFallback: Map<string, unknown> }).askFallback.clear(); // 模拟 relay 重启
   const aId = send("COMMAND_ANSWER", { session_id: extId("cli-1"), request_id: ridA, answers: ["M"] });
   assert((await waitAck(aId)).ok, "32 late answer recovered after restart-wipe");
-  await waitLog(() => fakeLog().some((a) => a[0] === "4321" && a[1] === "--esc"));
-  assert(fakeLog().some((a) => a[0] === "4321" && a[1] === "--esc"), "32 esc injected via state recovery");
-  await waitLog(() => fakeLog().some((a) => a[0] === "4321" && String(a[1]).includes("「M」")));
-  assert(fakeLog().some((a) => a[0] === "4321" && String(a[1]).includes("「M」")), "32 answer text injected via state recovery");
+  await waitLog(() => fakeLog().some((a) => a[0] === String(process.pid) && a[1] === "--esc"));
+  assert(fakeLog().some((a) => a[0] === String(process.pid) && a[1] === "--esc"), "32 esc injected via state recovery");
+  await waitLog(() => fakeLog().some((a) => a[0] === String(process.pid) && String(a[1]).includes("「M」")));
+  assert(fakeLog().some((a) => a[0] === String(process.pid) && String(a[1]).includes("「M」")), "32 answer text injected via state recovery");
   assert(events.some((e) => e.type === "SESSION_WAITING_RESOLVED" && (e.payload as { request_id: string }).request_id === ridA), "32 resolved event emitted");
 
   // 32b. 重启丢兜底后 PC 在本地选择器作答 → 横幅仍收起（按状态里的 request_id 结）
@@ -689,7 +689,7 @@ await wait(150);
 {
   const qInput = { questions: [{ header: "方案", question: "云手机在线时的问题?", options: [{ label: "P" }, { label: "Q" }] }] };
   const st = () => mgr.snapshot().find((s) => s.session_id === extId("cli-1"));
-  await hook({ event: "UserPromptSubmit", prompt: "云门控回合", cli_pid: 4321 });
+  await hook({ event: "UserPromptSubmit", prompt: "云门控回合", cli_pid: process.pid });
   cloudOnline = true;
   wsCur!.close();
   await wait(500);
@@ -944,7 +944,7 @@ await wait(150);
   const umCount = (t: string) =>
     events.filter((e) => e.type === "SESSION_LOG" && (e.payload as { kind?: string; text?: string }).kind === "user_message" && (e.payload as { text: string }).text === t).length;
   const pendTexts = () => pendOf(sid).map((p) => p.text);
-  await hook({ event: "UserPromptSubmit", prompt: "转录晋升回合", cli_pid: 4321, transcript_path: T });
+  await hook({ event: "UserPromptSubmit", prompt: "转录晋升回合", cli_pid: process.pid, transcript_path: T });
   await hook({ event: "PostToolUse", tool_name: "Bash", tool_response: "ok", transcript_path: T });
   // 模拟 hook 死亡：状态 DONE + pending 滞留（不经 extInput，避免真注入）
   mgr.setExternalStatus(sid, "DONE", "回合结束");

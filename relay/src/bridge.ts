@@ -1066,8 +1066,9 @@ export class Bridge {
     // 会话自动翻回 WORKING、pid 重新定位，回到正常注入通路
     // 恢复触发放宽（2026-09-17）：电脑重启后 CLI 全灭、relay 重启后 pid 丢失、
     // done_reason 非 disconnected——只要 CLI 不可用就走恢复，不再限定断连
-    const cliDown = !state.cli_pid || !cliHostAlive(state.cli_pid);
-    if (state.status === "DONE" || cliDown) {
+    // DONE 会话：CLI 进程不在了才走恢复（claude --resume 新终端重启+投递）。
+    // CLI 还活着（等输入）→ 走正常注入路径，不打断
+    if (state.status === "DONE" && (!state.cli_pid || !cliHostAlive(state.cli_pid))) {
       return this.resumeExternal(sessionId, text);
     }
 
