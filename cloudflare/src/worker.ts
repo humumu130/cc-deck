@@ -55,6 +55,32 @@ export default {
     }
     if (url.pathname.startsWith("/dl/")) {
       const name = url.pathname.slice(4);
+      // /dl/<file> KV 直出（≤25MiB）：Range/206 断点续传（2026-09-17）——手机更新器的
+      // .part + Range 续传拿到 200 会弃包全量重下，公司长传输被防火墙掐断后永远差
+      // 最后一口气（用户实测"下到 99% 就重下"死循环）。KV 值全量读进内存可承受
+      const dlOut = (obj: ArrayBuffer, filename: string): Response => {
+        const base: Record<string, string> = {
+          "content-type": "application/octet-stream",
+          "content-disposition": `attachment; filename="${filename}"`,
+          "cache-control": "no-store",
+          "accept-ranges": "bytes",
+          "content-length": String(obj.byteLength),
+        };
+        const range = request.headers.get("range");
+        const m = range ? /^bytes=(\d+)-(\d*)$/.exec(range.trim()) : null;
+        if (m) {
+          const start = Number(m[1]);
+          const end = m[2] ? Math.min(Number(m[2]), obj.byteLength - 1) : obj.byteLength - 1;
+          if (start >= obj.byteLength || start > end) {
+            return new Response(null, { status: 416, headers: { "content-range": `bytes */${obj.byteLength}` } });
+          }
+          return new Response(obj.slice(start, end + 1), {
+            status: 206,
+            headers: { ...base, "content-range": `bytes ${start}-${end}/${obj.byteLength}`, "content-length": String(end - start + 1) },
+          });
+        }
+        return new Response(obj, { status: 200, headers: base });
+      };
       // /dl/ 无文件名：开源项目落地页（2026-09-09 设计稿 v2 全量内联移植：吸顶导航+侧栏圆点 / 终端×手机
       // 主视觉 / bento 特性 / 三步接入 / 下载卡 / CTA / 页脚）。CSS/JS/favicon 全内联零外部请求；
       // 版本三处（hero 徽章 / lead / 桌面卡副标）由 scripts/version.mjs 单一事实源同步——改版本只改
@@ -65,10 +91,15 @@ export default {
         return env.ASSETS.fetch(new Request("https://assets.local/site/index.html"));
       }
       if (!/^[\w.-]+$/.test(name) || !env.DL) return new Response("bad name", { status: 400 });
-      // #15 APK（95MB）超 KV 25MiB 值上限，且阿里云边界对 CF 境外出口 403（流式回源
-      // 不可行）——302 跳 ECS 直链：二维码/页面只见本域地址，手机（国内）直连 ECS 满速。
-      // R2 开通后可换对象存储直出（待用户在 CF 控制台启用）
+      // #15 时代的 cc-deck.apk 302 ECS 已废（2026-09-17）：R8 后 APK 16MB < KV 25MiB，
+      // 改 KV 直出优先（公司网络屏蔽 ECS 裸 IP，302 对公司死路=更新 99% 循环根因）；
+      // KV 未上传时 302 ECS 兜底（家庭 Wi-Fi 可达）
       if (name === "cc-deck.apk") {
+        const { value: apk, metadata } = await env.DL.getWithMetadata("cc-deck.apk", { type: "arrayBuffer" });
+        if (apk) {
+          const fn = (metadata as { filename?: string } | null)?.filename ?? name;
+          return dlOut(apk, fn);
+        }
         return new Response(null, {
           status: 302,
           headers: { location: "http://8.133.211.170:8888/cc-deck.apk", "cache-control": "no-store" },
@@ -102,14 +133,7 @@ export default {
         const { value: exe, metadata } = await env.DL.getWithMetadata(name, { type: "arrayBuffer" });
         if (exe) {
           const fn = (metadata as { filename?: string } | null)?.filename ?? name;
-          return new Response(exe, {
-            status: 200,
-            headers: {
-              "content-type": "application/octet-stream",
-              "content-disposition": `attachment; filename="${fn}"`,
-              "cache-control": "no-store",
-            },
-          });
+          return dlOut(exe, fn);
         }
         return new Response(null, {
           status: 302,
@@ -122,14 +146,7 @@ export default {
       if (!obj) return new Response("not found", { status: 404 });
       // no-store：/dl/<file> 是稳定地址，KV 换新版后二次下载必须拿到新文件，
       // 绝不能让浏览器用缓存的旧安装包（索引页 HTML 才保留 max-age=300）
-      return new Response(obj, {
-        status: 200,
-        headers: {
-          "content-type": "application/octet-stream",
-          "content-disposition": `attachment; filename="${name}"`,
-          "cache-control": "no-store",
-        },
-      });
+      return dlOut(obj, name);
     }
     if (url.pathname !== "/cloud" && url.pathname !== "/cloud-poll" && url.pathname !== "/wan") {
       return new Response("not found", { status: 404 });

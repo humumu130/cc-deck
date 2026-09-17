@@ -134,14 +134,19 @@ async function checkManifest(): Promise<UpdateInfo | null | "miss"> {
         clearTimeout(timer);
       }
       if (!res.ok) continue;
-      const m = (await res.json()) as { version?: string; notes?: string };
+      const m = (await res.json()) as { version?: string; notes?: string; url?: string };
       const version = (m.version ?? "").replace(/^v/, "");
       if (!version) continue;
       if (!isNewer(version, currentVersion())) return null;
+      // 下载地址（2026-09-17）：清单带 url 且为本域 KV 直出 → 优先——公司网络屏蔽
+      // ECS 裸 IP，此前硬编码 ECS_MIRROR 对公司用户是死路（99% 循环根因之一）；
+      // 缺失/异域回落 ECS 镜像（家庭 Wi-Fi 直连满速）
+      const manifestUrl = typeof m.url === "string" ? m.url : "";
+      const apkUrl = manifestUrl.startsWith("https://cc.humumu.online/") ? manifestUrl : ECS_MIRROR;
       return {
         version,
         notes: String(m.notes ?? "").slice(0, 500).trim(),
-        apkUrl: ECS_MIRROR,
+        apkUrl,
         ghUrl: "", // 清单不带 asset 直链；ECS 失败时 resolveGhAsset 懒解析
         fullUrl: GH_RELEASE_PAGE,
       };
