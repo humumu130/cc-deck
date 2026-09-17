@@ -423,6 +423,8 @@ const SessionCard = memo(function SessionCard({
   const minimal = density === "minimal";
   const color = statusColor(s.status, c);
   const deletable = s.status === "DONE" || s.status === "ERROR";
+  // 空闲超时置灰（cc-light 同款）：非活跃卡片降透明度
+  const isIdleCard = s.status === "DONE" || s.status === "ERROR";
   // 沉寂会话（DONE 且非今日更新）：名称色降一档，长列表里让位给活跃会话
   const idle = s.status === "DONE" && !isSameDay(s.updated_at ?? s.started_at, Date.now());
   return (
@@ -436,7 +438,7 @@ const SessionCard = memo(function SessionCard({
       onReveal={onReveal}
       compact={compact}
       minimal={minimal}
-      dim={dim}
+      dim={dim || isIdleCard}
     >
       {minimal ? (
         // 极简行：状态灯 + 名称（单行）+ 右端常显水位区（细条+百分比，无数据 "–" 占位），
