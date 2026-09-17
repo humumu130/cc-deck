@@ -110,9 +110,29 @@ export class CloudClient {
 
   private connect(): void {
     if (this.stopped) return;
-    const ws = new WebSocket(this.bridgeUrl());
+    let ws: WebSocket;
+    try {
+      ws = new WebSocket(this.bridgeUrl());
+    } catch (err) {
+      // 构造即抛（URL 异常等）：不修补会断掉 close→重试链，relay 从此离线到重启
+      console.log(`[cloud] bridge connect throw: ${err instanceof Error ? err.message : err}, retry in ${this.delayMs}ms`);
+      this.timer = setTimeout(() => this.connect(), this.delayMs);
+      this.delayMs = Math.min(this.delayMs * 2, 30_000);
+      return;
+    }
     this.ws = ws;
+    // CONNECT 悬死看门狗（2026-09-17）：公司网络丢 SYN/防火墙黑洞时 close 永不
+    // 触发，readyState 停在 CONNECTING——心跳跳过（非 OPEN）、重试链断，relay
+    // 离线到重启为止（桥日志实测：公司 relay 掉线 2 分钟才回来的嫌疑路径）。
+    // 15s 未 open 即 terminate，走统一 close→重连
+    const bootGuard = setTimeout(() => {
+      if (this.ws === ws && ws.readyState === WebSocket.CONNECTING) {
+        console.log("[cloud] bridge connect timeout (15s CONNECTING), terminating for retry");
+        ws.terminate();
+      }
+    }, 15_000);
     ws.on("open", () => {
+      clearTimeout(bootGuard);
       this.delayMs = 1000;
       this.lastRecv = Date.now();
       console.log(`[cloud] bridge connected ${this.tag} (dev=${this.identity.relayDev})`);
@@ -156,6 +176,7 @@ export class CloudClient {
     });
     ws.on("error", () => undefined); // close 会跟着触发，统一在那处理
     ws.on("close", () => {
+      clearTimeout(bootGuard);
       if (this.ws === ws) {
         console.log(`[cloud] bridge disconnected ${this.tag}, retry in ${this.delayMs}ms`);
         for (const [dev, st] of this.phones) {
