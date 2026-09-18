@@ -36,7 +36,7 @@ echo "[3/3] 比对"
 [ "$LOCAL_MD5" = "$REMOTE_MD5" ] || { echo "ERR: md5 不一致 local=$LOCAL_MD5 remote=$REMOTE_MD5"; exit 1; }
 [ "$LOCAL_SIZE" = "$REMOTE_SIZE" ] || { echo "ERR: 大小不一致 local=${LOCAL_SIZE}B remote=${REMOTE_SIZE}B"; exit 1; }
 case "$KEY" in
-  *.apk|*.zip) TMP=$(mktemp /tmp/kv-zipt.XXXXXX); curl -sS --max-time 120 -o "$TMP" "$DOMAIN/dl/$KEY"; unzip -t "$TMP" >/dev/null || { rm -f "$TMP"; echo "ERR: 回读 zip 损坏"; exit 1; }; rm -f "$TMP"; ;;
+  *.apk|*.zip) TMP=$(mktemp /tmp/kv-zipt.XXXXXX); curl -sS --max-time 300 -o "$TMP" "$DOMAIN/dl/$KEY"; unzip -t "$TMP" >/dev/null || { rm -f "$TMP"; echo "ERR: 回读 zip 损坏"; exit 1; }; rm -f "$TMP"; ;;
 esac
 echo "✅ KV 上传校验通过：$KEY ($LOCAL_MD5, ${LOCAL_SIZE}B)"
 echo "   直链: $DOMAIN/dl/$KEY"
