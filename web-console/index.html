@@ -1358,29 +1358,47 @@
   #liverow .sum { flex: 1; color: var(--working); font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   #liverow .el { color: var(--faint); font-variant-numeric: tabular-nums; font-size: 11.5px; }
 
+  /* #14 提问卡排版重设计：提问态（.ask）中性面板+品牌轻描边——AskUserQuestion 是中性
+     提问不是告警；审批态（默认，权限允许/拒绝）保留黄警示语言，两态互不污染 */
   #waitbox {
     margin: 12px auto 0; width: calc(100% - 40px); max-width: min(1040px, 100%);
-    background: rgba(245,184,65,.07);
-    border: 1px solid rgba(245,184,65,.4); border-radius: 14px; padding: 14px 16px; display: none;
+    background: var(--panel);
+    border: 1px solid var(--border); border-radius: 14px; padding: 16px 18px; display: none;
     flex: none;
     animation: riseIn .18s ease-out;
   }
-  #waitbox .t { color: var(--working); font-weight: 700; font-size: 13px; display: flex; align-items: center; gap: 8px; }
-  #waitbox .t i { width: 9px; height: 9px; border-radius: 50%; background: var(--working); animation: breathe 1.6s infinite; --sc: var(--working); }
-  #waitdetail { margin-top: 7px; font-size: 13px; word-break: break-all; }
-  #waitelapsed { color: var(--faint); font-size: 12px; margin-top: 5px; }
-  #waitbox .cmds { margin-top: 11px; display: flex; gap: 10px; }
-  #questions { margin-top: 10px; display: flex; flex-direction: column; gap: 10px; }
-  .q-item .q-text { font-size: 13px; font-weight: 600; }
-  .q-item .q-header { font-size: 11px; color: var(--brand-2); letter-spacing: 1px; margin-bottom: 2px; }
-  .q-opts { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 7px; }
-  .q-opts button { font-size: 12.5px; }
-  .q-opts button.sel { background: var(--grad); border: none; color: #fff; font-weight: 600; }
-  .q-opts button .d { display: block; font-size: 11px; color: var(--dim); font-weight: 400; max-width: 260px; text-align: left; }
-  .q-opts button.sel .d { color: rgba(255,255,255,.75); }
-  .q-free { margin-top: 7px; width: 100%; }
-  .q-foot { display: flex; gap: 8px; margin-top: 10px; align-items: center; }
-  #askCancel { background: none; border: none; color: var(--faint); font-size: 11.5px; padding: 4px 6px; text-decoration: underline dotted; }
+  #waitbox:not(.ask) { background: rgba(245,184,65,.07); border-color: rgba(245,184,65,.4); }
+  #waitbox.ask { border-color: rgba(217,119,87,.35); }
+  #waitbox .t { color: var(--text-strong); font-weight: 700; font-size: 13px; display: flex; align-items: center; gap: 8px; }
+  #waitbox:not(.ask) .t { color: var(--working); }
+  #waitbox .t i { width: 9px; height: 9px; border-radius: 50%; background: var(--working); animation: breathe 1.6s infinite; --sc: var(--working); flex: none; }
+  /* 计时并入标题行右端（对齐 #liverow 的 .el 形态），不再独占一行 */
+  #waitelapsed { margin-left: auto; color: var(--faint); font-size: 11px; font-weight: 400; font-variant-numeric: tabular-nums; }
+  #waitdetail { margin-top: 6px; font-size: 12px; color: var(--dim); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  #waitbox .cmds { margin-top: 14px; display: flex; gap: 10px; align-items: center; }
+  #answerBtn { margin-left: auto; }
+  #questions { margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--border); display: flex; flex-direction: column; gap: 14px; }
+  .q-item .q-header { font-size: 11px; color: var(--brand-2); letter-spacing: 1px; margin-bottom: 6px; }
+  /* 字号四级拉开：问题正文 15px 与聊天正文同档成为视觉重心（原 13px 比正文还小） */
+  .q-item .q-text { font-size: 15px; font-weight: 600; color: var(--text-strong); line-height: 1.55; margin-bottom: 10px; }
+  /* 选项竖排单列（表单列表题的直线扫读动线，逐项可比对描述）；选择指示符 + label/desc 纵排列 */
+  .q-opts { display: flex; flex-direction: column; align-items: stretch; gap: 8px; }
+  .q-item[data-bare="1"] .q-opts { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); }
+  .q-opts button { display: flex; align-items: flex-start; gap: 10px; text-align: left; padding: 10px 14px; border-radius: 12px; font-size: 13px; }
+  .q-opts .mark { flex: none; width: 14px; height: 14px; margin-top: 2px; border-radius: 50%; border: 1.5px solid var(--faint); transition: background .15s, border-color .15s; }
+  .q-item[data-multi="1"] .q-opts .mark { border-radius: 4px; }
+  .q-opts .col { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+  .q-opts .col .l { font-size: 13px; font-weight: 600; color: var(--text-strong); line-height: 1.45; }
+  .q-opts .col .d { font-size: 12px; color: var(--dim); line-height: 1.5; }
+  /* 选中态：几何不变（保留 1px 边框杜绝 2px 跳动），只换色 + 指示符内嵌环填充 */
+  .q-opts button.sel { background: rgba(217,119,87,.12); border-color: rgba(217,119,87,.55); }
+  .q-opts button.sel .mark { border-color: var(--brand); background: var(--brand); box-shadow: inset 0 0 0 2.5px var(--panel); }
+  .q-opts button.sel .col .l { color: var(--brand); }
+  .q-opts button.sel .col .d { color: var(--text); }
+  .q-free { margin-top: 8px; width: 100%; }
+  /* 取消作答：虚线文字链 → ghost 小钮（与卡内按钮语言一致），动作行内左置 */
+  #askCancel { background: none; border: 1px solid transparent; color: var(--dim); font-size: 12px; padding: 6px 12px; border-radius: 8px; text-decoration: none; }
+  #askCancel:hover { color: var(--text); border-color: var(--border); }
 
   /* ---------- 时间线（聊天式，与手机端转录对齐） ---------- */
   /* 阅读体验：正文 15px×字号档 + 1.75 行高 + 阅读列宽（宽屏行长控制） */
@@ -2021,17 +2039,14 @@
     </div>
 
     <div id="waitbox">
-      <div class="t"><i></i>等待你的确认</div>
+      <div class="t"><i></i><span id="waitT">等待你的确认</span><span id="waitelapsed"></span></div>
       <div id="waitdetail"></div>
-      <div id="waitelapsed"></div>
       <div id="questions"></div>
       <div class="cmds">
+        <button id="askCancel">取消作答</button>
         <button id="allowBtn" class="allow big">✓ 允许</button>
         <button id="rejectBtn" class="reject big">✗ 拒绝</button>
         <button id="answerBtn" class="primary big" style="display:none">提交作答</button>
-      </div>
-      <div class="q-foot">
-        <button id="askCancel">取消作答（视为拒绝回答）</button>
       </div>
     </div>
 
@@ -4106,16 +4121,21 @@ function renderDetail() {
     wb.style.display = "block";
     const passive = s.waiting_request.decidable === false;
     const isAsk = Array.isArray(s.waiting_request.questions) && s.waiting_request.questions.length > 0;
+    // #14 提问/审批两态分流：提问走中性卡（.ask）+ 专属文案，审批保留黄卡
+    wb.classList.toggle("ask", isAsk);
+    $("waitT").textContent = isAsk ? "Claude 在提问" : "等待你的确认";
     $("waitdetail").textContent = (s.waiting_request.tool_name ? s.waiting_request.tool_name + " — " : "") + (s.waiting_request.input_summary || "");
     const wsec = Math.floor((Date.now() - (s.waiting_request.received_at || Date.now())) / 1000);
     $("waitelapsed").textContent = passive ? "CLI 正在本地等待确认，请在电脑上处理" : "已等待 " + wsec + "s" +
       (s.waiting_request.suggestions?.length && !isAsk ? " · 建议: " + s.waiting_request.suggestions.join(" / ") : "");
+    // 单问题单选：点选项即发，自由输入回车即发——提交大按钮退场（对齐手机端 single 模式）
+    const single = isAsk && s.waiting_request.questions.length === 1 && !s.waiting_request.questions[0].multi;
     const cmds = document.querySelector("#waitbox .cmds");
     if (cmds) cmds.style.display = passive ? "none" : "flex";
-    $("askCancel").style.display = passive ? "none" : "";
+    $("askCancel").style.display = passive || !isAsk ? "none" : "";
     $("allowBtn").style.display = isAsk ? "none" : "";
     $("rejectBtn").style.display = isAsk ? "none" : "";
-    $("answerBtn").style.display = isAsk ? "" : "none";
+    $("answerBtn").style.display = isAsk && !single ? "" : "none";
     renderQuestions(s.waiting_request);
   } else {
     wb.style.display = "none";
@@ -4682,10 +4702,14 @@ function renderQuestions(wr) {
     // 单问题单选：点选项即发（手机端交互）；多问题/多选：勾选后提交
     const single = qs.length === 1 && !qs[0].multi;
     box.innerHTML = qs.map((q, qi) => {
+      // #14 选项行 = 选择指示符（单选圆/多选方）+ label/desc 纵排列；data-bare：纯标签
+      // 选项（全部无描述）由 CSS 切等宽 grid 两列，避免竖排过长
       const opts = (q.options || []).map((o, oi) =>
-        '<button type="button" data-q="' + qi + '" data-o="' + oi + '"><span class="l">' + escapeHtml(o.label) + "</span>" +
-        (o.description ? '<span class="d">' + escapeHtml(o.description) + "</span>" : "") + "</button>").join("");
-      return '<div class="q-item" data-qi="' + qi + '">' +
+        '<button type="button" data-q="' + qi + '" data-o="' + oi + '"><span class="mark"></span>' +
+        '<span class="col"><span class="l">' + escapeHtml(o.label) + "</span>" +
+        (o.description ? '<span class="d">' + escapeHtml(o.description) + "</span>" : "") + "</span></button>").join("");
+      return '<div class="q-item" data-qi="' + qi + '"' + (q.multi ? ' data-multi="1"' : "") +
+        ((q.options || []).every((o) => !o.description) ? ' data-bare="1"' : "") + '>' +
         '<div class="q-header">' + escapeHtml(q.header || "问题 " + (qi + 1)) + (q.multi ? " · 可多选" : single ? " · 点选即答" : "") + '</div>' +
         '<div class="q-text">' + escapeHtml(q.question) + '</div>' +
         '<div class="q-opts">' + opts + "</div>" +
@@ -4704,6 +4728,8 @@ function renderQuestions(wr) {
     });
     box.querySelectorAll(".q-free").forEach((inp) => {
       inp.oninput = () => { askState.free[+inp.dataset.q] = inp.value; };
+      // 自由输入回车即提交（single 模式无提交大按钮，键盘直达）
+      inp.onkeydown = (e) => { if (e.key === "Enter" && !e.isComposing) { e.preventDefault(); submitAnswer(); } };
     });
   }
 }
