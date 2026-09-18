@@ -1,6 +1,6 @@
 import { mkdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
-import { join, resolve } from "node:path";
+import { isAbsolute, join, resolve, sep } from "node:path";
 import { devId } from "./e2e.js";
 import type { EventBus } from "./event-bus.js";
 import { AgentSession } from "./agent-adapter.js";
@@ -24,6 +24,7 @@ import type {
   AgentCallbacks,
 } from "./agent-adapter.js";
 import type {
+  ArtifactItem,
   Command,
   CommandAckPayload,
   FileChangeStats,
@@ -688,6 +689,103 @@ export class SessionManager {
       status: s.state.status,
       action_summary: s.state.action_summary,
       stats: { ...stats },
+    });
+  }
+
+  // #35 输出物单条合并咽喉点（实时路径：external hook 事件 / 托管 SDK 工具结果）。
+  // 归一 key = 小写绝对路径（macOS 不敏感盘 / Windows 盘符大小写归一，展示保留原文）；
+  // 相对入参以会话 cwd 补全；create 不降级（"本会话产出过该文件"是最有价值的归类）；
+  // 捕获时顺手 stat 刷新 size/exists（不做轮询）。silent = 不逐条广播（回放批量
+  // 由 setArtifacts 收尾一次 emit）
+  mergeArtifact(
+    id: string,
+    item: { path: string; tool: string; adds: number; dels: number; created: boolean; ts: number },
+    silent = false,
+  ): void {
+    const s = this.sessions.get(id);
+    if (!s) return;
+    if (!item.path || item.path === "(未知文件)") return;
+    const cwd = s.state.cwd || "";
+    let p = item.path;
+    if (!isAbsolute(p) && cwd) p = resolve(cwd, p);
+    const key = p.toLowerCase();
+    const list: ArtifactItem[] = s.state.artifacts ? s.state.artifacts.map((a) => ({ ...a })) : [];
+    const idx = list.findIndex((a) => a.path.toLowerCase() === key);
+    let size: number | undefined;
+    let exists = true;
+    try {
+      size = statSync(p).size;
+    } catch {
+      exists = false;
+    }
+    const origin = cwd ? (p === cwd || p.startsWith(cwd + sep) ? ("cwd" as const) : ("outside" as const)) : undefined;
+    if (idx >= 0) {
+      const a = list[idx] as ArtifactItem;
+      list[idx] = {
+        ...a,
+        op: a.op === "create" || item.created ? "create" : "edit",
+        tools: a.tools.includes(item.tool) ? a.tools : [...a.tools, item.tool],
+        adds: a.adds + item.adds,
+        dels: a.dels + item.dels,
+        last_at: Math.max(a.last_at, item.ts),
+        size,
+        exists,
+        ...(origin ? { origin } : {}),
+      };
+    } else {
+      list.push({
+        path: p,
+        op: item.created ? "create" : "edit",
+        tools: [item.tool],
+        adds: item.adds,
+        dels: item.dels,
+        first_at: item.ts,
+        last_at: item.ts,
+        size,
+        exists,
+        ...(origin ? { origin } : {}),
+      });
+      // 上限保最新：超 200 条丢最旧 + 标记截断（UI 汇总行提示）
+      if (list.length > 200) {
+        list.sort((x, y) => y.last_at - x.last_at);
+        list.length = 200;
+        s.state.artifacts_truncated = true;
+      }
+    }
+    s.state.artifacts = list;
+    if (silent) return;
+    s.state.updated_at = Date.now();
+    this.bus.emit(id, "SESSION_UPDATED", {
+      status: s.state.status,
+      action_summary: s.state.action_summary,
+      stats: { ...s.state.stats },
+      artifacts: list.map((a) => ({ ...a })),
+      ...(s.state.artifacts_truncated ? { artifacts_truncated: true } : {}),
+    });
+  }
+
+  // #35 输出物整表重建（transcript 回放路径：relay 重启后全文件重扫）。必须整体替换
+  // 而非逐条 merge 增量——转录轮转/收缩会再次触发 firstRead 回放，merge 会把
+  // adds/dels 双计；items 按转录时间顺序喂入，合并语义由 mergeArtifact(silent) 承担
+  setArtifacts(
+    id: string,
+    items: { path: string; tool: string; adds: number; dels: number; created: boolean; ts: number }[],
+  ): void {
+    const s = this.sessions.get(id);
+    if (!s) return;
+    s.state.artifacts = undefined;
+    s.state.artifacts_truncated = false;
+    if (!items.length) return;
+    for (const it of items) this.mergeArtifact(id, it, true);
+    // 局部转写断开 TS 对 776 行 undefined 赋值的窄化（方法调用不重推属性窄化）
+    const merged = s.state.artifacts as ArtifactItem[] | undefined;
+    s.state.updated_at = Date.now();
+    this.bus.emit(id, "SESSION_UPDATED", {
+      status: s.state.status,
+      action_summary: s.state.action_summary,
+      stats: { ...s.state.stats },
+      artifacts: (merged ?? []).map((a) => ({ ...a })),
+      ...(s.state.artifacts_truncated ? { artifacts_truncated: true } : {}),
     });
   }
 
@@ -1373,6 +1471,10 @@ export class SessionManager {
         },
         onStats: (stats) => {
           managed.state.stats = stats;
+        },
+        // #35 输出物：SDK 工具结果单条合并（agent-adapter 从 tool_use/tool_result 配对产出）
+        onArtifacts: (item) => {
+          this.mergeArtifact(managed.state.session_id, item);
         },
         onTodos: (todos) => {
           // 经 setTodos 咽喉点：托管会话的隐藏条目同样被过滤

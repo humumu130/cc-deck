@@ -54,6 +54,24 @@ export interface CronTask {
   recurring?: boolean;    // false = 一次性任务（跑完自删）
 }
 
+// #35 会话输出物：Write/Edit/MultiEdit/NotebookEdit 四类工具的文件产出清单。
+// 口径只捕"入参必有 file_path"的确定性工具（Bash 重定向产物启发式误报多，不入）；
+// 主键 = 归一化绝对路径（大小写不敏感比较、展示保留原文）
+export type ArtifactOp = "create" | "edit";
+
+export interface ArtifactItem {
+  path: string;        // 绝对路径（相对入参以会话 cwd 补全）
+  op: ArtifactOp;      // 本会话内新建过 → "create"（后继 Edit 不降级）；否则 "edit"
+  tools: string[];     // 出现过的工具名（Write/Edit/MultiEdit/NotebookEdit 并集）
+  adds: number;        // 累计 + 行
+  dels: number;        // 累计 − 行
+  first_at: number;    // 首次出现（ms）
+  last_at: number;     // 最后一次写（ms；排序键）
+  size?: number;       // 最近一次 stat 的字节数（捕获时顺手 stat；缺省不显）
+  exists?: boolean;    // 最近一次 stat 是否存在；false → UI「已删除」态
+  origin?: "cwd" | "outside";  // 相对会话 cwd 的位置（UI 决定相对/绝对展示与角标）
+}
+
 export interface SessionState {
   session_id: string;
   relay_session_id: string;   // SDK/CLI 侧 session_id（用于 resume）
@@ -84,6 +102,8 @@ export interface SessionState {
   permission_mode?: ManagedPermissionMode; // 托管会话当前权限模式
   pending_inputs?: PendingInput[]; // external 会话已发送未处理的注入消息（客户端显示在工作指示器下方，处理/回合结束时晋升为正式消息）
   cron_tasks?: CronTask[];   // 会话目录的定时任务快照（30s 轮询，变化才下发；[] = 已清空）
+  artifacts?: ArtifactItem[]; // #35 会话输出物清单（内存态；外部会话重启走 transcript 回放重建）
+  artifacts_truncated?: boolean; // #35 输出物超 200 条被截断保最新（汇总行提示用）
   compacting?: boolean;      // #363 true = CLI 正在压缩上下文（PreCompact hook 置位，Compacting conversation…）；下一事件/转录增长/8min 兜底清位
   // #49 置顶会话：pinned = 用户置顶（写穿 data/pinned-sessions.json，跨重启保留）。
   // saved = 休眠标记：relay 重启后置顶会话只登记不拉起（agent 为空、可见不可操作），
@@ -156,6 +176,8 @@ export interface SessionUpdatedPayload {
   permission_mode?: ManagedPermissionMode; // 权限模式变化时携带
   pending_inputs?: PendingInput[]; // 排队注入消息增减时携带（[] = 清空）
   cron_tasks?: CronTask[];    // 定时任务变化时携带（[] = 清空）
+  artifacts?: ArtifactItem[]; // #35 输出物清单变化时携带（整表替换；[] = 清空）
+  artifacts_truncated?: boolean; // #35 截断标记（与 artifacts 同帧或 SNAPSHOT 携带）
   pinned?: boolean;           // #49 置顶状态变化时携带（true/false 都显式下发，端上直改）
   saved?: boolean;            // #49 休眠标记变化时携带（恢复成功清位 / unpin 摘除）
   // 恒随增量帧携带（null = 已清）：审批弹窗死锁根治的权威自愈通道——CLI 侧放弃/

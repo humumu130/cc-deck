@@ -18,6 +18,7 @@ import {
   detailToolResult,
   detailToolUse,
   diffLines,
+  fileEditMetrics,
   fullText,
   normKey,
   parseAskQuestions,
@@ -1696,6 +1697,9 @@ export class Bridge {
           }
         }
       }
+      // #35 输出物：首读全文件回放重建（转录轮转/shrink 重触 firstRead 也安全——
+      // setArtifacts 整体替换，天然幂等不双计）
+      if (firstRead) this.replayArtifacts(id, transcriptPath);
       if (usageSeen || model) {
         // 首读以窗口内条目做种子（relay 重启后的近似值）；此后增量累加
         let u = this.extUsage.get(id);
@@ -1720,7 +1724,9 @@ export class Bridge {
     } catch {}
   }
 
-  // 文件改动统计：Edit/Write/MultiEdit/NotebookEdit 结果的 +/- 行累计（统计页数据源）
+  // 文件改动统计：Edit/Write/MultiEdit/NotebookEdit 结果的 +/- 行累计（统计页数据源）。
+  // #35 同点位顺路喂输出物清单（mergeArtifact 咽喉点）；增删行/新建判定统一走
+  // fileEditMetrics（+++ / --- 头行不计入，修掉旧内联计数的小高估）
   private feedFileStats(id: string, ev: BridgeEvent): void {
     const tool = ev.tool_name ?? "";
     if (tool !== "Edit" && tool !== "Write" && tool !== "MultiEdit" && tool !== "NotebookEdit") return;
@@ -1729,24 +1735,8 @@ export class Bridge {
       | null
       | undefined;
     if (!r || typeof r !== "object") return;
-    let added = 0;
-    let deleted = 0;
-    if (Array.isArray(r.structuredPatch)) {
-      for (const h of r.structuredPatch as { lines?: unknown }[]) {
-        if (!h || !Array.isArray(h.lines)) continue;
-        for (const l of h.lines as unknown[]) {
-          if (typeof l !== "string" || !l) continue;
-          if (l.startsWith("+")) added++;
-          else if (l.startsWith("-")) deleted++;
-        }
-      }
-    } else if (typeof r.content === "string" && r.content) {
-      const lines = r.content.split("\n");
-      if (lines[lines.length - 1] === "") lines.pop();
-      added += lines.length;
-    } else {
-      return;
-    }
+    const m = fileEditMetrics(r);
+    if (!m) return;
     const input = (ev.tool_input ?? {}) as { file_path?: unknown };
     const file =
       typeof r.filePath === "string" ? r.filePath :
@@ -1760,9 +1750,76 @@ export class Bridge {
       this.extFileStats.set(id, st);
     }
     st.files.add(file);
-    st.added += added;
-    st.deleted += deleted;
+    st.added += m.adds;
+    st.deleted += m.dels;
     this.mgr.setExternalStats(id, { files_changed: st.files.size, lines_added: st.added, lines_deleted: st.deleted });
+    // 输出物清单（"(未知文件)"在 mergeArtifact 内挡掉；相对路径由其以 cwd 补全）
+    this.mgr.mergeArtifact(id, { path: file, tool, adds: m.adds, dels: m.dels, created: m.created, ts: Date.now() });
+  }
+
+  // #35 输出物回放：转录全文件分块扫（先例 replayTaskHistory 的读法）。
+  // tool_use 行（四类文件工具，入参含 file_path）记 callId → {tool, path}，
+  // tool_result 行按 tool_use_id 配对回取结构化结果；行门 = file_path/filePath/
+  // structuredPatch/gitDiff（配对两侧任一必含其一，未命中行直接跳过省 JSON.parse）
+  private replayArtifacts(id: string, path: string): void {
+    const items: { path: string; tool: string; adds: number; dels: number; created: boolean; ts: number }[] = [];
+    const uses = new Map<string, { tool: string; path: string }>();
+    try {
+      const size = statSync(path).size;
+      const fd = openSync(path, "r");
+      const CHUNK = 8 * 1024 * 1024;
+      const buf = Buffer.alloc(CHUNK);
+      let carry = "";
+      for (let pos = 0; pos < size; ) {
+        const n = readSync(fd, buf, 0, CHUNK, pos);
+        if (n <= 0) break;
+        const text = carry + buf.toString("utf-8", 0, n);
+        const lines = text.split("\n");
+        carry = lines.pop() ?? "";
+        for (const line of lines) {
+          const hasFileKw =
+            line.includes("file_path") || line.includes("filePath") ||
+            line.includes("structuredPatch") || line.includes("gitDiff");
+          // 结果行可能只带 type/content（无 filePath/patch 关键字）——有账目待配对时
+          // 也放行 tool_use_id 行（无账目时纯布尔短路，不付 JSON.parse 成本）
+          if (!hasFileKw && !(uses.size > 0 && line.includes("tool_use_id"))) continue;
+          type TrLine = { timestamp?: unknown; message?: { content?: unknown }; tool_use_result?: unknown };
+          let j: TrLine | null = null;
+          try {
+            j = JSON.parse(line) as TrLine;
+          } catch {
+            continue;
+          }
+          if (!j || !Array.isArray(j.message?.content)) continue;
+          const parsed = typeof j.timestamp === "string" ? Date.parse(j.timestamp) : NaN;
+          const at = Number.isFinite(parsed) ? parsed : Date.now();
+          for (const b of j.message.content) {
+            if (!b || typeof b !== "object") continue;
+            const blk = b as { type?: string; name?: unknown; id?: unknown; input?: unknown; tool_use_id?: unknown; content?: unknown };
+            if (blk.type === "tool_use") {
+              const name = typeof blk.name === "string" ? blk.name : "";
+              if (name !== "Write" && name !== "Edit" && name !== "MultiEdit" && name !== "NotebookEdit") continue;
+              const fp = (blk.input as { file_path?: unknown } | null)?.file_path;
+              if (typeof fp === "string" && fp && typeof blk.id === "string") {
+                uses.set(blk.id, { tool: name, path: fp });
+                if (uses.size > 512) uses.delete(uses.keys().next().value as string);
+              }
+            } else if (blk.type === "tool_result" && typeof blk.tool_use_id === "string") {
+              const use = uses.get(blk.tool_use_id);
+              if (!use) continue;
+              uses.delete(blk.tool_use_id);
+              const m = fileEditMetrics(j.tool_use_result ?? blk.content);
+              if (m) items.push({ path: use.path, tool: use.tool, adds: m.adds, dels: m.dels, created: m.created, ts: at });
+            }
+          }
+        }
+        pos += n;
+      }
+      closeSync(fd);
+    } catch {
+      return;
+    }
+    this.mgr.setArtifacts(id, items);
   }
 
   // 首见/轮转（firstRead）：全文件回放任务工具调用重建完整清单。

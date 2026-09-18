@@ -24,6 +24,7 @@ import {
   detailToolUse,
   diffLines,
   extractDiffStats,
+  fileEditMetrics,
   fullText,
   parseAskQuestions,
   summarizeToolResult,
@@ -111,6 +112,9 @@ export interface AgentCallbacks {
   // superseded = CLI 已自行越过权限门（新输入打断/回合推进），relay 清扫孤儿 pending 补发
   onWaitingResolved(requestId: string, decision: "allow" | "deny" | "answer" | "superseded", by?: string): void;
   onStats(stats: FileChangeStats): void;
+  // #35 输出物：Edit/Write 类工具单条产出（tool_use/tool_result 配对后回调；
+  // 可选——非会话级实现方（标题生成等）无需关心）
+  onArtifacts?(item: { path: string; tool: string; adds: number; dels: number; created: boolean; ts: number }): void;
   // 每回合 result 消息携带的 token 用量（累计口径由调用方决定）
   onUsage(usage: TokenUsage): void;
   // TodoWrite 工具调用：最新任务清单全量替换
@@ -161,6 +165,9 @@ export class AgentSession {
   // 流已关闭（stop/进程退出）：此后 sendMessage 不可用，调用方走 resume 重建
   ended = false;
   private filesTouched = new Set<string>();
+  // #35 输出物配对账：Edit/Write 类 tool_use 的 callId → { 工具名, file_path }，
+  // 同消息流的 tool_result（tool_use_id）命中即产出一条（未配对的被打断调用自然丢弃）
+  private pendingFileUses = new Map<string, { tool: string; path: string }>();
   private queue = new AsyncQueue<SDKUserMessage>();
   private pending = new Map<string, PendingPermission>();
   private stopping = false;
@@ -317,6 +324,21 @@ export class AgentSession {
               tool: block.name,
               detail: detailToolUse(block.name, block.input as Record<string, unknown>),
             });
+            // #35 输出物：四类文件工具登记待配对（结果帧按 tool_use_id 回取路径）
+            if (
+              (block.name === "Write" || block.name === "Edit" || block.name === "MultiEdit" || block.name === "NotebookEdit") &&
+              typeof (block.input as { file_path?: unknown } | null)?.file_path === "string" &&
+              typeof (block as { id?: unknown }).id === "string"
+            ) {
+              this.pendingFileUses.set((block as { id: string }).id, {
+                tool: block.name,
+                path: (block.input as { file_path: string }).file_path,
+              });
+              if (this.pendingFileUses.size > 64) {
+                // 防泄漏上限：串行执行下账目应近实时清空，异常堆积丢最旧
+                this.pendingFileUses.delete(this.pendingFileUses.keys().next().value as string);
+              }
+            }
             const todos = this.tasks.feed(block.name, block.input);
             if (todos) this.cb.onTodos(todos);
             this.cb.onStatusChange("WORKING", this.lastSummary);
@@ -347,6 +369,24 @@ export class AgentSession {
             }
             extractDiffStats(structured ?? tr.content, this.stats, this.filesTouched);
             this.cb.onStats({ ...this.stats });
+            // #35 输出物：tool_use_id 回取登记的文件工具调用，产出一条（无 diff 数据
+            // 的失败/中断调用 metrics 为 null 自然跳过；命中即清账防重复配对）
+            const callId = (b as { tool_use_id?: unknown }).tool_use_id;
+            if (typeof callId === "string" && this.pendingFileUses.has(callId)) {
+              const use = this.pendingFileUses.get(callId)!;
+              this.pendingFileUses.delete(callId);
+              const m = fileEditMetrics(structured ?? tr.content);
+              if (m) {
+                this.cb.onArtifacts?.({
+                  path: use.path,
+                  tool: use.tool,
+                  adds: m.adds,
+                  dels: m.dels,
+                  created: m.created,
+                  ts: Date.now(),
+                });
+              }
+            }
             this.cb.onLog("tool_result", summarizeToolResult(tr.content), {
               detail: detailToolResult(structured ?? tr.content),
               diff: diffLines(structured),

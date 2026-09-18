@@ -1,0 +1,583 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>cc-deck 输出物 Tab · 界面设计稿 v1</title>
+<style>
+  /* 设计 token 直接取自现网 web-console（:root 深色 / html.light 浅色）与手机 App
+     theme.ts DARK——输出物 tab 长在宿主既有设计系统里，不另造皮肤。
+     配套设计文档：docs/artifacts-tab-design.md */
+  :root {
+    /* web-console 浅色（html.light 实测值） */
+    --bg: #F3F5F9; --bg-main: #FCFDFE; --panel: #FFFFFF; --panel-2: #F1F4F9;
+    --border: #D9DFE9; --side-line: rgba(16,24,40,.08); --side-bg: #F1F2F5;
+    --text: #1C2637; --text-strong: #101B2E; --dim: #5F6C84; --faint: #8D99AE;
+    --brand: #C2603E; --brand-line: #E07B4C;
+    --working: #A16207; --done: #047857; --error: #C2410C;
+    --code-bg: rgba(100,116,139,.14); --scroll: #C3CBD9;
+    --mono: Consolas, "Cascadia Mono", "JetBrains Mono", monospace;
+    /* 手机帧（expo-app theme.ts DARK） */
+    --p-bg: #050B12; --p-panel: #0B1622; --p-panel2: #101F30;
+    --p-line: rgba(125,165,220,.10); --p-text: #E8F0FA; --p-dim: #7B93AE; --p-faint: #4A5F78;
+    --p-brand: #4D9FFF; --p-brand2: #7C6CF2;
+  }
+  /* 深色帧 = web-console :root 实测值（.console.dark 内覆盖同名变量，组件样式共用） */
+  .console.dark {
+    --bg: #050B12; --bg-main: #0A0F17; --panel: #0B141F; --panel-2: #101B2B;
+    --border: #1B2739; --side-line: rgba(148,163,190,.08); --side-bg: #04080E;
+    --text: #C9D3E0; --text-strong: #E7EEF8; --dim: #7E8BA3; --faint: #55617A;
+    --brand: #D97757; --brand-line: #D97757;
+    --working: #FFC53D; --done: #2BD98F; --error: #FF7849;
+    --code-bg: rgba(148,163,190,.14); --scroll: #1E2B42;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    background:
+      radial-gradient(1100px 460px at 85% -8%, rgba(194,96,62,.06), transparent 60%),
+      #ECEDEE;
+    color: #29302A; font-family: -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif;
+    min-height: 100vh; padding: 34px 20px 70px;
+  }
+  .page { max-width: 1520px; margin: 0 auto; }
+  h1 { font-size: 21px; margin-bottom: 7px; color: #1B231D; letter-spacing: .3px; }
+  .sub { color: #5D665C; font-size: 13px; margin-bottom: 6px; line-height: 1.75; max-width: 980px; }
+  .sub b { color: #29302A; }
+  .sub2 { color: #8B938A; font-size: 12px; margin-bottom: 26px; }
+
+  .sh { font-size: 17px; margin: 44px 0 4px; display: flex; align-items: center; gap: 9px; color: #1B231D; }
+  .tag { font-size: 11px; padding: 3px 11px; border-radius: 20px; font-weight: 600; letter-spacing: 1px; flex: none; }
+  .t-dt { background: rgba(194,96,62,.14); color: #A04E30; }
+  .t-m1 { background: rgba(37,99,235,.12); color: #1D4ED8; }
+  .t-ph { background: rgba(77,159,255,.16); color: #2563EB; }
+  .shsub { color: #5D665C; font-size: 12.5px; margin-bottom: 16px; line-height: 1.7; max-width: 960px; }
+  .stage { display: flex; gap: 26px; align-items: flex-start; flex-wrap: wrap; }
+
+  /* ---------- 桌面窗口壳（现网 web-console 骨架） ---------- */
+  .winframe {
+    position: relative; width: 1020px; flex: 0 0 auto; max-width: 100%;
+    background: var(--bg-main); border: 1px solid var(--border); border-radius: 14px;
+    box-shadow: 0 22px 55px rgba(23,32,26,.16); overflow: hidden;
+    color: var(--text); font-size: 13px;
+  }
+  .chrome { display: flex; align-items: center; gap: 10px; padding: 9px 14px; background: var(--side-bg); border-bottom: 1px solid var(--side-line); }
+  .chrome .dots { display: flex; gap: 6px; }
+  .chrome .dots i { width: 11px; height: 11px; border-radius: 50%; }
+  .chrome .dots i:nth-child(1) { background: #ff5f57; }
+  .chrome .dots i:nth-child(2) { background: #febc2e; }
+  .chrome .dots i:nth-child(3) { background: #28c840; }
+  .chrome .tt { font-size: 12px; color: var(--dim); }
+  .body { display: flex; min-height: 596px; }
+
+  /* 侧栏（会话列表，压缩示意） */
+  .side { width: 236px; flex: none; background: var(--side-bg); border-right: 1px solid var(--side-line); padding: 10px 10px 14px; }
+  .side .slabel { font-size: 10.5px; letter-spacing: 1.5px; color: var(--faint); font-weight: 600; padding: 6px 6px 7px; }
+  .scard { border-radius: 10px; padding: 9px 11px; margin-bottom: 6px; border: 1px solid transparent; }
+  .scard.on { background: var(--panel); border-color: var(--border); }
+  .scard .r1 { display: flex; align-items: center; gap: 7px; font-size: 12.5px; color: var(--text-strong); font-weight: 550; }
+  .scard .dot { width: 7px; height: 7px; border-radius: 50%; flex: none; }
+  .dot.work { background: var(--working); }
+  .dot.done { background: var(--done); }
+  .scard .r2 { font-size: 11px; color: var(--faint); margin-top: 4px; padding-left: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .newbtn { margin-top: 10px; width: 100%; border: 1px dashed var(--border); background: transparent; color: var(--dim); border-radius: 10px; padding: 8px; font-size: 12px; cursor: pointer; }
+
+  /* 详情头 + tab 行（复刻 .dhead / .tabs） */
+  .detail { flex: 1; display: flex; flex-direction: column; min-width: 0; }
+  .dhead { padding: 13px 18px 0; }
+  .dhead-r1 { display: flex; align-items: center; gap: 10px; }
+  .dhead-r1 .t { font-size: 15.5px; font-weight: 650; color: var(--text-strong); }
+  .chip { font-size: 10.5px; padding: 2px 9px; border-radius: 20px; background: rgba(4,120,87,.12); color: var(--done); font-weight: 600; }
+  .chip.work { background: rgba(161,98,7,.13); color: var(--working); }
+  .dhead-r1 .el { font-size: 11.5px; color: var(--faint); }
+  .dhead-r2 { display: flex; gap: 8px; align-items: center; font-size: 11.5px; color: var(--dim); margin-top: 5px; }
+  .dhead-r2 .cwd { font-family: var(--mono); font-size: 10.5px; color: var(--faint); background: var(--panel-2); border: 1px solid var(--border); border-radius: 6px; padding: 1px 7px; }
+  .tabs { display: flex; gap: 2px; margin-top: 11px; align-items: center; position: relative; border-bottom: 1px solid var(--border); padding: 0 4px; }
+  .tabs .tab { all: unset; cursor: pointer; padding: 7px 12px 9px; font-size: 12.5px; color: var(--dim); position: relative; }
+  .tabs .tab.active { color: var(--text); font-weight: 550; }
+  .tabs .spacer { flex: 1; }
+  .tab-ind { position: absolute; left: 0; bottom: 0; height: 2px; width: 58px; border-radius: 1px; background: var(--brand-line); transform: translateX(160px); }
+  .tabs .mini { font-size: 11px; padding: 4px 10px; border-radius: 999px; color: var(--dim); border: 1px solid var(--border); margin-bottom: 6px; }
+  .tab .plus { font-size: 9.5px; vertical-align: 3px; margin-left: 1px; }
+
+  /* ---------- 输出物面板 ---------- */
+  .tl { flex: 1; overflow: hidden; padding: 14px 18px 10px; }
+  .af-sum { display: flex; align-items: center; gap: 8px; padding-bottom: 10px; border-bottom: 1px solid var(--border); }
+  .af-sum .cnt { font-size: 13px; color: var(--text-strong); font-weight: 650; }
+  .af-sum .seg { font-size: 12px; color: var(--dim); }
+  .af-sum .seg b.cr { color: var(--done); font-weight: 600; }
+  .af-sum .seg b.ed { color: var(--dim); font-weight: 600; }
+  .af-sum .pm { font-family: var(--mono); font-size: 11.5px; }
+  .af-sum .pm .a { color: var(--done); }
+  .af-sum .pm .d { color: var(--error); }
+  .af-sum .sp { flex: 1; }
+  .af-sum .openbtn { font-size: 11px; color: var(--dim); border: 1px solid var(--border); background: var(--panel); border-radius: 8px; padding: 3px 9px; cursor: pointer; display: flex; align-items: center; gap: 5px; }
+  .af-sum .openbtn:hover { color: var(--text); border-color: var(--faint); }
+
+  .af-gt { font-size: 11px; letter-spacing: 1.5px; font-weight: 600; text-transform: uppercase; color: var(--faint); padding: 16px 0 7px; border-bottom: 1px solid var(--border); display: flex; align-items: baseline; gap: 7px; line-height: 16px; }
+  .af-gt .n { font-weight: 700; }
+  .af-gt.cr { color: var(--done); border-bottom-color: rgba(4,120,87,.22); }
+
+  .afrow { display: flex; align-items: center; gap: 10px; padding: 8px 2px; border-bottom: 1px solid var(--side-line); font-size: 13px; position: relative; }
+  .afrow:last-child { border-bottom: none; }
+  .afrow:hover { background: var(--panel-2); border-radius: 8px; }
+  .afrow.sel { background: var(--panel-2); border-radius: 8px; outline: 1px solid var(--border); }
+  .fico { flex: none; width: 26px; height: 26px; border-radius: 7px; display: flex; align-items: center; justify-content: center; }
+  .fico svg { width: 14px; height: 14px; }
+  /* 六类映射：文档=紫 · 代码=蓝 · 数据=琥珀 · 图片=绿 · 压缩=中性 · 其他=灰 */
+  .f-doc  { background: rgba(111,95,232,.13);  color: #6F5FE8; }
+  .f-code { background: rgba(47,127,232,.12);  color: #2F7FE8; }
+  .f-data { background: rgba(161,98,7,.13);    color: #A16207; }
+  .f-img  { background: rgba(4,120,87,.12);    color: #047857; }
+  .f-zip  { background: rgba(100,116,139,.14); color: #64748F; }
+  .f-gen  { background: rgba(100,116,139,.10); color: #8D99AE; }
+  .console.dark .f-doc  { background: rgba(124,108,242,.16); color: #9C8CFF; }
+  .console.dark .f-code { background: rgba(77,159,255,.15);  color: #7CB8FF; }
+  .console.dark .f-data { background: rgba(255,197,61,.13);  color: #FFC53D; }
+  .console.dark .f-img  { background: rgba(43,217,143,.13);  color: #2BD98F; }
+  .console.dark .f-zip, .console.dark .f-gen { background: rgba(148,163,190,.13); color: #94A3BE; }
+
+  .afname { display: flex; align-items: baseline; gap: 0; min-width: 0; flex: 1; overflow: hidden; white-space: nowrap; }
+  .afname .fn { color: var(--text-strong); font-weight: 550; }
+  /* 路径是本 tab 核心信息：用 --dim 而非 --faint（浅色 ≥4.5:1），不与文件名抢层级 */
+  .afname .dir { color: var(--dim); font-size: 11.5px; font-family: var(--mono); }
+  .afname .dir2 { color: var(--dim); font-size: 11px; font-family: var(--mono); opacity: .9; }
+  .badge { flex: none; font-size: 10px; padding: 1.5px 7px; border-radius: 20px; font-weight: 600; margin-left: 8px; }
+  .b-del { background: rgba(100,116,139,.13); color: var(--faint); }
+  .b-out { background: rgba(161,98,7,.12); color: var(--working); }
+  /* 右侧元信息三列固定栅格：+− 行 | 大小 | 时间（缺列也保持对齐） */
+  .afmeta { flex: none; display: flex; align-items: center; gap: 10px; font-size: 11.5px; color: var(--faint); font-variant-numeric: tabular-nums; }
+  .afmeta .pm { font-family: var(--mono); font-size: 11px; min-width: 66px; text-align: right; }
+  .afmeta .pm .a { color: var(--done); }
+  .console.dark .afmeta .pm .a { color: #2BD98F; }
+  .afmeta .pm .d { color: var(--error); }
+  .console.dark .afmeta .pm .d { color: #FF7849; }
+  .afmeta .sz { color: var(--faint); min-width: 46px; text-align: right; }
+  .afmeta .tm { min-width: 52px; text-align: right; }
+  .af-act { flex: none; width: 22px; height: 22px; border-radius: 6px; border: none; background: transparent; color: var(--faint); font-size: 13px; cursor: pointer; line-height: 1; }
+  .afrow:hover .af-act, .afrow.sel .af-act { opacity: 1; }
+  .af-act { opacity: 0; }
+  .af-act:hover { background: var(--code-bg); color: var(--text); }
+  .afrow.dead .fn, .afrow.dead .dir { color: var(--faint); text-decoration: line-through; text-decoration-color: var(--border); }
+  /* 深色底上 faint(#55617A) 与 bg-main(#0A0F17) 对比不足：已删除态提一档到 dim，删除线保留弱化语义 */
+  .console.dark .afrow.dead .fn, .console.dark .afrow.dead .dir { color: var(--dim); }
+  .afrow.dead .fico { opacity: .45; }
+  .af-foot { display: flex; align-items: center; gap: 6px; padding: 12px 2px 2px; font-size: 11px; color: var(--faint); }
+  .af-foot .k { padding: 1px 6px; border: 1px solid var(--border); border-radius: 5px; font-size: 10px; color: var(--dim); background: var(--panel); }
+
+  /* 行内菜单（#326 openFpathPop 同款形态）：右缘对齐行内 ⋯ 钮，顶部 caret 指向触发钮 */
+  .fpop {
+    position: absolute; z-index: 30; right: 2px; top: 46px;
+    display: flex; flex-direction: column; gap: 2px; min-width: 168px;
+    background: var(--panel); border: 1px solid var(--border); border-radius: 10px; padding: 5px;
+    box-shadow: 0 14px 38px rgba(15,23,42,.22);
+  }
+  .fpop::after {
+    content: ""; position: absolute; top: -5px; right: 9px;
+    border: 5px solid transparent; border-top-width: 0; border-bottom-color: var(--panel);
+  }
+  .fpop button { all: unset; cursor: pointer; padding: 7px 12px; border-radius: 7px; color: var(--dim); font-size: 12.5px; display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+  .fpop button:hover { background: var(--panel-2); color: var(--text); }
+  .fpop button .m1c { font-size: 9px; padding: 1px 6px; border-radius: 10px; background: rgba(37,99,235,.10); color: #1D4ED8; font-weight: 700; letter-spacing: .5px; }
+  .fpop .div { height: 1px; background: var(--border); margin: 3px 4px; }
+
+  /* ---------- 标注 ---------- */
+  .notes { width: 300px; flex: 0 0 auto; padding-top: 40px; }
+  .notes .nt { font-size: 13px; font-weight: 650; color: #1B231D; margin-bottom: 12px; letter-spacing: .5px; }
+  .note { display: flex; gap: 9px; margin-bottom: 13px; font-size: 12.5px; color: #454E46; line-height: 1.65; }
+  .note .no { flex: none; width: 19px; height: 19px; border-radius: 50%; background: #1B231D; color: #F3F5F9; font-size: 11px; font-weight: 700; display: flex; align-items: center; justify-content: center; margin-top: 1px; }
+  .note b { color: #1B231D; }
+  .note .m1c { font-size: 9.5px; padding: 1px 6px; border-radius: 10px; background: rgba(37,99,235,.12); color: #1D4ED8; font-weight: 700; vertical-align: 1px; }
+  /* 帧内编号锚点：行级锚点用 .sm 小号，整体落进行左侧 gutter（.tl padding-left 18px），不压内容 */
+  .pin { position: absolute; z-index: 40; width: 19px; height: 19px; border-radius: 50%; background: #1B231D; color: #F3F5F9; font-size: 11px; font-weight: 700; display: flex; align-items: center; justify-content: center; box-shadow: 0 0 0 3px rgba(27,35,29,.14); }
+  .pin.sm { width: 15px; height: 15px; font-size: 10px; box-shadow: 0 0 0 2.5px rgba(27,35,29,.16); }
+
+  /* ---------- 手机帧 ---------- */
+  .phone {
+    width: 316px; flex: 0 0 auto; border-radius: 40px; border: 1px solid #0E1826;
+    background: var(--p-bg); color: var(--p-text); overflow: hidden; position: relative;
+    box-shadow: 0 20px 50px rgba(10,20,35,.4); font-size: 13px;
+  }
+  .p-status { display: flex; justify-content: space-between; padding: 13px 22px 4px; font-size: 11.5px; color: var(--p-dim); }
+  .p-notch { position: absolute; top: 10px; left: 50%; transform: translateX(-50%); width: 96px; height: 22px; border-radius: 12px; background: #01050A; }
+  .p-head { padding: 12px 16px 0; }
+  .p-head .r1 { display: flex; align-items: center; gap: 8px; }
+  .p-head .back { color: var(--p-brand); font-size: 14px; }
+  .p-head .t { font-size: 15px; font-weight: 650; flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .p-head .st { font-size: 10px; padding: 2px 8px; border-radius: 20px; background: rgba(255,197,61,.15); color: #FFC53D; font-weight: 600; }
+  .p-tabs { display: flex; gap: 5px; padding: 10px 10px 9px; position: relative; }
+  .p-tabs .pt { flex: 1; text-align: center; font-size: 11.5px; color: var(--p-dim); padding: 6px 0 8px; border-radius: 9px; position: relative; }
+  .p-tabs .pt.on { color: var(--p-text); font-weight: 650; background: rgba(125,165,220,.08); }
+  .p-tabs .pt.on::after { content: ""; position: absolute; left: 26%; right: 26%; bottom: 2px; height: 2px; border-radius: 1px; background: var(--p-brand); }
+  .p-body { padding: 4px 14px 18px; min-height: 380px; }
+  .p-sum { display: flex; align-items: center; gap: 7px; padding: 8px 2px 10px; font-size: 11.5px; color: var(--p-dim); }
+  .p-sum b { color: var(--p-text); font-size: 12.5px; }
+  .p-sum .sp { flex: 1; }
+  .p-sum .pm { font-family: var(--mono); font-size: 11px; }
+  .p-sum .pm .a { color: #2BD98F; } .p-sum .pm .d { color: #FF7849; }
+  .p-gt { font-size: 10px; letter-spacing: 1.5px; font-weight: 700; color: var(--p-faint); padding: 10px 2px 6px; text-transform: uppercase; }
+  .p-gt.cr { color: #2BD98F; }
+  .prow { display: flex; align-items: center; gap: 10px; padding: 9px 2px; border-bottom: 1px solid var(--p-line); }
+  .prow:last-child { border-bottom: none; }
+  .prow .fico { width: 30px; height: 30px; border-radius: 8px; }
+  .prow .fico svg { width: 15px; height: 15px; }
+  .console.dark .prow .f-doc { background: rgba(124,108,242,.16); color: #9C8CFF; }
+  .console.dark .prow .f-code { background: rgba(77,159,255,.15); color: #7CB8FF; }
+  .console.dark .prow .f-img { background: rgba(43,217,143,.13); color: #2BD98F; }
+  .console.dark .prow .f-data { background: rgba(255,197,61,.13); color: #FFC53D; }
+  .console.dark .prow .f-gen, .console.dark .prow .f-zip { background: rgba(148,163,190,.13); color: #94A3BE; }
+  .prow .mid { flex: 1; min-width: 0; }
+  .prow .nm { font-size: 13px; color: var(--p-text); font-weight: 550; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .prow .pth { font-size: 10.5px; color: var(--p-dim); font-family: var(--mono); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-top: 2px; }
+  .prow .mt { font-size: 10.5px; color: var(--p-dim); margin-top: 3px; }
+  .prow .mt .a { color: #2BD98F; font-family: var(--mono); } .prow .mt .d { color: #FF7849; font-family: var(--mono); }
+  .prow .chev { color: var(--p-faint); font-size: 15px; }
+  .prow.dead .nm { color: var(--p-faint); text-decoration: line-through; }
+
+  /* 手机详情 sheet（点行弹出）：加大 grabber 与投影，与压暗的列表拉开层级 */
+  .sheet { position: absolute; left: 10px; right: 10px; bottom: 10px; background: var(--p-panel); border: 1px solid rgba(125,165,220,.16); border-radius: 18px; padding: 12px 16px 12px; box-shadow: 0 -18px 46px rgba(0,0,0,.58); }
+  .sheet .grab { width: 44px; height: 5px; border-radius: 3px; background: rgba(125,165,220,.3); margin: 0 auto 11px; }
+  .sheet .r1 { display: flex; align-items: center; gap: 10px; }
+  .sheet .fico { width: 34px; height: 34px; border-radius: 9px; }
+  .sheet .fico svg { width: 17px; height: 17px; }
+  .console.dark .sheet .f-doc { background: rgba(124,108,242,.16); color: #9C8CFF; }
+  .sheet .t { font-size: 14.5px; font-weight: 650; }
+  .sheet .sub { font-size: 10.5px; color: var(--p-dim); margin-top: 2px; }
+  .sheet .x { margin-left: auto; color: var(--p-faint); font-size: 13px; }
+  .sheet .pathbox { margin-top: 12px; background: var(--p-panel2); border: 1px solid var(--p-line); border-radius: 10px; padding: 9px 11px; font-family: var(--mono); font-size: 10.5px; color: var(--p-text); line-height: 1.6; word-break: break-all; user-select: text; }
+  .sheet .meta { display: flex; gap: 14px; margin-top: 10px; font-size: 11px; color: var(--p-dim); flex-wrap: wrap; }
+  .sheet .meta b { color: var(--p-text); font-weight: 550; }
+  .sheet .btns { display: flex; gap: 8px; margin-top: 12px; }
+  .sheet .b1 { flex: 1; text-align: center; border-radius: 10px; padding: 9px 0; font-size: 12.5px; font-weight: 600; }
+  .sheet .b-copy { background: var(--p-brand); color: #04121F; }
+  .sheet .b-share { background: var(--p-panel2); border: 1px solid var(--p-line); color: var(--p-text); }
+  .sheet .note2 { margin-top: 10px; text-align: center; font-size: 10.5px; color: var(--p-faint); }
+
+  /* ---------- 小帧：空态 / 浏览器降级 ---------- */
+  .miniframe { width: 470px; flex: 0 0 auto; background: var(--bg-main); border: 1px solid var(--border); border-radius: 12px; overflow: hidden; box-shadow: 0 14px 36px rgba(23,32,26,.13); color: var(--text); }
+  .miniframe .mh { display: flex; align-items: center; gap: 8px; padding: 8px 13px; background: var(--side-bg); border-bottom: 1px solid var(--side-line); font-size: 11.5px; color: var(--dim); }
+  .miniframe .mh .addr { flex: 1; background: var(--panel); border: 1px solid var(--border); border-radius: 7px; padding: 3px 10px; font-size: 10.5px; color: var(--faint); font-family: var(--mono); }
+  .empty { display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 192px; color: var(--faint); text-align: center; font-size: 12.5px; line-height: 2; padding: 20px; }
+  .empty .big { font-size: 32px; opacity: .45; margin-bottom: 6px; }
+  .brpop { position: relative; margin: 34px auto 38px; width: 190px; background: var(--panel); border: 1px solid var(--border); border-radius: 10px; padding: 5px; box-shadow: 0 8px 26px rgba(15,23,42,.14); }
+  .brpop button { all: unset; display: block; padding: 7px 12px; border-radius: 7px; color: var(--dim); font-size: 12px; width: 100%; box-sizing: border-box; }
+  .brpop button:hover { background: var(--panel-2); color: var(--text); }
+  .miniframe .cap { padding: 0 14px 14px; font-size: 11px; color: var(--faint); line-height: 1.7; text-align: center; }
+  .miniframe .cap b { color: var(--dim); }
+</style>
+</head>
+<body>
+<div class="page">
+  <h1>输出物（Artifacts）Tab · 界面设计稿 v1</h1>
+  <div class="sub">详情页右侧第 6 个子 tab：<b>消息 · 任务 · 全部 · <b>输出物</b> · 定时 · 统计</b>（插在「全部」后——紧跟流水的结果面）。数据由 relay 从 Write/Edit/MultiEdit/NotebookEdit 工具流自动捕获（详见 <b>docs/artifacts-tab-design.md</b> §四采集口径），桌面双击调本地默认应用打开（复用已上线 #326 openPath 能力），手机端展示文件名 + 路径 + 简单信息。</div>
+  <div class="sub2">设计 token 取自现网 web-console 深浅两主题与手机 App theme.ts DARK · 2026-09-19 · 本稿为静态示意，非可交互实现</div>
+
+  <!-- ================= 桌面 · 浅色（主） ================= -->
+  <div class="sh"><span class="tag t-dt">桌面 / 网页</span>浅色 · 主视图（Tauri / EXE / 浏览器同构）</div>
+  <div class="shsub">示例会话 = 本功能自己的开发会话（cwd <b>/Users/xdd/dev/cc-deck</b>）。两组：新建（本会话产出）在前、修改（存量改动）在后，组内按最后写入倒序；已删除 / cwd 外为边界态示意。</div>
+  <div class="stage">
+
+    <div class="winframe console light">
+      <div class="chrome"><div class="dots"><i></i><i></i><i></i></div><span class="tt">CC Deck</span></div>
+      <div class="body">
+        <div class="side">
+          <div class="slabel">会话</div>
+          <div class="scard"><div class="r1"><span class="dot work"></span>0.4.24 发版准备</div><div class="r2">Bash · gh release create</div></div>
+          <div class="scard on"><div class="r1"><span class="dot work"></span>输出物 tab 设计与 mockup</div><div class="r2">Edit · web-console/index.html</div></div>
+          <div class="scard"><div class="r1"><span class="dot done"></span>relay 转录轮询自愈</div><div class="r2">已完成 · 22:03</div></div>
+          <button class="newbtn">＋ 新建会话</button>
+        </div>
+        <div class="detail">
+          <div class="dhead">
+            <div class="dhead-r1"><span class="t">输出物 tab 设计与 mockup</span><span class="chip work">运行中</span><span class="el">1:47:22</span></div>
+            <div class="dhead-r2"><span>桥接</span><span class="cwd">/Users/xdd/dev/cc-deck</span><span>ctx 84%</span><span>glm-4.7</span></div>
+            <div class="tabs">
+              <button class="tab">消息</button><button class="tab">任务</button><button class="tab">全部</button><button class="tab active">输出物<span class="pin" style="top:-15px;right:-13px">1</span></button><button class="tab">定时</button><button class="tab">统计</button>
+              <span class="spacer"></span><span class="mini">字·标准</span><span class="mini">思考·关</span>
+              <span class="tab-ind"></span>
+            </div>
+          </div>
+          <div class="tl">
+            <div class="af-sum">
+              <span class="cnt">9 个文件</span>
+              <span class="seg"><b class="cr">新建 3</b> · <b class="ed">修改 6</b></span>
+              <span class="pm"><span class="a">+1,838</span> <span class="d">−83</span></span>
+              <span class="sp"></span>
+              <button class="openbtn" style="position:relative"><svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3.5 7.2c0-1.3 1-2.3 2.3-2.3h3l2 2.2h6.4c1.3 0 2.3 1 2.3 2.3v7.3c0 1.3-1 2.3-2.3 2.3H5.8c-1.3 0-2.3-1-2.3-2.3z"/></svg>打开工作目录<span class="pin sm" style="left:-24px;top:50%;transform:translateY(-50%)">6</span></button>
+            </div>
+
+            <div class="af-gt cr">新建 <span class="n">3</span><span style="font-weight:400;letter-spacing:0;text-transform:none">本会话产出的文件</span></div>
+            <div class="afrow">
+              <span class="pin sm" style="left:-16px;top:50%;transform:translateY(-50%)">3</span>
+              <span class="fico f-doc"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3.4h8.4L19 8v12.6H6z"/><path d="M14 3.6V8h4.6"/><path d="M9 12.4h6M9 15.8h6M9 8.6h2.6"/></svg></span>
+              <span class="afname"><span class="fn">artifacts-tab-mockup.html</span>&nbsp;<span class="dir">docs/</span></span>
+              <span class="afmeta"><span class="pm"><span class="a">+812</span> <span class="d">−0</span></span><span class="sz">31 KB</span><span class="tm">23:26</span></span>
+              <button class="af-act">⋯</button>
+            </div>
+            <div class="afrow">
+              <span class="fico f-doc"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3.4h8.4L19 8v12.6H6z"/><path d="M14 3.6V8h4.6"/><path d="M9 12.4h6M9 15.8h6M9 8.6h2.6"/></svg></span>
+              <span class="afname"><span class="fn">artifacts-tab-design.md</span>&nbsp;<span class="dir">docs/</span></span>
+              <span class="afmeta"><span class="pm"><span class="a">+486</span> <span class="d">−0</span></span><span class="sz">19 KB</span><span class="tm">22:41</span></span>
+              <button class="af-act">⋯</button>
+            </div>
+            <div class="afrow">
+              <span class="fico f-data"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M7 4.5C4.8 4.5 4.8 9 7 9s2.2 4.5 0 4.5-2.2 4.5 0 4.5"/><path d="M17 4.5c2.2 0 2.2 4.5 0 4.5s-2.2 4.5 0 4.5 2.2 4.5 0 4.5"/></svg></span>
+              <span class="afname"><span class="fn">session-sample.json</span>&nbsp;<span class="dir">docs/data/</span></span>
+              <span class="afmeta"><span class="pm"><span class="a">+64</span> <span class="d">−0</span></span><span class="sz">2.1 KB</span><span class="tm">21:58</span></span>
+              <button class="af-act">⋯</button>
+            </div>
+
+            <div class="af-gt">修改 <span class="n">6</span><span style="font-weight:400;letter-spacing:0;text-transform:none">存量文件改动</span></div>
+            <div class="afrow sel">
+              <span class="pin" style="right:-8px;top:-10px">2</span>
+              <span class="fico f-code"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="m9.2 8.6-3.6 3.4 3.6 3.4"/><path d="m14.8 8.6 3.6 3.4-3.6 3.4"/></svg></span>
+              <span class="afname"><span class="fn">DetailScreen.tsx</span>&nbsp;<span class="dir">expo-app/src/screens/</span></span>
+              <span class="afmeta"><span class="pm"><span class="a">+148</span> <span class="d">−31</span></span><span class="sz">78 KB</span><span class="tm">23:20</span></span>
+              <button class="af-act">⋯</button>
+              <div class="fpop">
+                <button>打开文件</button>
+                <button>打开所在目录</button>
+                <div class="div"></div>
+                <button>复制路径</button>
+                <button>复制相对路径</button>
+                <div class="div"></div>
+                <button>在时间线中查看<span class="m1c">M1</span></button>
+              </div>
+            </div>
+            <div class="afrow">
+              <span class="fico f-code"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="m9.2 8.6-3.6 3.4 3.6 3.4"/><path d="m14.8 8.6 3.6 3.4-3.6 3.4"/></svg></span>
+              <span class="afname"><span class="fn">index.html</span>&nbsp;<span class="dir">web-console/</span></span>
+              <span class="afmeta"><span class="pm"><span class="a">+186</span> <span class="d">−22</span></span><span class="sz">402 KB</span><span class="tm">23:18</span></span>
+              <button class="af-act">⋯</button>
+            </div>
+            <div class="afrow">
+              <span class="fico f-code"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="m9.2 8.6-3.6 3.4 3.6 3.4"/><path d="m14.8 8.6 3.6 3.4-3.6 3.4"/></svg></span>
+              <span class="afname"><span class="fn">bridge.ts</span>&nbsp;<span class="dir">relay/src/</span></span>
+              <span class="afmeta"><span class="pm"><span class="a">+64</span> <span class="d">−12</span></span><span class="sz">128 KB</span><span class="tm">23:04</span></span>
+              <button class="af-act">⋯</button>
+            </div>
+            <div class="afrow">
+              <span class="fico f-code"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="m9.2 8.6-3.6 3.4 3.6 3.4"/><path d="m14.8 8.6 3.6 3.4-3.6 3.4"/></svg></span>
+              <span class="afname"><span class="fn">types.ts</span>&nbsp;<span class="dir">relay/src/</span></span>
+              <span class="afmeta"><span class="pm"><span class="a">+38</span> <span class="d">−4</span></span><span class="sz">29 KB</span><span class="tm">23:02</span></span>
+              <button class="af-act">⋯</button>
+            </div>
+            <div class="afrow dead">
+              <span class="pin sm" style="left:-16px;top:50%;transform:translateY(-50%)">4</span>
+              <span class="fico f-code"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="m9.2 8.6-3.6 3.4 3.6 3.4"/><path d="m14.8 8.6 3.6 3.4-3.6 3.4"/></svg></span>
+              <span class="afname"><span class="fn">gen-sample.ts</span>&nbsp;<span class="dir">scripts/</span><span class="badge b-del">已删除</span></span>
+              <span class="afmeta"><span class="pm"><span class="a">+22</span> <span class="d">−8</span></span><span class="tm">22:58</span></span>
+              <button class="af-act">⋯</button>
+            </div>
+            <div class="afrow">
+              <span class="pin sm" style="left:-16px;top:50%;transform:translateY(-50%)">5</span>
+              <span class="fico f-doc"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3.4h8.4L19 8v12.6H6z"/><path d="M14 3.6V8h4.6"/><path d="M9 12.4h6M9 15.8h6M9 8.6h2.6"/></svg></span>
+              <span class="afname"><span class="dir2">…/dev/notes/</span><span class="fn">cc-deck-发版备忘.md</span><span class="badge b-out">cwd 外</span></span>
+              <span class="afmeta"><span class="pm"><span class="a">+18</span> <span class="d">−6</span></span><span class="tm">昨天</span></span>
+              <button class="af-act">⋯</button>
+            </div>
+
+            <div class="af-foot"><span class="k">双击</span>本地打开<span class="k">右键 / ⋯</span>更多操作<span class="k">仅收录</span>Write · Edit · MultiEdit · NotebookEdit</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="notes">
+      <div class="nt">交互标注</div>
+      <div class="note"><span class="no">1</span><div><b>第 6 tab「输出物」</b>：插在「全部」后；有产出时 label 带弱上标计数（⁺，可关）。</div></div>
+      <div class="note"><span class="no">2</span><div><b>⋯ / 右键浮窗</b>（#326 openFpathPop 同款）：桌面给打开两项 + 复制两项；「在时间线中查看」跳「全部」tab 定位该文件最后一条 Edit/Write <span class="m1c">M1</span>。</div></div>
+      <div class="note"><span class="no">3</span><div><b>双击行 = 本地默认应用打开</b>（window.ccDeck.openPath，已上线能力零新增）；已删除行双击 toast「文件已不存在」。</div></div>
+      <div class="note"><span class="no">4</span><div><b>已删除态</b>：relay stat 不到 → 置灰 + 删除线 + 角标；打开禁用、复制保留。</div></div>
+      <div class="note"><span class="no">5</span><div><b>cwd 外文件</b>：绝对路径（首段省略）+ 琥珀角标；打开不受影响。</div></div>
+      <div class="note"><span class="no">6</span><div><b>汇总行</b>：个数 · 新建/修改拆分 · 累计增删行；右端「打开工作目录」（reveal cwd，Bash 产出的兜底入口），浏览器隐藏。</div></div>
+    </div>
+  </div>
+
+  <!-- ================= 桌面 · 深色 ================= -->
+  <div class="sh"><span class="tag t-dt">桌面 / 网页</span>深色 · 同构（面板细节）</div>
+  <div class="shsub">同一套 CSS 变量映射（web-console <b>:root</b> 深色档），组件零改动；示意截取 tab 行 + 面板。</div>
+  <div class="stage">
+    <div class="winframe console dark" style="width:760px">
+      <div class="chrome"><div class="dots"><i></i><i></i><i></i></div><span class="tt">CC Deck</span></div>
+      <div class="detail">
+        <div class="dhead" style="padding-top:11px">
+          <div class="dhead-r1"><span class="t">输出物 tab 设计与 mockup</span><span class="chip work">运行中</span></div>
+          <div class="tabs" style="margin-top:9px">
+            <button class="tab">消息</button><button class="tab">任务</button><button class="tab">全部</button><button class="tab active">输出物</button><button class="tab">定时</button><button class="tab">统计</button>
+            <span class="spacer"></span><span class="mini">字·标准</span>
+            <span class="tab-ind"></span>
+          </div>
+        </div>
+        <div class="tl" style="min-height:400px">
+          <div class="af-sum">
+            <span class="cnt">9 个文件</span>
+            <span class="seg"><b class="cr">新建 3</b> · <b class="ed">修改 6</b></span>
+            <span class="pm"><span class="a">+1,838</span> <span class="d">−83</span></span>
+            <span class="sp"></span>
+            <button class="openbtn">打开工作目录</button>
+          </div>
+          <div class="af-gt cr">新建 <span class="n">3</span></div>
+          <div class="afrow">
+            <span class="fico f-doc"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3.4h8.4L19 8v12.6H6z"/><path d="M14 3.6V8h4.6"/><path d="M9 12.4h6M9 15.8h6M9 8.6h2.6"/></svg></span>
+            <span class="afname"><span class="fn">artifacts-tab-mockup.html</span>&nbsp;<span class="dir">docs/</span></span>
+            <span class="afmeta"><span class="pm"><span class="a">+812</span> <span class="d">−0</span></span><span class="sz">31 KB</span><span class="tm">23:26</span></span>
+            <button class="af-act">⋯</button>
+          </div>
+          <div class="afrow">
+            <span class="fico f-img"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3.6" y="5" width="16.8" height="14" rx="2.6"/><circle cx="9" cy="10" r="1.7"/><path d="m5.5 17.4 4.6-4.4 3 2.8 2.6-2.5 3.2 3.1"/></svg></span>
+            <span class="afname"><span class="fn">diagram-flow.svg</span>&nbsp;<span class="dir">docs/</span></span>
+            <span class="afmeta"><span class="pm"><span class="a">+142</span> <span class="d">−0</span></span><span class="sz">12 KB</span><span class="tm">23:11</span></span>
+            <button class="af-act">⋯</button>
+          </div>
+          <div class="af-gt">修改 <span class="n">6</span></div>
+          <div class="afrow sel">
+            <span class="fico f-code"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="m9.2 8.6-3.6 3.4 3.6 3.4"/><path d="m14.8 8.6 3.6 3.4-3.6 3.4"/></svg></span>
+            <span class="afname"><span class="fn">DetailScreen.tsx</span>&nbsp;<span class="dir">expo-app/src/screens/</span></span>
+            <span class="afmeta"><span class="pm"><span class="a">+148</span> <span class="d">−31</span></span><span class="sz">78 KB</span><span class="tm">23:20</span></span>
+            <button class="af-act">⋯</button>
+          </div>
+          <div class="afrow">
+            <span class="fico f-code"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="m9.2 8.6-3.6 3.4 3.6 3.4"/><path d="m14.8 8.6 3.6 3.4-3.6 3.4"/></svg></span>
+            <span class="afname"><span class="fn">index.html</span>&nbsp;<span class="dir">web-console/</span></span>
+            <span class="afmeta"><span class="pm"><span class="a">+186</span> <span class="d">−22</span></span><span class="sz">402 KB</span><span class="tm">23:18</span></span>
+            <button class="af-act">⋯</button>
+          </div>
+          <div class="afrow dead">
+            <span class="fico f-code"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="m9.2 8.6-3.6 3.4 3.6 3.4"/><path d="m14.8 8.6 3.6 3.4-3.6 3.4"/></svg></span>
+            <span class="afname"><span class="fn">gen-sample.ts</span>&nbsp;<span class="dir">scripts/</span><span class="badge b-del">已删除</span></span>
+            <span class="afmeta"><span class="pm"><span class="a">+22</span> <span class="d">−8</span></span><span class="tm">22:58</span></span>
+            <button class="af-act">⋯</button>
+          </div>
+          <div class="af-foot"><span class="k">双击</span>本地打开<span class="k">右键 / ⋯</span>更多操作<span class="k">仅收录</span>Write · Edit · MultiEdit · NotebookEdit</div>
+        </div>
+      </div>
+    </div>
+    <div class="notes" style="width:340px">
+      <div class="nt">视觉规范</div>
+      <div class="note"><span class="no" style="background:#454E46">A</span><div><b>类型图标六类</b>：文档=紫 · 代码=蓝 · 数据=琥珀 · 图片=绿 · 压缩/其他=中性；26px 圆角方底 + 单色 glyph（stroke 1.8，与现网 SVG 语言一致），不追真实 filetype 图标。</div></div>
+      <div class="note"><span class="no" style="background:#454E46">B</span><div><b>层级</b>：文件名 --text-strong / 目录前缀 --faint（mono 小一号）/ 元信息 --faint 右对齐 tabular-nums——一屏扫出"产出了什么"。</div></div>
+      <div class="note"><span class="no" style="background:#454E46">C</span><div><b>分组条</b>复用任务面板 .todo-gt 形态：11px 大写字距 + 1px 底线；新建组 done 绿系、修改组中性。图片/二进制无 +− 行时显字节数占位。</div></div>
+      <div class="note"><span class="no" style="background:#454E46">D</span><div><b>深浅同构</b>：全部颜色走 CSS 变量（--panel/--border/--text/--faint…），组件样式零分叉；expo 端走 theme.ts LIGHT/DARK 同理。</div></div>
+    </div>
+  </div>
+
+  <!-- ================= 手机端 ================= -->
+  <div class="sh"><span class="tag t-ph">手机 App</span>输出物视图 + 文件详情 sheet（文件在电脑上）</div>
+  <div class="shsub">手机打不开电脑文件——按需求底线：看得见文件、路径与简单信息；点行弹底部 sheet（绝对路径可选中复制），长按行快捷「复制路径 / 分享」。文本小文件只读预览为 <b>M1</b>（relay 精确命中注册表路径 + ≤256KB + text/* 安全边界）。</div>
+  <div class="stage">
+
+    <div class="phone console dark">
+      <div class="p-notch"></div>
+      <div class="p-status"><span>23:28</span><span>● relay · 局域网</span></div>
+      <div class="p-head">
+        <div class="r1"><span class="back">‹</span><span class="t">输出物 tab 设计与 mockup</span><span class="st">运行中</span></div>
+      </div>
+      <div class="p-tabs">
+        <span class="pt">消息</span><span class="pt">任务</span><span class="pt">全部</span><span class="pt on">输出物</span><span class="pt">定时</span><span class="pt">统计</span>
+      </div>
+      <div class="p-body">
+        <div class="p-sum"><b>9 个文件</b><span>新建 3 · 修改 6</span><span class="sp"></span><span class="pm"><span class="a">+1,838</span> <span class="d">−83</span></span></div>
+        <div class="p-gt cr">新建 · 3</div>
+        <div class="prow">
+          <span class="fico f-doc"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3.4h8.4L19 8v12.6H6z"/><path d="M14 3.6V8h4.6"/><path d="M9 12.4h6M9 15.8h6M9 8.6h2.6"/></svg></span>
+          <span class="mid"><span class="nm">artifacts-tab-mockup.html</span><span class="pth">docs/artifacts-tab-mockup.html</span><span class="mt">23:26 · 31 KB · <span class="a">+812</span></span></span>
+          <span class="chev">›</span>
+        </div>
+        <div class="prow">
+          <span class="fico f-doc"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3.4h8.4L19 8v12.6H6z"/><path d="M14 3.6V8h4.6"/><path d="M9 12.4h6M9 15.8h6M9 8.6h2.6"/></svg></span>
+          <span class="mid"><span class="nm">artifacts-tab-design.md</span><span class="pth">docs/artifacts-tab-design.md</span><span class="mt">22:41 · 19 KB · <span class="a">+486</span></span></span>
+          <span class="chev">›</span>
+        </div>
+        <div class="p-gt">修改 · 6</div>
+        <div class="prow">
+          <span class="fico f-code"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="m9.2 8.6-3.6 3.4 3.6 3.4"/><path d="m14.8 8.6 3.6 3.4-3.6 3.4"/></svg></span>
+          <span class="mid"><span class="nm">DetailScreen.tsx</span><span class="pth">expo-app/src/screens/DetailScreen.tsx</span><span class="mt">23:20 · 78 KB · <span class="a">+148</span> <span class="d">−31</span></span></span>
+          <span class="chev">›</span>
+        </div>
+        <div class="prow">
+          <span class="fico f-code"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="m9.2 8.6-3.6 3.4 3.6 3.4"/><path d="m14.8 8.6 3.6 3.4-3.6 3.4"/></svg></span>
+          <span class="mid"><span class="nm">index.html</span><span class="pth">web-console/index.html</span><span class="mt">23:18 · 402 KB · <span class="a">+186</span> <span class="d">−22</span></span></span>
+          <span class="chev">›</span>
+        </div>
+        <div class="prow dead">
+          <span class="fico f-code"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="m9.2 8.6-3.6 3.4 3.6 3.4"/><path d="m14.8 8.6 3.6 3.4-3.6 3.4"/></svg></span>
+          <span class="mid"><span class="nm">gen-sample.ts</span><span class="pth">scripts/gen-sample.ts · 已删除</span><span class="mt">22:58 · <span class="a">+22</span> <span class="d">−8</span></span></span>
+          <span class="chev">›</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="phone console dark" style="height:640px">
+      <div class="p-notch"></div>
+      <div class="p-status"><span>23:28</span><span>● relay · 局域网</span></div>
+      <div class="p-head">
+        <div class="r1"><span class="back">‹</span><span class="t">输出物 tab 设计与 mockup</span><span class="st">运行中</span></div>
+      </div>
+      <div class="p-tabs">
+        <span class="pt">消息</span><span class="pt">任务</span><span class="pt">全部</span><span class="pt on">输出物</span><span class="pt">定时</span><span class="pt">统计</span>
+      </div>
+      <div class="p-body" style="opacity:.5">
+        <div class="p-sum"><b>9 个文件</b><span>新建 3 · 修改 6</span><span class="sp"></span><span class="pm"><span class="a">+1,838</span> <span class="d">−83</span></span></div>
+        <div class="p-gt cr">新建 · 3</div>
+        <div class="prow"><span class="fico f-doc"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3.4h8.4L19 8v12.6H6z"/><path d="M14 3.6V8h4.6"/><path d="M9 12.4h6M9 15.8h6M9 8.6h2.6"/></svg></span><span class="mid"><span class="nm">artifacts-tab-mockup.html</span></span><span class="chev">›</span></div>
+        <div class="p-gt">修改 · 6</div>
+        <div class="prow"><span class="fico f-code"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="m9.2 8.6-3.6 3.4 3.6 3.4"/><path d="m14.8 8.6 3.6 3.4-3.6 3.4"/></svg></span><span class="mid"><span class="nm">DetailScreen.tsx</span></span><span class="chev">›</span></div>
+        <div class="prow"><span class="fico f-code"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="m9.2 8.6-3.6 3.4 3.6 3.4"/><path d="m14.8 8.6 3.6 3.4-3.6 3.4"/></svg></span><span class="mid"><span class="nm">index.html</span></span><span class="chev">›</span></div>
+      </div>
+      <!-- 点行弹出的详情 sheet -->
+      <div class="sheet">
+        <div class="grab"></div>
+        <div class="r1">
+          <span class="fico f-doc"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3.4h8.4L19 8v12.6H6z"/><path d="M14 3.6V8h4.6"/><path d="M9 12.4h6M9 15.8h6M9 8.6h2.6"/></svg></span>
+          <span><span class="t">artifacts-tab-mockup.html</span><div class="sub">HTML 文档 · 本会话新建</div></span>
+          <span class="x">✕</span>
+        </div>
+        <div class="pathbox">/Users/xdd/dev/cc-deck/docs/artifacts-tab-mockup.html</div>
+        <div class="meta"><span>大小 <b>31 KB</b></span><span>最后写入 <b>23:26</b></span><span>累计 <b class="a" style="color:#2BD98F">+812</b></span></div>
+        <div class="btns"><span class="b1 b-copy">复制路径</span><span class="b1 b-share">分享</span></div>
+        <div class="note2">文件在电脑上 · App 内暂不能打开（预览见 M1）</div>
+      </div>
+    </div>
+
+    <div class="notes" style="width:300px">
+      <div class="nt">手机端要点</div>
+      <div class="note"><span class="no" style="background:#2563EB">P1</span><div><b>列表 = 桌面行去交互版</b>：图标 + 文件名 + 相对路径（mono 灰）+ 元信息行（时间 · 大小 · 增删）；已删除行删除线标注。</div></div>
+      <div class="note"><span class="no" style="background:#2563EB">P2</span><div><b>点行弹 sheet</b>：绝对路径 mono 整段可选中（原生拖选手柄）；「复制路径」expo-clipboard、「分享」Share.share（均为既有先例）。</div></div>
+      <div class="note"><span class="no" style="background:#2563EB">P3</span><div><b>不假装能打开</b>：sheet 底部固定说明文案；M1 若文件投放于全局产物中心（~/.cc-deck/artifacts/）则换「查看」钮走 /artifacts/&lt;file&gt; 直下。</div></div>
+      <div class="note"><span class="no" style="background:#2563EB">P4</span><div><b>6 tab 均分</b>：11.5px 不换行；VIEWS 插入「输出物」后 tab 条几何（tabW 计算）自动适配。</div></div>
+    </div>
+  </div>
+
+  <!-- ================= 空态 / 浏览器降级 ================= -->
+  <div class="sh"><span class="tag t-m1">边界</span>空态 · 浏览器降级</div>
+  <div class="stage" style="margin-top:14px">
+    <div class="miniframe console light">
+      <div class="mh"><span>输出物</span><span class="addr">tab=files · 空会话</span></div>
+      <div class="empty"><div class="big">⬡</div>本会话还没有文件产出<br><span style="font-size:11.5px">CLI 里用 Write / Edit 写文件后，这里会自动出现</span></div>
+    </div>
+    <div class="miniframe console light">
+      <div class="mh"><span>浏览器（无桌面壳）</span><span class="addr">https://cc-deck.humumu.online</span></div>
+      <div class="brpop">
+        <button>复制路径</button>
+        <button>复制相对路径</button>
+      </div>
+      <div class="cap">能力探测 <b>window.ccDeck.openPath 不存在</b> → 浮窗仅剩复制两项（#326 既有降级行为）<br>双击 = 复制路径 + toast「在桌面端打开可启动本地应用」</div>
+    </div>
+    <div class="miniframe console light">
+      <div class="mh"><span>外部会话未挂 hooks</span><span class="addr">tab=files</span></div>
+      <div class="empty"><div class="big">◌</div>未能捕获本会话的文件改动<br><span style="font-size:11.5px">该 CLI 会话未接 cc-deck hooks（转录轮询兜底见设计文档 §四）</span></div>
+    </div>
+  </div>
+</div>
+<script>
+  // tab 指示条按活动按钮实测定位（静态稿免手调像素；仅几何计算，无交互逻辑）
+  document.querySelectorAll(".console").forEach(function (fr) {
+    var ind = fr.querySelector(".tab-ind");
+    var act = fr.querySelector(".tabs .tab.active");
+    if (!ind || !act) return;
+    ind.style.width = (act.offsetWidth - 16) + "px";
+    ind.style.transform = "translateX(" + (act.offsetLeft + 8) + "px)";
+  });
+</script>
+</body>
+</html>

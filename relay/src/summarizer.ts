@@ -387,6 +387,60 @@ export function summarizeToolResult(content: unknown): string {
   return truncate(lines[lines.length - 1] ?? "", 120);
 }
 
+// #35 输出物采集：单次 Edit/Write 类工具结果的增删行 + 新建/修改判定。
+// 新建判定（两形态）：结果对象带 type:"create"（CLI 结构化结果显式标注）；
+// 或 structuredPatch 缺失/为空且 content 非空（无旧内容的全文写入——新建文件
+// 没有 diff 可打）。Write 覆盖已有文件时 patch 有 hunks → edit。
+// 无任何可辨数据（缺 patch 且无 content）返回 null，调用方跳过不入清单
+export function fileEditMetrics(result: unknown): { adds: number; dels: number; created: boolean } | null {
+  if (!result || typeof result !== "object") return null;
+  const r = result as {
+    type?: unknown;
+    gitDiff?: unknown;
+    structuredPatch?: unknown;
+    content?: unknown;
+  };
+  if (r.gitDiff && typeof r.gitDiff === "object") {
+    // git 仓库内：增删行以 gitDiff 权威（与 extractDiffStats 同优先级）；新建判定
+    // 仍走 type/patch/content 三态（gitDiff 本身不区分新建/覆盖），三者全缺时
+    // 保守按"修改"（宁可少报新建，不虚报）
+    const gds = Array.isArray(r.gitDiff) ? (r.gitDiff as { additions?: unknown; deletions?: unknown }[]) : [r.gitDiff as { additions?: unknown; deletions?: unknown }];
+    let adds = 0;
+    let dels = 0;
+    for (const d of gds) {
+      if (!d || typeof d !== "object") continue;
+      adds += Number(d.additions) || 0;
+      dels += Number(d.deletions) || 0;
+    }
+    const patchHas = Array.isArray(r.structuredPatch) && r.structuredPatch.length > 0;
+    if (r.type === "create") return { adds, dels, created: true };
+    if (patchHas) return { adds, dels, created: false };
+    if (typeof r.content === "string" && r.content) return { adds, dels, created: true };
+    return { adds, dels, created: false };
+  }
+  if (Array.isArray(r.structuredPatch) && r.structuredPatch.length > 0) {
+    let adds = 0;
+    let dels = 0;
+    for (const hunk of r.structuredPatch as { lines?: unknown }[]) {
+      if (!hunk || !Array.isArray(hunk.lines)) continue;
+      for (const line of hunk.lines as unknown[]) {
+        if (typeof line !== "string" || !line) continue;
+        if (line.startsWith("+") && !line.startsWith("+++")) adds++;
+        else if (line.startsWith("-") && !line.startsWith("---")) dels++;
+      }
+    }
+    return { adds, dels, created: false };
+  }
+  if (r.type === "create" || (typeof r.content === "string" && r.content)) {
+    // 无 patch 的全文写入：行数在 content 里（extractDiffStats 同款口径，尾空行剔除）
+    const content = typeof r.content === "string" ? r.content : "";
+    const lines = content ? content.split("\n") : [];
+    if (lines.length && lines[lines.length - 1] === "") lines.pop();
+    return { adds: lines.length, dels: 0, created: true };
+  }
+  return null;
+}
+
 // 从 Edit/Write 工具结果聚合增删行统计。gitDiff 仅在 git 仓库内存在（单个对象）；
 // 否则从 structuredPatch 的 diff 行数 +/-（structuredPatch 的行不含 +++/--- 头，防御排除）
 export function extractDiffStats(
