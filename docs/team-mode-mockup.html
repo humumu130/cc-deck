@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>cc-deck 团队模式 · 界面形态 v3</title>
+<title>cc-deck 团队模式 · 界面形态 v4</title>
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body {
@@ -54,8 +54,8 @@
   }
   .tabs button.on { color: #e6eaf2; border-bottom-color: #4f8cff; font-weight: 600; }
   .badge {
-    display: inline-block; min-width: 15px; height: 15px; border-radius: 8px; background: #ef5b5b;
-    color: #fff; font-size: 9.5px; line-height: 15px; text-align: center; padding: 0 4px;
+    display: inline-block; min-width: 15px; height: 15px; border-radius: 8px; background: #f0b45a;
+    color: #141926; font-size: 9.5px; font-weight: 600; line-height: 15px; text-align: center; padding: 0 4px;
     margin-left: 4px; vertical-align: 1px;
   }
 
@@ -81,7 +81,7 @@
   .staffbtns span { flex: 1; text-align: center; font-size: 12px; padding: 6px 0; border-radius: 8px; cursor: pointer; }
   .ok { background: #2f5dcc; }
   .adj { border: 1px solid #3a4258; color: #9db1d6; }
-  .ready { background: #12241c; border: 1px solid #1f6b4a; border-top-left-radius: 4px; }
+  .ready { background: #12241c; border: 1px solid #1f6b4a; border-top-left-radius: 4px; box-shadow: 0 0 0 3px rgba(31,107,74,.16); }
   .ready .rt { color: #34d399; font-weight: 600; }
   .ready .rd { color: #9fc7b4; font-size: 12px; margin-top: 2px; }
   .readybtns { display: flex; gap: 8px; margin-top: 8px; }
@@ -106,13 +106,13 @@
     display: flex; align-items: center; gap: 8px; padding: 7px 10px;
     background: #161a24; border: 1px solid #232836; border-radius: 10px; margin-bottom: 8px;
   }
-  .laneh .ln { font-size: 12px; font-weight: 600; color: #cbd5ec; }
+  .laneh .ln { font-size: 13px; font-weight: 600; color: #e2e8f5; letter-spacing: .3px; }
   .laneh .lc { font-size: 10.5px; color: #8b93a7; background: #232b3d; border-radius: 6px; padding: 1px 7px; }
   .laneh .arr { margin-left: auto; color: #6b7590; font-size: 11px; }
   .laneh .pin-top { font-size: 9.5px; color: #34d399; background: rgba(52,211,153,.12); border-radius: 6px; padding: 1px 6px; }
   .lane.go .laneh { background: #12241c; border-color: #1f6b4a; }
   .lane.go .laneh .ln { color: #34d399; }
-  .cline { font-size: 10.5px; color: #727c92; margin-top: 5px; }
+  .cline { font-size: 10.5px; color: #8a93a3; margin-top: 5px; }
   .cline .warn { color: #f0b45a; }
   .col { background: #12151d; border: 1px solid #1d2330; border-radius: 12px; padding: 8px; }
   .col h4 { font-size: 12px; color: #8b93a7; font-weight: 600; padding: 2px 4px 8px; }
@@ -144,12 +144,12 @@
   .ctxrow { display: flex; align-items: center; gap: 8px; margin-top: 7px; }
   .ctx { flex: 1; height: 5px; border-radius: 3px; background: #232b3d; overflow: hidden; }
   .ctx i { display: block; height: 100%; border-radius: 3px; background: linear-gradient(90deg,#4f8cff,#34d399); }
-  .ctxlabel { font-size: 9.5px; color: #6b7590; flex: 0 0 auto; }
-  .fresh { font-size: 9.5px; color: #6b7590; }
+  .ctxlabel { font-size: 10px; color: #7f8aa3; flex: 0 0 auto; }
+  .fresh { font-size: 10px; color: #7f8aa3; }
   .mact { display: flex; gap: 8px; margin-top: 8px; }
   .mact span { flex: 1; text-align: center; font-size: 11px; padding: 5px 0; border-radius: 8px; border: 1px solid #2a3040; color: #9db1d6; }
   .mact span.off { opacity: .4; }
-  .crewfoot { font-size: 10.5px; color: #6b7590; text-align: center; margin-top: 4px; line-height: 1.8; }
+  .crewfoot { font-size: 10.5px; color: #7f8aa3; text-align: center; margin-top: 4px; line-height: 1.8; }
 
   /* ---------- 图注 ---------- */
   .notes { flex: 1 1 300px; max-width: 440px; display: flex; flex-direction: column; gap: 14px; }
@@ -209,12 +209,12 @@
   .feed { overflow-y: auto; }
   .feed::-webkit-scrollbar { display: none; }
   .fi { display: flex; gap: 8px; font-size: 11px; color: #9aa3b8; padding: 5px 0; border-bottom: 1px dashed #1f2532; line-height: 1.5; }
-  .fi .t { color: #6b7590; flex: 0 0 32px; }
+  .fi .t { color: #7f8aa3; flex: 0 0 34px; font-variant-numeric: tabular-nums; }
   .fi .e { color: #7fb0ff; }
   .dtboard { flex: 1.25; min-width: 0; padding: 12px; overflow: hidden; display: flex; flex-direction: column; }
   .boardrow { display: flex; gap: 8px; flex: 1; min-height: 0; }
   .boardrow .col { flex: 1 1 0; }
-  .boardfoot { font-size: 10.5px; color: #6b7590; margin-top: 8px; }
+  .boardfoot { font-size: 10.5px; color: #7f8aa3; margin-top: 8px; }
 
   /* ---------- 网页端 ---------- */
   .webbody { padding: 12px 14px 16px; }
@@ -272,7 +272,7 @@
               <div class="bubble">收到。改动面分析：只碰手机端 updates.ts + 出包脚本，桌面无改动。建议编制——
                 <div class="staffcard">
                   <div class="m">📱 <b>手机端开发</b> <span class="role">只改 expo-app/**</span></div>
-                  <div class="m">✅ <b>验收</b> <span class="role">独立出包复核，全局唯一出包口</span></div>
+                  <div class="m">🧪 <b>验收</b> <span class="role">独立出包复核，全局唯一出包口</span></div>
                   <div class="m">👑 <b>Leader</b> <span class="role">指挥 + 发版（兼）</span></div>
                   <div class="staffbtns"><span class="ok">✓ 确认编制</span><span class="adj">调整</span></div>
                 </div>
@@ -325,9 +325,9 @@
 
           <div class="lane go">
             <div class="laneh"><span class="ln">📦 就绪待装机</span><span class="lc">1</span><span class="pin-top">置顶</span></div>
-            <div class="card hl">
+            <div class="card">
               <div class="ct">test.17 通道隔离</div>
-              <div class="cm"><span class="chip">✅验收</span><span class="tag-ready">◉ 等你装机看效果</span></div>
+              <div class="cm"><span class="chip">🧪验收</span><span class="tag-ready">◉ 等你装机看效果</span></div>
               <div class="cline">12MB · 出包 10:42 · 反馈一句话即闭环</div>
             </div>
           </div>
@@ -350,7 +350,7 @@
             <div class="laneh"><span class="ln">待验收</span><span class="lc">1</span><span class="arr">▾</span></div>
             <div class="card">
               <div class="ct">test.5 桌面包</div>
-              <div class="cm"><span class="chip">✅验收</span><span class="chip">独立复核中</span></div>
+              <div class="cm"><span class="chip">🧪验收</span><span class="chip">独立复核中</span></div>
               <div class="cline">出包复核 · 预计 10 分钟</div>
             </div>
           </div>
@@ -375,29 +375,26 @@
             <div class="member">
               <div class="mh"><div class="avatar">👑</div><div><div class="nm">Leader</div><div class="rl">指挥 + 发版（串行出包口）</div></div><span class="pill g">● 工作中</span></div>
               <div class="mb">当前：<b>出包 test.17</b> · 分支 <b>dev（主仓）</b></div>
-              <div class="ctxrow"><div class="ctx"><i style="width:41%"></i></div><span class="ctxlabel">上下文 41%</span></div>
-              <div class="ctxrow" style="margin-top:4px"><span class="fresh">心跳：刚刚 · 10:42 推送 latest-test.json</span></div>
+              <div class="ctxrow"><div class="ctx"><i style="width:41%"></i></div><span class="ctxlabel">上下文 41% · 刚刚活跃</span></div>
             </div>
             <div class="member">
               <div class="mh"><div class="avatar">📱</div><div><div class="nm">手机端开发</div><div class="rl">只改 expo-app/**</div></div><span class="pill g">● 工作中</span></div>
               <div class="mb">当前：<b>通道隔离 checkManifest 分流</b> · 分支 <b>wt/mobile-upd</b></div>
-              <div class="ctxrow"><div class="ctx"><i style="width:63%"></i></div><span class="ctxlabel">上下文 63%</span></div>
-              <div class="ctxrow" style="margin-top:4px"><span class="fresh">心跳：刚刚 · 10:30 提交 5b2e907</span></div>
-              <div class="mact"><span>▶ 旁听（M2+）</span><span>✉ 经 Leader 转达</span></div>
+              <div class="ctxrow"><div class="ctx"><i style="width:63%"></i></div><span class="ctxlabel">上下文 63% · 刚刚活跃</span></div>
+              <div class="mact"><span class="off">▶ 旁听（M2 开放）</span><span>✉ 转告 Leader</span></div>
             </div>
             <div class="member">
-              <div class="mh"><div class="avatar">🖥️</div><div><div class="nm">桌面端开发</div><div class="rl">web-console + desktop-tauri</div></div><span class="pill y">● 滞留 12 分</span></div>
+              <div class="mh"><div class="avatar">🖥️</div><div><div class="nm">桌面端开发</div><div class="rl">web-console + desktop-tauri</div></div><span class="pill y">⚠ 停了 12 分</span></div>
               <div class="mb">当前：<b>双气泡修复</b> · 分支 <b>fix/bubble</b></div>
-              <div class="ctxrow"><div class="ctx"><i style="width:78%"></i></div><span class="ctxlabel">上下文 78%</span></div>
-              <div class="ctxrow" style="margin-top:4px"><span class="fresh">心跳正常但日志停滞——已通知 Leader 处置</span></div>
-              <div class="mact"><span>▶ 旁听（M2+）</span><span>✉ 经 Leader 转达</span></div>
+              <div class="ctxrow"><div class="ctx"><i style="width:78%"></i></div><span class="ctxlabel">上下文 78% · 停了 12 分，已提醒 Leader</span></div>
+              <div class="mact"><span class="off">▶ 旁听（M2 开放）</span><span>✉ 转告 Leader</span></div>
             </div>
             <div class="member">
-              <div class="mh"><div class="avatar">✅</div><div><div class="nm">验收</div><div class="rl">独立复核 · 全局唯一出包口</div></div><span class="pill b">● 等待中</span></div>
-              <div class="mb">当前：<b>test.17 装机复核通过，等下一批</b></div>
-              <div class="ctxrow"><div class="ctx"><i style="width:22%"></i></div><span class="ctxlabel">上下文 22%</span></div>
+              <div class="mh"><div class="avatar">🧪</div><div><div class="nm">验收</div><div class="rl">独立复核 · 全局唯一出包口</div></div><span class="pill b">● 待命中</span></div>
+              <div class="mb">当前：<b>test.17 装机复核通过，等下一批</b>（无需你操作）</div>
+              <div class="ctxrow"><div class="ctx"><i style="width:22%"></i></div><span class="ctxlabel">上下文 22% · 待命中</span></div>
             </div>
-            <div class="crewfoot">状态三色：绿=干活中 · 黄=滞留（心跳在但日志停） · 红=失联<br>成员收纳在团队工作区内，不占普通会话列表</div>
+            <div class="crewfoot">状态三色：绿=干活中 · 黄=停了（心跳在但无进展，可点状态标处置） · 红=失联<br>成员收纳在团队工作区内，不占普通会话列表</div>
           </div>
         </section>
       </div>
@@ -437,10 +434,10 @@
           <div class="itm on plain">👑 Leader <span class="dot g"></span><span class="sub2">出包 test.17 · dev</span></div>
           <div class="itm plain" style="padding-left:20px">📱 手机端开发 <span class="dot g"></span><span class="sub2">通道隔离 · wt/mobile-upd</span></div>
           <div class="itm plain" style="padding-left:20px">🖥️ 桌面端开发 <span class="dot y"></span><span class="sub2">双气泡修复 · fix/bubble</span></div>
-          <div class="itm plain" style="padding-left:20px">✅ 验收 <span class="dot b"></span><span class="sub2">等下一批</span></div>
+          <div class="itm plain" style="padding-left:20px">🧪 验收 <span class="dot b"></span><span class="sub2">等下一批</span></div>
           <div class="grp" style="margin-top:10px">▸ 普通会话</div>
-          <div class="itm" style="color:#5d6678">relay 调试 <span class="dot b"></span></div>
-          <div class="itm" style="color:#5d6678">0.5.2 出包 <span class="dot b"></span></div>
+          <div class="itm" style="color:#7c8598">relay 调试 <span class="dot b"></span></div>
+          <div class="itm" style="color:#7c8598">0.5.2 出包 <span class="dot b"></span></div>
         </div>
         <div class="dtmid">
           <div class="dtchat">
@@ -485,11 +482,11 @@
             </div>
             <div class="col">
               <h4>待验收 <b>1</b></h4>
-              <div class="card"><div class="ct">test.18 出包</div><div class="cm"><span class="chip">✅</span></div></div>
+              <div class="card"><div class="ct">test.18 出包</div><div class="cm"><span class="chip">🧪</span></div></div>
             </div>
             <div class="col go">
               <h4>就绪待装机</h4>
-              <div class="card hl"><div class="ct">test.17</div><div class="cm"><span class="tag-ready">◉ 等装机</span></div></div>
+              <div class="card"><div class="ct">test.17</div><div class="cm"><span class="tag-ready">◉ 等装机</span></div></div>
             </div>
           </div>
           <div class="boardfoot">已完成 3 张收进归档 ↘ · 双击卡片看 handoff 全文</div>
@@ -518,7 +515,7 @@
         <div class="url">🔒 cc.humumu.online/console</div>
       </div>
       <div class="webbody">
-        <div class="wbanner">👁️ 观察窗 · 只读 —— 看板/成员/时间线全可见，可发消息给 Leader；装机确认与成员管理请在 App 内操作</div>
+        <div class="wbanner">👁️ 观察窗 · 只读 —— 看板 / 成员 / 时间线全可见 · 可发消息给 Leader · 装机确认与成员管理请在 App 操作</div>
         <div class="wbcols">
           <div class="col">
             <h4>待认领 <b>1</b></h4>
@@ -531,11 +528,11 @@
           </div>
           <div class="col">
             <h4>待验收 <b>1</b></h4>
-            <div class="card"><div class="ct">test.5 桌面包</div><div class="cm"><span class="chip">✅</span></div></div>
+            <div class="card"><div class="ct">test.5 桌面包</div><div class="cm"><span class="chip">🧪</span></div></div>
           </div>
           <div class="col go">
             <h4>就绪待装机</h4>
-            <div class="card hl"><div class="ct">test.17 通道隔离</div><div class="cm"><span class="tag-ready">◉ 等装机</span></div></div>
+            <div class="card"><div class="ct">test.17 通道隔离</div><div class="cm"><span class="tag-ready">◉ 等装机</span></div></div>
           </div>
           <div class="col">
             <h4>已完成</h4>
@@ -546,7 +543,7 @@
           <div class="mc"><span class="dot g"></span>👑 Leader · 出包中</div>
           <div class="mc"><span class="dot g"></span>📱 手机端 · 通道隔离</div>
           <div class="mc"><span class="dot g"></span>🖥️ 桌面端 · 双气泡</div>
-          <div class="mc"><span class="dot y"></span>✅ 验收 · 等下一批</div>
+          <div class="mc"><span class="dot y"></span>🧪 验收 · 等下一批</div>
         </div>
         <div class="webfeed">
           <h5>活动时间线</h5>
