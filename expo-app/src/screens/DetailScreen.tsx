@@ -47,11 +47,26 @@ const VOICE_ERR_NAMES: Record<number, string> = {
 // 权限模式循环切换（与 relay 的 ManagedPermissionMode 对齐）。四档含"跳过"：
 // skip 会话被误切后能切回来；skip = 免审全部命令与编辑，勾选信任本机环境再用
 const PERM_CYCLE = ["default", "acceptEdits", "plan", "bypassPermissions"] as const;
-const PERM_LABEL: Record<(typeof PERM_CYCLE)[number], string> = {
+type PermMode = (typeof PERM_CYCLE)[number];
+const PERM_LABEL: Record<PermMode, string> = {
   default: "标准",
   acceptEdits: "自动编辑",
   plan: "规划",
   bypassPermissions: "跳过",
+};
+// 胶囊短标签（#36 设计定案）：胶囊是"状态灯"只显两字短标签，全称与描述句只在
+// 四选一面板出现（面板是"说明书"）——「自动」替「自动编辑」为 R2 最坏档省 18px
+const PERM_SHORT: Record<PermMode, string> = {
+  default: "标准",
+  acceptEdits: "自动",
+  plan: "规划",
+  bypassPermissions: "跳过",
+};
+const PERM_DESC: Record<PermMode, string> = {
+  default: "每个命令与文件编辑都需确认",
+  acceptEdits: "文件编辑免审，命令仍需确认",
+  plan: "只读规划，先出方案再执行",
+  bypassPermissions: "所有命令与编辑免审直接执行",
 };
 
 function matchFilter(kind: string, f: ViewKind, tool?: string): boolean {
@@ -314,6 +329,87 @@ function ContentMenu({ text, onClose }: { text: string; onClose: () => void }) {
               <Text style={d.menuBtnPriT}>分享</Text>
             </Pressable>
           </View>
+        </Pressable>
+      </Pressable>
+    </Modal>
+  );
+}
+
+// #36 权限模式四选一面板（设计定案 docs/perm-mode-design.md §4.2/4.3）：替代原
+// 循环点击——恒定 2 击直达任意档、每档一句描述首次使用即懂；跳过档（bypassPermissions
+// 免审执行一切命令与编辑）首击只展开底部确认区、再击「确认跳过」才发命令，误触不可达。
+// 当前项选中靠整行 tintStrong 底 + 右缘 ✓（不靠游离符号）；已处于跳过档时该行直接收起
+// （现状即该危险态，无需再确认一次"保持"）
+function PermPanel({ cur, onPick, onClose }: { cur: PermMode; onPick: (m: PermMode) => void; onClose: () => void }) {
+  const { c } = useTheme();
+  const d = useThemeStyles(makeStyles);
+  const [arm, setArm] = useState(false);
+  const pick = (m: PermMode) => {
+    if (m === "bypassPermissions") {
+      if (cur === "bypassPermissions") { onClose(); return; } // 已在此档：收起即可
+      setArm(true); // 首击只武装，等底部「确认跳过」
+      return;
+    }
+    onPick(m);
+    onClose();
+  };
+  return (
+    <Modal visible transparent animationType="fade" onRequestClose={onClose}>
+      <Pressable style={d.permScrim} onPress={onClose}>
+        <Pressable style={d.permSheet} onPress={() => undefined}>
+          <View style={d.permGrab} />
+          <View style={d.permTitleRow}>
+            <Text style={d.permTitle}>权限模式</Text>
+            <Pressable hitSlop={8} onPress={onClose} accessibilityLabel="关闭权限模式面板">
+              <Text style={d.permX}>✕</Text>
+            </Pressable>
+          </View>
+          {PERM_CYCLE.map((m) => {
+            const danger = m === "bypassPermissions";
+            return (
+              <Pressable
+                key={m}
+                style={[d.permRow, cur === m && d.permRowCur, danger && arm && d.permRowArm]}
+                android_ripple={{ color: c.tintSoft, borderless: false, radius: 10 }}
+                onPress={() => pick(m)}
+                accessibilityLabel={`${PERM_LABEL[m]}：${PERM_DESC[m]}${cur === m ? "，当前" : ""}`}
+              >
+                <View style={{ flex: 1, minWidth: 0 }}>
+                  <View style={d.permNameRow}>
+                    <Text style={[d.permName, danger && { color: c.waiting }]}>{PERM_LABEL[m]}</Text>
+                    {danger ? (
+                      <View style={d.permBadge}>
+                        <Text style={d.permBadgeT}>危险</Text>
+                      </View>
+                    ) : null}
+                  </View>
+                  <Text style={d.permDesc}>{PERM_DESC[m]}</Text>
+                </View>
+                {cur === m ? <Text style={d.permCheck}>✓</Text> : null}
+              </Pressable>
+            );
+          })}
+          {arm ? (
+            <View style={d.permConfirm}>
+              <Text style={d.permConfirmT}>开启后所有命令与文件编辑将不经你确认直接执行，仅在你完全信任当前任务时使用</Text>
+              <View style={d.permConfirmBtns}>
+                <Pressable
+                  style={d.permCancel}
+                  android_ripple={{ color: withA(c.dim, 0.15), borderless: false, radius: 8 }}
+                  onPress={onClose}
+                >
+                  <Text style={d.permCancelT}>取消</Text>
+                </Pressable>
+                <Pressable
+                  style={d.permGo}
+                  android_ripple={{ color: "rgba(255,255,255,0.18)", borderless: false, radius: 8 }}
+                  onPress={() => { onPick("bypassPermissions"); onClose(); }}
+                >
+                  <Text style={d.permGoT}>确认跳过</Text>
+                </Pressable>
+              </View>
+            </View>
+          ) : null}
         </Pressable>
       </Pressable>
     </Modal>
@@ -591,8 +687,10 @@ export interface DetailBackHandle {
 }
 
 export default function DetailScreen({ sid, onBack, initialView, ref }: { sid: string; onBack: () => void; initialView?: ViewKind; ref?: Ref<DetailBackHandle> }) {
-  const { c } = useTheme();
+  const { c, mode } = useTheme();
   const d = useThemeStyles(makeStyles);
+  // #36 权限模式四选一面板：胶囊（Head R2）点开，替代循环切换
+  const [permPanel, setPermPanel] = useState(false);
   const snap = useRelay();
   const [input, setInput] = useState(() => drafts.get(sid) ?? "");
   const editInput = (v: string) => {
@@ -1079,6 +1177,8 @@ export default function DetailScreen({ sid, onBack, initialView, ref }: { sid: s
   // 历史托管会话：有 SDK 会话 id 就能 resume 复活（发消息即恢复），否则只读
   const resumable = !external && !!s.relay_session_id;
   const canCmd = snap.connected && (!s.historical || external || resumable);
+  // #36 权限模式：胶囊四态（幽灵/点亮/警示）+ 面板直选，替代 subFilterRow 循环 chip
+  const perm = (s.permission_mode ?? "default") as PermMode;
   const wr = s.waiting_request;
   // 审批横幅对称化：必须同时处于 WAITING 态（与列表卡/网页端同口径）——脱钩帧
   //（waiting_request 残留 + status 已翻走）不再渲染横幅，防"以为在等审批"的假等待
@@ -1221,18 +1321,62 @@ export default function DetailScreen({ sid, onBack, initialView, ref }: { sid: s
                 <Text style={[d.ctxPct, { color: c[contextLevel(ctxUsed, ctxLimit)] }]}>{ctxPct}%</Text>
               </View>
             ) : null}
-            <Pressable
-              style={[d.thinkToggle, { marginLeft: "auto" }, showThink && d.thinkToggleOn]}
-              android_ripple={{ color: c.tintSoft, borderless: false, radius: 8 }}
-              onPress={() => { thinkShown = !thinkShown; setShowThink(thinkShown); }}
-              hitSlop={6}
-              accessibilityLabel={showThink ? "思考过程显示，已开" : "思考过程显示，已关"}
-            >
-              <Text style={[d.thinkToggleT, showThink && d.thinkToggleTOn]}>思考</Text>
-              <View style={[d.thinkSwitch, showThink && d.thinkSwitchOn]}>
-                <View style={[d.thinkSwitchKnob, showThink && { alignSelf: "flex-end" }]} />
-              </View>
-            </Pressable>
+            {/* #36 设置簇（右锚）：权限胶囊 + 思考开关成组——同为会话级 14px 小胶囊，
+                形态语言一致。权限胶囊是"状态灯"：标准=幽灵盾标（低噪声保锚点）、
+                自动/规划=品牌蓝点亮+两字短标签、跳过=waiting 红警示+盾内感叹号
+                （危险档必须 ambient 常显视口顶——读转录/切 tab 都看得见） */}
+            <View style={d.permCluster}>
+              {!external && canCmd && !s.historical ? (
+                <Pressable
+                  style={[
+                    d.permPill,
+                    perm === "default"
+                      ? [d.permPillGhost, { borderColor: mode === "dark" ? "rgba(125,165,220,0.22)" : c.line }]
+                      : perm === "bypassPermissions" ? d.permPillWarn : d.permPillLit,
+                  ]}
+                  android_ripple={{ color: c.tintSoft, borderless: false, radius: 8 }}
+                  onPress={() => setPermPanel(true)}
+                  hitSlop={{ top: 8, bottom: 8, left: 6, right: 6 }}
+                  accessibilityLabel={`权限模式：${PERM_LABEL[perm]}，点按选择`}
+                >
+                  <Svg
+                    width={10}
+                    height={10}
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke={perm === "default" ? c.dim : perm === "bypassPermissions" ? c.waiting : c.brandA}
+                    strokeWidth={2.4}
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  >
+                    <Path d="M12 3l7 3v5c0 4.5-3 7.5-7 9-4-1.5-7-4.5-7-9V6l7-3z" />
+                    {perm === "bypassPermissions" ? (
+                      <>
+                        <Path d="M12 8.5v3.5" />
+                        <Path d="M12 15.8h0.01" strokeWidth={2.6} />
+                      </>
+                    ) : null}
+                  </Svg>
+                  {perm !== "default" ? (
+                    <Text style={[d.permT, perm === "bypassPermissions" && d.permTWarn]}>
+                      {PERM_SHORT[perm]}
+                    </Text>
+                  ) : null}
+                </Pressable>
+              ) : null}
+              <Pressable
+                style={[d.thinkToggle, showThink && d.thinkToggleOn]}
+                android_ripple={{ color: c.tintSoft, borderless: false, radius: 8 }}
+                onPress={() => { thinkShown = !thinkShown; setShowThink(thinkShown); }}
+                hitSlop={6}
+                accessibilityLabel={showThink ? "思考过程显示，已开" : "思考过程显示，已关"}
+              >
+                <Text style={[d.thinkToggleT, showThink && d.thinkToggleTOn]}>思考</Text>
+                <View style={[d.thinkSwitch, showThink && d.thinkSwitchOn]}>
+                  <View style={[d.thinkSwitchKnob, showThink && { alignSelf: "flex-end" }]} />
+                </View>
+              </Pressable>
+            </View>
           </View>
         </View>
       </View>
@@ -1270,21 +1414,6 @@ export default function DetailScreen({ sid, onBack, initialView, ref }: { sid: s
               <Animated.View style={[d.tabInd, { width: tabW, transform: [{ translateX: indX }, { scaleX: indS }] }]} />
             </View>
           </View>
-          {!external && canCmd && !s.historical ? (
-          <View style={d.subFilterRow}>
-            <Pressable
-              style={[d.filterChip, (s.permission_mode ?? "default") !== "default" && d.filterChipOn]}
-              android_ripple={{ color: c.tintSoft, borderless: false, radius: 12 }}
-              onPress={() => {
-                const cur = s.permission_mode ?? "default";
-                const next = PERM_CYCLE[(PERM_CYCLE.indexOf(cur) + 1) % PERM_CYCLE.length];
-                store.send("COMMAND_PERM", { session_id: sid, mode: next });
-              }}
-            >
-              <Text style={[d.filterT, (s.permission_mode ?? "default") !== "default" && d.filterTOn]}>权限·{PERM_LABEL[s.permission_mode ?? "default"]}</Text>
-            </Pressable>
-          </View>
-          ) : null}
       </View>
       ) : null}
 
@@ -1759,6 +1888,14 @@ export default function DetailScreen({ sid, onBack, initialView, ref }: { sid: s
         }}
       />
 
+      {permPanel ? (
+        <PermPanel
+          cur={perm}
+          onPick={(m) => store.send("COMMAND_PERM", { session_id: sid, mode: m })}
+          onClose={() => setPermPanel(false)}
+        />
+      ) : null}
+
       {menuText ? <ContentMenu text={menuText} onClose={() => setMenuText(null)} /> : null}
       {taskPop != null ? (
         <TaskPop
@@ -1897,17 +2034,67 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
   tabInd: { position: "absolute", left: TAB_PAD_L, bottom: 0, height: 2.5, borderRadius: 1.5, backgroundColor: c.brandA },
   tabT: { fontSize: 12, color: c.dim },
   tabTOn: { color: c.text, fontWeight: "600" },
-  filterChip: {
-    paddingHorizontal: 10, paddingVertical: 4, borderRadius: 10,
-    backgroundColor: c.tintSoft, borderWidth: 1, borderColor: c.line,
+  // #36 权限胶囊（R2 设置簇左位，思考开关右侧成组）：h14/r7 与思考开关同形态语言
+  permCluster: { marginLeft: "auto", flexDirection: "row", alignItems: "center", gap: 6, flexShrink: 0 },
+  permPill: {
+    height: 14, borderRadius: 7, borderWidth: 1,
+    flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 4,
   },
-  filterChipOn: { backgroundColor: c.tintStrong, borderColor: withA(c.brandA, 0.4) },
-  // tab 第二行：权限开关（思考开关已移头部）
-  subFilterRow: { flexDirection: "row", gap: 7, marginBottom: 10 },
+  // 幽灵态（标准）：20px 定宽只放盾标（描边色按明暗在 JSX 注入——深色 line 太弱需提亮）
+  permPillGhost: { width: 20, backgroundColor: c.tintSoft },
+  permPillLit: { paddingHorizontal: 6, backgroundColor: c.tintStrong, borderColor: withA(c.brandA, 0.4) },
+  // 警示态（跳过）：红只到 tint+描边+文字，不用实底——14px 实底会变整行最重元素压过标题
+  permPillWarn: { paddingHorizontal: 6, backgroundColor: withA(c.waiting, 0.1), borderColor: withA(c.waiting, 0.45) },
+  permT: { fontSize: 9, lineHeight: 10, color: c.brandA, fontWeight: "600" },
+  permTWarn: { color: c.waiting },
+  // #36 四选一底部面板
+  permScrim: { flex: 1, justifyContent: "flex-end", backgroundColor: "rgba(8,12,18,0.38)" },
+  permSheet: {
+    backgroundColor: c.panel, borderWidth: 1, borderColor: c.line,
+    borderTopLeftRadius: 14, borderTopRightRadius: 14,
+    paddingHorizontal: 14, paddingTop: 6, paddingBottom: 14,
+  },
+  permGrab: { alignSelf: "center", width: 36, height: 4, borderRadius: 2, backgroundColor: c.line, marginTop: 4, marginBottom: 8 },
+  permTitleRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 4 },
+  permTitle: { color: c.text, fontSize: 13, fontWeight: "600" },
+  permX: { color: c.faint, fontSize: 14, lineHeight: 18 },
+  permRow: {
+    flexDirection: "row", alignItems: "center", gap: 8,
+    paddingVertical: 9, paddingHorizontal: 8, borderRadius: 10, overflow: "hidden",
+  },
+  // 当前项：整行选中底 + 右缘 ✓（不靠游离符号——设计自审结论）
+  permRowCur: { backgroundColor: c.tintStrong },
+  // 跳过行武装态（首击待确认）：红 tint 选中，视觉从属底部确认区
+  permRowArm: { backgroundColor: withA(c.waiting, 0.08) },
+  permNameRow: { flexDirection: "row", alignItems: "center", gap: 6 },
+  permName: { color: c.text, fontSize: 13, fontWeight: "600", lineHeight: 17 },
+  permBadge: {
+    height: 15, paddingHorizontal: 4, borderRadius: 4, alignItems: "center", justifyContent: "center",
+    backgroundColor: withA(c.waiting, 0.1), borderWidth: 1, borderColor: withA(c.waiting, 0.45),
+  },
+  permBadgeT: { color: c.waiting, fontSize: 9, lineHeight: 11, fontWeight: "600" },
+  permDesc: { color: c.dim, fontSize: 10, lineHeight: 13, marginTop: 1 },
+  permCheck: { color: c.brandA, fontSize: 13, fontWeight: "700" },
+  // 危险确认区：左缘 3px 红从属条（视觉上从属跳过行）+ 整宽双按钮
+  permConfirm: {
+    backgroundColor: withA(c.waiting, 0.06), borderWidth: 1, borderColor: withA(c.waiting, 0.3),
+    borderLeftWidth: 3, borderLeftColor: withA(c.waiting, 0.55),
+    borderRadius: 10, padding: 10, marginTop: 6,
+  },
+  permConfirmT: { color: c.waiting, fontSize: 10.5, lineHeight: 14 },
+  permConfirmBtns: { flexDirection: "row", gap: 8, marginTop: 8 },
+  permCancel: {
+    flex: 1, height: 32, borderRadius: 8, alignItems: "center", justifyContent: "center",
+    backgroundColor: c.panel2, borderWidth: 1, borderColor: c.line, overflow: "hidden",
+  },
+  permCancelT: { color: c.dim, fontSize: 12, fontWeight: "600" },
+  permGo: {
+    flex: 1, height: 32, borderRadius: 8, alignItems: "center", justifyContent: "center",
+    backgroundColor: c.waiting, overflow: "hidden",
+  },
+  permGoT: { color: "#fff", fontSize: 12, fontWeight: "600" },
   // 任务/定时/统计视图容器
   viewCol: { flex: 1 },
-  filterT: { fontSize: 11, color: c.dim },
-  filterTOn: { color: c.brandA, fontWeight: "600" },
   // todo 视图头：标题 + 进度条 + 手动刷新（原折叠面板头部去 caret）
   todoHead: { flexDirection: "row", alignItems: "center", gap: 9, paddingVertical: 4, paddingHorizontal: 14 },
   todoHeadT: { color: c.dim, fontSize: 11.5, fontWeight: "600" },

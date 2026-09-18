@@ -1,0 +1,436 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=360">
+<title>权限模式切换重设计 · 手机端 mockup（360dp）</title>
+<style>
+  /* ===== 页面画布：深底承托 360dp 手机帧 ===== */
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: #23272E; font-family: -apple-system, "PingFang SC", "Helvetica Neue", "Noto Sans SC", sans-serif; width: 360px; margin: 0 auto; padding-bottom: 48px; -webkit-font-smoothing: antialiased; }
+  .cap { color: #C7CDD6; font-size: 11px; line-height: 15px; padding: 16px 12px 7px; }
+  .cap b { color: #FFD37A; font-weight: 600; }
+  .cap span { color: #7C8492; }
+
+  /* ===== 浅色 token（expo-app/src/theme.ts LIGHT，逐值对齐） ===== */
+  .phone {
+    --bg: #E9EAE4; --panel: #F2F3EE; --panel2: #E2E4DC;
+    --line: rgba(52,58,50,0.13); --text: #29302A; --dim: #5D665C; --faint: #8B938A;
+    --brandA: #2F7FE8; --waiting: #DC2626; --done: #047857;
+    --tintSoft: rgba(47,127,232,0.06); --tintStrong: rgba(47,127,232,0.13);
+    background: var(--bg); width: 360px; overflow: hidden;
+  }
+  /* 深色 token（DARK） */
+  .phone.dark {
+    --bg: #050B12; --panel: #0B1622; --panel2: #101F30;
+    --line: rgba(125,165,220,0.10); --text: #E8F0FA; --dim: #7B93AE; --faint: #4A5F78;
+    --brandA: #4D9FFF; --waiting: #F0524F; --done: #2BD98F;
+    --tintSoft: rgba(125,165,220,0.08); --tintStrong: rgba(93,134,245,0.16);
+  }
+
+  /* ===== Head（复刻 DetailScreen d.head：px12 pv6，R1 返回+标题，R2 元信息） ===== */
+  .head { display: flex; align-items: center; gap: 8px; padding: 6px 12px; border-bottom: 1px solid var(--line); }
+  .back { width: 26px; height: 26px; border-radius: 8px; background: var(--tintSoft); display: flex; align-items: center; justify-content: center; flex: none; }
+  .hcol { flex: 1; min-width: 0; }
+  .title { font-size: 15px; font-weight: 600; color: var(--text); line-height: 20px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .meta { display: flex; align-items: center; margin-top: 3px; }
+  .sub { font-size: 10px; color: var(--dim); line-height: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; flex-shrink: 1; }
+  .elapsed { margin-left: 6px; font-size: 10px; color: var(--dim); font-variant-numeric: tabular-nums; flex: none; }
+  .ctx { display: flex; align-items: center; gap: 4px; margin-left: 8px; flex: none; }
+  .ctx .lb { font-size: 9.5px; font-weight: 600; color: var(--faint); }
+  .ctx .bar { width: 30px; height: 3px; border-radius: 1.5px; background: var(--tintSoft); overflow: hidden; }
+  .ctx .bar i { display: block; width: 42%; height: 3px; border-radius: 1.5px; background: var(--done); }
+  .ctx .pc { font-size: 9.5px; color: var(--done); font-variant-numeric: tabular-nums; }
+
+  /* R2 右锚设置簇：[权限胶囊] 思考开关（marginLeft:auto 归簇） */
+  .cluster { margin-left: auto; display: flex; align-items: center; gap: 6px; flex: none; }
+  .think { height: 14px; border-radius: 7px; padding: 0 6px; background: var(--tintSoft); border: 1px solid transparent; display: flex; align-items: center; gap: 4px; flex: none; }
+  .think .t { font-size: 9px; color: var(--dim); line-height: 10px; }
+  .think .sw { width: 20px; height: 10px; border-radius: 5px; background: var(--line); position: relative; flex: none; }
+  .think .sw i { position: absolute; left: 1px; top: 1px; width: 8px; height: 8px; border-radius: 4px; background: #fff; }
+
+  /* ===== 推荐方案：权限胶囊（与思考开关同形态语言：h14 r7 tintSoft 底） ===== */
+  .perm { height: 14px; border-radius: 7px; display: flex; align-items: center; gap: 4px; padding: 0 6px; flex: none; }
+  .perm svg { width: 10px; height: 10px; flex: none; }
+  .perm .t { font-size: 9px; line-height: 10px; font-weight: 600; white-space: nowrap; }
+  /* 幽灵态：与 filterChip 同口径补 1px line 描边，保住"可点控件"轮廓（初审 P0-1） */
+  .perm.ghost { width: 20px; padding: 0; justify-content: center; background: var(--tintSoft); border: 1px solid var(--line); }
+  .perm.ghost svg { color: var(--dim); }
+  /* 深色下幽灵态描边提亮一档（复审建议：30%→~22% 蓝灰，保轮廓） */
+  .dark .perm.ghost { border-color: rgba(125,165,220,0.22); }
+  .perm.info { background: var(--tintStrong); border: 1px solid rgba(47,127,232,0.4); }
+  .perm.info svg, .perm.info .t { color: #2F7FE8; }
+  .dark .perm.info { border-color: rgba(77,159,255,0.4); }
+  .dark .perm.info svg, .dark .perm.info .t { color: #4D9FFF; }
+  .perm.warn { background: rgba(220,38,38,0.10); border: 1px solid rgba(220,38,38,0.45); }
+  .perm.warn svg, .perm.warn .t { color: #DC2626; }
+  .dark .perm.warn { background: rgba(240,82,79,0.12); border-color: rgba(240,82,79,0.5); }
+  .dark .perm.warn svg, .dark .perm.warn .t { color: #F0524F; }
+
+  /* ===== 固定工具区（fixedBar：px14 pt5） ===== */
+  .fixed { padding: 5px 14px 0; border-bottom: 1px solid var(--line); }
+  .tabs { display: flex; position: relative; padding-left: 4px; gap: 6px; margin-bottom: 10px; }
+  .tab { flex: 1; text-align: center; padding: 4px 0 6px; font-size: 12px; color: var(--dim); }
+  .tab.on { color: var(--text); font-weight: 600; }
+  .ind { position: absolute; left: 4px; bottom: 0; width: 61px; height: 2.5px; border-radius: 1.5px; background: var(--brandA); }
+  /* 现状：subFilterRow 独占行（本设计将整行删除） */
+  .subrow { display: flex; gap: 7px; margin-bottom: 10px; }
+  .chip { padding: 4px 10px; border-radius: 10px; background: var(--tintSoft); border: 1px solid var(--line); font-size: 11px; color: var(--dim); width: max-content; }
+  .chip.on { background: var(--tintStrong); border-color: rgba(47,127,232,0.4); color: #2F7FE8; font-weight: 600; }
+
+  /* ===== 对话流填充（语境占位） ===== */
+  .body { padding: 2px 14px 14px; }
+  .card { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 8px 11px; font-size: 12.5px; color: var(--text); line-height: 17px; margin-top: 10px; }
+  .pend { margin: 8px 0 0 auto; width: max-content; max-width: 86%; background: var(--tintSoft); border: 1px solid var(--line); border-radius: 12px; border-top-right-radius: 4px; padding: 7px 10px; font-size: 12.5px; color: var(--dim); }
+  .gone { margin: 10px 14px 14px; padding: 5px 8px; border: 1px dashed rgba(47,127,232,0.35); border-radius: 8px; font-size: 10px; color: var(--brandA); background: rgba(47,127,232,0.04); }
+
+  /* ===== 四选一底部面板 ===== */
+  .stage { position: relative; }
+  .scrim { position: absolute; inset: 0; background: rgba(8,12,18,0.38); }
+  .sheet { position: absolute; left: 0; right: 0; bottom: 0; background: var(--panel); border: 1px solid var(--line); border-bottom: none; border-radius: 14px 14px 0 0; padding: 6px 14px 14px; }
+  .grab { width: 36px; height: 4px; border-radius: 2px; background: var(--line); margin: 4px auto 10px; }
+  .shead { display: flex; align-items: center; margin-bottom: 2px; }
+  .shead .st { font-size: 13px; font-weight: 600; color: var(--text); }
+  .shead .x { margin-left: auto; font-size: 13px; color: var(--faint); padding: 4px 2px; }
+  .srow { display: flex; align-items: center; gap: 8px; padding: 9px 8px; border-radius: 10px; }
+  .srow + .srow { margin-top: 2px; }
+  /* 当前项：整行 tint 底 + 右缘 ✓（初审 P1-7：选中态靠底色而非游离符号） */
+  .srow.cur { background: var(--tintStrong); }
+  .srow .nm { font-size: 13px; font-weight: 600; color: var(--text); white-space: nowrap; }
+  .srow .ds { font-size: 10px; color: var(--dim); margin-top: 2px; }
+  .srow .col { min-width: 0; }
+  .srow .chk { margin-left: auto; color: var(--brandA); font-size: 13px; font-weight: 700; flex: none; }
+  .badge { font-size: 9px; line-height: 12px; padding: 0 4px; border-radius: 4px; background: rgba(220,38,38,0.10); border: 1px solid rgba(220,38,38,0.45); color: #DC2626; margin-left: 6px; font-weight: 600; }
+  .dark .badge { background: rgba(240,82,79,0.12); border-color: rgba(240,82,79,0.5); color: #F0524F; }
+  /* 跳过二次确认：面板底部整宽区（初审 P0-2：不再挤在选项行内），文案完整两行 + 双钮各半 */
+  .confirm { background: rgba(220,38,38,0.06); border: 1px solid rgba(220,38,38,0.3); border-left: 3px solid rgba(220,38,38,0.55); border-radius: 10px; padding: 10px 10px 8px; margin-top: 6px; }
+  .confirm .ct { font-size: 10.5px; line-height: 14px; color: #DC2626; }
+  .confirm .btns { display: flex; gap: 8px; margin-top: 8px; }
+  .confirm .btns > div { flex: 1; height: 32px; border-radius: 8px; display: flex; align-items: center; justify-content: center; font-size: 12px; }
+  .bCancel { background: var(--panel2); border: 1px solid var(--line); color: var(--dim); }
+  .bDanger { background: #DC2626; border: 1px solid #DC2626; font-weight: 600; color: #fff; }
+</style>
+</head>
+<body>
+
+<!-- ═══════════ ① 现状 · 默认档 ═══════════ -->
+<div class="cap"><b>① 现状</b> — 权限·标准（默认档）<span>｜tab 行下独占一行 subFilterRow，占竖向 ~36px，孤零突兀</span></div>
+<div class="phone">
+  <div class="head">
+    <div class="back"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#5D665C" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg></div>
+    <div class="hcol">
+      <div class="title">重构登录模块</div>
+      <div class="meta">
+        <div class="sub">claude·xdd-mac</div>
+        <div class="elapsed">18:42</div>
+        <div class="ctx"><span class="lb">ctx</span><span class="bar"><i></i></span><span class="pc">42%</span></div>
+        <div class="cluster">
+          <div class="think"><span class="t">思考</span><span class="sw"><i></i></span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="fixed">
+    <div class="tabs">
+      <div class="tab on">消息</div><div class="tab">任务</div><div class="tab">全部</div><div class="tab">定时</div><div class="tab">统计</div>
+      <div class="ind"></div>
+    </div>
+    <div class="subrow"><div class="chip">权限·标准</div></div>
+  </div>
+  <div class="body">
+    <div class="card">已定位到登录页 token 刷新竞态：refresh 与原请求并发时…</div>
+    <div class="pend">把刷新逻辑改成单飞，完成后重放原请求</div>
+  </div>
+</div>
+
+<!-- ═══════════ ② 现状 · 跳过档 ═══════════ -->
+<div class="cap"><b>② 现状</b> — 权限·跳过<span>｜点亮为品牌蓝：危险档无任何警示区分，且循环切换一步误触即达</span></div>
+<div class="phone">
+  <div class="head">
+    <div class="back"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#5D665C" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg></div>
+    <div class="hcol">
+      <div class="title">重构登录模块</div>
+      <div class="meta">
+        <div class="sub">claude·xdd-mac</div>
+        <div class="elapsed">18:42</div>
+        <div class="ctx"><span class="lb">ctx</span><span class="bar"><i></i></span><span class="pc">42%</span></div>
+        <div class="cluster">
+          <div class="think"><span class="t">思考</span><span class="sw"><i></i></span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="fixed">
+    <div class="tabs">
+      <div class="tab on">消息</div><div class="tab">任务</div><div class="tab">全部</div><div class="tab">定时</div><div class="tab">统计</div>
+      <div class="ind"></div>
+    </div>
+    <div class="subrow"><div class="chip on">权限·跳过</div></div>
+  </div>
+  <div class="body">
+    <div class="card">已定位到登录页 token 刷新竞态：refresh 与原请求并发时…</div>
+    <div class="pend">把刷新逻辑改成单飞，完成后重放原请求</div>
+  </div>
+</div>
+
+<!-- ═══════════ ③ 推荐方案 · 默认档（幽灵态） ═══════════ -->
+<div class="cap"><b>③ 方案A（推荐）</b> — 默认档·幽灵态<span>｜R2 右簇 [盾][思考]，subFilterRow 整行删除，内容上移 36px</span></div>
+<div class="phone">
+  <div class="head">
+    <div class="back"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#5D665C" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg></div>
+    <div class="hcol">
+      <div class="title">重构登录模块</div>
+      <div class="meta">
+        <div class="sub">claude·xdd-mac</div>
+        <div class="elapsed">18:42</div>
+        <div class="ctx"><span class="lb">ctx</span><span class="bar"><i></i></span><span class="pc">42%</span></div>
+        <div class="cluster">
+          <div class="perm ghost" aria-label="权限模式：标准">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l7 3v5c0 4.5-3 7.5-7 9-4-1.5-7-4.5-7-9V6l7-3z"/></svg>
+          </div>
+          <div class="think"><span class="t">思考</span><span class="sw"><i></i></span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="fixed">
+    <div class="tabs">
+      <div class="tab on">消息</div><div class="tab">任务</div><div class="tab">全部</div><div class="tab">定时</div><div class="tab">统计</div>
+      <div class="ind"></div>
+    </div>
+  </div>
+  <div class="gone">↑ 原「权限」独占行已删除，转录内容整体上移</div>
+  <div class="body">
+    <div class="card">已定位到登录页 token 刷新竞态：refresh 与原请求并发时…</div>
+    <div class="pend">把刷新逻辑改成单飞，完成后重放原请求</div>
+  </div>
+</div>
+
+<!-- ═══════════ ④ 推荐方案 · 自动编辑 ═══════════ -->
+<div class="cap"><b>④ 方案A</b> — 自动编辑·点亮态<span>｜盾标+短标签「自动」（全称见面板），品牌蓝 tint，源名不被挤出</span></div>
+<div class="phone">
+  <div class="head">
+    <div class="back"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#5D665C" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg></div>
+    <div class="hcol">
+      <div class="title">重构登录模块</div>
+      <div class="meta">
+        <div class="sub">claude·xdd-mac</div>
+        <div class="elapsed">18:42</div>
+        <div class="ctx"><span class="lb">ctx</span><span class="bar"><i></i></span><span class="pc">42%</span></div>
+        <div class="cluster">
+          <div class="perm info" aria-label="权限模式：自动编辑">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l7 3v5c0 4.5-3 7.5-7 9-4-1.5-7-4.5-7-9V6l7-3z"/></svg>
+            <span class="t">自动</span>
+          </div>
+          <div class="think"><span class="t">思考</span><span class="sw"><i></i></span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="fixed">
+    <div class="tabs">
+      <div class="tab on">消息</div><div class="tab">任务</div><div class="tab">全部</div><div class="tab">定时</div><div class="tab">统计</div>
+      <div class="ind"></div>
+    </div>
+  </div>
+  <div class="body">
+    <div class="card">已定位到登录页 token 刷新竞态：refresh 与原请求并发时…</div>
+    <div class="pend">把刷新逻辑改成单飞，完成后重放原请求</div>
+  </div>
+</div>
+
+<!-- ═══════════ ⑤ 推荐方案 · 跳过（警示态） ═══════════ -->
+<div class="cap"><b>⑤ 方案A</b> — 跳过·警示态<span>｜waiting 红描边+红字，常显于视口顶部：免审运行全程可视</span></div>
+<div class="phone">
+  <div class="head">
+    <div class="back"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#5D665C" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg></div>
+    <div class="hcol">
+      <div class="title">重构登录模块</div>
+      <div class="meta">
+        <div class="sub">claude·xd…</div>
+        <div class="elapsed">18:42</div>
+        <div class="ctx"><span class="lb">ctx</span><span class="bar"><i></i></span><span class="pc">42%</span></div>
+        <div class="cluster">
+          <div class="perm warn" aria-label="权限模式：跳过">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l7 3v5c0 4.5-3 7.5-7 9-4-1.5-7-4.5-7-9V6l7-3z"/><path d="M12 9v4"/><circle cx="12" cy="16.2" r="0.4" fill="currentColor"/></svg>
+            <span class="t">跳过</span>
+          </div>
+          <div class="think"><span class="t">思考</span><span class="sw"><i></i></span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="fixed">
+    <div class="tabs">
+      <div class="tab on">消息</div><div class="tab">任务</div><div class="tab">全部</div><div class="tab">定时</div><div class="tab">统计</div>
+      <div class="ind"></div>
+    </div>
+  </div>
+  <div class="body">
+    <div class="card">已定位到登录页 token 刷新竞态：refresh 与原请求并发时…</div>
+    <div class="pend">把刷新逻辑改成单飞，完成后重放原请求</div>
+  </div>
+</div>
+
+<!-- ═══════════ ⑥ 推荐方案 · 四选一面板 ═══════════ -->
+<div class="cap"><b>⑥ 方案A</b> — 点按弹出四选一面板<span>｜替代盲循环：任意档 2 击直达，语义全程可见</span></div>
+<div class="phone">
+  <div class="stage" style="height: 460px;">
+    <div class="head">
+      <div class="back"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#5D665C" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg></div>
+      <div class="hcol">
+        <div class="title">重构登录模块</div>
+        <div class="meta">
+          <div class="sub">claude·xdd-mac</div>
+          <div class="elapsed">18:42</div>
+          <div class="ctx"><span class="lb">ctx</span><span class="bar"><i></i></span><span class="pc">42%</span></div>
+          <div class="cluster">
+            <div class="perm ghost">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l7 3v5c0 4.5-3 7.5-7 9-4-1.5-7-4.5-7-9V6l7-3z"/></svg>
+            </div>
+            <div class="think"><span class="t">思考</span><span class="sw"><i></i></span></div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="fixed">
+      <div class="tabs">
+        <div class="tab on">消息</div><div class="tab">任务</div><div class="tab">全部</div><div class="tab">定时</div><div class="tab">统计</div>
+        <div class="ind"></div>
+      </div>
+    </div>
+    <div class="body">
+      <div class="card">已定位到登录页 token 刷新竞态：refresh 与原请求并发时…</div>
+      <div class="pend">把刷新逻辑改成单飞，完成后重放原请求</div>
+    </div>
+    <div class="scrim"></div>
+    <div class="sheet">
+      <div class="grab"></div>
+      <div class="shead"><span class="st">权限模式</span><span class="x">✕</span></div>
+      <div class="srow cur">
+        <div class="col"><div class="nm">标准</div><div class="ds">每个命令与文件编辑都需确认</div></div>
+        <span class="chk">✓</span>
+      </div>
+      <div class="srow">
+        <div class="col"><div class="nm">自动编辑</div><div class="ds">文件编辑免审，命令仍需确认</div></div>
+      </div>
+      <div class="srow">
+        <div class="col"><div class="nm">规划</div><div class="ds">只读规划，先出方案再执行</div></div>
+      </div>
+      <div class="srow">
+        <div class="col"><div class="nm" style="color:#DC2626;">跳过<span class="badge">危险</span></div><div class="ds">所有命令与编辑免审直接执行</div></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════ ⑦ 推荐方案 · 跳过二次确认 ═══════════ -->
+<div class="cap"><b>⑦ 方案A</b> — 跳过档行内二次确认<span>｜首击展开红条，再击「确认跳过」才下发，误触不可达</span></div>
+<div class="phone">
+  <div class="stage" style="height: 460px;">
+    <div class="head">
+      <div class="back"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#5D665C" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg></div>
+      <div class="hcol">
+        <div class="title">重构登录模块</div>
+        <div class="meta">
+          <div class="sub">claude·xdd-mac</div>
+          <div class="elapsed">18:42</div>
+          <div class="ctx"><span class="lb">ctx</span><span class="bar"><i></i></span><span class="pc">42%</span></div>
+          <div class="cluster">
+            <div class="perm ghost">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l7 3v5c0 4.5-3 7.5-7 9-4-1.5-7-4.5-7-9V6l7-3z"/></svg>
+            </div>
+            <div class="think"><span class="t">思考</span><span class="sw"><i></i></span></div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="fixed">
+      <div class="tabs">
+        <div class="tab on">消息</div><div class="tab">任务</div><div class="tab">全部</div><div class="tab">定时</div><div class="tab">统计</div>
+        <div class="ind"></div>
+      </div>
+    </div>
+    <div class="body">
+      <div class="card">已定位到登录页 token 刷新竞态：refresh 与原请求并发时…</div>
+      <div class="pend">把刷新逻辑改成单飞，完成后重放原请求</div>
+    </div>
+    <div class="scrim"></div>
+    <div class="sheet">
+      <div class="grab"></div>
+      <div class="shead"><span class="st">权限模式</span><span class="x">✕</span></div>
+      <div class="srow">
+        <div class="col"><div class="nm">标准</div><div class="ds">每个命令与文件编辑都需确认</div></div>
+      </div>
+      <div class="srow">
+        <div class="col"><div class="nm">自动编辑</div><div class="ds">文件编辑免审，命令仍需确认</div></div>
+      </div>
+      <div class="srow">
+        <div class="col"><div class="nm">规划</div><div class="ds">只读规划，先出方案再执行</div></div>
+      </div>
+      <div style="padding: 0 2px;">
+        <div class="srow" style="background: rgba(220,38,38,0.06); border: 1px solid rgba(220,38,38,0.3);">
+          <div class="col"><div class="nm" style="color:#DC2626;">跳过<span class="badge">危险</span></div><div class="ds">所有命令与编辑免审直接执行</div></div>
+        </div>
+        <div class="confirm">
+          <div class="ct">开启后所有命令与文件编辑将不经你确认直接执行，仅在你完全信任当前任务时使用</div>
+          <div class="btns"><div class="bCancel">取消</div><div class="bDanger">确认跳过</div></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════ ⑧ 深色版 ═══════════ -->
+<div class="cap"><b>⑧ 深色版</b> — 幽灵态 & 跳过警示态<span>｜同规格映射 DARK token</span></div>
+<div class="phone dark">
+  <div style="height: 18px;"></div>
+  <div class="head">
+    <div class="back"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#7B93AE" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg></div>
+    <div class="hcol">
+      <div class="title">重构登录模块 · 幽灵态</div>
+      <div class="meta">
+        <div class="sub">claude·xdd-mac</div>
+        <div class="elapsed">18:42</div>
+        <div class="ctx"><span class="lb">ctx</span><span class="bar"><i></i></span><span class="pc">42%</span></div>
+        <div class="cluster">
+          <div class="perm ghost">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l7 3v5c0 4.5-3 7.5-7 9-4-1.5-7-4.5-7-9V6l7-3z"/></svg>
+          </div>
+          <div class="think"><span class="t">思考</span><span class="sw"><i></i></span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="head">
+    <div class="back"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#7B93AE" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg></div>
+    <div class="hcol">
+      <div class="title">重构登录模块 · 跳过警示</div>
+      <div class="meta">
+        <div class="sub">claude·xdd-mac</div>
+        <div class="elapsed">18:42</div>
+        <div class="ctx"><span class="lb">ctx</span><span class="bar"><i></i></span><span class="pc">42%</span></div>
+        <div class="cluster">
+          <div class="perm warn">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l7 3v5c0 4.5-3 7.5-7 9-4-1.5-7-4.5-7-9V6l7-3z"/><path d="M12 9v4"/><circle cx="12" cy="16.2" r="0.4" fill="currentColor"/></svg>
+            <span class="t">跳过</span>
+          </div>
+          <div class="think"><span class="t">思考</span><span class="sw"><i></i></span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="fixed">
+    <div class="tabs">
+      <div class="tab on">消息</div><div class="tab">任务</div><div class="tab">全部</div><div class="tab">定时</div><div class="tab">统计</div>
+      <div class="ind"></div>
+    </div>
+  </div>
+  <div class="body">
+    <div class="card">已定位到登录页 token 刷新竞态：refresh 与原请求并发时…</div>
+    <div class="pend">把刷新逻辑改成单飞，完成后重放原请求</div>
+  </div>
+</div>
+
+</body>
+</html>
