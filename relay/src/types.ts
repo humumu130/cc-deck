@@ -158,6 +158,11 @@ export interface SessionUpdatedPayload {
   cron_tasks?: CronTask[];    // 定时任务变化时携带（[] = 清空）
   pinned?: boolean;           // #49 置顶状态变化时携带（true/false 都显式下发，端上直改）
   saved?: boolean;            // #49 休眠标记变化时携带（恢复成功清位 / unpin 摘除）
+  // 恒随增量帧携带（null = 已清）：审批弹窗死锁根治的权威自愈通道——CLI 侧放弃/
+  // 跳过某次权限请求时（如 WAITING 中用户又发了新消息），status 与 waiting_request
+  // 可能短暂脱钩，端上卡片按钮只看 waiting_request、详情弹窗只看 status，任一帧
+  // 带上权威值即可让两端收敛一致（旧 relay 不发此字段，端上有 status 兜底清理）
+  waiting_request?: WaitingPayload | null;
 }
 
 export interface SessionHeartbeatPayload {
@@ -196,8 +201,10 @@ export interface AskQuestion {
 }
 
 export interface WaitingResolvedPayload {
-  request_id: string;
-  decision: "allow" | "deny" | "timeout" | "answer";   // answer = AskUserQuestion 作答；timeout = 远程审批超时，回退 CLI 本地流程
+  // answer = AskUserQuestion 作答；timeout = 远程审批超时，回退 CLI 本地流程；
+  // superseded = CLI 已自行越过该权限门（新输入打断/回合结束），请求作废——relay
+  // 清扫孤儿 pending 时补发，让各端收起残留的审批面板；answered = 外部会话 PC 本地已作答
+  decision: "allow" | "deny" | "timeout" | "answer" | "superseded" | "answered";
   by: string;                 // 哪个客户端做的决定（调试用）
 }
 

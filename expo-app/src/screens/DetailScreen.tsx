@@ -1080,7 +1080,9 @@ export default function DetailScreen({ sid, onBack, initialView, ref }: { sid: s
   const resumable = !external && !!s.relay_session_id;
   const canCmd = snap.connected && (!s.historical || external || resumable);
   const wr = s.waiting_request;
-  const bannerVisible = !!wr && wr.decidable !== false;
+  // 审批横幅对称化：必须同时处于 WAITING 态（与列表卡/网页端同口径）——脱钩帧
+  //（waiting_request 残留 + status 已翻走）不再渲染横幅，防"以为在等审批"的假等待
+  const bannerVisible = !!wr && s.status === "WAITING" && wr.decidable !== false;
   // 状态条只保留"需要注意"的状态：出错/等待确认（横幅未兜底时）。
   // WORKING 状态行移入对话流（类 CLI），不再占顶栏
   const showStrip = s.status === "ERROR" || (s.status === "WAITING" && !bannerVisible);

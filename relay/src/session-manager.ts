@@ -1307,12 +1307,23 @@ export class SessionManager {
           this.emitUpdated(managed, true);
         },
         onStatusChange: (status, summary) => {
-          const changed = managed.state.status !== status;
+          // 审批弹窗死锁根治③：status 与 waiting_request 必须同进退——端上卡片按钮
+          // 只看 waiting_request、详情弹窗只看 status，任一帧让两者脱钩（status 翻走
+          // 而 waiting_request 残留）就是"处理按钮在、审批窗永不出现"。agent 仍有未
+          // 决议权限请求（hasPending，CLI 真阻塞）时，WORKING 是误报，保持 WAITING；
+          // pending 已清（CLI 越过权限门）则接受新状态并同帧清掉 waiting_request
+          const live = managed.state.status === "WAITING" && !!managed.state.waiting_request;
+          const effStatus =
+            live && status === "WORKING" && (managed.agent?.hasPending?.() ?? false) ? "WAITING" : status;
+          const changed = managed.state.status !== effStatus;
           // 回合起点：非 WORKING → WORKING 的跳变时刻（手机/手表状态行计时用）
-          if (changed && status === "WORKING") managed.state.turn_started_at = Date.now();
-          managed.state.status = status;
+          if (changed && effStatus === "WORKING") managed.state.turn_started_at = Date.now();
+          const cleared = live && effStatus !== "WAITING";
+          if (cleared) managed.state.waiting_request = undefined;
+          managed.state.status = effStatus;
           managed.state.action_summary = summary;
-          this.emitUpdated(managed, changed);
+          // 审批数据清零是关键翻转，不受节流吞帧（下一帧 UPDATE 即各端收敛的保证）
+          this.emitUpdated(managed, changed || cleared);
         },
         onWaiting: (p) => {
           managed.state.status = "WAITING";
@@ -1321,8 +1332,17 @@ export class SessionManager {
           this.bus.emit(managed.state.session_id, "SESSION_WAITING", p);
         },
         onWaitingResolved: (requestId, decision, resolvedBy) => {
-          managed.state.status = "WORKING";
-          managed.state.waiting_request = undefined;
+          // 根治③续：仅当决议针对"当前挂起"的请求才收口状态——孤儿请求补发的
+          // superseded 理论上可能晚于下一个 WAITING 到达（多端并发决议的时序窗口），
+          // 无差别收口会把新请求的 WAITING 一并打掉，复刻死锁
+          const cur = managed.state.waiting_request;
+          if (!cur || cur.request_id === requestId) {
+            managed.state.status = "WORKING";
+            managed.state.waiting_request = undefined;
+            // 强制补一帧带 waiting_request:null 的 UPDATE：RESOLVED 是瞬态帧，云桥/
+            // 断线丢帧时这帧是各端收敛的第二通道（不受节流）
+            this.emitUpdated(managed, true);
+          }
           managed.state.updated_at = Date.now();
           this.bus.emit(managed.state.session_id, "SESSION_WAITING_RESOLVED", {
             request_id: requestId,
@@ -1366,6 +1386,9 @@ export class SessionManager {
         onTurnEnd: (ok, reason, durationMs) => {
           managed.state.updated_at = Date.now();
           managed.state.duration_ms = durationMs;
+          // 回合收口同时清残留审批数据（打断等待中的请求等场景）：status 与
+          // waiting_request 脱钩是审批弹窗死锁的根源，任何离开 WAITING 的路径都收口
+          managed.state.waiting_request = undefined;
           if (ok) {
             managed.state.status = "DONE";
             managed.state.done_reason = reason;
@@ -1561,6 +1584,9 @@ export class SessionManager {
     this.bus.emit(s.state.session_id, "SESSION_UPDATED", {
       status: s.state.status,
       action_summary: s.state.action_summary,
+      // 根治③的权威自愈通道：waiting_request 恒随增量帧携带（null = 已清），端上
+      // 无论错过哪条 RESOLVED/WAITING，下一帧 UPDATE 即收敛一致
+      waiting_request: s.state.waiting_request ?? null,
       stats: { ...s.state.stats },
       ...(s.state.turn_started_at ? { turn_started_at: s.state.turn_started_at } : {}),
       ...(s.state.usage ? { usage: { ...s.state.usage } } : {}),

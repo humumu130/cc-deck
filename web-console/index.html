@@ -3374,6 +3374,12 @@ function onEvent(ctx, msg) {
       s.status = msg.payload.status;
       s.action_summary = msg.payload.action_summary;
       if (msg.payload.stats) s.stats = msg.payload.stats;
+      // 审批弹窗死锁根治④：waiting_request 与 status 同进退——新 relay 恒随 UPDATE
+      // 帧携带权威值（null = 已清）直接采信；旧 relay 不带此字段时，状态离开
+      // WAITING 就地清残留（与手机端 store 同款自愈），防止"卡片处理按钮在、
+      // 详情弹窗因 status!==WAITING 永不出现"的脱钩死锁
+      if (msg.payload.waiting_request !== undefined) s.waiting_request = msg.payload.waiting_request;
+      else if (msg.payload.status !== "WAITING") s.waiting_request = null;
       // 其余可选字段：出现即覆盖（与手机端 store 对齐）；pinned/saved 为 #49 保存恢复字段
       for (const f of ["remote_mode", "title", "title_locked", "model", "turn_started_at",
         "usage", "context_usage", "context_limit", "todos", "subagents", "permission_mode", "pending_inputs", "relay_session_id", "cron_tasks", "compacting", "pinned", "saved"]) {
@@ -3396,11 +3402,15 @@ function onEvent(ctx, msg) {
     }
     case "SESSION_WAITING_RESOLVED": {
       const s = ctx.sessions.get(sid); if (!s) break;
-      s.status = "WORKING";
-      s.waiting_request = null;
+      // 仅当决议针对当前挂起的请求才动状态：孤儿请求补发的 superseded 可能晚于
+      // 下一个 WAITING 到达（多端并发时序窗口），无差别收口会打掉新请求的弹窗
+      if (!s.waiting_request || s.waiting_request.request_id === msg.payload.request_id) {
+        s.status = "WORKING";
+        s.waiting_request = null;
+      }
       const d = msg.payload.decision;
-      const dText = d === "allow" ? "已允许" : d === "deny" ? "已拒绝" : d === "answer" ? "已作答" : "远程审批超时，回退本地";
-      pushLog(ctx, sid, { ts: msg.ts, kind: "system", text: dText + (d === "timeout" ? "" : " (by " + msg.payload.by + ")") });
+      const dText = d === "allow" ? "已允许" : d === "deny" ? "已拒绝" : d === "answer" ? "已作答" : d === "answered" ? "电脑端已作答" : d === "superseded" ? "请求已失效（CLI 已继续）" : "远程审批超时，回退本地";
+      pushLog(ctx, sid, { ts: msg.ts, kind: "system", text: dText + (d === "timeout" || d === "superseded" ? "" : " (by " + msg.payload.by + ")") });
       break;
     }
     case "SESSION_ERROR": {
@@ -3833,7 +3843,9 @@ function render() {
       d.dataset.src = ctx.cfg.id;
       d.className = "card " + s.status + (listCompact ? " compact" : "") + (selected && selected.src === ctx.cfg.id && s.session_id === selected.sid ? " sel" : "") + (s.historical && !dormant ? " historical" : "") + (dormant ? " dormant" : "");
       if (dormant) d.title = "已保存休眠 · 点击恢复";
-      const waiting = !!s.waiting_request;
+      // 根治④对称化：等待判定必须同时看 status——脱钩帧（waiting_request 残留 +
+      // status 已翻走）不该再渲染【处理】按钮，否则按钮点开详情永远等不到弹窗
+      const waiting = !!s.waiting_request && s.status === "WAITING";
       const waitingText = waiting
         ? (s.waiting_request.questions?.length ? "Claude 在提问：" + (s.waiting_request.questions[0].header || "") : "需要确认 " + s.waiting_request.tool_name + " — " + (s.waiting_request.input_summary || ""))
         : (s.status === "ERROR" && s.last_error ? "⚠ " + s.last_error : s.action_summary || "");

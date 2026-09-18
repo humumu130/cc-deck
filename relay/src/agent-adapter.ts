@@ -84,7 +84,8 @@ export interface AgentCallbacks {
   onInit(sdkSessionId: string, model: string, permissionMode?: string): void;
   onStatusChange(status: SessionStatus, actionSummary: string): void;
   onWaiting(p: WaitingPayload): void;
-  onWaitingResolved(requestId: string, decision: "allow" | "deny" | "answer", by?: string): void;
+  // superseded = CLI 已自行越过权限门（新输入打断/回合推进），relay 清扫孤儿 pending 补发
+  onWaitingResolved(requestId: string, decision: "allow" | "deny" | "answer" | "superseded", by?: string): void;
   onStats(stats: FileChangeStats): void;
   // 每回合 result 消息携带的 token 用量（累计口径由调用方决定）
   onUsage(usage: TokenUsage): void;
@@ -121,6 +122,9 @@ export interface AgentLike {
   answer(requestId: string, answers: string[], by?: string): boolean;
   stop(): Promise<void>;
   setPermissionMode(mode: "default" | "acceptEdits" | "plan" | "bypassPermissions"): Promise<void>;
+  // 可选：是否仍有未决议的权限请求——session-manager 的 WAITING 保持判定用；
+  // 测试假 agent 未实现时按"无挂起"处理（hasPending?.() ?? false）
+  hasPending?(): boolean;
 }
 
 // 单个 Agent 会话 = 一次 query() streaming 调用。
@@ -215,6 +219,22 @@ export class AgentSession {
   }
 
   private handleMessage(msg: SDKMessage): void {
+    // 审批弹窗死锁根治②：CLI 出现真实推进（模型生成 / 工具结果 / 回合结束）却仍有
+    // 未决议的权限请求 = CLI 已自行越过该权限门（典型：WAITING 中用户又发了新消息，
+    // CLI 打断当前工具调用），请求作废——补发 RESOLVED(superseded) 收起各端残留的
+    // 审批面板并清掉孤儿 pending（否则 promise 与 Map 条目双双泄漏）。
+    // 只在"能证明 CLI 没阻塞在 canUseTool"的消息上清扫：assistant/stream_event/result；
+    // user 消息仅在含 tool_result 时算证明（纯文本回显不能——CLI 可能仍阻塞，排队
+    // 消息恰在此时到达）；子代理消息（parent_tool_use_id 非空）不算——主流程的
+    // pending 与子代理生成可并存，误清会把活请求 deny 掉
+    const parent = (msg as { parent_tool_use_id?: string | null }).parent_tool_use_id;
+    if (
+      !parent &&
+      (msg.type === "assistant" || msg.type === "stream_event" || msg.type === "result" ||
+        (msg.type === "user" && this.msgHasToolResult(msg)))
+    ) {
+      this.sweepStalePending();
+    }
     switch (msg.type) {
       case "system":
         if (msg.subtype === "init") {
@@ -442,7 +462,11 @@ export class AgentSession {
     const marker = images && images.length > 0 ? `（+${images.length} 图）` : "";
     const full = fullText(text, 200);
     this.cb.onLog("user_message", truncate(text, 200) + marker, { full: full === undefined ? undefined : full + marker });
-    this.cb.onStatusChange("WORKING", this.lastSummary);
+    // 审批弹窗死锁根治①：WAITING 中用户再发消息时，这里不能乐观报 WORKING——CLI 仍
+    // 阻塞在 canUseTool 上（新消息排队等权限放行），假报会把 status 翻成 WORKING 而
+    // waiting_request 没人清，端上"卡片处理按钮在、审批弹窗永不出现"。状态保持 WAITING，
+    // 等真实活动（stream/assistant）或权限决议再翻
+    if (this.pending.size === 0) this.cb.onStatusChange("WORKING", this.lastSummary);
   }
 
   allow(requestId: string, by?: string): boolean {
@@ -475,6 +499,30 @@ export class AgentSession {
       p.resolve({ behavior: "deny", message: reason, interrupt: false });
       this.cb.onWaitingResolved(id, "deny");
     }
+  }
+
+  // 根治②清扫体：pending 里未被 allow/deny/answer 决议过的条目 = CLI 已越过的孤儿
+  // （正常决议路径当场删条目，走到这里的只剩被 CLI 抛弃的）。补 resolve 落地无害
+  //（CLI 侧早已不等待该控制请求），决策标 superseded 供端上显示"请求已失效"
+  private sweepStalePending(): void {
+    for (const [id, p] of [...this.pending]) {
+      this.pending.delete(id);
+      p.resolve({ behavior: "deny", message: "请求已失效（CLI 已继续）", interrupt: false });
+      this.cb.onWaitingResolved(id, "superseded");
+    }
+  }
+
+  // 会话状态机查询：是否仍有未决议的权限请求（session-manager 状态收口用）
+  hasPending(): boolean {
+    return this.pending.size > 0;
+  }
+
+  private msgHasToolResult(msg: SDKMessage): boolean {
+    const content = (msg as { message?: { content?: unknown } }).message?.content;
+    return (
+      Array.isArray(content) &&
+      content.some((b) => b && typeof b === "object" && (b as { type?: string }).type === "tool_result")
+    );
   }
 
   async stop(): Promise<void> {

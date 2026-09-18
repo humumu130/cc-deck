@@ -1940,8 +1940,11 @@ class RelayStore {
         conn.sessions.set(sid, s);
         s.status = msg.payload.status;
         s.action_summary = msg.payload.action_summary;
-        // 状态离开 WAITING 却没等来 RESOLVED 事件（relay 重启重放等场景）：清掉残留的审批面板数据
-        if (msg.payload.status !== "WAITING") s.waiting_request = null;
+        // 审批弹窗死锁根治（与网页端同款）：新 relay 恒随 UPDATE 帧携带 waiting_request
+        // 权威值（null = 已清）直接采信；旧 relay 不带时保持原自愈——状态离开 WAITING
+        // 就地清残留，防"列表按钮在、详情弹窗永不出现"的脱钩死锁
+        if (msg.payload.waiting_request !== undefined) s.waiting_request = msg.payload.waiting_request;
+        else if (msg.payload.status !== "WAITING") s.waiting_request = null;
         if (msg.payload.stats) s.stats = msg.payload.stats;
         if (msg.payload.remote_mode !== undefined) s.remote_mode = msg.payload.remote_mode;
         if (msg.payload.title) s.title = msg.payload.title;
@@ -1990,11 +1993,15 @@ class RelayStore {
         if (!s) break;
         s = { ...s }; // #91 同款替换
         conn.sessions.set(sid, s);
-        s.status = "WORKING";
-        s.waiting_request = null;
+        // 仅当决议针对当前挂起的请求才动状态：孤儿请求补发的 superseded 可能晚于
+        // 下一个 WAITING 到达（多端并发时序窗口），无差别收口会打掉新请求的审批横幅
+        if (!s.waiting_request || s.waiting_request.request_id === msg.payload.request_id) {
+          s.status = "WORKING";
+          s.waiting_request = null;
+        }
         const d = msg.payload.decision;
-        const dText = d === "allow" ? "已允许" : d === "deny" ? "已拒绝" : d === "answer" ? "已作答" : d === "answered" ? "电脑端已作答" : "远程审批超时，回退本地";
-        this.pushLog(conn, sid, { ts: msg.ts, kind: "system", text: dText + (d === "timeout" ? "" : ` (by ${msg.payload.by})`) });
+        const dText = d === "allow" ? "已允许" : d === "deny" ? "已拒绝" : d === "answer" ? "已作答" : d === "answered" ? "电脑端已作答" : d === "superseded" ? "请求已失效（CLI 已继续）" : "远程审批超时，回退本地";
+        this.pushLog(conn, sid, { ts: msg.ts, kind: "system", text: dText + (d === "timeout" || d === "superseded" ? "" : ` (by ${msg.payload.by})`) });
         break;
       }
       case "SESSION_ERROR": {
