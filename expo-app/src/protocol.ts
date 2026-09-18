@@ -44,6 +44,23 @@ export interface TodoItem {
   updated_at?: number;
 }
 
+// #35 会话输出物（relay ArtifactItem 镜像）：Write/Edit/MultiEdit/NotebookEdit 四类
+// 文件工具的产出清单；整表替换语义（SESSION_UPDATED/SNAPSHOT 携带）
+export type ArtifactOp = "create" | "edit";
+
+export interface ArtifactItem {
+  path: string;        // 绝对路径（相对入参已按会话 cwd 补全）
+  op: ArtifactOp;      // 会话内新建过 → "create"（后继 Edit 不降级）
+  tools: string[];
+  adds: number;
+  dels: number;
+  first_at: number;
+  last_at: number;
+  size?: number;       // 最近一次 stat 字节数（缺省不显）
+  exists?: boolean;    // false → 「已删除」态
+  origin?: "cwd" | "outside";
+}
+
 // 定时任务（CLI 会话 .claude/scheduled_tasks.json 的宽容解析快照，relay 30s 轮询下发）
 export interface CronTask {
   id: string;
@@ -86,6 +103,8 @@ export interface SessionState {
   pending_inputs?: PendingInput[]; // 外部会话已发送未处理的注入消息（显示在工作指示器下方，处理时上浮为正式消息）
   subagents?: SubagentEntry[]; // 并行子 Agent（⑂）：运行中/刚结束的后台任务状态
   cron_tasks?: CronTask[]; // 定时任务快照（[] = 已清空）
+  artifacts?: ArtifactItem[]; // #35 输出物清单（整表替换；手机端查看路径/统计，不能打开）
+  artifacts_truncated?: boolean; // #35 超 200 条截断标记（列表尾提示）
   compacting?: boolean;    // true = CLI 正在压缩上下文（Compacting conversation…），转录静默期防误判卡死
   // 最近一次任务完成汇报（#254）：瞬态 TASK_DONE 断线丢失时，端上从快照恢复未读汇报。
   // remaining_count 是数字（剩余条数）——与 TASK_DONE 事件的 remaining（TodoItem[]）同名异型，故改名区分

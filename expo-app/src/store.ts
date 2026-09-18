@@ -1978,6 +1978,9 @@ class RelayStore {
         }
         if (msg.payload.subagents) s.subagents = msg.payload.subagents;
         if (msg.payload.cron_tasks) s.cron_tasks = msg.payload.cron_tasks;
+        // #35 输出物：relay 整表替换下发（[] = 清空）；截断标记同帧或快照携带
+        if (msg.payload.artifacts) s.artifacts = msg.payload.artifacts;
+        if (msg.payload.artifacts_truncated !== undefined) s.artifacts_truncated = msg.payload.artifacts_truncated;
         if (msg.payload.compacting !== undefined) s.compacting = msg.payload.compacting;
         s.updated_at = msg.ts;
         break;

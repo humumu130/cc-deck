@@ -9,7 +9,7 @@ import { withA, type ThemeColors } from "../theme";
 import { useTheme, useThemeStyles } from "../theme-context";
 import { fmtElapsed, sessionElapsed, fmtHM, dayKey, fmtClock, fmtTok, contextPct, contextLevel, CONTEXT_LIMIT_FALLBACK, isVerifyTodo, isLiveLine, stripLiveMark } from "../fmt";
 import { store, useRelay } from "../store";
-import type { CronTask, LogEntry, SessionState, TodoItem, WaitingPayload } from "../protocol";
+import type { ArtifactItem, CronTask, LogEntry, SessionState, TodoItem, WaitingPayload } from "../protocol";
 import { useKbHeight } from "../kb";
 import { useProcessFont, useVoiceInput } from "../display-settings";
 import { voice } from "../voice";
@@ -18,13 +18,14 @@ import { MdText } from "../md";
 import { Collapse, FadeIn, PressScale } from "../motion";
 import RenameModal from "./RenameModal";
 
-// 详情页视图 tab（与网页端 tabs 对齐：消息/全部/任务/定时/统计，同序）。
-// 消息/全部 = 转录过滤视图；任务/定时/统计 = 独占内容视图。
+// 详情页视图 tab（与网页端 tabs 对齐：消息/任务/全部/输出物/定时/统计，同序）。
+// 消息/全部 = 转录过滤视图；任务/输出物/定时/统计 = 独占内容视图。
 // 原"工具/系统"过滤 chips 与设置抽屉"过程消息·隐藏档"重叠，移除。
 const VIEWS = [
   { k: "msg", label: "消息" },
   { k: "todos", label: "任务" },
   { k: "all", label: "全部" },
+  { k: "arts", label: "输出物" },
   { k: "cron", label: "定时" },
   { k: "stats", label: "统计" },
 ] as const;
@@ -111,6 +112,49 @@ const fmtDT = (ts: number) => {
   const p = (n: number) => String(n).padStart(2, "0");
   return `${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`;
 };
+
+// #35 输出物辅助（与 web-console artifactsTabHtml 同口径）：扩展名类型派生 / cwd 相对
+// 路径 / 体积 / 相对时间——列表行与详情 sheet 共用
+const ART_EXT: Record<string, string[]> = {
+  code: "ts tsx js jsx mjs cjs py rs go java kt kts swift c h cpp hpp cc cs rb php vue svelte sh zsh bash fish ps1 bat sql css scss less styl html htm xml astro lua dart nim zig ex exs erl hs ml scala tf proto graphql".split(" "),
+  doc: "md markdown txt text rst adoc asciidoc pdf doc docx rtf pages key keynote ppt pptx xlsx numbers log".split(" "),
+  data: "json jsonl jsonc ndjson csv tsv yaml yml toml ini cfg conf env properties plist db sqlite".split(" "),
+  img: "png jpg jpeg gif svg webp bmp ico tiff tif heic avif".split(" "),
+  zip: "zip tar gz tgz bz2 xz 7z rar dmg iso jar war apk".split(" "),
+};
+type ArtKind = "code" | "doc" | "data" | "img" | "zip" | "gen";
+function artKindOf(name: string): ArtKind {
+  const m = /\.([A-Za-z0-9]+)$/.exec(String(name || ""));
+  const ext = m ? m[1].toLowerCase() : "";
+  for (const k of ["code", "doc", "data", "img", "zip"] as const) if (ART_EXT[k].includes(ext)) return k;
+  return "gen";
+}
+// 行首类型 chip 文案：扩展名本身（无扩展名回落 ·）——比抽象图标更省解释
+function artExtOf(name: string): string {
+  const m = /\.([A-Za-z0-9]+)$/.exec(String(name || ""));
+  return m ? m[1].slice(0, 4) : "·";
+}
+// 相对 cwd 展示路径（origin=cwd 才有；分隔符保持 OS 原样）
+function artRelOf(s: SessionState, t: ArtifactItem): string {
+  if (t.origin !== "cwd" || !s.cwd) return "";
+  return t.path.startsWith(s.cwd) ? t.path.slice(s.cwd.length).replace(/^[\\/]+/, "") : "";
+}
+function fmtArtSize(n: number | undefined): string {
+  if (typeof n !== "number" || n < 0) return "";
+  if (n < 1024) return n + " B";
+  if (n < 1024 * 1024) return (n / 1024).toFixed(n < 10240 ? 1 : 0) + " KB";
+  return (n / 1048576).toFixed(1) + " MB";
+}
+// 输出物时间：今天 HH:mm / 昨天 / 7 天内 周X / 更早 M/d（web-console 同款）
+function fmtArtTime(ts: number): string {
+  if (!ts) return "";
+  const now = Date.now();
+  if (dayKey(ts) === dayKey(now)) return fmtHM(ts);
+  if (dayKey(ts) === dayKey(now - 86400000)) return "昨天";
+  if (now - ts < 7 * 86400000) return "周" + "日一二三四五六"[new Date(ts).getDay()];
+  const d = new Date(ts);
+  return d.getMonth() + 1 + "/" + d.getDate();
+}
 
 // 转录行：user=右气泡 / assistant=正文流式 / tool=紧凑卡片 / system=居中弱化
 // 转录字号分级：过程消息（工具/结果/系统/思考）比消息（用户/assistant）小一档，可在设置抽屉调。
@@ -329,6 +373,86 @@ function ContentMenu({ text, onClose }: { text: string; onClose: () => void }) {
               <Text style={d.menuBtnPriT}>分享</Text>
             </Pressable>
           </View>
+        </Pressable>
+      </Pressable>
+    </Modal>
+  );
+}
+
+// #35 输出物详情 sheet：手机端打不开电脑上的文件——核心价值是给完整绝对路径
+//（selectable 长按手拖选）+ 一键复制/分享（Clipboard/Share 先例同 ContentMenu）；
+// 元信息速览复用统计行。面板形态复用 #36 permSheet（底部 grab 条 + 标题行）
+function ArtSheet({ art, rel, onClose }: { art: ArtifactItem; rel: string; onClose: () => void }) {
+  const { c } = useTheme();
+  const d = useThemeStyles(makeStyles);
+  const [copied, setCopied] = useState(false);
+  const copiedTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => () => { if (copiedTimer.current) clearTimeout(copiedTimer.current); }, []);
+  const name = (rel || art.path).split(/[\\/]/).pop() || art.path;
+  const dead = art.exists === false;
+  const outside = art.origin === "outside" || (!rel && art.origin !== "cwd");
+  const kind = artKindOf(name);
+  const KC: Record<ArtKind, string> = { code: c.brandA, doc: c.done, data: c.working, img: c.waiting, zip: c.dim, gen: c.faint };
+  return (
+    <Modal visible transparent animationType="slide" onRequestClose={onClose}>
+      <Pressable style={d.permScrim} onPress={onClose}>
+        <Pressable style={d.permSheet} onPress={() => undefined}>
+          <View style={d.permGrab} />
+          <View style={d.permTitleRow}>
+            <View style={[d.artChip, { borderColor: withA(KC[kind], 0.45) }]}>
+              <Text style={[d.artChipT, { color: KC[kind] }]}>{artExtOf(name)}</Text>
+            </View>
+            <Text style={[d.permTitle, { flex: 1 }]} numberOfLines={1}>{name}</Text>
+            <Pressable hitSlop={8} onPress={onClose} accessibilityLabel="关闭输出物详情">
+              <Text style={d.permX}>✕</Text>
+            </Pressable>
+          </View>
+          <View style={d.artBadges}>
+            <View style={[d.artBadge, art.op === "create" && { borderColor: withA(c.done, 0.5) }]}>
+              <Text style={[d.artBadgeT, art.op === "create" && { color: c.done }]}>{art.op === "create" ? "新建" : "修改"}</Text>
+            </View>
+            {dead ? (
+              <View style={d.artBadge}><Text style={[d.artBadgeT, { color: c.error }]}>已删除</Text></View>
+            ) : null}
+            {outside ? (
+              <View style={d.artBadge}><Text style={[d.artBadgeT, { color: c.working }]}>cwd 外</Text></View>
+            ) : null}
+          </View>
+          <Text style={d.artPathLabel}>绝对路径（长按可选中复制）</Text>
+          <Text style={d.artPath} selectable>{art.path}</Text>
+          {rel ? <Text style={d.artRel} numberOfLines={1}>相对会话目录：{rel}</Text> : null}
+          <View style={d.menuBtns}>
+            <Pressable
+              style={d.menuBtn}
+              android_ripple={{ color: withA(c.dim, 0.2), borderless: false, radius: 10 }}
+              onPress={() => {
+                void Clipboard.setStringAsync(art.path).then(() => {
+                  setCopied(true);
+                  copiedTimer.current = setTimeout(() => setCopied(false), 1500);
+                });
+              }}
+            >
+              <Text style={d.menuBtnT}>{copied ? "已复制 ✓" : "复制路径"}</Text>
+            </Pressable>
+            <Pressable
+              style={[d.menuBtn, d.menuBtnPri]}
+              android_ripple={{ color: "rgba(255,255,255,0.15)", borderless: false, radius: 10 }}
+              onPress={() => {
+                onClose();
+                void Share.share({ message: art.path }).catch(() => undefined);
+              }}
+            >
+              <Text style={d.menuBtnPriT}>分享</Text>
+            </Pressable>
+          </View>
+          <View style={d.artInfo}>
+            <StatRow k="工具" v={art.tools?.join(" · ") || "—"} />
+            <StatRow k="行变更" v={`+${art.adds ?? 0} / −${art.dels ?? 0}`} />
+            {fmtArtSize(art.size) ? <StatRow k="大小" v={fmtArtSize(art.size)} /> : null}
+            {art.first_at ? <StatRow k="首次写入" v={fmtDT(art.first_at)} /> : null}
+            {art.last_at ? <StatRow k="最近写入" v={fmtDT(art.last_at)} /> : null}
+          </View>
+          <Text style={d.artHint}>文件保存在电脑（会话主机）上 · 手机端仅查看信息</Text>
         </Pressable>
       </Pressable>
     </Modal>
@@ -738,7 +862,7 @@ export default function DetailScreen({ sid, onBack, initialView, ref }: { sid: s
   const scrollRef = useRef<ScrollView>(null);
   const allScrollRef = useRef<ScrollView>(null);
   const pagerRef = useRef<ScrollView>(null);
-  // 五视图滑动指示条：由翻页滚动位置原生驱动（useNativeDriver 跟手，不走 JS 线程不掉帧）
+  // 六视图滑动指示条：由翻页滚动位置原生驱动（useNativeDriver 跟手，不走 JS 线程不掉帧）
   const scrollX = useRef(new Animated.Value(0)).current;
   const [tabRowW, setTabRowW] = useState(0);
   const atBottom = useRef(true);
@@ -982,6 +1106,8 @@ export default function DetailScreen({ sid, onBack, initialView, ref }: { sid: s
   const [flashTodo, setFlashTodo] = useState<number | null>(null);
   const [taskPop, setTaskPop] = useState<number | null>(null);
   const [taskHold, setTaskHold] = useState(false);
+  // #35 输出物详情 sheet：点行打开（artPop 为该条快照，rel 由挂载点按会话 cwd 现算）
+  const [artPop, setArtPop] = useState<ArtifactItem | null>(null);
   const [taskAnchor, setTaskAnchor] = useState<{ x: number; y: number } | undefined>(undefined);
   const openTaskRef = (n: number, hold = false, anchor?: { x: number; y: number }) => {
     setTaskPop(n);
@@ -1008,7 +1134,7 @@ export default function DetailScreen({ sid, onBack, initialView, ref }: { sid: s
   };
 
   // 转录跟随：直接 filter 不做 useMemo（logs 引用每次更新都变）；仅当用户停在底部时自动滚。
-  // 五视图翻页（#250）：消息/全部两页各自过滤，当前页的滚动容器才跟随滚底
+  // 六视图翻页（#250）：消息/全部两页各自过滤，当前页的滚动容器才跟随滚底
   const logs = s ? store.timelineOf(sid) : [];
   const procFont = useProcessFont();
   const procVisible = logs.filter(
@@ -1026,7 +1152,7 @@ export default function DetailScreen({ sid, onBack, initialView, ref }: { sid: s
     if (ref && atBottom.current && !touching.current) ref.scrollToEnd({ animated: false });
   }, [view, pageShown.length, lastLen, s?.pending_inputs?.length ?? 0, s?.status === "WORKING"]);
   const toggle = (key: string) => setExpanded((m) => ({ ...m, [key]: !m[key] }));
-  // 五视图横向翻页（#250/#252）：页宽=窗口宽（锁定竖屏）。tab 点击一律动画滚动；
+  // 六视图横向翻页（#250/#252）：页宽=窗口宽（锁定竖屏）。tab 点击一律动画滚动；
   // 远跳（>1 页）飞行途中临时全渲染，防掠过的中间页闪空白
 
   const viewIdx = VIEWS.findIndex((v) => v.k === view);
@@ -1417,7 +1543,7 @@ export default function DetailScreen({ sid, onBack, initialView, ref }: { sid: s
       </View>
       ) : null}
 
-      {/* 五视图横向翻页（#250/#252）：面板上左右滑动切换，懒渲染相邻 ±1 页（远跳飞行中临时全渲染）；
+      {/* 六视图横向翻页（#250/#252）：面板上左右滑动切换，懒渲染相邻 ±1 页（远跳飞行中临时全渲染）；
           滚动位置原生驱动 tab 指示条逐像素跟手。任务视图：整屏列表（网页端"任务" tab 同构）。
           外包一层作回到底部浮钮的定位锚（吸顶于对话区顶部，不随头部高度变化） */}
       <View style={{ flex: 1 }}>
@@ -1600,6 +1726,76 @@ export default function DetailScreen({ sid, onBack, initialView, ref }: { sid: s
               );
             })
           )}
+        </ScrollView>
+      ) : v.k === "arts" ? (
+        /* #35 输出物视图（网页端第 6 tab 同构）：新建/修改两组（组内按最后写入降序）+
+           汇总行（N 个文件 · 新建 X · 修改 Y · +a −d）；行首扩展名 chip 按类型着色。
+           手机端打不开电脑文件——点行弹详情 sheet 给完整路径（复制/分享），不在此行内展开 */
+        <ScrollView style={{ flex: 1 }} contentContainerStyle={{ padding: 14, paddingBottom: 40 + insets.bottom, ...((s.artifacts?.length ?? 0) === 0 ? { flexGrow: 1, justifyContent: "center", paddingBottom: 14 + insets.bottom } : null) }} showsVerticalScrollIndicator={false}>
+          {(s.artifacts?.length ?? 0) === 0 ? (
+            /* 空态三分（文案与网页端同口径）：历史会话无记录 / external 需 hooks / 托管尚无产出 */
+            <Text style={d.empty}>本会话还没有文件产出{"\n"}{s.historical ? "历史会话无输出物记录" : external ? "需 CLI 挂 cc-deck hooks 才能捕获（Write/Edit 写文件后自动出现）" : "CLI 里用 Write/Edit 写文件后，这里会自动出现"}</Text>
+          ) : (() => {
+            const arts = s.artifacts!;
+            const byRec = (a: ArtifactItem, b: ArtifactItem) => (b.last_at || b.first_at || 0) - (a.last_at || a.first_at || 0);
+            const created = arts.filter((t) => t.op === "create").sort(byRec);
+            const edited = arts.filter((t) => t.op !== "create").sort(byRec);
+            const adds = arts.reduce((n, t) => n + (t.adds ?? 0), 0);
+            const dels = arts.reduce((n, t) => n + (t.dels ?? 0), 0);
+            const KC: Record<ArtKind, string> = { code: c.brandA, doc: c.done, data: c.working, img: c.waiting, zip: c.dim, gen: c.faint };
+            const artRow = (t: ArtifactItem, i: number) => {
+              const rel = artRelOf(s, t);
+              const name = (rel || t.path).split(/[\\/]/).pop() || t.path;
+              const dir = rel
+                ? (rel.includes("/") || rel.includes("\\") ? rel.slice(0, Math.max(rel.lastIndexOf("/"), rel.lastIndexOf("\\")) + 1) : "")
+                : t.path.slice(0, t.path.length - name.length);
+              const dead = t.exists === false;
+              const outside = !rel && t.origin !== "cwd";
+              const kc = KC[artKindOf(name)];
+              return (
+                <Pressable
+                  key={t.path + "|" + i}
+                  style={[d.cronRow, i === 0 && { borderTopWidth: 0, marginTop: 0 }]}
+                  android_ripple={{ color: c.tintSoft, borderless: false }}
+                  onPress={() => setArtPop(t)}
+                  accessibilityLabel={`输出物 ${name}，点按查看路径详情`}
+                >
+                  <View style={[d.artChip, { borderColor: withA(kc, 0.45) }]}>
+                    <Text style={[d.artChipT, { color: kc }]}>{artExtOf(name)}</Text>
+                  </View>
+                  <View style={{ flex: 1, minWidth: 0 }}>
+                    <View style={d.artNameRow}>
+                      <Text style={[d.cronName, dead && { color: c.dim }]} numberOfLines={1}>{name}</Text>
+                      {dead ? <Text style={[d.artTag, { color: c.error }]}>已删除</Text> : null}
+                      {outside ? <Text style={[d.artTag, { color: c.working }]}>cwd 外</Text> : null}
+                    </View>
+                    <Text style={d.cronMeta} numberOfLines={1}>
+                      {dir ? dir + " · " : ""}+{t.adds ?? 0} −{t.dels ?? 0}{fmtArtSize(t.size) ? " · " + fmtArtSize(t.size) : ""} · {fmtArtTime(t.last_at || t.first_at)}
+                    </Text>
+                  </View>
+                </Pressable>
+              );
+            };
+            return (
+              <>
+                <View style={d.artSum}>
+                  <Text style={d.artSumN}>{arts.length} 个文件</Text>
+                  <Text style={d.artSumSeg}>
+                    新建 <Text style={{ color: c.done, fontWeight: "700" }}>{created.length}</Text>
+                    {"  ·  修改 "}
+                    <Text style={{ color: c.dim, fontWeight: "700" }}>{edited.length}</Text>
+                  </Text>
+                  <Text style={d.artSumPm}>+{adds.toLocaleString()} −{dels.toLocaleString()}</Text>
+                </View>
+                {s.artifacts_truncated ? <Text style={d.artTrunc}>已截断 · 保留最新 200 条</Text> : null}
+                {created.length ? <Text style={[d.artGt, { color: c.done }]}>新建 {created.length} · 本会话产出</Text> : null}
+                {created.map(artRow)}
+                {edited.length ? <Text style={[d.artGt, { color: c.dim }]}>修改 {edited.length}</Text> : null}
+                {edited.map(artRow)}
+                <Text style={d.artFoot}>点文件查看路径详情 · 仅收录 Write / Edit / MultiEdit / NotebookEdit</Text>
+              </>
+            );
+          })()}
         </ScrollView>
       ) : v.k === "stats" ? (
         /* 统计视图（原 StatsModal 内容平铺；字段与网页"统计" tab 呼应） */
@@ -1897,6 +2093,7 @@ export default function DetailScreen({ sid, onBack, initialView, ref }: { sid: s
       ) : null}
 
       {menuText ? <ContentMenu text={menuText} onClose={() => setMenuText(null)} /> : null}
+      {artPop ? <ArtSheet art={artPop} rel={artRelOf(s, artPop)} onClose={() => setArtPop(null)} /> : null}
       {taskPop != null ? (
         <TaskPop
           n={taskPop}
@@ -2114,6 +2311,27 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
   cronMark: { color: c.working, fontSize: 12, width: 16, textAlign: "center", lineHeight: 17 },
   cronName: { color: c.text, fontSize: 12.5, lineHeight: 17 },
   cronMeta: { color: c.faint, fontSize: 11, lineHeight: 15, marginTop: 1, fontVariant: ["tabular-nums"] },
+  // #35 输出物：汇总行 / 分组头 / 扩展名 chip / 角标 / 详情 sheet（视觉审查口径：
+  // 辅助信息统一 ≥10.5px 且避开 --faint 级低对比；亮暗主题走 c.* 变量自适应）
+  artSum: { flexDirection: "row", alignItems: "center", gap: 10, paddingVertical: 2, paddingBottom: 8 },
+  artSumN: { color: c.text, fontSize: 13, fontWeight: "700", fontVariant: ["tabular-nums"] },
+  artSumSeg: { color: c.dim, fontSize: 11.5 },
+  artSumPm: { color: c.dim, fontSize: 11.5, fontVariant: ["tabular-nums"], marginLeft: "auto" },
+  artTrunc: { color: c.working, fontSize: 11, marginTop: -4, marginBottom: 4 },
+  artGt: { fontSize: 11, fontWeight: "700", marginTop: 10, marginBottom: 2 },
+  artChip: { minWidth: 28, height: 20, borderRadius: 5, borderWidth: 1, alignItems: "center", justifyContent: "center", paddingHorizontal: 4, marginTop: 1 },
+  artChipT: { fontSize: 9, fontFamily: "monospace", fontWeight: "700" },
+  artNameRow: { flexDirection: "row", alignItems: "center", gap: 6 },
+  artTag: { fontSize: 10, lineHeight: 13, borderWidth: 1, borderColor: c.line, borderRadius: 4, paddingHorizontal: 4, paddingVertical: 1 },
+  artFoot: { color: c.faint, fontSize: 10.5, textAlign: "center", paddingVertical: 16 },
+  artBadges: { flexDirection: "row", gap: 6, marginBottom: 10 },
+  artBadge: { borderWidth: 1, borderColor: c.line, borderRadius: 4, paddingHorizontal: 6, paddingVertical: 2 },
+  artBadgeT: { fontSize: 10, lineHeight: 13 },
+  artPathLabel: { color: c.faint, fontSize: 10.5, marginBottom: 4 },
+  artPath: { color: c.text, fontSize: 12, fontFamily: "monospace", lineHeight: 17, borderWidth: 1, borderColor: c.line, borderRadius: 8, padding: 10, backgroundColor: c.panel2 },
+  artRel: { color: c.dim, fontSize: 10.5, fontFamily: "monospace", marginTop: 6 },
+  artInfo: { marginTop: 12, borderTopWidth: 1, borderTopColor: c.line },
+  artHint: { color: c.faint, fontSize: 10.5, textAlign: "center", marginTop: 12 },
   todoSec: { flexDirection: "row", alignItems: "center", gap: 7, marginTop: 9, marginBottom: 1 },
   todoSecLine: { flex: 1, height: 1, backgroundColor: c.line },
   todoSecT: { fontSize: 10.5, fontWeight: "700", letterSpacing: 0.5 },
