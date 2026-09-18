@@ -4841,7 +4841,7 @@ document.addEventListener("click", (ev) => {
 
 // ⚙ 设置浮层（#317）：显示项为散装开关的镜像（点行 = 触发原按钮再回读状态），
 // 服务器管理不进浮层——左栏常驻面板已是高频区，与手机抽屉同为一级入口
-const CONSOLE_VERSION = "0.5.2";
+const CONSOLE_VERSION = "0.5.2-test.5";
 // #396 拨杆同步：滑块移到 idx 档（transform 过渡），选中档文字加 .on（白字压品牌色滑块上）
 function setLever(el, idx) {
   if (!el) return;
@@ -5866,9 +5866,10 @@ $("sendBtn").onclick = () => {
   }
   // #279 批次3：带图走 COMMAND_MESSAGE images（原始 base64；空文本 + 图也可发，relay 侧文本块省略）
   if (sendCommandTo(sel.ctx, "COMMAND_MESSAGE", { session_id: sid, text, ...(imgs.length ? { images: imgs } : {}) })) {
-    // #279B 历史会话 resume 路径：relay resumeAgent 会 pushExternalLog 回填 user_message
-    // + "已恢复 SDK 会话"系统行，本地不预写防重复；活会话仍本地即时回显
-    if (!sel.s.historical) pushLog(sel.ctx, sid, { ts: Date.now(), kind: "user_message", text: text + (imgs.length ? "（+" + imgs.length + " 图）" : "") });
+    // 本地不预写 user_message：relay 的 agent-adapter sendMessage() 会同步 onLog 回填
+    // （含 "+N 图" 标记，M1 起即有），本地乐观回显会叠出双气泡（2026-09-18 桌面托管
+    // 会话实测：电脑端每条消息两个同文同时刻气泡）。与外部注入路径（上方"不本地
+    // 预写"）及 #279B resume 路径同口径，时间线单一事实源在 relay
     $("msginput").value = "";
     sendImages = [];
     renderImgRow();

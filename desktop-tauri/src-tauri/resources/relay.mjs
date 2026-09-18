@@ -42968,16 +42968,29 @@ async function resumeSession(cwd, sessionId, text, permMode) {
     return runAppleScript(script);
   }
   if (process.platform === "win32" && !process.env.CCR_OSASCRIPT_CMD) {
-    const q2 = (v) => '"' + v.replace(/"/g, '\\"') + '"';
-    const perm = permMode ? ` --permission-mode ${q2(permMode)}` : "";
-    const inner = `claude --resume ${q2(sessionId)}${perm} ${q2(text)}`;
+    const esc = (v) => '"' + v.replace(/"/g, '\\"') + '"';
+    const body = [
+      "@echo off",
+      `cd /d ${esc(cwd)}`,
+      `claude --resume ${esc(sessionId)}${permMode ? ` --permission-mode ${esc(permMode)}` : ""} ${esc(text)}`,
+      '(del "%~f0") 2>nul',
+      ""
+    ].join("\r\n");
+    const tmp = join11(tmpdir(), `ccr-resume-${process.pid}-${Date.now().toString(36)}.cmd`);
+    writeFileSync5(tmp, body, "utf8");
     return new Promise((resolve7) => {
-      const child = spawn2("cmd.exe", ["/c", "start", "cc-deck-resume", "/D", cwd, "cmd", "/k", inner], {
+      const child = spawn2("cmd.exe", ["/c", "start", "cmd", "/k", tmp], {
         windowsHide: true,
         detached: true,
         stdio: "ignore"
       });
-      child.on("error", (e) => resolve7({ ok: false, error: e.message }));
+      child.on("error", (e) => {
+        try {
+          rmSync2(tmp, { force: true });
+        } catch {
+        }
+        resolve7({ ok: false, error: e.message });
+      });
       child.on("spawn", () => resolve7({ ok: true }));
       child.unref?.();
     });
@@ -43321,10 +43334,21 @@ var Bridge = class _Bridge {
   stuckRetryMs;
   subagentEndTtlMs;
   subagentRunTtlMs;
+  // 恢复会话闭环（2026-09-18 公司机报障）：spawn 成功 ≠ 恢复进程上线。窗口期内
+  // 滞留看门狗对会话持袖旁观（补回车只会打进旧 CLI 空输入框）；窗口到期/闭环判定
+  // 未上线则解除，下条消息可重试恢复
+  resumeClosures = /* @__PURE__ */ new Map();
   // hook 侧 pid 缓存路径必须与 bridge-hook.mjs 的 dataDir 判定一致，
   // 否则插件形态下（bundle 在插件缓存目录）按模块路径解析会读错文件，
   // relay 重启后 cli_pid 补水失效、远程发消息全被拒
   pidCacheFile = "";
+  // 恢复窗口/上线校验阈值：运行时读 env（测试中途可调，同 guardConfig 惯例）
+  get resumeWindowMs() {
+    return Number(process.env.CCR_RESUME_WINDOW_MS) > 0 ? Number(process.env.CCR_RESUME_WINDOW_MS) : 12e4;
+  }
+  get resumeVerifyMs() {
+    return Number(process.env.CCR_RESUME_VERIFY_MS) > 0 ? Number(process.env.CCR_RESUME_VERIFY_MS) : 45e3;
+  }
   // #50 idle 归档：DONE 且长时间（默认 12h，CCR_IDLE_ARCHIVE_MS 可调）无事件无增长的
   // ext 会话标 historical（沉底降权 + 旧端仅查看）。同 cwd 挂着旧终端的会话不再
   // 跟当前工作会话抢列表焦点（用户实测「CC-watch-ba」旧身挂了一天双显示）。
@@ -44114,7 +44138,16 @@ var Bridge = class _Bridge {
       return { ok: false, error: "\u5F53\u524D relay \u4E3B\u673A\u6682\u4E0D\u652F\u6301\u5411\u5916\u90E8 CLI \u4F1A\u8BDD\u6CE8\u5165\u8F93\u5165\uFF08\u4EC5 Windows/macOS\uFF09\uFF1B\u6258\u7BA1\u4F1A\u8BDD\u4E0D\u53D7\u5F71\u54CD" };
     }
     if (state.status === "DONE" && (!state.cli_pid || !cliHostAlive(state.cli_pid))) {
-      return this.resumeExternal(sessionId, text);
+      if (!state.cli_pid || !pidAlive(state.cli_pid)) {
+        this.reconcilePidsFromSessions();
+        this.hydratePidsFromCache();
+      }
+      const pid2 = this.mgr.getExternal(sessionId)?.cli_pid ?? state.cli_pid;
+      let alive2 = !!pid2 && cliHostAlive(pid2);
+      if (!alive2 && pid2) alive2 = cliHostAlive(pid2);
+      if (!alive2) {
+        return this.resumeExternal(sessionId, text, !pid2 ? "\u65E0\u8FDB\u7A0B\u5B9A\u4F4D" : `\u8FDB\u7A0B ${pid2} \u5224\u5B9A\u4E0D\u53EF\u7528\uFF08\u4E8C\u6B21\u63A2\u6D4B\u4ECD\u5931\u8D25\uFF09`);
+      }
     }
     const q2 = this.inputQueue.get(sessionId) ?? [];
     q2.push(text);
@@ -44136,11 +44169,11 @@ var Bridge = class _Bridge {
   // 会话连发 N 条 = N 个重复标签（用户 Mac 一晚叠了 15 个）。窗口内后续消息只进
   // pending，恢复进程空闲时 flushQueue 自动带上
   resumeSpawns = /* @__PURE__ */ new Map();
-  resumeExternal(sessionId, text) {
+  resumeExternal(sessionId, text, why) {
     const state = this.mgr.getExternal(sessionId);
     if (!state) return { ok: false, error: `\u4F1A\u8BDD\u4E0D\u5B58\u5728: ${sessionId}` };
     if (this.resumeSpawns.size > 60) this.resumeSpawns.clear();
-    const inWindow = Date.now() - (this.resumeSpawns.get(sessionId) ?? 0) < 12e4;
+    const inWindow = Date.now() - (this.resumeSpawns.get(sessionId) ?? 0) < this.resumeWindowMs;
     this.mgr.setExternalPending(sessionId, [...state.pending_inputs ?? [], { text: text.trim(), ts: Date.now() }]);
     if (inWindow) {
       this.mgr.pushExternalLog(sessionId, "system", `\u6062\u590D\u8FDB\u884C\u4E2D\uFF0C\u6D88\u606F\u5DF2\u6392\u961F\uFF08\u6062\u590D\u8FDB\u7A0B\u7A7A\u95F2\u540E\u81EA\u52A8\u5E26\u4E0A\uFF09\uFF1A${truncate(text, 80)}`);
@@ -44148,13 +44181,25 @@ var Bridge = class _Bridge {
     }
     const cwd = state.cwd || homedir8();
     this.resumeSpawns.set(sessionId, Date.now());
-    this.mgr.pushExternalLog(sessionId, "system", `\u6062\u590D\u4F1A\u8BDD\u4E2D\uFF08\u65B0\u7EC8\u7AEF\u6807\u7B7E claude --resume\uFF09\u5E76\u6295\u9012\uFF1A${truncate(text, 80)}`);
+    this.mgr.pushExternalLog(sessionId, "system", `\u6062\u590D\u4F1A\u8BDD\u4E2D\uFF08\u65B0\u7EC8\u7AEF\u6807\u7B7E claude --resume${why ? `\uFF0C\u539F\u56E0\uFF1A${why}` : ""}\uFF09\u5E76\u6295\u9012\uFF1A${truncate(text, 80)}`);
     void resumeSession(cwd, sessionId.slice(4), text, state.permission_mode).then((r) => {
       if (!r.ok) {
         this.resumeSpawns.delete(sessionId);
         this.mgr.setExternalPending(sessionId, []);
         this.mgr.pushExternalLog(sessionId, "system", `\u6062\u590D\u5931\u8D25\uFF1A${r.error ?? "\u672A\u77E5\u9519\u8BEF"}`);
+        return;
       }
+      const prev = this.resumeClosures.get(sessionId);
+      if (prev) clearTimeout(prev);
+      const t = setTimeout(() => {
+        this.resumeClosures.delete(sessionId);
+        const st2 = this.mgr.getExternal(sessionId);
+        if (!(st2?.pending_inputs ?? []).some((p) => normKey(p.text) === normKey(text))) return;
+        this.resumeSpawns.delete(sessionId);
+        this.mgr.pushExternalLog(sessionId, "system", `\u6062\u590D\u8FDB\u7A0B ${Math.round(this.resumeVerifyMs / 1e3)}s \u5185\u672A\u4E0A\u7EBF\uFF08\u65B0\u7EC8\u7AEF\u53EF\u80FD\u542F\u52A8\u5931\u8D25\uFF09\uFF0C\u4E0B\u6761\u6D88\u606F\u53D1\u9001\u65F6\u5C06\u91CD\u8BD5\u6062\u590D`);
+      }, this.resumeVerifyMs);
+      t.unref?.();
+      this.resumeClosures.set(sessionId, t);
     });
     return { ok: true };
   }
@@ -45118,10 +45163,14 @@ var Bridge = class _Bridge {
         const rec = this.recentUserMsgs.get(id2)?.get(normKey(p.text));
         return !(rec && now - rec.ts < 6e4 && rec.ts >= p.ts);
       }).map((p) => p.text);
-      if (stuckTexts.length === 0 || !s.cli_pid || s.status !== "WORKING" && s.status !== "DONE" || this.flushing.has(id2) || (this.inputQueue.get(id2)?.length ?? 0) > 0) {
+      if (stuckTexts.length === 0) {
         this.stuckWatch.delete(id2);
         continue;
       }
+      if (!s.cli_pid || s.status !== "WORKING" && s.status !== "DONE" || this.flushing.has(id2) || (this.inputQueue.get(id2)?.length ?? 0) > 0) {
+        continue;
+      }
+      if (Date.now() - (this.resumeSpawns.get(id2) ?? 0) < this.resumeWindowMs) continue;
       const w2 = this.stuckWatch.get(id2);
       if (w2?.given_up) continue;
       if (w2 && now - w2.lastTry < this.stuckRetryMs) continue;
