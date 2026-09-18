@@ -12,7 +12,7 @@ import { startWatchGateway } from "./src/watch";
 import { ThemeProvider, useTheme, useThemeStyles } from "./src/theme-context";
 import { useKbHeight } from "./src/kb";
 import { loadDisplaySettings } from "./src/display-settings";
-import { withA, type ThemeColors } from "./src/theme";
+import { mix, withA, type ThemeColors } from "./src/theme";
 import {
   VERSION_NOTES,
   cancelDownload,
@@ -906,14 +906,19 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
   // 悬浮层根：全屏 box-none，按钮/卡片/收起 scrim 各自绝对定位
   tdWrap: { position: "absolute", top: 0, left: 0, right: 0, bottom: 0, zIndex: 80 },
   tdScrim: { position: "absolute", top: 0, left: 0, right: 0, bottom: 0 },
-  // 汇报小方钮基础形（位置/尺寸/圆角），两种表面形态：详情页沿用 done 轻染底；
-  // 列表页盖在会话卡上，轻染底会透出卡面文字——改实底 panel + 描边 + 高一点的 elevation
+  // 汇报小方钮基础形（位置/尺寸/圆角）。#17 白块定案（2026-09-18 用户拍板）：
+  // 半透明玻璃形态 + 数字角标，勿改实底。玻璃用 mix() 预混合不透明色实现（见
+  // tdFabDetail 注释）。列表页仍 panel 实底：盖在会话卡上，半透明会透出卡面
+  // 文字（#204 老约束），玻璃形态只用于详情页
   tdFab: {
     position: "absolute", right: 12, width: 44, height: 44, borderRadius: 14,
     overflow: "visible",
   },
+  // #17 白块终修（vis18 品红实验定案）：半透明底会让 elevation 阴影从身后不均匀透出
+  // （边缘灰环+中心亮块=「对号下的白方块」）。染底改 mix(bg, done, 0.25) 预混合不透明
+  // 玻璃色（= 25% done 叠在页面底上，观感与真半透明一致），阴影留在钮外，内部零分层
   tdFabDetail: {
-    backgroundColor: withA(c.done, 0.10), borderWidth: 1, borderColor: withA(c.done, 0.45), elevation: 4,
+    backgroundColor: mix(c.bg, c.done, 0.25), borderWidth: 1, borderColor: withA(c.done, 0.45), elevation: 4,
   },
   tdFabList: {
     backgroundColor: c.panel, borderWidth: 1, borderColor: withA(c.done, 0.5), elevation: 6,
@@ -953,13 +958,14 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
   // 悬浮层根：全屏 box-none，按钮/卡片/scrim 各自绝对定位
   cfWrap: { position: "absolute", top: 0, left: 0, right: 0, bottom: 0, zIndex: 80 },
   cfScrim: { position: "absolute", top: 0, left: 0, right: 0, bottom: 0 },
-  // 小方钮：与 tdFab 同尺寸同圆角；落位（right/上偏）由 JSX 按 TaskDoneFloat 在场与否注入
+  // 小方钮：与 tdFab 同尺寸同圆角；落位（right/上偏）由 JSX 按 TaskDoneFloat 在场与否注入。
+  // #17 同款玻璃定案：详情页 mix() 预混合玻璃染底+描边，列表页 panel 实底防透字
   cfFab: {
     position: "absolute", right: 12, width: 44, height: 44, borderRadius: 14,
     overflow: "visible",
   },
   cfFabDetail: {
-    backgroundColor: withA(c.brandA, 0.10), borderWidth: 1, borderColor: withA(c.brandA, 0.45), elevation: 4,
+    backgroundColor: mix(c.bg, c.brandA, 0.25), borderWidth: 1, borderColor: withA(c.brandA, 0.45), elevation: 4,
   },
   cfFabList: {
     backgroundColor: c.panel, borderWidth: 1, borderColor: withA(c.brandA, 0.5), elevation: 6,

@@ -1739,7 +1739,7 @@ export default function DetailScreen({ sid, onBack, initialView, ref }: { sid: s
           ) : null}
           <PressScale
             style={[d.sendBtn, (!canCmd || (!input.trim() && images.length === 0)) && { opacity: 0.4 }]}
-            ripple="rgba(255,255,255,0.2)"
+            ripple={withA(c.text, 0.14)}
             haptic
             onPress={() => send()}
             disabled={!canCmd}
@@ -2109,12 +2109,15 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
     backgroundColor: c.panel2, borderWidth: 1, borderColor: c.line,
     paddingHorizontal: 14, paddingVertical: 11, color: c.text, fontSize: 15,
   },
-  // 发送按钮对齐网页版 #sendBtn：品牌色实底方块 + 白色 ➤
+  // 发送按钮对齐网页版 #sendBtn：品牌色实底方块 + 白色 ➤。
+  // 2026-09-18 亮色反馈：蓝底不搭 → theme.sendBg/sendLine/sendFg——深色维持品牌蓝，
+  // 浅色与并排输入框同材质（panel2+line 描边+深灰 ➤）
   sendBtn: {
-    width: 44, height: 44, borderRadius: 13, backgroundColor: c.brandA,
+    width: 44, height: 44, borderRadius: 13, backgroundColor: c.sendBg,
+    borderWidth: 1, borderColor: c.sendLine,
     alignItems: "center", justifyContent: "center",
   },
-  sendT: { color: "#fff", fontSize: 17, lineHeight: 20, marginLeft: 2 },
+  sendT: { color: c.sendFg, fontSize: 17, lineHeight: 20, marginLeft: 2 },
   // 内容长按菜单（#249）：与 md.tsx 链接浮窗同视觉语言
   menuScrim: { flex: 1, backgroundColor: "rgba(0,0,0,0.5)", justifyContent: "center", alignItems: "center", padding: 28 },
   menuCard: { width: "100%", maxWidth: 340, backgroundColor: c.panel, borderRadius: 14, borderWidth: 1, borderColor: c.line, padding: 12 },

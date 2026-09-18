@@ -16,11 +16,16 @@ export interface ThemeColors {
   tintSoft: string;    // 品牌色弱底（chip/卡片叠层）
   tintStrong: string;  // 选中态底
   overlay: string;     // 命令栏等近实底
-  // 列表页"新建会话"FAB（2026-09-18 亮色反馈：原写死近黑底在浅色下突兀）：
-  // 深色保持原观感（近黑底+暖橙十字），浅色改主操作口径（品牌蓝底+白十字）
+  // 列表页"新建会话"FAB（2026-09-18 亮色二次反馈：品牌蓝底太突兀）：
+  // 深色保持原观感（近黑底+暖橙十字），浅色走中性面板口径（暖白底+灰描边+深灰十字）
   fabBg: string;
   fabLine: string;
   fabPlus: string;
+  // 详情页命令栏发送键（2026-09-18 亮色反馈：蓝底不搭）：深色维持品牌蓝实底，
+  // 浅色与并排输入框同材质（panel2+line 描边），➤ 用深灰
+  sendBg: string;
+  sendLine: string;
+  sendFg: string;
 }
 
 export const DARK: ThemeColors = {
@@ -43,6 +48,9 @@ export const DARK: ThemeColors = {
   fabBg: "#1D1726",
   fabLine: "rgba(255,255,255,0.09)",
   fabPlus: "#D97757",
+  sendBg: "#4D9FFF",
+  sendLine: "transparent",
+  sendFg: "#FFFFFF",
 };
 
 export const LIGHT: ThemeColors = {
@@ -64,9 +72,13 @@ export const LIGHT: ThemeColors = {
   tintSoft: "rgba(47,127,232,0.06)",
   tintStrong: "rgba(47,127,232,0.13)",
   overlay: "rgba(240,241,236,0.97)",
-  fabBg: "#2F7FE8",
-  fabLine: "rgba(255,255,255,0.18)",
-  fabPlus: "#FFFFFF",
+  fabBg: "#E2E4DC",
+  fabLine: "rgba(52,58,50,0.13)",
+  // #23 补：浅色十字/箭头回归品牌橙（与深色 FAB 十字同色），中性面板上保品牌识别
+  fabPlus: "#D97757",
+  sendBg: "#E2E4DC",
+  sendLine: "rgba(52,58,50,0.13)",
+  sendFg: "#D97757",
 };
 
 // #RRGGBB + alpha -> #RRGGBBAA（RN 支持 8 位 hex）
@@ -75,6 +87,16 @@ export const withA = (hex: string, a: number): string => {
     .toString(16)
     .padStart(2, "0");
   return `${hex}${v}`;
+};
+
+// 两 hex 预混合（t=0 取 a，t=1 取 b），输出不透明 hex。#17 白块根因：elevation 阴影
+// 会从半透明底后面不均匀透出（边缘浓成灰环、中心无阴影成亮块）——玻璃浮钮染底一律
+// 用 mix(前景, 页面底, t) 预混合成不透明色，观感与真半透明一致且无分层（品红实验定案）
+export const mix = (a: string, b: string, t: number): string => {
+  const pa = [0, 2, 4].map((i) => parseInt(a.slice(1 + i, 3 + i), 16));
+  const pb = [0, 2, 4].map((i) => parseInt(b.slice(1 + i, 3 + i), 16));
+  const c = pa.map((v, i) => Math.round(v + (pb[i] - v) * Math.min(1, Math.max(0, t))));
+  return `#${c.map((v) => v.toString(16).padStart(2, "0")).join("")}`;
 };
 
 // 兼容旧引用（静态场景）；组件内请用 useTheme()
