@@ -263,19 +263,25 @@ const CF_JOIN = ""; //  与 fp 内部的  不同，join/split 才不成碎片
 // #306 待确认悬浮按钮：TaskDoneFloat 同款形态（右下 44dp 小方钮 + 数字角标 +
 // spring 弹入、展开卡 fade+上滑收放），换品牌色系区分语义（任务完成=绿 /
 // 待确认=品牌色）。位置与其错开：TaskDoneFloat 在场时垫其上方 +52，不在场时
-// 落其标准位（FAB/命令栏之上）。展开卡按会话分组逐条列出 [待确认] 事项：
+// 落其标准位（FAB/命令栏之上）；汇报卡展开期间本钮隐藏（#17：展开卡与本钮
+// 同落 base+52，不藏会压在汇报卡 ✓ 行上）。展开卡按会话分组逐条列出 [待确认] 事项：
 // 会话名（displaySrcName 源名规则缩写）+ 内容摘要，点条目直达该会话"任务"
 // tab；✕ 逐条已读、底部全部已读——已读指纹记 store.confirmDismissedKey
 // （内存级，#300 语义：内容变化指纹不匹配自动重现）。展开态由 Shell 持有（#282）
 function ConfirmFloat({
   isDetail,
   hasTaskDone,
+  hidden,
   expanded,
   setExpanded,
   onOpen,
 }: {
   isDetail: boolean;
   hasTaskDone: boolean;
+  // 任务汇报卡展开期间本钮隐藏（#17）：两浮层共用 base+52 落位，绿卡展开的卡片
+  // 与本钮同位同层（zIndex 80、本钮渲染在后）→ 橙方块压在汇报卡 ✓ 行上（用户
+  // 报的"对号上的色块"）。收卡后本钮重新挂载走 spring 弹入，自然回场。
+  hidden: boolean;
   expanded: boolean;
   setExpanded: (v: boolean) => void;
   onOpen: (sid: string) => void;
@@ -350,6 +356,7 @@ function ConfirmFloat({
   };
 
   if (!total) return null;
+  if (hidden && !expanded) return null; // #17 汇报卡展开期让位隐藏（含自身展开不受影响）
   // TaskDoneFloat 同款落位：键盘弹出贴键盘上沿；其在场时本钮垫其上方 +52 错开
   const base = kbH > 0 ? kbH + (isDetail ? 80 : 10) : insets.bottom + (isDetail ? 74 : 124);
   const bottom = base + (hasTaskDone ? 52 : 0);
@@ -856,6 +863,7 @@ function Shell() {
           <ConfirmFloat
             isDetail={!!detail && navPhase !== "closing"}
             hasTaskDone={snap.taskDoneQueue.length > 0}
+            hidden={tdExpanded}
             expanded={cfExpanded}
             setExpanded={openCf}
             onOpen={(sid) => {
