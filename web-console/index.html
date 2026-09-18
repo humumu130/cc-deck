@@ -3349,6 +3349,8 @@ function onEvent(ctx, msg) {
       ctx.lastSeq = Math.max(ctx.lastSeq, msg.seq);
       ctx.models = Array.isArray(msg.payload.models) ? msg.payload.models : []; // #388 模型清单（旧版 relay 无字段=空）
       if (msg.payload.homedir) ctx.homedir = msg.payload.homedir; // #368 新建表单默认目录
+      if (msg.payload.platform) ctx.platform = msg.payload.platform; // relay 平台：新建表单示例自适应+盘符拦截（旧 relay 无字段=中立文案）
+      updateCwdPlaceholder(); // 运行时回调：五块 script 已全部执行，函数全局可达
       // 重连快照里已没有挂起删除的会话 = 别处已删/服务器侧已终结：取消挂起，
       // 免得 4s 后对不存在的会话发命令弹"会话不存在"误报
       if (pendingDel.sid && !ctx.sessions.has(pendingDel.sid)) cancelPendingDel();
@@ -5167,6 +5169,14 @@ function morphAddBtn(open) {
     b.classList.remove("morph");
   }, 110);
 }
+// 新建表单示例按 relay 平台自适应：Windows relay 才给盘符示例，mac/linux 给家目录风格，
+// 未知（旧 relay）给中立文案——杜绝"照示例填 C:\ 却跑在 mac relay"的 /C: 回落误导
+function updateCwdPlaceholder() {
+  const actx = ctxs.get(activeServerId) || ctxs.get(servers[0]?.id);
+  $("cwd").placeholder = actx?.platform === "win32" ? "工作目录（如 D:\\dev\\my-project）"
+    : actx?.platform ? "工作目录（relay 侧路径，如 ~/dev/my-project）"
+    : "工作目录（relay 侧路径）";
+}
 $("addBtn").onclick = () => {
   const open = !$("newform").classList.contains("open");
   $("newform").classList.toggle("open", open);
@@ -5582,6 +5592,12 @@ $("createBtn").onclick = () => {
   const prompt = $("prompt").value.trim();
   if (!prompt) { toast("请输入初始指令"); return; }
   const ctx = ctxs.get(activeServerId) || firstOnlineCtx();
+  // Windows 盘符路径只在 Windows relay 上有效：其余平台前置拦截（旧 relay 无 platform 字段则放行，走服务端回落）
+  if (ctx && ctx.platform && ctx.platform !== "win32" && (/^[A-Za-z]:[\\/]?/.test(cwd) || /^\/[A-Za-z]:/.test(cwd))) {
+    toast(`Windows 盘符路径在当前 relay（${ctx.platform === "darwin" ? "macOS" : ctx.platform}）上无效，请填 relay 侧路径`, 5000);
+    $("cwd").focus();
+    return;
+  }
   // 勾选"跳过权限确认"→ bypassPermissions：免审全部命令与编辑（与手机端 NewSessionModal 同语义）
   const bypass = $("skipPerm").checked;
   const id = sendCommandTo(ctx, "COMMAND_CREATE", { cwd: cwd || ".", prompt, ...(bypass ? { permissionMode: "bypassPermissions" } : {}) });
@@ -7358,6 +7374,7 @@ async function probeLocalRelay() {
     setFormKind("lan", s);
   }
   $("cwd").value = lsGet("ccr_cwd") || "";
+  updateCwdPlaceholder();
   // #386 网页自动嗅探本机 relay：回环 ws 不受 https 混合内容限制，8787 端口固定、
   // 家用部署 token 默认 devtoken——命中即静默加「本机」源（向导存在则收起并直连）。
   // 探测全程对用户不可见：仅未配置时状态卡副行短暂显示"正在探测本机…"；

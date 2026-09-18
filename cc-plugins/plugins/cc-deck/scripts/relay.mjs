@@ -41304,14 +41304,20 @@ function resolveCreateCwd(rawCwd, defaultCwd) {
       return false;
     }
   };
-  const wanted = (rawCwd || "").trim() || (defaultCwd || "").trim();
+  let wanted = (rawCwd || "").trim() || (defaultCwd || "").trim();
+  // "~"/"~/x" 展开家目录：resolve 不做 tilde 展开，原样送入会拼进进程 cwd 变无效路径
+  if (wanted === "~") wanted = homedir4();
+  else if (wanted.startsWith("~/")) wanted = homedir4() + wanted.slice(1);
   if (wanted) {
     const abs = resolve5(wanted);
     if (isUsableDir(abs)) return { cwd: abs, fallbackNote: "" };
   }
   const home = homedir4();
-  const wantedDesc = wanted ? `\u6307\u5B9A\u7684\u5DE5\u4F5C\u76EE\u5F55 ${resolve5(wanted)} \u4E0D\u662F\u6709\u6548\u76EE\u5F55\uFF08\u4E0D\u5B58\u5728\u6216\u65E0\u6CD5\u8BBF\u95EE\uFF09` : "\u672A\u6307\u5B9A\u5DE5\u4F5C\u76EE\u5F55\uFF0C\u4E14\u9ED8\u8BA4\u76EE\u5F55\u672A\u914D\u7F6E\uFF08CCR_CWD\uFF09";
-  const suggest = '\u5982\u9700\u56FA\u5B9A\u5DE5\u4F5C\u76EE\u5F55\uFF0C\u8BF7\u8BBE\u7F6E CCR_CWD \u73AF\u5883\u53D8\u91CF\u6307\u5411\u5B9E\u9645\u9879\u76EE\u76EE\u5F55\uFF08\u5982 Windows "D:\\projects\\myapp"\u3001macOS/Linux "~/projects/myapp"\uFF09\u540E\u91CD\u542F relay';
+  // Windows 盘符路径 = 客户端本地盘，对 relay 本机无意义：给人话提示而非笼统"不是有效目录"
+  // （2026-09-18：Windows 客户端照表单示例填 C:\ → resolve 成 /C: → 回落警告，误导源头）
+  const winDrive = !!wanted && (/^[A-Za-z]:[\\/]?/.test(wanted) || /^\/[A-Za-z]:/.test(wanted));
+  const wantedDesc = !wanted ? "\u672A\u6307\u5B9A\u5DE5\u4F5C\u76EE\u5F55\uFF0C\u4E14\u9ED8\u8BA4\u76EE\u5F55\u672A\u914D\u7F6E\uFF08CCR_CWD\uFF09" : winDrive ? `\u6307\u5B9A\u7684\u5DE5\u4F5C\u76EE\u5F55 ${wanted} \u662F Windows \u76D8\u7B26\u8DEF\u5F84\u2014\u2014\u4F1A\u8BDD\u8FD0\u884C\u5728 relay \u672C\u673A\uFF08${process.platform}\uFF09\uFF0C\u5BA2\u6237\u7AEF\u672C\u5730\u76D8\u7B26\u5728\u6B64\u65E0\u6548` : `\u6307\u5B9A\u7684\u5DE5\u4F5C\u76EE\u5F55 ${resolve5(wanted)} \u4E0D\u662F\u6709\u6548\u76EE\u5F55\uFF08\u4E0D\u5B58\u5728\u6216\u65E0\u6CD5\u8BBF\u95EE\uFF09`;
+  const suggest = winDrive ? '\u8BF7\u6539\u586B relay \u4FA7\u8DEF\u5F84\uFF08macOS/Linux \u5982 "~/projects/myapp"\u3001Windows \u5982 "D:\\projects\\myapp"\uFF09\uFF0C\u6216\u7559\u7A7A\u8D70\u9ED8\u8BA4\u76EE\u5F55' : '\u5982\u9700\u56FA\u5B9A\u5DE5\u4F5C\u76EE\u5F55\uFF0C\u8BF7\u8BBE\u7F6E CCR_CWD \u73AF\u5883\u53D8\u91CF\u6307\u5411\u5B9E\u9645\u9879\u76EE\u76EE\u5F55\uFF08\u5982 Windows "D:\\projects\\myapp"\u3001macOS/Linux "~/projects/myapp"\uFF09\u540E\u91CD\u542F relay';
   if (isUsableDir(home)) {
     return {
       cwd: home,
@@ -45754,6 +45760,8 @@ function startServer(bus2, mgr2, cfg2, opts = {}) {
           ...Object.keys(snapLogs.logs_truncated).length ? { logs_truncated: snapLogs.logs_truncated } : {},
           server_time: Date.now(),
           homedir: homedir9(),
+          // relay 平台（旧客户端忽略）：新建会话表单据此自适应示例与盘符路径拦截
+          platform: process.platform,
           models: listModels(mgr2.cfg.model),
           // 云桥启用的 relay 附带自身设备 id（= CloudConfig.relayDev 同源值）：
           // 客户端据此密码学匹配"LAN 直连条目"与"云桥条目"是同一台 relay，自动合并。
