@@ -1762,6 +1762,87 @@ await wait(150);
   delete process.env.CCR_OSASCRIPT_CMD;
 }
 
+// 50. 恢复误触发防护与闭环（2026-09-18 公司机报障）：CLI 存活不走恢复、死 pid 恢复带
+//     原因留痕、恢复窗口内看门狗让位、闭环未上线解锁重试、状态瞬翻不清看门狗计数
+{
+  const { spawn } = await import("node:child_process");
+  const appleLog = () => fakeLog().filter((a) => a[0] === "-e").map((a) => String(a[1]));
+  const logsOf = (sid: string) => events.filter((e) => e.type === "SESSION_LOG" && e.session_id === extId(sid)).map((e) => String((e.payload as { text: string }).text));
+
+  // ① DONE + CLI 存活（本测试进程）→ 走正常注入，绝不开恢复新窗
+  await hook({ event: "UserPromptSubmit", session_id: "cli-50a", prompt: "存活会话回合", cli_pid: process.pid, cwd: "/tmp" });
+  mgr.setExternalStatus(extId("cli-50a"), "DONE", "完成");
+  const a50 = send("COMMAND_EXT_INPUT", { session_id: extId("cli-50a"), text: "还活着别恢复" });
+  assert((await waitAck(a50)).ok, "50 alive-DONE EXT_INPUT acked");
+  await wait(400);
+  assert(!logsOf("cli-50a").some((t) => t.includes("恢复会话中")), "50 alive CLI never goes resume path");
+  assert(fakeLog().some((a) => a[0] === String(process.pid) && String(a[1]).includes("还活着别恢复")), "50 alive CLI gets direct inject");
+  mgr.setExternalPending(extId("cli-50a"), []); // 清 pending 防看门狗后续介入
+  await hook({ event: "SessionEnd", session_id: "cli-50a", reason: "clear" });
+
+  // ② DONE + 死 pid → 恢复，且日志带触发原因（此前此分支零留痕，排障全靠猜）
+  //（闭环窗 env 先设：b50 的 spawn 会立刻读它起回查 timer）
+  const dead = spawn(process.execPath, ["-e", "process.exit(0)"]);
+  await new Promise<void>((r) => dead.once("exit", () => r()));
+  process.env.CCR_TEST_PLATFORM = "darwin";
+  process.env.CCR_OSASCRIPT_CMD = fileURLToPath(new URL("./fake-injector.mjs", import.meta.url));
+  process.env.CCR_RESUME_VERIFY_MS = "1200";
+  await hook({ event: "UserPromptSubmit", session_id: "cli-50b", prompt: "死定位会话", cli_pid: dead.pid, cwd: "/tmp" });
+  mgr.setExternalStatus(extId("cli-50b"), "DONE", "完成");
+  const b50 = send("COMMAND_EXT_INPUT", { session_id: extId("cli-50b"), text: "恢复带原因" });
+  assert((await waitAck(b50)).ok, "50 dead-DONE EXT_INPUT acked");
+  await wait(400);
+  assert(logsOf("cli-50b").some((t) => t.includes("恢复会话中") && t.includes("原因：进程") && t.includes("二次探测")), "50 resume log carries reason");
+  assert(appleLog().some((x) => x.includes("claude --resume")), "50 resume spawns claude --resume");
+  assert((mgr.snapshot().find((s) => s.session_id === extId("cli-50b"))?.pending_inputs ?? []).some((p) => p.text === "恢复带原因"), "50 resume msg echoed in pending");
+
+  // ③ 恢复闭环：窗口内消息只排队不重开；到期未晋升 → 「未上线」留痕 + 解锁重试
+  const c50 = send("COMMAND_EXT_INPUT", { session_id: extId("cli-50b"), text: "闭环期间这条只排队" });
+  assert((await waitAck(c50)).ok, "50 in-window EXT_INPUT acked");
+  assert(logsOf("cli-50b").some((t) => t.includes("恢复进行中，消息已排队")), "50 in-window msg queues without new spawn");
+  await wait(1600);
+  assert(logsOf("cli-50b").some((t) => t.includes("未上线")), "50 closure detects no-show and logs");
+  const spawnCountBefore = logsOf("cli-50b").filter((t) => t.includes("恢复会话中")).length;
+  const d50 = send("COMMAND_EXT_INPUT", { session_id: extId("cli-50b"), text: "解锁后重试恢复" });
+  assert((await waitAck(d50)).ok, "50 post-closure EXT_INPUT acked");
+  await wait(400);
+  assert(logsOf("cli-50b").filter((t) => t.includes("恢复会话中")).length === spawnCountBefore + 1, "50 closure unlocks retry (new spawn)");
+
+  // ④ 恢复窗口期内：滞留看门狗持袖旁观（补回车只会打进旧 CLI 空输入框）；窗口过期恢复补发
+  const enters50 = () => fakeLog().filter((a) => a[0] === String(dead.pid) && a[1] === "").length;
+  mgr.setExternalPending(extId("cli-50b"), [{ text: "恢复带原因", ts: Date.now() - 9000 }]);
+  (bridge as unknown as { sweepStuckInputs(): void }).sweepStuckInputs();
+  assert(enters50() === 0, "50 watchdog defers during resume window");
+  process.env.CCR_RESUME_WINDOW_MS = "800";
+  await wait(1000);
+  (bridge as unknown as { sweepStuckInputs(): void }).sweepStuckInputs();
+  // 补发走防抢发守门（异步：--peek 快照失败 → fail-open）+ 假注入器子进程落盘也是异步，
+  // 同步读必为 0（29 段同款坑）——轮询等日志
+  await waitLog(() => enters50() >= 1, 5000);
+  assert(enters50() >= 1, "50 watchdog resumes after window expiry");
+  delete process.env.CCR_RESUME_WINDOW_MS;
+  delete process.env.CCR_RESUME_VERIFY_MS;
+
+  // ⑤ 状态瞬翻（WAITING↔WORKING）不清看门狗计数：given_up 粘滞，不再无限补发刷日志
+  const enters50c = () => fakeLog().filter((a) => a[0] === "5077" && a[1] === "").length;
+  await hook({ event: "UserPromptSubmit", session_id: "cli-50c", prompt: "粘滞计数回合", cli_pid: 5077, cwd: "/tmp" });
+  mgr.setExternalPending(extId("cli-50c"), [{ text: "粘滞的滞留消息", ts: Date.now() - 9000 }]);
+  await wait(9000); // CCR_STUCK_AFTER_MS=2000 / RETRY=1500：3 次补发后 given_up
+  const fired = enters50c();
+  assert(fired === 3, `50 sticky tries exactly three (got ${fired})`);
+  mgr.setExternalStatus(extId("cli-50c"), "WAITING", "权限确认");
+  await wait(2000);
+  mgr.setExternalStatus(extId("cli-50c"), "WORKING", "又跑");
+  mgr.setExternalPending(extId("cli-50c"), [{ text: "粘滞的滞留消息", ts: Date.now() - 9000 }]);
+  await wait(6000);
+  assert(enters50c() === fired, "50 status flicker does not reset give-up");
+  assert(logsOf("cli-50c").filter((t) => t.includes("暂停自动补发")).length === 1, "50 give-up logged exactly once");
+  await hook({ event: "SessionEnd", session_id: "cli-50c", reason: "clear" });
+  await hook({ event: "SessionEnd", session_id: "cli-50b", reason: "clear" });
+  delete process.env.CCR_TEST_PLATFORM;
+  delete process.env.CCR_OSASCRIPT_CMD;
+}
+
 wsCur!.close();
 await wait(300);
 console.log("\nBRIDGE TESTS PASSED");

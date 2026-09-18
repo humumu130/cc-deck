@@ -261,17 +261,36 @@ export async function resumeSession(
     return runAppleScript(script);
   }
   if (process.platform === "win32" && !process.env.CCR_OSASCRIPT_CMD) {
-    const q = (v: string) => '"' + v.replace(/"/g, '\\"') + '"';
-    const perm = permMode ? ` --permission-mode ${q(permMode)}` : "";
-    const inner = `claude --resume ${q(sessionId)}${perm} ${q(text)}`;
-    // start "title" /D <dir> cmd /k <cmd>：可见窗口（用户能看到恢复的会话），/D 定 cwd
+    // 2026-09-18 公司机真机翻车复盘：旧实现「spawn 参数向量 → cmd /c start 标题 /D
+    // 目录 cmd /k 内嵌命令」有两层问题——
+    // ①start 的标题必须带引号（start "" 程序 是惯用法），旧代码首参 cc-deck-resume
+    //   未加引号，start 把它当「要启动的程序名」→ 找不到程序，恢复窗口根本没开过
+    //   （错误输出被 windowsHide 吞掉，relay 侧 spawn 成功误报 ok）；
+    // ②内嵌命令要过 node 参数转义 + cmd /c 剥引号 + start 再剥 + cmd /k 再剥四层，
+    //   cwd/正文带空格即碎。
+    // 改为落临时 .cmd 脚本再 start：文件内容只有一层 cmd 引号规则，写什么执行什么；
+    // start 只带无引号歧义的临时路径，参数面最小。末行自删防 tmp 堆积（cmd /k 窗口
+    // 常驻，批处理执行完即可删自身）。启动失败由 bridge 侧恢复闭环（45s 上线回查）兜住
+    const esc = (v: string) => '"' + v.replace(/"/g, '\\"') + '"';
+    const body = [
+      "@echo off",
+      `cd /d ${esc(cwd)}`,
+      `claude --resume ${esc(sessionId)}${permMode ? ` --permission-mode ${esc(permMode)}` : ""} ${esc(text)}`,
+      "(del \"%~f0\") 2>nul",
+      "",
+    ].join("\r\n");
+    const tmp = join(tmpdir(), `ccr-resume-${process.pid}-${Date.now().toString(36)}.cmd`);
+    writeFileSync(tmp, body, "utf8");
     return new Promise((resolve) => {
-      const child = spawn("cmd.exe", ["/c", "start", "cc-deck-resume", "/D", cwd, "cmd", "/k", inner], {
+      const child = spawn("cmd.exe", ["/c", "start", "cmd", "/k", tmp], {
         windowsHide: true,
         detached: true,
         stdio: "ignore",
       });
-      child.on("error", (e) => resolve({ ok: false, error: e.message }));
+      child.on("error", (e) => {
+        try { rmSync(tmp, { force: true }); } catch {}
+        resolve({ ok: false, error: e.message });
+      });
       child.on("spawn", () => resolve({ ok: true }));
       child.unref?.();
     });

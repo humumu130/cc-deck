@@ -154,11 +154,23 @@ export class Bridge {
   private readonly stuckRetryMs: number;
   private readonly subagentEndTtlMs: number;
   private readonly subagentRunTtlMs: number;
+  // 恢复会话闭环（2026-09-18 公司机报障）：spawn 成功 ≠ 恢复进程上线。窗口期内
+  // 滞留看门狗对会话持袖旁观（补回车只会打进旧 CLI 空输入框）；窗口到期/闭环判定
+  // 未上线则解除，下条消息可重试恢复
+  private resumeClosures = new Map<string, NodeJS.Timeout>();
 
   // hook 侧 pid 缓存路径必须与 bridge-hook.mjs 的 dataDir 判定一致，
   // 否则插件形态下（bundle 在插件缓存目录）按模块路径解析会读错文件，
   // relay 重启后 cli_pid 补水失效、远程发消息全被拒
   private pidCacheFile = "";
+
+  // 恢复窗口/上线校验阈值：运行时读 env（测试中途可调，同 guardConfig 惯例）
+  private get resumeWindowMs(): number {
+    return Number(process.env.CCR_RESUME_WINDOW_MS) > 0 ? Number(process.env.CCR_RESUME_WINDOW_MS) : 120_000;
+  }
+  private get resumeVerifyMs(): number {
+    return Number(process.env.CCR_RESUME_VERIFY_MS) > 0 ? Number(process.env.CCR_RESUME_VERIFY_MS) : 45_000;
+  }
 
   constructor(
     private bus: EventBus,
@@ -1074,8 +1086,24 @@ export class Bridge {
     // done_reason 非 disconnected——只要 CLI 不可用就走恢复，不再限定断连
     // DONE 会话：CLI 进程不在了才走恢复（claude --resume 新终端重启+投递）。
     // CLI 还活着（等输入）→ 走正常注入路径，不打断
+    // 误判双重防护（2026-09-18 公司机报障：CLI 窗口存活却走恢复开新窗，消息滞留
+    // 输入框、对旧 CLI 空框补发 10 次回车）：判死前先抢救——
+    // ①pid 缺失/已死 → 立即跑一轮补定位（不等 60s 自愈节拍：CLI 自写的 sessions
+    //   文件 / cli-pids 缓存此刻可能已能恢复定位，定位到了就不开新窗）；
+    // ②在档 pid 双探测：tasklist/ps 单次偶发失败（杀软干扰、系统瞬时繁忙）不直接
+    //   判死，重试一次仍失败才算不可用。
+    // 仍不可用才开恢复新窗，且把触发原因写进恢复日志（此前此分支无任何留痕可查）
     if (state.status === "DONE" && (!state.cli_pid || !cliHostAlive(state.cli_pid))) {
-      return this.resumeExternal(sessionId, text);
+      if (!state.cli_pid || !pidAlive(state.cli_pid)) {
+        this.reconcilePidsFromSessions();
+        this.hydratePidsFromCache();
+      }
+      const pid2 = this.mgr.getExternal(sessionId)?.cli_pid ?? state.cli_pid;
+      let alive2 = !!pid2 && cliHostAlive(pid2);
+      if (!alive2 && pid2) alive2 = cliHostAlive(pid2); // 二次探测
+      if (!alive2) {
+        return this.resumeExternal(sessionId, text, !pid2 ? "无进程定位" : `进程 ${pid2} 判定不可用（二次探测仍失败）`);
+      }
     }
 
     const q = this.inputQueue.get(sessionId) ?? [];
@@ -1101,11 +1129,11 @@ export class Bridge {
   // pending，恢复进程空闲时 flushQueue 自动带上
   private resumeSpawns = new Map<string, number>();
 
-  private resumeExternal(sessionId: string, text: string): { ok: boolean; error?: string } {
+  private resumeExternal(sessionId: string, text: string, why?: string): { ok: boolean; error?: string } {
     const state = this.mgr.getExternal(sessionId);
     if (!state) return { ok: false, error: `会话不存在: ${sessionId}` };
     if (this.resumeSpawns.size > 60) this.resumeSpawns.clear();
-    const inWindow = Date.now() - (this.resumeSpawns.get(sessionId) ?? 0) < 120_000;
+    const inWindow = Date.now() - (this.resumeSpawns.get(sessionId) ?? 0) < this.resumeWindowMs;
     this.mgr.setExternalPending(sessionId, [...(state.pending_inputs ?? []), { text: text.trim(), ts: Date.now() }]);
     if (inWindow) {
       this.mgr.pushExternalLog(sessionId, "system", `恢复进行中，消息已排队（恢复进程空闲后自动带上）：${truncate(text, 80)}`);
@@ -1113,13 +1141,29 @@ export class Bridge {
     }
     const cwd = state.cwd || homedir();
     this.resumeSpawns.set(sessionId, Date.now());
-    this.mgr.pushExternalLog(sessionId, "system", `恢复会话中（新终端标签 claude --resume）并投递：${truncate(text, 80)}`);
+    this.mgr.pushExternalLog(sessionId, "system", `恢复会话中（新终端标签 claude --resume${why ? `，原因：${why}` : ""}）并投递：${truncate(text, 80)}`);
     void resumeSession(cwd, sessionId.slice(4), text, state.permission_mode).then((r) => {
       if (!r.ok) {
         this.resumeSpawns.delete(sessionId); // 恢复失败解除窗口，下条消息可重试恢复
         this.mgr.setExternalPending(sessionId, []);
         this.mgr.pushExternalLog(sessionId, "system", `恢复失败：${r.error ?? "未知错误"}`);
+        return;
       }
+      // 恢复闭环（2026-09-18 公司机报障）：spawn 成功 ≠ 恢复进程上线——claude 不在
+      // PATH / 并发同会话被拒 / 新窗启动失败时，此前 pending 永挂、滞留看门狗干转。
+      // 回查窗口到期时消息仍未晋升（无 UserPromptSubmit）→ 判定恢复未上线：解除
+      // resumeSpawns 让下条消息可重试恢复，并留痕告知
+      const prev = this.resumeClosures.get(sessionId);
+      if (prev) clearTimeout(prev);
+      const t = setTimeout(() => {
+        this.resumeClosures.delete(sessionId);
+        const st = this.mgr.getExternal(sessionId);
+        if (!(st?.pending_inputs ?? []).some((p) => normKey(p.text) === normKey(text))) return; // 已晋升/已清：恢复成功
+        this.resumeSpawns.delete(sessionId);
+        this.mgr.pushExternalLog(sessionId, "system", `恢复进程 ${Math.round(this.resumeVerifyMs / 1000)}s 内未上线（新终端可能启动失败），下条消息发送时将重试恢复`);
+      }, this.resumeVerifyMs);
+      t.unref?.();
+      this.resumeClosures.set(sessionId, t);
     });
     return { ok: true };
   }
@@ -2279,16 +2323,24 @@ export class Bridge {
         const rec = this.recentUserMsgs.get(id)?.get(normKey(p.text));
         return !(rec && now - rec.ts < 60_000 && rec.ts >= p.ts);
       }).map((p) => p.text);
+      if (stuckTexts.length === 0) {
+        this.stuckWatch.delete(id); // 真送达/清空：看门狗全额重置
+        continue;
+      }
+      // 瞬态条件不满足（无定位/状态不适合/flush 中/队列有货）：跳过本轮但保留看门狗
+      // 计数——此前这里整档 delete，tries/given_up 被反复清零，「3 次后暂停」上界
+      // 打穿，同一条滞留消息刷出 10 条补发日志（2026-09-18 公司机实测）
       if (
-        stuckTexts.length === 0 ||
         !s.cli_pid ||
         (s.status !== "WORKING" && s.status !== "DONE") ||
         this.flushing.has(id) ||
         (this.inputQueue.get(id)?.length ?? 0) > 0
       ) {
-        this.stuckWatch.delete(id); // 不满足条件（含已送达/状态变化）：重置看门狗
         continue;
       }
+      // 恢复窗口期内（resumeSpawns 刚 spawn）：滞留消息归恢复闭环管理（上线校验 +
+      // 窗口解锁重试），此时补回车只会打进旧 CLI 的空输入框——无效果纯噪音
+      if (Date.now() - (this.resumeSpawns.get(id) ?? 0) < this.resumeWindowMs) continue;
       const w = this.stuckWatch.get(id);
       if (w?.given_up) continue; // 连续 3 次仍滞留：放弃，防无限打转
       if (w && now - w.lastTry < this.stuckRetryMs) continue; // 每会话限速
