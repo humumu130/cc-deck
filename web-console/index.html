@@ -245,6 +245,41 @@
   .mp-row:hover { background: var(--hov); }
   .mp-row.cur { color: var(--brand); font-weight: 700; }
   .mp-row .mp-cur { color: var(--brand); font-size: 11px; flex: none; }
+  /* #40 权限模式四选一弹层（modelPop 同壳）：每行全称+描述句；当前项整行 tint 底 +
+     右缘「当前」（不靠游离符号，对齐手机端 #36 定案）；跳过行危险 badge + 武装态；
+     面板底部内嵌确认条（左缘 3px 红从属条 + 取消/确认双按钮）——危险档误触不可达 */
+  #permPop {
+    display: none; position: fixed; z-index: 60; width: 300px;
+    background: var(--panel); border: 1px solid var(--border); border-radius: 12px;
+    padding: 5px; box-shadow: 0 8px 28px rgba(0,0,0,.4);
+  }
+  #permPop.open { display: block; }
+  .pp-row { display: flex; align-items: center; gap: 10px; padding: 7px 10px; border-radius: 8px; cursor: pointer; }
+  .pp-row:hover { background: var(--hov); }
+  .pp-row.cur { background: rgba(217,119,87,.10); }
+  .pp-row .pp-main { flex: 1; min-width: 0; }
+  .pp-row .pp-name { font-size: 12.5px; color: var(--text); font-weight: 600; display: flex; align-items: center; gap: 6px; }
+  .pp-row.cur .pp-name { color: var(--brand); }
+  .pp-row .pp-desc { font-size: 11px; color: var(--dim); margin-top: 1px; }
+  .pp-row .pp-cur { color: var(--brand); font-size: 11px; flex: none; }
+  /* 跳过行：行名警示色 + 危险 badge；武装态（首击待确认）waiting tint 底 */
+  .pp-row.danger .pp-name { color: var(--waiting); }
+  .pp-badge {
+    flex: none; font-size: 9.5px; font-weight: 600; color: var(--waiting); line-height: 1.4;
+    border: 1px solid rgba(240,82,79,.45); background: rgba(240,82,79,.10);
+    border-radius: 4px; padding: 1px 4px;
+  }
+  .pp-row.arm { background: rgba(240,82,79,.08); }
+  .pp-row.arm:hover { background: rgba(240,82,79,.12); }
+  .pp-confirm {
+    margin: 5px 2px 2px; border: 1px solid rgba(240,82,79,.3); border-left: 3px solid rgba(240,82,79,.55);
+    border-radius: 10px; background: rgba(240,82,79,.06); padding: 9px 10px;
+  }
+  .pp-confirm-t { font-size: 11px; color: var(--waiting); line-height: 1.5; }
+  .pp-confirm-btns { display: flex; gap: 8px; margin-top: 8px; }
+  .pp-confirm-btns button { flex: 1; height: 30px; border-radius: 8px; font-size: 12px; font-weight: 600; cursor: pointer; }
+  .pp-cancel { color: var(--dim); background: var(--bg-soft); border: 1px solid var(--border); }
+  .pp-go { color: #fff; background: var(--waiting); border: none; }
   .sp-row { display: flex; align-items: center; gap: 8px; font-size: 12.5px; color: var(--text); padding: 7px 9px; border-radius: 8px; }
   .sp-row i { width: 8px; height: 8px; border-radius: 50%; flex: none; }
   .sp-row .sp-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -1427,6 +1462,8 @@
     border: 1px solid var(--border); background: transparent; /* #13 虚线→实线（同 .hbtn） */
   }
   .tabs button.mini.on, #dctxcell button.mini.on { color: var(--brand); border-color: rgba(217,119,87,.55); border-style: solid; }
+  /* #40 权限跳过档警示（id 级优先盖过 .on 品牌蓝；红只到文字+描边，同手机端口径） */
+  #permBtn.warn { color: var(--waiting); border-color: rgba(240,82,79,.55); }
 
   /* 工作状态行（类 CLI，置于输入卡上方）：✶ 摘要 · 回合耗时；宽度与时间线会话列对齐 */
   #liverow {
@@ -1885,6 +1922,9 @@
 
 <!-- #388 模型选择弹层：锚在 modelBtn 下方（fixed 定位，JS 设坐标） -->
 <div id="modelPop"></div>
+
+<!-- #40 权限模式四选一弹层：锚在 permBtn 下方（modelPop 同款壳，行文案+跳过二次确认为专属） -->
+<div id="permPop"></div>
 
 <!-- #49 会话卡右键菜单（fixed 定位 JS 设坐标；菜单项 JS 生成——托管/外部会话菜单不同） -->
 <div id="cardMenu"></div>
@@ -2552,6 +2592,13 @@ function connectAll() { for (const cfg of servers) connectServer(cfg); }
 
 const PERM_CYCLE = ["default", "acceptEdits", "plan", "bypassPermissions"];
 const PERM_LABEL = { default: "标准", acceptEdits: "自动编辑", plan: "规划", bypassPermissions: "跳过" };
+// #40 四选一面板描述句：与手机端 DetailScreen PERM_DESC 逐句一致（两端共用词表，改则同步）
+const PERM_DESC = {
+  default: "每个命令与文件编辑都需确认",
+  acceptEdits: "文件编辑免审，命令仍需确认",
+  plan: "只读规划，先出方案再执行",
+  bypassPermissions: "所有命令与编辑免审直接执行",
+};
 
 function uuid() {
   if (crypto.randomUUID) return crypto.randomUUID();
@@ -4199,7 +4246,10 @@ function renderDetail() {
     const pm = s.permission_mode ?? "default";
     permBtn.textContent = "权限·" + (PERM_LABEL[pm] ?? pm);
     permBtn.classList.toggle("on", pm !== "default");
-  } else permBtn.style.display = "none";
+    // #40 跳过档警示色（对齐手机端 permPillWarn：红只到描边+文字，不用实底）
+    permBtn.classList.toggle("warn", pm === "bypassPermissions");
+    permBtn.title = "权限模式：" + (PERM_LABEL[pm] ?? pm) + "（点击切换）";
+  } else { permBtn.style.display = "none"; permBtn.classList.remove("warn"); }
   const modelBtn = $("modelBtn");
   const canModel = (sel.ctx.models?.length || 0) > 0 && !s.historical;
   if (canModel) {
@@ -6386,13 +6436,69 @@ applyTlScale();
 setThemeIcon(); // #39 初始图标（线条版）
 document.querySelector('meta[name="theme-color"]')?.setAttribute(
   "content", document.documentElement.classList.contains("light") ? "#F1F2F5" : "#04080E");
+// #40 权限模式四选一弹层（对齐手机端 #36 定案，替代循环点击）：点 permBtn 弹出，
+// 恒定 2 击直达任意档；跳过档首击只武装（行 tint + 底部确认条），再击「确认跳过」
+// 才发命令——误触不可达。已处于跳过档时点该行仅收起（现状即该危险态，无需再确认"保持"）
+function closePermPop() {
+  const p = $("permPop");
+  if (p.classList.contains("open")) { p.classList.remove("open"); p.innerHTML = ""; }
+}
+function renderPermPop(cur, arm) {
+  const pop = $("permPop");
+  pop.innerHTML = PERM_CYCLE.map((m) => {
+    const danger = m === "bypassPermissions";
+    return (
+      '<div class="pp-row' + (m === cur ? " cur" : "") + (danger ? " danger" : "") + (danger && arm ? " arm" : "") + '" data-m="' + m + '">' +
+      '<div class="pp-main"><div class="pp-name">' + PERM_LABEL[m] + (danger ? '<span class="pp-badge">危险</span>' : "") + "</div>" +
+      '<div class="pp-desc">' + PERM_DESC[m] + "</div></div>" +
+      (m === cur ? '<span class="pp-cur">当前</span>' : "") + "</div>"
+    );
+  }).join("") + (
+    arm
+      ? '<div class="pp-confirm"><div class="pp-confirm-t">开启后所有命令与文件编辑将不经你确认直接执行，仅在你完全信任当前任务时使用</div>' +
+        '<div class="pp-confirm-btns"><button class="pp-cancel">取消</button><button class="pp-go">确认跳过</button></div></div>'
+      : ""
+  );
+  const sel = selSession();
+  pop.querySelectorAll(".pp-row").forEach((row) => {
+    row.onclick = (ev) => {
+      ev.stopPropagation();
+      const m = row.dataset.m;
+      if (m === "bypassPermissions") {
+        if (cur === "bypassPermissions" || !sel) { closePermPop(); return; } // 已在此档：收起即可
+        renderPermPop(cur, true); // 首击只武装，等「确认跳过」
+        return;
+      }
+      closePermPop();
+      if (sel && m !== cur) sendCommandTo(sel.ctx, "COMMAND_PERM", { session_id: selected.sid, mode: m });
+    };
+  });
+  if (arm) {
+    pop.querySelector(".pp-cancel").onclick = (ev) => { ev.stopPropagation(); closePermPop(); };
+    pop.querySelector(".pp-go").onclick = (ev) => {
+      ev.stopPropagation();
+      closePermPop();
+      if (sel) sendCommandTo(sel.ctx, "COMMAND_PERM", { session_id: selected.sid, mode: "bypassPermissions" });
+    };
+  }
+}
 $("permBtn").onclick = () => {
   const sel = selSession();
   if (!sel || sel.s.external || sel.s.historical) return;
-  const cur = sel.s.permission_mode ?? "default";
-  const next = PERM_CYCLE[(PERM_CYCLE.indexOf(cur) + 1) % PERM_CYCLE.length];
-  sendCommandTo(sel.ctx, "COMMAND_PERM", { session_id: selected.sid, mode: next });
+  const pop = $("permPop");
+  if (pop.classList.contains("open")) { closePermPop(); return; }
+  closeModelPop(); // 防与模型弹层叠加
+  renderPermPop(sel.s.permission_mode ?? "default", false);
+  pop.classList.add("open");
+  const r = $("permBtn").getBoundingClientRect();
+  const pw = 300;
+  pop.style.left = Math.max(8, Math.min(r.right - pw, window.innerWidth - pw - 8)) + "px";
+  pop.style.top = Math.min(r.bottom + 6, window.innerHeight - 260) + "px";
 };
+window.addEventListener("click", (ev) => {
+  const pop = $("permPop");
+  if (pop.classList.contains("open") && !pop.contains(ev.target) && ev.target !== $("permBtn")) closePermPop();
+}, true);
 // #388 模型选择弹层：锚在按钮下方，点选即发 COMMAND_MODEL（下一回合生效）
 function closeModelPop() {
   const p = $("modelPop");
@@ -6405,6 +6511,7 @@ $("modelBtn").onclick = () => {
   if (!models.length) return;
   const pop = $("modelPop");
   if (pop.classList.contains("open")) { closeModelPop(); return; }
+  closePermPop(); // #40 防与权限弹层叠加
   pop.innerHTML = models.map((m) =>
     '<div class="mp-row' + (m === sel.s.model ? " cur" : "") + '" data-m="' + encodeURIComponent(m) + '">' +
     '<span>' + m + "</span>" + (m === sel.s.model ? '<span class="mp-cur">当前</span>' : "") + "</div>",
