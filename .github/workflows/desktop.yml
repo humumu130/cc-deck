@@ -62,6 +62,18 @@ jobs:
           npm version --no-git-tag-version --allow-same-version "$V"
           sed -i "s/const CONSOLE_VERSION = \"[^\"]*\"/const CONSOLE_VERSION = \"$V\"/" ../web-console/index.html
 
+      - name: Stamp dev suffix (无 tag 验证构建通道标识)
+        # 对齐 android.yml 同名步骤：无 tag 验证包烙 -dev.<run_number>，关于页不再与
+        # 正式版撞名（2026-09-18 用户装机见裸 "0.5.2" 误当正式包）。只改 CI 工作区副本
+        if: ${{ !startsWith(github.ref, 'refs/tags/') }}
+        working-directory: desktop-tauri
+        shell: bash
+        run: |
+          V=$(node -e "console.log(require('./package.json').version)")-dev.${{ github.run_number }}
+          npm version --no-git-tag-version --allow-same-version "$V"
+          sed -i "s/const CONSOLE_VERSION = \"[^\"]*\"/const CONSOLE_VERSION = \"$V\"/" ../web-console/index.html
+          echo "stamped: $V"
+
       - name: Build NSIS
         working-directory: desktop-tauri
         shell: bash
@@ -146,6 +158,19 @@ jobs:
           npm version --no-git-tag-version --allow-same-version "$V"
           sed -i.bak "s/const CONSOLE_VERSION = \"[^\"]*\"/const CONSOLE_VERSION = \"$V\"/" ../web-console/index.html
           rm -f ../web-console/index.html.bak
+
+      - name: Stamp dev suffix (无 tag 验证构建通道标识)
+        # 同 Windows job 的 dev 烙印：无 tag 验证包 -dev.<run_number>，防与正式版撞名。
+        # sed -i.bak：macOS BSD sed 同上（test.1 教训）
+        if: ${{ !startsWith(github.ref, 'refs/tags/') }}
+        working-directory: desktop-tauri
+        shell: bash
+        run: |
+          V=$(node -e "console.log(require('./package.json').version)")-dev.${{ github.run_number }}
+          npm version --no-git-tag-version --allow-same-version "$V"
+          sed -i.bak "s/const CONSOLE_VERSION = \"[^\"]*\"/const CONSOLE_VERSION = \"$V\"/" ../web-console/index.html
+          rm -f ../web-console/index.html.bak
+          echo "stamped: $V"
 
       - name: Build dmg
         working-directory: desktop-tauri

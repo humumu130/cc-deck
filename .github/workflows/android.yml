@@ -49,6 +49,18 @@ jobs:
           sed -i "s/versionName \"[^\"]*\"/versionName \"$V\"/" android/app/build.gradle
           sed -i "s/\"version\": \"[^\"]*\"/\"version\": \"$V\"/" app.json
 
+      - name: Stamp dev suffix (无 tag 验证构建通道标识)
+        # workflow_dispatch/push 触发的无 tag 构建是验证包（adb 装机用，不发 Release 不碰
+        # latest.json），但 versionName 裸用仓库值会与正式版撞名（2026-09-18 用户装机见
+        # "0.5.2"误当正式包）。烙 -dev.<run_number>：关于页一眼可辨，且 run 号可反查构建
+        if: ${{ !startsWith(github.ref, 'refs/tags/') }}
+        working-directory: expo-app
+        run: |
+          V=$(node -e "console.log(require('./app.json').expo.version)")-dev.${{ github.run_number }}
+          sed -i "s/versionName \"[^\"]*\"/versionName \"$V\"/" android/app/build.gradle
+          sed -i "s/\"version\": \"[^\"]*\"/\"version\": \"$V\"/" app.json
+          echo "stamped: $V"
+
       - name: Build release APK
         working-directory: expo-app/android
         run: ./gradlew assembleRelease --stacktrace
