@@ -66,6 +66,7 @@ export interface SourceConn {
   failNote: string | null;
   lastSeq: number;
   models: string[];    // #388 该源 SNAPSHOT.models 携带的可用模型清单
+  platform: string;    // SNAPSHOT.platform（relay 本机平台，旧 relay 无字段 = ""）
   sessions: Map<string, SessionState>;
   timelines: Map<string, LogEntry[]>;
   reconnectDelay: number;
@@ -124,6 +125,9 @@ export interface SourceStatus {
   // = wsUrl——同一台服务器在手机/网页两端取到同色（本地 uuid 两端各异不可用）
   colorKey: string;
   relayName?: string; // #100 relay 侧自定义名（客户端未手动改名时的默认显示）
+  // relay 平台（SNAPSHOT platform，0.5.3 起）：新建会话表单据此自适应工作目录
+  // 文案/示例并拦截盘符路径（Windows 手机端填 D:\ 发到 mac relay 的 /C: 回落问题）
+  platform?: string;
 }
 
 export interface Snapshot {
@@ -406,6 +410,7 @@ class RelayStore {
       channel: c.channel,
       relayName: c.relayName || undefined, // #100 relay 侧自定义名（未手动改名时的默认显示）
       colorKey: c.entry.cloud?.relayDev || c.entry.wsUrl,
+      platform: c.platform || undefined,
     }));
     // #388 模型清单取活动源口径（模型切换命令无 sid 路由也走活动源）
     const activeModels = this.activeConn()?.models ?? [];
@@ -737,6 +742,7 @@ class RelayStore {
         failNote: null,
         lastSeq: 0,
         models: [],
+        platform: "",
         sessions: new Map(),
         timelines: new Map(),
         reconnectDelay: RECONNECT_BASE_MS,
@@ -1892,6 +1898,10 @@ class RelayStore {
         // F7 手表凭据 dev：仅云桥启用的 relay 携带；LAN/云快照同源同值，学到即存
         const wanDev = (msg.payload as { wan_dev?: unknown } | undefined)?.wan_dev;
         if (typeof wanDev === "string" && wanDev) conn.wanDev = wanDev;
+        // relay 本机平台（0.5.3 起）：新建会话表单自适应文案/盘符拦截用；旧 relay
+        // 无字段 = 保持空串（UI 按「PC 上的路径」旧口径展示，行为零变化）
+        const plat = (msg.payload as { platform?: unknown } | undefined)?.platform;
+        if (typeof plat === "string" && plat) conn.platform = plat;
         for (const old of conn.sessions.keys()) {
           if (this.sidIndex.get(old) === conn) this.sidIndex.delete(old);
         }

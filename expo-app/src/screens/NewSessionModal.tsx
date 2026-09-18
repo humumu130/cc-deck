@@ -34,6 +34,14 @@ export default function NewSessionModal({ visible, onClose }: { visible: boolean
       ? targetId
       : snap.activeSourceId ?? snap.sources[0]?.id ?? null
     : null;
+  // 目标源 relay 平台（SNAPSHOT.platform，0.5.3 起）：win32 沿用盘符示例；其余按
+  // relay 侧路径展示并拦截盘符输入（Windows 客户端填 D:\ 发到 mac relay 会回落
+  // 家目录并告警）；旧 relay 无字段 → 旧口径零变化
+  const plat = (multi ? snap.sources.find((x) => x.id === effTarget) : null)
+    ?? snap.sources.find((x) => x.id === snap.activeSourceId)
+    ?? snap.sources[0];
+  const relayPlatform = plat?.platform;
+  const posixRelay = !!relayPlatform && relayPlatform !== "win32";
 
   if (visible && !loadedInit) {
     setLoadedInit(true);
@@ -50,7 +58,13 @@ export default function NewSessionModal({ visible, onClose }: { visible: boolean
     const cc = cwd.trim();
     const p = prompt.trim();
     if (!cc) {
-      setErr("请填写工作目录（PC 上的项目路径）");
+      setErr(`请填写工作目录（${posixRelay ? "relay 侧路径" : "PC 上的项目路径"}）`);
+      return;
+    }
+    // 盘符路径拦截（与网页端同款）：非 win32 relay 上 C:\ 类路径必然无效（会话跑
+    // 在 relay 本机，客户端本地盘符无意义），提前拦下省一次创建失败往返
+    if (posixRelay && (/^[A-Za-z]:[\\/]?/.test(cc) || /^\/[A-Za-z]:/.test(cc))) {
+      setErr(`Windows 盘符路径在当前 relay（${relayPlatform === "darwin" ? "macOS" : relayPlatform}）上无效，请填 relay 侧路径`);
       return;
     }
     setErr(null);
@@ -99,12 +113,12 @@ export default function NewSessionModal({ visible, onClose }: { visible: boolean
               </View>
             ) : null}
             <View style={m.field}>
-              <Text style={m.label}>工作目录（PC 上的路径）</Text>
+              <Text style={m.label}>工作目录（{posixRelay ? "relay 侧路径" : "PC 上的路径"}）</Text>
               <TextInput
-                style={[m.input, err && !cwd.trim() && m.inputErr]}
+                style={[m.input, err && m.inputErr]}
                 value={cwd}
                 onChangeText={(v) => { setCwd(v); setErr(null); }}
-                placeholder="D:\dev\myproject"
+                placeholder={posixRelay ? "~/dev/myproject" : "D:\dev\myproject"}
                 placeholderTextColor={c.faint}
                 autoCapitalize="none"
                 autoCorrect={false}
