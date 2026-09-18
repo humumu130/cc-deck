@@ -1276,6 +1276,63 @@
   .cron-name { font-size: 13.5px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .cron-item.paused .cron-name { color: var(--dim); font-weight: 500; }
   .cron-meta { font-size: 11.5px; color: var(--faint); margin-top: 1px; font-variant-numeric: tabular-nums; }
+  /* ---------- #35 输出物（详情页"输出物" tab） ---------- */
+  .af-sum { display: flex; align-items: center; gap: 14px; padding: 10px 2px 12px; border-bottom: 1px solid var(--border); font-size: 12px; color: var(--faint); flex-wrap: wrap; font-variant-numeric: tabular-nums; }
+  .af-sum .cnt { color: var(--dim); font-weight: 600; font-size: 13px; }
+  .af-sum .seg b.cr { color: var(--done); font-weight: 600; }
+  .af-sum .seg b.ed { color: var(--dim); font-weight: 600; }
+  .af-sum .pm { font-family: var(--mono); font-size: .95em; }
+  .af-sum .sp { flex: 1; }
+  .af-trunc { font-size: 11px; color: var(--working); } /* 视觉审查：10.5px 暗底被忽略性略过 */
+  .af-open-dir { flex: none; display: inline-flex; align-items: center; gap: 5px; border: 1px solid var(--border); background: transparent; color: var(--dim); font-size: 11.5px; line-height: 1; border-radius: 7px; padding: 5px 9px; cursor: pointer; }
+  .af-open-dir:hover { color: var(--text); border-color: var(--hov); background: var(--bg-soft); }
+  .af-open-dir svg { width: 12px; height: 12px; }
+  .af-gt { display: flex; align-items: baseline; gap: 6px; font-size: 11px; letter-spacing: 1.5px; font-weight: 600; color: var(--faint); text-transform: uppercase; padding: 14px 2px 6px; border-bottom: 1px solid var(--border); }
+  .af-gt .sub { font-weight: 400; letter-spacing: 0; text-transform: none; font-size: 10.5px; margin-left: 4px; }
+  .af-gt.cr { color: var(--done); border-bottom-color: rgba(43,217,143,.22); }
+  html.light .af-gt { color: var(--dim); } /* 视觉审查：--faint(#8D99AE) 白底 ~2.9:1 跌破 AA（.day-sep 同款修正），.cr 绿色不动 */
+  html.light .af-gt.cr { border-bottom-color: rgba(4,120,87,.25); }
+  .afrow { display: flex; align-items: center; gap: 10px; padding: 8px 2px; border-bottom: 1px solid var(--side-line); font-size: 13px; cursor: default; user-select: none; -webkit-user-select: none; }
+  .afrow:hover { background: var(--bg-soft); border-radius: 8px; }
+  .fico { flex: none; width: 26px; height: 26px; border-radius: 7px; display: flex; align-items: center; justify-content: center; }
+  .fico svg { width: 14px; height: 14px; }
+  /* 六类映射（设计稿同款）：文档=紫 · 代码=蓝 · 数据=琥珀 · 图片=绿 · 压缩=中性 · 其他=灰 */
+  .fico.f-doc  { background: rgba(124,108,242,.16); color: #9C8CFF; }
+  .fico.f-code { background: rgba(77,159,255,.15);  color: #7CB8FF; }
+  .fico.f-data { background: rgba(255,197,61,.13);  color: #FFC53D; }
+  .fico.f-img  { background: rgba(43,217,143,.13);  color: #2BD98F; }
+  .fico.f-zip  { background: rgba(148,163,190,.18); color: #A9B6CE; } /* 视觉审查：.13/#94A3BE 暗底与背景融合 */
+  .fico.f-gen  { background: rgba(148,163,190,.16); color: #A9B6CE; }
+  html.light .fico.f-doc  { background: rgba(111,95,232,.13); color: #6F5FE8; }
+  html.light .fico.f-code { background: rgba(47,127,232,.12); color: #2F7FE8; }
+  html.light .fico.f-data { background: rgba(161,98,7,.13);   color: #A16207; }
+  html.light .fico.f-img  { background: rgba(4,120,87,.12);   color: #047857; }
+  html.light .fico.f-zip  { background: rgba(100,116,139,.14); color: #64748F; }
+  html.light .fico.f-gen  { background: rgba(100,116,139,.10); color: #8D99AE; }
+  .afname { display: flex; align-items: baseline; min-width: 0; flex: 1; overflow: hidden; white-space: nowrap; }
+  .afname .fn { color: var(--text-strong); font-weight: 550; }
+  /* 路径是本 tab 核心信息：--dim 而非 --faint，不与文件名抢层级（设计稿同款） */
+  .afname .dir, .afname .dir2 { color: var(--dim); font-size: 12px; }
+  .afname .dir2 { direction: rtl; text-overflow: ellipsis; } /* cwd 外绝对路径目录段：右起截断保盘符/根 */
+  .afrow .badge { flex: none; font-size: 11px; padding: 2px 7px; border-radius: 20px; font-weight: 600; margin-left: 8px; } /* 视觉审查：10px 双主题辨识吃力 */
+  .badge.b-del { background: rgba(255,120,73,.12); color: var(--error); }
+  html.light .badge.b-del { background: rgba(194,65,12,.10); }
+  .badge.b-out { background: rgba(255,197,61,.13); color: var(--working); }
+  html.light .badge.b-out { background: rgba(161,98,7,.10); }
+  .afrow.dead .fn { color: var(--faint); text-decoration: line-through; text-decoration-color: rgba(255,255,255,.22); }
+  html.light .afrow.dead .fn { text-decoration-color: rgba(16,27,46,.28); }
+  .afrow.dead .fico { opacity: .5; }
+  .afmeta { flex: none; display: flex; align-items: center; gap: 10px; font-size: 11px; color: var(--faint); font-variant-numeric: tabular-nums; }
+  html.light .afmeta { color: var(--dim); } /* 视觉审查：亮色元信息列 #8D99AE 白底 2.9:1，暗色 --faint(#55617A) 深底可读不动 */
+  .afmeta .pm { font-family: var(--mono); font-size: .95em; }
+  .afmeta .pm .ds-add, .afmeta .pm .ds-del { font-size: 1em; }
+  .afmeta .sz { min-width: 42px; text-align: right; }
+  .afmeta .tm { min-width: 32px; text-align: right; }
+  .af-act { flex: none; opacity: 0; border: none; background: transparent; color: var(--faint); font-size: 13px; line-height: 1.4; padding: 2px 6px; border-radius: 6px; cursor: pointer; transition: opacity .15s; }
+  .afrow:hover .af-act { opacity: 1; }
+  .af-act:hover { color: var(--dim); background: var(--hov); }
+  .af-foot { display: flex; align-items: center; gap: 16px; padding: 14px 6px 30px; font-size: 11.5px; color: var(--dim); flex-wrap: wrap; } /* 视觉审查：暗色 --faint/11px 近乎不可见 → --dim（亮主题自动解析 #5F6C84）+ 左右 2px 贴边放宽 */
+  .af-foot .k { border: 1px solid var(--border); border-radius: 5px; padding: 0 5px; margin-right: 5px; font-size: 10.5px; line-height: 1.6; }
   .card-summary { color: var(--card-sub); font-size: 11.5px; margin-top: 4px; padding-left: 6px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; } /* #399 悬挂缩进对齐灯列；#54 动作行降档 12.5→11.5 + 提色 */
   .card-summary.waiting { color: var(--working); }
   .card-stats { font-size: 11px; color: var(--faint); margin-top: 6px; display: flex; align-items: center; gap: 10px; font-variant-numeric: tabular-nums; } /* #54 元信息行降档 12→11 */
@@ -2063,6 +2120,7 @@
         <button data-tab="activity" class="tab active">消息</button>
         <button data-tab="todos" class="tab">任务</button>
         <button data-tab="log" class="tab">全部</button>
+        <button data-tab="artifacts" class="tab">输出物</button>
         <button data-tab="cron" class="tab">定时</button>
         <button data-tab="stats" class="tab">统计</button>
         <span class="spacer"></span>
@@ -3448,7 +3506,7 @@ function onEvent(ctx, msg) {
       else if (msg.payload.status !== "WAITING") s.waiting_request = null;
       // 其余可选字段：出现即覆盖（与手机端 store 对齐）；pinned/saved 为 #49 保存恢复字段
       for (const f of ["remote_mode", "title", "title_locked", "model", "turn_started_at",
-        "usage", "context_usage", "context_limit", "todos", "subagents", "permission_mode", "pending_inputs", "relay_session_id", "cron_tasks", "compacting", "pinned", "saved"]) {
+        "usage", "context_usage", "context_limit", "todos", "subagents", "permission_mode", "pending_inputs", "relay_session_id", "cron_tasks", "compacting", "pinned", "saved", "artifacts", "artifacts_truncated"]) {
         if (msg.payload[f] !== undefined) s[f] = msg.payload[f];
       }
       s.updated_at = msg.ts;
@@ -4287,6 +4345,15 @@ function renderDetail() {
     }
     return;
   }
+  if (activeTab === "artifacts") {
+    // #35 输出物：全量序列化作 key（cron 同款）——增删行累计/角标/截断标记任一变化触发重建
+    const artKey = "art:" + s.session_id + ":" + JSON.stringify(s.artifacts ?? null) + ":" + (s.artifacts_truncated ? 1 : 0);
+    if (tl.dataset.count !== artKey) {
+      tl.dataset.count = artKey;
+      tl.innerHTML = artifactsTabHtml(s);
+    }
+    return;
+  }
   const full = sel.ctx.timelines.get(s.session_id) || [];
   const list = activeTab === "activity"
     // #41 任务操作（TaskCreate/TaskUpdate/TodoWrite）随消息面板可见：只放行任务类
@@ -4472,6 +4539,106 @@ function cronTabHtml(s) {
       '<div class="cron-prompt">' + escapeHtml(t.prompt || "") + "</div>" +
     "</div></div>";
   }).join("");
+}
+
+// ---------- #35 输出物 tab（会话文件产出清单：分组 新建/修改，组内按 last_at 降序） ----------
+// 双击行 = 本地默认应用打开（桌面壳 window.ccDeck.openPath，浏览器降级 toast+复制路径）；
+// 右键 / hover ⋯ = #326 openFpathPop 同款浮窗（追加"复制相对路径"，已删除行隐藏打开两项）。
+// 单击无动作防误开；全部交互走 #timeline 事件委托（innerHTML 全量重建免重挂）
+// 六类图标（设计稿同款 SVG，stroke 1.8 与现网语言一致），不追真实 filetype
+const ART_SVG = {
+  code: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="m9.2 8.6-3.6 3.4 3.6 3.4"/><path d="m14.8 8.6 3.6 3.4-3.6 3.4"/></svg>',
+  doc: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3.4h8.4L19 8v12.6H6z"/><path d="M14 3.6V8h4.6"/><path d="M9 12.4h6M9 15.8h6M9 8.6h2.6"/></svg>',
+  data: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M7 4.5C4.8 4.5 4.8 9 7 9s2.2 4.5 0 4.5-2.2 4.5 0 4.5"/><path d="M17 4.5c2.2 0 2.2 4.5 0 4.5s-2.2 4.5 0 4.5 2.2 4.5 0 4.5"/></svg>',
+  img: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3.6" y="5" width="16.8" height="14" rx="2.6"/><circle cx="9" cy="10" r="1.7"/><path d="m5.5 17.4 4.6-4.4 3 2.8 2.6-2.5 3.2 3.1"/></svg>',
+  zip: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h16v12.6H4z"/><path d="m4 7 2-3.2h12L20 7"/><path d="M10.4 11h3.2M10.4 14h3.2"/></svg>',
+  gen: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M5 3.8h9L19 8.8v11.4H5z"/><path d="M13.8 4v4.8H18.6"/></svg>',
+};
+const ART_EXT = {
+  code: new Set("ts tsx js jsx mjs cjs py rs go java kt kts swift c h cpp hpp cc cs rb php vue svelte sh zsh bash fish ps1 bat sql css scss less styl html htm xml astro lua dart nim zig ex exs erl hs ml scala tf proto graphql".split(" ")),
+  doc: new Set("md markdown txt text rst adoc asciidoc pdf doc docx rtf pages key keynote ppt pptx xlsx numbers log".split(" ")),
+  data: new Set("json jsonl jsonc ndjson csv tsv yaml yml toml ini cfg conf env properties plist db sqlite".split(" ")),
+  img: new Set("png jpg jpeg gif svg webp bmp ico tiff tif heic avif".split(" ")),
+  zip: new Set("zip tar gz tgz bz2 xz 7z rar dmg iso jar war apk".split(" ")),
+};
+function artKindOf(name) {
+  const m = /\.([A-Za-z0-9]+)$/.exec(String(name || ""));
+  const ext = m ? m[1].toLowerCase() : "";
+  for (const k of ["code", "doc", "data", "img", "zip"]) if (ART_EXT[k].has(ext)) return k;
+  return "gen";
+}
+// 相对 cwd 展示路径（origin=cwd 才有；分隔符保持 OS 原样）
+function artRelOf(s, t) {
+  if (t.origin !== "cwd" || !s.cwd) return "";
+  return t.path.startsWith(s.cwd) ? t.path.slice(s.cwd.length).replace(/^[\\/]+/, "") : "";
+}
+// 输出物时间：今天 HH:mm / 昨天 / 7 天内 周X / 更早 M/d
+function fmtArtTime(ts) {
+  if (!ts) return "";
+  const now = Date.now();
+  if (dayKey(ts) === dayKey(now)) return fmtHM(ts);
+  if (dayKey(ts) === dayKey(now - 86400000)) return "昨天";
+  if (now - ts < 7 * 86400000) return "周" + "日一二三四五六"[new Date(ts).getDay()];
+  const d = new Date(ts);
+  return d.getMonth() + 1 + "/" + d.getDate();
+}
+function fmtArtSize(n) {
+  if (typeof n !== "number" || n < 0) return "";
+  if (n < 1024) return n + " B";
+  if (n < 1024 * 1024) return (n / 1024).toFixed(n < 10240 ? 1 : 0) + " KB";
+  return (n / 1048576).toFixed(1) + " MB";
+}
+function artRowHtml(t, s) {
+  const p = String(t.path || "");
+  const rel = artRelOf(s, t);
+  const name = (rel || p).split(/[\\/]/).pop() || p;
+  const dead = t.exists === false;
+  const outside = !rel && t.origin !== "cwd";
+  // cwd 内：文件名亮显 + 目录前缀灰显随行；cwd 外：绝对路径目录段（rtl 截断保根）+ 琥珀角标
+  const dirHtml = rel
+    ? '<span class="fn">' + escapeHtml(name) + '</span>&nbsp;<span class="dir">' + escapeHtml(rel.slice(0, rel.length - name.length)) + "</span>"
+    : '<span class="dir2">' + escapeHtml(p.slice(0, p.length - name.length)) + '</span><span class="fn">' + escapeHtml(name) + "</span>";
+  const badge = (dead ? '<span class="badge b-del">已删除</span>' : "") + (outside ? '<span class="badge b-out">cwd 外</span>' : "");
+  const k = artKindOf(name);
+  return '<div class="afrow' + (dead ? " dead" : "") + '" data-p="' + escapeHtml(p) + '"' +
+    (rel ? ' data-rel="' + escapeHtml(rel) + '"' : "") + (dead ? ' data-dead="1"' : "") +
+    ' title="' + escapeHtml(p) + '">' +
+    '<span class="fico f-' + k + '">' + ART_SVG[k] + "</span>" +
+    '<span class="afname">' + dirHtml + badge + "</span>" +
+    '<span class="afmeta"><span class="pm"><span class="ds-add">+' + (t.adds ?? 0) + '</span> <span class="ds-del">−' + (t.dels ?? 0) + "</span></span>" +
+    (fmtArtSize(t.size) ? '<span class="sz">' + fmtArtSize(t.size) + "</span>" : "") +
+    '<span class="tm">' + fmtArtTime(t.last_at || t.first_at) + "</span></span>" +
+    '<button class="af-act" title="更多操作">⋯</button>' +
+    "</div>";
+}
+function artifactsTabHtml(s) {
+  const arts = s.artifacts ?? [];
+  if (!arts.length) {
+    const hint = s.historical
+      ? "历史会话无输出物记录"
+      : s.external
+        ? "需 CLI 挂 cc-deck hooks 才能捕获（Write/Edit 写文件后自动出现）"
+        : "CLI 里用 Write/Edit 写文件后，这里会自动出现";
+    return '<div class="todo-empty">本会话还没有文件产出<br><span style="font-size:12px">' + hint + "</span></div>";
+  }
+  const byRecency = (a, b) => (b.last_at || b.first_at || 0) - (a.last_at || a.first_at || 0);
+  const created = arts.filter((t) => t.op === "create").sort(byRecency);
+  const edited = arts.filter((t) => t.op !== "create").sort(byRecency);
+  const adds = arts.reduce((n, t) => n + (t.adds ?? 0), 0);
+  const dels = arts.reduce((n, t) => n + (t.dels ?? 0), 0);
+  const shellOk = !!(window.ccDeck && window.ccDeck.openPath);
+  let html =
+    '<div class="af-sum"><span class="cnt">' + arts.length + " 个文件</span>" +
+    '<span class="seg"><b class="cr">新建 ' + created.length + '</b> · <b class="ed">修改 ' + edited.length + "</b></span>" +
+    '<span class="pm"><span class="ds-add">+' + adds.toLocaleString() + '</span> <span class="ds-del">−' + dels.toLocaleString() + "</span></span>" +
+    (s.artifacts_truncated ? '<span class="af-trunc">已截断 · 保留最新 200</span>' : "") +
+    '<span class="sp"></span>' +
+    (shellOk && s.cwd ? '<button class="af-open-dir" data-dir="' + escapeHtml(s.cwd) + '"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3.5 7.2c0-1.3 1-2.3 2.3-2.3h3l2 2.2h6.4c1.3 0 2.3 1 2.3 2.3v7.3c0 1.3-1 2.3-2.3 2.3H5.8c-1.3 0-2.3-1-2.3-2.3z"/></svg>打开工作目录</button>' : "") +
+    "</div>";
+  if (created.length) html += '<div class="af-gt cr">新建 <span>' + created.length + '</span><span class="sub">本会话产出的文件</span></div>' + created.map((t) => artRowHtml(t, s)).join("");
+  if (edited.length) html += '<div class="af-gt">修改 <span>' + edited.length + "</span></div>" + edited.map((t) => artRowHtml(t, s)).join("");
+  html += '<div class="af-foot"><span><span class="k">双击</span>本地打开</span><span><span class="k">右键 / ⋯</span>更多操作</span><span><span class="k">仅收录</span>Write · Edit · MultiEdit · NotebookEdit</span></div>';
+  return html;
 }
 
 function escapeHtml(s) {
@@ -6441,6 +6608,12 @@ $("timeline").addEventListener("pointerdown", (ev) => {
 });
 $("timeline").addEventListener("contextmenu", (ev) => {
   if (ev.target.closest(".task-ref")) ev.preventDefault();
+  // #35 输出物行右键 = ⋯ 同款浮窗（打开/定位/复制；已删除行走 noOpen 分支）
+  const afrow = ev.target.closest(".afrow");
+  if (afrow) {
+    ev.preventDefault();
+    openArtPop(afrow, ev.clientX, ev.clientY);
+  }
 });
 // 触屏滚动抢走指针（pointercancel）或按住移出窗口松开（blur）：无 pointerup 可等，
 // 清掉按压计时防"无人按着却弹钉住卡"
@@ -6470,6 +6643,38 @@ $("timeline").addEventListener("click", (ev) => {
   }
   const cron = ev.target.closest(".cron-item");
   if (cron && !ev.target.closest(".todo-del")) cron.classList.toggle("open");
+  // #35 输出物：⋯ 菜单钮 / 打开工作目录（仅桌面壳渲染该钮，浏览器不可达）
+  const afAct = ev.target.closest(".af-act");
+  if (afAct) {
+    const row = afAct.closest(".afrow");
+    if (row) openArtPop(row, ev.clientX, ev.clientY);
+    return;
+  }
+  const afDir = ev.target.closest(".af-open-dir");
+  if (afDir && window.ccDeck && window.ccDeck.openPath) {
+    window.ccDeck.openPath(afDir.dataset.dir || "", false).catch((er) => toast(String(er?.message || er).slice(0, 80), 3500));
+  }
+});
+// #35 输出物浮窗入口：路径 + 相对路径（origin=cwd 才有）+ 已删除标记 → openFpathPop 扩展参
+function openArtPop(row, x, y) {
+  openFpathPop(row.dataset.p || "", x, y, {
+    rel: row.dataset.rel || "",
+    noOpen: row.dataset.dead === "1",
+  });
+}
+// #35 双击输出物行 = 本地默认应用打开（核心交互）；浏览器降级 toast + 顺带复制路径，
+// 不让降级成死胡同；已删除行双击只 toast
+$("timeline").addEventListener("dblclick", (ev) => {
+  const row = ev.target.closest(".afrow");
+  if (!row) return;
+  const p = row.dataset.p || "";
+  if (row.dataset.dead === "1") { toast("文件已不存在（可能已被清理）"); return; }
+  if (window.ccDeck && window.ccDeck.openPath) {
+    window.ccDeck.openPath(p, false).catch((er) => toast(String(er?.message || er).slice(0, 80), 3500));
+  } else {
+    copyText(p);
+    toast("在桌面端打开可双击启动本地应用（路径已复制）");
+  }
 });
 // #374 任务拖动排序（未完成区）：HTML5 DnD 委托——drop 换位本地重排 + 注入调序指令
 const todoKeyOf = (t) => String(t.id ?? t.content);
@@ -6541,7 +6746,7 @@ function copyText(s) {
   try { document.execCommand("copy"); done(); } catch { toast("复制失败"); }
   ta.remove();
 }
-function openFpathPop(p, x, y) {
+function openFpathPop(p, x, y, opts) {
   const pop = $("fpathPop");
   pop.innerHTML = "";
   const mk = (label, fn) => {
@@ -6550,20 +6755,26 @@ function openFpathPop(p, x, y) {
     b.onclick = (e) => { e.stopPropagation(); pop.classList.remove("open"); fn(); };
     pop.appendChild(b);
   };
-  const shellOk = !!(window.ccDeck && window.ccDeck.openPath);
+  // #35 opts：rel = 顺带给"复制相对路径"项；noOpen = 已删除文件——打开两项不给（stat 不到，
+  // 打开必然失败，toast 兜底由双击路径负责），复制照常
+  const shellOk = !!(window.ccDeck && window.ccDeck.openPath) && !opts?.noOpen;
   if (shellOk) {
     mk("打开文件", () => { window.ccDeck.openPath(p, false).catch((er) => toast(String(er?.message || er).slice(0, 80), 3500)); });
     mk("打开所在目录", () => { window.ccDeck.openPath(p, true).catch((er) => toast(String(er?.message || er).slice(0, 80), 3500)); });
   }
   mk("复制路径", () => copyText(p));
+  if (opts?.rel) mk("复制相对路径", () => copyText(opts.rel));
   pop.classList.add("open");
   const r = pop.getBoundingClientRect();
   pop.style.left = Math.max(8, Math.min(x, innerWidth - r.width - 10)) + "px";
   pop.style.top = Math.max(8, Math.min(y, innerHeight - r.height - 10)) + "px";
 }
+// 关闭监听须走 capture（modelPop 同款）：bubble 侧 timeline 委托同次点击里才开浮窗，
+// bubble 的 document 关闭会把它立刻关掉（#326 上线起左键点 .fpath 浮窗闪现即关的根因，
+// #35 输出物 ⋯ 入口同机制，一并修复）——capture 先关旧、bubble 再开新，天然无冲突
 document.addEventListener("click", (ev) => {
   if (!ev.target.closest("#fpathPop")) $("fpathPop").classList.remove("open");
-});
+}, true);
 
 // #306/#406 待确认悬浮清单交互（同上委托口径）：✕ → 该条已读（localStorage 记已读
 // 条目 key，内容变化后自动重现）；全部已读 → 当前集合全标+关窗（顺手清掉已消亡会话
