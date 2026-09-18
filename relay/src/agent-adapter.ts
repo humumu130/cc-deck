@@ -489,8 +489,9 @@ export class AgentSession {
     this.queue.end();
   }
 
-  // 会话中途切换权限模式（SDK 控制通道，CLI 的 /permissions 同款能力）
-  async setPermissionMode(mode: "default" | "acceptEdits" | "plan"): Promise<void> {
+  // 会话中途切换权限模式（SDK 控制通道，CLI 的 /permissions 同款能力）。
+  // 四档全放开：bypassPermissions 此前被类型窄化挡掉——skip 会话被误切后就回不去了
+  async setPermissionMode(mode: "default" | "acceptEdits" | "plan" | "bypassPermissions"): Promise<void> {
     await this.q.setPermissionMode(mode);
   }
 }

@@ -40,7 +40,11 @@ import type {
 } from "./types.js";
 
 function isManagedMode(m: unknown): m is ManagedPermissionMode {
-  return m === "default" || m === "acceptEdits" || m === "plan";
+  // bypassPermissions 必须在内：① CLI init 回报 skip 会话时据此镜像记录 state（否则
+  // 挂起恢复 `state.permission_mode ?? "default"` 把 skip 会话掉回 default，每条命令
+  // 重新送审）② COMMAND_PERM 切换接受 skip 档——客户端切换器已含四档，缺此则一切走
+  // default/acceptEdits 就再也切不回 skip（用户实踩：skip 启动 → 点权限按钮 → 永久降级）
+  return m === "default" || m === "acceptEdits" || m === "plan" || m === "bypassPermissions";
 }
 
 // 设备类型派生：meta 自报身份优先（CC Deck App / 移动 platform → phone，watch → watch），

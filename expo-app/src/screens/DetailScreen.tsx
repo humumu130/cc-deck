@@ -44,12 +44,14 @@ const VOICE_ERR_NAMES: Record<number, string> = {
   9: "权限",
 };
 
-// 权限模式循环切换（与 relay 的 ManagedPermissionMode 对齐）
-const PERM_CYCLE = ["default", "acceptEdits", "plan"] as const;
+// 权限模式循环切换（与 relay 的 ManagedPermissionMode 对齐）。四档含"跳过"：
+// skip 会话被误切后能切回来；skip = 免审全部命令与编辑，勾选信任本机环境再用
+const PERM_CYCLE = ["default", "acceptEdits", "plan", "bypassPermissions"] as const;
 const PERM_LABEL: Record<(typeof PERM_CYCLE)[number], string> = {
   default: "标准",
   acceptEdits: "自动编辑",
   plan: "规划",
+  bypassPermissions: "跳过",
 };
 
 function matchFilter(kind: string, f: ViewKind, tool?: string): boolean {

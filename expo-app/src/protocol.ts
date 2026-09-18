@@ -82,7 +82,7 @@ export interface SessionState {
   context_limit?: number; // 上下文窗口上限（relay 按模型下发；缺省兜底 200k）
   todos?: TodoItem[];
   title_locked?: boolean;
-  permission_mode?: "default" | "acceptEdits" | "plan"; // 托管会话权限模式
+  permission_mode?: "default" | "acceptEdits" | "plan" | "bypassPermissions"; // 托管会话权限模式（skip 会话 init 即 bypass，切换器四档循环）
   pending_inputs?: PendingInput[]; // 外部会话已发送未处理的注入消息（显示在工作指示器下方，处理时上浮为正式消息）
   subagents?: SubagentEntry[]; // 并行子 Agent（⑂）：运行中/刚结束的后台任务状态
   cron_tasks?: CronTask[]; // 定时任务快照（[] = 已清空）

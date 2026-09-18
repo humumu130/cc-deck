@@ -516,7 +516,8 @@ export type Command =
   | ResumeSessionCommand
   | ImportPushCommand;
 
-// 托管会话权限模式切换（default=每次确认 / acceptEdits=自动接受编辑 / plan=只读规划）
+// 托管会话权限模式切换（default=每次确认 / acceptEdits=自动接受编辑 / plan=只读规划 /
+// bypassPermissions=跳过全部确认——skip 会话被误切后靠此切回）
 export interface PermCommand extends CommandBase {
   type: "COMMAND_PERM";
   payload: { session_id: string; mode: ManagedPermissionMode };
