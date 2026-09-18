@@ -18,6 +18,16 @@ import { printQr } from "./qr.js";
 import { advertiseRelay } from "./mdns.js";
 import { ensureTodoToolsEnv, TODO_TOOLS_ENV_KEY } from "./todo-tools-env.js";
 
+// 内嵌模式（桌面壳 CCR_PARENT_PID 标记）：日志加时间戳——embedded-relay.log 此前
+// 全是裸行，云桥翻动/断连这类时序问题无从对表排障（2026-09-18 电脑端排查之痛）
+if (process.env.CCR_PARENT_PID) {
+  const ts = () => new Date().toISOString().replace("T", " ").slice(0, 19) + " ";
+  for (const m of ["log", "error", "warn"] as const) {
+    const orig = console[m].bind(console);
+    console[m] = (...a: unknown[]) => orig(ts() + a.join(" "));
+  }
+}
+
 const cfg = loadConfig();
 
 // #28（2026-09-10 用户机实测根因）：同数据目录双 relay 进程（CLI 插件 supervisor +
