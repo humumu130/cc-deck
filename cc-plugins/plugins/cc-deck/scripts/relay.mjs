@@ -10337,8 +10337,8 @@ function unseal(box, theirPublicKeyB64, mySecretKeyB64) {
 }
 
 // src/index.ts
-import { networkInterfaces as networkInterfaces3, homedir as homedir11, hostname } from "node:os";
-import { join as join15 } from "node:path";
+import { networkInterfaces as networkInterfaces3, homedir as homedir12, hostname } from "node:os";
+import { join as join16 } from "node:path";
 import { writeFileSync as writeFileSync10, openSync as openSync3, readFileSync as readFileSync15, rmSync as rmSync3, existsSync as existsSync11 } from "node:fs";
 import { spawn as spawn3, execFileSync as execFileSync2 } from "node:child_process";
 import { fileURLToPath as fileURLToPath4 } from "node:url";
@@ -10363,7 +10363,14 @@ function loadConfig() {
     token = randomUUID().replace(/-/g, "");
     writeFileSync(tokenFile, token, "utf-8");
   }
-  const defaultCwd = process.env.CCR_CWD || homedir();
+  let defaultCwd = process.env.CCR_CWD || "";
+  if (!defaultCwd) {
+    try {
+      defaultCwd = readFileSync(join(dataDir2, "last-cwd"), "utf-8").trim();
+    } catch {
+    }
+  }
+  if (!defaultCwd) defaultCwd = homedir();
   const model = process.env.CCR_MODEL ?? process.env.ANTHROPIC_DEFAULT_SONNET_MODEL ?? "glm-5.3";
   let bridgeToken = process.env.CCR_BRIDGE_TOKEN ?? "";
   const bridgeTokenPath = join(dataDir2, "bridge-token");
@@ -10705,8 +10712,8 @@ var EventBus = class {
 
 // src/session-manager.ts
 import { mkdirSync as mkdirSync4, readFileSync as readFileSync7, statSync as statSync3, writeFileSync as writeFileSync4 } from "node:fs";
-import { homedir as homedir4 } from "node:os";
-import { join as join8, resolve as resolve5 } from "node:path";
+import { homedir as homedir5 } from "node:os";
+import { join as join9, resolve as resolve5 } from "node:path";
 
 // node_modules/@anthropic-ai/claude-agent-sdk/sdk.mjs
 import { createRequire as k8 } from "node:module";
@@ -40167,6 +40174,8 @@ function VJ(e, t) {
 
 // src/agent-adapter.ts
 import { randomUUID as randomUUID3 } from "node:crypto";
+import { homedir as homedir3 } from "node:os";
+import { delimiter as pathDelimiter, join as join7 } from "node:path";
 
 // src/cli-path.ts
 import { accessSync, constants as constants2, existsSync as existsSync4 } from "node:fs";
@@ -40674,6 +40683,27 @@ var TaskTracker = class {
 };
 
 // src/agent-adapter.ts
+function childEnv() {
+  const extra = [
+    join7(homedir3(), "node/bin"),
+    // 用户级 node（本机实证位置）
+    "/usr/local/bin",
+    // macOS Intel / 惯装位
+    "/opt/homebrew/bin",
+    // macOS Apple Silicon (homebrew)
+    join7(homedir3(), ".npm-global/bin"),
+    // npm 全局自定义前缀惯用位
+    ...process.env.CCR_EXTRA_PATH ? process.env.CCR_EXTRA_PATH.split(pathDelimiter) : []
+  ];
+  const cur = (process.env.PATH ?? "").split(pathDelimiter).filter(Boolean);
+  const merged = [...cur, ...extra.filter((d2) => d2 && !cur.includes(d2))];
+  return {
+    ...process.env,
+    PATH: merged.join(pathDelimiter),
+    CCR_RELAY_CHILD: "1",
+    CLAUDE_CODE_ENABLE_TODO_TOOLS: "1"
+  };
+}
 var AsyncQueue = class {
   values = [];
   resolvers = [];
@@ -40732,7 +40762,8 @@ var AgentSession = class {
         // CLAUDE_CODE_ENABLE_TODO_TOOLS：CLI 按模型身份门控任务工具（TaskCreate/Get/Update/
         // List 仅对 Claude 系模型默认提供），GLM 等其它模型一律裁剪→任务面板恒空。官方
         // 逃生门即此 env——托管会话必须注入，与模型无关（用户级 settings 兜底见 todo-tools-env.ts）
-        env: { ...process.env, CCR_RELAY_CHILD: "1", CLAUDE_CODE_ENABLE_TODO_TOOLS: "1" },
+        // PATH 补全：见 childEnv()（M0）
+        env: childEnv(),
         permissionMode: opts?.permissionMode ?? "default",
         ...opts?.resume ? { resume: opts.resume } : {},
         includePartialMessages: true,
@@ -40788,14 +40819,7 @@ var AgentSession = class {
   }
   handleMessage(msg) {
     const parent = msg.parent_tool_use_id;
-    // 根治②清扫体（2026-09-18 #5 精确化）：只认"CLI 已越过请求"的硬证据——
-    // ① user 消息带 tool_result（该工具已有结果而我们的 allow/deny/answer 未参与 = 被抛弃）
-    // ② result 消息（回合收尾，控制请求不可能再被等）
-    // 不再对 assistant/stream_event 清扫：AskUserQuestion 挂起后 SDK 仍会送出同回合的
-    // 流式尾事件/后续文本块（includePartialMessages），旧逻辑 100ms 内就把刚挂起的提问
-    // superseded 成"请求已失效"，端上从此看不到提问卡（#5）。真被 CLI 抛弃的孤儿
-    // 由 tool_result/result 两类硬证据兜住，流关闭由 pump finally 的 denyAllPending 兜底。
-    if (!parent && (msg.type === "result" || msg.type === "user" && this.msgHasToolResult(msg))) {
+    if (!parent && (msg.type === "assistant" || msg.type === "stream_event" || msg.type === "result" || msg.type === "user" && this.msgHasToolResult(msg))) {
       this.sweepStalePending();
     }
     switch (msg.type) {
@@ -41104,7 +41128,7 @@ async function generateTitle(task, model, onSid, cwd) {
 
 // src/cron.ts
 import { readFileSync as readFileSync4 } from "node:fs";
-import { join as join7 } from "node:path";
+import { join as join8 } from "node:path";
 var str = (v) => typeof v === "string" && v.trim() ? v : void 0;
 var EXPIRED_ONE_SHOT_GRACE_MS = 10 * 60 * 1e3;
 function tsNum(v) {
@@ -41143,7 +41167,7 @@ function normalizeTask(raw, fallbackId) {
 function readCronTasks(cwd) {
   let text;
   try {
-    text = readFileSync4(join7(cwd, ".claude", "scheduled_tasks.json"), "utf8");
+    text = readFileSync4(join8(cwd, ".claude", "scheduled_tasks.json"), "utf8");
   } catch (e) {
     return e.code === "ENOENT" ? void 0 : "bad";
   }
@@ -41175,10 +41199,10 @@ function cronTasksKey(tasks) {
 
 // src/task-store.ts
 import { readdirSync as readdirSync2, readFileSync as readFileSync5, statSync as statSync2 } from "node:fs";
-import { homedir as homedir3 } from "node:os";
+import { homedir as homedir4 } from "node:os";
 import path from "node:path";
 function readTaskStoreTodos(cliSessionId) {
-  const dir = path.join(homedir3(), ".claude", "tasks", cliSessionId);
+  const dir = path.join(homedir4(), ".claude", "tasks", cliSessionId);
   let files;
   try {
     files = readdirSync2(dir).filter((f) => f.endsWith(".json"));
@@ -41311,20 +41335,22 @@ function resolveCreateCwd(rawCwd, defaultCwd) {
       return false;
     }
   };
-  let wanted = (rawCwd || "").trim() || (defaultCwd || "").trim();
-  // "~"/"~/x" 展开家目录：resolve 不做 tilde 展开，原样送入会拼进进程 cwd 变无效路径
-  if (wanted === "~") wanted = homedir4();
-  else if (wanted.startsWith("~/")) wanted = homedir4() + wanted.slice(1);
+  const wanted = (rawCwd || "").trim();
+  const def = (defaultCwd || "").trim();
   if (wanted) {
     const abs = resolve5(wanted);
     if (isUsableDir(abs)) return { cwd: abs, fallbackNote: "" };
   }
-  const home = homedir4();
-  // Windows 盘符路径 = 客户端本地盘，对 relay 本机无意义：给人话提示而非笼统"不是有效目录"
-  // （2026-09-18：Windows 客户端照表单示例填 C:\ → resolve 成 /C: → 回落警告，误导源头）
-  const winDrive = !!wanted && (/^[A-Za-z]:[\\/]?/.test(wanted) || /^\/[A-Za-z]:/.test(wanted));
-  const wantedDesc = !wanted ? "\u672A\u6307\u5B9A\u5DE5\u4F5C\u76EE\u5F55\uFF0C\u4E14\u9ED8\u8BA4\u76EE\u5F55\u672A\u914D\u7F6E\uFF08CCR_CWD\uFF09" : winDrive ? `\u6307\u5B9A\u7684\u5DE5\u4F5C\u76EE\u5F55 ${wanted} \u662F Windows \u76D8\u7B26\u8DEF\u5F84\u2014\u2014\u4F1A\u8BDD\u8FD0\u884C\u5728 relay \u672C\u673A\uFF08${process.platform}\uFF09\uFF0C\u5BA2\u6237\u7AEF\u672C\u5730\u76D8\u7B26\u5728\u6B64\u65E0\u6548` : `\u6307\u5B9A\u7684\u5DE5\u4F5C\u76EE\u5F55 ${resolve5(wanted)} \u4E0D\u662F\u6709\u6548\u76EE\u5F55\uFF08\u4E0D\u5B58\u5728\u6216\u65E0\u6CD5\u8BBF\u95EE\uFF09`;
-  const suggest = winDrive ? '\u8BF7\u6539\u586B relay \u4FA7\u8DEF\u5F84\uFF08macOS/Linux \u5982 "~/projects/myapp"\u3001Windows \u5982 "D:\\projects\\myapp"\uFF09\uFF0C\u6216\u7559\u7A7A\u8D70\u9ED8\u8BA4\u76EE\u5F55' : '\u5982\u9700\u56FA\u5B9A\u5DE5\u4F5C\u76EE\u5F55\uFF0C\u8BF7\u8BBE\u7F6E CCR_CWD \u73AF\u5883\u53D8\u91CF\u6307\u5411\u5B9E\u9645\u9879\u76EE\u76EE\u5F55\uFF08\u5982 Windows "D:\\projects\\myapp"\u3001macOS/Linux "~/projects/myapp"\uFF09\u540E\u91CD\u542F relay';
+  if (def) {
+    const abs = resolve5(def);
+    if (isUsableDir(abs)) {
+      const note = wanted ? `\u6307\u5B9A\u7684\u5DE5\u4F5C\u76EE\u5F55 ${resolve5(wanted)} \u4E0D\u662F\u6709\u6548\u76EE\u5F55\uFF08\u4E0D\u5B58\u5728\u6216\u65E0\u6CD5\u8BBF\u95EE\uFF09\uFF0C\u672C\u6B21\u5DF2\u56DE\u843D\u9ED8\u8BA4\u76EE\u5F55 ${abs}` : "";
+      return { cwd: abs, fallbackNote: note };
+    }
+  }
+  const home = homedir5();
+  const wantedDesc = wanted ? `\u6307\u5B9A\u7684\u5DE5\u4F5C\u76EE\u5F55 ${resolve5(wanted)} \u4E0D\u662F\u6709\u6548\u76EE\u5F55\uFF08\u4E0D\u5B58\u5728\u6216\u65E0\u6CD5\u8BBF\u95EE\uFF09\uFF0C\u9ED8\u8BA4\u76EE\u5F55\uFF08CCR_CWD/\u4E0A\u6B21\u6709\u6548\u76EE\u5F55\uFF09\u4E5F\u672A\u914D\u7F6E\u6216\u65E0\u6548` : "\u672A\u6307\u5B9A\u5DE5\u4F5C\u76EE\u5F55\uFF0C\u4E14\u9ED8\u8BA4\u76EE\u5F55\u672A\u914D\u7F6E\uFF08CCR_CWD\uFF09";
+  const suggest = '\u5982\u9700\u56FA\u5B9A\u5DE5\u4F5C\u76EE\u5F55\uFF0C\u8BF7\u8BBE\u7F6E CCR_CWD \u73AF\u5883\u53D8\u91CF\u6307\u5411\u5B9E\u9645\u9879\u76EE\u76EE\u5F55\uFF08\u5982 Windows "D:\\projects\\myapp"\u3001macOS/Linux "~/projects/myapp"\uFF09\u540E\u91CD\u542F relay';
   if (isUsableDir(home)) {
     return {
       cwd: home,
@@ -41350,7 +41376,7 @@ function sanitizeImages(raw) {
 var CHILD_SESSIONS_CAP = 200;
 function readChildSessions(dataDir2) {
   try {
-    const raw = JSON.parse(readFileSync7(join8(dataDir2, "child-sessions.json"), "utf-8"));
+    const raw = JSON.parse(readFileSync7(join9(dataDir2, "child-sessions.json"), "utf-8"));
     return Array.isArray(raw) ? raw.filter((x) => typeof x === "string") : [];
   } catch {
     return [];
@@ -41361,13 +41387,13 @@ function appendChildSession(dataDir2, sid) {
   if (list.includes(sid)) return;
   list.push(sid);
   try {
-    writeFileSync4(join8(dataDir2, "child-sessions.json"), JSON.stringify(list.slice(-CHILD_SESSIONS_CAP)));
+    writeFileSync4(join9(dataDir2, "child-sessions.json"), JSON.stringify(list.slice(-CHILD_SESSIONS_CAP)));
   } catch {
   }
 }
 function readDeletedExts(dataDir2) {
   try {
-    const raw = JSON.parse(readFileSync7(join8(dataDir2, "deleted-ext.json"), "utf-8"));
+    const raw = JSON.parse(readFileSync7(join9(dataDir2, "deleted-ext.json"), "utf-8"));
     return Array.isArray(raw) ? raw.filter((x) => typeof x === "string") : [];
   } catch {
     return [];
@@ -41378,13 +41404,13 @@ function appendDeletedExt(dataDir2, id2) {
   if (list.includes(id2)) return;
   list.push(id2);
   try {
-    writeFileSync4(join8(dataDir2, "deleted-ext.json"), JSON.stringify(list.slice(-300)));
+    writeFileSync4(join9(dataDir2, "deleted-ext.json"), JSON.stringify(list.slice(-300)));
   } catch {
   }
 }
 function readTitleOverrides(dataDir2) {
   try {
-    const raw = JSON.parse(readFileSync7(join8(dataDir2, "title-overrides.json"), "utf-8"));
+    const raw = JSON.parse(readFileSync7(join9(dataDir2, "title-overrides.json"), "utf-8"));
     if (!raw || typeof raw !== "object" || Array.isArray(raw)) return {};
     const out = {};
     for (const [k3, v] of Object.entries(raw)) {
@@ -41397,7 +41423,7 @@ function readTitleOverrides(dataDir2) {
 }
 var PINNED_SESSIONS_CAP = 50;
 function pinnedSessionsPath(dataDir2) {
-  return join8(dataDir2, "pinned-sessions.json");
+  return join9(dataDir2, "pinned-sessions.json");
 }
 function readPinnedSessions(dataDir2) {
   try {
@@ -41476,7 +41502,7 @@ var SessionManager = class {
     if (process.env.CCR_NO_TITLE_GEN === "1") return;
     if (this.titleRequested.has(sessionId)) return;
     this.titleRequested.add(sessionId);
-    const titleCwd = join8(this.cfg.dataDir, ".tmp-titlegen");
+    const titleCwd = join9(this.cfg.dataDir, ".tmp-titlegen");
     try {
       mkdirSync4(titleCwd, { recursive: true });
     } catch {
@@ -42063,7 +42089,7 @@ var SessionManager = class {
           s.state.updated_at = Date.now();
           this.titleOverrides[s.state.session_id] = title;
           try {
-            writeFileSync4(join8(this.cfg.dataDir, "title-overrides.json"), JSON.stringify(this.titleOverrides));
+            writeFileSync4(join9(this.cfg.dataDir, "title-overrides.json"), JSON.stringify(this.titleOverrides));
           } catch {
           }
           this.bus.emit(cmd.payload.session_id, "SESSION_UPDATED", {
@@ -42258,6 +42284,13 @@ var SessionManager = class {
   create(rawCwd, prompt, permissionMode) {
     const { cwd, fallbackNote } = resolveCreateCwd(rawCwd, this.cfg.defaultCwd);
     if (!cwd) throw new Error(fallbackNote);
+    if (!process.env.CCR_CWD && cwd !== homedir5()) {
+      this.cfg.defaultCwd = cwd;
+      try {
+        writeFileSync4(join9(this.cfg.dataDir, "last-cwd"), cwd, "utf-8");
+      } catch {
+      }
+    }
     this.evictOldSessions();
     const managed = {
       agent: null,
@@ -42681,13 +42714,13 @@ var SessionManager = class {
 import { createServer } from "node:http";
 import { randomUUID as randomUUID5 } from "node:crypto";
 import { readFileSync as readFileSync12, writeFileSync as writeFileSync7, mkdirSync as mkdirSync6, existsSync as existsSync8, readdirSync as readdirSync5 } from "node:fs";
-import { join as join12, dirname as dirname6, sep as sep5 } from "node:path";
-import { homedir as homedir9, networkInterfaces as networkInterfaces2 } from "node:os";
+import { join as join13, dirname as dirname6, sep as sep5 } from "node:path";
+import { homedir as homedir10, networkInterfaces as networkInterfaces2 } from "node:os";
 
 // src/artifacts.ts
 import { readdirSync as readdirSync3, statSync as statSync4, readFileSync as readFileSync8, existsSync as existsSync5 } from "node:fs";
-import { join as join9, resolve as resolve6, extname } from "node:path";
-import { homedir as homedir5 } from "node:os";
+import { join as join10, resolve as resolve6, extname } from "node:path";
+import { homedir as homedir6 } from "node:os";
 var MIME = {
   ".html": "text/html; charset=utf-8",
   ".htm": "text/html; charset=utf-8",
@@ -42705,7 +42738,7 @@ var MIME = {
   ".js": "text/javascript; charset=utf-8"
 };
 function artifactsDir() {
-  return join9(homedir5(), ".cc-deck", "artifacts");
+  return join10(homedir6(), ".cc-deck", "artifacts");
 }
 function listArtifacts() {
   const dir = artifactsDir();
@@ -42719,7 +42752,7 @@ function listArtifacts() {
   for (const f of files) {
     if (f.startsWith(".")) continue;
     try {
-      const st2 = statSync4(join9(dir, f));
+      const st2 = statSync4(join10(dir, f));
       if (st2.isFile()) out.push({ name: f, size: st2.size, mtime: st2.mtimeMs });
     } catch {
     }
@@ -42730,7 +42763,7 @@ function listArtifacts() {
 function serveArtifact(name, res) {
   if (!/^[\w][\w.-]*$/.test(name)) return false;
   const dir = resolve6(artifactsDir());
-  const full = resolve6(join9(dir, name));
+  const full = resolve6(join10(dir, name));
   if (!full.startsWith(dir + "/") && full !== dir) return false;
   const path5 = full;
   if (!existsSync5(path5)) return false;
@@ -42749,18 +42782,18 @@ function serveArtifact(name, res) {
 
 // src/models.ts
 import { existsSync as existsSync6, readFileSync as readFileSync9 } from "node:fs";
-import { homedir as homedir6 } from "node:os";
-import { join as join10 } from "node:path";
+import { homedir as homedir7 } from "node:os";
+import { join as join11 } from "node:path";
 var DEFAULT_MODEL = "glm-5.3";
 function readClaudeSettings() {
   try {
-    return JSON.parse(readFileSync9(join10(homedir6(), ".claude", "settings.json"), "utf8"));
+    return JSON.parse(readFileSync9(join11(homedir7(), ".claude", "settings.json"), "utf8"));
   } catch {
     return {};
   }
 }
 function listModels(fallbackDefault) {
-  const s = existsSync6(join10(homedir6(), ".claude", "settings.json")) ? readClaudeSettings() : {};
+  const s = existsSync6(join11(homedir7(), ".claude", "settings.json")) ? readClaudeSettings() : {};
   const env = s.env ?? {};
   const out = [];
   const add = (m) => {
@@ -42794,14 +42827,14 @@ var wrapper_default = import_websocket.default;
 // src/bridge.ts
 import { randomUUID as randomUUID4 } from "node:crypto";
 import { closeSync as closeSync2, openSync as openSync2, readSync as readSync2, readFileSync as readFileSync11, readdirSync as readdirSync4, statSync as statSync5, writeFileSync as writeFileSync6 } from "node:fs";
-import { homedir as homedir8 } from "node:os";
+import { homedir as homedir9 } from "node:os";
 import path4 from "node:path";
 
 // src/injector.ts
 import { spawn as spawn2, execFileSync } from "node:child_process";
 import { existsSync as existsSync7, mkdirSync as mkdirSync5, appendFileSync as appendFileSync2, readFileSync as readFileSync10, writeFileSync as writeFileSync5, rmSync as rmSync2 } from "node:fs";
-import path3, { join as join11 } from "node:path";
-import { homedir as homedir7, tmpdir } from "node:os";
+import path3, { join as join12 } from "node:path";
+import { homedir as homedir8, tmpdir } from "node:os";
 import { fileURLToPath as fileURLToPath2 } from "node:url";
 var here = path3.dirname(fileURLToPath2(import.meta.url));
 var dataDir = process.env.CCR_DATA_DIR ?? path3.join(here, "..", "data");
@@ -42944,7 +42977,7 @@ function runAppleScript(script) {
       clearTimeout(timer);
       if (code === 0) return resolve7({ ok: true });
       try {
-        appendFileSync2(join11(homedir7(), "inject-debug.log"), `[${(/* @__PURE__ */ new Date()).toISOString()}] code=${code} err=${err} |n`);
+        appendFileSync2(join12(homedir8(), "inject-debug.log"), `[${(/* @__PURE__ */ new Date()).toISOString()}] code=${code} err=${err} |n`);
       } catch {
       }
       resolve7({ ok: false, error: mapAppleError(err) ?? (err.trim() || `exit ${code}`) });
@@ -42989,7 +43022,7 @@ async function resumeSession(cwd, sessionId, text, permMode) {
       '(del "%~f0") 2>nul',
       ""
     ].join("\r\n");
-    const tmp = join11(tmpdir(), `ccr-resume-${process.pid}-${Date.now().toString(36)}.cmd`);
+    const tmp = join12(tmpdir(), `ccr-resume-${process.pid}-${Date.now().toString(36)}.cmd`);
     writeFileSync5(tmp, body, "utf8");
     return new Promise((resolve7) => {
       const child = spawn2("cmd.exe", ["/c", "start", "cmd", "/k", tmp], {
@@ -43114,7 +43147,7 @@ async function captureConsoleBottom(pid, rows = 20) {
   }
   if (!ensureInjector() || !peekSupported()) return null;
   if (!targetIsCliHost(pid)) return null;
-  const tmp = join11(tmpdir(), `ccr-peek-${pid}-${process.pid}-${Date.now().toString(36)}.txt`);
+  const tmp = join12(tmpdir(), `ccr-peek-${pid}-${process.pid}-${Date.now().toString(36)}.txt`);
   const r = await run([String(pid), "--peek", tmp, String(rows)]);
   if (!r.ok) return null;
   try {
@@ -43251,7 +43284,7 @@ var QUESTION_HOLD_MS = 9e4;
 var sleep2 = (ms) => new Promise((r) => setTimeout(r, ms));
 function cliSessionIdle(pid) {
   try {
-    const f = path4.join(homedir8(), ".claude", "sessions", `${pid}.json`);
+    const f = path4.join(homedir9(), ".claude", "sessions", `${pid}.json`);
     const d2 = JSON.parse(readFileSync11(f, "utf-8"));
     return d2.status === "idle";
   } catch {
@@ -43260,7 +43293,7 @@ function cliSessionIdle(pid) {
 }
 function cliSessionStatus(pid) {
   try {
-    const f = path4.join(homedir8(), ".claude", "sessions", `${pid}.json`);
+    const f = path4.join(homedir9(), ".claude", "sessions", `${pid}.json`);
     const d2 = JSON.parse(readFileSync11(f, "utf-8"));
     return typeof d2.status === "string" ? d2.status : null;
   } catch {
@@ -43398,7 +43431,7 @@ var Bridge = class _Bridge {
   // 该 CLI 重启后 hook 生效即获得完整功能
   adoptOrphans() {
     try {
-      const root = process.env.CCR_PROJECTS_ROOT ?? path4.join(homedir8(), ".claude", "projects");
+      const root = process.env.CCR_PROJECTS_ROOT ?? path4.join(homedir9(), ".claude", "projects");
       const cutoff = Date.now() - 30 * 6e4;
       for (const dir of readdirSync4(root, { withFileTypes: true })) {
         if (!dir.isDirectory()) continue;
@@ -43573,7 +43606,7 @@ var Bridge = class _Bridge {
   // 补定位顺带清 historical：活 pid 即会话真实存活的证明。
   reconcilePidsFromSessions() {
     try {
-      const dir = process.env.CCR_SESSIONS_ROOT || path4.join(homedir8(), ".claude", "sessions");
+      const dir = process.env.CCR_SESSIONS_ROOT || path4.join(homedir9(), ".claude", "sessions");
       let files;
       try {
         files = readdirSync4(dir);
@@ -43764,19 +43797,17 @@ var Bridge = class _Bridge {
       }
       const text = buf.toString("latin1");
       let custom, ai;
-      // latin1 字节视图的捕获组须先还原 UTF-8 再 parse：中文标题字节序列直接
-      // JSON.parse 会变乱码（端边对账→ç«¯è¾¹å¯¹è´¢）；转义序列纯 ASCII 两视图等价
       const reC = /"type":"custom-title","customTitle":"((?:[^"\\]|\\.)*)"/g;
       for (const m of text.matchAll(reC)) {
         try {
-          custom = JSON.parse('"' + Buffer.from(m[1], "latin1").toString("utf-8") + '"');
+          custom = JSON.parse('"' + m[1] + '"');
         } catch {
         }
       }
       const reA = /"type":"ai-title","aiTitle":"((?:[^"\\]|\\.)*)"/g;
       for (const m of text.matchAll(reA)) {
         try {
-          ai = JSON.parse('"' + Buffer.from(m[1], "latin1").toString("utf-8") + '"');
+          ai = JSON.parse('"' + m[1] + '"');
         } catch {
         }
       }
@@ -44053,7 +44084,7 @@ var Bridge = class _Bridge {
   static modelDisplayName() {
     if (_Bridge.modelDisplay === void 0) {
       try {
-        _Bridge.modelDisplay = readFileSync11(path4.join(homedir8(), ".cc-deck", "data", "model-display"), "utf8").trim() || null;
+        _Bridge.modelDisplay = readFileSync11(path4.join(homedir9(), ".cc-deck", "data", "model-display"), "utf8").trim() || null;
       } catch {
         _Bridge.modelDisplay = null;
       }
@@ -44194,7 +44225,7 @@ var Bridge = class _Bridge {
       this.mgr.pushExternalLog(sessionId, "system", `\u6062\u590D\u8FDB\u884C\u4E2D\uFF0C\u6D88\u606F\u5DF2\u6392\u961F\uFF08\u6062\u590D\u8FDB\u7A0B\u7A7A\u95F2\u540E\u81EA\u52A8\u5E26\u4E0A\uFF09\uFF1A${truncate(text, 80)}`);
       return { ok: true };
     }
-    const cwd = state.cwd || homedir8();
+    const cwd = state.cwd || homedir9();
     this.resumeSpawns.set(sessionId, Date.now());
     this.mgr.pushExternalLog(sessionId, "system", `\u6062\u590D\u4F1A\u8BDD\u4E2D\uFF08\u65B0\u7EC8\u7AEF\u6807\u7B7E claude --resume${why ? `\uFF0C\u539F\u56E0\uFF1A${why}` : ""}\uFF09\u5E76\u6295\u9012\uFF1A${truncate(text, 80)}`);
     void resumeSession(cwd, sessionId.slice(4), text, state.permission_mode).then((r) => {
@@ -44411,7 +44442,7 @@ var Bridge = class _Bridge {
   }
   readCcSessionName(cliSessionId) {
     try {
-      const dir = path4.join(homedir8(), ".claude", "sessions");
+      const dir = path4.join(homedir9(), ".claude", "sessions");
       for (const f of readdirSync4(dir)) {
         if (!f.endsWith(".json")) continue;
         try {
@@ -45263,7 +45294,7 @@ function localIps() {
 var TRUSTED_WEB_ORIGINS = ["https://cc.humumu.online", "https://cc-deck.humumu.online"];
 var PLUGIN_CFG_KEYS = ["taskGuard", "qNotify", "restorePoint"];
 function pluginConfigPath() {
-  return join12(homedir9(), ".cc-deck", "config.json");
+  return join13(homedir10(), ".cc-deck", "config.json");
 }
 function readPluginConfig() {
   const out = { taskGuard: false, qNotify: true, restorePoint: false };
@@ -45350,11 +45381,11 @@ function listCustomCommands(dir, source) {
   const out = [];
   for (const e of entries) {
     if (e.isFile() && e.name.endsWith(".md")) {
-      out.push({ name: e.name.slice(0, -3), desc: descOf(join12(dir, e.name)), source });
+      out.push({ name: e.name.slice(0, -3), desc: descOf(join13(dir, e.name)), source });
     } else if (e.isDirectory()) {
       try {
-        for (const g2 of readdirSync5(join12(dir, e.name))) {
-          if (g2.endsWith(".md")) out.push({ name: `${e.name}:${g2.slice(0, -3)}`, desc: descOf(join12(dir, e.name, g2)), source });
+        for (const g2 of readdirSync5(join13(dir, e.name))) {
+          if (g2.endsWith(".md")) out.push({ name: `${e.name}:${g2.slice(0, -3)}`, desc: descOf(join13(dir, e.name, g2)), source });
         }
       } catch {
       }
@@ -45364,10 +45395,10 @@ function listCustomCommands(dir, source) {
 }
 function startServer(bus2, mgr2, cfg2, opts = {}) {
   const webRoot = process.env.CCR_WEB_ROOT ?? ("1" ? fileURLToPath3(new URL("../", import.meta.url)) : fileURLToPath3(new URL("../../", import.meta.url)));
-  const consoleHtml = join12(webRoot, "web-console", "index.html");
-  const naclJs = join12(webRoot, "web-console", "nacl.js");
-  const qrJs = join12(webRoot, "web-console", "qr.js");
-  const mobileDir = join12(webRoot, "mobile") + sep5;
+  const consoleHtml = join13(webRoot, "web-console", "index.html");
+  const naclJs = join13(webRoot, "web-console", "nacl.js");
+  const qrJs = join13(webRoot, "web-console", "qr.js");
+  const mobileDir = join13(webRoot, "mobile") + sep5;
   const PWA_ASSETS = {
     "/manifest.json": "application/manifest+json; charset=utf-8",
     "/apple-touch-icon.png": "image/png",
@@ -45443,7 +45474,7 @@ function startServer(bus2, mgr2, cfg2, opts = {}) {
       return;
     }
     if (req.method === "GET" && PWA_ASSETS[url.pathname]) {
-      const file = join12(webRoot, "web-console", url.pathname.slice(1));
+      const file = join13(webRoot, "web-console", url.pathname.slice(1));
       if (!existsSync8(file)) {
         res.writeHead(404).end("not found");
         return;
@@ -45487,7 +45518,7 @@ function startServer(bus2, mgr2, cfg2, opts = {}) {
         res.writeHead(401).end();
         return;
       }
-      const file = join12(cfg2.dataDir, "relay-name");
+      const file = join13(cfg2.dataDir, "relay-name");
       if (req.method === "GET") {
         let name = "";
         try {
@@ -45636,8 +45667,8 @@ function startServer(bus2, mgr2, cfg2, opts = {}) {
       }
       const cwd = url.searchParams.get("cwd") ?? "";
       const custom = [
-        ...listCustomCommands(join12(homedir9(), ".claude", "commands"), "user"),
-        ...cwd ? listCustomCommands(join12(cwd, ".claude", "commands"), "project") : []
+        ...listCustomCommands(join13(homedir10(), ".claude", "commands"), "user"),
+        ...cwd ? listCustomCommands(join13(cwd, ".claude", "commands"), "project") : []
       ];
       const seen = new Set(custom.map((c) => c.name));
       const commands = [
@@ -45766,9 +45797,7 @@ function startServer(bus2, mgr2, cfg2, opts = {}) {
           logs: snapLogs.logs,
           ...Object.keys(snapLogs.logs_truncated).length ? { logs_truncated: snapLogs.logs_truncated } : {},
           server_time: Date.now(),
-          homedir: homedir9(),
-          // relay 平台（旧客户端忽略）：新建会话表单据此自适应示例与盘符路径拦截
-          platform: process.platform,
+          homedir: homedir10(),
           models: listModels(mgr2.cfg.model),
           // 云桥启用的 relay 附带自身设备 id（= CloudConfig.relayDev 同源值）：
           // 客户端据此密码学匹配"LAN 直连条目"与"云桥条目"是同一台 relay，自动合并。
@@ -45997,10 +46026,10 @@ var connectionCounter = 0;
 
 // src/cloud-identity.ts
 import { existsSync as existsSync9, readFileSync as readFileSync13, writeFileSync as writeFileSync8 } from "node:fs";
-import { join as join13 } from "node:path";
+import { join as join14 } from "node:path";
 import { createHash, randomBytes } from "node:crypto";
 function loadOrCreateIdentity(dataDir2) {
-  const kpPath = join13(dataDir2, "cloud-keypair.json");
+  const kpPath = join14(dataDir2, "cloud-keypair.json");
   let keypair;
   if (existsSync9(kpPath)) {
     keypair = JSON.parse(readFileSync13(kpPath, "utf-8"));
@@ -46009,7 +46038,7 @@ function loadOrCreateIdentity(dataDir2) {
     keypair = generateKeyPair();
     writeFileSync8(kpPath, JSON.stringify(keypair), "utf-8");
   }
-  const wanSecretPath = join13(dataDir2, "wan-secret");
+  const wanSecretPath = join14(dataDir2, "wan-secret");
   let wanSecret = "";
   if (existsSync9(wanSecretPath)) wanSecret = readFileSync13(wanSecretPath, "utf-8").trim();
   if (!/^[0-9a-f]{32}$/.test(wanSecret)) {
@@ -46017,7 +46046,7 @@ function loadOrCreateIdentity(dataDir2) {
     writeFileSync8(wanSecretPath, wanSecret, "utf-8");
   }
   const wanDev = "wt-" + createHash("sha256").update(wanSecret).digest("hex").slice(0, 16);
-  const peersPath = join13(dataDir2, "cloud-peers.json");
+  const peersPath = join14(dataDir2, "cloud-peers.json");
   const peers = /* @__PURE__ */ new Map();
   if (existsSync9(peersPath)) {
     try {
@@ -46694,16 +46723,16 @@ function advertiseRelay(port, name) {
 
 // src/todo-tools-env.ts
 import { existsSync as existsSync10, readFileSync as readFileSync14, writeFileSync as writeFileSync9 } from "node:fs";
-import { join as join14 } from "node:path";
-import { homedir as homedir10 } from "node:os";
+import { join as join15 } from "node:path";
+import { homedir as homedir11 } from "node:os";
 var TODO_TOOLS_ENV_KEY = "CLAUDE_CODE_ENABLE_TODO_TOOLS";
 function claudeConfigDir() {
-  return process.env.CLAUDE_CONFIG_DIR ?? join14(homedir10(), ".claude");
+  return process.env.CLAUDE_CONFIG_DIR ?? join15(homedir11(), ".claude");
 }
 function ensureTodoToolsEnv() {
   const dir = claudeConfigDir();
   if (!existsSync10(dir)) return "skip-no-dir";
-  const file = join14(dir, "settings.json");
+  const file = join15(dir, "settings.json");
   let obj;
   if (!existsSync10(file)) {
     obj = {};
@@ -46739,7 +46768,7 @@ if (process.env.CCR_PARENT_PID) {
 }
 var cfg = loadConfig();
 {
-  const lockPath = join15(cfg.dataDir, "relay.lock");
+  const lockPath = join16(cfg.dataDir, "relay.lock");
   try {
     const prev = Number(readFileSync15(lockPath, "utf8").trim());
     if (Number.isFinite(prev) && prev > 0 && prev !== process.pid) {
@@ -46801,7 +46830,7 @@ if (cliArgs.has("--pair")) {
   let port = cfg.port;
   let bridgeToken = cfg.bridgeToken;
   try {
-    const b = JSON.parse(readFileSync15(join15(cfg.dataDir, "bridge.json"), "utf-8"));
+    const b = JSON.parse(readFileSync15(join16(cfg.dataDir, "bridge.json"), "utf-8"));
     if (b.port) port = b.port;
     if (b.token) bridgeToken = b.token;
   } catch {
@@ -46852,14 +46881,14 @@ if (cliArgs.has("--daemon")) {
     process.exit(1);
   }
   const rest = process.argv.slice(2).filter((a) => a !== "--daemon");
-  const logFd = openSync3(join15(cfg.dataDir, "relay.log"), "a");
+  const logFd = openSync3(join16(cfg.dataDir, "relay.log"), "a");
   const child = spawn3(process.execPath, [fileURLToPath4(import.meta.url), ...rest], {
     detached: true,
     stdio: ["ignore", logFd, logFd],
     env: { ...process.env, CC_DECK_DAEMON: "1" }
   });
   child.unref();
-  console.log(`CC Deck Relay \u5DF2\u8F6C\u540E\u53F0\u8FD0\u884C\uFF08\u65E5\u5FD7: ${join15(cfg.dataDir, "relay.log")}\uFF09`);
+  console.log(`CC Deck Relay \u5DF2\u8F6C\u540E\u53F0\u8FD0\u884C\uFF08\u65E5\u5FD7: ${join16(cfg.dataDir, "relay.log")}\uFF09`);
   process.exit(0);
 }
 function pidIsNode(pid) {
@@ -46882,7 +46911,7 @@ function pidIsNode(pid) {
   }
 }
 if (cliArgs.has("--stop")) {
-  const pidFile = join15(cfg.dataDir, "relay.pid");
+  const pidFile = join16(cfg.dataDir, "relay.pid");
   try {
     const pid = Number(readFileSync15(pidFile, "utf-8").trim());
     if (pid > 0 && pidIsNode(pid)) {
@@ -46900,7 +46929,7 @@ if (cliArgs.has("--stop")) {
   }
   process.exit(0);
 }
-var persistPath = join15(cfg.dataDir, "events.ndjson");
+var persistPath = join16(cfg.dataDir, "events.ndjson");
 var prior = loadEvents(persistPath);
 var kept = compactEvents(prior);
 if (prior.length !== kept.length) rewriteFile(persistPath, kept);
@@ -46947,7 +46976,7 @@ if (cfg.cloudUrls.length) {
         },
         relayName: () => {
           try {
-            return readFileSync15(join15(cfg.dataDir, "relay-name"), "utf8").trim().slice(0, 40) || "";
+            return readFileSync15(join16(cfg.dataDir, "relay-name"), "utf8").trim().slice(0, 40) || "";
           } catch {
             return "";
           }
@@ -46969,7 +46998,7 @@ startServer(bus, mgr, cfg, {
   // #100 relay 自定义名称：dataDir/relay-name 单行文件（web 设置 relay 页可写）
   relayName: () => {
     try {
-      return readFileSync15(join15(cfg.dataDir, "relay-name"), "utf8").trim().slice(0, 40) || "";
+      return readFileSync15(join16(cfg.dataDir, "relay-name"), "utf8").trim().slice(0, 40) || "";
     } catch {
       return "";
     }
@@ -47001,14 +47030,14 @@ startServer(bus, mgr, cfg, {
   onReady: () => {
     advertiseRelay(cfg.port, `CC Deck Relay (${hostname()})`);
     if (process.env.CC_DECK_DAEMON === "1") {
-      writeFileSync10(join15(cfg.dataDir, "relay.pid"), String(process.pid), "utf-8");
+      writeFileSync10(join16(cfg.dataDir, "relay.pid"), String(process.pid), "utf-8");
     }
     const bridgeJson = JSON.stringify({ port: cfg.port, token: cfg.bridgeToken });
-    writeFileSync10(join15(cfg.dataDir, "bridge.json"), bridgeJson, "utf-8");
-    const hookHome = join15(homedir11(), ".cc-deck", "data");
+    writeFileSync10(join16(cfg.dataDir, "bridge.json"), bridgeJson, "utf-8");
+    const hookHome = join16(homedir12(), ".cc-deck", "data");
     if (cfg.dataDir !== hookHome && existsSync11(hookHome)) {
       try {
-        writeFileSync10(join15(hookHome, "bridge.json"), bridgeJson, "utf-8");
+        writeFileSync10(join16(hookHome, "bridge.json"), bridgeJson, "utf-8");
       } catch {
       }
     }
@@ -47027,7 +47056,7 @@ console.log(`  \u5386\u53F2:   ${persistPath}\uFF08\u6062\u590D ${adopted} \u4E2
 if (pinned.saved > 0) {
   console.log(`  \u7F6E\u9876:   ${pinned.saved} \u4E2A\u4F1A\u8BDD\u5DF2\u4F11\u7720\u767B\u8BB0\uFF08\u70B9\u5361\u7247\u6309\u9700\u6062\u590D\uFF0C\u4E0D\u81EA\u52A8\u62C9\u8D77\uFF09`);
 }
-console.log(`  \u6865\u63A5:   ${join15(cfg.dataDir, "bridge.json")}\uFF08\u5916\u90E8 CLI \u4F1A\u8BDD\u7ECF hooks \u63A5\u5165\uFF09`);
+console.log(`  \u6865\u63A5:   ${join16(cfg.dataDir, "bridge.json")}\uFF08\u5916\u90E8 CLI \u4F1A\u8BDD\u7ECF hooks \u63A5\u5165\uFF09`);
 console.log(
   cloudIdentity ? `  \u4E91\u6865:   ${cfg.cloudUrls.join(" + ")}\uFF08dev=${cloudIdentity.relayDev}\uFF0C\u5DF2\u914D\u5BF9 ${cloudIdentity.peers.size} \u53F0\u8BBE\u5907${cfg.cloudToken ? "" : "\uFF1B\u672A\u8BBE CCR_CLOUD_TOKEN\uFF0C\u4EC5\u53EF\u914D\u5BF9\u4E0D\u53EF\u8FDE\u6865"}\uFF09` : `  \u4E91\u6865:   \u672A\u542F\u7528\uFF08\u672A\u8BBE\u7F6E CCR_CLOUD_URL\uFF09`
 );
