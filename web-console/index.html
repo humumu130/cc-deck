@@ -2583,6 +2583,7 @@ window.addEventListener("resize", tdRestorePos);
     tdFloat.dragged = true; // 吞掉紧随其后的 click，避免拖完误触展开/收起
     const r = el.getBoundingClientRect();
     try { localStorage.setItem(TD_POS_KEY, JSON.stringify({ x: Math.round(r.left), y: Math.round(r.top) })); } catch {}
+    placeNoteBar(); // #18 批次二②：绿框拖到新位置，撤销条/通知卡让位基准跟着重算
   };
   el.addEventListener("pointerup", end);
   el.addEventListener("pointercancel", end);
@@ -2623,6 +2624,7 @@ function showTaskDone(ctx, sid, payload) {
       clearTimeout(tdFloat.timer);
       el.classList.remove("show");
       el.classList.remove("mini");
+      placeNoteBar(); // 卡关掉，撤销条/通知卡回落默认槽位
       return;
     }
     tdFloat.expanded = !tdFloat.expanded;
@@ -6101,7 +6103,9 @@ $("undoBtn").onclick = (e) => { e.stopPropagation(); undoDelete(); };
 
 // #52 web 通知悬浮框（USER_NOTE 帧 { text, ts }）：taskDone 绿框上方同语言通知卡。
 // 单例复用（新通知顶替旧内容并重置计时），8s 自动淡出，✕ 即关；文本 textContent 注入防 XSS。
-// 位置动态让位：绿框在显（含展开卡）抬到其上缘之上，撤销条在显再让位，否则默认 undoBar 槽位
+// 位置动态让位（#18 批次二统一口径）：撤销条与通知卡都以绿框（含展开卡/mini 钮）上缘
+// 为基准抬升（+10px 空隙，绿框不显/在屏外时落默认槽位 76），通知卡再叠在可见撤销条
+// 之上（实际高度，不再写死 122）。此前撤销条无任何让位——绿卡展开时压在卡面中间。
 let noteTimer = 0;
 function placeNoteBar() {
   const bar = $("noteBar"), td = $("taskDone"), ub = $("undoBar");
@@ -6109,9 +6113,14 @@ function placeNoteBar() {
   if (td.classList.contains("show")) {
     const top = td.getBoundingClientRect().top;
     if (top > 0) base = Math.max(base, window.innerHeight - top + 10);
-  } else if (ub.classList.contains("show")) base = Math.max(base, 122);
+  }
+  ub.style.bottom = base + "px";
+  if (ub.classList.contains("show")) base += ub.offsetHeight + 10;
   bar.style.bottom = base + "px";
 }
+// #18 批次二②：窗口拖拽/缩放后浮层不重算——绿框自身已有 resize 恢复（下方注册），
+// 撤销条/通知卡的让位基准也随视口变化，resize 一并重排
+window.addEventListener("resize", placeNoteBar);
 function showUserNote(text) {
   const t = String(text ?? "").trim();
   if (!t) return;
