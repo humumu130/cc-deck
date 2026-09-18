@@ -22,7 +22,14 @@ const MANIFEST_URLS = [
   "https://cc.humumu.online/dl/latest.json",
   "http://8.133.211.170:8888/latest.json",
 ];
+// 通道隔离（2026-09-18）：test 通道读 ECS 专属清单 latest-test.json（build-test-apk.sh
+// 出包时写入），test 包按纪律只走裸 IP、永不进 CF 主域；release/snap 读双镜像主清单
+//（发版流程写入，只含正式发布）。测试设备由此可在线升级 test 新包，正式/快照设备
+// 永远看不到 test 包（此前 test.11 混入主清单，正式用户会被提示装测试包）。
+const TEST_MANIFEST_URL = "http://8.133.211.170:8888/latest-test.json";
 const GH_RELEASE_PAGE = "https://github.com/humumu130/cc-deck/releases/latest";
+// test 包内容 = dev 分支最新构建，无独立 Release 页；「查看完整变更」指提交历史
+const GH_COMMITS_PAGE = "https://github.com/humumu130/cc-deck/commits/dev";
 
 const KEY_LAST_CHECK = "cc_update_last_check";
 const KEY_SKIPPED = "cc_update_skipped";
@@ -51,6 +58,7 @@ export type UpdateInfo = {
   apkUrl: string; // ECS 镜像（下载首选）
   ghUrl: string; // GitHub asset 直链（清单路径拿不到，置空，下载回落时经 GH API 懒解析）
   fullUrl: string; // release 页（弹窗「查看完整变更」次级链接，正文不铺 changelog）
+  noGhFallback?: boolean; // test 通道：包只存在 ECS，下载换源不回落 GitHub asset（那是正式包，版本错配）
 };
 
 // manifest notes / release 摘要 → 弹窗特性条目：latest.json 摘要是单行中文分号串，
@@ -74,7 +82,17 @@ function parseSemver(v: string): { core: number[]; pre: string | null } {
   const m = String(v).replace(/^v/, "").match(/^(\d+)\.(\d+)\.(\d+)(?:-([\w.]+))?$/);
   if (!m) return { core: [0, 0, 0], pre: String(v) || null };
   return { core: [Number(m[1]), Number(m[2]), Number(m[3])], pre: m[4] ?? null };
-}export function isNewer(remote: string, local: string): boolean {
+}// 更新通道（与 SettingsDrawer 通道角标同规则：-test/-snap 后缀判定）：
+// test → 读 ECS 专属清单；snap/release → 读双镜像主清单
+export type UpdateChannel = "test" | "snap" | "release";
+export function channelOf(v: string): UpdateChannel {
+  const pre = parseSemver(v).pre ?? "";
+  if (/test/i.test(pre)) return "test";
+  if (/snap/i.test(pre)) return "snap";
+  return "release";
+}
+
+export function isNewer(remote: string, local: string): boolean {
   const r = parseSemver(remote);
   const l = parseSemver(local);
   for (let i = 0; i < 3; i++) {
@@ -123,7 +141,10 @@ export async function skipVersion(v: string): Promise<void> {
 // 轻量清单检查：任一镜像可达即用（CF 域 TLS 最快，ECS 8888 兜底）。
 // 清单version≤本地 → 直接 null（无新版场景同样秒回，不再撞 GitHub 超时）
 async function checkManifest(): Promise<UpdateInfo | null | "miss"> {
-  for (const url of MANIFEST_URLS) {
+  const ch = channelOf(currentVersion());
+  // 通道隔离：test 通道只读 ECS 专属清单（单源）；release/snap 读双镜像主清单
+  const urls = ch === "test" ? [TEST_MANIFEST_URL] : MANIFEST_URLS;
+  for (const url of urls) {
     try {
       const ctrl = new AbortController();
       const timer = setTimeout(() => ctrl.abort(), 4000);
@@ -141,7 +162,20 @@ async function checkManifest(): Promise<UpdateInfo | null | "miss"> {
       // 下载地址（2026-09-17）：清单带 url 且为本域 KV 直出 → 优先——公司网络屏蔽
       // ECS 裸 IP，此前硬编码 ECS_MIRROR 对公司用户是死路（99% 循环根因之一）；
       // 缺失/异域回落 ECS 镜像（家庭 Wi-Fi 直连满速）
+      // 通道隔离（2026-09-18）：test 通道放行 ECS 版本化直链（test 包只有版本化
+      // 文件名，无固定名镜像，不可信 url 直接 miss——绝不能回落主通道固定名包）
       const manifestUrl = typeof m.url === "string" ? m.url : "";
+      if (ch === "test") {
+        if (!manifestUrl.startsWith("http://8.133.211.170:8888/cc-deck-")) continue;
+        return {
+          version,
+          notes: String(m.notes ?? "").slice(0, 500).trim(),
+          apkUrl: manifestUrl,
+          ghUrl: "",
+          fullUrl: GH_COMMITS_PAGE,
+          noGhFallback: true,
+        };
+      }
       const apkUrl = manifestUrl.startsWith("https://cc.humumu.online/") ? manifestUrl : ECS_MIRROR;
       return {
         version,
@@ -161,6 +195,8 @@ export async function checkUpdate(): Promise<UpdateInfo | null> {
   // #29 清单优先：国内秒级；拿不到才落 GitHub（原路径原样保留为兜底）
   const fast = await checkManifest();
   if (fast !== "miss") return fast;
+  // GitHub 兜底仅正式/快照通道：test 包不上 GH Releases，兜底只会拿到正式包（版本错配）
+  if (channelOf(currentVersion()) === "test") return null;
   try {
     const ctrl = new AbortController();
     const timer = setTimeout(() => ctrl.abort(), FETCH_TIMEOUT_MS);
@@ -516,9 +552,10 @@ async function attemptLoop(info: UpdateInfo, myGen: number): Promise<void> {
     if (myGen !== gen) return; // 已取消/换目标
     if (r === "ok") return;
     sourceFails++;
-    // 同源连败 → 换 GitHub asset（跨源字节不可混续：弃 .part 全量重来）
+    // 同源连败 → 换 GitHub asset（跨源字节不可混续：弃 .part 全量重来）；
+    // test 通道无 GH 备源（noGhFallback）：留在 ECS 把剩余次数用完
     if (sourceFails >= SWITCH_SOURCE_AFTER && tries < MAX_TRIES) {
-      const gh = info.ghUrl || (await resolveGhAsset());
+      const gh = info.noGhFallback ? null : info.ghUrl || (await resolveGhAsset());
       if (myGen !== gen) return;
       if (gh && gh !== url) {
         url = gh;

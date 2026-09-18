@@ -44,6 +44,16 @@ echo "    ECS md5 校验一致"
 # 清掉旧固定名 test 包（今天之前的历史遗留，避免"分不清是哪个"的同类问题）
 $SSH "$ECS_HOST" "rm -f $ECS_DIR/cc-deck-${BASE}-test.apk" 2>/dev/null || true
 
+# test 通道清单（2026-09-18 通道隔离）：test 设备应用内检查更新读这份（updates.ts
+# TEST_MANIFEST_URL），随出包自动指向最新 test.N 版本化直链；主清单 latest.json 永不
+# 写 test 版本（release/snap 设备看不到 test 包）。url 必须是 ECS 版本化文件名前缀
+# （app 侧白名单校验），notes 进更新弹窗特性摘要。
+NOTE_JSON=$(printf '%s' "$NOTE" | sed 's/"/\\"/g')
+[ -n "$NOTE_JSON" ] || NOTE_JSON="测试通道构建"
+printf '{"version":"%s","url":"http://8.133.211.170:8888/cc-deck-%s.apk","size":%s,"notes":"%s"}' \
+  "$VER" "$VER" "$(stat -f%z "$APK")" "$NOTE_JSON" \
+  | $SSH "$ECS_HOST" "cat > $ECS_DIR/latest-test.json"
+
 echo "[5/5] 完成"
 SIZE=$(du -h "$APK" | cut -f1)
 echo "  版本: ${VER}  大小: ${SIZE}  ${NOTE}"
