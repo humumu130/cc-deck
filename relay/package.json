@@ -13,7 +13,8 @@
     "test:bridge": "tsx scripts/test-bridge.ts",
     "test:todo-env": "tsx scripts/test-todo-env.ts",
     "test:waiting-deadlock": "tsx scripts/test-waiting-deadlock.ts",
-    "test:cloud": "tsx scripts/test-cloud.ts"
+    "test:cloud": "tsx scripts/test-cloud.ts",
+    "test:watchdog": "tsx scripts/test-watchdog.ts"
   },
   "dependencies": {
     "@anthropic-ai/claude-agent-sdk": "latest",

@@ -275,7 +275,8 @@ export type EventType =
   | "PAIR_REQUEST"
   | "PAIR_RESOLVED"
   | "PAIRED_DEVICE"
-  | "USER_NOTE";
+  | "USER_NOTE"
+  | "WATCHDOG";
 
 export type EventPayloadMap = {
   SESSION_CREATED: SessionCreatedPayload;
@@ -293,7 +294,20 @@ export type EventPayloadMap = {
   PAIR_RESOLVED: PairResolvedPayload;
   PAIRED_DEVICE: PairedDevicePayload;
   USER_NOTE: UserNotePayload;
+  // #7 SDK 会话流看门狗观测（落 events.ndjson 供复盘误杀率；客户端不消费，
+  // 未知事件类型各端 switch 自然跳过）
+  WATCHDOG: WatchdogPayload;
 };
+
+// #7 看门狗动作观测：stall_detected=超窗起疑 →（cpu_active=树在烧 CPU 误杀排除/
+// zombie_confirmed=两轮采样整树空闲）→ recover_start/ok/fail=杀树重拉 → gave_up=防风暴上限
+export interface WatchdogPayload {
+  action: "stall_detected" | "cpu_active" | "zombie_confirmed" | "recover_start" | "recover_ok" | "recover_fail" | "gave_up";
+  lane: "slow" | "fast";
+  stalled_ms?: number;
+  cpu_delta_ms?: number;
+  detail?: string;
+}
 
 export interface SessionDeletedPayload {
   session_id: string;

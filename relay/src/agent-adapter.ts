@@ -6,6 +6,7 @@ import type {
   SDKMessage,
   SDKUserMessage,
 } from "@anthropic-ai/claude-agent-sdk";
+import { spawn } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { homedir } from "node:os";
 import { delimiter as pathDelimiter, join } from "node:path";
@@ -153,6 +154,9 @@ export interface AgentLike {
   // 可选：是否仍有未决议的权限请求——session-manager 的 WAITING 保持判定用；
   // 测试假 agent 未实现时按"无挂起"处理（hasPending?.() ?? false）
   hasPending?(): boolean;
+  // 可选：CLI 子进程 pid——#7 看门狗的进程树 CPU 采样与杀树用；假 agent/非进程
+  // 实现（云通道等）没有，看门狗采不到就退化为"纯时间窗判定"（不杀，只放弃）
+  readonly childPid?: number;
 }
 
 // 单个 Agent 会话 = 一次 query() streaming 调用。
@@ -164,6 +168,9 @@ export class AgentSession {
   readonly stats: FileChangeStats = { files_changed: 0, lines_added: 0, lines_deleted: 0 };
   // 流已关闭（stop/进程退出）：此后 sendMessage 不可用，调用方走 resume 重建
   ended = false;
+  // #7 看门狗：CLI 子进程 pid（spawnClaudeCodeProcess 包装时捕获）。SDK 默认 spawn
+  // 的行为逐项镜像（stdio 三 pipe + cwd/env/signal），仅多记一个 pid
+  readonly childPid: number | undefined;
   private filesTouched = new Set<string>();
   // #35 输出物配对账：Edit/Write 类 tool_use 的 callId → { 工具名, file_path }，
   // 同消息流的 tool_result（tool_use_id）命中即产出一条（未配对的被打断调用自然丢弃）
@@ -218,6 +225,21 @@ export class AgentSession {
         env: childEnv(),
         permissionMode: opts?.permissionMode ?? "default",
         ...(opts?.resume ? { resume: opts.resume } : {}),
+        // #7 看门狗：包一层默认 spawn 记 pid（SDK 默认行为 = spawn(cmd, args,
+        // {stdio 三 pipe, cwd, env, signal})，这里逐项镜像）。杀树/CPU 采样都要 pid
+        spawnClaudeCodeProcess: (o) => {
+          if (process.env.CCR_DEBUG) {
+            process.stderr.write(`[spawn-hook] command=${o.command} args=${JSON.stringify(o.args)} cwd=${o.cwd ?? ""}\n`);
+          }
+          const child = spawn(o.command, o.args, {
+            stdio: ["pipe", "pipe", "pipe"],
+            cwd: o.cwd,
+            env: o.env,
+            signal: o.signal,
+          });
+          (this as { childPid: number | undefined }).childPid = child.pid ?? undefined;
+          return child;
+        },
         includePartialMessages: true,
         canUseTool: (toolName, input, opts2) =>
           this.handlePermission(toolName, input, opts2 as CanUseToolOpts),
