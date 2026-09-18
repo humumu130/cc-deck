@@ -155,7 +155,7 @@ async function checkManifest(): Promise<UpdateInfo | null | "miss"> {
         clearTimeout(timer);
       }
       if (!res.ok) continue;
-      const m = (await res.json()) as { version?: string; notes?: string; url?: string };
+      const m = (await res.json()) as { version?: string; notes?: string; url?: string; url_cf?: string };
       const version = (m.version ?? "").replace(/^v/, "");
       if (!version) continue;
       if (!isNewer(version, currentVersion())) return null;
@@ -164,13 +164,19 @@ async function checkManifest(): Promise<UpdateInfo | null | "miss"> {
       // 缺失/异域回落 ECS 镜像（家庭 Wi-Fi 直连满速）
       // 通道隔离（2026-09-18）：test 通道放行 ECS 版本化直链（test 包只有版本化
       // 文件名，无固定名镜像，不可信 url 直接 miss——绝不能回落主通道固定名包）
+      // CF 镜像（2026-09-18 晚）：test 包也上 KV 版本化文件名，清单加 url_cf 字段
+      //（url 保持 ECS 供旧客户端兼容），新客户端优先 CF——公司网（屏蔽 ECS 裸 IP）
+      // 也能在线升 test 包
       const manifestUrl = typeof m.url === "string" ? m.url : "";
+      const manifestUrlCf = typeof m.url_cf === "string" ? m.url_cf : "";
       if (ch === "test") {
-        if (!manifestUrl.startsWith("http://8.133.211.170:8888/cc-deck-")) continue;
+        const okEcs = manifestUrl.startsWith("http://8.133.211.170:8888/cc-deck-");
+        const okCf = manifestUrlCf.startsWith("https://cc.humumu.online/dl/cc-deck-");
+        if (!okEcs && !okCf) continue;
         return {
           version,
           notes: String(m.notes ?? "").slice(0, 500).trim(),
-          apkUrl: manifestUrl,
+          apkUrl: okCf ? manifestUrlCf : manifestUrl,
           ghUrl: "",
           fullUrl: GH_COMMITS_PAGE,
           noGhFallback: true,

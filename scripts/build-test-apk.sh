@@ -50,8 +50,20 @@ $SSH "$ECS_HOST" "rm -f $ECS_DIR/cc-deck-${BASE}-test.apk" 2>/dev/null || true
 # （app 侧白名单校验），notes 进更新弹窗特性摘要。
 NOTE_JSON=$(printf '%s' "$NOTE" | sed 's/"/\\"/g')
 [ -n "$NOTE_JSON" ] || NOTE_JSON="测试通道构建"
-printf '{"version":"%s","url":"http://8.133.211.170:8888/cc-deck-%s.apk","size":%s,"notes":"%s"}' \
-  "$VER" "$VER" "$(stat -f%z "$APK")" "$NOTE_JSON" \
+# CF 镜像（2026-09-18 晚，可选）：配了 CLOUDFLARE_API_TOKEN 时 APK 也上 KV 版本化
+# 文件名，清单加 url_cf——公司网屏蔽 ECS 裸 IP，新客户端（≥test.16）优先 CF 也能
+# 在线升 test 包；url 字段保持 ECS 供旧客户端（≤test.15）兼容。无 token 静默跳过。
+URL_CF_FIELD=""
+if [ -n "${CLOUDFLARE_API_TOKEN:-}" ]; then
+  if scripts/kv-put-verified.sh "$APK" "cc-deck-${VER}.apk" >/dev/null 2>&1; then
+    URL_CF_FIELD=",\"url_cf\":\"https://cc.humumu.online/dl/cc-deck-${VER}.apk\""
+    echo "    CF 镜像: https://cc.humumu.online/dl/cc-deck-${VER}.apk"
+  else
+    echo "    ⚠️ CF 镜像上传失败（清单仍指 ECS）"
+  fi
+fi
+printf '{"version":"%s","url":"http://8.133.211.170:8888/cc-deck-%s.apk"%s,"size":%s,"notes":"%s"}' \
+  "$VER" "$VER" "$URL_CF_FIELD" "$(stat -f%z "$APK")" "$NOTE_JSON" \
   | $SSH "$ECS_HOST" "cat > $ECS_DIR/latest-test.json"
 
 echo "[5/5] 完成"
