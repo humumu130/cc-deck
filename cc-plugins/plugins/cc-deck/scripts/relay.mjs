@@ -40788,7 +40788,14 @@ var AgentSession = class {
   }
   handleMessage(msg) {
     const parent = msg.parent_tool_use_id;
-    if (!parent && (msg.type === "assistant" || msg.type === "stream_event" || msg.type === "result" || msg.type === "user" && this.msgHasToolResult(msg))) {
+    // 根治②清扫体（2026-09-18 #5 精确化）：只认"CLI 已越过请求"的硬证据——
+    // ① user 消息带 tool_result（该工具已有结果而我们的 allow/deny/answer 未参与 = 被抛弃）
+    // ② result 消息（回合收尾，控制请求不可能再被等）
+    // 不再对 assistant/stream_event 清扫：AskUserQuestion 挂起后 SDK 仍会送出同回合的
+    // 流式尾事件/后续文本块（includePartialMessages），旧逻辑 100ms 内就把刚挂起的提问
+    // superseded 成"请求已失效"，端上从此看不到提问卡（#5）。真被 CLI 抛弃的孤儿
+    // 由 tool_result/result 两类硬证据兜住，流关闭由 pump finally 的 denyAllPending 兜底。
+    if (!parent && (msg.type === "result" || msg.type === "user" && this.msgHasToolResult(msg))) {
       this.sweepStalePending();
     }
     switch (msg.type) {
