@@ -39,10 +39,16 @@ export function loadConfig(): RelayConfig {
     token = randomUUID().replace(/-/g, "");
     writeFileSync(tokenFile, token, "utf-8");
   }
-  // #293 默认工作目录未配置（CCR_CWD 未设/空串）时回落用户主目录：守护/插件形态下
-  // process.cwd() 常指向安装目录甚至已删除的启动目录（Mac 源手机新增会话失败根因），
-  // 不适合当会话 cwd；homedir 跨平台（Windows/macOS/Linux）始终可用
-  const defaultCwd = process.env.CCR_CWD || homedir();
+  // #293 默认工作目录三级来源：CCR_CWD 显式配置 → sticky（上次创建会话的有效目录，
+  // data/last-cwd，session-manager 创建成功时写入）→ 用户主目录。守护/插件形态下
+  // process.cwd() 常指向安装目录甚至已删除的启动目录，不适合当会话 cwd；sticky 让
+  // 手机端残留的无效目录（Windows 时代的 /C: 等）自动落到真实项目目录而非家目录
+  //（2026-09-18 三连"卡住"根因收口）；homedir 跨平台始终可用兜底
+  let defaultCwd = process.env.CCR_CWD || "";
+  if (!defaultCwd) {
+    try { defaultCwd = readFileSync(join(dataDir, "last-cwd"), "utf-8").trim(); } catch {}
+  }
+  if (!defaultCwd) defaultCwd = homedir();
   // spike 结论：必须显式指定 model，否则 CLI 会给默认模型名拼 [1m] 后缀
   const model =
     process.env.CCR_MODEL ?? process.env.ANTHROPIC_DEFAULT_SONNET_MODEL ?? "glm-5.3";

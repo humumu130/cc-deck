@@ -7,6 +7,8 @@ import type {
   SDKUserMessage,
 } from "@anthropic-ai/claude-agent-sdk";
 import { randomUUID } from "node:crypto";
+import { homedir } from "node:os";
+import { delimiter as pathDelimiter, join } from "node:path";
 import { resolveClaudeCliPath } from "./cli-path.js";
 import type {
   FileChangeStats,
@@ -34,6 +36,28 @@ import {
   zaiBridgePrefix,
   splitZaiText,
 } from "./summarizer.js";
+
+// 会话子进程环境（M0，2026-09-18）：relay 守护进程常由 Finder/launchd/Tauri 拉起，
+// PATH 仅 /usr/bin:/bin:/usr/sbin:/sbin——会话里 hook 报 node: command not found、
+// gradle 报 Cannot run program "node"（当日实证），每个会话被迫手动补 PATH。spawn 时
+// 统一补常见安装目录（不存在的目录在 PATH 里无害），CCR_EXTRA_PATH 可追加自定义位。
+export function childEnv(): NodeJS.ProcessEnv {
+  const extra = [
+    join(homedir(), "node/bin"),       // 用户级 node（本机实证位置）
+    "/usr/local/bin",                  // macOS Intel / 惯装位
+    "/opt/homebrew/bin",               // macOS Apple Silicon (homebrew)
+    join(homedir(), ".npm-global/bin"), // npm 全局自定义前缀惯用位
+    ...(process.env.CCR_EXTRA_PATH ? process.env.CCR_EXTRA_PATH.split(pathDelimiter) : []),
+  ];
+  const cur = (process.env.PATH ?? "").split(pathDelimiter).filter(Boolean);
+  const merged = [...cur, ...extra.filter((d) => d && !cur.includes(d))];
+  return {
+    ...process.env,
+    PATH: merged.join(pathDelimiter),
+    CCR_RELAY_CHILD: "1",
+    CLAUDE_CODE_ENABLE_TODO_TOOLS: "1",
+  };
+}
 
 // streaming input 模式的 prompt 源：push 用户消息 / end 收尾
 export class AsyncQueue<T> {
@@ -183,7 +207,8 @@ export class AgentSession {
         // CLAUDE_CODE_ENABLE_TODO_TOOLS：CLI 按模型身份门控任务工具（TaskCreate/Get/Update/
         // List 仅对 Claude 系模型默认提供），GLM 等其它模型一律裁剪→任务面板恒空。官方
         // 逃生门即此 env——托管会话必须注入，与模型无关（用户级 settings 兜底见 todo-tools-env.ts）
-        env: { ...process.env, CCR_RELAY_CHILD: "1", CLAUDE_CODE_ENABLE_TODO_TOOLS: "1" },
+        // PATH 补全：见 childEnv()（M0）
+        env: childEnv(),
         permissionMode: opts?.permissionMode ?? "default",
         ...(opts?.resume ? { resume: opts.resume } : {}),
         includePartialMessages: true,

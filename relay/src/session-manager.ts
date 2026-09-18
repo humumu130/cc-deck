@@ -96,9 +96,12 @@ function sanitizeImportPushEntry(raw: unknown): ImportPushEntry | null {
   return { kind, wsUrl, ...(token ? { token } : {}), ...(cloud ? { cloud } : {}) };
 }
 
-// #293 新增会话工作目录三级回落：手机指定目录 → 默认目录（CCR_CWD）→ 用户主目录。
+// #293 新增会话工作目录三级回落：手机指定目录 → 默认目录（CCR_CWD/sticky）→ 用户主目录。
 // 目录校验必须 try/catch：目录不存在/不可访问时 statSync 直接抛 ENOENT，旧实现裸调
 // 把 errno 原文抛给手机端（Mac 源启动目录失效时"新增会话"必失败且提示不可读）。
+// 2026-09-18 修正（M0）：指定目录"非空但无效"（手机残留的 Windows 路径 /C: 等）此前
+// 直接跳默认落 homedir——sticky 默认目录永远没机会兜，云端会话全落家目录（三连
+// "卡住"根因）。改为：指定无效时先试默认目录，默认可用就落它（附说明），都没有才 homedir。
 // 未配置或校验失败一律回落 homedir（跨平台）并返回人话说明；完全无可用目录时
 // cwd 返回空串，由调用方把说明当错误上屏（含建议值）。
 export function resolveCreateCwd(
@@ -114,15 +117,26 @@ export function resolveCreateCwd(
     }
   };
 
-  const wanted = (rawCwd || "").trim() || (defaultCwd || "").trim();
+  const wanted = (rawCwd || "").trim();
+  const def = (defaultCwd || "").trim();
   if (wanted) {
     const abs = resolve(wanted);
     if (isUsableDir(abs)) return { cwd: abs, fallbackNote: "" };
   }
+  // 指定无效或未指定：默认目录（CCR_CWD / sticky last-cwd）可用则兜住
+  if (def) {
+    const abs = resolve(def);
+    if (isUsableDir(abs)) {
+      const note = wanted
+        ? `指定的工作目录 ${resolve(wanted)} 不是有效目录（不存在或无法访问），本次已回落默认目录 ${abs}`
+        : "";
+      return { cwd: abs, fallbackNote: note };
+    }
+  }
 
   const home = homedir();
   const wantedDesc = wanted
-    ? `指定的工作目录 ${resolve(wanted)} 不是有效目录（不存在或无法访问）`
+    ? `指定的工作目录 ${resolve(wanted)} 不是有效目录（不存在或无法访问），默认目录（CCR_CWD/上次有效目录）也未配置或无效`
     : "未指定工作目录，且默认目录未配置（CCR_CWD）";
   const suggest =
     '如需固定工作目录，请设置 CCR_CWD 环境变量指向实际项目目录（如 Windows "D:\\projects\\myapp"、macOS/Linux "~/projects/myapp"）后重启 relay';
@@ -1240,6 +1254,13 @@ export class SessionManager {
     // #293 三级回落：指定/默认目录无效时回落用户主目录（说明进时间线），完全无可用目录才报错
     const { cwd, fallbackNote } = resolveCreateCwd(rawCwd, this.cfg.defaultCwd);
     if (!cwd) throw new Error(fallbackNote);
+    // sticky 默认目录（M0，2026-09-18）：解析出的有效项目目录记为下次默认——手机端
+    // /C: 类残留指定进来时，回落落在真实项目目录而非家目录；CCR_CWD 显式配置时不越权。
+    // 回落到家目录的 cwd 不记（记了等于没记）
+    if (!process.env.CCR_CWD && cwd !== homedir()) {
+      this.cfg.defaultCwd = cwd;
+      try { writeFileSync(join(this.cfg.dataDir, "last-cwd"), cwd, "utf-8"); } catch {}
+    }
     this.evictOldSessions();
 
     const managed: ManagedSession = {

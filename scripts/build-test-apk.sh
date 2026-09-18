@@ -7,6 +7,23 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
+# 出包互斥锁（M0 糙版，2026-09-18）：多会话并行时同时出包会在 [1/5] 撞 test.N 序号、
+# 互相覆盖 ECS 文件——全局串行。macOS 无 flock(1)，用 mkdir 原子锁 + pid 探活：
+# 持锁进程已死自动清残留（防死锁永久堵路），活锁则报 pid 退出
+LOCK_DIR="/tmp/cc-deck-test-build.lock"
+if ! mkdir "$LOCK_DIR" 2>/dev/null; then
+  OLD_PID=$(cat "$LOCK_DIR/pid" 2>/dev/null || true)
+  if [ -n "$OLD_PID" ] && kill -0 "$OLD_PID" 2>/dev/null; then
+    echo "ERR: 另一个 test 出包正在运行（pid $OLD_PID），等它完成后再试；确认无构建在跑可 rm -rf $LOCK_DIR" >&2
+    exit 1
+  fi
+  echo "    清理死锁残留（pid ${OLD_PID:-unknown} 已退出）"
+  rm -rf "$LOCK_DIR"
+  mkdir "$LOCK_DIR"
+fi
+echo $$ > "$LOCK_DIR/pid"
+trap 'rm -rf "$LOCK_DIR"' EXIT
+
 NOTE="${1:-}"
 BASE=$(tr -d '[:space:]' < VERSION)
 ECS_HOST="root@8.133.211.170"
