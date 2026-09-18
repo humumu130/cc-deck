@@ -84,6 +84,24 @@ export function readTasks(sid) {
     .map((t) => ({ id: t.id, subject: String(t.subject || "") || "(无标题)", status: t.status }));
 }
 
+// 全量任务（含已完成/豁免/blocked，原始字段）：生命周期守卫要算"完成后解锁了谁"、
+// 检测多任务并行悬挂等，需要比 readTasks 更宽的视图；过滤逻辑由调用方自定
+export function readAllTasks(sid) {
+  const dir = join(home, ".claude", "tasks", sid);
+  const all = [];
+  try {
+    for (const f of readdirSync(dir)) {
+      if (!f.endsWith(".json")) continue;
+      try {
+        const t = JSON.parse(readFileSync(join(dir, f), "utf-8"));
+        if (t.status === "deleted") continue;
+        all.push({ ...t, id: t.id ?? f.replace(/\.json$/, "") });
+      } catch {}
+    }
+  } catch {}
+  return all;
+}
+
 // ---------- 回合忙碌状态机 ----------
 const TURN_FILE = join(dataDir, "guard-turn.json");
 
