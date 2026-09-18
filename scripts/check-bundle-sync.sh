@@ -21,7 +21,10 @@ if [ -n "$(git status --porcelain)" ]; then
 fi
 
 # 诊断桩特征（最新 bundle 必含——版本链断裂时期的旧 bundle 无此串）
-if [ -f cc-plugins/plugins/cc-deck/scripts/relay.mjs ] && ! grep -q 'no cli_pid sid' cc-plugins/plugins/cc-deck/scripts/relay.mjs; then
+# 探针沿革：'no cli_pid sid'（2026-09-14）→ 506a58c 重构后从源码消失、守卫误拦，
+# 2026-09-18 换 CLAUDE_CODE_ENABLE_TODO_TOOLS（f283b58 任务工具门控的 env 契约，
+# 断裂时代 bundle 无此串；env 契约不轻易改名，比日志文案耐用）
+if [ -f cc-plugins/plugins/cc-deck/scripts/relay.mjs ] && ! grep -q 'CLAUDE_CODE_ENABLE_TODO_TOOLS' cc-plugins/plugins/cc-deck/scripts/relay.mjs; then
   echo "❌ bundle 缺诊断桩特征（可能是版本链断裂时期的旧产物）"
   FAIL=1
 fi

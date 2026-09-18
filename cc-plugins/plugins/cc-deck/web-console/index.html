@@ -1054,6 +1054,10 @@
   #newform.open { display: flex; }
   #newform textarea { resize: vertical; min-height: 56px; }
   #newform .row { display: flex; justify-content: flex-end; gap: 8px; }
+  /* 新建选项行：左对齐排勾选与 ? 悬浮（罗嗦引导文案收进 title） */
+  #newform .row.newopts { justify-content: flex-start; align-items: center; gap: 6px; }
+  .skip-perm { display: flex; align-items: center; gap: 5px; font-size: 11.5px; color: var(--dim); cursor: pointer; user-select: none; }
+  .hint-q { display: inline-flex; align-items: center; justify-content: center; width: 14px; height: 14px; border-radius: 50%; border: 1px solid var(--border); color: var(--dim); font-size: 10px; cursor: help; flex: none; }
 
   .card {
     background: var(--panel); border: 1px solid var(--border); border-radius: 14px;
@@ -1791,8 +1795,12 @@
         <input id="cwd" placeholder="工作目录（如 D:\dev\my-project）">
         <textarea id="prompt" rows="2" placeholder="初始指令，如：帮我看看当前项目结构并总结"></textarea>
         <div class="pair-hint" id="newTarget"></div>
-        <!-- #23 认知引导：面板新建的是后台会话（无终端窗口）；想在终端里看到对话需装 CLI 插件 -->
-        <div class="pair-hint">此为后台会话（无终端窗口）。想在终端里看到对话？给电脑端 CLI 装 CC Deck 插件后用「终端」会话。</div>
+        <div class="row newopts">
+          <!-- 跳过权限 = bypassPermissions：免审全部命令与编辑，仅信任本机环境时勾选 -->
+          <label class="skip-perm"><input type="checkbox" id="skipPerm">跳过权限确认</label>
+          <!-- #23 认知引导（罗嗦文案收进悬浮）：面板新建的是后台会话（无终端窗口）；想在终端里看到对话需装 CLI 插件 -->
+          <span class="hint-q" title="此为后台会话（无终端窗口）。想在终端里看到对话？给电脑端 CLI 装 CC Deck 插件后用「终端」会话。">?</span>
+        </div>
         <div class="row">
           <button id="createBtn" class="primary">创建会话</button>
         </div>
@@ -2422,8 +2430,8 @@ function connectServer(cfg) {
 }
 function connectAll() { for (const cfg of servers) connectServer(cfg); }
 
-const PERM_CYCLE = ["default", "acceptEdits", "plan"];
-const PERM_LABEL = { default: "标准", acceptEdits: "自动编辑", plan: "规划" };
+const PERM_CYCLE = ["default", "acceptEdits", "plan", "bypassPermissions"];
+const PERM_LABEL = { default: "标准", acceptEdits: "自动编辑", plan: "规划", bypassPermissions: "跳过" };
 
 function uuid() {
   if (crypto.randomUUID) return crypto.randomUUID();
@@ -3366,6 +3374,12 @@ function onEvent(ctx, msg) {
       s.status = msg.payload.status;
       s.action_summary = msg.payload.action_summary;
       if (msg.payload.stats) s.stats = msg.payload.stats;
+      // 审批弹窗死锁根治④：waiting_request 与 status 同进退——新 relay 恒随 UPDATE
+      // 帧携带权威值（null = 已清）直接采信；旧 relay 不带此字段时，状态离开
+      // WAITING 就地清残留（与手机端 store 同款自愈），防止"卡片处理按钮在、
+      // 详情弹窗因 status!==WAITING 永不出现"的脱钩死锁
+      if (msg.payload.waiting_request !== undefined) s.waiting_request = msg.payload.waiting_request;
+      else if (msg.payload.status !== "WAITING") s.waiting_request = null;
       // 其余可选字段：出现即覆盖（与手机端 store 对齐）；pinned/saved 为 #49 保存恢复字段
       for (const f of ["remote_mode", "title", "title_locked", "model", "turn_started_at",
         "usage", "context_usage", "context_limit", "todos", "subagents", "permission_mode", "pending_inputs", "relay_session_id", "cron_tasks", "compacting", "pinned", "saved"]) {
@@ -3388,11 +3402,15 @@ function onEvent(ctx, msg) {
     }
     case "SESSION_WAITING_RESOLVED": {
       const s = ctx.sessions.get(sid); if (!s) break;
-      s.status = "WORKING";
-      s.waiting_request = null;
+      // 仅当决议针对当前挂起的请求才动状态：孤儿请求补发的 superseded 可能晚于
+      // 下一个 WAITING 到达（多端并发时序窗口），无差别收口会打掉新请求的弹窗
+      if (!s.waiting_request || s.waiting_request.request_id === msg.payload.request_id) {
+        s.status = "WORKING";
+        s.waiting_request = null;
+      }
       const d = msg.payload.decision;
-      const dText = d === "allow" ? "已允许" : d === "deny" ? "已拒绝" : d === "answer" ? "已作答" : "远程审批超时，回退本地";
-      pushLog(ctx, sid, { ts: msg.ts, kind: "system", text: dText + (d === "timeout" ? "" : " (by " + msg.payload.by + ")") });
+      const dText = d === "allow" ? "已允许" : d === "deny" ? "已拒绝" : d === "answer" ? "已作答" : d === "answered" ? "电脑端已作答" : d === "superseded" ? "请求已失效（CLI 已继续）" : "远程审批超时，回退本地";
+      pushLog(ctx, sid, { ts: msg.ts, kind: "system", text: dText + (d === "timeout" || d === "superseded" ? "" : " (by " + msg.payload.by + ")") });
       break;
     }
     case "SESSION_ERROR": {
@@ -3825,7 +3843,9 @@ function render() {
       d.dataset.src = ctx.cfg.id;
       d.className = "card " + s.status + (listCompact ? " compact" : "") + (selected && selected.src === ctx.cfg.id && s.session_id === selected.sid ? " sel" : "") + (s.historical && !dormant ? " historical" : "") + (dormant ? " dormant" : "");
       if (dormant) d.title = "已保存休眠 · 点击恢复";
-      const waiting = !!s.waiting_request;
+      // 根治④对称化：等待判定必须同时看 status——脱钩帧（waiting_request 残留 +
+      // status 已翻走）不该再渲染【处理】按钮，否则按钮点开详情永远等不到弹窗
+      const waiting = !!s.waiting_request && s.status === "WAITING";
       const waitingText = waiting
         ? (s.waiting_request.questions?.length ? "Claude 在提问：" + (s.waiting_request.questions[0].header || "") : "需要确认 " + s.waiting_request.tool_name + " — " + (s.waiting_request.input_summary || ""))
         : (s.status === "ERROR" && s.last_error ? "⚠ " + s.last_error : s.action_summary || "");
@@ -5551,7 +5571,10 @@ $("createBtn").onclick = () => {
   const prompt = $("prompt").value.trim();
   if (!prompt) { toast("请输入初始指令"); return; }
   const ctx = ctxs.get(activeServerId) || firstOnlineCtx();
-  const id = sendCommandTo(ctx, "COMMAND_CREATE", { cwd: cwd || ".", prompt });
+  // 勾选"跳过权限确认"→ bypassPermissions：免审全部命令与编辑（与手机端 NewSessionModal 同语义）
+  const bypass = $("skipPerm").checked;
+  const id = sendCommandTo(ctx, "COMMAND_CREATE", { cwd: cwd || ".", prompt, ...(bypass ? { permissionMode: "bypassPermissions" } : {}) });
+  if (bypass) $("skipPerm").checked = false; // 创建后回落，防止下一次误建 skip 会话
   if (id) {
     lsSet("ccr_cwd", cwd);
     $("prompt").value = "";
