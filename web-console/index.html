@@ -5391,9 +5391,11 @@ $("gpIdleLever").querySelectorAll(".lever-opt").forEach((b) => {
 // 门控（2026-09-18 双气泡验证轮反馈）：tauri-latest.json 只配 windows-x86_64 平台，
 // Mac 端 updater.check 判"0.5.2 正式 > 0.5.2-test.N"为有更新、下载时无本平台条目
 // 直接炸（用户实测"更新失败"+英文串）；test/snap 桌面包为本地直装，被 updater 升
-// 正式版会破坏通道隔离——Mac 或 test/snap 版一律不走 updater，提示手动更新
+// 正式版会破坏通道隔离——Mac 或 test/snap 版一律不走 updater，提示手动更新。
+// dev 同罪（#22，2026-09-19）：desktop.yml 无 tag 验证包烙 -dev.<run_number>，时间
+// 上晚于同号正式版、semver 却判正式更高——不拦会被提示（静默路径甚至自动装）降级
 const UPDATER_BLOCKED = /Mac/i.test(navigator.platform || navigator.userAgent)
-  || /-(test|snap)\./i.test(CONSOLE_VERSION);
+  || /-(test|snap|dev)\./i.test(CONSOLE_VERSION);
 async function shellCheckUpdate() {
   const withTimeout = (p, ms) => Promise.race([p, new Promise((_, rej) => setTimeout(() => rej(new Error("网络超时")), ms))]);
   if (UPDATER_BLOCKED) return { blocked: true };
@@ -5437,10 +5439,12 @@ $("gpUpdate").onclick = async () => {
   }
   setTimeout(() => { v.textContent = ""; }, 4000);
 };
-// Tauri 静默检查：启动 5s 后台查一次，发现新版直接下载安装（退出时生效，不打扰）
+// Tauri 静默检查：启动 5s 后台查一次，发现新版直接下载安装（退出时生效，不打扰）。
+// #22 套 UPDATER_BLOCKED 门：此前只有手动检查走门，test/snap/dev 的 Windows 包在
+// 这条静默路径会被自动升级成正式版（通道隔离静默破坏）；Mac 拦掉也省一次必炸请求
 setTimeout(() => {
   try {
-    if (window.__TAURI__ && window.__TAURI__.updater) {
+    if (!UPDATER_BLOCKED && window.__TAURI__ && window.__TAURI__.updater) {
       window.__TAURI__.updater.check().then((u) => {
         if (u && u.available) { u.downloadAndInstall().then(() => toast("新版本已就绪，重启后生效")).catch(() => {}); }
       }).catch(() => {});

@@ -83,12 +83,16 @@ function parseSemver(v: string): { core: number[]; pre: string | null } {
   if (!m) return { core: [0, 0, 0], pre: String(v) || null };
   return { core: [Number(m[1]), Number(m[2]), Number(m[3])], pre: m[4] ?? null };
 }// 更新通道（与 SettingsDrawer 通道角标同规则：-test/-snap 后缀判定）：
-// test → 读 ECS 专属清单；snap/release → 读双镜像主清单
-export type UpdateChannel = "test" | "snap" | "release";
+// test → 读 ECS 专属清单；snap/release → 读双镜像主清单；dev → 不参与更新检查
+export type UpdateChannel = "test" | "snap" | "release" | "dev";
 export function channelOf(v: string): UpdateChannel {
   const pre = parseSemver(v).pre ?? "";
   if (/test/i.test(pre)) return "test";
   if (/snap/i.test(pre)) return "snap";
+  // dev = CI 无 tag 验证包（android.yml/desktop.yml 烙 -dev.<run_number>）。时间上
+  // 晚于同号正式版（最新代码），semver 却判"正式 > 预发布"方向相反——若按 release
+  // 通道读主清单，0.5.2-dev.90 首启即被提示"升级"0.5.2（实为降级，2026-09-18 实踩）
+  if (/^dev/i.test(pre)) return "dev";
   return "release";
 }
 
@@ -198,6 +202,10 @@ async function checkManifest(): Promise<UpdateInfo | null | "miss"> {
 }
 
 export async function checkUpdate(): Promise<UpdateInfo | null> {
+  // dev 通道（CI 无 tag 验证包）不参与更新检查：无专属清单，读主清单必被 semver
+  // "正式 > 预发布"误判成可升级（0.5.2-dev.90 ← 0.5.2，实为降级提示）。静默检查
+  // 不弹窗；手动检查显示"已是最新 ✓ <本机版本>"，换包走 adb/出包脚本
+  if (channelOf(currentVersion()) === "dev") return null;
   // #29 清单优先：国内秒级；拿不到才落 GitHub（原路径原样保留为兜底）
   const fast = await checkManifest();
   if (fast !== "miss") return fast;
