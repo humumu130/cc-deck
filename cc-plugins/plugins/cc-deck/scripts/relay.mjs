@@ -43751,17 +43751,19 @@ var Bridge = class _Bridge {
       }
       const text = buf.toString("latin1");
       let custom, ai;
+      // latin1 字节视图的捕获组须先还原 UTF-8 再 parse：中文标题字节序列直接
+      // JSON.parse 会变乱码（端边对账→ç«¯è¾¹å¯¹è´¢）；转义序列纯 ASCII 两视图等价
       const reC = /"type":"custom-title","customTitle":"((?:[^"\\]|\\.)*)"/g;
       for (const m of text.matchAll(reC)) {
         try {
-          custom = JSON.parse('"' + m[1] + '"');
+          custom = JSON.parse('"' + Buffer.from(m[1], "latin1").toString("utf-8") + '"');
         } catch {
         }
       }
       const reA = /"type":"ai-title","aiTitle":"((?:[^"\\]|\\.)*)"/g;
       for (const m of text.matchAll(reA)) {
         try {
-          ai = JSON.parse('"' + m[1] + '"');
+          ai = JSON.parse('"' + Buffer.from(m[1], "latin1").toString("utf-8") + '"');
         } catch {
         }
       }
