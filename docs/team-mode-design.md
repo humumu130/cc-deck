@@ -118,6 +118,103 @@ relay 创建会话进程时自动配好环境，两件事：
 - 任务板载体：GitHub Issues（推荐，认领/状态/标签现成）或仓库任务文件
 - 跨模型无关：编排协议设计在 relay 层，不依赖具体模型的自觉（leader/worker 可能跑不同模型）
 
+## 运行时协议（M1 细化草案）
+
+原则：**糙**。字段够用就行，消息类型能少则少，权限收紧留到 M2。
+
+### 任务卡（板的唯一实体）
+
+```json
+{
+  "id": "T-12",
+  "title": "更新通道隔离",
+  "scope": ["expo-app/**", "scripts/build-test-apk.sh"],
+  "accept": [
+    "test 设备应用内可查到新 test 包",
+    "release/snap 设备检查更新永远看不到 test 版本"
+  ],
+  "status": "ready_to_install",
+  "assignee": "worker-mobile",
+  "branch": "wt/t7/mobile-upd",
+  "artifact": "0.5.2-test.17",
+  "updated": 1695024123
+}
+```
+
+- `scope` = 改动面（文件域）：派工时按它做互斥分组——scope 有交集的任务不并行
+- `accept` = 验收点清单：worker 自测对着打勾，验收会话独立复核同一份——单一验收标准，两道关
+- `artifact` = 产出物（test 包版本号），"就绪待装机"的依据
+
+### 状态机
+
+```
+backlog（待认领）
+  ├─ worker 认领 / leader 指派 ──────────→ claimed（进行中）
+claimed
+  ├─ 自测过 + commit 上分支 → 提交 ─────→ submitted（待验收）
+  ├─ 卡住 / 放弃 ──────────────────────→ backlog（任务回板）
+submitted
+  ├─ 验收复核通过 + 出包 ──────────────→ ready_to_install（就绪待装机）
+  └─ 验收打回（必附一句话原因）─────────→ claimed
+ready_to_install
+  ├─ 用户装机看效果 OK ────────────────→ done
+  └─ 用户一句话反馈问题 ───────────────→ claimed（leader 派修复循环）
+done（终态，板保留供审计）
+```
+
+- **用户在环是硬性设计**：ready_to_install → done 必须用户确认——用户是最终验收人，这一步不自动化
+- 打回必附原因：原因是 worker 下一轮的直接输入，闭环就此成立
+- M1 流转权限从宽（谁都能改状态，UI 按角色高亮默认动作）；M2 收紧（worker 只能操作自己的卡）
+
+### 消息集（刻意最少）
+
+只有三类，全部经 relay：
+
+1. `chat`：用户 ↔ leader 的会话消息（现有能力，原样）
+2. `board.*`：任务卡增删改/流转（板操作的事件化，手机和 Agent 双端消费同一事件流）
+3. `notify.user`：推用户的（就绪待装机、验收打回摘要、成员异常）
+
+**worker 之间 M1 不做点对点通信**——必须协调的经 leader。控制流=leader 的派工消息（spawn 后首条 prompt 或会话内新指令），状态=板。少一类消息，少一类失控。
+
+### Leader 循环 / Worker 循环（伪码）
+
+```
+leader:                          worker:
+loop                             loop
+  读板 + 成员心跳                   领卡（或接 leader 派工）→ claimed
+  有 submitted 且验收空闲           在自己 worktree 开发
+    → 派验收                       自测不过不提交（含在开发内）
+  有 backlog 且编制有空位           commit 上分支 + 自测结果 → submitted
+    → 按 scope 互斥派工            被打回 → 读原因继续改
+  用户有新消息 → 处理               通过 → 领下一张
+  成员心跳超时
+    → 卡回 backlog，可重启成员
+  全部 done 且用户确认 → 收团
+```
+
+### 接替机制（连续性的机制化）
+
+- 每成员周期性心跳到 relay（hook 上报，不靠 Agent 自觉）
+- 接替 = spawn 新会话 + 注入身份（"你是 team X 的 leader，板在 relay"）→ 新 leader **读板即恢复**，无需考古 transcript
+- 这条就是把"连续性不靠会话记忆，靠 git 和文档"的原则变成机制
+
+### git 工作流
+
+- 每成员一个 worktree：`git worktree add ../cc-deck-wt/<member> -b wt/<team>/<member>`
+- 分支只允许动自己 scope 内的文件；越域改动 leader 合并时拦
+- 合并由 leader 统一做（squash 回 dev），成员之间不互相合并
+- worktree 回收：成员名下任务全部 done 且已合并后删
+
+### 发版互斥
+
+- relay 提供锁（单机文件锁即可，糙够用）；build-test-apk.sh 出包前先拿锁
+- test.N 序号、latest-test.json 写入的竞态彻底机械化消掉——当日手工纪律的产品化落点
+
+### 开团 / 收团
+
+- **开团**：用户点入口 → relay 建团队实体（板+id）→ spawn leader → leader 分析任务提编制 → 用户确认 → leader spawn 成员（身份三件套 + worktree 注入）→ 运行
+- **收团**：leader 全量 merge → 出 snap/release 包 → 板转归档只读 → 清 worktree → 团队条目折叠进历史（板的审计价值保留）
+
 ## 落地路径
 
 | 阶段 | 内容 | 备注 |
