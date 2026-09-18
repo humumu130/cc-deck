@@ -141,12 +141,74 @@
     margin-top: 22px; background: #10131b; border: 1px dashed #2c3648; border-radius: 12px;
     padding: 12px 16px; font-size: 12.5px; color: #8b93a7; line-height: 1.9;
   }
+
+  /* ---------- 分节标题 ---------- */
+  .sh { font-size: 17px; margin: 46px 0 6px; }
+  .shsub { color: #8b93a7; font-size: 12.5px; margin-bottom: 18px; line-height: 1.7; max-width: 760px; }
+
+  /* 彩色编号（5-7 与手机帧 1-4 区分） */
+  .pin.c5, .num.c5 { background: #34d399; }
+  .pin.c5 { box-shadow: 0 0 0 4px rgba(52,211,153,.25); }
+  .pin.c6, .num.c6 { background: #f0b45a; }
+  .pin.c6 { box-shadow: 0 0 0 4px rgba(240,180,90,.25); }
+  .pin.c7, .num.c7 { background: #a78bfa; }
+  .pin.c7 { box-shadow: 0 0 0 4px rgba(167,139,250,.25); }
+
+  /* ---------- 桌面壳 / 网页壳共用窗框 ---------- */
+  .winframe {
+    position: relative; width: 880px; flex: 0 0 auto; max-width: 100%;
+    background: #15181f; border: 1px solid #2a2e38; border-radius: 14px;
+    box-shadow: 0 24px 60px rgba(0,0,0,.55); overflow: hidden;
+  }
+  .chrome { display: flex; align-items: center; gap: 10px; padding: 9px 14px; background: #10131b; border-bottom: 1px solid #232836; }
+  .chrome .dots { display: flex; gap: 6px; }
+  .chrome .dots i { width: 11px; height: 11px; border-radius: 50%; }
+  .chrome .dots i:nth-child(1) { background: #ff5f57; }
+  .chrome .dots i:nth-child(2) { background: #febc2e; }
+  .chrome .dots i:nth-child(3) { background: #28c840; }
+  .chrome .tt { font-size: 12px; color: #8b93a7; }
+  .chrome .url {
+    margin-left: auto; max-width: 340px; background: #161a24; border: 1px solid #232836;
+    border-radius: 8px; font-size: 11.5px; color: #7c8598; padding: 4px 10px;
+  }
+  .chrome .btn { font-size: 11px; color: #7c8598; border: 1px solid #2a3040; border-radius: 7px; padding: 3px 9px; }
+
+  /* ---------- 桌面端布局 ---------- */
+  .dtbody { display: flex; height: 500px; }
+  .dtside { width: 192px; flex: 0 0 auto; background: #111420; border-right: 1px solid #232836; padding: 12px 8px; }
+  .dtside .grp { font-size: 10.5px; color: #6b7590; padding: 6px 8px 4px; letter-spacing: .5px; }
+  .dtside .itm { display: flex; align-items: center; gap: 7px; font-size: 12px; padding: 7px 8px; border-radius: 8px; color: #cbd5ec; }
+  .dtside .itm.on { background: #1c2436; }
+  .dtside .itm.sub { padding-left: 20px; font-size: 11.5px; color: #9aa3b8; }
+  .dot { width: 7px; height: 7px; border-radius: 50%; margin-left: auto; flex: 0 0 auto; }
+  .dot.g { background: #34d399; } .dot.y { background: #f0b45a; } .dot.b { background: #3b4358; }
+  .dtmain { flex: 1; display: flex; min-width: 0; }
+  .dtchat { flex: 1; min-width: 0; border-right: 1px solid #232836; padding: 12px; overflow: hidden; }
+  .dtboard { flex: 1.15; min-width: 0; padding: 12px; overflow: hidden; }
+  .ph { font-size: 12px; color: #8b93a7; margin-bottom: 10px; }
+  .board.wide .col { flex: 1 1 0; }
+
+  /* ---------- 网页端 ---------- */
+  .webbody { padding: 12px 14px 16px; }
+  .wbanner {
+    background: #1a2436; border: 1px dashed #33415e; color: #9db1d6;
+    border-radius: 10px; font-size: 11.5px; padding: 8px 10px; text-align: center; margin-bottom: 12px;
+  }
+  .mstrip { display: flex; gap: 8px; margin-top: 12px; flex-wrap: wrap; }
+  .mstrip .mc {
+    display: flex; align-items: center; gap: 7px; background: #161a24; border: 1px solid #252b3a;
+    border-radius: 9px; padding: 6px 10px; font-size: 11.5px; color: #cbd5ec;
+  }
+
+  .dp5 { top: 52px; left: -14px; }
+  .dp6 { top: 230px; right: -14px; }
+  .wp7 { top: 46px; right: -14px; }
 </style>
 </head>
 <body>
 <div class="page">
   <h1>cc-deck 团队模式 · 界面形态示意</h1>
-  <p class="sub">一句话：<b>聊天窗只有你和 Leader（长得和现在的单会话一模一样），团队的"群"在看板里。</b>手机上的 ①②③④ 对应下方图注；点顶部 tab 可切换三个视图。</p>
+  <p class="sub">一句话：<b>聊天窗只有你和 Leader（长得和现在的单会话一模一样），团队的"群"在看板里。</b>下方依次是手机端（①②③④）、桌面端（⑤⑥）、网页端（⑦）三帧；手机帧点顶部 tab 可切换三个视图。</p>
 
   <div class="stage">
     <div class="phone">
@@ -301,6 +363,130 @@
         <p>Leader 推送「📦 就绪待装机」卡片，你点下载安装、装机看效果、一句话反馈——<b>你永远只做最后一公里</b>，其余全部 Agent 间消化。</p></div>
       <div class="note"><div class="nh"><span class="num">4</span>看板是共享的单一事实源</div>
         <p>这块板建在 <b>relay 层</b>：你手机上看到的就是 Agent 们正在读写的同一份（认领/流转实时同步）。Claude 内置任务清单按会话隔离、互相看不见——团队模式必须重建这一层。</p></div>
+    </aside>
+  </div>
+
+  <h2 class="sh">🖥️ 桌面端 · 驾驶舱</h2>
+  <p class="shsub">宽屏的差异化：<b>左 Leader 对话 / 右任务板常驻并排</b>（手机靠切 tab，桌面双栏同屏）。侧栏出现「团队」分组收纳成员；右上角是桌面端独有运维入口（重启重建 / 收团归档）。</p>
+  <div class="stage">
+    <div class="winframe">
+      <div class="chrome">
+        <div class="dots"><i></i><i></i><i></i></div>
+        <div class="tt">CC Deck — 团队 · 发布小队</div>
+        <div class="btn">重启重建</div>
+        <div class="btn">收团</div>
+      </div>
+      <div class="dtbody">
+        <div class="dtside">
+          <div class="grp">▾ 团队 · 发布小队</div>
+          <div class="itm on">👑 Leader <span class="dot g"></span></div>
+          <div class="itm sub">📱 手机端开发 <span class="dot g"></span></div>
+          <div class="itm sub">🖥️ 桌面端开发 <span class="dot g"></span></div>
+          <div class="itm sub">✅ 验收 <span class="dot y"></span></div>
+          <div class="grp" style="margin-top:10px">▸ 普通会话</div>
+          <div class="itm sub" style="color:#5d6678">relay 调试 <span class="dot b"></span></div>
+          <div class="itm sub" style="color:#5d6678">0.5.2 出包 <span class="dot b"></span></div>
+        </div>
+        <div class="dtmain">
+          <div class="dtchat">
+            <div class="ph">👑 Leader · 与手机端同一会话（多端同步）</div>
+            <div class="row me"><div class="bubble">test.17 装机看过了，通道隔离 OK</div></div>
+            <div class="row leader">
+              <div>
+                <div class="who">👑 Leader</div>
+                <div class="bubble">✅ 已标记 done。下一批建议：桌面端 test.5 复验 + CF 镜像，要开吗？</div>
+              </div>
+            </div>
+            <div class="row me"><div class="bubble">开。CF 镜像归 scripts，别动 expo-app。</div></div>
+            <div class="row leader">
+              <div>
+                <div class="who">👑 Leader</div>
+                <div class="bubble">已建 2 张卡派工 → 看板右栏实时更新</div>
+              </div>
+            </div>
+          </div>
+          <div class="dtboard">
+            <div class="ph">任务板 · 与手机端同源实时</div>
+            <div class="board wide">
+              <div class="col">
+                <h4>进行中 <b>2</b></h4>
+                <div class="card"><div class="ct">CF 镜像上 KV</div><div class="cm"><span class="chip">🛠️</span></div></div>
+                <div class="card"><div class="ct">test.5 复验</div><div class="cm"><span class="chip">🖥️</span></div></div>
+              </div>
+              <div class="col">
+                <h4>待验收 <b>1</b></h4>
+                <div class="card"><div class="ct">test.18 出包</div><div class="cm"><span class="chip">✅</span></div></div>
+              </div>
+              <div class="col">
+                <h4>就绪待装机</h4>
+                <div class="card hl"><div class="ct">test.17</div><div class="cm"><span class="tag-ready">◉ 等装机</span></div></div>
+              </div>
+            </div>
+            <div class="crewfoot" style="margin-top:8px">已完成的卡收进归档视图 ↘</div>
+          </div>
+        </div>
+      </div>
+      <span class="pin c5 dp5">5</span>
+      <span class="pin c6 dp6">6</span>
+    </div>
+
+    <aside class="notes">
+      <div class="note"><div class="nh"><span class="num c5">5</span>成员收纳在「团队」分组</div>
+        <p>worker 不散落在普通会话列表——团队条目下按成员展开，绿点=工作中、黄点=滞留（watchdog 三色）。点成员 = 只读旁听（M2+）；桌面端还能<b>一键打开该成员的 worktree 目录</b>——路径就在本机，人可以直接钻进成员工作区看代码。</p></div>
+      <div class="note"><div class="nh"><span class="num c6">6</span>对话与看板并排常驻</div>
+        <p>Leader 说话时看板状态在余光里变化，不用切视图。<b>重启重建 / 收团</b>等 relay 运维动作收纳在桌面端（手机和网页不暴露）。</p></div>
+    </aside>
+  </div>
+
+  <h2 class="sh">🌐 网页端 · 观察窗</h2>
+  <p class="shsub">web-console 加「团队」视图，M1 <b>只读为主</b>：公司电脑装不了 App 时，浏览器盯团队动静与「就绪待装机」；能给 Leader 发消息，但操作面（成员管理/装机确认/运维）收敛在 App。</p>
+  <div class="stage">
+    <div class="winframe">
+      <div class="chrome">
+        <div class="dots"><i></i><i></i><i></i></div>
+        <div class="tt">团队 · 发布小队 — CC Deck Console</div>
+        <div class="url">🔒 cc.humumu.online/console</div>
+      </div>
+      <div class="webbody">
+        <div class="wbanner">👁️ 观察窗 · 只读 —— 看板/成员/时间线全可见，可发消息给 Leader；装机确认与成员管理请在 App 内操作</div>
+        <div class="board wide">
+          <div class="col">
+            <h4>待认领 <b>1</b></h4>
+            <div class="card"><div class="ct">CF 镜像：test 包上 KV</div><div class="cm"><span class="chip">scripts/**</span></div></div>
+          </div>
+          <div class="col">
+            <h4>进行中 <b>2</b></h4>
+            <div class="card"><div class="ct">更新通道隔离</div><div class="cm"><span class="chip">📱</span><span class="chip br">wt/mobile</span></div></div>
+            <div class="card"><div class="ct">双气泡修复</div><div class="cm"><span class="chip">🖥️</span><span class="chip br">fix/bubble</span></div></div>
+          </div>
+          <div class="col">
+            <h4>待验收 <b>1</b></h4>
+            <div class="card"><div class="ct">test.5 桌面包</div><div class="cm"><span class="chip">✅</span></div></div>
+          </div>
+          <div class="col">
+            <h4>就绪待装机</h4>
+            <div class="card hl"><div class="ct">test.17 通道隔离</div><div class="cm"><span class="tag-ready">◉ 等装机</span></div></div>
+          </div>
+          <div class="col">
+            <h4>已完成</h4>
+            <div class="card dim"><div class="ct">版本号双通道澄清</div><div class="cm"><span class="chip">👑</span></div></div>
+          </div>
+        </div>
+        <div class="mstrip">
+          <div class="mc"><span class="dot g"></span>👑 Leader · 出包中</div>
+          <div class="mc"><span class="dot g"></span>📱 手机端 · 通道隔离</div>
+          <div class="mc"><span class="dot g"></span>🖥️ 桌面端 · 双气泡</div>
+          <div class="mc"><span class="dot y"></span>✅ 验收 · 等下一批</div>
+        </div>
+      </div>
+      <span class="pin c7 wp7">7</span>
+    </div>
+
+    <aside class="notes">
+      <div class="note"><div class="nh"><span class="num c7">7</span>网页端 = 零特权观察窗</div>
+        <p>看板、成员状态、时间线全可见（含给 Leader 发消息），<b>成员管理 / 装机确认 / 发版 / 运维一律不给</b>——网页端可能开在不受控的电脑上，操作面收敛在 App 是安全边界，不是功能阉割。</p></div>
+      <div class="note"><div class="nh"><span class="num">≡</span>三端同一个数据源</div>
+        <p>手机、桌面、网页看到的板，全部由 <b>relay 同一事件流</b>渲染（BOARD_* 事件 + 既有 last_seq 断线补发），端只做渲染层差异——不另做端间同步，relay 的板是唯一事实源。</p></div>
     </aside>
   </div>
 
