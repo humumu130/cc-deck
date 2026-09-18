@@ -1704,10 +1704,11 @@ export default function DetailScreen({ sid, onBack, initialView, ref }: { sid: s
               onPress={pickImages}
               disabled={!canCmd || images.length >= 4}
             >
+              {/* 2026-09-18 与网页端统一为线条相机（原相框+山形图片图标两端不一致） */}
               <Svg width={19} height={19} viewBox="0 0 24 24" fill="none" stroke={c.dim} strokeWidth={1.7} strokeLinecap="round" strokeLinejoin="round">
-                <Rect x={3.5} y={4.5} width={17} height={15} rx={3} />
-                <Circle cx={9} cy={9.5} r={1.6} />
-                <Path d="M4.5 17l4.5-4.5 3.8 3.8 3-3 3.7 3.7" />
+                <Path d="M8.7 6.8l1.05-1.9a1.5 1.5 0 0 1 1.3-.75h1.9a1.5 1.5 0 0 1 1.3.75l1.05 1.9" />
+                <Rect x={3.4} y={6.8} width={17.2} height={13} rx={3} />
+                <Circle cx={12} cy={13.2} r={3.5} />
               </Svg>
             </Pressable>
           ) : null}

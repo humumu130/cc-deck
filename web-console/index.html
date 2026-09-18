@@ -137,8 +137,14 @@
   html.mac-tauri .card-title { font-size: 14px; }
   html.mac-tauri #dtitle { font-size: 15px; }
   #sideHead #runhint { flex: 1; min-width: 0; }
-  /* #39 主题钮线条图标：SVG 居中（去 emoji 基线抖动） */
-  #themeBtn { display: flex; align-items: center; justify-content: center; }
+  /* #39 主题钮线条图标：SVG 居中（去 emoji 基线抖动）。
+     2026-09-18 去边框（对齐手机端）：全局 button 的 1px 边框+panel 底+大内边距
+     使这个纯图标钮看起来裹了个框，改为裸图标钮，hover 以变色反馈 */
+  #themeBtn {
+    display: flex; align-items: center; justify-content: center;
+    border: none; background: none; padding: 4px; color: var(--dim);
+  }
+  #themeBtn:hover { color: var(--text); }
   /* #63/#64 通道含义问号（设置连接区标题旁）：hover 悬浮显示旁侧说明卡（不点击不居中——
      桌面鼠标交互习惯，问号锚定相对定位，浮层 absolute 跟随） */
   .gp-sec { position: relative; }
@@ -898,11 +904,13 @@
   .srv-row .srv-share:hover:not(:disabled) { color: var(--brand); border-color: var(--brand); }
   .srv-row .srv-share:disabled { opacity: .38; cursor: default; }
   .srv-right .srv-chan, .srv-right .srv-chan.cloud, .srv-right .srv-pbadge { margin-left: 0; }
-  /* #96 通道角标=插头的角标（2026-09-16 回归本体）：贴插头左缘（插头已是行内
-     最右元素，右侧出界）——定宽槽位下的对齐不破坏 */
+  /* #96 通道角标=连接图标的角标（2026-09-18 回归本体二次修正）：此前 2026-09-16 重排把
+     插头挪到紧贴分享钮后，绝对定位的角标（right:calc(100%+2px)）被挤出插头左缘、
+     压到分享钮上——用户视为"漂移到分享按钮"。恢复 .op-chan 定宽槽位（空槽占位、
+     跨行严格对齐的既有纪律），角标槽内右对齐、紧贴插头左缘 */
   .plug { position: relative; }
-  .pchan { position: absolute; right: calc(100% + 2px); top: 8.5px; font-style: normal; font-size: 8px; line-height: 10px; color: var(--dim); }
-  .pchan.lan { font-size: 7px; font-weight: 700; color: #5B9DFF; top: 9px; letter-spacing: .2px; }
+  .pchan { font-style: normal; font-size: 8px; line-height: 10px; color: var(--dim); display: inline-block; }
+  .pchan.lan { font-size: 7px; font-weight: 700; color: #5B9DFF; letter-spacing: .2px; }
   .srv-addr { display: block; font-size: 11px; color: var(--dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .srv-row .srv-del {
     flex: none; background: none; border: none; cursor: pointer; color: var(--faint);
@@ -1590,8 +1598,12 @@
     align-self: center; flex: none;
   }
   #stopBtn:hover { background: rgba(240,82,79,.18); border-color: rgba(240,82,79,.55); }
-  /* #279 批次3 图片入口：输入卡底部功能行的 📷 图标钮（外部 CLI/历史会话隐藏） */
-  #imgBtn { padding: 3px 8px; font-size: 15px; line-height: 1.4; flex: none; }
+  /* #279 批次3 图片入口：输入卡底部功能行的相机图标钮（外部 CLI/历史会话隐藏）。
+     2026-09-18 与手机端统一为线条相机（原 📷 emoji 与整体线条风不符），currentColor 随主题 */
+  #imgBtn {
+    padding: 6px 7px; flex: none; display: flex; align-items: center; justify-content: center;
+    color: var(--dim);
+  }
   #sendBtn {
     width: 34px; height: 34px; border-radius: 10px; padding: 0; border: none; flex: none;
     background: var(--send-btn); color: #fff; font-size: 17px; line-height: 1;
@@ -2044,7 +2056,7 @@
         </div>
         <div class="ic-bottom">
           <div class="ic-left">
-            <button id="imgBtn" title="添加图片（最多 4 张，也可直接 Ctrl+V 粘贴）">📷</button>
+            <button id="imgBtn" title="添加图片（最多 4 张，也可直接 Ctrl+V 粘贴）"><svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M8.7 6.8l1.05-1.9a1.5 1.5 0 0 1 1.3-.75h1.9a1.5 1.5 0 0 1 1.3.75l1.05 1.9"/><rect x="3.4" y="6.8" width="17.2" height="13" rx="3"/><circle cx="12" cy="13.2" r="3.5"/></svg></button>
             <button id="stopBtn" title="停止会话">⏹ 停止</button>
           </div>
           <button id="sendBtn" title="发送（Enter）">➤</button>
@@ -5430,8 +5442,8 @@ function renderServers() {
     const isLocal = s.kind === "lan" && !!localEp(s.wsUrl)?.loop;
     const localTag = isLocal ? '<span class="srv-local-tag">（自动接入）</span>' : "";
     // #48 通道标记：云桥/ LAN / 手动直连不显示
-    // #81+#96 与手机端同款几何：仅已连接显示；不独立占位——缩成插头右下外侧
-    // 小角标（垂直中线=插头底边、水平在插头右缘外不重叠）
+    // #81+#96 仅已连接显示；2026-09-18 修正：改回 .op-chan 定宽槽位（分享钮与插头
+    // 之间，空槽占位跨行对齐），此前绝对定位贴插头左缘会压到紧邻的分享钮
     const chanOn = ctx && ctx.status === "online";
     const chanBadge = !chanOn ? "" : s.kind === "cloud" ? '<i class="pchan">☁</i>' : s.kind === "lan" ? '<i class="pchan lan">LAN</i>' : "";
     return '<div class="srv-row' + (s.id === activeServerId ? " active" : "") + (s.id === editId ? " editing" : "") + '" data-id="' + s.id + '" title="点击设为活动源，并在下方展开编辑">' +
@@ -5443,7 +5455,8 @@ function renderServers() {
       '<span class="srv-ops">' +
       (isRetryable(ctx) ? '<button class="srv-retry" title="跳过退避等待，立即重连">↻</button>' : "") +
       '<button class="srv-share"' + (ctx && ctx.status === "online" ? "" : " disabled") + ' title="' + (ctx && ctx.status === "online" ? "手机扫一下接入这台电脑（同网直连 · 跨网云桥，自动路由）" : "该源未在线") + '">分享</button>' +
-      '<span class="plug ' + (ctx ? ctx.status : "offline") + '">' + PLUG_SVG + (chanOn ? chanBadge : "") + "</span>" +
+      '<span class="op-slot op-chan" style="text-align:right">' + (chanOn ? chanBadge : "") + "</span>" +
+      '<span class="plug ' + (ctx ? ctx.status : "offline") + '">' + PLUG_SVG + "</span>" +
       '<span class="op-del">' + (isLocal ? '<button class="srv-del" title="本机条目不可删除" disabled style="visibility:hidden">✕</button>' : '<button class="srv-del" title="删除">✕</button>') + "</span>" +
       "</span>" +
       "</div>";

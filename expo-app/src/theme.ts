@@ -16,6 +16,11 @@ export interface ThemeColors {
   tintSoft: string;    // 品牌色弱底（chip/卡片叠层）
   tintStrong: string;  // 选中态底
   overlay: string;     // 命令栏等近实底
+  // 列表页"新建会话"FAB（2026-09-18 亮色反馈：原写死近黑底在浅色下突兀）：
+  // 深色保持原观感（近黑底+暖橙十字），浅色改主操作口径（品牌蓝底+白十字）
+  fabBg: string;
+  fabLine: string;
+  fabPlus: string;
 }
 
 export const DARK: ThemeColors = {
@@ -35,6 +40,9 @@ export const DARK: ThemeColors = {
   tintSoft: "rgba(125,165,220,0.08)",
   tintStrong: "rgba(93,134,245,0.16)",
   overlay: "rgba(8,15,26,0.97)",
+  fabBg: "#1D1726",
+  fabLine: "rgba(255,255,255,0.09)",
+  fabPlus: "#D97757",
 };
 
 export const LIGHT: ThemeColors = {
@@ -56,6 +64,9 @@ export const LIGHT: ThemeColors = {
   tintSoft: "rgba(47,127,232,0.06)",
   tintStrong: "rgba(47,127,232,0.13)",
   overlay: "rgba(240,241,236,0.97)",
+  fabBg: "#2F7FE8",
+  fabLine: "rgba(255,255,255,0.18)",
+  fabPlus: "#FFFFFF",
 };
 
 // #RRGGBB + alpha -> #RRGGBBAA（RN 支持 8 位 hex）

@@ -1016,7 +1016,7 @@ export default function ListScreen({ sessions, connected, connText, onOpen, onNe
 
       <PressScale style={[styles.fab, { bottom: insets.bottom + 24 }]} ripple="rgba(255,255,255,0.18)" haptic onPress={onNew}>
         <View style={styles.fabGrad}>
-          <PlusMark size={20} />
+          <PlusMark size={20} color={c.fabPlus} />
         </View>
       </PressScale>
 
@@ -1257,9 +1257,11 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
     borderRadius: 8, backgroundColor: c.tintStrong, paddingHorizontal: 12, paddingVertical: 5,
   },
   undoBtnT: { color: c.brandA, fontSize: 12.5, fontWeight: "700" },
+  // FAB 底/描边/十字色随主题（theme.ts fabBg/fabLine/fabPlus）：深色维持原近黑观感，
+  // 浅色改品牌蓝主操作口径（2026-09-18 亮色黑底突兀反馈）
   fabGrad: {
     width: 56, height: 56, borderRadius: 16, alignItems: "center", justifyContent: "center",
-    backgroundColor: "#1D1726", borderWidth: 1, borderColor: "rgba(255,255,255,0.09)",
+    backgroundColor: c.fabBg, borderWidth: 1, borderColor: c.fabLine,
   },
 });
 
