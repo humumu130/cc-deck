@@ -16,6 +16,7 @@ import { CloudClient } from "./cloud-client.js";
 import { createPairingCodes } from "./pairing.js";
 import { printQr } from "./qr.js";
 import { advertiseRelay } from "./mdns.js";
+import { ensureTodoToolsEnv, TODO_TOOLS_ENV_KEY } from "./todo-tools-env.js";
 
 const cfg = loadConfig();
 
@@ -337,6 +338,14 @@ startServer(bus, mgr, cfg, {
         writeFileSync(join(hookHome, "bridge.json"), bridgeJson, "utf-8");
       } catch {}
     }
+    // 任务工具门控的用户级兜底（listen 成功后做，启动失败不碰用户文件）：终端自开的
+    // 会话不是 relay spawn 的，进程级注入管不到——幂等补写 settings.json env，让之后
+    // 新开的终端会话也有任务工具。只在键缺失时补，用户显式设置一律尊重（见模块头注释）
+    try {
+      if (ensureTodoToolsEnv() === "written") {
+        console.log(`  兜底:   已补 ${TODO_TOOLS_ENV_KEY}=1（用户 settings.json，新开会话生效）`);
+      }
+    } catch {} // 模块内部已吞写失败，这里只防未预期异常影响启动
   },
 });
 

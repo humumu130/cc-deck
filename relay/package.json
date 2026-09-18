@@ -11,6 +11,7 @@
     "test:ws": "tsx scripts/test-ws.ts",
     "test:history": "tsx scripts/test-history.ts",
     "test:bridge": "tsx scripts/test-bridge.ts",
+    "test:todo-env": "tsx scripts/test-todo-env.ts",
     "test:cloud": "tsx scripts/test-cloud.ts"
   },
   "dependencies": {

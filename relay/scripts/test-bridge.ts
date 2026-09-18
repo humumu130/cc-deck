@@ -77,6 +77,12 @@ rmSync(fileURLToPath(new URL("../data/deleted-ext.json", import.meta.url)), { fo
 const TDATA = fileURLToPath(new URL("../data/test-datadir/", import.meta.url));
 process.env.CCR_DATA_DIR = TDATA;
 rmSync(TDATA, { recursive: true, force: true });
+// 用户配置隔离：onReady 的任务工具兜底会写 settings.json——指到测试目录，
+// 防止套件碰真实 ~/.claude（外部用户机器上跑同一保护，这里防测试污染本机）
+const CCFG = fileURLToPath(new URL("../data/test-claude-cfg/", import.meta.url));
+rmSync(CCFG, { recursive: true, force: true });
+mkdirSync(CCFG, { recursive: true });
+process.env.CLAUDE_CONFIG_DIR = CCFG;
 const cfg = loadConfig();
 const bus = new EventBus();
 const mgr = new SessionManager(bus, cfg);

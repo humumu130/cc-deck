@@ -176,7 +176,10 @@ export class AgentSession {
         cwd: this.cwd,
         pathToClaudeCodeExecutable: cliPath,
         // 标记为 Relay 子进程：全局 bridge hook 据此跳过上报（避免与 managed 会话双注册）
-        env: { ...process.env, CCR_RELAY_CHILD: "1" },
+        // CLAUDE_CODE_ENABLE_TODO_TOOLS：CLI 按模型身份门控任务工具（TaskCreate/Get/Update/
+        // List 仅对 Claude 系模型默认提供），GLM 等其它模型一律裁剪→任务面板恒空。官方
+        // 逃生门即此 env——托管会话必须注入，与模型无关（用户级 settings 兜底见 todo-tools-env.ts）
+        env: { ...process.env, CCR_RELAY_CHILD: "1", CLAUDE_CODE_ENABLE_TODO_TOOLS: "1" },
         permissionMode: opts?.permissionMode ?? "default",
         ...(opts?.resume ? { resume: opts.resume } : {}),
         includePartialMessages: true,
