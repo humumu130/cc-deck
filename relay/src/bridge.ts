@@ -1480,6 +1480,11 @@ export class Bridge {
   // transcript 已读字节偏移：PostToolUse/Stop 时增量读出助手文本推上时间线
   private transcriptOffsets = new Map<string, number>();
 
+  // #72 上次计入总量的 usage 元组（会话 -> "in:out:cr:cw"）：转录流式快照会把同
+  // 一次调用的 usage 行重复落盘 3~7 行，同元组只累计一次，否则会话 token 总量虚高
+  // 数倍（实测虚到 cache_read 2.38 亿）。水位是覆盖式，天然不受重复行影响
+  private lastUsageTuple = new Map<string, string>();
+
   // 转录末条形态：assistant 消息整条完成才落盘（生成期间零写入，纯思考可达分钟级），
   // 静默 ≠ 回合结束。可靠区分：末条是纯文本 assistant 消息 = 回合自然结束；
   // 末条是 tool_use（工具执行中）或 tool_result/新 prompt（下一条消息生成中）= 仍在回合内
@@ -1622,10 +1627,16 @@ export class Bridge {
           const mu = j.message?.usage;
           if (mu && typeof mu === "object") {
             const inc = (v: unknown) => (typeof v === "number" && v > 0 ? v : 0);
-            usageIn += inc(mu.input_tokens);
-            usageOut += inc(mu.output_tokens);
-            usageCr += inc(mu.cache_read_input_tokens);
-            usageCw += inc(mu.cache_creation_input_tokens);
+            const tuple = `${inc(mu.input_tokens)}:${inc(mu.output_tokens)}:${inc(mu.cache_read_input_tokens)}:${inc(mu.cache_creation_input_tokens)}`;
+            // 同元组重复行（流式快照）只计一次总量；零值行（流中断 glitch）不计不记账
+            if (tuple !== "0:0:0:0" && tuple !== this.lastUsageTuple.get(id)) {
+              if (this.lastUsageTuple.size > 200) this.lastUsageTuple.clear();
+              this.lastUsageTuple.set(id, tuple);
+              usageIn += inc(mu.input_tokens);
+              usageOut += inc(mu.output_tokens);
+              usageCr += inc(mu.cache_read_input_tokens);
+              usageCw += inc(mu.cache_creation_input_tokens);
+            }
             usageSeen = true;
             ctxLast = inc(mu.input_tokens) + inc(mu.cache_read_input_tokens) + inc(mu.cache_creation_input_tokens);
           }

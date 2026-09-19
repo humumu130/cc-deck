@@ -116,8 +116,12 @@ export interface AgentCallbacks {
   // #35 输出物：Edit/Write 类工具单条产出（tool_use/tool_result 配对后回调；
   // 可选——非会话级实现方（标题生成等）无需关心）
   onArtifacts?(item: { path: string; tool: string; adds: number; dels: number; created: boolean; ts: number }): void;
-  // 每回合 result 消息携带的 token 用量（累计口径由调用方决定）
+  // 每回合 result 消息携带的 token 用量（回合聚合量，累计口径由调用方决定）
   onUsage(usage: TokenUsage): void;
+  // #72 上下文水位：每条 assistant 消息（= 每次 API 调用）的 per-call usage
+  // (input+cache_read+cache_creation) = 该次调用实际送入的上下文。回合 result 的
+  // 聚合 usage 不能当水位用（重回合恒超窗口上限）。可选：非会话级实现方无需关心
+  onContext?(tokens: number): void;
   // TodoWrite 工具调用：最新任务清单全量替换
   onTodos(todos: TodoItem[]): void;
   onLog(
@@ -299,6 +303,13 @@ export class AgentSession {
         break;
 
       case "assistant": {
+        // #72 per-call 水位先于块处理上报：assistant 消息 usage = 本次调用实际送入量，
+        // 回合内每次调用都会刷新（CLI 的自动压缩判断同口径）
+        const au = (msg.message as { usage?: Partial<TokenUsage> }).usage;
+        if (au && typeof au.input_tokens === "number") {
+          const wm = (au.input_tokens || 0) + (au.cache_read_input_tokens || 0) + (au.cache_creation_input_tokens || 0);
+          if (wm > 0) this.cb.onContext?.(wm);
+        }
         let ti = 0;
         for (const block of msg.message.content) {
           if ((block as { type?: string }).type === "thinking") {

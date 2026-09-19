@@ -140,6 +140,13 @@ export function reduceHistory(events: Envelope[]): Map<string, ReplayedSession> 
         if (p.title_locked) s.title_locked = true;
         if (p.turn_started_at) s.turn_started_at = p.turn_started_at;
         if (p.usage) s.usage = p.usage;
+        // #72 水位跨重启还原：热替换/重启清空内存态后，此前不回放 context_usage/
+        // context_limit，导致 mid-turn 与 idle 会话的水位条全部消失（只有恰逢回合
+        // 完成的会话重新拿到）。载荷显式携带才还原，与下发侧 spread 语义一致
+        const cu = (p as { context_usage?: unknown }).context_usage;
+        const cl = (p as { context_limit?: unknown }).context_limit;
+        if (typeof cu === "number" && cu > 0) s.context_usage = cu;
+        if (typeof cl === "number" && cl > 0) s.context_limit = cl;
         if (p.todos) s.todos = p.todos;
         if (p.subagents) s.subagents = p.subagents;
         if ((p as { relay_session_id?: string }).relay_session_id) s.relay_session_id = (p as { relay_session_id?: string }).relay_session_id!;

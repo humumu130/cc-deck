@@ -265,6 +265,14 @@ for (const s of mgr.snapshot()) {
 // 才用 transcript resume 按需拉起——不拉 SDK 子进程，启动零成本
 const pinned = mgr.applyPinned();
 
+// #75 无人值守自动拉起：延迟几秒让收养广播/桥接先落地，再按任务存储待办把有
+// 活干的托管会话 resume 起来（语义与约束见 session-manager.autoReviveManaged）
+setTimeout(() => {
+  try {
+    mgr.autoReviveManaged();
+  } catch {}
+}, 5_000).unref?.();
+
 // 云桥：CCR_CLOUD_URL 配置了才启用（出站连桥，公司网络友好）。
 // 逗号分隔多桥并行：每桥一个 CloudClient，手机/网页各自连任一桥都能互通
 let lanAuthNonces: Map<string, number> | null = null;

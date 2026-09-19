@@ -16,10 +16,14 @@ import { saveUploadFiles, type UploadBlob } from "./uploads.js";
 import { normKey, truncate } from "./summarizer.js";
 import type { AgentLike } from "./agent-adapter.js";
 
-// 上下文窗口上限按模型区分：集中在此维护并随 context_usage 下发，客户端不存映射表
-function contextLimitOf(model: string | undefined): number {
-  const m = (model || "").toLowerCase();
-  if (/glm[-_]?5/.test(m)) return 1_000_000; // GLM-5.x 系列 1M 窗口
+// 上下文窗口上限：集中维护并随 context_usage 下发，客户端不存映射表。
+// #72 口径修正（2026-09-19 实测取证）：此前 /glm[-_]?5/ 映射 1M 是错的——本机
+// glm-5.3 会话转录里 20+ 个压缩边界一致落在 per-call 水位 ~165-166K（个别长工具
+// 回合越过检查点冲到 226-273K），即 Claude Code 自身按 200K 窗口、~83% 阈值自动
+// 压缩（与用户 CLI+Claude HUD 时代"临近 100% 压缩"的体感一致）。显示口径必须与
+// CLI 实际压缩行为一致。用户拍板：不追求贴近上限才压缩（高水位影响质量，早压缩
+// 是好事），水位显示只需如实反映；压缩节奏完全归 CLI 管，这里只做显示。
+function contextLimitOf(_model: string | undefined): number {
   return 200_000;
 }
 
@@ -558,6 +562,41 @@ export class SessionManager {
       adopted++;
     }
     return adopted;
+  }
+
+  // #75 无人值守连续性（2026-09-19 用户拍板最小闭环：不追求完善机制，先保证
+  // 「重启后当前工作会话能被拉起继续干活」）：relay 启动收养历史托管会话后，凡
+  // CLI 任务存储（~/.claude/tasks/<cli_sid>/，权威源）里仍有未完成待办
+  //（pending/in_progress）的托管会话，自动 resume 并注入续跑指令——不再依赖人
+  // 发消息触发恢复。约束：外部会话不适用（用户终端自管，hooks 会重新接入）；
+  // 无未完成待办的不拉（已收工/纯闲聊会话拉起来只会空转耗 token）；单次上限
+  // 按最近活跃排序取 3 个；失败即止不重试（留 historical 态 = 与旧行为一致，
+  // 等人来发消息）。CCR_NO_AUTOREVIVE=1 逃生阀（测试/紧急关闭）。
+  autoReviveManaged(limit = 3): number {
+    if (process.env.CCR_NO_AUTOREVIVE === "1") return 0;
+    const candidates: { s: ManagedSession; updated: number }[] = [];
+    for (const s of this.sessions.values()) {
+      if (s.state.external || s.agent) continue;
+      if (!s.state.relay_session_id) continue; // 首回合未完成即断，无 resume 锚点
+      const todos = readTaskStoreTodos(s.state.relay_session_id);
+      if (!todos || !todos.some((t) => t.status === "pending" || t.status === "in_progress")) continue;
+      // 48h 新鲜度：一周前残留的"pending 愿望"不是活工作，拉起来只会空转误导
+      if (Date.now() - s.state.updated_at > 48 * 3600_000) continue;
+      candidates.push({ s, updated: s.state.updated_at });
+    }
+    candidates.sort((a, b) => b.updated - a.updated);
+    let revived = 0;
+    for (const c of candidates) {
+      if (revived >= limit) break;
+      try {
+        this.resumeAgent(c.s, "[relay 自动恢复] relay 重启完成，检测到本会话仍有未完成任务。请直接读取任务清单继续推进工作，无需复述上下文。");
+        revived++;
+      } catch (e) {
+        console.log(`[auto-revive] ${c.s.state.session_id.slice(0, 8)} 恢复失败: ${e instanceof Error ? e.message : String(e)}`);
+      }
+    }
+    if (revived > 0) console.log(`[auto-revive] 已自动拉起 ${revived} 个有未完成待办的托管会话`);
+    return revived;
   }
 
   // ---------- 外部会话（hooks 桥接）----------
@@ -1759,7 +1798,9 @@ export class SessionManager {
         },
         onUsage: (u) => {
           touch("usage");
-          // result 消息是每回合一条，usage 为回合量：累计成会话总量
+          // result 消息是每回合一条，usage 为回合聚合量（回合内各次调用之和）：只累计
+          // 会话总量。#72：聚合值 ≠ 当前窗口占用（重回合恒超窗口上限，曾把水位钉死
+          // 假 100%）——水位改由 onContext（每条 assistant 消息的 per-call usage）维护
           const cur = managed.state.usage;
           managed.state.usage = {
             input_tokens: (cur?.input_tokens ?? 0) + u.input_tokens,
@@ -1767,11 +1808,16 @@ export class SessionManager {
             cache_read_input_tokens: (cur?.cache_read_input_tokens ?? 0) + (u.cache_read_input_tokens ?? 0),
             cache_creation_input_tokens: (cur?.cache_creation_input_tokens ?? 0) + (u.cache_creation_input_tokens ?? 0),
           };
-          // 当回合水位（CLI 上下文占用口径）：覆盖不累计
-          managed.state.context_usage =
-            (u.input_tokens || 0) + (u.cache_read_input_tokens || 0) + (u.cache_creation_input_tokens || 0);
-          managed.state.context_limit = contextLimitOf(managed.state.model);
           this.emitUpdated(managed, true);
+        },
+        // #72 上下文水位（per-call 口径，回合内逐调用实时刷新）：assistant 消息自带
+        // usage，in+cr+cc = 该次调用实际送入的上下文，覆盖式——压缩后自然回落。
+        // 可选回调：旧实现方（标题生成等假 agent）不实现也不影响
+        onContext: (tokens: number) => {
+          touch("context");
+          if (tokens > 0) managed.state.context_usage = tokens;
+          managed.state.context_limit = contextLimitOf(managed.state.model);
+          this.emitUpdated(managed, false);
         },
         onLog: (kind, text, meta) => {
           touch(kind);
