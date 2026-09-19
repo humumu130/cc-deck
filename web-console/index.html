@@ -33,7 +33,10 @@
     --brand: #D97757;
     --brand-2: #C96442;
     --brand-line: #D97757;
-    --send-btn: #D97757;
+    /* #48 发送键材质统一（对齐手机端 #23 定稿）：中性面板（输入卡内 recessed 层 --panel-2）
+       + 描边 + 品牌橙 ➤——废止品牌色实底，深浅两主题同规则 */
+    --send-btn: var(--panel-2);
+    --send-btn-line: var(--border);
     --grad: linear-gradient(135deg, #E8985F, #C96442);
     --working: #FFC53D;
     --waiting: #F0524F;
@@ -76,8 +79,10 @@
     /* #13 巡检：浅色线条档品牌色——文字对比需要 #C2603E，但 tab 下划线/选中卡
        描边等"线条"场景用它偏红显脏，线条提亮一档（深色线条=品牌色本尊，见 :root） */
     --brand-line: #E07B4C;
-    /* #13 巡检：发送钮与深色统一走品牌色（原蓝 #2F7FE8 与品牌橙割裂） */
-    --send-btn: var(--brand);
+    /* #48 发送键材质统一（对齐手机端 #23 定稿）：中性面板+描边+品牌橙 ➤
+       （原 #13 品牌色实底废止——两端三主题一个语言） */
+    --send-btn: var(--panel-2);
+    --send-btn-line: var(--border);
     --working: #A16207;
     --waiting: #DC2626;
     --error: #C2410C;
@@ -1752,11 +1757,12 @@
     color: var(--dim);
   }
   #sendBtn {
-    width: 34px; height: 34px; border-radius: 10px; padding: 0; border: none; flex: none;
-    background: var(--send-btn); color: #fff; font-size: 17px; line-height: 1;
+    width: 34px; height: 34px; border-radius: 10px; padding: 0; flex: none;
+    border: 1px solid var(--send-btn-line);
+    background: var(--send-btn); color: var(--brand); font-size: 17px; line-height: 1;
     display: flex; align-items: center; justify-content: center;
   }
-  #sendBtn:hover:not(:disabled) { filter: brightness(1.1); }
+  #sendBtn:hover:not(:disabled) { filter: brightness(1.08); border-color: var(--brand-line); }
   #sendBtn:disabled { opacity: .4; cursor: default; }
   /* #279B 历史会话无可恢复记录：输入卡整体禁用态（不隐藏，对齐手机 editable={false}+透明度） */
   #cmdbar.cmd-off #inputcard { opacity: .55; }

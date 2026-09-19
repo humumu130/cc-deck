@@ -2514,9 +2514,8 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
     backgroundColor: c.panel2, borderWidth: 1, borderColor: c.line,
     paddingHorizontal: 14, paddingVertical: 11, color: c.text, fontSize: 15,
   },
-  // 发送按钮对齐网页版 #sendBtn：品牌色实底方块 + 白色 ➤。
-  // 2026-09-18 亮色反馈：蓝底不搭 → theme.sendBg/sendLine/sendFg——深色维持品牌蓝，
-  // 浅色与并排输入框同材质（panel2+line 描边+深灰 ➤）
+  // 发送按钮：两主题同规则（#48，2026-09-19）——theme.sendBg/sendLine/sendFg，
+  // 与并排输入框同材质（panel2+line）+ 品牌橙 ➤（桌面端 #sendBtn 同步对齐）
   sendBtn: {
     width: 44, height: 44, borderRadius: 13, backgroundColor: c.sendBg,
     borderWidth: 1, borderColor: c.sendLine,

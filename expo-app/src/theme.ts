@@ -21,8 +21,9 @@ export interface ThemeColors {
   fabBg: string;
   fabLine: string;
   fabPlus: string;
-  // 详情页命令栏发送键（2026-09-18 亮色反馈：蓝底不搭）：深色维持品牌蓝实底，
-  // 浅色与并排输入框同材质（panel2+line 描边），➤ 用深灰
+  // 详情页命令栏发送键（2026-09-18 亮色反馈定稿、2026-09-19 #48 补暗色）：
+  // 两主题同规则——与并排输入框同材质（panel2 底 + line 描边）+ 品牌橙 ➤
+  // （FAB 十字同为品牌橙，按钮符号色全端一致；废止暗色品牌蓝实底）
   sendBg: string;
   sendLine: string;
   sendFg: string;
@@ -48,9 +49,10 @@ export const DARK: ThemeColors = {
   fabBg: "#1D1726",
   fabLine: "rgba(255,255,255,0.09)",
   fabPlus: "#D97757",
-  sendBg: "#4D9FFF",
-  sendLine: "transparent",
-  sendFg: "#FFFFFF",
+  // #48：暗色与亮色统一（用户 2026-09-19 反馈）——同输入框材质 + 品牌橙 ➤
+  sendBg: "#101F30",
+  sendLine: "rgba(125,165,220,0.10)",
+  sendFg: "#D97757",
 };
 
 export const LIGHT: ThemeColors = {
