@@ -303,11 +303,20 @@ class RelayStore {
     // 前台重连看门狗（2026-09-17）：部分国产 ROM 回前台不派发 AppState change
     // （或迟滞数秒），reconnecting 的长退避 timer 在用户已回到 app 时仍按原时刻
     // 空等（上限 900s）。每 5s 巡检：前台态下把 >6s 后才到点的重试拉到立即执行
-    // （只动 reconnecting；connecting 由 connCycle 自身 20s 看门狗负责，不重复掐）
+    // 挂死 connect 看门狗（2026-09-20 #85）：云桥 ws 的 new WebSocket 无 connect
+    // 超时，Android 后台切网后 TCP connect 可无限挂在 CONNECTING（onopen/onclose/
+    // onerror 全不来）；旧注释称「connecting 由 connCycle 自身 20s 看门狗负责」——
+    // connectStartedAt 只写不读，该看门狗从未存在，回前台重启的那次 connect 恰逢
+    // 网络未就绪就会永远卡死（用户实测"回前台重连很久"，杀 App 冷启动反而秒连）。
+    // 前台态下超 20s 的 connecting 一律掐掉重发：正常链最坏 ~9s（LAN 握手 4.5s +
+    // tryWs 1.8s 或 probeLan 4s + 桥握手），20s 只杀真挂死不误伤慢网；桥开门等
+    // relay 首帧的 connecting 若 20s 无响应也一并重启——ROUTE_MISS 会先到（置
+    // offline 不在本分支），20s 连桥都不回即真空异常，掐掉合理
     setInterval(() => {
       if (AppState.currentState !== "active") return;
       for (const conn of this.conns.values()) {
         if (conn.state === "reconnecting" && conn.retryAt - Date.now() > 6000) this.connConnect(conn);
+        if (conn.state === "connecting" && conn.connectStartedAt && Date.now() - conn.connectStartedAt > 20_000) this.connConnect(conn);
       }
     }, 5000);
   }

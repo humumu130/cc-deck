@@ -2621,7 +2621,7 @@ function ensureCtx(cfg) {
       failKind: "", retryAt: 0, retryNote: "", // #40web 失败归因/重试倒计时（见 setConn/scheduleReconnect）
       pendingPair: null, pairTimer: 0, pingTimer: null, lastPong: 0,
       transport: "ws", pollGen: 0, pollSid: "", pollBase: "",
-      wsFails: 0, postFails: 0, hsTimer: 0, discTried: false, discTimer: 0,
+      wsFails: 0, postFails: 0, hsTimer: 0, lanHsTimer: 0, discTried: false, discTimer: 0,
     };
     ctxs.set(cfg.id, c);
   } else c.cfg = cfg;
@@ -2634,6 +2634,7 @@ function disconnectCtx(ctx, text) {
   stopCloudPing(ctx);
   clearTimeout(ctx.reconnectTimer); ctx.reconnectTimer = 0;
   clearTimeout(ctx.hsTimer); ctx.hsTimer = 0;
+  clearTimeout(ctx.lanHsTimer); ctx.lanHsTimer = 0; // #85 LAN 握手看门狗（防孤儿 ctx 复活）
   clearTimeout(ctx.discTimer); ctx.discTimer = 0;
   try { ctx.ws && ctx.ws.close(); } catch {}
   ctx.ws = null;
@@ -2821,13 +2822,27 @@ function connectLan(ctx) {
   try { ctx.ws && ctx.ws.close(); } catch {}
   const w = new WebSocket(url);
   ctx.ws = w;
+  // LAN 握手看门狗（#85）：与云路径 hsTimer 同款纪律——休眠唤醒/网络切换后 TCP
+  // connect 可无限挂在 CONNECTING（onopen/onclose 都不来），visibilitychange 只救
+  // reconnecting/offline 不救 connecting，卡死即永远「连接中」。8s 未开门掐掉走
+  // 重连退避（正常 LAN 握手 <1s，8s 只杀真挂死）
+  clearTimeout(ctx.lanHsTimer);
+  ctx.lanHsTimer = setTimeout(() => {
+    ctx.lanHsTimer = 0;
+    if (ctx.ws !== w || w.readyState !== WebSocket.CONNECTING) return;
+    try { w.close(); } catch {}
+    setConn(ctx, "offline", "连接超时", "transport");
+    scheduleReconnect(ctx);
+  }, 8000);
   w.onopen = () => {
     if (ctx.ws !== w) return;
+    clearTimeout(ctx.lanHsTimer); ctx.lanHsTimer = 0;
     ctx.reconnectDelay = RETRY_BASE_MS; // #40web 连上即归零退避
     setConn(ctx, "online", "已连接");
   };
   w.onclose = () => {
     if (ctx.ws !== w) return;
+    clearTimeout(ctx.lanHsTimer); ctx.lanHsTimer = 0;
     // #40web 传输层失败：绝不引导配对码，归因 transport 走自动重试 + 手动重试钮
     setConn(ctx, "offline", "已断开", "transport");
     scheduleReconnect(ctx);
