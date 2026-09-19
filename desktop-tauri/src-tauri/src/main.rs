@@ -235,6 +235,9 @@ static EMBEDDED_RELAY: std::sync::Mutex<Option<std::process::Child>> = std::sync
 // #17 内嵌 relay 启动/引导失败原因（node 过旧 SyntaxError / spawn 失败 / 起后即退）——
 // relay_status 透出给网页状态行展示，替代死板的「未检测到」
 static EMBEDDED_RELAY_ERR: std::sync::Mutex<Option<String>> = std::sync::Mutex::new(None);
+// #66 relay 存续意愿：本方成功 spawn 置 true；用户手动停（relay_toggle off）与
+// 应用退出（kill_embedded_relay）置 false。监督线程据此区分「该重拉」与「别添乱」
+static RELAY_WANTED: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
 
 fn relay_port() -> u16 {
     std::env::var("CCR_DESKTOP_RELAY_PORT").ok().and_then(|v| v.parse().ok()).unwrap_or(8787)
@@ -389,6 +392,8 @@ fn spawn_embedded_relay(app: &tauri::AppHandle) -> Result<(), String> {
 #[tauri::command]
 fn relay_toggle(app: tauri::AppHandle, on: bool) -> Result<Value, String> {
     if !on {
+        // #66 用户手动停：先撤 WANT 再杀，监督线程不会把它拉回来
+        RELAY_WANTED.store(false, Ordering::SeqCst);
         if let Some(mut c) = EMBEDDED_RELAY.lock().unwrap().take() {
             let _ = c.kill();
             let _ = c.wait();
@@ -398,9 +403,11 @@ fn relay_toggle(app: tauri::AppHandle, on: bool) -> Result<Value, String> {
     }
     if port_listening(relay_port()) {
         println!("[embedded-relay] port {} already serving - nothing to do", relay_port());
+        RELAY_WANTED.store(true, Ordering::SeqCst);
         return Ok(relay_status_value()); // 已有 relay（插件/手动），视为"开启"状态
     }
     spawn_embedded_relay(&app)?;
+    RELAY_WANTED.store(true, Ordering::SeqCst);
     Ok(relay_status_value())
 }
 
@@ -441,7 +448,72 @@ fn wait_port_ready(port: u16, wait_ms: u64) {
     }
 }
 
+// #66 relay 子进程监督：此前只在启动时 spawn 一次，进程中途退出（部署热换 kill/崩溃/
+// OOM）后无人接管——桌面端「本机 relay 未检测到」、手机全断，只能用户手动重启桌面端
+// （2026-09-19 用户反馈「每次部署成功都需要我手动重启服务端软件，这是不对的」）。
+// 监督线程 1.5s 一拍：收割已退出的子进程句柄 → 端口无服务且 WANT=true → 重拉。
+// 安全边界（不打架的三条路径全走 take() 句柄）：用户设置里手动停 = WANT 置 false；
+// 应用退出 = kill_embedded_relay 内置 WANT false + QUITTING；端口被外部 relay
+// （插件 supervisor）占着 = 只让位不抢。连续暴毙按 2s→4s→…→32s 指数退避，防
+// node 过旧时打转；稳定运行 60s 后计数清零。
+fn supervise_embedded_relay(app: tauri::AppHandle) {
+    std::thread::spawn(move || {
+        let mut last_spawn = std::time::Instant::now();
+        let mut strikes = 0u32;
+        loop {
+            std::thread::sleep(std::time::Duration::from_millis(1500));
+            if !RELAY_WANTED.load(Ordering::SeqCst) || QUITTING.load(Ordering::SeqCst) {
+                strikes = 0;
+                continue;
+            }
+            let need_spawn = {
+                let mut g = EMBEDDED_RELAY.lock().unwrap();
+                // 意外死亡的形态：句柄仍在、进程已退。收割掉再决定是否重拉
+                let mut reaped = false;
+                if let Some(c) = g.as_mut() {
+                    if matches!(c.try_wait(), Ok(Some(_))) {
+                        reaped = true;
+                    }
+                }
+                if reaped {
+                    *g = None;
+                    println!("[embedded-relay] #66 child exited unexpectedly - will respawn");
+                }
+                // 本方子进程活着（含 node 冷启动窗口）不打扰；无本方进程且端口
+                // 无服务才需要拉——外部 relay 在服务时让位
+                if g.is_some() { false } else { !port_listening(relay_port()) }
+            };
+            if !need_spawn {
+                strikes = 0;
+                continue;
+            }
+            // 稳定跑过 60s 重新计数；strike 1 立即重拉，其后 2/4/8/16/32s 退避
+            if last_spawn.elapsed().as_secs() > 60 {
+                strikes = 0;
+            }
+            if strikes > 0 {
+                let wait_ms = 1000u64.saturating_mul(1u64 << strikes.min(5));
+                println!("[embedded-relay] #66 respawn backoff {wait_ms}ms (strike {strikes})");
+                std::thread::sleep(std::time::Duration::from_millis(wait_ms));
+                // 退避窗口内用户关掉了/应用要退：放弃本次
+                if !RELAY_WANTED.load(Ordering::SeqCst) || QUITTING.load(Ordering::SeqCst) {
+                    continue;
+                }
+            }
+            match spawn_embedded_relay(&app) {
+                Ok(()) => {
+                    last_spawn = std::time::Instant::now();
+                    println!("[embedded-relay] #66 respawned");
+                }
+                Err(e) => println!("[embedded-relay] #66 respawn failed: {e}"),
+            }
+            strikes += 1;
+        }
+    });
+}
+
 fn kill_embedded_relay() {
+    RELAY_WANTED.store(false, Ordering::SeqCst);
     if let Some(mut c) = EMBEDDED_RELAY.lock().unwrap().take() {
         let _ = c.kill();
         let _ = c.wait();
@@ -478,6 +550,7 @@ fn main() {
                     // #17 首启预算 4s→9s：全新安装机器上 Defender 冷扫描 2MB relay.mjs
                     // + node 冷启动可超 4s；页面侧另有 90s 自愈重探兜底
                     Ok(()) => {
+                        RELAY_WANTED.store(true, Ordering::SeqCst);
                         wait_port_ready(relay_port(), 9000);
                         // 起后即退（#17 同事实机：Node14 跑 node20 目标包 SyntaxError）——
                         // 原因透给状态行，不再只有「未检测到」
@@ -494,6 +567,8 @@ fn main() {
                     }
                 }
             }
+            // #66 子进程监督常驻（WANT 门控：从未启用/用户手动停时静默空转）
+            supervise_embedded_relay(app.handle().clone());
             let win = tauri::WebviewWindowBuilder::from_config(app.handle(), &app.config().app.windows[0])?
                 .initialization_script(INIT_SCRIPT)
                 // 只允许壳内源；等价 Electron will-navigate 的本地白名单（防页面被导航带离）。
