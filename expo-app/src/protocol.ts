@@ -167,7 +167,8 @@ export type CommandType =
   | "COMMAND_WATCH_GRANT"
   | "COMMAND_PERM"
   | "COMMAND_MODEL"
-  | "COMMAND_REFRESH_TODOS";
+  | "COMMAND_REFRESH_TODOS"
+  | "COMMAND_ARTIFACT_FETCH";
 
 // 云桥配对信息：relay 经可信 LAN 信道下发，手机落盘后即可走云通道
 export interface CloudPairInfo {
@@ -185,4 +186,7 @@ export interface CommandAck {
   error?: string;
   cloud?: CloudPairInfo;
   pair_code?: { code: string; expires_in: number };
+  // #79 仅 COMMAND_ARTIFACT_FETCH 成功 ACK 携带：字节数 + 扩展名推导 MIME
+  //（分级预览用；数据本体走 ARTIFACT_CHUNK 瞬态帧，ref=command_id）
+  artifact?: { size: number; mime: string };
 }

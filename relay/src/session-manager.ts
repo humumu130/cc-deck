@@ -335,6 +335,30 @@ const HEARTBEAT_INTERVAL_MS = 5000;
 const CRON_POLL_INTERVAL_MS = 30_000; // 定时任务文件轮询（无官方文件监听事件，读文件足够便宜）
 const MAX_SESSIONS = 20;
 
+// #79 输出物远程拉取限额：单文件 ≤20MB；明文分块 512KB（对齐 #408 快照预算——
+// 密文 ~700KB < CF Workers ws 1MiB 单帧硬限，云通道实测口径）
+const ARTIFACT_FETCH_MAX_BYTES = 20 * 1024 * 1024;
+const ARTIFACT_CHUNK_BYTES = 512 * 1024;
+
+// #79 预览分级用 MIME（扩展名推导，未命中给 application/octet-stream——客户端
+// 走下载+系统打开兜底）
+const ARTIFACT_MIME: Record<string, string> = {
+  txt: "text/plain", log: "text/plain", md: "text/markdown",
+  html: "text/html", htm: "text/html", json: "application/json", csv: "text/csv",
+  png: "image/png", jpg: "image/jpeg", jpeg: "image/jpeg", gif: "image/gif", webp: "image/webp", svg: "image/svg+xml",
+  pdf: "application/pdf",
+  doc: "application/msword", docx: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+  ppt: "application/vnd.ms-powerpoint", pptx: "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+  xls: "application/vnd.ms-excel", xlsx: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+  zip: "application/zip", apk: "application/vnd.android.package-archive", dmg: "application/x-apple-diskimage",
+  exe: "application/vnd.microsoft.portable-executable", msi: "application/x-msdownload",
+};
+
+export function mimeOf(p: string): string {
+  const m = /\.([A-Za-z0-9]+)$/.exec(p);
+  return (m && ARTIFACT_MIME[m[1].toLowerCase()]) || "application/octet-stream";
+}
+
 // ===== #7 SDK 会话流中断看门狗参数（env 读取放函数里逐次求值：测试可动态改） =====
 // 两轮 CPU 采样间整树累计增量低于此值（毫秒 CPU 时间）= 空闲。30s 窗口里 500ms ≈ 1.7%
 // 平均占用——给 ps 精度与偶发唤醒留噪声余量，长构建/长思考远高于此
@@ -1635,6 +1659,47 @@ export class SessionManager {
           }
           this.reviveSaved(s);
           return { command_id: cmd.command_id, ok: true };
+        }
+        case "COMMAND_ARTIFACT_FETCH": {
+          // #79 输出物远程访问（实时 E2E 传输，不落云存储）：授权锚点 = path 归一化
+          // 后必须命中该会话 state.artifacts 已登记条目（防任意读/路径穿越——客户端
+          // 只能拉它本就看得见的输出物）；≤20MB；成功 ACK 携带 size/mime，数据本体
+          // 经瞬态 ARTIFACT_CHUNK 帧按 ref=command_id 回发（LAN/云同路径，云侧自动
+          // E2E 密封，桥不落存储）。幂等重放（duplicate ack）不会重发数据——缺帧
+          // 重试必须换新 command_id
+          const s = this.require(cmd.payload.session_id);
+          const key = resolve(String(cmd.payload.path ?? "")).toLowerCase();
+          const hit = (s.state.artifacts ?? []).find((a) => a.path.toLowerCase() === key);
+          if (!hit) {
+            return { command_id: cmd.command_id, ok: false, error: "路径未登记在该会话的输出物清单里，无权拉取" };
+          }
+          let st;
+          try {
+            st = statSync(hit.path);
+          } catch {
+            return { command_id: cmd.command_id, ok: false, error: "文件不存在或不可访问（可能已被移动/删除）" };
+          }
+          if (!st.isFile()) return { command_id: cmd.command_id, ok: false, error: "不是常规文件" };
+          if (st.size > ARTIFACT_FETCH_MAX_BYTES) {
+            return { command_id: cmd.command_id, ok: false, error: `文件 ${(st.size / 1048576).toFixed(1)}MB 超过 20MB 上限，请在电脑端查看` };
+          }
+          const ref = cmd.command_id;
+          try {
+            const buf = readFileSync(hit.path);
+            const total = Math.max(1, Math.ceil(buf.length / ARTIFACT_CHUNK_BYTES));
+            for (let seq = 0; seq < total; seq++) {
+              this.bus.emitTransient("ARTIFACT_CHUNK", {
+                ref,
+                seq,
+                total,
+                b64: buf.subarray(seq * ARTIFACT_CHUNK_BYTES, (seq + 1) * ARTIFACT_CHUNK_BYTES).toString("base64"),
+              });
+            }
+            this.bus.emitTransient("ARTIFACT_CHUNK", { ref, done: true });
+          } catch (e) {
+            this.bus.emitTransient("ARTIFACT_CHUNK", { ref, error: e instanceof Error ? e.message : String(e) });
+          }
+          return { command_id: cmd.command_id, ok: true, artifact: { size: st.size, mime: mimeOf(hit.path) } };
         }
         case "COMMAND_WATCH_GRANT":
           // #316 手表配对授权在 ws-server 层处理（持有待配对连接池）；云信道走到这里

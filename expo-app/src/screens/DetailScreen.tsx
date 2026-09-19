@@ -5,6 +5,9 @@ import Svg, { Circle, Path, Rect } from "react-native-svg";
 import * as ImagePicker from "expo-image-picker";
 import * as ImageManipulator from "expo-image-manipulator";
 import * as DocumentPicker from "expo-document-picker";
+// #79 拉取的输出物复杂格式（pdf/office 等）交系统应用打开——与 updates.ts 安装器
+// 同款链路（getContentUriAsync + ACTION_VIEW + FLAG_GRANT_READ_URI_PERMISSION）
+import * as IntentLauncher from "expo-intent-launcher";
 // #62 真修：SDK 57 起 expo-file-system 主入口是新 API，readAsStringAsync 只是
 // "will throw in runtime" 的弃用占位——此前主力机实测选任何文件都报「未添加」
 // 就是它 unconditional throw（旧提示又把锅甩给大小限制）。legacy 子模块仍是
@@ -15,6 +18,7 @@ import { withA, type ThemeColors } from "../theme";
 import { useTheme, useThemeStyles } from "../theme-context";
 import { fmtElapsed, sessionElapsed, fmtHM, dayKey, fmtClock, fmtTok, contextPct, contextLevel, CONTEXT_LIMIT_FALLBACK, isVerifyTodo, isLiveLine, stripLiveMark } from "../fmt";
 import { store, useRelay } from "../store";
+import { fromB64, toB64 } from "../e2e";
 import type { ArtifactItem, CronTask, LogEntry, SessionState, TodoItem, WaitingPayload } from "../protocol";
 import { useKbHeight } from "../kb";
 import { useProcessFont, useVoiceInput } from "../display-settings";
@@ -385,22 +389,140 @@ function ContentMenu({ text, onClose }: { text: string; onClose: () => void }) {
   );
 }
 
-// #35 输出物详情 sheet：手机端打不开电脑上的文件——核心价值是给完整绝对路径
-//（selectable 长按手拖选）+ 一键复制/分享（Clipboard/Share 先例同 ContentMenu）；
-// 元信息速览复用统计行。面板形态复用 #36 permSheet（底部 grab 条 + 标题行）
-function ArtSheet({ art, rel, onClose }: { art: ArtifactItem; rel: string; onClose: () => void }) {
+// #79 拉取产物落手机缓存（cacheDirectory/art-view/，重名覆盖；返回 file:// uri）
+const ART_VIEW_DIR = `${FileSystem.cacheDirectory ?? ""}art-view/`;
+async function saveArtFile(name: string, u8: Uint8Array): Promise<string> {
+  try { await FileSystem.makeDirectoryAsync(ART_VIEW_DIR, { intermediates: true }); } catch {}
+  const safe = name.replace(/[\\/:*?"<>|]/g, "_").slice(-80) || "artifact";
+  const uri = ART_VIEW_DIR + safe;
+  await FileSystem.writeAsStringAsync(uri, toB64(u8), { encoding: FileSystem.EncodingType.Base64 });
+  return uri;
+}
+// content:// + 系统应用打开（flags:1 = FLAG_GRANT_READ_URI_PERMISSION，同 updates.ts 安装器）
+async function openArtExternally(uri: string, mime: string): Promise<string | null> {
+  try {
+    const curi = await FileSystem.getContentUriAsync(uri);
+    await IntentLauncher.startActivityAsync("android.intent.action.VIEW", { data: curi, type: mime, flags: 1 });
+    return null;
+  } catch {
+    return "手机上没有能打开此格式的应用，文件已保存在应用缓存里";
+  }
+}
+function decodeUtf8(u8: Uint8Array): string {
+  return new TextDecoder("utf-8", { fatal: false }).decode(u8);
+}
+
+// #79 拉取结果分级：img=内嵌图片；txt/md=内嵌文本（md 走 MdText）；sys=复杂格式
+//（pdf/office/zip…）落盘后交系统应用打开
+type ArtViewData =
+  | { kind: "img"; name: string; uri: string; size: number }
+  | { kind: "txt"; name: string; text: string; size: number }
+  | { kind: "md"; name: string; text: string; size: number }
+  | { kind: "sys"; name: string; uri: string; mime: string; size: number };
+
+// #79 输出物预览全屏层：图片/文本内嵌，复杂格式自动呼系统应用（头部按钮可重开）
+function ArtView({ v, onClose }: { v: ArtViewData; onClose: () => void }) {
+  const { c } = useTheme();
+  const d = useThemeStyles(makeStyles);
+  const [openErr, setOpenErr] = useState<string | null>(null);
+  useEffect(() => {
+    setOpenErr(null);
+    if (v.kind === "sys") void openArtExternally(v.uri, v.mime).then(setOpenErr);
+  }, [v]);
+  return (
+    <Modal visible animationType="fade" onRequestClose={onClose}>
+      <SafeAreaView style={{ flex: 1, backgroundColor: c.bg }}>
+        <View style={d.avHead}>
+          <Text style={d.avName} numberOfLines={1}>{v.name}</Text>
+          <Text style={d.avSize}>{fmtArtSize(v.size)}</Text>
+          <Pressable hitSlop={8} onPress={onClose} accessibilityLabel="关闭预览">
+            <Text style={d.avClose}>✕</Text>
+          </Pressable>
+        </View>
+        {v.kind === "img" ? (
+          <Image source={{ uri: v.uri }} style={{ flex: 1, backgroundColor: c.panel2 }} resizeMode="contain" />
+        ) : v.kind === "md" ? (
+          <ScrollView style={{ flex: 1 }} contentContainerStyle={{ padding: 14, paddingBottom: 40 }}>
+            <MdText src={v.text} selectable />
+          </ScrollView>
+        ) : v.kind === "txt" ? (
+          <ScrollView style={{ flex: 1 }} contentContainerStyle={{ padding: 14, paddingBottom: 40 }}>
+            <Text style={d.avTxt} selectable>{v.text}</Text>
+          </ScrollView>
+        ) : (
+          <View style={{ flex: 1, alignItems: "center", justifyContent: "center", padding: 24 }}>
+            <View style={d.avCard}>
+              <Text style={{ color: c.done, fontSize: 30 }}>✓</Text>
+              <Text style={{ color: c.text, fontSize: 14, fontWeight: "600", textAlign: "center" }}>
+                已保存到手机（{fmtArtSize(v.size)}）
+              </Text>
+              <Pressable
+                style={[d.menuBtn, d.menuBtnPri, { alignSelf: "stretch", marginTop: 4 }]}
+                android_ripple={{ color: "rgba(255,255,255,0.15)", borderless: false, radius: 10 }}
+                onPress={() => { void openArtExternally(v.uri, v.mime).then(setOpenErr); }}
+              >
+                <Text style={d.menuBtnPriT}>用其他应用打开</Text>
+              </Pressable>
+            </View>
+            <Text style={d.avHint}>
+              {openErr ?? "已尝试调起系统应用；若未弹出，请点上方按钮选择打开方式"}
+            </Text>
+          </View>
+        )}
+      </SafeAreaView>
+    </Modal>
+  );
+}
+
+// #35 输出物详情 sheet（#79 起支持实时拉取）：路径复制/分享保留；「拉取查看」把
+// 文件经 E2E 实时分块传到手机（≤20MB，不落云存储）按格式分级预览。元信息速览复用
+// 统计行。面板形态复用 #36 permSheet（底部 grab 条 + 标题行）
+function ArtSheet({ art, rel, sid, onClose }: { art: ArtifactItem; rel: string; sid: string; onClose: () => void }) {
   const { c } = useTheme();
   const d = useThemeStyles(makeStyles);
   const [copied, setCopied] = useState(false);
   const copiedTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   useEffect(() => () => { if (copiedTimer.current) clearTimeout(copiedTimer.current); }, []);
+  const [busy, setBusy] = useState(false);
+  const [ferr, setFerr] = useState<string | null>(null);
+  const [view, setView] = useState<ArtViewData | null>(null);
   const name = (rel || art.path).split(/[\\/]/).pop() || art.path;
   const dead = art.exists === false;
   const outside = art.origin === "outside" || (!rel && art.origin !== "cwd");
   const kind = artKindOf(name);
   const KC: Record<ArtKind, string> = { code: c.brandA, doc: c.done, data: c.working, img: c.waiting, zip: c.dim, gen: c.faint };
+  // #79 拉取 + 分级路由：图片/文本直接内嵌预览，复杂格式落缓存后交系统应用
+  const doFetch = async () => {
+    if (busy || dead) return;
+    setBusy(true);
+    setFerr(null);
+    try {
+      const r = await store.fetchArtifact(sid, art.path);
+      const chunks = r.b64s.map(fromB64);
+      let n = 0;
+      for (const cc of chunks) n += cc.length;
+      const u8 = new Uint8Array(n);
+      let o = 0;
+      for (const cc of chunks) { u8.set(cc, o); o += cc.length; }
+      const mime = r.mime || "application/octet-stream";
+      if (mime.startsWith("image/")) {
+        setView({ kind: "img", name, uri: await saveArtFile(name, u8), size: n });
+      } else if (mime === "text/markdown") {
+        setView({ kind: "md", name, text: decodeUtf8(u8), size: n });
+      } else if (mime.startsWith("text/") || mime === "application/json") {
+        setView({ kind: "txt", name, text: decodeUtf8(u8), size: n });
+      } else {
+        setView({ kind: "sys", name, uri: await saveArtFile(name, u8), mime, size: n });
+      }
+    } catch (e) {
+      setFerr(e instanceof Error ? e.message : String(e));
+    } finally {
+      setBusy(false);
+    }
+  };
   return (
     <Modal visible transparent animationType="slide" onRequestClose={onClose}>
+      {view ? <ArtView v={view} onClose={() => setView(null)} /> : null}
       <Pressable style={d.permScrim} onPress={onClose}>
         <Pressable style={d.permSheet} onPress={() => undefined}>
           <View style={d.permGrab} />
@@ -424,6 +546,17 @@ function ArtSheet({ art, rel, onClose }: { art: ArtifactItem; rel: string; onClo
               <View style={d.artBadge}><Text style={[d.artBadgeT, { color: c.working }]}>cwd 外</Text></View>
             ) : null}
           </View>
+          <View style={[d.menuBtns, { marginTop: 14 }]}>
+            <Pressable
+              style={[d.menuBtn, d.menuBtnPri, (busy || dead) && { opacity: 0.5 }]}
+              disabled={busy || dead}
+              android_ripple={{ color: "rgba(255,255,255,0.15)", borderless: false, radius: 10 }}
+              onPress={() => { void doFetch(); }}
+            >
+              <Text style={d.menuBtnPriT}>{busy ? "拉取中…" : dead ? "文件已删除，无法拉取" : "拉取到手机查看"}</Text>
+            </Pressable>
+          </View>
+          {ferr ? <Text style={{ color: c.error, fontSize: 11, marginTop: 8, textAlign: "center" }}>{ferr}</Text> : null}
           <Text style={d.artPathLabel}>绝对路径（长按可选中复制）</Text>
           <Text style={d.artPath} selectable>{art.path}</Text>
           {rel ? <Text style={d.artRel} numberOfLines={1}>相对会话目录：{rel}</Text> : null}
@@ -441,14 +574,14 @@ function ArtSheet({ art, rel, onClose }: { art: ArtifactItem; rel: string; onClo
               <Text style={d.menuBtnT}>{copied ? "已复制 ✓" : "复制路径"}</Text>
             </Pressable>
             <Pressable
-              style={[d.menuBtn, d.menuBtnPri]}
-              android_ripple={{ color: "rgba(255,255,255,0.15)", borderless: false, radius: 10 }}
+              style={d.menuBtn}
+              android_ripple={{ color: withA(c.dim, 0.2), borderless: false, radius: 10 }}
               onPress={() => {
                 onClose();
                 void Share.share({ message: art.path }).catch(() => undefined);
               }}
             >
-              <Text style={d.menuBtnPriT}>分享</Text>
+              <Text style={d.menuBtnT}>分享</Text>
             </Pressable>
           </View>
           <View style={d.artInfo}>
@@ -458,8 +591,8 @@ function ArtSheet({ art, rel, onClose }: { art: ArtifactItem; rel: string; onClo
             {art.first_at ? <StatRow k="首次写入" v={fmtDT(art.first_at)} /> : null}
             {art.last_at ? <StatRow k="最近写入" v={fmtDT(art.last_at)} /> : null}
           </View>
-          {/* #49：提示去掉"（会话主机）"内部术语 */}
-          <Text style={d.artHint}>文件保存在电脑上 · 手机端仅查看信息</Text>
+          {/* #49：提示去掉"（会话主机）"内部术语；#79 起支持拉取预览 */}
+          <Text style={d.artHint}>文件保存在电脑上 · 可实时拉取到手机预览（≤20MB，不落云存储）</Text>
         </Pressable>
       </Pressable>
     </Modal>
@@ -1877,7 +2010,7 @@ export default function DetailScreen({ sid, onBack, initialView, ref }: { sid: s
                 {edited.map(artRow)}
                 {/* #49：底部说明去掉"仅收录 Write/Edit…"工具清单（机制不外露）；
                     #51：补收录口径（文档类交付物），与网页端同句 */}
-                <Text style={d.artFoot}>仅收录文档、表格等交付物 · 点文件查看路径详情</Text>
+                <Text style={d.artFoot}>仅收录文档、表格等交付物 · 点文件可拉取到手机预览</Text>
               </>
             );
           })()}
@@ -2209,7 +2342,7 @@ export default function DetailScreen({ sid, onBack, initialView, ref }: { sid: s
       ) : null}
 
       {menuText ? <ContentMenu text={menuText} onClose={() => setMenuText(null)} /> : null}
-      {artPop ? <ArtSheet art={artPop} rel={artRelOf(s, artPop)} onClose={() => setArtPop(null)} /> : null}
+      {artPop ? <ArtSheet art={artPop} rel={artRelOf(s, artPop)} sid={sid} onClose={() => setArtPop(null)} /> : null}
       {taskPop != null ? (
         <TaskPop
           n={taskPop}
@@ -2448,6 +2581,14 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
   artRel: { color: c.dim, fontSize: 10.5, fontFamily: "monospace", marginTop: 6 },
   artInfo: { marginTop: 12, borderTopWidth: 1, borderTopColor: c.line },
   artHint: { color: c.faint, fontSize: 10.5, textAlign: "center", marginTop: 12 },
+  // #79 输出物预览全屏层（ArtView）
+  avHead: { flexDirection: "row", alignItems: "center", paddingHorizontal: 14, paddingVertical: 10, borderBottomWidth: StyleSheet.hairlineWidth, borderColor: c.line, gap: 10 },
+  avName: { color: c.text, fontSize: 14, fontWeight: "600", flex: 1 },
+  avSize: { color: c.faint, fontSize: 11 },
+  avClose: { color: c.dim, fontSize: 18, paddingHorizontal: 6 },
+  avTxt: { fontFamily: "monospace", fontSize: 11.5, lineHeight: 17.5, color: c.text },
+  avCard: { backgroundColor: c.panel, borderColor: c.line, borderWidth: 1, borderRadius: 14, padding: 18, alignItems: "center", gap: 10, alignSelf: "stretch" },
+  avHint: { color: c.faint, fontSize: 11, lineHeight: 16, textAlign: "center", marginTop: 14 },
   todoSec: { flexDirection: "row", alignItems: "center", gap: 7, marginTop: 9, marginBottom: 1 },
   todoSecLine: { flex: 1, height: 1, backgroundColor: c.line },
   todoSecT: { fontSize: 10.5, fontWeight: "700", letterSpacing: 0.5 },

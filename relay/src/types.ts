@@ -284,7 +284,8 @@ export type EventType =
   | "PAIR_RESOLVED"
   | "PAIRED_DEVICE"
   | "USER_NOTE"
-  | "WATCHDOG";
+  | "WATCHDOG"
+  | "ARTIFACT_CHUNK";
 
 export type EventPayloadMap = {
   SESSION_CREATED: SessionCreatedPayload;
@@ -305,7 +306,26 @@ export type EventPayloadMap = {
   // #7 SDK 会话流看门狗观测（落 events.ndjson 供复盘误杀率；客户端不消费，
   // 未知事件类型各端 switch 自然跳过）
   WATCHDOG: WatchdogPayload;
+  // #79 输出物远程拉取（瞬态：不落 ndjson 不进缓冲，见 ArtifactChunkPayload）
+  ARTIFACT_CHUNK: ArtifactChunkPayload;
 };
+
+// #79 输出物远程访问（2026-09-19 用户拍板：不放云存储，走 E2E 实时传输）：
+// 客户端发 COMMAND_ARTIFACT_FETCH 拉取会话已登记输出物 → relay 校验授权锚点
+// （path 必须命中该会话 state.artifacts，防任意读）后分块回发。与 PAIRED_DEVICE
+// 同款瞬态语义（seq:0、不进 EventBus 缓冲、不落 events.ndjson、断线不补发）——
+// 单次 20MB 拉取 = 40 帧 ×~683KB base64，进缓冲会冲掉 500 帧环、落盘会把
+// events.ndjson 灌成数十 MB；客户端缺帧/超时自行用新 command_id 重拉。
+// 帧形态：数据块 {ref, seq, total, b64}（ref = 拉取命令的 command_id，客户端
+// 生成故先于 ACK 已知，帧序无关紧要）；尾帧 {ref, done:true} 或 {ref, error}
+export interface ArtifactChunkPayload {
+  ref: string;
+  seq?: number;   // 0 起序
+  total?: number; // 总块数
+  b64?: string;   // ≤512KB 明文的 base64
+  done?: boolean; // 成功尾帧
+  error?: string; // 失败尾帧
+}
 
 // #7 看门狗动作观测：stall_detected=超窗起疑 →（cpu_active=树在烧 CPU 误杀排除/
 // zombie_confirmed=两轮采样整树空闲）→ recover_start/ok/fail=杀树重拉 → gave_up=防风暴上限
@@ -416,7 +436,8 @@ export type CommandType =
   | "COMMAND_TODO_HIDE"
   | "COMMAND_PIN_SESSION"
   | "COMMAND_RESUME_SESSION"
-  | "COMMAND_IMPORT_PUSH";
+  | "COMMAND_IMPORT_PUSH"
+  | "COMMAND_ARTIFACT_FETCH";
 
 export interface CommandBase {
   command_id: string;   // 客户端生成（uuid），Relay 按此去重
@@ -544,6 +565,14 @@ export interface PeersImportCommand extends CommandBase {
   payload: { peers: { dev: string; pubkey: string; name?: string; meta?: PeerMeta; paired_at?: number }[] };
 }
 
+// #79 输出物远程拉取（授权锚点：path 必须命中该会话已登记 artifacts，见
+// session-manager COMMAND_ARTIFACT_FETCH）。ACK 成功携带 artifact:{size,mime}，
+// 数据经瞬态 ARTIFACT_CHUNK 帧回发（ref = command_id）
+export interface ArtifactFetchCommand extends CommandBase {
+  type: "COMMAND_ARTIFACT_FETCH";
+  payload: { session_id: string; path: string };
+}
+
 export type Command =
   | CreateCommand
   | MessageCommand
@@ -570,7 +599,8 @@ export type Command =
   | ModelCommand
   | PinSessionCommand
   | ResumeSessionCommand
-  | ImportPushCommand;
+  | ImportPushCommand
+  | ArtifactFetchCommand;
 
 // 托管会话权限模式切换（default=每次确认 / acceptEdits=自动接受编辑 / plan=只读规划 /
 // bypassPermissions=跳过全部确认——skip 会话被误切后靠此切回）
@@ -681,6 +711,9 @@ export interface CommandAckPayload {
   imported?: number; // 仅 COMMAND_PEERS_IMPORT 成功时携带：实际导入条数
   // #25b 仅 COMMAND_CLOUD_INFO：本机 relay 云桥身份（cloud:false = 未配云桥）
   cloudInfo?: { cloud: boolean; bridge?: string; bt?: string; rd?: string; rk?: string };
+  // #79 仅 COMMAND_ARTIFACT_FETCH 成功时携带：字节数 + 扩展名推导的 MIME
+  //（客户端分级预览用；数据本体走 ARTIFACT_CHUNK 瞬态帧）
+  artifact?: { size: number; mime: string };
   // #65 幂等重放标记：同 command_id 二次到达时回放首次回执并置 true（首次执行
   // 的回执恒不带）；ok/error 语义保持首次原样，客户端不识别也不受影响
   duplicate?: boolean;

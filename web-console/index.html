@@ -1290,6 +1290,47 @@
     color: var(--dim); font-size: 12.5px;
   }
   #fpathPop button:hover { background: var(--hov); color: var(--text); }
+  /* #79 输出物在线预览浮层（全屏遮罩 + 顶栏 + 分级内容区） */
+  #artViewer {
+    position: fixed; inset: 0; z-index: 120; display: flex; flex-direction: column;
+    background: rgba(3,7,12,.86); backdrop-filter: blur(4px);
+  }
+  #artViewer .av-bar {
+    flex: none; display: flex; align-items: center; gap: 10px; padding: 10px 14px;
+    background: var(--panel); border-bottom: 1px solid var(--border);
+  }
+  #artViewer .av-name {
+    font-size: 13px; color: var(--text-strong); font-family: var(--mono);
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 46vw;
+  }
+  #artViewer .av-size { flex: none; font-size: 11px; color: var(--faint); }
+  #artViewer .av-act {
+    all: unset; cursor: pointer; flex: none; padding: 5px 13px; border-radius: 7px;
+    border: 1px solid var(--border); color: var(--dim); font-size: 12px; text-decoration: none;
+  }
+  #artViewer .av-act:hover { background: var(--hov); color: var(--text); }
+  #artViewer .av-close { margin-left: auto; }
+  #artViewer .av-body {
+    flex: 1; min-height: 0; overflow: auto; display: flex; flex-direction: column;
+    align-items: center; justify-content: center; padding: 16px; gap: 10px;
+  }
+  #artViewer .av-pre {
+    align-self: stretch; max-width: 980px; margin: 0 auto; padding: 14px 16px;
+    background: var(--bg-soft); border: 1px solid var(--border); border-radius: 10px;
+    color: var(--text); font-family: var(--mono); font-size: 12px; line-height: 1.65;
+    white-space: pre-wrap; word-break: break-word;
+  }
+  #artViewer .av-md {
+    align-self: stretch; max-width: 880px; margin: 0 auto; padding: 18px 22px;
+    background: var(--bg-main); border: 1px solid var(--border); border-radius: 10px;
+  }
+  #artViewer .av-img { max-width: 100%; max-height: calc(100vh - 120px); object-fit: contain; border-radius: 8px; }
+  #artViewer .av-frame { width: 100%; height: 100%; border: none; background: #fff; border-radius: 8px; }
+  #artViewer .av-hint { flex: none; font-size: 11.5px; color: var(--dim); }
+  #artViewer .av-nop {
+    padding: 26px 34px; background: var(--panel); border: 1px solid var(--border);
+    border-radius: 12px; color: var(--text); font-size: 13px; line-height: 1.8; text-align: center;
+  }
   /* #279⑤ 任务条目 ✕ 隐藏（hover 显现，同 card-edit 语言） */
   .todo-del { flex: none; margin-left: auto; opacity: 0; border: none; background: transparent; color: var(--faint); font-size: 11px; line-height: 1.5; padding: 2px 7px; border-radius: 6px; cursor: pointer; transition: opacity .15s; }
   .todo-item:hover .todo-del { opacity: 1; }
@@ -3528,6 +3569,70 @@ function onAck(ack) {
   if (!ack.ok && ack.error && !ack.error.startsWith("duplicate")) toast("命令失败: " + ack.error);
 }
 
+// ---------- #79 输出物远程拉取（实时端到端传输，不落云存储） ----------
+// COMMAND_ARTIFACT_FETCH → ACK(ok, artifact:{size,mime}) + 瞬态 ARTIFACT_CHUNK 帧
+// （ref=command_id）。帧可能在 ACK 前到达——本端在 sendCommandTo 返回 id 后同步登记
+// artFetches，ws 回帧最早也只能在当前脚本让出事件循环后才处理，不存在登记竞态。
+// 断线/缺帧由 90s 兜底超时收口；重试 = 重新点击（新 command_id，relay 幂等重放不重发数据）。
+const artFetches = new Map(); // command_id -> { parts, total, mime, size, resolve, reject, timer }
+function fetchArtifact(ctx, sid, path) {
+  return new Promise((resolve, reject) => {
+    const id = sendCommandTo(ctx, "COMMAND_ARTIFACT_FETCH", { session_id: sid, path });
+    if (!id) { reject(new Error("源未连接")); return; }
+    const st = { parts: [], total: 0, mime: "application/octet-stream", size: 0, ackSeen: false, doneSeen: false, resolve, reject };
+    st.timer = setTimeout(() => {
+      artFetches.delete(id); ackWaiters.delete(id);
+      reject(new Error("拉取超时（连接可能中断），请重试"));
+    }, 90_000);
+    artFetches.set(id, st);
+    // ACK 只取元信息/错误。relay 侧数据帧+done 尾帧先于 ACK 发出（execCommand 内
+    // 同步 emit，回执最后走）——done 先到时不能立即 settle：mime/size 还在 ACK 里，
+    // 提前 resolve 会把一切当 octet-stream 走下载兜底。双条件（ackSeen+doneSeen）
+    // 齐了才收口；失败（!ok）仍即时 reject
+    //（t:null——onAck 的 clearTimeout 不误清上面的总超时）
+    ackWaiters.set(id, { res: (ack) => {
+      if (ack && !ack.ok) {
+        artFetches.delete(id); clearTimeout(st.timer);
+        reject(new Error(ack.error || "拉取失败"));
+      } else {
+        if (ack?.artifact) {
+          st.mime = ack.artifact.mime || st.mime;
+          st.size = ack.artifact.size ?? 0;
+        }
+        st.ackSeen = true;
+        maybeSettleArtFetch(id, st);
+      }
+    }, t: null });
+  });
+}
+// 拉取成功收口：ackSeen+doneSeen 双条件（完整性与 mime 都就位）才放行
+function maybeSettleArtFetch(id, st) {
+  if (!st.ackSeen || !st.doneSeen) return;
+  clearTimeout(st.timer); artFetches.delete(id); ackWaiters.delete(id);
+  for (let i = 0; i < st.total; i++) {
+    if (st.parts[i] === undefined) { st.reject(new Error("传输不完整（缺块），请重试")); return; }
+  }
+  st.resolve({ b64s: st.parts, mime: st.mime, size: st.size });
+}
+// 失败/超时路径清理
+function failArtFetch(id, st, err) {
+  clearTimeout(st.timer); artFetches.delete(id); ackWaiters.delete(id);
+  st.reject(err);
+}
+// base64 块序列 → Uint8Array（逐块 atob 再合并，避免 20MB 级字符串反复拼接）
+function artB64ToBytes(b64s) {
+  const chunks = b64s.map((b) => {
+    const bin = atob(b);
+    const u = new Uint8Array(bin.length);
+    for (let i = 0; i < bin.length; i++) u[i] = bin.charCodeAt(i);
+    return u;
+  });
+  const out = new Uint8Array(chunks.reduce((a, c) => a + c.length, 0));
+  let o = 0;
+  for (const c of chunks) { out.set(c, o); o += c.length; }
+  return out;
+}
+
 // ---------- 事件处理（作用于事件所属源的 ctx） ----------
 function onEvent(ctx, msg) {
   const sid = msg.session_id;
@@ -3634,6 +3739,20 @@ function onEvent(ctx, msg) {
     case "SESSION_LOG": {
       if (msg.payload?.kind === "user_message") consumePendingByUserMsg(ctx, sid, msg.payload.text ?? "");
       pushLog(ctx, sid, msg.payload);
+      break;
+    }
+    // #79 输出物拉取数据帧（瞬态 seq:0）：ref=本端发起的 command_id。其他设备同拉时
+    // bus 全播帧也会到本端——artFetches 查无此 ref 直接忽略（单用户多端语义可接受）
+    case "ARTIFACT_CHUNK": {
+      const p = msg.payload || {};
+      const st = artFetches.get(p.ref);
+      if (!st) break;
+      if (p.error) { failArtFetch(p.ref, st, new Error(p.error)); break; }
+      if (typeof p.seq === "number" && typeof p.b64 === "string") {
+        if (st.parts[p.seq] === undefined) st.parts[p.seq] = p.b64;
+        if (typeof p.total === "number" && p.total > st.total) st.total = p.total;
+      }
+      if (p.done) { st.doneSeen = true; maybeSettleArtFetch(p.ref, st); }
       break;
     }
     case "TASK_DONE": {
@@ -6821,13 +6940,17 @@ $("timeline").addEventListener("click", (ev) => {
   }
 });
 // #35 输出物浮窗入口：路径 + 相对路径（origin=cwd 才有）+ 已删除标记 → openFpathPop 扩展参
+// #79 fetch：该会话上下文（远程拉取预览入口用；输出物行必属当前选中会话）
 function openArtPop(row, x, y) {
+  const hit = selSession();
   openFpathPop(row.dataset.p || "", x, y, {
     rel: row.dataset.rel || "",
     noOpen: row.dataset.dead === "1",
+    fetch: row.dataset.dead === "1" || !hit ? null : { ctx: hit.ctx, sid: hit.s.session_id },
   });
 }
-// #35 双击输出物行 = 本地默认应用打开（核心交互）；浏览器降级 toast + 顺带复制路径，
+// #35 双击输出物行 = 本地默认应用打开（核心交互）；#79 远程访问兜底链：
+// 桌面壳本地打开失败（云源——文件不在本机）或纯浏览器（无壳）→ 实时拉取 + 在线预览，
 // 不让降级成死胡同；已删除行双击只 toast
 $("timeline").addEventListener("dblclick", (ev) => {
   const row = ev.target.closest(".afrow");
@@ -6835,11 +6958,82 @@ $("timeline").addEventListener("dblclick", (ev) => {
   const p = row.dataset.p || "";
   if (row.dataset.dead === "1") { toast("文件已不存在（可能已被清理）"); return; }
   if (window.ccDeck && window.ccDeck.openPath) {
-    window.ccDeck.openPath(p, false).catch((er) => toast(String(er?.message || er).slice(0, 80), 3500));
+    window.ccDeck.openPath(p, false).catch(() => {
+      const hit = selSession();
+      if (hit) previewArtifact(hit.ctx, hit.s.session_id, p); // 远程源的文件不在本机 → 拉取预览
+      else toast("本地打开失败（文件不在本机）");
+    });
   } else {
-    copyText(p);
-    toast("在桌面端打开可双击启动本地应用（路径已复制）");
+    const hit = selSession();
+    if (hit) previewArtifact(hit.ctx, hit.s.session_id, p);
+    else { copyText(p); toast("在桌面端打开可双击启动本地应用（路径已复制）"); }
   }
+});
+
+// ---------- #79 输出物在线预览（拉取 + 分级展示） ----------
+// 简单格式内嵌：文本/Markdown/JSON/CSV → 文本或轻量 md 渲染；图片 → img；
+// PDF/HTML → 沙箱 iframe（HTML 不给 allow-scripts——交付物不该带脚本，带了也不执行）。
+// 复杂格式（Office/安装包等）不硬解：自动触发下载，提示用系统应用打开。
+async function previewArtifact(ctx, sid, path) {
+  const name = path.split(/[\\/]/).pop() || "输出物";
+  toast("正在拉取「" + name + "」…", 60_000);
+  try {
+    const r = await fetchArtifact(ctx, sid, path);
+    openArtViewer(name, r.mime, artB64ToBytes(r.b64s));
+  } catch (e) {
+    toast(String(e?.message || e), 4500);
+  }
+}
+let artViewerUrl = "";
+function closeArtViewer() {
+  const el = document.getElementById("artViewer");
+  if (!el) return;
+  if (artViewerUrl) { try { URL.revokeObjectURL(artViewerUrl); } catch {} artViewerUrl = ""; }
+  el.remove();
+}
+function openArtViewer(name, mime, bytes) {
+  closeArtViewer();
+  const blob = new Blob([bytes], { type: mime });
+  const url = URL.createObjectURL(blob);
+  artViewerUrl = url;
+  const ext = (/\.([A-Za-z0-9]+)$/.exec(name) || [])[1] || "?";
+  let body = "", autoDl = false;
+  if (/^image\//.test(mime)) {
+    // img 上下文里 svg 内嵌脚本不执行（浏览器沙箱语义），一律安全
+    body = '<img class="av-img" src="' + url + '" alt="">';
+  } else if (mime === "text/html") {
+    body = '<iframe class="av-frame" sandbox src="' + url + '"></iframe>';
+  } else if (mime === "application/pdf") {
+    body = '<iframe class="av-frame" src="' + url + '"></iframe><div class="av-hint">若此处空白（内嵌 PDF 不受支持），请点右上「下载」后打开</div>';
+  } else if (/^text\//.test(mime) || mime === "application/json") {
+    const txt = new TextDecoder("utf-8", { fatal: false }).decode(bytes);
+    if (mime === "text/markdown") body = '<div class="av-md">' + mdHtml(txt) + "</div>";
+    else body = '<pre class="av-pre">' + escapeHtml(txt) + "</pre>";
+  } else {
+    body = '<div class="av-nop">「.' + escapeHtml(ext) + '」格式不支持在线预览，已为你下载，请用系统应用打开</div>';
+    autoDl = true;
+  }
+  const ov = document.createElement("div");
+  ov.id = "artViewer";
+  ov.innerHTML =
+    '<div class="av-bar">' +
+      '<span class="av-name" title="' + escapeHtml(name) + '">' + escapeHtml(name) + '</span>' +
+      '<span class="av-size">' + fmtArtSize(bytes.byteLength) + '</span>' +
+      '<a class="av-act" href="' + url + '" download="' + escapeHtml(name) + '">下载</a>' +
+      '<button class="av-act av-close">关闭</button>' +
+    '</div>' +
+    '<div class="av-body">' + body + "</div>";
+  document.body.appendChild(ov);
+  ov.querySelector(".av-close").onclick = closeArtViewer;
+  ov.addEventListener("click", (ev) => { if (ev.target === ov) closeArtViewer(); });
+  if (autoDl) {
+    const a = ov.querySelector("a.av-act");
+    if (a) a.click(); // 浏览器下载行为；桌面壳内下载由壳处理（本地场景本就少）
+  }
+}
+// Esc 关预览（浮层全局快捷键，与 detail Esc 语义分层：先关最上层浮层）
+document.addEventListener("keydown", (ev) => {
+  if (ev.key === "Escape" && document.getElementById("artViewer")) closeArtViewer();
 });
 // #374 任务拖动排序（未完成区）：HTML5 DnD 委托——drop 换位本地重排 + 注入调序指令
 const todoKeyOf = (t) => String(t.id ?? t.content);
@@ -6922,6 +7116,8 @@ function openFpathPop(p, x, y, opts) {
   };
   // #35 opts：rel = 顺带给"复制相对路径"项；noOpen = 已删除文件——打开两项不给（stat 不到，
   // 打开必然失败，toast 兜底由双击路径负责），复制照常
+  // #79 fetch = 输出物远程拉取预览（实时 E2E 传输，浏览器/远程源可达）
+  if (opts?.fetch) mk("在线预览", () => previewArtifact(opts.fetch.ctx, opts.fetch.sid, p));
   const shellOk = !!(window.ccDeck && window.ccDeck.openPath) && !opts?.noOpen;
   if (shellOk) {
     mk("打开文件", () => { window.ccDeck.openPath(p, false).catch((er) => toast(String(er?.message || er).slice(0, 80), 3500)); });

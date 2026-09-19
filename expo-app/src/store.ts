@@ -111,8 +111,23 @@ interface PendingCmd {
   timer: ReturnType<typeof setTimeout>;
   wire: () => boolean;
   // 0.4.4 跨网回传等需要结果语义的调用方注入（send 第 4 参）：ACK 到达/超时收摊时回调，
-  // 断连清场不回调（调用方自带兜底超时）
-  onAck?: (r: { ok: boolean; err: string | null }) => void;
+  // 断连清场不回调（调用方自带兜底超时）。#79：artifact 仅 COMMAND_ARTIFACT_FETCH
+  // 成功 ACK 携带（mime/size，分级预览用）
+  onAck?: (r: { ok: boolean; err: string | null; artifact?: { size: number; mime: string } }) => void;
+}
+
+// #79 输出物拉取重组状态（fetchArtifact/artFetches/maybeSettleArtFetch 共用）：
+// relay 数据帧+done 尾帧先于 ACK 到达，ackSeen+doneSeen 双条件齐了才收口（mime 在 ACK 里）
+interface ArtFetchState {
+  parts: (string | undefined)[]; // 按 seq 归位的 base64 块（undefined 判缺失，空串是合法空块）
+  total: number;
+  mime: string;
+  size: number;
+  ackSeen: boolean;
+  doneSeen: boolean;
+  resolve: (v: { b64s: string[]; mime: string; size: number }) => void;
+  reject: (e: Error) => void;
+  timer: ReturnType<typeof setTimeout>;
 }
 
 // 按源连接状态（#294 批1：聚合视图数据源；单源模式仅活动源在连，UI 暂不消费）
@@ -1408,7 +1423,7 @@ class RelayStore {
       // 其余按 ACK 原样；p 不存在（已被超时收摊）则丢弃
       if (p?.onAck) {
         const dup = !ack.ok && !!ack.error && ack.error.startsWith("duplicate");
-        try { p.onAck({ ok: ack.ok === true || dup, err: ack.ok || dup ? null : String(ack.error ?? "未知错误") }); } catch {}
+        try { p.onAck({ ok: ack.ok === true || dup, err: ack.ok || dup ? null : String(ack.error ?? "未知错误"), ...(ack.artifact ? { artifact: ack.artifact } : {}) }); } catch {}
       }
       if (ack.cloud) void this.saveCloudPairing(conn, ack.cloud);
       if (ack.pair_code) {
@@ -2110,7 +2125,87 @@ class RelayStore {
         }
         break;
       }
+      // #79 输出物拉取数据帧（瞬态 seq:0）：ref = 本端预生成的 command_id。其他设备
+      // 同拉时全播帧也会到本端——查无此 ref 直接忽略（单用户多端语义可接受）。
+      // relay 先发数据帧+done 尾帧、ACK 最后到（execCommand 同步 emit 后才回执），
+      // doneSeen+ackSeen 双条件齐了才算完成（见 fetchArtifact）
+      case "ARTIFACT_CHUNK": {
+        const p = msg.payload as { ref?: unknown; seq?: unknown; total?: unknown; b64?: unknown; done?: unknown; error?: unknown };
+        const ref = typeof p.ref === "string" ? p.ref : "";
+        const st = ref ? this.artFetches.get(ref) : undefined;
+        if (!st) break;
+        if (typeof p.error === "string" && p.error) {
+          this.artFetches.delete(ref);
+          clearTimeout(st.timer);
+          st.reject(new Error(p.error));
+          break;
+        }
+        if (typeof p.seq === "number" && typeof p.b64 === "string") {
+          if (st.parts[p.seq] === undefined) st.parts[p.seq] = p.b64;
+          if (typeof p.total === "number" && p.total > st.total) st.total = p.total;
+        }
+        if (p.done === true) {
+          st.doneSeen = true;
+          this.maybeSettleArtFetch(ref, st);
+        }
+        break;
+      }
     }
+  }
+
+  // ---------- #79 输出物远程拉取（实时 E2E 传输，不落云存储） ----------
+  // command_id 由本方法预生成（ARTIFACT_CHUNK 帧的 ref 锚定它，必须先登记等待器再
+  // 发命令）；≤20MB、512KB 明文分块。缺帧/超时不自动重试——relay 幂等重放不重发
+  // 数据帧，重试必须换新 command_id（由用户重点按钮触发）
+  private artFetches = new Map<string, ArtFetchState>();
+
+  fetchArtifact(sessionId: string, path: string): Promise<{ b64s: string[]; mime: string; size: number }> {
+    return new Promise((resolve, reject) => {
+      const id = uuid();
+      const st = {
+        parts: [] as (string | undefined)[], total: 0,
+        mime: "application/octet-stream", size: 0,
+        ackSeen: false, doneSeen: false,
+        resolve, reject,
+        timer: null as unknown as ReturnType<typeof setTimeout>,
+      };
+      st.timer = setTimeout(() => {
+        this.artFetches.delete(id);
+        reject(new Error("拉取超时（连接可能中断），请重试"));
+      }, 90_000);
+      this.artFetches.set(id, st);
+      const ok = this.send("COMMAND_ARTIFACT_FETCH", { session_id: sessionId, path }, undefined, (r) => {
+        if (!r.ok) {
+          this.artFetches.delete(id);
+          clearTimeout(st.timer);
+          st.reject(new Error(r.err || "拉取失败"));
+          return;
+        }
+        if (r.artifact) {
+          st.mime = r.artifact.mime || st.mime;
+          st.size = r.artifact.size ?? 0;
+        }
+        st.ackSeen = true;
+        this.maybeSettleArtFetch(id, st);
+      }, id);
+      // send 同步失败（未连接/会话不存在）不回调 onAck，这里收口
+      if (!ok) {
+        this.artFetches.delete(id);
+        clearTimeout(st.timer);
+        st.reject(new Error("未连接，命令未发送"));
+      }
+    });
+  }
+
+  // 成功收口：完整性与 mime 都就位才放行（空文件 = 1 个空 b64 块也成立，判 undefined）
+  private maybeSettleArtFetch(id: string, st: ArtFetchState): void {
+    if (!st.ackSeen || !st.doneSeen) return;
+    clearTimeout(st.timer);
+    this.artFetches.delete(id);
+    for (let i = 0; i < st.total; i++) {
+      if (st.parts[i] === undefined) { st.reject(new Error("传输不完整（缺块），请重试")); return; }
+    }
+    st.resolve({ b64s: st.parts as string[], mime: st.mime, size: st.size });
   }
 
   // 兜底：user_message 晋升日志到达时本地移除被覆盖的排队条目
@@ -2193,7 +2288,7 @@ class RelayStore {
   // 显式 sourceId（批3 新建会话选目标源），再退活动源（COMMAND_CREATE / PAIR_*）。
   // ACK 追踪按源隔离（pendingCmds 在 conn 上）：超时重发同源同 command_id，
   // relay 幂等去重兜底，不跨源串扰。onAck（0.4.4）：需要结果语义的调用方注入
-  send(type: string, payload: Record<string, unknown>, sourceId?: string, onAck?: (r: { ok: boolean; err: string | null }) => void): boolean {
+  send(type: string, payload: Record<string, unknown>, sourceId?: string, onAck?: (r: { ok: boolean; err: string | null; artifact?: { size: number; mime: string } }) => void, cmdId?: string): boolean {
     const sid = typeof payload.session_id === "string" ? (payload.session_id as string) : null;
     // sid 已给但 sidIndex 未命中（#294 审查修复：会话已删/所属源换目标清缓存）：
     // 明确报"会话不存在"，不再回落活动源——回落会把命令发给另一台服务器
@@ -2209,7 +2304,9 @@ class RelayStore {
       this.emit({ lastErrorCmd: "未连接，命令未发送" });
       return false;
     }
-    const cmd = { command_id: uuid(), type, payload, ts: Date.now() };
+    // cmdId（#79）：预生成的 command_id——fetchArtifact 需要在命令发出前登记
+    // ARTIFACT_CHUNK 等待器（帧 ref=command_id）；不传则照旧自生成
+    const cmd = { command_id: cmdId || uuid(), type, payload, ts: Date.now() };
     const wire = (): boolean => {
       if (!conn.ws || conn.ws.readyState !== WebSocket.OPEN) return false;
       if (conn.channel === "cloud" && conn.cloudCfg && this.devKeys) {
