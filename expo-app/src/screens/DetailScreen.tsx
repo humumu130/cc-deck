@@ -397,15 +397,24 @@ function ContentMenu({ text, onClose }: { text: string; onClose: () => void }) {
   );
 }
 
-// #79 拉取产物落手机缓存（cacheDirectory/art-view/，重名覆盖；返回 file:// uri）
-const ART_VIEW_DIR = `${FileSystem.cacheDirectory ?? ""}art-view/`;
-async function saveArtFile(name: string, u8: Uint8Array): Promise<string> {
+// #79 拉取产物落手机持久存储（documentDirectory/art-view/，重名覆盖；返回 file:// uri）。
+// 2026-09-20 起从 cacheDirectory 迁来：Android 的 cache/ 系统低存储可整目录清空，
+// files/ 只随卸载删除——「杀 App 重启又要重拉」的持久化前提
+const ART_VIEW_DIR = `${FileSystem.documentDirectory ?? ""}art-view/`;
+const ART_IDX_URI = `${FileSystem.documentDirectory ?? ""}art-view-index.json`;
+async function writeArtUri(uri: string, u8: Uint8Array): Promise<void> {
   try { await FileSystem.makeDirectoryAsync(ART_VIEW_DIR, { intermediates: true }); } catch {}
-  const safe = name.replace(/[\\/:*?"<>|]/g, "_").slice(-80) || "artifact";
-  const uri = ART_VIEW_DIR + safe;
   await FileSystem.writeAsStringAsync(uri, toB64(u8), { encoding: FileSystem.EncodingType.Base64 });
-  return uri;
 }
+// 持久缓存文件名：键短哈希前缀 + 原名——不同会话/路径的同名文件（README.md 常见）
+// 互相覆盖会张冠李戴；键含 last_at，电脑上文件更新自然落新名，旧文件由 LRU 淘汰清理
+function artShortHash(s: string): string {
+  let h = 5381;
+  for (let i = 0; i < s.length; i++) h = ((h << 5) + h + s.charCodeAt(i)) >>> 0;
+  return h.toString(36);
+}
+const artCacheFile = (key: string, name: string) => `${artShortHash(key)}-${name.replace(/[\\/:*?"<>|]/g, "_").slice(-72) || "artifact"}`;
+const artCacheUri = (key: string, name: string) => ART_VIEW_DIR + artCacheFile(key, name);
 // #79 文本类（txt/md/html）分享/浏览器打开前落盘：expo-sharing 与 ACTION_VIEW 都
 // 需要文件 uri，正文在内存里得先写进缓存目录（与二进制同目录，重名覆盖同语义）
 async function saveArtText(name: string, text: string): Promise<string> {
@@ -440,18 +449,92 @@ type ArtViewData =
 
 // #79 拉取缓存（晨间反馈：同一份输出物不应每次查看都重拉）：键 = sid|path|last_at，
 // 电脑上文件更新（last_at 变化）键即失效、自动重拉最新——「在线预览的新鲜」与
-// 「本地缓存的速度」两头都占。内存表（App 重启后首看重拉一次可接受）；img/sys 的
-// 盘上文件本就落缓存目录，表里存 uri/text 均轻量。容量 12 条触达即 LRU
+// 「本地缓存的速度」两头都占。双层结构：
+// ① artCache 内存表（本次运行秒开）；② artDisk 磁盘索引（documentDirectory/
+//    art-view-index.json，2026-09-20 用户反馈「杀 App 重启又要重拉」加的持久层）——
+//    文件以键哈希前缀名全部落盘（img/sys 二进制、html/md/txt 正文），索引记
+//    cacheKey→{文件名, 显示名, kind, mime, size}；启动时读索引重建，命中即从盘
+//    读回零网络。两层同序 LRU（容量 12）：淘汰时删内存 + 删盘文件 + 改写索引
 const ART_CACHE_CAP = 12;
 const artCache = new Map<string, ArtViewData>();
+interface ArtDiskEntry { file: string; name: string; kind: ArtViewData["kind"]; mime?: string; size: number }
+const artDisk = new Map<string, ArtDiskEntry>();
+let artIdxTimer: ReturnType<typeof setTimeout> | null = null;
+// 索引写回：防抖 1.5s 合并连续 put；失败静默（持久层坏了不影响内存层工作）
+function artIdxFlush() {
+  if (artIdxTimer) return;
+  artIdxTimer = setTimeout(() => {
+    artIdxTimer = null;
+    void FileSystem.writeAsStringAsync(ART_IDX_URI, JSON.stringify([...artDisk.entries()]), {
+      encoding: FileSystem.EncodingType.UTF8,
+    }).catch(() => undefined);
+  }, 1500);
+}
+// 启动恢复：读索引重建磁盘层（损坏即弃）；fire-and-forget 不挡首屏
+void FileSystem.readAsStringAsync(ART_IDX_URI, { encoding: FileSystem.EncodingType.UTF8 })
+  .then((raw) => {
+    const arr = JSON.parse(raw) as [string, ArtDiskEntry][];
+    if (!Array.isArray(arr)) return;
+    for (const [k, e] of arr) {
+      if (typeof k === "string" && e && typeof e.file === "string" && e.name && e.kind) artDisk.set(k, e);
+    }
+  })
+  .catch(() => undefined);
+function artDiskEvict() {
+  while (artDisk.size > ART_CACHE_CAP) {
+    const oldest = artDisk.keys().next().value;
+    if (oldest === undefined) break;
+    const e = artDisk.get(oldest);
+    artDisk.delete(oldest);
+    if (e) void FileSystem.deleteAsync(ART_VIEW_DIR + e.file, { idempotent: true }).catch(() => undefined);
+  }
+  artIdxFlush();
+}
+// 磁盘层读取：文本类读回正文，img/sys 直接引用盘 uri；文件缺失返回 null（走重拉）
+async function artDiskLoad(k: string): Promise<ArtViewData | null> {
+  const e = artDisk.get(k);
+  if (!e) return null;
+  const uri = ART_VIEW_DIR + e.file;
+  try {
+    if (e.kind === "img") return { kind: "img", name: e.name, uri, size: e.size };
+    if (e.kind === "sys") return { kind: "sys", name: e.name, uri, mime: e.mime || "application/octet-stream", size: e.size };
+    const text = await FileSystem.readAsStringAsync(uri, { encoding: FileSystem.EncodingType.UTF8 });
+    if (e.kind === "html") return { kind: "html", name: e.name, text, size: e.size };
+    if (e.kind === "md") return { kind: "md", name: e.name, text, size: e.size };
+    return { kind: "txt", name: e.name, text, size: e.size };
+  } catch {
+    return null; // 盘文件被外部清掉：弃条目，走重拉
+  }
+}
 function artCacheGet(k: string): ArtViewData | undefined {
   const v = artCache.get(k);
   if (v) { artCache.delete(k); artCache.set(k, v); }
   return v;
 }
+// 查看与分享共用的异步取用：内存秒回；磁盘层命中读盘回填（含 LRU 触达），读不回
+// 清索引防空转。doFetch/doShare 均走这里（持久层对调用方透明）
+async function artCacheGetAsync(k: string): Promise<ArtViewData | null> {
+  const mem = artCacheGet(k);
+  if (mem) return mem;
+  if (!artDisk.has(k)) return null;
+  const e = artDisk.get(k)!;
+  artDisk.delete(k);
+  artDisk.set(k, e); // LRU 触达
+  const fromDisk = await artDiskLoad(k);
+  if (fromDisk) {
+    artCachePut(k, fromDisk);
+    return fromDisk;
+  }
+  artDisk.delete(k);
+  artIdxFlush();
+  return null;
+}
 function artCachePut(k: string, v: ArtViewData): void {
   artCache.delete(k);
   artCache.set(k, v);
+  artDisk.delete(k);
+  artDisk.set(k, { file: artCacheFile(k, v.name), name: v.name, kind: v.kind, ...(v.kind === "sys" ? { mime: v.mime } : {}), size: v.size });
+  artDiskEvict();
   while (artCache.size > ART_CACHE_CAP) {
     const oldest = artCache.keys().next().value;
     if (oldest === undefined) break;
@@ -459,8 +542,9 @@ function artCachePut(k: string, v: ArtViewData): void {
   }
 }
 
-// #79 分享文件本体（ArtView 头部与 ArtSheet 共用）：盘上有 uri 的直接用，文本类
-// 先落缓存目录；mime 按分级映射——晨间反馈二轮：分享=文件本身不是路径
+// #79 分享文件本体（ArtView 头部与 ArtSheet 共用）：文本类以干净名现落盘；img/sys
+// 的缓存文件带键哈希前缀（防同名碰撞），分享前复制一份干净名——收到的文件名不带
+// 前缀。mime 按分级映射——晨间反馈二轮：分享=文件本身不是路径
 async function shareArtView(v: ArtViewData): Promise<void> {
   const mime =
     v.kind === "sys" ? v.mime
@@ -468,7 +552,21 @@ async function shareArtView(v: ArtViewData): Promise<void> {
     : v.kind === "html" ? "text/html"
     : v.kind === "md" ? "text/markdown"
     : "text/plain";
-  const uri = v.kind === "img" || v.kind === "sys" ? v.uri : await saveArtText(v.name, v.text);
+  let uri: string;
+  if (v.kind === "img" || v.kind === "sys") {
+    uri = v.uri;
+    if (uri.startsWith(ART_VIEW_DIR)) {
+      // 分享副本落 cache 临时目录（干净名、系统自清不堆积持久层）
+      const safe = v.name.replace(/[\\/:*?"<>|]/g, "_").slice(-80) || "artifact";
+      const dst = `${FileSystem.cacheDirectory ?? ""}share-${safe}`;
+      try {
+        await FileSystem.copyAsync({ from: uri, to: dst });
+        uri = dst;
+      } catch { /* 复制失败用原 uri 兜底（仅文件名带前缀，内容正确） */ }
+    }
+  } else {
+    uri = await saveArtText(v.name, v.text);
+  }
   if (!(await Sharing.isAvailableAsync())) throw new Error("此设备不支持系统分享");
   await Sharing.shareAsync(uri, { mimeType: mime, dialogTitle: `分享 ${v.name}` });
 }
@@ -589,9 +687,11 @@ function ArtSheet({ art, rel, sid, onClose }: { art: ArtifactItem; rel: string; 
   // #79 拉取 + 分级路由：图片/HTML/文本直接内嵌预览，复杂格式落缓存后交系统应用。
   // 缓存命中（path+last_at 未变）秒开不重拉——文件在电脑上更新则键失效自动拉最新
   const cacheKey = `${sid}|${art.path}|${art.last_at ?? art.first_at ?? 0}`;
-  // 已缓存时主按钮变「查看」——用户不再疑惑"为什么又要拉取"（artCache.has 无 LRU 副作用）
-  const cached = !dead && artCache.has(cacheKey);
-  // 拉取构建（查看与分享共用）：E2E 分块拉取 → mime 分级 → 入缓存
+  // 已缓存时主按钮变「查看」——用户不再疑惑"为什么又要拉取"（has 无 LRU 副作用；
+  // 磁盘层同判：重启后盘缓存仍在，按钮照常显示已缓存）
+  const cached = !dead && (artCache.has(cacheKey) || artDisk.has(cacheKey));
+  // 拉取构建（查看与分享共用）：E2E 分块拉取 → 全量落盘（持久缓存，前缀名）→
+  // mime 分级 → 入缓存。文本类盘文件=正文 utf8 bytes（读回按 UTF8 解码一致）
   const fetchArtView = async (): Promise<ArtViewData> => {
     const r = await store.fetchArtifact(sid, art.path);
     const chunks = r.b64s.map(fromB64);
@@ -601,9 +701,11 @@ function ArtSheet({ art, rel, sid, onClose }: { art: ArtifactItem; rel: string; 
     let o = 0;
     for (const cc of chunks) { u8.set(cc, o); o += cc.length; }
     const mime = r.mime || "application/octet-stream";
+    const uri = artCacheUri(cacheKey, name);
+    await writeArtUri(uri, u8);
     let data: ArtViewData;
     if (mime.startsWith("image/")) {
-      data = { kind: "img", name, uri: await saveArtFile(name, u8), size: n };
+      data = { kind: "img", name, uri, size: n };
     } else if (mime === "text/html") {
       data = { kind: "html", name, text: decodeUtf8(u8), size: n };
     } else if (mime === "text/markdown") {
@@ -611,18 +713,18 @@ function ArtSheet({ art, rel, sid, onClose }: { art: ArtifactItem; rel: string; 
     } else if (mime.startsWith("text/") || mime === "application/json") {
       data = { kind: "txt", name, text: decodeUtf8(u8), size: n };
     } else {
-      data = { kind: "sys", name, uri: await saveArtFile(name, u8), mime, size: n };
+      data = { kind: "sys", name, uri, mime, size: n };
     }
     artCachePut(cacheKey, data);
     return data;
   };
   const doFetch = async () => {
     if (busy || dead) return;
-    const hit = artCacheGet(cacheKey);
-    if (hit) { setView(hit); return; }
     setBusy(true);
     setFerr(null);
     try {
+      const hit = await artCacheGetAsync(cacheKey);
+      if (hit) { setView(hit); return; }
       setView(await fetchArtView());
     } catch (e) {
       setFerr(e instanceof Error ? e.message : String(e));
@@ -637,7 +739,7 @@ function ArtSheet({ art, rel, sid, onClose }: { art: ArtifactItem; rel: string; 
     setBusy(true);
     setFerr(null);
     try {
-      await shareArtView(artCacheGet(cacheKey) ?? await fetchArtView());
+      await shareArtView((await artCacheGetAsync(cacheKey)) ?? (await fetchArtView()));
     } catch (e) {
       setFerr(e instanceof Error ? e.message : String(e));
     } finally {
