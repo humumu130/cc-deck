@@ -459,6 +459,20 @@ function artCachePut(k: string, v: ArtViewData): void {
   }
 }
 
+// #79 分享文件本体（ArtView 头部与 ArtSheet 共用）：盘上有 uri 的直接用，文本类
+// 先落缓存目录；mime 按分级映射——晨间反馈二轮：分享=文件本身不是路径
+async function shareArtView(v: ArtViewData): Promise<void> {
+  const mime =
+    v.kind === "sys" ? v.mime
+    : v.kind === "img" ? "image/*"
+    : v.kind === "html" ? "text/html"
+    : v.kind === "md" ? "text/markdown"
+    : "text/plain";
+  const uri = v.kind === "img" || v.kind === "sys" ? v.uri : await saveArtText(v.name, v.text);
+  if (!(await Sharing.isAvailableAsync())) throw new Error("此设备不支持系统分享");
+  await Sharing.shareAsync(uri, { mimeType: mime, dialogTitle: `分享 ${v.name}` });
+}
+
 // #79 输出物预览全屏层：图片/HTML/文本内嵌，复杂格式自动呼系统应用（头部按钮可重开）。
 // 晨间反馈补齐：头部「分享」= 文件本体进系统分享面板（存云盘/发微信/存本地一板全收，
 // 就是「下载到本地随用户处理」的系统出口）；HTML 另给「浏览器」按钮交系统浏览器渲染
@@ -472,19 +486,10 @@ function ArtView({ v, onClose }: { v: ArtViewData; onClose: () => void }) {
     setActErr(null);
     if (v.kind === "sys") void openArtExternally(v.uri, v.mime).then(setOpenErr);
   }, [v]);
-  // 分享文件本体：盘上有 uri 的直接用，文本类先落盘；mime 按分级映射
+  // 分享文件本体（逻辑在模块级 shareArtView，与 ArtSheet 共用）
   const shareFile = async () => {
     try {
-      const mime =
-        v.kind === "sys" ? v.mime
-        : v.kind === "img" ? "image/*"
-        : v.kind === "html" ? "text/html"
-        : v.kind === "md" ? "text/markdown"
-        : "text/plain";
-      const uri =
-        v.kind === "img" || v.kind === "sys" ? v.uri : await saveArtText(v.name, v.text);
-      if (!(await Sharing.isAvailableAsync())) throw new Error("此设备不支持系统分享");
-      await Sharing.shareAsync(uri, { mimeType: mime, dialogTitle: `分享 ${v.name}` });
+      await shareArtView(v);
       setActErr(null);
     } catch (e) {
       setActErr(e instanceof Error ? e.message : String(e));
@@ -586,6 +591,31 @@ function ArtSheet({ art, rel, sid, onClose }: { art: ArtifactItem; rel: string; 
   const cacheKey = `${sid}|${art.path}|${art.last_at ?? art.first_at ?? 0}`;
   // 已缓存时主按钮变「查看」——用户不再疑惑"为什么又要拉取"（artCache.has 无 LRU 副作用）
   const cached = !dead && artCache.has(cacheKey);
+  // 拉取构建（查看与分享共用）：E2E 分块拉取 → mime 分级 → 入缓存
+  const fetchArtView = async (): Promise<ArtViewData> => {
+    const r = await store.fetchArtifact(sid, art.path);
+    const chunks = r.b64s.map(fromB64);
+    let n = 0;
+    for (const cc of chunks) n += cc.length;
+    const u8 = new Uint8Array(n);
+    let o = 0;
+    for (const cc of chunks) { u8.set(cc, o); o += cc.length; }
+    const mime = r.mime || "application/octet-stream";
+    let data: ArtViewData;
+    if (mime.startsWith("image/")) {
+      data = { kind: "img", name, uri: await saveArtFile(name, u8), size: n };
+    } else if (mime === "text/html") {
+      data = { kind: "html", name, text: decodeUtf8(u8), size: n };
+    } else if (mime === "text/markdown") {
+      data = { kind: "md", name, text: decodeUtf8(u8), size: n };
+    } else if (mime.startsWith("text/") || mime === "application/json") {
+      data = { kind: "txt", name, text: decodeUtf8(u8), size: n };
+    } else {
+      data = { kind: "sys", name, uri: await saveArtFile(name, u8), mime, size: n };
+    }
+    artCachePut(cacheKey, data);
+    return data;
+  };
   const doFetch = async () => {
     if (busy || dead) return;
     const hit = artCacheGet(cacheKey);
@@ -593,28 +623,21 @@ function ArtSheet({ art, rel, sid, onClose }: { art: ArtifactItem; rel: string; 
     setBusy(true);
     setFerr(null);
     try {
-      const r = await store.fetchArtifact(sid, art.path);
-      const chunks = r.b64s.map(fromB64);
-      let n = 0;
-      for (const cc of chunks) n += cc.length;
-      const u8 = new Uint8Array(n);
-      let o = 0;
-      for (const cc of chunks) { u8.set(cc, o); o += cc.length; }
-      const mime = r.mime || "application/octet-stream";
-      let data: ArtViewData;
-      if (mime.startsWith("image/")) {
-        data = { kind: "img", name, uri: await saveArtFile(name, u8), size: n };
-      } else if (mime === "text/html") {
-        data = { kind: "html", name, text: decodeUtf8(u8), size: n };
-      } else if (mime === "text/markdown") {
-        data = { kind: "md", name, text: decodeUtf8(u8), size: n };
-      } else if (mime.startsWith("text/") || mime === "application/json") {
-        data = { kind: "txt", name, text: decodeUtf8(u8), size: n };
-      } else {
-        data = { kind: "sys", name, uri: await saveArtFile(name, u8), mime, size: n };
-      }
-      artCachePut(cacheKey, data);
-      setView(data);
+      setView(await fetchArtView());
+    } catch (e) {
+      setFerr(e instanceof Error ? e.message : String(e));
+    } finally {
+      setBusy(false);
+    }
+  };
+  // 晨间反馈二轮：分享=文件本体（原「分享路径」是理解偏了）——未拉取先走同一
+  // 拉取链（缓存命中秒出、顺带点亮主按钮「已缓存」），落盘后进系统分享面板
+  const doShare = async () => {
+    if (busy || dead) return;
+    setBusy(true);
+    setFerr(null);
+    try {
+      await shareArtView(artCacheGet(cacheKey) ?? await fetchArtView());
     } catch (e) {
       setFerr(e instanceof Error ? e.message : String(e));
     } finally {
@@ -683,14 +706,12 @@ function ArtSheet({ art, rel, sid, onClose }: { art: ArtifactItem; rel: string; 
               <Text style={d.artSecT}>{copied ? "已复制 ✓" : "复制路径"}</Text>
             </Pressable>
             <Pressable
-              style={d.artSec}
+              style={[d.artSec, (busy || dead) && { opacity: 0.5 }]}
+              disabled={busy || dead}
               android_ripple={{ color: withA(c.dim, 0.15), borderless: false, radius: 10 }}
-              onPress={() => {
-                onClose();
-                void Share.share({ message: art.path }).catch(() => undefined);
-              }}
+              onPress={() => { void doShare(); }}
             >
-              <Text style={d.artSecT}>分享路径</Text>
+              <Text style={d.artSecT}>{busy ? "拉取中…" : "分享文件"}</Text>
             </Pressable>
           </View>
         </Pressable>
