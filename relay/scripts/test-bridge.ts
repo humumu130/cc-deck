@@ -1108,6 +1108,19 @@ assert(!mgr.getExternal("ext-ff11bb22-cc33-dd44-ee55-ff6677889900"), "67 multi-t
   mkdirSync(gone, { recursive: true });
   rmSync(gone, { recursive: true, force: true });
   const r2 = resolveCreateCwd("", gone);
+  // DIAG80：CI（ubuntu）恒挂此断言、本地全绿——失败时倾倒现场（stat 状态/HOME/
+  // 返回值），一次 CI 运行换根因定位，定位后随修复一并删除
+  if (!(r2.cwd === home && r2.fallbackNote.includes("gone-cwd"))) {
+    const { statSync: st } = await import("node:fs");
+    let goneStat = "n/a";
+    try { goneStat = JSON.stringify(st(gone)); } catch (e) { goneStat = String(e); }
+    let homeStat = "n/a";
+    try { homeStat = JSON.stringify(st(home)); } catch (e) { homeStat = String(e); }
+    console.error(`DIAG80: home=${home} HOME=${process.env.HOME} gone=${gone}`);
+    console.error(`DIAG80: goneStat=${goneStat}`);
+    console.error(`DIAG80: homeStat=${homeStat}`);
+    console.error(`DIAG80: r2=${JSON.stringify(r2)}`);
+  }
   assert(r2.cwd === home && r2.fallbackNote.includes("gone-cwd"), "41 deleted default cwd falls back to homedir, note names it");
 
   // ③ 指定路径是文件（存在但非目录）→ 回落
