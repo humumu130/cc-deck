@@ -957,6 +957,10 @@ export default function DetailScreen({ sid, onBack, initialView, ref }: { sid: s
   const [permPanel, setPermPanel] = useState(false);
   const snap = useRelay();
   const [input, setInput] = useState(() => drafts.get(sid) ?? "");
+  // #68① 多行自动增高：Android 下纯 minHeight/maxHeight 的自适应不可靠（实测长文
+  // 恒 1 行），改 onContentSizeChange 显式定高——内容高 + 纵向 padding 22 + 边框 2，
+  // 夹在 [44,110]；封顶后高度恒定、内部自然滚动（类微信）
+  const [inputH, setInputH] = useState(44);
   const editInput = (v: string) => {
     if (v) drafts.set(sid, v);
     else drafts.delete(sid);
@@ -1615,7 +1619,10 @@ export default function DetailScreen({ sid, onBack, initialView, ref }: { sid: s
 
   return (
     <SafeAreaView style={d.safe} edges={["top"]}>
-      <View style={{ flex: 1 }}>
+      {/* #68③ 键盘顶升从底部栈扩大到整个面板：kb>0 时整体上移（顶部随之上出屏，
+          类微信——最下一条消息恒在输入栏上方；transform 不走重排，沿用 2026-09-16
+          调定的 -2px 藏缝余量）。底部栈不再自带位移 */}
+      <View style={{ flex: 1, transform: [{ translateY: kb > 0 ? -(kb - 2) : 0 }] }}>
       {/* 头部（用户 22:14/22:20 拍板口径）：R1 = ‹ + 标题主角；R2 = 元信息行——源·时长·ctx 水位
           左聚顺排（时长在水位前），思考开关（半高）右锚最右；编辑按钮移除。
           可点元素统一圆角 8/tintSoft 底无边框 */}
@@ -2160,11 +2167,11 @@ export default function DetailScreen({ sid, onBack, initialView, ref }: { sid: s
       ) : null}
       </View>
 
-      {/* 底部栈：审批横幅（常驻可见，类似 CLI 权限提示）> 模板行 > 命令栏；整体随键盘抬升。
+      {/* 底部栈：审批横幅（常驻可见，类似 CLI 权限提示）> 模板行 > 命令栏。
            外层通铺命令栏同色底（2026-09-16）：底部手势条区域不再露页面底色——输入栏
-           一气通到屏幕底边；抬升=kb-2：多抬改欠抬 2px——栏下沿藏进键盘内 2px（是输入栏自己的 padding 区，
-           不可见），透明缝彻底消失（2026-09-16 四测：此前多抬 P 恰好等于缝宽，方向反了） */}
-      <View pointerEvents="box-none" style={{ backgroundColor: c.overlay, paddingBottom: kb > 0 ? 0 : insets.bottom, transform: [{ translateY: kb > 0 ? -(kb - 2) : 0 }] }}>
+           一气通到屏幕底边。#68③ 起键盘抬升移到最外层面板级（kb transform 在此容器
+           的祖先上），本容器只保留手势条让位 */}
+      <View pointerEvents="box-none" style={{ backgroundColor: c.overlay, paddingBottom: kb > 0 ? 0 : insets.bottom }}>
         {bannerVisible ? (
           wr!.questions?.length ? (
             <FadeIn><AskBanner wr={wr!} sid={sid} /></FadeIn>
@@ -2259,26 +2266,27 @@ export default function DetailScreen({ sid, onBack, initialView, ref }: { sid: s
               #62 文件同链路（relay 落盘原名+路径指令，托管/外部一致） */}
           {external || !s.historical || s.relay_session_id ? (
             <>
+            {/* #68② 按钮瘦身：去底去边框纯线条图标（19→21 补视觉分量），触达靠 hitSlop */}
             <Pressable
-              style={[d.imgBtn, d.opRipple, (!canCmd || files.length >= 2) && { opacity: 0.4 }]}
-              android_ripple={{ color: c.tintSoft, borderless: false, radius: 11 }}
+              style={[d.imgBtn, (!canCmd || files.length >= 2) && { opacity: 0.4 }]}
               onPress={pickFiles}
+              hitSlop={6}
               disabled={!canCmd || files.length >= 2}
               accessibilityLabel="附加文件"
             >
               {/* 线条回形针（与相机按钮同形制） */}
-              <Svg width={19} height={19} viewBox="0 0 24 24" fill="none" stroke={c.dim} strokeWidth={1.7} strokeLinecap="round" strokeLinejoin="round">
+              <Svg width={21} height={21} viewBox="0 0 24 24" fill="none" stroke={c.dim} strokeWidth={1.7} strokeLinecap="round" strokeLinejoin="round">
                 <Path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48" />
               </Svg>
             </Pressable>
             <Pressable
-              style={[d.imgBtn, d.opRipple, (!canCmd || images.length >= 4) && { opacity: 0.4 }]}
-              android_ripple={{ color: c.tintSoft, borderless: false, radius: 11 }}
+              style={[d.imgBtn, (!canCmd || images.length >= 4) && { opacity: 0.4 }]}
               onPress={pickImages}
+              hitSlop={6}
               disabled={!canCmd || images.length >= 4}
             >
               {/* 2026-09-18 与网页端统一为线条相机（原相框+山形图片图标两端不一致） */}
-              <Svg width={19} height={19} viewBox="0 0 24 24" fill="none" stroke={c.dim} strokeWidth={1.7} strokeLinecap="round" strokeLinejoin="round">
+              <Svg width={21} height={21} viewBox="0 0 24 24" fill="none" stroke={c.dim} strokeWidth={1.7} strokeLinecap="round" strokeLinejoin="round">
                 <Path d="M8.7 6.8l1.05-1.9a1.5 1.5 0 0 1 1.3-.75h1.9a1.5 1.5 0 0 1 1.3.75l1.05 1.9" />
                 <Rect x={3.4} y={6.8} width={17.2} height={13} rx={3} />
                 <Circle cx={12} cy={13.2} r={3.5} />
@@ -2288,9 +2296,13 @@ export default function DetailScreen({ sid, onBack, initialView, ref }: { sid: s
           ) : null}
           <View style={{ flex: 1 }}>
             <TextInput
-              style={d.input}
+              style={[d.input, { height: inputH }]}
               value={input}
               onChangeText={editInput}
+              onContentSizeChange={(e) => {
+                const h = e.nativeEvent.contentSize.height;
+                setInputH(Math.max(44, Math.min(110, h + 24)));
+              }}
               placeholder={external ? "CLI忙时自动排队" : s.historical ? "继续对话（恢复会话）…" : "发送消息…"}
               placeholderTextColor={c.faint}
               editable={canCmd}
@@ -2303,9 +2315,9 @@ export default function DetailScreen({ sid, onBack, initialView, ref }: { sid: s
           {voiceOn ? (
             <Pressable
               style={[d.imgBtn, listening && d.micOn, !canCmd && { opacity: 0.4 }]}
-              android_ripple={{ color: c.tintSoft, borderless: false, radius: 13 }}
               onPressIn={() => void startVoice()}
               onPressOut={endVoice}
+              hitSlop={6}
               disabled={!canCmd}
             >
               <MicIcon color={listening ? c.brandA : c.dim} />
@@ -2741,12 +2753,12 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
     alignItems: "center", justifyContent: "center",
   },
   imgDelT: { color: c.dim, fontSize: 13, lineHeight: 15, marginTop: -1 },
+  // #68② 图标按钮：无底无框纯线条（原 44 宽 panel2+边框盒），高保 44 对齐输入框
   imgBtn: {
-    width: 44, height: 44, borderRadius: 13, backgroundColor: c.panel2,
-    borderWidth: 1, borderColor: c.line, alignItems: "center", justifyContent: "center",
+    width: 38, height: 44, alignItems: "center", justifyContent: "center",
   },
   imgBtnT: { fontSize: 17 },
-  micOn: { backgroundColor: c.tintStrong, borderColor: withA(c.brandA, 0.55) },
+  micOn: { borderRadius: 13, backgroundColor: c.tintStrong },
   voiceLive: {
     paddingHorizontal: 14, paddingVertical: 5,
     color: c.brandA, fontSize: 12, backgroundColor: c.overlay,
@@ -2755,10 +2767,12 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
     paddingHorizontal: 14, paddingVertical: 5,
     color: c.dim, fontSize: 11, backgroundColor: c.overlay,
   },
+  // #68② 输入区瘦身：图标按钮去底去框（38 宽纯线条，触达靠 hitSlop）、发送去框收窄、
+  // 行距 9→7——富余宽度全部让给输入框
   cmdbar: {
     paddingHorizontal: 12, paddingVertical: 10,
     backgroundColor: c.overlay, borderTopWidth: 1, borderTopColor: c.line,
-    flexDirection: "row", gap: 9, alignItems: "flex-end",
+    flexDirection: "row", gap: 7, alignItems: "flex-end",
   },
   // Slash 联想面板：输入 / 时悬于命令条上方，限高可滚； marginBottom 0 贴合命令条不透字
   slashBox: {
@@ -2782,14 +2796,13 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
     backgroundColor: c.panel2, borderWidth: 1, borderColor: c.line,
     paddingHorizontal: 14, paddingVertical: 11, color: c.text, fontSize: 15,
   },
-  // 发送按钮：两主题同规则（#48，2026-09-19）——theme.sendBg/sendLine/sendFg，
-  // 与并排输入框同材质（panel2+line）+ 品牌橙 ➤（桌面端 #sendBtn 同步对齐）
+  // 发送按钮：两主题同规则（#48）——theme.sendBg/sendFg 品牌橙 ➤；#68② 去边框
+  // 收窄（44→40、字 17→18），桌面端 #sendBtn 同步对齐
   sendBtn: {
-    width: 44, height: 44, borderRadius: 13, backgroundColor: c.sendBg,
-    borderWidth: 1, borderColor: c.sendLine,
+    width: 40, height: 44, borderRadius: 13, backgroundColor: c.sendBg,
     alignItems: "center", justifyContent: "center",
   },
-  sendT: { color: c.sendFg, fontSize: 17, lineHeight: 20, marginLeft: 2 },
+  sendT: { color: c.sendFg, fontSize: 18, lineHeight: 21, marginLeft: 2 },
   // 内容长按菜单（#249）：与 md.tsx 链接浮窗同视觉语言
   menuScrim: { flex: 1, backgroundColor: "rgba(0,0,0,0.5)", justifyContent: "center", alignItems: "center", padding: 28 },
   menuCard: { width: "100%", maxWidth: 340, backgroundColor: c.panel, borderRadius: 14, borderWidth: 1, borderColor: c.line, padding: 12 },
