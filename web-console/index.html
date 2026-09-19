@@ -1157,7 +1157,7 @@
      #399 第二行悬挂缩进至名称起点（灯 8px + c-head gap 8px），与首行文字块成组 */
   /* #54 三行卡层级：标题行（15px/--text-strong）不动；动作行降一档 12→11px、
      色从 --dim 回调到 --card-sub（介于原值与标题色之间）；元信息行 12→11px 保持 --faint */
-  .c-live { display: flex; align-items: center; gap: 8px; margin: 6px 0 5px; padding-left: 6px; font-size: 11px; color: var(--card-sub); font-variant-numeric: tabular-nums; min-width: 0; }
+  .c-live { display: flex; align-items: center; gap: 8px; margin: 4px 0 0; padding-left: 6px; font-size: 11px; line-height: 16px; color: var(--card-sub); font-variant-numeric: tabular-nums; min-width: 0; min-height: 16px; } /* #58 统一卡高：与 .card-summary 同几何（上距 4 + 行盒 16），WORKING/空闲卡等高 */
   .c-live .lv-dot { width: 9px; height: 9px; border-radius: 50%; background: var(--working); flex: none; animation: dot-breathe 2.4s ease-in-out infinite; }
   .c-live .lv-sec { color: var(--working); flex: none; }
   .c-live .lv-tok { flex: none; }
@@ -1241,8 +1241,8 @@
   .card.compact .card-title { flex: 1; min-width: 0; margin-top: 0; font-size: 13px; gap: 6px; }
   .card.compact .c-tt { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .card.compact .card-title input { font-size: 12.5px; }
-  .card.compact .card-summary { font-size: 11px; margin-top: 3px; padding-left: 6px; } /* #399 compact 灯列 = 8px 点 + 7px gap；#54 11.5→11 */
-  .card.compact .card-stats { font-size: 10px; margin-top: 5px; gap: 8px; } /* #54 10.5→10 */
+  .card.compact .card-summary { font-size: 11px; line-height: 15px; margin-top: 3px; padding-left: 6px; min-height: 15px; } /* #399 compact 灯列 = 8px 点 + 7px gap；#54 11.5→11；#58 行盒+占位双钉 15px */
+  .card.compact .card-stats { font-size: 10px; line-height: 14px; margin-top: 5px; gap: 8px; min-height: 14px; } /* #54 10.5→10；#58 行盒+占位双钉 14px */
 
   /* ---------- 任务面板（详情页"任务" tab） ---------- */
   .todo-head { display: flex; align-items: center; gap: 10px; padding: 16px 4px 6px; }
@@ -1377,9 +1377,9 @@
   .af-act:hover { color: var(--dim); background: var(--hov); }
   .af-foot { display: flex; align-items: center; gap: 16px; padding: 14px 6px 30px; font-size: 11.5px; color: var(--dim); flex-wrap: wrap; } /* 视觉审查：暗色 --faint/11px 近乎不可见 → --dim（亮主题自动解析 #5F6C84）+ 左右 2px 贴边放宽 */
   .af-foot .k { border: 1px solid var(--border); border-radius: 5px; padding: 0 5px; margin-right: 5px; font-size: 10.5px; line-height: 1.6; }
-  .card-summary { color: var(--card-sub); font-size: 11.5px; margin-top: 4px; padding-left: 6px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; } /* #399 悬挂缩进对齐灯列；#54 动作行降档 12.5→11.5 + 提色 */
+  .card-summary { color: var(--card-sub); font-size: 11.5px; line-height: 16px; margin-top: 4px; padding-left: 6px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-height: 16px; } /* #399 悬挂缩进对齐灯列；#54 动作行降档 12.5→11.5 + 提色；#58 行盒+min-height 双钉 16px，文本/空档等高 */
   .card-summary.waiting { color: var(--working); }
-  .card-stats { font-size: 11px; color: var(--faint); margin-top: 6px; display: flex; align-items: center; gap: 10px; font-variant-numeric: tabular-nums; } /* #54 元信息行降档 12→11 */
+  .card-stats { font-size: 11px; line-height: 15px; color: var(--faint); margin-top: 6px; display: flex; align-items: center; gap: 10px; font-variant-numeric: tabular-nums; min-height: 15px; } /* #54 元信息行降档 12→11；#58 行盒+min-height 双钉 15px，内容/空档等高 */
   .card-stats .add { color: var(--done); }
   .card-stats .del { color: var(--error); }
   /* #383 源标签居 stats 行最左（与上两行左对齐）；ctx 水位推最右 */
@@ -4066,17 +4066,18 @@ function render() {
         : "";
       const summaryRow = waitingText && s.status !== "WORKING" && !dupTitle
         ? '<div class="card-summary' + (waiting ? " waiting" : "") + '">' + escapeHtml(waitingText) + "</div>"
-        : "";
+        : '<div class="card-summary blank"></div>'; /* #58 空档占位：无摘要也留行，卡高恒定 */
       const ctaRow = waiting && !s.historical && s.waiting_request?.decidable !== false ? '<div class="card-cta"><button>处理</button></div>' : "";
       // #367 源标签内联进 stats 行右侧（多源才有；不再独立占一整行留白）；
-      // 全空时整行不渲染，卡片底部不再拖一条空白
       // #383 源标签移最左与上两行左对齐；ctx 水位条压到最右（不再悬中间）
       // 源徽章仅在聚合视图（全部）显示：筛选到单一源时 chip 已表明来源，整枚不渲染
       // （省 DOM，非 visibility 隐藏）；详情页头部 #dsrc 徽章不受此影响
       // #50 在线源唯一时同样不渲染（showSrcTag，见上）
+      // #58 推翻 #367 的「全空不渲染」：行数 1~3 漂移致同列表卡高参差（用户 2026-09-19
+      // 反馈），stats 行恒渲染 + min-height 占位，换取三行恒定等高（空档代价可接受）
       const srcTag = filterSrc === "all" && showSrcTag ? srcBadgeHtml(ctx.cfg) : "";
       const statsInner = srcTag + statsHtml(s.stats) + ctxHtml(s);
-      const statsBlock = statsInner ? '<div class="card-stats">' + statsInner + "</div>" : "";
+      const statsBlock = '<div class="card-stats">' + statsInner + "</div>";
       if (listCompact) {
         // #279⑨ 紧凑卡（对齐手机）：状态点+标题+耗时 / 摘要 / 改动+水位+源标签
         d.innerHTML =
