@@ -169,6 +169,10 @@ function fmtArtTime(ts: number): string {
   const d = new Date(ts);
   return d.getMonth() + 1 + "/" + d.getDate();
 }
+// #83 路径显示串断行：/ 与 - 后插零宽空格（U+200B）——Android ICU 断行不会在中文
+// 词内给出断点，长中文路径会被从词中间拆开，ZWSP 提供合法断点。仅用于显示；复制走
+// 按钮的原串（零宽空格进剪贴板=粘到终端的隐性坏路径），故路径 Text 不再开 selectable
+const brkPath = (p: string) => p.replace(/([\\/])/g, "$1\u200B").replace(/-/g, "-\u200B");
 
 // 转录行：user=右气泡 / assistant=正文流式 / tool=紧凑卡片 / system=居中弱化
 // 转录字号分级：过程消息（工具/结果/系统/思考）比消息（用户/assistant）小一档，可在设置抽屉调。
@@ -559,12 +563,13 @@ function ArtView({ v, onClose }: { v: ArtViewData; onClose: () => void }) {
   );
 }
 
-// #35 输出物详情 sheet（#79 起支持实时拉取）：路径复制/分享保留；「拉取查看」把
-// 文件经 E2E 实时分块传到手机（≤20MB，不落云存储）按格式分级预览。元信息速览复用
-// 统计行。面板形态复用 #36 permSheet（底部 grab 条 + 标题行）
+// #35 输出物详情 sheet（#79 起支持实时拉取；#83 重设计）：身份→动作→参考三段式
+// ——标题行（类型 chip + 文件名 14px）→ CTA + caption → 路径盒 + 次级按钮；元信息
+// 收编标题下中性一行（原徽章行 + 5 行键值表合并）。面板形态复用 #36 permSheet
 function ArtSheet({ art, rel, sid, onClose }: { art: ArtifactItem; rel: string; sid: string; onClose: () => void }) {
   const { c } = useTheme();
   const d = useThemeStyles(makeStyles);
+  const insets = useSafeAreaInsets();
   const [copied, setCopied] = useState(false);
   const copiedTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   useEffect(() => () => { if (copiedTimer.current) clearTimeout(copiedTimer.current); }, []);
@@ -620,46 +625,54 @@ function ArtSheet({ art, rel, sid, onClose }: { art: ArtifactItem; rel: string; 
     <Modal visible transparent animationType="slide" onRequestClose={onClose}>
       {view ? <ArtView v={view} onClose={() => setView(null)} /> : null}
       <Pressable style={d.permScrim} onPress={onClose}>
-        <Pressable style={d.permSheet} onPress={() => undefined}>
+        {/* #83：底部让位手势条（原 paddingBottom 14 在手势导航机型上贴边） */}
+        <Pressable style={[d.permSheet, { paddingBottom: 14 + insets.bottom }]} onPress={() => undefined}>
           <View style={d.permGrab} />
-          <View style={d.permTitleRow}>
+          {/* 一眼：类型色 chip + 文件名（14px 全场最大，修标题↔主按钮字号倒挂）。
+              已删除是唯一改变可用性的状态，红标签保留在头部（其余徽章降为中性文字） */}
+          <View style={d.artTitleRow}>
             <View style={[d.artChip, { borderColor: withA(KC[kind], 0.45) }]}>
               <Text style={[d.artChipT, { color: KC[kind] }]}>{artExtOf(name)}</Text>
             </View>
-            <Text style={[d.permTitle, { flex: 1 }]} numberOfLines={1}>{name}</Text>
-            <Pressable hitSlop={8} onPress={onClose} accessibilityLabel="关闭输出物详情">
-              <Text style={d.permX}>✕</Text>
-            </Pressable>
+            <Text style={d.artTitle} numberOfLines={2}>{name}</Text>
+            {dead ? <Text style={[d.artTag, { color: c.error }]}>已删除</Text> : null}
           </View>
-          <View style={d.artBadges}>
-            <View style={[d.artBadge, art.op === "create" && { borderColor: withA(c.done, 0.5) }]}>
-              <Text style={[d.artBadgeT, art.op === "create" && { color: c.done }]}>{art.op === "create" ? "新建" : "修改"}</Text>
-            </View>
-            {dead ? (
-              <View style={d.artBadge}><Text style={[d.artBadgeT, { color: c.error }]}>已删除</Text></View>
-            ) : null}
-            {outside ? (
-              <View style={d.artBadge}><Text style={[d.artBadgeT, { color: c.working }]}>cwd 外</Text></View>
-            ) : null}
+          {/* 元信息一行（原徽章行 + 5 行键值表收编为中性注脚）：零信息项不渲染、
+              首次=最近只显一个、+0/−0 跳过行变更 */}
+          <Text style={d.artMeta} numberOfLines={3}>
+            {[
+              art.op === "create" ? "新建" : "修改",
+              outside ? "cwd 外" : "",
+              fmtArtSize(art.size),
+              fmtArtTime(art.last_at || art.first_at),
+              art.tools?.length ? `工具 ${art.tools.join(" · ")}` : "",
+              (art.adds || art.dels) ? `+${art.adds ?? 0} −${art.dels ?? 0} 行` : "",
+              art.first_at && art.first_at !== art.last_at ? `首次 ${fmtArtTime(art.first_at)}` : "",
+            ].filter(Boolean).join(" · ")}
+          </Text>
+          {/* 二眼：整宽 CTA（四态文案保留）；已删除=ghost 状态说明（红字短句），不再假 CTA */}
+          <Pressable
+            style={[d.artPri, dead && d.artPriDead]}
+            disabled={busy || dead}
+            android_ripple={{ color: "rgba(255,255,255,0.15)", borderless: false, radius: 10 }}
+            onPress={() => { void doFetch(); }}
+          >
+            <Text style={[d.artPriT, dead && d.artPriDeadT]}>{busy ? "拉取中…" : dead ? "文件已删除" : cached ? "查看（已缓存）" : "拉取到手机查看"}</Text>
+          </Pressable>
+          {/* 脚注升为 CTA caption：它解释的是拉取动作（原沉底贴手势条处可读性最差） */}
+          <Text style={d.artCap}>文件在电脑上 · 实时拉取预览（≤20MB，不落云存储）</Text>
+          {ferr ? <Text style={d.artErr} numberOfLines={2}>{ferr}</Text> : null}
+          {/* 三眼：路径参考盒——显示串经 brkPath 断行（中文词不拆腰）；复制走下方
+              按钮的干净原串（selectable 移除：零宽空格会污染剪贴板） */}
+          <View style={d.artPath}>
+            <Text style={d.artPathT}>{brkPath(art.path)}</Text>
+            {rel ? <Text style={d.artRel} numberOfLines={1}>相对 {brkPath(rel)}</Text> : null}
           </View>
-          <View style={[d.menuBtns, { marginTop: 14 }]}>
+          {/* 次级动作：panel2 底 + line 描边（对齐 permCancel 的次级按钮语言，替换近白隐形的 tintSoft） */}
+          <View style={d.artSecRow}>
             <Pressable
-              style={[d.menuBtn, d.menuBtnPri, (busy || dead) && { opacity: 0.5 }]}
-              disabled={busy || dead}
-              android_ripple={{ color: "rgba(255,255,255,0.15)", borderless: false, radius: 10 }}
-              onPress={() => { void doFetch(); }}
-            >
-              <Text style={d.menuBtnPriT}>{busy ? "拉取中…" : dead ? "文件已删除，无法拉取" : cached ? "查看（已缓存）" : "拉取到手机查看"}</Text>
-            </Pressable>
-          </View>
-          {ferr ? <Text style={{ color: c.error, fontSize: 11, marginTop: 8, textAlign: "center" }}>{ferr}</Text> : null}
-          <Text style={d.artPathLabel}>绝对路径（长按可选中复制）</Text>
-          <Text style={d.artPath} selectable>{art.path}</Text>
-          {rel ? <Text style={d.artRel} numberOfLines={1}>相对会话目录：{rel}</Text> : null}
-          <View style={d.menuBtns}>
-            <Pressable
-              style={d.menuBtn}
-              android_ripple={{ color: withA(c.dim, 0.2), borderless: false, radius: 10 }}
+              style={d.artSec}
+              android_ripple={{ color: withA(c.dim, 0.15), borderless: false, radius: 10 }}
               onPress={() => {
                 void Clipboard.setStringAsync(art.path).then(() => {
                   setCopied(true);
@@ -667,28 +680,19 @@ function ArtSheet({ art, rel, sid, onClose }: { art: ArtifactItem; rel: string; 
                 });
               }}
             >
-              <Text style={d.menuBtnT}>{copied ? "已复制 ✓" : "复制路径"}</Text>
+              <Text style={d.artSecT}>{copied ? "已复制 ✓" : "复制路径"}</Text>
             </Pressable>
             <Pressable
-              style={d.menuBtn}
-              android_ripple={{ color: withA(c.dim, 0.2), borderless: false, radius: 10 }}
+              style={d.artSec}
+              android_ripple={{ color: withA(c.dim, 0.15), borderless: false, radius: 10 }}
               onPress={() => {
                 onClose();
                 void Share.share({ message: art.path }).catch(() => undefined);
               }}
             >
-              <Text style={d.menuBtnT}>分享路径</Text>
+              <Text style={d.artSecT}>分享路径</Text>
             </Pressable>
           </View>
-          <View style={d.artInfo}>
-            <StatRow k="工具" v={art.tools?.join(" · ") || "—"} />
-            <StatRow k="行变更" v={`+${art.adds ?? 0} / −${art.dels ?? 0}`} />
-            {fmtArtSize(art.size) ? <StatRow k="大小" v={fmtArtSize(art.size)} /> : null}
-            {art.first_at ? <StatRow k="首次写入" v={fmtDT(art.first_at)} /> : null}
-            {art.last_at ? <StatRow k="最近写入" v={fmtDT(art.last_at)} /> : null}
-          </View>
-          {/* #49：提示去掉"（会话主机）"内部术语；#79 起支持拉取预览 */}
-          <Text style={d.artHint}>文件保存在电脑上 · 可实时拉取到手机预览（≤20MB，不落云存储）</Text>
         </Pressable>
       </Pressable>
     </Modal>
@@ -703,6 +707,8 @@ function ArtSheet({ art, rel, sid, onClose }: { art: ArtifactItem; rel: string; 
 function PermPanel({ cur, onPick, onClose }: { cur: PermMode; onPick: (m: PermMode) => void; onClose: () => void }) {
   const { c } = useTheme();
   const d = useThemeStyles(makeStyles);
+  // #83 同修：sheet 底部让位手势条（确认按钮原同样贴边）
+  const insets = useSafeAreaInsets();
   const [arm, setArm] = useState(false);
   const pick = (m: PermMode) => {
     if (m === "bypassPermissions") {
@@ -716,7 +722,7 @@ function PermPanel({ cur, onPick, onClose }: { cur: PermMode; onPick: (m: PermMo
   return (
     <Modal visible transparent animationType="fade" onRequestClose={onClose}>
       <Pressable style={d.permScrim} onPress={onClose}>
-        <Pressable style={d.permSheet} onPress={() => undefined}>
+        <Pressable style={[d.permSheet, { paddingBottom: 14 + insets.bottom }]} onPress={() => undefined}>
           <View style={d.permGrab} />
           <View style={d.permTitleRow}>
             <Text style={d.permTitle}>权限模式</Text>
@@ -2692,14 +2698,26 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
   artNameRow: { flexDirection: "row", alignItems: "center", gap: 6 },
   artTag: { fontSize: 10, lineHeight: 13, borderWidth: 1, borderColor: c.line, borderRadius: 4, paddingHorizontal: 4, paddingVertical: 1 },
   artFoot: { color: c.faint, fontSize: 10.5, textAlign: "center", paddingVertical: 16 },
-  artBadges: { flexDirection: "row", gap: 6, marginBottom: 10 },
-  artBadge: { borderWidth: 1, borderColor: c.line, borderRadius: 4, paddingHorizontal: 6, paddingVertical: 2 },
-  artBadgeT: { fontSize: 10, lineHeight: 13 },
-  artPathLabel: { color: c.faint, fontSize: 10.5, marginBottom: 4 },
-  artPath: { color: c.text, fontSize: 12, fontFamily: "monospace", lineHeight: 17, borderWidth: 1, borderColor: c.line, borderRadius: 8, padding: 10, backgroundColor: c.panel2 },
-  artRel: { color: c.dim, fontSize: 10.5, fontFamily: "monospace", marginTop: 6 },
-  artInfo: { marginTop: 12, borderTopWidth: 1, borderTopColor: c.line },
-  artHint: { color: c.faint, fontSize: 10.5, textAlign: "center", marginTop: 12 },
+  // #83 sheet 重设计样式（仅 ArtSheet 使用，零共享）：字号阶梯 14 标题 > 13 CTA >
+  // 12 次级按钮 > 11 元信息/路径 mono > 10 caption/相对路径 > 9 chip
+  artTitleRow: { flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 2 },
+  artTitle: { color: c.text, fontSize: 14, fontWeight: "600", lineHeight: 19, flex: 1 },
+  artMeta: { color: c.dim, fontSize: 11, lineHeight: 15, marginTop: 6, fontVariant: ["tabular-nums"] },
+  artPri: { height: 42, borderRadius: 10, alignItems: "center", justifyContent: "center", backgroundColor: c.brandA, overflow: "hidden", marginTop: 12 },
+  artPriT: { color: "#fff", fontSize: 13, fontWeight: "600" },
+  // 已删除态：ghost 状态说明（panel2 底 + error 描边 + 红字短句），不是可点 CTA
+  artPriDead: { backgroundColor: c.panel2, borderWidth: 1, borderColor: withA(c.error, 0.3) },
+  artPriDeadT: { color: c.error },
+  artCap: { color: c.faint, fontSize: 10, lineHeight: 13, textAlign: "center", marginTop: 6 },
+  artErr: { color: c.error, fontSize: 11, lineHeight: 14, textAlign: "center", marginTop: 6 },
+  // 路径盒（容器）：panel2 内陷 + 细描边；内文 11px mono（显示串已经 brkPath 断词）
+  artPath: { borderWidth: 1, borderColor: c.line, borderRadius: 8, paddingHorizontal: 10, paddingVertical: 8, backgroundColor: c.panel2, marginTop: 12 },
+  artPathT: { color: c.text, fontSize: 11, fontFamily: "monospace", lineHeight: 16 },
+  artRel: { color: c.dim, fontSize: 10, fontFamily: "monospace", lineHeight: 14, marginTop: 4 },
+  // 次级按钮行：panel2 底 + line 描边（permCancel 同语言），材质差让位 CTA
+  artSecRow: { flexDirection: "row", gap: 10, marginTop: 10 },
+  artSec: { flex: 1, height: 38, borderRadius: 10, alignItems: "center", justifyContent: "center", backgroundColor: c.panel2, borderWidth: 1, borderColor: c.line, overflow: "hidden" },
+  artSecT: { color: c.dim, fontSize: 12, fontWeight: "600" },
   // #79 输出物预览全屏层（ArtView）
   avHead: { flexDirection: "row", alignItems: "center", paddingHorizontal: 14, paddingVertical: 10, borderBottomWidth: StyleSheet.hairlineWidth, borderColor: c.line, gap: 10 },
   avName: { color: c.text, fontSize: 14, fontWeight: "600", flex: 1 },
