@@ -188,10 +188,15 @@ export function reduceHistory(events: Envelope[]): Map<string, ReplayedSession> 
       case "SESSION_LOG": {
         const p = e.payload as LogEntry & { kind: LogEntry["kind"] };
         // streaming 不回放：历史条目都是终态，残留光标会卡住 "▌"
-        rs.logs.push({
+        const entry: LogEntry = {
           ts: e.ts, kind: p.kind, text: p.text, tool: p.tool,
           full: p.full, id: p.id, detail: p.detail, diff: p.diff,
-        });
+        };
+        // #73 同 id 原地替换（与运行期语义一致）：托管流式块/外部转录增长链每帧
+        // 都落盘，重放逐条 push 会把同一条消息的中间快照全部复活成重复条目
+        const li = p.id ? rs.logs.findIndex((x) => x.id === p.id) : -1;
+        if (li >= 0) rs.logs[li] = entry;
+        else rs.logs.push(entry);
         if (rs.logs.length > 500) rs.logs.splice(0, rs.logs.length - 500);
         break;
       }

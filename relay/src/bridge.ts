@@ -1480,6 +1480,17 @@ export class Bridge {
   // transcript 已读字节偏移：PostToolUse/Stop 时增量读出助手文本推上时间线
   private transcriptOffsets = new Map<string, number>();
 
+  // #73 外部转录流式快照折叠：同一 message.id 的多行转录 = 同一条逻辑消息的增长
+  // 快照（2026-09-19 实测：58 行 assistant 仅 19 个唯一 id，同 id 行文本逐行增长；
+  // 个别尾行文本为空的分块 flush 伪影）。按 (sid, msgId, kind) 复用稳定日志 id 让
+  // pushExternalLog 原地替换，时间线不再被增量快照刷屏；文本只增不减（最长快照
+  // 胜出，空尾行不回退、等长重复快照不重复下发）。id 携带本次启动戳——重启后
+  // 回放重建的时间线带着旧运行期的 id，seq 归零若复用裸序号会顶掉旧消息条目
+  private static readonly XSTREAM_BOOT = Date.now().toString(36);
+  private xstreamSeq = new Map<string, number>();
+  private xchainId = new Map<string, string>(); // sid|msgId|kind -> 稳定日志 id
+  private xchainBest = new Map<string, number>(); // 同 key -> 已下发最长文本长度
+
   // #72 上次计入总量的 usage 元组（会话 -> "in:out:cr:cw"）：转录流式快照会把同
   // 一次调用的 usage 行重复落盘 3~7 行，同元组只累计一次，否则会话 token 总量虚高
   // 数倍（实测虚到 cache_read 2.38 亿）。水位是覆盖式，天然不受重复行影响
@@ -1539,7 +1550,7 @@ export class Bridge {
         }
         if (st0?.historical) st0.historical = false;
       }
-      const entries: { kind: "assistant_text" | "thinking" | "tool_use" | "tool_result"; text: string; tool?: string; detail?: string }[] = [];
+      const entries: { kind: "assistant_text" | "thinking" | "tool_use" | "tool_result"; text: string; tool?: string; detail?: string; msgId?: string }[] = [];
       const enqueues: string[] = [];
       const steers: string[] = [];
       const userTexts: string[] = []; // 本批真实用户 prompt 行（晋升 pending 用）
@@ -1623,7 +1634,7 @@ export class Bridge {
           continue;
         }
         try {
-          const j = JSON.parse(line) as { message?: { content?: unknown[]; usage?: Record<string, unknown>; model?: unknown } };
+          const j = JSON.parse(line) as { message?: { id?: unknown; content?: unknown[]; usage?: Record<string, unknown>; model?: unknown } };
           const mu = j.message?.usage;
           if (mu && typeof mu === "object") {
             const inc = (v: unknown) => (typeof v === "number" && v > 0 ? v : 0);
@@ -1641,6 +1652,9 @@ export class Bridge {
             ctxLast = inc(mu.input_tokens) + inc(mu.cache_read_input_tokens) + inc(mu.cache_creation_input_tokens);
           }
           if (typeof j.message?.model === "string" && j.message.model) model = Bridge.modelDisplayName() ?? j.message.model;
+          // #73 增长链锚点：同一条消息的流式快照行共享 message.id（msg_*），链按它
+          // 识别；缺 id（异常转录）退化为旧行为——每行独立条目，不折叠也不误合
+          const msgId = typeof j.message?.id === "string" && j.message.id ? j.message.id : "";
           const content = j.message?.content;
           if (!Array.isArray(content)) continue;
           Bridge.collectTaskOps(content, taskOps, creates);
@@ -1704,10 +1718,10 @@ export class Bridge {
           // content 顺序上 thinking 在正文之前；每行各合并为一条。
           // 混合拆出的桥段在正文之后（append 形态所致），排在正文后
           const th = thinks.join("\n").trim();
-          if (th) entries.push({ kind: "thinking", text: th });
+          if (th) entries.push({ kind: "thinking", text: th, msgId });
           entries.push(...zaiEntries);
           const tx = texts.join("\n").trim();
-          if (tx) entries.push({ kind: "assistant_text", text: tx });
+          if (tx) entries.push({ kind: "assistant_text", text: tx, msgId });
           entries.push(...zaiMixed);
         } catch {}
       }
@@ -1738,12 +1752,7 @@ export class Bridge {
       }
       // 首读（relay 重启/新接入）只回放最后一条正文，thinking 不回放避免刷屏；排队台账不回放（陈旧）
       const emit = firstRead ? entries.filter((e) => e.kind === "assistant_text").slice(-1) : entries;
-      for (const e of emit) {
-        this.mgr.pushExternalLog(id, e.kind, truncate(e.text, 400), e.tool, {
-          full: fullText(e.text, 400),
-          ...(e.detail ? { detail: e.detail } : {}),
-        });
-      }
+      for (const e of emit) this.emitTranscriptEntry(id, e);
       if (!firstRead) {
         for (const t of enqueues) this.onQueueEnqueue(id, t);
         for (const t of steers) this.onSteerDelivered(id, t);
@@ -1800,6 +1809,40 @@ export class Bridge {
         );
       }
     } catch {}
+  }
+
+  // #73 转录条目下发（pushAssistantTexts 专用）：带 msgId 的 assistant_text/
+  // thinking 走增长链——同 key 复用稳定日志 id（pushExternalLog 原地替换），文本
+  // 只增不减（空尾行 flush 伪影不回退、等长重复快照不重复下发）；zai/工具类条目
+  // 无 msgId，维持旧语义（每条独立）
+  private emitTranscriptEntry(
+    id: string,
+    e: { kind: "assistant_text" | "thinking" | "tool_use" | "tool_result"; text: string; tool?: string; detail?: string; msgId?: string },
+  ): void {
+    let logId: string | undefined;
+    if ((e.kind === "assistant_text" || e.kind === "thinking") && e.msgId) {
+      const key = `${id}|${e.msgId}|${e.kind}`;
+      logId = this.xchainId.get(key);
+      if (!logId) {
+        const n = (this.xstreamSeq.get(id) ?? 0) + 1;
+        this.xstreamSeq.set(id, n);
+        // 兜底上限：超量整表清空（链内中途被清的极端代价 = 该条消息拆回两条，可接受）
+        if (this.xchainId.size > 400 || this.xchainBest.size > 400) {
+          this.xchainId.clear();
+          this.xchainBest.clear();
+        }
+        logId = `xstream-${Bridge.XSTREAM_BOOT}-${n}`;
+        this.xchainId.set(key, logId);
+      }
+      const best = this.xchainBest.get(key) ?? 0;
+      if (e.text.length <= best) return; // 回退/重复快照：保持已下发的更长文本
+      this.xchainBest.set(key, e.text.length);
+    }
+    this.mgr.pushExternalLog(id, e.kind, truncate(e.text, 400), e.tool, {
+      full: fullText(e.text, 400),
+      ...(e.detail ? { detail: e.detail } : {}),
+      ...(logId ? { id: logId } : {}),
+    });
   }
 
   // 文件改动统计：Edit/Write/MultiEdit/NotebookEdit 结果的 +/- 行累计（统计页数据源）。
