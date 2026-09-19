@@ -5,7 +5,7 @@
 // 代码）一律不收。含 fileEditMetrics 单元 / hook 实时 + transcript 回放 /
 // SNAPSHOT / 整表替换保留登记 / 中文文件名下载回归。
 // 环境隔离口径同 test-bridge（独立数据目录/项目根/claude 配置/端口）
-import { mkdirSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { join } from "node:path";
 import { setTimeout as wait } from "node:timers/promises";
@@ -206,7 +206,9 @@ const snapArts = ((snap as { payload?: { sessions?: { session_id: string; artifa
 assert(Array.isArray(snapArts) && snapArts.length === 4 && snapArts.some((x) => x.tools.includes("登记")), "SNAPSHOT 全量携带 artifacts（含登记条目）");
 
 // 回放幂等 + 登记保留：转录换文件（≈轮转）重触 firstRead → setArtifacts 整表替换，
-// 产物目录基线回放 + 登记条目从 deliverables.json 挂回（不丢、不双计）
+// 产物目录基线回放 + 登记条目从 deliverables.json 挂回（不丢、不双计）。
+// #82 起 mergeArtifact 新条目同步落登记清单——活采条目（不在 transcript 里的
+// 实时-补充.md）此前会被整表替换洗掉，现在经清单挂回存活
 const T2 = join(ROOT, "transcript2.jsonl");
 writeFileSync(T2, lines.slice(0, -1).join("\n") + "\n");
 {
@@ -220,7 +222,7 @@ writeFileSync(T2, lines.slice(0, -1).join("\n") + "\n");
 await wait(4000);
 a = arts();
 const k1 = a.find((x) => x.path === join(ART, "工作报告-2026-09-19.html"));
-assert(!!k1 && k1.adds === 1 && a.length === 3 && a.some((x) => x.path === DECLARED), `幂等：整表替换回产物基线且登记条目保留 got=${a.length}（实时条目洗回、登记不丢）`);
+assert(!!k1 && k1.adds === 1 && a.length === 4 && a.some((x) => x.path === DECLARED) && a.some((x) => x.path === join(ART, "实时-补充.md")), `幂等：整表替换回产物基线，活采与登记条目均保留 got=${a.length}（#82 前活采条目被轮转洗掉）`);
 
 // ---------- 产物中心 HTTP：列表 + 中文文件名下载 ----------
 {
@@ -232,6 +234,24 @@ assert(!!k1 && k1.adds === 1 && a.length === 3 && a.some((x) => x.path === DECLA
   assert(fr.status === 200 && body.includes("今日工作报告"), `产物中心：中文文件名可下载（CJK 正则回归）status=${fr.status}`);
   const noauth = await fetch(`${http}/artifacts/${encodeURIComponent("工作报告-2026-09-19.html")}`);
   assert(noauth.status === 401, "产物中心：无 token 401");
+}
+
+// ---------- #82 托管会话产物表跨重启：mergeArtifact 新条目落 deliverables.json ----------
+{
+  // ① 活采路径（hook 实时 Write）与回放路径（transcript 重扫）的新条目都进登记清单
+  const reg = JSON.parse(readFileSync(join(cfg.dataDir, "deliverables.json"), "utf-8")) as { sid: string; path: string }[];
+  assert(reg.some((e) => e.sid === SID && e.path === join(ART, "实时-补充.md")), "#82 活采新条目落登记清单");
+  assert(reg.some((e) => e.sid === SID && e.path === join(ART, "工作报告-2026-09-19.html")), "#82 回放新条目同落清单（含轮转重扫）");
+  assert(reg.filter((e) => e.sid === SID && e.path === join(ART, "工作报告-2026-09-19.html")).length === 1, "#82 登记清单 sid+path 幂等（实时+回放+轮转不重复追加）");
+  assert(!reg.some((e) => e.path === join(CWD, "docs/new.md") || e.path === join(CWD, "src/app.ts")), "#82 项目目录条目不进登记清单");
+  // ② 模拟重启：新 SessionManager（同 dataDir）收养无 transcript 的会话（托管 SDK 形态，
+  //    修复前 journal 帧被挤掉即全丢）→ applyDeclaredDeliverables 从清单挂回产物目录条目
+  const bus2 = new EventBus();
+  const mgr2 = new SessionManager(bus2, cfg);
+  mgr2.ensureExternal(SID, CWD, "重启后重挂（#82）", "cli-art1");
+  const names = (mgr2.getExternal(SID)?.artifacts ?? []).map((x) => x.path);
+  assert(names.includes(join(ART, "工作报告-2026-09-19.html")) && names.includes(join(ART, "实时-补充.md")), "#82 重启挂回：产物目录条目经登记清单存活");
+  assert(names.includes(DECLARED), "#82 重启挂回：deliver 显式登记条目照旧存活");
 }
 
 ws.close();

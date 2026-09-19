@@ -945,6 +945,14 @@ export class SessionManager {
         exists,
         ...(origin ? { origin } : {}),
       });
+      // #82 落盘：产物目录写入即交付声明（#69），但声明动作不在 transcript；journal
+      // 状态帧每会话仅留最近 50 条（见 #53 注释），写产物那帧很快被挤掉——托管（SDK）
+      // 会话没有 transcript 全文件重扫兜底，relay 重启后产物表只剩 deliverables.json
+      // 挂回项（2026-09-20 晨间夜间报告丢失实锤）。新条目同步进登记清单
+      // （appendDeliverable sid+path 幂等，回放重扫/轮转不重复追加），借
+      // ensureExternal/adopt/setArtifacts 三处 applyDeclaredDeliverables 跨重启存活；
+      // 重启挂回后 tools 降级为「登记」、增删行归零，可见性优先可接受
+      appendDeliverable(this.cfg.dataDir, { sid: id, path: p, ts: item.ts });
       // 上限保最新：超 200 条丢最旧 + 标记截断（UI 汇总行提示）
       if (list.length > 200) {
         list.sort((x, y) => y.last_at - x.last_at);
