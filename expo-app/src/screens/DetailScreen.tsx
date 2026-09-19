@@ -452,7 +452,8 @@ function ArtSheet({ art, rel, onClose }: { art: ArtifactItem; rel: string; onClo
             {art.first_at ? <StatRow k="首次写入" v={fmtDT(art.first_at)} /> : null}
             {art.last_at ? <StatRow k="最近写入" v={fmtDT(art.last_at)} /> : null}
           </View>
-          <Text style={d.artHint}>文件保存在电脑（会话主机）上 · 手机端仅查看信息</Text>
+          {/* #49：提示去掉"（会话主机）"内部术语 */}
+          <Text style={d.artHint}>文件保存在电脑上 · 手机端仅查看信息</Text>
         </Pressable>
       </Pressable>
     </Modal>
@@ -1591,7 +1592,8 @@ export default function DetailScreen({ sid, onBack, initialView, ref }: { sid: s
           {sortedTodos.length === 0 ? (
             // 空态垂直居中：父容器 viewCol(flex:1) 里头部之下剩余区域由文本撑满，
             // textAlignVertical 让文字在盒内垂直居中（paddingVertical 对称不偏移）
-            <Text style={[d.empty, { flex: 1, textAlignVertical: "center" }]}>暂无任务清单{"\n"}在 CLI 里建任务后自动出现</Text>
+            // #49：空态文案不暴露内部机制，只留一句话
+            <Text style={[d.empty, { flex: 1, textAlignVertical: "center" }]}>暂无任务清单</Text>
           ) : (
           <View style={d.todoScrollWrap}>
             <ScrollView
@@ -1695,7 +1697,7 @@ export default function DetailScreen({ sid, onBack, initialView, ref }: { sid: s
           {/* 空态垂直居中：内容容器 flexGrow 撑满可视面板 + justifyContent 居中提示组；
               底部 40+insets 的滚动余量在空态无意义，收成与顶部对称（14+insets）防中心偏上 */}
           {(s.cron_tasks?.length ?? 0) === 0 ? (
-            <Text style={d.empty}>暂无定时任务{"\n"}在 CLI 创建后自动出现</Text>
+            <Text style={d.empty}>暂无定时任务</Text>
           ) : (
             s.cron_tasks!.map((t, i) => {
               const open = !!cronOpen[t.id];
@@ -1733,8 +1735,8 @@ export default function DetailScreen({ sid, onBack, initialView, ref }: { sid: s
            手机端打不开电脑文件——点行弹详情 sheet 给完整路径（复制/分享），不在此行内展开 */
         <ScrollView style={{ flex: 1 }} contentContainerStyle={{ padding: 14, paddingBottom: 40 + insets.bottom, ...((s.artifacts?.length ?? 0) === 0 ? { flexGrow: 1, justifyContent: "center", paddingBottom: 14 + insets.bottom } : null) }} showsVerticalScrollIndicator={false}>
           {(s.artifacts?.length ?? 0) === 0 ? (
-            /* 空态三分（文案与网页端同口径）：历史会话无记录 / external 需 hooks / 托管尚无产出 */
-            <Text style={d.empty}>本会话还没有文件产出{"\n"}{s.historical ? "历史会话无输出物记录" : external ? "需 CLI 挂 cc-deck hooks 才能捕获（Write/Edit 写文件后自动出现）" : "CLI 里用 Write/Edit 写文件后，这里会自动出现"}</Text>
+            /* #49：空态文案不暴露内部机制（原三分提示句移除），只留一句话（与网页端同口径） */
+            <Text style={d.empty}>当前会话还没有文件产出</Text>
           ) : (() => {
             const arts = s.artifacts!;
             const byRec = (a: ArtifactItem, b: ArtifactItem) => (b.last_at || b.first_at || 0) - (a.last_at || a.first_at || 0);
@@ -1792,7 +1794,8 @@ export default function DetailScreen({ sid, onBack, initialView, ref }: { sid: s
                 {created.map(artRow)}
                 {edited.length ? <Text style={[d.artGt, { color: c.dim }]}>修改 {edited.length}</Text> : null}
                 {edited.map(artRow)}
-                <Text style={d.artFoot}>点文件查看路径详情 · 仅收录 Write / Edit / MultiEdit / NotebookEdit</Text>
+                {/* #49：底部说明去掉"仅收录 Write/Edit…"工具清单（机制不外露） */}
+                <Text style={d.artFoot}>点文件查看路径详情</Text>
               </>
             );
           })()}
@@ -1850,7 +1853,8 @@ export default function DetailScreen({ sid, onBack, initialView, ref }: { sid: s
         scrollEventThrottle={120}
       >
         {s.historical && !external ? (
-          <Text style={d.histnote}>{resumable ? "历史会话 · 发送消息将恢复继续（SDK resume）" : "Relay 重启前的历史会话，仅可查看"}</Text>
+          // #49：提示不暴露内部机制（SDK resume、Relay 等字眼移除）
+          <Text style={d.histnote}>{resumable ? "历史会话 · 发送消息将恢复继续" : "历史会话，仅可查看"}</Text>
         ) : null}
 
         {list.length === 0 ? (

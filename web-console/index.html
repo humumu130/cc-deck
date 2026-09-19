@@ -2191,7 +2191,7 @@
 
     <div id="timeline"></div>
 
-    <div id="hisnote">⏳ Relay 重启前的历史会话，仅可查看。</div>
+    <div id="hisnote">⏳ 历史会话，仅可查看。</div>
     <div id="pendbox"></div>
     <div id="agbox"></div>
     <div id="liverow">
@@ -4342,9 +4342,10 @@ function renderDetail() {
   const canCmd = !s.historical || s.external || resumable;
   cmdLocked = !canCmd;
   $("hisnote").style.display = s.historical && !s.external ? "block" : "none";
+  // #49：空态/提示文案不暴露内部机制（SDK resume、Relay 重启等字眼移除）
   $("hisnote").textContent = resumable
-    ? "⏳ 历史会话 · 发送消息将恢复继续（SDK resume）"
-    : "⏳ Relay 重启前的历史会话，仅可查看";
+    ? "⏳ 历史会话 · 发送消息将恢复继续"
+    : "⏳ 历史会话，仅可查看";
   $("cmdbar").style.display = "flex";
   $("cmdbar").classList.toggle("cmd-off", cmdLocked);
   $("msginput").disabled = cmdLocked;
@@ -4488,10 +4489,11 @@ function refreshTodos(sel, s) {
 
 function todosTabHtml(s) {
   const todos = s.todos ?? [];
-  if (!todos.length) return '<div class="todo-empty">暂无任务清单<br><span style="font-size:12px">CLI 里使用 TodoWrite 工具后，这里会显示任务进度</span></div>';
+  // #49：空态提示不暴露内部机制（原第二行"CLI 里使用 TodoWrite…"移除）
+  if (!todos.length) return '<div class="todo-empty">暂无任务清单</div>';
   const hidden = todoHiddenOf(s.session_id);
   const all = todos.filter((t) => !hidden.includes(t.content));
-  if (!all.length) return '<div class="todo-empty">任务清单已全部隐藏<br><span style="font-size:12px">CLI 里更新任务后会重新显示</span></div>';
+  if (!all.length) return '<div class="todo-empty">任务清单已全部隐藏</div>';
   const doneAll = all.filter((t) => t.status === "completed");
   const doneHasTs = doneAll.length > 0 && doneAll.every((t) => typeof t.updated_at === "number");
   const doneWindow = doneHasTs
@@ -4579,7 +4581,8 @@ function cronSummaryOf(t) {
 }
 function cronTabHtml(s) {
   const tasks = s.cron_tasks ?? [];
-  if (!tasks.length) return '<div class="todo-empty">暂无定时任务<br><span style="font-size:12px">CLI 里创建 durable 定时任务后，这里 30s 内显示</span></div>';
+  // #49：空态提示不暴露内部机制（原"durable 定时任务/30s"字眼移除）
+  if (!tasks.length) return '<div class="todo-empty">暂无定时任务</div>';
   // #376：meta 行配人话频率；点条目展开 prompt 全文（.open）
   return tasks.map((t) => {
     const desc = cronDesc(t.schedule);
@@ -4669,14 +4672,8 @@ function artRowHtml(t, s) {
 }
 function artifactsTabHtml(s) {
   const arts = s.artifacts ?? [];
-  if (!arts.length) {
-    const hint = s.historical
-      ? "历史会话无输出物记录"
-      : s.external
-        ? "需 CLI 挂 cc-deck hooks 才能捕获（Write/Edit 写文件后自动出现）"
-        : "CLI 里用 Write/Edit 写文件后，这里会自动出现";
-    return '<div class="todo-empty">本会话还没有文件产出<br><span style="font-size:12px">' + hint + "</span></div>";
-  }
+  // #49：空态文案不暴露内部机制——三种情形（历史/外部/托管）统一只留一句话
+  if (!arts.length) return '<div class="todo-empty">当前会话还没有文件产出</div>';
   const byRecency = (a, b) => (b.last_at || b.first_at || 0) - (a.last_at || a.first_at || 0);
   const created = arts.filter((t) => t.op === "create").sort(byRecency);
   const edited = arts.filter((t) => t.op !== "create").sort(byRecency);
@@ -4693,7 +4690,8 @@ function artifactsTabHtml(s) {
     "</div>";
   if (created.length) html += '<div class="af-gt cr">新建 <span>' + created.length + '</span><span class="sub">本会话产出的文件</span></div>' + created.map((t) => artRowHtml(t, s)).join("");
   if (edited.length) html += '<div class="af-gt">修改 <span>' + edited.length + "</span></div>" + edited.map((t) => artRowHtml(t, s)).join("");
-  html += '<div class="af-foot"><span><span class="k">双击</span>本地打开</span><span><span class="k">右键 / ⋯</span>更多操作</span><span><span class="k">仅收录</span>Write · Edit · MultiEdit · NotebookEdit</span></div>';
+  // #49：底部说明去掉"仅收录 Write/Edit…"工具清单（机制不外露）
+  html += '<div class="af-foot"><span><span class="k">双击</span>本地打开</span><span><span class="k">右键 / ⋯</span>更多操作</span></div>';
   return html;
 }
 
