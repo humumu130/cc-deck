@@ -855,10 +855,11 @@ export default function DetailScreen({ sid, onBack, initialView, ref }: { sid: s
   const thumbTravel = Math.max(0, todoMetrics.layout - todoThumbH - 4);
   const [images, setImages] = useState<string[]>([]);
   const [queuedHint, setQueuedHint] = useState<string | null>(null);
-  const flashQueuedHint = () => {
-    setQueuedHint("已排队，确认/回合结束后自动发送");
+  const flashHint = (t: string) => {
+    setQueuedHint(t);
     setTimeout(() => setQueuedHint(null), 4000);
   };
+  const flashQueuedHint = () => flashHint("已排队，确认/回合结束后自动发送");
   const [picking, setPicking] = useState(false);
   const scrollRef = useRef<ScrollView>(null);
   const allScrollRef = useRef<ScrollView>(null);
@@ -1488,6 +1489,28 @@ export default function DetailScreen({ sid, onBack, initialView, ref }: { sid: s
                       {PERM_SHORT[perm]}
                     </Text>
                   ) : null}
+                </Pressable>
+              ) : null}
+              {/* #56 外部会话远程审批开关：开=Bash/Edit 等门控工具的权限确认挂起到
+                  手机/网页出按钮；手机离线 relay 自动回退终端本地弹框（hasClients 守卫）。
+                  状态回显走 SESSION_UPDATED remote_mode（协议早已就绪，本任务只补 UI） */}
+              {external && canCmd && !s.historical ? (
+                <Pressable
+                  style={[d.thinkToggle, s.remote_mode && d.thinkToggleOn]}
+                  android_ripple={{ color: c.tintSoft, borderless: false, radius: 8 }}
+                  onPress={() => {
+                    const next = !s.remote_mode;
+                    if (store.send("COMMAND_EXT_MODE", { session_id: sid, enabled: next }) && next) {
+                      flashHint("远程审批已开：权限确认将挂起到手机，离线自动回退终端");
+                    }
+                  }}
+                  hitSlop={6}
+                  accessibilityLabel={s.remote_mode ? "远程审批：已开，权限确认挂起到手机" : "远程审批：已关，权限确认在终端本地"}
+                >
+                  <Text style={[d.thinkToggleT, s.remote_mode && d.thinkToggleTOn]}>审批</Text>
+                  <View style={[d.thinkSwitch, s.remote_mode && d.thinkSwitchOn]}>
+                    <View style={[d.thinkSwitchKnob, s.remote_mode && { alignSelf: "flex-end" }]} />
+                  </View>
                 </Pressable>
               ) : null}
               <Pressable
