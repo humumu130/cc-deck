@@ -55,13 +55,20 @@ assert(rs!.state.status === "DONE" && rs!.state.done_reason === "success", "终�
 assert(rs!.state.stats.lines_added === 2 && rs!.state.stats.lines_deleted === 3, "统计恢复");
 assert(rs!.logs.length === 301, "时间线 = 300 日志 + 1 完成事件");
 
-// 非终态会话 → ERROR + historical
+// 非终态会话（无 SDK 会话号，不可恢复）→ ERROR + historical（#52 批：文案改中性）
 const events2 = [mk(1, "s2", "SESSION_CREATED", { cwd: "/x", initial_prompt: "中断测试", model: "m" }), mk(2, "s2", "SESSION_UPDATED", { status: "WORKING", action_summary: "干活", stats: null })];
 const replayed2 = reduceHistory(events2);
 const rs2 = replayed2.get("s2")!;
-assert(rs2.state.status === "ERROR" && rs2.state.last_error === "Relay 重启，会话中断", "非终态标记 ERROR");
+assert(rs2.state.status === "ERROR" && rs2.state.last_error === "服务更新重启，会话已中断", "非终态标记 ERROR");
 assert(rs2.state.historical === true, "标记 historical");
-assert(rs2.logs.at(-1)!.text === "Relay 重启，会话中断", "中断事件入时间线");
+assert(rs2.logs.at(-1)!.text === "服务更新重启，会话已中断", "中断事件入时间线");
+
+// 非终态会话（带 SDK 会话号，可 resume）→ 中性 DONE 而非 ERROR 红条（#52 批）
+const events3 = [mk(1, "s3", "SESSION_CREATED", { cwd: "/x", initial_prompt: "恢复测试", model: "m" }), mk(2, "s3", "SESSION_UPDATED", { status: "WORKING", action_summary: "干活", stats: null, relay_session_id: "sdk-123" })];
+const rs3 = reduceHistory(events3).get("s3")!;
+assert(rs3.state.status === "DONE" && rs3.state.done_reason === "服务更新重启，会话已中断" && !rs3.state.last_error, "可恢复标 DONE 中性");
+assert(rs3.state.historical === true, "可恢复也标 historical");
+assert(rs3.logs.at(-1)!.text === "服务更新重启，会话已中断 · 发送消息即可继续", "可恢复时间线文案");
 
 // ---------- EventBus 持久化 + 预载 ----------
 console.log("EventBus 持久化:");

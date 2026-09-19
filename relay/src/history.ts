@@ -212,18 +212,26 @@ export function reduceHistory(events: Envelope[]): Map<string, ReplayedSession> 
           try { process.kill(rs.state.cli_pid, 0); alive = true; } catch { alive = false; }
         }
         if (alive) {
-          rs.logs.push({ ts: Date.now(), kind: "system", text: "Relay 重启，CLI 进程仍在运行" });
+          // #49 口径：服务端重启对用户是"服务更新"，不暴露 Relay/CLI 内部机制字眼
+          rs.logs.push({ ts: Date.now(), kind: "system", text: "服务更新重启 · 会话继续跟踪中" });
         } else {
           rs.state.status = "DONE";
           rs.state.done_reason = "ended";
           rs.state.historical = true;
-          rs.logs.push({ ts: Date.now(), kind: "system", text: "Relay 重启时 CLI 已退出，回合视作结束" });
+          rs.logs.push({ ts: Date.now(), kind: "system", text: "服务更新重启 · 会话已结束" });
         }
+      } else if (rs.state.relay_session_id) {
+        // #52 批：托管会话带 SDK 会话号即可靠 resume 恢复——归 DONE 中性态而非
+        // ERROR 红条（DONE 不发包、只在启动重标，不会触发"任务完成"通知卡）
+        rs.state.status = "DONE";
+        rs.state.done_reason = "服务更新重启，会话已中断";
+        rs.state.historical = true;
+        rs.logs.push({ ts: Date.now(), kind: "system", text: "服务更新重启，会话已中断 · 发送消息即可继续" });
       } else {
         rs.state.status = "ERROR";
-        rs.state.last_error = "Relay 重启，会话中断";
+        rs.state.last_error = "服务更新重启，会话已中断";
         rs.state.historical = true;
-        rs.logs.push({ ts: Date.now(), kind: "system", text: "Relay 重启，会话中断" });
+        rs.logs.push({ ts: Date.now(), kind: "system", text: "服务更新重启，会话已中断" });
       }
     }
     // 重放后不存在仍可决的等待（进程已随重启断开）：残留 waiting_request 会让

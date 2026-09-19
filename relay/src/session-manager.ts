@@ -1,6 +1,6 @@
 import { mkdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
-import { isAbsolute, join, resolve, sep } from "node:path";
+import { extname, isAbsolute, join, resolve, sep } from "node:path";
 import { devId } from "./e2e.js";
 import type { EventBus } from "./event-bus.js";
 import { AgentSession } from "./agent-adapter.js";
@@ -20,6 +20,18 @@ function contextLimitOf(model: string | undefined): number {
   if (/glm[-_]?5/.test(m)) return 1_000_000; // GLM-5.x 系列 1M 窗口
   return 200_000;
 }
+
+// #51 输出物收录口径：只收用户交付物（文档/表格/演示/纯文本笔记），代码与配置
+// 文件不计入。按扩展名白名单在采集咽喉点（mergeArtifact）过滤——实时采集与
+// transcript 回放重建（setArtifacts）都过这里，relay 重启后回放会把此前误收的
+// 代码条目自然洗掉。无扩展名（Makefile 等）一律不收，规则简单可预期。
+const DOC_ARTIFACT_EXTS = new Set([
+  "md", "markdown", "txt", "text", "rtf",
+  "doc", "docx", "pdf", "pages",
+  "xls", "xlsx", "csv", "numbers",
+  "ppt", "pptx", "key",
+  "odt", "ods", "odp",
+]);
 import { addHiddenTodoKey, hiddenTodoKeys } from "./todo-hidden.js";
 import type {
   AgentCallbacks,
@@ -744,6 +756,8 @@ export class SessionManager {
     const cwd = s.state.cwd || "";
     let p = item.path;
     if (!isAbsolute(p) && cwd) p = resolve(cwd, p);
+    // #51 只收用户交付物：非文档类扩展名（代码/配置）在此丢弃，不进输出物面板
+    if (!DOC_ARTIFACT_EXTS.has(extname(p).slice(1).toLowerCase())) return;
     const key = p.toLowerCase();
     const list: ArtifactItem[] = s.state.artifacts ? s.state.artifacts.map((a) => ({ ...a })) : [];
     const idx = list.findIndex((a) => a.path.toLowerCase() === key);

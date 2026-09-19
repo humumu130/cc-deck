@@ -1735,8 +1735,9 @@ export default function DetailScreen({ sid, onBack, initialView, ref }: { sid: s
            手机端打不开电脑文件——点行弹详情 sheet 给完整路径（复制/分享），不在此行内展开 */
         <ScrollView style={{ flex: 1 }} contentContainerStyle={{ padding: 14, paddingBottom: 40 + insets.bottom, ...((s.artifacts?.length ?? 0) === 0 ? { flexGrow: 1, justifyContent: "center", paddingBottom: 14 + insets.bottom } : null) }} showsVerticalScrollIndicator={false}>
           {(s.artifacts?.length ?? 0) === 0 ? (
-            /* #49：空态文案不暴露内部机制（原三分提示句移除），只留一句话（与网页端同口径） */
-            <Text style={d.empty}>当前会话还没有文件产出</Text>
+            /* #49：空态文案不暴露内部机制（原三分提示句移除），只留一句话（与网页端同口径）；
+               #51：收录口径收窄为文档类交付物，空态措辞同步 */
+            <Text style={d.empty}>当前会话还没有文档产出</Text>
           ) : (() => {
             const arts = s.artifacts!;
             const byRec = (a: ArtifactItem, b: ArtifactItem) => (b.last_at || b.first_at || 0) - (a.last_at || a.first_at || 0);
@@ -1794,8 +1795,9 @@ export default function DetailScreen({ sid, onBack, initialView, ref }: { sid: s
                 {created.map(artRow)}
                 {edited.length ? <Text style={[d.artGt, { color: c.dim }]}>修改 {edited.length}</Text> : null}
                 {edited.map(artRow)}
-                {/* #49：底部说明去掉"仅收录 Write/Edit…"工具清单（机制不外露） */}
-                <Text style={d.artFoot}>点文件查看路径详情</Text>
+                {/* #49：底部说明去掉"仅收录 Write/Edit…"工具清单（机制不外露）；
+                    #51：补收录口径（文档类交付物），与网页端同句 */}
+                <Text style={d.artFoot}>仅收录文档、表格等交付物 · 点文件查看路径详情</Text>
               </>
             );
           })()}

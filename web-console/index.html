@@ -3557,9 +3557,11 @@ function onEvent(ctx, msg) {
       // 详情弹窗因 status!==WAITING 永不出现"的脱钩死锁
       if (msg.payload.waiting_request !== undefined) s.waiting_request = msg.payload.waiting_request;
       else if (msg.payload.status !== "WAITING") s.waiting_request = null;
-      // 其余可选字段：出现即覆盖（与手机端 store 对齐）；pinned/saved 为 #49 保存恢复字段
+      // 其余可选字段：出现即覆盖（与手机端 store 对齐）；pinned/saved 为 #49 保存恢复字段；
+      // historical 必须在列（#52）：relay 增量帧恒带该布尔，漏并会让恢复后的会话
+      // 永远挂着"历史会话"横幅（本地值只在快照时写过一次）
       for (const f of ["remote_mode", "title", "title_locked", "model", "turn_started_at",
-        "usage", "context_usage", "context_limit", "todos", "subagents", "permission_mode", "pending_inputs", "relay_session_id", "cron_tasks", "compacting", "pinned", "saved", "artifacts", "artifacts_truncated"]) {
+        "usage", "context_usage", "context_limit", "todos", "subagents", "permission_mode", "pending_inputs", "relay_session_id", "cron_tasks", "compacting", "pinned", "saved", "historical", "artifacts", "artifacts_truncated"]) {
         if (msg.payload[f] !== undefined) s[f] = msg.payload[f];
       }
       s.updated_at = msg.ts;
@@ -4673,7 +4675,8 @@ function artRowHtml(t, s) {
 function artifactsTabHtml(s) {
   const arts = s.artifacts ?? [];
   // #49：空态文案不暴露内部机制——三种情形（历史/外部/托管）统一只留一句话
-  if (!arts.length) return '<div class="todo-empty">当前会话还没有文件产出</div>';
+  // #51：收录口径收窄为文档类交付物，空态措辞同步
+  if (!arts.length) return '<div class="todo-empty">当前会话还没有文档产出</div>';
   const byRecency = (a, b) => (b.last_at || b.first_at || 0) - (a.last_at || a.first_at || 0);
   const created = arts.filter((t) => t.op === "create").sort(byRecency);
   const edited = arts.filter((t) => t.op !== "create").sort(byRecency);
@@ -4690,8 +4693,9 @@ function artifactsTabHtml(s) {
     "</div>";
   if (created.length) html += '<div class="af-gt cr">新建 <span>' + created.length + '</span><span class="sub">本会话产出的文件</span></div>' + created.map((t) => artRowHtml(t, s)).join("");
   if (edited.length) html += '<div class="af-gt">修改 <span>' + edited.length + "</span></div>" + edited.map((t) => artRowHtml(t, s)).join("");
-  // #49：底部说明去掉"仅收录 Write/Edit…"工具清单（机制不外露）
-  html += '<div class="af-foot"><span><span class="k">双击</span>本地打开</span><span><span class="k">右键 / ⋯</span>更多操作</span></div>';
+  // #49：底部说明去掉"仅收录 Write/Edit…"工具清单（机制不外露）；
+  // #51：补一句收录口径（文档类交付物），让"代码为何不在列表"有出处
+  html += '<div class="af-foot"><span>仅收录文档、表格等交付物</span><span><span class="k">双击</span>本地打开</span><span><span class="k">右键 / ⋯</span>更多操作</span></div>';
   return html;
 }
 
