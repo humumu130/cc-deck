@@ -1,4 +1,4 @@
-const require = (await import("node:module")).createRequire(import.meta.url);
+const require = (await import(node:module)).createRequire(import.meta.url);
 var __create = Object.create;
 var __defProp = Object.defineProperty;
 var __getOwnPropDesc = Object.getOwnPropertyDescriptor;
