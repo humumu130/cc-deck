@@ -62,6 +62,49 @@ relay 创建会话进程时自动配好环境，两件事：
 
 身份动态可调：验收高峰开发转验收；worker 卡住 leader 收编任务。
 
+### 模型绑定（身份的第四件：成员可异构不同厂商）
+
+"可异构混编"落成机制。核心认知：**厂商 = 端点 + 凭证（env 级），模型 = spawn 参数**——relay 托管会话本就是 CLI + SDK 形态（`query({ options: { model, env } })`），model 与 env 都是现成注入位（本机实证：会话即 glm-5.3 经 SDK 跑通），异构不需要新架构，需要一份登记表和一条纪律。
+
+**Provider 登记表**（`~/.cc-deck/providers.json`，0600；本地信任域——不入 git、永不进 SNAPSHOT/事件流）：
+
+```json
+{
+  "providers": [
+    { "id": "zhipu", "name": "智谱 GLM", "baseUrl": "https://open.bigmodel.cn/api/anthropic",
+      "models": ["glm-5.3", "glm-5.3-air"], "quota": "coding-plan-5h" },
+    { "id": "anthropic", "name": "Anthropic", "baseUrl": "",
+      "models": ["claude-opus-4-5", "claude-sonnet-4-5"] }
+  ]
+}
+```
+
+- `baseUrl` 空 = 官方端点（走 CLI 默认 env）；非空 = 经 env 覆盖路由（`ANTHROPIC_BASE_URL` / `ANTHROPIC_AUTH_TOKEN`）。任何 Anthropic Messages 兼容厂商（GLM / DeepSeek / Kimi / Qwen / OpenRouter / 本地网关）都这么接——M1 边界即此：**成员 runtime 统一是 Claude Code CLI，厂商差异只到 env 层**；非 Messages 兼容厂商（原生 Gemini API 等）需转换网关，M3 再议
+- token 明文存表（M1，与 relay token 同信任域）；M2 加 `"$ENV_VAR"` 引用档
+- 客户端只见**脱敏视图**（id/name/models，无 token）——开团选型的 picker 数据；`COMMAND_MODEL` 运行时切换保留，校验从自由字符串收紧为**登记表白名单**（防端上注入任意模型名/端点）
+
+**成员 spec 加第四件**：`{ prompt 模板, scope/权限, provider, model }`。spawn 时在 `childEnv()` 基础上按 provider 合并 env、model 传参——与 M0 PATH 注入同一挂点（injector.ts），改动收敛。
+
+**角色路由默认表**（身份模板库的一部分，用户可改）：
+
+| 角色 | 默认路由 | 理由 |
+|---|---|---|
+| Leader | 强模型（glm-5.3 旗舰 / claude-opus） | 指挥质量决定全队上限 |
+| 开发 worker | 包月池便宜档（glm-5.3-air） | 搬砖量大成本敏感——"并行从花钱变占容量"的落点 |
+| 验收 | **换厂商**中档（claude-sonnet） | 独立性 2.0：流程独立之外再加认知独立——同厂商模型有同源盲区，会犯一样的错 |
+| 调研（只读） | 最便宜档 | 低风险高量 |
+
+**UI 落点**：编制卡每行带模型 chip（开团时点选更换）；成员名册卡带模型 chip；详情头模型显示为现有能力不动。
+
+**换模型 = 接替机制的红利**：连续性靠板 + git，不靠 transcript——厂商限流、池烧穿、模型升级时，Leader 提议替换 → 用户确认 → 同身份换 provider/model 重 spawn → 读板读卡继续。与"成员死了接替"同一机制，零新代码。**异构不只是省成本，是热更换能力**。
+
+**边界与风险**：
+
+- 厂商纪律差异（对 scope 约束的遵守度）：不靠自觉，merge 时 `git diff --name-only` 机械对照照旧兜底；弱模型成员更依赖机械校验
+- 能力差异（长上下文/工具支持）：`contextLimitOf` 扩为 per-provider 表（glm-5.x→1M 已是先例），水位条按各成员 limit 渲染
+- 厂商侧故障：M1 手动换 provider 重 spawn；M2 心跳连续失败 N 次 → Leader 主动提议换厂商
+- 限额池水位：GLM 5h 池是账号级共享容量，多成员 = N 倍速消耗——开团编制卡显示预计并发占用与池水位（M2，复用 glm-plan-usage 插件的查询口）
+
 ### 手机看板（用户的"只看效果"视野）
 
 呈现形态（v4 定稿竖排、v5 补色语义闭环，2026-09-18/19 与用户对齐）：手机又细又长，看板做**竖向泳道**——状态分组纵向堆叠（组头 = 状态名 + 计数 + 可折叠），**「就绪待装机」组置顶**（用户最关心，组头/卡片/按钮统一琥珀高亮），已完成默认折叠；卡片全宽，可多带一行过程信息（自测进度、活跃新鲜度、停滞告警）。顶部保留**进度总览条**（分段配色与状态语义闭环：灰=待认领 · 绿=进行中（对齐成员三色"绿=干活中"）· 品牌色=待验收 · 琥珀=就绪待装机（与徽标同色）· 深蓝灰=已完成）补状态分布一览；看板 tab 琥珀徽标 = 待装机数量（琥珀 = 需要你行动/注意，与「⚠ 停滞」告警同色族）。曾评估横滑泳道（Trello 式）：适合"搬卡的人"，但手机端用户是指挥/验收者不搬卡，拇指工学与卡片信息密度都输给竖排——弃。成员页每卡：三色状态（绿=干活/黄=滞留/红=失联，watchdog 双信号）+ 上下文水位条 + 心跳新鲜度 + 当前任务/分支；"旁听"（M2+）与"经 Leader 转达"入口。交付物出 test 包后标"就绪待装机"，用户装机看效果、一句话反馈，leader 派修复循环。

@@ -197,6 +197,8 @@
   .ctx i { display: block; height: 100%; border-radius: 3px; background: linear-gradient(90deg, #E8985F, #C96442); }
   .ctxlabel { font-size: 10px; color: var(--dim); flex: 0 0 auto; }
   .mb .br, .pmb .br { white-space: nowrap; } /* 分支名等代码 token 不在内部断行 */
+  .mdl { font-family: var(--mono); font-size: 9.5px; color: var(--dim); background: var(--bg-main); border: 1px solid var(--border); border-radius: 4px; padding: 1px 5px; white-space: nowrap; } /* 成员模型 chip：异构厂商成员的可见标识 */
+  .pstaff .mdl, .pmember .mdl { color: var(--p-dim); background: var(--p-panel2); border-color: var(--p-line); } /* 手机帧的模型 chip 用手机 token */
   .mact { display: flex; gap: 8px; margin-top: 8px; }
   .mact span { flex: 1; text-align: center; font-size: 11px; padding: 5px 0; border-radius: 8px; border: 1px solid var(--border); color: var(--card-sub); }
   .mact span.off { opacity: .4; }
@@ -470,9 +472,9 @@
                   <div class="mwho">👑 Leader</div>
                   <div class="mbub">收到。改动面分析：只碰手机端 updates.ts + 出包脚本，桌面无改动。建议编制——
                     <div class="staffcard">
-                      <div class="m">📱 <b>手机端开发</b> <span class="role">只改 expo-app/**</span></div>
-                      <div class="m">🧪 <b>验收</b> <span class="role">独立出包复核，全局唯一出包口</span></div>
-                      <div class="m">👑 <b>Leader</b> <span class="role">指挥 + 发版（兼）</span></div>
+                      <div class="m">📱 <b>手机端开发</b> <span class="role">只改 expo-app/**</span> <span class="mdl">glm-5.3-air</span></div>
+                      <div class="m">🧪 <b>验收</b> <span class="role">独立出包复核，全局唯一出包口</span> <span class="mdl">claude-sonnet-4-5</span></div>
+                      <div class="m">👑 <b>Leader</b> <span class="role">指挥 + 发版（兼）</span> <span class="mdl">glm-5.3</span></div>
                       <div class="staffbtns"><span class="ok">✓ 确认编制</span><span class="adj">调整</span></div>
                     </div>
                   </div>
@@ -507,24 +509,24 @@
               <div class="crewgrid">
                 <div class="member">
                   <div class="mh"><div class="avatar">👑</div><div><div class="nm">Leader</div><div class="rl">指挥 + 发版（串行出包口）</div></div><span class="pill g">● 工作中</span></div>
-                  <div class="mb">当前：<b>出包 test.17</b> · 分支 <b class="br">dev（主仓）</b></div>
+                  <div class="mb">当前：<b>出包 test.17</b> · 分支 <b class="br">dev（主仓）</b> · <span class="mdl">glm-5.3</span></div>
                   <div class="ctxrow"><div class="ctx"><i style="width:41%"></i></div><span class="ctxlabel">上下文 41% · 刚刚活跃</span></div>
                 </div>
                 <div class="member">
                   <div class="mh"><div class="avatar">📱</div><div><div class="nm">手机端开发</div><div class="rl">只改 expo-app/**</div></div><span class="pill g">● 工作中</span></div>
-                  <div class="mb">当前：<b>通道隔离 checkManifest 分流</b> · 分支 <b class="br">wt/mobile-upd</b></div>
+                  <div class="mb">当前：<b>通道隔离 checkManifest 分流</b> · 分支 <b class="br">wt/mobile-upd</b> · <span class="mdl">glm-5.3-air</span></div>
                   <div class="ctxrow"><div class="ctx"><i style="width:63%"></i></div><span class="ctxlabel">上下文 63% · 刚刚活跃</span></div>
                   <div class="mact"><span class="off">▶ 旁听（M2 开放）</span><span>✉ 转告 Leader</span><span>📂 worktree</span></div>
                 </div>
                 <div class="member">
                   <div class="mh"><div class="avatar">🖥️</div><div><div class="nm">桌面端开发</div><div class="rl">web-console + desktop-tauri</div></div><span class="pill y">⚠ 停了 12 分</span></div>
-                  <div class="mb">当前：<b>双气泡修复</b> · 分支 <b class="br">fix/bubble</b></div>
+                  <div class="mb">当前：<b>双气泡修复</b> · 分支 <b class="br">fix/bubble</b> · <span class="mdl">glm-5.3-air</span></div>
                   <div class="ctxrow"><div class="ctx"><i style="width:78%"></i></div><span class="ctxlabel">上下文 78% · 已提醒 Leader 处置</span></div>
                   <div class="mact"><span class="off">▶ 旁听（M2 开放）</span><span>✉ 转告 Leader</span><span>📂 worktree</span></div>
                 </div>
                 <div class="member">
                   <div class="mh"><div class="avatar">🧪</div><div><div class="nm">验收</div><div class="rl">独立复核 · 全局唯一出包口</div></div><span class="pill b">● 待命中</span></div>
-                  <div class="mb">当前：<b>test.17 装机复核通过，等下一批</b>（无需你操作）</div>
+                  <div class="mb">当前：<b>test.17 装机复核通过，等下一批</b>（无需你操作） · <span class="mdl">claude-sonnet-4-5</span></div>
                   <div class="ctxrow"><div class="ctx"><i style="width:22%"></i></div><span class="ctxlabel">上下文 22% · 待命中</span></div>
                   <div class="mact"><span class="off">▶ 旁听（M2 开放）</span><span>✉ 转告 Leader</span><span>📂 worktree</span></div>
                 </div>
@@ -593,9 +595,9 @@
               <div class="pwho">👑 Leader</div>
               <div class="pbub">收到。改动面分析：只碰手机端 updates.ts + 出包脚本，桌面无改动。建议编制——
                 <div class="pstaff">
-                  <div class="m">📱 <b>手机端开发</b> <span class="role">只改 expo-app/**</span></div>
-                  <div class="m">🧪 <b>验收</b> <span class="role">独立出包复核，全局唯一出包口</span></div>
-                  <div class="m">👑 <b>Leader</b> <span class="role">指挥 + 发版（兼）</span></div>
+                  <div class="m">📱 <b>手机端开发</b> <span class="role">只改 expo-app/**</span> <span class="mdl">glm-5.3-air</span></div>
+                  <div class="m">🧪 <b>验收</b> <span class="role">独立出包复核，全局唯一出包口</span> <span class="mdl">claude-sonnet-4-5</span></div>
+                  <div class="m">👑 <b>Leader</b> <span class="role">指挥 + 发版（兼）</span> <span class="mdl">glm-5.3</span></div>
                   <div class="pstaffbtns"><span class="pok">✓ 确认编制</span><span class="padj">调整</span></div>
                 </div>
               </div>
@@ -690,24 +692,24 @@
           <div class="pcrew">
             <div class="pmember">
               <div class="pmh"><div class="pavatar">👑</div><div><div class="nm">Leader</div><div class="rl">指挥 + 发版（串行出包口）</div></div><span class="ppill g">● 工作中</span></div>
-              <div class="pmb">当前：<b>出包 test.17</b> · 分支 <b class="br">dev（主仓）</b></div>
+              <div class="pmb">当前：<b>出包 test.17</b> · 分支 <b class="br">dev（主仓）</b> · <span class="mdl">glm-5.3</span></div>
               <div class="pctxrow"><div class="pctx"><i style="width:41%"></i></div><span class="pctxlabel">上下文 41% · 刚刚活跃</span></div>
             </div>
             <div class="pmember">
               <div class="pmh"><div class="pavatar">📱</div><div><div class="nm">手机端开发</div><div class="rl">只改 expo-app/**</div></div><span class="ppill g">● 工作中</span></div>
-              <div class="pmb">当前：<b>通道隔离 checkManifest 分流</b> · 分支 <b class="br">wt/mobile-upd</b></div>
+              <div class="pmb">当前：<b>通道隔离 checkManifest 分流</b> · 分支 <b class="br">wt/mobile-upd</b> · <span class="mdl">glm-5.3-air</span></div>
               <div class="pctxrow"><div class="pctx"><i style="width:63%"></i></div><span class="pctxlabel">上下文 63% · 刚刚活跃</span></div>
               <div class="pmact"><span class="off">▶ 旁听（M2 开放）</span><span>✉ 转告 Leader</span></div>
             </div>
             <div class="pmember">
               <div class="pmh"><div class="pavatar">🖥️</div><div><div class="nm">桌面端开发</div><div class="rl">web-console + desktop-tauri</div></div><span class="ppill y">⚠ 停了 12 分</span></div>
-              <div class="pmb">当前：<b>双气泡修复</b> · 分支 <b class="br">fix/bubble</b></div>
+              <div class="pmb">当前：<b>双气泡修复</b> · 分支 <b class="br">fix/bubble</b> · <span class="mdl">glm-5.3-air</span></div>
               <div class="pctxrow"><div class="pctx"><i style="width:78%"></i></div><span class="pctxlabel">上下文 78% · 已提醒 Leader 处置</span></div>
               <div class="pmact"><span class="off">▶ 旁听（M2 开放）</span><span>✉ 转告 Leader</span></div>
             </div>
             <div class="pmember">
               <div class="pmh"><div class="pavatar">🧪</div><div><div class="nm">验收</div><div class="rl">独立复核 · 全局唯一出包口</div></div><span class="ppill b">● 待命中</span></div>
-              <div class="pmb">当前：<b>test.17 装机复核通过，等下一批</b>（无需你操作）</div>
+              <div class="pmb">当前：<b>test.17 装机复核通过，等下一批</b>（无需你操作） · <span class="mdl">claude-sonnet-4-5</span></div>
               <div class="pctxrow"><div class="pctx"><i style="width:22%"></i></div><span class="pctxlabel">上下文 22% · 待命中</span></div>
             </div>
             <div class="pcrewfoot">状态三色：<span style="color:var(--done)">绿=干活中</span> · <span style="color:var(--working)">黄=停了</span>（心跳在但无进展，可点状态标处置） · <span style="color:var(--waiting)">红=失联</span><br>成员收纳在团队工作区内，不占普通会话列表</div>
@@ -735,6 +737,7 @@
 
   <div class="tip">💡 与 Claude Code 内置子 Agent / teams 的区别一句话：内置是<b>「一个会话进程内的并行」</b>（父会话死则全死、只在终端里、同模型）；团队模式是<b>「总线上的对等成员」</b>（每个成员是 relay 上独立会话、互不连坐、手机指挥、状态持久化在 relay、可异构模型混编）。详见 docs/team-mode-design.md。</div>
   <div class="tip" style="margin-top:10px">🔗 三端同源：手机、桌面、网页看到的板，全部由 <b>relay 同一事件流</b>渲染（BOARD_* 事件 + 既有 last_seq 断线补发）——桌面/网页本就是同一份 web-console 代码（EXE/Mac 是壳），团队视图也只做一份；手机端是独立 App，渲染竖排形态。</div>
+  <div class="tip" style="margin-top:10px">🔌 <b>异构模型</b>：每个成员可绑<b>不同厂商</b>的模型（编制卡上选型，凭证只存 relay 本地、永不下发端上）。默认路由：Leader 强模型 · worker 走包月便宜档 · <b>验收换厂商</b>——流程独立之外再加认知独立（同厂商模型会犯一样的错）。换模型 = 同一套接替机制（板 + git 是记忆，transcript 是消耗品）：池烧穿或限流时，同身份换个模型重 spawn 即继续。</div>
 </div>
 
 <script>
