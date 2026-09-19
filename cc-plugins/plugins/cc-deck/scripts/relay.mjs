@@ -44109,6 +44109,7 @@ var Bridge = class _Bridge {
           const cwd = this.readCwdFromTail(p);
           if (!cwd) continue;
           if (this.isTitleGenTranscript(p)) continue;
+          if (this.isTestProbeTranscript(p)) continue;
           if (cwd.split(/[\\/]+/).some((seg) => seg.toLowerCase().startsWith(".tmp-"))) continue;
           const act = this.scanOrphanActivity(p);
           if (!act.adopt) {
@@ -44167,18 +44168,35 @@ var Bridge = class _Bridge {
   }
   // 起标题子会话转录识别：只读文件头 4KB 找命名指令指纹（latin1 子串匹配，中文
   // prompt 经 JSON 转义后 UTF-8 字节序列不变，latin1 视图下按字节序列命中）
-  isTitleGenTranscript(p) {
+  // transcript 头 4KB 含指定串：探针/指纹类护栏共用（首条 user prompt 必在头部，
+  // 只读头不全量 IO，与 readCwdFromTail 同开销量级）
+  transcriptHeadHas(p, needle) {
     let fd2;
     try {
       fd2 = openSync2(p, "r");
       const buf = Buffer.alloc(4096);
       const n = readSync2(fd2, buf, 0, 4096, 0);
-      return buf.subarray(0, n).includes("\u8D77\u4E00\u4E2A\u7B80\u77ED\u7684\u4E2D\u6587\u6807\u9898");
+      return buf.subarray(0, n).includes(needle);
     } catch {
       return false;
     } finally {
       if (fd2 !== void 0) closeSync2(fd2);
     }
+  }
+  isTitleGenTranscript(p) {
+    return this.transcriptHeadHas(p, "\u8D77\u4E00\u4E2A\u7B80\u77ED\u7684\u4E2D\u6587\u6807\u9898");
+  }
+  // #67 relay 自测探针指纹：.tmp- cwd 护栏之外形态无关的兜底——探针会话无论在
+  // 哪个 cwd 起（历史事故：test-ws 用仓库根目录），只要首条 prompt 命中指纹就不
+  // 收养。改测试探针文案务必同步这里，两处是约定联动
+  static TEST_PROBE_MARKS = [
+    "\u8BF7\u76F4\u63A5\u56DE\u590D\u4E24\u4E2A\u5B57\uFF1A\u6536\u5230",
+    // test-ws COMMAND_CREATE 探针（真实 CLI 落 transcript）
+    "\u8BF7\u76F4\u63A5\u56DE\u590D\u56DB\u4E2A\u5B57\uFF1A\u597D\u7684\u6536\u5230"
+    // test-sessions 探针（.tmp- 沙箱内，双保险）
+  ];
+  isTestProbeTranscript(p) {
+    return _Bridge.TEST_PROBE_MARKS.some((m) => this.transcriptHeadHas(p, m));
   }
   // 孤儿候选交互性判定 + 文件大小（供"增长观察"用）。流式分块扫全文件，64KB 块 +
   // 1KB carry 防跨界漏匹配；非末块的末 1KB 区域命中留给下一块计（避免重复计数），
