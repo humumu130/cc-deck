@@ -35,9 +35,9 @@ var __toESM = (mod, isNodeMode, target) => (target = mod != null ? __create(__ge
   mod
 ));
 
-// node_modules/tweetnacl/nacl-fast.js
+// relay/node_modules/tweetnacl/nacl-fast.js
 var require_nacl_fast = __commonJS({
-  "node_modules/tweetnacl/nacl-fast.js"(exports, module) {
+  "relay/node_modules/tweetnacl/nacl-fast.js"(exports, module) {
     (function(nacl2) {
       "use strict";
       var gf2 = function(init) {
@@ -2259,9 +2259,9 @@ var require_nacl_fast = __commonJS({
   }
 });
 
-// node_modules/ws/lib/constants.js
+// relay/node_modules/ws/lib/constants.js
 var require_constants = __commonJS({
-  "node_modules/ws/lib/constants.js"(exports, module) {
+  "relay/node_modules/ws/lib/constants.js"(exports, module) {
     "use strict";
     var BINARY_TYPES = ["nodebuffer", "arraybuffer", "fragments"];
     var hasBlob = typeof Blob !== "undefined";
@@ -2282,9 +2282,9 @@ var require_constants = __commonJS({
   }
 });
 
-// node_modules/ws/lib/buffer-util.js
+// relay/node_modules/ws/lib/buffer-util.js
 var require_buffer_util = __commonJS({
-  "node_modules/ws/lib/buffer-util.js"(exports, module) {
+  "relay/node_modules/ws/lib/buffer-util.js"(exports, module) {
     "use strict";
     var { EMPTY_BUFFER } = require_constants();
     var FastBuffer = Buffer[Symbol.species];
@@ -2357,9 +2357,9 @@ var require_buffer_util = __commonJS({
   }
 });
 
-// node_modules/ws/lib/limiter.js
+// relay/node_modules/ws/lib/limiter.js
 var require_limiter = __commonJS({
-  "node_modules/ws/lib/limiter.js"(exports, module) {
+  "relay/node_modules/ws/lib/limiter.js"(exports, module) {
     "use strict";
     var kDone = /* @__PURE__ */ Symbol("kDone");
     var kRun = /* @__PURE__ */ Symbol("kRun");
@@ -2407,9 +2407,9 @@ var require_limiter = __commonJS({
   }
 });
 
-// node_modules/ws/lib/permessage-deflate.js
+// relay/node_modules/ws/lib/permessage-deflate.js
 var require_permessage_deflate = __commonJS({
-  "node_modules/ws/lib/permessage-deflate.js"(exports, module) {
+  "relay/node_modules/ws/lib/permessage-deflate.js"(exports, module) {
     "use strict";
     var zlib = __require("zlib");
     var bufferUtil = require_buffer_util();
@@ -2790,9 +2790,9 @@ var require_permessage_deflate = __commonJS({
   }
 });
 
-// node_modules/ws/lib/validation.js
+// relay/node_modules/ws/lib/validation.js
 var require_validation = __commonJS({
-  "node_modules/ws/lib/validation.js"(exports, module) {
+  "relay/node_modules/ws/lib/validation.js"(exports, module) {
     "use strict";
     var { isUtf8 } = __require("buffer");
     var { hasBlob } = require_constants();
@@ -2991,9 +2991,9 @@ var require_validation = __commonJS({
   }
 });
 
-// node_modules/ws/lib/receiver.js
+// relay/node_modules/ws/lib/receiver.js
 var require_receiver = __commonJS({
-  "node_modules/ws/lib/receiver.js"(exports, module) {
+  "relay/node_modules/ws/lib/receiver.js"(exports, module) {
     "use strict";
     var { Writable } = __require("stream");
     var PerMessageDeflate2 = require_permessage_deflate();
@@ -3614,9 +3614,9 @@ var require_receiver = __commonJS({
   }
 });
 
-// node_modules/ws/lib/sender.js
+// relay/node_modules/ws/lib/sender.js
 var require_sender = __commonJS({
-  "node_modules/ws/lib/sender.js"(exports, module) {
+  "relay/node_modules/ws/lib/sender.js"(exports, module) {
     "use strict";
     var { Duplex } = __require("stream");
     var { randomFillSync } = __require("crypto");
@@ -4107,9 +4107,9 @@ var require_sender = __commonJS({
   }
 });
 
-// node_modules/ws/lib/event-target.js
+// relay/node_modules/ws/lib/event-target.js
 var require_event_target = __commonJS({
-  "node_modules/ws/lib/event-target.js"(exports, module) {
+  "relay/node_modules/ws/lib/event-target.js"(exports, module) {
     "use strict";
     var { kForOnEventAttribute, kListener } = require_constants();
     var kCode = /* @__PURE__ */ Symbol("kCode");
@@ -4336,9 +4336,9 @@ var require_event_target = __commonJS({
   }
 });
 
-// node_modules/ws/lib/extension.js
+// relay/node_modules/ws/lib/extension.js
 var require_extension = __commonJS({
-  "node_modules/ws/lib/extension.js"(exports, module) {
+  "relay/node_modules/ws/lib/extension.js"(exports, module) {
     "use strict";
     var { tokenChars } = require_validation();
     function push(dest, name, elem) {
@@ -4489,9 +4489,9 @@ var require_extension = __commonJS({
   }
 });
 
-// node_modules/ws/lib/websocket.js
+// relay/node_modules/ws/lib/websocket.js
 var require_websocket = __commonJS({
-  "node_modules/ws/lib/websocket.js"(exports, module) {
+  "relay/node_modules/ws/lib/websocket.js"(exports, module) {
     "use strict";
     var EventEmitter = __require("events");
     var https = __require("https");
@@ -5385,9 +5385,9 @@ var require_websocket = __commonJS({
   }
 });
 
-// node_modules/ws/lib/stream.js
+// relay/node_modules/ws/lib/stream.js
 var require_stream = __commonJS({
-  "node_modules/ws/lib/stream.js"(exports, module) {
+  "relay/node_modules/ws/lib/stream.js"(exports, module) {
     "use strict";
     var WebSocket3 = require_websocket();
     var { Duplex } = __require("stream");
@@ -5483,9 +5483,9 @@ var require_stream = __commonJS({
   }
 });
 
-// node_modules/ws/lib/subprotocol.js
+// relay/node_modules/ws/lib/subprotocol.js
 var require_subprotocol = __commonJS({
-  "node_modules/ws/lib/subprotocol.js"(exports, module) {
+  "relay/node_modules/ws/lib/subprotocol.js"(exports, module) {
     "use strict";
     var { tokenChars } = require_validation();
     function parse3(header) {
@@ -5528,9 +5528,9 @@ var require_subprotocol = __commonJS({
   }
 });
 
-// node_modules/ws/lib/websocket-server.js
+// relay/node_modules/ws/lib/websocket-server.js
 var require_websocket_server = __commonJS({
-  "node_modules/ws/lib/websocket-server.js"(exports, module) {
+  "relay/node_modules/ws/lib/websocket-server.js"(exports, module) {
     "use strict";
     var EventEmitter = __require("events");
     var http = __require("http");
@@ -5929,9 +5929,9 @@ var require_websocket_server = __commonJS({
   }
 });
 
-// node_modules/qrcode-terminal/vendor/QRCode/QRMode.js
+// relay/node_modules/qrcode-terminal/vendor/QRCode/QRMode.js
 var require_QRMode = __commonJS({
-  "node_modules/qrcode-terminal/vendor/QRCode/QRMode.js"(exports, module) {
+  "relay/node_modules/qrcode-terminal/vendor/QRCode/QRMode.js"(exports, module) {
     module.exports = {
       MODE_NUMBER: 1 << 0,
       MODE_ALPHA_NUM: 1 << 1,
@@ -5941,9 +5941,9 @@ var require_QRMode = __commonJS({
   }
 });
 
-// node_modules/qrcode-terminal/vendor/QRCode/QR8bitByte.js
+// relay/node_modules/qrcode-terminal/vendor/QRCode/QR8bitByte.js
 var require_QR8bitByte = __commonJS({
-  "node_modules/qrcode-terminal/vendor/QRCode/QR8bitByte.js"(exports, module) {
+  "relay/node_modules/qrcode-terminal/vendor/QRCode/QR8bitByte.js"(exports, module) {
     var QRMode = require_QRMode();
     function QR8bitByte(data) {
       this.mode = QRMode.MODE_8BIT_BYTE;
@@ -5963,9 +5963,9 @@ var require_QR8bitByte = __commonJS({
   }
 });
 
-// node_modules/qrcode-terminal/vendor/QRCode/QRMath.js
+// relay/node_modules/qrcode-terminal/vendor/QRCode/QRMath.js
 var require_QRMath = __commonJS({
-  "node_modules/qrcode-terminal/vendor/QRCode/QRMath.js"(exports, module) {
+  "relay/node_modules/qrcode-terminal/vendor/QRCode/QRMath.js"(exports, module) {
     var QRMath = {
       glog: function(n) {
         if (n < 1) {
@@ -6001,9 +6001,9 @@ var require_QRMath = __commonJS({
   }
 });
 
-// node_modules/qrcode-terminal/vendor/QRCode/QRPolynomial.js
+// relay/node_modules/qrcode-terminal/vendor/QRCode/QRPolynomial.js
 var require_QRPolynomial = __commonJS({
-  "node_modules/qrcode-terminal/vendor/QRCode/QRPolynomial.js"(exports, module) {
+  "relay/node_modules/qrcode-terminal/vendor/QRCode/QRPolynomial.js"(exports, module) {
     var QRMath = require_QRMath();
     function QRPolynomial(num, shift) {
       if (num.length === void 0) {
@@ -6053,9 +6053,9 @@ var require_QRPolynomial = __commonJS({
   }
 });
 
-// node_modules/qrcode-terminal/vendor/QRCode/QRMaskPattern.js
+// relay/node_modules/qrcode-terminal/vendor/QRCode/QRMaskPattern.js
 var require_QRMaskPattern = __commonJS({
-  "node_modules/qrcode-terminal/vendor/QRCode/QRMaskPattern.js"(exports, module) {
+  "relay/node_modules/qrcode-terminal/vendor/QRCode/QRMaskPattern.js"(exports, module) {
     module.exports = {
       PATTERN000: 0,
       PATTERN001: 1,
@@ -6069,9 +6069,9 @@ var require_QRMaskPattern = __commonJS({
   }
 });
 
-// node_modules/qrcode-terminal/vendor/QRCode/QRUtil.js
+// relay/node_modules/qrcode-terminal/vendor/QRCode/QRUtil.js
 var require_QRUtil = __commonJS({
-  "node_modules/qrcode-terminal/vendor/QRCode/QRUtil.js"(exports, module) {
+  "relay/node_modules/qrcode-terminal/vendor/QRCode/QRUtil.js"(exports, module) {
     var QRMode = require_QRMode();
     var QRPolynomial = require_QRPolynomial();
     var QRMath = require_QRMath();
@@ -6293,9 +6293,9 @@ var require_QRUtil = __commonJS({
   }
 });
 
-// node_modules/qrcode-terminal/vendor/QRCode/QRErrorCorrectLevel.js
+// relay/node_modules/qrcode-terminal/vendor/QRCode/QRErrorCorrectLevel.js
 var require_QRErrorCorrectLevel = __commonJS({
-  "node_modules/qrcode-terminal/vendor/QRCode/QRErrorCorrectLevel.js"(exports, module) {
+  "relay/node_modules/qrcode-terminal/vendor/QRCode/QRErrorCorrectLevel.js"(exports, module) {
     module.exports = {
       L: 1,
       M: 0,
@@ -6305,9 +6305,9 @@ var require_QRErrorCorrectLevel = __commonJS({
   }
 });
 
-// node_modules/qrcode-terminal/vendor/QRCode/QRRSBlock.js
+// relay/node_modules/qrcode-terminal/vendor/QRCode/QRRSBlock.js
 var require_QRRSBlock = __commonJS({
-  "node_modules/qrcode-terminal/vendor/QRCode/QRRSBlock.js"(exports, module) {
+  "relay/node_modules/qrcode-terminal/vendor/QRCode/QRRSBlock.js"(exports, module) {
     var QRErrorCorrectLevel = require_QRErrorCorrectLevel();
     function QRRSBlock(totalCount, dataCount) {
       this.totalCount = totalCount;
@@ -6554,9 +6554,9 @@ var require_QRRSBlock = __commonJS({
   }
 });
 
-// node_modules/qrcode-terminal/vendor/QRCode/QRBitBuffer.js
+// relay/node_modules/qrcode-terminal/vendor/QRCode/QRBitBuffer.js
 var require_QRBitBuffer = __commonJS({
-  "node_modules/qrcode-terminal/vendor/QRCode/QRBitBuffer.js"(exports, module) {
+  "relay/node_modules/qrcode-terminal/vendor/QRCode/QRBitBuffer.js"(exports, module) {
     function QRBitBuffer() {
       this.buffer = [];
       this.length = 0;
@@ -6589,9 +6589,9 @@ var require_QRBitBuffer = __commonJS({
   }
 });
 
-// node_modules/qrcode-terminal/vendor/QRCode/index.js
+// relay/node_modules/qrcode-terminal/vendor/QRCode/index.js
 var require_QRCode = __commonJS({
-  "node_modules/qrcode-terminal/vendor/QRCode/index.js"(exports, module) {
+  "relay/node_modules/qrcode-terminal/vendor/QRCode/index.js"(exports, module) {
     var QR8bitByte = require_QR8bitByte();
     var QRUtil = require_QRUtil();
     var QRPolynomial = require_QRPolynomial();
@@ -6909,9 +6909,9 @@ var require_QRCode = __commonJS({
   }
 });
 
-// node_modules/qrcode-terminal/lib/main.js
+// relay/node_modules/qrcode-terminal/lib/main.js
 var require_main = __commonJS({
-  "node_modules/qrcode-terminal/lib/main.js"(exports, module) {
+  "relay/node_modules/qrcode-terminal/lib/main.js"(exports, module) {
     var QRCode = require_QRCode();
     var QRErrorCorrectLevel = require_QRErrorCorrectLevel();
     var black = "\x1B[40m  \x1B[0m";
@@ -6999,9 +6999,9 @@ var require_main = __commonJS({
   }
 });
 
-// node_modules/bonjour-service/dist/lib/utils/dns-equal.js
+// relay/node_modules/bonjour-service/dist/lib/utils/dns-equal.js
 var require_dns_equal = __commonJS({
-  "node_modules/bonjour-service/dist/lib/utils/dns-equal.js"(exports) {
+  "relay/node_modules/bonjour-service/dist/lib/utils/dns-equal.js"(exports) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     exports.default = dnsEqual;
@@ -7017,9 +7017,9 @@ var require_dns_equal = __commonJS({
   }
 });
 
-// node_modules/bonjour-service/dist/lib/dns-txt.js
+// relay/node_modules/bonjour-service/dist/lib/dns-txt.js
 var require_dns_txt = __commonJS({
-  "node_modules/bonjour-service/dist/lib/dns-txt.js"(exports) {
+  "relay/node_modules/bonjour-service/dist/lib/dns-txt.js"(exports) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     exports.DnsTxt = void 0;
@@ -7060,9 +7060,9 @@ var require_dns_txt = __commonJS({
   }
 });
 
-// node_modules/bonjour-service/dist/lib/service-types.js
+// relay/node_modules/bonjour-service/dist/lib/service-types.js
 var require_service_types = __commonJS({
-  "node_modules/bonjour-service/dist/lib/service-types.js"(exports) {
+  "relay/node_modules/bonjour-service/dist/lib/service-types.js"(exports) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     exports.toType = exports.toString = void 0;
@@ -7115,9 +7115,9 @@ var require_service_types = __commonJS({
   }
 });
 
-// node_modules/bonjour-service/dist/lib/service.js
+// relay/node_modules/bonjour-service/dist/lib/service.js
 var require_service = __commonJS({
-  "node_modules/bonjour-service/dist/lib/service.js"(exports) {
+  "relay/node_modules/bonjour-service/dist/lib/service.js"(exports) {
     "use strict";
     var __importDefault = exports && exports.__importDefault || function(mod) {
       return mod && mod.__esModule ? mod : { "default": mod };
@@ -7250,9 +7250,9 @@ var require_service = __commonJS({
   }
 });
 
-// node_modules/bonjour-service/dist/lib/registry.js
+// relay/node_modules/bonjour-service/dist/lib/registry.js
 var require_registry = __commonJS({
-  "node_modules/bonjour-service/dist/lib/registry.js"(exports) {
+  "relay/node_modules/bonjour-service/dist/lib/registry.js"(exports) {
     "use strict";
     var __importDefault = exports && exports.__importDefault || function(mod) {
       return mod && mod.__esModule ? mod : { "default": mod };
@@ -7397,9 +7397,9 @@ var require_registry = __commonJS({
   }
 });
 
-// node_modules/dns-packet/types.js
+// relay/node_modules/dns-packet/types.js
 var require_types = __commonJS({
-  "node_modules/dns-packet/types.js"(exports) {
+  "relay/node_modules/dns-packet/types.js"(exports) {
     "use strict";
     exports.toString = function(type) {
       switch (type) {
@@ -7593,9 +7593,9 @@ var require_types = __commonJS({
   }
 });
 
-// node_modules/dns-packet/rcodes.js
+// relay/node_modules/dns-packet/rcodes.js
 var require_rcodes = __commonJS({
-  "node_modules/dns-packet/rcodes.js"(exports) {
+  "relay/node_modules/dns-packet/rcodes.js"(exports) {
     "use strict";
     exports.toString = function(rcode) {
       switch (rcode) {
@@ -7674,9 +7674,9 @@ var require_rcodes = __commonJS({
   }
 });
 
-// node_modules/dns-packet/opcodes.js
+// relay/node_modules/dns-packet/opcodes.js
 var require_opcodes = __commonJS({
-  "node_modules/dns-packet/opcodes.js"(exports) {
+  "relay/node_modules/dns-packet/opcodes.js"(exports) {
     "use strict";
     exports.toString = function(opcode) {
       switch (opcode) {
@@ -7755,9 +7755,9 @@ var require_opcodes = __commonJS({
   }
 });
 
-// node_modules/dns-packet/classes.js
+// relay/node_modules/dns-packet/classes.js
 var require_classes = __commonJS({
-  "node_modules/dns-packet/classes.js"(exports) {
+  "relay/node_modules/dns-packet/classes.js"(exports) {
     "use strict";
     exports.toString = function(klass) {
       switch (klass) {
@@ -7792,9 +7792,9 @@ var require_classes = __commonJS({
   }
 });
 
-// node_modules/dns-packet/optioncodes.js
+// relay/node_modules/dns-packet/optioncodes.js
 var require_optioncodes = __commonJS({
-  "node_modules/dns-packet/optioncodes.js"(exports) {
+  "relay/node_modules/dns-packet/optioncodes.js"(exports) {
     "use strict";
     exports.toString = function(type) {
       switch (type) {
@@ -7886,9 +7886,9 @@ var require_optioncodes = __commonJS({
   }
 });
 
-// node_modules/@leichtgewicht/ip-codec/index.cjs
+// relay/node_modules/@leichtgewicht/ip-codec/index.cjs
 var require_ip_codec = __commonJS({
-  "node_modules/@leichtgewicht/ip-codec/index.cjs"(exports, module) {
+  "relay/node_modules/@leichtgewicht/ip-codec/index.cjs"(exports, module) {
     var ipCodec = (function(exports2) {
       "use strict";
       Object.defineProperty(exports2, "__esModule", {
@@ -8079,9 +8079,9 @@ var require_ip_codec = __commonJS({
   }
 });
 
-// node_modules/dns-packet/index.js
+// relay/node_modules/dns-packet/index.js
 var require_dns_packet = __commonJS({
-  "node_modules/dns-packet/index.js"(exports) {
+  "relay/node_modules/dns-packet/index.js"(exports) {
     "use strict";
     var Buffer2 = __require("buffer").Buffer;
     var types = require_types();
@@ -9507,9 +9507,9 @@ var require_dns_packet = __commonJS({
   }
 });
 
-// node_modules/thunky/index.js
+// relay/node_modules/thunky/index.js
 var require_thunky = __commonJS({
-  "node_modules/thunky/index.js"(exports, module) {
+  "relay/node_modules/thunky/index.js"(exports, module) {
     "use strict";
     var nextTick = nextTickArgs;
     process.nextTick(upgrade, 42);
@@ -9556,9 +9556,9 @@ var require_thunky = __commonJS({
   }
 });
 
-// node_modules/multicast-dns/index.js
+// relay/node_modules/multicast-dns/index.js
 var require_multicast_dns = __commonJS({
-  "node_modules/multicast-dns/index.js"(exports, module) {
+  "relay/node_modules/multicast-dns/index.js"(exports, module) {
     var packet = require_dns_packet();
     var dgram = __require("dgram");
     var thunky = require_thunky();
@@ -9729,9 +9729,9 @@ var require_multicast_dns = __commonJS({
   }
 });
 
-// node_modules/fast-deep-equal/es6/index.js
+// relay/node_modules/fast-deep-equal/es6/index.js
 var require_es6 = __commonJS({
-  "node_modules/fast-deep-equal/es6/index.js"(exports, module) {
+  "relay/node_modules/fast-deep-equal/es6/index.js"(exports, module) {
     "use strict";
     module.exports = function equal(a, b) {
       if (a === b) return true;
@@ -9785,9 +9785,9 @@ var require_es6 = __commonJS({
   }
 });
 
-// node_modules/bonjour-service/dist/lib/mdns-server.js
+// relay/node_modules/bonjour-service/dist/lib/mdns-server.js
 var require_mdns_server = __commonJS({
-  "node_modules/bonjour-service/dist/lib/mdns-server.js"(exports) {
+  "relay/node_modules/bonjour-service/dist/lib/mdns-server.js"(exports) {
     "use strict";
     var __importDefault = exports && exports.__importDefault || function(mod) {
       return mod && mod.__esModule ? mod : { "default": mod };
@@ -9896,9 +9896,9 @@ var require_mdns_server = __commonJS({
   }
 });
 
-// node_modules/bonjour-service/dist/lib/utils/filter-service.js
+// relay/node_modules/bonjour-service/dist/lib/utils/filter-service.js
 var require_filter_service = __commonJS({
-  "node_modules/bonjour-service/dist/lib/utils/filter-service.js"(exports) {
+  "relay/node_modules/bonjour-service/dist/lib/utils/filter-service.js"(exports) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     exports.default = (service, txtQuery) => {
@@ -9922,9 +9922,9 @@ var require_filter_service = __commonJS({
   }
 });
 
-// node_modules/bonjour-service/dist/lib/utils/filter-txt.js
+// relay/node_modules/bonjour-service/dist/lib/utils/filter-txt.js
 var require_filter_txt = __commonJS({
-  "node_modules/bonjour-service/dist/lib/utils/filter-txt.js"(exports) {
+  "relay/node_modules/bonjour-service/dist/lib/utils/filter-txt.js"(exports) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     exports.default = (data) => Object.keys(data).filter((key) => !key.includes("binary")).reduce((cur, key) => {
@@ -9933,9 +9933,9 @@ var require_filter_txt = __commonJS({
   }
 });
 
-// node_modules/bonjour-service/dist/lib/utils/equal-txt.js
+// relay/node_modules/bonjour-service/dist/lib/utils/equal-txt.js
 var require_equal_txt = __commonJS({
-  "node_modules/bonjour-service/dist/lib/utils/equal-txt.js"(exports) {
+  "relay/node_modules/bonjour-service/dist/lib/utils/equal-txt.js"(exports) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     exports.default = equalTxt;
@@ -9955,9 +9955,9 @@ var require_equal_txt = __commonJS({
   }
 });
 
-// node_modules/bonjour-service/dist/lib/browser.js
+// relay/node_modules/bonjour-service/dist/lib/browser.js
 var require_browser = __commonJS({
-  "node_modules/bonjour-service/dist/lib/browser.js"(exports) {
+  "relay/node_modules/bonjour-service/dist/lib/browser.js"(exports) {
     "use strict";
     var __importDefault = exports && exports.__importDefault || function(mod) {
       return mod && mod.__esModule ? mod : { "default": mod };
@@ -10154,9 +10154,9 @@ var require_browser = __commonJS({
   }
 });
 
-// node_modules/bonjour-service/dist/lib/bonjour.js
+// relay/node_modules/bonjour-service/dist/lib/bonjour.js
 var require_bonjour = __commonJS({
-  "node_modules/bonjour-service/dist/lib/bonjour.js"(exports) {
+  "relay/node_modules/bonjour-service/dist/lib/bonjour.js"(exports) {
     "use strict";
     var __importDefault = exports && exports.__importDefault || function(mod) {
       return mod && mod.__esModule ? mod : { "default": mod };
@@ -10209,9 +10209,9 @@ var require_bonjour = __commonJS({
   }
 });
 
-// node_modules/bonjour-service/dist/index.js
+// relay/node_modules/bonjour-service/dist/index.js
 var require_dist = __commonJS({
-  "node_modules/bonjour-service/dist/index.js"(exports, module) {
+  "relay/node_modules/bonjour-service/dist/index.js"(exports, module) {
     "use strict";
     var __createBinding = exports && exports.__createBinding || (Object.create ? (function(o, m, k3, k22) {
       if (k22 === void 0) k22 = k3;
@@ -10275,10 +10275,10 @@ var require_dist = __commonJS({
   }
 });
 
-// src/index.ts
+// relay/src/index.ts
 import { randomBytes as randomBytes2 } from "node:crypto";
 
-// src/e2e.ts
+// relay/src/e2e.ts
 var import_tweetnacl = __toESM(require_nacl_fast(), 1);
 var B64 = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
 function toB64(b) {
@@ -10336,14 +10336,14 @@ function unseal(box, theirPublicKeyB64, mySecretKeyB64) {
   return JSON.parse(new TextDecoder().decode(opened));
 }
 
-// src/index.ts
+// relay/src/index.ts
 import { networkInterfaces as networkInterfaces3, homedir as homedir12, hostname } from "node:os";
 import { join as join16 } from "node:path";
 import { writeFileSync as writeFileSync11, openSync as openSync3, readFileSync as readFileSync15, rmSync as rmSync3, existsSync as existsSync11, readdirSync as readdirSync6, statSync as statSync6 } from "node:fs";
 import { spawn as spawn4, execFileSync as execFileSync2 } from "node:child_process";
 import { fileURLToPath as fileURLToPath4 } from "node:url";
 
-// src/config.ts
+// relay/src/config.ts
 import { randomUUID } from "node:crypto";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
@@ -10400,7 +10400,7 @@ function loadConfig() {
   };
 }
 
-// src/lan-ip.ts
+// relay/src/lan-ip.ts
 import * as os from "node:os";
 var VIRTUAL_NIC_RE = /vmware|virtual|vethernet|wsl|loopback|tap|bluetooth|hyper-v|docker|tailscale|zerotier|wireguard|wintun|openvpn|vpn/i;
 var PRIV_RE = /^(192\.168|10|172\.(1[6-9]|2\d|3[01]))\./;
@@ -10428,9 +10428,18 @@ function detectLanIp(interfaces = os.networkInterfaces()) {
   return "";
 }
 
-// src/history.ts
+// relay/src/history.ts
 import { readFileSync as readFileSync2, writeFileSync as writeFileSync2, existsSync as existsSync2, mkdirSync as mkdirSync2 } from "node:fs";
 import { dirname } from "node:path";
+
+// relay/src/context-limit.ts
+var CONTEXT_LIMIT_TOKENS = 2e5;
+function contextLimitOf(_model) {
+  return CONTEXT_LIMIT_TOKENS;
+}
+var REPLAY_CONTEXT_MAX = 3e5;
+
+// relay/src/history.ts
 var MAX_SESSIONS_KEPT = 30;
 var MAX_LOGS_PER_SESSION = 300;
 var MAX_STATE_EVENTS_PER_SESSION = 50;
@@ -10541,6 +10550,11 @@ function reduceHistory(events) {
         if (p.title_locked) s.title_locked = true;
         if (p.turn_started_at) s.turn_started_at = p.turn_started_at;
         if (p.usage) s.usage = p.usage;
+        const cu = p.context_usage;
+        if (typeof cu === "number" && cu > 0 && cu <= REPLAY_CONTEXT_MAX) {
+          s.context_usage = cu;
+          s.context_limit = contextLimitOf(s.model);
+        }
         if (p.todos) s.todos = p.todos;
         if (p.subagents) s.subagents = p.subagents;
         if (p.relay_session_id) s.relay_session_id = p.relay_session_id;
@@ -10576,7 +10590,7 @@ function reduceHistory(events) {
       }
       case "SESSION_LOG": {
         const p = e.payload;
-        rs2.logs.push({
+        const entry = {
           ts: e.ts,
           kind: p.kind,
           text: p.text,
@@ -10585,7 +10599,10 @@ function reduceHistory(events) {
           id: p.id,
           detail: p.detail,
           diff: p.diff
-        });
+        };
+        const li = p.id ? rs2.logs.findIndex((x) => x.id === p.id) : -1;
+        if (li >= 0) rs2.logs[li] = entry;
+        else rs2.logs.push(entry);
         if (rs2.logs.length > 500) rs2.logs.splice(0, rs2.logs.length - 500);
         break;
       }
@@ -10643,7 +10660,7 @@ function deriveTitle(prompt) {
   return t || "\u672A\u547D\u540D\u4F1A\u8BDD";
 }
 
-// src/event-bus.ts
+// relay/src/event-bus.ts
 var EventBus = class {
   constructor(opts = {}) {
     this.opts = opts;
@@ -10688,8 +10705,10 @@ var EventBus = class {
   // 不落盘、重连不补发（PAIR_REQUEST/PAIR_RESOLVED 在 ws-server 的同款语义抽到总
   // 线层）——PAIRED_DEVICE 新配对提醒若走 emit 落 ndjson，掉线重连会按 last_seq
   // 补发历史提醒，重复弹通知。消费方（CloudClient.onEnv）以 seq>lastSeq 守卫推进
-  emitTransient(type, payload) {
-    const env = { seq: 0, session_id: "", ts: Date.now(), type, payload };
+  // #79 to：定向投递——广播层据此过滤接收者（仅发起拉取的客户端收分块帧），
+  // 不传 = 全广播（PAIR_REQUEST 等原有瞬态语义不变）
+  emitTransient(type, payload, to2) {
+    const env = { seq: 0, session_id: "", ts: Date.now(), type, payload, ...to2 ? { to: to2 } : {} };
     for (const l of this.listeners) {
       try {
         l(env);
@@ -10715,12 +10734,12 @@ var EventBus = class {
   }
 };
 
-// src/session-manager.ts
+// relay/src/session-manager.ts
 import { mkdirSync as mkdirSync5, readFileSync as readFileSync8, statSync as statSync4, writeFileSync as writeFileSync5 } from "node:fs";
 import { homedir as homedir6 } from "node:os";
 import { isAbsolute as isAbsolute4, join as join10, resolve as resolve6, sep as sep5 } from "node:path";
 
-// src/artifacts.ts
+// relay/src/artifacts.ts
 import { readdirSync, statSync, readFileSync as readFileSync3, existsSync as existsSync3 } from "node:fs";
 import { join as join2, resolve, extname } from "node:path";
 import { homedir as homedir2 } from "node:os";
@@ -10783,7 +10802,7 @@ function serveArtifact(name, res) {
   }
 }
 
-// node_modules/@anthropic-ai/claude-agent-sdk/sdk.mjs
+// relay/node_modules/@anthropic-ai/claude-agent-sdk/sdk.mjs
 import { createRequire as k8 } from "node:module";
 import * as ur from "node:fs/promises";
 import * as An from "node:path";
@@ -40240,13 +40259,13 @@ function VJ(e, t) {
   return null;
 }
 
-// src/agent-adapter.ts
+// relay/src/agent-adapter.ts
 import { spawn as spawn2 } from "node:child_process";
 import { randomUUID as randomUUID3 } from "node:crypto";
 import { homedir as homedir4 } from "node:os";
 import { delimiter as pathDelimiter, join as join8 } from "node:path";
 
-// src/cli-path.ts
+// relay/src/cli-path.ts
 import { accessSync, constants as constants2, existsSync as existsSync5 } from "node:fs";
 import { createRequire } from "node:module";
 import { delimiter as delimiter2, dirname as dirname5, join as join7 } from "node:path";
@@ -40335,7 +40354,7 @@ function resolveClaudeCliPath() {
   return null;
 }
 
-// src/summarizer.ts
+// relay/src/summarizer.ts
 var MAX_SUMMARY = 80;
 function basename3(p) {
   if (typeof p !== "string") return "";
@@ -40790,7 +40809,7 @@ var TaskTracker = class {
   }
 };
 
-// src/agent-adapter.ts
+// relay/src/agent-adapter.ts
 function childEnv() {
   const extra = [
     join8(homedir4(), "node/bin"),
@@ -40846,6 +40865,10 @@ var AsyncQueue = class {
     };
   }
 };
+function watermarkFromUsage(u) {
+  if (!u || typeof u.input_tokens !== "number") return 0;
+  return (u.input_tokens || 0) + (u.cache_read_input_tokens || 0) + (u.cache_creation_input_tokens || 0);
+}
 var AgentSession = class {
   constructor(cwd, model, cb2, initialPrompt, opts) {
     this.cwd = cwd;
@@ -40959,6 +40982,8 @@ var AgentSession = class {
         }
         break;
       case "assistant": {
+        const wm2 = watermarkFromUsage(msg.message.usage);
+        if (wm2 > 0) this.cb.onContext?.(wm2);
         let ti = 0;
         for (const block of msg.message.content) {
           if (block.type === "thinking") {
@@ -41102,6 +41127,9 @@ var AgentSession = class {
     } else if (ev2.type === "content_block_stop") {
       const id2 = this.streamIdx.get(idx);
       if (id2) this.emitStreamBlock(id2, false);
+    } else if (ev2.type === "message_delta") {
+      const wm2 = watermarkFromUsage(ev2.usage);
+      if (wm2 > 0) this.cb.onContext?.(wm2);
     }
   }
   emitStreamBlock(id2, streaming) {
@@ -41235,7 +41263,7 @@ var AgentSession = class {
   }
 };
 
-// src/title-gen.ts
+// relay/src/title-gen.ts
 async function generateTitle(task, model, onSid, cwd) {
   const trimmed = task.trim().slice(0, 600);
   if (!trimmed) return { title: null };
@@ -41285,7 +41313,7 @@ async function generateTitle(task, model, onSid, cwd) {
   }
 }
 
-// src/cron.ts
+// relay/src/cron.ts
 import { readFileSync as readFileSync5 } from "node:fs";
 import { join as join9 } from "node:path";
 var str = (v) => typeof v === "string" && v.trim() ? v : void 0;
@@ -41356,7 +41384,7 @@ function cronTasksKey(tasks) {
   return JSON.stringify(tasks);
 }
 
-// src/task-store.ts
+// relay/src/task-store.ts
 import { readdirSync as readdirSync3, readFileSync as readFileSync6, statSync as statSync3 } from "node:fs";
 import { homedir as homedir5 } from "node:os";
 import path from "node:path";
@@ -41388,7 +41416,7 @@ function readTaskStoreTodos(cliSessionId) {
   return out;
 }
 
-// src/proc-tree.ts
+// relay/src/proc-tree.ts
 import { execFile } from "node:child_process";
 function parseCpuTimeMs(s) {
   const raw = (s || "").trim();
@@ -41499,7 +41527,7 @@ async function killTree(root) {
   return "killed";
 }
 
-// src/uploads.ts
+// relay/src/uploads.ts
 import { mkdirSync as mkdirSync4, writeFileSync as writeFileSync3 } from "node:fs";
 import path2 from "node:path";
 function tmpUploadDir(dataDir2) {
@@ -41565,7 +41593,7 @@ function saveUploadFiles(dataDir2, sessionId, files) {
   return saved;
 }
 
-// src/todo-hidden.ts
+// relay/src/todo-hidden.ts
 import { readFileSync as readFileSync7, writeFileSync as writeFileSync4 } from "node:fs";
 import path3 from "node:path";
 import { fileURLToPath } from "node:url";
@@ -41613,12 +41641,7 @@ function addHiddenTodoKey(sessionId, key) {
   }
 }
 
-// src/session-manager.ts
-function contextLimitOf(model) {
-  const m = (model || "").toLowerCase();
-  if (/glm[-_]?5/.test(m)) return 1e6;
-  return 2e5;
-}
+// relay/src/session-manager.ts
 function isManagedMode(m) {
   return m === "default" || m === "acceptEdits" || m === "plan" || m === "bypassPermissions";
 }
@@ -41811,6 +41834,39 @@ var UPDATE_THROTTLE_MS = 2e3;
 var HEARTBEAT_INTERVAL_MS = 5e3;
 var CRON_POLL_INTERVAL_MS = 3e4;
 var MAX_SESSIONS = 20;
+var ARTIFACT_FETCH_MAX_BYTES = 20 * 1024 * 1024;
+var ARTIFACT_CHUNK_BYTES = 512 * 1024;
+var ARTIFACT_MIME = {
+  txt: "text/plain",
+  log: "text/plain",
+  md: "text/markdown",
+  html: "text/html",
+  htm: "text/html",
+  json: "application/json",
+  csv: "text/csv",
+  png: "image/png",
+  jpg: "image/jpeg",
+  jpeg: "image/jpeg",
+  gif: "image/gif",
+  webp: "image/webp",
+  svg: "image/svg+xml",
+  pdf: "application/pdf",
+  doc: "application/msword",
+  docx: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+  ppt: "application/vnd.ms-powerpoint",
+  pptx: "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+  xls: "application/vnd.ms-excel",
+  xlsx: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+  zip: "application/zip",
+  apk: "application/vnd.android.package-archive",
+  dmg: "application/x-apple-diskimage",
+  exe: "application/vnd.microsoft.portable-executable",
+  msi: "application/x-msdownload"
+};
+function mimeOf(p) {
+  const m = /\.([A-Za-z0-9]+)$/.exec(p);
+  return m && ARTIFACT_MIME[m[1].toLowerCase()] || "application/octet-stream";
+}
 var WATCHDOG_CPU_IDLE_DELTA_MS = 500;
 function watchdogStallMs() {
   const v = Number(process.env.CCR_WATCHDOG_STALL_MS);
@@ -41979,6 +42035,39 @@ var SessionManager = class {
       adopted2++;
     }
     return adopted2;
+  }
+  // #75 无人值守连续性（2026-09-19 用户拍板最小闭环：不追求完善机制，先保证
+  // 「重启后当前工作会话能被拉起继续干活」）：relay 启动收养历史托管会话后，凡
+  // CLI 任务存储（~/.claude/tasks/<cli_sid>/，权威源）里仍有未完成待办
+  //（pending/in_progress）的托管会话，自动 resume 并注入续跑指令——不再依赖人
+  // 发消息触发恢复。约束：外部会话不适用（用户终端自管，hooks 会重新接入）；
+  // 无未完成待办的不拉（已收工/纯闲聊会话拉起来只会空转耗 token）；单次上限
+  // 按最近活跃排序取 3 个；失败即止不重试（留 historical 态 = 与旧行为一致，
+  // 等人来发消息）。CCR_NO_AUTOREVIVE=1 逃生阀（测试/紧急关闭）。
+  autoReviveManaged(limit = 3) {
+    if (process.env.CCR_NO_AUTOREVIVE === "1") return 0;
+    const candidates = [];
+    for (const s of this.sessions.values()) {
+      if (s.state.external || s.agent) continue;
+      if (!s.state.relay_session_id) continue;
+      const todos = readTaskStoreTodos(s.state.relay_session_id);
+      if (!todos || !todos.some((t) => t.status === "pending" || t.status === "in_progress")) continue;
+      if (Date.now() - s.state.updated_at > 48 * 36e5) continue;
+      candidates.push({ s, updated: s.state.updated_at });
+    }
+    candidates.sort((a, b) => b.updated - a.updated);
+    let revived = 0;
+    for (const c of candidates) {
+      if (revived >= limit) break;
+      try {
+        this.resumeAgent(c.s, "[relay \u81EA\u52A8\u6062\u590D] relay \u91CD\u542F\u5B8C\u6210\uFF0C\u68C0\u6D4B\u5230\u672C\u4F1A\u8BDD\u4ECD\u6709\u672A\u5B8C\u6210\u4EFB\u52A1\u3002\u8BF7\u76F4\u63A5\u8BFB\u53D6\u4EFB\u52A1\u6E05\u5355\u7EE7\u7EED\u63A8\u8FDB\u5DE5\u4F5C\uFF0C\u65E0\u9700\u590D\u8FF0\u4E0A\u4E0B\u6587\u3002");
+        revived++;
+      } catch (e) {
+        console.log(`[auto-revive] ${c.s.state.session_id.slice(0, 8)} \u6062\u590D\u5931\u8D25: ${e instanceof Error ? e.message : String(e)}`);
+      }
+    }
+    if (revived > 0) console.log(`[auto-revive] \u5DF2\u81EA\u52A8\u62C9\u8D77 ${revived} \u4E2A\u6709\u672A\u5B8C\u6210\u5F85\u529E\u7684\u6258\u7BA1\u4F1A\u8BDD`);
+    return revived;
   }
   // ---------- 外部会话（hooks 桥接）----------
   bridge = null;
@@ -42441,8 +42530,13 @@ var SessionManager = class {
     const s = this.sessions.get(id2);
     if (!s) return;
     const entry = { ts: Date.now(), kind, text, tool, ...meta };
-    s.logs.push(entry);
-    if (s.logs.length > 500) s.logs.splice(0, s.logs.length - 500);
+    const i = meta?.id ? s.logs.findIndex((e) => e.id === meta.id) : -1;
+    if (i >= 0) {
+      s.logs[i] = entry;
+    } else {
+      s.logs.push(entry);
+      if (s.logs.length > 500) s.logs.splice(0, s.logs.length - 500);
+    }
     this.bus.emit(id2, "SESSION_LOG", entry);
   }
   setRemoteMode(id2, enabled) {
@@ -42879,6 +42973,45 @@ var SessionManager = class {
           this.reviveSaved(s);
           return { command_id: cmd.command_id, ok: true };
         }
+        case "COMMAND_ARTIFACT_FETCH": {
+          const s = this.require(cmd.payload.session_id);
+          const key = resolve6(String(cmd.payload.path ?? "")).toLowerCase();
+          const hit = (s.state.artifacts ?? []).find((a) => a.path.toLowerCase() === key);
+          if (!hit) {
+            return { command_id: cmd.command_id, ok: false, error: "\u8DEF\u5F84\u672A\u767B\u8BB0\u5728\u8BE5\u4F1A\u8BDD\u7684\u8F93\u51FA\u7269\u6E05\u5355\u91CC\uFF0C\u65E0\u6743\u62C9\u53D6" };
+          }
+          let st2;
+          try {
+            st2 = statSync4(hit.path);
+          } catch {
+            return { command_id: cmd.command_id, ok: false, error: "\u6587\u4EF6\u4E0D\u5B58\u5728\u6216\u4E0D\u53EF\u8BBF\u95EE\uFF08\u53EF\u80FD\u5DF2\u88AB\u79FB\u52A8/\u5220\u9664\uFF09" };
+          }
+          if (!st2.isFile()) return { command_id: cmd.command_id, ok: false, error: "\u4E0D\u662F\u5E38\u89C4\u6587\u4EF6" };
+          if (st2.size > ARTIFACT_FETCH_MAX_BYTES) {
+            return { command_id: cmd.command_id, ok: false, error: `\u6587\u4EF6 ${(st2.size / 1048576).toFixed(1)}MB \u8D85\u8FC7 20MB \u4E0A\u9650\uFF0C\u8BF7\u5728\u7535\u8111\u7AEF\u67E5\u770B` };
+          }
+          const ref = cmd.command_id;
+          try {
+            const buf = readFileSync8(hit.path);
+            const total = Math.max(1, Math.ceil(buf.length / ARTIFACT_CHUNK_BYTES));
+            for (let seq = 0; seq < total; seq++) {
+              this.bus.emitTransient(
+                "ARTIFACT_CHUNK",
+                {
+                  ref,
+                  seq,
+                  total,
+                  b64: buf.subarray(seq * ARTIFACT_CHUNK_BYTES, (seq + 1) * ARTIFACT_CHUNK_BYTES).toString("base64")
+                },
+                by
+              );
+            }
+            this.bus.emitTransient("ARTIFACT_CHUNK", { ref, done: true }, by);
+          } catch (e) {
+            this.bus.emitTransient("ARTIFACT_CHUNK", { ref, error: e instanceof Error ? e.message : String(e) }, by);
+          }
+          return { command_id: cmd.command_id, ok: true, artifact: { size: st2.size, mime: mimeOf(hit.path) } };
+        }
         case "COMMAND_WATCH_GRANT":
           return { command_id: cmd.command_id, ok: false, error: "\u624B\u8868\u914D\u5BF9\u6388\u6743\u4EC5\u9650\u5C40\u57DF\u7F51\u4FE1\u9053" };
       }
@@ -43022,9 +43155,16 @@ var SessionManager = class {
           cache_read_input_tokens: (cur?.cache_read_input_tokens ?? 0) + (u.cache_read_input_tokens ?? 0),
           cache_creation_input_tokens: (cur?.cache_creation_input_tokens ?? 0) + (u.cache_creation_input_tokens ?? 0)
         };
-        managed.state.context_usage = (u.input_tokens || 0) + (u.cache_read_input_tokens || 0) + (u.cache_creation_input_tokens || 0);
-        managed.state.context_limit = contextLimitOf(managed.state.model);
         this.emitUpdated(managed, true);
+      },
+      // #72 上下文水位（per-call 口径，回合内逐调用实时刷新）：assistant 消息自带
+      // usage，in+cr+cc = 该次调用实际送入的上下文，覆盖式——压缩后自然回落。
+      // 可选回调：旧实现方（标题生成等假 agent）不实现也不影响
+      onContext: (tokens) => {
+        touch("context");
+        if (tokens > 0) managed.state.context_usage = tokens;
+        managed.state.context_limit = contextLimitOf(managed.state.model);
+        this.emitUpdated(managed, false);
       },
       onLog: (kind, text, meta) => {
         touch(kind);
@@ -43517,14 +43657,14 @@ var SessionManager = class {
   }
 };
 
-// src/ws-server.ts
+// relay/src/ws-server.ts
 import { createServer } from "node:http";
 import { randomUUID as randomUUID5 } from "node:crypto";
 import { readFileSync as readFileSync12, writeFileSync as writeFileSync8, mkdirSync as mkdirSync8, existsSync as existsSync8, readdirSync as readdirSync5 } from "node:fs";
 import { join as join13, dirname as dirname6, sep as sep6 } from "node:path";
 import { homedir as homedir10, networkInterfaces as networkInterfaces2 } from "node:os";
 
-// src/models.ts
+// relay/src/models.ts
 import { existsSync as existsSync6, readFileSync as readFileSync9 } from "node:fs";
 import { homedir as homedir7 } from "node:os";
 import { join as join11 } from "node:path";
@@ -43554,10 +43694,10 @@ function listModels(fallbackDefault) {
   return out;
 }
 
-// src/ws-server.ts
+// relay/src/ws-server.ts
 import { fileURLToPath as fileURLToPath3 } from "node:url";
 
-// node_modules/ws/wrapper.mjs
+// relay/node_modules/ws/wrapper.mjs
 var import_stream5 = __toESM(require_stream(), 1);
 var import_extension = __toESM(require_extension(), 1);
 var import_permessage_deflate = __toESM(require_permessage_deflate(), 1);
@@ -43568,13 +43708,13 @@ var import_websocket = __toESM(require_websocket(), 1);
 var import_websocket_server = __toESM(require_websocket_server(), 1);
 var wrapper_default = import_websocket.default;
 
-// src/bridge.ts
+// relay/src/bridge.ts
 import { randomUUID as randomUUID4 } from "node:crypto";
 import { closeSync as closeSync2, openSync as openSync2, readSync as readSync2, readFileSync as readFileSync11, readdirSync as readdirSync4, statSync as statSync5, writeFileSync as writeFileSync7 } from "node:fs";
 import { homedir as homedir9 } from "node:os";
 import path5 from "node:path";
 
-// src/injector.ts
+// relay/src/injector.ts
 import { spawn as spawn3, execFileSync } from "node:child_process";
 import { existsSync as existsSync7, mkdirSync as mkdirSync6, appendFileSync as appendFileSync2, readFileSync as readFileSync10, writeFileSync as writeFileSync6, rmSync as rmSync2 } from "node:fs";
 import path4, { join as join12 } from "node:path";
@@ -43908,7 +44048,7 @@ async function captureConsoleBottom(pid, rows = 20) {
   }
 }
 
-// src/type-guard.ts
+// relay/src/type-guard.ts
 function guardConfig() {
   const num = (v, def) => Number(v) > 0 ? Number(v) : def;
   return {
@@ -44003,7 +44143,7 @@ async function guardCompensateEnter(knownTexts, capture, opts = {}) {
   }
 }
 
-// src/bridge.ts
+// relay/src/bridge.ts
 function pBody(p) {
   return p.body ?? p.text;
 }
@@ -45244,6 +45384,22 @@ var Bridge = class _Bridge {
   trackers = /* @__PURE__ */ new Map();
   // transcript 已读字节偏移：PostToolUse/Stop 时增量读出助手文本推上时间线
   transcriptOffsets = /* @__PURE__ */ new Map();
+  // #73 外部转录流式快照折叠：同一 message.id 的多行转录 = 同一条逻辑消息的增长
+  // 快照（2026-09-19 实测：58 行 assistant 仅 19 个唯一 id，同 id 行文本逐行增长；
+  // 个别尾行文本为空的分块 flush 伪影）。按 (sid, msgId, kind) 复用稳定日志 id 让
+  // pushExternalLog 原地替换，时间线不再被增量快照刷屏；文本只增不减（最长快照
+  // 胜出，空尾行不回退、等长重复快照不重复下发）。id 携带本次启动戳——重启后
+  // 回放重建的时间线带着旧运行期的 id，seq 归零若复用裸序号会顶掉旧消息条目
+  static XSTREAM_BOOT = Date.now().toString(36);
+  xstreamSeq = /* @__PURE__ */ new Map();
+  xchainId = /* @__PURE__ */ new Map();
+  // sid|msgId|kind -> 稳定日志 id
+  xchainBest = /* @__PURE__ */ new Map();
+  // 同 key -> 已下发最长文本长度
+  // #72 上次计入总量的 usage 元组（会话 -> "in:out:cr:cw"）：转录流式快照会把同
+  // 一次调用的 usage 行重复落盘 3~7 行，同元组只累计一次，否则会话 token 总量虚高
+  // 数倍（实测虚到 cache_read 2.38 亿）。水位是覆盖式，天然不受重复行影响
+  lastUsageTuple = /* @__PURE__ */ new Map();
   // 转录末条形态：assistant 消息整条完成才落盘（生成期间零写入，纯思考可达分钟级），
   // 静默 ≠ 回合结束。可靠区分：末条是纯文本 assistant 消息 = 回合自然结束；
   // 末条是 tool_use（工具执行中）或 tool_result/新 prompt（下一条消息生成中）= 仍在回合内
@@ -45365,14 +45521,20 @@ var Bridge = class _Bridge {
           const mu2 = j2.message?.usage;
           if (mu2 && typeof mu2 === "object") {
             const inc = (v) => typeof v === "number" && v > 0 ? v : 0;
-            usageIn += inc(mu2.input_tokens);
-            usageOut += inc(mu2.output_tokens);
-            usageCr += inc(mu2.cache_read_input_tokens);
-            usageCw += inc(mu2.cache_creation_input_tokens);
+            const tuple = `${inc(mu2.input_tokens)}:${inc(mu2.output_tokens)}:${inc(mu2.cache_read_input_tokens)}:${inc(mu2.cache_creation_input_tokens)}`;
+            if (tuple !== "0:0:0:0" && tuple !== this.lastUsageTuple.get(id2)) {
+              if (this.lastUsageTuple.size > 200) this.lastUsageTuple.clear();
+              this.lastUsageTuple.set(id2, tuple);
+              usageIn += inc(mu2.input_tokens);
+              usageOut += inc(mu2.output_tokens);
+              usageCr += inc(mu2.cache_read_input_tokens);
+              usageCw += inc(mu2.cache_creation_input_tokens);
+            }
             usageSeen = true;
             ctxLast = inc(mu2.input_tokens) + inc(mu2.cache_read_input_tokens) + inc(mu2.cache_creation_input_tokens);
           }
           if (typeof j2.message?.model === "string" && j2.message.model) model = _Bridge.modelDisplayName() ?? j2.message.model;
+          const msgId = typeof j2.message?.id === "string" && j2.message.id ? j2.message.id : "";
           const content = j2.message?.content;
           if (!Array.isArray(content)) continue;
           _Bridge.collectTaskOps(content, taskOps, creates);
@@ -45424,10 +45586,10 @@ var Bridge = class _Bridge {
           }
           shape = hasToolUse ? "tool" : "end";
           const th2 = thinks.join("\n").trim();
-          if (th2) entries.push({ kind: "thinking", text: th2 });
+          if (th2) entries.push({ kind: "thinking", text: th2, msgId });
           entries.push(...zaiEntries);
           const tx2 = texts.join("\n").trim();
-          if (tx2) entries.push({ kind: "assistant_text", text: tx2 });
+          if (tx2) entries.push({ kind: "assistant_text", text: tx2, msgId });
           entries.push(...zaiMixed);
         } catch {
         }
@@ -45444,12 +45606,7 @@ var Bridge = class _Bridge {
         }
       }
       const emit = firstRead ? entries.filter((e) => e.kind === "assistant_text").slice(-1) : entries;
-      for (const e of emit) {
-        this.mgr.pushExternalLog(id2, e.kind, truncate(e.text, 400), e.tool, {
-          full: fullText(e.text, 400),
-          ...e.detail ? { detail: e.detail } : {}
-        });
-      }
+      for (const e of emit) this.emitTranscriptEntry(id2, e);
       if (!firstRead) {
         for (const t of enqueues) this.onQueueEnqueue(id2, t);
         for (const t of steers) this.onSteerDelivered(id2, t);
@@ -45499,6 +45656,35 @@ var Bridge = class _Bridge {
       }
     } catch {
     }
+  }
+  // #73 转录条目下发（pushAssistantTexts 专用）：带 msgId 的 assistant_text/
+  // thinking 走增长链——同 key 复用稳定日志 id（pushExternalLog 原地替换），文本
+  // 只增不减（空尾行 flush 伪影不回退、等长重复快照不重复下发）；zai/工具类条目
+  // 无 msgId，维持旧语义（每条独立）
+  emitTranscriptEntry(id2, e) {
+    let logId;
+    if ((e.kind === "assistant_text" || e.kind === "thinking") && e.msgId) {
+      const key = `${id2}|${e.msgId}|${e.kind}`;
+      logId = this.xchainId.get(key);
+      if (!logId) {
+        const n = (this.xstreamSeq.get(id2) ?? 0) + 1;
+        this.xstreamSeq.set(id2, n);
+        if (this.xchainId.size > 400 || this.xchainBest.size > 400) {
+          this.xchainId.clear();
+          this.xchainBest.clear();
+        }
+        logId = `xstream-${_Bridge.XSTREAM_BOOT}-${n}`;
+        this.xchainId.set(key, logId);
+      }
+      const best = this.xchainBest.get(key) ?? 0;
+      if (e.text.length <= best) return;
+      this.xchainBest.set(key, e.text.length);
+    }
+    this.mgr.pushExternalLog(id2, e.kind, truncate(e.text, 400), e.tool, {
+      full: fullText(e.text, 400),
+      ...e.detail ? { detail: e.detail } : {},
+      ...logId ? { id: logId } : {}
+    });
   }
   // 文件改动统计：Edit/Write/MultiEdit/NotebookEdit 结果的 +/- 行累计（统计页数据源）。
   // #35 同点位顺路喂输出物清单（mergeArtifact 咽喉点）；增删行/新建判定统一走
@@ -46115,7 +46301,7 @@ function parseGateTools(raw) {
   return new Set((raw ?? def).split(",").map((s) => s.trim()).filter(Boolean));
 }
 
-// src/ws-server.ts
+// relay/src/ws-server.ts
 function localIps() {
   const out = /* @__PURE__ */ new Set();
   for (const list of Object.values(networkInterfaces2())) {
@@ -46124,12 +46310,12 @@ function localIps() {
   return out;
 }
 var TRUSTED_WEB_ORIGINS = ["https://cc.humumu.online", "https://cc-deck.humumu.online"];
-var PLUGIN_CFG_KEYS = ["taskGuard", "qNotify", "restorePoint"];
+var PLUGIN_CFG_KEYS = ["taskGuard", "qNotify", "restorePoint", "deliverables"];
 function pluginConfigPath() {
   return join13(homedir10(), ".cc-deck", "config.json");
 }
 function readPluginConfig() {
-  const out = { taskGuard: false, qNotify: true, restorePoint: false };
+  const out = { taskGuard: false, qNotify: true, restorePoint: false, deliverables: false };
   try {
     const raw = JSON.parse(readFileSync12(pluginConfigPath(), "utf-8"));
     for (const k3 of PLUGIN_CFG_KEYS) if (typeof raw[k3] === "boolean") out[k3] = raw[k3];
@@ -46163,7 +46349,8 @@ var COMMAND_TYPES = /* @__PURE__ */ new Set([
   "COMMAND_TODO_HIDE",
   "COMMAND_PIN_SESSION",
   "COMMAND_RESUME_SESSION",
-  "COMMAND_IMPORT_PUSH"
+  "COMMAND_IMPORT_PUSH",
+  "COMMAND_ARTIFACT_FETCH"
 ]);
 var HEARTBEAT_MS = 3e4;
 var BUILTIN_COMMANDS = [
@@ -46630,6 +46817,7 @@ function startServer(bus2, mgr2, cfg2, opts = {}) {
   wss.on("connection", (ws2, url) => {
     const clientId = `web-${connectionCounter++}`;
     ws2.isAlive = true;
+    ws2.clientId = clientId;
     ws2.on("pong", () => {
       ws2.isAlive = true;
     });
@@ -46656,6 +46844,8 @@ function startServer(bus2, mgr2, cfg2, opts = {}) {
           server_time: Date.now(),
           homedir: homedir10(),
           models: listModels(mgr2.cfg.model),
+          // #71 输出物开关：恒布尔随快照下发（旧客户端忽略未知键），三端 tab 据此显隐
+          deliverables: readPluginConfig().deliverables,
           // 云桥启用的 relay 附带自身设备 id（= CloudConfig.relayDev 同源值）：
           // 客户端据此密码学匹配"LAN 直连条目"与"云桥条目"是同一台 relay，自动合并。
           // wan_dev（F7）：手表 /wan 透传通道的凭据 dev，手机侧写进手表连接配置
@@ -46718,7 +46908,9 @@ function startServer(bus2, mgr2, cfg2, opts = {}) {
   const unsubscribe = bus2.subscribe((env) => {
     const text = JSON.stringify(env);
     for (const client of wss.clients) {
-      if (client.pairing) continue;
+      const cw2 = client;
+      if (cw2.pairing) continue;
+      if (env.to && cw2.clientId !== env.to) continue;
       if (client.readyState === import_websocket.default.OPEN) client.send(text);
     }
   });
@@ -46881,7 +47073,7 @@ async function handleBridgeHook(req, res, bridge, cfg2) {
 }
 var connectionCounter = 0;
 
-// src/cloud-identity.ts
+// relay/src/cloud-identity.ts
 import { existsSync as existsSync9, readFileSync as readFileSync13, writeFileSync as writeFileSync9 } from "node:fs";
 import { join as join14 } from "node:path";
 import { createHash, randomBytes } from "node:crypto";
@@ -46964,7 +47156,7 @@ function loadOrCreateIdentity(dataDir2) {
   };
 }
 
-// src/cloud-client.ts
+// relay/src/cloud-client.ts
 var PEER_META_MAX = 120;
 var SIGHTING_TTL_MS = 18e4;
 var PEER_META_KEYS = ["name", "platform", "ua", "app"];
@@ -47255,6 +47447,8 @@ var CloudClient = class {
         server_time: Date.now(),
         relay_dev: this.identity.relayDev,
         wan_dev: this.identity.wanDev,
+        // #71 输出物开关（与 ws-server 直连快照同源）：云通道手机 tab 同样跟随
+        deliverables: readPluginConfig().deliverables,
         // #117：云通道快照补 lan_hint/relay_name——#95/#100 此前只挂在 ws-server
         // 直连快照上，云通道手机收不到（LAN 角标恒☁️、默认名不生效的根因）
         ...this.extra?.lanHint?.() ? { lan_hint: this.extra.lanHint() } : {},
@@ -47405,9 +47599,11 @@ var CloudClient = class {
   onEnv(env) {
     if (!this.ws || this.ws.readyState !== wrapper_default.OPEN) return;
     for (const [dev, st2] of this.phones) {
+      if (env.to && env.to !== `cloud-${dev}`) continue;
       if (st2.active && this.sendSealed(dev, env) && env.seq > st2.lastSeq) st2.lastSeq = env.seq;
     }
     for (const [dev, st2] of this.wanWatches) {
+      if (env.to && env.to !== `wan-${dev}`) continue;
       if (st2.active) {
         this.sendWan(dev, env);
         if (env.seq > st2.lastSeq) st2.lastSeq = env.seq;
@@ -47503,7 +47699,7 @@ var CloudClient = class {
   }
 };
 
-// src/pairing.ts
+// relay/src/pairing.ts
 import { randomInt } from "node:crypto";
 var TTL_FLOOR_MS = 6e4;
 var TTL_CEIL_MS = 30 * 6e4;
@@ -47546,7 +47742,7 @@ function createPairingCodes(ttlMs) {
   };
 }
 
-// src/qr.ts
+// relay/src/qr.ts
 var import_qrcode_terminal = __toESM(require_main(), 1);
 function printQr(text, label) {
   console.log(`
@@ -47554,7 +47750,7 @@ ${label}`);
   import_qrcode_terminal.default.generate(text, { small: true });
 }
 
-// src/mdns.ts
+// relay/src/mdns.ts
 var import_bonjour_service = __toESM(require_dist(), 1);
 function advertiseRelay(port, name) {
   try {
@@ -47578,7 +47774,7 @@ function advertiseRelay(port, name) {
   }
 }
 
-// src/todo-tools-env.ts
+// relay/src/todo-tools-env.ts
 import { existsSync as existsSync10, readFileSync as readFileSync14, writeFileSync as writeFileSync10 } from "node:fs";
 import { join as join15 } from "node:path";
 import { homedir as homedir11 } from "node:os";
@@ -47615,7 +47811,7 @@ function ensureTodoToolsEnv() {
   }
 }
 
-// src/index.ts
+// relay/src/index.ts
 if (process.env.CCR_PARENT_PID) {
   const ts2 = () => (/* @__PURE__ */ new Date()).toISOString().replace("T", " ").slice(0, 19) + " ";
   for (const m of ["log", "error", "warn"]) {
@@ -47820,6 +48016,12 @@ for (const s of mgr.snapshot()) {
   });
 }
 var pinned = mgr.applyPinned();
+setTimeout(() => {
+  try {
+    mgr.autoReviveManaged();
+  } catch {
+  }
+}, 5e3).unref?.();
 var lanAuthNonces = null;
 var cloudIdentity = null;
 var cloudClients = [];
