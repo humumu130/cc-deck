@@ -1318,11 +1318,10 @@ export default function DetailScreen({ sid, onBack, initialView, ref }: { sid: s
     const text = (override ?? input).trim();
     if (!text && images.length === 0) return;
     const willQueue = external && s.status === "WAITING";
+    // #54 外部会话同口径带图：relay 落盘临时目录 + 注入「正文 + 路径查看指令」，CLI Read 看图
     const ok = store.send(
       external ? "COMMAND_EXT_INPUT" : "COMMAND_MESSAGE",
-      external
-        ? { session_id: sid, text }
-        : { session_id: sid, text, ...(images.length > 0 ? { images } : {}) },
+      { session_id: sid, text, ...(images.length > 0 ? { images } : {}) },
     );
     if (ok) {
       editInput("");
@@ -2027,8 +2026,9 @@ export default function DetailScreen({ sid, onBack, initialView, ref }: { sid: s
         ) : null}
         <View style={d.cmdbar}>
           {/* 可恢复的托管历史会话同样支持发图（SDK resume 支持图片，2026-09-16 反馈：
-              测试客户端创建的会话闲置转 historical 后发图入口消失） */}
-          {!external && (!s.historical || s.relay_session_id) ? (
+              测试客户端创建的会话闲置转 historical 后发图入口消失）；
+              #54 外部 CLI 会话开放发图（relay 落盘+注入查看指令） */}
+          {external || !s.historical || s.relay_session_id ? (
             <Pressable
               style={[d.imgBtn, d.opRipple, (!canCmd || images.length >= 4) && { opacity: 0.4 }]}
               android_ripple={{ color: c.tintSoft, borderless: false, radius: 11 }}

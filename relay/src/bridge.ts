@@ -1,6 +1,6 @@
 // hooks 桥接：用户自开 CLI 会话（外部会话）事件路由 + 远程审批挂起 + 终端按键注入
 import { randomUUID } from "node:crypto";
-import { closeSync, openSync, readSync, readFileSync, readdirSync, statSync, writeFileSync } from "node:fs";
+import { closeSync, openSync, readSync, readFileSync, readdirSync, statSync, writeFileSync, mkdirSync } from "node:fs";
 import { homedir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -1071,10 +1071,41 @@ export class Bridge {
   // 与 PC 终端手敲一致；WAITING（本地权限弹窗/远程审批挂起）注入 Enter 可能误触弹窗，排队等回合结束。
   // ERROR 也放行（relay 重启重放的误标，自愈 sweeper 未及翻转时先到）：pid 死了注入
   // 自然失败走 onInjectFail 清定位，不会卡死
-  extInput(sessionId: string, text: string): { ok: boolean; error?: string } {
+  extInput(sessionId: string, text: string, images?: string[]): { ok: boolean; error?: string } {
     const state = this.mgr.getExternal(sessionId);
     if (!state) return { ok: false, error: `会话不存在: ${sessionId}` };
-    if (!text.trim()) return { ok: false, error: "空消息" };
+    // #54 路线 A：外部会话发图——base64 落盘专用临时目录 <dataDir>/../tmp（7 天自动清扫，
+    // 见 index.ts sweepTmpImages），合成「正文 + 路径查看指令」后走既有注入/排队链路，
+    // CLI 用 Read 工具渲染图片（Read 原生支持 PNG/JPG）。扩展名按魔数嗅探兜底 png
+    let body = text.trim();
+    const saved: string[] = [];
+    if (images && images.length) {
+      const dir = path.join(this.opts.dataDir, "..", "tmp");
+      try { mkdirSync(dir, { recursive: true }); } catch {}
+      const sidKey = sessionId.replace(/[^a-z0-9]/gi, "").slice(0, 8) || "ext";
+      const stamp = Date.now();
+      for (let i = 0; i < Math.min(images.length, 4); i++) {
+        const b64 = images[i];
+        const head = Buffer.from(b64.slice(0, 24), "base64");
+        const ext = head[0] === 0x89 && head[1] === 0x50 ? "png"
+          : head[0] === 0xff && head[1] === 0xd8 ? "jpg"
+          : head[0] === 0x47 && head[1] === 0x49 ? "gif"
+          : head.slice(0, 4).toString("latin1") === "RIFF" && head.slice(8, 12).toString("latin1") === "WEBP" ? "webp"
+          : "png";
+        const p = path.join(dir, `img-${sidKey}-${stamp}-${i + 1}.${ext}`);
+        try { writeFileSync(p, Buffer.from(b64, "base64")); saved.push(p); } catch {}
+      }
+      if (saved.length) {
+        body = body
+          ? `${body}\n（图片已保存：${saved.join("、")}——请用 Read 工具查看后再继续）`
+          : `请用 Read 工具查看图片：${saved.join("、")}`;
+      } else if (!body) {
+        return { ok: false, error: "图片保存失败（临时目录不可写）" };
+      }
+    }
+    if (!body) return { ok: false, error: "空消息" };
+    // 回显用短文本：排队气泡里别展开整串临时路径
+    const echoText = saved.length ? `${text.trim()} [图片×${saved.length}]`.trim() : text.trim();
     // 平台不支持注入（Linux 无按键注入器；Windows SendInput / macOS osascript 均已支持）：
     // 明确报错而非排队后静默失败——手机端"消息消失无反应"的根因（#303），ACK ok:false 让客户端弹原因
     if (!injectSupported()) {
@@ -1103,22 +1134,22 @@ export class Bridge {
       let alive2 = !!pid2 && cliHostAlive(pid2);
       if (!alive2 && pid2) alive2 = cliHostAlive(pid2); // 二次探测
       if (!alive2) {
-        return this.resumeExternal(sessionId, text, !pid2 ? "无进程定位" : `进程 ${pid2} 判定不可用（二次探测仍失败）`);
+        return this.resumeExternal(sessionId, body, !pid2 ? "无进程定位" : `进程 ${pid2} 判定不可用（二次探测仍失败）`);
       }
     }
 
     const q = this.inputQueue.get(sessionId) ?? [];
-    q.push(text);
+    q.push(body);
     this.inputQueue.set(sessionId, q);
     // 发送方回显：进会话状态 pending_inputs（客户端显示在工作指示器下方，处理时上浮为正式消息）
-    this.mgr.setExternalPending(sessionId, [...(state.pending_inputs ?? []), { text: text.trim(), ts: Date.now() }]);
+    this.mgr.setExternalPending(sessionId, [...(state.pending_inputs ?? []), { text: echoText, ts: Date.now() }]);
     if ((state.status === "DONE" || state.status === "WORKING" || state.status === "ERROR") && !this.flushing.has(sessionId)) {
       if (state.status !== "DONE") {
-        this.mgr.pushExternalLog(sessionId, "system", `已注入终端（CLI 运行中，自动排队跟随）：${truncate(text, 80)}`);
+        this.mgr.pushExternalLog(sessionId, "system", `已注入终端（CLI 运行中，自动排队跟随）：${truncate(body, 80)}`);
       }
       void this.flushQueue(sessionId);
     } else {
-      this.mgr.pushExternalLog(sessionId, "system", `已排队（等待确认/回合结束后自动发送）：${truncate(text, 80)}`);
+      this.mgr.pushExternalLog(sessionId, "system", `已排队（等待确认/回合结束后自动发送）：${truncate(body, 80)}`);
     }
     return { ok: true };
   }

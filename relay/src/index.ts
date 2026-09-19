@@ -2,7 +2,7 @@ import { randomBytes } from "node:crypto";
 import { seal, unseal } from "./e2e.js";
 import { networkInterfaces, homedir, hostname } from "node:os";
 import { join } from "node:path";
-import { writeFileSync, openSync, readFileSync, rmSync, existsSync } from "node:fs";
+import { writeFileSync, openSync, readFileSync, rmSync, existsSync, readdirSync, statSync } from "node:fs";
 import { spawn, execFileSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { loadConfig } from "./config.js";
@@ -220,6 +220,23 @@ if (cliArgs.has("--stop")) {
 
 // 历史持久化：relay/data/events.ndjson（重启后重放重建会话与时间线）
 const persistPath = join(cfg.dataDir, "events.ndjson");
+
+// #54 外部会话发图的临时目录清扫：<dataDir>/../tmp 下的 img-* 为一次性投递物
+// （CLI Read 过即无价值），7 天过期——启动扫一遍 + 每 6 小时日扫，双保险
+function sweepTmpImages(dir: string): void {
+  try {
+    for (const f of readdirSync(dir)) {
+      if (!f.startsWith("img-")) continue;
+      const p = join(dir, f);
+      try {
+        if (Date.now() - statSync(p).mtimeMs > 7 * 86400_000) rmSync(p, { force: true });
+      } catch {}
+    }
+  } catch {}
+}
+const tmpImageDir = join(cfg.dataDir, "..", "tmp");
+sweepTmpImages(tmpImageDir);
+setInterval(() => sweepTmpImages(tmpImageDir), 6 * 3600_000).unref?.();
 const prior = loadEvents(persistPath);
 const kept = compactEvents(prior);
 if (prior.length !== kept.length) rewriteFile(persistPath, kept); // 启动时压缩

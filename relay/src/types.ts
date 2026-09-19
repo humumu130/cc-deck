@@ -448,10 +448,12 @@ export interface ExtModeCommand extends CommandBase {
   payload: { session_id: string; enabled: boolean };
 }
 
-// 外部会话输入注入（空闲时敲进终端；忙时排队，回合结束自动发送）
+// 外部会话输入注入（空闲时敲进终端；忙时排队，回合结束自动发送）。
+// #54 images：原始 base64 数组（与 COMMAND_MESSAGE 同口径，sanitize 限 4 张/8MB）——
+// relay 落盘临时目录后把「正文 + 路径查看指令」注入，CLI 用 Read 工具看图
 export interface ExtInputCommand extends CommandBase {
   type: "COMMAND_EXT_INPUT";
-  payload: { session_id: string; text: string };
+  payload: { session_id: string; text: string; images?: string[] };
 }
 
 // 外部会话打断（向终端注入 Esc）

@@ -4362,9 +4362,9 @@ function renderDetail() {
   $("stopBtn").style.display = running ? "flex" : "none";
   $("stopBtn").textContent = s.external ? "⏹ 注入 Esc" : "⏹ 停止";
   $("stopBtn").title = s.external ? "注入 Esc 打断" : "停止会话";
-  // #279 批次3：图片入口仅托管会话（外部 CLI 会话发图入口隐藏，对齐手机端）
-  // 可恢复的托管历史会话保留发图（SDK resume 支持图片）
-  $("imgBtn").style.display = s.external || (s.historical && !s.relay_session_id) ? "none" : "";
+  // #279 批次3 图片入口；#54 起外部 CLI 会话也可发图（relay 落盘+注入路径指令）
+  // 隐藏仅剩：不可恢复的托管历史会话（cmdLocked 同口径）
+  $("imgBtn").style.display = s.historical && !s.external && !s.relay_session_id ? "none" : "";
 
   // 时间线 / 统计（增量重建）
   const tl = $("timeline");
@@ -5935,7 +5935,8 @@ $("createBtn").onclick = () => {
 // 上送：COMMAND_MESSAGE payload.images = 原始 base64 数组（relay sanitizeImages 限 4 张/单张 8MB，同口径）。
 let sendImages = []; // 待发图 base64（无 data: 前缀，与手机端一致）；切会话即清
 const IMG_MAX = 4;
-function imgSessionOk(s) { return !s.external && !s.historical; }
+// #54 外部会话开放（落盘+注入链路）；托管历史会话维持只读口径（resumable 除外见下）
+function imgSessionOk(s) { return !!s.external || !s.historical; }
 
 function compressImageFile(file) {
   return new Promise((resolve, reject) => {
@@ -6016,8 +6017,7 @@ document.addEventListener("paste", (ev) => {
   const sel = selSession();
   if (!sel) return;
   if (!imgSessionOk(sel.s)) {
-    if (sel.s.external) toast("终端 CLI 会话不支持发图");
-    else if (sel.s.historical) toast(sel.s.relay_session_id ? "恢复会话不支持带图" : "历史会话仅可查看");
+    if (sel.s.historical) toast(sel.s.relay_session_id ? "恢复会话不支持带图" : "历史会话仅可查看");
     return;
   }
   ev.preventDefault();
@@ -6235,11 +6235,13 @@ $("sendBtn").onclick = () => {
   if (!sel) return;
   const sid = selected.sid;
   if (sel.s.external) {
-    if (imgs.length) { toast("终端 CLI 会话不支持发图"); return; }
-    // 注入路径：时间线由 hook 的 UserPromptSubmit / 排队日志回填，不本地预写
-    if (sendCommandTo(sel.ctx, "COMMAND_EXT_INPUT", { session_id: sid, text })) {
+    // #54 注入路径带图：relay 落盘临时目录，合成「正文 + 路径查看指令」注入，CLI 用 Read 看图；
+    // 时间线由 hook 的 UserPromptSubmit / 排队日志回填，不本地预写
+    if (sendCommandTo(sel.ctx, "COMMAND_EXT_INPUT", { session_id: sid, text, ...(imgs.length ? { images: imgs } : {}) })) {
       $("msginput").value = "";
-      histPush(text);
+      if (text) histPush(text);
+      sendImages = [];
+      renderImgRow();
       syncSendState();
       if (sel.s.status === "WAITING") toast("已排队，回合结束后自动发送");
     }

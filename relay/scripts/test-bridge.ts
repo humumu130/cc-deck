@@ -1843,6 +1843,42 @@ await wait(150);
   delete process.env.CCR_OSASCRIPT_CMD;
 }
 
+// 54. 外部会话发图（路线 A 落盘+指令）：base64 落 <dataDir>/../tmp（魔数嗅探扩展名）、
+//     注入文合成「正文 + 路径查看指令」、pending 回显短文本、空正文合成纯查看指令
+{
+  const { readdirSync } = await import("node:fs");
+  const TMPIMG = join(cfg.dataDir, "..", "tmp");
+  rmSync(TMPIMG, { recursive: true, force: true });
+  const sid54 = extId("cli-54");
+  mgr.ensureExternal(sid54, "/tmp", "图片链路测试", "cli-54");
+  mgr.setExternalCliPid(sid54, 5477);
+  mgr.setExternalStatus(sid54, "WORKING", "测试中"); // WORKING：DONE+死 pid 会走 resume 分支绕开注入
+  // 最小合法 PNG 头（魔数 89 50 4E 47 …）——扩展名嗅探靠它判 .png
+  const pngB64 = Buffer.from(
+    "89504e470d0a1a0a0000000d49484452000000010000000108060000001f15c489" +
+    "0000000d4944415478da63fccf00f60300030301003b9d40e20000000049454e44ae426082",
+    "hex",
+  ).toString("base64");
+  const r54 = bridge.extInput(sid54, "看下这张图", [pngB64]);
+  assert(r54.ok, "54 extInput with image ok");
+  const files54 = readdirSync(TMPIMG).filter((f) => f.startsWith("img-"));
+  assert(files54.length === 1 && files54[0].endsWith(".png"), "54 image saved to tmp dir with sniffed ext");
+  await waitLog(() => fakeLog().some((a) => a[0] === "5477" && String(a[1]).includes("请用 Read 工具查看")), 5000);
+  const inj54 = fakeLog().find((a) => a[0] === "5477" && String(a[1]).includes("请用 Read 工具查看"));
+  assert(!!inj54 && String(inj54[1]).startsWith("看下这张图"), "54 injected body keeps original text");
+  assert(!!inj54 && String(inj54[1]).includes(files54[0]), "54 injected body names saved path");
+  const st54 = mgr.getExternal(sid54)!;
+  assert(st54.pending_inputs?.at(-1)?.text === "看下这张图 [图片×1]", "54 pending echo short text");
+  // 空正文 + 图：body 退化为纯查看指令（回显同款短文本）
+  const r54b = bridge.extInput(sid54, "", [pngB64]);
+  assert(r54b.ok, "54 image-only message ok");
+  assert(readdirSync(TMPIMG).filter((f) => f.startsWith("img-")).length === 2, "54 second image saved");
+  await waitLog(() => fakeLog().some((a) => a[0] === "5477" && String(a[1]).startsWith("请用 Read 工具查看图片")), 5000);
+  assert(true, "54 image-only body starts with Read instruction");
+  assert(mgr.getExternal(sid54)!.pending_inputs?.at(-1)?.text === "[图片×1]", "54 image-only echo");
+  rmSync(TMPIMG, { recursive: true, force: true });
+}
+
 wsCur!.close();
 await wait(300);
 console.log("\nBRIDGE TESTS PASSED");

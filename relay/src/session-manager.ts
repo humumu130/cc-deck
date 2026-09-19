@@ -149,9 +149,14 @@ export function resolveCreateCwd(
   }
 
   const home = homedir();
+  // 默认目录两种失效形态分开说（#293 sticky-cwd 场景）：配置了但无效要点名路径，
+  // 用户才知道去修哪里（回落 note 只说"未配置"会误导——明明设过 CCR_CWD）
+  const defDesc = def
+    ? `默认目录（CCR_CWD/上次有效目录）${resolve(def)} 无效（不存在或无法访问）`
+    : "默认目录未配置（CCR_CWD）";
   const wantedDesc = wanted
-    ? `指定的工作目录 ${resolve(wanted)} 不是有效目录（不存在或无法访问），默认目录（CCR_CWD/上次有效目录）也未配置或无效`
-    : "未指定工作目录，且默认目录未配置（CCR_CWD）";
+    ? `指定的工作目录 ${resolve(wanted)} 不是有效目录（不存在或无法访问），${defDesc}`
+    : `未指定工作目录，且${defDesc}`;
   const suggest =
     '如需固定工作目录，请设置 CCR_CWD 环境变量指向实际项目目录（如 Windows "D:\\projects\\myapp"、macOS/Linux "~/projects/myapp"）后重启 relay';
   if (isUsableDir(home)) {
@@ -1124,7 +1129,7 @@ export class SessionManager {
           if (!this.bridge) {
             return { command_id: cmd.command_id, ok: false, error: "bridge 未就绪" };
           }
-          const r = this.bridge.extInput(cmd.payload.session_id, cmd.payload.text);
+          const r = this.bridge.extInput(cmd.payload.session_id, cmd.payload.text, sanitizeImages(cmd.payload.images));
           return { command_id: cmd.command_id, ok: r.ok, error: r.error };
         }
         case "COMMAND_EXT_STOP": {
