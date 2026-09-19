@@ -100,7 +100,7 @@ relay 创建会话进程时自动配好环境，两件事：
 
 - **第 0 层·零配置**：默认 provider = 继承 relay 进程环境——用户本就为 Claude Code 配好的 `ANTHROPIC_BASE_URL`/`ANTHROPIC_AUTH_TOKEN`（GLM 套餐用户现状即此），relay 原样继承。单厂商用户**永远碰不到 providers.json**，什么都不用填，这也是信任基线：我们不碰用户凭证，凭证本来就在他机器的环境变量里。（GUI/launchd 拉起的 relay 可能缺 shell profile env——M0 PATH 注入同源问题，登记表正是这条路径的兜底）
 - **M1·手编文件**：`~/.cc-deck/providers.json`（dogfooding 阶段用户就是我们自己）
-- **M2·设置页 UI**：三端同源表单（厂商名/baseUrl/模型/凭证）→ relay 写**同一份文件**——UI 只是文件的编辑器，不是新存储；手机开团选型时可当场补登 provider
+- **M2·设置页 UI**：三端同源表单（厂商名/baseUrl/模型/凭证）→ relay 写**同一份文件**——UI 只是文件的编辑器，不是新存储；手机开团选型时可当场补登 provider。界面形态见 mockup「设置 · 模型服务」章节（桌面设置导航 + 三张 Provider 卡 + 角色路由默认表 + 手机紧凑版 + 图注 8-10，5.3 三轮审查通过）
 - **凭证落点恒在本机**：UI 只显示尾 4 位；「验证连通」由 relay 从本机直连厂商发起——端上拿不到完整 key 是**数据结构层面的事实**（脱敏视图 payload 里没有 token 字段），不是 UI 层遮盖；输入通道走既有鉴权信道（LAN token / 云 E2E），与 relay 向端上下发云桥 token（COMMAND_CLOUD_INFO）同一信任级、有先例
 - **给不愿在 App 里输 key 的用户明路**：`$ENV_VAR` 引用档与手编文件两条替代路径在设置页/文档明示——给多疑用户一条明路，比说服更有效
 - **透明即安抚**：设置页明示「凭证仅存本机 `~/.cc-deck/providers.json`（0600），永不上传、永不进事件流」+ EXE/Mac 文件位置直达；开源 README 附「你的密钥去了哪里」一节（数据流图上 key 只出现在本机两个框：配置文件 → spawn env）

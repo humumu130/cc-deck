@@ -306,6 +306,84 @@
   .pmact span.off { opacity: .4; }
   .pcrewfoot { font-size: 10.5px; color: var(--p-dim); text-align: center; margin-top: 12px; line-height: 1.8; }
 
+  /* ---------- 设置 · 模型服务（M2 Provider 管理页：桌面帧 console token / 手机帧 App token） ---------- */
+  .dtbody.set { height: 780px; }
+  /* 左侧设置导航：与 web-console 设置抽屉 #405 同构（竖排 rail + 选中项左缘橙条） */
+  .setnav { width: 170px; flex: 0 0 auto; background: var(--side-bg); border-right: 1px solid var(--side-line); padding: 14px 10px 12px; display: flex; flex-direction: column; }
+  .snav { position: relative; display: flex; align-items: center; gap: 8px; padding: 9px 11px; border-radius: 8px; font-size: 12.5px; color: var(--dim); border: 1px solid transparent; margin-bottom: 3px; }
+  .snav .ico { font-size: 13px; flex: 0 0 auto; }
+  .snav.on { color: var(--text-strong); background: var(--panel); border-color: var(--border); font-weight: 600; }
+  .snav.on::before { content: ""; position: absolute; left: -1px; top: 7px; bottom: 7px; width: 3px; border-radius: 3px; background: var(--brand); }
+  .setnav .foot { margin-top: auto; padding: 0 6px; font-size: 10px; color: var(--faint); line-height: 1.7; }
+
+  .setmain { flex: 1; min-width: 0; background: var(--bg-main); padding: 16px 20px; overflow: hidden; }
+  .sethead .t { font-size: 15.5px; font-weight: 600; color: var(--text-strong); }
+  .sethead .s { font-size: 11px; color: var(--dim); margin-top: 4px; display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+
+  /* Provider 卡：默认（继承 env）= 虚线边 + 绿 pill；登记卡 = 实线边 + 灰 pill */
+  .prov { background: var(--panel); border: 1px solid var(--border); border-radius: 12px; padding: 11px 13px; margin-top: 10px; }
+  .prov.def { border-style: dashed; background: linear-gradient(135deg, rgba(43,217,143,.05), var(--panel) 55%); }
+  .prh { display: flex; align-items: center; gap: 8px; }
+  .prh .nm { font-size: 13px; font-weight: 600; color: var(--text-strong); }
+  .prh .pill { margin-left: 0; }
+  .prh .acts { margin-left: auto; display: flex; gap: 6px; flex: 0 0 auto; }
+  .prbtn { font-size: 11px; padding: 4px 10px; border-radius: 7px; border: 1px solid var(--border); color: var(--card-sub); }
+  .prbtn.go { border-color: rgba(217,119,87,.4); color: #E8985F; }
+  .prbtn.ok { border-color: rgba(43,217,143,.35); color: var(--done); }
+  .prbtn.del { color: var(--waiting); }
+  .prrow { display: flex; align-items: center; gap: 7px; margin-top: 7px; font-size: 11.5px; color: var(--card-sub); flex-wrap: wrap; }
+  .prrow .lb { color: var(--faint); flex: 0 0 46px; font-size: 10.5px; }
+  .prcode { font-family: var(--mono); font-size: 10.5px; color: var(--card-sub); background: var(--bg-main); border: 1px solid var(--border); border-radius: 5px; padding: 1.5px 7px; white-space: nowrap; }
+  .prnote { font-size: 10.5px; color: var(--faint); margin-top: 6px; line-height: 1.65; }
+  .prq { width: 92px; height: 5px; border-radius: 3px; background: rgba(148,163,190,.14); overflow: hidden; flex: 0 0 auto; }
+  .prq i { display: block; height: 100%; background: linear-gradient(90deg, #E8985F, #C96442); } /* 水位条与上下文水位同一视觉语法 */
+
+  /* 角色路由默认表（身份模板库的一部分） */
+  .rtable { background: var(--panel); border: 1px solid var(--border); border-radius: 12px; padding: 10px 13px; margin-top: 12px; }
+  .rtable h5 { font-size: 11.5px; color: var(--dim); font-weight: 600; }
+  .rrow { display: flex; align-items: center; gap: 8px; padding: 6px 0; border-bottom: 1px dashed var(--side-line); font-size: 11.5px; color: var(--text); }
+  .rrow .role { flex: 0 0 96px; font-weight: 600; }
+  .rrow .why { margin-left: auto; color: var(--faint); font-size: 10.5px; }
+  .rrow.hl { background: rgba(217,119,87,.06); border-radius: 8px; padding-left: 7px; padding-right: 7px; border-bottom-color: transparent; }
+  .rrow.hl .why { color: #E8985F; }
+  .rfoot { font-size: 10.5px; color: var(--faint); padding-top: 7px; }
+
+  .pradd { border: 1px dashed var(--border); border-radius: 12px; text-align: center; color: var(--dim); font-size: 12px; padding: 9px 0; margin-top: 12px; }
+  .escape { font-size: 10.5px; color: var(--faint); margin-top: 9px; line-height: 1.7; }
+
+  /* 手机帧 Provider 卡（App token；间距收紧一档，保证信任条收进 740px 屏内） */
+  .pprov { background: var(--p-panel); border: 1px solid var(--p-line); border-radius: 12px; padding: 8px 11px; margin-bottom: 7px; }
+  .pprov.def { border-style: dashed; background: linear-gradient(135deg, rgba(43,217,143,.05), var(--p-panel) 55%); }
+  .pprh { display: flex; align-items: center; gap: 8px; }
+  .pprh .nm { font-size: 12.5px; font-weight: 600; color: var(--p-text); }
+  .pprh .ppill { margin-left: 0; }
+  .ppr { display: flex; align-items: center; gap: 6px; margin-top: 4px; font-size: 11px; color: var(--p-dim); flex-wrap: wrap; }
+  .ppr .lb { color: var(--p-faint); flex: 0 0 40px; font-size: 10px; }
+  .pprcode { font-family: var(--mono); font-size: 10px; color: var(--p-dim); background: var(--p-panel2); border: 1px solid var(--p-line); border-radius: 5px; padding: 1px 6px; white-space: nowrap; }
+  .pprov .mdl { color: var(--p-dim); background: var(--p-panel2); border-color: var(--p-line); }
+  .ppacts { display: flex; gap: 8px; margin-top: 6px; }
+  .ppacts span { flex: 1; text-align: center; font-size: 11px; padding: 4px 0; border-radius: 8px; border: 1px solid var(--p-line); color: var(--p-dim); }
+  .ppacts span.go { border-color: rgba(77,159,255,.45); color: #7CB8FF; }
+  .ppacts span.ok { border-color: rgba(43,217,143,.35); color: var(--done); }
+  .ppacts span.del { color: var(--waiting); flex: 0 0 44px; }
+  .pq { width: 76px; height: 4px; border-radius: 2px; background: var(--p-panel2); overflow: hidden; flex: 0 0 auto; }
+  .pq i { display: block; height: 100%; background: linear-gradient(90deg, var(--p-brand), var(--p-brand2)); }
+  .proute { background: var(--p-panel); border: 1px solid var(--p-line); border-radius: 12px; padding: 8px 11px; margin-bottom: 7px; }
+  .proute h5 { font-size: 11px; color: var(--p-dim); font-weight: 600; }
+  .prr { display: flex; align-items: center; gap: 7px; padding: 4px 0; border-bottom: 1px dashed var(--p-line); font-size: 11.5px; color: var(--p-text); }
+  .prr .role { flex: 0 0 74px; font-weight: 600; }
+  .prr .why { margin-left: auto; color: var(--p-faint); font-size: 10px; text-align: right; }
+  .prr.hl .why { color: #7CB8FF; }
+  .ppradd { border: 1px dashed var(--p-line); border-radius: 12px; text-align: center; color: var(--p-dim); font-size: 12px; padding: 7px 0; margin-bottom: 7px; }
+  .ptrust { background: var(--p-panel); border: 1px dashed var(--p-line); border-radius: 10px; padding: 8px 10px; font-size: 10.5px; color: var(--p-dim); text-align: center; line-height: 1.7; }
+  .ptrust b { color: #7FD1A8; font-weight: 600; }
+
+  /* 新章节图注钉位与配色（8 默认橙 / 9 绿=信任 / 10 复用 brand-2） */
+  .num.c9 { background: var(--done); }
+  .pin.c9 { background: var(--done); box-shadow: 0 0 0 4px rgba(43,217,143,.25); }
+  .dp8 { top: 118px; right: -14px; } .dp9 { top: 330px; right: -14px; } .dp10 { top: 785px; right: -14px; }
+  .np9 { top: 694px; right: -14px; }
+
   /* ---------- 图注 ---------- */
   .notes { flex: 1 1 300px; max-width: 420px; display: flex; flex-direction: column; gap: 14px; }
   .note { background: var(--panel); border: 1px solid var(--border); border-radius: 14px; padding: 14px 16px; }
@@ -732,6 +810,146 @@
         <p>Leader 推「📦 就绪待装机」卡片，点下载安装、看效果、一句话反馈——<b>你永远只做最后一公里</b>。看板 tab 上的琥珀数字 = 等你装机的数量（琥珀 = 需要你行动）。</p></div>
       <div class="note"><div class="nh"><span class="num">4</span>竖向泳道 + 进度总览</div>
         <p>手机又细又长——泳道竖排顺着滑，「就绪待装机」<b>置顶</b>（你最关心的是它），已完成默认折叠。顶部一条分段进度条补全局感，不翻泳道也知道团队到哪了。桌面宽屏则横排泳道——同一份数据，各用各的形态。</p></div>
+    </aside>
+  </div>
+
+  <!-- ================= 设置 · 模型服务（M2 Provider 管理页） ================= -->
+  <h2 class="sh"><span class="tag t-dt">配置面</span>设置 · 模型服务（Provider 管理）</h2>
+  <p class="shsub">M2 设置页，异构模型绑定的配置落点：<b>三端同源表单（名称 / baseUrl / 模型 / 凭证）→ relay 写同一份 ~/.cc-deck/providers.json</b>——这页只是那份文件的<b>编辑器</b>，不是新存储。第 0 层默认<b>继承本机环境零配置</b>（单厂商用户永远碰不到这页）；登记卡 = 非空 baseUrl 经 env 覆盖路由的扩展位。手机开团选型时也可当场补登 provider。</p>
+  <div class="stage">
+    <div class="winframe">
+      <div class="chrome">
+        <div class="dots"><i></i><i></i><i></i></div>
+        <div class="tt">CC Deck — 设置 · 模型服务</div>
+        <div class="btn ttl" title="EXE / Mac 独有：在文件管理器打开 ~/.cc-deck/providers.json">📂 打开配置文件</div>
+      </div>
+      <div class="dtbody set">
+        <div class="setnav">
+          <div class="snav"><span class="ico">⚙</span>通用</div>
+          <div class="snav on"><span class="ico">🧠</span>模型服务</div>
+          <div class="snav"><span class="ico">👥</span>团队身份模板</div>
+          <div class="snav"><span class="ico">ℹ</span>关于</div>
+          <div class="foot">v0.6.0-test<br>本机 relay · 已连接</div>
+        </div>
+        <div class="setmain">
+          <div class="sethead">
+            <div class="t">模型服务（Provider）</div>
+            <div class="s">凭证只存本机 <span class="prcode">~/.cc-deck/providers.json</span>（0600）· 永不上传、永不进事件流</div>
+          </div>
+
+          <!-- 第 0 层：继承本机环境（不在登记表里，虚线卡与登记卡区分） -->
+          <div class="prov def">
+            <div class="prh"><span class="nm">默认 · 继承本机环境</span><span class="pill g">零配置 · 当前生效</span>
+              <span class="acts"><span class="prbtn go">验证连通</span></span></div>
+            <div class="prrow"><span class="lb">接法</span>继承 relay 进程环境——你为 Claude Code 配好的 env 原样生效，无需登记</div>
+            <div class="prrow"><span class="lb">环境变量</span><span class="prcode">ANTHROPIC_BASE_URL</span><span class="prcode">ANTHROPIC_AUTH_TOKEN</span></div>
+            <div class="prnote">单厂商用户这就是全部——凭证本来就在你机器的环境变量里，cc-deck 不碰、不存、不搬。</div>
+          </div>
+
+          <!-- 登记卡 1：智谱 GLM -->
+          <div class="prov">
+            <div class="prh"><span class="nm">智谱 GLM</span><span class="pill b">已登记</span>
+              <span class="acts">
+                <span class="prbtn ok">验证连通 ✓ 已连通</span>
+                <span class="prbtn" title="EXE / Mac 独有：打开文件位置">📂</span>
+                <span class="prbtn del">删除</span>
+              </span></div>
+            <div class="prrow"><span class="lb">baseUrl</span><span class="prcode">https://open.bigmodel.cn/api/anthropic</span></div>
+            <div class="prrow"><span class="lb">模型</span><span class="prcode">glm-5.3</span><span class="prcode">glm-5.3-air</span></div>
+            <div class="prrow"><span class="lb">凭证</span><span class="prcode">••••9f3a</span><span style="color:var(--faint);font-size:10.5px">仅显尾 4 位 · 或填 $ENV_VAR 引用</span></div>
+            <div class="prrow"><span class="lb">额度</span>包月 5h 池 · 水位 62%<span class="prq"><i style="width:62%"></i></span></div>
+          </div>
+
+          <!-- 登记卡 2：Anthropic（baseUrl 空 = 官方端点） -->
+          <div class="prov">
+            <div class="prh"><span class="nm">Anthropic</span><span class="pill b">已登记</span>
+              <span class="acts"><span class="prbtn go">验证连通</span></span></div>
+            <div class="prrow"><span class="lb">baseUrl</span><span class="prcode">（空）= 官方端点</span><span style="color:var(--faint);font-size:10.5px">走 CLI 默认 env</span></div>
+            <div class="prrow"><span class="lb">模型</span><span class="prcode">claude-opus-4-5</span><span class="prcode">claude-sonnet-4-5</span></div>
+            <div class="prrow"><span class="lb">凭证</span><span class="prcode">••••c2e1</span></div>
+          </div>
+
+          <!-- 角色路由默认表 -->
+          <div class="rtable">
+            <h5>角色路由默认表 · 开团选型时的初始映射</h5>
+            <div class="rrow"><span class="role">👑 Leader</span><span class="prcode">glm-5.3</span><span class="why">强模型 · 指挥质量决定全队上限</span></div>
+            <div class="rrow"><span class="role">开发 worker</span><span class="prcode">glm-5.3-air</span><span class="why">包月便宜档 · 搬砖量大成本敏感</span></div>
+            <div class="rrow hl"><span class="role">🧪 验收</span><span class="prcode">claude-sonnet</span><span class="why">换厂商 = 认知独立（同厂商会犯一样的错）</span></div>
+            <div class="rrow"><span class="role">🔍 调研（只读）</span><span class="prcode">最便宜档</span><span class="why">低风险高量</span></div>
+            <div class="rfoot">默认表 · 开团时逐成员可改（身份模板库的一部分）</div>
+          </div>
+
+          <div class="pradd">＋ 添加厂商（名称 / baseUrl / 模型 / 凭证）</div>
+          <div class="escape">不想在 App 里输入？手编 <span class="prcode">~/.cc-deck/providers.json</span>，或凭证填 <span class="prcode">$ENV_VAR</span> 引用环境变量——两条替代路径常驻此页 <span style="color:var(--dim)">→</span></div>
+        </div>
+      </div>
+      <span class="pin dp8">8</span>
+      <span class="pin c9 dp9">9</span>
+      <span class="pin c5 dp10">10</span>
+    </div>
+
+    <div class="phone">
+      <div class="notch"></div>
+      <div class="screen">
+        <header class="appbar">
+          <span class="back">‹</span>
+          <div class="tt">
+            <div class="t">模型服务</div>
+            <div class="s">设置 · Provider</div>
+          </div>
+          <span class="menu">⋯</span>
+        </header>
+
+        <section class="ppane on" id="pprov">
+          <div class="pprov def">
+            <div class="pprh"><span class="nm">默认 · 继承本机环境</span><span class="ppill g">零配置 · 生效</span></div>
+            <div class="ppr"><span class="lb">环境变量</span><span class="pprcode">ANTHROPIC_BASE_URL</span><span class="pprcode">ANTHROPIC_AUTH_TOKEN</span></div>
+            <div class="ppr" style="color:var(--p-faint);font-size:10px">凭证本来就在你机器的环境变量里</div>
+            <div class="ppacts"><span class="go">验证连通</span></div>
+          </div>
+
+          <div class="pprov">
+            <div class="pprh"><span class="nm">智谱 GLM</span><span class="ppill b">已登记</span></div>
+            <div class="ppr"><span class="lb">baseUrl</span><span class="pprcode">open.bigmodel.cn</span></div>
+            <div class="ppr"><span class="lb">模型</span><span class="mdl">glm-5.3</span><span class="mdl">glm-5.3-air</span></div>
+            <div class="ppr"><span class="lb">凭证</span><span class="pprcode">••••9f3a</span></div>
+            <div class="ppr"><span class="lb">额度</span>包月 5h 池 · 62%<span class="pq"><i style="width:62%"></i></span></div>
+            <div class="ppacts"><span class="ok">✓ 已连通</span><span>📂</span><span class="del">删除</span></div>
+          </div>
+
+          <div class="pprov">
+            <div class="pprh"><span class="nm">Anthropic</span><span class="ppill b">已登记</span></div>
+            <div class="ppr"><span class="lb">baseUrl</span><span class="pprcode">（空）= 官方端点</span></div>
+            <div class="ppr"><span class="lb">模型</span><span class="mdl">claude-opus-4-5</span><span class="mdl">claude-sonnet-4-5</span></div>
+            <div class="ppr"><span class="lb">凭证</span><span class="pprcode">••••c2e1</span></div>
+            <div class="ppacts"><span class="go">验证连通</span></div>
+          </div>
+
+          <div class="proute">
+            <h5>角色路由默认表</h5>
+            <div class="prr"><span class="role">👑 Leader</span><span class="mdl">glm-5.3</span><span class="why">强模型</span></div>
+            <div class="prr"><span class="role">开发</span><span class="mdl">glm-5.3-air</span><span class="why">包月便宜档</span></div>
+            <div class="prr hl"><span class="role">🧪 验收</span><span class="mdl">claude-sonnet</span><span class="why">换厂商=认知独立</span></div>
+            <div class="prr"><span class="role">🔍 调研</span><span class="mdl">最便宜档</span><span class="why">只读低风险</span></div>
+            <div style="font-size:10px;color:var(--p-faint);padding-top:6px">默认表 · 开团时逐成员可改</div>
+          </div>
+
+          <div class="ppradd">＋ 添加厂商</div>
+
+          <div class="ptrust">🔒 <b>凭证仅存本机</b> ~/.cc-deck/providers.json（0600）<br>永不上传 · 永不进事件流 · 📂 打开文件位置</div>
+        </section>
+      </div>
+
+      <span class="pin cp np9">9</span>
+    </div>
+
+    <aside class="notes">
+      <div class="note"><div class="nh"><span class="num">8</span>三层入口，第 0 层零配置</div>
+        <p><b>第 0 层</b>默认继承本机环境（<b>ANTHROPIC_BASE_URL / ANTHROPIC_AUTH_TOKEN</b> 原样生效）——单厂商用户<b>永远碰不到这页</b>，什么都不用填，这也是信任基线。M1 手编文件，M2 才有这页 UI，且它<b>只是 providers.json 的编辑器，不是新存储</b>——三端表单写的是同一份文件。</p></div>
+      <div class="note"><div class="nh"><span class="num c9">9</span>凭证不出本机</div>
+        <p>UI 只显<b>尾 4 位</b>；「验证连通」由 relay <b>从本机直连厂商</b>发起；端上拿到的是无 token 字段的脱敏视图——<b>payload 里没有 token 字段是数据结构事实，不是 UI 遮盖</b>。输入通道走既有鉴权信道（LAN token / 云 E2E），与云桥 token 下发同一信任级。</p></div>
+      <div class="note"><div class="nh"><span class="num c5">10</span>给多疑者明路 + 默认表可改</div>
+        <p>不愿在 App 里输 key？<b>手编文件</b>与 <b>$ENV_VAR 引用档</b>两条替代路径在设置页常驻明示——给明路比说服有效。角色路由默认表（Leader 强模型 · 开发便宜档 · <b>验收换厂商 = 认知独立</b> · 调研最便宜）只是初始映射，<b>开团时逐成员可改</b>。</p></div>
     </aside>
   </div>
 
