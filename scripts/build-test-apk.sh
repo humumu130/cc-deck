@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # 本地 test 包构建：版本 <base>-test.N（N 从 ECS 已有 test 包自动递增），风格对齐 snap.N
 #   用法：scripts/build-test-apk.sh ["改动摘要"]
-# 动作：base 取 VERSION 文件 → ECS 查最大 test.N → 烙 <base>-test.N 进 build.gradle+app.json
+# 动作：base 取 VERSION 文件 → 基线守卫（必须 > latest.json 已发正式版）→ ECS 查最大 test.N
+#       → 烙 <base>-test.N 进 build.gradle+app.json
 #       → arm64 release 构建（R8 按 gradle.properties 现状）→ 推 ECS 版本化文件名 → 直链输出
 # 纪律：test 包只走 ECS 裸 IP 路径，永不进 CF 主域；版本烙印只改工作区不提交
 set -euo pipefail
@@ -31,6 +32,24 @@ ECS_DIR="/opt/cc-apk"
 KEY="$HOME/.ssh/id_ed25519"
 SSH="ssh -i $KEY -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null"
 SCP="scp -i $KEY -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null"
+
+# 基线守卫（2026-09-19，0.5.2-test.17 事故防再犯）：latest.json（发版流程写入）是
+# "已发正式版"的权威事实源；base 不严格大于它即拒绝出包——正式版已发布的版本号不再
+# 作 test 基线（用户 2026-09-19 定的规矩）。只比 core 三段；ECS 不可达时守卫放行
+#（后续 [1/5] 查序号同样会失败，不会静默错基线）
+RELEASED=$($SSH "$ECS_HOST" "grep -o '\"version\":\"[^\"]*\"' $ECS_DIR/latest.json 2>/dev/null | head -1 | cut -d'\"' -f4" 2>/dev/null || true)
+if [ -n "$RELEASED" ]; then
+  REL_CORE=$(printf '%s' "$RELEASED" | grep -oE '^[0-9]+\.[0-9]+\.[0-9]+')
+  BASE_CORE=$(printf '%s' "$BASE" | grep -oE '^[0-9]+\.[0-9]+\.[0-9]+')
+  if [ -n "$REL_CORE" ] && [ -n "$BASE_CORE" ]; then
+    VERDICT=$(awk -v a="$BASE_CORE" -v b="$REL_CORE" 'BEGIN{split(a,x,".");split(b,y,".");for(i=1;i<=3;i++){if(x[i]+0>y[i]+0){print "newer";exit}if(x[i]+0<y[i]+0){print "older";exit}}print "equal"}')
+    if [ "$VERDICT" != "newer" ]; then
+      NEXT=$(awk -v b="$REL_CORE" 'BEGIN{split(b,y,".");print y[1]"."y[2]"."y[3]+1}')
+      echo "ERR: 基线 ${BASE} 不高于已发正式版 ${RELEASED}（ECS latest.json）——正式版发过的版本号不再作 test 基线，先 bump VERSION 到 ${NEXT} 再出包" >&2
+      exit 1
+    fi
+  fi
+fi
 
 echo "[1/5] base=$BASE, ECS 查已有 test 序号"
 EXISTING=$($SSH "$ECS_HOST" "ls $ECS_DIR 2>/dev/null | grep -E 'cc-deck-${BASE}-test\.[0-9]+\.apk' | grep -oE 'test\.[0-9]+' | grep -oE '[0-9]+' | sort -n | tail -1" 2>/dev/null || true)
