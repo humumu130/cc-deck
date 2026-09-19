@@ -63,16 +63,18 @@ if (cfg.restorePoint && cwd) {
 }
 
 // ---- 组件一：当前待办摘要 + 分诊纪律 ----
+// #74 调度纪律补全：新消息默认排队不打断进行中任务，仅用户显式话术（优先处理/
+// 先停下做这个）才抢占——与全局调度准则 §3 同口径，插件化给所有用户
 if (cfg.taskGuard) {
   const tasks = readTasks(sid);
   if (tasks.length) {
     const lines = tasks.slice(0, 10).map((t) => `- #${t.id} ${t.subject}${t.status === "in_progress" ? "（进行中）" : ""}`);
     const more = tasks.length > 10 ? `\n…另有 ${tasks.length - 10} 条` : "";
     out.push(
-      `【待办提醒|${tasks.length} 条】新消息先分诊：新任务立即 TaskCreate 入单 / 补充更新对应条目 / 纯问答直接答；完成即关。\n${lines.join("\n")}${more}`,
+      `【待办提醒|${tasks.length} 条】新消息先分诊：新任务立即 TaskCreate 入单 / 补充更新对应条目 / 纯问答直接答；完成即关。新消息默认排队不打断进行中任务，仅用户明说「优先处理 / 先停下做这个」才抢占。\n${lines.join("\n")}${more}`,
     );
   } else {
-    out.push("【待办提醒|0 条】新任务立即入单 / 完成即关 / 纯问答不入单。");
+    out.push("【待办提醒|0 条】新任务立即入单 / 完成即关 / 纯问答不入单。新消息默认排队，明说抢占才切换。");
   }
 }
 
