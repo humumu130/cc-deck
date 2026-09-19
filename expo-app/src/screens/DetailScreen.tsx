@@ -959,7 +959,8 @@ export default function DetailScreen({ sid, onBack, initialView, ref }: { sid: s
   const [input, setInput] = useState(() => drafts.get(sid) ?? "");
   // #68① 多行自动增高：Android 下纯 minHeight/maxHeight 的自适应不可靠（实测长文
   // 恒 1 行），改 onContentSizeChange 显式定高——内容高 + 纵向 padding 22 + 边框 2，
-  // 夹在 [44,110]；封顶后高度恒定、内部自然滚动（类微信）
+  // 夹在 [44,150]（晨间反馈 110→150：拉高后能看到更多已输入内容）；封顶后高度恒定、
+  // 内部自然滚动（类微信）
   const [inputH, setInputH] = useState(44);
   const editInput = (v: string) => {
     if (v) drafts.set(sid, v);
@@ -2276,7 +2277,7 @@ export default function DetailScreen({ sid, onBack, initialView, ref }: { sid: s
               #62 文件同链路（relay 落盘原名+路径指令，托管/外部一致） */}
           {external || !s.historical || s.relay_session_id ? (
             <>
-            {/* #68② 按钮瘦身：去底去边框纯线条图标（19→21 补视觉分量），触达靠 hitSlop */}
+            {/* #68② 按钮瘦身：去底去边框纯线条图标，触达靠 hitSlop（晨间反馈 21→18 再收紧） */}
             <Pressable
               style={[d.imgBtn, (!canCmd || files.length >= 2) && { opacity: 0.4 }]}
               onPress={pickFiles}
@@ -2285,7 +2286,7 @@ export default function DetailScreen({ sid, onBack, initialView, ref }: { sid: s
               accessibilityLabel="附加文件"
             >
               {/* 线条回形针（与相机按钮同形制） */}
-              <Svg width={21} height={21} viewBox="0 0 24 24" fill="none" stroke={c.dim} strokeWidth={1.7} strokeLinecap="round" strokeLinejoin="round">
+              <Svg width={18} height={18} viewBox="0 0 24 24" fill="none" stroke={c.dim} strokeWidth={1.7} strokeLinecap="round" strokeLinejoin="round">
                 <Path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48" />
               </Svg>
             </Pressable>
@@ -2296,7 +2297,7 @@ export default function DetailScreen({ sid, onBack, initialView, ref }: { sid: s
               disabled={!canCmd || images.length >= 4}
             >
               {/* 2026-09-18 与网页端统一为线条相机（原相框+山形图片图标两端不一致） */}
-              <Svg width={21} height={21} viewBox="0 0 24 24" fill="none" stroke={c.dim} strokeWidth={1.7} strokeLinecap="round" strokeLinejoin="round">
+              <Svg width={18} height={18} viewBox="0 0 24 24" fill="none" stroke={c.dim} strokeWidth={1.7} strokeLinecap="round" strokeLinejoin="round">
                 <Path d="M8.7 6.8l1.05-1.9a1.5 1.5 0 0 1 1.3-.75h1.9a1.5 1.5 0 0 1 1.3.75l1.05 1.9" />
                 <Rect x={3.4} y={6.8} width={17.2} height={13} rx={3} />
                 <Circle cx={12} cy={13.2} r={3.5} />
@@ -2311,7 +2312,7 @@ export default function DetailScreen({ sid, onBack, initialView, ref }: { sid: s
               onChangeText={editInput}
               onContentSizeChange={(e) => {
                 const h = e.nativeEvent.contentSize.height;
-                setInputH(Math.max(44, Math.min(110, h + 24)));
+                setInputH(Math.max(44, Math.min(150, h + 24)));
               }}
               placeholder={external ? "CLI忙时自动排队" : s.historical ? "继续对话（恢复会话）…" : "发送消息…"}
               placeholderTextColor={c.faint}
@@ -2763,9 +2764,10 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
     alignItems: "center", justifyContent: "center",
   },
   imgDelT: { color: c.dim, fontSize: 13, lineHeight: 15, marginTop: -1 },
-  // #68② 图标按钮：无底无框纯线条（原 44 宽 panel2+边框盒），高保 44 对齐输入框
+  // #68② 图标按钮：无底无框纯线条（原 44 宽 panel2+边框盒），高保 44 对齐输入框。
+  // 晨间反馈再收紧：38→30 宽（图标 21→18），富余宽度全让输入框，触达靠 hitSlop
   imgBtn: {
-    width: 38, height: 44, alignItems: "center", justifyContent: "center",
+    width: 30, height: 44, alignItems: "center", justifyContent: "center",
   },
   imgBtnT: { fontSize: 17 },
   micOn: { borderRadius: 13, backgroundColor: c.tintStrong },
