@@ -544,12 +544,15 @@ export class CloudClient {
   private onEnv(env: Envelope): void {
     if (!this.ws || this.ws.readyState !== WebSocket.OPEN) return;
     for (const [dev, st] of this.phones) {
+      // #79 定向瞬态帧（env.to）：只发给命令来源端——大流量分块不广播给全部云手机
+      if (env.to && env.to !== `cloud-${dev}`) continue;
       // 推进 lastSeq：桥闪断后 auto-resume 按 seq 补发，服务端必须知道已推到哪
       // （否则只能等设备 ping 上报，回补会重复下发已收事件）。
       // seq 单调守卫：瞬态帧（seq:0，如 PAIRED_DEVICE）不回拨 lastSeq
       if (st.active && this.sendSealed(dev, env) && env.seq > st.lastSeq) st.lastSeq = env.seq;
     }
     for (const [dev, st] of this.wanWatches) {
+      if (env.to && env.to !== `wan-${dev}`) continue;
       if (st.active) {
         this.sendWan(dev, env);
         if (env.seq > st.lastSeq) st.lastSeq = env.seq;

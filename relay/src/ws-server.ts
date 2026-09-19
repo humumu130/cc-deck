@@ -70,6 +70,7 @@ const COMMAND_TYPES = new Set([
   "COMMAND_PIN_SESSION",
   "COMMAND_RESUME_SESSION",
   "COMMAND_IMPORT_PUSH",
+  "COMMAND_ARTIFACT_FETCH",
 ]);
 
 const HEARTBEAT_MS = 30_000;
@@ -608,6 +609,7 @@ export function startServer(
   wss.on("connection", (ws: WebSocket, url: URL) => {
     const clientId = `web-${connectionCounter++}`;
     (ws as ClientWs).isAlive = true;
+    (ws as ClientWs).clientId = clientId;
     ws.on("pong", () => {
       (ws as ClientWs).isAlive = true;
     });
@@ -711,11 +713,15 @@ export function startServer(
     });
   });
 
-  // 全局事件广播（#316：待配对手表未鉴权，不收事件）
+  // 全局事件广播（#316：待配对手表未鉴权，不收事件）。
+  // #79 定向瞬态帧（env.to）：只发给命令来源连接——大流量分块不殃及同 relay 的
+  // 其他在线端（否则一次 20MB 拉取会向所有客户端广播 ~27MB base64）
   const unsubscribe = bus.subscribe((env) => {
     const text = JSON.stringify(env);
     for (const client of wss.clients) {
-      if ((client as ClientWs).pairing) continue;
+      const cw = client as ClientWs;
+      if (cw.pairing) continue;
+      if (env.to && cw.clientId !== env.to) continue;
       if (client.readyState === WebSocket.OPEN) client.send(text);
     }
   });
@@ -909,6 +915,7 @@ async function handleBridgeHook(
 interface ClientWs extends WebSocket {
   isAlive: boolean;
   pairing?: boolean; // #316 待配对手表（/ws?pair=1）：未鉴权，不收事件、不发命令
+  clientId?: string; // #79 本连接的命令来源 id（web-N）：定向瞬态帧（to 字段）的过滤键
 }
 
 let connectionCounter = 0;

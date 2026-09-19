@@ -11,6 +11,10 @@ export interface Envelope<T extends string = string, P = unknown> {
   ts: number;           // Date.now()
   type: T;
   payload: P;
+  // #79 定向瞬态帧：仅 emitTransient 携带（to=请求方连接 id，如 web-3 / cloud-devX），
+  // 广播层按它过滤接收者——大流量分块（ARTIFACT_CHUNK）只发给发起拉取的客户端，
+  // 不殃及同 relay 的其他在线端。常规事件恒 undefined（全广播）
+  to?: string;
 }
 
 // ---------- 会话状态 ----------

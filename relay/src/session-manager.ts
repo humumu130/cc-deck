@@ -1688,16 +1688,20 @@ export class SessionManager {
             const buf = readFileSync(hit.path);
             const total = Math.max(1, Math.ceil(buf.length / ARTIFACT_CHUNK_BYTES));
             for (let seq = 0; seq < total; seq++) {
-              this.bus.emitTransient("ARTIFACT_CHUNK", {
-                ref,
-                seq,
-                total,
-                b64: buf.subarray(seq * ARTIFACT_CHUNK_BYTES, (seq + 1) * ARTIFACT_CHUNK_BYTES).toString("base64"),
-              });
+              this.bus.emitTransient(
+                "ARTIFACT_CHUNK",
+                {
+                  ref,
+                  seq,
+                  total,
+                  b64: buf.subarray(seq * ARTIFACT_CHUNK_BYTES, (seq + 1) * ARTIFACT_CHUNK_BYTES).toString("base64"),
+                },
+                by,
+              );
             }
-            this.bus.emitTransient("ARTIFACT_CHUNK", { ref, done: true });
+            this.bus.emitTransient("ARTIFACT_CHUNK", { ref, done: true }, by);
           } catch (e) {
-            this.bus.emitTransient("ARTIFACT_CHUNK", { ref, error: e instanceof Error ? e.message : String(e) });
+            this.bus.emitTransient("ARTIFACT_CHUNK", { ref, error: e instanceof Error ? e.message : String(e) }, by);
           }
           return { command_id: cmd.command_id, ok: true, artifact: { size: st.size, mime: mimeOf(hit.path) } };
         }

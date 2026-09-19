@@ -59,8 +59,10 @@ export class EventBus {
   // 不落盘、重连不补发（PAIR_REQUEST/PAIR_RESOLVED 在 ws-server 的同款语义抽到总
   // 线层）——PAIRED_DEVICE 新配对提醒若走 emit 落 ndjson，掉线重连会按 last_seq
   // 补发历史提醒，重复弹通知。消费方（CloudClient.onEnv）以 seq>lastSeq 守卫推进
-  emitTransient(type: EventType, payload: unknown): void {
-    const env: Envelope = { seq: 0, session_id: "", ts: Date.now(), type, payload };
+  // #79 to：定向投递——广播层据此过滤接收者（仅发起拉取的客户端收分块帧），
+  // 不传 = 全广播（PAIR_REQUEST 等原有瞬态语义不变）
+  emitTransient(type: EventType, payload: unknown, to?: string): void {
+    const env: Envelope = { seq: 0, session_id: "", ts: Date.now(), type, payload, ...(to ? { to } : {}) };
     for (const l of this.listeners) {
       try {
         l(env);
