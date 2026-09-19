@@ -96,6 +96,15 @@ relay 创建会话进程时自动配好环境，两件事：
 
 **UI 落点**：编制卡每行带模型 chip（开团时点选更换）；成员名册卡带模型 chip；详情头模型显示为现有能力不动。
 
+**配置入口与信任设计**（在哪配 / 要不要经过 App / 用户怕不怕）：
+
+- **第 0 层·零配置**：默认 provider = 继承 relay 进程环境——用户本就为 Claude Code 配好的 `ANTHROPIC_BASE_URL`/`ANTHROPIC_AUTH_TOKEN`（GLM 套餐用户现状即此），relay 原样继承。单厂商用户**永远碰不到 providers.json**，什么都不用填，这也是信任基线：我们不碰用户凭证，凭证本来就在他机器的环境变量里。（GUI/launchd 拉起的 relay 可能缺 shell profile env——M0 PATH 注入同源问题，登记表正是这条路径的兜底）
+- **M1·手编文件**：`~/.cc-deck/providers.json`（dogfooding 阶段用户就是我们自己）
+- **M2·设置页 UI**：三端同源表单（厂商名/baseUrl/模型/凭证）→ relay 写**同一份文件**——UI 只是文件的编辑器，不是新存储；手机开团选型时可当场补登 provider
+- **凭证落点恒在本机**：UI 只显示尾 4 位；「验证连通」由 relay 从本机直连厂商发起——端上拿不到完整 key 是**数据结构层面的事实**（脱敏视图 payload 里没有 token 字段），不是 UI 层遮盖；输入通道走既有鉴权信道（LAN token / 云 E2E），与 relay 向端上下发云桥 token（COMMAND_CLOUD_INFO）同一信任级、有先例
+- **给不愿在 App 里输 key 的用户明路**：`$ENV_VAR` 引用档与手编文件两条替代路径在设置页/文档明示——给多疑用户一条明路，比说服更有效
+- **透明即安抚**：设置页明示「凭证仅存本机 `~/.cc-deck/providers.json`（0600），永不上传、永不进事件流」+ EXE/Mac 文件位置直达；开源 README 附「你的密钥去了哪里」一节（数据流图上 key 只出现在本机两个框：配置文件 → spawn env）
+
 **换模型 = 接替机制的红利**：连续性靠板 + git，不靠 transcript——厂商限流、池烧穿、模型升级时，Leader 提议替换 → 用户确认 → 同身份换 provider/model 重 spawn → 读板读卡继续。与"成员死了接替"同一机制，零新代码。**异构不只是省成本，是热更换能力**。
 
 **边界与风险**：
@@ -104,6 +113,7 @@ relay 创建会话进程时自动配好环境，两件事：
 - 能力差异（长上下文/工具支持）：`contextLimitOf` 扩为 per-provider 表（glm-5.x→1M 已是先例），水位条按各成员 limit 渲染
 - 厂商侧故障：M1 手动换 provider 重 spawn；M2 心跳连续失败 N 次 → Leader 主动提议换厂商
 - 限额池水位：GLM 5h 池是账号级共享容量，多成员 = N 倍速消耗——开团编制卡显示预计并发占用与池水位（M2，复用 glm-plan-usage 插件的查询口）
+- 凭证卫生：**日志与错误信息永不回显凭证**（校验失败报 provider id + 字段名，不报值）；relay 内存仅在 spawn 拼 env 时瞬时持有 token；另注意配第三方 baseUrl = 提示词发给该厂商（用户与厂商间的事），README 一句话说清
 
 ### 手机看板（用户的"只看效果"视野）
 
