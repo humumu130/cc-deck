@@ -61,6 +61,12 @@ interface Pending {
 // transcript 里一次任务工具操作（use 或已配对的 result）
 type TaskOp = { tool?: string; input?: unknown; result?: { task: { id: number } } };
 
+// 排队消息的对账键：带图消息的展示回显（text）与注入全文（body）不同，CLI 侧一切
+// 回流文本都是 body 形态——匹配一律取 body（见 PendingInput 注释）
+function pBody(p: PendingInput): string {
+  return p.body ?? p.text;
+}
+
 // transcript 首条记录的时间戳（ISO 字符串）——孤儿收养时的真实会话起点（#321）；
 // 只读首 4KB，解析失败返回 0（回落 ensureExternal 的 Date.now()）
 function transcriptFirstTs(p: string): number {
@@ -850,11 +856,11 @@ export class Bridge {
     const list = state?.pending_inputs ?? [];
     if (!list.length) return [];
     const key = normKey(text);
-    const kept = list.filter((p) => !key.includes(normKey(p.text)));
+    const kept = list.filter((p) => !key.includes(normKey(pBody(p))));
     if (kept.length === list.length) return [];
     this.mgr.setExternalPending(id, kept);
-    for (const p of list) if (key.includes(normKey(p.text))) this.dropEnqueuedKey(id, p.text);
-    return list.filter((p) => key.includes(normKey(p.text))).map((p) => p.text);
+    for (const p of list) if (key.includes(normKey(pBody(p)))) this.dropEnqueuedKey(id, pBody(p));
+    return list.filter((p) => key.includes(normKey(pBody(p)))).map((p) => p.text);
   }
 
   // PC 端敲字排队：与手机注入同构地进 pending_inputs，手机立即显示"排队中"
@@ -870,20 +876,20 @@ export class Bridge {
     // CLI 会把多条排队消息合并成一条 enqueue（"A\rB"，内部换行折叠）：覆盖任一待发消息
     // 即为同一批的重复表示，不重复入队；手机注入回显（extInput）已进队同样跳过。
     // 同时登记"已进 CLI 队列"：看门狗的滞留判定跳过（CLI 忙时排队是正常路径，非滞留）
-    const covered = pending.some((p) => key.includes(normKey(p.text)));
+    const covered = pending.some((p) => key.includes(normKey(pBody(p))));
     if (covered) {
       // #43 根治（2026-09-10 深夜）：transcript 的 enqueue 行 = CLI 已收到该消息的回执——
       // 不再只登记等 UserPromptSubmit 晋升（CLI 忙时合并提交的 UPS prompt 与 pending
       // 原文经 normKey 300 截断后互不包含，800 字长消息三式全脱靶 → 永久滞留闪烁，
       // 用户实测中招）。收到回执即晋升出队 + 写正式消息日志（enqueued 语义本就是已处理）
-      const hits = pending.filter((p) => key.includes(normKey(p.text)));
-      const kept = pending.filter((p) => !key.includes(normKey(p.text)));
+      const hits = pending.filter((p) => key.includes(normKey(pBody(p))));
+      const kept = pending.filter((p) => !key.includes(normKey(pBody(p))));
       this.mgr.setExternalPending(id, kept);
       for (const p of hits) {
         // 晋升即出队：清进队标记（同文本再次滞留时看门狗仍要管），不重新登记——
         // 登记了 isEnqueued 会永久跳过补发，39 段回归（晋升后重滞留）正挂在这
-        this.dropEnqueuedKey(id, p.text);
-        this.noteUserMsg(id, p.text, "promote");
+        this.dropEnqueuedKey(id, pBody(p));
+        this.noteUserMsg(id, pBody(p), "promote");
         this.mgr.pushExternalLog(id, "user_message", truncate(p.text, 300), undefined, { full: truncate(p.text, 2000) });
       }
       this.resetStuckWatch(id); // #111：enqueue 回执晋升与 UPS 晋升同权，重置滞留快窗
@@ -1134,22 +1140,24 @@ export class Bridge {
       let alive2 = !!pid2 && cliHostAlive(pid2);
       if (!alive2 && pid2) alive2 = cliHostAlive(pid2); // 二次探测
       if (!alive2) {
-        return this.resumeExternal(sessionId, body, !pid2 ? "无进程定位" : `进程 ${pid2} 判定不可用（二次探测仍失败）`);
+        return this.resumeExternal(sessionId, body, !pid2 ? "无进程定位" : `进程 ${pid2} 判定不可用（二次探测仍失败）`, echoText);
       }
     }
 
     const q = this.inputQueue.get(sessionId) ?? [];
     q.push(body);
     this.inputQueue.set(sessionId, q);
-    // 发送方回显：进会话状态 pending_inputs（客户端显示在工作指示器下方，处理时上浮为正式消息）
-    this.mgr.setExternalPending(sessionId, [...(state.pending_inputs ?? []), { text: echoText, ts: Date.now() }]);
+    // 发送方回显：进会话状态 pending_inputs（客户端显示在工作指示器下方，处理时上浮为正式消息）。
+    // 带图消息双文本：text=短回显（客户端可见面一律不暴露临时路径），body=注入 CLI 的
+    // 全文——晋升/看门狗/防抢发守门对账用 body（pBody），CLI 侧回流的只有 body 形态
+    this.mgr.setExternalPending(sessionId, [...(state.pending_inputs ?? []), { text: echoText, ts: Date.now(), ...(body !== echoText ? { body } : {}) }]);
     if ((state.status === "DONE" || state.status === "WORKING" || state.status === "ERROR") && !this.flushing.has(sessionId)) {
       if (state.status !== "DONE") {
-        this.mgr.pushExternalLog(sessionId, "system", `已注入终端（CLI 运行中，自动排队跟随）：${truncate(body, 80)}`);
+        this.mgr.pushExternalLog(sessionId, "system", `已注入终端（CLI 运行中，自动排队跟随）：${truncate(echoText, 80)}`);
       }
       void this.flushQueue(sessionId);
     } else {
-      this.mgr.pushExternalLog(sessionId, "system", `已排队（等待确认/回合结束后自动发送）：${truncate(body, 80)}`);
+      this.mgr.pushExternalLog(sessionId, "system", `已排队（等待确认/回合结束后自动发送）：${truncate(echoText, 80)}`);
     }
     return { ok: true };
   }
@@ -1161,19 +1169,21 @@ export class Bridge {
   // pending，恢复进程空闲时 flushQueue 自动带上
   private resumeSpawns = new Map<string, number>();
 
-  private resumeExternal(sessionId: string, text: string, why?: string): { ok: boolean; error?: string } {
+  private resumeExternal(sessionId: string, text: string, why?: string, echo?: string): { ok: boolean; error?: string } {
     const state = this.mgr.getExternal(sessionId);
     if (!state) return { ok: false, error: `会话不存在: ${sessionId}` };
     if (this.resumeSpawns.size > 60) this.resumeSpawns.clear();
     const inWindow = Date.now() - (this.resumeSpawns.get(sessionId) ?? 0) < this.resumeWindowMs;
-    this.mgr.setExternalPending(sessionId, [...(state.pending_inputs ?? []), { text: text.trim(), ts: Date.now() }]);
+    // 带图消息：pending 回显/日志用短文本（不暴露临时路径），对账键仍是注入全文
+    const shown = echo ?? text.trim();
+    this.mgr.setExternalPending(sessionId, [...(state.pending_inputs ?? []), { text: shown, ts: Date.now(), ...(shown !== text.trim() ? { body: text.trim() } : {}) }]);
     if (inWindow) {
-      this.mgr.pushExternalLog(sessionId, "system", `恢复进行中，消息已排队（恢复进程空闲后自动带上）：${truncate(text, 80)}`);
+      this.mgr.pushExternalLog(sessionId, "system", `恢复进行中，消息已排队（恢复进程空闲后自动带上）：${truncate(shown, 80)}`);
       return { ok: true };
     }
     const cwd = state.cwd || homedir();
     this.resumeSpawns.set(sessionId, Date.now());
-    this.mgr.pushExternalLog(sessionId, "system", `恢复会话中（新终端标签 claude --resume${why ? `，原因：${why}` : ""}）并投递：${truncate(text, 80)}`);
+    this.mgr.pushExternalLog(sessionId, "system", `恢复会话中（新终端标签 claude --resume${why ? `，原因：${why}` : ""}）并投递：${truncate(shown, 80)}`);
     void resumeSession(cwd, sessionId.slice(4), text, state.permission_mode).then((r) => {
       if (!r.ok) {
         this.resumeSpawns.delete(sessionId); // 恢复失败解除窗口，下条消息可重试恢复
@@ -1190,7 +1200,7 @@ export class Bridge {
       const t = setTimeout(() => {
         this.resumeClosures.delete(sessionId);
         const st = this.mgr.getExternal(sessionId);
-        if (!(st?.pending_inputs ?? []).some((p) => normKey(p.text) === normKey(text))) return; // 已晋升/已清：恢复成功
+        if (!(st?.pending_inputs ?? []).some((p) => normKey(pBody(p)) === normKey(text))) return; // 已晋升/已清：恢复成功
         this.resumeSpawns.delete(sessionId);
         this.mgr.pushExternalLog(sessionId, "system", `恢复进程 ${Math.round(this.resumeVerifyMs / 1000)}s 内未上线（新终端可能启动失败），下条消息发送时将重试恢复`);
       }, this.resumeVerifyMs);
@@ -1211,7 +1221,7 @@ export class Bridge {
     const key = normKey(prompt);
     // 同文本全部晋升：桌面端发消息会双入队（注入回显 + PC 敲字 transcript enqueue 各一条，
     // 同文本同 ts 邻近）——只清第一条会留幽灵 pending 永久闪烁（2026-09-14 用户实测）
-    const matched = list.filter((p) => normKey(p.text) === key);
+    const matched = list.filter((p) => normKey(pBody(p)) === key);
     const i = matched.length ? list.indexOf(matched[0]) : -1;
     if (i !== -1) {
       const promoted = list.splice(i, 1)[0];
@@ -1220,8 +1230,8 @@ export class Bridge {
         if (di !== -1) list.splice(di, 1);
       }
       this.mgr.setExternalPending(sessionId, list);
-      this.dropEnqueuedKey(sessionId, promoted.text);
-      this.noteUserMsg(sessionId, promoted.text, "promote");
+      this.dropEnqueuedKey(sessionId, pBody(promoted));
+      this.noteUserMsg(sessionId, pBody(promoted), "promote");
       this.mgr.pushExternalLog(sessionId, "user_message", truncate(promoted.text, 300), undefined, { full: truncate(promoted.text, 2000) });
       this.resetStuckWatch(sessionId);
       return true;
@@ -1230,15 +1240,15 @@ export class Bridge {
     for (let s = 0; s < list.length; s++) {
       const acc: string[] = [];
       for (let e = s; e < list.length; e++) {
-        acc.push(normKey(list[e].text));
+        acc.push(normKey(pBody(list[e])));
         const joined = acc.join(" ");
         if (joined.length > key.length) break;
         if (joined === key) {
           const hits = list.splice(s, e - s + 1);
           this.mgr.setExternalPending(sessionId, list);
           for (const h of hits) {
-            this.dropEnqueuedKey(sessionId, h.text);
-            this.noteUserMsg(sessionId, h.text, "promote");
+            this.dropEnqueuedKey(sessionId, pBody(h));
+            this.noteUserMsg(sessionId, pBody(h), "promote");
             this.mgr.pushExternalLog(sessionId, "user_message", truncate(h.text, 300), undefined, { full: truncate(h.text, 2000) });
           }
           this.noteUserMsg(sessionId, prompt, "promote"); // 合并形态也记账：后续同形态到达直接跳过
@@ -1258,15 +1268,15 @@ export class Bridge {
     // 前 120 字做 key 的 includes——合并形态只要含该条开头 120 字即命中（CLI 提交原文
     // 必完整含每条排队消息的全文，前缀 120 字必在其中）
     const subHits = list.filter((p) => {
-      const pk = normKey(p.text);
+      const pk = normKey(pBody(p));
       return key.includes(pk) || (pk.length > 120 && key.includes(pk.slice(0, 120)));
     });
     if (subHits.length) {
-      const keptList = list.filter((p) => !key.includes(normKey(p.text)));
+      const keptList = list.filter((p) => !key.includes(normKey(pBody(p))));
       this.mgr.setExternalPending(sessionId, keptList);
       for (const h of subHits) {
-        this.dropEnqueuedKey(sessionId, h.text);
-        this.noteUserMsg(sessionId, h.text, "promote");
+        this.dropEnqueuedKey(sessionId, pBody(h));
+        this.noteUserMsg(sessionId, pBody(h), "promote");
         this.mgr.pushExternalLog(sessionId, "user_message", truncate(h.text, 300), undefined, { full: truncate(h.text, 2000) });
       }
       this.resetStuckWatch(sessionId);
@@ -2163,9 +2173,9 @@ export class Bridge {
     const avail = [...(this.inputQueue.get(id) ?? [])];
     const kept: PendingInput[] = [];
     for (const p of state.pending_inputs ?? []) {
-      const qi = avail.findIndex((t) => normKey(t) === normKey(p.text));
+      const qi = avail.findIndex((t) => normKey(t) === normKey(pBody(p)));
       if (qi === -1) {
-        this.noteUserMsg(id, p.text, "promote");
+        this.noteUserMsg(id, pBody(p), "promote");
         this.mgr.pushExternalLog(id, "user_message", truncate(p.text, 300), undefined, { full: truncate(p.text, 2000) });
       } else {
         avail.splice(qi, 1); // 只做匹配记账，不动原队列（flushQueue 随后要注入）
@@ -2341,7 +2351,7 @@ export class Bridge {
     const st = this.mgr.getExternal(sessionId);
     if (!st?.cli_pid) return;
     // 已晋升（UserPromptSubmit 已到）：不是滞留，收工
-    if (!(st.pending_inputs ?? []).some((p) => normKey(p.text) === normKey(text))) return;
+    if (!(st.pending_inputs ?? []).some((p) => normKey(pBody(p)) === normKey(text))) return;
     // 与看门狗同款前置：状态不适合补回车 / 正有 flush 或守门在跑 → 交回看门狗兜底
     if (
       (st.status !== "WORKING" && st.status !== "DONE") ||
@@ -2351,8 +2361,10 @@ export class Bridge {
     ) return;
     const pid = st.cli_pid;
     // known 用全部 pending 文本（不止本条）：连续多条滞留时 foreignResidual 才能
-    // 把框内全部内容解释为我们的，否则前一条会被误判"外来输入"而暂缓
-    const known = (st.pending_inputs ?? []).map((p) => p.text);
+    // 把框内全部内容解释为我们的，否则前一条会被误判"外来输入"而暂缓。
+    // 带 #54 双文本口径：CLI 输入框里的滞留文是注入全文，对账键取 body——
+    // 用回显短文本（「… [图片×1]」）比对必失配 → skip-absent 误判放弃补发
+    const known = (st.pending_inputs ?? []).map((p) => pBody(p));
     this.stuckGuarding.add(sessionId);
     // verdict 语义与看门狗路径不同：skip-absent 在这里是「CLI 已原生排队、框已清」的
     // 正常态（pending 等工具边界自然晋升）——静默收手，绝不动 skips 计数（否则 3 条
@@ -2370,7 +2382,7 @@ export class Bridge {
           // 消息劈成两半）或本条已晋升（UserPromptSubmit 到达）——弃发交回下一轮
           const s2 = this.mgr.getExternal(sessionId);
           if (this.flushing.has(sessionId) || (this.inputQueue.get(sessionId)?.length ?? 0) > 0) return;
-          if (!s2 || !(s2.pending_inputs ?? []).some((p) => normKey(p.text) === normKey(text))) return;
+          if (!s2 || !(s2.pending_inputs ?? []).some((p) => normKey(pBody(p)) === normKey(text))) return;
           this.fireStuckEnter(sessionId, pid, v.kind === "enter-after-wait"
             ? `已补发回车（检测到输入框有其他输入，等停手 ${Math.round(v.waitedMs / 100) / 10}s 后补发）`
             : "注入后 3 秒仍滞留输入框，已补发回车（#111 主动验证）");
@@ -2405,12 +2417,13 @@ export class Bridge {
       const threshold = w0 && w0.tries > 0 ? this.stuckAfterMs : firstMs;
       const stuckTexts = (s.pending_inputs ?? []).filter((p) => {
         if (now - p.ts <= threshold) return false;
-        if (this.isEnqueued(id, p.text)) return false;
+        if (this.isEnqueued(id, pBody(p))) return false;
         // 60s 内晋升过同文本：pending 条目早于晋升记录 = 已处理过的残留，跳过；
-        // 条目更新 = 用户重发（"继续"这类高频词）再滞留，照常补发
-        const rec = this.recentUserMsgs.get(id)?.get(normKey(p.text));
+        // 条目更新 = 用户重发（"继续"这类高频词）再滞留，照常补发。
+        // 对账键统一 body 形态（noteUserMsg 记的就是提交全文）
+        const rec = this.recentUserMsgs.get(id)?.get(normKey(pBody(p)));
         return !(rec && now - rec.ts < 60_000 && rec.ts >= p.ts);
-      }).map((p) => p.text);
+      }).map((p) => pBody(p));
       if (stuckTexts.length === 0) {
         this.stuckWatch.delete(id); // 真送达/清空：看门狗全额重置
         continue;

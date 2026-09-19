@@ -128,10 +128,16 @@ export interface SubagentInfo {
   ended_at?: number;     // 缺失 = 运行中；非 bg 由 PostToolUse 收尾，bg 由 transcript 的 <task-notification> 收尾
 }
 
-// external 会话排队注入消息（EXT_INPUT 回显）
+// external 会话排队注入消息（EXT_INPUT 回显）。text=客户端展示短文本（带图消息为
+// 「正文 [图片×N]」，不含临时路径）；body=实际注入 CLI 的全文（带图时合成
+// 「正文+路径查看指令」）。晋升、看门狗、防抢发守门等一切与 CLI 侧回流的文本
+// （UserPromptSubmit prompt / enqueue 台账 / 输入框快照）对账，必须用 body——
+// CLI 看到的只有 body，拿 text 去比对必失配（2026-09-19 实测：看门狗 skip-absent
+// 误判×3 后暂停补发，带图消息滞留输入框一分钟以上）
 export interface PendingInput {
   text: string;
   ts: number;
+  body?: string;
 }
 
 // 托管会话权限模式（SDK PermissionMode 的安全子集：bypassPermissions 不开放远程切换）

@@ -494,7 +494,7 @@ export class SessionManager {
   private bridge: {
     resolvePending: (sessionId: string, requestId: string, decision: "allow" | "deny", reason?: string) => boolean;
     answerPending: (sessionId: string, requestId: string, answers: string[]) => string | null;
-    extInput: (sessionId: string, text: string) => { ok: boolean; error?: string };
+    extInput: (sessionId: string, text: string, images?: string[]) => { ok: boolean; error?: string };
     extStop: (sessionId: string) => { ok: boolean; error?: string };
     refreshTodos: (sessionId: string) => { ok: boolean; error?: string };
     hideTodo: (sessionId: string, content: string) => { ok: boolean; error?: string };
@@ -503,7 +503,7 @@ export class SessionManager {
   setBridge(b: {
     resolvePending: (sessionId: string, requestId: string, decision: "allow" | "deny", reason?: string) => boolean;
     answerPending: (sessionId: string, requestId: string, answers: string[]) => string | null;
-    extInput: (sessionId: string, text: string) => { ok: boolean; error?: string };
+    extInput: (sessionId: string, text: string, images?: string[]) => { ok: boolean; error?: string };
     extStop: (sessionId: string) => { ok: boolean; error?: string };
     refreshTodos: (sessionId: string) => { ok: boolean; error?: string };
     hideTodo: (sessionId: string, content: string) => { ok: boolean; error?: string };

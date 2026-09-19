@@ -1876,6 +1876,56 @@ await wait(150);
   await waitLog(() => fakeLog().some((a) => a[0] === "5477" && String(a[1]).startsWith("请用 Read 工具查看图片")), 5000);
   assert(true, "54 image-only body starts with Read instruction");
   assert(mgr.getExternal(sid54)!.pending_inputs?.at(-1)?.text === "[图片×1]", "54 image-only echo");
+
+  // ── 54b 双文本对账回归（2026-09-19 用户实测事故）：带图消息 pending 回显（echo）与
+  //     注入全文（body）分离后，晋升/看门狗/防抢发守门全部以 body 对账；客户端可见面
+  //     （气泡 text、时间线 user_message、注入/排队系统日志）一律不暴露临时路径
+  {
+    const { extractInputBox, anyKnownPresent } = await import("../src/type-guard.js");
+    const pend54 = mgr.getExternal(sid54)!.pending_inputs!.at(-1)!;
+    assert(pend54.text === "[图片×1]" && typeof pend54.body === "string" && pend54.body.startsWith("请用 Read 工具查看图片"), "54b pending carries body alongside echo");
+    const sys54 = events.filter((e) => e.type === "SESSION_LOG" && e.session_id === sid54 && (e.payload as { kind?: string }).kind === "system").map((e) => String((e.payload as { text: string }).text));
+    assert(sys54.some((t) => t.includes("已注入终端") && t.includes("[图片×1]")), "54b inject receipt log uses echo");
+    assert(!sys54.some((t) => t.includes("img-")), "54b no tmp path in client-visible system logs");
+    // ① 晋升：CLI 提交的 UPS prompt 是注入全文（含路径）→ pending 清空 + 时间线记短回显
+    await hook({ event: "UserPromptSubmit", prompt: pend54.body, session_id: "cli-54", cli_pid: 5477 });
+    await wait(200);
+    assert(!(mgr.getExternal(sid54)?.pending_inputs ?? []).some((p) => p.text === "[图片×1]"), "54b UPS with full body promotes image pending");
+    const um54 = events.filter((e) => e.type === "SESSION_LOG" && e.session_id === sid54 && (e.payload as { kind?: string }).kind === "user_message").map((e) => String((e.payload as { text: string }).text));
+    assert(um54.some((t) => t === "[图片×1]"), "54b promoted image msg logged as echo");
+    assert(!um54.some((t) => t.includes("img-")), "54b user_message hides tmp path");
+    // ② 看门狗（事故主体）：pending 回显滞留、CLI 输入框里是注入全文（折行）→ 守门以
+    //    body 判「框内有我们的消息」→ 补发回车。旧口径（known=echo）必 skip-absent，
+    //    3 次后 given_up，消息滞留输入框一分钟以上（活体取证：anyKnownPresent(box,[echo])
+    //    =false / [body]=true，2026-09-19 pid 46673 实测）
+    const bodyStr = pend54.body!;
+    const B54 = "─".repeat(60);
+    const wrap = (s: string, n: number) => Array.from({ length: Math.ceil(s.length / n) }, (_, i) => "  " + s.slice(i * n, (i + 1) * n));
+    const boxRows54 = [B54, "❯", ...wrap(bodyStr, 40), B54, "  ⏵⏵ bypass permissions on"];
+    const box54 = extractInputBox(boxRows54)!;
+    assert(!anyKnownPresent(box54, [pend54.text]), "54b echo alone cannot match injected body in box (the pit)");
+    assert(anyKnownPresent(box54, [bodyStr]), "54b body matches wrapped box");
+    const PEEK54 = fileURLToPath(new URL("../data/test-peek-54.txt", import.meta.url));
+    process.env.CCR_TEST_PLATFORM = "darwin";
+    process.env.CCR_OSASCRIPT_CMD = fileURLToPath(new URL("./fake-injector.mjs", import.meta.url));
+    process.env.CCR_FAKE_PEEK_FILE = PEEK54;
+    writeFileSync(PEEK54, boxRows54.join("\n"));
+    try {
+      const enters54 = () => fakeLog().filter((a) => a[0] === "5477" && a[1] === "").length;
+      const before54 = enters54();
+      mgr.setExternalPending(sid54, [{ text: pend54.text, ts: Date.now() - 9000, body: bodyStr }]);
+      (bridge as unknown as { sweepStuckInputs(): void }).sweepStuckInputs();
+      await waitLog(() => enters54() > before54, 5000);
+      assert(enters54() > before54, "54b watchdog compensates stuck image msg (body-matched, not skip-absent)");
+      const logs54b = events.filter((e) => e.type === "SESSION_LOG" && e.session_id === sid54).map((e) => String((e.payload as { text: string }).text));
+      assert(!logs54b.some((t) => t.includes("输入框已无该排队消息")), "54b no skip-absent misjudgment");
+    } finally {
+      delete process.env.CCR_TEST_PLATFORM;
+      delete process.env.CCR_OSASCRIPT_CMD;
+      delete process.env.CCR_FAKE_PEEK_FILE;
+      rmSync(PEEK54, { force: true });
+    }
+  }
   rmSync(TMPIMG, { recursive: true, force: true });
 }
 
