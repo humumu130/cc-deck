@@ -10716,9 +10716,72 @@ var EventBus = class {
 };
 
 // src/session-manager.ts
-import { mkdirSync as mkdirSync5, readFileSync as readFileSync7, statSync as statSync3, writeFileSync as writeFileSync5 } from "node:fs";
-import { homedir as homedir5 } from "node:os";
-import { extname, isAbsolute as isAbsolute4, join as join9, resolve as resolve5, sep as sep5 } from "node:path";
+import { mkdirSync as mkdirSync5, readFileSync as readFileSync8, statSync as statSync4, writeFileSync as writeFileSync5 } from "node:fs";
+import { homedir as homedir6 } from "node:os";
+import { isAbsolute as isAbsolute4, join as join10, resolve as resolve6, sep as sep5 } from "node:path";
+
+// src/artifacts.ts
+import { readdirSync, statSync, readFileSync as readFileSync3, existsSync as existsSync3 } from "node:fs";
+import { join as join2, resolve, extname } from "node:path";
+import { homedir as homedir2 } from "node:os";
+var MIME = {
+  ".html": "text/html; charset=utf-8",
+  ".htm": "text/html; charset=utf-8",
+  ".md": "text/markdown; charset=utf-8",
+  ".txt": "text/plain; charset=utf-8",
+  ".json": "application/json",
+  ".png": "image/png",
+  ".jpg": "image/jpeg",
+  ".jpeg": "image/jpeg",
+  ".gif": "image/gif",
+  ".svg": "image/svg+xml",
+  ".webp": "image/webp",
+  ".pdf": "application/pdf",
+  ".css": "text/css; charset=utf-8",
+  ".js": "text/javascript; charset=utf-8"
+};
+function artifactsDir() {
+  return process.env.CCR_ARTIFACTS_DIR || join2(homedir2(), ".cc-deck", "artifacts");
+}
+function listArtifacts() {
+  const dir = artifactsDir();
+  let files;
+  try {
+    files = readdirSync(dir);
+  } catch {
+    return [];
+  }
+  const out = [];
+  for (const f of files) {
+    if (f.startsWith(".")) continue;
+    try {
+      const st2 = statSync(join2(dir, f));
+      if (st2.isFile()) out.push({ name: f, size: st2.size, mtime: st2.mtimeMs });
+    } catch {
+    }
+  }
+  out.sort((a, b) => b.mtime - a.mtime);
+  return out;
+}
+function serveArtifact(name, res) {
+  if (!/^[\w一-鿿][\w一-鿿.-]*$/.test(name)) return false;
+  const dir = resolve(artifactsDir());
+  const full = resolve(join2(dir, name));
+  if (!full.startsWith(dir + "/") && full !== dir) return false;
+  const path6 = full;
+  if (!existsSync3(path6)) return false;
+  const st2 = statSync(path6);
+  if (!st2.isFile()) return false;
+  const type = MIME[extname(path6).toLowerCase()] ?? "application/octet-stream";
+  try {
+    const data = readFileSync3(path6);
+    res.writeHead(200, { "content-type": type, "content-length": st2.size, "cache-control": "no-store" });
+    res.end(data);
+    return true;
+  } catch {
+    return false;
+  }
+}
 
 // node_modules/@anthropic-ai/claude-agent-sdk/sdk.mjs
 import { createRequire as k8 } from "node:module";
@@ -40180,17 +40243,17 @@ function VJ(e, t) {
 // src/agent-adapter.ts
 import { spawn as spawn2 } from "node:child_process";
 import { randomUUID as randomUUID3 } from "node:crypto";
-import { homedir as homedir3 } from "node:os";
-import { delimiter as pathDelimiter, join as join7 } from "node:path";
+import { homedir as homedir4 } from "node:os";
+import { delimiter as pathDelimiter, join as join8 } from "node:path";
 
 // src/cli-path.ts
-import { accessSync, constants as constants2, existsSync as existsSync4 } from "node:fs";
+import { accessSync, constants as constants2, existsSync as existsSync5 } from "node:fs";
 import { createRequire } from "node:module";
-import { delimiter as delimiter2, dirname as dirname5, join as join6 } from "node:path";
-import { homedir as homedir2 } from "node:os";
+import { delimiter as delimiter2, dirname as dirname5, join as join7 } from "node:path";
+import { homedir as homedir3 } from "node:os";
 var cached;
 function usable(p) {
-  if (!p || !existsSync4(p)) return false;
+  if (!p || !existsSync5(p)) return false;
   if (process.platform === "win32") return true;
   try {
     accessSync(p, constants2.X_OK);
@@ -40219,34 +40282,34 @@ function fromPath(name) {
   if (process.platform === "win32") {
     for (const dir of dirs) {
       for (const ext of [".exe", ".cmd", ".bat"]) {
-        const p = join6(dir, name + ext);
+        const p = join7(dir, name + ext);
         if (usable(p)) return p;
       }
     }
   } else {
     for (const dir of dirs) {
-      const p = join6(dir, name);
+      const p = join7(dir, name);
       if (usable(p)) return p;
     }
   }
   return null;
 }
 function cmdToFallbackJs(p) {
-  const js2 = join6(dirname5(p), "node_modules", "@anthropic-ai", "claude-code", "cli.js");
-  return existsSync4(js2) ? js2 : null;
+  const js2 = join7(dirname5(p), "node_modules", "@anthropic-ai", "claude-code", "cli.js");
+  return existsSync5(js2) ? js2 : null;
 }
 function knownLocations() {
-  const home = homedir2();
+  const home = homedir3();
   if (process.platform === "win32") {
-    const appdata = process.env.APPDATA ?? join6(home, "AppData", "Roaming");
+    const appdata = process.env.APPDATA ?? join7(home, "AppData", "Roaming");
     return [
-      join6(home, ".local", "bin", "claude.exe"),
+      join7(home, ".local", "bin", "claude.exe"),
       // native 安装器默认位置
-      join6(appdata, "npm", "node_modules", "@anthropic-ai", "claude-code", "cli.js")
+      join7(appdata, "npm", "node_modules", "@anthropic-ai", "claude-code", "cli.js")
     ];
   }
   return [
-    join6(home, ".local", "bin", "claude"),
+    join7(home, ".local", "bin", "claude"),
     "/opt/homebrew/bin/claude",
     "/usr/local/bin/claude",
     "/usr/bin/claude"
@@ -40730,13 +40793,13 @@ var TaskTracker = class {
 // src/agent-adapter.ts
 function childEnv() {
   const extra = [
-    join7(homedir3(), "node/bin"),
+    join8(homedir4(), "node/bin"),
     // 用户级 node（本机实证位置）
     "/usr/local/bin",
     // macOS Intel / 惯装位
     "/opt/homebrew/bin",
     // macOS Apple Silicon (homebrew)
-    join7(homedir3(), ".npm-global/bin"),
+    join8(homedir4(), ".npm-global/bin"),
     // npm 全局自定义前缀惯用位
     ...process.env.CCR_EXTRA_PATH ? process.env.CCR_EXTRA_PATH.split(pathDelimiter) : []
   ];
@@ -41223,8 +41286,8 @@ async function generateTitle(task, model, onSid, cwd) {
 }
 
 // src/cron.ts
-import { readFileSync as readFileSync4 } from "node:fs";
-import { join as join8 } from "node:path";
+import { readFileSync as readFileSync5 } from "node:fs";
+import { join as join9 } from "node:path";
 var str = (v) => typeof v === "string" && v.trim() ? v : void 0;
 var EXPIRED_ONE_SHOT_GRACE_MS = 10 * 60 * 1e3;
 function tsNum(v) {
@@ -41263,7 +41326,7 @@ function normalizeTask(raw, fallbackId) {
 function readCronTasks(cwd) {
   let text;
   try {
-    text = readFileSync4(join8(cwd, ".claude", "scheduled_tasks.json"), "utf8");
+    text = readFileSync5(join9(cwd, ".claude", "scheduled_tasks.json"), "utf8");
   } catch (e) {
     return e.code === "ENOENT" ? void 0 : "bad";
   }
@@ -41294,14 +41357,14 @@ function cronTasksKey(tasks) {
 }
 
 // src/task-store.ts
-import { readdirSync as readdirSync2, readFileSync as readFileSync5, statSync as statSync2 } from "node:fs";
-import { homedir as homedir4 } from "node:os";
+import { readdirSync as readdirSync3, readFileSync as readFileSync6, statSync as statSync3 } from "node:fs";
+import { homedir as homedir5 } from "node:os";
 import path from "node:path";
 function readTaskStoreTodos(cliSessionId) {
-  const dir = path.join(homedir4(), ".claude", "tasks", cliSessionId);
+  const dir = path.join(homedir5(), ".claude", "tasks", cliSessionId);
   let files;
   try {
-    files = readdirSync2(dir).filter((f) => f.endsWith(".json"));
+    files = readdirSync3(dir).filter((f) => f.endsWith(".json"));
   } catch {
     return null;
   }
@@ -41309,7 +41372,7 @@ function readTaskStoreTodos(cliSessionId) {
   for (const f of files) {
     try {
       const fp2 = path.join(dir, f);
-      const t = JSON.parse(readFileSync5(fp2, "utf-8"));
+      const t = JSON.parse(readFileSync6(fp2, "utf-8"));
       if (t.status === "deleted") continue;
       const subject = typeof t.subject === "string" ? t.subject.trim() : "";
       if (!subject) continue;
@@ -41317,7 +41380,7 @@ function readTaskStoreTodos(cliSessionId) {
       const activeForm = typeof t.activeForm === "string" && t.activeForm.trim() ? { active_form: t.activeForm.trim().slice(0, 120) } : {};
       const parsed = Number(t.id);
       const id2 = (Number.isFinite(parsed) && parsed > 0 ? parsed : 0) || Number(f.replace(/[^0-9]/g, "")) || 0;
-      out.push({ id: id2 || void 0, content: subject.slice(0, 120), status, updated_at: statSync2(fp2).mtimeMs, ...activeForm });
+      out.push({ id: id2 || void 0, content: subject.slice(0, 120), status, updated_at: statSync3(fp2).mtimeMs, ...activeForm });
     } catch {
     }
   }
@@ -41503,7 +41566,7 @@ function saveUploadFiles(dataDir2, sessionId, files) {
 }
 
 // src/todo-hidden.ts
-import { readFileSync as readFileSync6, writeFileSync as writeFileSync4 } from "node:fs";
+import { readFileSync as readFileSync7, writeFileSync as writeFileSync4 } from "node:fs";
 import path3 from "node:path";
 import { fileURLToPath } from "node:url";
 var FILE = path3.join(path3.dirname(fileURLToPath(import.meta.url)), "..", "data", "todo-hidden.json");
@@ -41513,7 +41576,7 @@ var keySets = /* @__PURE__ */ new Map();
 function load() {
   if (fileCache) return fileCache;
   try {
-    const raw = JSON.parse(readFileSync6(FILE, "utf-8"));
+    const raw = JSON.parse(readFileSync7(FILE, "utf-8"));
     fileCache = {};
     for (const [k3, v] of Object.entries(raw)) {
       if (Array.isArray(v)) {
@@ -41556,27 +41619,6 @@ function contextLimitOf(model) {
   if (/glm[-_]?5/.test(m)) return 1e6;
   return 2e5;
 }
-var DOC_ARTIFACT_EXTS = /* @__PURE__ */ new Set([
-  "md",
-  "markdown",
-  "txt",
-  "text",
-  "rtf",
-  "doc",
-  "docx",
-  "pdf",
-  "pages",
-  "xls",
-  "xlsx",
-  "csv",
-  "numbers",
-  "ppt",
-  "pptx",
-  "key",
-  "odt",
-  "ods",
-  "odp"
-]);
 function isManagedMode(m) {
   return m === "default" || m === "acceptEdits" || m === "plan" || m === "bypassPermissions";
 }
@@ -41624,7 +41666,7 @@ function resolveCreateCwd(rawCwd, defaultCwd) {
   const isUsableDir = (p) => {
     if (!p) return false;
     try {
-      return statSync3(p).isDirectory();
+      return statSync4(p).isDirectory();
     } catch {
       return false;
     }
@@ -41632,19 +41674,19 @@ function resolveCreateCwd(rawCwd, defaultCwd) {
   const wanted = (rawCwd || "").trim();
   const def = (defaultCwd || "").trim();
   if (wanted) {
-    const abs = resolve5(wanted);
+    const abs = resolve6(wanted);
     if (isUsableDir(abs)) return { cwd: abs, fallbackNote: "" };
   }
   if (def) {
-    const abs = resolve5(def);
+    const abs = resolve6(def);
     if (isUsableDir(abs)) {
-      const note = wanted ? `\u6307\u5B9A\u7684\u5DE5\u4F5C\u76EE\u5F55 ${resolve5(wanted)} \u4E0D\u662F\u6709\u6548\u76EE\u5F55\uFF08\u4E0D\u5B58\u5728\u6216\u65E0\u6CD5\u8BBF\u95EE\uFF09\uFF0C\u672C\u6B21\u5DF2\u56DE\u843D\u9ED8\u8BA4\u76EE\u5F55 ${abs}` : "";
+      const note = wanted ? `\u6307\u5B9A\u7684\u5DE5\u4F5C\u76EE\u5F55 ${resolve6(wanted)} \u4E0D\u662F\u6709\u6548\u76EE\u5F55\uFF08\u4E0D\u5B58\u5728\u6216\u65E0\u6CD5\u8BBF\u95EE\uFF09\uFF0C\u672C\u6B21\u5DF2\u56DE\u843D\u9ED8\u8BA4\u76EE\u5F55 ${abs}` : "";
       return { cwd: abs, fallbackNote: note };
     }
   }
-  const home = homedir5();
-  const defDesc = def ? `\u9ED8\u8BA4\u76EE\u5F55\uFF08CCR_CWD/\u4E0A\u6B21\u6709\u6548\u76EE\u5F55\uFF09${resolve5(def)} \u65E0\u6548\uFF08\u4E0D\u5B58\u5728\u6216\u65E0\u6CD5\u8BBF\u95EE\uFF09` : "\u9ED8\u8BA4\u76EE\u5F55\u672A\u914D\u7F6E\uFF08CCR_CWD\uFF09";
-  const wantedDesc = wanted ? `\u6307\u5B9A\u7684\u5DE5\u4F5C\u76EE\u5F55 ${resolve5(wanted)} \u4E0D\u662F\u6709\u6548\u76EE\u5F55\uFF08\u4E0D\u5B58\u5728\u6216\u65E0\u6CD5\u8BBF\u95EE\uFF09\uFF0C${defDesc}` : `\u672A\u6307\u5B9A\u5DE5\u4F5C\u76EE\u5F55\uFF0C\u4E14${defDesc}`;
+  const home = homedir6();
+  const defDesc = def ? `\u9ED8\u8BA4\u76EE\u5F55\uFF08CCR_CWD/\u4E0A\u6B21\u6709\u6548\u76EE\u5F55\uFF09${resolve6(def)} \u65E0\u6548\uFF08\u4E0D\u5B58\u5728\u6216\u65E0\u6CD5\u8BBF\u95EE\uFF09` : "\u9ED8\u8BA4\u76EE\u5F55\u672A\u914D\u7F6E\uFF08CCR_CWD\uFF09";
+  const wantedDesc = wanted ? `\u6307\u5B9A\u7684\u5DE5\u4F5C\u76EE\u5F55 ${resolve6(wanted)} \u4E0D\u662F\u6709\u6548\u76EE\u5F55\uFF08\u4E0D\u5B58\u5728\u6216\u65E0\u6CD5\u8BBF\u95EE\uFF09\uFF0C${defDesc}` : `\u672A\u6307\u5B9A\u5DE5\u4F5C\u76EE\u5F55\uFF0C\u4E14${defDesc}`;
   const suggest = '\u5982\u9700\u56FA\u5B9A\u5DE5\u4F5C\u76EE\u5F55\uFF0C\u8BF7\u8BBE\u7F6E CCR_CWD \u73AF\u5883\u53D8\u91CF\u6307\u5411\u5B9E\u9645\u9879\u76EE\u76EE\u5F55\uFF08\u5982 Windows "D:\\projects\\myapp"\u3001macOS/Linux "~/projects/myapp"\uFF09\u540E\u91CD\u542F relay';
   if (isUsableDir(home)) {
     return {
@@ -41683,7 +41725,7 @@ function sanitizeFiles(raw) {
 var CHILD_SESSIONS_CAP = 200;
 function readChildSessions(dataDir2) {
   try {
-    const raw = JSON.parse(readFileSync7(join9(dataDir2, "child-sessions.json"), "utf-8"));
+    const raw = JSON.parse(readFileSync8(join10(dataDir2, "child-sessions.json"), "utf-8"));
     return Array.isArray(raw) ? raw.filter((x) => typeof x === "string") : [];
   } catch {
     return [];
@@ -41694,13 +41736,13 @@ function appendChildSession(dataDir2, sid) {
   if (list.includes(sid)) return;
   list.push(sid);
   try {
-    writeFileSync5(join9(dataDir2, "child-sessions.json"), JSON.stringify(list.slice(-CHILD_SESSIONS_CAP)));
+    writeFileSync5(join10(dataDir2, "child-sessions.json"), JSON.stringify(list.slice(-CHILD_SESSIONS_CAP)));
   } catch {
   }
 }
 function readDeletedExts(dataDir2) {
   try {
-    const raw = JSON.parse(readFileSync7(join9(dataDir2, "deleted-ext.json"), "utf-8"));
+    const raw = JSON.parse(readFileSync8(join10(dataDir2, "deleted-ext.json"), "utf-8"));
     return Array.isArray(raw) ? raw.filter((x) => typeof x === "string") : [];
   } catch {
     return [];
@@ -41711,13 +41753,32 @@ function appendDeletedExt(dataDir2, id2) {
   if (list.includes(id2)) return;
   list.push(id2);
   try {
-    writeFileSync5(join9(dataDir2, "deleted-ext.json"), JSON.stringify(list.slice(-300)));
+    writeFileSync5(join10(dataDir2, "deleted-ext.json"), JSON.stringify(list.slice(-300)));
+  } catch {
+  }
+}
+var DELIVERABLES_CAP = 300;
+function readDeliverables(dataDir2) {
+  try {
+    const raw = JSON.parse(readFileSync8(join10(dataDir2, "deliverables.json"), "utf-8"));
+    return Array.isArray(raw) ? raw.filter(
+      (x) => !!x && typeof x === "object" && typeof x.sid === "string" && typeof x.path === "string" && typeof x.ts === "number"
+    ) : [];
+  } catch {
+    return [];
+  }
+}
+function appendDeliverable(dataDir2, e) {
+  const list = readDeliverables(dataDir2).filter((x) => !(x.sid === e.sid && x.path === e.path));
+  list.push(e);
+  try {
+    writeFileSync5(join10(dataDir2, "deliverables.json"), JSON.stringify(list.slice(-DELIVERABLES_CAP)));
   } catch {
   }
 }
 function readTitleOverrides(dataDir2) {
   try {
-    const raw = JSON.parse(readFileSync7(join9(dataDir2, "title-overrides.json"), "utf-8"));
+    const raw = JSON.parse(readFileSync8(join10(dataDir2, "title-overrides.json"), "utf-8"));
     if (!raw || typeof raw !== "object" || Array.isArray(raw)) return {};
     const out = {};
     for (const [k3, v] of Object.entries(raw)) {
@@ -41730,11 +41791,11 @@ function readTitleOverrides(dataDir2) {
 }
 var PINNED_SESSIONS_CAP = 50;
 function pinnedSessionsPath(dataDir2) {
-  return join9(dataDir2, "pinned-sessions.json");
+  return join10(dataDir2, "pinned-sessions.json");
 }
 function readPinnedSessions(dataDir2) {
   try {
-    const raw = JSON.parse(readFileSync7(pinnedSessionsPath(dataDir2), "utf-8"));
+    const raw = JSON.parse(readFileSync8(pinnedSessionsPath(dataDir2), "utf-8"));
     return Array.isArray(raw) ? raw.filter((x) => typeof x === "string") : [];
   } catch {
     return [];
@@ -41825,7 +41886,7 @@ var SessionManager = class {
     if (process.env.CCR_NO_TITLE_GEN === "1") return;
     if (this.titleRequested.has(sessionId)) return;
     this.titleRequested.add(sessionId);
-    const titleCwd = join9(this.cfg.dataDir, ".tmp-titlegen");
+    const titleCwd = join10(this.cfg.dataDir, ".tmp-titlegen");
     try {
       mkdirSync5(titleCwd, { recursive: true });
     } catch {
@@ -41895,6 +41956,7 @@ var SessionManager = class {
         rs2.state.title_locked = true;
       }
       this.sessions.set(id2, { agent: null, state: rs2.state, logs: rs2.logs, lastUpdateEmit: 0, lastProgressAt: 0, lastProgressKind: "", unacked: [], wd: { phase: "idle", recoveries: [] } });
+      this.applyDeclaredDeliverables(id2);
       adopted2++;
     }
     return adopted2;
@@ -41944,6 +42006,7 @@ var SessionManager = class {
         existing.state.title_locked = true;
       }
       if (!existing.state.relay_session_id && cliSessionId) existing.state.relay_session_id = cliSessionId;
+      this.applyDeclaredDeliverables(id2);
       return existing.state;
     }
     const state = {
@@ -41967,6 +42030,7 @@ var SessionManager = class {
       state.title_locked = true;
     }
     this.sessions.set(id2, { agent: null, state, logs: [], lastUpdateEmit: 0, lastProgressAt: 0, lastProgressKind: "", unacked: [], wd: { phase: "idle", recoveries: [] } });
+    this.applyDeclaredDeliverables(id2);
     this.bus.emit(id2, "SESSION_CREATED", {
       cwd: state.cwd,
       initial_prompt: prompt,
@@ -42127,15 +42191,16 @@ var SessionManager = class {
     if (!item.path || item.path === "(\u672A\u77E5\u6587\u4EF6)") return;
     const cwd = s.state.cwd || "";
     let p = item.path;
-    if (!isAbsolute4(p) && cwd) p = resolve5(cwd, p);
-    if (!DOC_ARTIFACT_EXTS.has(extname(p).slice(1).toLowerCase())) return;
+    if (!isAbsolute4(p) && cwd) p = resolve6(cwd, p);
+    const adir = resolve6(artifactsDir()).toLowerCase();
+    if (!p.toLowerCase().startsWith(adir + sep5)) return;
     const key = p.toLowerCase();
     const list = s.state.artifacts ? s.state.artifacts.map((a) => ({ ...a })) : [];
     const idx = list.findIndex((a) => a.path.toLowerCase() === key);
     let size;
     let exists = true;
     try {
-      size = statSync3(p).size;
+      size = statSync4(p).size;
     } catch {
       exists = false;
     }
@@ -42183,6 +42248,89 @@ var SessionManager = class {
       ...s.state.artifacts_truncated ? { artifacts_truncated: true } : {}
     });
   }
+  // 意图声明制 · 原地登记（/api/deliver）：交付物路径原样记录（项目内 docs/ 等
+  // 不搬动），stat 补 size/exists；同路径重复登记幂等合并（tools 记「登记」，
+  // 产物目录自动收录的条目并入同 key 不重复）。持久化 deliverables.json
+  registerDeliverable(sessionId, rawPath) {
+    const s = this.sessions.get(sessionId);
+    if (!s) return { ok: false, error: `\u4F1A\u8BDD\u4E0D\u5B58\u5728: ${sessionId}` };
+    const p = resolve6(rawPath.trim());
+    appendDeliverable(this.cfg.dataDir, { sid: sessionId, path: p, ts: Date.now() });
+    const list = s.state.artifacts ? s.state.artifacts.map((a) => ({ ...a })) : [];
+    const idx = list.findIndex((a) => a.path.toLowerCase() === p.toLowerCase());
+    let size;
+    let exists = true;
+    try {
+      size = statSync4(p).size;
+    } catch {
+      exists = false;
+    }
+    const ts2 = Date.now();
+    if (idx >= 0) {
+      const a = list[idx];
+      list[idx] = {
+        ...a,
+        tools: a.tools.includes("\u767B\u8BB0") ? a.tools : [...a.tools, "\u767B\u8BB0"],
+        last_at: ts2,
+        size,
+        exists
+      };
+    } else {
+      list.push({ path: p, op: "create", tools: ["\u767B\u8BB0"], adds: 0, dels: 0, first_at: ts2, last_at: ts2, size, exists });
+      if (list.length > 200) {
+        list.sort((x, y) => y.last_at - x.last_at);
+        list.length = 200;
+        s.state.artifacts_truncated = true;
+      }
+    }
+    s.state.artifacts = list;
+    s.state.updated_at = Date.now();
+    this.bus.emit(sessionId, "SESSION_UPDATED", {
+      status: s.state.status,
+      action_summary: s.state.action_summary,
+      stats: { ...s.state.stats },
+      artifacts: list.map((a) => ({ ...a })),
+      ...s.state.artifacts_truncated ? { artifacts_truncated: true } : {}
+    });
+    return { ok: true };
+  }
+  // /api/deliver 归因：发起 shell 的 cwd 匹配会话——会话 cwd 与发起 cwd 互为前缀
+  // 都算（agent 会 cd 进子目录交付，也可能反向），命中多个取最近活跃。Bash 环境
+  // 拿不到 CLAUDE_SESSION_ID，cwd 前缀+新鲜度是可得的最强归因；同仓库并行会话
+  // 极端场景可能归到姊妹会话，可接受（看板仍在，只是挂在隔壁卡上）
+  deliverByCwd(cwd, rawPath) {
+    const c = resolve6(cwd || ".");
+    let best = null;
+    for (const s of this.sessions.values()) {
+      const sc2 = s.state.cwd;
+      const related = c === sc2 || c.startsWith(sc2 + sep5) || sc2.startsWith(c + sep5);
+      if (!related) continue;
+      if (!best || s.state.updated_at > best.updated) best = { id: s.state.session_id, updated: s.state.updated_at };
+    }
+    if (!best) return { ok: false, error: "\u65E0\u5339\u914D\u4F1A\u8BDD\uFF08cwd \u5BF9\u4E0D\u4E0A\u4EFB\u4F55\u5DF2\u77E5\u4F1A\u8BDD\uFF09" };
+    const r = this.registerDeliverable(best.id, rawPath);
+    return r.ok ? { ok: true, session_id: best.id } : r;
+  }
+  // 重启回放：把该会话登记过的交付物挂回（登记不在 transcript，靠 deliverables.json）
+  applyDeclaredDeliverables(sessionId) {
+    const s = this.sessions.get(sessionId);
+    if (!s) return;
+    const entries = readDeliverables(this.cfg.dataDir).filter((e) => e.sid === sessionId);
+    if (!entries.length) return;
+    const list = s.state.artifacts ? s.state.artifacts.map((a) => ({ ...a })) : [];
+    for (const e of entries) {
+      if (list.some((a) => a.path.toLowerCase() === e.path.toLowerCase())) continue;
+      let size;
+      let exists = true;
+      try {
+        size = statSync4(e.path).size;
+      } catch {
+        exists = false;
+      }
+      list.push({ path: e.path, op: "create", tools: ["\u767B\u8BB0"], adds: 0, dels: 0, first_at: e.ts, last_at: e.ts, size, exists });
+    }
+    s.state.artifacts = list;
+  }
   // #35 输出物整表重建（transcript 回放路径：relay 重启后全文件重扫）。必须整体替换
   // 而非逐条 merge 增量——转录轮转/收缩会再次触发 firstRead 回放，merge 会把
   // adds/dels 双计；items 按转录时间顺序喂入，合并语义由 mergeArtifact(silent) 承担
@@ -42191,8 +42339,9 @@ var SessionManager = class {
     if (!s) return;
     s.state.artifacts = void 0;
     s.state.artifacts_truncated = false;
-    if (!items.length) return;
     for (const it2 of items) this.mergeArtifact(id2, it2, true);
+    this.applyDeclaredDeliverables(id2);
+    if (!s.state.artifacts) return;
     const merged = s.state.artifacts;
     s.state.updated_at = Date.now();
     this.bus.emit(id2, "SESSION_UPDATED", {
@@ -42530,7 +42679,7 @@ var SessionManager = class {
           s.state.updated_at = Date.now();
           this.titleOverrides[s.state.session_id] = title;
           try {
-            writeFileSync5(join9(this.cfg.dataDir, "title-overrides.json"), JSON.stringify(this.titleOverrides));
+            writeFileSync5(join10(this.cfg.dataDir, "title-overrides.json"), JSON.stringify(this.titleOverrides));
           } catch {
           }
           this.bus.emit(cmd.payload.session_id, "SESSION_UPDATED", {
@@ -42725,10 +42874,10 @@ var SessionManager = class {
   create(rawCwd, prompt, permissionMode) {
     const { cwd, fallbackNote } = resolveCreateCwd(rawCwd, this.cfg.defaultCwd);
     if (!cwd) throw new Error(fallbackNote);
-    if (!process.env.CCR_CWD && cwd !== homedir5()) {
+    if (!process.env.CCR_CWD && cwd !== homedir6()) {
       this.cfg.defaultCwd = cwd;
       try {
-        writeFileSync5(join9(this.cfg.dataDir, "last-cwd"), cwd, "utf-8");
+        writeFileSync5(join10(this.cfg.dataDir, "last-cwd"), cwd, "utf-8");
       } catch {
       }
     }
@@ -43355,69 +43504,6 @@ import { randomUUID as randomUUID5 } from "node:crypto";
 import { readFileSync as readFileSync12, writeFileSync as writeFileSync8, mkdirSync as mkdirSync8, existsSync as existsSync8, readdirSync as readdirSync5 } from "node:fs";
 import { join as join13, dirname as dirname6, sep as sep6 } from "node:path";
 import { homedir as homedir10, networkInterfaces as networkInterfaces2 } from "node:os";
-
-// src/artifacts.ts
-import { readdirSync as readdirSync3, statSync as statSync4, readFileSync as readFileSync8, existsSync as existsSync5 } from "node:fs";
-import { join as join10, resolve as resolve6, extname as extname2 } from "node:path";
-import { homedir as homedir6 } from "node:os";
-var MIME = {
-  ".html": "text/html; charset=utf-8",
-  ".htm": "text/html; charset=utf-8",
-  ".md": "text/markdown; charset=utf-8",
-  ".txt": "text/plain; charset=utf-8",
-  ".json": "application/json",
-  ".png": "image/png",
-  ".jpg": "image/jpeg",
-  ".jpeg": "image/jpeg",
-  ".gif": "image/gif",
-  ".svg": "image/svg+xml",
-  ".webp": "image/webp",
-  ".pdf": "application/pdf",
-  ".css": "text/css; charset=utf-8",
-  ".js": "text/javascript; charset=utf-8"
-};
-function artifactsDir() {
-  return join10(homedir6(), ".cc-deck", "artifacts");
-}
-function listArtifacts() {
-  const dir = artifactsDir();
-  let files;
-  try {
-    files = readdirSync3(dir);
-  } catch {
-    return [];
-  }
-  const out = [];
-  for (const f of files) {
-    if (f.startsWith(".")) continue;
-    try {
-      const st2 = statSync4(join10(dir, f));
-      if (st2.isFile()) out.push({ name: f, size: st2.size, mtime: st2.mtimeMs });
-    } catch {
-    }
-  }
-  out.sort((a, b) => b.mtime - a.mtime);
-  return out;
-}
-function serveArtifact(name, res) {
-  if (!/^[\w][\w.-]*$/.test(name)) return false;
-  const dir = resolve6(artifactsDir());
-  const full = resolve6(join10(dir, name));
-  if (!full.startsWith(dir + "/") && full !== dir) return false;
-  const path6 = full;
-  if (!existsSync5(path6)) return false;
-  const st2 = statSync4(path6);
-  if (!st2.isFile()) return false;
-  const type = MIME[extname2(path6).toLowerCase()] ?? "application/octet-stream";
-  try {
-    const data = readFileSync8(path6);
-    res.writeHead(200, { "content-type": type, "content-length": st2.size, "cache-control": "no-store" });
-    res.end(data);
-    return true;
-  } catch {
-    return false;
-  }
-}
 
 // src/models.ts
 import { existsSync as existsSync6, readFileSync as readFileSync9 } from "node:fs";
@@ -46377,6 +46463,31 @@ function startServer(bus2, mgr2, cfg2, opts = {}) {
       if (!serveArtifact(decodeURIComponent(url.pathname.slice("/artifacts/".length)), res)) {
         res.writeHead(404).end("not found");
       }
+      return;
+    }
+    if (req.method === "POST" && url.pathname === "/api/deliver") {
+      if ((url.searchParams.get("token") ?? "") !== cfg2.token) {
+        res.writeHead(401).end("unauthorized");
+        return;
+      }
+      let body = "";
+      req.on("data", (c) => {
+        body += c;
+        if (body.length > 8192) req.destroy();
+      });
+      req.on("end", () => {
+        try {
+          const { path: p, cwd } = JSON.parse(body);
+          if (typeof p !== "string" || !p.trim()) {
+            res.writeHead(400, { "content-type": "application/json" }).end('{"ok":false,"error":"path \u5FC5\u586B"}');
+            return;
+          }
+          const r = mgr2.deliverByCwd(typeof cwd === "string" && cwd ? cwd : p, p);
+          res.writeHead(r.ok ? 200 : 404, { "content-type": "application/json" }).end(JSON.stringify(r));
+        } catch {
+          res.writeHead(400).end("bad json");
+        }
+      });
       return;
     }
     if ((req.method === "GET" || req.method === "POST") && url.pathname === "/api/plugin-config") {

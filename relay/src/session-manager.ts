@@ -1,6 +1,7 @@
 import { mkdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
-import { extname, isAbsolute, join, resolve, sep } from "node:path";
+import { isAbsolute, join, resolve, sep } from "node:path";
+import { artifactsDir } from "./artifacts.js";
 import { devId } from "./e2e.js";
 import type { EventBus } from "./event-bus.js";
 import { AgentSession } from "./agent-adapter.js";
@@ -22,17 +23,13 @@ function contextLimitOf(model: string | undefined): number {
   return 200_000;
 }
 
-// #51 输出物收录口径：只收用户交付物（文档/表格/演示/纯文本笔记），代码与配置
-// 文件不计入。按扩展名白名单在采集咽喉点（mergeArtifact）过滤——实时采集与
-// transcript 回放重建（setArtifacts）都过这里，relay 重启后回放会把此前误收的
-// 代码条目自然洗掉。无扩展名（Makefile 等）一律不收，规则简单可预期。
-const DOC_ARTIFACT_EXTS = new Set([
-  "md", "markdown", "txt", "text", "rtf",
-  "doc", "docx", "pdf", "pages",
-  "xls", "xlsx", "csv", "numbers",
-  "ppt", "pptx", "key",
-  "odt", "ods", "odp",
-]);
+// 2026-09-19 输出物口径（用户三轮澄清拍板，替代 #51 扩展名白名单）：只收「明确
+// 交付」的东西，且交付物原地不动、看板只做登记——
+// ① 原地登记（主力）：项目内交付物（docs/ 报告等）写在本该在的地方，agent 交付
+//    完成后 POST /api/deliver 登记原路径（registerDeliverable，tools 记「登记」）；
+// ② 产物目录：写 ~/.cc-deck/artifacts/ 即声明交付（任意格式，含二进制），自动
+//    收录——全局一次性产物/ui-review 页面等既有用途；
+// 启发式扩展名判断（前端项目改一堆 html/md 全是噪音）彻底废除。
 import { addHiddenTodoKey, hiddenTodoKeys } from "./todo-hidden.js";
 import type {
   AgentCallbacks,
@@ -241,6 +238,38 @@ function appendDeletedExt(dataDir: string, id: string): void {
   list.push(id);
   try {
     writeFileSync(join(dataDir, "deleted-ext.json"), JSON.stringify(list.slice(-300)));
+  } catch {}
+}
+
+// 意图声明制登记清单（2026-09-19）：项目内交付物原路径不搬动，只在看板记录。
+// 登记动作不在 transcript 里，重启回放重建不出来——必须落盘（同 title-overrides
+// 模式），ensureExternal/adopt/setArtifacts 三处回放挂回
+const DELIVERABLES_CAP = 300;
+
+interface DeliverableEntry { sid: string; path: string; ts: number }
+
+function readDeliverables(dataDir: string): DeliverableEntry[] {
+  try {
+    const raw = JSON.parse(readFileSync(join(dataDir, "deliverables.json"), "utf-8")) as unknown;
+    return Array.isArray(raw)
+      ? raw.filter(
+          (x): x is DeliverableEntry =>
+            !!x && typeof x === "object" &&
+            typeof (x as DeliverableEntry).sid === "string" &&
+            typeof (x as DeliverableEntry).path === "string" &&
+            typeof (x as DeliverableEntry).ts === "number",
+        )
+      : [];
+  } catch {
+    return [];
+  }
+}
+
+function appendDeliverable(dataDir: string, e: DeliverableEntry): void {
+  const list = readDeliverables(dataDir).filter((x) => !(x.sid === e.sid && x.path === e.path));
+  list.push(e);
+  try {
+    writeFileSync(join(dataDir, "deliverables.json"), JSON.stringify(list.slice(-DELIVERABLES_CAP)));
   } catch {}
 }
 
@@ -501,6 +530,7 @@ export class SessionManager {
         rs.state.title_locked = true;
       }
       this.sessions.set(id, { agent: null, state: rs.state, logs: rs.logs, lastUpdateEmit: 0, lastProgressAt: 0, lastProgressKind: "", unacked: [], wd: { phase: "idle", recoveries: [] } });
+      this.applyDeclaredDeliverables(id);
       adopted++;
     }
     return adopted;
@@ -591,6 +621,7 @@ export class SessionManager {
         existing.state.title_locked = true;
       }
       if (!existing.state.relay_session_id && cliSessionId) existing.state.relay_session_id = cliSessionId;
+      this.applyDeclaredDeliverables(id);
       return existing.state;
     }
     const state: SessionState = {
@@ -615,6 +646,7 @@ export class SessionManager {
       state.title_locked = true;
     }
     this.sessions.set(id, { agent: null, state, logs: [], lastUpdateEmit: 0, lastProgressAt: 0, lastProgressKind: "", unacked: [], wd: { phase: "idle", recoveries: [] } });
+    this.applyDeclaredDeliverables(id);
     this.bus.emit(id, "SESSION_CREATED", {
       cwd: state.cwd,
       initial_prompt: prompt,
@@ -792,8 +824,11 @@ export class SessionManager {
     const cwd = s.state.cwd || "";
     let p = item.path;
     if (!isAbsolute(p) && cwd) p = resolve(cwd, p);
-    // #51 只收用户交付物：非文档类扩展名（代码/配置）在此丢弃，不进输出物面板
-    if (!DOC_ARTIFACT_EXTS.has(extname(p).slice(1).toLowerCase())) return;
+    // 意图声明制（见文件头注释）：自动采集只认显式产物目录——写进
+    // ~/.cc-deck/artifacts/ 本身就是交付声明，任意格式可收；项目目录里的交付物
+    // 不经此处，由 /api/deliver 显式登记（registerDeliverable）
+    const adir = resolve(artifactsDir()).toLowerCase();
+    if (!p.toLowerCase().startsWith(adir + sep)) return;
     const key = p.toLowerCase();
     const list: ArtifactItem[] = s.state.artifacts ? s.state.artifacts.map((a) => ({ ...a })) : [];
     const idx = list.findIndex((a) => a.path.toLowerCase() === key);
@@ -850,6 +885,92 @@ export class SessionManager {
     });
   }
 
+  // 意图声明制 · 原地登记（/api/deliver）：交付物路径原样记录（项目内 docs/ 等
+  // 不搬动），stat 补 size/exists；同路径重复登记幂等合并（tools 记「登记」，
+  // 产物目录自动收录的条目并入同 key 不重复）。持久化 deliverables.json
+  registerDeliverable(sessionId: string, rawPath: string): { ok: boolean; error?: string } {
+    const s = this.sessions.get(sessionId);
+    if (!s) return { ok: false, error: `会话不存在: ${sessionId}` };
+    const p = resolve(rawPath.trim());
+    appendDeliverable(this.cfg.dataDir, { sid: sessionId, path: p, ts: Date.now() });
+    const list: ArtifactItem[] = s.state.artifacts ? s.state.artifacts.map((a) => ({ ...a })) : [];
+    const idx = list.findIndex((a) => a.path.toLowerCase() === p.toLowerCase());
+    let size: number | undefined;
+    let exists = true;
+    try {
+      size = statSync(p).size;
+    } catch {
+      exists = false;
+    }
+    const ts = Date.now();
+    if (idx >= 0) {
+      const a = list[idx] as ArtifactItem;
+      list[idx] = {
+        ...a,
+        tools: a.tools.includes("登记") ? a.tools : [...a.tools, "登记"],
+        last_at: ts,
+        size,
+        exists,
+      };
+    } else {
+      list.push({ path: p, op: "create", tools: ["登记"], adds: 0, dels: 0, first_at: ts, last_at: ts, size, exists });
+      if (list.length > 200) {
+        list.sort((x, y) => y.last_at - x.last_at);
+        list.length = 200;
+        s.state.artifacts_truncated = true;
+      }
+    }
+    s.state.artifacts = list;
+    s.state.updated_at = Date.now();
+    this.bus.emit(sessionId, "SESSION_UPDATED", {
+      status: s.state.status,
+      action_summary: s.state.action_summary,
+      stats: { ...s.state.stats },
+      artifacts: list.map((a) => ({ ...a })),
+      ...(s.state.artifacts_truncated ? { artifacts_truncated: true } : {}),
+    });
+    return { ok: true };
+  }
+
+  // /api/deliver 归因：发起 shell 的 cwd 匹配会话——会话 cwd 与发起 cwd 互为前缀
+  // 都算（agent 会 cd 进子目录交付，也可能反向），命中多个取最近活跃。Bash 环境
+  // 拿不到 CLAUDE_SESSION_ID，cwd 前缀+新鲜度是可得的最强归因；同仓库并行会话
+  // 极端场景可能归到姊妹会话，可接受（看板仍在，只是挂在隔壁卡上）
+  deliverByCwd(cwd: string, rawPath: string): { ok: boolean; session_id?: string; error?: string } {
+    const c = resolve(cwd || ".");
+    let best: { id: string; updated: number } | null = null;
+    for (const s of this.sessions.values()) {
+      const sc = s.state.cwd;
+      const related = c === sc || c.startsWith(sc + sep) || sc.startsWith(c + sep);
+      if (!related) continue;
+      if (!best || s.state.updated_at > best.updated) best = { id: s.state.session_id, updated: s.state.updated_at };
+    }
+    if (!best) return { ok: false, error: "无匹配会话（cwd 对不上任何已知会话）" };
+    const r = this.registerDeliverable(best.id, rawPath);
+    return r.ok ? { ok: true, session_id: best.id } : r;
+  }
+
+  // 重启回放：把该会话登记过的交付物挂回（登记不在 transcript，靠 deliverables.json）
+  private applyDeclaredDeliverables(sessionId: string): void {
+    const s = this.sessions.get(sessionId);
+    if (!s) return;
+    const entries = readDeliverables(this.cfg.dataDir).filter((e) => e.sid === sessionId);
+    if (!entries.length) return;
+    const list: ArtifactItem[] = s.state.artifacts ? s.state.artifacts.map((a) => ({ ...a })) : [];
+    for (const e of entries) {
+      if (list.some((a) => a.path.toLowerCase() === e.path.toLowerCase())) continue;
+      let size: number | undefined;
+      let exists = true;
+      try {
+        size = statSync(e.path).size;
+      } catch {
+        exists = false;
+      }
+      list.push({ path: e.path, op: "create", tools: ["登记"], adds: 0, dels: 0, first_at: e.ts, last_at: e.ts, size, exists });
+    }
+    s.state.artifacts = list;
+  }
+
   // #35 输出物整表重建（transcript 回放路径：relay 重启后全文件重扫）。必须整体替换
   // 而非逐条 merge 增量——转录轮转/收缩会再次触发 firstRead 回放，merge 会把
   // adds/dels 双计；items 按转录时间顺序喂入，合并语义由 mergeArtifact(silent) 承担
@@ -861,8 +982,12 @@ export class SessionManager {
     if (!s) return;
     s.state.artifacts = undefined;
     s.state.artifacts_truncated = false;
-    if (!items.length) return;
     for (const it of items) this.mergeArtifact(id, it, true);
+    // 登记制条目不在 transcript 里：整表替换会把原地登记的交付物洗掉，必须从
+    // deliverables.json 挂回（转录轮转/收缩重触 firstRead 也不丢登记；items 为
+    // 空也走这里——只剩登记条目同样要恢复）
+    this.applyDeclaredDeliverables(id);
+    if (!s.state.artifacts) return;
     // 局部转写断开 TS 对 776 行 undefined 赋值的窄化（方法调用不重推属性窄化）
     const merged = s.state.artifacts as ArtifactItem[] | undefined;
     s.state.updated_at = Date.now();

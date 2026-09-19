@@ -446,6 +446,34 @@ export function startServer(
       }
       return;
     }
+    // 2026-09-19 输出物原地登记（意图声明制）：交付物写到它本该在的地方（项目
+    // docs/ 等），agent 完成交付后 POST 登记原路径——文件不搬动，看板只记
+    // path/size/时间。归因：发起 cwd 前缀匹配最近活跃会话（见 deliverByCwd）
+    if (req.method === "POST" && url.pathname === "/api/deliver") {
+      if ((url.searchParams.get("token") ?? "") !== cfg.token) {
+        res.writeHead(401).end("unauthorized");
+        return;
+      }
+      let body = "";
+      req.on("data", (c: Buffer) => {
+        body += c;
+        if (body.length > 8192) req.destroy();
+      });
+      req.on("end", () => {
+        try {
+          const { path: p, cwd } = JSON.parse(body) as { path?: unknown; cwd?: unknown };
+          if (typeof p !== "string" || !p.trim()) {
+            res.writeHead(400, { "content-type": "application/json" }).end('{"ok":false,"error":"path 必填"}');
+            return;
+          }
+          const r = mgr.deliverByCwd(typeof cwd === "string" && cwd ? cwd : p, p);
+          res.writeHead(r.ok ? 200 : 404, { "content-type": "application/json" }).end(JSON.stringify(r));
+        } catch {
+          res.writeHead(400).end("bad json");
+        }
+      });
+      return;
+    }
     // #448 插件可选能力配置（设置「插件」页三开关）：读写 ~/.cc-deck/config.json 的
     // taskGuard/qNotify/restorePoint。hooks（guard-stop/guard-context）与本端点共用该
     // 文件为单一事实源；缺省 taskGuard=false / qNotify=true / restorePoint=false。

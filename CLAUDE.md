@@ -16,6 +16,12 @@
 - **不单独维护发版文档**：git tag + 提交信息 + GitHub Release 页即完整档案（单一事实源），另记一份必然漂移。
 - 用户可见的版本说明：`expo-app/src/updates.ts` 的 `VERSION_NOTES` 随正式版同步维护（措辞纪律见该文件注释）。
 
+## 交付物投递约定（2026-09-19，#69 意图声明制）
+
+- **项目内交付物**（用户明确让输出的报告/文档）：写到它本该在的位置（如 `docs/`），随后 `~/.cc-deck/bin/deliver <绝对路径>` 登记——文件不搬动，看板只记录（tools 标「登记」）。登记数据持久化在 relay `data/deliverables.json`，重启回放会挂回。
+- **全局一次性产物**（ui-review 页面等）：直接写 `~/.cc-deck/artifacts/` 即视为交付（任意格式自动收录，CCR_ARTIFACTS_DIR 可覆盖）。
+- 代码/配置文件改动**不算**交付物；旧的扩展名白名单启发式已彻底废除（relay/src/session-manager.ts 文件头注释是口径权威）。
+
 ## 环境备忘
 
 - 直连 github.com 超时，git 走仓库本地配置的 `http.https://github.com/.proxy`（Clash 127.0.0.1:7890）；gh CLI 需手动 export 同款代理。

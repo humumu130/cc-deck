@@ -24,7 +24,8 @@ const MIME: Record<string, string> = {
 };
 
 export function artifactsDir(): string {
-  return join(homedir(), ".cc-deck", "artifacts");
+  // CCR_ARTIFACTS_DIR 覆盖（测试隔离用）；默认全局产物目录 ~/.cc-deck/artifacts/
+  return process.env.CCR_ARTIFACTS_DIR || join(homedir(), ".cc-deck", "artifacts");
 }
 
 export function listArtifacts(): { name: string; size: number; mtime: number }[] {
@@ -48,8 +49,10 @@ export function listArtifacts(): { name: string; size: number; mtime: number }[]
 }
 
 // 命中并写出返回 true；文件名非法/不存在返回 false（调用方 404）
+// 文件名允许中文（2026-09-19）：中文命名交付物（工作报告-….html）列得出就要下
+// 得了，原 \w 正则对中文一律 404
 export function serveArtifact(name: string, res: import("node:http").ServerResponse): boolean {
-  if (!/^[\w][\w.-]*$/.test(name)) return false;
+  if (!/^[\w一-鿿][\w一-鿿.-]*$/.test(name)) return false;
   const dir = resolve(artifactsDir());
   const full = resolve(join(dir, name));
   if (!full.startsWith(dir + "/") && full !== dir) return false;

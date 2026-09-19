@@ -1,5 +1,9 @@
-// #35 输出物采集专项测试：fileEditMetrics 单元 + 外部会话真实链路
-//（hook 端点 → feedFileStats 实时合并 / transcript 回放重建 → SESSION_UPDATED/SNAPSHOT 下发）
+// 输出物专项测试（2026-09-19 意图声明制口径，替代 #51 扩展名白名单）：
+// 双通道——① 产物目录投递：写入 CCR_ARTIFACTS_DIR（生产=~/.cc-deck/artifacts/）
+// 的任意格式文件自动收录（写进去=声明交付）；② 原地登记：POST /api/deliver 登记
+// 项目内交付物原路径（文件不搬动，看板只记录）。项目目录里的改动（无论 md/html/
+// 代码）一律不收。含 fileEditMetrics 单元 / hook 实时 + transcript 回放 /
+// SNAPSHOT / 整表替换保留登记 / 中文文件名下载回归。
 // 环境隔离口径同 test-bridge（独立数据目录/项目根/claude 配置/端口）
 import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
@@ -21,6 +25,10 @@ process.env.CCR_PROJECTS_ROOT = join(ROOT, "projects");
 process.env.CCR_PORT = "8893";
 process.env.CCR_CWD = join(ROOT, "work"); // 会话默认目录 = 伪 cwd（回放相对路径补全基准）
 mkdirSync(process.env.CCR_CWD, { recursive: true });
+// 产物目录通道隔离：指向测试沙箱（生产默认 ~/.cc-deck/artifacts/）
+const ART = join(ROOT, "artifacts");
+process.env.CCR_ARTIFACTS_DIR = ART;
+mkdirSync(ART, { recursive: true });
 const CCFG = join(ROOT, "claude-cfg");
 mkdirSync(CCFG, { recursive: true });
 process.env.CLAUDE_CONFIG_DIR = CCFG;
@@ -34,13 +42,13 @@ function assert(cond: unknown, name: string) {
 // ---------- 单元：fileEditMetrics（create/edit 判定四形态） ----------
 {
   const c1 = fileEditMetrics({ type: "create", structuredPatch: [], content: "a\nb\nc" });
-  assert(c1?.created === true && c1.adds === 3, "metrics: type=create + content 行数（尾空行剔除）");
+  assert(c1?.created === true && c1?.adds === 3, "metrics: type=create + content 行数（尾空行剔除）");
   const c2 = fileEditMetrics({ structuredPatch: [{ lines: ["-old", "+new", "+new2"] }] });
-  assert(c2?.created === false && c2.adds === 2 && c2.dels === 1, "metrics: patch 有 hunks → edit，+/- 计数");
+  assert(c2?.created === false && c2?.adds === 2 && c2?.dels === 1, "metrics: patch 有 hunks → edit，+/- 计数");
   const c3 = fileEditMetrics({ content: "x" });
-  assert(c3?.created === true && c3.adds === 1, "metrics: 无 type 无 patch、只有 content → create 兜底");
+  assert(c3?.created === true && c3?.adds === 1, "metrics: 无 type 无 patch、只有 content → create 兜底");
   const c4 = fileEditMetrics({ gitDiff: { filename: "a.ts", additions: 5, deletions: 2 }, structuredPatch: [{ lines: ["+1"] }] });
-  assert(c4?.created === false && c4.adds === 5 && c4.dels === 2, "metrics: gitDiff 权威增删 + patch 非空 → edit");
+  assert(c4?.created === false && c4?.adds === 5 && c4?.dels === 2, "metrics: gitDiff 权威增删 + patch 非空 → edit");
   const c5 = fileEditMetrics({ type: "text_diff_content" });
   assert(c5 === null, "metrics: 无可辨数据 → null（调用方跳过）");
   const c6 = fileEditMetrics({ structuredPatch: [{ lines: ["+++ a.ts", "--- b.ts", "+x"] }] });
@@ -73,7 +81,10 @@ const arts = () => {
   return f.length ? (f[f.length - 1].payload as { artifacts: ArtifactItem[] }).artifacts : [];
 };
 
-// 伪 transcript：Write 新建 / Edit 修改 / cwd 外 Write / 被打断无结果的调用
+// 产物目录里的真实文件（exists=true 路径）+ 只在 transcript 里出现过的（exists=false）
+writeFileSync(join(ART, "工作报告-2026-09-19.html"), "<!doctype html><html><body>今日工作报告（中文文件名下载回归）</body></html>\n");
+
+// 伪 transcript：项目目录 Write/Edit（一律不收）/ 产物目录 Write（收）/ 被打断调用
 const CWD = process.env.CCR_CWD!;
 const T = join(ROOT, "transcript.jsonl");
 const lines = [
@@ -95,19 +106,28 @@ const lines = [
     tool_use_result: { structuredPatch: [{ lines: ["-旧逻辑", "+新逻辑", "+补一行"] }] },
     message: { content: [{ type: "tool_result", tool_use_id: "toolu_e1", content: "ok" }] },
   }),
+  // 产物目录投递①：真实落盘的中文 HTML 报告 → 收录且 exists=true
   JSON.stringify({
     type: "assistant", timestamp: new Date("2026-09-19T10:00:05Z").toISOString(),
-    message: { content: [{ type: "tool_use", id: "toolu_x1", name: "Write", input: { file_path: "/tmp/outside-report.md" } }] },
+    message: { content: [{ type: "tool_use", id: "toolu_a1", name: "Write", input: { file_path: join(ART, "工作报告-2026-09-19.html") } }] },
   }),
   JSON.stringify({
-    type: "user", timestamp: new Date("2026-09-19T10:00:06Z").toISOString(),
-    tool_use_result: { type: "create", content: "外部产出" },
-    message: { content: [{ type: "tool_result", tool_use_id: "toolu_x1", content: "ok" }] },
+    type: "user", timestamp: new Date("2026-09-19T10:00:06Z").toISOString(), tool_use_result: { type: "create", content: "<html>报告</html>" },
+    message: { content: [{ type: "tool_result", tool_use_id: "toolu_a1", content: "ok" }] },
+  }),
+  // 产物目录投递②：任意格式（pdf，未落盘）→ 收录且 exists=false
+  JSON.stringify({
+    type: "assistant", timestamp: new Date("2026-09-19T10:00:07Z").toISOString(),
+    message: { content: [{ type: "tool_use", id: "toolu_a2", name: "Write", input: { file_path: join(ART, "汇总表.pdf") } }] },
+  }),
+  JSON.stringify({
+    type: "user", timestamp: new Date("2026-09-19T10:00:08Z").toISOString(), tool_use_result: { type: "create", content: "%PDF-" },
+    message: { content: [{ type: "tool_result", tool_use_id: "toolu_a2", content: "ok" }] },
   }),
   // 被打断：有 tool_use 无 result → 不入清单
   JSON.stringify({
-    type: "assistant", timestamp: new Date("2026-09-19T10:00:07Z").toISOString(),
-    message: { content: [{ type: "tool_use", id: "toolu_gone", name: "Edit", input: { file_path: "src/dead.ts" } }] },
+    type: "assistant", timestamp: new Date("2026-09-19T10:00:09Z").toISOString(),
+    message: { content: [{ type: "tool_use", id: "toolu_gone", name: "Edit", input: { file_path: join(ART, "没写完.pdf") } }] },
   }),
 ];
 writeFileSync(T, lines.join("\n") + "\n");
@@ -121,43 +141,56 @@ async function hook(ev: Partial<BridgeEvent> & { event: string }): Promise<void>
   if (r.status !== 200) throw new Error("hook " + r.status);
 }
 
-// 首个 hook（UserPromptSubmit + transcript）→ 建会话；转录扫描走 3s 轮询
-//（UserPromptSubmit 不即时扫——只登记 transcriptPaths），等一轮轮询再断言
-await hook({ event: "UserPromptSubmit", prompt: "输出物回放回合", cli_pid: process.pid });
+// 首个 hook → 建会话；转录扫描走 3s 轮询，等一轮再断言
+await hook({ event: "UserPromptSubmit", prompt: "产物目录投递回合", cli_pid: process.pid });
 await wait(4000);
 let a = arts();
-assert(a.length === 3, `回放建 3 条（打断调用不入）got=${a.length}`);
+assert(a.length === 2, `回放只收产物目录投递 got=${a.length}`);
 const byPath = (p: string) => a.find((x) => x.path === p);
-const w1 = byPath(join(CWD, "docs/new.md"));
-assert(!!w1 && w1.op === "create" && w1.adds === 2 && w1.origin === "cwd", "回放：Write 新建归 create（相对路径已补全、origin=cwd、content 行数）");
-const e1 = byPath(join(CWD, "src/app.ts"));
-assert(!!e1 && e1.op === "edit" && e1.adds === 2 && e1.dels === 1, "回放：Edit 归 edit（patch 计数）");
-const x1 = byPath("/tmp/outside-report.md");
-assert(!!x1 && x1.origin === "outside", "回放：cwd 外绝对路径 origin=outside");
-assert(a.every((x) => x.exists === false), "回放：文件不存在 → exists=false（「已删除」态数据）");
+const a1 = byPath(join(ART, "工作报告-2026-09-19.html"));
+assert(!!a1 && a1.op === "create" && a1.exists === true, "回放：产物目录 HTML 收录（中文路径、盘上真实存在 exists=true）");
+const a2 = byPath(join(ART, "汇总表.pdf"));
+assert(!!a2 && a2.exists === false, "回放：任意格式收录（pdf，未落盘 exists=false）");
+assert(!byPath(join(CWD, "docs/new.md")) && !byPath(join(CWD, "src/app.ts")), "回放：项目目录 Write/Edit 一律不收（启发式已废）");
 
-// 实时路径：PostToolUse Write（feedFileStats → mergeArtifact 增量）
+// 实时路径①：产物目录新文件 → 收录
 await hook({
   event: "PostToolUse", tool_name: "Write", cli_pid: process.pid,
-  tool_input: { file_path: "docs/new.md" },
-  tool_response: { type: "create", filePath: "docs/new.md", structuredPatch: [], content: "重建后全文\n四行\n内容\n更多\n" },
+  tool_input: { file_path: join(ART, "实时-补充.md") },
+  tool_response: { type: "create", filePath: join(ART, "实时-补充.md"), structuredPatch: [], content: "补充\n两行\n" },
 });
 await wait(300);
 a = arts();
-const w1b = a.find((x) => x.path === join(CWD, "docs/new.md"));
-assert(!!w1b && w1b.op === "create" && w1b.adds === 2 + 4 && w1b.tools.length === 1, "实时：同文件再 Write 累计行数、create 不降级、单条不重");
-assert(a.length === 3, "实时：无新文件时清单不膨胀");
-
-// 实时新文件（Edit 覆盖）
+assert(a.length === 3 && !!byPath(join(ART, "实时-补充.md")), "实时：产物目录 Write 收录");
+// 实时路径②：项目目录文件 → 不收，清单不膨胀
 await hook({
-  event: "PostToolUse", tool_name: "Edit", cli_pid: process.pid,
-  tool_input: { file_path: "src/app.ts" },
-  tool_response: { structuredPatch: [{ lines: ["+又一处"] }] },
+  event: "PostToolUse", tool_name: "Write", cli_pid: process.pid,
+  tool_input: { file_path: "docs/another.md" },
+  tool_response: { type: "create", filePath: "docs/another.md", structuredPatch: [], content: "不该进清单\n" },
 });
 await wait(300);
 a = arts();
-const e1b = a.find((x) => x.path === join(CWD, "src/app.ts"));
-assert(!!e1b && e1b.tools.includes("Write") === false && e1b.tools.includes("Edit") && e1b.adds === 3, "实时：Edit 工具并入 tools、行数续累加");
+assert(a.length === 3, "实时：项目目录 Write 不收，清单不膨胀");
+
+// ---------- 原地登记通道（/api/deliver） ----------
+const DECLARED = join(CWD, "docs", "登记制说明.md");
+mkdirSync(join(CWD, "docs"), { recursive: true });
+writeFileSync(DECLARED, "# 登记制\n交付物原地不动，看板只登记。\n");
+{
+  const bad = await fetch(`${http}/api/deliver?token=WRONG`, { method: "POST", body: "{}" });
+  assert(bad.status === 401, "deliver：错误 token 401");
+  const r = await fetch(`${http}/api/deliver?token=${cfg.token}`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ path: DECLARED, cwd: CWD }),
+  });
+  const j = (await r.json()) as { ok: boolean; session_id?: string };
+  assert(r.status === 200 && j.ok === true && j.session_id === SID, `deliver：项目内文件登记成功归因到会话 got=${JSON.stringify(j)}`);
+}
+await wait(300);
+a = arts();
+const d1 = a.find((x) => x.path === DECLARED);
+assert(a.length === 4 && !!d1 && d1.tools.includes("登记") && d1.exists === true && d1.adds === 0, "deliver：登记条目入板（tools=登记、原路径真实存在、不动 adds/dels）");
 
 // SNAPSHOT 携带（新 WS 连接全量拉取）
 const ws2 = new WebSocket(`ws://127.0.0.1:${cfg.port}/ws?token=${cfg.token}`);
@@ -170,11 +203,10 @@ await new Promise((r) => ws2.once("open", r));
 await wait(300);
 const snapArts = ((snap as { payload?: { sessions?: { session_id: string; artifacts?: ArtifactItem[] }[] } })?.payload?.sessions ?? [])
   .find((x) => x.session_id === SID)?.artifacts;
-assert(Array.isArray(snapArts) && snapArts.length === 3 && snapArts.some((x) => x.op === "create"), "SNAPSHOT 全量携带 artifacts（断线重连重建）");
+assert(Array.isArray(snapArts) && snapArts.length === 4 && snapArts.some((x) => x.tools.includes("登记")), "SNAPSHOT 全量携带 artifacts（含登记条目）");
 
-// 回放幂等：模拟转录轮转/收缩——新 transcript 比旧的小（去掉末尾被打断行），
-// prev offset > size 触发 firstRead 全量重扫；setArtifacts 整体替换语义应把
-// 实时路径累计过的行数拉回回放基线（不双计）
+// 回放幂等 + 登记保留：转录换文件（≈轮转）重触 firstRead → setArtifacts 整表替换，
+// 产物目录基线回放 + 登记条目从 deliverables.json 挂回（不丢、不双计）
 const T2 = join(ROOT, "transcript2.jsonl");
 writeFileSync(T2, lines.slice(0, -1).join("\n") + "\n");
 {
@@ -187,8 +219,20 @@ writeFileSync(T2, lines.slice(0, -1).join("\n") + "\n");
 }
 await wait(4000);
 a = arts();
-const w1c = a.find((x) => x.path === join(CWD, "docs/new.md"));
-assert(!!w1c && w1c.adds === 2 && a.length === 3, "幂等：转录换文件重触 firstRead → 整表替换不双计（回到回放基线）");
+const k1 = a.find((x) => x.path === join(ART, "工作报告-2026-09-19.html"));
+assert(!!k1 && k1.adds === 1 && a.length === 3 && a.some((x) => x.path === DECLARED), `幂等：整表替换回产物基线且登记条目保留 got=${a.length}（实时条目洗回、登记不丢）`);
+
+// ---------- 产物中心 HTTP：列表 + 中文文件名下载 ----------
+{
+  const lr = await fetch(`${http}/api/artifacts?token=${cfg.token}`);
+  const lj = (await lr.json()) as { ok: boolean; artifacts: { name: string }[] };
+  assert(lr.status === 200 && lj.artifacts.some((x) => x.name === "工作报告-2026-09-19.html"), "产物中心列表含中文文件");
+  const fr = await fetch(`${http}/artifacts/${encodeURIComponent("工作报告-2026-09-19.html")}?token=${cfg.token}`);
+  const body = await fr.text();
+  assert(fr.status === 200 && body.includes("今日工作报告"), `产物中心：中文文件名可下载（CJK 正则回归）status=${fr.status}`);
+  const noauth = await fetch(`${http}/artifacts/${encodeURIComponent("工作报告-2026-09-19.html")}`);
+  assert(noauth.status === 401, "产物中心：无 token 401");
+}
 
 ws.close();
 ws2.close();
