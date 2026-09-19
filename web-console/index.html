@@ -2629,8 +2629,11 @@ function toast(msg, ms = 2600) {
 }
 
 // 任务完成汇报悬浮框（#204）：新报告展开列出完成项，10s 后自动折叠为一行小条，
-// 点卡片再展开；✕ 关闭（多源共用一个浮框，哪个源来报都弹）
-const tdFloat = { expanded: true, timer: 0, render: null, dragged: false };
+// 点卡片再展开；✕ 关闭（多源共用一个浮框，哪个源来报都弹）。
+// #63 已读语义：mini 方钮数字 = 未读汇报条数（新汇报 +1），与手机端「打开即已读」
+// 对齐——用户点击展开（阅读）清零，折叠后显示无数字 ✓；自动折叠不算已读；✕ 关闭
+// 视同已读一并清零。旧实现数字恒为最近一次汇报的完成项数，阅读后也挂着，无法重置
+const tdFloat = { expanded: true, timer: 0, render: null, dragged: false, unread: 0 };
 // #365 任务通知点外收起：展开态点击卡片外部 → 缩回小方钮
 document.addEventListener("click", (e) => {
   const el = $("taskDone");
@@ -2705,6 +2708,9 @@ window.addEventListener("resize", tdRestorePos);
   el.addEventListener("pointerup", end);
   el.addEventListener("pointercancel", end);
 })();
+// #63 汇报重放去重（与手机端 reportedTaskTs 同款）：TASK_DONE 占 seq 进缓冲，
+// 断线重连按 last_seq 补发会重复弹绿框——按 sid 记已展示过的最新 ts，旧的丢弃
+const tdLastTs = new Map();
 function showTaskDone(ctx, sid, payload) {
   const s = ctx.sessions.get(sid);
   const total = Array.isArray(payload?.done) ? payload.done.length : 0;
@@ -2714,10 +2720,12 @@ function showTaskDone(ctx, sid, payload) {
   const el = $("taskDone");
   clearTimeout(tdFloat.timer);
   tdFloat.expanded = true;
+  tdFloat.unread += 1; // #63 新汇报入未读（清零只发生在用户阅读/关闭）
   const renderTd = () => {
     el.classList.toggle("mini", !tdFloat.expanded);
     if (!tdFloat.expanded) {
-      el.innerHTML = "✓" + total;
+      // #63 已读后无数字（✓）；有未读显示条数
+      el.innerHTML = "✓" + (tdFloat.unread > 0 ? tdFloat.unread : "");
       el.classList.add("show");
       tdCollapsePos(); // #400 收起走存档位，不继承展开卡锚点
       placeNoteBar(); // #52 通知卡让位重算（展开↔收起尺寸变化）
@@ -2739,12 +2747,15 @@ function showTaskDone(ctx, sid, payload) {
     if (tdFloat.dragged) { tdFloat.dragged = false; return; } // 刚拖完，不算点击
     if (e.target && e.target.dataset && e.target.dataset.td === "x") {
       clearTimeout(tdFloat.timer);
+      tdFloat.unread = 0; // #63 关闭视同已读
       el.classList.remove("show");
       el.classList.remove("mini");
       placeNoteBar(); // 卡关掉，撤销条/通知卡回落默认槽位
       return;
     }
     tdFloat.expanded = !tdFloat.expanded;
+    tdFloat.unread = 0; // #63 任何用户点击（展开阅读/收起）都算已读——自动弹出的卡
+    // 被点一下收起同样说明看过了；无人交互的 10s 自动折叠才是"没读到"，保留计数
     renderTd();
     if (tdFloat.expanded) {
       clearTimeout(tdFloat.timer);
@@ -3626,6 +3637,10 @@ function onEvent(ctx, msg) {
       break;
     }
     case "TASK_DONE": {
+      // #63 重放去重：ts 不新于已展示过的同会话汇报 = last_seq 补发，直接丢弃
+      const tdTs = typeof msg.payload?.ts === "number" ? msg.payload.ts : msg.ts;
+      if (tdTs && tdTs <= (tdLastTs.get(sid) || 0)) break;
+      if (tdTs) tdLastTs.set(sid, tdTs);
       showTaskDone(ctx, sid, msg.payload);
       break;
     }
