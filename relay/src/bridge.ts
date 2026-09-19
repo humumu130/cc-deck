@@ -288,6 +288,10 @@ export class Bridge {
           // 历史 title-gen 转录（cwd=relay 进程目录）已被 .tmp- 护栏之前的版本落盘，
           // 靠 registry（重启/换形态丢失）挡不住，指纹是形态无关的最终防线
           if (this.isTitleGenTranscript(p)) continue;
+          // relay 自测探针指纹（#67）：test-ws 的 COMMAND_CREATE 探针历史用仓库根
+          // 目录当 cwd（transcript 落全局 projects，无 .tmp- 段又是多回合，上述护栏
+          // 全漏过），被生产 relay 收养成一排「relay」同名卡且 journal 回放永久复活
+          if (this.isTestProbeTranscript(p)) continue;
           // 测试沙箱不收养：relay 自测（test:sessions 等）在 .tmp-test 起真实 SDK 会话，
           // transcript 落全局 projects 目录，不拦就以孤儿身份混进手机会话列表（#269）。
           // Windows 路径大小写不敏感，段比较需 lower（手工建 .TMP-TEST 会让护栏静默失效）
@@ -353,18 +357,36 @@ export class Bridge {
 
   // 起标题子会话转录识别：只读文件头 4KB 找命名指令指纹（latin1 子串匹配，中文
   // prompt 经 JSON 转义后 UTF-8 字节序列不变，latin1 视图下按字节序列命中）
-  private isTitleGenTranscript(p: string): boolean {
+  // transcript 头 4KB 含指定串：探针/指纹类护栏共用（首条 user prompt 必在头部，
+  // 只读头不全量 IO，与 readCwdFromTail 同开销量级）
+  private transcriptHeadHas(p: string, needle: string): boolean {
     let fd: number | undefined;
     try {
       fd = openSync(p, "r");
       const buf = Buffer.alloc(4096);
       const n = readSync(fd, buf, 0, 4096, 0);
-      return buf.subarray(0, n).includes("起一个简短的中文标题");
+      return buf.subarray(0, n).includes(needle);
     } catch {
       return false;
     } finally {
       if (fd !== undefined) closeSync(fd);
     }
+  }
+
+  private isTitleGenTranscript(p: string): boolean {
+    return this.transcriptHeadHas(p, "起一个简短的中文标题");
+  }
+
+  // #67 relay 自测探针指纹：.tmp- cwd 护栏之外形态无关的兜底——探针会话无论在
+  // 哪个 cwd 起（历史事故：test-ws 用仓库根目录），只要首条 prompt 命中指纹就不
+  // 收养。改测试探针文案务必同步这里，两处是约定联动
+  private static readonly TEST_PROBE_MARKS = [
+    "请直接回复两个字：收到", // test-ws COMMAND_CREATE 探针（真实 CLI 落 transcript）
+    "请直接回复四个字：好的收到", // test-sessions 探针（.tmp- 沙箱内，双保险）
+  ];
+
+  private isTestProbeTranscript(p: string): boolean {
+    return Bridge.TEST_PROBE_MARKS.some((m) => this.transcriptHeadHas(p, m));
   }
 
   // 孤儿候选交互性判定 + 文件大小（供"增长观察"用）。流式分块扫全文件，64KB 块 +

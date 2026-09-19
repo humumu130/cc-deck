@@ -761,6 +761,15 @@ await wait(150);
     JSON.stringify({ type: "user", cwd: "D:\\probe", message: { role: "user", content: "请直接回复两个字：收到" } }) + "\n",
   );
   ago(join(PROOT, "proj-a", "ee11bb22-cc33-dd44-ee55-ff6677889900.jsonl"), 60_000);
+  // #67 relay 自测探针指纹：多回合（user×2，孤儿交互性判定会放行）+ cwd 无 .tmp-
+  // 段（历史 test-ws 用仓库根目录的形态）但首条 prompt 命中探针指纹 → 不收养。
+  // 曾致生产会话列表堆积一排「relay」同名卡且 journal 回放永久复活
+  writeFileSync(
+    join(PROOT, "proj-a", "ff11bb22-cc33-dd44-ee55-ff6677889900.jsonl"),
+    JSON.stringify({ type: "user", cwd: "D:\\repo\\relay", message: { role: "user", content: "请直接回复两个字：收到。禁止使用任何工具。" } }) + "\n" +
+      JSON.stringify({ type: "user", cwd: "D:\\repo\\relay", message: { role: "user", content: "second turn" } }) + "\n",
+  );
+  ago(join(PROOT, "proj-a", "ff11bb22-cc33-dd44-ee55-ff6677889900.jsonl"), 60_000);
   scan();
   await wait(300);
   assert(events.some((e) => e.type === "SESSION_CREATED" && e.session_id === orphanId), "34 fresh orphan adopted");
@@ -769,6 +778,7 @@ await wait(150);
   assert(!mgr.getExternal("ext-bb11bb22-cc33-dd44-ee55-ff6677889900"), "34 stale transcript skipped");
   assert(!mgr.getExternal("ext-cc11bb22-cc33-dd44-ee55-ff6677889900"), "34 no-cwd transcript skipped");
   assert(!mgr.getExternal("ext-ee11bb22-cc33-dd44-ee55-ff6677889900"), "34 single-turn probe transcript skipped");
+assert(!mgr.getExternal("ext-ff11bb22-cc33-dd44-ee55-ff6677889900"), "67 multi-turn test-probe fingerprint skipped (cwd 无 .tmp- 也拦)");
   // 首回合已调工具（终端等权限确认形态：1 user + assistant tool_use）→ 收养
   // （2026-09-16：旧 ≥2-user 门槛让它永不收养——公司 Windows "新会话几分钟不接入"根因）
   const ddId = "ext-dd11bb22-cc33-dd44-ee55-ff6677889900";

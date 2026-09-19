@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { mkdirSync } from "node:fs";
 import { WebSocket } from "ws";
 import { fileURLToPath } from "node:url";
 import { EventBus } from "../src/event-bus.js";
@@ -58,6 +59,12 @@ process.env.CCR_PORT = "8799";
 process.env.CCR_TOKEN = "test-token-123";
 // 孤儿扫描用空临时根，防止测试扫到真实 ~/.claude/projects
 process.env.CCR_PROJECTS_ROOT = fileURLToPath(new URL("../data/test-projects-ws/", import.meta.url));
+// #67 COMMAND_CREATE 探针 cwd 用 .tmp- 沙箱：历史用 process.cwd()（仓库根），
+// 真实 CLI 的 transcript 落全局 ~/.claude/projects 且无 .tmp- 段，被生产 relay
+// 孤儿扫描收养成一排「relay」卡（journal 回放永久复活）。沙箱 cwd 让 transcript
+// 自带 .tmp- 段被护栏跳过（同 test-sessions/.tmp-test 惯例）
+const PROBE_CWD = fileURLToPath(new URL("../data/.tmp-test-ws/", import.meta.url));
+mkdirSync(PROBE_CWD, { recursive: true });
 const cfg = loadConfig();
 const bus = new EventBus();
 const mgr = new SessionManager(bus, cfg);
@@ -95,7 +102,7 @@ assert(
 // 3. 创建一个真实会话（纯文本快速完成）
 const createId = send(c1, {
   type: "COMMAND_CREATE",
-  payload: { cwd: process.cwd(), prompt: "请直接回复两个字：收到。禁止使用任何工具。" },
+  payload: { cwd: PROBE_CWD, prompt: "请直接回复两个字：收到。禁止使用任何工具。" },
 });
 let sessionId = "";
 const deadline = Date.now() + 90_000;
