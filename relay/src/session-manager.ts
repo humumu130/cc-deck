@@ -470,6 +470,14 @@ export class SessionManager {
     for (const [id, rs] of entries) {
       if (this.sessions.size >= MAX_SESSIONS) break;
       rs.state.historical = true;
+      // #53 手动命名跨重启：改名虽双写（overrides 文件 + 事件帧），但事件流压缩每会话
+      // 只留最近 50 条状态帧，忙会话的改名帧会被挤掉——title-overrides.json 才是权威，
+      // 收养时套用（managed/external 通吃），否则重启后名字退回首条 prompt 派生名
+      const ov = this.titleOverrides[id];
+      if (ov) {
+        rs.state.title = ov;
+        rs.state.title_locked = true;
+      }
       this.sessions.set(id, { agent: null, state: rs.state, logs: rs.logs, lastUpdateEmit: 0, lastProgressAt: 0, lastProgressKind: "", unacked: [], wd: { phase: "idle", recoveries: [] } });
       adopted++;
     }
@@ -554,6 +562,12 @@ export class SessionManager {
     if (existing) {
       // Relay 重启后 adopt 为 historical 的外部会话：真实 hook 事件回来了，恢复可操作
       existing.state.historical = false;
+      // #53 兜底：手动命名权威在 title-overrides.json（该会话改名帧可能已被压缩挤掉）
+      const ov = this.titleOverrides[id];
+      if (ov && existing.state.title !== ov) {
+        existing.state.title = ov;
+        existing.state.title_locked = true;
+      }
       if (!existing.state.relay_session_id && cliSessionId) existing.state.relay_session_id = cliSessionId;
       return existing.state;
     }

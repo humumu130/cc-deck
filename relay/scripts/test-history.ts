@@ -1,5 +1,5 @@
 // 历史持久化测试：deriveTitle / compactEvents / reduceHistory / EventBus 持久化+预载 / adopt
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { EventBus } from "../src/event-bus.js";
@@ -112,6 +112,22 @@ const ack2 = mgr.handleCommand(
 );
 assert(ack2.ok === false, "历史会话拒绝 MESSAGE");
 assert(Object.keys(mgr.snapshotLogs()).length === 1, "快照含时间线");
+
+// #53 手动命名跨重启：改名帧会被事件流压缩挤掉（每会话只留最近 50 条状态帧），
+// title-overrides.json 是权威——收养时套用，名字不得退回首条 prompt 派生名
+{
+  const ovDir = mkdtempSync(join(tmpdir(), "ccr-hist-ov-"));
+  const sid = snap[0].session_id;
+  writeFileSync(join(ovDir, "title-overrides.json"), JSON.stringify({ [sid]: "我的会话" }));
+  const cfgOv = loadConfig();
+  cfgOv.token = "test";
+  cfgOv.dataDir = ovDir;
+  const mgrOv = new SessionManager(new EventBus(), cfgOv);
+  mgrOv.adopt(reduceHistory(kept2));
+  const s2 = mgrOv.snapshot();
+  assert(s2.length === 1 && s2[0].title === "我的会话" && s2[0].title_locked === true, "收养套用手动命名 override");
+  rmSync(ovDir, { recursive: true, force: true });
+}
 
 rmSync(dir, { recursive: true, force: true });
 void snapshot;

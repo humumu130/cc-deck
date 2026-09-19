@@ -230,13 +230,16 @@ const mgr = new SessionManager(bus, cfg);
 const adopted = mgr.adopt(replayed);
 
 // 重放会重写历史状态（非终态→ERROR、清 waiting_request），但重连客户端走
-// last_seq 补发拿不到 SNAPSHOT——为每个收养会话广播一次当前状态，补发路径也能收敛
+// last_seq 补发拿不到 SNAPSHOT——为每个收养会话广播一次当前状态，补发路径也能收敛。
+// #53 手动命名的会话随帧带 title：已连接端本地缓存的可能还是压缩回放前的旧名，
+// 不带就只有新载入页面（SNAPSHOT）能拿到恢复后的名字
 for (const s of mgr.snapshot()) {
   bus.emit(s.session_id, "SESSION_UPDATED", {
     status: s.status,
     action_summary: s.action_summary,
     stats: { ...s.stats },
     ...(s.usage ? { usage: s.usage } : {}),
+    ...(s.title_locked ? { title: s.title, title_locked: true } : {}),
   });
 }
 
