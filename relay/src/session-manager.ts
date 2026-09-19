@@ -16,16 +16,8 @@ import { saveUploadFiles, type UploadBlob } from "./uploads.js";
 import { normKey, truncate } from "./summarizer.js";
 import type { AgentLike } from "./agent-adapter.js";
 
-// 上下文窗口上限：集中维护并随 context_usage 下发，客户端不存映射表。
-// #72 口径修正（2026-09-19 实测取证）：此前 /glm[-_]?5/ 映射 1M 是错的——本机
-// glm-5.3 会话转录里 20+ 个压缩边界一致落在 per-call 水位 ~165-166K（个别长工具
-// 回合越过检查点冲到 226-273K），即 Claude Code 自身按 200K 窗口、~83% 阈值自动
-// 压缩（与用户 CLI+Claude HUD 时代"临近 100% 压缩"的体感一致）。显示口径必须与
-// CLI 实际压缩行为一致。用户拍板：不追求贴近上限才压缩（高水位影响质量，早压缩
-// 是好事），水位显示只需如实反映；压缩节奏完全归 CLI 管，这里只做显示。
-function contextLimitOf(_model: string | undefined): number {
-  return 200_000;
-}
+// 上下文窗口上限：口径与证据见 context-limit.ts（#72，session-manager/history 共用）
+import { contextLimitOf } from "./context-limit.js";
 
 // 2026-09-19 输出物口径（用户三轮澄清拍板，替代 #51 扩展名白名单）：只收「明确
 // 交付」的东西，且交付物原地不动、看板只做登记——

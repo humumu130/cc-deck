@@ -106,6 +106,18 @@ interface PendingPermission {
   created_at: number;
 }
 
+// #72 水位数据源（2026-09-19 生产探针取证，scripts/probe-assistant-usage.ts）：
+// GLM 后端的 assistant 完整消息 usage 全零（{"input_tokens":0,"output_tokens":0}，
+// message_start 同），真实 per-call usage 只出现在两处——stream_event message_delta
+// （消息收尾帧，e.g. input 7046 + cache_read 11648）与回合 result（聚合）。水位挂
+// message_delta：每条消息收尾即刷新（回合内逐调用，与 CLI 自动压缩判断同口径）；
+// assistant 消息路径保留为兜底（其它后端可能在完整消息上给真值）；result 聚合量
+// 只进会话总量，绝不当水位。
+export function watermarkFromUsage(u: Partial<TokenUsage> | undefined | null): number {
+  if (!u || typeof u.input_tokens !== "number") return 0;
+  return (u.input_tokens || 0) + (u.cache_read_input_tokens || 0) + (u.cache_creation_input_tokens || 0);
+}
+
 export interface AgentCallbacks {
   onInit(sdkSessionId: string, model: string, permissionMode?: string): void;
   onStatusChange(status: SessionStatus, actionSummary: string): void;
@@ -303,13 +315,10 @@ export class AgentSession {
         break;
 
       case "assistant": {
-        // #72 per-call 水位先于块处理上报：assistant 消息 usage = 本次调用实际送入量，
-        // 回合内每次调用都会刷新（CLI 的自动压缩判断同口径）
-        const au = (msg.message as { usage?: Partial<TokenUsage> }).usage;
-        if (au && typeof au.input_tokens === "number") {
-          const wm = (au.input_tokens || 0) + (au.cache_read_input_tokens || 0) + (au.cache_creation_input_tokens || 0);
-          if (wm > 0) this.cb.onContext?.(wm);
-        }
+        // #72 per-call 水位先于块处理上报（assistant.usage 兜底路径：GLM 后端此处
+        // 恒零、真实值在 message_delta，见 watermarkFromUsage 注释；其它后端可能在此给真值）
+        const wm = watermarkFromUsage((msg.message as { usage?: Partial<TokenUsage> }).usage);
+        if (wm > 0) this.cb.onContext?.(wm);
         let ti = 0;
         for (const block of msg.message.content) {
           if ((block as { type?: string }).type === "thinking") {
@@ -465,6 +474,7 @@ export class AgentSession {
       index?: number;
       content_block?: { type: string };
       delta?: { type: string; text?: string };
+      usage?: Partial<TokenUsage>;
     };
     const idx = ev.index ?? -1;
     if (ev.type === "content_block_start" && ev.content_block?.type === "text") {
@@ -480,6 +490,12 @@ export class AgentSession {
     } else if (ev.type === "content_block_stop") {
       const id = this.streamIdx.get(idx);
       if (id) this.emitStreamBlock(id, false);
+    } else if (ev.type === "message_delta") {
+      // #72 主数据源：message_delta（消息收尾帧）的 usage = 本条消息（= 本次 API
+      // 调用）的真实 per-call 用量（GLM 后端 assistant 完整消息 usage 全零，见
+      // watermarkFromUsage 取证注释）——每条消息收尾即刷新水位，回合内逐调用
+      const wm = watermarkFromUsage(ev.usage);
+      if (wm > 0) this.cb.onContext?.(wm);
     }
   }
 

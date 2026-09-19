@@ -13,6 +13,7 @@ import { EventBus } from "../src/event-bus.js";
 import { SessionManager } from "../src/session-manager.js";
 import { loadEvents, reduceHistory } from "../src/history.js";
 import type { AgentCallbacks, AgentLike } from "../src/agent-adapter.js";
+import { watermarkFromUsage } from "../src/agent-adapter.js";
 
 const ROOT = fileURLToPath(new URL("../data/test-ctxwm/", import.meta.url));
 rmSync(ROOT, { recursive: true, force: true });
@@ -76,19 +77,30 @@ mgr.setExternalUsage("ext-ctx-a", { input_tokens: 1, output_tokens: 1, cache_rea
   assert(st.context_usage === 123_456 && st.context_limit === 200_000, `外部路径 limit=200K got=${st.context_limit}`);
 }
 
-// S3 回放还原水位（重启后水位条不消失）
+// S3 回放还原水位（重启后水位条不消失）+ follow-up：limit 重算 / 污染值丢弃
 {
   const evFile = join(ROOT, "events.ndjson");
   const t0 = Date.now();
   const lines = [
     { seq: 1, ts: t0, type: "SESSION_CREATED", session_id: "m-replay-1", payload: { cwd: "/tmp/p", initial_prompt: "回放测试", model: "glm-5.3", title: "回放会话" } },
-    { seq: 2, ts: t0 + 1, type: "SESSION_UPDATED", session_id: "m-replay-1", payload: { status: "WORKING", action_summary: "干活", stats: { files_changed: 0, lines_added: 0, lines_deleted: 0 }, usage: { input_tokens: 9, output_tokens: 9, cache_read_input_tokens: 9, cache_creation_input_tokens: 0 }, context_usage: 108_466, context_limit: 200_000 } },
+    { seq: 2, ts: t0 + 1, type: "SESSION_UPDATED", session_id: "m-replay-1", payload: { status: "WORKING", action_summary: "干活", stats: { files_changed: 0, lines_added: 0, lines_deleted: 0 }, usage: { input_tokens: 9, output_tokens: 9, cache_read_input_tokens: 9, cache_creation_input_tokens: 0 }, context_usage: 108_466, context_limit: 1_000_000 } },
+    { seq: 3, ts: t0 + 2, type: "SESSION_UPDATED", session_id: "m-replay-2", payload: { status: "DONE", action_summary: "旧bug", stats: { files_changed: 0, lines_added: 0, lines_deleted: 0 }, context_usage: 551_835, context_limit: 1_000_000 } },
   ];
   writeFileSync(evFile, lines.map((l) => JSON.stringify(l)).join("\n"));
   const rs = reduceHistory(loadEvents(evFile));
   const st = rs.get("m-replay-1")?.state;
   assert(st?.context_usage === 108_466, `回放还原 context_usage got=${st?.context_usage}`);
-  assert(st?.context_limit === 200_000, `回放还原 context_limit got=${st?.context_limit}`);
+  assert(st?.context_limit === 200_000, `回放 limit 重算为 200K（历史帧 1M 不信任）got=${st?.context_limit}`);
+  const st2 = rs.get("m-replay-2")?.state;
+  assert(st2?.context_usage === undefined, `旧聚合污染值（551835>300K）不还原 got=${st2?.context_usage}`);
+}
+
+// S4 watermarkFromUsage：message_delta 口径（GLM 后端真值只在 delta/result）
+{
+  assert(watermarkFromUsage({ input_tokens: 7046, output_tokens: 3, cache_read_input_tokens: 11648 }) === 18_694, "delta usage → per-call 水位 18694");
+  assert(watermarkFromUsage({ input_tokens: 0, output_tokens: 0 }) === 0, "GLM assistant 完整消息的全零 usage → 0（不触发）");
+  assert(watermarkFromUsage(undefined) === 0, "无 usage → 0");
+  assert(watermarkFromUsage({ input_tokens: 100, cache_creation_input_tokens: 50 }) === 150, "cache_creation 计入");
 }
 
 rmSync(ROOT, { recursive: true, force: true });
