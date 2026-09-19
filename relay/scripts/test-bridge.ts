@@ -1929,6 +1929,40 @@ await wait(150);
   rmSync(TMPIMG, { recursive: true, force: true });
 }
 
+// 62. 外部会话发文件（#54 同链路）：file-* 落盘保留原始文件名（中文直存）、注入文合成
+//     「正文 + 路径处理指令」、pending 回显短文本 [文件×N]（echo/body 分离同 54b）、
+//     空正文纯文件退化纯指令、文件名剥路径分隔只留 basename
+{
+  const { readdirSync } = await import("node:fs");
+  const TMP62 = join(cfg.dataDir, "..", "tmp");
+  rmSync(TMP62, { recursive: true, force: true });
+  const sid62 = extId("cli-62");
+  mgr.ensureExternal(sid62, "/tmp", "文件链路测试", "cli-62");
+  mgr.setExternalCliPid(sid62, 6277);
+  mgr.setExternalStatus(sid62, "WORKING", "测试中");
+  const docB64 = Buffer.from("# 发文件测试\nhello from phone", "utf-8").toString("base64");
+  const r62 = bridge.extInput(sid62, "处理下这个文档", undefined, [{ name: "会议笔记.md", b64: docB64 }]);
+  assert(r62.ok, "62 extInput with file ok");
+  const saved62 = readdirSync(TMP62).filter((f) => f.startsWith("file-"));
+  assert(saved62.length === 1 && saved62[0].endsWith("会议笔记.md"), "62 file saved under tmp with original chinese name");
+  assert(readFileSync(join(TMP62, saved62[0]), "utf-8").includes("hello from phone"), "62 saved file content intact");
+  await waitLog(() => fakeLog().some((a) => a[0] === "6277" && String(a[1]).includes("文件已保存")), 5000);
+  const inj62 = fakeLog().find((a) => a[0] === "6277" && String(a[1]).includes("文件已保存"));
+  assert(!!inj62 && String(inj62[1]).startsWith("处理下这个文档"), "62 injected body keeps original text");
+  assert(!!inj62 && String(inj62[1]).includes(saved62[0]), "62 injected body names saved path");
+  const pend62 = mgr.getExternal(sid62)!.pending_inputs!.at(-1)!;
+  assert(pend62.text === "处理下这个文档 [文件×1]", "62 pending echo short text");
+  assert(typeof pend62.body === "string" && pend62.body.includes("请按需读取处理"), "62 pending carries body");
+  // 空正文纯文件 + 文件名带路径分隔：body 退化纯指令、名字只留 basename
+  const r62b = bridge.extInput(sid62, "", undefined, [{ name: "../../报告 v2.pdf", b64: docB64 }]);
+  assert(r62b.ok, "62 file-only message ok");
+  const saved62b = readdirSync(TMP62).filter((f) => f.startsWith("file-"));
+  assert(saved62b.some((f) => f.endsWith("报告 v2.pdf")), "62 filename sanitized to basename");
+  await waitLog(() => fakeLog().some((a) => a[0] === "6277" && String(a[1]).startsWith("请处理以下文件")), 5000);
+  assert(mgr.getExternal(sid62)!.pending_inputs!.at(-1)!.text === "[文件×1]", "62 file-only echo");
+  rmSync(TMP62, { recursive: true, force: true });
+}
+
 // 4t 转录标题 latin1→UTF-8 还原回归（#4 乱码根治）：scanTranscriptTitles 以 latin1
 // 字节视图扫转录，捕获组必须 Buffer.from(...,"latin1").toString("utf-8") 还原再
 // JSON.parse——08699ef 曾只改 bundle 副本、源码漏改，重打包后乱码复活（此段即防走岔）

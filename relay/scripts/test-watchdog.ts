@@ -7,7 +7,8 @@
 // 到 10min/3min——心跳 5s 与慢窗口 5s 同频，不 hush 时心跳会抢先开窗（抖动源），
 // 手动 tick 前再 arm 回测试值，保证开窗者确定是本测试。
 import { randomUUID } from "node:crypto";
-import { rmSync } from "node:fs";
+import { readdirSync, rmSync } from "node:fs";
+import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { EventBus } from "../src/event-bus.js";
 import { SessionManager } from "../src/session-manager.js";
@@ -72,7 +73,7 @@ interface Rec {
   prompt: string | undefined;
   resume?: string;
   cb: AgentCallbacks;
-  agent: AgentLike & { childPid?: number };
+  agent: AgentLike & { childPid?: number; sent: { text: string; images?: string[]; echo?: string }[] };
 }
 const created: Rec[] = [];
 let noPidFrom = Infinity; // 该序号起的 agent 不带 childPid（排除项场景用）
@@ -82,13 +83,17 @@ mgr.setAgentFactory((_cwd, _model, cb, prompt, opts) => {
     id: randomUUID(),
     startedAt: Date.now(),
     ended: false,
-    sendMessage: () => {},
+    // #62：记录 sendMessage 收到的实参（托管发文件断言用：正文合成 + echo 分离）
+    sent: [] as { text: string; images?: string[]; echo?: string }[],
+    sendMessage: (text: string, images?: string[], echo?: string) => {
+      (a as AgentLike & { childPid?: number; sent: { text: string; images?: string[]; echo?: string }[] }).sent.push({ text, images, echo });
+    },
     allow: () => false,
     deny: () => false,
     answer: () => false,
     stop: async () => {},
     setPermissionMode: async () => {},
-  } as AgentLike & { childPid?: number };
+  } as AgentLike & { childPid?: number; sent: { text: string; images?: string[]; echo?: string }[] };
   if (created.length < noPidFrom) (a as { childPid?: number }).childPid = 40000 + created.length;
   const rec: Rec = { prompt, resume: opts?.resume, cb, agent: a };
   created.push(rec);
@@ -319,6 +324,30 @@ async function main(): Promise<void> {
   assert((stateOf(sidG)?.last_error ?? "").includes("无法自动恢复"), "G last_error 说明无法自动恢复");
   assert(created.length === createdBeforeG, "G 不再拉起新 agent（无 sdkId 可续）");
   noInitFrom = Infinity;
+
+  // ===== #62 托管会话发文件：COMMAND_MESSAGE files → relay 落盘 tmp（原名）+ 正文
+  // 合成路径指令下发 agent + echo 分离（客户端回显不带临时路径）=====
+  {
+    const a62 = ack({ command_id: "c-62", type: "COMMAND_CREATE", payload: { cwd: process.cwd(), prompt: "62 托管发文件" }, ts: Date.now() });
+    assert(a62.ok === true && typeof a62.session_id === "string", "62 托管会话创建");
+    const sid62 = a62.session_id!;
+    assert(await waitFor(() => !!stateOf(sid62)?.relay_session_id), "62 onInit 就绪");
+    const rec62 = created[created.length - 1];
+    const docB64 = Buffer.from("托管文件内容 hello", "utf-8").toString("base64");
+    const m62 = ack({
+      command_id: "m-62", type: "COMMAND_MESSAGE",
+      payload: { session_id: sid62, text: "看下这个文件", files: [{ name: "桌面文档.txt", b64: docB64 }] },
+      ts: Date.now(),
+    });
+    assert(m62.ok === true, "62 托管发文件 ack ok");
+    const sent62 = rec62.agent.sent.at(-1)!;
+    assert(sent62.text.startsWith("看下这个文件") && sent62.text.includes("文件已保存：") && sent62.text.includes("桌面文档.txt"), "62 agent 收到合成正文（原文+路径指令）");
+    assert(sent62.echo === "看下这个文件（+1 文件）", "62 echo 分离（原文本+计数，不含路径）");
+    const tmp62 = join(TDATA, "..", "tmp");
+    const saved62 = readdirSync(tmp62).filter((f) => f.startsWith("file-"));
+    assert(saved62.some((f) => f.endsWith("桌面文档.txt")), "62 文件落盘 tmp 保留原始名");
+    rmSync(tmp62, { recursive: true, force: true });
+  }
 
   mgr.setAgentFactory(null);
   mgr.setWatchdogProcs(null);

@@ -1,6 +1,8 @@
 // 协议唯一定义源：Relay <-> 客户端（Web 调试台 / Android / 手表经手机网关）
 // 与 design/技术方案评审.md §5 对应
 
+import type { UploadBlob } from "./uploads.js";
+
 // ---------- 事件信封 ----------
 
 export interface Envelope<T extends string = string, P = unknown> {
@@ -430,7 +432,9 @@ export interface CreateCommand extends CommandBase {
 export interface MessageCommand extends CommandBase {
   type: "COMMAND_MESSAGE";
   // images：原始 base64（JPEG），由手机端压缩后上送
-  payload: { session_id: string; text: string; images?: string[] };
+  // files（#62）：文档等非图片附件——SDK 消息只收 image blocks，relay 落盘 tmp 后
+  // 把「正文 + 路径处理指令」下发（sanitize 限 2 个/6MB，见 session-manager）
+  payload: { session_id: string; text: string; images?: string[]; files?: UploadBlob[] };
 }
 
 export interface StopCommand extends CommandBase {
@@ -457,9 +461,10 @@ export interface ExtModeCommand extends CommandBase {
 // 外部会话输入注入（空闲时敲进终端；忙时排队，回合结束自动发送）。
 // #54 images：原始 base64 数组（与 COMMAND_MESSAGE 同口径，sanitize 限 4 张/8MB）——
 // relay 落盘临时目录后把「正文 + 路径查看指令」注入，CLI 用 Read 工具看图
+// #62 files：非图片附件（sanitize 限 2 个/6MB），落盘后「正文 + 路径处理指令」注入
 export interface ExtInputCommand extends CommandBase {
   type: "COMMAND_EXT_INPUT";
-  payload: { session_id: string; text: string; images?: string[] };
+  payload: { session_id: string; text: string; images?: string[]; files?: UploadBlob[] };
 }
 
 // 外部会话打断（向终端注入 Esc）

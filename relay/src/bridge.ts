@@ -34,6 +34,7 @@ import {
 } from "./summarizer.js";
 import { deriveTitle } from "./history.js";
 import { readTaskStoreTodos } from "./task-store.js";
+import { saveUploadImages, saveUploadFiles, type UploadBlob } from "./uploads.js";
 
 export interface BridgeOptions {
   gateTools: Set<string>;          // 远程审批门控的工具名
@@ -1084,41 +1085,37 @@ export class Bridge {
   // 与 PC 终端手敲一致；WAITING（本地权限弹窗/远程审批挂起）注入 Enter 可能误触弹窗，排队等回合结束。
   // ERROR 也放行（relay 重启重放的误标，自愈 sweeper 未及翻转时先到）：pid 死了注入
   // 自然失败走 onInjectFail 清定位，不会卡死
-  extInput(sessionId: string, text: string, images?: string[]): { ok: boolean; error?: string } {
+  extInput(sessionId: string, text: string, images?: string[], files?: UploadBlob[]): { ok: boolean; error?: string } {
     const state = this.mgr.getExternal(sessionId);
     if (!state) return { ok: false, error: `会话不存在: ${sessionId}` };
     // #54 路线 A：外部会话发图——base64 落盘专用临时目录 <dataDir>/../tmp（7 天自动清扫，
     // 见 index.ts sweepTmpImages），合成「正文 + 路径查看指令」后走既有注入/排队链路，
-    // CLI 用 Read 工具渲染图片（Read 原生支持 PNG/JPG）。扩展名按魔数嗅探兜底 png
+    // CLI 用 Read 工具渲染图片（Read 原生支持 PNG/JPG）。扩展名按魔数嗅探兜底 png。
+    // #62 文件同链路：落盘保留原始文件名，指令改「按需读取处理」（Read/Bash 均可接手）。
+    // 落盘逻辑抽至 uploads.ts（与托管会话共用，命名口径对账见 test-bridge）
     let body = text.trim();
-    const saved: string[] = [];
-    if (images && images.length) {
-      const dir = path.join(this.opts.dataDir, "..", "tmp");
-      try { mkdirSync(dir, { recursive: true }); } catch {}
-      const sidKey = sessionId.replace(/[^a-z0-9]/gi, "").slice(0, 8) || "ext";
-      const stamp = Date.now();
-      for (let i = 0; i < Math.min(images.length, 4); i++) {
-        const b64 = images[i];
-        const head = Buffer.from(b64.slice(0, 24), "base64");
-        const ext = head[0] === 0x89 && head[1] === 0x50 ? "png"
-          : head[0] === 0xff && head[1] === 0xd8 ? "jpg"
-          : head[0] === 0x47 && head[1] === 0x49 ? "gif"
-          : head.slice(0, 4).toString("latin1") === "RIFF" && head.slice(8, 12).toString("latin1") === "WEBP" ? "webp"
-          : "png";
-        const p = path.join(dir, `img-${sidKey}-${stamp}-${i + 1}.${ext}`);
-        try { writeFileSync(p, Buffer.from(b64, "base64")); saved.push(p); } catch {}
-      }
-      if (saved.length) {
-        body = body
-          ? `${body}\n（图片已保存：${saved.join("、")}——请用 Read 工具查看后再继续）`
-          : `请用 Read 工具查看图片：${saved.join("、")}`;
-      } else if (!body) {
-        return { ok: false, error: "图片保存失败（临时目录不可写）" };
-      }
+    const savedImgs = images && images.length ? saveUploadImages(this.opts.dataDir, sessionId, images) : [];
+    if (savedImgs.length) {
+      body = body
+        ? `${body}\n（图片已保存：${savedImgs.join("、")}——请用 Read 工具查看后再继续）`
+        : `请用 Read 工具查看图片：${savedImgs.join("、")}`;
+    } else if (images && images.length && !body) {
+      return { ok: false, error: "图片保存失败（临时目录不可写）" };
+    }
+    const savedFiles = files && files.length ? saveUploadFiles(this.opts.dataDir, sessionId, files) : [];
+    if (savedFiles.length) {
+      body = body
+        ? `${body}\n（文件已保存：${savedFiles.join("、")}——请按需读取处理）`
+        : `请处理以下文件：${savedFiles.join("、")}`;
+    } else if (files && files.length && !body) {
+      return { ok: false, error: "文件保存失败（临时目录不可写）" };
     }
     if (!body) return { ok: false, error: "空消息" };
-    // 回显用短文本：排队气泡里别展开整串临时路径
-    const echoText = saved.length ? `${text.trim()} [图片×${saved.length}]`.trim() : text.trim();
+    // 回显用短文本：排队气泡里别展开整串临时路径（#54b：echo/body 分离，客户端可见面不露路径）
+    const echoBits = [text.trim()];
+    if (savedImgs.length) echoBits.push(`[图片×${savedImgs.length}]`);
+    if (savedFiles.length) echoBits.push(`[文件×${savedFiles.length}]`);
+    const echoText = echoBits.filter((x) => x.length > 0).join(" ");
     // 平台不支持注入（Linux 无按键注入器；Windows SendInput / macOS osascript 均已支持）：
     // 明确报错而非排队后静默失败——手机端"消息消失无反应"的根因（#303），ACK ok:false 让客户端弹原因
     if (!injectSupported()) {

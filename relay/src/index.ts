@@ -221,12 +221,12 @@ if (cliArgs.has("--stop")) {
 // 历史持久化：relay/data/events.ndjson（重启后重放重建会话与时间线）
 const persistPath = join(cfg.dataDir, "events.ndjson");
 
-// #54 外部会话发图的临时目录清扫：<dataDir>/../tmp 下的 img-* 为一次性投递物
-// （CLI Read 过即无价值），7 天过期——启动扫一遍 + 每 6 小时日扫，双保险
+// #54 外部会话发图/#62 发文件的临时目录清扫：<dataDir>/../tmp 下的 img-* / file-*
+// 为一次性投递物（CLI 处理过即无价值），7 天过期——启动扫一遍 + 每 6 小时日扫，双保险
 function sweepTmpImages(dir: string): void {
   try {
     for (const f of readdirSync(dir)) {
-      if (!f.startsWith("img-")) continue;
+      if (!f.startsWith("img-") && !f.startsWith("file-")) continue;
       const p = join(dir, f);
       try {
         if (Date.now() - statSync(p).mtimeMs > 7 * 86400_000) rmSync(p, { force: true });

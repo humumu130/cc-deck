@@ -145,7 +145,9 @@ export interface AgentLike {
   readonly id: string;
   readonly startedAt: number;
   ended: boolean;
-  sendMessage(text: string, images?: string[]): void;
+  // echo（#62）：客户端回显文本（文件消息正文合成路径指令后传原文本短回显，不露临时
+  // 路径）；不传则回显 = 截断正文 + 图片计数
+  sendMessage(text: string, images?: string[], echo?: string): void;
   allow(requestId: string, by?: string): boolean;
   deny(requestId: string, reason?: string, by?: string): boolean;
   answer(requestId: string, answers: string[], by?: string): boolean;
@@ -544,11 +546,16 @@ export class AgentSession {
     });
   }
 
-  sendMessage(text: string, images?: string[]): void {
+  sendMessage(text: string, images?: string[], echo?: string): void {
     this.pushUserMessage(text, images);
     const marker = images && images.length > 0 ? `（+${images.length} 图）` : "";
-    const full = fullText(text, 200);
-    this.cb.onLog("user_message", truncate(text, 200) + marker, { full: full === undefined ? undefined : full + marker });
+    if (echo !== undefined) {
+      // #62 文件消息：回显/展开都用调用方给的短文本（正文含临时路径，不对账展示）
+      this.cb.onLog("user_message", echo, { full: fullText(echo, 200) });
+    } else {
+      const full = fullText(text, 200);
+      this.cb.onLog("user_message", truncate(text, 200) + marker, { full: full === undefined ? undefined : full + marker });
+    }
     // 审批弹窗死锁根治①：WAITING 中用户再发消息时，这里不能乐观报 WORKING——CLI 仍
     // 阻塞在 canUseTool 上（新消息排队等权限放行），假报会把 status 翻成 WORKING 而
     // waiting_request 没人清，端上"卡片处理按钮在、审批弹窗永不出现"。状态保持 WAITING，

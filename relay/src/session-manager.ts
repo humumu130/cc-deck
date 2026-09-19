@@ -11,6 +11,7 @@ import { generateTitle } from "./title-gen.js";
 import { cronTasksKey, readCronTasks } from "./cron.js";
 import { readTaskStoreTodos } from "./task-store.js";
 import { killTree, snapshotTree, treeCpuMs } from "./proc-tree.js";
+import { saveUploadFiles, type UploadBlob } from "./uploads.js";
 import { normKey, truncate } from "./summarizer.js";
 import type { AgentLike } from "./agent-adapter.js";
 
@@ -183,6 +184,22 @@ function sanitizeImages(raw: unknown): string[] | undefined {
   if (!Array.isArray(raw)) return undefined;
   const list = raw.filter((x): x is string => typeof x === "string" && x.length > 0 && x.length <= 8 * 1024 * 1024);
   return list.length > 0 ? list.slice(0, 4) : undefined;
+}
+
+// #62 文件附件清洗：最多 2 个、单个 28MB base64（≈20MB 原文件，2026-09-19 用户反馈
+// 4.5MB 太小后放宽）。超限项剔除而非整单拒收——手机端选文件时已有前置大小提示，
+// 这里兜底防裸协议灌大包（28MB×2=56MB 仍在 ws 默认 100MB 单帧内）
+function sanitizeFiles(raw: unknown): UploadBlob[] | undefined {
+  if (!Array.isArray(raw)) return undefined;
+  const list: UploadBlob[] = [];
+  for (const x of raw) {
+    if (!x || typeof x !== "object") continue;
+    const name = typeof (x as Record<string, unknown>).name === "string" ? (x as Record<string, unknown>).name : "";
+    const b64 = (x as Record<string, unknown>).b64;
+    if (typeof b64 !== "string" || b64.length === 0 || b64.length > 28 * 1024 * 1024) continue;
+    list.push({ name: String(name), b64 });
+  }
+  return list.length > 0 ? list.slice(0, 2) : undefined;
 }
 
 // relay 自拉的一次性 SDK 子会话记录（标题生成等），持久化到 <dataDir>/child-sessions.json；
@@ -494,7 +511,7 @@ export class SessionManager {
   private bridge: {
     resolvePending: (sessionId: string, requestId: string, decision: "allow" | "deny", reason?: string) => boolean;
     answerPending: (sessionId: string, requestId: string, answers: string[]) => string | null;
-    extInput: (sessionId: string, text: string, images?: string[]) => { ok: boolean; error?: string };
+    extInput: (sessionId: string, text: string, images?: string[], files?: UploadBlob[]) => { ok: boolean; error?: string };
     extStop: (sessionId: string) => { ok: boolean; error?: string };
     refreshTodos: (sessionId: string) => { ok: boolean; error?: string };
     hideTodo: (sessionId: string, content: string) => { ok: boolean; error?: string };
@@ -503,7 +520,7 @@ export class SessionManager {
   setBridge(b: {
     resolvePending: (sessionId: string, requestId: string, decision: "allow" | "deny", reason?: string) => boolean;
     answerPending: (sessionId: string, requestId: string, answers: string[]) => string | null;
-    extInput: (sessionId: string, text: string, images?: string[]) => { ok: boolean; error?: string };
+    extInput: (sessionId: string, text: string, images?: string[], files?: UploadBlob[]) => { ok: boolean; error?: string };
     extStop: (sessionId: string) => { ok: boolean; error?: string };
     refreshTodos: (sessionId: string) => { ok: boolean; error?: string };
     hideTodo: (sessionId: string, content: string) => { ok: boolean; error?: string };
@@ -997,18 +1014,35 @@ export class SessionManager {
           if (s.state.external) {
             return { command_id: cmd.command_id, ok: false, error: "外部会话请使用 COMMAND_EXT_INPUT" };
           }
+          // #62 文件附件：SDK 用户消息只收 image blocks，文件类附件落盘 tmp 后把
+          // 「正文 + 路径处理指令」作为正文下发（echo 分离：客户端可见面不暴露临时
+          // 路径，同 #54b 口径；unacked 记合成文——重放时盘上文件仍在，指令照常有效）
+          const orig = cmd.payload.text;
+          let text = orig;
+          let echo: string | undefined;
+          const files = sanitizeFiles(cmd.payload.files);
+          if (files && files.length > 0) {
+            const saved = saveUploadFiles(this.cfg.dataDir, cmd.payload.session_id, files);
+            if (saved.length > 0) {
+              const list = saved.join("、");
+              text = text.trim() ? `${text}\n（文件已保存：${list}——请按需读取处理）` : `请处理以下文件：${list}`;
+              echo = `${orig.trim()}（+${saved.length} 文件）`.trim();
+            } else if (!text.trim()) {
+              return { command_id: cmd.command_id, ok: false, error: "文件保存失败（临时目录不可写）" };
+            }
+          }
           // agent 已死（Relay 重启遗留 / stop 收尾）：有 SDK 会话 id 就地 resume 复活
           if (!s.agent || s.agent.ended) {
-            this.resumeAgent(s, cmd.payload.text, sanitizeImages(cmd.payload.images));
+            this.resumeAgent(s, text, sanitizeImages(cmd.payload.images), echo);
             return { command_id: cmd.command_id, ok: true };
           }
           if (s.state.status === "ERROR" || s.state.status === "DONE") {
             s.state.status = "WORKING";
           }
-          s.agent.sendMessage(cmd.payload.text, sanitizeImages(cmd.payload.images));
+          s.agent.sendMessage(text, sanitizeImages(cmd.payload.images), echo);
           // #7 看门狗重放账：入队即记，流回显 user_message 才出队（流死时 CLI 从未
           // 收到，恢复后须重发；不推进 lastProgressAt——灌进死队列不是"进展"）
-          s.unacked.push({ text: cmd.payload.text, images: sanitizeImages(cmd.payload.images), ts: Date.now() });
+          s.unacked.push({ text, images: sanitizeImages(cmd.payload.images), ts: Date.now() });
           this.emitUpdated(s, true);
           return { command_id: cmd.command_id, ok: true };
         }
@@ -1129,7 +1163,12 @@ export class SessionManager {
           if (!this.bridge) {
             return { command_id: cmd.command_id, ok: false, error: "bridge 未就绪" };
           }
-          const r = this.bridge.extInput(cmd.payload.session_id, cmd.payload.text, sanitizeImages(cmd.payload.images));
+          const r = this.bridge.extInput(
+            cmd.payload.session_id,
+            cmd.payload.text,
+            sanitizeImages(cmd.payload.images),
+            sanitizeFiles(cmd.payload.files),
+          );
           return { command_id: cmd.command_id, ok: r.ok, error: r.error };
         }
         case "COMMAND_EXT_STOP": {
@@ -1644,8 +1683,10 @@ export class SessionManager {
     };
   }
 
-  // 死会话复活：用 SDK resume 在同一 relay 会话上重建 agent（时间线/状态保留）
-  private resumeAgent(s: ManagedSession, firstMessage: string, images?: string[]): void {
+  // 死会话复活：用 SDK resume 在同一 relay 会话上重建 agent（时间线/状态保留）。
+  // echo（#62 文件消息）：客户端可见回显文本——正文已合成路径指令时传原文本短回显，
+  // 不暴露临时路径（同 #54b 口径）；不传则回显截断正文 + 图片计数
+  private resumeAgent(s: ManagedSession, firstMessage: string, images?: string[], echo?: string): void {
     const sdkId = s.state.relay_session_id;
     if (!sdkId) {
       throw new Error("会话已结束且无 SDK 会话记录，无法恢复（模型尚未完成初始化）");
@@ -1672,7 +1713,7 @@ export class SessionManager {
     s.wd.phase = "idle";
     s.unacked.push({ text: firstMessage, images, ts: Date.now() });
     const marker = images && images.length > 0 ? `（+${images.length} 图）` : "";
-    this.pushExternalLog(s.state.session_id, "user_message", truncate(firstMessage, 200) + marker);
+    this.pushExternalLog(s.state.session_id, "user_message", echo ?? truncate(firstMessage, 200) + marker);
     this.pushExternalLog(s.state.session_id, "system", `已恢复 SDK 会话（resume ${sdkId.slice(0, 8)}…）`);
     this.emitUpdated(s, true);
   }

@@ -4,6 +4,12 @@ import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context"
 import Svg, { Circle, Path, Rect } from "react-native-svg";
 import * as ImagePicker from "expo-image-picker";
 import * as ImageManipulator from "expo-image-manipulator";
+import * as DocumentPicker from "expo-document-picker";
+// #62 真修：SDK 57 起 expo-file-system 主入口是新 API，readAsStringAsync 只是
+// "will throw in runtime" 的弃用占位——此前主力机实测选任何文件都报「未添加」
+// 就是它 unconditional throw（旧提示又把锅甩给大小限制）。legacy 子模块仍是
+// 完整实现（Base64 编码 + Android content:// 都支持），选它直到新 API 有对等能力
+import * as FileSystem from "expo-file-system/legacy";
 import * as Clipboard from "expo-clipboard";
 import { withA, type ThemeColors } from "../theme";
 import { useTheme, useThemeStyles } from "../theme-context";
@@ -854,6 +860,8 @@ export default function DetailScreen({ sid, onBack, initialView, ref }: { sid: s
   const todoTravel = Math.max(1, todoMetrics.content - todoMetrics.layout);
   const thumbTravel = Math.max(0, todoMetrics.layout - todoThumbH - 4);
   const [images, setImages] = useState<string[]>([]);
+  // #62 待发文件：原文 base64（≤2 个/单个 20MB；relay sanitize 28MB b64 兜底）
+  const [files, setFiles] = useState<{ name: string; b64: string }[]>([]);
   const [queuedHint, setQueuedHint] = useState<string | null>(null);
   const flashHint = (t: string) => {
     setQueuedHint(t);
@@ -1317,16 +1325,22 @@ export default function DetailScreen({ sid, onBack, initialView, ref }: { sid: s
 
   const send = (override?: string) => {
     const text = (override ?? input).trim();
-    if (!text && images.length === 0) return;
+    if (!text && images.length === 0 && files.length === 0) return;
     const willQueue = external && s.status === "WAITING";
-    // #54 外部会话同口径带图：relay 落盘临时目录 + 注入「正文 + 路径查看指令」，CLI Read 看图
+    // #54/#62 外部会话同口径带附件：relay 落盘临时目录 + 注入「正文 + 路径指令」，
+    // CLI 用 Read 看图/处理文件；托管会话图片走 SDK image blocks、文件走路径指令
     const ok = store.send(
       external ? "COMMAND_EXT_INPUT" : "COMMAND_MESSAGE",
-      { session_id: sid, text, ...(images.length > 0 ? { images } : {}) },
+      {
+        session_id: sid, text,
+        ...(images.length > 0 ? { images } : {}),
+        ...(files.length > 0 ? { files } : {}),
+      },
     );
     if (ok) {
       editInput("");
       setImages([]);
+      setFiles([]);
       if (willQueue) flashQueuedHint();
     }
   };
@@ -1336,6 +1350,8 @@ export default function DetailScreen({ sid, onBack, initialView, ref }: { sid: s
     setVoiceHint(t);
     setTimeout(() => setVoiceHint(null), 3500);
   };
+  // #62 通用短提示（附件选择超限等），与语音提示同一条展示位
+  const hintOnce = setVoiceHintOnce;
   const startVoice = async () => {
     if (listening || !canCmd) return;
     try {
@@ -1411,6 +1427,48 @@ export default function DetailScreen({ sid, onBack, initialView, ref }: { sid: s
         }
       }
       if (out.length > 0) setImages((prev) => [...prev, ...out].slice(0, 4));
+    } catch {
+      // 用户取消/读取失败：静默
+    } finally {
+      setPicking(false);
+    }
+  };
+
+  // #62 文件选择：SAF picker 任意类型多选，读 base64 上送。上限 20MB/个（2026-09-19
+  // 用户主力机实测 4.5MB 拦下常规文件后放宽；relay sanitize 28MB b64 兜底）。
+  // 超限与读取失败分开提示且带文件名/实际大小——短提示消失后 chip 不在，用户要能
+  // 知道为什么没加上
+  const pickFiles = async () => {
+    if (picking) return;
+    setPicking(true);
+    try {
+      const res = await DocumentPicker.getDocumentAsync({ type: "*/*", multiple: true, copyToCacheDirectory: true });
+      if (res.canceled) return;
+      const out: { name: string; b64: string }[] = [];
+      const oversize: string[] = [];
+      const unreadable: string[] = [];
+      let readErr = "";
+      for (const a of res.assets) {
+        if (a.size != null && a.size > 20 * 1024 * 1024) {
+          oversize.push(`${(a.size / 1048576).toFixed(0)}MB ${a.name || ""}`.trim());
+          continue;
+        }
+        try {
+          const b64 = await FileSystem.readAsStringAsync(a.uri, { encoding: FileSystem.EncodingType.Base64 });
+          // 空读（provider 异常/拷贝失败 0 字节）也别静默上送——relay 会剔除空 b64，
+          // 用户侧表现就是"带了文件却没落盘"
+          if (!b64) throw new Error("读到 0 字节");
+          out.push({ name: a.name || "文件", b64 });
+        } catch (err) {
+          unreadable.push(a.name || "文件");
+          if (!readErr) readErr = err instanceof Error ? err.message : String(err);
+        }
+      }
+      if (oversize.length > 0) hintOnce(`${oversize.join("、")} 超过 20MB，未添加`);
+      if (unreadable.length > 0) hintOnce(`${unreadable.join("、")} 读取失败${readErr ? "：" + readErr.slice(0, 60) : ""}`);
+      const room = 2 - files.length;
+      if (out.length > room) hintOnce("最多同时带 2 个文件");
+      if (out.length > 0 && room > 0) setFiles((prev) => [...prev, ...out].slice(0, 2));
     } catch {
       // 用户取消/读取失败：静默
     } finally {
@@ -1995,14 +2053,28 @@ export default function DetailScreen({ sid, onBack, initialView, ref }: { sid: s
           </FadeIn>
           )
         ) : null}
-        {images.length > 0 ? (
-          <View style={d.imgRow}>
+        {images.length > 0 || files.length > 0 ? (
+          <View style={[d.imgRow, (images.length > 0 || files.length > 1) && d.imgRowWrap]}>
             {images.map((b, i) => (
-              <FadeIn key={i} dy={4}>
+              <FadeIn key={`i${i}`} dy={4}>
                 <View style={d.imgCell}>
                   <Image style={d.imgThumb} source={{ uri: `data:image/jpeg;base64,${b}` }} />
                   <Pressable style={d.imgDel} android_ripple={{ color: "rgba(0,0,0,0.3)", borderless: false, radius: 10 }} onPress={() => setImages((prev) => prev.filter((_, j) => j !== i))}>
                     <Text style={d.imgDelT}>×</Text>
+                  </Pressable>
+                </View>
+              </FadeIn>
+            ))}
+            {files.map((f, i) => (
+              <FadeIn key={`f${i}`} dy={4}>
+                <View style={d.fileChip}>
+                  <Svg width={12} height={12} viewBox="0 0 24 24" fill="none" stroke={c.dim} strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">
+                    <Path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z" />
+                    <Path d="M14 3v5h5" />
+                  </Svg>
+                  <Text style={d.fileName} numberOfLines={1}>{f.name}</Text>
+                  <Pressable style={d.fileDel} hitSlop={6} android_ripple={{ color: c.tintSoft, borderless: false, radius: 9 }} onPress={() => setFiles((prev) => prev.filter((_, j) => j !== i))} accessibilityLabel={`移除文件 ${f.name}`}>
+                    <Text style={d.fileDelT}>×</Text>
                   </Pressable>
                 </View>
               </FadeIn>
@@ -2050,8 +2122,22 @@ export default function DetailScreen({ sid, onBack, initialView, ref }: { sid: s
         <View style={d.cmdbar}>
           {/* 可恢复的托管历史会话同样支持发图（SDK resume 支持图片，2026-09-16 反馈：
               测试客户端创建的会话闲置转 historical 后发图入口消失）；
-              #54 外部 CLI 会话开放发图（relay 落盘+注入查看指令） */}
+              #54 外部 CLI 会话开放发图（relay 落盘+注入查看指令）；
+              #62 文件同链路（relay 落盘原名+路径指令，托管/外部一致） */}
           {external || !s.historical || s.relay_session_id ? (
+            <>
+            <Pressable
+              style={[d.imgBtn, d.opRipple, (!canCmd || files.length >= 2) && { opacity: 0.4 }]}
+              android_ripple={{ color: c.tintSoft, borderless: false, radius: 11 }}
+              onPress={pickFiles}
+              disabled={!canCmd || files.length >= 2}
+              accessibilityLabel="附加文件"
+            >
+              {/* 线条回形针（与相机按钮同形制） */}
+              <Svg width={19} height={19} viewBox="0 0 24 24" fill="none" stroke={c.dim} strokeWidth={1.7} strokeLinecap="round" strokeLinejoin="round">
+                <Path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48" />
+              </Svg>
+            </Pressable>
             <Pressable
               style={[d.imgBtn, d.opRipple, (!canCmd || images.length >= 4) && { opacity: 0.4 }]}
               android_ripple={{ color: c.tintSoft, borderless: false, radius: 11 }}
@@ -2065,6 +2151,7 @@ export default function DetailScreen({ sid, onBack, initialView, ref }: { sid: s
                 <Circle cx={12} cy={13.2} r={3.5} />
               </Svg>
             </Pressable>
+            </>
           ) : null}
           <View style={{ flex: 1 }}>
             <TextInput
@@ -2092,7 +2179,7 @@ export default function DetailScreen({ sid, onBack, initialView, ref }: { sid: s
             </Pressable>
           ) : null}
           <PressScale
-            style={[d.sendBtn, (!canCmd || (!input.trim() && images.length === 0)) && { opacity: 0.4 }]}
+            style={[d.sendBtn, (!canCmd || (!input.trim() && images.length === 0 && files.length === 0)) && { opacity: 0.4 }]}
             ripple={withA(c.text, 0.14)}
             haptic
             onPress={() => send()}
@@ -2489,13 +2576,24 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
   askFreeBtnT: { color: c.brandA, fontWeight: "600", fontSize: 13.5 },
   askSkip: { color: c.faint, fontSize: 11.5, textAlign: "center" },
   opRipple: { borderRadius: 13, overflow: "hidden" },
-  // 待发图片：缩略图行（可删除）+ 相册按钮
+  // 待发附件（图片缩略图 + #62 文件 chip 同条）：可删除 + 相册/文件按钮
   imgRow: {
     flexDirection: "row", gap: 8, backgroundColor: c.overlay,
     borderTopWidth: 1, borderTopColor: c.line, paddingHorizontal: 12, paddingTop: 9,
   },
+  // 多附件换行（chip 名字长，单行会溢出）
+  imgRowWrap: { flexWrap: "wrap", rowGap: 8 },
   imgCell: { width: 52, height: 52 },
   imgThumb: { width: 52, height: 52, borderRadius: 10 },
+  // #62 待发文件 chip：文档图标 + 文件名 + 删除，与缩略图同视觉语言
+  fileChip: {
+    flexDirection: "row", alignItems: "center", gap: 5, maxWidth: 230, height: 52,
+    borderWidth: 1, borderColor: c.line, borderRadius: 12, backgroundColor: c.panel,
+    paddingHorizontal: 10,
+  },
+  fileName: { color: c.dim, fontSize: 12, flexShrink: 1 },
+  fileDel: { width: 20, height: 20, alignItems: "center", justifyContent: "center" },
+  fileDelT: { color: c.faint, fontSize: 14, lineHeight: 16, marginTop: -1 },
   imgDel: {
     position: "absolute", top: -6, right: -6, width: 20, height: 20, borderRadius: 10,
     backgroundColor: c.panel, borderWidth: 1, borderColor: c.line,
