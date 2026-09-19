@@ -1929,6 +1929,28 @@ await wait(150);
   rmSync(TMPIMG, { recursive: true, force: true });
 }
 
+// 4t 转录标题 latin1→UTF-8 还原回归（#4 乱码根治）：scanTranscriptTitles 以 latin1
+// 字节视图扫转录，捕获组必须 Buffer.from(...,"latin1").toString("utf-8") 还原再
+// JSON.parse——08699ef 曾只改 bundle 副本、源码漏改，重打包后乱码复活（此段即防走岔）
+{
+  const tp4t = join(cfg.dataDir, "title-4t.jsonl");
+  const esc4t = (s: string) => JSON.stringify(s).slice(1, -1); // JSON 字符串体的转义段
+  const scan4t = () => (bridge as unknown as { scanTranscriptTitles(p: string): { custom?: string; ai?: string } }).scanTranscriptTitles(tp4t);
+  // 中文标题：UTF-8 字节在 latin1 视图是 mojibake 字符，正则结构不受影响（无引号/
+  // 反斜杠字节），还原后必须逐字还原——未还原时 JSON.parse 出 ç«¯è¾¹å¯¹è´¢
+  writeFileSync(tp4t, [
+    `{"type":"user","message":"hi"}`,
+    `{"type":"custom-title","customTitle":"${esc4t("端边对账")}"}`,
+    `{"type":"ai-title","aiTitle":"${esc4t("整理笔记")}"}`
+  ].join("\n"), "utf-8");
+  assert(scan4t().custom === "端边对账", "4t custom-title chinese restored from latin1 view");
+  assert(scan4t().ai === "整理笔记", "4t ai-title chinese restored from latin1 view");
+  // 转义序列（\" \\）纯 ASCII，两视图等价：还原不影响转义存活
+  writeFileSync(tp4t, `{"type":"custom-title","customTitle":"${esc4t('修复 "引号" 与 \\ 反斜杠')}"}`, "utf-8");
+  assert(scan4t().custom === '修复 "引号" 与 \\ 反斜杠', "4t escapes survive restore round trip");
+  rmSync(tp4t, { force: true });
+}
+
 wsCur!.close();
 await wait(300);
 console.log("\nBRIDGE TESTS PASSED");

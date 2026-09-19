@@ -645,10 +645,17 @@ export class Bridge {
       finally { try { closeSync(fd); } catch {} }
       const text = buf.toString("latin1");
       let custom: string | undefined, ai: string | undefined;
+      // latin1 字节视图的捕获组须先还原 UTF-8 再 parse：中文标题字节序列直接
+      // JSON.parse 会变乱码（端边对账→ç«¯è¾¹å¯¹è´¢）；转义序列纯 ASCII 两视图等价。
+      // 源码是正本：08699ef 曾只改 bundle 副本未落此处，重打包即被冲掉——勿再走岔
       const reC = /"type":"custom-title","customTitle":"((?:[^"\\]|\\.)*)"/g;
-      for (const m of text.matchAll(reC)) { try { custom = JSON.parse('"' + m[1] + '"'); } catch {} }
+      for (const m of text.matchAll(reC)) {
+        try { custom = JSON.parse('"' + Buffer.from(m[1], "latin1").toString("utf-8") + '"'); } catch {}
+      }
       const reA = /"type":"ai-title","aiTitle":"((?:[^"\\]|\\.)*)"/g;
-      for (const m of text.matchAll(reA)) { try { ai = JSON.parse('"' + m[1] + '"'); } catch {} }
+      for (const m of text.matchAll(reA)) {
+        try { ai = JSON.parse('"' + Buffer.from(m[1], "latin1").toString("utf-8") + '"'); } catch {}
+      }
       return { custom, ai };
     } catch { return {}; }
   }

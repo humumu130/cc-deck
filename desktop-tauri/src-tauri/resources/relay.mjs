@@ -10339,8 +10339,8 @@ function unseal(box, theirPublicKeyB64, mySecretKeyB64) {
 // src/index.ts
 import { networkInterfaces as networkInterfaces3, homedir as homedir12, hostname } from "node:os";
 import { join as join16 } from "node:path";
-import { writeFileSync as writeFileSync10, openSync as openSync3, readFileSync as readFileSync15, rmSync as rmSync3, existsSync as existsSync11 } from "node:fs";
-import { spawn as spawn3, execFileSync as execFileSync2 } from "node:child_process";
+import { writeFileSync as writeFileSync10, openSync as openSync3, readFileSync as readFileSync15, rmSync as rmSync3, existsSync as existsSync11, readdirSync as readdirSync6, statSync as statSync6 } from "node:fs";
+import { spawn as spawn4, execFileSync as execFileSync2 } from "node:child_process";
 import { fileURLToPath as fileURLToPath4 } from "node:url";
 
 // src/config.ts
@@ -10603,28 +10603,33 @@ function reduceHistory(events) {
   for (const rs2 of out.values()) {
     if (rs2.state.status === "WORKING" || rs2.state.status === "WAITING") {
       if (rs2.state.external) {
-        let alive = false;
+        let alive2 = false;
         if (rs2.state.cli_pid) {
           try {
             process.kill(rs2.state.cli_pid, 0);
-            alive = true;
+            alive2 = true;
           } catch {
-            alive = false;
+            alive2 = false;
           }
         }
-        if (alive) {
-          rs2.logs.push({ ts: Date.now(), kind: "system", text: "Relay \u91CD\u542F\uFF0CCLI \u8FDB\u7A0B\u4ECD\u5728\u8FD0\u884C" });
+        if (alive2) {
+          rs2.logs.push({ ts: Date.now(), kind: "system", text: "\u670D\u52A1\u66F4\u65B0\u91CD\u542F \xB7 \u4F1A\u8BDD\u7EE7\u7EED\u8DDF\u8E2A\u4E2D" });
         } else {
           rs2.state.status = "DONE";
           rs2.state.done_reason = "ended";
           rs2.state.historical = true;
-          rs2.logs.push({ ts: Date.now(), kind: "system", text: "Relay \u91CD\u542F\u65F6 CLI \u5DF2\u9000\u51FA\uFF0C\u56DE\u5408\u89C6\u4F5C\u7ED3\u675F" });
+          rs2.logs.push({ ts: Date.now(), kind: "system", text: "\u670D\u52A1\u66F4\u65B0\u91CD\u542F \xB7 \u4F1A\u8BDD\u5DF2\u7ED3\u675F" });
         }
+      } else if (rs2.state.relay_session_id) {
+        rs2.state.status = "DONE";
+        rs2.state.done_reason = "\u670D\u52A1\u66F4\u65B0\u91CD\u542F\uFF0C\u4F1A\u8BDD\u5DF2\u4E2D\u65AD";
+        rs2.state.historical = true;
+        rs2.logs.push({ ts: Date.now(), kind: "system", text: "\u670D\u52A1\u66F4\u65B0\u91CD\u542F\uFF0C\u4F1A\u8BDD\u5DF2\u4E2D\u65AD \xB7 \u53D1\u9001\u6D88\u606F\u5373\u53EF\u7EE7\u7EED" });
       } else {
         rs2.state.status = "ERROR";
-        rs2.state.last_error = "Relay \u91CD\u542F\uFF0C\u4F1A\u8BDD\u4E2D\u65AD";
+        rs2.state.last_error = "\u670D\u52A1\u66F4\u65B0\u91CD\u542F\uFF0C\u4F1A\u8BDD\u5DF2\u4E2D\u65AD";
         rs2.state.historical = true;
-        rs2.logs.push({ ts: Date.now(), kind: "system", text: "Relay \u91CD\u542F\uFF0C\u4F1A\u8BDD\u4E2D\u65AD" });
+        rs2.logs.push({ ts: Date.now(), kind: "system", text: "\u670D\u52A1\u66F4\u65B0\u91CD\u542F\uFF0C\u4F1A\u8BDD\u5DF2\u4E2D\u65AD" });
       }
     }
     rs2.state.waiting_request = void 0;
@@ -10713,7 +10718,7 @@ var EventBus = class {
 // src/session-manager.ts
 import { mkdirSync as mkdirSync4, readFileSync as readFileSync7, statSync as statSync3, writeFileSync as writeFileSync4 } from "node:fs";
 import { homedir as homedir5 } from "node:os";
-import { join as join9, resolve as resolve5 } from "node:path";
+import { extname, isAbsolute as isAbsolute4, join as join9, resolve as resolve5, sep as sep5 } from "node:path";
 
 // node_modules/@anthropic-ai/claude-agent-sdk/sdk.mjs
 import { createRequire as k8 } from "node:module";
@@ -40173,6 +40178,7 @@ function VJ(e, t) {
 }
 
 // src/agent-adapter.ts
+import { spawn as spawn2 } from "node:child_process";
 import { randomUUID as randomUUID3 } from "node:crypto";
 import { homedir as homedir3 } from "node:os";
 import { delimiter as pathDelimiter, join as join7 } from "node:path";
@@ -40554,6 +40560,45 @@ function summarizeToolResult(content) {
   if (okLines.length > 0) return truncate(okLines.join(" | "), 120);
   return truncate(lines[lines.length - 1] ?? "", 120);
 }
+function fileEditMetrics(result) {
+  if (!result || typeof result !== "object") return null;
+  const r = result;
+  if (r.gitDiff && typeof r.gitDiff === "object") {
+    const gds = Array.isArray(r.gitDiff) ? r.gitDiff : [r.gitDiff];
+    let adds = 0;
+    let dels = 0;
+    for (const d2 of gds) {
+      if (!d2 || typeof d2 !== "object") continue;
+      adds += Number(d2.additions) || 0;
+      dels += Number(d2.deletions) || 0;
+    }
+    const patchHas = Array.isArray(r.structuredPatch) && r.structuredPatch.length > 0;
+    if (r.type === "create") return { adds, dels, created: true };
+    if (patchHas) return { adds, dels, created: false };
+    if (typeof r.content === "string" && r.content) return { adds, dels, created: true };
+    return { adds, dels, created: false };
+  }
+  if (Array.isArray(r.structuredPatch) && r.structuredPatch.length > 0) {
+    let adds = 0;
+    let dels = 0;
+    for (const hunk of r.structuredPatch) {
+      if (!hunk || !Array.isArray(hunk.lines)) continue;
+      for (const line of hunk.lines) {
+        if (typeof line !== "string" || !line) continue;
+        if (line.startsWith("+") && !line.startsWith("+++")) adds++;
+        else if (line.startsWith("-") && !line.startsWith("---")) dels++;
+      }
+    }
+    return { adds, dels, created: false };
+  }
+  if (r.type === "create" || typeof r.content === "string" && r.content) {
+    const content = typeof r.content === "string" ? r.content : "";
+    const lines = content ? content.split("\n") : [];
+    if (lines.length && lines[lines.length - 1] === "") lines.pop();
+    return { adds: lines.length, dels: 0, created: true };
+  }
+  return null;
+}
 function extractDiffStats(result, stats, files) {
   if (!result || typeof result !== "object") return;
   const r = result;
@@ -40766,6 +40811,22 @@ var AgentSession = class {
         env: childEnv(),
         permissionMode: opts?.permissionMode ?? "default",
         ...opts?.resume ? { resume: opts.resume } : {},
+        // #7 看门狗：包一层默认 spawn 记 pid（SDK 默认行为 = spawn(cmd, args,
+        // {stdio 三 pipe, cwd, env, signal})，这里逐项镜像）。杀树/CPU 采样都要 pid
+        spawnClaudeCodeProcess: (o) => {
+          if (process.env.CCR_DEBUG) {
+            process.stderr.write(`[spawn-hook] command=${o.command} args=${JSON.stringify(o.args)} cwd=${o.cwd ?? ""}
+`);
+          }
+          const child = spawn2(o.command, o.args, {
+            stdio: ["pipe", "pipe", "pipe"],
+            cwd: o.cwd,
+            env: o.env,
+            signal: o.signal
+          });
+          this.childPid = child.pid ?? void 0;
+          return child;
+        },
         includePartialMessages: true,
         canUseTool: (toolName, input, opts2) => this.handlePermission(toolName, input, opts2),
         stderr: (s) => {
@@ -40785,7 +40846,13 @@ var AgentSession = class {
   stats = { files_changed: 0, lines_added: 0, lines_deleted: 0 };
   // 流已关闭（stop/进程退出）：此后 sendMessage 不可用，调用方走 resume 重建
   ended = false;
+  // #7 看门狗：CLI 子进程 pid（spawnClaudeCodeProcess 包装时捕获）。SDK 默认 spawn
+  // 的行为逐项镜像（stdio 三 pipe + cwd/env/signal），仅多记一个 pid
+  childPid;
   filesTouched = /* @__PURE__ */ new Set();
+  // #35 输出物配对账：Edit/Write 类 tool_use 的 callId → { 工具名, file_path }，
+  // 同消息流的 tool_result（tool_use_id）命中即产出一条（未配对的被打断调用自然丢弃）
+  pendingFileUses = /* @__PURE__ */ new Map();
   queue = new AsyncQueue();
   pending = /* @__PURE__ */ new Map();
   stopping = false;
@@ -40871,6 +40938,15 @@ var AgentSession = class {
               tool: block.name,
               detail: detailToolUse(block.name, block.input)
             });
+            if ((block.name === "Write" || block.name === "Edit" || block.name === "MultiEdit" || block.name === "NotebookEdit") && typeof block.input?.file_path === "string" && typeof block.id === "string") {
+              this.pendingFileUses.set(block.id, {
+                tool: block.name,
+                path: block.input.file_path
+              });
+              if (this.pendingFileUses.size > 64) {
+                this.pendingFileUses.delete(this.pendingFileUses.keys().next().value);
+              }
+            }
             const todos = this.tasks.feed(block.name, block.input);
             if (todos) this.cb.onTodos(todos);
             this.cb.onStatusChange("WORKING", this.lastSummary);
@@ -40899,6 +40975,22 @@ var AgentSession = class {
             }
             extractDiffStats(structured ?? tr.content, this.stats, this.filesTouched);
             this.cb.onStats({ ...this.stats });
+            const callId = b.tool_use_id;
+            if (typeof callId === "string" && this.pendingFileUses.has(callId)) {
+              const use2 = this.pendingFileUses.get(callId);
+              this.pendingFileUses.delete(callId);
+              const m = fileEditMetrics(structured ?? tr.content);
+              if (m) {
+                this.cb.onArtifacts?.({
+                  path: use2.path,
+                  tool: use2.tool,
+                  adds: m.adds,
+                  dels: m.dels,
+                  created: m.created,
+                  ts: Date.now()
+                });
+              }
+            }
             this.cb.onLog("tool_result", summarizeToolResult(tr.content), {
               detail: detailToolResult(structured ?? tr.content),
               diff: diffLines(structured)
@@ -41229,6 +41321,117 @@ function readTaskStoreTodos(cliSessionId) {
   return out;
 }
 
+// src/proc-tree.ts
+import { execFile } from "node:child_process";
+function parseCpuTimeMs(s) {
+  const raw = (s || "").trim();
+  if (!raw) return 0;
+  let days = 0;
+  let body = raw;
+  const dm = /^(\d+)-(.+)$/.exec(raw);
+  if (dm) {
+    days = Number(dm[1]);
+    body = dm[2];
+  }
+  const parts = body.split(":").map((x) => Number(x.replace(/[^0-9.]/g, "")) || 0);
+  const sec = parts[parts.length - 1] ?? 0;
+  const min = parts[parts.length - 2] ?? 0;
+  const hour = parts[parts.length - 3] ?? 0;
+  return Math.round((days * 86400 + hour * 3600 + min * 60 + sec) * 1e3);
+}
+async function snapshotTree() {
+  const out = /* @__PURE__ */ new Map();
+  if (process.platform === "win32") {
+    const stdout2 = await psExec("powershell.exe", [
+      "-NoProfile",
+      "-Command",
+      'Get-CimInstance Win32_Process | ForEach-Object { "$($_.ProcessId) $($_.ParentProcessId) $([int64]$_.KernelModeTime + [int64]$_.UserModeTime)" }'
+    ]);
+    for (const line of stdout2.split(/\r?\n/)) {
+      const m = /^\s*(\d+)\s+(\d+)\s+(\d+)\s*$/.exec(line);
+      if (m) out.set(Number(m[1]), { ppid: Number(m[2]), cpuMs: Math.round(Number(m[3]) / 1e4) });
+    }
+    return out;
+  }
+  const stdout = await psExec("ps", ["-eo", "pid=,ppid=,time="]);
+  for (const line of stdout.split(/\r?\n/)) {
+    const m = /^\s*(\d+)\s+(\d+)\s+(\S+)\s*$/.exec(line);
+    if (m) out.set(Number(m[1]), { ppid: Number(m[2]), cpuMs: parseCpuTimeMs(m[3]) });
+  }
+  return out;
+}
+function psExec(cmd, args) {
+  return new Promise((resolve7) => {
+    try {
+      execFile(cmd, args, { timeout: 1e4, windowsHide: true, maxBuffer: 4 * 1024 * 1024 }, (err, stdout) => {
+        resolve7(err ? "" : String(stdout));
+      });
+    } catch {
+      resolve7("");
+    }
+  });
+}
+function descendantsOf(snap, root) {
+  const out = /* @__PURE__ */ new Set([root]);
+  const children = /* @__PURE__ */ new Map();
+  for (const [pid, p] of snap) {
+    const arr = children.get(p.ppid);
+    if (arr) arr.push(pid);
+    else children.set(p.ppid, [pid]);
+  }
+  const queue = [root];
+  while (queue.length) {
+    const cur = queue.shift();
+    for (const kid of children.get(cur) ?? []) {
+      if (!out.has(kid)) {
+        out.add(kid);
+        queue.push(kid);
+      }
+    }
+  }
+  return out;
+}
+function treeCpuMs(snap, root) {
+  let total = 0;
+  for (const pid of descendantsOf(snap, root)) total += snap.get(pid)?.cpuMs ?? 0;
+  return total;
+}
+var alive = (pid) => {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch {
+    return false;
+  }
+};
+async function killTree(root) {
+  if (process.platform === "win32") {
+    await psExec("taskkill", ["/PID", String(root), "/T", "/F"]);
+    return "killed";
+  }
+  const snap = await snapshotTree();
+  const tree = [...descendantsOf(snap, root)];
+  if (!alive(root) && tree.every((p) => p !== root && !alive(p))) return "gone";
+  for (const pid of tree) {
+    try {
+      process.kill(pid, "SIGTERM");
+    } catch {
+    }
+  }
+  const deadline = Date.now() + 3e3;
+  while (Date.now() < deadline) {
+    await new Promise((r) => setTimeout(r, 150));
+    if (!tree.some(alive)) return "killed";
+  }
+  for (const pid of tree) {
+    try {
+      if (alive(pid)) process.kill(pid, "SIGKILL");
+    } catch {
+    }
+  }
+  return "killed";
+}
+
 // src/todo-hidden.ts
 import { readFileSync as readFileSync6, writeFileSync as writeFileSync3 } from "node:fs";
 import path2 from "node:path";
@@ -41283,6 +41486,27 @@ function contextLimitOf(model) {
   if (/glm[-_]?5/.test(m)) return 1e6;
   return 2e5;
 }
+var DOC_ARTIFACT_EXTS = /* @__PURE__ */ new Set([
+  "md",
+  "markdown",
+  "txt",
+  "text",
+  "rtf",
+  "doc",
+  "docx",
+  "pdf",
+  "pages",
+  "xls",
+  "xlsx",
+  "csv",
+  "numbers",
+  "ppt",
+  "pptx",
+  "key",
+  "odt",
+  "ods",
+  "odp"
+]);
 function isManagedMode(m) {
   return m === "default" || m === "acceptEdits" || m === "plan" || m === "bypassPermissions";
 }
@@ -41349,7 +41573,8 @@ function resolveCreateCwd(rawCwd, defaultCwd) {
     }
   }
   const home = homedir5();
-  const wantedDesc = wanted ? `\u6307\u5B9A\u7684\u5DE5\u4F5C\u76EE\u5F55 ${resolve5(wanted)} \u4E0D\u662F\u6709\u6548\u76EE\u5F55\uFF08\u4E0D\u5B58\u5728\u6216\u65E0\u6CD5\u8BBF\u95EE\uFF09\uFF0C\u9ED8\u8BA4\u76EE\u5F55\uFF08CCR_CWD/\u4E0A\u6B21\u6709\u6548\u76EE\u5F55\uFF09\u4E5F\u672A\u914D\u7F6E\u6216\u65E0\u6548` : "\u672A\u6307\u5B9A\u5DE5\u4F5C\u76EE\u5F55\uFF0C\u4E14\u9ED8\u8BA4\u76EE\u5F55\u672A\u914D\u7F6E\uFF08CCR_CWD\uFF09";
+  const defDesc = def ? `\u9ED8\u8BA4\u76EE\u5F55\uFF08CCR_CWD/\u4E0A\u6B21\u6709\u6548\u76EE\u5F55\uFF09${resolve5(def)} \u65E0\u6548\uFF08\u4E0D\u5B58\u5728\u6216\u65E0\u6CD5\u8BBF\u95EE\uFF09` : "\u9ED8\u8BA4\u76EE\u5F55\u672A\u914D\u7F6E\uFF08CCR_CWD\uFF09";
+  const wantedDesc = wanted ? `\u6307\u5B9A\u7684\u5DE5\u4F5C\u76EE\u5F55 ${resolve5(wanted)} \u4E0D\u662F\u6709\u6548\u76EE\u5F55\uFF08\u4E0D\u5B58\u5728\u6216\u65E0\u6CD5\u8BBF\u95EE\uFF09\uFF0C${defDesc}` : `\u672A\u6307\u5B9A\u5DE5\u4F5C\u76EE\u5F55\uFF0C\u4E14${defDesc}`;
   const suggest = '\u5982\u9700\u56FA\u5B9A\u5DE5\u4F5C\u76EE\u5F55\uFF0C\u8BF7\u8BBE\u7F6E CCR_CWD \u73AF\u5883\u53D8\u91CF\u6307\u5411\u5B9E\u9645\u9879\u76EE\u76EE\u5F55\uFF08\u5982 Windows "D:\\projects\\myapp"\u3001macOS/Linux "~/projects/myapp"\uFF09\u540E\u91CD\u542F relay';
   if (isUsableDir(home)) {
     return {
@@ -41443,6 +41668,22 @@ var UPDATE_THROTTLE_MS = 2e3;
 var HEARTBEAT_INTERVAL_MS = 5e3;
 var CRON_POLL_INTERVAL_MS = 3e4;
 var MAX_SESSIONS = 20;
+var WATCHDOG_CPU_IDLE_DELTA_MS = 500;
+function watchdogStallMs() {
+  const v = Number(process.env.CCR_WATCHDOG_STALL_MS);
+  return Number.isFinite(v) && v >= 5e3 ? v : 6e5;
+}
+function watchdogFastMs() {
+  const v = Number(process.env.CCR_WATCHDOG_FAST_MS);
+  return Number.isFinite(v) && v >= 2e3 ? v : 18e4;
+}
+function watchdogSampleMs() {
+  const v = Number(process.env.CCR_WATCHDOG_SAMPLE_MS);
+  return Number.isFinite(v) && v >= 50 ? v : 3e4;
+}
+function watchdogDisabled() {
+  return process.env.CCR_WATCHDOG_DISABLE === "1";
+}
 var SNAPSHOT_LOGS_BUDGET_BYTES = 512 * 1024;
 var SNAPSHOT_LOGS_PER_SESSION = 50;
 var SessionManager = class {
@@ -41566,7 +41807,12 @@ var SessionManager = class {
     for (const [id2, rs2] of entries) {
       if (this.sessions.size >= MAX_SESSIONS) break;
       rs2.state.historical = true;
-      this.sessions.set(id2, { agent: null, state: rs2.state, logs: rs2.logs, lastUpdateEmit: 0 });
+      const ov2 = this.titleOverrides[id2];
+      if (ov2) {
+        rs2.state.title = ov2;
+        rs2.state.title_locked = true;
+      }
+      this.sessions.set(id2, { agent: null, state: rs2.state, logs: rs2.logs, lastUpdateEmit: 0, lastProgressAt: 0, lastProgressKind: "", unacked: [], wd: { phase: "idle", recoveries: [] } });
       adopted2++;
     }
     return adopted2;
@@ -41610,6 +41856,11 @@ var SessionManager = class {
     const existing = this.sessions.get(id2);
     if (existing) {
       existing.state.historical = false;
+      const ov3 = this.titleOverrides[id2];
+      if (ov3 && existing.state.title !== ov3) {
+        existing.state.title = ov3;
+        existing.state.title_locked = true;
+      }
       if (!existing.state.relay_session_id && cliSessionId) existing.state.relay_session_id = cliSessionId;
       return existing.state;
     }
@@ -41633,7 +41884,7 @@ var SessionManager = class {
       state.title = ov2;
       state.title_locked = true;
     }
-    this.sessions.set(id2, { agent: null, state, logs: [], lastUpdateEmit: 0 });
+    this.sessions.set(id2, { agent: null, state, logs: [], lastUpdateEmit: 0, lastProgressAt: 0, lastProgressKind: "", unacked: [], wd: { phase: "idle", recoveries: [] } });
     this.bus.emit(id2, "SESSION_CREATED", {
       cwd: state.cwd,
       initial_prompt: prompt,
@@ -41783,6 +42034,93 @@ var SessionManager = class {
       stats: { ...stats }
     });
   }
+  // #35 输出物单条合并咽喉点（实时路径：external hook 事件 / 托管 SDK 工具结果）。
+  // 归一 key = 小写绝对路径（macOS 不敏感盘 / Windows 盘符大小写归一，展示保留原文）；
+  // 相对入参以会话 cwd 补全；create 不降级（"本会话产出过该文件"是最有价值的归类）；
+  // 捕获时顺手 stat 刷新 size/exists（不做轮询）。silent = 不逐条广播（回放批量
+  // 由 setArtifacts 收尾一次 emit）
+  mergeArtifact(id2, item, silent = false) {
+    const s = this.sessions.get(id2);
+    if (!s) return;
+    if (!item.path || item.path === "(\u672A\u77E5\u6587\u4EF6)") return;
+    const cwd = s.state.cwd || "";
+    let p = item.path;
+    if (!isAbsolute4(p) && cwd) p = resolve5(cwd, p);
+    if (!DOC_ARTIFACT_EXTS.has(extname(p).slice(1).toLowerCase())) return;
+    const key = p.toLowerCase();
+    const list = s.state.artifacts ? s.state.artifacts.map((a) => ({ ...a })) : [];
+    const idx = list.findIndex((a) => a.path.toLowerCase() === key);
+    let size;
+    let exists = true;
+    try {
+      size = statSync3(p).size;
+    } catch {
+      exists = false;
+    }
+    const origin = cwd ? p === cwd || p.startsWith(cwd + sep5) ? "cwd" : "outside" : void 0;
+    if (idx >= 0) {
+      const a = list[idx];
+      list[idx] = {
+        ...a,
+        op: a.op === "create" || item.created ? "create" : "edit",
+        tools: a.tools.includes(item.tool) ? a.tools : [...a.tools, item.tool],
+        adds: a.adds + item.adds,
+        dels: a.dels + item.dels,
+        last_at: Math.max(a.last_at, item.ts),
+        size,
+        exists,
+        ...origin ? { origin } : {}
+      };
+    } else {
+      list.push({
+        path: p,
+        op: item.created ? "create" : "edit",
+        tools: [item.tool],
+        adds: item.adds,
+        dels: item.dels,
+        first_at: item.ts,
+        last_at: item.ts,
+        size,
+        exists,
+        ...origin ? { origin } : {}
+      });
+      if (list.length > 200) {
+        list.sort((x, y) => y.last_at - x.last_at);
+        list.length = 200;
+        s.state.artifacts_truncated = true;
+      }
+    }
+    s.state.artifacts = list;
+    if (silent) return;
+    s.state.updated_at = Date.now();
+    this.bus.emit(id2, "SESSION_UPDATED", {
+      status: s.state.status,
+      action_summary: s.state.action_summary,
+      stats: { ...s.state.stats },
+      artifacts: list.map((a) => ({ ...a })),
+      ...s.state.artifacts_truncated ? { artifacts_truncated: true } : {}
+    });
+  }
+  // #35 输出物整表重建（transcript 回放路径：relay 重启后全文件重扫）。必须整体替换
+  // 而非逐条 merge 增量——转录轮转/收缩会再次触发 firstRead 回放，merge 会把
+  // adds/dels 双计；items 按转录时间顺序喂入，合并语义由 mergeArtifact(silent) 承担
+  setArtifacts(id2, items) {
+    const s = this.sessions.get(id2);
+    if (!s) return;
+    s.state.artifacts = void 0;
+    s.state.artifacts_truncated = false;
+    if (!items.length) return;
+    for (const it2 of items) this.mergeArtifact(id2, it2, true);
+    const merged = s.state.artifacts;
+    s.state.updated_at = Date.now();
+    this.bus.emit(id2, "SESSION_UPDATED", {
+      status: s.state.status,
+      action_summary: s.state.action_summary,
+      stats: { ...s.state.stats },
+      artifacts: (merged ?? []).map((a) => ({ ...a })),
+      ...s.state.artifacts_truncated ? { artifacts_truncated: true } : {}
+    });
+  }
   // 外部会话 token 用量 / 模型（bridge 从 transcript assistant 条目累计提取）
   // 上下文窗口上限按模型区分（集中维护，随 context_usage 一起下发；换模型只改这里）
   setExternalUsage(id2, usage, model, contextUsage) {
@@ -41912,6 +42250,7 @@ var SessionManager = class {
             s.state.status = "WORKING";
           }
           s.agent.sendMessage(cmd.payload.text, sanitizeImages(cmd.payload.images));
+          s.unacked.push({ text: cmd.payload.text, images: sanitizeImages(cmd.payload.images), ts: Date.now() });
           this.emitUpdated(s, true);
           return { command_id: cmd.command_id, ok: true };
         }
@@ -42027,7 +42366,7 @@ var SessionManager = class {
           if (!this.bridge) {
             return { command_id: cmd.command_id, ok: false, error: "bridge \u672A\u5C31\u7EEA" };
           }
-          const r = this.bridge.extInput(cmd.payload.session_id, cmd.payload.text);
+          const r = this.bridge.extInput(cmd.payload.session_id, cmd.payload.text, sanitizeImages(cmd.payload.images));
           return { command_id: cmd.command_id, ok: r.ok, error: r.error };
         }
         case "COMMAND_EXT_STOP": {
@@ -42309,7 +42648,11 @@ var SessionManager = class {
         stats: { files_changed: 0, lines_added: 0, lines_deleted: 0 }
       },
       logs: [],
-      lastUpdateEmit: 0
+      lastUpdateEmit: 0,
+      lastProgressAt: Date.now(),
+      lastProgressKind: "",
+      unacked: [],
+      wd: { phase: "idle", recoveries: [] }
     };
     const agent = this.newAgent(
       cwd,
@@ -42339,8 +42682,13 @@ var SessionManager = class {
   }
   // AgentSession 回调：create 与 resume 共用（状态机与事件下发完全一致）
   agentCallbacks(managed) {
+    const touch = (kind) => {
+      managed.lastProgressAt = Date.now();
+      managed.lastProgressKind = kind;
+    };
     return {
       onInit: (sdkId, model, permissionMode) => {
+        touch("init");
         if (!this.childSdkIds.has(sdkId)) {
           this.childSdkIds.add(sdkId);
           appendChildSession(this.cfg.dataDir, sdkId);
@@ -42351,6 +42699,7 @@ var SessionManager = class {
         this.emitUpdated(managed, true);
       },
       onStatusChange: (status, summary) => {
+        touch(status === "WORKING" ? "status_working" : "status");
         const live = managed.state.status === "WAITING" && !!managed.state.waiting_request;
         const effStatus = live && status === "WORKING" && (managed.agent?.hasPending?.() ?? false) ? "WAITING" : status;
         const changed = managed.state.status !== effStatus;
@@ -42362,12 +42711,14 @@ var SessionManager = class {
         this.emitUpdated(managed, changed || cleared);
       },
       onWaiting: (p) => {
+        touch("waiting");
         managed.state.status = "WAITING";
         managed.state.waiting_request = p;
         managed.state.updated_at = Date.now();
         this.bus.emit(managed.state.session_id, "SESSION_WAITING", p);
       },
       onWaitingResolved: (requestId, decision, resolvedBy) => {
+        touch("waiting_resolved");
         const cur = managed.state.waiting_request;
         if (!cur || cur.request_id === requestId) {
           managed.state.status = "WORKING";
@@ -42382,12 +42733,18 @@ var SessionManager = class {
         });
       },
       onStats: (stats) => {
+        touch("stats");
         managed.state.stats = stats;
+      },
+      // #35 输出物：SDK 工具结果单条合并（agent-adapter 从 tool_use/tool_result 配对产出）
+      onArtifacts: (item) => {
+        this.mergeArtifact(managed.state.session_id, item);
       },
       onTodos: (todos) => {
         this.setTodos(managed.state.session_id, todos);
       },
       onUsage: (u) => {
+        touch("usage");
         const cur = managed.state.usage;
         managed.state.usage = {
           input_tokens: (cur?.input_tokens ?? 0) + u.input_tokens,
@@ -42400,6 +42757,12 @@ var SessionManager = class {
         this.emitUpdated(managed, true);
       },
       onLog: (kind, text, meta) => {
+        touch(kind);
+        if (kind === "user_message") {
+          const key = text.replace(/（\+\d+ 图）$/, "").trim().replace(/\s+/g, " ").slice(0, 200);
+          const i2 = managed.unacked.findIndex((m) => m.text.trim().replace(/\s+/g, " ").slice(0, 200) === key);
+          if (i2 >= 0) managed.unacked.splice(i2, 1);
+        }
         const entry = { ts: Date.now(), kind, text, ...meta };
         const i = meta?.id ? managed.logs.findIndex((e) => e.id === meta.id) : -1;
         if (i >= 0) managed.logs[i] = entry;
@@ -42410,6 +42773,7 @@ var SessionManager = class {
         this.bus.emit(managed.state.session_id, "SESSION_LOG", entry);
       },
       onTurnEnd: (ok2, reason, durationMs) => {
+        if (managed.wd.phase === "recovering") return;
         managed.state.updated_at = Date.now();
         managed.state.duration_ms = durationMs;
         managed.state.waiting_request = void 0;
@@ -42428,6 +42792,8 @@ var SessionManager = class {
         }
       },
       onSessionEnd: (reason) => {
+        if (managed.wd.phase === "recovering") return;
+        managed.wd.phase = "idle";
         if (managed.state.status !== "DONE" && managed.state.status !== "ERROR") {
           managed.state.status = "DONE";
           managed.state.done_reason = reason;
@@ -42460,6 +42826,10 @@ var SessionManager = class {
     s.state.done_reason = void 0;
     s.state.last_error = void 0;
     s.state.turn_started_at = Date.now();
+    s.lastProgressAt = Date.now();
+    s.lastProgressKind = "";
+    s.wd.phase = "idle";
+    s.unacked.push({ text: firstMessage, images, ts: Date.now() });
     const marker = images && images.length > 0 ? `\uFF08+${images.length} \u56FE\uFF09` : "";
     this.pushExternalLog(s.state.session_id, "user_message", truncate(firstMessage, 200) + marker);
     this.pushExternalLog(s.state.session_id, "system", `\u5DF2\u6062\u590D SDK \u4F1A\u8BDD\uFF08resume ${sdkId.slice(0, 8)}\u2026\uFF09`);
@@ -42531,6 +42901,9 @@ var SessionManager = class {
     s.state.done_reason = void 0;
     s.state.last_error = void 0;
     s.state.updated_at = Date.now();
+    s.lastProgressAt = Date.now();
+    s.lastProgressKind = "";
+    s.wd.phase = "idle";
     this.emitUpdated(s, true);
   }
   // #49 开机置顶登记（不自动拉起，2026-09-09 用户拍板）：pinned-sessions.json 是
@@ -42623,6 +42996,7 @@ var SessionManager = class {
   }
   heartbeat() {
     const now = Date.now();
+    this.tickWatchdog(now);
     for (const s of this.sessions.values()) {
       if (s.state.status === "WORKING" || s.state.status === "WAITING") {
         this.bus.emit(s.state.session_id, "SESSION_HEARTBEAT", {
@@ -42630,6 +43004,167 @@ var SessionManager = class {
           action_summary: s.state.action_summary
         });
       }
+    }
+  }
+  // ===== #7 SDK 会话流中断看门狗 =====
+  // 现状：relay 的既有看门狗全在 bridge（外部 CLI 会话滞留补发等），SDK 托管子会话
+  // 零检测——流断后心跳照跳（心跳是 relay 侧定时器，与子进程健康无关），用户消息
+  // 灌进死队列。本看门狗 = 时间窗起疑 + CPU 双采样防误杀 + 杀树重拉 + 防风暴。
+  // 检测范围：仅托管（!external）且带活 agent 的 WORKING 会话。WAITING（等提问/
+  // 审批是合法静默）、compacting（压缩期天然无流事件）、历史/休眠/外部一律不检测。
+  // 进程树采不到 pid（childPid 缺失）时直接不起疑——无 CPU 证据不下杀手。
+  watchdogProcs = {
+    snapshotTree,
+    killTree
+  };
+  /** 测试缝：注入 proc-tree 替身（null 还原真实实现） */
+  setWatchdogProcs(p) {
+    this.watchdogProcs = p ?? { snapshotTree, killTree };
+  }
+  // 心跳同频扫描（5s）。双通道起疑：慢通道 = 任意静默 > T_stall（10min）；快通道 =
+  // 最后进展是 tool_result（工具已完成，CLI 本该立刻接话）却静默 > 3min。命中即进
+  // sampling 相位（同会话采样期间不重复起疑）。
+  // pre-init 豁免：brand-new parked CLI（空提示词创建，#49）设计上零输出等待首条
+  // stdin 消息（真实链路实证：干净 env 下 15s 零输出，sendMessage 后 init 立即到达）
+  // ——init 未到（无 relay_session_id）且无未回显消息的静默是合法等待，不检测；
+  // 但用户已发消息（unacked 非空）仍起疑：CLI 收不到消息也回不了显，僵死后无
+  // sdkId 可恢复，走到 recover_fail → ERROR 至少把死局上屏（否则永远假"启动中"）
+  tickWatchdog(now = Date.now()) {
+    if (watchdogDisabled()) return;
+    for (const s of this.sessions.values()) {
+      if (s.wd.phase !== "idle") continue;
+      if (s.state.external || s.state.historical) continue;
+      if (!s.agent || s.agent.ended) continue;
+      if (!s.agent.childPid) continue;
+      if (!s.state.relay_session_id && s.unacked.length === 0) continue;
+      if (s.state.status !== "WORKING" || s.state.compacting) continue;
+      const stalled = now - s.lastProgressAt;
+      const lane = stalled > watchdogStallMs() ? "slow" : s.lastProgressKind === "tool_result" && stalled > watchdogFastMs() ? "fast" : null;
+      if (!lane) continue;
+      s.wd.phase = "sampling";
+      this.bus.emit(s.state.session_id, "WATCHDOG", { action: "stall_detected", lane, stalled_ms: stalled });
+      void this.sampleAndJudge(s, lane, stalled);
+    }
+  }
+  // 两轮整树 CPU 采样（间隔 CCR_WATCHDOG_SAMPLE_MS，默认 30s）：增量 ≥ 500ms = 树在
+  // 真干活（长构建/长思考），误杀排除并后移锚点；增量 ≈ 0 = 僵死实锤，进恢复。
+  // detached 后台任务已脱离进程树（孤儿化 ppid=1），不参与采样也不被杀——设计口径
+  async sampleAndJudge(s, lane, stalled) {
+    const pid = s.agent?.childPid;
+    if (!pid) {
+      s.wd.phase = "idle";
+      return;
+    }
+    try {
+      const anchorAtStart = s.lastProgressAt;
+      const snap1 = await this.watchdogProcs.snapshotTree();
+      const cpu1 = treeCpuMs(snap1, pid);
+      await new Promise((r) => setTimeout(r, watchdogSampleMs()));
+      const snap2 = await this.watchdogProcs.snapshotTree();
+      if (s.wd.phase !== "sampling" || s.lastProgressAt !== anchorAtStart) {
+        if (s.wd.phase === "sampling") s.wd.phase = "idle";
+        return;
+      }
+      if (!s.agent || s.agent.ended || s.state.status !== "WORKING") {
+        s.wd.phase = "idle";
+        return;
+      }
+      const cpu2 = treeCpuMs(snap2, pid);
+      const delta = Math.max(0, cpu2 - cpu1);
+      if (delta >= WATCHDOG_CPU_IDLE_DELTA_MS) {
+        this.bus.emit(s.state.session_id, "WATCHDOG", { action: "cpu_active", lane, cpu_delta_ms: delta });
+        s.lastProgressAt = Date.now();
+        s.lastProgressKind = "";
+        s.wd.phase = "idle";
+        return;
+      }
+      this.bus.emit(s.state.session_id, "WATCHDOG", {
+        action: "zombie_confirmed",
+        lane,
+        stalled_ms: stalled,
+        cpu_delta_ms: delta
+      });
+      await this.recoverFromStall(s, lane, stalled, delta);
+    } catch (e) {
+      this.bus.emit(s.state.session_id, "WATCHDOG", {
+        action: "recover_fail",
+        lane,
+        detail: `\u91C7\u6837\u5F02\u5E38: ${e instanceof Error ? e.message : String(e)}`
+      });
+      if (s.wd.phase !== "recovering") s.wd.phase = "idle";
+    }
+  }
+  // 恢复：杀树（SIGTERM→3s→SIGKILL）→ 等流收尾 → 防风暴检查 → resume 重拉（带
+  // 未回显消息重放；无消息则 parked 恢复停在等待输入）→ 时间线留"看门狗接管"。
+  // 1h 内已自愈 2 次 → 放弃：转 WAITING + 黄框通知人工介入
+  async recoverFromStall(s, lane, stalled, cpuDelta) {
+    s.wd.phase = "recovering";
+    const sid = s.state.session_id;
+    const t02 = Date.now();
+    const agent = s.agent;
+    this.bus.emit(sid, "WATCHDOG", { action: "recover_start", lane, stalled_ms: stalled, cpu_delta_ms: cpuDelta });
+    this.pushExternalLog(
+      sid,
+      "system",
+      `\u770B\u95E8\u72D7\u63A5\u7BA1\uFF1A\u4F1A\u8BDD\u6D41\u5DF2 ${Math.round(stalled / 6e4)} \u5206\u949F\u65E0\u8FDB\u5C55\uFF08\u8FDB\u7A0B\u6811 CPU \u7A7A\u95F2\u786E\u8BA4\uFF09\uFF0C\u6B63\u5728\u81EA\u52A8\u6062\u590D`
+    );
+    try {
+      if (agent?.childPid) {
+        await this.watchdogProcs.killTree(agent.childPid);
+      }
+      const deadline = Date.now() + 5e3;
+      while (agent && !agent.ended && Date.now() < deadline) {
+        await new Promise((r) => setTimeout(r, 150));
+      }
+      if (agent && !agent.ended) {
+        await agent.stop().catch(() => {
+        });
+      }
+      const hourAgo = Date.now() - 36e5;
+      s.wd.recoveries = s.wd.recoveries.filter((t) => t > hourAgo);
+      if (s.wd.recoveries.length >= 2) {
+        this.bus.emit(sid, "WATCHDOG", { action: "gave_up", lane, detail: `1 \u5C0F\u65F6\u5185\u5DF2\u81EA\u6108 ${s.wd.recoveries.length} \u6B21` });
+        s.state.status = "WAITING";
+        s.state.action_summary = "\u6D41\u4E2D\u65AD\uFF0C\u81EA\u52A8\u6062\u590D\u5DF2\u8FBE\u4E0A\u9650";
+        s.state.waiting_request = void 0;
+        s.unacked = [];
+        this.pushExternalLog(
+          sid,
+          "system",
+          `\u6D41\u4E2D\u65AD\u81EA\u52A8\u6062\u590D\u5DF2\u8FBE\u4E0A\u9650\uFF081 \u5C0F\u65F6 ${s.wd.recoveries.length} \u6B21\uFF09\uFF0C\u5DF2\u505C\u6B62\u81EA\u6108\u2014\u2014\u8BF7\u5728\u7535\u8111\u7AEF\u68C0\u67E5 CLI\uFF0C\u6216\u624B\u52A8\u53D1\u4E00\u6761\u6D88\u606F\u89E6\u53D1\u6062\u590D`
+        );
+        this.notifyConfirm(sid, `\u4F1A\u8BDD\u300C${s.state.title || sid.slice(0, 8)}\u300D\u6D41\u4E2D\u65AD\uFF0C\u81EA\u52A8\u6062\u590D\u5DF2\u8FBE\u4E0A\u9650\uFF0C\u8BF7\u624B\u52A8\u5904\u7406`);
+        this.emitUpdated(s, true);
+        s.wd.phase = "idle";
+        return;
+      }
+      s.wd.recoveries.push(Date.now());
+      const pending = s.unacked;
+      s.unacked = [];
+      const sdkId = s.state.relay_session_id;
+      if (!sdkId) throw new Error("\u65E0 SDK \u4F1A\u8BDD\u8BB0\u5F55\uFF08\u9996\u6B21\u56DE\u5408\u672A\u5B8C\u6210\u5373\u4E2D\u65AD\uFF09\uFF0C\u65E0\u6CD5\u81EA\u52A8\u6062\u590D");
+      if (pending.length > 0) {
+        const text = pending.map((m) => m.text).join("\n\n");
+        const images = pending.flatMap((m) => m.images ?? []).slice(0, 4);
+        this.resumeAgent(s, text, images.length ? images : void 0);
+      } else {
+        this.reviveSaved(s);
+      }
+      s.wd.phase = "idle";
+      this.bus.emit(sid, "WATCHDOG", {
+        action: "recover_ok",
+        lane,
+        detail: `\u6062\u590D\u5DF2\u6D3E\u53D1\uFF08\u8017\u65F6 ${Date.now() - t02}ms\uFF09\uFF0C\u91CD\u653E\u672A\u56DE\u663E\u6D88\u606F ${pending.length} \u6761`
+      });
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      this.bus.emit(sid, "WATCHDOG", { action: "recover_fail", lane, detail: msg });
+      s.state.status = "ERROR";
+      s.state.last_error = `\u770B\u95E8\u72D7\u6062\u590D\u5931\u8D25: ${msg}`;
+      s.state.waiting_request = void 0;
+      this.pushExternalLog(sid, "system", s.state.last_error);
+      this.emitUpdated(s, true);
+      s.wd.phase = "idle";
     }
   }
   // 定时任务轮询：读各会话 cwd 下 .claude/scheduled_tasks.json，变化才下发。
@@ -42713,13 +43248,13 @@ var SessionManager = class {
 // src/ws-server.ts
 import { createServer } from "node:http";
 import { randomUUID as randomUUID5 } from "node:crypto";
-import { readFileSync as readFileSync12, writeFileSync as writeFileSync7, mkdirSync as mkdirSync6, existsSync as existsSync8, readdirSync as readdirSync5 } from "node:fs";
-import { join as join13, dirname as dirname6, sep as sep5 } from "node:path";
+import { readFileSync as readFileSync12, writeFileSync as writeFileSync7, mkdirSync as mkdirSync7, existsSync as existsSync8, readdirSync as readdirSync5 } from "node:fs";
+import { join as join13, dirname as dirname6, sep as sep6 } from "node:path";
 import { homedir as homedir10, networkInterfaces as networkInterfaces2 } from "node:os";
 
 // src/artifacts.ts
 import { readdirSync as readdirSync3, statSync as statSync4, readFileSync as readFileSync8, existsSync as existsSync5 } from "node:fs";
-import { join as join10, resolve as resolve6, extname } from "node:path";
+import { join as join10, resolve as resolve6, extname as extname2 } from "node:path";
 import { homedir as homedir6 } from "node:os";
 var MIME = {
   ".html": "text/html; charset=utf-8",
@@ -42769,7 +43304,7 @@ function serveArtifact(name, res) {
   if (!existsSync5(path5)) return false;
   const st2 = statSync4(path5);
   if (!st2.isFile()) return false;
-  const type = MIME[extname(path5).toLowerCase()] ?? "application/octet-stream";
+  const type = MIME[extname2(path5).toLowerCase()] ?? "application/octet-stream";
   try {
     const data = readFileSync8(path5);
     res.writeHead(200, { "content-type": type, "content-length": st2.size, "cache-control": "no-store" });
@@ -42826,12 +43361,12 @@ var wrapper_default = import_websocket.default;
 
 // src/bridge.ts
 import { randomUUID as randomUUID4 } from "node:crypto";
-import { closeSync as closeSync2, openSync as openSync2, readSync as readSync2, readFileSync as readFileSync11, readdirSync as readdirSync4, statSync as statSync5, writeFileSync as writeFileSync6 } from "node:fs";
+import { closeSync as closeSync2, openSync as openSync2, readSync as readSync2, readFileSync as readFileSync11, readdirSync as readdirSync4, statSync as statSync5, writeFileSync as writeFileSync6, mkdirSync as mkdirSync6 } from "node:fs";
 import { homedir as homedir9 } from "node:os";
 import path4 from "node:path";
 
 // src/injector.ts
-import { spawn as spawn2, execFileSync } from "node:child_process";
+import { spawn as spawn3, execFileSync } from "node:child_process";
 import { existsSync as existsSync7, mkdirSync as mkdirSync5, appendFileSync as appendFileSync2, readFileSync as readFileSync10, writeFileSync as writeFileSync5, rmSync as rmSync2 } from "node:fs";
 import path3, { join as join12 } from "node:path";
 import { homedir as homedir8, tmpdir } from "node:os";
@@ -42914,7 +43449,7 @@ var ERR_BY_CODE = {
 function run(args) {
   return new Promise((resolve7) => {
     const fake = process.env.CCR_INJECT_CMD;
-    const child = fake ? spawn2(process.execPath, [fake, ...args], { windowsHide: true }) : spawn2(exe2, args, { windowsHide: true });
+    const child = fake ? spawn3(process.execPath, [fake, ...args], { windowsHide: true }) : spawn3(exe2, args, { windowsHide: true });
     let err = "";
     child.stderr?.on("data", (c) => err += c);
     const timer = setTimeout(() => {
@@ -42962,7 +43497,7 @@ function mapAppleError(stderr) {
 function runAppleScript(script) {
   return new Promise((resolve7) => {
     const fake = process.env.CCR_OSASCRIPT_CMD;
-    const child = fake ? spawn2(process.execPath, [fake, "-e", script], { windowsHide: true }) : spawn2("osascript", ["-e", script]);
+    const child = fake ? spawn3(process.execPath, [fake, "-e", script], { windowsHide: true }) : spawn3("osascript", ["-e", script]);
     let err = "";
     child.stderr?.on("data", (c) => err += c);
     const timer = setTimeout(() => {
@@ -43025,7 +43560,7 @@ async function resumeSession(cwd, sessionId, text, permMode) {
     const tmp = join12(tmpdir(), `ccr-resume-${process.pid}-${Date.now().toString(36)}.cmd`);
     writeFileSync5(tmp, body, "utf8");
     return new Promise((resolve7) => {
-      const child = spawn2("cmd.exe", ["/c", "start", "cmd", "/k", tmp], {
+      const child = spawn3("cmd.exe", ["/c", "start", "cmd", "/k", tmp], {
         windowsHide: true,
         detached: true,
         stdio: "ignore"
@@ -43118,7 +43653,7 @@ function buildCaptureScript(pid) {
 function runAppleScriptOut(script) {
   return new Promise((resolve7) => {
     const fake = process.env.CCR_OSASCRIPT_CMD;
-    const child = fake ? spawn2(process.execPath, [fake, "-e", script], { windowsHide: true }) : spawn2("osascript", ["-e", script]);
+    const child = fake ? spawn3(process.execPath, [fake, "-e", script], { windowsHide: true }) : spawn3("osascript", ["-e", script]);
     let out = "";
     let err = "";
     child.stdout?.on("data", (c) => out += c);
@@ -43228,7 +43763,7 @@ function removeKnownTexts(s, known) {
 }
 function foreignResidual(box, knownTexts) {
   const stripped = box.map((l, i) => i === 0 ? l.replace(/^\s*❯\s*/, "") : l.replace(/^\s+/, ""));
-  const residuals = ["", " "].map((sep6) => maskNoise(removeKnownTexts(stripped.join(sep6), knownTexts)));
+  const residuals = ["", " "].map((sep7) => maskNoise(removeKnownTexts(stripped.join(sep7), knownTexts)));
   return residuals.every((r) => r) ? residuals[0] ?? "" : "";
 }
 var sleep = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -43260,6 +43795,9 @@ async function guardCompensateEnter(knownTexts, capture, opts = {}) {
 }
 
 // src/bridge.ts
+function pBody(p) {
+  return p.body ?? p.text;
+}
 function transcriptFirstTs(p) {
   let fd2;
   try {
@@ -43800,14 +44338,14 @@ var Bridge = class _Bridge {
       const reC = /"type":"custom-title","customTitle":"((?:[^"\\]|\\.)*)"/g;
       for (const m of text.matchAll(reC)) {
         try {
-          custom = JSON.parse('"' + m[1] + '"');
+          custom = JSON.parse('"' + Buffer.from(m[1], "latin1").toString("utf-8") + '"');
         } catch {
         }
       }
       const reA = /"type":"ai-title","aiTitle":"((?:[^"\\]|\\.)*)"/g;
       for (const m of text.matchAll(reA)) {
         try {
-          ai = JSON.parse('"' + m[1] + '"');
+          ai = JSON.parse('"' + Buffer.from(m[1], "latin1").toString("utf-8") + '"');
         } catch {
         }
       }
@@ -43989,11 +44527,11 @@ var Bridge = class _Bridge {
     const list = state?.pending_inputs ?? [];
     if (!list.length) return [];
     const key = normKey(text);
-    const kept2 = list.filter((p) => !key.includes(normKey(p.text)));
+    const kept2 = list.filter((p) => !key.includes(normKey(pBody(p))));
     if (kept2.length === list.length) return [];
     this.mgr.setExternalPending(id2, kept2);
-    for (const p of list) if (key.includes(normKey(p.text))) this.dropEnqueuedKey(id2, p.text);
-    return list.filter((p) => key.includes(normKey(p.text))).map((p) => p.text);
+    for (const p of list) if (key.includes(normKey(pBody(p)))) this.dropEnqueuedKey(id2, pBody(p));
+    return list.filter((p) => key.includes(normKey(pBody(p)))).map((p) => p.text);
   }
   // PC 端敲字排队：与手机注入同构地进 pending_inputs，手机立即显示"排队中"
   onQueueEnqueue(id2, content) {
@@ -44004,14 +44542,14 @@ var Bridge = class _Bridge {
     if (text.startsWith("[\u79FB\u52A8\u7AEF\u5220\u9664\u4EFB\u52A1]")) return;
     const key = normKey(content);
     const pending = state.pending_inputs ?? [];
-    const covered = pending.some((p) => key.includes(normKey(p.text)));
+    const covered = pending.some((p) => key.includes(normKey(pBody(p))));
     if (covered) {
-      const hits = pending.filter((p) => key.includes(normKey(p.text)));
-      const kept2 = pending.filter((p) => !key.includes(normKey(p.text)));
+      const hits = pending.filter((p) => key.includes(normKey(pBody(p))));
+      const kept2 = pending.filter((p) => !key.includes(normKey(pBody(p))));
       this.mgr.setExternalPending(id2, kept2);
       for (const p of hits) {
-        this.dropEnqueuedKey(id2, p.text);
-        this.noteUserMsg(id2, p.text, "promote");
+        this.dropEnqueuedKey(id2, pBody(p));
+        this.noteUserMsg(id2, pBody(p), "promote");
         this.mgr.pushExternalLog(id2, "user_message", truncate(p.text, 300), void 0, { full: truncate(p.text, 2e3) });
       }
       this.resetStuckWatch(id2);
@@ -44176,10 +44714,39 @@ var Bridge = class _Bridge {
   // 与 PC 终端手敲一致；WAITING（本地权限弹窗/远程审批挂起）注入 Enter 可能误触弹窗，排队等回合结束。
   // ERROR 也放行（relay 重启重放的误标，自愈 sweeper 未及翻转时先到）：pid 死了注入
   // 自然失败走 onInjectFail 清定位，不会卡死
-  extInput(sessionId, text) {
+  extInput(sessionId, text, images) {
     const state = this.mgr.getExternal(sessionId);
     if (!state) return { ok: false, error: `\u4F1A\u8BDD\u4E0D\u5B58\u5728: ${sessionId}` };
-    if (!text.trim()) return { ok: false, error: "\u7A7A\u6D88\u606F" };
+    let body = text.trim();
+    const saved = [];
+    if (images && images.length) {
+      const dir = path4.join(this.opts.dataDir, "..", "tmp");
+      try {
+        mkdirSync6(dir, { recursive: true });
+      } catch {
+      }
+      const sidKey = sessionId.replace(/[^a-z0-9]/gi, "").slice(0, 8) || "ext";
+      const stamp = Date.now();
+      for (let i = 0; i < Math.min(images.length, 4); i++) {
+        const b64 = images[i];
+        const head = Buffer.from(b64.slice(0, 24), "base64");
+        const ext = head[0] === 137 && head[1] === 80 ? "png" : head[0] === 255 && head[1] === 216 ? "jpg" : head[0] === 71 && head[1] === 73 ? "gif" : head.slice(0, 4).toString("latin1") === "RIFF" && head.slice(8, 12).toString("latin1") === "WEBP" ? "webp" : "png";
+        const p = path4.join(dir, `img-${sidKey}-${stamp}-${i + 1}.${ext}`);
+        try {
+          writeFileSync6(p, Buffer.from(b64, "base64"));
+          saved.push(p);
+        } catch {
+        }
+      }
+      if (saved.length) {
+        body = body ? `${body}
+\uFF08\u56FE\u7247\u5DF2\u4FDD\u5B58\uFF1A${saved.join("\u3001")}\u2014\u2014\u8BF7\u7528 Read \u5DE5\u5177\u67E5\u770B\u540E\u518D\u7EE7\u7EED\uFF09` : `\u8BF7\u7528 Read \u5DE5\u5177\u67E5\u770B\u56FE\u7247\uFF1A${saved.join("\u3001")}`;
+      } else if (!body) {
+        return { ok: false, error: "\u56FE\u7247\u4FDD\u5B58\u5931\u8D25\uFF08\u4E34\u65F6\u76EE\u5F55\u4E0D\u53EF\u5199\uFF09" };
+      }
+    }
+    if (!body) return { ok: false, error: "\u7A7A\u6D88\u606F" };
+    const echoText = saved.length ? `${text.trim()} [\u56FE\u7247\xD7${saved.length}]`.trim() : text.trim();
     if (!injectSupported()) {
       return { ok: false, error: "\u5F53\u524D relay \u4E3B\u673A\u6682\u4E0D\u652F\u6301\u5411\u5916\u90E8 CLI \u4F1A\u8BDD\u6CE8\u5165\u8F93\u5165\uFF08\u4EC5 Windows/macOS\uFF09\uFF1B\u6258\u7BA1\u4F1A\u8BDD\u4E0D\u53D7\u5F71\u54CD" };
     }
@@ -44192,20 +44759,20 @@ var Bridge = class _Bridge {
       let alive2 = !!pid2 && cliHostAlive(pid2);
       if (!alive2 && pid2) alive2 = cliHostAlive(pid2);
       if (!alive2) {
-        return this.resumeExternal(sessionId, text, !pid2 ? "\u65E0\u8FDB\u7A0B\u5B9A\u4F4D" : `\u8FDB\u7A0B ${pid2} \u5224\u5B9A\u4E0D\u53EF\u7528\uFF08\u4E8C\u6B21\u63A2\u6D4B\u4ECD\u5931\u8D25\uFF09`);
+        return this.resumeExternal(sessionId, body, !pid2 ? "\u65E0\u8FDB\u7A0B\u5B9A\u4F4D" : `\u8FDB\u7A0B ${pid2} \u5224\u5B9A\u4E0D\u53EF\u7528\uFF08\u4E8C\u6B21\u63A2\u6D4B\u4ECD\u5931\u8D25\uFF09`, echoText);
       }
     }
     const q2 = this.inputQueue.get(sessionId) ?? [];
-    q2.push(text);
+    q2.push(body);
     this.inputQueue.set(sessionId, q2);
-    this.mgr.setExternalPending(sessionId, [...state.pending_inputs ?? [], { text: text.trim(), ts: Date.now() }]);
+    this.mgr.setExternalPending(sessionId, [...state.pending_inputs ?? [], { text: echoText, ts: Date.now(), ...body !== echoText ? { body } : {} }]);
     if ((state.status === "DONE" || state.status === "WORKING" || state.status === "ERROR") && !this.flushing.has(sessionId)) {
       if (state.status !== "DONE") {
-        this.mgr.pushExternalLog(sessionId, "system", `\u5DF2\u6CE8\u5165\u7EC8\u7AEF\uFF08CLI \u8FD0\u884C\u4E2D\uFF0C\u81EA\u52A8\u6392\u961F\u8DDF\u968F\uFF09\uFF1A${truncate(text, 80)}`);
+        this.mgr.pushExternalLog(sessionId, "system", `\u5DF2\u6CE8\u5165\u7EC8\u7AEF\uFF08CLI \u8FD0\u884C\u4E2D\uFF0C\u81EA\u52A8\u6392\u961F\u8DDF\u968F\uFF09\uFF1A${truncate(echoText, 80)}`);
       }
       void this.flushQueue(sessionId);
     } else {
-      this.mgr.pushExternalLog(sessionId, "system", `\u5DF2\u6392\u961F\uFF08\u7B49\u5F85\u786E\u8BA4/\u56DE\u5408\u7ED3\u675F\u540E\u81EA\u52A8\u53D1\u9001\uFF09\uFF1A${truncate(text, 80)}`);
+      this.mgr.pushExternalLog(sessionId, "system", `\u5DF2\u6392\u961F\uFF08\u7B49\u5F85\u786E\u8BA4/\u56DE\u5408\u7ED3\u675F\u540E\u81EA\u52A8\u53D1\u9001\uFF09\uFF1A${truncate(echoText, 80)}`);
     }
     return { ok: true };
   }
@@ -44215,19 +44782,20 @@ var Bridge = class _Bridge {
   // 会话连发 N 条 = N 个重复标签（用户 Mac 一晚叠了 15 个）。窗口内后续消息只进
   // pending，恢复进程空闲时 flushQueue 自动带上
   resumeSpawns = /* @__PURE__ */ new Map();
-  resumeExternal(sessionId, text, why) {
+  resumeExternal(sessionId, text, why, echo) {
     const state = this.mgr.getExternal(sessionId);
     if (!state) return { ok: false, error: `\u4F1A\u8BDD\u4E0D\u5B58\u5728: ${sessionId}` };
     if (this.resumeSpawns.size > 60) this.resumeSpawns.clear();
     const inWindow = Date.now() - (this.resumeSpawns.get(sessionId) ?? 0) < this.resumeWindowMs;
-    this.mgr.setExternalPending(sessionId, [...state.pending_inputs ?? [], { text: text.trim(), ts: Date.now() }]);
+    const shown = echo ?? text.trim();
+    this.mgr.setExternalPending(sessionId, [...state.pending_inputs ?? [], { text: shown, ts: Date.now(), ...shown !== text.trim() ? { body: text.trim() } : {} }]);
     if (inWindow) {
-      this.mgr.pushExternalLog(sessionId, "system", `\u6062\u590D\u8FDB\u884C\u4E2D\uFF0C\u6D88\u606F\u5DF2\u6392\u961F\uFF08\u6062\u590D\u8FDB\u7A0B\u7A7A\u95F2\u540E\u81EA\u52A8\u5E26\u4E0A\uFF09\uFF1A${truncate(text, 80)}`);
+      this.mgr.pushExternalLog(sessionId, "system", `\u6062\u590D\u8FDB\u884C\u4E2D\uFF0C\u6D88\u606F\u5DF2\u6392\u961F\uFF08\u6062\u590D\u8FDB\u7A0B\u7A7A\u95F2\u540E\u81EA\u52A8\u5E26\u4E0A\uFF09\uFF1A${truncate(shown, 80)}`);
       return { ok: true };
     }
     const cwd = state.cwd || homedir9();
     this.resumeSpawns.set(sessionId, Date.now());
-    this.mgr.pushExternalLog(sessionId, "system", `\u6062\u590D\u4F1A\u8BDD\u4E2D\uFF08\u65B0\u7EC8\u7AEF\u6807\u7B7E claude --resume${why ? `\uFF0C\u539F\u56E0\uFF1A${why}` : ""}\uFF09\u5E76\u6295\u9012\uFF1A${truncate(text, 80)}`);
+    this.mgr.pushExternalLog(sessionId, "system", `\u6062\u590D\u4F1A\u8BDD\u4E2D\uFF08\u65B0\u7EC8\u7AEF\u6807\u7B7E claude --resume${why ? `\uFF0C\u539F\u56E0\uFF1A${why}` : ""}\uFF09\u5E76\u6295\u9012\uFF1A${truncate(shown, 80)}`);
     void resumeSession(cwd, sessionId.slice(4), text, state.permission_mode).then((r) => {
       if (!r.ok) {
         this.resumeSpawns.delete(sessionId);
@@ -44240,7 +44808,7 @@ var Bridge = class _Bridge {
       const t = setTimeout(() => {
         this.resumeClosures.delete(sessionId);
         const st2 = this.mgr.getExternal(sessionId);
-        if (!(st2?.pending_inputs ?? []).some((p) => normKey(p.text) === normKey(text))) return;
+        if (!(st2?.pending_inputs ?? []).some((p) => normKey(pBody(p)) === normKey(text))) return;
         this.resumeSpawns.delete(sessionId);
         this.mgr.pushExternalLog(sessionId, "system", `\u6062\u590D\u8FDB\u7A0B ${Math.round(this.resumeVerifyMs / 1e3)}s \u5185\u672A\u4E0A\u7EBF\uFF08\u65B0\u7EC8\u7AEF\u53EF\u80FD\u542F\u52A8\u5931\u8D25\uFF09\uFF0C\u4E0B\u6761\u6D88\u606F\u53D1\u9001\u65F6\u5C06\u91CD\u8BD5\u6062\u590D`);
       }, this.resumeVerifyMs);
@@ -44258,7 +44826,7 @@ var Bridge = class _Bridge {
     const list = state?.pending_inputs ?? [];
     if (!list.length) return false;
     const key = normKey(prompt);
-    const matched = list.filter((p) => normKey(p.text) === key);
+    const matched = list.filter((p) => normKey(pBody(p)) === key);
     const i = matched.length ? list.indexOf(matched[0]) : -1;
     if (i !== -1) {
       const promoted = list.splice(i, 1)[0];
@@ -44267,8 +44835,8 @@ var Bridge = class _Bridge {
         if (di !== -1) list.splice(di, 1);
       }
       this.mgr.setExternalPending(sessionId, list);
-      this.dropEnqueuedKey(sessionId, promoted.text);
-      this.noteUserMsg(sessionId, promoted.text, "promote");
+      this.dropEnqueuedKey(sessionId, pBody(promoted));
+      this.noteUserMsg(sessionId, pBody(promoted), "promote");
       this.mgr.pushExternalLog(sessionId, "user_message", truncate(promoted.text, 300), void 0, { full: truncate(promoted.text, 2e3) });
       this.resetStuckWatch(sessionId);
       return true;
@@ -44276,15 +44844,15 @@ var Bridge = class _Bridge {
     for (let s = 0; s < list.length; s++) {
       const acc = [];
       for (let e = s; e < list.length; e++) {
-        acc.push(normKey(list[e].text));
+        acc.push(normKey(pBody(list[e])));
         const joined = acc.join(" ");
         if (joined.length > key.length) break;
         if (joined === key) {
           const hits = list.splice(s, e - s + 1);
           this.mgr.setExternalPending(sessionId, list);
           for (const h of hits) {
-            this.dropEnqueuedKey(sessionId, h.text);
-            this.noteUserMsg(sessionId, h.text, "promote");
+            this.dropEnqueuedKey(sessionId, pBody(h));
+            this.noteUserMsg(sessionId, pBody(h), "promote");
             this.mgr.pushExternalLog(sessionId, "user_message", truncate(h.text, 300), void 0, { full: truncate(h.text, 2e3) });
           }
           this.noteUserMsg(sessionId, prompt, "promote");
@@ -44294,15 +44862,15 @@ var Bridge = class _Bridge {
       }
     }
     const subHits = list.filter((p) => {
-      const pk2 = normKey(p.text);
+      const pk2 = normKey(pBody(p));
       return key.includes(pk2) || pk2.length > 120 && key.includes(pk2.slice(0, 120));
     });
     if (subHits.length) {
-      const keptList = list.filter((p) => !key.includes(normKey(p.text)));
+      const keptList = list.filter((p) => !key.includes(normKey(pBody(p))));
       this.mgr.setExternalPending(sessionId, keptList);
       for (const h of subHits) {
-        this.dropEnqueuedKey(sessionId, h.text);
-        this.noteUserMsg(sessionId, h.text, "promote");
+        this.dropEnqueuedKey(sessionId, pBody(h));
+        this.noteUserMsg(sessionId, pBody(h), "promote");
         this.mgr.pushExternalLog(sessionId, "user_message", truncate(h.text, 300), void 0, { full: truncate(h.text, 2e3) });
       }
       this.resetStuckWatch(sessionId);
@@ -44691,6 +45259,7 @@ var Bridge = class _Bridge {
           }
         }
       }
+      if (firstRead) this.replayArtifacts(id2, transcriptPath);
       if (usageSeen || model) {
         let u = this.extUsage.get(id2);
         if (!u || firstRead) {
@@ -44714,30 +45283,16 @@ var Bridge = class _Bridge {
     } catch {
     }
   }
-  // 文件改动统计：Edit/Write/MultiEdit/NotebookEdit 结果的 +/- 行累计（统计页数据源）
+  // 文件改动统计：Edit/Write/MultiEdit/NotebookEdit 结果的 +/- 行累计（统计页数据源）。
+  // #35 同点位顺路喂输出物清单（mergeArtifact 咽喉点）；增删行/新建判定统一走
+  // fileEditMetrics（+++ / --- 头行不计入，修掉旧内联计数的小高估）
   feedFileStats(id2, ev2) {
     const tool = ev2.tool_name ?? "";
     if (tool !== "Edit" && tool !== "Write" && tool !== "MultiEdit" && tool !== "NotebookEdit") return;
     const r = ev2.tool_response;
     if (!r || typeof r !== "object") return;
-    let added = 0;
-    let deleted = 0;
-    if (Array.isArray(r.structuredPatch)) {
-      for (const h of r.structuredPatch) {
-        if (!h || !Array.isArray(h.lines)) continue;
-        for (const l of h.lines) {
-          if (typeof l !== "string" || !l) continue;
-          if (l.startsWith("+")) added++;
-          else if (l.startsWith("-")) deleted++;
-        }
-      }
-    } else if (typeof r.content === "string" && r.content) {
-      const lines = r.content.split("\n");
-      if (lines[lines.length - 1] === "") lines.pop();
-      added += lines.length;
-    } else {
-      return;
-    }
+    const m = fileEditMetrics(r);
+    if (!m) return;
     const input = ev2.tool_input ?? {};
     const file = typeof r.filePath === "string" ? r.filePath : typeof r.file_path === "string" ? r.file_path : typeof input.file_path === "string" ? input.file_path : "(\u672A\u77E5\u6587\u4EF6)";
     let st2 = this.extFileStats.get(id2);
@@ -44747,9 +45302,69 @@ var Bridge = class _Bridge {
       this.extFileStats.set(id2, st2);
     }
     st2.files.add(file);
-    st2.added += added;
-    st2.deleted += deleted;
+    st2.added += m.adds;
+    st2.deleted += m.dels;
     this.mgr.setExternalStats(id2, { files_changed: st2.files.size, lines_added: st2.added, lines_deleted: st2.deleted });
+    this.mgr.mergeArtifact(id2, { path: file, tool, adds: m.adds, dels: m.dels, created: m.created, ts: Date.now() });
+  }
+  // #35 输出物回放：转录全文件分块扫（先例 replayTaskHistory 的读法）。
+  // tool_use 行（四类文件工具，入参含 file_path）记 callId → {tool, path}，
+  // tool_result 行按 tool_use_id 配对回取结构化结果；行门 = file_path/filePath/
+  // structuredPatch/gitDiff（配对两侧任一必含其一，未命中行直接跳过省 JSON.parse）
+  replayArtifacts(id2, path5) {
+    const items = [];
+    const uses = /* @__PURE__ */ new Map();
+    try {
+      const size = statSync5(path5).size;
+      const fd2 = openSync2(path5, "r");
+      const CHUNK2 = 8 * 1024 * 1024;
+      const buf = Buffer.alloc(CHUNK2);
+      let carry = "";
+      for (let pos = 0; pos < size; ) {
+        const n = readSync2(fd2, buf, 0, CHUNK2, pos);
+        if (n <= 0) break;
+        const text = carry + buf.toString("utf-8", 0, n);
+        const lines = text.split("\n");
+        carry = lines.pop() ?? "";
+        for (const line of lines) {
+          const hasFileKw = line.includes("file_path") || line.includes("filePath") || line.includes("structuredPatch") || line.includes("gitDiff");
+          if (!hasFileKw && !(uses.size > 0 && line.includes("tool_use_id"))) continue;
+          let j2 = null;
+          try {
+            j2 = JSON.parse(line);
+          } catch {
+            continue;
+          }
+          if (!j2 || !Array.isArray(j2.message?.content)) continue;
+          const parsed = typeof j2.timestamp === "string" ? Date.parse(j2.timestamp) : NaN;
+          const at = Number.isFinite(parsed) ? parsed : Date.now();
+          for (const b of j2.message.content) {
+            if (!b || typeof b !== "object") continue;
+            const blk = b;
+            if (blk.type === "tool_use") {
+              const name = typeof blk.name === "string" ? blk.name : "";
+              if (name !== "Write" && name !== "Edit" && name !== "MultiEdit" && name !== "NotebookEdit") continue;
+              const fp2 = blk.input?.file_path;
+              if (typeof fp2 === "string" && fp2 && typeof blk.id === "string") {
+                uses.set(blk.id, { tool: name, path: fp2 });
+                if (uses.size > 512) uses.delete(uses.keys().next().value);
+              }
+            } else if (blk.type === "tool_result" && typeof blk.tool_use_id === "string") {
+              const use2 = uses.get(blk.tool_use_id);
+              if (!use2) continue;
+              uses.delete(blk.tool_use_id);
+              const m = fileEditMetrics(j2.tool_use_result ?? blk.content);
+              if (m) items.push({ path: use2.path, tool: use2.tool, adds: m.adds, dels: m.dels, created: m.created, ts: at });
+            }
+          }
+        }
+        pos += n;
+      }
+      closeSync2(fd2);
+    } catch {
+      return;
+    }
+    this.mgr.setArtifacts(id2, items);
   }
   // 首见/轮转（firstRead）：全文件回放任务工具调用重建完整清单。
   // 旧方案靠 hook 事件增量累积，relay 每次重启都从零开始（手机端 7/18 ≠ 实际的根因）；
@@ -45009,9 +45624,9 @@ var Bridge = class _Bridge {
     const avail = [...this.inputQueue.get(id2) ?? []];
     const kept2 = [];
     for (const p of state.pending_inputs ?? []) {
-      const qi2 = avail.findIndex((t) => normKey(t) === normKey(p.text));
+      const qi2 = avail.findIndex((t) => normKey(t) === normKey(pBody(p)));
       if (qi2 === -1) {
-        this.noteUserMsg(id2, p.text, "promote");
+        this.noteUserMsg(id2, pBody(p), "promote");
         this.mgr.pushExternalLog(id2, "user_message", truncate(p.text, 300), void 0, { full: truncate(p.text, 2e3) });
       } else {
         avail.splice(qi2, 1);
@@ -45164,10 +45779,10 @@ var Bridge = class _Bridge {
   runVerify(sessionId, text, round) {
     const st2 = this.mgr.getExternal(sessionId);
     if (!st2?.cli_pid) return;
-    if (!(st2.pending_inputs ?? []).some((p) => normKey(p.text) === normKey(text))) return;
+    if (!(st2.pending_inputs ?? []).some((p) => normKey(pBody(p)) === normKey(text))) return;
     if (st2.status !== "WORKING" && st2.status !== "DONE" || this.flushing.has(sessionId) || this.stuckGuarding.has(sessionId) || (this.inputQueue.get(sessionId)?.length ?? 0) > 0) return;
     const pid = st2.cli_pid;
-    const known = (st2.pending_inputs ?? []).map((p) => p.text);
+    const known = (st2.pending_inputs ?? []).map((p) => pBody(p));
     this.stuckGuarding.add(sessionId);
     void guardCompensateEnter(known, () => captureConsoleBottom(pid), {
       abort: () => {
@@ -45178,7 +45793,7 @@ var Bridge = class _Bridge {
       if (v.kind === "enter" || v.kind === "enter-after-wait") {
         const s2 = this.mgr.getExternal(sessionId);
         if (this.flushing.has(sessionId) || (this.inputQueue.get(sessionId)?.length ?? 0) > 0) return;
-        if (!s2 || !(s2.pending_inputs ?? []).some((p) => normKey(p.text) === normKey(text))) return;
+        if (!s2 || !(s2.pending_inputs ?? []).some((p) => normKey(pBody(p)) === normKey(text))) return;
         this.fireStuckEnter(sessionId, pid, v.kind === "enter-after-wait" ? `\u5DF2\u8865\u53D1\u56DE\u8F66\uFF08\u68C0\u6D4B\u5230\u8F93\u5165\u6846\u6709\u5176\u4ED6\u8F93\u5165\uFF0C\u7B49\u505C\u624B ${Math.round(v.waitedMs / 100) / 10}s \u540E\u8865\u53D1\uFF09` : "\u6CE8\u5165\u540E 3 \u79D2\u4ECD\u6EDE\u7559\u8F93\u5165\u6846\uFF0C\u5DF2\u8865\u53D1\u56DE\u8F66\uFF08#111 \u4E3B\u52A8\u9A8C\u8BC1\uFF09");
         if (round < 2) this.armVerify(sessionId, text, round + 1);
       }
@@ -45205,10 +45820,10 @@ var Bridge = class _Bridge {
       const threshold = w02 && w02.tries > 0 ? this.stuckAfterMs : firstMs;
       const stuckTexts = (s.pending_inputs ?? []).filter((p) => {
         if (now - p.ts <= threshold) return false;
-        if (this.isEnqueued(id2, p.text)) return false;
-        const rec = this.recentUserMsgs.get(id2)?.get(normKey(p.text));
+        if (this.isEnqueued(id2, pBody(p))) return false;
+        const rec = this.recentUserMsgs.get(id2)?.get(normKey(pBody(p)));
         return !(rec && now - rec.ts < 6e4 && rec.ts >= p.ts);
-      }).map((p) => p.text);
+      }).map((p) => pBody(p));
       if (stuckTexts.length === 0) {
         this.stuckWatch.delete(id2);
         continue;
@@ -45398,7 +46013,7 @@ function startServer(bus2, mgr2, cfg2, opts = {}) {
   const consoleHtml = join13(webRoot, "web-console", "index.html");
   const naclJs = join13(webRoot, "web-console", "nacl.js");
   const qrJs = join13(webRoot, "web-console", "qr.js");
-  const mobileDir = join13(webRoot, "mobile") + sep5;
+  const mobileDir = join13(webRoot, "mobile") + sep6;
   const PWA_ASSETS = {
     "/manifest.json": "application/manifest+json; charset=utf-8",
     "/apple-touch-icon.png": "image/png",
@@ -45947,7 +46562,7 @@ async function handlePluginConfig(req, res) {
       } catch {
       }
       for (const k3 of PLUGIN_CFG_KEYS) full[k3] = next[k3];
-      mkdirSync6(dirname6(pluginConfigPath()), { recursive: true });
+      mkdirSync7(dirname6(pluginConfigPath()), { recursive: true });
       writeFileSync7(pluginConfigPath(), JSON.stringify(full, null, 2) + "\n", "utf-8");
     } catch {
       res.writeHead(500, headers).end(JSON.stringify({ ok: false, error: "config.json \u5199\u5165\u5931\u8D25" }));
@@ -46185,8 +46800,8 @@ var CloudClient = class {
   }
   bridgeUrl() {
     const base = this.url ?? this.cfg.cloudUrl;
-    const sep6 = base.includes("?") ? "&" : "?";
-    return `${base}${sep6}token=${encodeURIComponent(this.cfg.cloudToken)}&dev=${this.identity.relayDev}&rk=${encodeURIComponent(this.identity.keypair.publicKey)}`;
+    const sep7 = base.includes("?") ? "&" : "?";
+    return `${base}${sep7}token=${encodeURIComponent(this.cfg.cloudToken)}&dev=${this.identity.relayDev}&rk=${encodeURIComponent(this.identity.keypair.publicKey)}`;
   }
   connect() {
     if (this.stopped) return;
@@ -46882,7 +47497,7 @@ if (cliArgs.has("--daemon")) {
   }
   const rest = process.argv.slice(2).filter((a) => a !== "--daemon");
   const logFd = openSync3(join16(cfg.dataDir, "relay.log"), "a");
-  const child = spawn3(process.execPath, [fileURLToPath4(import.meta.url), ...rest], {
+  const child = spawn4(process.execPath, [fileURLToPath4(import.meta.url), ...rest], {
     detached: true,
     stdio: ["ignore", logFd, logFd],
     env: { ...process.env, CC_DECK_DAEMON: "1" }
@@ -46930,6 +47545,22 @@ if (cliArgs.has("--stop")) {
   process.exit(0);
 }
 var persistPath = join16(cfg.dataDir, "events.ndjson");
+function sweepTmpImages(dir) {
+  try {
+    for (const f of readdirSync6(dir)) {
+      if (!f.startsWith("img-")) continue;
+      const p = join16(dir, f);
+      try {
+        if (Date.now() - statSync6(p).mtimeMs > 7 * 864e5) rmSync3(p, { force: true });
+      } catch {
+      }
+    }
+  } catch {
+  }
+}
+var tmpImageDir = join16(cfg.dataDir, "..", "tmp");
+sweepTmpImages(tmpImageDir);
+setInterval(() => sweepTmpImages(tmpImageDir), 6 * 36e5).unref?.();
 var prior = loadEvents(persistPath);
 var kept = compactEvents(prior);
 if (prior.length !== kept.length) rewriteFile(persistPath, kept);
@@ -46942,7 +47573,8 @@ for (const s of mgr.snapshot()) {
     status: s.status,
     action_summary: s.action_summary,
     stats: { ...s.stats },
-    ...s.usage ? { usage: s.usage } : {}
+    ...s.usage ? { usage: s.usage } : {},
+    ...s.title_locked ? { title: s.title, title_locked: true } : {}
   });
 }
 var pinned = mgr.applyPinned();
