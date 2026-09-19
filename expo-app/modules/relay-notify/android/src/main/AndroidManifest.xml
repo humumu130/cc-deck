@@ -2,6 +2,8 @@
   <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
   <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
   <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+  <!-- #60 后台保活豁免引导：拉起系统「忽略电池优化」对话框（ColorOS freezer 冻结的豁免入口） -->
+  <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
   <application>
     <service
       android:name="expo.modules.relaynotify.RelayForegroundService"

@@ -42,6 +42,24 @@ export function updateForegroundStats(working: number, waiting: number, error: n
   } catch {}
 }
 
+// #60 后台保活豁免：ColorOS 等国产 ROM 会以 cgroup freezer 冻结后台进程（FGS 也拦不住，
+// 实测 freezer:/frozen + WS 静默死），电池优化豁免（doze 白名单）是实证有效的根治入口
+//（豁免后后台保持 thaw、连接不断、系统通知照发）。查询失败按已豁免处理（不打扰用户）
+export function batteryExempt(): boolean {
+  try {
+    return mod?.batteryExempt?.() ?? true;
+  } catch {
+    return true;
+  }
+}
+
+// 拉起系统「忽略电池优化」确认对话框（部分 ROM 缺失则静默无反应）
+export function requestBatteryExempt(): void {
+  try {
+    mod?.requestBatteryExempt?.();
+  } catch {}
+}
+
 // API 33+ 运行时通知权限（拒绝则通知静默不显示，前台服务照常）
 export async function ensureNotifPermission(): Promise<void> {
   if (Platform.OS !== "android" || Platform.Version < 33) return;

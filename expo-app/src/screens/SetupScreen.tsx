@@ -10,6 +10,7 @@ import { store, useRelay, identityOf, type ServerEntry } from "../store";
 import { uuid } from "../fmt";
 import { currentVersion } from "../updates";
 import { useKbHeight } from "../kb";
+import { fgSupported, requestBatteryExempt } from "../notify";
 import ScanScreen, { routeScanResult, type ScanResult } from "./ScanScreen";
 import ImportPicker, { type ImportTarget } from "./ImportPicker";
 
@@ -532,6 +533,10 @@ export default function SetupScreen({ onClose, editId, initialScan }: Props) {
             </View>
           ) : null}
 
+          {/* #60 后台保活豁免状态卡：ColorOS 等国产 ROM 会冻结后台进程（FGS 也拦不住），
+              电池优化豁免是实证有效的根治入口。未豁免给「去优化」直达系统对话框 */}
+          {fgSupported() ? <KeepAliveCard /> : null}
+
           {/* 次入口「手动添加」：默认收起，展开后两框（地址+令牌/配对码），形态自动识别 */}
           {!editId ? (
             <Pressable
@@ -695,6 +700,22 @@ export default function SetupScreen({ onClose, editId, initialScan }: Props) {
 }
 
 const makeStyles = (c: ThemeColors) => StyleSheet.create({
+  // #60 后台保活豁免卡：srvRow 同形制（描边圆角卡），未豁免琥珀/已豁免绿
+  kaBox: {
+    width: "100%", maxWidth: 340, marginBottom: 20, borderWidth: 1, borderRadius: 13,
+    backgroundColor: c.panel, paddingVertical: 10, paddingHorizontal: 12, flexDirection: "row",
+    alignItems: "center", gap: 10,
+  },
+  kaMain: { flex: 1 },
+  kaHead: { flexDirection: "row", alignItems: "center", gap: 6 },
+  kaDot: { width: 7, height: 7, borderRadius: 4 },
+  kaTitle: { color: c.text, fontSize: 13.5, fontWeight: "600" },
+  kaSub: { color: c.faint, fontSize: 11, marginTop: 2, lineHeight: 15 },
+  kaBtn: {
+    paddingHorizontal: 13, paddingVertical: 7, borderRadius: 15, borderWidth: 1,
+    borderColor: withA(c.working, 0.5), backgroundColor: withA(c.working, 0.08), overflow: "hidden",
+  },
+  kaBtnT: { color: c.working, fontSize: 12.5, fontWeight: "600" },
   saveBarFix: {
     paddingHorizontal: 18, paddingTop: 10, paddingBottom: 12,
     backgroundColor: c.panel, borderTopWidth: 1, borderTopColor: c.line,
@@ -806,6 +827,36 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
   back: { marginTop: 14, paddingHorizontal: 22, paddingVertical: 8, borderRadius: 20 },
   backT: { color: c.dim, fontSize: 14 },
 });
+
+// #60 后台保活豁免卡：一键拉起系统「忽略电池优化」对话框（允许即写入 doze 白名单——
+// ColorOS freezer 冻结的实证有效豁免）。不做已优化/受限两态显示：ColorOS 的
+// isIgnoringBatteryOptimizations 被定制语义污染（实测白名单已清空仍返回 true），
+// 两态在国产 ROM 上必然误导，恒显入口最诚实（系统对话框本身幂等）
+function KeepAliveCard() {
+  const { c } = useTheme();
+  const s = useThemeStyles(makeStyles);
+  return (
+    <View style={s.kaBox}>
+      <View style={s.kaMain}>
+        <View style={s.kaHead}>
+          <View style={[s.kaDot, { backgroundColor: c.working }]} />
+          <Text style={s.kaTitle}>后台保活</Text>
+        </View>
+        <Text style={s.kaSub} numberOfLines={3}>
+          部分手机会冻结后台应用（消息/通知延迟）。建议允许后台运行；OPPO/一加（ColorOS）系统弹窗可能不生效，需 adb 命令：dumpsys deviceidle whitelist +包名
+        </Text>
+      </View>
+      <Pressable
+        style={s.kaBtn}
+        android_ripple={{ color: c.tintSoft, borderless: false, radius: 15 }}
+        onPress={requestBatteryExempt}
+        accessibilityLabel="去系统优化后台保活"
+      >
+        <Text style={s.kaBtnT}>去优化</Text>
+      </Pressable>
+    </View>
+  );
+}
 
 // 编辑态顶部状态行（2026-09-16 方案 A 对齐小优化①）：详情页不再只是表单——
 // 进页先看到这条源连没连上、走的哪条通道。数据取 useRelay 快照 sources（与

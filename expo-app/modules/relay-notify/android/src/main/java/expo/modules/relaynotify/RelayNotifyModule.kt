@@ -146,5 +146,30 @@ class RelayNotifyModule : Module() {
         nm.notify(FG_NOTIFICATION_ID, notif)
       } catch (_: SecurityException) {}
     }
+
+    // #60/#59 后台保活豁免查询：ColorOS 等国产 ROM 在 FGS 运行下仍以 cgroup freezer
+    // 冻结进程（2026-09-19 实测 /proc/<pid>/cgroup: freezer:/frozen 而 FGS isForeground=true），
+    // WS 静默死、本地通知发不出。加入电池优化豁免（doze 白名单）后实测保持 thaw + 连接不断。
+    // isIgnoringBatteryOptimizations 即该豁免状态的权威查询（adb dumpsys deviceidle whitelist 同源）
+    Function("batteryExempt") {
+      val ctx = appContext.reactContext ?: return@Function false
+      val pm = ctx.getSystemService(Context.POWER_SERVICE) as android.os.PowerManager
+      pm.isIgnoringBatteryOptimizations(ctx.packageName)
+    }
+
+    // 拉起系统「忽略电池优化」确认对话框（AOSP 标准入口；部分 ROM 缺失该 activity 则静默）
+    Function("requestBatteryExempt") {
+      val ctx = appContext.reactContext
+      if (ctx != null) {
+        try {
+          val intent = Intent(
+            android.provider.Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS,
+            android.net.Uri.parse("package:" + ctx.packageName),
+          )
+          intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+          ctx.startActivity(intent)
+        } catch (_: Exception) {}
+      }
+    }
   }
 }
