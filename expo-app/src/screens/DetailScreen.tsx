@@ -13,6 +13,10 @@ import * as IntentLauncher from "expo-intent-launcher";
 // 就是它 unconditional throw（旧提示又把锅甩给大小限制）。legacy 子模块仍是
 // 完整实现（Base64 编码 + Android content:// 都支持），选它直到新 API 有对等能力
 import * as FileSystem from "expo-file-system/legacy";
+// #79 晨间反馈：①HTML 报告内嵌渲染（WebView source html——夜间报告是 HTML，看源码
+// 没意义）②文件本体分享（RN Share 只能发文本，系统分享面板要 expo-sharing）
+import { WebView } from "react-native-webview";
+import * as Sharing from "expo-sharing";
 import * as Clipboard from "expo-clipboard";
 import { withA, type ThemeColors } from "../theme";
 import { useTheme, useThemeStyles } from "../theme-context";
@@ -398,6 +402,15 @@ async function saveArtFile(name: string, u8: Uint8Array): Promise<string> {
   await FileSystem.writeAsStringAsync(uri, toB64(u8), { encoding: FileSystem.EncodingType.Base64 });
   return uri;
 }
+// #79 文本类（txt/md/html）分享/浏览器打开前落盘：expo-sharing 与 ACTION_VIEW 都
+// 需要文件 uri，正文在内存里得先写进缓存目录（与二进制同目录，重名覆盖同语义）
+async function saveArtText(name: string, text: string): Promise<string> {
+  try { await FileSystem.makeDirectoryAsync(ART_VIEW_DIR, { intermediates: true }); } catch {}
+  const safe = name.replace(/[\\/:*?"<>|]/g, "_").slice(-80) || "artifact.txt";
+  const uri = ART_VIEW_DIR + safe;
+  await FileSystem.writeAsStringAsync(uri, text, { encoding: FileSystem.EncodingType.UTF8 });
+  return uri;
+}
 // content:// + 系统应用打开（flags:1 = FLAG_GRANT_READ_URI_PERMISSION，同 updates.ts 安装器）
 async function openArtExternally(uri: string, mime: string): Promise<string | null> {
   try {
@@ -412,35 +425,107 @@ function decodeUtf8(u8: Uint8Array): string {
   return new TextDecoder("utf-8", { fatal: false }).decode(u8);
 }
 
-// #79 拉取结果分级：img=内嵌图片；txt/md=内嵌文本（md 走 MdText）；sys=复杂格式
-//（pdf/office/zip…）落盘后交系统应用打开
+// #79 拉取结果分级：img=内嵌图片；html=WebView 渲染（报告类主格式，看源码没意义）；
+// txt/md=内嵌文本（md 走 MdText）；sys=复杂格式（pdf/office/zip…）落盘后交系统应用打开
 type ArtViewData =
   | { kind: "img"; name: string; uri: string; size: number }
+  | { kind: "html"; name: string; text: string; size: number }
   | { kind: "txt"; name: string; text: string; size: number }
   | { kind: "md"; name: string; text: string; size: number }
   | { kind: "sys"; name: string; uri: string; mime: string; size: number };
 
-// #79 输出物预览全屏层：图片/文本内嵌，复杂格式自动呼系统应用（头部按钮可重开）
+// #79 拉取缓存（晨间反馈：同一份输出物不应每次查看都重拉）：键 = sid|path|last_at，
+// 电脑上文件更新（last_at 变化）键即失效、自动重拉最新——「在线预览的新鲜」与
+// 「本地缓存的速度」两头都占。内存表（App 重启后首看重拉一次可接受）；img/sys 的
+// 盘上文件本就落缓存目录，表里存 uri/text 均轻量。容量 12 条触达即 LRU
+const ART_CACHE_CAP = 12;
+const artCache = new Map<string, ArtViewData>();
+function artCacheGet(k: string): ArtViewData | undefined {
+  const v = artCache.get(k);
+  if (v) { artCache.delete(k); artCache.set(k, v); }
+  return v;
+}
+function artCachePut(k: string, v: ArtViewData): void {
+  artCache.delete(k);
+  artCache.set(k, v);
+  while (artCache.size > ART_CACHE_CAP) {
+    const oldest = artCache.keys().next().value;
+    if (oldest === undefined) break;
+    artCache.delete(oldest);
+  }
+}
+
+// #79 输出物预览全屏层：图片/HTML/文本内嵌，复杂格式自动呼系统应用（头部按钮可重开）。
+// 晨间反馈补齐：头部「分享」= 文件本体进系统分享面板（存云盘/发微信/存本地一板全收，
+// 就是「下载到本地随用户处理」的系统出口）；HTML 另给「浏览器」按钮交系统浏览器渲染
 function ArtView({ v, onClose }: { v: ArtViewData; onClose: () => void }) {
   const { c } = useTheme();
   const d = useThemeStyles(makeStyles);
   const [openErr, setOpenErr] = useState<string | null>(null);
+  const [actErr, setActErr] = useState<string | null>(null);
   useEffect(() => {
     setOpenErr(null);
+    setActErr(null);
     if (v.kind === "sys") void openArtExternally(v.uri, v.mime).then(setOpenErr);
   }, [v]);
+  // 分享文件本体：盘上有 uri 的直接用，文本类先落盘；mime 按分级映射
+  const shareFile = async () => {
+    try {
+      const mime =
+        v.kind === "sys" ? v.mime
+        : v.kind === "img" ? "image/*"
+        : v.kind === "html" ? "text/html"
+        : v.kind === "md" ? "text/markdown"
+        : "text/plain";
+      const uri =
+        v.kind === "img" || v.kind === "sys" ? v.uri : await saveArtText(v.name, v.text);
+      if (!(await Sharing.isAvailableAsync())) throw new Error("此设备不支持系统分享");
+      await Sharing.shareAsync(uri, { mimeType: mime, dialogTitle: `分享 ${v.name}` });
+      setActErr(null);
+    } catch (e) {
+      setActErr(e instanceof Error ? e.message : String(e));
+    }
+  };
+  // HTML 交系统浏览器（App 内 WebView 渲不了的场景兜底，如外链资源/打印）
+  const openInBrowser = async () => {
+    if (v.kind !== "html") return;
+    try {
+      setActErr(await openArtExternally(await saveArtText(v.name, v.text), "text/html"));
+    } catch (e) {
+      setActErr(e instanceof Error ? e.message : String(e));
+    }
+  };
   return (
     <Modal visible animationType="fade" onRequestClose={onClose}>
       <SafeAreaView style={{ flex: 1, backgroundColor: c.bg }}>
         <View style={d.avHead}>
           <Text style={d.avName} numberOfLines={1}>{v.name}</Text>
           <Text style={d.avSize}>{fmtArtSize(v.size)}</Text>
+          {v.kind === "html" ? (
+            <Pressable hitSlop={6} onPress={() => { void openInBrowser(); }} accessibilityLabel="用浏览器打开">
+              <Text style={d.avAct}>浏览器</Text>
+            </Pressable>
+          ) : null}
+          <Pressable hitSlop={6} onPress={() => { void shareFile(); }} accessibilityLabel="分享文件">
+            <Text style={d.avAct}>分享</Text>
+          </Pressable>
           <Pressable hitSlop={8} onPress={onClose} accessibilityLabel="关闭预览">
             <Text style={d.avClose}>✕</Text>
           </Pressable>
         </View>
+        {openErr || actErr ? (
+          <Text style={d.avErr} numberOfLines={2}>{actErr ?? openErr}</Text>
+        ) : null}
         {v.kind === "img" ? (
           <Image source={{ uri: v.uri }} style={{ flex: 1, backgroundColor: c.panel2 }} resizeMode="contain" />
+        ) : v.kind === "html" ? (
+          // 晨间反馈：HTML 报告此前当纯文本显示源码——夜间报告等交付物都是 HTML，
+          // 必须渲染。正文已在内存，source html 免文件权限；透明底让报告自带底色透出
+          <WebView
+            source={{ html: v.text }}
+            originWhitelist={["*"]}
+            style={{ flex: 1, backgroundColor: "transparent" }}
+          />
         ) : v.kind === "md" ? (
           <ScrollView style={{ flex: 1 }} contentContainerStyle={{ padding: 14, paddingBottom: 40 }}>
             <MdText src={v.text} selectable />
@@ -491,9 +576,15 @@ function ArtSheet({ art, rel, sid, onClose }: { art: ArtifactItem; rel: string; 
   const outside = art.origin === "outside" || (!rel && art.origin !== "cwd");
   const kind = artKindOf(name);
   const KC: Record<ArtKind, string> = { code: c.brandA, doc: c.done, data: c.working, img: c.waiting, zip: c.dim, gen: c.faint };
-  // #79 拉取 + 分级路由：图片/文本直接内嵌预览，复杂格式落缓存后交系统应用
+  // #79 拉取 + 分级路由：图片/HTML/文本直接内嵌预览，复杂格式落缓存后交系统应用。
+  // 缓存命中（path+last_at 未变）秒开不重拉——文件在电脑上更新则键失效自动拉最新
+  const cacheKey = `${sid}|${art.path}|${art.last_at ?? art.first_at ?? 0}`;
+  // 已缓存时主按钮变「查看」——用户不再疑惑"为什么又要拉取"（artCache.has 无 LRU 副作用）
+  const cached = !dead && artCache.has(cacheKey);
   const doFetch = async () => {
     if (busy || dead) return;
+    const hit = artCacheGet(cacheKey);
+    if (hit) { setView(hit); return; }
     setBusy(true);
     setFerr(null);
     try {
@@ -505,15 +596,20 @@ function ArtSheet({ art, rel, sid, onClose }: { art: ArtifactItem; rel: string; 
       let o = 0;
       for (const cc of chunks) { u8.set(cc, o); o += cc.length; }
       const mime = r.mime || "application/octet-stream";
+      let data: ArtViewData;
       if (mime.startsWith("image/")) {
-        setView({ kind: "img", name, uri: await saveArtFile(name, u8), size: n });
+        data = { kind: "img", name, uri: await saveArtFile(name, u8), size: n };
+      } else if (mime === "text/html") {
+        data = { kind: "html", name, text: decodeUtf8(u8), size: n };
       } else if (mime === "text/markdown") {
-        setView({ kind: "md", name, text: decodeUtf8(u8), size: n });
+        data = { kind: "md", name, text: decodeUtf8(u8), size: n };
       } else if (mime.startsWith("text/") || mime === "application/json") {
-        setView({ kind: "txt", name, text: decodeUtf8(u8), size: n });
+        data = { kind: "txt", name, text: decodeUtf8(u8), size: n };
       } else {
-        setView({ kind: "sys", name, uri: await saveArtFile(name, u8), mime, size: n });
+        data = { kind: "sys", name, uri: await saveArtFile(name, u8), mime, size: n };
       }
+      artCachePut(cacheKey, data);
+      setView(data);
     } catch (e) {
       setFerr(e instanceof Error ? e.message : String(e));
     } finally {
@@ -553,7 +649,7 @@ function ArtSheet({ art, rel, sid, onClose }: { art: ArtifactItem; rel: string; 
               android_ripple={{ color: "rgba(255,255,255,0.15)", borderless: false, radius: 10 }}
               onPress={() => { void doFetch(); }}
             >
-              <Text style={d.menuBtnPriT}>{busy ? "拉取中…" : dead ? "文件已删除，无法拉取" : "拉取到手机查看"}</Text>
+              <Text style={d.menuBtnPriT}>{busy ? "拉取中…" : dead ? "文件已删除，无法拉取" : cached ? "查看（已缓存）" : "拉取到手机查看"}</Text>
             </Pressable>
           </View>
           {ferr ? <Text style={{ color: c.error, fontSize: 11, marginTop: 8, textAlign: "center" }}>{ferr}</Text> : null}
@@ -581,7 +677,7 @@ function ArtSheet({ art, rel, sid, onClose }: { art: ArtifactItem; rel: string; 
                 void Share.share({ message: art.path }).catch(() => undefined);
               }}
             >
-              <Text style={d.menuBtnT}>分享</Text>
+              <Text style={d.menuBtnT}>分享路径</Text>
             </Pressable>
           </View>
           <View style={d.artInfo}>
@@ -2609,6 +2705,8 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
   avName: { color: c.text, fontSize: 14, fontWeight: "600", flex: 1 },
   avSize: { color: c.faint, fontSize: 11 },
   avClose: { color: c.dim, fontSize: 18, paddingHorizontal: 6 },
+  avAct: { color: c.dim, fontSize: 11.5, fontWeight: "600", paddingHorizontal: 4 },
+  avErr: { color: c.error, fontSize: 11, lineHeight: 15, paddingHorizontal: 14, paddingVertical: 5, backgroundColor: withA(c.error, 0.06) },
   avTxt: { fontFamily: "monospace", fontSize: 11.5, lineHeight: 17.5, color: c.text },
   avCard: { backgroundColor: c.panel, borderColor: c.line, borderWidth: 1, borderRadius: 14, padding: 18, alignItems: "center", gap: 10, alignSelf: "stretch" },
   avHint: { color: c.faint, fontSize: 11, lineHeight: 16, textAlign: "center", marginTop: 14 },

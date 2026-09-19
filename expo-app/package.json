@@ -15,11 +15,13 @@
     "expo-image-picker": "~57.0.14",
     "expo-intent-launcher": "~57.0.1",
     "expo-linear-gradient": "~57.0.1",
+    "expo-sharing": "~57.0.21",
     "expo-status-bar": "~57.0.1",
     "react": "19.2.3",
     "react-native": "0.86.2",
     "react-native-safe-area-context": "~5.7.0",
     "react-native-svg": "15.15.4",
+    "react-native-webview": "13.16.1",
     "tweetnacl": "^1.0.3"
   },
   "devDependencies": {

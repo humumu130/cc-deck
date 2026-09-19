@@ -11,11 +11,12 @@
       [
         "expo-camera",
         {
-          "cameraPermission": "\u5141\u8bb8 $(PRODUCT_NAME) \u8bbf\u95ee\u6444\u50cf\u5934\uff0c\u7528\u4e8e\u626b\u63cf PC \u7aef relay \u7684\u8fde\u63a5\u4e8c\u7ef4\u7801",
+          "cameraPermission": "允许 $(PRODUCT_NAME) 访问摄像头，用于扫描 PC 端 relay 的连接二维码",
           "recordAudioAndroid": false,
           "barcodeScannerEnabled": true
         }
-      ]
+      ],
+      "expo-sharing"
     ],
     "ios": {
       "supportsTablet": false,
