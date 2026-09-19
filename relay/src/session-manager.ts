@@ -989,7 +989,10 @@ export class SessionManager {
     // 幂等去重：重复 command_id 重放首次回执（防失败后同 id 重试假成功）
     const seen = this.processedCommands.get(cmd.command_id);
     if (seen) {
-      return seen;
+      // #65 回放带 duplicate 标记：ok/session_id/error 保持首次原样（客户端状态机
+      // 零影响），调用方能区分「刚执行」与「幂等重放」——此前原样回放导致 test-ws
+      // 「second ack marked」断言在干净 HEAD 即失败
+      return { ...seen, duplicate: true };
     }
     const ack = this.execCommand(cmd, by);
     this.processedCommands.set(cmd.command_id, ack);

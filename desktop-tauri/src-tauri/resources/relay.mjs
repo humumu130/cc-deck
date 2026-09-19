@@ -42301,7 +42301,7 @@ var SessionManager = class {
   handleCommand(cmd, by) {
     const seen = this.processedCommands.get(cmd.command_id);
     if (seen) {
-      return seen;
+      return { ...seen, duplicate: true };
     }
     const ack = this.execCommand(cmd, by);
     this.processedCommands.set(cmd.command_id, ack);

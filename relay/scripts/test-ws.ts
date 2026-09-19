@@ -149,9 +149,10 @@ c1.ws.send(JSON.stringify({ type: "COMMAND_MESSAGE", command_id: dupId, ts: Date
 await wait(500);
 const dupAcks = c1.acks.filter((a) => a.command_id === dupId);
 assert(dupAcks.length === 2, "both duplicate sends acked");
+// #65：首次回执无标记，幂等重放带 duplicate:true（此前原样回放，两帧无差别可断）
 assert(
-  dupAcks.filter((a) => a.ok).length === 1 || dupAcks.some((a) => a.error?.startsWith("duplicate")),
-  "duplicate deduped (second ack marked)",
+  dupAcks.some((a) => a.duplicate === true) && dupAcks.some((a) => !a.duplicate),
+  "duplicate command_id replayed with duplicate mark (first ack unmarked)",
 );
 
 // 6. 非法消息 → 错误 ack 且连接不掉

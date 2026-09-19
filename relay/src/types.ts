@@ -681,4 +681,7 @@ export interface CommandAckPayload {
   imported?: number; // 仅 COMMAND_PEERS_IMPORT 成功时携带：实际导入条数
   // #25b 仅 COMMAND_CLOUD_INFO：本机 relay 云桥身份（cloud:false = 未配云桥）
   cloudInfo?: { cloud: boolean; bridge?: string; bt?: string; rd?: string; rk?: string };
+  // #65 幂等重放标记：同 command_id 二次到达时回放首次回执并置 true（首次执行
+  // 的回执恒不带）；ok/error 语义保持首次原样，客户端不识别也不受影响
+  duplicate?: boolean;
 }
