@@ -764,12 +764,23 @@ function Shell() {
   // 连接成功后：请求通知权限 + 启动前台服务保活
   // fgStarted：服务一旦起过就置位（stop 从不调用），后续文案刷新不再受连接态门控
   const fgStarted = useRef(false);
-  // （已并入下方统计 effect：连接成功 → 启动服务 → 同帧刷新，消除覆盖竞态）
 
   // #301/#355 前台服务通知正文随会话/连接态刷新：彩点+数字（working 琥珀/waiting 红/
-  // error 橙/done 绿，同列表 statChips；原生 Spannable 着色）。按分布 key 比对防重发
+  // error 橙/done 绿，同列表 statChips；原生 Spannable 着色）。按分布 key 比对防重发。
+  // 首启（连接成功的首帧）与本刷新同 effect 同帧执行——start 的默认文案当场被真实
+  // 文案覆盖，8186d16 要消除的"默认文案永久滞留"竞态不复现。
+  // ⚠️ 8186d16 曾把旧启动 effect 删除并注释"已并入下方统计 effect"，但并入从未发生
+  //（本 effect 开头就是 fgStarted 守卫恒 return）→ FGS 从不自启、通知权限从不请求，
+  // 后台保活全灭（#59 后台收不到消息的根因）+ WAITING/配对告警通知全哑。勿再走岔
   const fgText = useRef("");
   useEffect(() => {
+    if (snap.connected && !fgStarted.current) {
+      void ensureNotifPermission();
+      if (fgSupported()) {
+        startForegroundService();
+        fgStarted.current = true;
+      }
+    }
     if (!fgStarted.current) return;
     let text: string;
     if (!snap.connected) {
