@@ -41917,15 +41917,32 @@ var SessionManager = class {
   // 每会话取最近 perSessionCap 条，总量超 budgetBytes 时优先从条目最多的会话逐条
   // 丢最旧（每会话保底 1 条），保证单帧确定性有界。返回被截断会话的省略条数——
   // 客户端时间线接受截断语义（无更早分页拉取通道），标记仅供 UI 提示用。
+  // #70（2026-09-19 用户实测）：重连端走快照重建时无差别裁最旧，把 assistant 正文
+  // 当工具噪音一起洗掉——「手机上看得到回答、打开 Mac 只剩提问」。修正：截断两级
+  // 保护——① 取证窗口放宽到 2×cap，消息类条目（user_message/assistant_text，时间
+  // 线主骨）在窗口内全保、名额让给最新非消息条目补足；② 字节预算裁剪时优先丢
+  // 非消息条目，只有全员皆消息时才丢消息（每会话保底 1 条不变）。
   buildSnapshotLogs(budgetBytes = SNAPSHOT_LOGS_BUDGET_BYTES, perSessionCap = SNAPSHOT_LOGS_PER_SESSION) {
+    const isMsg = (e) => e.kind === "user_message" || e.kind === "assistant_text";
     const logs = {};
     const logsTruncated = {};
     const kept2 = [];
     let total = 0;
     for (const [id2, s] of this.sessions) {
-      const slice = s.logs.length > perSessionCap ? s.logs.slice(s.logs.length - perSessionCap) : s.logs;
-      if (slice.length < s.logs.length) logsTruncated[id2] = s.logs.length - slice.length;
-      const entries = slice.map((e) => ({ e, b: Buffer.byteLength(JSON.stringify(e)) + 1 }));
+      const wide = s.logs.length > perSessionCap * 2 ? s.logs.slice(s.logs.length - perSessionCap * 2) : s.logs;
+      let pick;
+      if (wide.length <= perSessionCap) {
+        pick = wide;
+      } else {
+        const msgIdx = wide.reduce((acc, e, i) => isMsg(e) ? (acc.push(i), acc) : acc, []);
+        const keepMsg = msgIdx.length > perSessionCap ? new Set(msgIdx.slice(msgIdx.length - perSessionCap)) : new Set(msgIdx);
+        const restIdx = wide.map((_, i) => i).filter((i) => !keepMsg.has(i));
+        const room = Math.max(0, perSessionCap - keepMsg.size);
+        const keepRest = new Set(restIdx.slice(Math.max(0, restIdx.length - room)));
+        pick = wide.filter((_, i) => keepMsg.has(i) || keepRest.has(i));
+      }
+      if (pick.length < s.logs.length) logsTruncated[id2] = s.logs.length - pick.length;
+      const entries = pick.map((e) => ({ e, b: Buffer.byteLength(JSON.stringify(e)) + 1 }));
       if (entries.length) {
         kept2.push({ id: id2, entries });
         total += entries.reduce((acc, x) => acc + x.b, 0);
@@ -41935,7 +41952,9 @@ var SessionManager = class {
       let big = null;
       for (const k3 of kept2) if (k3.entries.length > 1 && (!big || k3.entries.length > big.entries.length)) big = k3;
       if (!big) break;
-      const dropped = big.entries.shift();
+      let dropAt = big.entries.findIndex((x) => !isMsg(x.e));
+      if (dropAt < 0) dropAt = 0;
+      const dropped = big.entries.splice(dropAt, 1)[0];
       if (!dropped) break;
       total -= dropped.b;
       logsTruncated[big.id] = (logsTruncated[big.id] ?? 0) + 1;
