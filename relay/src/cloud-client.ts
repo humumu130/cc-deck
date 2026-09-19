@@ -5,6 +5,7 @@ import type { RelayConfig } from "./config.js";
 import type { CloudIdentity } from "./cloud-identity.js";
 import type { PairingCodes } from "./pairing.js";
 import { devId, seal, unseal, type SealedBox } from "./e2e.js";
+import { readPluginConfig } from "./ws-server.js";
 import type { Command, CommandAckPayload, Envelope, PeerMeta } from "./types.js";
 
 interface PhoneState {
@@ -348,6 +349,8 @@ export class CloudClient {
         server_time: Date.now(),
         relay_dev: this.identity.relayDev,
         wan_dev: this.identity.wanDev,
+        // #71 输出物开关（与 ws-server 直连快照同源）：云通道手机 tab 同样跟随
+        deliverables: readPluginConfig().deliverables,
         // #117：云通道快照补 lan_hint/relay_name——#95/#100 此前只挂在 ws-server
         // 直连快照上，云通道手机收不到（LAN 角标恒☁️、默认名不生效的根因）
         ...(this.extra?.lanHint?.() ? { lan_hint: this.extra.lanHint() } : {}),

@@ -1019,6 +1019,16 @@ export default function DetailScreen({ sid, onBack, initialView, ref }: { sid: s
   const insets = useSafeAreaInsets();
   const s: SessionState | undefined = snap.sessions.find((x) => x.session_id === sid);
 
+  // #71 输出物开关：SNAPSHOT.deliverables（relay 插件配置）=== true 才显示「输出物」页
+  // （旧 relay 无字段同样隐藏）。VIEWS 仍是静态全集（ViewKind 类型来源），运行时以
+  // VS 驱动 tab 行/翻页/指示条；与网页端 renderDetail 同口径
+  const VS = snap.deliverables === true ? VIEWS : VIEWS.filter((v) => v.k !== "arts");
+  // 停在被关掉的页（开着「输出物」时关开关/重连到关闭的 relay）→ 回落消息页，防 -1 白屏
+  useEffect(() => {
+    if (!VS.some((v) => v.k === view)) setView("msg");
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [snap.deliverables, view]);
+
   // 手动刷新任务清单：↻ 发命令，等下一帧 todos 引用变化（或 2.5s 超时）结束等待态
   const [todoSpin, setTodoSpin] = useState(false);
   const todoSpinAt = useRef<unknown>(null);
@@ -1265,7 +1275,7 @@ export default function DetailScreen({ sid, onBack, initialView, ref }: { sid: s
   const flashTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   useEffect(() => () => { if (flashTimer.current) clearTimeout(flashTimer.current); }, []);
   const jumpToTask = (n: number) => {
-    const i = VIEWS.findIndex((v) => v.k === "todos");
+    const i = VS.findIndex((v) => v.k === "todos");
     if (i < 0) return;
     const needFly = i !== viewIdx;
     if (needFly) gotoView(i);
@@ -1302,7 +1312,7 @@ export default function DetailScreen({ sid, onBack, initialView, ref }: { sid: s
   // 六视图横向翻页（#250/#252）：页宽=窗口宽（锁定竖屏）。tab 点击一律动画滚动；
   // 远跳（>1 页）飞行途中临时全渲染，防掠过的中间页闪空白
 
-  const viewIdx = VIEWS.findIndex((v) => v.k === view);
+  const viewIdx = VS.findIndex((v) => v.k === view);
   const pagerW = Dimensions.get("window").width;
   const [flight, setFlight] = useState(false);
   // 程序化滚动期间挂起 onScroll 的 label 联动：tab 已即时高亮目标项，
@@ -1321,7 +1331,7 @@ export default function DetailScreen({ sid, onBack, initialView, ref }: { sid: s
     progJump.current = true;
     if (progTimer.current) clearTimeout(progTimer.current);
     progTimer.current = setTimeout(() => { progJump.current = false; }, 1200);
-    setView(VIEWS[i].k);
+    setView(VS[i].k);
     if (Math.abs(i - viewIdx) > 1) {
       setFlight(true);
       if (flightTimer.current) clearTimeout(flightTimer.current);
@@ -1344,21 +1354,21 @@ export default function DetailScreen({ sid, onBack, initialView, ref }: { sid: s
   // 挂载后程序滚动落位（animated:false 不播切换动画）；宽度渲染时重读（分屏/旋转后
   // 首帧窗口已换宽）。仅在挂载时执行一次，后续 initialView 变化不追（组件随 sid 换不重挂）
   useEffect(() => {
-    const i = VIEWS.findIndex((v) => v.k === initialView);
+    const i = VS.findIndex((v) => v.k === initialView);
     if (i > 0) pagerRef.current?.scrollTo({ x: i * Dimensions.get("window").width, animated: false });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
   // 指示条几何：tab 等宽分铺 tabWrap（TAB_PAD_L 左边距 + TAB_GAP 间隙），横杠宽 = 单 tab 宽，
   // 每滑一页平移 (tabW + gap)；滑到两页中间时轻微拉伸（1.3x）落位回缩，clamp 防 overscroll 过冲
-  const tabW = tabRowW > 0 ? (tabRowW - TAB_PAD_L - TAB_GAP * (VIEWS.length - 1)) / VIEWS.length : 0;
+  const tabW = tabRowW > 0 ? (tabRowW - TAB_PAD_L - TAB_GAP * (VS.length - 1)) / VS.length : 0;
   const indX = scrollX.interpolate({
-    inputRange: VIEWS.map((_, i) => i * pagerW),
-    outputRange: VIEWS.map((_, i) => i * (tabW + TAB_GAP)),
+    inputRange: VS.map((_, i) => i * pagerW),
+    outputRange: VS.map((_, i) => i * (tabW + TAB_GAP)),
     extrapolate: "clamp",
   });
   const stretchIn: number[] = [0];
   const stretchOut: number[] = [1];
-  for (let k = 0; k < VIEWS.length - 1; k++) {
+  for (let k = 0; k < VS.length - 1; k++) {
     for (const f of [0.25, 0.5, 0.75, 1]) {
       stretchIn.push((k + f) * pagerW);
       stretchOut.push(f === 1 ? 1 : f === 0.5 ? 1.3 : 1.16);
@@ -1748,7 +1758,7 @@ export default function DetailScreen({ sid, onBack, initialView, ref }: { sid: s
           {/* tab 行：模型 chip 已挪头部副信息行（#391 返工）；tabWrap 自测宽供指示条几何 */}
           <View style={d.filterRow}>
             <View style={d.tabWrap} onLayout={(e) => setTabRowW(e.nativeEvent.layout.width)}>
-              {VIEWS.map((v, i) => (
+              {VS.map((v, i) => (
                 <Pressable
                   key={v.k}
                   style={d.tabBtn}
@@ -1782,16 +1792,16 @@ export default function DetailScreen({ sid, onBack, initialView, ref }: { sid: s
           if (progJump.current) return;
           // 越过中线即换高亮（不等落定）：滑到一半停住时 label 与页面一致停在中间态
           const i = Math.round(e.nativeEvent.contentOffset.x / pagerW);
-          if (i >= 0 && i < VIEWS.length && VIEWS[i].k !== view) setView(VIEWS[i].k);
+          if (i >= 0 && i < VS.length && VS[i].k !== view) setView(VS[i].k);
         }}
         onMomentumScrollEnd={(e) => {
           const i = Math.round(e.nativeEvent.contentOffset.x / pagerW);
-          if (i >= 0 && i < VIEWS.length && VIEWS[i].k !== view) setView(VIEWS[i].k);
+          if (i >= 0 && i < VS.length && VS[i].k !== view) setView(VS[i].k);
           progJump.current = false;
           setFlight(false);
         }}
       >
-      {VIEWS.map((v, vi) => (
+      {VS.map((v, vi) => (
         <View key={v.k} style={{ width: pagerW }}>
         {Math.abs(vi - viewIdx) <= 1 || flight ? (v.k === "todos" ? (
         <View style={d.viewCol}>

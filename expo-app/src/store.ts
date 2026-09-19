@@ -67,6 +67,7 @@ export interface SourceConn {
   lastSeq: number;
   models: string[];    // #388 该源 SNAPSHOT.models 携带的可用模型清单
   platform: string;    // SNAPSHOT.platform（relay 本机平台，旧 relay 无字段 = ""）
+  deliverables: boolean; // #71 该源 SNAPSHOT.deliverables（输出物看板开关，旧 relay 无字段 = false）
   sessions: Map<string, SessionState>;
   timelines: Map<string, LogEntry[]>;
   reconnectDelay: number;
@@ -168,6 +169,9 @@ export interface Snapshot {
   aggregate: boolean;
   // #388 可用模型清单（活动源 SNAPSHOT.models：厂商配置聚合，详情页下拉切换）
   models: string[];
+  // #71 输出物看板开关（活动源 SNAPSHOT.deliverables，relay 插件配置）：false/缺省
+  // （旧 relay 无字段）= 详情页隐藏「输出物」tab；true 才显示
+  deliverables?: boolean;
   sessions: SessionState[];
   lastErrorCmd: string | null;
   cloudBusy: boolean;
@@ -206,6 +210,7 @@ const emptySnapshot: Snapshot = {
   activeSourceId: null,
   aggregate: false,
   models: [],
+  deliverables: false,
   sessions: [],
   lastErrorCmd: null,
   cloudBusy: false,
@@ -417,7 +422,7 @@ class RelayStore {
   // 连接状态聚合（#294 批1）：单源 = 活动源直出（既有文案/字段逐字不变）；
   // 聚合 = any-online 派生，connText `${online}/${total} 在线`（connected/connState 供
   // App.tsx 通知权限/前台服务/回前台重连取此口径，调用方零改动）
-  private connStatusPatch(): Pick<Snapshot, "connected" | "connText" | "connState" | "channel" | "failNote" | "sources" | "activeSourceId" | "aggregate" | "models"> {
+  private connStatusPatch(): Pick<Snapshot, "connected" | "connText" | "connState" | "channel" | "failNote" | "sources" | "activeSourceId" | "aggregate" | "models" | "deliverables"> {
     const sources: SourceStatus[] = [...this.conns.values()].map((c) => ({
       id: c.id,
       name: c.name,
@@ -429,12 +434,14 @@ class RelayStore {
     }));
     // #388 模型清单取活动源口径（模型切换命令无 sid 路由也走活动源）
     const activeModels = this.activeConn()?.models ?? [];
+    // #71 输出物开关同口径取活动源（详情页 tab 显隐）
+    const activeDeliverables = this.activeConn()?.deliverables ?? false;
     const inPlay: SourceConn[] = this.aggregate
       ? [...this.conns.values()]
       : this.activeId
         ? [this.conns.get(this.activeId)].filter((c): c is SourceConn => !!c)
         : [];
-    if (!inPlay.length) return { connected: false, connText: "未配置", connState: "idle", channel: null, failNote: null, sources, activeSourceId: this.activeId, aggregate: this.aggregate, models: [] };
+    if (!inPlay.length) return { connected: false, connText: "未配置", connState: "idle", channel: null, failNote: null, sources, activeSourceId: this.activeId, aggregate: this.aggregate, models: [], deliverables: false };
     if (this.aggregate) {
       const online = inPlay.filter((c) => c.state === "online");
       const connState = online.length
@@ -457,6 +464,7 @@ class RelayStore {
         activeSourceId: this.activeId,
         aggregate: this.aggregate,
         models: activeModels,
+        deliverables: activeDeliverables,
       };
     }
     const c = inPlay[0];
@@ -471,6 +479,7 @@ class RelayStore {
       activeSourceId: this.activeId,
       aggregate: this.aggregate,
       models: c.models,
+      deliverables: c.deliverables,
     };
   }
 
@@ -758,6 +767,7 @@ class RelayStore {
         lastSeq: 0,
         models: [],
         platform: "",
+        deliverables: false,
         sessions: new Map(),
         timelines: new Map(),
         reconnectDelay: RECONNECT_BASE_MS,
@@ -1926,6 +1936,8 @@ class RelayStore {
         conn.models = Array.isArray(msg.payload.models)
           ? msg.payload.models.filter((m: unknown): m is string => typeof m === "string" && !!m)
           : [];
+        // #71 输出物看板开关随快照携带（旧版 relay 无此字段 = 关，详情页藏 tab）
+        conn.deliverables = (msg.payload as { deliverables?: unknown }).deliverables === true;
         for (const s of msg.payload.sessions as SessionState[]) {
           conn.sessions.set(s.session_id, s);
           conn.timelines.set(s.session_id, msg.payload.logs[s.session_id] ?? []);

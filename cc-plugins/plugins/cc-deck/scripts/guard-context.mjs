@@ -9,9 +9,12 @@
 //    机制措辞，2026-09-10 用户纠错：旧文案「用户插入提问（滚动防丢）」泄露实现术语）
 //  组件三 restorePoint（默认关）：项目目录存在 24h 内、非本会话写入的
 //    .cc-deck/state.md → 注入一行「上次会话遗留待办」提示并消费该文件（只注入一次）
+//  组件四 deliverables（#71，默认关）：输出物看板开关。开=每条用户消息附一行紧凑
+//    投递约定（交付物登记口径，替代写用户 CLAUDE.md 的持久污染——关闭即消失零残留）
+//    + 把插件自带 bin/deliver 同步落位 ~/.cc-deck/bin/（读比较，内容有变才覆盖）
 // stdout 整块注入上下文；通知 POST 与本地读取并行、最后收尾 await；异常全程静默。
-import { readFileSync } from "node:fs";
-import { join } from "node:path";
+import { readFileSync, copyFileSync, mkdirSync, chmodSync } from "node:fs";
+import { join, dirname } from "node:path";
 import { homedir } from "node:os";
 import {
   readConfig, readCliPid, isPidAlive, readTasks, readTurn, writeTurn,
@@ -38,7 +41,7 @@ const pid = readCliPid(sid);
 if (!pid) process.exit(0);
 
 const cfg = readConfig();
-if (!cfg.taskGuard && !cfg.qNotify && !cfg.restorePoint) process.exit(0);
+if (!cfg.taskGuard && !cfg.qNotify && !cfg.restorePoint && !cfg.deliverables) process.exit(0);
 
 // ---- 组件二：忙碌中插入提问 → 手机弹通知框（先发射，与下方本地读取并行） ----
 let notify = null;
@@ -78,9 +81,39 @@ if (cfg.taskGuard) {
   }
 }
 
+// ---- 组件四（#71 deliverables）：投递约定一行注入 + deliver 脚本落位 ----
+if (cfg.deliverables) {
+  out.push(
+    "【交付物登记】产出交付文档/报告后，用 ~/.cc-deck/bin/deliver <绝对路径> 登记到输出物看板；" +
+      "全局一次性产物直接写 ~/.cc-deck/artifacts/。代码/配置改动不算交付物。",
+  );
+  ensureDeliverScript();
+}
+
 if (out.length) console.log(out.join("\n"));
 if (notify) await notify; // 等 POST 收尾再退（≤1.5s），防进程先退掐断请求
 process.exit(0);
+
+// deliver 脚本落位：插件 bin/ 携带规范源，开启时同步到 ~/.cc-deck/bin/deliver。
+// 读比较后才写（内容一致零写入，不刷 mtime）；任何失败静默——脚本是登记入口的
+// 便捷形态，已有用户手装的版本不在本插件管辖范围也不强改
+function ensureDeliverScript() {
+  try {
+    const root = process.env.CLAUDE_PLUGIN_ROOT;
+    if (!root) return;
+    const src = join(root, "bin", "deliver");
+    const dst = join(homedir(), ".cc-deck", "bin", "deliver");
+    let cur = "";
+    try {
+      cur = readFileSync(dst, "utf-8");
+    } catch {}
+    const want = readFileSync(src, "utf-8");
+    if (cur === want) return;
+    mkdirSync(dirname(dst), { recursive: true });
+    copyFileSync(src, dst);
+    try { chmodSync(dst, 0o755); } catch {}
+  } catch {}
+}
 
 // POST 本机 relay /api/notify（LAN token 在 data/token；端口在 data/bridge.json）。
 // mode=confirm 复用现有黄框 [待确认] 通知链路；session_id 用 relay 外部会话 id（ext-<sid>）。

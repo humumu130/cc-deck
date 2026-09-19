@@ -2165,6 +2165,11 @@
               <span class="gp-plug-t"><span class="gp-plug-n">恢复点</span><span class="gp-plug-d">会话收工时保存未完成事项，下次自动提醒接续</span></span>
               <div class="lever" id="gpPlugRestoreLever" style="--n:2"><i class="lever-thumb"></i><button type="button" class="lever-opt" data-i="0">关</button><button type="button" class="lever-opt" data-i="1">开</button></div>
             </div>
+            <div class="gp-row gp-plug-row" id="gpPlugDeliverRow" style="display:none">
+              <span class="gi"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4v10"/><path d="M7.5 10.5L12 15l4.5-4.5"/><path d="M4.5 19h15"/></svg></span>
+              <span class="gp-plug-t"><span class="gp-plug-n">输出物看板</span><span class="gp-plug-d">会话产出文档/报告时自动附登记约定，「输出物」页可在手机/网页远程查看</span></span>
+              <div class="lever" id="gpPlugDeliverLever" style="--n:2"><i class="lever-thumb"></i><button type="button" class="lever-opt" data-i="0">关</button><button type="button" class="lever-opt" data-i="1">开</button></div>
+            </div>
           </div>
           <div class="gp-plug-note">仅对桥接给 CC Deck 的会话生效。</div>
         </section>
@@ -2611,7 +2616,7 @@ function ensureCtx(cfg) {
   if (!c) {
     c = {
       cfg, status: "offline", statusText: "未连接",
-      sessions: new Map(), timelines: new Map(), lastSeq: 0, models: [],
+      sessions: new Map(), timelines: new Map(), lastSeq: 0, models: [], deliverables: false,
       ws: null, reconnectDelay: RETRY_BASE_MS, reconnectTimer: 0,
       failKind: "", retryAt: 0, retryNote: "", // #40web 失败归因/重试倒计时（见 setConn/scheduleReconnect）
       pendingPair: null, pairTimer: 0, pingTimer: null, lastPong: 0,
@@ -3645,6 +3650,7 @@ function onEvent(ctx, msg) {
       }
       ctx.lastSeq = Math.max(ctx.lastSeq, msg.seq);
       ctx.models = Array.isArray(msg.payload.models) ? msg.payload.models : []; // #388 模型清单（旧版 relay 无字段=空）
+      ctx.deliverables = msg.payload.deliverables === true; // #71 输出物开关（旧版 relay 无字段=关，tab 隐藏）
       if (msg.payload.homedir) ctx.homedir = msg.payload.homedir; // #368 新建表单默认目录
       if (msg.payload.platform) ctx.platform = msg.payload.platform; // relay 平台：新建表单示例自适应+盘符拦截（旧 relay 无字段=中立文案）
       updateCwdPlaceholder(); // 运行时回调：五块 script 已全部执行，函数全局可达
@@ -4376,6 +4382,16 @@ function renderDetail() {
   $("detail").style.display = has ? "flex" : "none";
   $("empty").style.display = has ? "none" : "flex";
   if (!has) return;
+
+  // #71 输出物开关：所选会话所属源的 relay 配置（SNAPSHOT.deliverables）关=隐藏
+  // 「输出物」tab。停在 tab 上时开关被关（他处改配置后本端重连）→ 回落消息页；
+  // switchTab 会重进 renderDetail，此刻 activeTab 已换不会递归
+  {
+    const abtn = document.querySelector('.tabs button.tab[data-tab="artifacts"]');
+    const on = sel.ctx.deliverables === true;
+    abtn.style.display = on ? "" : "none";
+    if (!on && activeTab === "artifacts") { switchTab("activity"); return; }
+  }
 
   $("dtitle").textContent = s.title || "";
   $("dbadge").outerHTML = '<span id="dbadge" class="status-chip"></span>';
@@ -6747,7 +6763,7 @@ document.addEventListener("keydown", (ev) => {
   if (!selected) return;
   const ae = document.activeElement;
   if (ae && (ae.tagName === "INPUT" || ae.tagName === "TEXTAREA" || ae.isContentEditable)) return;
-  const tabs = [...document.querySelectorAll(".tabs button.tab")];
+  const tabs = [...document.querySelectorAll(".tabs button.tab")].filter((b) => b.style.display !== "none"); // #71 隐藏的输出物 tab 不进 ←→ 循环
   const i = tabs.findIndex((b) => b.dataset.tab === activeTab);
   if (i < 0) return;
   const n = ev.key === "ArrowRight" ? i + 1 : i - 1;
@@ -7916,8 +7932,8 @@ async function probeRelayStat() {
 //    /api/plugin-config（背后是 ~/.cc-deck/config.json，guard hooks 的单一事实源）。
 //    凭据与 URL 回退完全复用领码链路（local-info 实测优先 + 同端口走相对路径同源免跨源）；
 //    无本机 relay / 旧版 relay（404）→ 状态行灰点说明原因 + 拨杆整组禁点 ──
-const PLUG_KEYS = ["taskGuard", "qNotify", "restorePoint"];
-const PLUG_LEVERS = { taskGuard: "gpPlugTaskLever", qNotify: "gpPlugQnotifyLever", restorePoint: "gpPlugRestoreLever" };
+const PLUG_KEYS = ["taskGuard", "qNotify", "restorePoint", "deliverables"];
+const PLUG_LEVERS = { taskGuard: "gpPlugTaskLever", qNotify: "gpPlugQnotifyLever", restorePoint: "gpPlugRestoreLever", deliverables: "gpPlugDeliverLever" };
 let plugCfg = null;        // null = 未加载/不可用；否则 {taskGuard,qNotify,restorePoint}
 let plugBusy = false;      // 加载/保存并发守卫
 function plugSetStat(txt2, on) {
@@ -7934,6 +7950,9 @@ function plugRender() {
   $("gpPlugRows").classList.toggle("off", !plugCfg);
   if (!plugCfg) return;
   for (const k of PLUG_KEYS) setLever($(PLUG_LEVERS[k]), plugCfg[k] ? 1 : 0);
+  // #71 旧版 relay 响应无 deliverables 键：第四行隐藏（拨了也不生效，不误导）
+  const drow = $("gpPlugDeliverRow");
+  if (drow) drow.style.display = "deliverables" in plugCfg ? "" : "none";
 }
 function plugFail(msg) {
   plugCfg = null;
@@ -7991,6 +8010,16 @@ async function savePluginCfg(key, want) {
   if (!j) { toast("插件开关保存失败（" + err + "）"); return; }
   plugCfg = j;
   plugRender();
+  // #71 输出物拨杆即时生效：拨的是本机 relay 配置——指向同端口 LAN 源的快照缓存
+  // 同步刷新并重绘（SNAPSHOT 只在重连时来，不等它）；其余源等各自重连自然对齐
+  if (key === "deliverables") {
+    for (const c of ctxs.values()) {
+      if (c.cfg.kind !== "lan") continue;
+      try { if (new URL(c.cfg.wsUrl).port !== String(creds.port)) continue; } catch { continue; }
+      c.deliverables = want;
+    }
+    renderDetail();
+  }
 }
 for (const k of PLUG_KEYS) {
   const el = $(PLUG_LEVERS[k]);

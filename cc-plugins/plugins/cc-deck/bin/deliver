@@ -1,0 +1,21 @@
+#!/bin/bash
+# 交付物原地登记（2026-09-19 意图声明制，#71 起随插件分发）：文件写在本该在的地方，
+# 本脚本只把路径登记到 cc-deck 看板（POST /api/deliver）。用法：deliver <文件路径>
+# （相对路径按当前目录补全）。guard-context 开关开启时自动同步到 ~/.cc-deck/bin/。
+set -euo pipefail
+f="${1:-}"
+[ -z "$f" ] && { echo "用法: deliver <文件路径>" >&2; exit 1; }
+# 相对路径 → 绝对
+case "$f" in /*) ;; *) f="$PWD/$f";; esac
+data="$HOME/.cc-deck/data"
+token="$(cat "$data/token" 2>/dev/null || true)"
+[ -z "$token" ] && { echo "未找到 ~/.cc-deck/data/token（relay 未初始化？）" >&2; exit 1; }
+# 端口以 relay 自报为准（bridge.json），缺省回落默认 8787
+port="$(python3 -c 'import json,os;print(json.load(open(os.path.expanduser("~/.cc-deck/data/bridge.json")))["port"])' 2>/dev/null || true)"
+: "${port:=8787}"
+body="$(python3 - "$f" "$PWD" <<'PY'
+import json, sys
+print(json.dumps({"path": sys.argv[1], "cwd": sys.argv[2]}, ensure_ascii=False))
+PY
+)"
+exec curl -sS -X POST "http://127.0.0.1:${port}/api/deliver?token=${token}" -H 'content-type: application/json' --data-binary "$body"

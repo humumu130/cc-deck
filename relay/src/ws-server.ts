@@ -27,15 +27,18 @@ function localIps(): Set<string> {
 // 响应被浏览器静默拦截，「本机领码」必失败。新增部署域只需在此追加。
 const TRUSTED_WEB_ORIGINS: readonly string[] = ["https://cc.humumu.online", "https://cc-deck.humumu.online"];
 
-// #448 插件可选能力配置：~/.cc-deck/config.json 三键（guard-stop/guard-context hooks 与
-// /api/plugin-config 端点共用）。缺省值与 hooks 侧 guard-lib.mjs 的 CONFIG_DEFAULTS 一致
-const PLUGIN_CFG_KEYS = ["taskGuard", "qNotify", "restorePoint"] as const;
-type PluginConfig = { taskGuard: boolean; qNotify: boolean; restorePoint: boolean };
+// #448 插件可选能力配置：~/.cc-deck/config.json 四键（guard-stop/guard-context hooks 与
+// /api/plugin-config 端点共用）。缺省值与 hooks 侧 guard-lib.mjs 的 CONFIG_DEFAULTS 一致。
+// #71 第四键 deliverables（默认关）：输出物看板总开关——关=三端隐藏「输出物」tab、
+// guard-context 不注入投递约定；开=SNAPSHOT 下发 true + hook 注入约定 + deliver 脚本落位
+const PLUGIN_CFG_KEYS = ["taskGuard", "qNotify", "restorePoint", "deliverables"] as const;
+type PluginConfig = { taskGuard: boolean; qNotify: boolean; restorePoint: boolean; deliverables: boolean };
 function pluginConfigPath(): string {
   return join(homedir(), ".cc-deck", "config.json");
 }
-function readPluginConfig(): PluginConfig {
-  const out: PluginConfig = { taskGuard: false, qNotify: true, restorePoint: false };
+// 导出供 cloud-client 云通道 SNAPSHOT 同源携带（手机走云桥也要拿到开关）
+export function readPluginConfig(): PluginConfig {
+  const out: PluginConfig = { taskGuard: false, qNotify: true, restorePoint: false, deliverables: false };
   try {
     const raw = JSON.parse(readFileSync(pluginConfigPath(), "utf-8")) as Record<string, unknown>;
     for (const k of PLUGIN_CFG_KEYS) if (typeof raw[k] === "boolean") out[k] = raw[k] as boolean;
@@ -643,6 +646,8 @@ export function startServer(
           server_time: Date.now(),
           homedir: homedir(),
           models: listModels(mgr.cfg.model),
+          // #71 输出物开关：恒布尔随快照下发（旧客户端忽略未知键），三端 tab 据此显隐
+          deliverables: readPluginConfig().deliverables,
           // 云桥启用的 relay 附带自身设备 id（= CloudConfig.relayDev 同源值）：
           // 客户端据此密码学匹配"LAN 直连条目"与"云桥条目"是同一台 relay，自动合并。
           // wan_dev（F7）：手表 /wan 透传通道的凭据 dev，手机侧写进手表连接配置

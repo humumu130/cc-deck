@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // CC Deck 插件 · 任务调度守卫公共库（guard-stop / guard-context 共用）。
 // 三类共享能力：
-//  1) 配置：~/.cc-deck/config.json 的 taskGuard/qNotify/restorePoint 三键
+//  1) 配置：~/.cc-deck/config.json 的 taskGuard/qNotify/restorePoint/deliverables 四键
 //     （relay /api/plugin-config 同源读写，设置「插件」页是 UI 面）
 //  2) 桥接登记：bridge-hook 每次上报定位到 CLI 进程时把 session_id 缓存进
 //     ~/.cc-deck/data/cli-pids.json（dev/插件 relay 都写这里，见 bridge-hook dataDirs）。
@@ -13,8 +13,10 @@ import { readFileSync, writeFileSync, unlinkSync, existsSync, readdirSync, mkdir
 import { join } from "node:path";
 import { homedir } from "node:os";
 
-export const CONFIG_KEYS = ["taskGuard", "qNotify", "restorePoint"];
-export const CONFIG_DEFAULTS = { taskGuard: false, qNotify: true, restorePoint: false };
+// #71 第四键 deliverables（输出物看板开关，默认关）：开=guard-context 注入投递约定
+// + deliver 脚本落位 ~/.cc-deck/bin/；三键集合须与 ws-server PLUGIN_CFG_KEYS 同步
+export const CONFIG_KEYS = ["taskGuard", "qNotify", "restorePoint", "deliverables"];
+export const CONFIG_DEFAULTS = { taskGuard: false, qNotify: true, restorePoint: false, deliverables: false };
 
 const home = homedir();
 const deckDir = join(home, ".cc-deck");

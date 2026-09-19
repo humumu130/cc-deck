@@ -32,9 +32,13 @@ const TS = `${ROOT}/transcript.jsonl`;
 writeFileSync(TS, JSON.stringify({ type: "user", message: { role: "user", content: "e2e" }, timestamp: new Date().toISOString() }) + "\n");
 
 // 起 relay（云桥/自动恢复/标题生成全关，数据目录隔离）
+// #211 镜像隔离：bundle 入口 index.ts 会把 bridge.json 镜像回 os.homedir()/.cc-deck/data
+//（只要 dataDir ≠ hookHome 且 hookHome 存在）。os.homedir() 在 POSIX 跟随 $HOME——
+// 换 $HOME 让 hookHome 不存在，镜像空转，防 E2E relay 打挂生产 ~/.cc-deck/data/bridge.json
 const child = spawn(process.execPath, [RELAY], {
   env: {
     ...process.env,
+    HOME: `${ROOT}/home`,
     CCR_PORT: String(PORT),
     CCR_TOKEN: TOKEN,
     CCR_DATA_DIR: `${ROOT}/datadir`,
