@@ -29,8 +29,10 @@ const TRUSTED_WEB_ORIGINS: readonly string[] = ["https://cc.humumu.online", "htt
 
 // #448 插件可选能力配置：~/.cc-deck/config.json 四键（guard-stop/guard-context hooks 与
 // /api/plugin-config 端点共用）。缺省值与 hooks 侧 guard-lib.mjs 的 CONFIG_DEFAULTS 一致。
-// #71 第四键 deliverables（默认关）：输出物看板总开关——关=三端隐藏「输出物」tab、
-// guard-context 不注入投递约定；开=SNAPSHOT 下发 true + hook 注入约定 + deliver 脚本落位
+// #71 第四键 deliverables：输出物看板总开关——关=三端隐藏「输出物」tab、
+// guard-context 不注入投递约定；开=SNAPSHOT 下发 true + hook 注入约定 + deliver 脚本落位。
+// #107 默认改开（#71 决策反转，用户 2026-09-20：默认关用户可能几个月都不知道有这
+// 功能）；已显式写 false 的用户不受影响（下方 typeof 守卫：键存在才覆盖）
 const PLUGIN_CFG_KEYS = ["taskGuard", "qNotify", "restorePoint", "deliverables"] as const;
 type PluginConfig = { taskGuard: boolean; qNotify: boolean; restorePoint: boolean; deliverables: boolean };
 function pluginConfigPath(): string {
@@ -38,7 +40,7 @@ function pluginConfigPath(): string {
 }
 // 导出供 cloud-client 云通道 SNAPSHOT 同源携带（手机走云桥也要拿到开关）
 export function readPluginConfig(): PluginConfig {
-  const out: PluginConfig = { taskGuard: false, qNotify: true, restorePoint: false, deliverables: false };
+  const out: PluginConfig = { taskGuard: false, qNotify: true, restorePoint: false, deliverables: true };
   try {
     const raw = JSON.parse(readFileSync(pluginConfigPath(), "utf-8")) as Record<string, unknown>;
     for (const k of PLUGIN_CFG_KEYS) if (typeof raw[k] === "boolean") out[k] = raw[k] as boolean;

@@ -13,10 +13,12 @@ import { readFileSync, writeFileSync, unlinkSync, existsSync, readdirSync, mkdir
 import { join } from "node:path";
 import { homedir } from "node:os";
 
-// #71 第四键 deliverables（输出物看板开关，默认关）：开=guard-context 注入投递约定
+// #71 第四键 deliverables（输出物看板开关，#107 默认改开——与 relay 侧 ws-server
+// readPluginConfig 同步反转；已显式写 false 的用户不受影响，readConfig 的 typeof 守卫
+// 只在键存在时覆盖）：开=guard-context 注入投递约定
 // + deliver 脚本落位 ~/.cc-deck/bin/；三键集合须与 ws-server PLUGIN_CFG_KEYS 同步
 export const CONFIG_KEYS = ["taskGuard", "qNotify", "restorePoint", "deliverables"];
-export const CONFIG_DEFAULTS = { taskGuard: false, qNotify: true, restorePoint: false, deliverables: false };
+export const CONFIG_DEFAULTS = { taskGuard: false, qNotify: true, restorePoint: false, deliverables: true };
 
 const home = homedir();
 const deckDir = join(home, ".cc-deck");
