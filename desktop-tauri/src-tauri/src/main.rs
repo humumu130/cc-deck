@@ -50,6 +50,7 @@ if (!window.ccDeck) {
     relayCtl: true, // 标记：内置 relay 开关能力存在（网页端据此显示设置行）
     relayStatus: () => window.__TAURI__.core.invoke("relay_status"),
     relayToggle: (on) => window.__TAURI__.core.invoke("relay_toggle", { on }),
+    saveArtifact: (name, b64) => window.__TAURI__.core.invoke("save_artifact", { name, b64 }),
   };
 }
 document.addEventListener("click", (e) => {
@@ -119,6 +120,83 @@ fn open_path(app: tauri::AppHandle, path: String, reveal: bool) -> Result<(), St
         app.opener().reveal_item_in_dir(p).map_err(|e| e.to_string())
     } else {
         app.opener().open_path(p, None::<&str>).map_err(|e| e.to_string())
+    }
+}
+
+/// #106 输出物直接下载：web 侧拉取的字节流（base64）落系统「下载」目录，重名自动
+/// -2/-3 递增不覆盖，返回落盘绝对路径。打开动作复用 open_path（前端随后调用，失败
+/// toast 带路径，用户可手动找）。base64 解码内联实现——零新依赖（Cargo.lock 无 base64
+/// 直依赖，不为这一处引 crate 让 CI 冷缓存多一个拉取点）
+#[tauri::command]
+fn save_artifact(app: tauri::AppHandle, name: String, b64: String) -> Result<String, String> {
+    let bytes = b64_decode(&b64)?;
+    let dir = app.path().download_dir().map_err(|e| e.to_string())?;
+    // basename 语义：剥路径分隔符（前端已取 basename，这里兜底防目录穿越）
+    let safe: String = name.chars().filter(|c| *c != '/' && *c != '\\' && *c != '\0').collect();
+    if safe.is_empty() || safe == "." || safe == ".." {
+        return Err("无效文件名".into());
+    }
+    // 重名递增：name.ext → name-2.ext（下载目录常有同名旧件，静默覆盖会吞用户文件）
+    let (stem, ext) = match safe.rsplit_once('.') {
+        Some((s, e)) if !s.is_empty() && !e.is_empty() => (s.to_string(), format!(".{e}")),
+        _ => (safe.clone(), String::new()),
+    };
+    let mut path = dir.join(format!("{stem}{ext}"));
+    let mut n = 1u32;
+    while path.exists() {
+        n += 1;
+        if n > 999 {
+            return Err("同名文件过多，请清理下载目录".into());
+        }
+        path = dir.join(format!("{stem}-{n}{ext}"));
+    }
+    std::fs::write(&path, &bytes).map_err(|e| e.to_string())?;
+    Ok(path.to_string_lossy().into_owned())
+}
+
+/// 标准字母表 base64 解码（web 侧 btoa 产物：padding 只在尾部，无空白）。
+/// 过滤 '=' 后按 4 字符组还原；余 1 或出现非法字符即坏输入
+fn b64_decode(s: &str) -> Result<Vec<u8>, String> {
+    const TBL: &[u8; 64] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+    let mut rev = [255u8; 256];
+    for (i, &c) in TBL.iter().enumerate() {
+        rev[c as usize] = i as u8;
+    }
+    let body: Vec<u8> = s.bytes().filter(|b| !matches!(b, b'=' | b'\n' | b'\r')).collect();
+    if body.len() % 4 == 1 || body.iter().any(|&b| rev[b as usize] == 255) {
+        return Err("base64 解码失败".into());
+    }
+    let mut out = Vec::with_capacity(body.len() / 4 * 3);
+    for g in body.chunks(4) {
+        let v: Vec<u8> = g.iter().map(|&b| rev[b as usize]).collect();
+        let n = ((v[0] as u32) << 18)
+            | ((v[1] as u32) << 12)
+            | ((*v.get(2).unwrap_or(&0) as u32) << 6)
+            | (*v.get(3).unwrap_or(&0) as u32);
+        out.push((n >> 16) as u8);
+        if g.len() > 2 {
+            out.push((n >> 8) as u8);
+        }
+        if g.len() > 3 {
+            out.push(n as u8);
+        }
+    }
+    Ok(out)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::b64_decode;
+    #[test]
+    fn b64_roundtrip() {
+        // 与 web 侧 btoa 同字母表：对照 Node crypto 生成的标准向量
+        assert_eq!(b64_decode("").unwrap(), b"");
+        assert_eq!(b64_decode("QQ==").unwrap(), b"A");
+        assert_eq!(b64_decode("QUI=").unwrap(), b"AB");
+        assert_eq!(b64_decode("QUJD").unwrap(), b"ABC");
+        assert_eq!(b64_decode("SGVsbG8sIOS4lueVjA==").unwrap(), "Hello, 世界".as_bytes());
+        assert!(b64_decode("A").is_err()); // 余 1
+        assert!(b64_decode("Q*==").is_err()); // 非法字符
     }
 }
 
@@ -536,7 +614,7 @@ fn main() {
         .plugin(tauri_plugin_updater::Builder::new().build())
         // #8 全局快捷键（呼出/收起）：默认键在 setup 注册，网页侧可经 set_toggle_shortcut 改绑
         .plugin(tauri_plugin_global_shortcut::Builder::new().build())
-        .invoke_handler(tauri::generate_handler![probe_local, open_external, open_path, relay_status, relay_toggle, set_toggle_shortcut])
+        .invoke_handler(tauri::generate_handler![probe_local, open_external, open_path, save_artifact, relay_status, relay_toggle, set_toggle_shortcut])
         .setup(|app| {
             if build_tray(app).is_ok() {
                 TRAY_OK.store(true, Ordering::SeqCst);

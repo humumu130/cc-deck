@@ -7169,9 +7169,10 @@ function openArtPop(row, x, y) {
     fetch: row.dataset.dead === "1" || !hit ? null : { ctx: hit.ctx, sid: hit.s.session_id },
   });
 }
-// #35 双击输出物行 = 本地默认应用打开（核心交互）；#79 远程访问兜底链：
-// 桌面壳本地打开失败（云源——文件不在本机）或纯浏览器（无壳）→ 实时拉取 + 在线预览，
-// 不让降级成死胡同；已删除行双击只 toast
+// #35 双击输出物行 = 本地默认应用打开（核心交互）；#79 远程访问兜底链 + #106 改向：
+// 桌面壳本地打开失败（云源——文件不在本机）→ 实时拉取 + 落盘下载目录 + 系统软件打开
+// （不做在线预览）；纯浏览器（无壳）保留在线预览——网页端没有本地文件系统，预览是
+// 合理形态。已删除行双击只 toast
 $("timeline").addEventListener("dblclick", (ev) => {
   const row = ev.target.closest(".afrow");
   if (!row) return;
@@ -7180,7 +7181,8 @@ $("timeline").addEventListener("dblclick", (ev) => {
   if (window.ccDeck && window.ccDeck.openPath) {
     window.ccDeck.openPath(p, false).catch(() => {
       const hit = selSession();
-      if (hit) previewArtifact(hit.ctx, hit.s.session_id, p); // 远程源的文件不在本机 → 拉取预览
+      if (hit && window.ccDeck.saveArtifact) downloadAndOpenArtifact(hit.ctx, hit.s.session_id, p); // #106 远程源文件不在本机 → 下载后本地打开
+      else if (hit) previewArtifact(hit.ctx, hit.s.session_id, p); // 旧壳无 saveArtifact（升级窗口期）→ 预览兜底
       else toast("本地打开失败（文件不在本机）");
     });
   } else {
@@ -7189,6 +7191,27 @@ $("timeline").addEventListener("dblclick", (ev) => {
     else { copyText(p); toast("在桌面端打开可双击启动本地应用（路径已复制）"); }
   }
 });
+
+// #106 输出物直接下载（桌面壳专用）：拉取字节流 → 壳落盘系统「下载」目录（重名
+// 自动 -2 递增）→ 系统默认应用打开。取代桌面端在线预览——下载的文件随用户处置
+async function downloadAndOpenArtifact(ctx, sid, path) {
+  const name = path.split(/[\\/]/).pop() || "输出物";
+  toast("正在下载「" + name + "」…", 60_000);
+  try {
+    const r = await fetchArtifact(ctx, sid, path);
+    const saved = await window.ccDeck.saveArtifact(name, bytesToB64(artB64ToBytes(r.b64s)));
+    try { await window.ccDeck.openPath(saved, false); } catch {} // 打开失败不算下载失败——路径已 toast，用户可自取
+    toast("已下载并打开：" + saved, 5000);
+  } catch (e) {
+    toast(String(e?.message || e), 4500);
+  }
+}
+// Uint8Array → base64（分片 btoa 防 apply 栈溢出；20MB 上限内一次性格式化 <1s）
+function bytesToB64(u8) {
+  let s = "";
+  for (let i = 0; i < u8.length; i += 0x8000) s += String.fromCharCode.apply(null, u8.subarray(i, i + 0x8000));
+  return btoa(s);
+}
 
 // ---------- #79 输出物在线预览（拉取 + 分级展示） ----------
 // 简单格式内嵌：文本/Markdown/JSON/CSV → 文本或轻量 md 渲染；图片 → img；
@@ -7336,8 +7359,12 @@ function openFpathPop(p, x, y, opts) {
   };
   // #35 opts：rel = 顺带给"复制相对路径"项；noOpen = 已删除文件——打开两项不给（stat 不到，
   // 打开必然失败，toast 兜底由双击路径负责），复制照常
-  // #79 fetch = 输出物远程拉取预览（实时 E2E 传输，浏览器/远程源可达）
-  if (opts?.fetch) mk("在线预览", () => previewArtifact(opts.fetch.ctx, opts.fetch.sid, p));
+  // #79 fetch = 输出物远程拉取（实时 E2E 传输，浏览器/远程源可达）；#106 桌面壳改
+  // 「下载并打开」（落盘下载目录 + 系统软件），纯浏览器保留在线预览
+  if (opts?.fetch) {
+    if (window.ccDeck && window.ccDeck.saveArtifact) mk("下载并打开", () => downloadAndOpenArtifact(opts.fetch.ctx, opts.fetch.sid, p));
+    else mk("在线预览", () => previewArtifact(opts.fetch.ctx, opts.fetch.sid, p));
+  }
   const shellOk = !!(window.ccDeck && window.ccDeck.openPath) && !opts?.noOpen;
   if (shellOk) {
     mk("打开文件", () => { window.ccDeck.openPath(p, false).catch((er) => toast(String(er?.message || er).slice(0, 80), 3500)); });
