@@ -2258,7 +2258,7 @@
       <div id="inputcard">
         <div class="ic-top">
           <span class="ic-at" id="atBtn" title="输入">@</span>
-          <textarea id="msginput" rows="1" placeholder="发送消息（追加输入 / 开新回合）"></textarea>
+          <textarea id="msginput" rows="1" placeholder="发送消息（追加输入 / 开新回合）· ↑ 翻阅本会话历史"></textarea>
         </div>
         <div class="ic-bottom">
           <div class="ic-left">
@@ -3789,6 +3789,8 @@ function onEvent(ctx, msg) {
     }
     case "SESSION_DELETED": {
       ctx.sessions.delete(sid);
+      // #95 会话删除即清它的输入历史桶（无 lsDel 封装，直接删；无桶时静默）
+      try { localStorage.removeItem("cc.input.hist." + sid); } catch {}
       // #279① 服务器确认删除：已提交项出列（保持隐藏的使命完成）；挂起中的
       // 删除被别处终结 → 取消挂起，防超时后误发命令
       deleting.delete(sid);
@@ -5252,6 +5254,7 @@ const inputDrafts = new Map();
 function select(sid, srcId) {
   if (selected) inputDrafts.set(selected.sid + "@" + selected.src, $("msginput").value);
   selected = { src: srcId, sid };
+  histLoad(sid); // #95 输入历史按会话隔离：切会话换历史桶（histLoad 定义在下方，函数声明有提升）
   $("msginput").value = inputDrafts.get(sid + "@" + srcId) ?? "";
   undoReset($("msginput").value);
   document.body.classList.add("detail-open"); // ≤720px：详情覆盖层切换（桌面态该 class 无样式作用）
@@ -5266,6 +5269,7 @@ function select(sid, srcId) {
 
 function closeDetail() {
   selected = null;
+  histLoad(null); // #95 关详情回到空桶：此时按键不翻历史（无会话上下文）
   document.body.classList.remove("detail-open");
   sendImages = [];
   renderImgRow();
@@ -6403,19 +6407,30 @@ $("msginput").addEventListener("keydown", (e) => {
 // 带修饰键不参与（Alt/Ctrl+↑↓ 是切会话、Shift+↑↓ 是选区移动）；IME 组合中不抢键；
 // 空历史让位原生光标移动。浏览中编辑取回的内容不退出浏览态（readline 习惯：继续
 // ↑ 往更深翻，但 ↓ 翻到底还原的是"编辑后的草稿"）。历史仅记发送成功的文本（连续
-// 同文去重），localStorage cc.input.history 持久化、上限 200 条。
-const HIST_KEY = "cc.input.history";
+// 同文去重），上限 200 条。
+// #95 按会话隔离：历史分桶存 localStorage cc.input.hist.<sid>（旧全局键
+// cc.input.history 停用不迁移——跨会话混记正是本次要修的问题）；select 切会话换桶
+// 并重置浏览态，会话删除时清桶。
+const HIST_PREFIX = "cc.input.hist.";
 const HIST_MAX = 200;
+let histSid = null;    // 当前历史桶的会话 id（null = 未选会话，空桶）
 let inputHist = [];
-try { const h = JSON.parse(lsGet(HIST_KEY) || "[]"); if (Array.isArray(h)) inputHist = h.filter((x) => typeof x === "string"); } catch {}
 let histIdx = -1;      // -1 = 未浏览；0..len-1 指向历史（旧→新）
 let histDraft = "";    // 起翻时（或浏览中编辑后）的草稿，↓ 翻过最新一条时还原
+function histLoad(sid) {
+  if (histSid === sid) return;
+  histSid = sid;
+  histIdx = -1; histDraft = ""; // 换桶必重置浏览态（旧桶的浏览位对新桶无意义）
+  inputHist = [];
+  if (!sid) return;
+  try { const h = JSON.parse(lsGet(HIST_PREFIX + sid) || "[]"); if (Array.isArray(h)) inputHist = h.filter((x) => typeof x === "string"); } catch {}
+}
 function histPush(text) {
   histIdx = -1;
   if (!text || inputHist[inputHist.length - 1] === text) return;
   inputHist.push(text);
   if (inputHist.length > HIST_MAX) inputHist.shift();
-  lsSet(HIST_KEY, JSON.stringify(inputHist));
+  if (histSid) lsSet(HIST_PREFIX + histSid, JSON.stringify(inputHist));
 }
 function histApply(v) {
   $("msginput").value = v;
