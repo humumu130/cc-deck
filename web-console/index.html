@@ -1155,6 +1155,10 @@
      （暗=中性深 / 浅=中性墨），描边浅色降亮走 --sel-line（暗色 fallback 品牌线不变） */
   .card.sel { border-color: var(--sel-line, var(--brand-line)); box-shadow: 0 0 0 1px var(--sel-line, var(--brand-line)), var(--sel-shadow); }
   .card.historical { opacity: .75; }
+  /* #96 空闲置灰（手机 isIdleCard 同口径）：DONE/ERROR 静默 30min 降透明度退后，
+     hover 回一档便于辨认操作；#100 后台在跑卡豁免（不加 idle 类） */
+  .card.idle { opacity: .55; }
+  .card.idle:hover { opacity: .8; }
   .card-top { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
   .elapsed { font-size: 12px; color: var(--dim); font-variant-numeric: tabular-nums; }
   /* #362 标题恒第一行（灯+标题+总时长）：WORKING/空闲同构，状态切换不跳行；
@@ -4117,6 +4121,13 @@ window.addEventListener("resize", cfRestorePos);
 // 视同活跃（灯呼吸黄 + ⑂N 徽标 + 排序升 WORKING 档），消灭「派了后台任务却显示空闲」
 function bgRunning(s) { return (s.subagents ?? []).some((a) => !a.ended_at); }
 function bgCount(s) { return (s.subagents ?? []).filter((a) => !a.ended_at).length; }
+// #96 空闲置灰（对齐手机 isIdleCard 口径）：DONE/ERROR 且静默超 30 分钟降透明度退后，
+// 刚完成的保持鲜亮；#100 豁免后台在跑（等孩子 ≠ 死会话）。置灰由快照事件推动重渲
+const IDLE_DIM_MS = 30 * 60_000;
+function idleDimmed(s) {
+  return (s.status === "DONE" || s.status === "ERROR") && !bgRunning(s)
+    && Date.now() - (s.updated_at ?? s.started_at) > IDLE_DIM_MS;
+}
 // #98 补充（用户三条拍板）：①源强调色必须避开状态灯四色及其接近色——红=WAITING/
 // 橙红=ERROR（与品牌橙 0-2° 撞）/黄=WORKING/绿=DONE；②池内两两也须 ≥25°（同屏
 // 可辨，旧 7 色池 #4DD0E1~#29B6F6 仅 12° 不合格）；③不占品牌橙。安全区 hue
@@ -4247,7 +4258,7 @@ function render() {
   const showSrcTag = onlineSrcs > 1 || (onlineSrcs === 0 && ctxs.size > 1);
   // key 含 filterSrc：切 chip 时徽章显隐随聚合/单源变化，强制重渲即时生效
   // #49 key 含 pinned/saved：保存恢复切换/恢复点击后徽章与休眠态即时重渲
-  const key = (listCompact ? "C|" : "") + filterSrc + "|" + (showSrcTag ? "b1|" : "b0|") + list.map((e) => e.ctx.cfg.id + ":" + e.s.session_id + ":" + e.s.status + ":" + (e.s.title || "") + ":" + (e.s.action_summary || "") + ":" + (e.s.waiting_request ? 1 : 0) + ":" + ctxPct(e.s) + ":" + (e.s.pinned ? 1 : 0) + (isDormant(e.s) ? "d" : "") + (bgRunning(e.s) ? "g" : "")).join("|");
+  const key = (listCompact ? "C|" : "") + filterSrc + "|" + (showSrcTag ? "b1|" : "b0|") + list.map((e) => e.ctx.cfg.id + ":" + e.s.session_id + ":" + e.s.status + ":" + (e.s.title || "") + ":" + (e.s.action_summary || "") + ":" + (e.s.waiting_request ? 1 : 0) + ":" + ctxPct(e.s) + ":" + (e.s.pinned ? 1 : 0) + (isDormant(e.s) ? "d" : "") + (bgRunning(e.s) ? "g" : "") + (idleDimmed(e.s) ? "i" : "")).join("|");
   if (box.dataset.key !== key) {
     // 就地改名进行中：跳过重建（运行中会话 key 每秒变，会把编辑框冲掉）
     if (document.activeElement && document.activeElement.classList.contains("card-rename")) return;
@@ -4271,7 +4282,7 @@ function render() {
       const d = document.createElement("div");
       d.dataset.sid = s.session_id;
       d.dataset.src = ctx.cfg.id;
-      d.className = "card " + s.status + (listCompact ? " compact" : "") + (selected && selected.src === ctx.cfg.id && s.session_id === selected.sid ? " sel" : "") + (s.historical && !dormant ? " historical" : "") + (dormant ? " dormant" : "") + (s.status === "DONE" && bgRunning(s) ? " bg-live" : "");
+      d.className = "card " + s.status + (listCompact ? " compact" : "") + (selected && selected.src === ctx.cfg.id && s.session_id === selected.sid ? " sel" : "") + (s.historical && !dormant ? " historical" : "") + (dormant ? " dormant" : "") + (s.status === "DONE" && bgRunning(s) ? " bg-live" : "") + (idleDimmed(s) ? " idle" : "");
       if (dormant) d.title = "已保存休眠 · 点击恢复";
       // 根治④对称化：等待判定必须同时看 status——脱钩帧（waiting_request 残留 +
       // status 已翻走）不该再渲染【处理】按钮，否则按钮点开详情永远等不到弹窗
