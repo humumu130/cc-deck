@@ -700,11 +700,15 @@
   #connChip .chip-desk { display: inline-flex; align-items: center; flex: none; color: var(--dim); }
   #connChip.on .chip-desk { color: var(--done); }
   #connChip.wait .chip-desk { color: var(--working); }
-  /* 连接中三点脉动（2026-09-16）：connecting/reconnecting 时 chip 文本后跟随三点
-     依次亮起——与手机端 ConnDots 同语言，让"正在连接"可被一眼识别 */
+  /* 连接中三点（2026-09-16；#116 改 wave 式）：connecting/重试中时 chip 文本后三点
+     逐个亮起、全亮后齐灭循环（旧版三点同亮同灭，动感差，用户点单改）——复用
+     .pairing 的 pd-dots 步进 keyframes，与手机端 ConnDots、配对动效同一语言 */
   #connChip .conn-dots { display: none; margin-left: 2px; letter-spacing: 2px; color: var(--working); }
-  #connChip.connecting .conn-dots { display: inline-block; animation: conn-dots 1.2s infinite; }
-  @keyframes conn-dots { 0% { opacity: .15; } 50% { opacity: 1; } 100% { opacity: .15; } }
+  #connChip.connecting .conn-dots { display: inline-block; }
+  #connChip.connecting .conn-dots::after {
+    content: "·"; display: inline-block; width: 1.25em; text-align: left;
+    animation: pd-dots 1.4s steps(1, end) infinite;
+  }
   /* #39x 配对中/连接中：文字后三点依次出现循环（0%→1点 33%→2点 66%→3点 清空重来），
      JS 按状态文本（配对中、连接中）挂 .pairing；::after content 逐帧切换 + steps 保持 */
   @keyframes pd-dots {
@@ -2034,7 +2038,7 @@
 
     <div id="sideHead">
       <div id="runhint">连接中…</div>
-      <div id="connChip" title="服务器状态（点击查看列表）"><span class="chip-desk" id="connChipDesk"></span><span id="connText">未连接</span><i class="conn-dots">···</i></div>
+      <div id="connChip" title="服务器状态（点击查看列表）"><span class="chip-desk" id="connChipDesk"></span><span id="connText">未连接</span><i class="conn-dots"></i></div>
       <!-- #63 问号+弹层移入设置连接区（主面板顶栏不再放）；弹层内容在下方 body 末尾统一挂载 -->
       <button id="themeBtn" title="深浅色切换"><svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><circle cx="8" cy="8" r="3"/><path d="M8 1.5v2M8 12.5v2M1.5 8h2M12.5 8h2M3.4 3.4l1.4 1.4M11.2 11.2l1.4 1.4M12.6 3.4l-1.4 1.4M4.8 11.2l-1.4 1.4"/></svg></button>
     </div>

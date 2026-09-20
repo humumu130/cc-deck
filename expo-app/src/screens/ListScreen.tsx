@@ -1042,6 +1042,13 @@ export default function ListScreen({ sessions, connected, connText, onOpen, onNe
                       : "点右下角 ＋ 开始新会话"
                     : "点右下角 ＋ 开始新会话"}
             </Text>
+            {/* #116 正中间提示下面的三个点：重连中在居中提示下补 wave 三点（与右上角
+                chip 同组件同节拍），让"正在重连"在视觉正中也可被感知 */}
+            {snap.connState === "connecting" || snap.connState === "reconnecting" ? (
+              <View style={{ marginTop: 12 }}>
+                <ConnDots color={connColor} big />
+              </View>
+            ) : null}
           </View>
         }
       />
@@ -1299,18 +1306,36 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
   },
 });
 
-// 连接中三点脉动（2026-09-16）：与桌面端 conn-dots 同语言——让"正在连接"可被一眼识别
-function ConnDots({ color }: { color: string }) {
-  const op = useRef(new Animated.Value(0.15)).current;
+// 连接中三点（2026-09-16；#116 改 wave 式）：三个点逐个亮起、全亮后齐灭，循环——
+// 旧版整串 "···" 同亮同灭，动感差（用户点单）。实现：单个 progress 0→1 线性循环
+// （1.4s，与桌面端 pd-dots 同节拍），每点按错峰起点插值 opacity（0/0.33/0.66 起亮、
+// 0.85 齐灭），全程 native 驱动；形态与桌面 conn-dots::after、配对 pd-dots 同语言
+function ConnDots({ color, big }: { color: string; big?: boolean }) {
+  const p = useRef(new Animated.Value(0)).current;
   useEffect(() => {
-    const l = Animated.loop(Animated.sequence([
-      Animated.timing(op, { toValue: 1, duration: 600, useNativeDriver: true }),
-      Animated.timing(op, { toValue: 0.15, duration: 600, useNativeDriver: true }),
-    ]));
+    const l = Animated.loop(
+      Animated.timing(p, { toValue: 1, duration: 1400, easing: Easing.linear, useNativeDriver: true }),
+    );
     l.start();
     return () => l.stop();
-  }, [op]);
+  }, [p]);
+  const dotOp = (start: number) =>
+    p.interpolate({
+      // start 起亮（约 55ms 短爬升）→ 保持到 0.85 → 齐灭 → 灭到循环尾；
+      // 首点 start=0 时用 0.001 抬一下起点（inputRange 需严格递增）
+      inputRange: [0, start === 0 ? 0.001 : start, Math.min(start + 0.04, 0.84), 0.85, 0.9, 1],
+      outputRange: [0, 0, 1, 1, 0, 0],
+    });
   return (
-    <Animated.Text style={{ color, opacity: op, fontSize: 12, letterSpacing: 2, marginRight: -4 }}>···</Animated.Text>
+    <View style={{ flexDirection: "row", alignItems: "center", marginRight: big ? 0 : -4 }}>
+      {[0, 0.33, 0.66].map((s, i) => (
+        <Animated.Text
+          key={i}
+          style={{ color, fontSize: big ? 16 : 12, lineHeight: big ? 20 : 14, letterSpacing: 2, opacity: dotOp(s) }}
+        >
+          ·
+        </Animated.Text>
+      ))}
+    </View>
   );
 }
