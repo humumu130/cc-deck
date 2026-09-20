@@ -597,6 +597,7 @@ export class Bridge {
       this.sweepNoHookIdle();
       this.sweepWorkingIdle();
       this.sweepSubagents();
+      this.pollSubagentActivity();
       this.sweepStuckInputs();
     }, 3000); // 5s→3s（2026-09-17 用户反馈转轮行仍偏慢）：转轮行秒数每秒都在变，
     // 采样节奏就是用户可见的刷新率；3s 主循 + 2.5s 会话节流 ≈ 2.5~3s 级刷新
@@ -2392,6 +2393,108 @@ export class Bridge {
         x.ended_at ? now - x.ended_at < this.subagentEndTtlMs : now - x.started_at < this.subagentRunTtlMs,
       );
       if (kept.length !== s.subagents.length) this.mgr.setExternalSubagents(s.session_id, kept);
+    }
+  }
+
+  // ---------- #103 子 Agent 活性（HUD 风格：会话页能看到每个子 Agent 此刻在干什么）----------
+  // CLI 把每个子 Agent 的对话落盘在 <父transcript同目录>/<会话id>/subagents/agent-<agentId>.jsonl，
+  // 旁有 agent-<agentId>.meta.json 且自带 toolUseId（= Task 的 tool_use id，与 SubagentInfo.id
+  // 直接配对，前台/后台通吃——父 transcript 的 tool_result 只有结束才带 agentId，配不上「进行中」）。
+  // tail 出最后一个 assistant tool_use 即当前动作；act 变化才触发下发
+  // （setExternalSubagents 的 JSON 对比兜底，端上 3s 级感知）。文件缺失（旧版 CLI 无此
+  // 目录/已被清理）静默跳过，功能自动降级为无活性
+  private subagentAgentIds = new Map<string, string>(); // toolUseId -> agentId（meta 不变，配对缓存复用）
+
+  private resolveSubagentAgent(dir: string, toolUseId: string): string | null {
+    const cached = this.subagentAgentIds.get(toolUseId);
+    if (cached) return cached;
+    if (this.subagentAgentIds.size > 500) this.subagentAgentIds.clear();
+    let names: string[];
+    try { names = readdirSync(dir); } catch { return null; }
+    for (const n of names) {
+      if (!n.startsWith("agent-") || !n.endsWith(".meta.json")) continue;
+      try {
+        const meta = JSON.parse(readFileSync(path.join(dir, n), "utf8")) as { toolUseId?: string };
+        const agentId = n.slice("agent-".length, -".meta.json".length);
+        if (meta.toolUseId) this.subagentAgentIds.set(meta.toolUseId, agentId);
+      } catch {}
+    }
+    return this.subagentAgentIds.get(toolUseId) ?? null;
+  }
+
+  // 末 64KB tail 足够覆盖最近几十个回合的工具序列；首行可能被截半丢弃
+  private subagentActivity(file: string): string | null {
+    let st: ReturnType<typeof statSync>;
+    try { st = statSync(file); } catch { return null; }
+    const start = Math.max(0, st.size - 65_536);
+    let buf: Buffer;
+    try {
+      const fd = openSync(file, "r");
+      try {
+        buf = Buffer.alloc(st.size - start);
+        readSync(fd, buf, 0, buf.length, start);
+      } finally { closeSync(fd); }
+    } catch { return null; }
+    const lines = buf.toString("utf8").split("\n");
+    if (start > 0 && lines.length) lines[0] = "";
+    for (let i = lines.length - 1; i >= 0; i--) {
+      const l = lines[i]?.trim();
+      if (!l || !l.startsWith("{")) continue;
+      let e: { type?: string; message?: { content?: unknown[] } };
+      try { e = JSON.parse(l) as typeof e; } catch { continue; }
+      if (e.type !== "assistant" || !Array.isArray(e.message?.content)) continue;
+      const cs = e.message!.content as Array<{ type: string; name?: string; input?: unknown }>;
+      for (let k = cs.length - 1; k >= 0; k--) {
+        const c = cs[k];
+        if (c?.type === "tool_use" && c.name) return Bridge.describeToolUse(c.name, c.input);
+      }
+    }
+    return null;
+  }
+
+  // 工具调用 → 人话摘要：Bash 优先 description（无则命令前几个词），文件类取 basename，
+  // 检索类取 pattern/query——与 CLI/HUD 呈现粒度对齐（工具名 + 一眼可辨的目标）
+  private static describeToolUse(name: string, input: unknown): string {
+    const inp = (input ?? {}) as Record<string, unknown>;
+    const str = (v: unknown) => (typeof v === "string" ? v.trim() : "");
+    let gist = "";
+    switch (name) {
+      case "Bash": {
+        gist = str(inp.description) || str(inp.command).split(/\s+/).slice(0, 4).join(" ");
+        break;
+      }
+      case "Read": case "Edit": case "Write": case "NotebookEdit": {
+        gist = str(inp.file_path).split(/[\\/]/).pop() ?? "";
+        break;
+      }
+      case "Grep": case "Glob": { gist = str(inp.pattern) || str(inp.query); break; }
+      case "WebSearch": case "WebFetch": { gist = str(inp.query) || str(inp.url); break; }
+      case "Agent": case "Task": case "Skill": { gist = str(inp.description) || str(inp.skill); break; }
+      default: break;
+    }
+    return truncate(`${name}${gist ? " · " + gist : ""}`, 80);
+  }
+
+  // 活性轮询（主循环 3s 节拍）：只碰有 running 子 Agent 的会话；结束条目不采——
+  // 定格在结束前最后动作，随 TTL 清扫
+  private pollSubagentActivity(): void {
+    for (const s of this.mgr.snapshot()) {
+      if (!s.external || !s.subagents?.length || !s.subagents.some((x) => !x.ended_at)) continue;
+      const tp = this.transcriptPaths.get(s.session_id);
+      if (!tp) continue;
+      const dir = path.join(path.dirname(tp), path.basename(tp).replace(/\.jsonl$/i, ""), "subagents");
+      let next: SubagentInfo[] | null = null;
+      for (let i = 0; i < s.subagents.length; i++) {
+        const cur = s.subagents[i];
+        if (cur.ended_at) continue;
+        const agentId = this.resolveSubagentAgent(dir, cur.id);
+        if (!agentId) continue;
+        const act = this.subagentActivity(path.join(dir, `agent-${agentId}.jsonl`));
+        if (act === null || act === cur.act) continue;
+        next = next ?? s.subagents.map((x) => ({ ...x }));
+        next[i] = { ...next[i], act, act_at: Date.now() };
+      }
+      if (next) this.mgr.setExternalSubagents(s.session_id, next);
     }
   }
 

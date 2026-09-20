@@ -538,6 +538,47 @@ await wait(150);
   rmSync(T, { force: true });
 }
 
+// 28b. #103 子 Agent 活性（HUD 风格）：subagents/agent-*.meta.json 的 toolUseId 与条目配对 →
+//      tail 子 Agent transcript 最后一个 tool_use → act 随 SESSION_UPDATED 下发；结束定格最后动作
+{
+  const { writeFileSync, mkdirSync, appendFileSync } = await import("node:fs");
+  const T = fileURLToPath(new URL("../data/test-transcript.jsonl", import.meta.url));
+  rmSync(T, { force: true });
+  writeFileSync(T, JSON.stringify({ type: "assistant", message: { role: "assistant", content: [{ type: "text", text: "基线28b" }] } }) + "\n");
+  const sid = extId("cli-28b");
+  const subsOf = () => mgr.snapshot().find((s) => s.session_id === sid)?.subagents ?? [];
+  const poll = () => (bridge as unknown as { pollSubagentActivity(): void }).pollSubagentActivity();
+  await hook({ event: "UserPromptSubmit", session_id: "cli-28b", prompt: "活性测试回合", cli_pid: process.pid, transcript_path: T });
+  await hook({ event: "PreToolUse", session_id: "cli-28b", tool_name: "Agent", tool_use_id: "call_act1", tool_input: { description: "活性子代理", run_in_background: true }, permission_mode: "default" });
+  // 子 Agent 落盘布局（与 CLI 实际一致）：<父transcript去扩展名>/subagents/agent-<id>.{meta.json,jsonl}
+  const dir = T.replace(/\.jsonl$/, "") + "/subagents";
+  mkdirSync(dir, { recursive: true });
+  writeFileSync(dir + "/agent-ag28b01.meta.json", JSON.stringify({ toolUseId: "call_act1", agentType: "general-purpose", requestShape: "background" }));
+  const agFile = dir + "/agent-ag28b01.jsonl";
+  writeFileSync(agFile, JSON.stringify({ type: "user", message: { role: "user", content: [{ type: "text", text: "去干活" }] } }) + "\n");
+  poll();
+  assert(subsOf().find((x) => x.id === "call_act1")?.act === undefined, "28b no tool_use yet → no act");
+  appendFileSync(agFile, JSON.stringify({ type: "assistant", message: { role: "assistant", content: [{ type: "tool_use", id: "t1", name: "Bash", input: { description: "跑构建", command: "npm run build --flag" } }] } }) + "\n");
+  poll();
+  const a1 = subsOf().find((x) => x.id === "call_act1");
+  assert(a1?.act === "Bash · 跑构建" && typeof a1?.act_at === "number", "28b act picked from last tool_use (Bash description first)");
+  // 命令摘录退化路径 + 更新覆盖：Edit 无 description → 文件 basename
+  appendFileSync(agFile, JSON.stringify({ type: "assistant", message: { role: "assistant", content: [{ type: "text", text: "中间总结" }, { type: "tool_use", id: "t2", name: "Edit", input: { file_path: "/Users/x/dev/cc-deck/web-console/index.html" } }] } }) + "\n");
+  poll();
+  const a2 = subsOf().find((x) => x.id === "call_act1");
+  assert(a2?.act === "Edit · index.html" && (a2?.act_at ?? 0) >= (a1?.act_at ?? 0), "28b act updates to newest tool_use (file basename gist)");
+  // 结束定格：task-notification 收尾后 poll 不再改写 act
+  appendFileSync(T, JSON.stringify({ type: "user", message: { role: "user", content: [{ type: "text", text: "<task-notification>\n<tool-use-id>call_act1</tool-use-id>\n<status>completed</status>\n<summary>done</summary>" }] } }) + "\n");
+  await hook({ event: "PostToolUse", session_id: "cli-28b", tool_name: "Bash", tool_response: "ok", transcript_path: T });
+  appendFileSync(agFile, JSON.stringify({ type: "assistant", message: { role: "assistant", content: [{ type: "tool_use", id: "t3", name: "Read", input: { file_path: "/tmp/x.md" } }] } }) + "\n");
+  poll();
+  const a3 = subsOf().find((x) => x.id === "call_act1");
+  assert(a3?.ended_at !== undefined && a3?.act === "Edit · index.html", "28b ended entry freezes last act (no further polling)");
+  assert(events.some((e) => e.type === "SESSION_UPDATED" && Array.isArray((e.payload as { subagents?: { act?: string }[] }).subagents) && (e.payload as { subagents: { act?: string }[] }).subagents.some((x) => x.act === "Bash · 跑构建")), "28b SESSION_UPDATED carries act");
+  rmSync(T, { force: true });
+  rmSync(dir, { recursive: true, force: true });
+}
+
 // 29. 排队消息滞留输入框看门狗：滞留补发回车、WAITING 严禁、送达后不再触发、连续 3 次后放弃
 {
   const { writeFileSync } = await import("node:fs");

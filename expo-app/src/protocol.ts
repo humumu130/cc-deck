@@ -128,6 +128,10 @@ export interface SubagentEntry {
   bg: boolean;
   started_at: number;
   ended_at?: number;
+  // #103 活性（HUD 风格）：最近一次工具调用摘要（如 "Bash · npm test"），relay 轮询子
+  // Agent 自有 transcript 尾部得出；结束后定格为最后动作，随条目 TTL 清扫。旧 relay 无此字段
+  act?: string;
+  act_at?: number;
 }
 
 export interface LogEntry {

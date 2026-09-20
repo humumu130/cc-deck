@@ -1722,6 +1722,8 @@
   }
   .agrow { display: flex; gap: 10px; align-items: baseline; font-size: 12px; padding: 3px 0; }
   .agrow .ad { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  /* #103 活性：该子 Agent 最近一次工具调用（HUD 风格），运行中 dim / 结束 faint 定格 */
+  .agrow .aa { flex: none; max-width: 46%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 11px; }
   .agrow .at { color: var(--faint); font-size: 11px; font-variant-numeric: tabular-nums; }
 
   /* 轻量 Markdown（assistant_text/thinking，与手机端 md.tsx 同构）。
@@ -4602,7 +4604,9 @@ function renderDetail() {
       const run = !a.ended_at;
       const dur = fmtElapsed((a.ended_at ?? Date.now()) - a.started_at);
       return '<div class="agrow"><span class="ad" style="color:' + (run ? "var(--working)" : "var(--dim)") + '">' +
-        (run ? "⑂ " : "✓ ") + escapeHtml(a.desc) + '</span><span class="at">' + dur + "</span></div>";
+        (run ? "⑂ " : "✓ ") + escapeHtml(a.desc) + '</span>' +
+        (a.act ? '<span class="aa" style="color:' + (run ? "var(--dim)" : "var(--faint)") + '" title="当前动作">' + escapeHtml(a.act) + "</span>" : "") +
+        '<span class="at">' + dur + "</span></div>";
     }).join("");
   } else ag.style.display = "none";
 

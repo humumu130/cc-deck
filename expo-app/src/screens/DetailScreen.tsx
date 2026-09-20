@@ -2365,6 +2365,11 @@ export default function DetailScreen({ sid, onBack, initialView, ref }: { sid: s
                   <Text style={[d.agT, { color: run ? c.working : c.dim }]} numberOfLines={1}>
                     {run ? "⑂" : "✓"} {a.desc}
                   </Text>
+                  {a.act ? (
+                    <Text style={[d.agAct, { color: run ? c.dim : c.faint }]} numberOfLines={1}>
+                      {a.act}
+                    </Text>
+                  ) : null}
                   <Text style={[d.agTime, { color: run ? c.working : c.faint }]}>{dur}</Text>
                 </View>
               );
@@ -2899,6 +2904,7 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
   agRow: { flexDirection: "row", alignItems: "center", gap: 8, paddingVertical: 5 },
   agBoxFlow: { marginTop: 4, marginBottom: 10 },
   agT: { flex: 1, fontSize: 12 },
+  agAct: { flex: 1, fontSize: 11 }, // #103 活性：与描述平分行宽，超长省略（HUD 风格当前动作）
   agTime: { fontSize: 11, fontVariant: ["tabular-nums"] },
   histnote: { color: c.faint, fontSize: 11, textAlign: "center", marginBottom: 10 },
   trUser: {

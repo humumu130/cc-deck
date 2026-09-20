@@ -132,6 +132,11 @@ export interface SubagentInfo {
   bg: boolean;           // run_in_background
   started_at: number;
   ended_at?: number;     // 缺失 = 运行中；非 bg 由 PostToolUse 收尾，bg 由 transcript 的 <task-notification> 收尾
+  // #103 活性（HUD 风格）：该子 Agent 最近一次工具调用摘要（如 "Bash · npm test"），
+  // 由 relay 轮询子 Agent 自有 transcript 尾部得出；子 Agent 结束后定格为最后动作，
+  // 随条目 TTL 一同清扫。旧端无此字段——缺省不渲染即可
+  act?: string;
+  act_at?: number;       // 活性采样时间戳（端上可判断新鲜度）
 }
 
 // external 会话排队注入消息（EXT_INPUT 回显）。text=客户端展示短文本（带图消息为
