@@ -6274,6 +6274,25 @@ $("imgBtn").onclick = () => { const f = $("imgFile"); f.value = ""; f.click(); }
 $("imgFile").addEventListener("change", () => { void addImageFiles($("imgFile").files || []); });
 $("fileBtn").onclick = () => { const f = $("fileInput"); f.value = ""; f.click(); }; // #92 附加文件（任意类型）
 $("fileInput").addEventListener("change", () => { void addUploadFiles($("fileInput").files || []); });
+// #101 桌面壳内点击外链 → 系统浏览器：壳侧 INIT_SCRIPT 拦截在公司 Windows（WebView2）上
+// 疑未注入（实测点击无反应），页面层兜底同款捕获拦截——ccDeck 桥缺失时直接走 __TAURI__
+// IPC（withGlobalTauri 注入由 IPC 层保证，比 initialization_script 可靠）。defaultPrevented
+// 去重：壳层已处理过就不开第二次（两层注册时序在不同 WebView 上不定，先到先得）。
+// 打开失败兜底把 URL 复制进剪贴板，用户至少拿到链接；浏览器（无 __TAURI__）零行为。
+document.addEventListener("click", function (e) {
+  if (e.defaultPrevented) return;
+  const a = e.target && e.target.closest ? e.target.closest('a[href^="http"]') : null;
+  if (!a || !/^https?:/i.test(a.href)) return;
+  if (!window.__TAURI__) return;
+  e.preventDefault();
+  const p = window.ccDeck && window.ccDeck.openExternal
+    ? window.ccDeck.openExternal(a.href)
+    : window.__TAURI__.core.invoke("open_external", { url: a.href });
+  p.catch(() => {
+    try { navigator.clipboard.writeText(a.href); toast("呼出浏览器失败，链接已复制：" + a.href); }
+    catch (_) { toast("呼出浏览器失败：" + a.href); }
+  });
+}, true);
 // 粘贴贴图（网页端独有优势）：剪贴板含图片文件即进待发行；纯文本粘贴不受影响
 document.addEventListener("paste", (ev) => {
   const items = ev.clipboardData && ev.clipboardData.items;

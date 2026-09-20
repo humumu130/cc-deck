@@ -14,9 +14,11 @@
 // - 托盘：TrayIconBuilder + muda 菜单（显示主窗口 / 分隔线 / 退出），双击托盘唤起；
 //   关窗默认隐藏到托盘（quit 标志位放开）；托盘构建失败不致命——置 TRAY_OK=false，关窗直退。
 // - 外链：target=_blank 在 WebView2 内默认无动作（wry 拒开新窗），initialization_script
-//   捕获阶段拦截 a[target=_blank] + window.open，http(s) 走 open_external 命令 →
-//   tauri-plugin-opener 唤系统浏览器；on_navigation 只放行 tauri.localhost 源，
-//   等价 Electron 的 will-navigate 白名单。
+//   捕获阶段拦截 a[href^=http]（#101 放宽：不再限定 target）+ window.open，http(s) 走
+//   open_external 命令 → tauri-plugin-opener 唤系统浏览器；on_navigation 只放行
+//   tauri.localhost 源，等价 Electron 的 will-navigate 白名单。#101：公司 Windows 实测
+//   点击无反应（疑 initialization_script 在 WebView2 上未注入），页面层（web-console）
+//   另有同款兜底拦截，两层以 defaultPrevented 互相去重。
 // - 暂缺（与 Electron 的差异）：--smoke 冒烟模式（CI 侧用 Electron 包覆盖）。
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
@@ -51,7 +53,8 @@ if (!window.ccDeck) {
   };
 }
 document.addEventListener("click", (e) => {
-  const a = e.target && e.target.closest ? e.target.closest('a[target="_blank"]') : null;
+  if (e.defaultPrevented) return; // #101 双层去重：页面层兜底已处理过（两层时序在不同 WebView 上不定，先到先得）
+  const a = e.target && e.target.closest ? e.target.closest('a[href^="http"]') : null;
   if (a && /^https?:/i.test(a.href)) {
     e.preventDefault();
     window.ccDeck.openExternal(a.href).catch(() => {});
