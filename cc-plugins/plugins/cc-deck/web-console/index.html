@@ -38,8 +38,11 @@
     --send-btn: var(--panel-2);
     --send-btn-line: var(--border);
     --grad: linear-gradient(135deg, #E8985F, #C96442);
-    --working: #FFC53D;
-    --waiting: #F0524F;
+    /* #98 状态灯显眼度：两值各提一档（暗底 13.39:1 / 6.66:1），浅色不受影响。
+       #98 返工（装机反馈）：黄灯改真实红绿灯琥珀黄——原 #FFD84D 是浅柠檬黄，
+       明度 64% 发飘不显眼；#FFC400 饱和度顶格（暗底对比 ~12:1 仍充裕） */
+    --working: #FFC400;
+    --waiting: #FF6B68;
     --error: #FF7849;
     --done: #2BD98F;
     --mono: Consolas, "Cascadia Mono", "JetBrains Mono", monospace;
@@ -52,6 +55,8 @@
     --th-bg: rgba(148,163,190,.12);
     --toast-bg: #1A2334;
     --toast-shadow: 0 6px 24px rgba(0,0,0,.5);
+    /* #98 选中卡辉光去橙（列表最大常驻橙）：暗色中性深投影；描边仍走 --brand-line */
+    --sel-shadow: 0 4px 20px rgba(0,0,0,.35);
     --scroll: #1E2B42;
     --hov: #33436B;
     --hov2: #2C3D63;
@@ -83,7 +88,9 @@
        （原 #13 品牌色实底废止——两端三主题一个语言） */
     --send-btn: var(--panel-2);
     --send-btn-line: var(--border);
-    --working: #A16207;
+    /* #98 色相 35°→42°（与品牌橙拉开到 27°=暗色水准）：白底 5.26:1、hover 底 4.77:1，
+       顺带修复 lv-sec 黄字 hover 底 4.47:1 的 AA 超标 */
+    --working: #8F6400;
     --waiting: #DC2626;
     --error: #C2410C;
     --done: #047857;
@@ -96,6 +103,10 @@
     --th-bg: rgba(100,116,139,.10);
     --toast-bg: #FFFFFF;
     --toast-shadow: 0 6px 24px rgba(15,23,42,.16);
+    /* #98 选中卡降橙：辉光中性化 + 描边降亮一档（--brand-line #E07B4C 白底仅 2.95:1
+       且高亮橙线贴着黄灯；#C2603E 保品牌识别不再发浮） */
+    --sel-shadow: 0 4px 20px rgba(15,23,42,.12);
+    --sel-line: #C2603E;
     --scroll: #C3CBD9;
     --hov: #B9C4D6;
     --hov2: #B4C0D4;
@@ -120,10 +131,8 @@
   * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
   html, body { height: 100%; }
   body {
-    background:
-      radial-gradient(1200px 500px at 80% -10%, rgba(217,119,87,.08), transparent 60%),
-      radial-gradient(900px 400px at -10% 110%, rgba(201,100,66,.05), transparent 60%),
-      var(--bg-main);
+    /* #102 收敛：原两层品牌辐射光晕删除——#side/--bg-main 均为不透明层后是死层（不可见） */
+    background: var(--bg-main);
     color: var(--text);
     font: 14px/1.55 "Segoe UI", system-ui, -apple-system, "PingFang SC", "Microsoft YaHei UI", "Microsoft YaHei", sans-serif;
     display: flex; flex-direction: column; height: 100vh; overflow: hidden;
@@ -342,13 +351,13 @@
      行内 label 与右值/拨杆间距随收窄自然收拢，不再出现大留白。
      Token（设计说明 §6，抽屉局部变量，不动全应用）：
      背景 #060D16 / 侧栏 #08111D / 卡片 #0D1827 / 输入 #101D2D / 边框 #1D3046 /
-     主文字 #E5EDF7 / 次要 #8EA3BA / 弱 #53677E / Accent #F1844F / 成功 #55D98A；
+     主文字 #E5EDF7 / 次要 #8EA3BA / 弱 #53677E / Accent=全局 --brand-line（#102 治理⑥：消灭第三种橙 #F1844F）/ 成功 #55D98A；
      圆角 卡片10 / 按钮8 / 输入7 / Badge6；Section 间距 ~22px，卡内 padding 12-14px。
      五态齐备（Default/Hover/Active/Selected/Disabled），Selected=橙边+左橙条，不泛橙。 */
   #gearPop {
     --gp-bg: #060D16; --gp-rail: #08111D; --gp-card: #0D1827; --gp-input: #101D2D;
     --gp-border: #1D3046; --gp-text: #E5EDF7; --gp-dim: #8EA3BA; --gp-faint: #53677E;
-    --gp-accent: #F1844F; --gp-done: #55D98A;
+    --gp-accent: var(--brand-line); --gp-done: #55D98A; /* #102 治理⑥：改引用全局变量（原 #F1844F 第三种橙） */
     --gp-hov: rgba(142,163,186,.09); --gp-hov2: rgba(142,163,186,.16);
     position: absolute; top: 0; bottom: 0; left: 0; z-index: 45;
     width: min(528px, 100%); display: flex;
@@ -362,7 +371,7 @@
   html.light #gearPop {
     --gp-bg: #F3F5F9; --gp-rail: #EAEEF4; --gp-card: #FFFFFF; --gp-input: #F1F4F9;
     --gp-border: #D9DFE9; --gp-text: #1C2637; --gp-dim: #5F6C84; --gp-faint: #8D99AE;
-    --gp-accent: #C2603E; --gp-done: #047857;
+    --gp-accent: var(--brand); --gp-done: #047857; /* #102 治理⑥：浅色档引用化（原 #C2603E 即浅色 --brand 值） */
     --gp-hov: rgba(95,108,132,.08); --gp-hov2: rgba(95,108,132,.15);
   }
   #gearPop .panel { background: none; border: none; padding: 0; }
@@ -519,7 +528,7 @@
     font-size: 10px; line-height: 16px; text-align: center; font-weight: 700;
   }
   #gearPop .conn-form input { background: var(--gp-input); border-color: var(--gp-border); border-radius: 7px; color: var(--gp-text); }
-  #gearPop .conn-form input:focus { border-color: var(--gp-accent); box-shadow: 0 0 0 3px rgba(241,132,79,.16); }
+  #gearPop .conn-form input:focus { border-color: var(--gp-accent); box-shadow: 0 0 0 3px rgba(224,123,76,.14); } /* #102 治理⑥：rgba 变体随 --brand-line 归队 */
   #gearPop .conn-form.cloud #cfBox { background: var(--gp-input); border-color: var(--gp-border); border-radius: 8px; }
   #gearPop .conn-form.cloud .cf-sec { color: var(--gp-dim); }
   #gearPop .conn-form.cloud input { background: var(--gp-card); }
@@ -647,7 +656,7 @@
     transition: color .15s ease;
   }
   .lever-opt:hover { color: var(--text); }
-  .lever-opt.on { color: var(--brand); font-weight: 600; }
+  /* #102 治理：.lever-opt.on 旧全局规则删除（死规则——lever 实例全在 gearPop 内，恒被下条覆盖） */
   #gearPop .lever { background: var(--gp-input); border-color: var(--gp-border); }
   #gearPop .lever-thumb { background: var(--gp-card); border-color: var(--gp-border); }
   #gearPop .lever:hover .lever-thumb { border-color: rgba(142,163,186,.42); }
@@ -750,7 +759,7 @@
   .seg { display: flex; border: 1px solid var(--border); border-radius: 10px; overflow: hidden; background: var(--panel-2); flex: none; }
   .seg button { border: none; border-radius: 0; padding: 7px 13px; background: transparent; color: var(--dim); font-size: 12.5px; font-weight: 500; }
   .seg button + button { border-left: 1px solid var(--border); }
-  .seg button.on { background: var(--grad); color: #fff; font-weight: 600; }
+  .seg button.on { background: rgba(217,119,87,.12); border-color: rgba(217,119,87,.55); color: var(--text); font-weight: 600; } /* #102 治理⑧：全应用最后一处渐变整块填充选中态，对齐 #srcChips chips 语言 */
   /* 云桥表单（设置稿语言）：字段收进一张分组卡，小节标签上置、说明小字弱化；
      LAN（直连）态去卡化保持原平铺简洁——同一组输入，按 .cloud 切形态 */
   .cf-box { display: flex; flex-direction: column; gap: 9px; width: 100%; }
@@ -1087,14 +1096,15 @@
     display: none; flex-direction: column; align-items: flex-end; gap: 8px;
   }
   #confirmFloat.show { display: flex; }
+  /* #102 收敛④：待确认=注意语义贴 WAITING，不占品牌色——44px 常驻浮钮全家族中性化（数字加粗保持醒目） */
   .cf-btn {
     position: relative; z-index: 97; width: 44px; height: 44px; border-radius: 12px;
-    border: 1px solid rgba(217,119,87,.55); background: var(--toast-bg); color: var(--brand);
+    border: 1px solid var(--border); background: var(--toast-bg); color: var(--text-strong);
     font-size: 14px; font-weight: 700; cursor: pointer; box-shadow: var(--toast-shadow); flex: none;
     display: inline-flex; align-items: center; justify-content: center;
     font-variant-numeric: tabular-nums; touch-action: none;
   }
-  .cf-btn:hover { border-color: rgba(217,119,87,.9); }
+  .cf-btn:hover { border-color: var(--dim); }
   .cf-card {
     position: relative; z-index: 100; display: none; max-width: 340px; max-height: min(46vh, 380px); overflow-y: auto;
     background: var(--toast-bg); border: 1px solid var(--border); color: var(--text);
@@ -1102,12 +1112,12 @@
   }
   #confirmFloat.open .cf-card { display: block; }
   .cf-head { display: flex; align-items: center; gap: 8px; }
-  .cf-title { font-weight: 700; color: var(--brand); flex: 1; }
+  .cf-title { font-weight: 700; color: var(--text-strong); flex: 1; } /* #102 收敛④ */
   .cf-all {
-    background: rgba(217,119,87,.14); border: 1px solid rgba(217,119,87,.4); color: var(--brand);
+    background: var(--hov); border: 1px solid var(--border); color: var(--text-strong);
     font-weight: 700; font-size: 11.5px; border-radius: 8px; padding: 3px 10px; cursor: pointer; flex: none;
-  }
-  .cf-all:hover { background: rgba(217,119,87,.24); }
+  } /* #102 收敛④ */
+  .cf-all:hover { border-color: var(--dim); }
   .cf-close { color: var(--faint); padding: 3px 6px; font-size: 14px; cursor: pointer; flex: none; }
   .cf-close:hover { color: var(--text); }
   .cf-src { color: var(--faint); font-size: 11px; margin-top: 8px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -1115,11 +1125,11 @@
     display: flex; align-items: flex-start; gap: 7px; padding: 3px 5px; margin-top: 2px;
     color: var(--dim); font-size: 12px; line-height: 1.5; cursor: pointer; border-radius: 6px;
   }
-  .cf-row:hover { color: var(--text); background: rgba(217,119,87,.1); }
+  .cf-row:hover { color: var(--text); background: var(--hov); } /* #102 收敛④ */
   .cf-row .cf-t { flex: 1; min-width: 0; }
-  .cf-ref { color: var(--brand); font-weight: 700; }
+  .cf-ref { color: var(--text-strong); font-weight: 700; } /* #102 收敛④ */
   .cf-x { color: var(--faint); padding: 0 3px; font-size: 12px; flex: none; border-radius: 4px; cursor: pointer; }
-  .cf-x:hover { color: var(--text); background: rgba(217,119,87,.12); }
+  .cf-x:hover { color: var(--text); background: var(--hov); } /* #102 收敛④ */
   .cf-more { color: var(--faint); font-size: 11px; margin-top: 6px; }
 
   /* 侧栏底部：新建会话（表单 + 按钮，风格贴合会话卡片） */
@@ -1141,8 +1151,14 @@
   /* #13 巡检：悬停除描边外补一档底色（原只换边框色，与选中态难区分且静止视图无反馈）；
      选中态线条用 --brand-line（浅色下纯 --brand 偏红显脏） */
   .card:hover { border-color: var(--hov2); background: var(--panel-2); }
-  .card.sel { border-color: var(--brand-line); box-shadow: 0 0 0 1px var(--brand-line), 0 4px 20px rgba(217,119,87,.15); }
+  /* #98 选中卡辉光去橙（常态恒有一张卡选中=列表恒有一块橙）：投影改 --sel-shadow
+     （暗=中性深 / 浅=中性墨），描边浅色降亮走 --sel-line（暗色 fallback 品牌线不变） */
+  .card.sel { border-color: var(--sel-line, var(--brand-line)); box-shadow: 0 0 0 1px var(--sel-line, var(--brand-line)), var(--sel-shadow); }
   .card.historical { opacity: .75; }
+  /* #96 空闲置灰（手机 isIdleCard 同口径）：DONE/ERROR 静默 30min 降透明度退后，
+     hover 回一档便于辨认操作；#100 后台在跑卡豁免（不加 idle 类） */
+  .card.idle { opacity: .55; }
+  .card.idle:hover { opacity: .8; }
   .card-top { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
   .elapsed { font-size: 12px; color: var(--dim); font-variant-numeric: tabular-nums; }
   /* #362 标题恒第一行（灯+标题+总时长）：WORKING/空闲同构，状态切换不跳行；
@@ -1157,7 +1173,7 @@
      #399 第二行悬挂缩进至名称起点（灯 8px + c-head gap 8px），与首行文字块成组 */
   /* #54 三行卡层级：标题行（15px/--text-strong）不动；动作行降一档 12→11px、
      色从 --dim 回调到 --card-sub（介于原值与标题色之间）；元信息行 12→11px 保持 --faint */
-  .c-live { display: flex; align-items: center; gap: 8px; margin: 4px 0 0; padding-left: 6px; font-size: 11px; line-height: 16px; color: var(--card-sub); font-variant-numeric: tabular-nums; min-width: 0; min-height: 16px; } /* #58 统一卡高：与 .card-summary 同几何（上距 4 + 行盒 16），WORKING/空闲卡等高 */
+  .c-live { display: flex; align-items: center; gap: 8px; margin: 4px 0 0; padding-left: 4px; font-size: 11px; line-height: 16px; color: var(--card-sub); font-variant-numeric: tabular-nums; min-width: 0; min-height: 16px; } /* #58 统一卡高：与 .card-summary 同几何（上距 4 + 行盒 16），WORKING/空闲卡等高；#98 灯 8→10px 悬挂缩进 6→4 补偿 */
   .c-live .lv-dot { width: 9px; height: 9px; border-radius: 50%; background: var(--working); flex: none; animation: dot-breathe 2.4s ease-in-out infinite; }
   .c-live .lv-sec { color: var(--working); flex: none; }
   .c-live .lv-tok { flex: none; }
@@ -1236,12 +1252,29 @@
   /* #279⑨ 紧凑卡（对齐手机"简洁列表"三行）：状态点+标题+耗时 / 摘要 / 角标+改动+水位 */
   .card.compact { padding: 7px 11px 8px; border-radius: 10px; }
   .card.compact .c-row1 { display: flex; align-items: center; gap: 7px; }
-  .c-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--sc, var(--dim)); flex: none; }
+  /* #98 状态灯系统升级：8→10px（面积 +56%）+ 静态光圈（白底呈淡彩圈，深点+彩圈=
+     指示徽而非裸墨点）；WORKING 呼吸动画的 box-shadow 关键帧会自然接管光圈（预期） */
+  .c-dot { width: 10px; height: 10px; border-radius: 50%; background: var(--sc, var(--dim)); flex: none; box-shadow: 0 0 0 3px color-mix(in srgb, var(--sc, var(--dim)) 20%, transparent); }
   .c-dot.run { animation: dot-breathe 2.4s ease-in-out infinite; }
+  /* #98 浅色灯"LED 化"（浅色主杀器）：白底上深色灯是"印刷墨点"物理上无发光感——
+     亮芯（灯色提亮 45% 混白）给出发光感 + 深环保住边界对比（环色即原色值，全档 ≥3:1）。
+     用 border 做环：呼吸动画关键帧只覆写 box-shadow，动画期间环不消失 */
+  html.light .card .c-dot {
+    background: color-mix(in srgb, var(--sc, var(--dim)) 55%, #fff);
+    border: 1.5px solid var(--sc, var(--dim));
+  }
+  /* #98 返工（装机反馈）：终态空心环废止——用户拍板三端统一实心（手机端/右侧详情页
+     均实心，列表空心独树一帜）。DONE/ERROR 回落默认实心规则（浅色回落 LED 亮芯+环） */
+  /* #100 后台任务态：主回合 DONE 但仍有子 Agent 在跑——灯转 working 黄呼吸（--sc 覆写
+     带动光圈同色） */
+  .card.bg-live .c-dot { --sc: var(--working); background: var(--working); border: none; }
+  html.light .card.bg-live .c-dot { background: color-mix(in srgb, var(--working) 55%, #fff); border: 1.5px solid var(--working); }
+  /* #100 ⑂N 徽标：黄描边小胶囊（「在跑」语义色），his-badge 同形制 */
+  .bg-badge { font-size: 10px; color: var(--working); border: 1px solid color-mix(in srgb, var(--working) 45%, transparent); padding: 1px 6px; border-radius: 999px; flex: none; font-weight: 600; }
   .card.compact .card-title { flex: 1; min-width: 0; margin-top: 0; font-size: 13px; gap: 6px; }
   .card.compact .c-tt { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .card.compact .card-title input { font-size: 12.5px; }
-  .card.compact .card-summary { font-size: 11px; line-height: 15px; margin-top: 3px; padding-left: 6px; min-height: 15px; } /* #399 compact 灯列 = 8px 点 + 7px gap；#54 11.5→11；#58 行盒+占位双钉 15px */
+  .card.compact .card-summary { font-size: 11px; line-height: 15px; margin-top: 3px; padding-left: 4px; min-height: 15px; } /* #399 compact 灯列 = 8px 点 + 7px gap；#54 11.5→11；#58 行盒+占位双钉 15px；#98 灯 8→10px 缩进 6→4 补偿 */
   .card.compact .card-stats { font-size: 10px; line-height: 14px; margin-top: 5px; gap: 8px; min-height: 14px; } /* #54 10.5→10；#58 行盒+占位双钉 14px */
 
   /* ---------- 任务面板（详情页"任务" tab） ---------- */
@@ -1277,7 +1310,7 @@
   .task-ref { color: var(--brand); font-weight: 700; cursor: pointer; user-select: none; -webkit-user-select: none; }
   .task-ref:hover { text-decoration: underline; }
   /* #326 转录文件路径：可点（桌面壳打开/定位，浏览器复制） */
-  .fpath { color: var(--brand); cursor: pointer; word-break: break-all; }
+  .fpath { color: var(--dim); cursor: pointer; word-break: break-all; } /* #102 收敛②：橙→dim（可点性由 cursor 表达，hover 下划线见 :hover 规则） */
   .fpath:hover { text-decoration: underline; }
   #fpathPop {
     position: fixed; z-index: 95; display: none; flex-direction: column; gap: 2px;
@@ -1418,8 +1451,9 @@
   .af-act:hover { color: var(--dim); background: var(--hov); }
   .af-foot { display: flex; align-items: center; gap: 16px; padding: 14px 6px 30px; font-size: 11.5px; color: var(--dim); flex-wrap: wrap; } /* 视觉审查：暗色 --faint/11px 近乎不可见 → --dim（亮主题自动解析 #5F6C84）+ 左右 2px 贴边放宽 */
   .af-foot .k { border: 1px solid var(--border); border-radius: 5px; padding: 0 5px; margin-right: 5px; font-size: 10.5px; line-height: 1.6; }
-  .card-summary { color: var(--card-sub); font-size: 11.5px; line-height: 16px; margin-top: 4px; padding-left: 6px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-height: 16px; } /* #399 悬挂缩进对齐灯列；#54 动作行降档 12.5→11.5 + 提色；#58 行盒+min-height 双钉 16px，文本/空档等高 */
-  .card-summary.waiting { color: var(--working); }
+  .card-summary { color: var(--card-sub); font-size: 11.5px; line-height: 16px; margin-top: 4px; padding-left: 4px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-height: 16px; } /* #399 悬挂缩进对齐灯列；#54 动作行降档 12.5→11.5 + 提色；#58 行盒+min-height 双钉 16px；#98 灯 8→10px 缩进 6→4 补偿 */
+  /* #98 语义色修正：WAITING 卡摘要从 WORKING 黄回归红语义——黄只留给「在跑」 */
+  .card-summary.waiting { color: var(--waiting); }
   .card-stats { font-size: 11px; line-height: 15px; color: var(--faint); margin-top: 6px; display: flex; align-items: center; gap: 10px; font-variant-numeric: tabular-nums; min-height: 15px; } /* #54 元信息行降档 12→11；#58 行盒+min-height 双钉 15px，内容/空档等高 */
   .card-stats .add { color: var(--done); }
   .card-stats .del { color: var(--error); }
@@ -1459,10 +1493,8 @@
   /* #78 内容区主背景：--bg-main 之上仍叠品牌辐射光晕（原光晕只挂在 body，被实色侧栏/内容区盖住会丢） */
   #detail {
     flex: 1; display: flex; flex-direction: column; overflow: hidden;
-    background:
-      radial-gradient(1200px 500px at 80% -10%, rgba(217,119,87,.08), transparent 60%),
-      radial-gradient(900px 400px at -10% 110%, rgba(201,100,66,.05), transparent 60%),
-      var(--bg-main);
+    /* #102 收敛重点①：删双层品牌辐射光晕（现存最大面积常驻品牌色）回到纯底色 */
+    background: var(--bg-main);
   }
   #dhead { padding: 12px 20px 0; border-bottom: 1px solid var(--border); background: var(--glass-soft); flex: none; }
   #backBtn { display: none; margin-left: -8px; margin-bottom: 6px; }
@@ -1603,17 +1635,18 @@
   /* AI 消息：无气泡，头像 + 名称行（WorkBuddy 式），正文直接排版 */
   .msg-ai { margin: 22px 0; } /* #13 同 .msg-user */
   .msg-ai .ai-head { display: flex; align-items: center; gap: 9px; margin-bottom: 7px; }
+  /* #102 收敛③：去橙渐变/投影——每条 AI 消息一枚 28px 橙圆成列是转录区最高频品牌重复；
+     ✻ glyph 保留，底转中性面板色（保守版=只删投影，本版按拍板走全量） */
   .msg-ai .ai-ava {
-    width: 28px; height: 28px; border-radius: 50%; background: var(--grad);
+    width: 28px; height: 28px; border-radius: 50%; background: var(--panel-2);
     display: flex; align-items: center; justify-content: center;
-    color: #fff; font-size: 14px; flex: none;
-    box-shadow: 0 1px 8px rgba(217,119,87,.3);
+    color: var(--dim); font-size: 14px; flex: none; border: 1px solid var(--line);
   }
   .msg-ai .ai-name { font-weight: 650; font-size: 13.5px; }
   .msg-ai .ai-body { padding-left: 37px; min-width: 0; }
   .msg-ai .mt { color: var(--faint); font-size: 10.5px; font-variant-numeric: tabular-nums; }
   /* 命令行复制按钮：hover 行尾显现 */
-  .copy-btn { opacity: 0; cursor: pointer; color: var(--brand); font-size: 11px; padding: 2px 6px; border-radius: 6px; border: 1px solid var(--line); background: var(--panel); flex: none; transition: opacity .12s; }
+  .copy-btn { opacity: 0; cursor: pointer; color: var(--dim); font-size: 11px; padding: 2px 6px; border-radius: 6px; border: 1px solid var(--line); background: var(--panel); flex: none; transition: opacity .12s; } /* #102 收敛②：橙→dim */
   .trow:hover .copy-btn, .copy-btn:hover { opacity: 1; }
   .copy-btn:active { transform: scale(.94); }
   .msg-sys { text-align: center; color: var(--faint); font-size: .8em; margin: 10px 0; }
@@ -1637,7 +1670,7 @@
   .tline:hover { background: var(--code-bg); }
   .tline .tico { flex: none; color: var(--faint); }
   .tline .tname { font-weight: 600; }
-  .tname { color: var(--brand-2); font-weight: 700; }
+  .tname { color: var(--dim); font-weight: 600; } /* #102 收敛②之首：工具行是转录行数最多元素，橙字量立减约八成 */
   .tres { color: var(--faint); }
   .ds-add { color: var(--done); font-family: var(--mono); font-size: .95em; }
   .ds-del { color: var(--error); font-family: var(--mono); font-size: .95em; }
@@ -1652,7 +1685,7 @@
   .diff .d { color: var(--waiting); background: rgba(240,82,79,.06); }
   .diff .h { color: var(--working); background: rgba(255,197,61,.06); }
   .diff .c { color: var(--faint); }
-  .x-full { color: var(--brand); font-size: .78em; cursor: pointer; display: inline-block; user-select: none; }
+  .x-full { color: var(--dim); font-size: .78em; cursor: pointer; display: inline-block; user-select: none; } /* #102 收敛②：橙→dim */
   .msg-ai .x-full { margin: 7px 0 0 2px; }
   .x-full:hover { text-decoration: underline; }
   .stream-cur { color: var(--working); animation: blinkcur 1s infinite; font-weight: 700; }
@@ -1685,6 +1718,8 @@
   }
   .agrow { display: flex; gap: 10px; align-items: baseline; font-size: 12px; padding: 3px 0; }
   .agrow .ad { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  /* #103 活性：该子 Agent 最近一次工具调用（HUD 风格），运行中 dim / 结束 faint 定格 */
+  .agrow .aa { flex: none; max-width: 46%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 11px; }
   .agrow .at { color: var(--faint); font-size: 11px; font-variant-numeric: tabular-nums; }
 
   /* 轻量 Markdown（assistant_text/thinking，与手机端 md.tsx 同构）。
@@ -1736,7 +1771,8 @@
   }
   #inputcard:focus-within {
     border-color: var(--brand);
-    box-shadow: 0 0 0 3px rgba(217,119,87,.22), 0 2px 18px rgba(217,119,87,.12); /* #16 聚焦态加强：原 .13 光晕在深底上几乎不可辨 */
+    /* #102：删第二层 18px 大光晕（扩散过大），保留描边+3px 聚焦环（a11y 资产） */
+    box-shadow: 0 0 0 3px rgba(217,119,87,.22);
   }
   /* ---------- 回到底部浮钮（对齐手机端形态）：消息 tab 下滚动停止且距底 >80px 才浮现；
      绝对定位挂 #cmdbar（不随 #timeline 滚动），bottom:100%+10px 即悬停于输入区上方 10px ---------- */
@@ -1830,6 +1866,13 @@
     background: var(--panel);
   }
   #imgrow .img-x:hover { color: var(--text); border-color: var(--hov); }
+  /* #92 待发文件 chip：与缩略图同高，文件名截断 */
+  #imgrow .file-cell {
+    position: relative; display: flex; align-items: center; height: 56px; max-width: 170px;
+    padding: 0 8px; border: 1px solid var(--border); border-radius: 10px;
+    background: var(--bg-soft); font-size: 12px; color: var(--text);
+  }
+  #imgrow .file-cell .file-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
   #hisnote { display: none; padding: 14px 20px; border-top: 1px solid var(--border); color: var(--faint); font-size: 13px; background: var(--glass); flex: none; }
 
@@ -1883,10 +1926,11 @@
   #undoBar.show { opacity: 1; transform: translateY(0); pointer-events: auto; }
   #undoBar .ub-t { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   #undoBar .ub-btn {
-    flex: none; background: rgba(217,119,87,.14); border: 1px solid rgba(217,119,87,.4);
-    color: var(--brand); font-weight: 700; font-size: 12.5px; border-radius: 8px; padding: 4px 12px;
+    /* #102 收敛⑤：「撤销」是普通动作，中性化 */
+    flex: none; background: var(--hov); border: 1px solid var(--border);
+    color: var(--text-strong); font-weight: 700; font-size: 12.5px; border-radius: 8px; padding: 4px 12px;
   }
-  #undoBar .ub-btn:hover { background: rgba(217,119,87,.24); }
+  #undoBar .ub-btn:hover { border-color: var(--dim); }
 
   /* #52 web 通知悬浮框（USER_NOTE）：taskDone 绿框上方的同语言通知卡——右下浮框
      （toast-bg/细边框/圆角12/投影）默认占 undoBar 槽位（绿框小钮 44px 上缘 + 10px 空隙）；
@@ -2199,6 +2243,8 @@
         <span id="dbadge" class="status-chip"></span>
         <span class="elapsed" id="delapsed"></span>
         <span class="spacer"></span>
+        <!-- #104 停止入口挪到状态栏（标题/状态 chip 行右端，空间足够；仅运行中出现） -->
+        <button id="stopBtn" title="停止会话">⏹ 停止</button>
         <button id="renameBtn" class="ghost" title="重命名会话">✎</button>
       </div>
       <div id="dsub">
@@ -2253,17 +2299,18 @@
     </div>
     <div id="imgrow"></div>
     <input type="file" id="imgFile" accept="image/*" multiple hidden>
+    <input type="file" id="fileInput" multiple hidden>
     <div id="cmdbar">
       <div id="slashbox"></div>
       <div id="inputcard">
         <div class="ic-top">
           <span class="ic-at" id="atBtn" title="输入">@</span>
-          <textarea id="msginput" rows="1" placeholder="发送消息（追加输入 / 开新回合）"></textarea>
+          <textarea id="msginput" rows="1" placeholder="发送消息（追加输入 / 开新回合）· ↑ 翻阅本会话历史"></textarea>
         </div>
         <div class="ic-bottom">
           <div class="ic-left">
             <button id="imgBtn" title="添加图片（最多 4 张，也可直接 Ctrl+V 粘贴）"><svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M8.7 6.8l1.05-1.9a1.5 1.5 0 0 1 1.3-.75h1.9a1.5 1.5 0 0 1 1.3.75l1.05 1.9"/><rect x="3.4" y="6.8" width="17.2" height="13" rx="3"/><circle cx="12" cy="13.2" r="3.5"/></svg></button>
-            <button id="stopBtn" title="停止会话">⏹ 停止</button>
+            <button id="fileBtn" title="附加文件（最多 2 个，单个 20MB，发送时落盘到电脑由 CLI 读取）"><svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M21.4 11.05 12.25 20.2a5.5 5.5 0 0 1-7.78-7.78l8.49-8.48a3.5 3.5 0 1 1 4.95 4.95l-8.49 8.48a1.5 1.5 0 0 1-2.12-2.12l7.78-7.78"/></svg></button>
           </div>
           <button id="sendBtn" title="发送（Enter）">➤</button>
         </div>
@@ -2621,7 +2668,7 @@ function ensureCtx(cfg) {
       failKind: "", retryAt: 0, retryNote: "", // #40web 失败归因/重试倒计时（见 setConn/scheduleReconnect）
       pendingPair: null, pairTimer: 0, pingTimer: null, lastPong: 0,
       transport: "ws", pollGen: 0, pollSid: "", pollBase: "",
-      wsFails: 0, postFails: 0, hsTimer: 0, discTried: false, discTimer: 0,
+      wsFails: 0, postFails: 0, hsTimer: 0, lanHsTimer: 0, discTried: false, discTimer: 0,
     };
     ctxs.set(cfg.id, c);
   } else c.cfg = cfg;
@@ -2634,6 +2681,7 @@ function disconnectCtx(ctx, text) {
   stopCloudPing(ctx);
   clearTimeout(ctx.reconnectTimer); ctx.reconnectTimer = 0;
   clearTimeout(ctx.hsTimer); ctx.hsTimer = 0;
+  clearTimeout(ctx.lanHsTimer); ctx.lanHsTimer = 0; // #85 LAN 握手看门狗（防孤儿 ctx 复活）
   clearTimeout(ctx.discTimer); ctx.discTimer = 0;
   try { ctx.ws && ctx.ws.close(); } catch {}
   ctx.ws = null;
@@ -2821,13 +2869,27 @@ function connectLan(ctx) {
   try { ctx.ws && ctx.ws.close(); } catch {}
   const w = new WebSocket(url);
   ctx.ws = w;
+  // LAN 握手看门狗（#85）：与云路径 hsTimer 同款纪律——休眠唤醒/网络切换后 TCP
+  // connect 可无限挂在 CONNECTING（onopen/onclose 都不来），visibilitychange 只救
+  // reconnecting/offline 不救 connecting，卡死即永远「连接中」。8s 未开门掐掉走
+  // 重连退避（正常 LAN 握手 <1s，8s 只杀真挂死）
+  clearTimeout(ctx.lanHsTimer);
+  ctx.lanHsTimer = setTimeout(() => {
+    ctx.lanHsTimer = 0;
+    if (ctx.ws !== w || w.readyState !== WebSocket.CONNECTING) return;
+    try { w.close(); } catch {}
+    setConn(ctx, "offline", "连接超时", "transport");
+    scheduleReconnect(ctx);
+  }, 8000);
   w.onopen = () => {
     if (ctx.ws !== w) return;
+    clearTimeout(ctx.lanHsTimer); ctx.lanHsTimer = 0;
     ctx.reconnectDelay = RETRY_BASE_MS; // #40web 连上即归零退避
     setConn(ctx, "online", "已连接");
   };
   w.onclose = () => {
     if (ctx.ws !== w) return;
+    clearTimeout(ctx.lanHsTimer); ctx.lanHsTimer = 0;
     // #40web 传输层失败：绝不引导配对码，归因 transport 走自动重试 + 手动重试钮
     setConn(ctx, "offline", "已断开", "transport");
     scheduleReconnect(ctx);
@@ -2907,6 +2969,15 @@ function connectCloudFor(ctx, manual) {
     clearTimeout(ctx.hsTimer); ctx.hsTimer = 0;
     ctx.reconnectDelay = RETRY_BASE_MS; // #40web 连上即归零退避
     if (!peer || pair) {
+      // #88 扫码登录态（pc 空）连接一开就预取在线 relay 列表：回传帧是一次性的，
+      // 手机授权 ack 到达时 pendingPair 若还锚在烘焙旧身份（生产 relay rd/rk）就
+      // 解不开、丢弃即终局。此前发现帧要等空码 pair_req 撞 ROUTE_MISS 后才补发，
+      // 多耗一个 RTT（轮询传输更是数秒），用户赶在窗口内扫码即复现「无法解密」。
+      // 空码 pair_req 本是信标（relay 只记 sighting 不回包），发现帧并行不冲突
+      if (pair && pair.pc === "" && !ctx.discTried) {
+        ctx.discTried = true;
+        discoverRelay(ctx);
+      }
       sendPairReq(ctx, pair, dev);
       startPairWatchdog(ctx);
       return;
@@ -3017,6 +3088,12 @@ function startPollTransport(ctx, base, token, dev, pair) {
   const peer = cloudPeerOf(ctx.cfg);
   if (!peer || pair) {
     setConn(ctx, "connecting", "配对中(轮询)");
+    // #88 扫码登录态预取发现帧（与 ws onopen 对称）：轮询传输下 ROUTE_MISS 补发
+    // 路径要跨多个轮询周期才轮到，出码后扫码秒回 ack 更容易撞上旧锚窗口
+    if (pair && pair.pc === "" && !ctx.discTried) {
+      ctx.discTried = true;
+      discoverRelay(ctx);
+    }
     sendPairReq(ctx, pair, dev);
     startPairWatchdog(ctx);
   } else {
@@ -3085,12 +3162,17 @@ function onCloudText(ctx, text) {
     //（relay 换过密钥对）时清掉，换烘焙 rd/rk 携同一配对码重试（一次性自愈）。
     // 广播态（pair.rd 空串）不适用：换烘焙 rd 会退回单播猜目标
     const pair = ctx.pendingPair || pendingPairOf(cfg.id);
+    // 扫码登录态（pc 空）对 ROUTE_MISS 一律静默：空码 pair_req 只是信标，锚的
+    // 意义只在解 ack。#88 预取发现帧与信标并行发出，RELAYS 可能先到已换锚
+    //（fresh 身份来自发现帧，比烘焙值可信），迟到的 ROUTE_MISS 若走「回退烘焙
+    // 重试」会把 fresh 锚撤销——恰好复现「无法解密」原案
+    if (pair && pair.pc === "") return;
     if (pair && pair.rd && BAKED_RELAY.rd && BAKED_RELAY.rd !== pair.rd) {
       resetCloudPairing(cfg);
       ctx.pendingPair = { rd: BAKED_RELAY.rd, rk: BAKED_RELAY.rk, pc: pair.pc };
       setPendingPair(cfg.id, ctx.pendingPair);
       console.log("[cloud:" + cfg.name + "] 配对 ROUTE_MISS，改用烘焙 relay 身份重试");
-      if (ctx.pendingPair.pc) sendPairReq(ctx, ctx.pendingPair, devId(ckp.publicKey, "wb")); // 扫码登录态不发 pair_req，只等授权
+      if (ctx.pendingPair.pc) sendPairReq(ctx, ctx.pendingPair, devId(ckp.publicKey, "wb"));
       startPairWatchdog(ctx); // 重置看门狗：换 rd 重试不与旧 rd 共享 3 次预算
       return;
     }
@@ -3145,6 +3227,21 @@ function onCloudText(ctx, text) {
         console.log("[cloud:" + cfg.name + "] 多 relay 无锚点，转配对码广播定位（候选 " + all.length + " 台）");
         setConn(ctx, "connecting", "定位持码服务器…");
         sendPairReq(ctx, ctx.pendingPair, devId(ckp.publicKey, "wb"));
+        startPairWatchdog(ctx);
+        return;
+      }
+      if (pair && !pair.pc && all.length > 1) {
+        // #88 扫码登录态多 relay 歧义：无码可广播定位，但不必「歧义即停」——QR 无
+        // rd（fresh 未置）时手机走自己的活动源授权，回传由活动源密封，身份无法
+        // 预知。把在线候选公钥挂 cands 供 unseal 兜底逐个试解。安全性不变：页面
+        // 从未暴露自己的公钥，能对它密封 pair_ack 的只有经手机授权拿到 pk 的那台
+        // relay，密封本身即身份证明（wasLoginQr 采信路径本就豁免 rd 比对）。rd/rk
+        // 清空沿用广播态形态：看门狗重发的空码 pair_req 变广播（无路由即无
+        // ROUTE_MISS），不再撞烘焙 rd 离线反复触发重连震荡
+        ctx.pendingPair = { rd: "", rk: "", pc: "", cands: all.filter((x) => x.rk) };
+        setPendingPair(cfg.id, ctx.pendingPair);
+        console.log("[cloud:" + cfg.name + "] 扫码登录遇多 relay（" + all.length + " 台），挂候选公钥等待授权");
+        setConn(ctx, "connecting", "等待手机扫码授权");
         startPairWatchdog(ctx);
         return;
       }
@@ -3676,8 +3773,11 @@ function onEvent(ctx, msg) {
     }
     case "SESSION_UPDATED": {
       const s = ctx.sessions.get(sid); if (!s) break;
-      s.status = msg.payload.status;
-      s.action_summary = msg.payload.action_summary;
+      // #93 防御：部分帧（compacting 等）不带 status/summary——undefined 不采信，
+      // 否则把会话状态覆写成 undefined 后 render 的 s.status.toLowerCase() 会崩掉
+      // 整条渲染线（UI 冻结：提问不弹窗、状态停旧值，外部 CLI 会话每回合必踩）
+      if (msg.payload.status !== undefined) s.status = msg.payload.status;
+      if (msg.payload.action_summary !== undefined) s.action_summary = msg.payload.action_summary;
       if (msg.payload.stats) s.stats = msg.payload.stats;
       // 审批弹窗死锁根治④：waiting_request 与 status 同进退——新 relay 恒随 UPDATE
       // 帧携带权威值（null = 已清）直接采信；旧 relay 不带此字段时，状态离开
@@ -3736,6 +3836,8 @@ function onEvent(ctx, msg) {
     }
     case "SESSION_DELETED": {
       ctx.sessions.delete(sid);
+      // #95 会话删除即清它的输入历史桶（无 lsDel 封装，直接删；无桶时静默）
+      try { localStorage.removeItem("cc.input.hist." + sid); } catch {}
       // #279① 服务器确认删除：已提交项出列（保持隐藏的使命完成）；挂起中的
       // 删除被别处终结 → 取消挂起，防超时后误发命令
       deleting.delete(sid);
@@ -4016,12 +4118,25 @@ window.addEventListener("resize", cfRestorePos);
     window.addEventListener("pointercancel", end);
   });
 })();
-const SRC_COLORS = ["#D97757", "#5B9DFF", "#2BD98F", "#FFC53D", "#C792EA", "#F06292", "#4DD0E1", "#7E57C2"];
-function srcColor(id) {
-  let h = 0;
-  for (const ch of String(id)) h = ((h * 31) + ch.charCodeAt(0)) >>> 0;
-  return SRC_COLORS[h % SRC_COLORS.length];
+// #100 后台任务态判定：主回合已 DONE 但仍有未结束子 Agent（⑂）在跑——列表卡片
+// 视同活跃（灯呼吸黄 + ⑂N 徽标 + 排序升 WORKING 档），消灭「派了后台任务却显示空闲」
+function bgRunning(s) { return (s.subagents ?? []).some((a) => !a.ended_at); }
+function bgCount(s) { return (s.subagents ?? []).filter((a) => !a.ended_at).length; }
+// #96 空闲置灰（对齐手机 isIdleCard 口径）：DONE/ERROR 且静默超 30 分钟降透明度退后，
+// 刚完成的保持鲜亮；#100 豁免后台在跑（等孩子 ≠ 死会话）。置灰由快照事件推动重渲
+const IDLE_DIM_MS = 30 * 60_000;
+function idleDimmed(s) {
+  return (s.status === "DONE" || s.status === "ERROR") && !bgRunning(s)
+    && Date.now() - (s.updated_at ?? s.started_at) > IDLE_DIM_MS;
 }
+// #98 补充（用户三条拍板）：①源强调色必须避开状态灯四色及其接近色——红=WAITING/
+// 橙红=ERROR（与品牌橙 0-2° 撞）/黄=WORKING/绿=DONE；②池内两两也须 ≥25°（同屏
+// 可辨，旧 7 色池 #4DD0E1~#29B6F6 仅 12° 不合格）；③不占品牌橙。安全区 hue
+// 190°-302°，5 色等距 28°：青 190/蓝 218/靛 246/紫 274/洋红 302，明度交替拉开
+// ——120° 带内 25° 间距数学上限 ~5 色，源 >5 时取模循环复用（现实源数 ≤5）；
+// 与手机端 ListScreen SRC_COLORS 逐字节对齐。已过色距校验：对状态色（含明暗
+// 双值）+品牌橙全部 ≥25°，池内两两 28°
+const SRC_COLORS = ["#2FBEDA", "#5C94F5", "#665AD8", "#B886DF", "#CD51C8"];
 // 源配色键（#294 审查修复）：跨端稳定身份——云源取 relay 设备 id（cloud.rd）、LAN 源
 // 取 wsUrl，同一台服务器在手机/网页两端同色（本地 uuid 两端各异不可用；与手机端
 // SourceStatus.colorKey 同构）
@@ -4042,15 +4157,14 @@ function shortName(n) {
 function srcDisplayName(cfg) {
   return shortName(cfg.name);
 }
-// 同屏配色去重（与手机端同规则）：按 colorKey 稳定排序分配调色板序号，源数≤8 必不重
-const srcColorCache = new Map();
+// 同屏配色去重（与手机端同规则）：按 colorKey 稳定排序分配调色板序号，源数≤5 必不重
+// #91 修复：去掉跨快照缓存——旧实现首命中即固定色板序号，servers 后续增删时新条目
+// 按新快照取序、旧条目沿用旧序，不同源可分到同色（用户实测「本机」与「Mac」同橙）。
+// servers 规模个位数，每次现算排序开销可忽略；同帧统一快照分配才是「必不重」的成立前提
 function srcColorByKey(cfg) {
   const key = srcColorKey(cfg);
-  if (!srcColorCache.has(key)) {
-    const all = servers.map((x) => srcColorKey(x)).sort();
-    srcColorCache.set(key, SRC_COLORS[all.indexOf(key) % SRC_COLORS.length]);
-  }
-  return srcColorCache.get(key);
+  const all = servers.map((x) => srcColorKey(x)).sort();
+  return SRC_COLORS[all.indexOf(key) % SRC_COLORS.length];
 }
 function srcBadgeHtml(cfg) {
   // #399 徽章填色：整胶囊填源色实底、去圆点；字色按源色亮度自适应（亮色源用深字，
@@ -4128,13 +4242,16 @@ function render() {
   // 排序：等待 > 运行 > 错误 > 完成；组内按更新时间倒序（#279E 对齐手机口径：
   // 新完成的会话紧跟活跃段顶部，不再按启动时间沉到 DONE 组底部像"消失"）
   const order = { WAITING: 0, WORKING: 1, ERROR: 2, DONE: 3 };
+  // #100 后台在跑的 DONE 卡视同 WORKING 档（在干活不上沉）；组内排序不变
+  const rankOf = (s) => (s.status === "DONE" && bgRunning(s) ? 1 : order[s.status]);
   let entries = allSessions();
   if (filterSrc !== "all") entries = entries.filter((e) => e.ctx.cfg.id === filterSrc);
-  if (collapseIdle) entries = entries.filter((e) => e.s.status !== "DONE");
+  // 折叠空闲豁免后台在跑卡（#100）：等孩子 ≠ 空闲
+  if (collapseIdle) entries = entries.filter((e) => e.s.status !== "DONE" || bgRunning(e.s));
   // #279① 挂起删除（4s 撤销窗口内）与已提交删除（待 SESSION_DELETED 确认）的卡片保持隐藏
   entries = entries.filter((e) => e.s.session_id !== pendingDel.sid && !deleting.has(e.s.session_id));
   const list = entries.sort((a, b) =>
-    (order[a.s.status] - order[b.s.status]) || ((b.s.updated_at || b.s.started_at) - (a.s.updated_at || a.s.started_at)));
+    (rankOf(a.s) - rankOf(b.s)) || ((b.s.updated_at || b.s.started_at) - (a.s.updated_at || a.s.started_at)));
   // #50 徽章显隐按「在线源数」判定：唯一在线源时无归属歧义，全部视图下也不渲染；
   // 全部离线时回落按配置源数>1（旧行为，离线卡的来源仍可辨）。
   // 显隐因子入 key：源上下线会翻转显隐，key 不含则不重渲、徽章残留/缺失
@@ -4142,7 +4259,7 @@ function render() {
   const showSrcTag = onlineSrcs > 1 || (onlineSrcs === 0 && ctxs.size > 1);
   // key 含 filterSrc：切 chip 时徽章显隐随聚合/单源变化，强制重渲即时生效
   // #49 key 含 pinned/saved：保存恢复切换/恢复点击后徽章与休眠态即时重渲
-  const key = (listCompact ? "C|" : "") + filterSrc + "|" + (showSrcTag ? "b1|" : "b0|") + list.map((e) => e.ctx.cfg.id + ":" + e.s.session_id + ":" + e.s.status + ":" + (e.s.title || "") + ":" + (e.s.action_summary || "") + ":" + (e.s.waiting_request ? 1 : 0) + ":" + ctxPct(e.s) + ":" + (e.s.pinned ? 1 : 0) + (isDormant(e.s) ? "d" : "")).join("|");
+  const key = (listCompact ? "C|" : "") + filterSrc + "|" + (showSrcTag ? "b1|" : "b0|") + list.map((e) => e.ctx.cfg.id + ":" + e.s.session_id + ":" + e.s.status + ":" + (e.s.title || "") + ":" + (e.s.action_summary || "") + ":" + (e.s.waiting_request ? 1 : 0) + ":" + ctxPct(e.s) + ":" + (e.s.pinned ? 1 : 0) + (isDormant(e.s) ? "d" : "") + (bgRunning(e.s) ? "g" : "") + (idleDimmed(e.s) ? "i" : "")).join("|");
   if (box.dataset.key !== key) {
     // 就地改名进行中：跳过重建（运行中会话 key 每秒变，会把编辑框冲掉）
     if (document.activeElement && document.activeElement.classList.contains("card-rename")) return;
@@ -4166,7 +4283,7 @@ function render() {
       const d = document.createElement("div");
       d.dataset.sid = s.session_id;
       d.dataset.src = ctx.cfg.id;
-      d.className = "card " + s.status + (listCompact ? " compact" : "") + (selected && selected.src === ctx.cfg.id && s.session_id === selected.sid ? " sel" : "") + (s.historical && !dormant ? " historical" : "") + (dormant ? " dormant" : "");
+      d.className = "card " + s.status + (listCompact ? " compact" : "") + (selected && selected.src === ctx.cfg.id && s.session_id === selected.sid ? " sel" : "") + (s.historical && !dormant ? " historical" : "") + (dormant ? " dormant" : "") + (s.status === "DONE" && bgRunning(s) ? " bg-live" : "") + (idleDimmed(s) ? " idle" : "");
       if (dormant) d.title = "已保存休眠 · 点击恢复";
       // 根治④对称化：等待判定必须同时看 status——脱钩帧（waiting_request 残留 +
       // status 已翻走）不该再渲染【处理】按钮，否则按钮点开详情永远等不到弹窗
@@ -4175,11 +4292,15 @@ function render() {
         ? (s.waiting_request.questions?.length ? "Claude 在提问：" + (s.waiting_request.questions[0].header || "") : "需要确认 " + s.waiting_request.tool_name + " — " + (s.waiting_request.input_summary || ""))
         : (s.status === "ERROR" && s.last_error ? "⚠ " + s.last_error : s.action_summary || "");
       // 与手机 deletable 同口径：仅 DONE/ERROR 可删（relay 对运行中会话拒绝删除）
-      const deletable = s.status === "DONE" || s.status === "ERROR";
+      // #100 后台子 Agent 在跑时禁删（删会话会杀后台任务）——「运行中，不能删除」tooltip 已有
+      const deletable = (s.status === "DONE" || s.status === "ERROR") && !(s.status !== "WORKING" && bgRunning(s));
       // #49 徽章：休眠卡（已保存未恢复）出「休眠」徽；普通遗留出「历史」；外部 CLI 出「终端」
       // #23 徽章四态：休眠/历史/终端（外部 CLI 会话）/后台（控制台新建的托管会话——
       // 无终端窗口，消息只在面板可见；降低与终端会话的混淆）
       const badges = dormant ? '<span class="his-badge">休眠</span>' : s.historical ? '<span class="his-badge">历史</span>' : s.external ? '<span class="his-badge ext">终端</span>' : '<span class="his-badge bg">后台</span>';
+      // #100 后台任务徽标：主回合空闲但子 Agent 仍在跑——⑂N 黄胶囊（灯同转呼吸黄）；
+      // WORKING 时 liveRow 已交代在跑，徽标只补「空闲却没闲着」这个误报场景
+      const bgBadge = s.status !== "WORKING" && bgRunning(s) ? '<span class="bg-badge" title="后台子 Agent 运行中">⑂' + bgCount(s) + "</span>" : "";
       // #49 保存恢复徽章：pinned 卡标题行左端 10px 级锚形小标（悬停说明与 toast 同口径：
       // 重启后休眠保留，点击卡片恢复——不自动拉起，2026-09-09 拍板）
       const pinFlag = s.pinned ? '<span class="pin-flag" title="已保存：重启后休眠保留，点击卡片恢复">' + PIN_ANCHOR_SVG + "</span>" : "";
@@ -4193,8 +4314,8 @@ function render() {
       // #362 标题恒第一行：灯（WORKING 呼吸）+标题+总时长同构一行，状态切换不跳行；
       // WORKING 实时行（回合秒+↓tokens+动作摘要）退居第二行，空闲第二行=摘要
       const headRow =
-        '<div class="c-head">' + pinFlag + '<span class="c-dot' + (s.status === "WORKING" ? " run" : "") + '" style="--sc:var(--' + s.status.toLowerCase() + ')"></span>' +
-          '<span class="card-title"><span class="c-tt">' + escapeHtml(s.title || "") + "</span>" + badges + opBtns + "</span>" +
+        '<div class="c-head">' + pinFlag + '<span class="c-dot' + (s.status === "WORKING" || (s.status === "DONE" && bgRunning(s)) ? " run" : "") /* #100 后台在跑也呼吸 */ + '" style="--sc:var(--' + (s.status || "").toLowerCase() + ')"></span>' +
+          '<span class="card-title"><span class="c-tt">' + escapeHtml(s.title || "") + "</span>" + bgBadge + badges + opBtns + "</span>" +
           '<span class="elapsed">' + fmtElapsed(sessionElapsed(s)) + "</span></div>";
       const liveRow = s.status === "WORKING"
         ? '<div class="c-live">' +
@@ -4221,8 +4342,8 @@ function render() {
       if (listCompact) {
         // #279⑨ 紧凑卡（对齐手机）：状态点+标题+耗时 / 摘要 / 改动+水位+源标签
         d.innerHTML =
-          '<div class="c-row1">' + pinFlag + '<span class="c-dot' + (s.status === "WORKING" ? " run" : "") + '" style="--sc:var(--' + s.status.toLowerCase() + ')"></span>' +
-            '<span class="card-title"><span class="c-tt">' + escapeHtml(s.title || "") + "</span>" + badges + opBtns + "</span>" +
+          '<div class="c-row1">' + pinFlag + '<span class="c-dot' + (s.status === "WORKING" || (s.status === "DONE" && bgRunning(s)) ? " run" : "") /* #100 后台在跑也呼吸 */ + '" style="--sc:var(--' + (s.status || "").toLowerCase() + ')"></span>' +
+            '<span class="card-title"><span class="c-tt">' + escapeHtml(s.title || "") + "</span>" + bgBadge + badges + opBtns + "</span>" +
             '<span class="elapsed">' + fmtElapsed(sessionElapsed(s)) + "</span></div>" +
           summaryRow +
           statsBlock +
@@ -4482,7 +4603,9 @@ function renderDetail() {
       const run = !a.ended_at;
       const dur = fmtElapsed((a.ended_at ?? Date.now()) - a.started_at);
       return '<div class="agrow"><span class="ad" style="color:' + (run ? "var(--working)" : "var(--dim)") + '">' +
-        (run ? "⑂ " : "✓ ") + escapeHtml(a.desc) + '</span><span class="at">' + dur + "</span></div>";
+        (run ? "⑂ " : "✓ ") + escapeHtml(a.desc) + '</span>' +
+        (a.act ? '<span class="aa" style="color:' + (run ? "var(--dim)" : "var(--faint)") + '" title="当前动作">' + escapeHtml(a.act) + "</span>" : "") +
+        '<span class="at">' + dur + "</span></div>";
     }).join("");
   } else ag.style.display = "none";
 
@@ -4525,7 +4648,7 @@ function renderDetail() {
       ? (resumable ? "继续对话（恢复会话）…" : "历史会话仅可查看")
       : "发送消息（Enter 发送 · Shift+Enter 换行）";
   syncSendState();
-  // 停止入口只在运行中出现（WorkBuddy 式：执行中输入区显示停止）
+  // 停止入口只在运行中出现（#104 挪到状态栏：dhead-row 右端，重命名按钮旁）
   const running = s.status === "WORKING" || s.status === "WAITING";
   $("stopBtn").style.display = running ? "flex" : "none";
   $("stopBtn").textContent = s.external ? "⏹ 注入 Esc" : "⏹ 停止";
@@ -4533,6 +4656,7 @@ function renderDetail() {
   // #279 批次3 图片入口；#54 起外部 CLI 会话也可发图（relay 落盘+注入路径指令）
   // 隐藏仅剩：不可恢复的托管历史会话（cmdLocked 同口径）
   $("imgBtn").style.display = s.historical && !s.external && !s.relay_session_id ? "none" : "";
+  $("fileBtn").style.display = s.historical && !s.external && !s.relay_session_id ? "none" : ""; // #92 文件入口同口径
 
   // 时间线 / 统计（增量重建）
   const tl = $("timeline");
@@ -4714,7 +4838,9 @@ function todosTabHtml(s) {
       html += '<div class="todo-item ' + t.status + '"' + (t.id != null ? ' data-tid="' + t.id + '"' : "") + dragAttrs + '>' +
         (t.status !== "completed" ? '<span class="todo-grip" title="拖动调整执行优先级">⠿</span>' : "") +
         '<span class="todo-ck">' + mark + '</span><span class="todo-tx">' +
-        escapeHtml(t.status === "in_progress" && t.active_form ? t.active_form : t.content) + "</span>" +
+        /* #97 任务编号 #N 前缀（对齐手机端）：权威任务存储 id 由此可见，
+           转录 #NNN 可点跳转的锚；旧 TodoWrite 清单无 id 不显示 */
+        escapeHtml((t.id != null ? "#" + t.id + " " : "") + (t.status === "in_progress" && t.active_form ? t.active_form : t.content)) + "</span>" +
         '<button class="todo-del" data-c="' + escapeHtml(t.content) + '" title="隐藏该条">✕</button></div>';
     }
     html += "</div>";
@@ -5199,6 +5325,7 @@ const inputDrafts = new Map();
 function select(sid, srcId) {
   if (selected) inputDrafts.set(selected.sid + "@" + selected.src, $("msginput").value);
   selected = { src: srcId, sid };
+  histLoad(sid); // #95 输入历史按会话隔离：切会话换历史桶（histLoad 定义在下方，函数声明有提升）
   $("msginput").value = inputDrafts.get(sid + "@" + srcId) ?? "";
   undoReset($("msginput").value);
   document.body.classList.add("detail-open"); // ≤720px：详情覆盖层切换（桌面态该 class 无样式作用）
@@ -5206,6 +5333,7 @@ function select(sid, srcId) {
   document.querySelectorAll(".tabs button.tab").forEach((b) => b.classList.toggle("active", b.dataset.tab === "activity"));
   $("timeline").dataset.count = "";
   sendImages = []; // #279 批次3：待发图不跨会话（手机端随页面卸载重置，网页常驻需显式清）
+  sendFiles = []; // #92 待发文件同口径不跨会话
   renderImgRow();
   updateSlashBox(); // 切会话收起旧联想（会话的命令集不同）
   render();
@@ -5213,8 +5341,10 @@ function select(sid, srcId) {
 
 function closeDetail() {
   selected = null;
+  histLoad(null); // #95 关详情回到空桶：此时按键不翻历史（无会话上下文）
   document.body.classList.remove("detail-open");
   sendImages = [];
+  sendFiles = []; // #92
   renderImgRow();
   updateSlashBox();
   render();
@@ -5311,7 +5441,7 @@ document.addEventListener("click", (ev) => {
 
 // ⚙ 设置浮层（#317）：显示项为散装开关的镜像（点行 = 触发原按钮再回读状态），
 // 服务器管理不进浮层——左栏常驻面板已是高频区，与手机抽屉同为一级入口
-const CONSOLE_VERSION = "0.6.0";
+const CONSOLE_VERSION = "0.6.0-test.8";
 // #396 拨杆同步：滑块移到 idx 档（transform 过渡），选中档文字加 .on（白字压品牌色滑块上）
 function setLever(el, idx) {
   if (!el) return;
@@ -6102,6 +6232,9 @@ $("createBtn").onclick = () => {
 // 压缩：canvas 重绘 JPEG 长边≤1568 / 质量 0.82（HEIC 等浏览器不解码格式 catch 后 toast）；
 // 上送：COMMAND_MESSAGE payload.images = 原始 base64 数组（relay sanitizeImages 限 4 张/单张 8MB，同口径）。
 let sendImages = []; // 待发图 base64（无 data: 前缀，与手机端一致）；切会话即清
+// #92 待发文件（与手机端 #62 同口径 {name, b64}）：relay sanitize 限 2 个；切会话即清
+const FILE_MAX = 2, FILE_SIZE_MAX = 20 * 1024 * 1024;
+let sendFiles = [];
 const IMG_MAX = 4;
 // #54 外部会话开放（落盘+注入链路）；托管历史会话维持只读口径（resumable 除外见下）
 function imgSessionOk(s) { return !!s.external || !s.historical; }
@@ -6153,23 +6286,80 @@ async function addImageFiles(files) {
   syncSendState();
 }
 
+// #92 待发文件：任意类型多选，读 base64（去 data: 前缀）。上限与手机端一致（2 个/20MB），
+// relay sanitize 兜底剔除；超限与读取失败分开提示（带文件名/大小，chip 不在也要能知道为何没加上）
+async function addUploadFiles(files) {
+  const sel = selSession();
+  if (!sel || !imgSessionOk(sel.s)) return;
+  const all = [...files].filter(Boolean);
+  if (!all.length) return;
+  const room = FILE_MAX - sendFiles.length;
+  if (room <= 0) { toast("最多同时带 " + FILE_MAX + " 个文件"); return; }
+  const take = all.slice(0, room);
+  const oversize = [], failed = [];
+  for (const f of take) {
+    if (f.size > FILE_SIZE_MAX) { oversize.push((f.size / 1048576).toFixed(0) + "MB " + (f.name || "")); continue; }
+    try {
+      const dataUrl = await new Promise((res, rej) => {
+        const r = new FileReader();
+        r.onload = () => res(String(r.result));
+        r.onerror = () => rej(new Error("read fail"));
+        r.readAsDataURL(f);
+      });
+      const raw = dataUrl.slice(dataUrl.indexOf(",") + 1);
+      if (!raw) throw new Error("0 字节");
+      sendFiles.push({ name: f.name || "文件", b64: raw });
+    } catch { failed.push(f.name || "文件"); }
+  }
+  if (all.length > take.length) toast("最多同时带 " + FILE_MAX + " 个文件，超出的未添加");
+  if (oversize.length) toast(oversize.join("、") + " 超过 20MB，未添加", 4200);
+  if (failed.length) toast("「" + failed.join("、").slice(0, 40) + "」读取失败", 4200);
+  renderImgRow();
+  syncSendState();
+}
+
 function renderImgRow() {
   const row = $("imgrow");
-  if (!sendImages.length) { row.style.display = "none"; row.innerHTML = ""; return; }
+  if (!sendImages.length && !sendFiles.length) { row.style.display = "none"; row.innerHTML = ""; return; }
   row.style.display = "flex";
-  row.innerHTML = sendImages.map((b, i) =>
-    '<div class="img-cell"><img src="data:image/jpeg;base64,' + b + '" alt="">' +
-    '<button class="img-x" data-i="' + i + '" title="移除">✕</button></div>').join("");
+  row.innerHTML =
+    sendImages.map((b, i) =>
+      '<div class="img-cell"><img src="data:image/jpeg;base64,' + b + '" alt="">' +
+      '<button class="img-x" data-k="img" data-i="' + i + '" title="移除">✕</button></div>').join("") +
+    sendFiles.map((f, i) =>
+      '<div class="file-cell" title="' + escapeHtml(f.name) + '"><span class="file-name">📄 ' + escapeHtml(f.name) + '</span>' +
+      '<button class="img-x" data-k="file" data-i="' + i + '" title="移除">✕</button></div>').join("");
 }
 $("imgrow").addEventListener("click", (ev) => {
   const x = ev.target.closest(".img-x");
   if (!x) return;
-  sendImages.splice(+x.dataset.i, 1);
+  (x.dataset.k === "file" ? sendFiles : sendImages).splice(+x.dataset.i, 1);
   renderImgRow();
   syncSendState();
 });
 $("imgBtn").onclick = () => { const f = $("imgFile"); f.value = ""; f.click(); };
 $("imgFile").addEventListener("change", () => { void addImageFiles($("imgFile").files || []); });
+$("fileBtn").onclick = () => { const f = $("fileInput"); f.value = ""; f.click(); }; // #92 附加文件（任意类型）
+$("fileInput").addEventListener("change", () => { void addUploadFiles($("fileInput").files || []); });
+// #101 桌面壳内点击外链 → 系统浏览器：壳侧 INIT_SCRIPT 拦截在公司 Windows（WebView2）上
+// 疑未注入（实测点击无反应），页面层兜底同款捕获拦截——ccDeck 桥缺失时直接走 __TAURI__
+// IPC（withGlobalTauri 注入由 IPC 层保证，比 initialization_script 可靠）。defaultPrevented
+// 去重：壳层已处理过就不开第二次（两层注册时序在不同 WebView 上不定，先到先得）。
+// 打开失败兜底把 URL 复制进剪贴板，用户至少拿到链接；浏览器（无 __TAURI__）零行为。
+document.addEventListener("click", function (e) {
+  if (e.defaultPrevented) return;
+  const a = e.target && e.target.closest ? e.target.closest('a[href^="http"]') : null;
+  if (!a || !/^https?:/i.test(a.href)) return;
+  if (!window.__TAURI__) return;
+  e.preventDefault();
+  const p = window.ccDeck && window.ccDeck.openExternal
+    ? window.ccDeck.openExternal(a.href)
+    : window.__TAURI__.core.invoke("open_external", { url: a.href });
+  p.catch(() => {
+    try { navigator.clipboard.writeText(a.href); toast("呼出浏览器失败，链接已复制：" + a.href); }
+    catch (_) { toast("呼出浏览器失败：" + a.href); }
+  });
+}, true);
 // 粘贴贴图（网页端独有优势）：剪贴板含图片文件即进待发行；纯文本粘贴不受影响
 document.addEventListener("paste", (ev) => {
   const items = ev.clipboardData && ev.clipboardData.items;
@@ -6195,7 +6385,7 @@ document.addEventListener("paste", (ev) => {
 function syncSendState() {
   const mi = $("msginput");
   // #279B 锁定态（历史无可恢复）叠加内容空判：禁用钮统一在此合流
-  $("sendBtn").disabled = cmdLocked || (!mi.value.trim() && sendImages.length === 0);
+  $("sendBtn").disabled = cmdLocked || (!mi.value.trim() && sendImages.length === 0 && sendFiles.length === 0);
   mi.style.height = "auto";
   mi.style.height = Math.min(mi.scrollHeight, 170) + "px";
 }
@@ -6350,19 +6540,30 @@ $("msginput").addEventListener("keydown", (e) => {
 // 带修饰键不参与（Alt/Ctrl+↑↓ 是切会话、Shift+↑↓ 是选区移动）；IME 组合中不抢键；
 // 空历史让位原生光标移动。浏览中编辑取回的内容不退出浏览态（readline 习惯：继续
 // ↑ 往更深翻，但 ↓ 翻到底还原的是"编辑后的草稿"）。历史仅记发送成功的文本（连续
-// 同文去重），localStorage cc.input.history 持久化、上限 200 条。
-const HIST_KEY = "cc.input.history";
+// 同文去重），上限 200 条。
+// #95 按会话隔离：历史分桶存 localStorage cc.input.hist.<sid>（旧全局键
+// cc.input.history 停用不迁移——跨会话混记正是本次要修的问题）；select 切会话换桶
+// 并重置浏览态，会话删除时清桶。
+const HIST_PREFIX = "cc.input.hist.";
 const HIST_MAX = 200;
+let histSid = null;    // 当前历史桶的会话 id（null = 未选会话，空桶）
 let inputHist = [];
-try { const h = JSON.parse(lsGet(HIST_KEY) || "[]"); if (Array.isArray(h)) inputHist = h.filter((x) => typeof x === "string"); } catch {}
 let histIdx = -1;      // -1 = 未浏览；0..len-1 指向历史（旧→新）
 let histDraft = "";    // 起翻时（或浏览中编辑后）的草稿，↓ 翻过最新一条时还原
+function histLoad(sid) {
+  if (histSid === sid) return;
+  histSid = sid;
+  histIdx = -1; histDraft = ""; // 换桶必重置浏览态（旧桶的浏览位对新桶无意义）
+  inputHist = [];
+  if (!sid) return;
+  try { const h = JSON.parse(lsGet(HIST_PREFIX + sid) || "[]"); if (Array.isArray(h)) inputHist = h.filter((x) => typeof x === "string"); } catch {}
+}
 function histPush(text) {
   histIdx = -1;
   if (!text || inputHist[inputHist.length - 1] === text) return;
   inputHist.push(text);
   if (inputHist.length > HIST_MAX) inputHist.shift();
-  lsSet(HIST_KEY, JSON.stringify(inputHist));
+  if (histSid) lsSet(HIST_PREFIX + histSid, JSON.stringify(inputHist));
 }
 function histApply(v) {
   $("msginput").value = v;
@@ -6396,8 +6597,8 @@ $("atBtn").onclick = () => $("msginput").focus();
 syncSendState();
 $("sendBtn").onclick = () => {
   const text = $("msginput").value.trim();
-  const imgs = sendImages;
-  if ((!text && !imgs.length) || !selected) return;
+  const imgs = sendImages, fs = sendFiles; // #92 fs：待发文件（与手机端 #62 同口径）
+  if ((!text && !imgs.length && !fs.length) || !selected) return;
   if ($("msginput").disabled) return; // #279B 锁定态（历史无可恢复）：输入已禁用，防御性兜底
   const sel = selSession();
   if (!sel) return;
@@ -6405,10 +6606,11 @@ $("sendBtn").onclick = () => {
   if (sel.s.external) {
     // #54 注入路径带图：relay 落盘临时目录，合成「正文 + 路径查看指令」注入，CLI 用 Read 看图；
     // 时间线由 hook 的 UserPromptSubmit / 排队日志回填，不本地预写
-    if (sendCommandTo(sel.ctx, "COMMAND_EXT_INPUT", { session_id: sid, text, ...(imgs.length ? { images: imgs } : {}) })) {
+    if (sendCommandTo(sel.ctx, "COMMAND_EXT_INPUT", { session_id: sid, text, ...(imgs.length ? { images: imgs } : {}), ...(fs.length ? { files: fs } : {}) })) {
       $("msginput").value = "";
       if (text) histPush(text);
       sendImages = [];
+      sendFiles = [];
       renderImgRow();
       syncSendState();
       if (sel.s.status === "WAITING") toast("已排队，回合结束后自动发送");
@@ -6416,7 +6618,7 @@ $("sendBtn").onclick = () => {
     return;
   }
   // #279 批次3：带图走 COMMAND_MESSAGE images（原始 base64；空文本 + 图也可发，relay 侧文本块省略）
-  if (sendCommandTo(sel.ctx, "COMMAND_MESSAGE", { session_id: sid, text, ...(imgs.length ? { images: imgs } : {}) })) {
+  if (sendCommandTo(sel.ctx, "COMMAND_MESSAGE", { session_id: sid, text, ...(imgs.length ? { images: imgs } : {}), ...(fs.length ? { files: fs } : {}) })) {
     // 本地不预写 user_message：relay 的 agent-adapter sendMessage() 会同步 onLog 回填
     // （含 "+N 图" 标记，M1 起即有），本地乐观回显会叠出双气泡（2026-09-18 桌面托管
     // 会话实测：电脑端每条消息两个同文同时刻气泡）。与外部注入路径（上方"不本地
@@ -6424,6 +6626,7 @@ $("sendBtn").onclick = () => {
     $("msginput").value = "";
     histPush(text);
     sendImages = [];
+    sendFiles = [];
     renderImgRow();
     syncSendState();
   }
@@ -6952,7 +7155,11 @@ $("timeline").addEventListener("click", (ev) => {
   }
   const afDir = ev.target.closest(".af-open-dir");
   if (afDir && window.ccDeck && window.ccDeck.openPath) {
-    window.ccDeck.openPath(afDir.dataset.dir || "", false).catch((er) => toast(String(er?.message || er).slice(0, 80), 3500));
+    // #106 返工：远程会话 cwd 不在本机——明确语义提示，不弹 openPath 报错
+    shellHasLocal(afDir.dataset.dir || "").then((local) => {
+      if (!local) { toast("工作目录不在本机（远程会话）", 3500); return; }
+      window.ccDeck.openPath(afDir.dataset.dir || "", false).catch((er) => toast(String(er?.message || er).slice(0, 80), 3500));
+    });
   }
 });
 // #35 输出物浮窗入口：路径 + 相对路径（origin=cwd 才有）+ 已删除标记 → openFpathPop 扩展参
@@ -6965,19 +7172,25 @@ function openArtPop(row, x, y) {
     fetch: row.dataset.dead === "1" || !hit ? null : { ctx: hit.ctx, sid: hit.s.session_id },
   });
 }
-// #35 双击输出物行 = 本地默认应用打开（核心交互）；#79 远程访问兜底链：
-// 桌面壳本地打开失败（云源——文件不在本机）或纯浏览器（无壳）→ 实时拉取 + 在线预览，
-// 不让降级成死胡同；已删除行双击只 toast
+// #35 双击输出物行 = 本地默认应用打开（核心交互）；#79 远程访问兜底链 + #106 改向：
+// 桌面壳本地打开失败（云源——文件不在本机）→ 实时拉取 + 落盘下载目录 + 系统软件打开
+// （不做在线预览）；纯浏览器（无壳）保留在线预览——网页端没有本地文件系统，预览是
+// 合理形态。已删除行双击只 toast
 $("timeline").addEventListener("dblclick", (ev) => {
   const row = ev.target.closest(".afrow");
   if (!row) return;
   const p = row.dataset.p || "";
   if (row.dataset.dead === "1") { toast("文件已不存在（可能已被清理）"); return; }
   if (window.ccDeck && window.ccDeck.openPath) {
-    window.ccDeck.openPath(p, false).catch(() => {
+    // #106 返工：先探后开——不在本机（远程源）无感直达下载，不再先弹 openPath 报错
+    shellHasLocal(p).then((local) => {
       const hit = selSession();
-      if (hit) previewArtifact(hit.ctx, hit.s.session_id, p); // 远程源的文件不在本机 → 拉取预览
-      else toast("本地打开失败（文件不在本机）");
+      if (!local && hit && window.ccDeck.saveArtifact) { downloadAndOpenArtifact(hit.ctx, hit.s.session_id, p); return; }
+      window.ccDeck.openPath(p, false).catch(() => {
+        if (hit && window.ccDeck.saveArtifact) downloadAndOpenArtifact(hit.ctx, hit.s.session_id, p); // 本地源但打开失败（权限/被占用）→ 下载后打开
+        else if (hit) previewArtifact(hit.ctx, hit.s.session_id, p); // 旧壳无 saveArtifact（升级窗口期）→ 预览兜底
+        else toast("本地打开失败（文件不在本机）");
+      });
     });
   } else {
     const hit = selSession();
@@ -6985,6 +7198,36 @@ $("timeline").addEventListener("dblclick", (ev) => {
     else { copyText(p); toast("在桌面端打开可双击启动本地应用（路径已复制）"); }
   }
 });
+
+// #106 返工（装机反馈「先报错路径没有文件，然后才下载」）：壳侧先探后开——
+// probe_path 微秒级 stat 判「路径在本机吗」，远程源（云 relay）产物路径本机必无，
+// 分流做在后台，用户无感直达下载。旧壳无 probePath（升级窗口期）按「在」处理，
+// 回落原 openPath→catch 链
+function shellHasLocal(p) {
+  if (window.ccDeck && window.ccDeck.probePath) return window.ccDeck.probePath(p).catch(() => true);
+  return Promise.resolve(true);
+}
+
+// #106 输出物直接下载（桌面壳专用）：拉取字节流 → 壳落盘系统「下载」目录（重名
+// 自动 -2 递增）→ 系统默认应用打开。取代桌面端在线预览——下载的文件随用户处置
+async function downloadAndOpenArtifact(ctx, sid, path) {
+  const name = path.split(/[\\/]/).pop() || "输出物";
+  toast("正在下载「" + name + "」…", 60_000);
+  try {
+    const r = await fetchArtifact(ctx, sid, path);
+    const saved = await window.ccDeck.saveArtifact(name, bytesToB64(artB64ToBytes(r.b64s)));
+    try { await window.ccDeck.openPath(saved, false); } catch {} // 打开失败不算下载失败——路径已 toast，用户可自取
+    toast("已下载并打开：" + saved, 5000);
+  } catch (e) {
+    toast(String(e?.message || e), 4500);
+  }
+}
+// Uint8Array → base64（分片 btoa 防 apply 栈溢出；20MB 上限内一次性格式化 <1s）
+function bytesToB64(u8) {
+  let s = "";
+  for (let i = 0; i < u8.length; i += 0x8000) s += String.fromCharCode.apply(null, u8.subarray(i, i + 0x8000));
+  return btoa(s);
+}
 
 // ---------- #79 输出物在线预览（拉取 + 分级展示） ----------
 // 简单格式内嵌：文本/Markdown/JSON/CSV → 文本或轻量 md 渲染；图片 → img；
@@ -7132,12 +7375,29 @@ function openFpathPop(p, x, y, opts) {
   };
   // #35 opts：rel = 顺带给"复制相对路径"项；noOpen = 已删除文件——打开两项不给（stat 不到，
   // 打开必然失败，toast 兜底由双击路径负责），复制照常
-  // #79 fetch = 输出物远程拉取预览（实时 E2E 传输，浏览器/远程源可达）
-  if (opts?.fetch) mk("在线预览", () => previewArtifact(opts.fetch.ctx, opts.fetch.sid, p));
+  // #79 fetch = 输出物远程拉取（实时 E2E 传输，浏览器/远程源可达）；#106 桌面壳改
+  // 「下载并打开」（落盘下载目录 + 系统软件），纯浏览器保留在线预览
+  if (opts?.fetch) {
+    if (window.ccDeck && window.ccDeck.saveArtifact) mk("下载并打开", () => downloadAndOpenArtifact(opts.fetch.ctx, opts.fetch.sid, p));
+    else mk("在线预览", () => previewArtifact(opts.fetch.ctx, opts.fetch.sid, p));
+  }
   const shellOk = !!(window.ccDeck && window.ccDeck.openPath) && !opts?.noOpen;
   if (shellOk) {
-    mk("打开文件", () => { window.ccDeck.openPath(p, false).catch((er) => toast(String(er?.message || er).slice(0, 80), 3500)); });
-    mk("打开所在目录", () => { window.ccDeck.openPath(p, true).catch((er) => toast(String(er?.message || er).slice(0, 80), 3500)); });
+    // #106 返工：先探后开——不在本机（远程源）「打开文件」静默转下载；「打开所在
+    // 目录」给明确语义提示（目录无从下载），不再弹 openPath 的「路径没有文件」报错
+    mk("打开文件", () => {
+      shellHasLocal(p).then((local) => {
+        if (!local && opts?.fetch && window.ccDeck.saveArtifact) { downloadAndOpenArtifact(opts.fetch.ctx, opts.fetch.sid, p); return; }
+        if (!local) { toast("文件不在本机（远程会话产物）", 3500); return; }
+        window.ccDeck.openPath(p, false).catch((er) => toast(String(er?.message || er).slice(0, 80), 3500));
+      });
+    });
+    mk("打开所在目录", () => {
+      shellHasLocal(p).then((local) => {
+        if (!local) { toast("路径不在本机（远程会话），无法打开所在目录", 3500); return; }
+        window.ccDeck.openPath(p, true).catch((er) => toast(String(er?.message || er).slice(0, 80), 3500));
+      });
+    });
   }
   mk("复制路径", () => copyText(p));
   if (opts?.rel) mk("复制相对路径", () => copyText(opts.rel));
@@ -7291,16 +7551,20 @@ $("gpApkQr").onclick = () => {
   pop.classList.add("open");
 };
 $("apkQrPop").onclick = () => $("apkQrPop").classList.remove("open");
-// imp=true：0.4.4 合并码（「扫码从手机导入」云桥语境唤起）——授权入网/回传连接二选一，
-// 码带 imp:1（旧 App 忽略未知字段仍可纯授权，新 App 识别后给双选）；回传经桥密封投递
-function startLoginQr(imp) {
+// imp=true：0.4.4 合并码（「扫码从手机导入」唤起）；#90 起不再按表单形态分叉——导入
+// 永远出这一种码，云桥身份 + 可选 rt（局域网直传）同码自带，手机端自动择路。码带
+// imp:1（旧 App 忽略 rt 仍走双选授权/回传，新 App 直接弹选择器）；回传经桥密封投递
+function startLoginQr(imp, opts) {
   loadCloudIdentity();
   const dev = devId(ckp.publicKey, "wb");
   let cfg = editId ? cfgOf(editId) : null;
   if (cfg && cfg.kind !== "cloud") { toast("仅云桥类型支持扫码登录"); return; }
   if (!cfg) {
-    const url = $("url").value.trim() || defaultCloudUrl();
-    const token = $("token").value.trim() || BAKED_BRIDGE_TOKEN;
+    // opts.bridgeUrl/bridgeToken（#90）：直连形态表单的 url/token 字段是 LAN 中继的
+    // 地址与令牌，不能当桥用——importSrvQr 显式传入桥地址与公共桥 token；空值回落
+    // 表单/默认同旧（云桥形态表单字段语义本就是桥）
+    const url = (opts && opts.bridgeUrl) || $("url").value.trim() || defaultCloudUrl();
+    const token = (opts && opts.bridgeToken) || $("token").value.trim() || BAKED_BRIDGE_TOKEN;
     // 复用同桥的未配对云源（首启自种的「公共桥」等；按桥 host:port 归一匹配，
     // 旧版条目的死地址写法也随之刷新），反复重试不堆积重复源
     const bk = normBridge(url);
@@ -7323,9 +7587,18 @@ function startLoginQr(imp) {
   const trustedRd = () =>
     (ctx.pendingPair && ctx.pendingPair.fresh && ctx.pendingPair.rd) ||
     (c.paired && c.rd ? c.rd : "");
+  // #88 出码即可扫的判定：rd 可信（单 relay 换锚）或已挂候选公钥（多 relay 歧义
+  // 态）都算就绪——后者回传靠 cands 兜底试解，状态行不再卡「正在确认身份」误导等待。
+  // #90 追加：imp 码附上 rt（局域网直传）也算就绪——同网手机走 rt 压根不依赖云桥
+  // 身份（桥被防火墙拦死的纯内网环境也能用），不得让状态行卡「正在确认身份」劝退
+  const qrReady = () => !!(trustedRd() || (ctx.pendingPair && ctx.pendingPair.cands) || impRt);
+  // #90 rt 附带（imp 专用）：异步探测本机 relay 后填充——私网 IP 可达即附进码，手机
+  // 同网直传（快、免桥依赖）；探测完成前先出单云桥码，redraw 节拍捡起换新码
+  let impRt = null;
   const makePayload = () => JSON.stringify({
     t: "ccdeck-login", v: 1,
     ...(imp ? { imp: 1 } : {}),
+    ...(imp && impRt ? { rt: impRt } : {}),
     // 实捕发现（三码测试）：云源 wsUrl 本以 /cloud 结尾，再拼 +"/cloud" 双写成
     // /cloud/cloud——当前 App 不读该字段故无害，但属口径炸弹，与统一分享构建器对齐不追加
     bridge: cfg.wsUrl.replace(/\/$/, "").replace(/^http/, "ws").replace(/\/cloud$/, "") + "/cloud",
@@ -7334,11 +7607,11 @@ function startLoginQr(imp) {
     // name 一律 encodeURIComponent（手机端解码）
     name: encodeURIComponent((cfg.name || "浏览器").slice(0, 24)),
   });
-  $("loginQrTitle").textContent = imp ? "从手机添加" : "扫码登录";
+  $("loginQrTitle").textContent = imp ? "从手机导入连接" : "扫码登录";
   $("loginQrSub").innerHTML = imp
-    ? "手机 CC Deck App 扫码后可选：<br/>授权这台电脑入网 / 挑一条连接回传"
+    ? "手机 CC Deck App 扫码后<br/>选择要分享的连接（同网直传 · 跨网走桥）"
     : "手机 CC Deck App 扫下方二维码<br/>确认后自动进入——免输配对码";
-  $("loginQrState").textContent = trustedRd() ? "等待手机扫码…" : "正在确认服务器身份…请稍候";
+  $("loginQrState").textContent = qrReady() ? "等待手机扫码…" : "正在确认服务器身份…请稍候";
   drawLoginQr(makePayload());
   $("loginQrPop").classList.add("open");
   // 授权应答走 pair_ack：置 pendingPair（login 态 pc 空串），身份检查与输码路径同构。
@@ -7360,12 +7633,36 @@ function startLoginQr(imp) {
   const redraw = () => {
     if (!$("loginQrPop").classList.contains("open")) return;
     drawLoginQr(makePayload());
-    $("loginQrState").textContent = trustedRd() ? "等待手机扫码…" : "正在确认服务器身份…请稍候";
+    $("loginQrState").textContent = qrReady() ? "等待手机扫码…" : "正在确认服务器身份…请稍候";
   };
   clearInterval(loginQrTimer);
   loginQrTimer = setInterval(redraw, 3000); // relay 身份经发现帧刷新后二维码随之更新
   clearTimeout(loginQrTimeout);
   loginQrTimeout = setTimeout(() => { if ($("loginQrPop").classList.contains("open")) { closeLoginQr(imp ? "超时未完成，已取消（可重试）" : "超时未授权，已取消（可重试或改用配对码）"); } }, 120000);
+  // #90 rt 探测（imp）：本机 relay 在跑 + 私网 IP 可达（#25 同款守卫——tauri.localhost/
+  // 回环/域名对手机不可达，只认私网 IP）就把局域网直传通道附进同一个码并开收件 ws。
+  // 异步不挡出码（先出单云桥码，探测完 redraw 即时换码）；无 relay/无私网 IP 静默保持
+  // 单云桥码。收件 ws 与浮层同生命周期（closeLoginQr 断），层已关不再附（防孤儿监听）
+  if (imp) {
+    void (async () => {
+      await Promise.resolve(); // 让位同步段（redraw 定义）先完成
+      try {
+        if (!localRelayInfo) await probeRelayStat();
+        const info = localRelayInfo;
+        if (!info) return;
+        const PRIV_IP3 = /^(192\.168|10|172\.(1[6-9]|2\d|3[01]))\./;
+        const rtHost =
+          (PRIV_IP3.test(info.lanIp || "") && info.lanIp) ||
+          (PRIV_IP3.test(location.hostname || "") ? location.hostname : "");
+        if (!rtHost) return;
+        const rtUrl = "ws://" + rtHost + ":" + info.port + "/ws";
+        if (!$("loginQrPop").classList.contains("open")) return;
+        impRt = { url: rtUrl, token: info.token };
+        importListenStart(rtUrl, info.token);
+        redraw();
+      } catch {}
+    })();
+  }
 }
 function closeLoginQr(msg) {
   $("loginQrPop").classList.remove("open");
@@ -7556,35 +7853,15 @@ async function shareSrvQr(id) {
 }
 
 
-// 议题③ 从手机导入：添加服务器表单里的「扫码从手机导入」。码内 rt = 本机 relay
-//（lan-ip + 实测端口/token，一律 localRelayInfo 实测优先，同 #40x 领码教训）；
-// 出码同时向同一 relay 开一条临时回传 ws，等手机选好连接推 import-resp 帧
+// 议题③ 从手机导入（#90 统一码，2026-09-20）：不再按表单形态分叉两种码——永远出
+// startLoginQr(true) 合并码（云桥密封回传，跨网络可用），本机 relay 私网可达时 rt
+// 由 startLoginQr 附进同一个码 + 开临时收件 ws（手机自动择路：同网直传/跨网走桥）。
+// 直连形态表单的 url 字段是 LAN 地址不能当桥，桥地址显式传 defaultCloudUrl()
 let importWs = null;
 async function importSrvQr() {
-  // 0.4.4 合并扫码：云桥语境出跨网合并码（手机扫后可选授权这台电脑入网 / 挑一条连接
-  // 回传——经桥密封投递，不受同一 WiFi 限制）；直连语境无桥可走，维持下方旧 rt 局域网
-  // 回传通道（本机 relay 在跑 + 手机同一 WiFi）。授权能力原在 relay 页「扫码接入」钮，
-  // 0.4.4 起并到这里，relay 页只剩手机接入一键
-  const editCfg = editId ? cfgOf(editId) : null;
-  if (formKind === "cloud" || (editCfg && editCfg.kind === "cloud")) {
-    startLoginQr(true);
-    return;
-  }
-  if (!localRelayInfo) await probeRelayStat(); // relay 页没开过也能出码：先补一次实测探测
-  if (!localRelayInfo) { toast("本机 relay 未运行"); return; }
-  // #25 同款守卫：rt 是手机直连回传地址，tauri.localhost/回环/域名都不可达——只认私网 IP
-  const PRIV_IP3 = /^(192\.168|10|172\.(1[6-9]|2\d|3[01]))\./;
-  const host =
-    (PRIV_IP3.test(localRelayInfo.lanIp || "") && localRelayInfo.lanIp) ||
-    (PRIV_IP3.test(location.hostname || "") ? location.hostname : "");
-  if (!host) { toast("无法确定本机局域网地址：手机与本机需同一 WiFi（跨网络请用云桥形态的「从手机添加」）"); return; }
-  const url = "ws://" + host + ":" + localRelayInfo.port + "/ws";
-  $("loginQrTitle").textContent = "从手机导入连接";
-  $("loginQrSub").innerHTML = "手机 CC Deck App 扫码后<br/>选择要分享的连接";
-  $("loginQrState").textContent = "等待手机扫码…";
-  drawLoginQr(JSON.stringify({ t: "ccdeck-import", v: 1, rt: { url, token: localRelayInfo.token } }));
-  $("loginQrPop").classList.add("open");
-  importListenStart(url, localRelayInfo.token); // 码内容与监听同生命周期：开浮层=开监听
+  // 云桥形态：表单 url/token 即桥参数（token 空回落公共桥）；直连形态：烘焙桥 + 默认地址
+  if (formKind === "cloud") startLoginQr(true, { bridgeUrl: $("url").value.trim(), bridgeToken: $("token").value.trim() });
+  else startLoginQr(true, { bridgeUrl: defaultCloudUrl(), bridgeToken: BAKED_BRIDGE_TOKEN });
 }
 $("importSrvBtn").onclick = () => void importSrvQr();
 

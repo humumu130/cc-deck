@@ -42183,7 +42183,11 @@ var SessionManager = class {
       }, 48e4);
       t.unref?.();
     }
-    this.bus.emit(id2, "SESSION_UPDATED", { compacting: on2 });
+    this.bus.emit(id2, "SESSION_UPDATED", {
+      status: s.state.status,
+      action_summary: s.state.action_summary,
+      compacting: on2
+    });
   }
   // pid 对账/解锁等纯状态修复后强制下发：emitUpdated 携带 historical 等字段，
   // 否则客户端要等下次 SNAPSHOT 才摘掉"仅可查看"
@@ -44630,6 +44634,7 @@ var Bridge = class _Bridge {
       this.sweepNoHookIdle();
       this.sweepWorkingIdle();
       this.sweepSubagents();
+      this.pollSubagentActivity();
       this.sweepStuckInputs();
     }, 3e3);
     this.queuePollTimer.unref();
@@ -46105,10 +46110,12 @@ var Bridge = class _Bridge {
   // transcript 里的 Agent tool_use 块（真实 call_xxx id）：
   //  - hook 未带 tool_use_id 时 Pre 建的是合成 id（ag-N）——升级为真实 id，后续 task-notification 才能配对
   //  - relay 重启等原因错过 Pre hook 的后台派生：补建条目（结束靠 task-notification）
+  // 注意 list 取法必须是 `?? []`（与 trackSubagentStart 对齐）：state.subagents 初始
+  // 是 undefined，早先的 `if (!list) return` 把"补建条目"路径整个堵死——relay 重启后
+  // 第一个后台子 Agent 永远建不起来，手机/桌面全程误报空闲（#100 复发的第一根因）
   observeAgentUse(id2, use2) {
     if (!use2.id) return;
-    const list = this.mgr.getExternal(id2)?.subagents;
-    if (!list) return;
+    const list = this.mgr.getExternal(id2)?.subagents ?? [];
     if (list.some((x) => x.id === use2.id)) return;
     const input = use2.input ?? {};
     const desc = _Bridge.subagentDesc(input);
@@ -46144,15 +46151,185 @@ var Bridge = class _Bridge {
     if (i === -1 || list[i].ended_at) return;
     this.mgr.setExternalSubagents(id2, list.map((x, k3) => k3 === i ? { ...x, ended_at: Date.now() } : { ...x }));
   }
-  // TTL 清理（每 5s 轮询节拍里跑）：已结束保留 10 分钟；running 30 分钟无事件视为僵尸清除
+  // TTL 清理（每轮询节拍里跑）：已结束保留 10 分钟；running 以活性账本优先——
+  // 子 Agent 转录最后一次增长距令超过 30 分钟才判僵尸（真实 CLI 死亡/失控后文件
+  // 停止增长，仍会被清）；无账本记录（旧版 CLI 无转录信号）回落 started_at 旧口径
   sweepSubagents() {
     const now = Date.now();
     for (const s of this.mgr.snapshot()) {
       if (!s.external || !s.subagents?.length) continue;
-      const kept2 = s.subagents.filter(
-        (x) => x.ended_at ? now - x.ended_at < this.subagentEndTtlMs : now - x.started_at < this.subagentRunTtlMs
-      );
+      const dropped = [];
+      const kept2 = s.subagents.filter((x) => {
+        if (x.ended_at) return now - x.ended_at < this.subagentEndTtlMs;
+        const ok2 = now - (this.subagentAlive.get(`${s.session_id}:${x.id}`) ?? x.started_at) < this.subagentRunTtlMs;
+        if (!ok2) dropped.push(x.id);
+        return ok2;
+      });
+      if (dropped.length) {
+        const prefix = `${s.session_id}:`;
+        for (const k3 of [...this.subagentAlive.keys()]) {
+          if (k3.startsWith(prefix) && dropped.includes(k3.slice(prefix.length))) {
+            this.subagentAlive.delete(k3);
+            this.subagentFileSize.delete(k3);
+          }
+        }
+      }
       if (kept2.length !== s.subagents.length) this.mgr.setExternalSubagents(s.session_id, kept2);
+    }
+    if (this.subagentAlive.size > 500) {
+      this.subagentAlive.clear();
+      this.subagentFileSize.clear();
+    }
+  }
+  // ---------- #103 子 Agent 活性（HUD 风格：会话页能看到每个子 Agent 此刻在干什么）----------
+  // CLI 把每个子 Agent 的对话落盘在 <父transcript同目录>/<会话id>/subagents/agent-<agentId>.jsonl，
+  // 旁有 agent-<agentId>.meta.json 且自带 toolUseId（= Task 的 tool_use id，与 SubagentInfo.id
+  // 直接配对，前台/后台通吃——父 transcript 的 tool_result 只有结束才带 agentId，配不上「进行中」）。
+  // tail 出最后一个 assistant tool_use 即当前动作；act 变化才触发下发
+  // （setExternalSubagents 的 JSON 对比兜底，端上 3s 级感知）。文件缺失（旧版 CLI 无此
+  // 目录/已被清理）静默跳过，功能自动降级为无活性
+  subagentAgentIds = /* @__PURE__ */ new Map();
+  // toolUseId -> agentId（meta 不变，配对缓存复用）
+  // running 子 Agent 活性账本（sweepSubagents 僵尸判定的第二时钟）：pollSubagentActivity
+  // 每节拍顺手 stat 子 Agent 转录——文件大小增长 = 还在干活，刷新最后活性时间。
+  // 此前 sweep 对 running 条目按 started_at 一刀切 30min，1h+ 的真实长任务会被当
+  // 僵尸清掉、状态塌回"空闲"（#100 复发的第二根因）。无转录信号（旧版 CLI 无
+  // subagents 目录 / 文件未建）时回落 started_at，行为与旧版一致
+  subagentAlive = /* @__PURE__ */ new Map();
+  // `${sid}:${toolUseId}` -> 最后转录增长时间
+  subagentFileSize = /* @__PURE__ */ new Map();
+  // 同 key -> 上次见到的文件大小
+  resolveSubagentAgent(dir, toolUseId) {
+    const cached2 = this.subagentAgentIds.get(toolUseId);
+    if (cached2) return cached2;
+    if (this.subagentAgentIds.size > 500) this.subagentAgentIds.clear();
+    let names;
+    try {
+      names = readdirSync4(dir);
+    } catch {
+      return null;
+    }
+    for (const n of names) {
+      if (!n.startsWith("agent-") || !n.endsWith(".meta.json")) continue;
+      try {
+        const meta = JSON.parse(readFileSync11(path5.join(dir, n), "utf8"));
+        const agentId = n.slice("agent-".length, -".meta.json".length);
+        if (meta.toolUseId) this.subagentAgentIds.set(meta.toolUseId, agentId);
+      } catch {
+      }
+    }
+    return this.subagentAgentIds.get(toolUseId) ?? null;
+  }
+  // 末 64KB tail 足够覆盖最近几十个回合的工具序列；首行可能被截半丢弃
+  subagentActivity(file) {
+    let st2;
+    try {
+      st2 = statSync5(file);
+    } catch {
+      return null;
+    }
+    const start = Math.max(0, st2.size - 65536);
+    let buf;
+    try {
+      const fd2 = openSync2(file, "r");
+      try {
+        buf = Buffer.alloc(st2.size - start);
+        readSync2(fd2, buf, 0, buf.length, start);
+      } finally {
+        closeSync2(fd2);
+      }
+    } catch {
+      return null;
+    }
+    const lines = buf.toString("utf8").split("\n");
+    if (start > 0 && lines.length) lines[0] = "";
+    for (let i = lines.length - 1; i >= 0; i--) {
+      const l = lines[i]?.trim();
+      if (!l || !l.startsWith("{")) continue;
+      let e;
+      try {
+        e = JSON.parse(l);
+      } catch {
+        continue;
+      }
+      if (e.type !== "assistant" || !Array.isArray(e.message?.content)) continue;
+      const cs2 = e.message.content;
+      for (let k3 = cs2.length - 1; k3 >= 0; k3--) {
+        const c = cs2[k3];
+        if (c?.type === "tool_use" && c.name) return _Bridge.describeToolUse(c.name, c.input);
+      }
+    }
+    return null;
+  }
+  // 工具调用 → 人话摘要：Bash 优先 description（无则命令前几个词），文件类取 basename，
+  // 检索类取 pattern/query——与 CLI/HUD 呈现粒度对齐（工具名 + 一眼可辨的目标）
+  static describeToolUse(name, input) {
+    const inp = input ?? {};
+    const str2 = (v) => typeof v === "string" ? v.trim() : "";
+    let gist = "";
+    switch (name) {
+      case "Bash": {
+        gist = str2(inp.description) || str2(inp.command).split(/\s+/).slice(0, 4).join(" ");
+        break;
+      }
+      case "Read":
+      case "Edit":
+      case "Write":
+      case "NotebookEdit": {
+        gist = str2(inp.file_path).split(/[\\/]/).pop() ?? "";
+        break;
+      }
+      case "Grep":
+      case "Glob": {
+        gist = str2(inp.pattern) || str2(inp.query);
+        break;
+      }
+      case "WebSearch":
+      case "WebFetch": {
+        gist = str2(inp.query) || str2(inp.url);
+        break;
+      }
+      case "Agent":
+      case "Task":
+      case "Skill": {
+        gist = str2(inp.description) || str2(inp.skill);
+        break;
+      }
+      default:
+        break;
+    }
+    return truncate(`${name}${gist ? " \xB7 " + gist : ""}`, 80);
+  }
+  // 活性轮询（主循环 3s 节拍）：只碰有 running 子 Agent 的会话；结束条目不采——
+  // 定格在结束前最后动作，随 TTL 清扫
+  pollSubagentActivity() {
+    for (const s of this.mgr.snapshot()) {
+      if (!s.external || !s.subagents?.length || !s.subagents.some((x) => !x.ended_at)) continue;
+      const tp2 = this.transcriptPaths.get(s.session_id);
+      if (!tp2) continue;
+      const dir = path5.join(path5.dirname(tp2), path5.basename(tp2).replace(/\.jsonl$/i, ""), "subagents");
+      let next = null;
+      for (let i = 0; i < s.subagents.length; i++) {
+        const cur = s.subagents[i];
+        if (cur.ended_at) continue;
+        const agentId = this.resolveSubagentAgent(dir, cur.id);
+        if (!agentId) continue;
+        const agentFile = path5.join(dir, `agent-${agentId}.jsonl`);
+        const aliveKey = `${s.session_id}:${cur.id}`;
+        try {
+          const sz2 = statSync5(agentFile).size;
+          if (this.subagentFileSize.get(aliveKey) !== sz2) {
+            this.subagentFileSize.set(aliveKey, sz2);
+            this.subagentAlive.set(aliveKey, Date.now());
+          }
+        } catch {
+        }
+        const act = this.subagentActivity(agentFile);
+        if (act === null || act === cur.act) continue;
+        next = next ?? s.subagents.map((x) => ({ ...x }));
+        next[i] = { ...next[i], act, act_at: Date.now() };
+      }
+      if (next) this.mgr.setExternalSubagents(s.session_id, next);
     }
   }
   // ---------- 注入后主动验证（#111）+ 排队消息滞留输入框看门狗 ----------
@@ -46316,7 +46493,7 @@ function pluginConfigPath() {
   return join13(homedir10(), ".cc-deck", "config.json");
 }
 function readPluginConfig() {
-  const out = { taskGuard: false, qNotify: true, restorePoint: false, deliverables: false };
+  const out = { taskGuard: false, qNotify: true, restorePoint: false, deliverables: true };
   try {
     const raw = JSON.parse(readFileSync12(pluginConfigPath(), "utf-8"));
     for (const k3 of PLUGIN_CFG_KEYS) if (typeof raw[k3] === "boolean") out[k3] = raw[k3];
@@ -46844,6 +47021,9 @@ function startServer(bus2, mgr2, cfg2, opts = {}) {
           ...Object.keys(snapLogs.logs_truncated).length ? { logs_truncated: snapLogs.logs_truncated } : {},
           server_time: Date.now(),
           homedir: homedir10(),
+          // relay 本机平台（#8：手机端 NewSessionModal 自适应路径文案/盘符拦截依据；
+          // #117 教训——云通道快照同名字段必须同步，云桥手机才收得到）
+          platform: process.platform,
           models: listModels(mgr2.cfg.model),
           // #71 输出物开关：恒布尔随快照下发（旧客户端忽略未知键），三端 tab 据此显隐
           deliverables: readPluginConfig().deliverables,
@@ -47450,6 +47630,9 @@ var CloudClient = class {
         wan_dev: this.identity.wanDev,
         // #71 输出物开关（与 ws-server 直连快照同源）：云通道手机 tab 同样跟随
         deliverables: readPluginConfig().deliverables,
+        // relay 本机平台（#8）：与 ws-server 直连快照同源同步（#117 教训：云桥手机
+        // 建会话的路径文案/盘符拦截同样需要；旧客户端忽略未知键）
+        platform: process.platform,
         // #117：云通道快照补 lan_hint/relay_name——#95/#100 此前只挂在 ws-server
         // 直连快照上，云通道手机收不到（LAN 角标恒☁️、默认名不生效的根因）
         ...this.extra?.lanHint?.() ? { lan_hint: this.extra.lanHint() } : {},
