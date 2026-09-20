@@ -179,6 +179,11 @@ function BlinkDot({ color }: { color: string }) {
   );
 }
 
+// #100 后台任务徽标：主回合空闲但仍有子 Agent 在跑——⑂N 黄字小标（与灯同语义色）
+function BgBadge({ n, color }: { n: number; color: string }) {
+  return <Text style={{ color, fontSize: 9.5, fontWeight: "700" }}> ⑂{n}</Text>;
+}
+
 // 黄灯旁的实时工作状态：回合耗时 · ↓输出tokens · 当前动作（每秒走秒）；
 // #363 压缩中：⟳ 明示（CLI "Compacting conversation..."），不显示旧摘要防误判卡死
 function LiveStat({ s }: { s: SessionState }) {
@@ -444,15 +449,20 @@ const SessionCard = memo(function SessionCard({
   const compact = density === "compact";
   const minimal = density === "minimal";
   const color = statusColor(s.status, c);
-  const deletable = s.status === "DONE" || s.status === "ERROR";
+  // #100 后台任务态：主回合空闲但仍有子 Agent 在跑——灯转黄呼吸 + ⑂N 徽标 + 不置灰
+  const bgCount = (s.subagents ?? []).filter((a) => !a.ended_at).length;
+  const bgLive = bgCount > 0 && s.status !== "WORKING";
+  const dotColor = bgLive ? c.working : color;
+  const deletable = (s.status === "DONE" || s.status === "ERROR") && !bgLive; // #100 后台在跑禁删（删会话会杀后台任务）
   // 空闲超时置灰（2026-09-17 名实对齐：此前 DONE 即灰没有超时，刚结束的会话瞬间
   // 变暗被用户反馈"灰过头"）——DONE/ERROR 且静默 30 分钟才蒙层置灰，刚完成的保持
   // 鲜亮让位更从容；阈值常量 IDLE_DIM_MS 可调
   const isIdleCard =
     (s.status === "DONE" || s.status === "ERROR") &&
+    !bgLive && // #100 豁免：后台子 Agent 还在跑的会话不是闲置（等孩子 ≠ 死会话）
     Date.now() - (s.updated_at ?? s.started_at) > IDLE_DIM_MS;
-  // 沉寂会话（DONE 且非今日更新）：名称色降一档，长列表里让位给活跃会话
-  const idle = s.status === "DONE" && !isSameDay(s.updated_at ?? s.started_at, Date.now());
+  // 沉寂会话（DONE 且非今日更新）：名称色降一档，长列表里让位给活跃会话；#100 后台在跑同样豁免
+  const idle = s.status === "DONE" && !bgLive && !isSameDay(s.updated_at ?? s.started_at, Date.now());
   return (
     <SwipeRow
       sid={s.session_id}
@@ -471,14 +481,15 @@ const SessionCard = memo(function SessionCard({
         // 其余全部隐藏；行间分隔由 swipeWrapM 的极淡 hairline 承担（平铺行，不再堆卡间距）；
         // 点击/左滑交互与其他档一致
         <View style={styles.rowM}>
-          {s.status === "WORKING" ? (
-            <BlinkDot color={color} />
+          {s.status === "WORKING" || bgLive ? (
+            <BlinkDot color={dotColor} />
           ) : (
             <View style={[styles.dot, { backgroundColor: color }]} />
           )}
           <Text style={[styles.titleM, idle && styles.titleIdle]} numberOfLines={1}>
             {s.title || "未命名会话"}
           </Text>
+          {bgCount > 0 ? <BgBadge n={bgCount} color={c.working} /> : null}
           <View style={{ flex: 1 }} />
           {srcBadge ? <SrcBadge {...srcBadge} /> : null}
           <CtxCell s={s} />
@@ -487,12 +498,13 @@ const SessionCard = memo(function SessionCard({
         // 紧凑卡：状态点+标题+时长一行、动作摘要一行、目录/改动/水位一行——省高度但不丢信息
         <>
           <View style={styles.rowC}>
-            {s.status === "WORKING" ? (
-              <BlinkDot color={color} />
+            {s.status === "WORKING" || bgLive ? (
+              <BlinkDot color={dotColor} />
             ) : (
               <View style={[styles.dot, { backgroundColor: color }]} />
             )}
             <Text style={[styles.titleC, idle && styles.titleIdle]} numberOfLines={1}>{s.title || "未命名会话"}</Text>
+            {bgCount > 0 ? <BgBadge n={bgCount} color={c.working} /> : null}
             <View style={{ flex: 1 }} />
             {srcBadge ? <SrcBadge {...srcBadge} /> : null}
             <Elapsed s={s} />
@@ -517,14 +529,15 @@ const SessionCard = memo(function SessionCard({
           {/* #362 标题恒第一行（灯+名称+时长）：WORKING/空闲同构，状态切换不跳行；
               工作实时行/摘要 occupy 第二行可变位 */}
           <View style={styles.titleRow}>
-            {s.status === "WORKING" ? (
-              <BlinkDot color={color} />
+            {s.status === "WORKING" || bgLive ? (
+              <BlinkDot color={dotColor} />
             ) : (
               <View style={[styles.dot, { backgroundColor: color }]} />
             )}
             <Text style={[styles.title, idle && styles.titleIdle]} numberOfLines={1}>
               {s.title || "未命名会话"}
             </Text>
+            {bgCount > 0 ? <BgBadge n={bgCount} color={c.working} /> : null}
             <View style={{ flex: 1 }} />
             <Elapsed s={s} />
           </View>
@@ -699,8 +712,10 @@ export default function ListScreen({ sessions, connected, connText, onOpen, onNe
     // 新完成的会话紧跟活跃段，不再"闪现后跳到 20 个会话底部"像消失。
     // #294 批2：聚合时 sessions 已是全源平铺，同一比较器作用于合并列表；
     // 分组态在下方 rows memo 里按 src 分区（组间按组内最近活动排序），组内沿用本排序
+    // #100 后台在跑（子 Agent 未收尾）视同活跃置顶——派了任务却沉底像消失
     const rank = (s: SessionState) =>
-      s.status === "WORKING" || s.status === "WAITING" || s.status === "ERROR" ? 0 : 1;
+      s.status === "WORKING" || s.status === "WAITING" || s.status === "ERROR" ||
+      (s.subagents ?? []).some((a) => !a.ended_at) ? 0 : 1;
     return [...sessions].sort(
       (a, b) => rank(a) - rank(b) || (b.updated_at ?? b.started_at) - (a.updated_at ?? a.started_at),
     );
@@ -744,7 +759,8 @@ export default function ListScreen({ sessions, connected, connText, onOpen, onNe
   };
   const idleCount = counts["DONE"] ?? 0;
   const visible = useMemo(
-    () => (collapseIdle ? sorted.filter((s) => s.status !== "DONE") : sorted)
+    // 折叠空闲豁免后台在跑卡（#100）：等子 Agent ≠ 空闲，不随折叠隐藏
+    () => (collapseIdle ? sorted.filter((s) => s.status !== "DONE" || (s.subagents ?? []).some((a) => !a.ended_at)) : sorted)
       .filter((s) => s.session_id !== pendingDel && !deleting.includes(s.session_id)),
     [sorted, collapseIdle, pendingDel, deleting],
   );

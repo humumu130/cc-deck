@@ -1264,6 +1264,12 @@
      浅色条须压过上面 LED 规则（特异性 html.light .card .c-dot 更高），故双写 */
   .card.DONE .c-dot, .card.ERROR .c-dot { background: transparent; border: 2px solid var(--sc); }
   html.light .card.DONE .c-dot, html.light .card.ERROR .c-dot { background: transparent; border: 2px solid var(--sc); }
+  /* #100 后台任务态：主回合 DONE 但仍有子 Agent 在跑——灯转 working 黄呼吸（--sc 覆写
+     带动光圈同色）。本块置于终态空心环之后：特异性同级靠声明顺序压过背景/边框 */
+  .card.bg-live .c-dot { --sc: var(--working); background: var(--working); border: none; }
+  html.light .card.bg-live .c-dot { background: color-mix(in srgb, var(--working) 55%, #fff); border: 1.5px solid var(--working); }
+  /* #100 ⑂N 徽标：黄描边小胶囊（「在跑」语义色），his-badge 同形制 */
+  .bg-badge { font-size: 10px; color: var(--working); border: 1px solid color-mix(in srgb, var(--working) 45%, transparent); padding: 1px 6px; border-radius: 999px; flex: none; font-weight: 600; }
   .card.compact .card-title { flex: 1; min-width: 0; margin-top: 0; font-size: 13px; gap: 6px; }
   .card.compact .c-tt { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .card.compact .card-title input { font-size: 12.5px; }
@@ -4107,6 +4113,10 @@ window.addEventListener("resize", cfRestorePos);
     window.addEventListener("pointercancel", end);
   });
 })();
+// #100 后台任务态判定：主回合已 DONE 但仍有未结束子 Agent（⑂）在跑——列表卡片
+// 视同活跃（灯呼吸黄 + ⑂N 徽标 + 排序升 WORKING 档），消灭「派了后台任务却显示空闲」
+function bgRunning(s) { return (s.subagents ?? []).some((a) => !a.ended_at); }
+function bgCount(s) { return (s.subagents ?? []).filter((a) => !a.ended_at).length; }
 // #98 补充（用户三条拍板）：①源强调色必须避开状态灯四色及其接近色——红=WAITING/
 // 橙红=ERROR（与品牌橙 0-2° 撞）/黄=WORKING/绿=DONE；②池内两两也须 ≥25°（同屏
 // 可辨，旧 7 色池 #4DD0E1~#29B6F6 仅 12° 不合格）；③不占品牌橙。安全区 hue
@@ -4220,13 +4230,16 @@ function render() {
   // 排序：等待 > 运行 > 错误 > 完成；组内按更新时间倒序（#279E 对齐手机口径：
   // 新完成的会话紧跟活跃段顶部，不再按启动时间沉到 DONE 组底部像"消失"）
   const order = { WAITING: 0, WORKING: 1, ERROR: 2, DONE: 3 };
+  // #100 后台在跑的 DONE 卡视同 WORKING 档（在干活不上沉）；组内排序不变
+  const rankOf = (s) => (s.status === "DONE" && bgRunning(s) ? 1 : order[s.status]);
   let entries = allSessions();
   if (filterSrc !== "all") entries = entries.filter((e) => e.ctx.cfg.id === filterSrc);
-  if (collapseIdle) entries = entries.filter((e) => e.s.status !== "DONE");
+  // 折叠空闲豁免后台在跑卡（#100）：等孩子 ≠ 空闲
+  if (collapseIdle) entries = entries.filter((e) => e.s.status !== "DONE" || bgRunning(e.s));
   // #279① 挂起删除（4s 撤销窗口内）与已提交删除（待 SESSION_DELETED 确认）的卡片保持隐藏
   entries = entries.filter((e) => e.s.session_id !== pendingDel.sid && !deleting.has(e.s.session_id));
   const list = entries.sort((a, b) =>
-    (order[a.s.status] - order[b.s.status]) || ((b.s.updated_at || b.s.started_at) - (a.s.updated_at || a.s.started_at)));
+    (rankOf(a.s) - rankOf(b.s)) || ((b.s.updated_at || b.s.started_at) - (a.s.updated_at || a.s.started_at)));
   // #50 徽章显隐按「在线源数」判定：唯一在线源时无归属歧义，全部视图下也不渲染；
   // 全部离线时回落按配置源数>1（旧行为，离线卡的来源仍可辨）。
   // 显隐因子入 key：源上下线会翻转显隐，key 不含则不重渲、徽章残留/缺失
@@ -4234,7 +4247,7 @@ function render() {
   const showSrcTag = onlineSrcs > 1 || (onlineSrcs === 0 && ctxs.size > 1);
   // key 含 filterSrc：切 chip 时徽章显隐随聚合/单源变化，强制重渲即时生效
   // #49 key 含 pinned/saved：保存恢复切换/恢复点击后徽章与休眠态即时重渲
-  const key = (listCompact ? "C|" : "") + filterSrc + "|" + (showSrcTag ? "b1|" : "b0|") + list.map((e) => e.ctx.cfg.id + ":" + e.s.session_id + ":" + e.s.status + ":" + (e.s.title || "") + ":" + (e.s.action_summary || "") + ":" + (e.s.waiting_request ? 1 : 0) + ":" + ctxPct(e.s) + ":" + (e.s.pinned ? 1 : 0) + (isDormant(e.s) ? "d" : "")).join("|");
+  const key = (listCompact ? "C|" : "") + filterSrc + "|" + (showSrcTag ? "b1|" : "b0|") + list.map((e) => e.ctx.cfg.id + ":" + e.s.session_id + ":" + e.s.status + ":" + (e.s.title || "") + ":" + (e.s.action_summary || "") + ":" + (e.s.waiting_request ? 1 : 0) + ":" + ctxPct(e.s) + ":" + (e.s.pinned ? 1 : 0) + (isDormant(e.s) ? "d" : "") + (bgRunning(e.s) ? "g" : "")).join("|");
   if (box.dataset.key !== key) {
     // 就地改名进行中：跳过重建（运行中会话 key 每秒变，会把编辑框冲掉）
     if (document.activeElement && document.activeElement.classList.contains("card-rename")) return;
@@ -4258,7 +4271,7 @@ function render() {
       const d = document.createElement("div");
       d.dataset.sid = s.session_id;
       d.dataset.src = ctx.cfg.id;
-      d.className = "card " + s.status + (listCompact ? " compact" : "") + (selected && selected.src === ctx.cfg.id && s.session_id === selected.sid ? " sel" : "") + (s.historical && !dormant ? " historical" : "") + (dormant ? " dormant" : "");
+      d.className = "card " + s.status + (listCompact ? " compact" : "") + (selected && selected.src === ctx.cfg.id && s.session_id === selected.sid ? " sel" : "") + (s.historical && !dormant ? " historical" : "") + (dormant ? " dormant" : "") + (s.status === "DONE" && bgRunning(s) ? " bg-live" : "");
       if (dormant) d.title = "已保存休眠 · 点击恢复";
       // 根治④对称化：等待判定必须同时看 status——脱钩帧（waiting_request 残留 +
       // status 已翻走）不该再渲染【处理】按钮，否则按钮点开详情永远等不到弹窗
@@ -4267,11 +4280,15 @@ function render() {
         ? (s.waiting_request.questions?.length ? "Claude 在提问：" + (s.waiting_request.questions[0].header || "") : "需要确认 " + s.waiting_request.tool_name + " — " + (s.waiting_request.input_summary || ""))
         : (s.status === "ERROR" && s.last_error ? "⚠ " + s.last_error : s.action_summary || "");
       // 与手机 deletable 同口径：仅 DONE/ERROR 可删（relay 对运行中会话拒绝删除）
-      const deletable = s.status === "DONE" || s.status === "ERROR";
+      // #100 后台子 Agent 在跑时禁删（删会话会杀后台任务）——「运行中，不能删除」tooltip 已有
+      const deletable = (s.status === "DONE" || s.status === "ERROR") && !(s.status !== "WORKING" && bgRunning(s));
       // #49 徽章：休眠卡（已保存未恢复）出「休眠」徽；普通遗留出「历史」；外部 CLI 出「终端」
       // #23 徽章四态：休眠/历史/终端（外部 CLI 会话）/后台（控制台新建的托管会话——
       // 无终端窗口，消息只在面板可见；降低与终端会话的混淆）
       const badges = dormant ? '<span class="his-badge">休眠</span>' : s.historical ? '<span class="his-badge">历史</span>' : s.external ? '<span class="his-badge ext">终端</span>' : '<span class="his-badge bg">后台</span>';
+      // #100 后台任务徽标：主回合空闲但子 Agent 仍在跑——⑂N 黄胶囊（灯同转呼吸黄）；
+      // WORKING 时 liveRow 已交代在跑，徽标只补「空闲却没闲着」这个误报场景
+      const bgBadge = s.status !== "WORKING" && bgRunning(s) ? '<span class="bg-badge" title="后台子 Agent 运行中">⑂' + bgCount(s) + "</span>" : "";
       // #49 保存恢复徽章：pinned 卡标题行左端 10px 级锚形小标（悬停说明与 toast 同口径：
       // 重启后休眠保留，点击卡片恢复——不自动拉起，2026-09-09 拍板）
       const pinFlag = s.pinned ? '<span class="pin-flag" title="已保存：重启后休眠保留，点击卡片恢复">' + PIN_ANCHOR_SVG + "</span>" : "";
@@ -4285,8 +4302,8 @@ function render() {
       // #362 标题恒第一行：灯（WORKING 呼吸）+标题+总时长同构一行，状态切换不跳行；
       // WORKING 实时行（回合秒+↓tokens+动作摘要）退居第二行，空闲第二行=摘要
       const headRow =
-        '<div class="c-head">' + pinFlag + '<span class="c-dot' + (s.status === "WORKING" ? " run" : "") + '" style="--sc:var(--' + (s.status || "").toLowerCase() + ')"></span>' +
-          '<span class="card-title"><span class="c-tt">' + escapeHtml(s.title || "") + "</span>" + badges + opBtns + "</span>" +
+        '<div class="c-head">' + pinFlag + '<span class="c-dot' + (s.status === "WORKING" || (s.status === "DONE" && bgRunning(s)) ? " run" : "") /* #100 后台在跑也呼吸 */ + '" style="--sc:var(--' + (s.status || "").toLowerCase() + ')"></span>' +
+          '<span class="card-title"><span class="c-tt">' + escapeHtml(s.title || "") + "</span>" + bgBadge + badges + opBtns + "</span>" +
           '<span class="elapsed">' + fmtElapsed(sessionElapsed(s)) + "</span></div>";
       const liveRow = s.status === "WORKING"
         ? '<div class="c-live">' +
@@ -4313,8 +4330,8 @@ function render() {
       if (listCompact) {
         // #279⑨ 紧凑卡（对齐手机）：状态点+标题+耗时 / 摘要 / 改动+水位+源标签
         d.innerHTML =
-          '<div class="c-row1">' + pinFlag + '<span class="c-dot' + (s.status === "WORKING" ? " run" : "") + '" style="--sc:var(--' + (s.status || "").toLowerCase() + ')"></span>' +
-            '<span class="card-title"><span class="c-tt">' + escapeHtml(s.title || "") + "</span>" + badges + opBtns + "</span>" +
+          '<div class="c-row1">' + pinFlag + '<span class="c-dot' + (s.status === "WORKING" || (s.status === "DONE" && bgRunning(s)) ? " run" : "") /* #100 后台在跑也呼吸 */ + '" style="--sc:var(--' + (s.status || "").toLowerCase() + ')"></span>' +
+            '<span class="card-title"><span class="c-tt">' + escapeHtml(s.title || "") + "</span>" + bgBadge + badges + opBtns + "</span>" +
             '<span class="elapsed">' + fmtElapsed(sessionElapsed(s)) + "</span></div>" +
           summaryRow +
           statsBlock +
