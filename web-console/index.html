@@ -1830,6 +1830,13 @@
     background: var(--panel);
   }
   #imgrow .img-x:hover { color: var(--text); border-color: var(--hov); }
+  /* #92 待发文件 chip：与缩略图同高，文件名截断 */
+  #imgrow .file-cell {
+    position: relative; display: flex; align-items: center; height: 56px; max-width: 170px;
+    padding: 0 8px; border: 1px solid var(--border); border-radius: 10px;
+    background: var(--bg-soft); font-size: 12px; color: var(--text);
+  }
+  #imgrow .file-cell .file-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
   #hisnote { display: none; padding: 14px 20px; border-top: 1px solid var(--border); color: var(--faint); font-size: 13px; background: var(--glass); flex: none; }
 
@@ -2253,6 +2260,7 @@
     </div>
     <div id="imgrow"></div>
     <input type="file" id="imgFile" accept="image/*" multiple hidden>
+    <input type="file" id="fileInput" multiple hidden>
     <div id="cmdbar">
       <div id="slashbox"></div>
       <div id="inputcard">
@@ -2263,6 +2271,7 @@
         <div class="ic-bottom">
           <div class="ic-left">
             <button id="imgBtn" title="添加图片（最多 4 张，也可直接 Ctrl+V 粘贴）"><svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M8.7 6.8l1.05-1.9a1.5 1.5 0 0 1 1.3-.75h1.9a1.5 1.5 0 0 1 1.3.75l1.05 1.9"/><rect x="3.4" y="6.8" width="17.2" height="13" rx="3"/><circle cx="12" cy="13.2" r="3.5"/></svg></button>
+            <button id="fileBtn" title="附加文件（最多 2 个，单个 20MB，发送时落盘到电脑由 CLI 读取）"><svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M21.4 11.05 12.25 20.2a5.5 5.5 0 0 1-7.78-7.78l8.49-8.48a3.5 3.5 0 1 1 4.95 4.95l-8.49 8.48a1.5 1.5 0 0 1-2.12-2.12l7.78-7.78"/></svg></button>
             <button id="stopBtn" title="停止会话">⏹ 停止</button>
           </div>
           <button id="sendBtn" title="发送（Enter）">➤</button>
@@ -4582,6 +4591,7 @@ function renderDetail() {
   // #279 批次3 图片入口；#54 起外部 CLI 会话也可发图（relay 落盘+注入路径指令）
   // 隐藏仅剩：不可恢复的托管历史会话（cmdLocked 同口径）
   $("imgBtn").style.display = s.historical && !s.external && !s.relay_session_id ? "none" : "";
+  $("fileBtn").style.display = s.historical && !s.external && !s.relay_session_id ? "none" : ""; // #92 文件入口同口径
 
   // 时间线 / 统计（增量重建）
   const tl = $("timeline");
@@ -5256,6 +5266,7 @@ function select(sid, srcId) {
   document.querySelectorAll(".tabs button.tab").forEach((b) => b.classList.toggle("active", b.dataset.tab === "activity"));
   $("timeline").dataset.count = "";
   sendImages = []; // #279 批次3：待发图不跨会话（手机端随页面卸载重置，网页常驻需显式清）
+  sendFiles = []; // #92 待发文件同口径不跨会话
   renderImgRow();
   updateSlashBox(); // 切会话收起旧联想（会话的命令集不同）
   render();
@@ -5266,6 +5277,7 @@ function closeDetail() {
   histLoad(null); // #95 关详情回到空桶：此时按键不翻历史（无会话上下文）
   document.body.classList.remove("detail-open");
   sendImages = [];
+  sendFiles = []; // #92
   renderImgRow();
   updateSlashBox();
   render();
@@ -6153,6 +6165,9 @@ $("createBtn").onclick = () => {
 // 压缩：canvas 重绘 JPEG 长边≤1568 / 质量 0.82（HEIC 等浏览器不解码格式 catch 后 toast）；
 // 上送：COMMAND_MESSAGE payload.images = 原始 base64 数组（relay sanitizeImages 限 4 张/单张 8MB，同口径）。
 let sendImages = []; // 待发图 base64（无 data: 前缀，与手机端一致）；切会话即清
+// #92 待发文件（与手机端 #62 同口径 {name, b64}）：relay sanitize 限 2 个；切会话即清
+const FILE_MAX = 2, FILE_SIZE_MAX = 20 * 1024 * 1024;
+let sendFiles = [];
 const IMG_MAX = 4;
 // #54 外部会话开放（落盘+注入链路）；托管历史会话维持只读口径（resumable 除外见下）
 function imgSessionOk(s) { return !!s.external || !s.historical; }
@@ -6204,23 +6219,61 @@ async function addImageFiles(files) {
   syncSendState();
 }
 
+// #92 待发文件：任意类型多选，读 base64（去 data: 前缀）。上限与手机端一致（2 个/20MB），
+// relay sanitize 兜底剔除；超限与读取失败分开提示（带文件名/大小，chip 不在也要能知道为何没加上）
+async function addUploadFiles(files) {
+  const sel = selSession();
+  if (!sel || !imgSessionOk(sel.s)) return;
+  const all = [...files].filter(Boolean);
+  if (!all.length) return;
+  const room = FILE_MAX - sendFiles.length;
+  if (room <= 0) { toast("最多同时带 " + FILE_MAX + " 个文件"); return; }
+  const take = all.slice(0, room);
+  const oversize = [], failed = [];
+  for (const f of take) {
+    if (f.size > FILE_SIZE_MAX) { oversize.push((f.size / 1048576).toFixed(0) + "MB " + (f.name || "")); continue; }
+    try {
+      const dataUrl = await new Promise((res, rej) => {
+        const r = new FileReader();
+        r.onload = () => res(String(r.result));
+        r.onerror = () => rej(new Error("read fail"));
+        r.readAsDataURL(f);
+      });
+      const raw = dataUrl.slice(dataUrl.indexOf(",") + 1);
+      if (!raw) throw new Error("0 字节");
+      sendFiles.push({ name: f.name || "文件", b64: raw });
+    } catch { failed.push(f.name || "文件"); }
+  }
+  if (all.length > take.length) toast("最多同时带 " + FILE_MAX + " 个文件，超出的未添加");
+  if (oversize.length) toast(oversize.join("、") + " 超过 20MB，未添加", 4200);
+  if (failed.length) toast("「" + failed.join("、").slice(0, 40) + "」读取失败", 4200);
+  renderImgRow();
+  syncSendState();
+}
+
 function renderImgRow() {
   const row = $("imgrow");
-  if (!sendImages.length) { row.style.display = "none"; row.innerHTML = ""; return; }
+  if (!sendImages.length && !sendFiles.length) { row.style.display = "none"; row.innerHTML = ""; return; }
   row.style.display = "flex";
-  row.innerHTML = sendImages.map((b, i) =>
-    '<div class="img-cell"><img src="data:image/jpeg;base64,' + b + '" alt="">' +
-    '<button class="img-x" data-i="' + i + '" title="移除">✕</button></div>').join("");
+  row.innerHTML =
+    sendImages.map((b, i) =>
+      '<div class="img-cell"><img src="data:image/jpeg;base64,' + b + '" alt="">' +
+      '<button class="img-x" data-k="img" data-i="' + i + '" title="移除">✕</button></div>').join("") +
+    sendFiles.map((f, i) =>
+      '<div class="file-cell" title="' + escapeHtml(f.name) + '"><span class="file-name">📄 ' + escapeHtml(f.name) + '</span>' +
+      '<button class="img-x" data-k="file" data-i="' + i + '" title="移除">✕</button></div>').join("");
 }
 $("imgrow").addEventListener("click", (ev) => {
   const x = ev.target.closest(".img-x");
   if (!x) return;
-  sendImages.splice(+x.dataset.i, 1);
+  (x.dataset.k === "file" ? sendFiles : sendImages).splice(+x.dataset.i, 1);
   renderImgRow();
   syncSendState();
 });
 $("imgBtn").onclick = () => { const f = $("imgFile"); f.value = ""; f.click(); };
 $("imgFile").addEventListener("change", () => { void addImageFiles($("imgFile").files || []); });
+$("fileBtn").onclick = () => { const f = $("fileInput"); f.value = ""; f.click(); }; // #92 附加文件（任意类型）
+$("fileInput").addEventListener("change", () => { void addUploadFiles($("fileInput").files || []); });
 // 粘贴贴图（网页端独有优势）：剪贴板含图片文件即进待发行；纯文本粘贴不受影响
 document.addEventListener("paste", (ev) => {
   const items = ev.clipboardData && ev.clipboardData.items;
@@ -6246,7 +6299,7 @@ document.addEventListener("paste", (ev) => {
 function syncSendState() {
   const mi = $("msginput");
   // #279B 锁定态（历史无可恢复）叠加内容空判：禁用钮统一在此合流
-  $("sendBtn").disabled = cmdLocked || (!mi.value.trim() && sendImages.length === 0);
+  $("sendBtn").disabled = cmdLocked || (!mi.value.trim() && sendImages.length === 0 && sendFiles.length === 0);
   mi.style.height = "auto";
   mi.style.height = Math.min(mi.scrollHeight, 170) + "px";
 }
@@ -6458,8 +6511,8 @@ $("atBtn").onclick = () => $("msginput").focus();
 syncSendState();
 $("sendBtn").onclick = () => {
   const text = $("msginput").value.trim();
-  const imgs = sendImages;
-  if ((!text && !imgs.length) || !selected) return;
+  const imgs = sendImages, fs = sendFiles; // #92 fs：待发文件（与手机端 #62 同口径）
+  if ((!text && !imgs.length && !fs.length) || !selected) return;
   if ($("msginput").disabled) return; // #279B 锁定态（历史无可恢复）：输入已禁用，防御性兜底
   const sel = selSession();
   if (!sel) return;
@@ -6467,10 +6520,11 @@ $("sendBtn").onclick = () => {
   if (sel.s.external) {
     // #54 注入路径带图：relay 落盘临时目录，合成「正文 + 路径查看指令」注入，CLI 用 Read 看图；
     // 时间线由 hook 的 UserPromptSubmit / 排队日志回填，不本地预写
-    if (sendCommandTo(sel.ctx, "COMMAND_EXT_INPUT", { session_id: sid, text, ...(imgs.length ? { images: imgs } : {}) })) {
+    if (sendCommandTo(sel.ctx, "COMMAND_EXT_INPUT", { session_id: sid, text, ...(imgs.length ? { images: imgs } : {}), ...(fs.length ? { files: fs } : {}) })) {
       $("msginput").value = "";
       if (text) histPush(text);
       sendImages = [];
+      sendFiles = [];
       renderImgRow();
       syncSendState();
       if (sel.s.status === "WAITING") toast("已排队，回合结束后自动发送");
@@ -6478,7 +6532,7 @@ $("sendBtn").onclick = () => {
     return;
   }
   // #279 批次3：带图走 COMMAND_MESSAGE images（原始 base64；空文本 + 图也可发，relay 侧文本块省略）
-  if (sendCommandTo(sel.ctx, "COMMAND_MESSAGE", { session_id: sid, text, ...(imgs.length ? { images: imgs } : {}) })) {
+  if (sendCommandTo(sel.ctx, "COMMAND_MESSAGE", { session_id: sid, text, ...(imgs.length ? { images: imgs } : {}), ...(fs.length ? { files: fs } : {}) })) {
     // 本地不预写 user_message：relay 的 agent-adapter sendMessage() 会同步 onLog 回填
     // （含 "+N 图" 标记，M1 起即有），本地乐观回显会叠出双气泡（2026-09-18 桌面托管
     // 会话实测：电脑端每条消息两个同文同时刻气泡）。与外部注入路径（上方"不本地
@@ -6486,6 +6540,7 @@ $("sendBtn").onclick = () => {
     $("msginput").value = "";
     histPush(text);
     sendImages = [];
+    sendFiles = [];
     renderImgRow();
     syncSendState();
   }
