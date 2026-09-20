@@ -1820,9 +1820,19 @@ assert(!mgr.getExternal("ext-ff11bb22-cc33-dd44-ee55-ff6677889900"), "67 multi-t
 
   // ④ 恢复窗口期内：滞留看门狗持袖旁观（补回车只会打进旧 CLI 空输入框）；窗口过期恢复补发
   const enters50 = () => fakeLog().filter((a) => a[0] === String(dead.pid) && a[1] === "").length;
+  // 基线化（#80/#84 CI flaky 根治）：③ 的 wait(1600) 与 2s 滞留阈值恰在同一时刻（S0+2000）
+  // 到期，而闭环 timer（1200ms）已删恢复窗口、d50 重开窗口要等 wait 醒来——这个间隙里
+  // 「窗口已删 + 阈值已到」，3s 相位随机的自动看门狗轮询合法补发一次回车是设计语义
+  // （窗口过期看门狗接管）；慢 runner 上 wait 超睡会把间隙拉宽成必中。④ 要断言的是
+  // 「恢复窗口内的 sweep 让位」而非「本会话从未补发」：先等 ③ 期间在途异步落盘追平、
+  // 取基线按增量断言（原绝对 ===0 同步读看不见本次 sweep 的异步输出，只能被 ③④ 间
+  // 的合法补发打挂——两头都修）
+  await wait(400);
+  const enters50base = enters50();
   mgr.setExternalPending(extId("cli-50b"), [{ text: "恢复带原因", ts: Date.now() - 9000 }]);
   (bridge as unknown as { sweepStuckInputs(): void }).sweepStuckInputs();
-  assert(enters50() === 0, "50 watchdog defers during resume window");
+  await wait(800); // 手动 sweep 若误补发，异步落盘 ~100-300ms：给足观察窗（原同步读恒 0 测不出）
+  assert(enters50() === enters50base, "50 watchdog defers during resume window");
   process.env.CCR_RESUME_WINDOW_MS = "800";
   await wait(1000);
   (bridge as unknown as { sweepStuckInputs(): void }).sweepStuckInputs();
