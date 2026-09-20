@@ -4072,11 +4072,6 @@ window.addEventListener("resize", cfRestorePos);
   });
 })();
 const SRC_COLORS = ["#D97757", "#5B9DFF", "#2BD98F", "#FFC53D", "#C792EA", "#F06292", "#4DD0E1", "#7E57C2"];
-function srcColor(id) {
-  let h = 0;
-  for (const ch of String(id)) h = ((h * 31) + ch.charCodeAt(0)) >>> 0;
-  return SRC_COLORS[h % SRC_COLORS.length];
-}
 // 源配色键（#294 审查修复）：跨端稳定身份——云源取 relay 设备 id（cloud.rd）、LAN 源
 // 取 wsUrl，同一台服务器在手机/网页两端同色（本地 uuid 两端各异不可用；与手机端
 // SourceStatus.colorKey 同构）
@@ -4098,14 +4093,13 @@ function srcDisplayName(cfg) {
   return shortName(cfg.name);
 }
 // 同屏配色去重（与手机端同规则）：按 colorKey 稳定排序分配调色板序号，源数≤8 必不重
-const srcColorCache = new Map();
+// #91 修复：去掉跨快照缓存——旧实现首命中即固定色板序号，servers 后续增删时新条目
+// 按新快照取序、旧条目沿用旧序，不同源可分到同色（用户实测「本机」与「Mac」同橙）。
+// servers 规模个位数，每次现算排序开销可忽略；同帧统一快照分配才是「必不重」的成立前提
 function srcColorByKey(cfg) {
   const key = srcColorKey(cfg);
-  if (!srcColorCache.has(key)) {
-    const all = servers.map((x) => srcColorKey(x)).sort();
-    srcColorCache.set(key, SRC_COLORS[all.indexOf(key) % SRC_COLORS.length]);
-  }
-  return srcColorCache.get(key);
+  const all = servers.map((x) => srcColorKey(x)).sort();
+  return SRC_COLORS[all.indexOf(key) % SRC_COLORS.length];
 }
 function srcBadgeHtml(cfg) {
   // #399 徽章填色：整胶囊填源色实底、去圆点；字色按源色亮度自适应（亮色源用深字，
