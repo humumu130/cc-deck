@@ -616,12 +616,23 @@ fn kill_embedded_relay() {
     }
 }
 
-fn main() {
+/// 构建器按构建类型分流：单实例插件只在正式构建注册——dev 壳要与已装的正式版
+/// 并行运行做联调（macOS 上该插件同 identifier 互踢：dev 实例启动即检测到正式版
+/// 在跑，回调后自退，无法在装了正式版的机器上起 dev 壳自测）
+#[cfg(not(debug_assertions))]
+fn app_builder() -> tauri::Builder<tauri::Wry> {
+    // 单实例插件须最先注册；二次启动（含参数不同）不另起窗口，唤起已有主窗口
+    tauri::Builder::default().plugin(tauri_plugin_single_instance::init(|app, _argv, _cwd| {
+        show_main(app);
+    }))
+}
+#[cfg(debug_assertions)]
+fn app_builder() -> tauri::Builder<tauri::Wry> {
     tauri::Builder::default()
-        // 单实例插件须最先注册；二次启动（含参数不同）不另起窗口，唤起已有主窗口
-        .plugin(tauri_plugin_single_instance::init(|app, _argv, _cwd| {
-            show_main(app);
-        }))
+}
+
+fn main() {
+    app_builder()
         .plugin(tauri_plugin_opener::init())
         // 在线更新（#319）：检查/下载/安装由 web-console ⚙ 关于区经 __TAURI__.updater 调用，
         // 签名公钥在 tauri.conf.json plugins.updater，签名的私钥经 CI Secrets 注入
