@@ -1729,6 +1729,9 @@
   /* #103 活性：该子 Agent 最近一次工具调用（HUD 风格），运行中 dim / 结束 faint 定格 */
   .agrow .aa { flex: none; max-width: 46%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 11px; }
   .agrow .at { color: var(--faint); font-size: 11px; font-variant-numeric: tabular-nums; }
+  /* #13 巡检：面板标题（原无标题，首见用户不知道这块是什么）+ 溢出提示（超 4 条收起） */
+  .aghead { font-size: 11px; color: var(--faint); padding: 2px 0 4px; letter-spacing: .04em; }
+  .agmore { font-size: 11px; color: var(--faint); padding-top: 3px; }
 
   /* 轻量 Markdown（assistant_text/thinking，与手机端 md.tsx 同构）。
      assistant 正文无卡片直接排版（WorkBuddy 式，靠头像行区分发言者）；字号随时间线档位缩放 */
@@ -4647,19 +4650,27 @@ function renderDetail() {
       + (s.context_usage ? " · " + tokStr(s.context_usage) + "/" + tokStr(s.context_limit || 200000) : "");
   } else lr.style.display = "none";
 
-  // 子 Agent 状态（external 会话）
+  // 子 Agent 状态（external 会话）。#13 巡检：加面板标题（子代理 + 总数/运行数——
+  // 原面板无标题，⑂/✓ 行首见不知所云）与超 4 条的溢出提示（原 slice(-4) 静默截断，
+  // 用户不知道前面还有）
   const ag = $("agbox");
   const subs = s.subagents ?? [];
   if (subs.length > 0) {
     ag.style.display = "block";
-    ag.innerHTML = subs.slice(-4).map((a) => {
-      const run = !a.ended_at;
-      const dur = fmtElapsed((a.ended_at ?? Date.now()) - a.started_at);
-      return '<div class="agrow"><span class="ad" style="color:' + (run ? "var(--working)" : "var(--dim)") + '">' +
-        (run ? "⑂ " : "✓ ") + escapeHtml(a.desc) + '</span>' +
-        (a.act ? '<span class="aa" style="color:' + (run ? "var(--dim)" : "var(--faint)") + '" title="当前动作">' + escapeHtml(a.act) + "</span>" : "") +
-        '<span class="at">' + dur + "</span></div>";
-    }).join("");
+    const shown = subs.slice(-4);
+    const more = subs.length - shown.length;
+    const running = subs.filter((a) => !a.ended_at).length;
+    ag.innerHTML =
+      '<div class="aghead">子代理 ' + subs.length + (running > 0 ? " · " + running + " 运行中" : "") + "</div>" +
+      shown.map((a) => {
+        const run = !a.ended_at;
+        const dur = fmtElapsed((a.ended_at ?? Date.now()) - a.started_at);
+        return '<div class="agrow"><span class="ad" style="color:' + (run ? "var(--working)" : "var(--dim)") + '">' +
+          (run ? "⑂ " : "✓ ") + escapeHtml(a.desc) + '</span>' +
+          (a.act ? '<span class="aa" style="color:' + (run ? "var(--dim)" : "var(--faint)") + '" title="当前动作">' + escapeHtml(a.act) + "</span>" : "") +
+          '<span class="at">' + dur + "</span></div>";
+      }).join("") +
+      (more > 0 ? '<div class="agmore">… 更早 ' + more + " 条已收起</div>" : "");
   } else ag.style.display = "none";
 
   // 排队注入消息（external 会话 CLI 忙时）；pendOpen=跨重渲染的展开态记忆
@@ -7248,7 +7259,7 @@ $("timeline").addEventListener("dblclick", (ev) => {
   } else {
     const hit = selSession();
     if (hit) previewArtifact(hit.ctx, hit.s.session_id, p);
-    else { copyText(p); toast("在桌面端打开可双击启动本地应用（路径已复制）"); }
+    else { copyText(p); toast("网页端无法直接打开本地文件——请用 CC Deck 桌面端双击打开（路径已复制）"); }
   }
 });
 
@@ -7263,9 +7274,14 @@ function shellHasLocal(p) {
 
 // #106 输出物直接下载（桌面壳专用）：拉取字节流 → 壳落盘系统「下载」目录（重名
 // 自动 -2 递增）→ 系统默认应用打开。取代桌面端在线预览——下载的文件随用户处置
+// #13 巡检两项收口：busy 锁（20MB 级拉取在途时双击/连点不并发第二份）+ 进度 toast
+// 时长配对 fetchArtifact 的 90s 总超时（原 60s：慢链路 30s 静默窗后才有结果反馈）
+let artDlBusy = false;
 async function downloadAndOpenArtifact(ctx, sid, path) {
+  if (artDlBusy) { toast("上一个输出物还在下载中…", 2500); return; }
+  artDlBusy = true;
   const name = path.split(/[\\/]/).pop() || "输出物";
-  toast("正在下载「" + name + "」…", 60_000);
+  toast("正在下载「" + name + "」…", 95_000);
   try {
     const r = await fetchArtifact(ctx, sid, path);
     const saved = await window.ccDeck.saveArtifact(name, bytesToB64(artB64ToBytes(r.b64s)));
@@ -7273,6 +7289,8 @@ async function downloadAndOpenArtifact(ctx, sid, path) {
     toast("已下载并打开：" + saved, 5000);
   } catch (e) {
     toast(String(e?.message || e), 4500);
+  } finally {
+    artDlBusy = false;
   }
 }
 // Uint8Array → base64（分片 btoa 防 apply 栈溢出；20MB 上限内一次性格式化 <1s）

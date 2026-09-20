@@ -2385,27 +2385,43 @@ export default function DetailScreen({ sid, onBack, initialView, ref }: { sid: s
             </Pressable>
           </View>
         ) : null}
-        {/* 并行子 Agent 状态：主工作状态栏下方；⑂ 运行中走秒（本地计时，relay 只在变化时推）、✓ 刚结束带时长 */}
+        {/* 并行子 Agent 状态：主工作状态栏下方；⑂ 运行中走秒（本地计时，relay 只在变化时推）、✓ 刚结束带时长。
+            #13 巡检：面板标题（子代理 + 总数/运行数）与超 4 条溢出提示（原 slice(-4) 静默截断）——与桌面端同款 */}
         {(s?.subagents?.length ?? 0) > 0 ? (
           <View style={[d.agBox, d.agBoxFlow]}>
-            {(s!.subagents!).slice(-4).map((a) => {
-              const run = !a.ended_at;
-              const ms = (a.ended_at ?? Date.now()) - a.started_at;
-              const dur = ms < 60_000 ? `${Math.floor(ms / 1000)}s` : `${Math.floor(ms / 60_000)}m${String(Math.floor((ms % 60_000) / 1000)).padStart(2, "0")}s`;
+            {(() => {
+              const all = s!.subagents!;
+              const shown = all.slice(-4);
+              const more = all.length - shown.length;
+              const running = all.filter((a) => !a.ended_at).length;
               return (
-                <View key={a.id} style={d.agRow}>
-                  <Text style={[d.agT, { color: run ? c.working : c.dim }]} numberOfLines={1}>
-                    {run ? "⑂" : "✓"} {a.desc}
+                <>
+                  <Text style={d.agHead}>
+                    子代理 {all.length}
+                    {running > 0 ? ` · ${running} 运行中` : ""}
                   </Text>
-                  {a.act ? (
-                    <Text style={[d.agAct, { color: run ? c.dim : c.faint }]} numberOfLines={1}>
-                      {a.act}
-                    </Text>
-                  ) : null}
-                  <Text style={[d.agTime, { color: run ? c.working : c.faint }]}>{dur}</Text>
-                </View>
+                  {shown.map((a) => {
+                    const run = !a.ended_at;
+                    const ms = (a.ended_at ?? Date.now()) - a.started_at;
+                    const dur = ms < 60_000 ? `${Math.floor(ms / 1000)}s` : `${Math.floor(ms / 60_000)}m${String(Math.floor((ms % 60_000) / 1000)).padStart(2, "0")}s`;
+                    return (
+                      <View key={a.id} style={d.agRow}>
+                        <Text style={[d.agT, { color: run ? c.working : c.dim }]} numberOfLines={1}>
+                          {run ? "⑂" : "✓"} {a.desc}
+                        </Text>
+                        {a.act ? (
+                          <Text style={[d.agAct, { color: run ? c.dim : c.faint }]} numberOfLines={1}>
+                            {a.act}
+                          </Text>
+                        ) : null}
+                        <Text style={[d.agTime, { color: run ? c.working : c.faint }]}>{dur}</Text>
+                      </View>
+                    );
+                  })}
+                  {more > 0 ? <Text style={d.agMore}>… 更早 {more} 条已收起</Text> : null}
+                </>
               );
-            })}
+            })()}
           </View>
         ) : null}
         {(s.pending_inputs?.length ?? 0) > 0 ? (
@@ -2951,6 +2967,9 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
   agT: { flex: 1, fontSize: 12 },
   agAct: { flex: 1, fontSize: 11 }, // #103 活性：与描述平分行宽，超长省略（HUD 风格当前动作）
   agTime: { fontSize: 11, fontVariant: ["tabular-nums"] },
+  // #13 巡检：面板标题（原无标题，⑂/✓ 行首见不知所云）+ 超 4 条的溢出提示
+  agHead: { color: c.faint, fontSize: 11, letterSpacing: 0.4, paddingVertical: 4 },
+  agMore: { color: c.faint, fontSize: 11, paddingVertical: 3 },
   histnote: { color: c.faint, fontSize: 11, textAlign: "center", marginBottom: 10 },
   trUser: {
     alignSelf: "flex-end", maxWidth: "85%", marginBottom: 10,
