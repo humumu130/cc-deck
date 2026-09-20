@@ -7341,16 +7341,20 @@ $("gpApkQr").onclick = () => {
   pop.classList.add("open");
 };
 $("apkQrPop").onclick = () => $("apkQrPop").classList.remove("open");
-// imp=true：0.4.4 合并码（「扫码从手机导入」云桥语境唤起）——授权入网/回传连接二选一，
-// 码带 imp:1（旧 App 忽略未知字段仍可纯授权，新 App 识别后给双选）；回传经桥密封投递
-function startLoginQr(imp) {
+// imp=true：0.4.4 合并码（「扫码从手机导入」唤起）；#90 起不再按表单形态分叉——导入
+// 永远出这一种码，云桥身份 + 可选 rt（局域网直传）同码自带，手机端自动择路。码带
+// imp:1（旧 App 忽略 rt 仍走双选授权/回传，新 App 直接弹选择器）；回传经桥密封投递
+function startLoginQr(imp, opts) {
   loadCloudIdentity();
   const dev = devId(ckp.publicKey, "wb");
   let cfg = editId ? cfgOf(editId) : null;
   if (cfg && cfg.kind !== "cloud") { toast("仅云桥类型支持扫码登录"); return; }
   if (!cfg) {
-    const url = $("url").value.trim() || defaultCloudUrl();
-    const token = $("token").value.trim() || BAKED_BRIDGE_TOKEN;
+    // opts.bridgeUrl/bridgeToken（#90）：直连形态表单的 url/token 字段是 LAN 中继的
+    // 地址与令牌，不能当桥用——importSrvQr 显式传入桥地址与公共桥 token；空值回落
+    // 表单/默认同旧（云桥形态表单字段语义本就是桥）
+    const url = (opts && opts.bridgeUrl) || $("url").value.trim() || defaultCloudUrl();
+    const token = (opts && opts.bridgeToken) || $("token").value.trim() || BAKED_BRIDGE_TOKEN;
     // 复用同桥的未配对云源（首启自种的「公共桥」等；按桥 host:port 归一匹配，
     // 旧版条目的死地址写法也随之刷新），反复重试不堆积重复源
     const bk = normBridge(url);
@@ -7374,11 +7378,17 @@ function startLoginQr(imp) {
     (ctx.pendingPair && ctx.pendingPair.fresh && ctx.pendingPair.rd) ||
     (c.paired && c.rd ? c.rd : "");
   // #88 出码即可扫的判定：rd 可信（单 relay 换锚）或已挂候选公钥（多 relay 歧义
-  // 态）都算就绪——后者回传靠 cands 兜底试解，状态行不再卡「正在确认身份」误导等待
-  const qrReady = () => !!(trustedRd() || (ctx.pendingPair && ctx.pendingPair.cands));
+  // 态）都算就绪——后者回传靠 cands 兜底试解，状态行不再卡「正在确认身份」误导等待。
+  // #90 追加：imp 码附上 rt（局域网直传）也算就绪——同网手机走 rt 压根不依赖云桥
+  // 身份（桥被防火墙拦死的纯内网环境也能用），不得让状态行卡「正在确认身份」劝退
+  const qrReady = () => !!(trustedRd() || (ctx.pendingPair && ctx.pendingPair.cands) || impRt);
+  // #90 rt 附带（imp 专用）：异步探测本机 relay 后填充——私网 IP 可达即附进码，手机
+  // 同网直传（快、免桥依赖）；探测完成前先出单云桥码，redraw 节拍捡起换新码
+  let impRt = null;
   const makePayload = () => JSON.stringify({
     t: "ccdeck-login", v: 1,
     ...(imp ? { imp: 1 } : {}),
+    ...(imp && impRt ? { rt: impRt } : {}),
     // 实捕发现（三码测试）：云源 wsUrl 本以 /cloud 结尾，再拼 +"/cloud" 双写成
     // /cloud/cloud——当前 App 不读该字段故无害，但属口径炸弹，与统一分享构建器对齐不追加
     bridge: cfg.wsUrl.replace(/\/$/, "").replace(/^http/, "ws").replace(/\/cloud$/, "") + "/cloud",
@@ -7387,9 +7397,9 @@ function startLoginQr(imp) {
     // name 一律 encodeURIComponent（手机端解码）
     name: encodeURIComponent((cfg.name || "浏览器").slice(0, 24)),
   });
-  $("loginQrTitle").textContent = imp ? "从手机添加" : "扫码登录";
+  $("loginQrTitle").textContent = imp ? "从手机导入连接" : "扫码登录";
   $("loginQrSub").innerHTML = imp
-    ? "手机 CC Deck App 扫码后可选：<br/>授权这台电脑入网 / 挑一条连接回传"
+    ? "手机 CC Deck App 扫码后<br/>选择要分享的连接（同网直传 · 跨网走桥）"
     : "手机 CC Deck App 扫下方二维码<br/>确认后自动进入——免输配对码";
   $("loginQrState").textContent = qrReady() ? "等待手机扫码…" : "正在确认服务器身份…请稍候";
   drawLoginQr(makePayload());
@@ -7419,6 +7429,30 @@ function startLoginQr(imp) {
   loginQrTimer = setInterval(redraw, 3000); // relay 身份经发现帧刷新后二维码随之更新
   clearTimeout(loginQrTimeout);
   loginQrTimeout = setTimeout(() => { if ($("loginQrPop").classList.contains("open")) { closeLoginQr(imp ? "超时未完成，已取消（可重试）" : "超时未授权，已取消（可重试或改用配对码）"); } }, 120000);
+  // #90 rt 探测（imp）：本机 relay 在跑 + 私网 IP 可达（#25 同款守卫——tauri.localhost/
+  // 回环/域名对手机不可达，只认私网 IP）就把局域网直传通道附进同一个码并开收件 ws。
+  // 异步不挡出码（先出单云桥码，探测完 redraw 即时换码）；无 relay/无私网 IP 静默保持
+  // 单云桥码。收件 ws 与浮层同生命周期（closeLoginQr 断），层已关不再附（防孤儿监听）
+  if (imp) {
+    void (async () => {
+      await Promise.resolve(); // 让位同步段（redraw 定义）先完成
+      try {
+        if (!localRelayInfo) await probeRelayStat();
+        const info = localRelayInfo;
+        if (!info) return;
+        const PRIV_IP3 = /^(192\.168|10|172\.(1[6-9]|2\d|3[01]))\./;
+        const rtHost =
+          (PRIV_IP3.test(info.lanIp || "") && info.lanIp) ||
+          (PRIV_IP3.test(location.hostname || "") ? location.hostname : "");
+        if (!rtHost) return;
+        const rtUrl = "ws://" + rtHost + ":" + info.port + "/ws";
+        if (!$("loginQrPop").classList.contains("open")) return;
+        impRt = { url: rtUrl, token: info.token };
+        importListenStart(rtUrl, info.token);
+        redraw();
+      } catch {}
+    })();
+  }
 }
 function closeLoginQr(msg) {
   $("loginQrPop").classList.remove("open");
@@ -7609,35 +7643,15 @@ async function shareSrvQr(id) {
 }
 
 
-// 议题③ 从手机导入：添加服务器表单里的「扫码从手机导入」。码内 rt = 本机 relay
-//（lan-ip + 实测端口/token，一律 localRelayInfo 实测优先，同 #40x 领码教训）；
-// 出码同时向同一 relay 开一条临时回传 ws，等手机选好连接推 import-resp 帧
+// 议题③ 从手机导入（#90 统一码，2026-09-20）：不再按表单形态分叉两种码——永远出
+// startLoginQr(true) 合并码（云桥密封回传，跨网络可用），本机 relay 私网可达时 rt
+// 由 startLoginQr 附进同一个码 + 开临时收件 ws（手机自动择路：同网直传/跨网走桥）。
+// 直连形态表单的 url 字段是 LAN 地址不能当桥，桥地址显式传 defaultCloudUrl()
 let importWs = null;
 async function importSrvQr() {
-  // 0.4.4 合并扫码：云桥语境出跨网合并码（手机扫后可选授权这台电脑入网 / 挑一条连接
-  // 回传——经桥密封投递，不受同一 WiFi 限制）；直连语境无桥可走，维持下方旧 rt 局域网
-  // 回传通道（本机 relay 在跑 + 手机同一 WiFi）。授权能力原在 relay 页「扫码接入」钮，
-  // 0.4.4 起并到这里，relay 页只剩手机接入一键
-  const editCfg = editId ? cfgOf(editId) : null;
-  if (formKind === "cloud" || (editCfg && editCfg.kind === "cloud")) {
-    startLoginQr(true);
-    return;
-  }
-  if (!localRelayInfo) await probeRelayStat(); // relay 页没开过也能出码：先补一次实测探测
-  if (!localRelayInfo) { toast("本机 relay 未运行"); return; }
-  // #25 同款守卫：rt 是手机直连回传地址，tauri.localhost/回环/域名都不可达——只认私网 IP
-  const PRIV_IP3 = /^(192\.168|10|172\.(1[6-9]|2\d|3[01]))\./;
-  const host =
-    (PRIV_IP3.test(localRelayInfo.lanIp || "") && localRelayInfo.lanIp) ||
-    (PRIV_IP3.test(location.hostname || "") ? location.hostname : "");
-  if (!host) { toast("无法确定本机局域网地址：手机与本机需同一 WiFi（跨网络请用云桥形态的「从手机添加」）"); return; }
-  const url = "ws://" + host + ":" + localRelayInfo.port + "/ws";
-  $("loginQrTitle").textContent = "从手机导入连接";
-  $("loginQrSub").innerHTML = "手机 CC Deck App 扫码后<br/>选择要分享的连接";
-  $("loginQrState").textContent = "等待手机扫码…";
-  drawLoginQr(JSON.stringify({ t: "ccdeck-import", v: 1, rt: { url, token: localRelayInfo.token } }));
-  $("loginQrPop").classList.add("open");
-  importListenStart(url, localRelayInfo.token); // 码内容与监听同生命周期：开浮层=开监听
+  // 云桥形态：表单 url/token 即桥参数（token 空回落公共桥）；直连形态：烘焙桥 + 默认地址
+  if (formKind === "cloud") startLoginQr(true, { bridgeUrl: $("url").value.trim(), bridgeToken: $("token").value.trim() });
+  else startLoginQr(true, { bridgeUrl: defaultCloudUrl(), bridgeToken: BAKED_BRIDGE_TOKEN });
 }
 $("importSrvBtn").onclick = () => void importSrvQr();
 

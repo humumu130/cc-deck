@@ -17,8 +17,9 @@ export interface ScanResult {
   token: string;
   // #325 扫码登录（微信式）：网页/exe 端出示的授权请求——不是添加服务器，
   // 消费方应发 COMMAND_LOGIN_GRANT 给当前活动 relay。imp=0.4.4 合并码标记：
-  // 出码端还接受「挑一条连接回传」（COMMAND_IMPORT_PUSH 跨网中转），双选呈现
-  login?: { dev: string; pk: string; name: string; rd?: string; imp?: boolean };
+  // 出码端还接受「挑一条连接回传」（COMMAND_IMPORT_PUSH 跨网中转）。#90 起 imp 码
+  // 可再带 rt（出码电脑的局域网直传通道）——手机自动择路，不再弹双选确认
+  login?: { dev: string; pk: string; name: string; rd?: string; imp?: boolean; rt?: { url: string; token: string } };
   // #330 云源接入邀请（电脑端「添加手机」出的码）：一次性配对码+桥地址+relay 身份，
   // 消费方走 pair_req 流程落成云源条目
   invite?: { bridge: string; bt: string; rd: string; rk: string; code: string };
@@ -59,7 +60,13 @@ export function parseScanPayload(raw: string): ScanResult | null {
         if (typeof j.name === "string" && j.name) {
           try { name = decodeURIComponent(j.name); } catch { name = j.name; }
         }
-        return { wsUrl: "", token: "", login: { dev, pk, name, rd: rd || undefined, ...(j.imp === 1 || j.imp === true ? { imp: true } : {}) } };
+        // #90 统一导入码附带 rt（电脑同网直传通道）：url 须 ws(s):// 且 token 非空才可信，
+        // 透传给 ImportPicker 双通道择路（rt 直传优先，不通降级云桥密封推送）
+        const rtJ = (typeof j.rt === "object" && j.rt !== null ? j.rt : {}) as { url?: unknown; token?: unknown };
+        const rurl = typeof rtJ.url === "string" ? rtJ.url.replace(/\/+$/, "") : "";
+        const rtk = typeof rtJ.token === "string" ? rtJ.token : "";
+        const rt = /^wss?:\/\//.test(rurl) && rtk ? { url: rurl, token: rtk } : undefined;
+        return { wsUrl: "", token: "", login: { dev, pk, name, rd: rd || undefined, ...(j.imp === 1 || j.imp === true ? { imp: true } : {}), ...(rt ? { rt } : {}) } };
       }
       return null;
     }
@@ -193,22 +200,15 @@ export async function routeScanResult(r: ScanResult, ctx: ScanRouteCtx): Promise
         ctx.onError("未连接 relay：先连接服务器，再扫码授权网页端");
       }
     };
-    // 0.4.4 合并码：授权入网 / 挑一条连接回传 双选（回传经 relay 加密中转，跨网络可用）。
-    // 普通登录码保持单选授权；三钮 Alert 中性钮居左、主操作居右（RN 平台约定）
+    // 0.4.4 合并码，#90 直达化：imp 码意图明确（从手机导入），直接弹连接选择器，不再
+    // 弹「授权入网/回传连接」双选确认——授权入网收成选择器内的次级链接行。码带 rt
+    //（出码电脑的同网直传通道）时一并传入，由选择器自动择路（rt 直传优先，不通降级
+    // 云桥密封推送，跨网络可用）。旧 App 扫新码仍走双选（向后兼容不变）
     if (r.login.imp) {
-      Alert.alert(
-        "扫码接入",
-        `「${who}」想接入这台手机上的 CC Deck。\n可授权它直接入网，或挑一条连接给它回传。`,
-        [
-          { text: "取消", style: "cancel" },
-          {
-            text: "回传连接",
-            onPress: () => ctx.onImport({ cloudPush: { dev, pk, ...(viaId ? { viaId } : {}) } }),
-          },
-          { text: "授权入网", onPress: grant },
-        ],
-        { cancelable: true },
-      );
+      ctx.onImport({
+        cloudPush: { dev, pk, name: who, ...(viaId ? { viaId } : {}) },
+        ...(r.login.rt ? { rt: r.login.rt } : {}),
+      });
       return;
     }
     Alert.alert(

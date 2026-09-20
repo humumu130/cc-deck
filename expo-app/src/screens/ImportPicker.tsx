@@ -1,10 +1,13 @@
 // 连接导入选择器（ccdeck-import 手机侧）：电脑端「分享连接」码扫入后弹出——列出手机上
-// 可分享的连接（有令牌或云桥配置的条目；行首点亮绿=该源当前在线），点选一条后向码中
-// rt 临时 WebSocket 回发 ccdeck-import-resp：
+// 可分享的连接（有令牌或云桥配置的条目；行首点亮绿=该源当前在线），点选一条后回传
+// ccdeck-import-resp：
 //   LAN 条目  entry={kind:"lan", wsUrl, token}
 //   云条目    entry={kind:"cloud", wsUrl, token, cloud:{url, token, rd, rk, paired:true}}
 //   已配对云源且在线 → 先向其 relay 领一次性配对码附在 cloud.code（电脑侧免输码直接
 //   pair）；该源离线 → 省略 code，resp.note="未在线，未附码"
+// #90 双通道择路：统一导入码同时带 rt（出码电脑的同网直传通道）与 cloudPush（云桥密封
+// 推送）——先试 rt（快、免桥依赖），3s 内没送达自动降级云桥（跨网络可用）；旧 rt-only
+// 码维持直连唯一通道。授权入网（不搬配置）收成本弹层次级链接行
 // 临时通道用完即断，绝不进手机连接列表。发送反馈在弹层内呈现（RN Modal 压住全局
 // Toast，NewSessionModal 同款教训），成功后短暂停留再自动收层
 import { useEffect, useRef, useState } from "react";
@@ -15,11 +18,12 @@ import { store, useRelay, type ServerEntry } from "../store";
 
 // 回传目标两形态：
 //   LAN rt（旧）：电脑端临时收件通道（码中 rt 字段）——url + 一次性收件令牌，同一 WiFi
-//   cloudPush（0.4.4 合并码）：经 relay 加密中转（COMMAND_IMPORT_PUSH，跨网络）——
-//     dev/pk = 出码端身份，viaId = 授权源（rd 匹配的已连源，缺省活动源）
+//   cloudPush（0.4.4 合并码，#90 增强）：经 relay 加密中转（COMMAND_IMPORT_PUSH，跨
+//     网络）——dev/pk = 出码端身份，viaId = 授权源（rd 匹配的已连源，缺省活动源），
+//     name = 出码端名（授权入网链接行呈现）；可选 rt = 出码电脑同网直传通道（择路用）
 export type ImportTarget =
   | { url: string; token: string }
-  | { cloudPush: { dev: string; pk: string; viaId?: string } };
+  | { cloudPush: { dev: string; pk: string; name?: string; viaId?: string }; rt?: { url: string; token: string } };
 
 type SendState =
   | { phase: "idle" }
@@ -58,9 +62,10 @@ function fetchPairCode(sourceId: string): Promise<string | null> {
 }
 
 // 临时 WebSocket 回发（LAN rt 通道专用；云中转走 pick 内的 COMMAND_IMPORT_PUSH）：
-// 8s 内必须完成 open+send；发出后收到任意回帧即算送达并关闭，
+// budgetMs 内必须完成 open+send（默认 8s；#90 双通道择路里 rt 首试压到 3s——跨网时
+// 移动网常黑洞到超时才报错，拖长降级等待）；发出后收到任意回帧即算送达并关闭，
 // 2s 无回帧也收摊（电脑端处理完即断开属正常）。发出前的 close/error 都算失败
-function sendToTarget(rt: { url: string; token: string }, resp: unknown): Promise<void> {
+function sendToTarget(rt: { url: string; token: string }, resp: unknown, budgetMs = 8000): Promise<void> {
   return new Promise((resolve, reject) => {
     const url = rt.url + (rt.url.includes("?") ? "&" : "?") + "token=" + encodeURIComponent(rt.token);
     let ws: WebSocket;
@@ -87,7 +92,7 @@ function sendToTarget(rt: { url: string; token: string }, resp: unknown): Promis
       if (err) reject(err);
       else resolve();
     };
-    const overall = setTimeout(() => fin(new Error(sent ? "电脑未回应" : "连接电脑超时")), 8000);
+    const overall = setTimeout(() => fin(new Error(sent ? "电脑未回应" : "连接电脑超时")), budgetMs);
     ws.onopen = () => {
       try {
         ws.send(JSON.stringify(resp));
@@ -99,7 +104,9 @@ function sendToTarget(rt: { url: string; token: string }, resp: unknown): Promis
       grace = setTimeout(() => fin(null), 2000);
     };
     ws.onmessage = () => fin(null); // 任意回帧 = 电脑已收到
-    ws.onerror = () => fin(new Error(sent ? "电脑中断了连接" : "连不上电脑"));
+    // rt 地址恒为出码电脑的私网 IP（出码端 #25 守卫保证），连不上几乎只剩一种解释：
+    // 手机与电脑不在同一网络——直说，不再笼统「连不上电脑」让人猜（#90 文案）
+    ws.onerror = () => fin(new Error(sent ? "电脑中断了连接" : "连不上电脑：手机与电脑需同一 Wi-Fi"));
     ws.onclose = () => fin(sent ? null : new Error("电脑拒绝了连接"));
   });
 }
@@ -187,33 +194,60 @@ export default function ImportPicker({
         }
         setLive({ phase: "busy", text: "正在发送给电脑…" });
         if ("cloudPush" in target) {
-          // 0.4.4 云中转：relay 校验后用出码端公钥密封投递（跨网络）。ACK 带结果
-          // 语义（离线/格式等同步报错）；断连清场不回调，15s 兜底收摊
           const cp = target.cloudPush;
-          const sent = await new Promise<{ ok: boolean; err: string | null }>((resolve) => {
-            let done = false;
-            const fin = (r: { ok: boolean; err: string | null }) => {
-              if (done) return;
-              done = true;
-              clearTimeout(timer);
-              resolve(r);
-            };
-            const timer = setTimeout(() => fin({ ok: false, err: "等待服务器确认超时" }), 15000);
-            const queued = store.send(
-              "COMMAND_IMPORT_PUSH",
-              { target_dev: cp.dev, target_pk: cp.pk, entry, ...(note ? { note } : {}) },
-              cp.viaId,
-              (r) => fin(r),
-            );
-            if (!queued) fin({ ok: false, err: "未连接，未发送" });
+          const resp: Record<string, unknown> = { t: "ccdeck-import-resp", entry };
+          if (note) resp.note = note;
+          // #90 双通道择路：码带 rt（出码电脑的同网直传通道）先试直传——快、免桥依赖；
+          // 3s 内没送达（跨网/防火墙拦截）自动降级云桥密封推送。rt 失败不报给用户
+          //（降级是正常路径），只在状态行轻描「经服务器中转」
+          let via: "lan" | "cloud" = "cloud";
+          if (target.rt) {
+            try {
+              await sendToTarget(target.rt, resp, 3000);
+              via = "lan";
+            } catch {
+              setLive({ phase: "busy", text: "局域网不通，经服务器中转…" });
+            }
+          }
+          if (via === "cloud") {
+            // 0.4.4 云中转：relay 校验后用出码端公钥密封投递（跨网络）。ACK 带结果
+            // 语义（离线/格式等同步报错）；断连清场不回调，15s 兜底收摊
+            const sent = await new Promise<{ ok: boolean; err: string | null }>((resolve) => {
+              let done = false;
+              const fin = (r: { ok: boolean; err: string | null }) => {
+                if (done) return;
+                done = true;
+                clearTimeout(timer);
+                resolve(r);
+              };
+              const timer = setTimeout(() => fin({ ok: false, err: "等待服务器确认超时" }), 15000);
+              const queued = store.send(
+                "COMMAND_IMPORT_PUSH",
+                { target_dev: cp.dev, target_pk: cp.pk, entry, ...(note ? { note } : {}) },
+                cp.viaId,
+                (r) => fin(r),
+              );
+              if (!queued) fin({ ok: false, err: "未连接，未发送" });
+            });
+            if (!sent.ok) throw new Error(sent.err ?? "未知错误");
+          }
+          setLive({
+            phase: "ok",
+            text:
+              via === "lan"
+                ? "已发送给电脑（局域网直传）"
+                : target.rt
+                  ? "已发送给电脑（经服务器中转）"
+                  : note
+                    ? `已发送给电脑（${note}）`
+                    : "已发送给电脑",
           });
-          if (!sent.ok) throw new Error(sent.err ?? "未知错误");
         } else {
           const resp: Record<string, unknown> = { t: "ccdeck-import-resp", entry };
           if (note) resp.note = note;
           await sendToTarget(target, resp);
+          setLive({ phase: "ok", text: note ? `已发送给电脑（${note}）` : "已发送给电脑" });
         }
-        setLive({ phase: "ok", text: note ? `已发送给电脑（${note}）` : "已发送给电脑" });
         setTimeout(() => {
           if (aliveRef.current) onClose();
         }, 1400);
@@ -223,6 +257,29 @@ export default function ImportPicker({
         busyRef.current = false;
       }
     })();
+  };
+
+  // #90 授权入网（原 0.4.4 双选 Alert 的另一半，收成本弹层次级链接行）：不搬任何
+  // 配置，把出码端作为受信会话设备授进手机所连 relay——与扫码登录 grant 同参数同链路
+  //（viaId 匹配 rd 的已连源，缺省活动源）
+  const grantAccess = () => {
+    if (busyRef.current || !target || !("cloudPush" in target)) return;
+    busyRef.current = true;
+    const cp = target.cloudPush;
+    const ok = store.send(
+      "COMMAND_LOGIN_GRANT",
+      { session_dev: cp.dev, session_pk: cp.pk, name: cp.name ?? "电脑" },
+      cp.viaId,
+    );
+    if (ok) {
+      if (aliveRef.current) setSt({ phase: "ok", text: "已授权入网" });
+      setTimeout(() => {
+        if (aliveRef.current) onClose();
+      }, 1400);
+    } else {
+      if (aliveRef.current) setSt({ phase: "fail", text: "未连接 relay：先连接服务器再授权" });
+      busyRef.current = false;
+    }
   };
 
   return (
@@ -235,7 +292,7 @@ export default function ImportPicker({
               {target && "url" in target
                 ? `电脑 ${hostOf(target.url)} `
                 : target
-                  ? "电脑经服务器中转接收（跨网络可用）"
+                  ? `${target.cloudPush.name ? `「${target.cloudPush.name}」` : "电脑"}经服务器中转接收（跨网络可用）`
                   : "电脑 "}
               请求导入手机上的连接，点选要分享的一条
             </Text>
@@ -282,6 +339,16 @@ export default function ImportPicker({
                 {st.text}
               </Text>
             ) : null}
+            {target && "cloudPush" in target ? (
+              <Pressable
+                style={m.grantRow}
+                disabled={busyRef.current}
+                onPress={grantAccess}
+                accessibilityLabel="不搬配置，仅授权这台电脑入网"
+              >
+                <Text style={m.grantT}>不搬配置，仅授权这台电脑入网 ›</Text>
+              </Pressable>
+            ) : null}
             <Pressable style={m.cancel} android_ripple={{ color: c.tintSoft, borderless: false, radius: 21 }} disabled={busyRef.current} onPress={onClose}>
               <Text style={m.cancelT}>{st.phase === "fail" ? "关闭" : "取消"}</Text>
             </Pressable>
@@ -323,6 +390,9 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
   busyT: { color: c.dim, fontSize: 12.5, marginTop: 6 },
   okT: { color: c.done, fontSize: 12.5, fontWeight: "700", marginTop: 6 },
   failT: { color: c.waiting, fontSize: 12.5, marginTop: 6 },
+  // #90 授权入网次级链接行（主操作是选连接回传，这里是「只授权不搬配置」的另一意图）
+  grantRow: { alignItems: "center", paddingVertical: 8, marginTop: 2 },
+  grantT: { color: c.brandA, fontSize: 12, fontWeight: "600" },
   cancel: { height: 42, marginTop: 8, alignItems: "center", justifyContent: "center" },
   cancelT: { color: c.dim, fontSize: 14 },
 });
