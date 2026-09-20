@@ -2424,8 +2424,11 @@ export default function DetailScreen({ sid, onBack, initialView, ref }: { sid: s
       {/* 底部栈：审批横幅（常驻可见，类似 CLI 权限提示）> 模板行 > 命令栏。
            外层通铺命令栏同色底（2026-09-16）：底部手势条区域不再露页面底色——输入栏
            一气通到屏幕底边。#108 起键盘让位改 root paddingBottom 收缩式（祖先容器
-           已按 kb 缩短），本容器只保留手势条让位 */}
-      <View pointerEvents="box-none" style={{ backgroundColor: c.overlay, paddingBottom: kb > 0 ? 0 : insets.bottom }}>
+           已按 kb 缩短），本容器只保留手势条让位。
+           #114 主力机反馈「输入框下方到屏幕边缘的距离偏大」：完整 insets.bottom
+           （手势导航机型 ≈30+）叠 cmdbar paddingVertical 10 显得空，让位量适度
+           削减 12（保底 6：手势条仍不至于压输入区） */}
+      <View pointerEvents="box-none" style={{ backgroundColor: c.overlay, paddingBottom: kb > 0 ? 0 : Math.max(6, insets.bottom - 12) }}>
         {bannerVisible ? (
           wr!.questions?.length ? (
             <FadeIn><AskBanner wr={wr!} sid={sid} /></FadeIn>
