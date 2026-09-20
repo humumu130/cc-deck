@@ -2922,6 +2922,15 @@ function connectCloudFor(ctx, manual) {
     clearTimeout(ctx.hsTimer); ctx.hsTimer = 0;
     ctx.reconnectDelay = RETRY_BASE_MS; // #40web 连上即归零退避
     if (!peer || pair) {
+      // #88 扫码登录态（pc 空）连接一开就预取在线 relay 列表：回传帧是一次性的，
+      // 手机授权 ack 到达时 pendingPair 若还锚在烘焙旧身份（生产 relay rd/rk）就
+      // 解不开、丢弃即终局。此前发现帧要等空码 pair_req 撞 ROUTE_MISS 后才补发，
+      // 多耗一个 RTT（轮询传输更是数秒），用户赶在窗口内扫码即复现「无法解密」。
+      // 空码 pair_req 本是信标（relay 只记 sighting 不回包），发现帧并行不冲突
+      if (pair && pair.pc === "" && !ctx.discTried) {
+        ctx.discTried = true;
+        discoverRelay(ctx);
+      }
       sendPairReq(ctx, pair, dev);
       startPairWatchdog(ctx);
       return;
@@ -3032,6 +3041,12 @@ function startPollTransport(ctx, base, token, dev, pair) {
   const peer = cloudPeerOf(ctx.cfg);
   if (!peer || pair) {
     setConn(ctx, "connecting", "配对中(轮询)");
+    // #88 扫码登录态预取发现帧（与 ws onopen 对称）：轮询传输下 ROUTE_MISS 补发
+    // 路径要跨多个轮询周期才轮到，出码后扫码秒回 ack 更容易撞上旧锚窗口
+    if (pair && pair.pc === "" && !ctx.discTried) {
+      ctx.discTried = true;
+      discoverRelay(ctx);
+    }
     sendPairReq(ctx, pair, dev);
     startPairWatchdog(ctx);
   } else {
@@ -3100,12 +3115,17 @@ function onCloudText(ctx, text) {
     //（relay 换过密钥对）时清掉，换烘焙 rd/rk 携同一配对码重试（一次性自愈）。
     // 广播态（pair.rd 空串）不适用：换烘焙 rd 会退回单播猜目标
     const pair = ctx.pendingPair || pendingPairOf(cfg.id);
+    // 扫码登录态（pc 空）对 ROUTE_MISS 一律静默：空码 pair_req 只是信标，锚的
+    // 意义只在解 ack。#88 预取发现帧与信标并行发出，RELAYS 可能先到已换锚
+    //（fresh 身份来自发现帧，比烘焙值可信），迟到的 ROUTE_MISS 若走「回退烘焙
+    // 重试」会把 fresh 锚撤销——恰好复现「无法解密」原案
+    if (pair && pair.pc === "") return;
     if (pair && pair.rd && BAKED_RELAY.rd && BAKED_RELAY.rd !== pair.rd) {
       resetCloudPairing(cfg);
       ctx.pendingPair = { rd: BAKED_RELAY.rd, rk: BAKED_RELAY.rk, pc: pair.pc };
       setPendingPair(cfg.id, ctx.pendingPair);
       console.log("[cloud:" + cfg.name + "] 配对 ROUTE_MISS，改用烘焙 relay 身份重试");
-      if (ctx.pendingPair.pc) sendPairReq(ctx, ctx.pendingPair, devId(ckp.publicKey, "wb")); // 扫码登录态不发 pair_req，只等授权
+      if (ctx.pendingPair.pc) sendPairReq(ctx, ctx.pendingPair, devId(ckp.publicKey, "wb"));
       startPairWatchdog(ctx); // 重置看门狗：换 rd 重试不与旧 rd 共享 3 次预算
       return;
     }
@@ -3160,6 +3180,21 @@ function onCloudText(ctx, text) {
         console.log("[cloud:" + cfg.name + "] 多 relay 无锚点，转配对码广播定位（候选 " + all.length + " 台）");
         setConn(ctx, "connecting", "定位持码服务器…");
         sendPairReq(ctx, ctx.pendingPair, devId(ckp.publicKey, "wb"));
+        startPairWatchdog(ctx);
+        return;
+      }
+      if (pair && !pair.pc && all.length > 1) {
+        // #88 扫码登录态多 relay 歧义：无码可广播定位，但不必「歧义即停」——QR 无
+        // rd（fresh 未置）时手机走自己的活动源授权，回传由活动源密封，身份无法
+        // 预知。把在线候选公钥挂 cands 供 unseal 兜底逐个试解。安全性不变：页面
+        // 从未暴露自己的公钥，能对它密封 pair_ack 的只有经手机授权拿到 pk 的那台
+        // relay，密封本身即身份证明（wasLoginQr 采信路径本就豁免 rd 比对）。rd/rk
+        // 清空沿用广播态形态：看门狗重发的空码 pair_req 变广播（无路由即无
+        // ROUTE_MISS），不再撞烘焙 rd 离线反复触发重连震荡
+        ctx.pendingPair = { rd: "", rk: "", pc: "", cands: all.filter((x) => x.rk) };
+        setPendingPair(cfg.id, ctx.pendingPair);
+        console.log("[cloud:" + cfg.name + "] 扫码登录遇多 relay（" + all.length + " 台），挂候选公钥等待授权");
+        setConn(ctx, "connecting", "等待手机扫码授权");
         startPairWatchdog(ctx);
         return;
       }
@@ -7338,6 +7373,9 @@ function startLoginQr(imp) {
   const trustedRd = () =>
     (ctx.pendingPair && ctx.pendingPair.fresh && ctx.pendingPair.rd) ||
     (c.paired && c.rd ? c.rd : "");
+  // #88 出码即可扫的判定：rd 可信（单 relay 换锚）或已挂候选公钥（多 relay 歧义
+  // 态）都算就绪——后者回传靠 cands 兜底试解，状态行不再卡「正在确认身份」误导等待
+  const qrReady = () => !!(trustedRd() || (ctx.pendingPair && ctx.pendingPair.cands));
   const makePayload = () => JSON.stringify({
     t: "ccdeck-login", v: 1,
     ...(imp ? { imp: 1 } : {}),
@@ -7353,7 +7391,7 @@ function startLoginQr(imp) {
   $("loginQrSub").innerHTML = imp
     ? "手机 CC Deck App 扫码后可选：<br/>授权这台电脑入网 / 挑一条连接回传"
     : "手机 CC Deck App 扫下方二维码<br/>确认后自动进入——免输配对码";
-  $("loginQrState").textContent = trustedRd() ? "等待手机扫码…" : "正在确认服务器身份…请稍候";
+  $("loginQrState").textContent = qrReady() ? "等待手机扫码…" : "正在确认服务器身份…请稍候";
   drawLoginQr(makePayload());
   $("loginQrPop").classList.add("open");
   // 授权应答走 pair_ack：置 pendingPair（login 态 pc 空串），身份检查与输码路径同构。
@@ -7375,7 +7413,7 @@ function startLoginQr(imp) {
   const redraw = () => {
     if (!$("loginQrPop").classList.contains("open")) return;
     drawLoginQr(makePayload());
-    $("loginQrState").textContent = trustedRd() ? "等待手机扫码…" : "正在确认服务器身份…请稍候";
+    $("loginQrState").textContent = qrReady() ? "等待手机扫码…" : "正在确认服务器身份…请稍候";
   };
   clearInterval(loginQrTimer);
   loginQrTimer = setInterval(redraw, 3000); // relay 身份经发现帧刷新后二维码随之更新
