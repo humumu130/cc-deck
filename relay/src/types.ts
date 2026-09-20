@@ -261,6 +261,9 @@ export interface SnapshotPayload {
   // earliest_seq 序号，改用"被省略条数"表达截断；旧客户端忽略未知字段，新客户端
   // 可据此提示"仅显示最近 N 条"
   logs_truncated?: Record<string, number>;
+  // relay 本机平台（process.platform，#8）：手机端新建会话表单自适应路径文案与
+  // 盘符拦截依据（0.5.3 起客户端已在读，此前 relay 漏组装恒空串）
+  platform?: string;
 }
 
 // 时间线条目（M1 调试台用；压缩/截断后的一行文本，不推原始日志流）

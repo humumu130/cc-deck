@@ -645,6 +645,9 @@ export function startServer(
           ...(Object.keys(snapLogs.logs_truncated).length ? { logs_truncated: snapLogs.logs_truncated } : {}),
           server_time: Date.now(),
           homedir: homedir(),
+          // relay 本机平台（#8：手机端 NewSessionModal 自适应路径文案/盘符拦截依据；
+          // #117 教训——云通道快照同名字段必须同步，云桥手机才收得到）
+          platform: process.platform,
           models: listModels(mgr.cfg.model),
           // #71 输出物开关：恒布尔随快照下发（旧客户端忽略未知键），三端 tab 据此显隐
           deliverables: readPluginConfig().deliverables,
