@@ -1,0 +1,702 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>cc-deck · #98 状态灯辨识度优化 · 设计稿（方案 B）</title>
+<style>
+  /* 页面壳：token 取自 web-console 暗色主题（与 team-mode-mockup 同源）。
+     卡片模拟区 .wc（桌面）/ .ph（手机）按真实代码复原；青色 #22D3EE = 变动点标注色，不属于两端 UI。 */
+  :root { --bg:#050B12; --border:#1B2739; --text:#C9D3E0; --text-strong:#E7EEF8; --dim:#7E8BA3; --anno:#22D3EE; }
+  * { box-sizing:border-box; margin:0; padding:0; }
+  body {
+    background: radial-gradient(1200px 500px at 80% -10%, rgba(217,119,87,.06), transparent 60%), var(--bg);
+    color:var(--text); font:14px/1.6 -apple-system,"Segoe UI","PingFang SC","Microsoft YaHei UI","Microsoft YaHei",sans-serif;
+    min-height:100vh; padding:34px 18px 70px;
+  }
+  .page { max-width:1280px; margin:0 auto; }
+  .kicker { font-size:11px; color:var(--anno); letter-spacing:2.5px; font-weight:700; margin-bottom:9px; }
+  h1 { font-size:21px; color:var(--text-strong); margin-bottom:12px; }
+  h1 small { font-size:12.5px; color:var(--dim); font-weight:400; margin-left:10px; }
+
+  .concl { border:1px solid rgba(217,119,87,.38); background:rgba(217,119,87,.06); border-radius:12px; padding:14px 18px; font-size:13.5px; line-height:1.95; color:#D5DEEC; }
+  .concl b { color:#F2D3C5; } .concl .hl { color:#FFC53D; font-weight:600; }
+
+  .plans { display:flex; gap:12px; margin-top:16px; flex-wrap:wrap; }
+  .plan { flex:1; min-width:250px; border:1px solid var(--border); border-radius:11px; padding:11px 14px; font-size:12px; color:#8FA3BC; line-height:1.8; background:#070D16; }
+  .plan b { color:#D7E3F4; display:block; margin-bottom:2px; }
+  .plan.pick { border-color:rgba(34,211,238,.55); box-shadow:0 0 0 1px rgba(34,211,238,.22); }
+  .plan .ptag { float:right; font-size:10px; color:var(--anno); border:1px solid rgba(34,211,238,.45); border-radius:999px; padding:1px 8px; margin-left:6px; }
+
+  .legend { display:flex; gap:16px; align-items:center; flex-wrap:wrap; font-size:11.5px; color:#7E8FA8; margin-top:14px; }
+  .legmark { display:inline-block; width:18px; height:12px; border:1.5px dashed rgba(34,211,238,.9); border-radius:5px; margin-right:6px; vertical-align:-1px; }
+
+  nav.idx { display:flex; flex-wrap:wrap; gap:8px; margin-top:16px; }
+  nav.idx a { font-size:11.5px; color:#9FB0C8; text-decoration:none; border:1px solid var(--border); padding:3px 11px; border-radius:999px; }
+  nav.idx a:hover { color:var(--anno); border-color:rgba(34,211,238,.5); }
+
+  table.rc { border-collapse:collapse; width:100%; margin-top:16px; font-size:12px; }
+  .rc th,.rc td { border:1px solid var(--border); padding:7px 11px; text-align:left; color:#9FB0C8; vertical-align:top; line-height:1.7; }
+  .rc th { color:#D7E2F1; font-weight:600; background:#0C1524; white-space:nowrap; }
+  .rc .cy { color:var(--anno); font-weight:700; white-space:nowrap; }
+
+  .sec { margin-top:56px; scroll-margin-top:14px; }
+  .sech { display:flex; align-items:center; gap:11px; }
+  .bnum { width:25px; height:25px; border-radius:50%; background:var(--anno); color:#03212B; font-weight:800; font-size:13px; display:inline-flex; align-items:center; justify-content:center; flex:none; }
+  .sech h2 { font-size:16.5px; color:var(--text-strong); }
+  .sech .opt { font-size:10.5px; color:#7E8FA8; border:1px solid var(--border); border-radius:999px; padding:2px 9px; font-weight:500; }
+  .sech .key { font-size:10.5px; color:#FFC53D; background:rgba(255,197,61,.12); border-radius:999px; padding:2px 9px; font-weight:600; }
+  .secd { font-size:12.5px; color:#8FA3BC; line-height:1.85; margin:9px 0 2px; max-width:1040px; }
+  .secd b { color:#DCE6F3; } .secd code { background:#101B2B; border:1px solid var(--border); border-radius:5px; padding:1px 6px; font-size:11px; color:#C8D6EA; font-family:Consolas,monospace; }
+
+  .cmp { display:flex; gap:14px; align-items:stretch; flex-wrap:wrap; margin-top:14px; }
+  .panel { flex:1; min-width:330px; display:flex; flex-direction:column; border:1px solid var(--border); border-radius:13px; background:#070D16; overflow:hidden; }
+  .plabel { display:flex; align-items:center; gap:7px; padding:8px 13px; font-size:11.5px; font-weight:600; letter-spacing:.5px; border-bottom:1px solid #141D2B; }
+  .plabel.b { color:#93A3BC; } .plabel.b::before { content:""; width:7px; height:7px; border-radius:50%; background:#4A5F78; }
+  .plabel.a { color:var(--anno); } .plabel.a::before { content:""; width:7px; height:7px; border-radius:50%; background:var(--anno); box-shadow:0 0 6px rgba(34,211,238,.6); }
+  .pbody { padding:14px; display:flex; flex-direction:column; gap:12px; flex:1; }
+  .pcap { padding:10px 14px 12px; font-size:12px; line-height:1.8; color:#8FA3BC; border-top:1px solid #141D2B; }
+  .pcap b { color:#D9E4F2; }
+  .themeduo { display:flex; gap:12px; flex-wrap:wrap; }
+  .themeduo > div { flex:1; min-width:210px; }
+  .duotag { font-size:10px; color:#6C7A93; margin-bottom:6px; letter-spacing:1.5px; }
+  .duotag.star { color:#C9A15C; }
+
+  /* 变动点标注：青色虚线圈 + 角标 */
+  .mark { position:relative; display:inline-flex; padding:4px 5px; border-radius:9px; }
+  .mark::after { content:""; position:absolute; inset:0; border:1.5px dashed rgba(34,211,238,.95); border-radius:9px; pointer-events:none; }
+  .mark[data-t]::before { content:attr(data-t); position:absolute; top:-10px; left:-7px; z-index:3; background:var(--anno); color:#03212B; font-size:9.5px; font-weight:700; padding:1px 6px; border-radius:7px; white-space:nowrap; letter-spacing:.3px; }
+  .markcard { position:relative; }
+  .markcard::after { content:""; position:absolute; inset:-6px; border:1.5px dashed rgba(34,211,238,.9); border-radius:19px; pointer-events:none; z-index:3; }
+  .markcard[data-t]::before { content:attr(data-t); position:absolute; top:-11px; right:12px; z-index:4; background:var(--anno); color:#03212B; font-size:9.5px; font-weight:700; padding:1px 6px; border-radius:7px; white-space:nowrap; }
+
+  /* ============================================================
+     桌面端模拟（web-console/index.html 复原）
+     主题作用域 .wc.dk / .wc.lt + 变动点修饰类（m-*，叠在同类元素上）
+     ============================================================ */
+  .wc.dk { --panel:#0B141F; --panel-2:#101B2B; --border:#1B2739; --side-bg:#04080E; --bg-main:#0A0F17;
+    --text:#C9D3E0; --text-strong:#E7EEF8; --dim:#7E8BA3; --faint:#55617A; --card-sub:#A9B5C7;
+    --brand:#D97757; --brand-2:#C96442; --brand-line:#D97757;
+    --working:#FFC53D; --waiting:#F0524F; --error:#FF7849; --done:#2BD98F; }
+  .wc.lt { --panel:#FFFFFF; --panel-2:#F1F4F9; --border:#D9DFE9; --side-bg:#F1F2F5; --bg-main:#FCFDFE;
+    --text:#1C2637; --text-strong:#101B2E; --dim:#5F6C84; --faint:#8D99AE; --card-sub:#4A5670;
+    --brand:#C2603E; --brand-2:#A04E30; --brand-line:#E07B4C;
+    --working:#A16207; --waiting:#DC2626; --error:#C2410C; --done:#047857; }
+
+  .wc .card { background:var(--panel); border:1px solid var(--border); border-radius:14px; padding:11px 13px; position:relative; }
+  .wc .card.sel { border-color:var(--brand-line); box-shadow:0 0 0 1px var(--brand-line), 0 4px 20px rgba(217,119,87,.15); }
+  .wc .c-head { display:flex; align-items:center; gap:8px; min-width:0; }
+  .wc .card-title { flex:1; min-width:0; display:flex; align-items:center; gap:8px; font-size:15px; font-weight:650; }
+  .wc .c-tt { color:var(--text-strong); min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; text-align:left; }
+  .wc .elapsed { font-size:12px; color:var(--dim); font-variant-numeric:tabular-nums; flex:none; }
+  .wc .c-live { display:flex; align-items:center; gap:8px; margin:4px 0 0 6px; font-size:11px; line-height:16px; min-height:16px; color:var(--card-sub); font-variant-numeric:tabular-nums; }
+  .wc .lv-sec { color:var(--working); flex:none; }
+  .wc .lv-sum { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; text-align:left; }
+  .wc .card-summary { margin:4px 0 0 6px; font-size:11.5px; line-height:16px; min-height:16px; color:var(--card-sub); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; text-align:left; }
+  .wc .card-summary.waiting { color:var(--working); }
+  .wc .card-stats { display:flex; align-items:center; gap:10px; margin-top:6px; font-size:11px; line-height:15px; min-height:15px; color:var(--faint); font-variant-numeric:tabular-nums; }
+  .wc .add { color:var(--done); } .wc .del { color:var(--error); }
+  .wc .his-badge.ext { flex:none; font-size:10px; font-weight:500; color:var(--brand-2); border:1px solid rgba(201,100,66,.4); border-radius:999px; padding:1px 7px; }
+  .wc .ctxm { margin-left:auto; display:inline-flex; align-items:center; gap:4px; }
+  .wc .ctxbar { width:30px; height:4px; border-radius:2px; background:color-mix(in srgb, var(--faint) 22%, transparent); overflow:hidden; }
+  .wc .ctxbar i { display:block; height:100%; background:linear-gradient(90deg, var(--brand), var(--brand-2)); }
+  .wc .ctxt { font-size:10px; }
+  .wc .card-cta { margin-top:10px; display:flex; justify-content:flex-end; }
+  .wc .card-cta button { background:rgba(245,184,65,.12); border:1px solid rgba(245,184,65,.45); color:var(--working); font-weight:600; border-radius:999px; padding:5px 18px; font-size:12px; }
+  .wc .c-dot { width:8px; height:8px; border-radius:50%; background:var(--sc, var(--dim)); flex:none; }
+  .wc .c-dot.run { animation:dot-breathe 2.4s ease-in-out infinite; }
+
+  /* 变动点修饰类（现状 = 无修饰类） */
+  .m-size .c-dot { width:10px; height:10px; box-shadow:0 0 0 3px color-mix(in srgb, var(--sc) 20%, transparent); }        /* ① 10px+光圈 */
+  .m-hollow .c-dot.hollow { background:transparent; border:2px solid var(--sc); }                                          /* ② 终态空心 */
+  .wc.lt.m-led .c-dot.led { background:color-mix(in srgb, var(--sc) 55%, #fff); border:1.5px solid var(--sc); }            /* ⑤ 浅色 LED 化 */
+  .wc.lt.m-w6400 { --working:#8F6400; }                                                                                    /* ⑥ 浅色 working 换值 */
+  .m-waitred .card-summary.waiting { color:var(--waiting); }                                                               /* ⑨ WAITING 摘要红 */
+  .wc.dk.m-dknew { --working:#FFD84D; --waiting:#FF6B68; }                                                                 /* ⑧ 暗色两值 */
+  .wc.lt.m-selneutral .card.sel { border-color:#C2603E; box-shadow:0 0 0 1px #C2603E, 0 4px 20px rgba(15,23,42,.12); }      /* ③ 选中卡（浅） */
+  .wc.dk.m-selneutral .card.sel { box-shadow:0 0 0 1px var(--brand-line), 0 4px 20px rgba(0,0,0,.35); }                    /* ③ 选中卡（暗） */
+
+  .cardsurf { background:var(--side-bg); border-radius:10px; padding:12px; display:flex; flex-direction:column; gap:8px; }
+  .stripcard { background:var(--panel); border:1px solid var(--border); border-radius:12px; display:inline-flex; }
+  .dstrip { display:flex; gap:22px; align-items:flex-start; padding:14px 18px 12px; }
+  .ditem { display:flex; flex-direction:column; align-items:center; gap:8px; }
+  .ditem .dl { font-size:10.5px; color:var(--dim); white-space:nowrap; }
+  .ditem .dr { font-size:9.5px; color:var(--faint); font-variant-numeric:tabular-nums; }
+
+  .mag { display:flex; gap:24px; align-items:flex-start; padding:8px 4px 2px; flex-wrap:wrap; }
+  .magitem { display:flex; flex-direction:column; align-items:center; gap:13px; }
+  .magbox { width:30px; height:30px; display:flex; align-items:center; justify-content:center; zoom:2.6; }
+  .maglab { font-size:10.5px; color:#7E8FA8; white-space:nowrap; }
+  .magcap { font-size:11px; color:#6C7A93; margin-top:2px; }
+
+  .runhint { display:flex; align-items:center; font-size:11.5px; color:var(--dim); padding:2px 3px 9px; font-variant-numeric:tabular-nums; }
+  .rh-chip { display:inline-flex; align-items:center; gap:3.5px; margin-left:9px; }
+  .rh-chip i { width:7px; height:7px; border-radius:50%; }
+  .rh-help { display:inline-flex; align-items:center; justify-content:center; margin-left:8px; width:14px; height:14px; border-radius:50%; border:1px solid var(--border); color:var(--dim); font-size:10px; }
+
+  .dtlist { background:var(--side-bg); border:1px solid color-mix(in srgb, var(--border) 55%, transparent); border-radius:12px; padding:10px; display:flex; flex-direction:column; gap:7px; }
+  .stag { font-size:10px; color:var(--dim); padding:3px 2px 0; letter-spacing:.6px; }
+
+  /* ④ 全局橙雾演示面 */
+  .glowdemo { position:relative; height:96px; border-radius:10px; border:1px solid var(--border); }
+  .gd-lt.cur  { background:radial-gradient(1200px 500px at 80% -10%, rgba(217,119,87,.08), transparent 60%), radial-gradient(900px 400px at -10% 110%, rgba(201,100,66,.05), transparent 60%), #FCFDFE; border-color:#D9DFE9; }
+  .gd-lt.half { background:radial-gradient(1200px 500px at 80% -10%, rgba(217,119,87,.04), transparent 60%), radial-gradient(900px 400px at -10% 110%, rgba(201,100,66,.03), transparent 60%), #FCFDFE; border-color:#D9DFE9; }
+  .gd-dk.cur  { background:radial-gradient(1200px 500px at 80% -10%, rgba(217,119,87,.08), transparent 60%), radial-gradient(900px 400px at -10% 110%, rgba(201,100,66,.05), transparent 60%), #0A0F17; }
+  .gd-dk.half { background:radial-gradient(1200px 500px at 80% -10%, rgba(217,119,87,.04), transparent 60%), radial-gradient(900px 400px at -10% 110%, rgba(201,100,66,.03), transparent 60%), #0A0F17; }
+
+  /* ⑥ 色相标尺 */
+  .hueruler-wrap { border:1px solid var(--border); border-radius:13px; background:#070D16; padding:34px 20px 16px; margin-top:14px; }
+  .hueruler { position:relative; height:22px; border-radius:8px; border:1px solid #26354C;
+    background:linear-gradient(90deg, hsl(0 62% 55%), hsl(15 62% 55%), hsl(30 62% 55%), hsl(42 62% 50%), hsl(60 62% 50%)); }
+  .hmk { position:absolute; top:-8px; bottom:-8px; width:2px; background:#F2F7FF; box-shadow:0 0 4px rgba(0,0,0,.6); }
+  .hmk span { position:absolute; top:-22px; left:50%; transform:translateX(-50%); font-size:10px; color:#B9C8DD; white-space:nowrap; }
+  .hmk.bad { background:#FF7849; } .hmk.bad span { color:#FF9D7E; }
+  .hmk.good { background:#2BD98F; } .hmk.good span { color:#7BE8BC; }
+  .huscale { display:flex; justify-content:space-between; font-size:9.5px; color:#5F7189; margin-top:7px; font-variant-numeric:tabular-nums; }
+
+  .swrow { display:flex; align-items:center; gap:12px; flex-wrap:wrap; font-size:11px; color:#9FB0C8; }
+  .sw { display:inline-flex; align-items:center; gap:7px; }
+  .sw i { width:38px; height:20px; border-radius:6px; border:1px solid rgba(160,170,190,.4); flex:none; }
+  .deg { color:#7E8FA8; font-variant-numeric:tabular-nums; }
+
+  /* ============================================================
+     手机端模拟（expo-app ListScreen + theme.ts 复原）
+     ============================================================ */
+  .ph.dk { --bg:#050B12; --panel:#0B1622; --panel2:#101F30; --line:rgba(125,165,220,.10); --text:#E8F0FA; --dim:#7B93AE; --faint:#4A5F78; --working:#FFC53D; --waiting:#F0524F; --error:#FF7849; --done:#2BD98F; --brand:#4D9FFF; }
+  .ph.lt { --bg:#E9EAE4; --panel:#F2F3EE; --panel2:#E2E4DC; --line:rgba(52,58,50,.13); --text:#29302A; --dim:#5D665C; --faint:#8B938A; --working:#A16207; --waiting:#DC2626; --error:#C2410C; --done:#047857; --brand:#2F7FE8; }
+
+  .phone { border-radius:24px; border:1px solid var(--border); background:#0A0F17; padding:5px; }
+  .pscreen { border-radius:19px; background:var(--bg); overflow:hidden; }
+  .pstat { display:flex; justify-content:space-between; font-size:10px; color:var(--faint); padding:7px 16px 3px; }
+  .phead { display:flex; align-items:center; padding:6px 14px 8px; }
+  .plogo { font-size:14px; font-weight:700; color:var(--text); letter-spacing:.3px; }
+  .pconn { margin-left:10px; font-size:10px; color:var(--done); }
+  .picon { margin-left:auto; font-size:12px; color:var(--dim); }
+  .pchips { display:flex; gap:6px; padding:0 14px 10px; flex-wrap:wrap; }
+  .pchip { display:inline-flex; align-items:center; gap:4px; font-size:11px; color:var(--dim); border:1px solid var(--line); border-radius:999px; padding:2px 9px; background:var(--panel); font-variant-numeric:tabular-nums; }
+  .pchip i { width:7px; height:7px; border-radius:50%; }
+  .pchip.on { color:var(--text); font-weight:600; }
+  .plist { padding:0 10px 12px; display:flex; flex-direction:column; gap:9px; }
+  .ph .mcard { background:var(--panel); border:1px solid var(--line); border-radius:16px; padding:11px 13px; }
+  .ph .mrow { display:flex; align-items:center; gap:7px; }
+  .ph .mdot { width:11px; height:11px; border-radius:50%; background:var(--sc, var(--dim)); flex:none; }
+  .ph .mdot.run { animation:dot-breathe 2.4s ease-in-out infinite; }
+  .ph .mtitle { flex:1; min-width:0; color:var(--text); font-size:15px; font-weight:600; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; text-align:left; }
+  .ph .melap { font-size:12px; color:var(--faint); font-variant-numeric:tabular-nums; flex:none; }
+  .ph .mlive { display:flex; align-items:center; gap:6px; margin:5px 0 0 6px; font-size:12px; min-height:16px; color:var(--dim); font-variant-numeric:tabular-nums; }
+  .ph .mlive .lw { color:var(--working); flex:none; }
+  .ph .mlive .lw-sum { color:var(--working); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; text-align:left; }
+  .ph .msum { margin:5px 0 5px 6px; font-size:13px; color:var(--dim); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; text-align:left; }
+  .ph .mfoot { display:flex; align-items:center; gap:8px; margin-left:6px; }
+  .ph .mmeta { font-size:10px; color:var(--faint); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .ph .mflex { flex:1; }
+  .ph .mstats { font-size:10px; color:var(--faint); font-variant-numeric:tabular-nums; flex:none; }
+  .ph .mstats .add { color:var(--working); }
+  .ph .mstats .del { color:var(--error); }
+  .ph .mctxbar { width:30px; height:3px; border-radius:1.5px; background:color-mix(in srgb, var(--faint) 25%, transparent); overflow:hidden; }
+  .ph .mctxbar i { display:block; height:100%; background:var(--brand); }
+  .ph .mctxt { font-size:10px; color:var(--faint); font-variant-numeric:tabular-nums; }
+  /* ⑦ 手机端两条黄字降级 */
+  .ph.m-mobtext .mlive .lw-sum { color:var(--dim); }
+  .ph.m-mobtext .mstats .add { color:var(--done); }
+
+  /* 真实呼吸动画（与 web-console 1447 行 / expo BlinkDot 同参数） */
+  @keyframes dot-breathe {
+    0%, 100% { opacity:1; transform:scale(1); box-shadow:0 0 2px 0 color-mix(in srgb, var(--sc) 40%, transparent); }
+    50% { opacity:.45; transform:scale(.8); box-shadow:0 0 9px 2px color-mix(in srgb, var(--sc) 55%, transparent); }
+  }
+  @media (prefers-reduced-motion: reduce) { .c-dot.run, .mdot.run { animation:none; } }
+
+  /* 四象限 */
+  .quad { display:grid; grid-template-columns:1fr 1fr; gap:18px; margin-top:14px; }
+  .q { border:1px solid var(--border); border-radius:14px; background:#070D16; padding:14px; }
+  .q h3 { font-size:14px; color:#E2EAF6; display:flex; gap:9px; align-items:center; margin-bottom:3px; }
+  .qstar { font-size:10px; background:rgba(255,197,61,.14); color:#FFD84D; border-radius:999px; padding:2px 9px; font-weight:600; }
+  .qsub { font-size:11.5px; color:#7E8FA8; margin-bottom:12px; line-height:1.7; }
+  .qcmp { display:flex; gap:12px; }
+  .qcol { flex:1; min-width:0; }
+  .qlab { font-size:11px; margin-bottom:7px; font-weight:600; }
+  .qlab.b { color:#93A3BC; } .qlab.a { color:var(--anno); }
+
+  /* 顺带修缮 + 拍板区 */
+  .extra li { font-size:12.5px; color:#9FB0C8; line-height:2.0; margin-left:18px; }
+  .extra b { color:#D9E4F2; } .extra .cy { color:var(--anno); font-weight:700; }
+  .decgrid { display:grid; grid-template-columns:1fr 1fr; gap:14px; margin-top:14px; }
+  .dec { border:1px solid var(--border); border-radius:13px; padding:14px 16px; background:#070D16; }
+  .dec h4 { font-size:13.5px; color:#E2EAF6; display:flex; gap:10px; align-items:center; margin-bottom:8px; }
+  .dnum { font-size:10.5px; background:rgba(34,211,238,.14); color:var(--anno); border:1px solid rgba(34,211,238,.4); border-radius:6px; padding:1px 7px; font-weight:700; flex:none; }
+  .dec p { font-size:12px; color:#8FA3BC; line-height:1.8; }
+  .opts { display:flex; gap:8px; margin-top:10px; flex-wrap:wrap; }
+  .opt { font-size:11.5px; border:1px solid #2A3650; color:#9FB0C8; border-radius:999px; padding:3px 12px; }
+  .opt.pick { border-color:rgba(34,211,238,.6); color:var(--anno); }
+  .opt.pick::after { content:" · 本稿默认"; font-size:10px; }
+
+  .foot { margin-top:46px; padding-top:16px; border-top:1px solid var(--border); font-size:11.5px; color:#6C7A93; line-height:2; }
+
+  @media (max-width:1080px) { .quad, .decgrid { grid-template-columns:1fr; } .qcmp { flex-direction:column; } }
+</style>
+</head>
+<body>
+<div class="page">
+
+  <div class="kicker">CC-DECK · ISSUE #98 · 设计稿 MOCKUP · 基于 docs/status-light-analysis.md v2</div>
+  <h1>状态灯辨识度优化<small>桌面 web-console（橙主题）为主 · 手机 expo-app（蓝主题）轻量微调 · 全稿按首选方案 B 展示</small></h1>
+
+  <div class="concl">
+    <b>一句话病因：黄灯不是「不够亮」，是被围住了。</b>浅色模式下四色状态灯全部<b>暗于白卡底</b>（亮度差 −0.83～−0.86）——它们是「印刷墨点」，物理上发不了光；而周围全是橙：选中卡亮橙描边（与黄灯色相仅差 <span class="hl">16°</span>）、橙辉光、全屏橙光晕、品牌橙本身（差 <span class="hl">20°</span>）；ERROR 更是与品牌橙 <span class="hl">0–2°</span> 完全同色相（天然迷彩）。方案 B 三步走：<b>LED 化</b>（把灯变回发光体）＋<b>形状编码</b>（实心=进行中 / 空心=终态）＋<b>暖场降噪</b>（去橙），把状态灯从暖色噪声里捞出来。
+  </div>
+
+  <div class="plans">
+    <div class="plan"><b>方案 A · 保守</b>约 6 行 CSS，只动灯自己（尺寸 / 光圈 / 色值）。浅色改善约四成——「印刷墨点」机理未根治。</div>
+    <div class="plan pick"><span class="ptag">★ 首选 · 本稿所示</span><b>方案 B · 中庸</b>约 18 行 CSS，不改 JS：灯系统升级（LED 化 + 形状编码）＋ 暖场降噪（选中卡去橙 / 光晕减半 / 语义色归位）。报告 §4 五条根因全部有对应项。</div>
+    <div class="plan"><b>方案 C · 进取</b>约 25 行：B + 卡片左缘 3px 状态条 + WORKING 整卡微染。检出效率最高，但与 hover/选中/历史/休眠四态叠加需目验调优——建议 B 落地用一周仍觉不够再上 C。</div>
+  </div>
+
+  <div class="legend">
+    <span><span class="legmark"></span>青色虚线框 = 本次变动点（不属于两端 UI）</span>
+    <span>所有卡片 / 灯 / 呼吸动画按 web-console 与 expo-app 真实代码参数复原，非抽象示意图</span>
+    <span>左右对比 = <b style="color:#93A3BC">现状（现网代码原样）</b> → <b style="color:#22D3EE">方案 B 改后</b></span>
+  </div>
+
+  <nav class="idx">
+    <a href="#b1">① 灯 10px + 光圈</a><a href="#b2">② 终态空心环</a><a href="#b3">③ 选中卡去橙</a><a href="#b4">④ 全局橙雾减半</a><a href="#b5">⑤ 浅色 LED 化</a><a href="#b6">⑥ working 换 #8F6400</a><a href="#b7">⑦ 手机端微调</a><a href="#b8">⑧ 暗色两值</a><a href="#b9">⑨ WAITING 摘要语义</a><a href="#quad">四象限总览</a><a href="#extra">顺带修缮</a><a href="#decide">拍板区</a>
+  </nav>
+
+  <table class="rc">
+    <tr><th>根因（报告 §4，按权重）</th><th>对应变动点</th></tr>
+    <tr><td>1. 浅色亮度倒置——灯暗于白底，无「发光感」（<b>★主因</b>）</td><td class="cy">⑤ LED 化</td></tr>
+    <tr><td>2. 色相拥挤——浅色黄灯距橙 16–20°，ERROR 与橙 0–2° 重合</td><td class="cy">⑥ 换色 + ③ 去橙 + ② 形状编码</td></tr>
+    <tr><td>3. 灯体几何——桌面 8px，视角仅手机的 40%（13.2 vs 33.4 角分）</td><td class="cy">① 10px + 光圈</td></tr>
+    <tr><td>4. 静态无分层——裸色点贴卡面，绿黄只靠色相区分</td><td class="cy">① 光圈 + ② 空心环</td></tr>
+    <tr><td>5. 语义色混用——WAITING 摘要黄字 / 手机统计黄字抢「在跑」的色</td><td class="cy">⑨ 摘要红 + ⑦ 手机降级</td></tr>
+    <tr><td>加重的环境项——全屏橙雾、选中卡橙辉光常驻</td><td class="cy">③ + ④ 降噪</td></tr>
+  </table>
+
+  <!-- ================= 变动点 1 ================= -->
+  <section class="sec" id="b1">
+    <div class="sech"><span class="bnum">1</span><h2>桌面灯 8px → 10px + 静态光圈</h2><span class="opt">.c-dot · index.html 1239 行</span></div>
+    <div class="secd">现状是 <code>8px</code> 裸色点直接贴卡面，无描边、无光圈；呼吸动画的缩放幅度（8→6.4px）肉眼难辨，只剩轻微闪烁。改后 <code>10px</code>（面积 <b>+56%</b>，缩小与手机端 11px 的几何差距）＋ <code style="white-space:nowrap">3px / 20%</code> 静态光圈——深点＋彩圈组成「指示徽」，明暗两主题同受益。</div>
+    <div class="cmp">
+      <div class="panel">
+        <div class="plabel b">现状</div>
+        <div class="pbody">
+          <div class="themeduo">
+            <div><div class="duotag star">浅色（★ 你的模式）</div><div class="wc lt"><div class="cardsurf" id="b1b-lt"></div></div></div>
+            <div><div class="duotag">暗色</div><div class="wc dk"><div class="cardsurf" id="b1b-dk"></div></div></div>
+          </div>
+          <div class="wc lt"><div class="magcap">3× 放大 · 浅色四状态</div><div id="b1b-mag"></div></div>
+        </div>
+        <div class="pcap">8px 裸点，无任何分层。WORKING 与 DONE 之间只差一个色相——橙环境里这正是最不可靠的通道。</div>
+      </div>
+      <div class="panel">
+        <div class="plabel a">方案 B 改后（仅本条改动）</div>
+        <div class="pbody">
+          <div class="themeduo">
+            <div><div class="duotag star">浅色（★）</div><div class="wc lt m-size"><div class="cardsurf" id="b1a-lt"></div></div></div>
+            <div><div class="duotag">暗色</div><div class="wc dk m-size"><div class="cardsurf" id="b1a-dk"></div></div></div>
+          </div>
+          <div class="wc lt m-size"><div class="magcap">3× 放大 · 浅色四状态</div><div id="b1a-mag"></div></div>
+        </div>
+        <div class="pcap">10px + 静态光圈；<b>WORKING 呼吸动画期间 box-shadow 关键帧自然接管为动态光晕</b>（预期行为，不用改动画代码）。</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ================= 变动点 2 ================= -->
+  <section class="sec" id="b2">
+    <div class="sech"><span class="bnum">2</span><h2>DONE / ERROR 改空心环（形状编码）</h2><span class="opt">明暗同规则 · 纯 CSS 零 JS</span></div>
+    <div class="secd"><b>终态退后、进行中的留在前排</b>：WORKING / WAITING 保持实心亮点（在跑 / 要处理），DONE / ERROR 改 <code>2px</code> 空心环（终态）。扫列表从「分辨黄绿」变成「只找实心亮点」——色弱、余光、黑白打印都可靠。render 早已把状态写成卡片类名（<code>d.className = "card " + s.status</code>，4222 行），<b>纯 CSS 实现，零 JS 改动</b>；浅色 2px <code>#047857</code> 环对白底 5.48:1。</div>
+    <div class="cmp">
+      <div class="panel">
+        <div class="plabel b">现状</div>
+        <div class="pbody">
+          <div class="themeduo">
+            <div><div class="duotag star">浅色（★）</div><div class="wc lt"><div class="cardsurf"><div class="stripcard dstrip" id="b2b-lt"></div></div></div></div>
+            <div><div class="duotag">暗色</div><div class="wc dk"><div class="cardsurf"><div class="stripcard dstrip" id="b2b-dk"></div></div></div></div>
+          </div>
+        </div>
+        <div class="pcap">四个状态全是实心点，只靠色相区分；浅色下全是「暗墨点」；ERROR 还与品牌橙 0–2° 撞色（天然迷彩）。</div>
+      </div>
+      <div class="panel">
+        <div class="plabel a">方案 B 改后（含①的 10px 叠加）</div>
+        <div class="pbody">
+          <div class="themeduo">
+            <div><div class="duotag star">浅色（★）</div><div class="wc lt m-size m-hollow"><div class="cardsurf"><div class="stripcard dstrip" id="b2a-lt"></div></div></div></div>
+            <div><div class="duotag">暗色</div><div class="wc dk m-size m-hollow"><div class="cardsurf"><div class="stripcard dstrip" id="b2a-dk"></div></div></div></div>
+          </div>
+        </div>
+        <div class="pcap"><b>实心 = 有事发生</b>（运行中 / 等待确认，含呼吸动画或红色实心），<b>空心 = 终态</b>（已完成 / 出错）——扫一眼列表，实心亮点自动浮出来。</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ================= 变动点 3 ================= -->
+  <section class="sec" id="b3">
+    <div class="sech"><span class="bnum">3</span><h2>选中卡去橙（辉光中性化 + 描边降亮）</h2><span class="opt">.card.sel · 1144 行</span></div>
+    <div class="secd">浅色选中卡描边用亮橙 <code>#E07B4C</code>（白底仅 <b>2.95:1</b>，本身就偏浮）＋ 硬编码橙辉光 <code>rgba(217,119,87,.15)</code>。常态下永远有一张卡选中 → <b>列表恒有一块橙</b>贴着黄灯（色相仅差 16°）。改后投影中性化（浅 <code>rgba(15,23,42,.12)</code> / 暗 <code>rgba(0,0,0,.35)</code>，新变量 <code>--sel-shadow</code>）；浅色描边降亮为 <code>--sel-line:#C2603E</code>（保留品牌识别、不再发浮），暗色描边维持品牌色不动。另一条路线「完全中性灰线」见拍板区 D3。</div>
+    <div class="cmp">
+      <div class="panel">
+        <div class="plabel b">现状</div>
+        <div class="pbody">
+          <div class="themeduo">
+            <div><div class="duotag star">浅色（★）</div><div class="wc lt"><div class="cardsurf" id="b3b-lt"></div></div></div>
+            <div><div class="duotag">暗色</div><div class="wc dk"><div class="cardsurf" id="b3b-dk"></div></div></div>
+          </div>
+        </div>
+        <div class="pcap">橙描边 + 橙辉光在白底晕开——选中卡成了「第二光源」，整列视线被它吸走，黄灯贴着亮橙线更难分。</div>
+      </div>
+      <div class="panel">
+        <div class="plabel a">方案 B 改后（仅本条改动）</div>
+        <div class="pbody">
+          <div class="themeduo">
+            <div><div class="duotag star">浅色（★）</div><div class="wc lt m-selneutral"><div class="cardsurf" id="b3a-lt"></div></div></div>
+            <div><div class="duotag">暗色</div><div class="wc dk m-selneutral"><div class="cardsurf" id="b3a-dk"></div></div></div>
+          </div>
+        </div>
+        <div class="pcap">描边还在（降亮一档 #C2603E），辉光改中性投影——<b>选中感来自「线」而不是「橙雾」</b>，黄灯身边不再有第二团橙。</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ================= 变动点 4 ================= -->
+  <section class="sec" id="b4">
+    <div class="sech"><span class="bnum">4</span><h2>全局橙光晕减半</h2><span class="opt">body / #detail · 124–125 / 1463–1464 行</span></div>
+    <div class="secd">两层橙径向光晕硬编码 <code>.08 / .05</code>，浅色同样生效——叠白底后 ≈ <code>#F9F2F1</code>，一层淡暖雾铺满全屏，方向与黄灯相冲。改后 alpha <b>减半</b>（<code>.04 / .03</code>）：品牌氛围保留，不再参与「淹没」。下图为缩略示意（实际为全屏 1200×500 径向渐变，只改 alpha，视觉差异比示意图更弥散）。</div>
+    <div class="cmp">
+      <div class="panel">
+        <div class="plabel b">现状</div>
+        <div class="pbody">
+          <div class="duotag star">浅色内容区底 #FCFDFE（★）</div>
+          <div class="glowdemo gd-lt cur markcard" data-t="现状 .08 / .05"></div>
+          <div class="duotag" style="margin-top:10px">暗色内容区底 #0A0F17</div>
+          <div class="glowdemo gd-dk cur"></div>
+        </div>
+        <div class="pcap">右侧 + 左下两团橙雾：单独看都淡，但它们决定了「整个界面的底色偏暖」——黄灯的对手不是某个元素，是这层底色。</div>
+      </div>
+      <div class="panel">
+        <div class="plabel a">方案 B 改后</div>
+        <div class="pbody">
+          <div class="duotag star">浅色内容区底 #FCFDFE（★）</div>
+          <div class="glowdemo gd-lt half markcard" data-t="减半 .04 / .03"></div>
+          <div class="duotag" style="margin-top:10px">暗色内容区底 #0A0F17</div>
+          <div class="glowdemo gd-dk half"></div>
+        </div>
+        <div class="pcap">氛围还在，暖雾退半场。与③合计，浅色列表环境的「橙含量」大幅下降——这是黄灯能否浮出来的背景条件。</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ================= 变动点 5 ================= -->
+  <section class="sec" id="b5">
+    <div class="sech"><span class="bnum">5</span><h2>浅色 LED 化：亮芯 + 深色环</h2><span class="key">浅色主杀器 · 直接治「灯不发光」</span></div>
+    <div class="secd">报告 §3.3 的结构性问题：浅色四色灯全部<b>暗于白底</b>（ΔL −0.83～−0.86），怎么调色值都是「墨点」。一条规则经 <code>--sc</code> 覆盖四状态：<b>亮芯</b> = 灯色混入 45% 白（<code>color-mix(in srgb, var(--sc) 55%, #fff)</code>，呈「点亮的 LED」），<b>1.5px 深环</b> = 原色值边界（WORKING 5.26 / WAITING 4.83 / ERROR 5.18 / DONE 5.48，全部 ≥3:1）。暗色不需要（灯本来就亮于底），维持实心。<b>环用 border 而非 box-shadow</b>：呼吸动画的关键帧会整体覆写 box-shadow，border 不受影响——WORKING 动画期间环不消失。</div>
+    <div class="cmp">
+      <div class="panel">
+        <div class="plabel b">现状（浅色）</div>
+        <div class="pbody">
+          <div class="wc lt"><div class="cardsurf"><div class="stripcard dstrip" id="b5b-strip"></div></div></div>
+          <div class="wc lt"><div class="cardsurf" id="b5b-card"></div></div>
+          <div class="wc lt"><div class="magcap">3× 放大</div><div id="b5b-mag"></div></div>
+        </div>
+        <div class="pcap">深色小点落在白卡上 = 印印刷墨点 / 暗斑——8px 还是 10px 都一样，这就是「黄灯被淹没」的浅色机理本体。</div>
+      </div>
+      <div class="panel">
+        <div class="plabel a">方案 B 改后（仅本条改动）</div>
+        <div class="pbody">
+          <div class="wc lt m-led"><div class="cardsurf"><div class="stripcard dstrip" id="b5a-strip"></div></div></div>
+          <div class="wc lt m-led"><div class="cardsurf" id="b5a-card"></div></div>
+          <div class="wc lt m-size m-led m-w6400"><div class="magcap">3× 放大 · 与①⑥叠加后的最终效果</div><div id="b5a-mag"></div></div>
+        </div>
+        <div class="pcap"><b>亮芯给出发光感，深环保住边界对比</b>。注意 WORKING（呼吸中）的青色标注环是 border——动画缩放时它跟着灯走，不消失。</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ================= 变动点 6 ================= -->
+  <section class="sec" id="b6">
+    <div class="sech"><span class="bnum">6</span><h2>浅色 --working：#A16207 → #8F6400</h2><span class="opt">index.html 86 行 · v2 修正项</span></div>
+    <div class="secd">色相 35° → <b>42°</b>，与品牌橙从 20° 拉开到 <b>27°</b>（= 暗色水准）。对比度全面抬升：白卡 4.92→<b>5.26</b>、hover 底 4.47→<b>4.77</b>（顺带修复 <code>.lv-sec</code> 秒数黄字 11px 跌文字 AA）、手机米白底 4.72。<b>v1 曾建议 #B45309——v2 复核距品牌橙仅 11°，比现状更近，弃用</b>（见下方色相标尺）。</div>
+    <div class="cmp">
+      <div class="panel">
+        <div class="plabel b">现状</div>
+        <div class="pbody">
+          <div class="swrow"><span class="sw"><i style="background:#A16207"></i>working 现值 #A16207（35°）</span><span class="deg">← 20° →</span><span class="sw"><i style="background:#C2603E"></i>品牌橙(浅) #C2603E（15°）</span></div>
+          <div class="wc lt"><div class="cardsurf" id="b6b-card"></div></div>
+        </div>
+        <div class="pcap">黄灯、秒数黄字、选中卡亮橙描边（16°）挤在同一段暖色里；hover 底上秒数黄字 4.47:1 跌 AA。</div>
+      </div>
+      <div class="panel">
+        <div class="plabel a">方案 B 改后（仅本条改动）</div>
+        <div class="pbody">
+          <div class="swrow"><span class="sw"><i style="background:#8F6400"></i>working 新值 #8F6400（42°）</span><span class="deg">← 27° →</span><span class="sw"><i style="background:#C2603E"></i>品牌橙(浅) #C2603E（15°）</span></div>
+          <div class="wc lt m-w6400"><div class="cardsurf" id="b6a-card"></div></div>
+        </div>
+        <div class="pcap">更偏金褐 / 古铜，离橙更远；灯、秒数、摘要全部同向受益。波及 runhint / 连接中 / 审批摘要等 10 余处引用——全为对比度↑。</div>
+      </div>
+    </div>
+    <div class="hueruler-wrap">
+      <div class="hueruler">
+        <div class="hmk" style="left:25%"><span>品牌橙 15°</span></div>
+        <div class="hmk bad" style="left:43.3%"><span>v1 弃用 26°（#B45309，仅差 11°）</span></div>
+        <div class="hmk" style="left:58.3%"><span>现值 35°（#A16207，差 20°）</span></div>
+        <div class="hmk good" style="left:70%"><span>新值 42°（#8F6400，差 27°）</span></div>
+      </div>
+      <div class="huscale"><span>0°（红 / ERROR、WAITING 也在这头）</span><span>橙黄分界地带</span><span>60°（纯黄）</span></div>
+    </div>
+  </section>
+
+  <!-- ================= 变动点 7 ================= -->
+  <section class="sec" id="b7">
+    <div class="sech"><span class="bnum">7</span><h2>手机端轻量微调（黄字降级，灯不动）</h2><span class="opt">expo-app · 优先级低 · 单独拍板</span></div>
+    <div class="secd">手机观感远好于桌面（蓝紫品牌、无橙包围、11px 灯面积 1.9 倍——<b>黄灯独占暖色通道的优势保留</b>），所以灯本身不动。「轻微同感」的来源是卡内黄字：<b>LiveStat 整行摘要黄字</b>（#A16207 对米白 #F2F3EE 仅 4.41:1，12px 跌文字 AA——桌面同位置本来就是「秒数黄、摘要中性」的层级，手机抄漏了）与<b>统计行 +行数黄字</b>（桌面同位置是绿色）。改后摘要→dim、+行数→绿，黄只留给灯与秒数 / ⟳。</div>
+    <div class="cmp">
+      <div class="panel">
+        <div class="plabel b">现状（浅色 ★）</div>
+        <div class="pbody">
+          <div class="ph lt"><div class="cardsurf" style="background:var(--bg)" id="b7b"></div></div>
+        </div>
+        <div class="pcap">整行黄字既弱（4.41:1 跌 AA）又稀释灯的独占性；+96 黄字让「新增」也来抢 working 的色。</div>
+      </div>
+      <div class="panel">
+        <div class="plabel a">方案 B 改后（仅两条文字降级）</div>
+        <div class="pbody">
+          <div class="ph lt m-mobtext"><div class="cardsurf" style="background:var(--bg)" id="b7a"></div></div>
+        </div>
+        <div class="pcap">摘要回中性灰，+行数对齐桌面绿色——黄只属于「在跑」。可选：浅色 working 同步换 #8F6400（AA 自动修复），默认不动，见拍板 D6。暗色手机同理受益（层级统一）。</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ================= 变动点 8 ================= -->
+  <section class="sec" id="b8">
+    <div class="sech"><span class="bnum">8</span><h2>暗色 --working / --waiting 提亮一档</h2><span class="opt">index.html 41–42 行 · 不影响浅色</span></div>
+    <div class="secd">暗色本无辨识度问题（黄灯 11.73:1），方案 B 顺手带上：<code>#FFC53D→#FFD84D</code>（13.39:1，色相 42°→47° 离橙更远）、<code>#F0524F→#FF6B68</code>（5.31→6.66:1——WAITING 是暗色四色中最弱的一个，暗底红点发闷）。</div>
+    <div class="cmp">
+      <div class="panel">
+        <div class="plabel b">现状（暗色）</div>
+        <div class="pbody">
+          <div class="wc dk"><div class="cardsurf"><div class="stripcard dstrip" id="b8b"></div></div></div>
+        </div>
+        <div class="pcap">WAITING 红 5.31:1 四色最弱；WORKING 黄虽达标但色相 42° 与橙 15° 仍偏近。</div>
+      </div>
+      <div class="panel">
+        <div class="plabel a">方案 B 改后</div>
+        <div class="pbody">
+          <div class="wc dk m-dknew"><div class="cardsurf"><div class="stripcard dstrip" id="b8a"></div></div></div>
+        </div>
+        <div class="pcap">两值各提一档，形状编码（②）与光圈（①）在暗色同样生效。此项不影响浅色，可单独取舍（拍板 D5）。</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ================= 变动点 9 ================= -->
+  <section class="sec" id="b9">
+    <div class="sech"><span class="bnum">9</span><h2>WAITING 卡摘要：黄字 → 红（语义归位）</h2><span class="opt">.card-summary.waiting · 1422 行</span></div>
+    <div class="secd">「等待确认」的卡现在整行用 working 黄——与「在跑」的灯抢同一语义色。改后回归 <code>--waiting</code> 红：<b>黄只留给「在跑」，红 = 需要你处理</b>（与「处理」按钮的红系视觉一致）。ERROR 与品牌橙撞色的问题同理靠②空心环解决，不动色值。</div>
+    <div class="cmp">
+      <div class="panel">
+        <div class="plabel b">现状（浅色 ★）</div>
+        <div class="pbody"><div class="wc lt"><div class="cardsurf" id="b9b"></div></div></div>
+        <div class="pcap">WAITING 卡的黄字摘要 + 黄灯 WORKING 卡混在列表里——两种「需要关注」的状态共用一个颜色通道。</div>
+      </div>
+      <div class="panel">
+        <div class="plabel a">方案 B 改后（仅本条改动）</div>
+        <div class="pbody"><div class="wc lt m-waitred"><div class="cardsurf" id="b9a"></div></div></div>
+        <div class="pcap">摘要回红语义，与红实心灯、右下「处理」按钮成一组——看到红 = 有事等你。</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ================= 四象限 ================= -->
+  <section class="sec" id="quad">
+    <div class="sech"><span class="bnum" style="background:#F2F7FF;color:#0B141F">总</span><h2>明暗 × 两端 · 四象限总览</h2><span class="opt">方案 B 全量叠加</span></div>
+    <div class="secd">每列 4 张卡（运行中 / 已完成 / 出错 / 等待确认），左列现状、右列全量叠加。<b>先看左列：你能一眼找到哪张在跑吗？再看右列</b>——实心亮点（金 / 红）= 在跑或要处理，空心环 = 终态。★ = 你当前实际使用的模式。</div>
+    <div class="quad">
+      <div class="q">
+        <h3>浅色 · 桌面 web-console <span class="qstar">★ 你的模式</span></h3>
+        <div class="qsub">白卡 + #F1F2F5 侧栏 + 常驻选中卡（橙描边）+ 全局橙雾——现网原样。</div>
+        <div class="qcmp">
+          <div class="qcol"><div class="qlab b">现状</div><div class="wc lt dtlist" id="q-dt-lt-b"></div></div>
+          <div class="qcol"><div class="qlab a">方案 B</div><div class="wc lt m-size m-led m-hollow m-w6400 m-selneutral m-waitred dtlist" id="q-dt-lt-a"></div></div>
+        </div>
+      </div>
+      <div class="q">
+        <h3>浅色 · 手机 expo-app <span class="qstar">★ 你的模式</span></h3>
+        <div class="qsub">暖米白卡 + 蓝品牌；问题在卡内黄字，不在灯本身（仅⑦两条降级）。</div>
+        <div class="qcmp">
+          <div class="qcol"><div class="qlab b">现状</div><div class="phone ph lt"><div class="pscreen" id="q-ph-lt-b"></div></div></div>
+          <div class="qcol"><div class="qlab a">方案 B</div><div class="phone ph lt m-mobtext"><div class="pscreen" id="q-ph-lt-a"></div></div></div>
+        </div>
+      </div>
+      <div class="q">
+        <h3>暗色 · 桌面 web-console</h3>
+        <div class="qsub">对照组：暗色本就较好（灯亮于底），但仍受橙描边 / 无形状编码影响。</div>
+        <div class="qcmp">
+          <div class="qcol"><div class="qlab b">现状</div><div class="wc dk dtlist" id="q-dt-dk-b"></div></div>
+          <div class="qcol"><div class="qlab a">方案 B</div><div class="wc dk m-size m-hollow m-selneutral m-waitred m-dknew dtlist" id="q-dt-dk-a"></div></div>
+        </div>
+      </div>
+      <div class="q">
+        <h3>暗色 · 手机 expo-app</h3>
+        <div class="qsub">对照组：四端里观感最好的环境，⑦的两条层级修正同样生效。</div>
+        <div class="qcmp">
+          <div class="qcol"><div class="qlab b">现状</div><div class="phone ph dk"><div class="pscreen" id="q-ph-dk-b"></div></div></div>
+          <div class="qcol"><div class="qlab a">方案 B</div><div class="phone ph dk m-mobtext"><div class="pscreen" id="q-ph-dk-a"></div></div></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ================= 顺带修缮 ================= -->
+  <section class="sec" id="extra">
+    <div class="sech"><span class="bnum" style="background:#8FA3BC">＋</span><h2>顺带修缮清单（报告中的其他小发现）</h2></div>
+    <ul class="extra" style="margin-top:12px">
+      <li><b>桌面 .lv-sec 秒数黄字</b> hover 底 4.47:1 跌文字 AA → 已并入 <span class="cy">⑥</span>（换 #8F6400 后 4.77:1，无需单独改）。</li>
+      <li><b>手机 LiveStat 黄字</b> 米白底 4.41:1 跌 AA → 已并入 <span class="cy">⑦</span>（摘要降级为 dim）。</li>
+      <li><b>WAITING 摘要混语义</b> → 已并入 <span class="cy">⑨</span>（方案 B 落地清单 #9）。</li>
+      <li><b>runhint 列头 7px 微点</b>（218–222 行）：靠⑥新色值间接改善；若仍觉弱，后续单独升 8px——不在本次范围。</li>
+      <li><b>.c-live .lv-dot 死代码</b>（1161 行）：#362 重构后 render 已不输出，可顺手删一行（非必须）。</li>
+    </ul>
+  </section>
+
+  <!-- ================= 拍板区 ================= -->
+  <section class="sec" id="decide">
+    <div class="sech"><span class="bnum" style="background:#FFC53D;color:#3A2A00">✓</span><h2>拍板区 · 六个决策点</h2></div>
+    <div class="secd">以下选项按报告 v2 推荐预选（青色 = 本稿默认）。逐条回复编号 + 选择即可（选项按钮仅为示意，不可点击），落地时按全局自测要求执行（web-console 双主题目验 + Tauri 构建装机；手机端若采纳则补 expo 测试套件 + 无线 adb 装机）。</div>
+    <div class="decgrid">
+      <div class="dec"><h4><span class="dnum">D1</span>形状编码（②）：接受 DONE / ERROR 空心环吗？</h4>
+        <p>这是 B 案辨识度收益最大的单项（色弱 / 余光 / 撞色全解决），但改变「绿点 = 完成」的既有习惯——完成后从「亮点」变「圆环」。</p>
+        <div class="opts"><span class="opt pick">接受空心环</span><span class="opt">不要，只靠色值 + 光圈</span></div></div>
+      <div class="dec"><h4><span class="dnum">D2</span>浅色 --working 新值 #8F6400（⑥）</h4>
+        <p>色相 42°、白底 5.26:1。比现值更偏金褐 / 古铜（往「陈年黄铜」方向，不是亮黄）。若觉得太沉或太暖，可在 42° 附近微调后再目验。</p>
+        <div class="opts"><span class="opt pick">就这个值</span><span class="opt">再亮一点（向 #B45309 方向但避开 26°）</span><span class="opt">再深一点</span></div></div>
+      <div class="dec"><h4><span class="dnum">D3</span>选中卡描边走哪条路线？（③）</h4>
+        <p>辉光中性化两案一致；分歧在描边：a) 降亮保品牌 #C2603E（本稿所示，品牌识别保留）；b) 完全中性灰线（列表零橙，品牌只留按钮 / 头像）。</p>
+        <div class="opts"><span class="opt pick">a) #C2603E 降亮描边</span><span class="opt">b) 完全中性</span></div></div>
+      <div class="dec"><h4><span class="dnum">D4</span>光圈 / 辉光强度（①④）</h4>
+        <p>本稿示例：静态光圈 20% · 3px；body 光晕减半；（可选项）呼吸 halo 峰值 55%→70% 让动画更明显。觉得过头或不够都可调数值。</p>
+        <div class="opts"><span class="opt pick">示例强度正好</span><span class="opt">光圈再强些</span><span class="opt">光圈再弱些</span><span class="opt">halo 70% 一并带上</span></div></div>
+      <div class="dec"><h4><span class="dnum">D5</span>暗色两值微调（⑧）</h4>
+        <p>#FFD84D / #FF6B68，只影响暗色主题。你平时用浅色，此项纯为偶尔切暗色时的观感一致性。</p>
+        <div class="opts"><span class="opt pick">顺手带上</span><span class="opt">暂不动</span></div></div>
+      <div class="dec"><h4><span class="dnum">D6</span>手机端改动范围（⑦）</h4>
+        <p>报告默认只做两条黄字降级（LiveStat 摘要→dim、+行数→绿）。可选项：浅色 working 一并换 #8F6400（LiveStat AA 超标自动修复，但手机观感目前尚可）。</p>
+        <div class="opts"><span class="opt pick">仅两条黄字降级</span><span class="opt">连 working 也换 #8F6400</span><span class="opt">手机端全部不动</span></div></div>
+    </div>
+  </section>
+
+  <div class="foot">
+    依据：docs/status-light-analysis.md（v2，2026-09-20，明暗双列口径）· 桌面改动全部集中于 web-console/index.html CSS 段约 18 行（+可选 expo-app 3 处文字色）· 无 JS / 布局 / 跨端协议改动。<br>
+    本稿为单文件零依赖 HTML，浏览器直接打开；卡片 / 灯 / 呼吸动画按现网代码参数复原。设计稿规矩：预览拍板后才随实现一起提交，未改 web-console / expo-app 任何源码。
+  </div>
+</div>
+
+<script>
+/* ---------- 数据（会话内容为模拟，结构与真实 render 一致） ---------- */
+const ST_LABEL = { WORKING:"运行中", DONE:"已完成", ERROR:"出错", WAITING:"等待确认" };
+const SCV = { WORKING:"working", DONE:"done", ERROR:"error", WAITING:"waiting" };
+const SESS = [
+  { st:"WORKING", title:"状态灯辨识度优化", el:"12分", live:{sec:"142s", tok:"↓ 18.2k", sum:"编辑 web-console 状态灯样式"}, add:214, del:38, ctx:42, meta:"托管 · 📁 cc-deck" },
+  { st:"DONE", title:"relay 快照回放修复", el:"1.4时", sum:"修复 events 重放乱序导致的状态漂移", add:96, del:12, ctx:67, badge:"终端", meta:"外部 CLI · 📁 relay" },
+  { st:"ERROR", title:"desktop-tauri 打包失败", el:"3.2时", sum:"exit code 1 · bundling error", add:null, ctx:8, meta:"托管 · 📁 desktop-tauri" },
+  { st:"WAITING", title:"expo SDK 57 升级", el:"26分", sum:"是否允许执行 npx expo install --fix ？", cta:true, ctx:31, meta:"托管 · 📁 expo-app" },
+];
+
+/* ---------- 桌面卡（结构 = index.html 4250–4291 render 复原） ---------- */
+const dotFor = st => '<span class="c-dot' + (st==="WORKING"?" run":"") + ((st==="WORKING"||st==="WAITING")?" led":" hollow") + '" style="--sc:var(--' + SCV[st] + ')"></span>';
+function dtCard(s, o = {}) {
+  const row2 = s.st === "WORKING"
+    ? '<div class="c-live"><span class="lv-sec">' + s.live.sec + '</span><span class="lv-tok">' + s.live.tok + '</span><span class="lv-sum">' + s.live.sum + '</span></div>'
+    : '<div class="card-summary' + (s.st === "WAITING" ? " waiting" : "") + '">' + s.sum + '</div>';
+  const stats = '<div class="card-stats">' + (s.add != null ? '<span class="add">+' + s.add + '</span><span class="del">−' + s.del + '</span>' : '')
+    + '<span class="ctxm"><span class="ctxbar"><i style="width:' + s.ctx + '%"></i></span><span class="ctxt">' + s.ctx + '%</span></span></div>';
+  return '<div class="card' + (o.sel ? " sel" : "") + (o.mark ? " markcard" : "") + '"' + (o.mark ? ' data-t="' + o.mark + '"' : "") + '>'
+    + '<div class="c-head">' + dotFor(s.st) + '<span class="card-title"><span class="c-tt">' + s.title + '</span>'
+    + (s.badge ? '<span class="his-badge ext">' + s.badge + '</span>' : '')
+    + '</span><span class="elapsed">' + s.el + '</span></div>' + row2 + stats
+    + (s.cta ? '<div class="card-cta"><button>处理</button></div>' : "") + '</div>';
+}
+
+/* ---------- 手机卡（结构 = ListScreen.tsx 498–541 标准卡复原） ---------- */
+function phCard(s) {
+  const row2 = s.st === "WORKING"
+    ? '<div class="mlive"><span class="lw">' + s.live.sec + ' · ' + s.live.tok + '</span><span class="lw-sum">' + s.live.sum + '</span></div>'
+    : '<div class="msum">' + s.sum + '</div>';
+  return '<div class="mcard"><div class="mrow"><span class="mdot' + (s.st === "WORKING" ? " run" : "") + '" style="--sc:var(--' + SCV[s.st] + ')"></span>'
+    + '<span class="mtitle">' + s.title + '</span><span class="melap">' + s.el + '</span></div>' + row2
+    + '<div class="mfoot"><span class="mmeta">' + s.meta + '</span><span class="mflex"></span>'
+    + (s.add != null ? '<span class="mstats"><span class="add">+' + s.add + '</span> <span class="del">−' + s.del + '</span></span>' : '')
+    + '<span class="mctxbar"><i style="width:' + s.ctx + '%"></i></span><span class="mctxt">' + s.ctx + '%</span></span></div></div>';
+}
+
+/* ---------- 灯条 / 放大条 ---------- */
+const stripHTML = (withRatio) => '<div class="dstrip">' + ["WORKING","DONE","ERROR","WAITING"].map(st => {
+  const r = { WORKING:"11.73:1", DONE:"10.07:1", ERROR:"7.08:1", WAITING:"5.31:1" }[st];
+  const r2 = { WORKING:"13.39:1", DONE:"10.07:1", ERROR:"7.08:1", WAITING:"6.66:1" }[st];
+  return '<div class="ditem">' + dotFor(st) + '<span class="dl">' + ST_LABEL[st] + '</span>'
+    + (withRatio ? '<span class="dr">' + (withRatio === 2 ? r2 : r) + '</span>' : "") + '</div>';
+}).join("") + '</div>';
+const magHTML = () => '<div class="mag">' + ["WORKING","DONE","ERROR","WAITING"].map(st =>
+  '<div class="magitem"><div class="magbox">' + dotFor(st) + '</div><span class="maglab">' + ST_LABEL[st] + '</span></div>').join("") + '</div>';
+
+/* ---------- 列表（四象限用） ---------- */
+function dtListHTML() {
+  const chips = ["WORKING","WAITING","ERROR","DONE"].map(st => '<span class="rh-chip"><i style="--sc:var(--' + SCV[st] + ')"></i>1</span>').join("");
+  return '<div class="runhint"><span>4</span>' + chips + '<span class="rh-help">?</span></div>'
+    + SESS.map(s => '<div class="stag">' + ST_LABEL[s.st] + '</div>' + dtCard(s, { sel: s.st === "WORKING" })).join("");
+}
+function phListHTML() {
+  const chips = '<span class="pchip on">全部 4</span>' + ["WORKING","WAITING","ERROR","DONE"].map(st => '<span class="pchip"><i style="--sc:var(--' + SCV[st] + ')"></i>1</span>').join("");
+  return '<div class="pstat"><span>9:41</span><span>5G</span></div>'
+    + '<div class="phead"><span class="plogo">cc-deck</span><span class="pconn">● 在线</span><span class="picon">◐</span></div>'
+    + '<div class="pchips">' + chips + '</div>'
+    + '<div class="plist">' + SESS.map(s => '<div class="stag">' + ST_LABEL[s.st] + '</div>' + phCard(s)).join("") + '</div>';
+}
+
+/* ---------- 变动点标注（青色虚线圈） ---------- */
+function markEl(el, t) { if (!el) return; const m = document.createElement("span"); m.className = "mark"; m.dataset.t = t; el.parentNode.insertBefore(m, el); m.appendChild(el); }
+
+/* ---------- 填充 ---------- */
+const $ = id => document.getElementById(id);
+/* ① 尺寸 + 光圈 */
+$("b1b-lt").innerHTML = dtCard(SESS[0]); $("b1a-lt").innerHTML = dtCard(SESS[0]);
+$("b1b-dk").innerHTML = dtCard(SESS[0]); $("b1a-dk").innerHTML = dtCard(SESS[0]);
+$("b1b-mag").innerHTML = magHTML();      $("b1a-mag").innerHTML = magHTML();
+markEl(document.querySelector("#b1a-lt .c-dot"), "10px + 光圈");
+markEl(document.querySelector("#b1a-dk .c-dot"), "10px + 光圈");
+/* ② 空心环 */
+$("b2b-lt").innerHTML = stripHTML(); $("b2a-lt").innerHTML = stripHTML();
+$("b2b-dk").innerHTML = stripHTML(); $("b2a-dk").innerHTML = stripHTML();
+["#b2a-lt", "#b2a-dk"].forEach(sel => { const d = document.querySelector(sel + " .c-dot.hollow"); if (d) markEl(d, "空心环"); });
+/* ③ 选中卡 */
+$("b3b-lt").innerHTML = dtCard(SESS[0], { sel: true }); $("b3a-lt").innerHTML = dtCard(SESS[0], { sel: true, mark: "中性投影 + 降亮描边" });
+$("b3b-dk").innerHTML = dtCard(SESS[0], { sel: true }); $("b3a-dk").innerHTML = dtCard(SESS[0], { sel: true });
+/* ⑤ LED 化 */
+$("b5b-strip").innerHTML = stripHTML(); $("b5a-strip").innerHTML = stripHTML();
+$("b5b-card").innerHTML = dtCard(SESS[0]); $("b5a-card").innerHTML = dtCard(SESS[0]);
+$("b5b-mag").innerHTML = magHTML(); $("b5a-mag").innerHTML = magHTML();
+["#b5a-strip .c-dot.led", "#b5a-card .c-dot.led"].forEach(sel => { const d = document.querySelector(sel); if (d) markEl(d, "亮芯 + 深环"); });
+/* ⑥ working 换值 */
+$("b6b-card").innerHTML = dtCard(SESS[0]); $("b6a-card").innerHTML = dtCard(SESS[0]);
+markEl(document.querySelector("#b6a-card .c-dot"), "环色 42°");
+markEl(document.querySelector("#b6a-card .lv-sec"), "秒数同色 5.26:1");
+/* ⑦ 手机 */
+$("b7b").innerHTML = phCard(SESS[0]) + phCard(SESS[1]);
+$("b7a").innerHTML = phCard(SESS[0]) + phCard(SESS[1]);
+markEl(document.querySelector("#b7a .lw-sum"), "摘要→中性灰");
+markEl(document.querySelector("#b7a .mstats .add"), "+行数→绿");
+/* ⑧ 暗色两值 */
+$("b8b").innerHTML = stripHTML(true); $("b8a").innerHTML = stripHTML(2);
+markEl(document.querySelector("#b8a .c-dot.run"), "#FFD84D");
+markEl(document.querySelector("#b8a .ditem:nth-of-type(4) .c-dot"), "#FF6B68");
+/* ⑨ WAITING 摘要 */
+$("b9b").innerHTML = dtCard(SESS[3]); $("b9a").innerHTML = dtCard(SESS[3]);
+markEl(document.querySelector("#b9a .card-summary"), "红语义");
+/* 四象限 */
+$("q-dt-lt-b").innerHTML = dtListHTML(); $("q-dt-lt-a").innerHTML = dtListHTML();
+$("q-dt-dk-b").innerHTML = dtListHTML(); $("q-dt-dk-a").innerHTML = dtListHTML();
+$("q-ph-lt-b").innerHTML = phListHTML(); $("q-ph-lt-a").innerHTML = phListHTML();
+$("q-ph-dk-b").innerHTML = phListHTML(); $("q-ph-dk-a").innerHTML = phListHTML();
+</script>
+</body>
+</html>
