@@ -38,8 +38,10 @@
     --send-btn: var(--panel-2);
     --send-btn-line: var(--border);
     --grad: linear-gradient(135deg, #E8985F, #C96442);
-    /* #98 状态灯显眼度：两值各提一档（暗底 13.39:1 / 6.66:1），浅色不受影响 */
-    --working: #FFD84D;
+    /* #98 状态灯显眼度：两值各提一档（暗底 13.39:1 / 6.66:1），浅色不受影响。
+       #98 返工（装机反馈）：黄灯改真实红绿灯琥珀黄——原 #FFD84D 是浅柠檬黄，
+       明度 64% 发飘不显眼；#FFC400 饱和度顶格（暗底对比 ~12:1 仍充裕） */
+    --working: #FFC400;
     --waiting: #FF6B68;
     --error: #FF7849;
     --done: #2BD98F;
@@ -1261,13 +1263,10 @@
     background: color-mix(in srgb, var(--sc, var(--dim)) 55%, #fff);
     border: 1.5px solid var(--sc, var(--dim));
   }
-  /* #98 形状编码：终态空心化（明暗同规则）——WORKING/WAITING=实心亮点（在跑/要处理），
-     DONE/ERROR=空心环（终态退后）。render 已把状态写进卡片类名（"card "+status），纯 CSS。
-     浅色条须压过上面 LED 规则（特异性 html.light .card .c-dot 更高），故双写 */
-  .card.DONE .c-dot, .card.ERROR .c-dot { background: transparent; border: 2px solid var(--sc); }
-  html.light .card.DONE .c-dot, html.light .card.ERROR .c-dot { background: transparent; border: 2px solid var(--sc); }
+  /* #98 返工（装机反馈）：终态空心环废止——用户拍板三端统一实心（手机端/右侧详情页
+     均实心，列表空心独树一帜）。DONE/ERROR 回落默认实心规则（浅色回落 LED 亮芯+环） */
   /* #100 后台任务态：主回合 DONE 但仍有子 Agent 在跑——灯转 working 黄呼吸（--sc 覆写
-     带动光圈同色）。本块置于终态空心环之后：特异性同级靠声明顺序压过背景/边框 */
+     带动光圈同色） */
   .card.bg-live .c-dot { --sc: var(--working); background: var(--working); border: none; }
   html.light .card.bg-live .c-dot { background: color-mix(in srgb, var(--working) 55%, #fff); border: 1.5px solid var(--working); }
   /* #100 ⑂N 徽标：黄描边小胶囊（「在跑」语义色），his-badge 同形制 */
