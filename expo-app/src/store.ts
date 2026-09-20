@@ -969,11 +969,25 @@ class RelayStore {
     void this.connCycle(conn, ep);
   }
 
+  // #85 密钥读取竞速兜底：AsyncStorage.getItem 无超时——原生层偶发挂死（冷启动
+  // 高压/低端机实测）时 await deviceKeys() 永久悬置，connCycle 卡 connecting 零
+  // 流量，20s 看门狗重试也只能再挂一轮。5s 竞速：未就绪返回 null，调用方按
+  // 「云凭据未就绪」回落常规退避重试；in-flight 读取照常完成并缓存，下轮即就绪。
+  // 绝不能在超时后现场生成新密钥顶替——身份（公钥）一换 relay 侧 peers 对不上，
+  // 直接变未配对
+  private keysSoon(ms = 5000): Promise<BoxKeyPair | null> {
+    return Promise.race([
+      this.deviceKeys(),
+      new Promise<null>((r) => setTimeout(() => r(null), ms)),
+    ]);
+  }
+
   // #95 云身份 LAN 回箱握手：hello 拿 nonce（校验 relay_dev 防连错机）→
   // box{dev,nonce} 给 relay → 回箱（用本机 dev 公钥加密的 token）解开
   private async lanHandshake(conn: SourceConn): Promise<string> {
     if (!conn.lanHint || !conn.cloudCfg) return "";
-    const keys = await this.deviceKeys();
+    const keys = await this.keysSoon();
+    if (!keys) return "";
     // dev 身份与云通道 openCloud 同口径：配对码配对的 wb-、其余 ph-
     const dev = conn.cloudCfg.dev ?? devId(keys.publicKey, "ph");
     try {
@@ -1043,8 +1057,9 @@ class RelayStore {
     if (conn.cloudCfg && !this.devKeys) {
       // 冷启动首轮 keys 还没从 AsyncStorage 就绪（connConnect 里是 fire-and-forget 预取，
       // 微任务级）：等一拍再判，消除「首轮必 offline」的假失败（旧版靠下一轮重连兜底，
-      // 退避起步 3s 后这个空窗会被放大成可见的假诊断）
-      await this.deviceKeys();
+      // 退避起步 3s 后这个空窗会被放大成可见的假诊断）。#85：改 keysSoon 竞速——
+      // 原生存储挂死时这里曾永久悬置（见 keysSoon 注释）
+      await this.keysSoon();
       if (ep !== conn.epoch) return;
     }
     if (conn.cloudCfg && this.devKeys) {
