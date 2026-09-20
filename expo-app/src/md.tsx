@@ -219,7 +219,9 @@ function LinkSheet({ url, onClose }: { url: string; onClose: () => void }) {
               onPress={() => {
                 void Clipboard.setStringAsync(url).then(() => {
                   setCopied(true);
-                  copiedTimer.current = setTimeout(() => setCopied(false), 1500);
+                  // #110 复制后弹窗不赖着：留 600ms ✓ 微反馈即自动收起
+                  //（timer 复用 unmount cleanup；弹窗关了 copied 随组件销毁无需复位）
+                  copiedTimer.current = setTimeout(onClose, 600);
                 });
               }}
             >
@@ -228,7 +230,8 @@ function LinkSheet({ url, onClose }: { url: string; onClose: () => void }) {
             <Pressable
               style={[d.linkBtn, d.linkBtnPri]}
               android_ripple={{ color: "rgba(255,255,255,0.15)", borderless: false, radius: 10 }}
-              onPress={() => void Linking.openURL(url).catch(() => undefined)}
+              // #110 打开即收：呼起浏览器本身就是强反馈，弹窗先撤
+              onPress={() => { onClose(); void Linking.openURL(url).catch(() => undefined); }}
             >
               <Text style={d.linkBtnPriT}>打开</Text>
             </Pressable>
