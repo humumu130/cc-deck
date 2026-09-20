@@ -773,7 +773,15 @@ export class SessionManager {
       }, 480_000);
       t.unref?.();
     }
-    this.bus.emit(id, "SESSION_UPDATED", { compacting: on });
+    // #93：compacting 是部分帧——必须随带 status/action_summary，否则客户端
+    //（web-console SESSION_UPDATED 直接采信 payload.status）会把会话状态覆写成
+    // undefined，render 里 s.status.toLowerCase() 崩掉整条消息渲染线（UI 冻结：
+    // 提问不弹窗、状态停旧值）。其他 setExternal* 均随带，唯独此处漏——对齐
+    this.bus.emit(id, "SESSION_UPDATED", {
+      status: s.state.status,
+      action_summary: s.state.action_summary,
+      compacting: on,
+    });
   }
 
   // pid 对账/解锁等纯状态修复后强制下发：emitUpdated 携带 historical 等字段，

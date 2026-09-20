@@ -1984,8 +1984,10 @@ class RelayStore {
         // 突变不触发重渲——统计行 5s 变而卡灯拖 30-40s 的根因
         s = { ...s };
         conn.sessions.set(sid, s);
-        s.status = msg.payload.status;
-        s.action_summary = msg.payload.action_summary;
+        // #93 防御（与 web-console 同款）：部分帧（compacting 等）不带 status/summary
+        // ——undefined 不采信，覆写会 undefined 会让状态灯/等待判定全线失真
+        if (msg.payload.status !== undefined) s.status = msg.payload.status;
+        if (msg.payload.action_summary !== undefined) s.action_summary = msg.payload.action_summary;
         // 审批弹窗死锁根治（与网页端同款）：新 relay 恒随 UPDATE 帧携带 waiting_request
         // 权威值（null = 已清）直接采信；旧 relay 不带时保持原自愈——状态离开 WAITING
         // 就地清残留，防"列表按钮在、详情弹窗永不出现"的脱钩死锁

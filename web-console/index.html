@@ -3726,8 +3726,11 @@ function onEvent(ctx, msg) {
     }
     case "SESSION_UPDATED": {
       const s = ctx.sessions.get(sid); if (!s) break;
-      s.status = msg.payload.status;
-      s.action_summary = msg.payload.action_summary;
+      // #93 防御：部分帧（compacting 等）不带 status/summary——undefined 不采信，
+      // 否则把会话状态覆写成 undefined 后 render 的 s.status.toLowerCase() 会崩掉
+      // 整条渲染线（UI 冻结：提问不弹窗、状态停旧值，外部 CLI 会话每回合必踩）
+      if (msg.payload.status !== undefined) s.status = msg.payload.status;
+      if (msg.payload.action_summary !== undefined) s.action_summary = msg.payload.action_summary;
       if (msg.payload.stats) s.stats = msg.payload.stats;
       // 审批弹窗死锁根治④：waiting_request 与 status 同进退——新 relay 恒随 UPDATE
       // 帧携带权威值（null = 已清）直接采信；旧 relay 不带此字段时，状态离开
@@ -4243,7 +4246,7 @@ function render() {
       // #362 标题恒第一行：灯（WORKING 呼吸）+标题+总时长同构一行，状态切换不跳行；
       // WORKING 实时行（回合秒+↓tokens+动作摘要）退居第二行，空闲第二行=摘要
       const headRow =
-        '<div class="c-head">' + pinFlag + '<span class="c-dot' + (s.status === "WORKING" ? " run" : "") + '" style="--sc:var(--' + s.status.toLowerCase() + ')"></span>' +
+        '<div class="c-head">' + pinFlag + '<span class="c-dot' + (s.status === "WORKING" ? " run" : "") + '" style="--sc:var(--' + (s.status || "").toLowerCase() + ')"></span>' +
           '<span class="card-title"><span class="c-tt">' + escapeHtml(s.title || "") + "</span>" + badges + opBtns + "</span>" +
           '<span class="elapsed">' + fmtElapsed(sessionElapsed(s)) + "</span></div>";
       const liveRow = s.status === "WORKING"
@@ -4271,7 +4274,7 @@ function render() {
       if (listCompact) {
         // #279⑨ 紧凑卡（对齐手机）：状态点+标题+耗时 / 摘要 / 改动+水位+源标签
         d.innerHTML =
-          '<div class="c-row1">' + pinFlag + '<span class="c-dot' + (s.status === "WORKING" ? " run" : "") + '" style="--sc:var(--' + s.status.toLowerCase() + ')"></span>' +
+          '<div class="c-row1">' + pinFlag + '<span class="c-dot' + (s.status === "WORKING" ? " run" : "") + '" style="--sc:var(--' + (s.status || "").toLowerCase() + ')"></span>' +
             '<span class="card-title"><span class="c-tt">' + escapeHtml(s.title || "") + "</span>" + badges + opBtns + "</span>" +
             '<span class="elapsed">' + fmtElapsed(sessionElapsed(s)) + "</span></div>" +
           summaryRow +
