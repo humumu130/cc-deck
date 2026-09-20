@@ -57,8 +57,11 @@ const FONT_OPTS: { k: ProcessFont; label: string }[] = [
 
 // #337 服务器色点=身份色：登记后固定，不随选中/连接状态变——选中由 srvRowOn 外侧
 // 亮边框表达。#356 哈希取色会撞色（我的电脑/Mac 同黄）——改同网页 srcColorByKey：
-// 按当前服务器 id 集合稳定排序分配色板序号，源数≤7 必不重
-const SRV_COLORS = ["#D97757", "#4D9FFF", "#2BD98F", "#A78BFA", "#22D3EE", "#F472B6", "#FBBF24"] as const;
+// 按当前服务器 id 集合稳定排序分配色板序号。
+// #102 治理⑦：旧 7 色池含 #D97757（占品牌橙）、#2BD98F（撞 DONE 绿）、#FBBF24
+// （撞 WORKING 黄），违反 #98 三条拍板——对齐 SRC_COLORS 五色池（web 侧同概念池
+// 已按 #98 清过），源数 >5 取模循环复用（现实源数 ≤5 必不重）
+const SRV_COLORS = ["#2FBEDA", "#5C94F5", "#665AD8", "#B886DF", "#CD51C8"] as const;
 let srvColorOrder: string[] = [];
 let srvColorMap = new Map<string, string>();
 const rebuildSrvColors = (ids: string[]) => {
