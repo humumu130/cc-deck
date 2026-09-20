@@ -1183,10 +1183,14 @@ export default function DetailScreen({ sid, onBack, initialView, ref }: { sid: s
   const snap = useRelay();
   const [input, setInput] = useState(() => drafts.get(sid) ?? "");
   // #68① 多行自动增高：Android 下纯 minHeight/maxHeight 的自适应不可靠（实测长文
-  // 恒 1 行），改 onContentSizeChange 显式定高——内容高 + 纵向 padding 22 + 边框 2，
-  // 夹在 [44,150]（晨间反馈 110→150：拉高后能看到更多已输入内容）；封顶后高度恒定、
-  // 内部自然滚动（类微信）
+  // 恒 1 行），改 onContentSizeChange 显式定高，夹在 [44,150]（晨间反馈 110→150：
+  // 拉高后能看到更多已输入内容）；封顶后高度恒定、内部自然滚动（类微信）
+  // #113 基线自校准：部分机型（测试机 OPPO density480 实锤）空输入的 contentSize
+  // 虚高（含 padding/边框，≈64 而非净行高 ≈20），旧算法 h+24 把空输入夹成 ≈88
+  // （两倍高）。改为：空输入时记下该设备基线、高度恒 44；有内容按 相对基线的增量
+  // 定高——虚高机型与诚实机型统一归一，单行 44、每多一行 +lineHeight
   const [inputH, setInputH] = useState(44);
+  const inputBaseRef = useRef<number | null>(null); // #113 设备单行基线（首次空输入事件校准）
   const editInput = (v: string) => {
     if (v) drafts.set(sid, v);
     else drafts.delete(sid);
@@ -2554,8 +2558,17 @@ export default function DetailScreen({ sid, onBack, initialView, ref }: { sid: s
               value={input}
               onChangeText={editInput}
               onContentSizeChange={(e) => {
+                // #113 基线自校准：空输入的 contentSize = 该设备单行基线（虚高机型
+                // 含 padding/边框）。空输入恒 44；有内容按 相对基线增量 定高，
+                // 设备口径差异在减法里抵消
                 const h = e.nativeEvent.contentSize.height;
-                setInputH(Math.max(44, Math.min(150, h + 24)));
+                if (!input.trim()) {
+                  inputBaseRef.current = h;
+                  setInputH(44);
+                  return;
+                }
+                const base = inputBaseRef.current ?? h;
+                setInputH(Math.max(44, Math.min(150, 44 + Math.max(0, h - base))));
               }}
               placeholder={
                 !snap.connected
