@@ -2675,6 +2675,12 @@ function ensureCtx(cfg) {
       ws: null, reconnectDelay: RETRY_BASE_MS, reconnectTimer: 0,
       failKind: "", retryAt: 0, retryNote: "", // #40web 失败归因/重试倒计时（见 setConn/scheduleReconnect）
       pendingPair: null, pairTimer: 0, pingTimer: null, lastPong: 0,
+      // #88/#85 配对退避：看门狗耗尽（无 pair_ack）后下一次允许发 pair_req 的时刻 +
+      // 当前退避时长。此前重连循环每轮 onopen + 看门狗重发约 4 帧错码 pair_req，
+      // 挂机数小时 = 对桥的持续轰炸（wb-3f08 实测 ~8s/帧数小时，殃及同桥手机的
+      // 云通道）。relay 离线与错码客户端不可分——不硬停，指数退避（30s 起倍增
+      // 15min 封顶）；配对成功或用户重新输码即清零满速
+      pairNextAt: 0, pairBackoffMs: 0,
       transport: "ws", pollGen: 0, pollSid: "", pollBase: "",
       wsFails: 0, postFails: 0, hsTimer: 0, lanHsTimer: 0, discTried: false, discTimer: 0,
     };
@@ -2986,8 +2992,13 @@ function connectCloudFor(ctx, manual) {
         ctx.discTried = true;
         discoverRelay(ctx);
       }
-      sendPairReq(ctx, pair, dev);
-      startPairWatchdog(ctx);
+      // #88/#85 配对退避：退避窗内不发也不起看门狗（无尝试即无耗尽——否则每轮
+      // 重连 4 拍空转照样「耗尽」，toast 刷屏且退避空涨；防刷帧见 pairNextAt 注释）。
+      // 扫码登录态 pc 空是信标帧，不受限
+      if (pair.pc === "" || Date.now() >= (ctx.pairNextAt || 0)) {
+        sendPairReq(ctx, pair, dev);
+        startPairWatchdog(ctx);
+      }
       return;
     }
     setConn(ctx, "online", "已连接 ☁");
@@ -3062,26 +3073,35 @@ function startPairWatchdog(ctx) {
     const peer = cloudPeerOf(ctx.cfg);
     if ((peer && peer.relay_dev !== peerBefore) || ++tries > 3) {
       clearInterval(ctx.pairTimer);
-      if (!peer || peer.relay_dev === peerBefore) {
-        // 耗尽无新身份（含 relay 连续错码进入 pairFails 静默期）：offline + 退避重连，
-        // 不能静默 return——否则状态永久卡"配对中…"直到 F5
-        const bcMiss = ctx.pendingPair && !ctx.pendingPair.rd; // 广播态：码没找到持码者
-        // #40web 配对流程受挫（码无效/无应答）：归因 pair——引导换新码而非盲目重连
-        setConn(ctx, "offline", bcMiss ? "未找到持码服务器" : "配对无应答", "pair");
-        scheduleReconnect(ctx);
-        if (ctx.pendingPair && ctx.pendingPair.pc === "") {
-          // #325 扫码登录态：等的是手机授权而非配对码应答，F12 排查提示不适用
-          toast("relay 长时间无应答：确认手机能连上这台服务器后，重新点「扫码登录」", 6000);
-        } else {
-          toast("配对请求一直没回音：按 F12 看 Console 的 [cloud] 日志和 Network 里 cloud-poll 请求，截图备查", 6000);
-        }
-        console.log("[cloud:" + ctx.cfg.name + "] 配对看门狗耗尽：pair_req 已重发 3 次无 pair_ack");
+      if (peer && peer.relay_dev !== peerBefore) {
+        // 配对成功（新身份到手）：清配对退避——下次配对（如再输码）满速开始
+        ctx.pairNextAt = 0; ctx.pairBackoffMs = 0;
+        return;
       }
+      // 耗尽无新身份（含 relay 连续错码进入 pairFails 静默期）：offline + 退避重连，
+      // 不能静默 return——否则状态永久卡"配对中…"直到 F5
+      const bcMiss = ctx.pendingPair && !ctx.pendingPair.rd; // 广播态：码没找到持码者
+      // #40web 配对流程受挫（码无效/无应答）：归因 pair——引导换新码而非盲目重连
+      setConn(ctx, "offline", bcMiss ? "未找到持码服务器" : "配对无应答", "pair");
+      scheduleReconnect(ctx);
+      if (ctx.pendingPair && ctx.pendingPair.pc === "") {
+        // #325 扫码登录态：等的是手机授权而非配对码应答，F12 排查提示不适用
+        toast("relay 长时间无应答：确认手机能连上这台服务器后，重新点「扫码登录」", 6000);
+      } else {
+        toast("配对请求一直没回音：按 F12 看 Console 的 [cloud] 日志和 Network 里 cloud-poll 请求，截图备查", 6000);
+      }
+      console.log("[cloud:" + ctx.cfg.name + "] 配对看门狗耗尽：pair_req 已重发 3 次无 pair_ack");
+      // #88/#85 配对退避推进（见 ensureCtx 字段注释）：耗尽一轮指数退避一轮，封顶
+      // 15 分钟。relay 只是离线的场景同样受益（桥上不再无限刷）；relay 回线后最迟
+      // 一个退避窗内自动续上，手动重输码即满速
+      ctx.pairBackoffMs = Math.min(ctx.pairBackoffMs ? ctx.pairBackoffMs * 2 : 30_000, 900_000);
+      ctx.pairNextAt = Date.now() + ctx.pairBackoffMs;
       return;
     }
     const pair = ctx.pendingPair || pendingPairOf(ctx.cfg.id);
     if (!pair) { clearInterval(ctx.pairTimer); return; }
-    if (pair.pc) sendPairReq(ctx, pair, devId(ckp.publicKey, "wb")); // 扫码登录态（pc 空）不发 pair_req，只等授权
+    // 退避窗内不重发（扫码登录态 pc 空本就不发，只等授权）
+    if (pair.pc && Date.now() >= (ctx.pairNextAt || 0)) sendPairReq(ctx, pair, devId(ckp.publicKey, "wb"));
   }, 8000);
 }
 
@@ -3102,8 +3122,11 @@ function startPollTransport(ctx, base, token, dev, pair) {
       ctx.discTried = true;
       discoverRelay(ctx);
     }
-    sendPairReq(ctx, pair, dev);
-    startPairWatchdog(ctx);
+    // #88/#85 配对退避：窗内不发不起看门狗（同 ws onopen，防空转耗尽）
+    if (pair.pc === "" || Date.now() >= (ctx.pairNextAt || 0)) {
+      sendPairReq(ctx, pair, dev);
+      startPairWatchdog(ctx);
+    }
   } else {
     setConn(ctx, "online", "已连接 ☁(轮询)");
     sendCloud(ctx, { t: "hello", last_seq: ctx.sessions.size > 0 ? ctx.lastSeq : 0 });
@@ -3180,8 +3203,11 @@ function onCloudText(ctx, text) {
       ctx.pendingPair = { rd: BAKED_RELAY.rd, rk: BAKED_RELAY.rk, pc: pair.pc };
       setPendingPair(cfg.id, ctx.pendingPair);
       console.log("[cloud:" + cfg.name + "] 配对 ROUTE_MISS，改用烘焙 relay 身份重试");
-      if (ctx.pendingPair.pc) sendPairReq(ctx, ctx.pendingPair, devId(ckp.publicKey, "wb"));
-      startPairWatchdog(ctx); // 重置看门狗：换 rd 重试不与旧 rd 共享 3 次预算
+      // #88/#85 配对退避：窗内不发不起看门狗（防 ROUTE_MISS→烘焙重试循环刷帧）
+      if (ctx.pendingPair.pc && Date.now() >= (ctx.pairNextAt || 0)) {
+        sendPairReq(ctx, ctx.pendingPair, devId(ckp.publicKey, "wb"));
+        startPairWatchdog(ctx); // 重置看门狗：换 rd 重试不与旧 rd 共享 3 次预算
+      }
       return;
     }
     // 烘焙值也失配（relay 换 keypair 后 rd 全部过期，重新部署页面也追不上）：
@@ -3234,8 +3260,10 @@ function onCloudText(ctx, text) {
         setPendingPair(cfg.id, ctx.pendingPair);
         console.log("[cloud:" + cfg.name + "] 多 relay 无锚点，转配对码广播定位（候选 " + all.length + " 台）");
         setConn(ctx, "connecting", "定位持码服务器…");
-        sendPairReq(ctx, ctx.pendingPair, devId(ckp.publicKey, "wb"));
-        startPairWatchdog(ctx);
+        if (Date.now() >= (ctx.pairNextAt || 0)) { // #88/#85 配对退避：窗内不发不起看门狗
+          sendPairReq(ctx, ctx.pendingPair, devId(ckp.publicKey, "wb"));
+          startPairWatchdog(ctx);
+        }
         return;
       }
       if (pair && !pair.pc && all.length > 1) {
@@ -3273,6 +3301,9 @@ function onCloudText(ctx, text) {
         console.log("[cloud:" + cfg.name + "] relay " + pick.dev + " 已回在线，重发配对请求");
       }
       setConn(ctx, "connecting", "配对中");
+      // relay 已确认回在线（发现帧身份在手）：清配对退避满速重试——退防的是「relay
+      // 不在/不答时重连循环刷帧」（#88/#85），relay 真回来这一刻值得重开完整一轮
+      ctx.pairNextAt = 0; ctx.pairBackoffMs = 0;
       if (ctx.pendingPair.pc) sendPairReq(ctx, ctx.pendingPair, devId(ckp.publicKey, "wb")); // 扫码登录态不发 pair_req，只等授权
       startPairWatchdog(ctx);
       return;
@@ -7531,6 +7562,7 @@ function submitPairCode() {
   setPendingPair(cfg.id, pair);
   const ctx = ensureCtx(cfg);
   ctx.pendingPair = pair;
+  ctx.pairNextAt = 0; ctx.pairBackoffMs = 0; // #88/#85 手动输码=用户意图：清配对退避满速
   $("pairCode").value = "";
   saveServers();
   renderServers();
@@ -7984,6 +8016,7 @@ function wizSubmitPair() {
   setPendingPair(cfg.id, pair);
   const ctx = ensureCtx(cfg);
   ctx.pendingPair = pair;
+  ctx.pairNextAt = 0; ctx.pairBackoffMs = 0; // #88/#85 手动输码=用户意图：清配对退避满速
   $("wizCode").value = "";
   saveServers();
   renderServers();
