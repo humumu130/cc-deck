@@ -38,8 +38,9 @@
     --send-btn: var(--panel-2);
     --send-btn-line: var(--border);
     --grad: linear-gradient(135deg, #E8985F, #C96442);
-    --working: #FFC53D;
-    --waiting: #F0524F;
+    /* #98 状态灯显眼度：两值各提一档（暗底 13.39:1 / 6.66:1），浅色不受影响 */
+    --working: #FFD84D;
+    --waiting: #FF6B68;
     --error: #FF7849;
     --done: #2BD98F;
     --mono: Consolas, "Cascadia Mono", "JetBrains Mono", monospace;
@@ -52,6 +53,8 @@
     --th-bg: rgba(148,163,190,.12);
     --toast-bg: #1A2334;
     --toast-shadow: 0 6px 24px rgba(0,0,0,.5);
+    /* #98 选中卡辉光去橙（列表最大常驻橙）：暗色中性深投影；描边仍走 --brand-line */
+    --sel-shadow: 0 4px 20px rgba(0,0,0,.35);
     --scroll: #1E2B42;
     --hov: #33436B;
     --hov2: #2C3D63;
@@ -83,7 +86,9 @@
        （原 #13 品牌色实底废止——两端三主题一个语言） */
     --send-btn: var(--panel-2);
     --send-btn-line: var(--border);
-    --working: #A16207;
+    /* #98 色相 35°→42°（与品牌橙拉开到 27°=暗色水准）：白底 5.26:1、hover 底 4.77:1，
+       顺带修复 lv-sec 黄字 hover 底 4.47:1 的 AA 超标 */
+    --working: #8F6400;
     --waiting: #DC2626;
     --error: #C2410C;
     --done: #047857;
@@ -96,6 +101,10 @@
     --th-bg: rgba(100,116,139,.10);
     --toast-bg: #FFFFFF;
     --toast-shadow: 0 6px 24px rgba(15,23,42,.16);
+    /* #98 选中卡降橙：辉光中性化 + 描边降亮一档（--brand-line #E07B4C 白底仅 2.95:1
+       且高亮橙线贴着黄灯；#C2603E 保品牌识别不再发浮） */
+    --sel-shadow: 0 4px 20px rgba(15,23,42,.12);
+    --sel-line: #C2603E;
     --scroll: #C3CBD9;
     --hov: #B9C4D6;
     --hov2: #B4C0D4;
@@ -121,8 +130,9 @@
   html, body { height: 100%; }
   body {
     background:
-      radial-gradient(1200px 500px at 80% -10%, rgba(217,119,87,.08), transparent 60%),
-      radial-gradient(900px 400px at -10% 110%, rgba(201,100,66,.05), transparent 60%),
+      /* #98 橙色环境降噪：两层品牌光晕 alpha 减半（浅色下淡暖雾围黄灯的同向因素） */
+      radial-gradient(1200px 500px at 80% -10%, rgba(217,119,87,.04), transparent 60%),
+      radial-gradient(900px 400px at -10% 110%, rgba(201,100,66,.03), transparent 60%),
       var(--bg-main);
     color: var(--text);
     font: 14px/1.55 "Segoe UI", system-ui, -apple-system, "PingFang SC", "Microsoft YaHei UI", "Microsoft YaHei", sans-serif;
@@ -1141,7 +1151,9 @@
   /* #13 巡检：悬停除描边外补一档底色（原只换边框色，与选中态难区分且静止视图无反馈）；
      选中态线条用 --brand-line（浅色下纯 --brand 偏红显脏） */
   .card:hover { border-color: var(--hov2); background: var(--panel-2); }
-  .card.sel { border-color: var(--brand-line); box-shadow: 0 0 0 1px var(--brand-line), 0 4px 20px rgba(217,119,87,.15); }
+  /* #98 选中卡辉光去橙（常态恒有一张卡选中=列表恒有一块橙）：投影改 --sel-shadow
+     （暗=中性深 / 浅=中性墨），描边浅色降亮走 --sel-line（暗色 fallback 品牌线不变） */
+  .card.sel { border-color: var(--sel-line, var(--brand-line)); box-shadow: 0 0 0 1px var(--sel-line, var(--brand-line)), var(--sel-shadow); }
   .card.historical { opacity: .75; }
   .card-top { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
   .elapsed { font-size: 12px; color: var(--dim); font-variant-numeric: tabular-nums; }
@@ -1157,7 +1169,7 @@
      #399 第二行悬挂缩进至名称起点（灯 8px + c-head gap 8px），与首行文字块成组 */
   /* #54 三行卡层级：标题行（15px/--text-strong）不动；动作行降一档 12→11px、
      色从 --dim 回调到 --card-sub（介于原值与标题色之间）；元信息行 12→11px 保持 --faint */
-  .c-live { display: flex; align-items: center; gap: 8px; margin: 4px 0 0; padding-left: 6px; font-size: 11px; line-height: 16px; color: var(--card-sub); font-variant-numeric: tabular-nums; min-width: 0; min-height: 16px; } /* #58 统一卡高：与 .card-summary 同几何（上距 4 + 行盒 16），WORKING/空闲卡等高 */
+  .c-live { display: flex; align-items: center; gap: 8px; margin: 4px 0 0; padding-left: 4px; font-size: 11px; line-height: 16px; color: var(--card-sub); font-variant-numeric: tabular-nums; min-width: 0; min-height: 16px; } /* #58 统一卡高：与 .card-summary 同几何（上距 4 + 行盒 16），WORKING/空闲卡等高；#98 灯 8→10px 悬挂缩进 6→4 补偿 */
   .c-live .lv-dot { width: 9px; height: 9px; border-radius: 50%; background: var(--working); flex: none; animation: dot-breathe 2.4s ease-in-out infinite; }
   .c-live .lv-sec { color: var(--working); flex: none; }
   .c-live .lv-tok { flex: none; }
@@ -1236,12 +1248,26 @@
   /* #279⑨ 紧凑卡（对齐手机"简洁列表"三行）：状态点+标题+耗时 / 摘要 / 角标+改动+水位 */
   .card.compact { padding: 7px 11px 8px; border-radius: 10px; }
   .card.compact .c-row1 { display: flex; align-items: center; gap: 7px; }
-  .c-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--sc, var(--dim)); flex: none; }
+  /* #98 状态灯系统升级：8→10px（面积 +56%）+ 静态光圈（白底呈淡彩圈，深点+彩圈=
+     指示徽而非裸墨点）；WORKING 呼吸动画的 box-shadow 关键帧会自然接管光圈（预期） */
+  .c-dot { width: 10px; height: 10px; border-radius: 50%; background: var(--sc, var(--dim)); flex: none; box-shadow: 0 0 0 3px color-mix(in srgb, var(--sc, var(--dim)) 20%, transparent); }
   .c-dot.run { animation: dot-breathe 2.4s ease-in-out infinite; }
+  /* #98 浅色灯"LED 化"（浅色主杀器）：白底上深色灯是"印刷墨点"物理上无发光感——
+     亮芯（灯色提亮 45% 混白）给出发光感 + 深环保住边界对比（环色即原色值，全档 ≥3:1）。
+     用 border 做环：呼吸动画关键帧只覆写 box-shadow，动画期间环不消失 */
+  html.light .card .c-dot {
+    background: color-mix(in srgb, var(--sc, var(--dim)) 55%, #fff);
+    border: 1.5px solid var(--sc, var(--dim));
+  }
+  /* #98 形状编码：终态空心化（明暗同规则）——WORKING/WAITING=实心亮点（在跑/要处理），
+     DONE/ERROR=空心环（终态退后）。render 已把状态写进卡片类名（"card "+status），纯 CSS。
+     浅色条须压过上面 LED 规则（特异性 html.light .card .c-dot 更高），故双写 */
+  .card.DONE .c-dot, .card.ERROR .c-dot { background: transparent; border: 2px solid var(--sc); }
+  html.light .card.DONE .c-dot, html.light .card.ERROR .c-dot { background: transparent; border: 2px solid var(--sc); }
   .card.compact .card-title { flex: 1; min-width: 0; margin-top: 0; font-size: 13px; gap: 6px; }
   .card.compact .c-tt { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .card.compact .card-title input { font-size: 12.5px; }
-  .card.compact .card-summary { font-size: 11px; line-height: 15px; margin-top: 3px; padding-left: 6px; min-height: 15px; } /* #399 compact 灯列 = 8px 点 + 7px gap；#54 11.5→11；#58 行盒+占位双钉 15px */
+  .card.compact .card-summary { font-size: 11px; line-height: 15px; margin-top: 3px; padding-left: 4px; min-height: 15px; } /* #399 compact 灯列 = 8px 点 + 7px gap；#54 11.5→11；#58 行盒+占位双钉 15px；#98 灯 8→10px 缩进 6→4 补偿 */
   .card.compact .card-stats { font-size: 10px; line-height: 14px; margin-top: 5px; gap: 8px; min-height: 14px; } /* #54 10.5→10；#58 行盒+占位双钉 14px */
 
   /* ---------- 任务面板（详情页"任务" tab） ---------- */
@@ -1418,8 +1444,9 @@
   .af-act:hover { color: var(--dim); background: var(--hov); }
   .af-foot { display: flex; align-items: center; gap: 16px; padding: 14px 6px 30px; font-size: 11.5px; color: var(--dim); flex-wrap: wrap; } /* 视觉审查：暗色 --faint/11px 近乎不可见 → --dim（亮主题自动解析 #5F6C84）+ 左右 2px 贴边放宽 */
   .af-foot .k { border: 1px solid var(--border); border-radius: 5px; padding: 0 5px; margin-right: 5px; font-size: 10.5px; line-height: 1.6; }
-  .card-summary { color: var(--card-sub); font-size: 11.5px; line-height: 16px; margin-top: 4px; padding-left: 6px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-height: 16px; } /* #399 悬挂缩进对齐灯列；#54 动作行降档 12.5→11.5 + 提色；#58 行盒+min-height 双钉 16px，文本/空档等高 */
-  .card-summary.waiting { color: var(--working); }
+  .card-summary { color: var(--card-sub); font-size: 11.5px; line-height: 16px; margin-top: 4px; padding-left: 4px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-height: 16px; } /* #399 悬挂缩进对齐灯列；#54 动作行降档 12.5→11.5 + 提色；#58 行盒+min-height 双钉 16px；#98 灯 8→10px 缩进 6→4 补偿 */
+  /* #98 语义色修正：WAITING 卡摘要从 WORKING 黄回归红语义——黄只留给「在跑」 */
+  .card-summary.waiting { color: var(--waiting); }
   .card-stats { font-size: 11px; line-height: 15px; color: var(--faint); margin-top: 6px; display: flex; align-items: center; gap: 10px; font-variant-numeric: tabular-nums; min-height: 15px; } /* #54 元信息行降档 12→11；#58 行盒+min-height 双钉 15px，内容/空档等高 */
   .card-stats .add { color: var(--done); }
   .card-stats .del { color: var(--error); }
@@ -4080,7 +4107,14 @@ window.addEventListener("resize", cfRestorePos);
     window.addEventListener("pointercancel", end);
   });
 })();
-const SRC_COLORS = ["#D97757", "#5B9DFF", "#2BD98F", "#FFC53D", "#C792EA", "#F06292", "#4DD0E1", "#7E57C2"];
+// #98 补充（用户三条拍板）：①源强调色必须避开状态灯四色及其接近色——红=WAITING/
+// 橙红=ERROR（与品牌橙 0-2° 撞）/黄=WORKING/绿=DONE；②池内两两也须 ≥25°（同屏
+// 可辨，旧 7 色池 #4DD0E1~#29B6F6 仅 12° 不合格）；③不占品牌橙。安全区 hue
+// 190°-302°，5 色等距 28°：青 190/蓝 218/靛 246/紫 274/洋红 302，明度交替拉开
+// ——120° 带内 25° 间距数学上限 ~5 色，源 >5 时取模循环复用（现实源数 ≤5）；
+// 与手机端 ListScreen SRC_COLORS 逐字节对齐。已过色距校验：对状态色（含明暗
+// 双值）+品牌橙全部 ≥25°，池内两两 28°
+const SRC_COLORS = ["#2FBEDA", "#5C94F5", "#665AD8", "#B886DF", "#CD51C8"];
 // 源配色键（#294 审查修复）：跨端稳定身份——云源取 relay 设备 id（cloud.rd）、LAN 源
 // 取 wsUrl，同一台服务器在手机/网页两端同色（本地 uuid 两端各异不可用；与手机端
 // SourceStatus.colorKey 同构）
@@ -4101,7 +4135,7 @@ function shortName(n) {
 function srcDisplayName(cfg) {
   return shortName(cfg.name);
 }
-// 同屏配色去重（与手机端同规则）：按 colorKey 稳定排序分配调色板序号，源数≤8 必不重
+// 同屏配色去重（与手机端同规则）：按 colorKey 稳定排序分配调色板序号，源数≤5 必不重
 // #91 修复：去掉跨快照缓存——旧实现首命中即固定色板序号，servers 后续增删时新条目
 // 按新快照取序、旧条目沿用旧序，不同源可分到同色（用户实测「本机」与「Mac」同橙）。
 // servers 规模个位数，每次现算排序开销可忽略；同帧统一快照分配才是「必不重」的成立前提

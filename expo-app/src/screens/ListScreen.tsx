@@ -48,7 +48,13 @@ function isSameDay(a: number, b: number): boolean {
 // 网页端 SRC_COLORS/srcColor 逐字节对齐；哈希键用跨端稳定身份（store
 // SourceStatus.colorKey：云源 relay 设备 id、LAN 源 wsUrl），同一台服务器在两端
 // 取到同色——本地 uuid 两端各异不可用
-const SRC_COLORS = ["#D97757", "#5B9DFF", "#2BD98F", "#FFC53D", "#C792EA", "#F06292", "#4DD0E1", "#7E57C2"];
+// #98 补充（用户三条）：①避开状态灯四色及接近色（红/橙/黄/绿全段让给 WAITING/
+// ERROR/品牌橙/WORKING/DONE）；②池内两两也须 ≥25°（同屏可辨）；③不占品牌橙。
+// 安全区 hue 190°-302°，5 色等距 28°：青 190/蓝 218/靛 246/紫 274/洋红 302，
+// 明度交替拉开——120° 带内 25° 间距数学上限就是 ~5 色，源 >5 时取模循环复用
+// （现实源数 ≤5）；与 web-console SRC_COLORS 逐字节同步。已过色距校验：
+// 对状态色（含明暗双值）+品牌橙全部 ≥25°，池内两两 28°
+const SRC_COLORS = ["#2FBEDA", "#5C94F5", "#665AD8", "#B886DF", "#CD51C8"];
 function srcColor(id: string): string {
   let h = 0;
   for (const ch of String(id)) h = ((h * 31) + ch.charCodeAt(0)) >>> 0;
@@ -194,7 +200,17 @@ function LiveStat({ s }: { s: SessionState }) {
   return (
     <Text style={styles.liveStat} numberOfLines={1}>
       {s.compacting ? <Text style={{ color: c.working }}>⟳ 压缩上下文 · </Text> : null}
-      <Text style={{ color: c.working }}>{live ? summary : `${summary || ""}（${meta}）`}</Text>
+      {/* #98 黄字降级：摘要回中性灰（浅色 #A16207 对米白 4.41:1 跌破 12px AA 且稀释
+          WORKING 灯的黄色独占），只留计时/↓token/⟳ 压缩标记黄色——对齐桌面 .c-live
+          层级（秒数黄、摘要中性，1162/1164 行；手机此前整行黄=抄漏了层级） */}
+      {live ? (
+        <Text style={{ color: c.dim }}>{summary}</Text>
+      ) : (
+        <>
+          <Text style={{ color: c.dim }}>{summary || ""}</Text>
+          <Text style={{ color: c.working }}>（{meta}）</Text>
+        </>
+      )}
     </Text>
   );
 }
@@ -487,7 +503,8 @@ const SessionCard = memo(function SessionCard({
             <View style={{ flex: 1 }} />
             {s.stats && s.stats.files_changed > 0 ? (
               <Text style={styles.statsC}>
-                <Text style={{ color: c.working }}>+{s.stats.lines_added}</Text>
+                {/* #98 +新增行数对齐桌面 .card-stats .add 的绿色（黄只属于「在跑」） */}
+                <Text style={{ color: c.done }}>+{s.stats.lines_added}</Text>
                 {" "}
                 <Text style={{ color: c.error }}>-{s.stats.lines_deleted}</Text>
               </Text>
@@ -531,7 +548,8 @@ const SessionCard = memo(function SessionCard({
             <View style={{ flex: 1 }} />
             {s.stats && s.stats.files_changed > 0 ? (
               <Text style={styles.stats}>
-                <Text style={{ color: c.working }}>+{s.stats.lines_added}</Text>
+                {/* #98 同上：+行数黄→绿（普通卡），对齐桌面 */}
+                <Text style={{ color: c.done }}>+{s.stats.lines_added}</Text>
                 {" "}
                 <Text style={{ color: c.error }}>-{s.stats.lines_deleted}</Text>
               </Text>
