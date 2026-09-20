@@ -1930,6 +1930,25 @@ export default function DetailScreen({ sid, onBack, initialView, ref }: { sid: s
                       {PERM_SHORT[perm]}
                     </Text>
                   ) : null}
+                  {/* #117 切换符 ⇄（用户文字描述定形：上右箭头/下左箭头，贴近侧的箭头
+                      抹除=等号+右上捺+左下捺）——Lucide arrow-right-left 同款几何，SVG
+                      线稿不用文字字形（Android 字体对 U+21C4 覆盖不稳）。与盾标同色：
+                      点按可切换的 affordance 标记，幽灵态也有 */}
+                  <Svg
+                    width={10}
+                    height={10}
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke={perm === "default" ? c.dim : perm === "bypassPermissions" ? c.waiting : c.brandA}
+                    strokeWidth={2.4}
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  >
+                    <Path d="M4 7h16" />
+                    <Path d="M16 3l4 4-4 4" />
+                    <Path d="M4 17h16" />
+                    <Path d="M8 13l-4 4 4 4" />
+                  </Svg>
                 </Pressable>
               ) : null}
               {/* #56 外部会话远程审批开关：开=Bash/Edit 等门控工具的权限确认挂起到
@@ -2776,8 +2795,9 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
     height: 14, borderRadius: 7, borderWidth: 1,
     flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 4,
   },
-  // 幽灵态（标准）：20px 定宽只放盾标（描边色按明暗在 JSX 注入——深色 line 太弱需提亮）
-  permPillGhost: { width: 20, backgroundColor: c.tintSoft },
+  // 幽灵态（标准）：盾标 + ⇄ 切换符（#117 起两图标，定宽 20 放不下改自适应，
+  // 描边色按明暗在 JSX 注入——深色 line 太弱需提亮）
+  permPillGhost: { paddingHorizontal: 6, backgroundColor: c.tintSoft },
   permPillLit: { paddingHorizontal: 6, backgroundColor: c.tintStrong, borderColor: withA(c.brandA, 0.4) },
   // 警示态（跳过）：红只到 tint+描边+文字，不用实底——14px 实底会变整行最重元素压过标题
   permPillWarn: { paddingHorizontal: 6, backgroundColor: withA(c.waiting, 0.1), borderColor: withA(c.waiting, 0.45) },

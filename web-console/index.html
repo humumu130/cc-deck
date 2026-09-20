@@ -1550,6 +1550,10 @@
   .tabs button.mini.on, #dctxcell button.mini.on { color: var(--brand); border-color: rgba(217,119,87,.55); border-style: solid; }
   /* #40 权限跳过档警示（id 级优先盖过 .on 品牌蓝；红只到文字+描边，同手机端口径） */
   #permBtn.warn { color: var(--waiting); border-color: rgba(240,82,79,.55); }
+  /* #117 权限按钮内文字 + ⇄ 切换符并排（display "" 回落至此，不再是被 textContent
+      整写的纯文字按钮）；SVG stroke=currentColor 随 dim/on/warn 状态变色 */
+  #permBtn { display: inline-flex; align-items: center; gap: 4px; }
+  #permBtn svg { flex: none; }
 
   /* 工作状态行（类 CLI，置于输入卡上方）：✶ 摘要 · 回合耗时；宽度与时间线会话列对齐 */
   #liverow {
@@ -2272,7 +2276,7 @@
         <span class="spacer"></span>
         <button id="fontBtn" class="mini" title="正文字号（点按切换）">字·标准</button>
         <button id="thinkBtn" class="mini" title="显示思考过程">思考 ·关</button>
-        <button id="permBtn" class="mini" style="display:none">权限·标准</button>
+        <button id="permBtn" class="mini" style="display:none"><span id="permBtnT">权限·标准</span><!-- #117 切换符 ⇄（用户文字描述定形：上右箭头/下左箭头，贴近侧箭头抹除=等号+右上捺+左下捺）；SVG 线稿随状态变色（currentColor），与手机端 permPill 同几何 --><svg viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h16"/><path d="M16 3l4 4-4 4"/><path d="M4 17h16"/><path d="M8 13l-4 4 4 4"/></svg></button>
         <!-- #56 外部会话远程审批开关：off=权限确认在终端本地弹框；on=挂起到手机/网页出按钮 -->
         <button id="extModeBtn" class="mini" style="display:none">审批·终端</button>
         <span class="tab-ind" id="tabInd"></span>
@@ -4534,7 +4538,8 @@ function renderDetail() {
   if (!s.external && !s.historical) {
     permBtn.style.display = "";
     const pm = s.permission_mode ?? "default";
-    permBtn.textContent = "权限·" + (PERM_LABEL[pm] ?? pm);
+    // #117 文字写进内层 span（textContent 整写会抹掉按钮内的 ⇄ SVG）
+    $("permBtnT").textContent = "权限·" + (PERM_LABEL[pm] ?? pm);
     permBtn.classList.toggle("on", pm !== "default");
     // #40 跳过档警示色（对齐手机端 permPillWarn：红只到描边+文字，不用实底）
     permBtn.classList.toggle("warn", pm === "bypassPermissions");
