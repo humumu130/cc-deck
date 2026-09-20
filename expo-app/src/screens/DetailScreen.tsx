@@ -3060,10 +3060,16 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
     borderRadius: 7, paddingHorizontal: 5, paddingVertical: 1, overflow: "hidden",
   },
   slashEmpty: { color: c.faint, fontSize: 12, paddingHorizontal: 12, paddingVertical: 10 },
+  // #68 返工（test.7 装机反馈「多行仍不抬高」根因）：删 flex:1——套 <View flex:1>
+  // 包裹层后它变成纵轴 flexGrow（flexBasis 0 压掉显式 height），wrap-content 容器
+  // 无空间可长，高度恒钉在 minHeight 44（两种增高方案都失灵的公共原因）。宽度由
+  // 包裹层默认 alignItems:stretch 拉满，无需自带 flex。maxHeight 110→150 对齐
+  // inputH 钳制（cd7509c 只改了钳制漏了样式）
   input: {
-    flex: 1, minHeight: 44, maxHeight: 110, borderRadius: 13,
+    minHeight: 44, maxHeight: 150, borderRadius: 13,
     backgroundColor: c.panel2, borderWidth: 1, borderColor: c.line,
     paddingHorizontal: 14, paddingVertical: 11, color: c.text, fontSize: 15,
+    textAlignVertical: "top",
   },
   // 发送按钮：两主题同规则（#48）——theme.sendBg/sendFg 品牌橙 ➤；#68② 去边框
   // 收窄（44→40、字 17→18），桌面端 #sendBtn 同步对齐
