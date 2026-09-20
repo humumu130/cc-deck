@@ -4835,7 +4835,9 @@ function todosTabHtml(s) {
       html += '<div class="todo-item ' + t.status + '"' + (t.id != null ? ' data-tid="' + t.id + '"' : "") + dragAttrs + '>' +
         (t.status !== "completed" ? '<span class="todo-grip" title="拖动调整执行优先级">⠿</span>' : "") +
         '<span class="todo-ck">' + mark + '</span><span class="todo-tx">' +
-        escapeHtml(t.status === "in_progress" && t.active_form ? t.active_form : t.content) + "</span>" +
+        /* #97 任务编号 #N 前缀（对齐手机端）：权威任务存储 id 由此可见，
+           转录 #NNN 可点跳转的锚；旧 TodoWrite 清单无 id 不显示 */
+        escapeHtml((t.id != null ? "#" + t.id + " " : "") + (t.status === "in_progress" && t.active_form ? t.active_form : t.content)) + "</span>" +
         '<button class="todo-del" data-c="' + escapeHtml(t.content) + '" title="隐藏该条">✕</button></div>';
     }
     html += "</div>";
