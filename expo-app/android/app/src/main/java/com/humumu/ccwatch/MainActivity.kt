@@ -36,11 +36,17 @@ class MainActivity : ReactActivity() {
     val emit: (Int) -> Unit = { px ->
       val dp = (px / resources.displayMetrics.density).toInt()
       if (dp != last) {
-        last = dp
+        // #87：last 必须在成功送出后才记账——React 重建瞬间 currentReactContext 为 null
+        // 时，若先更新 last 再 ?.emit，这次键盘高度变化被永久吞掉（同值不再补发），
+        // JS 侧 kb 卡在旧值：收起被吞=面板恒顶升（输入框平移出可视位）、弹出被吞=
+        // 键盘开着面板不抬（输入框被键盘盖住）。ctx 为 null 时保持 last 不动，下一次
+        // 布局/insets 分发（GlobalLayoutListener 会因 React 重建再触发）补发正确值
         val ctx = (application as? MainApplication)?.reactHost?.currentReactContext
-        ctx
-          ?.getJSModule(DeviceEventManagerModule.RCTDeviceEventEmitter::class.java)
-          ?.emit("kbInsets", Arguments.createMap().apply { putInt("height", dp) })
+        if (ctx != null) {
+          last = dp
+          ctx.getJSModule(DeviceEventManagerModule.RCTDeviceEventEmitter::class.java)
+            .emit("kbInsets", Arguments.createMap().apply { putInt("height", dp) })
+        }
       }
     }
     val listener = OnApplyWindowInsetsListener { _, insets ->

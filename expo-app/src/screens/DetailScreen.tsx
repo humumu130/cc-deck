@@ -2532,14 +2532,26 @@ export default function DetailScreen({ sid, onBack, initialView, ref }: { sid: s
           ) : null}
           <View style={{ flex: 1 }}>
             <TextInput
-              style={[d.input, { height: inputH }]}
+              // #87 键盘不弹排查：editable=false（未连接/会话不可恢复）在 Android 上点击
+              // 完全无反应——用户表象就是「键盘弹不出来」。断连挂死（#85 connecting 卡死）
+              // 期间曾长期处于此态且无任何视觉提示。现半透明弱化 + placeholder 说明原因，
+              // 用户能自诊断「是断连不是键盘坏了」
+              style={[d.input, { height: inputH }, !canCmd && { opacity: 0.5 }]}
               value={input}
               onChangeText={editInput}
               onContentSizeChange={(e) => {
                 const h = e.nativeEvent.contentSize.height;
                 setInputH(Math.max(44, Math.min(150, h + 24)));
               }}
-              placeholder={external ? "CLI忙时自动排队" : s.historical ? "继续对话（恢复会话）…" : "发送消息…"}
+              placeholder={
+                !snap.connected
+                  ? "未连接 · 恢复连接后可输入"
+                  : external
+                    ? "CLI忙时自动排队"
+                    : s.historical
+                      ? (resumable ? "继续对话（恢复会话）…" : "历史会话，仅可查看")
+                      : "发送消息…"
+              }
               placeholderTextColor={c.faint}
               editable={canCmd}
               multiline
