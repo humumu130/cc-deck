@@ -1855,10 +1855,13 @@ export default function DetailScreen({ sid, onBack, initialView, ref }: { sid: s
 
   return (
     <SafeAreaView style={d.safe} edges={["top"]}>
-      {/* #68③ 键盘顶升从底部栈扩大到整个面板：kb>0 时整体上移（顶部随之上出屏，
-          类微信——最下一条消息恒在输入栏上方；transform 不走重排，沿用 2026-09-16
-          调定的 -2px 藏缝余量）。底部栈不再自带位移 */}
-      <View style={{ flex: 1, transform: [{ translateY: kb > 0 ? -(kb - 2) : 0 }] }}>
+      {/* #108 键盘让位从「整面板上移」改为「收缩式」：#68③ 的 translateY 把 head+tab
+          一起顶出屏（用户反馈完全被挤没）。edge-to-edge 下窗口不 resize，root 直接
+          paddingBottom = kb 让 flex 布局只压缩 flex:1 的翻页列表区——head/状态条/tab 行
+          位置稳定，列表收缩、输入栏贴键盘顶；贴底视图由转录 ScrollView 的 onLayout 兜底
+          拉回底部（视口收缩旧 transform 方案没有的问题）。沿用 2026-09-16 调定的
+          -2px 藏缝余量（键盘压住输入栏底 2px 不露缝） */}
+      <View style={{ flex: 1, paddingBottom: kb > 0 ? kb - 2 : 0 }}>
       {/* 头部（用户 22:14/22:20 拍板口径）：R1 = ‹ + 标题主角；R2 = 元信息行——源·时长·ctx 水位
           左聚顺排（时长在水位前），思考开关（半高）右锚最右；编辑按钮移除。
           可点元素统一圆角 8/tintSoft 底无边框 */}
@@ -2309,6 +2312,12 @@ export default function DetailScreen({ sid, onBack, initialView, ref }: { sid: s
           }, 300);
         }}
         scrollEventThrottle={120}
+        // #108 收缩式键盘让位后视口会随 kb 变小：贴底状态被顶掉时把列表拉回底部
+        //（旧 translateY 方案视口不变无此问题；手法同任务页 todoAtBottom 的贴底保底，
+        //  touching 守卫同 1535 行流式滚底——按住列表时不抢滚动）
+        onLayout={() => {
+          if (atBottom.current && !touching.current) (v.k === "msg" ? scrollRef : allScrollRef).current?.scrollToEnd({ animated: false });
+        }}
       >
         {s.historical && !external ? (
           // #49：提示不暴露内部机制（SDK resume、Relay 等字眼移除）
@@ -2410,8 +2419,8 @@ export default function DetailScreen({ sid, onBack, initialView, ref }: { sid: s
 
       {/* 底部栈：审批横幅（常驻可见，类似 CLI 权限提示）> 模板行 > 命令栏。
            外层通铺命令栏同色底（2026-09-16）：底部手势条区域不再露页面底色——输入栏
-           一气通到屏幕底边。#68③ 起键盘抬升移到最外层面板级（kb transform 在此容器
-           的祖先上），本容器只保留手势条让位 */}
+           一气通到屏幕底边。#108 起键盘让位改 root paddingBottom 收缩式（祖先容器
+           已按 kb 缩短），本容器只保留手势条让位 */}
       <View pointerEvents="box-none" style={{ backgroundColor: c.overlay, paddingBottom: kb > 0 ? 0 : insets.bottom }}>
         {bannerVisible ? (
           wr!.questions?.length ? (
