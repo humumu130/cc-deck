@@ -4501,6 +4501,19 @@ setInterval(() => {
   }
 }, 1000);
 
+// #96 置灰驱动（根治桌面端不变灰）：render() 纯事件驱动——DONE/ERROR 会话静默
+// 超 30min 后不再有任何事件触发重渲，idleDimmed 判定再对 .idle 也挂不上（手机端
+// 回前台有 resumeProbe 快照兜底，桌面端页面常驻没有这条路径）。30s 逐卡对账：
+// DOM 卡的 .idle 与重算结果不符才整列重渲——折叠/过滤口径天然对齐（不在 DOM 的
+// 卡不参与），稳态零开销；跨过阈值的时刻本就无交互
+setInterval(() => {
+  for (const el of document.querySelectorAll("#cards .card")) {
+    if (el.classList.contains("WORKING")) continue;
+    const hit = allSessions().find((x) => x.ctx.cfg.id === el.dataset.src && x.s.session_id === el.dataset.sid);
+    if (hit && el.classList.contains("idle") !== idleDimmed(hit.s)) { render(); return; }
+  }
+}, 30_000);
+
 // 排队气泡展开态记忆（文本为键）：renderDetail 每秒重建排队区 DOM，无记忆则展开即被收回
 const pendOpen = new Set();
 
