@@ -47,6 +47,7 @@ if (!window.ccDeck) {
     probeLocal: () => window.__TAURI__.core.invoke("probe_local"),
     openExternal: (url) => window.__TAURI__.core.invoke("open_external", { url }),
     openPath: (path, reveal) => window.__TAURI__.core.invoke("open_path", { path, reveal }),
+    probePath: (path) => window.__TAURI__.core.invoke("probe_path", { path }),
     relayCtl: true, // 标记：内置 relay 开关能力存在（网页端据此显示设置行）
     relayStatus: () => window.__TAURI__.core.invoke("relay_status"),
     relayToggle: (on) => window.__TAURI__.core.invoke("relay_toggle", { on }),
@@ -121,6 +122,19 @@ fn open_path(app: tauri::AppHandle, path: String, reveal: bool) -> Result<(), St
     } else {
         app.opener().open_path(p, None::<&str>).map_err(|e| e.to_string())
     }
+}
+
+/// #106 返工（装机反馈「先报错路径没有文件，然后才下载」）：本地存在性探测——
+/// 远程源产物路径在本机必然不存在，web 侧先探再决定直开还是下载，把分流做在
+/// 后台（用户无感）。只读 stat，微秒级；绝对路径校验同 open_path
+#[tauri::command]
+fn probe_path(path: String) -> bool {
+    let p = path.trim();
+    let b = p.as_bytes();
+    let is_abs = (b.len() >= 3 && b[0].is_ascii_alphabetic() && b[1] == b':' && (b[2] == b'\\' || b[2] == b'/'))
+        || p.starts_with("\\\\")
+        || p.starts_with('/');
+    is_abs && !p.contains("..") && std::path::Path::new(p).exists()
 }
 
 /// #106 输出物直接下载：web 侧拉取的字节流（base64）落系统「下载」目录，重名自动
@@ -614,7 +628,7 @@ fn main() {
         .plugin(tauri_plugin_updater::Builder::new().build())
         // #8 全局快捷键（呼出/收起）：默认键在 setup 注册，网页侧可经 set_toggle_shortcut 改绑
         .plugin(tauri_plugin_global_shortcut::Builder::new().build())
-        .invoke_handler(tauri::generate_handler![probe_local, open_external, open_path, save_artifact, relay_status, relay_toggle, set_toggle_shortcut])
+        .invoke_handler(tauri::generate_handler![probe_local, open_external, open_path, probe_path, save_artifact, relay_status, relay_toggle, set_toggle_shortcut])
         .setup(|app| {
             if build_tray(app).is_ok() {
                 TRAY_OK.store(true, Ordering::SeqCst);

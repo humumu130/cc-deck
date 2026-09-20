@@ -7156,7 +7156,11 @@ $("timeline").addEventListener("click", (ev) => {
   }
   const afDir = ev.target.closest(".af-open-dir");
   if (afDir && window.ccDeck && window.ccDeck.openPath) {
-    window.ccDeck.openPath(afDir.dataset.dir || "", false).catch((er) => toast(String(er?.message || er).slice(0, 80), 3500));
+    // #106 返工：远程会话 cwd 不在本机——明确语义提示，不弹 openPath 报错
+    shellHasLocal(afDir.dataset.dir || "").then((local) => {
+      if (!local) { toast("工作目录不在本机（远程会话）", 3500); return; }
+      window.ccDeck.openPath(afDir.dataset.dir || "", false).catch((er) => toast(String(er?.message || er).slice(0, 80), 3500));
+    });
   }
 });
 // #35 输出物浮窗入口：路径 + 相对路径（origin=cwd 才有）+ 已删除标记 → openFpathPop 扩展参
@@ -7179,11 +7183,15 @@ $("timeline").addEventListener("dblclick", (ev) => {
   const p = row.dataset.p || "";
   if (row.dataset.dead === "1") { toast("文件已不存在（可能已被清理）"); return; }
   if (window.ccDeck && window.ccDeck.openPath) {
-    window.ccDeck.openPath(p, false).catch(() => {
+    // #106 返工：先探后开——不在本机（远程源）无感直达下载，不再先弹 openPath 报错
+    shellHasLocal(p).then((local) => {
       const hit = selSession();
-      if (hit && window.ccDeck.saveArtifact) downloadAndOpenArtifact(hit.ctx, hit.s.session_id, p); // #106 远程源文件不在本机 → 下载后本地打开
-      else if (hit) previewArtifact(hit.ctx, hit.s.session_id, p); // 旧壳无 saveArtifact（升级窗口期）→ 预览兜底
-      else toast("本地打开失败（文件不在本机）");
+      if (!local && hit && window.ccDeck.saveArtifact) { downloadAndOpenArtifact(hit.ctx, hit.s.session_id, p); return; }
+      window.ccDeck.openPath(p, false).catch(() => {
+        if (hit && window.ccDeck.saveArtifact) downloadAndOpenArtifact(hit.ctx, hit.s.session_id, p); // 本地源但打开失败（权限/被占用）→ 下载后打开
+        else if (hit) previewArtifact(hit.ctx, hit.s.session_id, p); // 旧壳无 saveArtifact（升级窗口期）→ 预览兜底
+        else toast("本地打开失败（文件不在本机）");
+      });
     });
   } else {
     const hit = selSession();
@@ -7191,6 +7199,15 @@ $("timeline").addEventListener("dblclick", (ev) => {
     else { copyText(p); toast("在桌面端打开可双击启动本地应用（路径已复制）"); }
   }
 });
+
+// #106 返工（装机反馈「先报错路径没有文件，然后才下载」）：壳侧先探后开——
+// probe_path 微秒级 stat 判「路径在本机吗」，远程源（云 relay）产物路径本机必无，
+// 分流做在后台，用户无感直达下载。旧壳无 probePath（升级窗口期）按「在」处理，
+// 回落原 openPath→catch 链
+function shellHasLocal(p) {
+  if (window.ccDeck && window.ccDeck.probePath) return window.ccDeck.probePath(p).catch(() => true);
+  return Promise.resolve(true);
+}
 
 // #106 输出物直接下载（桌面壳专用）：拉取字节流 → 壳落盘系统「下载」目录（重名
 // 自动 -2 递增）→ 系统默认应用打开。取代桌面端在线预览——下载的文件随用户处置
@@ -7367,8 +7384,21 @@ function openFpathPop(p, x, y, opts) {
   }
   const shellOk = !!(window.ccDeck && window.ccDeck.openPath) && !opts?.noOpen;
   if (shellOk) {
-    mk("打开文件", () => { window.ccDeck.openPath(p, false).catch((er) => toast(String(er?.message || er).slice(0, 80), 3500)); });
-    mk("打开所在目录", () => { window.ccDeck.openPath(p, true).catch((er) => toast(String(er?.message || er).slice(0, 80), 3500)); });
+    // #106 返工：先探后开——不在本机（远程源）「打开文件」静默转下载；「打开所在
+    // 目录」给明确语义提示（目录无从下载），不再弹 openPath 的「路径没有文件」报错
+    mk("打开文件", () => {
+      shellHasLocal(p).then((local) => {
+        if (!local && opts?.fetch && window.ccDeck.saveArtifact) { downloadAndOpenArtifact(opts.fetch.ctx, opts.fetch.sid, p); return; }
+        if (!local) { toast("文件不在本机（远程会话产物）", 3500); return; }
+        window.ccDeck.openPath(p, false).catch((er) => toast(String(er?.message || er).slice(0, 80), 3500));
+      });
+    });
+    mk("打开所在目录", () => {
+      shellHasLocal(p).then((local) => {
+        if (!local) { toast("路径不在本机（远程会话），无法打开所在目录", 3500); return; }
+        window.ccDeck.openPath(p, true).catch((er) => toast(String(er?.message || er).slice(0, 80), 3500));
+      });
+    });
   }
   mk("复制路径", () => copyText(p));
   if (opts?.rel) mk("复制相对路径", () => copyText(opts.rel));
