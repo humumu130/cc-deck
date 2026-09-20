@@ -42030,7 +42030,7 @@ var SessionManager = class {
         rs2.state.title = ov2;
         rs2.state.title_locked = true;
       }
-      this.sessions.set(id2, { agent: null, state: rs2.state, logs: rs2.logs, lastUpdateEmit: 0, lastProgressAt: 0, lastProgressKind: "", unacked: [], wd: { phase: "idle", recoveries: [] } });
+      this.sessions.set(id2, { agent: null, state: rs2.state, logs: rs2.logs, lastUpdateEmit: 0, lastProgressAt: 0, lastProgressKind: "", unacked: [], wd: { phase: "idle", recoveries: [], gaveUp: false }, streamGen: 0 });
       this.applyDeclaredDeliverables(id2);
       adopted2++;
     }
@@ -42137,7 +42137,7 @@ var SessionManager = class {
       state.title = ov2;
       state.title_locked = true;
     }
-    this.sessions.set(id2, { agent: null, state, logs: [], lastUpdateEmit: 0, lastProgressAt: 0, lastProgressKind: "", unacked: [], wd: { phase: "idle", recoveries: [] } });
+    this.sessions.set(id2, { agent: null, state, logs: [], lastUpdateEmit: 0, lastProgressAt: 0, lastProgressKind: "", unacked: [], wd: { phase: "idle", recoveries: [], gaveUp: false }, streamGen: 0 });
     this.applyDeclaredDeliverables(id2);
     this.bus.emit(id2, "SESSION_CREATED", {
       cwd: state.cwd,
@@ -42606,7 +42606,7 @@ var SessionManager = class {
               return { command_id: cmd.command_id, ok: false, error: "\u6587\u4EF6\u4FDD\u5B58\u5931\u8D25\uFF08\u4E34\u65F6\u76EE\u5F55\u4E0D\u53EF\u5199\uFF09" };
             }
           }
-          if (!s.agent || s.agent.ended) {
+          if (!s.agent || s.agent.ended || s.wd.gaveUp) {
             this.resumeAgent(s, text, sanitizeImages(cmd.payload.images), echo);
             return { command_id: cmd.command_id, ok: true };
           }
@@ -43060,7 +43060,8 @@ var SessionManager = class {
       lastProgressAt: Date.now(),
       lastProgressKind: "",
       unacked: [],
-      wd: { phase: "idle", recoveries: [] }
+      wd: { phase: "idle", recoveries: [], gaveUp: false },
+      streamGen: 0
     };
     const agent = this.newAgent(
       cwd,
@@ -43090,12 +43091,25 @@ var SessionManager = class {
   }
   // AgentSession 回调：create 与 resume 共用（状态机与事件下发完全一致）
   agentCallbacks(managed) {
+    const gen = managed.streamGen;
+    const mine = () => managed.streamGen === gen;
     const touch = (kind) => {
+      if (!mine()) return;
+      if (managed.wd.gaveUp) {
+        managed.wd.gaveUp = false;
+        managed.state.status = "WORKING";
+        managed.state.action_summary = "\u6D41\u5DF2\u6062\u590D";
+        managed.state.waiting_request = void 0;
+        managed.state.turn_started_at = Date.now();
+        this.pushExternalLog(managed.state.session_id, "system", "\u68C0\u6D4B\u5230\u4F1A\u8BDD\u6D41\u4ECD\u5728\u5DE5\u4F5C\uFF0C\u5DF2\u81EA\u52A8\u64A4\u9500\u7B49\u5F85\u72B6\u6001");
+        this.emitUpdated(managed, true);
+      }
       managed.lastProgressAt = Date.now();
       managed.lastProgressKind = kind;
     };
     return {
       onInit: (sdkId, model, permissionMode) => {
+        if (!mine()) return;
         touch("init");
         if (!this.childSdkIds.has(sdkId)) {
           this.childSdkIds.add(sdkId);
@@ -43107,6 +43121,7 @@ var SessionManager = class {
         this.emitUpdated(managed, true);
       },
       onStatusChange: (status, summary) => {
+        if (!mine()) return;
         touch(status === "WORKING" ? "status_working" : "status");
         const live = managed.state.status === "WAITING" && !!managed.state.waiting_request;
         const effStatus = live && status === "WORKING" && (managed.agent?.hasPending?.() ?? false) ? "WAITING" : status;
@@ -43119,6 +43134,7 @@ var SessionManager = class {
         this.emitUpdated(managed, changed || cleared);
       },
       onWaiting: (p) => {
+        if (!mine()) return;
         touch("waiting");
         managed.state.status = "WAITING";
         managed.state.waiting_request = p;
@@ -43126,6 +43142,7 @@ var SessionManager = class {
         this.bus.emit(managed.state.session_id, "SESSION_WAITING", p);
       },
       onWaitingResolved: (requestId, decision, resolvedBy) => {
+        if (!mine()) return;
         touch("waiting_resolved");
         const cur = managed.state.waiting_request;
         if (!cur || cur.request_id === requestId) {
@@ -43141,17 +43158,21 @@ var SessionManager = class {
         });
       },
       onStats: (stats) => {
+        if (!mine()) return;
         touch("stats");
         managed.state.stats = stats;
       },
       // #35 输出物：SDK 工具结果单条合并（agent-adapter 从 tool_use/tool_result 配对产出）
       onArtifacts: (item) => {
+        if (!mine()) return;
         this.mergeArtifact(managed.state.session_id, item);
       },
       onTodos: (todos) => {
+        if (!mine()) return;
         this.setTodos(managed.state.session_id, todos);
       },
       onUsage: (u) => {
+        if (!mine()) return;
         touch("usage");
         const cur = managed.state.usage;
         managed.state.usage = {
@@ -43166,12 +43187,14 @@ var SessionManager = class {
       // usage，in+cr+cc = 该次调用实际送入的上下文，覆盖式——压缩后自然回落。
       // 可选回调：旧实现方（标题生成等假 agent）不实现也不影响
       onContext: (tokens) => {
+        if (!mine()) return;
         touch("context");
         if (tokens > 0) managed.state.context_usage = tokens;
         managed.state.context_limit = contextLimitOf(managed.state.model);
         this.emitUpdated(managed, false);
       },
       onLog: (kind, text, meta) => {
+        if (!mine()) return;
         touch(kind);
         if (kind === "user_message") {
           const key = text.replace(/（\+\d+ 图）$/, "").trim().replace(/\s+/g, " ").slice(0, 200);
@@ -43188,6 +43211,7 @@ var SessionManager = class {
         this.bus.emit(managed.state.session_id, "SESSION_LOG", entry);
       },
       onTurnEnd: (ok2, reason, durationMs) => {
+        if (!mine()) return;
         if (managed.wd.phase === "recovering") return;
         managed.state.updated_at = Date.now();
         managed.state.duration_ms = durationMs;
@@ -43207,6 +43231,7 @@ var SessionManager = class {
         }
       },
       onSessionEnd: (reason) => {
+        if (!mine()) return;
         if (managed.wd.phase === "recovering") return;
         managed.wd.phase = "idle";
         if (managed.state.status !== "DONE" && managed.state.status !== "ERROR") {
@@ -43229,6 +43254,12 @@ var SessionManager = class {
     if (!sdkId) {
       throw new Error("\u4F1A\u8BDD\u5DF2\u7ED3\u675F\u4E14\u65E0 SDK \u4F1A\u8BDD\u8BB0\u5F55\uFF0C\u65E0\u6CD5\u6062\u590D\uFF08\u6A21\u578B\u5C1A\u672A\u5B8C\u6210\u521D\u59CB\u5316\uFF09");
     }
+    const old = s.agent;
+    s.streamGen++;
+    if (old && !old.ended && old.childPid) {
+      void this.watchdogProcs.killTree(old.childPid).catch(() => {
+      });
+    }
     const agent = this.newAgent(
       s.state.cwd,
       s.state.model,
@@ -43246,6 +43277,7 @@ var SessionManager = class {
     s.lastProgressAt = Date.now();
     s.lastProgressKind = "";
     s.wd.phase = "idle";
+    s.wd.gaveUp = false;
     s.unacked.push({ text: firstMessage, images, ts: Date.now() });
     const marker = images && images.length > 0 ? `\uFF08+${images.length} \u56FE\uFF09` : "";
     this.pushExternalLog(s.state.session_id, "user_message", echo ?? truncate(firstMessage, 200) + marker);
@@ -43264,6 +43296,8 @@ var SessionManager = class {
     }
     let inited = false;
     let timer = null;
+    s.streamGen++;
+    s.wd.gaveUp = false;
     const base = this.agentCallbacks(s);
     const fail = (reason) => {
       if (inited) return;
@@ -43511,9 +43545,10 @@ var SessionManager = class {
       if (s.wd.phase !== "recovering") s.wd.phase = "idle";
     }
   }
-  // 恢复：杀树（SIGTERM→3s→SIGKILL）→ 等流收尾 → 防风暴检查 → resume 重拉（带
-  // 未回显消息重放；无消息则 parked 恢复停在等待输入）→ 时间线留"看门狗接管"。
-  // 1h 内已自愈 2 次 → 放弃：转 WAITING + 黄框通知人工介入
+  // 恢复：防风暴检查（1h 内已自愈 2 次 → 放弃：不杀树，转 WAITING + 黄框通知人工
+  // 介入；流若回魂由 gaveUp 自愈翻回 WORKING）→ 杀树（SIGTERM→3s→SIGKILL）→ 等流
+  // 收尾 → resume 重拉（带未回显消息重放；无消息则 parked 恢复停在等待输入）→
+  // 时间线留"看门狗接管"。
   async recoverFromStall(s, lane, stalled, cpuDelta) {
     s.wd.phase = "recovering";
     const sid = s.state.session_id;
@@ -43526,6 +43561,25 @@ var SessionManager = class {
       `\u770B\u95E8\u72D7\u63A5\u7BA1\uFF1A\u4F1A\u8BDD\u6D41\u5DF2 ${Math.round(stalled / 6e4)} \u5206\u949F\u65E0\u8FDB\u5C55\uFF08\u8FDB\u7A0B\u6811 CPU \u7A7A\u95F2\u786E\u8BA4\uFF09\uFF0C\u6B63\u5728\u81EA\u52A8\u6062\u590D`
     );
     try {
+      const hourAgo = Date.now() - 36e5;
+      s.wd.recoveries = s.wd.recoveries.filter((t) => t > hourAgo);
+      if (s.wd.recoveries.length >= 2) {
+        this.bus.emit(sid, "WATCHDOG", { action: "gave_up", lane, detail: `1 \u5C0F\u65F6\u5185\u5DF2\u81EA\u6108 ${s.wd.recoveries.length} \u6B21` });
+        s.wd.gaveUp = true;
+        s.state.status = "WAITING";
+        s.state.action_summary = "\u6D41\u4E2D\u65AD\uFF0C\u81EA\u52A8\u6062\u590D\u5DF2\u8FBE\u4E0A\u9650";
+        s.state.waiting_request = void 0;
+        s.unacked = [];
+        this.pushExternalLog(
+          sid,
+          "system",
+          `\u6D41\u4E2D\u65AD\u81EA\u52A8\u6062\u590D\u5DF2\u8FBE\u4E0A\u9650\uFF081 \u5C0F\u65F6 ${s.wd.recoveries.length} \u6B21\uFF09\uFF0C\u5DF2\u505C\u6B62\u81EA\u6108\u2014\u2014\u8BF7\u5728\u7535\u8111\u7AEF\u68C0\u67E5 CLI\uFF0C\u6216\u624B\u52A8\u53D1\u4E00\u6761\u6D88\u606F\u89E6\u53D1\u6062\u590D\uFF1B\u82E5\u4F1A\u8BDD\u4ECD\u5728\u5DE5\u4F5C\uFF0C\u663E\u793A\u4F1A\u81EA\u52A8\u6062\u590D`
+        );
+        this.notifyConfirm(sid, `\u4F1A\u8BDD\u300C${s.state.title || sid.slice(0, 8)}\u300D\u6D41\u4E2D\u65AD\uFF0C\u81EA\u52A8\u6062\u590D\u5DF2\u8FBE\u4E0A\u9650\uFF0C\u8BF7\u624B\u52A8\u5904\u7406`);
+        this.emitUpdated(s, true);
+        s.wd.phase = "idle";
+        return;
+      }
       if (agent?.childPid) {
         await this.watchdogProcs.killTree(agent.childPid);
       }
@@ -43536,24 +43590,6 @@ var SessionManager = class {
       if (agent && !agent.ended) {
         await agent.stop().catch(() => {
         });
-      }
-      const hourAgo = Date.now() - 36e5;
-      s.wd.recoveries = s.wd.recoveries.filter((t) => t > hourAgo);
-      if (s.wd.recoveries.length >= 2) {
-        this.bus.emit(sid, "WATCHDOG", { action: "gave_up", lane, detail: `1 \u5C0F\u65F6\u5185\u5DF2\u81EA\u6108 ${s.wd.recoveries.length} \u6B21` });
-        s.state.status = "WAITING";
-        s.state.action_summary = "\u6D41\u4E2D\u65AD\uFF0C\u81EA\u52A8\u6062\u590D\u5DF2\u8FBE\u4E0A\u9650";
-        s.state.waiting_request = void 0;
-        s.unacked = [];
-        this.pushExternalLog(
-          sid,
-          "system",
-          `\u6D41\u4E2D\u65AD\u81EA\u52A8\u6062\u590D\u5DF2\u8FBE\u4E0A\u9650\uFF081 \u5C0F\u65F6 ${s.wd.recoveries.length} \u6B21\uFF09\uFF0C\u5DF2\u505C\u6B62\u81EA\u6108\u2014\u2014\u8BF7\u5728\u7535\u8111\u7AEF\u68C0\u67E5 CLI\uFF0C\u6216\u624B\u52A8\u53D1\u4E00\u6761\u6D88\u606F\u89E6\u53D1\u6062\u590D`
-        );
-        this.notifyConfirm(sid, `\u4F1A\u8BDD\u300C${s.state.title || sid.slice(0, 8)}\u300D\u6D41\u4E2D\u65AD\uFF0C\u81EA\u52A8\u6062\u590D\u5DF2\u8FBE\u4E0A\u9650\uFF0C\u8BF7\u624B\u52A8\u5904\u7406`);
-        this.emitUpdated(s, true);
-        s.wd.phase = "idle";
-        return;
       }
       s.wd.recoveries.push(Date.now());
       const pending = s.unacked;
