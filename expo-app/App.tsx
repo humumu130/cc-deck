@@ -705,7 +705,9 @@ function Shell() {
       // 版本弹窗（忽略此版后不再弹）；检查失败静默不打扰
       {
         const info = await checkUpdate();
-        if (info && (await getSkippedVersion()) !== info.version) setUpdateInfo(info);
+        // "miss"（清单双源不可达）是 truthy 字符串，必须显式排除——静默检查只在
+        // 确认拿到新版信息时弹窗，miss 保持安静（手动检查入口另有「检查失败」反馈）
+        if (info && info !== "miss" && (await getSkippedVersion()) !== info.version) setUpdateInfo(info);
       }
     })();
   }, []);

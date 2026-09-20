@@ -4,7 +4,8 @@
 # 动作：base 取 VERSION 文件 → 基线守卫（必须 > latest.json 已发正式版）→ ECS 查最大 test.N
 #       → 烙 <base>-test.N 进 build.gradle+app.json
 #       → arm64 release 构建（R8 按 gradle.properties 现状）→ 推 ECS 版本化文件名 → 直链输出
-# 纪律：test 包只走 ECS 裸 IP 路径，永不进 CF 主域；版本烙印只改工作区不提交
+# 纪律：test 包不上 GitHub Release、不进主域 latest.json/固定名 cc-deck.apk（ECS 裸 IP
+# + CF KV 版本化文件名双源）；版本烙印只改工作区不提交
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
@@ -101,6 +102,17 @@ fi
 printf '{"version":"%s","url":"http://8.133.211.170:8888/cc-deck-%s.apk"%s,"size":%s,"notes":"%s"}' \
   "$VER" "$VER" "$URL_CF_FIELD" "$(stat -f%z "$APK")" "$NOTE_JSON" \
   | $SSH "$ECS_HOST" "cat > $ECS_DIR/latest-test.json"
+# 清单也上 KV（2026-09-20）：ECS 裸 IP 被公司网屏蔽时清单单源会让 App 内检查更新
+# 失明（拿不到清单谎报「已是最新」）——updates.ts 的 TEST_MANIFEST_URLS CF 优先读
+if [ -n "${CLOUDFLARE_API_TOKEN:-}" ]; then
+  $SSH "$ECS_HOST" "cat $ECS_DIR/latest-test.json" > /tmp/latest-test.json.$$
+  if scripts/kv-put-verified.sh "/tmp/latest-test.json.$$" "latest-test.json" >/dev/null 2>&1; then
+    echo "    CF 清单: https://cc.humumu.online/dl/latest-test.json"
+  else
+    echo "    ⚠️ CF 清单上传失败（App 内检查更新在公司网不可达，仅 ECS 可查）"
+  fi
+  rm -f "/tmp/latest-test.json.$$"
+fi
 
 echo "[5/5] 完成"
 SIZE=$(du -h "$APK" | cut -f1)

@@ -22,11 +22,18 @@ const MANIFEST_URLS = [
   "https://cc.humumu.online/dl/latest.json",
   "http://8.133.211.170:8888/latest.json",
 ];
-// 通道隔离（2026-09-18）：test 通道读 ECS 专属清单 latest-test.json（build-test-apk.sh
-// 出包时写入），test 包按纪律只走裸 IP、永不进 CF 主域；release/snap 读双镜像主清单
-//（发版流程写入，只含正式发布）。测试设备由此可在线升级 test 新包，正式/快照设备
-// 永远看不到 test 包（此前 test.11 混入主清单，正式用户会被提示装测试包）。
-const TEST_MANIFEST_URL = "http://8.133.211.170:8888/latest-test.json";
+// 通道隔离（2026-09-18）：test 通道读专属清单 latest-test.json（build-test-apk.sh
+// 出包时写入 ECS + CF KV 双源），release/snap 读双镜像主清单（发版流程写入，只含
+// 正式发布）。测试设备由此可在线升级 test 新包，正式/快照设备永远看不到 test 包
+//（此前 test.11 混入主清单，正式用户会被提示装测试包）。
+// 2026-09-20 清单也上 CF（此前只有 APK 走 url_cf）：用户公司网屏蔽 ECS 裸 IP，
+// 清单单源使检查更新在公司网直接失明——拿不到清单还谎报「已是最新 ✓ <本机旧版>」，
+// 用户表象即「检查更新下载下来的还是 test 3」。纪律实质不变：test 清单/包永不进
+// 主域 latest.json、不用固定名 cc-deck.apk、不上 GitHub Release，只多一份 KV 镜像。
+const TEST_MANIFEST_URLS = [
+  "https://cc.humumu.online/dl/latest-test.json",
+  "http://8.133.211.170:8888/latest-test.json",
+];
 const GH_RELEASE_PAGE = "https://github.com/humumu130/cc-deck/releases/latest";
 // test 包内容 = dev 分支最新构建，无独立 Release 页；「查看完整变更」指提交历史
 const GH_COMMITS_PAGE = "https://github.com/humumu130/cc-deck/commits/dev";
@@ -153,7 +160,7 @@ export async function skipVersion(v: string): Promise<void> {
 async function checkManifest(): Promise<UpdateInfo | null | "miss"> {
   const ch = channelOf(currentVersion());
   // 通道隔离：test 通道只读 ECS 专属清单（单源）；release/snap 读双镜像主清单
-  const urls = ch === "test" ? [TEST_MANIFEST_URL] : MANIFEST_URLS;
+  const urls = ch === "test" ? TEST_MANIFEST_URLS : MANIFEST_URLS;
   for (const url of urls) {
     try {
       const ctrl = new AbortController();
@@ -207,7 +214,10 @@ async function checkManifest(): Promise<UpdateInfo | null | "miss"> {
   return "miss"; // 双清单都不可达 → 走 GitHub API 兜底
 }
 
-export async function checkUpdate(): Promise<UpdateInfo | null> {
+// 返回 "miss" = 双清单（及兜底）都不可达、无法判定有无新版——调用方不得当「已是
+// 最新」报（2026-09-20：用户公司网屏蔽 ECS 裸 IP，清单 miss 曾被谎报成「已是
+// 最新 ✓ <本机旧版>」，表象即「检查更新拿到的还是 test 3」）
+export async function checkUpdate(): Promise<UpdateInfo | null | "miss"> {
   // dev 通道（CI 无 tag 验证包）不参与更新检查：无专属清单，读主清单必被 semver
   // "正式 > 预发布"误判成可升级（0.5.2-dev.90 ← 0.5.2，实为降级提示）。静默检查
   // 不弹窗；手动检查显示"已是最新 ✓ <本机版本>"，换包走 adb/出包脚本
@@ -216,7 +226,7 @@ export async function checkUpdate(): Promise<UpdateInfo | null> {
   const fast = await checkManifest();
   if (fast !== "miss") return fast;
   // GitHub 兜底仅正式/快照通道：test 包不上 GH Releases，兜底只会拿到正式包（版本错配）
-  if (channelOf(currentVersion()) === "test") return null;
+  if (channelOf(currentVersion()) === "test") return "miss";
   try {
     const ctrl = new AbortController();
     const timer = setTimeout(() => ctrl.abort(), FETCH_TIMEOUT_MS);
@@ -230,7 +240,7 @@ export async function checkUpdate(): Promise<UpdateInfo | null> {
       clearTimeout(timer);
     }
     void AsyncStorage.setItem(KEY_LAST_CHECK, String(Date.now())).catch(() => {});
-    if (!res.ok) return null;
+    if (!res.ok) return "miss";
     const rel = (await res.json()) as {
       tag_name?: string;
       assets?: { browser_download_url?: string }[];
@@ -247,7 +257,7 @@ export async function checkUpdate(): Promise<UpdateInfo | null> {
       fullUrl: GH_RELEASE_PAGE,
     };
   } catch {
-    return null;
+    return "miss";
   }
 }
 

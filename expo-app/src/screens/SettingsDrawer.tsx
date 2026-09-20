@@ -128,7 +128,11 @@ function useUpdateCheck() {
     setMsg("检查中…");
     const info = await checkUpdate();
     setBusy(false);
-    if (info) {
+    // "miss" ≠ 已是最新：清单双源都不可达（典型：公司网），谎报会掩盖「其实有新版
+    // 只是查不到」——2026-09-20 用户在公司网检查更新被报「已是最新 ✓ test.3」
+    if (info === "miss") {
+      setMsg("检查失败 · 网络不通？稍后再试");
+    } else if (info) {
       setMsg(`发现新版 v${info.version} ↗`);
       announceUpdate(info);
     } else {
