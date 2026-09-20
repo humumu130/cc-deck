@@ -39,7 +39,9 @@ export const DARK: ThemeColors = {
   faint: "#4A5F78",
   brandA: "#4D9FFF",
   brandB: "#7C6CF2",
-  working: "#FFC53D",
+  // #118 饱和度对齐桌面端 --working（#FFC400）：旧值 #FFC53D 蓝通道偏高发灰，
+  // 用户反馈"黄灯不够显眼、饱和度不够高"
+  working: "#FFC400",
   waiting: "#F0524F",
   error: "#FF7849",
   done: "#2BD98F",
@@ -67,7 +69,8 @@ export const LIGHT: ThemeColors = {
   brandA: "#2F7FE8",
   brandB: "#6F5FE8",
   // 浅色状态四色与网页端 CSS 浅色变量对齐（两端风格一致）
-  working: "#A16207",
+  // #118 同步对齐桌面浅色 --working（#8F6400；旧值 #A16207 同样欠饱和）
+  working: "#8F6400",
   waiting: "#DC2626",
   error: "#C2410C",
   done: "#047857",

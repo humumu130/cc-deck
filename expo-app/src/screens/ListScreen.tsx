@@ -205,7 +205,7 @@ function LiveStat({ s }: { s: SessionState }) {
   return (
     <Text style={styles.liveStat} numberOfLines={1}>
       {s.compacting ? <Text style={{ color: c.working }}>⟳ 压缩上下文 · </Text> : null}
-      {/* #98 黄字降级：摘要回中性灰（浅色 #A16207 对米白 4.41:1 跌破 12px AA 且稀释
+      {/* #98 黄字降级：摘要回中性灰（浅色旧值 #A16207 对米白 4.41:1 跌破 12px AA 且稀释
           WORKING 灯的黄色独占），只留计时/↓token/⟳ 压缩标记黄色——对齐桌面 .c-live
           层级（秒数黄、摘要中性，1162/1164 行；手机此前整行黄=抄漏了层级） */}
       {live ? (
