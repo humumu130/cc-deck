@@ -77,7 +77,8 @@ export const LIGHT: ThemeColors = {
   tintSoft: "rgba(47,127,232,0.06)",
   tintStrong: "rgba(47,127,232,0.13)",
   overlay: "rgba(240,241,236,0.97)",
-  fabBg: "#E2E4DC",
+  // #13 巡检 nit②：#E2E4DC 与页面底近同色，提亮一档拉开层次（描边已有，提底即够）
+  fabBg: "#EDEFE8",
   fabLine: "rgba(52,58,50,0.13)",
   // #23 补：浅色十字/箭头回归品牌橙（与深色 FAB 十字同色），中性面板上保品牌识别
   fabPlus: "#D97757",

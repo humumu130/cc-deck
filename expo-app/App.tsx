@@ -939,11 +939,15 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
   tdFabHit: { flex: 1, alignItems: "center", justifyContent: "center", borderRadius: 14, overflow: "hidden" },
   tdFabT: { color: c.done, fontSize: 17, fontWeight: "700" },
   tdBadge: {
-    position: "absolute", top: -6, right: -6, minWidth: 18, height: 18, borderRadius: 9,
+    // #13 巡检 nit④：-6 偏移让 18px 角标圆与按钮圆角边缘轻微重叠露边，内收 2dp 压实
+    position: "absolute", top: -4, right: -4, minWidth: 18, height: 18, borderRadius: 9,
     paddingHorizontal: 5, backgroundColor: c.done, alignItems: "center", justifyContent: "center",
     elevation: 5,
   },
-  tdBadgeT: { color: "#06281A", fontSize: 11, fontWeight: "800" },
+  // #13 巡检 nit①：深绿底 #047857 配深字 #06281A 对比仅 ~2.9:1，改白 ~5.5:1。
+  // （cfBadgeT 不随改：brandA 是亮蓝 #4D9FFF/#2F7FE8，白字对比 ~2.6:1 反而差于深字
+  //  ~8:1——5.3 Flash「同理改白」的建议在该处不成立，保持深字）
+  tdBadgeT: { color: "#FFFFFF", fontSize: 11, fontWeight: "800" },
   // 展开卡：无标题，任务项两行封顶（大字体时 maxHeight 兜底内部滚动），底部 清除/查看会话 双钮
   tdCard: {
     position: "absolute", left: 12, right: 12, maxHeight: "70%",
@@ -986,7 +990,8 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
   cfFabHit: { flex: 1, alignItems: "center", justifyContent: "center", borderRadius: 14, overflow: "hidden" },
   cfFabT: { color: c.brandA, fontSize: 17, fontWeight: "800" },
   cfBadge: {
-    position: "absolute", top: -6, right: -6, minWidth: 18, height: 18, borderRadius: 9,
+    // #13 巡检 nit④：同 tdBadge 内收 2dp（18px 角标圆压按钮圆角更实，不再露边）
+    position: "absolute", top: -4, right: -4, minWidth: 18, height: 18, borderRadius: 9,
     paddingHorizontal: 5, backgroundColor: c.brandA, alignItems: "center", justifyContent: "center",
     elevation: 5,
   },
