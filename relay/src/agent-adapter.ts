@@ -15,6 +15,7 @@ import type {
   FileChangeStats,
   SessionLogPayload,
   SessionStatus,
+  SubagentInfo,
   TodoItem,
   TokenUsage,
   WaitingPayload,
@@ -136,6 +137,10 @@ export interface AgentCallbacks {
   onContext?(tokens: number): void;
   // TodoWrite 工具调用：最新任务清单全量替换
   onTodos(todos: TodoItem[]): void;
+  // #112 子 Agent 工作状态（SDK 托管会话）：主流程 Task/Agent 工具派生 + parent
+  // 消息流活性 → SubagentInfo 全量（与外部会话 bridge 采集同构，端上 #100/#103
+  // 消费口径不变）。可选：非会话级实现方（标题生成等）无需关心
+  onSubagents?(list: SubagentInfo[]): void;
   onLog(
     kind: SessionLogPayload["kind"],
     text: string,
@@ -206,6 +211,12 @@ export class AgentSession {
   private streamOrder: string[] = [];
   private lastStreamEmit = 0;
   private tasks = new TaskTracker();
+  // #112 子 Agent 账本（SDK 托管会话）：主流程 Task/Agent 工具调用建条目、
+  // tool_result 收尾（bg 除外）、parent_tool_use_id 消息流刷活性。上限 30 与
+  // bridge.trackSubagentStart 对齐；变更才全量回调（session-manager JSON 对比去重）
+  private subagents: SubagentInfo[] = [];
+  // #112：resume 形态标记（init 清空残留账本用，见 case "system"）
+  private readonly resumed: boolean;
   private q: Query;
 
   constructor(
@@ -221,6 +232,7 @@ export class AgentSession {
     if (initialPrompt !== undefined || (opts?.images?.length ?? 0) > 0) {
       this.pushUserMessage(initialPrompt ?? "", opts?.images);
     }
+    this.resumed = Boolean(opts?.resume);
     // 单文件 bundle 部署后 SDK 找不到包内平台二进制（见 cli-path.ts 头注释），
     // 解析失败时给出可行动的中文报错（直通 create 的 ack.error → 客户端 toast）
     const cliPath = resolveClaudeCliPath();
@@ -286,6 +298,7 @@ export class AgentSession {
     } finally {
       this.ended = true;
       this.denyAllPending("session closed");
+      this.closeAllSubagents(); // #112 进程树死=子 Agent 必死，账本收活
       this.cb.onSessionEnd(this.stopping ? "stopped" : "stream closed");
     }
   }
@@ -307,9 +320,15 @@ export class AgentSession {
     ) {
       this.sweepStalePending();
     }
+    // #112 子 Agent 活性：parent 消息 = 该子 Agent 自己的流（其工具调用刷 #103
+    // act 摘要）。放在 switch 前——parent 消息不走主流程日志路径的部分也照刷
+    if (parent) this.feedSubagentActivity(parent, msg);
     switch (msg.type) {
       case "system":
         if (msg.subtype === "init") {
+          // #112 resume 重建：新实例账本为空，上一实例残留的 running 条目已随旧
+          // 进程树消亡——init 即清空下发一次（[] = 端上清空），防 bgRunning 永真
+          if (this.subagents.length || this.resumed) this.cb.onSubagents?.([]);
           this.cb.onInit(msg.session_id, msg.model ?? this.model, msg.permissionMode);
         }
         break;
@@ -363,6 +382,11 @@ export class AgentSession {
               this.cb.onStatusChange("WORKING", this.lastSummary);
             }
           } else if (block.type === "tool_use") {
+            // #112 主流程 Task/Agent 工具调用：子 Agent 派生建账（parent 非空的
+            // tool_use 是子 Agent 内部调用，不建顶层条目——由 feedSubagentActivity 刷 act）
+            if (!parent && (block.name === "Task" || block.name === "Agent") && typeof (block as { id?: unknown }).id === "string") {
+              this.trackSubagentStart((block as { id: string }).id, block.input as Record<string, unknown>);
+            }
             this.lastSummary = summarizeToolUse(block.name, block.input as Record<string, unknown>);
             this.cb.onLog("tool_use", this.lastSummary, {
               tool: block.name,
@@ -416,6 +440,9 @@ export class AgentSession {
             // #35 输出物：tool_use_id 回取登记的文件工具调用，产出一条（无 diff 数据
             // 的失败/中断调用 metrics 为 null 自然跳过；命中即清账防重复配对）
             const callId = (b as { tool_use_id?: unknown }).tool_use_id;
+            // #112 Task/Agent 的 tool_result 到达 = 该子 Agent 收尾（等待型与后台型
+            // 通知在此同形态到达；子 Agent 内部工具的 result id 不命中账本，天然无扰）
+            if (typeof callId === "string" && !parent) this.trackSubagentEnd(callId);
             if (typeof callId === "string" && this.pendingFileUses.has(callId)) {
               const use = this.pendingFileUses.get(callId)!;
               this.pendingFileUses.delete(callId);
@@ -517,6 +544,64 @@ export class AgentSession {
       streaming,
     });
     this.cb.onStatusChange("WORKING", this.lastSummary);
+  }
+
+  // ---------- #112 子 Agent 采集（与外部会话 bridge.ts 同口径）----------
+
+  // 主流程 Task/Agent tool_use：建 running 条目（幂等：同 id 不重建；上限 30 对齐
+  // bridge.trackSubagentStart）。变更才全量回调，深拷贝防端上/状态共享引用
+  private trackSubagentStart(blockId: string, input: Record<string, unknown>): void {
+    if (this.subagents.some((x) => x.id === blockId)) return;
+    const d = typeof input.description === "string" ? input.description.trim() : "";
+    const desc = truncate(d || String(input.prompt ?? "").trim(), 80) || "(子代理)";
+    this.subagents.push({
+      id: blockId,
+      desc,
+      kind: typeof input.subagent_type === "string" && input.subagent_type ? input.subagent_type : "general",
+      bg: input.run_in_background === true,
+      started_at: Date.now(),
+    });
+    if (this.subagents.length > 30) this.subagents.splice(0, this.subagents.length - 30);
+    this.cb.onSubagents?.(this.subagents.map((x) => ({ ...x })));
+  }
+
+  // Task/Agent 的 tool_result 到达 = 该子 Agent 收尾（等待型的执行结果与后台型的
+  // 完成通知在此同形态到达；子 Agent 内部工具的 result id 不命中账本，天然无扰）
+  private trackSubagentEnd(toolUseId: string): void {
+    const i = this.subagents.findIndex((x) => x.id === toolUseId && !x.ended_at);
+    if (i === -1) return;
+    this.subagents[i] = { ...this.subagents[i], ended_at: Date.now() };
+    this.cb.onSubagents?.(this.subagents.map((x) => ({ ...x })));
+  }
+
+  // parent_tool_use_id 消息 = 该子 Agent 自己的流：其 assistant 消息里的 tool_use
+  // 刷 act 摘要（#103 HUD「该子 Agent 在干什么」；assistant 级频率=每 API 调用一条，
+  // 无需节流）。命中账本才有意义（SDK 短暂发未知 parent 的消息时静默）
+  private feedSubagentActivity(parentId: string, msg: SDKMessage): void {
+    const i = this.subagents.findIndex((x) => x.id === parentId && !x.ended_at);
+    if (i === -1 || msg.type !== "assistant") return;
+    const content = (msg.message as { content?: unknown }).content;
+    if (!Array.isArray(content)) return;
+    for (const b of content) {
+      if (b && typeof b === "object" && (b as { type?: string }).type === "tool_use" && typeof (b as { name?: unknown }).name === "string") {
+        this.subagents[i] = {
+          ...this.subagents[i],
+          act: summarizeToolUse((b as { name: string }).name, (b as { input?: unknown }).input as Record<string, unknown>),
+          act_at: Date.now(),
+        };
+        this.cb.onSubagents?.(this.subagents.map((x) => ({ ...x })));
+        return;
+      }
+    }
+  }
+
+  // 会话结束（stop/进程退出）：子 Agent 与会话同进程树，必死——全部收活，防
+  // running 残留让端上 bgRunning 永真（卡不置灰/误报后台在跑）
+  private closeAllSubagents(): void {
+    if (!this.subagents.some((x) => !x.ended_at)) return;
+    const now = Date.now();
+    this.subagents = this.subagents.map((x) => (x.ended_at ? x : { ...x, ended_at: now }));
+    this.cb.onSubagents?.(this.subagents.map((x) => ({ ...x })));
   }
 
   private handlePermission(

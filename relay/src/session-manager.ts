@@ -1914,6 +1914,13 @@ export class SessionManager {
           // 经 setTodos 咽喉点：托管会话的隐藏条目同样被过滤
           this.setTodos(managed.state.session_id, todos);
         },
+        // #112 子 Agent 工作状态（SDK 托管会话）：复用 setExternalSubagents 咽喉
+        //（JSON 对比去重 + SESSION_UPDATED 下发——实现与 external 无耦合，通用）
+        onSubagents: (list) => {
+          if (!mine()) return;
+          touch("subagents");
+          this.setExternalSubagents(managed.state.session_id, list);
+        },
         onUsage: (u) => {
           if (!mine()) return;
           touch("usage");
