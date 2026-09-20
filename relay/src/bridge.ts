@@ -2341,10 +2341,12 @@ export class Bridge {
   // transcript 里的 Agent tool_use 块（真实 call_xxx id）：
   //  - hook 未带 tool_use_id 时 Pre 建的是合成 id（ag-N）——升级为真实 id，后续 task-notification 才能配对
   //  - relay 重启等原因错过 Pre hook 的后台派生：补建条目（结束靠 task-notification）
+  // 注意 list 取法必须是 `?? []`（与 trackSubagentStart 对齐）：state.subagents 初始
+  // 是 undefined，早先的 `if (!list) return` 把"补建条目"路径整个堵死——relay 重启后
+  // 第一个后台子 Agent 永远建不起来，手机/桌面全程误报空闲（#100 复发的第一根因）
   private observeAgentUse(id: string, use: { id: string; input: unknown }): void {
     if (!use.id) return;
-    const list = this.mgr.getExternal(id)?.subagents;
-    if (!list) return;
+    const list = this.mgr.getExternal(id)?.subagents ?? [];
     if (list.some((x) => x.id === use.id)) return;
     const input = (use.input ?? {}) as Record<string, unknown>;
     const desc = Bridge.subagentDesc(input);
@@ -2384,15 +2386,36 @@ export class Bridge {
     this.mgr.setExternalSubagents(id, list.map((x, k) => (k === i ? { ...x, ended_at: Date.now() } : { ...x })));
   }
 
-  // TTL 清理（每 5s 轮询节拍里跑）：已结束保留 10 分钟；running 30 分钟无事件视为僵尸清除
+  // TTL 清理（每轮询节拍里跑）：已结束保留 10 分钟；running 以活性账本优先——
+  // 子 Agent 转录最后一次增长距令超过 30 分钟才判僵尸（真实 CLI 死亡/失控后文件
+  // 停止增长，仍会被清）；无账本记录（旧版 CLI 无转录信号）回落 started_at 旧口径
   private sweepSubagents(): void {
     const now = Date.now();
     for (const s of this.mgr.snapshot()) {
       if (!s.external || !s.subagents?.length) continue;
-      const kept = s.subagents.filter((x) =>
-        x.ended_at ? now - x.ended_at < this.subagentEndTtlMs : now - x.started_at < this.subagentRunTtlMs,
-      );
+      const dropped: string[] = [];
+      const kept = s.subagents.filter((x) => {
+        if (x.ended_at) return now - x.ended_at < this.subagentEndTtlMs;
+        const ok = now - (this.subagentAlive.get(`${s.session_id}:${x.id}`) ?? x.started_at) < this.subagentRunTtlMs;
+        if (!ok) dropped.push(x.id);
+        return ok;
+      });
+      if (dropped.length) {
+        // 清掉的条目同步清活性账本（防 Map 无限膨胀 + 防同 id 复用吃陈旧活性）
+        const prefix = `${s.session_id}:`;
+        for (const k of [...this.subagentAlive.keys()]) {
+          if (k.startsWith(prefix) && dropped.includes(k.slice(prefix.length))) {
+            this.subagentAlive.delete(k);
+            this.subagentFileSize.delete(k);
+          }
+        }
+      }
       if (kept.length !== s.subagents.length) this.mgr.setExternalSubagents(s.session_id, kept);
+    }
+    // 账本兜底上限：会话换代/极端量级时整本清空（丢失代价 = TTL 回落 started_at）
+    if (this.subagentAlive.size > 500) {
+      this.subagentAlive.clear();
+      this.subagentFileSize.clear();
     }
   }
 
@@ -2404,6 +2427,14 @@ export class Bridge {
   // （setExternalSubagents 的 JSON 对比兜底，端上 3s 级感知）。文件缺失（旧版 CLI 无此
   // 目录/已被清理）静默跳过，功能自动降级为无活性
   private subagentAgentIds = new Map<string, string>(); // toolUseId -> agentId（meta 不变，配对缓存复用）
+
+  // running 子 Agent 活性账本（sweepSubagents 僵尸判定的第二时钟）：pollSubagentActivity
+  // 每节拍顺手 stat 子 Agent 转录——文件大小增长 = 还在干活，刷新最后活性时间。
+  // 此前 sweep 对 running 条目按 started_at 一刀切 30min，1h+ 的真实长任务会被当
+  // 僵尸清掉、状态塌回"空闲"（#100 复发的第二根因）。无转录信号（旧版 CLI 无
+  // subagents 目录 / 文件未建）时回落 started_at，行为与旧版一致
+  private subagentAlive = new Map<string, number>();    // `${sid}:${toolUseId}` -> 最后转录增长时间
+  private subagentFileSize = new Map<string, number>(); // 同 key -> 上次见到的文件大小
 
   private resolveSubagentAgent(dir: string, toolUseId: string): string | null {
     const cached = this.subagentAgentIds.get(toolUseId);
@@ -2489,7 +2520,18 @@ export class Bridge {
         if (cur.ended_at) continue;
         const agentId = this.resolveSubagentAgent(dir, cur.id);
         if (!agentId) continue;
-        const act = this.subagentActivity(path.join(dir, `agent-${agentId}.jsonl`));
+        const agentFile = path.join(dir, `agent-${agentId}.jsonl`);
+        // 活性账本：转录在长 = 子 Agent 在干活（同一工具跑 40 分钟不换 act 也在写
+        // tool_result），比 act 变化更钝但更稳；首次见到也算活（自举）
+        const aliveKey = `${s.session_id}:${cur.id}`;
+        try {
+          const sz = statSync(agentFile).size;
+          if (this.subagentFileSize.get(aliveKey) !== sz) {
+            this.subagentFileSize.set(aliveKey, sz);
+            this.subagentAlive.set(aliveKey, Date.now());
+          }
+        } catch {}
+        const act = this.subagentActivity(agentFile);
         if (act === null || act === cur.act) continue;
         next = next ?? s.subagents.map((x) => ({ ...x }));
         next[i] = { ...next[i], act, act_at: Date.now() };

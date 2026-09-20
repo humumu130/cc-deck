@@ -579,6 +579,62 @@ await wait(150);
   rmSync(dir, { recursive: true, force: true });
 }
 
+// 28c. #100 复发根因回归：
+//      ① relay 重启后 subagents 状态丢失——transcript 里的后台 Agent tool_use 必须能从
+//         空列表自举补建（旧版 observeAgentUse 的 `if (!list) return` 把补建路径堵死，
+//         重启后第一个后台子 Agent 永远建不起来 → 全程误报空闲）；前台 tool_use 不自举
+//        （fg 结束不产生 task-notification，自举会造出只能等 TTL 的幽灵条目）
+//      ② running 清扫按子 Agent 转录增长活性判僵尸：文件在长的长任务不被
+//         started_at + RUN_TTL 一刀切清掉；无转录信号回落 started_at（旧口径）
+{
+  const { writeFileSync, appendFileSync, mkdirSync } = await import("node:fs");
+  const T = fileURLToPath(new URL("../data/test-transcript.jsonl", import.meta.url));
+  rmSync(T, { force: true });
+  writeFileSync(T, JSON.stringify({ type: "assistant", message: { role: "assistant", content: [{ type: "text", text: "基线28c" }] } }) + "\n");
+  const sid = extId("cli-28c");
+  const subsOf = () => mgr.snapshot().find((s) => s.session_id === sid)?.subagents ?? [];
+  const sweep = () => (bridge as unknown as { sweepSubagents(): void }).sweepSubagents();
+  const poll = () => (bridge as unknown as { pollSubagentActivity(): void }).pollSubagentActivity();
+  await hook({ event: "UserPromptSubmit", session_id: "cli-28c", prompt: "自举测试回合", cli_pid: process.pid, transcript_path: T });
+  // ① 无 Pre hook（模拟 relay 重启错过派生）——transcript 落 bg tool_use 后经转录轮询自举
+  appendFileSync(T, JSON.stringify({ type: "assistant", message: { role: "assistant", content: [{ type: "tool_use", id: "call_boot1", name: "Agent", input: { description: "重启后自举", run_in_background: true } }] } }) + "\n");
+  appendFileSync(T, JSON.stringify({ type: "assistant", message: { role: "assistant", content: [{ type: "tool_use", id: "call_fgboot1", name: "Agent", input: { description: "前台不自举", run_in_background: false } }] } }) + "\n");
+  await hook({ event: "PostToolUse", session_id: "cli-28c", tool_name: "Bash", tool_response: "ok", transcript_path: T });
+  const booted = subsOf().find((x) => x.id === "call_boot1");
+  assert(booted?.bg === true && booted?.ended_at === undefined, "28c bg tool_use bootstraps entry from empty subagents list");
+  assert(!subsOf().some((x) => x.id === "call_fgboot1"), "28c foreground tool_use does NOT bootstrap (ghost-entry guard)");
+  // ② 活性清扫：子 Agent 转录存在且在长 → started_at 远超 RUN_TTL（3s）也不清
+  const dir = T.replace(/\.jsonl$/, "") + "/subagents";
+  mkdirSync(dir, { recursive: true });
+  writeFileSync(dir + "/agent-ag28c01.meta.json", JSON.stringify({ toolUseId: "call_boot1", agentType: "general-purpose", requestShape: "background" }));
+  const agFile = dir + "/agent-ag28c01.jsonl";
+  writeFileSync(agFile, JSON.stringify({ type: "assistant", message: { role: "assistant", content: [{ type: "tool_use", id: "t1", name: "Bash", input: { description: "长任务" } }] } }) + "\n");
+  poll(); // 首见转录 → 活性账本记账（now）
+  // 注意从活状态取条目（snapshot() 是深拷贝，改快照改不到真实状态）
+  const live1 = mgr.getExternal(sid)?.subagents?.find((x) => x.id === "call_boot1");
+  assert(live1 !== undefined, "28c entry present before liveness sweep");
+  live1!.started_at = Date.now() - 60_000; // 伪装 1h44m 级长任务：started_at 早超 RUN_TTL
+  appendFileSync(agFile, JSON.stringify({ type: "assistant", message: { role: "assistant", content: [{ type: "tool_use", id: "t2", name: "Read", input: { file_path: "/tmp/y.md" } }] } }) + "\n");
+  poll(); // 转录增长 → 活性刷新
+  sweep();
+  assert(subsOf().some((x) => x.id === "call_boot1" && x.ended_at === undefined), "28c growing long-running subagent survives TTL sweep");
+  // ③ 僵尸：转录停止增长且活性记录超 RUN_TTL → 清（含活性账本同步清理）
+  const aliveMap = (bridge as unknown as { subagentAlive: Map<string, number> }).subagentAlive;
+  aliveMap.set(`${sid}:call_boot1`, Date.now() - 60_000); // 伪装最后一次增长在 1 分钟前
+  sweep();
+  assert(!subsOf().some((x) => x.id === "call_boot1"), "28c stale liveness beyond TTL swept as zombie");
+  assert(!aliveMap.has(`${sid}:call_boot1`), "28c liveness ledger cleaned with swept entry");
+  // ④ 回落口径：无转录信号（无 meta 文件）的 running 条目按 started_at 判僵尸（旧版行为）
+  await hook({ event: "PreToolUse", session_id: "cli-28c", tool_name: "Agent", tool_use_id: "call_nosig", tool_input: { description: "无信号子代理", run_in_background: true }, permission_mode: "default" });
+  const nosig = mgr.getExternal(sid)?.subagents?.find((x) => x.id === "call_nosig");
+  assert(nosig !== undefined, "28c no-signal entry created via Pre hook");
+  nosig!.started_at = Date.now() - 60_000;
+  sweep();
+  assert(!subsOf().some((x) => x.id === "call_nosig"), "28c no-signal running entry falls back to started_at TTL");
+  rmSync(T, { force: true });
+  rmSync(dir, { recursive: true, force: true });
+}
+
 // 29. 排队消息滞留输入框看门狗：滞留补发回车、WAITING 严禁、送达后不再触发、连续 3 次后放弃
 {
   const { writeFileSync } = await import("node:fs");
