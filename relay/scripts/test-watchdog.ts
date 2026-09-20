@@ -280,6 +280,45 @@ async function main(): Promise<void> {
   await wait(200);
   assert(created.length === countAfterGiveup, "E 放弃后不再拉起新 agent");
 
+  // ===== H. #109 放弃路径重构：不预杀树 + 流回调自愈翻回 WORKING + 手动接管补刀旧树 =====
+  const recE2 = created[created.length - 1]; // 放弃时仍挂着的 agent（第 2 轮重拉的那个）
+  assert(!recE2.agent.ended, "H 放弃路径未预杀树（agent 仍挂着）");
+  assert(!killedPids.includes(recE2.agent.childPid!), "H 放弃时未发杀树指令");
+  // H1 流回魂：任何流回调都是活体证据 → 撤销放弃、翻回 WORKING
+  recE2.cb.onLog("assistant_text", "其实流还活着");
+  assert(await waitFor(() => stateOf(sidE)?.status === "WORKING"), "H1 流回调 → 自愈翻回 WORKING");
+  assert(hasSysLog(sidE, "已自动撤销等待状态"), "H1 时间线留自愈说明");
+  // H2 自愈后发消息走活流（不 resume）：同 agent 收到，不拉新 agent
+  const createdBeforeH2 = created.length;
+  const hMsg = ack({ command_id: "m-h1", type: "COMMAND_MESSAGE", payload: { session_id: sidE, text: "自愈后的消息" }, ts: Date.now() });
+  assert(hMsg.ok === true, "H2 自愈后消息 ack");
+  assert(recE2.agent.sent.some((m) => m.text === "自愈后的消息"), "H2 消息进活流（同 agent sendMessage）");
+  assert(created.length === createdBeforeH2, "H2 未拉新 agent");
+  // H3 再次停滞 → 滑窗内仍 2 次 → 再放弃（依旧不杀）；手动消息 → resume 接管 + 补刀旧树
+  cpuFeed = [100, 100];
+  hush();
+  await wait(QUIET_SLOW);
+  arm();
+  mgr.tickWatchdog();
+  assert(await waitFor(() => wdCount("gave_up") >= 2), "H3 再次放弃（滑窗内仍 2 次）");
+  assert(await waitFor(() => stateOf(sidE)?.status === "WAITING"), "H3 再次 WAITING");
+  const createdBeforeH3 = created.length;
+  const oldPidH = recE2.agent.childPid!;
+  const hMsg2 = ack({ command_id: "m-h2", type: "COMMAND_MESSAGE", payload: { session_id: sidE, text: "手动恢复" }, ts: Date.now() });
+  assert(hMsg2.ok === true, "H3 手动消息 ack");
+  assert(await waitFor(() => created.length === createdBeforeH3 + 1), "H3 resume 拉起新 agent");
+  assert(created[created.length - 1].prompt === "手动恢复", "H3 重放手动消息");
+  assert(await waitFor(() => killedPids.includes(oldPidH)), "H3 接管补刀旧树（无孤儿进程）");
+  assert(await waitFor(() => stateOf(sidE)?.status === "WORKING"), "H3 接管后 WORKING");
+  // H4 流身份守卫：旧流（补刀收尾 / 回魂）事件整体忽略——不改状态、不进时间线
+  assert(stateOf(sidE)?.status === "WORKING", "H4 补刀收尾回调未污染新流状态");
+  recE2.cb.onLog("assistant_text", "旧流幽灵消息");
+  assert(
+    !events.some((e) => e.type === "SESSION_LOG" && e.session_id === sidE && String((e.payload as { text?: string }).text ?? "").includes("旧流幽灵消息")),
+    "H4 旧流事件不进时间线",
+  );
+  assert(stateOf(sidE)?.status === "WORKING", "H4 旧流不翻状态");
+
   // ===== F. 禁用开关：同条件一关一开对照 =====
   const f1 = ack({ command_id: "c-f1", type: "COMMAND_CREATE", payload: { cwd: process.cwd(), prompt: "看门狗 F 禁用对照" }, ts: Date.now() });
   const sidF = f1.session_id!;

@@ -323,11 +323,16 @@ interface ManagedSession {
   // 已被 CLI 处理过的消息在 transcript 里，重放会重复）
   unacked: { text: string; images?: string[]; ts: number }[];
   wd: WatchdogState;
+  // #109 流代际：resumeAgent/reviveSaved 换流前递增。回调闭包按创建时代际比对，
+  // 不匹配即忽略——旧流的任何后续事件（接管补刀的收尾回调 / 网络回魂）不再写
+  // 状态/时间线/用量，双流并发写同一会话在此根治
+  streamGen: number;
 }
 
 interface WatchdogState {
   phase: "idle" | "sampling" | "recovering";
   recoveries: number[]; // 自愈时间戳（1h 滑窗，≥2 次后放弃自愈转人工）
+  gaveUp: boolean; // #109 已放弃自愈：touch() 见流回调即翻回 WORKING（放弃态误判自愈）
 }
 
 const UPDATE_THROTTLE_MS = 2000;   // 同状态下的 SESSION_UPDATED 节流
@@ -573,7 +578,7 @@ export class SessionManager {
         rs.state.title = ov;
         rs.state.title_locked = true;
       }
-      this.sessions.set(id, { agent: null, state: rs.state, logs: rs.logs, lastUpdateEmit: 0, lastProgressAt: 0, lastProgressKind: "", unacked: [], wd: { phase: "idle", recoveries: [] } });
+      this.sessions.set(id, { agent: null, state: rs.state, logs: rs.logs, lastUpdateEmit: 0, lastProgressAt: 0, lastProgressKind: "", unacked: [], wd: { phase: "idle", recoveries: [], gaveUp: false }, streamGen: 0 });
       this.applyDeclaredDeliverables(id);
       adopted++;
     }
@@ -724,7 +729,7 @@ export class SessionManager {
       state.title = ov;
       state.title_locked = true;
     }
-    this.sessions.set(id, { agent: null, state, logs: [], lastUpdateEmit: 0, lastProgressAt: 0, lastProgressKind: "", unacked: [], wd: { phase: "idle", recoveries: [] } });
+    this.sessions.set(id, { agent: null, state, logs: [], lastUpdateEmit: 0, lastProgressAt: 0, lastProgressKind: "", unacked: [], wd: { phase: "idle", recoveries: [], gaveUp: false }, streamGen: 0 });
     this.applyDeclaredDeliverables(id);
     this.bus.emit(id, "SESSION_CREATED", {
       cwd: state.cwd,
@@ -1262,8 +1267,9 @@ export class SessionManager {
               return { command_id: cmd.command_id, ok: false, error: "文件保存失败（临时目录不可写）" };
             }
           }
-          // agent 已死（Relay 重启遗留 / stop 收尾）：有 SDK 会话 id 就地 resume 复活
-          if (!s.agent || s.agent.ended) {
+          // agent 已死（Relay 重启遗留 / stop 收尾）或已放弃自愈（#109：放弃路径不再
+          // 预杀树，僵流可能还挂着）：有 SDK 会话 id 就地 resume 复活（接管时补刀旧树）
+          if (!s.agent || s.agent.ended || s.wd.gaveUp) {
             this.resumeAgent(s, text, sanitizeImages(cmd.payload.images), echo);
             return { command_id: cmd.command_id, ok: true };
           }
@@ -1769,7 +1775,8 @@ export class SessionManager {
       lastProgressAt: Date.now(),
       lastProgressKind: "",
       unacked: [],
-      wd: { phase: "idle", recoveries: [] },
+      wd: { phase: "idle", recoveries: [], gaveUp: false },
+      streamGen: 0,
     };
 
     const agent = this.newAgent(
@@ -1803,13 +1810,33 @@ export class SessionManager {
 
   // AgentSession 回调：create 与 resume 共用（状态机与事件下发完全一致）
   private agentCallbacks(managed: ManagedSession): AgentCallbacks {
+    // #109 流身份守卫：闭包捕获创建时代际；resumeAgent/reviveSaved 换流前递增
+    // managed.streamGen——旧流再吐任何事件（接管补刀的收尾 / 网络回魂）都过不了
+    // 代际比对，各回调整体忽略
+    const gen = managed.streamGen;
+    const mine = (): boolean => managed.streamGen === gen;
     // #7 看门狗：任何流回调都算"活着"，推进锚点
     const touch = (kind: string): void => {
+      if (!mine()) return;
+      // #109 放弃态自愈：防风暴放弃后 WAITING 钉死——onLog 不翻状态、onStatusChange
+      // 回合中不来，被误判的活流只能干等人工（今晚案例：relay 重启拉活后卡片恒显
+      // 「等待 CLI 输入」而流实际在工作）。任何流回调都是活体证据：翻回 WORKING
+      // 并撤销放弃标记
+      if (managed.wd.gaveUp) {
+        managed.wd.gaveUp = false;
+        managed.state.status = "WORKING";
+        managed.state.action_summary = "流已恢复";
+        managed.state.waiting_request = undefined;
+        managed.state.turn_started_at = Date.now();
+        this.pushExternalLog(managed.state.session_id, "system", "检测到会话流仍在工作，已自动撤销等待状态");
+        this.emitUpdated(managed, true);
+      }
       managed.lastProgressAt = Date.now();
       managed.lastProgressKind = kind;
     };
     return {
         onInit: (sdkId, model, permissionMode) => {
+          if (!mine()) return;
           touch("init");
           // #307：托管子会话 sid 即时落盘 child-sessions.json——relay 在此刻之后
           // 任意时点重启，孤儿扫描都认得它是自己的（不再被收养成"relay"垃圾会话）
@@ -1823,6 +1850,7 @@ export class SessionManager {
           this.emitUpdated(managed, true);
         },
         onStatusChange: (status, summary) => {
+          if (!mine()) return;
           touch(status === "WORKING" ? "status_working" : "status");
           // 审批弹窗死锁根治③：status 与 waiting_request 必须同进退——端上卡片按钮
           // 只看 waiting_request、详情弹窗只看 status，任一帧让两者脱钩（status 翻走
@@ -1843,6 +1871,7 @@ export class SessionManager {
           this.emitUpdated(managed, changed || cleared);
         },
         onWaiting: (p) => {
+          if (!mine()) return;
           touch("waiting");
           managed.state.status = "WAITING";
           managed.state.waiting_request = p;
@@ -1850,6 +1879,7 @@ export class SessionManager {
           this.bus.emit(managed.state.session_id, "SESSION_WAITING", p);
         },
         onWaitingResolved: (requestId, decision, resolvedBy) => {
+          if (!mine()) return;
           touch("waiting_resolved");
           // 根治③续：仅当决议针对"当前挂起"的请求才收口状态——孤儿请求补发的
           // superseded 理论上可能晚于下一个 WAITING 到达（多端并发决议的时序窗口），
@@ -1870,18 +1900,22 @@ export class SessionManager {
           });
         },
         onStats: (stats) => {
+          if (!mine()) return;
           touch("stats");
           managed.state.stats = stats;
         },
         // #35 输出物：SDK 工具结果单条合并（agent-adapter 从 tool_use/tool_result 配对产出）
         onArtifacts: (item) => {
+          if (!mine()) return;
           this.mergeArtifact(managed.state.session_id, item);
         },
         onTodos: (todos) => {
+          if (!mine()) return;
           // 经 setTodos 咽喉点：托管会话的隐藏条目同样被过滤
           this.setTodos(managed.state.session_id, todos);
         },
         onUsage: (u) => {
+          if (!mine()) return;
           touch("usage");
           // result 消息是每回合一条，usage 为回合聚合量（回合内各次调用之和）：只累计
           // 会话总量。#72：聚合值 ≠ 当前窗口占用（重回合恒超窗口上限，曾把水位钉死
@@ -1899,12 +1933,14 @@ export class SessionManager {
         // usage，in+cr+cc = 该次调用实际送入的上下文，覆盖式——压缩后自然回落。
         // 可选回调：旧实现方（标题生成等假 agent）不实现也不影响
         onContext: (tokens: number) => {
+          if (!mine()) return;
           touch("context");
           if (tokens > 0) managed.state.context_usage = tokens;
           managed.state.context_limit = contextLimitOf(managed.state.model);
           this.emitUpdated(managed, false);
         },
         onLog: (kind, text, meta) => {
+          if (!mine()) return;
           touch(kind);
           // #7 看门狗消息重放账：流回显 user_message = CLI 真正收到了这条消息
           //（echo 文案带"（+N 图）"尾缀，匹配前剥掉；normalize 口径与手机端一致）
@@ -1924,6 +1960,7 @@ export class SessionManager {
           this.bus.emit(managed.state.session_id, "SESSION_LOG", entry);
         },
         onTurnEnd: (ok, reason, durationMs) => {
+          if (!mine()) return;
           // #7 看门狗恢复期：杀树时 CLI 可能吐出最后的 interrupted result——状态
           // 归恢复流程接管（resumeAgent 紧接着设 WORKING），此处让位避免 ERROR/DONE
           // 假终态帧闪现
@@ -1948,6 +1985,7 @@ export class SessionManager {
           }
         },
         onSessionEnd: (reason) => {
+          if (!mine()) return;
           // #7 看门狗：恢复期旧 agent 流被杀关闭是预期步骤，不产生 DONE 假终态
           //（状态由恢复流程接管）；其余路径（进程自然退出/stop 收尾）照旧收口，
           // 并复位采样相位——新 agent 由 resumeAgent/reviveSaved 重新起算
@@ -1974,6 +2012,13 @@ export class SessionManager {
     if (!sdkId) {
       throw new Error("会话已结束且无 SDK 会话记录，无法恢复（模型尚未完成初始化）");
     }
+    // #109 旧流收尾：放弃路径不再预杀树，接管时在此补刀（防孤儿进程/双流并发）。
+    // 代际递增先于补刀——旧流的收尾回调过不了身份守卫，不会污染新流状态
+    const old = s.agent;
+    s.streamGen++;
+    if (old && !old.ended && old.childPid) {
+      void this.watchdogProcs.killTree(old.childPid).catch(() => {});
+    }
     const agent = this.newAgent(
       s.state.cwd,
       s.state.model,
@@ -1994,6 +2039,7 @@ export class SessionManager {
     s.lastProgressAt = Date.now();
     s.lastProgressKind = "";
     s.wd.phase = "idle";
+    s.wd.gaveUp = false;
     s.unacked.push({ text: firstMessage, images, ts: Date.now() });
     const marker = images && images.length > 0 ? `（+${images.length} 图）` : "";
     this.pushExternalLog(s.state.session_id, "user_message", echo ?? truncate(firstMessage, 200) + marker);
@@ -2013,6 +2059,9 @@ export class SessionManager {
     }
     let inited = false;
     let timer: ReturnType<typeof setTimeout> | null = null;
+    // #109 换流代际递增 + 撤销放弃标记（resumeAgent 同口径：新流身份从现在起算）
+    s.streamGen++;
+    s.wd.gaveUp = false;
     const base = this.agentCallbacks(s);
     const fail = (reason: string): void => {
       if (inited) return;
@@ -2286,9 +2335,10 @@ export class SessionManager {
     }
   }
 
-  // 恢复：杀树（SIGTERM→3s→SIGKILL）→ 等流收尾 → 防风暴检查 → resume 重拉（带
-  // 未回显消息重放；无消息则 parked 恢复停在等待输入）→ 时间线留"看门狗接管"。
-  // 1h 内已自愈 2 次 → 放弃：转 WAITING + 黄框通知人工介入
+  // 恢复：防风暴检查（1h 内已自愈 2 次 → 放弃：不杀树，转 WAITING + 黄框通知人工
+  // 介入；流若回魂由 gaveUp 自愈翻回 WORKING）→ 杀树（SIGTERM→3s→SIGKILL）→ 等流
+  // 收尾 → resume 重拉（带未回显消息重放；无消息则 parked 恢复停在等待输入）→
+  // 时间线留"看门狗接管"。
   private async recoverFromStall(s: ManagedSession, lane: "slow" | "fast", stalled: number, cpuDelta: number): Promise<void> {
     s.wd.phase = "recovering";
     const sid = s.state.session_id;
@@ -2301,6 +2351,29 @@ export class SessionManager {
       `看门狗接管：会话流已 ${Math.round(stalled / 60000)} 分钟无进展（进程树 CPU 空闲确认），正在自动恢复`,
     );
     try {
+      // #109 防风暴检查前置到杀树之前：放弃 = 承诺停止干预，而杀树恰是最重的干预
+      // ——误判时（网络长等待 CPU 空闲被判僵死）先杀后弃把活会话弄死，WAITING 钉死
+      // 后只能人工重建。真僵尸不杀也无害：放弃态由 gaveUp 自愈守卫看住，手动消息
+      // 触发的 resume 接管时会补刀旧树（无孤儿进程）
+      const hourAgo = Date.now() - 3600_000;
+      s.wd.recoveries = s.wd.recoveries.filter((t) => t > hourAgo);
+      if (s.wd.recoveries.length >= 2) {
+        this.bus.emit(sid, "WATCHDOG", { action: "gave_up", lane, detail: `1 小时内已自愈 ${s.wd.recoveries.length} 次` });
+        s.wd.gaveUp = true;
+        s.state.status = "WAITING";
+        s.state.action_summary = "流中断，自动恢复已达上限";
+        s.state.waiting_request = undefined;
+        s.unacked = [];
+        this.pushExternalLog(
+          sid,
+          "system",
+          `流中断自动恢复已达上限（1 小时 ${s.wd.recoveries.length} 次），已停止自愈——请在电脑端检查 CLI，或手动发一条消息触发恢复；若会话仍在工作，显示会自动恢复`,
+        );
+        this.notifyConfirm(sid, `会话「${s.state.title || sid.slice(0, 8)}」流中断，自动恢复已达上限，请手动处理`);
+        this.emitUpdated(s, true);
+        s.wd.phase = "idle";
+        return;
+      }
       if (agent?.childPid) {
         await this.watchdogProcs.killTree(agent.childPid);
       }
@@ -2311,25 +2384,6 @@ export class SessionManager {
       }
       if (agent && !agent.ended) {
         await agent.stop().catch(() => {});
-      }
-      // 防风暴：1h 滑窗内已自愈 ≥2 次不再拉起
-      const hourAgo = Date.now() - 3600_000;
-      s.wd.recoveries = s.wd.recoveries.filter((t) => t > hourAgo);
-      if (s.wd.recoveries.length >= 2) {
-        this.bus.emit(sid, "WATCHDOG", { action: "gave_up", lane, detail: `1 小时内已自愈 ${s.wd.recoveries.length} 次` });
-        s.state.status = "WAITING";
-        s.state.action_summary = "流中断，自动恢复已达上限";
-        s.state.waiting_request = undefined;
-        s.unacked = [];
-        this.pushExternalLog(
-          sid,
-          "system",
-          `流中断自动恢复已达上限（1 小时 ${s.wd.recoveries.length} 次），已停止自愈——请在电脑端检查 CLI，或手动发一条消息触发恢复`,
-        );
-        this.notifyConfirm(sid, `会话「${s.state.title || sid.slice(0, 8)}」流中断，自动恢复已达上限，请手动处理`);
-        this.emitUpdated(s, true);
-        s.wd.phase = "idle";
-        return;
       }
       s.wd.recoveries.push(Date.now());
       const pending = s.unacked;
