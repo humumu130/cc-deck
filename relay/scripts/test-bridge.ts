@@ -1801,7 +1801,10 @@ assert(!mgr.getExternal("ext-ff11bb22-cc33-dd44-ee55-ff6677889900"), "67 multi-t
   assert((await waitAck(v3)).ok, "111 third msg acked");
   await waitLog(() => enters111() >= entersAfterCap + 1, 5000);
   assert(enters111() >= entersAfterCap + 1, "111 post-promotion stuck still gets fast verify (watchdog reset)");
-  assert(sysLogFrom("#111 主动验证", evIdx3), "111 reset makes fresh verify log (tries back to 1)");
+  // reset 判别放宽（#84 CI flaky）：本质是「tries 回 1 后的新鲜补发日志」——任何路径
+  // tries=1/2 都打日志，无 reset 时 tries≥4 静默。CI 慢机注入链可超 2s 首窗阈值，
+  // 看门狗先于快验补发时文案是看门狗版「已补发回车」——两只都是 reset 生效的证据
+  assert(sysLogFrom("#111 主动验证", evIdx3) || sysLogFrom("已补发回车", evIdx3), "111 reset makes fresh verify log (tries back to 1)");
 
   // ④ WAITING（权限弹窗/审批挂起）→ 主动验证严禁补发（回车会误触弹窗）。
   //    验证窗拉到 1500ms 给注入→翻态留余量
@@ -1944,7 +1947,14 @@ assert(!mgr.getExternal("ext-ff11bb22-cc33-dd44-ee55-ff6677889900"), "67 multi-t
   const enters50c = () => fakeLog().filter((a) => a[0] === "5077" && a[1] === "").length;
   await hook({ event: "UserPromptSubmit", session_id: "cli-50c", prompt: "粘滞计数回合", cli_pid: 5077, cwd: "/tmp" });
   mgr.setExternalPending(extId("cli-50c"), [{ text: "粘滞的滞留消息", ts: Date.now() - 9000 }]);
-  await wait(9000); // CCR_STUCK_AFTER_MS=2000 / RETRY=1500：3 次补发后 given_up
+  // 等第 3 发留痕而非固定 9s（#84 CI flaky 根治，4/5 复发口径「got 2」）：3s 拍相位
+  // 偏晚 + 守门链/注入器子进程落盘慢（CI 高负载秒级）时，第 3 发落在 9s 窗外或其
+  // 落盘未追平，wait 醒来同步读必少 1。tries===3 跃迁在 relay 进程内同步写 mgr 日志
+  // （「暂停自动补发」），先等它（15s 兜底：首拍相位 3s + 两拍 6s×慢机放大 + 链路
+  // 余量）再等 fakeLog 追平；「恰好 3 次」上界由 given_up 门槛（第 3 发同拍同步
+  // 置位）+ 后续 flicker 断言的 6000ms 窗（> 一个 3s 拍周期）兜底，等法不弱化断言
+  await waitLog(() => logsOf("cli-50c").some((t) => t.includes("暂停自动补发")), 15_000);
+  await waitLog(() => enters50c() >= 3, 5000);
   const fired = enters50c();
   assert(fired === 3, `50 sticky tries exactly three (got ${fired})`);
   mgr.setExternalStatus(extId("cli-50c"), "WAITING", "权限确认");
