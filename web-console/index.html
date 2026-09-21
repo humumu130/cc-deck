@@ -1676,7 +1676,10 @@
     color: var(--dim); border-radius: 8px; padding: 3px 7px; margin-left: -7px;
   }
   .tline:hover { background: var(--code-bg); }
-  .tline .tico { flex: none; color: var(--faint); }
+  /* #120：工具行图标列 28px 与 AI 头像同宽、字形居中——图标中心对齐头像中心
+     （原 tico 贴行首与头像左缘平齐，小图标吊在大头像左肩显丑）；tname 起点随之
+     落到 35px ≈ 正文列 37px，工具名与消息正文近于共线，列感更整齐 */
+  .tline .tico { flex: none; color: var(--faint); width: 28px; text-align: center; }
   .tline .tname { font-weight: 600; }
   .tname { color: var(--dim); font-weight: 600; } /* #102 收敛②之首：工具行是转录行数最多元素，橙字量立减约八成 */
   .tres { color: var(--faint); }
