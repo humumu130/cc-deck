@@ -62,7 +62,10 @@ echo "    $(basename "$EXE") ($(stat -f%z "$EXE")B)"
 
 echo "[3/5] exe 双源上传…"
 $SCP -q "$EXE" "$ECS_HOST:$ECS_DIR/$EXE_KEY"
-$SSH "$ECS_HOST" "[ \"\$(md5 -q - 2>/dev/null || md5sum | awk '{print \$1}')\" ] ; md5sum $ECS_DIR/$EXE_KEY | awk '{print \"ECS md5:\", \$1}'"
+LOCAL_MD5=$(md5 -q "$EXE")
+ECS_MD5=$($SSH "$ECS_HOST" "md5sum $ECS_DIR/$EXE_KEY" | awk '{print $1}')
+[ "$LOCAL_MD5" = "$ECS_MD5" ] || { echo "ERR: ECS exe md5 不一致 local=$LOCAL_MD5 remote=$ECS_MD5"; exit 1; }
+echo "    ECS md5 校验一致"
 scripts/kv-put-verified.sh "$EXE" "$EXE_KEY"
 
 echo "[4/5] 生成并上传 $MANIFEST_KEY（双源，url 各指本源）…"
