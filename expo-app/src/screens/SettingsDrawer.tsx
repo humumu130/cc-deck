@@ -265,6 +265,13 @@ export default function SettingsDrawer({
     setIdleDimMin(v);
     setIdleDimText(String(v));
   };
+  // #130 标签旁 ⓘ：原次行注脚「负数 = 永不变灰」收进弹窗（行高与上下设置行对齐）
+  const idleDimHelp = () => {
+    Alert.alert(
+      "空闲变灰",
+      "会话停止活动超过设定分钟数后，列表里显示为灰色。\n\n填负数 = 永不变灰；留空或非法值回落默认 30 分钟。",
+    );
+  };
   const snap = useRelay();
   const [servers, setServers] = useState<ServerEntry[]>([]);
   rebuildSrvColors(servers.map((s) => s.id));
@@ -657,29 +664,31 @@ export default function SettingsDrawer({
           <Lever options={FONT_OPTS} value={processFont} onChange={setProcessFont} />
         </View>
         {/* #121 空闲变灰阈值（分钟）：数字输入（不锁数字键盘——要能输负号），失回提交。
-            #130 拆两行：输入框+「分钟」独占首行右侧，「负数 = 永不变灰」降次行注脚（永不截断） */}
-        <View style={d.setItem}>
-          <View style={d.setRow}>
-            <View style={d.setL}>
-              <LineIcon path={ICON_MOON} />
-              <Text style={d.setLabel}>空闲变灰</Text>
-            </View>
-            <View style={d.numRow}>
-              <TextInput
-                style={d.numInput}
-                value={idleDimText}
-                onChangeText={setIdleDimText}
-                onEndEditing={commitIdleDim}
-                onSubmitEditing={commitIdleDim}
-                returnKeyType="done"
-                placeholder="30"
-                placeholderTextColor={c.faint}
-                selectTextOnFocus
-              />
-              <Text style={d.numUnit}>分钟</Text>
-            </View>
+            #130 反馈（2026-09-21 用户真机）：该栏比上下行高一截不齐——原 numNote 次行
+            （+15）与 30 高输入框所致。改与「过程消息」「回车发送」完全同构的单行，
+            「负数 = 永不变灰」语义收进标签旁 ⓘ 弹窗 */}
+        <View style={[d.setItem, d.setRow]}>
+          <View style={d.setL}>
+            <LineIcon path={ICON_MOON} />
+            <Text style={d.setLabel}>空闲变灰</Text>
+            <Pressable hitSlop={8} onPress={idleDimHelp} accessibilityLabel="空闲变灰说明">
+              <Text style={d.helpMark}>ⓘ</Text>
+            </Pressable>
           </View>
-          <Text style={d.numNote}>负数 = 永不变灰</Text>
+          <View style={d.numRow}>
+            <TextInput
+              style={d.numInput}
+              value={idleDimText}
+              onChangeText={setIdleDimText}
+              onEndEditing={commitIdleDim}
+              onSubmitEditing={commitIdleDim}
+              returnKeyType="done"
+              placeholder="30"
+              placeholderTextColor={c.faint}
+              selectTextOnFocus
+            />
+            <Text style={d.numUnit}>分钟</Text>
+          </View>
         </View>
         {/* #129 回车键行为（会话输入框）：开 = 回车即发送（#68 多行化之前的旧习惯，
             键帽「发送」）；关 = 回车换行、发送靠 ➤（长文本多行编辑）。
@@ -948,15 +957,17 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
   // #130 行前缀左组：12px 线图标 + 标签（图标由 LineIcon/PencilIcon 渲染）
   setL: { flexDirection: "row", alignItems: "center", gap: 6 },
   // #121 空闲变灰数字输入：窄框右锚（lever 同位），单位注脚。
-  // #130 输入框 56→52 +「分钟」升 11px dim；负数说明拆到次行 numNote
+  // #130 反馈（2026-09-21 用户真机）：输入框 30 高偏肥——降 26；负数说明已收进
+  // ⓘ 弹窗，numNote 次行删除（行高与其他设置行对齐）
   numRow: { flexDirection: "row", alignItems: "center", gap: 8 },
   numInput: {
-    width: 52, height: 30, borderRadius: 8, borderWidth: 1, borderColor: c.line,
+    width: 52, height: 26, borderRadius: 8, borderWidth: 1, borderColor: c.line,
     backgroundColor: c.panel2, paddingHorizontal: 6, paddingVertical: 0,
     color: c.text, fontSize: 13, textAlign: "center", includeFontPadding: false,
   },
   numUnit: { color: c.dim, fontSize: 11 },
-  numNote: { color: c.faint, fontSize: 11, marginTop: 2 },
+  // #130 标签旁小问号（faint 不抢焦点）：点弹该设置项的语义说明
+  helpMark: { color: c.faint, fontSize: 12.5, fontWeight: "700" },
   // #353 拨杆：胶囊轨道 + 浮起滑块（阴影），标签盖在轨道上层。
   // #37 同行缩小版：24 高（原 34）。#130 轨道去描边（原 tintSoft 底 + 细边双边缘）
   leverTrack: {
