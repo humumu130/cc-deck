@@ -1705,6 +1705,8 @@
   .tline .tname { font-weight: 600; }
   .tname { color: var(--dim); font-weight: 600; } /* #102 收敛②之首：工具行是转录行数最多元素，橙字量立减约八成 */
   .tres { color: var(--faint); }
+  /* #128 任务工具行摘要：单行省略直显（替代原折叠框），完整内容不再展开 */
+  .tline .tsum { flex: 1 1 120px; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .ds-add { color: var(--done); font-family: var(--mono); font-size: .95em; }
   .ds-del { color: var(--error); font-family: var(--mono); font-size: .95em; }
   .tdetail {
@@ -5282,14 +5284,17 @@ function entryHtml(e, prevDay) {
   } else if (e.kind === "tool_use") {
     const t = e.tool || "";
     const tico = /^(Edit|Write|MultiEdit|NotebookEdit)$/.test(t) ? "✎" : t === "Bash" ? "❯_" : /^(Read|Glob|Grep|WebFetch|WebSearch)$/.test(t) ? "▤" : "⚙";
-    html += '<div class="trow"><div class="tline"><span class="tico">' + tico + '</span><span class="tname">' + escapeHtml(t || "tool") + "</span><span>" + taskRefHtml(e.text) + "</span>" +
+    // #128（2026-09-21 验收反馈）：任务状态变更（Task*）这类简单内容不搞折叠框——
+    // 展开框长文超界且交互无必要，摘要单行省略直显（.tsum），完整描述不再渲染
+    const isTaskTool = /^Task/.test(t);
+    html += '<div class="trow"><div class="tline"><span class="tico">' + tico + '</span><span class="tname">' + escapeHtml(t || "tool") + "</span><span" + (isTaskTool ? ' class="tsum"' : "") + ">" + taskRefHtml(e.text) + "</span>" +
       (t === "Bash" || t === "Write" ? '<span class="copy-btn" data-copy="' + escapeHtml(e.text || "").replace(/"/g, "&quot;") + '" title="复制命令">⧉</span>' : "") +
-      (e.detail
+      (e.detail && !isTaskTool
         ? (open
           ? '<span class="x-full" data-x="' + k + '">收起 ▴</span>'
           : '<span class="x-full" data-x="' + k + '">展开 ▾</span>')
         : "") + "</div>" +
-      (open && e.detail ? '<div class="tdetail">' + escapeHtml(e.detail) + "</div>" : "") + "</div>";
+      (open && e.detail && !isTaskTool ? '<div class="tdetail">' + escapeHtml(e.detail) + "</div>" : "") + "</div>";
   } else if (e.kind === "tool_result") {
     if (e.diff && e.diff.length) {
       const plus = e.diff.filter((l) => l.startsWith("+")).length;
