@@ -18,6 +18,15 @@
 3. **Release 包**：snapshot 攒了几批、连续使用几天无问题后发正式版。
    `v<X.Y.Z>` 干净 tag → CI 建 GitHub Release 挂产物 + latest.json 轻量清单同步（双镜像，见 updates.ts 的发版八步清单注释）。
 
+### 更新说明军规（cc-deck 特化落点）
+
+通用五军规/排版结构/通道精度见全局 ~/.claude/CLAUDE.md「更新说明军规」节（2026-09-21，权威，持续打磨）。本节只记项目特化：
+
+- 数据结构：`VERSION_NOTES: { group: "new"|"improved"|"fixed"; text: string; note?: string }[]` + `VERSION_DATE`，在 expo-app/src/updates.ts，随版本同步维护；消费端 = 手机关于弹窗（SettingsDrawer AboutModal）。
+- 桌面端发版说明（Tauri）与 GitHub Release body 同口径：Release 正文放全量细节（弹窗「查看完整变更」的落地页）。
+- test/snap 通道 notes（latest-test.json 等）由提交聚合生成，不人工收敛；正式版（latest.json + VERSION_NOTES）人工收敛到军规内。
+- 反例来历：0.6.0 首版 13 条 32 行平铺被用户骂「跟狗屎一样堆起来」（2026-09-21），调研后定军规。
+
 ### 发版记录归档
 
 - **不单独维护发版文档**：git tag + 提交信息 + GitHub Release 页即完整档案（单一事实源），另记一份必然漂移。
