@@ -101,6 +101,9 @@ export interface SourceConn {
   // 的混跑兜底：40 拍无唤醒强制断开回落重连）
   awaitWake?: boolean;
   wakePings?: number;
+  // #85 假在线修正（2026-09-21 用户实测）：回前台把陈旧 online 降级为「校验连接…」
+  // 时置位——探测期收到任何真帧即恢复 online（onMessage 顶部），判死/换连时清
+  resumeCheck?: boolean;
   // F7（2026-09-09）手表 /wan 透传凭据 dev（wt-<hash>，随 SNAPSHOT wan_dev 下发）：
   // 手表网关拼手表连接配置用（旧 relay 无字段 = 回落 wt-app1，自建宽松桥不受影响）
   wanDev?: string | null;
@@ -329,6 +332,17 @@ class RelayStore {
     for (const conn of this.conns.values()) {
       if (!this.aggregate && conn.id !== this.activeId) continue;
       if (conn.state === "online") {
+        // #85 假在线修正（2026-09-21 用户实测反馈）：回前台瞬间 UI 先信陈旧的
+        // connected 显示「在线」，探测判死流程走完才翻黄——用户看到的就是「一开始
+        // 显示在线，过了几秒才变黄重连」。探测发起前，lastDownAt 已超 20s（>一个
+        // 心跳周期 15s+PONG 往返，前台活跃连接必新鲜、后台冻结必陈旧）先把状态降为
+        // 「校验中」让 UI 立即翻黄；探测通过（2.5s 内有下行）由 onMessage 恢复 online
+        if (Date.now() - conn.lastDownAt > 20_000) {
+          conn.resumeCheck = true;
+          conn.state = "reconnecting";
+          conn.stateText = "校验连接…";
+          this.emit();
+        }
         this.connResumeProbe(conn); // 假在线复核：>30s 无下行断开走重连，否则 PING 2.5s 确认
         continue;
       }
@@ -958,6 +972,7 @@ class RelayStore {
     // 既无令牌也无云桥配置才无从建连
     if (!conn.cfg.token && !conn.cloudCfg) return;
     if (conn.state === "unpaired") return;
+    conn.resumeCheck = false; // #85 新连接周期：上一轮校验作废
     // #85 后台保活（2026-09-21）：任一源发起连接即 ensure 常驻前台服务（notify 侧
     // 已去抖，重连周期高频触达无副作用）。此前 FGS 只有下载更新时被复用，日常根本
     // 没人启动：进程入 cached 池被 freezer 冻结 → 15s 心跳停 → WS 空闲被断，回前台
@@ -1371,8 +1386,25 @@ class RelayStore {
   private connResumeProbe(conn: SourceConn) {
     const ws = conn.ws;
     // readyState 守卫：disconnect 后 hbTimer 残留 ≤15s（下一拍自清）+ 新 socket
-    // 尚在 CONNECTING 的窗口内，hbTimer 判存活不可靠，只探已 OPEN 的连接
-    if (!ws || !conn.hbTimer || ws.readyState !== WebSocket.OPEN) return;
+    // 尚在 CONNECTING 的窗口内，hbTimer 判存活不可靠——无 socket 直接不探
+    if (!ws || !conn.hbTimer) return;
+    // #85 僵尸 socket（2026-09-21）：online 态的 ws 非 OPEN = 冻结/断网期连接已被
+    // 掐死而 onclose 事件丢失（状态卡「假在线」绿）——旧守卫直接 return 会让它
+    // 永远没人收尸（心跳 send 异常也被 catch 吞）。按 onclose 同语义判死走重连
+    if (ws.readyState !== WebSocket.OPEN) {
+      killWs(ws);
+      conn.ws = null;
+      this.stopHb(conn);
+      this.clearPendingCmds(conn);
+      conn.awaitWake = false;
+      conn.resumeCheck = false;
+      conn.state = "offline";
+      conn.stateText = null;
+      conn.channel = null;
+      this.emit();
+      this.scheduleReconnect(conn);
+      return;
+    }
     if (conn.probeTimer) {
       clearTimeout(conn.probeTimer);
       conn.probeTimer = null;
@@ -1442,6 +1474,18 @@ class RelayStore {
   // ---------- 下行处理（LAN 与云通道共用，云侧已解密；按源隔离） ----------
 
   private onMessage(conn: SourceConn, msg: Envelope | CommandAck) {
+    // #85 假在线修正：resumeCheck 期间收到任何真帧（SNAPSHOT/pong/信封）= 链路
+    // 活着，立即恢复在线——回前台降级的「校验连接…」翻回绿（LAN/云通道共用入口，
+    // ROUTE_MISS/pair_nack 等桥层帧在进这里前已各自 return，不会误恢复）
+    if (conn.resumeCheck) {
+      conn.resumeCheck = false;
+      if (conn.state !== "online") {
+        conn.state = "online";
+        conn.stateText = null;
+        conn.failNote = null;
+        this.emit();
+      }
+    }
     // #33：relay 首帧 = 真在线（云通道开门只标 connecting）。LAN adoptLan 无此问题
     // （ws 直连 relay，开门即在线），只在云通道补位
     if (conn.channel === "cloud" && conn.state !== "online") {

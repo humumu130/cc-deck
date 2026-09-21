@@ -24,6 +24,8 @@ const val FG_TITLE = "CC Deck" // #301 品牌统一（原 "Cloud Code Relay"）
 
 // 常驻前台服务：保活 WS 连接（用户也能从通知知晓后台运行）
 class RelayForegroundService : Service() {
+  private var wakeLock: android.os.PowerManager.WakeLock? = null
+
   override fun onBind(intent: Intent?): IBinder? = null
 
   override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -31,12 +33,35 @@ class RelayForegroundService : Service() {
     ensureChannel(nm, FG_CHANNEL_ID, "后台连接", NotificationManager.IMPORTANCE_MIN)
     val pi = launchIntent(this, 0)
     val notif = buildNotification(this, FG_CHANNEL_ID, FG_TITLE, "保持与 PC 的连接中", pi, ongoing = true)
-    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-      startForeground(FG_NOTIFICATION_ID, notif, ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC)
-    } else {
-      startForeground(FG_NOTIFICATION_ID, notif)
+    // #85（2026-09-21）FGS type：35+ 的 dataSync 有 6h 硬性时限（onTimeout 不停即
+    // crash），且部分 ROM 对 dataSync 型冻结策略激进——换 specialUse（自有分发，
+    // 无 Play 政策审查；PROPERTY_SPECIAL_USE_FGS_SUBTYPE 在 manifest 里声明用途）。
+    // 34 以下不认识 specialUse：29-33 沿用 dataSync（无时限问题），更老不传 type
+    when {
+      Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE ->
+        startForeground(FG_NOTIFICATION_ID, notif, ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE)
+      Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q ->
+        startForeground(FG_NOTIFICATION_ID, notif, ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC)
+      else -> startForeground(FG_NOTIFICATION_ID, notif)
+    }
+    // #85 PARTIAL_WAKE_LOCK：息屏后保 CPU 不睡——JS 心跳（15s/拍）在深睡下定时器
+    // 全停，WS 因无流量被 NAT/服务端掐断（用户实测后台几分钟即断）。与 FGS 互补：
+    // FGS 防进程被杀，WakeLock 防 CPU 休眠；厂商层 freezer 冻结仍需电池豁免
+    //（App 设置抽屉「后台保活」引导）。持有代价是耗电，属保活诉求的必要成本
+    val pm = getSystemService(Context.POWER_SERVICE) as android.os.PowerManager
+    if (wakeLock?.isHeld != true) {
+      wakeLock = pm.newWakeLock(android.os.PowerManager.PARTIAL_WAKE_LOCK, "ccdeck:relay_fg").apply {
+        setReferenceCounted(false)
+        acquire()
+      }
     }
     return START_STICKY
+  }
+
+  override fun onDestroy() {
+    wakeLock?.let { if (it.isHeld) it.release() }
+    wakeLock = null
+    super.onDestroy()
   }
 }
 

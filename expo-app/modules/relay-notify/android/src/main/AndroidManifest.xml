@@ -1,13 +1,23 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
   <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
   <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
+  <!-- #85（2026-09-21）34+ 起前台服务改 specialUse 型（dataSync 在 35+ 有 6h 上限） -->
+  <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
+  <!-- #85 PARTIAL_WAKE_LOCK：息屏后保 CPU，JS 心跳不停（防分钟级断连） -->
+  <uses-permission android:name="android.permission.WAKE_LOCK" />
   <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
   <!-- #60 后台保活豁免引导：拉起系统「忽略电池优化」对话框（ColorOS freezer 冻结的豁免入口） -->
   <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
   <application>
+    <!-- #85 双 type：34+ 走 specialUse（启动侧 SDK 分支），29-33 沿用 dataSync；
+         manifest 必须涵盖运行时用到的全部 type，否则 startForeground 抛异常 -->
     <service
       android:name="expo.modules.relaynotify.RelayForegroundService"
       android:exported="false"
-      android:foregroundServiceType="dataSync" />
+      android:foregroundServiceType="dataSync|specialUse">
+      <property
+        android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
+        android:value="Persistent WebSocket link to the user's own PC relay for remote session monitoring and notifications" />
+    </service>
   </application>
 </manifest>
