@@ -878,12 +878,13 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
     paddingHorizontal: 8, paddingVertical: 8, borderRadius: 9,
   },  // #46/#53 通道标记：☁️ emoji 与 LanGlyph 胶囊两态
   chanCloudT: { fontSize: 10.5, lineHeight: 14 },
-  // #96/#130 插头角标几何：wrap 18→30 给角标留驻位（不再贴名称挤排）；
-  // 插头 13px 在 30 宽居中 → 右缘 x≈21.5，角标 left 22 起、top 垂直居中
-  // （云 9/2 → 3.5；LAN 8/2 → 4）
-  plugWrap: { position: "relative", width: 30, height: 16, alignItems: "center", justifyContent: "center" },
-  plugBadgeCloud: { position: "absolute", left: 22, top: 3.5, fontSize: 7.5, lineHeight: 9 },
-  plugBadgeLan: { position: "absolute", left: 22, top: 4, fontSize: 6.5, lineHeight: 8, color: "#5B9DFF", fontWeight: "700", letterSpacing: 0.2 },
+  // #96 插头角标几何（#130 follow-up 恢复）：云/LAN 是连接图标的右下角**角标**——
+  // 锚 right + bottom、下沉出底，明显小于插头且低于其中心线（用户重申：不与插头
+  // 平级并排；#130 曾误改为 left + top 垂直居中，角标变等高并排，越界回退）。
+  // wrap 18→24 保留少量右侧余量防角标贴名称挤排
+  plugWrap: { position: "relative", width: 24, height: 16, alignItems: "center", justifyContent: "center" },
+  plugBadgeCloud: { position: "absolute", right: 0, bottom: -3, fontSize: 7.5, lineHeight: 9 },
+  plugBadgeLan: { position: "absolute", right: -3, bottom: -4, fontSize: 6.5, lineHeight: 8, color: "#5B9DFF", fontWeight: "700", letterSpacing: 0.2 },
   // #96 插头右下角通道角标：不独立占位，缩到 7px 级（云=☁ 字符 / LAN=微字）
   // #53 图例弹窗：图标列固定宽左对齐 + 文字；组间距（legSep）大于行距
   legHead: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 12 },
