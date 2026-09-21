@@ -5,7 +5,8 @@
     ],
     "PostToolUse": [
       { "matcher": "*", "hooks": [{ "type": "command", "command": "node \"${CLAUDE_PLUGIN_ROOT}/scripts/hook.mjs\"" }] },
-      { "matcher": "TaskCreate|TaskUpdate|TaskDelete", "timeout": 15, "hooks": [{ "type": "command", "command": "node \"${CLAUDE_PLUGIN_ROOT}/scripts/guard-lifecycle.mjs\"" }] }
+      { "matcher": "TaskCreate|TaskUpdate|TaskDelete", "timeout": 15, "hooks": [{ "type": "command", "command": "node \"${CLAUDE_PLUGIN_ROOT}/scripts/guard-lifecycle.mjs\"" }] },
+      { "matcher": "Write|Edit", "timeout": 10, "hooks": [{ "type": "command", "command": "node \"${CLAUDE_PLUGIN_ROOT}/scripts/deliver-guard.mjs\"" }] }
     ],
     "PreToolUse": [
       { "matcher": "*", "timeout": 620, "hooks": [{ "type": "command", "command": "node \"${CLAUDE_PLUGIN_ROOT}/scripts/hook.mjs\"" }] }
