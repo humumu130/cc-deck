@@ -5,7 +5,7 @@
 #       烙成 tauri-latest-test.json，见该 workflow "Sync version from tag" 步骤）
 # 动作：[1/5] 等 desktop.yml 的 tag run 跑完 → [2/5] 拉 artifact（setup.exe + .sig）
 #       → [3/5] exe 双源上传（ECS + CF KV，KV 走带校验上传）
-#       → [4/5] 生成 tauri-latest-test.json 双源（CF 版 url 指 CF 域名、ECS 版指裸 IP）
+#       → [4/5] 生成 tauri-latest-test.json 双源（url 统一指 CF https，见 #122 注）
 #       → [5/5] 回读校验（清单字段 + exe 可达）
 # 纪律：先传 exe 后传清单（清单指向必须先就绪）；test 包不上 GitHub Release
 #       （desktop.yml 已门控）、不动正式通道 tauri-latest.json / latest.json。
@@ -71,11 +71,11 @@ scripts/kv-put-verified.sh "$EXE" "$EXE_KEY"
 echo "[4/5] 生成并上传 $MANIFEST_KEY（双源，url 各指本源）…"
 SIGB64=$(base64 < "$SIG" | tr -d '\n')
 PUB_DATE=$(date -u +%Y-%m-%dT%H:%M:%SZ)
-# CF 版：url 走规范路径 /download/（公司可达）；ECS 版：url 裸 IP（家庭网/流量直连）
+# 清单 url 双源统一指 CF https（#122：updater 对 http 敏感——endpoint 层启动即校验
+# https，下载 url 虽不校验也不冒险；exe 双源都存着，下载统一走 CF 即可）
 printf '{"version":"%s","pub_date":"%s","platforms":{"windows-x86_64":{"signature":"%s","url":"https://cc.humumu.online/download/%s"}}}' \
   "$VER" "$PUB_DATE" "$SIGB64" "$EXE_KEY" > "$TMP/manifest-cf.json"
-printf '{"version":"%s","pub_date":"%s","platforms":{"windows-x86_64":{"signature":"%s","url":"http://8.133.211.170:8888/%s"}}}' \
-  "$VER" "$PUB_DATE" "$SIGB64" "$EXE_KEY" > "$TMP/manifest-ecs.json"
+cp "$TMP/manifest-cf.json" "$TMP/manifest-ecs.json"
 $SCP -q "$TMP/manifest-ecs.json" "$ECS_HOST:$ECS_DIR/$MANIFEST_KEY"
 scripts/kv-put-verified.sh "$TMP/manifest-cf.json" "$MANIFEST_KEY"
 
@@ -95,7 +95,7 @@ ECS_MAN=$($SSH "$ECS_HOST" "cat $ECS_DIR/$MANIFEST_KEY")
 import json
 m = json.loads('''$( echo "$ECS_MAN" )''')
 assert m['version'] == '$VER'
-assert m['platforms']['windows-x86_64']['url'] == 'http://8.133.211.170:8888/$EXE_KEY'
+assert m['platforms']['windows-x86_64']['url'] == 'https://cc.humumu.online/download/$EXE_KEY'
 print('    ECS 清单 OK: version=%s' % m['version'])
 "
 curl -sS --max-time 20 -o /dev/null -w "    CF exe HTTP=%{http_code} len=%{size_download}\n" -r 0-1023 "https://cc.humumu.online/download/$EXE_KEY"
