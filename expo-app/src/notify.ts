@@ -8,13 +8,20 @@ export function fgSupported(): boolean {
   return !!mod;
 }
 
+// #85 JS 侧去抖：start 挂在 connConnect（重连周期高频触达）——已运行不重复
+// startService（省 IPC + 防 onStartCommand 抖动）；stop 后复位，下次连接周期
+// 重新拉起（FGS 意外被 ROM 杀掉时靠这条自愈）
+let fgRunning = false;
+
 export function startForegroundService(): void {
+  if (fgRunning) return;
   try {
-    mod?.start();
+    fgRunning = !!mod?.start();
   } catch {}
 }
 
 export function stopForegroundService(): void {
+  fgRunning = false;
   try {
     mod?.stop();
   } catch {}

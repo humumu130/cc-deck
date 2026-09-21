@@ -7,6 +7,7 @@ import type { CloudPairInfo, CommandAck, Envelope, LogEntry, SessionState } from
 import { uuid } from "./fmt";
 import { currentVersion } from "./updates";
 import { devId, generateKeyPair, seal, unseal, setRandomBytes, type BoxKeyPair, type SealedBox } from "./e2e";
+import { fgSupported, startForegroundService, stopForegroundService } from "./notify";
 
 // #42 设备实名上报（配对时）：expo-constants 的 deviceName（Android = Build.MODEL，
 // 如 "Find X8"）优先，回落 RN Platform.constants.Model；都无 → "手机"。
@@ -646,6 +647,8 @@ class RelayStore {
         // 删光全部服务器：清空全局汇报状态，避免列表空了却仍显示"已连接"的幽灵连接
         this.taskDoneQueue = [];
         this.reportedTaskTs.clear();
+        // #85：源全删即无保活对象——停常驻前台服务（通知随之消失），不再空挂
+        if (fgSupported()) stopForegroundService();
         this.emit({ taskDoneQueue: [] });
         return;
       }
@@ -955,6 +958,13 @@ class RelayStore {
     // 既无令牌也无云桥配置才无从建连
     if (!conn.cfg.token && !conn.cloudCfg) return;
     if (conn.state === "unpaired") return;
+    // #85 后台保活（2026-09-21）：任一源发起连接即 ensure 常驻前台服务（notify 侧
+    // 已去抖，重连周期高频触达无副作用）。此前 FGS 只有下载更新时被复用，日常根本
+    // 没人启动：进程入 cached 池被 freezer 冻结 → 15s 心跳停 → WS 空闲被断，回前台
+    // 才发现断线重连（"后台老是断开/回前台特别慢"的根因）。挂 connConnect 收口全
+    // 路径（启动恢复 connect()/手动添加 connectServer()/重连 scheduleReconnect）；
+    // FGS 被杀自愈也靠这条。ColorOS 等 ROM 冻 FGS 仍需电池豁免（设置→后台保活卡）
+    if (fgSupported()) startForegroundService();
     if (conn.reconnectTimer) {
       clearTimeout(conn.reconnectTimer);
       conn.reconnectTimer = null;
