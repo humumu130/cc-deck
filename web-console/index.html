@@ -41,7 +41,7 @@
     /* #98 状态灯显眼度：两值各提一档（暗底 13.39:1 / 6.66:1），浅色不受影响。
        #98 返工（装机反馈）：黄灯改真实红绿灯琥珀黄——原 #FFD84D 是浅柠檬黄，
        明度 64% 发飘不显眼；#FFC400 饱和度顶格（暗底对比 ~12:1 仍充裕） */
-    --working: #FFC400;
+    --working: #FFD60A; /* #124 更黄更显眼（旧 #FFC400 偏琥珀发暗）；手机端 theme.ts 同步 */
     --waiting: #FF6B68;
     --error: #FF7849;
     --done: #2BD98F;
@@ -1490,6 +1490,10 @@
   .status-chip.s-ERROR   { --sc: var(--error); }
   .status-chip.s-DONE    { --sc: var(--done); }
   .status-chip.s-WORKING i { animation: dot-breathe 2.4s ease-in-out infinite; }
+  /* #124 详情头状态字收敛：dhead 内去灯（状态由文字+颜色自述，列表卡 chip 不受影响）、
+     字号 11→9 小三号、字距同步收紧（小字号 1px 字距会散） */
+  #dhead .status-chip i { display: none; }
+  #dhead .status-chip { font-size: 9px; letter-spacing: .5px; }
   @keyframes dot-breathe {
     0%, 100% { opacity: 1; transform: scale(1); box-shadow: 0 0 2px 0 color-mix(in srgb, var(--sc) 40%, transparent); }
     50% { opacity: .45; transform: scale(.8); box-shadow: 0 0 9px 2px color-mix(in srgb, var(--sc) 55%, transparent); }
@@ -1846,16 +1850,20 @@
   }
   #slashbox .sl-empty { padding: 12px 13px; color: var(--faint); font-size: 12px; }
   #inputcard .ic-left { display: flex; align-items: center; gap: 8px; flex: 1; min-width: 0; }
+  /* #124 停止入口挪到发送钮旁：纯图标（去「停止」二字）34×34，sendBtn 同规格红调；
+     原形态=dhead 行右端红胶囊文字钮（#104） */
   #stopBtn {
-    display: none; border-radius: 999px; padding: 4px 13px; font-size: 12px; font-weight: 600;
+    display: none; width: 34px; height: 34px; border-radius: 10px; padding: 0; flex: none;
     background: rgba(240,82,79,.1); border: 1px solid rgba(240,82,79,.4); color: var(--error);
-    align-self: center; flex: none;
+    font-size: 15px; line-height: 1;
+    align-items: center; justify-content: center;
   }
   #stopBtn:hover { background: rgba(240,82,79,.18); border-color: rgba(240,82,79,.55); }
   /* #279 批次3 图片入口：输入卡底部功能行的相机图标钮（外部 CLI/历史会话隐藏）。
      2026-09-18 与手机端统一为线条相机（原 📷 emoji 与整体线条风不符），currentColor 随主题 */
-  /* #13 巡检：与 #sendBtn 同规格 34×34 并排（原 padding 撑出约 26px 高，基线不对称） */
-  #imgBtn {
+  /* #13 巡检：与 #sendBtn 同规格 34×34 并排（原 padding 撑出约 26px 高，基线不对称）；
+     #124 #fileBtn 同规格（原先无规则被默认 padding 撑大，用户反馈附件钮比相机钮大） */
+  #imgBtn, #fileBtn {
     width: 34px; height: 34px; padding: 0; flex: none; display: flex; align-items: center; justify-content: center;
     color: var(--dim);
   }
@@ -2266,8 +2274,6 @@
         <span id="dbadge" class="status-chip"></span>
         <span class="elapsed" id="delapsed"></span>
         <span class="spacer"></span>
-        <!-- #104 停止入口挪到状态栏（标题/状态 chip 行右端，空间足够；仅运行中出现） -->
-        <button id="stopBtn" title="停止会话">⏹ 停止</button>
         <button id="renameBtn" class="ghost" title="重命名会话">✎</button>
       </div>
       <div id="dsub">
@@ -2335,6 +2341,8 @@
             <button id="imgBtn" title="添加图片（最多 4 张，也可直接 Ctrl+V 粘贴）"><svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M8.7 6.8l1.05-1.9a1.5 1.5 0 0 1 1.3-.75h1.9a1.5 1.5 0 0 1 1.3.75l1.05 1.9"/><rect x="3.4" y="6.8" width="17.2" height="13" rx="3"/><circle cx="12" cy="13.2" r="3.5"/></svg></button>
             <button id="fileBtn" title="附加文件（最多 2 个，单个 20MB，发送时落盘到电脑由 CLI 读取）"><svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M21.4 11.05 12.25 20.2a5.5 5.5 0 0 1-7.78-7.78l8.49-8.48a3.5 3.5 0 1 1 4.95 4.95l-8.49 8.48a1.5 1.5 0 0 1-2.12-2.12l7.78-7.78"/></svg></button>
           </div>
+          <!-- #124 停止入口：dhead 挪来发送钮旁，纯图标（语义进 title 悬停可见） -->
+          <button id="stopBtn" title="停止会话">⏹</button>
           <button id="sendBtn" title="发送（Enter）">➤</button>
         </div>
       </div>
@@ -4728,10 +4736,9 @@ function renderDetail() {
       ? (resumable ? "继续对话（恢复会话）…" : "历史会话仅可查看")
       : "发送消息（Enter 发送 · Shift+Enter 换行）";
   syncSendState();
-  // 停止入口只在运行中出现（#104 挪到状态栏：dhead-row 右端，重命名按钮旁）
+  // 停止入口只在运行中出现（#124 挪到发送钮旁纯图标钮；文字语义进 title）
   const running = s.status === "WORKING" || s.status === "WAITING";
   $("stopBtn").style.display = running ? "flex" : "none";
-  $("stopBtn").textContent = s.external ? "⏹ 注入 Esc" : "⏹ 停止";
   $("stopBtn").title = s.external ? "注入 Esc 打断" : "停止会话";
   // #279 批次3 图片入口；#54 起外部 CLI 会话也可发图（relay 落盘+注入路径指令）
   // 隐藏仅剩：不可恢复的托管历史会话（cmdLocked 同口径）

@@ -39,9 +39,10 @@ export const DARK: ThemeColors = {
   faint: "#4A5F78",
   brandA: "#4D9FFF",
   brandB: "#7C6CF2",
-  // #118 饱和度对齐桌面端 --working（#FFC400）：旧值 #FFC53D 蓝通道偏高发灰，
-  // 用户反馈"黄灯不够显眼、饱和度不够高"
-  working: "#FFC400",
+  // #124 加黄提亮（#FFC400 → #FFD60A，用户拍板"更黄更显眼"）；沿革：#118 曾把
+  // #FFC53D 对齐桌面 #FFC400——两轮反馈都嫌不够黄，这次直接进纯黄段；浅色不动
+  // （#8F6400 对比度红线，见下）。
+  working: "#FFD60A",
   waiting: "#F0524F",
   error: "#FF7849",
   done: "#2BD98F",
