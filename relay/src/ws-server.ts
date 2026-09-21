@@ -80,6 +80,12 @@ const COMMAND_TYPES = new Set([
 ]);
 
 const HEARTBEAT_MS = 30_000;
+// #85 心跳容忍度（2026-09-21，与 cloud-bridge 同款）：单轮无 pong 即 terminate 会把
+// 手机后台停摆（doze/冻结，持续几分钟是常态）全误杀，且 terminate 硬掐 TCP 不发
+// close 帧，客户端冻结期间无从感知（回前台成假在线）。踢人只是服务端清死连接的
+// 卫生动作（客户端恢复靠自身探测）——容忍 20 轮（10 分钟）：停摆 <10min 的连接
+// 解冻后 OkHttp 补 pong 即原地复活；ping 节奏不变（保 NAT 不掐 idle TCP）
+const HEARTBEAT_MISS_LIMIT = 20;
 
 // 内置 slash 命令表（手机/网页输入联想）：只列稳定核心集，desc 仅作提示文案
 const BUILTIN_COMMANDS: { name: string; desc: string }[] = [
@@ -779,8 +785,13 @@ export function startServer(
     for (const client of wss.clients) {
       const c = client as ClientWs;
       if (!c.isAlive) {
-        client.terminate();
-        continue;
+        c.miss = (c.miss ?? 0) + 1;
+        if (c.miss >= HEARTBEAT_MISS_LIMIT) {
+          client.terminate();
+          continue;
+        }
+      } else {
+        c.miss = 0;
       }
       c.isAlive = false;
       client.ping();
@@ -963,6 +974,7 @@ async function handleBridgeHook(
 
 interface ClientWs extends WebSocket {
   isAlive: boolean;
+  miss?: number; // #85 连续未回 pong 轮数（达到 HEARTBEAT_MISS_LIMIT 才 terminate）
   pairing?: boolean; // #316 待配对手表（/ws?pair=1）：未鉴权，不收事件、不发命令
   clientId?: string; // #79 本连接的命令来源 id（web-N）：定向瞬态帧（to 字段）的过滤键
 }

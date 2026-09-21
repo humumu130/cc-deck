@@ -182,18 +182,28 @@ class RelayNotifyModule : Module() {
       pm.isIgnoringBatteryOptimizations(ctx.packageName)
     }
 
-    // 拉起系统「忽略电池优化」确认对话框（AOSP 标准入口；部分 ROM 缺失该 activity 则静默）
+    // #85 拉起电池豁免入口，三级兜底（2026-09-21 用户实测 ColorOS 点「去优化」无反应：
+    // 主对话框 activity 缺失/被吞，旧实现静默失败 → 豁免从未授上 → freezer 冻结无解）。
+    // 返回实际打开的页面：dialog=确认对话框 / list=电池优化列表页 / details=应用详情页
+    // / none=全失败——JS 侧据此给手动路径引导（expo Function DSL 用尾表达式返回值）
     Function("requestBatteryExempt") {
       val ctx = appContext.reactContext
-      if (ctx != null) {
-        try {
-          val intent = Intent(
-            android.provider.Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS,
-            android.net.Uri.parse("package:" + ctx.packageName),
-          )
+      if (ctx == null) {
+        "none"
+      } else {
+        val pkg = android.net.Uri.parse("package:" + ctx.packageName)
+        fun tryStart(intent: Intent): Boolean {
           intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-          ctx.startActivity(intent)
-        } catch (_: Exception) {}
+          return try { ctx.startActivity(intent); true } catch (_: Exception) { false }
+        }
+        // 主路径：AOSP 标准确认对话框（一键允许/拒绝）→ 列表页（所有 ROM 都有，
+        // 用户找到 App 设「不允许优化」）→ 应用详情页（至少能到达本 App 设置）
+        when {
+          tryStart(Intent(android.provider.Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS, pkg)) -> "dialog"
+          tryStart(Intent(android.provider.Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS)) -> "list"
+          tryStart(Intent(android.provider.Settings.ACTION_APPLICATION_DETAILS_SETTINGS, pkg)) -> "details"
+          else -> "none"
+        }
       }
     }
   }

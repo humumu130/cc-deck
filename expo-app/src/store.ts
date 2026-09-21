@@ -1339,8 +1339,16 @@ class RelayStore {
         return;
       }
       if (Date.now() - conn.lastDownAt > 55_000) {
-        try { ws.close(); } catch {}
-        return;
+        // #85 前台：55s 无下行判半开黑洞，快速 close 重连（不等 TCP 重传超时）。
+        // 后台不掐（2026-09-21 用户质疑推动）：服务端心跳容忍已放宽到 10 分钟，
+        // 长停摆（doze/冻结）解冻后连接可能仍活着——这里掐掉就白扔一条可无缝
+        // 恢复的连接。落到下方照发 PING：连接活着 PONG 回来即原地复活；真死的
+        // 由服务端 terminate（解冻后 RST 到达走 onclose）或回前台体检兜底，后台
+        // 每 15s 一拍空 PING 成本可忽略
+        if (AppState.currentState === "active") {
+          try { ws.close(); } catch {}
+          return;
+        }
       }
       // #34 旧桥兼容兜底：待唤醒态下 ROUTE_MISS 回帧会持续刷新 lastDownAt，
       // 55s 判死永不触发；桥不升级就没有 relay-online 广播 → 永久卡待唤醒。
@@ -1409,13 +1417,11 @@ class RelayStore {
       clearTimeout(conn.probeTimer);
       conn.probeTimer = null;
     }
+    // #85 长停摆连接可能仍活（2026-09-21）：服务端容忍放宽（10 分钟）+ 30s ping
+    // 保 NAT，后台冻结几分钟的连接解冻后未必死——旧「>30s 停摆即死透直接 close」
+    // 是服务端 30s 单轮踢时代的假设，现在会把活连接误杀。一律发 PING 探测 2.5s：
+    // 有回即无缝保连（resumeCheck 翻绿），无回再 close 走重连，最坏多等 2.5s
     const t0 = conn.lastDownAt;
-    // #90 回前台提速：55s→30s——正常心跳 15s 一拍 PONG，前台服务存活时 lastDownAt
-    // 必新鲜；后台期间停摆超 30s 即死透，直接 close 走重连省一整轮探测等待
-    if (Date.now() - t0 > 30_000) {
-      try { ws.close(); } catch {}
-      return;
-    }
     const cloud = conn.channel === "cloud" && conn.cloudCfg ? conn.cloudCfg : undefined;
     const keys = this.devKeys;
     try {

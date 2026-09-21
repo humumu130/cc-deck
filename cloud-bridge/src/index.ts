@@ -9,6 +9,13 @@ import { CloudRouter } from "./router.js";
 const webDir = (name: string) => fileURLToPath(new URL(`../web-console/${name}`, import.meta.url));
 
 const HEARTBEAT_MS = 30_000;
+// #85 心跳容忍度（2026-09-21）：单轮无 pong 即 terminate 对移动端太苛刻——手机
+// 后台停摆（doze/冻结）持续几分钟是常态，且 terminate 硬掐 TCP 不发 close 帧，
+// 客户端冻结期间无从感知（回前台才暴露）。踢人对客户端恢复无益（恢复靠客户端
+// 自身探测），纯粹是服务端清死连接的卫生动作——个人自用桥连接数极少，容忍 20
+// 轮（10 分钟）零压力：停摆 <10min 的连接解冻后 OkHttp 补上 pong 即原地复活
+// （ping 节奏不变，30s 一拍保 NAT 不掐 idle TCP，复活链路成立的前提）
+const HEARTBEAT_MISS_LIMIT = 20;
 
 // Node 形态云桥：HTTP upgrade 鉴权（/cloud?token=&dev=）后交 CloudRouter。
 // 桥不持久化任何状态，重启即清空（补发由 relay 的 seq 机制负责）。
@@ -129,8 +136,13 @@ export function startCloudServer(port: number, token: string, extraPorts: number
     for (const [connId, ws] of socks) {
       const c = ws as HbWs;
       if (!c.isAlive) {
-        ws.terminate();
-        continue;
+        c.miss = (c.miss ?? 0) + 1;
+        if (c.miss >= HEARTBEAT_MISS_LIMIT) {
+          ws.terminate();
+          continue;
+        }
+      } else {
+        c.miss = 0;
       }
       c.isAlive = false;
       ws.ping();
@@ -165,6 +177,7 @@ export function startCloudServer(port: number, token: string, extraPorts: number
 
 interface HbWs extends WebSocket {
   isAlive: boolean;
+  miss?: number; // #85 连续未回 pong 轮数（达到 HEARTBEAT_MISS_LIMIT 才 terminate）
 }
 
 function main(): void {

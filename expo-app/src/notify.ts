@@ -60,11 +60,16 @@ export function batteryExempt(): boolean {
   }
 }
 
-// 拉起系统「忽略电池优化」确认对话框（部分 ROM 缺失则静默无反应）
-export function requestBatteryExempt(): void {
+// #85 拉电池豁免入口（三级兜底，2026-09-21）：主对话框（AOSP 标准，一键允许）→
+// 电池优化列表页 → 应用详情页。返回实际打开的页面（dialog/list/details/none）——
+// ColorOS 等部分 ROM 缺主对话框 activity，旧实现静默失败即用户实测的「点去优化
+// 没反应」；调用方据此给手动路径引导
+export function requestBatteryExempt(): string {
   try {
-    mod?.requestBatteryExempt?.();
-  } catch {}
+    return mod?.requestBatteryExempt?.() ?? "none";
+  } catch {
+    return "none";
+  }
 }
 
 // API 33+ 运行时通知权限（拒绝则通知静默不显示，前台服务照常）

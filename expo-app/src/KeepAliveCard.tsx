@@ -8,10 +8,27 @@
 // #130 纵向两行重排（设计稿拍板）：修黑边 bug（原写了 borderWidth 没写 borderColor，
 // RN 默认纯黑——截图里刺眼黑框的根因）；抽屉紧凑态 56dp——标题行右端「去优化 ›」
 // 文字链 + 副行一句话；detail 态保完整教育文案 + 整宽 32h 按钮（pairGen 同语言）
-import { Pressable, StyleSheet, Text, View, type StyleProp, type ViewStyle } from "react-native";
+import { Alert, Pressable, StyleSheet, Text, View, type StyleProp, type ViewStyle } from "react-native";
 import { withA, type ThemeColors } from "./theme";
 import { useTheme, useThemeStyles } from "./theme-context";
 import { requestBatteryExempt } from "./notify";
+
+// #85 兜底落点引导（2026-09-21 用户实测 ColorOS 点「去优化」无反应：缺 AOSP 主
+// 对话框 activity，旧实现静默）。原生三级兜底返回实际打开的页面，非主路径给一句
+// 话指引——用户知道跳到了哪、接下来点什么
+function onExemptPress(): void {
+  const r = requestBatteryExempt();
+  if (r === "dialog") return; // 标准确认对话框已弹出，系统自己引导
+  if (r === "list") {
+    Alert.alert("已打开电池优化设置", "在列表中找到 CC Deck（不常见时看「全部应用」），设为「不允许优化」。");
+    return;
+  }
+  if (r === "details") {
+    Alert.alert("已打开应用详情", "请进入「电池 / 耗电管理」，选择「允许完全后台行为 / 不优化」。");
+    return;
+  }
+  Alert.alert("未能打开系统设置", "可连电脑执行一次授权（此后永久生效）：\nadb shell dumpsys deviceidle whitelist +com.humumu.ccwatch");
+}
 
 const makeStyles = (c: ThemeColors) =>
   StyleSheet.create({
@@ -45,7 +62,7 @@ export default function KeepAliveCard({ detail = false, style }: { detail?: bool
         <View style={[s.kaDot, { backgroundColor: c.working }]} />
         <Text style={s.kaTitle}>后台保活</Text>
         {!detail ? (
-          <Pressable hitSlop={8} onPress={requestBatteryExempt} accessibilityLabel="去系统优化后台保活">
+          <Pressable hitSlop={8} onPress={onExemptPress} accessibilityLabel="去系统优化后台保活">
             <Text style={s.kaLink}>去优化 ›</Text>
           </Pressable>
         ) : null}
@@ -59,7 +76,7 @@ export default function KeepAliveCard({ detail = false, style }: { detail?: bool
         <Pressable
           style={s.kaBtn}
           android_ripple={{ color: c.tintSoft, borderless: false, radius: 14 }}
-          onPress={requestBatteryExempt}
+          onPress={onExemptPress}
           accessibilityLabel="去系统优化后台保活"
         >
           <Text style={s.kaBtnT}>去优化</Text>
