@@ -89,8 +89,11 @@
     --send-btn: var(--panel-2);
     --send-btn-line: var(--border);
     /* #98 色相 35°→42°（与品牌橙拉开到 27°=暗色水准）：白底 5.26:1、hover 底 4.77:1，
-       顺带修复 lv-sec 黄字 hover 底 4.47:1 的 AA 超标 */
-    --working: #8F6400;
+       顺带修复 lv-sec 黄字 hover 底 4.47:1 的 AA 超标
+       #124①返工（2026-09-21 验收反馈"还是差不多，要红绿灯那种明黄"）：#8F6400 亮度 28%
+       发褐看不出黄——亮度提到 39% 饱和度顶格（hsl 44°/100%/39%），白底 3.0:1（状态徽标
+       可接受档；文字可读性靠灯芯/描边分层兜底，见下方 run 态灯芯规则） */
+    --working: #C79100;
     --waiting: #DC2626;
     --error: #C2410C;
     --done: #047857;
@@ -1187,6 +1190,7 @@
      色从 --dim 回调到 --card-sub（介于原值与标题色之间）；元信息行 12→11px 保持 --faint */
   .c-live { display: flex; align-items: center; gap: 8px; margin: 4px 0 0; padding-left: 4px; font-size: 11px; line-height: 16px; color: var(--card-sub); font-variant-numeric: tabular-nums; min-width: 0; min-height: 16px; } /* #58 统一卡高：与 .card-summary 同几何（上距 4 + 行盒 16），WORKING/空闲卡等高；#98 灯 8→10px 悬挂缩进 6→4 补偿 */
   .c-live .lv-dot { width: 9px; height: 9px; border-radius: 50%; background: var(--working); flex: none; animation: dot-breathe 2.4s ease-in-out infinite; }
+  html.light .c-live .lv-dot { background: #FFD60A; box-shadow: 0 0 0 1.5px var(--working); } /* #124①返工：同列表卡 run 灯芯——纯黄芯+金环 */
   .c-live .lv-sec { color: var(--working); flex: none; }
   .c-live .lv-tok { flex: none; }
   .c-live .lv-sum { color: var(--card-sub); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1; min-width: 0; }
@@ -1275,6 +1279,9 @@
     background: color-mix(in srgb, var(--sc, var(--dim)) 55%, #fff);
     border: 1.5px solid var(--sc, var(--dim));
   }
+  /* #124①返工：浅色 WORKING 灯芯不用 55% 混白（奶黄无"黄"感）——纯红绿灯黄 #FFD60A
+     填充 + 金黄环保边，发光体同款观感；呼吸动画的光圈仍走 --sc 黄 */
+  html.light .card .c-dot.run { background: #FFD60A; }
   /* #98 返工（装机反馈）：终态空心环废止——用户拍板三端统一实心（手机端/右侧详情页
      均实心，列表空心独树一帜）。DONE/ERROR 回落默认实心规则（浅色回落 LED 亮芯+环） */
   /* #100 后台任务态：主回合 DONE 但仍有子 Agent 在跑——灯转 working 黄呼吸（--sc 覆写
