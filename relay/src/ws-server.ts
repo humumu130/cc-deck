@@ -5,6 +5,7 @@ import { join, dirname, sep } from "node:path";
 import { homedir, networkInterfaces } from "node:os";
 import { detectLanIp } from "./lan-ip.js";
 import { listArtifacts, serveArtifact } from "./artifacts.js";
+import { serveAcceptancePage, loadAcceptance, saveResult, rateLimited, ACCEPTANCE_ID_RE } from "./acceptance.js";
 import { listModels } from "./models.js";
 import { fileURLToPath } from "node:url";
 import { WebSocketServer, WebSocket } from "ws";
@@ -476,6 +477,44 @@ export function startServer(
           res.writeHead(r.ok ? 200 : 404, { "content-type": "application/json" }).end(JSON.stringify(r));
         } catch {
           res.writeHead(400).end("bad json");
+        }
+      });
+      return;
+    }
+    // #125 验收单在线表单：GET /acceptance/<id> 出自包含表单页，POST /api/acceptance
+    // 收勾选结果落 data/acceptances/<id>.results.json。鉴权=登记白名单（id 32hex 必须
+    // 命中已登记文件）+ 限流；不使用 relay 主 token——填表链接永不携带主 token。
+    if (req.method === "GET" && url.pathname.startsWith("/acceptance/")) {
+      const id = url.pathname.slice("/acceptance/".length).replace(/\/+$/, "");
+      if (!serveAcceptancePage(id, res)) res.writeHead(404, { "content-type": "text/plain" }).end("not found");
+      return;
+    }
+    if (req.method === "POST" && url.pathname === "/api/acceptance") {
+      let body = "";
+      req.on("data", (c: Buffer) => {
+        body += c;
+        if (body.length > 65536) req.destroy();
+      });
+      req.on("end", () => {
+        try {
+          const { id, rows } = JSON.parse(body) as { id?: unknown; rows?: unknown };
+          if (typeof id !== "string" || !ACCEPTANCE_ID_RE.test(id) || !loadAcceptance(id)) {
+            res.writeHead(404, { "content-type": "application/json" }).end('{"ok":false,"error":"验收单不存在"}');
+            return;
+          }
+          if (rateLimited(id)) {
+            res.writeHead(429, { "content-type": "application/json" }).end('{"ok":false,"error":"提交太频繁"}');
+            return;
+          }
+          const ua = String(req.headers["user-agent"] ?? "");
+          const err = saveResult(id, { rows }, ua);
+          if (err) {
+            res.writeHead(400, { "content-type": "application/json" }).end(JSON.stringify({ ok: false, error: err }));
+            return;
+          }
+          res.writeHead(200, { "content-type": "application/json" }).end('{"ok":true}');
+        } catch {
+          res.writeHead(400, { "content-type": "application/json" }).end('{"ok":false,"error":"bad json"}');
         }
       });
       return;
