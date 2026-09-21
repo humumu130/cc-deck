@@ -1500,7 +1500,10 @@
   /* #124 详情头状态字收敛：dhead 内去灯（状态由文字+颜色自述，列表卡 chip 不受影响）、
      字号 11→9 小三号、字距同步收紧（小字号 1px 字距会散） */
   #dhead .status-chip i { display: none; }
-  #dhead .status-chip { font-size: 9px; letter-spacing: .5px; }
+  /* #124②返工（2026-09-21 验收反馈"跟会话名不应纵向对齐，应类似角标但不挨那么近"）：
+     从行中心线（align-items:center 的纵对齐）上抬为上标角标位——relative top 上移，
+     flex gap 12px 天然留出与标题的间距（不贴死） */
+  #dhead .status-chip { font-size: 9px; letter-spacing: .5px; position: relative; top: -7px; }
   @keyframes dot-breathe {
     0%, 100% { opacity: 1; transform: scale(1); box-shadow: 0 0 2px 0 color-mix(in srgb, var(--sc) 40%, transparent); }
     50% { opacity: .45; transform: scale(.8); box-shadow: 0 0 9px 2px color-mix(in srgb, var(--sc) 55%, transparent); }
