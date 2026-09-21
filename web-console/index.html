@@ -455,6 +455,14 @@
   @keyframes gp-hk-rec { 0%, 100% { opacity: 1; } 50% { opacity: .45; } }
   a.gp-row { text-decoration: none; }
   a.gp-row .gp-chev { margin-left: auto; }
+  /* #121 空闲变灰时长：行尾窄数字框 + 弱化单位注脚（lever 同位控件） */
+  .gp-row .gp-num {
+    width: 58px; text-align: center; font-weight: 600; font-size: 12.5px;
+    background: var(--gp-input); color: inherit; border: 1px solid var(--gp-border);
+    border-radius: 7px; padding: 3px 6px; outline: none; flex: none;
+  }
+  .gp-row .gp-num:focus { border-color: var(--hov); }
+  .gp-row .gp-unit { margin-left: 8px; font-size: 11px; color: var(--gp-dim); flex: none; }
   .gp-row.gp-static { cursor: default; }
   .gp-row.gp-static:hover { background: none; }
   /* 连接状态卡：状态点 + 名称/副行 + 右侧状态 Badge（renderGpStatus 同步着色） */
@@ -2189,6 +2197,7 @@
             <div class="gp-row" id="gpMono"><span class="gi"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3h8v18H8z"/><path d="M12 7v10"/></svg></span>等宽字体<div class="lever" id="gpMonoLever" style="--n:2"><i class="lever-thumb"></i><button type="button" class="lever-opt" data-i="0">默认</button><button type="button" class="lever-opt" data-i="1">圆角</button></div></div>
             <div class="gp-row" id="gpThink"><span class="gi"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="8.4"/><path d="M12 3.6a8.4 8.4 0 0 1 0 16.8Z" fill="currentColor" stroke="none" opacity=".45"/></svg></span>思考过程<div class="lever" id="gpThinkLever" style="--n:2"><i class="lever-thumb"></i><button type="button" class="lever-opt" data-i="0">关</button><button type="button" class="lever-opt" data-i="1">开</button></div></div>
             <div class="gp-row" id="gpIdle" style="display:none"><span class="gi"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3.4 20.6 8 12 12.6 3.4 8Z"/><path d="m3.4 12.4 8.6 4.6 8.6-4.6"/><path d="m3.4 16.6 8.6 4.6 8.6-4.6"/></svg></span>折叠空闲<div class="lever" id="gpIdleLever" style="--n:2"><i class="lever-thumb"></i><button type="button" class="lever-opt" data-i="0">显示</button><button type="button" class="lever-opt" data-i="1">折叠</button></div></div>
+            <div class="gp-row" id="gpIdleDim"><span class="gi"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="12" cy="12" r="8.4"/><path d="M12 7.4V12l3.2 2"/></svg></span>空闲变灰<input type="number" step="1" class="gp-num" id="gpIdleDimInput" /><span class="gp-unit">分钟（负数=永不）</span></div>
             <!-- #8/#67 呼出/收起与切换会话行已迁独立「快捷键」栏 -->
           </div>
         </section>
@@ -4167,12 +4176,16 @@ window.addEventListener("resize", cfRestorePos);
 // 视同活跃（灯呼吸黄 + ⑂N 徽标 + 排序升 WORKING 档），消灭「派了后台任务却显示空闲」
 function bgRunning(s) { return (s.subagents ?? []).some((a) => !a.ended_at); }
 function bgCount(s) { return (s.subagents ?? []).filter((a) => !a.ended_at).length; }
-// #96 空闲置灰（对齐手机 isIdleCard 口径）：DONE/ERROR 且静默超 30 分钟降透明度退后，
-// 刚完成的保持鲜亮；#100 豁免后台在跑（等孩子 ≠ 死会话）。置灰由快照事件推动重渲
-const IDLE_DIM_MS = 30 * 60_000;
+// #96 空闲置灰（对齐手机 isIdleCard 口径）：DONE/ERROR 且静默超时长降透明度退后，
+// 刚完成的保持鲜亮；#100 豁免后台在跑（等孩子 ≠ 死会话）。置灰由快照事件推动重渲。
+// #121 时长可配置：分钟数存 localStorage(ccd_idle_dim_min)，默认 30；负数 = 永不
+// 变灰（取 Infinity 让 > 比较恒 false，判定零分支）。设置抽屉「显示」栏改完即生效
+let idleDimMin = 30;
+{ const v = Number(lsGet("ccd_idle_dim_min")); if (Number.isFinite(v)) idleDimMin = v; }
+const idleDimMs = () => (idleDimMin < 0 ? Infinity : idleDimMin * 60_000);
 function idleDimmed(s) {
   return (s.status === "DONE" || s.status === "ERROR") && !bgRunning(s)
-    && Date.now() - (s.updated_at ?? s.started_at) > IDLE_DIM_MS;
+    && Date.now() - (s.updated_at ?? s.started_at) > idleDimMs();
 }
 // #98 补充（用户三条拍板）：①源强调色必须避开状态灯四色及其接近色——红=WAITING/
 // 橙红=ERROR（与品牌橙 0-2° 撞）/黄=WORKING/绿=DONE；②池内两两也须 ≥25°（同屏
@@ -5753,6 +5766,17 @@ $("gpIdleLever").querySelectorAll(".lever-opt").forEach((b) => {
     render(); syncGearPop();
   };
 });
+// #121 空闲变灰时长：change 提交（空/非法回落 30），立即重渲列表生效
+$("gpIdleDimInput").value = String(idleDimMin);
+$("gpIdleDimInput").onchange = () => {
+  const raw = $("gpIdleDimInput").value.trim();
+  let v = raw === "" ? 30 : Math.trunc(Number(raw));
+  if (!Number.isFinite(v)) v = 30;
+  idleDimMin = v;
+  lsSet("ccd_idle_dim_min", String(v));
+  $("gpIdleDimInput").value = String(v);
+  render();
+};
 // 本机 relay 探测已去手动化（#386b 手动行移除）：init 启动即自动静默探测，见 init 尾部 probeLocalRelay
 
 // 检查更新（#319）：Electron 走 preload IPC，Tauri 走 updater 插件全局 API；

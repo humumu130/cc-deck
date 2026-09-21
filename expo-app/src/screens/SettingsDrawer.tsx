@@ -1,14 +1,14 @@
 // 设置抽屉：首页左上角图标呼出，也支持左缘右滑呼出 / 面板上左滑收起；
 // 分区收纳连接（状态卡+服务器列表）、配对、显示与关于
 import { useEffect, useRef, useState, type ReactNode } from "react";
-import { Alert, Animated, Linking, Modal, PanResponder, Pressable, ScrollView, StyleSheet, Switch, Text, View } from "react-native";
+import { Alert, Animated, Linking, Modal, PanResponder, Pressable, ScrollView, StyleSheet, Switch, Text, TextInput, View } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import Constants from "expo-constants";
 import * as Clipboard from "expo-clipboard";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useTheme, useThemeStyles } from "../theme-context";
 import { LogoMark, PencilIcon } from "../brand";
-import { setProcessFont, useProcessFont, setVoiceInput, useVoiceInput, setAggregate as persistAggregate, useAggregate, type ProcessFont } from "../display-settings";
+import { setProcessFont, useProcessFont, setVoiceInput, useVoiceInput, setAggregate as persistAggregate, useAggregate, getIdleDimMin, setIdleDimMin, type ProcessFont } from "../display-settings";
 import { checkUpdate, announceUpdate, VERSION_NOTES } from "../updates";
 import { store, useRelay, type ServerEntry, type SourceStatus, isLanUrl } from "../store";
 import { withA, type ThemeColors } from "../theme";
@@ -236,6 +236,15 @@ export default function SettingsDrawer({
   ).current;
   const processFont = useProcessFont();
   const aggregate = useAggregate();
+  // #121 空闲变灰阈值：本地编辑串，失回/提交时解析（空/非法回落 30），负数 = 永不变灰
+  const [idleDimText, setIdleDimText] = useState(String(getIdleDimMin()));
+  const commitIdleDim = () => {
+    const raw = idleDimText.trim();
+    let v = raw === "" ? 30 : Math.trunc(Number(raw));
+    if (!Number.isFinite(v)) v = 30;
+    setIdleDimMin(v);
+    setIdleDimText(String(v));
+  };
   const snap = useRelay();
   const [servers, setServers] = useState<ServerEntry[]>([]);
   rebuildSrvColors(servers.map((s) => s.id));
@@ -608,6 +617,24 @@ export default function SettingsDrawer({
           {/* #37 同行化：缩小版拨杆（118×24）与标题同行（原两行占位） */}
           <Lever options={FONT_OPTS} value={processFont} onChange={setProcessFont} />
         </View>
+        {/* #121 空闲变灰阈值（分钟）：数字输入（不锁数字键盘——要能输负号），失回提交 */}
+        <View style={[d.setItem, d.setRow]}>
+          <Text style={d.setLabel}><Text style={d.rowIconT}>◐ </Text>空闲变灰</Text>
+          <View style={d.numRow}>
+            <TextInput
+              style={d.numInput}
+              value={idleDimText}
+              onChangeText={setIdleDimText}
+              onEndEditing={commitIdleDim}
+              onSubmitEditing={commitIdleDim}
+              returnKeyType="done"
+              placeholder="30"
+              placeholderTextColor={c.faint}
+              selectTextOnFocus
+            />
+            <Text style={d.numUnit}>分钟 · 负数永不</Text>
+          </View>
+        </View>
         {/* 多源聚合（#294 批4）开关已移除（2026-09-14）：与会话列表上方「单源/聚合」
             胶囊重复，收敛为单一入口（列表就近操作）；行为不变（store.setAggregate） */}
         </>
@@ -851,6 +878,14 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
   setRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
   setLabel: { color: c.text, fontSize: 13.5, fontWeight: "600" },
   rowIconT: { color: c.dim, fontSize: 12, fontWeight: "400" },
+  // #121 空闲变灰数字输入：窄框右锚（lever 同位），单位弱化注脚
+  numRow: { flexDirection: "row", alignItems: "center", gap: 8 },
+  numInput: {
+    width: 56, height: 30, borderRadius: 8, borderWidth: 1, borderColor: c.line,
+    backgroundColor: c.panel2, paddingHorizontal: 6, paddingVertical: 0,
+    color: c.text, fontSize: 13, textAlign: "center", includeFontPadding: false,
+  },
+  numUnit: { color: c.faint, fontSize: 10.5 },
   // #353 拨杆：胶囊轨道 + 浮起滑块（阴影），标签盖在轨道上层。
   // #37 同行缩小版：24 高（原 34），拨杆随行尾布局（setRow 已有 space-between）
   leverTrack: {

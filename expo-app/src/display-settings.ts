@@ -12,6 +12,8 @@ export type ListDensity = "std" | "compact" | "minimal";
 let processFont: ProcessFont = "compact";
 let listDensity: ListDensity = "std";
 let voiceInput = false;
+// #121 空闲变灰阈值（分钟）：默认 30；负数 = 永不变灰（与 web-console ccd_idle_dim_min 同语义）
+let idleDimMin = 30;
 const listeners = new Set<() => void>();
 
 function notify(): void {
@@ -64,10 +66,33 @@ export function setVoiceInput(v: boolean): void {
   notify();
 }
 
+// #121 空闲变灰阈值（分钟）：调用方传整数；负数 = 永不变灰
+export function getIdleDimMin(): number {
+  return idleDimMin;
+}
+
+export function setIdleDimMin(v: number): void {
+  idleDimMin = v;
+  void AsyncStorage.setItem("cc.display.idleDimMin", String(v));
+  notify();
+}
+
 export function useVoiceInput(): boolean {
   const [v, setV] = useState(voiceInput);
   useEffect(() => {
     const l = () => setV(voiceInput);
+    listeners.add(l);
+    return () => {
+      listeners.delete(l);
+    };
+  }, []);
+  return v;
+}
+
+export function useIdleDimMin(): number {
+  const [v, setV] = useState(idleDimMin);
+  useEffect(() => {
+    const l = () => setV(idleDimMin);
     listeners.add(l);
     return () => {
       listeners.delete(l);
@@ -122,6 +147,12 @@ export async function loadDisplaySettings(): Promise<void> {
     else listDensity = ld === "1" ? "compact" : "std";
     aggregate = (await AsyncStorage.getItem("cc.display.aggregate")) === "1";
     voiceInput = (await AsyncStorage.getItem("cc.display.voiceInput")) === "1";
+    // #121 空闲变灰阈值：字符串转数（旧版本未设置 = 保持默认 30）
+    const idm = await AsyncStorage.getItem("cc.display.idleDimMin");
+    if (idm != null) {
+      const n = Number(idm);
+      if (Number.isFinite(n)) idleDimMin = n;
+    }
   } catch {}
   notify();
 }

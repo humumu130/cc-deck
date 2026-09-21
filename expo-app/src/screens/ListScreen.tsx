@@ -6,7 +6,7 @@ import { statusColor, withA, type ThemeColors } from "../theme";
 import { useTheme, useThemeStyles } from "../theme-context";
 import { LogoMark, PencilIcon } from "../brand";
 import { sessionElapsed, fmtElapsed, fmtTok, contextPct, contextLevel, CONTEXT_LIMIT_FALLBACK, displaySrcName, isLiveLine, stripLiveMark } from "../fmt";
-import { setListDensity, useListDensity, setAggregate as persistAggregate, type ListDensity } from "../display-settings";
+import { setListDensity, useListDensity, setAggregate as persistAggregate, useIdleDimMin, type ListDensity } from "../display-settings";
 import { store, useRelay } from "../store";
 import { FadeIn, PressScale } from "../motion";
 import type { SessionState } from "../protocol";
@@ -221,8 +221,8 @@ function LiveStat({ s }: { s: SessionState }) {
 }
 
 // 会话耗时：WORKING 时自带每秒 tick（简洁模式没有 LiveStat，耗时也要走秒）
-// 闲置置灰阈值：DONE/ERROR 静默超过该时长即蒙层置灰（用户定语义"闲置超时置灰"）
-const IDLE_DIM_MS = 30 * 60_000;
+// 闲置置灰阈值（#121 可配置）：分钟数来自设置抽屉（display-settings.idleDimMin，
+// 默认 30，负数 = 永不变灰），SessionCard 内经 useIdleDimMin 现算
 function Elapsed({ s }: { s: SessionState }) {
   const styles = useThemeStyles(makeStyles);
   const [, tick] = useState(0);
@@ -446,6 +446,7 @@ const SessionCard = memo(function SessionCard({
 }) {
   const { c } = useTheme();
   const styles = useThemeStyles(makeStyles);
+  const idleDimMin = useIdleDimMin();
   const compact = density === "compact";
   const minimal = density === "minimal";
   const color = statusColor(s.status, c);
@@ -455,12 +456,12 @@ const SessionCard = memo(function SessionCard({
   const dotColor = bgLive ? c.working : color;
   const deletable = (s.status === "DONE" || s.status === "ERROR") && !bgLive; // #100 后台在跑禁删（删会话会杀后台任务）
   // 空闲超时置灰（2026-09-17 名实对齐：此前 DONE 即灰没有超时，刚结束的会话瞬间
-  // 变暗被用户反馈"灰过头"）——DONE/ERROR 且静默 30 分钟才蒙层置灰，刚完成的保持
-  // 鲜亮让位更从容；阈值常量 IDLE_DIM_MS 可调
+  // 变暗被用户反馈"灰过头"）——DONE/ERROR 且静默超阈值才蒙层置灰，刚完成的保持
+  // 鲜亮让位更从容；#121 阈值可配置（分钟，负数 = 永不 → Infinity 让 > 恒 false）
   const isIdleCard =
     (s.status === "DONE" || s.status === "ERROR") &&
     !bgLive && // #100 豁免：后台子 Agent 还在跑的会话不是闲置（等孩子 ≠ 死会话）
-    Date.now() - (s.updated_at ?? s.started_at) > IDLE_DIM_MS;
+    Date.now() - (s.updated_at ?? s.started_at) > (idleDimMin < 0 ? Infinity : idleDimMin * 60_000);
   // 沉寂会话（DONE 且非今日更新）：名称色降一档，长列表里让位给活跃会话；#100 后台在跑同样豁免
   const idle = s.status === "DONE" && !bgLive && !isSameDay(s.updated_at ?? s.started_at, Date.now());
   return (
