@@ -1189,8 +1189,27 @@ class RelayStore {
     // 开门标记：区分「桥都连不上」（地址错/断网/封锁 → 传输层，自动重试）与开门后的
     // 各种断开（relay 离线/桥闪断）。三态拆分 ④c 的诊断依据
     let opened = false;
+    // #85 开门超时（2026-09-21 用户实测：回前台重连 20 多秒，冷启动反而 5 秒）：
+    // new WebSocket 无 connect 超时，回前台瞬间 ColorOS 网络栈还在从后台限网恢复，
+    // TCP connect 挂死要等满 20s 看门狗才被掐——用户全程看着「连接中」干等。
+    // CF 桥握手正常 <3s，6s 未开门即判挂死：killWs（CONNECTING 期 close 是 no-op，
+    // 必须摘 handler + 晚开门补刀）+ fastRetry 800ms 快发（此时网络基本已恢复，
+    // 第二轮秒连）。最坏 20s 压到 ~9s。LAN 探测/握手 fetch 均自带超时，唯此环节裸奔
+    const openTimer = setTimeout(() => {
+      if (conn.ws !== ws) return;
+      killWs(ws);
+      conn.ws = null;
+      conn.channel = null;
+      conn.state = "offline";
+      conn.stateText = null;
+      conn.failNote = "云桥连接超时，自动重试中";
+      conn.fastRetry = true;
+      this.emit();
+      this.scheduleReconnect(conn);
+    }, 6000);
     ws.onopen = () => {
       if (conn.ws !== ws) return;
+      clearTimeout(openTimer);
       opened = true;
       conn.reconnectDelay = RECONNECT_BASE_MS;
       conn.fastRetry = true;
@@ -1214,6 +1233,7 @@ class RelayStore {
     };
     ws.onclose = () => {
       if (conn.ws !== ws) return;
+      clearTimeout(openTimer); // #85 开门超时器：正常终态即清（防误杀后续新连接）
       this.stopHb(conn);
       this.clearPendingCmds(conn);
       conn.awaitWake = false; // #34 桥 ws 断了：待唤醒作废，回落旧重连循环
