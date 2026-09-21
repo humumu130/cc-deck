@@ -13,6 +13,7 @@ import { checkUpdate, announceUpdate, VERSION_NOTES } from "../updates";
 import { store, useRelay, type ServerEntry, type SourceStatus, isLanUrl } from "../store";
 import { fgSupported } from "../notify";
 import KeepAliveCard from "../KeepAliveCard";
+import Svg, { Path, Rect } from "react-native-svg";
 import { withA, type ThemeColors } from "../theme";
 import ScanScreen, { routeScanResult, type ScanResult } from "./ScanScreen";
 import ImportPicker, { type ImportTarget } from "./ImportPicker";
@@ -102,6 +103,21 @@ function Lever<T extends string>({ options, value, onChange }: {
     </View>
   );
 }
+
+// #130 行前缀 12px 线性图标（消息泡/半月/回车/关于箱/）：替换原胖瘦不一的字符
+// 图标（▤◐↵◈✎），统一 stroke 1.8 细线——react-native-svg
+function LineIcon({ path, color }: { path: string; color?: string }) {
+  const { c } = useTheme();
+  return (
+    <Svg width={12} height={12} viewBox="0 0 24 24">
+      <Path d={path} stroke={color ?? c.dim} strokeWidth={1.8} fill="none" strokeLinecap="round" strokeLinejoin="round" />
+    </Svg>
+  );
+}
+const ICON_MSG = "M4 5h16v10H9l-4 4z"; // 消息泡（过程消息）
+const ICON_MOON = "M12 3a9 9 0 1 0 9 9 7 7 0 0 1-9-9z"; // 半月（空闲变灰）
+const ICON_ENTER = "M20 4v6a3 3 0 0 1-3 3H5m4-4-4 4 4 4"; // 回车箭头（回车发送）
+const ICON_BOX = "M6 6h12a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2zM9 6V4h6v2M12 10v4"; // 收纳箱（版本/关于）
 
 // 扫描框角标（ScanScreen 取景框同语言 mini 版）：四角 L 亮角 + 中部扫描横线，
 // 纯 View 线条绘制（App 无 svg 依赖，与既有图形语言一致）
@@ -400,10 +416,11 @@ export default function SettingsDrawer({
     if (!visible) setAboutOpen(false);
   }, [visible]);
 
-  // #313 显示设置区折叠：低频项收纳腾空间（记忆上次选择，默认展开），折叠态标题示"常用"
-  const [dispCollapsed, setDispCollapsed] = useState(false);
+  // #313 显示设置区折叠：低频项收纳腾空间（记忆上次选择）。#130 默认改折叠：
+  // 仅没存过偏好的新会话用默认，存过 "0"/"1" 的老用户原样尊重
+  const [dispCollapsed, setDispCollapsed] = useState(true);
   useEffect(() => {
-    void AsyncStorage.getItem("cc_display_collapsed").then((v) => setDispCollapsed(v === "1"));
+    void AsyncStorage.getItem("cc_display_collapsed").then((v) => setDispCollapsed(v !== "0"));
   }, []);
   const toggleDisp = () => {
     setDispCollapsed((v) => {
@@ -422,9 +439,7 @@ export default function SettingsDrawer({
     null;
   // （#36 状态卡已删：connDotColor/connSubText 随之退役）
 
-
-  // 关于区检查更新行：与关于弹窗共用同一套检查逻辑（行内反馈）
-  const upd = useUpdateCheck();
+  // 关于区检查更新行已删（#130 收敛进关于弹窗），upd 不再需要
 
   return (
     <View style={d.root} pointerEvents={visible ? "auto" : "none"}>
@@ -434,7 +449,7 @@ export default function SettingsDrawer({
       <Animated.View style={[d.panel, { transform: [{ translateX }], paddingTop: 18 + insets.top }]} {...pan.panHandlers}>
         <View style={d.head}>
           <View style={d.logo}>
-            <LogoMark size={24} />
+            <LogoMark size={20} />
           </View>
           <View style={{ flex: 1, minWidth: 0 }}>
             <Text style={d.nameT}>CC Deck</Text>
@@ -453,12 +468,13 @@ export default function SettingsDrawer({
           </Pressable>
         </View>
 
-        <ScrollView style={d.body} nestedScrollEnabled showsVerticalScrollIndicator={false}>
+        {/* #130 底部补安全距离：contentContainerStyle 撑出手势条空间（原 Build 行贴底） */}
+        <ScrollView style={d.body} nestedScrollEnabled showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 20 + insets.bottom }}>
         {/* 连接区（对齐设置原型）：区头（可折叠收起服务器列表）+ 状态卡 + 列表/添加入口 */}
         <View style={d.secHead}>
           {/* #51 问号左靠：紧跟「连接」标题成左组（原 space-between 三元素被推中） */}
           <View style={d.secTitleRow}>
-            <Text style={d.secTitleT}><Text style={d.secIconT}>◫ </Text>连接{srvCollapsed && servers.length ? ` · ${servers.length}` : ""}</Text>
+            <Text style={d.secTitleT}>连接{srvCollapsed && servers.length ? ` · ${servers.length}` : ""}</Text>
             {/* #48/#53 通道含义问号：自绘图例弹窗（AboutModal 同款 sheet + 图标行） */}
             <Pressable
               hitSlop={8}
@@ -495,6 +511,9 @@ export default function SettingsDrawer({
             const chanTag = e.cloud ? "cloud" : isLanUrl(e.wsUrl) ? "lan" : "";
             return (
               <View key={e.id} style={[d.srvRow, active && d.srvRowOn]}>
+                {/* #337 身份色（登记后固定，与状态解耦）#130 从 7dp 圆点改为卡片
+                    左缘 3dp 色条——名称不再被点隔断、右侧不再显空 */}
+                <View style={[d.srvBar, { backgroundColor: srvColorMap.get(e.id) ?? c.faint }]} />
                 <Pressable
                   style={d.srvMain}
                   android_ripple={{ color: c.tintSoft, borderless: false }}
@@ -506,10 +525,8 @@ export default function SettingsDrawer({
                   }}
                 >
                   <View style={d.srvHead}>
-                    {/* #337 身份色点（登记后固定，与状态解耦）+ #46 双元素：
-                        通道标记 + 连接状态插头（绿=已连/灰=可点触发/黄闪=连接中），
-                        状态文案类元素全撤（云桥在线/↻ 重连等）——失败原因走弹窗 */}
-                    <View style={[d.srvDot, { backgroundColor: srvColorMap.get(e.id) ?? c.faint }]} />
+                    {/* #46 双元素：通道标记 + 连接状态插头（绿=已连/灰=可点触发/
+                        黄闪=连接中），状态文案类元素全撤——失败原因走弹窗 */}
   <Text style={d.srvName} numberOfLines={1}>{(() => { const st = snap.sources.find((x) => x.id === e.id); return st?.relayName && e.name === defaultHostName(e) ? st.relayName : e.name; })()}</Text>
                     {/* #81+#96 通道=动态属性，仅已连接显示真实通道（上报 channel 优先、
                         配置推断兜底）；#96 起不独立占位——缩成插头右下角小角标 */}
@@ -553,16 +570,26 @@ export default function SettingsDrawer({
                   </Pressable>
                 ) : (
                   <Pressable style={d.srvEdit} android_ripple={{ color: c.tintSoft, borderless: false, radius: 13 }} onPress={() => edit(e)}>
-                    <View style={{ marginTop: 1 }}><PencilIcon size={13} color={c.dim} /></View>
+                    <PencilIcon size={12} color={c.faint} />
                   </Pressable>
                 )}
               </View>
             );
           })}
-          {/* 新增入口（#276/#36）：仅手动添加——扫码入口在顶栏 APP 名旁已有，此处删除重复按钮 */}
-          <View style={d.addRowWrap}>
-            <Pressable style={d.addRow} android_ripple={{ color: c.tintSoft, borderless: false }} onPress={() => { onClose(); onSetup(); }}>
-              <Text style={d.addT}>＋ 手动添加</Text>
+          {/* 新增入口（#276/#36）：仅手动添加——扫码入口在顶栏 APP 名旁已有。
+              #130 改虚线幽灵卡（与服务器卡同宽占位卡，「可添加」语义更直观，
+              少一处游离强调蓝）；dashed 圆角用 SVG 画——RN Android 虚线边框
+              配 borderRadius 会缺角 */}
+          <View style={d.ghostWrap}>
+            <Pressable
+              style={d.ghostBtn}
+              android_ripple={{ color: c.tintSoft, borderless: false, radius: 12 }}
+              onPress={() => { onClose(); onSetup(); }}
+            >
+              <Svg style={d.ghostBorder} pointerEvents="none">
+                <Rect x="1" y="1" width="98%" height="38" rx="11" stroke={withA(c.dim, 0.35)} strokeWidth={1} strokeDasharray="4 4" fill="none" />
+              </Svg>
+              <Text style={d.ghostT}>＋ 手动添加</Text>
             </Pressable>
           </View>
           {/* #308 云桥引导已删（#36 用户点单）：提示框啰嗦+太阳云图标无意义——
@@ -573,12 +600,12 @@ export default function SettingsDrawer({
 
         {/* #85 后台保活豁免卡（常驻可见——原入口只在添加连接页，配好的人看不到）：
             手机管家「允许后台活动」管不住系统冻结层，断线频发时一键授予系统级豁免 */}
-        {fgSupported() ? <KeepAliveCard /> : null}
+        {fgSupported() ? <KeepAliveCard style={d.kaSlot} /> : null}
 
         {/* L6 段头统一：纯段头（不可折叠）与可折叠段头（secHead+▾/▸）同结构同规格——
-            同字号字重字色、同 18/6 上下节奏、同 24×24 右占位（行高一致）但不渲染箭头 */}
+            同字号字重字色、同上下节奏、同 24×24 右占位（行高一致）但不渲染箭头 */}
         <View style={d.secHead}>
-          <Text style={d.secTitleT}><Text style={d.secIconT}>⇄ </Text>配对</Text>
+          <Text style={d.secTitleT}>配对</Text>
           <View style={d.secToggle} />
         </View>
         {pc ? (
@@ -594,7 +621,7 @@ export default function SettingsDrawer({
                 </Text>
                 <Pressable
                   style={d.pairRefresh}
-                  android_ripple={{ color: c.tintSoft, borderless: false, radius: 14 }}
+                  android_ripple={{ color: c.tintSoft, borderless: false, radius: 13 }}
                   hitSlop={6}
                   onPress={() => void genPairCode()}
                 >
@@ -611,9 +638,10 @@ export default function SettingsDrawer({
         )}
         {pairErr ? <Text style={d.pairErrT}>{pairErr}</Text> : null}
 
-        {/* #313 显示区可折叠：服务器列表同款 secHead + ▾/▸，AsyncStorage 记忆（默认展开） */}
+        {/* #313 显示区可折叠：服务器列表同款 secHead + ▾/▸，AsyncStorage 记忆。
+            #130 默认改折叠（低频区让路；存过偏好的老用户不受影响——null 才用默认） */}
         <View style={d.secHead}>
-          <Text style={d.secTitleT}><Text style={d.secIconT}>≡ </Text>显示{dispCollapsed ? " · 常用" : ""}</Text>
+          <Text style={d.secTitleT}>显示{dispCollapsed ? " · 常用" : ""}</Text>
           <Pressable style={d.secToggle} hitSlop={10} onPress={toggleDisp} android_ripple={{ color: c.tintSoft, borderless: true, radius: 12 }}>
             <Text style={d.secToggleT}>{dispCollapsed ? "▸" : "▾"}</Text>
           </Pressable>
@@ -621,36 +649,50 @@ export default function SettingsDrawer({
         {!dispCollapsed ? (
         <>
         <View style={[d.setItem, d.setRow]}>
-          <Text style={d.setLabel}><Text style={d.rowIconT}>▤ </Text>过程消息</Text>
+          <View style={d.setL}>
+            <LineIcon path={ICON_MSG} />
+            <Text style={d.setLabel}>过程消息</Text>
+          </View>
           {/* #37 同行化：缩小版拨杆（118×24）与标题同行（原两行占位） */}
           <Lever options={FONT_OPTS} value={processFont} onChange={setProcessFont} />
         </View>
-        {/* #121 空闲变灰阈值（分钟）：数字输入（不锁数字键盘——要能输负号），失回提交 */}
-        <View style={[d.setItem, d.setRow]}>
-          <Text style={d.setLabel}><Text style={d.rowIconT}>◐ </Text>空闲变灰</Text>
-          <View style={d.numRow}>
-            <TextInput
-              style={d.numInput}
-              value={idleDimText}
-              onChangeText={setIdleDimText}
-              onEndEditing={commitIdleDim}
-              onSubmitEditing={commitIdleDim}
-              returnKeyType="done"
-              placeholder="30"
-              placeholderTextColor={c.faint}
-              selectTextOnFocus
-            />
-            <Text style={d.numUnit}>分钟 · 负数永不</Text>
+        {/* #121 空闲变灰阈值（分钟）：数字输入（不锁数字键盘——要能输负号），失回提交。
+            #130 拆两行：输入框+「分钟」独占首行右侧，「负数 = 永不变灰」降次行注脚（永不截断） */}
+        <View style={d.setItem}>
+          <View style={d.setRow}>
+            <View style={d.setL}>
+              <LineIcon path={ICON_MOON} />
+              <Text style={d.setLabel}>空闲变灰</Text>
+            </View>
+            <View style={d.numRow}>
+              <TextInput
+                style={d.numInput}
+                value={idleDimText}
+                onChangeText={setIdleDimText}
+                onEndEditing={commitIdleDim}
+                onSubmitEditing={commitIdleDim}
+                returnKeyType="done"
+                placeholder="30"
+                placeholderTextColor={c.faint}
+                selectTextOnFocus
+              />
+              <Text style={d.numUnit}>分钟</Text>
+            </View>
           </View>
+          <Text style={d.numNote}>负数 = 永不变灰</Text>
         </View>
         {/* #129 回车键行为（会话输入框）：开 = 回车即发送（#68 多行化之前的旧习惯，
-            键帽「发送」）；关 = 回车换行、发送靠 ➤（长文本多行编辑） */}
+            键帽「发送」）；关 = 回车换行、发送靠 ➤（长文本多行编辑）。
+            #130 track 实色化（原半透明淡蓝）——与思考开关同语言 */}
         <View style={[d.setItem, d.setRow]}>
-          <Text style={d.setLabel}><Text style={d.rowIconT}>↵ </Text>回车发送</Text>
+          <View style={d.setL}>
+            <LineIcon path={ICON_ENTER} />
+            <Text style={d.setLabel}>回车发送</Text>
+          </View>
           <Switch
             value={enterSend}
             onValueChange={setEnterSend}
-            trackColor={{ false: c.line, true: withA(c.brandA, 0.55) }}
+            trackColor={{ false: withA(c.dim, 0.3), true: c.brandA }}
             thumbColor="#EDEDF2"
           />
         </View>
@@ -658,10 +700,10 @@ export default function SettingsDrawer({
             胶囊重复，收敛为单一入口（列表就近操作）；行为不变（store.setAggregate） */}
         </>
         ) : null}
-        {/* #313 关于区（对齐设置原型）：版本（呼出弹窗看本版特性/检查更新/反馈）、检查更新
-            （行内反馈，与弹窗共用 useUpdateCheck）、反馈三行列表 + 底部弱化 Build 行 */}
+        {/* #313 关于区：版本（呼出弹窗——本版特性/检查更新/反馈都在里面）、反馈两行。
+            #130 「检查更新」行从抽屉移除：与关于弹窗内同款按钮重复，功能不砍只收敛入口 */}
         <View style={d.secHead}>
-          <Text style={d.secTitleT}><Text style={d.secIconT}>ⓘ </Text>关于</Text>
+          <Text style={d.secTitleT}>关于</Text>
           <View style={d.secToggle} />
         </View>
         <Pressable
@@ -670,18 +712,14 @@ export default function SettingsDrawer({
           onPress={() => setAboutOpen(true)}
           accessibilityLabel="版本与本版特性"
         >
-          <Text style={d.setLabel}><Text style={d.rowIconT}>◈ </Text>版本</Text>
-          <Text style={d.aboutVerT}>{APP_VER}{CHANNEL_TAG ? ` · ${CHANNEL_TAG}` : ""} ›</Text>
-        </Pressable>
-        <Pressable
-          style={[d.setItem, d.setRow]}
-          android_ripple={{ color: c.tintSoft, borderless: false }}
-          disabled={upd.busy}
-          onPress={() => void upd.checkNow()}
-          accessibilityLabel="检查更新"
-        >
-          <Text style={d.setLabel}><Text style={d.rowIconT}>↻ </Text>检查更新</Text>
-          <Text style={d.aboutVerT} numberOfLines={1}>{upd.busy ? "检查中…" : (upd.msg ?? "›")}</Text>
+          <View style={d.setL}>
+            <LineIcon path={ICON_BOX} />
+            <Text style={d.setLabel}>版本</Text>
+          </View>
+          <View style={d.aboutRight}>
+            <Text style={d.aboutVerT}>{APP_VER}</Text>
+            <Text style={d.aboutT}>›</Text>
+          </View>
         </Pressable>
         <Pressable
           style={[d.setItem, d.setRow]}
@@ -689,7 +727,10 @@ export default function SettingsDrawer({
           onPress={() => void Linking.openURL(FEEDBACK_URL).catch(() => {})}
           accessibilityLabel="反馈"
         >
-          <Text style={d.setLabel}><Text style={d.rowIconT}>✎ </Text>反馈</Text>
+          <View style={d.setL}>
+            <PencilIcon size={12} color={c.dim} />
+            <Text style={d.setLabel}>反馈</Text>
+          </View>
           <Text style={d.aboutT}>›</Text>
         </Pressable>
         <Text style={d.aboutBuildT}>CC Deck · Build {APP_VER.replace(/^v/, "")}</Text>
@@ -785,52 +826,55 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
     width: 225, height: "100%", backgroundColor: c.bg,
     borderRightWidth: 1, borderColor: c.line, paddingTop: 18, paddingHorizontal: 16,
   },
-  head: { flexDirection: "row", alignItems: "center", gap: 12, paddingBottom: 16, borderBottomWidth: 1, borderBottomColor: c.line },
+  // #130 头部减重：logo 42→36、间距收紧；三枚静默图标钮（扫码/刷新/问号）统一
+  // tintSoft 底去描边——与会话页返回钮、思考开关同一体系
+  head: { flexDirection: "row", alignItems: "center", gap: 10, paddingBottom: 14, borderBottomWidth: 1, borderBottomColor: c.line },
   logo: {
-    width: 42, height: 42, borderRadius: 13, alignItems: "center", justifyContent: "center",
+    width: 36, height: 36, borderRadius: 11, alignItems: "center", justifyContent: "center",
     backgroundColor: "#1D1726", borderWidth: 1, borderColor: "rgba(255,255,255,0.09)",
   },
   nameT: { color: c.text, fontSize: 16, fontWeight: "700" },
-  verT: { color: c.faint, fontSize: 11.5, marginTop: 1 },
-  // 头部右上全局扫码钮：abClose 同形制（tintSoft 圆角方 + 细边框），角标式扫描图标
+  verT: { color: c.faint, fontSize: 11, marginTop: 1 },
+  // 头部右上全局扫码钮：tintSoft 圆角方（#130 去描边），角标式扫描图标
   scanBtn: {
     width: 30, height: 30, borderRadius: 10, alignItems: "center", justifyContent: "center",
-    backgroundColor: c.tintSoft, borderWidth: 1, borderColor: c.line, overflow: "hidden",
+    backgroundColor: c.tintSoft, overflow: "hidden",
   },
   secT: { color: c.faint, fontSize: 11, fontWeight: "700", marginTop: 18, marginBottom: 6, letterSpacing: 1 },
-  secHead: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginTop: 18, marginBottom: 6 },
+  // #130 区头：去字符图标（◫⇄≡ⓘ 胖瘦不一）纯文字 + 字距放宽 + 节奏 20/8
+  secHead: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginTop: 20, marginBottom: 8 },
   // #51 标题左组：标题+问号同行靠左（原问号被 space-between 推中）
   secTitleRow: { flexDirection: "row", alignItems: "center", gap: 7 },
-  secTitleT: { color: c.faint, fontSize: 11, fontWeight: "700", letterSpacing: 1 },
-  // #346 分区/行前缀小图标（与网页设置面板 gi 同语言）：色弱一档、字号小一档
-  secIconT: { color: c.dim, fontSize: 10.5 },
+  secTitleT: { color: c.faint, fontSize: 11, fontWeight: "700", letterSpacing: 1.5 },
   secToggle: { width: 24, height: 24, alignItems: "center", justifyContent: "center", marginVertical: -6 },
   secToggleT: { color: c.dim, fontSize: 11 },
-  // #48 通道含义问号（连接区标题旁，点击弹解释）
-  secHelpT: { color: c.dim, fontSize: 11, borderWidth: 1, borderColor: withA(c.dim, 0.4), borderRadius: 8, width: 16, height: 16, textAlign: "center", lineHeight: 14, overflow: "hidden" },
+  // #48 通道含义问号（连接区标题旁，点击弹解释）——#130 去 16px 描边圈，改 tintSoft 软底
+  secHelpT: { color: c.dim, fontSize: 11, backgroundColor: c.tintSoft, borderRadius: 8, width: 16, height: 16, textAlign: "center", lineHeight: 14, overflow: "hidden" },
   srvScroll: { maxHeight: 236 },
   srvRow: {
     flexDirection: "row", alignItems: "center", borderWidth: 1, borderColor: c.line,
     borderRadius: 12, backgroundColor: c.panel, marginBottom: 8, overflow: "hidden",
   },
-  srvRowOn: { borderColor: withA(c.done, 0.45), backgroundColor: withA(c.done, 0.08) },
-  srvMain: { flex: 1, paddingVertical: 9, paddingLeft: 11, paddingRight: 4 },
+  // #130 选中改品牌蓝（原绿框绿底——绿色从此只表示「在线插头」），与全 App 选中语言统一
+  srvRowOn: { borderColor: withA(c.brandA, 0.45), backgroundColor: c.tintStrong },
+  // #130 身份色条：卡片左缘 3dp（原 7dp 圆点）
+  srvBar: { position: "absolute", left: 0, top: 10, bottom: 10, width: 3, borderRadius: 2 },
+  srvMain: { flex: 1, paddingVertical: 9, paddingLeft: 12, paddingRight: 4 },
   // #51 行头：名称占满剩余空间（flex:1）——通道标记+插头图标恒右对齐（原 flexShrink
   // 随名称长短漂移：短名靠左长名靠右不齐）；图标间距收小 6→4
   srvHead: { flexDirection: "row", alignItems: "center", gap: 4 },
-  srvDot: { width: 7, height: 7, borderRadius: 4 },
   srvName: { color: c.text, fontSize: 13.5, fontWeight: "600", flex: 1 },
   srvEditBtn: {
     backgroundColor: "transparent", alignItems: "center", justifyContent: "center",
     paddingHorizontal: 8, paddingVertical: 8, borderRadius: 9,
   },  // #46/#53 通道标记：☁️ emoji 与 LanGlyph 胶囊两态
   chanCloudT: { fontSize: 10.5, lineHeight: 14 },
-  // #96 返工（用户几何定稿）：角标垂直中线=插头底边、水平在插头右缘之外（不重叠）。
-  // 插头 13px 在 wrap(18x16) 居中：右缘 x≈15.5 / 底 y≈14.5 → 角标 left 17 起、
-  // top = 14.5 − 行高/2（云 9/2 → 10；LAN 8/2 → 10.5）
-  plugWrap: { position: "relative", width: 18, height: 16, alignItems: "center", justifyContent: "center" },
-  plugBadgeCloud: { position: "absolute", left: 17, top: 10, fontSize: 7.5, lineHeight: 9 },
-  plugBadgeLan: { position: "absolute", left: 17, top: 10.5, fontSize: 6.5, lineHeight: 8, color: "#5B9DFF", fontWeight: "700", letterSpacing: 0.2 },
+  // #96/#130 插头角标几何：wrap 18→30 给角标留驻位（不再贴名称挤排）；
+  // 插头 13px 在 30 宽居中 → 右缘 x≈21.5，角标 left 22 起、top 垂直居中
+  // （云 9/2 → 3.5；LAN 8/2 → 4）
+  plugWrap: { position: "relative", width: 30, height: 16, alignItems: "center", justifyContent: "center" },
+  plugBadgeCloud: { position: "absolute", left: 22, top: 3.5, fontSize: 7.5, lineHeight: 9 },
+  plugBadgeLan: { position: "absolute", left: 22, top: 4, fontSize: 6.5, lineHeight: 8, color: "#5B9DFF", fontWeight: "700", letterSpacing: 0.2 },
   // #96 插头右下角通道角标：不独立占位，缩到 7px 级（云=☁ 字符 / LAN=微字）
   // #53 图例弹窗：图标列固定宽左对齐 + 文字；组间距（legSep）大于行距
   legHead: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 12 },
@@ -840,17 +884,20 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
   legIcon: { width: 30, alignItems: "center", justifyContent: "center" },
   legT: { color: c.text, fontSize: 13.5, flex: 1 },
   legSep: { height: 14 },
-  srvEdit: { width: 34, height: 42, alignItems: "center", justifyContent: "center" },
+  // #130 编辑热区收窄（34×42→30×40）+ 图标降为 faint 12px（更安静的次级动作）
+  srvEdit: { width: 30, height: 40, alignItems: "center", justifyContent: "center" },
   srvEditT: { color: c.dim, fontSize: 13.5 },
   // #46 长按亮出的删除按钮（替常驻 ✕）
-  srvDelArm: { paddingHorizontal: 10, height: 42, alignItems: "center", justifyContent: "center" },
+  srvDelArm: { paddingHorizontal: 10, height: 40, alignItems: "center", justifyContent: "center" },
   srvDelArmT: { color: c.waiting, fontSize: 12.5, fontWeight: "700" },
-  addRowWrap: { flexDirection: "row", justifyContent: "flex-end", marginBottom: 8 },
-  // #378 去框化二期：添加入口纯文字链接式；#46 移右下角（原居中）
-  addRow: {
-    alignItems: "center", justifyContent: "center", paddingVertical: 10, paddingHorizontal: 8,
-  },
-  addT: { color: c.brandA, fontSize: 13, fontWeight: "700" },
+  // #130 添加入口改虚线幽灵卡（原右下角孤悬蓝字链接）：与服务器卡同宽的占位卡。
+  // 虚线描边由 JSX 内 SVG Rect 绘制（RN Android dashed+borderRadius 缺角）
+  ghostWrap: { marginBottom: 8 },
+  ghostBtn: { height: 40, borderRadius: 12, alignItems: "center", justifyContent: "center", overflow: "hidden" },
+  ghostBorder: { ...FILL },
+  ghostT: { color: c.dim, fontSize: 12.5 },
+  // #130 保活卡与上方列表的呼吸距
+  kaSlot: { marginTop: 2 },
   cloudHint: {
     marginTop: 8, alignItems: "center", paddingVertical: 7, borderRadius: 10,
     borderWidth: 1, borderColor: withA(c.working, 0.35), backgroundColor: withA(c.working, 0.07),
@@ -880,12 +927,14 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
     paddingVertical: 10, paddingHorizontal: 2, marginBottom: 8,
   },
   pairTop: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
-  pairSide: { flexDirection: "row", alignItems: "center", gap: 6 },
-  pairCodeT: { color: c.text, fontSize: 19, fontWeight: "800", letterSpacing: 3 },
+  pairSide: { flexDirection: "row", alignItems: "center", gap: 8 },
+  // #130 配对码降权：19→15（层级靠字重+等宽+字距，不靠尺寸）
+  pairCodeT: { color: c.text, fontSize: 15, fontWeight: "700", letterSpacing: 2, fontVariant: ["tabular-nums"] },
   pairExpT: { color: c.dim, fontSize: 11, fontVariant: ["tabular-nums"] },
+  // #130 刷新钮与扫码钮同形制：tintSoft 圆底去描边，26×26
   pairRefresh: {
-    width: 24, height: 24, borderRadius: 12, alignItems: "center", justifyContent: "center",
-    backgroundColor: c.tintSoft, borderWidth: 1, borderColor: c.line,
+    width: 26, height: 26, borderRadius: 13, alignItems: "center", justifyContent: "center",
+    backgroundColor: c.tintSoft, overflow: "hidden",
   },
   pairRefreshT: { color: c.dim, fontSize: 12.5 },
   pairHintT: { color: c.faint, fontSize: 10, marginTop: 6, textAlign: "center" },
@@ -896,20 +945,23 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
   },
   setRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
   setLabel: { color: c.text, fontSize: 13.5, fontWeight: "600" },
-  rowIconT: { color: c.dim, fontSize: 12, fontWeight: "400" },
-  // #121 空闲变灰数字输入：窄框右锚（lever 同位），单位弱化注脚
+  // #130 行前缀左组：12px 线图标 + 标签（图标由 LineIcon/PencilIcon 渲染）
+  setL: { flexDirection: "row", alignItems: "center", gap: 6 },
+  // #121 空闲变灰数字输入：窄框右锚（lever 同位），单位注脚。
+  // #130 输入框 56→52 +「分钟」升 11px dim；负数说明拆到次行 numNote
   numRow: { flexDirection: "row", alignItems: "center", gap: 8 },
   numInput: {
-    width: 56, height: 30, borderRadius: 8, borderWidth: 1, borderColor: c.line,
+    width: 52, height: 30, borderRadius: 8, borderWidth: 1, borderColor: c.line,
     backgroundColor: c.panel2, paddingHorizontal: 6, paddingVertical: 0,
     color: c.text, fontSize: 13, textAlign: "center", includeFontPadding: false,
   },
-  numUnit: { color: c.faint, fontSize: 10.5 },
+  numUnit: { color: c.dim, fontSize: 11 },
+  numNote: { color: c.faint, fontSize: 11, marginTop: 2 },
   // #353 拨杆：胶囊轨道 + 浮起滑块（阴影），标签盖在轨道上层。
-  // #37 同行缩小版：24 高（原 34），拨杆随行尾布局（setRow 已有 space-between）
+  // #37 同行缩小版：24 高（原 34）。#130 轨道去描边（原 tintSoft 底 + 细边双边缘）
   leverTrack: {
     flexDirection: "row", height: 24, borderRadius: 12,
-    backgroundColor: c.tintSoft, borderWidth: 1, borderColor: c.line, overflow: "hidden",
+    backgroundColor: c.tintSoft, overflow: "hidden",
   },
   leverThumb: {
     position: "absolute", top: 2, left: 0, bottom: 2, borderRadius: 10,
@@ -929,12 +981,14 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
   segOptOn: { backgroundColor: c.tintStrong, borderColor: c.brandA },
   segT: { color: c.dim, fontSize: 12, fontWeight: "600" },
   segTOn: { color: c.brandA },
-  // #313 关于行右侧箭头
-  aboutT: { color: c.faint, fontSize: 14 },
-  // 关于区行右值（版本号/检查结果，弱一档小字）
-  aboutVerT: { color: c.dim, fontSize: 11.5, flexShrink: 1, paddingLeft: 8 },
+  // #313 关于行右侧箭头（#130 缩到 12px 与右值同高）
+  aboutT: { color: c.faint, fontSize: 12 },
+  // 版本行右组：版本号 + 箭头并排
+  aboutRight: { flexDirection: "row", alignItems: "center", gap: 4 },
+  // 关于区行右值（版本号，弱一档小字）
+  aboutVerT: { color: c.dim, fontSize: 11, flexShrink: 1 },
   // 关于区底部弱化 Build 行（面板元信息收尾，最暗一档）
-  aboutBuildT: { color: c.faint, fontSize: 10, marginTop: 14 },
+  aboutBuildT: { color: c.faint, fontSize: 10, marginTop: 16 },
   // #313 关于弹窗（ab = about）：NewSessionModal 同款贴底卡片视觉语言
   abMask: { flex: 1, backgroundColor: withA("#02050A", 0.65), justifyContent: "flex-end" },
   abSheet: {
