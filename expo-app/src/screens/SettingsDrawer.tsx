@@ -11,6 +11,8 @@ import { LogoMark, PencilIcon } from "../brand";
 import { setProcessFont, useProcessFont, setVoiceInput, useVoiceInput, setAggregate as persistAggregate, useAggregate, getIdleDimMin, setIdleDimMin, type ProcessFont } from "../display-settings";
 import { checkUpdate, announceUpdate, VERSION_NOTES } from "../updates";
 import { store, useRelay, type ServerEntry, type SourceStatus, isLanUrl } from "../store";
+import { fgSupported } from "../notify";
+import KeepAliveCard from "../KeepAliveCard";
 import { withA, type ThemeColors } from "../theme";
 import ScanScreen, { routeScanResult, type ScanResult } from "./ScanScreen";
 import ImportPicker, { type ImportTarget } from "./ImportPicker";
@@ -566,6 +568,10 @@ export default function SettingsDrawer({
         </ScrollView>
         ) : null}
         {!srvCollapsed && servers.length === 0 ? <Text style={d.srvEmpty}>还没有服务器，点下方新增</Text> : null}
+
+        {/* #85 后台保活豁免卡（常驻可见——原入口只在添加连接页，配好的人看不到）：
+            手机管家「允许后台活动」管不住系统冻结层，断线频发时一键授予系统级豁免 */}
+        {fgSupported() ? <KeepAliveCard /> : null}
 
         {/* L6 段头统一：纯段头（不可折叠）与可折叠段头（secHead+▾/▸）同结构同规格——
             同字号字重字色、同 18/6 上下节奏、同 24×24 右占位（行高一致）但不渲染箭头 */}
