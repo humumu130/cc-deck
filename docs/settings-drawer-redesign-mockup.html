@@ -1,0 +1,408 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>设置抽屉重设计 mockup · #130</title>
+<style>
+  :root{
+    --bg:#050B12; --panel:#0B1622; --panel2:#101F30;
+    --line:rgba(125,165,220,0.10);
+    --text:#E8F0FA; --dim:#7B93AE; --faint:#4A5F78;
+    --brandA:#4D9FFF; --done:#2BD98F; --working:#FFD60A;
+    --tintSoft:rgba(125,165,220,0.08); --tintStrong:rgba(93,134,245,0.16);
+    --logoBg:#1D1726; --logoLine:rgba(255,255,255,0.09);
+  }
+  *{margin:0;padding:0;box-sizing:border-box;-webkit-font-smoothing:antialiased}
+  body{background:#02060C;color:var(--text);font-family:-apple-system,"PingFang SC","Segoe UI",system-ui,sans-serif;padding:34px 40px 60px}
+  h1{font-size:17px;font-weight:700;margin-bottom:6px}
+  .sub{color:var(--dim);font-size:12.5px;margin-bottom:28px;line-height:1.7}
+  .stage{display:flex;gap:44px;align-items:flex-start;flex-wrap:wrap}
+  .col{display:flex;flex-direction:column;align-items:center;gap:12px}
+  .phone{width:261px;background:var(--bg);border-radius:30px;border:1px solid rgba(125,165,220,0.16);padding:18px;box-shadow:0 24px 60px rgba(0,0,0,0.55)}
+  .phone::before{content:"";display:block;width:64px;height:5px;border-radius:3px;background:rgba(125,165,220,0.18);margin:0 auto 14px}
+  .cap{font-size:12px;color:var(--dim);font-weight:600}
+  .cap b{color:var(--text)}
+
+  /* ====== 抽屉面板（两版共用骨架） ====== */
+  .drawer{width:225px;height:760px;background:var(--bg);border-right:1px solid var(--line);padding:14px 16px 16px;display:flex;flex-direction:column;overflow:hidden;position:relative}
+  .scrly{flex:1;overflow:hidden;display:flex;flex-direction:column}
+
+  /* 头部 */
+  .head{display:flex;align-items:center;gap:12px;padding-bottom:16px;border-bottom:1px solid var(--line)}
+  .head.small{gap:10px;padding-bottom:14px}
+  .logo{display:flex;align-items:center;justify-content:center;background:var(--logoBg);border:1px solid var(--logoLine)}
+  .logo.big{width:42px;height:42px;border-radius:13px}
+  .logo.small{width:36px;height:36px;border-radius:11px}
+  .hname{font-size:16px;font-weight:700;color:var(--text);line-height:1.25}
+  .hver{font-size:11px;color:var(--faint);margin-top:1px}
+  .scanbtn{width:30px;height:30px;border-radius:10px;background:var(--tintSoft);display:flex;align-items:center;justify-content:center;margin-left:auto;flex-shrink:0}
+  .scanbtn.old{border:1px solid var(--line)}
+
+  /* 区头 */
+  .sec{display:flex;align-items:center;gap:7px;margin-bottom:8px}
+  .sec.old{margin-top:18px}
+  .sec.new{margin-top:20px}
+  .secT{font-size:11px;font-weight:700;color:var(--faint);letter-spacing:1.5px}
+  .secIco{font-size:10.5px;color:var(--dim)}
+  .q{width:16px;height:16px;border-radius:8px;font-size:11px;color:var(--dim);display:flex;align-items:center;justify-content:center}
+  .q.old{border:1px solid rgba(123,147,174,0.4)}
+  .q.new{background:var(--tintSoft)}
+  .caret{margin-left:auto;color:var(--dim);font-size:11px;width:24px;text-align:center}
+
+  /* 服务器卡 */
+  .srv{display:flex;align-items:center;border-radius:12px;border:1px solid var(--line);background:var(--panel);margin-bottom:8px;min-height:44px;position:relative;overflow:hidden}
+  .srv .bar{position:absolute;left:0;top:10px;bottom:10px;width:3px;border-radius:2px}
+  .srv.on-old{border-color:rgba(43,217,143,0.45);background:rgba(43,217,143,0.08)}
+  .srv.on-new{border-color:rgba(77,159,255,0.45);background:var(--tintStrong)}
+  .srvIn{display:flex;align-items:center;gap:6px;padding:9px 4px 9px 11px;flex:1;min-width:0}
+  .dot{width:7px;height:7px;border-radius:4px;flex-shrink:0}
+  .sname{font-size:13.5px;font-weight:600;color:var(--text);flex:1;white-space:nowrap;overflow:hidden}
+  .plugwrap{display:flex;align-items:center;width:30px;justify-content:center;position:relative}
+  .plugwrap.old{width:18px}
+  .cloudbadge{position:absolute;left:19px;top:12px;font-size:8px;color:var(--dim)}
+  .pencil{width:30px;height:40px;display:flex;align-items:center;justify-content:center;flex-shrink:0}
+  .pencil.old{width:34px;height:42px}
+  .addlink{display:flex;justify-content:flex-end;padding:10px 8px 2px 0;font-size:13px;font-weight:700;color:var(--brandA)}
+  .ghostadd{height:40px;border-radius:12px;border:1px dashed rgba(123,147,174,0.35);display:flex;align-items:center;justify-content:center;font-size:12.5px;color:var(--dim);margin-bottom:8px}
+
+  /* 保活卡 */
+  .ka{background:var(--panel);border-radius:13px;padding:10px 12px;display:flex;align-items:center;gap:10px}
+  .ka.old{border:1px solid #000}
+  .ka.new{border:1px solid var(--line);border-radius:12px;flex-direction:column;align-items:stretch;gap:0;margin-top:2px}
+  .kaMain{flex:1;min-width:0}
+  .kaHead{display:flex;align-items:center;gap:6px}
+  .kadot{width:7px;height:7px;border-radius:4px;background:var(--working);flex-shrink:0}
+  .kaT{font-size:13.5px;font-weight:600;color:var(--text)}
+  .kaSub{font-size:11px;color:var(--faint);line-height:15px;margin-top:2px;overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical}
+  .kaBtn{padding:7px 13px;border-radius:15px;font-size:12.5px;font-weight:600;color:var(--working);border:1px solid rgba(255,214,10,0.5);background:rgba(255,214,10,0.08);flex-shrink:0}
+  .kaRow1{display:flex;align-items:center;gap:6px}
+  .kaLink{margin-left:auto;font-size:12.5px;font-weight:600;color:var(--brandA);flex-shrink:0}
+  .kaSub2{font-size:11px;color:var(--faint);line-height:15px;margin-top:3px;white-space:nowrap;overflow:hidden}
+
+  /* 配对 */
+  .pair{display:flex;align-items:center;justify-content:space-between;padding:10px 2px}
+  .pairCode{font-weight:800;letter-spacing:3px;font-size:19px;color:var(--text)}
+  .pairCode.new{font-size:15px;font-weight:700;letter-spacing:2px;font-variant-numeric:tabular-nums}
+  .pairSide{display:flex;align-items:center;gap:6px}
+  .pairExp{font-size:11px;color:var(--dim);font-variant-numeric:tabular-nums}
+  .pairRf{width:24px;height:24px;border-radius:12px;background:var(--tintSoft);border:1px solid var(--line);display:flex;align-items:center;justify-content:center;font-size:12.5px;color:var(--dim)}
+  .pairRf.new{width:26px;height:26px;border-radius:13px;border:none}
+
+  /* 显示区设置行 */
+  .setrow{display:flex;align-items:center;justify-content:space-between;padding:11px 0;border-bottom:0.5px solid var(--line);min-height:44px}
+  .setL{display:flex;align-items:center;gap:6px;font-size:13.5px;font-weight:600;color:var(--text)}
+  .ico{font-size:12px;color:var(--dim);font-weight:400}
+  .lever{width:118px;height:24px;border-radius:12px;background:var(--tintSoft);display:flex;position:relative;flex-shrink:0}
+  .lever.old{border:1px solid var(--line)}
+  .lever .thumb{position:absolute;top:2px;bottom:2px;left:3px;width:33px;border-radius:10px;background:var(--panel2);border:1px solid rgba(77,159,255,0.4)}
+  .lever .opt{flex:1;display:flex;align-items:center;justify-content:center;font-size:11px;color:var(--dim);position:relative;z-index:1}
+  .lever .opt.on{color:var(--text);font-weight:600}
+  .numrow{display:flex;align-items:center;gap:8px}
+  .numIn{width:56px;height:30px;border-radius:8px;border:1px solid var(--line);background:var(--panel2);color:var(--text);font-size:13px;display:flex;align-items:center;justify-content:center}
+  .numIn.new{width:52px}
+  .numUnit{font-size:10.5px;color:var(--faint);white-space:nowrap;max-width:44px;overflow:hidden}
+  .sw{width:40px;height:22px;border-radius:11px;position:relative;flex-shrink:0}
+  .sw i{position:absolute;width:18px;height:18px;border-radius:50%;background:#EDEDF2;top:2px;right:2px}
+  .sw.old{background:rgba(77,159,255,0.55)}
+  .sw.new{background:var(--brandA)}
+  .twoL{display:flex;flex-direction:column;flex:1;min-width:0}
+  .note2{font-size:11px;color:var(--faint);margin-top:2px}
+
+  /* 关于 */
+  .aboutV{font-size:11.5px;color:var(--dim);padding-left:8px}
+  .aboutV.new{font-size:11px}
+  .arrow{font-size:14px;color:var(--faint)}
+  .arrow.new{font-size:12px}
+  .build{font-size:10px;color:var(--faint);margin-top:14px}
+
+  /* 标注角标 */
+  .tag{display:inline-flex;align-items:center;justify-content:center;min-width:15px;height:15px;border-radius:8px;background:var(--brandA);color:#fff;font-size:9.5px;font-weight:700;font-style:normal;margin-left:5px;flex-shrink:0;vertical-align:middle}
+  .tag.pain{background:#F0524F}
+
+  /* 决策点 */
+  .decide{margin-top:40px;max-width:760px}
+  .decide h2{font-size:14.5px;font-weight:700;margin-bottom:14px}
+  .decide ol{list-style:none;display:flex;flex-direction:column;gap:9px}
+  .decide li{display:flex;gap:10px;font-size:12.5px;color:var(--dim);line-height:1.65;align-items:flex-start}
+  .decide li b{color:var(--text);font-weight:600}
+  .decide .n{width:15px;height:15px;border-radius:8px;background:var(--brandA);color:#fff;font-size:9.5px;font-weight:700;display:flex;align-items:center;justify-content:center;flex-shrink:0;margin-top:3px}
+  .backbtn{margin-top:26px;padding:14px 16px;border:1px solid var(--line);border-radius:12px;background:var(--panel);font-size:12.5px;color:var(--dim);line-height:1.8;max-width:760px}
+  .backbtn b{color:var(--text)}
+  .demo{display:inline-flex;align-items:center;justify-content:center;width:26px;height:26px;border-radius:8px;background:var(--tintSoft);vertical-align:middle;margin:0 6px}
+  svg{display:block}
+</style>
+</head>
+<body>
+
+<h1>设置抽屉重设计 · #130 设计稿</h1>
+<p class="sub">左 = 现状（v0.6.0-test.15，按你截图还原）｜右 = 重设计方案（视觉子 Agent 出稿）。暗色主题，色值取自 theme.ts 真机值，红色角标 = 现状痛点，蓝色角标 = 改动点（见下方决策清单）。<b>这是设计稿，尚未动任何代码。</b></p>
+
+<div class="stage">
+
+<!-- ═══════════════ 现状 ═══════════════ -->
+<div class="col">
+  <div class="phone">
+    <div class="drawer">
+      <div class="scrly">
+
+        <div class="head">
+          <div class="logo big">
+            <svg width="22" height="22" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14" stroke="#D97757" stroke-width="3.4" stroke-linecap="round"/></svg>
+          </div>
+          <div style="flex:1;min-width:0">
+            <div class="hname">CC Deck</div>
+            <div class="hver">测试版</div>
+          </div>
+          <div class="scanbtn old">
+            <svg width="16" height="16" viewBox="0 0 16 16"><path d="M1 5V2a1 1 0 0 1 1-1h3M11 1h3a1 1 0 0 1 1 1v3M15 11v3a1 1 0 0 1-1 1h-3M5 15H2a1 1 0 0 1-1-1v-3" stroke="#4D9FFF" stroke-width="1.6" fill="none" stroke-linecap="round"/><rect x="2" y="7" width="12" height="2" rx="1" fill="#4D9FFF"/></svg>
+          </div>
+        </div>
+
+        <div class="sec old">
+          <span class="secT"><span class="secIco">◫ </span>连接</span>
+          <span class="q old">?</span>
+          <span class="caret">▾</span>
+        </div>
+
+        <div class="srv on-old">
+          <div class="srvIn">
+            <span class="dot" style="background:#2FBEDA"></span>
+            <span class="sname">mac</span>
+            <span class="plugwrap old">
+              <svg width="13" height="10" viewBox="0 0 13 10"><rect x="0" y="3" width="5" height="1.4" fill="#2BD98F"/><rect x="5" y="1" width="4" height="7.2" rx="1" fill="none" stroke="#2BD98F" stroke-width="1.2"/><rect x="9" y="2" width="3" height="1.2" fill="#2BD98F"/><rect x="9" y="6" width="3" height="1.2" fill="#2BD98F"/></svg>
+              <span class="cloudbadge">☁</span>
+            </span>
+          </div>
+          <div class="pencil old">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#7B93AE" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 3a2.8 2.8 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5z"/></svg>
+          </div>
+        </div>
+
+        <div class="srv">
+          <div class="srvIn">
+            <span class="dot" style="background:#5C94F5"></span>
+            <span class="sname">shac</span>
+            <span class="plugwrap old">
+              <svg width="13" height="10" viewBox="0 0 13 10"><rect x="0" y="3" width="5" height="1.4" fill="#4A5F78"/><rect x="5" y="1" width="4" height="7.2" rx="1" fill="none" stroke="#4A5F78" stroke-width="1.2"/><rect x="9" y="2" width="3" height="1.2" fill="#4A5F78"/><rect x="9" y="6" width="3" height="1.2" fill="#4A5F78"/></svg>
+            </span>
+          </div>
+          <div class="pencil old">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#7B93AE" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 3a2.8 2.8 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5z"/></svg>
+          </div>
+        </div>
+
+        <div class="addlink">＋ 手动添加</div>
+
+        <div class="ka old" style="margin-top:8px">
+          <div class="kaMain">
+            <div class="kaHead"><span class="kadot"></span><span class="kaT">后台保活</span><em class="tag pain">1</em></div>
+            <div class="kaSub">后台频繁断线时点右侧授权系统级「忽略电池优化」（手机管家的「允许后台活动」管不住系统冻结层）</div>
+          </div>
+          <div class="kaBtn">去优化</div>
+        </div>
+
+        <div class="sec old"><span class="secT"><span class="secIco">⇄ </span>配对</span></div>
+
+        <div class="pair">
+          <span class="pairCode">757 01852<em class="tag pain">2</em></span>
+          <span class="pairSide">
+            <span class="pairExp">4:43</span>
+            <span class="pairRf">↻</span>
+          </span>
+        </div>
+
+        <div class="sec old"><span class="secT"><span class="secIco">≡ </span>显示</span><span class="caret">▾</span></div>
+
+        <div class="setrow">
+          <span class="setL"><span class="ico">▤ </span>过程消息</span>
+          <span class="lever old"><span class="thumb"></span><span class="opt on" style="padding-left:6px">标准</span><span class="opt">紧凑</span><span class="opt">隐藏</span></span>
+        </div>
+        <div class="setrow">
+          <span class="setL"><span class="ico">◐ </span>空闲变灰</span>
+          <span class="numrow">
+            <span class="numIn">30</span>
+            <span class="numUnit">分钟 · 负数永…<em class="tag pain" style="margin-left:2px">3</em></span>
+          </span>
+        </div>
+        <div class="setrow">
+          <span class="setL"><span class="ico">↵ </span>回车发送</span>
+          <span class="sw old"><i></i></span>
+        </div>
+
+        <div class="sec old"><span class="secT"><span class="secIco">ⓘ </span>关于</span></div>
+
+        <div class="setrow">
+          <span class="setL"><span class="ico">◈ </span>版本</span>
+          <span class="aboutV">v0.6.0-test.15 · 测试版 <span class="arrow">›</span></span>
+        </div>
+        <div class="setrow">
+          <span class="setL"><span class="ico">↻ </span>检查更新</span>
+          <span class="arrow">›</span>
+        </div>
+        <div class="setrow">
+          <span class="setL"><span class="ico">✎ </span>反馈</span>
+          <span class="arrow">›</span>
+        </div>
+        <div class="build">CC Deck · Build 0.6.0-test.15</div>
+
+      </div>
+    </div>
+  </div>
+  <div class="cap">现状 · test.15（<b>红标</b>为痛点）</div>
+</div>
+
+<!-- ═══════════════ 新方案 ═══════════════ -->
+<div class="col">
+  <div class="phone">
+    <div class="drawer">
+      <div class="scrly">
+
+        <div class="head small">
+          <div class="logo small">
+            <svg width="20" height="20" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14" stroke="#D97757" stroke-width="3.4" stroke-linecap="round"/></svg>
+          </div>
+          <div style="flex:1;min-width:0">
+            <div class="hname">CC Deck</div>
+            <div class="hver">测试版</div>
+          </div>
+          <div class="scanbtn"><em class="tag">1</em>
+            <svg width="16" height="16" viewBox="0 0 16 16"><path d="M1 5V2a1 1 0 0 1 1-1h3M11 1h3a1 1 0 0 1 1 1v3M15 11v3a1 1 0 0 1-1 1h-3M5 15H2a1 1 0 0 1-1-1v-3" stroke="#4D9FFF" stroke-width="1.6" fill="none" stroke-linecap="round"/><rect x="2" y="7" width="12" height="2" rx="1" fill="#4D9FFF"/></svg>
+          </div>
+        </div>
+
+        <div class="sec new">
+          <span class="secT">连接<em class="tag">2</em></span>
+          <span class="q new">?</span>
+          <span class="caret">▾</span>
+        </div>
+
+        <div class="srv on-new">
+          <span class="bar" style="background:#2FBEDA"></span>
+          <div class="srvIn" style="padding-left:12px">
+            <span class="sname">mac</span>
+            <span class="plugwrap">
+              <svg width="13" height="10" viewBox="0 0 13 10"><rect x="0" y="3" width="5" height="1.4" fill="#2BD98F"/><rect x="5" y="1" width="4" height="7.2" rx="1" fill="none" stroke="#2BD98F" stroke-width="1.2"/><rect x="9" y="2" width="3" height="1.2" fill="#2BD98F"/><rect x="9" y="6" width="3" height="1.2" fill="#2BD98F"/></svg>
+              <span class="cloudbadge" style="left:16px;top:1px">☁</span>
+            </span>
+          </div>
+          <div class="pencil">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#4A5F78" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 3a2.8 2.8 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5z"/></svg>
+          </div>
+        </div>
+
+        <div class="srv">
+          <span class="bar" style="background:#5C94F5"></span>
+          <div class="srvIn" style="padding-left:12px">
+            <span class="sname">shac</span>
+            <span class="plugwrap">
+              <svg width="13" height="10" viewBox="0 0 13 10"><rect x="0" y="3" width="5" height="1.4" fill="#4A5F78"/><rect x="5" y="1" width="4" height="7.2" rx="1" fill="none" stroke="#4A5F78" stroke-width="1.2"/><rect x="9" y="2" width="3" height="1.2" fill="#4A5F78"/><rect x="9" y="6" width="3" height="1.2" fill="#4A5F78"/></svg>
+            </span>
+          </div>
+          <div class="pencil">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#4A5F78" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 3a2.8 2.8 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5z"/></svg>
+          </div>
+        </div>
+
+        <div class="ghostadd">＋ 手动添加<em class="tag">3</em></div>
+
+        <div class="ka new">
+          <div class="kaRow1">
+            <span class="kadot"></span>
+            <span class="kaT">后台保活</span>
+            <span class="kaLink">去优化 ›<em class="tag">4</em></span>
+          </div>
+          <div class="kaSub2">断线频发？授予系统级后台豁免</div>
+        </div>
+
+        <div class="sec new"><span class="secT">配对<em class="tag">5</em></span></div>
+
+        <div class="pair" style="padding-left:2px;padding-right:2px">
+          <span class="pairCode new">757 01852</span>
+          <span class="pairSide" style="gap:8px">
+            <span class="pairExp">4:43</span>
+            <span class="pairRf new">↻</span>
+          </span>
+        </div>
+
+        <div class="sec new"><span class="secT">显示<em class="tag">6</em></span><span class="caret">▾</span></div>
+
+        <div class="setrow">
+          <span class="setL">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#7B93AE" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 5h16v10H9l-4 4z"/></svg>
+            过程消息
+          </span>
+          <span class="lever"><span class="thumb"></span><span class="opt on" style="padding-left:6px">标准</span><span class="opt">紧凑</span><span class="opt">隐藏</span></span>
+        </div>
+        <div class="setrow" style="align-items:center">
+          <div class="twoL">
+            <div style="display:flex;align-items:center;justify-content:space-between">
+              <span class="setL">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#7B93AE" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3a9 9 0 1 0 9 9 7 7 0 0 1-9-9z"/></svg>
+                空闲变灰
+              </span>
+              <span class="numrow">
+                <span class="numIn new">30</span>
+                <span style="font-size:11px;color:#7B93AE">分钟</span>
+              </span>
+            </div>
+            <div class="note2">负数 = 永不变灰<em class="tag">7</em></div>
+          </div>
+        </div>
+        <div class="setrow">
+          <span class="setL">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#7B93AE" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M20 4v6a3 3 0 0 1-3 3H5m4-4-4 4 4 4"/></svg>
+            回车发送
+          </span>
+          <span class="sw new"><i></i></span>
+        </div>
+
+        <div class="sec new"><span class="secT">关于<em class="tag">8</em></span></div>
+
+        <div class="setrow">
+          <span class="setL">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#7B93AE" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="6" width="16" height="13" rx="2"/><path d="M9 6V4h6v2M12 10v4"/></svg>
+            版本
+          </span>
+          <span class="aboutV new">v0.6.0-test.15 <span class="arrow new">›</span></span>
+        </div>
+        <div class="setrow">
+          <span class="setL">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#7B93AE" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M17 3a2.8 2.8 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5z"/></svg>
+            反馈
+          </span>
+          <span class="arrow new">›</span>
+        </div>
+        <div class="build" style="margin-top:16px">CC Deck · Build 0.6.0-test.15</div>
+
+      </div>
+    </div>
+  </div>
+  <div class="cap">重设计方案（<b>蓝标</b>对应下方决策清单）</div>
+</div>
+
+</div>
+
+<div class="decide">
+  <h2>决策清单（逐条拍板，可只否决其中几条）</h2>
+  <ol>
+    <li><span class="n">1</span><span><b>头部减重 + 图标钮去边框</b>：Logo 42→36；扫码钮、配对刷新钮、区头问号三枚「静默图标钮」统一去描边（tintSoft 底无边框）——与会话页返回钮、思考开关同一体系。</span></li>
+    <li><span class="n">2</span><span><b>区头去字符图标 + 选中卡改色</b>：◫⇄≡ⓘ 四个胖瘦不一的字符图标全部移除，区头纯文字（11px 加宽字距）；选中服务器卡从绿框绿底改为「品牌蓝框 + 选中蓝底」，与全 App 选中语言统一——<b>绿色从此只表示「在线插头」</b>；身份色从 7dp 圆点改为卡片左缘 3dp 色条（名称不再被点隔断、右侧不再显空）。</span></li>
+    <li><span class="n">3</span><span><b>「＋手动添加」改虚线幽灵卡</b>：从右下角孤悬蓝字链接改为与服务器卡同宽的虚线占位卡（40 高、灰字）——列表区的「可添加」语义更直观，少一处游离的强调蓝。</span></li>
+    <li><span class="n">4</span><span><b>后台保活卡瘦身 78→56dp</b>（最丑的一块）：修复<b>黑色边框 bug</b>（代码里写了 borderWidth 没写 borderColor，RN 默认纯黑——你截图里那个刺眼黑框就是它）；挤排改两行：标题行右端「去优化 ›」蓝色文字链，副行整宽一句话「断线频发？授予系统级后台豁免」——文字永不截断，黄色只留 7dp 状态点。完整说明仍在添加连接页。</span></li>
+    <li><span class="n">5</span><span><b>配对码降权</b>：19px→15px 等宽数字（层级靠字重+等宽+字距，不靠尺寸）；倒计时/刷新钮与码严格同一行垂直居中。</span></li>
+    <li><span class="n">6</span><span><b>显示区节奏</b>：默认改折叠（你设过一次就不动了；已保存的偏好不受影响）——mockup 画的是展开态；行图标换 12px 细线 SVG（消息泡/半月/回车箭头，胖瘦一致）；拨杆轨道去边框。</span></li>
+    <li><span class="n">7</span><span><b>空闲变灰行拆两行 + 开关实色</b>：输入框（56→52）+「分钟」独占第一行右侧，「负数 = 永不变灰」降为第二行注脚——永不截断；回车发送开关从半透明淡蓝改品牌蓝实色（与思考开关同语言）。</span></li>
+    <li><span class="n">8</span><span><b>关于区并两行</b>：「检查更新」行从抽屉移除——功能不砍，并入「版本」行点开的弹窗里（那里本来就有一个同款「↻ 检查更新」按钮，两处重复）；抽屉只留 版本 / 反馈 两行。底部补安全距离（现状会贴到手势条）。</span></li>
+  </ol>
+
+  <!-- 2026-09-21 用户拍板：8 条决策全批，按本稿落地（#130）；返回钮结论采纳（不加边框） -->
+  <div class="backbtn">
+    <b>顺带答复你之前问的：会话页左上角返回按钮要不要边框？</b><br>
+    结论：<b>不加边框，维持现状。</b> 它代码上本来就没有边框——你看到的「边框感」是 tintSoft 半透明底色与背景的填充边界。加描边会在 26px 小钮上形成「填充边界+描边」双边缘，更糊更重；去掉底色则丢失落点感、也和同一行的「思考」开关不成对（两者现在同为 tintSoft 底，视觉上已经是一对）。真正要修的是反向的：<b>把抽屉里那三枚带边框的图标钮（扫码/刷新/问号）的边框拆掉</b>，向返回钮看齐——这正是决策 ①。
+    <span class="demo"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#7B93AE" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg></span>← 返回钮现状（放大），无需改动。
+  </div>
+</div>
+
+</body>
+</html>
