@@ -55,6 +55,20 @@ export function setAggregate(v: boolean): void {
   notify();
 }
 
+// #129 回车键行为（会话输入框）：true = 回车发送（#68 多行化之前的旧习惯，默认
+// 恢复）；false = 回车换行、发送靠 ➤ 按钮（长文本多行编辑场景）。未设置 = true
+let enterSend = true;
+
+export function getEnterSend(): boolean {
+  return enterSend;
+}
+
+export function setEnterSend(v: boolean): void {
+  enterSend = v;
+  void AsyncStorage.setItem("cc.display.enterSend", v ? "1" : "0");
+  notify();
+}
+
 // 语音输入（按住说话）：识别服务在部分机型不可用，默认关闭，需要者自行开启
 export function getVoiceInput(): boolean {
   return voiceInput;
@@ -81,6 +95,18 @@ export function useVoiceInput(): boolean {
   const [v, setV] = useState(voiceInput);
   useEffect(() => {
     const l = () => setV(voiceInput);
+    listeners.add(l);
+    return () => {
+      listeners.delete(l);
+    };
+  }, []);
+  return v;
+}
+
+export function useEnterSend(): boolean {
+  const [v, setV] = useState(enterSend);
+  useEffect(() => {
+    const l = () => setV(enterSend);
     listeners.add(l);
     return () => {
       listeners.delete(l);
@@ -147,6 +173,8 @@ export async function loadDisplaySettings(): Promise<void> {
     else listDensity = ld === "1" ? "compact" : "std";
     aggregate = (await AsyncStorage.getItem("cc.display.aggregate")) === "1";
     voiceInput = (await AsyncStorage.getItem("cc.display.voiceInput")) === "1";
+    // #129 回车发送：未设置/读取异常均回落默认 true（≠ 其他布尔项的 "1" 才真）
+    enterSend = (await AsyncStorage.getItem("cc.display.enterSend")) !== "0";
     // #121 空闲变灰阈值：字符串转数（旧版本未设置 = 保持默认 30）
     const idm = await AsyncStorage.getItem("cc.display.idleDimMin");
     if (idm != null) {

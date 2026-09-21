@@ -25,7 +25,7 @@ import { store, useRelay } from "../store";
 import { fromB64, toB64 } from "../e2e";
 import type { ArtifactItem, CronTask, LogEntry, SessionState, TodoItem, WaitingPayload } from "../protocol";
 import { useKbHeight } from "../kb";
-import { useProcessFont, useVoiceInput } from "../display-settings";
+import { useEnterSend, useProcessFont, useVoiceInput } from "../display-settings";
 import { voice } from "../voice";
 import { BUILTIN_COMMANDS, fetchSlashCommands, httpBaseOf, matchSlash, type SlashCommand } from "../slash";
 import { MdText } from "../md";
@@ -1190,6 +1190,9 @@ export default function DetailScreen({ sid, onBack, initialView, ref }: { sid: s
   // 定高——虚高机型与诚实机型统一归一，单行 44、每多一行 +lineHeight
   const [inputH, setInputH] = useState(44);
   const inputBaseRef = useRef<number | null>(null); // #113 设备单行基线（首次空输入事件校准）
+  // #129 回车键行为：开 = 回车发送（恢复 #68 多行化之前的旧习惯）；关 = 回车换行
+  const enterSend = useEnterSend();
+  const inputRef = useRef<TextInput>(null);
   const editInput = (v: string) => {
     if (v) drafts.set(sid, v);
     else drafts.delete(sid);
@@ -2585,6 +2588,7 @@ export default function DetailScreen({ sid, onBack, initialView, ref }: { sid: s
               // 完全无反应——用户表象就是「键盘弹不出来」。断连挂死（#85 connecting 卡死）
               // 期间曾长期处于此态且无任何视觉提示。现半透明弱化 + placeholder 说明原因，
               // 用户能自诊断「是断连不是键盘坏了」
+              ref={inputRef}
               style={[d.input, { height: inputH }, !canCmd && { opacity: 0.5 }]}
               value={input}
               onChangeText={editInput}
@@ -2613,9 +2617,18 @@ export default function DetailScreen({ sid, onBack, initialView, ref }: { sid: s
               placeholderTextColor={c.faint}
               editable={canCmd}
               multiline
-              returnKeyType="send"
-              blurOnSubmit={false}
-              onSubmitEditing={() => send()}
+              // #129 回车键行为（设置抽屉「显示」区可切）：开 = 回车发送（键帽「发送」、
+              // 不插换行，恢复 #68 多行化前的旧习惯）；关 = 回车换行、发送靠 ➤。
+              // blurOnSubmit=true 才会让 Android multiline 的回车触发 onSubmitEditing
+              returnKeyType={enterSend ? "send" : "default"}
+              blurOnSubmit={enterSend}
+              onSubmitEditing={() => {
+                send();
+                // 发送后夺回焦点：blurOnSubmit=true 的回车在 Android 上会顺带 blur 收起
+                // 键盘，连续发消息不该每条都重弹（键盘未收时 focus 是无操作）。延后一拍
+                // 躲开随 submit 到来的 blur
+                setTimeout(() => inputRef.current?.focus(), 0);
+              }}
             />
           </View>
           {voiceOn ? (

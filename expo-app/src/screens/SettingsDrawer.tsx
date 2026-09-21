@@ -8,7 +8,7 @@ import * as Clipboard from "expo-clipboard";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useTheme, useThemeStyles } from "../theme-context";
 import { LogoMark, PencilIcon } from "../brand";
-import { setProcessFont, useProcessFont, setVoiceInput, useVoiceInput, setAggregate as persistAggregate, useAggregate, getIdleDimMin, setIdleDimMin, type ProcessFont } from "../display-settings";
+import { setProcessFont, useProcessFont, setVoiceInput, useVoiceInput, setAggregate as persistAggregate, useAggregate, getIdleDimMin, setIdleDimMin, setEnterSend, useEnterSend, type ProcessFont } from "../display-settings";
 import { checkUpdate, announceUpdate, VERSION_NOTES } from "../updates";
 import { store, useRelay, type ServerEntry, type SourceStatus, isLanUrl } from "../store";
 import { fgSupported } from "../notify";
@@ -238,6 +238,8 @@ export default function SettingsDrawer({
   ).current;
   const processFont = useProcessFont();
   const aggregate = useAggregate();
+  // #129 回车发送开关（会话输入框回车键行为）
+  const enterSend = useEnterSend();
   // #121 空闲变灰阈值：本地编辑串，失回/提交时解析（空/非法回落 30），负数 = 永不变灰
   const [idleDimText, setIdleDimText] = useState(String(getIdleDimMin()));
   const commitIdleDim = () => {
@@ -640,6 +642,17 @@ export default function SettingsDrawer({
             />
             <Text style={d.numUnit}>分钟 · 负数永不</Text>
           </View>
+        </View>
+        {/* #129 回车键行为（会话输入框）：开 = 回车即发送（#68 多行化之前的旧习惯，
+            键帽「发送」）；关 = 回车换行、发送靠 ➤（长文本多行编辑） */}
+        <View style={[d.setItem, d.setRow]}>
+          <Text style={d.setLabel}><Text style={d.rowIconT}>↵ </Text>回车发送</Text>
+          <Switch
+            value={enterSend}
+            onValueChange={setEnterSend}
+            trackColor={{ false: c.line, true: withA(c.brandA, 0.55) }}
+            thumbColor="#EDEDF2"
+          />
         </View>
         {/* 多源聚合（#294 批4）开关已移除（2026-09-14）：与会话列表上方「单源/聚合」
             胶囊重复，收敛为单一入口（列表就近操作）；行为不变（store.setAggregate） */}
