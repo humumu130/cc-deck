@@ -5774,7 +5774,12 @@ $("gpIdleLever").querySelectorAll(".lever-opt").forEach((b) => {
   };
 });
 // #121 空闲变灰时长：change 提交（空/非法回落 30），立即重渲列表生效
+// #121②验收 follow-up（2026-09-21）：Windows WebView 回车不触发 change（只失焦触发），
+// 用户"输入 1 回车"无反应——Enter 直接 blur 走 change 路径（提交+回落逻辑复用不另写）
 $("gpIdleDimInput").value = String(idleDimMin);
+$("gpIdleDimInput").onkeydown = (e) => {
+  if (e.key === "Enter") { e.preventDefault(); e.target.blur(); }
+};
 $("gpIdleDimInput").onchange = () => {
   const raw = $("gpIdleDimInput").value.trim();
   let v = raw === "" ? 30 : Math.trunc(Number(raw));
