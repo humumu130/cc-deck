@@ -104,7 +104,10 @@ export function saveResult(id: string, payload: unknown, ua: string): string | n
 }
 
 // ---- 表单页（自包含单 HTML；勾选交互按用户口径：怎么简单怎么来）----
-export function acceptanceHtml(a: Acceptance): string {
+// apiPath：提交端点。relay 本体默认 /api/acceptance；ECS 云桥借道版传 /nacl.js
+// （云桥所在 CF tunnel ingress 按 path 白名单分流，只有 / 系白名单路径可达——
+//   POST /nacl.js 方法分支=提交端点：web-console 仅 GET 该路径，无干扰）
+export function acceptanceHtml(a: Acceptance, apiPath = "/api/acceptance"): string {
   const data = JSON.stringify(a).replace(/</g, "\\u003c");
   const preface = (a.preface ?? []).map((p) => `<p class="pf">${esc(p)}</p>`).join("");
   const notes = (a.notes ?? []).map((n) => `<li>${esc(n)}</li>`).join("");
@@ -205,7 +208,7 @@ document.getElementById("submit").onclick = function () {
     rows.push({ i: i, verdict: state[i] || null, note: (document.getElementById("n" + i).value || "").trim() });
   }
   document.getElementById("msg").textContent = "提交中…";
-  fetch("/api/acceptance", {
+  fetch(${JSON.stringify(apiPath)}, {
     method: "POST",
     headers: { "content-type": "application/json" },
     body: JSON.stringify({ id: DATA.id, rows: rows }),
@@ -233,10 +236,10 @@ function esc(s: string): string {
   );
 }
 
-export function serveAcceptancePage(id: string, res: ServerResponse): boolean {
+export function serveAcceptancePage(id: string, res: ServerResponse, apiPath?: string): boolean {
   const a = loadAcceptance(id);
   if (!a) return false;
-  const html = acceptanceHtml(a);
+  const html = acceptanceHtml(a, apiPath);
   res.writeHead(200, { "content-type": "text/html; charset=utf-8", "cache-control": "no-store" });
   res.end(html);
   return true;

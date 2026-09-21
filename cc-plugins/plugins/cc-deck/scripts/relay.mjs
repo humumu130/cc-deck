@@ -43846,7 +43846,7 @@ function saveResult(id2, payload, ua) {
   writeFileSync6(file, JSON.stringify({ id: id2, history }, null, 1));
   return null;
 }
-function acceptanceHtml(a) {
+function acceptanceHtml(a, apiPath = "/api/acceptance") {
   const data = JSON.stringify(a).replace(/</g, "\\u003c");
   const preface = (a.preface ?? []).map((p) => `<p class="pf">${esc(p)}</p>`).join("");
   const notes = (a.notes ?? []).map((n) => `<li>${esc(n)}</li>`).join("");
@@ -43947,7 +43947,7 @@ document.getElementById("submit").onclick = function () {
     rows.push({ i: i, verdict: state[i] || null, note: (document.getElementById("n" + i).value || "").trim() });
   }
   document.getElementById("msg").textContent = "\u63D0\u4EA4\u4E2D\u2026";
-  fetch("/api/acceptance", {
+  fetch(${JSON.stringify(apiPath)}, {
     method: "POST",
     headers: { "content-type": "application/json" },
     body: JSON.stringify({ id: DATA.id, rows: rows }),
@@ -43974,10 +43974,10 @@ function esc(s) {
     (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]
   );
 }
-function serveAcceptancePage(id2, res) {
+function serveAcceptancePage(id2, res, apiPath) {
   const a = loadAcceptance(id2);
   if (!a) return false;
-  const html = acceptanceHtml(a);
+  const html = acceptanceHtml(a, apiPath);
   res.writeHead(200, { "content-type": "text/html; charset=utf-8", "cache-control": "no-store" });
   res.end(html);
   return true;
