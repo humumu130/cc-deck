@@ -5761,12 +5761,13 @@ $("gpIdleLever").querySelectorAll(".lever-opt").forEach((b) => {
 // Promise 永挂（按钮永远"检查中…"）——外层 10s race 兜底并给手动下载入口
 // 门控（2026-09-18 双气泡验证轮反馈）：tauri-latest.json 只配 windows-x86_64 平台，
 // Mac 端 updater.check 判"0.5.2 正式 > 0.5.2-test.N"为有更新、下载时无本平台条目
-// 直接炸（用户实测"更新失败"+英文串）；test/snap 桌面包为本地直装，被 updater 升
-// 正式版会破坏通道隔离——Mac 或 test/snap 版一律不走 updater，提示手动更新。
-// dev 同罪（#22，2026-09-19）：desktop.yml 无 tag 验证包烙 -dev.<run_number>，时间
-// 上晚于同号正式版、semver 却判正式更高——不拦会被提示（静默路径甚至自动装）降级
+// 直接炸（用户实测"更新失败"+英文串）。
+// #119（2026-09-21）test 通道解禁：test.N 包的 updater endpoint 由 desktop.yml 在
+// 构建期烙成 tauri-latest-test.json（CF 主源 + ECS 兜底，清单由 build-test-desktop.sh
+// 产出）——test 包查不到正式清单，通道隔离从"禁用"改为"隔离源"，Windows test 版
+// 可在线更新。Mac（清单无 mac 条目）与 snap/dev（直装/降级风险）仍拦，提示手动更新。
 const UPDATER_BLOCKED = /Mac/i.test(navigator.platform || navigator.userAgent)
-  || /-(test|snap|dev)\./i.test(CONSOLE_VERSION);
+  || /-(snap|dev)\./i.test(CONSOLE_VERSION);
 async function shellCheckUpdate() {
   const withTimeout = (p, ms) => Promise.race([p, new Promise((_, rej) => setTimeout(() => rej(new Error("网络超时")), ms))]);
   if (UPDATER_BLOCKED) return { blocked: true };
@@ -5792,7 +5793,7 @@ $("gpUpdate").onclick = async () => {
     const r = await shellCheckUpdate();
     if (r && r.blocked) {
       v.textContent = "手动更新";
-      toast("此版本请手动更新（Mac / 测试通道不走在线升级）", 5000);
+      toast("此版本请手动更新（Mac / 快照与开发通道不走在线升级）", 5000);
     }
     else if (r === null) v.textContent = "网页随仓库";
     else if (r.available) v.textContent = r.installed ? "已装·重启生效" : `→ ${r.version}`;
@@ -8597,7 +8598,7 @@ async function probeLocalRelay() {
   // 静默 check-only（绝不自动装——不走 shellCheckUpdate，其在无 ccDeck.checkUpdate 桥
   // 时会落到 updater 的自动 downloadAndInstall 分支），有新版 toast 一句 + 关于页
   // 版本位预填「→ vX」；失败零打扰
-  if (window.ccDeck && window.__TAURI__ && window.__TAURI__.updater) {
+  if (window.ccDeck && window.__TAURI__ && window.__TAURI__.updater && !UPDATER_BLOCKED) {
     const autoChk = async () => {
       try {
         const u = await Promise.race([

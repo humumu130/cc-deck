@@ -61,6 +61,14 @@ jobs:
           V="${GITHUB_REF_NAME#v}"
           npm version --no-git-tag-version --allow-same-version "$V"
           sed -i "s/const CONSOLE_VERSION = \"[^\"]*\"/const CONSOLE_VERSION = \"$V\"/" ../web-console/index.html
+          # #119 test 通道在线更新：endpoint 烙成 test 专用清单（CF 主源公司可达 + ECS
+          # 兜底），通道隔离在编译期锁定——test 包永远查不到正式清单，semver 天然
+          # 按 test.N 序号递增判更新（build-test-desktop.sh 产出该清单）
+          if [[ "$GITHUB_REF_NAME" == *-test.* ]]; then
+            sed -i 's#https://cc.humumu.online/download/tauri-latest.json#https://cc.humumu.online/download/tauri-latest-test.json#' src-tauri/tauri.conf.json
+            sed -i 's#https://github.com/humumu130/cc-deck/releases/latest/download/latest.json#http://8.133.211.170:8888/tauri-latest-test.json#' src-tauri/tauri.conf.json
+            grep -n "tauri-latest-test" src-tauri/tauri.conf.json
+          fi
 
       - name: Stamp dev suffix (无 tag 验证构建通道标识)
         # 对齐 android.yml 同名步骤：无 tag 验证包烙 -dev.<run_number>，关于页不再与
@@ -158,6 +166,14 @@ jobs:
           npm version --no-git-tag-version --allow-same-version "$V"
           sed -i.bak "s/const CONSOLE_VERSION = \"[^\"]*\"/const CONSOLE_VERSION = \"$V\"/" ../web-console/index.html
           rm -f ../web-console/index.html.bak
+          # #119 同 Windows job：test tag 烙 test 专用 updater 清单（Mac test 包虽被
+          # UPDATER_BLOCKED 拦住不发请求，endpoint 同改保持一致，放开只需清单加 mac 条目）
+          if [[ "$GITHUB_REF_NAME" == *-test.* ]]; then
+            sed -i.bak 's#https://cc.humumu.online/download/tauri-latest.json#https://cc.humumu.online/download/tauri-latest-test.json#' src-tauri/tauri.conf.json
+            sed -i.bak 's#https://github.com/humumu130/cc-deck/releases/latest/download/latest.json#http://8.133.211.170:8888/tauri-latest-test.json#' src-tauri/tauri.conf.json
+            rm -f src-tauri/tauri.conf.json.bak
+            grep -n "tauri-latest-test" src-tauri/tauri.conf.json
+          fi
 
       - name: Stamp dev suffix (无 tag 验证构建通道标识)
         # 同 Windows job 的 dev 烙印：无 tag 验证包 -dev.<run_number>，防与正式版撞名。
