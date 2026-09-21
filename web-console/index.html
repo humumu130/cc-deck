@@ -5024,7 +5024,8 @@ function artRowHtml(t, s) {
     ' title="' + escapeHtml(p) + '">' +
     '<span class="fico f-' + k + '">' + ART_SVG[k] + "</span>" +
     '<span class="afname">' + dirHtml + badge + "</span>" +
-    '<span class="afmeta"><span class="pm"><span class="ds-add">+' + (t.adds ?? 0) + '</span> <span class="ds-del">−' + (t.dels ?? 0) + "</span></span>" +
+    // 2026-09-21 用户：移除行变更统计（+N −N）——输出物是交付物口径（#51），行数是代码 diff 语义残留
+    '<span class="afmeta">' +
     (fmtArtSize(t.size) ? '<span class="sz">' + fmtArtSize(t.size) + "</span>" : "") +
     '<span class="tm">' + fmtArtTime(t.last_at || t.first_at) + "</span></span>" +
     '<button class="af-act" title="更多操作">⋯</button>' +
@@ -5038,13 +5039,10 @@ function artifactsTabHtml(s) {
   const byRecency = (a, b) => (b.last_at || b.first_at || 0) - (a.last_at || a.first_at || 0);
   const created = arts.filter((t) => t.op === "create").sort(byRecency);
   const edited = arts.filter((t) => t.op !== "create").sort(byRecency);
-  const adds = arts.reduce((n, t) => n + (t.adds ?? 0), 0);
-  const dels = arts.reduce((n, t) => n + (t.dels ?? 0), 0);
+  // 2026-09-21 用户：移除汇总行的「新建 N · 修改 N / +N −N」统计（分组标题仍带计数，信息不丢）
   const shellOk = !!(window.ccDeck && window.ccDeck.openPath);
   let html =
     '<div class="af-sum"><span class="cnt">' + arts.length + " 个文件</span>" +
-    '<span class="seg"><b class="cr">新建 ' + created.length + '</b> · <b class="ed">修改 ' + edited.length + "</b></span>" +
-    '<span class="pm"><span class="ds-add">+' + adds.toLocaleString() + '</span> <span class="ds-del">−' + dels.toLocaleString() + "</span></span>" +
     (s.artifacts_truncated ? '<span class="af-trunc">已截断 · 保留最新 200</span>' : "") +
     '<span class="sp"></span>' +
     (shellOk && s.cwd ? '<button class="af-open-dir" data-dir="' + escapeHtml(s.cwd) + '"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3.5 7.2c0-1.3 1-2.3 2.3-2.3h3l2 2.2h6.4c1.3 0 2.3 1 2.3 2.3v7.3c0 1.3-1 2.3-2.3 2.3H5.8c-1.3 0-2.3-1-2.3-2.3z"/></svg>打开工作目录</button>' : "") +

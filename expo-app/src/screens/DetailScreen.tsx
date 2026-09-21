@@ -763,7 +763,7 @@ function ArtSheet({ art, rel, sid, onClose }: { art: ArtifactItem; rel: string; 
             {dead ? <Text style={[d.artTag, { color: c.error }]}>已删除</Text> : null}
           </View>
           {/* 元信息一行（原徽章行 + 5 行键值表收编为中性注脚）：零信息项不渲染、
-              首次=最近只显一个、+0/−0 跳过行变更 */}
+              首次=最近只显一个；2026-09-21 行变更 +N −N 随 tab 页统计一并移除（交付物口径） */}
           <Text style={d.artMeta} numberOfLines={3}>
             {[
               art.op === "create" ? "新建" : "修改",
@@ -771,7 +771,6 @@ function ArtSheet({ art, rel, sid, onClose }: { art: ArtifactItem; rel: string; 
               fmtArtSize(art.size),
               fmtArtTime(art.last_at || art.first_at),
               art.tools?.length ? `工具 ${art.tools.join(" · ")}` : "",
-              (art.adds || art.dels) ? `+${art.adds ?? 0} −${art.dels ?? 0} 行` : "",
               art.first_at && art.first_at !== art.last_at ? `首次 ${fmtArtTime(art.first_at)}` : "",
             ].filter(Boolean).join(" · ")}
           </Text>
@@ -2225,8 +2224,6 @@ export default function DetailScreen({ sid, onBack, initialView, ref }: { sid: s
             const byRec = (a: ArtifactItem, b: ArtifactItem) => (b.last_at || b.first_at || 0) - (a.last_at || a.first_at || 0);
             const created = arts.filter((t) => t.op === "create").sort(byRec);
             const edited = arts.filter((t) => t.op !== "create").sort(byRec);
-            const adds = arts.reduce((n, t) => n + (t.adds ?? 0), 0);
-            const dels = arts.reduce((n, t) => n + (t.dels ?? 0), 0);
             const KC: Record<ArtKind, string> = { code: c.brandA, doc: c.done, data: c.working, img: c.waiting, zip: c.dim, gen: c.faint };
             const artRow = (t: ArtifactItem, i: number) => {
               const rel = artRelOf(s, t);
@@ -2255,7 +2252,8 @@ export default function DetailScreen({ sid, onBack, initialView, ref }: { sid: s
                       {outside ? <Text style={[d.artTag, { color: c.working }]}>cwd 外</Text> : null}
                     </View>
                     <Text style={d.cronMeta} numberOfLines={1}>
-                      {dir ? dir + " · " : ""}+{t.adds ?? 0} −{t.dels ?? 0}{fmtArtSize(t.size) ? " · " + fmtArtSize(t.size) : ""} · {fmtArtTime(t.last_at || t.first_at)}
+                      {/* 2026-09-21 用户：移除行变更 +N −N（交付物口径，与网页端同改） */}
+                      {dir ? dir + " · " : ""}{fmtArtSize(t.size) ? fmtArtSize(t.size) + " · " : ""}{fmtArtTime(t.last_at || t.first_at)}
                     </Text>
                   </View>
                 </Pressable>
@@ -2264,13 +2262,8 @@ export default function DetailScreen({ sid, onBack, initialView, ref }: { sid: s
             return (
               <>
                 <View style={d.artSum}>
+                  {/* 2026-09-21 用户：移除「新建 N · 修改 N / +N −N」统计（分组标题仍带计数，与网页端同改） */}
                   <Text style={d.artSumN}>{arts.length} 个文件</Text>
-                  <Text style={d.artSumSeg}>
-                    新建 <Text style={{ color: c.done, fontWeight: "700" }}>{created.length}</Text>
-                    {"  ·  修改 "}
-                    <Text style={{ color: c.dim, fontWeight: "700" }}>{edited.length}</Text>
-                  </Text>
-                  <Text style={d.artSumPm}>+{adds.toLocaleString()} −{dels.toLocaleString()}</Text>
                 </View>
                 {s.artifacts_truncated ? <Text style={d.artTrunc}>已截断 · 保留最新 200 条</Text> : null}
                 {created.length ? <Text style={[d.artGt, { color: c.done }]}>新建 {created.length} · 本会话产出</Text> : null}
@@ -2890,8 +2883,6 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
   // 辅助信息统一 ≥10.5px 且避开 --faint 级低对比；亮暗主题走 c.* 变量自适应）
   artSum: { flexDirection: "row", alignItems: "center", gap: 10, paddingVertical: 2, paddingBottom: 8 },
   artSumN: { color: c.text, fontSize: 13, fontWeight: "700", fontVariant: ["tabular-nums"] },
-  artSumSeg: { color: c.dim, fontSize: 11.5 },
-  artSumPm: { color: c.dim, fontSize: 11.5, fontVariant: ["tabular-nums"], marginLeft: "auto" },
   artTrunc: { color: c.working, fontSize: 11, marginTop: -4, marginBottom: 4 },
   artGt: { fontSize: 11, fontWeight: "700", marginTop: 10, marginBottom: 2 },
   artChip: { minWidth: 28, height: 20, borderRadius: 5, borderWidth: 1, alignItems: "center", justifyContent: "center", paddingHorizontal: 4, marginTop: 1 },
