@@ -1,0 +1,72 @@
+#!/usr/bin/env python3
+# 验收单出单工具（#136 三步方案①，激活 #125 在线表单）：把四段结构验收单 md 登记为
+# data/acceptances/<id>.json，回吐在线表单链接（浏览器打开点选填写，结果落
+# <id>.results.json）。用法：acceptance <验收单.md>。md 解析规则（对齐全局验收单
+# 四段结构，宽容解析）：第一个 "# " 行=标题；首个表格前的其余非空行=前置说明
+# （去 "- " 列表符）；表格行 "| 任务号 | 验收项 | 通过标准 | … |" 取前三列（通过
+# 与否/问题两列是留给用户填的，忽略），表头与 --- 分隔行自动跳过；表格后的非空行
+# =备注。同 md 重复出单=新 id 新单（旧单历史留痕不清理；改了 md 就重新出一张）。
+import json, os, re, secrets, subprocess, sys, time
+
+md = sys.argv[1] if len(sys.argv) > 1 else ""
+if not md or not os.path.isfile(md):
+    sys.exit("用法: acceptance <验收单.md>")
+
+lines = open(md, encoding="utf-8").read().splitlines()
+title, preface, rows, notes = "", [], [], []
+in_table = False
+for ln in lines:
+    s = ln.strip()
+    if not s:
+        continue
+    if not title and s.startswith("# "):
+        title = s[2:].strip()
+        continue
+    if s.startswith("#"):  # ## 小节头（前置/验收表/备注）是结构标记，不进内容
+        continue
+    if s.startswith("|"):
+        in_table = True
+        cells = [c.strip() for c in s.strip("|").split("|")]
+        if len(cells) < 3:
+            continue
+        if all(re.fullmatch(r":?-{2,}:?", c) for c in cells if c):  # 分隔行
+            continue
+        if "任务号" in cells[0] or "验收项" in cells[1]:  # 表头
+            continue
+        rows.append({"task": cells[0], "item": cells[1], "criteria": cells[2]})
+        continue
+    (notes if in_table else preface).append(re.sub(r"^[-*] ", "", s))
+
+if not rows:
+    sys.exit("ERR: 未解析到验收表行（找 | 任务号 | 验收项 | 通过标准 | 形态的表格）")
+title = title or os.path.basename(md)
+
+acc_dir = os.environ.get("CCR_ACCEPTANCE_DIR") or os.path.join(
+    os.path.expanduser("~"), ".cc-deck", "data", "acceptances")
+os.makedirs(acc_dir, exist_ok=True)
+aid = secrets.token_hex(16)
+doc = {"id": aid, "title": title, "created_at": int(time.time()),
+       "rows": rows, **({"preface": preface} if preface else {}),
+       **({"notes": notes} if notes else {})}
+path = os.path.join(acc_dir, f"{aid}.json")
+with open(path, "w", encoding="utf-8") as f:
+    json.dump(doc, f, ensure_ascii=False, indent=1)
+
+# 端口以 relay 自报为准（bridge.json），缺省 8787（同 deliver 口径）
+port = "8787"
+try:
+    port = str(json.load(open(os.path.expanduser("~/.cc-deck/data/bridge.json")))["port"])
+except Exception:
+    pass
+ip = "127.0.0.1"
+for iface in ("en0", "en1"):
+    try:
+        out = subprocess.run(["ipconfig", "getifaddr", iface], capture_output=True, text=True).stdout.strip()
+        if out:
+            ip = out
+            break
+    except Exception:
+        pass
+
+print(f"✅ 已登记 {len(rows)} 行：{path}")
+print(f"   填写链接: http://{ip}:{port}/acceptance/{aid}")
