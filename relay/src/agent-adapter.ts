@@ -430,6 +430,28 @@ export class AgentSession {
 
       case "user": {
         const content = msg.message.content;
+        // #142 三轮残留（2026-09-23 实锤）：新版 CLI 的 Agent 工具 run_in_background
+        // 缺省即后台（tool_use 输入无该键），完成信号是 user 消息里的 <task-notification>
+        // 文本——永远没有 tool_result，trackSubagentEnd 等不到；bg 缺省被误标前台后
+        // 两条收尾路径全断，SDK 托管会话的条目就此永远 running（act 冻结、角标虚高）。
+        // 与 bridge 转录扫描同款：解析通知里的 tool-use-id 收尾配对条目
+        //（bg/fg 均收——通知只由真实结束发出；parent 消息是子 Agent 自己的流，
+        // 其通知 id 属内层调用，顶层账本不配对）
+        const notifTexts: string[] = [];
+        if (!parent && typeof content === "string") notifTexts.push(content);
+        else if (!parent && Array.isArray(content)) {
+          for (const b of content) {
+            if (b && typeof b === "object" && (b as { type?: string }).type === "text" && typeof (b as { text?: unknown }).text === "string") {
+              notifTexts.push((b as { text: string }).text);
+            }
+          }
+        }
+        for (const t of notifTexts) {
+          if (!t.includes("<task-notification>")) continue;
+          const m = /<tool-use-id>([^<]+)/.exec(t);
+          const tuId = m?.[1]?.trim();
+          if (tuId) this.closeSubagentByNotification(tuId);
+        }
         const blocks = Array.isArray(content) ? content : [];
         for (const b of blocks) {
           if (b && typeof b === "object" && (b as { type?: string }).type === "tool_result") {
@@ -577,13 +599,24 @@ export class AgentSession {
   // 「等待型与后台型通知同形态到达」假设不成立——派生瞬间（实测 100% <100ms，
   // events.ndjson 5/5 复现）也有一条假 tool_result（spawn 回执），把它当结束信号
   // 会立即写 ended_at，端上恒显「✓ 0s」读秒冻结（托管 SDK 会话全走本路径，只修
-  // bridge.ts 的 hooks 路径时线上等于未修）。守卫与 bridge.ts 同款：后台条目不在此
-  // 收尾（真结束交 closeAllSubagents 会话收摊兜底）；前台 <2s 的假回执跳过、≥2s
-  // 视为同步阻塞调用的真实返回才收尾
+  // bridge.ts 的 hooks 路径时线上等于未修）。守卫与 bridge.ts 同款：<2s 的假回执
+  // 跳过；≥2s 视为真实返回才收尾。bg 条目同样放行——run_in_background 缺省即后台
+  // 的新版 CLI 里显式 bg 条目若收到 ≥2s 的 tool_result 也是真实结束（后台完成的
+  // 主信号是 task-notification，见 case "user" 的通知解析，这里是双保险）
   private trackSubagentEnd(toolUseId: string): void {
     const i = this.subagents.findIndex((x) => x.id === toolUseId && !x.ended_at);
-    if (i === -1 || this.subagents[i].bg) return;
+    if (i === -1) return;
     if (Date.now() - (this.subagents[i].started_at ?? 0) < 2000) return;
+    this.subagents[i] = { ...this.subagents[i], ended_at: Date.now() };
+    this.cb.onSubagents?.(this.subagents.map((x) => ({ ...x })));
+  }
+
+  // <task-notification> 的 tool-use-id：收尾配对子 Agent 条目（#142 三轮残留）。
+  // 后台子 Agent（含 run_in_background 缺省的新版 CLI 默认后台形态）完成只发通知
+  // 文本、无 tool_result——这是它们唯一的结束信号
+  private closeSubagentByNotification(toolUseId: string): void {
+    const i = this.subagents.findIndex((x) => x.id === toolUseId && !x.ended_at);
+    if (i === -1) return;
     this.subagents[i] = { ...this.subagents[i], ended_at: Date.now() };
     this.cb.onSubagents?.(this.subagents.map((x) => ({ ...x })));
   }
