@@ -39,10 +39,23 @@
       "icons/icon.icns"
     ],
     "createUpdaterArtifacts": true,
-    "resources": [
-      "resources/relay.mjs",
-      "resources/bin/inject.cs"
-    ],
+    "resources": {
+      "resources/relay.mjs": "resources/relay.mjs",
+      "resources/bin/inject.cs": "resources/bin/inject.cs",
+      "../../web-console/index.html": "web-console/index.html",
+      "../../web-console/nacl.js": "web-console/nacl.js",
+      "../../web-console/qr.js": "web-console/qr.js",
+      "../../web-console/manifest.json": "web-console/manifest.json",
+      "../../web-console/apple-touch-icon.png": "web-console/apple-touch-icon.png",
+      "../../web-console/icon-192.png": "web-console/icon-192.png",
+      "../../web-console/icon-512.png": "web-console/icon-512.png",
+      "../../web-console/maskable-512.png": "web-console/maskable-512.png",
+      "../../mobile/index.html": "mobile/index.html",
+      "../../mobile/manifest.webmanifest": "mobile/manifest.webmanifest",
+      "../../mobile/sw.js": "mobile/sw.js",
+      "../../mobile/icon-192.png": "mobile/icon-192.png",
+      "../../mobile/icon-512.png": "mobile/icon-512.png"
+    },
     "windows": {
       "nsis": {
         "installerHooks": "./installer-hooks.nsh"

@@ -29,6 +29,8 @@ await build({
 });
 
 // 2. 静态资源：网页控制台 + 移动端 PWA 壳 + APK + 注入器源码 + bridge hook（单源复制，防双份漂移）
+// ⚠ 此清单与 desktop-tauri/src-tauri/tauri.conf.json 的 resources 映射需同步维护
+//   （#150：桌面打包漏 web-console/mobile → relay 网页端 503；qr.js 此处未拷，桌面打包有）
 const copy = (from, to) => {
   mkdirSync(dirname(to), { recursive: true });
   rmSync(to, { force: true });
@@ -36,6 +38,8 @@ const copy = (from, to) => {
 };
 copy(join(root, "web-console", "index.html"), join(out, "web-console", "index.html"));
 copy(join(root, "web-console", "nacl.js"), join(out, "web-console", "nacl.js"));
+// qr.js（扫码登录编码器）：#150 补——此前漏拷，插件部署的网页端点扫码按钮静默抛错（#325 同坑）
+copy(join(root, "web-console", "qr.js"), join(out, "web-console", "qr.js"));
 for (const f of ["manifest.json", "apple-touch-icon.png", "icon-192.png", "icon-512.png", "maskable-512.png"]) {
   copy(join(root, "web-console", f), join(out, "web-console", f));
 }
