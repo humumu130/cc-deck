@@ -2038,6 +2038,9 @@ export class SessionManager {
     s.state.status = "WORKING";
     s.state.historical = false;
     s.state.saved = undefined;
+    // #139：摘掉休眠期残留的「已保存，点击恢复」摘要——不清的话手机/紧凑卡在
+    // 恢复后到首个进度事件之间仍显示旧文案，看起来像「恢复了但没生效」
+    s.state.action_summary = "";
     s.state.done_reason = undefined;
     s.state.last_error = undefined;
     s.state.turn_started_at = Date.now();
