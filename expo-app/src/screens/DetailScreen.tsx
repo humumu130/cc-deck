@@ -2403,17 +2403,17 @@ export default function DetailScreen({ sid, onBack, initialView, ref }: { sid: s
           </View>
         ) : null}
         {/* 并行子 Agent 状态（#142 重设计）：主工作状态行（liveRow）下方的续行——去独立
-            大框（原 panel2 盒）；标题行点击折叠/展开（agCollapsed 模块级记忆）；运行中
-            行首走帧星（SPIN_FRAMES，随 agTick 1s 重渲换帧，#148 手机端铁律：低频步进
-            不用 Animated 逐帧）；ended_at>0 才算结束（防数据侧 ended_at:0 假运行冻结
-            读秒）。#13 巡检：标题带总数/运行数，超 4 条溢出提示与桌面端同款 */}
+            大框（原 panel2 盒）；标题行即折叠开关（2026-09-24 用户拍板：只写「subAgent」
+            + 尾部箭头——无星、无数量、无运行中字样，走帧星只属于具体子 Agent 条目）；
+            agCollapsed 模块级记忆；条目行首走帧星（SPIN_FRAMES，随 agTick 1s 重渲换帧，
+            #148 手机端铁律：低频步进不用 Animated 逐帧）、完成态换 ✓ 定格；ended_at>0
+            才算结束（防数据侧 ended_at:0 假运行冻结读秒）。#13 巡检：超 4 条溢出提示 */}
         {(s?.subagents?.length ?? 0) > 0 ? (
           <View style={d.agBox}>
             {(() => {
               const all = s!.subagents!;
               const shown = all.slice(-4);
               const more = all.length - shown.length;
-              const running = all.filter((a) => !((a.ended_at ?? 0) > 0)).length;
               const frame = SPIN_FRAMES[Math.floor(Date.now() / 1000) % SPIN_FRAMES.length];
               return (
                 <>
@@ -2422,14 +2422,10 @@ export default function DetailScreen({ sid, onBack, initialView, ref }: { sid: s
                     hitSlop={{ top: 6, bottom: 4, left: 0, right: 0 }}
                     android_ripple={{ color: c.tintSoft, borderless: false, radius: 8 }}
                     onPress={() => { agCollapsed = !agCollapsed; setAgOpen(!agCollapsed); }}
-                    accessibilityLabel={`子代理 ${all.length}，运行中 ${running}，点按${agOpen ? "折叠" : "展开"}`}
+                    accessibilityLabel={`subAgent ${all.length} 个，点按${agOpen ? "折叠" : "展开"}`}
                   >
-                    {running > 0 ? (
-                      <Text style={[d.agSpin, { color: c.working }]}>{frame}</Text>
-                    ) : null}
                     <Text style={d.agHeadT}>
-                      {agOpen ? "▾" : "▸"} 子代理 {all.length}
-                      {running > 0 ? ` · ${running} 运行中` : ""}
+                      subAgent {agOpen ? "▾" : "▸"}
                     </Text>
                   </Pressable>
                   {agOpen ? (

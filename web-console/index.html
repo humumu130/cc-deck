@@ -1752,7 +1752,8 @@
   }
   /* 主状态行可见时贴紧它（liverow 底 margin 10px 收掉 4px），视觉成一组 */
   #agbox.attach { margin-top: -4px; }
-  /* 标题行即折叠开关：点按收起/展开，运行中时行首呼吸点 */
+  /* 标题行即折叠开关：点按收起/展开（2026-09-24 用户拍板：只写 subAgent + 尾部箭头，
+     呼吸点只在具体子 Agent 条目行首，不在标题行） */
   .aghead {
     display: inline-flex; align-items: center; gap: 6px;
     font-size: 11px; color: var(--faint); padding: 1px 4px 3px 0; letter-spacing: .04em;
@@ -4743,10 +4744,12 @@ function renderDetail() {
   } else lr.style.display = "none";
 
   // 子 Agent 状态（external 会话）。#142 重设计：并入状态栏——#liverow 下的续行（去
-  // 独立大框，attach 类贴合主状态行）；标题行点击折叠/展开（agCollapsed 模块级记忆，
-  // 1s 重渲不丢态，pendOpen 先例）；运行中行首呼吸点 + 秒数本地计时。防御：ended_at>0
-  // 才算结束——数据侧 ended_at:0（defined-but-falsy）会让 `?? Date.now()` 取 0 → 负
-  // 时长被 clamp 冻结，读秒不涨的嫌疑形态（run 判定与取值同口径）
+  // 独立大框，attach 类贴合主状态行）；标题行即折叠开关（2026-09-24 用户拍板：只写
+  // 「subAgent」+ 尾部箭头——无呼吸点、无数量、无运行中字样，呼吸点只属于具体条目；
+  // agCollapsed 模块级记忆，1s 重渲不丢态，pendOpen 先例）；条目运行中行首呼吸点 +
+  // 秒数本地计时。防御：ended_at>0 才算结束——数据侧 ended_at:0（defined-but-falsy）
+  // 会让 `?? Date.now()` 取 0 → 负时长被 clamp 冻结，读秒不涨的嫌疑形态（run 判定与
+  // 取值同口径）
   const ag = $("agbox");
   const subs = s.subagents ?? [];
   if (subs.length > 0) {
@@ -4754,12 +4757,9 @@ function renderDetail() {
     ag.className = s.status === "WORKING" ? "attach" : "";
     const shown = subs.slice(-4);
     const more = subs.length - shown.length;
-    const running = subs.filter((a) => !(a.ended_at > 0)).length;
     ag.innerHTML =
-      '<div class="aghead" id="agtoggle">' +
-      (running > 0 ? '<i class="agdot"></i>' : "") +
-      '<span class="caret">' + (agCollapsed ? "▸" : "▾") + "</span>" +
-      "子代理 " + subs.length + (running > 0 ? " · " + running + " 运行中" : "") + "</div>" +
+      '<div class="aghead" id="agtoggle">subAgent <span class="caret">' +
+      (agCollapsed ? "▸" : "▾") + "</span></div>" +
       (agCollapsed ? "" :
         shown.map((a) => {
           const run = !(a.ended_at > 0);
@@ -5760,7 +5760,7 @@ document.addEventListener("click", (ev) => {
 
 // ⚙ 设置浮层（#317）：显示项为散装开关的镜像（点行 = 触发原按钮再回读状态），
 // 服务器管理不进浮层——左栏常驻面板已是高频区，与手机抽屉同为一级入口
-const CONSOLE_VERSION = "0.6.0-test.18";
+const CONSOLE_VERSION = "0.6.0-test.26";
 // #396 拨杆同步：滑块移到 idx 档（transform 过渡），选中档文字加 .on（白字压品牌色滑块上）
 function setLever(el, idx) {
   if (!el) return;
