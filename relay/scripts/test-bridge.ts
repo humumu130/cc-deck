@@ -2112,6 +2112,32 @@ assert(!mgr.getExternal("ext-ff11bb22-cc33-dd44-ee55-ff6677889900"), "67 multi-t
   rmSync(tp4t, { force: true });
 }
 
+// 144. #144 重启回放僵尸的收敛时刻戳：relay 重启后 lastHookAt/lastGrow 内存表为空、
+//      回放态 updated_at 是真实死亡时刻（数小时前）。dead sweep 收殓后 updated_at
+//      必须保持该旧值——否则快照把「几小时前已死」洗成「刚刚活跃」，全端 30 分钟
+//      不置灰（2026-09-22 公司机实测：装 test.18 重启即本机源全亮、远程源正常）
+{
+  const { spawn } = await import("node:child_process");
+  const dead144 = spawn(process.execPath, ["-e", "process.exit(0)"]);
+  await new Promise<void>((r) => dead144.once("exit", () => r()));
+  await hook({ event: "UserPromptSubmit", session_id: "cli-144", prompt: "重启回放僵尸", cli_pid: dead144.pid, cwd: "/tmp", permission_mode: "default" });
+  await wait(150);
+  const id144 = extId("cli-144");
+  // 模拟重启回放态：hook/转录内存表清空 + updated_at 拨回 2 小时前
+  (bridge as unknown as { lastHookAt: Map<string, number> }).lastHookAt.delete(id144);
+  (bridge as unknown as { lastGrow: Map<string, number> }).lastGrow.delete(id144);
+  const diedAt = Date.now() - 2 * 3600_000;
+  const st144 = mgr.getExternal(id144)!;
+  st144.updated_at = diedAt;
+  assert(st144.status === "WORKING", "144 zombie replayed as WORKING");
+  process.env.CCR_DEAD_SWEEP = "1";
+  (bridge as unknown as { sweepWorkingIdle(): void }).sweepWorkingIdle();
+  process.env.CCR_DEAD_SWEEP = "0";
+  const z144 = mgr.getExternal(id144);
+  assert(z144?.status === "DONE" && z144?.done_reason === "disconnected", "144 replay zombie converged to disconnected");
+  assert(z144?.updated_at === diedAt, "144 converged updated_at keeps real death time (not Date.now())");
+}
+
 wsCur!.close();
 await wait(300);
 console.log("\nBRIDGE TESTS PASSED");

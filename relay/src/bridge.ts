@@ -643,7 +643,7 @@ export class Bridge {
           );
           if (s.status === "WORKING" && quiet > 20_000) {
             const turn = this.turnStart.get(s.session_id) ?? s.started_at;
-            this.mgr.finishExternal(s.session_id, "completed", now - turn);
+            this.mgr.finishExternal(s.session_id, "completed", now - turn, now - quiet); // #144 完成时刻=最后转录/hook 活动，非判定时刻
           }
         }
       } catch {}
@@ -768,7 +768,7 @@ export class Bridge {
       this.noHookIds.delete(id);
       const turn = this.turnStart.get(id) ?? st.started_at;
       this.turnStart.delete(id);
-      this.mgr.finishExternal(id, "completed", Date.now() - turn);
+      this.mgr.finishExternal(id, "completed", Date.now() - turn, last); // #144 完成时刻=最后转录增长，非判定时刻
       this.mgr.pushExternalLog(id, "system", "转录静默，回合视作结束（无 hook 会话）");
       if ((this.inputQueue.get(id)?.length ?? 0) > 0) void this.flushQueue(id);
     }
@@ -788,6 +788,14 @@ export class Bridge {
     for (const s of this.mgr.snapshot()) {
       if (!s.external || s.status !== "WORKING") continue;
       const id = s.session_id;
+      // #144：真实最后活动起点——dead 分支也用它收殓时刻戳，先算（重启回放后
+      // lastGrow/lastHookAt 为空，回退到回放态 updated_at = 最后落盘事件 ts，
+      // 正是僵尸的真实死亡时刻；判定时刻 now 只影响"何时发现"，不能当活跃时刻）
+      const idleSince = Math.max(
+        this.lastGrow.get(id) ?? 0,
+        this.lastHookAt.get(id) ?? 0,
+        s.updated_at ?? 0,
+      );
       // 进程存活硬信号：cli_pid 已不是 CLI 宿主 → 异常断开（无 SessionEnd 的死亡：
       // 死机/重启/崩溃；主动退出走 SessionEnd → 卡片已同步清除，到不了这里）。
       // 不等静默窗口、不受 updated_at 刷新干扰（手机反复发消息会把 idleSince 一直
@@ -796,7 +804,7 @@ export class Bridge {
       if (deadSweepOn && s.cli_pid && !cliHostAlive(s.cli_pid)) {
         const turn = this.turnStart.get(id) ?? s.started_at;
         this.turnStart.delete(id);
-        this.mgr.finishExternal(id, "disconnected", now - turn);
+        this.mgr.finishExternal(id, "disconnected", now - turn, idleSince);
         const dropped = this.inputQueue.get(id)?.length ?? 0;
         this.inputQueue.delete(id);
         this.disarmVerify(id);
@@ -811,11 +819,6 @@ export class Bridge {
       // 静默兜底窗提到 15 分钟；从无 hook 事件的会话维持原启发式（#211/#65 场景）
       const hooked = (this.lastHookAt.get(id) ?? 0) > 0;
       const effWin = hooked ? 900_000 : (this.turnShape.get(id) ?? "gen") === "end" ? idleMs : 600_000;
-      const idleSince = Math.max(
-        this.lastGrow.get(id) ?? 0,
-        this.lastHookAt.get(id) ?? 0,
-        s.updated_at ?? 0,
-      );
       // 末条形态分档（与 sweepNoHookIdle 同参）：end=纯文本收尾 90s 即回落，
       // 其余（工具执行中/生成中）给 10 分钟长窗——先判全局 600s 会让 90s 档变死代码
       const shape = this.turnShape.get(id) ?? "gen";
@@ -828,7 +831,7 @@ export class Bridge {
         if (!hooked && now - idleSince > idleMs && s.cli_pid && cliSessionIdle(s.cli_pid)) {
           const turn = this.turnStart.get(id) ?? s.started_at;
           this.turnStart.delete(id);
-          this.mgr.finishExternal(id, "completed", now - turn);
+          this.mgr.finishExternal(id, "completed", now - turn, idleSince);
           this.mgr.pushExternalLog(id, "system", "CLI 已空闲（进程状态 idle），回合视作结束");
           if ((this.inputQueue.get(id)?.length ?? 0) > 0) void this.flushQueue(id);
         }
@@ -836,7 +839,7 @@ export class Bridge {
       }
       const turn = this.turnStart.get(id) ?? s.started_at;
       this.turnStart.delete(id);
-      this.mgr.finishExternal(id, "completed", now - turn);
+      this.mgr.finishExternal(id, "completed", now - turn, idleSince);
       this.mgr.pushExternalLog(id, "system", "转录与事件均静默超时，回合视作结束（hook 失联兜底）");
       if ((this.inputQueue.get(id)?.length ?? 0) > 0) void this.flushQueue(id);
     }

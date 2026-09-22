@@ -1156,14 +1156,20 @@ export class SessionManager {
     this.bus.emit(id, "SESSION_DELETED", { session_id: id });
   }
 
-  finishExternal(id: string, reason: string, durationMs: number): void {
+  // #144：at = 完成时刻（默认判定时刻）。静默推断收敛（sweep 扫描）必须传真实
+  // 最后活动时刻 idleSince——relay 重启后首轮 sweep 会批量收殓回放出的 WORKING
+  // 僵尸（CLI 早已死、停在最后一帧，lastHookAt/lastGrow 内存表为空），若刷
+  // Date.now() 会把「几小时前的死亡」洗成「刚刚活跃」，快照下发后全端 30 分钟
+  // 不置灰（2026-09-22 用户实测：装 test.18 重启即本机源全亮、远程源正常）。
+  // 正常终态上报（Stop hook/用户打断/compact 归档）不传 at，判定时刻即真实时刻
+  finishExternal(id: string, reason: string, durationMs: number, at: number = Date.now()): void {
     const s = this.sessions.get(id);
     if (!s) return;
     s.state.status = "DONE";
     s.state.done_reason = reason;
     s.state.duration_ms = durationMs;
     s.state.waiting_request = undefined;
-    s.state.updated_at = Date.now();
+    s.state.updated_at = at;
     this.bus.emit(id, "SESSION_DONE", {
       terminal_reason: reason,
       duration_ms: durationMs,
