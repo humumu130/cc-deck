@@ -1488,8 +1488,8 @@
   /* #98 语义色修正：WAITING 卡摘要从 WORKING 黄回归红语义——黄只留给「在跑」 */
   .card-summary.waiting { color: var(--waiting); }
   .card-stats { font-size: 11px; line-height: 15px; color: var(--faint); margin-top: 6px; display: flex; align-items: center; gap: 10px; font-variant-numeric: tabular-nums; min-height: 15px; } /* #54 元信息行降档 12→11；#58 行盒+min-height 双钉 15px，内容/空档等高 */
-  .card-stats .add { color: var(--done); }
-  .card-stats .del { color: var(--error); }
+  /* #145 工作目录上卡（替代改动统计行）：超长省略，title 悬停全路径 */
+  .card-stats .card-dir { flex: none; max-width: 45%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   /* #383 源标签居 stats 行最左（与上两行左对齐）；ctx 水位推最右 */
   .card-stats .src-badge { flex: none; }
   .card-stats .ctx-mini { margin-left: auto; }
@@ -4057,9 +4057,13 @@ function fmtLastActive(ts) {
   return p(t.getMonth() + 1) + "-" + p(t.getDate()) + " " + p(t.getHours()) + ":" + p(t.getMinutes());
 }
 
-function statsHtml(st) {
-  if (!st || st.files_changed === 0) return "";
-  return st.files_changed + " 文件 · <span class='add'>+" + st.lines_added + "</span> <span class='del'>-" + st.lines_deleted + "</span>";
+// #145 工作目录上卡（对齐手机端 📁 目录名）：basename 形式省宽度，悬停 title 显全路径；
+// 改动统计行（原 statsHtml）卡片不再渲染——详情页统计 tab 保留全量口径
+function folderHtml(s) {
+  if (!s.cwd) return "";
+  const parts = String(s.cwd).replace(/[\\/]+$/, "").split(/[\\/]/);
+  const name = parts[parts.length - 1] || s.cwd;
+  return '<span class="card-dir" title="' + escapeHtml(s.cwd) + '">📁 ' + escapeHtml(name) + "</span>";
 }
 
 // 上下文水位：context_usage/context_limit 均由 relay 按模型下发（手机端同口径）；
@@ -4459,7 +4463,7 @@ function render() {
       // #58 推翻 #367 的「全空不渲染」：行数 1~3 漂移致同列表卡高参差（用户 2026-09-19
       // 反馈），stats 行恒渲染 + min-height 占位，换取三行恒定等高（空档代价可接受）
       const srcTag = filterSrc === "all" && showSrcTag ? srcBadgeHtml(ctx.cfg) : "";
-      const statsInner = srcTag + statsHtml(s.stats) + ctxHtml(s);
+      const statsInner = srcTag + folderHtml(s) + ctxHtml(s);
       const statsBlock = '<div class="card-stats">' + statsInner + "</div>";
       if (listCompact) {
         // #279⑨ 紧凑卡（对齐手机）：状态点+标题+耗时 / 摘要 / 改动+水位+源标签

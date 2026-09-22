@@ -498,14 +498,7 @@ const SessionCard = memo(function SessionCard({
           <View style={styles.footC}>
             {s.cwd ? <Text style={styles.folderC} numberOfLines={1}>📁 {folderOf(s.cwd)}</Text> : null}
             <View style={{ flex: 1 }} />
-            {s.stats && s.stats.files_changed > 0 ? (
-              <Text style={styles.statsC}>
-                {/* #98 +新增行数对齐桌面 .card-stats .add 的绿色（黄只属于「在跑」） */}
-                <Text style={{ color: c.done }}>+{s.stats.lines_added}</Text>
-                {" "}
-                <Text style={{ color: c.error }}>-{s.stats.lines_deleted}</Text>
-              </Text>
-            ) : null}
+            {/* #145 卡片去改动统计行（详情页统计保留全量）；目录已上卡 */}
             <CtxMini s={s} />
           </View>
         </>
@@ -534,7 +527,8 @@ const SessionCard = memo(function SessionCard({
             <Text style={styles.sum} numberOfLines={1}>{s.action_summary || "…"}</Text>
           )}
           {/* 次要信息合并行（降噪）：托管/外部 · 目录 · 历史 一行小字（原 tag 胶囊 +
-              目录/历史分散多段 → 单段 faint 尾截断），右侧 ±行数(降一档)与 ctx 水位 */}
+              目录/历史分散多段 → 单段 faint 尾截断），右侧 ctx 水位（#145 改动统计行
+              移除，详情页统计保留全量） */}
           <View style={styles.foot}>
             {/* #86 多源源标签独立放左下（对齐桌面端卡底统计行形态），不再挤标题行 */}
             {srcBadge ? <SrcBadge {...srcBadge} /> : null}
@@ -545,14 +539,6 @@ const SessionCard = memo(function SessionCard({
               {s.historical && !s.external ? " · 历史" : ""}
             </Text>
             <View style={{ flex: 1 }} />
-            {s.stats && s.stats.files_changed > 0 ? (
-              <Text style={styles.stats}>
-                {/* #98 同上：+行数黄→绿（普通卡），对齐桌面 */}
-                <Text style={{ color: c.done }}>+{s.stats.lines_added}</Text>
-                {" "}
-                <Text style={{ color: c.error }}>-{s.stats.lines_deleted}</Text>
-              </Text>
-            ) : null}
             <CtxMini s={s} />
           </View>
         </>
@@ -1260,7 +1246,6 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
   sumC: { color: c.faint, fontSize: 11, marginTop: 2 },
   footC: { flexDirection: "row", alignItems: "center", gap: 8, marginTop: 4 },
   folderC: { fontSize: 10, color: c.dim, flexShrink: 1, maxWidth: 120 },
-  statsC: { fontSize: 10, color: c.faint, fontVariant: ["tabular-nums"] },
   dot: {
     width: 11, height: 11, borderRadius: 6, opacity: 1,
     alignItems: "center", justifyContent: "center",
@@ -1275,7 +1260,6 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
   foot: { flexDirection: "row", alignItems: "center", gap: 8, paddingLeft: 6 }, /* #83 同缩进 */
   // 次要信息合并行（降噪）：托管/外部 · 目录 · 历史 一行 faint 小字，替代原 tag 胶囊
   meta: { fontSize: 10, color: c.faint, flexShrink: 1 },
-  stats: { fontSize: 10, fontVariant: ["tabular-nums"] },
   // 上下文占用 mini（foot 最右）：30px 微型条 + 百分比
   ctxMini: { flexDirection: "row", alignItems: "center", gap: 4 },
   ctxMiniBar: { width: 30, height: 3, borderRadius: 1.5, backgroundColor: c.tintSoft, overflow: "hidden" },
