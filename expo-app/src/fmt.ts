@@ -56,6 +56,15 @@ export function sessionElapsed(s: { status: string; duration_ms?: number; histor
   return Date.now() - s.started_at;
 }
 
+// #143 卡片右上角：会话计时 → 最后活跃时间 MM-dd HH:mm（updated_at 随事件刷新，
+// 分钟粒度；WORKING 的回合秒数留在 LiveStat，详情页计时不动）
+export function fmtLastActive(ts: number | undefined): string {
+  if (!ts) return "--";
+  const t = new Date(ts);
+  const p = (n: number) => String(n).padStart(2, "0");
+  return `${p(t.getMonth() + 1)}-${p(t.getDate())} ${p(t.getHours())}:${p(t.getMinutes())}`;
+}
+
 // 上下文水位条：水位与上限均由 relay 下发（context_usage/context_limit），
 // 上限按模型在 relay 集中维护（glm-5.x 1M / 其余 200k），端上只兜底缺省
 export const CONTEXT_LIMIT_FALLBACK = 200_000;

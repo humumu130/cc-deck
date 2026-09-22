@@ -5,7 +5,7 @@ import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context"
 import { statusColor, withA, type ThemeColors } from "../theme";
 import { useTheme, useThemeStyles } from "../theme-context";
 import { LogoMark, PencilIcon } from "../brand";
-import { sessionElapsed, fmtElapsed, fmtTok, contextPct, contextLevel, CONTEXT_LIMIT_FALLBACK, displaySrcName, isLiveLine, stripLiveMark } from "../fmt";
+import { fmtLastActive, fmtTok, contextPct, contextLevel, CONTEXT_LIMIT_FALLBACK, displaySrcName, isLiveLine, stripLiveMark } from "../fmt";
 import { setListDensity, useListDensity, setAggregate as persistAggregate, useIdleDimMin, isIdleSession, type ListDensity } from "../display-settings";
 import { store, useRelay } from "../store";
 import { FadeIn, PressScale } from "../motion";
@@ -220,19 +220,13 @@ function LiveStat({ s }: { s: SessionState }) {
   );
 }
 
-// 会话耗时：WORKING 时自带每秒 tick（简洁模式没有 LiveStat，耗时也要走秒）
+// #143 卡片右上角：会话计时 → 最后活跃时间 MM-dd HH:mm（updated_at 随事件刷新，
+// 分钟粒度无需每秒 tick——移除 WORKING 秒表重渲染；回合时长仍在 LiveStat/详情页）
 // 闲置置灰阈值（#121 可配置）：分钟数来自设置抽屉（display-settings.idleDimMin，
 // 默认 30，负数 = 永不变灰），SessionCard 内经 useIdleDimMin 现算
 function Elapsed({ s }: { s: SessionState }) {
   const styles = useThemeStyles(makeStyles);
-  const [, tick] = useState(0);
-  const live = s.status === "WORKING";
-  useEffect(() => {
-    if (!live) return;
-    const t = setInterval(() => tick((n) => n + 1), 1000);
-    return () => clearInterval(t);
-  }, [live]);
-  return <Text style={styles.elapsed}>{fmtElapsed(sessionElapsed(s))}</Text>;
+  return <Text style={styles.elapsed}>{fmtLastActive(s.updated_at)}</Text>;
 }
 
 // 左滑露出操作面板（重命名 + 删除；DONE/ERROR 才可删）。

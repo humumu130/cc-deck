@@ -4055,6 +4055,15 @@ function sessionElapsed(s) {
   return Date.now() - s.started_at;
 }
 
+// #143 卡片右上角：会话计时 → 最后活跃时间 MM-dd HH:mm（updated_at 随事件刷新，
+// 分钟粒度；WORKING 的回合秒数留在第二行 c-live，详情页 ⏱ 计时不动）
+function fmtLastActive(ts) {
+  if (!ts) return "--";
+  const t = new Date(ts);
+  const p = (n) => String(n).padStart(2, "0");
+  return p(t.getMonth() + 1) + "-" + p(t.getDate()) + " " + p(t.getHours()) + ":" + p(t.getMinutes());
+}
+
 function statsHtml(st) {
   if (!st || st.files_changed === 0) return "";
   return st.files_changed + " 文件 · <span class='add'>+" + st.lines_added + "</span> <span class='del'>-" + st.lines_deleted + "</span>";
@@ -4436,7 +4445,7 @@ function render() {
       const headRow =
         '<div class="c-head">' + pinFlag + '<span class="c-dot' + (s.status === "WORKING" || (s.status === "DONE" && bgRunning(s)) ? " run" : "") /* #100 后台在跑也呼吸 */ + '" style="--sc:var(--' + (s.status || "").toLowerCase() + ')"></span>' +
           '<span class="card-title"><span class="c-tt">' + escapeHtml(s.title || "") + "</span>" + bgBadge + badges + opBtns + "</span>" +
-          '<span class="elapsed">' + fmtElapsed(sessionElapsed(s)) + "</span></div>";
+          '<span class="elapsed" title="最后活跃">' + fmtLastActive(s.updated_at) + "</span></div>";
       const liveRow = s.status === "WORKING"
         ? '<div class="c-live">' +
           (s.compacting ? '<span class="lv-tok">⟳ 压缩上下文</span>' : "") +
@@ -4464,7 +4473,7 @@ function render() {
         d.innerHTML =
           '<div class="c-row1">' + pinFlag + '<span class="c-dot' + (s.status === "WORKING" || (s.status === "DONE" && bgRunning(s)) ? " run" : "") /* #100 后台在跑也呼吸 */ + '" style="--sc:var(--' + (s.status || "").toLowerCase() + ')"></span>' +
             '<span class="card-title"><span class="c-tt">' + escapeHtml(s.title || "") + "</span>" + bgBadge + badges + opBtns + "</span>" +
-            '<span class="elapsed">' + fmtElapsed(sessionElapsed(s)) + "</span></div>" +
+            '<span class="elapsed" title="最后活跃">' + fmtLastActive(s.updated_at) + "</span></div>" +
           summaryRow +
           statsBlock +
           ctaRow;
@@ -4607,13 +4616,14 @@ window.addEventListener("blur", closeCardMenu);
 window.addEventListener("resize", closeCardMenu);
 window.addEventListener("scroll", closeCardMenu, true);
 
-// 每秒定点刷新（#320）：WORKING 卡耗时/实时工作行走秒，querySelector 级更新不触发整列重建
+// 每秒定点刷新（#320）：WORKING 卡实时工作行走秒（#143 后 .elapsed=最后活跃时间，
+// 分钟粒度，这里顺手刷新兜 render 丢帧），querySelector 级更新不触发整列重建
 setInterval(() => {
   for (const el of document.querySelectorAll("#cards .card.WORKING")) {
     const hit = allSessions().find((x) => x.ctx.cfg.id === el.dataset.src && x.s.session_id === el.dataset.sid);
     if (!hit) continue;
     const e2 = el.querySelector(".elapsed");
-    if (e2) e2.textContent = fmtElapsed(sessionElapsed(hit.s));
+    if (e2) e2.textContent = fmtLastActive(hit.s.updated_at);
     const sec = el.querySelector(".lv-sec");
     if (sec) sec.textContent = Math.max(0, Math.floor((Date.now() - (hit.s.turn_started_at ?? hit.s.updated_at)) / 1000)) + "s";
   }
