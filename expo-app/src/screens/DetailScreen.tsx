@@ -98,6 +98,9 @@ let thinkShown = false;
 // 详情页工具区折叠开关：同样 app 生命周期内记忆
 let ctrlCollapsed = false;
 
+// #142 子 Agent 面板折叠开关：app 生命周期内记忆（跨页面/会话切换，1s tick 重渲不丢态）
+let agCollapsed = false;
+
 // 输入草稿跨进出保留：按 session_id 暂存（app 生命周期内，发送即清）
 const drafts = new Map<string, string>();
 
@@ -1216,6 +1219,8 @@ export default function DetailScreen({ sid, onBack, initialView, ref }: { sid: s
   useEffect(() => { setShowJump(false); }, [view]);
   const [showThink, setShowThink] = useState(thinkShown);
   const [collapsed, setCollapsed] = useState(ctrlCollapsed);
+  // #142 子 Agent 面板展开态（初始同步模块级记忆，点按写回）
+  const [agOpen, setAgOpen] = useState(!agCollapsed);
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
   // #376 定时任务条目展开态（按任务 id）
   const [cronOpen, setCronOpen] = useState<Record<string, boolean>>({});
@@ -1369,8 +1374,10 @@ export default function DetailScreen({ sid, onBack, initialView, ref }: { sid: s
     { status: "verify", label: `待验证 ${allTodos.filter((t) => isVerifyTodo(t)).length}` },
     { status: "pending", label: `待开始 ${allTodos.filter((t) => t.status === "pending").length}` },
   ] as const;
-  // 子 Agent 运行中时本地走秒（relay 只在状态变化时推，秒数由端上自算）
-  const agRunning = (s?.subagents ?? []).some((a) => !a.ended_at);
+  // 子 Agent 运行中时本地走秒（relay 只在状态变化时推，秒数由端上自算）。
+  // #142 防御：ended_at>0 才算结束——数据侧 ended_at:0（defined-but-falsy）会让
+  // `?? Date.now()` 取 0 → 负时长冻结读秒，run 判定与取值同口径
+  const agRunning = (s?.subagents ?? []).some((a) => !((a.ended_at ?? 0) > 0));
   const [, setAgTick] = useState(0);
   useEffect(() => {
     if (!agRunning) return;
@@ -2395,40 +2402,64 @@ export default function DetailScreen({ sid, onBack, initialView, ref }: { sid: s
             </Pressable>
           </View>
         ) : null}
-        {/* 并行子 Agent 状态：主工作状态栏下方；⑂ 运行中走秒（本地计时，relay 只在变化时推）、✓ 刚结束带时长。
-            #13 巡检：面板标题（子代理 + 总数/运行数）与超 4 条溢出提示（原 slice(-4) 静默截断）——与桌面端同款 */}
+        {/* 并行子 Agent 状态（#142 重设计）：主工作状态行（liveRow）下方的续行——去独立
+            大框（原 panel2 盒）；标题行点击折叠/展开（agCollapsed 模块级记忆）；运行中
+            行首走帧星（SPIN_FRAMES，随 agTick 1s 重渲换帧，#148 手机端铁律：低频步进
+            不用 Animated 逐帧）；ended_at>0 才算结束（防数据侧 ended_at:0 假运行冻结
+            读秒）。#13 巡检：标题带总数/运行数，超 4 条溢出提示与桌面端同款 */}
         {(s?.subagents?.length ?? 0) > 0 ? (
-          <View style={[d.agBox, d.agBoxFlow]}>
+          <View style={d.agBox}>
             {(() => {
               const all = s!.subagents!;
               const shown = all.slice(-4);
               const more = all.length - shown.length;
-              const running = all.filter((a) => !a.ended_at).length;
+              const running = all.filter((a) => !((a.ended_at ?? 0) > 0)).length;
+              const frame = SPIN_FRAMES[Math.floor(Date.now() / 1000) % SPIN_FRAMES.length];
               return (
                 <>
-                  <Text style={d.agHead}>
-                    子代理 {all.length}
-                    {running > 0 ? ` · ${running} 运行中` : ""}
-                  </Text>
-                  {shown.map((a) => {
-                    const run = !a.ended_at;
-                    const ms = (a.ended_at ?? Date.now()) - a.started_at;
-                    const dur = ms < 60_000 ? `${Math.floor(ms / 1000)}s` : `${Math.floor(ms / 60_000)}m${String(Math.floor((ms % 60_000) / 1000)).padStart(2, "0")}s`;
-                    return (
-                      <View key={a.id} style={d.agRow}>
-                        <Text style={[d.agT, { color: run ? c.working : c.dim }]} numberOfLines={1}>
-                          {run ? "⑂" : "✓"} {a.desc}
-                        </Text>
-                        {a.act ? (
-                          <Text style={[d.agAct, { color: run ? c.dim : c.faint }]} numberOfLines={1}>
-                            {a.act}
-                          </Text>
-                        ) : null}
-                        <Text style={[d.agTime, { color: run ? c.working : c.faint }]}>{dur}</Text>
-                      </View>
-                    );
-                  })}
-                  {more > 0 ? <Text style={d.agMore}>… 更早 {more} 条已收起</Text> : null}
+                  <Pressable
+                    style={d.agHead}
+                    hitSlop={{ top: 6, bottom: 4, left: 0, right: 0 }}
+                    android_ripple={{ color: c.tintSoft, borderless: false, radius: 8 }}
+                    onPress={() => { agCollapsed = !agCollapsed; setAgOpen(!agCollapsed); }}
+                    accessibilityLabel={`子代理 ${all.length}，运行中 ${running}，点按${agOpen ? "折叠" : "展开"}`}
+                  >
+                    {running > 0 ? (
+                      <Text style={[d.agSpin, { color: c.working }]}>{frame}</Text>
+                    ) : null}
+                    <Text style={d.agHeadT}>
+                      {agOpen ? "▾" : "▸"} 子代理 {all.length}
+                      {running > 0 ? ` · ${running} 运行中` : ""}
+                    </Text>
+                  </Pressable>
+                  {agOpen ? (
+                    <>
+                      {shown.map((a) => {
+                        const run = !((a.ended_at ?? 0) > 0);
+                        const ms = a.started_at > 0 ? Math.max(0, ((a.ended_at ?? 0) > 0 ? a.ended_at! : Date.now()) - a.started_at) : 0;
+                        const dur = !(a.started_at > 0) ? "" : ms < 60_000 ? `${Math.floor(ms / 1000)}s` : `${Math.floor(ms / 60_000)}m${String(Math.floor((ms % 60_000) / 1000)).padStart(2, "0")}s`;
+                        return (
+                          <View key={a.id} style={d.agRow}>
+                            {run ? (
+                              <Text style={[d.agSpin, { color: c.working }]}>{frame}</Text>
+                            ) : (
+                              <Text style={d.agDone}>✓</Text>
+                            )}
+                            <Text style={[d.agT, { color: run ? c.working : c.dim }]} numberOfLines={1}>
+                              {a.desc}
+                            </Text>
+                            {a.act ? (
+                              <Text style={[d.agAct, { color: run ? c.dim : c.faint }]} numberOfLines={1}>
+                                {a.act}
+                              </Text>
+                            ) : null}
+                            <Text style={[d.agTime, { color: run ? c.working : c.faint }]}>{dur}</Text>
+                          </View>
+                        );
+                      })}
+                      {more > 0 ? <Text style={d.agMore}>… 更早 {more} 条已收起</Text> : null}
+                    </>
+                  ) : null}
                 </>
               );
             })()}
@@ -2975,18 +3006,19 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
   },
   todoDel: { width: 24, height: 22, alignItems: "center", justifyContent: "center" },
   todoDelT: { color: c.faint, fontSize: 12 },
-  // 子 Agent 状态块：紧贴筛选行下方，与 todoBox 同宽同圆角
-  agBox: {
-    backgroundColor: c.panel2, borderWidth: 1, borderColor: c.line,
-    borderRadius: 12, paddingHorizontal: 12, paddingVertical: 2, marginBottom: 8,
-  },
-  agRow: { flexDirection: "row", alignItems: "center", gap: 8, paddingVertical: 5 },
-  agBoxFlow: { marginTop: 4, marginBottom: 10 },
+  // 子 Agent 状态块（#142 重设计）：主状态行下方的续行——去独立大框（原 panel2 盒），
+  // 无底无边细行直接贴 liveRow 之下；标题行即折叠开关（自包含触区）
+  agBox: { paddingHorizontal: 13, marginTop: 6, marginBottom: 10 },
+  agHead: { flexDirection: "row", alignItems: "center", gap: 6, paddingVertical: 4, alignSelf: "flex-start", borderRadius: 8, overflow: "hidden" },
+  agHeadT: { color: c.faint, fontSize: 11, letterSpacing: 0.4 },
+  // 运行中标记：走帧星（SPIN_FRAMES 随 agTick 1s 换帧，#148 低频步进）
+  agSpin: { fontSize: 11, fontWeight: "700", lineHeight: 14 },
+  agDone: { color: c.done, fontSize: 11, lineHeight: 14 },
+  agRow: { flexDirection: "row", alignItems: "center", gap: 7, paddingVertical: 3 },
   agT: { flex: 1, fontSize: 12 },
   agAct: { flex: 1, fontSize: 11 }, // #103 活性：与描述平分行宽，超长省略（HUD 风格当前动作）
   agTime: { fontSize: 11, fontVariant: ["tabular-nums"] },
-  // #13 巡检：面板标题（原无标题，⑂/✓ 行首见不知所云）+ 超 4 条的溢出提示
-  agHead: { color: c.faint, fontSize: 11, letterSpacing: 0.4, paddingVertical: 4 },
+  // #13 巡检：超 4 条的溢出提示（原 slice(-4) 静默截断）
   agMore: { color: c.faint, fontSize: 11, paddingVertical: 3 },
   histnote: { color: c.faint, fontSize: 11, textAlign: "center", marginBottom: 10 },
   trUser: {

@@ -1744,21 +1744,31 @@
   }
   #pendbox span.open .pend-caret { transform: rotate(180deg); color: var(--dim); }
   @keyframes pendpulse { 50% { opacity: .45; } }
-  /* 子 Agent 工作状态 */
+  /* 子 Agent 工作状态（#142 重设计：并入状态栏——去独立大框，作 #liverow 下的续行；
+     折叠态记忆 agCollapsed 在 JS 模块级，防 1s 重渲丢态） */
   #agbox {
-    display: none; margin: 10px auto 0; width: calc(100% - 40px); max-width: min(1040px, 100%);
-    background: var(--panel-2); border: 1px solid var(--border);
-    border-radius: 12px; padding: 7px 12px; flex: none;
-    animation: riseIn .18s ease-out;
+    display: none; margin: 0 auto 10px; width: calc(100% - 40px); max-width: min(1040px, 100%);
+    padding: 0 13px; flex: none;
   }
-  .agrow { display: flex; gap: 10px; align-items: baseline; font-size: 12px; padding: 3px 0; }
+  /* 主状态行可见时贴紧它（liverow 底 margin 10px 收掉 4px），视觉成一组 */
+  #agbox.attach { margin-top: -4px; }
+  /* 标题行即折叠开关：点按收起/展开，运行中时行首呼吸点 */
+  .aghead {
+    display: inline-flex; align-items: center; gap: 6px;
+    font-size: 11px; color: var(--faint); padding: 1px 4px 3px 0; letter-spacing: .04em;
+    cursor: pointer; user-select: none; border-radius: 6px;
+  }
+  .aghead:hover { color: var(--dim); }
+  .aghead .caret { font-size: 9px; }
+  /* 运行中动效标记：呼吸点（桌面 web 端 CSS 动画不受手机端 #148 逐帧铁律限制） */
+  .agdot { width: 6px; height: 6px; border-radius: 50%; background: var(--working); flex: none; animation: dot-breathe 2.4s ease-in-out infinite; }
+  .agrow { display: flex; gap: 8px; align-items: center; font-size: 11.5px; padding: 2px 0 0 13px; }
   .agrow .ad { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   /* #103 活性：该子 Agent 最近一次工具调用（HUD 风格），运行中 dim / 结束 faint 定格 */
   .agrow .aa { flex: none; max-width: 46%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 11px; }
   .agrow .at { color: var(--faint); font-size: 11px; font-variant-numeric: tabular-nums; }
-  /* #13 巡检：面板标题（原无标题，首见用户不知道这块是什么）+ 溢出提示（超 4 条收起） */
-  .aghead { font-size: 11px; color: var(--faint); padding: 2px 0 4px; letter-spacing: .04em; }
-  .agmore { font-size: 11px; color: var(--faint); padding-top: 3px; }
+  /* #13 巡检：超 4 条的溢出提示（原 slice(-4) 静默截断，用户不知道前面还有） */
+  .agmore { font-size: 11px; color: var(--faint); padding-top: 3px; padding-left: 13px; }
 
   /* 轻量 Markdown（assistant_text/thinking，与手机端 md.tsx 同构）。
      assistant 正文无卡片直接排版（WorkBuddy 式，靠头像行区分发言者）；字号随时间线档位缩放 */
@@ -2342,12 +2352,13 @@
 
     <div id="hisnote">⏳ 历史会话，仅可查看。</div>
     <div id="pendbox"></div>
-    <div id="agbox"></div>
     <div id="liverow">
       <span class="spin">✶</span>
       <span class="sum" id="livesum">思考中…</span>
       <span class="el" id="liveel"></span>
     </div>
+    <!-- #142 子 Agent 状态：主状态行（liverow）下方的续行，不再是独立大框 -->
+    <div id="agbox"></div>
     <div id="imgrow"></div>
     <input type="file" id="imgFile" accept="image/*" multiple hidden>
     <input type="file" id="fileInput" multiple hidden>
@@ -4626,6 +4637,8 @@ setInterval(() => {
 
 // 排队气泡展开态记忆（文本为键）：renderDetail 每秒重建排队区 DOM，无记忆则展开即被收回
 const pendOpen = new Set();
+// #142 子 Agent 面板折叠态：模块级记忆（renderDetail 1s 重建 DOM 不丢态，pendOpen 先例）
+let agCollapsed = false;
 
 function renderDetail() {
   const sel = selSession();
@@ -4725,27 +4738,37 @@ function renderDetail() {
       + (s.context_usage ? " · " + tokStr(s.context_usage) + "/" + tokStr(s.context_limit || 200000) : "");
   } else lr.style.display = "none";
 
-  // 子 Agent 状态（external 会话）。#13 巡检：加面板标题（子代理 + 总数/运行数——
-  // 原面板无标题，⑂/✓ 行首见不知所云）与超 4 条的溢出提示（原 slice(-4) 静默截断，
-  // 用户不知道前面还有）
+  // 子 Agent 状态（external 会话）。#142 重设计：并入状态栏——#liverow 下的续行（去
+  // 独立大框，attach 类贴合主状态行）；标题行点击折叠/展开（agCollapsed 模块级记忆，
+  // 1s 重渲不丢态，pendOpen 先例）；运行中行首呼吸点 + 秒数本地计时。防御：ended_at>0
+  // 才算结束——数据侧 ended_at:0（defined-but-falsy）会让 `?? Date.now()` 取 0 → 负
+  // 时长被 clamp 冻结，读秒不涨的嫌疑形态（run 判定与取值同口径）
   const ag = $("agbox");
   const subs = s.subagents ?? [];
   if (subs.length > 0) {
     ag.style.display = "block";
+    ag.className = s.status === "WORKING" ? "attach" : "";
     const shown = subs.slice(-4);
     const more = subs.length - shown.length;
-    const running = subs.filter((a) => !a.ended_at).length;
+    const running = subs.filter((a) => !(a.ended_at > 0)).length;
     ag.innerHTML =
-      '<div class="aghead">子代理 ' + subs.length + (running > 0 ? " · " + running + " 运行中" : "") + "</div>" +
-      shown.map((a) => {
-        const run = !a.ended_at;
-        const dur = fmtElapsed((a.ended_at ?? Date.now()) - a.started_at);
-        return '<div class="agrow"><span class="ad" style="color:' + (run ? "var(--working)" : "var(--dim)") + '">' +
-          (run ? "⑂ " : "✓ ") + escapeHtml(a.desc) + '</span>' +
-          (a.act ? '<span class="aa" style="color:' + (run ? "var(--dim)" : "var(--faint)") + '" title="当前动作">' + escapeHtml(a.act) + "</span>" : "") +
-          '<span class="at">' + dur + "</span></div>";
-      }).join("") +
-      (more > 0 ? '<div class="agmore">… 更早 ' + more + " 条已收起</div>" : "");
+      '<div class="aghead" id="agtoggle">' +
+      (running > 0 ? '<i class="agdot"></i>' : "") +
+      '<span class="caret">' + (agCollapsed ? "▸" : "▾") + "</span>" +
+      "子代理 " + subs.length + (running > 0 ? " · " + running + " 运行中" : "") + "</div>" +
+      (agCollapsed ? "" :
+        shown.map((a) => {
+          const run = !(a.ended_at > 0);
+          const dur = a.started_at > 0 ? fmtElapsed(Math.max(0, (a.ended_at > 0 ? a.ended_at : Date.now()) - a.started_at)) : "";
+          return '<div class="agrow">' +
+            (run ? '<i class="agdot" style="width:5px;height:5px"></i>' : '<span style="color:var(--done);font-size:10px;flex:none">✓</span>') +
+            '<span class="ad" style="color:' + (run ? "var(--working)" : "var(--dim)") + '">' + escapeHtml(a.desc) + "</span>" +
+            (a.act ? '<span class="aa" style="color:' + (run ? "var(--dim)" : "var(--faint)") + '" title="当前动作">' + escapeHtml(a.act) + "</span>" : "") +
+            '<span class="at">' + dur + "</span></div>";
+        }).join("") +
+        (more > 0 ? '<div class="agmore">… 更早 ' + more + " 条已收起</div>" : ""));
+    const tg = $("agtoggle");
+    if (tg) tg.onclick = () => { agCollapsed = !agCollapsed; renderDetail(); };
   } else ag.style.display = "none";
 
   // 排队注入消息（external 会话 CLI 忙时）；pendOpen=跨重渲染的展开态记忆
