@@ -4480,9 +4480,15 @@ const MENU_TRASH_SVG = '<svg viewBox="0 0 24 24" width="12" height="12" fill="no
 const isManagedSession = (s) => !s?.external;
 // 休眠态（#49 语义更正：开机不自动恢复）：已保存（saved）但尚未拉起的 pinned 会话。
 // relay 契约字段是 saved（SNAPSHOT 全量 + SESSION_UPDATED 增量恒带布尔）。休眠卡点击=发恢复命令
+// #139 用户口径（2026-09-22 拍板）：「已保存 点击恢复」只属于服务端已关掉的会话——
+// 运行中（WORKING）或等待输入（WAITING）的会话一律正常卡：本来就没停，无从恢复；
+// 且休眠卡点击会被劫持成发恢复命令、连详情都进不去，误判代价高。即使 relay 状态
+// 抖动把 saved 残留带在运行态会话上（重启窗口/竞态），这里也拦住
 function isDormant(s) {
   if (!s?.pinned) return false;
-  return s.saved === true;
+  if (s.saved !== true) return false;
+  if (s.status === "WORKING" || s.status === "WAITING") return false;
+  return true;
 }
 // 点击休眠卡：COMMAND_RESUME_SESSION {session_id}；ACK 成功先本地转正常态（徽章/弱化即时回），
 // relay 回帧收口；失败/超时 toast 说明
