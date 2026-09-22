@@ -1158,7 +1158,7 @@ class RelayStore {
       } catch {
         return;
       }
-      this.onMessage(conn, msg);
+      this.safeOnMessage(conn, msg, "lan");
     };
   }
 
@@ -1310,7 +1310,7 @@ class RelayStore {
         this.markUnpaired(conn, typeof sealedNack.error === "string" && sealedNack.error ? sealedNack.error : "设备不在 relay 配对列表中");
         return;
       }
-      this.onMessage(conn, inner);
+      this.safeOnMessage(conn, inner, "cloud");
     };
   }
 
@@ -1498,6 +1498,27 @@ class RelayStore {
   }
 
   // ---------- 下行处理（LAN 与云通道共用，云侧已解密；按源隔离） ----------
+
+  // #135 遗留防御（2026-09-22 随 #146 排查落地，与 web-console onCloudText 同款）：
+  // 单帧处理异常隔离——毒帧（畸形字段进 onEvent 某分支抛 TypeError 等）会沿
+  // ws.onmessage 裸抛被 RN 原生层吞掉，表现为帧无痕丢失：lastSeq 已推进（赋值在
+  // onEvent 之前）但 emit 没跑，UI 停留旧状态。SNAPSHOT 帧中毒时会话列表/输出物
+  // tab 全不更新，而连接与心跳一切正常（2026-09-22 输出物栏断粮表象与此吻合）。
+  // 处理：跳过毒帧 + console.error 留毒帧摘要（adb logcat 可见，凭摘要定位字段），
+  // 并补一次 emit 把帧内已突变的状态（deliverables/seq 等）刷出去；其余帧照常，
+  // SNAPSHOT 中毒时下一次 hello/ping 恢复会重取快照
+  private safeOnMessage(conn: SourceConn, msg: Envelope | CommandAck, tag: string): void {
+    try {
+      this.onMessage(conn, msg);
+    } catch (err) {
+      const brief = `${String((msg as { type?: unknown }).type ?? "?")} sid=${String((msg as { session_id?: unknown }).session_id ?? "").slice(0, 8)} seq=${String((msg as { seq?: unknown }).seq ?? "-")}`;
+      const stack = err instanceof Error ? `${err.message} @ ${(err.stack ?? "").split("\n")[1]?.trim() ?? ""}` : String(err);
+      console.error(`[store] ${tag} 帧处理异常 ${brief}: ${stack.slice(0, 300)}`);
+      try {
+        this.emit();
+      } catch {}
+    }
+  }
 
   private onMessage(conn: SourceConn, msg: Envelope | CommandAck) {
     // #85 假在线修正：resumeCheck 期间收到任何真帧（SNAPSHOT/pong/信封）= 链路
@@ -2044,7 +2065,9 @@ class RelayStore {
         conn.deliverables = (msg.payload as { deliverables?: unknown }).deliverables === true;
         for (const s of msg.payload.sessions as SessionState[]) {
           conn.sessions.set(s.session_id, s);
-          conn.timelines.set(s.session_id, msg.payload.logs[s.session_id] ?? []);
+          // logs 可选链（#146 排查加固）：字段缺省/畸形时 TypeError 会中断快照装配
+          //（deliverables 已赋值但 emit 未跑，UI 停留旧态）——回落空时间线继续
+          conn.timelines.set(s.session_id, msg.payload.logs?.[s.session_id] ?? []);
           this.sidIndex.set(s.session_id, conn);
         }
         conn.lastSeq = Math.max(conn.lastSeq, msg.seq);
