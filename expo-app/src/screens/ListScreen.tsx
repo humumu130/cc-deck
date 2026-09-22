@@ -1,5 +1,5 @@
 import { memo, useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState, type Ref } from "react";
-import { Animated, Easing, FlatList, Image, PanResponder, Pressable, RefreshControl, StyleSheet, Text, Vibration, View } from "react-native";
+import { Animated, FlatList, Image, PanResponder, Pressable, RefreshControl, StyleSheet, Text, Vibration, View } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { statusColor, withA, type ThemeColors } from "../theme";
@@ -122,7 +122,7 @@ function clipSrcName(name: string): string {
   return name;
 }
 
-// cc light 风格：运行中黄灯呼吸（亮度+缩放联动，2.4s 一拍，对齐网页端呼吸灯）
+// cc light 风格：运行中黄灯呼吸（亮度呼吸，对齐网页端呼吸灯）
 // #77 终版（用户三连反馈后）：桌面端 THEME_ICONS 同款 SVG 渲染成 PNG 资产
 // （resvg 生成，黑色线条），Image tintColor 运行时染色适配深浅模式——像素级
 // 同款，View 手绘近似已弃（比例/月牙弧度两次不像）。深色显太阳=点击切浅、
@@ -151,32 +151,19 @@ function ThemeGlyph({ dark }: { dark: boolean }) {
   );
 }
 
+// #148 根因修复：bridgeless 下 Animated 逐帧动画（native/JS 驱动判别实验实测皆同）
+// 每帧提交拖满 RenderThread（71%+、输入事件饿死 → 整机冻结；禁动画对照帧数
+// 数千→104 归零）。降级为低频步进明灭：1→0.72→0.45→0.72 四级三角波 480ms/步
+//（≈1.9s 一拍，近原 2.4s 节奏），每秒仅 2 次提交，肉眼仍是柔和呼吸感
+const BLINK_PHASES = [1, 0.72, 0.45, 0.72];
 function BlinkDot({ color }: { color: string }) {
-  const op = useRef(new Animated.Value(1)).current;
-  const sc = useRef(new Animated.Value(1)).current;
   const styles = useThemeStyles(makeStyles);
+  const [ph, setPh] = useState(0);
   useEffect(() => {
-    const ease = Easing.inOut(Easing.quad);
-    const loop = Animated.loop(
-      Animated.parallel([
-        Animated.sequence([
-          Animated.timing(op, { toValue: 0.45, duration: 1200, easing: ease, useNativeDriver: true }),
-          Animated.timing(op, { toValue: 1, duration: 1200, easing: ease, useNativeDriver: true }),
-        ]),
-        Animated.sequence([
-          Animated.timing(sc, { toValue: 0.8, duration: 1200, easing: ease, useNativeDriver: true }),
-          Animated.timing(sc, { toValue: 1, duration: 1200, easing: ease, useNativeDriver: true }),
-        ]),
-      ]),
-    );
-    loop.start();
-    return () => loop.stop();
-  }, [op, sc]);
-  return (
-    <Animated.View
-      style={[styles.dot, { backgroundColor: color, opacity: op, transform: [{ scale: sc }] }]}
-    />
-  );
+    const t = setInterval(() => setPh((n) => (n + 1) % BLINK_PHASES.length), 480);
+    return () => clearInterval(t);
+  }, []);
+  return <View style={[styles.dot, { backgroundColor: color, opacity: BLINK_PHASES[ph] }]} />;
 }
 
 // #100 后台任务徽标：主回合空闲但仍有子 Agent 在跑——⑂N 黄字小标（与灯同语义色）
@@ -1322,35 +1309,25 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
   },
 });
 
-// 连接中三点（2026-09-16；#116 改 wave 式）：三个点逐个亮起、全亮后齐灭，循环——
-// 旧版整串 "···" 同亮同灭，动感差（用户点单）。实现：单个 progress 0→1 线性循环
-// （1.4s，与桌面端 pd-dots 同节拍），每点按错峰起点插值 opacity（0/0.33/0.66 起亮、
-// 0.85 齐灭），全程 native 驱动；形态与桌面 conn-dots::after、配对 pd-dots 同语言
+// 连接中三点（2026-09-16；#116 wave 式）。#148 同源降级：原 native 逐帧插值
+//（1400ms 循环）与呼吸灯同一渲染风暴（重连期间整机卡顿感，#85 同症状嫌疑）——
+// 改低频轮替：420ms/步点亮下一枚、其余 0.25 底亮（经典输入指示器形态），
+// 每秒 ~2.4 次提交
 function ConnDots({ color, big }: { color: string; big?: boolean }) {
-  const p = useRef(new Animated.Value(0)).current;
+  const [n, setN] = useState(0);
   useEffect(() => {
-    const l = Animated.loop(
-      Animated.timing(p, { toValue: 1, duration: 1400, easing: Easing.linear, useNativeDriver: true }),
-    );
-    l.start();
-    return () => l.stop();
-  }, [p]);
-  const dotOp = (start: number) =>
-    p.interpolate({
-      // start 起亮（约 55ms 短爬升）→ 保持到 0.85 → 齐灭 → 灭到循环尾；
-      // 首点 start=0 时用 0.001 抬一下起点（inputRange 需严格递增）
-      inputRange: [0, start === 0 ? 0.001 : start, Math.min(start + 0.04, 0.84), 0.85, 0.9, 1],
-      outputRange: [0, 0, 1, 1, 0, 0],
-    });
+    const t = setInterval(() => setN((v) => (v + 1) % 3), 420);
+    return () => clearInterval(t);
+  }, []);
   return (
     <View style={{ flexDirection: "row", alignItems: "center", marginRight: big ? 0 : -4 }}>
-      {[0, 0.33, 0.66].map((s, i) => (
-        <Animated.Text
+      {[0, 1, 2].map((i) => (
+        <Text
           key={i}
-          style={{ color, fontSize: big ? 16 : 12, lineHeight: big ? 20 : 14, letterSpacing: 2, opacity: dotOp(s) }}
+          style={{ color, fontSize: big ? 16 : 12, lineHeight: big ? 20 : 14, letterSpacing: 2, opacity: i === n ? 1 : 0.25 }}
         >
           ·
-        </Animated.Text>
+        </Text>
       ))}
     </View>
   );

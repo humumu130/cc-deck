@@ -1062,24 +1062,21 @@ function LiveStatusLine({ summary, startedAt, color, tok }: { summary: string; s
   );
 }
 
-// 排队注入消息：脉冲呼吸（类 CLI queued），CLI 处理/回合结束时上浮为正式消息
+// 排队注入消息：脉冲呼吸（类 CLI queued），CLI 处理/回合结束时上浮为正式消息。
+// #148 同源降级：原 Animated 逐帧呼吸（native 驱动 900ms 往返）与列表呼吸灯同一
+// 渲染风暴——改低频步进：六级三角波 600ms/步（3.6s 一拍），每秒 ~1.7 次提交
+const PEND_PHASES = [0.35, 0.5, 0.65, 0.85, 0.65, 0.5];
 function PendingRow({ text }: { text: string }) {
   const d = useThemeStyles(makeStyles);
-  const op = useRef(new Animated.Value(0.35)).current;
+  const [ph, setPh] = useState(0);
   useEffect(() => {
-    const a = Animated.loop(
-      Animated.sequence([
-        Animated.timing(op, { toValue: 0.85, duration: 900, useNativeDriver: true }),
-        Animated.timing(op, { toValue: 0.35, duration: 900, useNativeDriver: true }),
-      ]),
-    );
-    a.start();
-    return () => a.stop();
-  }, [op]);
+    const t = setInterval(() => setPh((n) => (n + 1) % PEND_PHASES.length), 600);
+    return () => clearInterval(t);
+  }, []);
   return (
-    <Animated.View style={[d.pendRow, { opacity: op }]}>
+    <View style={[d.pendRow, { opacity: PEND_PHASES[ph] }]}>
       <Text style={d.pendT} numberOfLines={3}>{text}</Text>
-    </Animated.View>
+    </View>
   );
 }
 
