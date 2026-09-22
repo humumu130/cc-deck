@@ -405,6 +405,14 @@ export class RouterDO extends DurableObject {
       this.router.unregister(a.connId);
       return;
     }
+    // 链路级心跳回显（#146）：{t:"hb"}→{t:"hb_ack"}（与 Node 桥 index.ts 同款，
+    // 防 CF 对协议层 ping 的代答骗过端到端探活），不进路由
+    try {
+      if ((JSON.parse(message) as { t?: unknown }).t === "hb") {
+        try { ws.send(JSON.stringify({ t: "hb_ack" })); } catch { /* 已在关闭流程 */ }
+        return;
+      }
+    } catch { /* 非 JSON 帧照走原路由 */ }
     // #373 /wan 上行包信封：手表明文帧 → {to:wanTo, data:{t:"wan",from,frame}}
     if (a.wanTo) {
       this.router.handleFrame(

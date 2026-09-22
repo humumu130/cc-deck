@@ -6,7 +6,7 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { randomUUID } from "node:crypto";
-import { WebSocket } from "ws";
+import { WebSocket, WebSocketServer } from "ws";
 import { startCloudServer } from "../../cloud-bridge/src/index.js";
 import { loadConfig } from "../src/config.js";
 import { EventBus } from "../src/event-bus.js";
@@ -1106,6 +1106,57 @@ assert(
     "23 坏条目（lan 缺 token）ACK 拒绝",
   );
   phoneWs6.close();
+}
+
+// ---------- 24) #146 应用层端到端心跳：桥回显 hb / 哑链路判死重连 ----------
+{
+  // ① 桥回显：任意连接发 {t:"hb"} 直接收 {t:"hb_ack"}（不进路由、不挑 dev）
+  const hbWs = new WebSocket(`ws://127.0.0.1:${BRIDGE_PORT}/cloud?token=${BRIDGE_TOKEN}&dev=hb-probe`);
+  const hbGot: { t?: string }[] = [];
+  hbWs.on("message", (raw) => {
+    try { hbGot.push(JSON.parse(String(raw))); } catch {}
+  });
+  hbWs.on("error", () => undefined);
+  await new Promise<void>((r) => hbWs.on("open", r));
+  hbWs.send(JSON.stringify({ t: "hb" }));
+  assert(await waitFor(() => hbGot.some((m) => m.t === "hb_ack")), "24 桥对 {t:hb} 直回 {t:hb_ack}（链路级回显）");
+  hbWs.close();
+
+  // ② 判死重连：哑服务器只收不应答任何文本帧（ws 库自动回协议 pong = 精确模拟
+  // CF edge 代答控制帧的半开假象），CloudClient 3 轮 hb 无应用层回包必须 terminate
+  // 重连——这正是 2026-09-22 输出物栏断粮事故的失效模式回归
+  const dumb = new WebSocketServer({ port: 0 });
+  let dumbConns = 0;
+  let dumbHbFrames = 0;
+  dumb.on("connection", (ws) => {
+    dumbConns++;
+    ws.on("message", (data, isBinary) => {
+      if (!isBinary) {
+        try { if ((JSON.parse(String(data)) as { t?: unknown }).t === "hb") dumbHbFrames++; } catch {}
+      }
+      // 永不回文本帧：hb_ack 缺席即模拟 CF 回收后段
+    });
+  });
+  await new Promise<void>((r) => dumb.on("listening", r));
+  const dumbPort = (dumb.address() as { port: number }).port;
+
+  const { mkdirSync } = await import("node:fs");
+  const hbDir = join(dataDir, "relay-hb");
+  mkdirSync(hbDir, { recursive: true });
+  const hbIdentity = loadOrCreateIdentity(hbDir);
+  // 全局收紧 hb 间隔（主 cloud 仍连真桥：桥会回 ack，不受影响）；5s tick × 3 轮
+  // + 1s 重连退避，40s 窗口足够观察到第二次连接
+  process.env.CCR_CLOUD_HB_MS = "300";
+  const cloudHb = new CloudClient(bus, mgr, cfg, hbIdentity, pairCodes, `ws://127.0.0.1:${dumbPort}/cloud`);
+  cloudHb.start();
+  assert(
+    await waitFor(() => dumbConns >= 2, 40_000, 100),
+    "24 哑链路（零文本回包）触发判死重连（连接数 ≥2，协议 pong 代答骗不过）",
+  );
+  assert(dumbHbFrames >= 3, "24 判死前累计发出 ≥3 枚 hb（3 轮判死语义）");
+  delete process.env.CCR_CLOUD_HB_MS;
+  cloudHb.close();
+  dumb.close();
 }
 
 // ---------- 清理 ----------

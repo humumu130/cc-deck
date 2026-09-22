@@ -77,6 +77,10 @@ export class CloudClient {
   private timer: ReturnType<typeof setTimeout> | null = null;
   private lastRecv = 0;
   private lastPingAt = 0;
+  // #146 应用层端到端心跳：协议层 ping/pong 被 CF edge 代答（控制帧不透传），后段
+  // 回收时半开 TCP 骗过 pong 检测——见 startHeartbeat 的 hb 块
+  private lastHbAt = 0;
+  private hbMiss = 0;
   private hbTimer: ReturnType<typeof setInterval> | null = null;
   // 桥闪断时记录断线前 active 的设备，重连后主动补发（见 connect 的 open 处理）
   private resumeOnOpen = new Set<string>();
@@ -137,6 +141,8 @@ export class CloudClient {
       clearTimeout(bootGuard);
       this.delayMs = 1000;
       this.lastRecv = Date.now();
+      this.lastHbAt = 0; // #146：新连接立即发首枚 hb（同时清 miss 计数）
+      this.hbMiss = 0;
       console.log(`[cloud] bridge connected ${this.tag} (dev=${this.identity.relayDev})`);
       // 闪断自愈：桥链路闪断不该连累每台设备重新 hello——后台网页标签会被浏览器
       // 冻结定时器发不出 ping，下行将黑洞到手动刷新。重连后立即按各设备 lastSeq
@@ -165,6 +171,9 @@ export class CloudClient {
     });
     ws.on("message", (raw) => {
       this.lastRecv = Date.now();
+      // #146：任何应用层文本帧（hb_ack/事件/ROUTE_MISS/旧桥的 bad frame ERROR）都
+      // 证明端到端通路活着——协议层 pong 不算（CF edge 会代答，恰是事故根因）
+      this.hbMiss = 0;
       // 帧处理整体兜底（L3）：onFrame 内任意 throw（如非法 base64 公钥进 devId）
       // 会沿 ws 回调裸抛崩进程（公共桥上一帧即可触发重启循环）——吞掉并记日志
       try {
@@ -213,6 +222,25 @@ export class CloudClient {
       if (this.lastPingAt === 0 || Date.now() - this.lastPingAt >= 10_000) {
         this.lastPingAt = Date.now();
         ws.ping();
+      }
+      // #146 应用层端到端探活：CF edge 代答协议层 ping/pong（控制帧不透传源站），
+      // 业务空闲时 edge→cloudflared→桥 后段被回收，上面的 pong 检测被半开 TCP 骗过
+      // ——手机 hello 全部 ROUTE_MISS 而本机毫不知情（2026-09-22 输出物栏断粮事故：
+      // 桥 connected 后 2 分钟桥侧零连接、本侧 TCP 仍 ESTABLISHED 无断连日志）。
+      // 文本帧 CF 必透传：周期发 {t:"hb"}，桥回 {t:"hb_ack"}（旧桥回 bad frame ERROR
+      // 同样是端到端文本帧，检测等效）；任何应用层收包即清零 miss。连续 3 轮无任何
+      // 回包 = 链路已死，terminate 走统一重连（新握手即重建 CF 后段路由，open 时
+      // resumeOnOpen 自动向设备补发）。CCR_CLOUD_HB_MS 可收紧（测试用）
+      const hbMs = Number(process.env.CCR_CLOUD_HB_MS) > 0 ? Number(process.env.CCR_CLOUD_HB_MS) : 20_000;
+      if (this.lastHbAt === 0 || Date.now() - this.lastHbAt >= hbMs) {
+        this.lastHbAt = Date.now();
+        this.hbMiss += 1;
+        this.send({ t: "hb" });
+        if (this.hbMiss >= 3) {
+          console.log("[cloud] app heartbeat dead (3x hb unacked), terminating for reconnect");
+          ws.terminate();
+          return;
+        }
       }
     }, 5_000);
     this.hbTimer.unref?.();

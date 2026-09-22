@@ -121,6 +121,17 @@ export function startCloudServer(port: number, token: string, extraPorts: number
       });
       ws.on("message", (data, isBinary) => {
         if (isBinary) return;
+        // 链路级心跳回显（#146）：CF edge 会代答 ws 协议层 ping/pong（控制帧不透传
+        // 源站），业务空闲时 edge→cloudflared→桥 后段被回收、对端半开 TCP 无感——
+        // 手机重连 hello 全部 ROUTE_MISS 而源站 relay 毫不知情（2026-09-22 输出物
+        // 栏断粮事故）。文本帧 CF 必透传，{t:"hb"} 直接回 {t:"hb_ack"}，供对端端到端
+        // 探活；无 to/from 不进路由，relay/手机/网页任意连接通用
+        try {
+          if ((JSON.parse(data.toString()) as { t?: unknown }).t === "hb") {
+            ws.send(JSON.stringify({ t: "hb_ack" }));
+            return;
+          }
+        } catch { /* 非 JSON 帧照走原路由 */ }
         if (isWan) {
           // 上行包信封：明文帧 → {to:rd, data:{t:"wan",from,frame}}
           router.handleFrame(connId, JSON.stringify({ to: wanTo, data: { t: "wan", from: dev, frame: data.toString() } }));
