@@ -3218,8 +3218,19 @@ async function pollLoop(ctx) {
   }
 }
 
-// 下行帧统一入口（ws onmessage 与轮询 GET 共用，按源）
+// 下行帧统一入口（ws onmessage 与轮询 GET 共用，按源）。
+// #135 帧级异常隔离（2026-09-22）：帧处理链（onEvent→render）任一帧抛异常若不隔离，
+// 轮询传输下会杀死整个 pollLoop（async while 循环体抛出、无人 catch）——拉取停止、
+// lastSeq 冻结、画面停在旧时间点，而连接状态仍显示已连接（昨晚实证：wb 设备游标冻死
+// 173720 四十余分钟，每次重连补发首条即同一毒帧、处理再崩、循环死锁）。ws 传输每帧
+// 独立事件本不致死链，但异常同样无痕。wrapper 兜住单帧异常：跳过该帧、console 留下
+// 毒帧摘要（定位具体字段用），其余帧照常处理
 function onCloudText(ctx, text) {
+  try { onCloudTextRaw(ctx, text); }
+  catch (e) { console.error("[cloud:" + ctx.cfg.name + "] 帧处理异常（已跳过该帧）:", e, String(text).slice(0, 300)); }
+}
+
+function onCloudTextRaw(ctx, text) {
   let f;
   try { f = JSON.parse(text); } catch { return; }
   const cfg = ctx.cfg;

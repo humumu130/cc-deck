@@ -512,7 +512,9 @@ export class CloudClient {
     }
     if (inner.t === "hello") {
       const lastSeq = Number(inner.last_seq ?? 0) || 0;
-      console.log(`[cloud] phone ${f.from} hello last_seq=${lastSeq}`);
+      // dev 前缀即终端类型（ph-手机 App / wb-网页 / wt-手表）——旧模板硬编码 "phone"，
+      // 网页端设备也被打成 phone，#135 排查被误导过一轮
+      console.log(`[cloud] ${f.from} hello last_seq=${lastSeq}`);
       // #42 hello 顺带实名化：新版 App 每次连接上报机型名（旧版无 name 字段=不动）。
       // 存量「手机」硬编码名在设备更新后首次连接即替换为实名，无需重新配对
       const helloName = typeof inner.name === "string" ? inner.name.trim().slice(0, 32) : "";
@@ -528,7 +530,7 @@ export class CloudClient {
       const st = this.phones.get(f.from);
       const lastSeq = Number(inner.last_seq ?? 0) || 0;
       if (!st || !st.active) {
-        console.log(`[cloud] phone ${f.from} resume via ping last_seq=${lastSeq}`);
+        console.log(`[cloud] ${f.from} resume via ping last_seq=${lastSeq}`);
         this.resumePhone(f.from, lastSeq);
       } else {
         st.lastSeq = lastSeq;
