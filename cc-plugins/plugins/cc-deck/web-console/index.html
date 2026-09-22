@@ -64,6 +64,13 @@
     /* #54 会话卡动作行色阶：介于 --dim 与标题色 --text-strong 之间（原 --dim 过淡回调一档），
        卡内三层级 = 标题 --text-strong > 动作 --card-sub > 元信息 --faint */
     --card-sub: #A9B5C7;
+    /* #141 码块语法着色（GitHub dark 配色，与 expo-app highlight.ts 的 SYN_DARK 同值） */
+    --syn-com: #8B949E;
+    --syn-kw: #FF7B72;
+    --syn-str: #A5D6FF;
+    --syn-num: #79C0FF;
+    --syn-tag: #7EE787;
+    --syn-attr: #FFA657;
   }
   html.light {
     --bg: #F3F5F9;
@@ -115,6 +122,13 @@
     --hov2: #B4C0D4;
     --on-accent: #fff;
     --card-sub: #4A5670;
+    /* #141 码块语法着色（GitHub light 配色，与 expo-app highlight.ts 的 SYN_LIGHT 同值） */
+    --syn-com: #6E7781;
+    --syn-kw: #CF222E;
+    --syn-str: #0A3069;
+    --syn-num: #0550AE;
+    --syn-tag: #116329;
+    --syn-attr: #953800;
   }
   /* #13 巡检（2026-09-18 视觉审查）：浅色组件层覆盖。此前浅色只做变量映射，而组件里
      直接标定的 rgba()/--faint（按深底对比调的）原样带进白底——元信息、徽章、指示符
@@ -1486,24 +1500,8 @@
   }
   .card-cta button:hover { background: rgba(245,184,65,.22); }
 
-  .status-chip {
-    display: inline-flex; align-items: center; gap: 6px;
-    font-size: 11px; font-weight: 700; letter-spacing: 1px;
-    color: var(--sc, var(--dim));
-  }
-  .status-chip i { width: 11px; height: 11px; border-radius: 50%; background: var(--sc, var(--dim)); flex: none; }
-  .status-chip.s-WORKING { --sc: var(--working); }
-  .status-chip.s-WAITING { --sc: var(--waiting); }
-  .status-chip.s-ERROR   { --sc: var(--error); }
-  .status-chip.s-DONE    { --sc: var(--done); }
-  .status-chip.s-WORKING i { animation: dot-breathe 2.4s ease-in-out infinite; }
-  /* #124 详情头状态字收敛：dhead 内去灯（状态由文字+颜色自述，列表卡 chip 不受影响）、
-     字号 11→9 小三号、字距同步收紧（小字号 1px 字距会散） */
-  #dhead .status-chip i { display: none; }
-  /* #124②返工（2026-09-21 验收反馈"跟会话名不应纵向对齐，应类似角标但不挨那么近"）：
-     从行中心线（align-items:center 的纵对齐）上抬为上标角标位——relative top 上移，
-     flex gap 12px 天然留出与标题的间距（不贴死） */
-  #dhead .status-chip { font-size: 9px; letter-spacing: .5px; position: relative; top: -7px; }
+  /* #151 详情头工作状态英文 chip 整体移除（2026-09-22 用户拍板：几轮调不好就不调了，
+     状态看左侧会话卡灯即可）；dot-breathe 关键帧保留——列表卡灯/连接行/实时行仍用 */
   @keyframes dot-breathe {
     0%, 100% { opacity: 1; transform: scale(1); box-shadow: 0 0 2px 0 color-mix(in srgb, var(--sc) 40%, transparent); }
     50% { opacity: .45; transform: scale(.8); box-shadow: 0 0 9px 2px color-mix(in srgb, var(--sc) 55%, transparent); }
@@ -1658,8 +1656,10 @@
     border-radius: 14px; border-top-right-radius: 5px; padding: 10px 15px;
     white-space: pre-wrap; word-break: break-word;
   }
-  /* #38 长消息默认折叠：8 行截断（line-clamp 不动文本，展开即全文） */
-  .msg-user .ub.clamp { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 8; overflow: hidden; }
+  /* #38/#149 长消息默认折叠：3 行 + 省略号（line-clamp 不动文本，展开即全文）；
+     line-clamp 之外再钳 max-height 整行对齐——只靠 line-clamp 末行会漏半截
+     （#pendbox 2026-09-16 同款坑），高度钳到 3×行高才真正只露三行 */
+  .msg-user .ub.clamp { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 3; line-height: 1.5; max-height: 4.5em; overflow: hidden; }
   .msg-user .x-full { margin: 5px 2px 0 0; }
   .msg-user .mt { color: var(--faint); font-size: 10.5px; margin-top: 4px; font-variant-numeric: tabular-nums; }
   /* AI 消息：无气泡，头像 + 名称行（WorkBuddy 式），正文直接排版 */
@@ -1780,6 +1780,17 @@
   .rename-ok { flex: none; cursor: pointer; color: var(--done); font-size: 13px; font-weight: 700; padding: 1px 7px; border-radius: 6px; border: 1px solid var(--done); opacity: .92; }
   .rename-ok:hover { opacity: 1; background: rgba(85,217,138,.12); }
   .md-code { background: var(--mdcode-bg); border: 1px solid var(--border); border-radius: 10px; padding: 11px 13px; margin: 0; overflow-x: auto; white-space: pre; font-family: var(--mono); font-size: .86em; line-height: 1.6; letter-spacing: 0; }
+  /* #141 语法高亮 token 色（变量随主题切换）；add/del 借主题 done/waiting，与工具 diff 行同色语言 */
+  .md-code .s-com { color: var(--syn-com); }
+  .md-code .s-kw { color: var(--syn-kw); }
+  .md-code .s-str { color: var(--syn-str); }
+  .md-code .s-num { color: var(--syn-num); }
+  .md-code .s-tag { color: var(--syn-tag); }
+  .md-code .s-attr { color: var(--syn-attr); }
+  .md-code .s-add { color: var(--done); }
+  .md-code .s-del { color: var(--waiting); }
+  /* #141 语言小徽标（Typora 式）：码块右下角，非空 lang 即显示 */
+  .md-lang { position: absolute; right: 8px; bottom: 7px; font-size: 10px; color: var(--faint); letter-spacing: .4px; text-transform: lowercase; pointer-events: none; }
   .md-li { margin: 5px 0; white-space: pre-wrap; }
   .md-bul { color: var(--faint); }
   .md-quote { border-left: 3px solid var(--brand); padding: 3px 12px; color: var(--faint); margin: 9px 0; }
@@ -2283,7 +2294,6 @@
       <!-- 两行化（对齐手机 2026-09-14 定稿）：R1=标题+时长（弱化小字）；R2=源名+路径+ctx 短条+模型名 -->
       <div class="dhead-row">
         <span id="dtitle"></span>
-        <span id="dbadge" class="status-chip"></span>
         <span class="elapsed" id="delapsed"></span>
         <span class="spacer"></span>
         <button id="renameBtn" class="ghost" title="重命名会话">✎</button>
@@ -4010,9 +4020,6 @@ function pushLog(ctx, sid, entry) {
 }
 
 // ---------- 渲染 ----------
-function chip(status) {
-  return '<span class="status-chip s-' + status + '"><i></i>' + status + "</span>";
-}
 
 function fmtElapsed(ms) {
   const sec = Math.floor(ms / 1000);
@@ -4028,6 +4035,15 @@ function sessionElapsed(s) {
   if (s.status === "DONE" && s.duration_ms) return s.duration_ms;
   if (s.historical || s.status === "ERROR") return s.updated_at - s.started_at;
   return Date.now() - s.started_at;
+}
+
+// #143 卡片右上角：会话计时 → 最后活跃时间 MM-dd HH:mm（updated_at 随事件刷新，
+// 分钟粒度；WORKING 的回合秒数留在第二行 c-live，详情页 ⏱ 计时不动）
+function fmtLastActive(ts) {
+  if (!ts) return "--";
+  const t = new Date(ts);
+  const p = (n) => String(n).padStart(2, "0");
+  return p(t.getMonth() + 1) + "-" + p(t.getDate()) + " " + p(t.getHours()) + ":" + p(t.getMinutes());
 }
 
 function statsHtml(st) {
@@ -4317,13 +4333,18 @@ function render() {
   renderSrcChips();
   renderConfirmFloat(); // #306 [待确认] 悬浮清单（key 守卫，重渲代价极小）
 
-  // #279⑨ 折叠空闲（对齐手机）：仅 DONE>0 时可见，开着时隐藏 DONE 卡（顶部计数仍全量）
+  // #279⑨ 折叠空闲 + #140 与闲置变灰联动：折叠对象 = 已过变灰阈值的真闲置卡
+  //（idleDimmed 同口径，内含 #100 后台在跑豁免）——刚收工的会话处在交流窗口期，
+  // 点折叠也不藏（用户拍板：变灰才折叠）；idleDimMin<0（永不变灰）→ 无可折叠卡，
+  // 按钮隐藏。计数 = 闲置卡数（非全部 DONE 数）；跨阈值时刻由 30s 置灰对账器
+  // 触发重渲，按钮计数随动
+  const idleN = allSessions().filter((e) => idleDimmed(e.s)).length;
   const ib = $("idleBtn");
-  const ikey = cnt.DONE + (collapseIdle ? "|1" : "|0");
+  const ikey = idleN + (collapseIdle ? "|1" : "|0");
   if (ib.dataset.key !== ikey) {
     ib.dataset.key = ikey;
-    ib.style.display = cnt.DONE > 0 ? "" : "none";
-    ib.textContent = collapseIdle ? "展开空闲 " + cnt.DONE : "折叠空闲 ▾";
+    ib.style.display = idleN > 0 ? "" : "none";
+    ib.textContent = collapseIdle ? "展开空闲 " + idleN : "折叠空闲 ▾";
     ib.classList.toggle("on", collapseIdle);
   }
 
@@ -4335,8 +4356,9 @@ function render() {
   const rankOf = (s) => (s.status === "DONE" && bgRunning(s) ? 1 : order[s.status]);
   let entries = allSessions();
   if (filterSrc !== "all") entries = entries.filter((e) => e.ctx.cfg.id === filterSrc);
-  // 折叠空闲豁免后台在跑卡（#100）：等孩子 ≠ 空闲
-  if (collapseIdle) entries = entries.filter((e) => e.s.status !== "DONE" || bgRunning(e.s));
+  // #140 折叠空闲与闲置变灰联动：只折已变灰的真闲置卡（idleDimmed 同口径，
+  // #100 后台在跑豁免内含）——刚收工的会话留在交流窗口期可见
+  if (collapseIdle) entries = entries.filter((e) => !idleDimmed(e.s));
   // #279① 挂起删除（4s 撤销窗口内）与已提交删除（待 SESSION_DELETED 确认）的卡片保持隐藏
   entries = entries.filter((e) => e.s.session_id !== pendingDel.sid && !deleting.has(e.s.session_id));
   const list = entries.sort((a, b) =>
@@ -4405,7 +4427,7 @@ function render() {
       const headRow =
         '<div class="c-head">' + pinFlag + '<span class="c-dot' + (s.status === "WORKING" || (s.status === "DONE" && bgRunning(s)) ? " run" : "") /* #100 后台在跑也呼吸 */ + '" style="--sc:var(--' + (s.status || "").toLowerCase() + ')"></span>' +
           '<span class="card-title"><span class="c-tt">' + escapeHtml(s.title || "") + "</span>" + bgBadge + badges + opBtns + "</span>" +
-          '<span class="elapsed">' + fmtElapsed(sessionElapsed(s)) + "</span></div>";
+          '<span class="elapsed" title="最后活跃">' + fmtLastActive(s.updated_at) + "</span></div>";
       const liveRow = s.status === "WORKING"
         ? '<div class="c-live">' +
           (s.compacting ? '<span class="lv-tok">⟳ 压缩上下文</span>' : "") +
@@ -4433,7 +4455,7 @@ function render() {
         d.innerHTML =
           '<div class="c-row1">' + pinFlag + '<span class="c-dot' + (s.status === "WORKING" || (s.status === "DONE" && bgRunning(s)) ? " run" : "") /* #100 后台在跑也呼吸 */ + '" style="--sc:var(--' + (s.status || "").toLowerCase() + ')"></span>' +
             '<span class="card-title"><span class="c-tt">' + escapeHtml(s.title || "") + "</span>" + bgBadge + badges + opBtns + "</span>" +
-            '<span class="elapsed">' + fmtElapsed(sessionElapsed(s)) + "</span></div>" +
+            '<span class="elapsed" title="最后活跃">' + fmtLastActive(s.updated_at) + "</span></div>" +
           summaryRow +
           statsBlock +
           ctaRow;
@@ -4480,9 +4502,15 @@ const MENU_TRASH_SVG = '<svg viewBox="0 0 24 24" width="12" height="12" fill="no
 const isManagedSession = (s) => !s?.external;
 // 休眠态（#49 语义更正：开机不自动恢复）：已保存（saved）但尚未拉起的 pinned 会话。
 // relay 契约字段是 saved（SNAPSHOT 全量 + SESSION_UPDATED 增量恒带布尔）。休眠卡点击=发恢复命令
+// #139 用户口径（2026-09-22 拍板）：「已保存 点击恢复」只属于服务端已关掉的会话——
+// 运行中（WORKING）或等待输入（WAITING）的会话一律正常卡：本来就没停，无从恢复；
+// 且休眠卡点击会被劫持成发恢复命令、连详情都进不去，误判代价高。即使 relay 状态
+// 抖动把 saved 残留带在运行态会话上（重启窗口/竞态），这里也拦住
 function isDormant(s) {
   if (!s?.pinned) return false;
-  return s.saved === true;
+  if (s.saved !== true) return false;
+  if (s.status === "WORKING" || s.status === "WAITING") return false;
+  return true;
 }
 // 点击休眠卡：COMMAND_RESUME_SESSION {session_id}；ACK 成功先本地转正常态（徽章/弱化即时回），
 // relay 回帧收口；失败/超时 toast 说明
@@ -4570,13 +4598,14 @@ window.addEventListener("blur", closeCardMenu);
 window.addEventListener("resize", closeCardMenu);
 window.addEventListener("scroll", closeCardMenu, true);
 
-// 每秒定点刷新（#320）：WORKING 卡耗时/实时工作行走秒，querySelector 级更新不触发整列重建
+// 每秒定点刷新（#320）：WORKING 卡实时工作行走秒（#143 后 .elapsed=最后活跃时间，
+// 分钟粒度，这里顺手刷新兜 render 丢帧），querySelector 级更新不触发整列重建
 setInterval(() => {
   for (const el of document.querySelectorAll("#cards .card.WORKING")) {
     const hit = allSessions().find((x) => x.ctx.cfg.id === el.dataset.src && x.s.session_id === el.dataset.sid);
     if (!hit) continue;
     const e2 = el.querySelector(".elapsed");
-    if (e2) e2.textContent = fmtElapsed(sessionElapsed(hit.s));
+    if (e2) e2.textContent = fmtLastActive(hit.s.updated_at);
     const sec = el.querySelector(".lv-sec");
     if (sec) sec.textContent = Math.max(0, Math.floor((Date.now() - (hit.s.turn_started_at ?? hit.s.updated_at)) / 1000)) + "s";
   }
@@ -4617,8 +4646,7 @@ function renderDetail() {
   }
 
   $("dtitle").textContent = s.title || "";
-  $("dbadge").outerHTML = '<span id="dbadge" class="status-chip"></span>';
-  $("dbadge").innerHTML = chip(s.status);
+  // #151 详情头工作状态英文 chip 已移除（dbadge）——状态看左侧会话卡
   $("dsrc").innerHTML = srcBadgeHtml(sel.ctx.cfg);
   $("dcwd").textContent = s.cwd;
   $("dcwd").title = s.cwd; // #41web 收缩省略后完整路径看 title
@@ -5163,7 +5191,7 @@ const mdSplitRow = (l) => l.trim().replace(/^\|/, "").replace(/\|$/, "").split("
 function mdBlocks(src) {
   const out = [];
   const lines = String(src).split(/\r?\n/);
-  let para = [], inCode = false, code = [], tableBuf = [];
+  let para = [], inCode = false, code = [], tableBuf = [], lang = "";
   const flush = () => { if (para.length) { out.push({ t: "p", text: para.join("\n") }); para = []; } };
   const flushTable = () => {
     if (!tableBuf.length) return;
@@ -5174,11 +5202,13 @@ function mdBlocks(src) {
   };
   for (const raw of lines) {
     if (inCode) {
-      if (/^\s*```/.test(raw)) { out.push({ t: "code", text: code.join("\n") }); code = []; inCode = false; }
+      if (/^\s*```/.test(raw)) { out.push({ t: "code", lang, text: code.join("\n") }); code = []; lang = ""; inCode = false; }
       else code.push(raw);
       continue;
     }
-    if (/^\s*```/.test(raw)) { flush(); inCode = true; continue; }
+    // #141 开栏捕获语言标注（```xml / ```sql…），供 code 块语法着色
+    const mdFence = /^\s*```([\w+#.-]*)/.exec(raw);
+    if (mdFence) { flush(); inCode = true; lang = mdFence[1].trim().toLowerCase(); continue; }
     if (/^\s*\|/.test(raw)) { flush(); tableBuf.push(raw); continue; }
     flushTable();
     const h = /^(#{1,4})\s+(.*)$/.exec(raw);
@@ -5191,7 +5221,7 @@ function mdBlocks(src) {
     if (!raw.trim()) flush();
     else para.push(raw);
   }
-  if (inCode && code.length) out.push({ t: "code", text: code.join("\n") }); // 截断码块兜底
+  if (inCode && code.length) out.push({ t: "code", lang, text: code.join("\n") }); // 截断码块兜底
   flushTable();
   flush();
   return out;
@@ -5231,11 +5261,161 @@ function mdInline(text) {
   }
   return out + escapeHtml(text.slice(last));
 }
+// ---------- #141 语法高亮 tokenizer（移植自 expo-app/src/highlight.ts——改那边必须同步这里） ----------
+// 纯函数零依赖：synLangOf 做 fence 标注→语言族归一（未收录返 null 降级纯文本）；
+// synTokenize 返回 [s,e) 半开区间 token（按起始位排序、相邻同类合并），>100KB 返 null 防卡 UI；
+// synHtml 是 web 侧渲染辅助（RN 端用组件嵌套 <Text>），逐段转义后包 <span class="s-xxx">。
+// 算法：每规则带 g 单趟 matchAll 收集候选 → 按（起始位, 规则序）排序 → 从左到右吸收，
+// 落在已消费区间的丢弃（注释里的字符串/字符串里的关键字不重复着色）。
+const SYN_ALIAS = {
+  xml: "xml", html: "xml", svg: "xml", vue: "xml", xsd: "xml", xsl: "xml", xslt: "xml", plist: "xml", axml: "xml",
+  json: "json", jsonc: "json", json5: "json",
+  py: "py", python: "py", python3: "py",
+  sh: "sh", bash: "sh", shell: "sh", zsh: "sh", console: "sh", terminal: "sh",
+  sql: "sql", mysql: "sql", mariadb: "sql", plsql: "sql", psql: "sql", postgres: "sql", postgresql: "sql", sqlite: "sql",
+  js: "js", javascript: "js", jsx: "js", mjs: "js", cjs: "js", node: "js",
+  ts: "ts", typescript: "ts", tsx: "ts",
+  css: "css", scss: "css", sass: "css", less: "css",
+  yaml: "yaml", yml: "yaml",
+  diff: "diff", patch: "diff",
+  java: "clike", kotlin: "clike", kt: "clike", swift: "clike", objectivec: "clike", objc: "clike",
+  go: "clike", golang: "clike", rust: "clike", rs: "clike",
+  c: "clike", cpp: "clike", "c++": "clike", cc: "clike", cxx: "clike", h: "clike", hpp: "clike", hh: "clike",
+  cs: "clike", csharp: "clike", php: "clike", dart: "clike", scala: "clike",
+};
+function synLangOf(tag) {
+  const k = (tag || "").trim().toLowerCase();
+  return k && Object.prototype.hasOwnProperty.call(SYN_ALIAS, k) ? SYN_ALIAS[k] : null;
+}
+const synKwRe = (words, ci) => new RegExp("\\b(?:" + words + ")\\b", ci ? "gi" : "g");
+const SYN_SQL_KW = "select|from|where|insert|into|values|update|set|delete|create|drop|alter|rename|truncate|table|database|schema|view|index|key|join|left|right|full|inner|outer|cross|natural|straight_join|on|using|as|and|or|not|in|is|null|like|ilike|rlike|regexp|between|exists|union|all|distinct|case|when|then|else|end|primary|foreign|references|constraint|unique|check|default|auto_increment|on duplicate|engine|charset|character|collate|if|begin|commit|rollback|transaction|trigger|procedure|function|declare|return|call|grant|revoke|partition|over|window|order|group|by|having|limit|offset|asc|desc|with|recursive|interval|day|hour|minute|month|year|now|current_timestamp|count|sum|avg|min|max|cast|convert|dual";
+const SYN_JS_KW = "var|let|const|function|return|if|else|for|while|do|switch|case|default|break|continue|new|class|extends|super|this|typeof|instanceof|in|of|try|catch|finally|throw|async|await|yield|import|export|from|as|null|undefined|true|false|void|delete|static|get|set";
+const SYN_TS_KW = SYN_JS_KW + "|interface|type|enum|implements|private|public|protected|readonly|namespace|declare|abstract|keyof|infer|satisfies|is|string|number|boolean|any|unknown|never|symbol|bigint";
+const SYN_PY_KW = "def|class|return|if|elif|else|for|while|break|continue|pass|import|from|as|with|try|except|finally|raise|lambda|yield|global|nonlocal|assert|del|in|is|not|and|or|None|True|False|async|await|self|cls";
+const SYN_SH_KW = "if|then|else|elif|fi|for|in|do|done|while|until|case|esac|function|return|exit|local|export|source|alias|shift|read|declare|unset|set|trap|exec|eval|echo|printf|cd|pushd|popd|sudo";
+const SYN_CLIKE_KW = "abstract|alias|and|as|assert|async|await|base|bool|boolean|break|byte|case|catch|chan|char|class|const|constructor|continue|crate|data|defer|default|delegate|delete|do|double|dyn|else|enum|event|explicit|extern|false|final|finally|fn|for|foreach|func|function|get|go|goto|if|impl|implements|import|in|include|init|inline|instanceof|int|interface|internal|is|let|lock|long|match|mod|module|mut|namespace|new|nil|null|nullptr|object|operator|or|override|package|private|protected|pub|public|raise|readonly|ref|register|require|return|sealed|self|set|short|signed|sizeof|static|str|string|struct|super|switch|synchronized|template|this|throw|throws|trait|transient|true|try|type|typedef|typename|typeof|union|unsafe|unsigned|use|using|val|var|virtual|void|volatile|when|where|while|with|yield";
+const SYN_RULES = {
+  xml: [
+    { c: "com", re: /<!--[\s\S]*?-->/g },
+    { c: "tag", re: /<(?:\?[\w.:-]+|![A-Z][\w.:-]*|\/?[\w.:-]+)/g },
+    { c: "attr", re: /[\w.:-]+(?==)/g },
+    { c: "str", re: /"[^"]*"|'[^']*'/g },
+  ],
+  sql: [
+    { c: "com", re: /--[^\n]*|\/\*[\s\S]*?\*\//g },
+    { c: "str", re: /'(?:[^'\\]|\\.|'')*'|"(?:[^"\\]|\\.)*"|`[^`\n]*`/g },
+    { c: "kw", re: synKwRe(SYN_SQL_KW, true) },
+    { c: "num", re: /\b\d+(?:\.\d+)?\b/g },
+  ],
+  js: [
+    { c: "com", re: /\/\/[^\n]*|\/\*[\s\S]*?\*\//g },
+    { c: "str", re: /"(?:[^"\\\n]|\\.)*"|'(?:[^'\\\n]|\\.)*'|`(?:[^`\\]|\\.)*`/g },
+    { c: "kw", re: synKwRe(SYN_JS_KW) },
+    { c: "num", re: /\b0[xXbB][0-9a-fA-F_]+\b|\b\d+(?:\.\d+)?(?:[eE][+-]?\d+)?\b/g },
+  ],
+  ts: [
+    { c: "com", re: /\/\/[^\n]*|\/\*[\s\S]*?\*\//g },
+    { c: "str", re: /"(?:[^"\\\n]|\\.)*"|'(?:[^'\\\n]|\\.)*'|`(?:[^`\\]|\\.)*`/g },
+    { c: "kw", re: synKwRe(SYN_TS_KW) },
+    { c: "num", re: /\b0[xXbB][0-9a-fA-F_]+\b|\b\d+(?:\.\d+)?(?:[eE][+-]?\d+)?\b/g },
+  ],
+  json: [
+    { c: "attr", re: /"(?:[^"\\]|\\.)*"(?=\s*:)/g },
+    { c: "str", re: /"(?:[^"\\]|\\.)*"/g },
+    { c: "kw", re: /\b(?:true|false|null)\b/g },
+    { c: "num", re: /-?\b\d+(?:\.\d+)?(?:[eE][+-]?\d+)?\b/g },
+  ],
+  py: [
+    { c: "com", re: /#[^\n]*/g },
+    { c: "str", re: /[rRfFbB]{0,2}(?:'''[\s\S]*?'''|"""[\s\S]*?"""|'(?:[^'\\\n]|\\.)*'|"(?:[^"\\\n]|\\.)*")/g },
+    { c: "kw", re: synKwRe(SYN_PY_KW) },
+    { c: "num", re: /\b0[xX][0-9a-fA-F]+\b|\b\d+(?:\.\d+)?\b/g },
+  ],
+  sh: [
+    // # 前须空白/行首（${#x} 长度语法不误伤）；前导空白计入 token（着色不可见）
+    { c: "com", re: /(?:^|\s)#[^\n]*/g },
+    { c: "str", re: /"(?:[^"\\]|\\.)*"|'[^']*'/g },
+    { c: "kw", re: synKwRe(SYN_SH_KW) },
+    { c: "attr", re: /\$\{[^}\n]*\}|\$[\w@#?*!-]+/g },
+    { c: "num", re: /\b\d+\b/g },
+  ],
+  clike: [
+    { c: "com", re: /\/\/[^\n]*|\/\*[\s\S]*?\*\//g },
+    { c: "str", re: /"(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)'|`(?:[^`\\]|\\.)*`/g },
+    // Rust 属性 #[derive(...)] / Java 注解 @Override（[Attr] 无前缀难辨只收 # 形）
+    { c: "attr", re: /#\[[^\]\n]*\]|@\w+|#\w+(?=[^\w(])/g },
+    { c: "kw", re: synKwRe(SYN_CLIKE_KW) },
+    { c: "num", re: /\b0[xXbB][0-9a-fA-F_]+\b|\b\d+(?:\.\d+)?(?:[eE][+-]?\d+)?[fFuUlL]{0,3}\b/g },
+  ],
+  css: [
+    { c: "com", re: /\/\*[\s\S]*?\*\//g },
+    { c: "str", re: /"[^"\n]*"|'[^'\n]*'/g },
+    { c: "kw", re: /@[\w-]+|!important\b/g },
+    // 选择器：类/ID/伪类伪元素着 tag 色（元素选择器无状态难辨，保持默认）
+    { c: "tag", re: /[.#][\w-]+|::?[\w-]+(?=[\s,{):>+~[])/g },
+    { c: "attr", re: /[-a-zA-Z]+(?=[ \t]*:)/g },
+    { c: "num", re: /#[0-9a-fA-F]{3,8}\b|\b\d+(?:\.\d+)?(?:px|em|rem|vh|vw|vmin|vmax|s|ms|fr|deg|ch|pt|%)?/g },
+  ],
+  yaml: [
+    { c: "com", re: /(?:^|\s)#[^\n]*/g },
+    // 行首键（含列表 - 前缀）：前导空白/横杠计入 token（着色不可见）
+    { c: "attr", re: /^[ \t]*(?:- )?[ \t]*[\w.$-]+(?=[ \t]*:)/gm },
+    { c: "str", re: /"(?:[^"\\]|\\.)*"|'[^']*'/g },
+    { c: "kw", re: /\b(?:true|false|null|yes|no|on|off)\b/g },
+    { c: "num", re: /\b\d+(?:\.\d+)?\b/g },
+  ],
+  diff: [
+    { c: "add", re: /^\+[^\n]*/gm },
+    { c: "del", re: /^-[^\n]*/gm },
+    { c: "kw", re: /^@@[^\n]*/gm },
+    { c: "attr", re: /^(?:diff |index |new file mode|deleted file mode|rename )/gim },
+  ],
+};
+const SYN_MAX_BYTES = 100000;
+function synTokenize(code, fam) {
+  if (!code || code.length > SYN_MAX_BYTES) return null;
+  const rules = SYN_RULES[fam];
+  if (!rules) return null;
+  const cands = [];
+  for (let r = 0; r < rules.length; r++)
+    for (const m of String(code).matchAll(rules[r].re)) {
+      if (m[0]) cands.push({ s: m.index ?? 0, e: (m.index ?? 0) + m[0].length, c: rules[r].c, r });
+    }
+  cands.sort((a, b) => a.s - b.s || a.r - b.r);
+  const toks = [];
+  let pos = 0;
+  for (const t of cands) {
+    if (t.s < pos) continue; // 落在已消费区间内：丢弃
+    const last = toks[toks.length - 1];
+    if (last && last.c === t.c && last.e === t.s) last.e = t.e; // 相邻同类合并
+    else toks.push({ s: t.s, e: t.e, c: t.c });
+    pos = t.e;
+  }
+  return toks;
+}
+function synHtml(code, fam) {
+  const toks = synTokenize(code, fam);
+  if (!toks) return null;
+  let out = "", pos = 0;
+  for (const t of toks) {
+    if (t.s > pos) out += escapeHtml(code.slice(pos, t.s));
+    out += '<span class="s-' + t.c + '">' + escapeHtml(code.slice(t.s, t.e)) + "</span>";
+    pos = t.e;
+  }
+  if (pos < code.length) out += escapeHtml(code.slice(pos));
+  return out;
+}
 function mdHtml(src) {
   let html = "";
   for (const b of mdBlocks(src)) {
     if (b.t === "h") html += '<div class="md-h' + b.level + '">' + mdInline(b.text) + "</div>";
-    else if (b.t === "code") html += '<div class="md-code-wrap"><span class="copy-btn" data-copy="' + escapeHtml(b.text).replace(/"/g, "&quot;") + '" title="复制代码">⧉ 复制</span><pre class="md-code">' + escapeHtml(b.text) + "</pre></div>";
+    else if (b.t === "code") {
+      // #141 语法着色：命中语言族 → token 分段（未标注/超长降级纯文本）；非空 lang 右下角小徽标
+      const fam = synLangOf(b.lang);
+      const body = fam ? (synHtml(b.text, fam) ?? escapeHtml(b.text)) : escapeHtml(b.text);
+      html += '<div class="md-code-wrap"><span class="copy-btn" data-copy="' + escapeHtml(b.text).replace(/"/g, "&quot;") + '" title="复制代码">⧉ 复制</span><pre class="md-code">' + body +
+        (b.lang ? '<span class="md-lang">' + escapeHtml(b.lang) + "</span>" : "") + "</pre></div>";
+    }
     else if (b.t === "li") html += '<div class="md-li" style="padding-left:' + (14 + b.depth * 14) + 'px"><span class="md-bul">' + (b.ord ? b.ord + "." : "•") + "</span> " + mdInline(b.text) + "</div>";
     else if (b.t === "quote") html += '<div class="md-quote">' + mdInline(b.text) + "</div>";
     else if (b.t === "table") html += '<div class="md-table-wrap"><table class="md-table"><thead><tr>' +
@@ -5273,10 +5453,11 @@ function entryHtml(e, prevDay) {
   const day = e.ts ? dayKey(e.ts) : "";
   if (day && day !== prevDay) html += '<div class="day-sep">── ' + day + " ──</div>";
   if (e.kind === "user_message") {
-    // #38 长消息默认折叠可展开（>300 字 ≈ 8 行，与 AI 消息同款 x-full 交互）：
-    // 侧边栏反馈类长文不再撑爆面板
+    // #38/#149 长消息默认折叠可展开（>100 字 ≈ 3+ 行，与 AI 消息同款 x-full 交互）：
+    // 折叠 3 行 + 省略号（8 行→3 行、300 字→100 字，2026-09-22 用户反馈行数偏多
+    // 且 line-clamp 末行半截）
     const src = e.full ?? e.text;
-    const long = String(src ?? "").length > 300;
+    const long = String(src ?? "").length > 100;
     html += '<div class="msg-user"><div class="ub' + (long && !open ? " clamp" : "") + '">' + userMsgHtml(src) + "</div>" +
       (long ? '<span class="x-full" data-x="' + k + '">' + (open ? "收起 ▴" : "展开全文 " + String(src ?? "").length + " 字 ▾") + "</span>" : "") +
       (hm ? '<div class="mt">' + hm + "</div>" : "") + "</div>";
@@ -5552,7 +5733,7 @@ document.addEventListener("click", (ev) => {
 
 // ⚙ 设置浮层（#317）：显示项为散装开关的镜像（点行 = 触发原按钮再回读状态），
 // 服务器管理不进浮层——左栏常驻面板已是高频区，与手机抽屉同为一级入口
-const CONSOLE_VERSION = "0.6.0-test.16";
+const CONSOLE_VERSION = "0.6.0-test.18";
 // #396 拨杆同步：滑块移到 idx 档（transform 过渡），选中档文字加 .on（白字压品牌色滑块上）
 function setLever(el, idx) {
   if (!el) return;
