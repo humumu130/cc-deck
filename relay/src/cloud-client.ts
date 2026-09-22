@@ -6,6 +6,7 @@ import type { CloudIdentity } from "./cloud-identity.js";
 import type { PairingCodes } from "./pairing.js";
 import { devId, seal, unseal, type SealedBox } from "./e2e.js";
 import { readPluginConfig } from "./ws-server.js";
+import { listAcceptances } from "./acceptance.js";
 import type { Command, CommandAckPayload, Envelope, PeerMeta } from "./types.js";
 
 interface PhoneState {
@@ -351,6 +352,8 @@ export class CloudClient {
         wan_dev: this.identity.wanDev,
         // #71 输出物开关（与 ws-server 直连快照同源）：云通道手机 tab 同样跟随
         deliverables: readPluginConfig().deliverables,
+        // #137 三步方案②：验收单待填态汇总（与 ws-server 直连快照同源同步）
+        acceptances: listAcceptances(),
         // relay 本机平台（#8）：与 ws-server 直连快照同源同步（#117 教训：云桥手机
         // 建会话的路径文案/盘符拦截同样需要；旧客户端忽略未知键）
         platform: process.platform,

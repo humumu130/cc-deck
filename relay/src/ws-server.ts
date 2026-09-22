@@ -5,7 +5,7 @@ import { join, dirname, sep } from "node:path";
 import { homedir, networkInterfaces } from "node:os";
 import { detectLanIp } from "./lan-ip.js";
 import { listArtifacts, serveArtifact } from "./artifacts.js";
-import { serveAcceptancePage, loadAcceptance, saveResult, rateLimited, ACCEPTANCE_ID_RE } from "./acceptance.js";
+import { serveAcceptancePage, loadAcceptance, saveResult, rateLimited, ACCEPTANCE_ID_RE, listAcceptances } from "./acceptance.js";
 import { listModels } from "./models.js";
 import { fileURLToPath } from "node:url";
 import { WebSocketServer, WebSocket } from "ws";
@@ -698,6 +698,8 @@ export function startServer(
           models: listModels(mgr.cfg.model),
           // #71 输出物开关：恒布尔随快照下发（旧客户端忽略未知键），三端 tab 据此显隐
           deliverables: readPluginConfig().deliverables,
+          // #137 三步方案②：验收单待填态汇总（云通道 cloud-client 同步携带）
+          acceptances: listAcceptances(),
           // 云桥启用的 relay 附带自身设备 id（= CloudConfig.relayDev 同源值）：
           // 客户端据此密码学匹配"LAN 直连条目"与"云桥条目"是同一台 relay，自动合并。
           // wan_dev（F7）：手表 /wan 透传通道的凭据 dev，手机侧写进手表连接配置

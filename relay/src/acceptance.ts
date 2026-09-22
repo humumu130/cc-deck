@@ -8,7 +8,7 @@
 //   ② 提交限流：同 id 60s 窗口 10 次（内存 Map，进程级），超限 429
 //   ③ body ≤ 64KB + 行数/枚举值/备注长度全量校验，脏数据一律 400
 //   ④ 表单页与提交 API 同源，无 CORS 面；登记数据内嵌前做 < 转义（防注入）
-import { readFileSync, writeFileSync, mkdirSync, existsSync } from "node:fs";
+import { readFileSync, writeFileSync, mkdirSync, existsSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 import { homedir } from "node:os";
 import type { ServerResponse } from "node:http";
@@ -101,6 +101,52 @@ export function saveResult(id: string, payload: unknown, ua: string): string | n
   history.push({ at: Date.now(), ua: ua.slice(0, 100), counts, rows: clean });
   writeFileSync(file, JSON.stringify({ id, history }, null, 1));
   return null;
+}
+
+// ---- 待填态汇总（#137 三步方案②）----
+export interface AcceptanceSummary {
+  id: string;
+  title: string;
+  created_at: number;
+  total: number; // 登记行数
+  judged: number; // 最新一次提交的已判行数（pass+fail；未提交=0）
+  done: boolean; // 最新提交已覆盖全部行（badge 消失条件）
+}
+
+// 扫 acceptances 目录汇总：<id>.json 为单，配对 <id>.results.json 取最新一次提交
+// 算进度。无 results 或未全覆盖 = 待填。随 SNAPSHOT 下发（LAN ws-server 与云通道
+// cloud-client 两处同源，#117 教训：同名字段必须同步），手机端据此显示待填 badge。
+// 上限 20 张、新的在前——防长期运行膨胀（超限老单的表单页仍可打开，只是不进汇总）
+export function listAcceptances(limit = 20): AcceptanceSummary[] {
+  let names: string[];
+  try {
+    names = readdirSync(acceptanceDir());
+  } catch {
+    return [];
+  }
+  const out: AcceptanceSummary[] = [];
+  for (const n of names) {
+    if (!n.endsWith(".json") || n.endsWith(".results.json")) continue;
+    const id = n.slice(0, -5);
+    if (!ACCEPTANCE_ID_RE.test(id)) continue;
+    const a = loadAcceptance(id);
+    if (!a) continue;
+    let judged = 0;
+    let done = false;
+    try {
+      const r = JSON.parse(readFileSync(join(acceptanceDir(), `${id}.results.json`), "utf-8")) as {
+        history?: { rows?: { verdict?: string | null }[] }[];
+      };
+      const last = r.history?.[r.history.length - 1];
+      if (last?.rows) {
+        judged = last.rows.filter((x) => x.verdict === "pass" || x.verdict === "fail").length;
+        done = judged >= a.rows.length;
+      }
+    } catch {}
+    out.push({ id, title: a.title, created_at: a.created_at, total: a.rows.length, judged, done });
+  }
+  out.sort((x, y) => y.created_at - x.created_at);
+  return out.slice(0, limit);
 }
 
 // ---- 表单页（自包含单 HTML；勾选交互按用户口径：怎么简单怎么来）----
