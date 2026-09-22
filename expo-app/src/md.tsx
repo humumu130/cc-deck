@@ -1,16 +1,17 @@
 // 轻量 Markdown 渲染（时间线 assistant 文本用）：
 // 覆盖标题/粗斜体/行内码/围栏码块/无序有序列表/引用/分割线/GFM 表格/链接（可点击浮窗复制/打开），零依赖子集实现，
 // 截断产生的残缺标记按字面渲染（解析器对不匹配标记容错）。
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Linking, Modal, Pressable, StyleSheet, Text, View, type GestureResponderEvent, type TextStyle } from "react-native";
 import * as Clipboard from "expo-clipboard";
 import { withA, type ThemeColors } from "./theme";
 import { useTheme, useThemeStyles } from "./theme-context";
+import { SYN_DARK, SYN_LIGHT, synLangOf, synTokenize, type SynTok } from "./highlight";
 
 type Block =
   | { t: "p"; text: string }
   | { t: "h"; level: number; text: string }
-  | { t: "code"; text: string }
+  | { t: "code"; lang: string; text: string }
   | { t: "li"; text: string; depth: number; ord?: string }
   | { t: "quote"; text: string }
   | { t: "table"; head: string[]; rows: string[][] }
@@ -27,6 +28,7 @@ function parseBlocks(src: string): Block[] {
   let para: string[] = [];
   let inCode = false;
   let code: string[] = [];
+  let lang = "";
   let tableBuf: string[] = [];
   const flush = () => {
     if (para.length) {
@@ -46,15 +48,19 @@ function parseBlocks(src: string): Block[] {
   for (const raw of lines) {
     if (inCode) {
       if (/^\s*```/.test(raw)) {
-        out.push({ t: "code", text: code.join("\n") });
+        out.push({ t: "code", lang, text: code.join("\n") });
         code = [];
+        lang = "";
         inCode = false;
       } else code.push(raw);
       continue;
     }
-    if (/^\s*```/.test(raw)) {
+    // #141 开栏捕获语言标注（```xml / ```sql…），供 code 块语法着色
+    const fence = /^\s*```([\w+#.-]*)/.exec(raw);
+    if (fence) {
       flush();
       inCode = true;
+      lang = fence[1].trim().toLowerCase();
       continue;
     }
     if (/^\s*\|/.test(raw)) {
@@ -94,7 +100,7 @@ function parseBlocks(src: string): Block[] {
     if (!raw.trim()) flush();
     else para.push(raw);
   }
-  if (inCode && code.length) out.push({ t: "code", text: code.join("\n") }); // 截断的码块兜底
+  if (inCode && code.length) out.push({ t: "code", lang, text: code.join("\n") }); // 截断的码块兜底
   flushTable();
   flush();
   return out;
@@ -242,8 +248,28 @@ function LinkSheet({ url, onClose }: { url: string; onClose: () => void }) {
   );
 }
 
+// #141 语法着色码块：token 区间与默认色段交替渲染为嵌套 <Text>（字体/行高继承
+// 外层 codeBlockT）；add/del（diff 专用）映射主题 done/waiting，与工具 diff 行同色语言
+function synColorOf(t: SynTok, c: ThemeColors, mode: "dark" | "light"): string {
+  if (t.c === "add") return c.done;
+  if (t.c === "del") return c.waiting;
+  return (mode === "dark" ? SYN_DARK : SYN_LIGHT)[t.c];
+}
+
+function SynText({ text, toks, c, mode }: { text: string; toks: SynTok[]; c: ThemeColors; mode: "dark" | "light" }) {
+  const parts: ReactNode[] = [];
+  let pos = 0;
+  toks.forEach((t, i) => {
+    if (t.s > pos) parts.push(<Text key={`p${i}`}>{text.slice(pos, t.s)}</Text>);
+    parts.push(<Text key={`t${i}`} style={{ color: synColorOf(t, c, mode) }}>{text.slice(t.s, t.e)}</Text>);
+    pos = t.e;
+  });
+  if (pos < text.length) parts.push(<Text>{text.slice(pos)}</Text>);
+  return <>{parts}</>;
+}
+
 export function MdText({ src, style, selectable, onTaskRef, onTaskRefOut }: { src: string; style?: TextStyle; selectable?: boolean; onTaskRef?: (n: number, hold?: boolean, anchor?: { x: number; y: number }) => void; onTaskRefOut?: () => void }) {
-  const { c } = useTheme();
+  const { c, mode } = useTheme();
   const d = useThemeStyles(makeStyles);
   const blocks = useMemo(() => parseBlocks(src), [src]);
   const [linkUrl, setLinkUrl] = useState<string | null>(null);
@@ -259,12 +285,18 @@ export function MdText({ src, style, selectable, onTaskRef, onTaskRefOut }: { sr
                 {b.text}
               </Text>
             );
-          case "code":
+          case "code": {
+            // #141：有语言标注且命中族 → token 着色；未标注/超长降级保持纯文本
+            const fam = synLangOf(b.lang);
+            const toks = fam ? synTokenize(b.text, fam) : null;
             return (
               <View key={i} style={d.codeBlock}>
-                <Text style={[d.base, d.codeBlockT]} selectable>{b.text}</Text>
+                <Text style={[d.base, d.codeBlockT]} selectable>
+                  {toks ? <SynText text={b.text} toks={toks} c={c} mode={mode} /> : b.text}
+                </Text>
               </View>
             );
+          }
           case "li":
             return (
               <View key={i} style={[d.li, { paddingLeft: 14 + b.depth * 14 }]}>
