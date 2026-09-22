@@ -183,12 +183,19 @@ export function startServer(
   cfg: RelayConfig,
   opts: StartServerOptions = {},
 ): { port: number; close: () => Promise<void>; bridge: Bridge } {
-  // 静态根：插件 bundle（CC_DECK_PLUGIN define）= 插件根（scripts/../）；开发模式 = 仓库根（src/../../）
+  // 静态根（#150 复发根治，2026-09-24）：不再依赖 esbuild define / 运行时 env——按候选探测，
+  // 谁的 web-console/index.html 存在用谁：CCR_WEB_ROOT 显式指定 > bundle 上级（插件 scripts/../
+  // 与桌面 app Resources/ 同构）> 仓库根（dev：src/../../）。旧表达式（CC_DECK_PLUGIN 三元）
+  // 在桌面 app 无人设 env、手敲 esbuild 又漏 --define 时走 src/../../ 分支 = Contents/ 下无
+  // web-console → `/` 恒 503（#150 同款事故复发，实测 2026-09-24 热替换后）
+  const webRootCandidates = [
+    process.env.CCR_WEB_ROOT,
+    fileURLToPath(new URL("../", import.meta.url)),
+    fileURLToPath(new URL("../../", import.meta.url)),
+  ];
   const webRoot =
-    process.env.CCR_WEB_ROOT ??
-    ((process.env.CC_DECK_PLUGIN as string | undefined)
-      ? fileURLToPath(new URL("../", import.meta.url))
-      : fileURLToPath(new URL("../../", import.meta.url)));
+    webRootCandidates.find((p) => p && existsSync(join(p, "web-console", "index.html"))) ??
+    webRootCandidates[1]!;
   const consoleHtml = join(webRoot, "web-console", "index.html");
   const naclJs = join(webRoot, "web-console", "nacl.js");
   const qrJs = join(webRoot, "web-console", "qr.js");
