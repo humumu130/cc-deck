@@ -9,7 +9,12 @@ cd "$(dirname "$0")/.."
 FILE="${1:?用法: kv-put-verified.sh <本地文件> <KV key>}"
 KEY="${2:?缺少 KV key}"
 KV_NS="d9b9bb1768324fb1b71907ca72de7aa6"
+CF_ACCOUNT="0c1742f1daa27d42b5e7a150d685c15a"
 CF_TOKEN="${CF_TOKEN:-${CLOUDFLARE_API_TOKEN:?缺 CF_TOKEN/CLOUDFLARE_API_TOKEN}}"
+# wrangler 代理回落（2026-09-22）：api.cloudflare.com 被墙时 wrangler 直连超时
+#（undici 不吃 http_proxy env，test.24/25 连续两晚上传失败）——curl 走本地代理打
+# REST API 等价上传，末尾 md5 回读校验照旧兜底
+CF_PROXY="${CC_CF_PROXY:-http://127.0.0.1:7890}"
 DOMAIN="https://cc.humumu.online"
 
 [ -f "$FILE" ] || { echo "ERR: 本地文件不存在 $FILE"; exit 1; }
@@ -22,9 +27,15 @@ LOCAL_SIZE=$(stat -f%z "$FILE")
 FN=$(basename "$FILE")
 
 echo "[1/3] put $KEY ← $(basename "$FILE") (${LOCAL_SIZE}B)"
-(cd cloudflare && CLOUDFLARE_API_TOKEN="$CF_TOKEN" npx wrangler kv key put "$KEY" \
-  --path "$FILE" --namespace-id "$KV_NS" --remote \
-  --metadata "{\"filename\":\"$FN\"}" >/dev/null)
+if ! (cd cloudflare && CLOUDFLARE_API_TOKEN="$CF_TOKEN" npx wrangler kv key put "$KEY" \
+    --path "$FILE" --namespace-id "$KV_NS" --remote \
+    --metadata "{\"filename\":\"$FN\"}" >/dev/null 2>&1); then
+  echo "    wrangler 直连失败，回落 curl+代理（$CF_PROXY）"
+  curl -sS --max-time 600 -x "$CF_PROXY" \
+    -H "Authorization: Bearer $CF_TOKEN" -X PUT --data-binary "@$FILE" \
+    "https://api.cloudflare.com/client/v4/accounts/$CF_ACCOUNT/storage/kv/namespaces/$KV_NS/values/$KEY" \
+    | grep -q '"success":true' || { echo "ERR: KV 上传失败（wrangler 与 curl 代理均失败）"; exit 1; }
+fi
 
 echo "[2/3] 回读校验"
 TMP=$(mktemp /tmp/kv-verify.XXXXXX)
