@@ -559,6 +559,9 @@ export class AgentSession {
     if (this.subagents.some((x) => x.id === blockId)) return;
     const d = typeof input.description === "string" ? input.description.trim() : "";
     const desc = truncate(d || String(input.prompt ?? "").trim(), 80) || "(子代理)";
+    // #142 三轮（2026-09-23 用户拍板）：批次滚动同 bridge.trackSubagentStart——新派生
+    // 时无在跑条目 = 新一轮分派，清掉上一批历史；有在跑则并入当前批次（并行同批）
+    if (!this.subagents.some((x) => !x.ended_at)) this.subagents = [];
     this.subagents.push({
       id: blockId,
       desc,

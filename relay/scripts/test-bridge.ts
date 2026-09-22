@@ -518,11 +518,16 @@ await wait(150);
   await wait(2100);
   await hook({ event: "PostToolUse", tool_name: "Agent", tool_use_id: "call_fg1", tool_response: "ok" });
   assert(subs()[0].ended_at !== undefined, "28 late Post (>=2s) ends foreground subagent");
-  // ② 后台：PostToolUse（派生瞬间返回）不收尾，transcript 的 task-notification（user 行）收尾
+  // ② 后台：PostToolUse（派生瞬间返回）不收尾，transcript 的 task-notification（user 行）收尾。
+  // #142 三轮（2026-09-23 用户拍板）：前台已结束、当前无在跑条目 → 本轮派生视为新分派，
+  // 开新批次并清出上一批历史（call_fg1 不再留在列表/总数里）
   await hook({ event: "PreToolUse", tool_name: "Agent", tool_use_id: "call_bg1", tool_input: { description: "后台子代理", run_in_background: true }, permission_mode: "default" });
-  assert(subs().length === 2 && subs()[1].bg === true && subs()[1].ended_at === undefined, "28 bg subagent entry created");
+  assert(subs().length === 1 && subs()[0].id === "call_bg1" && subs()[0].bg === true && subs()[0].ended_at === undefined, "28 bg spawn with no running entries starts new batch (wipes finished history)");
+  // 并行同批：仍有在跑条目时再派一个 → 并入当前批次（不洗牌、历史不回）
+  await hook({ event: "PreToolUse", tool_name: "Agent", tool_use_id: "call_fg2", tool_input: { description: "并行前台", run_in_background: false }, permission_mode: "default" });
+  assert(subs().length === 2 && subs().some((x) => x.id === "call_fg2" && x.ended_at === undefined), "28 parallel spawn joins current batch");
   await hook({ event: "PostToolUse", tool_name: "Agent", tool_use_id: "call_bg1", tool_response: "spawned" });
-  assert(subs()[1].ended_at === undefined, "28 bg subagent ignores PostToolUse");
+  assert(subs().find((x) => x.id === "call_bg1")?.ended_at === undefined, "28 bg subagent ignores PostToolUse");
   appendFileSync(T, JSON.stringify({ type: "user", message: { role: "user", content: [{ type: "text", text: "<task-notification>\n<task-id>b1</task-id>\n<tool-use-id>call_bg1</tool-use-id>\n<status>completed</status>\n<summary>done</summary>" }] } }) + "\n");
   await hook({ event: "PostToolUse", tool_name: "Bash", tool_response: "ok", transcript_path: T });
   assert(subs().find((x) => x.id === "call_bg1")?.ended_at !== undefined, "28 task-notification (user line) ends bg subagent");

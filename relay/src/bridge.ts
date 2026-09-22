@@ -2306,8 +2306,12 @@ export class Bridge {
   private trackSubagentStart(id: string, ev: BridgeEvent): void {
     const input = (ev.tool_input ?? {}) as Record<string, unknown>;
     const tuId = typeof ev.tool_use_id === "string" && ev.tool_use_id ? ev.tool_use_id : `ag-${++this.subagentSeq}`;
-    const list = [...(this.mgr.getExternal(id)?.subagents ?? [])];
+    let list = [...(this.mgr.getExternal(id)?.subagents ?? [])];
     if (list.some((x) => x.id === tuId)) return;
+    // #142 三轮（2026-09-23 用户拍板）：列表按「分派批次」滚动——新派生发生时当前
+    // 没有任何在跑条目 = 新一轮分派开始，清掉上一批历史（含已结束），面板/角标从此
+    // 只见当前批次；有在跑条目则并入当前批次（并行同批）。
+    if (!list.some((x) => !x.ended_at)) list = [];
     const entry: SubagentInfo = {
       id: tuId,
       desc: Bridge.subagentDesc(input),
@@ -2368,13 +2372,16 @@ export class Bridge {
       }
     }
     if (input.run_in_background === true) {
-      const next = [...list, {
+      // #142 三轮：批次滚动同 trackSubagentStart——补建时无在跑条目即新批次，不带历史
+      let next = [...list];
+      if (!next.some((x) => !x.ended_at)) next = [];
+      next.push({
         id: use.id,
         desc,
         kind: typeof input.subagent_type === "string" && input.subagent_type ? input.subagent_type : "general",
         bg: true,
         started_at: Date.now(),
-      }];
+      });
       if (next.length > 30) next.splice(0, next.length - 30);
       this.mgr.setExternalSubagents(id, next);
     }
@@ -2387,8 +2394,11 @@ export class Bridge {
     if (!list?.length) return;
     let i = list.findIndex((x) => x.id === toolUseId);
     if (i === -1) {
-      // hook 未带 id、合成条目未升级成功：退而收尾最老的 running 后台条目（合成 id）
-      i = list.findIndex((x) => !x.ended_at && x.bg && x.id.startsWith("ag-"));
+      // hook 未带 id、合成条目未升级成功：退而收尾最老的 running 条目（合成 id）。
+      // #142 三轮：不再限定 bg——hook 输入缺 run_in_background 时 bg 被误标 false，
+      // 真结束的 task-notification 配不上真实 id 也进不了 bg 兜底 → 条目永远"在跑"
+      //（卡片角标虚高、面板不翻篇的实锤根因）。通知本就只由真实结束发出，放宽安全
+      i = list.findIndex((x) => !x.ended_at && x.id.startsWith("ag-"));
     }
     if (i === -1 || list[i].ended_at) return;
     // 同上：禁止原地改共享引用，否则变更检测吞掉 ended 下发
