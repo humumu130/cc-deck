@@ -570,11 +570,17 @@ export class AgentSession {
     this.cb.onSubagents?.(this.subagents.map((x) => ({ ...x })));
   }
 
-  // Task/Agent 的 tool_result 到达 = 该子 Agent 收尾（等待型的执行结果与后台型的
-  // 完成通知在此同形态到达；子 Agent 内部工具的 result id 不命中账本，天然无扰）
+  // Task/Agent 的 tool_result 到达 = 该子 Agent 收尾——#142（2026-09-24）修正：
+  // 「等待型与后台型通知同形态到达」假设不成立——派生瞬间（实测 100% <100ms，
+  // events.ndjson 5/5 复现）也有一条假 tool_result（spawn 回执），把它当结束信号
+  // 会立即写 ended_at，端上恒显「✓ 0s」读秒冻结（托管 SDK 会话全走本路径，只修
+  // bridge.ts 的 hooks 路径时线上等于未修）。守卫与 bridge.ts 同款：后台条目不在此
+  // 收尾（真结束交 closeAllSubagents 会话收摊兜底）；前台 <2s 的假回执跳过、≥2s
+  // 视为同步阻塞调用的真实返回才收尾
   private trackSubagentEnd(toolUseId: string): void {
     const i = this.subagents.findIndex((x) => x.id === toolUseId && !x.ended_at);
-    if (i === -1) return;
+    if (i === -1 || this.subagents[i].bg) return;
+    if (Date.now() - (this.subagents[i].started_at ?? 0) < 2000) return;
     this.subagents[i] = { ...this.subagents[i], ended_at: Date.now() };
     this.cb.onSubagents?.(this.subagents.map((x) => ({ ...x })));
   }
