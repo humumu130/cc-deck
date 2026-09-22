@@ -40869,7 +40869,7 @@ function watermarkFromUsage(u) {
   if (!u || typeof u.input_tokens !== "number") return 0;
   return (u.input_tokens || 0) + (u.cache_read_input_tokens || 0) + (u.cache_creation_input_tokens || 0);
 }
-var AgentSession = class {
+var AgentSession = class _AgentSession {
   constructor(cwd, model, cb2, initialPrompt, opts) {
     this.cwd = cwd;
     this.model = model;
@@ -40947,6 +40947,11 @@ var AgentSession = class {
   lastSummary = "\u542F\u52A8\u4E2D";
   // 流式文本块：index->id 映射 + id->累计文本 + 当前消息内文本块 id 顺序表
   // （完整 assistant 消息的 content 数组可能重排/剔除 thinking，不能按 index 对齐，按文本块出现顺序对齐）
+  // #134 id 防碰撞：进程启动随机段掺进 id——resume/重启重建 adapter 后 blockSeq 从头计数，
+  // 纯序号 id（t1/t2…）会跨重启复用，客户端按同 id 原地替换把旧回复条目覆盖成新消息的
+  // 流式帧（2026-09-22 实证：t1 一天内属于 6 条不同消息，正文错乱/消失）。与 bridge.ts
+  // 的 XSTREAM_BOOT 同款防御
+  static ADAPTER_BOOT = Date.now().toString(36);
   blockSeq = 0;
   streamIdx = /* @__PURE__ */ new Map();
   streamBufs = /* @__PURE__ */ new Map();
@@ -41014,7 +41019,7 @@ var AgentSession = class {
               this.cb.onLog("tool_result", "zai \u5185\u7F6E\u5DE5\u5177\u7ED3\u679C", { tool: "zai", detail: capDetail(block.text, 2e3) });
             } else {
               const { body, segs } = splitZaiText(block.text);
-              const id2 = this.streamOrder[ti++] ?? `t${++this.blockSeq}`;
+              const id2 = this.streamOrder[ti++] ?? `t${_AgentSession.ADAPTER_BOOT}-${++this.blockSeq}`;
               if (body) {
                 this.cb.onLog("assistant_text", truncate(body, 400), {
                   full: fullText(body, 400),
@@ -41129,7 +41134,7 @@ var AgentSession = class {
     const ev2 = msg.event;
     const idx = ev2.index ?? -1;
     if (ev2.type === "content_block_start" && ev2.content_block?.type === "text") {
-      const id2 = `t${++this.blockSeq}`;
+      const id2 = `t${_AgentSession.ADAPTER_BOOT}-${++this.blockSeq}`;
       this.streamIdx.set(idx, id2);
       this.streamBufs.set(id2, "");
       this.streamOrder.push(id2);
@@ -46845,6 +46850,7 @@ var COMMAND_TYPES = /* @__PURE__ */ new Set([
   "COMMAND_ARTIFACT_FETCH"
 ]);
 var HEARTBEAT_MS = 3e4;
+var HEARTBEAT_MISS_LIMIT = 20;
 var BUILTIN_COMMANDS = [
   { name: "compact", desc: "\u538B\u7F29\u5BF9\u8BDD\u5386\u53F2\uFF0C\u91CA\u653E\u4E0A\u4E0B\u6587" },
   { name: "clear", desc: "\u6E05\u7A7A\u5F53\u524D\u4F1A\u8BDD\u5386\u53F2" },
@@ -47448,8 +47454,13 @@ function startServer(bus2, mgr2, cfg2, opts = {}) {
     for (const client of wss.clients) {
       const c = client;
       if (!c.isAlive) {
-        client.terminate();
-        continue;
+        c.miss = (c.miss ?? 0) + 1;
+        if (c.miss >= HEARTBEAT_MISS_LIMIT) {
+          client.terminate();
+          continue;
+        }
+      } else {
+        c.miss = 0;
       }
       c.isAlive = false;
       client.ping();
