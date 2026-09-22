@@ -270,6 +270,20 @@ export function setUpdateListener(fn: ((info: UpdateInfo) => void) | null): void
 }
 
 export function announceUpdate(info: UpdateInfo): void {
+  // #154 二轮（2026-09-23）：检查发现新版本时，已下载未装的整包（done 态）即告过时
+  // ——它占着固定路径 APK_PATH，重启后被恢复成 done 态、被「立即安装」装出去（用户
+  // 实锤：检查到 28 却装回 26）。先同步作废快照态（弹窗立即不再提供旧包安装），文件
+  // 与 meta 异步清理。meta 为 null（如重启恢复路径未回填）时由 resume 侧守卫兜底。
+  if (meta?.done && meta.version !== info.version) {
+    if (phase === "done") {
+      phase = "idle";
+      version = "";
+      bytes = 0;
+      total = 0;
+      emit();
+    }
+    void clearFiles();
+  }
   listener?.(info);
 }
 
@@ -768,9 +782,17 @@ export async function resumePendingDownload(): Promise<void> {
     const m = JSON.parse(raw) as Partial<DlMeta>;
     if (!m.version || !m.url) return;
     if (m.done) {
+      // #154 二轮（2026-09-23）：整包版本不比当前已装版本新（同版=已装过、更旧=回退）
+      // 即陈旧残留——直接清理，不恢复成 done 态。旧逻辑原样复活滞留旧包（固定路径
+      // APK_PATH），回前台/「立即安装」装的都是它 → 「检查到 28 下载到 26」。
+      if (!isNewer(m.version, currentVersion())) {
+        await clearFiles();
+        return;
+      }
       const a = await FileSystem.getInfoAsync(APK_PATH);
       if (a.exists && (a.size ?? 0) >= APK_MIN_BYTES) {
         version = m.version;
+        meta = { version: m.version, url: m.url, total: m.total || (a.size ?? 0), done: true };
         total = m.total || (a.size ?? 0);
         bytes = a.size ?? 0;
         phase = "done";
