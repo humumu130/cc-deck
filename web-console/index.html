@@ -2302,10 +2302,10 @@
   <div id="detail">
     <div id="dhead">
       <button id="backBtn" class="ghost">‹ 返回</button>
-      <!-- 两行化（对齐手机 2026-09-14 定稿）：R1=标题+时长（弱化小字）；R2=源名+路径+ctx 短条+模型名 -->
+      <!-- 两行化（对齐手机 2026-09-14 定稿，#155 再收敛）：R1=标题（原时长已删——消息
+           时间戳已提供时间感，统计 tab 保留用时全量）；R2=源名+路径+ctx 短条+模型名 -->
       <div class="dhead-row">
         <span id="dtitle"></span>
-        <span class="elapsed" id="delapsed"></span>
         <span class="spacer"></span>
         <button id="renameBtn" class="ghost" title="重命名会话">✎</button>
       </div>
@@ -4049,13 +4049,18 @@ function sessionElapsed(s) {
   return Date.now() - s.started_at;
 }
 
-// #143 卡片右上角：会话计时 → 最后活跃时间 MM-dd HH:mm（updated_at 随事件刷新，
-// 分钟粒度；WORKING 的回合秒数留在第二行 c-live，详情页 ⏱ 计时不动）
+// #143 卡片右上角：会话计时 → 最后活跃时间（updated_at 随事件刷新，分钟粒度；
+// WORKING 的回合秒数留在第二行 c-live）。#155 拍板：当天只显 HH:mm，历史只显日期
+// （当年 MM-dd，跨年补年份 yyyy-MM-dd）——与手机端 fmt.ts 同口径
 function fmtLastActive(ts) {
   if (!ts) return "--";
   const t = new Date(ts);
   const p = (n) => String(n).padStart(2, "0");
-  return p(t.getMonth() + 1) + "-" + p(t.getDate()) + " " + p(t.getHours()) + ":" + p(t.getMinutes());
+  const now = new Date();
+  if (t.getFullYear() === now.getFullYear() && t.getMonth() === now.getMonth() && t.getDate() === now.getDate())
+    return p(t.getHours()) + ":" + p(t.getMinutes());
+  const md = p(t.getMonth() + 1) + "-" + p(t.getDate());
+  return t.getFullYear() === now.getFullYear() ? md : t.getFullYear() + "-" + md;
 }
 
 // #145 工作目录上卡（对齐手机端 📁 目录名）：basename 形式省宽度，悬停 title 显全路径；
@@ -4668,7 +4673,7 @@ function renderDetail() {
   $("dsrc").innerHTML = srcBadgeHtml(sel.ctx.cfg);
   $("dcwd").textContent = s.cwd;
   $("dcwd").title = s.cwd; // #41web 收缩省略后完整路径看 title
-  $("delapsed").textContent = "⏱ " + fmtElapsed(sessionElapsed(s));
+  // #155 详情头 ⏱ 时长已删（消息时间戳够用）；统计 tab 的「用时」保留全量口径
   $("dctx").innerHTML = ctxHtml(s); // 概况区水位（#dctxcell，并入元信息行右端；窄屏媒询自动回落整行）
 
   // 思考开关 / 权限模式 chip / 模型切换 chip（#388）；字嵌开关 + 状态随文字（对齐手机"开/关换文字"）

@@ -207,8 +207,9 @@ function LiveStat({ s }: { s: SessionState }) {
   );
 }
 
-// #143 卡片右上角：会话计时 → 最后活跃时间 MM-dd HH:mm（updated_at 随事件刷新，
-// 分钟粒度无需每秒 tick——移除 WORKING 秒表重渲染；回合时长仍在 LiveStat/详情页）
+// #143 卡片右上角：会话计时 → 最后活跃时间（updated_at 随事件刷新，分钟粒度无需
+// 每秒 tick——移除 WORKING 秒表重渲染；回合时长仍在 LiveStat。#155 格式收敛：
+// 当天 HH:mm / 历史只显日期）
 // 闲置置灰阈值（#121 可配置）：分钟数来自设置抽屉（display-settings.idleDimMin，
 // 默认 30，负数 = 永不变灰），SessionCard 内经 useIdleDimMin 现算
 function Elapsed({ s }: { s: SessionState }) {

@@ -56,13 +56,19 @@ export function sessionElapsed(s: { status: string; duration_ms?: number; histor
   return Date.now() - s.started_at;
 }
 
-// #143 卡片右上角：会话计时 → 最后活跃时间 MM-dd HH:mm（updated_at 随事件刷新，
-// 分钟粒度；WORKING 的回合秒数留在 LiveStat，详情页计时不动）
+// #143 卡片右上角：会话计时 → 最后活跃时间（updated_at 随事件刷新，分钟粒度；
+// WORKING 的回合秒数留在 LiveStat）。#155 拍板：当天只显 HH:mm（当天看日期是废话），
+// 历史只显日期不带时间——当年 MM-dd，跨年补年份 yyyy-MM-dd
 export function fmtLastActive(ts: number | undefined): string {
   if (!ts) return "--";
   const t = new Date(ts);
   const p = (n: number) => String(n).padStart(2, "0");
-  return `${p(t.getMonth() + 1)}-${p(t.getDate())} ${p(t.getHours())}:${p(t.getMinutes())}`;
+  const now = new Date();
+  const sameDay =
+    t.getFullYear() === now.getFullYear() && t.getMonth() === now.getMonth() && t.getDate() === now.getDate();
+  if (sameDay) return `${p(t.getHours())}:${p(t.getMinutes())}`;
+  const md = `${p(t.getMonth() + 1)}-${p(t.getDate())}`;
+  return t.getFullYear() === now.getFullYear() ? md : `${t.getFullYear()}-${md}`;
 }
 
 // 上下文水位条：水位与上限均由 relay 下发（context_usage/context_limit），

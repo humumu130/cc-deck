@@ -1889,9 +1889,9 @@ export default function DetailScreen({ sid, onBack, initialView, ref }: { sid: s
           拉回底部（视口收缩旧 transform 方案没有的问题）。沿用 2026-09-16 调定的
           -2px 藏缝余量（键盘压住输入栏底 2px 不露缝） */}
       <View style={{ flex: 1, paddingBottom: kb > 0 ? kb - 2 : 0 }}>
-      {/* 头部（用户 22:14/22:20 拍板口径）：R1 = ‹ + 标题主角；R2 = 元信息行——源·时长·ctx 水位
-          左聚顺排（时长在水位前），思考开关（半高）右锚最右；编辑按钮移除。
-          可点元素统一圆角 8/tintSoft 底无边框 */}
+      {/* 头部（用户 22:14/22:20 拍板口径，#155 再收敛）：R1 = ‹ + 标题主角；R2 = 元信息行——
+          源·ctx 水位左聚顺排（原时长已删：消息时间戳已提供时间感，统计区保留耗时全量），
+          思考开关（半高）右锚最右；编辑按钮移除。可点元素统一圆角 8/tintSoft 底无边框 */}
       <View style={d.head}>
         <Pressable style={d.back} android_ripple={{ color: c.tintSoft, borderless: false }} onPress={onBack} hitSlop={8}>
           <Svg width={14} height={14} viewBox="0 0 24 24" fill="none" stroke={c.dim} strokeWidth={2.6} strokeLinecap="round" strokeLinejoin="round">
@@ -1901,8 +1901,7 @@ export default function DetailScreen({ sid, onBack, initialView, ref }: { sid: s
         <View style={{ flex: 1, minWidth: 0 }}>
           <Text style={[d.title, { flexShrink: 1 }]} numberOfLines={1} ellipsizeMode="tail">{s.title || "未命名会话"}</Text>
           <View style={d.headMeta}>
-            {srcMeta ? <Text style={[d.sub, { flexShrink: 1 }]} numberOfLines={1}>{srcMeta}</Text> : null}
-            <Text style={[d.sub, { marginLeft: srcMeta ? 6 : 0, flexShrink: 0, fontVariant: ["tabular-nums"] }]}>{fmtElapsed(sessionElapsed(s))}</Text>
+            {srcMeta ? <Text style={[d.sub, { flexShrink: 1, marginRight: 2 }]} numberOfLines={1}>{srcMeta}</Text> : null}
             {ctxUsed > 0 ? (
               <View style={d.ctxGroup}>
                 <Text style={d.ctxLabel}>ctx</Text>
