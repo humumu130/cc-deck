@@ -2403,9 +2403,9 @@ export default function DetailScreen({ sid, onBack, initialView, ref }: { sid: s
           </View>
         ) : null}
         {/* 并行子 Agent 状态（#142 重设计）：主工作状态行（liveRow）下方的续行——去独立
-            大框（原 panel2 盒）；标题行即折叠开关（2026-09-24 用户拍板：只写「subAgent」
-            + 尾部箭头——无星、无数量、无运行中字样，走帧星只属于具体子 Agent 条目）；
-            agCollapsed 模块级记忆；条目行首走帧星（SPIN_FRAMES，随 agTick 1s 重渲换帧，
+            大框（原 panel2 盒）；标题行即折叠开关（2026-09-24 用户二轮拍板：「subAgent
+            + 总数」+ 尾部箭头——总数保留、无「运行中」字样，走帧星只属于具体子 Agent
+            条目；条目行相对标题行缩进 12 形成层级）；agCollapsed 模块级记忆；条目行首走帧星（SPIN_FRAMES，随 agTick 1s 重渲换帧，
             #148 手机端铁律：低频步进不用 Animated 逐帧）、完成态换 ✓ 定格；ended_at>0
             才算结束（防数据侧 ended_at:0 假运行冻结读秒）。#13 巡检：超 4 条溢出提示 */}
         {(s?.subagents?.length ?? 0) > 0 ? (
@@ -2425,7 +2425,7 @@ export default function DetailScreen({ sid, onBack, initialView, ref }: { sid: s
                     accessibilityLabel={`subAgent ${all.length} 个，点按${agOpen ? "折叠" : "展开"}`}
                   >
                     <Text style={d.agHeadT}>
-                      subAgent {agOpen ? "▾" : "▸"}
+                      subAgent {all.length} {agOpen ? "▾" : "▸"}
                     </Text>
                   </Pressable>
                   {agOpen ? (
@@ -3010,12 +3010,13 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
   // 运行中标记：走帧星（SPIN_FRAMES 随 agTick 1s 换帧，#148 低频步进）
   agSpin: { fontSize: 11, fontWeight: "700", lineHeight: 14 },
   agDone: { color: c.done, fontSize: 11, lineHeight: 14 },
-  agRow: { flexDirection: "row", alignItems: "center", gap: 7, paddingVertical: 3 },
+  // 条目行相对标题缩进 12（09-24 二轮：标题与具体项要有缩进层级）
+  agRow: { flexDirection: "row", alignItems: "center", gap: 7, paddingVertical: 3, paddingLeft: 12 },
   agT: { flex: 1, fontSize: 12 },
   agAct: { flex: 1, fontSize: 11 }, // #103 活性：与描述平分行宽，超长省略（HUD 风格当前动作）
   agTime: { fontSize: 11, fontVariant: ["tabular-nums"] },
   // #13 巡检：超 4 条的溢出提示（原 slice(-4) 静默截断）
-  agMore: { color: c.faint, fontSize: 11, paddingVertical: 3 },
+  agMore: { color: c.faint, fontSize: 11, paddingVertical: 3, paddingLeft: 12 },
   histnote: { color: c.faint, fontSize: 11, textAlign: "center", marginBottom: 10 },
   trUser: {
     alignSelf: "flex-end", maxWidth: "85%", marginBottom: 10,

@@ -4744,8 +4744,8 @@ function renderDetail() {
   } else lr.style.display = "none";
 
   // 子 Agent 状态（external 会话）。#142 重设计：并入状态栏——#liverow 下的续行（去
-  // 独立大框，attach 类贴合主状态行）；标题行即折叠开关（2026-09-24 用户拍板：只写
-  // 「subAgent」+ 尾部箭头——无呼吸点、无数量、无运行中字样，呼吸点只属于具体条目；
+  // 独立大框，attach 类贴合主状态行）；标题行即折叠开关（2026-09-24 用户二轮拍板：
+  // 「subAgent + 总数」+ 尾部箭头——总数保留、无「运行中」字样，呼吸点只属于具体条目；
   // agCollapsed 模块级记忆，1s 重渲不丢态，pendOpen 先例）；条目运行中行首呼吸点 +
   // 秒数本地计时。防御：ended_at>0 才算结束——数据侧 ended_at:0（defined-but-falsy）
   // 会让 `?? Date.now()` 取 0 → 负时长被 clamp 冻结，读秒不涨的嫌疑形态（run 判定与
@@ -4758,7 +4758,7 @@ function renderDetail() {
     const shown = subs.slice(-4);
     const more = subs.length - shown.length;
     ag.innerHTML =
-      '<div class="aghead" id="agtoggle">subAgent <span class="caret">' +
+      '<div class="aghead" id="agtoggle">subAgent ' + subs.length + ' <span class="caret">' +
       (agCollapsed ? "▸" : "▾") + "</span></div>" +
       (agCollapsed ? "" :
         shown.map((a) => {
