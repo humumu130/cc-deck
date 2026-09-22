@@ -148,6 +148,10 @@ export interface SourceStatus {
   // relay 平台（SNAPSHOT platform，0.5.3 起）：新建会话表单据此自适应工作目录
   // 文案/示例并拦截盘符路径（Windows 手机端填 D:\ 发到 mac relay 的 /C: 回落问题）
   platform?: string;
+  // #146 per-源 输出物开关（SNAPSHOT.deliverables，conn 级持久——收到过快照的源
+  // 保留最后已知值，离线不丢）：聚合模式下详情页 tab 按「会话所属源」取此值
+  // （旧口径一律取活动源，活动源指向从未上线的离线源时其他源会话被误藏）
+  deliverables?: boolean;
 }
 
 export interface Snapshot {
@@ -455,6 +459,7 @@ class RelayStore {
       relayName: c.relayName || undefined, // #100 relay 侧自定义名（未手动改名时的默认显示）
       colorKey: c.entry.cloud?.relayDev || c.entry.wsUrl,
       platform: c.platform || undefined,
+      deliverables: c.deliverables, // #146 per-源 输出物开关（详情页按会话源取数）
     }));
     // #388 模型清单取活动源口径（模型切换命令无 sid 路由也走活动源）
     const activeModels = this.activeConn()?.models ?? [];

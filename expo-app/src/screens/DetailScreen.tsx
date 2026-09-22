@@ -1253,13 +1253,22 @@ export default function DetailScreen({ sid, onBack, initialView, ref }: { sid: s
 
   // #71 输出物开关：SNAPSHOT.deliverables（relay 插件配置）=== true 才显示「输出物」页
   // （旧 relay 无字段同样隐藏）。VIEWS 仍是静态全集（ViewKind 类型来源），运行时以
-  // VS 驱动 tab 行/翻页/指示条；与网页端 renderDetail 同口径
-  const VS = snap.deliverables === true ? VIEWS : VIEWS.filter((v) => v.k !== "arts");
+  // VS 驱动 tab 行/翻页/指示条；与网页端 renderDetail 同口径。
+  // #146 修正（聚合模式）：deliverables 是 relay 侧 per-源 配置——跟「正在看的会话
+  // 所属源」取数（s.src 聚合时盖章；1649 行 slashSrc / 源角标同款先例）。旧口径一律
+  // 取活动源：活动源指向从未上线的离线源（deliverables=false）时，其他源的会话也被
+  // 误藏 tab（用户实测：公司电脑关机+聚合，Mac 会话输出物栏消失）。单源模式 s.src
+  // 未盖章（或源找不到）回落 snap.deliverables，行为不变
+  const srcDeliverables = s?.src !== undefined
+    ? snap.sources.find((x) => x.id === s.src)?.deliverables
+    : undefined;
+  const deliverables = srcDeliverables ?? snap.deliverables;
+  const VS = deliverables === true ? VIEWS : VIEWS.filter((v) => v.k !== "arts");
   // 停在被关掉的页（开着「输出物」时关开关/重连到关闭的 relay）→ 回落消息页，防 -1 白屏
   useEffect(() => {
     if (!VS.some((v) => v.k === view)) setView("msg");
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [snap.deliverables, view]);
+  }, [deliverables, view]);
 
   // 手动刷新任务清单：↻ 发命令，等下一帧 todos 引用变化（或 2.5s 超时）结束等待态
   const [todoSpin, setTodoSpin] = useState(false);
