@@ -507,12 +507,17 @@ await wait(150);
   const sid = extId("cli-1");
   const subs = () => mgr.snapshot().find((s) => s.session_id === sid)?.subagents ?? [];
   await hook({ event: "UserPromptSubmit", prompt: "子代理测试回合", cli_pid: process.pid, transcript_path: T });
-  // ① 前台：Pre 建 running 条目，Post 按 tool_use_id 收尾
+  // ① 前台：Pre 建 running 条目；#142 根因回归——派生瞬间（<2s）的 Post 不收尾
+  //（实测 816 条样本 100% <100ms 假 Post，旧逻辑立即写 ended_at 端上恒显「✓ 0s」），
+  // ≥2s 的 Post 才是同步阻塞调用的真实返回、按 tool_use_id 收尾
   await hook({ event: "PreToolUse", tool_name: "Agent", tool_use_id: "call_fg1", tool_input: { description: "前台子代理", subagent_type: "general", run_in_background: false }, permission_mode: "default" });
   const fg = subs()[0];
   assert(subs().length === 1 && fg.id === "call_fg1" && fg.desc === "前台子代理" && fg.kind === "general" && fg.bg === false && fg.ended_at === undefined, "28 Pre creates running subagent entry");
+  await hook({ event: "PostToolUse", tool_name: "Agent", tool_use_id: "call_fg1", tool_response: "spawned" });
+  assert(subs()[0].ended_at === undefined, "28 spawn-instant Post (<2s) does not end foreground subagent (#142)");
+  await wait(2100);
   await hook({ event: "PostToolUse", tool_name: "Agent", tool_use_id: "call_fg1", tool_response: "ok" });
-  assert(subs()[0].ended_at !== undefined, "28 Post ends foreground subagent");
+  assert(subs()[0].ended_at !== undefined, "28 late Post (>=2s) ends foreground subagent");
   // ② 后台：PostToolUse（派生瞬间返回）不收尾，transcript 的 task-notification（user 行）收尾
   await hook({ event: "PreToolUse", tool_name: "Agent", tool_use_id: "call_bg1", tool_input: { description: "后台子代理", run_in_background: true }, permission_mode: "default" });
   assert(subs().length === 2 && subs()[1].bg === true && subs()[1].ended_at === undefined, "28 bg subagent entry created");

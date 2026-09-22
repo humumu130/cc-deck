@@ -2336,6 +2336,12 @@ export class Bridge {
       }
     }
     if (i === -1 || list[i].bg || list[i].ended_at) return;
+    // #142 读秒冻结根因（2026-09-23 实锤）：非后台 spawn 的 PostToolUse 也会在派生
+    // 瞬间（实测 816 条样本 100% <100ms）就返回——把它当结束信号会立即写 ended_at，
+    // 端上恒渲染「✓ 0s」定格。守卫：<2s 的 Post 一律不收尾，真实结束交 transcript
+    // 的 task-notification（closeSubagentByNotification）；≥2s 视为同步阻塞调用的
+    // 真实返回，行为不变
+    if (Date.now() - (list[i].started_at ?? 0) < 2000) return;
     // 不可原地改 list：它就是 state.subagents 的引用，先改会让 setExternalSubagents
     // 的 JSON 对比判定"无变化"而不下发（手机端永远收不到 ended）
     this.mgr.setExternalSubagents(id, list.map((x, k) => (k === i ? { ...x, ended_at: Date.now() } : { ...x })));
