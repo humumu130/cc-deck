@@ -57,18 +57,19 @@ export function sessionElapsed(s: { status: string; duration_ms?: number; histor
 }
 
 // #143 卡片右上角：会话计时 → 最后活跃时间（updated_at 随事件刷新，分钟粒度；
-// WORKING 的回合秒数留在 LiveStat）。#155 拍板：当天只显 HH:mm（当天看日期是废话），
-// 历史只显日期不带时间——当年 MM-dd，跨年补年份 yyyy-MM-dd
+// WORKING 的回合秒数留在 LiveStat）。#155 拍板微信式分级精度（符合直觉，越近越精）：
+// 当天 HH:mm / 昨天显「昨天」（不带时刻）/ 今年 M月d日（不补零）/ 跨年带年份。
+// 「昨天」按自然日边界判定（非 24h 滚动窗——凌晨看昨晚也是「昨天」）
 export function fmtLastActive(ts: number | undefined): string {
   if (!ts) return "--";
   const t = new Date(ts);
   const p = (n: number) => String(n).padStart(2, "0");
   const now = new Date();
-  const sameDay =
-    t.getFullYear() === now.getFullYear() && t.getMonth() === now.getMonth() && t.getDate() === now.getDate();
-  if (sameDay) return `${p(t.getHours())}:${p(t.getMinutes())}`;
-  const md = `${p(t.getMonth() + 1)}-${p(t.getDate())}`;
-  return t.getFullYear() === now.getFullYear() ? md : `${t.getFullYear()}-${md}`;
+  const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+  if (ts >= startOfToday) return `${p(t.getHours())}:${p(t.getMinutes())}`;
+  if (ts >= startOfToday - 86400e3) return "昨天";
+  const md = `${t.getMonth() + 1}月${t.getDate()}日`;
+  return t.getFullYear() === now.getFullYear() ? md : `${t.getFullYear()}年${md}`;
 }
 
 // 上下文水位条：水位与上限均由 relay 下发（context_usage/context_limit），

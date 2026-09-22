@@ -4050,17 +4050,19 @@ function sessionElapsed(s) {
 }
 
 // #143 卡片右上角：会话计时 → 最后活跃时间（updated_at 随事件刷新，分钟粒度；
-// WORKING 的回合秒数留在第二行 c-live）。#155 拍板：当天只显 HH:mm，历史只显日期
-// （当年 MM-dd，跨年补年份 yyyy-MM-dd）——与手机端 fmt.ts 同口径
+// WORKING 的回合秒数留在第二行 c-live）。#155 拍板微信式分级精度（符合直觉，越近越精）：
+// 当天 HH:mm / 昨天显「昨天」/ 今年 M月d日（不补零）/ 跨年带年份——与手机端 fmt.ts
+// 同口径；「昨天」按自然日边界判定（非 24h 滚动窗）
 function fmtLastActive(ts) {
   if (!ts) return "--";
   const t = new Date(ts);
   const p = (n) => String(n).padStart(2, "0");
   const now = new Date();
-  if (t.getFullYear() === now.getFullYear() && t.getMonth() === now.getMonth() && t.getDate() === now.getDate())
-    return p(t.getHours()) + ":" + p(t.getMinutes());
-  const md = p(t.getMonth() + 1) + "-" + p(t.getDate());
-  return t.getFullYear() === now.getFullYear() ? md : t.getFullYear() + "-" + md;
+  const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+  if (ts >= startOfToday) return p(t.getHours()) + ":" + p(t.getMinutes());
+  if (ts >= startOfToday - 86400e3) return "昨天";
+  const md = t.getMonth() + 1 + "月" + t.getDate() + "日";
+  return t.getFullYear() === now.getFullYear() ? md : t.getFullYear() + "年" + md;
 }
 
 // #145 工作目录上卡（对齐手机端 📁 目录名）：basename 形式省宽度，悬停 title 显全路径；
