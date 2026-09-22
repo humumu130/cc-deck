@@ -335,6 +335,14 @@ export class AgentSession {
           // 进程树消亡——init 即清空下发一次（[] = 端上清空），防 bgRunning 永真
           if (this.subagents.length || this.resumed) this.cb.onSubagents?.([]);
           this.cb.onInit(msg.session_id, msg.model ?? this.model, msg.permissionMode);
+        } else if ((msg as { subtype?: string }).subtype === "task_notification") {
+          // #142 三轮残留（2026-09-23 实锤收口）：后台子 Agent（含新版 CLI
+          // run_in_background 缺省即后台的形态）完成通知在 SDK 流是
+          // system/task_notification——带 tool_use_id + status
+          //（completed/failed/stopped），不是 user 消息、没有 tool_result。
+          // 此前 case "system" 只认 init，通知落 default 丢弃 → 条目永不收口
+          const tu = (msg as { tool_use_id?: string }).tool_use_id;
+          if (typeof tu === "string" && tu) this.closeSubagentByNotification(tu);
         }
         break;
 
