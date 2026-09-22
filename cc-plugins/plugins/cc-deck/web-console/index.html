@@ -89,8 +89,11 @@
     --send-btn: var(--panel-2);
     --send-btn-line: var(--border);
     /* #98 色相 35°→42°（与品牌橙拉开到 27°=暗色水准）：白底 5.26:1、hover 底 4.77:1，
-       顺带修复 lv-sec 黄字 hover 底 4.47:1 的 AA 超标 */
-    --working: #8F6400;
+       顺带修复 lv-sec 黄字 hover 底 4.47:1 的 AA 超标
+       #124①返工（2026-09-21 验收反馈"还是差不多，要红绿灯那种明黄"）：#8F6400 亮度 28%
+       发褐看不出黄——亮度提到 39% 饱和度顶格（hsl 44°/100%/39%），白底 3.0:1（状态徽标
+       可接受档；文字可读性靠灯芯/描边分层兜底，见下方 run 态灯芯规则） */
+    --working: #C79100;
     --waiting: #DC2626;
     --error: #C2410C;
     --done: #047857;
@@ -1187,6 +1190,7 @@
      色从 --dim 回调到 --card-sub（介于原值与标题色之间）；元信息行 12→11px 保持 --faint */
   .c-live { display: flex; align-items: center; gap: 8px; margin: 4px 0 0; padding-left: 4px; font-size: 11px; line-height: 16px; color: var(--card-sub); font-variant-numeric: tabular-nums; min-width: 0; min-height: 16px; } /* #58 统一卡高：与 .card-summary 同几何（上距 4 + 行盒 16），WORKING/空闲卡等高；#98 灯 8→10px 悬挂缩进 6→4 补偿 */
   .c-live .lv-dot { width: 9px; height: 9px; border-radius: 50%; background: var(--working); flex: none; animation: dot-breathe 2.4s ease-in-out infinite; }
+  html.light .c-live .lv-dot { background: #FFD60A; box-shadow: 0 0 0 1.5px var(--working); } /* #124①返工：同列表卡 run 灯芯——纯黄芯+金环 */
   .c-live .lv-sec { color: var(--working); flex: none; }
   .c-live .lv-tok { flex: none; }
   .c-live .lv-sum { color: var(--card-sub); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1; min-width: 0; }
@@ -1275,6 +1279,9 @@
     background: color-mix(in srgb, var(--sc, var(--dim)) 55%, #fff);
     border: 1.5px solid var(--sc, var(--dim));
   }
+  /* #124①返工：浅色 WORKING 灯芯不用 55% 混白（奶黄无"黄"感）——纯红绿灯黄 #FFD60A
+     填充 + 金黄环保边，发光体同款观感；呼吸动画的光圈仍走 --sc 黄 */
+  html.light .card .c-dot.run { background: #FFD60A; }
   /* #98 返工（装机反馈）：终态空心环废止——用户拍板三端统一实心（手机端/右侧详情页
      均实心，列表空心独树一帜）。DONE/ERROR 回落默认实心规则（浅色回落 LED 亮芯+环） */
   /* #100 后台任务态：主回合 DONE 但仍有子 Agent 在跑——灯转 working 黄呼吸（--sc 覆写
@@ -1493,7 +1500,10 @@
   /* #124 详情头状态字收敛：dhead 内去灯（状态由文字+颜色自述，列表卡 chip 不受影响）、
      字号 11→9 小三号、字距同步收紧（小字号 1px 字距会散） */
   #dhead .status-chip i { display: none; }
-  #dhead .status-chip { font-size: 9px; letter-spacing: .5px; }
+  /* #124②返工（2026-09-21 验收反馈"跟会话名不应纵向对齐，应类似角标但不挨那么近"）：
+     从行中心线（align-items:center 的纵对齐）上抬为上标角标位——relative top 上移，
+     flex gap 12px 天然留出与标题的间距（不贴死） */
+  #dhead .status-chip { font-size: 9px; letter-spacing: .5px; position: relative; top: -7px; }
   @keyframes dot-breathe {
     0%, 100% { opacity: 1; transform: scale(1); box-shadow: 0 0 2px 0 color-mix(in srgb, var(--sc) 40%, transparent); }
     50% { opacity: .45; transform: scale(.8); box-shadow: 0 0 9px 2px color-mix(in srgb, var(--sc) 55%, transparent); }
@@ -1695,6 +1705,8 @@
   .tline .tname { font-weight: 600; }
   .tname { color: var(--dim); font-weight: 600; } /* #102 收敛②之首：工具行是转录行数最多元素，橙字量立减约八成 */
   .tres { color: var(--faint); }
+  /* #128 任务工具行摘要：单行省略直显（替代原折叠框），完整内容不再展开 */
+  .tline .tsum { flex: 1 1 120px; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .ds-add { color: var(--done); font-family: var(--mono); font-size: .95em; }
   .ds-del { color: var(--error); font-family: var(--mono); font-size: .95em; }
   .tdetail {
@@ -3206,8 +3218,19 @@ async function pollLoop(ctx) {
   }
 }
 
-// 下行帧统一入口（ws onmessage 与轮询 GET 共用，按源）
+// 下行帧统一入口（ws onmessage 与轮询 GET 共用，按源）。
+// #135 帧级异常隔离（2026-09-22）：帧处理链（onEvent→render）任一帧抛异常若不隔离，
+// 轮询传输下会杀死整个 pollLoop（async while 循环体抛出、无人 catch）——拉取停止、
+// lastSeq 冻结、画面停在旧时间点，而连接状态仍显示已连接（昨晚实证：wb 设备游标冻死
+// 173720 四十余分钟，每次重连补发首条即同一毒帧、处理再崩、循环死锁）。ws 传输每帧
+// 独立事件本不致死链，但异常同样无痕。wrapper 兜住单帧异常：跳过该帧、console 留下
+// 毒帧摘要（定位具体字段用），其余帧照常处理
 function onCloudText(ctx, text) {
+  try { onCloudTextRaw(ctx, text); }
+  catch (e) { console.error("[cloud:" + ctx.cfg.name + "] 帧处理异常（已跳过该帧）:", e, String(text).slice(0, 300)); }
+}
+
+function onCloudTextRaw(ctx, text) {
   let f;
   try { f = JSON.parse(text); } catch { return; }
   const cfg = ctx.cfg;
@@ -5272,14 +5295,17 @@ function entryHtml(e, prevDay) {
   } else if (e.kind === "tool_use") {
     const t = e.tool || "";
     const tico = /^(Edit|Write|MultiEdit|NotebookEdit)$/.test(t) ? "✎" : t === "Bash" ? "❯_" : /^(Read|Glob|Grep|WebFetch|WebSearch)$/.test(t) ? "▤" : "⚙";
-    html += '<div class="trow"><div class="tline"><span class="tico">' + tico + '</span><span class="tname">' + escapeHtml(t || "tool") + "</span><span>" + taskRefHtml(e.text) + "</span>" +
+    // #128（2026-09-21 验收反馈）：任务状态变更（Task*）这类简单内容不搞折叠框——
+    // 展开框长文超界且交互无必要，摘要单行省略直显（.tsum），完整描述不再渲染
+    const isTaskTool = /^Task/.test(t);
+    html += '<div class="trow"><div class="tline"><span class="tico">' + tico + '</span><span class="tname">' + escapeHtml(t || "tool") + "</span><span" + (isTaskTool ? ' class="tsum"' : "") + ">" + taskRefHtml(e.text) + "</span>" +
       (t === "Bash" || t === "Write" ? '<span class="copy-btn" data-copy="' + escapeHtml(e.text || "").replace(/"/g, "&quot;") + '" title="复制命令">⧉</span>' : "") +
-      (e.detail
+      (e.detail && !isTaskTool
         ? (open
           ? '<span class="x-full" data-x="' + k + '">收起 ▴</span>'
           : '<span class="x-full" data-x="' + k + '">展开 ▾</span>')
         : "") + "</div>" +
-      (open && e.detail ? '<div class="tdetail">' + escapeHtml(e.detail) + "</div>" : "") + "</div>";
+      (open && e.detail && !isTaskTool ? '<div class="tdetail">' + escapeHtml(e.detail) + "</div>" : "") + "</div>";
   } else if (e.kind === "tool_result") {
     if (e.diff && e.diff.length) {
       const plus = e.diff.filter((l) => l.startsWith("+")).length;
@@ -5526,7 +5552,7 @@ document.addEventListener("click", (ev) => {
 
 // ⚙ 设置浮层（#317）：显示项为散装开关的镜像（点行 = 触发原按钮再回读状态），
 // 服务器管理不进浮层——左栏常驻面板已是高频区，与手机抽屉同为一级入口
-const CONSOLE_VERSION = "0.6.0-test.14";
+const CONSOLE_VERSION = "0.6.0-test.16";
 // #396 拨杆同步：滑块移到 idx 档（transform 过渡），选中档文字加 .on（白字压品牌色滑块上）
 function setLever(el, idx) {
   if (!el) return;
@@ -5774,7 +5800,12 @@ $("gpIdleLever").querySelectorAll(".lever-opt").forEach((b) => {
   };
 });
 // #121 空闲变灰时长：change 提交（空/非法回落 30），立即重渲列表生效
+// #121②验收 follow-up（2026-09-21）：Windows WebView 回车不触发 change（只失焦触发），
+// 用户"输入 1 回车"无反应——Enter 直接 blur 走 change 路径（提交+回落逻辑复用不另写）
 $("gpIdleDimInput").value = String(idleDimMin);
+$("gpIdleDimInput").onkeydown = (e) => {
+  if (e.key === "Enter") { e.preventDefault(); e.target.blur(); }
+};
 $("gpIdleDimInput").onchange = () => {
   const raw = $("gpIdleDimInput").value.trim();
   let v = raw === "" ? 30 : Math.trunc(Number(raw));

@@ -48113,7 +48113,7 @@ var CloudClient = class {
     }
     if (inner.t === "hello") {
       const lastSeq = Number(inner.last_seq ?? 0) || 0;
-      console.log(`[cloud] phone ${f.from} hello last_seq=${lastSeq}`);
+      console.log(`[cloud] ${f.from} hello last_seq=${lastSeq}`);
       const helloName = typeof inner.name === "string" ? inner.name.trim().slice(0, 32) : "";
       if (helloName) this.identity.renamePeer(peerDev, helloName);
       this.resumePhone(f.from, lastSeq);
@@ -48123,7 +48123,7 @@ var CloudClient = class {
       const st2 = this.phones.get(f.from);
       const lastSeq = Number(inner.last_seq ?? 0) || 0;
       if (!st2 || !st2.active) {
-        console.log(`[cloud] phone ${f.from} resume via ping last_seq=${lastSeq}`);
+        console.log(`[cloud] ${f.from} resume via ping last_seq=${lastSeq}`);
         this.resumePhone(f.from, lastSeq);
       } else {
         st2.lastSeq = lastSeq;
