@@ -4317,13 +4317,18 @@ function render() {
   renderSrcChips();
   renderConfirmFloat(); // #306 [待确认] 悬浮清单（key 守卫，重渲代价极小）
 
-  // #279⑨ 折叠空闲（对齐手机）：仅 DONE>0 时可见，开着时隐藏 DONE 卡（顶部计数仍全量）
+  // #279⑨ 折叠空闲 + #140 与闲置变灰联动：折叠对象 = 已过变灰阈值的真闲置卡
+  //（idleDimmed 同口径，内含 #100 后台在跑豁免）——刚收工的会话处在交流窗口期，
+  // 点折叠也不藏（用户拍板：变灰才折叠）；idleDimMin<0（永不变灰）→ 无可折叠卡，
+  // 按钮隐藏。计数 = 闲置卡数（非全部 DONE 数）；跨阈值时刻由 30s 置灰对账器
+  // 触发重渲，按钮计数随动
+  const idleN = allSessions().filter((e) => idleDimmed(e.s)).length;
   const ib = $("idleBtn");
-  const ikey = cnt.DONE + (collapseIdle ? "|1" : "|0");
+  const ikey = idleN + (collapseIdle ? "|1" : "|0");
   if (ib.dataset.key !== ikey) {
     ib.dataset.key = ikey;
-    ib.style.display = cnt.DONE > 0 ? "" : "none";
-    ib.textContent = collapseIdle ? "展开空闲 " + cnt.DONE : "折叠空闲 ▾";
+    ib.style.display = idleN > 0 ? "" : "none";
+    ib.textContent = collapseIdle ? "展开空闲 " + idleN : "折叠空闲 ▾";
     ib.classList.toggle("on", collapseIdle);
   }
 
@@ -4335,8 +4340,9 @@ function render() {
   const rankOf = (s) => (s.status === "DONE" && bgRunning(s) ? 1 : order[s.status]);
   let entries = allSessions();
   if (filterSrc !== "all") entries = entries.filter((e) => e.ctx.cfg.id === filterSrc);
-  // 折叠空闲豁免后台在跑卡（#100）：等孩子 ≠ 空闲
-  if (collapseIdle) entries = entries.filter((e) => e.s.status !== "DONE" || bgRunning(e.s));
+  // #140 折叠空闲与闲置变灰联动：只折已变灰的真闲置卡（idleDimmed 同口径，
+  // #100 后台在跑豁免内含）——刚收工的会话留在交流窗口期可见
+  if (collapseIdle) entries = entries.filter((e) => !idleDimmed(e.s));
   // #279① 挂起删除（4s 撤销窗口内）与已提交删除（待 SESSION_DELETED 确认）的卡片保持隐藏
   entries = entries.filter((e) => e.s.session_id !== pendingDel.sid && !deleting.has(e.s.session_id));
   const list = entries.sort((a, b) =>

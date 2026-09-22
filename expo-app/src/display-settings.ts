@@ -1,6 +1,7 @@
 // 显示设置（抽屉）：AsyncStorage 持久化 + 轻量订阅
 import { useEffect, useState } from "react";
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import type { SessionState } from "./protocol";
 
 export type ProcessFont = "compact" | "normal" | "hidden";
 
@@ -83,6 +84,19 @@ export function setVoiceInput(v: boolean): void {
 // #121 空闲变灰阈值（分钟）：调用方传整数；负数 = 永不变灰
 export function getIdleDimMin(): number {
   return idleDimMin;
+}
+
+// #140 真闲置判定（变灰/折叠共用单一口径，防两处漂移）：DONE/ERROR 且无后台
+// 子 Agent 在跑（#100 等孩子 ≠ 空闲）、静默超 idleDimMin 分钟；负数（永不变灰）
+// → 恒 false（Infinity 让 > 恒假）——也即永不折叠。列表卡蒙层（#96/#121）与
+// 「折叠空闲」（#140 联动，用户拍板：变灰才折叠）共用本函数
+export function isIdleSession(
+  s: Pick<SessionState, "status" | "updated_at" | "started_at" | "subagents">,
+  min: number,
+): boolean {
+  if (s.status !== "DONE" && s.status !== "ERROR") return false;
+  if ((s.subagents ?? []).some((a) => !a.ended_at)) return false;
+  return Date.now() - (s.updated_at ?? s.started_at) > (min < 0 ? Infinity : min * 60_000);
 }
 
 export function setIdleDimMin(v: number): void {

@@ -6,7 +6,7 @@ import { statusColor, withA, type ThemeColors } from "../theme";
 import { useTheme, useThemeStyles } from "../theme-context";
 import { LogoMark, PencilIcon } from "../brand";
 import { sessionElapsed, fmtElapsed, fmtTok, contextPct, contextLevel, CONTEXT_LIMIT_FALLBACK, displaySrcName, isLiveLine, stripLiveMark } from "../fmt";
-import { setListDensity, useListDensity, setAggregate as persistAggregate, useIdleDimMin, type ListDensity } from "../display-settings";
+import { setListDensity, useListDensity, setAggregate as persistAggregate, useIdleDimMin, isIdleSession, type ListDensity } from "../display-settings";
 import { store, useRelay } from "../store";
 import { FadeIn, PressScale } from "../motion";
 import type { SessionState } from "../protocol";
@@ -456,13 +456,10 @@ const SessionCard = memo(function SessionCard({
   const bgLive = bgCount > 0 && s.status !== "WORKING";
   const dotColor = bgLive ? c.working : color;
   const deletable = (s.status === "DONE" || s.status === "ERROR") && !bgLive; // #100 后台在跑禁删（删会话会杀后台任务）
-  // 空闲超时置灰（2026-09-17 名实对齐：此前 DONE 即灰没有超时，刚结束的会话瞬间
-  // 变暗被用户反馈"灰过头"）——DONE/ERROR 且静默超阈值才蒙层置灰，刚完成的保持
-  // 鲜亮让位更从容；#121 阈值可配置（分钟，负数 = 永不 → Infinity 让 > 恒 false）
-  const isIdleCard =
-    (s.status === "DONE" || s.status === "ERROR") &&
-    !bgLive && // #100 豁免：后台子 Agent 还在跑的会话不是闲置（等孩子 ≠ 死会话）
-    Date.now() - (s.updated_at ?? s.started_at) > (idleDimMin < 0 ? Infinity : idleDimMin * 60_000);
+  // 空闲超时置灰：isIdleSession 单一口径（#140 起与「折叠空闲」共用，防漂移）——
+  // DONE/ERROR 且静默超阈值（#121 可配置，负数 = 永不）才蒙层，刚完成的保持鲜亮；
+  // #100 后台子 Agent 在跑豁免（等孩子 ≠ 死会话）
+  const isIdleCard = isIdleSession(s, idleDimMin);
   // 沉寂会话（DONE 且非今日更新）：名称色降一档，长列表里让位给活跃会话；#100 后台在跑同样豁免
   const idle = s.status === "DONE" && !bgLive && !isSameDay(s.updated_at ?? s.started_at, Date.now());
   // #49/#139 休眠卡（对齐桌面端 isDormant 口径）：已保存（saved）且会话不在跑——
@@ -590,6 +587,8 @@ export default function ListScreen({ sessions, connected, connText, onOpen, onNe
   const insets = useSafeAreaInsets();
   const snap = useRelay();
   const density = useListDensity();
+  // #140 折叠空闲与闲置变灰联动：列表级阈值（与卡片蒙层同源），折叠判定用
+  const idleDimMin = useIdleDimMin();
   // 布局循环切换（统计行胶囊）：标准→紧凑→极简→标准，点击即写回 display-settings
   const cycleDensity = useCallback(() => {
     const i = DENSITY_ORDER.indexOf(density);
@@ -773,12 +772,18 @@ export default function ListScreen({ sessions, connected, connText, onOpen, onNe
       return !v;
     });
   };
-  const idleCount = counts["DONE"] ?? 0;
+  // #140 折叠空闲与闲置变灰联动（用户拍板口径）：只折「已变灰」的真闲置卡——
+  // isIdleSession 与卡片蒙层同一判定（DONE/ERROR 且静默超 idleDimMin，#100 后台
+  // 在跑豁免）。刚收工的会话处在交流窗口期，点折叠也不从面板消失；idleDimMin<0
+  // （永不变灰）→ 无可折叠卡，按钮隐藏。计数 = 闲置卡数（不再是全部 DONE 数）
+  const idleCount = useMemo(
+    () => sorted.filter((s) => isIdleSession(s, idleDimMin)).length,
+    [sorted, idleDimMin],
+  );
   const visible = useMemo(
-    // 折叠空闲豁免后台在跑卡（#100）：等子 Agent ≠ 空闲，不随折叠隐藏
-    () => (collapseIdle ? sorted.filter((s) => s.status !== "DONE" || (s.subagents ?? []).some((a) => !a.ended_at)) : sorted)
+    () => (collapseIdle ? sorted.filter((s) => !isIdleSession(s, idleDimMin)) : sorted)
       .filter((s) => s.session_id !== pendingDel && !deleting.includes(s.session_id)),
-    [sorted, collapseIdle, pendingDel, deleting],
+    [sorted, collapseIdle, idleDimMin, pendingDel, deleting],
   );
 
   // 分组态行模型：按源分区渲染（组头：源色条+源名+在线点+计数 → 组内会话卡）；
