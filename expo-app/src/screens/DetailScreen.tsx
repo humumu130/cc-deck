@@ -190,11 +190,14 @@ function TranscriptRow({ e, open, onToggle, onContentMenu, onTaskRef, onTaskRefO
   const pf = PROC_FONT[useProcessFont()];
   const cursor = e.streaming ? <Text style={{ color: c.working }}>▌</Text> : null;
   if (e.kind === "user_message") {
+    // #149 长消息折叠：3 行 + tail 省略号，展开即全文（与 assistant_text 同款交互）；
+    // 短消息（无 full，≤200 字 3 行内）不折叠不出现展开钮
+    const long = !!e.full;
     return (
       <View style={d.trUser}>
         {/* URL 链接化：拆段渲染，链接段品牌色+可点开系统浏览器（2026-09-14 用户提） */}
-        <Text style={d.trUserText} selectable>
-          {(e.full ?? e.text).split(/(https?:\/\/[^\s<>"')\]]+)/g).map((seg, i) =>
+        <Text style={d.trUserText} selectable numberOfLines={long && !open ? 3 : undefined} ellipsizeMode="tail">
+          {(open ? e.full ?? e.text : e.text).split(/(https?:\/\/[^\s<>"')\]]+)/g).map((seg, i) =>
             /^https?:\/\//.test(seg) ? (
               <Text key={i} style={{ color: c.brandA }} onPress={() => { try { Linking.openURL(seg); } catch {} }}>{seg}</Text>
             ) : (
@@ -202,6 +205,11 @@ function TranscriptRow({ e, open, onToggle, onContentMenu, onTaskRef, onTaskRefO
             ),
           )}
         </Text>
+        {long ? (
+          <Pressable onPress={onToggle} hitSlop={6}>
+            <Text style={d.tlExpand}>{open ? "收起 ▴" : `展开全文 ${e.full!.length} 字 ▾`}</Text>
+          </Pressable>
+        ) : null}
         {e.ts ? <Text style={d.trUserTime}>{fmtHM(e.ts)}</Text> : null}
       </View>
     );

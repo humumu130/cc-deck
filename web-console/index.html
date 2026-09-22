@@ -1672,8 +1672,10 @@
     border-radius: 14px; border-top-right-radius: 5px; padding: 10px 15px;
     white-space: pre-wrap; word-break: break-word;
   }
-  /* #38 长消息默认折叠：8 行截断（line-clamp 不动文本，展开即全文） */
-  .msg-user .ub.clamp { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 8; overflow: hidden; }
+  /* #38/#149 长消息默认折叠：3 行 + 省略号（line-clamp 不动文本，展开即全文）；
+     line-clamp 之外再钳 max-height 整行对齐——只靠 line-clamp 末行会漏半截
+     （#pendbox 2026-09-16 同款坑），高度钳到 3×行高才真正只露三行 */
+  .msg-user .ub.clamp { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 3; line-height: 1.5; max-height: 4.5em; overflow: hidden; }
   .msg-user .x-full { margin: 5px 2px 0 0; }
   .msg-user .mt { color: var(--faint); font-size: 10.5px; margin-top: 4px; font-variant-numeric: tabular-nums; }
   /* AI 消息：无气泡，头像 + 名称行（WorkBuddy 式），正文直接排版 */
@@ -5472,10 +5474,11 @@ function entryHtml(e, prevDay) {
   const day = e.ts ? dayKey(e.ts) : "";
   if (day && day !== prevDay) html += '<div class="day-sep">── ' + day + " ──</div>";
   if (e.kind === "user_message") {
-    // #38 长消息默认折叠可展开（>300 字 ≈ 8 行，与 AI 消息同款 x-full 交互）：
-    // 侧边栏反馈类长文不再撑爆面板
+    // #38/#149 长消息默认折叠可展开（>100 字 ≈ 3+ 行，与 AI 消息同款 x-full 交互）：
+    // 折叠 3 行 + 省略号（8 行→3 行、300 字→100 字，2026-09-22 用户反馈行数偏多
+    // 且 line-clamp 末行半截）
     const src = e.full ?? e.text;
-    const long = String(src ?? "").length > 300;
+    const long = String(src ?? "").length > 100;
     html += '<div class="msg-user"><div class="ub' + (long && !open ? " clamp" : "") + '">' + userMsgHtml(src) + "</div>" +
       (long ? '<span class="x-full" data-x="' + k + '">' + (open ? "收起 ▴" : "展开全文 " + String(src ?? "").length + " 字 ▾") + "</span>" : "") +
       (hm ? '<div class="mt">' + hm + "</div>" : "") + "</div>";
