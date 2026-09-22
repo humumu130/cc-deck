@@ -37,15 +37,25 @@ if ! (cd cloudflare && CLOUDFLARE_API_TOKEN="$CF_TOKEN" npx wrangler kv key put 
     | grep -q '"success":true' || { echo "ERR: KV 上传失败（wrangler 与 curl 代理均失败）"; exit 1; }
 fi
 
-echo "[2/3] 回读校验"
+# 回读校验（2026-09-23 #154 加重试）：CF KV 是最终一致——put 成功后立即经
+# cc.humumu.online 回读，边缘可能仍返回旧值 → md5 不匹配被误判「上传失败」
+#（test.28 发布实证：put 实际成功、清单滞留旧版让 App 检查更新拿到旧包）。不匹配
+# 隔 6s 重读最多 4 次；仍不一致才算真失败（坏上传不会被重试掩盖）
+echo "[2/3] 回读校验（KV 最终一致，不匹配重读最多 4 次）"
 TMP=$(mktemp /tmp/kv-verify.XXXXXX)
-# 家里到 CF 的下载速度波动大（实测 80KB/s~5.7MB/s），120s 曾把大文件校验误判成超时
-curl -sS --max-time 300 -o "$TMP" "$DOMAIN/dl/$KEY"
-REMOTE_MD5=$(md5 -q "$TMP"); REMOTE_SIZE=$(stat -f%z "$TMP"); rm -f "$TMP"
+REMOTE_MD5=""; REMOTE_SIZE=""; VERIFY_OK=0
+for i in 1 2 3 4; do
+  # 家里到 CF 的下载速度波动大（实测 80KB/s~5.7MB/s），120s 曾把大文件校验误判成超时
+  if curl -sS --max-time 300 -o "$TMP" "$DOMAIN/dl/$KEY"; then
+    REMOTE_MD5=$(md5 -q "$TMP"); REMOTE_SIZE=$(stat -f%z "$TMP")
+    if [ "$LOCAL_MD5" = "$REMOTE_MD5" ] && [ "$LOCAL_SIZE" = "$REMOTE_SIZE" ]; then VERIFY_OK=1; break; fi
+  fi
+  [ "$i" = "4" ] || { echo "    第 $i 次回读未一致（remote=$REMOTE_MD5），6s 后重读"; sleep 6; }
+done
+rm -f "$TMP"
 
 echo "[3/3] 比对"
-[ "$LOCAL_MD5" = "$REMOTE_MD5" ] || { echo "ERR: md5 不一致 local=$LOCAL_MD5 remote=$REMOTE_MD5"; exit 1; }
-[ "$LOCAL_SIZE" = "$REMOTE_SIZE" ] || { echo "ERR: 大小不一致 local=${LOCAL_SIZE}B remote=${REMOTE_SIZE}B"; exit 1; }
+[ "$VERIFY_OK" = "1" ] || { echo "ERR: 回读不一致 local=$LOCAL_MD5/${LOCAL_SIZE}B remote=$REMOTE_MD5/${REMOTE_SIZE:-0}B"; exit 1; }
 case "$KEY" in
   *.apk|*.zip) TMP=$(mktemp /tmp/kv-zipt.XXXXXX); curl -sS --max-time 300 -o "$TMP" "$DOMAIN/dl/$KEY"; unzip -t "$TMP" >/dev/null || { rm -f "$TMP"; echo "ERR: 回读 zip 损坏"; exit 1; }; rm -f "$TMP"; ;;
 esac

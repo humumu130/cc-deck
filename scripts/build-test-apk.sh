@@ -92,11 +92,14 @@ NOTE_JSON=$(printf '%s' "$NOTE" | sed 's/"/\\"/g')
 # 在线升 test 包；url 字段保持 ECS 供旧客户端（≤test.15）兼容。无 token 静默跳过。
 URL_CF_FIELD=""
 if [ -n "${CLOUDFLARE_API_TOKEN:-}" ]; then
-  if scripts/kv-put-verified.sh "$APK" "cc-deck-${VER}.apk" >/dev/null 2>&1; then
+  # KV 上传输出落日志不进 /dev/null（#154：test.28 清单上传失败真实报错被吞，
+  # 只剩一句警告，排查全靠复现）——失败时 tail 带出根因
+  if scripts/kv-put-verified.sh "$APK" "cc-deck-${VER}.apk" >/tmp/kv-apk-put.log 2>&1; then
     URL_CF_FIELD=",\"url_cf\":\"https://cc.humumu.online/dl/cc-deck-${VER}.apk\""
     echo "    CF 镜像: https://cc.humumu.online/dl/cc-deck-${VER}.apk"
   else
-    echo "    ⚠️ CF 镜像上传失败（清单仍指 ECS）"
+    echo "    ⚠️ CF 镜像上传失败（清单仍指 ECS），根因："
+    tail -3 /tmp/kv-apk-put.log
   fi
 fi
 printf '{"version":"%s","url":"http://8.133.211.170:8888/cc-deck-%s.apk"%s,"size":%s,"notes":"%s"}' \
@@ -106,10 +109,12 @@ printf '{"version":"%s","url":"http://8.133.211.170:8888/cc-deck-%s.apk"%s,"size
 # 失明（拿不到清单谎报「已是最新」）——updates.ts 的 TEST_MANIFEST_URLS CF 优先读
 if [ -n "${CLOUDFLARE_API_TOKEN:-}" ]; then
   $SSH "$ECS_HOST" "cat $ECS_DIR/latest-test.json" > /tmp/latest-test.json.$$
-  if scripts/kv-put-verified.sh "/tmp/latest-test.json.$$" "latest-test.json" >/dev/null 2>&1; then
+  # 同 #154：失败必须带出真实报错——清单滞留旧版 = App 检查更新拿到旧包（用户实锤）
+  if scripts/kv-put-verified.sh "/tmp/latest-test.json.$$" "latest-test.json" >/tmp/kv-manifest-put.log 2>&1; then
     echo "    CF 清单: https://cc.humumu.online/dl/latest-test.json"
   else
-    echo "    ⚠️ CF 清单上传失败（App 内检查更新在公司网不可达，仅 ECS 可查）"
+    echo "    ⚠️ CF 清单上传失败（App 内检查更新可能拿到旧版），根因："
+    tail -3 /tmp/kv-manifest-put.log
   fi
   rm -f "/tmp/latest-test.json.$$"
 fi
