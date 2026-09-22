@@ -2103,6 +2103,10 @@ class RelayStore {
         // #52 historical 必须随增量帧合并：relay 恒带该布尔（旧 relay 不带则 undefined
         // 不覆盖）。漏并会让恢复后的会话一直挂着"历史会话"横幅（本地值只在快照写过）
         if (msg.payload.historical !== undefined) s.historical = msg.payload.historical;
+        // #49 保存恢复标记随帧合并（relay 恒带布尔，旧 relay 不带则不动）：手机端据此
+        // 渲染休眠卡（saved 且非运行态 → 点击发 COMMAND_RESUME_SESSION，#139）
+        if (msg.payload.pinned !== undefined) s.pinned = msg.payload.pinned;
+        if (msg.payload.saved !== undefined) s.saved = msg.payload.saved;
         // 排队消息：已被 user_message 回显消费过的不再被状态帧灌回（#323 底部闪烁根因——
         // relay 侧 pending 直到 CLI 晋升才清，期间每个 WORKING 状态帧都会把本地刚删的条目复原）
         if (msg.payload.pending_inputs) {

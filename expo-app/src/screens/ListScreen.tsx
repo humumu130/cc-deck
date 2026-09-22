@@ -432,10 +432,11 @@ function SrcBadge({ name, color }: { name: string; color: string }) {
 }
 
 const SessionCard = memo(function SessionCard({
-  s, onOpen, onRename, onDelete, revealSid, onReveal, density, dim, srcBadge,
+  s, onOpen, onResume, onRename, onDelete, revealSid, onReveal, density, dim, srcBadge,
 }: {
   s: SessionState;
   onOpen: (sid: string) => void;
+  onResume: (sid: string) => void; // #49/#139 休眠卡点按恢复
   onRename: (sid: string) => void;
   onDelete: (sid: string) => void;
   revealSid: string | null;
@@ -464,18 +465,23 @@ const SessionCard = memo(function SessionCard({
     Date.now() - (s.updated_at ?? s.started_at) > (idleDimMin < 0 ? Infinity : idleDimMin * 60_000);
   // 沉寂会话（DONE 且非今日更新）：名称色降一档，长列表里让位给活跃会话；#100 后台在跑同样豁免
   const idle = s.status === "DONE" && !bgLive && !isSameDay(s.updated_at ?? s.started_at, Date.now());
+  // #49/#139 休眠卡（对齐桌面端 isDormant 口径）：已保存（saved）且会话不在跑——
+  // 「点击恢复」入口只属于服务端已关掉的会话；运行中/等待输入的即使带 saved 残留
+  // 也按正常卡处理（本来就没停，无从恢复）。休眠卡降透明度 + 点按发恢复命令
+  const dormant =
+    s.pinned === true && s.saved === true && s.status !== "WORKING" && s.status !== "WAITING";
   return (
     <SwipeRow
       sid={s.session_id}
       deletable={deletable}
-      onPress={() => onOpen(s.session_id)}
+      onPress={() => (dormant ? onResume(s.session_id) : onOpen(s.session_id))}
       onRename={() => onRename(s.session_id)}
       onDelete={() => onDelete(s.session_id)}
       revealSid={revealSid}
       onReveal={onReveal}
       compact={compact}
       minimal={minimal}
-      dim={dim || isIdleCard}
+      dim={dim || isIdleCard || dormant}
     >
       {minimal ? (
         // 极简行：状态灯 + 名称（单行）+ 右端常显水位区（细条+百分比，无数据 "–" 占位），
@@ -557,6 +563,7 @@ const SessionCard = memo(function SessionCard({
             <Text style={styles.meta} numberOfLines={1}>
               {s.external ? "外部 CLI" : "托管"}
               {s.cwd ? ` · 📁 ${folderOf(s.cwd)}` : ""}
+              {dormant ? " · 已保存" : ""}
               {s.historical && !s.external ? " · 历史" : ""}
             </Text>
             <View style={{ flex: 1 }} />
@@ -601,6 +608,14 @@ export default function ListScreen({ sessions, connected, connText, onOpen, onNe
     [sessions, renameSid],
   );
   const handleRename = useCallback((sid: string) => setRenameSid(sid), []);
+
+  // #49/#139 休眠卡点按 = 按需恢复（对齐桌面端）：此前手机端没有实现保存恢复，
+  // relay 下发的「已保存，点击恢复」摘要在手机上成了死文案——点卡只打开详情，
+  // 恢复从未发生。恢复失败走 SESSION_ERROR（卡片转「恢复失败」可重点重试），
+  // 未连接等前置错误由全局 Toast 负责（与删除路径同口径）
+  const handleResumeSaved = useCallback((sid: string) => {
+    store.send("COMMAND_RESUME_SESSION", { session_id: sid });
+  }, []);
 
   // 删除撤销（#247）：点删除只隐藏卡片 + 浮撤销条，4s 内可撤（纯客户端延迟提交），
   // 超时才真正发 COMMAND_DELETE——误触不丢会话。两次快速删除时前一条立即提交
@@ -1014,6 +1029,7 @@ export default function ListScreen({ sessions, connected, connText, onOpen, onNe
             <SessionCard
               s={item.s}
               onOpen={onOpen}
+              onResume={handleResumeSaved}
               onRename={handleRename}
               onDelete={requestDelete}
               revealSid={revealSid}

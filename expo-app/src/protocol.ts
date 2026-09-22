@@ -90,6 +90,8 @@ export interface SessionState {
   duration_ms?: number;
   historical?: boolean;
   external?: boolean;
+  pinned?: boolean; // #49 保存恢复：置顶跨重启保留（重启后休眠登记，点卡按需拉起）
+  saved?: boolean;  // #49 休眠标记：已保存未拉起；仅非运行态可作休眠卡（恢复入口，#139 口径）
   remote_mode?: boolean;
   cli_pid?: number;
   elapsed_hint?: number;
