@@ -46,6 +46,9 @@ acc_dir = os.environ.get("CCR_ACCEPTANCE_DIR") or os.path.join(
 os.makedirs(acc_dir, exist_ok=True)
 aid = secrets.token_hex(16)
 doc = {"id": aid, "title": title, "created_at": int(time.time()),
+       # cwd=出单会话归因键（#138）：用户提交后 relay 按它把「3✓ 1✗ 2未测」摘要
+       # 回流成该会话的 system 行；旧单没这字段=回流静默跳过
+       "cwd": os.getcwd(),
        "rows": rows, **({"preface": preface} if preface else {}),
        **({"notes": notes} if notes else {})}
 path = os.path.join(acc_dir, f"{aid}.json")

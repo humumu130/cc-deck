@@ -1032,22 +1032,30 @@ export class SessionManager {
     return { ok: true };
   }
 
-  // /api/deliver 归因：发起 shell 的 cwd 匹配会话——会话 cwd 与发起 cwd 互为前缀
-  // 都算（agent 会 cd 进子目录交付，也可能反向），命中多个取最近活跃。Bash 环境
-  // 拿不到 CLAUDE_SESSION_ID，cwd 前缀+新鲜度是可得的最强归因；同仓库并行会话
-  // 极端场景可能归到姊妹会话，可接受（看板仍在，只是挂在隔壁卡上）
-  deliverByCwd(cwd: string, rawPath: string): { ok: boolean; session_id?: string; error?: string } {
+  // cwd→会话归因核心（deliverByCwd 与 #138 验收单回填通知共用）：会话 cwd 与入参
+  // cwd 互为前缀都算（agent 会 cd 进子目录交付，也可能反向），命中多个取最近活跃。
+  // Bash 环境拿不到 CLAUDE_SESSION_ID，cwd 前缀+新鲜度是可得的最强归因；同仓库并行
+  // 会话极端场景可能归到姊妹会话，可接受（看板仍在，只是挂在隔壁卡上）。
+  // 空 cwd 会话跳过（原先 "" + sep 会前缀匹配一切绝对路径，属潜在误归因，顺手修复）
+  matchSessionByCwd(cwd: string): string | null {
     const c = resolve(cwd || ".");
     let best: { id: string; updated: number } | null = null;
     for (const s of this.sessions.values()) {
       const sc = s.state.cwd;
+      if (!sc) continue;
       const related = c === sc || c.startsWith(sc + sep) || sc.startsWith(c + sep);
       if (!related) continue;
       if (!best || s.state.updated_at > best.updated) best = { id: s.state.session_id, updated: s.state.updated_at };
     }
-    if (!best) return { ok: false, error: "无匹配会话（cwd 对不上任何已知会话）" };
-    const r = this.registerDeliverable(best.id, rawPath);
-    return r.ok ? { ok: true, session_id: best.id } : r;
+    return best ? best.id : null;
+  }
+
+  // /api/deliver 归因（matchSessionByCwd 之上叠交付物登记）
+  deliverByCwd(cwd: string, rawPath: string): { ok: boolean; session_id?: string; error?: string } {
+    const sid = this.matchSessionByCwd(cwd);
+    if (!sid) return { ok: false, error: "无匹配会话（cwd 对不上任何已知会话）" };
+    const r = this.registerDeliverable(sid, rawPath);
+    return r.ok ? { ok: true, session_id: sid } : r;
   }
 
   // 重启回放：把该会话登记过的交付物挂回（登记不在 transcript，靠 deliverables.json）

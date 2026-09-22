@@ -63,6 +63,34 @@ writeFileSync(join(ROOT, `${A}.results.json`), "{broken");
 l = listAcceptances();
 assert(l.find((x) => x.id === A)!.judged === 0, "坏 results 回落待填不炸");
 
+// ---- #138 回填回流：cwd→会话归因（matchSessionByCwd）----
+// 独立数据目录隔离（SessionManager 构造/journal 不碰生产 ~/.cc-deck/data）
+import { EventBus } from "../src/event-bus.js";
+import { SessionManager } from "../src/session-manager.js";
+import { loadConfig } from "../src/config.js";
+process.env.CCR_DATA_DIR = join(ROOT, "sm-data");
+process.env.CCR_TOKEN = "test-token";
+{
+  const mgr = new SessionManager(new EventBus(), loadConfig());
+  const W = "/virtual/work";
+  const s1 = mgr.ensureExternal("sid-one", W, "会话一");
+  mgr.ensureExternal("sid-two", "/virtual/other", "会话二");
+  assert(mgr.matchSessionByCwd(W) === "sid-one", "cwd 精确命中");
+  assert(mgr.matchSessionByCwd(W + "/sub/dir") === "sid-one", "出单 cwd 在会话子目录=命中");
+  assert(mgr.matchSessionByCwd("/virtual") === "sid-one", "出单 cwd 比会话浅（反向前缀）=命中");
+  assert(mgr.matchSessionByCwd("/nowhere/else") === null, "无关 cwd=null（relay 侧静默跳过）");
+  // 同族多会话：updated_at 新鲜度决胜（deliverByCwd 同款语义）
+  (s1 as unknown as { updated_at: number }).updated_at = Date.now() + 5000;
+  assert(mgr.matchSessionByCwd("/virtual") === "sid-one", " bumped 更新时间者胜");
+  (s1 as unknown as { updated_at: number }).updated_at = 1;
+  assert(mgr.matchSessionByCwd("/virtual/work") === "sid-one", "唯一精确命中不受新鲜度影响");
+  // 空 cwd 会话不参与匹配（原 "" + sep 前缀匹配一切的误归因修复）
+  const s3 = mgr.ensureExternal("sid-empty", "/virtual/third", "会话三");
+  (s3 as unknown as { cwd: string; updated_at: number }).cwd = "";
+  (s3 as unknown as { updated_at: number }).updated_at = Date.now() + 9999;
+  assert(mgr.matchSessionByCwd("/virtual/work") === "sid-one", "空 cwd 会话不劫持匹配");
+}
+
 rmSync(ROOT, { recursive: true, force: true });
 console.log(fail === 0 ? `\nACCEPTANCE TESTS PASSED (${pass})` : `\n${fail} FAILED`);
 process.exit(fail === 0 ? 0 : 1);

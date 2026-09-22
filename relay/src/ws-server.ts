@@ -504,7 +504,9 @@ export function startServer(
       req.on("end", () => {
         try {
           const { id, rows } = JSON.parse(body) as { id?: unknown; rows?: unknown };
-          if (typeof id !== "string" || !ACCEPTANCE_ID_RE.test(id) || !loadAcceptance(id)) {
+          const acc =
+            typeof id === "string" && ACCEPTANCE_ID_RE.test(id) ? loadAcceptance(id) : null;
+          if (typeof id !== "string" || !acc) {
             res.writeHead(404, { "content-type": "application/json" }).end('{"ok":false,"error":"验收单不存在"}');
             return;
           }
@@ -519,6 +521,24 @@ export function startServer(
             return;
           }
           res.writeHead(200, { "content-type": "application/json" }).end('{"ok":true}');
+          // #138 回填自动回流：按出单时盖进记录的 cwd 归因到会话，推一条 system 行
+          //（模型切换/权限切换同款管道，两端客户端零改动）——「3✓ 1✗ 2未测」式摘要
+          // 消掉人肉对账。归因不到（旧工具出的单没盖 cwd / 会话已收摊）=静默，不影响
+          // 提交；通知异常也不影响（响应已回）。
+          try {
+            const cwd = (acc as { cwd?: unknown }).cwd;
+            if (typeof cwd === "string" && cwd) {
+              const sid = mgr.matchSessionByCwd(cwd);
+              if (sid) {
+                const rs = Array.isArray(rows) ? (rows as { verdict?: unknown }[]) : [];
+                const p = rs.filter((r) => r && r.verdict === "pass").length;
+                const f = rs.filter((r) => r && r.verdict === "fail").length;
+                const u = rs.length - p - f;
+                const t = acc.title.length > 40 ? acc.title.slice(0, 40) + "…" : acc.title;
+                mgr.pushExternalLog(sid, "system", `验收单已回填：《${t}》 ${p}✓ ${f}✗ ${u}未测`);
+              }
+            }
+          } catch { /* 回流失败不影响提交结果 */ }
         } catch {
           res.writeHead(400, { "content-type": "application/json" }).end('{"ok":false,"error":"bad json"}');
         }
