@@ -1850,6 +1850,17 @@
     /* #102：删第二层 18px 大光晕（扩散过大），保留描边+3px 聚焦环（a11y 资产） */
     box-shadow: 0 0 0 3px rgba(217,119,87,.22);
   }
+  /* #165 拖文件入输入卡：拖悬高亮（对齐 focus 聚焦环语言）+ 半透蒙层落点提示 */
+  #cmdbar.drag-over #inputcard {
+    border-color: var(--brand);
+    box-shadow: 0 0 0 3px rgba(217,119,87,.30);
+  }
+  #cmdbar.drag-over::after {
+    content: "松开添加为附件（图片自动压缩）"; position: absolute; inset: 0; z-index: 30;
+    display: flex; align-items: center; justify-content: center;
+    color: var(--dim); font-size: 13px; pointer-events: none;
+    background: color-mix(in srgb, var(--bg-main) 78%, transparent);
+  }
   /* ---------- 回到底部浮钮（对齐手机端形态）：消息 tab 下滚动停止且距底 >80px 才浮现；
      绝对定位挂 #cmdbar（不随 #timeline 滚动），bottom:100%+10px 即悬停于输入区上方 10px ---------- */
   #cmdbar > #toBottomBtn {
@@ -6742,27 +6753,85 @@ document.addEventListener("click", function (e) {
     catch (_) { toast("呼出浏览器失败：" + a.href); }
   });
 }, true);
-// 粘贴贴图（网页端独有优势）：剪贴板含图片文件即进待发行；纯文本粘贴不受影响
+// 粘贴贴图/文件（网页端独有优势；#165 扩展：资源管理器/访达复制的任意文件）：
+// ① clipboardData.files（Win WebView2 里 Explorer 复制的文件在此，FileList 完整）；
+// ② 截图场景（mac WKWebView）files 常为空——items image/* blob 兜底；
+// 图片走压缩链路、其他文件走 #92 附件链路；纯文本粘贴不受影响
 document.addEventListener("paste", (ev) => {
-  const items = ev.clipboardData && ev.clipboardData.items;
-  if (!items) return;
-  const files = [];
-  for (const it of items) {
-    if (it.kind === "file" && String(it.type).startsWith("image/")) {
-      const f = it.getAsFile();
-      if (f) files.push(f);
+  const cd = ev.clipboardData;
+  if (!cd) return;
+  const files = cd.files && cd.files.length ? [...cd.files] : [];
+  if (!files.length && cd.items) {
+    for (const it of cd.items) {
+      if (it.kind === "file" && String(it.type).startsWith("image/")) {
+        const f = it.getAsFile();
+        if (f) files.push(f);
+      }
     }
   }
   if (!files.length) return;
   const sel = selSession();
   if (!sel) return;
   if (!imgSessionOk(sel.s)) {
-    if (sel.s.historical) toast(sel.s.relay_session_id ? "恢复会话不支持带图" : "历史会话仅可查看");
+    if (sel.s.historical) toast(sel.s.relay_session_id ? "恢复会话不支持带附件" : "历史会话仅可查看");
     return;
   }
   ev.preventDefault();
-  void addImageFiles(files);
+  const imgs = files.filter((f) => String(f.type).startsWith("image/"));
+  const docs = files.filter((f) => !String(f.type).startsWith("image/"));
+  if (docs.length) void addUploadFiles(docs);
+  if (imgs.length) void addImageFiles(imgs);
 });
+// #165 拖文件入输入卡：dragover 高亮蒙层 + drop 分流（图片压缩/文件附件，同粘贴口径）。
+// 只认 dataTransfer.types 含 "Files" 的拖动——任务排序 DnD（#374，text 载荷）不受影响；
+// document 层兜底 preventDefault：拖过头在页面任意处松手不再让 WebView 导航到 file:// 白屏
+(function () {
+  const bar = $("cmdbar");
+  const hasFiles = (ev) => {
+    const t = ev.dataTransfer && ev.dataTransfer.types;
+    return !!(t && [...t].includes("Files"));
+  };
+  let depth = 0;
+  bar.addEventListener("dragenter", (ev) => {
+    if (!hasFiles(ev)) return;
+    ev.preventDefault();
+    depth++;
+    bar.classList.add("drag-over");
+  });
+  bar.addEventListener("dragover", (ev) => {
+    if (!hasFiles(ev)) return;
+    ev.preventDefault();
+    ev.dataTransfer.dropEffect = "copy";
+  });
+  bar.addEventListener("dragleave", () => {
+    if (--depth <= 0) { depth = 0; bar.classList.remove("drag-over"); }
+  });
+  bar.addEventListener("drop", (ev) => {
+    if (!hasFiles(ev)) return;
+    ev.preventDefault();
+    depth = 0;
+    bar.classList.remove("drag-over");
+    const files = ev.dataTransfer.files && ev.dataTransfer.files.length ? [...ev.dataTransfer.files] : [];
+    if (!files.length) return;
+    const sel = selSession();
+    if (!sel) { toast("先选择一个会话"); return; }
+    if (!imgSessionOk(sel.s)) {
+      if (sel.s.historical) toast(sel.s.relay_session_id ? "恢复会话不支持带附件" : "历史会话仅可查看");
+      return;
+    }
+    const imgs = files.filter((f) => String(f.type).startsWith("image/"));
+    const docs = files.filter((f) => !String(f.type).startsWith("image/"));
+    if (docs.length) void addUploadFiles(docs);
+    if (imgs.length) void addImageFiles(imgs);
+  });
+  document.addEventListener("dragover", (ev) => { if (hasFiles(ev)) ev.preventDefault(); });
+  document.addEventListener("drop", (ev) => {
+    if (!hasFiles(ev)) return;
+    ev.preventDefault();
+    const t = ev.target;
+    if (!(t && t.closest && t.closest("#cmdbar"))) toast("拖到下方输入框再松开，即可添加为附件");
+  });
+})();
 // 输入卡：textarea 自适应高度 + 纸飞机可用态同步
 function syncSendState() {
   const mi = $("msginput");
