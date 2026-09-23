@@ -1,11 +1,12 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
-  "description": "主窗口最小暴露面：core:default 打通 IPC 通道；updater:default 供 ⚙ 设置抽屉检查/安装更新；窗口控制（#365）：无边框拖拽区 + 最小化/最大化/关闭/主题同步需逐项授权（core:default 不含这些，Tauri 2 ACL 默认拒绝——此前拖不动/按钮无效的根因）",
+  "description": "主窗口最小暴露面：core:default 打通 IPC 通道；updater:default 供 ⚙ 设置抽屉检查/安装更新；dialog:default 供新建会话表单原生目录选择（#168）；窗口控制（#365）：无边框拖拽区 + 最小化/最大化/关闭/主题同步需逐项授权（core:default 不含这些，Tauri 2 ACL 默认拒绝——此前拖不动/按钮无效的根因）",
   "windows": ["main"],
   "permissions": [
     "core:default",
     "updater:default",
+    "dialog:default",
     "core:window:allow-start-dragging",
     "core:window:allow-minimize",
     "core:window:allow-maximize",

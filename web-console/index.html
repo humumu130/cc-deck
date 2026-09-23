@@ -1169,6 +1169,27 @@
   #newform .row { display: flex; justify-content: flex-end; gap: 8px; }
   /* 新建选项行：左对齐排勾选与 ? 悬浮（罗嗦引导文案收进 title） */
   #newform .row.newopts { justify-content: flex-start; align-items: center; gap: 6px; }
+  /* #168 目录行：输入框 + 内嵌浏览钮（桌面壳原生目录对话框）；输入框让出右侧钮位 */
+  .cwd-wrap { position: relative; }
+  .cwd-wrap #cwd { width: 100%; padding-right: 32px; }
+  #cwdPick {
+    position: absolute; right: 5px; top: 50%; transform: translateY(-50%);
+    display: flex; align-items: center; justify-content: center;
+    width: 22px; height: 22px; border: none; border-radius: 6px;
+    background: none; color: var(--dim); cursor: pointer; padding: 0;
+  }
+  #cwdPick:hover { color: var(--text); background: var(--hov); }
+  /* #168 历史目录快捷填入：横向一排小 chip（上次用过的 + 该源会话近期目录），溢出横滚 */
+  #cwdHist { display: flex; gap: 6px; overflow-x: auto; scrollbar-width: none; }
+  #cwdHist::-webkit-scrollbar { display: none; }
+  .cwd-chip {
+    flex: none; max-width: 150px; display: inline-flex; align-items: center; gap: 4px;
+    padding: 2.5px 8px; border-radius: 999px; border: 1px solid var(--border);
+    background: var(--bg-soft); color: var(--dim); font-size: 11px; cursor: pointer;
+    user-select: none; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  .cwd-chip:hover { color: var(--text); border-color: var(--hov2); }
+  .cwd-chip .cc-last { color: var(--brand-2); font-size: 10px; flex: none; }
   .skip-perm { display: flex; align-items: center; gap: 5px; font-size: 11.5px; color: var(--dim); cursor: pointer; user-select: none; }
   .hint-q { display: inline-flex; align-items: center; justify-content: center; width: 14px; height: 14px; border-radius: 50%; border: 1px solid var(--border); color: var(--dim); font-size: 10px; cursor: help; flex: none; }
 
@@ -2145,7 +2166,11 @@
     <div id="newbox">
       <div id="newform">
         <div class="seg" id="newSrcSeg" style="display:none"></div>
-        <input id="cwd" placeholder="工作目录（如 D:\dev\my-project）">
+        <div class="cwd-wrap">
+          <input id="cwd" placeholder="工作目录（如 D:\dev\my-project）">
+          <button id="cwdPick" title="浏览选择本机目录" style="display:none"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3.5 7.2c0-1.3 1-2.3 2.3-2.3h3l2 2.2h6.4c1.3 0 2.3 1 2.3 2.3v7.3c0 1.3-1 2.3-2.3 2.3H5.8c-1.3 0-2.3-1-2.3-2.3z"/></svg></button>
+        </div>
+        <div id="cwdHist" style="display:none"></div>
         <textarea id="prompt" rows="2" placeholder="初始指令，如：帮我看看当前项目结构并总结"></textarea>
         <div class="pair-hint" id="newTarget"></div>
         <div class="row newopts">
@@ -6174,16 +6199,94 @@ function updateCwdPlaceholder() {
     : actx?.platform ? "工作目录（relay 侧路径，如 ~/dev/my-project）"
     : "工作目录（relay 侧路径）";
 }
+// #168 历史目录：每源各记一份「上次创建成功用的目录」（旧版全局 ccr_cwd 迁移读、
+// 双写保留——回滚旧版仍有值可读），避免 Mac 的路径被预填到公司电脑源上
+function cwdKey(id) { return "ccr_cwd@" + (id || ""); }
+function lastCwdOf(id) { return lsGet(cwdKey(id)) || lsGet("ccr_cwd") || ""; }
+// 历史目录 chips：上次用的 + 该源会话近期工作目录（按最后活跃倒序去重），
+// 点击填入输入框。纯客户端聚合（会话 cwd 本就在 SNAPSHOT 里），relay 零改动
+function renderCwdHist() {
+  const box = $("cwdHist");
+  const items = [];
+  const last = lastCwdOf(activeServerId);
+  if (last) items.push({ dir: last, last: true });
+  const seen = new Set(items.map((i) => String(i.dir).toLowerCase()));
+  const ctx = ctxs.get(activeServerId);
+  if (ctx) {
+    const ss = [...ctx.sessions.values()].filter((s) => s.cwd);
+    ss.sort((a, b) => (b.updated_at || 0) - (a.updated_at || 0));
+    for (const s of ss) {
+      const k = String(s.cwd).toLowerCase();
+      if (seen.has(k)) continue;
+      seen.add(k);
+      items.push({ dir: s.cwd });
+      if (items.length >= 6) break;
+    }
+  }
+  box.innerHTML = "";
+  for (const it of items) {
+    const c = document.createElement("button");
+    c.type = "button";
+    c.className = "cwd-chip";
+    c.title = it.dir;
+    const parts = String(it.dir).replace(/[\\/]+$/, "").split(/[\\/]/);
+    c.innerHTML = (it.last ? '<span class="cc-last">上次</span>' : "") + escapeHtml(parts[parts.length - 1] || it.dir);
+    c.onclick = () => { $("cwd").value = it.dir; $("cwd").focus(); };
+    box.appendChild(c);
+  }
+  box.style.display = items.length ? "flex" : "none";
+}
+// #168 桌面壳原生选目录：目录对话框只能在「本机源」上用（选的是这台电脑的文件系统，
+// 远程源该路径不存在）。本机判定：loopback 直连，或内网 IP 写法与本机 relay 探测
+//（probeLocal）端口+token 一致；域名写法无法判定按远程处理
+async function activeIsLocalRelay() {
+  const cfg = cfgOf(activeServerId);
+  if (!cfg || cfg.kind !== "lan") return false;
+  const ep = localEp(cfg.wsUrl);
+  if (!ep) return false;
+  if (ep.loop) return true;
+  try {
+    const j = window.ccDeck?.probeLocal ? await window.ccDeck.probeLocal() : null;
+    if (j && j.ok && ep.port === (j.port || 8787) && cfg.token && cfg.token === j.token) return true;
+  } catch {}
+  return false;
+}
+// 浏览钮可见性：仅桌面壳且 dialog 插件在（老壳无插件→藏，热更不炸）
+function syncCwdPick() {
+  $("cwdPick").style.display = window.__TAURI__ && window.__TAURI__.dialog ? "flex" : "none";
+}
+$("cwdPick").onclick = async () => {
+  if (!window.__TAURI__?.dialog) return;
+  if (!(await activeIsLocalRelay())) {
+    toast("当前新建目标是其他电脑的源，无法浏览本机目录——请直接输入那台电脑上的路径", 5000);
+    return;
+  }
+  try {
+    const cur = $("cwd").value.trim();
+    const dir = await window.__TAURI__.dialog.open({
+      directory: true, multiple: false, title: "选择工作目录",
+      ...(cur ? { defaultPath: cur } : {}),
+    });
+    if (typeof dir === "string" && dir) { $("cwd").value = dir; $("prompt").focus(); }
+  } catch (e) { toast("打开目录选择器失败: " + (e?.message || e), 4000); }
+};
 $("addBtn").onclick = () => {
   const open = !$("newform").classList.contains("open");
   $("newform").classList.toggle("open", open);
   $("addBtn").classList.toggle("on", open);
   morphAddBtn(open);
   if (open) {
+    // 预填：该源上次用的目录 > 活动源用户根目录（#368 原行为兜底）
     if (!$("cwd").value.trim()) {
-      const actx = ctxs.get(activeServerId) || ctxs.get(servers[0]?.id);
-      if (actx && actx.homedir) $("cwd").value = actx.homedir;
+      const last = lastCwdOf(activeServerId);
+      if (last) $("cwd").value = last;
+      else {
+        const actx = ctxs.get(activeServerId) || ctxs.get(servers[0]?.id);
+        if (actx && actx.homedir) $("cwd").value = actx.homedir;
+      }
     }
+    renderCwdHist();
+    syncCwdPick();
     $("prompt").focus();
   }
 };
@@ -6601,7 +6704,9 @@ $("createBtn").onclick = () => {
   const id = sendCommandTo(ctx, "COMMAND_CREATE", { cwd: cwd || ".", prompt, ...(bypass ? { permissionMode: "bypassPermissions" } : {}) });
   if (bypass) $("skipPerm").checked = false; // 创建后回落，防止下一次误建 skip 会话
   if (id) {
-    lsSet("ccr_cwd", cwd);
+    // #168 历史目录：按实际建会话的源记「上次目录」（双写旧全局键，回滚兼容）
+    const keyId = ctx?.cfg?.id || activeServerId;
+    if (cwd) { lsSet(cwdKey(keyId), cwd); lsSet("ccr_cwd", cwd); }
     $("prompt").value = "";
     closeNewForm();
     // 回执看门狗：客户端"在线"最长可比 relay 真实离线晚 ~45s（ping 判死窗口），
@@ -8846,8 +8951,9 @@ async function probeLocalRelay() {
     history.replaceState(null, "", location.pathname);
     setFormKind("lan", s);
   }
-  $("cwd").value = lsGet("ccr_cwd") || "";
+  $("cwd").value = lastCwdOf(activeServerId);
   updateCwdPlaceholder();
+  syncCwdPick(); // #168 目录浏览钮：桌面壳 + dialog 插件在场才显示
   // #386 网页自动嗅探本机 relay：回环 ws 不受 https 混合内容限制，8787 端口固定、
   // 家用部署 token 默认 devtoken——命中即静默加「本机」源（向导存在则收起并直连）。
   // 探测全程对用户不可见：仅未配置时状态卡副行短暂显示"正在探测本机…"；

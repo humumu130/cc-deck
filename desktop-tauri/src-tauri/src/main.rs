@@ -637,6 +637,9 @@ fn main() {
         // 在线更新（#319）：检查/下载/安装由 web-console ⚙ 关于区经 __TAURI__.updater 调用，
         // 签名公钥在 tauri.conf.json plugins.updater，签名的私钥经 CI Secrets 注入
         .plugin(tauri_plugin_updater::Builder::new().build())
+        // #168 原生目录选择对话框：新建会话表单的「浏览」钮经 __TAURI__.dialog.open
+        //（directory:true）调用；仅本机源可用（网页侧 guard），capabilities 放行 dialog:default
+        .plugin(tauri_plugin_dialog::init())
         // #8 全局快捷键（呼出/收起）：默认键在 setup 注册，网页侧可经 set_toggle_shortcut 改绑
         .plugin(tauri_plugin_global_shortcut::Builder::new().build())
         .invoke_handler(tauri::generate_handler![probe_local, open_external, open_path, probe_path, save_artifact, relay_status, relay_toggle, set_toggle_shortcut])
