@@ -824,32 +824,36 @@ export class SessionManager {
 
   // 任务清单更新（TodoWrite；managed 与 external 两条路径共用）。
   // 单一咽喉点：hook 路径 / transcript 轮询 / COMMAND_REFRESH_TODOS 重发全部经此，
-  // 隐藏条目（COMMAND_TODO_HIDE 记入 todo-hidden.json）在这里统一过滤
-  setTodos(id: string, todos: TodoItem[]): void {
+  // 隐藏条目（COMMAND_TODO_HIDE 记入 todo-hidden.json）在这里统一过滤。
+  // at：事件真实发生时刻——relay 重启后的 transcript 水合（firstRead 重建清单）必须
+  // 传转录时间戳，缺省才用当下（#157：水合刷 Date.now() 会把全表最后活跃时间伪造成
+  // 重启时刻，闲置置灰判定全失效——公司 relay 晨启批量"当前时间"的根因）
+  setTodos(id: string, todos: TodoItem[], at?: number): void {
     const s = this.sessions.get(id);
     if (!s) return;
     const hidden = hiddenTodoKeys(id);
     const list = hidden.size ? todos.filter((t) => !hidden.has(normKey(t.content))) : todos;
     s.state.todos = list;
-    s.state.updated_at = Date.now();
-    this.emitUpdated(s, true);
+    s.state.updated_at = at ?? Date.now();
+    this.emitUpdated(s, true, at);
   }
 
   // external 会话子 Agent 工作状态：仅 subagents 实际变化时下发 SESSION_UPDATED
-  // （运行中条目的"秒数走动"由客户端本地计时，relay 不逐秒推）
-  setExternalSubagents(id: string, list: SubagentInfo[]): void {
+  // （运行中条目的"秒数走动"由客户端本地计时，relay 不逐秒推）。at 语义同 setTodos
+  setExternalSubagents(id: string, list: SubagentInfo[], at?: number): void {
     const s = this.sessions.get(id);
     if (!s) return;
     const prev = JSON.stringify(s.state.subagents ?? []);
     const next = JSON.stringify(list);
     if (prev === next) return;
     s.state.subagents = list.length ? list : undefined;
-    s.state.updated_at = Date.now();
+    s.state.updated_at = at ?? Date.now();
     this.bus.emit(id, "SESSION_UPDATED", {
       status: s.state.status,
       action_summary: s.state.action_summary,
       stats: { ...s.state.stats },
       subagents: list,
+      updated_at: s.state.updated_at,
     });
   }
 
@@ -1085,6 +1089,7 @@ export class SessionManager {
   setArtifacts(
     id: string,
     items: { path: string; tool: string; adds: number; dels: number; created: boolean; ts: number }[],
+    at?: number,
   ): void {
     const s = this.sessions.get(id);
     if (!s) return;
@@ -1098,19 +1103,22 @@ export class SessionManager {
     if (!s.state.artifacts) return;
     // 局部转写断开 TS 对 776 行 undefined 赋值的窄化（方法调用不重推属性窄化）
     const merged = s.state.artifacts as ArtifactItem[] | undefined;
-    s.state.updated_at = Date.now();
+    // at 语义同 setTodos：firstRead 输出物回放传转录时刻，防重启水合刷"最后活跃"（#157）
+    s.state.updated_at = at ?? Date.now();
     this.bus.emit(id, "SESSION_UPDATED", {
       status: s.state.status,
       action_summary: s.state.action_summary,
       stats: { ...s.state.stats },
       artifacts: (merged ?? []).map((a) => ({ ...a })),
       ...(s.state.artifacts_truncated ? { artifacts_truncated: true } : {}),
+      updated_at: s.state.updated_at,
     });
   }
 
   // 外部会话 token 用量 / 模型（bridge 从 transcript assistant 条目累计提取）
-  // 上下文窗口上限按模型区分（集中维护，随 context_usage 一起下发；换模型只改这里）
-  setExternalUsage(id: string, usage: TokenUsage, model?: string, contextUsage?: number): void {
+  // 上下文窗口上限按模型区分（集中维护，随 context_usage 一起下发；换模型只改这里）。
+  // at 语义同 setTodos：首读 usage 种子传转录时刻（#157）
+  setExternalUsage(id: string, usage: TokenUsage, model?: string, contextUsage?: number, at?: number): void {
     const s = this.sessions.get(id);
     if (!s) return;
     s.state.usage = usage;
@@ -1119,7 +1127,7 @@ export class SessionManager {
       s.state.context_usage = contextUsage;
       s.state.context_limit = contextLimitOf(model ?? s.state.model);
     }
-    s.state.updated_at = Date.now();
+    s.state.updated_at = at ?? Date.now();
     this.bus.emit(id, "SESSION_UPDATED", {
       status: s.state.status,
       action_summary: s.state.action_summary,
@@ -1127,6 +1135,7 @@ export class SessionManager {
       usage,
       ...(model ? { model } : {}),
       ...(contextUsage !== undefined ? { context_usage: contextUsage, context_limit: contextLimitOf(model ?? s.state.model) } : {}),
+      updated_at: s.state.updated_at,
     });
   }
 
@@ -2210,11 +2219,12 @@ export class SessionManager {
     this.bus.emit(sessionId, "SESSION_WAITING_RESOLVED", { request_id: requestId, decision, by });
   }
 
-  private emitUpdated(s: ManagedSession, force: boolean): void {
+  // at：本帧对应的真实活动时刻（水合/回放路径传入，缺省当下——#157，语义同 setTodos）
+  private emitUpdated(s: ManagedSession, force: boolean, at?: number): void {
     const now = Date.now();
     if (!force && now - s.lastUpdateEmit < UPDATE_THROTTLE_MS) return;
     s.lastUpdateEmit = now;
-    s.state.updated_at = now;
+    s.state.updated_at = at ?? now;
     this.bus.emit(s.state.session_id, "SESSION_UPDATED", {
       status: s.state.status,
       action_summary: s.state.action_summary,
@@ -2241,6 +2251,9 @@ export class SessionManager {
       // historical 增删必须实时下发：转录自愈/pid 对账解锁后，已连接的客户端
       // 要等到下次 SNAPSHOT 才能摘掉"仅可查看"——期间用户以为发不了消息
       historical: !!s.state.historical,
+      // #157 载荷显式带 updated_at：客户端最后活跃时间以它为准（水合帧 ≠ 活动帧，
+      // 信 envelope ts 会把重启时刻误当活动时刻）；旧客户端忽略此字段不受影响
+      updated_at: s.state.updated_at,
     });
   }
 

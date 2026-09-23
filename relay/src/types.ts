@@ -202,6 +202,8 @@ export interface SessionUpdatedPayload {
   // 可能短暂脱钩，端上卡片按钮只看 waiting_request、详情弹窗只看 status，任一帧
   // 带上权威值即可让两端收敛一致（旧 relay 不发此字段，端上有 status 兜底清理）
   waiting_request?: WaitingPayload | null;
+  updated_at?: number;          // #157 事件对应的活动时刻：水合帧（重启回放）≠ envelope
+                               // 发出时刻，端上最后活跃时间以此为准；旧客户端忽略不受影响
 }
 
 export interface SessionHeartbeatPayload {

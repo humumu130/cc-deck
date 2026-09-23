@@ -3899,7 +3899,10 @@ function onEvent(ctx, msg) {
         "usage", "context_usage", "context_limit", "todos", "subagents", "permission_mode", "pending_inputs", "relay_session_id", "cron_tasks", "compacting", "pinned", "saved", "historical", "artifacts", "artifacts_truncated"]) {
         if (msg.payload[f] !== undefined) s[f] = msg.payload[f];
       }
-      s.updated_at = msg.ts;
+      // #157 最后活跃时间优先采信载荷显式值（relay 水合帧 ≠ 活动帧，信 envelope ts
+      // 会把重启时刻当活动时刻）；旧 relay 不带该字段 → 回落 msg.ts，行为不变
+      s.updated_at = typeof msg.payload.updated_at === "number" && msg.payload.updated_at > 0
+        ? msg.payload.updated_at : msg.ts;
       break;
     }
     case "SESSION_HEARTBEAT": {

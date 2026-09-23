@@ -1577,7 +1577,16 @@ export class Bridge {
       let usageSeen = false;
       let ctxLast = 0; // 本轮增量中最后一条 assistant 的上下文水位（覆盖式）
       let model = "";
+      // #157 窗口内最后一条记录的真实时刻：firstRead 水合（任务清单/usage/输出物/
+      // 子代理重建）记账用它——relay 重启后这批"重放态"写入若刷 Date.now()，全部
+      // 会话的最后活跃时间会被伪造成重启时刻（晨启公司 relay 全表"当前时间"根因）
+      let lastTs = 0;
       for (const line of raw.slice(0, end).split("\n")) {
+        const tm = /"timestamp":\s*"([^"]+)"/.exec(line);
+        if (tm) {
+          const tt = Date.parse(tm[1]);
+          if (Number.isFinite(tt)) lastTs = tt;
+        }
         // 后台子 Agent 完成通知：作为 user 消息或 attachment 行出现，取 tool-use-id 配对收尾
         //（捕获到 "<" 为止：不受 JSON 对闭合标签斜杠的转义影响）
         if (line.includes("<task-notification>")) {
@@ -1766,8 +1775,11 @@ export class Bridge {
         for (const t of userTexts) this.promotePending(id, t);
       }
       // 子 Agent：先补/升级 tool_use 条目（同批快速完成时通知才有配对目标），再按通知收尾
-      for (const u of agentUses) this.observeAgentUse(id, u);
-      for (const n of agentNotifs) this.closeSubagentByNotification(id, n);
+      // 水合记账时刻（#157）：首读重建的一切状态写入都记转录最后时刻，非首读（真实
+      // 增量）保持缺省 = 当下
+      const hydrateAt = firstRead && lastTs > 0 ? lastTs : undefined;
+      for (const u of agentUses) this.observeAgentUse(id, u, hydrateAt);
+      for (const n of agentNotifs) this.closeSubagentByNotification(id, n, hydrateAt);
       // 任务清单：CLI 任务存储目录优先（权威、变更检测防重发），无目录再 transcript 回放/增量。
       // store 命中过至少一次后目录消失（CLI 清理/换代）不再回退 tracker——陈旧基线会覆写权威快照
       const storeTodos = this.readTaskStore(id);
@@ -1776,21 +1788,21 @@ export class Bridge {
         if (this.lastTodos.get(id) !== j) {
           if (this.lastTodos.size > 60) this.lastTodos.clear();
           this.lastTodos.set(id, j);
-          this.mgr.setTodos(id, storeTodos);
+          this.mgr.setTodos(id, storeTodos, hydrateAt);
         }
       } else if (!this.lastTodos.has(id)) {
-        if (firstRead) this.replayTaskHistory(id, transcriptPath);
+        if (firstRead) this.replayTaskHistory(id, transcriptPath, hydrateAt);
         else if (taskOps.length) {
           const tr = this.ensureTracker(id);
           for (const op of taskOps) {
             const todos = op.result ? tr.feedResult(op.result) : tr.feed(op.tool as string, op.input);
-            if (todos) this.mgr.setTodos(id, todos);
+            if (todos) this.mgr.setTodos(id, todos, hydrateAt);
           }
         }
       }
       // #35 输出物：首读全文件回放重建（转录轮转/shrink 重触 firstRead 也安全——
       // setArtifacts 整体替换，天然幂等不双计）
-      if (firstRead) this.replayArtifacts(id, transcriptPath);
+      if (firstRead) this.replayArtifacts(id, transcriptPath, hydrateAt);
       if (usageSeen || model) {
         // 首读以窗口内条目做种子（relay 重启后的近似值）；此后增量累加
         let u = this.extUsage.get(id);
@@ -1810,6 +1822,7 @@ export class Bridge {
           { input_tokens: u.input, output_tokens: u.output, cache_read_input_tokens: u.cacheRead, cache_creation_input_tokens: u.cacheWrite },
           u.model || undefined,
           u.ctx || undefined,
+          hydrateAt,
         );
       }
     } catch {}
@@ -1885,8 +1898,9 @@ export class Bridge {
   // #35 输出物回放：转录全文件分块扫（先例 replayTaskHistory 的读法）。
   // tool_use 行（四类文件工具，入参含 file_path）记 callId → {tool, path}，
   // tool_result 行按 tool_use_id 配对回取结构化结果；行门 = file_path/filePath/
-  // structuredPatch/gitDiff（配对两侧任一必含其一，未命中行直接跳过省 JSON.parse）
-  private replayArtifacts(id: string, path: string): void {
+  // structuredPatch/gitDiff（配对两侧任一必含其一，未命中行直接跳过省 JSON.parse）。
+  // at：水合记账时刻（#157）
+  private replayArtifacts(id: string, path: string, at?: number): void {
     const items: { path: string; tool: string; adds: number; dels: number; created: boolean; ts: number }[] = [];
     const uses = new Map<string, { tool: string; path: string }>();
     try {
@@ -1944,14 +1958,15 @@ export class Bridge {
     } catch {
       return;
     }
-    this.mgr.setArtifacts(id, items);
+    this.mgr.setArtifacts(id, items, at);
   }
 
   // 首见/轮转（firstRead）：全文件回放任务工具调用重建完整清单。
   // 旧方案靠 hook 事件增量累积，relay 每次重启都从零开始（手机端 7/18 ≠ 实际的根因）；
   // transcript 是唯一完整事实源。预过滤 + 分块读，108MB 转录一次性扫描 ~1s。
   // 工具串行执行，use/result 按文件顺序回放即可正确配对（callId 交集做结果匹配）。
-  private replayTaskHistory(id: string, path: string): void {
+  // at：水合记账时刻（#157）——回放产出的清单写入不得刷"当下"
+  private replayTaskHistory(id: string, path: string, at?: number): void {
     const ops: TaskOp[] = [];
     const creates = new Set<string>();
     try {
@@ -1983,7 +1998,7 @@ export class Bridge {
     this.trackers.set(id, tr);
     for (const op of ops) {
       const todos = op.result ? tr.feedResult(op.result) : tr.feed(op.tool as string, op.input);
-      if (todos) this.mgr.setTodos(id, todos);
+      if (todos) this.mgr.setTodos(id, todos, at);
     }
   }
 
@@ -2357,7 +2372,7 @@ export class Bridge {
   // 注意 list 取法必须是 `?? []`（与 trackSubagentStart 对齐）：state.subagents 初始
   // 是 undefined，早先的 `if (!list) return` 把"补建条目"路径整个堵死——relay 重启后
   // 第一个后台子 Agent 永远建不起来，手机/桌面全程误报空闲（#100 复发的第一根因）
-  private observeAgentUse(id: string, use: { id: string; input: unknown }): void {
+  private observeAgentUse(id: string, use: { id: string; input: unknown }, at?: number): void {
     if (!use.id) return;
     const list = this.mgr.getExternal(id)?.subagents ?? [];
     if (list.some((x) => x.id === use.id)) return;
@@ -2367,7 +2382,7 @@ export class Bridge {
       const x = list[k];
       if (!x.ended_at && x.id.startsWith("ag-") && normKey(x.desc) === normKey(desc)) {
         const next = list.map((y, i2) => (i2 === k ? { ...y, id: use.id } : y));
-        this.mgr.setExternalSubagents(id, next);
+        this.mgr.setExternalSubagents(id, next, at);
         return;
       }
     }
@@ -2380,16 +2395,17 @@ export class Bridge {
         desc,
         kind: typeof input.subagent_type === "string" && input.subagent_type ? input.subagent_type : "general",
         bg: true,
-        started_at: Date.now(),
+        started_at: at ?? Date.now(),
       });
       if (next.length > 30) next.splice(0, next.length - 30);
-      this.mgr.setExternalSubagents(id, next);
+      this.mgr.setExternalSubagents(id, next, at);
     }
   }
 
   // transcript 里 <task-notification> 的 tool-use-id：收尾后台子 Agent
-  // （通知可能作为 user 消息或 attachment 行出现，识别在 pushAssistantTexts 的行扫描里做）
-  private closeSubagentByNotification(id: string, toolUseId: string): void {
+  // （通知可能作为 user 消息或 attachment 行出现，识别在 pushAssistantTexts 的行扫描里做）。
+  // at：水合记账时刻（#157）——首读窗口里的历史通知按转录时刻收尾
+  private closeSubagentByNotification(id: string, toolUseId: string, at?: number): void {
     const list = this.mgr.getExternal(id)?.subagents;
     if (!list?.length) return;
     let i = list.findIndex((x) => x.id === toolUseId);
@@ -2402,7 +2418,7 @@ export class Bridge {
     }
     if (i === -1 || list[i].ended_at) return;
     // 同上：禁止原地改共享引用，否则变更检测吞掉 ended 下发
-    this.mgr.setExternalSubagents(id, list.map((x, k) => (k === i ? { ...x, ended_at: Date.now() } : { ...x })));
+    this.mgr.setExternalSubagents(id, list.map((x, k) => (k === i ? { ...x, ended_at: at ?? Date.now() } : { ...x })), at);
   }
 
   // TTL 清理（每轮询节拍里跑）：已结束保留 10 分钟；running 以活性账本优先——

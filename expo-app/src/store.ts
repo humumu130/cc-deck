@@ -2150,7 +2150,11 @@ class RelayStore {
         if (msg.payload.artifacts) s.artifacts = msg.payload.artifacts;
         if (msg.payload.artifacts_truncated !== undefined) s.artifacts_truncated = msg.payload.artifacts_truncated;
         if (msg.payload.compacting !== undefined) s.compacting = msg.payload.compacting;
-        s.updated_at = msg.ts;
+        // #157 最后活跃时间优先采信载荷显式值：relay 重启后的水合帧（任务清单/用量/
+        // 输出物回放重建）不是真实活动，信 envelope ts 会把重启时刻当活动时刻（全表
+        // 不置灰根因）。旧 relay 不带该字段 → 回落 msg.ts，行为不变
+        const pu = (msg.payload as { updated_at?: number }).updated_at;
+        s.updated_at = typeof pu === "number" && pu > 0 ? pu : msg.ts;
         break;
       }
       case "SESSION_HEARTBEAT": {

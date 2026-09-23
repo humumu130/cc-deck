@@ -2148,6 +2148,40 @@ assert(!mgr.getExternal("ext-ff11bb22-cc33-dd44-ee55-ff6677889900"), "67 multi-t
   assert(z144?.updated_at === diedAt, "144 converged updated_at keeps real death time (not Date.now())");
 }
 
+// 157. relay 重启水合不刷「最后活跃」：firstRead 重建任务清单/用量的写入必须记转录
+//      时刻（2026-09-23 晨公司 relay 实测：晨启后全表最后活跃=当前时刻、闲置置灰
+//      全失效。根因是水合 setter 刷 Date.now()——setTodos/setExternalUsage 等）
+{
+  const T157 = join(cfg.dataDir, "test-transcript-157.jsonl");
+  const old157 = Date.now() - 2 * 3600_000;
+  const iso = (t: number) => new Date(t).toISOString();
+  writeFileSync(T157, [
+    JSON.stringify({ timestamp: iso(old157 - 60_000), type: "user", message: "水合回合", cwd: "/tmp" }),
+    JSON.stringify({ timestamp: iso(old157 - 30_000), type: "assistant", message: { role: "assistant", usage: { input_tokens: 10, output_tokens: 5 }, model: "glm-test", content: [{ type: "tool_use", id: "c157", name: "TaskCreate", input: { subject: "水合任务", description: "d" } }] } }),
+    JSON.stringify({ timestamp: iso(old157), type: "user", message: { content: [{ type: "tool_result", tool_use_id: "c157", content: "Task #9 created successfully" }] }, cwd: "/tmp" }),
+    // 尾随换行必须有：lastTs 扫描窗口截至 raw.lastIndexOf("\n")，缺末行换行会把
+    // 最后一行（真实末次活动时刻）切出窗口（生产转录逐行 appendFileSync 恒带 \n）
+  ].join("\n") + "\n", "utf-8");
+  const id157 = "ext-cli-157";
+  mgr.ensureExternal(id157, "/tmp", "水合回合", "cli-157", old157 - 120_000);
+  mgr.setExternalStatus(id157, "DONE", "完成");
+  // 模拟重启回放态：updated_at = 真实最后活动（2h 前），水合内存表全空
+  mgr.getExternal(id157)!.updated_at = old157;
+  (bridge as unknown as { lastTodos: Map<string, string> }).lastTodos.delete(id157);
+  (bridge as unknown as { extUsage: Map<string, unknown> }).extUsage.delete(id157);
+  (bridge as unknown as { transcriptOffsets: Map<string, number> }).transcriptOffsets.delete(id157);
+  // firstRead 水合（孤儿扫描重挂 transcript 后的首次轮询同款路径）
+  (bridge as unknown as { pushAssistantTexts(id: string, p?: string): void }).pushAssistantTexts(id157, T157);
+  const h157 = mgr.getExternal(id157)!;
+  assert((h157.todos?.length ?? 0) >= 1, "157 todos replayed from transcript on firstRead");
+  assert(!!h157.usage, "157 usage seeded from transcript on firstRead");
+  assert(
+    Math.abs(h157.updated_at - old157) < 1000,
+    `157 hydration stamps transcript ts, not now (updated_at=${h157.updated_at}, want ~${old157})`,
+  );
+  rmSync(T157, { force: true });
+}
+
 wsCur!.close();
 await wait(300);
 console.log("\nBRIDGE TESTS PASSED");
