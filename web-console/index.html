@@ -1567,9 +1567,9 @@
   #dhead { padding: 12px 20px 0; border-bottom: 1px solid var(--border); background: var(--glass-soft); flex: none; }
   #backBtn { display: none; margin-left: -8px; margin-bottom: 6px; }
   .dhead-row { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
-  #dtitle { font-size: 16px; font-weight: 700; } /* #67漏项 17→16 调小一号 */
-  #renameBtn { padding: 3px 9px; font-size: 13px; color: var(--dim); }
-  #dsub { color: var(--dim); font-size: 12px; margin-top: 5px; display: flex; gap: 12px; flex-wrap: wrap; align-items: center; }
+  #dtitle { font-size: 16px; font-weight: 700; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; } /* #67漏项 17→16；#176 并行后过长收缩省略 */
+  /* #176 元信息并入名称行：占名称后剩余宽度（水位 margin-left:auto 贴行尾），窄屏内部 wrap 回落 */
+  #dsub { color: var(--dim); font-size: 12px; display: flex; gap: 12px; flex-wrap: wrap; align-items: center; flex: 1 1 auto; min-width: 0; }
   /* R1 时长弱化小字（对齐手机 d.sub：跟在标题后，dim 不抢视觉） */
   .dhead-row .elapsed { color: var(--dim); font-weight: 400; font-size: 12px; white-space: nowrap; }
   /* #41web 路径过长时不换行挤第三行，而是收缩省略（完整路径在 title），给右端水位/chip 让位 */
@@ -2364,23 +2364,21 @@
   <div id="detail">
     <div id="dhead">
       <button id="backBtn" class="ghost">‹ 返回</button>
-      <!-- 两行化（对齐手机 2026-09-14 定稿，#155 再收敛）：R1=标题（原时长已删——消息
-           时间戳已提供时间感，统计 tab 保留用时全量）；R2=源名+路径+ctx 短条+模型名 -->
+      <!-- #176 单行化：元信息（源名+路径+ctx 短条+模型名）并入名称行 dim 小字、贴行尾，
+           去 ✎ 改名钮（改名入口保留在会话列表卡片 ✎）——head 矮一档给消息区让位。
+           名称过长收缩省略；窄屏 dsub 内部 flex-wrap 回落换行（≤900px 水位整格回落独立行） -->
       <div class="dhead-row">
         <span id="dtitle"></span>
-        <span class="spacer"></span>
-        <button id="renameBtn" class="ghost" title="重命名会话">✎</button>
-      </div>
-      <div id="dsub">
-        <span id="dsrc"></span>
-        <span id="dcwd"></span>
-        <!-- #41web 水位+模型 chip 并入元信息行右端（26px 短条定宽，与手机同款紧凑形态；
-             路径收缩省略完整路径看 title）。窄屏（≤900px 详情头放不下）整格 flex-basis:100% 自动回落
-             独立一行 = 原 #dctxrow 第三行形态（条 flex:1 + chip 行尾） -->
-        <span id="dctxcell">
-          <span id="dctx"></span>
-          <button id="modelBtn" class="mini" style="display:none" title="切换模型（下一回合生效）">模型</button>
-        </span>
+        <div id="dsub">
+          <span id="dsrc"></span>
+          <span id="dcwd"></span>
+          <!-- #41web 水位+模型 chip 行尾（26px 短条定宽，与手机同款紧凑形态；
+               路径收缩省略完整路径看 title） -->
+          <span id="dctxcell">
+            <span id="dctx"></span>
+            <button id="modelBtn" class="mini" style="display:none" title="切换模型（下一回合生效）">模型</button>
+          </span>
+        </div>
       </div>
       <div class="tabs" title="点击或 ←/→ 键切换视图">
         <button data-tab="activity" class="tab active">消息</button>
@@ -7385,14 +7383,7 @@ function startCardRename(cardEl, s, ctx) {
   // 失焦=自动保存并收起（原为放弃——点击外部改名静默丢失）
   inp.onblur = () => finish(true);
 }
-$("renameBtn").onclick = () => {
-  const sel = selSession();
-  if (!sel) return;
-  const t = prompt("会话名称", sel.s.title || "");
-  if (t === null) return;
-  const v = t.trim();
-  if (v && v !== sel.s.title) sendCommandTo(sel.ctx, "COMMAND_RENAME", { session_id: selected.sid, title: v });
-};
+/* #176 详情头 ✎ 改名钮已移除（head 单行化）——改名走会话列表卡片的 ✎ 就地编辑 */
 $("thinkBtn").onclick = () => {
   thinkShown = !thinkShown;
   renderDetail();
