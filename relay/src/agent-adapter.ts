@@ -216,6 +216,10 @@ export class AgentSession {
   private streamOrder: string[] = [];
   private lastStreamEmit = 0;
   private tasks = new TaskTracker();
+  // #160 TaskCreate 待回填账：callId → 发射时的概要/detail。result（{task:{id}}）
+  // 到达后同 id 重发「#N 新建 …」原地替换首行——编号不展开任务面板也可见。
+  // CLI 工具串行执行，账目应近实时清空；上限防泄漏（丢最旧，同 pendingFileUses）
+  private pendingTaskCreates = new Map<string, { text: string; detail: string | undefined }>();
   // #112 子 Agent 账本（SDK 托管会话）：主流程 Task/Agent 工具调用建条目、
   // tool_result 收尾（bg 除外）、parent_tool_use_id 消息流刷活性。上限 30 与
   // bridge.trackSubagentStart 对齐；变更才全量回调（session-manager JSON 对比去重）
@@ -401,9 +405,22 @@ export class AgentSession {
               this.trackSubagentStart((block as { id: string }).id, block.input as Record<string, unknown>);
             }
             this.lastSummary = summarizeToolUse(block.name, block.input as Record<string, unknown>);
+            const toolDetail = detailToolUse(block.name, block.input as Record<string, unknown>);
+            // #160 TaskCreate 带稳定日志 id 发射：result 回填编号后同 id 原地替换
+            const taskCallId =
+              block.name === "TaskCreate" && typeof (block as { id?: unknown }).id === "string"
+                ? (block as { id: string }).id
+                : undefined;
+            if (taskCallId) {
+              this.pendingTaskCreates.set(taskCallId, { text: this.lastSummary, detail: toolDetail });
+              if (this.pendingTaskCreates.size > 32) {
+                this.pendingTaskCreates.delete(this.pendingTaskCreates.keys().next().value as string);
+              }
+            }
             this.cb.onLog("tool_use", this.lastSummary, {
               tool: block.name,
-              detail: detailToolUse(block.name, block.input as Record<string, unknown>),
+              detail: toolDetail,
+              ...(taskCallId ? { id: taskCallId } : {}),
             });
             // #35 输出物：四类文件工具登记待配对（结果帧按 tool_use_id 回取路径）
             if (
@@ -497,6 +514,24 @@ export class AgentSession {
               detail: detailToolResult(structured ?? tr.content),
               diff: diffLines(structured),
             });
+            // #160 TaskCreate 编号回填：result 携带 {task:{id}}，同 id 重发「#N 新建 …」
+            // 原地替换发射时的无号行（callId 与发射侧配对，比 TaskTracker 的 FIFO 更准）
+            if (typeof callId === "string") {
+              const pend = this.pendingTaskCreates.get(callId);
+              if (pend) {
+                const nid = Number(
+                  String(((structured as { task?: { id?: unknown } } | null)?.task)?.id ?? "").replace(/[^0-9]/g, ""),
+                );
+                if (nid) {
+                  this.cb.onLog("tool_use", `#${nid} ${pend.text}`, {
+                    tool: "TaskCreate",
+                    id: callId,
+                    ...(pend.detail ? { detail: pend.detail } : {}),
+                  });
+                }
+                this.pendingTaskCreates.delete(callId);
+              }
+            }
             const todos = this.tasks.feedResult(structured);
             if (todos) this.cb.onTodos(todos);
             this.cb.onStatusChange("WORKING", this.lastSummary);

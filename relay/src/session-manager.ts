@@ -13,7 +13,7 @@ import { cronTasksKey, readCronTasks } from "./cron.js";
 import { readTaskStoreTodos } from "./task-store.js";
 import { killTree, snapshotTree, treeCpuMs } from "./proc-tree.js";
 import { saveUploadFiles, type UploadBlob } from "./uploads.js";
-import { normKey, truncate } from "./summarizer.js";
+import { normKey, taskDoneLabel, truncate } from "./summarizer.js";
 import type { AgentLike } from "./agent-adapter.js";
 
 // 上下文窗口上限：口径与证据见 context-limit.ts（#72，session-manager/history 共用）
@@ -1192,6 +1192,12 @@ export class SessionManager {
       duration_ms: durationMs,
       stats: { ...s.state.stats },
     });
+  }
+
+  // #160 外部会话日志的 live 引用（只读约定）：bridge 的任务编号回填按稳定 id
+  // 找原条目取文案/detail，原地重发同 id 条目（不新增行）
+  getExternalLogs(id: string): LogEntry[] {
+    return this.sessions.get(id)?.logs ?? [];
   }
 
   pushExternalLog(
@@ -2510,7 +2516,9 @@ export class SessionManager {
                 (prevOpen.has(t.content) ||
                   (!prevByContent.has(t.content) && typeof t.updated_at === "number" && Date.now() - t.updated_at < 10 * 60_000)),
             )
-            .map((t) => t.content);
+            // #160 汇报条目前缀任务编号（有 id 才带）：与时间线生命周期行同口径，
+            // 不展开任务面板也能对上号
+            .map(taskDoneLabel);
           if (done.length) {
             // 汇报同时记入会话状态（#254）：TASK_DONE 瞬态事件在客户端断线/进程被杀时
             // 丢失，落状态后 SNAPSHOT 可恢复未读汇报（端上按 ts 与已清除位去重）。

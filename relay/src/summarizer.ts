@@ -109,14 +109,17 @@ export function summarizeToolUse(tool: string, input: Record<string, unknown>): 
       return `联网搜索 ${truncate(String(input.query ?? ""), 50)}`;
     case "Agent":
       return `子代理 ${truncate(String(input.description ?? input.prompt ?? ""), 40)}`;
-    // #54 折叠行带任务编号（用户点单）：Update 的 taskId 直接可用；Create 的编号
-    // 在 result 回填（此处只能给 subject 概要），编号由端上任务浮窗/清单承载
+    // #54/#160 生命周期行带任务编号（不展开面板也可见）：Update 的 taskId 直接可用；
+    // Create 的编号在 result 回填——发射处带稳定日志 id，bridge/agent-adapter 拿到
+    // result 的 {task:{id}} 后同 id 原地替换成「#N 新建 …」（见两处 #160 回填点）
     case "TaskCreate":
       return `新建 ${truncate(String(input.subject ?? ""), 40)}`;
     case "TaskUpdate": {
-      const id = input.taskId ?? input.task_id;
+      // #160 编号归一：taskId 可能是 number 也可能是数字串（hook JSON 反序列化
+      // 形态），按 TaskTracker 同款剥非数字字符；无编号时留裸文案，不留「# 」空号残影
+      const id = Number(String(input.taskId ?? input.task_id ?? "").replace(/[^0-9]/g, ""));
       const what = input.status ? `状态→${input.status}` : input.subject ? "改标题" : "更新";
-      return `#${typeof id === "number" ? id : ""} ${what}`.trim();
+      return id ? `#${id} ${what}` : what;
     }
     default:
       return tool;
@@ -592,4 +595,10 @@ export class TaskTracker {
   snapshot(): TodoItem[] {
     return this.tasks.map((t) => ({ ...t }));
   }
+}
+
+// #160 任务完成汇报条目标签：有编号前缀「#N 」，与时间线生命周期行同口径——
+// 汇报悬浮卡不展开任务面板也能对上号（pollTaskStore 的 done 数组用它生成）
+export function taskDoneLabel(t: TodoItem): string {
+  return typeof t.id === "number" ? `#${t.id} ${t.content}` : t.content;
 }

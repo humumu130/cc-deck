@@ -2182,6 +2182,55 @@ assert(!mgr.getExternal("ext-ff11bb22-cc33-dd44-ee55-ff6677889900"), "67 multi-t
   rmSync(T157, { force: true });
 }
 
+// 160. 任务生命周期行带编号：TaskCreate 发射带稳定 id，result（文本/对象形态）
+//      回填编号后同 id 原地替换成「#N 新建 …」（不新增重复行）；TaskUpdate 数字串
+//      taskId 归一、无号不留「# 」残影；汇报条目 taskDoneLabel 有号前缀
+{
+  const sid = extId("cli-160");
+  await hook({ event: "UserPromptSubmit", session_id: "cli-160", prompt: "编号回填回合", cli_pid: process.pid });
+  await wait(150);
+  const logs160 = () => mgr.getExternalLogs(sid);
+  // ① Pre 发射：条目带 callId、文案无号（编号此刻未知）
+  await hook({ event: "PreToolUse", session_id: "cli-160", tool_name: "TaskCreate", tool_use_id: "call_160a", tool_input: { subject: "编号回填任务", description: "d" }, permission_mode: "default" });
+  await wait(150);
+  const e1 = logs160().find((e) => e.id === "call_160a");
+  assert(!!e1 && e1.kind === "tool_use" && e1.tool === "TaskCreate" && e1.text === "新建 编号回填任务", "160 Pre logs TaskCreate with stable id, no number yet");
+  const countAfterPre = logs160().length;
+  // ② Post 文本形态 result → 原地替换成带号行；唯一新增是 result 行本身
+  await hook({ event: "PostToolUse", session_id: "cli-160", tool_name: "TaskCreate", tool_use_id: "call_160a", tool_response: "Task #9 created successfully" });
+  await wait(150);
+  const e2 = logs160().find((e) => e.id === "call_160a");
+  assert(!!e2 && e2.text === "#9 新建 编号回填任务", "160 text-form result backfills number in place");
+  assert(logs160().filter((e) => e.id === "call_160a").length === 1 && logs160().length === countAfterPre + 1, "160 replaced entry stays single (result row is the only addition)");
+  // ③ 对象形态 result 同样回填
+  await hook({ event: "PreToolUse", session_id: "cli-160", tool_name: "TaskCreate", tool_use_id: "call_160d", tool_input: { subject: "对象形态任务" }, permission_mode: "default" });
+  await wait(150);
+  await hook({ event: "PostToolUse", session_id: "cli-160", tool_name: "TaskCreate", tool_use_id: "call_160d", tool_response: { task: { id: 12, subject: "对象形态任务" } } });
+  await wait(150);
+  assert(logs160().find((e) => e.id === "call_160d")?.text === "#12 新建 对象形态任务", "160 object-form result backfills number too");
+  // ④ Post 无 tool_use_id（旧 CLI 形态）→ 无可配对条目，不新增带号行
+  const countBeforeOrphan = logs160().length;
+  await hook({ event: "PostToolUse", session_id: "cli-160", tool_name: "TaskCreate", tool_response: "Task #99 created successfully" });
+  await wait(150);
+  assert(
+    logs160().length === countBeforeOrphan + 1 && !logs160().some((e) => e.kind === "tool_use" && e.text.includes("#99")),
+    "160 orphan result adds no duplicate numbered tool_use line (result row itself may quote the text)",
+  );
+  // ⑤ TaskUpdate 数字串 taskId → 归一带号；无号输入不留「# 」残影
+  await hook({ event: "PreToolUse", session_id: "cli-160", tool_name: "TaskUpdate", tool_use_id: "call_160b", tool_input: { taskId: "9", status: "completed" }, permission_mode: "default" });
+  await wait(150);
+  assert(logs160().some((e) => e.tool === "TaskUpdate" && e.text === "#9 状态→completed"), "160 TaskUpdate string taskId coerced to number");
+  await hook({ event: "PreToolUse", session_id: "cli-160", tool_name: "TaskUpdate", tool_use_id: "call_160c", tool_input: { status: "in_progress" }, permission_mode: "default" });
+  await wait(150);
+  const tu = logs160().filter((e) => e.tool === "TaskUpdate").at(-1);
+  assert(!!tu && tu.text === "状态→in_progress", "160 id-less TaskUpdate leaves bare text (no '# ' residue)");
+  // ⑥ 汇报条目标签（pollTaskStore done 数组的生成函数）
+  const { taskDoneLabel } = await import("../src/summarizer.js");
+  assert(taskDoneLabel({ content: "测试任务", status: "completed", id: 9 }) === "#9 测试任务", "160 done label prefixes id");
+  assert(taskDoneLabel({ content: "无号任务", status: "completed" }) === "无号任务", "160 done label without id unchanged");
+  await hook({ event: "SessionEnd", session_id: "cli-160", reason: "clear" });
+}
+
 wsCur!.close();
 await wait(300);
 console.log("\nBRIDGE TESTS PASSED");

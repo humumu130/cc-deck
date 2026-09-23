@@ -60,7 +60,7 @@ interface Pending {
 }
 
 // transcript 里一次任务工具操作（use 或已配对的 result）
-type TaskOp = { tool?: string; input?: unknown; result?: { task: { id: number } } };
+type TaskOp = { tool?: string; input?: unknown; result?: { task: { id: number } }; callId?: string };
 
 // 排队消息的对账键：带图消息的展示回显（text）与注入全文（body）不同，CLI 侧一切
 // 回流文本都是 body 形态——匹配一律取 body（见 PendingInput 注释）
@@ -1797,6 +1797,17 @@ export class Bridge {
           for (const op of taskOps) {
             const todos = op.result ? tr.feedResult(op.result) : tr.feed(op.tool as string, op.input);
             if (todos) this.mgr.setTodos(id, todos, hydrateAt);
+            // #160 编号回填（转录兜底）：hook 断流时 PostToolUse 不来，转录的
+            // "Task #N created successfully" 配对 callId 也能把无号首行原地替换成带号
+            if (op.result && op.callId) {
+              const orig = this.mgr.getExternalLogs(id).find((e) => e.id === op.callId);
+              if (orig && !orig.text.startsWith("#")) {
+                this.mgr.pushExternalLog(id, "tool_use", `#${op.result.task.id} ${orig.text}`, "TaskCreate", {
+                  id: op.callId,
+                  ...(orig.detail ? { detail: orig.detail } : {}),
+                });
+              }
+            }
           }
         }
       }
@@ -2019,7 +2030,7 @@ export class Bridge {
           ? (c as { type?: string; text?: unknown }[]).map((x) => (x && typeof x === "object" && x.type === "text" && typeof x.text === "string" ? x.text : "")).join("")
           : "";
         const m = /Task #(\d+) created successfully/.exec(text);
-        if (m) ops.push({ result: { task: { id: Number(m[1]) } } });
+        if (m) ops.push({ result: { task: { id: Number(m[1]) } }, callId: blk.tool_use_id });
       }
     }
   }
@@ -2115,6 +2126,10 @@ export class Bridge {
     const summary = questions.length
       ? `提问: ${questions.map((q) => q.header).join(" / ")}`
       : summarizeToolUse(ev.tool_name ?? "tool", input);
+    // #160 TaskCreate 带稳定日志 id 发射：PostToolUse result 拿到编号后同 id 原地
+    // 替换成「#N 新建 …」（旧 CLI hook 不带 tool_use_id 时走旧形态，首行无号不回归）
+    const taskCallId =
+      ev.tool_name === "TaskCreate" && typeof ev.tool_use_id === "string" && ev.tool_use_id ? ev.tool_use_id : undefined;
 
     const remote = !!this.mgr.getExternal(id)?.remote_mode;
     const shouldGate =
@@ -2144,6 +2159,7 @@ export class Bridge {
       }
       this.mgr.pushExternalLog(id, "tool_use", summary, ev.tool_name, {
         detail: detailToolUse(ev.tool_name ?? "tool", input),
+        ...(taskCallId ? { id: taskCallId } : {}),
       });
       return { decision: "pass" };
     }
@@ -2161,6 +2177,7 @@ export class Bridge {
     this.mgr.setExternalWaiting(id, payload);
     this.mgr.pushExternalLog(id, "tool_use", summary, ev.tool_name, {
       detail: detailToolUse(ev.tool_name ?? "tool", input),
+      ...(taskCallId ? { id: taskCallId } : {}),
     });
 
     // 权限类长挂起（590s）；提问类 90s 窗口——手机先答则 updatedInput 注入答案（PC 不再弹）；
@@ -2202,6 +2219,29 @@ export class Bridge {
       detail: detailToolResult(ev.tool_response),
       diff: diffLines(ev.tool_response),
     });
+    // #160 TaskCreate 编号回填：result（"Task #N created successfully" 文本或
+    // {task:{id}} 对象）到手后同 id 重发带号首行，原地替换发射时的无号行；
+    // Pre 未带 id / 条目已滚出 500 帽则找不到原条目，静默跳过（不新增重复行）
+    if (ev.tool_name === "TaskCreate" && typeof ev.tool_use_id === "string" && ev.tool_use_id) {
+      let nid = 0;
+      const resp = ev.tool_response;
+      if (resp && typeof resp === "object") {
+        nid = Number(String((resp as { task?: { id?: unknown } }).task?.id ?? "").replace(/[^0-9]/g, ""));
+      }
+      if (!nid && typeof resp === "string") {
+        const m = /Task #(\d+) created successfully/.exec(resp);
+        if (m) nid = Number(m[1]);
+      }
+      if (nid) {
+        const orig = this.mgr.getExternalLogs(id).find((e) => e.id === ev.tool_use_id);
+        if (orig) {
+          this.mgr.pushExternalLog(id, "tool_use", `#${nid} ${orig.text}`, "TaskCreate", {
+            id: ev.tool_use_id,
+            ...(orig.detail ? { detail: orig.detail } : {}),
+          });
+        }
+      }
+    }
     this.feedFileStats(id, ev);
     this.pushAssistantTexts(id, ev.transcript_path);
     // 清除 passive WAITING（CLI 本地已处理）
