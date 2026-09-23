@@ -10339,7 +10339,7 @@ function unseal(box, theirPublicKeyB64, mySecretKeyB64) {
 // src/index.ts
 import { networkInterfaces as networkInterfaces3, homedir as homedir13, hostname } from "node:os";
 import { join as join17 } from "node:path";
-import { writeFileSync as writeFileSync12, openSync as openSync3, readFileSync as readFileSync16, rmSync as rmSync3, existsSync as existsSync12, readdirSync as readdirSync6, statSync as statSync6 } from "node:fs";
+import { writeFileSync as writeFileSync12, openSync as openSync3, readFileSync as readFileSync16, rmSync as rmSync3, existsSync as existsSync12, readdirSync as readdirSync7, statSync as statSync6 } from "node:fs";
 import { spawn as spawn4, execFileSync as execFileSync2 } from "node:child_process";
 import { fileURLToPath as fileURLToPath4 } from "node:url";
 
@@ -40438,14 +40438,15 @@ function summarizeToolUse(tool, input) {
       return `\u8054\u7F51\u641C\u7D22 ${truncate(String(input.query ?? ""), 50)}`;
     case "Agent":
       return `\u5B50\u4EE3\u7406 ${truncate(String(input.description ?? input.prompt ?? ""), 40)}`;
-    // #54 折叠行带任务编号（用户点单）：Update 的 taskId 直接可用；Create 的编号
-    // 在 result 回填（此处只能给 subject 概要），编号由端上任务浮窗/清单承载
+    // #54/#160 生命周期行带任务编号（不展开面板也可见）：Update 的 taskId 直接可用；
+    // Create 的编号在 result 回填——发射处带稳定日志 id，bridge/agent-adapter 拿到
+    // result 的 {task:{id}} 后同 id 原地替换成「#N 新建 …」（见两处 #160 回填点）
     case "TaskCreate":
       return `\u65B0\u5EFA ${truncate(String(input.subject ?? ""), 40)}`;
     case "TaskUpdate": {
-      const id2 = input.taskId ?? input.task_id;
+      const id2 = Number(String(input.taskId ?? input.task_id ?? "").replace(/[^0-9]/g, ""));
       const what = input.status ? `\u72B6\u6001\u2192${input.status}` : input.subject ? "\u6539\u6807\u9898" : "\u66F4\u65B0";
-      return `#${typeof id2 === "number" ? id2 : ""} ${what}`.trim();
+      return id2 ? `#${id2} ${what}` : what;
     }
     default:
       return tool;
@@ -40808,6 +40809,9 @@ var TaskTracker = class {
     return this.tasks.map((t) => ({ ...t }));
   }
 };
+function taskDoneLabel(t) {
+  return typeof t.id === "number" ? `#${t.id} ${t.content}` : t.content;
+}
 
 // src/agent-adapter.ts
 function childEnv() {
@@ -40958,6 +40962,10 @@ var AgentSession = class _AgentSession {
   streamOrder = [];
   lastStreamEmit = 0;
   tasks = new TaskTracker();
+  // #160 TaskCreate 待回填账：callId → 发射时的概要/detail。result（{task:{id}}）
+  // 到达后同 id 重发「#N 新建 …」原地替换首行——编号不展开任务面板也可见。
+  // CLI 工具串行执行，账目应近实时清空；上限防泄漏（丢最旧，同 pendingFileUses）
+  pendingTaskCreates = /* @__PURE__ */ new Map();
   // #112 子 Agent 账本（SDK 托管会话）：主流程 Task/Agent 工具调用建条目、
   // tool_result 收尾（bg 除外）、parent_tool_use_id 消息流刷活性。上限 30 与
   // bridge.trackSubagentStart 对齐；变更才全量回调（session-manager JSON 对比去重）
@@ -40994,6 +41002,9 @@ var AgentSession = class _AgentSession {
         if (msg.subtype === "init") {
           if (this.subagents.length || this.resumed) this.cb.onSubagents?.([]);
           this.cb.onInit(msg.session_id, msg.model ?? this.model, msg.permissionMode);
+        } else if (msg.subtype === "task_notification") {
+          const tu = msg.tool_use_id;
+          if (typeof tu === "string" && tu) this.closeSubagentByNotification(tu);
         }
         break;
       case "assistant": {
@@ -41040,9 +41051,18 @@ var AgentSession = class _AgentSession {
               this.trackSubagentStart(block.id, block.input);
             }
             this.lastSummary = summarizeToolUse(block.name, block.input);
+            const toolDetail = detailToolUse(block.name, block.input);
+            const taskCallId = block.name === "TaskCreate" && typeof block.id === "string" ? block.id : void 0;
+            if (taskCallId) {
+              this.pendingTaskCreates.set(taskCallId, { text: this.lastSummary, detail: toolDetail });
+              if (this.pendingTaskCreates.size > 32) {
+                this.pendingTaskCreates.delete(this.pendingTaskCreates.keys().next().value);
+              }
+            }
             this.cb.onLog("tool_use", this.lastSummary, {
               tool: block.name,
-              detail: detailToolUse(block.name, block.input)
+              detail: toolDetail,
+              ...taskCallId ? { id: taskCallId } : {}
             });
             if ((block.name === "Write" || block.name === "Edit" || block.name === "MultiEdit" || block.name === "NotebookEdit") && typeof block.input?.file_path === "string" && typeof block.id === "string") {
               this.pendingFileUses.set(block.id, {
@@ -41068,6 +41088,21 @@ var AgentSession = class _AgentSession {
         break;
       case "user": {
         const content = msg.message.content;
+        const notifTexts = [];
+        if (!parent && typeof content === "string") notifTexts.push(content);
+        else if (!parent && Array.isArray(content)) {
+          for (const b of content) {
+            if (b && typeof b === "object" && b.type === "text" && typeof b.text === "string") {
+              notifTexts.push(b.text);
+            }
+          }
+        }
+        for (const t of notifTexts) {
+          if (!t.includes("<task-notification>")) continue;
+          const m = /<tool-use-id>([^<]+)/.exec(t);
+          const tuId = m?.[1]?.trim();
+          if (tuId) this.closeSubagentByNotification(tuId);
+        }
         const blocks = Array.isArray(content) ? content : [];
         for (const b of blocks) {
           if (b && typeof b === "object" && b.type === "tool_result") {
@@ -41102,6 +41137,22 @@ var AgentSession = class _AgentSession {
               detail: detailToolResult(structured ?? tr.content),
               diff: diffLines(structured)
             });
+            if (typeof callId === "string") {
+              const pend = this.pendingTaskCreates.get(callId);
+              if (pend) {
+                const nid = Number(
+                  String(structured?.task?.id ?? "").replace(/[^0-9]/g, "")
+                );
+                if (nid) {
+                  this.cb.onLog("tool_use", `#${nid} ${pend.text}`, {
+                    tool: "TaskCreate",
+                    id: callId,
+                    ...pend.detail ? { detail: pend.detail } : {}
+                  });
+                }
+                this.pendingTaskCreates.delete(callId);
+              }
+            }
             const todos = this.tasks.feedResult(structured);
             if (todos) this.cb.onTodos(todos);
             this.cb.onStatusChange("WORKING", this.lastSummary);
@@ -41172,6 +41223,7 @@ var AgentSession = class _AgentSession {
     if (this.subagents.some((x) => x.id === blockId)) return;
     const d2 = typeof input.description === "string" ? input.description.trim() : "";
     const desc = truncate(d2 || String(input.prompt ?? "").trim(), 80) || "(\u5B50\u4EE3\u7406)";
+    if (!this.subagents.some((x) => !x.ended_at)) this.subagents = [];
     this.subagents.push({
       id: blockId,
       desc,
@@ -41182,9 +41234,25 @@ var AgentSession = class _AgentSession {
     if (this.subagents.length > 30) this.subagents.splice(0, this.subagents.length - 30);
     this.cb.onSubagents?.(this.subagents.map((x) => ({ ...x })));
   }
-  // Task/Agent 的 tool_result 到达 = 该子 Agent 收尾（等待型的执行结果与后台型的
-  // 完成通知在此同形态到达；子 Agent 内部工具的 result id 不命中账本，天然无扰）
+  // Task/Agent 的 tool_result 到达 = 该子 Agent 收尾——#142（2026-09-24）修正：
+  // 「等待型与后台型通知同形态到达」假设不成立——派生瞬间（实测 100% <100ms，
+  // events.ndjson 5/5 复现）也有一条假 tool_result（spawn 回执），把它当结束信号
+  // 会立即写 ended_at，端上恒显「✓ 0s」读秒冻结（托管 SDK 会话全走本路径，只修
+  // bridge.ts 的 hooks 路径时线上等于未修）。守卫与 bridge.ts 同款：<2s 的假回执
+  // 跳过；≥2s 视为真实返回才收尾。bg 条目同样放行——run_in_background 缺省即后台
+  // 的新版 CLI 里显式 bg 条目若收到 ≥2s 的 tool_result 也是真实结束（后台完成的
+  // 主信号是 task-notification，见 case "user" 的通知解析，这里是双保险）
   trackSubagentEnd(toolUseId) {
+    const i = this.subagents.findIndex((x) => x.id === toolUseId && !x.ended_at);
+    if (i === -1) return;
+    if (Date.now() - (this.subagents[i].started_at ?? 0) < 2e3) return;
+    this.subagents[i] = { ...this.subagents[i], ended_at: Date.now() };
+    this.cb.onSubagents?.(this.subagents.map((x) => ({ ...x })));
+  }
+  // <task-notification> 的 tool-use-id：收尾配对子 Agent 条目（#142 三轮残留）。
+  // 后台子 Agent（含 run_in_background 缺省的新版 CLI 默认后台形态）完成只发通知
+  // 文本、无 tool_result——这是它们唯一的结束信号
+  closeSubagentByNotification(toolUseId) {
     const i = this.subagents.findIndex((x) => x.id === toolUseId && !x.ended_at);
     if (i === -1) return;
     this.subagents[i] = { ...this.subagents[i], ended_at: Date.now() };
@@ -42293,31 +42361,35 @@ var SessionManager = class {
   }
   // 任务清单更新（TodoWrite；managed 与 external 两条路径共用）。
   // 单一咽喉点：hook 路径 / transcript 轮询 / COMMAND_REFRESH_TODOS 重发全部经此，
-  // 隐藏条目（COMMAND_TODO_HIDE 记入 todo-hidden.json）在这里统一过滤
-  setTodos(id2, todos) {
+  // 隐藏条目（COMMAND_TODO_HIDE 记入 todo-hidden.json）在这里统一过滤。
+  // at：事件真实发生时刻——relay 重启后的 transcript 水合（firstRead 重建清单）必须
+  // 传转录时间戳，缺省才用当下（#157：水合刷 Date.now() 会把全表最后活跃时间伪造成
+  // 重启时刻，闲置置灰判定全失效——公司 relay 晨启批量"当前时间"的根因）
+  setTodos(id2, todos, at) {
     const s = this.sessions.get(id2);
     if (!s) return;
     const hidden = hiddenTodoKeys(id2);
     const list = hidden.size ? todos.filter((t) => !hidden.has(normKey(t.content))) : todos;
     s.state.todos = list;
-    s.state.updated_at = Date.now();
-    this.emitUpdated(s, true);
+    s.state.updated_at = at ?? Date.now();
+    this.emitUpdated(s, true, at);
   }
   // external 会话子 Agent 工作状态：仅 subagents 实际变化时下发 SESSION_UPDATED
-  // （运行中条目的"秒数走动"由客户端本地计时，relay 不逐秒推）
-  setExternalSubagents(id2, list) {
+  // （运行中条目的"秒数走动"由客户端本地计时，relay 不逐秒推）。at 语义同 setTodos
+  setExternalSubagents(id2, list, at) {
     const s = this.sessions.get(id2);
     if (!s) return;
     const prev = JSON.stringify(s.state.subagents ?? []);
     const next = JSON.stringify(list);
     if (prev === next) return;
     s.state.subagents = list.length ? list : void 0;
-    s.state.updated_at = Date.now();
+    s.state.updated_at = at ?? Date.now();
     this.bus.emit(id2, "SESSION_UPDATED", {
       status: s.state.status,
       action_summary: s.state.action_summary,
       stats: { ...s.state.stats },
-      subagents: list
+      subagents: list,
+      updated_at: s.state.updated_at
     });
   }
   // 外部会话标题升级（CC 会话名 / 首个 prompt 摘要）；initialPrompt 只在缺失时补记。
@@ -42479,22 +42551,29 @@ var SessionManager = class {
     });
     return { ok: true };
   }
-  // /api/deliver 归因：发起 shell 的 cwd 匹配会话——会话 cwd 与发起 cwd 互为前缀
-  // 都算（agent 会 cd 进子目录交付，也可能反向），命中多个取最近活跃。Bash 环境
-  // 拿不到 CLAUDE_SESSION_ID，cwd 前缀+新鲜度是可得的最强归因；同仓库并行会话
-  // 极端场景可能归到姊妹会话，可接受（看板仍在，只是挂在隔壁卡上）
-  deliverByCwd(cwd, rawPath) {
+  // cwd→会话归因核心（deliverByCwd 与 #138 验收单回填通知共用）：会话 cwd 与入参
+  // cwd 互为前缀都算（agent 会 cd 进子目录交付，也可能反向），命中多个取最近活跃。
+  // Bash 环境拿不到 CLAUDE_SESSION_ID，cwd 前缀+新鲜度是可得的最强归因；同仓库并行
+  // 会话极端场景可能归到姊妹会话，可接受（看板仍在，只是挂在隔壁卡上）。
+  // 空 cwd 会话跳过（原先 "" + sep 会前缀匹配一切绝对路径，属潜在误归因，顺手修复）
+  matchSessionByCwd(cwd) {
     const c = resolve6(cwd || ".");
     let best = null;
     for (const s of this.sessions.values()) {
       const sc2 = s.state.cwd;
+      if (!sc2) continue;
       const related = c === sc2 || c.startsWith(sc2 + sep5) || sc2.startsWith(c + sep5);
       if (!related) continue;
       if (!best || s.state.updated_at > best.updated) best = { id: s.state.session_id, updated: s.state.updated_at };
     }
-    if (!best) return { ok: false, error: "\u65E0\u5339\u914D\u4F1A\u8BDD\uFF08cwd \u5BF9\u4E0D\u4E0A\u4EFB\u4F55\u5DF2\u77E5\u4F1A\u8BDD\uFF09" };
-    const r = this.registerDeliverable(best.id, rawPath);
-    return r.ok ? { ok: true, session_id: best.id } : r;
+    return best ? best.id : null;
+  }
+  // /api/deliver 归因（matchSessionByCwd 之上叠交付物登记）
+  deliverByCwd(cwd, rawPath) {
+    const sid = this.matchSessionByCwd(cwd);
+    if (!sid) return { ok: false, error: "\u65E0\u5339\u914D\u4F1A\u8BDD\uFF08cwd \u5BF9\u4E0D\u4E0A\u4EFB\u4F55\u5DF2\u77E5\u4F1A\u8BDD\uFF09" };
+    const r = this.registerDeliverable(sid, rawPath);
+    return r.ok ? { ok: true, session_id: sid } : r;
   }
   // 重启回放：把该会话登记过的交付物挂回（登记不在 transcript，靠 deliverables.json）
   applyDeclaredDeliverables(sessionId) {
@@ -42519,7 +42598,7 @@ var SessionManager = class {
   // #35 输出物整表重建（transcript 回放路径：relay 重启后全文件重扫）。必须整体替换
   // 而非逐条 merge 增量——转录轮转/收缩会再次触发 firstRead 回放，merge 会把
   // adds/dels 双计；items 按转录时间顺序喂入，合并语义由 mergeArtifact(silent) 承担
-  setArtifacts(id2, items) {
+  setArtifacts(id2, items, at) {
     const s = this.sessions.get(id2);
     if (!s) return;
     s.state.artifacts = void 0;
@@ -42528,18 +42607,20 @@ var SessionManager = class {
     this.applyDeclaredDeliverables(id2);
     if (!s.state.artifacts) return;
     const merged = s.state.artifacts;
-    s.state.updated_at = Date.now();
+    s.state.updated_at = at ?? Date.now();
     this.bus.emit(id2, "SESSION_UPDATED", {
       status: s.state.status,
       action_summary: s.state.action_summary,
       stats: { ...s.state.stats },
       artifacts: (merged ?? []).map((a) => ({ ...a })),
-      ...s.state.artifacts_truncated ? { artifacts_truncated: true } : {}
+      ...s.state.artifacts_truncated ? { artifacts_truncated: true } : {},
+      updated_at: s.state.updated_at
     });
   }
   // 外部会话 token 用量 / 模型（bridge 从 transcript assistant 条目累计提取）
-  // 上下文窗口上限按模型区分（集中维护，随 context_usage 一起下发；换模型只改这里）
-  setExternalUsage(id2, usage, model, contextUsage) {
+  // 上下文窗口上限按模型区分（集中维护，随 context_usage 一起下发；换模型只改这里）。
+  // at 语义同 setTodos：首读 usage 种子传转录时刻（#157）
+  setExternalUsage(id2, usage, model, contextUsage, at) {
     const s = this.sessions.get(id2);
     if (!s) return;
     s.state.usage = usage;
@@ -42548,14 +42629,15 @@ var SessionManager = class {
       s.state.context_usage = contextUsage;
       s.state.context_limit = contextLimitOf(model ?? s.state.model);
     }
-    s.state.updated_at = Date.now();
+    s.state.updated_at = at ?? Date.now();
     this.bus.emit(id2, "SESSION_UPDATED", {
       status: s.state.status,
       action_summary: s.state.action_summary,
       stats: { ...s.state.stats },
       usage,
       ...model ? { model } : {},
-      ...contextUsage !== void 0 ? { context_usage: contextUsage, context_limit: contextLimitOf(model ?? s.state.model) } : {}
+      ...contextUsage !== void 0 ? { context_usage: contextUsage, context_limit: contextLimitOf(model ?? s.state.model) } : {},
+      updated_at: s.state.updated_at
     });
   }
   setExternalWaiting(id2, payload) {
@@ -42589,19 +42671,30 @@ var SessionManager = class {
     }
     this.bus.emit(id2, "SESSION_DELETED", { session_id: id2 });
   }
-  finishExternal(id2, reason, durationMs) {
+  // #144：at = 完成时刻（默认判定时刻）。静默推断收敛（sweep 扫描）必须传真实
+  // 最后活动时刻 idleSince——relay 重启后首轮 sweep 会批量收殓回放出的 WORKING
+  // 僵尸（CLI 早已死、停在最后一帧，lastHookAt/lastGrow 内存表为空），若刷
+  // Date.now() 会把「几小时前的死亡」洗成「刚刚活跃」，快照下发后全端 30 分钟
+  // 不置灰（2026-09-22 用户实测：装 test.18 重启即本机源全亮、远程源正常）。
+  // 正常终态上报（Stop hook/用户打断/compact 归档）不传 at，判定时刻即真实时刻
+  finishExternal(id2, reason, durationMs, at = Date.now()) {
     const s = this.sessions.get(id2);
     if (!s) return;
     s.state.status = "DONE";
     s.state.done_reason = reason;
     s.state.duration_ms = durationMs;
     s.state.waiting_request = void 0;
-    s.state.updated_at = Date.now();
+    s.state.updated_at = at;
     this.bus.emit(id2, "SESSION_DONE", {
       terminal_reason: reason,
       duration_ms: durationMs,
       stats: { ...s.state.stats }
     });
+  }
+  // #160 外部会话日志的 live 引用（只读约定）：bridge 的任务编号回填按稳定 id
+  // 找原条目取文案/detail，原地重发同 id 条目（不新增行）
+  getExternalLogs(id2) {
+    return this.sessions.get(id2)?.logs ?? [];
   }
   pushExternalLog(id2, kind, text, tool, meta) {
     const s = this.sessions.get(id2);
@@ -43350,6 +43443,7 @@ var SessionManager = class {
     s.state.status = "WORKING";
     s.state.historical = false;
     s.state.saved = void 0;
+    s.state.action_summary = "";
     s.state.done_reason = void 0;
     s.state.last_error = void 0;
     s.state.turn_started_at = Date.now();
@@ -43491,11 +43585,12 @@ var SessionManager = class {
     s.state.updated_at = Date.now();
     this.bus.emit(sessionId, "SESSION_WAITING_RESOLVED", { request_id: requestId, decision, by });
   }
-  emitUpdated(s, force) {
+  // at：本帧对应的真实活动时刻（水合/回放路径传入，缺省当下——#157，语义同 setTodos）
+  emitUpdated(s, force, at) {
     const now = Date.now();
     if (!force && now - s.lastUpdateEmit < UPDATE_THROTTLE_MS) return;
     s.lastUpdateEmit = now;
-    s.state.updated_at = now;
+    s.state.updated_at = at ?? now;
     this.bus.emit(s.state.session_id, "SESSION_UPDATED", {
       status: s.state.status,
       action_summary: s.state.action_summary,
@@ -43521,7 +43616,10 @@ var SessionManager = class {
       // SNAPSHOT 里用于断线恢复，增量携带纯属带宽浪费
       // historical 增删必须实时下发：转录自愈/pid 对账解锁后，已连接的客户端
       // 要等到下次 SNAPSHOT 才能摘掉"仅可查看"——期间用户以为发不了消息
-      historical: !!s.state.historical
+      historical: !!s.state.historical,
+      // #157 载荷显式带 updated_at：客户端最后活跃时间以它为准（水合帧 ≠ 活动帧，
+      // 信 envelope ts 会把重启时刻误当活动时刻）；旧客户端忽略此字段不受影响
+      updated_at: s.state.updated_at
     });
   }
   heartbeat() {
@@ -43741,7 +43839,7 @@ var SessionManager = class {
           const prevOpen = new Set(prev.filter((t) => t.status !== "completed").map((t) => t.content));
           const done = visible.filter(
             (t) => t.status === "completed" && (prevOpen.has(t.content) || !prevByContent.has(t.content) && typeof t.updated_at === "number" && Date.now() - t.updated_at < 10 * 6e4)
-          ).map((t) => t.content);
+          ).map(taskDoneLabel);
           if (done.length) {
             const report = {
               done: done.slice(0, 10),
@@ -43780,12 +43878,12 @@ var SessionManager = class {
 // src/ws-server.ts
 import { createServer } from "node:http";
 import { randomUUID as randomUUID5 } from "node:crypto";
-import { readFileSync as readFileSync13, writeFileSync as writeFileSync9, mkdirSync as mkdirSync9, existsSync as existsSync9, readdirSync as readdirSync5 } from "node:fs";
+import { readFileSync as readFileSync13, writeFileSync as writeFileSync9, mkdirSync as mkdirSync9, existsSync as existsSync9, readdirSync as readdirSync6 } from "node:fs";
 import { join as join14, dirname as dirname6, sep as sep6 } from "node:path";
 import { homedir as homedir11, networkInterfaces as networkInterfaces2 } from "node:os";
 
 // src/acceptance.ts
-import { readFileSync as readFileSync9, writeFileSync as writeFileSync6, mkdirSync as mkdirSync6, existsSync as existsSync6 } from "node:fs";
+import { readFileSync as readFileSync9, writeFileSync as writeFileSync6, mkdirSync as mkdirSync6, existsSync as existsSync6, readdirSync as readdirSync4 } from "node:fs";
 import { join as join11 } from "node:path";
 import { homedir as homedir7 } from "node:os";
 var ACCEPTANCE_ID_RE = /^[0-9a-f]{32}$/;
@@ -43851,6 +43949,36 @@ function saveResult(id2, payload, ua) {
   writeFileSync6(file, JSON.stringify({ id: id2, history }, null, 1));
   return null;
 }
+function listAcceptances(limit = 20) {
+  let names;
+  try {
+    names = readdirSync4(acceptanceDir());
+  } catch {
+    return [];
+  }
+  const out = [];
+  for (const n of names) {
+    if (!n.endsWith(".json") || n.endsWith(".results.json")) continue;
+    const id2 = n.slice(0, -5);
+    if (!ACCEPTANCE_ID_RE.test(id2)) continue;
+    const a = loadAcceptance(id2);
+    if (!a) continue;
+    let judged = 0;
+    let done = false;
+    try {
+      const r = JSON.parse(readFileSync9(join11(acceptanceDir(), `${id2}.results.json`), "utf-8"));
+      const last = r.history?.[r.history.length - 1];
+      if (last?.rows) {
+        judged = last.rows.filter((x) => x.verdict === "pass" || x.verdict === "fail").length;
+        done = judged >= a.rows.length;
+      }
+    } catch {
+    }
+    out.push({ id: id2, title: a.title, created_at: a.created_at, total: a.rows.length, judged, done });
+  }
+  out.sort((x, y) => y.created_at - x.created_at);
+  return out.slice(0, limit);
+}
 function acceptanceHtml(a, apiPath = "/api/acceptance") {
   const data = JSON.stringify(a).replace(/</g, "\\u003c");
   const preface = (a.preface ?? []).map((p) => `<p class="pf">${esc(p)}</p>`).join("");
@@ -43895,6 +44023,27 @@ function acceptanceHtml(a, apiPath = "/api/acceptance") {
   .done { text-align:center; padding:40px 0; }
   .done .n { font-size:34px; font-weight:800; }
   ul.nt { color:#7E8B9B; font-size:12px; margin:12px 0 0 18px; }
+  /* #132 \u624B\u673A\u9002\u914D\uFF08\u54CD\u5E94\u5F0F\uFF0C\u975E UA \u55C5\u63A2\u2014\u2014\u7A84\u5C4F\u4E0E\u89E6\u5C4F\u81EA\u52A8\u751F\u6548\uFF0C\u684C\u9762\u7A84\u7A97\u53E3\u540C\u53D7\u76CA\uFF09\uFF1A
+     \u75DB\u70B9=34px \u5706\u94AE\u4F4E\u4E8E 44px \u89E6\u63A7\u6807\u51C6\u4E14\u884C\u5185\u6324\u538B\u3001\u8F93\u5165\u6846 <16px \u89E6\u53D1 iOS \u805A\u7126\u81EA\u52A8\u7F29\u653E\u3002
+     \u79FB\u52A8\u5F62\u6001\uFF1A\u4EFB\u52A1\u53F7/\u9A8C\u6536\u9879\u7EB5\u5411\u5806\u53E0\uFF0C\u5224\u5B9A\u94AE\u653E\u5927\u6210\u534A\u5BBD\u80F6\u56CA\u5E26\u6587\u5B57\uFF08\u2713 \u901A\u8FC7 / \u2717 \u4E0D\u901A\u8FC7\uFF09\uFF0C
+     \u901A\u8FC7\u6807\u51C6\u6B21\u884C\u5C0F\u5B57\uFF0C\u5907\u6CE8\u6846 16px \u9632\u7F29\u653E */
+  @media (max-width: 640px), (pointer: coarse) {
+    body { padding: 14px 10px 120px; }
+    .wrap { max-width: none; }
+    h1 { font-size: 16px; }
+    .pf { font-size: 12px; }
+    .card { padding: 12px; border-radius: 10px; margin-bottom: 8px; }
+    .r1 { display: block; }
+    .task { font-size: 11px; margin-bottom: 2px; }
+    .item { display: block; font-size: 15px; line-height: 1.45; }
+    .btns { display: flex; gap: 8px; margin-top: 10px; }
+    .vb { flex: 1; width: auto; height: 44px; border-radius: 12px; font-size: 14px; gap: 4px; }
+    .vb[data-v="pass"]::after { content: "\u901A\u8FC7"; }
+    .vb[data-v="fail"]::after { content: "\u4E0D\u901A\u8FC7"; }
+    .crit { font-size: 12px; margin-top: 8px; }
+    .note { font-size: 16px; }
+    #submit { height: 50px; }
+  }
 </style>
 </head>
 <body>
@@ -44034,7 +44183,7 @@ var wrapper_default = import_websocket.default;
 
 // src/bridge.ts
 import { randomUUID as randomUUID4 } from "node:crypto";
-import { closeSync as closeSync2, openSync as openSync2, readSync as readSync2, readFileSync as readFileSync12, readdirSync as readdirSync4, statSync as statSync5, writeFileSync as writeFileSync8 } from "node:fs";
+import { closeSync as closeSync2, openSync as openSync2, readSync as readSync2, readFileSync as readFileSync12, readdirSync as readdirSync5, statSync as statSync5, writeFileSync as writeFileSync8 } from "node:fs";
 import { homedir as homedir10 } from "node:os";
 import path5 from "node:path";
 
@@ -44644,11 +44793,11 @@ var Bridge = class _Bridge {
     try {
       const root = process.env.CCR_PROJECTS_ROOT ?? path5.join(homedir10(), ".claude", "projects");
       const cutoff = Date.now() - 30 * 6e4;
-      for (const dir of readdirSync4(root, { withFileTypes: true })) {
+      for (const dir of readdirSync5(root, { withFileTypes: true })) {
         if (!dir.isDirectory()) continue;
         let files;
         try {
-          files = readdirSync4(path5.join(root, dir.name));
+          files = readdirSync5(path5.join(root, dir.name));
         } catch {
           continue;
         }
@@ -44838,7 +44987,7 @@ var Bridge = class _Bridge {
       const dir = process.env.CCR_SESSIONS_ROOT || path5.join(homedir10(), ".claude", "sessions");
       let files;
       try {
-        files = readdirSync4(dir);
+        files = readdirSync5(dir);
       } catch {
         return;
       }
@@ -44996,7 +45145,7 @@ var Bridge = class _Bridge {
           );
           if (s.status === "WORKING" && quiet > 2e4) {
             const turn = this.turnStart.get(s.session_id) ?? s.started_at;
-            this.mgr.finishExternal(s.session_id, "completed", now - turn);
+            this.mgr.finishExternal(s.session_id, "completed", now - turn, now - quiet);
           }
         }
       } catch {
@@ -45122,7 +45271,7 @@ var Bridge = class _Bridge {
       this.noHookIds.delete(id2);
       const turn = this.turnStart.get(id2) ?? st2.started_at;
       this.turnStart.delete(id2);
-      this.mgr.finishExternal(id2, "completed", Date.now() - turn);
+      this.mgr.finishExternal(id2, "completed", Date.now() - turn, last);
       this.mgr.pushExternalLog(id2, "system", "\u8F6C\u5F55\u9759\u9ED8\uFF0C\u56DE\u5408\u89C6\u4F5C\u7ED3\u675F\uFF08\u65E0 hook \u4F1A\u8BDD\uFF09");
       if ((this.inputQueue.get(id2)?.length ?? 0) > 0) void this.flushQueue(id2);
     }
@@ -45140,10 +45289,15 @@ var Bridge = class _Bridge {
     for (const s of this.mgr.snapshot()) {
       if (!s.external || s.status !== "WORKING") continue;
       const id2 = s.session_id;
+      const idleSince = Math.max(
+        this.lastGrow.get(id2) ?? 0,
+        this.lastHookAt.get(id2) ?? 0,
+        s.updated_at ?? 0
+      );
       if (deadSweepOn && s.cli_pid && !cliHostAlive(s.cli_pid)) {
         const turn2 = this.turnStart.get(id2) ?? s.started_at;
         this.turnStart.delete(id2);
-        this.mgr.finishExternal(id2, "disconnected", now - turn2);
+        this.mgr.finishExternal(id2, "disconnected", now - turn2, idleSince);
         const dropped = this.inputQueue.get(id2)?.length ?? 0;
         this.inputQueue.delete(id2);
         this.disarmVerify(id2);
@@ -45154,17 +45308,12 @@ var Bridge = class _Bridge {
       if (this.noHookIds.has(id2) || s.compacting || this.pending.has(id2)) continue;
       const hooked = (this.lastHookAt.get(id2) ?? 0) > 0;
       const effWin = hooked ? 9e5 : (this.turnShape.get(id2) ?? "gen") === "end" ? idleMs : 6e5;
-      const idleSince = Math.max(
-        this.lastGrow.get(id2) ?? 0,
-        this.lastHookAt.get(id2) ?? 0,
-        s.updated_at ?? 0
-      );
       const shape = this.turnShape.get(id2) ?? "gen";
       if (!idleSince || now - idleSince <= effWin) {
         if (!hooked && now - idleSince > idleMs && s.cli_pid && cliSessionIdle(s.cli_pid)) {
           const turn2 = this.turnStart.get(id2) ?? s.started_at;
           this.turnStart.delete(id2);
-          this.mgr.finishExternal(id2, "completed", now - turn2);
+          this.mgr.finishExternal(id2, "completed", now - turn2, idleSince);
           this.mgr.pushExternalLog(id2, "system", "CLI \u5DF2\u7A7A\u95F2\uFF08\u8FDB\u7A0B\u72B6\u6001 idle\uFF09\uFF0C\u56DE\u5408\u89C6\u4F5C\u7ED3\u675F");
           if ((this.inputQueue.get(id2)?.length ?? 0) > 0) void this.flushQueue(id2);
         }
@@ -45172,7 +45321,7 @@ var Bridge = class _Bridge {
       }
       const turn = this.turnStart.get(id2) ?? s.started_at;
       this.turnStart.delete(id2);
-      this.mgr.finishExternal(id2, "completed", now - turn);
+      this.mgr.finishExternal(id2, "completed", now - turn, idleSince);
       this.mgr.pushExternalLog(id2, "system", "\u8F6C\u5F55\u4E0E\u4E8B\u4EF6\u5747\u9759\u9ED8\u8D85\u65F6\uFF0C\u56DE\u5408\u89C6\u4F5C\u7ED3\u675F\uFF08hook \u5931\u8054\u515C\u5E95\uFF09");
       if ((this.inputQueue.get(id2)?.length ?? 0) > 0) void this.flushQueue(id2);
     }
@@ -45693,7 +45842,7 @@ var Bridge = class _Bridge {
   readCcSessionName(cliSessionId) {
     try {
       const dir = path5.join(homedir10(), ".claude", "sessions");
-      for (const f of readdirSync4(dir)) {
+      for (const f of readdirSync5(dir)) {
         if (!f.endsWith(".json")) continue;
         try {
           const d2 = JSON.parse(readFileSync12(path5.join(dir, f), "utf-8"));
@@ -45791,7 +45940,13 @@ var Bridge = class _Bridge {
       let usageSeen = false;
       let ctxLast = 0;
       let model = "";
+      let lastTs2 = 0;
       for (const line of raw.slice(0, end).split("\n")) {
+        const tm2 = /"timestamp":\s*"([^"]+)"/.exec(line);
+        if (tm2) {
+          const tt = Date.parse(tm2[1]);
+          if (Number.isFinite(tt)) lastTs2 = tt;
+        }
         if (line.includes("<task-notification>")) {
           const m = /<tool-use-id>([^<]+)/.exec(line);
           if (m && m[1].trim()) agentNotifs.push(m[1].trim());
@@ -45938,27 +46093,37 @@ var Bridge = class _Bridge {
         if (removes > steers.length) this.onQueueDiscard(id2, removes - steers.length);
         for (const t of userTexts) this.promotePending(id2, t);
       }
-      for (const u of agentUses) this.observeAgentUse(id2, u);
-      for (const n of agentNotifs) this.closeSubagentByNotification(id2, n);
+      const hydrateAt = firstRead && lastTs2 > 0 ? lastTs2 : void 0;
+      for (const u of agentUses) this.observeAgentUse(id2, u, hydrateAt);
+      for (const n of agentNotifs) this.closeSubagentByNotification(id2, n, hydrateAt);
       const storeTodos = this.readTaskStore(id2);
       if (storeTodos) {
         const j2 = JSON.stringify(storeTodos);
         if (this.lastTodos.get(id2) !== j2) {
           if (this.lastTodos.size > 60) this.lastTodos.clear();
           this.lastTodos.set(id2, j2);
-          this.mgr.setTodos(id2, storeTodos);
+          this.mgr.setTodos(id2, storeTodos, hydrateAt);
         }
       } else if (!this.lastTodos.has(id2)) {
-        if (firstRead) this.replayTaskHistory(id2, transcriptPath);
+        if (firstRead) this.replayTaskHistory(id2, transcriptPath, hydrateAt);
         else if (taskOps.length) {
           const tr = this.ensureTracker(id2);
           for (const op2 of taskOps) {
             const todos = op2.result ? tr.feedResult(op2.result) : tr.feed(op2.tool, op2.input);
-            if (todos) this.mgr.setTodos(id2, todos);
+            if (todos) this.mgr.setTodos(id2, todos, hydrateAt);
+            if (op2.result && op2.callId) {
+              const orig = this.mgr.getExternalLogs(id2).find((e) => e.id === op2.callId);
+              if (orig && !orig.text.startsWith("#")) {
+                this.mgr.pushExternalLog(id2, "tool_use", `#${op2.result.task.id} ${orig.text}`, "TaskCreate", {
+                  id: op2.callId,
+                  ...orig.detail ? { detail: orig.detail } : {}
+                });
+              }
+            }
           }
         }
       }
-      if (firstRead) this.replayArtifacts(id2, transcriptPath);
+      if (firstRead) this.replayArtifacts(id2, transcriptPath, hydrateAt);
       if (usageSeen || model) {
         let u = this.extUsage.get(id2);
         if (!u || firstRead) {
@@ -45976,7 +46141,8 @@ var Bridge = class _Bridge {
           id2,
           { input_tokens: u.input, output_tokens: u.output, cache_read_input_tokens: u.cacheRead, cache_creation_input_tokens: u.cacheWrite },
           u.model || void 0,
-          u.ctx || void 0
+          u.ctx || void 0,
+          hydrateAt
         );
       }
     } catch {
@@ -46038,8 +46204,9 @@ var Bridge = class _Bridge {
   // #35 输出物回放：转录全文件分块扫（先例 replayTaskHistory 的读法）。
   // tool_use 行（四类文件工具，入参含 file_path）记 callId → {tool, path}，
   // tool_result 行按 tool_use_id 配对回取结构化结果；行门 = file_path/filePath/
-  // structuredPatch/gitDiff（配对两侧任一必含其一，未命中行直接跳过省 JSON.parse）
-  replayArtifacts(id2, path6) {
+  // structuredPatch/gitDiff（配对两侧任一必含其一，未命中行直接跳过省 JSON.parse）。
+  // at：水合记账时刻（#157）
+  replayArtifacts(id2, path6, at) {
     const items = [];
     const uses = /* @__PURE__ */ new Map();
     try {
@@ -46065,7 +46232,7 @@ var Bridge = class _Bridge {
           }
           if (!j2 || !Array.isArray(j2.message?.content)) continue;
           const parsed = typeof j2.timestamp === "string" ? Date.parse(j2.timestamp) : NaN;
-          const at = Number.isFinite(parsed) ? parsed : Date.now();
+          const at2 = Number.isFinite(parsed) ? parsed : Date.now();
           for (const b of j2.message.content) {
             if (!b || typeof b !== "object") continue;
             const blk = b;
@@ -46082,7 +46249,7 @@ var Bridge = class _Bridge {
               if (!use2) continue;
               uses.delete(blk.tool_use_id);
               const m = fileEditMetrics(j2.tool_use_result ?? blk.content);
-              if (m) items.push({ path: use2.path, tool: use2.tool, adds: m.adds, dels: m.dels, created: m.created, ts: at });
+              if (m) items.push({ path: use2.path, tool: use2.tool, adds: m.adds, dels: m.dels, created: m.created, ts: at2 });
             }
           }
         }
@@ -46092,13 +46259,14 @@ var Bridge = class _Bridge {
     } catch {
       return;
     }
-    this.mgr.setArtifacts(id2, items);
+    this.mgr.setArtifacts(id2, items, at);
   }
   // 首见/轮转（firstRead）：全文件回放任务工具调用重建完整清单。
   // 旧方案靠 hook 事件增量累积，relay 每次重启都从零开始（手机端 7/18 ≠ 实际的根因）；
   // transcript 是唯一完整事实源。预过滤 + 分块读，108MB 转录一次性扫描 ~1s。
   // 工具串行执行，use/result 按文件顺序回放即可正确配对（callId 交集做结果匹配）。
-  replayTaskHistory(id2, path6) {
+  // at：水合记账时刻（#157）——回放产出的清单写入不得刷"当下"
+  replayTaskHistory(id2, path6, at) {
     const ops = [];
     const creates = /* @__PURE__ */ new Set();
     try {
@@ -46131,7 +46299,7 @@ var Bridge = class _Bridge {
     this.trackers.set(id2, tr);
     for (const op2 of ops) {
       const todos = op2.result ? tr.feedResult(op2.result) : tr.feed(op2.tool, op2.input);
-      if (todos) this.mgr.setTodos(id2, todos);
+      if (todos) this.mgr.setTodos(id2, todos, at);
     }
   }
   // transcript content 块 → 任务操作序列（tool_use 直接收；tool_result 仅认已见 TaskCreate 的
@@ -46149,7 +46317,7 @@ var Bridge = class _Bridge {
         const c = blk.content;
         const text = typeof c === "string" ? c : Array.isArray(c) ? c.map((x) => x && typeof x === "object" && x.type === "text" && typeof x.text === "string" ? x.text : "").join("") : "";
         const m = /Task #(\d+) created successfully/.exec(text);
-        if (m) ops.push({ result: { task: { id: Number(m[1]) } } });
+        if (m) ops.push({ result: { task: { id: Number(m[1]) } }, callId: blk.tool_use_id });
       }
     }
   }
@@ -46231,6 +46399,7 @@ var Bridge = class _Bridge {
     if (ev2.tool_name === "Agent" || ev2.tool_name === "Task") this.trackSubagentStart(id2, ev2);
     const questions = ev2.tool_name === "AskUserQuestion" ? parseAskQuestions(input) : [];
     const summary = questions.length ? `\u63D0\u95EE: ${questions.map((q2) => q2.header).join(" / ")}` : summarizeToolUse(ev2.tool_name ?? "tool", input);
+    const taskCallId = ev2.tool_name === "TaskCreate" && typeof ev2.tool_use_id === "string" && ev2.tool_use_id ? ev2.tool_use_id : void 0;
     const remote = !!this.mgr.getExternal(id2)?.remote_mode;
     const shouldGate = (
       // AskUserQuestion 不是权限决策而是必需输入：不要求 remote_mode，手机在线就下发选项
@@ -46253,7 +46422,8 @@ var Bridge = class _Bridge {
         this.mgr.setExternalStatus(id2, "WORKING", summary);
       }
       this.mgr.pushExternalLog(id2, "tool_use", summary, ev2.tool_name, {
-        detail: detailToolUse(ev2.tool_name ?? "tool", input)
+        detail: detailToolUse(ev2.tool_name ?? "tool", input),
+        ...taskCallId ? { id: taskCallId } : {}
       });
       return { decision: "pass" };
     }
@@ -46268,7 +46438,8 @@ var Bridge = class _Bridge {
     };
     this.mgr.setExternalWaiting(id2, payload);
     this.mgr.pushExternalLog(id2, "tool_use", summary, ev2.tool_name, {
-      detail: detailToolUse(ev2.tool_name ?? "tool", input)
+      detail: detailToolUse(ev2.tool_name ?? "tool", input),
+      ...taskCallId ? { id: taskCallId } : {}
     });
     const holdMs = questions.length ? this.opts.questionHoldMs ?? QUESTION_HOLD_MS : this.opts.holdMs ?? DEFAULT_HOLD_MS;
     return new Promise((resolve7) => {
@@ -46301,6 +46472,26 @@ var Bridge = class _Bridge {
       detail: detailToolResult(ev2.tool_response),
       diff: diffLines(ev2.tool_response)
     });
+    if (ev2.tool_name === "TaskCreate" && typeof ev2.tool_use_id === "string" && ev2.tool_use_id) {
+      let nid = 0;
+      const resp = ev2.tool_response;
+      if (resp && typeof resp === "object") {
+        nid = Number(String(resp.task?.id ?? "").replace(/[^0-9]/g, ""));
+      }
+      if (!nid && typeof resp === "string") {
+        const m = /Task #(\d+) created successfully/.exec(resp);
+        if (m) nid = Number(m[1]);
+      }
+      if (nid) {
+        const orig = this.mgr.getExternalLogs(id2).find((e) => e.id === ev2.tool_use_id);
+        if (orig) {
+          this.mgr.pushExternalLog(id2, "tool_use", `#${nid} ${orig.text}`, "TaskCreate", {
+            id: ev2.tool_use_id,
+            ...orig.detail ? { detail: orig.detail } : {}
+          });
+        }
+      }
+    }
     this.feedFileStats(id2, ev2);
     this.pushAssistantTexts(id2, ev2.transcript_path);
     if (state.status === "WAITING" && state.waiting_request?.decidable === false) {
@@ -46395,8 +46586,9 @@ var Bridge = class _Bridge {
   trackSubagentStart(id2, ev2) {
     const input = ev2.tool_input ?? {};
     const tuId = typeof ev2.tool_use_id === "string" && ev2.tool_use_id ? ev2.tool_use_id : `ag-${++this.subagentSeq}`;
-    const list = [...this.mgr.getExternal(id2)?.subagents ?? []];
+    let list = [...this.mgr.getExternal(id2)?.subagents ?? []];
     if (list.some((x) => x.id === tuId)) return;
+    if (!list.some((x) => !x.ended_at)) list = [];
     const entry = {
       id: tuId,
       desc: _Bridge.subagentDesc(input),
@@ -46424,6 +46616,7 @@ var Bridge = class _Bridge {
       }
     }
     if (i === -1 || list[i].bg || list[i].ended_at) return;
+    if (Date.now() - (list[i].started_at ?? 0) < 2e3) return;
     this.mgr.setExternalSubagents(id2, list.map((x, k3) => k3 === i ? { ...x, ended_at: Date.now() } : { ...x }));
   }
   // transcript 里的 Agent tool_use 块（真实 call_xxx id）：
@@ -46432,7 +46625,7 @@ var Bridge = class _Bridge {
   // 注意 list 取法必须是 `?? []`（与 trackSubagentStart 对齐）：state.subagents 初始
   // 是 undefined，早先的 `if (!list) return` 把"补建条目"路径整个堵死——relay 重启后
   // 第一个后台子 Agent 永远建不起来，手机/桌面全程误报空闲（#100 复发的第一根因）
-  observeAgentUse(id2, use2) {
+  observeAgentUse(id2, use2, at) {
     if (!use2.id) return;
     const list = this.mgr.getExternal(id2)?.subagents ?? [];
     if (list.some((x) => x.id === use2.id)) return;
@@ -46442,33 +46635,36 @@ var Bridge = class _Bridge {
       const x = list[k3];
       if (!x.ended_at && x.id.startsWith("ag-") && normKey(x.desc) === normKey(desc)) {
         const next = list.map((y, i2) => i2 === k3 ? { ...y, id: use2.id } : y);
-        this.mgr.setExternalSubagents(id2, next);
+        this.mgr.setExternalSubagents(id2, next, at);
         return;
       }
     }
     if (input.run_in_background === true) {
-      const next = [...list, {
+      let next = [...list];
+      if (!next.some((x) => !x.ended_at)) next = [];
+      next.push({
         id: use2.id,
         desc,
         kind: typeof input.subagent_type === "string" && input.subagent_type ? input.subagent_type : "general",
         bg: true,
-        started_at: Date.now()
-      }];
+        started_at: at ?? Date.now()
+      });
       if (next.length > 30) next.splice(0, next.length - 30);
-      this.mgr.setExternalSubagents(id2, next);
+      this.mgr.setExternalSubagents(id2, next, at);
     }
   }
   // transcript 里 <task-notification> 的 tool-use-id：收尾后台子 Agent
-  // （通知可能作为 user 消息或 attachment 行出现，识别在 pushAssistantTexts 的行扫描里做）
-  closeSubagentByNotification(id2, toolUseId) {
+  // （通知可能作为 user 消息或 attachment 行出现，识别在 pushAssistantTexts 的行扫描里做）。
+  // at：水合记账时刻（#157）——首读窗口里的历史通知按转录时刻收尾
+  closeSubagentByNotification(id2, toolUseId, at) {
     const list = this.mgr.getExternal(id2)?.subagents;
     if (!list?.length) return;
     let i = list.findIndex((x) => x.id === toolUseId);
     if (i === -1) {
-      i = list.findIndex((x) => !x.ended_at && x.bg && x.id.startsWith("ag-"));
+      i = list.findIndex((x) => !x.ended_at && x.id.startsWith("ag-"));
     }
     if (i === -1 || list[i].ended_at) return;
-    this.mgr.setExternalSubagents(id2, list.map((x, k3) => k3 === i ? { ...x, ended_at: Date.now() } : { ...x }));
+    this.mgr.setExternalSubagents(id2, list.map((x, k3) => k3 === i ? { ...x, ended_at: at ?? Date.now() } : { ...x }), at);
   }
   // TTL 清理（每轮询节拍里跑）：已结束保留 10 分钟；running 以活性账本优先——
   // 子 Agent 转录最后一次增长距令超过 30 分钟才判僵尸（真实 CLI 死亡/失控后文件
@@ -46524,7 +46720,7 @@ var Bridge = class _Bridge {
     if (this.subagentAgentIds.size > 500) this.subagentAgentIds.clear();
     let names;
     try {
-      names = readdirSync4(dir);
+      names = readdirSync5(dir);
     } catch {
       return null;
     }
@@ -46880,7 +47076,7 @@ var BUILTIN_COMMANDS = [
 function listCustomCommands(dir, source) {
   let entries;
   try {
-    entries = readdirSync5(dir, { withFileTypes: true });
+    entries = readdirSync6(dir, { withFileTypes: true });
   } catch {
     return [];
   }
@@ -46901,7 +47097,7 @@ function listCustomCommands(dir, source) {
       out.push({ name: e.name.slice(0, -3), desc: descOf(join14(dir, e.name)), source });
     } else if (e.isDirectory()) {
       try {
-        for (const g2 of readdirSync5(join14(dir, e.name))) {
+        for (const g2 of readdirSync6(join14(dir, e.name))) {
           if (g2.endsWith(".md")) out.push({ name: `${e.name}:${g2.slice(0, -3)}`, desc: descOf(join14(dir, e.name, g2)), source });
         }
       } catch {
@@ -46911,7 +47107,12 @@ function listCustomCommands(dir, source) {
   return out;
 }
 function startServer(bus2, mgr2, cfg2, opts = {}) {
-  const webRoot = process.env.CCR_WEB_ROOT ?? ("1" ? fileURLToPath3(new URL("../", import.meta.url)) : fileURLToPath3(new URL("../../", import.meta.url)));
+  const webRootCandidates = [
+    process.env.CCR_WEB_ROOT,
+    fileURLToPath3(new URL("../", import.meta.url)),
+    fileURLToPath3(new URL("../../", import.meta.url))
+  ];
+  const webRoot = webRootCandidates.find((p) => p && existsSync9(join14(p, "web-console", "index.html"))) ?? webRootCandidates[1];
   const consoleHtml = join14(webRoot, "web-console", "index.html");
   const naclJs = join14(webRoot, "web-console", "nacl.js");
   const qrJs = join14(webRoot, "web-console", "qr.js");
@@ -47208,7 +47409,8 @@ function startServer(bus2, mgr2, cfg2, opts = {}) {
       req.on("end", () => {
         try {
           const { id: id2, rows } = JSON.parse(body);
-          if (typeof id2 !== "string" || !ACCEPTANCE_ID_RE.test(id2) || !loadAcceptance(id2)) {
+          const acc = typeof id2 === "string" && ACCEPTANCE_ID_RE.test(id2) ? loadAcceptance(id2) : null;
+          if (typeof id2 !== "string" || !acc) {
             res.writeHead(404, { "content-type": "application/json" }).end('{"ok":false,"error":"\u9A8C\u6536\u5355\u4E0D\u5B58\u5728"}');
             return;
           }
@@ -47223,6 +47425,21 @@ function startServer(bus2, mgr2, cfg2, opts = {}) {
             return;
           }
           res.writeHead(200, { "content-type": "application/json" }).end('{"ok":true}');
+          try {
+            const cwd = acc.cwd;
+            if (typeof cwd === "string" && cwd) {
+              const sid = mgr2.matchSessionByCwd(cwd);
+              if (sid) {
+                const rs2 = Array.isArray(rows) ? rows : [];
+                const p = rs2.filter((r) => r && r.verdict === "pass").length;
+                const f = rs2.filter((r) => r && r.verdict === "fail").length;
+                const u = rs2.length - p - f;
+                const t = acc.title.length > 40 ? acc.title.slice(0, 40) + "\u2026" : acc.title;
+                mgr2.pushExternalLog(sid, "system", `\u9A8C\u6536\u5355\u5DF2\u56DE\u586B\uFF1A\u300A${t}\u300B ${p}\u2713 ${f}\u2717 ${u}\u672A\u6D4B`);
+              }
+            }
+          } catch {
+          }
         } catch {
           res.writeHead(400, { "content-type": "application/json" }).end('{"ok":false,"error":"bad json"}');
         }
@@ -47382,6 +47599,8 @@ function startServer(bus2, mgr2, cfg2, opts = {}) {
           models: listModels(mgr2.cfg.model),
           // #71 输出物开关：恒布尔随快照下发（旧客户端忽略未知键），三端 tab 据此显隐
           deliverables: readPluginConfig().deliverables,
+          // #137 三步方案②：验收单待填态汇总（云通道 cloud-client 同步携带）
+          acceptances: listAcceptances(),
           // 云桥启用的 relay 附带自身设备 id（= CloudConfig.relayDev 同源值）：
           // 客户端据此密码学匹配"LAN 直连条目"与"云桥条目"是同一台 relay，自动合并。
           // wan_dev（F7）：手表 /wan 透传通道的凭据 dev，手机侧写进手表连接配置
@@ -47763,6 +47982,10 @@ var CloudClient = class {
   timer = null;
   lastRecv = 0;
   lastPingAt = 0;
+  // #146 应用层端到端心跳：协议层 ping/pong 被 CF edge 代答（控制帧不透传），后段
+  // 回收时半开 TCP 骗过 pong 检测——见 startHeartbeat 的 hb 块
+  lastHbAt = 0;
+  hbMiss = 0;
   hbTimer = null;
   // 桥闪断时记录断线前 active 的设备，重连后主动补发（见 connect 的 open 处理）
   resumeOnOpen = /* @__PURE__ */ new Set();
@@ -47800,6 +48023,8 @@ var CloudClient = class {
       clearTimeout(bootGuard);
       this.delayMs = 1e3;
       this.lastRecv = Date.now();
+      this.lastHbAt = 0;
+      this.hbMiss = 0;
       console.log(`[cloud] bridge connected ${this.tag} (dev=${this.identity.relayDev})`);
       if (this.resumeOnOpen.size) {
         const devs = [...this.resumeOnOpen];
@@ -47822,6 +48047,7 @@ var CloudClient = class {
     });
     ws2.on("message", (raw) => {
       this.lastRecv = Date.now();
+      this.hbMiss = 0;
       try {
         this.onFrame(String(raw));
       } catch (err) {
@@ -47865,6 +48091,17 @@ var CloudClient = class {
       if (this.lastPingAt === 0 || Date.now() - this.lastPingAt >= 1e4) {
         this.lastPingAt = Date.now();
         ws2.ping();
+      }
+      const hbMs = Number(process.env.CCR_CLOUD_HB_MS) > 0 ? Number(process.env.CCR_CLOUD_HB_MS) : 2e4;
+      if (this.lastHbAt === 0 || Date.now() - this.lastHbAt >= hbMs) {
+        this.lastHbAt = Date.now();
+        this.hbMiss += 1;
+        this.send({ t: "hb" });
+        if (this.hbMiss >= 3) {
+          console.log("[cloud] app heartbeat dead (3x hb unacked), terminating for reconnect");
+          ws2.terminate();
+          return;
+        }
       }
     }, 5e3);
     this.hbTimer.unref?.();
@@ -47990,6 +48227,8 @@ var CloudClient = class {
         wan_dev: this.identity.wanDev,
         // #71 输出物开关（与 ws-server 直连快照同源）：云通道手机 tab 同样跟随
         deliverables: readPluginConfig().deliverables,
+        // #137 三步方案②：验收单待填态汇总（与 ws-server 直连快照同源同步）
+        acceptances: listAcceptances(),
         // relay 本机平台（#8）：与 ws-server 直连快照同源同步（#117 教训：云桥手机
         // 建会话的路径文案/盘符拦截同样需要；旧客户端忽略未知键）
         platform: process.platform,
@@ -48529,7 +48768,7 @@ if (cliArgs.has("--stop")) {
 var persistPath = join17(cfg.dataDir, "events.ndjson");
 function sweepTmpImages(dir) {
   try {
-    for (const f of readdirSync6(dir)) {
+    for (const f of readdirSync7(dir)) {
       if (!f.startsWith("img-") && !f.startsWith("file-")) continue;
       const p = join17(dir, f);
       try {

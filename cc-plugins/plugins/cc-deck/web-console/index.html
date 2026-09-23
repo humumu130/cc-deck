@@ -2302,10 +2302,10 @@
   <div id="detail">
     <div id="dhead">
       <button id="backBtn" class="ghost">‹ 返回</button>
-      <!-- 两行化（对齐手机 2026-09-14 定稿）：R1=标题+时长（弱化小字）；R2=源名+路径+ctx 短条+模型名 -->
+      <!-- 两行化（对齐手机 2026-09-14 定稿，#155 再收敛）：R1=标题（原时长已删——消息
+           时间戳已提供时间感，统计 tab 保留用时全量）；R2=源名+路径+ctx 短条+模型名 -->
       <div class="dhead-row">
         <span id="dtitle"></span>
-        <span class="elapsed" id="delapsed"></span>
         <span class="spacer"></span>
         <button id="renameBtn" class="ghost" title="重命名会话">✎</button>
       </div>
@@ -3899,7 +3899,10 @@ function onEvent(ctx, msg) {
         "usage", "context_usage", "context_limit", "todos", "subagents", "permission_mode", "pending_inputs", "relay_session_id", "cron_tasks", "compacting", "pinned", "saved", "historical", "artifacts", "artifacts_truncated"]) {
         if (msg.payload[f] !== undefined) s[f] = msg.payload[f];
       }
-      s.updated_at = msg.ts;
+      // #157 最后活跃时间优先采信载荷显式值（relay 水合帧 ≠ 活动帧，信 envelope ts
+      // 会把重启时刻当活动时刻）；旧 relay 不带该字段 → 回落 msg.ts，行为不变
+      s.updated_at = typeof msg.payload.updated_at === "number" && msg.payload.updated_at > 0
+        ? msg.payload.updated_at : msg.ts;
       break;
     }
     case "SESSION_HEARTBEAT": {
@@ -4049,13 +4052,34 @@ function sessionElapsed(s) {
   return Date.now() - s.started_at;
 }
 
-// #143 卡片右上角：会话计时 → 最后活跃时间 MM-dd HH:mm（updated_at 随事件刷新，
-// 分钟粒度；WORKING 的回合秒数留在第二行 c-live，详情页 ⏱ 计时不动）
+// #143 卡片右上角：会话计时 → 最后活跃时间（updated_at 随事件刷新，分钟粒度；
+// WORKING 的回合秒数留在第二行 c-live）。#155 拍板微信式分级精度（符合直觉，越近越精）：
+// 当天 HH:mm / 昨天显「昨天」/ 今年 M月d日（不补零）/ 跨年带年份——与手机端 fmt.ts
+// 同口径；「昨天」按自然日边界判定（非 24h 滚动窗）
 function fmtLastActive(ts) {
   if (!ts) return "--";
   const t = new Date(ts);
   const p = (n) => String(n).padStart(2, "0");
-  return p(t.getMonth() + 1) + "-" + p(t.getDate()) + " " + p(t.getHours()) + ":" + p(t.getMinutes());
+  const now = new Date();
+  const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+  if (ts >= startOfToday) return p(t.getHours()) + ":" + p(t.getMinutes());
+  if (ts >= startOfToday - 86400e3) return "昨天";
+  const md = t.getMonth() + 1 + "月" + t.getDate() + "日";
+  return t.getFullYear() === now.getFullYear() ? md : t.getFullYear() + "年" + md;
+}
+
+// #162 跨天分隔线标签：微信式分级（今天/昨天/M月d日/yyyy年M月d日，自然日边界），
+// 与 fmtLastActive 同口径（当天这里是日期级标签「今天」，不带时刻）——手机端 fmt.ts
+// dayLabel 同步
+function dayLabel(ts) {
+  if (!ts) return "";
+  const now = new Date();
+  const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+  if (ts >= startOfToday) return "今天";
+  if (ts >= startOfToday - 86400e3) return "昨天";
+  const t = new Date(ts);
+  const md = t.getMonth() + 1 + "月" + t.getDate() + "日";
+  return t.getFullYear() === now.getFullYear() ? md : t.getFullYear() + "年" + md;
 }
 
 // #145 工作目录上卡（对齐手机端 📁 目录名）：basename 形式省宽度，悬停 title 显全路径；
@@ -4410,7 +4434,8 @@ function render() {
       const d = document.createElement("div");
       d.dataset.sid = s.session_id;
       d.dataset.src = ctx.cfg.id;
-      d.className = "card " + s.status + (listCompact ? " compact" : "") + (selected && selected.src === ctx.cfg.id && s.session_id === selected.sid ? " sel" : "") + (s.historical && !dormant ? " historical" : "") + (dormant ? " dormant" : "") + (s.status === "DONE" && bgRunning(s) ? " bg-live" : "") + (idleDimmed(s) ? " idle" : "");
+      // #161 对齐手机 bgLive 口径：非 WORKING 且子 Agent 在跑（不限 DONE）——灯转黄呼吸
+      d.className = "card " + s.status + (listCompact ? " compact" : "") + (selected && selected.src === ctx.cfg.id && s.session_id === selected.sid ? " sel" : "") + (s.historical && !dormant ? " historical" : "") + (dormant ? " dormant" : "") + (s.status !== "WORKING" && bgRunning(s) ? " bg-live" : "") + (idleDimmed(s) ? " idle" : "");
       if (dormant) d.title = "已保存休眠 · 点击恢复";
       // 根治④对称化：等待判定必须同时看 status——脱钩帧（waiting_request 残留 +
       // status 已翻走）不该再渲染【处理】按钮，否则按钮点开详情永远等不到弹窗
@@ -4425,9 +4450,9 @@ function render() {
       // #23 徽章四态：休眠/历史/终端（外部 CLI 会话）/后台（控制台新建的托管会话——
       // 无终端窗口，消息只在面板可见；降低与终端会话的混淆）
       const badges = dormant ? '<span class="his-badge">休眠</span>' : s.historical ? '<span class="his-badge">历史</span>' : s.external ? '<span class="his-badge ext">终端</span>' : '<span class="his-badge bg">后台</span>';
-      // #100 后台任务徽标：主回合空闲但子 Agent 仍在跑——⑂N 黄胶囊（灯同转呼吸黄）；
-      // WORKING 时 liveRow 已交代在跑，徽标只补「空闲却没闲着」这个误报场景
-      const bgBadge = s.status !== "WORKING" && bgRunning(s) ? '<span class="bg-badge" title="后台子 Agent 运行中">⑂' + bgCount(s) + "</span>" : "";
+      // #100 后台任务徽标：⑂N 黄胶囊。#161 对齐手机：bgCount > 0 恒显——WORKING 时
+      // liveRow 只交代主回合在跑，并行子 Agent 数仍要一眼可见（手机三档密度卡同口径）
+      const bgBadge = bgRunning(s) ? '<span class="bg-badge" title="后台子 Agent 运行中">⑂' + bgCount(s) + "</span>" : "";
       // #49 保存恢复徽章：pinned 卡标题行左端 10px 级锚形小标（悬停说明与 toast 同口径：
       // 重启后休眠保留，点击卡片恢复——不自动拉起，2026-09-09 拍板）
       const pinFlag = s.pinned ? '<span class="pin-flag" title="已保存：重启后休眠保留，点击卡片恢复">' + PIN_ANCHOR_SVG + "</span>" : "";
@@ -4441,7 +4466,7 @@ function render() {
       // #362 标题恒第一行：灯（WORKING 呼吸）+标题+总时长同构一行，状态切换不跳行；
       // WORKING 实时行（回合秒+↓tokens+动作摘要）退居第二行，空闲第二行=摘要
       const headRow =
-        '<div class="c-head">' + pinFlag + '<span class="c-dot' + (s.status === "WORKING" || (s.status === "DONE" && bgRunning(s)) ? " run" : "") /* #100 后台在跑也呼吸 */ + '" style="--sc:var(--' + (s.status || "").toLowerCase() + ')"></span>' +
+        '<div class="c-head">' + pinFlag + '<span class="c-dot' + (s.status === "WORKING" || (s.status !== "WORKING" && bgRunning(s)) ? " run" : "") /* #100/#161 后台在跑也呼吸（bgLive 不限 DONE） */ + '" style="--sc:var(--' + (s.status || "").toLowerCase() + ')"></span>' +
           '<span class="card-title"><span class="c-tt">' + escapeHtml(s.title || "") + "</span>" + bgBadge + badges + opBtns + "</span>" +
           '<span class="elapsed" title="最后活跃">' + fmtLastActive(s.updated_at) + "</span></div>";
       const liveRow = s.status === "WORKING"
@@ -4469,7 +4494,7 @@ function render() {
       if (listCompact) {
         // #279⑨ 紧凑卡（对齐手机）：状态点+标题+耗时 / 摘要 / 改动+水位+源标签
         d.innerHTML =
-          '<div class="c-row1">' + pinFlag + '<span class="c-dot' + (s.status === "WORKING" || (s.status === "DONE" && bgRunning(s)) ? " run" : "") /* #100 后台在跑也呼吸 */ + '" style="--sc:var(--' + (s.status || "").toLowerCase() + ')"></span>' +
+          '<div class="c-row1">' + pinFlag + '<span class="c-dot' + (s.status === "WORKING" || (s.status !== "WORKING" && bgRunning(s)) ? " run" : "") /* #100/#161 后台在跑也呼吸（bgLive 不限 DONE） */ + '" style="--sc:var(--' + (s.status || "").toLowerCase() + ')"></span>' +
             '<span class="card-title"><span class="c-tt">' + escapeHtml(s.title || "") + "</span>" + bgBadge + badges + opBtns + "</span>" +
             '<span class="elapsed" title="最后活跃">' + fmtLastActive(s.updated_at) + "</span></div>" +
           summaryRow +
@@ -4668,7 +4693,7 @@ function renderDetail() {
   $("dsrc").innerHTML = srcBadgeHtml(sel.ctx.cfg);
   $("dcwd").textContent = s.cwd;
   $("dcwd").title = s.cwd; // #41web 收缩省略后完整路径看 title
-  $("delapsed").textContent = "⏱ " + fmtElapsed(sessionElapsed(s));
+  // #155 详情头 ⏱ 时长已删（消息时间戳够用）；统计 tab 的「用时」保留全量口径
   $("dctx").innerHTML = ctxHtml(s); // 概况区水位（#dctxcell，并入元信息行右端；窄屏媒询自动回落整行）
 
   // 思考开关 / 权限模式 chip / 模型切换 chip（#388）；字嵌开关 + 状态随文字（对齐手机"开/关换文字"）
@@ -5092,15 +5117,11 @@ function artRelOf(s, t) {
   if (t.origin !== "cwd" || !s.cwd) return "";
   return t.path.startsWith(s.cwd) ? t.path.slice(s.cwd.length).replace(/^[\\/]+/, "") : "";
 }
-// 输出物时间：今天 HH:mm / 昨天 / 7 天内 周X / 更早 M/d
+// 输出物时间：#162 套用 #155 微信式分级（当天 HH:mm / 昨天 / 今年 M月d日 / 跨年带
+// 年份）——与卡片最后活跃、手机端 fmtArtTime 同口径；周X/M/d 旧档位废弃
 function fmtArtTime(ts) {
   if (!ts) return "";
-  const now = Date.now();
-  if (dayKey(ts) === dayKey(now)) return fmtHM(ts);
-  if (dayKey(ts) === dayKey(now - 86400000)) return "昨天";
-  if (now - ts < 7 * 86400000) return "周" + "日一二三四五六"[new Date(ts).getDay()];
-  const d = new Date(ts);
-  return d.getMonth() + 1 + "/" + d.getDate();
+  return fmtLastActive(ts);
 }
 function fmtArtSize(n) {
   if (typeof n !== "number" || n < 0) return "";
@@ -5478,7 +5499,8 @@ function entryHtml(e, prevDay) {
   const hm = e.ts ? fmtHM(e.ts) : "";
   let html = "";
   const day = e.ts ? dayKey(e.ts) : "";
-  if (day && day !== prevDay) html += '<div class="day-sep">── ' + day + " ──</div>";
+  // #162 分隔线标签套微信式分级（今天/昨天/M月d日/跨年带年份），同日判定仍走 dayKey
+  if (day && day !== prevDay) html += '<div class="day-sep">── ' + dayLabel(e.ts) + " ──</div>";
   if (e.kind === "user_message") {
     // #38/#149 长消息默认折叠可展开（>100 字 ≈ 3+ 行，与 AI 消息同款 x-full 交互）：
     // 折叠 3 行 + 省略号（8 行→3 行、300 字→100 字，2026-09-22 用户反馈行数偏多
