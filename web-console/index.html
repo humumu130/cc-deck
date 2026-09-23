@@ -964,9 +964,17 @@
   /* ---------- 服务器管理列表（多源） ---------- */
   #srvList { display: flex; flex-direction: column; gap: 7px; }
   .srv-row {
+    position: relative; /* #152 左缘身份色竖条（srv-bar）的定位基准 */
     display: flex; align-items: center; gap: 9px; padding: 8px 9px 8px 11px;
     border: 1px solid var(--border); border-radius: 12px; background: var(--panel);
     cursor: pointer; transition: border-color .15s, box-shadow .15s;
+  }
+  /* #152 连接行左缘身份色竖条（对齐手机 SettingsDrawer srvBar：left:0 / 上下 inset 10 /
+     宽 3 / 圆角 2）。颜色=该源身份色（srcColorByKey，与列表源徽章同色），
+     登记后跨状态不变——状态仍由右侧插头三色承载，色条只答「这是哪个源」 */
+  .srv-bar {
+    position: absolute; left: 0; top: 10px; bottom: 10px; width: 3px;
+    border-radius: 2px; pointer-events: none;
   }
   .srv-row:hover { border-color: var(--hov); }
   .srv-row.active { border-color: var(--brand); box-shadow: 0 0 0 1px var(--brand); }
@@ -6580,6 +6588,7 @@ function renderServers() {
     const chanOn = ctx && ctx.status === "online";
     const chanBadge = !chanOn ? "" : s.kind === "cloud" ? '<i class="pchan">☁</i>' : s.kind === "lan" ? '<i class="pchan lan">LAN</i>' : "";
     return '<div class="srv-row' + (s.id === activeServerId ? " active" : "") + (s.id === editId ? " editing" : "") + '" data-id="' + s.id + '" title="点击设为活动源，并在下方展开编辑">' +
+      '<i class="srv-bar" style="background:' + srcColorByKey(s) + '"></i>' + // #152 左缘身份色竖条（对齐手机 srvBar）
       '<div class="srv-main"><b>' + escapeHtml(s.name) + localTag + '</b>' +
       '<span class="srv-addr' + (pdPairingAnim(stText) ? " pairing" : "") + '">' + escapeHtml(addr) + "</span></div>" +
       // #64 状态/模式图标恒右对齐（对齐手机端 #46/#51：名称 flex 占满，[通道标记][配对徽章][插头] 右列；
