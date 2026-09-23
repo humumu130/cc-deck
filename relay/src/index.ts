@@ -9,7 +9,7 @@ import { loadConfig } from "./config.js";
 import { detectLanIp } from "./lan-ip.js";
 import { EventBus } from "./event-bus.js";
 import { SessionManager } from "./session-manager.js";
-import { startServer } from "./ws-server.js";
+import { startServer, startAcceptanceCloudPoll } from "./ws-server.js";
 import { compactEvents, loadEvents, reduceHistory, rewriteFile } from "./history.js";
 import { loadOrCreateIdentity } from "./cloud-identity.js";
 import { CloudClient } from "./cloud-client.js";
@@ -322,6 +322,8 @@ if (cfg.cloudUrls.length) {
 
 // 云通道活跃手机计入"手机在线"：云桥场景下提问/权限照常门控（否则手机在场却直接放行本地）
 // pairCodes 仅云桥启用时下发（无云桥时配对码无处消费，领了也白领）
+// #175 验收单云通道回流（公司网提交走 CF Worker→KV，relay 每 60s 拉回+通知）
+startAcceptanceCloudPoll(cfg, mgr);
 startServer(bus, mgr, cfg, {
   cloudHasPhones: () => cloudClients.some((c) => c.hasActivePhones()),
   ...(cloudClients.length ? { pairCodes } : {}),

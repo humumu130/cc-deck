@@ -46,6 +46,32 @@ export default {
       // HTML 设计稿要看不能下——2026-09-16 relay/连接区重设计提案走此通道）
       const doc = url.pathname.slice(6);
       if (!/^[\w.-]+$/.test(doc) || !env.DL) return new Response("bad name", { status: 400 });
+      // #175 验收单云通道提交端点（2026-09-24）：公司网浏览器打不开家庭 LAN，云版表单页
+      //（/view/acceptance-<id>.html，出单工具上传）把勾选结果 POST 到同名 .results.json
+      // 键。键名白名单收紧到 acceptance-<32hex>.results.json——绝不放宽到任意键名，
+      // 防此端点被用来覆盖 apk/清单等 /dl 键。存提交数组（read-merge-write append，
+      // 上限 50 条）：家庭 relay 每 60s 拉回、签名去重落盘（断线期间多次提交一次补齐）。
+      // 无鉴权——id 128bit 不可枚举即凭证（与 relay 本体 /api/acceptance 同口径）。
+      if (req.method === "POST") {
+        if (!/^acceptance-[0-9a-f]{32}\.results\.json$/.test(doc)) return new Response("bad name", { status: 400 });
+        const body = await req.text();
+        if (body.length > 65536) return new Response("too large", { status: 413 });
+        let rows: unknown;
+        try {
+          rows = (JSON.parse(body) as { rows?: unknown }).rows;
+        } catch {
+          return new Response("bad json", { status: 400 });
+        }
+        if (!Array.isArray(rows) || rows.length === 0 || rows.length > 500) return new Response("bad rows", { status: 400 });
+        const cur = (await env.DL.get(doc, { type: "json" })) as { at: number; ua: string; rows: unknown }[] | null;
+        const hist = Array.isArray(cur) ? cur : [];
+        hist.push({ at: Date.now(), ua: (req.headers.get("user-agent") ?? "").slice(0, 100), rows });
+        await env.DL.put(doc, JSON.stringify(hist.slice(-50)));
+        return new Response('{"ok":true}', {
+          status: 200,
+          headers: { "content-type": "application/json", "cache-control": "no-store" },
+        });
+      }
       const html = await env.DL.get(doc, { type: "text" });
       if (!html) return new Response("not found", { status: 404 });
       return new Response(html, {

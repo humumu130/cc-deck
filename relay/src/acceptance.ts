@@ -290,3 +290,46 @@ export function serveAcceptancePage(id: string, res: ServerResponse, apiPath?: s
   res.end(html);
   return true;
 }
+
+// ---- 云通道回流（#175，2026-09-24）：公司网浏览器打不开家庭 LAN，提交改走
+// CF Worker（POST /view/acceptance-<id>.results.json）→ KV 存提交数组；relay 每
+// 60s 拉回、按 rows 签名与本地 history 去重后逐条走 saveResult（同一套校验落盘），
+// 返回实际新增的提交（供 #138 通知取最新一条）。云端数组由 Worker read-merge-write
+// append（上限 50 条），断线期间多次提交也能一次补齐；签名去重让轮询幂等。
+export interface CloudSubmit {
+  at: number;
+  ua: string;
+  rows: unknown;
+}
+export function applyCloudSubmits(id: string, submits: CloudSubmit[]): CloudSubmit[] {
+  if (!ACCEPTANCE_ID_RE.test(id)) return [];
+  const seen = new Set<string>();
+  try {
+    const h = (
+      JSON.parse(readFileSync(join(acceptanceDir(), `${id}.results.json`), "utf-8")) as {
+        history?: { rows?: unknown }[];
+      }
+    ).history;
+    if (Array.isArray(h)) {
+      for (const e of h) {
+        try {
+          seen.add(JSON.stringify((e as { rows?: unknown }).rows ?? null));
+        } catch {}
+      }
+    }
+  } catch {}
+  const added: CloudSubmit[] = [];
+  if (!Array.isArray(submits)) return added;
+  for (const s of submits) {
+    if (!s || typeof s !== "object" || !Array.isArray((s as CloudSubmit).rows)) continue;
+    const sig = JSON.stringify(s.rows);
+    if (seen.has(sig)) continue;
+    // ua 加 cloud/ 前缀区分来源（与 LAN 直提的 UA 落盘格式一致，截断同款）
+    const ua = `cloud/${String(s.ua ?? "remote").slice(0, 100)}`;
+    if (saveResult(id, { rows: s.rows }, ua) === null) {
+      seen.add(sig);
+      added.push(s);
+    }
+  }
+  return added;
+}

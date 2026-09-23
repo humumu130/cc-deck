@@ -5,7 +5,17 @@ import { join, dirname, sep } from "node:path";
 import { homedir, networkInterfaces } from "node:os";
 import { detectLanIp } from "./lan-ip.js";
 import { listArtifacts, serveArtifact } from "./artifacts.js";
-import { serveAcceptancePage, loadAcceptance, saveResult, rateLimited, ACCEPTANCE_ID_RE, listAcceptances } from "./acceptance.js";
+import {
+  serveAcceptancePage,
+  loadAcceptance,
+  saveResult,
+  rateLimited,
+  ACCEPTANCE_ID_RE,
+  listAcceptances,
+  applyCloudSubmits,
+  type Acceptance,
+  type CloudSubmit,
+} from "./acceptance.js";
 import { listModels } from "./models.js";
 import { fileURLToPath } from "node:url";
 import { WebSocketServer, WebSocket } from "ws";
@@ -47,6 +57,58 @@ export function readPluginConfig(): PluginConfig {
     for (const k of PLUGIN_CFG_KEYS) if (typeof raw[k] === "boolean") out[k] = raw[k] as boolean;
   } catch {}
   return out;
+}
+
+// #138 回填通知（LAN 直提与 #175 云回流共用）：按出单时盖进记录的 cwd 归因到会话，
+// 推一条 system 行——「3✓ 1✗ 2未测」式摘要消掉人肉对账。归因不到（旧单没盖
+// cwd / 会话已收摊）= 静默，不影响提交；通知异常也不影响调用方。
+function notifyAcceptanceRefill(acc: Acceptance, rows: unknown, mgr: SessionManager): void {
+  try {
+    const cwd = (acc as { cwd?: unknown }).cwd;
+    if (typeof cwd !== "string" || !cwd) return;
+    const sid = mgr.matchSessionByCwd(cwd);
+    if (!sid) return;
+    const rs = Array.isArray(rows) ? (rows as { verdict?: unknown }[]) : [];
+    const p = rs.filter((r) => r && r.verdict === "pass").length;
+    const f = rs.filter((r) => r && r.verdict === "fail").length;
+    const u = rs.length - p - f;
+    const t = acc.title.length > 40 ? acc.title.slice(0, 40) + "…" : acc.title;
+    mgr.pushExternalLog(sid, "system", `验收单已回填：《${t}》 ${p}✓ ${f}✗ ${u}未测`);
+  } catch { /* 通知失败不影响提交/回流 */ }
+}
+
+// #175 验收单云通道回流：公司网浏览器打不开家庭 LAN，提交走 CF Worker
+// （POST /view/acceptance-<id>.results.json → KV 数组 append）。这里每 60s 对
+// 未完成单子拉云端结果、签名去重后落盘（applyCloudSubmits），有新增即推 #138 通知
+//（按最后一条算摘要，多条新增不刷屏）。云端无提交/网络失败静默下次再试；单子
+// 全部判完（done）即不再拉。启动延迟 20s 让云桥/收养广播先落地。
+export function startAcceptanceCloudPoll(cfg: RelayConfig, mgr: SessionManager): void {
+  let base = "";
+  try {
+    base = `https://${new URL(cfg.cloudUrl).host}`;
+  } catch {
+    return; // 云桥未配置（cloudUrl 空/非法）——云通道回流不启用
+  }
+  const tick = async (): Promise<void> => {
+    for (const s of listAcceptances()) {
+      if (s.done) continue;
+      let submits: CloudSubmit[] | null = null;
+      try {
+        const r = await fetch(`${base}/view/acceptance-${s.id}.results.json`, {
+          signal: AbortSignal.timeout(10_000),
+        });
+        if (r.ok) submits = (await r.json()) as CloudSubmit[];
+      } catch { /* 网络失败下次再试 */ }
+      if (!Array.isArray(submits) || submits.length === 0) continue;
+      const added = applyCloudSubmits(s.id, submits);
+      if (added.length > 0) {
+        const acc = loadAcceptance(s.id);
+        if (acc) notifyAcceptanceRefill(acc, added[added.length - 1].rows, mgr);
+      }
+    }
+  };
+  setTimeout(() => void tick(), 20_000).unref?.();
+  setInterval(() => void tick(), 60_000).unref?.();
 }
 
 const COMMAND_TYPES = new Set([
@@ -502,6 +564,15 @@ export function startServer(
       if (!serveAcceptancePage(id, res)) res.writeHead(404, { "content-type": "text/plain" }).end("not found");
       return;
     }
+    // #175 云版表单页：apiPath 烙成 CF Worker 的 /view/acceptance-<id>.results.json
+    //（提交落 KV、relay 回流），出单工具 curl 本端点拿 HTML 后上传 KV——公司网浏览器
+    // 经 https://cc.humumu.online/view/acceptance-<id>.html 打开填写。页面无密钥可公开。
+    if (req.method === "GET" && url.pathname.startsWith("/acceptance-cloud/")) {
+      const id = url.pathname.slice("/acceptance-cloud/".length).replace(/\/+$/, "");
+      const apiPath = `/view/acceptance-${id}.results.json`;
+      if (!serveAcceptancePage(id, res, apiPath)) res.writeHead(404, { "content-type": "text/plain" }).end("not found");
+      return;
+    }
     if (req.method === "POST" && url.pathname === "/api/acceptance") {
       let body = "";
       req.on("data", (c: Buffer) => {
@@ -528,24 +599,9 @@ export function startServer(
             return;
           }
           res.writeHead(200, { "content-type": "application/json" }).end('{"ok":true}');
-          // #138 回填自动回流：按出单时盖进记录的 cwd 归因到会话，推一条 system 行
-          //（模型切换/权限切换同款管道，两端客户端零改动）——「3✓ 1✗ 2未测」式摘要
-          // 消掉人肉对账。归因不到（旧工具出的单没盖 cwd / 会话已收摊）=静默，不影响
-          // 提交；通知异常也不影响（响应已回）。
-          try {
-            const cwd = (acc as { cwd?: unknown }).cwd;
-            if (typeof cwd === "string" && cwd) {
-              const sid = mgr.matchSessionByCwd(cwd);
-              if (sid) {
-                const rs = Array.isArray(rows) ? (rows as { verdict?: unknown }[]) : [];
-                const p = rs.filter((r) => r && r.verdict === "pass").length;
-                const f = rs.filter((r) => r && r.verdict === "fail").length;
-                const u = rs.length - p - f;
-                const t = acc.title.length > 40 ? acc.title.slice(0, 40) + "…" : acc.title;
-                mgr.pushExternalLog(sid, "system", `验收单已回填：《${t}》 ${p}✓ ${f}✗ ${u}未测`);
-              }
-            }
-          } catch { /* 回流失败不影响提交结果 */ }
+          // #138 回填自动回流：按出单时盖进记录的 cwd 归因到会话推 system 行（详见
+          // notifyAcceptanceRefill；与 #175 云回流共用同一条通知路径）
+          notifyAcceptanceRefill(acc, rows, mgr);
         } catch {
           res.writeHead(400, { "content-type": "application/json" }).end('{"ok":false,"error":"bad json"}');
         }
