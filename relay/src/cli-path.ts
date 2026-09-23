@@ -5,7 +5,7 @@
 // 解析顺序：CC_DECK_CLAUDE_PATH → 包内平台包（dev 模式下等价 SDK 默认行为）→ PATH → 常见安装位置。
 // 命中 .cmd/.bat 时换同目录 npm 包的 cli.js——SDK 对非 .js 路径直接 spawn，Windows 上
 // Node 的 shell 校验会拒 .cmd；.js 结尾路径 SDK 自动用 node 拉起（sdk.mjs MIe()）。
-import { accessSync, constants, existsSync } from "node:fs";
+import { accessSync, constants, existsSync, readFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import { delimiter, dirname, join } from "node:path";
 import { homedir } from "node:os";
@@ -63,9 +63,25 @@ function fromPath(name: string): string | null {
 }
 
 // %APPDATA%\npm\claude.cmd → %APPDATA%\npm\node_modules\@anthropic-ai\claude-code\cli.js
+// #167：固定相对布局找不到时，解析 npm shim 文本提取真实目标（pnpm/自定义 prefix/
+// 新版包布局下 node_modules 不在 .cmd 旁）：shim 里是 node "%~dp0\…\cli.js" %* 形态，
+// %~dp0 = .cmd 所在目录。解析失败返回 null（由调用方落回原路径，spawn 层再兜底）。
 function cmdToFallbackJs(p: string): string | null {
-  const js = join(dirname(p), "node_modules", "@anthropic-ai", "claude-code", "cli.js");
-  return existsSync(js) ? js : null;
+  const direct = join(dirname(p), "node_modules", "@anthropic-ai", "claude-code", "cli.js");
+  if (existsSync(direct)) return direct;
+  try {
+    const txt = readFileSync(p, "utf8");
+    // 提取 "%~dp0\<相对路径>.js"（含无 %~dp0 前缀的绝对/相对写法，取 .js 结尾目标）
+    const m = txt.match(/(?:%~dp0\\?"|")(%~dp0\\)?([^"\r\n]+\.js)"/i);
+    if (m) {
+      const rel = m[2].replace(/\\+/g, "\\");
+      const cand = rel.match(/^[a-zA-Z]:[\\/]/) ? rel : join(dirname(p), rel);
+      if (existsSync(cand)) return cand;
+    }
+  } catch {
+    // 读不出（编码/权限）：交由 spawn 层兜底
+  }
+  return null;
 }
 
 function knownLocations(): string[] {

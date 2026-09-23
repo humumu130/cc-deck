@@ -270,12 +270,30 @@ export class AgentSession {
           if (process.env.CCR_DEBUG) {
             process.stderr.write(`[spawn-hook] command=${o.command} args=${JSON.stringify(o.args)} cwd=${o.cwd ?? ""}\n`);
           }
-          const child = spawn(o.command, o.args, {
+          const opts: { stdio: ["pipe", "pipe", "pipe"]; cwd?: string; env?: NodeJS.ProcessEnv; signal?: AbortSignal } = {
             stdio: ["pipe", "pipe", "pipe"],
             cwd: o.cwd,
             env: o.env,
             signal: o.signal,
-          });
+          };
+          let child;
+          try {
+            child = spawn(o.command, o.args, opts);
+          } catch (e) {
+            // #167：Windows 上 spawn .cmd/.bat 无 shell 同步抛 EINVAL（Node CVE-2024-27980
+            // 修复后的强制行为；cli-path 的 .js 兜底漏网的安装形态——pnpm/自定义 prefix 等）。
+            // 终极兜底：cmd.exe /c 拉起 shim；仍失败则抛带可行动信息的错误（直通 ack.error）。
+            const msg = e instanceof Error ? e.message : String(e);
+            if (process.platform === "win32" && /\.(cmd|bat)$/i.test(o.command)) {
+              process.stderr.write(`[spawn-hook] EINVAL 兜底 cmd.exe /c：${o.command}\n`);
+              child = spawn(process.env.ComSpec ?? "cmd.exe", ["/d", "/s", "/c", o.command, ...o.args], opts);
+            } else {
+              throw new Error(
+                `启动 CLI 失败（${msg}）：可执行文件 ${o.command} 无法在此环境直接启动` +
+                  (process.platform === "win32" ? "；可设置环境变量 CC_DECK_CLAUDE_PATH 指向 claude.exe 或 cli.js 后重启" : ""),
+              );
+            }
+          }
           (this as { childPid: number | undefined }).childPid = child.pid ?? undefined;
           return child;
         },
