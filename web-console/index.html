@@ -4516,7 +4516,9 @@ function render() {
       // #23 徽章四态：休眠/历史/终端（外部 CLI 会话）/后台（控制台新建的托管会话——
       // 无终端窗口，消息只在面板可见；降低与终端会话的混淆）
       // #164 挂点迁移：不再进标题行（分类信息与源标签/📁 同族）——移 stats 元信息行
-      const badges = dormant ? '<span class="his-badge">休眠</span>' : s.historical ? '<span class="his-badge">历史</span>' : s.external ? '<span class="his-badge ext">终端</span>' : '<span class="his-badge bg">后台</span>';
+      // #171 英文缩写（用户验收批注「最好改成英文缩写，更简洁」）：SAVED/HIST/CLI/SDK，
+      // 四态全部带 title 悬停解释（缩写不自解释；bg 的 cursor:help 原先没有配套 title）
+      const badges = dormant ? '<span class="his-badge" title="已保存休眠（点击卡片恢复）">SAVED</span>' : s.historical ? '<span class="his-badge" title="历史会话（进程已结束）">HIST</span>' : s.external ? '<span class="his-badge ext" title="外部终端里的 CLI 会话">CLI</span>' : '<span class="his-badge bg" title="托管会话（控制台新建，无终端窗口）">SDK</span>';
       // #100 后台任务徽标：⑂N 黄胶囊。#161 对齐手机：bgCount > 0 恒显——WORKING 时
       // liveRow 只交代主回合在跑，并行子 Agent 数仍要一眼可见（手机三档密度卡同口径）
       const bgBadge = bgRunning(s) ? '<span class="bg-badge" title="后台子 Agent 运行中">⑂' + bgCount(s) + "</span>" : "";
