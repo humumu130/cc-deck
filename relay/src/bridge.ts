@@ -140,7 +140,8 @@ export class Bridge {
   private extFileStats = new Map<string, { files: Set<string>; added: number; deleted: number }>();
   private extUsage = new Map<string, { input: number; output: number; cacheRead: number; cacheWrite: number; model: string; ctx: number }>();
   // 排队消息滞留看门狗：ext id -> { 最近补发时间, 连续补发次数, 连续跳过次数, 是否已放弃 }
-  private stuckWatch = new Map<string, { lastTry: number; tries: number; skips: number; given_up: boolean }>();
+  // blind = 连续「快照不可用」轮数（#180：检测不可用不补发，连续 3 轮放弃自动补发）
+  private stuckWatch = new Map<string, { lastTry: number; tries: number; skips: number; blind: number; given_up: boolean }>();
   // 防抢发守门进行中的会话（等待人工停手期间，看门狗节拍跳过防重入）
   private stuckGuarding = new Set<string>();
   // #111 注入后主动验证：ext id -> { 定时器, 最后注入的文本 }。注入成功 ≠ 提交成功
@@ -2765,7 +2766,7 @@ export class Bridge {
       // 防抢发守门（异步等待期间占位限速防重入；补发计数只在真正发回车时增加）
       if (guardConfig().enabled) {
         if (this.stuckGuarding.has(id)) continue; // 守门等待中：绝不旁路直发
-        this.stuckWatch.set(id, { lastTry: now, tries: w?.tries ?? 0, skips: w?.skips ?? 0, given_up: w?.given_up ?? false });
+        this.stuckWatch.set(id, { lastTry: now, tries: w?.tries ?? 0, skips: w?.skips ?? 0, blind: w?.blind ?? 0, given_up: w?.given_up ?? false });
         this.stuckGuarding.add(id);
         void this.guardedStuckEnter(id, pid, stuckTexts).finally(() => this.stuckGuarding.delete(id));
         continue;
@@ -2774,11 +2775,11 @@ export class Bridge {
     }
   }
 
-  // 真正补发回车（守门通过 / 守门关闭 / 快照不可用 fail-open 都走到这里）
+  // 真正补发回车（守门通过 / 守门关闭才走到这里——#180 起快照不可用不再 fail-open 盲发）
   private fireStuckEnter(id: string, pid: number, msg?: string): void {
     const w = this.stuckWatch.get(id);
     const tries = (w?.tries ?? 0) + 1;
-    this.stuckWatch.set(id, { lastTry: Date.now(), tries, skips: w?.skips ?? 0, given_up: tries >= 3 });
+    this.stuckWatch.set(id, { lastTry: Date.now(), tries, skips: w?.skips ?? 0, blind: 0, given_up: tries >= 3 });
     // 「暂停自动补发」只在 tries===3 跃迁时打一次：#111 主动验证不查 given_up 门槛，
     // 后续消息仍会触发本函数（行为有界无害），反复打同款日志会与现实矛盾
     if (tries === 3) {
@@ -2796,12 +2797,14 @@ export class Bridge {
   private bumpStuckSkips(id: string, msg: string): void {
     const w = this.stuckWatch.get(id);
     const skips = (w?.skips ?? 0) + 1;
-    this.stuckWatch.set(id, { lastTry: Date.now(), tries: w?.tries ?? 0, skips, given_up: (w?.given_up ?? false) || skips >= 3 });
+    this.stuckWatch.set(id, { lastTry: Date.now(), tries: w?.tries ?? 0, skips, blind: 0, given_up: (w?.given_up ?? false) || skips >= 3 });
     this.mgr.pushExternalLog(id, "system", skips >= 3 ? "输入框多次未见该排队消息，暂停自动补发（下次发送消息时会一并提交）" : msg);
   }
 
   // 补发回车前的防抢发守门：快照 CLI 输入框，有疑似人工输入则等停手再补。
-  // 快照不可用（旧注入器/弹窗盖住/识别失败）fail-open 维持旧行为直接补发。
+  // 快照不可用（旧注入器/弹窗盖住/识别失败）不补发（#180 反转 fail-open：看不到 ≠ 安全
+  // ——宁让滞留消息多等/最终放弃，也不盲发回车打断正在打字的用户；2026-09-24 公司机
+  // 打字中途被自动发送即此路径：Windows peek 未编译成功，快照恒 null 仍照发）。
   private async guardedStuckEnter(id: string, pid: number, texts: string[]): Promise<void> {
     const v = await guardCompensateEnter(texts, () => captureConsoleBottom(pid), {
       abort: () => {
@@ -2823,7 +2826,24 @@ export class Bridge {
       this.fireStuckEnter(id, pid, `已补发回车（检测到输入框有其他输入，等停手 ${Math.round(v.waitedMs / 100) / 10}s 后补发）`);
       return;
     }
-    this.fireStuckEnter(id, pid); // enter / unknown（快照不可用 fail-open，行为同旧版）
+    if (v.kind === "unknown") {
+      // #180：快照不可用 ≠ 可以发。本轮暂缓（下轮看门狗按限速重试，弹窗盖住等瞬态
+      // 场景随后自愈）；连续 3 轮不可用 → 放弃自动补发，交用户下次发送时一并提交
+      //（CLI 原生排队语义，滞留消息不会丢）——与 fireStuckEnter 3 次上限同界。
+      const w = this.stuckWatch.get(id);
+      const blind = (w?.blind ?? 0) + 1;
+      const giveUp = blind >= 3;
+      this.stuckWatch.set(id, { lastTry: Date.now(), tries: w?.tries ?? 0, skips: w?.skips ?? 0, blind, given_up: giveUp });
+      this.mgr.pushExternalLog(
+        id,
+        "system",
+        giveUp
+          ? "防抢发检测连续不可用，为避免打断输入暂停自动补发（下次发送消息时会一并提交）"
+          : "防抢发检测不可用（无法快照输入框），暂不补发回车以免打断输入，稍后自动重试",
+      );
+      return;
+    }
+    this.fireStuckEnter(id, pid); // enter：快照确认框内只有滞留消息
   }
 }
 

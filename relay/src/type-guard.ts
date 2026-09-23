@@ -1,7 +1,8 @@
 // 防抢发（type guard）：排队消息滞留看门狗在补发回车前，先快照 CLI 输入框，
 // 确认框内没有"非我们注入的内容"（= 真人正在打字 / 已敲未发的半截输入）才补发；
 // 检测到人工输入则暂缓回车，等输入框静止（停手）后再补。纯逻辑模块：快照函数与
-// 配置由调用方注入，便于单测；快照不可用一律 fail-open（回到旧的直接补发行为）。
+// 配置由调用方注入，便于单测；快照不可用返回 unknown——#180 起调用方不 fail-open
+// （检测不可用 = 不补发，宁让滞留消息多等也不打断人工输入）。
 //
 // 快照格式（injector.captureConsoleBottom）：屏幕可见区末尾若干行，每行一行。
 // CLI 输入框识别（Claude CLI TUI，实测 2.1.x Windows/macOS 同构）：
@@ -35,7 +36,7 @@ const isBorderRow = (l: string): boolean => {
 };
 
 // 从快照行提取输入框内容行（最后一对全宽边框之间的行，且含 ❯ 提示符）。
-// 识别不到（权限弹窗盖住 / 异版 UI / 框被截断）返回 null → 调用方 fail-open。
+// 识别不到（权限弹窗盖住 / 异版 UI / 框被截断）返回 null → 调用方按 unknown 保守处理。
 export function extractInputBox(lines: string[]): string[] | null {
   let bottom = -1;
   for (let i = lines.length - 1; i >= 0; i--) {
@@ -107,7 +108,7 @@ export type GuardVerdict =
   | { kind: "skip-absent" }                              // 框内已无滞留消息（人工提交/清空）→ 不补发
   | { kind: "timeout"; waitedMs: number }                // 持续输入未停手 → 放弃本轮
   | { kind: "aborted" }                                  // 等待期间会话状态变化 → 静默退出
-  | { kind: "unknown" };                                 // 快照不可用/识别失败 → fail-open
+  | { kind: "unknown" };                                 // 快照不可用/识别失败 → 调用方保守处理（#180：不补发）
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 

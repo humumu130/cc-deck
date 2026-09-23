@@ -652,6 +652,11 @@ await wait(150);
   rmSync(T, { force: true });
   writeFileSync(T, JSON.stringify({ type: "assistant", message: { role: "assistant", content: [{ type: "text", text: "基线29" }] } }) + "\n");
   const sid = extId("cli-7");
+  // #180 起快照不可用不再盲发：提供"框内只有滞留消息"的干净快照让守门照常放行
+  //（本段测看门狗补发节奏；守门机制本身 45 段专测）
+  const PEEK29 = fileURLToPath(new URL("../data/test-peek-29.txt", import.meta.url));
+  process.env.CCR_FAKE_PEEK_FILE = PEEK29;
+  writeFileSync(PEEK29, ["✶ Working…", "─".repeat(40), "❯ 滞留的消息", "─".repeat(40), "  ⏵⏵ bypass permissions on"].join("\n"));
   const enters = () => fakeLog().filter((a) => a[0] === "7777" && a[1] === "").length;
   await hook({ event: "UserPromptSubmit", prompt: "看门狗回合", session_id: "cli-7", cli_pid: 7777, transcript_path: T });
   // WORKING + pending 滞留（注入成功但回车被吞、未晋升）→ 5s 节拍内补发回车
@@ -681,7 +686,9 @@ await wait(150);
   await wait(6500);
   assert(enters() === afterRetry, "29 no further attempts after give-up");
   await hook({ event: "SessionEnd", session_id: "cli-7", reason: "clear" });
+  delete process.env.CCR_FAKE_PEEK_FILE;
   rmSync(T, { force: true });
+  rmSync(PEEK29, { force: true });
 }
 
 // 30. AskUserQuestion 双端任一作答：窗口内 updatedInput 注入；超时兜底横幅保留 + 晚答 Esc+注入；PC 先答清横幅
@@ -1103,6 +1110,10 @@ assert(!mgr.getExternal("ext-ff11bb22-cc33-dd44-ee55-ff6677889900"), "67 multi-t
   rmSync(T, { force: true });
   writeFileSync(T, JSON.stringify({ type: "assistant", message: { role: "assistant", content: [{ type: "text", text: "基线39" }] } }) + "\n");
   const sid = extId("cli-8");
+  // 同 29 段：#180 后给干净快照走守门放行（第三阶段补发断言依赖它）
+  const PEEK39 = fileURLToPath(new URL("../data/test-peek-39.txt", import.meta.url));
+  process.env.CCR_FAKE_PEEK_FILE = PEEK39;
+  writeFileSync(PEEK39, ["✶ Working…", "─".repeat(40), "❯ 进队消息", "─".repeat(40), "  ⏵⏵ bypass permissions on"].join("\n"));
   const enters = () => fakeLog().filter((a) => a[0] === "8888" && a[1] === "").length;
   await hook({ event: "UserPromptSubmit", prompt: "看门狗39", session_id: "cli-8", cli_pid: 8888, transcript_path: T });
   await hook({ event: "PostToolUse", tool_name: "Bash", tool_response: "ok", session_id: "cli-8", transcript_path: T });
@@ -1127,7 +1138,9 @@ assert(!mgr.getExternal("ext-ff11bb22-cc33-dd44-ee55-ff6677889900"), "67 multi-t
   await wait(12000);
   assert(enters() >= 1, "39 same text re-stuck after promotion triggers re-send");
   await hook({ event: "SessionEnd", session_id: "cli-8", reason: "clear" });
+  delete process.env.CCR_FAKE_PEEK_FILE;
   rmSync(T, { force: true });
+  rmSync(PEEK39, { force: true });
 }
 
 // 40. #292 系统通知块污染过滤：后台任务通知/命令回显以 UserPromptSubmit 形态到达时
@@ -1336,7 +1349,8 @@ assert(!mgr.getExternal("ext-ff11bb22-cc33-dd44-ee55-ff6677889900"), "67 multi-t
 
 // ── 45 段：防抢发（type guard）——看门狗补发回车前快照 CLI 输入框：
 //     框内只有滞留消息→照常补发；有疑似人工输入→等停手再补；持续输入→本轮放弃；
-//     框内已无滞留消息→跳过；快照不可用→fail-open 直接补发；CCR_TYPE_GUARD=off→不快照。
+//     框内已无滞留消息→跳过；快照不可用→unknown（#180：不盲发，暂缓重试、连续 3 轮放弃）；
+//     CCR_TYPE_GUARD=off→不快照。
 //     纯逻辑部分用真实 CLI 控制台快照样本（Windows Terminal + Claude CLI 2.1.x 实测采集）
 {
   const { extractInputBox, foreignResidual, anyKnownPresent, guardCompensateEnter, guardConfig } = await import("../src/type-guard.js");
@@ -1382,7 +1396,7 @@ assert(!mgr.getExternal("ext-ff11bb22-cc33-dd44-ee55-ff6677889900"), "67 multi-t
   // ⑤ 框空 → 滞留消息不在（skip 判定）；busy 的 spinner 不误伤
   assert(!anyKnownPresent(extractInputBox(CAP_EMPTY)!, [MSG1, MSG2]), "45 empty box → known absent");
   assert(extractInputBox(["✶ Working…", B, "❯", B])!.length === 1, "45 busy spinner row stays outside box");
-  // ⑥ 无法识别（无边框对/无 ❯，如权限弹窗盖住）→ null → fail-open
+  // ⑥ 无法识别（无边框对/无 ❯，如权限弹窗盖住）→ null → unknown（调用方保守处理）
   assert(extractInputBox(["  ? Allow Bash", "  1. Yes  2. No"]) === null, "45 unrecognizable screen → null");
 
   // ⑦ 守门判定（快照序列注入，短时钟）：干净→enter；人工→停手后 enter-after-wait；
@@ -1398,7 +1412,7 @@ assert(!mgr.getExternal("ext-ff11bb22-cc33-dd44-ee55-ff6677889900"), "67 multi-t
   const vChaos = await guardCompensateEnter([MSG1], async () => (i++ % 2 ? CHAOS_A : CHAOS_B), { cfg: cfg45 });
   assert(vChaos.kind === "timeout", "45 continuously changing box → give up this round");
   assert((await guardCompensateEnter([MSG1], cap(CAP_EMPTY), { cfg: cfg45 })).kind === "skip-absent", "45 known absent → skip");
-  assert((await guardCompensateEnter([MSG1], cap(null), { cfg: cfg45 })).kind === "unknown", "45 capture unavailable → unknown (fail-open)");
+  assert((await guardCompensateEnter([MSG1], cap(null), { cfg: cfg45 })).kind === "unknown", "45 capture unavailable → unknown (caller defers per #180)");
   let aborted = false;
   assert(
     (await guardCompensateEnter([MSG1, MSG2], cap(CAP_WRAP), { cfg: cfg45, abort: () => aborted })).kind === "enter-after-wait",
@@ -1493,12 +1507,20 @@ assert(!mgr.getExternal("ext-ff11bb22-cc33-dd44-ee55-ff6677889900"), "67 multi-t
     assert(enters45() === beforeD, "45d message gone from box → skip enter");
     assert(logs45().some((t) => t.includes("跳过本次补发回车")), "45d skip log emitted");
     await settle();
-    // e. 快照不可用（旧注入器/识别失败）→ fail-open 维持旧行为直接补发
+    // e. 快照不可用（旧注入器/编译失败/识别失败）→ #180 反转 fail-open：不盲发回车；
+    //    暂缓重试，连续 3 轮不可用 → 放弃自动补发（交用户下次发送一并提交，消息不丢）
     const beforeE = enters45();
     delete process.env.CCR_FAKE_PEEK_FILE;
     mgr.setExternalPending(sid, [{ text: MSG1, ts: Date.now() - 9000 }]);
     await wait(8000);
-    assert(enters45() > beforeE, "45e capture unavailable → legacy direct enter (fail-open)");
+    assert(enters45() === beforeE, "45e capture unavailable → NO direct enter (#180 fail-open reversed)");
+    assert(logs45().some((t) => t.includes("暂不补发回车以免打断输入")), "45e defer log emitted");
+    // 预置 blind=2（跳过 2×60s 真实限速等待）：下一轮 unknown 应翻 given_up 并停止重试
+    (bridge as unknown as { stuckWatch: Map<string, { lastTry: number; tries: number; skips: number; blind: number; given_up: boolean }> })
+      .stuckWatch.set(sid, { lastTry: 0, tries: 0, skips: 0, blind: 2, given_up: false });
+    await wait(8000);
+    assert(logs45().some((t) => t.includes("防抢发检测连续不可用")), "45e 3rd blind round → give up auto-enter");
+    assert(enters45() === beforeE, "45e never enters while capture unavailable");
     process.env.CCR_FAKE_PEEK_FILE = PEEK;
     await settle();
     // f. CCR_TYPE_GUARD=off → 不快照直接补发
@@ -1929,6 +1951,10 @@ assert(!mgr.getExternal("ext-ff11bb22-cc33-dd44-ee55-ff6677889900"), "67 multi-t
   assert(logsOf("cli-50b").filter((t) => t.includes("恢复会话中")).length === spawnCountBefore + 1, "50 closure unlocks retry (new spawn)");
 
   // ④ 恢复窗口期内：滞留看门狗持袖旁观（补回车只会打进旧 CLI 空输入框）；窗口过期恢复补发
+  // 同 29/39 段：#180 后窗口过期补发需守门放行，提供"框内只有滞留消息"的干净快照
+  const PEEK50 = fileURLToPath(new URL("../data/test-peek-50.txt", import.meta.url));
+  process.env.CCR_FAKE_PEEK_FILE = PEEK50;
+  writeFileSync(PEEK50, ["✶ Working…", "─".repeat(40), "❯ 恢复带原因", "─".repeat(40), "  ⏵⏵ bypass permissions on"].join("\n"));
   const enters50 = () => fakeLog().filter((a) => a[0] === String(dead.pid) && a[1] === "").length;
   // 基线化（#80/#84 CI flaky 根治）：③ 的 wait(1600) 与 2s 滞留阈值恰在同一时刻（S0+2000）
   // 到期，而闭环 timer（1200ms）已删恢复窗口、d50 重开窗口要等 wait 醒来——这个间隙里
@@ -1946,8 +1972,8 @@ assert(!mgr.getExternal("ext-ff11bb22-cc33-dd44-ee55-ff6677889900"), "67 multi-t
   process.env.CCR_RESUME_WINDOW_MS = "800";
   await wait(1000);
   (bridge as unknown as { sweepStuckInputs(): void }).sweepStuckInputs();
-  // 补发走防抢发守门（异步：--peek 快照失败 → fail-open）+ 假注入器子进程落盘也是异步，
-  // 同步读必为 0（29 段同款坑）——轮询等日志
+  // 补发走防抢发守门（异步快照）+ 假注入器子进程落盘也是异步，同步读必为 0
+  //（29 段同款坑）——轮询等日志
   await waitLog(() => enters50() >= 1, 5000);
   assert(enters50() >= 1, "50 watchdog resumes after window expiry");
   delete process.env.CCR_RESUME_WINDOW_MS;
@@ -1956,6 +1982,8 @@ assert(!mgr.getExternal("ext-ff11bb22-cc33-dd44-ee55-ff6677889900"), "67 multi-t
   // ⑤ 状态瞬翻（WAITING↔WORKING）不清看门狗计数：given_up 粘滞，不再无限补发刷日志
   const enters50c = () => fakeLog().filter((a) => a[0] === "5077" && a[1] === "").length;
   await hook({ event: "UserPromptSubmit", session_id: "cli-50c", prompt: "粘滞计数回合", cli_pid: 5077, cwd: "/tmp" });
+  // 快照换成本段滞留消息（PEEK 文件全局共享，内容随阶段改写）
+  writeFileSync(PEEK50, ["✶ Working…", "─".repeat(40), "❯ 粘滞的滞留消息", "─".repeat(40), "  ⏵⏵ bypass permissions on"].join("\n"));
   mgr.setExternalPending(extId("cli-50c"), [{ text: "粘滞的滞留消息", ts: Date.now() - 9000 }]);
   // 等第 3 发留痕而非固定 9s（#84 CI flaky 根治，4/5 复发口径「got 2」）：3s 拍相位
   // 偏晚 + 守门链/注入器子进程落盘慢（CI 高负载秒级）时，第 3 发落在 9s 窗外或其
@@ -1978,6 +2006,8 @@ assert(!mgr.getExternal("ext-ff11bb22-cc33-dd44-ee55-ff6677889900"), "67 multi-t
   await hook({ event: "SessionEnd", session_id: "cli-50b", reason: "clear" });
   delete process.env.CCR_TEST_PLATFORM;
   delete process.env.CCR_OSASCRIPT_CMD;
+  delete process.env.CCR_FAKE_PEEK_FILE;
+  rmSync(PEEK50, { force: true });
 }
 
 // 54. 外部会话发图（路线 A 落盘+指令）：base64 落 <dataDir>/../tmp（魔数嗅探扩展名）、

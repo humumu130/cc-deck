@@ -66,6 +66,12 @@ export function ensureInjector(): boolean {
     console.warn("[injector] compile failed:", e instanceof Error ? e.message : e);
   }
   ready = existsSync(exe);
+  // #180 静默降级显式化：注入可用但快照（--peek）不可用 = 防抢发检测失效——以前完全
+  // 无声，公司机打字中途被自动发送排查时无从得知保护是否降级。只在状态落定的这一次
+  // 打（ready 缓存后本函数提前返回，不会刷屏）。
+  if (ready && !peekSupported()) {
+    console.warn("[injector] 防抢发快照不可用（inject.exe 无 --peek 能力：旧版产物保留或编译失败）——滞留补发回车将按 #180 保守跳过");
+  }
   return ready;
 }
 
@@ -425,7 +431,8 @@ function runAppleScriptOut(script: string): Promise<{ ok: boolean; text: string;
 
 // 快照目标控制台可见区末尾 rows 行（默认 20，覆盖 CLI 输入框 + 状态行）。
 // Windows: inject.exe --peek 读屏幕缓冲写临时文件；macOS: Terminal contents。
-// 失败返回 null——调用方 fail-open（维持补发回车的旧行为），绝不因快照不可用卡死排队消息。
+// 失败返回 null——#180 起调用方按 unknown 保守处理（暂缓重试、连续 3 轮放弃），
+// 绝不因快照不可用盲发回车。
 export async function captureConsoleBottom(pid: number, rows = 20): Promise<string[] | null> {
   if (!injectSupported()) return null;
   if (useAppleInjector()) {
