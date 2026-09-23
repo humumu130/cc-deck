@@ -1213,10 +1213,11 @@
   .cards-empty .ce-icon { font-size: 34px; opacity: .5; margin-bottom: 10px; }
   .card-title { font-size: 15px; font-weight: 650; margin-top: 4px; display: flex; align-items: center; gap: 8px; } /* #40→#67漏项 16 回落 15（用户点单调小） */
   .his-badge {
-    font-size: 10px; color: var(--faint); border: 1px solid var(--border);
-    padding: 1px 7px; border-radius: 999px; flex: none; font-weight: 500;
-  } /* #164：从标题行移入 stats 元信息行（与源标签同族），名称行让宽——规则不动，仅挂点变 */
-  .his-badge.ext { color: var(--brand-2); border-color: rgba(201,100,66,.4); }
+    font-size: 10px; color: var(--faint); flex: none; font-weight: 500;
+  } /* #164：从标题行移入 stats 元信息行（与源标签同族），名称行让宽——规则不动，仅挂点变；
+     #171 去胶囊化（边框+内边距让分类标在元信息行里视觉过重，用户报突兀）：降为素文本
+     小字，与手机端 meta 行「外部 CLI · 📁 目录 · 历史」同口径；终端类保品牌色区分 */
+  .his-badge.ext { color: var(--brand-2); }
   /* #23 托管会话（控制台新建，无终端窗口）徽章：中性弱化，悬停解释 */
   .his-badge.bg { cursor: help; }
   /* #13 巡检：显影后用 --dim（原 --faint 白底/深底都近乎不可见），hover 仍各自着色 */
