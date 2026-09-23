@@ -1503,7 +1503,7 @@
   .card-summary { color: var(--card-sub); font-size: 11.5px; line-height: 16px; margin-top: 4px; padding-left: 4px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-height: 16px; } /* #399 悬挂缩进对齐灯列；#54 动作行降档 12.5→11.5 + 提色；#58 行盒+min-height 双钉 16px；#98 灯 8→10px 缩进 6→4 补偿 */
   /* #98 语义色修正：WAITING 卡摘要从 WORKING 黄回归红语义——黄只留给「在跑」 */
   .card-summary.waiting { color: var(--waiting); }
-  .card-stats { font-size: 11px; line-height: 15px; color: var(--faint); margin-top: 6px; display: flex; align-items: center; gap: 10px; font-variant-numeric: tabular-nums; min-height: 15px; } /* #54 元信息行降档 12→11；#58 行盒+min-height 双钉 15px，内容/空档等高 */
+  .card-stats { font-size: 11px; line-height: 15px; color: var(--faint); margin-top: 6px; display: flex; align-items: center; gap: 10px; font-variant-numeric: tabular-nums; min-height: 15px; } /* #54 元信息行降档 12→11；#58 行盒+min-height 双钉 15px */
   /* #145 工作目录上卡（替代改动统计行）：超长省略，title 悬停全路径 */
   .card-stats .card-dir { flex: none; max-width: 45%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   /* #383 源标签居 stats 行最左（与上两行左对齐）；ctx 水位推最右 */
@@ -4491,9 +4491,6 @@ function render() {
         '<button class="card-edit" title="重命名">✎</button>' +
         '<button class="card-del' + (deletable ? "" : " off") + '" title="' + (deletable ? "删除会话" : "运行中，不能删除") + '">✕</button>';
       const tok = s.usage && s.usage.output_tokens ? s.usage.output_tokens : 0;
-      // #341 去重：自动标题常与 action_summary 同文（title-gen 由动作生成）——同文时摘要不重复展示
-      const title = s.title || "";
-      const dupTitle = !!(waitingText && title && (waitingText === title || title.startsWith(waitingText) || waitingText.startsWith(title)));
       // #362 标题恒第一行：灯（WORKING 呼吸）+标题+总时长同构一行，状态切换不跳行；
       // WORKING 实时行（回合秒+↓tokens+动作摘要）退居第二行，空闲第二行=摘要
       // #164：标题行只剩 灯+标题+⑂N+时间（徽章下移 stats 行、✎/✕ 悬停浮层盖时间），
@@ -4508,12 +4505,15 @@ function render() {
           (s.compacting ? '<span class="lv-tok">⟳ 压缩上下文</span>' : "") +
           '<span class="lv-sec">' + Math.max(0, Math.floor((Date.now() - (s.turn_started_at ?? s.updated_at)) / 1000)) + 's</span>' +
           (tok ? '<span class="lv-tok">↓ ' + tokStr(tok) + "</span>" : "") +
-          (s.action_summary && !dupTitle && !s.compacting ? '<span class="lv-sum">' + escapeHtml(s.action_summary) + "</span>" : "") +
+          (s.action_summary && !s.compacting ? '<span class="lv-sum">' + escapeHtml(s.action_summary) + "</span>" : "") +
           "</div>"
         : "";
-      const summaryRow = waitingText && s.status !== "WORKING" && !dupTitle
-        ? '<div class="card-summary' + (waiting ? " waiting" : "") + '">' + escapeHtml(waitingText) + "</div>"
-        : '<div class="card-summary blank"></div>'; /* #58 空档占位：无摘要也留行，卡高恒定 */
+      // #170 中间行永不空白：去 #341 的 dupTitle 抑制（前缀匹配误伤面大——标题是项目名
+      // 而摘要恰以它开头时整行消失，用户实测「有的卡片工作状态消失」）与状态限制（紧凑
+      // 密度下 WORKING 卡曾因此恒落 blank 占位），空摘要回落「…」——与手机两档密度
+      // `action_summary || "…"` 同口径；#58 等高由 .card-summary 的 min-height 钉住
+      const summaryRow =
+        '<div class="card-summary' + (waiting ? " waiting" : "") + '">' + escapeHtml(waitingText || "…") + "</div>";
       const ctaRow = waiting && !s.historical && s.waiting_request?.decidable !== false ? '<div class="card-cta"><button>处理</button></div>' : "";
       // #367 源标签内联进 stats 行右侧（多源才有；不再独立占一整行留白）；
       // #383 源标签移最左与上两行左对齐；ctx 水位条压到最右（不再悬中间）
