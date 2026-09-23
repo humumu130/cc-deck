@@ -4420,7 +4420,8 @@ function render() {
       const d = document.createElement("div");
       d.dataset.sid = s.session_id;
       d.dataset.src = ctx.cfg.id;
-      d.className = "card " + s.status + (listCompact ? " compact" : "") + (selected && selected.src === ctx.cfg.id && s.session_id === selected.sid ? " sel" : "") + (s.historical && !dormant ? " historical" : "") + (dormant ? " dormant" : "") + (s.status === "DONE" && bgRunning(s) ? " bg-live" : "") + (idleDimmed(s) ? " idle" : "");
+      // #161 对齐手机 bgLive 口径：非 WORKING 且子 Agent 在跑（不限 DONE）——灯转黄呼吸
+      d.className = "card " + s.status + (listCompact ? " compact" : "") + (selected && selected.src === ctx.cfg.id && s.session_id === selected.sid ? " sel" : "") + (s.historical && !dormant ? " historical" : "") + (dormant ? " dormant" : "") + (s.status !== "WORKING" && bgRunning(s) ? " bg-live" : "") + (idleDimmed(s) ? " idle" : "");
       if (dormant) d.title = "已保存休眠 · 点击恢复";
       // 根治④对称化：等待判定必须同时看 status——脱钩帧（waiting_request 残留 +
       // status 已翻走）不该再渲染【处理】按钮，否则按钮点开详情永远等不到弹窗
@@ -4435,9 +4436,9 @@ function render() {
       // #23 徽章四态：休眠/历史/终端（外部 CLI 会话）/后台（控制台新建的托管会话——
       // 无终端窗口，消息只在面板可见；降低与终端会话的混淆）
       const badges = dormant ? '<span class="his-badge">休眠</span>' : s.historical ? '<span class="his-badge">历史</span>' : s.external ? '<span class="his-badge ext">终端</span>' : '<span class="his-badge bg">后台</span>';
-      // #100 后台任务徽标：主回合空闲但子 Agent 仍在跑——⑂N 黄胶囊（灯同转呼吸黄）；
-      // WORKING 时 liveRow 已交代在跑，徽标只补「空闲却没闲着」这个误报场景
-      const bgBadge = s.status !== "WORKING" && bgRunning(s) ? '<span class="bg-badge" title="后台子 Agent 运行中">⑂' + bgCount(s) + "</span>" : "";
+      // #100 后台任务徽标：⑂N 黄胶囊。#161 对齐手机：bgCount > 0 恒显——WORKING 时
+      // liveRow 只交代主回合在跑，并行子 Agent 数仍要一眼可见（手机三档密度卡同口径）
+      const bgBadge = bgRunning(s) ? '<span class="bg-badge" title="后台子 Agent 运行中">⑂' + bgCount(s) + "</span>" : "";
       // #49 保存恢复徽章：pinned 卡标题行左端 10px 级锚形小标（悬停说明与 toast 同口径：
       // 重启后休眠保留，点击卡片恢复——不自动拉起，2026-09-09 拍板）
       const pinFlag = s.pinned ? '<span class="pin-flag" title="已保存：重启后休眠保留，点击卡片恢复">' + PIN_ANCHOR_SVG + "</span>" : "";
@@ -4451,7 +4452,7 @@ function render() {
       // #362 标题恒第一行：灯（WORKING 呼吸）+标题+总时长同构一行，状态切换不跳行；
       // WORKING 实时行（回合秒+↓tokens+动作摘要）退居第二行，空闲第二行=摘要
       const headRow =
-        '<div class="c-head">' + pinFlag + '<span class="c-dot' + (s.status === "WORKING" || (s.status === "DONE" && bgRunning(s)) ? " run" : "") /* #100 后台在跑也呼吸 */ + '" style="--sc:var(--' + (s.status || "").toLowerCase() + ')"></span>' +
+        '<div class="c-head">' + pinFlag + '<span class="c-dot' + (s.status === "WORKING" || (s.status !== "WORKING" && bgRunning(s)) ? " run" : "") /* #100/#161 后台在跑也呼吸（bgLive 不限 DONE） */ + '" style="--sc:var(--' + (s.status || "").toLowerCase() + ')"></span>' +
           '<span class="card-title"><span class="c-tt">' + escapeHtml(s.title || "") + "</span>" + bgBadge + badges + opBtns + "</span>" +
           '<span class="elapsed" title="最后活跃">' + fmtLastActive(s.updated_at) + "</span></div>";
       const liveRow = s.status === "WORKING"
@@ -4479,7 +4480,7 @@ function render() {
       if (listCompact) {
         // #279⑨ 紧凑卡（对齐手机）：状态点+标题+耗时 / 摘要 / 改动+水位+源标签
         d.innerHTML =
-          '<div class="c-row1">' + pinFlag + '<span class="c-dot' + (s.status === "WORKING" || (s.status === "DONE" && bgRunning(s)) ? " run" : "") /* #100 后台在跑也呼吸 */ + '" style="--sc:var(--' + (s.status || "").toLowerCase() + ')"></span>' +
+          '<div class="c-row1">' + pinFlag + '<span class="c-dot' + (s.status === "WORKING" || (s.status !== "WORKING" && bgRunning(s)) ? " run" : "") /* #100/#161 后台在跑也呼吸（bgLive 不限 DONE） */ + '" style="--sc:var(--' + (s.status || "").toLowerCase() + ')"></span>' +
             '<span class="card-title"><span class="c-tt">' + escapeHtml(s.title || "") + "</span>" + bgBadge + badges + opBtns + "</span>" +
             '<span class="elapsed" title="最后活跃">' + fmtLastActive(s.updated_at) + "</span></div>" +
           summaryRow +
