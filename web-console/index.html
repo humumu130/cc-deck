@@ -2105,7 +2105,7 @@
     #slashbox { left: 14px; right: 14px; max-width: calc(100% - 28px); }
   }
 </style>
-<script>try{if(localStorage.getItem("ccr_theme")==="light")document.documentElement.classList.add("light")}catch(e){}</script>
+<script>/* #173 默认浅色：仅显式存过 "dark" 才深色；无偏好/存过 "light" 均浅色（已存偏好不动） */try{if(localStorage.getItem("ccr_theme")!=="dark")document.documentElement.classList.add("light")}catch(e){}</script>
 <script>/* 桌面壳标题栏主题同步：Electron 走 preload IPC，Tauri 走全局 API；浏览器无桥接自动跳过 */window.__ccShellTheme=(light)=>{try{window.ccDeck&&window.ccDeck.setNativeTheme(!light)}catch(e){}try{window.__TAURI__&&window.__TAURI__.window.getCurrentWindow().setTheme(light?"light":"dark")}catch(e){}};__ccShellTheme(document.documentElement.classList.contains("light"));</script>
 </head>
 <body>
