@@ -43,11 +43,24 @@ export function isConfirmTodo(t: { content?: string; status?: string }): boolean
   return t.status === "pending" && CONFIRM_RE.test(t.content ?? "");
 }
 
-// 跨天分隔线标签：MM-DD
+// 跨天分隔线键：MM-DD（同日判定用；显示标签走 dayLabel）
 export function dayKey(ts: number): string {
   if (!ts) return "";
   const t = new Date(ts);
   return `${String(t.getMonth() + 1).padStart(2, "0")}-${String(t.getDate()).padStart(2, "0")}`;
+}
+
+// #162 跨天分隔线标签：微信式分级（今天/昨天/M月d日/yyyy年M月d日，自然日边界），
+// 与 fmtLastActive 同口径（当天这里是日期级标签「今天」，不带时刻）——两端同步
+export function dayLabel(ts: number): string {
+  if (!ts) return "";
+  const now = new Date();
+  const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+  if (ts >= startOfToday) return "今天";
+  if (ts >= startOfToday - 86400e3) return "昨天";
+  const t = new Date(ts);
+  const md = `${t.getMonth() + 1}月${t.getDate()}日`;
+  return t.getFullYear() === now.getFullYear() ? md : `${t.getFullYear()}年${md}`;
 }
 
 export function sessionElapsed(s: { status: string; duration_ms?: number; historical?: boolean; started_at: number; updated_at: number }): number {

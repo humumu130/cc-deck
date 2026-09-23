@@ -20,7 +20,7 @@ import * as Sharing from "expo-sharing";
 import * as Clipboard from "expo-clipboard";
 import { withA, type ThemeColors } from "../theme";
 import { useTheme, useThemeStyles } from "../theme-context";
-import { fmtElapsed, sessionElapsed, fmtHM, dayKey, fmtClock, fmtTok, contextPct, contextLevel, CONTEXT_LIMIT_FALLBACK, isVerifyTodo, isLiveLine, stripLiveMark } from "../fmt";
+import { fmtElapsed, sessionElapsed, fmtHM, dayKey, dayLabel, fmtLastActive, fmtClock, fmtTok, contextPct, contextLevel, CONTEXT_LIMIT_FALLBACK, isVerifyTodo, isLiveLine, stripLiveMark } from "../fmt";
 import { store, useRelay } from "../store";
 import { fromB64, toB64 } from "../e2e";
 import type { ArtifactItem, CronTask, LogEntry, SessionState, TodoItem, WaitingPayload } from "../protocol";
@@ -162,15 +162,11 @@ function fmtArtSize(n: number | undefined): string {
   if (n < 1024 * 1024) return (n / 1024).toFixed(n < 10240 ? 1 : 0) + " KB";
   return (n / 1048576).toFixed(1) + " MB";
 }
-// 输出物时间：今天 HH:mm / 昨天 / 7 天内 周X / 更早 M/d（web-console 同款）
+// 输出物时间：#162 套用 #155 微信式分级（当天 HH:mm / 昨天 / 今年 M月d日 / 跨年带
+// 年份，自然日边界）——与卡片最后活跃、web-console 同口径；周X/M/d 旧档位废弃
 function fmtArtTime(ts: number): string {
   if (!ts) return "";
-  const now = Date.now();
-  if (dayKey(ts) === dayKey(now)) return fmtHM(ts);
-  if (dayKey(ts) === dayKey(now - 86400000)) return "昨天";
-  if (now - ts < 7 * 86400000) return "周" + "日一二三四五六"[new Date(ts).getDay()];
-  const d = new Date(ts);
-  return d.getMonth() + 1 + "/" + d.getDate();
+  return fmtLastActive(ts);
 }
 // #83 路径显示串断行：/ 与 - 后插零宽空格（U+200B）——Android ICU 断行不会在中文
 // 词内给出断点，长中文路径会被从词中间拆开，ZWSP 提供合法断点。仅用于显示；复制走
@@ -2369,10 +2365,11 @@ export default function DetailScreen({ sid, onBack, initialView, ref }: { sid: s
           list.map((e) => {
             const key = e.id ?? `${e.ts}|${e.kind}|${e.text}`;
             const nodes = [];
-            // 跨天分隔线：与上一条可见消息不同日时插入（首条也插，标注起始日期）
+            // 跨天分隔线：与上一条可见消息不同日时插入（首条也插，标注起始日期）；
+            // #162 标签套微信式分级（今天/昨天/M月d日/跨年带年份），同日判定仍走 dayKey
             const day = e.ts ? dayKey(e.ts) : "";
             if (day && day !== lastDay) {
-              nodes.push(<Text key={`day-${key}`} style={d.daySep}>── {day} ──</Text>);
+              nodes.push(<Text key={`day-${key}`} style={d.daySep}>── {dayLabel(e.ts!)} ──</Text>);
             }
             if (day) lastDay = day;
             nodes.push(<TranscriptRow key={key} e={e} open={!!expanded[key]} onToggle={() => toggle(key)} onContentMenu={setMenuText} onTaskRef={openTaskRef} onTaskRefOut={outTaskRef} />);

@@ -4068,6 +4068,20 @@ function fmtLastActive(ts) {
   return t.getFullYear() === now.getFullYear() ? md : t.getFullYear() + "年" + md;
 }
 
+// #162 跨天分隔线标签：微信式分级（今天/昨天/M月d日/yyyy年M月d日，自然日边界），
+// 与 fmtLastActive 同口径（当天这里是日期级标签「今天」，不带时刻）——手机端 fmt.ts
+// dayLabel 同步
+function dayLabel(ts) {
+  if (!ts) return "";
+  const now = new Date();
+  const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+  if (ts >= startOfToday) return "今天";
+  if (ts >= startOfToday - 86400e3) return "昨天";
+  const t = new Date(ts);
+  const md = t.getMonth() + 1 + "月" + t.getDate() + "日";
+  return t.getFullYear() === now.getFullYear() ? md : t.getFullYear() + "年" + md;
+}
+
 // #145 工作目录上卡（对齐手机端 📁 目录名）：basename 形式省宽度，悬停 title 显全路径；
 // 改动统计行（原 statsHtml）卡片不再渲染——详情页统计 tab 保留全量口径
 function folderHtml(s) {
@@ -5103,15 +5117,11 @@ function artRelOf(s, t) {
   if (t.origin !== "cwd" || !s.cwd) return "";
   return t.path.startsWith(s.cwd) ? t.path.slice(s.cwd.length).replace(/^[\\/]+/, "") : "";
 }
-// 输出物时间：今天 HH:mm / 昨天 / 7 天内 周X / 更早 M/d
+// 输出物时间：#162 套用 #155 微信式分级（当天 HH:mm / 昨天 / 今年 M月d日 / 跨年带
+// 年份）——与卡片最后活跃、手机端 fmtArtTime 同口径；周X/M/d 旧档位废弃
 function fmtArtTime(ts) {
   if (!ts) return "";
-  const now = Date.now();
-  if (dayKey(ts) === dayKey(now)) return fmtHM(ts);
-  if (dayKey(ts) === dayKey(now - 86400000)) return "昨天";
-  if (now - ts < 7 * 86400000) return "周" + "日一二三四五六"[new Date(ts).getDay()];
-  const d = new Date(ts);
-  return d.getMonth() + 1 + "/" + d.getDate();
+  return fmtLastActive(ts);
 }
 function fmtArtSize(n) {
   if (typeof n !== "number" || n < 0) return "";
@@ -5489,7 +5499,8 @@ function entryHtml(e, prevDay) {
   const hm = e.ts ? fmtHM(e.ts) : "";
   let html = "";
   const day = e.ts ? dayKey(e.ts) : "";
-  if (day && day !== prevDay) html += '<div class="day-sep">── ' + day + " ──</div>";
+  // #162 分隔线标签套微信式分级（今天/昨天/M月d日/跨年带年份），同日判定仍走 dayKey
+  if (day && day !== prevDay) html += '<div class="day-sep">── ' + dayLabel(e.ts) + " ──</div>";
   if (e.kind === "user_message") {
     // #38/#149 长消息默认折叠可展开（>100 字 ≈ 3+ 行，与 AI 消息同款 x-full 交互）：
     // 折叠 3 行 + 省略号（8 行→3 行、300 字→100 字，2026-09-22 用户反馈行数偏多
