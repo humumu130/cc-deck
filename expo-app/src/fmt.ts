@@ -87,7 +87,10 @@ export function fmtLastActive(ts: number | undefined): string {
 
 // 上下文水位条：水位与上限均由 relay 下发（context_usage/context_limit），
 // 上限按模型在 relay 集中维护（glm-5.x 1M / 其余 200k），端上只兜底缺省
-export const CONTEXT_LIMIT_FALLBACK = 200_000;
+// #166：glm-5.3 真实窗口 1M（用户 CLI 对照 + 转录峰值 867K 实证；#72 的 200K
+// 结论系把 165-166K 的 microcompact 边界误判为全量压缩线）。正常时 relay 按模型
+// 下发 context_limit，此 fallback 仅 relay 未下发时兜底。
+export const CONTEXT_LIMIT_FALLBACK = 1_000_000;
 
 export function contextPct(used: number, limit: number): number {
   return Math.min(100, Math.round((used / limit) * 100));
