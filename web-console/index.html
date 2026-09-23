@@ -1179,17 +1179,22 @@
     background: none; color: var(--dim); cursor: pointer; padding: 0;
   }
   #cwdPick:hover { color: var(--text); background: var(--hov); }
-  /* #168 历史目录快捷填入：横向一排小 chip（上次用过的 + 该源会话近期目录），溢出横滚 */
-  #cwdHist { display: flex; gap: 6px; overflow-x: auto; scrollbar-width: none; }
-  #cwdHist::-webkit-scrollbar { display: none; }
-  .cwd-chip {
-    flex: none; max-width: 150px; display: inline-flex; align-items: center; gap: 4px;
-    padding: 2.5px 8px; border-radius: 999px; border: 1px solid var(--border);
-    background: var(--bg-soft); color: var(--dim); font-size: 11px; cursor: pointer;
-    user-select: none; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  /* #168 历史目录下拉：点目录输入框弹出（最近 5 条，按源隔离），浮层锚在 .cwd-wrap 下方 */
+  #cwdHist {
+    position: absolute; top: calc(100% + 4px); left: 0; right: 0; z-index: 60;
+    max-height: 226px; overflow-y: auto; display: none;
+    background: var(--panel); border: 1px solid var(--border); border-radius: 10px;
+    box-shadow: 0 10px 28px rgba(0, 0, 0, 0.22); padding: 3px;
   }
-  .cwd-chip:hover { color: var(--text); border-color: var(--hov2); }
-  .cwd-chip .cc-last { color: var(--brand-2); font-size: 10px; flex: none; }
+  .cwd-opt {
+    display: flex; flex-direction: column; gap: 1px; width: 100%; text-align: left;
+    padding: 6px 9px; border: none; border-radius: 7px; background: none;
+    cursor: pointer; user-select: none;
+  }
+  .cwd-opt:hover { background: var(--bg-soft); }
+  .cwd-opt .nm { font-size: 12px; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .cwd-opt .p { font-size: 10.5px; color: var(--dim); opacity: 0.85; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .cwd-opt .cc-last { color: var(--brand-2); font-size: 10px; margin-right: 5px; }
   .skip-perm { display: flex; align-items: center; gap: 5px; font-size: 11.5px; color: var(--dim); cursor: pointer; user-select: none; }
   .hint-q { display: inline-flex; align-items: center; justify-content: center; width: 14px; height: 14px; border-radius: 50%; border: 1px solid var(--border); color: var(--dim); font-size: 10px; cursor: help; flex: none; }
 
@@ -2169,8 +2174,8 @@
         <div class="cwd-wrap">
           <input id="cwd" placeholder="工作目录（如 D:\dev\my-project）">
           <button id="cwdPick" title="浏览选择本机目录" style="display:none"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3.5 7.2c0-1.3 1-2.3 2.3-2.3h3l2 2.2h6.4c1.3 0 2.3 1 2.3 2.3v7.3c0 1.3-1 2.3-2.3 2.3H5.8c-1.3 0-2.3-1-2.3-2.3z"/></svg></button>
+          <div id="cwdHist"></div>
         </div>
-        <div id="cwdHist" style="display:none"></div>
         <textarea id="prompt" rows="2" placeholder="初始指令，如：帮我看看当前项目结构并总结"></textarea>
         <div class="pair-hint" id="newTarget"></div>
         <div class="row newopts">
@@ -6201,41 +6206,75 @@ function updateCwdPlaceholder() {
 }
 // #168 历史目录：每源各记一份「上次创建成功用的目录」（旧版全局 ccr_cwd 迁移读、
 // 双写保留——回滚旧版仍有值可读），避免 Mac 的路径被预填到公司电脑源上
+// #168 迭代（2026-09-24 用户定）：历史目录改点目录输入框弹下拉，最近 5 条，按源隔离。
+// 存储：ccr_cwd_hist@<serverId> = 路径数组（新→旧，cap 5）；旧单值键（ccr_cwd@id / 全局
+// ccr_cwd）读取时迁移垫底、成功时双写保回滚兼容。会话 cwd 仅作该源补充凑满 5 条。
 function cwdKey(id) { return "ccr_cwd@" + (id || ""); }
-function lastCwdOf(id) { return lsGet(cwdKey(id)) || lsGet("ccr_cwd") || ""; }
-// 历史目录 chips：上次用的 + 该源会话近期工作目录（按最后活跃倒序去重），
-// 点击填入输入框。纯客户端聚合（会话 cwd 本就在 SNAPSHOT 里），relay 零改动
-function renderCwdHist() {
+function cwdHistKey(id) { return "ccr_cwd_hist@" + (id || ""); }
+function readCwdHist(id) {
+  let arr = [];
+  try {
+    const raw = localStorage.getItem(cwdHistKey(id));
+    if (raw) arr = JSON.parse(raw).filter((x) => typeof x === "string" && x);
+  } catch {}
+  for (const legacy of [lsGet(cwdKey(id)), lsGet("ccr_cwd")]) {
+    if (legacy && !arr.some((d) => d.toLowerCase() === legacy.toLowerCase())) arr.push(legacy);
+  }
+  return arr.slice(0, 5);
+}
+function pushCwdHist(id, dir) {
+  if (!dir) return;
+  const arr = readCwdHist(id).filter((d) => d.toLowerCase() !== dir.toLowerCase());
+  arr.unshift(dir);
+  try { localStorage.setItem(cwdHistKey(id), JSON.stringify(arr.slice(0, 5))); } catch {}
+}
+function lastCwdOf(id) { return readCwdHist(id)[0] || ""; }
+function renderCwdDrop() {
   const box = $("cwdHist");
   const items = [];
-  const last = lastCwdOf(activeServerId);
-  if (last) items.push({ dir: last, last: true });
-  const seen = new Set(items.map((i) => String(i.dir).toLowerCase()));
-  const ctx = ctxs.get(activeServerId);
+  const seen = new Set();
+  const add = (dir, last) => {
+    const k = String(dir).toLowerCase();
+    if (seen.has(k)) return;
+    seen.add(k);
+    items.push({ dir, last });
+  };
+  const hist = readCwdHist(activeServerId);
+  hist.forEach((d, i) => add(d, i === 0 && hist.length > 1));
+  const ctx = ctxs.get(activeServerId); // 同源会话 cwd 补充（按最后活跃倒序去重）
   if (ctx) {
     const ss = [...ctx.sessions.values()].filter((s) => s.cwd);
     ss.sort((a, b) => (b.updated_at || 0) - (a.updated_at || 0));
     for (const s of ss) {
-      const k = String(s.cwd).toLowerCase();
-      if (seen.has(k)) continue;
-      seen.add(k);
-      items.push({ dir: s.cwd });
-      if (items.length >= 6) break;
+      if (items.length >= 5) break;
+      add(s.cwd, false);
     }
   }
   box.innerHTML = "";
+  if (!items.length) { box.style.display = "none"; return; }
   for (const it of items) {
-    const c = document.createElement("button");
-    c.type = "button";
-    c.className = "cwd-chip";
-    c.title = it.dir;
+    const row = document.createElement("button");
+    row.type = "button";
+    row.className = "cwd-opt";
     const parts = String(it.dir).replace(/[\\/]+$/, "").split(/[\\/]/);
-    c.innerHTML = (it.last ? '<span class="cc-last">上次</span>' : "") + escapeHtml(parts[parts.length - 1] || it.dir);
-    c.onclick = () => { $("cwd").value = it.dir; $("cwd").focus(); };
-    box.appendChild(c);
+    row.innerHTML =
+      '<span class="nm">' + (it.last ? '<span class="cc-last">上次</span>' : "") + escapeHtml(parts[parts.length - 1] || it.dir) + "</span>" +
+      '<span class="p">' + escapeHtml(it.dir) + "</span>";
+    // mousedown 先于输入框 blur：不 preventDefault 会先收下拉再吃掉这次点击
+    row.onmousedown = (e) => {
+      e.preventDefault();
+      $("cwd").value = it.dir;
+      box.style.display = "none";
+      $("prompt").focus();
+    };
+    box.appendChild(row);
   }
-  box.style.display = items.length ? "flex" : "none";
+  box.style.display = "block";
 }
+function hideCwdDrop() { $("cwdHist").style.display = "none"; }
+$("cwd").addEventListener("focus", renderCwdDrop);
+$("cwd").addEventListener("blur", () => setTimeout(hideCwdDrop, 150));
+document.addEventListener("keydown", (e) => { if (e.key === "Escape") hideCwdDrop(); });
 // #168 桌面壳原生选目录：目录对话框只能在「本机源」上用（选的是这台电脑的文件系统，
 // 远程源该路径不存在）。本机判定：loopback 直连，或内网 IP 写法与本机 relay 探测
 //（probeLocal）端口+token 一致；域名写法无法判定按远程处理
@@ -6285,7 +6324,6 @@ $("addBtn").onclick = () => {
         if (actx && actx.homedir) $("cwd").value = actx.homedir;
       }
     }
-    renderCwdHist();
     syncCwdPick();
     $("prompt").focus();
   }
@@ -6704,9 +6742,9 @@ $("createBtn").onclick = () => {
   const id = sendCommandTo(ctx, "COMMAND_CREATE", { cwd: cwd || ".", prompt, ...(bypass ? { permissionMode: "bypassPermissions" } : {}) });
   if (bypass) $("skipPerm").checked = false; // 创建后回落，防止下一次误建 skip 会话
   if (id) {
-    // #168 历史目录：按实际建会话的源记「上次目录」（双写旧全局键，回滚兼容）
+    // #168 历史目录：按实际建会话的源记最近 5 条历史（pushCwdHist cap 5）+ 双写旧单值键（回滚兼容）
     const keyId = ctx?.cfg?.id || activeServerId;
-    if (cwd) { lsSet(cwdKey(keyId), cwd); lsSet("ccr_cwd", cwd); }
+    if (cwd) { pushCwdHist(keyId, cwd); lsSet(cwdKey(keyId), cwd); lsSet("ccr_cwd", cwd); }
     $("prompt").value = "";
     closeNewForm();
     // 回执看门狗：客户端"在线"最长可比 relay 真实离线晚 ~45s（ping 判死窗口），
