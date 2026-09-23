@@ -1,5 +1,5 @@
 import { memo, useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState, type Ref } from "react";
-import { Animated, FlatList, Image, PanResponder, Pressable, RefreshControl, StyleSheet, Text, Vibration, View } from "react-native";
+import { Animated, FlatList, Image, Linking, PanResponder, Pressable, RefreshControl, StyleSheet, Text, Vibration, View } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { statusColor, withA, type ThemeColors } from "../theme";
@@ -7,7 +7,7 @@ import { useTheme, useThemeStyles } from "../theme-context";
 import { LogoMark, PencilIcon } from "../brand";
 import { fmtLastActive, fmtTok, contextPct, contextLevel, CONTEXT_LIMIT_FALLBACK, displaySrcName, isLiveLine, stripLiveMark } from "../fmt";
 import { setListDensity, useListDensity, setAggregate as persistAggregate, useIdleDimMin, isIdleSession, type ListDensity } from "../display-settings";
-import { store, useRelay } from "../store";
+import { store, useRelay, type AcceptanceSummary, type SourceStatus } from "../store";
 import { FadeIn, PressScale } from "../motion";
 import type { SessionState } from "../protocol";
 import RenameModal from "./RenameModal";
@@ -740,6 +740,39 @@ export default function ListScreen({ sessions, connected, connText, onOpen, onNe
       return !v;
     });
   };
+  // #137 待填验收单 badge：跨源汇总未完成且未点开过的单，列表顶部条件卡。
+  // seen 本地记（AsyncStorage，per 单 id）——浏览器填完后 relay 侧 done 已置，
+  // 但 SNAPSHOT 只在重连时下发，只看 done 的话 badge 会在快照刷新前多挂一阵；
+  // 点开即视为已知，先行收起（下一张未 seen 的单自动顶上）
+  const [accSeen, setAccSeen] = useState<Set<string>>(new Set());
+  useEffect(() => {
+    void AsyncStorage.getItem("ccr_acc_seen").then((v) => {
+      if (!v) return;
+      try { setAccSeen(new Set(JSON.parse(v) as string[])); } catch {}
+    });
+  }, []);
+  const accPending = useMemo(() => {
+    const out: { src: SourceStatus; a: AcceptanceSummary }[] = [];
+    for (const src of snap.sources)
+      for (const a of src.acceptances ?? [])
+        if (!a.done && !accSeen.has(a.id)) out.push({ src, a });
+    out.sort((x, y) => y.a.created_at - x.a.created_at); // 新单在前，卡显示最新一张
+    return out;
+  }, [snap.sources, accSeen]);
+  const openAcc = (item: { src: SourceStatus; a: AcceptanceSummary }) => {
+    // 链接按源当前通道择路（同出单工具双发口径）：LAN 通道 = 同网直连表单页；
+    // 云通道/未知 = CF Worker /view KV 页面（无 token，32hex id 即鉴权）
+    const url = item.src.channel === "lan" && item.src.lanHint
+      ? `http://${item.src.lanHint}/acceptance/${item.a.id}`
+      : `https://cc.humumu.online/view/acceptance-${item.a.id}.html`;
+    void Linking.openURL(url).catch(() => undefined);
+    setAccSeen((prev) => {
+      if (prev.has(item.a.id)) return prev;
+      const next = new Set(prev).add(item.a.id);
+      void AsyncStorage.setItem("ccr_acc_seen", JSON.stringify([...next]));
+      return next;
+    });
+  };
   // #140 折叠空闲与闲置变灰联动（用户拍板口径）：只折「已变灰」的真闲置卡——
   // isIdleSession 与卡片蒙层同一判定（DONE/ERROR 且静默超 idleDimMin，#100 后台
   // 在跑豁免）。刚收工的会话处在交流窗口期，点折叠也不从面板消失；idleDimMin<0
@@ -985,6 +1018,29 @@ export default function ListScreen({ sessions, connected, connText, onOpen, onNe
           />
         }
         contentContainerStyle={{ paddingBottom: insets.bottom + 120, paddingHorizontal: 14, paddingTop: 6 }}
+        // #137 待填验收单条件卡：统计行下方、会话列表顶部（有待填单才出现）
+        ListHeaderComponent={
+          accPending.length > 0 ? (
+            <Pressable
+              style={styles.accCard}
+              android_ripple={{ color: c.tintSoft, borderless: false }}
+              accessibilityLabel={`验收单待填：${accPending[0].a.title}，点击打开填写页面`}
+              onPress={() => openAcc(accPending[0])}
+            >
+              <View style={styles.accTag}>
+                <Text style={styles.accTagT}>验收单</Text>
+              </View>
+              <View style={{ flex: 1, minWidth: 0 }}>
+                <Text style={styles.accTitle} numberOfLines={1}>{accPending[0].a.title}</Text>
+                <Text style={styles.accSub} numberOfLines={1}>
+                  {`待填 ${accPending[0].a.judged}/${accPending[0].a.total}`}
+                  {accPending.length > 1 ? ` · 另有 ${accPending.length - 1} 张` : ""}
+                </Text>
+              </View>
+              <Text style={styles.accGo}>去填写 ›</Text>
+            </Pressable>
+          ) : null
+        }
         onScrollBeginDrag={() => { scrollArmed.current = true; }}
         onEndReached={footRefresh}
         onEndReachedThreshold={0.2}
@@ -1097,6 +1153,19 @@ export default function ListScreen({ sessions, connected, connText, onOpen, onNe
 
 const makeStyles = (c: ThemeColors) => StyleSheet.create({
   safe: { flex: 1, backgroundColor: c.bg },
+  // #137 待填验收单卡（列表顶部条件卡）：卡片形制对齐会话卡（panel 底/line 边/
+  // 12 圆角），品牌色只点「验收单」标签与「去填写」动作（#102 品牌色克制）
+  accCard: {
+    flexDirection: "row", alignItems: "center", gap: 10,
+    paddingVertical: 10, paddingHorizontal: 12,
+    borderRadius: 12, borderWidth: 1, marginBottom: 8, overflow: "hidden",
+    backgroundColor: c.panel, borderColor: c.line,
+  },
+  accTag: { backgroundColor: c.tintSoft, borderRadius: 6, paddingHorizontal: 6, paddingVertical: 3 },
+  accTagT: { color: c.brandA, fontSize: 10, fontWeight: "700" },
+  accTitle: { color: c.text, fontSize: 13, fontWeight: "600" },
+  accSub: { color: c.dim, fontSize: 11, marginTop: 2 },
+  accGo: { color: c.brandA, fontSize: 12, fontWeight: "600" },
   // 顶栏设备图标源切换菜单（方案 A）：右上锚定小面板，行=色点+名称+通道+当前标
   srcMenu: {
     position: "absolute", top: 52, right: 12, zIndex: 30, minWidth: 208,

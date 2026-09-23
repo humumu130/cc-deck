@@ -49,6 +49,17 @@ export interface ServerEntry {
   relayDev?: string | null;
 }
 
+// 待填验收单摘要（#137，SNAPSHOT acceptances 携带；relay 侧 relay/src/acceptance.ts
+// listAcceptances 同形）：done = judged ≥ total（badge 消失条件）。上限 20 张、新的在前
+export interface AcceptanceSummary {
+  id: string;
+  title: string;
+  created_at: number;
+  total: number;
+  judged: number;
+  done: boolean;
+}
+
 // 源运行态（#294 批1，对齐网页端 ensureCtx 的 ctx）：单连接状态机按源实例化。
 // conn.cfg = 该源最后一次实际建连参数（幂等比较基准；区别于 entry 持久化字段——
 // 勾了"不记住令牌"时 entry.token 为空而 cfg.token 是本次连接用的令牌）
@@ -69,6 +80,7 @@ export interface SourceConn {
   models: string[];    // #388 该源 SNAPSHOT.models 携带的可用模型清单
   platform: string;    // SNAPSHOT.platform（relay 本机平台，旧 relay 无字段 = ""）
   deliverables: boolean; // #71 该源 SNAPSHOT.deliverables（输出物看板开关，旧 relay 无字段 = false）
+  acceptances: AcceptanceSummary[]; // #137 该源 SNAPSHOT.acceptances（待填验收单，旧 relay 无字段 = 空表）
   sessions: Map<string, SessionState>;
   timelines: Map<string, LogEntry[]>;
   reconnectDelay: number;
@@ -152,6 +164,10 @@ export interface SourceStatus {
   // 保留最后已知值，离线不丢）：聚合模式下详情页 tab 按「会话所属源」取此值
   // （旧口径一律取活动源，活动源指向从未上线的离线源时其他源会话被误藏）
   deliverables?: boolean;
+  // #137 待填验收单（SNAPSHOT.acceptances，conn 级同上）：列表顶部 badge 跨源
+  // 汇总，!done 的单显示；lanHint 供构造表单 LAN 链接（无则回落云通道链接）
+  acceptances?: AcceptanceSummary[];
+  lanHint?: string;
 }
 
 export interface Snapshot {
@@ -460,6 +476,8 @@ class RelayStore {
       colorKey: c.entry.cloud?.relayDev || c.entry.wsUrl,
       platform: c.platform || undefined,
       deliverables: c.deliverables, // #146 per-源 输出物开关（详情页按会话源取数）
+      acceptances: c.acceptances, // #137 待填验收单（列表 badge 跨源汇总）
+      lanHint: c.lanHint || undefined, // #137 表单 LAN 链接构造（同网时用）
     }));
     // #388 模型清单取活动源口径（模型切换命令无 sid 路由也走活动源）
     const activeModels = this.activeConn()?.models ?? [];
@@ -799,6 +817,7 @@ class RelayStore {
         models: [],
         platform: "",
         deliverables: false,
+        acceptances: [], // #137 SNAPSHOT 覆盖式更新（收到快照前为空）
         sessions: new Map(),
         timelines: new Map(),
         reconnectDelay: RECONNECT_BASE_MS,
@@ -2057,6 +2076,12 @@ class RelayStore {
         // 无字段 = 保持空串（UI 按「PC 上的路径」旧口径展示，行为零变化）
         const plat = (msg.payload as { platform?: unknown } | undefined)?.platform;
         if (typeof plat === "string" && plat) conn.platform = plat;
+        // #137 待填验收单清单随快照携带（relay 5801c11 起双通道同源下发；旧 relay
+        // 无字段 = 空表，列表 badge 不显示）。覆盖式更新——relay 侧每次现算
+        const accs = (msg.payload as { acceptances?: unknown }).acceptances;
+        conn.acceptances = Array.isArray(accs)
+          ? accs.filter((a): a is AcceptanceSummary => !!a && typeof (a as AcceptanceSummary).id === "string" && !!(a as AcceptanceSummary).id)
+          : [];
         for (const old of conn.sessions.keys()) {
           if (this.sidIndex.get(old) === conn) this.sidIndex.delete(old);
         }
