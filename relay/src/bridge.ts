@@ -831,6 +831,7 @@ export class Bridge {
         if (!hooked && now - idleSince > idleMs && s.cli_pid && cliSessionIdle(s.cli_pid)) {
           const turn = this.turnStart.get(id) ?? s.started_at;
           this.turnStart.delete(id);
+          this.sweepPendingToTurnEnd(id); // #172：收回合前清扫残留排队（Done 后无人再清）
           this.mgr.finishExternal(id, "completed", now - turn, idleSince);
           this.mgr.pushExternalLog(id, "system", "CLI 已空闲（进程状态 idle），回合视作结束");
           if ((this.inputQueue.get(id)?.length ?? 0) > 0) void this.flushQueue(id);
@@ -839,6 +840,7 @@ export class Bridge {
       }
       const turn = this.turnStart.get(id) ?? s.started_at;
       this.turnStart.delete(id);
+      this.sweepPendingToTurnEnd(id); // #172：收回合前清扫残留排队（Done 后无人再清）
       this.mgr.finishExternal(id, "completed", now - turn, idleSince);
       this.mgr.pushExternalLog(id, "system", "转录与事件均静默超时，回合视作结束（hook 失联兜底）");
       if ((this.inputQueue.get(id)?.length ?? 0) > 0) void this.flushQueue(id);
@@ -2292,6 +2294,7 @@ export class Bridge {
       // 视作回合结束（状态回落 DONE + flush 排队输入），迟于真实打断 ≤60s
       const turn = this.turnStart.get(id) ?? state.started_at;
       this.turnStart.delete(id);
+      this.sweepPendingToTurnEnd(id); // #172：收回合前清扫残留排队（Done 后无人再清）
       this.mgr.finishExternal(id, "completed", Date.now() - turn);
       this.mgr.pushExternalLog(id, "system", "空闲回退：未收到 Stop（回合可能被打断），已标记结束");
       if ((this.inputQueue.get(id)?.length ?? 0) > 0) void this.flushQueue(id);
@@ -2299,6 +2302,32 @@ export class Bridge {
       this.mgr.pushExternalLog(id, "system", truncate(msg, 120));
     }
     return { decision: "pass" };
+  }
+
+  // #172 回合收尾统一清扫：pending 中已不在注入队列里的条目 = CLI 已处理（UPS/回执
+  // 晋升路径脱靶或 hook 帧丢失），晋升为正式消息出队；仍在队列里的保留（flushQueue
+  // 随后注入，等 CLI 处理时的 UserPromptSubmit 晋升避免双气泡）。此前仅 Stop hook
+  // 路径做该清扫——hook 失联静默兜底、CLI idle 快回落、Esc 打断空闲回退三处收尾
+  // 直接 finishExternal 收回合，残留 pending 在 DONE 态再无清扫者（工作态专属的
+  // silence/dead sweep 都不再进来），「消息已送达却一直排队」永久滞留（2026-09-24
+  // 用户实测）。四处收尾路径在此同权。
+  private sweepPendingToTurnEnd(id: string): void {
+    const state = this.mgr.getExternal(id);
+    if (!state?.pending_inputs?.length) return;
+    const avail = [...(this.inputQueue.get(id) ?? [])];
+    const kept: PendingInput[] = [];
+    for (const p of state.pending_inputs) {
+      const qi = avail.findIndex((t) => normKey(t) === normKey(pBody(p)));
+      if (qi === -1) {
+        this.noteUserMsg(id, pBody(p), "promote");
+        this.mgr.pushExternalLog(id, "user_message", truncate(p.text, 300), undefined, { full: truncate(p.text, 2000) });
+      } else {
+        avail.splice(qi, 1); // 只做匹配记账，不动原队列（flushQueue 随后要注入）
+        kept.push(p);
+      }
+    }
+    if (state.pending_inputs.length !== kept.length) this.mgr.setExternalPending(id, kept);
+    this.resetStuckWatch(id); // #111：Stop 出队晋升同权，重置滞留快窗
   }
 
   private onStop(ev: BridgeEvent): BridgeDecision {
@@ -2309,20 +2338,7 @@ export class Bridge {
     this.pushAssistantTexts(id, ev.transcript_path);
     // 回合结束：已在回合中消费的 steering 消息（不在注入队列里）晋升为正式消息；
     // 仍在队列里的即将注入，等 CLI 处理时的 UserPromptSubmit 晋升（避免双气泡）
-    const avail = [...(this.inputQueue.get(id) ?? [])];
-    const kept: PendingInput[] = [];
-    for (const p of state.pending_inputs ?? []) {
-      const qi = avail.findIndex((t) => normKey(t) === normKey(pBody(p)));
-      if (qi === -1) {
-        this.noteUserMsg(id, pBody(p), "promote");
-        this.mgr.pushExternalLog(id, "user_message", truncate(p.text, 300), undefined, { full: truncate(p.text, 2000) });
-      } else {
-        avail.splice(qi, 1); // 只做匹配记账，不动原队列（flushQueue 随后要注入）
-        kept.push(p);
-      }
-    }
-    if ((state.pending_inputs?.length ?? 0) !== kept.length) this.mgr.setExternalPending(id, kept);
-    this.resetStuckWatch(id); // #111：Stop 出队晋升同权，重置滞留快窗
+    this.sweepPendingToTurnEnd(id);
     const turn = this.turnStart.get(id) ?? state.started_at;
     this.turnStart.delete(id);
     this.mgr.finishExternal(id, "completed", Date.now() - turn);
