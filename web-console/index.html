@@ -1878,16 +1878,21 @@
     /* #102：删第二层 18px 大光晕（扩散过大），保留描边+3px 聚焦环（a11y 资产） */
     box-shadow: 0 0 0 3px rgba(217,119,87,.22);
   }
-  /* #165 拖文件入输入卡：拖悬高亮（对齐 focus 聚焦环语言）+ 半透蒙层落点提示 */
-  #cmdbar.drag-over #inputcard {
-    border-color: var(--brand);
-    box-shadow: 0 0 0 3px rgba(217,119,87,.30);
-  }
-  #cmdbar.drag-over::after {
-    content: "松开添加为附件（图片自动压缩）"; position: absolute; inset: 0; z-index: 30;
+  /* #179 全窗拖放蒙层：拖文件悬停页面任意位置即整页提示——不再只认输入卡
+     （Windows 实测「拖到输入框无反应」：落区窄 + 非 Files 载荷拖动零反馈）。
+     pointer-events:none 保证蒙层不吞后续拖拽事件 */
+  body.file-drag-over::after {
+    content: "松开添加为附件（图片自动压缩，文件 ≤2 个）";
+    position: fixed; inset: 0; z-index: 300;
     display: flex; align-items: center; justify-content: center;
-    color: var(--dim); font-size: 13px; pointer-events: none;
-    background: color-mix(in srgb, var(--bg-main) 78%, transparent);
+    color: var(--dim); font-size: 15px; letter-spacing: 1px; pointer-events: none;
+    background: color-mix(in srgb, var(--bg-main) 74%, transparent);
+    border: 2px dashed var(--brand);
+  }
+  /* #179 附件能力小字提醒（用户原话：要小字提醒，不然用户都不知道） */
+  #attachHint {
+    font-size: 11px; color: var(--dim); opacity: .8;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0;
   }
   /* ---------- 回到底部浮钮（对齐手机端形态）：消息 tab 下滚动停止且距底 >80px 才浮现；
      绝对定位挂 #cmdbar（不随 #timeline 滚动），bottom:100%+10px 即悬停于输入区上方 10px ---------- */
@@ -2434,6 +2439,7 @@
           <div class="ic-left">
             <button id="imgBtn" title="添加图片（最多 4 张，也可直接 Ctrl+V 粘贴）"><svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M8.7 6.8l1.05-1.9a1.5 1.5 0 0 1 1.3-.75h1.9a1.5 1.5 0 0 1 1.3.75l1.05 1.9"/><rect x="3.4" y="6.8" width="17.2" height="13" rx="3"/><circle cx="12" cy="13.2" r="3.5"/></svg></button>
             <button id="fileBtn" title="附加文件（最多 2 个，单个 20MB，发送时落盘到电脑由 CLI 读取）"><svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M21.4 11.05 12.25 20.2a5.5 5.5 0 0 1-7.78-7.78l8.49-8.48a3.5 3.5 0 1 1 4.95 4.95l-8.49 8.48a1.5 1.5 0 0 1-2.12-2.12l7.78-7.78"/></svg></button>
+            <span id="attachHint">支持粘贴 / 拖入图片、文件</span>
           </div>
           <!-- #124 停止入口：dhead 挪来发送钮旁，纯图标（语义进 title 悬停可见） -->
           <button id="stopBtn" title="停止会话">⏹</button>
@@ -4912,6 +4918,7 @@ function renderDetail() {
   // 隐藏仅剩：不可恢复的托管历史会话（cmdLocked 同口径）
   $("imgBtn").style.display = s.historical && !s.external && !s.relay_session_id ? "none" : "";
   $("fileBtn").style.display = s.historical && !s.external && !s.relay_session_id ? "none" : ""; // #92 文件入口同口径
+  $("attachHint").style.display = s.historical && !s.external && !s.relay_session_id ? "none" : ""; // #179 小字提醒同口径（按钮都藏了别孤挂）
 
   // 时间线 / 统计（增量重建）
   const tl = $("timeline");
@@ -6925,39 +6932,47 @@ document.addEventListener("paste", (ev) => {
   if (docs.length) void addUploadFiles(docs);
   if (imgs.length) void addImageFiles(imgs);
 });
-// #165 拖文件入输入卡：dragover 高亮蒙层 + drop 分流（图片压缩/文件附件，同粘贴口径）。
+// #179 全窗拖放：拖文件悬停页面任意位置即全页蒙层提示，任意处松手即收件——
+// #165 旧版只认输入卡落区，Windows 实测「拖到输入框无反应」：落区窄易拖歪 +
+// 聊天窗/网页拖图（text/uri-list 载荷、无 Files）静默跳过零反馈。
 // 只认 dataTransfer.types 含 "Files" 的拖动——任务排序 DnD（#374，text 载荷）不受影响；
-// document 层兜底 preventDefault：拖过头在页面任意处松手不再让 WebView 导航到 file:// 白屏
+// uri/html 载荷拖动松手时给明确提示（不白屏不导航 file://）。
 (function () {
-  const bar = $("cmdbar");
-  const hasFiles = (ev) => {
-    const t = ev.dataTransfer && ev.dataTransfer.types;
-    return !!(t && [...t].includes("Files"));
-  };
+  const types = (ev) => (ev.dataTransfer && ev.dataTransfer.types ? [...ev.dataTransfer.types] : []);
+  const hasFiles = (ev) => types(ev).includes("Files");
   let depth = 0;
-  bar.addEventListener("dragenter", (ev) => {
+  const unmask = () => { depth = 0; document.body.classList.remove("file-drag-over"); };
+  document.addEventListener("dragenter", (ev) => {
     if (!hasFiles(ev)) return;
     ev.preventDefault();
     depth++;
-    bar.classList.add("drag-over");
+    document.body.classList.add("file-drag-over");
   });
-  bar.addEventListener("dragover", (ev) => {
+  document.addEventListener("dragover", (ev) => {
     if (!hasFiles(ev)) return;
     ev.preventDefault();
     ev.dataTransfer.dropEffect = "copy";
   });
-  bar.addEventListener("dragleave", () => {
-    if (--depth <= 0) { depth = 0; bar.classList.remove("drag-over"); }
+  document.addEventListener("dragleave", () => {
+    if (depth > 0 && --depth <= 0) unmask();
   });
-  bar.addEventListener("drop", (ev) => {
-    if (!hasFiles(ev)) return;
+  window.addEventListener("blur", unmask); // 拖到窗口外松手：收掉蒙层
+  document.addEventListener("drop", (ev) => {
+    if (!hasFiles(ev)) {
+      // 网页/聊天窗拖图（uri/html 载荷）：preventDefault 防 WebView 导航白屏，并给明确反馈
+      if (types(ev).some((t) => t === "text/uri-list" || t === "text/html")) {
+        ev.preventDefault();
+        toast("仅支持拖入本地图片 / 文件（网页或聊天里的图，请先保存或截图后粘贴）");
+      }
+      unmask();
+      return;
+    }
     ev.preventDefault();
-    depth = 0;
-    bar.classList.remove("drag-over");
+    unmask();
     const files = ev.dataTransfer.files && ev.dataTransfer.files.length ? [...ev.dataTransfer.files] : [];
     if (!files.length) return;
     const sel = selSession();
-    if (!sel) { toast("先选择一个会话"); return; }
+    if (!sel) { toast("先在左侧选择一个会话"); return; }
     if (!imgSessionOk(sel.s)) {
       if (sel.s.historical) toast(sel.s.relay_session_id ? "恢复会话不支持带附件" : "历史会话仅可查看");
       return;
@@ -6966,13 +6981,6 @@ document.addEventListener("paste", (ev) => {
     const docs = files.filter((f) => !String(f.type).startsWith("image/"));
     if (docs.length) void addUploadFiles(docs);
     if (imgs.length) void addImageFiles(imgs);
-  });
-  document.addEventListener("dragover", (ev) => { if (hasFiles(ev)) ev.preventDefault(); });
-  document.addEventListener("drop", (ev) => {
-    if (!hasFiles(ev)) return;
-    ev.preventDefault();
-    const t = ev.target;
-    if (!(t && t.closest && t.closest("#cmdbar"))) toast("拖到下方输入框再松开，即可添加为附件");
   });
 })();
 // 输入卡：textarea 自适应高度 + 纸飞机可用态同步
