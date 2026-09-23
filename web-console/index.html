@@ -1503,9 +1503,10 @@
   .card-summary { color: var(--card-sub); font-size: 11.5px; line-height: 16px; margin-top: 4px; padding-left: 4px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-height: 16px; } /* #399 悬挂缩进对齐灯列；#54 动作行降档 12.5→11.5 + 提色；#58 行盒+min-height 双钉 16px；#98 灯 8→10px 缩进 6→4 补偿 */
   /* #98 语义色修正：WAITING 卡摘要从 WORKING 黄回归红语义——黄只留给「在跑」 */
   .card-summary.waiting { color: var(--waiting); }
-  .card-stats { font-size: 11px; line-height: 15px; color: var(--faint); margin-top: 6px; display: flex; align-items: center; gap: 10px; font-variant-numeric: tabular-nums; min-height: 15px; } /* #54 元信息行降档 12→11；#58 行盒+min-height 双钉 15px */
-  /* #145 工作目录上卡（替代改动统计行）：超长省略，title 悬停全路径 */
-  .card-stats .card-dir { flex: none; max-width: 45%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .card-stats { font-size: 11px; line-height: 15px; color: var(--faint); margin-top: 6px; display: flex; align-items: center; gap: 10px; font-variant-numeric: tabular-nums; min-height: 15px; overflow: hidden; } /* #54 元信息行降档 12→11；#58 行盒+min-height 双钉 15px；#169 溢出护栏：窄侧栏下内容总宽超卡时静默裁切，不外溢到卡外 */
+  /* #145 工作目录上卡（替代改动统计行）：超长省略，title 悬停全路径；
+     #169 flex:none→可收缩——窄侧栏下目录名先让路（省略号截断），保住右侧水位百分比（#166 正在对照验收的量，不能被挤出裁掉）；宽侧栏 45% 上限行为不变 */
+  .card-stats .card-dir { flex: 0 1 auto; min-width: 0; max-width: 45%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   /* #383 源标签居 stats 行最左（与上两行左对齐）；ctx 水位推最右 */
   .card-stats .src-badge { flex: none; }
   .card-stats .ctx-mini { margin-left: auto; }
