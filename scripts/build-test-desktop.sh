@@ -30,16 +30,27 @@ TMP="$(mktemp -d /tmp/cc-deck-desktop-test.XXXXXX)"
 trap 'rm -rf "$TMP"' EXIT
 
 echo "[1/5] 等 desktop.yml 的 $TAG run 完成…"
+if [ -n "${RUN_ID:-}" ]; then
+  # 注入旁路：矩阵腿无关抖动（如 dmg 腿挂、Windows NSIS 腿 success 且 artifact 完好）
+  # 时 run 整体 conclusion=failure 会卡死 success 门——手动 RUN_ID=<id> 跳过轮询直进拉取
+  echo "    RUN_ID=$RUN_ID（环境变量注入，跳过轮询/结论门——自行确认 artifact 完好）"
+else
 RUN_ID=""
 for i in $(seq 1 120); do
+  # gh 瞬断（代理抖动 EOF/空输出）不算致命：当本轮没查到，30s 后重试——
+  # 曾两次在 Clash 全断窗口撞上空输出 JSONDecodeError 杀掉整脚本
   RUN_ID=$(gh run list -R "$REPO" -w desktop.yml --limit 10 --json databaseId,headBranch,status,conclusion \
     | /usr/bin/python3 -c "
 import json,sys
-for r in json.load(sys.stdin):
+try:
+    runs = json.load(sys.stdin)
+except Exception:
+    sys.exit(1)
+for r in runs:
     if r['headBranch'] == '$TAG':
         print(r['databaseId'], r['status'], r['conclusion'] or '')
         break
-")
+" 2>/dev/null) || RUN_ID=""
   ST=$(echo "$RUN_ID" | awk '{print $2}')
   [ "$ST" = "completed" ] && break
   [ -n "$ST" ] && echo "    run $(echo "$RUN_ID" | awk '{print $1}') $ST…（30s 再查）"
@@ -50,9 +61,16 @@ CONCL=$(echo "$RUN_ID" | awk '{print $3}')
 RUN_ID=$(echo "$RUN_ID" | awk '{print $1}')
 [ "$CONCL" = "success" ] || { echo "ERR: run $RUN_ID 结论 $CONCL（非 success）——先去 Actions 排查"; exit 1; }
 echo "    run $RUN_ID success"
+fi
 
 echo "[2/5] 拉 Windows 产物（setup.exe + .sig）…"
-gh run download -R "$REPO" "$RUN_ID" -n "CC-Deck-Desktop-Tauri-$TAG" -D "$TMP" || { echo "ERR: artifact 拉取失败（名字 CC-Deck-Desktop-Tauri-$TAG）"; exit 1; }
+# 产物下载走同一条抖动链路，失败重试 3 次（30s 间隔）再放弃
+DL_OK=0
+for i in 1 2 3; do
+  if gh run download -R "$REPO" "$RUN_ID" -n "CC-Deck-Desktop-Tauri-$TAG" -D "$TMP"; then DL_OK=1; break; fi
+  [ "$i" = "3" ] || { echo "    下载失败（第 $i 次），30s 后重试…"; sleep 30; }
+done
+[ "$DL_OK" = "1" ] || { echo "ERR: artifact 拉取失败（名字 CC-Deck-Desktop-Tauri-$TAG）"; exit 1; }
 EXE=$(find "$TMP" -name '*-setup.exe' | head -1)
 SIG=$(find "$TMP" -name '*-setup.exe.sig' | head -1)
 [ -n "$EXE" ] && [ -n "$SIG" ] || { echo "ERR: artifact 缺 setup.exe 或 .sig（EXE=$EXE SIG=$SIG）"; exit 1; }
