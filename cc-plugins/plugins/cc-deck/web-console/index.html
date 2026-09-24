@@ -964,9 +964,17 @@
   /* ---------- 服务器管理列表（多源） ---------- */
   #srvList { display: flex; flex-direction: column; gap: 7px; }
   .srv-row {
+    position: relative; /* #152 左缘身份色竖条（srv-bar）的定位基准 */
     display: flex; align-items: center; gap: 9px; padding: 8px 9px 8px 11px;
     border: 1px solid var(--border); border-radius: 12px; background: var(--panel);
     cursor: pointer; transition: border-color .15s, box-shadow .15s;
+  }
+  /* #152 连接行左缘身份色竖条（对齐手机 SettingsDrawer srvBar：left:0 / 上下 inset 10 /
+     宽 3 / 圆角 2）。颜色=该源身份色（srcColorByKey，与列表源徽章同色），
+     登记后跨状态不变——状态仍由右侧插头三色承载，色条只答「这是哪个源」 */
+  .srv-bar {
+    position: absolute; left: 0; top: 10px; bottom: 10px; width: 3px;
+    border-radius: 2px; pointer-events: none;
   }
   .srv-row:hover { border-color: var(--hov); }
   .srv-row.active { border-color: var(--brand); box-shadow: 0 0 0 1px var(--brand); }
@@ -1169,6 +1177,32 @@
   #newform .row { display: flex; justify-content: flex-end; gap: 8px; }
   /* 新建选项行：左对齐排勾选与 ? 悬浮（罗嗦引导文案收进 title） */
   #newform .row.newopts { justify-content: flex-start; align-items: center; gap: 6px; }
+  /* #168 目录行：输入框 + 内嵌浏览钮（桌面壳原生目录对话框）；输入框让出右侧钮位 */
+  .cwd-wrap { position: relative; }
+  .cwd-wrap #cwd { width: 100%; padding-right: 32px; }
+  #cwdPick {
+    position: absolute; right: 5px; top: 50%; transform: translateY(-50%);
+    display: flex; align-items: center; justify-content: center;
+    width: 22px; height: 22px; border: none; border-radius: 6px;
+    background: none; color: var(--dim); cursor: pointer; padding: 0;
+  }
+  #cwdPick:hover { color: var(--text); background: var(--hov); }
+  /* #168 历史目录下拉：点目录输入框弹出（最近 5 条，按源隔离），浮层锚在 .cwd-wrap 下方 */
+  #cwdHist {
+    position: absolute; top: calc(100% + 4px); left: 0; right: 0; z-index: 60;
+    max-height: 226px; overflow-y: auto; display: none;
+    background: var(--panel); border: 1px solid var(--border); border-radius: 10px;
+    box-shadow: 0 10px 28px rgba(0, 0, 0, 0.22); padding: 3px;
+  }
+  .cwd-opt {
+    display: flex; flex-direction: column; gap: 1px; width: 100%; text-align: left;
+    padding: 6px 9px; border: none; border-radius: 7px; background: none;
+    cursor: pointer; user-select: none;
+  }
+  .cwd-opt:hover { background: var(--bg-soft); }
+  .cwd-opt .nm { font-size: 12px; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .cwd-opt .p { font-size: 10.5px; color: var(--dim); opacity: 0.85; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .cwd-opt .cc-last { color: var(--brand-2); font-size: 10px; margin-right: 5px; }
   .skip-perm { display: flex; align-items: center; gap: 5px; font-size: 11.5px; color: var(--dim); cursor: pointer; user-select: none; }
   .hint-q { display: inline-flex; align-items: center; justify-content: center; width: 14px; height: 14px; border-radius: 50%; border: 1px solid var(--border); color: var(--dim); font-size: 10px; cursor: help; flex: none; }
 
@@ -1192,7 +1226,7 @@
   .elapsed { font-size: 12px; color: var(--dim); font-variant-numeric: tabular-nums; }
   /* #362 标题恒第一行（灯+标题+总时长）：WORKING/空闲同构，状态切换不跳行；
      WORKING 实时行退居第二行（灯在标题行），空闲第二行=摘要（App 卡同构） */
-  .c-head { display: flex; align-items: center; gap: 8px; min-width: 0; }
+  .c-head { display: flex; align-items: center; gap: 8px; min-width: 0; position: relative; } /* #164 relative：✎/✕ 浮层锚点 */
   .c-head .card-title { flex: 1; min-width: 0; margin-top: 0; }
   .c-head .c-tt { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   /* 会话卡标题提对比（--text-strong ≈ 提亮 15%）：标题行是扫读锚点，弱于正文层级 */
@@ -1213,20 +1247,37 @@
   .cards-empty .ce-icon { font-size: 34px; opacity: .5; margin-bottom: 10px; }
   .card-title { font-size: 15px; font-weight: 650; margin-top: 4px; display: flex; align-items: center; gap: 8px; } /* #40→#67漏项 16 回落 15（用户点单调小） */
   .his-badge {
-    font-size: 10px; color: var(--faint); border: 1px solid var(--border);
-    padding: 1px 7px; border-radius: 999px; flex: none; font-weight: 500;
-  }
-  .his-badge.ext { color: var(--brand-2); border-color: rgba(201,100,66,.4); }
+    font-size: 10px; color: var(--faint); flex: none; font-weight: 500;
+  } /* #164：从标题行移入 stats 元信息行（与源标签同族），名称行让宽——规则不动，仅挂点变；
+     #171 去胶囊化（边框+内边距让分类标在元信息行里视觉过重，用户报突兀）：降为素文本
+     小字，与手机端 meta 行「外部 CLI · 📁 目录 · 历史」同口径；终端类保品牌色区分 */
+  .his-badge.ext { color: var(--brand-2); }
   /* #23 托管会话（控制台新建，无终端窗口）徽章：中性弱化，悬停解释 */
   .his-badge.bg { cursor: help; }
   /* #13 巡检：显影后用 --dim（原 --faint 白底/深底都近乎不可见），hover 仍各自着色 */
   .card-edit {
-    margin-left: auto; flex: none; background: none; border: none; cursor: pointer;
+    flex: none; background: none; border: none; cursor: pointer;
     color: var(--dim); font-size: 12px; padding: 2px 4px; border-radius: 6px; opacity: 0;
     transition: opacity .12s;
   }
   .card:hover .card-edit { opacity: 1; }
   .card-edit:hover { color: var(--text); background: var(--bg-soft); }
+  /* #164 会话卡名称让宽（用户反馈：稍长名称即被"…"截断太狠）：
+     ① ✎/✕ 原在 .card-title 流内 opacity:0 隐藏——不显也常驻占 ~44px，与分类徽章、
+        时间一起把名称挤到只剩几个字；改绝对定位悬停浮层，落点盖住最后活跃时间
+        （悬停去操作时无需读时间，两者互斥不叠字）；
+     ② 分类徽章（终端/后台/历史/休眠）移 stats 元信息行（与源标签/📁 同族）。
+        名称净增 ~90px（≈6 个汉字）。触屏无 hover：按钮常显、时间让位（MQ 内处理） */
+  .c-ops {
+    position: absolute; right: -4px; top: 50%; transform: translateY(-50%);
+    display: flex; align-items: center; flex: none; z-index: 2;
+    opacity: 0; pointer-events: none; transition: opacity .12s;
+  }
+  .card:hover .c-ops { opacity: 1; pointer-events: auto; }
+  .elapsed { transition: opacity .12s; }
+  .card:hover .elapsed { opacity: 0; }
+  /* 重命名进行中 ✎ 与标题内 ✓ 重复——输入框在 .card-title 里时收掉浮层（:has 不支持则无害降级） */
+  .card:has(.card-title input) .c-ops { opacity: 0 !important; pointer-events: none; }
   /* #279① 会话删除 ✕（与 ✎ 同款 hover 显现；DONE/ERROR 才可删，运行中置灰） */
   .card-del {
     flex: none; background: none; border: none; cursor: pointer;
@@ -1281,7 +1332,7 @@
   #apkQrPop .aq-u { color: var(--faint); font-size: 11px; }
   /* #279⑨ 紧凑卡（对齐手机"简洁列表"三行）：状态点+标题+耗时 / 摘要 / 角标+改动+水位 */
   .card.compact { padding: 7px 11px 8px; border-radius: 10px; }
-  .card.compact .c-row1 { display: flex; align-items: center; gap: 7px; }
+  .card.compact .c-row1 { display: flex; align-items: center; gap: 7px; position: relative; } /* #164 ✎/✕ 浮层锚点 */
   /* #98 状态灯系统升级：8→10px（面积 +56%）+ 静态光圈（白底呈淡彩圈，深点+彩圈=
      指示徽而非裸墨点）；WORKING 呼吸动画的 box-shadow 关键帧会自然接管光圈（预期） */
   .c-dot { width: 10px; height: 10px; border-radius: 50%; background: var(--sc, var(--dim)); flex: none; box-shadow: 0 0 0 3px color-mix(in srgb, var(--sc, var(--dim)) 20%, transparent); }
@@ -1487,9 +1538,10 @@
   .card-summary { color: var(--card-sub); font-size: 11.5px; line-height: 16px; margin-top: 4px; padding-left: 4px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-height: 16px; } /* #399 悬挂缩进对齐灯列；#54 动作行降档 12.5→11.5 + 提色；#58 行盒+min-height 双钉 16px；#98 灯 8→10px 缩进 6→4 补偿 */
   /* #98 语义色修正：WAITING 卡摘要从 WORKING 黄回归红语义——黄只留给「在跑」 */
   .card-summary.waiting { color: var(--waiting); }
-  .card-stats { font-size: 11px; line-height: 15px; color: var(--faint); margin-top: 6px; display: flex; align-items: center; gap: 10px; font-variant-numeric: tabular-nums; min-height: 15px; } /* #54 元信息行降档 12→11；#58 行盒+min-height 双钉 15px，内容/空档等高 */
-  /* #145 工作目录上卡（替代改动统计行）：超长省略，title 悬停全路径 */
-  .card-stats .card-dir { flex: none; max-width: 45%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .card-stats { font-size: 11px; line-height: 15px; color: var(--faint); margin-top: 6px; display: flex; align-items: center; gap: 10px; font-variant-numeric: tabular-nums; min-height: 15px; overflow: hidden; } /* #54 元信息行降档 12→11；#58 行盒+min-height 双钉 15px；#169 溢出护栏：窄侧栏下内容总宽超卡时静默裁切，不外溢到卡外 */
+  /* #145 工作目录上卡（替代改动统计行）：超长省略，title 悬停全路径；
+     #169 flex:none→可收缩——窄侧栏下目录名先让路（省略号截断），保住右侧水位百分比（#166 正在对照验收的量，不能被挤出裁掉）；宽侧栏 45% 上限行为不变 */
+  .card-stats .card-dir { flex: 0 1 auto; min-width: 0; max-width: 45%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   /* #383 源标签居 stats 行最左（与上两行左对齐）；ctx 水位推最右 */
   .card-stats .src-badge { flex: none; }
   .card-stats .ctx-mini { margin-left: auto; }
@@ -1523,9 +1575,9 @@
   #dhead { padding: 12px 20px 0; border-bottom: 1px solid var(--border); background: var(--glass-soft); flex: none; }
   #backBtn { display: none; margin-left: -8px; margin-bottom: 6px; }
   .dhead-row { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
-  #dtitle { font-size: 16px; font-weight: 700; } /* #67漏项 17→16 调小一号 */
-  #renameBtn { padding: 3px 9px; font-size: 13px; color: var(--dim); }
-  #dsub { color: var(--dim); font-size: 12px; margin-top: 5px; display: flex; gap: 12px; flex-wrap: wrap; align-items: center; }
+  #dtitle { font-size: 16px; font-weight: 700; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; } /* #67漏项 17→16；#176 并行后过长收缩省略 */
+  /* #176 元信息并入名称行：占名称后剩余宽度（水位 margin-left:auto 贴行尾），窄屏内部 wrap 回落 */
+  #dsub { color: var(--dim); font-size: 12px; display: flex; gap: 12px; flex-wrap: wrap; align-items: center; flex: 1 1 auto; min-width: 0; }
   /* R1 时长弱化小字（对齐手机 d.sub：跟在标题后，dim 不抢视觉） */
   .dhead-row .elapsed { color: var(--dim); font-weight: 400; font-size: 12px; white-space: nowrap; }
   /* #41web 路径过长时不换行挤第三行，而是收缩省略（完整路径在 title），给右端水位/chip 让位 */
@@ -1834,6 +1886,22 @@
     /* #102：删第二层 18px 大光晕（扩散过大），保留描边+3px 聚焦环（a11y 资产） */
     box-shadow: 0 0 0 3px rgba(217,119,87,.22);
   }
+  /* #179 全窗拖放蒙层：拖文件悬停页面任意位置即整页提示——不再只认输入卡
+     （Windows 实测「拖到输入框无反应」：落区窄 + 非 Files 载荷拖动零反馈）。
+     pointer-events:none 保证蒙层不吞后续拖拽事件 */
+  body.file-drag-over::after {
+    content: "松开添加为附件（图片自动压缩，文件 ≤2 个）";
+    position: fixed; inset: 0; z-index: 300;
+    display: flex; align-items: center; justify-content: center;
+    color: var(--dim); font-size: 15px; letter-spacing: 1px; pointer-events: none;
+    background: color-mix(in srgb, var(--bg-main) 74%, transparent);
+    border: 2px dashed var(--brand);
+  }
+  /* #179 附件能力小字提醒（用户原话：要小字提醒，不然用户都不知道） */
+  #attachHint {
+    font-size: 11px; color: var(--dim); opacity: .8;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0;
+  }
   /* ---------- 回到底部浮钮（对齐手机端形态）：消息 tab 下滚动停止且距底 >80px 才浮现；
      绝对定位挂 #cmdbar（不随 #timeline 滚动），bottom:100%+10px 即悬停于输入区上方 10px ---------- */
   #cmdbar > #toBottomBtn {
@@ -2044,15 +2112,18 @@
     #undoBar { right: 10px; bottom: 84px; max-width: calc(100vw - 20px); }
     #confirmFloat { right: 10px; bottom: 158px; }
     .cf-card { max-width: calc(100vw - 20px); }
-    /* 触屏无 hover：卡片操作钮常显（同 srv-row 按钮处理），删除入口才可达 */
+    /* 触屏无 hover：卡片操作钮常显（同 srv-row 按钮处理），删除入口才可达；
+       #164 按钮改浮层后配套：常显 + 时间让位（visibility 保占位，名称宽度不漂移） */
     .card-edit, .card-del { opacity: 1; }
+    .c-ops { opacity: 1; pointer-events: auto; }
+    .card .elapsed { visibility: hidden; }
     #timeline, #dhead, #cmdbar, #hisnote { padding-left: 14px; padding-right: 14px; margin-left: 0; margin-right: 0; }
     #waitbox, #liverow, #agbox, #imgrow { margin-left: 14px; margin-right: 14px; width: calc(100% - 28px); }
     #pendbox { padding: 0 14px 8px; }
     #slashbox { left: 14px; right: 14px; max-width: calc(100% - 28px); }
   }
 </style>
-<script>try{if(localStorage.getItem("ccr_theme")==="light")document.documentElement.classList.add("light")}catch(e){}</script>
+<script>/* #173 默认浅色：仅显式存过 "dark" 才深色；无偏好/存过 "light" 均浅色（已存偏好不动） */try{if(localStorage.getItem("ccr_theme")!=="dark")document.documentElement.classList.add("light")}catch(e){}</script>
 <script>/* 桌面壳标题栏主题同步：Electron 走 preload IPC，Tauri 走全局 API；浏览器无桥接自动跳过 */window.__ccShellTheme=(light)=>{try{window.ccDeck&&window.ccDeck.setNativeTheme(!light)}catch(e){}try{window.__TAURI__&&window.__TAURI__.window.getCurrentWindow().setTheme(light?"light":"dark")}catch(e){}};__ccShellTheme(document.documentElement.classList.contains("light"));</script>
 </head>
 <body>
@@ -2113,7 +2184,11 @@
     <div id="newbox">
       <div id="newform">
         <div class="seg" id="newSrcSeg" style="display:none"></div>
-        <input id="cwd" placeholder="工作目录（如 D:\dev\my-project）">
+        <div class="cwd-wrap">
+          <input id="cwd" placeholder="工作目录（如 D:\dev\my-project）">
+          <button id="cwdPick" title="浏览选择本机目录" style="display:none"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3.5 7.2c0-1.3 1-2.3 2.3-2.3h3l2 2.2h6.4c1.3 0 2.3 1 2.3 2.3v7.3c0 1.3-1 2.3-2.3 2.3H5.8c-1.3 0-2.3-1-2.3-2.3z"/></svg></button>
+          <div id="cwdHist"></div>
+        </div>
         <textarea id="prompt" rows="2" placeholder="初始指令，如：帮我看看当前项目结构并总结"></textarea>
         <div class="pair-hint" id="newTarget"></div>
         <div class="row newopts">
@@ -2302,23 +2377,21 @@
   <div id="detail">
     <div id="dhead">
       <button id="backBtn" class="ghost">‹ 返回</button>
-      <!-- 两行化（对齐手机 2026-09-14 定稿，#155 再收敛）：R1=标题（原时长已删——消息
-           时间戳已提供时间感，统计 tab 保留用时全量）；R2=源名+路径+ctx 短条+模型名 -->
+      <!-- #176 单行化：元信息（源名+路径+ctx 短条+模型名）并入名称行 dim 小字、贴行尾，
+           去 ✎ 改名钮（改名入口保留在会话列表卡片 ✎）——head 矮一档给消息区让位。
+           名称过长收缩省略；窄屏 dsub 内部 flex-wrap 回落换行（≤900px 水位整格回落独立行） -->
       <div class="dhead-row">
         <span id="dtitle"></span>
-        <span class="spacer"></span>
-        <button id="renameBtn" class="ghost" title="重命名会话">✎</button>
-      </div>
-      <div id="dsub">
-        <span id="dsrc"></span>
-        <span id="dcwd"></span>
-        <!-- #41web 水位+模型 chip 并入元信息行右端（26px 短条定宽，与手机同款紧凑形态；
-             路径收缩省略完整路径看 title）。窄屏（≤900px 详情头放不下）整格 flex-basis:100% 自动回落
-             独立一行 = 原 #dctxrow 第三行形态（条 flex:1 + chip 行尾） -->
-        <span id="dctxcell">
-          <span id="dctx"></span>
-          <button id="modelBtn" class="mini" style="display:none" title="切换模型（下一回合生效）">模型</button>
-        </span>
+        <div id="dsub">
+          <span id="dsrc"></span>
+          <span id="dcwd"></span>
+          <!-- #41web 水位+模型 chip 行尾（26px 短条定宽，与手机同款紧凑形态；
+               路径收缩省略完整路径看 title） -->
+          <span id="dctxcell">
+            <span id="dctx"></span>
+            <button id="modelBtn" class="mini" style="display:none" title="切换模型（下一回合生效）">模型</button>
+          </span>
+        </div>
       </div>
       <div class="tabs" title="点击或 ←/→ 键切换视图">
         <button data-tab="activity" class="tab active">消息</button>
@@ -2374,6 +2447,7 @@
           <div class="ic-left">
             <button id="imgBtn" title="添加图片（最多 4 张，也可直接 Ctrl+V 粘贴）"><svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M8.7 6.8l1.05-1.9a1.5 1.5 0 0 1 1.3-.75h1.9a1.5 1.5 0 0 1 1.3.75l1.05 1.9"/><rect x="3.4" y="6.8" width="17.2" height="13" rx="3"/><circle cx="12" cy="13.2" r="3.5"/></svg></button>
             <button id="fileBtn" title="附加文件（最多 2 个，单个 20MB，发送时落盘到电脑由 CLI 读取）"><svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M21.4 11.05 12.25 20.2a5.5 5.5 0 0 1-7.78-7.78l8.49-8.48a3.5 3.5 0 1 1 4.95 4.95l-8.49 8.48a1.5 1.5 0 0 1-2.12-2.12l7.78-7.78"/></svg></button>
+            <span id="attachHint">支持粘贴 / 拖入图片、文件</span>
           </div>
           <!-- #124 停止入口：dhead 挪来发送钮旁，纯图标（语义进 title 悬停可见） -->
           <button id="stopBtn" title="停止会话">⏹</button>
@@ -4095,7 +4169,7 @@ function folderHtml(s) {
 // 判级用原始比值（与手机端 contextLevel 一致，避免取整边界色级不一致）
 function ctxPct(s) {
   if (!s || !s.context_usage) return 0;
-  const limit = s.context_limit || 200000;
+  const limit = s.context_limit || 1000000;
   return Math.min(100, Math.round((s.context_usage / limit) * 100));
 }
 // token 缩写（状态行 "123k/1M" 段用，与手机端 fmtTok 同口径）
@@ -4107,7 +4181,7 @@ function tokStr(n) {
 function ctxHtml(s) {
   const used = (s && s.context_usage) || 0;
   if (!used) return "";
-  const limit = (s && s.context_limit) || 200000;
+  const limit = (s && s.context_limit) || 1000000;
   const pct = ctxPct(s);
   const r = used / limit;
   const lv = r < 0.6 ? "done" : r < 0.85 ? "working" : "waiting";
@@ -4449,7 +4523,10 @@ function render() {
       // #49 徽章：休眠卡（已保存未恢复）出「休眠」徽；普通遗留出「历史」；外部 CLI 出「终端」
       // #23 徽章四态：休眠/历史/终端（外部 CLI 会话）/后台（控制台新建的托管会话——
       // 无终端窗口，消息只在面板可见；降低与终端会话的混淆）
-      const badges = dormant ? '<span class="his-badge">休眠</span>' : s.historical ? '<span class="his-badge">历史</span>' : s.external ? '<span class="his-badge ext">终端</span>' : '<span class="his-badge bg">后台</span>';
+      // #164 挂点迁移：不再进标题行（分类信息与源标签/📁 同族）——移 stats 元信息行
+      // #171 英文缩写（用户验收批注「最好改成英文缩写，更简洁」）：SAVED/HIST/CLI/SDK，
+      // 四态全部带 title 悬停解释（缩写不自解释；bg 的 cursor:help 原先没有配套 title）
+      const badges = dormant ? '<span class="his-badge" title="已保存休眠（点击卡片恢复）">SAVED</span>' : s.historical ? '<span class="his-badge" title="历史会话（进程已结束）">HIST</span>' : s.external ? '<span class="his-badge ext" title="外部终端里的 CLI 会话">CLI</span>' : '<span class="his-badge bg" title="托管会话（控制台新建，无终端窗口）">SDK</span>';
       // #100 后台任务徽标：⑂N 黄胶囊。#161 对齐手机：bgCount > 0 恒显——WORKING 时
       // liveRow 只交代主回合在跑，并行子 Agent 数仍要一眼可见（手机三档密度卡同口径）
       const bgBadge = bgRunning(s) ? '<span class="bg-badge" title="后台子 Agent 运行中">⑂' + bgCount(s) + "</span>" : "";
@@ -4460,26 +4537,29 @@ function render() {
         '<button class="card-edit" title="重命名">✎</button>' +
         '<button class="card-del' + (deletable ? "" : " off") + '" title="' + (deletable ? "删除会话" : "运行中，不能删除") + '">✕</button>';
       const tok = s.usage && s.usage.output_tokens ? s.usage.output_tokens : 0;
-      // #341 去重：自动标题常与 action_summary 同文（title-gen 由动作生成）——同文时摘要不重复展示
-      const title = s.title || "";
-      const dupTitle = !!(waitingText && title && (waitingText === title || title.startsWith(waitingText) || waitingText.startsWith(title)));
       // #362 标题恒第一行：灯（WORKING 呼吸）+标题+总时长同构一行，状态切换不跳行；
       // WORKING 实时行（回合秒+↓tokens+动作摘要）退居第二行，空闲第二行=摘要
+      // #164：标题行只剩 灯+标题+⑂N+时间（徽章下移 stats 行、✎/✕ 悬停浮层盖时间），
+      // 名称净增 ~90px——悬停标题可见全文 tooltip
       const headRow =
         '<div class="c-head">' + pinFlag + '<span class="c-dot' + (s.status === "WORKING" || (s.status !== "WORKING" && bgRunning(s)) ? " run" : "") /* #100/#161 后台在跑也呼吸（bgLive 不限 DONE） */ + '" style="--sc:var(--' + (s.status || "").toLowerCase() + ')"></span>' +
-          '<span class="card-title"><span class="c-tt">' + escapeHtml(s.title || "") + "</span>" + bgBadge + badges + opBtns + "</span>" +
-          '<span class="elapsed" title="最后活跃">' + fmtLastActive(s.updated_at) + "</span></div>";
+          '<span class="card-title"><span class="c-tt" title="' + escapeHtml(s.title || "") + '">' + escapeHtml(s.title || "") + "</span>" + bgBadge + "</span>" +
+          '<span class="elapsed" title="最后活跃">' + fmtLastActive(s.updated_at) + "</span>" +
+          '<span class="c-ops">' + opBtns + "</span></div>";
       const liveRow = s.status === "WORKING"
         ? '<div class="c-live">' +
           (s.compacting ? '<span class="lv-tok">⟳ 压缩上下文</span>' : "") +
           '<span class="lv-sec">' + Math.max(0, Math.floor((Date.now() - (s.turn_started_at ?? s.updated_at)) / 1000)) + 's</span>' +
           (tok ? '<span class="lv-tok">↓ ' + tokStr(tok) + "</span>" : "") +
-          (s.action_summary && !dupTitle && !s.compacting ? '<span class="lv-sum">' + escapeHtml(s.action_summary) + "</span>" : "") +
+          (s.action_summary && !s.compacting ? '<span class="lv-sum">' + escapeHtml(s.action_summary) + "</span>" : "") +
           "</div>"
         : "";
-      const summaryRow = waitingText && s.status !== "WORKING" && !dupTitle
-        ? '<div class="card-summary' + (waiting ? " waiting" : "") + '">' + escapeHtml(waitingText) + "</div>"
-        : '<div class="card-summary blank"></div>'; /* #58 空档占位：无摘要也留行，卡高恒定 */
+      // #170 中间行永不空白：去 #341 的 dupTitle 抑制（前缀匹配误伤面大——标题是项目名
+      // 而摘要恰以它开头时整行消失，用户实测「有的卡片工作状态消失」）与状态限制（紧凑
+      // 密度下 WORKING 卡曾因此恒落 blank 占位），空摘要回落「…」——与手机两档密度
+      // `action_summary || "…"` 同口径；#58 等高由 .card-summary 的 min-height 钉住
+      const summaryRow =
+        '<div class="card-summary' + (waiting ? " waiting" : "") + '">' + escapeHtml(waitingText || "…") + "</div>";
       const ctaRow = waiting && !s.historical && s.waiting_request?.decidable !== false ? '<div class="card-cta"><button>处理</button></div>' : "";
       // #367 源标签内联进 stats 行右侧（多源才有；不再独立占一整行留白）；
       // #383 源标签移最左与上两行左对齐；ctx 水位条压到最右（不再悬中间）
@@ -4489,14 +4569,15 @@ function render() {
       // #58 推翻 #367 的「全空不渲染」：行数 1~3 漂移致同列表卡高参差（用户 2026-09-19
       // 反馈），stats 行恒渲染 + min-height 占位，换取三行恒定等高（空档代价可接受）
       const srcTag = filterSrc === "all" && showSrcTag ? srcBadgeHtml(ctx.cfg) : "";
-      const statsInner = srcTag + folderHtml(s) + ctxHtml(s);
+      const statsInner = srcTag + badges + folderHtml(s) + ctxHtml(s); /* #164 badges 从标题行移入（分类信息归元信息行） */
       const statsBlock = '<div class="card-stats">' + statsInner + "</div>";
       if (listCompact) {
-        // #279⑨ 紧凑卡（对齐手机）：状态点+标题+耗时 / 摘要 / 改动+水位+源标签
+        // #279⑨ 紧凑卡（对齐手机）：状态点+标题+耗时 / 摘要 / 改动+水位+源标签（#164 徽章同移 stats 行）
         d.innerHTML =
           '<div class="c-row1">' + pinFlag + '<span class="c-dot' + (s.status === "WORKING" || (s.status !== "WORKING" && bgRunning(s)) ? " run" : "") /* #100/#161 后台在跑也呼吸（bgLive 不限 DONE） */ + '" style="--sc:var(--' + (s.status || "").toLowerCase() + ')"></span>' +
-            '<span class="card-title"><span class="c-tt">' + escapeHtml(s.title || "") + "</span>" + bgBadge + badges + opBtns + "</span>" +
-            '<span class="elapsed" title="最后活跃">' + fmtLastActive(s.updated_at) + "</span></div>" +
+            '<span class="card-title"><span class="c-tt" title="' + escapeHtml(s.title || "") + '">' + escapeHtml(s.title || "") + "</span>" + bgBadge + "</span>" +
+            '<span class="elapsed" title="最后活跃">' + fmtLastActive(s.updated_at) + "</span>" +
+            '<span class="c-ops">' + opBtns + "</span></div>" +
           summaryRow +
           statsBlock +
           ctaRow;
@@ -4847,6 +4928,7 @@ function renderDetail() {
   // 隐藏仅剩：不可恢复的托管历史会话（cmdLocked 同口径）
   $("imgBtn").style.display = s.historical && !s.external && !s.relay_session_id ? "none" : "";
   $("fileBtn").style.display = s.historical && !s.external && !s.relay_session_id ? "none" : ""; // #92 文件入口同口径
+  $("attachHint").style.display = s.historical && !s.external && !s.relay_session_id ? "none" : ""; // #179 小字提醒同口径（按钮都藏了别孤挂）
 
   // 时间线 / 统计（增量重建）
   const tl = $("timeline");
@@ -6137,16 +6219,127 @@ function updateCwdPlaceholder() {
     : actx?.platform ? "工作目录（relay 侧路径，如 ~/dev/my-project）"
     : "工作目录（relay 侧路径）";
 }
+// #168 历史目录：每源各记一份「上次创建成功用的目录」（旧版全局 ccr_cwd 迁移读、
+// 双写保留——回滚旧版仍有值可读），避免 Mac 的路径被预填到公司电脑源上
+// #168 迭代（2026-09-24 用户定）：历史目录改点目录输入框弹下拉，最近 5 条，按源隔离。
+// 存储：ccr_cwd_hist@<serverId> = 路径数组（新→旧，cap 5）；旧单值键（ccr_cwd@id / 全局
+// ccr_cwd）读取时迁移垫底、成功时双写保回滚兼容。会话 cwd 仅作该源补充凑满 5 条。
+function cwdKey(id) { return "ccr_cwd@" + (id || ""); }
+function cwdHistKey(id) { return "ccr_cwd_hist@" + (id || ""); }
+function readCwdHist(id) {
+  let arr = [];
+  try {
+    const raw = localStorage.getItem(cwdHistKey(id));
+    if (raw) arr = JSON.parse(raw).filter((x) => typeof x === "string" && x);
+  } catch {}
+  for (const legacy of [lsGet(cwdKey(id)), lsGet("ccr_cwd")]) {
+    if (legacy && !arr.some((d) => d.toLowerCase() === legacy.toLowerCase())) arr.push(legacy);
+  }
+  return arr.slice(0, 5);
+}
+function pushCwdHist(id, dir) {
+  if (!dir) return;
+  const arr = readCwdHist(id).filter((d) => d.toLowerCase() !== dir.toLowerCase());
+  arr.unshift(dir);
+  try { localStorage.setItem(cwdHistKey(id), JSON.stringify(arr.slice(0, 5))); } catch {}
+}
+function lastCwdOf(id) { return readCwdHist(id)[0] || ""; }
+function renderCwdDrop() {
+  const box = $("cwdHist");
+  const items = [];
+  const seen = new Set();
+  const add = (dir, last) => {
+    const k = String(dir).toLowerCase();
+    if (seen.has(k)) return;
+    seen.add(k);
+    items.push({ dir, last });
+  };
+  const hist = readCwdHist(activeServerId);
+  hist.forEach((d, i) => add(d, i === 0 && hist.length > 1));
+  const ctx = ctxs.get(activeServerId); // 同源会话 cwd 补充（按最后活跃倒序去重）
+  if (ctx) {
+    const ss = [...ctx.sessions.values()].filter((s) => s.cwd);
+    ss.sort((a, b) => (b.updated_at || 0) - (a.updated_at || 0));
+    for (const s of ss) {
+      if (items.length >= 5) break;
+      add(s.cwd, false);
+    }
+  }
+  box.innerHTML = "";
+  if (!items.length) { box.style.display = "none"; return; }
+  for (const it of items) {
+    const row = document.createElement("button");
+    row.type = "button";
+    row.className = "cwd-opt";
+    const parts = String(it.dir).replace(/[\\/]+$/, "").split(/[\\/]/);
+    row.innerHTML =
+      '<span class="nm">' + (it.last ? '<span class="cc-last">上次</span>' : "") + escapeHtml(parts[parts.length - 1] || it.dir) + "</span>" +
+      '<span class="p">' + escapeHtml(it.dir) + "</span>";
+    // mousedown 先于输入框 blur：不 preventDefault 会先收下拉再吃掉这次点击
+    row.onmousedown = (e) => {
+      e.preventDefault();
+      $("cwd").value = it.dir;
+      box.style.display = "none";
+      $("prompt").focus();
+    };
+    box.appendChild(row);
+  }
+  box.style.display = "block";
+}
+function hideCwdDrop() { $("cwdHist").style.display = "none"; }
+$("cwd").addEventListener("focus", renderCwdDrop);
+$("cwd").addEventListener("blur", () => setTimeout(hideCwdDrop, 150));
+document.addEventListener("keydown", (e) => { if (e.key === "Escape") hideCwdDrop(); });
+// #168 桌面壳原生选目录：目录对话框只能在「本机源」上用（选的是这台电脑的文件系统，
+// 远程源该路径不存在）。本机判定：loopback 直连，或内网 IP 写法与本机 relay 探测
+//（probeLocal）端口+token 一致；域名写法无法判定按远程处理
+async function activeIsLocalRelay() {
+  const cfg = cfgOf(activeServerId);
+  if (!cfg || cfg.kind !== "lan") return false;
+  const ep = localEp(cfg.wsUrl);
+  if (!ep) return false;
+  if (ep.loop) return true;
+  try {
+    const j = window.ccDeck?.probeLocal ? await window.ccDeck.probeLocal() : null;
+    if (j && j.ok && ep.port === (j.port || 8787) && cfg.token && cfg.token === j.token) return true;
+  } catch {}
+  return false;
+}
+// 浏览钮可见性：仅桌面壳且 dialog 插件在（老壳无插件→藏，热更不炸）
+function syncCwdPick() {
+  $("cwdPick").style.display = window.__TAURI__ && window.__TAURI__.dialog ? "flex" : "none";
+}
+$("cwdPick").onclick = async () => {
+  if (!window.__TAURI__?.dialog) return;
+  if (!(await activeIsLocalRelay())) {
+    toast("当前新建目标是其他电脑的源，无法浏览本机目录——请直接输入那台电脑上的路径", 5000);
+    return;
+  }
+  try {
+    const cur = $("cwd").value.trim();
+    const dir = await window.__TAURI__.dialog.open({
+      directory: true, multiple: false, title: "选择工作目录",
+      ...(cur ? { defaultPath: cur } : {}),
+    });
+    if (typeof dir === "string" && dir) { $("cwd").value = dir; $("prompt").focus(); }
+  } catch (e) { toast("打开目录选择器失败: " + (e?.message || e), 4000); }
+};
 $("addBtn").onclick = () => {
   const open = !$("newform").classList.contains("open");
   $("newform").classList.toggle("open", open);
   $("addBtn").classList.toggle("on", open);
   morphAddBtn(open);
   if (open) {
+    // 预填：该源上次用的目录 > 活动源用户根目录（#368 原行为兜底）
     if (!$("cwd").value.trim()) {
-      const actx = ctxs.get(activeServerId) || ctxs.get(servers[0]?.id);
-      if (actx && actx.homedir) $("cwd").value = actx.homedir;
+      const last = lastCwdOf(activeServerId);
+      if (last) $("cwd").value = last;
+      else {
+        const actx = ctxs.get(activeServerId) || ctxs.get(servers[0]?.id);
+        if (actx && actx.homedir) $("cwd").value = actx.homedir;
+      }
     }
+    syncCwdPick();
     $("prompt").focus();
   }
 };
@@ -6395,6 +6588,7 @@ function renderServers() {
     const chanOn = ctx && ctx.status === "online";
     const chanBadge = !chanOn ? "" : s.kind === "cloud" ? '<i class="pchan">☁</i>' : s.kind === "lan" ? '<i class="pchan lan">LAN</i>' : "";
     return '<div class="srv-row' + (s.id === activeServerId ? " active" : "") + (s.id === editId ? " editing" : "") + '" data-id="' + s.id + '" title="点击设为活动源，并在下方展开编辑">' +
+      '<i class="srv-bar" style="background:' + srcColorByKey(s) + '"></i>' + // #152 左缘身份色竖条（对齐手机 srvBar）
       '<div class="srv-main"><b>' + escapeHtml(s.name) + localTag + '</b>' +
       '<span class="srv-addr' + (pdPairingAnim(stText) ? " pairing" : "") + '">' + escapeHtml(addr) + "</span></div>" +
       // #64 状态/模式图标恒右对齐（对齐手机端 #46/#51：名称 flex 占满，[通道标记][配对徽章][插头] 右列；
@@ -6564,7 +6758,9 @@ $("createBtn").onclick = () => {
   const id = sendCommandTo(ctx, "COMMAND_CREATE", { cwd: cwd || ".", prompt, ...(bypass ? { permissionMode: "bypassPermissions" } : {}) });
   if (bypass) $("skipPerm").checked = false; // 创建后回落，防止下一次误建 skip 会话
   if (id) {
-    lsSet("ccr_cwd", cwd);
+    // #168 历史目录：按实际建会话的源记最近 5 条历史（pushCwdHist cap 5）+ 双写旧单值键（回滚兼容）
+    const keyId = ctx?.cfg?.id || activeServerId;
+    if (cwd) { pushCwdHist(keyId, cwd); lsSet(cwdKey(keyId), cwd); lsSet("ccr_cwd", cwd); }
     $("prompt").value = "";
     closeNewForm();
     // 回执看门狗：客户端"在线"最长可比 relay 真实离线晚 ~45s（ping 判死窗口），
@@ -6718,27 +6914,86 @@ document.addEventListener("click", function (e) {
     catch (_) { toast("呼出浏览器失败：" + a.href); }
   });
 }, true);
-// 粘贴贴图（网页端独有优势）：剪贴板含图片文件即进待发行；纯文本粘贴不受影响
+// 粘贴贴图/文件（网页端独有优势；#165 扩展：资源管理器/访达复制的任意文件）：
+// ① clipboardData.files（Win WebView2 里 Explorer 复制的文件在此，FileList 完整）；
+// ② 截图场景（mac WKWebView）files 常为空——items image/* blob 兜底；
+// 图片走压缩链路、其他文件走 #92 附件链路；纯文本粘贴不受影响
 document.addEventListener("paste", (ev) => {
-  const items = ev.clipboardData && ev.clipboardData.items;
-  if (!items) return;
-  const files = [];
-  for (const it of items) {
-    if (it.kind === "file" && String(it.type).startsWith("image/")) {
-      const f = it.getAsFile();
-      if (f) files.push(f);
+  const cd = ev.clipboardData;
+  if (!cd) return;
+  const files = cd.files && cd.files.length ? [...cd.files] : [];
+  if (!files.length && cd.items) {
+    for (const it of cd.items) {
+      if (it.kind === "file" && String(it.type).startsWith("image/")) {
+        const f = it.getAsFile();
+        if (f) files.push(f);
+      }
     }
   }
   if (!files.length) return;
   const sel = selSession();
   if (!sel) return;
   if (!imgSessionOk(sel.s)) {
-    if (sel.s.historical) toast(sel.s.relay_session_id ? "恢复会话不支持带图" : "历史会话仅可查看");
+    if (sel.s.historical) toast(sel.s.relay_session_id ? "恢复会话不支持带附件" : "历史会话仅可查看");
     return;
   }
   ev.preventDefault();
-  void addImageFiles(files);
+  const imgs = files.filter((f) => String(f.type).startsWith("image/"));
+  const docs = files.filter((f) => !String(f.type).startsWith("image/"));
+  if (docs.length) void addUploadFiles(docs);
+  if (imgs.length) void addImageFiles(imgs);
 });
+// #179 全窗拖放：拖文件悬停页面任意位置即全页蒙层提示，任意处松手即收件——
+// #165 旧版只认输入卡落区，Windows 实测「拖到输入框无反应」：落区窄易拖歪 +
+// 聊天窗/网页拖图（text/uri-list 载荷、无 Files）静默跳过零反馈。
+// 只认 dataTransfer.types 含 "Files" 的拖动——任务排序 DnD（#374，text 载荷）不受影响；
+// uri/html 载荷拖动松手时给明确提示（不白屏不导航 file://）。
+(function () {
+  const types = (ev) => (ev.dataTransfer && ev.dataTransfer.types ? [...ev.dataTransfer.types] : []);
+  const hasFiles = (ev) => types(ev).includes("Files");
+  let depth = 0;
+  const unmask = () => { depth = 0; document.body.classList.remove("file-drag-over"); };
+  document.addEventListener("dragenter", (ev) => {
+    if (!hasFiles(ev)) return;
+    ev.preventDefault();
+    depth++;
+    document.body.classList.add("file-drag-over");
+  });
+  document.addEventListener("dragover", (ev) => {
+    if (!hasFiles(ev)) return;
+    ev.preventDefault();
+    ev.dataTransfer.dropEffect = "copy";
+  });
+  document.addEventListener("dragleave", () => {
+    if (depth > 0 && --depth <= 0) unmask();
+  });
+  window.addEventListener("blur", unmask); // 拖到窗口外松手：收掉蒙层
+  document.addEventListener("drop", (ev) => {
+    if (!hasFiles(ev)) {
+      // 网页/聊天窗拖图（uri/html 载荷）：preventDefault 防 WebView 导航白屏，并给明确反馈
+      if (types(ev).some((t) => t === "text/uri-list" || t === "text/html")) {
+        ev.preventDefault();
+        toast("仅支持拖入本地图片 / 文件（网页或聊天里的图，请先保存或截图后粘贴）");
+      }
+      unmask();
+      return;
+    }
+    ev.preventDefault();
+    unmask();
+    const files = ev.dataTransfer.files && ev.dataTransfer.files.length ? [...ev.dataTransfer.files] : [];
+    if (!files.length) return;
+    const sel = selSession();
+    if (!sel) { toast("先在左侧选择一个会话"); return; }
+    if (!imgSessionOk(sel.s)) {
+      if (sel.s.historical) toast(sel.s.relay_session_id ? "恢复会话不支持带附件" : "历史会话仅可查看");
+      return;
+    }
+    const imgs = files.filter((f) => String(f.type).startsWith("image/"));
+    const docs = files.filter((f) => !String(f.type).startsWith("image/"));
+    if (docs.length) void addUploadFiles(docs);
+    if (imgs.length) void addImageFiles(imgs);
+  });
+})();
 // 输入卡：textarea 自适应高度 + 纸飞机可用态同步
 function syncSendState() {
   const mi = $("msginput");
@@ -7147,14 +7402,7 @@ function startCardRename(cardEl, s, ctx) {
   // 失焦=自动保存并收起（原为放弃——点击外部改名静默丢失）
   inp.onblur = () => finish(true);
 }
-$("renameBtn").onclick = () => {
-  const sel = selSession();
-  if (!sel) return;
-  const t = prompt("会话名称", sel.s.title || "");
-  if (t === null) return;
-  const v = t.trim();
-  if (v && v !== sel.s.title) sendCommandTo(sel.ctx, "COMMAND_RENAME", { session_id: selected.sid, title: v });
-};
+/* #176 详情头 ✎ 改名钮已移除（head 单行化）——改名走会话列表卡片的 ✎ 就地编辑 */
 $("thinkBtn").onclick = () => {
   thinkShown = !thinkShown;
   renderDetail();
@@ -8751,8 +8999,9 @@ async function probeLocalRelay() {
     history.replaceState(null, "", location.pathname);
     setFormKind("lan", s);
   }
-  $("cwd").value = lsGet("ccr_cwd") || "";
+  $("cwd").value = lastCwdOf(activeServerId);
   updateCwdPlaceholder();
+  syncCwdPick(); // #168 目录浏览钮：桌面壳 + dialog 插件在场才显示
   // #386 网页自动嗅探本机 relay：回环 ws 不受 https 混合内容限制，8787 端口固定、
   // 家用部署 token 默认 devtoken——命中即静默加「本机」源（向导存在则收起并直连）。
   // 探测全程对用户不可见：仅未配置时状态卡副行短暂显示"正在探测本机…"；

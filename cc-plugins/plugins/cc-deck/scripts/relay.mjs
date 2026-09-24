@@ -1,4 +1,4 @@
-import{createRequire as ccCr}from"module";const require=ccCr(import.meta.url);
+const require = (await import('node:module')).createRequire(import.meta.url);
 var __create = Object.create;
 var __defProp = Object.defineProperty;
 var __getOwnPropDesc = Object.getOwnPropertyDescriptor;
@@ -10350,7 +10350,7 @@ import { join } from "node:path";
 import { homedir } from "node:os";
 function loadConfig() {
   const port = Number(process.env.CCR_PORT ?? 8787);
-  const dataDir2 = process.env.CCR_DATA_DIR ?? (process.env.CC_DECK_PLUGIN ? join(homedir(), ".cc-deck", "data") : join(process.cwd(), "data"));
+  const dataDir2 = process.env.CCR_DATA_DIR ?? ("1" ? join(homedir(), ".cc-deck", "data") : join(process.cwd(), "data"));
   mkdirSync(dataDir2, { recursive: true });
   const envToken = process.env.CCR_TOKEN;
   const tokenFile = join(dataDir2, "token");
@@ -41268,7 +41268,9 @@ var AgentSession = class _AgentSession {
       id: blockId,
       desc,
       kind: typeof input.subagent_type === "string" && input.subagent_type ? input.subagent_type : "general",
-      bg: input.run_in_background === true,
+      // 缺省即后台（同 bridge.trackSubagentStart）：run_in_background 仅显式传参时序列化，
+      // `=== true` 会把缺省后台误标 false（2026-09-24 实测）
+      bg: input.run_in_background !== false,
       started_at: Date.now()
     });
     if (this.subagents.length > 30) this.subagents.splice(0, this.subagents.length - 30);
@@ -45949,6 +45951,11 @@ var Bridge = class _Bridge {
   // 一次调用的 usage 行重复落盘 3~7 行，同元组只累计一次，否则会话 token 总量虚高
   // 数倍（实测虚到 cache_read 2.38 亿）。水位是覆盖式，天然不受重复行影响
   lastUsageTuple = /* @__PURE__ */ new Map();
+  // #183 会话级 Agent/Task tool_use id 台账：tool_result 在派生后的后续批次到达
+  //（fg 数分钟、bg 回执虽快也可能跨批），届时本批 agentUses 已不含派生时的 use，
+  // 没有这本台账 result 就配不上对（公司机 hook 断链会话 fg 结束信号丢失的根源）。
+  // 扫描 assistant 行时顺手记，会话/条目双重封顶防膨胀
+  agentUseLedger = /* @__PURE__ */ new Map();
   // 转录末条形态：assistant 消息整条完成才落盘（生成期间零写入，纯思考可达分钟级），
   // 静默 ≠ 回合结束。可靠区分：末条是纯文本 assistant 消息 = 回合自然结束；
   // 末条是 tool_use（工具执行中）或 tool_result/新 prompt（下一条消息生成中）= 仍在回合内
@@ -46006,6 +46013,7 @@ var Bridge = class _Bridge {
       const taskOps = [];
       const agentNotifs = [];
       const agentUses = [];
+      const agentResults = /* @__PURE__ */ new Map();
       const creates = this.taskCreateSet(id2);
       let removes = 0;
       let usageIn = 0;
@@ -46067,6 +46075,28 @@ var Bridge = class _Bridge {
               const j2 = JSON.parse(line);
               if (Array.isArray(j2.message?.content)) _Bridge.collectTaskOps(j2.message.content, taskOps, creates);
             } catch {
+            }
+          }
+          if (line.includes('"tool_result"')) {
+            const led = this.agentUseLedger.get(id2);
+            if (led?.size) {
+              try {
+                const j2 = JSON.parse(line);
+                if (Array.isArray(j2.message?.content)) {
+                  for (const b of j2.message.content) {
+                    const blk = b;
+                    if (blk?.type !== "tool_result" || typeof blk.tool_use_id !== "string" || !blk.tool_use_id) continue;
+                    if (!led.has(blk.tool_use_id)) continue;
+                    let t = "";
+                    if (typeof blk.content === "string") t = blk.content;
+                    else if (Array.isArray(blk.content)) {
+                      t = blk.content.map((x) => x?.type === "text" && typeof x.text === "string" ? x.text : "").join("");
+                    }
+                    agentResults.set(blk.tool_use_id, { async: t.startsWith("Async agent launched"), at: lastTs2 || Date.now() });
+                  }
+                }
+              } catch {
+              }
             }
           }
           continue;
@@ -46135,7 +46165,18 @@ var Bridge = class _Bridge {
                 input: b.input ?? {}
               };
               if (blk.name === "Agent" || blk.name === "Task") {
-                agentUses.push({ id: typeof blk.id === "string" ? blk.id : "", input: b.input });
+                const uid = typeof blk.id === "string" ? blk.id : "";
+                agentUses.push({ id: uid, input: b.input, ts: lastTs2 || Date.now() });
+                if (uid) {
+                  if (this.agentUseLedger.size > 200) this.agentUseLedger.clear();
+                  let led = this.agentUseLedger.get(id2);
+                  if (!led) {
+                    led = /* @__PURE__ */ new Set();
+                    this.agentUseLedger.set(id2, led);
+                  }
+                  if (led.size > 300) led.clear();
+                  led.add(uid);
+                }
               }
             }
           }
@@ -46169,7 +46210,8 @@ var Bridge = class _Bridge {
         for (const t of userTexts) this.promotePending(id2, t);
       }
       const hydrateAt = firstRead && lastTs2 > 0 ? lastTs2 : void 0;
-      for (const u of agentUses) this.observeAgentUse(id2, u, hydrateAt);
+      for (const u of agentUses) this.observeAgentUse(id2, u, hydrateAt, agentResults.get(u.id));
+      agentResults.forEach((r, tuId) => this.applyAgentResult(id2, tuId, r, hydrateAt));
       for (const n of agentNotifs) this.closeSubagentByNotification(id2, n, hydrateAt);
       const storeTodos = this.readTaskStore(id2);
       if (storeTodos) {
@@ -46681,7 +46723,10 @@ var Bridge = class _Bridge {
       id: tuId,
       desc: _Bridge.subagentDesc(input),
       kind: typeof input.subagent_type === "string" && input.subagent_type ? input.subagent_type : "general",
-      bg: input.run_in_background === true,
+      // 缺省即后台（2026-09-24 实测 transcript 实锤：run_in_background 仅显式传参时序列化，
+      // 缺省时 input 无此键，显式 false 在）——`=== true` 会把缺省后台全误标 false，
+      // 收尾分流（Post vs task-notification）走错支路，只能靠 31a83d2 放宽的兜底活命
+      bg: input.run_in_background !== false,
       started_at: Date.now()
     };
     list.push(entry);
@@ -46709,11 +46754,13 @@ var Bridge = class _Bridge {
   }
   // transcript 里的 Agent tool_use 块（真实 call_xxx id）：
   //  - hook 未带 tool_use_id 时 Pre 建的是合成 id（ag-N）——升级为真实 id，后续 task-notification 才能配对
-  //  - relay 重启等原因错过 Pre hook 的后台派生：补建条目（结束靠 task-notification）
+  //  - relay 重启/hook 断链（#183 公司机实锤）时错过的派生：补建条目——fg/bg 通建，
+  //    bg 优先由配对 tool_result 的异步启动回执判定（run_in_background 仅显式传参时
+  //    进 input，缺省即后台的默认形态转录与 hook 都拿不到，详见扫描处注释）
   // 注意 list 取法必须是 `?? []`（与 trackSubagentStart 对齐）：state.subagents 初始
   // 是 undefined，早先的 `if (!list) return` 把"补建条目"路径整个堵死——relay 重启后
   // 第一个后台子 Agent 永远建不起来，手机/桌面全程误报空闲（#100 复发的第一根因）
-  observeAgentUse(id2, use2, at) {
+  observeAgentUse(id2, use2, at, result) {
     if (!use2.id) return;
     const list = this.mgr.getExternal(id2)?.subagents ?? [];
     if (list.some((x) => x.id === use2.id)) return;
@@ -46722,23 +46769,55 @@ var Bridge = class _Bridge {
     for (let k3 = list.length - 1; k3 >= 0; k3--) {
       const x = list[k3];
       if (!x.ended_at && x.id.startsWith("ag-") && normKey(x.desc) === normKey(desc)) {
-        const next = list.map((y, i2) => i2 === k3 ? { ...y, id: use2.id } : y);
-        this.mgr.setExternalSubagents(id2, next, at);
+        const next2 = list.map((y, i2) => i2 === k3 ? { ...y, id: use2.id } : y);
+        this.mgr.setExternalSubagents(id2, next2, at);
         return;
       }
     }
-    if (input.run_in_background === true) {
+    if (result && !result.async && at !== void 0) return;
+    const isBg = result ? result.async : input.run_in_background !== false;
+    let next = [...list];
+    if (!next.some((x) => !x.ended_at)) next = [];
+    next.push({
+      id: use2.id,
+      desc,
+      kind: typeof input.subagent_type === "string" && input.subagent_type ? input.subagent_type : "general",
+      bg: isBg,
+      started_at: use2.ts || at || Date.now()
+    });
+    if (next.length > 30) next.splice(0, next.length - 30);
+    this.mgr.setExternalSubagents(id2, next, at);
+  }
+  // #183 Agent/Task tool_result 落地（扫描收集的 agentResults，在 observeAgentUse 之后跑）：
+  //  - 异步启动回执：bg 纠偏——hook 链的 tool_input 同样被 CLI 剥掉 run_in_background，
+  //    trackSubagentStart 建的条目 bg 误标 false（不影响收尾但影响端上「后台」语义）；
+  //    use 完全错过（窗口边缘/极角情况）时按 bg 兜底补建，结束仍等 task-notification
+  //  - 前台 result = 真实完成：收尾 running 条目——hook 断链会话的 fg 子 Agent 此前
+  //    无任何结束信号（Post hook 不在、notification 只属后台），只能等 30min TTL。
+  //    transcript 的 result 就是真实结束，不经 trackSubagentEnd 的 <2s 守卫——那守卫
+  //    防的是 Post 派生瞬间假回执，这里没有假回执问题
+  applyAgentResult(id2, toolUseId, result, hydrateAt) {
+    const list = this.mgr.getExternal(id2)?.subagents ?? [];
+    const i = list.findIndex((x) => x.id === toolUseId);
+    if (i >= 0) {
+      const x = list[i];
+      if (result.async && !x.bg) {
+        this.mgr.setExternalSubagents(id2, list.map((y, k3) => k3 === i ? { ...y, bg: true } : { ...y }), hydrateAt);
+      } else if (!result.async && !x.ended_at) {
+        this.mgr.setExternalSubagents(
+          id2,
+          list.map((y, k3) => k3 === i ? { ...y, ended_at: result.at || hydrateAt || Date.now() } : { ...y }),
+          hydrateAt
+        );
+      }
+      return;
+    }
+    if (result.async) {
       let next = [...list];
       if (!next.some((x) => !x.ended_at)) next = [];
-      next.push({
-        id: use2.id,
-        desc,
-        kind: typeof input.subagent_type === "string" && input.subagent_type ? input.subagent_type : "general",
-        bg: true,
-        started_at: at ?? Date.now()
-      });
+      next.push({ id: toolUseId, desc: "\u540E\u53F0\u5B50 Agent", kind: "general", bg: true, started_at: result.at || hydrateAt || Date.now() });
       if (next.length > 30) next.splice(0, next.length - 30);
-      this.mgr.setExternalSubagents(id2, next, at);
+      this.mgr.setExternalSubagents(id2, next, hydrateAt);
     }
   }
   // transcript 里 <task-notification> 的 tool-use-id：收尾后台子 Agent
@@ -48850,7 +48929,7 @@ if (cliArgs.has("--qr")) {
   process.exit(0);
 }
 if (cliArgs.has("--daemon")) {
-  if (!process.env.CC_DECK_PLUGIN) {
+  if (false) {
     console.log("dev \u6A21\u5F0F\uFF08tsx \u524D\u53F0\u8DD1 TS \u6E90\u7801\uFF09\u4E0D\u652F\u6301 --daemon\uFF0C\u8BF7\u76F4\u63A5\u524D\u53F0\u8FD0\u884C");
     process.exit(1);
   }
