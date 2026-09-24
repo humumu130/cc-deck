@@ -37,6 +37,34 @@ if [ -f cc-plugins/plugins/cc-deck/scripts/relay.mjs ] && ! node --check cc-plug
   FAIL=1
 fi
 
+# bundle 冒烟（#190，2026-09-24 事故的防再犯）：node --check 只逮语法，逮不住
+# 「语法合法但加载即炸」——当日热替换进 Mac App 的 bundle 缺 build-plugin.mjs 的
+# createRequire banner（绕过脚本直接 esbuild 的产物），tweetnacl 的 require("crypto")
+# 落到 esbuild 兜底 throw，内嵌 relay 启动即崩、监督线程无限退避重拉。真 import
+# 起服一次（隔离端口+隔离数据目录，3s 存活且打印启动横幅才算过）才能逮住这类伤
+if [ -f cc-plugins/plugins/cc-deck/scripts/relay.mjs ]; then
+  SMOKE_DIR="$(mktemp -d /tmp/ccdeck-smoke-data.XXXXXX)"
+  SMOKE_LOG="$SMOKE_DIR/out.log"
+  SMOKE_PORT=$(( (RANDOM % 20000) + 40000 ))
+  CCR_PORT="$SMOKE_PORT" CCR_DATA_DIR="$SMOKE_DIR" CC_DECK_PLUGIN=1 \
+    node cc-plugins/plugins/cc-deck/scripts/relay.mjs >"$SMOKE_LOG" 2>&1 &
+  SMOKE_PID=$!
+  sleep 3
+  SMOKE_OK=1
+  kill -0 "$SMOKE_PID" 2>/dev/null || SMOKE_OK=0
+  grep -q "CC Deck Relay 已启动" "$SMOKE_LOG" || SMOKE_OK=0
+  if [ "$SMOKE_OK" != "1" ]; then
+    echo "❌ bundle 冒烟：隔离端口 $SMOKE_PORT 起服失败（语法检查逮不住的运行期伤）："
+    head -8 "$SMOKE_LOG"
+    FAIL=1
+  fi
+  kill "$SMOKE_PID" 2>/dev/null
+  sleep 0.3
+  kill -9 "$SMOKE_PID" 2>/dev/null
+  wait "$SMOKE_PID" 2>/dev/null
+  rm -rf "$SMOKE_DIR"
+fi
+
 # 版本一致性闸门（2026-09-17）：VERSION 单一事实源，五处落点漂移即拦
 if [ -f scripts/version.mjs ] && ! node scripts/version.mjs --check >/dev/null 2>&1; then
   echo "❌ 版本号落点与 VERSION 不一致：node scripts/version.mjs --write 修正后再来"
