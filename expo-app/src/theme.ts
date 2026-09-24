@@ -13,6 +13,9 @@ export interface ThemeColors {
   waiting: string;
   error: string;
   done: string;
+  // #192 实心绿钮文字 / 红系可读文字（修 #F0524F 暗底 3.9:1 不达 AA）
+  onDone: string;
+  dangerFg: string;
   tintSoft: string;    // 品牌色弱底（chip/卡片叠层）
   tintStrong: string;  // 选中态底
   overlay: string;     // 命令栏等近实底
@@ -46,6 +49,8 @@ export const DARK: ThemeColors = {
   waiting: "#F0524F",
   error: "#FF7849",
   done: "#2BD98F",
+  onDone: "#07230F",
+  dangerFg: "#FF6B68",
   tintSoft: "rgba(125,165,220,0.08)",
   tintStrong: "rgba(93,134,245,0.16)",
   overlay: "rgba(8,15,26,0.97)",
@@ -75,6 +80,8 @@ export const LIGHT: ThemeColors = {
   waiting: "#DC2626",
   error: "#C2410C",
   done: "#047857",
+  onDone: "#FFFFFF",
+  dangerFg: "#DC2626",
   tintSoft: "rgba(47,127,232,0.06)",
   tintStrong: "rgba(47,127,232,0.13)",
   overlay: "rgba(240,241,236,0.97)",

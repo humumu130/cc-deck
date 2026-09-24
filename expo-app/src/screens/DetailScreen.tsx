@@ -2595,12 +2595,18 @@ export default function DetailScreen({ sid, onBack, initialView, ref }: { sid: s
             <FadeIn><AskBanner wr={wr!} sid={sid} /></FadeIn>
           ) : (
           <FadeIn>
-          <View style={d.waitBanner}>
-            <Text style={d.waitT}>◐ 等待你的确认</Text>
-            <Text style={d.waitTool}>工具 <Text style={d.waitToolName}>{wr!.tool_name}</Text></Text>
-            <Text style={d.waitDesc} numberOfLines={6}>{wr!.input_summary}</Text>
+          <View style={[d.waitBanner, d.waitBannerApprove]}>
+            <View style={d.waitHead}>
+              <View style={d.waitDot} />
+              <Text style={d.waitTitle}>等待你的确认</Text>
+              {wr!.tool_name ? <Text style={d.waitChip}>{wr!.tool_name}</Text> : null}
+            </View>
+            <Text style={d.waitCmd} numberOfLines={4}>
+              <Text style={d.waitPs}>$ </Text>
+              {wr!.input_summary}
+            </Text>
             <View style={d.wbtns}>
-              <PressScale style={[d.btnAllow, d.opRipple]} ripple={withA(c.done, 0.18)} haptic onPress={() => decide(true)}>
+              <PressScale style={[d.btnAllow, d.opRipple]} ripple={withA(c.onDone, 0.15)} haptic onPress={() => decide(true)}>
                 <Text style={d.btnAllowT}>✓ 允许</Text>
               </PressScale>
               <PressScale style={[d.btnReject, d.opRipple]} ripple={withA(c.waiting, 0.18)} haptic onPress={() => decide(false)}>
@@ -3158,24 +3164,30 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
   empty: { color: c.faint, textAlign: "center", paddingVertical: 40, fontSize: 13 },
   waitBanner: {
     marginHorizontal: 8, marginBottom: 6,
-    borderRadius: 16, borderWidth: 1, borderColor: withA(c.working, 0.4),
-    backgroundColor: c.panel, padding: 14,
+    borderRadius: 14, borderWidth: 1, borderColor: withA(c.working, 0.38),
+    backgroundColor: c.panel, padding: 12,
   },
+  /* #192 审批态黄 tint 容器（提问态 AskBanner 复用 waitBanner 基础样式保持中性底，不受影响） */
+  waitBannerApprove: { backgroundColor: withA(c.working, 0.07) },
+  /* 提问态 AskBanner 专用（审批态标题已并入 waitHead 行） */
   waitT: { color: c.working, fontWeight: "700", fontSize: 13, marginBottom: 6 },
-  waitTool: { color: c.text, fontSize: 13, marginBottom: 4 },
-  waitToolName: { color: c.working, fontWeight: "700" },
-  waitDesc: { color: c.dim, fontSize: 13, marginBottom: 12 },
+  waitHead: { flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 9 },
+  waitDot: { width: 9, height: 9, borderRadius: 4.5, backgroundColor: c.working },
+  waitTitle: { color: c.working, fontWeight: "700", fontSize: 13, flexShrink: 1 },
+  waitChip: { marginLeft: "auto", fontFamily: "monospace", fontSize: 10.5, fontWeight: "700", color: c.working, backgroundColor: withA(c.working, 0.12), borderWidth: 1, borderColor: withA(c.working, 0.3), borderRadius: 6, paddingHorizontal: 7, paddingVertical: 2, overflow: "hidden" as const },
+  waitPs: { color: c.done, fontWeight: "700" },
+  waitCmd: { fontFamily: "monospace", fontSize: 12, lineHeight: 17, color: c.text, backgroundColor: c.panel2, borderWidth: 1, borderColor: c.line, borderRadius: 10, paddingVertical: 7, paddingHorizontal: 9, marginBottom: 11 },
   wbtns: { flexDirection: "row", gap: 10 },
   btnAllow: {
-    flex: 1, height: 42, borderRadius: 12, alignItems: "center", justifyContent: "center",
-    backgroundColor: withA(c.done, 0.14), borderWidth: 1, borderColor: withA(c.done, 0.35),
+    flex: 1.5, height: 46, borderRadius: 12, alignItems: "center", justifyContent: "center",
+    backgroundColor: c.done,
   },
-  btnAllowT: { color: c.done, fontWeight: "600", fontSize: 14 },
+  btnAllowT: { color: c.onDone, fontWeight: "700", fontSize: 14.5 },
   btnReject: {
-    flex: 1, height: 42, borderRadius: 12, alignItems: "center", justifyContent: "center",
-    backgroundColor: withA(c.waiting, 0.10), borderWidth: 1, borderColor: withA(c.waiting, 0.3),
+    flex: 1, height: 46, borderRadius: 12, alignItems: "center", justifyContent: "center",
+    backgroundColor: "transparent", borderWidth: 1, borderColor: withA(c.waiting, 0.45),
   },
-  btnRejectT: { color: c.waiting, fontWeight: "600", fontSize: 14 },
+  btnRejectT: { color: c.dangerFg, fontWeight: "600", fontSize: 14 },
   // AskUserQuestion 作答横幅（#190 stepper 指示器行）
   askSteps: { flexDirection: "row", alignItems: "center", gap: 7, marginBottom: 10 },
   askCount: { color: c.dim, fontSize: 11, marginRight: 2 },

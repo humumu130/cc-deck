@@ -45,6 +45,8 @@
     --waiting: #FF6B68;
     --error: #FF7849;
     --done: #2BD98F;
+    /* #192 实心绿钮上的文字色（允许=全卡唯一实心主钮） */
+    --on-done: #07230F;
     --mono: Consolas, "Cascadia Mono", "JetBrains Mono", monospace;
     --glass: rgba(9,15,25,.8);
     --glass-soft: rgba(9,15,25,.55);
@@ -104,6 +106,8 @@
     --waiting: #DC2626;
     --error: #C2410C;
     --done: #047857;
+    /* #192 亮色绿底 #047857 上用白字（5.5:1） */
+    --on-done: #FFFFFF;
     --glass: rgba(255,255,255,.82);
     --glass-soft: rgba(255,255,255,.6);
     /* #78 侧栏/标题栏灰调实色（macOS 浅色侧栏档位，--bg-soft #EAEEF4 仍作其上的 hover/输入底） */
@@ -757,10 +761,11 @@
   button:hover { border-color: var(--hov); }
   button:active { transform: scale(.97); }
   button.primary { background: var(--grad); border: none; color: #fff; font-weight: 600; box-shadow: 0 2px 12px rgba(217,119,87,.3); }
-  button.allow { background: rgba(43,217,143,.12); border: 1px solid rgba(43,217,143,.5); color: var(--done); font-weight: 600; }
-  button.allow:hover { background: rgba(43,217,143,.22); border-color: rgba(43,217,143,.75); }
-  button.reject { background: rgba(240,82,79,.10); border: 1px solid rgba(240,82,79,.5); color: var(--error); font-weight: 600; }
-  button.reject:hover { background: rgba(240,82,79,.2); border-color: rgba(240,82,79,.75); }
+  /* #192 允许=唯一实心绿主钮（决策锚点）；拒绝=红幽灵（轻一档防误触，修旧橙字红边双色系） */
+  button.allow { background: var(--done); border: 1px solid transparent; color: var(--on-done); font-weight: 700; }
+  button.allow:hover { filter: brightness(1.08); }
+  button.reject { background: transparent; border: 1px solid color-mix(in srgb, var(--waiting) 45%, transparent); color: var(--waiting); font-weight: 600; }
+  button.reject:hover { background: color-mix(in srgb, var(--waiting) 10%, transparent); border-color: color-mix(in srgb, var(--waiting) 70%, transparent); }
   button.ghost { background: transparent; }
   button.big { padding: 10px 22px; font-size: 14px; border-radius: 10px; } /* #13 圆角收敛：控件档 10px */
 
@@ -1546,11 +1551,16 @@
   .card-stats .src-badge { flex: none; }
   .card-stats .ctx-mini { margin-left: auto; }
   .card-cta { margin-top: 10px; display: flex; justify-content: flex-end; }
+  /* #192 「处理」是导航不是决策：黄实底丸 → ghost 药丸（透明底+黄描边+›），hover 才上 tint；29→24px */
   .card-cta button {
-    background: rgba(245,184,65,.12); border: 1px solid rgba(245,184,65,.45); color: var(--working);
-    font-weight: 600; border-radius: 999px; padding: 5px 18px;
+    background: transparent; border: 1px solid color-mix(in srgb, var(--working) 38%, transparent); color: var(--working);
+    font-weight: 600; border-radius: 999px; padding: 4px 13px; font-size: 12px;
+    transition: background .15s, border-color .15s;
   }
-  .card-cta button:hover { background: rgba(245,184,65,.22); }
+  .card-cta button::after { content: "›"; margin-left: 5px; font-weight: 700; }
+  .card-cta button:hover { background: color-mix(in srgb, var(--working) 12%, transparent); border-color: color-mix(in srgb, var(--working) 60%, transparent); }
+  html.light .card-cta button { color: #7A5800; border-color: color-mix(in srgb, #7A5800 38%, transparent); }
+  html.light .card-cta button:hover { background: color-mix(in srgb, #7A5800 10%, transparent); border-color: color-mix(in srgb, #7A5800 60%, transparent); }
 
   /* #151 详情头工作状态英文 chip 整体移除（2026-09-22 用户拍板：几轮调不好就不调了，
      状态看左侧会话卡灯即可）；dot-breathe 关键帧保留——列表卡灯/连接行/实时行仍用 */
@@ -1645,30 +1655,48 @@
   #waitbox {
     margin: 12px auto 0; width: calc(100% - 40px); max-width: min(1040px, 100%);
     background: var(--panel);
-    border: 1px solid var(--border); border-radius: 14px; padding: 16px 18px; display: none;
+    border: 1px solid var(--border); border-radius: 14px; padding: 12px 16px; display: none;
     flex: none;
     animation: riseIn .18s ease-out;
   }
-  #waitbox:not(.ask) { background: rgba(245,184,65,.07); border-color: rgba(245,184,65,.4); }
+  /* #192 黄 tint 与状态灯同源（旧为硬编码 rgba(245,184,65) 另一黄）；高度预算收紧 */
+  #waitbox:not(.ask) { background: color-mix(in srgb, var(--working) 7%, var(--panel)); border-color: color-mix(in srgb, var(--working) 36%, transparent); }
   #waitbox.ask { border-color: rgba(217,119,87,.35); }
   #waitbox .t { color: var(--text-strong); font-weight: 700; font-size: 13px; display: flex; align-items: center; gap: 8px; }
   #waitbox:not(.ask) .t { color: var(--working); }
   #waitbox .t i { width: 9px; height: 9px; border-radius: 50%; background: var(--working); animation: breathe 1.6s infinite; --sc: var(--working); flex: none; }
   /* 计时并入标题行右端（对齐 #liverow 的 .el 形态），不再独占一行 */
   #waitelapsed { margin-left: auto; color: var(--faint); font-size: 11px; font-weight: 400; font-variant-numeric: tabular-nums; }
+  /* #192 工具名上提为等宽 chip 进标题行（计左侧）；提问态不出 */
+  #waitbox .t .wchip {
+    flex: none; margin-left: 2px;
+    font-family: var(--mono); font-size: 10.5px; font-weight: 700; line-height: 1.5;
+    color: var(--working);
+    background: color-mix(in srgb, var(--working) 12%, transparent);
+    border: 1px solid color-mix(in srgb, var(--working) 30%, transparent);
+    border-radius: 6px; padding: 1px 7px;
+  }
+  html.light #waitbox .t .wchip { color: #7A5800; border-color: color-mix(in srgb, #7A5800 30%, transparent); background: color-mix(in srgb, #7A5800 10%, transparent); }
   #waitdetail { margin-top: 6px; font-size: 12px; color: var(--dim); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   /* #13 巡检（安全项）：审批卡的待审命令必须完整可见——原单行省略号会把 rm -rf 这类
      命令截断，决策依据不完整。审批态改等宽换行代码块展示全文；提问态仍单行元信息 */
   #waitbox:not(.ask) #waitdetail {
     white-space: pre-wrap; word-break: break-all; text-overflow: clip;
     font-family: var(--mono); background: var(--code-bg);
-    border-radius: 8px; padding: 6px 10px; color: var(--text); font-size: 12px;
+    border-radius: 10px; padding: 7px 10px; color: var(--text); font-size: 12px;
+    margin-top: 9px;
     /* #190 滚动兜底：审批卡长命令（多行 pre-wrap）同提问卡病根——#waitbox 在滚动区外
        flex:none，超高会把 timeline 压到 0、按钮被裁。内部滚动消化 */
     max-height: 40vh; overflow-y: auto;
   }
-  #waitbox .cmds { margin-top: 14px; display: flex; gap: 10px; align-items: center; }
+  /* #192 $ 提示符（C 方向嫁接）：一眼读出「这是要在终端里跑的命令」 */
+  #waitbox:not(.ask) #waitdetail::before { content: "$ "; color: var(--done); font-weight: 700; }
+  #waitbox .cmds { margin-top: 12px; display: flex; gap: 8px; align-items: center; }
+  /* #192 紧凑档按钮 40→33px（28-34 区间）；作答钮同尺寸保持节奏 */
+  #waitbox .cmds button.big { padding: 7px 20px; font-size: 13.5px; }
   #answerBtn { margin-left: auto; }
+  /* #192 主行动居右（对话惯例）；提问/审批按钮互斥显示不冲突 */
+  #allowBtn { margin-left: auto; }
   #questions { margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--border); display: flex; flex-direction: column; gap: 14px; }
   /* #190 滚动兜底：单题选项极多/描述极长时（stepper 已消化多问题场景），卡内滚动防撑爆 */
   #questions .q-item { max-height: 45vh; overflow-y: auto; }
@@ -2424,7 +2452,7 @@
     </div>
 
     <div id="waitbox">
-      <div class="t"><i></i><span id="waitT">等待你的确认</span><span id="waitelapsed"></span></div>
+      <div class="t"><i></i><span id="waitT">等待你的确认</span><span class="wchip" id="waitTool" hidden></span><span id="waitelapsed"></span></div>
       <div id="waitdetail"></div>
       <div id="questions"></div>
       <div class="cmds">
@@ -4839,7 +4867,11 @@ function renderDetail() {
     // #14 提问/审批两态分流：提问走中性卡（.ask）+ 专属文案，审批保留黄卡
     wb.classList.toggle("ask", isAsk);
     $("waitT").textContent = isAsk ? "Claude 在提问" : "等待你的确认";
-    $("waitdetail").textContent = (s.waiting_request.tool_name ? s.waiting_request.tool_name + " — " : "") + (s.waiting_request.input_summary || "");
+    // #192 工具名上提 chip 进标题行，命令块只放命令本身（$ 提示符由 CSS ::before 补）
+    const wt = s.waiting_request.tool_name || "";
+    $("waitTool").hidden = isAsk || !wt;
+    $("waitTool").textContent = wt;
+    $("waitdetail").textContent = s.waiting_request.input_summary || "";
     const wsec = Math.floor((Date.now() - (s.waiting_request.received_at || Date.now())) / 1000);
     $("waitelapsed").textContent = passive ? "CLI 正在本地等待确认，请在电脑上处理" : "已等待 " + wsec + "s" +
       (s.waiting_request.suggestions?.length && !isAsk ? " · 建议: " + s.waiting_request.suggestions.join(" / ") : "");

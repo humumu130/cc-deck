@@ -495,7 +495,11 @@ const SessionCard = memo(function SessionCard({
             {srcBadge ? <SrcBadge {...srcBadge} /> : null}
             <Elapsed s={s} />
           </View>
-          <Text style={styles.sumC} numberOfLines={1}>{s.action_summary || "…"}</Text>
+          {s.status === "WAITING" && s.waiting_request ? (
+            <Text style={[styles.sumC, styles.sumWaiting]} numberOfLines={1}>需要确认 · {s.action_summary || ""}</Text>
+          ) : (
+            <Text style={styles.sumC} numberOfLines={1}>{s.action_summary || "…"}</Text>
+          )}
           <View style={styles.footC}>
             {s.cwd ? <Text style={styles.folderC} numberOfLines={1}>📁 {folderOf(s.cwd)}</Text> : null}
             <View style={{ flex: 1 }} />
@@ -524,6 +528,8 @@ const SessionCard = memo(function SessionCard({
             <View style={styles.liveRow}>
               <LiveStat s={s} />
             </View>
+          ) : s.status === "WAITING" && s.waiting_request ? (
+            <Text style={[styles.sum, styles.sumWaiting]} numberOfLines={1}>需要确认 · {s.action_summary || ""}</Text>
           ) : (
             <Text style={styles.sum} numberOfLines={1}>{s.action_summary || "…"}</Text>
           )}
@@ -1327,6 +1333,8 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
   // 沉寂会话（DONE 非今日更新）名称降档：覆盖 title/titleC 的 color
   titleIdle: { color: c.dim },
   sum: { color: c.dim, fontSize: 13, marginBottom: 5, paddingLeft: 6 }, /* #83 同缩进 */
+  /* #192 WAITING 卡摘要报警（对齐桌面 .card-summary.waiting；dangerFg 双主题保 AA） */
+  sumWaiting: { color: c.dangerFg, fontWeight: "600" },
   foot: { flexDirection: "row", alignItems: "center", gap: 8, paddingLeft: 6 }, /* #83 同缩进 */
   // 次要信息合并行（降噪）：托管/外部 · 目录 · 历史 一行 faint 小字，替代原 tag 胶囊
   meta: { fontSize: 10, color: c.faint, flexShrink: 1 },
