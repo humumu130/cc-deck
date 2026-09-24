@@ -47212,13 +47212,17 @@ function notifyAcceptanceRefill(acc, rows, mgr2) {
   } catch {
   }
 }
-function startAcceptanceCloudPoll(cfg2, mgr2) {
+function emitAcceptancesUpdated(bus2) {
+  bus2.emitTransient("ACCEPTANCES_UPDATED", { acceptances: listAcceptances() });
+}
+function startAcceptanceCloudPoll(cfg2, mgr2, bus2) {
   let base = "";
   try {
     base = `https://${new URL(cfg2.cloudUrl).host}`;
   } catch {
     return;
   }
+  let lastSig = JSON.stringify(listAcceptances());
   const tick = async () => {
     for (const s of listAcceptances()) {
       if (s.done) continue;
@@ -47236,6 +47240,14 @@ function startAcceptanceCloudPoll(cfg2, mgr2) {
         const acc = loadAcceptance(s.id);
         if (acc) notifyAcceptanceRefill(acc, added[added.length - 1].rows, mgr2);
       }
+    }
+    try {
+      const sig = JSON.stringify(listAcceptances());
+      if (sig !== lastSig) {
+        lastSig = sig;
+        emitAcceptancesUpdated(bus2);
+      }
+    } catch {
     }
   };
   setTimeout(() => void tick(), 2e4).unref?.();
@@ -47657,6 +47669,7 @@ function startServer(bus2, mgr2, cfg2, opts = {}) {
           }
           res.writeHead(200, { "content-type": "application/json" }).end('{"ok":true}');
           notifyAcceptanceRefill(acc, rows, mgr2);
+          emitAcceptancesUpdated(bus2);
         } catch {
           res.writeHead(400, { "content-type": "application/json" }).end('{"ok":false,"error":"bad json"}');
         }
@@ -49063,7 +49076,7 @@ if (cfg.cloudUrls.length) {
     }
   }
 }
-startAcceptanceCloudPoll(cfg, mgr);
+startAcceptanceCloudPoll(cfg, mgr, bus);
 startServer(bus, mgr, cfg, {
   cloudHasPhones: () => cloudClients.some((c) => c.hasActivePhones()),
   ...cloudClients.length ? { pairCodes } : {},
