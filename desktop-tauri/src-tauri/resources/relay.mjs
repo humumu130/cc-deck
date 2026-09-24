@@ -44176,6 +44176,35 @@ function serveAcceptancePage(id2, res, apiPath) {
   res.end(html);
   return true;
 }
+function applyCloudSubmits(id2, submits) {
+  if (!ACCEPTANCE_ID_RE.test(id2)) return [];
+  const seen = /* @__PURE__ */ new Set();
+  try {
+    const h = JSON.parse(readFileSync10(join11(acceptanceDir(), `${id2}.results.json`), "utf-8")).history;
+    if (Array.isArray(h)) {
+      for (const e of h) {
+        try {
+          seen.add(JSON.stringify(e.rows ?? null));
+        } catch {
+        }
+      }
+    }
+  } catch {
+  }
+  const added = [];
+  if (!Array.isArray(submits)) return added;
+  for (const s of submits) {
+    if (!s || typeof s !== "object" || !Array.isArray(s.rows)) continue;
+    const sig = JSON.stringify(s.rows);
+    if (seen.has(sig)) continue;
+    const ua = `cloud/${String(s.ua ?? "remote").slice(0, 100)}`;
+    if (saveResult(id2, { rows: s.rows }, ua) === null) {
+      seen.add(sig);
+      added.push(s);
+    }
+  }
+  return added;
+}
 
 // src/models.ts
 import { existsSync as existsSync7, readFileSync as readFileSync11 } from "node:fs";
@@ -44283,6 +44312,9 @@ function ensureInjector() {
     console.warn("[injector] compile failed:", e instanceof Error ? e.message : e);
   }
   ready = existsSync8(exe2);
+  if (ready && !peekSupported()) {
+    console.warn("[injector] \u9632\u62A2\u53D1\u5FEB\u7167\u4E0D\u53EF\u7528\uFF08inject.exe \u65E0 --peek \u80FD\u529B\uFF1A\u65E7\u7248\u4EA7\u7269\u4FDD\u7559\u6216\u7F16\u8BD1\u5931\u8D25\uFF09\u2014\u2014\u6EDE\u7559\u8865\u53D1\u56DE\u8F66\u5C06\u6309 #180 \u4FDD\u5B88\u8DF3\u8FC7");
+  }
   return ready;
 }
 var VALID_TARGET = /^(claude|node)(\.exe)?$/i;
@@ -44757,6 +44789,7 @@ var Bridge = class _Bridge {
   extFileStats = /* @__PURE__ */ new Map();
   extUsage = /* @__PURE__ */ new Map();
   // 排队消息滞留看门狗：ext id -> { 最近补发时间, 连续补发次数, 连续跳过次数, 是否已放弃 }
+  // blind = 连续「快照不可用」轮数（#180：检测不可用不补发，连续 3 轮放弃自动补发）
   stuckWatch = /* @__PURE__ */ new Map();
   // 防抢发守门进行中的会话（等待人工停手期间，看门狗节拍跳过防重入）
   stuckGuarding = /* @__PURE__ */ new Set();
@@ -46989,7 +47022,7 @@ var Bridge = class _Bridge {
       const pid = s.cli_pid;
       if (guardConfig().enabled) {
         if (this.stuckGuarding.has(id2)) continue;
-        this.stuckWatch.set(id2, { lastTry: now, tries: w2?.tries ?? 0, skips: w2?.skips ?? 0, given_up: w2?.given_up ?? false });
+        this.stuckWatch.set(id2, { lastTry: now, tries: w2?.tries ?? 0, skips: w2?.skips ?? 0, blind: w2?.blind ?? 0, given_up: w2?.given_up ?? false });
         this.stuckGuarding.add(id2);
         void this.guardedStuckEnter(id2, pid, stuckTexts).finally(() => this.stuckGuarding.delete(id2));
         continue;
@@ -46997,11 +47030,11 @@ var Bridge = class _Bridge {
       this.fireStuckEnter(id2, pid);
     }
   }
-  // 真正补发回车（守门通过 / 守门关闭 / 快照不可用 fail-open 都走到这里）
+  // 真正补发回车（守门通过 / 守门关闭才走到这里——#180 起快照不可用不再 fail-open 盲发）
   fireStuckEnter(id2, pid, msg) {
     const w2 = this.stuckWatch.get(id2);
     const tries = (w2?.tries ?? 0) + 1;
-    this.stuckWatch.set(id2, { lastTry: Date.now(), tries, skips: w2?.skips ?? 0, given_up: tries >= 3 });
+    this.stuckWatch.set(id2, { lastTry: Date.now(), tries, skips: w2?.skips ?? 0, blind: 0, given_up: tries >= 3 });
     if (tries === 3) {
       this.mgr.pushExternalLog(id2, "system", "\u6392\u961F\u6D88\u606F\u7591\u4F3C\u6EDE\u7559\u8F93\u5165\u6846\uFF0C\u5DF2\u8865\u53D1 3 \u6B21\u56DE\u8F66\u4ECD\u6EDE\u7559\uFF0C\u6682\u505C\u81EA\u52A8\u8865\u53D1\uFF08\u4E0B\u6B21\u53D1\u9001\u6D88\u606F\u65F6\u4F1A\u4E00\u5E76\u63D0\u4EA4\uFF09");
     } else if (tries < 3) {
@@ -47016,11 +47049,13 @@ var Bridge = class _Bridge {
   bumpStuckSkips(id2, msg) {
     const w2 = this.stuckWatch.get(id2);
     const skips = (w2?.skips ?? 0) + 1;
-    this.stuckWatch.set(id2, { lastTry: Date.now(), tries: w2?.tries ?? 0, skips, given_up: (w2?.given_up ?? false) || skips >= 3 });
+    this.stuckWatch.set(id2, { lastTry: Date.now(), tries: w2?.tries ?? 0, skips, blind: 0, given_up: (w2?.given_up ?? false) || skips >= 3 });
     this.mgr.pushExternalLog(id2, "system", skips >= 3 ? "\u8F93\u5165\u6846\u591A\u6B21\u672A\u89C1\u8BE5\u6392\u961F\u6D88\u606F\uFF0C\u6682\u505C\u81EA\u52A8\u8865\u53D1\uFF08\u4E0B\u6B21\u53D1\u9001\u6D88\u606F\u65F6\u4F1A\u4E00\u5E76\u63D0\u4EA4\uFF09" : msg);
   }
   // 补发回车前的防抢发守门：快照 CLI 输入框，有疑似人工输入则等停手再补。
-  // 快照不可用（旧注入器/弹窗盖住/识别失败）fail-open 维持旧行为直接补发。
+  // 快照不可用（旧注入器/弹窗盖住/识别失败）不补发（#180 反转 fail-open：看不到 ≠ 安全
+  // ——宁让滞留消息多等/最终放弃，也不盲发回车打断正在打字的用户；2026-09-24 公司机
+  // 打字中途被自动发送即此路径：Windows peek 未编译成功，快照恒 null 仍照发）。
   async guardedStuckEnter(id2, pid, texts) {
     const v = await guardCompensateEnter(texts, () => captureConsoleBottom(pid), {
       abort: () => {
@@ -47039,6 +47074,18 @@ var Bridge = class _Bridge {
     if (v.kind === "aborted") return;
     if (v.kind === "enter-after-wait") {
       this.fireStuckEnter(id2, pid, `\u5DF2\u8865\u53D1\u56DE\u8F66\uFF08\u68C0\u6D4B\u5230\u8F93\u5165\u6846\u6709\u5176\u4ED6\u8F93\u5165\uFF0C\u7B49\u505C\u624B ${Math.round(v.waitedMs / 100) / 10}s \u540E\u8865\u53D1\uFF09`);
+      return;
+    }
+    if (v.kind === "unknown") {
+      const w2 = this.stuckWatch.get(id2);
+      const blind = (w2?.blind ?? 0) + 1;
+      const giveUp = blind >= 3;
+      this.stuckWatch.set(id2, { lastTry: Date.now(), tries: w2?.tries ?? 0, skips: w2?.skips ?? 0, blind, given_up: giveUp });
+      this.mgr.pushExternalLog(
+        id2,
+        "system",
+        giveUp ? "\u9632\u62A2\u53D1\u68C0\u6D4B\u8FDE\u7EED\u4E0D\u53EF\u7528\uFF0C\u4E3A\u907F\u514D\u6253\u65AD\u8F93\u5165\u6682\u505C\u81EA\u52A8\u8865\u53D1\uFF08\u4E0B\u6B21\u53D1\u9001\u6D88\u606F\u65F6\u4F1A\u4E00\u5E76\u63D0\u4EA4\uFF09" : "\u9632\u62A2\u53D1\u68C0\u6D4B\u4E0D\u53EF\u7528\uFF08\u65E0\u6CD5\u5FEB\u7167\u8F93\u5165\u6846\uFF09\uFF0C\u6682\u4E0D\u8865\u53D1\u56DE\u8F66\u4EE5\u514D\u6253\u65AD\u8F93\u5165\uFF0C\u7A0D\u540E\u81EA\u52A8\u91CD\u8BD5"
+      );
       return;
     }
     this.fireStuckEnter(id2, pid);
@@ -47070,6 +47117,50 @@ function readPluginConfig() {
   } catch {
   }
   return out;
+}
+function notifyAcceptanceRefill(acc, rows, mgr2) {
+  try {
+    const cwd = acc.cwd;
+    if (typeof cwd !== "string" || !cwd) return;
+    const sid = mgr2.matchSessionByCwd(cwd);
+    if (!sid) return;
+    const rs2 = Array.isArray(rows) ? rows : [];
+    const p = rs2.filter((r) => r && r.verdict === "pass").length;
+    const f = rs2.filter((r) => r && r.verdict === "fail").length;
+    const u = rs2.length - p - f;
+    const t = acc.title.length > 40 ? acc.title.slice(0, 40) + "\u2026" : acc.title;
+    mgr2.pushExternalLog(sid, "system", `\u9A8C\u6536\u5355\u5DF2\u56DE\u586B\uFF1A\u300A${t}\u300B ${p}\u2713 ${f}\u2717 ${u}\u672A\u6D4B`);
+  } catch {
+  }
+}
+function startAcceptanceCloudPoll(cfg2, mgr2) {
+  let base = "";
+  try {
+    base = `https://${new URL(cfg2.cloudUrl).host}`;
+  } catch {
+    return;
+  }
+  const tick = async () => {
+    for (const s of listAcceptances()) {
+      if (s.done) continue;
+      let submits = null;
+      try {
+        const r = await fetch(`${base}/view/acceptance-${s.id}.results.json`, {
+          signal: AbortSignal.timeout(1e4)
+        });
+        if (r.ok) submits = await r.json();
+      } catch {
+      }
+      if (!Array.isArray(submits) || submits.length === 0) continue;
+      const added = applyCloudSubmits(s.id, submits);
+      if (added.length > 0) {
+        const acc = loadAcceptance(s.id);
+        if (acc) notifyAcceptanceRefill(acc, added[added.length - 1].rows, mgr2);
+      }
+    }
+  };
+  setTimeout(() => void tick(), 2e4).unref?.();
+  setInterval(() => void tick(), 6e4).unref?.();
 }
 var COMMAND_TYPES = /* @__PURE__ */ new Set([
   "COMMAND_CREATE",
@@ -47455,6 +47546,12 @@ function startServer(bus2, mgr2, cfg2, opts = {}) {
       if (!serveAcceptancePage(id2, res)) res.writeHead(404, { "content-type": "text/plain" }).end("not found");
       return;
     }
+    if (req.method === "GET" && url.pathname.startsWith("/acceptance-cloud/")) {
+      const id2 = url.pathname.slice("/acceptance-cloud/".length).replace(/\/+$/, "");
+      const apiPath = `/view/acceptance-${id2}.results.json`;
+      if (!serveAcceptancePage(id2, res, apiPath)) res.writeHead(404, { "content-type": "text/plain" }).end("not found");
+      return;
+    }
     if (req.method === "POST" && url.pathname === "/api/acceptance") {
       let body = "";
       req.on("data", (c) => {
@@ -47480,21 +47577,7 @@ function startServer(bus2, mgr2, cfg2, opts = {}) {
             return;
           }
           res.writeHead(200, { "content-type": "application/json" }).end('{"ok":true}');
-          try {
-            const cwd = acc.cwd;
-            if (typeof cwd === "string" && cwd) {
-              const sid = mgr2.matchSessionByCwd(cwd);
-              if (sid) {
-                const rs2 = Array.isArray(rows) ? rows : [];
-                const p = rs2.filter((r) => r && r.verdict === "pass").length;
-                const f = rs2.filter((r) => r && r.verdict === "fail").length;
-                const u = rs2.length - p - f;
-                const t = acc.title.length > 40 ? acc.title.slice(0, 40) + "\u2026" : acc.title;
-                mgr2.pushExternalLog(sid, "system", `\u9A8C\u6536\u5355\u5DF2\u56DE\u586B\uFF1A\u300A${t}\u300B ${p}\u2713 ${f}\u2717 ${u}\u672A\u6D4B`);
-              }
-            }
-          } catch {
-          }
+          notifyAcceptanceRefill(acc, rows, mgr2);
         } catch {
           res.writeHead(400, { "content-type": "application/json" }).end('{"ok":false,"error":"bad json"}');
         }
@@ -48901,6 +48984,7 @@ if (cfg.cloudUrls.length) {
     }
   }
 }
+startAcceptanceCloudPoll(cfg, mgr);
 startServer(bus, mgr, cfg, {
   cloudHasPhones: () => cloudClients.some((c) => c.hasActivePhones()),
   ...cloudClients.length ? { pairCodes } : {},

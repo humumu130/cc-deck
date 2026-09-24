@@ -1,4 +1,4 @@
-const require = (await import('node:module')).createRequire(import.meta.url);
+import{createRequire as ccCr}from"module";const require=ccCr(import.meta.url);
 var __create = Object.create;
 var __defProp = Object.defineProperty;
 var __getOwnPropDesc = Object.getOwnPropertyDescriptor;
@@ -10339,7 +10339,7 @@ function unseal(box, theirPublicKeyB64, mySecretKeyB64) {
 // src/index.ts
 import { networkInterfaces as networkInterfaces3, homedir as homedir13, hostname } from "node:os";
 import { join as join17 } from "node:path";
-import { writeFileSync as writeFileSync12, openSync as openSync3, readFileSync as readFileSync16, rmSync as rmSync3, existsSync as existsSync12, readdirSync as readdirSync7, statSync as statSync6 } from "node:fs";
+import { writeFileSync as writeFileSync12, openSync as openSync3, readFileSync as readFileSync17, rmSync as rmSync3, existsSync as existsSync12, readdirSync as readdirSync7, statSync as statSync6 } from "node:fs";
 import { spawn as spawn4, execFileSync as execFileSync2 } from "node:child_process";
 import { fileURLToPath as fileURLToPath4 } from "node:url";
 
@@ -10350,7 +10350,7 @@ import { join } from "node:path";
 import { homedir } from "node:os";
 function loadConfig() {
   const port = Number(process.env.CCR_PORT ?? 8787);
-  const dataDir2 = process.env.CCR_DATA_DIR ?? ("1" ? join(homedir(), ".cc-deck", "data") : join(process.cwd(), "data"));
+  const dataDir2 = process.env.CCR_DATA_DIR ?? (process.env.CC_DECK_PLUGIN ? join(homedir(), ".cc-deck", "data") : join(process.cwd(), "data"));
   mkdirSync(dataDir2, { recursive: true });
   const envToken = process.env.CCR_TOKEN;
   const tokenFile = join(dataDir2, "token");
@@ -10433,11 +10433,25 @@ import { readFileSync as readFileSync2, writeFileSync as writeFileSync2, existsS
 import { dirname } from "node:path";
 
 // src/context-limit.ts
-var CONTEXT_LIMIT_TOKENS = 2e5;
-function contextLimitOf(_model) {
-  return CONTEXT_LIMIT_TOKENS;
+var CONTEXT_LIMIT_DEFAULT = 2e5;
+function envOverride() {
+  const raw = process.env.CCR_CONTEXT_LIMIT;
+  if (!raw) return void 0;
+  const n = Number(raw);
+  return Number.isFinite(n) && n > 0 ? Math.floor(n) : void 0;
 }
-var REPLAY_CONTEXT_MAX = 3e5;
+function contextLimitOf(model) {
+  const o = envOverride();
+  if (o !== void 0) return o;
+  const m = (model ?? "").trim().toLowerCase();
+  if (!m) return CONTEXT_LIMIT_DEFAULT;
+  if (m.startsWith("glm-5")) return 1e6;
+  if (m.startsWith("glm-4.7")) return 1e6;
+  if (m.startsWith("glm-4.6")) return 2e5;
+  if (m.startsWith("glm-4.5")) return 128e3;
+  return CONTEXT_LIMIT_DEFAULT;
+}
+var REPLAY_CONTEXT_MAX = 15e5;
 
 // src/history.ts
 var MAX_SESSIONS_KEPT = 30;
@@ -10735,7 +10749,7 @@ var EventBus = class {
 };
 
 // src/session-manager.ts
-import { mkdirSync as mkdirSync5, readFileSync as readFileSync8, statSync as statSync4, writeFileSync as writeFileSync5 } from "node:fs";
+import { mkdirSync as mkdirSync5, readFileSync as readFileSync9, statSync as statSync4, writeFileSync as writeFileSync5 } from "node:fs";
 import { homedir as homedir6 } from "node:os";
 import { isAbsolute as isAbsolute4, join as join10, resolve as resolve6, sep as sep5 } from "node:path";
 
@@ -40266,7 +40280,7 @@ import { homedir as homedir4 } from "node:os";
 import { delimiter as pathDelimiter, join as join8 } from "node:path";
 
 // src/cli-path.ts
-import { accessSync, constants as constants2, existsSync as existsSync5 } from "node:fs";
+import { accessSync, constants as constants2, existsSync as existsSync5, readFileSync as readFileSync5 } from "node:fs";
 import { createRequire } from "node:module";
 import { delimiter as delimiter2, dirname as dirname5, join as join7 } from "node:path";
 import { homedir as homedir3 } from "node:os";
@@ -40314,8 +40328,19 @@ function fromPath(name) {
   return null;
 }
 function cmdToFallbackJs(p) {
-  const js2 = join7(dirname5(p), "node_modules", "@anthropic-ai", "claude-code", "cli.js");
-  return existsSync5(js2) ? js2 : null;
+  const direct = join7(dirname5(p), "node_modules", "@anthropic-ai", "claude-code", "cli.js");
+  if (existsSync5(direct)) return direct;
+  try {
+    const txt = readFileSync5(p, "utf8");
+    const m = txt.match(/(?:%~dp0\\?"|")(%~dp0\\)?([^"\r\n]+\.js)"/i);
+    if (m) {
+      const rel = m[2].replace(/\\+/g, "\\");
+      const cand = rel.match(/^[a-zA-Z]:[\\/]/) ? rel : join7(dirname5(p), rel);
+      if (existsSync5(cand)) return cand;
+    }
+  } catch {
+  }
+  return null;
 }
 function knownLocations() {
   const home = homedir3();
@@ -40909,12 +40934,27 @@ var AgentSession = class _AgentSession {
             process.stderr.write(`[spawn-hook] command=${o.command} args=${JSON.stringify(o.args)} cwd=${o.cwd ?? ""}
 `);
           }
-          const child = spawn2(o.command, o.args, {
+          const opts2 = {
             stdio: ["pipe", "pipe", "pipe"],
             cwd: o.cwd,
             env: o.env,
             signal: o.signal
-          });
+          };
+          let child;
+          try {
+            child = spawn2(o.command, o.args, opts2);
+          } catch (e) {
+            const msg = e instanceof Error ? e.message : String(e);
+            if (process.platform === "win32" && /\.(cmd|bat)$/i.test(o.command)) {
+              process.stderr.write(`[spawn-hook] EINVAL \u515C\u5E95 cmd.exe /c\uFF1A${o.command}
+`);
+              child = spawn2(process.env.ComSpec ?? "cmd.exe", ["/d", "/s", "/c", o.command, ...o.args], opts2);
+            } else {
+              throw new Error(
+                `\u542F\u52A8 CLI \u5931\u8D25\uFF08${msg}\uFF09\uFF1A\u53EF\u6267\u884C\u6587\u4EF6 ${o.command} \u65E0\u6CD5\u5728\u6B64\u73AF\u5883\u76F4\u63A5\u542F\u52A8` + (process.platform === "win32" ? "\uFF1B\u53EF\u8BBE\u7F6E\u73AF\u5883\u53D8\u91CF CC_DECK_CLAUDE_PATH \u6307\u5411 claude.exe \u6216 cli.js \u540E\u91CD\u542F" : "")
+              );
+            }
+          }
           this.childPid = child.pid ?? void 0;
           return child;
         },
@@ -41454,7 +41494,7 @@ async function generateTitle(task, model, onSid, cwd) {
 }
 
 // src/cron.ts
-import { readFileSync as readFileSync5 } from "node:fs";
+import { readFileSync as readFileSync6 } from "node:fs";
 import { join as join9 } from "node:path";
 var str = (v) => typeof v === "string" && v.trim() ? v : void 0;
 var EXPIRED_ONE_SHOT_GRACE_MS = 10 * 60 * 1e3;
@@ -41494,7 +41534,7 @@ function normalizeTask(raw, fallbackId) {
 function readCronTasks(cwd) {
   let text;
   try {
-    text = readFileSync5(join9(cwd, ".claude", "scheduled_tasks.json"), "utf8");
+    text = readFileSync6(join9(cwd, ".claude", "scheduled_tasks.json"), "utf8");
   } catch (e) {
     return e.code === "ENOENT" ? void 0 : "bad";
   }
@@ -41525,7 +41565,7 @@ function cronTasksKey(tasks) {
 }
 
 // src/task-store.ts
-import { readdirSync as readdirSync3, readFileSync as readFileSync6, statSync as statSync3 } from "node:fs";
+import { readdirSync as readdirSync3, readFileSync as readFileSync7, statSync as statSync3 } from "node:fs";
 import { homedir as homedir5 } from "node:os";
 import path from "node:path";
 function readTaskStoreTodos(cliSessionId) {
@@ -41540,7 +41580,7 @@ function readTaskStoreTodos(cliSessionId) {
   for (const f of files) {
     try {
       const fp2 = path.join(dir, f);
-      const t = JSON.parse(readFileSync6(fp2, "utf-8"));
+      const t = JSON.parse(readFileSync7(fp2, "utf-8"));
       if (t.status === "deleted") continue;
       const subject = typeof t.subject === "string" ? t.subject.trim() : "";
       if (!subject) continue;
@@ -41734,7 +41774,7 @@ function saveUploadFiles(dataDir2, sessionId, files) {
 }
 
 // src/todo-hidden.ts
-import { readFileSync as readFileSync7, writeFileSync as writeFileSync4 } from "node:fs";
+import { readFileSync as readFileSync8, writeFileSync as writeFileSync4 } from "node:fs";
 import path3 from "node:path";
 import { fileURLToPath } from "node:url";
 var FILE = path3.join(path3.dirname(fileURLToPath(import.meta.url)), "..", "data", "todo-hidden.json");
@@ -41744,7 +41784,7 @@ var keySets = /* @__PURE__ */ new Map();
 function load() {
   if (fileCache) return fileCache;
   try {
-    const raw = JSON.parse(readFileSync7(FILE, "utf-8"));
+    const raw = JSON.parse(readFileSync8(FILE, "utf-8"));
     fileCache = {};
     for (const [k3, v] of Object.entries(raw)) {
       if (Array.isArray(v)) {
@@ -41888,7 +41928,7 @@ function sanitizeFiles(raw) {
 var CHILD_SESSIONS_CAP = 200;
 function readChildSessions(dataDir2) {
   try {
-    const raw = JSON.parse(readFileSync8(join10(dataDir2, "child-sessions.json"), "utf-8"));
+    const raw = JSON.parse(readFileSync9(join10(dataDir2, "child-sessions.json"), "utf-8"));
     return Array.isArray(raw) ? raw.filter((x) => typeof x === "string") : [];
   } catch {
     return [];
@@ -41905,7 +41945,7 @@ function appendChildSession(dataDir2, sid) {
 }
 function readDeletedExts(dataDir2) {
   try {
-    const raw = JSON.parse(readFileSync8(join10(dataDir2, "deleted-ext.json"), "utf-8"));
+    const raw = JSON.parse(readFileSync9(join10(dataDir2, "deleted-ext.json"), "utf-8"));
     return Array.isArray(raw) ? raw.filter((x) => typeof x === "string") : [];
   } catch {
     return [];
@@ -41923,7 +41963,7 @@ function appendDeletedExt(dataDir2, id2) {
 var DELIVERABLES_CAP = 300;
 function readDeliverables(dataDir2) {
   try {
-    const raw = JSON.parse(readFileSync8(join10(dataDir2, "deliverables.json"), "utf-8"));
+    const raw = JSON.parse(readFileSync9(join10(dataDir2, "deliverables.json"), "utf-8"));
     return Array.isArray(raw) ? raw.filter(
       (x) => !!x && typeof x === "object" && typeof x.sid === "string" && typeof x.path === "string" && typeof x.ts === "number"
     ) : [];
@@ -41941,7 +41981,7 @@ function appendDeliverable(dataDir2, e) {
 }
 function readTitleOverrides(dataDir2) {
   try {
-    const raw = JSON.parse(readFileSync8(join10(dataDir2, "title-overrides.json"), "utf-8"));
+    const raw = JSON.parse(readFileSync9(join10(dataDir2, "title-overrides.json"), "utf-8"));
     if (!raw || typeof raw !== "object" || Array.isArray(raw)) return {};
     const out = {};
     for (const [k3, v] of Object.entries(raw)) {
@@ -41958,7 +41998,7 @@ function pinnedSessionsPath(dataDir2) {
 }
 function readPinnedSessions(dataDir2) {
   try {
-    const raw = JSON.parse(readFileSync8(pinnedSessionsPath(dataDir2), "utf-8"));
+    const raw = JSON.parse(readFileSync9(pinnedSessionsPath(dataDir2), "utf-8"));
     return Array.isArray(raw) ? raw.filter((x) => typeof x === "string") : [];
   } catch {
     return [];
@@ -43162,7 +43202,7 @@ var SessionManager = class {
           }
           const ref = cmd.command_id;
           try {
-            const buf = readFileSync8(hit.path);
+            const buf = readFileSync9(hit.path);
             const total = Math.max(1, Math.ceil(buf.length / ARTIFACT_CHUNK_BYTES));
             for (let seq = 0; seq < total; seq++) {
               this.bus.emitTransient(
@@ -43878,12 +43918,12 @@ var SessionManager = class {
 // src/ws-server.ts
 import { createServer } from "node:http";
 import { randomUUID as randomUUID5 } from "node:crypto";
-import { readFileSync as readFileSync13, writeFileSync as writeFileSync9, mkdirSync as mkdirSync9, existsSync as existsSync9, readdirSync as readdirSync6 } from "node:fs";
+import { readFileSync as readFileSync14, writeFileSync as writeFileSync9, mkdirSync as mkdirSync9, existsSync as existsSync9, readdirSync as readdirSync6 } from "node:fs";
 import { join as join14, dirname as dirname6, sep as sep6 } from "node:path";
 import { homedir as homedir11, networkInterfaces as networkInterfaces2 } from "node:os";
 
 // src/acceptance.ts
-import { readFileSync as readFileSync9, writeFileSync as writeFileSync6, mkdirSync as mkdirSync6, existsSync as existsSync6, readdirSync as readdirSync4 } from "node:fs";
+import { readFileSync as readFileSync10, writeFileSync as writeFileSync6, mkdirSync as mkdirSync6, existsSync as existsSync6, readdirSync as readdirSync4 } from "node:fs";
 import { join as join11 } from "node:path";
 import { homedir as homedir7 } from "node:os";
 var ACCEPTANCE_ID_RE = /^[0-9a-f]{32}$/;
@@ -43895,7 +43935,7 @@ function loadAcceptance(id2) {
   const file = join11(acceptanceDir(), `${id2}.json`);
   if (!existsSync6(file)) return null;
   try {
-    const a = JSON.parse(readFileSync9(file, "utf-8"));
+    const a = JSON.parse(readFileSync10(file, "utf-8"));
     if (!a || !Array.isArray(a.rows) || a.rows.length === 0) return null;
     return a;
   } catch {
@@ -43936,7 +43976,7 @@ function saveResult(id2, payload, ua) {
   const file = join11(dir, `${id2}.results.json`);
   let history = [];
   try {
-    history = JSON.parse(readFileSync9(file, "utf-8")).history ?? [];
+    history = JSON.parse(readFileSync10(file, "utf-8")).history ?? [];
   } catch {
   }
   if (!Array.isArray(history)) history = [];
@@ -43966,7 +44006,7 @@ function listAcceptances(limit = 20) {
     let judged = 0;
     let done = false;
     try {
-      const r = JSON.parse(readFileSync9(join11(acceptanceDir(), `${id2}.results.json`), "utf-8"));
+      const r = JSON.parse(readFileSync10(join11(acceptanceDir(), `${id2}.results.json`), "utf-8"));
       const last = r.history?.[r.history.length - 1];
       if (last?.rows) {
         judged = last.rows.filter((x) => x.verdict === "pass" || x.verdict === "fail").length;
@@ -44136,15 +44176,44 @@ function serveAcceptancePage(id2, res, apiPath) {
   res.end(html);
   return true;
 }
+function applyCloudSubmits(id2, submits) {
+  if (!ACCEPTANCE_ID_RE.test(id2)) return [];
+  const seen = /* @__PURE__ */ new Set();
+  try {
+    const h = JSON.parse(readFileSync10(join11(acceptanceDir(), `${id2}.results.json`), "utf-8")).history;
+    if (Array.isArray(h)) {
+      for (const e of h) {
+        try {
+          seen.add(JSON.stringify(e.rows ?? null));
+        } catch {
+        }
+      }
+    }
+  } catch {
+  }
+  const added = [];
+  if (!Array.isArray(submits)) return added;
+  for (const s of submits) {
+    if (!s || typeof s !== "object" || !Array.isArray(s.rows)) continue;
+    const sig = JSON.stringify(s.rows);
+    if (seen.has(sig)) continue;
+    const ua = `cloud/${String(s.ua ?? "remote").slice(0, 100)}`;
+    if (saveResult(id2, { rows: s.rows }, ua) === null) {
+      seen.add(sig);
+      added.push(s);
+    }
+  }
+  return added;
+}
 
 // src/models.ts
-import { existsSync as existsSync7, readFileSync as readFileSync10 } from "node:fs";
+import { existsSync as existsSync7, readFileSync as readFileSync11 } from "node:fs";
 import { homedir as homedir8 } from "node:os";
 import { join as join12 } from "node:path";
 var DEFAULT_MODEL = "glm-5.3";
 function readClaudeSettings() {
   try {
-    return JSON.parse(readFileSync10(join12(homedir8(), ".claude", "settings.json"), "utf8"));
+    return JSON.parse(readFileSync11(join12(homedir8(), ".claude", "settings.json"), "utf8"));
   } catch {
     return {};
   }
@@ -44183,13 +44252,13 @@ var wrapper_default = import_websocket.default;
 
 // src/bridge.ts
 import { randomUUID as randomUUID4 } from "node:crypto";
-import { closeSync as closeSync2, openSync as openSync2, readSync as readSync2, readFileSync as readFileSync12, readdirSync as readdirSync5, statSync as statSync5, writeFileSync as writeFileSync8 } from "node:fs";
+import { closeSync as closeSync2, openSync as openSync2, readSync as readSync2, readFileSync as readFileSync13, readdirSync as readdirSync5, statSync as statSync5, writeFileSync as writeFileSync8 } from "node:fs";
 import { homedir as homedir10 } from "node:os";
 import path5 from "node:path";
 
 // src/injector.ts
 import { spawn as spawn3, execFileSync } from "node:child_process";
-import { existsSync as existsSync8, mkdirSync as mkdirSync7, appendFileSync as appendFileSync2, readFileSync as readFileSync11, writeFileSync as writeFileSync7, rmSync as rmSync2 } from "node:fs";
+import { existsSync as existsSync8, mkdirSync as mkdirSync7, appendFileSync as appendFileSync2, readFileSync as readFileSync12, writeFileSync as writeFileSync7, rmSync as rmSync2 } from "node:fs";
 import path4, { join as join13 } from "node:path";
 import { homedir as homedir9, tmpdir } from "node:os";
 import { fileURLToPath as fileURLToPath2 } from "node:url";
@@ -44208,7 +44277,7 @@ function useAppleInjector() {
 var ready = false;
 function peekCapableSource() {
   try {
-    return readFileSync11(injectCs, "utf8").includes("--peek");
+    return readFileSync12(injectCs, "utf8").includes("--peek");
   } catch {
     return false;
   }
@@ -44243,6 +44312,9 @@ function ensureInjector() {
     console.warn("[injector] compile failed:", e instanceof Error ? e.message : e);
   }
   ready = existsSync8(exe2);
+  if (ready && !peekSupported()) {
+    console.warn("[injector] \u9632\u62A2\u53D1\u5FEB\u7167\u4E0D\u53EF\u7528\uFF08inject.exe \u65E0 --peek \u80FD\u529B\uFF1A\u65E7\u7248\u4EA7\u7269\u4FDD\u7559\u6216\u7F16\u8BD1\u5931\u8D25\uFF09\u2014\u2014\u6EDE\u7559\u8865\u53D1\u56DE\u8F66\u5C06\u6309 #180 \u4FDD\u5B88\u8DF3\u8FC7");
+  }
   return ready;
 }
 var VALID_TARGET = /^(claude|node)(\.exe)?$/i;
@@ -44508,7 +44580,7 @@ async function captureConsoleBottom(pid, rows = 20) {
   const r = await run([String(pid), "--peek", tmp, String(rows)]);
   if (!r.ok) return null;
   try {
-    const text = readFileSync11(tmp, "utf8");
+    const text = readFileSync12(tmp, "utf8");
     const lines = text.split(/\r?\n/).map((l) => l.replace(/\0+$/, "").trimEnd());
     return lines.length ? lines : null;
   } catch {
@@ -44645,7 +44717,7 @@ var sleep2 = (ms) => new Promise((r) => setTimeout(r, ms));
 function cliSessionIdle(pid) {
   try {
     const f = path5.join(homedir10(), ".claude", "sessions", `${pid}.json`);
-    const d2 = JSON.parse(readFileSync12(f, "utf-8"));
+    const d2 = JSON.parse(readFileSync13(f, "utf-8"));
     return d2.status === "idle";
   } catch {
     return false;
@@ -44654,7 +44726,7 @@ function cliSessionIdle(pid) {
 function cliSessionStatus(pid) {
   try {
     const f = path5.join(homedir10(), ".claude", "sessions", `${pid}.json`);
-    const d2 = JSON.parse(readFileSync12(f, "utf-8"));
+    const d2 = JSON.parse(readFileSync13(f, "utf-8"));
     return typeof d2.status === "string" ? d2.status : null;
   } catch {
     return null;
@@ -44717,6 +44789,7 @@ var Bridge = class _Bridge {
   extFileStats = /* @__PURE__ */ new Map();
   extUsage = /* @__PURE__ */ new Map();
   // 排队消息滞留看门狗：ext id -> { 最近补发时间, 连续补发次数, 连续跳过次数, 是否已放弃 }
+  // blind = 连续「快照不可用」轮数（#180：检测不可用不补发，连续 3 轮放弃自动补发）
   stuckWatch = /* @__PURE__ */ new Map();
   // 防抢发守门进行中的会话（等待人工停手期间，看门狗节拍跳过防重入）
   stuckGuarding = /* @__PURE__ */ new Set();
@@ -44967,7 +45040,7 @@ var Bridge = class _Bridge {
   // 从 hook 侧缓存文件补回（key=CLI session_id，CLI 存活期不变）
   hydratePidsFromCache() {
     try {
-      const cache = JSON.parse(readFileSync12(this.pidCacheFile, "utf-8"));
+      const cache = JSON.parse(readFileSync13(this.pidCacheFile, "utf-8"));
       for (const s of this.mgr.snapshot()) {
         if (!s.external || s.cli_pid) continue;
         const pid = cache[s.relay_session_id || s.session_id.slice(4)];
@@ -44997,7 +45070,7 @@ var Bridge = class _Bridge {
         if (!Number.isInteger(pid) || pid <= 0) continue;
         let sid = "";
         try {
-          const d2 = JSON.parse(readFileSync12(path5.join(dir, f), "utf-8"));
+          const d2 = JSON.parse(readFileSync13(path5.join(dir, f), "utf-8"));
           if (typeof d2.sessionId === "string" && d2.sessionId) sid = d2.sessionId;
         } catch {
         }
@@ -45313,6 +45386,7 @@ var Bridge = class _Bridge {
         if (!hooked && now - idleSince > idleMs && s.cli_pid && cliSessionIdle(s.cli_pid)) {
           const turn2 = this.turnStart.get(id2) ?? s.started_at;
           this.turnStart.delete(id2);
+          this.sweepPendingToTurnEnd(id2);
           this.mgr.finishExternal(id2, "completed", now - turn2, idleSince);
           this.mgr.pushExternalLog(id2, "system", "CLI \u5DF2\u7A7A\u95F2\uFF08\u8FDB\u7A0B\u72B6\u6001 idle\uFF09\uFF0C\u56DE\u5408\u89C6\u4F5C\u7ED3\u675F");
           if ((this.inputQueue.get(id2)?.length ?? 0) > 0) void this.flushQueue(id2);
@@ -45321,6 +45395,7 @@ var Bridge = class _Bridge {
       }
       const turn = this.turnStart.get(id2) ?? s.started_at;
       this.turnStart.delete(id2);
+      this.sweepPendingToTurnEnd(id2);
       this.mgr.finishExternal(id2, "completed", now - turn, idleSince);
       this.mgr.pushExternalLog(id2, "system", "\u8F6C\u5F55\u4E0E\u4E8B\u4EF6\u5747\u9759\u9ED8\u8D85\u65F6\uFF0C\u56DE\u5408\u89C6\u4F5C\u7ED3\u675F\uFF08hook \u5931\u8054\u515C\u5E95\uFF09");
       if ((this.inputQueue.get(id2)?.length ?? 0) > 0) void this.flushQueue(id2);
@@ -45463,7 +45538,7 @@ var Bridge = class _Bridge {
   static modelDisplayName() {
     if (_Bridge.modelDisplay === void 0) {
       try {
-        _Bridge.modelDisplay = readFileSync12(path5.join(homedir10(), ".cc-deck", "data", "model-display"), "utf8").trim() || null;
+        _Bridge.modelDisplay = readFileSync13(path5.join(homedir10(), ".cc-deck", "data", "model-display"), "utf8").trim() || null;
       } catch {
         _Bridge.modelDisplay = null;
       }
@@ -45781,7 +45856,7 @@ var Bridge = class _Bridge {
   // hook 侧 pid 缓存（relay 会话 id = "ext-" + CLI session_id）
   clearPidCache(sessionId) {
     try {
-      const raw = JSON.parse(readFileSync12(this.pidCacheFile, "utf-8"));
+      const raw = JSON.parse(readFileSync13(this.pidCacheFile, "utf-8"));
       delete raw[sessionId.slice(4)];
       writeFileSync8(this.pidCacheFile, JSON.stringify(raw));
     } catch {
@@ -45845,7 +45920,7 @@ var Bridge = class _Bridge {
       for (const f of readdirSync5(dir)) {
         if (!f.endsWith(".json")) continue;
         try {
-          const d2 = JSON.parse(readFileSync12(path5.join(dir, f), "utf-8"));
+          const d2 = JSON.parse(readFileSync13(path5.join(dir, f), "utf-8"));
           if (d2.sessionId === cliSessionId) return d2.name?.trim() || null;
         } catch {
         }
@@ -46526,6 +46601,7 @@ var Bridge = class _Bridge {
     } else if (/waiting for your input/i.test(msg) && state.status === "WORKING") {
       const turn = this.turnStart.get(id2) ?? state.started_at;
       this.turnStart.delete(id2);
+      this.sweepPendingToTurnEnd(id2);
       this.mgr.finishExternal(id2, "completed", Date.now() - turn);
       this.mgr.pushExternalLog(id2, "system", "\u7A7A\u95F2\u56DE\u9000\uFF1A\u672A\u6536\u5230 Stop\uFF08\u56DE\u5408\u53EF\u80FD\u88AB\u6253\u65AD\uFF09\uFF0C\u5DF2\u6807\u8BB0\u7ED3\u675F");
       if ((this.inputQueue.get(id2)?.length ?? 0) > 0) void this.flushQueue(id2);
@@ -46534,15 +46610,19 @@ var Bridge = class _Bridge {
     }
     return { decision: "pass" };
   }
-  onStop(ev2) {
-    const id2 = this.extId(ev2);
+  // #172 回合收尾统一清扫：pending 中已不在注入队列里的条目 = CLI 已处理（UPS/回执
+  // 晋升路径脱靶或 hook 帧丢失），晋升为正式消息出队；仍在队列里的保留（flushQueue
+  // 随后注入，等 CLI 处理时的 UserPromptSubmit 晋升避免双气泡）。此前仅 Stop hook
+  // 路径做该清扫——hook 失联静默兜底、CLI idle 快回落、Esc 打断空闲回退三处收尾
+  // 直接 finishExternal 收回合，残留 pending 在 DONE 态再无清扫者（工作态专属的
+  // silence/dead sweep 都不再进来），「消息已送达却一直排队」永久滞留（2026-09-24
+  // 用户实测）。四处收尾路径在此同权。
+  sweepPendingToTurnEnd(id2) {
     const state = this.mgr.getExternal(id2);
-    if (!state) return { decision: "pass" };
-    this.refreshName(id2, ev2);
-    this.pushAssistantTexts(id2, ev2.transcript_path);
+    if (!state?.pending_inputs?.length) return;
     const avail = [...this.inputQueue.get(id2) ?? []];
     const kept2 = [];
-    for (const p of state.pending_inputs ?? []) {
+    for (const p of state.pending_inputs) {
       const qi2 = avail.findIndex((t) => normKey(t) === normKey(pBody(p)));
       if (qi2 === -1) {
         this.noteUserMsg(id2, pBody(p), "promote");
@@ -46552,8 +46632,16 @@ var Bridge = class _Bridge {
         kept2.push(p);
       }
     }
-    if ((state.pending_inputs?.length ?? 0) !== kept2.length) this.mgr.setExternalPending(id2, kept2);
+    if (state.pending_inputs.length !== kept2.length) this.mgr.setExternalPending(id2, kept2);
     this.resetStuckWatch(id2);
+  }
+  onStop(ev2) {
+    const id2 = this.extId(ev2);
+    const state = this.mgr.getExternal(id2);
+    if (!state) return { decision: "pass" };
+    this.refreshName(id2, ev2);
+    this.pushAssistantTexts(id2, ev2.transcript_path);
+    this.sweepPendingToTurnEnd(id2);
     const turn = this.turnStart.get(id2) ?? state.started_at;
     this.turnStart.delete(id2);
     this.mgr.finishExternal(id2, "completed", Date.now() - turn);
@@ -46727,7 +46815,7 @@ var Bridge = class _Bridge {
     for (const n of names) {
       if (!n.startsWith("agent-") || !n.endsWith(".meta.json")) continue;
       try {
-        const meta = JSON.parse(readFileSync12(path5.join(dir, n), "utf8"));
+        const meta = JSON.parse(readFileSync13(path5.join(dir, n), "utf8"));
         const agentId = n.slice("agent-".length, -".meta.json".length);
         if (meta.toolUseId) this.subagentAgentIds.set(meta.toolUseId, agentId);
       } catch {
@@ -46934,7 +47022,7 @@ var Bridge = class _Bridge {
       const pid = s.cli_pid;
       if (guardConfig().enabled) {
         if (this.stuckGuarding.has(id2)) continue;
-        this.stuckWatch.set(id2, { lastTry: now, tries: w2?.tries ?? 0, skips: w2?.skips ?? 0, given_up: w2?.given_up ?? false });
+        this.stuckWatch.set(id2, { lastTry: now, tries: w2?.tries ?? 0, skips: w2?.skips ?? 0, blind: w2?.blind ?? 0, given_up: w2?.given_up ?? false });
         this.stuckGuarding.add(id2);
         void this.guardedStuckEnter(id2, pid, stuckTexts).finally(() => this.stuckGuarding.delete(id2));
         continue;
@@ -46942,11 +47030,11 @@ var Bridge = class _Bridge {
       this.fireStuckEnter(id2, pid);
     }
   }
-  // 真正补发回车（守门通过 / 守门关闭 / 快照不可用 fail-open 都走到这里）
+  // 真正补发回车（守门通过 / 守门关闭才走到这里——#180 起快照不可用不再 fail-open 盲发）
   fireStuckEnter(id2, pid, msg) {
     const w2 = this.stuckWatch.get(id2);
     const tries = (w2?.tries ?? 0) + 1;
-    this.stuckWatch.set(id2, { lastTry: Date.now(), tries, skips: w2?.skips ?? 0, given_up: tries >= 3 });
+    this.stuckWatch.set(id2, { lastTry: Date.now(), tries, skips: w2?.skips ?? 0, blind: 0, given_up: tries >= 3 });
     if (tries === 3) {
       this.mgr.pushExternalLog(id2, "system", "\u6392\u961F\u6D88\u606F\u7591\u4F3C\u6EDE\u7559\u8F93\u5165\u6846\uFF0C\u5DF2\u8865\u53D1 3 \u6B21\u56DE\u8F66\u4ECD\u6EDE\u7559\uFF0C\u6682\u505C\u81EA\u52A8\u8865\u53D1\uFF08\u4E0B\u6B21\u53D1\u9001\u6D88\u606F\u65F6\u4F1A\u4E00\u5E76\u63D0\u4EA4\uFF09");
     } else if (tries < 3) {
@@ -46961,11 +47049,13 @@ var Bridge = class _Bridge {
   bumpStuckSkips(id2, msg) {
     const w2 = this.stuckWatch.get(id2);
     const skips = (w2?.skips ?? 0) + 1;
-    this.stuckWatch.set(id2, { lastTry: Date.now(), tries: w2?.tries ?? 0, skips, given_up: (w2?.given_up ?? false) || skips >= 3 });
+    this.stuckWatch.set(id2, { lastTry: Date.now(), tries: w2?.tries ?? 0, skips, blind: 0, given_up: (w2?.given_up ?? false) || skips >= 3 });
     this.mgr.pushExternalLog(id2, "system", skips >= 3 ? "\u8F93\u5165\u6846\u591A\u6B21\u672A\u89C1\u8BE5\u6392\u961F\u6D88\u606F\uFF0C\u6682\u505C\u81EA\u52A8\u8865\u53D1\uFF08\u4E0B\u6B21\u53D1\u9001\u6D88\u606F\u65F6\u4F1A\u4E00\u5E76\u63D0\u4EA4\uFF09" : msg);
   }
   // 补发回车前的防抢发守门：快照 CLI 输入框，有疑似人工输入则等停手再补。
-  // 快照不可用（旧注入器/弹窗盖住/识别失败）fail-open 维持旧行为直接补发。
+  // 快照不可用（旧注入器/弹窗盖住/识别失败）不补发（#180 反转 fail-open：看不到 ≠ 安全
+  // ——宁让滞留消息多等/最终放弃，也不盲发回车打断正在打字的用户；2026-09-24 公司机
+  // 打字中途被自动发送即此路径：Windows peek 未编译成功，快照恒 null 仍照发）。
   async guardedStuckEnter(id2, pid, texts) {
     const v = await guardCompensateEnter(texts, () => captureConsoleBottom(pid), {
       abort: () => {
@@ -46984,6 +47074,18 @@ var Bridge = class _Bridge {
     if (v.kind === "aborted") return;
     if (v.kind === "enter-after-wait") {
       this.fireStuckEnter(id2, pid, `\u5DF2\u8865\u53D1\u56DE\u8F66\uFF08\u68C0\u6D4B\u5230\u8F93\u5165\u6846\u6709\u5176\u4ED6\u8F93\u5165\uFF0C\u7B49\u505C\u624B ${Math.round(v.waitedMs / 100) / 10}s \u540E\u8865\u53D1\uFF09`);
+      return;
+    }
+    if (v.kind === "unknown") {
+      const w2 = this.stuckWatch.get(id2);
+      const blind = (w2?.blind ?? 0) + 1;
+      const giveUp = blind >= 3;
+      this.stuckWatch.set(id2, { lastTry: Date.now(), tries: w2?.tries ?? 0, skips: w2?.skips ?? 0, blind, given_up: giveUp });
+      this.mgr.pushExternalLog(
+        id2,
+        "system",
+        giveUp ? "\u9632\u62A2\u53D1\u68C0\u6D4B\u8FDE\u7EED\u4E0D\u53EF\u7528\uFF0C\u4E3A\u907F\u514D\u6253\u65AD\u8F93\u5165\u6682\u505C\u81EA\u52A8\u8865\u53D1\uFF08\u4E0B\u6B21\u53D1\u9001\u6D88\u606F\u65F6\u4F1A\u4E00\u5E76\u63D0\u4EA4\uFF09" : "\u9632\u62A2\u53D1\u68C0\u6D4B\u4E0D\u53EF\u7528\uFF08\u65E0\u6CD5\u5FEB\u7167\u8F93\u5165\u6846\uFF09\uFF0C\u6682\u4E0D\u8865\u53D1\u56DE\u8F66\u4EE5\u514D\u6253\u65AD\u8F93\u5165\uFF0C\u7A0D\u540E\u81EA\u52A8\u91CD\u8BD5"
+      );
       return;
     }
     this.fireStuckEnter(id2, pid);
@@ -47010,11 +47112,55 @@ function pluginConfigPath() {
 function readPluginConfig() {
   const out = { taskGuard: false, qNotify: true, restorePoint: false, deliverables: true };
   try {
-    const raw = JSON.parse(readFileSync13(pluginConfigPath(), "utf-8"));
+    const raw = JSON.parse(readFileSync14(pluginConfigPath(), "utf-8"));
     for (const k3 of PLUGIN_CFG_KEYS) if (typeof raw[k3] === "boolean") out[k3] = raw[k3];
   } catch {
   }
   return out;
+}
+function notifyAcceptanceRefill(acc, rows, mgr2) {
+  try {
+    const cwd = acc.cwd;
+    if (typeof cwd !== "string" || !cwd) return;
+    const sid = mgr2.matchSessionByCwd(cwd);
+    if (!sid) return;
+    const rs2 = Array.isArray(rows) ? rows : [];
+    const p = rs2.filter((r) => r && r.verdict === "pass").length;
+    const f = rs2.filter((r) => r && r.verdict === "fail").length;
+    const u = rs2.length - p - f;
+    const t = acc.title.length > 40 ? acc.title.slice(0, 40) + "\u2026" : acc.title;
+    mgr2.pushExternalLog(sid, "system", `\u9A8C\u6536\u5355\u5DF2\u56DE\u586B\uFF1A\u300A${t}\u300B ${p}\u2713 ${f}\u2717 ${u}\u672A\u6D4B`);
+  } catch {
+  }
+}
+function startAcceptanceCloudPoll(cfg2, mgr2) {
+  let base = "";
+  try {
+    base = `https://${new URL(cfg2.cloudUrl).host}`;
+  } catch {
+    return;
+  }
+  const tick = async () => {
+    for (const s of listAcceptances()) {
+      if (s.done) continue;
+      let submits = null;
+      try {
+        const r = await fetch(`${base}/view/acceptance-${s.id}.results.json`, {
+          signal: AbortSignal.timeout(1e4)
+        });
+        if (r.ok) submits = await r.json();
+      } catch {
+      }
+      if (!Array.isArray(submits) || submits.length === 0) continue;
+      const added = applyCloudSubmits(s.id, submits);
+      if (added.length > 0) {
+        const acc = loadAcceptance(s.id);
+        if (acc) notifyAcceptanceRefill(acc, added[added.length - 1].rows, mgr2);
+      }
+    }
+  };
+  setTimeout(() => void tick(), 2e4).unref?.();
+  setInterval(() => void tick(), 6e4).unref?.();
 }
 var COMMAND_TYPES = /* @__PURE__ */ new Set([
   "COMMAND_CREATE",
@@ -47082,7 +47228,7 @@ function listCustomCommands(dir, source) {
   }
   const descOf = (p) => {
     try {
-      const head = readFileSync13(p, "utf-8").slice(0, 400);
+      const head = readFileSync14(p, "utf-8").slice(0, 400);
       const m = /^description:\s*(.+)$/m.exec(head);
       if (m) return m[1].trim().slice(0, 80);
       const line = head.split(/\r?\n/).find((l) => l.trim() && !l.startsWith("---"));
@@ -47145,7 +47291,7 @@ function startServer(bus2, mgr2, cfg2, opts = {}) {
       return true;
     }
     const ext = rel.slice(rel.lastIndexOf("."));
-    res.writeHead(200, { "content-type": MIME2[ext] ?? "application/octet-stream" }).end(readFileSync13(file));
+    res.writeHead(200, { "content-type": MIME2[ext] ?? "application/octet-stream" }).end(readFileSync14(file));
     return true;
   };
   const wss = new import_websocket_server.default({ noServer: true });
@@ -47171,7 +47317,7 @@ function startServer(bus2, mgr2, cfg2, opts = {}) {
         res.writeHead(503).end("web-console/index.html \u4E0D\u5B58\u5728\uFF08\u6B65\u9AA4 6 \u751F\u6210\uFF09");
         return;
       }
-      const html = readFileSync13(consoleHtml);
+      const html = readFileSync14(consoleHtml);
       res.writeHead(200, { "content-type": "text/html; charset=utf-8", "cache-control": "no-store" }).end(html);
       return;
     }
@@ -47180,7 +47326,7 @@ function startServer(bus2, mgr2, cfg2, opts = {}) {
         res.writeHead(503).end("web-console/nacl.js \u4E0D\u5B58\u5728\uFF08cp node_modules/tweetnacl/nacl-fast.min.js\uFF09");
         return;
       }
-      res.writeHead(200, { "content-type": "text/javascript; charset=utf-8", "cache-control": "no-store" }).end(readFileSync13(naclJs));
+      res.writeHead(200, { "content-type": "text/javascript; charset=utf-8", "cache-control": "no-store" }).end(readFileSync14(naclJs));
       return;
     }
     if (req.method === "GET" && url.pathname === "/qr.js") {
@@ -47188,7 +47334,7 @@ function startServer(bus2, mgr2, cfg2, opts = {}) {
         res.writeHead(503).end("web-console/qr.js \u4E0D\u5B58\u5728");
         return;
       }
-      res.writeHead(200, { "content-type": "text/javascript; charset=utf-8", "cache-control": "no-store" }).end(readFileSync13(qrJs));
+      res.writeHead(200, { "content-type": "text/javascript; charset=utf-8", "cache-control": "no-store" }).end(readFileSync14(qrJs));
       return;
     }
     if (req.method === "GET" && PWA_ASSETS[url.pathname]) {
@@ -47197,7 +47343,7 @@ function startServer(bus2, mgr2, cfg2, opts = {}) {
         res.writeHead(404).end("not found");
         return;
       }
-      res.writeHead(200, { "content-type": PWA_ASSETS[url.pathname] }).end(readFileSync13(file));
+      res.writeHead(200, { "content-type": PWA_ASSETS[url.pathname] }).end(readFileSync14(file));
       return;
     }
     if (url.pathname === "/api/lan-hello" && req.method === "GET") {
@@ -47240,7 +47386,7 @@ function startServer(bus2, mgr2, cfg2, opts = {}) {
       if (req.method === "GET") {
         let name = "";
         try {
-          name = readFileSync13(file, "utf8").trim().slice(0, 40);
+          name = readFileSync14(file, "utf8").trim().slice(0, 40);
         } catch {
         }
         res.writeHead(200, { "content-type": "application/json", "cache-control": "no-store" }).end(JSON.stringify({ ok: true, name }));
@@ -47400,6 +47546,12 @@ function startServer(bus2, mgr2, cfg2, opts = {}) {
       if (!serveAcceptancePage(id2, res)) res.writeHead(404, { "content-type": "text/plain" }).end("not found");
       return;
     }
+    if (req.method === "GET" && url.pathname.startsWith("/acceptance-cloud/")) {
+      const id2 = url.pathname.slice("/acceptance-cloud/".length).replace(/\/+$/, "");
+      const apiPath = `/view/acceptance-${id2}.results.json`;
+      if (!serveAcceptancePage(id2, res, apiPath)) res.writeHead(404, { "content-type": "text/plain" }).end("not found");
+      return;
+    }
     if (req.method === "POST" && url.pathname === "/api/acceptance") {
       let body = "";
       req.on("data", (c) => {
@@ -47425,21 +47577,7 @@ function startServer(bus2, mgr2, cfg2, opts = {}) {
             return;
           }
           res.writeHead(200, { "content-type": "application/json" }).end('{"ok":true}');
-          try {
-            const cwd = acc.cwd;
-            if (typeof cwd === "string" && cwd) {
-              const sid = mgr2.matchSessionByCwd(cwd);
-              if (sid) {
-                const rs2 = Array.isArray(rows) ? rows : [];
-                const p = rs2.filter((r) => r && r.verdict === "pass").length;
-                const f = rs2.filter((r) => r && r.verdict === "fail").length;
-                const u = rs2.length - p - f;
-                const t = acc.title.length > 40 ? acc.title.slice(0, 40) + "\u2026" : acc.title;
-                mgr2.pushExternalLog(sid, "system", `\u9A8C\u6536\u5355\u5DF2\u56DE\u586B\uFF1A\u300A${t}\u300B ${p}\u2713 ${f}\u2717 ${u}\u672A\u6D4B`);
-              }
-            }
-          } catch {
-          }
+          notifyAcceptanceRefill(acc, rows, mgr2);
         } catch {
           res.writeHead(400, { "content-type": "application/json" }).end('{"ok":false,"error":"bad json"}');
         }
@@ -47752,7 +47890,7 @@ async function handlePluginConfig(req, res) {
     try {
       let full = {};
       try {
-        full = JSON.parse(readFileSync13(pluginConfigPath(), "utf-8"));
+        full = JSON.parse(readFileSync14(pluginConfigPath(), "utf-8"));
       } catch {
       }
       for (const k3 of PLUGIN_CFG_KEYS) full[k3] = next[k3];
@@ -47834,14 +47972,14 @@ async function handleBridgeHook(req, res, bridge, cfg2) {
 var connectionCounter = 0;
 
 // src/cloud-identity.ts
-import { existsSync as existsSync10, readFileSync as readFileSync14, writeFileSync as writeFileSync10 } from "node:fs";
+import { existsSync as existsSync10, readFileSync as readFileSync15, writeFileSync as writeFileSync10 } from "node:fs";
 import { join as join15 } from "node:path";
 import { createHash, randomBytes } from "node:crypto";
 function loadOrCreateIdentity(dataDir2) {
   const kpPath = join15(dataDir2, "cloud-keypair.json");
   let keypair;
   if (existsSync10(kpPath)) {
-    keypair = JSON.parse(readFileSync14(kpPath, "utf-8"));
+    keypair = JSON.parse(readFileSync15(kpPath, "utf-8"));
     if (!keypair.publicKey || !keypair.secretKey) throw new Error("cloud-keypair.json \u635F\u574F\uFF0C\u8BF7\u5220\u9664\u540E\u91CD\u542F\u91CD\u65B0\u751F\u6210\uFF08\u5DF2\u914D\u5BF9\u624B\u673A\u9700\u91CD\u65B0\u914D\u5BF9\uFF09");
   } else {
     keypair = generateKeyPair();
@@ -47849,7 +47987,7 @@ function loadOrCreateIdentity(dataDir2) {
   }
   const wanSecretPath = join15(dataDir2, "wan-secret");
   let wanSecret = "";
-  if (existsSync10(wanSecretPath)) wanSecret = readFileSync14(wanSecretPath, "utf-8").trim();
+  if (existsSync10(wanSecretPath)) wanSecret = readFileSync15(wanSecretPath, "utf-8").trim();
   if (!/^[0-9a-f]{32}$/.test(wanSecret)) {
     wanSecret = randomBytes(16).toString("hex");
     writeFileSync10(wanSecretPath, wanSecret, "utf-8");
@@ -47859,7 +47997,7 @@ function loadOrCreateIdentity(dataDir2) {
   const peers = /* @__PURE__ */ new Map();
   if (existsSync10(peersPath)) {
     try {
-      const raw = JSON.parse(readFileSync14(peersPath, "utf-8"));
+      const raw = JSON.parse(readFileSync15(peersPath, "utf-8"));
       for (const [dev, entry] of Object.entries(raw)) peers.set(dev, entry);
     } catch {
     }
@@ -48558,7 +48696,7 @@ function advertiseRelay(port, name) {
 }
 
 // src/todo-tools-env.ts
-import { existsSync as existsSync11, readFileSync as readFileSync15, writeFileSync as writeFileSync11 } from "node:fs";
+import { existsSync as existsSync11, readFileSync as readFileSync16, writeFileSync as writeFileSync11 } from "node:fs";
 import { join as join16 } from "node:path";
 import { homedir as homedir12 } from "node:os";
 var TODO_TOOLS_ENV_KEY = "CLAUDE_CODE_ENABLE_TODO_TOOLS";
@@ -48574,7 +48712,7 @@ function ensureTodoToolsEnv() {
     obj = {};
   } else {
     try {
-      obj = JSON.parse(readFileSync15(file, "utf-8"));
+      obj = JSON.parse(readFileSync16(file, "utf-8"));
     } catch {
       return "skip-bad-json";
     }
@@ -48606,7 +48744,7 @@ var cfg = loadConfig();
 {
   const lockPath = join17(cfg.dataDir, "relay.lock");
   try {
-    const prev = Number(readFileSync16(lockPath, "utf8").trim());
+    const prev = Number(readFileSync17(lockPath, "utf8").trim());
     if (Number.isFinite(prev) && prev > 0 && prev !== process.pid) {
       process.kill(prev, 0);
       console.log(`[relay] \u6570\u636E\u76EE\u5F55\u5DF2\u88AB pid=${prev} \u7684 relay \u5360\u7528\uFF08\u5355\u5B9E\u4F8B\u9501\uFF09\uFF0C5s \u540E\u8BA9\u4F4D\u9000\u51FA`);
@@ -48625,7 +48763,7 @@ var cfg = loadConfig();
   }
   const wipe = () => {
     try {
-      if (Number(readFileSync16(lockPath, "utf8").trim()) === process.pid) rmSync3(lockPath);
+      if (Number(readFileSync17(lockPath, "utf8").trim()) === process.pid) rmSync3(lockPath);
     } catch {
     }
   };
@@ -48666,7 +48804,7 @@ if (cliArgs.has("--pair")) {
   let port = cfg.port;
   let bridgeToken = cfg.bridgeToken;
   try {
-    const b = JSON.parse(readFileSync16(join17(cfg.dataDir, "bridge.json"), "utf-8"));
+    const b = JSON.parse(readFileSync17(join17(cfg.dataDir, "bridge.json"), "utf-8"));
     if (b.port) port = b.port;
     if (b.token) bridgeToken = b.token;
   } catch {
@@ -48712,7 +48850,7 @@ if (cliArgs.has("--qr")) {
   process.exit(0);
 }
 if (cliArgs.has("--daemon")) {
-  if (false) {
+  if (!process.env.CC_DECK_PLUGIN) {
     console.log("dev \u6A21\u5F0F\uFF08tsx \u524D\u53F0\u8DD1 TS \u6E90\u7801\uFF09\u4E0D\u652F\u6301 --daemon\uFF0C\u8BF7\u76F4\u63A5\u524D\u53F0\u8FD0\u884C");
     process.exit(1);
   }
@@ -48737,7 +48875,7 @@ function pidIsNode(pid) {
       });
       return /node/i.test(out);
     }
-    if (existsSync12("/proc")) return readFileSync16(`/proc/${pid}/comm`, "utf-8").includes("node");
+    if (existsSync12("/proc")) return readFileSync17(`/proc/${pid}/comm`, "utf-8").includes("node");
     return "node" === execFileSync2("ps", ["-o", "comm=", "-p", String(pid)], {
       encoding: "utf-8",
       timeout: 5e3
@@ -48749,7 +48887,7 @@ function pidIsNode(pid) {
 if (cliArgs.has("--stop")) {
   const pidFile = join17(cfg.dataDir, "relay.pid");
   try {
-    const pid = Number(readFileSync16(pidFile, "utf-8").trim());
+    const pid = Number(readFileSync17(pidFile, "utf-8").trim());
     if (pid > 0 && pidIsNode(pid)) {
       process.kill(pid);
       console.log(`CC Deck Relay \u5DF2\u505C\u6B62\uFF08pid ${pid}\uFF09`);
@@ -48835,7 +48973,7 @@ if (cfg.cloudUrls.length) {
         },
         relayName: () => {
           try {
-            return readFileSync16(join17(cfg.dataDir, "relay-name"), "utf8").trim().slice(0, 40) || "";
+            return readFileSync17(join17(cfg.dataDir, "relay-name"), "utf8").trim().slice(0, 40) || "";
           } catch {
             return "";
           }
@@ -48846,6 +48984,7 @@ if (cfg.cloudUrls.length) {
     }
   }
 }
+startAcceptanceCloudPoll(cfg, mgr);
 startServer(bus, mgr, cfg, {
   cloudHasPhones: () => cloudClients.some((c) => c.hasActivePhones()),
   ...cloudClients.length ? { pairCodes } : {},
@@ -48857,7 +48996,7 @@ startServer(bus, mgr, cfg, {
   // #100 relay 自定义名称：dataDir/relay-name 单行文件（web 设置 relay 页可写）
   relayName: () => {
     try {
-      return readFileSync16(join17(cfg.dataDir, "relay-name"), "utf8").trim().slice(0, 40) || "";
+      return readFileSync17(join17(cfg.dataDir, "relay-name"), "utf8").trim().slice(0, 40) || "";
     } catch {
       return "";
     }
