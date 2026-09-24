@@ -526,6 +526,10 @@ await wait(150);
   // 并行同批：仍有在跑条目时再派一个 → 并入当前批次（不洗牌、历史不回）
   await hook({ event: "PreToolUse", tool_name: "Agent", tool_use_id: "call_fg2", tool_input: { description: "并行前台", run_in_background: false }, permission_mode: "default" });
   assert(subs().length === 2 && subs().some((x) => x.id === "call_fg2" && x.ended_at === undefined), "28 parallel spawn joins current batch");
+  // 缺省即后台（2026-09-24 实测：run_in_background 仅显式传参时进 input，缺省无此键——
+  // `=== true` 把缺省后台误标 false，收尾分流走错支路只能靠兜底活命）：缺省派生 bg 必为 true
+  await hook({ event: "PreToolUse", tool_name: "Agent", tool_use_id: "call_def1", tool_input: { description: "缺省后台", subagent_type: "Explore" }, permission_mode: "default" });
+  assert(subs().length === 3 && subs().find((x) => x.id === "call_def1")?.bg === true, "28 omitted run_in_background defaults to bg (harness default)");
   await hook({ event: "PostToolUse", tool_name: "Agent", tool_use_id: "call_bg1", tool_response: "spawned" });
   assert(subs().find((x) => x.id === "call_bg1")?.ended_at === undefined, "28 bg subagent ignores PostToolUse");
   appendFileSync(T, JSON.stringify({ type: "user", message: { role: "user", content: [{ type: "text", text: "<task-notification>\n<task-id>b1</task-id>\n<tool-use-id>call_bg1</tool-use-id>\n<status>completed</status>\n<summary>done</summary>" }] } }) + "\n");
@@ -648,11 +652,12 @@ await wait(150);
 }
 
 // 28d. #183 外部 CLI 会话子 Agent 转录兜底（公司机 hook 断链实锤）：
-//      现行 CLI 派生后台子 Agent 时把 run_in_background 从 tool_use input 里剥离
-//      （转录与 hook 的 tool_input 都拿不到）——旧版门槛 `run_in_background===true`
-//      把兜底链整个堵死。新语义：fg/bg 通建；bg 唯一可靠判据 = 配对 tool_result
-//      文本的「Async agent launched」异步启动回执前缀；前台 result = 真实完成
-//      （跨批次经 use id 台账配对收尾，hook 断链会话 fg 不再只能等 TTL）
+//      CLI 的 Agent 工具 run_in_background 仅显式传参时进 tool_use input（缺省即
+//      后台，字段不序列化；2026-09-24 transcript 实测：显式 false 在、缺省无键）
+//      ——旧版门槛 `run_in_background===true` 把兜底链整个堵死。新语义：fg/bg 通建
+//      （缺省按后台）；bg 佐证判据 = 配对 tool_result 文本的「Async agent launched」
+//      异步启动回执前缀；前台 result = 真实完成（跨批次经 use id 台账配对收尾，
+//      hook 断链会话 fg 不再只能等 TTL）
 {
   const { writeFileSync, appendFileSync, rmSync } = await import("node:fs");
   const T = fileURLToPath(new URL("../data/test-transcript.jsonl", import.meta.url));
@@ -681,7 +686,8 @@ await wait(150);
   await drive();
   assert(subsOf().find((x) => x.id === "call_bg183")?.ended_at !== undefined, "28d task-notification ends bg entry after receipt");
   // ④ fg 派生跨批次：use 先到建 running，result 数分钟后到达——台账配对收尾
-  appendFileSync(T, ln({ type: "assistant", timestamp: ts(4000), message: { role: "assistant", content: [{ type: "tool_use", id: "call_fg183", name: "Agent", input: { description: "前台快查" } }] } }));
+  //（input 显式 false——真实 CLI 前台派生带此键，缺省无键=后台）
+  appendFileSync(T, ln({ type: "assistant", timestamp: ts(4000), message: { role: "assistant", content: [{ type: "tool_use", id: "call_fg183", name: "Agent", input: { description: "前台快查", run_in_background: false } }] } }));
   await drive();
   let f1 = mgr.getExternal(sid)?.subagents?.find((x) => x.id === "call_fg183");
   assert(f1 !== undefined && f1.ended_at === undefined && f1.bg === false, "28d fg tool_use bootstraps running entry");

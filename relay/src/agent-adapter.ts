@@ -649,7 +649,9 @@ export class AgentSession {
       id: blockId,
       desc,
       kind: typeof input.subagent_type === "string" && input.subagent_type ? input.subagent_type : "general",
-      bg: input.run_in_background === true,
+      // 缺省即后台（同 bridge.trackSubagentStart）：run_in_background 仅显式传参时序列化，
+      // `=== true` 会把缺省后台误标 false（2026-09-24 实测）
+      bg: input.run_in_background !== false,
       started_at: Date.now(),
     });
     if (this.subagents.length > 30) this.subagents.splice(0, this.subagents.length - 30);

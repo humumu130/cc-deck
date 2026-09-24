@@ -1576,8 +1576,9 @@ export class Bridge {
       const taskOps: TaskOp[] = [];
       const agentNotifs: string[] = []; // 后台子 Agent 完成通知里的 tool-use-id
       const agentUses: { id: string; input: unknown; ts: number }[] = []; // Agent/Task tool_use 块（真实 call id + 行时刻）
-      // #183 Agent/Task 的 tool_result（user 行，按 tool_use_id 配对）：CLI 派生后台子
-      // Agent 时把 run_in_background 从 tool_use input 里剥离（hook/转录都拿不到），
+      // #183 Agent/Task 的 tool_result（user 行，按 tool_use_id 配对）：CLI 的 Agent 工具
+      // run_in_background 仅显式传参时进 tool_use input（缺省即后台的默认形态下字段
+      // 不序列化，hook/转录都拿不到；2026-09-24 transcript 实测：显式 false 在、缺省无键），
       // 唯一可靠 bg 判据是 result 文本的「Async agent launched」异步启动回执前缀；
       // 前台 result 则是真实完成信号（hook 断链会话 fg 子 Agent 的结束兜底）
       const agentResults = new Map<string, { async: boolean; at: number }>();
@@ -2482,8 +2483,8 @@ export class Bridge {
   // transcript 里的 Agent tool_use 块（真实 call_xxx id）：
   //  - hook 未带 tool_use_id 时 Pre 建的是合成 id（ag-N）——升级为真实 id，后续 task-notification 才能配对
   //  - relay 重启/hook 断链（#183 公司机实锤）时错过的派生：补建条目——fg/bg 通建，
-  //    bg 由配对 tool_result 的异步启动回执判定（run_in_background 被 CLI 从 input
-  //    里剥离，转录与 hook 都拿不到，详见扫描处注释）
+  //    bg 优先由配对 tool_result 的异步启动回执判定（run_in_background 仅显式传参时
+  //    进 input，缺省即后台的默认形态转录与 hook 都拿不到，详见扫描处注释）
   // 注意 list 取法必须是 `?? []`（与 trackSubagentStart 对齐）：state.subagents 初始
   // 是 undefined，早先的 `if (!list) return` 把"补建条目"路径整个堵死——relay 重启后
   // 第一个后台子 Agent 永远建不起来，手机/桌面全程误报空闲（#100 复发的第一根因）
