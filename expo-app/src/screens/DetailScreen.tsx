@@ -2015,6 +2015,45 @@ export default function DetailScreen({ sid, onBack, initialView, ref }: { sid: s
                   </Svg>
                 </Pressable>
               ) : null}
+              {/* #191 外部会话权限模式只读胶囊：relay 逐事件更新并下发 permission_mode，
+                  此前两端对外部会话整体隐藏——plan 模式无任何标识，远程审批照弹被误读成
+                  「权限跳过了还弹审批」。形态对齐托管胶囊（幽灵盾=标准/品牌蓝点亮=自动·
+                  规划/红警示=跳过），只读不带 ⇄：外部会话的权限在电脑终端切换 */}
+              {external && !s.historical ? (
+                <View
+                  style={[
+                    d.permPill,
+                    perm === "default"
+                      ? [d.permPillGhost, { borderColor: mode === "dark" ? "rgba(125,165,220,0.22)" : c.line }]
+                      : perm === "bypassPermissions" ? d.permPillWarn : d.permPillLit,
+                  ]}
+                  accessibilityLabel={`权限模式：${(PERM_LABEL as Record<string, string>)[perm] ?? perm}（外部会话，在电脑终端切换）`}
+                >
+                  <Svg
+                    width={10}
+                    height={10}
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke={perm === "default" ? c.dim : perm === "bypassPermissions" ? c.waiting : c.brandA}
+                    strokeWidth={2.4}
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  >
+                    <Path d="M12 3l7 3v5c0 4.5-3 7.5-7 9-4-1.5-7-4.5-7-9V6l7-3z" />
+                    {perm === "bypassPermissions" ? (
+                      <>
+                        <Path d="M12 8.5v3.5" />
+                        <Path d="M12 15.8h0.01" strokeWidth={2.6} />
+                      </>
+                    ) : null}
+                  </Svg>
+                  {perm !== "default" ? (
+                    <Text style={[d.permT, perm === "bypassPermissions" && d.permTWarn]}>
+                      {(PERM_SHORT as Record<string, string>)[perm] ?? perm}
+                    </Text>
+                  ) : null}
+                </View>
+              ) : null}
               {/* #56 外部会话远程审批开关：开=Bash/Edit 等门控工具的权限确认挂起到
                   手机/网页出按钮；手机离线 relay 自动回退终端本地弹框（hasClients 守卫）。
                   状态回显走 SESSION_UPDATED remote_mode（协议早已就绪，本任务只补 UI） */}

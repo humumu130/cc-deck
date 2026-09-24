@@ -4794,7 +4794,7 @@ function renderDetail() {
   $("thinkBtn").classList.toggle("on", thinkShown);
   $("thinkBtn").textContent = "思考 ·" + (thinkShown ? "开" : "关");
   const permBtn = $("permBtn");
-  if (!s.external && !s.historical) {
+  if (!s.historical) {
     permBtn.style.display = "";
     const pm = s.permission_mode ?? "default";
     // #117 文字写进内层 span（textContent 整写会抹掉按钮内的 ⇄ SVG）
@@ -4802,7 +4802,12 @@ function renderDetail() {
     permBtn.classList.toggle("on", pm !== "default");
     // #40 跳过档警示色（对齐手机端 permPillWarn：红只到描边+文字，不用实底）
     permBtn.classList.toggle("warn", pm === "bypassPermissions");
-    permBtn.title = "权限模式：" + (PERM_LABEL[pm] ?? pm) + "（点击切换）";
+    // #191 外部会话同显（只读状态灯）：relay 逐事件更新并下发 permission_mode，此前
+    // 两端对外部会话整体隐藏——plan 模式无任何标识，远程审批照弹被误读成「跳过了还弹」
+    permBtn.title = s.external
+      ? "权限模式：" + (PERM_LABEL[pm] ?? pm) + "（外部会话，在电脑终端切换）"
+      : "权限模式：" + (PERM_LABEL[pm] ?? pm) + "（点击切换）";
+    permBtn.style.cursor = s.external ? "default" : "";
   } else { permBtn.style.display = "none"; permBtn.classList.remove("warn"); }
   // #56 外部会话远程审批开关（协议就绪：COMMAND_EXT_MODE → relay setRemoteMode 挂起/放行）：
   // 开=Bash/Edit 等门控工具的权限确认挂起到手机/网页出按钮；手机不在线自动回退终端本地弹框
@@ -5015,7 +5020,8 @@ function statsTabHtml(s) {
     ["状态", s.status],
     ["目录", s.cwd],
     ["模型", s.model || "-"],
-    ["权限模式", s.external ? "-" : (PERM_LABEL[s.permission_mode ?? "default"] ?? s.permission_mode ?? "标准")],
+    // #191 外部会话同显权限模式（此前恒 "-"，plan 模式无处可辨）
+    ["权限模式", PERM_LABEL[s.permission_mode ?? "default"] ?? s.permission_mode ?? "标准"],
     ["开始时间", new Date(s.started_at).toLocaleString("zh-CN", { hour12: false })],
     ["用时", fmtElapsed(sessionElapsed(s))],
     ["修改文件", String(s.stats?.files_changed ?? 0)],
