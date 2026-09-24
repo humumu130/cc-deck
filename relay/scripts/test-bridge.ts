@@ -592,8 +592,9 @@ await wait(150);
 // 28c. #100 复发根因回归：
 //      ① relay 重启后 subagents 状态丢失——transcript 里的后台 Agent tool_use 必须能从
 //         空列表自举补建（旧版 observeAgentUse 的 `if (!list) return` 把补建路径堵死，
-//         重启后第一个后台子 Agent 永远建不起来 → 全程误报空闲）；前台 tool_use 不自举
-//        （fg 结束不产生 task-notification，自举会造出只能等 TTL 的幽灵条目）
+//         重启后第一个后台子 Agent 永远建不起来 → 全程误报空闲）；前台 tool_use 同样
+//         自举（#183 起：hook 断链会话的 fg 子 Agent 也要可见，结束信号 = 配对
+//         tool_result（28d 专测），幽灵治理不再靠「不建」）
 //      ② running 清扫按子 Agent 转录增长活性判僵尸：文件在长的长任务不被
 //         started_at + RUN_TTL 一刀切清掉；无转录信号回落 started_at（旧口径）
 {
@@ -608,11 +609,12 @@ await wait(150);
   await hook({ event: "UserPromptSubmit", session_id: "cli-28c", prompt: "自举测试回合", cli_pid: process.pid, transcript_path: T });
   // ① 无 Pre hook（模拟 relay 重启错过派生）——transcript 落 bg tool_use 后经转录轮询自举
   appendFileSync(T, JSON.stringify({ type: "assistant", message: { role: "assistant", content: [{ type: "tool_use", id: "call_boot1", name: "Agent", input: { description: "重启后自举", run_in_background: true } }] } }) + "\n");
-  appendFileSync(T, JSON.stringify({ type: "assistant", message: { role: "assistant", content: [{ type: "tool_use", id: "call_fgboot1", name: "Agent", input: { description: "前台不自举", run_in_background: false } }] } }) + "\n");
+  appendFileSync(T, JSON.stringify({ type: "assistant", message: { role: "assistant", content: [{ type: "tool_use", id: "call_fgboot1", name: "Agent", input: { description: "前台也自举", run_in_background: false } }] } }) + "\n");
   await hook({ event: "PostToolUse", session_id: "cli-28c", tool_name: "Bash", tool_response: "ok", transcript_path: T });
   const booted = subsOf().find((x) => x.id === "call_boot1");
   assert(booted?.bg === true && booted?.ended_at === undefined, "28c bg tool_use bootstraps entry from empty subagents list");
-  assert(!subsOf().some((x) => x.id === "call_fgboot1"), "28c foreground tool_use does NOT bootstrap (ghost-entry guard)");
+  const fgboot = subsOf().find((x) => x.id === "call_fgboot1");
+  assert(fgboot?.bg === false && fgboot?.ended_at === undefined, "28c foreground tool_use bootstraps running entry too (#183)");
   // ② 活性清扫：子 Agent 转录存在且在长 → started_at 远超 RUN_TTL（3s）也不清
   const dir = T.replace(/\.jsonl$/, "") + "/subagents";
   mkdirSync(dir, { recursive: true });
@@ -643,6 +645,79 @@ await wait(150);
   assert(!subsOf().some((x) => x.id === "call_nosig"), "28c no-signal running entry falls back to started_at TTL");
   rmSync(T, { force: true });
   rmSync(dir, { recursive: true, force: true });
+}
+
+// 28d. #183 外部 CLI 会话子 Agent 转录兜底（公司机 hook 断链实锤）：
+//      现行 CLI 派生后台子 Agent 时把 run_in_background 从 tool_use input 里剥离
+//      （转录与 hook 的 tool_input 都拿不到）——旧版门槛 `run_in_background===true`
+//      把兜底链整个堵死。新语义：fg/bg 通建；bg 唯一可靠判据 = 配对 tool_result
+//      文本的「Async agent launched」异步启动回执前缀；前台 result = 真实完成
+//      （跨批次经 use id 台账配对收尾，hook 断链会话 fg 不再只能等 TTL）
+{
+  const { writeFileSync, appendFileSync, rmSync } = await import("node:fs");
+  const T = fileURLToPath(new URL("../data/test-transcript.jsonl", import.meta.url));
+  rmSync(T, { force: true });
+  const sid = extId("cli-28d");
+  const subsOf = () => mgr.snapshot().find((s) => s.session_id === sid)?.subagents ?? [];
+  const now = Date.now();
+  const ts = (off: number) => new Date(now - 60_000 + off).toISOString();
+  const ln = (o: unknown) => JSON.stringify(o) + "\n";
+  const drive = () => hook({ event: "PostToolUse", session_id: "cli-28d", tool_name: "Bash", tool_response: "ok", transcript_path: T });
+  writeFileSync(T, ln({ type: "assistant", timestamp: ts(0), message: { role: "assistant", content: [{ type: "text", text: "基线28d" }] } }));
+  await hook({ event: "UserPromptSubmit", session_id: "cli-28d", prompt: "转录兜底回合", cli_pid: process.pid, transcript_path: T });
+  await drive();
+  // ① bg 派生（input 无 run_in_background，现行 CLI 实况）：门槛已去——先建 running
+  appendFileSync(T, ln({ type: "assistant", timestamp: ts(1000), message: { role: "assistant", content: [{ type: "tool_use", id: "call_bg183", name: "Agent", input: { description: "后台排查", subagent_type: "code-reviewer" } }] } }));
+  await drive();
+  let e1 = mgr.getExternal(sid)?.subagents?.find((x) => x.id === "call_bg183");
+  assert(e1 !== undefined && e1.ended_at === undefined, "28d bg tool_use without run_in_background bootstraps (gate removed)");
+  // ② 异步启动回执跨批次到达：bg 纠偏为 true，且回执不是结束信号——仍在跑
+  appendFileSync(T, ln({ type: "user", timestamp: ts(2000), message: { role: "user", content: [{ type: "tool_result", tool_use_id: "call_bg183", content: [{ type: "text", text: "Async agent launched successfully. (This tool result is internal metadata and not shown to the user.)" }] }] } }));
+  await drive();
+  e1 = mgr.getExternal(sid)?.subagents?.find((x) => x.id === "call_bg183");
+  assert(e1?.bg === true && e1.ended_at === undefined, "28d async-launch receipt corrects bg flag and does NOT end entry");
+  // ③ 后台完成走既有链路：task-notification 收尾
+  appendFileSync(T, ln({ type: "user", timestamp: ts(3000), message: { role: "user", content: [{ type: "text", text: "<task-notification>Background task completed<tool-use-id>call_bg183</tool-use-id>完成：审查通过</task-notification>" }] } }));
+  await drive();
+  assert(subsOf().find((x) => x.id === "call_bg183")?.ended_at !== undefined, "28d task-notification ends bg entry after receipt");
+  // ④ fg 派生跨批次：use 先到建 running，result 数分钟后到达——台账配对收尾
+  appendFileSync(T, ln({ type: "assistant", timestamp: ts(4000), message: { role: "assistant", content: [{ type: "tool_use", id: "call_fg183", name: "Agent", input: { description: "前台快查" } }] } }));
+  await drive();
+  let f1 = mgr.getExternal(sid)?.subagents?.find((x) => x.id === "call_fg183");
+  assert(f1 !== undefined && f1.ended_at === undefined && f1.bg === false, "28d fg tool_use bootstraps running entry");
+  appendFileSync(T, ln({ type: "user", timestamp: ts(5000), message: { role: "user", content: [{ type: "tool_result", tool_use_id: "call_fg183", content: [{ type: "text", text: "查完了：3 处引用，无需改动。" }] }] } }));
+  await drive();
+  f1 = subsOf().find((x) => x.id === "call_fg183");
+  assert(f1?.ended_at !== undefined && f1.bg === false, "28d fg tool_result (cross-batch via ledger) ends running entry");
+  rmSync(T, { force: true });
+}
+
+// 28d-2. #183 水合幽灵守卫：relay 重启回放历史窗口——「use+result 同窗且已结束的
+//        fg」不建条（否则 started_at≈ended_at≈窗口末的「✓ 0s」幽灵滞留到 TTL）；
+//        后台历史（有回执无 notification）照建，等 notification 重放收尾
+{
+  const { writeFileSync, rmSync } = await import("node:fs");
+  const T = fileURLToPath(new URL("../data/test-transcript.jsonl", import.meta.url));
+  rmSync(T, { force: true });
+  const sid = extId("cli-28d2");
+  const subsOf = () => mgr.snapshot().find((s) => s.session_id === sid)?.subagents ?? [];
+  const now = Date.now();
+  const ts = (off: number) => new Date(now - 60_000 + off).toISOString();
+  const ln = (o: unknown) => JSON.stringify(o) + "\n";
+  // 历史窗口：已结束 fg（use+result）+ 进行中 bg（use+回执，无 notification）
+  writeFileSync(
+    T,
+    ln({ type: "assistant", timestamp: ts(1000), message: { role: "assistant", content: [{ type: "tool_use", id: "call_histfg", name: "Agent", input: { description: "历史前台" } }] } }) +
+      ln({ type: "user", timestamp: ts(1500), message: { role: "user", content: [{ type: "tool_result", tool_use_id: "call_histfg", content: [{ type: "text", text: "历史前台结果" }] }] } }) +
+      ln({ type: "assistant", timestamp: ts(2000), message: { role: "assistant", content: [{ type: "tool_use", id: "call_histbg", name: "Agent", input: { description: "历史后台" } }] } }) +
+      ln({ type: "user", timestamp: ts(2100), message: { role: "user", content: [{ type: "tool_result", tool_use_id: "call_histbg", content: [{ type: "text", text: "Async agent launched successfully. (This tool result is internal metadata.)" }] }] } }),
+  );
+  await hook({ event: "UserPromptSubmit", session_id: "cli-28d2", prompt: "水合重放回合", cli_pid: process.pid, transcript_path: T });
+  await hook({ event: "PostToolUse", session_id: "cli-28d2", tool_name: "Bash", tool_response: "ok", transcript_path: T });
+  assert(!subsOf().some((x) => x.id === "call_histfg"), "28d-2 hydration skips finished foreground history (ghost guard)");
+  const hb = subsOf().find((x) => x.id === "call_histbg");
+  assert(hb?.bg === true && hb.ended_at === undefined, "28d-2 hydration keeps running background history");
+  rmSync(T, { force: true });
 }
 
 // 29. 排队消息滞留输入框看门狗：滞留补发回车、WAITING 严禁、送达后不再触发、连续 3 次后放弃

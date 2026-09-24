@@ -1503,6 +1503,12 @@ export class Bridge {
   // 数倍（实测虚到 cache_read 2.38 亿）。水位是覆盖式，天然不受重复行影响
   private lastUsageTuple = new Map<string, string>();
 
+  // #183 会话级 Agent/Task tool_use id 台账：tool_result 在派生后的后续批次到达
+  //（fg 数分钟、bg 回执虽快也可能跨批），届时本批 agentUses 已不含派生时的 use，
+  // 没有这本台账 result 就配不上对（公司机 hook 断链会话 fg 结束信号丢失的根源）。
+  // 扫描 assistant 行时顺手记，会话/条目双重封顶防膨胀
+  private agentUseLedger = new Map<string, Set<string>>();
+
   // 转录末条形态：assistant 消息整条完成才落盘（生成期间零写入，纯思考可达分钟级），
   // 静默 ≠ 回合结束。可靠区分：末条是纯文本 assistant 消息 = 回合自然结束；
   // 末条是 tool_use（工具执行中）或 tool_result/新 prompt（下一条消息生成中）= 仍在回合内
@@ -1569,7 +1575,12 @@ export class Bridge {
       let shape: "tool" | "gen" | "end" | null = null;
       const taskOps: TaskOp[] = [];
       const agentNotifs: string[] = []; // 后台子 Agent 完成通知里的 tool-use-id
-      const agentUses: { id: string; input: unknown }[] = []; // Agent/Task tool_use 块（真实 call id）
+      const agentUses: { id: string; input: unknown; ts: number }[] = []; // Agent/Task tool_use 块（真实 call id + 行时刻）
+      // #183 Agent/Task 的 tool_result（user 行，按 tool_use_id 配对）：CLI 派生后台子
+      // Agent 时把 run_in_background 从 tool_use input 里剥离（hook/转录都拿不到），
+      // 唯一可靠 bg 判据是 result 文本的「Async agent launched」异步启动回执前缀；
+      // 前台 result 则是真实完成信号（hook 断链会话 fg 子 Agent 的结束兜底）
+      const agentResults = new Map<string, { async: boolean; at: number }>();
       const creates = this.taskCreateSet(id);
       let removes = 0;
       // token 用量/模型：assistant 条目自带 usage（逐条 API 调用量，累加为会话总量）
@@ -1646,6 +1657,33 @@ export class Bridge {
               const j = JSON.parse(line) as { message?: { content?: unknown[] } };
               if (Array.isArray(j.message?.content)) Bridge.collectTaskOps(j.message.content, taskOps, creates);
             } catch {}
+          }
+          // #183 Agent/Task 的 tool_result 配对（台账命中 = 此 result 属于子 Agent 派生；
+          // 台账在扫描 assistant 行时顺手记，跨批次持久）：后台派生 CLI 立即回
+          // 「Async agent launched successfully…」启动回执（bg 判据），前台 result 是
+          // 真实完成（fg 收尾信号）。lastTs 即本行时刻（行首刚更新过）
+          if (line.includes('"tool_result"')) {
+            const led = this.agentUseLedger.get(id);
+            if (led?.size) {
+              try {
+                const j = JSON.parse(line) as { message?: { content?: unknown[] } };
+                if (Array.isArray(j.message?.content)) {
+                  for (const b of j.message.content) {
+                    const blk = b as { type?: string; tool_use_id?: unknown; content?: unknown };
+                    if (blk?.type !== "tool_result" || typeof blk.tool_use_id !== "string" || !blk.tool_use_id) continue;
+                    if (!led.has(blk.tool_use_id)) continue;
+                    let t = "";
+                    if (typeof blk.content === "string") t = blk.content;
+                    else if (Array.isArray(blk.content)) {
+                      t = (blk.content as { type?: string; text?: unknown }[])
+                        .map((x) => (x?.type === "text" && typeof x.text === "string" ? x.text : ""))
+                        .join("");
+                    }
+                    agentResults.set(blk.tool_use_id, { async: t.startsWith("Async agent launched"), at: lastTs || Date.now() });
+                  }
+                }
+              } catch {}
+            }
           }
           continue;
         }
@@ -1726,7 +1764,21 @@ export class Bridge {
                 input: ((b as { input?: unknown }).input ?? {}) as Record<string, unknown>,
               };
               if (blk.name === "Agent" || blk.name === "Task") {
-                agentUses.push({ id: typeof blk.id === "string" ? blk.id : "", input: (b as { input?: unknown }).input });
+                const uid = typeof blk.id === "string" ? blk.id : "";
+                agentUses.push({ id: uid, input: (b as { input?: unknown }).input, ts: lastTs || Date.now() });
+                // #183 use id 台账：result 在派生后的后续批次到达（fg 数分钟、bg 回执
+                // 也可能跨批），届时本批 agentUses 已不含派生时的 use——没有这本台账
+                // result 永远配不上对。双重封顶防膨胀
+                if (uid) {
+                  if (this.agentUseLedger.size > 200) this.agentUseLedger.clear();
+                  let led = this.agentUseLedger.get(id);
+                  if (!led) {
+                    led = new Set();
+                    this.agentUseLedger.set(id, led);
+                  }
+                  if (led.size > 300) led.clear();
+                  led.add(uid);
+                }
               }
             }
           }
@@ -1781,7 +1833,8 @@ export class Bridge {
       // 水合记账时刻（#157）：首读重建的一切状态写入都记转录最后时刻，非首读（真实
       // 增量）保持缺省 = 当下
       const hydrateAt = firstRead && lastTs > 0 ? lastTs : undefined;
-      for (const u of agentUses) this.observeAgentUse(id, u, hydrateAt);
+      for (const u of agentUses) this.observeAgentUse(id, u, hydrateAt, agentResults.get(u.id));
+      agentResults.forEach((r, tuId) => this.applyAgentResult(id, tuId, r, hydrateAt));
       for (const n of agentNotifs) this.closeSubagentByNotification(id, n, hydrateAt);
       // 任务清单：CLI 任务存储目录优先（权威、变更检测防重发），无目录再 transcript 回放/增量。
       // store 命中过至少一次后目录消失（CLI 清理/换代）不再回退 tracker——陈旧基线会覆写权威快照
@@ -2388,7 +2441,10 @@ export class Bridge {
       id: tuId,
       desc: Bridge.subagentDesc(input),
       kind: typeof input.subagent_type === "string" && input.subagent_type ? input.subagent_type : "general",
-      bg: input.run_in_background === true,
+      // 缺省即后台（2026-09-24 实测 transcript 实锤：run_in_background 仅显式传参时序列化，
+      // 缺省时 input 无此键，显式 false 在）——`=== true` 会把缺省后台全误标 false，
+      // 收尾分流（Post vs task-notification）走错支路，只能靠 31a83d2 放宽的兜底活命
+      bg: input.run_in_background !== false,
       started_at: Date.now(),
     };
     list.push(entry);
@@ -2425,11 +2481,18 @@ export class Bridge {
 
   // transcript 里的 Agent tool_use 块（真实 call_xxx id）：
   //  - hook 未带 tool_use_id 时 Pre 建的是合成 id（ag-N）——升级为真实 id，后续 task-notification 才能配对
-  //  - relay 重启等原因错过 Pre hook 的后台派生：补建条目（结束靠 task-notification）
+  //  - relay 重启/hook 断链（#183 公司机实锤）时错过的派生：补建条目——fg/bg 通建，
+  //    bg 由配对 tool_result 的异步启动回执判定（run_in_background 被 CLI 从 input
+  //    里剥离，转录与 hook 都拿不到，详见扫描处注释）
   // 注意 list 取法必须是 `?? []`（与 trackSubagentStart 对齐）：state.subagents 初始
   // 是 undefined，早先的 `if (!list) return` 把"补建条目"路径整个堵死——relay 重启后
   // 第一个后台子 Agent 永远建不起来，手机/桌面全程误报空闲（#100 复发的第一根因）
-  private observeAgentUse(id: string, use: { id: string; input: unknown }, at?: number): void {
+  private observeAgentUse(
+    id: string,
+    use: { id: string; input: unknown; ts?: number },
+    at?: number,
+    result?: { async: boolean; at: number },
+  ): void {
     if (!use.id) return;
     const list = this.mgr.getExternal(id)?.subagents ?? [];
     if (list.some((x) => x.id === use.id)) return;
@@ -2443,19 +2506,57 @@ export class Bridge {
         return;
       }
     }
-    if (input.run_in_background === true) {
-      // #142 三轮：批次滚动同 trackSubagentStart——补建时无在跑条目即新批次，不带历史
+    // #183 水合跳过「已结束的前台历史条目」：use+result 同窗的历史 fg 一建一收会
+    // 留下 started_at≈ended_at≈窗口末的幽灵「✓ 0s」条目（hook 断链会话滞留到 TTL）。
+    // 在跑的 fg（窗口内只有 use 无 result）不受影响照建；bg 历史照建（显示成本可接受，
+    // 且水合后 task-notification 重放收尾）
+    if (result && !result.async && at !== undefined) return;
+    const isBg = result ? result.async : input.run_in_background !== false;
+    // #142 三轮：批次滚动同 trackSubagentStart——补建时无在跑条目即新批次，不带历史
+    let next = [...list];
+    if (!next.some((x) => !x.ended_at)) next = [];
+    next.push({
+      id: use.id,
+      desc,
+      kind: typeof input.subagent_type === "string" && input.subagent_type ? input.subagent_type : "general",
+      bg: isBg,
+      started_at: use.ts || at || Date.now(),
+    });
+    if (next.length > 30) next.splice(0, next.length - 30);
+    this.mgr.setExternalSubagents(id, next, at);
+  }
+
+  // #183 Agent/Task tool_result 落地（扫描收集的 agentResults，在 observeAgentUse 之后跑）：
+  //  - 异步启动回执：bg 纠偏——hook 链的 tool_input 同样被 CLI 剥掉 run_in_background，
+  //    trackSubagentStart 建的条目 bg 误标 false（不影响收尾但影响端上「后台」语义）；
+  //    use 完全错过（窗口边缘/极角情况）时按 bg 兜底补建，结束仍等 task-notification
+  //  - 前台 result = 真实完成：收尾 running 条目——hook 断链会话的 fg 子 Agent 此前
+  //    无任何结束信号（Post hook 不在、notification 只属后台），只能等 30min TTL。
+  //    transcript 的 result 就是真实结束，不经 trackSubagentEnd 的 <2s 守卫——那守卫
+  //    防的是 Post 派生瞬间假回执，这里没有假回执问题
+  private applyAgentResult(id: string, toolUseId: string, result: { async: boolean; at: number }, hydrateAt?: number): void {
+    const list = this.mgr.getExternal(id)?.subagents ?? [];
+    const i = list.findIndex((x) => x.id === toolUseId);
+    if (i >= 0) {
+      const x = list[i];
+      if (result.async && !x.bg) {
+        // 禁止原地改共享引用（同 trackSubagentEnd 注）：JSON 对比会判"无变化"吞下发
+        this.mgr.setExternalSubagents(id, list.map((y, k) => (k === i ? { ...y, bg: true } : { ...y })), hydrateAt);
+      } else if (!result.async && !x.ended_at) {
+        this.mgr.setExternalSubagents(
+          id,
+          list.map((y, k) => (k === i ? { ...y, ended_at: result.at || hydrateAt || Date.now() } : { ...y })),
+          hydrateAt,
+        );
+      }
+      return;
+    }
+    if (result.async) {
       let next = [...list];
       if (!next.some((x) => !x.ended_at)) next = [];
-      next.push({
-        id: use.id,
-        desc,
-        kind: typeof input.subagent_type === "string" && input.subagent_type ? input.subagent_type : "general",
-        bg: true,
-        started_at: at ?? Date.now(),
-      });
+      next.push({ id: toolUseId, desc: "后台子 Agent", kind: "general", bg: true, started_at: result.at || hydrateAt || Date.now() });
       if (next.length > 30) next.splice(0, next.length - 30);
-      this.mgr.setExternalSubagents(id, next, at);
+      this.mgr.setExternalSubagents(id, next, hydrateAt);
     }
   }
 
