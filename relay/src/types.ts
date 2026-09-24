@@ -2,6 +2,7 @@
 // 与 design/技术方案评审.md §5 对应
 
 import type { UploadBlob } from "./uploads.js";
+import type { AcceptanceSummary } from "./acceptance.js";
 
 // ---------- 事件信封 ----------
 
@@ -298,6 +299,7 @@ export type EventType =
   | "PAIR_RESOLVED"
   | "PAIRED_DEVICE"
   | "USER_NOTE"
+  | "ACCEPTANCES_UPDATED"
   | "WATCHDOG"
   | "ARTIFACT_CHUNK";
 
@@ -317,6 +319,9 @@ export type EventPayloadMap = {
   PAIR_RESOLVED: PairResolvedPayload;
   PAIRED_DEVICE: PairedDevicePayload;
   USER_NOTE: UserNotePayload;
+  // #184 验收单状态推送（瞬态：seq:0 不落 ndjson；LAN 直播 + 云桥 onEnv 转发）——
+  // payload.acceptances 与 SNAPSHOT.acceptances 同源同构（listAcceptances() 全量）
+  ACCEPTANCES_UPDATED: AcceptancesUpdatedPayload;
   // #7 SDK 会话流看门狗观测（落 events.ndjson 供复盘误杀率；客户端不消费，
   // 未知事件类型各端 switch 自然跳过）
   WATCHDOG: WatchdogPayload;
@@ -389,6 +394,14 @@ export interface PairedDevicePayload {
 export interface UserNotePayload {
   text: string;   // 通知原文（/api/notify text，≤120 字）
   ts: number;     // Date.now()（端上通知去重/展示时间用）
+}
+
+// #184 验收单状态推送（2026-09-24 用户实测：桌面端填完，手机列表待填卡滞留不消）：
+// acceptances 只随 SNAPSHOT 下发，提交/回流/登记后无广播 → 在线手机要等重连才见新态。
+// 触发点=LAN 提交落盘后（即时）+ 云回流 60s tick 的签名对账（顺带覆盖新出单/删单）。
+// 与 USER_NOTE 同款瞬态语义：不落 events.ndjson、断线不补发（重连 SNAPSHOT 兜底）。
+export interface AcceptancesUpdatedPayload {
+  acceptances: AcceptanceSummary[]; // 与 SNAPSHOT.acceptances 同源（listAcceptances()）
 }
 
 // #42 设备身份元数据：pair_req 帧的可选自报字段，配对方各端按自身形态填——

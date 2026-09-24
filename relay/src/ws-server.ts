@@ -77,18 +77,29 @@ function notifyAcceptanceRefill(acc: Acceptance, rows: unknown, mgr: SessionMana
   } catch { /* 通知失败不影响提交/回流 */ }
 }
 
+// #184 验收单状态推送：acceptances 原本只随 SNAPSHOT 下发，他端提交后在线手机的
+// 待填卡要等重连才消失（用户实测：桌面填完手机卡滞留、点开已收摊的单）。提交/回流/
+// 登记后 emitTransient 全量汇总——LAN 直播（ws-server 总线订阅）+ 云桥 onEnv 转发
+// 两路同达，旧端未知类型自然跳过；seq:0 不落 ndjson，断线端由重连 SNAPSHOT 兜底。
+function emitAcceptancesUpdated(bus: EventBus): void {
+  bus.emitTransient("ACCEPTANCES_UPDATED", { acceptances: listAcceptances() });
+}
+
 // #175 验收单云通道回流：公司网浏览器打不开家庭 LAN，提交走 CF Worker
 // （POST /view/acceptance-<id>.results.json → KV 数组 append）。这里每 60s 对
 // 未完成单子拉云端结果、签名去重后落盘（applyCloudSubmits），有新增即推 #138 通知
 //（按最后一条算摘要，多条新增不刷屏）。云端无提交/网络失败静默下次再试；单子
 // 全部判完（done）即不再拉。启动延迟 20s 让云桥/收养广播先落地。
-export function startAcceptanceCloudPoll(cfg: RelayConfig, mgr: SessionManager): void {
+export function startAcceptanceCloudPoll(cfg: RelayConfig, mgr: SessionManager, bus: EventBus): void {
   let base = "";
   try {
     base = `https://${new URL(cfg.cloudUrl).host}`;
   } catch {
     return; // 云桥未配置（cloudUrl 空/非法）——云通道回流不启用
   }
+  // #184 tick 签名对账：云回流落盘、新出单登记、删单都会改变 listAcceptances() 汇总，
+  // 与上一拍不同即广播——在线端 ≤60s 内收到新态（LAN 提交另有 POST 落盘后的即时广播）
+  let lastSig = JSON.stringify(listAcceptances());
   const tick = async (): Promise<void> => {
     for (const s of listAcceptances()) {
       if (s.done) continue;
@@ -106,6 +117,13 @@ export function startAcceptanceCloudPoll(cfg: RelayConfig, mgr: SessionManager):
         if (acc) notifyAcceptanceRefill(acc, added[added.length - 1].rows, mgr);
       }
     }
+    try {
+      const sig = JSON.stringify(listAcceptances());
+      if (sig !== lastSig) {
+        lastSig = sig;
+        emitAcceptancesUpdated(bus);
+      }
+    } catch { /* 汇总失败跳过本拍广播 */ }
   };
   setTimeout(() => void tick(), 20_000).unref?.();
   setInterval(() => void tick(), 60_000).unref?.();
@@ -602,6 +620,8 @@ export function startServer(
           // #138 回填自动回流：按出单时盖进记录的 cwd 归因到会话推 system 行（详见
           // notifyAcceptanceRefill；与 #175 云回流共用同一条通知路径）
           notifyAcceptanceRefill(acc, rows, mgr);
+          // #184 状态即时广播：LAN 提交落盘即推（云回流走 poll tick 的签名对账）
+          emitAcceptancesUpdated(bus);
         } catch {
           res.writeHead(400, { "content-type": "application/json" }).end('{"ok":false,"error":"bad json"}');
         }

@@ -2304,6 +2304,17 @@ class RelayStore {
         }
         break;
       }
+      // #184 验收单状态推送（瞬态 seq:0）：他端提交/新出单后 relay 全量重发汇总——
+      // 覆盖式更新（同 SNAPSHOT 口径），待填卡据此秒收，不再等重连换快照。
+      // 旧 relay 无此事件 = 收不到帧，行为同前（重连兜底）。UI 刷新走分发层
+      // 非 SESSION_LOG 帧的统一 emit（connStatusPatch 读 conn.acceptances）
+      case "ACCEPTANCES_UPDATED": {
+        const accs = (msg.payload as { acceptances?: unknown }).acceptances;
+        if (Array.isArray(accs)) {
+          conn.acceptances = accs.filter((a): a is AcceptanceSummary => !!a && typeof (a as AcceptanceSummary).id === "string" && !!(a as AcceptanceSummary).id);
+        } // 畸形帧不动既有清单（relay 侧必发合法数组，防御而已）
+        break;
+      }
       // #79 输出物拉取数据帧（瞬态 seq:0）：ref = 本端预生成的 command_id。其他设备
       // 同拉时全播帧也会到本端——查无此 ref 直接忽略（单用户多端语义可接受）。
       // relay 先发数据帧+done 尾帧、ACK 最后到（execCommand 同步 emit 后才回执），

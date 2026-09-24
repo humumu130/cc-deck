@@ -2342,6 +2342,51 @@ assert(!mgr.getExternal("ext-ff11bb22-cc33-dd44-ee55-ff6677889900"), "67 multi-t
   await hook({ event: "SessionEnd", session_id: "cli-160", reason: "clear" });
 }
 
+// 184. #184 验收单状态推送：acceptances 原本只随 SNAPSHOT 下发，他端提交后在线手机
+//      的待填卡要等重连才消失（用户实测桌面填完手机卡滞留、点开已收摊的单）。
+//      LAN 提交落盘 → ACCEPTANCES_UPDATED 瞬态帧（seq:0 不占总线序号）携带全量汇总、
+//      done 翻 true；云回流路径走 poll tick 签名对账（同一 emitAcceptancesUpdated，
+//      本套件不启 poll——index.ts 才挂）
+{
+  const id184 = randomUUID().replace(/-/g, "");
+  // acceptanceDir() 独立口径（CCR_ACCEPTANCE_DIR / 生产 ~/.cc-deck），不吃 cfg.dataDir
+  // ——不隔离会读到真实单表（本段写入落 TDATA 而 relay 列生产目录，SNAPSHOT 断言必挂）
+  const dir184 = join(cfg.dataDir, "acceptances-184");
+  process.env.CCR_ACCEPTANCE_DIR = dir184;
+  mkdirSync(dir184, { recursive: true });
+  const sheet184 = join(dir184, `${id184}.json`);
+  writeFileSync(sheet184, JSON.stringify({
+    id: id184, title: "#184 推送测试", created_at: Date.now(),
+    rows: [{ task: "#184", item: "状态推送", criteria: "提交后收 ACCEPTANCES_UPDATED" }],
+    notes: "", cwd: process.cwd(),
+  }));
+  // 独立 ws（不受前面段落 socket 生命周期影响）：先验 SNAPSHOT 待填态
+  const w184 = new WebSocket(`ws://127.0.0.1:${cfg.port}/ws?token=${cfg.token}`);
+  attach(w184);
+  await new Promise((r) => w184.once("open", r));
+  await wait(300);
+  const snap184 = events.filter((e) => e.type === "SNAPSHOT").at(-1) as Envelope<"SNAPSHOT", { acceptances?: { id: string; done: boolean }[] }>;
+  const inSnap = snap184.payload.acceptances?.find((a) => a.id === id184);
+  assert(!!inSnap && inSnap.done === false, "184 SNAPSHOT carries pending acceptance");
+  // LAN 提交（全行 pass）→ 瞬态推送，done=true（端上覆盖式更新即收卡）
+  const r184 = await fetch(`${http}/api/acceptance`, {
+    method: "POST", headers: { "content-type": "application/json" },
+    body: JSON.stringify({ id: id184, rows: [{ i: 0, verdict: "pass" }] }),
+  });
+  assert(r184.ok, "184 POST acceptance ok");
+  await waitLog(() => events.some((e) => e.type === "ACCEPTANCES_UPDATED"));
+  const upd184 = events.filter((e) => e.type === "ACCEPTANCES_UPDATED").at(-1) as Envelope<"ACCEPTANCES_UPDATED", { acceptances?: { id: string; done: boolean }[] }>;
+  assert(!!upd184, "184 ACCEPTANCES_UPDATED emitted on LAN submit");
+  assert(upd184!.seq === 0, "184 transient frame seq:0 (no bus sequence)");
+  const inUpd = upd184!.payload.acceptances?.find((a) => a.id === id184);
+  assert(!!inUpd && inUpd.done === true, "184 update carries done=true (card clears)");
+  w184.close();
+  rmSync(sheet184, { force: true });
+  rmSync(join(dir184, `${id184}.results.json`), { force: true });
+  delete process.env.CCR_ACCEPTANCE_DIR;
+  rmSync(dir184, { recursive: true, force: true });
+}
+
 wsCur!.close();
 await wait(300);
 console.log("\nBRIDGE TESTS PASSED");
