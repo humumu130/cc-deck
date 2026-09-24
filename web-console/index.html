@@ -1663,10 +1663,23 @@
     white-space: pre-wrap; word-break: break-all; text-overflow: clip;
     font-family: var(--mono); background: var(--code-bg);
     border-radius: 8px; padding: 6px 10px; color: var(--text); font-size: 12px;
+    /* #190 滚动兜底：审批卡长命令（多行 pre-wrap）同提问卡病根——#waitbox 在滚动区外
+       flex:none，超高会把 timeline 压到 0、按钮被裁。内部滚动消化 */
+    max-height: 40vh; overflow-y: auto;
   }
   #waitbox .cmds { margin-top: 14px; display: flex; gap: 10px; align-items: center; }
   #answerBtn { margin-left: auto; }
   #questions { margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--border); display: flex; flex-direction: column; gap: 14px; }
+  /* #190 滚动兜底：单题选项极多/描述极长时（stepper 已消化多问题场景），卡内滚动防撑爆 */
+  #questions .q-item { max-height: 45vh; overflow-y: auto; }
+  /* #190 多问题 stepper 指示器行：题号计数 + 圆点（可点击跳题；已答实心/当前描边） */
+  .q-steps { display: flex; align-items: center; gap: 7px; margin-bottom: 12px; }
+  .q-steps .q-count { font-size: 11px; color: var(--dim); font-variant-numeric: tabular-nums; margin-right: 2px; }
+  .q-steps .q-hint { margin-left: auto; font-size: 10.5px; color: var(--faint); }
+  .q-dot { width: 9px; height: 9px; padding: 0; border-radius: 50%; border: 1.5px solid var(--faint); background: transparent; cursor: pointer; }
+  .q-dot.cur { border-color: var(--brand); border-width: 2px; box-shadow: 0 0 0 3px rgba(217,119,87,.35); transform: scale(1.25); }
+  .q-dot.done { background: var(--brand); border-color: var(--brand); }
+  .q-dot.done.cur { border-width: 2px; box-shadow: 0 0 0 3px rgba(217,119,87,.35); transform: scale(1.25); }
   .q-item .q-header { font-size: 11px; color: var(--brand-2); letter-spacing: 1px; margin-bottom: 6px; }
   /* 字号四级拉开：问题正文 15px 与聊天正文同档成为视觉重心（原 13px 比正文还小） */
   .q-item .q-text { font-size: 15px; font-weight: 600; color: var(--text-strong); line-height: 1.55; margin-bottom: 10px; }
@@ -5670,48 +5683,115 @@ $("timeline").addEventListener("click", (ev) => {
 });
 
 // ---------- AskUserQuestion 选项作答（与手机端 AskBanner 对齐） ----------
-let askState = null; // {rid, sel: [Set<label>...], free: [string...]}
+// #190 多问题 stepper（CLI 式）：一次只展示一题 + 题号指示器（可点击）+ ←→ 键切题；
+// 单选题选中自动进下一题、末题留步等「提交作答」。单问题保持全量平铺（点选即答）。
+let askState = null; // {rid, sel: [Set<label>...], free: [string...], stepped, cur, builtQi, builtRid}
 function renderQuestions(wr) {
   const box = $("questions");
   const qs = Array.isArray(wr.questions) ? wr.questions : [];
   if (!qs.length) { box.innerHTML = ""; box.style.display = "none"; askState = null; return; }
   box.style.display = "flex";
   if (!askState || askState.rid !== wr.request_id) {
-    askState = { rid: wr.request_id, sel: qs.map(() => new Set()), free: qs.map(() => "") };
-    // 单问题单选：点选项即发（手机端交互）；多问题/多选：勾选后提交
-    const single = qs.length === 1 && !qs[0].multi;
-    box.innerHTML = qs.map((q, qi) => {
-      // #14 选项行 = 选择指示符（单选圆/多选方）+ label/desc 纵排列；data-bare：纯标签
-      // 选项（全部无描述）由 CSS 切等宽 grid 两列，避免竖排过长
-      const opts = (q.options || []).map((o, oi) =>
-        '<button type="button" data-q="' + qi + '" data-o="' + oi + '"><span class="mark"></span>' +
-        '<span class="col"><span class="l">' + escapeHtml(o.label) + "</span>" +
-        (o.description ? '<span class="d">' + escapeHtml(o.description) + "</span>" : "") + "</span></button>").join("");
-      return '<div class="q-item" data-qi="' + qi + '"' + (q.multi ? ' data-multi="1"' : "") +
-        ((q.options || []).every((o) => !o.description) ? ' data-bare="1"' : "") + '>' +
-        '<div class="q-header">' + escapeHtml(q.header || "问题 " + (qi + 1)) + (q.multi ? " · 可多选" : single ? " · 点选即答" : "") + '</div>' +
-        '<div class="q-text">' + escapeHtml(q.question) + '</div>' +
-        '<div class="q-opts">' + opts + "</div>" +
-        '<input class="q-free" data-q="' + qi + '" placeholder="或自由输入…">' +
-        "</div>";
-    }).join("");
-    box.querySelectorAll(".q-opts button").forEach((b) => {
-      b.onclick = () => {
-        const qi = +b.dataset.q, label = qs[qi].options[+b.dataset.o].label;
-        if (single) { sendAnswer([label]); return; }
-        const set = askState.sel[qi];
-        if (qs[qi].multi) { set.has(label) ? set.delete(label) : set.add(label); }
-        else { set.clear(); set.add(label); askState.free[qi] = ""; box.querySelector('.q-free[data-q="' + qi + '"]').value = ""; }
-        syncSelClasses(qs);
-      };
-    });
-    box.querySelectorAll(".q-free").forEach((inp) => {
-      inp.oninput = () => { askState.free[+inp.dataset.q] = inp.value; };
-      // 自由输入回车即提交（single 模式无提交大按钮，键盘直达）
-      inp.onkeydown = (e) => { if (e.key === "Enter" && !e.isComposing) { e.preventDefault(); submitAnswer(); } };
-    });
+    askState = { rid: wr.request_id, sel: qs.map(() => new Set()), free: qs.map(() => ""), stepped: qs.length > 1, cur: 0, builtQi: -1, builtRid: "" };
   }
+  // 重建闸门：仅 rid 变更/切题时重建 DOM——流式 SESSION_UPDATED 高频重渲染不打断
+  // free 输入焦点（同题重复渲染直接跳过）
+  const buildQi = askState.stepped ? askState.cur : 0;
+  if (askState.builtRid !== askState.rid || askState.builtQi !== buildQi) buildAskDom(wr, qs);
 }
+function buildAskDom(wr, qs) {
+  const box = $("questions");
+  const st = askState;
+  const single = qs.length === 1 && !qs[0].multi;
+  const qi = st.stepped ? st.cur : 0;
+  st.builtQi = qi;
+  st.builtRid = st.rid;
+  // 指示器行：题号计数 + 可点击圆点（已答实心/当前描边高亮）；非 stepper 不渲染
+  const steps = st.stepped
+    ? '<div class="q-steps"><span class="q-count">' + (qi + 1) + " / " + qs.length + "</span>" +
+      qs.map((_, i) => '<button type="button" class="q-dot" data-goto="' + i + '" title="问题 ' + (i + 1) + '"></button>').join("") +
+      '<span class="q-hint">←→ 切换</span></div>'
+    : "";
+  const q = qs[qi];
+  // #14 选项行 = 选择指示符（单选圆/多选方）+ label/desc 纵排列；data-bare：纯标签
+  // 选项（全部无描述）由 CSS 切等宽 grid 两列，避免竖排过长
+  const opts = (q.options || []).map((o, oi) =>
+    '<button type="button" data-q="' + qi + '" data-o="' + oi + '"><span class="mark"></span>' +
+    '<span class="col"><span class="l">' + escapeHtml(o.label) + "</span>" +
+    (o.description ? '<span class="d">' + escapeHtml(o.description) + "</span>" : "") + "</span></button>").join("");
+  box.innerHTML = steps +
+    '<div class="q-item" data-qi="' + qi + '"' + (q.multi ? ' data-multi="1"' : "") +
+    ((q.options || []).every((o) => !o.description) ? ' data-bare="1"' : "") + '>' +
+    '<div class="q-header">' + escapeHtml(q.header || "问题 " + (qi + 1)) + (q.multi ? " · 可多选" : single ? " · 点选即答" : st.stepped && qi < qs.length - 1 ? " · 选中自动下一题" : "") + '</div>' +
+    '<div class="q-text">' + escapeHtml(q.question) + '</div>' +
+    '<div class="q-opts">' + opts + "</div>" +
+    '<input class="q-free" data-q="' + qi + '" placeholder="或自由输入…">' +
+    "</div>";
+  const freeInp = box.querySelector('.q-free[data-q="' + qi + '"]');
+  if (freeInp) freeInp.value = st.free[qi] || "";
+  box.querySelectorAll(".q-dot").forEach((d) => { d.onclick = () => askGoto(+d.dataset.goto); });
+  box.querySelectorAll(".q-opts button").forEach((b) => {
+    b.onclick = () => {
+      const label = qs[qi].options[+b.dataset.o].label;
+      if (single) { sendAnswer([label]); return; }
+      const set = st.sel[qi];
+      if (qs[qi].multi) { set.has(label) ? set.delete(label) : set.add(label); }
+      else {
+        set.clear(); set.add(label); st.free[qi] = "";
+        const f = box.querySelector('.q-free[data-q="' + qi + '"]'); if (f) f.value = "";
+        // stepper 单选：选中即进下一题（CLI 式）；末题留步等「提交作答」
+        if (st.stepped && qi < qs.length - 1) { syncDots(qs); askGoto(qi + 1); return; }
+      }
+      syncSelClasses(qs);
+      syncDots(qs);
+    };
+  });
+  if (freeInp) {
+    freeInp.oninput = () => { st.free[qi] = freeInp.value; syncDots(qs); };
+    // 自由输入回车即提交（single 模式无提交大按钮，键盘直达）
+    freeInp.onkeydown = (e) => { if (e.key === "Enter" && !e.isComposing) { e.preventDefault(); submitAnswer(); } };
+  }
+  syncSelClasses(qs);
+  syncDots(qs);
+}
+// 切题（越界钳制；wr 从当前会话现取，不吃旧闭包）
+function askGoto(qi) {
+  if (!askState || !askState.stepped) return;
+  const sel = selSession();
+  const wr = sel?.s?.waiting_request;
+  const qs = Array.isArray(wr?.questions) ? wr.questions : [];
+  if (!qs.length || wr.request_id !== askState.rid) return;
+  qi = Math.max(0, Math.min(qs.length - 1, qi));
+  if (qi === askState.cur) return;
+  askState.cur = qi;
+  renderQuestions(wr);
+}
+// 指示器圆点状态：已答（选项或 free）实心、当前题描边高亮
+function syncDots(qs) {
+  const st = askState;
+  if (!st || !st.stepped) return;
+  $("questions").querySelectorAll(".q-dot").forEach((d) => {
+    const i = +d.dataset.goto;
+    const answered = st.sel[i].size > 0 || !!(st.free[i] || "").trim();
+    d.classList.toggle("done", answered);
+    d.classList.toggle("cur", i === st.cur);
+  });
+}
+// stepper 激活判定（←→ 键切题优先于切 tab）
+function askSteppedActive() {
+  return !!(askState && askState.stepped && document.querySelector("#waitbox.ask") && $("waitbox").style.display === "block");
+}
+// #190 裸 ←/→ 切题：提问卡 stepper 可见时优先（tab 切换监听里同款判定让位）；
+// 输入控件聚焦不抢（free 输入框内方向键归 caret）
+document.addEventListener("keydown", (ev) => {
+  if (ev.key !== "ArrowLeft" && ev.key !== "ArrowRight") return;
+  if (ev.altKey || ev.ctrlKey || ev.metaKey || ev.shiftKey) return;
+  if (!askSteppedActive()) return;
+  const ae = document.activeElement;
+  if (ae && (ae.tagName === "INPUT" || ae.tagName === "TEXTAREA" || ae.isContentEditable)) return;
+  ev.preventDefault();
+  askGoto(askState.cur + (ev.key === "ArrowRight" ? 1 : -1));
+});
 function syncSelClasses(qs) {
   const box = $("questions");
   qs.forEach((q, qi) => {
@@ -5739,7 +5819,15 @@ function submitAnswer() {
     if (q.multi) return sel.join("、");
     return sel[0] ?? "";
   });
-  if (answers.some((a) => !a)) { toast("还有问题未作答"); return; }
+  if (answers.some((a) => !a)) {
+    // #190 stepper：toast 同时跳到第一道未答题（否则用户得猜/翻哪题没答）
+    if (askState?.stepped) {
+      const miss = answers.findIndex((a) => !a);
+      if (miss >= 0) askGoto(miss);
+    }
+    toast("还有问题未作答");
+    return;
+  }
   sendAnswer(answers);
 }
 
@@ -7566,10 +7654,12 @@ window.addEventListener("resize", moveTabInd);
 // #279③ 键盘 ←/→ 切 tab（桌面加分项）：输入控件聚焦时不抢键；
 // #67修：带修饰键（Alt/Ctrl 等）不响应——那是「修饰键+←→ 切数据源」的组合，
 // 旧版不排除导致 Alt+←→ 详情页内切的是 tab 而非源（用户实测冲突）
+// #190：提问卡 stepper 可见时让位（裸 ←→ 优先切题，见 renderQuestions 区监听）
 document.addEventListener("keydown", (ev) => {
   if (ev.key !== "ArrowLeft" && ev.key !== "ArrowRight") return;
   if (ev.altKey || ev.ctrlKey || ev.metaKey || ev.shiftKey) return;
   if (!selected) return;
+  if (askSteppedActive()) return;
   const ae = document.activeElement;
   if (ae && (ae.tagName === "INPUT" || ae.tagName === "TEXTAREA" || ae.isContentEditable)) return;
   const tabs = [...document.querySelectorAll(".tabs button.tab")].filter((b) => b.style.display !== "none"); // #71 隐藏的输出物 tab 不进 ←→ 循环

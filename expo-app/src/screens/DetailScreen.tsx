@@ -1080,39 +1080,67 @@ function PendingRow({ text }: { text: string }) {
 }
 
 // AskUserQuestion 作答横幅：单问题单选 = 点选项即发；多问题/多选 = 勾选后提交；单问题支持自由输入
+// #190 多问题 stepper（CLI 式，对齐桌面端）：一次只展示一题 + 题号指示器（可点击跳题）；
+// 单选题选中自动进下一题、末题留步等「提交回答」——题多时 banner 不再撑爆底部栈
 function AskBanner({ wr, sid }: { wr: WaitingPayload; sid: string }) {
   const { c } = useTheme();
   const d = useThemeStyles(makeStyles);
   const qs = wr.questions ?? [];
   const single = qs.length === 1 && !qs[0].multi;
+  const stepped = qs.length > 1;
   const [picked, setPicked] = useState<Record<number, string[]>>({});
-  const [free, setFree] = useState("");
+  const [free, setFree] = useState<Record<number, string>>({});
+  const [cur, setCur] = useState(0);
+  const advTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   useEffect(() => {
     setPicked({});
-    setFree("");
+    setFree({});
+    setCur(0);
+    return () => { if (advTimer.current) clearTimeout(advTimer.current); };
   }, [wr.request_id]);
+
+  const qi = stepped ? Math.min(cur, qs.length - 1) : 0;
+  const q = qs[qi];
+  const answered = (i: number) => (picked[i]?.length ?? 0) > 0 || !!(free[i] ?? "").trim();
 
   const answer = (answers: string[]) => {
     store.send("COMMAND_ANSWER", { session_id: sid, request_id: wr.request_id, answers });
   };
-  const toggle = (qi: number, label: string) => {
+  const toggle = (tq: number, label: string) => {
     setPicked((p) => {
-      const cur = p[qi] ?? [];
-      const has = cur.includes(label);
-      const next = qs[qi].multi
-        ? has ? cur.filter((x) => x !== label) : [...cur, label]
+      const curP = p[tq] ?? [];
+      const has = curP.includes(label);
+      const next = qs[tq].multi
+        ? has ? curP.filter((x) => x !== label) : [...curP, label]
         : has ? [] : [label];
-      return { ...p, [qi]: next };
+      return { ...p, [tq]: next };
     });
   };
-  const allAnswered = qs.every((_, i) => (picked[i]?.length ?? 0) > 0);
-  const freeReady = single && free.trim().length > 0;
+  // stepper 单选：选中并自动进下一题（260ms 停留让选中态可见）；末题留步等提交
+  const pickSingle = (tq: number, label: string) => {
+    toggle(tq, label);
+    if (stepped && tq < qs.length - 1) {
+      if (advTimer.current) clearTimeout(advTimer.current);
+      advTimer.current = setTimeout(() => setCur(tq + 1), 260);
+    }
+  };
+  const allAnswered = qs.every((_, i) => answered(i));
+  const submit = () => answer(qs.map((_, i) => free[i]?.trim() || (picked[i] ?? []).join("、")));
+  const freeText = free[qi] ?? "";
 
   return (
     <View style={d.waitBanner}>
       <Text style={d.waitT}>◉ Claude 在提问</Text>
-      {qs.map((q, qi) => (
-        <View key={qi}>
+      {stepped ? (
+        <View style={d.askSteps}>
+          <Text style={d.askCount}>{qi + 1} / {qs.length}</Text>
+          {qs.map((_, i) => (
+            <Pressable key={i} hitSlop={7} onPress={() => setCur(i)} style={[d.askDot, answered(i) && d.askDotDone, i === qi && d.askDotCur]} />
+          ))}
+        </View>
+      ) : null}
+      {q ? (
+        <View>
           <Text style={d.askQ}>{q.question}</Text>
           <View style={d.askOpts}>
             {q.options.map((o) => {
@@ -1122,21 +1150,39 @@ function AskBanner({ wr, sid }: { wr: WaitingPayload; sid: string }) {
                   key={o.label}
                   style={[d.askChip, on && d.askChipOn]}
                   android_ripple={{ color: c.tintSoft, borderless: false, radius: 14 }}
-                  onPress={() => (single ? answer([o.label]) : toggle(qi, o.label))}
+                  onPress={() => (single ? answer([o.label]) : q.multi ? toggle(qi, o.label) : pickSingle(qi, o.label))}
                 >
-                  <Text style={[d.askChipT, on && d.askChipOnT]}>{(q.multi && (picked[qi] ?? []).includes(o.label) ? "✓ " : "") + o.label}</Text>
+                  <Text style={[d.askChipT, on && d.askChipOnT]}>{(q.multi && on ? "✓ " : "") + o.label}</Text>
                 </Pressable>
               );
             })}
           </View>
+          {stepped ? (
+            <TextInput
+              style={[d.askFree, { marginBottom: 4 }]}
+              value={freeText}
+              onChangeText={(t) => setFree((f) => ({ ...f, [qi]: t }))}
+              placeholder="或输入自定义回答…"
+              placeholderTextColor={c.faint}
+              returnKeyType="send"
+              onSubmitEditing={() => {
+                if (!freeText.trim()) return;
+                if (allAnswered) submit();
+                else {
+                  const miss = qs.findIndex((_, i) => !answered(i));
+                  if (miss >= 0) setCur(miss);
+                }
+              }}
+            />
+          ) : null}
         </View>
-      ))}
+      ) : null}
       {!single ? (
         <Pressable
           style={[d.askSubmit, !allAnswered && { opacity: 0.4 }]}
           android_ripple={{ color: withA(c.done, 0.18), borderless: false }}
           disabled={!allAnswered}
-          onPress={() => answer(qs.map((_, i) => (picked[i] ?? []).join("、")))}
+          onPress={submit}
         >
           <Text style={d.askSubmitT}>提交回答</Text>
         </Pressable>
@@ -1145,20 +1191,20 @@ function AskBanner({ wr, sid }: { wr: WaitingPayload; sid: string }) {
         <View style={d.askFreeRow}>
           <TextInput
             style={d.askFree}
-            value={free}
-            onChangeText={setFree}
+            value={free[0] ?? ""}
+            onChangeText={(t) => setFree((f) => ({ ...f, 0: t }))}
             placeholder="或输入自定义回答…"
             placeholderTextColor={c.faint}
             returnKeyType="send"
             onSubmitEditing={() => {
-              if (free.trim()) answer([free.trim()]);
+              if ((free[0] ?? "").trim()) answer([(free[0] ?? "").trim()]);
             }}
           />
           <Pressable
-            style={[d.askFreeBtn, !freeReady && { opacity: 0.4 }]}
+            style={[d.askFreeBtn, !(free[0] ?? "").trim() && { opacity: 0.4 }]}
             android_ripple={{ color: withA(c.brandA, 0.2), borderless: false }}
-            disabled={!freeReady}
-            onPress={() => free.trim() && answer([free.trim()])}
+            disabled={!(free[0] ?? "").trim()}
+            onPress={() => (free[0] ?? "").trim() && answer([(free[0] ?? "").trim()])}
           >
             <Text style={d.askFreeBtnT}>作答</Text>
           </Pressable>
@@ -3091,7 +3137,12 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
     backgroundColor: withA(c.waiting, 0.10), borderWidth: 1, borderColor: withA(c.waiting, 0.3),
   },
   btnRejectT: { color: c.waiting, fontWeight: "600", fontSize: 14 },
-  // AskUserQuestion 作答横幅
+  // AskUserQuestion 作答横幅（#190 stepper 指示器行）
+  askSteps: { flexDirection: "row", alignItems: "center", gap: 7, marginBottom: 10 },
+  askCount: { color: c.dim, fontSize: 11, marginRight: 2 },
+  askDot: { width: 9, height: 9, borderRadius: 5, borderWidth: 1.5, borderColor: c.faint },
+  askDotDone: { backgroundColor: c.brandA, borderColor: c.brandA },
+  askDotCur: { borderColor: c.brandA, borderWidth: 2, transform: [{ scale: 1.25 }] },
   askQ: { color: c.text, fontSize: 13, fontWeight: "600", marginBottom: 7 },
   askOpts: { flexDirection: "row", flexWrap: "wrap", gap: 7, marginBottom: 11 },
   askChip: {
