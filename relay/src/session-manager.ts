@@ -327,6 +327,11 @@ interface ManagedSession {
   // 不匹配即忽略——旧流的任何后续事件（接管补刀的收尾回调 / 网络回魂）不再写
   // 状态/时间线/用量，双流并发写同一会话在此根治
   streamGen: number;
+  // #189 resume 互斥：上次 resumeAgent/reviveSaved 发起时刻（新流 onInit 清除）。
+  // 窗口内（resumePendingWindowMs）到达的消息/auto-revive 不再换流——新 agent 的
+  // childPid 尚未就位，此时换流补刀必然落空（双进程根源），消息改走 sendMessage
+  // 排队等新流就绪。undefined = 无进行中的 resume
+  resumePending?: number;
 }
 
 interface WatchdogState {
@@ -381,6 +386,16 @@ function watchdogFastMs(): number {
 function watchdogSampleMs(): number {
   const v = Number(process.env.CCR_WATCHDOG_SAMPLE_MS);
   return Number.isFinite(v) && v >= 50 ? v : 30_000;
+}
+// #189 resume 互斥窗：resumeAgent/reviveSaved 发起（spawn）→ 新流 onInit 到达之间的
+// 并发窗口。实测双拉案例：11:10:32 relay 重启 auto-revive 拉起 A1，36s 后用户消息触
+// 发接管 resume——A1 的 childPid 由异步 spawn 回调填充尚未就位，第二次补刀落空 →
+// 双进程并存、旧进程输出无人采集。窗口内到达的 resume 请求不换流：消息走 sendMessage
+// 排队（AsyncQueue 即 SDK prompt 流，按序消费）。45s 覆盖 CLI 冷启动（reviveSaved 的
+// init 超时 30s 再放宽），超窗仍无 init 视为本次 resume 失败，放行下一次接管补刀
+function resumePendingWindowMs(): number {
+  const v = Number(process.env.CCR_RESUME_PENDING_MS);
+  return Number.isFinite(v) && v >= 5_000 ? v : 45_000;
 }
 function watchdogDisabled(): boolean {
   return process.env.CCR_WATCHDOG_DISABLE === "1";
@@ -598,6 +613,9 @@ export class SessionManager {
     const candidates: { s: ManagedSession; updated: number }[] = [];
     for (const s of this.sessions.values()) {
       if (s.state.external || s.agent) continue;
+      // #189 resume 互斥：上一轮 resume 的 agent 还在路上（spawn→onInit 窗口），
+      // 不重复拉起（双拉 → childPid 未就位补刀落空 → 双进程）
+      if (s.resumePending && Date.now() - s.resumePending < resumePendingWindowMs()) continue;
       if (!s.state.relay_session_id) continue; // 首回合未完成即断，无 resume 锚点
       const todos = readTaskStoreTodos(s.state.relay_session_id);
       if (!todos || !todos.some((t) => t.status === "pending" || t.status === "in_progress")) continue;
@@ -1299,6 +1317,17 @@ export class SessionManager {
           // agent 已死（Relay 重启遗留 / stop 收尾）或已放弃自愈（#109：放弃路径不再
           // 预杀树，僵流可能还挂着）：有 SDK 会话 id 就地 resume 复活（接管时补刀旧树）
           if (!s.agent || s.agent.ended || s.wd.gaveUp) {
+            // #189 resume 互斥：上次 resume 的 agent 还在路上（spawn→onInit 窗口），
+            // ended 只是流先关了——此刻再接管必然双拉（新 agent childPid 未就位，
+            // 补刀落空 → 双进程）。消息走 sendMessage 排队：AsyncQueue 即 SDK prompt
+            // 流，新流 init 后按序消费，语义与正常排队一致
+            if (s.agent && !s.wd.gaveUp && s.resumePending && Date.now() - s.resumePending < resumePendingWindowMs()) {
+              if (s.state.status === "ERROR" || s.state.status === "DONE") s.state.status = "WORKING";
+              s.agent.sendMessage(text, sanitizeImages(cmd.payload.images), echo);
+              s.unacked.push({ text, images: sanitizeImages(cmd.payload.images), ts: Date.now() });
+              this.emitUpdated(s, true);
+              return { command_id: cmd.command_id, ok: true };
+            }
             this.resumeAgent(s, text, sanitizeImages(cmd.payload.images), echo);
             return { command_id: cmd.command_id, ok: true };
           }
@@ -1867,6 +1896,9 @@ export class SessionManager {
         onInit: (sdkId, model, permissionMode) => {
           if (!mine()) return;
           touch("init");
+          // #189 resume 互斥解除：新流 init 到达 = spawn 窗口结束，后续消息/恢复
+          // 请求恢复正常路径（sendMessage 直达 / 接管补刀）
+          managed.resumePending = undefined;
           // #307：托管子会话 sid 即时落盘 child-sessions.json——relay 在此刻之后
           // 任意时点重启，孤儿扫描都认得它是自己的（不再被收养成"relay"垃圾会话）
           if (!this.childSdkIds.has(sdkId)) {
@@ -2050,11 +2082,17 @@ export class SessionManager {
     }
     // #109 旧流收尾：放弃路径不再预杀树，接管时在此补刀（防孤儿进程/双流并发）。
     // 代际递增先于补刀——旧流的收尾回调过不了身份守卫，不会污染新流状态
+    // #189 补刀不看 ended：ended 只代表 SDK 流关闭，进程可能还活着（流半开/早断，
+    // 实测 91907 活尸——流断数小时进程仍在跑）。接管换流时旧进程必须杀：它的工作
+    // 要么已入 transcript 要么已丢，留着只会双进程分叉。childPid 未就位（异步 spawn
+    // 回调填充中）的窗口由调用侧互斥（resumePending）挡住，不该走到这里
     const old = s.agent;
     s.streamGen++;
-    if (old && !old.ended && old.childPid) {
+    if (old?.childPid) {
       void this.watchdogProcs.killTree(old.childPid).catch(() => {});
     }
+    // #189 resume 互斥标记：spawn→onInit 窗口内的二次 resume 请求在调用侧被拦下
+    s.resumePending = Date.now();
     const agent = this.newAgent(
       s.state.cwd,
       s.state.model,
@@ -2100,6 +2138,8 @@ export class SessionManager {
     let timer: ReturnType<typeof setTimeout> | null = null;
     // #109 换流代际递增 + 撤销放弃标记（resumeAgent 同口径：新流身份从现在起算）
     s.streamGen++;
+    // #189 resume 互斥标记（同 resumeAgent：spawn→onInit 窗口内不换流）
+    s.resumePending = Date.now();
     s.wd.gaveUp = false;
     const base = this.agentCallbacks(s);
     const fail = (reason: string): void => {
@@ -2306,7 +2346,26 @@ export class SessionManager {
     for (const s of this.sessions.values()) {
       if (s.wd.phase !== "idle") continue;
       if (s.state.external || s.state.historical) continue;
-      if (!s.agent || s.agent.ended) continue;
+      // #189 resume 互斥豁免：spawn→onInit 窗口内新流零输出是合法等待（CLI 冷启
+      // 动数秒到数十秒），不按静默起疑
+      if (s.resumePending && now - s.resumePending < resumePendingWindowMs()) continue;
+      if (!s.agent || s.agent.ended) {
+        // #189 ended 盲区接管：流已关闭但 status 钉在 WORKING（换流代际错位丢了
+        // 回合结束帧 / 流半开早断），再没人发 SESSION_DONE——原实现直接 continue，
+        // 会话永久假「工作中」（实测钉死 24 分钟零接管）。按慢通道阈值判死后走
+        // 标准恢复流程：unacked 重放 resume / 无消息 parked 恢复；防风暴（1h 2 次
+        // 上限）与杀树清活尸同样生效
+        if (
+          s.agent && s.agent.ended && s.state.status === "WORKING" &&
+          s.state.relay_session_id && now - s.lastProgressAt > watchdogStallMs()
+        ) {
+          s.wd.phase = "sampling";
+          const stalled = now - s.lastProgressAt;
+          this.bus.emit(s.state.session_id, "WATCHDOG", { action: "stall_detected", lane: "ended", stalled_ms: stalled });
+          void this.recoverFromStall(s, "ended", stalled, 0);
+        }
+        continue;
+      }
       if (!s.agent.childPid) continue;
       if (!s.state.relay_session_id && s.unacked.length === 0) continue;
       if (s.state.status !== "WORKING" || s.state.compacting) continue;
@@ -2382,16 +2441,19 @@ export class SessionManager {
   // 介入；流若回魂由 gaveUp 自愈翻回 WORKING）→ 杀树（SIGTERM→3s→SIGKILL）→ 等流
   // 收尾 → resume 重拉（带未回显消息重放；无消息则 parked 恢复停在等待输入）→
   // 时间线留"看门狗接管"。
-  private async recoverFromStall(s: ManagedSession, lane: "slow" | "fast", stalled: number, cpuDelta: number): Promise<void> {
+  private async recoverFromStall(s: ManagedSession, lane: "slow" | "fast" | "ended", stalled: number, cpuDelta: number): Promise<void> {
     s.wd.phase = "recovering";
     const sid = s.state.session_id;
     const t0 = Date.now();
     const agent = s.agent;
     this.bus.emit(sid, "WATCHDOG", { action: "recover_start", lane, stalled_ms: stalled, cpu_delta_ms: cpuDelta });
+    // #189 ended 通道：流已关（非 CPU 僵死），文案区分——用户看时间线不困惑
     this.pushExternalLog(
       sid,
       "system",
-      `看门狗接管：会话流已 ${Math.round(stalled / 60000)} 分钟无进展（进程树 CPU 空闲确认），正在自动恢复`,
+      lane === "ended"
+        ? `看门狗接管：会话流已断开且 ${Math.round(stalled / 60000)} 分钟无进展（状态未收尾），正在自动恢复`
+        : `看门狗接管：会话流已 ${Math.round(stalled / 60000)} 分钟无进展（进程树 CPU 空闲确认），正在自动恢复`,
     );
     try {
       // #109 防风暴检查前置到杀树之前：放弃 = 承诺停止干预，而杀树恰是最重的干预

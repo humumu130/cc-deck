@@ -2387,6 +2387,145 @@ assert(!mgr.getExternal("ext-ff11bb22-cc33-dd44-ee55-ff6677889900"), "67 multi-t
   rmSync(dir184, { recursive: true, force: true });
 }
 
+// 189. #189 托管会话 resume 互斥（spawn→onInit 窗口）+ ended 盲区接管：接管换流后
+// 新流的 childPid 要等异步 spawn 回调才就位——窗口内二次换流补刀必落空（双进程
+// 根源，实测 ff3d58ab 双拉案例）。①窗口内消息不换流（sendMessage 排队）②新流
+// onInit 清窗后恢复直发 ③超窗放行接管（旧流 ended=true 也补刀，91907 活尸场景）
+// ④窗口内看门狗持袖旁观 ⑤流 ended 但 status 钉 WORKING 的盲区由看门狗 lane="ended"
+// 接管（杀活尸 + 重放未回显消息）⑥autoRevive 窗口内不重复拉起（语义锁）
+{
+  const { homedir } = await import("node:os");
+  // 独立 ws（184 段收尾 close 掉了 attach 的连接，send 会落进死套接字 → ack timeout）
+  const w189 = new WebSocket(`ws://127.0.0.1:${cfg.port}/ws?token=${cfg.token}`);
+  attach(w189);
+  await new Promise((r) => w189.once("open", r));
+  await wait(200);
+  const SDK189 = "sdk189-0";
+  const TASK_DIR189 = join(homedir(), ".claude", "tasks", SDK189);
+  rmSync(TASK_DIR189, { recursive: true, force: true });
+  // 假 agent：仅 create（有 prompt 且非 resume）自动 init；resume 流不自动 init——
+  // init 由测试手动触发，精确钉住 spawn→onInit 并发窗口。childPid 用超 pid_max 的
+  // 不存在值（killTree 真实现会 ESRCH；这里换 spy 直接断言补刀调用）
+  let fac189 = 0;
+  const kills189: number[] = [];
+  const recs189: { a: AgentLike; cb: AgentCallbacks; sent: string[]; prompt?: string }[] = [];
+  mgr.setAgentFactory((cwd, model, cb, prompt, opts) => {
+    fac189++;
+    const sent: string[] = [];
+    const rec: { a: AgentLike; cb: AgentCallbacks; sent: string[]; prompt?: string } = { a: null as unknown as AgentLike, cb, sent, prompt };
+    recs189.push(rec);
+    const a: AgentLike = {
+      id: randomUUID(),
+      startedAt: Date.now(),
+      ended: false,
+      childPid: 19900000 + fac189,
+      sendMessage: (t) => { sent.push(t); },
+      allow: () => false,
+      deny: () => false,
+      answer: () => false,
+      stop: async () => { a.ended = true; cb.onSessionEnd("stopped"); },
+      setPermissionMode: async () => {},
+    };
+    rec.a = a;
+    if (prompt !== undefined && !opts?.resume) {
+      setTimeout(() => { if (!a.ended) cb.onInit(SDK189, model, "default"); }, 10);
+    }
+    return a;
+  });
+  mgr.setWatchdogProcs({
+    snapshotTree: async () => new Map(),
+    killTree: async (pid) => { kills189.push(pid); return "gone" as const; },
+  });
+  let sid189 = "";
+  // 事件按全局 seq 去重：44 段的 w44 全程未 close，与 w189 同收一条广播会把共享
+  // events 数组记成双份——精确计数断言（恰一次）必须先去重（同一次 emit 双份同 seq）
+  const uniq189 = (list: Envelope[]): Envelope[] => {
+    const seen = new Set<number>();
+    return list.filter((e) => (seen.has(e.seq) ? false : (seen.add(e.seq), true)));
+  };
+  const sys189 = () => uniq189(events.filter((e) => e.type === "SESSION_LOG" && e.session_id === sid189)).map((e) => String((e.payload as { text: string }).text));
+  const wd189 = () => uniq189(events.filter((e) => e.type === "WATCHDOG" && e.session_id === sid189));
+
+  // a) 创建：正常 init、停在 WORKING（无 onTurnEnd）
+  const c189 = await waitAck(send("COMMAND_CREATE", { cwd: process.cwd(), prompt: "#189 互斥窗测试" }));
+  assert(c189.ok === true && typeof c189.session_id === "string", "189a 托管会话创建（工厂缝，无真 CLI）");
+  sid189 = c189.session_id!;
+  await wait(150);
+  assert(mgr.snapshot().some((s) => s.session_id === sid189 && s.relay_session_id === SDK189), "189a onInit 落位 relay_session_id");
+  assert(fac189 === 1, "189a 首个 agent");
+
+  // b) 流断（ended，模拟半开早断/换流代际错位）→ 消息触发接管 resume（互斥窗打戳）
+  recs189[0]!.a.ended = true;
+  assert((await waitAck(send("COMMAND_MESSAGE", { session_id: sid189, text: "m1" }))).ok, "189b m1 acked（接管路径）");
+  assert(fac189 === 2, "189b 接管拉起第 2 个 agent");
+  assert(!!recs189[1]!.prompt && recs189[1]!.prompt.includes("m1"), "189b resume 以 m1 为首条消息");
+  assert(sys189().filter((t) => t.includes("已恢复 SDK 会话")).length === 1, "189b 恰一次恢复日志");
+
+  // c) 窗口内（onInit 未到）再来消息：不换流——sendMessage 排队（AsyncQueue 即 SDK
+  // prompt 流），无新恢复日志、无新 agent
+  process.env.CCR_RESUME_PENDING_MS = "5000";
+  assert((await waitAck(send("COMMAND_MESSAGE", { session_id: sid189, text: "m2" }))).ok, "189c 窗内 m2 acked");
+  assert(fac189 === 2, "189c 窗内消息绝不二次换流（互斥生效）");
+  assert(recs189[1]!.sent.some((t) => t === "m2"), "189c 窗内消息经 sendMessage 排队");
+  assert(sys189().filter((t) => t.includes("已恢复 SDK 会话")).length === 1, "189c 窗内消息不新增恢复日志");
+
+  // d) 新流 onInit 到达 → 互斥解除：后续消息走正常直发路径（同一 agent，不换流）
+  recs189[1]!.cb.onInit(SDK189, "claude-x", "default");
+  assert((await waitAck(send("COMMAND_MESSAGE", { session_id: sid189, text: "m3" }))).ok, "189d init 后 m3 acked");
+  assert(fac189 === 2 && recs189[1]!.sent.some((t) => t === "m3"), "189d init 后消息直达同一流");
+
+  // e) 再断流再接管（新戳）→ 等 5.3s 超窗 → 旧流标 ended（91907 形态：流断进程活）
+  // 后消息放行接管：第 4 代拉起，且补刀不看 ended（旧树照杀）
+  recs189[1]!.a.ended = true;
+  assert((await waitAck(send("COMMAND_MESSAGE", { session_id: sid189, text: "m4" }))).ok, "189e m4 acked");
+  assert(fac189 === 3, "189e m4 接管拉起第 3 个 agent");
+  await wait(5300); // 超过 CCR_RESUME_PENDING_MS=5000
+  process.env.CCR_WATCHDOG_STALL_MS = "5000";
+  process.env.CCR_WATCHDOG_SAMPLE_MS = "50";
+  recs189[2]!.a.ended = true; // 旧流已关但进程挂着——补刀必须杀（#189 放宽点）
+  assert((await waitAck(send("COMMAND_MESSAGE", { session_id: sid189, text: "m5" }))).ok, "189e 超窗 m5 acked");
+  assert(fac189 === 4, "189e 超窗放行接管（第 4 个 agent）");
+  assert(kills189.includes(19900003), "189e 补刀旧树不看 ended（流断活尸也杀）");
+
+  // f) 盲区：新流（agent4）无 init、ended=true、status 钉 WORKING——窗口内看门狗
+  // 持袖旁观；静默超阈 + 超窗后 lane="ended" 接管：杀活尸 + 重放全部未回显消息
+  recs189[3]!.a.ended = true; // 新流 spawn 即半开早断（ended 盲区成立前提；不设则
+  // tickWatchdog 走 CPU 采样通道 lane="slow"，假树恒 0 增量照样 recover——lane 断言必挂
+  assert(mgr.snapshot().find((s) => s.session_id === sid189)!.status === "WORKING", "189f 状态钉在 WORKING");
+  mgr.tickWatchdog();
+  assert(wd189().length === 0, "189f 窗口内看门狗持袖旁观（零输出是合法等待）");
+  await wait(5300); // 窗口过期 + 静默超阈（lastProgressAt = m5 接管时刻）
+  mgr.tickWatchdog();
+  await waitLog(() => wd189().some((e) => (e.payload as { action?: string }).action === "recover_ok"), 4000);
+  assert(wd189().some((e) => { const p = e.payload as { action?: string; lane?: string }; return p.action === "stall_detected" && p.lane === "ended"; }), "189f 盲区按 lane=ended 判死（不走 CPU 采样）");
+  assert(kills189.includes(19900004), "189f 盲区恢复杀掉流断活尸");
+  assert(fac189 === 5, "189f 盲区恢复重拉（第 5 个 agent）");
+  assert(!!recs189[4]!.prompt && recs189[4]!.prompt.includes("m5"), "189f 重放包含全部未回显消息");
+  assert(sys189().some((t) => t.includes("看门狗接管：会话流已断开")), "189f ended 通道接管文案进时间线");
+
+  // g) autoRevive 语义锁：agent 清空（模拟重启后形态）+ 任务存储有 pending——超窗
+  // 对照会拉起；窗内跳过（auto-revive 双拉防线，防未来重构误删）
+  mkdirSync(TASK_DIR189, { recursive: true });
+  writeFileSync(join(TASK_DIR189, "1.json"), JSON.stringify({ id: 1, subject: "#189 语义锁", status: "pending" }));
+  const sess189 = (mgr as unknown as { sessions: Map<string, { agent: AgentLike | null; resumePending?: number }> }).sessions.get(sid189)!;
+  sess189.agent = null;
+  sess189.resumePending = Date.now() - 100_000; // 远超窗：对照
+  mgr.autoReviveManaged();
+  assert(fac189 === 6, "189g 超窗对照：autoRevive 正常拉起");
+  sess189.agent = null;
+  sess189.resumePending = Date.now(); // 窗内
+  mgr.autoReviveManaged();
+  assert(fac189 === 6, "189g 窗口内 autoRevive 不重复拉起（防双拉）");
+
+  // 清理：env、任务目录、替身与工厂还原
+  delete process.env.CCR_RESUME_PENDING_MS;
+  delete process.env.CCR_WATCHDOG_STALL_MS;
+  delete process.env.CCR_WATCHDOG_SAMPLE_MS;
+  rmSync(TASK_DIR189, { recursive: true, force: true });
+  mgr.setWatchdogProcs(null);
+  mgr.setAgentFactory(null);
+}
+
 wsCur!.close();
 await wait(300);
 console.log("\nBRIDGE TESTS PASSED");
