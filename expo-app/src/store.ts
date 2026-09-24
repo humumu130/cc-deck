@@ -339,7 +339,11 @@ class RelayStore {
     setInterval(() => {
       if (AppState.currentState !== "active") return;
       for (const conn of this.conns.values()) {
-        if (conn.state === "reconnecting" && conn.retryAt - Date.now() > 6000) this.connConnect(conn);
+        // #85 孤儿 reconnecting 兜底（2026-09-24）：回前台体检手动置 reconnecting
+        //（「校验连接…」）不走 scheduleReconnect——无 timer、retryAt 陈旧在过去，
+        // 原条件永远不满足，探测链再失联即无限黄条。凡 reconnecting 却无 timer
+        // 一律立即接管
+        if (conn.state === "reconnecting" && (!conn.reconnectTimer || conn.retryAt - Date.now() > 6000)) this.connConnect(conn);
         if (conn.state === "connecting" && conn.connectStartedAt && Date.now() - conn.connectStartedAt > 20_000) this.connConnect(conn);
       }
     }, 5000);
@@ -1390,7 +1394,9 @@ class RelayStore {
         // 由服务端 terminate（解冻后 RST 到达走 onclose）或回前台体检兜底，后台
         // 每 15s 一拍空 PING 成本可忽略
         if (AppState.currentState === "active") {
-          try { ws.close(); } catch {}
+          // #85 同步收尸：裸 ws.close() 赌 onclose 在静默死 TCP 上可能等 peer ack
+          // 悬到 TCP 重传超时（Android 默认 ~15 分钟）——判死分支一律 connDead 立即重连
+          this.connDead(conn, ws);
           return;
         }
       }
@@ -1400,7 +1406,7 @@ class RelayStore {
       // 桥下正常秒级唤醒，此路径只在混跑期走到）
       if (conn.awaitWake && ++conn.wakePings! >= 40) {
         conn.awaitWake = false;
-        try { ws.close(); } catch {}
+        this.connDead(conn, ws); // #85 同步收尸（同 55s 分支，不赌 onclose）
         return;
       }
       try {
@@ -1435,6 +1441,29 @@ class RelayStore {
     this.probeIdleLanIdentity();
   }
 
+  // #85 判死同步收尸（2026-09-24 三轮）：所有「确认死链」分支统一走这里，立即
+  // 摘 socket/心跳/在途命令并排重连——此前各分支裸 ws.close() 赌 onclose 事件回收，
+  // 但静默死 TCP（后台冻结期对端消失、无 RST 到达）上 OkHttp 的关闭走优雅握手，
+  // 要等 peer ack / TCP 重传超时（Android 默认 ~15 分钟）才派发 onclose；期间连接
+  // 状态无人接管（回前台「校验连接…」手动置的 reconnecting 无重连 timer、retryAt
+  // 陈旧使看门狗原条件不满足）= 用户实测「回前台偶现卡死、冷启动却秒连」的无界
+  // 等待路径——冷启动无僵尸 socket 可赌，故秒连。收尾与 onclose 处理器等价
+  //（offline + scheduleReconnect），fastRetry 语义保留（最近开过门的连接 800ms 快发）
+  private connDead(conn: SourceConn, ws: WebSocket) {
+    killWs(ws); // 摘 handlers + close + 晚开门补刀——不依赖任何事件回来
+    if (conn.ws !== ws) return; // 已被更新的连接取代：只收尸体，不动现行连接状态
+    conn.ws = null;
+    this.stopHb(conn);
+    this.clearPendingCmds(conn);
+    conn.awaitWake = false;
+    conn.resumeCheck = false;
+    conn.state = "offline";
+    conn.stateText = null;
+    conn.channel = null;
+    this.emit();
+    this.scheduleReconnect(conn);
+  }
+
   private connResumeProbe(conn: SourceConn) {
     const ws = conn.ws;
     // readyState 守卫：disconnect 后 hbTimer 残留 ≤15s（下一拍自清）+ 新 socket
@@ -1444,17 +1473,7 @@ class RelayStore {
     // 掐死而 onclose 事件丢失（状态卡「假在线」绿）——旧守卫直接 return 会让它
     // 永远没人收尸（心跳 send 异常也被 catch 吞）。按 onclose 同语义判死走重连
     if (ws.readyState !== WebSocket.OPEN) {
-      killWs(ws);
-      conn.ws = null;
-      this.stopHb(conn);
-      this.clearPendingCmds(conn);
-      conn.awaitWake = false;
-      conn.resumeCheck = false;
-      conn.state = "offline";
-      conn.stateText = null;
-      conn.channel = null;
-      this.emit();
-      this.scheduleReconnect(conn);
+      this.connDead(conn, ws);
       return;
     }
     if (conn.probeTimer) {
@@ -1473,13 +1492,18 @@ class RelayStore {
         ? JSON.stringify({ to: cloud.relayDev, data: seal({ t: "ping", last_seq: conn.lastSeq }, cloud.relayPubkey, keys.secretKey) })
         : JSON.stringify({ type: "PING" }));
     } catch {
-      try { ws.close(); } catch {}
+      // #85 send 异常 = socket 已坏：此时状态可能已被回前台体检置「校验连接…」
+      //（无 timer 的 reconnecting），同步收尸才能保证有人接管重连
+      this.connDead(conn, ws);
       return;
     }
     conn.probeTimer = setTimeout(() => {
       conn.probeTimer = null;
       if (conn.ws === ws && conn.lastDownAt === t0) {
-        try { ws.close(); } catch {}
+        // #85 2.5s 无任何下行 = 确认死链：同步收尸立即重连（有回则 lastDownAt 已被
+        // onMessage 刷新，此处自然跳过）。原裸 ws.close() 在静默死 TCP 上等 onclose
+        // 可悬 ~15 分钟——回前台卡死的最后一条无界路径
+        this.connDead(conn, ws);
       }
     }, 2500); // #90 4s→2.5s：云链路 PONG <1s，2.5s 无回即判死
   }
