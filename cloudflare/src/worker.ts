@@ -72,7 +72,10 @@ export default {
           headers: { "content-type": "application/json", "cache-control": "no-store" },
         });
       }
-      const html = await env.DL.get(doc, { type: "text" });
+      let html = await env.DL.get(doc, { type: "text" });
+      // 链接后缀宽容（2026-09-24 用户实测踩坑）：手抄/转述丢了 .html 的预览链接
+      //（/view/acceptance-<id>）补 .html 重查一次，仍无才 404；POST 白名单不受影响
+      if (!html && !doc.endsWith(".html")) html = await env.DL.get(doc + ".html", { type: "text" });
       if (!html) return new Response("not found", { status: 404 });
       return new Response(html, {
         status: 200,
