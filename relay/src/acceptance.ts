@@ -110,13 +110,19 @@ export interface AcceptanceSummary {
   created_at: number;
   total: number; // 登记行数
   judged: number; // 最新一次提交的已判行数（pass+fail；未提交=0）
-  done: boolean; // 最新提交已覆盖全部行（badge 消失条件）
+  // #195 生命周期语义（2026-09-25 用户定）：submitted = 提交过一次（哪怕留空行）。
+  // 待填卡的消失条件从「全行判完(done)」改为「提交过(submitted)」——实际填单常留
+  // 「未测」空行，全行判完永不达成 → 卡永久滞留（用户实锤：12 张单仅 2 张消）。
+  // done 保留为纯统计口径（表单页/回流摘要用），不再作消失条件。
+  submitted: boolean;
+  done: boolean; // 最新提交已覆盖全部行（统计口径）
 }
 
 // 扫 acceptances 目录汇总：<id>.json 为单，配对 <id>.results.json 取最新一次提交
-// 算进度。无 results 或未全覆盖 = 待填。随 SNAPSHOT 下发（LAN ws-server 与云通道
-// cloud-client 两处同源，#117 教训：同名字段必须同步），手机端据此显示待填 badge。
-// 上限 20 张、新的在前——防长期运行膨胀（超限老单的表单页仍可打开，只是不进汇总）
+// 算进度。无 results = 待填；提交过（submitted）即视为已处理。随 SNAPSHOT 下发
+// （LAN ws-server 与云通道 cloud-client 两处同源，#117 教训：同名字段必须同步），
+// 手机端据此显示待填 badge。上限 20 张、新的在前——防长期运行膨胀（超限老单的
+// 表单页仍可打开，只是不进汇总）
 export function listAcceptances(limit = 20): AcceptanceSummary[] {
   let names: string[];
   try {
@@ -133,17 +139,19 @@ export function listAcceptances(limit = 20): AcceptanceSummary[] {
     if (!a) continue;
     let judged = 0;
     let done = false;
+    let submitted = false;
     try {
       const r = JSON.parse(readFileSync(join(acceptanceDir(), `${id}.results.json`), "utf-8")) as {
         history?: { rows?: { verdict?: string | null }[] }[];
       };
       const last = r.history?.[r.history.length - 1];
       if (last?.rows) {
+        submitted = true;
         judged = last.rows.filter((x) => x.verdict === "pass" || x.verdict === "fail").length;
         done = judged >= a.rows.length;
       }
     } catch {}
-    out.push({ id, title: a.title, created_at: a.created_at, total: a.rows.length, judged, done });
+    out.push({ id, title: a.title, created_at: a.created_at, total: a.rows.length, judged, submitted, done });
   }
   out.sort((x, y) => y.created_at - x.created_at);
   return out.slice(0, limit);

@@ -760,11 +760,22 @@ export default function ListScreen({ sessions, connected, connText, onOpen, onNe
   const accPending = useMemo(() => {
     const out: { src: SourceStatus; a: AcceptanceSummary }[] = [];
     for (const src of snap.sources)
+      // #195 消失条件改「提交过即消」（submitted；留空行也算提交）——旧判定
+      // !done 要求全行判完，实际填单常留「未测」空行 → 卡永久滞留。旧 relay 无
+      // submitted 字段（undefined）回退 done 判定
       for (const a of src.acceptances ?? [])
-        if (!a.done && !accSeen.has(a.id)) out.push({ src, a });
+        if (!(a.submitted || a.done) && !accSeen.has(a.id)) out.push({ src, a });
     out.sort((x, y) => y.a.created_at - x.a.created_at); // 新单在前，卡显示最新一张
     return out;
   }, [snap.sources, accSeen]);
+  const seenAcc = (id: string) => {
+    setAccSeen((prev) => {
+      if (prev.has(id)) return prev;
+      const next = new Set(prev).add(id);
+      void AsyncStorage.setItem("ccr_acc_seen", JSON.stringify([...next]));
+      return next;
+    });
+  };
   const openAcc = (item: { src: SourceStatus; a: AcceptanceSummary }) => {
     // 链接按源当前通道择路（同出单工具双发口径）：LAN 通道 = 同网直连表单页；
     // 云通道/未知 = CF Worker /view KV 页面（无 token，32hex id 即鉴权）
@@ -772,13 +783,11 @@ export default function ListScreen({ sessions, connected, connText, onOpen, onNe
       ? `http://${item.src.lanHint}/acceptance/${item.a.id}`
       : `https://cc.humumu.online/view/acceptance-${item.a.id}.html`;
     void Linking.openURL(url).catch(() => undefined);
-    setAccSeen((prev) => {
-      if (prev.has(item.a.id)) return prev;
-      const next = new Set(prev).add(item.a.id);
-      void AsyncStorage.setItem("ccr_acc_seen", JSON.stringify([...next]));
-      return next;
-    });
+    seenAcc(item.a.id);
   };
+  // #195 手动删除通知：不点开表单直接收卡（本地 seen 隐藏，不动 relay 侧单子与
+  // 填报数据——「删通知」而非「删单」；下张待填单自动顶上）
+  const dismissAcc = (id: string) => seenAcc(id);
   // #140 折叠空闲与闲置变灰联动（用户拍板口径）：只折「已变灰」的真闲置卡——
   // isIdleSession 与卡片蒙层同一判定（DONE/ERROR 且静默超 idleDimMin，#100 后台
   // 在跑豁免）。刚收工的会话处在交流窗口期，点折叠也不从面板消失；idleDimMin<0
@@ -1044,6 +1053,14 @@ export default function ListScreen({ sessions, connected, connText, onOpen, onNe
                 </Text>
               </View>
               <Text style={styles.accGo}>去填写 ›</Text>
+              <Pressable
+                style={styles.accClose}
+                hitSlop={{ top: 10, bottom: 10, left: 10, right: 6 }}
+                accessibilityLabel="不再提示该验收单"
+                onPress={() => dismissAcc(accPending[0].a.id)}
+              >
+                <Text style={styles.accCloseT}>×</Text>
+              </Pressable>
             </Pressable>
           ) : null
         }
@@ -1172,6 +1189,9 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
   accTitle: { color: c.text, fontSize: 13, fontWeight: "600" },
   accSub: { color: c.dim, fontSize: 11, marginTop: 2 },
   accGo: { color: c.brandA, fontSize: 12, fontWeight: "600" },
+  // #195 收卡按钮：弱化色 ×（faint），不与「去填写」抢焦点；纯本地隐藏
+  accClose: { paddingLeft: 2 },
+  accCloseT: { color: c.faint, fontSize: 16, fontWeight: "600", lineHeight: 18 },
   // 顶栏设备图标源切换菜单（方案 A）：右上锚定小面板，行=色点+名称+通道+当前标
   srcMenu: {
     position: "absolute", top: 52, right: 12, zIndex: 30, minWidth: 208,

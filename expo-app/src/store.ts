@@ -50,13 +50,16 @@ export interface ServerEntry {
 }
 
 // 待填验收单摘要（#137，SNAPSHOT acceptances 携带；relay 侧 relay/src/acceptance.ts
-// listAcceptances 同形）：done = judged ≥ total（badge 消失条件）。上限 20 张、新的在前
+// listAcceptances 同形）：#195 消失条件 = submitted（提交过即消，留空行也算）；
+// done = judged ≥ total 降级为统计口径。submitted 可选——旧 relay 无该字段，
+// 消费方回退 done。上限 20 张、新的在前
 export interface AcceptanceSummary {
   id: string;
   title: string;
   created_at: number;
   total: number;
   judged: number;
+  submitted?: boolean;
   done: boolean;
 }
 
