@@ -18,7 +18,8 @@
         "minHeight": 640,
         "create": false,
         "decorations": false,
-        "theme": "Dark"
+        "theme": "Dark",
+        "dragDropEnabled": false
       }
     ],
     "security": {
