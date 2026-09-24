@@ -2377,84 +2377,92 @@ export default function DetailScreen({ sid, onBack, initialView, ref }: { sid: s
           })
         )}
 
-        {/* 工作状态行：类 CLI 放对话流内（顶栏不再显示工作状态）；排队注入消息在其下方，
-            CLI 处理（UserPromptSubmit）/回合结束时上浮为正式消息 */}
-        {s.status === "WORKING" ? (
+        {/* 工作状态盒（类 CLI 放对话流内，顶栏不再显示工作状态）；#186 用户授权拍板：
+            并行子 Agent 并入状态栏——子 Agent 是本回合工作的并行分支、与主状态同信息族，
+            同一描边盒承载完整工作图景（信息密度集中），替代旧「盒内主状态 + 盒外裸行」的
+            异质分离。渲染条件放宽为 WORKING 或有子 Agent 条目：非 WORKING 但后台仍在跑/
+            刚收尾定格时，盒形态保持、仅渲染子 Agent 部分（回合结束后仍可展开查看 ✓ 定格）。
+            排队注入消息在盒下方，CLI 处理（UserPromptSubmit）/回合结束时上浮为正式消息 */}
+        {s.status === "WORKING" || (s?.subagents?.length ?? 0) > 0 ? (
           <View style={d.liveRow}>
-            <LiveStatusLine
-              summary={s.compacting ? "⟳ 正在压缩上下文…" : s.action_summary}
-              startedAt={s.turn_started_at ?? s.updated_at}
-              color={c.working}
-              // 手机屏窄：状态栏不显 ctx（2026-09-16 用户反馈）——终端转轮行长文案
-              // 只挤得下几个字，ctx 占用让位（桌面端不受限照常显示）
-              tok={undefined}
-            />
-            <Pressable
-              style={[d.stripBtnWarn, d.opRipple]}
-              android_ripple={{ color: withA(c.waiting, 0.15), borderless: false }}
-              onPress={() => store.send(external ? "COMMAND_EXT_STOP" : "COMMAND_STOP", { session_id: sid })}
-            >
-              <Text style={d.stripBtnWarnT}>{external ? "■ 打断" : "■ 停止"}</Text>
-            </Pressable>
-          </View>
-        ) : null}
-        {/* 并行子 Agent 状态（#142 重设计）：主工作状态行（liveRow）下方的续行——去独立
-            大框（原 panel2 盒）；标题行即折叠开关（2026-09-24 用户二轮拍板：「subAgent
-            + 总数」+ 尾部箭头——总数保留、无「运行中」字样，走帧星只属于具体子 Agent
-            条目；条目行相对标题行缩进 12 形成层级）；agCollapsed 模块级记忆；条目行首走帧星（SPIN_FRAMES，随 agTick 1s 重渲换帧，
-            #148 手机端铁律：低频步进不用 Animated 逐帧）、完成态换 ✓ 定格；ended_at>0
-            才算结束（防数据侧 ended_at:0 假运行冻结读秒）。#13 巡检：超 4 条溢出提示 */}
-        {(s?.subagents?.length ?? 0) > 0 ? (
-          <View style={d.agBox}>
-            {(() => {
-              const all = s!.subagents!;
-              const shown = all.slice(-4);
-              const more = all.length - shown.length;
-              const frame = SPIN_FRAMES[Math.floor(Date.now() / 1000) % SPIN_FRAMES.length];
-              return (
-                <>
-                  <Pressable
-                    style={d.agHead}
-                    hitSlop={{ top: 6, bottom: 4, left: 0, right: 0 }}
-                    android_ripple={{ color: c.tintSoft, borderless: false, radius: 8 }}
-                    onPress={() => { agCollapsed = !agCollapsed; setAgOpen(!agCollapsed); }}
-                    accessibilityLabel={`subAgent ${all.length} 个，点按${agOpen ? "折叠" : "展开"}`}
-                  >
-                    <Text style={d.agHeadT}>
-                      subAgent {all.length} {agOpen ? "▾" : "▸"}
-                    </Text>
-                  </Pressable>
-                  {agOpen ? (
+            {s.status === "WORKING" ? (
+              <View style={d.liveMain}>
+                <LiveStatusLine
+                  summary={s.compacting ? "⟳ 正在压缩上下文…" : s.action_summary}
+                  startedAt={s.turn_started_at ?? s.updated_at}
+                  color={c.working}
+                  // 手机屏窄：状态栏不显 ctx（2026-09-16 用户反馈）——终端转轮行长文案
+                  // 只挤得下几个字，ctx 占用让位（桌面端不受限照常显示）
+                  tok={undefined}
+                />
+                <Pressable
+                  style={[d.stripBtnWarn, d.opRipple]}
+                  android_ripple={{ color: withA(c.waiting, 0.15), borderless: false }}
+                  onPress={() => store.send(external ? "COMMAND_EXT_STOP" : "COMMAND_STOP", { session_id: sid })}
+                >
+                  <Text style={d.stripBtnWarnT}>{external ? "■ 打断" : "■ 停止"}</Text>
+                </Pressable>
+              </View>
+            ) : null}
+            {/* 并行子 Agent 状态（#142 三轮 + #186 并入/紧凑化）：标题行即折叠开关
+                （「subAgent + 总数」+ 尾部箭头，总数保留、无「运行中」字样，走帧星只属于
+                具体条目）；条目行相对标题行缩进形成层级；agCollapsed 模块级记忆；条目行首
+                走帧星（SPIN_FRAMES 随 agTick 1s 重渲换帧，#148 铁律低频步进不用 Animated）、
+                完成态换 ✓ 定格；ended_at>0 才算结束（防 ended_at:0 假运行冻结读秒）。
+                #13 巡检：超 4 条溢出提示；#186 字号 12/11/11→11/10.5/10、行距收紧 */}
+            {(s?.subagents?.length ?? 0) > 0 ? (
+              <View style={d.agBox}>
+                {(() => {
+                  const all = s!.subagents!;
+                  const shown = all.slice(-4);
+                  const more = all.length - shown.length;
+                  const frame = SPIN_FRAMES[Math.floor(Date.now() / 1000) % SPIN_FRAMES.length];
+                  return (
                     <>
-                      {shown.map((a) => {
-                        const run = !((a.ended_at ?? 0) > 0);
-                        const ms = a.started_at > 0 ? Math.max(0, ((a.ended_at ?? 0) > 0 ? a.ended_at! : Date.now()) - a.started_at) : 0;
-                        const dur = !(a.started_at > 0) ? "" : ms < 60_000 ? `${Math.floor(ms / 1000)}s` : `${Math.floor(ms / 60_000)}m${String(Math.floor((ms % 60_000) / 1000)).padStart(2, "0")}s`;
-                        return (
-                          <View key={a.id} style={d.agRow}>
-                            {run ? (
-                              <Text style={[d.agSpin, { color: c.working }]}>{frame}</Text>
-                            ) : (
-                              <Text style={d.agDone}>✓</Text>
-                            )}
-                            <Text style={[d.agT, { color: run ? c.working : c.dim }]} numberOfLines={1}>
-                              {a.desc}
-                            </Text>
-                            {a.act ? (
-                              <Text style={[d.agAct, { color: run ? c.dim : c.faint }]} numberOfLines={1}>
-                                {a.act}
-                              </Text>
-                            ) : null}
-                            <Text style={[d.agTime, { color: run ? c.working : c.faint }]}>{dur}</Text>
-                          </View>
-                        );
-                      })}
-                      {more > 0 ? <Text style={d.agMore}>… 更早 {more} 条已收起</Text> : null}
+                      <Pressable
+                        style={d.agHead}
+                        hitSlop={{ top: 6, bottom: 4, left: 0, right: 0 }}
+                        android_ripple={{ color: c.tintSoft, borderless: false, radius: 8 }}
+                        onPress={() => { agCollapsed = !agCollapsed; setAgOpen(!agCollapsed); }}
+                        accessibilityLabel={`subAgent ${all.length} 个，点按${agOpen ? "折叠" : "展开"}`}
+                      >
+                        <Text style={d.agHeadT}>
+                          subAgent {all.length} {agOpen ? "▾" : "▸"}
+                        </Text>
+                      </Pressable>
+                      {agOpen ? (
+                        <>
+                          {shown.map((a) => {
+                            const run = !((a.ended_at ?? 0) > 0);
+                            const ms = a.started_at > 0 ? Math.max(0, ((a.ended_at ?? 0) > 0 ? a.ended_at! : Date.now()) - a.started_at) : 0;
+                            const dur = !(a.started_at > 0) ? "" : ms < 60_000 ? `${Math.floor(ms / 1000)}s` : `${Math.floor(ms / 60_000)}m${String(Math.floor((ms % 60_000) / 1000)).padStart(2, "0")}s`;
+                            return (
+                              <View key={a.id} style={d.agRow}>
+                                {run ? (
+                                  <Text style={[d.agSpin, { color: c.working }]}>{frame}</Text>
+                                ) : (
+                                  <Text style={d.agDone}>✓</Text>
+                                )}
+                                <Text style={[d.agT, { color: run ? c.working : c.dim }]} numberOfLines={1}>
+                                  {a.desc}
+                                </Text>
+                                {a.act ? (
+                                  <Text style={[d.agAct, { color: run ? c.dim : c.faint }]} numberOfLines={1}>
+                                    {a.act}
+                                  </Text>
+                                ) : null}
+                                <Text style={[d.agTime, { color: run ? c.working : c.faint }]}>{dur}</Text>
+                              </View>
+                            );
+                          })}
+                          {more > 0 ? <Text style={d.agMore}>… 更早 {more} 条已收起</Text> : null}
+                        </>
+                      ) : null}
                     </>
-                  ) : null}
-                </>
-              );
-            })()}
+                  );
+                })()}
+              </View>
+            ) : null}
           </View>
         ) : null}
         {(s.pending_inputs?.length ?? 0) > 0 ? (
@@ -2829,12 +2837,17 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
   statusSpin: { fontSize: 14, fontWeight: "700" },
   statusText: { flex: 1, fontSize: 12.5, fontWeight: "600" },
   statusTime: { color: c.faint, fontSize: 11.5, fontVariant: ["tabular-nums"] },
-  // 工作状态行（对话流内，类 CLI）+ 其下方的排队注入消息
+  // 工作状态盒（对话流内，类 CLI）+ 其下方的排队注入消息。
+  // #186 改 column：主状态行（liveMain）+ 并行子 Agent 块（agBox）同盒收拢；
+  // marginBottom 10 承接原 agBox 的底部间距（与 pendWrap marginTop 8 叠加 18）。含子
+  // Agent 的路径间距与旧版一致；「WORKING 无子 Agent + 排队消息」组合由旧 8 变 18——
+  // 各路径底部节奏统一为 18，有意为之（审查确认非功能问题）
   liveRow: {
-    flexDirection: "row", alignItems: "center", gap: 8,
+    flexDirection: "column",
     backgroundColor: c.panel, borderWidth: 1, borderColor: c.line,
-    borderRadius: 12, paddingHorizontal: 11, paddingVertical: 8, marginTop: 10,
+    borderRadius: 12, paddingHorizontal: 11, paddingVertical: 8, marginTop: 10, marginBottom: 10,
   },
+  liveMain: { flexDirection: "row", alignItems: "center", gap: 8 },
   pendWrap: { flexDirection: "column", gap: 6, marginTop: 8, alignItems: "flex-end" },
   pendRow: {
     maxWidth: "86%", backgroundColor: c.tintSoft, borderWidth: 1, borderColor: c.line,
@@ -2998,21 +3011,24 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
   },
   todoDel: { width: 24, height: 22, alignItems: "center", justifyContent: "center" },
   todoDelT: { color: c.faint, fontSize: 12 },
-  // 子 Agent 状态块（#142 重设计）：主状态行下方的续行——去独立大框（原 panel2 盒），
-  // 无底无边细行直接贴 liveRow 之下；标题行即折叠开关（自包含触区）
-  agBox: { paddingHorizontal: 13, marginTop: 6, marginBottom: 10 },
-  agHead: { flexDirection: "row", alignItems: "center", gap: 6, paddingVertical: 4, alignSelf: "flex-start", borderRadius: 8, overflow: "hidden" },
-  agHeadT: { color: c.faint, fontSize: 11, letterSpacing: 0.4 },
+  // 子 Agent 状态块（#142 重设计 → #186 并入状态盒）：liveRow 盒内的续行块（无底无边，
+  // 贴主状态行下方）；标题行即折叠开关（自包含触区）；#186 紧凑化——字号 agT 12→11、
+  // agAct/agHeadT 11→10.5、agTime 11→10，条目行 paddingVertical 3→2、gap 7→6，
+  // 标题行 paddingVertical 4→3；间距节奏统一 18（见 liveRow 注释的排队消息路径说明）
+  agBox: { marginTop: 2 },
+  agHead: { flexDirection: "row", alignItems: "center", gap: 6, paddingVertical: 3, paddingLeft: 1, alignSelf: "flex-start", borderRadius: 8, overflow: "hidden" },
+  agHeadT: { color: c.faint, fontSize: 10.5, letterSpacing: 0.4 },
   // 运行中标记：走帧星（SPIN_FRAMES 随 agTick 1s 换帧，#148 低频步进）
-  agSpin: { fontSize: 11, fontWeight: "700", lineHeight: 14 },
-  agDone: { color: c.done, fontSize: 11, lineHeight: 14 },
-  // 条目行相对标题缩进 12（09-24 二轮：标题与具体项要有缩进层级）
-  agRow: { flexDirection: "row", alignItems: "center", gap: 7, paddingVertical: 3, paddingLeft: 12 },
-  agT: { flex: 1, fontSize: 12 },
-  agAct: { flex: 1, fontSize: 11 }, // #103 活性：与描述平分行宽，超长省略（HUD 风格当前动作）
-  agTime: { fontSize: 11, fontVariant: ["tabular-nums"] },
+  agSpin: { fontSize: 10.5, fontWeight: "700", lineHeight: 13 },
+  agDone: { color: c.done, fontSize: 10.5, lineHeight: 13 },
+  // 条目行相对标题缩进（09-24 二轮：标题与具体项要有缩进层级）：paddingLeft 13 对齐
+  // 标题行 paddingLeft 1，有效视觉缩进 12
+  agRow: { flexDirection: "row", alignItems: "center", gap: 6, paddingVertical: 2, paddingLeft: 13 },
+  agT: { flex: 1, fontSize: 11 },
+  agAct: { flex: 1, fontSize: 10.5 }, // #103 活性：与描述平分行宽，超长省略（HUD 风格当前动作）
+  agTime: { fontSize: 10, fontVariant: ["tabular-nums"] },
   // #13 巡检：超 4 条的溢出提示（原 slice(-4) 静默截断）
-  agMore: { color: c.faint, fontSize: 11, paddingVertical: 3, paddingLeft: 12 },
+  agMore: { color: c.faint, fontSize: 10.5, paddingVertical: 2, paddingLeft: 13 },
   histnote: { color: c.faint, fontSize: 11, textAlign: "center", marginBottom: 10 },
   trUser: {
     alignSelf: "flex-end", maxWidth: "85%", marginBottom: 10,
