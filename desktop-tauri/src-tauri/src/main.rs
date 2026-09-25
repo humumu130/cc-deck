@@ -623,6 +623,185 @@ fn kill_embedded_relay() {
     }
 }
 
+// ── #76/#196 relay 系统服务化（macOS launchd）：设置页「开机自启」开关背后 ──
+// 服务化 = relay 注册为 LaunchAgent（RunAtLoad + KeepAlive + 5s 节流重拉）。壳让位
+// 逻辑零新增：supervisor 的 need_spawn=「无本方子进程 && 端口无服务」，端口被服务
+// 占住即自然让位；服务停用后端口空出，supervisor 1.5s 内重拉内嵌实例（无缝回退）。
+// 与 deploy/mac-relay-launchd/ 脚本同款 plist 模板（终端用户没有仓库，逻辑内嵌壳里）。
+// Windows 版走任务计划器，后续另做——开关 cfg 门控只在 macOS 露出。
+const RELAY_SERVICE_LABEL: &str = "online.humumu.ccdeck.relay";
+
+#[cfg(target_os = "macos")]
+fn current_uid() -> u32 {
+    static UID: std::sync::OnceLock<u32> = std::sync::OnceLock::new();
+    *UID.get_or_init(|| {
+        std::process::Command::new("id").arg("-u").output().ok()
+            .and_then(|o| String::from_utf8_lossy(&o.stdout).trim().parse().ok())
+            .unwrap_or(501)
+    })
+}
+
+#[cfg(target_os = "macos")]
+fn launchctl(args: &[&str]) -> std::io::Result<std::process::Output> {
+    std::process::Command::new("launchctl").args(args).output()
+}
+
+/// 服务是否已注册进 launchd（print 命中即注册；plist 在但未 bootstrap 不算）
+#[cfg(target_os = "macos")]
+fn relay_service_registered() -> bool {
+    let target = format!("gui/{}/{}", current_uid(), RELAY_SERVICE_LABEL);
+    matches!(launchctl(&["print", &target]), Ok(o) if o.status.success())
+}
+
+/// 生成 launchd plist（node/脚本/数据目录全用本机解析出的绝对路径——launchd 环境
+/// 极简，不留运行时猜测）。与 enable.sh 同模板：不传 CCR_PARENT_PID（服务化模式，
+/// relay parentPid=0 自动跳过父进程轮询）
+#[cfg(target_os = "macos")]
+fn write_relay_service_plist(app: &tauri::AppHandle) -> Result<std::path::PathBuf, String> {
+    let node = node_path().ok_or("未检测到 Node.js 运行时——relay 服务化需要它")?;
+    let node = node.to_string_lossy().into_owned();
+    let res = app.path().resource_dir().map_err(|e| e.to_string())?;
+    let abs = |p: std::path::PathBuf| {
+        let c = std::fs::canonicalize(&p).unwrap_or(p);
+        c.to_string_lossy().into_owned()
+    };
+    let script = abs(res.join("resources").join("relay.mjs"));
+    if !std::path::Path::new(&script).exists() {
+        return Err("内置 relay.mjs 缺失（安装包损坏？重装试试）".into());
+    }
+    let inject_cs = abs(res.join("resources").join("bin").join("inject.cs"));
+    let home = std::env::var("HOME").map_err(|_| "无法定位用户目录".to_string())?;
+    let data_dir = format!("{home}/.cc-deck/data");
+    let log = format!("{data_dir}/relay-service.log");
+    let port = relay_port();
+    let inject_env = if std::path::Path::new(&inject_cs).exists() {
+        format!("    <key>CCR_INJECT_CS</key>\n    <string>{inject_cs}</string>\n")
+    } else { String::new() };
+    let plist = format!(r#"<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>{RELAY_SERVICE_LABEL}</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>{node}</string>
+    <string>{script}</string>
+  </array>
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>CCR_PORT</key>
+    <string>{port}</string>
+    <key>CCR_DATA_DIR</key>
+    <string>{data_dir}</string>
+{inject_env}    <key>CCR_NOHOOK_IDLE_MS</key>
+    <string>60000</string>
+    <key>PATH</key>
+    <string>{home}/node/bin:/usr/local/bin:/usr/bin:/bin</string>
+  </dict>
+  <key>RunAtLoad</key>
+  <true/>
+  <key>KeepAlive</key>
+  <true/>
+  <key>ThrottleInterval</key>
+  <integer>5</integer>
+  <key>StandardOutPath</key>
+  <string>{log}</string>
+  <key>StandardErrorPath</key>
+  <string>{log}</string>
+</dict>
+</plist>
+"#);
+    let dir = std::path::Path::new(&home).join("Library").join("LaunchAgents");
+    std::fs::create_dir_all(&dir).map_err(|e| format!("创建 LaunchAgents 失败：{e}"))?;
+    let path = dir.join(format!("{RELAY_SERVICE_LABEL}.plist"));
+    std::fs::write(&path, plist).map_err(|e| format!("写 plist 失败：{e}"))?;
+    Ok(path)
+}
+
+/// 服务化状态（设置页开关读）：supported=平台支持；enabled=launchd 已注册；
+/// active=端口当前有 relay 在服务（无论谁属主）
+#[tauri::command]
+fn relay_service_status() -> Value {
+    #[cfg(target_os = "macos")]
+    {
+        serde_json::json!({
+            "supported": true,
+            "enabled": relay_service_registered(),
+            "active": port_listening(relay_port()),
+        })
+    }
+    #[cfg(not(target_os = "macos"))]
+    serde_json::json!({ "supported": false, "enabled": false, "active": port_listening(relay_port()) })
+}
+
+/// 服务化开关（阻塞最长约 8s 等 relay 起停，丢线程池防冻 UI）
+#[tauri::command]
+async fn relay_service_toggle(app: tauri::AppHandle, on: bool) -> Result<Value, String> {
+    #[cfg(not(target_os = "macos"))]
+    {
+        let _ = (app, on);
+        return Err("此平台暂不支持 relay 服务化（Windows 版规划中）".into());
+    }
+    #[cfg(target_os = "macos")]
+    {
+        tauri::async_runtime::spawn_blocking(move || relay_service_toggle_sync(&app, on))
+            .await
+            .map_err(|e| format!("切换任务失败：{e}"))?
+    }
+}
+
+#[cfg(target_os = "macos")]
+fn relay_service_toggle_sync(app: &tauri::AppHandle, on: bool) -> Result<Value, String> {
+    let uid = current_uid();
+    let target = format!("gui/{uid}/{RELAY_SERVICE_LABEL}");
+    let port = relay_port();
+    if on {
+        // 端口被非本方 relay 占着且服务未注册（插件 supervisor/手动实例）：硬上=服务
+        // EADDRINUSE 崩溃循环。先停它再开（本方内嵌实例不算，下一步会被我们停掉）
+        let ours = EMBEDDED_RELAY.lock().unwrap().is_some();
+        if !ours && port_listening(port) && !relay_service_registered() {
+            return Err("端口上的 relay 由外部程序托管——先停它再开启系统服务".into());
+        }
+        // ① 停本方内嵌实例（WANT 先撤防 supervisor 抢拉；kill 后端口空出）
+        RELAY_WANTED.store(false, Ordering::SeqCst);
+        if let Some(mut c) = EMBEDDED_RELAY.lock().unwrap().take() {
+            let _ = c.kill();
+            let _ = c.wait();
+            println!("[relay-service] embedded instance stopped for handover");
+        }
+        // ② 写 plist + 幂等重挂 + 立即拉起
+        let plist = write_relay_service_plist(app)?;
+        let plist_str = plist.to_string_lossy().into_owned();
+        let _ = launchctl(&["bootout", &target]); // 已注册时先摘（幂等）
+        launchctl(&["bootstrap", &format!("gui/{uid}"), &plist_str])
+            .map_err(|e| format!("launchd 注册失败：{e}"))?;
+        let _ = launchctl(&["enable", &target]);
+        launchctl(&["kickstart", "-k", &target])
+            .map_err(|e| format!("launchd 拉起失败：{e}"))?;
+        // ③ 等端口就绪（服务实例起 node ~1-2s）
+        wait_port_ready(port, 8000);
+        if !port_listening(port) {
+            return Err("服务已注册但端口迟迟未就绪——看 ~/.cc-deck/data/relay-service.log".into());
+        }
+        // ④ WANT 复位：端口在服务，supervisor 只会让位不会重复拉
+        RELAY_WANTED.store(true, Ordering::SeqCst);
+        println!("[relay-service] enabled, service owns port {port}");
+    } else {
+        // 停用：bootout + 清 plist；WANT=true 让 supervisor 在端口空出后 1.5s 内
+        // 自动重拉内嵌实例（无缝回退，用户无感）
+        let _ = launchctl(&["bootout", &target]);
+        let home = std::env::var("HOME").unwrap_or_default();
+        let _ = std::fs::remove_file(
+            std::path::Path::new(&home).join("Library").join("LaunchAgents").join(format!("{RELAY_SERVICE_LABEL}.plist")),
+        );
+        RELAY_WANTED.store(true, Ordering::SeqCst);
+        wait_port_ready(port, 8000);
+        println!("[relay-service] disabled, shell takes over port {port}");
+    }
+    Ok(relay_service_status())
+}
+
 /// 构建器按构建类型分流：单实例插件只在正式构建注册——dev 壳要与已装的正式版
 /// 并行运行做联调（macOS 上该插件同 identifier 互踢：dev 实例启动即检测到正式版
 /// 在跑，回调后自退，无法在装了正式版的机器上起 dev 壳自测）
@@ -649,7 +828,7 @@ fn main() {
         .plugin(tauri_plugin_dialog::init())
         // #8 全局快捷键（呼出/收起）：默认键在 setup 注册，网页侧可经 set_toggle_shortcut 改绑
         .plugin(tauri_plugin_global_shortcut::Builder::new().build())
-        .invoke_handler(tauri::generate_handler![probe_local, open_external, open_path, probe_path, save_artifact, relay_status, relay_toggle, set_toggle_shortcut])
+        .invoke_handler(tauri::generate_handler![probe_local, open_external, open_path, probe_path, save_artifact, relay_status, relay_toggle, relay_service_status, relay_service_toggle, set_toggle_shortcut])
         .setup(|app| {
             if build_tray(app).is_ok() {
                 TRAY_OK.store(true, Ordering::SeqCst);

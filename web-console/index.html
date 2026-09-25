@@ -2333,6 +2333,16 @@
             <button id="gpRelayNameEdit" class="gp-mini-btn" style="flex:none" title="修改本机名称">✎</button>
             <button id="gpRelayNameSave" class="gp-mini-btn" style="display:none;flex:none">保存</button>
           </div>
+          <!-- #196 relay 服务化开关（先 macOS）：开机自启 + 崩溃自拉起，不依赖 CC Deck 开着。
+               默认隐藏：仅桌面壳且壳带 relay_service_* 命令（新壳）才显示——浏览器/旧壳
+               invoke 失败一律藏卡，不误导 -->
+          <div class="gp-card gp-rows" id="gpSvcCard" style="display:none;margin-bottom:10px">
+            <div class="gp-row gp-plug-row">
+              <span class="gi"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3.4 20.6 8 12 12.6 3.4 8Z"/><path d="m3.4 12.4 8.6 4.6 8.6-4.6"/><path d="m3.4 16.6 8.6 4.6 8.6-4.6"/></svg></span>
+              <span class="gp-plug-t"><span class="gp-plug-n">开机自启（系统服务）</span><span class="gp-plug-d">开机即有 relay，手机随时可连，不依赖 CC Deck 开着；切换会短暂重启 relay，各端秒级自动恢复</span></span>
+              <div class="lever" id="gpSvcLever" style="--n:2"><i class="lever-thumb"></i><button type="button" class="lever-opt" data-i="0">关</button><button type="button" class="lever-opt" data-i="1">开</button></div>
+            </div>
+          </div>
           <div class="gp-sec"><svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9 5.5 10.5 4h3L15 5.5"/><rect x="4" y="5.5" width="16" height="15" rx="3"/><path d="M8.5 11h7M8.5 15h4.5"/></svg>已配对设备</div>
           <div class="gp-card gp-peers">
             <div id="gpPeersList" class="gp-peers-list"><div class="gp-peers-empty">连接服务器后可管理</div></div>
@@ -6190,7 +6200,7 @@ function setGearSection(sec) {
     if (nav) nav.classList.toggle("on", on);
   }
   try { if (!window.__ccGearPin) localStorage.setItem(GP_SEC_KEY, sec); } catch {} // ?gear=1 深链会话不污染分页记忆（顺手项①）
-  if (sec === "relay") { probeRelayStat(); refreshPeers(); } // 设备清单随 relay 页可见时静默刷新（议题①）
+  if (sec === "relay") { probeRelayStat(); refreshPeers(); loadRelaySvc(); } // 设备清单随 relay 页可见时静默刷新（议题①）+ #196 服务化开关状态
   if (sec === "plug") loadPluginCfg(); // #448 插件三开关随插件页可见时拉取本机配置
 }
 document.querySelectorAll(".gp-nav-item").forEach((b) => { b.onclick = () => { setGearSection(b.dataset.sec); }; });
@@ -8947,6 +8957,47 @@ async function probeRelayStat() {
   }
   txt.textContent = "未检测到";
 }
+
+// ── #196 relay 服务化开关（先 macOS）：状态/切换走壳命令 relay_service_status /
+//    relay_service_toggle（launchd 注册与停用在壳侧实现，见 main.rs）。可见性三重门：
+//    浏览器（无 __TAURI__）、旧壳（命令未注册 invoke 会 reject）、不支持平台
+//   （supported:false）→ 一律藏卡不误导。切换期间 relay 会重启（内嵌↔服务交接），
+//    本页正是 relay 托管的——ws 断线自动重连兜底，invoke 应答走壳不受影响 ──
+let svcCfg = null;      // null=不可用/未加载；否则 {supported,enabled,active}
+let svcBusy = false;
+function svcRender() {
+  const card = $("gpSvcCard");
+  if (!card) return;
+  card.style.display = svcCfg && svcCfg.supported ? "" : "none";
+  if (svcCfg) setLever($("gpSvcLever"), svcCfg.enabled ? 1 : 0);
+}
+async function loadRelaySvc() {
+  if (svcBusy || !window.__TAURI__?.core?.invoke) return;
+  try {
+    const st = await window.__TAURI__.core.invoke("relay_service_status");
+    svcCfg = st && typeof st === "object" ? st : null;
+  } catch { svcCfg = null; } // 旧壳：命令未注册
+  svcRender();
+}
+$("gpSvcLever")?.querySelectorAll(".lever-opt").forEach((b) => {
+  b.onclick = async () => {
+    if (!svcCfg || svcBusy) return;
+    const want = b.dataset.i === "1";
+    if (!!svcCfg.enabled === want) return;
+    svcBusy = true;
+    toast(want ? "正在注册系统服务…（约数秒）" : "正在停用系统服务…", 4000);
+    try {
+      const st = await window.__TAURI__.core.invoke("relay_service_toggle", { on: want });
+      svcCfg = st && typeof st === "object" ? st : svcCfg;
+    } catch (e) {
+      toast("切换失败：" + String((e && (e.message || e)) || e).slice(0, 90), 6000);
+    } finally {
+      svcBusy = false;
+      svcRender();
+      probeRelayStat(); // relay 属主刚换手（内嵌↔服务），状态行同步刷
+    }
+  };
+});
 
 // ── #448 设置「插件」页：三开关（任务调度强化/插入问答通知/恢复点）读写本机 relay
 //    /api/plugin-config（背后是 ~/.cc-deck/config.json，guard hooks 的单一事实源）。
