@@ -7109,16 +7109,22 @@ document.addEventListener("paste", (ev) => {
 (function () {
   const types = (ev) => (ev.dataTransfer && ev.dataTransfer.types ? [...ev.dataTransfer.types] : []);
   const hasFiles = (ev) => types(ev).includes("Files");
+  // #179 三轮：WebKit（Safari/WKWebView）对浏览器外发起的文件拖动（访达/桌面），
+  // dragenter/dragover 阶段 dataTransfer.types 为空（drop 时才暴露）——只认显式
+  // "Files" 才 preventDefault 的话 drop 永不触发 =「拖本地文件无反应」真因（而
+  // 浏览器内拖图片 types 正常带 Files，故二轮时 uri 提示项 ✓、本地文件项 ✗）。
+  // types 为空一律当潜在文件拖放行；drop 阶段各引擎都会给真实载荷，在那里分流。
+  const maybeFiles = (ev) => hasFiles(ev) || types(ev).length === 0;
   let depth = 0;
   const unmask = () => { depth = 0; document.body.classList.remove("file-drag-over"); };
   document.addEventListener("dragenter", (ev) => {
-    if (!hasFiles(ev)) return;
+    if (!maybeFiles(ev)) return;
     ev.preventDefault();
     depth++;
     document.body.classList.add("file-drag-over");
   });
   document.addEventListener("dragover", (ev) => {
-    if (!hasFiles(ev)) return;
+    if (!maybeFiles(ev)) return;
     ev.preventDefault();
     ev.dataTransfer.dropEffect = "copy";
   });
@@ -7139,7 +7145,12 @@ document.addEventListener("paste", (ev) => {
     ev.preventDefault();
     unmask();
     const files = ev.dataTransfer.files && ev.dataTransfer.files.length ? [...ev.dataTransfer.files] : [];
-    if (!files.length) return;
+    if (!files.length) {
+      // types 声称有 Files 但 drop 载荷为空（跨源保护/拖拽源不提供数据）——不再静默，
+      // 给出口径明确的指引（此前这里零反馈，是「无反应」的另一张静默面孔）
+      toast("拖入未能读取到文件内容，请改用粘贴（⌘V/Ctrl+V）或输入框旁的附件按钮", 4200);
+      return;
+    }
     const sel = selSession();
     if (!sel) { toast("先在左侧选择一个会话"); return; }
     if (!imgSessionOk(sel.s)) {
