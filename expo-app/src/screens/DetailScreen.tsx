@@ -1752,6 +1752,10 @@ export default function DetailScreen({ sid, onBack, initialView, ref }: { sid: s
   const ctxUsed = s.context_usage ?? 0;
   const ctxLimit = s.context_limit ?? CONTEXT_LIMIT_FALLBACK;
   const ctxPct = contextPct(ctxUsed, ctxLimit);
+  // #159 方案A：ctx 百分比只在报警档亮色（60-84 黄 / ≥85 红），正常档归入 dim——
+  // 与源缝成一句单色元信息后，绿色常亮反而是唯一的高噪声源
+  const ctxLevel = contextLevel(ctxUsed, ctxLimit);
+  const ctxTone = ctxLevel === "waiting" ? c.waiting : ctxLevel === "working" ? c.working : c.dim;
   // 历史托管会话：有 SDK 会话 id 就能 resume 复活（发消息即恢复），否则只读
   const resumable = !external && !!s.relay_session_id;
   const canCmd = snap.connected && (!s.historical || external || resumable);
@@ -1931,9 +1935,10 @@ export default function DetailScreen({ sid, onBack, initialView, ref }: { sid: s
           拉回底部（视口收缩旧 transform 方案没有的问题）。沿用 2026-09-16 调定的
           -2px 藏缝余量（键盘压住输入栏底 2px 不露缝） */}
       <View style={{ flex: 1, paddingBottom: kb > 0 ? kb - 2 : 0 }}>
-      {/* 头部（用户 22:14/22:20 拍板口径，#155 再收敛）：R1 = ‹ + 标题主角；R2 = 元信息行——
-          源·ctx 水位左聚顺排（原时长已删：消息时间戳已提供时间感，统计区保留耗时全量），
-          思考开关（半高）右锚最右；编辑按钮移除。可点元素统一圆角 8/tintSoft 底无边框 */}
+      {/* 头部（用户 22:14/22:20 拍板口径，#155 收敛，#159 方案A再收敛）：R1 = ‹ + 标题主角；
+          R2 = 元信息行——源·ctx 缝成一句单色元信息（·分隔，全 dim 10px 一档字号；ctx 百分比
+          仅报警档亮色），设置簇右锚（原时长已删：消息时间戳已提供时间感，统计区保留耗时全量）。
+          可点元素统一圆角 8/tintSoft 底无边框；#164 红线：标题可用宽度不动 */}
       <View style={d.head}>
         <Pressable style={d.back} android_ripple={{ color: c.tintSoft, borderless: false }} onPress={onBack} hitSlop={8}>
           <Svg width={14} height={14} viewBox="0 0 24 24" fill="none" stroke={c.dim} strokeWidth={2.6} strokeLinecap="round" strokeLinejoin="round">
@@ -1943,15 +1948,17 @@ export default function DetailScreen({ sid, onBack, initialView, ref }: { sid: s
         <View style={{ flex: 1, minWidth: 0 }}>
           <Text style={[d.title, { flexShrink: 1 }]} numberOfLines={1} ellipsizeMode="tail">{s.title || "未命名会话"}</Text>
           <View style={d.headMeta}>
-            {srcMeta ? <Text style={[d.sub, { flexShrink: 1, marginRight: 2 }]} numberOfLines={1}>{srcMeta}</Text> : null}
-            {ctxUsed > 0 ? (
-              <View style={d.ctxGroup}>
-                <Text style={d.ctxLabel}>ctx</Text>
-                <View style={d.ctxBar}>
-                  <View style={{ width: `${ctxPct}%`, height: 3, borderRadius: 1.5, backgroundColor: c[contextLevel(ctxUsed, ctxLimit)] }} />
-                </View>
-                <Text style={[d.ctxPct, { color: c[contextLevel(ctxUsed, ctxLimit)] }]}>{ctxPct}%</Text>
-              </View>
+            {/* #159 方案A：源·ctx 一句话（"源104 · 35%"）替代 ctx 标签+30px 水位条+
+                常亮分级色——一行只留一档字号一种形态；水位信息百分比已足够（列表卡
+                mini 条、统计区仍有全量），ctxTone 只在 60-84 黄 / ≥85 红报警 */}
+            {srcMeta || ctxUsed > 0 ? (
+              <Text style={[d.sub, { flexShrink: 1 }]} numberOfLines={1}>
+                {srcMeta}
+                {srcMeta && ctxUsed > 0 ? " · " : ""}
+                {ctxUsed > 0 ? (
+                  <Text style={{ color: ctxTone, fontVariant: ["tabular-nums"] }}>{ctxPct}%</Text>
+                ) : null}
+              </Text>
             ) : null}
             {/* #36 设置簇（右锚）：权限胶囊 + 思考开关成组——同为会话级 14px 小胶囊，
                 形态语言一致。权限胶囊是"状态灯"：标准=幽灵盾标（低噪声保锚点）、
@@ -2071,9 +2078,6 @@ export default function DetailScreen({ sid, onBack, initialView, ref }: { sid: s
                   accessibilityLabel={s.remote_mode ? "远程审批：已开，权限确认挂起到手机" : "远程审批：已关，权限确认在终端本地"}
                 >
                   <Text style={[d.thinkToggleT, s.remote_mode && d.thinkToggleTOn]}>审批</Text>
-                  <View style={[d.thinkSwitch, s.remote_mode && d.thinkSwitchOn]}>
-                    <View style={[d.thinkSwitchKnob, s.remote_mode && { alignSelf: "flex-end" }]} />
-                  </View>
                 </Pressable>
               ) : null}
               <Pressable
@@ -2084,9 +2088,6 @@ export default function DetailScreen({ sid, onBack, initialView, ref }: { sid: s
                 accessibilityLabel={showThink ? "思考过程显示，已开" : "思考过程显示，已关"}
               >
                 <Text style={[d.thinkToggleT, showThink && d.thinkToggleTOn]}>思考</Text>
-                <View style={[d.thinkSwitch, showThink && d.thinkSwitchOn]}>
-                  <View style={[d.thinkSwitchKnob, showThink && { alignSelf: "flex-end" }]} />
-                </View>
               </Pressable>
             </View>
           </View>
@@ -2866,10 +2867,12 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
     backgroundColor: c.panel, borderWidth: 1, borderColor: c.line, elevation: 4,
   },
   jumpFabT: { color: c.dim, fontSize: 16, fontWeight: "700", lineHeight: 18, marginTop: -1 },
-  // 头部（用户拍板口径）：R1 = 返回+标题；R2 = 元信息行（源·时长·ctx 左聚 + 半高思考右锚），总高 ~60px
+  // 头部（用户拍板口径）：R1 = 返回+标题；R2 = 元信息行（源·ctx 一句话左聚 + 胶囊簇右锚）。
+  // #159 方案A：标题↔元信息视觉间距 6→9pt（marginTop 3→6），head paddingVertical 6→4
+  // 补偿——总高 49→48px 不增反减（#108 键盘顶升契约不受影响）
   head: {
     flexDirection: "row", alignItems: "center", gap: 8,
-    paddingHorizontal: 12, paddingVertical: 6, borderBottomWidth: 1, borderBottomColor: c.line,
+    paddingHorizontal: 12, paddingVertical: 4, borderBottomWidth: 1, borderBottomColor: c.line,
   },
   // 返回钮：圆角 8 / tintSoft 底（与思考开关同语言）；SVG chevron 保笔画一致；overflow hidden 裁 ripple
   back: {
@@ -2878,15 +2881,11 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
   },
   hintText: { color: c.faint },
   title: { color: c.text, fontSize: 15, fontWeight: "600", lineHeight: 20 },
-  // R2 元信息行：源·时长·ctx 水位顺排左聚，思考开关 marginLeft:auto 右锚
-  headMeta: { flexDirection: "row", alignItems: "center", marginTop: 3 },
-  // 副信息行（头部专用）：次级信息统一档 10px dim
+  // R2 元信息行：源·ctx 一句话左聚（#159 缝合，原 ctx 标签/水位条/独立字号样式已废），
+  // 设置簇 marginLeft:auto 右锚
+  headMeta: { flexDirection: "row", alignItems: "center", marginTop: 6 },
+  // 副信息行（头部专用）：次级信息统一档 10px dim（#159：源与 ctx 同档同色，报警档才异色）
   sub: { color: c.dim, fontSize: 10, lineHeight: 13 },
-  // 上下文占用（行内组）：标签 + 30px 细条 + 百分比，颜色按占用分级
-  ctxGroup: { flexDirection: "row", alignItems: "center", gap: 4, marginLeft: 8, flexShrink: 0 },
-  ctxLabel: { color: c.faint, fontSize: 9.5, fontWeight: "600" },
-  ctxBar: { width: 30, height: 3, borderRadius: 1.5, backgroundColor: c.tintSoft, overflow: "hidden" },
-  ctxPct: { fontSize: 9.5, fontVariant: ["tabular-nums"] },
   // 统计视图卡片（原 StatsModal 内容平铺）
   statsCard: {
     borderRadius: 14, backgroundColor: c.panel, borderWidth: 1, borderColor: c.line, padding: 16,
@@ -2894,8 +2893,9 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
   statRow: { flexDirection: "row", justifyContent: "space-between", gap: 14, paddingVertical: 8, borderTopWidth: 1, borderTopColor: withA(c.dim, 0.12) },
   statRowK: { color: c.dim, fontSize: 13 },
   statRowV: { color: c.text, fontSize: 13, fontVariant: ["tabular-nums"], textAlign: "right", flex: 1 },
-  // 思考开关（R2 元信息行最右）：用户要求高度减半（26→14），文字 + 迷你滑块随档缩小；
-  // 触达靠 hitSlop 补偿，圆角 8/tintSoft 底与返回钮同语言
+  // 思考/审批开关（R2 设置簇）：#159 方案A 去迷你滑块，改与权限胶囊同形文字胶囊——
+  // h14/r7/tintSoft 素底（off）+ 品牌蓝描边亮底（on），一行只剩一种胶囊形态；
+  // 触达靠 hitSlop 补偿，圆角 8 语感与返回钮同
   thinkToggle: {
     height: 14, borderRadius: 7, paddingHorizontal: 6, backgroundColor: c.tintSoft,
     borderWidth: 1, borderColor: "transparent", alignItems: "center", justifyContent: "center",
@@ -2904,13 +2904,6 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
   thinkToggleOn: { borderColor: withA(c.brandA, 0.4), backgroundColor: c.tintStrong },
   thinkToggleT: { fontSize: 9, lineHeight: 10, color: c.dim },
   thinkToggleTOn: { color: c.brandA, fontWeight: "600" },
-  // 开关条随 chip 减半同步缩（26x14 → 20x10）
-  thinkSwitch: {
-    width: 20, height: 10, borderRadius: 5, backgroundColor: c.line,
-    alignItems: "flex-start", justifyContent: "center", paddingHorizontal: 1,
-  },
-  thinkSwitchOn: { backgroundColor: c.brandA, alignItems: "flex-end" },
-  thinkSwitchKnob: { width: 8, height: 8, borderRadius: 4, backgroundColor: "#fff" },
   // 固定工具区：跟随头部、不随转录滚动，底部一条分隔线与头部呼应（paddingTop 收紧贴头部）
   fixedBar: { paddingHorizontal: 14, paddingTop: 5, borderBottomWidth: 1, borderBottomColor: c.line },
   strip: {
