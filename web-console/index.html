@@ -1584,10 +1584,14 @@
   }
   #dhead { padding: 12px 20px 0; border-bottom: 1px solid var(--border); background: var(--glass-soft); flex: none; }
   #backBtn { display: none; margin-left: -8px; margin-bottom: 6px; }
-  .dhead-row { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+  /* #197 标题后随元信息（源徽标+路径+水位）改与标题底部对齐（原垂直居中视觉重心偏高） */
+  .dhead-row { display: flex; align-items: flex-end; gap: 12px; flex-wrap: wrap; }
   #dtitle { font-size: 16px; font-weight: 700; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; } /* #67漏项 17→16；#176 并行后过长收缩省略 */
-  /* #176 元信息并入名称行：占名称后剩余宽度（水位 margin-left:auto 贴行尾），窄屏内部 wrap 回落 */
-  #dsub { color: var(--dim); font-size: 12px; display: flex; gap: 12px; flex-wrap: wrap; align-items: center; flex: 1 1 auto; min-width: 0; }
+  /* #176 元信息并入名称行：占名称后剩余宽度（水位 margin-left:auto 贴行尾），窄屏内部 wrap 回落；
+     #197 字号 12→11 再小一档（与标题拉开层级） */
+  #dsub { color: var(--dim); font-size: 11px; display: flex; gap: 12px; flex-wrap: wrap; align-items: center; flex: 1 1 auto; min-width: 0; }
+  /* #197 head 内源徽标再小一档（9→8px）：只作用详情头，列表卡统计行同款徽标口径不动 */
+  #dsub .src-badge { font-size: 8px; padding: 1px 4px; }
   /* R1 时长弱化小字（对齐手机 d.sub：跟在标题后，dim 不抢视觉） */
   .dhead-row .elapsed { color: var(--dim); font-weight: 400; font-size: 12px; white-space: nowrap; }
   /* #41web 路径过长时不换行挤第三行，而是收缩省略（完整路径在 title），给右端水位/chip 让位 */
