@@ -1,0 +1,2537 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>cc-deck · 团队模式完整形态 v7.1 —— 增补：⋯ 收纳 · 联动总览 · 输出物升常驻</title>
+<style>
+  /* 设计 token 直接取自现网 web-console（桌面/EXE/Mac 同码）与手机 App theme.ts：
+     桌面/网页帧用 console 的蓝黑底+暖橙品牌色；手机帧用 App 的蓝紫体系——
+     团队模式的每个视图都长在宿主既有设计系统里，不另造皮肤 */
+  :root {
+    --bg: #050B12; --bg-main: #0A0F17; --panel: #0B141F; --panel-2: #101B2B;
+    --border: #1B2739; --side-line: rgba(148,163,190,.08); --side-bg: #04080E;
+    --text: #C9D3E0; --text-strong: #E7EEF8; --dim: #7E8BA3; --faint: #55617A;
+    --card-sub: #A9B5C7;
+    --brand: #D97757; --brand-2: #C96442; --brand-line: #D97757;
+    --working: #FFC53D; --waiting: #F0524F; --done: #2BD98F;
+    --mono: Consolas, "Cascadia Mono", "JetBrains Mono", monospace;
+    /* 手机帧（expo-app theme.ts DARK） */
+    --p-bg: #050B12; --p-panel: #0B1622; --p-panel2: #101F30;
+    --p-line: rgba(125,165,220,.10); --p-text: #E8F0FA; --p-dim: #7B93AE; --p-faint: #4A5F78;
+    --p-brand: #4D9FFF; --p-brand2: #7C6CF2;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    background:
+      radial-gradient(1200px 500px at 80% -10%, rgba(217,119,87,.08), transparent 60%),
+      radial-gradient(900px 400px at -10% 110%, rgba(201,100,66,.05), transparent 60%),
+      #050B12;
+    color: var(--text); font-family: -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif;
+    min-height: 100vh; padding: 40px 24px 60px;
+  }
+  .page { max-width: 1760px; margin: 0 auto; }
+  h1 { font-size: 20px; margin-bottom: 6px; color: var(--text-strong); }
+  .sub { color: var(--dim); font-size: 13px; margin-bottom: 10px; line-height: 1.7; max-width: 900px; }
+  .sub b { color: var(--text); }
+
+  .sh { font-size: 17px; margin: 46px 0 6px; display: flex; align-items: center; gap: 9px; color: var(--text-strong); }
+  .tag { font-size: 11px; padding: 3px 11px; border-radius: 20px; font-weight: 600; letter-spacing: 1px; }
+  .t-dt { background: rgba(217,119,87,.15); color: #E8985F; }
+  .t-ph { background: rgba(77,159,255,.15); color: #7CB8FF; }
+  .shsub { color: var(--dim); font-size: 12.5px; margin-bottom: 18px; line-height: 1.7; max-width: 860px; }
+  .shsub b { color: var(--text); }
+  .stage { display: flex; gap: 28px; align-items: flex-start; flex-wrap: wrap; justify-content: center; }
+
+  /* ---------- 桌面/网页窗口壳（现网 web-console 骨架） ---------- */
+  .winframe {
+    position: relative; width: 1280px; flex: 0 0 auto; max-width: 100%;
+    background: var(--bg-main); border: 1px solid var(--border); border-radius: 14px;
+    box-shadow: 0 24px 60px rgba(0,0,0,.55); overflow: hidden;
+  }
+  .chrome { display: flex; align-items: center; gap: 10px; padding: 9px 14px; background: var(--side-bg); border-bottom: 1px solid var(--side-line); }
+  .chrome .dots { display: flex; gap: 6px; }
+  .chrome .dots i { width: 11px; height: 11px; border-radius: 50%; }
+  .chrome .dots i:nth-child(1) { background: #ff5f57; }
+  .chrome .dots i:nth-child(2) { background: #febc2e; }
+  .chrome .dots i:nth-child(3) { background: #28c840; }
+  .chrome .tt { font-size: 12px; color: var(--dim); }
+  .chrome .btn { font-size: 11px; color: var(--dim); border: 1px solid var(--border); border-radius: 7px; padding: 3px 9px; }
+  .chrome .btn.ttl { border-color: rgba(217,119,87,.4); color: #E8985F; }
+
+  .dtbody { display: flex; height: 760px; position: relative; }
+
+  /* v6 桌面导航 rail：微信式纯图标竖栏（console token 体系；顶部绿点收纳原侧栏头的连接信息） */
+  .rail { width: 56px; flex: 0 0 auto; background: #030609; border-right: 1px solid var(--side-line); display: flex; flex-direction: column; align-items: center; padding: 12px 0; }
+  .rail .rdot { width: 8px; height: 8px; border-radius: 50%; background: var(--done); box-shadow: 0 0 6px rgba(43,217,143,.45); margin: 2px 0 16px; }
+  .rail .ri { position: relative; width: 40px; height: 40px; border-radius: 12px; display: flex; align-items: center; justify-content: center; font-size: 18px; color: var(--dim); cursor: pointer; margin-bottom: 4px; }
+  .rail .ri:hover { color: var(--text); background: rgba(148,163,190,.10); }
+  .rail .ri.on { color: var(--brand); background: rgba(217,119,87,.14); } /* 选中：图标品牌橙 + 淡橙圆底（两帧同款） */
+  .rail .rspring { flex: 1; } /* 弹簧之下的留白 = 未来域扩展位（通知 / 插件等），不提前占坑 */
+  .rail .rdot { cursor: pointer; } /* v7 连接三拆：绿点可点，弹连接快览面板 */
+  /* V8：rail 🔔 角标 = 未读 alert 数（红底数字；warn/info 不计入——防狼来了） */
+  .rail .ri .rbadge { position: absolute; top: 3px; right: 3px; min-width: 15px; height: 15px; line-height: 15px; border-radius: 8px; background: #e5484d; color: #fff; font-size: 9.5px; font-weight: 700; text-align: center; padding: 0 3px; box-shadow: 0 0 0 2px #030609; }
+  /* V8 增量②：卡面两层判定进度点（self 维度：✓ 绿 ✗ 红 ○ 灰）与修复中降饱和 */
+  .vpg { display: inline-flex; gap: 3px; align-items: center; margin-left: 6px; vertical-align: 1px; }
+  .vpg i { width: 9px; height: 9px; border-radius: 50%; box-shadow: 0 0 0 1px rgba(5,11,18,.6); }
+  .vpg i.p { background: var(--done); } .vpg i.f { background: #e5484d; } .vpg i.u { background: var(--faint); opacity: .55; }
+  .vsheet { display: inline-block; font-size: 10px; color: var(--working); border: 1px solid rgba(255,197,61,.45); background: rgba(255,197,61,.08); border-radius: 6px; padding: 1px 7px; margin-left: auto; flex: none; }
+  .tcard.fixing .ct, .tcard.fixing .cline, .tcard.fixing .cm { opacity: .55; } /* D14：原卡降饱和 + 角标，泳道不清空保持上下文（内容分层降不透明度，fixtag 角标保持全亮——整卡 opacity 会让小元素不可辨，视觉审查 V-22） */
+  .fixtag { display: inline-block; font-size: 9.5px; color: #e5484d; border: 1px dashed rgba(229,72,77,.55); border-radius: 5px; padding: 0 5px; margin-left: 6px; }
+  .tcard.repair { border-left: 2px dashed rgba(229,72,77,.5); margin-left: 14px; } /* 修复卡子卡：缩进 + 虚线左缘 + 来源 chip */
+  .pcard.fixing .ct, .pcard.fixing .cline, .pcard.fixing .cm { opacity: .55; } /* 手机帧同款分层降饱和（M11 数据同步） */
+  .pcard.repair { border-left: 2px dashed rgba(229,72,77,.5); margin-left: 14px; }
+  /* V8 增量⑤：消息 pane 历史条与断连补洞分隔卡 */
+  .histbar { text-align: center; font-size: 11px; color: var(--faint); padding: 7px 0 4px; }
+  .gapcard { text-align: center; font-size: 11px; color: var(--dim); background: var(--side-bg); border: 1px dashed var(--border); border-radius: 9px; padding: 5px 12px; margin: 8px auto; width: fit-content; }
+  /* V8 增量⑦：waiting_request 结构化确认条（替代 ConfirmFloat 正则派生——数据源 = waiting_request.questions 广播，端上零文本推导；pending_inputs 维持排队语义不进此处，工程审查 I1） */
+  .pconfirm { display: flex; align-items: center; gap: 10px; border: 1px solid rgba(255,197,61,.4); background: rgba(255,197,61,.07); border-radius: 10px; padding: 8px 12px; font-size: 12px; }
+  .pconfirm .pcbtn { font-size: 11.5px; color: var(--brand); border: 1px solid rgba(217,119,87,.5); border-radius: 7px; padding: 2px 10px; flex: none; }
+  .pconfirm .pcbtn.pri { background: var(--brand); color: #fff; border-color: transparent; } /* 允许 = 实心主按钮（V-18：高风险操作主次分明） */
+  .pconfirm .ctxlink { font-size: 10.5px; color: var(--faint); flex: none; }
+  .ppane .pconfirm .pcbtn { color: #7CB8FF; border-color: rgba(77,159,255,.5); } /* 手机帧确认条按钮 = App 品牌蓝（p token） */
+  .ppane .pconfirm .pcbtn.pri { background: var(--p-brand); color: #fff; border-color: transparent; }
+  /* v7 绿点快览面板：状态=绿点常驻的直达入口（配置=relay 卡、管理=连接与设备页） */
+  .cpanel { position: absolute; left: 64px; top: 14px; width: 240px; background: var(--panel); border: 1px solid var(--border); border-radius: 12px; padding: 10px 12px 12px; box-shadow: 0 16px 40px rgba(0,0,0,.5); z-index: 20; display: none; }
+  .cpanel.on { display: block; }
+  .cpanel h5 { font-size: 10.5px; color: var(--faint); padding: 2px 0 6px; letter-spacing: .3px; }
+  .cprow { display: flex; align-items: flex-start; gap: 8px; padding: 6px 0; border-bottom: 1px dashed var(--side-line); }
+  .cprow:last-of-type { border-bottom: none; }
+  .cprow .rdot2 { width: 8px; height: 8px; border-radius: 50%; background: var(--done); box-shadow: 0 0 6px rgba(43,217,143,.45); flex: 0 0 auto; margin-top: 4px; }
+  .cprow .cpt { font-size: 12px; color: var(--text); line-height: 1.5; }
+  .cprow .cpt .meta { font-size: 10.5px; color: var(--dim); margin-top: 1px; }
+  .cpbtn { display: block; text-align: center; font-size: 11.5px; padding: 6px 0; border-radius: 8px; border: 1px solid rgba(217,119,87,.4); color: #E8985F; margin-top: 6px; cursor: pointer; }
+
+  /* v6 地基版：占位空态（团队域「即将开放」；中列与详情区共用） */
+  .empty { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; padding: 0 16px; }
+  .empty .eico { font-size: 32px; opacity: .45; margin-bottom: 10px; }
+  .empty .et { font-size: 13.5px; font-weight: 600; color: var(--text); margin-bottom: 7px; }
+  .empty .ed { font-size: 11px; color: var(--faint); line-height: 1.8; max-width: 380px; }
+  .dtside .empty .ed { max-width: 176px; }
+
+  /* 侧栏：现网 #side 同款（实色深一档 + 弱分隔线 + 会话卡） */
+  .dtside { width: 236px; flex: 0 0 auto; background: var(--side-bg); border-right: 1px solid var(--side-line); padding: 14px 10px 12px; display: flex; flex-direction: column; }
+  .listbar { display: flex; align-items: center; padding: 0 4px 7px; }
+  .listbar h3 { font-size: 12px; color: var(--text-strong); font-weight: 600; }
+  .listbar .hbtn { margin-left: auto; font-size: 10.5px; color: var(--dim); border: 1px solid var(--border); border-radius: 999px; padding: 3px 9px; }
+
+  .grp { font-size: 10.5px; color: var(--faint); padding: 8px 6px 5px; letter-spacing: .4px; display: flex; align-items: center; gap: 6px; }
+  .grp .cnt { color: var(--dim); font-weight: 600; }
+  .scard {
+    background: var(--panel); border: 1px solid var(--border); border-radius: 14px;
+    padding: 9px 11px; margin-bottom: 7px; cursor: pointer;
+  }
+  .scard .r1 { display: flex; align-items: center; gap: 7px; font-size: 12.5px; color: var(--text-strong); font-weight: 600; }
+  .scard .r1 .dot { margin-left: auto; width: 7px; height: 7px; border-radius: 50%; flex: none; }
+  .dot.g { background: var(--done); } .dot.y { background: var(--working); } .dot.b { background: var(--faint); }
+  .scard .r2 { font-size: 10.5px; color: var(--card-sub); margin-top: 3px; }
+  .scard .r2 .f { color: var(--faint); }
+  .scard.on { border-color: rgba(217,119,87,.55); box-shadow: 0 0 0 1px rgba(217,119,87,.25); background: linear-gradient(135deg, rgba(217,119,87,.10), var(--panel) 55%); }
+  .scard.dim { opacity: .55; }
+  .newcard { border: 1px dashed var(--border); border-radius: 14px; text-align: center; color: var(--dim); font-size: 11.5px; padding: 7px 0; }
+
+  /* 详情区：现网 #detail 同款（返回头 + 两行标题 + Tab 指示条） */
+  .dtdetail { flex: 1; min-width: 0; display: flex; flex-direction: column; background: var(--bg-main); }
+  .dhead { padding: 14px 18px 0; border-bottom: 1px solid var(--side-line); }
+  .dhead .row1 { display: flex; align-items: center; gap: 10px; }
+  .dhead .back { color: var(--dim); font-size: 15px; }
+  .dhead .dt { font-size: 15.5px; font-weight: 600; color: var(--text-strong); }
+  .dhead .live { font-size: 11px; color: var(--done); }
+  .dhead .row1 .mini { margin-left: auto; font-size: 11px; padding: 4px 10px; border-radius: 999px; color: var(--dim); border: 1px solid var(--border); }
+  .dhead .row1 .mini.ttl { border-color: rgba(217,119,87,.4); color: #E8985F; }
+  .dhead .row2 { display: flex; gap: 10px; align-items: center; font-size: 11px; color: var(--dim); margin: 5px 0 9px; }
+  .dhead .row2 .sep { color: var(--faint); }
+  .dhead .ctxbar { width: 60px; height: 5px; border-radius: 3px; background: rgba(148,163,190,.14); overflow: hidden; }
+  .dhead .ctxbar i { display: block; height: 100%; background: linear-gradient(90deg, #E8985F, #C96442); }
+
+  .dtabs { display: flex; gap: 2px; align-items: center; position: relative; }
+  .dtabs .tab {
+    background: transparent; border: none; border-bottom: 2px solid transparent; border-radius: 0;
+    color: var(--dim); padding: 8px 16px; font-size: 13px; font-weight: 600; cursor: pointer;
+    font-family: inherit; display: flex; align-items: center; gap: 6px;
+  }
+  .dtabs .tab.active { color: var(--text); border-bottom-color: var(--brand-line); }
+  .dtabs .bdg {
+    display: inline-block; min-width: 15px; height: 15px; border-radius: 8px; background: var(--working);
+    color: #0B141F; font-size: 9.5px; font-weight: 700; line-height: 15px; text-align: center; padding: 0 4px;
+  }
+  .dtabs .sp { flex: 1; }
+  .dtabs .mini { font-size: 11.5px; padding: 5px 11px; border-radius: 999px; color: var(--dim); border: 1px solid var(--border); background: transparent; }
+  .dtabs .mini.ttl { border-color: rgba(217,119,87,.4); color: #E8985F; }
+
+  .dpane { display: none; flex: 1; min-height: 0; overflow: hidden; }
+  .dpane.on { display: flex; flex-direction: column; }
+
+  /* 消息 pane：现网消息流同款气泡层级 */
+  .msgflow { flex: 1; min-height: 0; padding: 14px 18px; overflow: hidden; }
+  .teamnotice { background: var(--panel); border: 1px dashed var(--border); color: var(--card-sub); border-radius: 10px; font-size: 11.5px; padding: 8px 10px; text-align: center; margin-bottom: 12px; }
+  .mrow { display: flex; margin-bottom: 8px; }
+  .mrow.me { justify-content: flex-end; }
+  .mbub { max-width: 72%; padding: 8px 12px; border-radius: 14px; font-size: 13px; line-height: 1.6; }
+  .mrow.leader .mbub { background: var(--panel); border: 1px solid var(--border); border-top-left-radius: 4px; }
+  .mrow.ai .mbub { background: var(--panel); border: 1px solid var(--border); border-top-left-radius: 4px; } /* 现网普通会话的 Claude 侧气泡（与 leader 同款层级） */
+  .mrow.me .mbub { background: rgba(217,119,87,.16); border: 1px solid rgba(217,119,87,.35); border-top-right-radius: 4px; }
+  .mwho { font-size: 10.5px; color: var(--dim); margin-bottom: 3px; }
+  .staffcard { margin-top: 8px; background: var(--panel-2); border: 1px solid var(--border); border-radius: 10px; padding: 9px 10px; }
+  .staffcard .m { display: flex; align-items: center; gap: 8px; font-size: 12.5px; padding: 3px 0; color: var(--text); }
+  .staffcard .role { color: var(--dim); font-size: 11px; }
+  .staffbtns { display: flex; gap: 8px; margin-top: 8px; }
+  .staffbtns span { flex: 1; text-align: center; font-size: 12px; padding: 6px 0; border-radius: 8px; }
+  .ok { background: var(--brand); color: #fff; } .adj { border: 1px solid var(--border); color: var(--card-sub); }
+  .ready { background: rgba(255,197,61,.06); border: 1px solid rgba(255,197,61,.45); border-top-left-radius: 4px; box-shadow: 0 0 0 3px rgba(255,197,61,.10); }
+  .ready .rt { color: var(--working); font-weight: 600; }
+  .ready .rd { color: var(--card-sub); font-size: 12px; margin-top: 2px; }
+  .readybtns { display: flex; gap: 8px; margin-top: 8px; }
+  .readybtns span { font-size: 12px; padding: 6px 12px; border-radius: 8px; text-align: center; }
+  .dl { background: var(--working); color: #2B2100; font-weight: 600; } .fb { border: 1px solid rgba(255,197,61,.35); color: var(--working); }
+  .typing { display: inline-flex; gap: 4px; padding: 4px 2px 0 14px; }
+  .typing i { width: 6px; height: 6px; border-radius: 50%; background: var(--dim); animation: blink 1.3s infinite; }
+  .typing i:nth-child(2) { animation-delay: .2s; } .typing i:nth-child(3) { animation-delay: .4s; }
+  @keyframes blink { 0%, 80%, 100% { opacity: .25; } 40% { opacity: 1; } }
+  .inputbar { flex: none; display: flex; gap: 8px; padding: 10px 18px 14px; border-top: 1px solid var(--side-line); }
+  .inputbar .box { flex: 1; background: var(--panel); border: 1px solid var(--border); border-radius: 10px; font-size: 12.5px; color: var(--faint); padding: 9px 12px; }
+  .inputbar .send { background: linear-gradient(135deg, #E8985F, #C96442); color: #fff; border-radius: 10px; padding: 0 18px; font-size: 13px; font-weight: 600; display: flex; align-items: center; }
+
+  /* 看板 pane：全宽横排泳道（宽屏形态；手机才是竖排） */
+  .boardwrap { flex: 1; min-height: 0; padding: 14px 18px 12px; display: flex; flex-direction: column; }
+  .ov { padding: 0 0 12px; }
+  .prog { display: flex; height: 8px; border-radius: 4px; overflow: hidden; background: var(--panel); }
+  .prog i { height: 100%; box-sizing: border-box; }
+  .prog i + i { border-left: 2px solid var(--bg); } /* 段间发丝缝：完成段色最深，靠缝隙保证五段可数而非靠色差（v7.1b 走查） */
+  /* 进度段色语义闭环：绿=进行中（对齐成员三色"绿=干活中"）· 品牌色=待验收（团队内部流转）·
+     琥珀=就绪待装机（与 Tab 徽标同色=需要你行动/注意，和"⚠ 停滞"同一族）；已完成恒为深蓝灰 */
+  .p-b { background: #33415C; } .p-r { background: var(--done); } .p-v { background: var(--brand); } .p-ok { background: var(--working); } .p-d { background: #283953; } /* 完成段提亮一档：原 #1B2739 在 #0B141F 轨道上几乎不可辨（v7.1b 走查发现） */
+  .ppane .p-v { background: var(--p-brand); } /* 手机帧的待验收段用手机品牌蓝 */
+  .ovleg { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 8px; }
+  .ovleg span { font-size: 10.5px; color: var(--dim); background: var(--panel); border-radius: 6px; padding: 2px 8px; }
+  .ovleg b { color: var(--text); font-weight: 600; }
+  .lg { display: inline-block; width: 7px; height: 7px; border-radius: 50%; margin-right: 5px; vertical-align: .5px; }
+  .lg-v { background: var(--brand); } .ppane .lg-v { background: var(--p-brand); }
+  .bcols { display: flex; gap: 10px; flex: 1; min-height: 0; }
+  .bcol { flex: 1 1 0; background: var(--panel); border: 1px solid var(--border); border-radius: 12px; padding: 8px; min-width: 0; }
+  .bcol h4 { font-size: 12px; color: var(--dim); font-weight: 600; padding: 2px 4px 8px; display: flex; align-items: center; gap: 6px; }
+  .bcol h4 b { color: var(--text); }
+  .bcol.go { border-color: rgba(255,197,61,.5); box-shadow: 0 0 0 1px rgba(255,197,61,.22); background: linear-gradient(180deg, rgba(255,197,61,.06), var(--panel) 40%); }
+  .bcol.go h4 { color: var(--working); }
+  .tcard { background: var(--panel-2); border: 1px solid var(--border); border-radius: 10px; padding: 9px 10px; margin-bottom: 8px; font-size: 12px; line-height: 1.5; color: var(--text); }
+  .tcard .ct { font-weight: 600; color: var(--text-strong); }
+  .tcard .cm { display: flex; gap: 6px; margin-top: 6px; flex-wrap: wrap; }
+  .tchip { font-size: 10.5px; padding: 2px 7px; border-radius: 6px; background: var(--bg-main); color: var(--card-sub); }
+  .tchip.br { color: #7FD1A8; }
+  .tagr { color: var(--working); font-size: 10.5px; }
+  .cline { font-size: 10.5px; color: var(--dim); margin-top: 5px; }
+  .cline .warn { color: var(--working); }
+  .arch { text-align: center; color: var(--dim); font-size: 11px; padding: 10px 0 4px; line-height: 1.9; }
+  .boardfoot { flex: none; font-size: 10.5px; color: var(--faint); margin-top: 8px; }
+
+  /* 成员 pane：名册卡片 */
+  .crewwrap { flex: 1; min-height: 0; padding: 14px 18px; overflow: hidden; }
+  .crewgrid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  .member { background: var(--panel); border: 1px solid var(--border); border-radius: 14px; padding: 12px 13px; }
+  .mh { display: flex; align-items: center; gap: 9px; }
+  .avatar { width: 34px; height: 34px; border-radius: 9px; background: var(--panel-2); display: flex; align-items: center; justify-content: center; font-size: 17px; flex: 0 0 auto; }
+  .mh .nm { font-size: 13.5px; font-weight: 600; color: var(--text-strong); }
+  .mh .rl { font-size: 10.5px; color: var(--dim); }
+  .pill { margin-left: auto; font-size: 10px; padding: 2.5px 9px; border-radius: 20px; flex: 0 0 auto; }
+  .pill.g { background: rgba(43,217,143,.12); color: var(--done); }
+  .pill.y { background: rgba(255,197,61,.12); color: var(--working); }
+  .pill.b { background: rgba(126,139,163,.15); color: var(--dim); }
+  .mb { margin-top: 8px; font-size: 11.5px; color: var(--card-sub); line-height: 1.7; }
+  .mb b { color: var(--text); font-weight: 500; }
+  .ctxrow { display: flex; align-items: center; gap: 8px; margin-top: 7px; }
+  .ctx { flex: 1; height: 5px; border-radius: 3px; background: rgba(148,163,190,.14); overflow: hidden; }
+  .ctx i { display: block; height: 100%; border-radius: 3px; background: linear-gradient(90deg, #E8985F, #C96442); }
+  .ctxlabel { font-size: 10px; color: var(--dim); flex: 0 0 auto; }
+  .mb .br, .pmb .br { white-space: nowrap; } /* 分支名等代码 token 不在内部断行 */
+  .mdl { font-family: var(--mono); font-size: 9.5px; color: var(--dim); background: var(--bg-main); border: 1px solid var(--border); border-radius: 4px; padding: 1px 5px; white-space: nowrap; } /* 成员模型 chip：异构厂商成员的可见标识 */
+  .pstaff .mdl, .pmember .mdl { color: var(--p-dim); background: var(--p-panel2); border-color: var(--p-line); } /* 手机帧的模型 chip 用手机 token */
+  .mact { display: flex; gap: 8px; margin-top: 8px; }
+  .mact span { flex: 1; text-align: center; font-size: 11px; padding: 5px 0; border-radius: 8px; border: 1px solid var(--border); color: var(--card-sub); }
+  .mact span.off { opacity: .4; }
+  .crewfoot { font-size: 10.5px; color: var(--dim); margin-top: 12px; text-align: center; line-height: 1.8; }
+
+  /* 活动 pane：时间线 */
+  .feedwrap { flex: 1; min-height: 0; padding: 14px 18px; overflow: hidden; }
+  .feedwrap h5 { font-size: 11px; color: var(--dim); margin-bottom: 8px; }
+  .fi { display: flex; gap: 9px; font-size: 11.5px; color: var(--card-sub); padding: 6px 0; border-bottom: 1px dashed var(--side-line); line-height: 1.5; }
+  .fi .t { color: var(--faint); flex: 0 0 36px; font-variant-numeric: tabular-nums; font-family: var(--mono); font-size: 10.5px; padding-top: 1px; }
+  .fi .e { flex: 0 0 auto; }
+
+  /* ---------- v7.1 ⋯ 收纳（overflow）：⋮ 按钮 + 桌面下拉 / 手机底部浮层；只收视图不收动作 ---------- */
+  .ovanchor { position: relative; display: inline-flex; }
+  .ovbtn { /* 继承 .tab 造型（桌面） */
+    background: transparent; border: none; border-bottom: 2px solid transparent; border-radius: 0;
+    color: var(--dim); padding: 8px 14px; font-size: 13px; font-weight: 600; cursor: pointer;
+    font-family: inherit; position: relative; letter-spacing: 1px;
+  }
+  .ovbtn:hover { color: var(--text); }
+  .ovbtn.active { color: var(--text); border-bottom-color: var(--brand-line); }
+  .ptabs .ovanchor { flex: 0 0 auto; }
+  .ptabs button.ovbtn { padding: 11px 14px; min-width: 46px; letter-spacing: 0; } /* 覆盖 .ptabs button 的横向零内边距 */
+  .ptabs button.ovbtn.on { color: var(--p-text); border-bottom-color: var(--p-brand); font-weight: 600; }
+  .ovbadge { /* 琥珀角标：徽标透传到 ⋮ / 菜单行 */
+    display: inline-block; min-width: 15px; height: 15px; border-radius: 8px; background: var(--working);
+    color: #0B141F; font-size: 9.5px; font-weight: 700; line-height: 15px; text-align: center; padding: 0 4px;
+    margin-left: 6px; vertical-align: 1px;
+  }
+  .ovbtn .ovbadge { position: absolute; top: 7px; right: 8px; margin: 0; transform: scale(.8); transform-origin: top right; }
+  .ovmenu { /* 桌面：锚在 ⋮ 下拉小菜单 */
+    position: absolute; top: calc(100% + 6px); left: -6px; min-width: 190px;
+    background: var(--panel); border: 1px solid var(--border); border-radius: 10px; padding: 5px 0;
+    box-shadow: 0 16px 40px rgba(0,0,0,.5); z-index: 30; display: none;
+  }
+  .ovmenu.on { display: block; }
+  .ovmenu .ovrow { display: flex; align-items: center; gap: 8px; padding: 7px 14px; font-size: 12.5px; color: var(--text); cursor: pointer; white-space: nowrap; }
+  .ovmenu .ovrow:hover { background: var(--panel-2); }
+  .screen.ovroot { position: relative; } /* 仅含浮层的手机帧启用，不改既有帧层叠 */
+  .ovmask { position: absolute; inset: 0; background: rgba(3,8,15,.55); z-index: 40; display: none; }
+  .ovmask.on { display: block; }
+  .ovsheet { /* 手机：底部半屏浮层 */
+    position: absolute; left: 0; right: 0; bottom: 0; z-index: 41;
+    background: var(--p-panel); border-top: 1px solid var(--p-line); border-radius: 18px 18px 0 0;
+    padding: 2px 16px 16px; display: none; box-shadow: 0 -14px 40px rgba(0,0,0,.45);
+  }
+  .ovsheet.on { display: block; }
+  .ovgrip { width: 36px; height: 4px; border-radius: 2px; background: var(--p-panel2); margin: 10px auto 4px; }
+  .ovsheet h6 { font-size: 11px; color: var(--p-faint); letter-spacing: .5px; padding: 4px 2px 2px; font-weight: 600; }
+  .ovsheet .ovrow { display: flex; align-items: center; gap: 8px; padding: 12px 2px; font-size: 13.5px; color: var(--p-text); cursor: pointer; border-bottom: 1px dashed var(--p-line); }
+  .ovsheet .ovrow:hover { color: #7CB8FF; }
+  .ovfoot { font-size: 10px; color: var(--p-faint); padding: 10px 2px 0; }
+  .pfi { /* 手机时间线行（p token 体系） */
+    display: flex; gap: 9px; font-size: 11.5px; color: var(--p-dim); padding: 7px 0;
+    border-bottom: 1px dashed var(--p-line); line-height: 1.5;
+  }
+  .pfi .t { color: var(--p-faint); flex: 0 0 36px; font-family: var(--mono); font-size: 10.5px; padding-top: 1px; font-variant-numeric: tabular-nums; }
+  .pfi .e { flex: 0 0 auto; }
+  .pfi b { color: var(--p-text); font-weight: 500; }
+  .ovhint { font-size: 10.5px; color: var(--faint); margin-top: 10px; line-height: 1.65; }
+  .ppane .ovhint { color: var(--p-faint); }
+  .pfrow { display: flex; align-items: center; gap: 8px; padding: 9px 2px; border-bottom: 1px dashed var(--p-line); font-size: 12.5px; color: var(--p-text); }
+  .pfrow .ppill { margin-left: auto; }
+
+  /* v7.1 统计瓦片（2×2 · 桌面 console token / 手机 p token 双态） */
+  .statgrid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  .stile { background: var(--panel); border: 1px solid var(--border); border-radius: 12px; padding: 12px 14px; }
+  .stile .k { font-size: 10.5px; color: var(--dim); }
+  .stile .v { font-size: 20px; font-weight: 700; color: var(--text-strong); margin-top: 4px; font-variant-numeric: tabular-nums; }
+  .stile .ctx { display: block; margin-top: 7px; }
+  .ppane .stile { background: var(--p-panel); border-color: var(--p-line); }
+  .ppane .stile .k { color: var(--p-dim); }
+  .ppane .stile .v { color: var(--p-text); }
+  .ppane .stile .ctx { background: var(--p-panel2); }
+  .ppane .stile .ctx i { background: linear-gradient(90deg, var(--p-brand), var(--p-brand2)); }
+
+  /* v7.1 活动 tab 过滤 chips（纯视觉态互斥高亮） */
+  .fchips { display: flex; gap: 8px; margin: 2px 0 12px; }
+  .fchip { font-size: 11.5px; padding: 4px 13px; border-radius: 999px; background: var(--panel); border: 1px solid var(--border); color: var(--dim); cursor: pointer; }
+  .fchip:hover { color: var(--text); }
+  .fchip.on { background: rgba(217,119,87,.14); border-color: rgba(217,119,87,.45); color: #E8985F; font-weight: 600; }
+
+  /* v7.1 手机看板总览：吸顶 + 视窗框双向联动（桌面横排不加） */
+  .ovpit { position: sticky; top: 0; z-index: 4; background: var(--p-bg); margin: 0 -12px; padding: 12px 12px 10px; border-bottom: 1px solid var(--p-line); }
+  #p3b { padding-top: 0; } /* v7.1b：sticky 出不了包含块——pane 顶 padding 会把吸顶条的钉点压到滚动口下方 12px，滚动内容从缝里漏（改由吸顶条自己的 12px 顶 padding 提供呼吸） */
+  .ovhit { position: relative; cursor: pointer; padding: 16px 0; } /* 点击热区 ≥40px（8px 条 + 上下各 16px） */
+  .ovmark { /* 视窗描边框：left/width 由 JS 按泳道并集吸附分段边界设定 */
+    position: absolute; top: 50%; transform: translateY(-50%); height: 14px;
+    border: 2px solid rgba(232,240,250,.9); background: rgba(232,240,250,.08); border-radius: 5px;
+    pointer-events: none; transition: left .18s ease, width .18s ease; z-index: 2; opacity: 0;
+  }
+  .ovpit .ovleg { position: relative; z-index: 1; } /* 图例可点：压过 ovhit 的透明热区 */
+  .ovleg .legbtn { cursor: pointer; }
+  .ovleg .legbtn:hover { color: var(--p-text); }
+  .plane { scroll-margin-top: 122px; } /* 组头停在吸顶总览条下沿：实测条高 115 + 7 呼吸（JS 的 STICKY 按实测高度同步算） */
+
+  /* ---------- 手机壳（expo-app theme.ts 体系） ---------- */
+  .phone {
+    position: relative; width: 412px; flex: 0 0 auto;
+    background: var(--p-panel); border: 11px solid #1A2432; border-radius: 48px;
+    box-shadow: 0 24px 60px rgba(0,0,0,.55);
+  }
+  .notch { position: absolute; top: 11px; left: 50%; transform: translateX(-50%); width: 126px; height: 24px; background: #1A2432; border-radius: 13px; z-index: 45; } /* v7.1 提到浮层之上：⋯ sheet 打开时状态条不被遮罩压暗 */
+  .screen { position: relative; height: 900px; display: flex; flex-direction: column; overflow: hidden; border-radius: 37px; background: var(--p-bg); } /* v7.1 position:relative：⋯ 底部浮层（.ovmask/.ovsheet）锚在屏内 */
+  .appbar { padding: 40px 14px 10px; background: var(--p-panel); border-bottom: 1px solid var(--p-line); display: flex; align-items: center; }
+  .back { font-size: 19px; color: var(--p-dim); margin-right: 9px; }
+  .appbar .tt { flex: 1; min-width: 0; }
+  .appbar .t { font-size: 15.5px; font-weight: 600; color: var(--p-text); }
+  .appbar .s { font-size: 10.5px; color: var(--p-dim); margin-top: 2px; }
+  .appbar .live { color: var(--done); }
+  .appbar .menu { color: var(--p-dim); font-size: 17px; letter-spacing: 1px; }
+  .ptabs { display: flex; background: var(--p-bg); border-bottom: 1px solid var(--p-line); }
+  .ptabs button {
+    flex: 1; padding: 11px 0; background: none; border: none; color: var(--p-dim);
+    font-size: 14px; cursor: pointer; border-bottom: 2px solid transparent; position: relative; font-family: inherit;
+  }
+  .ptabs button.on { color: var(--p-text); border-bottom-color: var(--p-brand); font-weight: 600; }
+  .pbadge {
+    display: inline-block; min-width: 15px; height: 15px; border-radius: 8px; background: var(--working);
+    color: #0B1622; font-size: 9.5px; font-weight: 700; line-height: 15px; text-align: center; padding: 0 4px;
+    margin-left: 4px; vertical-align: 1px;
+  }
+  .ppane { display: none; flex: 1; overflow-y: auto; padding: 12px 12px 18px; }
+  .ppane.on { display: block; }
+  .ppane::-webkit-scrollbar { display: none; }
+
+  /* v6 手机底部导航（微信式三 Tab：会话 / 团队 / 设置；详情页不加——root 页才有） */
+  .ptabbar { flex: none; height: 56px; display: flex; background: var(--p-panel); border-top: 1px solid var(--p-line); }
+  .ptab { flex: 1; position: relative; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px; font-size: 10px; color: var(--p-dim); }
+  .ptab .ic { font-size: 19px; line-height: 1; }
+  .ptab.on { color: var(--p-text); font-weight: 600; }
+  .ptab.on::after { content: ""; position: absolute; left: 50%; transform: translateX(-50%); bottom: 5px; width: 4px; height: 4px; border-radius: 2px; background: var(--p-brand); } /* 选中指示：品牌蓝点 */
+  .ptabbar .pbadge { position: absolute; top: 6px; left: calc(50% + 5px); margin-left: 0; } /* 待装机琥珀徽标 */
+  .screen.withbar .ppane { padding-bottom: 10px; } /* 带底栏的帧收紧底部留白，内容尽量收进首屏 */
+
+  /* v6 会话主页列表卡（console 会话卡同构 · 手机 token） */
+  .hcard { display: flex; align-items: center; gap: 11px; background: var(--p-panel); border: 1px solid var(--p-line); border-radius: 12px; padding: 13px 13px; margin-bottom: 12px; }
+  .hcard .av { width: 42px; height: 42px; border-radius: 10px; background: var(--p-panel2); display: flex; align-items: center; justify-content: center; font-size: 19px; flex: 0 0 auto; }
+  .hcard .ht { flex: 1; min-width: 0; }
+  .hcard .nm { display: flex; align-items: center; gap: 6px; font-size: 13.5px; font-weight: 600; color: var(--p-text); }
+  .hcard .nm .dot { margin-left: auto; width: 7px; height: 7px; border-radius: 50%; flex: none; }
+  .hcard .dot.b { background: var(--p-faint); } /* 手机 token 覆盖 console 的 .dot.b */
+  .hcard .hs { font-size: 10.5px; color: var(--p-dim); margin-top: 3px; }
+  .hcard .hs .live { color: var(--done); }
+  .hcard .arr { color: var(--p-faint); font-size: 16px; flex: none; }
+  .hcard.dim { opacity: .62; }
+  .hcard.team { border-color: rgba(77,159,255,.42); background: linear-gradient(135deg, rgba(77,159,255,.09), var(--p-panel) 55%); } /* 团队入口卡：品牌蓝点题 */
+  .hcard.on { border-color: rgba(77,159,255,.65); box-shadow: 0 0 0 1px rgba(77,159,255,.30); } /* v7 团队卡选中态 */
+  .appbar .plus { color: var(--p-dim); font-size: 20px; line-height: 1; padding: 0 4px; }
+
+  .pteamnotice { background: var(--p-panel); border: 1px dashed var(--p-line); color: var(--p-dim); border-radius: 10px; font-size: 11.5px; padding: 8px 10px; text-align: center; margin-bottom: 14px; }
+  .prow { display: flex; margin-bottom: 12px; }
+  .prow.me { justify-content: flex-end; }
+  .pbub { max-width: 78%; padding: 9px 12px; border-radius: 14px; font-size: 13px; line-height: 1.6; }
+  .prow.leader .pbub { background: var(--p-panel); border: 1px solid var(--p-line); border-top-left-radius: 4px; color: var(--p-text); }
+  .prow.me .pbub { background: rgba(77,159,255,.18); border: 1px solid rgba(77,159,255,.4); border-top-right-radius: 4px; color: var(--p-text); }
+  .pwho { font-size: 10.5px; color: var(--p-dim); margin-bottom: 3px; }
+  .pstaff { margin-top: 8px; background: var(--p-bg); border: 1px solid var(--p-line); border-radius: 10px; padding: 9px 10px; color: var(--p-text); }
+  .pstaff .m { display: flex; align-items: center; gap: 8px; font-size: 12.5px; padding: 3px 0; }
+  .pstaff .role { color: var(--p-dim); font-size: 11px; }
+  .pstaffbtns { display: flex; gap: 8px; margin-top: 8px; }
+  .pstaffbtns span { flex: 1; text-align: center; font-size: 12px; padding: 6px 0; border-radius: 8px; }
+  .pok { background: var(--p-brand); color: #fff; } .padj { border: 1px solid var(--p-line); color: var(--p-dim); }
+  .pready { background: rgba(255,197,61,.06); border: 1px solid rgba(255,197,61,.45); border-top-left-radius: 4px; box-shadow: 0 0 0 3px rgba(255,197,61,.10); }
+  .pready .rt { color: var(--working); font-weight: 600; }
+  .pready .rd { color: var(--p-dim); font-size: 12px; margin-top: 2px; }
+  .preadybtns { display: flex; gap: 8px; margin-top: 8px; }
+  .preadybtns span { font-size: 12px; padding: 6px 12px; border-radius: 8px; text-align: center; }
+  .pdl { background: var(--working); color: #2B2100; font-weight: 600; } .pfb { border: 1px solid rgba(255,197,61,.35); color: var(--working); }
+  .ptyping { display: inline-flex; gap: 4px; padding: 4px 2px 0 14px; }
+  .ptyping i { width: 6px; height: 6px; border-radius: 50%; background: var(--p-dim); animation: blink 1.3s infinite; }
+  .ptyping i:nth-child(2) { animation-delay: .2s; } .ptyping i:nth-child(3) { animation-delay: .4s; }
+  .pinbar { flex: none; display: flex; gap: 8px; padding: 9px 12px 12px; border-top: 1px solid var(--p-line); background: var(--p-bg); } /* v7 手机团队对话输入条（App token） */
+  .pinbar .box { flex: 1; background: var(--p-panel); border: 1px solid var(--p-line); border-radius: 10px; font-size: 12px; color: var(--p-faint); padding: 9px 12px; }
+  .pinbar .send { background: linear-gradient(135deg, var(--p-brand), var(--p-brand2)); color: #fff; border-radius: 10px; padding: 0 16px; font-size: 12.5px; font-weight: 600; display: flex; align-items: center; }
+
+  /* 手机看板：竖向泳道 */
+  .plane { margin-bottom: 12px; }
+  .planeh {
+    display: flex; align-items: center; gap: 8px; padding: 7px 10px;
+    background: var(--p-panel); border: 1px solid var(--p-line); border-radius: 10px; margin-bottom: 8px;
+  }
+  .planeh .ln { font-size: 13px; font-weight: 600; color: var(--p-text); letter-spacing: .3px; }
+  .planeh .lc { font-size: 10.5px; color: var(--p-dim); background: var(--p-panel2); border-radius: 6px; padding: 1px 7px; }
+  .planeh .arr { margin-left: auto; color: var(--p-faint); font-size: 11px; }
+  .planeh .pin-top { font-size: 9.5px; color: var(--working); background: rgba(255,197,61,.12); border-radius: 6px; padding: 1px 6px; }
+  .plane.go .planeh { background: rgba(255,197,61,.07); border-color: rgba(255,197,61,.45); }
+  .plane.go .planeh .ln { color: var(--working); }
+  .pcard { background: var(--p-panel); border: 1px solid var(--p-line); border-radius: 10px; padding: 9px 10px; font-size: 12px; line-height: 1.5; color: var(--p-text); margin-bottom: 8px; }
+  .pcard .ct { font-weight: 600; }
+  .pcard .cm { display: flex; gap: 6px; margin-top: 6px; flex-wrap: wrap; }
+  .pchip { font-size: 10.5px; padding: 2px 7px; border-radius: 6px; background: var(--p-panel2); color: var(--p-dim); }
+  .pchip.br { color: #7FD1A8; }
+  .pcline { font-size: 10.5px; color: var(--p-dim); margin-top: 5px; }
+  .pcline .warn { color: var(--working); }
+
+  /* 手机成员 */
+  .pcrew { display: flex; flex-direction: column; gap: 10px; }
+  .pmember { background: var(--p-panel); border: 1px solid var(--p-line); border-radius: 12px; padding: 11px 12px; }
+  .pmh { display: flex; align-items: center; gap: 9px; }
+  .pavatar { width: 34px; height: 34px; border-radius: 9px; background: var(--p-panel2); display: flex; align-items: center; justify-content: center; font-size: 17px; flex: 0 0 auto; }
+  .pmh .nm { font-size: 13.5px; font-weight: 600; color: var(--p-text); }
+  .pmh .rl { font-size: 10.5px; color: var(--p-dim); }
+  .ppill { margin-left: auto; font-size: 10px; padding: 2.5px 9px; border-radius: 20px; flex: 0 0 auto; }
+  .ppill.g { background: rgba(43,217,143,.12); color: var(--done); }
+  .ppill.y { background: rgba(255,197,61,.12); color: var(--working); }
+  .ppill.b { background: rgba(123,147,174,.15); color: var(--p-dim); }
+  .pmb { margin-top: 8px; font-size: 11.5px; color: var(--p-dim); line-height: 1.7; }
+  .pmb b { color: var(--p-text); font-weight: 500; }
+  .pctxrow { display: flex; align-items: center; gap: 8px; margin-top: 7px; }
+  .pctx { flex: 1; height: 5px; border-radius: 3px; background: var(--p-panel2); overflow: hidden; }
+  .pctx i { display: block; height: 100%; border-radius: 3px; background: linear-gradient(90deg, var(--p-brand), var(--p-brand2)); }
+  .pctxlabel { font-size: 10px; color: var(--p-dim); flex: 0 0 auto; }
+  .pmact { display: flex; gap: 8px; margin-top: 8px; }
+  .pmact span { flex: 1; text-align: center; font-size: 11px; padding: 5px 0; border-radius: 8px; border: 1px solid var(--p-line); color: var(--p-dim); }
+  .pmact span.off { opacity: .4; }
+  .pcrewfoot { font-size: 10.5px; color: var(--p-dim); text-align: center; margin-top: 12px; line-height: 1.8; }
+
+  /* ---------- 设置 · 模型服务（M2 Provider 管理页：桌面帧 console token / 手机帧 App token） ---------- */
+  .dtbody.set { height: 800px; }
+  /* 左侧设置导航：与 web-console 设置抽屉 #405 同构（竖排 rail + 选中项左缘橙条） */
+  .setnav { width: 170px; flex: 0 0 auto; background: var(--side-bg); border-right: 1px solid var(--side-line); padding: 14px 10px 12px; display: flex; flex-direction: column; }
+  .snav { position: relative; display: flex; align-items: center; gap: 8px; padding: 9px 11px; border-radius: 8px; font-size: 12.5px; color: var(--dim); border: 1px solid transparent; margin-bottom: 3px; }
+  .snav .ico { font-size: 13px; flex: 0 0 auto; }
+  .snav.on { color: var(--text-strong); background: var(--panel); border-color: var(--border); font-weight: 600; }
+  .snav.on::before { content: ""; position: absolute; left: -1px; top: 7px; bottom: 7px; width: 3px; border-radius: 3px; background: var(--brand); }
+  .setnav .foot { margin-top: auto; padding: 0 6px; font-size: 10px; color: var(--faint); line-height: 1.7; }
+  .setnav .snav { cursor: pointer; }
+  .setnav .snav:hover { color: var(--text); }
+  .setpage { display: none; }
+  .setpage.on { display: block; }
+
+  /* v6.1 通用页控件：开关（.sw）/ 分段选择（.seg）/ 设置分组卡（.setcard），全部长在既有 token 上 */
+  .setcard { background: var(--panel); border: 1px solid var(--border); border-radius: 12px; padding: 3px 13px 7px; margin-top: 10px; }
+  .setcard h5 { font-size: 11px; color: var(--dim); font-weight: 600; padding: 9px 0 3px; letter-spacing: .3px; }
+  .swrow { display: flex; align-items: center; gap: 10px; padding: 8px 0; border-bottom: 1px dashed var(--side-line); }
+  .setcard .swrow:last-child { border-bottom: none; }
+  .swrow .swtxt { flex: 1; min-width: 0; font-size: 12.5px; color: var(--text); }
+  .swrow .swd { font-size: 10.5px; color: var(--faint); margin-top: 2px; line-height: 1.55; }
+  .sw { position: relative; width: 34px; height: 20px; border-radius: 10px; background: var(--panel-2); border: 1px solid var(--border); flex: 0 0 auto; }
+  .sw i { position: absolute; top: 2px; left: 2.5px; width: 14px; height: 14px; border-radius: 50%; background: var(--dim); }
+  .sw.on { background: rgba(43,217,143,.16); border-color: rgba(43,217,143,.5); }
+  .sw.on i { left: 15.5px; background: var(--done); box-shadow: 0 0 6px rgba(43,217,143,.4); }
+  .seg { display: inline-flex; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; flex: 0 0 auto; }
+  .seg span { font-size: 11px; padding: 4px 13px; color: var(--dim); background: var(--bg-main); }
+  .seg span.on { color: #E8985F; background: rgba(217,119,87,.14); font-weight: 600; }
+  .relaystat { display: flex; align-items: center; gap: 8px; padding: 9px 0 4px; }
+  .relaystat .rdot2 { width: 8px; height: 8px; border-radius: 50%; background: var(--done); box-shadow: 0 0 6px rgba(43,217,143,.45); flex: 0 0 auto; }
+  .relaystat .st { font-size: 12.5px; font-weight: 600; color: var(--text-strong); }
+  .relaystat .meta { font-size: 10.5px; color: var(--dim); margin-top: 2px; }
+  .aboutcard { text-align: center; padding: 26px 13px 20px; }
+  .aboutcard .logo { font-size: 30px; font-weight: 800; letter-spacing: 1px; color: var(--text-strong); }
+  .aboutcard .logo b { color: var(--brand); }
+  .aboutcard .ver { font-size: 12px; color: var(--dim); margin-top: 8px; }
+  .aboutcard .ver .ch { font-size: 10.5px; color: #E8985F; background: rgba(217,119,87,.14); border-radius: 6px; padding: 1px 8px; margin-left: 6px; }
+  .abtn { display: inline-block; margin-top: 14px; font-size: 12px; padding: 7px 22px; border-radius: 9px; background: linear-gradient(135deg, #E8985F, #C96442); color: #fff; font-weight: 600; }
+  .abtn.ghost { background: transparent; border: 1px solid var(--border); color: var(--card-sub); font-weight: 500; margin-left: 8px; }
+  .tplrow { display: flex; align-items: center; gap: 8px; padding: 8px 0; border-bottom: 1px dashed var(--side-line); font-size: 12.5px; color: var(--dim); }
+  .tplrow .tico { width: 30px; height: 30px; border-radius: 8px; background: var(--panel-2); display: flex; align-items: center; justify-content: center; font-size: 15px; flex: 0 0 auto; }
+  .tplrow .tnm { color: var(--text); font-weight: 600; }
+  .tplrow .trl { font-size: 10.5px; color: var(--faint); margin-top: 1px; }
+
+  .setmain { flex: 1; min-width: 0; background: var(--bg-main); padding: 16px 20px; overflow: hidden; }
+  .sethead .t { font-size: 15.5px; font-weight: 600; color: var(--text-strong); }
+  .sethead .s { font-size: 11px; color: var(--dim); margin-top: 4px; display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+
+  /* Provider 卡：默认（继承 env）= 虚线边 + 绿 pill；登记卡 = 实线边 + 灰 pill */
+  .prov { background: var(--panel); border: 1px solid var(--border); border-radius: 12px; padding: 11px 13px; margin-top: 10px; }
+  .prov.def { border-style: dashed; background: linear-gradient(135deg, rgba(43,217,143,.05), var(--panel) 55%); }
+  .prh { display: flex; align-items: center; gap: 8px; }
+  .prh .nm { font-size: 13px; font-weight: 600; color: var(--text-strong); }
+  .prh .pill { margin-left: 0; }
+  .prh .acts { margin-left: auto; display: flex; gap: 6px; flex: 0 0 auto; }
+  .prbtn { font-size: 11px; padding: 4px 10px; border-radius: 7px; border: 1px solid var(--border); color: var(--card-sub); }
+  .prbtn.go { border-color: rgba(217,119,87,.4); color: #E8985F; }
+  .prbtn.ok { border-color: rgba(43,217,143,.35); color: var(--done); }
+  .prbtn.del { color: var(--waiting); }
+  .prrow { display: flex; align-items: center; gap: 7px; margin-top: 7px; font-size: 11.5px; color: var(--card-sub); flex-wrap: wrap; }
+  .prrow .lb { color: var(--faint); flex: 0 0 46px; font-size: 10.5px; }
+  .prcode { font-family: var(--mono); font-size: 10.5px; color: var(--card-sub); background: var(--bg-main); border: 1px solid var(--border); border-radius: 5px; padding: 1.5px 7px; white-space: nowrap; }
+  .prnote { font-size: 10.5px; color: var(--faint); margin-top: 6px; line-height: 1.65; }
+  .prq { width: 92px; height: 5px; border-radius: 3px; background: rgba(148,163,190,.14); overflow: hidden; flex: 0 0 auto; }
+  .prq i { display: block; height: 100%; background: linear-gradient(90deg, #E8985F, #C96442); } /* 水位条与上下文水位同一视觉语法 */
+
+  /* 角色路由默认表（身份模板库的一部分） */
+  .rtable { background: var(--panel); border: 1px solid var(--border); border-radius: 12px; padding: 10px 13px; margin-top: 12px; }
+  .rtable h5 { font-size: 11.5px; color: var(--dim); font-weight: 600; }
+  .rrow { display: flex; align-items: center; gap: 8px; padding: 6px 0; border-bottom: 1px dashed var(--side-line); font-size: 11.5px; color: var(--text); }
+  .rrow .role { flex: 0 0 96px; font-weight: 600; }
+  .rrow .why { margin-left: auto; color: var(--faint); font-size: 10.5px; }
+  .rrow.hl { background: rgba(217,119,87,.06); border-radius: 8px; padding-left: 7px; padding-right: 7px; border-bottom-color: transparent; }
+  .rrow.hl .why { color: #E8985F; }
+  /* 兜底 chip：包月烧穿后的回落档（小号 · faint · 虚线边 = 未激活态；等宽对齐 .prcode） */
+  .rrow .fbk { font-family: var(--mono); font-size: 10px; color: var(--faint); background: var(--bg-main); border: 1px dashed var(--border); border-radius: 5px; padding: 1.5px 7px; white-space: nowrap; flex: 0 0 auto; }
+  .rrow.hl .fbk { color: #E8985F; border-color: rgba(217,119,87,.4); } /* 验收行例外：与 .why 同用强调色 */
+  .rfoot { font-size: 10.5px; color: var(--faint); padding-top: 7px; }
+
+  .pradd { border: 1px dashed var(--border); border-radius: 12px; text-align: center; color: var(--dim); font-size: 12px; padding: 9px 0; margin-top: 12px; }
+  .escape { font-size: 10.5px; color: var(--faint); margin-top: 9px; line-height: 1.7; }
+
+  /* 手机帧 Provider 卡（App token；间距收紧三档 + 删浏览态冗余行，保证信任条收进 740px 屏内——v6 加底栏后进一步收紧） */
+  .pprov { background: var(--p-panel); border: 1px solid var(--p-line); border-radius: 12px; padding: 7px 11px; margin-bottom: 5px; }
+  .pprov.def { border-style: dashed; background: linear-gradient(135deg, rgba(43,217,143,.05), var(--p-panel) 55%); }
+  .pprh { display: flex; align-items: center; gap: 8px; }
+  .pprh .nm { font-size: 12.5px; font-weight: 600; color: var(--p-text); }
+  .pprh .ppill { margin-left: 0; }
+  .ppr { display: flex; align-items: center; gap: 6px; margin-top: 2px; font-size: 11px; color: var(--p-dim); flex-wrap: wrap; }
+  .ppr .lb { color: var(--p-faint); flex: 0 0 40px; font-size: 10px; }
+  .pprcode { font-family: var(--mono); font-size: 10px; color: var(--p-dim); background: var(--p-panel2); border: 1px solid var(--p-line); border-radius: 5px; padding: 1px 6px; white-space: nowrap; }
+  .pprov .mdl { color: var(--p-dim); background: var(--p-panel2); border-color: var(--p-line); }
+  .ppacts { display: flex; gap: 8px; margin-top: 5px; }
+  .ppacts span { flex: 1; text-align: center; font-size: 11px; padding: 4px 0; border-radius: 8px; border: 1px solid var(--p-line); color: var(--p-dim); }
+  .ppacts span.go { border-color: rgba(77,159,255,.45); color: #7CB8FF; }
+  .ppacts span.ok { border-color: rgba(43,217,143,.35); color: var(--done); }
+  .ppradd .sub { color: var(--p-faint); font-size: 10.5px; } /* B 案：后半句引导弱化 */
+  .pq { width: 76px; height: 4px; border-radius: 2px; background: var(--p-panel2); overflow: hidden; flex: 0 0 auto; }
+  .pq i { display: block; height: 100%; background: linear-gradient(90deg, var(--p-brand), var(--p-brand2)); }
+  .proute { background: var(--p-panel); border: 1px solid var(--p-line); border-radius: 12px; padding: 7px 11px; margin-bottom: 5px; }
+  .proute h5 { font-size: 11px; color: var(--p-dim); font-weight: 600; }
+  .prr { display: flex; align-items: center; gap: 7px; padding: 2px 0; border-bottom: 1px dashed var(--p-line); font-size: 11.5px; color: var(--p-text); }
+  .prr .role { flex: 0 0 74px; font-weight: 600; }
+  .prr .why { margin-left: auto; color: var(--p-faint); font-size: 10px; text-align: right; }
+  .prr.hl .why { color: #7CB8FF; }
+  .ppradd { border: 1px dashed var(--p-line); border-radius: 12px; text-align: center; color: var(--p-dim); font-size: 12px; padding: 6px 0; margin-bottom: 6px; }
+  .ptrust { background: var(--p-panel); border: 1px dashed var(--p-line); border-radius: 10px; padding: 7px 10px; font-size: 10.5px; color: var(--p-dim); text-align: center; line-height: 1.6; }
+  .ptrust b { color: #7FD1A8; font-weight: 600; }
+
+  /* 新章节图注钉位与配色（8 默认橙 / 9 绿=信任 / 10 复用 brand-2） */
+  .num.c9 { background: var(--done); }
+  .pin.c9 { background: var(--done); box-shadow: 0 0 0 4px rgba(43,217,143,.25); }
+  .dp8 { top: 120px; right: -8px; } .dp9 { top: 336px; right: -8px; } .dp10 { top: 781px; right: -8px; }
+  .np9 { top: 640px; right: -8px; }
+
+  /* ---------- 图注 ---------- */
+  .notes { flex: 1 1 300px; max-width: 420px; display: flex; flex-direction: column; gap: 14px; }
+  .note { background: var(--panel); border: 1px solid var(--border); border-radius: 14px; padding: 14px 16px; }
+  .note .nh { display: flex; align-items: center; gap: 8px; font-weight: 600; font-size: 14px; margin-bottom: 6px; color: var(--text-strong); }
+  .num { width: 22px; height: 22px; border-radius: 50%; background: var(--brand); color: #fff; display: inline-flex; align-items: center; justify-content: center; font-size: 12px; flex: 0 0 auto; }
+  .note p { font-size: 12.5px; color: var(--card-sub); line-height: 1.8; }
+  .note p b { color: var(--text); }
+  .num.c5 { background: var(--brand-2); }
+  .num.c6 { background: var(--working); }
+  .num.c7 { background: #7C6CF2; }
+  .pin {
+    position: absolute; width: 24px; height: 24px; border-radius: 50%;
+    background: var(--brand); color: #fff; font-size: 13px; font-weight: 700;
+    display: flex; align-items: center; justify-content: center;
+    box-shadow: 0 0 0 4px rgba(217,119,87,.25); z-index: 9;
+  }
+  .pin.c5 { background: var(--brand-2); box-shadow: 0 0 0 4px rgba(201,100,66,.25); }
+  .pin.c6 { background: var(--working); box-shadow: 0 0 0 4px rgba(255,197,61,.25); color: #3A2C00; }
+  .pin.c7 { background: #7C6CF2; box-shadow: 0 0 0 4px rgba(124,108,242,.25); }
+  .pin.cp { background: var(--p-brand); box-shadow: 0 0 0 4px rgba(77,159,255,.25); }
+  .p1 { top: 115px; right: -8px; } .p2 { top: 306px; right: -8px; }
+  .p3 { top: 152px; right: -8px; } .p4 { top: 586px; right: -8px; } .p5 { top: 150px; right: -8px; } .p6 { top: 148px; right: -8px; }
+  .dp5 { top: 752px; left: -8px; } .dp6 { top: 110px; right: -8px; } .dp7 { top: 440px; left: -8px; }
+  .dp11 { top: 43px; left: -8px; }
+  .dp12 { top: 140px; left: -8px; }
+  .p13 { top: 734px; right: -8px; }  /* v7.1：手机会话详情帧 ⋯ 浮层处 */
+  .dp14 { top: 108px; left: 604px; } /* v7.1：桌面会话详情 dtabs 的 ⋮ 右侧弹簧空白处——钉不压按钮本体，标注目标保持可见 */
+
+  .tip { margin-top: 22px; background: var(--side-bg); border: 1px dashed var(--border); border-radius: 12px; padding: 12px 16px; font-size: 12.5px; color: var(--dim); line-height: 1.9; }
+  .tip b { color: var(--text); }
+  /* 交互原型深链锚点落位用（纯导航辅助，不改视觉） */
+  [id^="mk-"] { scroll-margin-top: 24px; }
+</style>
+</head>
+<body>
+<div class="page">
+  <h1>cc-deck <span style="font-size:12px;color:var(--faint)">V8 UI 增量稿 · v7.1b 之上接 V2 编排层七项</span></h1>
+  <p style="margin:10px 0 0"><a href="v8-ui-interactive-v2.html" style="display:inline-block;font-size:12.5px;color:#7CB8FF;border:1px solid rgba(77,159,255,.4);border-radius:9px;padding:7px 14px;text-decoration:none">🎮 打开可交互原型（整合面板 · 桌面+手机 · 5s 无操作自动演示）↗</a></p>
+  <p class="sub">一句话：<b>v7.1b 完整稿不动，把 V2（设计文档 0.8）长出来的新实体接进既有导航地图</b>——① rail 新增 <b>📁 项目</b>一级域（自动聚合 · 可 ＋ 手动打开本机目录：列表→详情四分节；💬/👥 原入口不动）+ <b>🔔 通知</b>（v6 既定「弹簧之下扩展位」首个住户；badge = 未读 alert）；② 看板卡面加<b>两层判定</b>（AI 自验 ✓✓◦ 进度点 + 卡详情 self/user 双徽标）与<b>修复中派生态</b>（原卡降饱和 + 修复卡子卡）；③ <b>验收单状态入口</b>（就绪待装机卡 / alert / 项目详情三入口同单；回填 + 确认收单两步同屏）；④ <b>通知三级</b>（🔴 需你行动·常驻手动关 / 🟡 注意 / ⚪ 动态；失联 alert 行动项 = 换厂商接替入口）；⑤ 消息 pane 接<b>历史补洞</b>（↑ 加载更早 / 断连补齐分隔卡）；⑥ 设置第六页 <b>🧩 扩展</b>（内建三件 + 停用开关 + 权限声明）；⑦ <b>ConfirmFloat 正则派生拆除</b>（替代 = waiting_request 结构化确认条，端上零文本推导）。既有 v7.1b 帧<b>零回归</b>。开放问题挂点 O1/O2/O10（deadline M1②③），详见 <b>docs/v8-ui-design.md</b>。</p>
+
+  <!-- ================= 桌面端 & 网页端（同一设计） ================= -->
+  <h2 class="sh" id="mk-desktop"><span class="tag t-dt">团队域点亮</span>桌面端 &amp; 网页端 · 同一设计</h2>
+  <p class="shsub">v6 骨架的<b>最小改动</b>不变：56px 图标 rail（顶部绿点 = relay 连接 · 💬 会话 · 👥 团队 · ⚙ 设置），会话列表<b>原样保留、位置不动</b>；会话详情 Tab 行 v7.1 升为 <b>消息 / 任务 / 输出物 / 全部 + ⋯</b>（输出物升常驻；⏰ 定时任务 · 📊 统计低频视图收进 ⋯ 下拉——<b>只收视图不收动作</b>，⏸ 中断 / ↗ 导出留在原位）；点 rail 项 = <b>中列与详情原地切换</b>（微信左栏心智，点 💬 可试 ⋯ 菜单）。本帧默认选中 👥 团队——<b>团队域完整形态</b>：中列 = 团队列表，详情 = 消息 / 看板 / 成员 / 活动 四 Tab（<b>不加 ⋯</b>：无收纳需求不占坑）。<b>顶部绿点可点</b>：弹连接快览面板，直达连接与设备页。网页端完全同构，仅少 EXE / Mac 的本机按钮。</p>
+  <div class="stage" id="mk-dt-cockpit">
+    <div class="winframe">
+      <div class="chrome">
+        <div class="dots"><i></i><i></i><i></i></div>
+        <div class="tt">CC Deck</div>
+      </div>
+      <div class="dtbody" style="height:840px"><!-- V8 ②：进行中泳道 +T-21 修复卡后内容变高，画布 760→840（M1 增量帧注记，非 v7.1b 回归） -->
+        <nav class="rail">
+          <span class="rdot" title="已连接 · 本机 relay（点击弹快览）"></span>
+          <span class="ri" data-d="chat" title="会话">💬</span>
+          <span class="ri on" data-d="team" title="团队">👥</span>
+          <span class="ri" data-d="proj" title="项目 · V8 新增一级域（聚合只读）→ 见下方项目域帧">📁</span>
+          <span class="rspring"></span>
+          <span class="ri" data-d="notif" title="通知 · V8 新增（badge=未读 alert）→ 见下方通知面板帧">🔔<span class="rbadge">2</span></span>
+          <span class="ri" data-d="set" title="设置 · 见下方设置帧">⚙</span>
+        </nav>
+
+        <!-- 绿点快览面板：连接三拆的「状态」入口（点 rail 顶部绿点弹出） -->
+        <div class="cpanel" id="cpanel-1">
+          <h5>连接快览</h5>
+          <div class="cprow"><span class="rdot2"></span><div class="cpt">本机 relay · 已连接<div class="meta">端口 8787 · 事件流自动补发</div></div></div>
+          <div class="cprow"><span class="rdot2"></span><div class="cpt">云桥 · 已连接<div class="meta">wss://cc.humumu.online/cloud</div></div></div>
+          <div class="cprow"><span class="rdot2"></span><div class="cpt">设备 3 · 2 在线 · <span style="color:var(--working)">1 异常</span><div class="meta">配对码错误 · 重试中 · 浏览器端</div></div></div>
+          <span class="cpbtn">打开连接与设备 →</span>
+        </div>
+
+        <div class="dtside" id="side-team">
+          <div class="listbar"><h3>团队</h3><span class="hbtn">密度·标准</span></div>
+          <div class="grp">▾ 进行中 <span class="cnt">1</span></div>
+          <div class="scard on">
+            <div class="r1">🤖 cc-deck M1 攻坚团 <span class="dot g"></span></div>
+            <div class="r2">6 成员 · 4 进行中 · 2 待验收 · 2 待装机 · <span class="f">刚刚活跃</span></div>
+          </div>
+          <div class="grp" style="margin-top:6px">▾ 已收团 <span class="cnt">1</span></div>
+          <div class="scard dim">
+            <div class="r1">🧹 v0.5.2 双端发版团 <span class="dot b"></span></div>
+            <div class="r2">已归档 · 09-18</div>
+          </div>
+          <div class="newcard">＋ 新建团队</div>
+        </div>
+
+        <!-- 会话域中列：现网列表原样（点 rail 💬 显示） -->
+        <div class="dtside" id="side-chat" style="display:none">
+          <div class="listbar"><h3>会话</h3><span class="hbtn">密度·标准</span></div>
+          <div class="grp">▾ cc-deck · 进行中 <span class="cnt">4</span></div>
+          <div class="scard on">
+            <div class="r1">🎨 ui-review 走查 <span class="dot g"></span></div>
+            <div class="r2">清理 v4 截图引用 · <span class="f">刚刚活跃</span></div>
+          </div>
+          <div class="scard">
+            <div class="r1">🤖 团队模式设计稿 v6 <span style="font-size:9.5px;color:var(--working);border:1px solid rgba(255,197,61,.45);border-radius:5px;padding:0 5px;margin-left:6px">⏸ 等你确认</span><span class="dot g"></span></div>
+            <div class="r2">导航地基 · 在等你确认方案 <span class="f">· 12 分钟前</span></div>
+          </div>
+          <div class="scard">
+            <div class="r1">📦 0.5.2-test.15 出包 <span class="dot y"></span></div>
+            <div class="r2">Actions 跑完 2/3 · <span class="f">等安卓产物</span></div>
+          </div>
+          <div class="scard">
+            <div class="r1">📱 手机走查 <span class="dot b"></span></div>
+            <div class="r2">无线 adb 待连 · <span class="f">1 小时前</span></div>
+          </div>
+          <div class="grp" style="margin-top:6px">▾ blog · 已完成 <span class="cnt">2</span></div>
+          <div class="scard dim">
+            <div class="r1">🔧 主题模板调试 <span class="dot b"></span></div>
+            <div class="r2">暗色代码块适配 · <span class="f">昨天</span></div>
+          </div>
+          <div class="scard dim">
+            <div class="r1">📝 文章草稿整理 <span class="dot b"></span></div>
+            <div class="r2">3 篇 · 待发布 · <span class="f">前天</span></div>
+          </div>
+          <div class="newcard">＋ 新建会话</div>
+        </div>
+
+        <!-- 团队域详情：完整形态（默认选中 👥；四 Tab：消息 / 看板 / 成员 / 活动） -->
+        <div class="dtdetail" id="detail-team">
+          <div class="dhead">
+            <div class="row1">
+              <span class="back">‹</span>
+              <span class="dt">🤖 cc-deck M1 攻坚团</span>
+              <span class="live">● 运行中 · 2 小时</span>
+              <span class="mini ttl">↗ 归档</span>
+            </div>
+            <div class="row2">
+              <span>编制 6 · 任务 11 · 开团 09:30</span>
+              <span class="ctxbar"><i style="width:32%"></i></span>
+              <span>32%</span>
+              <span class="sep">·</span><span>Leader glm-5.3</span>
+            </div>
+            <div class="dtabs">
+              <button class="tab active" data-t="tmsg">消息</button>
+              <button class="tab" data-t="tboard">看板<span class="bdg">1</span></button>
+              <button class="tab" data-t="tcrew">成员</button>
+              <button class="tab" data-t="tfeed">活动</button>
+              <span class="sp"></span>
+            </div>
+          </div>
+
+          <!-- 消息：与 Leader 的团队对话（teamnotice / 派工摘要 / 就绪待装机琥珀卡） -->
+          <section class="dpane on" id="tmsg">
+            <div class="msgflow">
+              <div class="teamnotice">开团 09:30 · Leader 按改动面建议编制：3 开发 + 独立验收（换厂商）+ 1 调研 · 你已确认</div>
+              <div class="mrow me"><div class="mbub">M1 目标：relay 任务板 + worktree 供给线 + 手机只读看板。按任务卡干，验收走独立出包。</div></div>
+              <div class="mrow leader">
+                <div>
+                  <div class="mwho">Leader · glm-5.3</div>
+                  <div class="mbub">已拆 9 张卡上板；scope 无交集的三张先并行：T-12 任务板 / T-15 手机看板 / T-18 CI 冒烟。三名 worker 已认领开工，worktree 已建。</div>
+                </div>
+              </div>
+              <div class="staffcard">
+                <div class="m">🛠 worker-relay <span class="role">T-12 任务板数据模型 · wt/t7/relay</span> <span class="mdl" style="margin-left:auto">glm-5.3-air</span></div>
+                <div class="m">📱 worker-mobile <span class="role">T-15 手机只读看板</span> <span class="mdl" style="margin-left:auto">glm-5.3-air</span></div>
+                <div class="m">🖥 worker-console <span class="role">T-18 CI 冒烟</span> <span class="mdl" style="margin-left:auto">glm-5.3-air</span></div>
+              </div>
+              <div class="mrow me"><div class="mbub">手机看板先做只读，写操作 M2 再开。</div></div>
+              <div class="mrow leader">
+                <div>
+                  <div class="mwho">Leader · glm-5.3</div>
+                  <div class="mbub">收到，T-15 卡上已标 M2 范围。T-14（worktree 供给线）自测通过、已提交待验收。</div>
+                </div>
+              </div>
+              <div class="mrow leader">
+                <div>
+                  <div class="mwho">Leader · glm-5.3</div>
+                  <div class="mbub ready">
+                    <div class="rt">T-13 更新通道隔离收尾 · 就绪待装机</div>
+                    <div class="rd">验收独立出包通过 · 四处版本号已同步 · 产物 0.6.0-test.19</div>
+                    <div class="readybtns"><span class="dl">装机看效果</span><span class="fb">反馈问题</span></div>
+                  </div>
+                </div>
+              </div>
+              <div class="typing"><i></i><i></i><i></i></div>
+            </div>
+            <div class="inputbar"><div class="box">给 Leader 发消息…</div><div class="send">发送</div></div>
+          </section>
+
+          <!-- 看板：全宽横排泳道（板 = relay 单一事实源） -->
+          <section class="dpane" id="tboard">
+            <div class="boardwrap">
+              <div class="ov">
+                <div class="prog">
+                  <i class="p-b" style="width:18%"></i><i class="p-r" style="width:36%"></i><i class="p-v" style="width:18%"></i><i class="p-ok" style="width:19%"></i><i class="p-d" style="width:9%"></i>
+                </div>
+                <div class="ovleg">
+                  <span><i class="lg p-b"></i>待认领 <b>2</b></span>
+                  <span><i class="lg p-r"></i>进行中 <b>4</b></span>
+                  <span><i class="lg p-v"></i>待验收 <b>2</b></span>
+                  <span><i class="lg p-ok"></i>就绪待装机 <b>2</b></span>
+                  <span><i class="lg p-d"></i>已完成 <b>1</b></span>
+                </div>
+              </div>
+              <div class="bcols">
+                <div class="bcol">
+                  <h4>待认领 <b>2</b></h4>
+                  <div class="tcard"><div class="ct">T-16 收团归档清理</div><div class="cline">○ 任何人可接 · 开团时已估 2h</div></div>
+                  <div class="tcard"><div class="ct">T-17 事件流周期压缩</div><div class="cline">○ 任何人可接 · 压缩前先备份</div></div>
+                  <div class="newcard">＋ 新建任务卡</div>
+                </div>
+                <div class="bcol">
+                  <h4>进行中 <b>4</b></h4>
+                  <div class="tcard"><div class="ct">T-12 任务板数据模型 <span class="vpg" title="AI 自验 4 项中 2 项通过"><i class="p"></i><i class="p"></i><i class="u"></i><i class="u"></i></span></div><div class="cm"><span class="tchip">worker-relay</span><span class="tchip">glm-5.3-air</span></div><div class="cline">认领 10:02 · 分支 <span class="br">wt/t7/relay</span></div></div>
+                  <div class="tcard"><div class="ct">T-15 手机只读看板 <span class="vpg" title="AI 自验 3 项中 1 项未过"><i class="p"></i><i class="f"></i><i class="p"></i></span></div><div class="cm"><span class="tchip">worker-mobile</span><span class="tchip">glm-5.3-air</span></div><div class="cline">认领 09:52 · 分支 <span class="br">wt/t7/mobile</span> · 写操作标 M2</div></div>
+                  <div class="tcard"><div class="ct">T-18 CI 冒烟 <span class="vpg" title="AI 自验 3 项全过，待提交"><i class="p"></i><i class="p"></i><i class="p"></i></span></div><div class="cm"><span class="tchip">worker-console</span><span class="tchip">glm-5.3-air</span></div><div class="cline">认领 09:47 · 分支 <span class="br">wt/t7/console</span> · 全过待提交</div></div>
+                  <div class="tcard repair"><div class="ct">T-21 修复 · 导入码迁移 item②</div><div class="cm"><span class="tchip" style="color:#e5484d;border-color:rgba(229,72,77,.4)">修复卡 · 属 T-20</span><span class="tchip">worker-console</span></div><div class="cline">认领 11:08 · 派回原归属者</div></div>
+                </div>
+                <div class="bcol">
+                  <h4>待验收 <b>2</b></h4>
+                  <div class="tcard"><div class="ct">T-14 worktree 供给线 <span class="vpg" title="AI 自验 2 项全过"><i class="p"></i><i class="p"></i></span></div><div class="cline"><span class="warn">⚠ 停留 40 分</span> · worker-relay 提交</div></div>
+                  <div class="tcard"><div class="ct">T-19 发版互斥锁 <span class="vpg" title="AI 自验 4 项全过"><i class="p"></i><i class="p"></i><i class="p"></i><i class="p"></i></span></div><div class="cline">已提交 · 等独立出包验收</div></div>
+                </div>
+                <div class="bcol go">
+                  <h4>⚡ 就绪待装机 <b>2</b></h4>
+                  <div class="tcard"><div class="ct" style="display:flex;align-items:center">T-13 更新通道隔离收尾<span class="vpg" title="AI 自验 3 项全过"><i class="p"></i><i class="p"></i><i class="p"></i></span><span class="vsheet">验收单 ↗</span></div><div class="cm"><span class="tchip br">0.6.0-test.19</span></div><div class="cline">已回填 2/3 · 差 1 项确认 → 收单</div></div>
+                  <div class="tcard fixing"><div class="ct" style="display:flex;align-items:center">T-20 导入码迁移<span class="vpg" title="AI 自验 2 项中 1 项未过"><i class="p"></i><i class="f"></i></span><span class="fixtag">修复中 · 暂缓装机</span></div><div class="cline">装机回填 1 项 ✗ → 修复卡 T-21 · 修完同单再验</div></div>
+                </div>
+                <div class="bcol">
+                  <h4>已完成 <b>1</b></h4>
+                  <div class="tcard" style="opacity:.45"><div class="ct">✓ T-11 M0 PATH 注入</div><div class="cline">完成 · 09-19</div></div>
+                </div>
+              </div>
+              <div class="boardfoot">板面实时同步 · 断线自动补齐 · 修复中卡片暂缓装机 · 卡面 ✓✗○ = AI 自验进度，最终验收以验收单为准</div>
+            </div>
+          </section>
+
+          <!-- 成员：名册卡（三色 = watchdog 双信号） -->
+          <section class="dpane" id="tcrew">
+            <div class="crewwrap">
+              <div class="crewgrid">
+                <div class="member">
+                  <div class="mh"><span class="avatar">👑</span><div style="min-width:0"><div class="nm">Leader</div><div class="rl">指挥 · 兼验收</div></div><span class="mdl">glm-5.3</span><span class="pill g">在线</span></div>
+                  <div class="mb"><b>指挥全团</b> · 拆卡 9 张 · T-13 已验收</div>
+                  <div class="ctxrow"><span class="ctx"><i style="width:18%"></i></span><span class="ctxlabel">上下文 18%</span></div>
+                  <div class="mact"><span>旁听</span><span>消息</span><span>接替</span></div>
+                </div>
+                <div class="member">
+                  <div class="mh"><span class="avatar">🛠</span><div style="min-width:0"><div class="nm">worker-relay</div><div class="rl">开发</div></div><span class="mdl">glm-5.3-air</span><span class="pill g">在线</span></div>
+                  <div class="mb"><b>T-12 任务板数据模型</b> · <b class="br">wt/t7/relay</b></div>
+                  <div class="ctxrow"><span class="ctx"><i style="width:61%"></i></span><span class="ctxlabel">上下文 61%</span></div>
+                  <div class="mact"><span>旁听</span><span>消息</span><span>接替</span></div>
+                </div>
+                <div class="member">
+                  <div class="mh"><span class="avatar">🖥</span><div style="min-width:0"><div class="nm">worker-console</div><div class="rl">开发</div></div><span class="mdl">glm-5.3-air</span><span class="pill g">在线</span></div>
+                  <div class="mb"><b>T-18 CI 冒烟</b> · <b class="br">wt/t7/console</b></div>
+                  <div class="ctxrow"><span class="ctx"><i style="width:22%"></i></span><span class="ctxlabel">上下文 22%</span></div>
+                  <div class="mact"><span>旁听</span><span>消息</span><span>接替</span></div>
+                </div>
+                <div class="member">
+                  <div class="mh"><span class="avatar">📱</span><div style="min-width:0"><div class="nm">worker-mobile</div><div class="rl">开发</div></div><span class="mdl">glm-5.3-air</span><span class="pill g">在线</span></div>
+                  <div class="mb"><b>T-15 手机只读看板</b> · <b class="br">wt/t7/mobile</b></div>
+                  <div class="ctxrow"><span class="ctx"><i style="width:47%"></i></span><span class="ctxlabel">上下文 47%</span></div>
+                  <div class="mact"><span>旁听</span><span>消息</span><span>接替</span></div>
+                </div>
+                <div class="member">
+                  <div class="mh"><span class="avatar">🧪</span><div style="min-width:0"><div class="nm">验收</div><div class="rl">独立出包 · 认知独立</div></div><span class="mdl">claude-opus-4-5</span><span class="pill y">失联</span></div>
+                  <div class="mb"><b>额度链走尽</b> · 验收槽按设计不回落同厂商 · 等换厂商接替</div>
+                  <div class="ctxrow"><span class="ctx"><i style="width:9%"></i></span><span class="ctxlabel">上下文 9%</span></div>
+                  <div class="mact"><span>旁听</span><span>消息</span><span style="border-color:rgba(217,119,87,.4);color:#E8985F">接替 ↗</span></div>
+                </div>
+                <div class="member">
+                  <div class="mh"><span class="avatar">🔍</span><div style="min-width:0"><div class="nm">调研</div><div class="rl">只读 · 检索竞品看板交互</div></div><span class="mdl">最便宜档</span><span class="pill y">滞留</span></div>
+                  <div class="mb"><b>检索竞品看板交互</b> · 25 分钟无日志<div class="cline"><span class="warn">⚠ 滞留 25 分 · watchdog 已通知 Leader</span></div></div>
+                  <div class="ctxrow"><span class="ctx"><i style="width:33%"></i></span><span class="ctxlabel">上下文 33%</span></div>
+                  <div class="mact"><span>旁听</span><span>消息</span><span>接替</span></div>
+                </div>
+              </div>
+              <div class="crewfoot">三色 = watchdog 双信号（心跳 + 日志）· 接替 = 同身份重 spawn，板 + git 是记忆</div>
+            </div>
+          </section>
+
+          <!-- 活动：团队时间线（倒序） -->
+          <section class="dpane" id="tfeed">
+            <div class="feedwrap">
+              <h5>活动 · 团队时间线</h5>
+              <div class="fchips">
+                <span class="fchip on">全部</span>
+                <span class="fchip">输出物</span>
+                <span class="fchip">状态流转</span>
+                <span class="fchip">异常</span>
+              </div>
+              <div class="fi"><span class="t">12:02</span><span class="e">⚠</span><span>调研成员日志停滞 25 分 → 通知 Leader</span></div>
+              <div class="fi"><span class="t">11:05</span><span class="e">✱</span><span>T-13 就绪待装机 <span class="prcode">0.6.0-test.19</span>（notify 已推手机）</span></div>
+              <div class="fi"><span class="t">10:47</span><span class="e">✓</span><span>验收通过 T-13（独立出包）</span></div>
+              <div class="fi"><span class="t">10:31</span><span class="e">▶</span><span>worker-relay 提交 T-14 自测通过 → 待验收</span></div>
+              <div class="fi"><span class="t">10:02</span><span class="e">▶</span><span>worker-relay 认领 T-12</span></div>
+              <div class="fi"><span class="t">09:41</span><span class="e">✱</span><span>worktree 建立 ×4（wt/t7/*）</span></div>
+              <div class="fi"><span class="t">09:35</span><span class="e">✓</span><span>编制确认（3 开发 + 独立验收 + 1 调研 · 共 6 席）</span></div>
+              <div class="fi"><span class="t">09:30</span><span class="e">✱</span><span>开团 · Leader 上线</span></div>
+            </div>
+          </section>
+        </div>
+
+        <!-- 会话域详情：现网详情原样（点 rail 💬 显示） -->
+        <div class="dtdetail" id="detail-chat" style="display:none">
+          <div class="dhead">
+            <div class="row1">
+              <span class="back">‹</span>
+              <span class="dt">🎨 ui-review 走查</span>
+              <span class="live">● 运行中 · 41 分</span>
+              <span class="mini">↗ 导出</span>
+            </div>
+            <div class="row2">
+              <span>上下文 58%</span>
+              <span class="ctxbar"><i style="width:58%"></i></span>
+              <span class="sep">·</span><span>glm-5.3</span>
+              <span class="sep">·</span><span class="mdl">wt/ui-review</span>
+            </div>
+            <div class="dtabs">
+              <button class="tab active" data-t="cmsg">消息</button>
+              <button class="tab" data-t="ctask">任务</button>
+              <button class="tab" data-t="cout">输出物</button>
+              <button class="tab" data-t="call">全部</button>
+              <span class="ovanchor">
+                <button class="ovbtn" title="低频视图：定时任务 · 统计">⋮</button>
+                <div class="ovmenu">
+                  <span class="ovrow" data-t="ctimer">⏰ 定时任务<span class="ovbadge">2</span></span>
+                  <span class="ovrow" data-t="cstat">📊 统计</span>
+                </div>
+              </span>
+              <span class="sp"></span>
+              <button class="mini">⏸ 中断</button>
+            </div>
+          </div>
+
+          <!-- 消息：现网普通对话流（v6.1 扩到 8 轮：导航重构 v6 收尾主题；V8 增量⑤ = 顶部加载更早条 + 断连补洞分隔卡） -->
+          <section class="dpane on" id="cmsg">
+            <div class="msgflow">
+              <div class="histbar">↑ 上滑加载更早 · 加载中（正在翻历史页）——翻完显示「已到对话开头」</div>
+              <div class="mrow me"><div class="mbub">导航重构 v6 收尾：把 docs 里 3 个文档的目录对齐到最新导航，改完跑一遍 linkcheck。</div></div>
+              <div class="mrow ai">
+                <div>
+                  <div class="mwho">Claude</div>
+                  <div class="mbub">已对齐 3 个文档目录；linkcheck 通过，2 个 404 外链已换成归档地址。改动只在 docs/**。</div>
+                </div>
+              </div>
+              <div class="gapcard">⇅ 已补齐断连期间的 6 条消息 · 11:02 重连自动对齐</div>
+              <div class="mrow me"><div class="mbub">好，顺手把过期的 v4 截图引用清掉。</div></div>
+              <div class="mrow ai">
+                <div>
+                  <div class="mwho">Claude</div>
+                  <div class="mbub">收到，正在清理 v4 截图引用——扫到 11 处，删 9 处、2 处换新图……</div>
+                </div>
+              </div>
+              <div class="mrow me"><div class="mbub">设置章节那几张也旧了：换成三段式主窗口的截图，KV 预览文案同步提一句。</div></div>
+              <div class="mrow ai">
+                <div>
+                  <div class="mwho">Claude</div>
+                  <div class="mbub">已换 3 张截图；「关于」收进设置导航后 KV 预览只剩模型服务一节引用，文案已同步——diff 准备好了。</div>
+                </div>
+              </div>
+              <div class="mrow me"><div class="mbub">行。v6 稿就差拍板了，我先出一版 v6.1 放大稿给你预览。</div></div>
+              <div class="mrow ai">
+                <div>
+                  <div class="mwho">Claude</div>
+                  <div class="mbub">好——v6.1 把帧放大到真实分辨率、会话与设置补满内容，团队域继续冻结占位。改完叫你。</div>
+                </div>
+              </div>
+              <div class="typing"><i></i><i></i><i></i></div>
+            </div>
+            <div class="pconfirm" style="margin:0 18px 10px"><span>⏸ 在等你确认<span style="color:var(--faint);font-size:10.5px"> · Bash 写入 docs/</span></span><span style="margin-left:auto;display:flex;gap:6px;align-items:center"><span class="ctxlink">上下文 ↗</span><span class="pcbtn pri">允许</span><span class="pcbtn">拒绝</span></span></div>
+            <div class="inputbar"><div class="box">给 Claude 发消息…</div><div class="send">发送</div></div>
+          </section>
+
+          <!-- 任务：现网任务列表（v6.1 扩到 6 张 · 状态混合；V8 增量② = 卡面两层判定进度点 + 单会话验收单入口） -->
+          <section class="dpane" id="ctask">
+            <div class="crewwrap">
+              <div class="tcard"><div class="ct">✓ 对齐 docs 目录结构 <span class="vpg"><i class="p"></i><i class="p"></i></span></div><div class="cline">AI 自验 2/2 · 5 分钟前</div></div>
+              <div class="tcard"><div class="ct">✓ 替换 404 外链为归档地址 <span class="vpg"><i class="p"></i></span></div><div class="cline">AI 自验 1/1 · 3 分钟前</div></div>
+              <div class="tcard"><div class="ct">✓ 更新设置章节截图（三段式）</div><div class="cline">3 张 · 刚刚</div></div>
+              <div class="tcard"><div class="ct">↻ 清理 v4 截图引用 <span class="vpg"><i class="p"></i><i class="u"></i><i class="u"></i></span></div><div class="cline">进行中 · 11 处已清 9 处 · 自验 1/3</div></div>
+              <div class="tcard"><div class="ct">↻ KV 预览文案同步</div><div class="cline">进行中 · diff 已就绪待过目</div></div>
+              <div class="tcard"><div class="ct" style="display:flex;align-items:center">○ v6.1 放大稿出图</div><div class="cline">待办 · <span class="warn">阻塞：等拍板</span></div></div>
+              <div class="tcard" style="border-color:rgba(255,197,61,.45)"><div class="ct" style="display:flex;align-items:center">⚡ 截图批量替换 · 出包 0.6.0-test.19<span class="vsheet">验收单 ↗</span></div><div class="cline">AI 自验全过已出单 · 等你回填 → 确认收单（你的收单 = 最终确认）</div></div>
+            </div>
+          </section>
+
+          <!-- 全部：合并流（v6.1 扩到 8 条） -->
+          <section class="dpane" id="call">
+            <div class="feedwrap">
+              <h5>全部 · 消息与任务合并流</h5>
+              <div class="fi"><span class="t">11:02</span><span class="e">💬</span><span>你：顺手把过期的 v4 截图引用清掉</span></div>
+              <div class="fi"><span class="t">10:58</span><span class="e">✓</span><span>任务完成：更新设置章节截图（三段式）</span></div>
+              <div class="fi"><span class="t">10:52</span><span class="e">💬</span><span>Claude：已对齐 3 个文档目录，linkcheck 通过</span></div>
+              <div class="fi"><span class="t">10:47</span><span class="e">💬</span><span>你：设置章节截图换三段式的</span></div>
+              <div class="fi"><span class="t">10:40</span><span class="e">✓</span><span>任务完成：替换 404 外链（2 处）</span></div>
+              <div class="fi"><span class="t">10:31</span><span class="e">▶</span><span>任务开始：对齐 docs 目录结构</span></div>
+              <div class="fi"><span class="t">10:15</span><span class="e">💬</span><span>你：导航重构 v6 收尾清单——目录 / linkcheck / v4 引用</span></div>
+              <div class="fi"><span class="t">09:58</span><span class="e">✱</span><span>会话创建 · 分支 wt/ui-review</span></div>
+            </div>
+          </section>
+
+          <!-- 输出物：v7.1 升常驻 Tab（deliver 意图声明制：项目产物写本位路径并登记，全局产物自动收录） -->
+          <section class="dpane" id="cout">
+            <div class="crewwrap">
+              <div class="ovhint" style="margin:0 0 10px">deliver 意图声明制：报告/文档写本位路径，登记只记 path/size</div>
+              <div class="tcard"><div class="ct">docs/team-mode-mockup.html</div><div class="cm"><span class="tchip">134.8KB</span><span class="tchip">刚刚</span><span class="tchip">登记</span><span class="prbtn" style="margin-left:auto">打开</span></div></div>
+              <div class="tcard"><div class="ct">docs/team-mode-design.md</div><div class="cm"><span class="tchip">28KB</span><span class="tchip">1 小时前</span><span class="tchip">登记</span><span class="prbtn" style="margin-left:auto">打开</span></div></div>
+              <div class="tcard"><div class="ct">~/.cc-deck/artifacts/ui-review-summary.html</div><div class="cm"><span class="tchip">全局产物</span><span class="tchip">昨天</span><span class="tchip">自动收录</span><span class="prbtn" style="margin-left:auto">打开</span></div></div>
+              <div class="ovhint">项目产物 deliver 登记 · 全局产物写 ~/.cc-deck/artifacts/ 即自动收录</div>
+            </div>
+          </section>
+
+          <!-- 定时任务：v7.1 低频视图，经 ⋯ 到达 -->
+          <section class="dpane" id="ctimer">
+            <div class="crewwrap">
+              <div class="rtable" style="margin-top:0">
+                <h5>⏰ 定时任务</h5>
+                <div class="rrow"><span class="role">每日 09:00</span>站报汇总<span class="pill g" style="margin-left:auto">启用</span></div>
+                <div class="rrow"><span class="role">周三 21:00</span>依赖升级巡检<span class="pill g" style="margin-left:auto">启用</span></div>
+                <div class="rrow" style="border-bottom:none"><span class="role">每日 22:30</span>events 周期压缩<span class="pill b" style="margin-left:auto">停用</span></div>
+              </div>
+              <div class="ovhint">低频视图 · 收纳于 ⋯</div>
+            </div>
+          </section>
+
+          <!-- 统计：v7.1 低频视图，经 ⋯ 到达 -->
+          <section class="dpane" id="cstat">
+            <div class="crewwrap">
+              <div class="statgrid">
+                <div class="stile"><div class="k">上下文水位</div><div class="v">58%</div><span class="ctx"><i style="width:58%"></i></span></div>
+                <div class="stile"><div class="k">今日事件</div><div class="v">1,214</div></div>
+                <div class="stile"><div class="k">累计输出物</div><div class="v">46</div></div>
+                <div class="stile"><div class="k">连续运行</div><div class="v">41 分</div></div>
+              </div>
+              <div class="ovhint">低频视图 · 收纳于 ⋯</div>
+            </div>
+          </section>
+        </div>
+      </div>
+            <span class="pin c5 dp5">5</span>
+      <span class="pin c6 dp6">6</span>
+      <span class="pin c7 dp7">7</span>
+      <span class="pin dp11">11</span>
+      <span class="pin dp14">14</span>
+    </div>
+
+    <aside class="notes">
+      <div class="note"><div class="nh"><span class="num c5">5</span>什么搬到了哪里</div>
+        <p><b>设置搬家</b>：从孤立抽屉 / 弹窗 → rail ⚙ 三段式主窗口（rail · 设置导航 · 内容区），「关于」收进设置菜单、不占 rail；<b>会话不动</b>：列表与详情（消息 / 任务 / 全部）现网原样，零改动零迁移成本。团队是<b>已点亮的第三域</b>，与既有两域平级，不挤进会话列表当分组。</p></div>
+      <div class="note"><div class="nh"><span class="num c6">6</span>点 rail = 中列原地切换</div>
+        <p>💬 ↔ 👥 点击即切换<b>中列与详情</b>（本帧可点，试试）：不弹窗、不换页，右侧详情随域联动——会话域 = 详情 Tab 行 v7.1 升为 消息 / 任务 / 输出物 / 全部 + ⋯（见 ⑭），团队域 = 本帧四 Tab 完整形态。⚙ 在驾驶舱帧点击平滑跳到下方设置帧。微信左栏心智：导航永远在最左一列。</p></div>
+      <div class="note"><div class="nh"><span class="num c7">7</span>rail 三项 + 扩展位</div>
+        <p>💬 会话 · 👥 团队 · ⚙ 设置三项起手，顶部状态点 = relay 连接（<b>可点</b>，弹连接快览面板）；<b>弹簧以下的留白就是未来域扩展位</b>（通知 / 插件等），不提前占坑。<b>团队域已点亮</b>——本稿即完整形态：消息 / 看板 / 成员 / 活动四 Tab。</p></div>
+      <div class="note"><div class="nh"><span class="num">11</span>两端一张导航地图</div>
+        <p>桌面 rail 与手机底部三 Tab 是<b>同一张地图</b>：💬 会话 · 👥 团队 · ⚙ 设置，三域两端同源。<b>第三域已点亮</b>——手机团队 Tab 完整形态见下方手机章节；骨架、切换语义、与现网的兼容在 v6 已定稿，本稿专注团队域本身。</p></div>
+      <div class="note"><div class="nh"><span class="num">14</span>⋯ 收纳：只收视图不收动作</div>
+        <p>会话详情 Tab 行末尾的 <b>⋮</b>（点 rail 💬 切到会话域可试，钉 14 处）：下拉小菜单收 <b>⏰ 定时任务（琥珀角标 2）· 📊 统计</b>两个低频视图——点菜单行<b>原地切 pane</b>、tab 行 active 让位、⋮ 自己高亮；点普通 tab 即回收。⏸ 中断 / ↗ 导出等<b>动作按钮永不进 ⋯</b>。手机同款语义收进底部浮层（见 ⑬）。团队详情四 Tab 不加 ⋯：无收纳需求不占坑。</p></div>
+    </aside>
+  </div>
+
+  <!-- ================= V8 增量帧 · 项目域 / 通知 / 验收单（桌面） ================= -->
+  <style>
+    /* V8 新帧局部样式（不动 v7.1b 既有 CSS） */
+    .v8sec .dtdetail .dhead { border-bottom: 1px solid var(--border); }
+    .psec { padding: 11px 16px 4px; }
+    .psec h5 { font-size: 11px; color: var(--dim); font-weight: 600; letter-spacing: .3px; display: flex; align-items: center; gap: 8px; }
+    .psec h5 .cnt { color: var(--faint); font-weight: 500; }
+    .psec h5 .jump { margin-left: auto; font-size: 10.5px; color: var(--brand); font-weight: 500; cursor: pointer; }
+    .vrow { display: flex; gap: 9px; align-items: center; padding: 7px 10px; border: 1px solid var(--border); border-radius: 9px; background: var(--panel); margin: 6px 0; font-size: 12px; }
+    .vrow .t { min-width: 0; flex: 1; }
+    .vrow .t b { font-weight: 600; color: var(--text-strong); }
+    .vrow .t .s { color: var(--faint); font-size: 10.5px; margin-top: 1px; }
+    .vrow .k { flex: none; font-size: 10px; color: var(--dim); background: var(--panel-2); border: 1px solid var(--border); border-radius: 6px; padding: 1px 7px; }
+    .notifpanel { position: absolute; left: 64px; bottom: 56px; width: 400px; max-height: 70%; overflow-y: auto; background: var(--panel); border: 1px solid var(--border); border-radius: 12px; box-shadow: 0 14px 40px rgba(0,0,0,.5); padding: 12px 13px; z-index: 30; } /* 锚 rail 🔔 图标右侧弹出（V-11：与触发源空间关联，绿点快览同族） */
+    .notifpanel h5 { font-size: 12px; font-weight: 650; color: var(--text-strong); display: flex; align-items: center; }
+    .notifpanel h5 .clr { margin-left: auto; font-size: 10.5px; color: var(--faint); font-weight: 500; }
+    .ngrp { font-size: 10.5px; color: var(--dim); font-weight: 600; margin: 10px 0 3px; letter-spacing: .3px; }
+    .nrow { display: flex; gap: 9px; padding: 8px 9px; border: 1px solid var(--border); border-radius: 9px; margin: 5px 0; font-size: 12px; background: var(--panel-2); align-items: flex-start; }
+    .nrow.alert { border-color: rgba(229,72,77,.45); background: rgba(229,72,77,.05); }
+    .nrow .ic { flex: none; font-size: 14px; margin-top: 1px; }
+    .nrow .t { min-width: 0; flex: 1; }
+    .nrow .t b { font-weight: 600; color: var(--text-strong); }
+    .nrow .t .s { color: var(--faint); font-size: 10.5px; margin-top: 1px; }
+    .nrow .act { flex: none; font-size: 10.5px; color: var(--brand); border: 1px solid rgba(217,119,87,.5); border-radius: 7px; padding: 2px 9px; margin-top: 2px; }
+  .nrow.warn { border-color: rgba(255,197,61,.4); } /* 中间级琥珀描边：与 alert 红描边分级（视觉审查 V-20） */
+  .nrow .t .s { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 250px; }
+  .nrow.alert .x { flex: none; font-size: 12px; color: var(--faint); padding: 0 2px; margin-top: 2px; cursor: pointer; } /* alert 常驻语义 = 手动逐条关闭（V-10：纪律与界面一致） */
+    .sheetsteps { display: flex; align-items: center; gap: 6px; font-size: 11px; color: var(--dim); padding: 4px 16px 10px; }
+    .sheetsteps b { color: var(--working); font-weight: 600; }
+    .sheetsteps b.cur { background: rgba(255,197,61,.12); border: 1px solid rgba(255,197,61,.4); border-radius: 6px; padding: 1px 8px; } /* 当前段琥珀空心高亮（V-14：与已完成段区分） */
+    .sheetsteps .arw { color: var(--faint); }
+    .srow { display: grid; grid-template-columns: 22px 1fr auto 138px auto; gap: 9px; align-items: center; padding: 8px 10px; border: 1px solid var(--border); border-radius: 9px; background: var(--panel); margin: 6px 16px; font-size: 12px; }
+    .sev { font-size: 10px; color: var(--faint); cursor: pointer; white-space: nowrap; } /* 证据回看入口（V-04：规格四列的第四列） */
+    .screen .srow { grid-template-columns: 22px 1fr auto; row-gap: 6px; } /* 手机验收单帧：输入框/证据折第二行（内容宽 ~388px 装不下五列） */
+    .screen .srow .no { grid-row: 1 / 3; }
+    .screen .srow input { grid-column: 2; grid-row: 2; }
+    .screen .srow .sev { grid-column: 3; grid-row: 2; align-self: center; }
+    .srow .no { color: var(--faint); font-size: 10.5px; }
+    .srow .std { color: var(--text); line-height: 1.45; }
+    .srow .v { flex: none; font-size: 10.5px; border-radius: 6px; padding: 1px 8px; border: 1px solid; }
+    .srow .v.ok { color: var(--done); border-color: rgba(43,217,143,.4); background: rgba(43,217,143,.07); }
+    .srow .v.no { color: #e5484d; border-color: rgba(229,72,77,.4); background: rgba(229,72,77,.06); }
+    .srow .v.un { color: var(--faint); border-color: var(--border); }
+    .srow input { width: 100%; background: var(--panel-2); border: 1px solid var(--border); border-radius: 7px; color: var(--dim); font-size: 11px; padding: 5px 9px; }
+    .aicollapsed { margin: 6px 16px; border: 1px dashed var(--border); border-radius: 9px; padding: 7px 12px; font-size: 11.5px; color: var(--dim); }
+    .sheetfoot { margin: 12px 16px 16px; border-top: 1px solid var(--border); padding-top: 12px; display: flex; gap: 10px; align-items: center; }
+    .sheetfoot .main { flex: 1; text-align: center; font-size: 13px; font-weight: 650; color: #2B2100; background: var(--working); border-radius: 9px; padding: 9px 0; } /* 琥珀底深字：验收单属「需你行动」语义族（V-15：白字 on 品牌橙对比不足） */
+    .sheetfoot .ghost2 { font-size: 12px; color: var(--dim); border: 1px solid var(--border); border-radius: 9px; padding: 8px 14px; }
+  </style>
+
+  <h2 class="sh"><span class="tag t-dt">V8 增量 · 项目域 / 通知 / 验收单</span>桌面端 · 三张新帧（既有帧零回归）</h2>
+  <p class="shsub">V2 编排层长出的三个新面：① <b>📁 项目域</b> = 聚合<b>只读</b>视图（列表 → 详情四分节，每节「在 💬 中查看 ↗」回原域——联动不合并；挂 <b>O10</b>，M1③ 动工前拍）；② <b>🔔 通知面板</b> = rail 弹簧下扩展位首个住户（badge = 未读 alert 数；🔴 需你行动<b>常驻手动关</b> / 🟡 注意 / ⚪ 动态；失联 alert 行动项 = <b>换厂商接替</b>入口）；③ <b>验收单页</b> = 就绪待装机卡 / alert / 项目详情三入口同单（行组按端分节；全 pass 行折叠「AI 已代验」；<b>回填 + 确认收单两步同屏</b>——D15 你的收单 = 闸口；挂 <b>O1</b>，M1② 动工前拍）。</p>
+
+  <!-- 帧 A · 项目域（rail 📁 一级域：聚合只读） -->
+  <div class="stage v8sec">
+    <div class="winframe" id="mk-frame-proj">
+      <div class="chrome">
+        <div class="dots"><i></i><i></i><i></i></div>
+        <div class="tt">CC Deck — 项目</div>
+      </div>
+      <div class="dtbody" style="position:relative">
+        <nav class="rail">
+          <span class="rdot" title="已连接 · 本机 relay"></span>
+          <span class="ri" title="会话">💬</span>
+          <span class="ri" title="团队">👥</span>
+          <span class="ri on" title="项目 · V8 新增一级域">📁</span>
+          <span class="rspring"></span>
+          <span class="ri" title="通知">🔔<span class="rbadge">2</span></span>
+          <span class="ri" title="设置">⚙</span>
+        </nav>
+
+        <div class="dtside">
+          <div class="listbar"><h3>项目</h3><span class="hbtn">共 4 · 已隐藏 1</span></div>
+          <div class="grp">▾ 活跃 <span class="cnt">3</span></div>
+          <div class="scard on">
+            <div class="r1">📂 cc-deck <span class="dot g"></span></div>
+            <div class="r2">~/dev/cc-deck · 6 会话 · 1 团队 · 2 需行动</div>
+          </div>
+          <div class="scard">
+            <div class="r1">📂 windclaw-qclaw <span class="dot y"></span></div>
+            <div class="r2">~/dev/windclaw · 1 会话 · 等构建</div>
+          </div>
+          <div class="scard">
+            <div class="r1">📂 blog <span class="dot b"></span></div>
+            <div class="r2">~/dev/blog · 3 天前活跃</div>
+          </div>
+          <div class="grp" style="margin-top:6px">▾ 已隐藏 <span class="cnt">1</span></div>
+          <div class="scard dim">
+            <div class="r1">📂 legacy-scripts</div>
+            <div class="r2">右键隐藏 · 可恢复</div>
+          </div>
+        </div>
+
+        <div class="dtdetail">
+          <div class="dhead">
+            <div class="row1">
+              <span class="back">‹</span>
+              <span class="dt">📂 cc-deck</span>
+              <span class="live">● 6 会话 · 1 团队 · 2 需行动</span>
+              <span class="mini ttl">✏ 改名</span>
+              <span class="mini">移除（仅隐藏）</span>
+            </div>
+            <div class="row2">
+              <span>目录 ~/dev/cc-deck</span>
+              <span class="sep">·</span><span>输出物 46</span>
+              <span class="sep">·</span><span>验收单 3 张未闭环</span>
+            </div>
+          </div>
+          <div class="crewwrap" style="padding:0">
+            <div class="psec">
+              <h5>💬 会话 <span class="cnt">6</span><span class="jump">在 💬 中查看 ↗</span></h5>
+              <div class="vrow"><div class="t"><b>🎨 ui-review 走查</b><div class="s">刚刚活跃 · 上下文 58%</div></div><span class="k">运行中</span></div>
+              <div class="vrow"><div class="t"><b>📦 0.5.2-test.15 出包</b><div class="s">1 小时前 · 等安卓产物</div></div><span class="k">运行中</span></div>
+            </div>
+            <div class="psec">
+              <h5>👥 团队 <span class="cnt">1 活跃 · 1 归档</span><span class="jump">在 👥 中查看 ↗</span></h5>
+              <div class="vrow"><div class="t"><b>🤖 cc-deck M1 攻坚团</b><div class="s">6 成员 · 4 进行中 · 2 待装机</div></div><span class="k">运行中</span></div>
+              <div class="vrow"><div class="t"><b>🧹 v0.5.2 双端发版团</b><div class="s">已归档 · 09-18</div></div><span class="k">归档</span></div>
+            </div>
+            <div class="psec">
+              <h5>📦 输出物 <span class="cnt">46</span><span class="jump">全部 ↗</span></h5>
+              <div class="vrow"><div class="t"><b>docs/v2-system-design.md</b><div class="s">刚刚</div></div><span class="k" style="color:#7CB8FF">交付物</span></div>
+              <div class="vrow"><div class="t"><b>验收单 0.6.0-test.19</b><div class="s">1 小时前 · 已回填 2/3</div></div><span class="k" style="color:var(--working)">验收单</span></div>
+            </div>
+            <div class="psec" style="padding-bottom:14px">
+              <h5>✅ 验收单 <span class="cnt">3 未闭环</span><span class="jump">全部 ↗</span></h5>
+              <div class="vrow"><div class="t"><b>0.6.0-test.19 · 更新通道隔离</b><div class="s">已回填 2/3 · 等确认收单</div></div><span class="k" style="color:var(--working)">已回填</span></div>
+              <div class="vrow"><div class="t"><b>0.6.0-test.18 · 导入码</b><div class="s">1 项 ✗ → 修复中（T-21）</div></div><span class="k" style="color:#e5484d">修复中</span></div>
+              <div class="vrow"><div class="t"><b>0.6.0-test.17 · 归档清理</b><div class="s">全部通过 · 已收单</div></div><span class="k">已收单</span></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="tip">📌 项目域三原则：<b>只读聚合</b>（不产生第二写面——「升格即搬家不留双入口」判据的豁免根基；guard：M2 若此处看板变可写须重新过判据）；<b>联动不合并</b>（每节「在 💬 中查看 ↗」跳原域，与对端 #133 验收单入口同哲学）；<b>指纹 = realpath 归一</b>（防 /var↔/private/var 双项目）。手机底部第四 Tab 同款（见下方手机帧）——四 Tab 是否过载挂 <b>O-V8a</b> 随 O10 一并拍。</div>
+  </div>
+
+  <!-- 帧 B · 通知面板（rail 🔔 弹出：三级分组 + alert 行动项） -->
+  <div class="stage v8sec">
+    <div class="winframe" id="mk-frame-notif">
+      <div class="chrome">
+        <div class="dots"><i></i><i></i><i></i></div>
+        <div class="tt">CC Deck — 通知</div>
+      </div>
+      <div class="dtbody" style="position:relative">
+        <nav class="rail">
+          <span class="rdot" title="已连接 · 本机 relay"></span>
+          <span class="ri" title="会话">💬</span>
+          <span class="ri" title="团队">👥</span>
+          <span class="ri" title="项目">📁</span>
+          <span class="rspring"></span>
+          <span class="ri on" title="通知">🔔<span class="rbadge">2</span></span>
+          <span class="ri" title="设置">⚙</span>
+        </nav>
+
+        <div style="position:absolute;inset:0;background:rgba(3,8,15,.45);z-index:29"></div>
+        <div class="notifpanel">
+          <h5>通知<span style="font-size:10.5px;color:var(--faint);font-weight:500;margin-left:8px">🔴 条目常驻 · 手动关闭</span><span class="clr">清空 info/warn →</span></h5>
+          <div class="ngrp">🔴 需你行动（常驻 · 不自动消失）</div>
+          <div class="nrow alert"><span class="ic">⚡</span><div class="t"><b>0.6.0-test.19 就绪待装机</b><div class="s">T-13 已回填 2/3 · 差 1 项确认收单 · 12 分钟前</div></div><span class="act">验收单 ↗</span><span class="x">×</span></div>
+          <div class="nrow alert"><span class="ic">📴</span><div class="t"><b>验收成员失联 · 额度链走尽</b><div class="s">claude 额度尽 · 验收槽不回落同厂商 · 8 分钟前</div></div><span class="act">换厂商接替 ↗</span><span class="x">×</span></div>
+          <div class="ngrp">🟡 注意（可自愈 · 此为历史）</div>
+          <div class="nrow warn"><span class="ic">⚠</span><div class="t"><b>worker-relay 滞留 25 分</b><div class="s">已通知 Leader · watchdog · 30 分钟前</div></div></div>
+          <div class="nrow warn"><span class="ic">🔄</span><div class="t"><b>worker-mobile 已失联并自动接替</b><div class="s">resume 成功 · 板与 git 是记忆 · 1 小时前</div></div></div>
+          <div class="ngrp">⚪ 动态（短时 · 已读即清）</div>
+          <div class="nrow"><span class="ic">📤</span><div class="t"><b>deliver：v8-ui-design.md 已登记</b><div class="s">2 小时前</div></div></div>
+          <div class="nrow"><span class="ic">📦</span><div class="t"><b>test.19 安卓产物已出</b><div class="s">3 小时前</div></div></div>
+        </div>
+
+        <div class="dtside" style="opacity:.5">
+          <div class="listbar"><h3>会话</h3></div>
+        </div>
+        <div class="dtdetail" style="opacity:.35">
+          <div class="dhead"><div class="row1"><span class="dt">🎨 ui-review 走查</span></div></div>
+        </div>
+      </div>
+    </div>
+    <div class="tip">🔔 三级纪律（V2 §九）：info 短时 / warn 10s 可自愈 / <b>alert 常驻手动关</b>——「全部已读」只清 info/warn，alert 逐条关闭；<b>badge 只数 alert</b>（warn/info 不计——防狼来了）。条目 = notification 表投影（payload 只作渲染引用），点击跳既有路由不开新路。<b>失联分级</b>：自动接替成功 = warn 事后告知；链走尽才升 alert（本帧第二条即此形态，行动项=换厂商接替 = 手动接替入口）。手机触达形态（推送/徽标 vs 收纳）挂 <b>O2</b>——Android FGS 常驻通知位已被连接保活占用是 O2 必算项。</div>
+  </div>
+
+  <!-- 帧 C · 验收单页（三入口同单：就绪待装机卡 / alert / 项目详情） -->
+  <div class="stage v8sec">
+    <div class="winframe" id="mk-frame-sheet">
+      <div class="chrome">
+        <div class="dots"><i></i><i></i><i></i></div>
+        <div class="tt">CC Deck — 验收单 · 0.6.0-test.19</div>
+      </div>
+      <div class="dtbody" style="position:relative">
+        <nav class="rail">
+          <span class="rdot" title="已连接 · 本机 relay"></span>
+          <span class="ri" title="会话">💬</span>
+          <span class="ri" title="团队">👥</span>
+          <span class="ri" title="项目">📁</span>
+          <span class="rspring"></span>
+          <span class="ri" title="通知">🔔<span class="rbadge">2</span></span>
+          <span class="ri" title="设置">⚙</span>
+        </nav>
+
+        <div class="dtdetail" style="flex:1">
+          <div class="dhead">
+            <div class="row1">
+              <span class="back">‹</span>
+              <span class="dt">✅ 验收单 · 0.6.0-test.19</span>
+              <span style="font-size:11px;color:var(--dim)">批内 1 卡 · T-13 原卡</span>
+              <span class="mini">导出 md</span>
+            </div>
+            <div class="row2">
+              <span>验收会话出单 · 12:02</span>
+              <span class="sep">·</span><span>回填 2/3</span>
+            </div>
+          </div>
+          <div class="sheetsteps">出单 <b>✓</b><span class="arw">→</span> 回填 <b>✓ 已提交 2/3</b><span class="arw">→</span> <b class="cur">确认收单（等 1 项）</b></div>
+
+          <div class="psec" style="padding-top:2px"><h5>📱 手机端（2 项 · 待你回填）</h5></div>
+          <div class="srow"><span class="no">①</span><span class="std">安装 test.19 后检查更新，通道角标显示「test」</span><span class="v ok">✓</span><input placeholder="通过，角标正常"><span class="sev">证据 ↗</span></div>
+          <div class="srow"><span class="no">②</span><span class="std">公司网下点「检查更新」能拉到清单</span><span class="v un">未测</span><input placeholder="手机端测完回此填写"><span class="sev" style="opacity:.3">—</span></div>
+          <div class="psec"><h5>🖥 桌面端（1 项 · 已回填 ✓）</h5></div>
+          <div class="srow"><span class="no">③</span><span class="std">双端同装 test.19，badge 计数一致</span><span class="v ok">✓</span><input placeholder="一致，均 1"><span class="sev">证据 ↗</span></div>
+          <div class="psec"><h5>🌐 网页端 · AI 已代验 3 项（只读）</h5></div>
+          <div class="srow" style="opacity:.75"><span class="no">④</span><span class="std">控制台打开，版本号显示 test.19</span><span class="v ok">✓</span><div style="font-size:10.5px;color:var(--faint)">AI 代验通过</div><span class="sev">证据 ↗</span></div>
+          <div class="srow" style="opacity:.75"><span class="no">⑤</span><span class="std">输出物页可打开最新登记</span><span class="v ok">✓</span><div style="font-size:10.5px;color:var(--faint)">AI 代验通过</div><span class="sev">证据 ↗</span></div>
+          <div class="srow" style="opacity:.75"><span class="no">⑥</span><span class="std">更新通道角标与桌面一致</span><span class="v ok">✓</span><div style="font-size:10.5px;color:var(--faint)">AI 代验通过</div><span class="sev">证据 ↗</span></div>
+          <div class="sheetfoot">
+            <div class="main">提交回填（2/3）</div>
+          </div>
+          <div class="aicollapsed" style="border-color:rgba(255,197,61,.4);color:var(--dim)">提交成功后此按钮变 <b style="color:var(--working)">「确认收单」</b>（全过时）——回填与收单两步同屏；仍有未测 = 保持「提交回填（N/M）」；有 ✗ 时变「已通知修复 · 跟踪看板 ↗」</div>
+        </div>
+      </div>
+    </div>
+    <div class="tip">✅ 入口三处同单：就绪待装机卡「验收单 ↗」chip / 通知 alert「验收单 ↗」/ 项目详情 ✅ 分节——<b>状态入口、联动不合并</b>（O1 口径，#133 已倾向）。行组<b>按端分节</b>（手机/桌面/网页——snapshot 口径）；<b>团队单全 pass 行正常展开</b>供复核（本帧形态）；<b>单会话模式</b>才折叠为「AI 已代验 ✓ N 项」（渲染裁剪，快照恒全量）——手机验收单帧即折叠形态。已验行可点<b>证据回看 ↗</b>（弹证据摘要）。<b>两步同屏</b>：提交回填 → 确认收单，全过才出收单键（D15：你的收单 = 唯一终态闸口）；有 fail → 通知修复卡（默认派回原归属者），closed 后仍可改判（改判只改判定记录 + 触发修复卡，卡态不回转）。表单通道 = 用户端凭证（D16）——离线/凭证失效提示引导重配对，不出技术弹窗。挂 <b>O1</b>（M1② 动工前拍板入口终形态）。</div>
+  </div>
+
+  <!-- ================= 手机端 ================= -->
+  <h2 class="sh" id="mk-phone"><span class="tag t-ph">掌上完整形态</span>手机端 · 团队 Tab + 会话详情（七帧）</h2>
+  <p class="shsub">底部四 Tab（V8 ① 起）：<b>💬 会话 / 👥 团队 / 📁 项目 / ⚙ 设置</b>——与桌面 rail 同一张导航地图，团队 Tab v7 点亮、v7.1 增补会话详情帧（既有帧底栏已同步四 Tab）。会话主页 = 列表加<b>项目分组</b>（V8 ①，组头 = 项目名 + 折叠箭头）+ 团队入口卡点亮；<b>会话详情</b>= 消息 / 任务 / 输出物 / 全部 + ⋯，低频视图收进底部浮层；团队主页与团队详情（对话 / 看板 / 成员 + ⋯ 收活动）= 二级页藏底栏，只留 ‹ 返回；设置 · 连接与设备 = 浏览态（手机是指挥台，不是安装器）。<b>七帧逐一看（demo 数据已随 V8 看板同步）</b>：两端看到的是 relay 同一事件流；项目 / 通知 / 验收单新帧见下方 V8 掌上节。</p>
+  <div class="stage">
+    <div class="phone" id="mk-ph-chat">
+      <div class="notch"></div>
+      <div class="screen withbar">
+        <header class="appbar">
+          <div class="tt">
+            <div class="t">会话</div>
+          </div>
+          <span style="position:relative;font-size:17px;color:var(--p-dim);margin-right:12px" title="通知 · badge 只数需你行动">🔔<span style="position:absolute;top:-4px;right:-7px;min-width:14px;height:14px;line-height:14px;border-radius:7px;background:#e5484d;color:#fff;font-size:9px;font-weight:700;text-align:center;padding:0 3px">2</span></span>
+          <span class="plus" title="新建普通会话 / 开启新团队">＋</span>
+        </header>
+
+        <!-- 会话主页：团队入口卡 + 普通会话列表（root 页：有底栏；v6.1 扩到 6 张） -->
+        <section class="ppane on">
+          <div class="hcard team">
+            <div class="av">🤖</div>
+            <div class="ht">
+              <div class="nm">cc-deck M1 攻坚团<span class="dot g"></span></div>
+              <div class="hs">6 成员 · 4 进行中 · 2 待装机 · <span class="live">刚刚活跃</span></div>
+            </div>
+          </div>
+          <div style="font-size:10.5px;color:var(--p-faint);padding:4px 4px 5px;letter-spacing:.4px">▾ cc-deck · 进行中 <b style="color:var(--p-dim)">4</b></div>
+          <div class="hcard">
+            <div class="av">🎨</div>
+            <div class="ht">
+              <div class="nm">ui-review 走查<span class="dot g"></span></div>
+              <div class="hs">清理 v4 截图引用 · <span class="live">刚刚活跃</span></div>
+            </div>
+          </div>
+          <div class="hcard">
+            <div class="av">🤖</div>
+            <div class="ht">
+              <div class="nm">团队模式设计稿 v6<span style="font-size:9px;color:var(--working);border:1px solid rgba(255,197,61,.45);border-radius:5px;padding:0 5px;margin-left:6px">⏸ 等你确认</span><span class="dot g"></span></div>
+              <div class="hs">导航地基 · 在等你确认方案 · 12 分钟前</div>
+            </div>
+          </div>
+          <div class="hcard">
+            <div class="av">📦</div>
+            <div class="ht">
+              <div class="nm">0.5.2-test.15 出包<span class="dot y"></span></div>
+              <div class="hs">Actions 跑完 2/3 · 等安卓产物</div>
+            </div>
+          </div>
+          <div class="hcard">
+            <div class="av">📱</div>
+            <div class="ht">
+              <div class="nm">手机走查<span class="dot b"></span></div>
+              <div class="hs">无线 adb 待连 · 1 小时前</div>
+            </div>
+          </div>
+          <div style="font-size:10.5px;color:var(--p-faint);padding:8px 4px 5px;letter-spacing:.4px">▾ blog · 已完成 <b style="color:var(--p-dim)">2</b></div>
+          <div class="hcard dim">
+            <div class="av">🔧</div>
+            <div class="ht">
+              <div class="nm">主题模板调试<span class="dot b"></span></div>
+              <div class="hs">暗色代码块适配 · 昨天</div>
+            </div>
+          </div>
+          <div class="hcard dim">
+            <div class="av">📝</div>
+            <div class="ht">
+              <div class="nm">文章草稿整理<span class="dot b"></span></div>
+              <div class="hs">3 篇 · 待发布 · 前天</div>
+            </div>
+          </div>
+        </section>
+
+        <nav class="ptabbar">
+          <span class="ptab on"><span class="ic">💬</span><span class="lb">会话</span></span>
+          <span class="ptab"><span class="ic">👥</span><span class="lb">团队</span><span class="pbadge">1</span></span>
+          <span class="ptab"><span class="ic">📁</span><span class="lb">项目</span></span>
+          <span class="ptab"><span class="ic">⚙</span><span class="lb">设置</span></span>
+        </nav>
+      </div>
+
+      <span class="pin cp p1">1</span>
+    </div>
+
+    <!-- 帧 1b · 会话详情（v7.1 新增 · 二级页藏底栏；Tab 行 = 消息/任务/输出物/全部 + ⋮；本帧把 ⋯ 浮层画成打开态） -->
+    <div class="phone" id="mk-ph-chatd">
+      <div class="notch"></div>
+      <div class="screen">
+        <header class="appbar">
+          <span class="back">‹</span>
+          <div class="tt">
+            <div class="t">🎨 ui-review 走查</div>
+            <div class="s"><span class="live">● 运行中 · 41 分</span> · 上下文 58%</div>
+          </div>
+        </header>
+        <nav class="ptabs">
+          <button class="on" data-t="p7m">消息</button>
+          <button data-t="p7k">任务</button>
+          <button data-t="p7o">输出物</button>
+          <button data-t="p7a">全部</button>
+          <span class="ovanchor">
+            <button class="ovbtn" title="低频视图：定时任务 · 统计">⋮<span class="ovbadge">2</span></button>
+          </span>
+        </nav>
+
+        <section class="ppane on" id="p7m">
+          <div class="histbar" style="padding:6px 0 2px">↑ 上滑加载更早</div>
+          <div class="gapcard" style="border-color:rgba(255,197,61,.4);color:var(--working)">⇄ 正在对齐更早的消息…</div>
+          <div class="prow me"><div class="pbub">把 docs 里 3 个文档的目录对齐到最新导航，改完跑一遍 linkcheck。</div></div>
+          <div class="prow leader"><div><div class="pwho">Claude</div><div class="pbub">已对齐 3 个文档目录；linkcheck 通过，2 个 404 外链已换归档地址。</div></div></div>
+          <div class="gapcard">⇅ 已补齐断连期间的 6 条消息 · 11:02 重连自动对齐</div>
+          <div class="prow me"><div class="pbub">好，顺手把过期的 v4 截图引用清掉。</div></div>
+          <div class="prow leader"><div><div class="pwho">Claude</div><div class="pbub">收到——v4 截图引用扫到 11 处，删 9 处、2 处换新图，正在收尾……</div></div></div>
+          <div class="pconfirm" style="margin:8px 10px"><span>⏸ 在等你确认<span style="color:var(--p-faint);font-size:10.5px"> · Bash 写入 docs/</span></span><span style="margin-left:auto;display:flex;gap:6px;align-items:center"><span class="ctxlink" style="color:var(--p-faint)">上下文 ↗</span><span class="pcbtn pri">允许</span><span class="pcbtn">拒绝</span></span></div>
+          <div class="pinbar"><div class="box">给 Claude 发消息…</div><div class="send">发送</div></div>
+        </section>
+
+        <section class="ppane" id="p7k">
+          <div class="pcard"><div class="ct">✓ 对齐 docs 目录 <span class="vpg"><i class="p"></i><i class="p"></i></span></div><div class="pcline">AI 自验 2/2 · 5 分钟前</div></div>
+          <div class="pcard"><div class="ct">✓ 替换 404 外链 <span class="vpg"><i class="p"></i></span></div><div class="pcline">AI 自验 1/1 · 3 分钟前</div></div>
+          <div class="pcard"><div class="ct">↻ 清理 v4 引用 <span class="vpg"><i class="p"></i><i class="u"></i></span></div><div class="pcline">进行中 · 11 处已清 9 处 · 自验 1/2</div></div>
+          <div class="pcard"><div class="ct">○ v7.1 补丁</div><div class="pcline">待办 · <span class="warn">阻塞：等拍板</span></div></div>
+        </section>
+
+        <section class="ppane" id="p7o">
+          <div class="pcard"><div class="ct">docs/team-mode-mockup.html</div><div class="cm"><span class="pchip">134.8KB</span><span class="pchip">刚刚</span><span class="pchip br">登记</span></div></div>
+          <div class="pcard"><div class="ct">docs/team-mode-design.md</div><div class="cm"><span class="pchip">28KB</span><span class="pchip">1 小时前</span><span class="pchip br">登记</span></div></div>
+          <div class="pcard"><div class="ct">~/.cc-deck/artifacts/ui-review-summary.html</div><div class="cm"><span class="pchip">全局产物</span><span class="pchip">昨天</span><span class="pchip br">自动收录</span></div></div>
+          <div class="ovhint">deliver 意图声明制：写本位路径，登记只记 path/size</div>
+        </section>
+
+        <section class="ppane" id="p7a">
+          <div class="pfi"><span class="t">11:02</span><span class="e">💬</span><span>你：顺手清掉过期 v4 截图引用</span></div>
+          <div class="pfi"><span class="t">10:58</span><span class="e">✓</span><span>任务完成：更新设置章节截图</span></div>
+          <div class="pfi"><span class="t">10:52</span><span class="e">💬</span><span>Claude：目录对齐 · linkcheck 通过</span></div>
+          <div class="pfi"><span class="t">10:40</span><span class="e">✓</span><span>任务完成：替换 404 外链（2 处）</span></div>
+          <div class="pfi"><span class="t">10:31</span><span class="e">▶</span><span>任务开始：对齐 docs 目录结构</span></div>
+          <div class="pfi"><span class="t">09:58</span><span class="e">✱</span><span>会话创建 · <b>wt/ui-review</b></span></div>
+        </section>
+
+        <section class="ppane" id="p7timer">
+          <div class="pfrow"><span>⏰ 每日 09:00 · 站报汇总</span><span class="ppill g">启用</span></div>
+          <div class="pfrow"><span>⏰ 周三 21:00 · 依赖升级巡检</span><span class="ppill g">启用</span></div>
+          <div class="pfrow" style="border-bottom:none"><span>⏰ 每日 22:30 · events 周期压缩</span><span class="ppill b">停用</span></div>
+          <div class="ovhint">低频视图 · 收纳于 ⋯</div>
+        </section>
+
+        <section class="ppane" id="p7stat">
+          <div class="statgrid">
+            <div class="stile"><div class="k">上下文水位</div><div class="v">58%</div><span class="ctx"><i style="width:58%"></i></span></div>
+            <div class="stile"><div class="k">今日事件</div><div class="v">1,214</div></div>
+            <div class="stile"><div class="k">累计输出物</div><div class="v">46</div></div>
+            <div class="stile"><div class="k">连续运行</div><div class="v">41 分</div></div>
+          </div>
+          <div class="ovhint">低频视图 · 收纳于 ⋯</div>
+        </section>
+
+        <!-- ⋯ 底部浮层：本帧画成打开态（遮罩 + 半屏 sheet）；点菜单行原地切 pane 并收起 -->
+        <div class="ovmask on"></div>
+        <div class="ovsheet on">
+          <div class="ovgrip"></div>
+          <h6>低频视图</h6>
+          <span class="ovrow" data-t="p7timer">⏰ 定时任务<span class="ovbadge">2</span></span>
+          <span class="ovrow" data-t="p7stat">📊 统计</span>
+          <div class="ovfoot">只收视图不收动作 · 点按本页原地切换</div>
+        </div>
+      </div>
+
+      <span class="pin cp p13">13</span>
+    </div>
+
+    <!-- 帧 2 · 团队主页（root 页：底栏 👥 选中；团队卡选中态 + 开团流程提示） -->
+    <div class="phone" id="mk-ph-team">
+      <div class="notch"></div>
+      <div class="screen withbar">
+        <header class="appbar">
+          <div class="tt">
+            <div class="t">团队</div>
+          </div>
+          <span style="position:relative;font-size:17px;color:var(--p-dim);margin-right:12px" title="通知 · badge 只数需你行动">🔔<span style="position:absolute;top:-4px;right:-7px;min-width:14px;height:14px;line-height:14px;border-radius:7px;background:#e5484d;color:#fff;font-size:9px;font-weight:700;text-align:center;padding:0 3px">2</span></span>
+          <span class="plus" title="开新团队">＋</span>
+        </header>
+
+        <section class="ppane on">
+          <div class="hcard team on">
+            <div class="av">🤖</div>
+            <div class="ht">
+              <div class="nm">cc-deck M1 攻坚团<span class="dot g"></span></div>
+              <div class="hs">6 成员 · 4 进行中 · 2 待装机 · <span class="live">刚刚活跃</span></div>
+            </div>
+          </div>
+          <div class="hcard dim">
+            <div class="av">🧹</div>
+            <div class="ht">
+              <div class="nm">v0.5.2 双端发版团<span class="dot b"></span></div>
+              <div class="hs">已归档 · 09-18</div>
+            </div>
+          </div>
+          <div class="ppradd" style="margin:2px 0 14px">＋ 新建团队</div>
+          <div class="pteamnotice">开团：描述目标 → Leader 建议编制 → 你确认 → 自动建 worktree 并 spawn 全员</div>
+        </section>
+
+        <nav class="ptabbar">
+          <span class="ptab"><span class="ic">💬</span><span class="lb">会话</span></span>
+          <span class="ptab on"><span class="ic">👥</span><span class="lb">团队</span><span class="pbadge">1</span></span>
+          <span class="ptab"><span class="ic">📁</span><span class="lb">项目</span></span>
+          <span class="ptab"><span class="ic">⚙</span><span class="lb">设置</span></span>
+        </nav>
+      </div>
+
+      <span class="pin cp p2">2</span>
+    </div>
+
+    <!-- 帧 3 · 团队详情（二级页：无底栏；看板 Tab 默认——竖排泳道，就绪待装机置顶） -->
+    <div class="phone" id="mk-ph-teamd">
+      <div class="notch"></div>
+      <div class="screen">
+        <header class="appbar">
+          <span class="back">‹</span>
+          <div class="tt">
+            <div class="t">cc-deck M1 攻坚团</div>
+            <div class="s"><span class="live">● 运行中</span> · 编制 6</div>
+          </div>
+        </header>
+        <nav class="ptabs">
+          <button data-t="p3t">对话</button>
+          <button class="on" data-t="p3b">看板<span class="pbadge">1</span></button>
+          <button data-t="p3c">成员</button>
+          <span class="ovanchor">
+            <button class="ovbtn" title="低频视图：活动">⋮</button>
+          </span>
+        </nav>
+
+        <section class="ppane" id="p3t">
+          <div class="pteamnotice">开团 09:30 · 编制确认：3 开发 + 独立验收（换厂商）+ 1 调研 · 你已确认</div>
+          <div class="prow me"><div class="pbub">M1 目标：relay 任务板 + worktree 供给线 + 手机只读看板。验收走独立出包。</div></div>
+          <div class="prow leader"><div><div class="pwho">Leader · glm-5.3</div><div class="pbub">已拆 9 张卡；T-12 / T-15 / T-18 三张先并行，worker 已认领开工，worktree 已建。</div></div></div>
+          <div class="prow me"><div class="pbub">手机看板先做只读，写操作 M2 再开。</div></div>
+          <div class="prow leader"><div><div class="pwho">Leader · glm-5.3</div><div class="pbub">收到，T-15 已标 M2。T-14 自测通过、已提交待验收。</div></div></div>
+          <div class="prow leader"><div><div class="pwho">Leader · glm-5.3</div><div class="pbub pready"><div class="rt">T-13 更新通道隔离收尾 · 就绪待装机</div><div class="rd">独立出包通过 · 四处版本号已同步 · 产物 0.6.0-test.19</div><div class="preadybtns"><span class="pdl">装机看效果</span><span class="pfb">反馈问题</span></div></div></div></div>
+          <div class="ptyping"><i></i><i></i><i></i></div>
+          <div class="pinbar"><div class="box">给 Leader 发消息…</div><div class="send">发送</div></div>
+        </section>
+
+        <section class="ppane on" id="p3b">
+          <div class="ov ovpit">
+            <div class="ovhit">
+              <div class="prog"><i class="p-b" data-lane="0" data-n="2" style="width:18%"></i><i class="p-r" data-lane="1" data-n="4" style="width:36%"></i><i class="p-v" data-lane="2" data-n="2" style="width:18%"></i><i class="p-ok" data-lane="3" data-n="2" style="width:19%"></i><i class="p-d" data-lane="4" data-n="1" style="width:9%"></i></div>
+              <span class="ovmark"></span>
+            </div>
+            <div class="ovleg">
+              <span class="legbtn" data-lane="0"><i class="lg p-b"></i>待认领 <b>2</b></span>
+              <span class="legbtn" data-lane="1"><i class="lg p-r"></i>进行中 <b>4</b></span>
+              <span class="legbtn" data-lane="2"><i class="lg p-v"></i>待验收 <b>2</b></span>
+              <span class="legbtn" data-lane="3"><i class="lg p-ok"></i>待装机 <b>2</b></span>
+              <span class="legbtn" data-lane="4"><i class="lg p-d"></i>完成 <b>1</b></span>
+            </div>
+            <div class="ovhint" style="margin:8px 0 0">总览吸顶 · 点分段 / 图例跳组 · 框 = 当前视口泳道</div>
+          </div>
+          <div class="plane go" data-lane="3">
+            <div class="planeh"><span class="pin-top">置顶</span><span class="ln">⚡ 就绪待装机</span><span class="lc">2</span><span class="arr">▾</span></div>
+            <div class="pcard">
+              <div class="ct" style="display:flex;align-items:center">T-13 更新通道隔离收尾<span class="vpg" title="AI 自验 3 项全过"><i class="p"></i><i class="p"></i><i class="p"></i></span><span class="vsheet">验收单 ↗</span></div>
+              <div class="cm"><span class="pchip br">0.6.0-test.19</span></div>
+              <div class="pcline">已回填 2/3 · 差 1 项确认 → 收单</div>
+            </div>
+            <div class="pcard fixing">
+              <div class="ct" style="display:flex;align-items:center">T-20 导入码迁移<span class="vpg" title="AI 自验 2 项中 1 项未过"><i class="p"></i><i class="f"></i></span><span class="fixtag">修复中 · 暂缓装机</span></div>
+              <div class="pcline">装机回填 1 项 ✗ → 修复卡 T-21 · 修完同单再验</div>
+            </div>
+          </div>
+          <div class="plane" data-lane="1">
+            <div class="planeh"><span class="ln">进行中</span><span class="lc">4</span><span class="arr">▾</span></div>
+            <div class="pcard"><div class="ct">T-12 任务板数据模型 <span class="vpg" title="AI 自验 4 项中 2 项通过"><i class="p"></i><i class="p"></i><i class="u"></i><i class="u"></i></span></div><div class="cm"><span class="pchip">worker-relay</span><span class="pchip">glm-5.3-air</span></div><div class="pcline">认领 10:02 · wt/t7/relay</div></div>
+            <div class="pcard"><div class="ct">T-15 手机只读看板 <span class="vpg" title="AI 自验 3 项中 1 项未过"><i class="p"></i><i class="f"></i><i class="p"></i></span></div><div class="cm"><span class="pchip">worker-mobile</span><span class="pchip">glm-5.3-air</span></div><div class="pcline">认领 09:52 · wt/t7/mobile · 写操作标 M2</div></div>
+            <div class="pcard"><div class="ct">T-18 CI 冒烟 <span class="vpg" title="AI 自验 3 项全过，待提交"><i class="p"></i><i class="p"></i><i class="p"></i></span></div><div class="cm"><span class="pchip">worker-console</span><span class="pchip">glm-5.3-air</span></div><div class="pcline">认领 09:47 · wt/t7/console · 全过待提交</div></div><div class="pcard repair"><div class="ct">T-21 修复 · 导入码迁移 item②</div><div class="cm"><span class="pchip" style="color:#e5484d;border-color:rgba(229,72,77,.4)">修复卡 · 属 T-20</span><span class="pchip">worker-console</span></div><div class="pcline">认领 11:08 · 派回原归属者</div></div>
+          </div>
+          <div class="plane" data-lane="2">
+            <div class="planeh"><span class="ln">待验收</span><span class="lc">2</span><span class="arr">▾</span></div>
+            <div class="pcard"><div class="ct">T-14 worktree 供给线 <span class="vpg" title="AI 自验 2 项全过"><i class="p"></i><i class="p"></i></span></div><div class="pcline"><span class="warn">⚠ 停留 40 分</span> · worker-relay 提交</div></div>
+            <div class="pcard"><div class="ct">T-19 发版互斥锁 <span class="vpg" title="AI 自验 4 项全过"><i class="p"></i><i class="p"></i><i class="p"></i><i class="p"></i></span></div><div class="pcline">已提交 · 等独立出包验收</div></div>
+          </div>
+          <div class="plane" data-lane="0">
+            <div class="planeh"><span class="ln">待认领</span><span class="lc">2</span><span class="arr">▾</span></div>
+            <div class="pcard" style="opacity:.75"><div class="ct">T-16 收团归档清理</div></div>
+            <div class="pcard" style="opacity:.75"><div class="ct">T-17 事件流周期压缩</div></div>
+          </div>
+          <div class="plane" data-lane="4">
+            <div class="planeh"><span class="ln">已完成</span><span class="lc">1</span><span class="arr">▸</span></div>
+          </div>
+        </section>
+
+        <section class="ppane" id="p3c">
+          <div class="pcrew">
+            <div class="pmember"><div class="pmh"><span class="pavatar">👑</span><div style="min-width:0"><div class="nm">Leader</div><div class="rl">指挥 · 兼验收</div></div><span class="mdl">glm-5.3</span><span class="ppill g">在线</span></div><div class="pmb"><b>指挥全团</b> · 拆卡 9 张 · T-13 已验收</div><div class="pctxrow"><span class="pctx"><i style="width:18%"></i></span><span class="pctxlabel">上下文 18%</span></div><div class="pmact"><span>旁听</span><span>消息</span><span>接替</span></div></div>
+            <div class="pmember"><div class="pmh"><span class="pavatar">🛠</span><div style="min-width:0"><div class="nm">worker-relay</div><div class="rl">开发</div></div><span class="mdl">glm-5.3-air</span><span class="ppill g">在线</span></div><div class="pmb"><b>T-12 任务板数据模型</b> · <b class="br">wt/t7/relay</b></div><div class="pctxrow"><span class="pctx"><i style="width:61%"></i></span><span class="pctxlabel">上下文 61%</span></div><div class="pmact"><span>旁听</span><span>消息</span><span>接替</span></div></div>
+            <div class="pmember"><div class="pmh"><span class="pavatar">🖥</span><div style="min-width:0"><div class="nm">worker-console</div><div class="rl">开发</div></div><span class="mdl">glm-5.3-air</span><span class="ppill g">在线</span></div><div class="pmb"><b>T-18 CI 冒烟</b> · <b class="br">wt/t7/console</b></div><div class="pctxrow"><span class="pctx"><i style="width:22%"></i></span><span class="pctxlabel">上下文 22%</span></div><div class="pmact"><span>旁听</span><span>消息</span><span>接替</span></div></div>
+            <div class="pmember"><div class="pmh"><span class="pavatar">📱</span><div style="min-width:0"><div class="nm">worker-mobile</div><div class="rl">开发</div></div><span class="mdl">glm-5.3-air</span><span class="ppill g">在线</span></div><div class="pmb"><b>T-15 手机只读看板</b> · <b class="br">wt/t7/mobile</b></div><div class="pctxrow"><span class="pctx"><i style="width:47%"></i></span><span class="pctxlabel">上下文 47%</span></div><div class="pmact"><span>旁听</span><span>消息</span><span>接替</span></div></div>
+            <div class="pmember"><div class="pmh"><span class="pavatar">🧪</span><div style="min-width:0"><div class="nm">验收</div><div class="rl">独立出包 · 认知独立</div></div><span class="mdl">claude-opus-4-5</span><span class="ppill y">失联</span></div><div class="pmb"><b>额度链走尽</b> · 验收槽按设计不回落同厂商 · 等换厂商接替</div><div class="pctxrow"><span class="pctx"><i style="width:9%"></i></span><span class="pctxlabel">上下文 9%</span></div><div class="pmact"><span>旁听</span><span>消息</span><span style="border-color:rgba(217,119,87,.4);color:#E8985F">接替 ↗</span></div></div>
+            <div class="pmember"><div class="pmh"><span class="pavatar">🔍</span><div style="min-width:0"><div class="nm">调研</div><div class="rl">只读 · 检索竞品看板交互</div></div><span class="mdl">最便宜档</span><span class="ppill y">滞留</span></div><div class="pmb"><b>检索竞品看板交互</b> · 25 分钟无日志<div class="pcline"><span class="warn">⚠ 滞留 25 分 · watchdog 已通知 Leader</span></div></div><div class="pctxrow"><span class="pctx"><i style="width:33%"></i></span><span class="pctxlabel">上下文 33%</span></div><div class="pmact"><span>旁听</span><span>消息</span><span>接替</span></div></div>
+          </div>
+          <div class="pcrewfoot">三色 = watchdog 双信号（心跳 + 日志）· 接替 = 同身份重 spawn，板 + git 是记忆</div>
+        </section>
+
+        <section class="ppane" id="p3f">
+          <div class="pfi"><span class="t">12:02</span><span class="e">⚠</span><span>调研停滞 25 分 → <b>通知 Leader</b></span></div>
+          <div class="pfi"><span class="t">11:05</span><span class="e">✱</span><span>T-13 就绪待装机 <b>0.6.0-test.19</b></span></div>
+          <div class="pfi"><span class="t">10:47</span><span class="e">✓</span><span>验收通过 T-13（独立出包）</span></div>
+          <div class="pfi"><span class="t">10:31</span><span class="e">▶</span><span>T-14 提交 · 待验收</span></div>
+          <div class="pfi"><span class="t">10:02</span><span class="e">▶</span><span>worker-relay 认领 T-12</span></div>
+          <div class="pfi"><span class="t">09:30</span><span class="e">✱</span><span>开团 · 编制确认（6 席）</span></div>
+          <div class="ovhint">低频视图 · 收纳于 ⋯</div>
+        </section>
+
+        <!-- ⋯ 底部浮层（默认收起，点 ⋮ 打开）：收「活动」低频视图 -->
+        <div class="ovmask"></div>
+        <div class="ovsheet">
+          <div class="ovgrip"></div>
+          <h6>低频视图</h6>
+          <span class="ovrow" data-t="p3f">📥 活动</span>
+          <div class="ovfoot">只收视图不收动作 · 点按本页原地切换</div>
+        </div>
+      </div>
+
+      <span class="pin cp p3">3</span>
+    </div>
+
+    <!-- 帧 4 · 团队详情（对话 Tab 默认——与 Leader 单聊；团队动静走看板与活动，不进聊天流） -->
+    <div class="phone" id="mk-ph-crew">
+      <div class="notch"></div>
+      <div class="screen">
+        <header class="appbar">
+          <span class="back">‹</span>
+          <div class="tt">
+            <div class="t">cc-deck M1 攻坚团</div>
+            <div class="s"><span class="live">● 运行中</span> · 编制 6</div>
+          </div>
+        </header>
+        <nav class="ptabs">
+          <button class="on" data-t="p4t">对话</button>
+          <button data-t="p4b">看板<span class="pbadge">1</span></button>
+          <button data-t="p4c">成员</button>
+          <span class="ovanchor">
+            <button class="ovbtn" title="低频视图：活动">⋮</button>
+          </span>
+        </nav>
+
+        <section class="ppane on" id="p4t">
+          <div class="pteamnotice">开团 09:30 · 编制确认：3 开发 + 独立验收（换厂商）+ 1 调研 · 你已确认</div>
+          <div class="prow me"><div class="pbub">M1 目标：relay 任务板 + worktree 供给线 + 手机只读看板。验收走独立出包。</div></div>
+          <div class="prow leader"><div><div class="pwho">Leader · glm-5.3</div><div class="pbub">已拆 9 张卡；T-12 / T-15 / T-18 三张先并行，worker 已认领开工，worktree 已建。</div></div></div>
+          <div class="prow me"><div class="pbub">手机看板先做只读，写操作 M2 再开。</div></div>
+          <div class="prow leader"><div><div class="pwho">Leader · glm-5.3</div><div class="pbub">收到，T-15 已标 M2。T-14 自测通过、已提交待验收。</div></div></div>
+          <div class="prow leader"><div><div class="pwho">Leader · glm-5.3</div><div class="pbub pready"><div class="rt">T-13 更新通道隔离收尾 · 就绪待装机</div><div class="rd">独立出包通过 · 四处版本号已同步 · 产物 0.6.0-test.19</div><div class="preadybtns"><span class="pdl">装机看效果</span><span class="pfb">反馈问题</span></div></div></div></div>
+          <div class="ptyping"><i></i><i></i><i></i></div>
+          <div class="pinbar"><div class="box">给 Leader 发消息…</div><div class="send">发送</div></div>
+        </section>
+
+        <section class="ppane" id="p4b">
+          <div class="ov">
+            <div class="prog"><i class="p-b" style="width:18%"></i><i class="p-r" style="width:36%"></i><i class="p-v" style="width:18%"></i><i class="p-ok" style="width:19%"></i><i class="p-d" style="width:9%"></i></div>
+            <div class="ovleg">
+              <span><i class="lg p-b"></i>待认领 <b>2</b></span>
+              <span><i class="lg p-r"></i>进行中 <b>4</b></span>
+              <span><i class="lg p-v"></i>待验收 <b>2</b></span>
+              <span><i class="lg p-ok"></i>待装机 <b>2</b></span>
+              <span><i class="lg p-d"></i>完成 <b>1</b></span>
+            </div>
+          </div>
+          <div class="plane go">
+            <div class="planeh"><span class="pin-top">置顶</span><span class="ln">⚡ 就绪待装机</span><span class="lc">2</span><span class="arr">▾</span></div>
+            <div class="pcard">
+              <div class="ct" style="display:flex;align-items:center">T-13 更新通道隔离收尾<span class="vpg" title="AI 自验 3 项全过"><i class="p"></i><i class="p"></i><i class="p"></i></span><span class="vsheet">验收单 ↗</span></div>
+              <div class="cm"><span class="pchip br">0.6.0-test.19</span></div>
+              <div class="pcline">已回填 2/3 · 差 1 项确认 → 收单</div>
+            </div>
+            <div class="pcard fixing">
+              <div class="ct" style="display:flex;align-items:center">T-20 导入码迁移<span class="vpg" title="AI 自验 2 项中 1 项未过"><i class="p"></i><i class="f"></i></span><span class="fixtag">修复中 · 暂缓装机</span></div>
+              <div class="pcline">装机回填 1 项 ✗ → 修复卡 T-21 · 修完同单再验</div>
+            </div>
+          </div>
+          <div class="plane">
+            <div class="planeh"><span class="ln">进行中</span><span class="lc">4</span><span class="arr">▾</span></div>
+            <div class="pcard"><div class="ct">T-12 任务板数据模型 <span class="vpg" title="AI 自验 4 项中 2 项通过"><i class="p"></i><i class="p"></i><i class="u"></i><i class="u"></i></span></div><div class="cm"><span class="pchip">worker-relay</span><span class="pchip">glm-5.3-air</span></div><div class="pcline">认领 10:02 · wt/t7/relay</div></div>
+            <div class="pcard"><div class="ct">T-15 手机只读看板 <span class="vpg" title="AI 自验 3 项中 1 项未过"><i class="p"></i><i class="f"></i><i class="p"></i></span></div><div class="cm"><span class="pchip">worker-mobile</span><span class="pchip">glm-5.3-air</span></div><div class="pcline">认领 09:52 · wt/t7/mobile · 写操作标 M2</div></div>
+            <div class="pcard"><div class="ct">T-18 CI 冒烟 <span class="vpg" title="AI 自验 3 项全过，待提交"><i class="p"></i><i class="p"></i><i class="p"></i></span></div><div class="cm"><span class="pchip">worker-console</span><span class="pchip">glm-5.3-air</span></div><div class="pcline">认领 09:47 · wt/t7/console · 全过待提交</div></div><div class="pcard repair"><div class="ct">T-21 修复 · 导入码迁移 item②</div><div class="cm"><span class="pchip" style="color:#e5484d;border-color:rgba(229,72,77,.4)">修复卡 · 属 T-20</span><span class="pchip">worker-console</span></div><div class="pcline">认领 11:08 · 派回原归属者</div></div>
+          </div>
+          <div class="plane">
+            <div class="planeh"><span class="ln">待验收</span><span class="lc">2</span><span class="arr">▾</span></div>
+            <div class="pcard"><div class="ct">T-14 worktree 供给线 <span class="vpg" title="AI 自验 2 项全过"><i class="p"></i><i class="p"></i></span></div><div class="pcline"><span class="warn">⚠ 停留 40 分</span> · worker-relay 提交</div></div>
+            <div class="pcard"><div class="ct">T-19 发版互斥锁 <span class="vpg" title="AI 自验 4 项全过"><i class="p"></i><i class="p"></i><i class="p"></i><i class="p"></i></span></div><div class="pcline">已提交 · 等独立出包验收</div></div>
+          </div>
+          <div class="plane">
+            <div class="planeh"><span class="ln">待认领</span><span class="lc">2</span><span class="arr">▾</span></div>
+            <div class="pcard" style="opacity:.75"><div class="ct">T-16 收团归档清理</div></div>
+            <div class="pcard" style="opacity:.75"><div class="ct">T-17 事件流周期压缩</div></div>
+          </div>
+          <div class="plane">
+            <div class="planeh"><span class="ln">已完成</span><span class="lc">1</span><span class="arr">▸</span></div>
+          </div>
+        </section>
+
+        <section class="ppane" id="p4c">
+          <div class="pcrew">
+            <div class="pmember"><div class="pmh"><span class="pavatar">👑</span><div style="min-width:0"><div class="nm">Leader</div><div class="rl">指挥 · 兼验收</div></div><span class="mdl">glm-5.3</span><span class="ppill g">在线</span></div><div class="pmb"><b>指挥全团</b> · 拆卡 9 张 · T-13 已验收</div><div class="pctxrow"><span class="pctx"><i style="width:18%"></i></span><span class="pctxlabel">上下文 18%</span></div><div class="pmact"><span>旁听</span><span>消息</span><span>接替</span></div></div>
+            <div class="pmember"><div class="pmh"><span class="pavatar">🛠</span><div style="min-width:0"><div class="nm">worker-relay</div><div class="rl">开发</div></div><span class="mdl">glm-5.3-air</span><span class="ppill g">在线</span></div><div class="pmb"><b>T-12 任务板数据模型</b> · <b class="br">wt/t7/relay</b></div><div class="pctxrow"><span class="pctx"><i style="width:61%"></i></span><span class="pctxlabel">上下文 61%</span></div><div class="pmact"><span>旁听</span><span>消息</span><span>接替</span></div></div>
+            <div class="pmember"><div class="pmh"><span class="pavatar">🖥</span><div style="min-width:0"><div class="nm">worker-console</div><div class="rl">开发</div></div><span class="mdl">glm-5.3-air</span><span class="ppill g">在线</span></div><div class="pmb"><b>T-18 CI 冒烟</b> · <b class="br">wt/t7/console</b></div><div class="pctxrow"><span class="pctx"><i style="width:22%"></i></span><span class="pctxlabel">上下文 22%</span></div><div class="pmact"><span>旁听</span><span>消息</span><span>接替</span></div></div>
+            <div class="pmember"><div class="pmh"><span class="pavatar">📱</span><div style="min-width:0"><div class="nm">worker-mobile</div><div class="rl">开发</div></div><span class="mdl">glm-5.3-air</span><span class="ppill g">在线</span></div><div class="pmb"><b>T-15 手机只读看板</b> · <b class="br">wt/t7/mobile</b></div><div class="pctxrow"><span class="pctx"><i style="width:47%"></i></span><span class="pctxlabel">上下文 47%</span></div><div class="pmact"><span>旁听</span><span>消息</span><span>接替</span></div></div>
+            <div class="pmember"><div class="pmh"><span class="pavatar">🧪</span><div style="min-width:0"><div class="nm">验收</div><div class="rl">独立出包 · 认知独立</div></div><span class="mdl">claude-opus-4-5</span><span class="ppill y">失联</span></div><div class="pmb"><b>额度链走尽</b> · 验收槽按设计不回落同厂商 · 等换厂商接替</div><div class="pctxrow"><span class="pctx"><i style="width:9%"></i></span><span class="pctxlabel">上下文 9%</span></div><div class="pmact"><span>旁听</span><span>消息</span><span style="border-color:rgba(217,119,87,.4);color:#E8985F">接替 ↗</span></div></div>
+            <div class="pmember"><div class="pmh"><span class="pavatar">🔍</span><div style="min-width:0"><div class="nm">调研</div><div class="rl">只读 · 检索竞品看板交互</div></div><span class="mdl">最便宜档</span><span class="ppill y">滞留</span></div><div class="pmb"><b>检索竞品看板交互</b> · 25 分钟无日志<div class="pcline"><span class="warn">⚠ 滞留 25 分 · watchdog 已通知 Leader</span></div></div><div class="pctxrow"><span class="pctx"><i style="width:33%"></i></span><span class="pctxlabel">上下文 33%</span></div><div class="pmact"><span>旁听</span><span>消息</span><span>接替</span></div></div>
+          </div>
+          <div class="pcrewfoot">三色 = watchdog 双信号（心跳 + 日志）· 接替 = 同身份重 spawn，板 + git 是记忆</div>
+        </section>
+
+        <section class="ppane" id="p4f">
+          <div class="pfi"><span class="t">12:02</span><span class="e">⚠</span><span>调研停滞 25 分 → <b>通知 Leader</b></span></div>
+          <div class="pfi"><span class="t">11:05</span><span class="e">✱</span><span>T-13 就绪待装机 <b>0.6.0-test.19</b></span></div>
+          <div class="pfi"><span class="t">10:47</span><span class="e">✓</span><span>验收通过 T-13（独立出包）</span></div>
+          <div class="pfi"><span class="t">10:31</span><span class="e">▶</span><span>T-14 提交 · 待验收</span></div>
+          <div class="pfi"><span class="t">10:02</span><span class="e">▶</span><span>worker-relay 认领 T-12</span></div>
+          <div class="pfi"><span class="t">09:30</span><span class="e">✱</span><span>开团 · 编制确认（6 席）</span></div>
+          <div class="ovhint">低频视图 · 收纳于 ⋯</div>
+        </section>
+
+        <div class="ovmask"></div>
+        <div class="ovsheet">
+          <div class="ovgrip"></div>
+          <h6>低频视图</h6>
+          <span class="ovrow" data-t="p4f">📥 活动</span>
+          <div class="ovfoot">只收视图不收动作 · 点按本页原地切换</div>
+        </div>
+      </div>
+
+      <span class="pin cp p4">4</span>
+    </div>
+
+    <!-- 帧 5 · 团队详情（成员 Tab 默认——三色状态 + watchdog 双信号 + 异构模型 chip） -->
+    <div class="phone" id="mk-ph-ovflow">
+      <div class="notch"></div>
+      <div class="screen">
+        <header class="appbar">
+          <span class="back">‹</span>
+          <div class="tt">
+            <div class="t">cc-deck M1 攻坚团</div>
+            <div class="s"><span class="live">● 运行中</span> · 编制 6</div>
+          </div>
+        </header>
+        <nav class="ptabs">
+          <button data-t="p5t">对话</button>
+          <button data-t="p5b">看板<span class="pbadge">1</span></button>
+          <button class="on" data-t="p5c">成员</button>
+          <span class="ovanchor">
+            <button class="ovbtn" title="低频视图：活动">⋮</button>
+          </span>
+        </nav>
+
+        <section class="ppane" id="p5t">
+          <div class="pteamnotice">开团 09:30 · 编制确认：3 开发 + 独立验收（换厂商）+ 1 调研 · 你已确认</div>
+          <div class="prow me"><div class="pbub">M1 目标：relay 任务板 + worktree 供给线 + 手机只读看板。验收走独立出包。</div></div>
+          <div class="prow leader"><div><div class="pwho">Leader · glm-5.3</div><div class="pbub">已拆 9 张卡；T-12 / T-15 / T-18 三张先并行，worker 已认领开工，worktree 已建。</div></div></div>
+          <div class="prow me"><div class="pbub">手机看板先做只读，写操作 M2 再开。</div></div>
+          <div class="prow leader"><div><div class="pwho">Leader · glm-5.3</div><div class="pbub">收到，T-15 已标 M2。T-14 自测通过、已提交待验收。</div></div></div>
+          <div class="prow leader"><div><div class="pwho">Leader · glm-5.3</div><div class="pbub pready"><div class="rt">T-13 更新通道隔离收尾 · 就绪待装机</div><div class="rd">独立出包通过 · 四处版本号已同步 · 产物 0.6.0-test.19</div><div class="preadybtns"><span class="pdl">装机看效果</span><span class="pfb">反馈问题</span></div></div></div></div>
+          <div class="ptyping"><i></i><i></i><i></i></div>
+          <div class="pinbar"><div class="box">给 Leader 发消息…</div><div class="send">发送</div></div>
+        </section>
+
+        <section class="ppane" id="p5b">
+          <div class="ov">
+            <div class="prog"><i class="p-b" style="width:18%"></i><i class="p-r" style="width:36%"></i><i class="p-v" style="width:18%"></i><i class="p-ok" style="width:19%"></i><i class="p-d" style="width:9%"></i></div>
+            <div class="ovleg">
+              <span><i class="lg p-b"></i>待认领 <b>2</b></span>
+              <span><i class="lg p-r"></i>进行中 <b>4</b></span>
+              <span><i class="lg p-v"></i>待验收 <b>2</b></span>
+              <span><i class="lg p-ok"></i>待装机 <b>2</b></span>
+              <span><i class="lg p-d"></i>完成 <b>1</b></span>
+            </div>
+          </div>
+          <div class="plane go">
+            <div class="planeh"><span class="pin-top">置顶</span><span class="ln">⚡ 就绪待装机</span><span class="lc">2</span><span class="arr">▾</span></div>
+            <div class="pcard">
+              <div class="ct" style="display:flex;align-items:center">T-13 更新通道隔离收尾<span class="vpg" title="AI 自验 3 项全过"><i class="p"></i><i class="p"></i><i class="p"></i></span><span class="vsheet">验收单 ↗</span></div>
+              <div class="cm"><span class="pchip br">0.6.0-test.19</span></div>
+              <div class="pcline">已回填 2/3 · 差 1 项确认 → 收单</div>
+            </div>
+            <div class="pcard fixing">
+              <div class="ct" style="display:flex;align-items:center">T-20 导入码迁移<span class="vpg" title="AI 自验 2 项中 1 项未过"><i class="p"></i><i class="f"></i></span><span class="fixtag">修复中 · 暂缓装机</span></div>
+              <div class="pcline">装机回填 1 项 ✗ → 修复卡 T-21 · 修完同单再验</div>
+            </div>
+          </div>
+          <div class="plane">
+            <div class="planeh"><span class="ln">进行中</span><span class="lc">4</span><span class="arr">▾</span></div>
+            <div class="pcard"><div class="ct">T-12 任务板数据模型 <span class="vpg" title="AI 自验 4 项中 2 项通过"><i class="p"></i><i class="p"></i><i class="u"></i><i class="u"></i></span></div><div class="cm"><span class="pchip">worker-relay</span><span class="pchip">glm-5.3-air</span></div><div class="pcline">认领 10:02 · wt/t7/relay</div></div>
+            <div class="pcard"><div class="ct">T-15 手机只读看板 <span class="vpg" title="AI 自验 3 项中 1 项未过"><i class="p"></i><i class="f"></i><i class="p"></i></span></div><div class="cm"><span class="pchip">worker-mobile</span><span class="pchip">glm-5.3-air</span></div><div class="pcline">认领 09:52 · wt/t7/mobile · 写操作标 M2</div></div>
+            <div class="pcard"><div class="ct">T-18 CI 冒烟 <span class="vpg" title="AI 自验 3 项全过，待提交"><i class="p"></i><i class="p"></i><i class="p"></i></span></div><div class="cm"><span class="pchip">worker-console</span><span class="pchip">glm-5.3-air</span></div><div class="pcline">认领 09:47 · wt/t7/console · 全过待提交</div></div><div class="pcard repair"><div class="ct">T-21 修复 · 导入码迁移 item②</div><div class="cm"><span class="pchip" style="color:#e5484d;border-color:rgba(229,72,77,.4)">修复卡 · 属 T-20</span><span class="pchip">worker-console</span></div><div class="pcline">认领 11:08 · 派回原归属者</div></div>
+          </div>
+          <div class="plane">
+            <div class="planeh"><span class="ln">待验收</span><span class="lc">2</span><span class="arr">▾</span></div>
+            <div class="pcard"><div class="ct">T-14 worktree 供给线 <span class="vpg" title="AI 自验 2 项全过"><i class="p"></i><i class="p"></i></span></div><div class="pcline"><span class="warn">⚠ 停留 40 分</span> · worker-relay 提交</div></div>
+            <div class="pcard"><div class="ct">T-19 发版互斥锁 <span class="vpg" title="AI 自验 4 项全过"><i class="p"></i><i class="p"></i><i class="p"></i><i class="p"></i></span></div><div class="pcline">已提交 · 等独立出包验收</div></div>
+          </div>
+          <div class="plane">
+            <div class="planeh"><span class="ln">待认领</span><span class="lc">2</span><span class="arr">▾</span></div>
+            <div class="pcard" style="opacity:.75"><div class="ct">T-16 收团归档清理</div></div>
+            <div class="pcard" style="opacity:.75"><div class="ct">T-17 事件流周期压缩</div></div>
+          </div>
+          <div class="plane">
+            <div class="planeh"><span class="ln">已完成</span><span class="lc">1</span><span class="arr">▸</span></div>
+          </div>
+        </section>
+
+        <section class="ppane on" id="p5c">
+          <div class="pcrew">
+            <div class="pmember"><div class="pmh"><span class="pavatar">👑</span><div style="min-width:0"><div class="nm">Leader</div><div class="rl">指挥 · 兼验收</div></div><span class="mdl">glm-5.3</span><span class="ppill g">在线</span></div><div class="pmb"><b>指挥全团</b> · 拆卡 9 张 · T-13 已验收</div><div class="pctxrow"><span class="pctx"><i style="width:18%"></i></span><span class="pctxlabel">上下文 18%</span></div><div class="pmact"><span>旁听</span><span>消息</span><span>接替</span></div></div>
+            <div class="pmember"><div class="pmh"><span class="pavatar">🛠</span><div style="min-width:0"><div class="nm">worker-relay</div><div class="rl">开发</div></div><span class="mdl">glm-5.3-air</span><span class="ppill g">在线</span></div><div class="pmb"><b>T-12 任务板数据模型</b> · <b class="br">wt/t7/relay</b></div><div class="pctxrow"><span class="pctx"><i style="width:61%"></i></span><span class="pctxlabel">上下文 61%</span></div><div class="pmact"><span>旁听</span><span>消息</span><span>接替</span></div></div>
+            <div class="pmember"><div class="pmh"><span class="pavatar">🖥</span><div style="min-width:0"><div class="nm">worker-console</div><div class="rl">开发</div></div><span class="mdl">glm-5.3-air</span><span class="ppill g">在线</span></div><div class="pmb"><b>T-18 CI 冒烟</b> · <b class="br">wt/t7/console</b></div><div class="pctxrow"><span class="pctx"><i style="width:22%"></i></span><span class="pctxlabel">上下文 22%</span></div><div class="pmact"><span>旁听</span><span>消息</span><span>接替</span></div></div>
+            <div class="pmember"><div class="pmh"><span class="pavatar">📱</span><div style="min-width:0"><div class="nm">worker-mobile</div><div class="rl">开发</div></div><span class="mdl">glm-5.3-air</span><span class="ppill g">在线</span></div><div class="pmb"><b>T-15 手机只读看板</b> · <b class="br">wt/t7/mobile</b></div><div class="pctxrow"><span class="pctx"><i style="width:47%"></i></span><span class="pctxlabel">上下文 47%</span></div><div class="pmact"><span>旁听</span><span>消息</span><span>接替</span></div></div>
+            <div class="pmember"><div class="pmh"><span class="pavatar">🧪</span><div style="min-width:0"><div class="nm">验收</div><div class="rl">独立出包 · 认知独立</div></div><span class="mdl">claude-opus-4-5</span><span class="ppill y">失联</span></div><div class="pmb"><b>额度链走尽</b> · 验收槽按设计不回落同厂商 · 等换厂商接替</div><div class="pctxrow"><span class="pctx"><i style="width:9%"></i></span><span class="pctxlabel">上下文 9%</span></div><div class="pmact"><span>旁听</span><span>消息</span><span style="border-color:rgba(217,119,87,.4);color:#E8985F">接替 ↗</span></div></div>
+            <div class="pmember"><div class="pmh"><span class="pavatar">🔍</span><div style="min-width:0"><div class="nm">调研</div><div class="rl">只读 · 检索竞品看板交互</div></div><span class="mdl">最便宜档</span><span class="ppill y">滞留</span></div><div class="pmb"><b>检索竞品看板交互</b> · 25 分钟无日志<div class="pcline"><span class="warn">⚠ 滞留 25 分 · watchdog 已通知 Leader</span></div></div><div class="pctxrow"><span class="pctx"><i style="width:33%"></i></span><span class="pctxlabel">上下文 33%</span></div><div class="pmact"><span>旁听</span><span>消息</span><span>接替</span></div></div>
+          </div>
+          <div class="pcrewfoot">三色 = watchdog 双信号（心跳 + 日志）· 接替 = 同身份重 spawn，板 + git 是记忆</div>
+        </section>
+
+        <section class="ppane" id="p5f">
+          <div class="pfi"><span class="t">12:02</span><span class="e">⚠</span><span>调研停滞 25 分 → <b>通知 Leader</b></span></div>
+          <div class="pfi"><span class="t">11:05</span><span class="e">✱</span><span>T-13 就绪待装机 <b>0.6.0-test.19</b></span></div>
+          <div class="pfi"><span class="t">10:47</span><span class="e">✓</span><span>验收通过 T-13（独立出包）</span></div>
+          <div class="pfi"><span class="t">10:31</span><span class="e">▶</span><span>T-14 提交 · 待验收</span></div>
+          <div class="pfi"><span class="t">10:02</span><span class="e">▶</span><span>worker-relay 认领 T-12</span></div>
+          <div class="pfi"><span class="t">09:30</span><span class="e">✱</span><span>开团 · 编制确认（6 席）</span></div>
+          <div class="ovhint">低频视图 · 收纳于 ⋯</div>
+        </section>
+
+        <div class="ovmask"></div>
+        <div class="ovsheet">
+          <div class="ovgrip"></div>
+          <h6>低频视图</h6>
+          <span class="ovrow" data-t="p5f">📥 活动</span>
+          <div class="ovfoot">只收视图不收动作 · 点按本页原地切换</div>
+        </div>
+      </div>
+
+      <span class="pin cp p5">5</span>
+    </div>
+
+    <!-- 帧 6 · 设置 · 连接与设备（root 页：底栏 ⚙ 选中；手机浏览态——踢出/重配对回电脑端） -->
+    <div class="phone" id="mk-ph-set-conn">
+      <div class="notch"></div>
+      <div class="screen withbar">
+        <header class="appbar">
+          <div class="tt">
+            <div class="t">连接与设备</div>
+            <div class="s">设置 · 连接</div>
+          </div>
+          <span class="menu">⋯</span>
+        </header>
+
+        <section class="ppane on" id="pconn">
+          <div class="pprov">
+            <div class="pprh"><span class="nm">本机 relay</span><span class="ppill g">在线</span></div>
+            <div class="ppr"><span class="lb">端口</span><span class="pprcode">8787</span> 事件流本地 · 断线自动补发</div>
+          </div>
+
+          <div class="pprov">
+            <div class="pprh"><span class="nm">已配设备</span></div>
+            <div class="ppr"><span>📱 主手机</span><span class="pprcode">wb-2dea</span><span style="color:var(--done);font-size:10px">在线 · 本机</span></div>
+            <div class="ppr"><span>📱 备机</span><span class="pprcode">wb-6b87</span><span style="font-size:10px">在线 · LAN 直连</span></div>
+            <div class="ppr"><span>🌐 浏览器</span><span class="pprcode">wb-3f08</span><span style="color:var(--working);font-size:10px">配对码错误 · 重试中</span></div>
+          </div>
+
+          <div class="pprov">
+            <div class="pprh"><span class="nm">云桥</span><span class="ppill g">已连接</span></div>
+            <div class="ppr"><span class="lb">中继</span><span class="pprcode">cc.humumu.online/cloud</span> 哑管道只见密文</div>
+          </div>
+
+          <div class="ptrust" style="margin-top:6px">🔌 踢出 / 重配对请回电脑端——<b>手机是指挥台，不是安装器</b></div>
+        </section>
+
+        <nav class="ptabbar">
+          <span class="ptab"><span class="ic">💬</span><span class="lb">会话</span></span>
+          <span class="ptab"><span class="ic">👥</span><span class="lb">团队</span><span class="pbadge">1</span></span>
+          <span class="ptab"><span class="ic">📁</span><span class="lb">项目</span></span>
+          <span class="ptab on"><span class="ic">⚙</span><span class="lb">设置</span></span>
+        </nav>
+      </div>
+
+      <span class="pin cp p6">6</span>
+    </div>
+
+    <aside class="notes">
+      <div class="note"><div class="nh"><span class="num">1</span>会话主页 = 结构不动 + 项目分组 + 团队入口卡</div>
+        <p>会话列表结构不动：状态点、活跃时间、新建入口都长在原处；V8 ① 加<b>项目分组</b>（组头 = 项目名，跨项目不打散——与桌面 💬 列表同款）。<b>团队入口卡点亮</b>——团队模式上线后列表第一张就是它（品牌蓝边 + 状态点 + 待装机计数），点进 = 团队主页帧。普通会话卡点进 = 右侧新增的<b>会话详情帧</b>（钉 13）。</p></div>
+      <div class="note"><div class="nh"><span class="num">13</span>会话详情 + ⋯ 打开态</div>
+        <p>二级页<b>藏底栏</b>，Tab 行 = <b>消息 / 任务 / 输出物 / 全部 + ⋮</b>（与桌面同口径）。<b>低频视图进 ⋯</b>：⏰ 定时任务 · 📊 统计收进底部半屏浮层，本帧画成打开态——点菜单行<b>原地切 pane</b>、浮层收起、⋮ 高亮；<b>琥珀角标 2 透传到 ⋮</b>，有数就有提示，不必点开找。输出物升常驻 Tab（deliver 意图声明制：项目产物登记、全局产物自动收录）。</p></div>
+      <div class="note"><div class="nh"><span class="num">2</span>团队主页与开团流程</div>
+        <p>底栏 👥 团队 Tab（琥珀 1 = 待装机）。列表 = 进行中团队 + 已收团归档 + 新建；<b>开团四步</b>：描述目标 → Leader 建议编制 → 你确认 → 自动建 worktree 并 spawn 全员——确认权在你，Leader 只提方案。</p></div>
+      <div class="note"><div class="nh"><span class="num">3</span>竖排看板 · 总览联动</div>
+        <p>手机竖排泳道 + 顶部<b>进度总览吸顶</b>（五段色与桌面同语义闭环：绿=进行中 · 蓝=待验收 · 琥珀=待装机）。「就绪待装机」<b>琥珀置顶</b>：装机看效果 / 反馈问题两键直达——手机是验收动作的终点。v7.1 <b>双向联动</b>：描边视窗框 = 当前视口覆盖的泳道并集（<b>吸附分段边界</b>，不像素级连续映射）；点分段 / 图例平滑跳组，组头停在吸顶条下沿。⚠ 停留告警同屏可见。</p></div>
+      <div class="note"><div class="nh"><span class="num">4</span>与 Leader 单聊</div>
+        <p>对话 Tab = 你与 Leader 的<b>私人频道</b>：目标、编制、范围取舍在这里谈。<b>团队动静不进聊天流</b>——认领、提交、停滞走看板与活动，聊天只留决策。就绪待装机琥珀卡同样推到这里。</p></div>
+      <div class="note"><div class="nh"><span class="num">5</span>成员三色 + watchdog 双信号</div>
+        <p>绿=干活中 · 灰=空闲 · <b>琥珀=滞留</b>（心跳 + 日志双信号，25 分钟无日志即告警并通知 Leader）。每成员可见<b>当前任务 · 分支 · 上下文水位 · 模型 chip</b>（异构厂商混编）；旁听 / 消息 / 接替三键——接替 = 同身份重 spawn，板 + git 是记忆。</p></div>
+      <div class="note"><div class="nh"><span class="num">6</span>设置 · 连接的手机形态</div>
+        <p>底栏 ⚙ → 连接与设备：<b>浏览态</b>——relay 在线、设备清单、云桥状态一眼可查，异常设备（配对码错误）琥珀示警。<b>踢出 / 重配对回电脑端</b>：手机是指挥台，不是安装器——与模型服务页同一纪律。</p></div>
+    </aside>
+  </div>
+
+  <!-- ================= 设置 · 模型服务（M2 Provider 管理页） ================= -->
+  <h2 class="sh" id="mk-set"><span class="tag t-dt">配置面</span>设置 · 模型服务（Provider 管理）</h2>
+  <p class="shsub">设置三段式嵌入主窗口（rail ⚙ · 设置导航 · 内容区），与驾驶舱同一骨架，不再是孤立弹窗；<b>设置导航六页（通用 / 模型服务 / 连接与设备 / 团队身份模板 / <b style="color:var(--brand)">🧩 扩展〔V8 新增〕</b> / 关于）可点切换</b>——本帧试试。M2 设置页，异构模型绑定的配置落点：<b>电脑 / 网页表单（名称 / baseUrl / 模型 / 凭证）→ relay 写同一份 ~/.cc-deck/providers.json</b>——这页只是那份文件的<b>编辑器</b>，不是新存储。第 0 层默认<b>继承本机环境零配置</b>（单厂商用户永远碰不到这页）；登记卡 = 非空 baseUrl 经 env 覆盖路由的扩展位。手机 App 端为<b>浏览态</b>（脱敏视图 + 验证连通 + 换路由），<b>凭证录入只在电脑/网页</b>——应急时手机浏览器开网页端即可。</p>
+  <div class="stage">
+    <div class="winframe">
+      <div class="chrome">
+        <div class="dots"><i></i><i></i><i></i></div>
+        <div class="tt">CC Deck — 设置 · 模型服务</div>
+        <div class="btn ttl" title="EXE / Mac 独有：在文件管理器打开 ~/.cc-deck/providers.json">📂 打开配置文件</div>
+      </div>
+      <div class="dtbody set">
+        <nav class="rail">
+          <span class="rdot" title="已连接 · 本机 relay（点击弹快览）"></span>
+          <span class="ri" title="会话 · 见上方驾驶舱帧">💬</span>
+          <span class="ri" title="团队 · 见上方驾驶舱帧">👥</span>
+          <span class="ri" title="项目 · V8 新增 → 见下方项目域帧">📁</span>
+          <span class="rspring"></span>
+          <span class="ri" title="通知 · V8 新增 → 见下方通知面板帧">🔔<span class="rbadge">2</span></span>
+          <span class="ri on" title="设置">⚙</span>
+        </nav>
+
+        <!-- 设置帧的绿点快览面板（与本帧 rdot 绑定） -->
+        <div class="cpanel" id="cpanel-2">
+          <h5>连接快览</h5>
+          <div class="cprow"><span class="rdot2"></span><div class="cpt">本机 relay · 已连接<div class="meta">端口 8787 · 事件流自动补发</div></div></div>
+          <div class="cprow"><span class="rdot2"></span><div class="cpt">云桥 · 已连接<div class="meta">wss://cc.humumu.online/cloud</div></div></div>
+          <div class="cprow"><span class="rdot2"></span><div class="cpt">设备 3 · 2 在线 · <span style="color:var(--working)">1 异常</span><div class="meta">配对码错误 · 重试中 · 浏览器端</div></div></div>
+          <span class="cpbtn">打开连接与设备 →</span>
+        </div>
+
+        <div class="setnav">
+          <div class="snav" data-p="setpage-gen"><span class="ico">⚙</span>通用</div>
+          <div class="snav on" data-p="setpage-prov"><span class="ico">🧠</span>模型服务</div>
+          <div class="snav" data-p="setpage-conn"><span class="ico">🔌</span>连接与设备</div>
+          <div class="snav" data-p="setpage-tpl"><span class="ico">👥</span>团队身份模板</div>
+          <div class="snav" data-p="setpage-ext"><span class="ico">🧩</span>扩展</div>
+          <div class="snav" data-p="setpage-about"><span class="ico">ℹ</span>关于</div>
+          <div class="foot">v0.6.0-test<br>本机 relay · 已连接</div>
+        </div>
+        <div class="setmain">
+
+          <!-- ===== 通用页（v6.1 新增；点左侧「通用」显示） ===== -->
+          <div class="setpage" id="setpage-gen">
+            <div class="sethead">
+              <div class="t">通用</div>
+              <div class="s">启动 · 外观 · 快捷键 · 通知——三端同步的基座偏好（连接状态见 rail 绿点 / 连接与设备页）</div>
+            </div>
+
+            <div class="setcard">
+              <h5>启动</h5>
+              <div class="swrow">
+                <div class="swtxt">开机自启<div class="swd">登录后常驻菜单栏，relay 随进程拉起</div></div>
+                <span class="sw on"><i></i></span>
+              </div>
+              <div class="swrow">
+                <div class="swtxt">启动落在会话页<div class="swd">打开即看现场；关掉则停在上次离开的域</div></div>
+                <span class="sw on"><i></i></span>
+              </div>
+            </div>
+
+            <div class="setcard">
+              <h5>外观</h5>
+              <div class="swrow">
+                <div class="swtxt">列表密度<div class="swd">标准=呼吸感 · 紧凑=一屏多看两条会话</div></div>
+                <span class="seg"><span class="on">标准</span><span>紧凑</span></span>
+              </div>
+              <div class="swrow">
+                <div class="swtxt">主题<div class="swd">跟随 console 深色体系，浅色在排期</div></div>
+                <span class="seg"><span class="on">深色</span></span>
+              </div>
+            </div>
+
+            <div class="setcard">
+              <h5>快捷键</h5>
+              <div class="swrow">
+                <div class="swtxt">全局搜索 <span class="prcode">⌘K</span><div class="swd">跨会话 / 团队 / 任务的模糊搜索</div></div>
+                <span class="prbtn">修改</span>
+              </div>
+              <div class="swrow">
+                <div class="swtxt">新建会话 <span class="prcode">⌘N</span><div class="swd">普通会话；开团走团队页 ＋</div></div>
+                <span class="prbtn">修改</span>
+              </div>
+              <div class="swrow">
+                <div class="swtxt">中断当前会话 <span class="prcode">⌘.</span><div class="swd">对焦点会话发 ESC</div></div>
+                <span class="prbtn">修改</span>
+              </div>
+            </div>
+
+            <div class="setcard">
+              <h5>通知</h5>
+              <div class="swrow">
+                <div class="swtxt">会话完成通知<div class="swd">任务收尾时推一条系统通知（手机同推）</div></div>
+                <span class="sw on"><i></i></span>
+              </div>
+              <div class="swrow">
+                <div class="swtxt">停滞告警<div class="swd">会话 15 分钟无事件点亮琥珀点提醒你</div></div>
+                <span class="sw"><i></i></span>
+              </div>
+            </div>
+          </div>
+
+          <!-- ===== 连接与设备页（v7 新增：连接三拆的管理面——状态=绿点 / 配置=relay 卡 / 管理=本页） ===== -->
+          <div class="setpage" id="setpage-conn">
+            <div class="sethead">
+              <div class="t">连接与设备</div>
+              <div class="s">relay · 云桥 · 已配设备——连接三拆的管理面，绿点常驻 rail 顶部点它直达</div>
+            </div>
+
+            <div class="setcard">
+              <h5>relay</h5>
+              <div class="relaystat">
+                <span class="rdot2"></span>
+                <div>
+                  <div class="st">本机 relay · 已连接</div>
+                  <div class="meta">端口 8787 · 事件流 ~/.cc-deck/data/events.ndjson · 断线自动补发</div>
+                </div>
+                <span class="acts" style="margin-left:auto;display:flex;gap:6px"><span class="prbtn go">重启</span><span class="prbtn">日志</span></span>
+              </div>
+            </div>
+
+            <div class="setcard">
+              <h5>已配设备</h5>
+              <div class="swrow">
+                <span style="font-size:16px;flex:0 0 auto">📱</span>
+                <div class="swtxt">iPhone 15 · 主机<div class="swd"><span class="prcode">wb-2dea…</span> 在线 · 云桥 · 刚刚活跃 <span style="color:var(--done)">●</span></div></div>
+                <span class="prbtn">详情</span>
+              </div>
+              <div class="swrow">
+                <span style="font-size:16px;flex:0 0 auto">📱</span>
+                <div class="swtxt">iPhone 12 · 备机<div class="swd"><span class="prcode">wb-6b87…</span> 在线 · LAN 直连 · 25 分钟前</div></div>
+                <span class="prbtn">详情</span>
+              </div>
+              <div class="swrow">
+                <span style="font-size:16px;flex:0 0 auto">🌐</span>
+                <div class="swtxt">浏览器 · 网页端<div class="swd" style="color:var(--working)"><span class="prcode">wb-3f08…</span> 配对码错误 · 重试中 · 09-18 起</div></div>
+                <span style="display:flex;gap:6px;flex:0 0 auto"><span class="prbtn go">重配对</span><span class="prbtn del">踢出</span></span>
+              </div>
+              <div class="escape" style="margin-top:6px">设备身份 = 配对密钥（E2E），踢出后需重新配对</div>
+            </div>
+
+            <div class="setcard">
+              <h5>云桥</h5>
+              <div class="swrow">
+                <div class="swtxt">云桥中继<div class="swd">wss://cc.humumu.online/cloud · 哑管道只见密文 · 断网自动回落 LAN 直连</div></div>
+                <span class="sw on"><i></i></span>
+              </div>
+            </div>
+
+            <div class="pradd">＋ 配对新设备（显示 6 位配对码）</div>
+          </div>
+
+          <!-- ===== 模型服务页（默认选中） ===== -->
+          <div class="setpage on" id="setpage-prov">
+          <div class="sethead">
+            <div class="t">模型服务（Provider）</div>
+            <div class="s">凭证只存本机 <span class="prcode">~/.cc-deck/providers.json</span>（0600）· 永不上传、永不进事件流</div>
+          </div>
+
+          <!-- 第 0 层：继承本机环境（不在登记表里，虚线卡与登记卡区分） -->
+          <div class="prov def">
+            <div class="prh"><span class="nm">默认 · 继承本机环境</span><span class="pill g">零配置 · 当前生效</span>
+              <span class="acts"><span class="prbtn go">验证连通</span></span></div>
+            <div class="prrow"><span class="lb">接法</span>继承 relay 进程环境——你为 Claude Code 配好的 env 原样生效，无需登记</div>
+            <div class="prrow"><span class="lb">环境变量</span><span class="prcode">ANTHROPIC_BASE_URL</span><span class="prcode">ANTHROPIC_AUTH_TOKEN</span></div>
+            <div class="prnote">单厂商用户这就是全部——凭证本来就在你机器的环境变量里，cc-deck 不碰、不存、不搬。</div>
+          </div>
+
+          <!-- 登记卡 1：智谱 GLM -->
+          <div class="prov">
+            <div class="prh"><span class="nm">智谱 GLM</span><span class="pill b">已登记</span>
+              <span class="acts">
+                <span class="prbtn ok">验证连通 ✓ 已连通</span>
+                <span class="prbtn" title="EXE / Mac 独有：打开文件位置">📂</span>
+                <span class="prbtn del">删除</span>
+              </span></div>
+            <div class="prrow"><span class="lb">baseUrl</span><span class="prcode">https://open.bigmodel.cn/api/anthropic</span></div>
+            <div class="prrow"><span class="lb">模型</span><span class="prcode">glm-5.3</span><span class="prcode">glm-5.3-air</span></div>
+            <div class="prrow"><span class="lb">凭证</span><span class="prcode">••••9f3a</span><span style="color:var(--faint);font-size:10.5px">仅显尾 4 位 · 或填 $ENV_VAR 引用</span></div>
+            <div class="prrow"><span class="lb">额度</span>包月 5h 池 · 水位 62%<span class="prq"><i style="width:62%"></i></span></div>
+          </div>
+
+          <!-- 登记卡 2：Anthropic（baseUrl 空 = 官方端点） -->
+          <div class="prov">
+            <div class="prh"><span class="nm">Anthropic</span><span class="pill b">已登记</span>
+              <span class="acts"><span class="prbtn go">验证连通</span></span></div>
+            <div class="prrow"><span class="lb">baseUrl</span><span class="prcode">（空）= 官方端点</span><span style="color:var(--faint);font-size:10.5px">走 CLI 默认 env</span></div>
+            <div class="prrow"><span class="lb">模型</span><span class="prcode">claude-opus-4-5</span><span class="prcode">claude-sonnet-4-5</span></div>
+            <div class="prrow"><span class="lb">凭证</span><span class="prcode">••••c2e1</span></div>
+          </div>
+
+          <!-- 角色路由默认表 -->
+          <div class="rtable">
+            <h5>角色路由默认表 · 包月优先，按量兜底（开团初始映射）</h5>
+            <div class="rrow"><span class="role">👑 Leader</span><span class="prcode">glm-5.3</span><span class="fbk">▸ claude-opus-4-5</span><span class="why">强模型 · 指挥质量决定全队上限</span></div>
+            <div class="rrow"><span class="role">开发 worker</span><span class="prcode">glm-5.3-air</span><span class="fbk">▸ 按量便宜档（自选）</span><span class="why">包月便宜档 · 搬砖量大成本敏感</span></div>
+            <div class="rrow hl"><span class="role">🧪 验收</span><span class="prcode">claude-sonnet</span><span class="fbk">▸ ✕ 不回落 GLM（认知独立）</span><span class="why">换厂商 = 认知独立（同厂商会犯一样的错）</span></div>
+            <div class="rrow"><span class="role">🔍 调研（只读）</span><span class="prcode">最便宜档</span><span class="fbk">▸ 同 worker</span><span class="why">低风险高量</span></div>
+            <div class="rfoot">默认表 · 开团时逐成员可改（身份模板库的一部分）</div>
+          </div>
+
+          <div class="pradd">＋ 添加厂商（名称 / baseUrl / 模型 / 凭证）</div>
+          <div class="escape">不想在 App 里输入？手编 <span class="prcode">~/.cc-deck/providers.json</span>，或凭证填 <span class="prcode">$ENV_VAR</span> 引用环境变量——两条替代路径常驻此页 <span style="color:var(--dim)">→</span></div>
+          </div>
+
+          <!-- ===== 团队身份模板页（v7 点亮：预置五角色 + 模型 chip；开团时逐成员可改） ===== -->
+          <div class="setpage" id="setpage-tpl">
+            <div class="sethead">
+              <div class="t">团队身份模板</div>
+              <div class="s">模型路由 · 系统提示 · 工具白名单都长在模板上——开团的初始编制</div>
+            </div>
+
+            <div class="setcard">
+              <h5>预置角色</h5>
+              <div class="tplrow"><span class="tico">👑</span><div style="min-width:0;flex:1"><div class="tnm">Leader</div><div class="trl">指挥全团 · 拆卡与调度 · 兼验收</div></div><span class="mdl">glm-5.3</span><span class="prbtn">编辑</span></div>
+              <div class="tplrow"><span class="tico">🛠</span><div style="min-width:0;flex:1"><div class="tnm">开发 worker</div><div class="trl">搬砖量大 · worktree 内干活</div></div><span class="mdl">glm-5.3-air</span><span class="prbtn">编辑</span></div>
+              <div class="tplrow"><span class="tico">🧪</span><div style="min-width:0;flex:1"><div class="tnm">验收</div><div class="trl">独立出包验证 · 换厂商=认知独立</div></div><span class="mdl">claude-opus-4-5</span><span class="prbtn">编辑</span></div>
+              <div class="tplrow"><span class="tico">🔍</span><div style="min-width:0;flex:1"><div class="tnm">调研</div><div class="trl">只读 · 检索与竞品分析</div></div><span class="mdl">最便宜档</span><span class="prbtn">编辑</span></div>
+              <div class="tplrow" style="border-bottom:none"><span class="tico">📱</span><div style="min-width:0;flex:1"><div class="tnm">手机端</div><div class="trl">随身指挥 · 通知与快览</div></div><span class="mdl">—</span><span class="prbtn">编辑</span></div>
+            </div>
+
+            <div class="escape">开团时逐成员可改——模板只给初始值，不当牢笼。</div>
+          </div>
+
+          <!-- ===== 扩展页（V8 新增第六页：Extension 管理——第三接入面的控制面侧；手机同款列表态） ===== -->
+          <div class="setpage" id="setpage-ext">
+            <div class="sethead">
+              <div class="t">扩展</div>
+              <div class="s">控制面能力扩展——内建三件随软件发行、免安装确认；统一鉴权 · 无特权通道</div>
+            </div>
+
+            <div class="setcard">
+              <h5>内建扩展 · 随软件发行</h5>
+              <div class="tplrow"><span class="tico">✅</span><div style="min-width:0;flex:1"><div class="tnm">acceptance · 验收体系 <span class="mdl" style="margin-left:6px">内建</span></div><div class="trl">出单 · 回填 · 收单闭环 · 验收单分发与提醒</div></div><span class="pill g">已启用</span><span class="prbtn">停用</span></div>
+              <div class="tplrow"><span class="tico">📤</span><div style="min-width:0;flex:1"><div class="tnm">deliver · 输出物登记 <span class="mdl" style="margin-left:6px">内建</span></div><div class="trl">意图声明制登记 · 输出物看板数据源</div></div><span class="pill g">已启用</span><span class="prbtn">停用</span></div>
+              <div class="tplrow" style="border-bottom:none"><span class="tico">📦</span><div style="min-width:0;flex:1"><div class="tnm">artifacts · 产物看板 <span class="mdl" style="margin-left:6px">内建</span></div><div class="trl">登记查询 · 产物打开与分享</div></div><span class="pill g">已启用</span><span class="prbtn">停用</span></div>
+              <div class="escape" style="border:none;padding-top:6px">内建不可卸载、可停用——停用即对应能力面下线（如停用验收体系后出单/回填入口全部隐藏），二次确认会写明影响。M1 骨架期三件恒启用，停用开关随注册表就绪后生效。</div>
+            </div>
+
+            <div class="setcard">
+              <h5>权限声明（只读）· 授权以命令面权限表为准</h5>
+              <div class="swrow"><div class="swtxt">acceptance<div class="swd">读任务板 · 写验收单（出单 · 回填 · 收单）· 发重要提醒</div></div><span class="prcode">manifest v1</span></div>
+              <div class="swrow"><div class="swtxt">deliver<div class="swd">写输出物登记 · 读项目</div></div><span class="prcode">manifest v1</span></div>
+              <div class="swrow" style="border-bottom:none"><div class="swtxt">artifacts<div class="swd">读输出物 · 读项目</div></div><span class="prcode">manifest v1</span></div>
+            </div>
+
+            <div class="setcard">
+              <h5>第三方扩展</h5>
+              <div class="escape" style="border:none;padding:4px 0 2px">🧩 尚无第三方扩展——规范与市场 M2 开放，不预建目录。技能（skill）/ MCP 兼容投送是 <b>Agent 侧</b>资产（舰队配装），不在本页——本页只管控制面扩展。</div>
+            </div>
+          </div>
+
+          <!-- ===== 关于页（v6.1 新增；「关于」从孤立弹窗收进设置菜单） ===== -->
+          <div class="setpage" id="setpage-about">
+            <div class="sethead">
+              <div class="t">关于</div>
+              <div class="s">版本 · 更新通道 · 诊断</div>
+            </div>
+
+            <div class="setcard aboutcard">
+              <div class="logo">cc-<b>deck</b></div>
+              <div class="ver">v0.6.0-test<span class="ch">通道 · test</span></div>
+              <div>
+                <span class="abtn">检查更新</span><span class="abtn ghost">导出诊断日志</span>
+              </div>
+              <div class="ver" style="margin-top:14px;font-size:10.5px;color:var(--faint)">test 通道每日出包、不写 latest.json；切 stable 通道才推正式版</div>
+            </div>
+
+            <div class="setcard">
+              <h5>开源</h5>
+              <div class="swrow" style="border-bottom:none">
+                <div class="swtxt">源码与发版记录<div class="swd">GitHub Releases · tag 即档案（git tag + 提交信息 + Release 页）</div></div>
+                <span class="prcode">github.com/humumu130/cc-deck</span>
+              </div>
+            </div>
+          </div>
+
+        </div>
+      </div>
+      <span class="pin dp8">8</span>
+      <span class="pin c9 dp9">9</span>
+      <span class="pin c5 dp10">10</span>
+      <span class="pin dp12">12</span>
+    </div>
+
+    <div class="phone" id="mk-ph-prov">
+      <div class="notch"></div>
+      <div class="screen withbar">
+        <header class="appbar">
+          <div class="tt">
+            <div class="t">模型服务</div>
+            <div class="s">设置 · Provider</div>
+          </div>
+          <span class="menu">⋯</span>
+        </header>
+
+        <section class="ppane on" id="pprov">
+          <div class="pprov def">
+            <div class="pprh"><span class="nm">默认 · 继承本机环境</span><span class="ppill g">零配置 · 生效</span></div>
+            <div class="ppr"><span class="lb">环境变量</span><span class="pprcode">ANTHROPIC_BASE_URL</span><span class="pprcode">ANTHROPIC_AUTH_TOKEN</span></div>
+            <div class="ppacts"><span class="go">验证连通</span></div>
+          </div>
+
+          <div class="pprov">
+            <div class="pprh"><span class="nm">智谱 GLM</span><span class="ppill b">已登记</span></div>
+            <div class="ppr"><span class="lb">baseUrl</span><span class="pprcode">open.bigmodel.cn</span></div>
+            <div class="ppr"><span class="lb">模型</span><span class="mdl">glm-5.3</span><span class="mdl">glm-5.3-air</span></div>
+            <div class="ppr"><span class="lb">凭证</span><span class="pprcode">••••9f3a</span></div>
+            <div class="ppr"><span class="lb">额度</span>包月 5h 池 · 62%<span class="pq"><i style="width:62%"></i></span></div>
+            <div class="ppacts"><span class="ok">✓ 已连通</span></div>
+          </div>
+
+          <div class="pprov">
+            <div class="pprh"><span class="nm">Anthropic</span><span class="ppill b">已登记</span></div>
+            <div class="ppr"><span class="lb">baseUrl</span><span class="pprcode">（空）= 官方端点</span></div>
+            <div class="ppr"><span class="lb">模型</span><span class="mdl">claude-opus-4-5</span><span class="mdl">claude-sonnet-4-5</span></div>
+            <div class="ppr"><span class="lb">凭证</span><span class="pprcode">••••c2e1</span></div>
+            <div class="ppacts"><span class="go">验证连通</span></div>
+          </div>
+
+          <div class="proute">
+            <h5>角色路由默认表</h5>
+            <div class="prr"><span class="role">👑 Leader</span><span class="mdl">glm-5.3</span><span class="why">强模型</span></div>
+            <div class="prr"><span class="role">开发</span><span class="mdl">glm-5.3-air</span><span class="why">包月便宜档</span></div>
+            <div class="prr hl"><span class="role">🧪 验收</span><span class="mdl">claude-sonnet</span><span class="why">换厂商=认知独立</span></div>
+            <div style="font-size:10px;color:var(--p-faint);padding-top:5px">默认表 · 开团时逐成员可改</div>
+          </div>
+
+          <div class="ppradd">＋ 添加厂商 <span class="sub">· 请回电脑 / 网页端</span></div>
+
+          <div class="ptrust">🔒 <b>凭证仅存你的电脑</b> · 永不上传、永不进事件流<br>新增 / 修改凭证请回电脑或网页端</div>
+        </section>
+
+        <nav class="ptabbar">
+          <span class="ptab"><span class="ic">💬</span><span class="lb">会话</span></span>
+          <span class="ptab"><span class="ic">👥</span><span class="lb">团队</span><span class="pbadge">1</span></span>
+          <span class="ptab"><span class="ic">📁</span><span class="lb">项目</span></span>
+          <span class="ptab on"><span class="ic">⚙</span><span class="lb">设置</span></span>
+        </nav>
+      </div>
+
+      <span class="pin cp np9">9</span>
+    </div>
+
+    <aside class="notes">
+      <div class="note"><div class="nh"><span class="num">8</span>三层入口，第 0 层零配置</div>
+        <p>设置已三段式嵌入主窗口（桌面 rail ⚙ · 设置导航 · 内容；手机 = 底部 Tab ⚙，浏览态）。<b>第 0 层</b>默认继承本机环境（<b>ANTHROPIC_BASE_URL / ANTHROPIC_AUTH_TOKEN</b> 原样生效）——单厂商用户<b>永远碰不到这页</b>，什么都不用填，这也是信任基线。M1 手编文件，M2 才有这页 UI，且它<b>只是 providers.json 的编辑器，不是新存储</b>——电脑/网页表单写的是同一份文件；手机 App 只浏览、验证、换路由（录入回电脑：<b>手机是指挥台，不是安装器</b>）。</p></div>
+      <div class="note"><div class="nh"><span class="num c9">9</span>凭证不出本机</div>
+        <p>UI 只显<b>尾 4 位</b>；「验证连通」由 relay <b>从本机直连厂商</b>发起；端上拿到的是无 token 字段的脱敏视图——<b>payload 里没有 token 字段是数据结构事实，不是 UI 遮盖</b>。输入通道走既有鉴权信道（LAN token / 云 E2E），与云桥 token 下发同一信任级。</p></div>
+      <div class="note"><div class="nh"><span class="num c5">10</span>给多疑者明路 + 默认表可改</div>
+        <p>不愿在 App 里输 key？<b>手编文件</b>与 <b>$ENV_VAR 引用档</b>两条替代路径在设置页常驻明示——给明路比说服有效。角色路由默认表（Leader 强模型 · 开发便宜档 · <b>验收换厂商 = 认知独立</b> · 调研最便宜）只是初始映射，<b>开团时逐成员可改</b>。</p></div>
+      <div class="note"><div class="nh"><span class="num">12</span>连接三拆</div>
+        <p><b>状态 = 绿点常驻</b> rail 顶部（点它弹快览面板，见驾驶舱帧）、<b>配置 = relay 卡</b>（重启 / 日志）、<b>管理 = 本页</b>（设备 · 云桥 · 配对）——relay 状态卡从通用页整体搬来这里，升格即搬家、不留双入口。异常设备琥珀示警，踢出 = 吊销配对密钥。</p></div>
+    </aside>
+  </div>
+
+  <!-- ================= V8 增量 · 手机（项目 ×2 + 通知中心） ================= -->
+  <h2 class="sh" id="mk-v8ph"><span class="tag t-ph">V8 增量 · 掌上</span>手机端 · 项目 Tab + 通知中心 + 验收单（四帧新帧）</h2>
+  <p class="shsub">底部导航升<b>四 Tab：💬 会话 / 👥 团队 / 📁 项目 / ⚙ 设置</b>（与桌面 rail 同一张导航地图——上面既有帧的底栏已同步）；通知 = root 页顶栏 <b>🔔 角标</b>进二级页（badge 只数需你行动）。项目 = 列表 root + 详情二级页（藏底栏，与团队详情同款模式）。<b>验收单 = 出门回填的主战场</b>（末帧）：本机行组可操作、其他端折叠只读、回填 + 确认收单两步同屏——与桌面帧 C 同一张单。<b>四 Tab 是否过载挂 O-V8a</b>（备选：📁 收进 ⚙ / 团队页顶部项目切换），随 O10 一并拍；通知推送形态挂 <b>O2</b>。</p>
+  <div class="stage phones">
+
+    <!-- 帧 V8-p1 · 项目列表（root：底栏 📁 选中） -->
+    <div class="phone" id="mk-ph-proj">
+      <div class="notch"></div>
+      <div class="screen withbar">
+        <header class="appbar">
+          <div class="tt">
+            <div class="t">项目</div>
+            <div class="s">3 活跃 · 1 已隐藏</div>
+          </div>
+          <span style="position:relative;font-size:17px;color:var(--p-dim);margin-right:12px" title="通知 · badge 只数需你行动">🔔<span style="position:absolute;top:-4px;right:-7px;min-width:14px;height:14px;line-height:14px;border-radius:7px;background:#e5484d;color:#fff;font-size:9px;font-weight:700;text-align:center;padding:0 3px">2</span></span>
+          <span class="menu">⋯</span>
+        </header>
+
+        <section class="ppane on">
+          <div class="pcard"><div class="ct">📂 cc-deck <span class="dot g" style="margin-left:auto"></span></div><div class="pcline">~/dev/cc-deck · 6 会话 · 1 团队 · <span class="warn">2 需行动</span></div></div>
+          <div class="pcard"><div class="ct">📂 windclaw-qclaw <span class="dot y" style="margin-left:auto"></span></div><div class="pcline">~/dev/windclaw · 1 会话 · 等构建</div></div>
+          <div class="pcard"><div class="ct">📂 blog <span class="dot b" style="margin-left:auto"></span></div><div class="pcline">~/dev/blog · 3 天前活跃</div></div>
+          <div class="pcard" style="opacity:.5"><div class="ct">📂 legacy-scripts</div><div class="pcline">已隐藏 · 长按恢复</div></div>
+          <div class="pcline" style="text-align:center;padding:10px 0;color:var(--p-faint);font-size:10.5px">项目按目录自动识别 · 无需新建</div>
+        </section>
+
+        <nav class="ptabbar">
+          <span class="ptab"><span class="ic">💬</span><span class="lb">会话</span></span>
+          <span class="ptab"><span class="ic">👥</span><span class="lb">团队</span><span class="pbadge">1</span></span>
+          <span class="ptab on"><span class="ic">📁</span><span class="lb">项目</span></span>
+          <span class="ptab"><span class="ic">⚙</span><span class="lb">设置</span></span>
+        </nav>
+      </div>
+    </div>
+
+    <!-- 帧 V8-p2 · 项目详情（二级页：藏底栏 · 只读聚合四分节） -->
+    <div class="phone" id="mk-ph-projd">
+      <div class="notch"></div>
+      <div class="screen">
+        <header class="appbar">
+          <span class="back">‹</span>
+          <div class="tt">
+            <div class="t">📂 cc-deck</div>
+            <div class="s">6 会话 · 1 团队 · 2 需行动</div>
+          </div>
+          <span class="menu">⋯</span>
+        </header>
+
+        <section class="ppane on">
+          <div class="psec" style="padding:8px 12px 0"><h5>💬 会话 6<span class="jump" style="margin-left:auto;font-size:10px;color:var(--p-dim)">在 💬 查看 ↗</span></h5></div>
+          <div class="vrow" style="margin:6px 12px"><div class="t"><b>🎨 ui-review 走查</b><div class="s">刚刚 · 上下文 58%</div></div><span class="k">运行中</span></div>
+          <div class="vrow" style="margin:6px 12px"><div class="t"><b>📦 0.5.2-test.15 出包</b><div class="s">1 小时前 · 等安卓产物</div></div><span class="k">运行中</span></div>
+          <div class="psec" style="padding:8px 12px 0"><h5>👥 团队 1 活跃 · 1 归档<span class="jump" style="margin-left:auto;font-size:10px;color:var(--p-dim)">在 👥 查看 ↗</span></h5></div>
+          <div class="vrow" style="margin:6px 12px"><div class="t"><b>🤖 cc-deck M1 攻坚团</b><div class="s">6 成员 · 4 进行中 · 2 待装机</div></div><span class="k">运行中</span></div>
+          <div class="psec" style="padding:8px 12px 0"><h5>📦 输出物 46<span class="jump" style="margin-left:auto;font-size:10px;color:var(--p-dim)">全部 ↗</span></h5></div>
+          <div class="vrow" style="margin:6px 12px"><div class="t"><b>docs/v2-system-design.md</b><div class="s">刚刚</div></div><span class="k" style="color:#7CB8FF">交付物</span></div>
+          <div class="psec" style="padding:8px 12px 0"><h5>✅ 验收单 3 未闭环<span class="jump" style="margin-left:auto;font-size:10px;color:var(--p-dim)">全部 ↗</span></h5></div>
+          <div class="vrow" style="margin:6px 12px"><div class="t"><b>0.6.0-test.19 · 更新通道隔离</b><div class="s">已回填 2/3 · 等确认收单</div></div><span class="k" style="color:var(--working)">已回填</span></div>
+          <div class="vrow" style="margin:6px 12px"><div class="t"><b>0.6.0-test.18 · 导入码</b><div class="s">1 项 ✗ → 修复中（T-21）</div></div><span class="k" style="color:#e5484d">修复中</span></div>
+          <div class="pcline" style="text-align:center;padding:10px 0;color:var(--p-faint);font-size:10.5px">只读聚合 · 联动不合并（写操作回原域）</div>
+        </section>
+      </div>
+    </div>
+
+    <!-- 帧 V8-p3 · 通知中心（二级页：顶栏 🔔 进入 · badge 只数 alert） -->
+    <div class="phone" id="mk-ph-notif">
+      <div class="notch"></div>
+      <div class="screen">
+        <header class="appbar">
+          <span class="back">‹</span>
+          <div class="tt">
+            <div class="t">🔔 通知</div>
+            <div class="s">2 需你行动</div>
+          </div>
+          <span class="menu">⋯</span>
+        </header>
+
+        <section class="ppane on">
+          <div class="ngrp" style="padding:0 12px">🔴 需你行动（常驻 · 手动关）</div>
+          <div class="nrow alert" style="margin:5px 12px"><span class="ic">⚡</span><div class="t"><b>test.19 就绪待装机</b><div class="s">已回填 2/3 · 差 1 项确认收单 · 12 分钟前</div></div><span class="act">验收单 ↗</span><span class="x">×</span></div>
+          <div class="nrow alert" style="margin:5px 12px"><span class="ic">📴</span><div class="t"><b>验收成员失联 · 额度链走尽</b><div class="s">claude 额度尽 · 验收槽不回落同厂商 · 8 分钟前</div></div><span class="act">换厂商接替 ↗</span><span class="x">×</span></div>
+          <div class="ngrp" style="padding:0 12px">🟡 注意</div>
+          <div class="nrow warn" style="margin:5px 12px"><span class="ic">🔄</span><div class="t"><b>worker-mobile 已自动接替</b><div class="s">接替成功 · 事后告知不打扰</div></div></div>
+          <div class="ngrp" style="padding:0 12px">⚪ 动态</div>
+          <div class="nrow" style="margin:5px 12px"><span class="ic">📤</span><div class="t"><b>v8-ui-design.md 已登记</b><div class="s">2 小时前</div></div></div>
+          <div class="pcline" style="text-align:center;padding:10px 0;color:var(--p-faint);font-size:10.5px">推送形态待定：系统通知 / 合并常驻通知 / 仅角标（O2 拍板）</div>
+        </section>
+      </div>
+    </div>
+
+    <!-- 帧 V8-p4 · 验收单（二级页：手机 = 出门回填主战场——本机行可操作，其他端折叠只读；与桌面帧 C 同一张单） -->
+    <div class="phone" id="mk-ph-sheet">
+      <div class="notch"></div>
+      <div class="screen">
+        <header class="appbar">
+          <span class="back">‹</span>
+          <div class="tt">
+            <div class="t">✅ 验收单 · 0.6.0-test.19</div>
+            <div class="s">批内 1 卡 · T-13 原卡 · 回填 2/3</div>
+          </div>
+        </header>
+        <section class="ppane on">
+          <div class="sheetsteps" style="padding:10px 12px 4px">出单 <b>✓</b><span class="arw">→</span> 回填 <b>✓ 已提交 2/3</b><span class="arw">→</span> <b class="cur">确认收单（等 1 项）</b></div>
+          <div class="psec" style="padding:8px 12px 0"><h5>📱 手机端 2 项 · 待你回填</h5></div>
+          <div class="srow" style="margin:6px 12px"><span class="no">①</span><span class="std">安装 test.19 后检查更新，通道角标显示「test」</span><span class="v ok">✓</span><input placeholder="通过，角标正常"><span class="sev">证据 ↗</span></div>
+          <div class="srow" style="margin:6px 12px"><span class="no">②</span><span class="std">公司网下点「检查更新」能拉到清单</span><span class="v un">未测</span><input placeholder="测完在此填写"><span class="sev" style="opacity:.3">—</span></div>
+          <div class="aicollapsed" style="margin:8px 12px">🖥 桌面端 1 项 · 已回填 ✓（他端回填 · 只读）</div>
+          <div class="aicollapsed" style="margin:8px 12px">🌐 AI 已代验 3 项 · 全部通过（点开只读查看证据）</div>
+          <div class="sheetfoot" style="margin:12px 12px 16px"><div class="main">提交回填（2/3）</div></div>
+          <div class="ovhint" style="margin:6px 2px 0">与桌面同一张单——本机行组可操作，其他端折叠只读；全过后此按钮变「确认收单」（两步同屏）</div>
+        </section>
+      </div>
+    </div>
+  </div>
+
+  <div class="tip">💡 与 Claude Code 内置子 Agent / teams 的区别一句话：内置是<b>「一个会话进程内的并行」</b>（父会话死则全死、只在终端里、同模型）；团队模式是<b>「总线上的对等成员」</b>（每个成员是 relay 上独立会话、互不连坐、手机指挥、状态持久化在 relay、可异构模型混编）。详见 docs/team-mode-design.md。</div>
+  <div class="tip" style="margin-top:10px">🔗 三端同源：手机、桌面、网页看到的板，全部由 <b>relay 同一事件流</b>渲染（BOARD_* 事件 + 既有 last_seq 断线补发）——桌面/网页本就是同一份 web-console 代码（EXE/Mac 是壳），团队视图也只做一份；手机端是独立 App，渲染自己的形态。</div>
+  <div class="tip" style="margin-top:10px">🔌 <b>异构模型</b>：每个成员可绑<b>不同厂商</b>的模型（编制卡上选型，凭证只存 relay 本地、永不下发端上）。默认路由：Leader 强模型 · worker 走包月便宜档 · <b>验收换厂商</b>——流程独立之外再加认知独立（同厂商模型会犯一样的错）。换模型 = 同一套接替机制（板 + git 是记忆，transcript 是消耗品）：池烧穿或限流时，同身份换个模型重 spawn 即继续。</div>
+</div>
+
+<script>
+  function bindTabs(container) {
+    var ids = [...container.querySelectorAll('button[data-t]')].map(function (b) { return b.dataset.t; });
+    container.querySelectorAll('button[data-t]').forEach(function (b) {
+      b.addEventListener('click', function () {
+        container.querySelectorAll('button[data-t]').forEach(function (x) { x.classList.remove('on'); x.classList.remove('active'); });
+        ids.forEach(function (id) { var el = document.getElementById(id); if (el) el.classList.remove('on'); });
+        b.classList.add('on'); b.classList.add('active');
+        document.getElementById(b.dataset.t).classList.add('on');
+      });
+    });
+  }
+  document.querySelectorAll('.ptabs, .dtabs').forEach(bindTabs);
+
+  /* v6 rail 交互：驾驶舱帧内 💬/👥 原地切换中列与详情（display 切换）；⚙ 平滑跳到设置帧 */
+  (function () {
+    var rail = document.querySelector('.dtbody:not(.set) .rail');
+    if (!rail) return;
+    rail.querySelectorAll('.ri[data-d]').forEach(function (it) {
+      it.addEventListener('click', function () {
+        var d = it.dataset.d;
+        if (d === 'set') {
+          var t = document.querySelector('.dtbody.set');
+          if (t) t.closest('.winframe').scrollIntoView({ behavior: 'smooth', block: 'center' });
+          return;
+        }
+        rail.querySelectorAll('.ri[data-d]').forEach(function (x) { x.classList.remove('on'); });
+        it.classList.add('on');
+        ['chat', 'team'].forEach(function (k) {
+          var side = document.getElementById('side-' + k);
+          var det = document.getElementById('detail-' + k);
+          if (side) side.style.display = (k === d) ? '' : 'none';
+          if (det) det.style.display = (k === d) ? '' : 'none';
+        });
+      });
+    });
+  })();
+
+  /* v6.1 设置导航四页切换（仿 rail 交互风格：点 snav = 内容区原地换页） */
+  (function () {
+    document.querySelectorAll('.setnav .snav[data-p]').forEach(function (it) {
+      it.addEventListener('click', function () {
+        var nav = it.closest('.setnav');
+        nav.querySelectorAll('.snav[data-p]').forEach(function (x) { x.classList.remove('on'); });
+        it.classList.add('on');
+        var main = it.closest('.dtbody').querySelector('.setmain');
+        main.querySelectorAll('.setpage').forEach(function (p) { p.classList.remove('on'); });
+        var pg = document.getElementById(it.dataset.p);
+        if (pg) pg.classList.add('on');
+        var tt = it.closest('.winframe').querySelector('.chrome .tt'); /* 窗口标题随设置页联动（剥掉导航项前缀图标） */
+        if (tt) tt.textContent = 'CC Deck — 设置 · ' + it.textContent.trim().replace(/^[^一-龥A-Za-z0-9]+/u, '');
+      });
+    });
+  })();
+
+  /* v7 绿点快览面板：点 rdot 弹/收本帧 .cpanel；「打开连接与设备」= 滚到设置帧 + 激活连接与设备页 + 收起 */
+  (function () {
+    document.querySelectorAll('.winframe').forEach(function (frame) {
+      var rdot = frame.querySelector('.rail .rdot');
+      var panel = frame.querySelector('.cpanel');
+      if (!rdot || !panel) return;
+      rdot.addEventListener('click', function () { panel.classList.toggle('on'); });
+      var go = panel.querySelector('.cpbtn');
+      if (!go) return;
+      go.addEventListener('click', function () {
+        panel.classList.remove('on');
+        var set = document.querySelector('.dtbody.set');
+        if (!set) return;
+        set.closest('.winframe').scrollIntoView({ behavior: 'smooth', block: 'center' });
+        var nav = set.querySelector('.snav[data-p="setpage-conn"]');
+        if (nav) nav.click();
+      });
+    });
+  })();
+
+  /* v7.1 ⋯ 收纳（overflow）：⋮ 按钮 + 桌面下拉 / 手机底部浮层。
+     菜单行用 span[data-t]（不是 button[data-t]），与 bindTabs 分轨绑定、互不干扰：
+     菜单行切换 = 清全部相关 pane 与 tab active → ⋮ 高亮 → 目标 pane on → 菜单收起；
+     普通 tab 点击 = ⋮ 失活 + 低频 pane 关 + 菜单收起（bindTabs 本身照常工作）。 */
+  function bindOverflow(root) {
+    var btn = root.querySelector('.ovbtn');
+    if (!btn) return;
+    var pop = root.querySelector('.ovmenu') || root.querySelector('.ovsheet');
+    if (!pop) return;
+    var mask = root.querySelector('.ovmask');
+    var bar = btn.closest('.dtabs') || btn.closest('.ptabs');
+    var btns = bar ? [].slice.call(bar.querySelectorAll('button[data-t]')) : [];
+    var rows = [].slice.call(pop.querySelectorAll('span[data-t]'));
+    var ids = btns.concat(rows).map(function (el) { return el.dataset.t; });
+    function closeAll() {
+      document.querySelectorAll('.ovmenu.on, .ovsheet.on, .ovmask.on').forEach(function (el) { el.classList.remove('on'); });
+    }
+    btn.addEventListener('click', function () {
+      var open = pop.classList.contains('on');
+      closeAll();
+      if (!open) { pop.classList.add('on'); if (mask) mask.classList.add('on'); }
+    });
+    rows.forEach(function (r) {
+      r.addEventListener('click', function () {
+        ids.forEach(function (id) { var el = document.getElementById(id); if (el) el.classList.remove('on'); });
+        btns.forEach(function (b) { b.classList.remove('on'); b.classList.remove('active'); });
+        btn.classList.add('on'); btn.classList.add('active');
+        var pane = document.getElementById(r.dataset.t);
+        if (pane) pane.classList.add('on');
+        closeAll();
+      });
+    });
+    btns.forEach(function (b) {
+      b.addEventListener('click', function () {
+        /* 只清低频 pane 与 ⋮ 态：常规 pane 由先绑定的 bindTabs 负责（此处不清，避免把刚点亮的 pane 又关掉） */
+        rows.forEach(function (r) { var el = document.getElementById(r.dataset.t); if (el) el.classList.remove('on'); });
+        btn.classList.remove('on'); btn.classList.remove('active');
+        closeAll();
+      });
+    });
+    if (mask) mask.addEventListener('click', closeAll);
+  }
+  document.querySelectorAll('.dtabs, .screen').forEach(bindOverflow); /* .screen 含手机帧的 sheet+mask；无 ⋮ 的容器自动跳过 */
+  document.addEventListener('click', function (e) { /* 点空白处收起 */
+    if (e.target.closest('.ovanchor, .ovmenu, .ovsheet')) return;
+    document.querySelectorAll('.ovmenu.on, .ovsheet.on, .ovmask.on').forEach(function (el) { el.classList.remove('on'); });
+  });
+
+  /* v7.1 活动 tab 过滤 chips：组内互斥高亮（纯视觉态，不做真过滤） */
+  document.querySelectorAll('.fchips').forEach(function (g) {
+    g.querySelectorAll('.fchip').forEach(function (c) {
+      c.addEventListener('click', function () {
+        g.querySelectorAll('.fchip').forEach(function (x) { x.classList.remove('on'); });
+        c.classList.add('on');
+      });
+    });
+  });
+
+  /* v7.1 手机看板总览双向联动（仅帧 3 看板 pane）：
+     分段宽 = 各状态任务数占比；泳道标 data-lane 对应分段。滚动（rAF 节流）→ 视口相交泳道并集 →
+     ovmark 吸附分段边界（禁止像素级连续映射）；点分段 / 图例 → 平滑滚到组（scroll-margin 让组头停在吸顶条下沿） */
+  (function () {
+    var pane = document.getElementById('p3b');
+    if (!pane) return;
+    var prog = pane.querySelector('.ovhit .prog');
+    var segs = [].slice.call(prog.querySelectorAll('i'));
+    var planes = [].slice.call(pane.querySelectorAll('.plane'));
+    var mark = pane.querySelector('.ovmark');
+    var hit = pane.querySelector('.ovhit');
+    var STICKY = Math.round(pane.querySelector('.ovpit').getBoundingClientRect().height) + 7; /* 吸顶条实测高度 + 呼吸，替代拍脑袋常数 */
+    function fracs() {
+      var tot = segs.reduce(function (a, s) { return a + (+s.dataset.n); }, 0);
+      var f = {}, acc = 0;
+      segs.forEach(function (s) { var l = +s.dataset.lane; f[l] = [acc / tot, (acc + (+s.dataset.n)) / tot]; acc += +s.dataset.n; });
+      return f;
+    }
+    function update() {
+      var sr = pane.getBoundingClientRect();
+      if (sr.height < 10) return; /* pane 隐藏时不算 */
+      var f = fracs(), lo = 1, hi = 0, seen = false;
+      planes.forEach(function (pl) {
+        var r = pl.getBoundingClientRect();
+        if (r.bottom > sr.top + STICKY + 4 && r.top < sr.bottom - 4) {
+          var fr = f[+pl.dataset.lane];
+          if (!fr) return;
+          seen = true; lo = Math.min(lo, fr[0]); hi = Math.max(hi, fr[1]);
+        }
+      });
+      mark.style.opacity = seen ? 1 : 0;
+      if (seen) { mark.style.left = (lo * 100) + '%'; mark.style.width = ((hi - lo) * 100) + '%'; }
+    }
+    var raf = null;
+    pane.addEventListener('scroll', function () {
+      if (!raf) raf = requestAnimationFrame(function () { raf = null; update(); });
+    });
+    window.addEventListener('resize', update);
+    function goTo(lane) {
+      var pl = planes.filter(function (p) { return +p.dataset.lane === lane; })[0];
+      if (!pl) return;
+      var top = pl.getBoundingClientRect().top - pane.getBoundingClientRect().top + pane.scrollTop - STICKY;
+      pane.scrollTo({ top: Math.max(0, top), behavior: 'smooth' });
+    }
+    hit.addEventListener('click', function (e) {
+      var r = prog.getBoundingClientRect();
+      var x = Math.max(0, Math.min(1, (e.clientX - r.left) / r.width)), f = fracs();
+      for (var i = 0; i < segs.length; i++) {
+        var l = +segs[i].dataset.lane;
+        if (x >= f[l][0] && x <= f[l][1]) { goTo(l); return; }
+      }
+    });
+    pane.querySelectorAll('.ovleg span[data-lane]').forEach(function (s) {
+      s.addEventListener('click', function () { goTo(+s.dataset.lane); });
+    });
+    var b3 = document.querySelector('.ptabs button[data-t="p3b"]');
+    if (b3) b3.addEventListener('click', function () { setTimeout(update, 0); });
+    update();
+  })();
+</script>
+</body>
+</html>
