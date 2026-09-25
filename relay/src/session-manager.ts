@@ -1,4 +1,4 @@
-import { mkdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
+import { mkdirSync, readFileSync, realpathSync, statSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { isAbsolute, join, resolve, sep } from "node:path";
 import { artifactsDir } from "./artifacts.js";
@@ -1059,12 +1059,23 @@ export class SessionManager {
   // Bash 环境拿不到 CLAUDE_SESSION_ID，cwd 前缀+新鲜度是可得的最强归因；同仓库并行
   // 会话极端场景可能归到姊妹会话，可接受（看板仍在，只是挂在隔壁卡上）。
   // 空 cwd 会话跳过（原先 "" + sep 会前缀匹配一切绝对路径，属潜在误归因，顺手修复）
+  // #203 realpath 归一（2026-09-25）：macOS /tmp 是 /private/tmp 的符号链接——会话
+  // 登记逻辑路径（/tmp）与 Bash/hook 上报物理路径（/private/tmp/keyhive）两种形态
+  // 并存时前缀匹配失配（secret 会话实锤：deliver-guard 自动登记与手动补登记同死
+  // 此处，且 hook 失败静默无人知）。两边 realpath 后再比；路径已消失（历史会话
+  // cwd 被删）realpathSync 会 throw，回落 resolve 值。低频调用（deliver/验收单
+  // 回填），循环内逐会话归一的代价可忽略
   matchSessionByCwd(cwd: string): string | null {
-    const c = resolve(cwd || ".");
+    const norm = (x: string): string => {
+      const r = resolve(x || ".");
+      try { return realpathSync(r); } catch { return r; }
+    };
+    const c = norm(cwd);
     let best: { id: string; updated: number } | null = null;
     for (const s of this.sessions.values()) {
-      const sc = s.state.cwd;
-      if (!sc) continue;
+      const rawCwd = s.state.cwd;
+      if (!rawCwd) continue;
+      const sc = norm(rawCwd);
       const related = c === sc || c.startsWith(sc + sep) || sc.startsWith(c + sep);
       if (!related) continue;
       if (!best || s.state.updated_at > best.updated) best = { id: s.state.session_id, updated: s.state.updated_at };
