@@ -7402,7 +7402,21 @@ $("sendBtn").onclick = () => {
     syncSendState();
   }
 };
-$("msginput").addEventListener("keydown", (e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); $("sendBtn").click(); } });
+// #178 IME 组词期 Enter 不发送（输入法回车上屏把半截草稿顶飞）：主输入框补上改名框
+// 同款 IME 健壮守卫（2026-09-16 改名框已实测的形态分类）——①正常组词
+// （composition 活跃/isComposing）→ 吞；②搜狗/QQ 拼音在 WebView2 组词事件未活跃
+// → 不吞，Enter 正常发送；③组词提交 Enter 晚于 compositionend 的时序抖动 → 150ms
+// 提交锁 + 229 抖动窗吸收。兜底路径：发送按钮点击不经过此守卫，永不受影响。
+let msgComposing = false, msgCommitLockUntil = 0;
+$("msginput").addEventListener("compositionstart", () => { msgComposing = true; });
+$("msginput").addEventListener("compositionend", () => { msgComposing = false; msgCommitLockUntil = Date.now() + 150; });
+$("msginput").addEventListener("keydown", (e) => {
+  if (e.key !== "Enter" || e.shiftKey) return;
+  if (e.isComposing || msgComposing) return;
+  if (e.keyCode === 229 && Date.now() - msgCommitLockUntil < 400) return; // 组词尾疑似抖动窗
+  e.preventDefault();
+  $("sendBtn").click();
+});
 $("stopBtn").onclick = () => {
   const sel = selSession();
   if (!sel) return;
