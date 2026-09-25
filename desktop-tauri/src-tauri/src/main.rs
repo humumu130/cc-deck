@@ -493,6 +493,13 @@ fn relay_toggle(app: tauri::AppHandle, on: bool) -> Result<Value, String> {
             let _ = c.kill();
             let _ = c.wait();
             println!("[embedded-relay] stopped by user");
+        } else if port_listening(relay_port()) {
+            // #76 端口上有 relay 但非本应用子进程（launchd 服务/插件 supervisor 托管）——
+            // 本开关管不到也不该 kill，透出指引，否则用户点「关」看似无效
+            *EMBEDDED_RELAY_ERR.lock().unwrap() = Some(
+                "端口上的 relay 由外部托管（系统服务/插件）——此开关只管理应用内嵌实例。停用系统服务：终端跑 deploy/mac-relay-launchd/disable.sh".into(),
+            );
+            println!("[embedded-relay] toggle-off skipped: externally managed relay on port {}", relay_port());
         }
         return Ok(relay_status_value());
     }
