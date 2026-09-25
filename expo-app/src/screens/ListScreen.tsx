@@ -1209,7 +1209,10 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
   srcMenuManageT: { color: c.dim, fontSize: 12 },
   topbar: {
     flexDirection: "row", alignItems: "center", gap: 10,
-    paddingHorizontal: 16, paddingTop: 10, paddingBottom: 8,
+    // #198 横线与详情页 head 对齐：padding 10/8→9/6 + 标题列 lineHeight 显式化
+    //（titleT 20 / titleSub 13，与详情页 d.title/d.sub 同档）——两页 head 构造等高
+    //（详情=6+20+3+14+6，列表=9+max(logo34,20+0.5+13)+6），分隔线 Y 一致
+    paddingHorizontal: 16, paddingTop: 9, paddingBottom: 6,
     borderBottomWidth: 1, borderBottomColor: c.line,
   },
   logoBtn: { borderRadius: 12 },
@@ -1238,8 +1241,8 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
   tgMoon: { width: 12, height: 12, borderRadius: 6, borderWidth: 1.4 },
   tgMoonMask: { position: "absolute", width: 10, height: 10, borderRadius: 5, left: 4.5, top: -2.5 },
   titleWrap: { flexShrink: 1, marginRight: "auto" },
-  titleT: { color: c.text, fontSize: 16, fontWeight: "700", letterSpacing: 0.2 },
-  titleSub: { color: c.faint, fontSize: 11, marginTop: 0.5 },
+  titleT: { color: c.text, fontSize: 16, fontWeight: "700", letterSpacing: 0.2, lineHeight: 20 }, // #198 lineHeight 显式（原字体度量浮动）
+  titleSub: { color: c.faint, fontSize: 11, lineHeight: 13, marginTop: 0.5 },
   statRow: {
     flexDirection: "row", alignItems: "center", gap: 9,
     paddingHorizontal: 18, paddingTop: 8, paddingBottom: 4,
