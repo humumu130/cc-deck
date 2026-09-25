@@ -21,8 +21,17 @@ KV_NS="d9b9bb1768324fb1b71907ca72de7aa6"
 EXE_KEY="cc-deck-desktop-${VER}-x64-setup.exe"
 MANIFEST_KEY="tauri-latest-test.json"
 CF_TOKEN="${CF_TOKEN:-${CLOUDFLARE_API_TOKEN:?缺 CF_TOKEN/CLOUDFLARE_API_TOKEN}}"
-# gh/git 走代理（github 直连超时；KV/ECS 不走代理）
-export https_proxy="${https_proxy:-http://127.0.0.1:7890}"
+# gh/git 走代理（github 直连超时；KV/ECS 不走代理）。代理探活：Clash 停机窗口
+# 不再硬套死代理（曾两次全断窗口杀脚本），探不通就回落直连（当前网络直连可用时）
+PROXY_CAND="${https_proxy:-http://127.0.0.1:7890}"
+PROXY_HP="${PROXY_CAND#*//}"          # 剥 scheme → host:port
+if nc -z -w 2 "${PROXY_HP%%:*}" "${PROXY_HP##*:}" 2>/dev/null; then
+  export https_proxy="$PROXY_CAND"
+  echo "    gh 走代理 $PROXY_CAND"
+else
+  unset https_proxy http_proxy all_proxy HTTPS_PROXY HTTP_PROXY ALL_PROXY
+  echo "    代理 $PROXY_CAND 不通，gh 回落直连"
+fi
 KEY="$HOME/.ssh/id_ed25519"
 SSH="ssh -i $KEY -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null"
 SCP="scp -i $KEY -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null"
