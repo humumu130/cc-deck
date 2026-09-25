@@ -7472,6 +7472,14 @@ function commitDelete(src, sid) {
   setTimeout(() => { deleting.delete(sid); render(); }, 3000);
 }
 function requestDelete(src, sid) {
+  // #207 离线源拦截（对齐手机 ListScreen）：会话数据在源机器上，源离线时删除
+  // 命令必然送不达——旧版照走乐观舞步（隐藏 4s+3s 兜底）到期卡片静默回归＝
+  // 「删除又复活」。点删当下点名源拦下，不进舞步
+  const dctx = ctxs.get(src);
+  if (!dctx || dctx.status !== "online") {
+    toast((dctx && dctx.cfg && dctx.cfg.name ? "「" + dctx.cfg.name + "」" : "该源") + "离线中，该设备开机联网后才能删除");
+    return;
+  }
   const s = ctxs.get(src)?.sessions.get(sid);
   if (pendingDel.timer) {
     clearTimeout(pendingDel.timer);

@@ -69,9 +69,9 @@ function Toast() {
   useEffect(() => () => { if (timer.current) clearTimeout(timer.current); }, []);
 
   if (!show || !snap.lastErrorCmd) return null;
-  // 完整句子的文案（本地未发送 / ACK 超时结论）不再套"命令失败:"前缀，避免语义叠加误导排查方向
+  // 完整句子的文案（本地未发送 / ACK 超时结论 / #207 离线源删除拦截）不再套"命令失败:"前缀，避免语义叠加误导排查方向
   const raw = snap.lastErrorCmd;
-  const msg = raw === "未连接，命令未发送" || raw.endsWith("可能未送达") ? raw : `命令失败: ${raw}`;
+  const msg = raw === "未连接，命令未发送" || raw.endsWith("可能未送达") || raw.endsWith("才能删除") ? raw : `命令失败: ${raw}`;
   return (
     <View style={st.toastWrap} pointerEvents="none">
       <Animated.View style={[st.toast, { opacity: op, transform: [{ translateY: y }] }]}>

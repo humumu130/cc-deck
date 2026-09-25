@@ -2579,6 +2579,25 @@ class RelayStore {
     if (this.snap.lastErrorCmd) this.emit({ lastErrorCmd: null });
   }
 
+  // 完整句错误直显（#207）：界面层主动报错复用 App 全局 toast 通道
+  //（文案已是完整句，App 渲染端不套「命令失败:」前缀）
+  notifyCmdError(msg: string) {
+    this.emit({ lastErrorCmd: msg });
+  }
+
+  // #207 删除前置检查：会话数据存在源机器上，源离线时 COMMAND_DELETE 必然
+  // 送不达——旧版照走乐观删除舞步（隐藏 4s + 提交后 3s 兜底），到期卡片静默
+  // 回归，用户感知为「删除后十几秒复活」（实发场景：删除关机的公司电脑上的
+  // 历史会话）。改为滑删当下拦截并点名源，不进舞步。返回 null=源可达可删；
+  // 否则返回完整句提示（toast 直显）。路由未知（快照重建瞬间等）返回 null，
+  // 交给 send 既有的「会话不存在/未连接」分支兜底
+  deleteBlockReason(sid: string): string | null {
+    const conn = this.sidIndex.get(sid);
+    if (!conn) return null;
+    if (conn.state === "online" && conn.ws && conn.ws.readyState === WebSocket.OPEN) return null;
+    return `「${conn.name}」离线中，该设备开机联网后才能删除`;
+  }
+
   // 快照恢复未读汇报（#254）：瞬态 TASK_DONE 在断线/进程被杀期间丢失，relay 把最近
   // 汇报随会话状态下发；仅恢复 2h 内、未入过队、未被用户清除过的（防重启翻旧账）
   private recoverTaskDone(list: SessionState[]): void {

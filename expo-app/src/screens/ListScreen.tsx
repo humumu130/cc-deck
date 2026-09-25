@@ -626,6 +626,14 @@ export default function ListScreen({ sessions, connected, connText, onOpen, onNe
     }
   }, [sessions, pendingDel, deleting]);
   const requestDelete = useCallback((sid: string) => {
+    // #207 离线源拦截：会话数据在源机器上，源离线时删除命令必然送不达——旧版
+    // 照走乐观舞步（隐藏 4s+3s 兜底）到期卡片静默回归＝「删除又复活」（实发：
+    // 手机删关机的公司电脑上的历史会话）。滑删当下点名源拦下，不进舞步
+    const block = store.deleteBlockReason(sid);
+    if (block) {
+      store.notifyCmdError(block);
+      return;
+    }
     try { Vibration.vibrate(20); } catch {}
     if (delTimer.current) {
       clearTimeout(delTimer.current);
