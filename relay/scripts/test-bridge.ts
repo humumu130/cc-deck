@@ -1321,6 +1321,36 @@ assert(!mgr.getExternal("ext-ff11bb22-cc33-dd44-ee55-ff6677889900"), "67 multi-t
   assert(resolveCreateCwd(PROOT, "Z:/definitely-missing").cwd === resolve(PROOT), "41 valid raw cwd wins over default");
   assert(resolveCreateCwd("", PROOT).cwd === resolve(PROOT), "41 configured default cwd used as-is");
 
+  // #208 autoMkdir（客户端「目录不存在时自动创建」开关，随 COMMAND_CREATE 带上）：
+  // 开=mkdir -p 建出（含多级）+ 说明进时间线；建失败（路径中间是文件）回落默认目录
+  // 并点名「自动创建」失败；关/缺省=完全旧回落行为；~ 前缀展开到 homedir（手机
+  // placeholder 即 ~/dev/...，不展开会在 relay 进程 cwd 下建出字面 "~" 目录）
+  {
+    const { existsSync, statSync } = await import("node:fs");
+    const defRoot = join(PROOT, "def-root");
+    mkdirSync(defRoot, { recursive: true });
+    const mkTarget = join(PROOT, "208-auto", "deep", "proj");
+    const r3 = resolveCreateCwd(mkTarget, defRoot, true);
+    assert(r3.cwd === mkTarget && r3.fallbackNote.includes("原不存在") && r3.fallbackNote.includes("自动创建"), "41/#208 autoMkdir on creates multi-level dir and notes it");
+    assert(statSync(mkTarget).isDirectory(), "41/#208 created dir really exists on disk");
+    // 关：同一不存在目录 → 旧回落（默认目录）且不创建
+    const mkTarget2 = join(PROOT, "208-off");
+    const r4 = resolveCreateCwd(mkTarget2, defRoot, false);
+    assert(r4.cwd === defRoot && r4.fallbackNote.includes("不是有效目录"), "41/#208 autoMkdir off keeps legacy fallback wording");
+    assert(!existsSync(mkTarget2), "41/#208 off does NOT create the dir");
+    // 缺省第三参 = 关（旧调用形态零变化）
+    assert(resolveCreateCwd(mkTarget2, defRoot).cwd === defRoot, "41/#208 omitted third arg behaves as off");
+    // 建失败形态：路径中间是普通文件 → 回落默认目录，说明点名「自动创建」失败
+    const blockedFile = join(PROOT, "208-blocker");
+    writeFileSync(blockedFile, "x");
+    const r5 = resolveCreateCwd(join(blockedFile, "sub"), defRoot, true);
+    assert(r5.cwd === defRoot && r5.fallbackNote.includes("「自动创建」失败"), "41/#208 mkdir failure falls back to default and names it");
+    // ~ 展开：建在真实 homedir 下（用后即清）
+    const r6 = resolveCreateCwd("~/cc-deck-208-tilde-test", defRoot, true);
+    assert(r6.cwd === join(home, "cc-deck-208-tilde-test") && statSync(r6.cwd).isDirectory(), "41/#208 tilde path expands to homedir and creates there");
+    rmSync(join(home, "cc-deck-208-tilde-test"), { recursive: true, force: true });
+  }
+
   // ⑥ 配置层：未设 CCR_CWD → defaultCwd 即 homedir（不再拿启动目录当默认）；设置后优先级不变
   const hadCwd = process.env.CCR_CWD;
   delete process.env.CCR_CWD;

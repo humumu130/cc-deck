@@ -474,7 +474,9 @@ export interface CommandBase {
 
 export interface CreateCommand extends CommandBase {
   type: "COMMAND_CREATE";
-  payload: { cwd: string; prompt: string; permissionMode?: ManagedPermissionMode };
+  // autoMkdir（#208）：客户端创建表单「目录不存在时自动创建」开关，开=指定目录
+  // 不存在时 relay 侧 mkdir -p；缺省/假 = 旧三级回落行为
+  payload: { cwd: string; prompt: string; permissionMode?: ManagedPermissionMode; autoMkdir?: boolean };
 }
 
 export interface MessageCommand extends CommandBase {

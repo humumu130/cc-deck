@@ -112,9 +112,23 @@ function sanitizeImportPushEntry(raw: unknown): ImportPushEntry | null {
 // "卡住"根因）。改为：指定无效时先试默认目录，默认可用就落它（附说明），都没有才 homedir。
 // 未配置或校验失败一律回落 homedir（跨平台）并返回人话说明；完全无可用目录时
 // cwd 返回空串，由调用方把说明当错误上屏（含建议值）。
+// #208（2026-09-25 用户需求）autoMkdir 开关：创建会话时指定目录不存在 → mkdir -p
+// 建出来（新项目还没 init 就想开会话的诉求）；建失败（权限/路径中间是文件）不硬抛，
+// 落回本回落链并点名原因。开关由客户端创建表单随命令带上，默认关＝完全旧行为。
+
+// ~ 前缀展开（#208 顺手）：手机端 placeholder 就是 ~/dev/myproject——shell 习惯的
+// ~ 在 node resolve 下只是字面目录名（autoMkdir 会真在 relay 进程 cwd 下建出 "~/…"
+// 目录），展开成 homedir 再解析。仅认 "~" 与 "~/" 两种前缀，其余原样
+function expandHome(p: string): string {
+  if (p === "~") return homedir();
+  if (p.startsWith("~/")) return join(homedir(), p.slice(2));
+  return p;
+}
+
 export function resolveCreateCwd(
   rawCwd: string,
   defaultCwd: string,
+  autoMkdir = false,
 ): { cwd: string; fallbackNote: string } {
   const isUsableDir = (p: string): boolean => {
     if (!p) return false;
@@ -124,19 +138,36 @@ export function resolveCreateCwd(
       return false; // 不存在/无权访问/非目录：一律视为不可用
     }
   };
+  const tryMkdir = (abs: string): boolean => {
+    try {
+      mkdirSync(abs, { recursive: true });
+      return isUsableDir(abs);
+    } catch {
+      return false; // EACCES/EROFS/路径中间是文件（ENOTDIR）等：交给回落链
+    }
+  };
 
-  const wanted = (rawCwd || "").trim();
-  const def = (defaultCwd || "").trim();
+  const wanted = expandHome((rawCwd || "").trim());
+  const def = expandHome((defaultCwd || "").trim());
+  let mkdirFailed = false; // 开着且指定目录建不出来：回落说明里点名「自动创建失败」
   if (wanted) {
     const abs = resolve(wanted);
     if (isUsableDir(abs)) return { cwd: abs, fallbackNote: "" };
+    if (autoMkdir) {
+      if (tryMkdir(abs)) {
+        return { cwd: abs, fallbackNote: `工作目录 ${abs} 原不存在，已按「自动创建」开关创建` };
+      }
+      mkdirFailed = true;
+    }
   }
   // 指定无效或未指定：默认目录（CCR_CWD / sticky last-cwd）可用则兜住
   if (def) {
     const abs = resolve(def);
     if (isUsableDir(abs)) {
       const note = wanted
-        ? `指定的工作目录 ${resolve(wanted)} 不是有效目录（不存在或无法访问），本次已回落默认目录 ${abs}`
+        ? mkdirFailed
+          ? `指定的工作目录 ${resolve(wanted)} 不存在，「自动创建」失败（路径中间可能是文件或无写权限），本次已回落默认目录 ${abs}`
+          : `指定的工作目录 ${resolve(wanted)} 不是有效目录（不存在或无法访问），本次已回落默认目录 ${abs}`
         : "";
       return { cwd: abs, fallbackNote: note };
     }
@@ -149,7 +180,9 @@ export function resolveCreateCwd(
     ? `默认目录（CCR_CWD/上次有效目录）${resolve(def)} 无效（不存在或无法访问）`
     : "默认目录未配置（CCR_CWD）";
   const wantedDesc = wanted
-    ? `指定的工作目录 ${resolve(wanted)} 不是有效目录（不存在或无法访问），${defDesc}`
+    ? mkdirFailed
+      ? `指定的工作目录 ${resolve(wanted)} 不存在，「自动创建」失败（路径中间可能是文件或无写权限），${defDesc}`
+      : `指定的工作目录 ${resolve(wanted)} 不是有效目录（不存在或无法访问），${defDesc}`
     : `未指定工作目录，且${defDesc}`;
   const suggest =
     '如需固定工作目录，请设置 CCR_CWD 环境变量指向实际项目目录（如 Windows "D:\\projects\\myapp"、macOS/Linux "~/projects/myapp"）后重启 relay';
@@ -1300,7 +1333,8 @@ export class SessionManager {
         case "COMMAND_CREATE": {
           // permissionMode: 客户端可选 bypassPermissions（新建时勾选"跳过权限确认"）
           const pm = cmd.payload.permissionMode === "bypassPermissions" ? "bypassPermissions" : undefined;
-          const session_id = this.create(cmd.payload.cwd, cmd.payload.prompt, pm);
+          // #208 autoMkdir：客户端创建表单「目录不存在时自动创建」开关（默认关＝旧回落行为）
+          const session_id = this.create(cmd.payload.cwd, cmd.payload.prompt, pm, cmd.payload.autoMkdir === true);
           return { command_id: cmd.command_id, ok: true, session_id };
         }
         case "COMMAND_MESSAGE": {
@@ -1810,9 +1844,10 @@ export class SessionManager {
     }
   }
 
-  private create(rawCwd: string, prompt: string, permissionMode?: ManagedPermissionMode): string {
-    // #293 三级回落：指定/默认目录无效时回落用户主目录（说明进时间线），完全无可用目录才报错
-    const { cwd, fallbackNote } = resolveCreateCwd(rawCwd, this.cfg.defaultCwd);
+  private create(rawCwd: string, prompt: string, permissionMode?: ManagedPermissionMode, autoMkdir = false): string {
+    // #293 三级回落：指定/默认目录无效时回落用户主目录（说明进时间线），完全无可用目录才报错；
+    // #208 autoMkdir：指定目录不存在时先 mkdir -p 建出来（失败仍走回落链）
+    const { cwd, fallbackNote } = resolveCreateCwd(rawCwd, this.cfg.defaultCwd, autoMkdir);
     if (!cwd) throw new Error(fallbackNote);
     // sticky 默认目录（M0，2026-09-18）：解析出的有效项目目录记为下次默认——手机端
     // /C: 类残留指定进来时，回落落在真实项目目录而非家目录；CCR_CWD 显式配置时不越权。
