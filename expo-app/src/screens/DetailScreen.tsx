@@ -2402,6 +2402,8 @@ export default function DetailScreen({ sid, onBack, initialView, ref }: { sid: s
             <StatRow k="最近活动" v={fmtClock(s.updated_at)} />
             <StatRow k="工作目录" v={s.cwd || "—"} />
             {s.cli_pid ? <StatRow k="CLI PID" v={String(s.cli_pid)} /> : null}
+            {/* #205 对齐网页端统计 tab：Session ID（长按复制整串） */}
+            <StatRow k="Session ID" v={s.session_id} copy />
           </View>
         </ScrollView>
       ) : (() => {
@@ -2830,12 +2832,26 @@ export default function DetailScreen({ sid, onBack, initialView, ref }: { sid: s
 }
 
 // 统计视图行（原 StatsModal 的 Row 平铺化）
-function StatRow({ k, v, vc }: { k: string; v: string; vc?: string }) {
+// #205 统计行支持 copy：长按一键复制整串值（uuid 手动拖选太繁琐），复制后
+// 值临时变「已复制 ✓」1.5s（同 ContentMenu 反馈形态）。当前仅 Session ID 用
+function StatRow({ k, v, vc, copy }: { k: string; v: string; vc?: string; copy?: boolean }) {
   const d = useThemeStyles(makeStyles);
+  const [copied, setCopied] = useState(false);
+  const copiedTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => () => { if (copiedTimer.current) clearTimeout(copiedTimer.current); }, []);
   return (
     <View style={d.statRow}>
       <Text style={d.statRowK}>{k}</Text>
-      <Text style={[d.statRowV, vc ? { color: vc } : null]}>{v}</Text>
+      <Text
+        style={[d.statRowV, vc ? { color: vc } : null]}
+        onLongPress={copy ? () => {
+          void Clipboard.setStringAsync(v).then(() => {
+            setCopied(true);
+            if (copiedTimer.current) clearTimeout(copiedTimer.current);
+            copiedTimer.current = setTimeout(() => setCopied(false), 1500);
+          });
+        } : undefined}
+      >{copied ? "已复制 ✓" : v}</Text>
     </View>
   );
 }
