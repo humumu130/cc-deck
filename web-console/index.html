@@ -1802,7 +1802,7 @@
   .tline .tname { font-weight: 600; }
   .tname { color: var(--dim); font-weight: 600; } /* #102 收敛②之首：工具行是转录行数最多元素，橙字量立减约八成 */
   .tres { color: var(--faint); }
-  /* #128 任务工具行摘要：单行省略直显（替代原折叠框），完整内容不再展开 */
+  /* #128 任务工具行摘要单行省略直显；#204 恢复「展开 ▾」（全文进 .tdetail，摘要恒一行不重复） */
   .tline .tsum { flex: 1 1 120px; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .ds-add { color: var(--done); font-family: var(--mono); font-size: .95em; }
   .ds-del { color: var(--error); font-family: var(--mono); font-size: .95em; }
@@ -5672,17 +5672,19 @@ function entryHtml(e, prevDay) {
   } else if (e.kind === "tool_use") {
     const t = e.tool || "";
     const tico = /^(Edit|Write|MultiEdit|NotebookEdit)$/.test(t) ? "✎" : t === "Bash" ? "❯_" : /^(Read|Glob|Grep|WebFetch|WebSearch)$/.test(t) ? "▤" : "⚙";
-    // #128（2026-09-21 验收反馈）：任务状态变更（Task*）这类简单内容不搞折叠框——
-    // 展开框长文超界且交互无必要，摘要单行省略直显（.tsum），完整描述不再渲染
+    // #128 摘要单行省略保留（Task 行默认紧凑）；#204（2026-09-25 用户反馈「只看得到
+    // 第一行，手机端可展开」）恢复 Task* 行展开——任务描述常带完整背景/验收点，
+    // 加回「展开 ▾」与普通工具行同款交互；展开体复用 .tdetail（max-height 360px +
+    // 滚动，#128 担心的长文超界由其防住）。展开态摘要仍单行省略（全文在 detail，不重复）
     const isTaskTool = /^Task/.test(t);
     html += '<div class="trow"><div class="tline"><span class="tico">' + tico + '</span><span class="tname">' + escapeHtml(t || "tool") + "</span><span" + (isTaskTool ? ' class="tsum"' : "") + ">" + taskRefHtml(e.text) + "</span>" +
       (t === "Bash" || t === "Write" ? '<span class="copy-btn" data-copy="' + escapeHtml(e.text || "").replace(/"/g, "&quot;") + '" title="复制命令">⧉</span>' : "") +
-      (e.detail && !isTaskTool
+      (e.detail
         ? (open
           ? '<span class="x-full" data-x="' + k + '">收起 ▴</span>'
           : '<span class="x-full" data-x="' + k + '">展开 ▾</span>')
         : "") + "</div>" +
-      (open && e.detail && !isTaskTool ? '<div class="tdetail">' + escapeHtml(e.detail) + "</div>" : "") + "</div>";
+      (open && e.detail ? '<div class="tdetail">' + escapeHtml(e.detail) + "</div>" : "") + "</div>";
   } else if (e.kind === "tool_result") {
     if (e.diff && e.diff.length) {
       const plus = e.diff.filter((l) => l.startsWith("+")).length;
