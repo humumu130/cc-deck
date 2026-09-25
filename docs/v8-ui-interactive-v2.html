@@ -208,7 +208,7 @@ button { font-family: inherit; }
 .cbtn.blue { border-color: var(--info-line); color: var(--info); text-decoration: none; display: inline-flex; align-items: center; }
 .cbtn.blue:hover { background: var(--info-soft); border-color: var(--info); }
 .statuschip { font-size: 11px; color: var(--faint); border: 1px dashed var(--border); border-radius: 999px; padding: 5px 13px; }
-.statuschip b { color: var(--working-fg); font-weight: 600; }
+.statuschip b { color: var(--info); font-weight: 600; }
 
 /* ---------- 舞台 / 壳 ---------- */
 .stage { display: flex; gap: 34px; align-items: flex-start; flex-wrap: wrap; justify-content: center; max-width: 1760px; margin: 10px auto 0; }
@@ -284,6 +284,7 @@ button { font-family: inherit; }
 .scard .r1 .dot { margin-left: auto; width: 7px; height: 7px; border-radius: 50%; flex: none; }
 .dot.g { background: var(--done); }
 .dot.y { background: var(--working); }
+.dot.i { background: var(--info); }
 .dot.b { background: var(--faint); }
 .scard .r2 { font-size: 10.5px; color: var(--card-sub); margin-top: 3px; }
 .scard .r2 .f { color: var(--faint); }
@@ -1003,7 +1004,7 @@ button { font-family: inherit; }
 }
 #dmbar.on { display: flex; animation: toastin .3s ease; }
 #dmbar .dtxt { font-size: 12.5px; color: var(--text); line-height: 1.55; min-width: 0; }
-#dmbar .dtxt b { color: var(--working-fg); }
+#dmbar .dtxt b { color: var(--info); }
 #dmbar .dmeta { display: flex; align-items: center; gap: 10px; flex: none; }
 #dmbar .dn { font-size: 10.5px; color: var(--faint); font-family: var(--mono); }
 #dmbar .dstop { font-size: 11px; color: var(--dim); border: 1px solid var(--border); border-radius: 8px; padding: 4px 11px; cursor: pointer; background: transparent; font-family: inherit; transition: color .15s ease, border-color .15s ease; }
@@ -1012,7 +1013,7 @@ button { font-family: inherit; }
 #dmbar .dmk:hover { background: var(--info-soft); }
 #dmbar .dprog { display: flex; gap: 3px; flex-wrap: wrap; max-width: 130px; }
 #dmbar .dprog i { width: 4px; height: 4px; border-radius: 2px; background: var(--faint); opacity: .35; }
-#dmbar .dprog i.done { background: var(--working); opacity: 1; }
+#dmbar .dprog i.done { background: var(--info); opacity: 1; }
 .dm-glow { outline: 2px solid rgba(255,197,61,.6); outline-offset: 8px; border-radius: 18px; }
 .phone.dm-glow { border-radius: 50px; }
 .dm-spot { position: relative; z-index: 50; border-radius: 8px; animation: dmpulse 1.15s ease-in-out infinite; }
@@ -1390,7 +1391,7 @@ button:focus-visible, .snav:focus-visible, .hcard:focus-visible, .ptab:focus-vis
               <div class="r2">导航地基 · 在等你确认方案 <span class="f">· 12 分钟前</span></div>
             </div>
             <div class="scard">
-              <div class="r1"><span class="cav">📦</span>0.5.2-test.15 出包 <span class="dot y"></span></div>
+              <div class="r1"><span class="cav">📦</span>0.5.2-test.15 出包 <span class="dot i"></span></div>
               <div class="r2">Actions 跑完 2/3 · <span class="f">等安卓产物</span></div>
             </div>
             <div class="scard">
@@ -1556,7 +1557,7 @@ button:focus-visible, .snav:focus-visible, .hcard:focus-visible, .ptab:focus-vis
               <div class="r2">~/dev/cc-deck · 6 会话 · 1 团队 · 2 需行动</div>
             </div>
             <div class="scard">
-              <div class="r1"><svg class="i"><use href="#i-folder"/></svg><span style="margin-left:6px">windclaw-qclaw</span> <span class="dot y"></span></div>
+              <div class="r1"><svg class="i"><use href="#i-folder"/></svg><span style="margin-left:6px">windclaw-qclaw</span> <span class="dot i"></span></div>
               <div class="r2">~/dev/windclaw · 1 会话 · 等构建</div>
             </div>
             <div class="scard">
@@ -1917,7 +1918,7 @@ button:focus-visible, .snav:focus-visible, .hcard:focus-visible, .ptab:focus-vis
           <div class="hcard" data-toast="📦 出包会话——原型未展开，看板走团队 Tab">
             <div class="av">📦</div>
             <div class="ht">
-              <div class="nm">0.5.2-test.15 出包<span class="dot y"></span></div>
+              <div class="nm">0.5.2-test.15 出包<span class="dot i"></span></div>
               <div class="hs">Actions 跑完 2/3 · 等安卓产物</div>
             </div>
           </div>
@@ -2187,7 +2188,7 @@ button:focus-visible, .snav:focus-visible, .hcard:focus-visible, .ptab:focus-vis
         </header>
         <section class="ppane on">
           <div class="pcard" data-go="pprojd"><div class="ct"><svg class="i"><use href="#i-folder"/></svg><span style="margin-left:6px">cc-deck</span> <span class="dot g" style="margin-left:auto"></span></div><div class="pcline">~/dev/cc-deck · 6 会话 · 1 团队 · <span class="warn">2 需行动</span></div></div>
-          <div class="pcard" data-toast="windclaw-qclaw——原型只展开 cc-deck 项目"><div class="ct"><svg class="i"><use href="#i-folder"/></svg><span style="margin-left:6px">windclaw-qclaw</span> <span class="dot y" style="margin-left:auto"></span></div><div class="pcline">~/dev/windclaw · 1 会话 · 等构建</div></div>
+          <div class="pcard" data-toast="windclaw-qclaw——原型只展开 cc-deck 项目"><div class="ct"><svg class="i"><use href="#i-folder"/></svg><span style="margin-left:6px">windclaw-qclaw</span> <span class="dot i" style="margin-left:auto"></span></div><div class="pcline">~/dev/windclaw · 1 会话 · 等构建</div></div>
           <div class="pcard" data-toast="blog 项目——原型只展开 cc-deck 项目"><div class="ct"><svg class="i"><use href="#i-folder"/></svg><span style="margin-left:6px">blog</span> <span class="dot b" style="margin-left:auto"></span></div><div class="pcline">~/dev/blog · 3 天前活跃</div></div>
           <div class="pcard" style="opacity:.5" data-toast="已隐藏项目 · 长按恢复"><div class="ct">📂 legacy-scripts</div><div class="pcline">已隐藏 · 长按恢复</div></div>
           <div class="pcline" style="text-align:center;padding:10px 0;color:var(--p-faint);font-size:10.5px">项目按目录自动识别 · 也可 ＋ 手动打开本机目录</div>

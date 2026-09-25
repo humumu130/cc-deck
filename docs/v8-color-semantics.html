@@ -1,0 +1,164 @@
+<!doctype html>
+<html lang="zh-CN" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>cc-deck · V8 色彩与状态语义规范（裁决稿）</title>
+<style>
+/* token 值取自 docs/v8-ui-interactive-v2.html，双主题一致 */
+:root, [data-theme="dark"] {
+  color-scheme: dark;
+  --bg: #060B13; --panel: #0E1726; --panel-2: #131F31; --border: #1C2A3E;
+  --text: #C6D2E3; --text-strong: #EBF2FB; --dim: #8494AC; --faint: #7A889F;
+  --brand: #E08A63; --brand-fg: #EC9A73; --brand-grad: linear-gradient(135deg,#EC9A73,#C96442);
+  --working: #FFC53D; --working-fg: #FFC53D;
+  --danger: #E5484D; --danger-fg: #F16A6F;
+  --info: #7CB8FF; --ok: #35DC97;
+  --warn-soft: rgba(255,197,61,.08); --warn-line: rgba(255,197,61,.42);
+  --p-brand: #4D9FFF; --p-brand2: #7C6CF2;
+}
+[data-theme="light"] {
+  color-scheme: light;
+  --bg: #F6F8FC; --panel: #FFFFFF; --panel-2: #F4F6FA; --border: #DFE5EE;
+  --text: #2F3A4E; --text-strong: #101828; --dim: #6F7A90; --faint: #6F7A90;
+  --brand: #C05B33; --brand-fg: #B04E28; --brand-grad: linear-gradient(135deg,#B85228,#96391A);
+  --working: #E8A33D; --working-fg: #8F5B00;
+  --danger: #D63B3B; --danger-fg: #C22F2F;
+  --info: #2563EB; --ok: #0E7A4A;
+  --warn-soft: #FBF2DC; --warn-line: rgba(143,91,0,.3);
+  --p-brand: #2563D9; --p-brand2: #6554E0;
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--text);
+  font: 14px/1.75 -apple-system, BlinkMacSystemFont, "SF Pro Text", "PingFang SC", "Noto Sans SC", sans-serif;
+  transition: background .3s ease, color .3s ease; }
+.page { max-width: 1060px; margin: 0 auto; padding: 44px 28px 90px; }
+h1 { font-size: 21px; color: var(--text-strong); margin: 0 0 4px; }
+h1 .lite { font-size: 12px; color: var(--faint); font-weight: 400; margin-left: 10px; }
+.sub { color: var(--dim); font-size: 13px; max-width: 860px; }
+.sub b { color: var(--text); }
+h2 { font-size: 16px; color: var(--text-strong); margin: 46px 0 4px; padding-top: 18px; border-top: 1px solid var(--border); }
+h2 .n { display: inline-flex; align-items: center; justify-content: center; width: 22px; height: 22px; border-radius: 7px; background: var(--panel-2); border: 1px solid var(--border); font-size: 12px; margin-right: 8px; color: var(--dim); }
+h3 { font-size: 13.5px; color: var(--text-strong); margin: 26px 0 2px; }
+.tbar { position: fixed; top: 16px; right: 20px; z-index: 9; display: flex; gap: 8px; }
+.tbtn { border: 1px solid var(--border); background: var(--panel); color: var(--dim); border-radius: 9px; padding: 6px 13px; font-size: 12.5px; cursor: pointer; transition: color .15s ease; }
+.tbtn:hover { color: var(--text); }
+table { width: 100%; border-collapse: collapse; margin: 12px 0 6px; font-size: 12.5px; }
+th { text-align: left; color: var(--faint); font-weight: 600; padding: 7px 10px; border-bottom: 1px solid var(--border); white-space: nowrap; }
+td { padding: 7px 10px; border-bottom: 1px solid var(--border); vertical-align: top; }
+td.nw { white-space: nowrap; }
+.sw { display: inline-block; width: 30px; height: 15px; border-radius: 4px; border: 1px solid rgba(128,140,160,.25); vertical-align: -3px; margin-right: 7px; }
+.pill { display: inline-block; border-radius: 999px; padding: 1px 9px; font-size: 11px; white-space: nowrap; }
+.pill.y { background: var(--working); color: #0B141F; font-weight: 700; }
+.pill.r { background: var(--danger); color: #fff; font-weight: 700; }
+.pill.b { background: var(--info); color: #fff; font-weight: 700; }
+.pill.o { background: var(--brand-grad); color: #fff; font-weight: 700; }
+.pill.g { background: var(--ok); color: #06281A; font-weight: 700; }
+.pill.n { background: var(--panel-2); border: 1px solid var(--border); color: var(--dim); font-weight: 600; }
+.card { background: var(--panel); border: 1px solid var(--border); border-radius: 13px; padding: 15px 18px; margin: 12px 0; }
+.card .hd { font-size: 13px; font-weight: 700; color: var(--text-strong); margin-bottom: 6px; }
+.rec { border-left: 3px solid var(--brand); }
+.rec .hd::before { content: "推荐 "; color: var(--brand-fg); font-size: 11px; letter-spacing: 1px; }
+.alt { opacity: .88; }
+.warnbox { background: var(--warn-soft); border: 1px solid var(--warn-line); border-radius: 11px; padding: 10px 15px; font-size: 12.5px; margin: 12px 0; }
+.warnbox b { color: var(--working-fg); }
+code { font-family: ui-monospace, "SF Mono", Menlo, monospace; font-size: 11.5px; background: var(--panel-2); border: 1px solid var(--border); border-radius: 5px; padding: 1px 6px; color: var(--dim); }
+.dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; vertical-align: 0; margin-right: 5px; }
+.dot.g { background: var(--ok); } .dot.y { background: var(--working); } .dot.b { background: #5C6B85; } .dot.i { background: var(--info); } .dot.r { background: var(--danger); }
+.foot { color: var(--faint); font-size: 11.5px; margin-top: 40px; }
+.arrow { color: var(--faint); }
+.strike { text-decoration: line-through; opacity: .55; }
+.grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+@media (max-width: 760px) { .grid2 { grid-template-columns: 1fr; } }
+</style>
+</head>
+<body>
+<div class="tbar"><button class="tbtn" onclick="tgl()">◐ 深浅切换</button></div>
+<div class="page">
+<h1>cc-deck 色彩与状态语义规范 <span class="lite">V8 · 已拍板 2026-09-25</span></h1>
+<p class="sub">对象 = <b>v8-ui-interactive-v2.html</b> 的语义色体系。三笔历史设计债在此一并裁决：<b>①琥珀一色多义（40+ 消费点承载 4 种语义）②badge 红琥珀分裂（判据未写死）③双端品牌色并存（桌面橙 / 手机蓝）</b>。<b>2026-09-25 用户拍板：方案 A（琥珀两分法）+ 债②判据备案 + 债③双品牌保持</b>，同日按 §4 清单落地 v2 原型（含落地核实修正，见 §4）。</p>
+
+<h2><span class="n">0</span>现状盘点 · 语义色全景</h2>
+<p class="sub">v2 实际在用的语义色族（token 消费点统计，深 / 浅两主题同结构）：</p>
+<table>
+<tr><th>色族</th><th>色板</th><th>token</th><th>消费</th><th>当前承担的语义（实测）</th></tr>
+<tr><td class="nw"><span class="sw" style="background:var(--working)"></span>琥珀</td><td class="nw">#FFC53D / #E8A33D</td><td class="nw"><code>--working(-fg)</code> 等 5 个</td><td class="nw"><b>40+</b></td><td><b>四义混载：</b>等你行动（待确认/待验收/装机/验收单/就绪待装机列）· 等外部（出包等安卓产物/等构建）· 警示注意（通知 warn/1 异常）· 进行中（演示条/状态强调字）</td></tr>
+<tr><td class="nw"><span class="sw" style="background:var(--brand)"></span>品牌橙</td><td class="nw">#E08A63 / #C05B33</td><td class="nw"><code>--brand*</code> 7 个</td><td class="nw">56</td><td>桌面端：你的身份（气泡）· 选中态 · 主动作（发送/去）</td></tr>
+<tr><td class="nw"><span class="sw" style="background:var(--p-brand)"></span>手机蓝</td><td class="nw">#4D9FFF / #2563D9</td><td class="nw"><code>--p-brand*</code> 4 个</td><td class="nw">35</td><td>手机端同款四义：身份 · 选中 · 主动作 · 确认按钮</td></tr>
+<tr><td class="nw"><span class="sw" style="background:var(--danger)"></span>红</td><td class="nw">#E5484D / #D63B3B</td><td class="nw"><code>--danger*</code> 5 个</td><td class="nw">21</td><td>未读 alert 计数（铃铛×2）· 通知「需你行动」· 失败（进度段/✗/修复卡）</td></tr>
+<tr><td class="nw"><span class="sw" style="background:var(--info)"></span>蓝(info)</td><td class="nw">#7CB8FF / #2563EB</td><td class="nw"><code>--info*</code> 3 个</td><td class="nw">11</td><td>链接/信息 · 外部链按钮</td></tr>
+<tr><td class="nw"><span class="sw" style="background:var(--ok)"></span>绿</td><td class="nw">#35DC97 / #0E7A4A</td><td class="nw"><code>--ok-soft/line</code></td><td class="nw">12</td><td>运行中（<span class="dot g"></span>）· 成功 · 已连接</td></tr>
+</table>
+
+<h2><span class="n">1</span>债① 琥珀一色多义 → 裁决</h2>
+<p class="sub">同屏最痛场景：会话列表里「<b>等你确认</b>」pill（琥珀）挨着你发的消息气泡（橙），「需要你操作」与「这是你的输出」视觉不可分；同时「出包等安卓产物」（系统在忙）也用同一个琥珀。</p>
+<table>
+<tr><th>现状语义</th><th>场景（实测选择器）</th><th>现状色</th></tr>
+<tr><td class="nw">等你行动</td><td>待确认 pill、待验收 badge（看板/Tab×2/输出物菜单）、就绪待装机看板列+手机泳道+版本号 chip、就绪待装机标题+装机按钮、验收单浮层、反馈按钮</td><td><span class="pill y">琥珀</span></td></tr>
+<tr><td class="nw">等外部 / 进行中</td><td>黄状态点（出包等产物 / 等构建）、状态 chip / 演示条强调字</td><td><span class="pill y">琥珀</span></td></tr>
+<tr><td class="nw">警示注意</td><td>通知「注意」级点+图标、设备「1 异常」、卡片副行警示字</td><td><span class="pill y">琥珀</span></td></tr>
+</table>
+
+<div class="card rec">
+<div class="hd">方案 A · 两分法：琥珀 =「需要你」，蓝 =「系统在忙」</div>
+<ul style="margin:6px 0 2px;padding-left:20px">
+<li><b>琥珀收敛独占「需要你注意/行动」</b>：等你行动 + 警示注意 合并归琥珀——两者共享「看这边」的心理指向，且都该被扫视时第一眼捕获；</li>
+<li><b>「等外部 / 进行中」整体迁 <code>--info</code> 蓝</b>：黄点 <span class="dot y"></span>→<span class="dot i"></span>（等产物/等构建）、状态 chip / 演示条强调字——「系统在忙不是你的事」用冷色，与琥珀的「该你了」形成暖冷对偶；</li>
+<li>与绿点体系不冲突：<span class="dot g"></span> 运行中（活跃）= 绿，<span class="dot i"></span> 等外部 = 蓝，<span class="dot b"></span> 完成/闲置 = 蓝灰——三态三点三色，语义连续。</li>
+</ul>
+</div>
+<div class="card alt">
+<div class="hd">方案 B · 三分法：再拆「警示」独立色</div>
+警示注意（通知 warn / 异常）另立橙红中间色，琥珀纯化成「待办」。语义最精确，但多一个状态色增加认知负担，且警示场景低频——<b>收益配不上成本</b>，仅备选。
+</div>
+<div class="card alt">
+<div class="hd">方案 C · 维持现状 + 文档备案</div>
+不拆，只把四义写进规范。零改动，但「等你确认 vs 等安卓产物同色」的歧义永久存在——<b>债没还，只是记了账</b>。
+</div>
+
+<h2><span class="n">2</span>债② badge 红琥珀分裂 → 裁决</h2>
+<table>
+<tr><th>badge</th><th>色</th><th>位置</th><th>语义（实测）</th></tr>
+<tr><td class="nw">铃铛「2」</td><td><span class="pill r">红</span></td><td>rail 🔔 + 手机 🔔</td><td>未读 <b>alert</b>（需你行动级）</td></tr>
+<tr><td class="nw">琥珀「1」</td><td><span class="pill y">琥珀</span></td><td>看板 Tab · 手机团队 Tab · 输出物菜单</td><td>待验收 / 待办计数</td></tr>
+</table>
+<div class="card rec">
+<div class="hd">写死判据：红 =「不处理会出事」，琥珀 =「排着队的」</div>
+<ul style="margin:6px 0 2px;padding-left:20px">
+<li><b>红 badge = alert 专属</b>：内容 = 通知三级里的「🔴 需你行动」（验收单待确认、成员失联、失联接替）。读掉即清零，永不转琥珀；</li>
+<li><b>琥珀 badge = 待办队列计数</b>：内容 = 可排期的事项（待验收、待装机）。不读不清零，处理完才减；</li>
+<li>两色同屏时红压琥珀（红永远更少更急）——现状已天然如此（红 2 vs 琥珀 1），规范把它写死即可，<b>无需改原型</b>，只写判据。</li>
+</ul>
+</div>
+
+<h2><span class="n">3</span>债③ 双端品牌色 → 裁决</h2>
+<table>
+<tr><th></th><th>桌面（cc-deck 桌面壳）</th><th>手机（expo-app）</th></tr>
+<tr><td class="nw">品牌主色</td><td><span class="pill o">橙 #E08A63</span></td><td><span class="pill b">蓝 #4D9FFF</span></td></tr>
+<tr><td class="nw">承担语义</td><td colspan="2" style="text-align:center">完全同构：身份（气泡）· 选中态 · 主动作（发送/确认）</td></tr>
+</table>
+<div class="card rec">
+<div class="hd">方案 a · 保持双品牌，规范备案「同语义、异色板」</div>两端语义层严格同构（什么位置用什么语义已对齐），只是色板分端——手机端是独立 App（expo-app），有自己的品牌身份合理；统一反而让其中一端像另一端的皮肤。<b>零改动，写死即结。</b>
+</div>
+<div class="card alt">
+<div class="hd">方案 b/c · 统一为橙 / 统一为蓝</div>品牌单点更聚焦，代价是某一端 35~56 处品牌色消费点整体换血，且丢失「产品族内双子」的结构表达。除非未来品牌战略变化，不建议。
+</div>
+
+<h2><span class="n">4</span>落地清单（已执行 · 2026-09-25）</h2>
+<p class="sub">对 v2 原型的全部改动——只迁色，不动结构/文案/交互。<b>落地核实修正</b>：裁决稿初版曾把看板 go 列 / 泳道 / 版本 chip 归入「进行中」拟迁蓝，落地前对源码核实发现其实际内容为「⚡ 就绪待装机」（等你行动类，属琥珀保留区），三项撤销——看板「进行中」列本就是普通列无高亮。</p>
+<table>
+<tr><th>#</th><th>场景（选择器）</th><th class="strike">迁色前</th><th>改为</th></tr>
+<tr><td class="nw">1</td><td>状态点（出包等产物 ×2 / 等构建 ×2）：CSS 新增 <code>.dot.i</code>，4 处 HTML <code>dot y</code>→<code>dot i</code></td><td class="strike">琥珀点</td><td><span class="dot i"></span> info 蓝 <code>--info</code></td></tr>
+<tr><td class="nw">2</td><td>状态 chip 强调字 <code>.statuschip b</code>（「待机 · 5s 自动演示」倒计时）</td><td class="strike">琥珀字</td><td>info 蓝字</td></tr>
+<tr><td class="nw">3</td><td>演示条强调字 <code>#dmbar .dtxt b</code> + 演示进度点 <code>.dprog i.done</code>（演示机制组件整体冷色化）</td><td class="strike">琥珀字/点</td><td>info 蓝</td></tr>
+<tr><td colspan="4" style="color:var(--faint)">—— 琥珀保留区（全部不动）：待确认 pill、待验收 badge×3、<b>就绪待装机看板列+手机泳道+版本 chip</b>（<code>.bcol.go</code> / <code>.plane.go .planeh</code> / <code>.tchip.br</code>）、就绪待装机标题+装机按钮、验收单浮层、反馈按钮、通知 warn 级、异常警示字、<code>.dot.y</code> 定义（警示点备用：停滞告警「点亮琥珀点」）——</td></tr>
+</table>
+<div class="warnbox">文案核查结论：演示词「『就绪待装机』琥珀泳道置顶」「琥珀角标透传」「就绪待装机琥珀卡」均为保留区描述，<b>继续正确无需改</b>；「点亮琥珀点提醒你」（停滞告警）为警示语义，同样保留。</div>
+
+<p class="foot">已拍板落地 · 基于 v8-ui-interactive-v2.html token 实测（2026-09-25）· 三笔债源自 #18 双主题重画审查记录 · 债②判据与债③双品牌备案见 §2/§3</p>
+</div>
+<script>
+function tgl(){ const h=document.documentElement; h.dataset.theme = h.dataset.theme==='dark'?'light':'dark'; }
+</script>
+</body>
+</html>
