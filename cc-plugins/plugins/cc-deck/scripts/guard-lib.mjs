@@ -180,6 +180,104 @@ export function removeRestore(cwd) {
   } catch {}
 }
 
+// ---------- #203 输出物兜底账本（deliver-guard 记账 / deliver-stop 收工对账） ----------
+// 会话级「写过哪些文档类文件」清单：deliver-guard 在 PostToolUse(Write|Edit) 随手
+// 记，deliver-stop 在 Stop 时对账（写过 × 看板零登记 → 拦一次提醒自查）。p=已记
+// 路径，a=已提醒过且 AI 判定非交付物（二停放行时盖章）——同批文件只提醒一轮，
+// 后续轮次只追新增文件，防每轮 Stop 反复唠叨。旧版纯数组格式读入兼容。
+export const DELIVER_WATCH_DIR = join(dataDir, "deliver-watch");
+const WATCH_STALE_MS = 7 * 24 * 3600_000; // 账本兜底清理（会话崩溃/未走 Stop 的残留）
+const WATCH_CAP = 40;
+
+function watchFile(sid) { return join(DELIVER_WATCH_DIR, sid + ".json"); }
+
+function readWatchObj(sid) {
+  try {
+    const raw = JSON.parse(readFileSync(watchFile(sid), "utf-8"));
+    const strs = (x) => (Array.isArray(x) ? x.filter((v) => typeof v === "string") : []);
+    if (Array.isArray(raw)) return { p: strs(raw), a: [] };
+    return { p: strs(raw?.p), a: strs(raw?.a) };
+  } catch {
+    return { p: [], a: [] };
+  }
+}
+
+// 记一笔文档类写入（deliver-guard 调）：去重、封顶 WATCH_CAP、顺手清 >7 天陈旧
+// 账本。排除三类路径：~/.cc-deck 树（产物目录自动收录 + 内部数据）、node_modules/
+// .git 段、隐藏目录段（.claude 等配置形态，非交付物）。任何异常静默。
+export function recordDeliverWatch(sid, p) {
+  try {
+    if (!sid || typeof p !== "string" || p === "") return;
+    const seg = p.split(/[\\/]/);
+    if (seg.includes("node_modules") || seg.includes(".git")) return;
+    const deckPrefix = deckDir + "/";
+    if (p === deckDir || p.startsWith(deckPrefix) || p.startsWith(deckDir + "\\")) return;
+    if (seg.slice(0, -1).some((s) => s.length > 1 && s.startsWith("."))) return;
+    mkdirSync(DELIVER_WATCH_DIR, { recursive: true });
+    // 陈旧账本兜底清理（崩溃会话残留；目录内 = 近期会话数，量小）
+    try {
+      for (const f of readdirSync(DELIVER_WATCH_DIR)) {
+        const fp = join(DELIVER_WATCH_DIR, f);
+        if (Date.now() - statSync(fp).mtimeMs > WATCH_STALE_MS) unlinkSync(fp);
+      }
+    } catch {}
+    const o = readWatchObj(sid);
+    if (!o.p.includes(p)) {
+      o.p.push(p);
+      if (o.p.length > WATCH_CAP) o.p = o.p.slice(-WATCH_CAP);
+      writeFileSync(watchFile(sid), JSON.stringify(o));
+    }
+  } catch {}
+}
+
+// 待提醒文件（已记 − 已盖章；存在性过滤由调用方做）
+export function pendingDeliverWatch(sid) {
+  const o = readWatchObj(sid);
+  const acked = new Set(o.a);
+  return o.p.filter((p) => !acked.has(p));
+}
+
+// 二停放行时盖章：这批文件本轮已提醒过、AI 判非交付物，后续不再唠叨
+export function ackDeliverWatch(sid, paths) {
+  try {
+    const o = readWatchObj(sid);
+    o.a = [...new Set([...o.a, ...paths])];
+    if (o.a.length > WATCH_CAP) o.a = o.a.slice(-WATCH_CAP);
+    writeFileSync(watchFile(sid), JSON.stringify(o));
+  } catch {}
+}
+
+// 会话收 clean：看板已有登记/账本清空时整本删除（连同 pass 窗口残留）
+export function clearDeliverWatch(sid) {
+  try {
+    const f = watchFile(sid);
+    if (existsSync(f)) unlinkSync(f);
+    const pf = join(DELIVER_WATCH_DIR, sid + ".pass");
+    if (existsSync(pf)) unlinkSync(pf);
+  } catch {}
+}
+
+// deliver-stop 专属 60s 二次放行窗口（独立于 guard-pass：两个 Stop hook 并挂时
+// 共享同一窗口文件会互删误拦——各自消费各自的）。写不进时 fail-open 放行。
+const DELIVER_PASS_MS = 60_000;
+export function consumeDeliverPassWindow(sid) {
+  try {
+    const f = join(DELIVER_WATCH_DIR, sid + ".pass");
+    if (existsSync(f)) {
+      const age = Date.now() - statSync(f).mtimeMs;
+      if (age < DELIVER_PASS_MS) {
+        unlinkSync(f);
+        return true;
+      }
+    }
+    mkdirSync(DELIVER_WATCH_DIR, { recursive: true });
+    writeFileSync(f, String(Date.now()));
+    return false;
+  } catch {
+    return true;
+  }
+}
+
 // ---------- 60s 二次放行窗口（Stop 拦截用，同全局蓝本；存数据目录不动 ~/.claude） ----------
 const PASS_DIR = join(dataDir, "guard-pass");
 const PASS_WINDOW_MS = 60_000;

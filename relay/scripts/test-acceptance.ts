@@ -1,7 +1,7 @@
 // #125/#137 验收单模块测试（纯单元，不起服务）：saveResult 落盘留痕 +
 // listAcceptances 待填态汇总（无 results=待填、部分已判=待填、全覆盖=done、
 // 排序新的在前、上限截断）。CCR_ACCEPTANCE_DIR 隔离测试目录。
-import { mkdirSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { join } from "node:path";
 import { loadAcceptance, saveResult, listAcceptances, ACCEPTANCE_ID_RE } from "../src/acceptance.js";
@@ -89,6 +89,17 @@ process.env.CCR_TOKEN = "test-token";
   (s3 as unknown as { cwd: string; updated_at: number }).cwd = "";
   (s3 as unknown as { updated_at: number }).updated_at = Date.now() + 9999;
   assert(mgr.matchSessionByCwd("/virtual/work") === "sid-one", "空 cwd 会话不劫持匹配");
+  // #203 符号链接归一：会话登记物理路径、查询走逻辑路径（macOS /tmp vs
+  // /private/tmp 实锤形态）——两边 realpath 归一后前缀匹配应命中。查询路径
+  // 物理存在（生产链路 deliver 传的是 Bash cwd，必然存在；realpathSync 对
+  // 缺失尾段会 throw 回落 resolve 值，那是另一条路径，不在本用例口径）
+  const realDir = join(ROOT, "sl-real");
+  mkdirSync(join(realDir, "sub"), { recursive: true });
+  const linkDir = join(ROOT, "sl-link");
+  try { symlinkSync(realDir, linkDir); } catch { /* 重跑残留 */ }
+  mgr.ensureExternal("sid-sym", realDir, "符号链接会话");
+  assert(mgr.matchSessionByCwd(linkDir + "/sub") === "sid-sym", "查询路径过符号链接=realpath 归一命中");
+  assert(mgr.matchSessionByCwd(linkDir) === "sid-sym", "符号链接精确路径同样命中");
 }
 
 rmSync(ROOT, { recursive: true, force: true });

@@ -12,6 +12,7 @@ import { spawnSync } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { recordDeliverWatch } from "./guard-lib.mjs";
 
 const DOC_EXT = new Set([
   "md", "markdown", "html", "htm", "pdf", "txt",
@@ -24,8 +25,16 @@ try { evt = JSON.parse(readFileSync(0, "utf8")); } catch { process.exit(0); }
 const raw = evt?.tool_input?.file_path ?? evt?.tool_response?.filePath;
 if (typeof raw !== "string" || raw === "") process.exit(0);
 const p = path.resolve(raw);
-if (!p.split(path.sep).includes("docs")) process.exit(0);
 const ext = path.extname(p).slice(1).toLowerCase();
+// #203 收工对账账本：文档类写入全部随手记（不限 docs/——docs/ 外的漏网正是
+// deliver-stop 要提醒的；~/.cc-deck 树/node_modules/隐藏目录在库内排除）。
+// 不查开关/桥接：账本本身零成本（7 天自动清理），读侧 deliver-stop 统一把门，
+// 中途开开关/晚桥接的会话账目也不缺
+if (DOC_EXT.has(ext)) {
+  const sid = typeof evt?.session_id === "string" ? evt.session_id : "";
+  if (sid) recordDeliverWatch(sid, p);
+}
+if (!p.split(path.sep).includes("docs")) process.exit(0);
 if (!DOC_EXT.has(ext)) process.exit(0);
 if (!existsSync(p)) process.exit(0);
 const bin = path.join(os.homedir(), ".cc-deck", "bin", "deliver");
