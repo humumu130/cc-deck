@@ -6019,8 +6019,26 @@ function syncGearPop() {
   setLever($("gpIdleLever"), collapseIdle ? 1 : 0);
   const idle = $("idleBtn");
   $("gpIdle").style.display = idle.style.display === "none" ? "none" : "flex";
-  $("gpVer").textContent = CONSOLE_VERSION;
-  $("gpBuild") && ($("gpBuild").textContent = CONSOLE_VERSION); // #405 左栏底部弱化 Build 号（设计稿 §5）
+  // #199 版本口径（壳内显壳版本）：桌面壳与 web-console 是两条版本线——壳 =
+  // package.json 桌面 test.N，控制台 = CONSOLE_VERSION 随 APK 批次线。旧口径只显
+  // 控制台版本，壳更新后关于页版本号看似"倒退"（33→27）。壳内改显壳自身版本；
+  // 浏览器直访 8787 无壳命令（reject），回落控制台版本（那才是它的身份）
+  if (!window.__shellVerTried) {
+    window.__shellVerTried = true;
+    window.__TAURI__?.core?.invoke?.("app_version").then(
+      (v) => {
+        if (typeof v === "string" && v.trim()) {
+          window.__shellVer = v;
+          $("gpVer").textContent = v;
+          $("gpBuild") && ($("gpBuild").textContent = v);
+        }
+      },
+      () => {}
+    );
+  }
+  const showVer = window.__shellVer || CONSOLE_VERSION;
+  $("gpVer").textContent = showVer;
+  $("gpBuild") && ($("gpBuild").textContent = showVer); // #405 左栏底部弱化 Build 号（设计稿 §5）
   $("gpHotkey") && ($("gpHotkey").style.display = window.ccDeck ? "flex" : "none"); // #8 桌面端专属（#67 迁独立快捷键栏）
   renderGpStatus();
 }

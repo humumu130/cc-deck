@@ -272,6 +272,16 @@ fn set_toggle_shortcut(app: tauri::AppHandle, combo: Option<String>) -> Result<S
     Ok(c)
 }
 
+/// #199 壳自身版本号（关于页显示口径）：桌面壳与 web-console 是两条独立版本线
+///（壳=package.json 桌面线 test.N；控制台=CONSOLE_VERSION 随 APK 批次线）。旧口径
+/// 只显控制台版本——壳更新后关于页版本号看似"倒退"（33→27）。壳内改显壳版本
+///（tauri.conf 的 version 引用 package.json，构建期已解析进 config）；浏览器访问
+/// 8787 时无此命令，回落控制台版本（那才是它的身份）
+#[tauri::command]
+fn app_version(app: tauri::AppHandle) -> String {
+    app.config().version.clone().unwrap_or_else(|| "unknown".into())
+}
+
 /// 托盘（等价 Electron 的 createTray）：默认窗口图标 + “显示主窗口/退出”菜单，双击唤起；
 /// 任何一步失败整段回退（TRAY_OK=false），主窗口照常，关窗不再隐藏到托盘
 fn build_tray(app: &tauri::App) -> tauri::Result<()> {
@@ -828,7 +838,7 @@ fn main() {
         .plugin(tauri_plugin_dialog::init())
         // #8 全局快捷键（呼出/收起）：默认键在 setup 注册，网页侧可经 set_toggle_shortcut 改绑
         .plugin(tauri_plugin_global_shortcut::Builder::new().build())
-        .invoke_handler(tauri::generate_handler![probe_local, open_external, open_path, probe_path, save_artifact, relay_status, relay_toggle, relay_service_status, relay_service_toggle, set_toggle_shortcut])
+        .invoke_handler(tauri::generate_handler![probe_local, open_external, open_path, probe_path, save_artifact, relay_status, relay_toggle, relay_service_status, relay_service_toggle, set_toggle_shortcut, app_version])
         .setup(|app| {
             if build_tray(app).is_ok() {
                 TRAY_OK.store(true, Ordering::SeqCst);
