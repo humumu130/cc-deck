@@ -342,9 +342,6 @@ h1 em {
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
 .ac-dir svg { flex: none; }
-.ac-diff { margin-left: auto; display: flex; gap: 4px; font: 9.5px var(--mono); flex: none; }
-.ac-diff b { color: var(--brand-2); font-weight: 600; }
-.ac-diff u { text-decoration: none; color: #E5484D; }
 .ac-bar { width: 26px; height: 3px; border-radius: 2px; background: rgba(85, 217, 138, .18); overflow: hidden; flex: none; }
 .ac-bar i { display: block; height: 100%; background: var(--green); border-radius: 2px; }
 .ac-pct { font: 9.5px var(--mono); color: var(--green); flex: none; }
@@ -496,13 +493,6 @@ h1 em {
 .tk-tag { flex: none; font-size: 9.5px; color: var(--faint); border: 1px solid var(--line); border-radius: 5px; padding: 0 5px; }
 .approve-art { gap: 9px; align-items: stretch; }
 .approve-art .t-btn { height: 30px; font-size: 12px; }
-.key-art { flex-direction: row; align-items: center; gap: 10px; }
-.kbd {
-  font: 11.5px var(--mono); padding: 5px 10px; border-radius: 7px;
-  border: 1px solid rgba(85, 217, 138, .4); color: var(--green); background: rgba(85, 217, 138, .07);
-}
-.kbd-dim { border-color: var(--line-strong); color: var(--faint); background: rgba(13, 24, 39, .5); }
-.key-art svg { color: var(--faint); }
 .copy-btn { flex: none; }
 .copy-btn {
   margin-left: auto; width: 26px; height: 26px; border-radius: 7px;
@@ -512,13 +502,6 @@ h1 em {
 }
 .copy-btn:hover { color: var(--text); border-color: var(--line-strong); }
 .copy-btn.done { color: var(--green); border-color: rgba(85, 217, 138, .5); }
-.multi-src { gap: 11px; }
-.ms-src { display: flex; align-items: center; gap: 9px; font-size: 13px; color: var(--text); }
-.ms-src span { margin-left: auto; font-size: 11px; color: var(--faint); }
-.ms-merge {
-  display: flex; align-items: center; gap: 8px; margin-top: 2px; padding-top: 10px;
-  border-top: 1px dashed var(--line); color: var(--brand-2); font-size: 12.5px; font-weight: 650;
-}
 .toast {
   display: inline-flex; align-items: center; gap: 9px; padding: 9px 13px;
   border-radius: 10px; border: 1px solid var(--line-strong); background: rgba(7, 13, 23, .7);

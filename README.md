@@ -6,7 +6,7 @@
 [![release](https://img.shields.io/github/v/release/humumu130/cc-deck)](https://github.com/humumu130/cc-deck/releases/latest)
 [![license](https://img.shields.io/badge/license-MIT-blue)](./LICENSE)
 
-在手机上使用 PC 端的 Claude Code：查看会话状态、批准权限、发送消息、切换模型、接收任务汇报；电脑断网重启会话不丢，手机点一下即可远程恢复。自建 relay，不经过任何第三方云服务；不在同一网络时走 Cloudflare 中继，端到端加密。
+在手机上使用 PC 端的 Claude Code：查看会话状态、批准权限、发送消息、切换模型、接收任务汇报；电脑断网重启会话不丢，手机点一下即可远程恢复。默认自建 relay，局域网内不经过任何第三方服务；跨网经可自建的 Cloudflare 中继，端到端加密。
 
 [🏠 项目主页](https://cc-deck.humumu.online/) · [网页控制台](https://cc-deck.humumu.online/app) · [下载最新版](https://github.com/humumu130/cc-deck/releases/latest) · [直链下载页](https://cc-deck.humumu.online/download/)
 
@@ -31,7 +31,7 @@
 
 - 多会话实时同步，四态徽标（运行中 / 等待输入 / 出错 / 完成），断线自动补发
 - 权限审批推到手机点 Allow / Reject；AskUserQuestion 提问远程点选；随时打断
-- 给会话发消息、传图片（App 支持语音输入）；历史会话可续聊
+- 给会话发消息、传图片与文件（App 支持语音输入，桌面 / 网页可粘贴或拖入），会话产出的文件可拉回查看 / 保存；历史会话可续聊
 - 消息即发即达：点发送立刻送达电脑（排队回显即时，注入后自动校验、回车被吞秒级补发）
 - 模型远程切换：下拉即切当前会话模型（注入 CLI 原生 `/model`），ctx 水位行内嵌当前模型，App / 网页 / 桌面三端一致
 
@@ -43,16 +43,19 @@
 
 **替你盯着**
 
-- 任务完成主动汇报：悬浮框（可拖动、位置记忆）+ App 通知 + 手表震动，点按直达任务
+- 任务完成主动汇报：悬浮框（可拖动、位置记忆）+ App 通知，点按直达任务
 - 待确认事项黄色悬浮框 + `/api/notify` 注入接口：任何脚本都能把一条消息推到你手机上（用法见[进阶](#进阶)）
 - 上下文水位三端同口径分级色条，会话还能跑多久一眼可见；上下文压缩（Compacting）进行中三端明示，不再误判"卡死"
-- 完整转录（工具调用 / diff / 思考过程），`#NNN` 任务号点击弹气泡速览详情
+- 完整转录（工具调用 / diff / 思考过程），`#NNN` 任务号点击弹气泡速览详情；代码块按语言语法高亮
+- 子 Agent 活性可见：卡片角标显示并行运行数，点开面板看每个子 Agent 正在做什么（外部 CLI 会话同样支持）
+- 交付自动归集：会话产出的报告 / 文档汇入「输出物」看板，三端一处查看与打开；漏登记的产出也会自动收进看板
+- 验收单在线填报：一批功能一张验收单，手机 / 网页直接勾选，回填自动汇总回会话（跨网可提交）
 - 任务清单可拖动排序：手机 / 网页长按拖动调整优先级，CLI 按新顺序执行
 - 定时任务随身可查：cron 表达式自动译成人话（"每天 08:00"），点开看完整指令；过期的一次性任务自动滤除
 
 **多源多端**
 
-- Android App、Wear OS 手表、网页 / PWA、Windows 桌面客户端（Tauri 主推 3.4MB）
+- Android App、网页 / PWA、Windows 桌面客户端（Tauri 主推 3.4MB）
 - 多台 PC 可聚合同屏（opt-in），卡片角标区分来源；新建会话可选发往哪台（记住上次选择）
 - 同一台 PC 多通道自动归并：LAN 与云桥两条连接按公钥派生的设备 id 密码学合并；127.0.0.1 / 主机名 / IP 等写法差异同样收敛为一条，不再裂出重复条目
 - 跨网络经 6 位配对码接入云桥，全程密文，桥只见密文——在任何网络打开网页，输入家里 PC 领的 6 位码即连
@@ -60,9 +63,9 @@
 
 **细节到位**
 
-- 深色开发者工具风界面，App / 网页 / 桌面同一套设计语言
+- 浅色模式默认、深色与跟随系统可选，App / 网页 / 桌面同一套设计语言
 - 设置中心竖排菜单 + 卡片分区（连接 / Relay / 显示 / 关于）：Relay 状态、扫码配对、本机领码、添加手机收拢一页
-- 会话列表三档密度（标准 / 紧凑 / 极简）、源徽章按来源着色，信息密度自己调
+- 会话列表三档密度（标准 / 紧凑 / 极简）、源徽章按来源着色，信息密度自己调；空闲会话自动置灰（阈值可配，负数永不变灰）
 
 <details>
 <summary>四端能力矩阵</summary>
@@ -71,10 +74,12 @@
 |---|---|---|---|---|
 | 会话列表 · 四态速览 | ✅ | ✅ 抬腕速览 | ✅ | ✅ 同网页 |
 | 远程审批 · Ask 作答 | ✅ | ✅ 允许 / 拒绝 / 点选 | ✅ | ✅ |
-| 发消息 · 图片 | ✅ 语音 + 相册 | — | ✅ 粘贴截图 | ✅ |
+| 发消息 · 图片 · 文件 | ✅ 语音 + 相册 + 文件 | — | ✅ 粘贴 / 拖入 | ✅ 粘贴 / 拖入 |
 | 模型远程切换 | ✅ 水位行下拉 | — | ✅ | ✅ |
 | 打断 / 停止 / 删除 | ✅ | ✅ 停止 | ✅ 删除带撤销 | ✅ |
 | 任务清单 + 完成汇报 | ✅ 通知 | ✅ 轻震直达 | ✅ | ✅ |
+| 子 Agent 活性面板 | ✅ 角标 + 面板 | — | ✅ | ✅ |
+| 输出物看板（文档 / 报告） | ✅ 查看 + 打开 | — | ✅ | ✅ 查看 + 下载 |
 | 上下文水位 / 定时任务 | ✅ | ✅ ctx 百分比 | ✅ | ✅ |
 | 转录时间线 | ✅ 全量 | ✅ 压缩版 | ✅ 全量 | ✅ |
 | 多源聚合（默认关） | ✅ | — 跟随手机 | ✅ | ✅ |
@@ -97,14 +102,14 @@ claude plugin install cc-deck@cc-deck-plugins
 
 ### 场景 A · 同一网络（局域网）
 
-- **手机 App**：[Releases](https://github.com/humumu130/cc-deck/releases) 或[直链下载页](https://cc.humumu.online/dl/)下载 APK 安装，「新增服务器 → 扫码添加」扫 `/cc-deck` 的 App 直连码，零手输；装好后 App 内即可检查更新
+- **手机 App**：[Releases](https://github.com/humumu130/cc-deck/releases) 或[直链下载页](https://cc-deck.humumu.online/dl/)下载 APK 安装，「新增服务器 → 扫码添加」扫 `/cc-deck` 的 App 直连码，零手输；装好后 App 内即可检查更新
 - **浏览器**：桌面浏览器打开时会自动嗅探本机 relay（`127.0.0.1:8787`），命中即零配置直连；或扫控制台码 / 直接打开 `http://<PC-IP>:8787/?token=…`
 - **桌面**：下载 `CC-Deck-Setup-<tag>.exe`，启动自动连本机。未签名 exe 首次运行会触发 SmartScreen，选「更多信息 → 仍要运行」
 
 ### 场景 B · 跨网络（外出 / 异地）
 
 1. PC 保持 relay 运行，执行 `/cc-deck-pair` 领 6 位配对码（PC 只发出站连接，无需公网 IP）
-2. 手机 App「新增服务器 → 配对码」输码；或任意浏览器打开 <https://cc.humumu.online> 输码（PWA 可加主屏）
+2. 手机 App「新增服务器 → 配对码」输码；或任意浏览器打开 <https://cc-deck.humumu.online> 输码（PWA 可加主屏）
 3. 所在网络拦截 WSS 时，网页端自动降级 HTTP 长轮询保持在线
 
 <details>
@@ -265,7 +270,7 @@ cd desktop-tauri && npx tauri build              # Tauri
 cd relay && node scripts/build-plugin.mjs
 ```
 
-**版本号单一事实源**：根目录 `VERSION` 文件。发版只改它，再跑 `node scripts/version.mjs --write` 同步到四个落点（web-console `CONSOLE_VERSION`、expo-app `app.json` 与 `build.gradle`、desktop-tauri `package.json`）；`--check` 由 git pre-commit 钩子强制校验，不同步的提交直接拦截。
+**版本号单一事实源**：根目录 `VERSION` 文件。发版只改它，再跑 `node scripts/version.mjs --write` 同步到各落点（web-console `CONSOLE_VERSION`、expo-app `app.json` 与 `build.gradle`、desktop-tauri `package.json`、项目主页三处版本展示）；`--check` 由 git pre-commit 钩子强制校验，不同步的提交直接拦截。
 
 ```bash
 node scripts/version.mjs           # 查看各落点当前值
