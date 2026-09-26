@@ -1,13 +1,13 @@
 // #26 矩阵式 M1 —— Leader 常驻化集成测试（agentFactory 测试缝，不拉真 CLI）。
 // 覆盖：L1 首建（锚/pinned/题名/待命化）+ L2 sticky-cwd 豁免 + L3 重启重建零 spawn
-//       + L4 幂等 + L5 废锚重建。台账用例（L6）在 C3 追加。
+//       + L4 幂等 + L5 废锚重建 + L6 派单台账（running/done/failed/FIFO/兜底全清/断档补记）。
 import { randomUUID } from "node:crypto";
 import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { EventBus } from "../src/event-bus.js";
 import { SessionManager } from "../src/session-manager.js";
-import { ORG_LEADER_BOOTSTRAP_PROMPT, ORG_LEADER_TITLE, readOrgAnchor, writeOrgAnchor } from "../src/org.js";
+import { ORG_LEADER_BOOTSTRAP_PROMPT, ORG_LEADER_TITLE, readDispatchLog, readOrgAnchor, writeOrgAnchor } from "../src/org.js";
 import type { RelayConfig } from "../src/config.js";
 import type { AgentCallbacks, AgentLike } from "../src/agent-adapter.js";
 
@@ -164,6 +164,72 @@ async function main() {
     rmSync(ORG2, { recursive: true, force: true });
     rmSync(DATA2, { recursive: true, force: true });
     rmSync(sentinel, { recursive: true, force: true });
+
+    // ---------- L6 派单台账（C3） ----------
+    console.log("L6 派单台账:");
+    const ORG3 = mkdtempSync(join(tmpdir(), "ccr-org-lead3-"));
+    const DATA3 = mkdtempSync(join(tmpdir(), "ccr-data-lead3-"));
+    process.env.CCR_ORG_DIR = ORG3;
+    const created6: SpawnRec[] = [];
+    const cfg6: RelayConfig = { ...cfg, dataDir: DATA3, defaultCwd: "" };
+    const mgr6 = new SessionManager(new EventBus({ persistPath: join(DATA3, "events.ndjson") }), cfg6);
+    mgr6.setAgentFactory(makeFakeFactory(created6));
+    const r6 = mgr6.ensureLeader();
+    const lid = r6.ok ? r6.session_id : "";
+    const msg = (sid: string, text: string) =>
+      mgr6.handleCommand({ type: "COMMAND_MESSAGE", command_id: randomUUID(), ts: Date.now(), payload: { session_id: sid, text } }, "test");
+    assert(await waitFor(() => {
+      const c = mgr6.snapshot().find((s) => s.session_id === lid);
+      return !!c && c.status === "DONE" && c.done_reason === "success";
+    }), "L6 Leader 上岗回合完成（前置）");
+    assert(readDispatchLog(ORG3).length === 0, "L6 上岗引导（create initialPrompt）不入台账");
+
+    msg(lid, "咨询：矩阵式 M2 的路由表放哪层？");
+    let log6 = readDispatchLog(ORG3);
+    assert(log6.length === 1 && log6[0].status === "running" && log6[0].tier === "咨询" && log6[0].target === "org-leader" && log6[0].session_id === lid, "L6 MESSAGE→running（咨询/org-leader/会话 id）");
+    const dA = log6[0].id;
+    created6[0].cb.onTurnEnd(true, "答案已交付", 10);
+    log6 = readDispatchLog(ORG3);
+    assert(log6.length === 1 && log6[0].id === dA && log6[0].status === "done" && log6[0].receipt === "答案已交付", "L6 回合成功→同 id done（回执=terminal_reason）");
+
+    msg(lid, "问题一");
+    msg(lid, "问题二");
+    log6 = readDispatchLog(ORG3);
+    const running6 = log6.filter((e) => e.status === "running");
+    assert(running6.length === 2, "L6 两条消息各自成单（FIFO 排队 2 个 running）");
+    const dB = running6[0].id;
+    const dC = running6[1].id;
+    created6[0].cb.onTurnEnd(true, "第一答", 10);
+    log6 = readDispatchLog(ORG3);
+    assert(log6.find((e) => e.id === dB)?.status === "done" && log6.find((e) => e.id === dC)?.status === "running", "L6 一回合只收口最旧一单（FIFO 顺序）");
+    created6[0].cb.onTurnEnd(false, "CLI 异常退出", 10);
+    log6 = readDispatchLog(ORG3);
+    assert(log6.find((e) => e.id === dC)?.status === "failed" && log6.find((e) => e.id === dC)?.receipt === "CLI 异常退出", "L6 回合失败→failed（回执保留）");
+
+    const mk = mgr6.handleCommand({ type: "COMMAND_CREATE", command_id: randomUUID(), ts: Date.now(), payload: { cwd: ORG3, prompt: "普通会话" } }, "test");
+    const otherId = mk.ok ? (mk.session_id ?? "") : "";
+    assert(!!otherId && otherId !== lid, "L6 普通会话已建（前置）");
+    msg(otherId, "普通消息");
+    assert(readDispatchLog(ORG3).length === 3, "L6 非 Leader 会话零记账");
+
+    msg(lid, "问一");
+    msg(lid, "问二");
+    created6[0].cb.onSessionEnd("stream closed");
+    log6 = readDispatchLog(ORG3);
+    assert(log6.length === 5 && log6.every((e) => e.status !== "running") && log6.filter((e) => e.receipt === "stream closed").length === 2, "L6 onSessionEnd 兜底全清（未收口一律 done）");
+
+    msg(lid, "悬账问题");
+    assert(readDispatchLog(ORG3).some((e) => e.status === "running"), "L6 悬账落盘（前置：崩溃前 running）");
+    const created7: SpawnRec[] = [];
+    const mgr7 = new SessionManager(new EventBus({ persistPath: join(DATA3, "events.ndjson") }), cfg6);
+    mgr7.setAgentFactory(makeFakeFactory(created7));
+    const r7 = mgr7.ensureLeader();
+    assert(r7.ok === true && created7.length === 0, "L6 重启 ensureLeader ok 且零 spawn（前置）");
+    log6 = readDispatchLog(ORG3);
+    const hung6 = log6.find((e) => e.receipt === "relay 重启，回合中断");
+    assert(!!hung6 && hung6.status === "done" && log6.every((e) => e.status !== "running"), "L6 断档补记：悬账补 done「relay 重启，回合中断」且无残留 running");
+    rmSync(ORG3, { recursive: true, force: true });
+    rmSync(DATA3, { recursive: true, force: true });
   } finally {
     if (prevOrg === undefined) delete process.env.CCR_ORG_DIR; else process.env.CCR_ORG_DIR = prevOrg;
     if (prevTitleGen === undefined) delete process.env.CCR_NO_TITLE_GEN; else process.env.CCR_NO_TITLE_GEN = prevTitleGen;

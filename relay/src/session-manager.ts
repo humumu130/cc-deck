@@ -1,10 +1,11 @@
+import { randomUUID } from "node:crypto";
 import { mkdirSync, readFileSync, realpathSync, statSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { isAbsolute, join, resolve, sep } from "node:path";
 import { artifactsDir } from "./artifacts.js";
 import {
-  clearOrgAnchor, ensureOrgClaudeMd, ensureOrgDir, ORG_LEADER_BOOTSTRAP_PROMPT, ORG_LEADER_TITLE,
-  orgDir, readOrgAnchor, writeOrgAnchor,
+  appendDispatch, clearOrgAnchor, ensureOrgClaudeMd, ensureOrgDir, ORG_LEADER_BOOTSTRAP_PROMPT,
+  ORG_LEADER_TITLE, orgDir, readDispatchLog, readOrgAnchor, writeOrgAnchor,
 } from "./org.js";
 import { devId } from "./e2e.js";
 import type { EventBus } from "./event-bus.js";
@@ -1382,6 +1383,19 @@ export class SessionManager {
               return { command_id: cmd.command_id, ok: false, error: "文件保存失败（临时目录不可写）" };
             }
           }
+          // #26 派单台账（M1 咨询档）：Leader 会话的每条用户消息 = 一次咨询派单。
+          // M1「派与跑同刻」直接落 running（dispatched 留 M2 异步派单，schema 已留位）；
+          // 放在文件保存失败返回之后 = 只记必达消息，三投递出口（resumePending 排队 /
+          // resumeAgent 换流 / 直发 sendMessage）一次全覆盖。上岗引导走 create 的
+          // initialPrompt 不经此处，天然不入账（org.ts 注释同口径）。
+          if (this.isLeaderSession(cmd.payload.session_id)) {
+            const dispatchId = randomUUID();
+            this.leaderOpenDispatch.push(dispatchId);
+            appendDispatch({
+              ts: Date.now(), id: dispatchId, tier: "咨询", target: "org-leader",
+              status: "running", session_id: cmd.payload.session_id,
+            });
+          }
           // agent 已死（Relay 重启遗留 / stop 收尾）或已放弃自愈（#109：放弃路径不再
           // 预杀树，僵流可能还挂着）：有 SDK 会话 id 就地 resume 复活（接管时补刀旧树）
           if (!s.agent || s.agent.ended || s.wd.gaveUp) {
@@ -2136,6 +2150,11 @@ export class SessionManager {
           // 归恢复流程接管（resumeAgent 紧接着设 WORKING），此处让位避免 ERROR/DONE
           // 假终态帧闪现
           if (managed.wd.phase === "recovering") return;
+          // #26 派单台账收口：一回合一单，FIFO 收最旧（多消息排队时按序逐回合收）。
+          // recovering 让位漏掉的收口由恢复流的下个 onTurnEnd 补上
+          if (managed.state.session_id === this.leaderId) {
+            this.closeLeaderDispatch(ok ? "done" : "failed", reason, false);
+          }
           managed.state.updated_at = Date.now();
           managed.state.duration_ms = durationMs;
           // 回合收口同时清残留审批数据（打断等待中的请求等场景）：status 与
@@ -2161,6 +2180,11 @@ export class SessionManager {
           //（状态由恢复流程接管）；其余路径（进程自然退出/stop 收尾）照旧收口，
           // 并复位采样相位——新 agent 由 resumeAgent/reviveSaved 重新起算
           if (managed.wd.phase === "recovering") return;
+          // #26 派单台账兜底：流关闭时仍未收口的派单一律 done（M1 无失败语义可依，
+          // 流没了 = 咨询已无法继续），全清 FIFO
+          if (managed.state.session_id === this.leaderId) {
+            this.closeLeaderDispatch("done", reason, true);
+          }
           managed.wd.phase = "idle";
           if (managed.state.status !== "DONE" && managed.state.status !== "ERROR") {
             managed.state.status = "DONE";
@@ -2362,6 +2386,13 @@ export class SessionManager {
     } catch (e) {
       return { ok: false, error: `org 目录不可用: ${e instanceof Error ? e.message : String(e)}` };
     }
+    // #26 断档补记：上一进程遗留的 running 悬账（relay 崩溃/强杀时回合没收口）——
+    // 本进程的内存 FIFO 已随进程丢失，不补则永悬；各补一行 done 收口。auto-revive
+    // 续跑不走 COMMAND_MESSAGE 天然不入新账，不会双记。
+    const hung = readDispatchLog().filter((e) => e.status === "running");
+    for (const e of hung) {
+      appendDispatch({ ...e, ts: Date.now(), status: "done", receipt: "relay 重启，回合中断" });
+    }
     const anchor = readOrgAnchor();
     if (!anchor) return this.createLeaderFirstTime();
     const s = this.sessions.get(anchor.leader_session_id);
@@ -2477,6 +2508,20 @@ export class SessionManager {
     try {
       writeFileSync(join(this.cfg.dataDir, "title-overrides.json"), JSON.stringify(this.titleOverrides));
     } catch {}
+  }
+
+  // #26 派单台账收口：从 FIFO 取未收口派单补 done/failed 行（append-only 状态机，
+  // 读侧同 id 取最后一行收敛）。all=true 全清（onSessionEnd 流关闭兜底）；
+  // FIFO 空 = 无未收口派单（上岗引导回合等），no-op。回执 = terminal_reason 截 200 字。
+  private closeLeaderDispatch(status: "done" | "failed", receipt: string, all = false): void {
+    if (!this.leaderId) return;
+    const ids = all ? this.leaderOpenDispatch.splice(0) : [this.leaderOpenDispatch.shift()].filter((x): x is string => !!x);
+    for (const id of ids) {
+      appendDispatch({
+        ts: Date.now(), id, tier: "咨询", target: "org-leader",
+        status, receipt: truncate(receipt, 200), session_id: this.leaderId,
+      });
+    }
   }
 
   private require(sessionId: string): ManagedSession {
