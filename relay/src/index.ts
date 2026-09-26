@@ -17,6 +17,7 @@ import { createPairingCodes } from "./pairing.js";
 import { printQr } from "./qr.js";
 import { advertiseRelay } from "./mdns.js";
 import { ensureTodoToolsEnv, TODO_TOOLS_ENV_KEY } from "./todo-tools-env.js";
+import { orgDir } from "./org.js";
 
 // 内嵌模式（桌面壳 CCR_PARENT_PID 标记）：日志加时间戳——embedded-relay.log 此前
 // 全是裸行，云桥翻动/断连这类时序问题无从对表排障（2026-09-18 电脑端排查之痛）
@@ -265,6 +266,13 @@ for (const s of mgr.snapshot()) {
 // 才用 transcript resume 按需拉起——不拉 SDK 子进程，启动零成本
 const pinned = mgr.applyPinned();
 
+// #26 矩阵式团队 M1：组织 Leader 常驻化（逻辑常驻 = org cwd + org.json 锚；物理按需
+// 拉起）。必须在 applyPinned 之后：pinned 清单的双向静默清理可能刚把失联 Leader 的
+// 条目摘掉（events 压缩挤掉 CREATED → 内存无此会话 → 文件条目被清），锚才是权威，
+// ensureLeader 把休眠卡重建并重新入 pinned。除首建 parked 会话外零 spawn；org 目录
+// 不可用时只横幅点名，不阻断 relay 其余功能（下次启动重试）
+const leader = mgr.ensureLeader();
+
 // #75 无人值守自动拉起：延迟几秒让收养广播/桥接先落地，再按任务存储待办把有
 // 活干的托管会话 resume 起来（语义与约束见 session-manager.autoReviveManaged）
 setTimeout(() => {
@@ -396,6 +404,11 @@ console.log(`  历史:   ${persistPath}（恢复 ${adopted} 个会话）`);
 if (pinned.saved > 0) {
   console.log(`  置顶:   ${pinned.saved} 个会话已休眠登记（点卡片按需恢复，不自动拉起）`);
 }
+console.log(
+  leader.ok
+    ? `  组织:   Leader ${leader.created ? "首次创建" : leader.rebuilt ? "已从锚重建" : "在线"}（${orgDir()}）`
+    : `  组织:   Leader 未就绪：${leader.error}（下次启动重试）`,
+);
 console.log(`  桥接:   ${join(cfg.dataDir, "bridge.json")}（外部 CLI 会话经 hooks 接入）`);
 console.log(
   cloudIdentity

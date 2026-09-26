@@ -15,6 +15,14 @@ import { join } from "node:path";
 
 export const ORG_LEADER_TITLE = "组织 Leader";
 
+// 首建上岗引导消息：fresh parked CLI（空 prompt）在真实链路不回 init——SDK 会话 id
+// 只在 CLI 收到首条输入后才产生（#49 既有实证；M1 真链路复现：parked 2 分钟零输出，
+// 进程存活 CPU 闲置）。首建必须带这条上岗消息：① 拿到 sdkId（锚从此可 resume）；
+// ② 执行 CLAUDE.md 种子的「上岗读档自检」。只此一回，之后常驻全走 resume 零新回合。
+// 注意：走 create 的 initialPrompt（非 COMMAND_MESSAGE），C3 派单台账不会把它记成咨询。
+export const ORG_LEADER_BOOTSTRAP_PROMPT =
+  "（组织 Leader 上岗引导，系统消息）你已被创建为常驻组织的 Leader。请只做一件事：阅读本目录的 CLAUDE.md（组织记忆），然后用一两句话确认上岗——复述你在过渡期（M1）承接的两类事即可。不要执行其他操作、不要改动任何文件。";
+
 export function orgDir(): string {
   return process.env.CCR_ORG_DIR || join(homedir(), ".cc-deck", "org");
 }

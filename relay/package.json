@@ -17,7 +17,8 @@
     "test:cloud": "tsx scripts/test-cloud.ts",
     "test:watchdog": "tsx scripts/test-watchdog.ts",
     "test:acceptance": "tsx scripts/test-acceptance.ts",
-    "test:org": "tsx scripts/test-org.ts"
+    "test:org": "tsx scripts/test-org.ts",
+    "test:leader": "tsx scripts/test-leader.ts"
   },
   "dependencies": {
     "@anthropic-ai/claude-agent-sdk": "latest",

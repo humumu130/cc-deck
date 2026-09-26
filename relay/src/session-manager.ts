@@ -2,6 +2,10 @@ import { mkdirSync, readFileSync, realpathSync, statSync, writeFileSync } from "
 import { homedir } from "node:os";
 import { isAbsolute, join, resolve, sep } from "node:path";
 import { artifactsDir } from "./artifacts.js";
+import {
+  clearOrgAnchor, ensureOrgClaudeMd, ensureOrgDir, ORG_LEADER_BOOTSTRAP_PROMPT, ORG_LEADER_TITLE,
+  orgDir, readOrgAnchor, writeOrgAnchor,
+} from "./org.js";
 import { devId } from "./e2e.js";
 import type { EventBus } from "./event-bus.js";
 import { AgentSession } from "./agent-adapter.js";
@@ -456,6 +460,14 @@ export class SessionManager {
   private childSdkIds: Set<string>;
   private deletedExtIds: Set<string>;
   private titleOverrides: Record<string, string>;
+
+  // #26 矩阵式 M1：组织 Leader 常驻态。leaderId = 当前 Leader 的 relay 会话 id
+  //（isLeaderSession 的内存匹配源——COMMAND_MESSAGE/onTurnEnd 高频路径零盘 IO）；
+  // ensureLeader 维护，onInit 不重置（resume 换流只会话对象换、relay id 不变）。
+  // leaderOpenDispatch = 进行中派单 id FIFO（回合串行，消息数=回合数；C3 台账收口用）
+  private leaderId: string | null = null;
+  private leaderEnsured = false;
+  private leaderOpenDispatch: string[] = [];
 
   /** #388 供 ws-server 读默认模型（快照 payload.models 聚合用） */
   readonly cfg: RelayConfig;
@@ -1867,7 +1879,7 @@ export class SessionManager {
     }
   }
 
-  private create(rawCwd: string, prompt: string, permissionMode?: ManagedPermissionMode, autoMkdir = false): string {
+  private create(rawCwd: string, prompt: string, permissionMode?: ManagedPermissionMode, autoMkdir = false, opts?: { skipStickyCwd?: boolean }): string {
     // #293 三级回落：指定/默认目录无效时回落用户主目录（说明进时间线），完全无可用目录才报错；
     // #208 autoMkdir：指定目录不存在时先 mkdir -p 建出来（失败仍走回落链）
     const { cwd, fallbackNote } = resolveCreateCwd(rawCwd, this.cfg.defaultCwd, autoMkdir);
@@ -1875,7 +1887,9 @@ export class SessionManager {
     // sticky 默认目录（M0，2026-09-18）：解析出的有效项目目录记为下次默认——手机端
     // /C: 类残留指定进来时，回落落在真实项目目录而非家目录；CCR_CWD 显式配置时不越权。
     // 回落到家目录的 cwd 不记（记了等于没记）
-    if (!process.env.CCR_CWD && cwd !== homedir()) {
+    // #26 skipStickyCwd：内部会话（组织 Leader 以 org 目录为 cwd）不污染全局默认——
+    // 否则 org 会成为之后所有无指定目录新会话的落点
+    if (!process.env.CCR_CWD && !opts?.skipStickyCwd && cwd !== homedir()) {
       this.cfg.defaultCwd = cwd;
       try { writeFileSync(join(this.cfg.dataDir, "last-cwd"), cwd, "utf-8"); } catch {}
     }
@@ -1975,6 +1989,26 @@ export class SessionManager {
             appendChildSession(this.cfg.dataDir, sdkId);
           }
           managed.state.relay_session_id = sdkId;
+          // #26 Leader 锚回写：resume 会产生新 sdkId（onInit 无条件覆盖上面这行即证），
+          // 锚必须跟着收敛——否则下次恢复用旧 sid 必 404。「固定 session id」的实现
+          // 就是这个锚 + 每次回写，而非假设 id 不变。
+          if (managed.state.session_id === this.leaderId) {
+            const a = readOrgAnchor();
+            if (a && a.leader_session_id === managed.state.session_id) {
+              writeOrgAnchor({ ...a, leader_sdk_id: sdkId, updated_at: Date.now() });
+            }
+            // #26 待命化（防看门狗误杀）：init 已到、无排队消息（没有即将开始的回合）
+            // 却停在 WORKING——tickWatchdog 只检测 WORKING，parked Leader 静默 10min
+            // 必进 slow lane 被杀树重拉。翻 DONE = 合法的「等待咨询」形态。
+            // 消息驱动 resume 先 push unacked 再 spawn，到达这里 unacked≥1 不误翻；
+            // reviveSaved 的 onInit 包裹在 base 之后自设 DONE，覆盖不冲突。
+            if (managed.unacked.length === 0 && managed.state.status === "WORKING") {
+              managed.state.status = "DONE";
+              managed.state.done_reason = "待命（等待咨询）";
+              managed.state.action_summary = "组织 Leader · 待命";
+              managed.state.turn_started_at = undefined;
+            }
+          }
           managed.state.model = model;
           if (isManagedMode(permissionMode)) managed.state.permission_mode = permissionMode;
           this.emitUpdated(managed, true);
@@ -2306,6 +2340,143 @@ export class SessionManager {
     }
     if (keep.length !== file.length) writePinnedSessions(this.cfg.dataDir, keep);
     return { saved };
+  }
+
+  // ================= #26 矩阵式团队 M1：组织 Leader 常驻化 =================
+  // 设计稿 v3.1 §3.5「逻辑常驻」：常驻 = 固定身份（org.json 锚，独立于 events.ndjson
+  // 压缩与 pinned 双向清理）+ 按需物理拉起（复用休眠卡/pinned/消息驱动 resume 底座）。
+  // 开机 ensureLeader 只保证「卡在、锚准」；除首次创建 parked 会话（拿 sdkId 是可恢复
+  // 的前提——无 sdkId 的会话无法 resume）外零 spawn。
+
+  isLeaderSession(sessionId: string): boolean {
+    return this.leaderId === sessionId;
+  }
+
+  ensureLeader(): { ok: true; session_id: string; created: boolean; rebuilt: boolean } | { ok: false; error: string } {
+    if (this.leaderEnsured && this.leaderId) {
+      return { ok: true, session_id: this.leaderId, created: false, rebuilt: false };
+    }
+    try {
+      ensureOrgDir();
+      ensureOrgClaudeMd();
+    } catch (e) {
+      return { ok: false, error: `org 目录不可用: ${e instanceof Error ? e.message : String(e)}` };
+    }
+    const anchor = readOrgAnchor();
+    if (!anchor) return this.createLeaderFirstTime();
+    const s = this.sessions.get(anchor.leader_session_id);
+    if (s) {
+      this.adoptExistingLeader(s, anchor);
+      return { ok: true, session_id: anchor.leader_session_id, created: false, rebuilt: false };
+    }
+    if (!anchor.leader_sdk_id) {
+      // 首建后 init 前崩过的废锚：会话无法 resume（无 sdkId），清锚按未建组织处理
+      clearOrgAnchor();
+      return this.createLeaderFirstTime();
+    }
+    return this.rebuildDormantLeader(anchor);
+  }
+
+  // 首建：带上岗引导消息 spawn（parked 空 prompt 在真实链路不回 init、拿不到 sdkId，
+  // 见 org.ts ORG_LEADER_BOOTSTRAP_PROMPT 注释），一次性拿 sdkId——此后常驻零 spawn。
+  // 锚紧邻 create 同步落盘（崩溃窗口微秒级；后果=pinned 残卡可手删，下次重建）。
+  private createLeaderFirstTime(): { ok: true; session_id: string; created: boolean; rebuilt: boolean } {
+    const id = this.create(orgDir(), ORG_LEADER_BOOTSTRAP_PROMPT, undefined, false, { skipStickyCwd: true });
+    const now = Date.now();
+    writeOrgAnchor({ version: 1, leader_session_id: id, leader_sdk_id: "", created_at: now, updated_at: now });
+    // 题名双写：override 文件管跨重启（adopt 套用），内存 state.title 管当下卡片
+    //（不设的话首建到下次重启之间卡片显示的是空 prompt 派生名）
+    const s = this.sessions.get(id);
+    if (s) {
+      // 内存态同步置顶：驱逐豁免（evictOldSessions）读的是 state.pinned，只写文件
+      // 的话首建到重启之间 Leader 仍是可驱逐的普通卡
+      s.state.pinned = true;
+      s.state.title = ORG_LEADER_TITLE;
+      s.state.title_locked = true;
+      this.emitUpdated(s, true);
+    }
+    this.setTitleOverride(id, ORG_LEADER_TITLE);
+    this.leaderId = id;
+    this.leaderEnsured = true;
+    // 首建即置顶：驱逐豁免（evictOldSessions）+ 重启休眠登记（applyPinned）都吃 pinned
+    this.pinLeaderFile(id);
+    return { ok: true, session_id: id, created: true, rebuilt: false };
+  }
+
+  // 正常重启路径：会话已由 adopt 从 events 收养（可能已被 applyPinned 标休眠）。
+  // 只做常驻收口：补钉（unpin 过/文件条目被清过都复原——常驻语义）+ 题名 + leaderId。
+  // 不 spawn、不改 status（agent 存活时更不动运行态）。
+  private adoptExistingLeader(s: ManagedSession, _anchor: ReturnType<typeof readOrgAnchor>): void {
+    const id = s.state.session_id;
+    s.state.pinned = true;
+    if (!s.agent) {
+      s.state.saved = true;
+      if (s.state.status !== "DONE") {
+        s.state.status = "DONE";
+        s.state.done_reason = "已保存（组织 Leader 休眠）";
+      }
+    }
+    this.pinLeaderFile(id);
+    this.setTitleOverride(id, ORG_LEADER_TITLE);
+    this.leaderId = id;
+    this.leaderEnsured = true;
+  }
+
+  // events 被压缩挤掉（>30 会话）或用户删卡后的重建：从锚合成休眠卡，零 spawn。
+  // 不 emit SESSION_CREATED——锚才是重建权威；开机广播走 emitUpdated（与 applyPinned
+  // 同款），孤儿 UPDATED 行在 reduceHistory 里天然跳过（缺 CREATED）。
+  private rebuildDormantLeader(anchor: NonNullable<ReturnType<typeof readOrgAnchor>>): { ok: true; session_id: string; created: boolean; rebuilt: boolean } {
+    const id = anchor.leader_session_id;
+    const managed: ManagedSession = {
+      agent: null,
+      state: {
+        session_id: id,
+        relay_session_id: anchor.leader_sdk_id,
+        cwd: orgDir(),
+        initial_prompt: "",
+        title: ORG_LEADER_TITLE,
+        model: this.cfg.model,
+        status: "DONE",
+        done_reason: "已保存（组织 Leader 休眠）",
+        action_summary: "组织 Leader · 待命",
+        started_at: anchor.created_at || Date.now(),
+        updated_at: anchor.updated_at || Date.now(),
+        stats: { files_changed: 0, lines_added: 0, lines_deleted: 0 },
+        title_locked: true,
+        historical: true,
+        pinned: true,
+        saved: true,
+      },
+      logs: [],
+      lastUpdateEmit: 0,
+      lastProgressAt: 0,
+      lastProgressKind: "",
+      unacked: [],
+      wd: { phase: "idle", recoveries: [], gaveUp: false },
+      streamGen: 0,
+    };
+    this.sessions.set(id, managed);
+    this.pinLeaderFile(id);
+    this.setTitleOverride(id, ORG_LEADER_TITLE);
+    this.leaderId = id;
+    this.leaderEnsured = true;
+    this.emitUpdated(managed, true);
+    return { ok: true, session_id: id, created: false, rebuilt: true };
+  }
+
+  // Leader 常驻置顶写穿（去重后追加；cap 50 由 writePinnedSessions 裁）
+  private pinLeaderFile(id: string): void {
+    const ids = readPinnedSessions(this.cfg.dataDir).filter((x) => x !== id);
+    ids.push(id);
+    writePinnedSessions(this.cfg.dataDir, ids);
+  }
+
+  // 题名 override 写穿（跨重启收养/重建时都套用；仿 COMMAND_RENAME 落盘写法）
+  private setTitleOverride(id: string, title: string): void {
+    this.titleOverrides[id] = title;
+    try {
+      writeFileSync(join(this.cfg.dataDir, "title-overrides.json"), JSON.stringify(this.titleOverrides));
+    } catch {}
   }
 
   private require(sessionId: string): ManagedSession {
