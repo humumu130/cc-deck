@@ -1,0 +1,264 @@
+<!doctype html>
+<html lang="zh-CN" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>cc-deck · 团队模式组织形态规范（矩阵式裁决稿 v3.1）</title>
+<style>
+:root, [data-theme="dark"] {
+  color-scheme: dark;
+  --bg: #060B13; --panel: #0E1726; --panel-2: #131F31; --border: #1C2A3E;
+  --text: #C6D2E3; --text-strong: #EBF2FB; --dim: #8494AC; --faint: #7A889F;
+  --brand: #E08A63; --brand-fg: #EC9A73; --brand-grad: linear-gradient(135deg,#EC9A73,#C96442);
+  --working: #FFC53D; --working-fg: #FFC53D;
+  --danger: #E5484D; --info: #7CB8FF; --ok: #35DC97;
+  --warn-soft: rgba(255,197,61,.08); --warn-line: rgba(255,197,61,.42);
+}
+[data-theme="light"] {
+  color-scheme: light;
+  --bg: #F6F8FC; --panel: #FFFFFF; --panel-2: #F4F6FA; --border: #DFE5EE;
+  --text: #2F3A4E; --text-strong: #101828; --dim: #6F7A90; --faint: #6F7A90;
+  --brand: #C05B33; --brand-fg: #B04E28; --brand-grad: linear-gradient(135deg,#B85228,#96391A);
+  --working: #E8A33D; --working-fg: #8F5B00;
+  --danger: #D63B3B; --info: #2563EB; --ok: #0E7A4A;
+  --warn-soft: #FBF2DC; --warn-line: rgba(143,91,0,.3);
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--text);
+  font: 14px/1.75 -apple-system, BlinkMacSystemFont, "SF Pro Text", "PingFang SC", "Noto Sans SC", sans-serif;
+  transition: background .3s ease, color .3s ease; }
+.page { max-width: 1100px; margin: 0 auto; padding: 44px 28px 90px; }
+h1 { font-size: 21px; color: var(--text-strong); margin: 0 0 4px; }
+h1 .lite { font-size: 12px; color: var(--faint); font-weight: 400; margin-left: 10px; }
+.sub { color: var(--dim); font-size: 13px; max-width: 900px; }
+.sub b { color: var(--text); }
+h2 { font-size: 16px; color: var(--text-strong); margin: 46px 0 4px; padding-top: 18px; border-top: 1px solid var(--border); }
+h2 .n { display: inline-flex; align-items: center; justify-content: center; width: 22px; height: 22px; border-radius: 7px; background: var(--panel-2); border: 1px solid var(--border); font-size: 12px; margin-right: 8px; color: var(--dim); }
+h3 { font-size: 13.5px; color: var(--text-strong); margin: 24px 0 2px; }
+.tbar { position: fixed; top: 16px; right: 20px; z-index: 9; }
+.tbtn { border: 1px solid var(--border); background: var(--panel); color: var(--dim); border-radius: 9px; padding: 6px 13px; font-size: 12.5px; cursor: pointer; transition: color .15s ease; }
+.tbtn:hover { color: var(--text); }
+table { width: 100%; border-collapse: collapse; margin: 12px 0 6px; font-size: 12.5px; }
+th { text-align: left; color: var(--faint); font-weight: 600; padding: 7px 10px; border-bottom: 1px solid var(--border); white-space: nowrap; }
+td { padding: 7px 10px; border-bottom: 1px solid var(--border); vertical-align: top; }
+td.nw { white-space: nowrap; }
+.pill { display: inline-block; border-radius: 999px; padding: 1px 9px; font-size: 11px; white-space: nowrap; font-weight: 700; }
+.pill.y { background: var(--working); color: #0B141F; }
+.pill.r { background: var(--danger); color: #fff; }
+.pill.b { background: var(--info); color: #fff; }
+.pill.o { background: var(--brand-grad); color: #fff; }
+.pill.g { background: var(--ok); color: #06281A; }
+.pill.n { background: var(--panel-2); border: 1px solid var(--border); color: var(--dim); font-weight: 600; }
+.card { background: var(--panel); border: 1px solid var(--border); border-radius: 13px; padding: 15px 18px; margin: 12px 0; }
+.card .hd { font-size: 13px; font-weight: 700; color: var(--text-strong); margin-bottom: 6px; }
+.rec { border-left: 3px solid var(--brand); }
+.rec .hd::before { content: "推荐 "; color: var(--brand-fg); font-size: 11px; letter-spacing: 1px; }
+.alt { opacity: .88; }
+.warnbox { background: var(--warn-soft); border: 1px solid var(--warn-line); border-radius: 11px; padding: 10px 15px; font-size: 12.5px; margin: 12px 0; }
+.warnbox b { color: var(--working-fg); }
+.infobox { background: rgba(124,184,255,.07); border: 1px solid rgba(124,184,255,.3); border-radius: 11px; padding: 10px 15px; font-size: 12.5px; margin: 12px 0; }
+.infobox b { color: var(--info); }
+code { font-family: ui-monospace, "SF Mono", Menlo, monospace; font-size: 11.5px; background: var(--panel-2); border: 1px solid var(--border); border-radius: 5px; padding: 1px 6px; color: var(--dim); }
+.foot { color: var(--faint); font-size: 11.5px; margin-top: 40px; }
+ul { margin: 6px 0 2px; padding-left: 20px; }
+li { margin: 3px 0; }
+.arch { font-size: 12.5px; background: var(--panel-2); border: 1px solid var(--border); border-radius: 11px; padding: 13px 17px; margin: 12px 0; line-height: 2; }
+.arch b { color: var(--text-strong); }
+.lv { display: inline-block; border-radius: 6px; padding: 0 7px; font-size: 11px; font-weight: 700; margin-right: 6px; }
+.lv.o { background: var(--brand-grad); color: #fff; }
+.lv.s { background: var(--info); color: #fff; }
+.lv.m { background: var(--panel); border: 1px solid var(--border); color: var(--dim); }
+.st { font-family: ui-monospace, Menlo, monospace; font-size: 11.5px; }
+.st b { color: var(--text-strong); }
+</style>
+</head>
+<body>
+<div class="tbar"><button class="tbtn" onclick="tgl()">◐ 深浅切换</button></div>
+<div class="page">
+<h1>cc-deck 团队模式 · 组织形态规范 <span class="lite">矩阵式裁决稿 v3.1 · 2026-09-26</span></h1>
+<p class="sub">回答五个互相咬合的问题：<b>AI 团队按什么单位组织</b>（项目制 vs 常驻制 vs 矩阵式）、<b>记忆与台账怎么隔离不混乱</b>、<b>小需求和咨询怎么办</b>、<b>工作怎么路由到项目与人</b>、<b>数据模型与状态机长什么样</b>。结论：<b>矩阵式——常驻的「组织」（唯一 Leader + 两本账）+ 动态的「项目组」（编制/worktree/任务板）</b>；你只跟一个 Leader 交流，开团从用户操作变成 Leader 的分诊决策。<b>v2 = v1 + 三视角审查 32 条分诊修复 + 战略讨论五项增量</b>（cwd 硬规则 / 亲和路由 / 开团自动化 / 两本账 / 三态生命周期）。<b>本稿 preview only，拍板前不 commit。</b></p>
+
+<h2><span class="n">0</span>现状与问题</h2>
+<p class="sub">现状（V7/V8 已设计，未实现）：<b>团队跟项目走</b>——「开新团队：描述目标 → Leader 建议编制 → 你确认 → 自动建 worktree 并 spawn 全员」，项目完「收团归档」。四个隐性成本：</p>
+<ul>
+<li><b>冷启动重复税</b>：每次开团 Leader 重新理解你的偏好、规范、验收标准，第 N 次开团仍是第一天；</li>
+<li><b>经验归零</b>：A 项目踩过的坑 B 团队不知道，「收团」把养出的默契全部归档；</li>
+<li><b>多线管理</b>：并行项目 = 多个项目 Leader 多条沟通线，管理负担回到你身上；</li>
+<li><b>粒度一刀切</b>：改个按钮和做大工程走同一套开团仪式，轻需求付重税。</li>
+</ul>
+
+<h2><span class="n">1</span>三方案对比 → 裁决</h2>
+<table>
+<tr><th></th><th>纯项目制（现状）</th><th>纯常驻制</th><th>矩阵式（推荐）</th></tr>
+<tr><td class="nw">组织单位</td><td>一项目一团队，完事收团</td><td>一个团队框住所有项目</td><td><b>常驻组织 + 动态项目组</b>两层</td></tr>
+<tr><td class="nw">沟通线</td><td>每项目一个 Leader</td><td>单线（唯一 Leader）</td><td><b>单线（唯一 Leader）</b></td></tr>
+<tr><td class="nw">经验复利</td><td>✗ 收团归零</td><td>✓ 持续累积</td><td><b>✓ 组织层持续累积</b></td></tr>
+<tr><td class="nw">并行隔离</td><td>✓ 天然隔离</td><td><span class="pill r">硬伤</span> 任务板/编制/上下文混流</td><td><b>✓ 项目组物理隔离（cwd）</b></td></tr>
+<tr><td class="nw">Leader 上下文</td><td>小而干净</td><td><span class="pill r">硬伤</span> 装不下多项目历史，单点瓶颈</td><td><b>两本账外置，读档恢复</b></td></tr>
+<tr><td class="nw">闲置成本</td><td>无（收团即清）</td><td>常驻编制挂着</td><td>编制动态缩回常备态</td></tr>
+</table>
+<div class="card rec">
+<div class="hd">矩阵式：你要的其实是「一家公司」，不是「一个团队」</div>
+<ul>
+<li><b>常驻层 = 组织</b>：唯一 Leader（你的技术合伙人）+ <b>两本账</b>（组织记忆 = 经验，慢涨；派单台账 = 状态，快涨但外置结构化）——智能不靠会话生命，靠基础设施。Leader 换模型/厂商 = <b>换壳不换档</b>：账是文件，新 Leader 上线先读档自检（能复述关键偏好即通过）；</li>
+<li><b>动态层 = 项目组</b>：立项时从组织抽调 + 按需扩编，配 worktree + 任务板 + 验收单；结项<b>归档项目但经验回流组织</b>，编制缩回常备态；</li>
+<li>纯常驻制三硬伤分别被「cwd 物理隔离 / 两本账外置 / Leader 只管<b>分诊</b>与汇总」解掉。</li>
+</ul>
+</div>
+
+<h2><span class="n">2</span>两层结构 · cwd 硬规则 · 三域映射</h2>
+<div class="arch">
+<span class="lv o">组织 · 常驻</span><b>Leader + 两本账</b> —— 对话入口常开 · 分诊与立项 · 经验沉淀与回流<br>
+<span class="lv s">项目组 · 动态</span><b>编制 + worktree + 任务板 + 验收单</b> —— 按项目并行若干个，三态生命周期<br>
+<span class="lv m">普通会话 · 自由</span><b>不受矩阵约束的逃生舱</b> —— 任何正经活都可以不经过组织完成
+</div>
+
+<h3>2.1 cwd 硬规则：隔离的物理地基</h3>
+<p class="sub">矩阵式的隔离单位是 <b>cwd（工作目录）</b>——Claude Code 的第一公民（CLAUDE.md 自动加载、memory 按项目 slug 隔离全顺着 cwd 自动成立）。「所有人挤一个目录」结构性不可能：</p>
+<table>
+<tr><th>谁</th><th>cwd</th><th>记忆 / 产物落哪</th></tr>
+<tr><td class="nw">Leader</td><td><b>org 目录</b>（组织的家，不属于任何项目）</td><td>组织记忆 + 台账在 org 侧</td></tr>
+<tr><td class="nw">项目组 worker</td><td><b>项目锚点目录（worktree）</b>，spawn 时由 Leader 设定</td><td>项目层记忆 + 产物都在项目目录内</td></tr>
+<tr><td class="nw">临时探员 / 单会话</td><td>目标项目目录（按任务锚点）</td><td>结论按归层规则落位（§3.3）</td></tr>
+</table>
+<p class="sub">派活必须带项目锚点——Leader 自己不进项目目录干活：要么派探员带 cwd 去，要么轻量活以项目为 cwd 拉一次性会话。</p>
+
+<h3>2.2 项目组生命周期：三态，不是二态</h3>
+<table>
+<tr><th>态</th><th>编制</th><th>任务板</th><th>记忆</th><th>watchdog</th></tr>
+<tr><td class="nw"><b>在办</b> active</td><td>在线干活</td><td>流动</td><td>项目层活跃</td><td>告警</td></tr>
+<tr><td class="nw"><b>挂起</b> parked</td><td><b>退休进熟手池</b>（释放）</td><td>冻结保留</td><td>原地不动，<b>不触发回流</b></td><td>静默</td></tr>
+<tr><td class="nw"><b>结项</b> archived</td><td>解散</td><td>归档只读</td><td>经验回流组织层，其余封存归档区（不删）</td><td>—</td></tr>
+</table>
+<ul>
+<li><b>转移</b>：在办 ⇄ 挂起（双向：你说「先放放」→ 挂起；两周无活动 Leader 主动建议挂起、你点头）；在办/挂起 → 结项（单向，你说「完了/不做了」）；结项 → 在办 = <b>复活边</b>（虚线特殊转移：读档 + 按归档终态重建编制与看板）。</li>
+<li><b>间歇项目不要过早结项</b>：结项带两个副作用（回流流程白折腾 + 完结心智）；挂起是零仪式暂停，恢复 = 任务板原样解冻 + 路由表把原班人马派回来。</li>
+</ul>
+
+<h3>2.3 三域映射（联动不合并）</h3>
+<table>
+<tr><th>V8 三域</th><th>承载</th><th>说明</th></tr>
+<tr><td class="nw">团队域</td><td><b>常驻组织 + 各项目组入口</b></td><td>Leader 对话 Tab（桌面现名「消息」、手机现名「对话」，迁移后统一命名「对话」）升为主入口；项目组列表（三态分组展示）；「＋ 开新团队」→「找 Leader 谈新项目」（点开=预填一条给 Leader 的消息，立项与否它分诊）；「已收团」折叠区 →「已结项」归档区</td></tr>
+<tr><td class="nw">项目域</td><td><b>项目组锚点 + 组织侧视图</b></td><td>目录自动聚合（V8 已有）；项目详情页新增组织侧四分节：项目组状态 / 当前编制 / 任务板入口 / 最近派单回执流。项目组详情 = 双视图一套底座（团队域入口 + 项目域锚点跳链）</td></tr>
+<tr><td class="nw">会话域</td><td><b>自由工作区</b></td><td>不产生<b>立项</b>动作；普通会话是逃生舱——正经活可不经过组织完成，Leader 随时能接手</td></tr>
+</table>
+<div class="infobox"><b>分流一句话</b>：要组织记住的、要派活的 → Leader；纯自用、用完即走 → 普通会话；<b>不确定就去普通会话</b>（零成本，随时可移交）。</div>
+
+<h3>2.4 词表（旧 → 新，完整版）</h3>
+<table>
+<tr><th>旧词（原型消费点）</th><th>新词</th></tr>
+<tr><td>开新团队 / 开团（toast、teamnotice、feed）</td><td>立项（Leader 分诊决策，仪式消失）</td></tr>
+<tr><td>收团 / 已收团 / 收团归档清理</td><td>结项（归档 + 经验回流）/ 已结项 / 结项归档区维护</td></tr>
+<tr><td>团队列表 / 团队卡</td><td>项目组列表 / 项目组卡（三态分组）</td></tr>
+<tr><td>「＋ 开新团队」</td><td>「找 Leader 谈新项目」（预填消息）</td></tr>
+<tr><td>消息 Tab（桌面）/ 对话 Tab（手机）</td><td>统一「对话」</td></tr>
+</table>
+
+<h3>2.5 单聊信息流：单线 ≠ 不分流</h3>
+<p class="sub">「单线指<b>交互对象唯一</b>，不是信息不分流」。并行多项目时 Leader 对话流按项目带锚点（视觉分组 / 话题折叠）；汇报类默认聚合成 digest，不逐条刷流；watchdog 告警进台账与通知流，不进对话流刷屏。</p>
+
+<h2><span class="n">3</span>记忆与台账：两本账 + 三层归位</h2>
+<h3>3.1 两本账（Leader 手里）</h3>
+<table>
+<tr><th></th><th>组织记忆</th><th>派单台账</th></tr>
+<tr><td class="nw">装什么</td><td>偏好 / 方法论 / 坑（<b>经验</b>）</td><td>哪些项目在跑、编制状态、派过什么活、什么档、进行到哪（<b>状态</b>）</td></tr>
+<tr><td class="nw">涨速 / 形态</td><td>慢，有写入门槛，自由文本</td><td>快，<b>结构化 append-only</b>（同 events.ndjson 哲学：会话可死，账本不丢）</td></tr>
+<tr><td class="nw">纪律</td><td>宁缺毋滥 + 修订淘汰（§3.4）</td><td>派单<b>先落账再执行</b>；过程不回灌、只收回执一行；活跃/历史分档（活跃全量注入、历史留审计查时检索）</td></tr>
+</table>
+
+<h3>3.2 记忆三层（归位）</h3>
+<table>
+<tr><th>层</th><th>装什么</th><th>隔离方式</th><th>生命周期</th></tr>
+<tr><td class="nw"><b>项目层</b></td><td>spec / prd / 决策记录、项目代码理解、架构决策、任务状态、验收标准、项目内踩坑</td><td>跟项目目录物理走（<b>单一权威位置 = 主 worktree / relay 侧项目组目录</b>，worker worktree 内只放工作性 notes 不入回流——避免合并冲突与回流歧义）</td><td>结项封存归档区（不删），二次立项读档恢复</td></tr>
+<tr><td class="nw"><b>组织层</b>（=组织记忆）</td><td>Leader 维护的团队资产：机器学到的偏好、跨项目方法论、通用坑</td><td>常驻一份</td><td>持续沉淀 + 周期淘汰</td></tr>
+<tr><td class="nw"><b>个人层</b></td><td>你手写的全局 CLAUDE.md / memory（commit 纪律、文案军规——这些<b>本来就在这</b>）</td><td>跨一切，对一切 AI 生效</td><td>已在运行</td></tr>
+</table>
+<div class="warnbox"><b>写入判据两条</b>：① 换一个项目，这条经验还成立吗？（成立→组织层；不成立→项目层）② <b>谁维护</b>——个人层 = 你手写、Leader 只读不写；组织层 = Leader 机器维护、你可选读。<b>个人层已有的不收，只收机器学到的增量</b>（防双写漂移）；两处冲突时<b>个人层优先</b>（手写的压倒推断的）。咨询结论归层：项目相关的写项目目录记忆位（<b>目录即锚点</b>，不依赖活的项目组），通用的才进组织层。</div>
+
+<h3>3.3 检索机制分工（谁自动注入什么）</h3>
+<ul>
+<li><b>项目层</b>：自动注入发生在<b>以项目目录为 cwd 的会话</b>（worker / 探员）上——机械保证，零注入代码；</li>
+<li><b>组织层</b>：Leader 的 cwd = org 目录 → org 的 CLAUDE.md / memory 自动加载（<b>零代码捷径</b>）；Leader 不装项目层明细，靠探员回传；</li>
+<li><b>个人层</b>：全局机制，已在运行。</li>
+</ul>
+
+<h3>3.4 修订 · 可见性 · 回流（防「只写不修」）</h3>
+<ul>
+<li><b>变更可见</b>：Leader 每次沉淀 / 回流，对话流带一条摘要，你<b>事后可否决</b>（不必审批制）；组织层写入统一走 append-only 审计（谁何时写了什么，UI 可查）；</li>
+<li><b>周期淘汰</b>：结项时 + 周期性对组织记忆做一次复核（环境类经验会过期：代理端口、adb 行为…）；</li>
+<li><b>回流 = 提案 diff + 你一键确认</b>（复用验收单既有交互模式）；<b>漏回流是设计内代价</b>（宁缺毋滥的另一半，明示）；</li>
+<li><b>纠偏覆盖</b>：正经立项有独立验收（换厂商）——轻档接受无独立复核，靠痕迹可回滚兜底（显式取舍）；</li>
+<li><b>文档防漂移</b>：spec / prd / 决策记录与代码<b>同权走 git</b>——动到 spec 的改动进同一 commit，回执「改动文件」自然体现，<b>不设附带物、不加确认</b>（组织记忆跨项目静默生效故提案确认；spec 项目内演进、git 可回滚故附报）；结项归档前<b>断言级核对</b>（限可验证断言，背景叙事不参与；先 <code>git log --follow</code> 机械清账无回执变更，再逐断言查代码；零异常一句话归档，有异常出漂移清单走验收单逐条裁决）；纪律载体 = 立项时生成<b>项目 CLAUDE.md</b> 防漂移条款（目录级自动加载，普通会话也覆盖；改一字亦须报；你本人直改天然合法，不入核对异常）；<b>红线</b>：不做段落级映射与覆盖率统计（防滑坡；落 M2）。</li>
+</ul>
+
+<h3>3.5 Leader 会话生命周期</h3>
+<p class="sub"><b>常驻 = 逻辑常驻</b>（固定 session id + org cwd），物理按需拉起（复用现有 resume / auto-revive 底座）：拉起 → 注入 org 记忆 + 活跃台账 → 干活 → <b>compact 是预期行为</b>（长会话必然撞），两本账就是 compact 后的回锚——读档恢复，它「知道手下有哪些团队」不是因为记得，是因为每次上岗先读账。写档侧：沉淀是显式动作或回合末增量（实现时取舍），不依赖「会话结束自动沉淀」钩子。</p>
+
+<h3>3.6 边界划清</h3>
+<ul>
+<li><b>跨项目工件</b>：代码复用走工程手段（包管理 / git 引用），组织层只沉淀经验不沉淀工件——防止把组织记忆当资产库做胖；</li>
+<li><b>轻立项</b>：不建独立 worktree，项目层记忆直接放项目目录（与咨询归层同解）；结项走极简回流；</li>
+<li><b>越级</b>：单线是<b>默认交互模式不是权限墙</b>——你是所有者，随时可进任何 worker 会话直接说话，事后知会 Leader 一声即可。</li>
+</ul>
+
+<h2><span class="n">4</span>响应四档 + 第五态：分诊权在 Leader</h2>
+<table>
+<tr><th>档</th><th>场景</th><th>组织动作</th><th>确认门槛</th><th>落点</th></tr>
+<tr><td class="nw"><b>咨询</b></td><td>问问题、要分析，不改代码</td><td><b>一律在 Leader 对话内完成</b>（探员是 Leader 的子 agent，不产生第二条沟通线，用完即弃）；结论按 §3.2 归层沉淀；发现 spec 勘误转随手办顺手修</td><td>零确认</td><td>Leader 对话</td></tr>
+<tr><td class="nw"><b>随手办</b></td><td>30 秒~几分钟小改（改文案、加按钮）</td><td>派单会话 worker；不建 worktree；<b>痕迹三件套</b>：完成回一行结果+改动文件、commit 归属 <code>[随手办] 描述</code>、派单记录留台账；worker 会话<b>归档不删档</b>（审计）；权限走 acceptEdits + 白名单，改前认领、改后报 diff</td><td>零确认</td><td>项目目录（cwd 锚定）</td></tr>
+<tr><td class="nw"><b>轻立项</b></td><td>几小时~几天小功能</td><td>编制 = 1 worker + Leader 兼管；任务板<b>单卡简化态</b>（渲染降级非独立模型）；不建独立 worktree</td><td><b>同类免确认</b>（首次确认一次，信任累积）</td><td>项目组（轻）</td></tr>
+<tr><td class="nw"><b>正经立项</b></td><td>复杂项目（现完整团队模式）</td><td>全套：编制、看板、验收单、独立验收（换厂商）；<b>保留你确认编制环节</b>（现状锚点，明写防丢）</td><td><b>必须确认</b>（一次点击，防误判档烧钱）</td><td>项目组（全）</td></tr>
+<tr><td class="nw"><b>建议暂缓</b></td><td>与在办冲突、依赖未就绪、时机不对</td><td>分诊的合法第五输出：一句理由 + 触发条件，对齐 <code>[搁置]</code> 习惯</td><td>你点头即挂起</td><td>—</td></tr>
+</table>
+<ul>
+<li><b>升降级</b>：任一档运行中 Leader 可提请升降级（一句理由 + 增量编制/验收点），你确认即迁移——<b>任务卡与 worktree 原地继承、只补不重建</b>（分诊是概率判断，必须有矫正通道）；</li>
+<li><b>护栏</b>：单项目预算超线要确认；并行项目组数量上限（活跃台账因此天然是小表）；闲置自动缩编回收；</li>
+<li><b>开销认账</b>：分诊融合在 Leader 回复里（非独立调用）；每个随手办比直接开会话多一跳固定开销（分诊回合 + 拉起 + 回报），属可接受代价——换来的是痕迹与归口；</li>
+<li><b>手动开团降级为高级路径</b>：你预知是大工程可直接说「给我立个项」——说一声即走，不走表单。</li>
+</ul>
+
+<h2><span class="n">5</span>工作路由：cwd 锚定 + 熟手亲和调度（M3）</h2>
+<table>
+<tr><th>机制</th><th>规则</th></tr>
+<tr><td class="nw"><b>路由表</b></td><td>组织侧维护 <code>项目 × 技能 × 负荷</code> 三维记录：谁做过该项目几次、上次何时、评价、在忙与否、失败记录（干砸的记一笔，下次避开或加强验收）</td></tr>
+<tr><td class="nw"><b>熟手双来源</b></td><td><b>会话亲和</b>（resume 熟手会话，上下文连续——适合长线运维）｜<b>记忆亲和</b>（新会话 + 项目档案注入，干净冷启动——适合小 bug，比拖旧上下文便宜）</td></tr>
+<tr><td class="nw"><b>调度策略</b></td><td>小活查表：熟手空闲 → resume；忙 → 排队或次优 + 档案注入；搞砸记录 → 避开/加强验收</td></tr>
+<tr><td class="nw"><b>退休 / 复活</b></td><td>同时挂着的会话数有限（成本），不活跃熟手退休成档案；挂起项目恢复时优先派回原班人马；项目组挂起 → 成员会话全 parked，两层状态联动</td></tr>
+<tr><td class="nw"><b>成员卡进化</b></td><td>V8 成员列表从「编制陈列」变<b>熟手池视图</b>：本项目经验 N 次 · 上次日期 · 在忙/空闲</td></tr>
+</table>
+
+<h2><span class="n">6</span>信息模型与状态机</h2>
+<h3>6.1 六实体（初期文件态，模型不漂、存储可换）</h3>
+<table>
+<tr><th>实体</th><th>关键字段</th><th>形态</th></tr>
+<tr><td class="nw"><b>org</b> 组织</td><td>单例：记忆目录、配置</td><td>目录 + 文件</td></tr>
+<tr><td class="nw"><b>project_group</b> 项目组</td><td>锚点目录、状态（三态）、编制快照、任务板引用、时间戳组</td><td>json 索引</td></tr>
+<tr><td class="nw"><b>dispatch_log</b> 派单台账</td><td>append-only：档位、目标、项目锚点、状态、回执一行</td><td><b>ndjson</b></td></tr>
+<tr><td class="nw"><b>routing_table</b> 路由表</td><td>agent × 项目：次数、上次、评价、技能标签</td><td>json（量大迁 sqlite）</td></tr>
+<tr><td class="nw"><b>org_memory</b> 组织记忆</td><td>自由文本 + append-only 审计</td><td>md 文件</td></tr>
+<tr><td class="nw"><b>worker</b></td><td>= 会话 id + 档案（退休后只剩路由表记录）</td><td>无独立表，快照存项目组</td></tr>
+</table>
+<p class="sub">项目层记忆（spec / prd / 决策记录）物理 = 项目目录文件，<b>不入独立实体</b>，实体模型只管引用（project_group 锚点目录）；spec 变更的权威存储 = git commit 本身，台账不存 diff 内容。</p>
+<h3>6.2 三层状态机</h3>
+<div class="st">
+<b>项目组（主）</b>：<b>在办</b> ⇄ <b>挂起</b>（主动 / 两周无活动建议） ｜ 在办/挂起 → <b>结项</b>（单向终态） ｜ 结项 ┄→ 在办（复活边：读档 + 重建）<br>
+<b>派单</b>：已派 → 执行中 → 完成 ｜ 失败 → 重派（失败学习回写路由表）<br>
+<b>成员会话</b>：active ⇄ parked（与项目组态联动：组挂起 → 全员 parked；恢复 → 路由表拉原班）
+</div>
+
+<h2><span class="n">7</span>分阶段落地</h2>
+<table>
+<tr><th>阶段</th><th>做什么</th><th>拿到什么（写实口径）</th></tr>
+<tr><td class="nw"><b>M1</b></td><td>Leader 常驻化（org cwd + 固定 session id，复用 resume/auto-revive）+ 组织记忆外置（org CLAUDE.md 承载纪律，零代码捷径；或 agent-adapter 增加 systemPrompt append——SDK 已支持，二选一）+ 派单台账雏形</td><td><b>咨询有常驻出口 + 组织记忆从第一天开始攒 + M2 的基础设施</b>。<b>过渡期分工</b>：组织 Leader 仅承接咨询与随手办分诊，项目事务仍走项目 Leader——避免双头指挥（此期间沟通线暂为 N+1，M2 收敛为 1）</td></tr>
+<tr><td class="nw"><b>M2</b></td><td>立项流程改造（词表迁移 §2.4）+ 分诊四档 + 第五态 + 升降级 + 确认门槛与护栏 + 随手办三件套 + 文档防漂移（spec 同 commit + 结项断言核对，§3.4）+ 单聊项目锚点分流 + 任务板分区与单卡态（<b>板 store 为待建件</b>：跨会话项目组级存储，现只有按 CLI 会话隔离的 tasks 直读）</td><td><b>单线沟通成立</b>（项目 Leader 退役，分诊归一）+ 轻需求免税 + 档间可迁移</td></tr>
+<tr><td class="nw"><b>M3</b></td><td>路由表 + 熟手双来源调度 + 退休/复活 + 挂起自动化 + 编制弹性（worktree 供给线为待建件）</td><td>组织弹性完整形态</td></tr>
+</table>
+<div class="infobox"><b>复用口径（对齐代码事实）</b>：已实现可复用四项——watchdog、验收单、会话底座（resume / auto-revive / parked）、输出物登记；<b>待建两项</b>——项目组任务板 store、worktree 供给线（relay 与 desktop-tauri 现为零实现）。矩阵式的价值 = 在动工前把设计改对，而不是迁移存量代码。</div>
+
+<p class="foot">裁决稿 v3.1 = v2 + 文档防漂移（§3.4；三视角复审 21 条后收敛：spec 同 commit 附报 + 结项断言级核对 + 项目 CLAUDE.md 纪律载体）· 源自 2026-09-26 战略讨论（常驻制假设 → 矩阵式）+ 三视角审查 32 条分诊（工程 10 / 一致性 7 / 产品走查 15，交叉命中优先、结论对源核实）· 现状锚点对齐 v8-ui-interactive-v2.html（开团流程 / 收团归档 / Leader 对话 Tab：桌面「消息」手机「对话」）· 拍板前不 commit</p>
+</div>
+<script>
+function tgl(){ const h=document.documentElement; h.dataset.theme = h.dataset.theme==='dark'?'light':'dark'; }
+</script>
+</body>
+</html>
