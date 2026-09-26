@@ -1,0 +1,91 @@
+<!doctype html>
+<html lang="zh-CN" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>cc-deck · 矩阵式团队三图（组织 · 流程 · 状态）</title>
+<style>
+:root, [data-theme="dark"] {
+  color-scheme: dark;
+  --bg: #060B13; --panel: #0E1726; --panel-2: #131F31; --border: #1C2A3E;
+  --text: #C6D2E3; --text-strong: #EBF2FB; --dim: #8494AC; --faint: #7A889F;
+  --brand: #E08A63; --brand-fg: #EC9A73; --brand-grad: linear-gradient(135deg,#EC9A73,#C96442);
+  --working: #FFC53D; --danger: #E5484D; --info: #7CB8FF; --ok: #35DC97;
+}
+[data-theme="light"] {
+  color-scheme: light;
+  --bg: #F6F8FC; --panel: #FFFFFF; --panel-2: #F4F6FA; --border: #DFE5EE;
+  --text: #2F3A4E; --text-strong: #101828; --dim: #6F7A90; --faint: #6F7A90;
+  --brand: #C05B33; --brand-fg: #B04E28; --brand-grad: linear-gradient(135deg,#B85228,#96391A);
+  --working: #E8A33D; --danger: #D63B3B; --info: #2563EB; --ok: #0E7A4A;
+}
+* { box-sizing: border-box; }
+html, body { height: 100%; }
+body { margin: 0; background: var(--bg); color: var(--text);
+  font: 14px/1.7 -apple-system, BlinkMacSystemFont, "SF Pro Text", "PingFang SC", "Noto Sans SC", sans-serif;
+  display: flex; flex-direction: column; transition: background .3s ease, color .3s ease; }
+header { flex: none; padding: 14px 22px 12px; border-bottom: 1px solid var(--border);
+  display: flex; align-items: center; gap: 16px; flex-wrap: wrap; }
+.hgroup { display: flex; align-items: baseline; gap: 10px; margin-right: auto; }
+h1 { font-size: 15.5px; color: var(--text-strong); margin: 0; white-space: nowrap; }
+h1 .lite { font-size: 11.5px; color: var(--faint); font-weight: 400; }
+.tabs { display: flex; gap: 8px; }
+.tab { border: 1px solid var(--border); background: var(--panel); color: var(--dim);
+  border-radius: 9px; padding: 7px 15px; font-size: 12.5px; cursor: pointer; white-space: nowrap;
+  transition: color .15s ease, border-color .15s ease; font-family: inherit; }
+.tab:hover { color: var(--text); }
+.tab.on { color: #fff; background: var(--brand-grad); border-color: transparent; font-weight: 600; }
+.tbtn { border: 1px solid var(--border); background: var(--panel); color: var(--dim);
+  border-radius: 9px; padding: 6px 12px; font-size: 12.5px; cursor: pointer; font-family: inherit; }
+.tbtn:hover { color: var(--text); }
+.subline { flex: none; width: 100%; color: var(--dim); font-size: 12px; margin: -4px 0 0; }
+.subline b { color: var(--text); font-weight: 600; }
+main { flex: 1; min-height: 0; position: relative; }
+iframe { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; background: var(--bg); }
+.foot { flex: none; color: var(--faint); font-size: 11px; padding: 7px 22px; border-top: 1px solid var(--border); }
+</style>
+</head>
+<body>
+<header>
+  <div class="hgroup">
+    <h1>矩阵式团队 · 三图 <span class="lite">单入口 · 顶栏切换 · 2026-09-26</span></h1>
+  </div>
+  <nav class="tabs" id="tabs">
+    <button class="tab" data-i="0">① 组织形态总览</button>
+    <button class="tab" data-i="1">② 工作流主链路</button>
+    <button class="tab" data-i="2">③ 状态流转</button>
+  </nav>
+  <button class="tbtn" onclick="tgl()">◐ 深浅切换</button>
+  <p class="subline" id="subline"></p>
+</header>
+<main><iframe id="frame" title="diagram"></iframe></main>
+<div class="foot">配套决策稿 docs/v8-team-matrix.html（v3.1 裁决稿）· 三图各自带视图聚焦 / 主题切换 / 缩放检索 · preview only，拍板前不 commit</div>
+<script>
+var FRAMES = [
+  { src: 'v8-team-diagram-org.html',   sub: '<b>① 组织形态总览</b>——常驻组织（唯一 Leader + 两本账）+ 动态项目组 + 普通会话逃生舱；cwd 硬规则与记忆三层归位。' },
+  { src: 'v8-team-diagram-flow.html',  sub: '<b>② 工作流主链路</b>——一句话需求 → Leader 分诊五输出 → 执行收回执一行 → 落账与经验回流；确认门槛按成本档。' },
+  { src: 'v8-team-diagram-state.html', sub: '<b>③ 状态流转</b>——项目组三态（在办⇄挂起→结项·复活）× 派单循环 × 成员会话联动，三层状态机咬合。' }
+];
+var frame = document.getElementById('frame');
+var tabs = document.querySelectorAll('.tab');
+var subline = document.getElementById('subline');
+function show(i) {
+  var h = parseInt(location.hash.slice(1), 10);
+  if (!(h >= 0 && h < FRAMES.length)) h = null;
+  var k = (i != null) ? i : (h == null ? 0 : h);
+  tabs.forEach(function (t, j) { t.classList.toggle('on', j === k); });
+  frame.src = FRAMES[k].src;
+  subline.innerHTML = FRAMES[k].sub;
+  if (('#' + k) !== location.hash) { try { history.replaceState(null, '', '#' + k); } catch (e) {} }
+}
+tabs.forEach(function (t) { t.addEventListener('click', function () { show(+t.dataset.i); }); });
+window.addEventListener('hashchange', function () { show(null); });
+show(null);
+function tgl() {
+  var h = document.documentElement;
+  h.dataset.theme = h.dataset.theme === 'dark' ? 'light' : 'dark';
+  try { frame.contentWindow.postMessage({ type: 'theme', theme: h.dataset.theme }, '*'); } catch (e) {}
+}
+</script>
+</body>
+</html>

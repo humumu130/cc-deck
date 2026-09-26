@@ -1,0 +1,344 @@
+{
+  "schema_version": 2,
+  "diagram_type": "workflow",
+  "meta": {
+    "title": "cc-deck 矩阵式团队 · 工作流主链路",
+    "locale": "zh-CN",
+    "quality_profile": "showcase",
+    "views": [
+      {
+        "id": "triage",
+        "label": "分诊五输出",
+        "focus": [
+          "req",
+          "triage",
+          "consult",
+          "errand",
+          "light",
+          "confirm",
+          "defer"
+        ],
+        "note": "开团自动化：档位由 Leader 分诊，确认门槛按成本档。"
+      },
+      {
+        "id": "execute",
+        "label": "执行与回报",
+        "focus": [
+          "confirm",
+          "errand",
+          "light",
+          "exec",
+          "receipt"
+        ],
+        "note": "过程不回灌，只收回执一行；随手办留痕迹三件套。"
+      },
+      {
+        "id": "ledger",
+        "label": "落账与回流",
+        "focus": [
+          "receipt",
+          "ledger",
+          "memory",
+          "digest"
+        ],
+        "note": "派单先落账；结项经验以提案 diff 回流组织记忆。"
+      }
+    ]
+  },
+  "lanes": [
+    {
+      "id": "you",
+      "label": "你（唯一入口）"
+    },
+    {
+      "id": "leader",
+      "label": "Leader · 组织"
+    },
+    {
+      "id": "workers",
+      "label": "Worker / 探员"
+    },
+    {
+      "id": "memory",
+      "label": "两本账"
+    }
+  ],
+  "phases": [
+    {
+      "id": "intake",
+      "label": "接收 · 分诊",
+      "fromCol": 0,
+      "toCol": 1
+    },
+    {
+      "id": "dispatch",
+      "label": "出档",
+      "fromCol": 2,
+      "toCol": 3,
+      "variant": "emphasis"
+    },
+    {
+      "id": "run",
+      "label": "执行 · 回报",
+      "fromCol": 4,
+      "toCol": 4
+    },
+    {
+      "id": "settle",
+      "label": "落账 · 沉淀",
+      "fromCol": 5,
+      "toCol": 5,
+      "variant": "dashed"
+    }
+  ],
+  "mainPath": [
+    "req",
+    "triage",
+    "confirm",
+    "exec",
+    "receipt",
+    "digest"
+  ],
+  "nodes": [
+    {
+      "id": "req",
+      "lane": "you",
+      "col": 0,
+      "type": "external",
+      "label": "一句话需求",
+      "sublabel": "不挑粒度",
+      "width": 138
+    },
+    {
+      "id": "confirm",
+      "lane": "you",
+      "col": 3,
+      "type": "security",
+      "label": "确认编制",
+      "sublabel": "正经档 · 一次点击",
+      "width": 138
+    },
+    {
+      "id": "digest",
+      "lane": "you",
+      "col": 5,
+      "type": "frontend",
+      "label": "对话流",
+      "sublabel": "按项目锚点分流 + digest",
+      "width": 148
+    },
+    {
+      "id": "triage",
+      "lane": "leader",
+      "col": 1,
+      "type": "security",
+      "label": "Leader 分诊",
+      "sublabel": "五输出 · 零仪式",
+      "width": 138
+    },
+    {
+      "id": "consult",
+      "lane": "leader",
+      "col": 2,
+      "type": "backend",
+      "label": "咨询",
+      "sublabel": "单聊内答 · 探员即抛",
+      "width": 138
+    },
+    {
+      "id": "defer",
+      "lane": "leader",
+      "col": 3,
+      "type": "messagebus",
+      "label": "建议暂缓",
+      "sublabel": "一句理由 + 触发条件",
+      "width": 138
+    },
+    {
+      "id": "receipt",
+      "lane": "leader",
+      "col": 5,
+      "type": "backend",
+      "label": "收回执",
+      "sublabel": "一行结果 + diff",
+      "width": 138
+    },
+    {
+      "id": "errand",
+      "lane": "workers",
+      "col": 1,
+      "type": "messagebus",
+      "label": "随手办",
+      "sublabel": "痕迹三件套 · 归档不删",
+      "width": 140
+    },
+    {
+      "id": "light",
+      "lane": "workers",
+      "col": 2,
+      "type": "backend",
+      "label": "轻立项",
+      "sublabel": "1 worker + 单卡 · 免 worktree",
+      "width": 148
+    },
+    {
+      "id": "exec",
+      "lane": "workers",
+      "col": 4,
+      "type": "frontend",
+      "label": "项目组执行",
+      "sublabel": "cwd=锚点 · 全套编制",
+      "width": 148
+    },
+    {
+      "id": "ledger",
+      "lane": "memory",
+      "col": 4,
+      "type": "database",
+      "label": "派单台账",
+      "sublabel": "append-only · 先落账",
+      "width": 140
+    },
+    {
+      "id": "memory",
+      "lane": "memory",
+      "col": 5,
+      "type": "database",
+      "label": "组织记忆",
+      "sublabel": "写入判据归层 · 周期淘汰",
+      "width": 148
+    }
+  ],
+  "edges": [
+    {
+      "id": "req-triage",
+      "from": "req",
+      "to": "triage",
+      "label": "一句话",
+      "variant": "emphasis",
+      "role": "main"
+    },
+    {
+      "id": "triage-confirm",
+      "from": "triage",
+      "to": "confirm",
+      "label": "正经档 · 提编制",
+      "variant": "default",
+      "role": "main"
+    },
+    {
+      "id": "confirm-exec",
+      "from": "confirm",
+      "to": "exec",
+      "label": "确认即开工",
+      "variant": "emphasis",
+      "role": "main"
+    },
+    {
+      "id": "triage-consult",
+      "from": "triage",
+      "to": "consult",
+      "label": "问询 · 零立项",
+      "variant": "dashed",
+      "role": "branch"
+    },
+    {
+      "id": "triage-errand",
+      "from": "triage",
+      "to": "errand",
+      "label": "30 秒级 · 零确认",
+      "variant": "dashed",
+      "role": "branch"
+    },
+    {
+      "id": "triage-light",
+      "from": "triage",
+      "to": "light",
+      "label": "小功能 · 同类免确认",
+      "variant": "dashed",
+      "role": "branch",
+      "route": "drop"
+    },
+    {
+      "id": "triage-defer",
+      "from": "triage",
+      "to": "defer",
+      "label": "时机不对",
+      "variant": "security",
+      "role": "branch"
+    },
+    {
+      "id": "errand-exec",
+      "from": "errand",
+      "to": "exec",
+      "variant": "default",
+      "role": "branch",
+      "route": "bottom-channel"
+    },
+    {
+      "id": "light-exec",
+      "from": "light",
+      "to": "exec",
+      "variant": "default",
+      "role": "branch"
+    },
+    {
+      "id": "exec-receipt",
+      "from": "exec",
+      "to": "receipt",
+      "label": "回一行",
+      "variant": "emphasis",
+      "role": "return"
+    },
+    {
+      "id": "receipt-ledger",
+      "from": "receipt",
+      "to": "ledger",
+      "label": "append 落账",
+      "variant": "default",
+      "role": "return"
+    },
+    {
+      "id": "ledger-memory",
+      "from": "ledger",
+      "to": "memory",
+      "label": "结项 · 回流提案",
+      "variant": "default",
+      "role": "return"
+    },
+    {
+      "id": "receipt-digest",
+      "from": "receipt",
+      "to": "digest",
+      "label": "摘要可见 · 可否决",
+      "variant": "dashed",
+      "role": "return"
+    }
+  ],
+  "cards": [
+    {
+      "dot": "cyan",
+      "title": "分诊五输出",
+      "items": [
+        "咨询 · 随手办 · 轻立项 · 正经立项 · 建议暂缓",
+        "确认门槛按成本档：零 / 同类免 / 必须一次"
+      ]
+    },
+    {
+      "dot": "rose",
+      "title": "执行纪律",
+      "items": [
+        "派单先落账再执行，过程不回灌只收回执一行",
+        "spec 与代码同 commit，结项断言级核对"
+      ]
+    },
+    {
+      "dot": "emerald",
+      "title": "沉淀回流",
+      "items": [
+        "写入判据：换项目还成立 → 组织层，否则项目层",
+        "回流 = 提案 diff + 你一键确认"
+      ]
+    }
+  ]
+}

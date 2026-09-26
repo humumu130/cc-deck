@@ -1,0 +1,300 @@
+{
+  "schema_version": 1,
+  "diagram_type": "architecture",
+  "meta": {
+    "title": "cc-deck 矩阵式团队 · 组织形态总览",
+    "locale": "zh-CN",
+    "quality_profile": "showcase",
+    "viewBox": [
+      1240,
+      700
+    ],
+    "views": [
+      {
+        "id": "two-layers",
+        "label": "两层结构",
+        "focus": [
+          "user",
+          "leader",
+          "orgstore",
+          "routing",
+          "projA",
+          "projB"
+        ],
+        "note": "常驻组织唯一 Leader + 动态项目组并行若干个。"
+      },
+      {
+        "id": "memory",
+        "label": "记忆三层",
+        "focus": [
+          "personal",
+          "orgstore",
+          "projA",
+          "projB"
+        ],
+        "note": "个人层手写优先，组织层机器维护，项目层跟目录走。"
+      },
+      {
+        "id": "escape",
+        "label": "路由与逃生舱",
+        "focus": [
+          "user",
+          "casual",
+          "leader",
+          "routing"
+        ],
+        "note": "普通会话不经组织直达，随时可移交 Leader。"
+      }
+    ]
+  },
+  "components": [
+    {
+      "id": "user",
+      "type": "external",
+      "label": "你",
+      "sublabel": "唯一沟通线",
+      "pos": [
+        40,
+        320
+      ],
+      "size": [
+        124,
+        60
+      ]
+    },
+    {
+      "id": "personal",
+      "type": "database",
+      "label": "个人层",
+      "sublabel": "全局 CLAUDE.md · 你手写",
+      "pos": [
+        40,
+        96
+      ],
+      "size": [
+        150,
+        62
+      ],
+      "tag": "跨一切"
+    },
+    {
+      "id": "leader",
+      "type": "backend",
+      "label": "Leader",
+      "sublabel": "org cwd · 固定会话",
+      "pos": [
+        280,
+        320
+      ],
+      "size": [
+        150,
+        64
+      ],
+      "tag": "常驻"
+    },
+    {
+      "id": "orgstore",
+      "type": "database",
+      "label": "org 目录 · 两本账",
+      "sublabel": "组织记忆 + 派单台账",
+      "pos": [
+        560,
+        140
+      ],
+      "size": [
+        168,
+        64
+      ]
+    },
+    {
+      "id": "routing",
+      "type": "database",
+      "label": "路由表",
+      "sublabel": "熟手池 · 亲和调度",
+      "pos": [
+        271,
+        140
+      ],
+      "size": [
+        168,
+        64
+      ],
+      "tag": "M3"
+    },
+    {
+      "id": "projA",
+      "type": "frontend",
+      "label": "项目组 A",
+      "sublabel": "编制 + worktree + 看板",
+      "pos": [
+        560,
+        500
+      ],
+      "size": [
+        168,
+        64
+      ],
+      "tag": "在办"
+    },
+    {
+      "id": "projB",
+      "type": "frontend",
+      "label": "项目组 B",
+      "sublabel": "冻结任务板 · 成员退休",
+      "pos": [
+        820,
+        500
+      ],
+      "size": [
+        168,
+        64
+      ],
+      "tag": "挂起"
+    },
+    {
+      "id": "casual",
+      "type": "frontend",
+      "label": "普通会话",
+      "sublabel": "逃生舱 · 不经组织",
+      "pos": [
+        27,
+        560
+      ],
+      "size": [
+        150,
+        60
+      ]
+    }
+  ],
+  "boundaries": [
+    {
+      "kind": "region",
+      "label": "常驻组织",
+      "wraps": [
+        "leader",
+        "orgstore",
+        "routing"
+      ],
+      "pad": 20
+    },
+    {
+      "kind": "region",
+      "label": "动态项目组 × N（cwd 物理隔离）",
+      "wraps": [
+        "projA",
+        "projB"
+      ],
+      "pad": 18
+    }
+  ],
+  "connections": [
+    {
+      "id": "user-leader",
+      "from": "user",
+      "to": "leader",
+      "label": "单线沟通",
+      "variant": "emphasis",
+      "labelAt": [
+        196,
+        338
+      ]
+    },
+    {
+      "id": "leader-orgstore",
+      "from": "leader",
+      "to": "orgstore",
+      "label": "读档恢复 / 先落账"
+    },
+    {
+      "id": "leader-routing",
+      "from": "leader",
+      "to": "routing",
+      "label": "查熟手",
+      "variant": "dashed",
+      "fromSide": "top",
+      "toSide": "bottom"
+    },
+    {
+      "id": "leader-projA",
+      "from": "leader",
+      "to": "projA",
+      "label": "派单 · cwd=项目锚点"
+    },
+    {
+      "id": "leader-projB",
+      "from": "leader",
+      "to": "projB",
+      "label": "挂起 · watchdog 静默",
+      "variant": "dashed",
+      "fromSide": "bottom",
+      "toSide": "bottom",
+      "via": [
+        [
+          355,
+          640
+        ],
+        [
+          904,
+          640
+        ]
+      ]
+    },
+    {
+      "id": "projA-orgstore",
+      "from": "projA",
+      "to": "orgstore",
+      "label": "结项 · 经验回流（提案 diff）",
+      "variant": "dashed",
+      "labelAt": [
+        644,
+        300
+      ]
+    },
+    {
+      "id": "user-casual",
+      "from": "user",
+      "to": "casual",
+      "label": "直达",
+      "variant": "dashed",
+      "fromSide": "bottom",
+      "toSide": "top",
+      "route": "orthogonal-v"
+    },
+    {
+      "id": "casual-leader",
+      "from": "casual",
+      "to": "leader",
+      "label": "随时可移交",
+      "variant": "dashed"
+    }
+  ],
+  "cards": [
+    {
+      "dot": "cyan",
+      "title": "两层结构",
+      "items": [
+        "常驻组织：唯一 Leader + 两本账，入口常开",
+        "动态项目组：按项目并行若干个，互不污染",
+        "一家公司不是一个团队"
+      ]
+    },
+    {
+      "dot": "rose",
+      "title": "cwd 硬规则",
+      "items": [
+        "Leader 的 cwd = org 目录，不进项目干活",
+        "worker / 探员的 cwd = 项目锚点（worktree）",
+        "记忆与产物跟目录物理走，零注入代码"
+      ]
+    },
+    {
+      "dot": "emerald",
+      "title": "记忆三层归位",
+      "items": [
+        "个人层：你手写，Leader 只读，冲突时优先",
+        "组织层：Leader 维护，回流走提案 diff 确认",
+        "项目层：单一权威在主 worktree，结项封存不删"
+      ]
+    }
+  ]
+}

@@ -1,0 +1,278 @@
+{
+  "schema_version": 1,
+  "diagram_type": "lifecycle",
+  "meta": {
+    "title": "cc-deck 矩阵式团队 · 状态流转（三层状态机）",
+    "locale": "zh-CN",
+    "quality_profile": "showcase",
+    "viewBox": [
+      1075,
+      620
+    ],
+    "views": [
+      {
+        "id": "proj",
+        "label": "项目组主态",
+        "focus": [
+          "incubated",
+          "active",
+          "parked",
+          "archived"
+        ],
+        "note": "在办与挂起双向；结项单向终态，复活走读档重建。"
+      },
+      {
+        "id": "dispatch",
+        "label": "派单循环",
+        "focus": [
+          "dispatched",
+          "running",
+          "done",
+          "failed"
+        ],
+        "note": "失败重派并回写路由表；完成落一行回执。"
+      },
+      {
+        "id": "session",
+        "label": "会话联动",
+        "focus": [
+          "online",
+          "retired"
+        ],
+        "note": "组挂起全员退休，恢复时路由表拉回原班人马。"
+      }
+    ]
+  },
+  "lanes": [
+    {
+      "id": "main",
+      "label": "项目组（主状态机）"
+    },
+    {
+      "id": "disp",
+      "label": "派单（台账 append-only）"
+    },
+    {
+      "id": "sess",
+      "label": "成员会话"
+    },
+    {
+      "id": "rec",
+      "label": "恢复通道"
+    }
+  ],
+  "states": [
+    {
+      "id": "incubated",
+      "type": "start",
+      "label": "立项",
+      "sublabel": "分诊确认 · 建编制",
+      "lane": "main",
+      "col": 0,
+      "step": "01"
+    },
+    {
+      "id": "active",
+      "type": "active",
+      "label": "在办",
+      "sublabel": "编制在线 · 板流动",
+      "lane": "main",
+      "col": 1,
+      "step": "02",
+      "tag": "watchdog 告警"
+    },
+    {
+      "id": "parked",
+      "type": "waiting",
+      "label": "挂起",
+      "sublabel": "板冻结 · 不回流 · 静默",
+      "lane": "main",
+      "col": 2,
+      "step": "03"
+    },
+    {
+      "id": "archived",
+      "type": "success",
+      "label": "结项",
+      "sublabel": "归档 + 经验回流 · 单向终态",
+      "lane": "main",
+      "col": 3,
+      "step": "04"
+    },
+    {
+      "id": "dispatched",
+      "type": "active",
+      "label": "已派",
+      "sublabel": "先落账再执行",
+      "lane": "disp",
+      "col": 0,
+      "width": 96
+    },
+    {
+      "id": "running",
+      "type": "active",
+      "label": "执行中",
+      "sublabel": "cwd=项目锚点",
+      "lane": "disp",
+      "col": 1,
+      "width": 96
+    },
+    {
+      "id": "done",
+      "type": "success",
+      "label": "完成",
+      "sublabel": "回执一行落账",
+      "lane": "disp",
+      "col": 2,
+      "width": 96
+    },
+    {
+      "id": "failed",
+      "type": "failure",
+      "label": "失败",
+      "sublabel": "学习回写路由表",
+      "lane": "rec",
+      "col": 1,
+      "yOffset": 90,
+      "width": 96
+    },
+    {
+      "id": "online",
+      "type": "active",
+      "label": "在线",
+      "sublabel": "会话亲和 resume",
+      "lane": "sess",
+      "col": 0,
+      "yOffset": 160,
+      "width": 96
+    },
+    {
+      "id": "retired",
+      "type": "waiting",
+      "label": "退休",
+      "sublabel": "熟手池 · 记忆亲和",
+      "lane": "sess",
+      "col": 1,
+      "yOffset": 160,
+      "width": 96
+    }
+  ],
+  "transitions": [
+    {
+      "id": "start-active",
+      "from": "incubated",
+      "to": "active",
+      "label": "开工",
+      "variant": "emphasis",
+      "labelDy": 55
+    },
+    {
+      "id": "active-parked",
+      "from": "active",
+      "to": "parked",
+      "label": "挂起",
+      "variant": "default",
+      "labelDy": 55,
+      "labelDx": 10
+    },
+    {
+      "id": "parked-active",
+      "from": "parked",
+      "to": "active",
+      "label": "解冻",
+      "variant": "emphasis",
+      "route": "top-channel"
+    },
+    {
+      "id": "active-archived",
+      "from": "active",
+      "to": "archived",
+      "label": "结项",
+      "variant": "default",
+      "route": "top-channel"
+    },
+    {
+      "id": "parked-archived",
+      "from": "parked",
+      "to": "archived",
+      "label": "终局",
+      "variant": "default",
+      "labelDy": 55,
+      "labelDx": -12
+    },
+    {
+      "id": "archived-active",
+      "from": "archived",
+      "to": "active",
+      "label": "复活",
+      "variant": "dashed",
+      "route": "bottom-channel"
+    },
+    {
+      "id": "disp-run",
+      "from": "dispatched",
+      "to": "running",
+      "label": "拉起",
+      "variant": "default"
+    },
+    {
+      "id": "run-done",
+      "from": "running",
+      "to": "done",
+      "label": "验收",
+      "variant": "default"
+    },
+    {
+      "id": "run-failed",
+      "from": "running",
+      "to": "failed",
+      "label": "异常",
+      "variant": "security",
+      "labelDy": 24
+    },
+    {
+      "id": "failed-dispatched",
+      "from": "failed",
+      "to": "dispatched",
+      "label": "重派",
+      "variant": "emphasis",
+      "fromSide": "left",
+      "toSide": "bottom"
+    },
+    {
+      "id": "online-retired",
+      "from": "online",
+      "to": "retired",
+      "label": "退休",
+      "variant": "default"
+    },
+    {
+      "id": "retired-online",
+      "from": "retired",
+      "to": "online",
+      "label": "拉回",
+      "variant": "emphasis",
+      "route": "bottom-channel"
+    }
+  ],
+  "cards": [
+    {
+      "dot": "cyan",
+      "title": "三态不是二态",
+      "items": [
+        "挂起：零仪式暂停，板与记忆原地保留",
+        "结项：归档 + 经验回流，不可逆",
+        "复活：读档重建编制与看板（虚线）"
+      ]
+    },
+    {
+      "dot": "rose",
+      "title": "派单与会话联动",
+      "items": [
+        "先落账再执行，只收回执一行",
+        "失败重派：学习回写路由表",
+        "组挂起全员退休，恢复拉原班"
+      ]
+    }
+  ]
+}
