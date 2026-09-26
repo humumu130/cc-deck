@@ -9,7 +9,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useTheme, useThemeStyles } from "../theme-context";
 import { LogoMark, PencilIcon } from "../brand";
 import { setProcessFont, useProcessFont, setVoiceInput, useVoiceInput, setAggregate as persistAggregate, useAggregate, getIdleDimMin, setIdleDimMin, setEnterSend, useEnterSend, type ProcessFont } from "../display-settings";
-import { checkUpdate, announceUpdate, VERSION_NOTES } from "../updates";
+import { checkUpdate, announceUpdate, VERSION_NOTES, VERSION_DATE, releasePageUrl, type VersionNote } from "../updates";
 import { store, useRelay, type ServerEntry, type SourceStatus, isLanUrl } from "../store";
 import { fgSupported } from "../notify";
 import KeepAliveCard from "../KeepAliveCard";
@@ -135,9 +135,10 @@ function ScanGlyph({ color }: { color: string }) {
 }
 
 // #313 关于弹窗：底部滑上卡片（NewSessionModal 同款视觉语言——全宽贴底、只上圆角）。
-// 版本信息（LogoMark + 版本号）+ 本版特性摘要（VERSION_NOTES 逐条）+ 检查更新
-// （原 #312 抽屉行迁入：结果行内反馈，有新版经 announceUpdate 弹 App 层 UpdateBanner）
-// + 反馈入口（GitHub Issues）
+// 版本信息（LogoMark + 版本号·日期·通道角标）+ 本版特性（更新说明军规分组渲染，
+// 2026-09-21：新增/优化/修复三组 + 超限折叠 + 「查看完整变更」外链——原 13 条
+// 平铺文字墙被用户否决）+ 检查更新（原 #312 抽屉行迁入：结果行内反馈，有新版经
+// announceUpdate 弹 App 层 UpdateBanner）+ 反馈入口（GitHub Issues）
 // 手动检查更新（关于弹窗按钮与抽屉关于区行共用）：loading 态防抖；无新版"已是最新 ✓"，
 // 有新版行内提示 + announceUpdate 弹 App 层 UpdateBanner
 function useUpdateCheck() {
@@ -163,14 +164,28 @@ function useUpdateCheck() {
   return { busy, msg, checkNow };
 }
 
+// 军规分组头（全局 CLAUDE.md「更新说明军规」）：新增/优化/修复三组，只渲染有内容的组
+const NOTE_GROUPS: { k: VersionNote["group"]; label: string }[] = [
+  { k: "new", label: "新增" },
+  { k: "improved", label: "优化" },
+  { k: "fixed", label: "修复" },
+];
+// 军规条数上限：总数超此值折叠「展开全部 (N)」（当前版本 8 条全直出，机制留兜底）
+const MAX_NOTES = 8;
+
 function AboutModal({ visible, onClose }: { visible: boolean; onClose: () => void }) {
   const { c } = useTheme();
   const m = useThemeStyles(makeStyles);
   const { busy, msg, checkNow } = useUpdateCheck();
+  const [notesOpen, setNotesOpen] = useState(false);
+  const total = VERSION_NOTES.length;
+  const shown = notesOpen || total <= MAX_NOTES ? VERSION_NOTES : VERSION_NOTES.slice(0, MAX_NOTES);
   return (
     <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
       <Pressable style={m.abMask} onPress={onClose}>
-        <View style={{ width: "100%" }}>
+        {/* 2026-09-22 用户真机反馈：条目多展示不完全——sheet 上限 86% 屏高，超出由
+            条目区 ScrollView 整段滚动（原写死 maxHeight 320 把 8 条两行内容裁掉了） */}
+        <View style={{ width: "100%", maxHeight: "86%" }}>
           <Pressable style={m.abSheet} onPress={(e) => e.stopPropagation()}>
             <View style={m.abHead}>
               <View style={m.abLogo}>
@@ -179,7 +194,8 @@ function AboutModal({ visible, onClose }: { visible: boolean; onClose: () => voi
               <View style={{ flex: 1, minWidth: 0 }}>
                 <Text style={m.abNameT}>CC Deck</Text>
                 <View style={m.abVerRow}>
-                  <Text style={m.abVerT}>{APP_VER}</Text>
+                  {/* 军规头行：版本号 · 发布日期 · 通道角标（日期 = 用户判断落后多久的锚点） */}
+                  <Text style={m.abVerT}>{APP_VER} · {VERSION_DATE}</Text>
                   {CHANNEL_TAG != null && <Text style={m.abChanT}>{CHANNEL_TAG}</Text>}
                 </View>
               </View>
@@ -187,13 +203,35 @@ function AboutModal({ visible, onClose }: { visible: boolean; onClose: () => voi
                 <Text style={m.abCloseT}>✕</Text>
               </Pressable>
             </View>
-            <Text style={m.abSecT}>本版特性</Text>
-            {VERSION_NOTES.map((n, i) => (
-              <View key={i} style={m.abNoteRow}>
-                <View style={m.abNoteDot} />
-                <Text style={m.abNoteT}>{n}</Text>
-              </View>
-            ))}
+            <ScrollView style={m.abNotes} nestedScrollEnabled showsVerticalScrollIndicator={false}>
+              {NOTE_GROUPS.map(({ k, label }, gi) => {
+                const items = shown.filter((n) => n.group === k);
+                if (!items.length) return null;
+                return (
+                  <View key={k} style={gi > 0 ? m.abGroup : null}>
+                    <Text style={m.abSecT}>{label}</Text>
+                    {items.map((n, i) => (
+                      <View key={i} style={m.abNoteRow}>
+                        <View style={m.abNoteDot} />
+                        <View style={{ flex: 1 }}>
+                          <Text style={m.abNoteT}>{n.text}</Text>
+                          {n.note ? <Text style={m.abNoteSubT}>{n.note}</Text> : null}
+                        </View>
+                      </View>
+                    ))}
+                  </View>
+                );
+              })}
+              {total > MAX_NOTES && !notesOpen ? (
+                <Pressable hitSlop={6} onPress={() => setNotesOpen(true)} accessibilityLabel="展开全部更新说明">
+                  <Text style={m.abMoreT}>展开全部（{total}）</Text>
+                </Pressable>
+              ) : null}
+            </ScrollView>
+            {/* 军规：全量细节不进弹窗——Release 页/提交历史外链承载 */}
+            <Pressable hitSlop={6} onPress={() => void Linking.openURL(releasePageUrl()).catch(() => {})}>
+              <Text style={m.abFullT}>查看完整变更 ↗</Text>
+            </Pressable>
             <View style={m.abBtnRow}>
               <Pressable
                 style={[m.abBtn, busy && m.abBtnOff]}
@@ -1028,9 +1066,21 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
   },
   abCloseT: { color: c.dim, fontSize: 13 },
   abSecT: { color: c.faint, fontSize: 11, fontWeight: "700", marginBottom: 8, letterSpacing: 1 },
-  abNoteRow: { flexDirection: "row", alignItems: "center", gap: 8, paddingVertical: 3.5 },
-  abNoteDot: { width: 5, height: 5, borderRadius: 3, backgroundColor: c.brandA },
-  abNoteT: { flex: 1, color: c.dim, fontSize: 12.5, lineHeight: 18 },
+  // 军规分组容器间距：首个组贴头部（abHead 自带 marginBottom），后续组隔开
+  abGroup: { marginTop: 12 },
+  // 军规条目双行结构（主句 + note 灰字次行）：dot 顶对齐首行主句
+  abNoteRow: { flexDirection: "row", alignItems: "flex-start", gap: 8, paddingVertical: 3.5 },
+  abNoteDot: { width: 5, height: 5, borderRadius: 3, backgroundColor: c.brandA, marginTop: 6.5 },
+  abNoteT: { color: c.dim, fontSize: 12.5, lineHeight: 18 },
+  // note 次行：灰字小一档（默认值/开启方式等次要说明，军规②）
+  abNoteSubT: { color: c.faint, fontSize: 10.5, lineHeight: 14, marginTop: 2 },
+  // 军规排版：条目区弹性占满 sheet 剩余空间——内容少自适应，多则随 sheet 86% 屏高
+  // 上限整段滚动（flex:1 是关键：sheet 被外层 maxHeight 压缩时本区收缩成滚动视口）
+  abNotes: { flex: 1 },
+  // 折叠态「展开全部 (N)」：居中弱化次级动作
+  abMoreT: { color: c.dim, fontSize: 11.5, textAlign: "center", paddingVertical: 8 },
+  // 「查看完整变更 ↗」：外链居中，与按钮区隔开
+  abFullT: { color: c.dim, fontSize: 12, textAlign: "center", marginTop: 10 },
   abBtnRow: { flexDirection: "row", gap: 8, marginTop: 16 },
   abBtn: {
     flex: 1, height: 44, borderRadius: 13, alignItems: "center", justifyContent: "center",
