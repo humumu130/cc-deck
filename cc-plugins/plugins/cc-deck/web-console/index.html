@@ -45,6 +45,8 @@
     --waiting: #FF6B68;
     --error: #FF7849;
     --done: #2BD98F;
+    /* #192 实心绿钮上的文字色（允许=全卡唯一实心主钮） */
+    --on-done: #07230F;
     --mono: Consolas, "Cascadia Mono", "JetBrains Mono", monospace;
     --glass: rgba(9,15,25,.8);
     --glass-soft: rgba(9,15,25,.55);
@@ -104,6 +106,8 @@
     --waiting: #DC2626;
     --error: #C2410C;
     --done: #047857;
+    /* #192 亮色绿底 #047857 上用白字（5.5:1） */
+    --on-done: #FFFFFF;
     --glass: rgba(255,255,255,.82);
     --glass-soft: rgba(255,255,255,.6);
     /* #78 侧栏/标题栏灰调实色（macOS 浅色侧栏档位，--bg-soft #EAEEF4 仍作其上的 hover/输入底） */
@@ -612,6 +616,9 @@
   .gp-peer-kick:hover { border-color: rgba(229,72,77,.45); background: rgba(229,72,77,.08); }
   .gp-peer-kick:disabled { opacity: .5; cursor: default; }
   .gp-peers-empty { padding: 10px 4px; font-size: 12px; color: var(--gp-faint); text-align: center; }
+  /* #212 记住的规则行：pattern 等宽展示（命令前缀/目录路径），scope 徽章右置 */
+  .gp-rule-pat { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-weight: 500; font-size: 11.5px; }
+  .gp-rule-scope { margin-left: auto; flex: none; font-size: 10px; font-weight: 600; border: 1px solid var(--gp-border); color: var(--gp-dim); border-radius: 5px; padding: 1px 5px; }
   .gp-peers-foot { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 8px 4px 2px; }
   #gpPeersCount { font-size: 11px; color: var(--gp-faint); min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .gp-peers-acts { display: flex; gap: 6px; flex: none; }
@@ -757,10 +764,11 @@
   button:hover { border-color: var(--hov); }
   button:active { transform: scale(.97); }
   button.primary { background: var(--grad); border: none; color: #fff; font-weight: 600; box-shadow: 0 2px 12px rgba(217,119,87,.3); }
-  button.allow { background: rgba(43,217,143,.12); border: 1px solid rgba(43,217,143,.5); color: var(--done); font-weight: 600; }
-  button.allow:hover { background: rgba(43,217,143,.22); border-color: rgba(43,217,143,.75); }
-  button.reject { background: rgba(240,82,79,.10); border: 1px solid rgba(240,82,79,.5); color: var(--error); font-weight: 600; }
-  button.reject:hover { background: rgba(240,82,79,.2); border-color: rgba(240,82,79,.75); }
+  /* #192 允许=唯一实心绿主钮（决策锚点）；拒绝=红幽灵（轻一档防误触，修旧橙字红边双色系） */
+  button.allow { background: var(--done); border: 1px solid transparent; color: var(--on-done); font-weight: 700; }
+  button.allow:hover { filter: brightness(1.08); }
+  button.reject { background: transparent; border: 1px solid color-mix(in srgb, var(--waiting) 45%, transparent); color: var(--waiting); font-weight: 600; }
+  button.reject:hover { background: color-mix(in srgb, var(--waiting) 10%, transparent); border-color: color-mix(in srgb, var(--waiting) 70%, transparent); }
   button.ghost { background: transparent; }
   button.big { padding: 10px 22px; font-size: 14px; border-radius: 10px; } /* #13 圆角收敛：控件档 10px */
 
@@ -1176,7 +1184,7 @@
   #newform textarea { resize: vertical; min-height: 56px; }
   #newform .row { display: flex; justify-content: flex-end; gap: 8px; }
   /* 新建选项行：左对齐排勾选与 ? 悬浮（罗嗦引导文案收进 title） */
-  #newform .row.newopts { justify-content: flex-start; align-items: center; gap: 6px; }
+  #newform .row.newopts { justify-content: flex-start; align-items: center; gap: 6px; flex-wrap: wrap; }
   /* #168 目录行：输入框 + 内嵌浏览钮（桌面壳原生目录对话框）；输入框让出右侧钮位 */
   .cwd-wrap { position: relative; }
   .cwd-wrap #cwd { width: 100%; padding-right: 32px; }
@@ -1546,11 +1554,16 @@
   .card-stats .src-badge { flex: none; }
   .card-stats .ctx-mini { margin-left: auto; }
   .card-cta { margin-top: 10px; display: flex; justify-content: flex-end; }
+  /* #192 「处理」是导航不是决策：黄实底丸 → ghost 药丸（透明底+黄描边+›），hover 才上 tint；29→24px */
   .card-cta button {
-    background: rgba(245,184,65,.12); border: 1px solid rgba(245,184,65,.45); color: var(--working);
-    font-weight: 600; border-radius: 999px; padding: 5px 18px;
+    background: transparent; border: 1px solid color-mix(in srgb, var(--working) 38%, transparent); color: var(--working);
+    font-weight: 600; border-radius: 999px; padding: 4px 13px; font-size: 12px;
+    transition: background .15s, border-color .15s;
   }
-  .card-cta button:hover { background: rgba(245,184,65,.22); }
+  .card-cta button::after { content: "›"; margin-left: 5px; font-weight: 700; }
+  .card-cta button:hover { background: color-mix(in srgb, var(--working) 12%, transparent); border-color: color-mix(in srgb, var(--working) 60%, transparent); }
+  html.light .card-cta button { color: #7A5800; border-color: color-mix(in srgb, #7A5800 38%, transparent); }
+  html.light .card-cta button:hover { background: color-mix(in srgb, #7A5800 10%, transparent); border-color: color-mix(in srgb, #7A5800 60%, transparent); }
 
   /* #151 详情头工作状态英文 chip 整体移除（2026-09-22 用户拍板：几轮调不好就不调了，
      状态看左侧会话卡灯即可）；dot-breathe 关键帧保留——列表卡灯/连接行/实时行仍用 */
@@ -1574,10 +1587,14 @@
   }
   #dhead { padding: 12px 20px 0; border-bottom: 1px solid var(--border); background: var(--glass-soft); flex: none; }
   #backBtn { display: none; margin-left: -8px; margin-bottom: 6px; }
-  .dhead-row { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+  /* #197 标题后随元信息（源徽标+路径+水位）改与标题底部对齐（原垂直居中视觉重心偏高） */
+  .dhead-row { display: flex; align-items: flex-end; gap: 12px; flex-wrap: wrap; }
   #dtitle { font-size: 16px; font-weight: 700; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; } /* #67漏项 17→16；#176 并行后过长收缩省略 */
-  /* #176 元信息并入名称行：占名称后剩余宽度（水位 margin-left:auto 贴行尾），窄屏内部 wrap 回落 */
-  #dsub { color: var(--dim); font-size: 12px; display: flex; gap: 12px; flex-wrap: wrap; align-items: center; flex: 1 1 auto; min-width: 0; }
+  /* #176 元信息并入名称行：占名称后剩余宽度（水位 margin-left:auto 贴行尾），窄屏内部 wrap 回落；
+     #197 字号 12→11 再小一档（与标题拉开层级） */
+  #dsub { color: var(--dim); font-size: 11px; display: flex; gap: 12px; flex-wrap: wrap; align-items: center; flex: 1 1 auto; min-width: 0; }
+  /* #197 head 内源徽标再小一档（9→8px）：只作用详情头，列表卡统计行同款徽标口径不动 */
+  #dsub .src-badge { font-size: 8px; padding: 1px 4px; }
   /* R1 时长弱化小字（对齐手机 d.sub：跟在标题后，dim 不抢视觉） */
   .dhead-row .elapsed { color: var(--dim); font-weight: 400; font-size: 12px; white-space: nowrap; }
   /* #41web 路径过长时不换行挤第三行，而是收缩省略（完整路径在 title），给右端水位/chip 让位 */
@@ -1645,28 +1662,72 @@
   #waitbox {
     margin: 12px auto 0; width: calc(100% - 40px); max-width: min(1040px, 100%);
     background: var(--panel);
-    border: 1px solid var(--border); border-radius: 14px; padding: 16px 18px; display: none;
+    border: 1px solid var(--border); border-radius: 14px; padding: 12px 16px; display: none;
     flex: none;
     animation: riseIn .18s ease-out;
   }
-  #waitbox:not(.ask) { background: rgba(245,184,65,.07); border-color: rgba(245,184,65,.4); }
+  /* #192 黄 tint 与状态灯同源（旧为硬编码 rgba(245,184,65) 另一黄）；高度预算收紧 */
+  #waitbox:not(.ask) { background: color-mix(in srgb, var(--working) 7%, var(--panel)); border-color: color-mix(in srgb, var(--working) 36%, transparent); }
   #waitbox.ask { border-color: rgba(217,119,87,.35); }
   #waitbox .t { color: var(--text-strong); font-weight: 700; font-size: 13px; display: flex; align-items: center; gap: 8px; }
   #waitbox:not(.ask) .t { color: var(--working); }
   #waitbox .t i { width: 9px; height: 9px; border-radius: 50%; background: var(--working); animation: breathe 1.6s infinite; --sc: var(--working); flex: none; }
   /* 计时并入标题行右端（对齐 #liverow 的 .el 形态），不再独占一行 */
   #waitelapsed { margin-left: auto; color: var(--faint); font-size: 11px; font-weight: 400; font-variant-numeric: tabular-nums; }
+  /* #192 工具名上提为等宽 chip 进标题行（计左侧）；提问态不出 */
+  #waitbox .t .wchip {
+    flex: none; margin-left: 2px;
+    font-family: var(--mono); font-size: 10.5px; font-weight: 700; line-height: 1.5;
+    color: var(--working);
+    background: color-mix(in srgb, var(--working) 12%, transparent);
+    border: 1px solid color-mix(in srgb, var(--working) 30%, transparent);
+    border-radius: 6px; padding: 1px 7px;
+  }
+  html.light #waitbox .t .wchip { color: #7A5800; border-color: color-mix(in srgb, #7A5800 30%, transparent); background: color-mix(in srgb, #7A5800 10%, transparent); }
   #waitdetail { margin-top: 6px; font-size: 12px; color: var(--dim); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   /* #13 巡检（安全项）：审批卡的待审命令必须完整可见——原单行省略号会把 rm -rf 这类
      命令截断，决策依据不完整。审批态改等宽换行代码块展示全文；提问态仍单行元信息 */
   #waitbox:not(.ask) #waitdetail {
     white-space: pre-wrap; word-break: break-all; text-overflow: clip;
     font-family: var(--mono); background: var(--code-bg);
-    border-radius: 8px; padding: 6px 10px; color: var(--text); font-size: 12px;
+    border-radius: 10px; padding: 7px 10px; color: var(--text); font-size: 12px;
+    margin-top: 9px;
+    /* #190 滚动兜底：审批卡长命令（多行 pre-wrap）同提问卡病根——#waitbox 在滚动区外
+       flex:none，超高会把 timeline 压到 0、按钮被裁。内部滚动消化 */
+    max-height: 40vh; overflow-y: auto;
   }
-  #waitbox .cmds { margin-top: 14px; display: flex; gap: 10px; align-items: center; }
+  /* #192 $ 提示符（C 方向嫁接）：一眼读出「这是要在终端里跑的命令」 */
+  #waitbox:not(.ask) #waitdetail::before { content: "$ "; color: var(--done); font-weight: 700; }
+  #waitbox .cmds { margin-top: 12px; display: flex; gap: 8px; align-items: center; }
+  /* #192 紧凑档按钮 40→33px（28-34 区间）；作答钮同尺寸保持节奏 */
+  #waitbox .cmds button.big { padding: 7px 20px; font-size: 13.5px; }
+  /* #212 允许并记住：三级动作里的次级入口（视觉弱于「允许」，强于纯文本） */
+  #rememberBtn {
+    padding: 7px 14px; font-size: 12.5px; color: var(--dim);
+    background: transparent; border: 1px solid var(--border);
+  }
+  #rememberBtn:hover { color: var(--text-strong); border-color: color-mix(in srgb, var(--working) 45%, var(--border)); }
+  /* 记住范围确认条：点「允许并记住」后原地展开（替代主按钮组），label 一行说清将记什么 */
+  #rmbar { margin-top: 12px; display: none; flex-direction: column; gap: 8px; }
+  #rmbar .rm-label { font-size: 11.5px; color: var(--faint); }
+  #rmbar .rm-label b { color: var(--dim); font-weight: 600; word-break: break-all; }
+  #rmbar .rm-opts { display: flex; gap: 8px; align-items: center; }
+  #rmbar .rm-opts button { padding: 7px 16px; font-size: 12.5px; }
+  #rmbar .rm-opts .rm-go { margin-left: auto; }
   #answerBtn { margin-left: auto; }
+  /* #192 主行动居右（对话惯例）；提问/审批按钮互斥显示不冲突 */
+  #allowBtn { margin-left: auto; }
   #questions { margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--border); display: flex; flex-direction: column; gap: 14px; }
+  /* #190 滚动兜底：单题选项极多/描述极长时（stepper 已消化多问题场景），卡内滚动防撑爆 */
+  #questions .q-item { max-height: 45vh; overflow-y: auto; }
+  /* #190 多问题 stepper 指示器行：题号计数 + 圆点（可点击跳题；已答实心/当前描边） */
+  .q-steps { display: flex; align-items: center; gap: 7px; margin-bottom: 12px; }
+  .q-steps .q-count { font-size: 11px; color: var(--dim); font-variant-numeric: tabular-nums; margin-right: 2px; }
+  .q-steps .q-hint { margin-left: auto; font-size: 10.5px; color: var(--faint); }
+  .q-dot { width: 9px; height: 9px; padding: 0; border-radius: 50%; border: 1.5px solid var(--faint); background: transparent; cursor: pointer; }
+  .q-dot.cur { border-color: var(--brand); border-width: 2px; box-shadow: 0 0 0 3px rgba(217,119,87,.35); transform: scale(1.25); }
+  .q-dot.done { background: var(--brand); border-color: var(--brand); }
+  .q-dot.done.cur { border-width: 2px; box-shadow: 0 0 0 3px rgba(217,119,87,.35); transform: scale(1.25); }
   .q-item .q-header { font-size: 11px; color: var(--brand-2); letter-spacing: 1px; margin-bottom: 6px; }
   /* 字号四级拉开：问题正文 15px 与聊天正文同档成为视觉重心（原 13px 比正文还小） */
   .q-item .q-text { font-size: 15px; font-weight: 600; color: var(--text-strong); line-height: 1.55; margin-bottom: 10px; }
@@ -1757,7 +1818,7 @@
   .tline .tname { font-weight: 600; }
   .tname { color: var(--dim); font-weight: 600; } /* #102 收敛②之首：工具行是转录行数最多元素，橙字量立减约八成 */
   .tres { color: var(--faint); }
-  /* #128 任务工具行摘要：单行省略直显（替代原折叠框），完整内容不再展开 */
+  /* #128 任务工具行摘要单行省略直显；#204 恢复「展开 ▾」（全文进 .tdetail，摘要恒一行不重复） */
   .tline .tsum { flex: 1 1 120px; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .ds-add { color: var(--done); font-family: var(--mono); font-size: .95em; }
   .ds-del { color: var(--error); font-family: var(--mono); font-size: .95em; }
@@ -2194,6 +2255,9 @@
         <div class="row newopts">
           <!-- 跳过权限 = bypassPermissions：免审全部命令与编辑，仅信任本机环境时勾选 -->
           <label class="skip-perm"><input type="checkbox" id="skipPerm">跳过权限确认</label>
+          <!-- #208 目录自动创建（用户配置开关）：勾选随命令带 autoMkdir，relay 侧按输入路径
+               mkdir -p（含多级，时间线说明）；不勾（默认）＝旧行为回落默认目录并说明。偏好型开关本地记忆 -->
+          <label class="skip-perm" title="勾选：输入的工作目录不存在时按路径新建（含多级）。不勾：回落默认目录并在会话时间线说明"><input type="checkbox" id="autoMkdir">目录不存在时自动创建</label>
           <!-- #23 认知引导（罗嗦文案收进悬浮）：面板新建的是后台会话（无终端窗口）；想在终端里看到对话需装 CLI 插件 -->
           <span class="hint-q" title="此为后台会话（无终端窗口）。想在终端里看到对话？给电脑端 CLI 装 CC Deck 插件后用「终端」会话。">?</span>
         </div>
@@ -2292,6 +2356,16 @@
             <button id="gpRelayNameEdit" class="gp-mini-btn" style="flex:none" title="修改本机名称">✎</button>
             <button id="gpRelayNameSave" class="gp-mini-btn" style="display:none;flex:none">保存</button>
           </div>
+          <!-- #196 relay 服务化开关（先 macOS）：开机自启 + 崩溃自拉起，不依赖 CC Deck 开着。
+               默认隐藏：仅桌面壳且壳带 relay_service_* 命令（新壳）才显示——浏览器/旧壳
+               invoke 失败一律藏卡，不误导 -->
+          <div class="gp-card gp-rows" id="gpSvcCard" style="display:none;margin-bottom:10px">
+            <div class="gp-row gp-plug-row">
+              <span class="gi"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3.4 20.6 8 12 12.6 3.4 8Z"/><path d="m3.4 12.4 8.6 4.6 8.6-4.6"/><path d="m3.4 16.6 8.6 4.6 8.6-4.6"/></svg></span>
+              <span class="gp-plug-t"><span class="gp-plug-n">开机自启（系统服务）</span><span class="gp-plug-d">开机即有 relay，手机随时可连，不依赖 CC Deck 开着；切换会短暂重启 relay，各端秒级自动恢复</span></span>
+              <div class="lever" id="gpSvcLever" style="--n:2"><i class="lever-thumb"></i><button type="button" class="lever-opt" data-i="0">关</button><button type="button" class="lever-opt" data-i="1">开</button></div>
+            </div>
+          </div>
           <div class="gp-sec"><svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9 5.5 10.5 4h3L15 5.5"/><rect x="4" y="5.5" width="16" height="15" rx="3"/><path d="M8.5 11h7M8.5 15h4.5"/></svg>已配对设备</div>
           <div class="gp-card gp-peers">
             <div id="gpPeersList" class="gp-peers-list"><div class="gp-peers-empty">连接服务器后可管理</div></div>
@@ -2303,6 +2377,15 @@
                 <button id="gpPeersRefresh" class="gp-mini-btn">刷新</button>
                 <input type="file" id="gpPeersImportFile" accept="application/json,.json" style="display:none">
               </div>
+            </div>
+          </div>
+          <!-- #212 允许并记住：规则列表（SNAPSHOT.allow_rules 全量 + ALLOW_RULES_UPDATED
+               实时收敛；多源合并展示，删除按条目所属源路由命令） -->
+          <div class="gp-sec"><svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3.2a5.8 5.8 0 0 0-5.8 5.8v2.4H5a1.4 1.4 0 0 0 0 2.8h14a1.4 1.4 0 0 0 0-2.8h-1.2V9A5.8 5.8 0 0 0 12 3.2Z"/><path d="M9.2 17.4a2.8 2.8 0 0 0 5.6 0"/></svg>记住的规则</div>
+          <div class="gp-card gp-peers">
+            <div id="gpRulesList" class="gp-peers-list"><div class="gp-peers-empty">连接服务器后可查看</div></div>
+            <div class="gp-peers-foot">
+              <span id="gpRulesCount">审批时点「允许并记住」后出现；命中规则的请求自动放行，不再逐条弹窗</span>
             </div>
           </div>
         </section>
@@ -2411,14 +2494,24 @@
     </div>
 
     <div id="waitbox">
-      <div class="t"><i></i><span id="waitT">等待你的确认</span><span id="waitelapsed"></span></div>
+      <div class="t"><i></i><span id="waitT">等待你的确认</span><span class="wchip" id="waitTool" hidden></span><span id="waitelapsed"></span></div>
       <div id="waitdetail"></div>
       <div id="questions"></div>
       <div class="cmds">
         <button id="askCancel">取消作答</button>
         <button id="allowBtn" class="allow big">✓ 允许</button>
+        <button id="rememberBtn">✓ 允许并记住…</button>
         <button id="rejectBtn" class="reject big">✗ 拒绝</button>
         <button id="answerBtn" class="primary big" style="display:none">提交作答</button>
+      </div>
+      <!-- #212 记住范围确认条：点「允许并记住」展开（主按钮组隐藏），两选一即发 allow+scope -->
+      <div id="rmbar">
+        <span class="rm-label">将记住：<b id="rmLabel"></b>，之后同类请求不再逐条弹窗（危险命令除外）</span>
+        <div class="rm-opts">
+          <button id="rmSessBtn" class="allow">仅本会话</button>
+          <button id="rmAllBtn" class="allow">所有会话</button>
+          <button id="rmCancelBtn" class="rm-go">✕ 返回</button>
+        </div>
       </div>
     </div>
 
@@ -2803,6 +2896,7 @@ function ensureCtx(cfg) {
     c = {
       cfg, status: "offline", statusText: "未连接",
       sessions: new Map(), timelines: new Map(), lastSeq: 0, models: [], deliverables: false,
+      allowRules: null, // #212 记住规则（SNAPSHOT.allow_rules；null = 旧 relay 不支持）
       ws: null, reconnectDelay: RETRY_BASE_MS, reconnectTimer: 0,
       failKind: "", retryAt: 0, retryNote: "", // #40web 失败归因/重试倒计时（见 setConn/scheduleReconnect）
       pendingPair: null, pairTimer: 0, pingTimer: null, lastPong: 0,
@@ -3929,6 +4023,8 @@ function onEvent(ctx, msg) {
       ctx.lastSeq = Math.max(ctx.lastSeq, msg.seq);
       ctx.models = Array.isArray(msg.payload.models) ? msg.payload.models : []; // #388 模型清单（旧版 relay 无字段=空）
       ctx.deliverables = msg.payload.deliverables === true; // #71 输出物开关（旧版 relay 无字段=关，tab 隐藏）
+      ctx.allowRules = Array.isArray(msg.payload.allow_rules) ? msg.payload.allow_rules : null; // #212 记住规则（旧 relay 无字段=不支持）
+      renderAllowRules(); // relay 页开着时即时收敛（函数内有可见性 gate）
       if (msg.payload.homedir) ctx.homedir = msg.payload.homedir; // #368 新建表单默认目录
       if (msg.payload.platform) ctx.platform = msg.payload.platform; // relay 平台：新建表单示例自适应+盘符拦截（旧 relay 无字段=中立文案）
       updateCwdPlaceholder(); // 运行时回调：五块 script 已全部执行，函数全局可达
@@ -4002,6 +4098,11 @@ function onEvent(ctx, msg) {
       const d = msg.payload.decision;
       const dText = d === "allow" ? "已允许" : d === "deny" ? "已拒绝" : d === "answer" ? "已作答" : d === "answered" ? "电脑端已作答" : d === "superseded" ? "请求已失效（CLI 已继续）" : "远程审批超时，回退本地";
       pushLog(ctx, sid, { ts: msg.ts, kind: "system", text: dText + (d === "timeout" || d === "superseded" ? "" : " (by " + msg.payload.by + ")") });
+      break;
+    }
+    // #212 记住规则变更（瞬态广播）：全量替换该源的规则表；设置页打开时实时收敛
+    case "ALLOW_RULES_UPDATED": {
+      if (Array.isArray(msg.payload.rules)) { ctx.allowRules = msg.payload.rules; renderAllowRules(); }
       break;
     }
     case "SESSION_ERROR": {
@@ -4750,6 +4851,9 @@ setInterval(() => {
 const pendOpen = new Set();
 // #142 子 Agent 面板折叠态：模块级记忆（renderDetail 1s 重建 DOM 不丢态，pendOpen 先例）
 let agCollapsed = false;
+// #212 记住范围确认条展开态：展开中的 request_id（renderDetail 每秒重渲不丢态；
+// 换请求/审批收口自动复位）
+let rmOpenFor = "";
 
 function renderDetail() {
   const sel = selSession();
@@ -4781,7 +4885,7 @@ function renderDetail() {
   $("thinkBtn").classList.toggle("on", thinkShown);
   $("thinkBtn").textContent = "思考 ·" + (thinkShown ? "开" : "关");
   const permBtn = $("permBtn");
-  if (!s.external && !s.historical) {
+  if (!s.historical) {
     permBtn.style.display = "";
     const pm = s.permission_mode ?? "default";
     // #117 文字写进内层 span（textContent 整写会抹掉按钮内的 ⇄ SVG）
@@ -4789,7 +4893,12 @@ function renderDetail() {
     permBtn.classList.toggle("on", pm !== "default");
     // #40 跳过档警示色（对齐手机端 permPillWarn：红只到描边+文字，不用实底）
     permBtn.classList.toggle("warn", pm === "bypassPermissions");
-    permBtn.title = "权限模式：" + (PERM_LABEL[pm] ?? pm) + "（点击切换）";
+    // #191 外部会话同显（只读状态灯）：relay 逐事件更新并下发 permission_mode，此前
+    // 两端对外部会话整体隐藏——plan 模式无任何标识，远程审批照弹被误读成「跳过了还弹」
+    permBtn.title = s.external
+      ? "权限模式：" + (PERM_LABEL[pm] ?? pm) + "（外部会话，在电脑终端切换）"
+      : "权限模式：" + (PERM_LABEL[pm] ?? pm) + "（点击切换）";
+    permBtn.style.cursor = s.external ? "default" : "";
   } else { permBtn.style.display = "none"; permBtn.classList.remove("warn"); }
   // #56 外部会话远程审批开关（协议就绪：COMMAND_EXT_MODE → relay setRemoteMode 挂起/放行）：
   // 开=Bash/Edit 等门控工具的权限确认挂起到手机/网页出按钮；手机不在线自动回退终端本地弹框
@@ -4821,21 +4930,33 @@ function renderDetail() {
     // #14 提问/审批两态分流：提问走中性卡（.ask）+ 专属文案，审批保留黄卡
     wb.classList.toggle("ask", isAsk);
     $("waitT").textContent = isAsk ? "Claude 在提问" : "等待你的确认";
-    $("waitdetail").textContent = (s.waiting_request.tool_name ? s.waiting_request.tool_name + " — " : "") + (s.waiting_request.input_summary || "");
+    // #192 工具名上提 chip 进标题行，命令块只放命令本身（$ 提示符由 CSS ::before 补）
+    const wt = s.waiting_request.tool_name || "";
+    $("waitTool").hidden = isAsk || !wt;
+    $("waitTool").textContent = wt;
+    $("waitdetail").textContent = s.waiting_request.input_summary || "";
     const wsec = Math.floor((Date.now() - (s.waiting_request.received_at || Date.now())) / 1000);
     $("waitelapsed").textContent = passive ? "CLI 正在本地等待确认，请在电脑上处理" : "已等待 " + wsec + "s" +
       (s.waiting_request.suggestions?.length && !isAsk ? " · 建议: " + s.waiting_request.suggestions.join(" / ") : "");
     // 单问题单选：点选项即发，自由输入回车即发——提交大按钮退场（对齐手机端 single 模式）
     const single = isAsk && s.waiting_request.questions.length === 1 && !s.waiting_request.questions[0].multi;
+    // #212 允许并记住：remember 由 relay 判定可记忆才下发（危险形态无此字段=不出现）
+    const remember = !isAsk && !passive && s.waiting_request.remember ? s.waiting_request.remember : null;
+    if (rmOpenFor && rmOpenFor !== s.waiting_request.request_id) rmOpenFor = "";
+    const rmOpen = !!remember && rmOpenFor === s.waiting_request.request_id;
     const cmds = document.querySelector("#waitbox .cmds");
-    if (cmds) cmds.style.display = passive ? "none" : "flex";
+    if (cmds) cmds.style.display = passive || rmOpen ? "none" : "flex";
     $("askCancel").style.display = passive || !isAsk ? "none" : "";
-    $("allowBtn").style.display = isAsk ? "none" : "";
-    $("rejectBtn").style.display = isAsk ? "none" : "";
+    $("allowBtn").style.display = isAsk || rmOpen ? "none" : "";
+    $("rejectBtn").style.display = isAsk || rmOpen ? "none" : "";
+    $("rememberBtn").style.display = remember && !rmOpen ? "" : "none";
     $("answerBtn").style.display = isAsk && !single ? "" : "none";
+    $("rmbar").style.display = rmOpen ? "flex" : "none";
+    if (rmOpen) $("rmLabel").textContent = remember.label || remember.pattern || "";
     renderQuestions(s.waiting_request);
   } else {
     wb.style.display = "none";
+    rmOpenFor = ""; // #212 审批收口/切走会话，复位记住范围条
   }
 
   // WORKING 状态行（类 CLI：✶ 摘要 · 回合耗时）
@@ -5002,7 +5123,8 @@ function statsTabHtml(s) {
     ["状态", s.status],
     ["目录", s.cwd],
     ["模型", s.model || "-"],
-    ["权限模式", s.external ? "-" : (PERM_LABEL[s.permission_mode ?? "default"] ?? s.permission_mode ?? "标准")],
+    // #191 外部会话同显权限模式（此前恒 "-"，plan 模式无处可辨）
+    ["权限模式", PERM_LABEL[s.permission_mode ?? "default"] ?? s.permission_mode ?? "标准"],
     ["开始时间", new Date(s.started_at).toLocaleString("zh-CN", { hour12: false })],
     ["用时", fmtElapsed(sessionElapsed(s))],
     ["修改文件", String(s.stats?.files_changed ?? 0)],
@@ -5607,17 +5729,19 @@ function entryHtml(e, prevDay) {
   } else if (e.kind === "tool_use") {
     const t = e.tool || "";
     const tico = /^(Edit|Write|MultiEdit|NotebookEdit)$/.test(t) ? "✎" : t === "Bash" ? "❯_" : /^(Read|Glob|Grep|WebFetch|WebSearch)$/.test(t) ? "▤" : "⚙";
-    // #128（2026-09-21 验收反馈）：任务状态变更（Task*）这类简单内容不搞折叠框——
-    // 展开框长文超界且交互无必要，摘要单行省略直显（.tsum），完整描述不再渲染
+    // #128 摘要单行省略保留（Task 行默认紧凑）；#204（2026-09-25 用户反馈「只看得到
+    // 第一行，手机端可展开」）恢复 Task* 行展开——任务描述常带完整背景/验收点，
+    // 加回「展开 ▾」与普通工具行同款交互；展开体复用 .tdetail（max-height 360px +
+    // 滚动，#128 担心的长文超界由其防住）。展开态摘要仍单行省略（全文在 detail，不重复）
     const isTaskTool = /^Task/.test(t);
     html += '<div class="trow"><div class="tline"><span class="tico">' + tico + '</span><span class="tname">' + escapeHtml(t || "tool") + "</span><span" + (isTaskTool ? ' class="tsum"' : "") + ">" + taskRefHtml(e.text) + "</span>" +
       (t === "Bash" || t === "Write" ? '<span class="copy-btn" data-copy="' + escapeHtml(e.text || "").replace(/"/g, "&quot;") + '" title="复制命令">⧉</span>' : "") +
-      (e.detail && !isTaskTool
+      (e.detail
         ? (open
           ? '<span class="x-full" data-x="' + k + '">收起 ▴</span>'
           : '<span class="x-full" data-x="' + k + '">展开 ▾</span>')
         : "") + "</div>" +
-      (open && e.detail && !isTaskTool ? '<div class="tdetail">' + escapeHtml(e.detail) + "</div>" : "") + "</div>";
+      (open && e.detail ? '<div class="tdetail">' + escapeHtml(e.detail) + "</div>" : "") + "</div>";
   } else if (e.kind === "tool_result") {
     if (e.diff && e.diff.length) {
       const plus = e.diff.filter((l) => l.startsWith("+")).length;
@@ -5670,48 +5794,115 @@ $("timeline").addEventListener("click", (ev) => {
 });
 
 // ---------- AskUserQuestion 选项作答（与手机端 AskBanner 对齐） ----------
-let askState = null; // {rid, sel: [Set<label>...], free: [string...]}
+// #190 多问题 stepper（CLI 式）：一次只展示一题 + 题号指示器（可点击）+ ←→ 键切题；
+// 单选题选中自动进下一题、末题留步等「提交作答」。单问题保持全量平铺（点选即答）。
+let askState = null; // {rid, sel: [Set<label>...], free: [string...], stepped, cur, builtQi, builtRid}
 function renderQuestions(wr) {
   const box = $("questions");
   const qs = Array.isArray(wr.questions) ? wr.questions : [];
   if (!qs.length) { box.innerHTML = ""; box.style.display = "none"; askState = null; return; }
   box.style.display = "flex";
   if (!askState || askState.rid !== wr.request_id) {
-    askState = { rid: wr.request_id, sel: qs.map(() => new Set()), free: qs.map(() => "") };
-    // 单问题单选：点选项即发（手机端交互）；多问题/多选：勾选后提交
-    const single = qs.length === 1 && !qs[0].multi;
-    box.innerHTML = qs.map((q, qi) => {
-      // #14 选项行 = 选择指示符（单选圆/多选方）+ label/desc 纵排列；data-bare：纯标签
-      // 选项（全部无描述）由 CSS 切等宽 grid 两列，避免竖排过长
-      const opts = (q.options || []).map((o, oi) =>
-        '<button type="button" data-q="' + qi + '" data-o="' + oi + '"><span class="mark"></span>' +
-        '<span class="col"><span class="l">' + escapeHtml(o.label) + "</span>" +
-        (o.description ? '<span class="d">' + escapeHtml(o.description) + "</span>" : "") + "</span></button>").join("");
-      return '<div class="q-item" data-qi="' + qi + '"' + (q.multi ? ' data-multi="1"' : "") +
-        ((q.options || []).every((o) => !o.description) ? ' data-bare="1"' : "") + '>' +
-        '<div class="q-header">' + escapeHtml(q.header || "问题 " + (qi + 1)) + (q.multi ? " · 可多选" : single ? " · 点选即答" : "") + '</div>' +
-        '<div class="q-text">' + escapeHtml(q.question) + '</div>' +
-        '<div class="q-opts">' + opts + "</div>" +
-        '<input class="q-free" data-q="' + qi + '" placeholder="或自由输入…">' +
-        "</div>";
-    }).join("");
-    box.querySelectorAll(".q-opts button").forEach((b) => {
-      b.onclick = () => {
-        const qi = +b.dataset.q, label = qs[qi].options[+b.dataset.o].label;
-        if (single) { sendAnswer([label]); return; }
-        const set = askState.sel[qi];
-        if (qs[qi].multi) { set.has(label) ? set.delete(label) : set.add(label); }
-        else { set.clear(); set.add(label); askState.free[qi] = ""; box.querySelector('.q-free[data-q="' + qi + '"]').value = ""; }
-        syncSelClasses(qs);
-      };
-    });
-    box.querySelectorAll(".q-free").forEach((inp) => {
-      inp.oninput = () => { askState.free[+inp.dataset.q] = inp.value; };
-      // 自由输入回车即提交（single 模式无提交大按钮，键盘直达）
-      inp.onkeydown = (e) => { if (e.key === "Enter" && !e.isComposing) { e.preventDefault(); submitAnswer(); } };
-    });
+    askState = { rid: wr.request_id, sel: qs.map(() => new Set()), free: qs.map(() => ""), stepped: qs.length > 1, cur: 0, builtQi: -1, builtRid: "" };
   }
+  // 重建闸门：仅 rid 变更/切题时重建 DOM——流式 SESSION_UPDATED 高频重渲染不打断
+  // free 输入焦点（同题重复渲染直接跳过）
+  const buildQi = askState.stepped ? askState.cur : 0;
+  if (askState.builtRid !== askState.rid || askState.builtQi !== buildQi) buildAskDom(wr, qs);
 }
+function buildAskDom(wr, qs) {
+  const box = $("questions");
+  const st = askState;
+  const single = qs.length === 1 && !qs[0].multi;
+  const qi = st.stepped ? st.cur : 0;
+  st.builtQi = qi;
+  st.builtRid = st.rid;
+  // 指示器行：题号计数 + 可点击圆点（已答实心/当前描边高亮）；非 stepper 不渲染
+  const steps = st.stepped
+    ? '<div class="q-steps"><span class="q-count">' + (qi + 1) + " / " + qs.length + "</span>" +
+      qs.map((_, i) => '<button type="button" class="q-dot" data-goto="' + i + '" title="问题 ' + (i + 1) + '"></button>').join("") +
+      '<span class="q-hint">←→ 切换</span></div>'
+    : "";
+  const q = qs[qi];
+  // #14 选项行 = 选择指示符（单选圆/多选方）+ label/desc 纵排列；data-bare：纯标签
+  // 选项（全部无描述）由 CSS 切等宽 grid 两列，避免竖排过长
+  const opts = (q.options || []).map((o, oi) =>
+    '<button type="button" data-q="' + qi + '" data-o="' + oi + '"><span class="mark"></span>' +
+    '<span class="col"><span class="l">' + escapeHtml(o.label) + "</span>" +
+    (o.description ? '<span class="d">' + escapeHtml(o.description) + "</span>" : "") + "</span></button>").join("");
+  box.innerHTML = steps +
+    '<div class="q-item" data-qi="' + qi + '"' + (q.multi ? ' data-multi="1"' : "") +
+    ((q.options || []).every((o) => !o.description) ? ' data-bare="1"' : "") + '>' +
+    '<div class="q-header">' + escapeHtml(q.header || "问题 " + (qi + 1)) + (q.multi ? " · 可多选" : single ? " · 点选即答" : st.stepped && qi < qs.length - 1 ? " · 选中自动下一题" : "") + '</div>' +
+    '<div class="q-text">' + escapeHtml(q.question) + '</div>' +
+    '<div class="q-opts">' + opts + "</div>" +
+    '<input class="q-free" data-q="' + qi + '" placeholder="或自由输入…">' +
+    "</div>";
+  const freeInp = box.querySelector('.q-free[data-q="' + qi + '"]');
+  if (freeInp) freeInp.value = st.free[qi] || "";
+  box.querySelectorAll(".q-dot").forEach((d) => { d.onclick = () => askGoto(+d.dataset.goto); });
+  box.querySelectorAll(".q-opts button").forEach((b) => {
+    b.onclick = () => {
+      const label = qs[qi].options[+b.dataset.o].label;
+      if (single) { sendAnswer([label]); return; }
+      const set = st.sel[qi];
+      if (qs[qi].multi) { set.has(label) ? set.delete(label) : set.add(label); }
+      else {
+        set.clear(); set.add(label); st.free[qi] = "";
+        const f = box.querySelector('.q-free[data-q="' + qi + '"]'); if (f) f.value = "";
+        // stepper 单选：选中即进下一题（CLI 式）；末题留步等「提交作答」
+        if (st.stepped && qi < qs.length - 1) { syncDots(qs); askGoto(qi + 1); return; }
+      }
+      syncSelClasses(qs);
+      syncDots(qs);
+    };
+  });
+  if (freeInp) {
+    freeInp.oninput = () => { st.free[qi] = freeInp.value; syncDots(qs); };
+    // 自由输入回车即提交（single 模式无提交大按钮，键盘直达）
+    freeInp.onkeydown = (e) => { if (e.key === "Enter" && !e.isComposing) { e.preventDefault(); submitAnswer(); } };
+  }
+  syncSelClasses(qs);
+  syncDots(qs);
+}
+// 切题（越界钳制；wr 从当前会话现取，不吃旧闭包）
+function askGoto(qi) {
+  if (!askState || !askState.stepped) return;
+  const sel = selSession();
+  const wr = sel?.s?.waiting_request;
+  const qs = Array.isArray(wr?.questions) ? wr.questions : [];
+  if (!qs.length || wr.request_id !== askState.rid) return;
+  qi = Math.max(0, Math.min(qs.length - 1, qi));
+  if (qi === askState.cur) return;
+  askState.cur = qi;
+  renderQuestions(wr);
+}
+// 指示器圆点状态：已答（选项或 free）实心、当前题描边高亮
+function syncDots(qs) {
+  const st = askState;
+  if (!st || !st.stepped) return;
+  $("questions").querySelectorAll(".q-dot").forEach((d) => {
+    const i = +d.dataset.goto;
+    const answered = st.sel[i].size > 0 || !!(st.free[i] || "").trim();
+    d.classList.toggle("done", answered);
+    d.classList.toggle("cur", i === st.cur);
+  });
+}
+// stepper 激活判定（←→ 键切题优先于切 tab）
+function askSteppedActive() {
+  return !!(askState && askState.stepped && document.querySelector("#waitbox.ask") && $("waitbox").style.display === "block");
+}
+// #190 裸 ←/→ 切题：提问卡 stepper 可见时优先（tab 切换监听里同款判定让位）；
+// 输入控件聚焦不抢（free 输入框内方向键归 caret）
+document.addEventListener("keydown", (ev) => {
+  if (ev.key !== "ArrowLeft" && ev.key !== "ArrowRight") return;
+  if (ev.altKey || ev.ctrlKey || ev.metaKey || ev.shiftKey) return;
+  if (!askSteppedActive()) return;
+  const ae = document.activeElement;
+  if (ae && (ae.tagName === "INPUT" || ae.tagName === "TEXTAREA" || ae.isContentEditable)) return;
+  ev.preventDefault();
+  askGoto(askState.cur + (ev.key === "ArrowRight" ? 1 : -1));
+});
 function syncSelClasses(qs) {
   const box = $("questions");
   qs.forEach((q, qi) => {
@@ -5739,7 +5930,15 @@ function submitAnswer() {
     if (q.multi) return sel.join("、");
     return sel[0] ?? "";
   });
-  if (answers.some((a) => !a)) { toast("还有问题未作答"); return; }
+  if (answers.some((a) => !a)) {
+    // #190 stepper：toast 同时跳到第一道未答题（否则用户得猜/翻哪题没答）
+    if (askState?.stepped) {
+      const miss = answers.findIndex((a) => !a);
+      if (miss >= 0) askGoto(miss);
+    }
+    toast("还有问题未作答");
+    return;
+  }
   sendAnswer(answers);
 }
 
@@ -5864,7 +6063,7 @@ document.addEventListener("click", (ev) => {
 
 // ⚙ 设置浮层（#317）：显示项为散装开关的镜像（点行 = 触发原按钮再回读状态），
 // 服务器管理不进浮层——左栏常驻面板已是高频区，与手机抽屉同为一级入口
-const CONSOLE_VERSION = "0.6.0-test.31";
+const CONSOLE_VERSION = "0.6.1-test.1";
 // #396 拨杆同步：滑块移到 idx 档（transform 过渡），选中档文字加 .on（白字压品牌色滑块上）
 function setLever(el, idx) {
   if (!el) return;
@@ -5879,8 +6078,26 @@ function syncGearPop() {
   setLever($("gpIdleLever"), collapseIdle ? 1 : 0);
   const idle = $("idleBtn");
   $("gpIdle").style.display = idle.style.display === "none" ? "none" : "flex";
-  $("gpVer").textContent = CONSOLE_VERSION;
-  $("gpBuild") && ($("gpBuild").textContent = CONSOLE_VERSION); // #405 左栏底部弱化 Build 号（设计稿 §5）
+  // #199 版本口径（壳内显壳版本）：桌面壳与 web-console 是两条版本线——壳 =
+  // package.json 桌面 test.N，控制台 = CONSOLE_VERSION 随 APK 批次线。旧口径只显
+  // 控制台版本，壳更新后关于页版本号看似"倒退"（33→27）。壳内改显壳自身版本；
+  // 浏览器直访 8787 无壳命令（reject），回落控制台版本（那才是它的身份）
+  if (!window.__shellVerTried) {
+    window.__shellVerTried = true;
+    window.__TAURI__?.core?.invoke?.("app_version").then(
+      (v) => {
+        if (typeof v === "string" && v.trim()) {
+          window.__shellVer = v;
+          $("gpVer").textContent = v;
+          $("gpBuild") && ($("gpBuild").textContent = v);
+        }
+      },
+      () => {}
+    );
+  }
+  const showVer = window.__shellVer || CONSOLE_VERSION;
+  $("gpVer").textContent = showVer;
+  $("gpBuild") && ($("gpBuild").textContent = showVer); // #405 左栏底部弱化 Build 号（设计稿 §5）
   $("gpHotkey") && ($("gpHotkey").style.display = window.ccDeck ? "flex" : "none"); // #8 桌面端专属（#67 迁独立快捷键栏）
   renderGpStatus();
 }
@@ -6064,7 +6281,7 @@ function setGearSection(sec) {
     if (nav) nav.classList.toggle("on", on);
   }
   try { if (!window.__ccGearPin) localStorage.setItem(GP_SEC_KEY, sec); } catch {} // ?gear=1 深链会话不污染分页记忆（顺手项①）
-  if (sec === "relay") { probeRelayStat(); refreshPeers(); } // 设备清单随 relay 页可见时静默刷新（议题①）
+  if (sec === "relay") { probeRelayStat(); refreshPeers(); loadRelaySvc(); renderAllowRules(); } // 设备清单随 relay 页可见时静默刷新（议题①）+ #196 服务化开关状态 + #212 记住规则（纯本地渲染，数据在 SNAPSHOT/事件里已就位）
   if (sec === "plug") loadPluginCfg(); // #448 插件三开关随插件页可见时拉取本机配置
 }
 document.querySelectorAll(".gp-nav-item").forEach((b) => { b.onclick = () => { setGearSection(b.dataset.sec); }; });
@@ -6755,7 +6972,9 @@ $("createBtn").onclick = () => {
   }
   // 勾选"跳过权限确认"→ bypassPermissions：免审全部命令与编辑（与手机端 NewSessionModal 同语义）
   const bypass = $("skipPerm").checked;
-  const id = sendCommandTo(ctx, "COMMAND_CREATE", { cwd: cwd || ".", prompt, ...(bypass ? { permissionMode: "bypassPermissions" } : {}) });
+  // #208 目录自动创建开关（偏好型，本地记忆，与 skipPerm 用后即复位不同）
+  const autoMkdir = $("autoMkdir").checked;
+  const id = sendCommandTo(ctx, "COMMAND_CREATE", { cwd: cwd || ".", prompt, ...(bypass ? { permissionMode: "bypassPermissions" } : {}), ...(autoMkdir ? { autoMkdir: true } : {}) });
   if (bypass) $("skipPerm").checked = false; // 创建后回落，防止下一次误建 skip 会话
   if (id) {
     // #168 历史目录：按实际建会话的源记最近 5 条历史（pushCwdHist cap 5）+ 双写旧单值键（回滚兼容）
@@ -6780,6 +6999,12 @@ $("createBtn").onclick = () => {
       t: wd,
     });
   }
+};
+// #208 目录自动创建开关：本地记忆（ccd_auto_mkdir，默认关）。偏好型开关勾选状态
+// 跨次保留（skipPerm 是高危选项用后即复位，两者语义不同）
+try { $("autoMkdir").checked = localStorage.getItem("ccd_auto_mkdir") === "1"; } catch {}
+$("autoMkdir").onchange = () => {
+  try { localStorage.setItem("ccd_auto_mkdir", $("autoMkdir").checked ? "1" : "0"); } catch {}
 };
 // ---------- #279 批次3 图片发送（对齐手机 DetailScreen 图片链路） ----------
 // 入口：输入区 📷 选图 + document paste 剪贴板贴图（网页端独有）；
@@ -6951,16 +7176,22 @@ document.addEventListener("paste", (ev) => {
 (function () {
   const types = (ev) => (ev.dataTransfer && ev.dataTransfer.types ? [...ev.dataTransfer.types] : []);
   const hasFiles = (ev) => types(ev).includes("Files");
+  // #179 三轮：WebKit（Safari/WKWebView）对浏览器外发起的文件拖动（访达/桌面），
+  // dragenter/dragover 阶段 dataTransfer.types 为空（drop 时才暴露）——只认显式
+  // "Files" 才 preventDefault 的话 drop 永不触发 =「拖本地文件无反应」真因（而
+  // 浏览器内拖图片 types 正常带 Files，故二轮时 uri 提示项 ✓、本地文件项 ✗）。
+  // types 为空一律当潜在文件拖放行；drop 阶段各引擎都会给真实载荷，在那里分流。
+  const maybeFiles = (ev) => hasFiles(ev) || types(ev).length === 0;
   let depth = 0;
   const unmask = () => { depth = 0; document.body.classList.remove("file-drag-over"); };
   document.addEventListener("dragenter", (ev) => {
-    if (!hasFiles(ev)) return;
+    if (!maybeFiles(ev)) return;
     ev.preventDefault();
     depth++;
     document.body.classList.add("file-drag-over");
   });
   document.addEventListener("dragover", (ev) => {
-    if (!hasFiles(ev)) return;
+    if (!maybeFiles(ev)) return;
     ev.preventDefault();
     ev.dataTransfer.dropEffect = "copy";
   });
@@ -6981,7 +7212,12 @@ document.addEventListener("paste", (ev) => {
     ev.preventDefault();
     unmask();
     const files = ev.dataTransfer.files && ev.dataTransfer.files.length ? [...ev.dataTransfer.files] : [];
-    if (!files.length) return;
+    if (!files.length) {
+      // types 声称有 Files 但 drop 载荷为空（跨源保护/拖拽源不提供数据）——不再静默，
+      // 给出口径明确的指引（此前这里零反馈，是「无反应」的另一张静默面孔）
+      toast("拖入未能读取到文件内容，请改用粘贴（⌘V/Ctrl+V）或输入框旁的附件按钮", 4200);
+      return;
+    }
     const sel = selSession();
     if (!sel) { toast("先在左侧选择一个会话"); return; }
     if (!imgSessionOk(sel.s)) {
@@ -7244,7 +7480,21 @@ $("sendBtn").onclick = () => {
     syncSendState();
   }
 };
-$("msginput").addEventListener("keydown", (e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); $("sendBtn").click(); } });
+// #178 IME 组词期 Enter 不发送（输入法回车上屏把半截草稿顶飞）：主输入框补上改名框
+// 同款 IME 健壮守卫（2026-09-16 改名框已实测的形态分类）——①正常组词
+// （composition 活跃/isComposing）→ 吞；②搜狗/QQ 拼音在 WebView2 组词事件未活跃
+// → 不吞，Enter 正常发送；③组词提交 Enter 晚于 compositionend 的时序抖动 → 150ms
+// 提交锁 + 229 抖动窗吸收。兜底路径：发送按钮点击不经过此守卫，永不受影响。
+let msgComposing = false, msgCommitLockUntil = 0;
+$("msginput").addEventListener("compositionstart", () => { msgComposing = true; });
+$("msginput").addEventListener("compositionend", () => { msgComposing = false; msgCommitLockUntil = Date.now() + 150; });
+$("msginput").addEventListener("keydown", (e) => {
+  if (e.key !== "Enter" || e.shiftKey) return;
+  if (e.isComposing || msgComposing) return;
+  if (e.keyCode === 229 && Date.now() - msgCommitLockUntil < 400) return; // 组词尾疑似抖动窗
+  e.preventDefault();
+  $("sendBtn").click();
+});
 $("stopBtn").onclick = () => {
   const sel = selSession();
   if (!sel) return;
@@ -7255,6 +7505,21 @@ $("allowBtn").onclick = () => {
   const sel = selSession();
   if (sel && sel.s.waiting_request) sendCommandTo(sel.ctx, "COMMAND_CONTINUE", { session_id: selected.sid, request_id: sel.s.waiting_request.request_id });
 };
+// #212 允许并记住：展开范围两选 → 点选即 allow+remember_scope（relay 落规则）
+$("rememberBtn").onclick = () => {
+  const sel = selSession();
+  if (sel && sel.s.waiting_request) { rmOpenFor = sel.s.waiting_request.request_id; renderDetail(); }
+};
+const rmSend = (scope) => {
+  const sel = selSession();
+  if (sel && sel.s.waiting_request) {
+    rmOpenFor = "";
+    sendCommandTo(sel.ctx, "COMMAND_CONTINUE", { session_id: selected.sid, request_id: sel.s.waiting_request.request_id, remember_scope: scope });
+  }
+};
+$("rmSessBtn").onclick = () => rmSend("session");
+$("rmAllBtn").onclick = () => rmSend("global");
+$("rmCancelBtn").onclick = () => { rmOpenFor = ""; renderDetail(); };
 $("answerBtn").onclick = submitAnswer;
 $("askCancel").onclick = () => {
   const sel = selSession();
@@ -7287,6 +7552,14 @@ function commitDelete(src, sid) {
   setTimeout(() => { deleting.delete(sid); render(); }, 3000);
 }
 function requestDelete(src, sid) {
+  // #207 离线源拦截（对齐手机 ListScreen）：会话数据在源机器上，源离线时删除
+  // 命令必然送不达——旧版照走乐观舞步（隐藏 4s+3s 兜底）到期卡片静默回归＝
+  // 「删除又复活」。点删当下点名源拦下，不进舞步
+  const dctx = ctxs.get(src);
+  if (!dctx || dctx.status !== "online") {
+    toast((dctx && dctx.cfg && dctx.cfg.name ? "「" + dctx.cfg.name + "」" : "该源") + "离线中，该设备开机联网后才能删除");
+    return;
+  }
   const s = ctxs.get(src)?.sessions.get(sid);
   if (pendingDel.timer) {
     clearTimeout(pendingDel.timer);
@@ -7566,10 +7839,12 @@ window.addEventListener("resize", moveTabInd);
 // #279③ 键盘 ←/→ 切 tab（桌面加分项）：输入控件聚焦时不抢键；
 // #67修：带修饰键（Alt/Ctrl 等）不响应——那是「修饰键+←→ 切数据源」的组合，
 // 旧版不排除导致 Alt+←→ 详情页内切的是 tab 而非源（用户实测冲突）
+// #190：提问卡 stepper 可见时让位（裸 ←→ 优先切题，见 renderQuestions 区监听）
 document.addEventListener("keydown", (ev) => {
   if (ev.key !== "ArrowLeft" && ev.key !== "ArrowRight") return;
   if (ev.altKey || ev.ctrlKey || ev.metaKey || ev.shiftKey) return;
   if (!selected) return;
+  if (askSteppedActive()) return;
   const ae = document.activeElement;
   if (ae && (ae.tagName === "INPUT" || ae.tagName === "TEXTAREA" || ae.isContentEditable)) return;
   const tabs = [...document.querySelectorAll(".tabs button.tab")].filter((b) => b.style.display !== "none"); // #71 隐藏的输出物 tab 不进 ←→ 循环
@@ -8772,6 +9047,97 @@ $("gpPeersImportFile").onchange = function () {
   reader.readAsText(f);
 };
 
+// ===== #212 记住规则（设置页「记住的规则」）=====
+// 数据源：ctx.allowRules（SNAPSHOT 全量 + ALLOW_RULES_UPDATED 全量替换），按源各自
+// 维护；渲染时合并展示，多源时行内标注源名。删除按条目所属源路由——rule id 只在
+// 所属 relay 的存储里有效，发错源只会得到 no such rule
+let gpRuleArm = "", gpRuleTimer = 0;
+function collectAllowRules() {
+  const rows = [];
+  let online = 0, legacy = 0;
+  for (const c of ctxs.values()) {
+    if (c.status !== "online") continue;
+    online++;
+    if (!Array.isArray(c.allowRules)) { legacy++; continue; }
+    for (const r of c.allowRules) rows.push({ ctx: c, r });
+  }
+  return { rows, online, legacy };
+}
+function renderAllowRules() {
+  const box = $("gpRulesList");
+  if (!box) return;
+  // relay 页不可见时跳过（SNAPSHOT/事件路径会路过这里，白写 DOM 没意义）
+  const page = $("gpPageRelay");
+  if (!page || page.classList.contains("off")) return;
+  gpRuleArm = "";
+  const col = collectAllowRules();
+  if (!col.online) {
+    box.innerHTML = '<div class="gp-peers-empty">连接服务器后可查看</div>';
+    $("gpRulesCount").textContent = "";
+    return;
+  }
+  if (col.legacy === col.online) {
+    box.innerHTML = '<div class="gp-peers-empty">此 relay 版本不支持「允许并记住」（升级后可用）</div>';
+    $("gpRulesCount").textContent = "";
+    return;
+  }
+  if (!col.rows.length) {
+    box.innerHTML = '<div class="gp-peers-empty">暂无记住的规则</div>';
+    $("gpRulesCount").textContent = "0 条规则";
+    return;
+  }
+  $("gpRulesCount").textContent = col.rows.length + " 条规则";
+  const multiSrc = new Set(col.rows.map(function (x) { return x.ctx.cfg && x.ctx.cfg.id; })).size > 1;
+  col.rows.sort(function (a, b) { return (b.r.created_at || 0) - (a.r.created_at || 0); });
+  box.innerHTML = col.rows.map(function (x) {
+    const r = x.r;
+    const pat = r.pattern === "*" ? "全部操作" : r.pattern;
+    const src = multiSrc && x.ctx.cfg
+      ? '<span class="gp-peer-kind" title="' + escapeHtml(x.ctx.cfg.name || "") + '">' + escapeHtml((x.ctx.cfg.name || "?").slice(0, 8)) + "</span>"
+      : "";
+    return '<div class="gp-peer-row">' +
+      '<span class="gp-peer-kind">' + escapeHtml(r.tool || "?") + "</span>" +
+      '<span class="gp-pname gp-rule-pat" style="flex:1;min-width:0" title="' + escapeHtml(pat) + '">' + escapeHtml(pat) + "</span>" +
+      src +
+      '<span class="gp-rule-scope">' + (r.scope === "session" ? "本会话" : "全局") + "</span>" +
+      '<button class="gp-peer-kick" data-id="' + escapeHtml(r.id) + '">删除</button>' +
+      "</div>";
+  }).join("");
+}
+$("gpRulesList").addEventListener("click", function (ev) {
+  const btn = ev.target.closest(".gp-peer-kick");
+  if (!btn) return;
+  const id = btn.dataset.id;
+  if (gpRuleArm !== id) {
+    // 两次点按确认（对齐设备移除的 arm 模式）
+    gpRuleArm = id;
+    btn.textContent = "确认删除？";
+    clearTimeout(gpRuleTimer);
+    gpRuleTimer = setTimeout(function () {
+      if (gpRuleArm === id) {
+        gpRuleArm = "";
+        const b = document.querySelector('#gpRulesList .gp-peer-kick[data-id="' + id + '"]');
+        if (b) b.textContent = "删除";
+      }
+    }, 3000);
+    return;
+  }
+  gpRuleArm = "";
+  clearTimeout(gpRuleTimer);
+  btn.disabled = true;
+  btn.textContent = "删除中…";
+  void (async function () {
+    const hit = collectAllowRules().rows.find(function (x) { return x.r.id === id; });
+    const ack = hit && await commandAck(hit.ctx, "COMMAND_ALLOW_RULE_REMOVE", { id: id });
+    if (!ack || !ack.ok) { toast((ack && ack.error) || "删除失败"); renderAllowRules(); return; }
+    // 本地即时收敛（ALLOW_RULES_UPDATED 到达时再全量替换一次，幂等不冲突）
+    if (hit && Array.isArray(hit.ctx.allowRules)) {
+      hit.ctx.allowRules = hit.ctx.allowRules.filter(function (r) { return r.id !== id; });
+    }
+    renderAllowRules();
+  })();
+});
+
 // #40x relay 页状态行：本机 relay 静默探测（复用 local-info / 桌面壳 probeLocal），
 // 有=「运行中 · 端口 N」绿点，无=「未检测到」灰点；开抽屉/切到 relay 页时都会补探
 let localRelayInfo = null, relayStatProbing = false;
@@ -8819,6 +9185,47 @@ async function probeRelayStat() {
   }
   txt.textContent = "未检测到";
 }
+
+// ── #196 relay 服务化开关（先 macOS）：状态/切换走壳命令 relay_service_status /
+//    relay_service_toggle（launchd 注册与停用在壳侧实现，见 main.rs）。可见性三重门：
+//    浏览器（无 __TAURI__）、旧壳（命令未注册 invoke 会 reject）、不支持平台
+//   （supported:false）→ 一律藏卡不误导。切换期间 relay 会重启（内嵌↔服务交接），
+//    本页正是 relay 托管的——ws 断线自动重连兜底，invoke 应答走壳不受影响 ──
+let svcCfg = null;      // null=不可用/未加载；否则 {supported,enabled,active}
+let svcBusy = false;
+function svcRender() {
+  const card = $("gpSvcCard");
+  if (!card) return;
+  card.style.display = svcCfg && svcCfg.supported ? "" : "none";
+  if (svcCfg) setLever($("gpSvcLever"), svcCfg.enabled ? 1 : 0);
+}
+async function loadRelaySvc() {
+  if (svcBusy || !window.__TAURI__?.core?.invoke) return;
+  try {
+    const st = await window.__TAURI__.core.invoke("relay_service_status");
+    svcCfg = st && typeof st === "object" ? st : null;
+  } catch { svcCfg = null; } // 旧壳：命令未注册
+  svcRender();
+}
+$("gpSvcLever")?.querySelectorAll(".lever-opt").forEach((b) => {
+  b.onclick = async () => {
+    if (!svcCfg || svcBusy) return;
+    const want = b.dataset.i === "1";
+    if (!!svcCfg.enabled === want) return;
+    svcBusy = true;
+    toast(want ? "正在注册系统服务…（约数秒）" : "正在停用系统服务…", 4000);
+    try {
+      const st = await window.__TAURI__.core.invoke("relay_service_toggle", { on: want });
+      svcCfg = st && typeof st === "object" ? st : svcCfg;
+    } catch (e) {
+      toast("切换失败：" + String((e && (e.message || e)) || e).slice(0, 90), 6000);
+    } finally {
+      svcBusy = false;
+      svcRender();
+      probeRelayStat(); // relay 属主刚换手（内嵌↔服务），状态行同步刷
+    }
+  };
+});
 
 // ── #448 设置「插件」页：三开关（任务调度强化/插入问答通知/恢复点）读写本机 relay
 //    /api/plugin-config（背后是 ~/.cc-deck/config.json，guard hooks 的单一事实源）。
