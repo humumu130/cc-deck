@@ -102,12 +102,17 @@ async function main() {
 
     // ---------- D1 随手办派单 ----------
     console.log("D1 随手办派单:");
-    const anchor = join(DATA, "proj-x"); // 故意不存在：验证 autoMkdir
+    // 冲刺 F-04：派单 = 干活语义，幽灵锚一律拒（不再 autoMkdir 静默跑单）
+    const ghost = join(DATA, "proj-ghost");
+    const dg = mgr.orgAction("dispatch", { anchor: ghost, prompt: "试探" }) as { ok: boolean; error?: string };
+    assert(dg.ok === false && (dg.error ?? "").includes("锚目录不存在"), "幽灵锚拒派（可读报错，F-04）");
+    assert(!existsSync(ghost), "拒绝后不留幽灵目录（无副作用）");
+    const anchor = join(DATA, "proj-x");
+    mkdirSync(anchor, { recursive: true });
     const d1 = mgr.orgAction("dispatch", { anchor, prompt: "把 README 的错别字改掉" }) as { ok: boolean; dispatch_id?: string; session_id?: string; error?: string };
-    assert(d1.ok === true, "派单成功（目录不存在 autoMkdir 兜住）");
+    assert(d1.ok === true, "派单成功（锚目录存在）");
     const wid1 = d1.ok ? (d1 as { session_id: string }).session_id : "";
     const did1 = d1.ok ? (d1 as { dispatch_id: string }).dispatch_id : "";
-    assert(existsSync(anchor), "worker cwd 目录已建（autoMkdir）");
     const rec1 = created.find((c) => c !== created[0] && c.prompt?.startsWith("[随手办 派单]"));
     assert(!!rec1 && rec1.cwd === anchor, "spawn 携纪律模板 + cwd 锚项目");
     assert(!!rec1 && rec1.prompt === wrapDispatchPrompt("随手办", "把 README 的错别字改掉"), "模板全文一致（wrapDispatchPrompt）");
@@ -220,8 +225,10 @@ async function main() {
       JSON.stringify({ ts: 2, id: "dsp-run", tier: "咨询", target: "org-leader", status: "running", session_id: "s-old" }) + "\n" +
       JSON.stringify({ ts: 3, id: "dsp-gid", tier: "正经立项", target: "s-old", status: "running", session_id: "s-old", project_anchor: "/tmp/anchor-x" }) + "\n", "utf-8");
     // D6b 豁免面上锁（#7 加固轮）：gid 悬账配套路由表/板条目预先在盘——断档补记
-    // 走 appendDispatch 直写、不经 closeOpenDispatches → 不写路由表、不搬板（此前
-    // 无测试锁这条豁免面；复活后板条目仍归原会话的语义靠它）
+    // 走 appendDispatch 直写、不经 closeOpenDispatches → 不写路由表（relay 重启不是
+    // worker 的账）。冲刺 F-08（G1 实测校准）：板条按中断口径退 todo——原「仍归原
+    // 会话等续跑收口」不成立（续跑回合不走派单 FIFO，无钩子搬 done → orphan doing
+    // 永挂）；auto-revive 续跑真交付了由 Leader/用户目测搬 done。
     writeFileSync(join(ORG2, "projects.json"), JSON.stringify({
       groups: [{ id: "g-x", name: "断档组", anchor_dir: "/tmp/anchor-x", status: "active", tier: "正经立项",
         headcount: [{ session_id: "s-old", role: "worker" }], single_card: false, created_at: 1, updated_at: 1 }],
@@ -247,7 +254,7 @@ async function main() {
     assert(rej2?.receipt === "relay 重启，回合中断", "补记回执语义");
     assert(log2.filter((e) => e.id === "dsp-gid").some((e) => e.status === "done"), "gid 悬账同样补记 done");
     assert((routingFor("g-x").find((x) => x.session_id === "s-old")?.count ?? -1) === 3, "断档补记不写路由表（count 不动）");
-    assert(loadBoard("g-x").entries[0]?.status === "doing", "断档补记不搬板（doing 原样——条目仍归原会话）");
+    assert(loadBoard("g-x").entries[0]?.status === "todo", "断档补记板条退 todo（F-08 中断口径——活没交付不能停 doing）");
     process.env.CCR_ORG_DIR = prevOrg2 ?? ORG;
     rmSync(ORG2, { recursive: true, force: true });
     rmSync(DATA2, { recursive: true, force: true });

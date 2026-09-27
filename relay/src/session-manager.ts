@@ -2446,12 +2446,22 @@ export class SessionManager {
     }
     // #26 断档补记：上一进程遗留的 running/dispatched 悬账（relay 崩溃/强杀时回合
     // 没收口；dispatched = M2 派单 spawn 窗口崩的账）——本进程的内存 FIFO 已随进程
-    // 丢失，不补则永悬；各补一行 done 收口（不联动搬卡：worker 会话 resume 后板条
-    // 仍归它，Leader 可重派）。auto-revive 续跑不走 COMMAND_MESSAGE 天然不入新账，
-    // 不会双记。
+    // 丢失，不补则永悬；各补一行 done 收口。auto-revive 续跑不走 COMMAND_MESSAGE
+    // 天然不入新账，不会双记。
+    // 冲刺 F-08（G1 实测校准）：板条同步退 todo（中断口径，同 E1/onSessionEnd）——
+    // 原设想「板条仍归 worker、续跑收口」不成立：auto-revive 续跑回合不走派单 FIFO、
+    // 无钩子搬 done → orphan doing 永挂（实测 t-g.txt 已交付板仍 doing，用户视角
+    // 假「进行中」）。退 todo 更诚实：真交付了由 Leader/用户目测搬 done。
+    // gid 不在台账字段里——按 dispatch id 扫现役+挂起组的板试搬（moveEntryByDispatch
+    // 板里无此 id 即 no-op，随手办无板条天然豁免；挂起组板冻结由 writableBoard 挡）。
     const hung = readDispatchLog().filter((e) => e.status === "running" || e.status === "dispatched");
-    for (const e of hung) {
-      appendDispatch({ ...e, ts: Date.now(), status: "done", receipt: "relay 重启，回合中断" });
+    if (hung.length) {
+      const bySt = listGroupsByStatus();
+      const scanGids = [...bySt.active, ...bySt.parked].map((g) => g.id);
+      for (const e of hung) {
+        appendDispatch({ ...e, ts: Date.now(), status: "done", receipt: "relay 重启，回合中断" });
+        if (e.project_anchor) for (const gid of scanGids) moveEntryByDispatch(gid, e.id, "todo");
+      }
     }
     const anchor = readOrgAnchor();
     if (!anchor) return this.createLeaderFirstTime();
@@ -2578,6 +2588,19 @@ export class SessionManager {
     try {
       writeFileSync(join(this.cfg.dataDir, "title-overrides.json"), JSON.stringify(this.titleOverrides));
     } catch {}
+    // 冲刺 F-05（B 线实测）：题名双写——原只落盘，重启回放才套用，重启前后列表标题
+    // 劈叉（重启前=派生自 prompt 的旧标题先渲染）。内存态同步改 + 补帧，两端一致。
+    const s = this.sessions.get(id);
+    if (s && !s.state.title_locked) {
+      s.state.title = title;
+      s.state.title_locked = true;
+      s.state.updated_at = Date.now();
+      this.bus.emit(id, "SESSION_UPDATED", {
+        status: s.state.status,
+        action_summary: s.state.action_summary,
+        title,
+      });
+    }
   }
 
   // #26 派单台账收口（M2 泛化全会话）：按会话键从 FIFO 取未收口派单补 done/failed
@@ -3042,7 +3065,9 @@ export class SessionManager {
   dispatchWorker(input: { anchor: string; prompt: string; gid?: string; title?: string; skills?: string[] }):
     { ok: true; dispatch_id: string; session_id: string } | { ok: false; error: string } {
     if (!input.prompt.trim()) return { ok: false, error: "prompt 必填" };
-    if (!input.anchor.startsWith("/")) return { ok: false, error: "anchor 必须是绝对路径" };
+    // 冲刺 F-03：anchor 校验移 gid 解析之后——gid 派单锚取自组（anchor 参数可空），
+    // 校验提前会在 API 直调形态误拒（CLI 恒带 anchor 无感，纯 API 冗余）
+    if (!input.gid && !input.anchor.startsWith("/")) return { ok: false, error: "anchor 必须是绝对路径" };
     let tier: DispatchTier = "随手办";
     let anchor = input.anchor;
     if (input.gid) {
@@ -3051,6 +3076,13 @@ export class SessionManager {
       if (g.status !== "active") return { ok: false, error: `项目组 ${g.name} 为 ${g.status}，不可派单（挂起冻结/结项只读）` };
       tier = g.tier;
       anchor = g.anchor_dir;
+    }
+    // 冲刺 F-04（B8 幽灵锚）：派单 = 干活语义，锚目录不存在即拒——原路径恒
+    // autoMkdir=true 静默 mkdir 跑单，Leader 打错锚 = 活跑在幽灵目录无人知
+    //（#208 用户显式开关口径）。立项口保持安家语义（ensureProjectClaudeMd
+    // 已 mkdir recursive，新项目目录合法诞生）；本口只接「已存在的活目录」。
+    if (!statSync(anchor, { throwIfNoEntry: false })?.isDirectory()) {
+      return { ok: false, error: `锚目录不存在: ${anchor}（派单不自动建目录——先立项，或核对路径拼写）` };
     }
     const dispatchId = randomUUID();
     // #26 M3 §5 双来源调度：项目组活先查路由表——空闲熟手 resume 原会话（会话亲和：
@@ -3663,7 +3695,9 @@ export class SessionManager {
         // M1 审查轮（漏收窗口）：reviveSaved 是 parked 恢复（停在等待输入，不再产
         // 生任何回合事件）——FIFO 里挂着的派单/咨询单永等不到 onTurnEnd，先按中断
         // 口径全清（回执写实；不写路由），否则 org status 挂假账直到下一条消息
-        this.closeOpenDispatches(s.state.session_id, "done", "流中断恢复待命，回合中断", true, false);
+        // 冲刺 F-06：板去向同中断口径退 todo（对照 onSessionEnd 兜底 :2240 与多消息
+        // 重放 :3657）——活没交付不能停 done，否则结项核对清单看不见未完
+        this.closeOpenDispatches(s.state.session_id, "done", "流中断恢复待命，回合中断", true, false, undefined, "todo");
         this.reviveSaved(s); // 无未回显消息：parked 恢复，停在等待输入
       }
       s.wd.phase = "idle";
