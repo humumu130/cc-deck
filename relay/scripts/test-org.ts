@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
   orgDir, ensureOrgDir, ensureOrgClaudeMd, ORG_CLAUDE_MD_SEED, ORG_CLAUDE_MD_M2_MARKER,
+  ORG_CLAUDE_MD_M2P1_MARKER, ORG_CLAUDE_MD_M2P1_SECTION,
   readOrgAnchor, writeOrgAnchor, clearOrgAnchor,
   appendDispatch, readDispatchLog, dispatchLogPath, type DispatchEntry, type OrgAnchor,
 } from "../src/org.js";
@@ -58,6 +59,9 @@ const orgMd = () => readFileSync(join(dir, "CLAUDE.md"), "utf-8");
 assert(ensureOrgClaudeMd(dir) === "created", "首建 → created（种子 + M2 分诊段一体）");
 assert(ensureOrgClaudeMd(dir) === "exists", "再跑 → exists（标记在，零写入）");
 assert(orgMd().startsWith(ORG_CLAUDE_MD_SEED) && orgMd().includes(ORG_CLAUDE_MD_M2_MARKER), "内容 = M1 种子 + M2 分诊段");
+// 冲刺 F-11：种子不再含 M1 过渡段（新装不进矛盾文本）；补强段（分诊执行口径）一并落
+assert(!ORG_CLAUDE_MD_SEED.includes("过渡期纪律"), "种子无 M1 过渡段（F-11：小事可直接办 vs 派 worker 打架源已除）");
+assert(orgMd().includes(ORG_CLAUDE_MD_M2P1_MARKER), "首建含补强段（F-11 分诊执行口径）");
 // M1 时代已落地的文件（无 M2 标记）：增量追加不回播、不丢既有记忆
 const dirM1 = mkdtempSync(join(tmpdir(), "cc-deck-org-"));
 const m1Content = ORG_CLAUDE_MD_SEED + "\n2026-09-26 用户偏好测试条目\n";
@@ -65,6 +69,18 @@ writeFileSync(join(dirM1, "CLAUDE.md"), m1Content, "utf-8");
 assert(ensureOrgClaudeMd(dirM1) === "upgraded", "M1 旧档 → upgraded（补 M2 段）");
 const upgraded = readFileSync(join(dirM1, "CLAUDE.md"), "utf-8");
 assert(upgraded.includes("用户偏好测试条目") && upgraded.includes(ORG_CLAUDE_MD_M2_MARKER), "既有记忆保留 + M2 段就位");
+assert(upgraded.includes(ORG_CLAUDE_MD_M2P1_MARKER), "M1 旧档一次升级补齐 M2 + 补强段（两段一体）");
+// 冲刺 F-11 存量形态（已有 M2 段、无补强段——当前沙盒即此形状）：只补缺段，不重播 M2
+const dirM2Only = mkdtempSync(join(tmpdir(), "cc-deck-org-"));
+writeFileSync(join(dirM2Only, "CLAUDE.md"),
+  ORG_CLAUDE_MD_SEED + "\n" + "## M2 分诊通道（旧版存量）\n\n- 旧文案占位\n\n2026-09-27 Leader 记忆条目\n", "utf-8");
+assert(ensureOrgClaudeMd(dirM2Only) === "upgraded", "M2 存量档 → upgraded（只补补强段）");
+const m2Only = readFileSync(join(dirM2Only, "CLAUDE.md"), "utf-8");
+assert(m2Only.split("## M2 分诊通道").length === 2, "M2 段不重播（标记只出现一次）");
+assert(m2Only.includes("Leader 记忆条目") && m2Only.includes(ORG_CLAUDE_MD_M2P1_MARKER), "记忆保留 + 补强段追加在尾");
+assert(m2Only.indexOf(ORG_CLAUDE_MD_M2P1_MARKER) > m2Only.indexOf("Leader 记忆条目"), "补强段追加在既有内容之后");
+assert(m2Only.includes(ORG_CLAUDE_MD_M2P1_SECTION.trim().split("\n")[0]), "补强段标题行原样");
+rmSync(dirM2Only, { recursive: true, force: true });
 assert(ensureOrgClaudeMd(dirM1) === "exists", "已 upgraded 再跑 → exists");
 rmSync(dirM1, { recursive: true, force: true });
 // 手改（有标记）后仍 exists

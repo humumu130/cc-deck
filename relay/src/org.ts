@@ -54,14 +54,6 @@ export const ORG_CLAUDE_MD_SEED = `# 团队 CLAUDE.md —— 常驻团队的记�
   2. 派单台账 = 同目录 dispatch-log.ndjson（快账：何时派了什么、结果如何；系统自动记录，勿手改）。
 - 换壳不换档：你会被更换模型或重建会话，账是文件不是记忆。每次上岗先读本文件自检——能复述关键偏好即通过。
 
-## 过渡期纪律（M1，直至 M2 收敛）
-
-- 你只承接两类事：
-  1. 咨询：技术判断、方案评审、答疑——直接回答，不立项、不动项目文件。
-  2. 随手办分诊：几分钟内能闭环的小事可直接办；需要开团的明确转项目侧。
-- 项目事务一律走对应项目的项目 Leader（N+1）：不越权指挥项目会话、不代管项目工作区。
-- 此期间沟通线为 N+1（M2 收敛为 1）：不在项目内代替用户做团队层决策。
-
 ## 团队记忆写入纪律（宁缺毋滥）
 
 写入门槛——三条同时满足才写：
@@ -91,7 +83,7 @@ export const ORG_CLAUDE_MD_SEED = `# 团队 CLAUDE.md —— 常驻团队的记�
 export const ORG_CLAUDE_MD_M2_MARKER = "## M2 分诊通道";
 export const ORG_CLAUDE_MD_M2_SECTION = `${ORG_CLAUDE_MD_M2_MARKER}（2026-09-27 起，v3.1 §4）
 
-- 上方「过渡期纪律（M1，直至 M2 收敛）」整段已过时：项目 Leader 退役，你是唯一分诊出口，沟通线收敛为 1。
+- 上方若还有「过渡期纪律（M1）」段：整段已过时——项目 Leader 退役，你是唯一分诊出口，沟通线收敛为 1（新装文件无此段，读下文即可）。
 - 用户的一切来意先分诊，五响应（响应四档 + 第五态）：
   1. 咨询：问题/分析，不改代码——对话内直接答；发现 spec 勘误顺手修（转随手办零确认）。
   2. 随手办：30 秒~几分钟小改——\`~/.cc-deck/bin/org dispatch <项目目录> "<任务>"\` 派 worker（不建组、不建 worktree）。
@@ -103,21 +95,40 @@ export const ORG_CLAUDE_MD_M2_SECTION = `${ORG_CLAUDE_MD_M2_MARKER}（2026-09-27
 - 随手办 worker 的纪律（回执一行/commit 前缀）由派单系统自动注入，无需你转述；台账系统自动记，勿手改。
 `;
 
+// 冲刺 F-11（J2 实测校准）：M1 过渡段「小事可直接办」（存量文件仅标过时未删）与 M2
+// 「派 worker」打架，模型择易而行亲自动手——活不在台账、无审计。此补强段两条硬纪律
+// 按标记幂等追加到存量文件（同 M2 机制：不重排不删既有条目）；种子侧 M1 段已删（新装
+// 文件只靠本段立规矩）。
+export const ORG_CLAUDE_MD_M2P1_MARKER = "## 分诊执行口径";
+export const ORG_CLAUDE_MD_M2P1_SECTION = `${ORG_CLAUDE_MD_M2P1_MARKER}（2026-09-28 补强，实测校准，优先级高于上文措辞）
+
+- 随手办一律派 worker：凡结论是「要改文件/跑命令交付点什么」的小事，必须走
+  \`~/.cc-deck/bin/org dispatch <项目目录> "<任务>"\` 派单——即使你亲手做更快也不行。
+  你亲自动手 = 活不在台账、无审计、无人接盘。你的双手只用于：读档查证、与用户对话、
+  执行 org 分诊指令本身。
+- 暂缓必须落台账：凡分诊结论是「时机未到/依赖未就绪/等用户发话」，无论有没有项目组，
+  都要落 \`org hold <组id|-> "<理由>" "<解除条件>"\`。暂缓只记在会话任务清单里 =
+  relay 重启即蒸发、org status 里看不见 = 等于没说。
+`;
+
 // 幂等种子：只首建、永不覆盖——Leader 上岗后会持续在本文件沉淀组织记忆，重启重播种子会
-// 抹掉积累。existsSync 为准（内容不比对，存在即认）。M2 增量按标记追加（缺标记才补，
-// 已有 M2 内容零写入）。
+// 抹掉积累。existsSync 为准（内容不比对，存在即认）。增量按标记追加（M2 → M2 补强，
+// 缺哪个补哪个，已有内容零写入——同 id 收敛语义）。
 export function ensureOrgClaudeMd(dir?: string): "created" | "exists" | "upgraded" {
   const p = orgFilePath("CLAUDE.md", dir);
   if (!existsSync(p)) {
-    writeFileSync(p, ORG_CLAUDE_MD_SEED + "\n" + ORG_CLAUDE_MD_M2_SECTION, "utf-8");
+    writeFileSync(p, ORG_CLAUDE_MD_SEED + "\n" + ORG_CLAUDE_MD_M2_SECTION + "\n" + ORG_CLAUDE_MD_M2P1_SECTION, "utf-8");
     return "created";
   }
   const cur = readFileSync(p, "utf-8");
-  if (!cur.includes(ORG_CLAUDE_MD_M2_MARKER)) {
-    writeFileSync(p, cur.trimEnd() + "\n\n" + ORG_CLAUDE_MD_M2_SECTION, "utf-8");
-    return "upgraded";
-  }
-  return "exists";
+  const hasM2 = cur.includes(ORG_CLAUDE_MD_M2_MARKER);
+  const hasM2P1 = cur.includes(ORG_CLAUDE_MD_M2P1_MARKER);
+  if (hasM2 && hasM2P1) return "exists";
+  const parts = [cur.trimEnd()];
+  if (!hasM2) parts.push(ORG_CLAUDE_MD_M2_SECTION);
+  if (!hasM2P1) parts.push(ORG_CLAUDE_MD_M2P1_SECTION);
+  writeFileSync(p, parts.join("\n\n"), "utf-8");
+  return "upgraded";
 }
 
 // ---------- Leader 常驻锚（org.json） ----------
