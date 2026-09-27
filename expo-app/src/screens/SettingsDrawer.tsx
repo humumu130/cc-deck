@@ -11,6 +11,7 @@ import { LogoMark, PencilIcon } from "../brand";
 import { setProcessFont, useProcessFont, setVoiceInput, useVoiceInput, setAggregate as persistAggregate, useAggregate, getIdleDimMin, setIdleDimMin, setEnterSend, useEnterSend, type ProcessFont } from "../display-settings";
 import { checkUpdate, announceUpdate, VERSION_NOTES, VERSION_DATE, releasePageUrl, type VersionNote } from "../updates";
 import { store, useRelay, type ServerEntry, type SourceStatus, isLanUrl } from "../store";
+import type { AllowRule } from "../protocol";
 import { fgSupported } from "../notify";
 import KeepAliveCard from "../KeepAliveCard";
 import Svg, { Path, Rect } from "react-native-svg";
@@ -482,6 +483,24 @@ export default function SettingsDrawer({
     snap.sources.find((s) => s.state === "online") ??
     snap.sources[0] ??
     null;
+
+  // #212 记住规则（设置抽屉「记住的规则」区数据）：各在线源合并展示；
+  // legacy 计数支持分态——全部在线源都是旧 relay（allowRules 为 null）时显示
+  // 「升级后可用」。数据在 SourceStatus 上（connStatusPatch 透出），删除/事件
+  // 到达都经快照发布自动重渲，无需手动刷新
+  const ruleRows: { src: SourceStatus; r: AllowRule }[] = [];
+  let ruleOnline = 0;
+  let ruleLegacy = 0;
+  for (const s of snap.sources) {
+    if (s.state !== "online") continue;
+    ruleOnline++;
+    if (!Array.isArray(s.allowRules)) { ruleLegacy++; continue; }
+    for (const r of s.allowRules) ruleRows.push({ src: s, r });
+  }
+  const ruleMultiSrc = new Set(ruleRows.map((x) => x.src.id)).size > 1;
+  // 删除两次点按确认（web 端同款 arm 模式，3s 超时复位）
+  const [ruleArm, setRuleArm] = useState<string | null>(null);
+  const ruleArmTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   // （#36 状态卡已删：connDotColor/connSubText 随之退役）
 
   // 关于区检查更新行已删（#130 收敛进关于弹窗），upd 不再需要
@@ -682,6 +701,63 @@ export default function SettingsDrawer({
           </Pressable>
         )}
         {pairErr ? <Text style={d.pairErrT}>{pairErr}</Text> : null}
+
+        {/* #212 记住的规则：审批卡「允许并记住」落的规则（各在线源合并展示），
+            删除按条目所属源路由发命令。分态：无在线源 / 全旧 relay（不支持）/
+            空表 / 列表。两次点按确认删除（对齐 web 端） */}
+        <View style={d.secHead}>
+          <Text style={d.secTitleT}>记住的规则{ruleRows.length ? ` · ${ruleRows.length}` : ""}</Text>
+          <View style={d.secToggle} />
+        </View>
+        {ruleOnline === 0 ? (
+          <Text style={d.srvEmpty}>连接电脑后可查看</Text>
+        ) : ruleLegacy === ruleOnline ? (
+          <Text style={d.srvEmpty}>此电脑版本不支持，升级后可用</Text>
+        ) : ruleRows.length === 0 ? (
+          <Text style={d.srvEmpty}>暂无记住的规则</Text>
+        ) : (
+          <View>
+            {ruleRows.map(({ src, r }) => {
+              const key = `${src.id}|${r.id}`;
+              const armed = ruleArm === key;
+              return (
+                <View key={key} style={d.ruleRow}>
+                  <View style={d.ruleHead}>
+                    <Text style={d.ruleTool}>{r.tool}</Text>
+                    <View style={d.ruleScope}>
+                      <Text style={d.ruleScopeT}>{r.scope === "session" ? "本会话" : "全局"}</Text>
+                    </View>
+                    {ruleMultiSrc ? (
+                      <Text style={d.ruleSrc} numberOfLines={1}>{src.relayName || src.name}</Text>
+                    ) : null}
+                    <Pressable
+                      hitSlop={6}
+                      onPress={() => {
+                        if (!armed) {
+                          setRuleArm(key);
+                          if (ruleArmTimer.current) clearTimeout(ruleArmTimer.current);
+                          ruleArmTimer.current = setTimeout(() => setRuleArm(null), 3000);
+                          return;
+                        }
+                        setRuleArm(null);
+                        if (ruleArmTimer.current) clearTimeout(ruleArmTimer.current);
+                        // 删除按源路由（rule id 只在所属 relay 存储里有效）
+                        store.send("COMMAND_ALLOW_RULE_REMOVE", { id: r.id }, src.id, (ack) => {
+                          if (ack.ok) store.dropAllowRuleLocal(src.id, r.id);
+                          else Alert.alert("删除失败", ack.err || "服务器未找到此规则");
+                        });
+                      }}
+                      accessibilityLabel={`删除规则 ${r.tool} ${r.pattern === "*" ? "全部操作" : r.pattern}`}
+                    >
+                      <Text style={armed ? d.ruleDelArmT : d.ruleDelT}>{armed ? "确认删除？" : "删除"}</Text>
+                    </Pressable>
+                  </View>
+                  <Text style={d.rulePat} numberOfLines={2}>{r.pattern === "*" ? "全部操作" : r.pattern}</Text>
+                </View>
+              );
+            })}
+          </View>
+        )}
 
         {/* #313 显示区可折叠：服务器列表同款 secHead + ▾/▸，AsyncStorage 记忆。
             #130 默认改折叠（低频区让路；存过偏好的老用户不受影响——null 才用默认） */}
@@ -987,6 +1063,23 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
   pairRefreshT: { color: c.dim, fontSize: 12.5 },
   pairHintT: { color: c.faint, fontSize: 10, marginTop: 6, textAlign: "center" },
   pairErrT: { color: c.waiting, fontSize: 11.5, marginBottom: 8 },
+  // #212 记住规则行：首行 tool（等宽粗体）+ scope 徽章 + [源名] + 删除，次行
+  // pattern 等宽小字（命令前缀/目录路径）；卡形态与服务器行同语言
+  ruleRow: {
+    backgroundColor: c.panel, borderWidth: 1, borderColor: c.line,
+    borderRadius: 12, paddingHorizontal: 11, paddingVertical: 8, marginBottom: 8,
+  },
+  ruleHead: { flexDirection: "row", alignItems: "center", gap: 6 },
+  ruleTool: { color: c.text, fontSize: 12, fontWeight: "700", fontFamily: "monospace" },
+  ruleScope: {
+    borderWidth: 1, borderColor: c.line, borderRadius: 5,
+    paddingHorizontal: 4, paddingVertical: 1, backgroundColor: c.tintSoft,
+  },
+  ruleScopeT: { color: c.dim, fontSize: 9, fontWeight: "600", lineHeight: 11 },
+  ruleSrc: { flex: 1, color: c.faint, fontSize: 9.5, textAlign: "right" },
+  ruleDelT: { color: c.faint, fontSize: 11, marginLeft: "auto" },
+  ruleDelArmT: { color: c.waiting, fontSize: 11, fontWeight: "700", marginLeft: "auto" },
+  rulePat: { color: c.dim, fontSize: 10, fontFamily: "monospace", lineHeight: 13.5, marginTop: 3 },
   setItem: {
     paddingVertical: 11, borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: c.line,

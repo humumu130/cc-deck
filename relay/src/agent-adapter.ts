@@ -11,6 +11,7 @@ import { randomUUID } from "node:crypto";
 import { homedir } from "node:os";
 import { delimiter as pathDelimiter, join } from "node:path";
 import { resolveClaudeCliPath } from "./cli-path.js";
+import { suggestPattern, type AllowRuleStore } from "./allow-rules.js";
 import type {
   FileChangeStats,
   SessionLogPayload,
@@ -102,6 +103,7 @@ export class AsyncQueue<T> {
 }
 
 interface PendingPermission {
+  tool: string; // #212 记规则用（allow 时从 pending 还原 tool+input）
   input: Record<string, unknown>;
   resolve: (r: PermissionResult) => void;
   created_at: number;
@@ -169,7 +171,7 @@ export interface AgentLike {
   // echo（#62）：客户端回显文本（文件消息正文合成路径指令后传原文本短回显，不露临时
   // 路径）；不传则回显 = 截断正文 + 图片计数
   sendMessage(text: string, images?: string[], echo?: string): void;
-  allow(requestId: string, by?: string): boolean;
+  allow(requestId: string, by?: string, rememberScope?: "session" | "global"): boolean;
   deny(requestId: string, reason?: string, by?: string): boolean;
   answer(requestId: string, answers: string[], by?: string): boolean;
   stop(): Promise<void>;
@@ -200,6 +202,8 @@ export class AgentSession {
   private pendingFileUses = new Map<string, { tool: string; path: string }>();
   private queue = new AsyncQueue<SDKUserMessage>();
   private pending = new Map<string, PendingPermission>();
+  // #212 允许并记住：权限请求先查规则，命中直接放行（不下发审批卡）
+  private readonly rules: AllowRuleStore | undefined;
   private stopping = false;
   private resultSeenForTurn = true;
   private lastSummary = "启动中";
@@ -236,8 +240,14 @@ export class AgentSession {
     // 等待输入，首个回合由后续 sendMessage 开启）。空串与 undefined 语义不同：
     // 空串照旧推送（保持既有 create/resume 调用行为逐字节不变）
     initialPrompt: string | undefined,
-    opts?: { resume?: string; permissionMode?: "default" | "acceptEdits" | "plan" | "bypassPermissions"; images?: string[] },
+    opts?: {
+      resume?: string;
+      permissionMode?: "default" | "acceptEdits" | "plan" | "bypassPermissions";
+      images?: string[];
+      rules?: AllowRuleStore; // #212 允许并记住：缺省 = 无规则（标题生成等非会话级用法）
+    },
   ) {
+    this.rules = opts?.rules;
     if (initialPrompt !== undefined || (opts?.images?.length ?? 0) > 0) {
       this.pushUserMessage(initialPrompt ?? "", opts?.images);
     }
@@ -719,6 +729,14 @@ export class AgentSession {
     input: Record<string, unknown>,
     opts: CanUseToolOpts,
   ): Promise<PermissionResult> {
+    // #212 允许并记住：命中已记规则 → 本地放行，不下发审批卡（可解释性：时间线
+    // 留一条 system 日志）。危险形态（组合命令/黑名单 token）永不进记忆通道，见
+    // allow-rules.ts matchPattern 的双重防护
+    const hit = this.rules?.match(this.id, toolName, input);
+    if (hit) {
+      this.cb.onLog("system", `已按记住的规则放行 ${toolName}（${hit.pattern === "*" ? "工具级" : hit.pattern}）`);
+      return Promise.resolve({ behavior: "allow", updatedInput: input });
+    }
     const requestId = opts.requestId ?? opts.toolUseID;
     // AskUserQuestion：结构化问题下发，客户端渲染选项作答
     const questions = toolName === "AskUserQuestion" ? parseAskQuestions(input) : [];
@@ -726,16 +744,21 @@ export class AgentSession {
       ? `提问: ${questions.map((q) => q.header).join(" / ")}`
       : opts.title ?? summarizeToolUse(toolName, input);
     this.lastSummary = summary;
+    // #212 可记忆请求带 remember（pattern/label 预算好，端上零解析）；
+    // 危险形态 suggestPattern 返回 null → 不带字段 → 端上不显示「记住」入口
+    const remember = suggestPattern(toolName, input);
     this.cb.onWaiting({
       request_id: requestId,
       tool_name: toolName,
       input_summary: summary,
       suggestions: [],
       ...(questions.length ? { questions } : {}),
+      ...(remember ? { remember } : {}),
     });
     this.cb.onLog("system", questions.length ? summary : `等待确认: ${summary}`);
     return new Promise<PermissionResult>((resolve) => {
       this.pending.set(requestId, {
+        tool: toolName,
         input,
         created_at: Date.now(),
         resolve: (r) => {
@@ -785,9 +808,15 @@ export class AgentSession {
     if (this.pending.size === 0) this.cb.onStatusChange("WORKING", this.lastSummary);
   }
 
-  allow(requestId: string, by?: string): boolean {
+  allow(requestId: string, by?: string, rememberScope?: "session" | "global"): boolean {
     const p = this.pending.get(requestId);
     if (!p) return false;
+    // #212 允许并记住：落规则（pattern 由 pending 里的 tool+input 重新推导——
+    // 与下发卡片时的 remember 同源，危险形态此处自然得 null 不落）
+    if (rememberScope && this.rules) {
+      const sug = suggestPattern(p.tool, p.input);
+      if (sug) this.rules.add(p.tool, sug.pattern, rememberScope, rememberScope === "session" ? this.id : undefined, by ?? "unknown");
+    }
     p.resolve({ behavior: "allow", updatedInput: p.input });
     this.cb.onWaitingResolved(requestId, "allow", by);
     return true;

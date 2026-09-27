@@ -10,6 +10,7 @@
     "test:sessions": "tsx scripts/test-sessions.ts",
     "test:ws": "tsx scripts/test-ws.ts",
     "test:history": "tsx scripts/test-history.ts",
+    "test:allow-rules": "tsx scripts/test-allow-rules.ts",
     "test:bridge": "tsx scripts/test-bridge.ts",
     "test:todo-env": "tsx scripts/test-todo-env.ts",
     "test:waiting-deadlock": "tsx scripts/test-waiting-deadlock.ts",

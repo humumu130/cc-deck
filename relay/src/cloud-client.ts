@@ -382,6 +382,8 @@ export class CloudClient {
         deliverables: readPluginConfig().deliverables,
         // #137 三步方案②：验收单待填态汇总（与 ws-server 直连快照同源同步）
         acceptances: listAcceptances(),
+        // #212 允许并记住：规则全量（与 ws-server 直连快照同源同步，#117 教训）
+        allow_rules: this.mgr.allowRules.list(),
         // relay 本机平台（#8）：与 ws-server 直连快照同源同步（#117 教训：云桥手机
         // 建会话的路径文案/盘符拦截同样需要；旧客户端忽略未知键）
         platform: process.platform,

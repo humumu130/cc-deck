@@ -1921,10 +1921,19 @@ export default function DetailScreen({ sid, onBack, initialView, ref }: { sid: s
       setPicking(false);
     }
   };
-  const decide = (allow: boolean) => {
+  const decide = (allow: boolean, rememberScope?: "session" | "global") => {
     if (!wr) return;
-    store.send(allow ? "COMMAND_CONTINUE" : "COMMAND_REJECT", { session_id: sid, request_id: wr.request_id });
+    // #212 remember_scope：allow 的同时落「允许并记住」规则（relay 侧判定危险形态不落）
+    store.send(allow ? "COMMAND_CONTINUE" : "COMMAND_REJECT", {
+      session_id: sid, request_id: wr.request_id,
+      ...(allow && rememberScope ? { remember_scope: rememberScope } : {}),
+    });
+    setRmOpen(false);
   };
+  // #212 允许并记住：范围确认条展开态。按 request_id 复位——换请求/审批收口
+  //（waiting_request 清空）自动回主按钮组，不残留上一次的展开
+  const [rmOpen, setRmOpen] = useState(false);
+  useEffect(() => { setRmOpen(false); }, [wr?.request_id]);
 
   return (
     <SafeAreaView style={d.safe} edges={["top"]}>
@@ -2608,14 +2617,42 @@ export default function DetailScreen({ sid, onBack, initialView, ref }: { sid: s
               <Text style={d.waitPs}>$ </Text>
               {wr!.input_summary}
             </Text>
-            <View style={d.wbtns}>
-              <PressScale style={[d.btnAllow, d.opRipple]} ripple={withA(c.onDone, 0.15)} haptic onPress={() => decide(true)}>
-                <Text style={d.btnAllowT}>✓ 允许</Text>
-              </PressScale>
-              <PressScale style={[d.btnReject, d.opRipple]} ripple={withA(c.waiting, 0.18)} haptic onPress={() => decide(false)}>
-                <Text style={d.btnRejectT}>✕ 拒绝</Text>
-              </PressScale>
-            </View>
+            {rmOpen && wr!.remember ? (
+              /* #212 范围确认条：主按钮组原地换成两选（对齐 web 端交互） */
+              <View>
+                <Text style={d.rmLabel} numberOfLines={2}>
+                  将记住 <Text style={d.rmLabelB}>{wr!.remember.label}</Text>，之后同类请求不再逐条弹窗（危险命令除外）
+                </Text>
+                <View style={d.wbtns}>
+                  <PressScale style={[d.btnAllow, d.opRipple]} ripple={withA(c.onDone, 0.15)} haptic onPress={() => decide(true, "session")}>
+                    <Text style={d.btnAllowT}>仅本会话</Text>
+                  </PressScale>
+                  <PressScale style={[d.btnAllow, d.opRipple]} ripple={withA(c.onDone, 0.15)} haptic onPress={() => decide(true, "global")}>
+                    <Text style={d.btnAllowT}>所有会话</Text>
+                  </PressScale>
+                  <PressScale style={[d.btnReject, d.opRipple]} ripple={withA(c.waiting, 0.18)} haptic onPress={() => setRmOpen(false)}>
+                    <Text style={d.btnRejectT}>✕ 返回</Text>
+                  </PressScale>
+                </View>
+              </View>
+            ) : (
+              <View>
+                <View style={d.wbtns}>
+                  <PressScale style={[d.btnAllow, d.opRipple]} ripple={withA(c.onDone, 0.15)} haptic onPress={() => decide(true)}>
+                    <Text style={d.btnAllowT}>✓ 允许</Text>
+                  </PressScale>
+                  <PressScale style={[d.btnReject, d.opRipple]} ripple={withA(c.waiting, 0.18)} haptic onPress={() => decide(false)}>
+                    <Text style={d.btnRejectT}>✕ 拒绝</Text>
+                  </PressScale>
+                </View>
+                {/* #212 remember 由 relay 判定可记忆才下发（危险形态无此字段 = 不出现） */}
+                {wr!.remember ? (
+                  <Pressable style={d.rmEntry} android_ripple={{ color: c.tintSoft, borderless: false, radius: 10 }} onPress={() => setRmOpen(true)}>
+                    <Text style={d.rmEntryT}>✓ 允许并记住…</Text>
+                  </Pressable>
+                ) : null}
+              </View>
+            )}
           </View>
           </FadeIn>
           )
@@ -3197,6 +3234,14 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
     backgroundColor: "transparent", borderWidth: 1, borderColor: withA(c.waiting, 0.45),
   },
   btnRejectT: { color: c.dangerFg, fontWeight: "600", fontSize: 14 },
+  /* #212 允许并记住：次级入口（视觉弱于「允许」）+ 范围确认条说明行 */
+  rmEntry: {
+    marginTop: 8, height: 34, borderRadius: 10, alignItems: "center", justifyContent: "center",
+    backgroundColor: "transparent", borderWidth: 1, borderColor: c.line,
+  },
+  rmEntryT: { color: c.dim, fontWeight: "600", fontSize: 12.5 },
+  rmLabel: { color: c.faint, fontSize: 11.5, lineHeight: 16, marginBottom: 9 },
+  rmLabelB: { color: c.dim, fontWeight: "600" },
   // AskUserQuestion 作答横幅（#190 stepper 指示器行）
   askSteps: { flexDirection: "row", alignItems: "center", gap: 7, marginBottom: 10 },
   askCount: { color: c.dim, fontSize: 11, marginRight: 2 },

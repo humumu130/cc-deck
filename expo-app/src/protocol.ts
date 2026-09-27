@@ -34,6 +34,20 @@ export interface WaitingPayload {
   questions?: AskQuestion[]; // AskUserQuestion 结构化问题（存在时渲染选项点选作答）
   decidable?: boolean;
   received_at?: number;
+  // #212 允许并记住：存在 = 可记忆（非危险形态），渲染「记住」入口；作答发
+  // COMMAND_CONTINUE + remember_scope（relay 落规则）。旧 relay 无此字段
+  remember?: { pattern: string; label: string };
+}
+
+// #212 记住的规则（relay AllowRule 镜像）：SNAPSHOT.allow_rules / ALLOW_RULES_UPDATED 携带
+export interface AllowRule {
+  id: string;
+  scope: "session" | "global";
+  session_id?: string;
+  tool: string;
+  pattern: string; // Bash=命令前缀；Edit 族=目录前缀；其他="*"（工具级）
+  created_at: number;
+  created_by: string;
 }
 
 export interface TodoItem {
@@ -174,7 +188,8 @@ export type CommandType =
   | "COMMAND_PERM"
   | "COMMAND_MODEL"
   | "COMMAND_REFRESH_TODOS"
-  | "COMMAND_ARTIFACT_FETCH";
+  | "COMMAND_ARTIFACT_FETCH"
+  | "COMMAND_ALLOW_RULE_REMOVE";
 
 // 云桥配对信息：relay 经可信 LAN 信道下发，手机落盘后即可走云通道
 export interface CloudPairInfo {

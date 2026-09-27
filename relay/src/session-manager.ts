@@ -23,6 +23,7 @@ import type { AgentLike } from "./agent-adapter.js";
 
 // 上下文窗口上限：口径与证据见 context-limit.ts（#72，session-manager/history 共用）
 import { contextLimitOf } from "./context-limit.js";
+import { AllowRuleStore } from "./allow-rules.js";
 
 // 2026-09-19 输出物口径（用户三轮澄清拍板，替代 #51 扩展名白名单）：只收「明确
 // 交付」的东西，且交付物原地不动、看板只做登记——
@@ -472,13 +473,16 @@ export class SessionManager {
   /** #388 供 ws-server 读默认模型（快照 payload.models 聚合用） */
   readonly cfg: RelayConfig;
 
+  /** #212 允许并记住：规则存储单例（Bridge / AgentSession / HTTP API 三方共用同一份） */
+  readonly allowRules: AllowRuleStore;
+
   // #49 测试缝：托管 AgentSession 工厂。生产恒为 null（直接 new AgentSession，
   // 行为与从前逐字节一致）；test-bridge/test-cloud 注入假 agent 验证置顶/按需恢复
   // 与休眠登记路径，免拉真 CLI 子进程
-  private agentFactory: ((cwd: string, model: string, cb: AgentCallbacks, initialPrompt: string | undefined, opts?: { resume?: string; permissionMode?: ManagedPermissionMode; images?: string[] }) => AgentLike) | null = null;
+  private agentFactory: ((cwd: string, model: string, cb: AgentCallbacks, initialPrompt: string | undefined, opts?: { resume?: string; permissionMode?: ManagedPermissionMode; images?: string[]; rules?: AllowRuleStore }) => AgentLike) | null = null;
 
   setAgentFactory(
-    fn: ((cwd: string, model: string, cb: AgentCallbacks, initialPrompt: string | undefined, opts?: { resume?: string; permissionMode?: ManagedPermissionMode; images?: string[] }) => AgentLike) | null,
+    fn: ((cwd: string, model: string, cb: AgentCallbacks, initialPrompt: string | undefined, opts?: { resume?: string; permissionMode?: ManagedPermissionMode; images?: string[]; rules?: AllowRuleStore }) => AgentLike) | null,
   ): void {
     this.agentFactory = fn;
   }
@@ -490,9 +494,10 @@ export class SessionManager {
     initialPrompt: string | undefined,
     opts?: { resume?: string; permissionMode?: ManagedPermissionMode; images?: string[] },
   ): AgentLike {
+    const withRules = { ...opts, rules: this.allowRules };
     return this.agentFactory
-      ? this.agentFactory(cwd, model, cb, initialPrompt, opts)
-      : new AgentSession(cwd, model, cb, initialPrompt, opts);
+      ? this.agentFactory(cwd, model, cb, initialPrompt, withRules)
+      : new AgentSession(cwd, model, cb, initialPrompt, withRules);
   }
 
   constructor(
@@ -500,6 +505,7 @@ export class SessionManager {
     cfg: RelayConfig,
   ) {
     this.cfg = cfg;
+    this.allowRules = new AllowRuleStore(cfg.dataDir);
     this.childSdkIds = new Set(readChildSessions(cfg.dataDir));
     this.deletedExtIds = new Set(readDeletedExts(cfg.dataDir));
     this.titleOverrides = readTitleOverrides(cfg.dataDir);
@@ -687,7 +693,7 @@ export class SessionManager {
   // ---------- 外部会话（hooks 桥接）----------
 
   private bridge: {
-    resolvePending: (sessionId: string, requestId: string, decision: "allow" | "deny", reason?: string) => boolean;
+    resolvePending: (sessionId: string, requestId: string, decision: "allow" | "deny", reason?: string, rememberScope?: "session" | "global", by?: string) => boolean;
     answerPending: (sessionId: string, requestId: string, answers: string[]) => string | null;
     extInput: (sessionId: string, text: string, images?: string[], files?: UploadBlob[]) => { ok: boolean; error?: string };
     extStop: (sessionId: string) => { ok: boolean; error?: string };
@@ -696,7 +702,7 @@ export class SessionManager {
   } | null = null;
 
   setBridge(b: {
-    resolvePending: (sessionId: string, requestId: string, decision: "allow" | "deny", reason?: string) => boolean;
+    resolvePending: (sessionId: string, requestId: string, decision: "allow" | "deny", reason?: string, rememberScope?: "session" | "global", by?: string) => boolean;
     answerPending: (sessionId: string, requestId: string, answers: string[]) => string | null;
     extInput: (sessionId: string, text: string, images?: string[], files?: UploadBlob[]) => { ok: boolean; error?: string };
     extStop: (sessionId: string) => { ok: boolean; error?: string };
@@ -1238,6 +1244,7 @@ export class SessionManager {
     if (!s) return;
     this.sessions.delete(id);
     this.lastStoreTodos.delete(id);
+    this.allowRules.dropSession(id); // #212 会话删除清 session 级记住规则
     if (s.state.external) {
       this.deletedExtIds.add(id);
       appendDeletedExt(this.cfg.dataDir, id);
@@ -1464,15 +1471,18 @@ export class SessionManager {
         }
         case "COMMAND_CONTINUE": {
           const s = this.require(cmd.payload.session_id);
+          // #212 remember_scope：allow 的同时落规则（可记忆性以当时下发的
+          // WaitingPayload.remember 为准，relay 侧 suggestPattern 二次校验，危险形态不落）
+          const scope = cmd.payload.remember_scope;
           if (s.state.external) {
-            if (!this.bridge?.resolvePending(cmd.payload.session_id, cmd.payload.request_id, "allow")) {
+            if (!this.bridge?.resolvePending(cmd.payload.session_id, cmd.payload.request_id, "allow", undefined, scope, by)) {
               return { command_id: cmd.command_id, ok: false, error: "no such pending request" };
             }
             this.emitWaitingResolved(cmd.payload.session_id, cmd.payload.request_id, "allow", by);
             return { command_id: cmd.command_id, ok: true };
           }
           const live = this.requireLive(cmd.payload.session_id);
-          if (!live.agent.allow(cmd.payload.request_id, by)) {
+          if (!live.agent.allow(cmd.payload.request_id, by, scope)) {
             return { command_id: cmd.command_id, ok: false, error: "no such pending request" };
           }
           return { command_id: cmd.command_id, ok: true };
@@ -1589,6 +1599,15 @@ export class SessionManager {
             return { command_id: cmd.command_id, ok: false, error: "会话运行中，不能删除" };
           }
           this.deleteSession(cmd.payload.session_id);
+          return { command_id: cmd.command_id, ok: true };
+        }
+        // #212 删除「允许并记住」规则：成功后瞬态广播最新全量（在线端设置页实时
+        // 收敛；离线端重连 SNAPSHOT.allow_rules 兜底）。删不存在的 id 回 ok:false
+        case "COMMAND_ALLOW_RULE_REMOVE": {
+          if (!this.allowRules.remove(cmd.payload.id)) {
+            return { command_id: cmd.command_id, ok: false, error: "no such rule" };
+          }
+          this.bus.emitTransient("ALLOW_RULES_UPDATED", { rules: this.allowRules.list() });
           return { command_id: cmd.command_id, ok: true };
         }
         case "COMMAND_RENAME": {

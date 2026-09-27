@@ -616,6 +616,9 @@
   .gp-peer-kick:hover { border-color: rgba(229,72,77,.45); background: rgba(229,72,77,.08); }
   .gp-peer-kick:disabled { opacity: .5; cursor: default; }
   .gp-peers-empty { padding: 10px 4px; font-size: 12px; color: var(--gp-faint); text-align: center; }
+  /* #212 记住的规则行：pattern 等宽展示（命令前缀/目录路径），scope 徽章右置 */
+  .gp-rule-pat { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-weight: 500; font-size: 11.5px; }
+  .gp-rule-scope { margin-left: auto; flex: none; font-size: 10px; font-weight: 600; border: 1px solid var(--gp-border); color: var(--gp-dim); border-radius: 5px; padding: 1px 5px; }
   .gp-peers-foot { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 8px 4px 2px; }
   #gpPeersCount { font-size: 11px; color: var(--gp-faint); min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .gp-peers-acts { display: flex; gap: 6px; flex: none; }
@@ -1698,6 +1701,19 @@
   #waitbox .cmds { margin-top: 12px; display: flex; gap: 8px; align-items: center; }
   /* #192 紧凑档按钮 40→33px（28-34 区间）；作答钮同尺寸保持节奏 */
   #waitbox .cmds button.big { padding: 7px 20px; font-size: 13.5px; }
+  /* #212 允许并记住：三级动作里的次级入口（视觉弱于「允许」，强于纯文本） */
+  #rememberBtn {
+    padding: 7px 14px; font-size: 12.5px; color: var(--dim);
+    background: transparent; border: 1px solid var(--border);
+  }
+  #rememberBtn:hover { color: var(--text-strong); border-color: color-mix(in srgb, var(--working) 45%, var(--border)); }
+  /* 记住范围确认条：点「允许并记住」后原地展开（替代主按钮组），label 一行说清将记什么 */
+  #rmbar { margin-top: 12px; display: none; flex-direction: column; gap: 8px; }
+  #rmbar .rm-label { font-size: 11.5px; color: var(--faint); }
+  #rmbar .rm-label b { color: var(--dim); font-weight: 600; word-break: break-all; }
+  #rmbar .rm-opts { display: flex; gap: 8px; align-items: center; }
+  #rmbar .rm-opts button { padding: 7px 16px; font-size: 12.5px; }
+  #rmbar .rm-opts .rm-go { margin-left: auto; }
   #answerBtn { margin-left: auto; }
   /* #192 主行动居右（对话惯例）；提问/审批按钮互斥显示不冲突 */
   #allowBtn { margin-left: auto; }
@@ -2363,6 +2379,15 @@
               </div>
             </div>
           </div>
+          <!-- #212 允许并记住：规则列表（SNAPSHOT.allow_rules 全量 + ALLOW_RULES_UPDATED
+               实时收敛；多源合并展示，删除按条目所属源路由命令） -->
+          <div class="gp-sec"><svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3.2a5.8 5.8 0 0 0-5.8 5.8v2.4H5a1.4 1.4 0 0 0 0 2.8h14a1.4 1.4 0 0 0 0-2.8h-1.2V9A5.8 5.8 0 0 0 12 3.2Z"/><path d="M9.2 17.4a2.8 2.8 0 0 0 5.6 0"/></svg>记住的规则</div>
+          <div class="gp-card gp-peers">
+            <div id="gpRulesList" class="gp-peers-list"><div class="gp-peers-empty">连接服务器后可查看</div></div>
+            <div class="gp-peers-foot">
+              <span id="gpRulesCount">审批时点「允许并记住」后出现；命中规则的请求自动放行，不再逐条弹窗</span>
+            </div>
+          </div>
         </section>
         <section class="gp-page off" id="gpPageDisp">
           <div class="gp-sec"><svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M2.6 12S6 5.8 12 5.8 21.4 12 21.4 12 18 18.2 12 18.2 2.6 12 2.6 12Z"/><circle cx="12" cy="12" r="2.9"/></svg>显示</div>
@@ -2475,8 +2500,18 @@
       <div class="cmds">
         <button id="askCancel">取消作答</button>
         <button id="allowBtn" class="allow big">✓ 允许</button>
+        <button id="rememberBtn">✓ 允许并记住…</button>
         <button id="rejectBtn" class="reject big">✗ 拒绝</button>
         <button id="answerBtn" class="primary big" style="display:none">提交作答</button>
+      </div>
+      <!-- #212 记住范围确认条：点「允许并记住」展开（主按钮组隐藏），两选一即发 allow+scope -->
+      <div id="rmbar">
+        <span class="rm-label">将记住：<b id="rmLabel"></b>，之后同类请求不再逐条弹窗（危险命令除外）</span>
+        <div class="rm-opts">
+          <button id="rmSessBtn" class="allow">仅本会话</button>
+          <button id="rmAllBtn" class="allow">所有会话</button>
+          <button id="rmCancelBtn" class="rm-go">✕ 返回</button>
+        </div>
       </div>
     </div>
 
@@ -2861,6 +2896,7 @@ function ensureCtx(cfg) {
     c = {
       cfg, status: "offline", statusText: "未连接",
       sessions: new Map(), timelines: new Map(), lastSeq: 0, models: [], deliverables: false,
+      allowRules: null, // #212 记住规则（SNAPSHOT.allow_rules；null = 旧 relay 不支持）
       ws: null, reconnectDelay: RETRY_BASE_MS, reconnectTimer: 0,
       failKind: "", retryAt: 0, retryNote: "", // #40web 失败归因/重试倒计时（见 setConn/scheduleReconnect）
       pendingPair: null, pairTimer: 0, pingTimer: null, lastPong: 0,
@@ -3987,6 +4023,8 @@ function onEvent(ctx, msg) {
       ctx.lastSeq = Math.max(ctx.lastSeq, msg.seq);
       ctx.models = Array.isArray(msg.payload.models) ? msg.payload.models : []; // #388 模型清单（旧版 relay 无字段=空）
       ctx.deliverables = msg.payload.deliverables === true; // #71 输出物开关（旧版 relay 无字段=关，tab 隐藏）
+      ctx.allowRules = Array.isArray(msg.payload.allow_rules) ? msg.payload.allow_rules : null; // #212 记住规则（旧 relay 无字段=不支持）
+      renderAllowRules(); // relay 页开着时即时收敛（函数内有可见性 gate）
       if (msg.payload.homedir) ctx.homedir = msg.payload.homedir; // #368 新建表单默认目录
       if (msg.payload.platform) ctx.platform = msg.payload.platform; // relay 平台：新建表单示例自适应+盘符拦截（旧 relay 无字段=中立文案）
       updateCwdPlaceholder(); // 运行时回调：五块 script 已全部执行，函数全局可达
@@ -4060,6 +4098,11 @@ function onEvent(ctx, msg) {
       const d = msg.payload.decision;
       const dText = d === "allow" ? "已允许" : d === "deny" ? "已拒绝" : d === "answer" ? "已作答" : d === "answered" ? "电脑端已作答" : d === "superseded" ? "请求已失效（CLI 已继续）" : "远程审批超时，回退本地";
       pushLog(ctx, sid, { ts: msg.ts, kind: "system", text: dText + (d === "timeout" || d === "superseded" ? "" : " (by " + msg.payload.by + ")") });
+      break;
+    }
+    // #212 记住规则变更（瞬态广播）：全量替换该源的规则表；设置页打开时实时收敛
+    case "ALLOW_RULES_UPDATED": {
+      if (Array.isArray(msg.payload.rules)) { ctx.allowRules = msg.payload.rules; renderAllowRules(); }
       break;
     }
     case "SESSION_ERROR": {
@@ -4808,6 +4851,9 @@ setInterval(() => {
 const pendOpen = new Set();
 // #142 子 Agent 面板折叠态：模块级记忆（renderDetail 1s 重建 DOM 不丢态，pendOpen 先例）
 let agCollapsed = false;
+// #212 记住范围确认条展开态：展开中的 request_id（renderDetail 每秒重渲不丢态；
+// 换请求/审批收口自动复位）
+let rmOpenFor = "";
 
 function renderDetail() {
   const sel = selSession();
@@ -4894,15 +4940,23 @@ function renderDetail() {
       (s.waiting_request.suggestions?.length && !isAsk ? " · 建议: " + s.waiting_request.suggestions.join(" / ") : "");
     // 单问题单选：点选项即发，自由输入回车即发——提交大按钮退场（对齐手机端 single 模式）
     const single = isAsk && s.waiting_request.questions.length === 1 && !s.waiting_request.questions[0].multi;
+    // #212 允许并记住：remember 由 relay 判定可记忆才下发（危险形态无此字段=不出现）
+    const remember = !isAsk && !passive && s.waiting_request.remember ? s.waiting_request.remember : null;
+    if (rmOpenFor && rmOpenFor !== s.waiting_request.request_id) rmOpenFor = "";
+    const rmOpen = !!remember && rmOpenFor === s.waiting_request.request_id;
     const cmds = document.querySelector("#waitbox .cmds");
-    if (cmds) cmds.style.display = passive ? "none" : "flex";
+    if (cmds) cmds.style.display = passive || rmOpen ? "none" : "flex";
     $("askCancel").style.display = passive || !isAsk ? "none" : "";
-    $("allowBtn").style.display = isAsk ? "none" : "";
-    $("rejectBtn").style.display = isAsk ? "none" : "";
+    $("allowBtn").style.display = isAsk || rmOpen ? "none" : "";
+    $("rejectBtn").style.display = isAsk || rmOpen ? "none" : "";
+    $("rememberBtn").style.display = remember && !rmOpen ? "" : "none";
     $("answerBtn").style.display = isAsk && !single ? "" : "none";
+    $("rmbar").style.display = rmOpen ? "flex" : "none";
+    if (rmOpen) $("rmLabel").textContent = remember.label || remember.pattern || "";
     renderQuestions(s.waiting_request);
   } else {
     wb.style.display = "none";
+    rmOpenFor = ""; // #212 审批收口/切走会话，复位记住范围条
   }
 
   // WORKING 状态行（类 CLI：✶ 摘要 · 回合耗时）
@@ -6009,7 +6063,7 @@ document.addEventListener("click", (ev) => {
 
 // ⚙ 设置浮层（#317）：显示项为散装开关的镜像（点行 = 触发原按钮再回读状态），
 // 服务器管理不进浮层——左栏常驻面板已是高频区，与手机抽屉同为一级入口
-const CONSOLE_VERSION = "0.6.1-test.1";
+const CONSOLE_VERSION = "0.6.1-test.2";
 // #396 拨杆同步：滑块移到 idx 档（transform 过渡），选中档文字加 .on（白字压品牌色滑块上）
 function setLever(el, idx) {
   if (!el) return;
@@ -6227,7 +6281,7 @@ function setGearSection(sec) {
     if (nav) nav.classList.toggle("on", on);
   }
   try { if (!window.__ccGearPin) localStorage.setItem(GP_SEC_KEY, sec); } catch {} // ?gear=1 深链会话不污染分页记忆（顺手项①）
-  if (sec === "relay") { probeRelayStat(); refreshPeers(); loadRelaySvc(); } // 设备清单随 relay 页可见时静默刷新（议题①）+ #196 服务化开关状态
+  if (sec === "relay") { probeRelayStat(); refreshPeers(); loadRelaySvc(); renderAllowRules(); } // 设备清单随 relay 页可见时静默刷新（议题①）+ #196 服务化开关状态 + #212 记住规则（纯本地渲染，数据在 SNAPSHOT/事件里已就位）
   if (sec === "plug") loadPluginCfg(); // #448 插件三开关随插件页可见时拉取本机配置
 }
 document.querySelectorAll(".gp-nav-item").forEach((b) => { b.onclick = () => { setGearSection(b.dataset.sec); }; });
@@ -7451,6 +7505,21 @@ $("allowBtn").onclick = () => {
   const sel = selSession();
   if (sel && sel.s.waiting_request) sendCommandTo(sel.ctx, "COMMAND_CONTINUE", { session_id: selected.sid, request_id: sel.s.waiting_request.request_id });
 };
+// #212 允许并记住：展开范围两选 → 点选即 allow+remember_scope（relay 落规则）
+$("rememberBtn").onclick = () => {
+  const sel = selSession();
+  if (sel && sel.s.waiting_request) { rmOpenFor = sel.s.waiting_request.request_id; renderDetail(); }
+};
+const rmSend = (scope) => {
+  const sel = selSession();
+  if (sel && sel.s.waiting_request) {
+    rmOpenFor = "";
+    sendCommandTo(sel.ctx, "COMMAND_CONTINUE", { session_id: selected.sid, request_id: sel.s.waiting_request.request_id, remember_scope: scope });
+  }
+};
+$("rmSessBtn").onclick = () => rmSend("session");
+$("rmAllBtn").onclick = () => rmSend("global");
+$("rmCancelBtn").onclick = () => { rmOpenFor = ""; renderDetail(); };
 $("answerBtn").onclick = submitAnswer;
 $("askCancel").onclick = () => {
   const sel = selSession();
@@ -8977,6 +9046,97 @@ $("gpPeersImportFile").onchange = function () {
   };
   reader.readAsText(f);
 };
+
+// ===== #212 记住规则（设置页「记住的规则」）=====
+// 数据源：ctx.allowRules（SNAPSHOT 全量 + ALLOW_RULES_UPDATED 全量替换），按源各自
+// 维护；渲染时合并展示，多源时行内标注源名。删除按条目所属源路由——rule id 只在
+// 所属 relay 的存储里有效，发错源只会得到 no such rule
+let gpRuleArm = "", gpRuleTimer = 0;
+function collectAllowRules() {
+  const rows = [];
+  let online = 0, legacy = 0;
+  for (const c of ctxs.values()) {
+    if (c.status !== "online") continue;
+    online++;
+    if (!Array.isArray(c.allowRules)) { legacy++; continue; }
+    for (const r of c.allowRules) rows.push({ ctx: c, r });
+  }
+  return { rows, online, legacy };
+}
+function renderAllowRules() {
+  const box = $("gpRulesList");
+  if (!box) return;
+  // relay 页不可见时跳过（SNAPSHOT/事件路径会路过这里，白写 DOM 没意义）
+  const page = $("gpPageRelay");
+  if (!page || page.classList.contains("off")) return;
+  gpRuleArm = "";
+  const col = collectAllowRules();
+  if (!col.online) {
+    box.innerHTML = '<div class="gp-peers-empty">连接服务器后可查看</div>';
+    $("gpRulesCount").textContent = "";
+    return;
+  }
+  if (col.legacy === col.online) {
+    box.innerHTML = '<div class="gp-peers-empty">此 relay 版本不支持「允许并记住」（升级后可用）</div>';
+    $("gpRulesCount").textContent = "";
+    return;
+  }
+  if (!col.rows.length) {
+    box.innerHTML = '<div class="gp-peers-empty">暂无记住的规则</div>';
+    $("gpRulesCount").textContent = "0 条规则";
+    return;
+  }
+  $("gpRulesCount").textContent = col.rows.length + " 条规则";
+  const multiSrc = new Set(col.rows.map(function (x) { return x.ctx.cfg && x.ctx.cfg.id; })).size > 1;
+  col.rows.sort(function (a, b) { return (b.r.created_at || 0) - (a.r.created_at || 0); });
+  box.innerHTML = col.rows.map(function (x) {
+    const r = x.r;
+    const pat = r.pattern === "*" ? "全部操作" : r.pattern;
+    const src = multiSrc && x.ctx.cfg
+      ? '<span class="gp-peer-kind" title="' + escapeHtml(x.ctx.cfg.name || "") + '">' + escapeHtml((x.ctx.cfg.name || "?").slice(0, 8)) + "</span>"
+      : "";
+    return '<div class="gp-peer-row">' +
+      '<span class="gp-peer-kind">' + escapeHtml(r.tool || "?") + "</span>" +
+      '<span class="gp-pname gp-rule-pat" style="flex:1;min-width:0" title="' + escapeHtml(pat) + '">' + escapeHtml(pat) + "</span>" +
+      src +
+      '<span class="gp-rule-scope">' + (r.scope === "session" ? "本会话" : "全局") + "</span>" +
+      '<button class="gp-peer-kick" data-id="' + escapeHtml(r.id) + '">删除</button>' +
+      "</div>";
+  }).join("");
+}
+$("gpRulesList").addEventListener("click", function (ev) {
+  const btn = ev.target.closest(".gp-peer-kick");
+  if (!btn) return;
+  const id = btn.dataset.id;
+  if (gpRuleArm !== id) {
+    // 两次点按确认（对齐设备移除的 arm 模式）
+    gpRuleArm = id;
+    btn.textContent = "确认删除？";
+    clearTimeout(gpRuleTimer);
+    gpRuleTimer = setTimeout(function () {
+      if (gpRuleArm === id) {
+        gpRuleArm = "";
+        const b = document.querySelector('#gpRulesList .gp-peer-kick[data-id="' + id + '"]');
+        if (b) b.textContent = "删除";
+      }
+    }, 3000);
+    return;
+  }
+  gpRuleArm = "";
+  clearTimeout(gpRuleTimer);
+  btn.disabled = true;
+  btn.textContent = "删除中…";
+  void (async function () {
+    const hit = collectAllowRules().rows.find(function (x) { return x.r.id === id; });
+    const ack = hit && await commandAck(hit.ctx, "COMMAND_ALLOW_RULE_REMOVE", { id: id });
+    if (!ack || !ack.ok) { toast((ack && ack.error) || "删除失败"); renderAllowRules(); return; }
+    // 本地即时收敛（ALLOW_RULES_UPDATED 到达时再全量替换一次，幂等不冲突）
+    if (hit && Array.isArray(hit.ctx.allowRules)) {
+      hit.ctx.allowRules = hit.ctx.allowRules.filter(function (r) { return r.id !== id; });
+    }
+    renderAllowRules();
+  })();
+});
 
 // #40x relay 页状态行：本机 relay 静默探测（复用 local-info / 桌面壳 probeLocal），
 // 有=「运行中 · 端口 N」绿点，无=「未检测到」灰点；开抽屉/切到 relay 页时都会补探

@@ -35,6 +35,7 @@ import {
 import { deriveTitle } from "./history.js";
 import { readTaskStoreTodos } from "./task-store.js";
 import { saveUploadImages, saveUploadFiles, type UploadBlob } from "./uploads.js";
+import { suggestPattern, type AllowRuleStore } from "./allow-rules.js";
 
 export interface BridgeOptions {
   gateTools: Set<string>;          // 远程审批门控的工具名
@@ -42,6 +43,7 @@ export interface BridgeOptions {
   holdMs?: number;                 // PreToolUse 最长挂起（默认 590s，须 < hook 脚本内部 600s < settings timeout 620s）
   questionHoldMs?: number;         // AskUserQuestion 挂起窗口（默认 90s；超时放行 CLI 本地选择器）
   dataDir: string;                 // pid 缓存所在数据目录（与 hook 单源对齐：插件形态 ~/.cc-deck/data，dev 形态 <repo>/data）
+  rules?: AllowRuleStore;          // #212 允许并记住：命中规则的门控请求直接放行（缺省 = 未启用）
 }
 
 export interface BridgeDecision {
@@ -55,8 +57,9 @@ interface Pending {
   requestId: string;
   resolve: (d: BridgeDecision) => void;
   timer: NodeJS.Timeout;
+  toolName: string;                        // #212 记规则用（allow 时从 pending 还原 tool+input）
+  toolInput: Record<string, unknown>;      // 原始 tool_input（AskUserQuestion 作答注入 / #212 记规则）
   questions?: AskQuestion[];               // AskUserQuestion：原问题（作答时回显进 updatedInput）
-  toolInput?: Record<string, unknown>;     // AskUserQuestion：原始 tool_input
 }
 
 // transcript 里一次任务工具操作（use 或已配对的 result）
@@ -1046,10 +1049,23 @@ export class Bridge {
     }
   }
 
-  // 远程命令决定挂起中的审批（COMMAND_CONTINUE / COMMAND_REJECT）
-  resolvePending(sessionId: string, requestId: string, decision: "allow" | "deny", reason?: string): boolean {
+  // 远程命令决定挂起中的审批（COMMAND_CONTINUE / COMMAND_REJECT）。
+  // #212 rememberScope：allow 的同时落「允许并记住」规则（pattern 从 pending 的
+  // tool+input 重新推导——与下发卡片时的 remember 同源，危险形态自然得 null 不落）
+  resolvePending(
+    sessionId: string,
+    requestId: string,
+    decision: "allow" | "deny",
+    reason?: string,
+    rememberScope?: "session" | "global",
+    by?: string,
+  ): boolean {
     const p = this.pending.get(sessionId);
     if (!p || p.requestId !== requestId) return false;
+    if (decision === "allow" && rememberScope && this.opts.rules) {
+      const sug = suggestPattern(p.toolName, p.toolInput);
+      if (sug) this.opts.rules.add(p.toolName, sug.pattern, rememberScope, rememberScope === "session" ? sessionId : undefined, by ?? "unknown");
+    }
     clearTimeout(p.timer);
     this.pending.delete(sessionId);
     p.resolve({ decision, reason });
@@ -2189,6 +2205,31 @@ export class Bridge {
       ev.tool_name === "TaskCreate" && typeof ev.tool_use_id === "string" && ev.tool_use_id ? ev.tool_use_id : undefined;
 
     const remote = !!this.mgr.getExternal(id)?.remote_mode;
+    // #212 允许并记住：命中已记规则 → 直接放行（不弹审批卡，也不等手机在线——
+    // 决定已由用户预存，无需在场）。remote_mode 关 = 用户显式收回远程决定权，规则
+    // 不生效；bypassPermissions = 终端侧显式免门控，同样跳过。日志走 tool_use +
+    // system 两行（与正常路径一致，可解释）
+    if (
+      remote &&
+      ev.tool_name &&
+      this.opts.gateTools.has(ev.tool_name) &&
+      ev.permission_mode !== "bypassPermissions"
+    ) {
+      const hit = this.opts.rules?.match(id, ev.tool_name, input);
+      if (hit) {
+        this.mgr.pushExternalLog(id, "tool_use", summary, ev.tool_name, {
+          detail: detailToolUse(ev.tool_name ?? "tool", input),
+          ...(taskCallId ? { id: taskCallId } : {}),
+        });
+        this.mgr.setExternalStatus(id, "WORKING", summary);
+        this.mgr.pushExternalLog(
+          id,
+          "system",
+          `已按记住的规则放行 ${ev.tool_name}（${hit.pattern === "*" ? "工具级" : hit.pattern}）`,
+        );
+        return { decision: "allow" };
+      }
+    }
     const shouldGate =
       // AskUserQuestion 不是权限决策而是必需输入：不要求 remote_mode，手机在线就下发选项
       (questions.length > 0 ||
@@ -2223,6 +2264,8 @@ export class Bridge {
 
     // 挂起等远程决定
     const requestId = randomUUID();
+    // #212 可记忆请求带 remember（提问类非权限语义，恒不带）
+    const remember = questions.length ? undefined : suggestPattern(ev.tool_name ?? "tool", input);
     const payload: WaitingPayload = {
       request_id: requestId,
       tool_name: ev.tool_name ?? "tool",
@@ -2230,6 +2273,7 @@ export class Bridge {
       suggestions: [],
       decidable: true,
       ...(questions.length ? { questions } : {}),
+      ...(remember ? { remember } : {}),
     };
     this.mgr.setExternalWaiting(id, payload);
     this.mgr.pushExternalLog(id, "tool_use", summary, ev.tool_name, {
@@ -2260,7 +2304,9 @@ export class Bridge {
         requestId,
         resolve,
         timer,
-        ...(questions.length ? { questions, toolInput: input } : {}),
+        toolName: ev.tool_name ?? "tool",
+        toolInput: input,
+        ...(questions.length ? { questions } : {}),
       });
     });
   }
