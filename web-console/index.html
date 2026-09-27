@@ -1086,15 +1086,15 @@
     font-size: 11.5px; font-weight: 600; color: var(--text); }
   .org-cf-t i { display: block; font-style: normal; font-size: 10.5px; color: var(--faint);
     overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .org-cf button { flex: none; padding: 4px 12px; }
+  .org-cf button { flex: none; width: 34px; min-width: 34px; padding: 4px 0; justify-content: center; } /* #12 审查：✓/✗ 基类形态不同（圆钮 vs 胶囊）曾致 37/30px 不齐，定宽统一 */
   .org-chips { display: flex; flex-wrap: wrap; gap: 6px; }
   .org-chip { display: inline-flex; align-items: center; gap: 5px; font-size: 11px; padding: 3px 9px;
     border-radius: 999px; color: var(--text); max-width: 180px; }
   .org-chip > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .org-chip i { font-style: normal; font-size: 9.5px; color: var(--faint); flex: none; }
+  .org-chip i { font-style: normal; font-size: 10px; color: var(--dim); flex: none; }
   .org-chip.active { border-color: rgba(85,217,138,.55); background: rgba(85,217,138,.1); }
   .org-chip.pending { border-color: rgba(232,181,4,.55); background: rgba(232,181,4,.1); }
-  .org-chip.parked { opacity: .62; }
+  .org-chip.parked { border-style: dashed; } /* 冲刺 #12：挂起弱化改虚线边框（原 opacity .62 压字 → 对比度不达标） */
   .org-chip.on { outline: 1.5px solid rgba(217,119,87,.65); }
   /* 会话卡组织徽标（§2.5 分流的列表形态）：[组名] 组归属 / [随手办] 无组派单 */
   .org-badge { display: inline-flex; align-items: center; flex: none; font-size: 9px; font-weight: 600;
@@ -1112,7 +1112,8 @@
   #orgdrawer .od-st { flex: none; font-size: 10.5px; padding: 2px 8px; border-radius: 999px;
     border: 1px solid var(--border); color: var(--dim); }
   #orgdrawer .od-body { flex: 1; overflow-y: auto; padding: 10px 15px 20px; }
-  #orgdrawer h5 { margin: 13px 0 6px; font-size: 11px; color: var(--faint); font-weight: 600; letter-spacing: .04em; }
+  #orgdrawer h5 { margin: 15px 0 6px; padding-top: 12px; border-top: 1px solid var(--border); /* #12 审查：分区分隔（原仅留白，标题过弱分区靠猜） */
+    font-size: 11px; color: var(--dim); font-weight: 600; letter-spacing: .04em; }
   #orgdrawer .od-sess { display: flex; align-items: center; gap: 7px; padding: 5px 7px; border-radius: 8px;
     cursor: pointer; font-size: 12px; color: var(--text); }
   #orgdrawer .od-sess:hover { background: rgba(127,127,127,.09); }
@@ -1131,7 +1132,8 @@
   #orgdrawer .od-col { display: flex; flex-direction: column; gap: 5px; }
   #orgdrawer .od-ent { padding: 6px 9px; border: 1px solid var(--border); border-radius: 8px; font-size: 12px; color: var(--text); }
   #orgdrawer .od-ent .od-note { font-size: 10.5px; color: var(--faint); margin-top: 2px; }
-  #orgdrawer .od-cols3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; align-items: start; }
+  #orgdrawer .od-cols3 { display: flex; gap: 8px; align-items: start; }
+  #orgdrawer .od-cols3 > div { flex: 1; min-width: 0; }
   #orgdrawer .od-cols3 h6 { font-size: 10.5px; color: var(--faint); margin: 0 0 4px; font-weight: 600; }
   #orgdrawer .od-rec { padding: 5px 8px; border-left: 2px solid var(--border); margin-bottom: 5px; font-size: 11.5px; color: var(--dim); }
   #orgdrawer .od-rec b { color: var(--text); font-weight: 600; }
@@ -4444,7 +4446,7 @@ function renderOrgZone() {
     .flatMap((c) => c.projects.map((g) => ({ g, ctx: c })))
     .filter((x) => x.g.status !== "archived"); // 单向终态不占常驻位（结项留台账可查）
   if (!confirms.length && !groups.length) {
-    if (box.dataset.key !== "-") { box.dataset.key = "-"; box.hidden = true; box.innerHTML = ""; }
+    if (box.dataset.key !== "-") { box.dataset.key = "-"; box.hidden = true; box.classList.remove("show"); box.innerHTML = ""; }
     return;
   }
   const key = confirms.map((x) => x.ctx.cfg.id + x.cf.id + (x.cf.status || "")).join(",") + "|" +
@@ -4475,6 +4477,8 @@ function renderOrgZone() {
   }
   box.innerHTML = html;
   box.hidden = false;
+  box.classList.add("show"); // 冲刺 #12 实测修复：CSS 显示门是 .show 类（#orgzone.show），
+  // 此前只清 hidden 属性 → display:none 恒关，团队区（确认卡+组 chips）永不可见
 }
 
 function orgCloseDrawer() {
@@ -4550,9 +4554,13 @@ function orgRenderDrawer() {
   let boardHtml;
   if (!ents.length) boardHtml = '<div class="od-empty">板为空</div>';
   else if (g.tier === "轻立项") boardHtml = '<div class="od-col">' + ents.map(entHtml).join("") + "</div>";
-  else boardHtml = '<div class="od-cols3">' + [["todo", "待办"], ["doing", "进行"], ["done", "完成"]].map(([st, lb]) =>
-    "<div><h6>" + lb + " " + ents.filter((e) => e.status === st).length + "</h6><div class=\"od-col\">" +
-    ents.filter((e) => e.status === st).map(entHtml).join("") + "</div></div>").join("") + "</div>";
+  // 冲刺 #12 视觉审查修复：空列不渲染——430px 抽屉里固定三栏会把卡片挤成 ~128px 窄条
+  //（6 行碎字）且空列悬空成死白；flex 布局 + 只渲染非空列，单列全宽/双列对半/三列等宽
+  else boardHtml = '<div class="od-cols3">' + [["todo", "待办"], ["doing", "进行"], ["done", "完成"]]
+    .map(([st, lb]) => ({ lb, list: ents.filter((e) => e.status === st) }))
+    .filter((c) => c.list.length)
+    .map((c) => "<div><h6>" + c.lb + " " + c.list.length + "</h6><div class=\"od-col\">" +
+      c.list.map(entHtml).join("") + "</div></div>").join("") + "</div>";
   if (board.frozen) boardHtml = '<div class="od-empty">已挂起：板冻结只读</div>' + boardHtml;
   // 回执流（§3.5 只收回执一行）：最近 30 条按 anchor 过滤，新在前
   const recs = orgDrawer.data.receipts || [];
@@ -4568,7 +4576,7 @@ function orgRenderDrawer() {
       '<span class="od-st">' + escapeHtml(g.tier || "") + "</span>" +
       (board.frozen ? '<span class="od-st">冻结</span>' : "") +
     "</div>" +
-    "<h5>熟手池（" + pool.length + " 人 · 经验/上次/状态，Leader 兼管）</h5>" + sessHtml +
+    "<h5>熟手池 · " + pool.length + " 人（Leader 兼管）</h5>" + sessHtml +
     "<h5>任务板</h5>" + boardHtml +
     "<h5>最近派单回执</h5>" + recsHtml;
 }
@@ -6341,7 +6349,7 @@ document.addEventListener("click", (ev) => {
 
 // ⚙ 设置浮层（#317）：显示项为散装开关的镜像（点行 = 触发原按钮再回读状态），
 // 服务器管理不进浮层——左栏常驻面板已是高频区，与手机抽屉同为一级入口
-const CONSOLE_VERSION = "0.6.1-test.1";
+const CONSOLE_VERSION = "0.6.1-test.2"; // #12 团队域 UI 修复批（orgzone 显示门/板列折叠/chip 对比度）
 // #396 拨杆同步：滑块移到 idx 档（transform 过渡），选中档文字加 .on（白字压品牌色滑块上）
 function setLever(el, idx) {
   if (!el) return;
