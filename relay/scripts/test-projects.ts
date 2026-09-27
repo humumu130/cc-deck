@@ -205,6 +205,62 @@ assert(chk?.headcount.length === 1, "在编成员入清单");
 assert(buildArchiveChecklist("pg-none", dir2) === null, "组不存在 → null");
 rmSync(dir2, { recursive: true, force: true });
 
+// ---------- M3 挂起自动化：findStaleGroups / markHoldSuggested ----------
+console.log("挂起自动化（活度口径）:");
+import { findStaleGroups, markHoldSuggested } from "../src/projects.js";
+import { recordRoutingResult } from "../src/routing.js";
+const DAY = 86_400_000;
+const dir3 = mkdtempSync(join(tmpdir(), "cc-deck-projects3-"));
+const now = 1_000_000_000_000;
+const cs = createGroup({ name: "fresh", anchor_dir: join(dir3, "a-fresh"), tier: "轻立项" }, dir3);
+const gidF = cs.ok ? cs.group.id : "";
+decideConfirm(cs.ok && cs.confirm ? cs.confirm.id : "", true, "u", dir3);
+setGroupStatus(gidF, "active", undefined, dir3);
+assert(findStaleGroups(now, 14, dir3).length === 0, "新组（updated_at=now）不 stale");
+assert(findStaleGroups(now, 0, dir3).length === 0, "staleDays=0 = 触发器关闭");
+// 手工把组龄拨老：直接改索引文件（updated_at 无 setter，写文件最省口径）
+const pfile = JSON.parse(readFileSync(join(dir3, "projects.json"), "utf-8")) as { groups: { id: string; updated_at: number }[] };
+pfile.groups.find((x) => x.id === gidF)!.updated_at = now - 20 * DAY;
+writeFileSync(join(dir3, "projects.json"), JSON.stringify(pfile), "utf-8");
+const st1 = findStaleGroups(now, 14, dir3);
+assert(st1.length === 1 && st1[0].gid === gidF && st1[0].idleDays >= 20, "20 天无活动 → stale（idleDays 写实）");
+// 板活动刷新活度：upsert 后不再 stale
+upsertBoardEntry(gidF, { text: "动了一下", status: "todo" }, dir3);
+assert(findStaleGroups(now, 14, dir3).length === 0, "板更新刷新活度");
+// 台账活动
+const p2 = JSON.parse(readFileSync(join(dir3, "projects.json"), "utf-8")) as { groups: { id: string; updated_at: number }[]; boards?: unknown };
+p2.groups.find((x) => x.id === gidF)!.updated_at = now - 20 * DAY;
+writeFileSync(join(dir3, "projects.json"), JSON.stringify(p2), "utf-8");
+const bfile = JSON.parse(readFileSync(join(dir3, "boards", `${gidF}.json`), "utf-8")) as { updated_at: number };
+bfile.updated_at = now - 20 * DAY;
+writeFileSync(join(dir3, "boards", `${gidF}.json`), JSON.stringify(bfile), "utf-8");
+assert(findStaleGroups(now, 14, dir3).length === 1, "组+板都老 → stale");
+// 台账活动：给另一组挂 3 天前的收口行（gidF 的台账保持空，隔离验证）
+const co = createGroup({ name: "other", anchor_dir: join(dir3, "a-other"), tier: "轻立项" }, dir3);
+const gidO = co.ok ? co.group.id : "";
+decideConfirm(co.ok && co.confirm ? co.confirm.id : "", true, "u", dir3);
+setGroupStatus(gidO, "active", undefined, dir3);
+const pO = JSON.parse(readFileSync(join(dir3, "projects.json"), "utf-8")) as { groups: { id: string; updated_at: number }[] };
+pO.groups.find((x) => x.id === gidO)!.updated_at = now - 20 * DAY;
+writeFileSync(join(dir3, "projects.json"), JSON.stringify(pO), "utf-8");
+appendDispatch({ ts: now - 3 * DAY, id: "dsp-recent", tier: "随手办", target: "w", project_anchor: join(dir3, "a-other"), status: "done", session_id: "w" }, dir3);
+assert(findStaleGroups(now, 14, dir3).some((x) => x.gid === gidF) && !findStaleGroups(now, 14, dir3).some((x) => x.gid === gidO), "3 天前的台账活动刷新活度（他组隔离）");
+// 路由表活动（熟手最近收工也算活度）
+recordRoutingResult(gidF, "w", "done", "最近收工", dir3);
+assert(findStaleGroups(now, 14, dir3).length === 0, "路由表 last_ts 刷新活度（熟手最近收工）");
+// parked/archived 不进扫描
+setGroupStatus(gidF, "parked", undefined, dir3);
+assert(findStaleGroups(now, 14, dir3).length === 0, "非 active 不扫描");
+setGroupStatus(gidF, "active", undefined, dir3);
+// 冷却戳：markHoldSuggested 不动 updated_at（建议不是活动）
+const before = JSON.parse(readFileSync(join(dir3, "projects.json"), "utf-8")) as { groups: { id: string; updated_at: number; hold_suggested_at?: number }[] };
+const updBefore = before.groups.find((x) => x.id === gidF)!.updated_at;
+markHoldSuggested(gidF, now - 1 * DAY, dir3);
+const after = JSON.parse(readFileSync(join(dir3, "projects.json"), "utf-8")) as { groups: { id: string; updated_at: number; hold_suggested_at?: number }[] };
+assert(after.groups.find((x) => x.id === gidF)!.hold_suggested_at === now - 1 * DAY, "冷却戳落盘");
+assert(after.groups.find((x) => x.id === gidF)!.updated_at === updBefore, "戳记不动 updated_at（不自我续命）");
+rmSync(dir3, { recursive: true, force: true });
+
 // ---------- 收尾 ----------
 rmSync(dir, { recursive: true, force: true });
 console.log(`\n${fail === 0 ? "PASS" : "FAIL"}: ${pass} passed, ${fail} failed`);

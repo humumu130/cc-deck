@@ -125,6 +125,10 @@ export interface SessionState {
   // （咨询 Leader 无此二字段）
   project_gid?: string;
   dispatch_tier?: string;
+  // #26 M3 两层联动（§6.2 组挂起→成员会话全 parked）：成员会话随组挂起休眠时
+  // 记来源组 id——进程已停、可点开可发消息（消息路径 resumeAgent 天然复活）；
+  // 组复活清除。路由表记录不受影响（档案永存，复活后查表拉原班）
+  org_parked?: string;
   // 最近一次任务完成汇报（#254）：TASK_DONE 是瞬态事件，客户端断线/进程被杀时收不到；
   // 记入会话状态仅随 SNAPSHOT 下发（SESSION_UPDATED 增量帧不携带），端上按 ts 去重后恢复
   // 未读汇报。remaining_count 为数字（剩余条数）——TASK_DONE 事件的 remaining 是 TodoItem[]，

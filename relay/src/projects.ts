@@ -14,6 +14,8 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { randomUUID } from "node:crypto";
 import { join } from "node:path";
 import { orgDir, readDispatchLog } from "./org.js";
+// #26 M3 挂起自动化活度口径需要路由表（熟手最近收工）；routing 只 import org，无环
+import { routingFor } from "./routing.js";
 
 // ---------- 类型 ----------
 
@@ -42,6 +44,9 @@ export interface ProjectGroup {
   archived_at?: number;
   /** 结项一句话归档（零异常时）或被否决说明 */
   archive_note?: string;
+  /** #26 M3 挂起自动化：上次出建议暂缓单的时刻（手动/触发器同戳）——否决冷却
+   * 起算点，触发器在窗口期内不重复叨扰 */
+  hold_suggested_at?: number;
 }
 
 // 板状态只定义收口语义：待办 / 进行（派单承接）/ 完成（收口）。v3.1 §6.1 只要求
@@ -569,4 +574,48 @@ export function setLightConfirmTrusted(trusted: boolean, dir?: string): void {
   if (f.trust_light === trusted) return;
   f.trust_light = trusted;
   writeProjectsFile(f, dir);
+}
+
+// ---------- #26 M3 挂起自动化（§5 两周无活动建议暂缓） ----------
+
+// 建议冷却戳：出单即戳（手动/触发器同口径）。不动 updated_at——「建议」不是活动，
+// 戳了会自我续命让 stale 判定失真
+export function markHoldSuggested(gid: string, at: number, dir?: string): void {
+  const f = readProjectsFile(dir);
+  const g = f.groups.find((x) => x.id === gid);
+  if (!g) return;
+  g.hold_suggested_at = at;
+  saveGroup(g, dir);
+}
+
+export interface StaleGroupInfo {
+  gid: string;
+  name: string;
+  /** 整数天（最后活动距今） */
+  idleDays: number;
+}
+
+// 活度口径：组 updated_at ∨ 板 updated_at ∨ 该组派单台账最新 ts ∨ 路由表最新
+// last_ts（熟手最近收工）——四路取最大即「最后活动」。纯函数（now 注入）：
+// 扫描器与单测共用同一判定。staleDays<=0 直接空（触发器关闭态）。
+export function findStaleGroups(now: number, staleDays: number, dir?: string): StaleGroupInfo[] {
+  if (staleDays <= 0) return [];
+  const cutoff = now - staleDays * 86_400_000;
+  const DAY = 86_400_000;
+  const out: StaleGroupInfo[] = [];
+  for (const g of listGroups(dir)) {
+    if (g.status !== "active") continue;
+    const board = loadBoard(g.id, dir);
+    let last = Math.max(g.updated_at, board.updated_at);
+    const anchor = g.anchor_dir.replace(/\/+$/, "");
+    for (const e of readDispatchLog(dir)) {
+      const a = e.project_anchor ?? "";
+      if (a && a.replace(/\/+$/, "") === anchor && e.ts > last) last = e.ts;
+    }
+    for (const r of routingFor(g.id, dir)) {
+      if (r.last_ts > last) last = r.last_ts;
+    }
+    if (last < cutoff) out.push({ gid: g.id, name: g.name, idleDays: Math.max(1, Math.floor((now - last) / DAY)) });
+  }
+  return out;
 }

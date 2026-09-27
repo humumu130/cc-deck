@@ -10,7 +10,7 @@ import { join } from "node:path";
 import { EventBus } from "../src/event-bus.js";
 import { SessionManager, wrapDispatchPrompt } from "../src/session-manager.js";
 import { readDispatchLog } from "../src/org.js";
-import { listGroups, loadBoard } from "../src/projects.js";
+import { listGroups, listPendingConfirms, loadBoard } from "../src/projects.js";
 import { routingFor } from "../src/routing.js";
 import type { RelayConfig } from "../src/config.js";
 import type { AgentCallbacks, AgentLike } from "../src/agent-adapter.js";
@@ -279,6 +279,76 @@ async function main() {
     assert(tg.ok === true && (routingFor(gidE).find((x) => x.session_id === wE3)?.tags ?? []).join(",") === "rust,cli", "org tag 标签落账");
     const rtMiss = mgr.orgAction("rate", { gid: gidE, sid: "no-such", rating: "good" });
     assert(rtMiss.ok === false, "无合作记录不可评");
+
+    // ---------- D9 M3 两层联动 + 挂起自动化 ----------
+    console.log("D9 两层联动/挂起自动化:");
+    const cz = mgr.orgAction("project-create", { name: "zeta", anchor: join(DATA, "proj-z"), tier: "正经立项" }) as { ok: boolean; data?: { confirm?: { id: string }; group?: { id: string } } };
+    const gidZ = cz.data?.group?.id ?? "";
+    mgr.orgAction("confirm-decide", { confirm_id: cz.data?.confirm?.id ?? "", approve: true, by: "u" });
+    const z1 = mgr.orgAction("dispatch", { anchor: join(DATA, "proj-z"), prompt: "zeta 第一单", gid: gidZ }) as { ok: boolean; session_id?: string };
+    const wZ1 = z1.session_id ?? "";
+    assert(z1.ok === true && !!wZ1, "zeta 首单承接");
+    assert(await waitFor(() => (routingFor(gidZ).find((x) => x.session_id === wZ1)?.count ?? 0) === 1), "zeta 首单收口 count=1");
+    // 在跑成员 + 悬账 → 组挂起：悬账收口（中断≠干砸，路由表无感）+ 会话休眠
+    const hack = mgr as unknown as {
+      sessions: Map<string, { state: { status: string; org_parked?: string }; agent: { ended: boolean } | null; streamGen: number }>;
+      openDispatches: Map<string, { id: string; tier: string; gid?: string; anchor?: string }[]>;
+    };
+    hack.sessions.get(wZ1)!.state.status = "WORKING";
+    hack.openDispatches.set(wZ1, [{ id: "dsp-z-inflight", tier: "正经立项", gid: gidZ, anchor: join(DATA, "proj-z") }]);
+    const failedBefore = routingFor(gidZ).find((x) => x.session_id === wZ1)?.failed ?? 0;
+    const pz = mgr.orgAction("project-status", { id: gidZ, to: "parked", note: "先放放" });
+    assert(pz.ok === true && listGroups().find((g) => g.id === gidZ)?.status === "parked", "组挂起直达");
+    assert(hack.sessions.get(wZ1)?.state.org_parked === gidZ, "成员会话两层联动：org_parked 落组 id");
+    assert(hack.sessions.get(wZ1)?.state.status === "DONE", "挂起成员收口 DONE（退休进熟手池）");
+    assert(readDispatchLog().some((e) => e.id === "dsp-z-inflight" && e.status === "failed" && e.receipt === "项目组挂起，回合中断"), "悬账收口：中断≠干砸（failed+写实回执）");
+    assert((routingFor(gidZ).find((x) => x.session_id === wZ1)?.failed ?? 1) === failedBefore, "路由表不被挂起中断污染");
+    const frz = mgr.orgAction("dispatch", { anchor: join(DATA, "proj-z"), prompt: "冻结中偷活", gid: gidZ });
+    assert(frz.ok === false, "挂起组拒派单（M2 护栏不回归）");
+    // 复活：只清标记（零 eager spawn）+ 下次派单查表拉原班
+    const rz = mgr.orgAction("project-status", { id: gidZ, to: "active" });
+    assert(rz.ok === true && hack.sessions.get(wZ1)?.state.org_parked === undefined, "复活清成员 parked 标记");
+    const z2 = mgr.orgAction("dispatch", { anchor: join(DATA, "proj-z"), prompt: "zeta 第二单", gid: gidZ }) as { ok: boolean; session_id?: string };
+    assert(z2.ok === true && z2.session_id === wZ1, "复活后派单 → 路由表拉原班（resume 原会话）");
+    assert(await waitFor(() => (routingFor(gidZ).find((x) => x.session_id === wZ1)?.count ?? 0) === 2), "原班再收口 count=2");
+
+    // 挂起自动化：20 天无活动 → autoSuggestHold 出卡；幂等 + 否决冷却 + 开关
+    //（用零活动新组验证——zeta 的板/台账/路由全是刚刚的活动，活度口径不会 stale）
+    const DAY = 86_400_000;
+    const co2 = mgr.orgAction("project-create", { name: "oldwork", anchor: join(DATA, "proj-old"), tier: "正经立项" }) as { ok: boolean; data?: { confirm?: { id: string }; group?: { id: string } } };
+    const gidO2 = co2.data?.group?.id ?? "";
+    mgr.orgAction("confirm-decide", { confirm_id: co2.data?.confirm?.id ?? "", approve: true, by: "u" });
+    const backdate = (gid: string, days: number) => {
+      const pf = JSON.parse(readFileSync(join(ORG, "projects.json"), "utf-8")) as { groups: { id: string; updated_at: number; hold_suggested_at?: number }[] };
+      const g0 = pf.groups.find((x) => x.id === gid);
+      if (g0) g0.updated_at = Date.now() - days * DAY;
+      writeFileSync(join(ORG, "projects.json"), JSON.stringify(pf), "utf-8");
+    };
+    backdate(gidO2, 20);
+    const scan1 = mgr.autoSuggestHold();
+    assert(scan1.suggested.includes(gidO2), "20 天无活动 → 自动建议暂缓卡");
+    const autoCf = listPendingConfirms().find((c) => c.kind === "suggest-hold" && c.payload.gid === gidO2);
+    assert(!!autoCf && autoCf.payload.auto === true, "触发器卡带 auto 标（与手动建议可辨）");
+    assert(!!listGroups().find((g) => g.id === gidO2)?.hold_suggested_at, "冷却戳落盘");
+    const scan2 = mgr.autoSuggestHold();
+    assert(!scan2.suggested.includes(gidO2) && scan2.skipped.includes(gidO2), "二次扫描不重提（待决卡+冷却）");
+    // 否决 → 冷却：卡被否决后再扫仍不提
+    mgr.orgAction("confirm-decide", { confirm_id: autoCf?.id ?? "", approve: false, by: "u" });
+    const scan3 = mgr.autoSuggestHold();
+    assert(!scan3.suggested.includes(gidO2), "否决后窗口期内不叨扰（hold_suggested_at 冷却）");
+    // 冷却过期 → 再提
+    const pf2 = JSON.parse(readFileSync(join(ORG, "projects.json"), "utf-8")) as { groups: { id: string; hold_suggested_at?: number }[] };
+    pf2.groups.find((x) => x.id === gidO2)!.hold_suggested_at = Date.now() - 15 * DAY;
+    writeFileSync(join(ORG, "projects.json"), JSON.stringify(pf2), "utf-8");
+    const scan4 = mgr.autoSuggestHold();
+    assert(scan4.suggested.includes(gidO2), "冷却过期 → 可再建议");
+    mgr.orgAction("confirm-decide", { confirm_id: listPendingConfirms().find((c) => c.kind === "suggest-hold" && c.payload.gid === gidO2)?.id ?? "", approve: false, by: "u" });
+    // 开关：CCR_ORG_STALE_DAYS=0 关触发器
+    const prevStale = process.env.CCR_ORG_STALE_DAYS;
+    process.env.CCR_ORG_STALE_DAYS = "0";
+    const scan5 = mgr.autoSuggestHold();
+    assert(scan5.suggested.length === 0, "CCR_ORG_STALE_DAYS=0 触发器关闭");
+    if (prevStale === undefined) delete process.env.CCR_ORG_STALE_DAYS; else process.env.CCR_ORG_STALE_DAYS = prevStale;
 
     // ---------- 收尾 ----------
     console.log(`\n${fail === 0 ? "PASS" : "FAIL"}: ${pass} passed, ${fail} failed`);

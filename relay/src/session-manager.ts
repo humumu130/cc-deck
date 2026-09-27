@@ -12,7 +12,8 @@ import type { DispatchTier } from "./org.js";
 // 全部经 orgAction 单漏斗进出，广播统一 emitOrgState/emitBoard
 import {
   addConfirm, addMember, buildArchiveChecklist, createGroup, decideConfirm, findGroup,
-  listGroups, listPendingConfirms, loadBoard, moveBoardEntry, moveEntryByDispatch,
+  findStaleGroups, listGroups, listPendingConfirms, loadBoard, markHoldSuggested,
+  moveBoardEntry, moveEntryByDispatch,
   removeBoardEntry, setGroupStatus, setGroupTier, setLightConfirmTrusted, upsertBoardEntry,
   ensureProjectClaudeMd,
   type OrgConfirm, type ProjectGroupStatus, type ProjectTier, type BoardEntryStatus,
@@ -483,6 +484,8 @@ export class SessionManager {
   private openDispatches = new Map<string, { id: string; tier: DispatchTier; gid?: string; anchor?: string }[]>();
   private leaderId: string | null = null;
   private leaderEnsured = false;
+  // #26 M3 挂起自动化扫描节拍（boot + 每小时；startStaleScan 起，CCR_ORG_STALE_DAYS=0 不起）
+  private staleTimer: ReturnType<typeof setInterval> | null = null;
 
   /** #388 供 ws-server 读默认模型（快照 payload.models 聚合用） */
   readonly cfg: RelayConfig;
@@ -2545,7 +2548,7 @@ export class SessionManager {
     this.openDispatches.set(key, q);
   }
 
-  private closeOpenDispatches(key: string, status: "done" | "failed", receipt: string, all = false): void {
+  private closeOpenDispatches(key: string, status: "done" | "failed", receipt: string, all = false, recordRouting = true): void {
     const q = this.openDispatches.get(key);
     if (!q || q.length === 0) return;
     const es = all
@@ -2563,8 +2566,10 @@ export class SessionManager {
         moveEntryByDispatch(e.gid, e.id, status === "done" ? "done" : "todo");
         this.emitBoard(e.gid);
         // #26 M3 路由表记账：项目组派单收口即写熟手底账（次数/上次/回执；断档补记
-        // 直接走 appendDispatch 不经此，天然豁免——relay 重启不是 worker 的账）
-        recordRoutingResult(e.gid, key, status, receipt);
+        // 直接走 appendDispatch 不经此，天然豁免——relay 重启不是 worker 的账）。
+        // recordRouting=false = 挂起联动收口：回合中断是用户决策不是 worker 干砸，
+        // 熟手评价无感
+        if (recordRouting) recordRoutingResult(e.gid, key, status, receipt);
       }
     }
   }
@@ -2637,6 +2642,10 @@ export class SessionManager {
           // 挂起（你说「先放放」）/ 复活（读档重建）：用户明示决策，直达不走确认单
           const r = setGroupStatus(id, to, note || undefined);
           if (!r.ok) return r;
+          // #26 M3 两层联动：挂起 → 成员会话全 parked（收悬账+停流+退休进熟手池）；
+          // 复活 → 只清标记（原班由路由表在下次派单拉回）
+          if (to === "parked") this.parkGroupMembers(r.group.id);
+          else if (to === "active") this.reviveGroupMembers(r.group.id);
           this.emitOrgState();
           this.emitBoard(r.group.id); // 冻结态翻转随板广播
           return { ok: true, data: { group: r.group } };
@@ -2683,6 +2692,7 @@ export class SessionManager {
             reason,
             payload: { gid: g.id, ...(condition ? { condition } : {}) },
           });
+          markHoldSuggested(g.id, Date.now()); // #26 M3：冷却起算——否决后触发器再等一个窗口不重复叨扰
           this.emitOrgState();
           return { ok: true, data: { needsConfirm: true, confirm } };
         }
@@ -2789,7 +2799,8 @@ export class SessionManager {
           if (gid) setGroupTier(gid, (c.payload.to_tier === "轻立项" ? "轻立项" : "正经立项"));
           break;
         case "suggest-hold":
-          if (gid) setGroupStatus(gid, "parked"); // 点头即挂起（§4 第五态）
+          // 点头即挂起（§4 第五态）+ M3 两层联动（成员会话全 parked）
+          if (gid && setGroupStatus(gid, "parked").ok) this.parkGroupMembers(gid);
           break;
         case "archive":
           if (gid) {
@@ -2797,7 +2808,8 @@ export class SessionManager {
           }
           break;
         case "revive":
-          if (gid) setGroupStatus(gid, "active");
+          // 复活边直达通常走 project-status；此类型位保留同款联动（清标记，原班走路由表）
+          if (gid && setGroupStatus(gid, "active").ok) this.reviveGroupMembers(gid);
           break;
       }
     } else if (c.kind === "project-create" && gid) {
@@ -2923,6 +2935,117 @@ export class SessionManager {
       return e.session_id;
     }
     return null;
+  }
+
+  // ---------- #26 M3 两层联动（§6.2：组挂起 → 成员会话全 parked；恢复 → 路由表拉原班） ----------
+
+  // 组挂起的成员侧联动：在跑回合先收悬账（中断≠干砸：台账 failed + 板退待办 +
+  // 路由表不记——挂起是用户决策，不写熟手的失败账），再停流释放进程（idle CLI
+  // 进程也是成本，§5「同时挂着的会话数有限」）。会话留册休眠（org_parked 记来源
+  // 组）：点开详情/发消息/复活后派单都拉得起来（消息路径 resumeAgent 天然复活）。
+  private parkGroupMembers(gid: string): void {
+    const g = findGroup(gid);
+    if (!g) return;
+    for (const h of g.headcount) {
+      const s = this.sessions.get(h.session_id);
+      if (!s || s.state.external || this.isLeaderSession(h.session_id)) continue;
+      if ((this.openDispatches.get(h.session_id)?.length ?? 0) > 0) {
+        this.closeOpenDispatches(h.session_id, "failed", "项目组挂起，回合中断", true, false);
+      }
+      this.parkSession(s, gid);
+    }
+  }
+
+  // 单会话休眠（组挂起联动）：gen 递增让旧流回调全让位（身份守卫）——停流后的
+  // interrupted/ended 不产生假终态帧、不重复收口；进程树按 pid 补刀（无 pid 退
+  // 化 stop）。状态收口为 DONE + 挂起来源（板已冻结只读，卡片归组展示不变）
+  private parkSession(s: ManagedSession, gid: string): void {
+    const old = s.agent;
+    s.streamGen++;
+    if (old?.childPid) void this.watchdogProcs.killTree(old.childPid).catch(() => {});
+    else if (old && !old.ended) void old.stop().catch(() => {});
+    s.agent = null;
+    s.state.org_parked = gid;
+    s.state.status = "DONE";
+    s.state.done_reason = "项目组挂起（成员退休进熟手池）";
+    s.state.action_summary = "已随项目组挂起";
+    s.state.waiting_request = undefined;
+    s.state.last_error = undefined;
+    s.state.updated_at = Date.now();
+    s.resumePending = undefined;
+    s.wd.phase = "idle";
+    this.emitUpdated(s, true);
+  }
+
+  // 复活联动：只清 parked 标记，不主动拉会话——「恢复 = 任务板解冻 + 路由表拉
+  // 原班」：下次派单 pickVeteran 按 count 偏好自然回到熟手（resume），零 eager spawn
+  private reviveGroupMembers(gid: string): void {
+    for (const s of this.sessions.values()) {
+      if (s.state.org_parked !== gid) continue;
+      s.state.org_parked = undefined;
+      if (s.state.action_summary === "已随项目组挂起") s.state.action_summary = "";
+      s.state.updated_at = Date.now();
+      this.emitUpdated(s, true);
+    }
+  }
+
+  // ---------- #26 M3 挂起自动化（§5 两周无活动 → 主动建议暂缓） ----------
+  // 触发器：boot + 每小时扫描；窗口天数 CCR_ORG_STALE_DAYS 覆盖（默认 14，0=关）。
+  // 幂等：已有待决 suggest-hold 单不重提；否决冷却 = hold_suggested_at 后再等一个
+  // 窗口（手动建议同样戳记）。活度口径纯函数在 projects.ts findStaleGroups（时钟
+  // 注入可单测）；本方法只做决议面（出确认卡——用户点头才挂，Leader 只提案）
+
+  private staleDays(): number {
+    const raw = process.env.CCR_ORG_STALE_DAYS;
+    if (raw === undefined || raw === "") return 14; // 未设 = 默认两周（Number("")===0 坑）
+    const v = Number(raw);
+    return Number.isFinite(v) && v >= 0 ? v : 14;
+  }
+
+  autoSuggestHold(now = Date.now()): { suggested: string[]; skipped: string[] } {
+    const days = this.staleDays();
+    const suggested: string[] = [];
+    const skipped: string[] = [];
+    if (days <= 0) return { suggested, skipped };
+    const pendingGids = new Set(
+      listPendingConfirms()
+        .filter((c) => c.kind === "suggest-hold")
+        .map((c) => (typeof c.payload.gid === "string" ? c.payload.gid : "")),
+    );
+    const cooldown = days * 86_400_000;
+    for (const info of findStaleGroups(now, days)) {
+      const g = findGroup(info.gid);
+      if (!g) continue;
+      if (pendingGids.has(info.gid) || (g.hold_suggested_at && now - g.hold_suggested_at < cooldown)) {
+        skipped.push(info.gid);
+        continue;
+      }
+      addConfirm({
+        kind: "suggest-hold",
+        title: `建议暂缓：${g.name}`,
+        reason: `${info.idleDays} 天无活动（两周无活动触发器，§5 挂起自动化）——挂起后组员退休进熟手池释放编制，恢复时路由表拉回原班`,
+        payload: { gid: info.gid, auto: true },
+      });
+      markHoldSuggested(info.gid, now);
+      suggested.push(info.gid);
+    }
+    if (suggested.length) this.emitOrgState();
+    return { suggested, skipped };
+  }
+
+  startStaleScan(): void {
+    if (this.staleTimer || this.staleDays() === 0) return;
+    try {
+      this.autoSuggestHold();
+    } catch {
+      // 首扫失败不阻断 boot（org 目录异常等）；下一小时再来
+    }
+    this.staleTimer = setInterval(() => {
+      try {
+        this.autoSuggestHold();
+      } catch {}
+    }, 3_600_000);
+    this.staleTimer.unref?.();
   }
 
   private require(sessionId: string): ManagedSession {

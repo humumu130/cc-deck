@@ -273,6 +273,10 @@ const pinned = mgr.applyPinned();
 // 不可用时只横幅点名，不阻断 relay 其余功能（下次启动重试）
 const leader = mgr.ensureLeader();
 
+// #26 M3 挂起自动化：两周无活动的在办组 → Leader 主动建议暂缓（确认卡，用户点头
+// 才挂；CCR_ORG_STALE_DAYS 覆盖窗口，0=关）。boot 即扫一轮 + 每小时巡检
+mgr.startStaleScan();
+
 // #75 无人值守自动拉起：延迟几秒让收养广播/桥接先落地，再按任务存储待办把有
 // 活干的托管会话 resume 起来（语义与约束见 session-manager.autoReviveManaged）
 setTimeout(() => {
