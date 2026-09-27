@@ -2428,7 +2428,10 @@ export default function DetailScreen({ sid, onBack, initialView, ref }: { sid: s
         // 空态垂直居中（同定时视图手法）：仅 list 为空时容器撑满可视面板并居中提示组，
         // 底部大 padding（横幅/命令条的滚动余量）在空态收对称，否则中心会偏上一两百 px；
         // 非空分支样式零变化
-        contentContainerStyle={{ padding: 14, paddingBottom: 14 + (bannerVisible ? 200 : canCmd ? 96 : 60) + insets.bottom, ...(list.length === 0 ? { flexGrow: 1, justifyContent: "center", paddingBottom: 14 + insets.bottom } : null) }}
+        // G5（冲刺审查）：任务完成汇报悬浮钮（App.tsx TaskDoneFloat，详情页贴命令栏
+        // 上方 right:12）非空时末条正文右下角被遮——滚动内容条件让位 +52（浮钮形态
+        // 用户已拍板 #17 勿改，只让内容让路；空态居中提示不受浮钮影响不补）
+        contentContainerStyle={{ padding: 14, paddingBottom: 14 + (bannerVisible ? 200 : canCmd ? 96 : 60) + insets.bottom + (snap.taskDoneQueue.length > 0 ? 52 : 0), ...(list.length === 0 ? { flexGrow: 1, justifyContent: "center", paddingBottom: 14 + insets.bottom } : null) }}
         onTouchStart={() => { touching.current = true; }}
         onTouchEnd={() => { touching.current = false; }}
         onTouchCancel={() => { touching.current = false; }}

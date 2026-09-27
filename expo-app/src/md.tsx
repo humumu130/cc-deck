@@ -195,7 +195,6 @@ function InlineText({ text, small, header, outer, onLink, onTaskRef, onTaskRefOu
             s.code ? d.code : null,
             s.bold ? { fontWeight: "600" } : null,
             s.italic ? { fontStyle: "italic" } : null,
-            s.code ? { color: c.brandA } : null,
             s.link ? d.linkT : null,
           ]}
         >

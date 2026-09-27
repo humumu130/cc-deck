@@ -745,9 +745,11 @@ function GroupModal({ srcId, target, onClose, onOpenSession }: {
               <Text style={styles.gmSec}>最近派单回执</Text>
               {(detail.receipts ?? []).length ? detail.receipts!.map((r) => (
                 <View key={r.id + r.ts} style={[styles.gmRec, { borderLeftColor: r.status === "failed" ? c.error : c.line }]}>
-                  <Text style={styles.gmRecB}>[{r.tier}] {r.status}{r.target ? ` · ${r.target}` : ""}</Text>
-                  {r.receipt ? <Text style={styles.gmRecT} numberOfLines={3}>{r.receipt}</Text> : null}
-                  <Text style={styles.gmRecMeta}>{r.ts ? new Date(r.ts).toLocaleString() : ""}</Text>
+                  <Text style={styles.gmRecB}>[{r.tier}] {r.status}</Text>
+                  {r.receipt ? <Text style={styles.gmRecT} numberOfLines={5}>{r.receipt}</Text> : null}
+                  {/* 对齐 web（index.html 回执流）：target 归 meta 行、过滤 org-leader、
+                      截 8 位——整段 UUID 上屏既占行又不可辨 */}
+                  <Text style={styles.gmRecMeta}>{r.ts ? new Date(r.ts).toLocaleString() : ""}{r.target && r.target !== "org-leader" ? ` · ${r.target.slice(0, 8)}` : ""}</Text>
                 </View>
               )) : <Text style={styles.gmEmpty}>暂无派单回执</Text>}
             </>
@@ -1274,7 +1276,9 @@ export default function ListScreen({ sessions, connected, connText, onOpen, onNe
             progressBackgroundColor={c.panel}
           />
         }
-        contentContainerStyle={{ paddingBottom: insets.bottom + 120, paddingHorizontal: 14, paddingTop: 6 }}
+        // G5（冲刺审查）：任务完成汇报悬浮钮（列表页抬高让开 FAB，bottom=insets+124）
+        // 非空时末卡右缘被遮——条件让位 +52（浮钮形态用户拍板 #17 勿改，只让内容让路）
+        contentContainerStyle={{ paddingBottom: insets.bottom + 120 + (snap.taskDoneQueue.length > 0 ? 52 : 0), paddingHorizontal: 14, paddingTop: 6 }}
         // #137 待填验收单条件卡：统计行下方、会话列表顶部（有待填单才出现）
         // #26 M2 组织区（确认卡 + 项目组 chips）与之同位平铺；OrgZone 空数据自返回 null
         ListHeaderComponent={
