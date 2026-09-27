@@ -23,7 +23,8 @@ jobs:
         # test:sessions / test:ws 通过 agent SDK query() 拉起真实 claude CLI 子进程并
         # 等待真实模型回合完成，CI 无 CLI/凭据必挂，故排除。
         # test:org / test:leader（#26 矩阵式 M1）：纯 fs + agentFactory 假工厂，同为自包含
-        script: [test:bus, test:history, test:bridge, test:cloud, test:org, test:leader]
+        # test:projects / test:dispatch（#26 矩阵式 M2）：mkdtemp 沙盒 + 假工厂派单收口，同上
+        script: [test:bus, test:history, test:bridge, test:cloud, test:org, test:leader, test:projects, test:dispatch]
     defaults:
       run:
         working-directory: relay
