@@ -2850,7 +2850,16 @@ export class Bridge {
         return !(rec && now - rec.ts < 60_000 && rec.ts >= p.ts);
       }).map((p) => pBody(p));
       if (stuckTexts.length === 0) {
-        this.stuckWatch.delete(id); // 真送达/清空：看门狗全额重置
+        // #211：只对「有归宿」的条目全额重置（pending 空 / 全部已入 CLI 队列）。
+        // 仅剩年轻条目（age≤threshold）是悬而未决，不是滞留结论——原实现无差别
+        // delete 会把 #111 验证链在飞的 tries 清零：验证轮从 1 重数、与看门狗补发
+        // 各数各的，「3 次上限」打穿到 4 发（CI 恒挂本地恒绿＝主循 3s 拍相位是否
+        // 落进注入后快窗 + 慢机把第 4 发拖回断言窗）。保留计数也符合「补发过回长窗」
+        // 的注释原意：快窗内看门狗本就不动手，4s 验证链自管。
+        const pend = s.pending_inputs ?? [];
+        if (pend.length === 0 || pend.every((p) => this.isEnqueued(id, pBody(p)))) {
+          this.stuckWatch.delete(id); // 真送达/清空/全入队：看门狗全额重置
+        }
         continue;
       }
       // 瞬态条件不满足（无定位/状态不适合/flush 中/队列有货）：跳过本轮但保留看门狗
