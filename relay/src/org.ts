@@ -242,13 +242,15 @@ const ORG_CLI_TEMPLATE = `#!/bin/bash
 #   org set <id> <active|parked|archived> [note]   状态迁移（结项有悬账/未完 → 出确认卡附核对清单）
 #   org tier <id> <轻立项|正经立项> <reason>        升降级（必须带一句理由；确认卡）
 #   org hold <id|-> <reason> [condition]           建议暂缓（id=- 无组暂缓仅台账；点头即挂起）
-#   org dispatch <anchor> <task> [gid] [title]     派单 worker（无 gid=随手办；有 gid=项目组任务+板联动）
+#   org dispatch <anchor> <task> [gid] [title] [skills] 派单 worker（无 gid=随手办；有 gid=项目组任务+板联动；skills=逗号分隔技能标签，优先派带标签熟手）
 #   org board upsert <gid> <text> [todo|doing|done]
 #   org board move <gid> <entry_id> <todo|doing|done>
 #   org board del <gid> <entry_id>
 #   org detail <id>                                项目组详情：状态/编制/任务板/最近派单回执流
 #   org rate <gid> <sid> <good|bad>                熟手评价（M3 路由表；bad=下次派单避开）
 #   org tag <gid> <sid> <tag>...                   技能标签（整组替换，空格分隔）
+#   org member-retire <gid> <sid> [reason]         成员级退休（编制除名；本组悬账按中断收口，路由档案保留）
+#   org member-add <gid> <sid> [role]              复拉入编（退休熟手再回编制，调度门重新放行）
 # 相对路径 anchor 以当前目录补全（deliver 同口径）。由 relay 物化与升级（ensureOrgCli）。
 set -euo pipefail
 data="$HOME/.cc-deck/data"
@@ -258,7 +260,7 @@ port="$(python3 -c 'import json,os;print(json.load(open(os.path.expanduser("~/.c
 : "\${port:=8787}"
 
 action="\${1:-}"
-[ -z "$action" ] && { sed -n '3,18p' "$0" | sed 's/^# //' >&2; exit 1; }
+[ -z "$action" ] && { sed -n '3,20p' "$0" | sed 's/^# //' >&2; exit 1; }
 shift || true
 
 abs() { case "$1" in /*) printf '%s' "$1";; *) printf '%s' "$PWD/$1";; esac; }
@@ -307,17 +309,19 @@ PY
 )"
     ;;
   dispatch)
-    [ $# -ge 2 ] || { echo "用法: org dispatch <anchor> <task> [gid] [title]" >&2; exit 1; }
+    [ $# -ge 2 ] || { echo "用法: org dispatch <anchor> <task> [gid] [title] [skills]" >&2; exit 1; }
     anchor="$(abs "$1")"; shift
     task="$1"; shift || true
-    gid=""; title=""
+    gid=""; title=""; skills=""
     if [ $# -ge 1 ]; then gid="$1"; shift || true; fi
     if [ $# -ge 1 ]; then title="$1"; shift || true; fi
-    body="$(python3 - "$anchor" "$task" "$gid" "$title" <<'PY'
+    if [ $# -ge 1 ]; then skills="$1"; shift || true; fi
+    body="$(python3 - "$anchor" "$task" "$gid" "$title" "$skills" <<'PY'
 import json, sys
 d={"action":"dispatch","anchor":sys.argv[1],"prompt":sys.argv[2]}
 if sys.argv[3]: d["gid"]=sys.argv[3]
 if sys.argv[4]: d["title"]=sys.argv[4]
+if sys.argv[5]: d["skills"]=[t.strip() for t in sys.argv[5].split(",") if t.strip()]
 print(json.dumps(d,ensure_ascii=False))
 PY
 )"
@@ -359,6 +363,26 @@ PY
     body="$(python3 - "$@" <<'PY'
 import json, sys
 print(json.dumps({"action":"tag","gid":sys.argv[1],"sid":sys.argv[2],"tags":sys.argv[3:]},ensure_ascii=False))
+PY
+)"
+    ;;
+  member-retire)
+    [ $# -ge 2 ] || { echo "用法: org member-retire <gid> <sid> [reason]" >&2; exit 1; }
+    reason="\${3:-}"
+    body="$(python3 - "$1" "$2" "$reason" <<'PY'
+import json, sys
+d={"action":"member-retire","gid":sys.argv[1],"sid":sys.argv[2]}
+if sys.argv[3]: d["reason"]=sys.argv[3]
+print(json.dumps(d,ensure_ascii=False))
+PY
+)"
+    ;;
+  member-add)
+    [ $# -ge 2 ] || { echo "用法: org member-add <gid> <sid> [role]" >&2; exit 1; }
+    role="\${3:-worker}"
+    body="$(python3 - "$1" "$2" "$role" <<'PY'
+import json, sys
+print(json.dumps({"action":"member-add","gid":sys.argv[1],"sid":sys.argv[2],"role":sys.argv[3]},ensure_ascii=False))
 PY
 )"
     ;;

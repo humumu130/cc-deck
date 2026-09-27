@@ -15,7 +15,7 @@ import {
   findGroup, findGroupByAnchor, findStaleGroups, listConfirms, listGroups, listGroupsByStatus,
   listPendingConfirms, loadBoard, markHoldSuggested, maxActiveGroups,
   moveBoardEntry, moveEntryByDispatch,
-  removeBoardEntry, setGroupStatus, setGroupTier, setLightConfirmTrusted, upsertBoardEntry,
+  removeBoardEntry, removeMember, setGroupStatus, setGroupTier, setLightConfirmTrusted, upsertBoardEntry,
   ensureProjectClaudeMd,
   type OrgConfirm, type ProjectGroupStatus, type ProjectTier, type BoardEntryStatus,
 } from "./projects.js";
@@ -2770,6 +2770,7 @@ export class SessionManager {
             prompt: typeof p.prompt === "string" ? p.prompt : "",
             gid: str("gid") || undefined,
             title: str("title") || undefined,
+            skills: Array.isArray(p.skills) ? p.skills.filter((x): x is string => typeof x === "string") : undefined,
           });
         }
         case "board": {
@@ -2858,6 +2859,52 @@ export class SessionManager {
           const r = tagRouting(gid, sid, tags);
           if (!r.ok) return r;
           return { ok: true, data: { entry: r.entry } };
+        }
+        // #26 补章：成员级退休独立触发器（§5 退休/§6.1 worker「退休后只剩路由表
+        // 记录」——此前退休只随组挂起/结项发生，组级覆盖；本通道=对单个编制位提前
+        // 除名）。跨组正交：只收**本组**悬账（他组在跑派单保留，会话不因此停流）；
+        // 台账按中断口径收口（路由表无感——退休是编制决策不是干砸）；路由表档案
+        // 永存。复拉 = member-add 再入编（之后 pickVeteran 编制门重新放行）
+        case "member-retire": {
+          const gid = str("gid");
+          const sid = str("sid");
+          const reason = str("reason");
+          if (!gid || !sid) return { ok: false, error: "gid/sid 必填" };
+          const g = findGroup(gid);
+          if (!g) return { ok: false, error: `项目组不存在: ${gid}` };
+          if (g.status === "archived") return { ok: false, error: "结项组编制已解散（headcount 为快照档案），无成员可退" };
+          if (!g.headcount.some((h) => h.session_id === sid)) return { ok: false, error: `成员不在「${g.name}」编制内（已退休只剩档案？复拉走 member-add）` };
+          const s = this.sessions.get(sid);
+          if (!s || s.state.external) return { ok: false, error: "成员会话不在册（外部会话/已清理，档案留在路由表）" };
+          if (this.isLeaderSession(sid)) return { ok: false, error: "组织 Leader 不可退休（逻辑常驻，锚是权威）" };
+          if ((this.openDispatches.get(sid)?.length ?? 0) > 0) {
+            this.closeOpenDispatches(sid, "failed", reason ? truncate(`成员退休：${reason}`, 200) : "成员退休，回合中断", false, false, gid);
+          }
+          removeMember(gid, sid);
+          this.emitOrgState();
+          this.emitBoard(gid);
+          // 他组派单还在跑 → 只除名不停流（矩阵式正交：他组回合自然收口后空闲入池）
+          if ((this.openDispatches.get(sid)?.length ?? 0) > 0) return { ok: true, data: { retired: true, halted: false } };
+          this.retireSession(s, gid, "retired");
+          return { ok: true, data: { retired: true, halted: true } };
+        }
+        // #26 补章：复拉通道（退休熟手再入编）——编制门之后 pickVeteran 会重新考虑
+        // 该熟手（路由档案一直在）；只对在办组开放（挂起组冻结、结项组只读）
+        case "member-add": {
+          const gid = str("gid");
+          const sid = str("sid");
+          const role = str("role") || "worker";
+          if (!gid || !sid) return { ok: false, error: "gid/sid 必填" };
+          const g = findGroup(gid);
+          if (!g) return { ok: false, error: `项目组不存在: ${gid}` };
+          if (g.status !== "active") return { ok: false, error: `项目组 ${g.name} 为 ${g.status}（挂起冻结/结项只读），不可入编` };
+          const s = this.sessions.get(sid);
+          if (!s || s.state.external) return { ok: false, error: "成员会话不在册（复拉需先有会话卡）" };
+          if (this.isLeaderSession(sid)) return { ok: false, error: "组织 Leader 不可入编（分诊者不接活）" };
+          const r = addMember(gid, sid, role);
+          if (!r.ok) return { ok: false, error: r.error ?? "入编失败" };
+          this.emitOrgState();
+          return { ok: true, data: { group: r.group } };
         }
         case "confirm-decide": {
           const cid = str("confirm_id");
@@ -2972,7 +3019,7 @@ export class SessionManager {
   // 先落账再执行（§3.5 台账纪律）：dispatched 行 → 拉起 → running 行（同 id 收敛）；
   // 拉起失败即收口 failed 不留悬账；崩溃窗口的 dispatched 由断档补记兜底。
   // 权限 acceptEdits（§4 随手办纪律）、跳过 sticky 默认目录（worker cwd 锚项目不动全局）。
-  dispatchWorker(input: { anchor: string; prompt: string; gid?: string; title?: string }):
+  dispatchWorker(input: { anchor: string; prompt: string; gid?: string; title?: string; skills?: string[] }):
     { ok: true; dispatch_id: string; session_id: string } | { ok: false; error: string } {
     if (!input.prompt.trim()) return { ok: false, error: "prompt 必填" };
     if (!input.anchor.startsWith("/")) return { ok: false, error: "anchor 必须是绝对路径" };
@@ -2990,7 +3037,7 @@ export class SessionManager {
     // 上下文连续，适合长线运维）；忙/避开/只剩档案记录 → 新会话 + 锚点 CLAUDE.md
     // 档案注入（记忆亲和：干净冷启动）。排队不做——设计允许「排队或次优」，取次优：
     // 熟手全忙即顺延下一位或新会话，活不过夜
-    const veteran = input.gid ? this.pickVeteran(input.gid) : null;
+    const veteran = input.gid ? this.pickVeteran(input.gid, input.skills) : null;
     appendDispatch({ ts: Date.now(), id: dispatchId, tier, target: veteran ?? "spawn-pending", status: "dispatched", session_id: veteran ?? "", project_anchor: anchor });
     let sessionId: string;
     if (veteran) {
@@ -3059,10 +3106,27 @@ export class SessionManager {
   // resume 互斥窗口（spawn→onInit 双拉风险）｜外部会话（用户终端自管，relay 不得
   // 抢拉）｜Leader 本人（兼管是分诊不是承接）。historical 不排除：重启收养态正是
   // resume 的目标形态（与用户消息复活路径同款）。
-  private pickVeteran(gid: string): string | null {
+  // #26 补章（§5 路由表三维之「技能」臂）：派单可带 skills 标签——先在「标签命中」
+  // 的熟手里按熟练序挑（count/last），全忙或无命中再放宽到全员。技能是偏好不是
+  // 硬约束：宁可用不带标签的本项目熟手（resume 上下文连续），也不为标签冷启动。
+  // 无 skills 参数时行为与此前完全一致（回归口径）。
+  private pickVeteran(gid: string, skills?: string[]): string | null {
+    const wanted = (skills ?? []).map((t) => t.trim().toLowerCase()).filter(Boolean);
+    if (wanted.length === 0) return this.pickVeteranEligible(gid, null);
+    const hit = this.pickVeteranEligible(gid, (tags) => wanted.some((w) => tags.includes(w)));
+    return hit ?? this.pickVeteranEligible(gid, null);
+  }
+
+  // 熟手筛（#26 补章加两道）：① 编制门——路由记录在册但已从组编制除名（成员级
+  // 退休）= 只剩档案，不自动 resume（复拉 = member-add 再入编，§6.1 worker
+  // 「退休后只剩路由表记录」）；② 技能门——tagFilter 命中才入选（null = 不过滤）
+  private pickVeteranEligible(gid: string, tagFilter: ((tags: string[]) => boolean) | null): string | null {
+    const roster = new Set(findGroup(gid)?.headcount.map((h) => h.session_id) ?? []);
     for (const e of routingFor(gid)) {
       if (e.rating === "bad") continue;
       if (e.failed >= 2 && e.failed > e.count) continue;
+      if (!roster.has(e.session_id)) continue;
+      if (tagFilter && !tagFilter(e.tags ?? [])) continue;
       const s = this.sessions.get(e.session_id);
       if (!s || !s.state.relay_session_id) continue;
       if (s.state.external) continue;
@@ -3139,21 +3203,31 @@ export class SessionManager {
     s.agent = null;
   }
 
-  // 单会话收口（组挂起退休 / 结项解散共用）：parked = 留 org_parked 标记随组休眠
-  //（板已冻结只读，卡片归组展示不变）；disbanded = 清归属。unacked 即弃（中断
-  // 语义，防复活后看门狗恢复重放挂起前的旧指令）
-  private retireSession(s: ManagedSession, gid: string, mode: "parked" | "disbanded"): void {
+  // 单会话收口（组挂起退休 / 结项解散 / 成员级退休共用）：parked = 留 org_parked
+  // 标记随组休眠（板已冻结只读，卡片归组展示不变）；disbanded = 清归属；retired =
+  // 成员级退休（#26 补章）——清本组归属但**编制门**接管后续调度（pickVeteran 不
+  // 再 resume，只剩路由表档案），且只清指向本组的 project_gid（跨组正交：他组
+  // 归属不误伤）。unacked 即弃（中断语义，防复活后看门狗恢复重放挂起前的旧指令）
+  private retireSession(s: ManagedSession, gid: string, mode: "parked" | "disbanded" | "retired"): void {
     this.haltSessionStream(s);
     if (mode === "parked") {
       s.state.org_parked = gid;
-    } else {
+    } else if (mode === "disbanded") {
       s.state.org_parked = undefined;
       s.state.project_gid = undefined;
       s.state.dispatch_tier = undefined;
+    } else {
+      s.state.org_parked = undefined;
+      if (s.state.project_gid === gid) {
+        s.state.project_gid = undefined;
+        s.state.dispatch_tier = undefined;
+      }
     }
     s.state.status = "DONE";
-    s.state.done_reason = mode === "parked" ? "项目组挂起（成员退休进熟手池）" : "项目组结项（编制解散）";
-    s.state.action_summary = mode === "parked" ? "已随项目组挂起" : "已随项目组结项解散";
+    s.state.done_reason = mode === "parked" ? "项目组挂起（成员退休进熟手池）"
+      : mode === "disbanded" ? "项目组结项（编制解散）"
+        : "成员退休（编制除名，路由表档案保留）";
+    s.state.action_summary = mode === "parked" ? "已随项目组挂起" : mode === "disbanded" ? "已随项目组结项解散" : "已退休（编制除名）";
     s.state.waiting_request = undefined;
     s.state.last_error = undefined;
     s.state.updated_at = Date.now();

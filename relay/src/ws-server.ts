@@ -614,6 +614,7 @@ export function startServer(
           const ORG_HTTP_ACTIONS = new Set([
             "status", "project-create", "project-status", "project-tier", "suggest-hold",
             "dispatch", "board", "project-detail", "rate", "tag",
+            "member-retire", "member-add", // #26 补章：编制面执行动作（可逆：复拉走 member-add），非决议类
           ]);
           if (!ORG_HTTP_ACTIONS.has(action.trim())) {
             res.writeHead(403, { "content-type": "application/json" }).end(

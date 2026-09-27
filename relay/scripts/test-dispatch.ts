@@ -617,6 +617,80 @@ async function main() {
     assert(created.length === createdBefore, "放弃恢复零 spawn（不起死回生）");
     stopNoop = false;
 
+    // ---------- D13 补章（skills 定向调度 + 成员级退休/复拉） ----------
+    console.log("D13 补章（skills 定向/成员级退休）:");
+    const cTa = mgr.orgAction("project-create", { name: "tau", anchor: join(DATA, "proj-ta"), tier: "轻立项" });
+    const gidTa = listGroups().find((g) => g.name === "tau")?.id ?? "";
+    assert(cTa.ok === true && !!gidTa, "tau 立项（前置）");
+    const taAnchor = join(DATA, "proj-ta");
+    // 抬 W1 熟练度到 3（逐单等收口再派下一单——空闲熟手 resume 原会话，顺带锁
+    // 「无 skills 行为不变」的回归口径）
+    let wT1 = "";
+    for (let i = 0; i < 3; i++) {
+      const dx = mgr.orgAction("dispatch", { anchor: taAnchor, prompt: `tau 基线单 ${i + 1}`, gid: gidTa }) as { ok: boolean; session_id?: string };
+      const sx = dx.session_id ?? "";
+      assert(dx.ok === true && !!sx, `tau 基线单 ${i + 1} 派出（前置）`);
+      assert(await waitFor(() => (routingFor(gidTa).find((x) => x.session_id === sx)?.count ?? 0) === i + 1), `基线单 ${i + 1} 收口（前置）`);
+      if (!wT1) wT1 = sx;
+      else assert(sx === wT1, `基线单 ${i + 1} resume 原熟手（无 skills 行为不变）`);
+    }
+    assert((routingFor(gidTa).find((x) => x.session_id === wT1)?.count ?? 0) === 3, "W1 count=3（前置）");
+    hack.sessions.get(wT1)!.state.status = "WORKING"; // 逼出第二会话
+    const ta2 = mgr.orgAction("dispatch", { anchor: taAnchor, prompt: "tau 二单", gid: gidTa }) as { ok: boolean; session_id?: string };
+    const wT2 = ta2.session_id ?? "";
+    assert(ta2.ok === true && !!wT2 && wT2 !== wT1, "首熟练手忙 → 新会话 W2（前置）");
+    assert(await waitFor(() => (routingFor(gidTa).find((x) => x.session_id === wT2)?.count ?? 0) === 1), "W2 收口（前置）");
+    hack.sessions.get(wT1)!.state.status = "DONE"; // 还原空闲
+    assert(mgr.orgAction("tag", { gid: gidTa, sid: wT2, tags: ["rust"] }).ok === true, "W2 打 rust 标（前置）");
+    const ta3 = mgr.orgAction("dispatch", { anchor: taAnchor, prompt: "tau 三单（要 rust）", gid: gidTa, skills: ["rust"] }) as { ok: boolean; session_id?: string };
+    assert(ta3.ok === true && ta3.session_id === wT2, "skills 命中 → 越过熟练序选带标签熟手（W1=3 让位 W2）");
+    assert(await waitFor(() => (routingFor(gidTa).find((x) => x.session_id === wT2)?.count ?? 0) === 2), "W2 再收口（前置）");
+    const ta4 = mgr.orgAction("dispatch", { anchor: taAnchor, prompt: "tau 四单", gid: gidTa, skills: ["python"] }) as { ok: boolean; session_id?: string };
+    assert(ta4.ok === true && ta4.session_id === wT1, "skills 无命中 → 放宽回熟练序（技能是偏好不是硬约束）");
+    assert(await waitFor(() => (routingFor(gidTa).find((x) => x.session_id === wT1)?.count ?? 0) === 4), "W1 再收口（前置：4>2 奠定退休后余威）");
+
+    // b) 成员级退休：编制除名 → 本组悬账中断收口 + 会话休眠 + 路由档案保留 + 编制门跳过
+    hack.sessions.get(wT1)!.state.status = "WORKING";
+    hack.openDispatches.set(wT1, [{ id: "dsp-ta-ret", tier: "轻立项", gid: gidTa, anchor: taAnchor }]);
+    const rt1 = mgr.orgAction("member-retire", { gid: gidTa, sid: wT1, reason: "休假" }) as { ok: boolean; data?: { halted?: boolean } };
+    assert(rt1.ok === true && rt1.data?.halted === true, "member-retire 成功（在跑成员停流收口）");
+    assert(readDispatchLog().some((x) => x.id === "dsp-ta-ret" && x.status === "failed" && (x.receipt ?? "").includes("成员退休")), "本组悬账按中断收口（写实回执）");
+    assert(!(listGroups().find((g) => g.id === gidTa)?.headcount ?? []).some((h) => h.session_id === wT1), "编制除名（headcount 移除）");
+    assert(hack.sessions.get(wT1)?.state.status === "DONE" && hack.sessions.get(wT1)?.state.done_reason === "成员退休（编制除名，路由表档案保留）", "会话休眠 + done_reason 写实");
+    assert(hack.sessions.get(wT1)?.state.project_gid === undefined, "本组归属清除");
+    assert((routingFor(gidTa).find((x) => x.session_id === wT1)?.count ?? -1) === 4, "路由档案保留（count 不动）");
+    const ta5 = mgr.orgAction("dispatch", { anchor: taAnchor, prompt: "tau 五单", gid: gidTa }) as { ok: boolean; session_id?: string };
+    const ta5Spawn = created[created.length - 1]; // ta5 的 resume 流（派给 W2）——d) 段收 phi 悬账用它
+    assert(ta5.ok === true && ta5.session_id === wT2, "编制门生效：退休熟手不被 resume（只剩档案），落 W2");
+    assert(await waitFor(() => (routingFor(gidTa).find((x) => x.session_id === wT2)?.count ?? 0) === 3), "W2 收口（前置）");
+    const rtBad1 = mgr.orgAction("member-retire", { gid: gidTh, sid: wT2 }) as { ok: boolean; error?: string };
+    assert(rtBad1.ok === false && (rtBad1.error ?? "").includes("结项"), "结项组拒退休（编制已是快照档案）");
+    const rtBad2 = mgr.orgAction("member-retire", { gid: gidTa, sid: "no-such-sid" }) as { ok: boolean; error?: string };
+    assert(rtBad2.ok === false && (rtBad2.error ?? "").includes("编制内"), "不在编制拒退休");
+
+    // c) 复拉：member-add 回编制 → 编制门重新放行（W1=4 > W2=3 熟练序居首）
+    const ma1 = mgr.orgAction("member-add", { gid: gidTa, sid: wT1 }) as { ok: boolean; data?: { group?: { headcount?: { session_id: string }[] } } };
+    assert(ma1.ok === true && (ma1.data?.group?.headcount ?? []).some((h) => h.session_id === wT1), "复拉入编成功");
+    const ta6 = mgr.orgAction("dispatch", { anchor: taAnchor, prompt: "tau 六单", gid: gidTa }) as { ok: boolean; session_id?: string };
+    assert(ta6.ok === true && ta6.session_id === wT1, "复拉后编制门放行（原熟手回归 resume）");
+    assert(await waitFor(() => (routingFor(gidTa).find((x) => x.session_id === wT1)?.count ?? 0) === 5), "W1 回归收口");
+
+    // d) 跨组正交：W2 为 phi 组在跑 → tau 侧 member-retire 只除名不杀流
+    const cPh = mgr.orgAction("project-create", { name: "phi", anchor: join(DATA, "proj-ph"), tier: "轻立项" });
+    const gidPh = listGroups().find((g) => g.name === "phi")?.id ?? "";
+    assert(cPh.ok === true && !!gidPh, "phi 立项（前置）");
+    addMember(gidPh, wT2, "worker");
+    hack.sessions.get(wT2)!.state.status = "WORKING";
+    hack.openDispatches.set(wT2, [{ id: "dsp-ph-x", tier: "轻立项", gid: gidPh, anchor: join(DATA, "proj-ph") }]);
+    const rt2 = mgr.orgAction("member-retire", { gid: gidTa, sid: wT2, reason: "除名但活没干完" }) as { ok: boolean; data?: { halted?: boolean } };
+    assert(rt2.ok === true && rt2.data?.halted === false, "他组在跑 → 只除名不停流（halted:false）");
+    assert(readDispatchLog().every((x) => x.id !== "dsp-ph-x"), "他组悬账不陪葬（phi 的单没被 tau 侧退休收口）");
+    assert(hack.sessions.get(wT2)?.state.status === "WORKING", "会话仍在干活（未休眠）");
+    ta5Spawn.cb.onTurnEnd(true, "phi 干完", 8); // wT2 自己的流回调（cbFor 此刻会命中 ta6 的 wT1 流，不能用）
+    assert(readDispatchLog().some((x) => x.id === "dsp-ph-x" && x.status === "done" && x.receipt === "phi 干完"), "他组回合自然收口（写实回执）");
+    assert((routingFor(gidPh).find((x) => x.session_id === wT2)?.count ?? 0) === 1, "phi 路由入账（跨组正交面）");
+    assert(!hack.openDispatches.has(wT2), "FIFO 清空");
+
     // ---------- 收尾 ----------
     console.log(`\n${fail === 0 ? "PASS" : "FAIL"}: ${pass} passed, ${fail} failed`);
     process.exit(fail === 0 ? 0 : 1);
