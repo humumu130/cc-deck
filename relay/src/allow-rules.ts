@@ -94,6 +94,20 @@ export class AllowRuleStore {
   private rules: AllowRule[] = [];
   private file: string;
 
+  // #212 规则集变更回调（add / remove / dropSession 实际改表后触发）：宿主挂 bus
+  // 广播 ALLOW_RULES_UPDATED。此前广播只挂在删除命令一处——「允许并记住」落规则后
+  // 不广播，在线手机设置抽屉看不到刚记的规则（直到重连拿快照），实机首验抓到。
+  // 收敛到存储层统一触发，两个落规则点（bridge 外部会话 / agent-adapter 托管会话）
+  // 与删除路径全覆盖，后续新 mutation 不再漏。
+  onChange?: () => void;
+  private notify(): void {
+    try {
+      this.onChange?.();
+    } catch {
+      /* 广播异常不影响规则本身 */
+    }
+  }
+
   constructor(dataDir: string) {
     this.file = join(dataDir, "allow-rules.json");
     try {
@@ -139,6 +153,7 @@ export class AllowRuleStore {
     };
     this.rules.push(rule);
     this.persist();
+    this.notify();
     return rule;
   }
 
@@ -147,6 +162,7 @@ export class AllowRuleStore {
     this.rules = this.rules.filter((r) => r.id !== id);
     if (this.rules.length === before) return false;
     this.persist();
+    this.notify();
     return true;
   }
 
@@ -154,7 +170,10 @@ export class AllowRuleStore {
   dropSession(sessionId: string): void {
     const before = this.rules.length;
     this.rules = this.rules.filter((r) => !(r.scope === "session" && r.session_id === sessionId));
-    if (this.rules.length !== before) this.persist();
+    if (this.rules.length !== before) {
+      this.persist();
+      this.notify();
+    }
   }
 
   list(): AllowRule[] {
