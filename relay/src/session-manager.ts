@@ -493,6 +493,10 @@ export class SessionManager {
   ) {
     this.cfg = cfg;
     this.allowRules = new AllowRuleStore(cfg.dataDir);
+    // #212 规则集任何 mutation（落规则/删除/会话清理）后瞬态广播最新全量——
+    // 在线端设置页「记住的规则」实时收敛；离线端重连 SNAPSHOT.allow_rules 兜底
+    this.allowRules.onChange = () =>
+      this.bus.emitTransient("ALLOW_RULES_UPDATED", { rules: this.allowRules.list() });
     this.childSdkIds = new Set(readChildSessions(cfg.dataDir));
     this.deletedExtIds = new Set(readDeletedExts(cfg.dataDir));
     this.titleOverrides = readTitleOverrides(cfg.dataDir);
@@ -1575,13 +1579,13 @@ export class SessionManager {
           this.deleteSession(cmd.payload.session_id);
           return { command_id: cmd.command_id, ok: true };
         }
-        // #212 删除「允许并记住」规则：成功后瞬态广播最新全量（在线端设置页实时
-        // 收敛；离线端重连 SNAPSHOT.allow_rules 兜底）。删不存在的 id 回 ok:false
+        // #212 删除「允许并记住」规则。删不存在的 id 回 ok:false；成功后的
+        // ALLOW_RULES_UPDATED 广播由 allowRules.onChange 统一触发（构造处挂接，
+        // 覆盖落规则/删除/会话清理全部 mutation——见 AllowRuleStore.onChange 注释）
         case "COMMAND_ALLOW_RULE_REMOVE": {
           if (!this.allowRules.remove(cmd.payload.id)) {
             return { command_id: cmd.command_id, ok: false, error: "no such rule" };
           }
-          this.bus.emitTransient("ALLOW_RULES_UPDATED", { rules: this.allowRules.list() });
           return { command_id: cmd.command_id, ok: true };
         }
         case "COMMAND_RENAME": {

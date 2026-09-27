@@ -84,5 +84,30 @@ const store2 = new AllowRuleStore(ROOT);
 assert(store2.list().length === store.list().length, "重启回放条数一致");
 assert(store2.match(SID, "Bash", { command: "git log -1" }) !== null, "回放后 global 规则仍命中");
 
+// ---------- onChange：规则集变更回调（#212 广播收敛点，宿主挂 ALLOW_RULES_UPDATED） ----------
+let fired = 0;
+const store3 = new AllowRuleStore(ROOT);
+store3.onChange = () => fired++;
+const r1 = store3.add("Bash", "git log", "global", undefined, "t");
+assert(fired === 1, "add 落规则触发 onChange");
+store3.add("Bash", "git log", "global", undefined, "t-again");
+assert(fired === 2, "同键去重重记（换 id）也是表变更，触发");
+// 去重重记已把 r1 顶掉（同键换新 id）——先验证被顶掉的旧 id 删除落空不触发
+assert(store3.remove(r1.id) === false && fired === 2, "remove 不存在 id（no such rule）不触发");
+const cur = store3.list().find((r) => r.tool === "Bash" && r.pattern === "git log");
+assert(!!cur, "去重重记后规则仍在（新 id）");
+if (cur) {
+  assert(store3.remove(cur.id) === true && fired === 3, "remove 存在 id 触发");
+}
+store3.dropSession("no-such-session");
+assert(fired === 3, "dropSession 无 session 规则不触发");
+const r2 = store3.add("Edit", "/tmp/x", "session", "s9", "t");
+store3.dropSession("s9");
+assert(fired === 5 && !store3.list().some((r) => r.id === r2.id), "dropSession 实际清 session 规则触发");
+let threw = false;
+store3.onChange = () => { threw = true; throw new Error("boom"); };
+store3.add("WebFetch", "*", "global", undefined, "t");
+assert(threw && store3.list().some((r) => r.tool === "WebFetch"), "回调抛异常不影响规则本身（notify try/catch）");
+
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);
