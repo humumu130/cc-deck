@@ -2472,7 +2472,12 @@ export class SessionManager {
   // 见 org.ts ORG_LEADER_BOOTSTRAP_PROMPT 注释），一次性拿 sdkId——此后常驻零 spawn。
   // 锚紧邻 create 同步落盘（崩溃窗口微秒级；后果=pinned 残卡可手删，下次重建）。
   private createLeaderFirstTime(): { ok: true; session_id: string; created: boolean; rebuilt: boolean } | { ok: false; error: string } {
-    const id = this.create(orgDir(), ORG_LEADER_BOOTSTRAP_PROMPT, undefined, false, { skipStickyCwd: true });
+    // 冲刺 F-10：Leader 无人值守执行分诊（org CLI + 只读查证）——default 模式下每条
+    // Bash 都弹审批卡，用户不在场 = 分诊瘫痪（J 线实测：咨询档查证命令死循环弹卡）。
+    // bypassPermissions 只能 spawn 时决定（CLI 限制：运行时 default→bypass 不可切，
+    // COMMAND_PERM 实测报「session was not launched with --dangerously-skip-permissions」）。
+    // 安全边界：Leader 权力=只提案不决议（确认卡在 relay 层），CLI 层审批对 Leader 纯噪音
+    const id = this.create(orgDir(), ORG_LEADER_BOOTSTRAP_PROMPT, "bypassPermissions", false, { skipStickyCwd: true });
     const now = Date.now();
     // M1 审查轮：锚写失败不得继续置常驻——否则本进程「假常驻」（leaderEnsured 真、
     // 锚不在盘上）+ 下次启动按未建组织再 spawn → 双 Leader 卡。失败即报错返回
@@ -3066,7 +3071,7 @@ export class SessionManager {
         const msg = e instanceof Error ? e.message : String(e);
         this.pushExternalLog(veteran, "system", `熟手复活失败，本单降级新会话: ${msg}`);
         try {
-          sessionId = this.create(anchor, wrapDispatchPrompt(tier, input.prompt), "acceptEdits", true, { skipStickyCwd: true });
+          sessionId = this.create(anchor, wrapDispatchPrompt(tier, input.prompt), "bypassPermissions", true, { skipStickyCwd: true });
         } catch (e2) {
           const msg2 = e2 instanceof Error ? e2.message : String(e2);
           appendDispatch({ ts: Date.now(), id: dispatchId, tier, target: "spawn-pending", status: "failed", receipt: truncate(`resume 失败(${msg}) 后新会话亦失败: ${msg2}`, 200), session_id: "", project_anchor: anchor });
@@ -3075,7 +3080,7 @@ export class SessionManager {
       }
     } else {
       try {
-        sessionId = this.create(anchor, wrapDispatchPrompt(tier, input.prompt), "acceptEdits", true, { skipStickyCwd: true });
+        sessionId = this.create(anchor, wrapDispatchPrompt(tier, input.prompt), "bypassPermissions", true, { skipStickyCwd: true });
       } catch (e) {
         const msg = e instanceof Error ? e.message : String(e);
         appendDispatch({ ts: Date.now(), id: dispatchId, tier, target: "spawn-pending", status: "failed", receipt: truncate(msg, 200), session_id: "", project_anchor: anchor });
