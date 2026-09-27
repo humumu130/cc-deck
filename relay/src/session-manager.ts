@@ -18,7 +18,7 @@ import {
   type OrgConfirm, type ProjectGroupStatus, type ProjectTier, type BoardEntryStatus,
 } from "./projects.js";
 // #26 M3 路由表（纯 fs，无环）：派单收口自动记账 + 熟手查表（§5 工作路由）
-import { rateRouting, recordRoutingResult, tagRouting } from "./routing.js";
+import { rateRouting, recordRoutingResult, routingFor, tagRouting } from "./routing.js";
 import { devId } from "./e2e.js";
 import type { EventBus } from "./event-bus.js";
 import { AgentSession } from "./agent-adapter.js";
@@ -2818,9 +2818,10 @@ export class SessionManager {
     this.bus.emitTransient("BOARD_UPDATED", { gid, board: loadBoard(gid) });
   }
 
-  // #26 M2 派单（§4 随手办/项目组任务）：spawn worker 会话承接。
-  // 先落账再执行（§3.5 台账纪律）：dispatched 行 → spawn → running 行（同 id 收敛）；
-  // spawn 失败即收口 failed 不留悬账；崩溃窗口的 dispatched 由断档补记兜底。
+  // #26 M2 派单（§4 随手办/项目组任务）：worker 会话承接——M3 起项目组活双来源
+  //（§5 查表：空闲熟手 resume｜新会话+档案注入），随手办仍恒新会话（无组无路由记录）。
+  // 先落账再执行（§3.5 台账纪律）：dispatched 行 → 拉起 → running 行（同 id 收敛）；
+  // 拉起失败即收口 failed 不留悬账；崩溃窗口的 dispatched 由断档补记兜底。
   // 权限 acceptEdits（§4 随手办纪律）、跳过 sticky 默认目录（worker cwd 锚项目不动全局）。
   dispatchWorker(input: { anchor: string; prompt: string; gid?: string; title?: string }):
     { ok: true; dispatch_id: string; session_id: string } | { ok: false; error: string } {
@@ -2836,14 +2837,39 @@ export class SessionManager {
       anchor = g.anchor_dir;
     }
     const dispatchId = randomUUID();
-    appendDispatch({ ts: Date.now(), id: dispatchId, tier, target: "spawn-pending", status: "dispatched", session_id: "", project_anchor: anchor });
+    // #26 M3 §5 双来源调度：项目组活先查路由表——空闲熟手 resume 原会话（会话亲和：
+    // 上下文连续，适合长线运维）；忙/避开/只剩档案记录 → 新会话 + 锚点 CLAUDE.md
+    // 档案注入（记忆亲和：干净冷启动）。排队不做——设计允许「排队或次优」，取次优：
+    // 熟手全忙即顺延下一位或新会话，活不过夜
+    const veteran = input.gid ? this.pickVeteran(input.gid) : null;
+    appendDispatch({ ts: Date.now(), id: dispatchId, tier, target: veteran ?? "spawn-pending", status: "dispatched", session_id: veteran ?? "", project_anchor: anchor });
     let sessionId: string;
-    try {
-      sessionId = this.create(anchor, wrapDispatchPrompt(tier, input.prompt), "acceptEdits", true, { skipStickyCwd: true });
-    } catch (e) {
-      const msg = e instanceof Error ? e.message : String(e);
-      appendDispatch({ ts: Date.now(), id: dispatchId, tier, target: "spawn-pending", status: "failed", receipt: truncate(msg, 200), session_id: "", project_anchor: anchor });
-      return { ok: false, error: `worker 拉起失败: ${msg}` };
+    if (veteran) {
+      try {
+        this.resumeAgent(this.require(veteran), wrapDispatchPrompt(tier, input.prompt));
+        sessionId = veteran;
+      } catch (e) {
+        // 熟手复活失败（理论窗口：并发竞态后 require 抛/新 agent 拉起即抛）：同 id
+        // 降级记忆亲和新会话，台账收敛到 running 行（熟手不因此记 failed——
+        // closeOpenDispatches 才收口，路由表无感）
+        const msg = e instanceof Error ? e.message : String(e);
+        this.pushExternalLog(veteran, "system", `熟手复活失败，本单降级新会话: ${msg}`);
+        try {
+          sessionId = this.create(anchor, wrapDispatchPrompt(tier, input.prompt), "acceptEdits", true, { skipStickyCwd: true });
+        } catch (e2) {
+          const msg2 = e2 instanceof Error ? e2.message : String(e2);
+          appendDispatch({ ts: Date.now(), id: dispatchId, tier, target: "spawn-pending", status: "failed", receipt: truncate(`resume 失败(${msg}) 后新会话亦失败: ${msg2}`, 200), session_id: "", project_anchor: anchor });
+          return { ok: false, error: `worker 拉起失败: ${msg2}` };
+        }
+      }
+    } else {
+      try {
+        sessionId = this.create(anchor, wrapDispatchPrompt(tier, input.prompt), "acceptEdits", true, { skipStickyCwd: true });
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : String(e);
+        appendDispatch({ ts: Date.now(), id: dispatchId, tier, target: "spawn-pending", status: "failed", receipt: truncate(msg, 200), session_id: "", project_anchor: anchor });
+        return { ok: false, error: `worker 拉起失败: ${msg}` };
+      }
     }
     const s = this.sessions.get(sessionId);
     if (s) {
@@ -2875,6 +2901,28 @@ export class SessionManager {
     }
     this.emitOrgState();
     return { ok: true, dispatch_id: dispatchId, session_id: sessionId };
+  }
+
+  // #26 M3 §5 查表选熟手：按 routingFor 调度偏好序（bad 沉底→熟练→最近）扫第一个
+  // 可承接者。避开名单 = bad 评价｜失败≥2 且多于成功（未手动评 bad 时的兜底——
+  // 「干砸的记一笔，下次避开或加强验收」）；不可承接 = 会话不在册/无 SDK 会话 id
+  //（退休后只剩路由表记录——档案位，等记忆亲和新会话）｜在忙（WORKING/WAITING）｜
+  // resume 互斥窗口（spawn→onInit 双拉风险）｜外部会话（用户终端自管，relay 不得
+  // 抢拉）｜Leader 本人（兼管是分诊不是承接）。historical 不排除：重启收养态正是
+  // resume 的目标形态（与用户消息复活路径同款）。
+  private pickVeteran(gid: string): string | null {
+    for (const e of routingFor(gid)) {
+      if (e.rating === "bad") continue;
+      if (e.failed >= 2 && e.failed > e.count) continue;
+      const s = this.sessions.get(e.session_id);
+      if (!s || !s.state.relay_session_id) continue;
+      if (s.state.external) continue;
+      if (s.state.status === "WORKING" || s.state.status === "WAITING") continue;
+      if (s.resumePending && Date.now() - s.resumePending < resumePendingWindowMs()) continue;
+      if (this.isLeaderSession(e.session_id)) continue;
+      return e.session_id;
+    }
+    return null;
   }
 
   private require(sessionId: string): ManagedSession {

@@ -11,6 +11,7 @@ import { EventBus } from "../src/event-bus.js";
 import { SessionManager, wrapDispatchPrompt } from "../src/session-manager.js";
 import { readDispatchLog } from "../src/org.js";
 import { listGroups, loadBoard } from "../src/projects.js";
+import { routingFor } from "../src/routing.js";
 import type { RelayConfig } from "../src/config.js";
 import type { AgentCallbacks, AgentLike } from "../src/agent-adapter.js";
 import type { Command } from "../src/types.js";
@@ -230,6 +231,54 @@ async function main() {
     assert(ack2.ok === true && det?.group?.id === gidE && Array.isArray(det?.board?.entries) && Array.isArray(det?.receipts), "COMMAND_PROJECT_DETAIL 返回编制/板/回执流");
     const ack3 = mgr.handleCommand({ command_id: "cmd-3", type: "COMMAND_PROJECT_DETAIL", ts: Date.now(), payload: { gid: "nope" } } as Command, "web-1");
     assert(ack3.ok === false, "未知组详情 → ok:false");
+
+    // ---------- D8 M3 熟手查表调度（§5 双来源） ----------
+    console.log("D8 熟手查表调度:");
+    // eps 组（D7）active 且无派单记录：首单必走记忆亲和新会话
+    const e1 = mgr.orgAction("dispatch", { anchor: join(DATA, "proj-e"), prompt: "eps 第一单", gid: gidE }) as { ok: boolean; session_id?: string; dispatch_id?: string };
+    const wE1 = e1.session_id ?? "";
+    assert(e1.ok === true && !!wE1, "首单（路由表空）→ 新会话承接");
+    assert(await waitFor(() => (routingFor(gidE).find((x) => x.session_id === wE1)?.count ?? 0) === 1), "首单 done → 路由表 count=1");
+    // 第二单：W1 空闲熟手 → resume（会话亲和）——session_id 不变、不产新会话
+    const before2 = mgr.snapshot().length;
+    const created2 = created.length;
+    const e2 = mgr.orgAction("dispatch", { anchor: join(DATA, "proj-e"), prompt: "eps 第二单", gid: gidE }) as { ok: boolean; session_id?: string; dispatch_id?: string };
+    assert(e2.ok === true && e2.session_id === wE1, "空闲熟手 → resume 原会话（session_id 复用）");
+    assert(mgr.snapshot().length === before2, "未新增会话（会话亲和，非新拉）");
+    assert(created.length === created2 + 1, "resume 也走工厂（换流），但归属同一 relay 会话");
+    const rawE2 = readFileSync(join(ORG, "dispatch-log.ndjson"), "utf-8").trim().split("\n").map((l) => JSON.parse(l) as { id: string; status: string; target: string });
+    assert(rawE2.filter((x) => x.id === e2.dispatch_id)[0]?.target === wE1, "dispatched 行直指熟手（非 spawn-pending）");
+    assert(await waitFor(() => (routingFor(gidE).find((x) => x.session_id === wE1)?.count ?? 0) === 2), "熟手再收口 → count=2");
+    assert((listGroups().find((g) => g.id === gidE)?.headcount ?? []).filter((h) => h.session_id === wE1).length === 1, "重复派单 headcount 不重复入编（幂等）");
+
+    // 忙 → 次优/新会话：W1 置 WORKING → 第三单拉新 W2
+    const internals = mgr as unknown as { sessions: Map<string, { state: { status: string; relay_session_id?: string } }> };
+    internals.sessions.get(wE1)!.state.status = "WORKING";
+    const e3 = mgr.orgAction("dispatch", { anchor: join(DATA, "proj-e"), prompt: "eps 第三单", gid: gidE }) as { ok: boolean; session_id?: string };
+    const wE2 = e3.session_id ?? "";
+    assert(e3.ok === true && !!wE2 && wE2 !== wE1, "熟手在忙 → 新会话（排队不做，活不过夜）");
+    assert(await waitFor(() => (routingFor(gidE).find((x) => x.session_id === wE2)?.count ?? 0) === 1), "W2 done → count=1（次序 W1=2 > W2=1）");
+    // W1 仍忙、W2 空闲 → 第四单 resume W2（次优熟手）
+    const e4 = mgr.orgAction("dispatch", { anchor: join(DATA, "proj-e"), prompt: "eps 第四单", gid: gidE }) as { ok: boolean; session_id?: string };
+    assert(e4.ok === true && e4.session_id === wE2, "首选忙 → 次优熟手 W2 resume");
+    assert(await waitFor(() => (routingFor(gidE).find((x) => x.session_id === wE2)?.count ?? 0) === 2), "W2 再收口 → count=2");
+
+    // 搞砸 → 避开：W2 评 bad → 第五单（W1 忙）跳过 W2 → 新会话 W3
+    const rt = mgr.orgAction("rate", { gid: gidE, sid: wE2, rating: "bad" });
+    assert(rt.ok === true, "org rate bad 落账");
+    const e5 = mgr.orgAction("dispatch", { anchor: join(DATA, "proj-e"), prompt: "eps 第五单", gid: gidE }) as { ok: boolean; session_id?: string };
+    const wE3 = e5.session_id ?? "";
+    assert(e5.ok === true && !!wE3 && wE3 !== wE1 && wE3 !== wE2, "bad 评价熟手被避开 → 新会话");
+    assert(await waitFor(() => (routingFor(gidE).find((x) => x.session_id === wE3)?.count ?? 0) === 1), "W3 done → count=1");
+    // 退休形态：W1 会话不在册（只剩路由表记录）→ 档案位跳过；W2 bad；W3 空闲 → resume W3
+    internals.sessions.delete(wE1);
+    const e6 = mgr.orgAction("dispatch", { anchor: join(DATA, "proj-e"), prompt: "eps 第六单", gid: gidE }) as { ok: boolean; session_id?: string };
+    assert(e6.ok === true && e6.session_id === wE3, "退休记录跳过 + bad 跳过 → resume 唯一可用熟手 W3");
+    // tag 通道顺手验（评鉴/标签 CLI 面）
+    const tg = mgr.orgAction("tag", { gid: gidE, sid: wE3, tags: ["rust", "cli"] });
+    assert(tg.ok === true && (routingFor(gidE).find((x) => x.session_id === wE3)?.tags ?? []).join(",") === "rust,cli", "org tag 标签落账");
+    const rtMiss = mgr.orgAction("rate", { gid: gidE, sid: "no-such", rating: "good" });
+    assert(rtMiss.ok === false, "无合作记录不可评");
 
     // ---------- 收尾 ----------
     console.log(`\n${fail === 0 ? "PASS" : "FAIL"}: ${pass} passed, ${fail} failed`);
