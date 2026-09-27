@@ -230,6 +230,66 @@ async function main() {
     assert(!!hung6 && hung6.status === "done" && log6.every((e) => e.status !== "running"), "L6 断档补记：悬账补 done「relay 重启，回合中断」且无残留 running");
     rmSync(ORG3, { recursive: true, force: true });
     rmSync(DATA3, { recursive: true, force: true });
+
+    // ---------- L7 M1/M2 审查轮：恢复路径漏收（reviveSaved/合并重放）+ Leader 卡拒删 ----------
+    console.log("L7 审查轮（恢复漏收/Leader 拒删）:");
+    const ORG4 = mkdtempSync(join(tmpdir(), "ccr-org-l7-"));
+    const DATA4 = mkdtempSync(join(tmpdir(), "ccr-data-l7-"));
+    process.env.CCR_ORG_DIR = ORG4;
+    const created8: SpawnRec[] = [];
+    const mgr8 = new SessionManager(new EventBus({ persistPath: join(DATA4, "events.ndjson") }), { ...cfg6, dataDir: DATA4 });
+    mgr8.setAgentFactory(makeFakeFactory(created8));
+    const r8 = mgr8.ensureLeader();
+    const lid8 = r8.ok ? r8.session_id : "";
+    assert(r8.ok === true && created8.length === 1, "L7 前置：首建 Leader");
+
+    // (1) Leader 卡拒删：逻辑常驻锚是权威（§3.5）——进程内删卡=组织失聪（重启前无入口）
+    assert(mgr8.deleteSession(lid8) === false, "L7 deleteSession(Leader) → 拒删");
+    assert(!!mgr8.snapshot().find((s) => s.session_id === lid8), "L7 Leader 卡仍在册");
+    const delAck = mgr8.handleCommand({ command_id: randomUUID(), type: "COMMAND_DELETE", ts: Date.now(), payload: { session_id: lid8 } }, "test") as { ok: boolean; error?: string };
+    assert(delAck.ok === false && !!delAck.error, "L7 COMMAND_DELETE(Leader) → ok:false 带指引");
+
+    // (2) 恢复走 reviveSaved（无未回显消息 → parked 恢复不再产生回合事件）→ 悬挂单按中断收口
+    const msg8 = (text: string) =>
+      mgr8.handleCommand({ command_id: randomUUID(), type: "COMMAND_MESSAGE", ts: Date.now(), payload: { session_id: lid8, text } }, "test");
+    // 前置：上岗回合完成（onInit 已回、sdkId 在册——recoverFromStall 的 sdkId 检查在
+    // 收口分支之前，太早触发会走 recover_fail 什么都没收）
+    assert(await waitFor(() => {
+      const c = mgr8.snapshot().find((s) => s.session_id === lid8);
+      return !!c && c.status === "DONE" && c.done_reason === "success";
+    }), "L7 Leader 上岗回合完成（前置）");
+    msg8("咨询 X");
+    assert(await waitFor(() => readDispatchLog(ORG4).some((e) => e.status === "running")), "L7 咨询单落账 running（前置）");
+    const hack8 = mgr8 as unknown as {
+      sessions: Map<string, { agent: { ended: boolean } | null; unacked: { text: string }[]; wd: { phase: string } }>;
+      openDispatches: Map<string, { id: string; tier: "咨询" }[]>;
+      recoverFromStall(s: never, lane: string, stalled: number, cpu: number): Promise<void>;
+    };
+    const s8 = hack8.sessions.get(lid8)!;
+    s8.agent = { ended: true }; // 树已死（ended）：跳过杀树等待窗口，直达恢复分支
+    s8.unacked = [];
+    await hack8.recoverFromStall(s8 as never, "slow", 1000, 0);
+    let log8 = readDispatchLog(ORG4);
+    assert(log8.some((e) => e.status === "done" && e.receipt === "流中断恢复待命，回合中断"), "L7 reviveSaved 分支：悬挂单按中断收口（不再永悬 running）");
+    assert(log8.every((e) => e.status !== "running"), "L7 无残留 running");
+    assert(created8.length === 2, "L7 reviveSaved 拉起恢复流（spawn 记账）");
+
+    // (3) 合并重放：N 条未回显 + N 张悬挂单 → 合成 1 回合只归头单，盈余从尾收（写实回执）
+    msg8("问题一");
+    msg8("问题二");
+    assert(await waitFor(() => readDispatchLog(ORG4).filter((e) => e.status === "running").length === 2), "L7 两张悬挂单（前置）");
+    s8.unacked = [{ text: "问题一" }, { text: "问题二" }];
+    if (s8.agent) (s8.agent as { ended: boolean }).ended = true;
+    await hack8.recoverFromStall(s8 as never, "slow", 1000, 0);
+    log8 = readDispatchLog(ORG4);
+    const merged = log8.find((e) => e.receipt === "多消息合并重放（并入同回合）");
+    assert(!!merged && merged.status === "done", "L7 合并重放：盈余单先按中断收口（写实回执）");
+    assert(log8.filter((e) => e.status === "running").length === 1, "L7 头单留给合并回合（FIFO 语义：尾单先收）");
+    created8[created8.length - 1].cb.onTurnEnd(true, "合并作答", 10);
+    log8 = readDispatchLog(ORG4);
+    assert(log8.every((e) => e.status !== "running") && log8.some((e) => e.receipt === "合并作答"), "L7 合并回合 → 头单 done 归回合回执");
+    rmSync(ORG4, { recursive: true, force: true });
+    rmSync(DATA4, { recursive: true, force: true });
   } finally {
     if (prevOrg === undefined) delete process.env.CCR_ORG_DIR; else process.env.CCR_ORG_DIR = prevOrg;
     if (prevTitleGen === undefined) delete process.env.CCR_NO_TITLE_GEN; else process.env.CCR_NO_TITLE_GEN = prevTitleGen;

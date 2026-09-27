@@ -589,6 +589,9 @@ export function startServer(
     // suggest-hold/dispatch/board/project-detail；M3 追加 rate/tag——路由表评鉴，
     // Leader 手动记 good/bad 与技能标签）。鉴权循 deliver 先例（主 token）。
     // 用户端决议不经此（走 WS COMMAND_ORG_CONFIRM）——Leader 只提案不决议。
+    // M1/M2 审查轮：白名单强制上述口径——confirm-decide 属人类决议面，HTTP 放行
+    // 等于允许读过 token 的进程（含 Leader/被注入的 worker）自批确认卡，绕过
+    // 「用户是指挥/验收者」的确认门槛（此前只是注释声明，未强制）
     if (req.method === "POST" && url.pathname === "/api/org") {
       if ((url.searchParams.get("token") ?? "") !== cfg.token) {
         res.writeHead(401).end("unauthorized");
@@ -604,6 +607,18 @@ export function startServer(
           const { action, ...payload } = JSON.parse(body) as { action?: unknown };
           if (typeof action !== "string" || !action.trim()) {
             res.writeHead(400, { "content-type": "application/json" }).end('{"ok":false,"error":"action 必填"}');
+            return;
+          }
+          // 决议类动作不开放 HTTP（Leader 提案面）；未来新增 orgAction 动作默认
+          // 也不放行，需显式加白名单（防决议面被新动作意外扩大）
+          const ORG_HTTP_ACTIONS = new Set([
+            "status", "project-create", "project-status", "project-tier", "suggest-hold",
+            "dispatch", "board", "project-detail", "rate", "tag",
+          ]);
+          if (!ORG_HTTP_ACTIONS.has(action.trim())) {
+            res.writeHead(403, { "content-type": "application/json" }).end(
+              JSON.stringify({ ok: false, error: `action「${action.trim()}」不开放 HTTP 通道（决议类只走用户端确认卡）` }),
+            );
             return;
           }
           const r = mgr.orgAction(action.trim(), payload as Record<string, unknown>);

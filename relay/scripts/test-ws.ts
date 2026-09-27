@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { mkdirSync } from "node:fs";
+import { mkdirSync, rmSync } from "node:fs";
 import { WebSocket } from "ws";
 import { fileURLToPath } from "node:url";
 import { EventBus } from "../src/event-bus.js";
@@ -57,6 +57,12 @@ function send(c: TestClient, partial: Omit<Command, "command_id" | "ts">): strin
 // ---- 启动被测服务（独立端口，避免与 dev server 冲突） ----
 process.env.CCR_PORT = "8799";
 process.env.CCR_TOKEN = "test-token-123";
+// #26 M1/M2 审查轮：/api/org HTTP 通道测试需要隔离组织目录（默认 ~/.cc-deck/org 绝不可碰）
+const WS_ORG = fileURLToPath(new URL("../data/test-ws-org/", import.meta.url));
+mkdirSync(WS_ORG, { recursive: true });
+rmSync(WS_ORG, { recursive: true, force: true });
+mkdirSync(WS_ORG, { recursive: true });
+process.env.CCR_ORG_DIR = WS_ORG;
 // 孤儿扫描用空临时根，防止测试扫到真实 ~/.claude/projects
 process.env.CCR_PROJECTS_ROOT = fileURLToPath(new URL("../data/test-projects-ws/", import.meta.url));
 // #67 COMMAND_CREATE 探针 cwd 用 .tmp- 沙箱：历史用 process.cwd()（仓库根），
@@ -164,6 +170,18 @@ assert(
   c1.acks.some((a) => a.ok === false),
   "invalid message got error ack",
 );
+
+// 7. #26 M1/M2 审查轮：/api/org HTTP 通道——鉴权 + 决议动作白名单（confirm-decide
+//    不开放 HTTP：读过 token 的进程不得自批确认卡，决议只走 WS COMMAND_ORG_CONFIRM）
+const orgBase = `http://127.0.0.1:${cfg.port}/api/org`;
+const noTok = await fetch(orgBase, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ action: "status" }) });
+assert(noTok.status === 401, "/api/org 无 token → 401");
+const decide = await fetch(`${orgBase}?token=${cfg.token}`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ action: "confirm-decide", confirm_id: "cf-x", approve: true }) });
+assert(decide.status === 403, "/api/org confirm-decide → 403（决议面不开放 HTTP）");
+assert(((await decide.json()) as { ok: boolean }).ok === false, "拒收回 ok:false");
+const stat = await fetch(`${orgBase}?token=${cfg.token}`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ action: "status" }) });
+assert(stat.status === 200 && ((await stat.json()) as { ok: boolean }).ok === true, "/api/org status 放行（提案面）");
+rmSync(WS_ORG, { recursive: true, force: true });
 
 // 清理：STOP 会话 + 关闭
 send(c1, { type: "COMMAND_STOP", payload: { session_id: sessionId } });

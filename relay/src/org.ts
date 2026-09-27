@@ -269,7 +269,8 @@ case "$action" in
     ;;
   create)
     [ $# -ge 3 ] || { echo "用法: org create <name> <anchor> <轻立项|正经立项>" >&2; exit 1; }
-    body="$(python3 - "$@" <<'PY'
+    a2="$(abs "$2")"
+    body="$(python3 - "$1" "$a2" "$3" <<'PY'
 import json, sys
 print(json.dumps({"action":"project-create","name":sys.argv[1],"anchor":sys.argv[2],"tier":sys.argv[3]},ensure_ascii=False))
 PY

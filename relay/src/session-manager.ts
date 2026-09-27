@@ -12,7 +12,8 @@ import type { DispatchTier } from "./org.js";
 // 全部经 orgAction 单漏斗进出，广播统一 emitOrgState/emitBoard
 import {
   addConfirm, addMember, buildArchiveChecklist, canTransition, createGroup, decideConfirm,
-  findGroup, findStaleGroups, listGroups, listPendingConfirms, loadBoard, markHoldSuggested,
+  findGroup, findGroupByAnchor, findStaleGroups, listConfirms, listGroups, listGroupsByStatus,
+  listPendingConfirms, loadBoard, markHoldSuggested, maxActiveGroups,
   moveBoardEntry, moveEntryByDispatch,
   removeBoardEntry, setGroupStatus, setGroupTier, setLightConfirmTrusted, upsertBoardEntry,
   ensureProjectClaudeMd,
@@ -1268,9 +1269,13 @@ export class SessionManager {
 
   // 删除会话：外部会话写墓碑防历史重放复活（#34 断言的闭环），置顶清单同步摘除（#49）。
   // COMMAND_DELETE 与 SessionEnd 主动关闭收口共用（主动退出 → 客户端卡片同步清除）
-  deleteSession(id: string): void {
+  // M1 审查轮：返回 false = 拒删（组织 Leader 卡——锚 org.json 仍指向它，§3.5
+  // 逻辑常驻锚是权威；进程内删卡只会让组织失聪：leaderEnsured 已真 → ensureLeader
+  // no-op，重启前无入口。解散组织走清锚通道：删锚后重启即不再拉起）
+  deleteSession(id: string): boolean {
     const s = this.sessions.get(id);
-    if (!s) return;
+    if (!s) return true;
+    if (this.isLeaderSession(id)) return false;
     this.sessions.delete(id);
     this.lastStoreTodos.delete(id);
     this.allowRules.dropSession(id); // #212 会话删除清 session 级记住规则
@@ -1282,6 +1287,7 @@ export class SessionManager {
       writePinnedSessions(this.cfg.dataDir, readPinnedSessions(this.cfg.dataDir).filter((x) => x !== id));
     }
     this.bus.emit(id, "SESSION_DELETED", { session_id: id });
+    return true;
   }
 
   // #144：at = 完成时刻（默认判定时刻）。静默推断收敛（sweep 扫描）必须传真实
@@ -1627,7 +1633,9 @@ export class SessionManager {
           if (s.state.status === "WORKING" || s.state.status === "WAITING") {
             return { command_id: cmd.command_id, ok: false, error: "会话运行中，不能删除" };
           }
-          this.deleteSession(cmd.payload.session_id);
+          if (!this.deleteSession(cmd.payload.session_id)) {
+            return { command_id: cmd.command_id, ok: false, error: "组织 Leader 卡不可删除（逻辑常驻，锚是权威）；解散组织请清 org.json 锚后重启" };
+          }
           return { command_id: cmd.command_id, ok: true };
         }
         // #212 删除「允许并记住」规则。删不存在的 id 回 ok:false；成功后的
@@ -2220,8 +2228,10 @@ export class SessionManager {
           // #26 派单台账兜底（M2 泛化全会话）：流关闭时仍未收口的派单一律 done
           //（流没了 = 该回合无法继续，咨询与 worker 派单同语义），全清 FIFO。
           // M3 审查修正：兜底收口是中断口径（能走到这的都没收过 onTurnEnd 终态——
-          // 未开工/被打断），不写熟手 count（含用户停止触发的 pump finally 路径）
-          this.closeOpenDispatches(managed.state.session_id, "done", reason, true, false);
+          // 未开工/被打断），不写熟手 count（含用户停止触发的 pump finally 路径）。
+          // M1/M2 审查轮：板去向也按中断口径退 todo——活没交付，台账 done 只写实
+          //「流关了」，条目退回待认领（否则结项核对清单看不见未完，绕过知情放行卡）
+          this.closeOpenDispatches(managed.state.session_id, "done", reason, true, false, undefined, "todo");
           managed.wd.phase = "idle";
           if (managed.state.status !== "DONE" && managed.state.status !== "ERROR") {
             managed.state.status = "DONE";
@@ -2410,8 +2420,8 @@ export class SessionManager {
   // ================= #26 矩阵式团队 M1：组织 Leader 常驻化 =================
   // 设计稿 v3.1 §3.5「逻辑常驻」：常驻 = 固定身份（org.json 锚，独立于 events.ndjson
   // 压缩与 pinned 双向清理）+ 按需物理拉起（复用休眠卡/pinned/消息驱动 resume 底座）。
-  // 开机 ensureLeader 只保证「卡在、锚准」；除首次创建 parked 会话（拿 sdkId 是可恢复
-  // 的前提——无 sdkId 的会话无法 resume）外零 spawn。
+  // 开机 ensureLeader 只保证「卡在、锚准」；除首建带上岗引导 spawn 一次（一次性拿
+  // sdkId——无 sdkId 的会话无法 resume，见 org.ts 引导注释）外零 spawn。
 
   isLeaderSession(sessionId: string): boolean {
     return this.leaderId === sessionId;
@@ -2455,10 +2465,15 @@ export class SessionManager {
   // 首建：带上岗引导消息 spawn（parked 空 prompt 在真实链路不回 init、拿不到 sdkId，
   // 见 org.ts ORG_LEADER_BOOTSTRAP_PROMPT 注释），一次性拿 sdkId——此后常驻零 spawn。
   // 锚紧邻 create 同步落盘（崩溃窗口微秒级；后果=pinned 残卡可手删，下次重建）。
-  private createLeaderFirstTime(): { ok: true; session_id: string; created: boolean; rebuilt: boolean } {
+  private createLeaderFirstTime(): { ok: true; session_id: string; created: boolean; rebuilt: boolean } | { ok: false; error: string } {
     const id = this.create(orgDir(), ORG_LEADER_BOOTSTRAP_PROMPT, undefined, false, { skipStickyCwd: true });
     const now = Date.now();
-    writeOrgAnchor({ version: 1, leader_session_id: id, leader_sdk_id: "", created_at: now, updated_at: now });
+    // M1 审查轮：锚写失败不得继续置常驻——否则本进程「假常驻」（leaderEnsured 真、
+    // 锚不在盘上）+ 下次启动按未建组织再 spawn → 双 Leader 卡。失败即报错返回
+    //（会话保留为普通卡可手删；下次启动重试）。崩溃窗口=spawn 与落盘之间，微秒级
+    if (!writeOrgAnchor({ version: 1, leader_session_id: id, leader_sdk_id: "", created_at: now, updated_at: now })) {
+      return { ok: false, error: "组织锚写盘失败（盘满/权限？），本次未标记常驻；下次启动重试" };
+    }
     // 题名双写：override 文件管跨重启（adopt 套用），内存 state.title 管当下卡片
     //（不设的话首建到下次重启之间卡片显示的是空 prompt 派生名）
     const s = this.sessions.get(id);
@@ -2558,14 +2573,15 @@ export class SessionManager {
   // 行（append-only 状态机，读侧同 id 取最后一行收敛）。all=true 全清（onSessionEnd
   // 流关闭兜底）；FIFO 空 = 无未收口派单（上岗引导回合等），no-op。
   // 回执 = terminal_reason 截 200 字；gid 条目联动任务板：done→done、failed→todo
-  //（退回待认领）。
+  //（退回待认领）。boardTo 显式覆盖板去向：兜底收口（流关闭/恢复待命）台账记
+  // done（中断≠交付，回执写实）但活没交付，板须退 todo——不能用台账 status 推板。
   private pushOpenDispatch(key: string, e: { id: string; tier: DispatchTier; gid?: string; anchor?: string }): void {
     const q = this.openDispatches.get(key) ?? [];
     q.push(e);
     this.openDispatches.set(key, q);
   }
 
-  private closeOpenDispatches(key: string, status: "done" | "failed", receipt: string, all = false, recordRouting = true, onlyGid?: string): void {
+  private closeOpenDispatches(key: string, status: "done" | "failed", receipt: string, all = false, recordRouting = true, onlyGid?: string, boardTo?: "done" | "todo"): void {
     const q = this.openDispatches.get(key);
     if (!q || q.length === 0) return;
     // onlyGid（组挂起/结项联动收口用）：只收**该组**的派单——同一熟手可跨多组在跑，
@@ -2588,7 +2604,7 @@ export class SessionManager {
         ...(e.anchor ? { project_anchor: e.anchor } : {}),
       });
       if (e.gid) {
-        moveEntryByDispatch(e.gid, e.id, status === "done" ? "done" : "todo");
+        moveEntryByDispatch(e.gid, e.id, boardTo ?? (status === "done" ? "done" : "todo"));
         this.emitBoard(e.gid);
         // #26 M3 路由表记账：项目组派单收口即写熟手底账（次数/上次/回执；断档补记
         // 直接走 appendDispatch 不经此，天然豁免——relay 重启不是 worker 的账）。
@@ -2673,6 +2689,15 @@ export class SessionManager {
           if (!cur2) return { ok: false, error: `项目组不存在: ${id}` };
           if (!canTransition(cur2.status, to)) {
             return { ok: false, error: `非法状态迁移: ${cur2.status} → ${to}` };
+          }
+          // M1/M2 审查轮（复活边锚复查）：archived 组的锚在归档时已释放
+          //（findGroupByAnchor 排除 archived），期间锚可能被新组占位——此时复活会
+          // 造出双组同锚（派单回执按锚过滤会串组、板/编制口径全糊），先核占用
+          if (to === "active" && cur2.status === "archived") {
+            const holder = findGroupByAnchor(cur2.anchor_dir);
+            if (holder && holder.id !== cur2.id) {
+              return { ok: false, error: `锚点已被在办组「${holder.name}」占用，复活会双组同锚；请为新位置重新立项（或先结项占位组）` };
+            }
           }
           if (to === "parked") this.parkGroupMembers(id);
           const r = setGroupStatus(id, to, note || undefined);
@@ -2759,7 +2784,11 @@ export class SessionManager {
             });
             r = u.ok ? { ok: true, data: { entry: u.entry } } : u;
           } else if (op === "move") {
-            const m = moveBoardEntry(gid, str("entry_id"), str("status") as BoardEntryStatus);
+            // M1/M2 审查轮：move 与 upsert 同口径校验——store 层不挡非法串，
+            // 不校验会把任意字符串写进 BoardEntryStatus 污染三端分区渲染
+            const st = str("status");
+            if (!["todo", "doing", "done"].includes(st)) return { ok: false, error: "status 必须是 todo|doing|done" };
+            const m = moveBoardEntry(gid, str("entry_id"), st as BoardEntryStatus);
             r = m.ok ? { ok: true, data: { entry: m.entry } } : m;
           } else if (op === "del") {
             const d = removeBoardEntry(gid, str("entry_id"));
@@ -2827,9 +2856,24 @@ export class SessionManager {
         case "confirm-decide": {
           const cid = str("confirm_id");
           if (!cid) return { ok: false, error: "confirm_id 必填" };
+          // M1/M2 审查轮（决议副作用必须可执行）：批准立项前先核并行名额——pending
+          // 组不占 MAX_ACTIVE_GROUPS 名额，若先决议再执行、执行时名额已满，卡已
+          // approved 而组永卡 pending（确认卡是 pending 的唯一出口），死锁。前置
+          // 核失败 → 卡保持待决，用户腾出名额再批
+          if (bool("approve")) {
+            const pend = listConfirms().find((c) => c.id === cid);
+            const pgid = typeof pend?.payload.gid === "string" ? pend.payload.gid : "";
+            if (pend?.kind === "project-create" && pend.status === "pending" && pgid) {
+              const g = findGroup(pgid);
+              if (g?.status === "pending" && listGroupsByStatus().active.length >= maxActiveGroups()) {
+                return { ok: false, error: `在办并行已达上限（${maxActiveGroups()}），先挂起/结项一个组再批准（卡保持待决）` };
+              }
+            }
+          }
           const d = decideConfirm(cid, bool("approve"), str("by") || "user");
           if (!d.ok) return d;
-          this.applyConfirmEffects(d.confirm);
+          const eff = this.applyConfirmEffects(d.confirm);
+          if (!eff.ok) return { ok: false, error: eff.error ?? "决议副作用执行失败" };
           return { ok: true, data: { confirm: d.confirm } };
         }
         default:
@@ -2840,46 +2884,70 @@ export class SessionManager {
     }
   }
 
-  // 确认单决议副作用（一次决一次执行；这里之外不得有组状态迁移的旁路）
-  private applyConfirmEffects(c: OrgConfirm): void {
+  // 确认单决议副作用（一次决一次执行；这里之外不得有组状态迁移的旁路）。
+  // M1/M2 审查轮：副作用失败必须回传——静默失败会让「卡已 approved、组没动」的
+  // 劈叉态无人知晓（两层联动只做了成员侧）。失败时决议留痕不回滚（decideConfirm
+  // 已落盘），错误带回决议方（卡上可见），用户可走直达通道（project-status）补救
+  private applyConfirmEffects(c: OrgConfirm): { ok: boolean; error?: string } {
     const gid = typeof c.payload.gid === "string" ? c.payload.gid : "";
+    const fail = (what: string, r: { error?: string }): { ok: false; error: string } => {
+      this.emitOrgState(); // 失败路径同样广播：成员侧可能已部分变更（如挂起回滚）
+      if (gid) this.emitBoard(gid);
+      return { ok: false, error: `${what}失败: ${r.error ?? "未知原因"}（决议已留痕，可用 org set 直达通道补救）` };
+    };
     if (c.status === "approved") {
       switch (c.kind) {
         case "project-create":
           if (gid) {
-            setGroupStatus(gid, "active");
-            // §4 信任累积：轻立项首次确认通过 → 同类免确认通道打开
+            const r = setGroupStatus(gid, "active");
+            if (!r.ok) return fail("立项决议通过但激活", r);
+            // §4 信任累积：轻立项首次确认通过 → 同类免确认通道打开（只在激活成功后）
             if (findGroup(gid)?.tier === "轻立项") setLightConfirmTrusted(true);
           }
           break;
         case "tier-change":
-          if (gid) setGroupTier(gid, (c.payload.to_tier === "轻立项" ? "轻立项" : "正经立项"));
+          if (gid) {
+            const r = setGroupTier(gid, (c.payload.to_tier === "轻立项" ? "轻立项" : "正经立项"));
+            if (!r.ok) return fail("档位迁移", r);
+          }
           break;
         case "suggest-hold":
           // 点头即挂起（§4 第五态）+ M3 两层联动（成员会话全 parked）。
           // 审查修正（陈旧卡复核）：出卡后组可能已恢复活跃（又派了新单）或已非在办，
-          // 只对仍 active 的组执行挂起；先收成员再冻组（板退卡窗口，同 project-status）
+          // 只对仍 active 的组执行挂起；先收成员再冻组（板退卡窗口，同 project-status）。
+          // 非在办 → 跳过属陈旧卡正常语义（ok），不报失败
           if (gid && findGroup(gid)?.status === "active") {
             this.parkGroupMembers(gid);
-            setGroupStatus(gid, "parked");
+            const r = setGroupStatus(gid, "parked");
+            if (!r.ok) {
+              this.reviveGroupMembers(gid); // 冻组失败回滚成员侧标记，避免两层劈叉
+              return fail("挂起迁移", r);
+            }
           }
           break;
         case "archive":
           if (gid) {
             const a = setGroupStatus(gid, "archived", typeof c.payload.note === "string" && c.payload.note ? c.payload.note : "结项确认通过（悬账/未完条目知情放行）");
-            if (a.ok) this.disbandGroupMembers(gid); // M3：编制解散（知情放行的悬账按中断收口）
+            if (!a.ok) return fail("结项迁移", a);
+            this.disbandGroupMembers(gid); // M3：编制解散（知情放行的悬账按中断收口）
           }
           break;
         case "revive":
           // 复活边直达通常走 project-status；此类型位保留同款联动（清标记，原班走路由表）
-          if (gid && setGroupStatus(gid, "active").ok) this.reviveGroupMembers(gid);
+          if (gid) {
+            const r = setGroupStatus(gid, "active");
+            if (!r.ok) return fail("复活迁移", r);
+            this.reviveGroupMembers(gid);
+          }
           break;
       }
     } else if (c.kind === "project-create" && gid) {
-      setGroupStatus(gid, "archived", "立项确认被否决"); // pending → archived 留痕
+      const r = setGroupStatus(gid, "archived", "立项确认被否决"); // pending → archived 留痕
+      if (!r.ok) return fail("否决留痕迁移", r);
     }
     this.emitOrgState();
     if (gid) this.emitBoard(gid);
+    return { ok: true };
   }
 
   // #26 M2 组织广播（瞬态：在线端实时收敛；离线端由 SNAPSHOT.projects/org_confirms
@@ -3050,8 +3118,13 @@ export class SessionManager {
       // 显示已挂起，文件照改）。窗口期后再补一刀；agent === old 守卫确保只杀这条
       // 流（期间被复活换了新流则不动）
       const sid = s.state.session_id;
+      // M1/M2 审查轮（代际守卫）：本函数在调度后同步置 s.agent=null，「触发时
+      // agent !== old」恒真（null 或复活后的新对象都 !== old）→ 原守卫是死代码、
+      // 补刀一次都不会发。改看 streamGen（同 attach 回调 mine() 范式）：窗口内被
+      // 复活换流则代际已递增，自然跳过——只补刀这条没被接管的旧流
+      const gen = s.streamGen;
       const t = setTimeout(() => {
-        if (this.sessions.get(sid)?.agent !== old || old.ended) return;
+        if (this.sessions.get(sid)?.streamGen !== gen || old.ended) return;
         if (old.childPid) void this.watchdogProcs.killTree(old.childPid).catch(() => {});
         else void old.stop().catch(() => {});
       }, resumePendingWindowMs() + 1000);
@@ -3448,11 +3521,24 @@ export class SessionManager {
       const sdkId = s.state.relay_session_id;
       if (!sdkId) throw new Error("无 SDK 会话记录（首次回合未完成即中断），无法自动恢复");
       if (pending.length > 0) {
-        // 多条未回显消息拼一段重放（CLI 按顺序本就该都收到）；图片合并仍守 4 张上限
+        // 多条未回显消息拼一段重放（CLI 按顺序本就该都收到）；图片合并仍守 4 张上限。
+        // M1 审查轮（漏收窗口）：N 条合并成 1 个重放回合，onTurnEnd 只收 FIFO 头
+        // 1 单——其余 N-1 单的独立回合已不存在（合成回合代答），先按中断口径收掉。
+        // 从尾收（尾单旋到头再出队）：头单=最老单保留本回合回执（FIFO 语义）
+        for (let i = 1; i < pending.length; i++) {
+          const q = this.openDispatches.get(s.state.session_id);
+          if (!q || q.length <= 1) break;
+          q.unshift(q.pop()!);
+          this.closeOpenDispatches(s.state.session_id, "done", "多消息合并重放（并入同回合）", false, false, undefined, "todo");
+        }
         const text = pending.map((m) => m.text).join("\n\n");
         const images = pending.flatMap((m) => m.images ?? []).slice(0, 4);
         this.resumeAgent(s, text, images.length ? images : undefined);
       } else {
+        // M1 审查轮（漏收窗口）：reviveSaved 是 parked 恢复（停在等待输入，不再产
+        // 生任何回合事件）——FIFO 里挂着的派单/咨询单永等不到 onTurnEnd，先按中断
+        // 口径全清（回执写实；不写路由），否则 org status 挂假账直到下一条消息
+        this.closeOpenDispatches(s.state.session_id, "done", "流中断恢复待命，回合中断", true, false);
         this.reviveSaved(s); // 无未回显消息：parked 恢复，停在等待输入
       }
       s.wd.phase = "idle";

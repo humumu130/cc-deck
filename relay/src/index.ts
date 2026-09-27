@@ -269,8 +269,9 @@ const pinned = mgr.applyPinned();
 // #26 矩阵式团队 M1：组织 Leader 常驻化（逻辑常驻 = org cwd + org.json 锚；物理按需
 // 拉起）。必须在 applyPinned 之后：pinned 清单的双向静默清理可能刚把失联 Leader 的
 // 条目摘掉（events 压缩挤掉 CREATED → 内存无此会话 → 文件条目被清），锚才是权威，
-// ensureLeader 把休眠卡重建并重新入 pinned。除首建 parked 会话外零 spawn；org 目录
-// 不可用时只横幅点名，不阻断 relay 其余功能（下次启动重试）
+// ensureLeader 把休眠卡重建并重新入 pinned。除首建带上岗引导 spawn 一次外零 spawn
+//（首建即 spawn，见 org.ts 引导注释）；org 目录不可用时只横幅点名，不阻断 relay
+// 其余功能（下次启动重试）
 const leader = mgr.ensureLeader();
 
 // #26 M3 审查修正：挂起标记重启重建——org_parked 是内存态不进事件流，重启后组仍

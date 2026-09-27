@@ -89,8 +89,10 @@ mkdirSync(ORG, { recursive: true });
 process.env.CCR_ORG_DIR = ORG;
 const SID_PARKED = "autorevive-test-parked-cli";
 const SID_GP = "autorevive-test-gp-cli";
+const SID_AR = "autorevive-test-archived-cli";
 putTodo(SID_PARKED, "1.json", { id: 1, subject: "挂起组在跑活", status: "in_progress" });
 putTodo(SID_GP, "1.json", { id: 1, subject: "丢标成员在跑活", status: "in_progress" });
+putTodo(SID_AR, "1.json", { id: 1, subject: "结项组残留待办", status: "in_progress" });
 writeFileSync(
   join(ORG, "projects.json"),
   JSON.stringify({
@@ -98,6 +100,11 @@ writeFileSync(
       id: "g-parked", name: "挂起组", anchor_dir: "/tmp/anchor-g", status: "parked", tier: "正经立项",
       headcount: [{ session_id: "m-gp", role: "worker" }], single_card: false,
       created_at: Date.now(), updated_at: Date.now(), parked_at: Date.now(),
+    }, {
+      // M1/M2 审查轮补：结项组（编制解散）成员同样不自动拉起——组状态非 active 双保险的另一臂
+      id: "g-archived", name: "结项组", anchor_dir: "/tmp/anchor-ar", status: "archived", tier: "正经立项",
+      headcount: [{ session_id: "m-ar", role: "worker" }], single_card: false,
+      created_at: Date.now(), updated_at: Date.now(), archived_at: Date.now(),
     }],
     trust_light: false,
   }),
@@ -107,10 +114,12 @@ mgr.adopt(new Map([
   // 组状态在盘上是 parked（rehydrateParkedMembers 重建前的裸收养形态）
   mk2("m-parked", SID_PARKED, false, Date.now(), { org_parked: "g-parked" }),
   mk2("m-gp", SID_GP, false, Date.now(), { project_gid: "g-parked" }),
+  mk2("m-ar", SID_AR, false, Date.now(), { project_gid: "g-archived" }),
 ]));
 const n2 = mgr.autoReviveManaged();
 assert(n2 === 0, `挂起退休成员不自动拉起（标记/组状态双保险）got=${n2}`);
 assert(resumes.length === 1, "无新增 resume（挂起成员零拉起）");
+assert(mgr.snapshot().find((s) => s.session_id === "m-ar")?.status !== "WORKING", "结项组成员同样不自动拉起（编制已解散）");
 const rehy = mgr.rehydrateParkedMembers();
 assert(rehy === 1 && mgr.snapshot().find((s) => s.session_id === "m-gp")?.org_parked === "g-parked",
   `重启重建挂起标记（按组状态反推补标）got=${rehy}`);
@@ -123,6 +132,7 @@ rmSync(join(TASKS, SID_BUSY), { recursive: true, force: true });
 rmSync(join(TASKS, SID_IDLE), { recursive: true, force: true });
 rmSync(join(TASKS, SID_PARKED), { recursive: true, force: true });
 rmSync(join(TASKS, SID_GP), { recursive: true, force: true });
+rmSync(join(TASKS, SID_AR), { recursive: true, force: true });
 rmSync(ROOT, { recursive: true, force: true });
 console.log(`\nAUTOREVIVE TESTS: ${pass} pass / ${fail} fail`);
 process.exit(fail ? 1 : 0);

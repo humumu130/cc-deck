@@ -10,7 +10,7 @@ import { join } from "node:path";
 import { EventBus } from "../src/event-bus.js";
 import { SessionManager, wrapDispatchPrompt } from "../src/session-manager.js";
 import { readDispatchLog } from "../src/org.js";
-import { listGroups, listPendingConfirms, loadBoard } from "../src/projects.js";
+import { addMember, listGroups, listPendingConfirms, loadBoard, upsertBoardEntry } from "../src/projects.js";
 import { routingFor } from "../src/routing.js";
 import type { RelayConfig } from "../src/config.js";
 import type { AgentCallbacks, AgentLike } from "../src/agent-adapter.js";
@@ -31,12 +31,14 @@ async function waitFor(fn: () => boolean, ms = 3000, every = 25): Promise<boolea
 
 // 假 agent 工厂：init 模式 20ms 后 onInit（permissionMode 按工厂入参回报）；prompt
 // 会话再 10ms 后 onTurnEnd(okMode)。okNext 控制下一次 spawn 的回合成败（failed 收口用）。
+// stopNoop（D11 补刀用例）：stop() 计数但不落 ended/不回 onSessionEnd——模拟
+// resumePending 窗口内 stop 落空（孤儿 CLI 没被杀掉）。
 let okNext = true;
-type SpawnRec = { cwd: string; prompt: string | undefined; cb: AgentCallbacks };
+let stopNoop = false;
+const stopCalls: string[] = [];
+type SpawnRec = { cwd: string; prompt: string | undefined; cb: AgentCallbacks; agent: AgentLike };
 const makeFakeFactory = (created: SpawnRec[]) =>
   (cwd: string, model: string, cb: AgentCallbacks, prompt: string | undefined, opts?: { permissionMode?: string }): AgentLike => {
-    created.push({ cwd, prompt, cb });
-    const ok = okNext;
     const a: AgentLike = {
       id: randomUUID(),
       startedAt: Date.now(),
@@ -45,9 +47,14 @@ const makeFakeFactory = (created: SpawnRec[]) =>
       allow: () => false,
       deny: () => false,
       answer: () => false,
-      stop: async () => { a.ended = true; cb.onSessionEnd("stopped"); },
+      stop: async () => {
+        if (stopNoop) { stopCalls.push(a.id); return; }
+        a.ended = true; cb.onSessionEnd("stopped");
+      },
       setPermissionMode: async () => {},
     };
+    created.push({ cwd, prompt, cb, agent: a });
+    const ok = okNext;
     setTimeout(() => {
       if (a.ended) return;
       cb.onInit("sdk-" + a.id.slice(0, 8), model, opts?.permissionMode ?? "default");
@@ -291,7 +298,7 @@ async function main() {
     assert(await waitFor(() => (routingFor(gidZ).find((x) => x.session_id === wZ1)?.count ?? 0) === 1), "zeta 首单收口 count=1");
     // 在跑成员 + 悬账 → 组挂起：悬账收口（中断≠干砸，路由表无感）+ 会话休眠
     const hack = mgr as unknown as {
-      sessions: Map<string, { state: { status: string; org_parked?: string; project_gid?: string; done_reason?: string }; agent: { ended: boolean } | null; streamGen: number }>;
+      sessions: Map<string, { state: { status: string; org_parked?: string; project_gid?: string; done_reason?: string; updated_at?: number }; agent: { ended: boolean } | null; streamGen: number }>;
       openDispatches: Map<string, { id: string; tier: string; gid?: string; anchor?: string }[]>;
     };
     hack.sessions.get(wZ1)!.state.status = "WORKING";
@@ -419,6 +426,126 @@ async function main() {
     const rehy = mgr.rehydrateParkedMembers();
     assert(rehy === 1 && hack.sessions.get(wZ1)?.state.org_parked === gidZ, "rehydrate 按组状态反推补标（只补丢标的）");
     assert(hack.sessions.get(wZ4)?.state.org_parked === undefined, "复活中的成员不被 rehydrate 回打（agent 守卫）");
+
+    // ---------- D11 M1/M2 审查轮（补课回归：修正点全部上锁） ----------
+    console.log("D11 审查轮（板退窗口/兜底板向/陈旧卡/名额/白名单/锚冲突/成员活度/补刀）:");
+
+    // a) 挂起板退窗口：在跑派单的 doing 条目随组挂起退 todo + 冻结（修正点的实际效果，此前无直测）
+    const cEta = mgr.orgAction("project-create", { name: "eta", anchor: join(DATA, "proj-eta"), tier: "正经立项" }) as { ok: boolean; data?: { confirm?: { id: string }; group?: { id: string } } };
+    const gidEta = cEta.data?.group?.id ?? "";
+    mgr.orgAction("confirm-decide", { confirm_id: cEta.data?.confirm?.id ?? "", approve: true, by: "u" });
+    const etaAnchor = join(DATA, "proj-eta");
+    const etaD1 = mgr.orgAction("dispatch", { anchor: etaAnchor, prompt: "eta 一单", gid: gidEta }) as { ok: boolean; session_id?: string };
+    const wEta = etaD1.session_id ?? "";
+    assert(await waitFor(() => (routingFor(gidEta).find((x) => x.session_id === wEta)?.count ?? 0) === 1), "eta 首单收口（前置）");
+    hack.sessions.get(wEta)!.state.status = "WORKING";
+    hack.openDispatches.set(wEta, [{ id: "dsp-eta-p", tier: "正经立项", gid: gidEta, anchor: etaAnchor }]);
+    upsertBoardEntry(gidEta, { text: "挂起时在跑", status: "doing", dispatch_id: "dsp-eta-p" });
+    const pEta = mgr.orgAction("project-status", { id: gidEta, to: "parked", note: "板退窗口" });
+    assert(pEta.ok === true, "eta 挂起");
+    assert(loadBoard(gidEta).entries.find((x) => x.dispatch_id === "dsp-eta-p")?.status === "todo", "挂起板退窗口：在跑条目退 todo（不永挂 doing）");
+    assert(loadBoard(gidEta).frozen === true, "挂起后板冻结");
+    assert(readDispatchLog().some((x) => x.id === "dsp-eta-p" && x.status === "failed" && x.receipt === "项目组挂起，回合中断"), "悬账 failed+写实回执");
+
+    // b) 兜底收口板方向：流关闭台账 done（中断≠交付）但板退 todo——结项核对才看得见未完
+    mgr.orgAction("project-status", { id: gidEta, to: "active" });
+    const etaD2 = mgr.orgAction("dispatch", { anchor: etaAnchor, prompt: "eta 二单", gid: gidEta }) as { ok: boolean; session_id?: string };
+    assert(etaD2.ok === true && etaD2.session_id === wEta, "复活后原班承接（前置）");
+    assert(await waitFor(() => (routingFor(gidEta).find((x) => x.session_id === wEta)?.count ?? 0) === 2), "二单收口（前置）");
+    hack.openDispatches.set(wEta, [{ id: "dsp-eta-f", tier: "正经立项", gid: gidEta, anchor: etaAnchor }]);
+    upsertBoardEntry(gidEta, { text: "流死在半路", status: "doing", dispatch_id: "dsp-eta-f" });
+    cbFor(etaAnchor)!.onSessionEnd("stopped");
+    assert(readDispatchLog().some((x) => x.id === "dsp-eta-f" && x.status === "done" && x.receipt === "stopped"), "兜底台账 done（回执写实）");
+    assert(loadBoard(gidEta).entries.find((x) => x.dispatch_id === "dsp-eta-f")?.status === "todo", "兜底板退 todo（不虚标 done）");
+
+    // c) 陈旧暂缓卡：出卡后组被直达挂起 → 点头 → 组不动、成员标记不被重打
+    const shE = mgr.orgAction("suggest-hold", { id: gidEta, reason: "等等看" }) as { ok: boolean; data?: { confirm?: { id: string } } };
+    assert(shE.ok === true, "active 组建议暂缓出卡（前置）");
+    mgr.orgAction("project-status", { id: gidEta, to: "parked", note: "直达挂起（卡变陈旧）" });
+    const appr = mgr.orgAction("confirm-decide", { confirm_id: shE.data?.confirm?.id ?? "", approve: true, by: "u" });
+    assert(appr.ok === true, "陈旧卡点头决议本身成功");
+    assert(listGroups().find((g) => g.id === gidEta)?.status === "parked", "陈旧卡复核：组仍 parked（不重复动作）");
+    assert(hack.sessions.get(wEta)?.state.org_parked === gidEta, "成员标记不被重打（直达挂起那次打的还在）");
+
+    // d) 名额满批准：前置核挡下（卡保持待决）——不产「已批准但组永卡 pending」死锁
+    const activeBefore = listGroups().filter((g) => g.status === "active").length;
+    const savedMax2 = process.env.CCR_ORG_MAX_GROUPS;
+    process.env.CCR_ORG_MAX_GROUPS = String(activeBefore + 1);
+    const cOm = mgr.orgAction("project-create", { name: "omicron", anchor: join(DATA, "proj-om"), tier: "正经立项" }) as { ok: boolean; data?: { confirm?: { id: string }; group?: { id: string } } };
+    const gidOm = cOm.data?.group?.id ?? "";
+    const cfOm = cOm.data?.confirm?.id ?? "";
+    process.env.CCR_ORG_MAX_GROUPS = String(activeBefore); // 卡待决期间名额被占满
+    const blocked = mgr.orgAction("confirm-decide", { confirm_id: cfOm, approve: true, by: "u" }) as { ok: boolean; error?: string };
+    assert(blocked.ok === false && (blocked.error ?? "").includes("上限"), "名额满 → 批准被前置核挡下");
+    assert(listPendingConfirms().some((c) => c.id === cfOm && c.status === "pending"), "卡保持待决（可腾名额再批）");
+    assert(listGroups().find((g) => g.id === gidOm)?.status === "pending", "组仍 pending（没被半激活）");
+    if (savedMax2 === undefined) delete process.env.CCR_ORG_MAX_GROUPS; else process.env.CCR_ORG_MAX_GROUPS = savedMax2;
+    const apprOm = mgr.orgAction("confirm-decide", { confirm_id: cfOm, approve: true, by: "u" });
+    assert(apprOm.ok === true && listGroups().find((g) => g.id === gidOm)?.status === "active", "恢复名额后批准 → active（闭环）");
+
+    // e) board move 白名单：非法 status 拒绝（与 upsert 同口径）
+    const mvBad = mgr.orgAction("board", { op: "move", gid: gidEta, entry_id: "nope", status: "bogus" }) as { ok: boolean; error?: string };
+    assert(mvBad.ok === false && (mvBad.error ?? "").includes("todo|doing|done"), "board move 非法 status 拒绝");
+
+    // f) 复活边锚复查：归档组锚被新组占位 → 拒复活（双组同锚拦截）
+    const cTh = mgr.orgAction("project-create", { name: "theta", anchor: join(DATA, "proj-th"), tier: "轻立项" }) as { ok: boolean; data?: { group?: { id: string } } };
+    const gidTh = cTh.data?.group?.id ?? "";
+    assert(cTh.ok === true && listGroups().find((g) => g.id === gidTh)?.status === "active", "theta 轻立项直达 active（前置）");
+    const arTh = mgr.orgAction("project-status", { id: gidTh, to: "archived" });
+    assert(arTh.ok === true, "theta 一句话归档（锚释放，前置）");
+    const cIo = mgr.orgAction("project-create", { name: "iota", anchor: join(DATA, "proj-th"), tier: "轻立项" });
+    assert(cIo.ok === true, "同锚新组 iota 占位（前置）");
+    const rvTh = mgr.orgAction("project-status", { id: gidTh, to: "active" }) as { ok: boolean; error?: string };
+    assert(rvTh.ok === false && (rvTh.error ?? "").includes("占用"), "复活边锚复查：占位时拒复活");
+
+    // g) memberActivity 接线：四路全陈旧但成员会话在动 → 不出卡（防漏传第五路活度的回归）
+    const cKa = mgr.orgAction("project-create", { name: "kappa", anchor: join(DATA, "proj-ka"), tier: "轻立项" }) as { ok: boolean; data?: { group?: { id: string } } };
+    const gidKa = cKa.data?.group?.id ?? "";
+    addMember(gidKa, wZ1, "worker");
+    backdate(gidKa, 20);
+    const savedPgid = hack.sessions.get(wZ1)!.state.project_gid;
+    hack.sessions.get(wZ1)!.state.project_gid = gidKa;
+    hack.sessions.get(wZ1)!.state.updated_at = Date.now();
+    const scanK1 = mgr.autoSuggestHold();
+    assert(!scanK1.suggested.includes(gidKa), "成员会话在动 → 不出卡（第五路活度接线）");
+    hack.sessions.get(wZ1)!.state.project_gid = savedPgid; // 还原信号 → 反证不是永不出卡
+    const scanK2 = mgr.autoSuggestHold();
+    assert(scanK2.suggested.includes(gidKa), "无成员信号 → 照常出卡（活度口径不误杀）");
+    mgr.orgAction("confirm-decide", { confirm_id: listPendingConfirms().find((c) => c.kind === "suggest-hold" && c.payload.gid === gidKa)?.id ?? "", approve: false, by: "u" });
+
+    // h) 停流补刀（B1 修正真触发）：挂起落在 spawn 窗口 → 立即 stop 落空后窗口外必补刀；
+    //    期间被复活换流 → 代际守卫跳过（只杀旧流）
+    const prevRpm = process.env.CCR_RESUME_PENDING_MS;
+    process.env.CCR_RESUME_PENDING_MS = "5000"; // 窗口下限（resumePendingWindowMs 最低 5s）
+    stopNoop = true;
+    mgr.orgAction("project-status", { id: gidKa, to: "archived" }); // 腾名额（kappa 用完了）
+    mgr.orgAction("project-status", { id: gidOm, to: "archived" });
+    const cMu = mgr.orgAction("project-create", { name: "mu", anchor: join(DATA, "proj-mu"), tier: "轻立项" });
+    const gidMu = listGroups().find((g) => g.name === "mu")?.id ?? "";
+    assert(cMu.ok === true && !!gidMu, "mu 立项（前置）");
+    const dMu = mgr.orgAction("dispatch", { anchor: join(DATA, "proj-mu"), prompt: "mu 一单", gid: gidMu }) as { ok: boolean; session_id?: string };
+    const wMu = dMu.session_id ?? "";
+    assert(dMu.ok === true && await waitFor(() => (routingFor(gidMu).find((x) => x.session_id === wMu)?.count ?? 0) === 1), "mu 首单收口（前置）");
+    const cNu = mgr.orgAction("project-create", { name: "nu", anchor: join(DATA, "proj-nu"), tier: "轻立项" });
+    const gidNu = listGroups().find((g) => g.name === "nu")?.id ?? "";
+    assert(cNu.ok === true && !!gidNu, "nu 立项（前置）");
+    const dNu = mgr.orgAction("dispatch", { anchor: join(DATA, "proj-nu"), prompt: "nu 一单", gid: gidNu }) as { ok: boolean; session_id?: string };
+    const wNu = dNu.session_id ?? "";
+    assert(dNu.ok === true && await waitFor(() => (routingFor(gidNu).find((x) => x.session_id === wNu)?.count ?? 0) === 1), "nu 首单收口（前置）");
+    const agentMu = created.find((c) => c.cwd === join(DATA, "proj-mu"))?.agent;
+    const agentNu = created.find((c) => c.cwd === join(DATA, "proj-nu"))?.agent;
+    const muBefore = stopCalls.filter((x) => x === agentMu?.id).length;
+    const nuBefore = stopCalls.filter((x) => x === agentNu?.id).length;
+    mgr.orgAction("project-status", { id: gidMu, to: "parked", note: "补刀用例（无人接管）" });
+    mgr.orgAction("project-status", { id: gidNu, to: "parked", note: "换流用例" });
+    mgr.orgAction("project-status", { id: gidNu, to: "active" });
+    const dNu2 = mgr.orgAction("dispatch", { anchor: join(DATA, "proj-nu"), prompt: "nu 二单", gid: gidNu }) as { ok: boolean; session_id?: string };
+    assert(dNu2.ok === true && dNu2.session_id === wNu, "nu 复活后原班承接（换流，前置）");
+    await wait(6500); // 5s 窗口 + 1s 缓冲 + 调度余量
+    assert(stopCalls.filter((x) => x === agentMu?.id).length === muBefore + 2, "mu：立即 stop 落空 + 窗口后补刀真触发（代际守卫）");
+    assert(stopCalls.filter((x) => x === agentNu?.id).length === nuBefore + 1, "nu：复活换流 → 补刀被代际守卫跳过（不误杀新流）");
+    stopNoop = false;
+    if (prevRpm === undefined) delete process.env.CCR_RESUME_PENDING_MS; else process.env.CCR_RESUME_PENDING_MS = prevRpm;
 
     // ---------- 收尾 ----------
     console.log(`\n${fail === 0 ? "PASS" : "FAIL"}: ${pass} passed, ${fail} failed`);
