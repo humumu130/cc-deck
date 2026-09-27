@@ -619,6 +619,7 @@ function OrgZone({ confirms, groups, onDecide, onOpenGroup }: {
               g.status === "pending" && { borderColor: withA(c.waiting, 0.5), backgroundColor: withA(c.waiting, 0.08) },
             ]}
             android_ripple={{ color: c.tintSoft, borderless: false, radius: 14 }}
+            hitSlop={{ top: 8, bottom: 8, left: 4, right: 4 }}
             accessibilityLabel={`项目组 ${g.name}，${ORG_ST_ZH[g.status] ?? g.status}，${(g.headcount ?? []).length + 1} 人，点按查看详情`}
             onPress={() => onOpenGroup(src, g)}
           >
@@ -696,7 +697,7 @@ function GroupModal({ srcId, target, onClose, onOpenSession }: {
             <>
               {/* 熟手池：经验 N 次 · 上次 · 在忙/空闲/随组挂起/已退休（退休=只剩路由表档案，
                   不可点）；空闲/随组挂起可点开（消息/派单即拉起）；Leader 兼管不占行 */}
-              <Text style={styles.gmSec}>熟手池 · {pool.length} 人（经验/上次/状态，Leader 兼管）</Text>
+              <Text style={styles.gmSec}>熟手池 · {pool.length} 人（Leader 兼管）</Text>
               {pool.length ? pool.map((p) => {
                 const st = p.busy ? "在忙" : p.parked ? "随组挂起" : p.resumable ? "空闲" : "已退休（档案）";
                 const stColor = p.busy ? c.waiting : p.parked || !p.resumable ? c.faint : c.done;
@@ -1658,16 +1659,16 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
   // 折叠空闲胶囊形制，状态只到描边+tint（pending 黄 / active 绿 / parked 中性）
   orgZone: { gap: 6, marginBottom: 8 },
   orgCf: {
-    flexDirection: "row", alignItems: "center", gap: 8,
+    flexDirection: "row", alignItems: "center", gap: 10,
     paddingVertical: 9, paddingHorizontal: 12,
     borderRadius: 12, borderWidth: 1, backgroundColor: c.panel, borderColor: c.line,
   },
   orgCfKind: { color: c.brandA, fontSize: 10, fontWeight: "700", flexShrink: 0 },
   orgCfTitle: { color: c.text, fontSize: 12.5, fontWeight: "600" },
   orgCfReason: { color: c.faint, fontSize: 10.5, marginTop: 1 },
-  orgCfBtn: { width: 30, height: 30, borderRadius: 9, alignItems: "center", justifyContent: "center", overflow: "hidden" },
+  orgCfBtn: { width: 36, height: 36, borderRadius: 11, alignItems: "center", justifyContent: "center", overflow: "hidden" },
   orgCfBtnR: { borderWidth: 1, backgroundColor: "transparent" },
-  orgCfBtnT: { fontSize: 14, fontWeight: "700" },
+  orgCfBtnT: { fontSize: 15, fontWeight: "700" },
   orgChips: { flexDirection: "row", flexWrap: "wrap", gap: 6 },
   orgChip: {
     flexDirection: "row", alignItems: "center", gap: 4,
