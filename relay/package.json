@@ -20,7 +20,8 @@
     "test:org": "tsx scripts/test-org.ts",
     "test:leader": "tsx scripts/test-leader.ts",
     "test:projects": "tsx scripts/test-projects.ts",
-    "test:dispatch": "tsx scripts/test-dispatch.ts"
+    "test:dispatch": "tsx scripts/test-dispatch.ts",
+    "test:routing": "tsx scripts/test-routing.ts"
   },
   "dependencies": {
     "@anthropic-ai/claude-agent-sdk": "latest",

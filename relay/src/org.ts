@@ -247,6 +247,8 @@ const ORG_CLI_TEMPLATE = `#!/bin/bash
 #   org board move <gid> <entry_id> <todo|doing|done>
 #   org board del <gid> <entry_id>
 #   org detail <id>                                项目组详情：状态/编制/任务板/最近派单回执流
+#   org rate <gid> <sid> <good|bad>                熟手评价（M3 路由表；bad=下次派单避开）
+#   org tag <gid> <sid> <tag>...                   技能标签（整组替换，空格分隔）
 # 相对路径 anchor 以当前目录补全（deliver 同口径）。由 relay 物化与升级（ensureOrgCli）。
 set -euo pipefail
 data="$HOME/.cc-deck/data"
@@ -256,7 +258,7 @@ port="$(python3 -c 'import json,os;print(json.load(open(os.path.expanduser("~/.c
 : "\${port:=8787}"
 
 action="\${1:-}"
-[ -z "$action" ] && { sed -n '3,16p' "$0" | sed 's/^# //' >&2; exit 1; }
+[ -z "$action" ] && { sed -n '3,18p' "$0" | sed 's/^# //' >&2; exit 1; }
 shift || true
 
 abs() { case "$1" in /*) printf '%s' "$1";; *) printf '%s' "$PWD/$1";; esac; }
@@ -340,6 +342,22 @@ PY
     body="$(python3 - "$1" <<'PY'
 import json, sys
 print(json.dumps({"action":"project-detail","id":sys.argv[1]},ensure_ascii=False))
+PY
+)"
+    ;;
+  rate)
+    [ $# -ge 3 ] || { echo "用法: org rate <gid> <sid> <good|bad>" >&2; exit 1; }
+    body="$(python3 - "$@" <<'PY'
+import json, sys
+print(json.dumps({"action":"rate","gid":sys.argv[1],"sid":sys.argv[2],"rating":sys.argv[3]},ensure_ascii=False))
+PY
+)"
+    ;;
+  tag)
+    [ $# -ge 3 ] || { echo "用法: org tag <gid> <sid> <tag>..." >&2; exit 1; }
+    body="$(python3 - "$@" <<'PY'
+import json, sys
+print(json.dumps({"action":"tag","gid":sys.argv[1],"sid":sys.argv[2],"tags":sys.argv[3:]},ensure_ascii=False))
 PY
 )"
     ;;

@@ -17,6 +17,8 @@ import {
   ensureProjectClaudeMd,
   type OrgConfirm, type ProjectGroupStatus, type ProjectTier, type BoardEntryStatus,
 } from "./projects.js";
+// #26 M3 路由表（纯 fs，无环）：派单收口自动记账 + 熟手查表（§5 工作路由）
+import { rateRouting, recordRoutingResult, tagRouting } from "./routing.js";
 import { devId } from "./e2e.js";
 import type { EventBus } from "./event-bus.js";
 import { AgentSession } from "./agent-adapter.js";
@@ -2560,6 +2562,9 @@ export class SessionManager {
       if (e.gid) {
         moveEntryByDispatch(e.gid, e.id, status === "done" ? "done" : "todo");
         this.emitBoard(e.gid);
+        // #26 M3 路由表记账：项目组派单收口即写熟手底账（次数/上次/回执；断档补记
+        // 直接走 appendDispatch 不经此，天然豁免——relay 重启不是 worker 的账）
+        recordRoutingResult(e.gid, key, status, receipt);
       }
     }
   }
@@ -2730,6 +2735,27 @@ export class SessionManager {
             .slice(-30)
             .reverse();
           return { ok: true, data: { group: g, board: loadBoard(g.id), receipts } };
+        }
+        // ---------- #26 M3 路由表评鉴（§5：评价跟着合作记录走，Leader 手动） ----------
+        case "rate": {
+          const gid = str("gid");
+          const sid = str("sid");
+          const rating = str("rating");
+          if (!gid || !sid) return { ok: false, error: "gid/sid 必填" };
+          if (rating !== "good" && rating !== "bad") return { ok: false, error: "rating 必须是 good|bad" };
+          const r = rateRouting(gid, sid, rating);
+          if (!r.ok) return r;
+          return { ok: true, data: { entry: r.entry } };
+        }
+        case "tag": {
+          const gid = str("gid");
+          const sid = str("sid");
+          const tags = Array.isArray(p.tags) ? p.tags.filter((t): t is string => typeof t === "string") : [];
+          if (!gid || !sid) return { ok: false, error: "gid/sid 必填" };
+          if (tags.length === 0) return { ok: false, error: "tags 必填（至少一个）" };
+          const r = tagRouting(gid, sid, tags);
+          if (!r.ok) return r;
+          return { ok: true, data: { entry: r.entry } };
         }
         case "confirm-decide": {
           const cid = str("confirm_id");
