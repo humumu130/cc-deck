@@ -4,7 +4,7 @@
 //       D4 升降级/建议暂缓/结项核对（一句话归档 vs 确认卡）D5 状态护栏
 //       D6 断档补记（dispatched/running 悬账）D7 handleCommand 确认决议/详情拉取
 import { randomUUID } from "node:crypto";
-import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { EventBus } from "../src/event-bus.js";
@@ -87,7 +87,13 @@ async function main() {
     cfg.defaultCwd = stickySentinel;
 
     const created: SpawnRec[] = [];
-    const mgr = new SessionManager(new EventBus({ persistPath: join(DATA, "events.ndjson") }), cfg);
+    const bus = new EventBus({ persistPath: join(DATA, "events.ndjson") });
+    // D12：看门狗动作面观察缝（WATCHDOG 事件采集，验 recover_abandon 真发出）
+    const wdActions: { sid: string; action: string }[] = [];
+    bus.subscribe((env) => {
+      if (env.type === "WATCHDOG") wdActions.push({ sid: env.session_id, action: String((env.payload as { action?: string }).action ?? "") });
+    });
+    const mgr = new SessionManager(bus, cfg);
     mgr.setAgentFactory(makeFakeFactory(created));
     const r = mgr.ensureLeader();
     assert(r.ok === true, "环境就绪（Leader 首建）");
@@ -211,7 +217,24 @@ async function main() {
     process.env.CCR_ORG_DIR = ORG2;
     writeFileSync(join(ORG2, "dispatch-log.ndjson"),
       JSON.stringify({ ts: 1, id: "dsp-win", tier: "随手办", target: "spawn-pending", status: "dispatched", session_id: "", project_anchor: "/tmp/p" }) + "\n" +
-      JSON.stringify({ ts: 2, id: "dsp-run", tier: "咨询", target: "org-leader", status: "running", session_id: "s-old" }) + "\n", "utf-8");
+      JSON.stringify({ ts: 2, id: "dsp-run", tier: "咨询", target: "org-leader", status: "running", session_id: "s-old" }) + "\n" +
+      JSON.stringify({ ts: 3, id: "dsp-gid", tier: "正经立项", target: "s-old", status: "running", session_id: "s-old", project_anchor: "/tmp/anchor-x" }) + "\n", "utf-8");
+    // D6b 豁免面上锁（#7 加固轮）：gid 悬账配套路由表/板条目预先在盘——断档补记
+    // 走 appendDispatch 直写、不经 closeOpenDispatches → 不写路由表、不搬板（此前
+    // 无测试锁这条豁免面；复活后板条目仍归原会话的语义靠它）
+    writeFileSync(join(ORG2, "projects.json"), JSON.stringify({
+      groups: [{ id: "g-x", name: "断档组", anchor_dir: "/tmp/anchor-x", status: "active", tier: "正经立项",
+        headcount: [{ session_id: "s-old", role: "worker" }], single_card: false, created_at: 1, updated_at: 1 }],
+      trust_light: false,
+    }), "utf-8");
+    mkdirSync(join(ORG2, "boards"), { recursive: true });
+    writeFileSync(join(ORG2, "boards", "g-x.json"), JSON.stringify({
+      entries: [{ id: "e-x", text: "断档在跑", status: "doing", dispatch_id: "dsp-gid" }],
+      frozen: false,
+    }), "utf-8");
+    writeFileSync(join(ORG2, "routing.json"), JSON.stringify({
+      entries: [{ gid: "g-x", session_id: "s-old", count: 3, failed: 0, last_ts: 1, tags: [] }],
+    }), "utf-8");
     const cfg2: RelayConfig = { ...cfg, dataDir: DATA2 };
     const mgr2 = new SessionManager(new EventBus({ persistPath: join(DATA2, "events.ndjson") }), cfg2);
     mgr2.setAgentFactory(makeFakeFactory([]));
@@ -222,6 +245,9 @@ async function main() {
     assert(log2.filter((e) => e.id === "dsp-run").some((e) => e.status === "done"), "running 悬账 → 补记 done");
     const rej2 = log2.filter((e) => e.id === "dsp-run").find((e) => e.status === "done");
     assert(rej2?.receipt === "relay 重启，回合中断", "补记回执语义");
+    assert(log2.filter((e) => e.id === "dsp-gid").some((e) => e.status === "done"), "gid 悬账同样补记 done");
+    assert((routingFor("g-x").find((x) => x.session_id === "s-old")?.count ?? -1) === 3, "断档补记不写路由表（count 不动）");
+    assert(loadBoard("g-x").entries[0]?.status === "doing", "断档补记不搬板（doing 原样——条目仍归原会话）");
     process.env.CCR_ORG_DIR = prevOrg2 ?? ORG;
     rmSync(ORG2, { recursive: true, force: true });
     rmSync(DATA2, { recursive: true, force: true });
@@ -546,6 +572,50 @@ async function main() {
     assert(stopCalls.filter((x) => x === agentNu?.id).length === nuBefore + 1, "nu：复活换流 → 补刀被代际守卫跳过（不误杀新流）");
     stopNoop = false;
     if (prevRpm === undefined) delete process.env.CCR_RESUME_PENDING_MS; else process.env.CCR_RESUME_PENDING_MS = prevRpm;
+
+    // ---------- D12 收尾加固（tier 守卫 + 恢复放弃） ----------
+    console.log("D12 tier 守卫/恢复放弃:");
+    // a) 档位守卫：pending（立项卡没过——档位就写在卡上，先改=审A落B）与
+    //    archived（编制已解散）拒出卡；挂起组允许（整理档位与复活后口径连贯）
+    const cSg = mgr.orgAction("project-create", { name: "sigma", anchor: join(DATA, "proj-sg"), tier: "正经立项" }) as { ok: boolean; data?: { confirm?: { id: string }; group?: { id: string } } };
+    const gidSg = cSg.data?.group?.id ?? "";
+    assert(cSg.ok === true && !!gidSg, "sigma 正经立项 → pending（前置）");
+    const tSg = mgr.orgAction("project-tier", { id: gidSg, to: "轻立项", reason: "立项前偷改档" }) as { ok: boolean; error?: string };
+    assert(tSg.ok === false && (tSg.error ?? "").includes("pending"), "pending 组拒改档（档位随立项卡定）");
+    mgr.orgAction("confirm-decide", { confirm_id: cSg.data?.confirm?.id ?? "", approve: false, by: "u" });
+    const tTh2 = mgr.orgAction("project-tier", { id: gidTh, to: "轻立项", reason: "结项后想改档" }) as { ok: boolean; error?: string };
+    assert(tTh2.ok === false && (tTh2.error ?? "").includes("结项"), "archived 组拒改档（编制已解散）");
+    const tEt = mgr.orgAction("project-tier", { id: gidEta, to: "轻立项", reason: "挂起期整理档位" }) as { ok: boolean; data?: { confirm?: { id: string }; noop?: boolean } };
+    assert(tEt.ok === true && !!tEt.data?.confirm, "挂起组允许改档（确认卡走起）");
+    mgr.orgAction("confirm-decide", { confirm_id: tEt.data?.confirm?.id ?? "", approve: true, by: "u" });
+    assert(listGroups().find((g) => g.id === gidEta)?.tier === "轻立项" && listGroups().find((g) => g.id === gidEta)?.status === "parked", "挂起组改档落地（状态不动）");
+
+    // b) recover_abandon：杀树等待窗口内组被挂起收口 → 看门狗放弃恢复（不起死回生）
+    mgr.orgAction("project-status", { id: gidD, to: "archived" }); // 腾名额（delta/oldwork 已无悬账未完）
+    mgr.orgAction("project-status", { id: gidO2, to: "archived" });
+    const cRc = mgr.orgAction("project-create", { name: "rho", anchor: join(DATA, "proj-rc"), tier: "轻立项" });
+    const gidRc = listGroups().find((g) => g.name === "rho")?.id ?? "";
+    assert(cRc.ok === true && !!gidRc, "rho 立项（前置）");
+    const rcAnchor = join(DATA, "proj-rc");
+    const dRc = mgr.orgAction("dispatch", { anchor: rcAnchor, prompt: "rho 一单", gid: gidRc }) as { ok: boolean; session_id?: string };
+    const wRc = dRc.session_id ?? "";
+    assert(dRc.ok === true && await waitFor(() => (routingFor(gidRc).find((x) => x.session_id === wRc)?.count ?? 0) === 1), "rho 首单收口（前置：relay_session_id 在册）");
+    hack.sessions.get(wRc)!.state.status = "WORKING";
+    hack.openDispatches.set(wRc, [{ id: "dsp-rc-ab", tier: "轻立项", gid: gidRc, anchor: rcAnchor }]);
+    const hackRc = mgr as unknown as { recoverFromStall(s: never, lane: string, stalled: number, cpu: number): Promise<void> };
+    const sRc = hack.sessions.get(wRc)!;
+    stopNoop = true; // stop 落空：agent 永不落 ended → 逼出整段 5s 杀树等待窗口
+    const recP = hackRc.recoverFromStall(sRc as never, "slow", 1000, 0);
+    await wait(300); // 已进等待窗口（此时挂起 = 正中竞态靶心）
+    const pRc = mgr.orgAction("project-status", { id: gidRc, to: "parked", note: "恢复窗口内挂起" });
+    assert(pRc.ok === true, "窗口内挂起直达（前置）");
+    assert(readDispatchLog().some((x) => x.id === "dsp-rc-ab" && x.status === "failed" && x.receipt === "项目组挂起，回合中断"), "悬账由挂起收口（非看门狗）");
+    const createdBefore = created.length;
+    await recP;
+    assert(wdActions.some((x) => x.sid === wRc && x.action === "recover_abandon"), "看门狗发出 recover_abandon（放弃恢复事件面）");
+    assert(hack.sessions.get(wRc)?.state.org_parked === gidRc && hack.sessions.get(wRc)?.agent === null, "放弃恢复：会话保持挂起休眠（不复活不换流）");
+    assert(created.length === createdBefore, "放弃恢复零 spawn（不起死回生）");
+    stopNoop = false;
 
     // ---------- 收尾 ----------
     console.log(`\n${fail === 0 ? "PASS" : "FAIL"}: ${pass} passed, ${fail} failed`);

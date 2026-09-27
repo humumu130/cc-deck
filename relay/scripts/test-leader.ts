@@ -10,6 +10,7 @@ import { SessionManager } from "../src/session-manager.js";
 import { ORG_LEADER_BOOTSTRAP_PROMPT, ORG_LEADER_TITLE, readDispatchLog, readOrgAnchor, writeOrgAnchor } from "../src/org.js";
 import type { RelayConfig } from "../src/config.js";
 import type { AgentCallbacks, AgentLike } from "../src/agent-adapter.js";
+import type { ReplayedSession } from "../src/history.js";
 
 let pass = 0;
 let fail = 0;
@@ -290,6 +291,67 @@ async function main() {
     assert(log8.every((e) => e.status !== "running") && log8.some((e) => e.receipt === "合并作答"), "L7 合并回合 → 头单 done 归回合回执");
     rmSync(ORG4, { recursive: true, force: true });
     rmSync(DATA4, { recursive: true, force: true });
+
+    // ---------- L8 收尾加固（adopt 零 spawn / 锚回写不变式 / evict Leader 豁免） ----------
+    console.log("L8 加固（adopt/锚回写/evict 豁免）:");
+    const ORG5 = mkdtempSync(join(tmpdir(), "ccr-org-l8-"));
+    const DATA5 = mkdtempSync(join(tmpdir(), "ccr-data-l8-"));
+    process.env.CCR_ORG_DIR = ORG5;
+    const created9: SpawnRec[] = [];
+    const mgr9 = new SessionManager(new EventBus({ persistPath: join(DATA5, "events.ndjson") }), { ...cfg6, dataDir: DATA5 });
+    mgr9.setAgentFactory(makeFakeFactory(created9));
+    const r9 = mgr9.ensureLeader();
+    const lid9 = r9.ok ? r9.session_id : "";
+    assert(r9.ok === true && created9.length === 1, "L8 前置：首建 Leader 一次 spawn");
+    assert(await waitFor(() => {
+      const c = mgr9.snapshot().find((s) => s.session_id === lid9);
+      return !!c && c.status === "DONE" && c.done_reason === "success";
+    }), "L8 前置：上岗回合完成（onInit 已回、sdkId 落锚）");
+    const a9 = readOrgAnchor();
+    assert(!!a9 && a9.leader_session_id === lid9 && !!a9.leader_sdk_id, "L8 前置：锚带 sdkId");
+
+    // (1) adopt 零 spawn：重启形态 = 内存已有该会话（events 历史回放形态）→
+    //     ensureLeader 只认领（adoptExistingLeader），无 spawn 无重建
+    const created10: SpawnRec[] = [];
+    const mgr10 = new SessionManager(new EventBus({ persistPath: join(DATA5, "events2.ndjson") }), { ...cfg6, dataDir: DATA5 });
+    mgr10.setAgentFactory(makeFakeFactory(created10));
+    mgr10.adopt(new Map([[lid9, {
+      state: {
+        session_id: lid9, relay_session_id: a9!.leader_sdk_id, cwd: ORG5, initial_prompt: "x",
+        title: "组织 Leader", model: "m", status: "DONE", action_summary: "（历史）",
+        started_at: 1, updated_at: 1, stats: { files_changed: 0, lines_added: 0, lines_deleted: 0 },
+        pinned: true,
+      },
+      logs: [],
+    } as ReplayedSession]]));
+    const r10 = mgr10.ensureLeader();
+    assert(r10.ok === true && r10.created === false && r10.rebuilt === false && created10.length === 0, "L8 adopt 零 spawn（内存已有 → 只认领不建）");
+    rmSync(join(DATA5, "events2.ndjson"), { force: true });
+
+    // (2) 锚回写不变式：固定 relay id 靠「每次换流 onInit 回写」——resume 产生新
+    //     sdkId，锚必须跟着收敛（否则重启重建的休眠卡拿旧 sdk resume 失联）
+    const hack9 = mgr9 as unknown as { sessions: Map<string, { agent: unknown | null }> };
+    hack9.sessions.get(lid9)!.agent = null; // 模拟旧流已死（resume 路径前提）
+    mgr9.handleCommand({ command_id: randomUUID(), type: "COMMAND_MESSAGE", ts: Date.now(), payload: { session_id: lid9, text: "再问一条" } }, "test");
+    assert(await waitFor(() => created9.length === 2), "L8 resume 换流 spawn（前置）");
+    assert(await waitFor(() => {
+      const a = readOrgAnchor();
+      return !!a && a.leader_session_id === lid9 && !!a.leader_sdk_id && a.leader_sdk_id !== a9!.leader_sdk_id;
+    }), "L8 锚回写不变式：换流新 sdkId → 锚收敛（relay id 不变）");
+
+    // (3) evict Leader 豁免：容量满（MAX_SESSIONS=20）只挤普通 DONE 卡；pinned
+    //     （Leader 首建即置顶）永不动——锚是权威，驱逐 Leader=组织失聪
+    const hackEvict = mgr9 as unknown as { sessions: Map<string, unknown>; evictOldSessions(): void };
+    const sess9 = hackEvict.sessions as Map<string, { state: { session_id: string; status: string; pinned?: boolean; started_at: number } }>;
+    for (let i = 0; i < 21; i++) {
+      sess9.set("ev-dummy-" + i, { state: { session_id: "ev-dummy-" + i, status: "DONE", started_at: 1000 + i, pinned: undefined } });
+    }
+    (sess9.get(lid9) as { state: { started_at: number } }).state.started_at = 1; // Leader 置最老——若豁免失效必先被驱逐
+    hackEvict.evictOldSessions();
+    assert(!!sess9.get(lid9), "L8 Leader 豁免驱逐（pinned，锚是权威）");
+    assert(!sess9.has("ev-dummy-0") && sess9.size < 20, `L8 普通旧卡先被挤（余 ${sess9.size} < 20）`);
+    rmSync(ORG5, { recursive: true, force: true });
+    rmSync(DATA5, { recursive: true, force: true });
   } finally {
     if (prevOrg === undefined) delete process.env.CCR_ORG_DIR; else process.env.CCR_ORG_DIR = prevOrg;
     if (prevTitleGen === undefined) delete process.env.CCR_NO_TITLE_GEN; else process.env.CCR_NO_TITLE_GEN = prevTitleGen;

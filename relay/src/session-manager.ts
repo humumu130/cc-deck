@@ -2718,6 +2718,12 @@ export class SessionManager {
           if (!reason) return { ok: false, error: "升降级必须带一句理由（§4 矫正通道）" };
           const g = findGroup(id);
           if (!g) return { ok: false, error: `项目组不存在: ${id}` };
+          // #26 收尾加固：档位是立项确认卡语义的一部分（首建档位就写在 project-create
+          // 卡上）——pending 组先改档会出现「审的是轻、落地的是正」；archived 组编制
+          // 已解散，改档无意义（重启请重新立项）。挂起组允许（整理档位与复活后口径
+          // 连贯——原记录在案口子，此轮收口）
+          if (g.status === "pending") return { ok: false, error: "项目组待立项确认（pending），档位随立项卡定——先 ✓/✗ 立项决议" };
+          if (g.status === "archived") return { ok: false, error: "结项组不可改档（编制已解散；如需重启请重新立项）" };
           if (g.tier === to) return { ok: true, data: { group: g, noop: true } };
           const confirm = addConfirm({
             kind: "tier-change",
