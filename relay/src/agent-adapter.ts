@@ -209,11 +209,15 @@ export class AgentSession {
   private lastSummary = "启动中";
   // 流式文本块：index->id 映射 + id->累计文本 + 当前消息内文本块 id 顺序表
   // （完整 assistant 消息的 content 数组可能重排/剔除 thinking，不能按 index 对齐，按文本块出现顺序对齐）
-  // #134 id 防碰撞：进程启动随机段掺进 id——resume/重启重建 adapter 后 blockSeq 从头计数，
-  // 纯序号 id（t1/t2…）会跨重启复用，客户端按同 id 原地替换把旧回复条目覆盖成新消息的
-  // 流式帧（2026-09-22 实证：t1 一天内属于 6 条不同消息，正文错乱/消失）。与 bridge.ts
-  // 的 XSTREAM_BOOT 同款防御
-  private static readonly ADAPTER_BOOT = Date.now().toString(36);
+  // #134 id 防碰撞：启动随机段掺进 id——重建 adapter 后 blockSeq 从头计数，纯序号
+  // id（t1/t2…）会跨重建复用，客户端按同 id 原地替换把旧回复条目覆盖成新消息的
+  // 流式帧（2026-09-22 实证：t1 一天内属于 6 条不同消息，正文错乱/消失）。
+  // 2026-09-28 冲刺升级：原 BOOT 段是 static（进程级秒戳）——relay 进程内 resume
+  // 重建 adapter（看门狗恢复/auto-revive/消息复活都是热路径）时 blockSeq 归零，
+  // 同会话新旧回合撞 id，被中断回合的条目被新回合流式块顶掉（真链路实锤：同一
+  // relay 先后两个 CLI 的 id 共享前缀）。改实例级 + 随机尾段，跨重建永不相撞；
+  // bridge.ts XSTREAM_BOOT 为单例+会话级计数（进程内不重置）无此险，不动
+  private readonly adapterBoot = Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
   private blockSeq = 0;
   private streamIdx = new Map<number, string>();
   private streamBufs = new Map<string, string>();
@@ -410,7 +414,7 @@ export class AgentSession {
               // #265 混合形态：正文尾部被 z.ai append 桥调用/输出——拆段，桥段归
               // 工具日志，正文复用流式 id 原地替换（流式期间已只下发正文部分）
               const { body, segs } = splitZaiText(block.text);
-              const id = this.streamOrder[ti++] ?? `t${AgentSession.ADAPTER_BOOT}-${++this.blockSeq}`;
+              const id = this.streamOrder[ti++] ?? `t${this.adapterBoot}-${++this.blockSeq}`;
               if (body) {
                 this.cb.onLog("assistant_text", truncate(body, 400), {
                   full: fullText(body, 400),
@@ -603,7 +607,7 @@ export class AgentSession {
     };
     const idx = ev.index ?? -1;
     if (ev.type === "content_block_start" && ev.content_block?.type === "text") {
-      const id = `t${AgentSession.ADAPTER_BOOT}-${++this.blockSeq}`;
+      const id = `t${this.adapterBoot}-${++this.blockSeq}`;
       this.streamIdx.set(idx, id);
       this.streamBufs.set(id, "");
       this.streamOrder.push(id);
