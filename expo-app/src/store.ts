@@ -3,7 +3,7 @@ import { AppState, Platform } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import Constants from "expo-constants";
 import { getRandomBytes } from "expo-crypto";
-import type { AllowRule, CloudPairInfo, CommandAck, Envelope, LogEntry, SessionState } from "./protocol";
+import type { AllowRule, CloudPairInfo, CommandAck, DispatchReceipt, Envelope, LogEntry, ProjectBoard, ProjectGroup, OrgConfirm, SessionState } from "./protocol";
 import { uuid } from "./fmt";
 import { currentVersion } from "./updates";
 import { devId, generateKeyPair, seal, unseal, setRandomBytes, type BoxKeyPair, type SealedBox } from "./e2e";
@@ -87,6 +87,12 @@ export interface SourceConn {
   // #212 记住规则（SNAPSHOT.allow_rules / ALLOW_RULES_UPDATED，覆盖式）：null = 旧
   // relay 不支持（无字段），设置抽屉据此显示「升级后可用」；删除按源路由
   allowRules: AllowRule[] | null;
+  // #26 M2 组织域（SNAPSHOT.projects/org_confirms 覆盖式；PROJECTS_UPDATED /
+  // ORG_CONFIRM_UPDATED 增量）：projects null = 旧 relay 不支持，组织区不渲染。
+  // boards 为项目组任务板缓存（BOARD_UPDATED 增量维护；详情按需拉全量）
+  projects: ProjectGroup[] | null;
+  orgConfirms: OrgConfirm[];
+  boards: Map<string, ProjectBoard>;
   sessions: Map<string, SessionState>;
   timelines: Map<string, LogEntry[]>;
   reconnectDelay: number;
@@ -135,8 +141,9 @@ interface PendingCmd {
   wire: () => boolean;
   // 0.4.4 跨网回传等需要结果语义的调用方注入（send 第 4 参）：ACK 到达/超时收摊时回调，
   // 断连清场不回调（调用方自带兜底超时）。#79：artifact 仅 COMMAND_ARTIFACT_FETCH
-  // 成功 ACK 携带（mime/size，分级预览用）
-  onAck?: (r: { ok: boolean; err: string | null; artifact?: { size: number; mime: string } }) => void;
+  // 成功 ACK 携带（mime/size，分级预览用）；#26 M2：data 仅 COMMAND_PROJECT_DETAIL
+  // 成功 ACK 携带（{ group, board, receipts }）
+  onAck?: (r: { ok: boolean; err: string | null; artifact?: { size: number; mime: string }; data?: unknown }) => void;
 }
 
 // #79 输出物拉取重组状态（fetchArtifact/artFetches/maybeSettleArtFetch 共用）：
@@ -178,6 +185,10 @@ export interface SourceStatus {
   // 「升级后可用」）；[]/数组 = 已收到。非 SESSION_LOG 帧统一走 connStatusPatch
   // 发布，ALLOW_RULES_UPDATED 到达即重渲（同 acceptances 口径）
   allowRules?: AllowRule[] | null;
+  // #26 M2 组织域（SNAPSHOT.projects / PROJECTS_UPDATED 覆盖式）：null = 旧 relay
+  // 不支持（列表组织区不渲染）；orgConfirms = 待决议确认卡（✓/✗ 决议入口）
+  projects?: ProjectGroup[] | null;
+  orgConfirms?: OrgConfirm[];
 }
 
 export interface Snapshot {
@@ -293,6 +304,8 @@ const CMD_LABEL: Record<string, string> = {
   COMMAND_WATCH_GRANT: "手表配对",
   COMMAND_LOGIN_GRANT: "扫码授权",
   COMMAND_IMPORT_PUSH: "连接回传",
+  COMMAND_ORG_CONFIRM: "组织确认", // #26 M2 确认卡决议（失败 toast 用）
+  COMMAND_PROJECT_DETAIL: "项目组详情", // #26 M2 详情按需拉取
 };
 
 class RelayStore {
@@ -493,6 +506,8 @@ class RelayStore {
       acceptances: c.acceptances, // #137 待填验收单（列表 badge 跨源汇总）
       lanHint: c.lanHint || undefined, // #137 表单 LAN 链接构造（同网时用）
       allowRules: c.allowRules, // #212 记住规则（设置抽屉列表 + 按源路由删除）
+      projects: c.projects, // #26 M2 项目组（列表组织区 + 组详情）
+      orgConfirms: c.orgConfirms, // #26 M2 待决议确认卡
     }));
     // #388 模型清单取活动源口径（模型切换命令无 sid 路由也走活动源）
     const activeModels = this.activeConn()?.models ?? [];
@@ -834,6 +849,9 @@ class RelayStore {
         deliverables: false,
         acceptances: [], // #137 SNAPSHOT 覆盖式更新（收到快照前为空）
         allowRules: null, // #212 SNAPSHOT 覆盖式更新（null = 旧 relay 无 allow_rules 字段）
+        projects: null, // #26 M2 SNAPSHOT 覆盖式更新（null = 旧 relay 无团队字段）
+        orgConfirms: [],
+        boards: new Map(),
         sessions: new Map(),
         timelines: new Map(),
         reconnectDelay: RECONNECT_BASE_MS,
@@ -1618,7 +1636,7 @@ class RelayStore {
       // 其余按 ACK 原样；p 不存在（已被超时收摊）则丢弃
       if (p?.onAck) {
         const dup = !ack.ok && !!ack.error && ack.error.startsWith("duplicate");
-        try { p.onAck({ ok: ack.ok === true || dup, err: ack.ok || dup ? null : String(ack.error ?? "未知错误"), ...(ack.artifact ? { artifact: ack.artifact } : {}) }); } catch {}
+        try { p.onAck({ ok: ack.ok === true || dup, err: ack.ok || dup ? null : String(ack.error ?? "未知错误"), ...(ack.artifact ? { artifact: ack.artifact } : {}), ...(ack.data !== undefined ? { data: ack.data } : {}) }); } catch {}
       }
       if (ack.cloud) void this.saveCloudPairing(conn, ack.cloud);
       if (ack.pair_code) {
@@ -2123,6 +2141,16 @@ class RelayStore {
         conn.allowRules = Array.isArray(rules)
           ? rules.filter((r): r is AllowRule => !!r && typeof (r as AllowRule).id === "string" && typeof (r as AllowRule).tool === "string")
           : null;
+        // #26 M2 组织域随快照携带（覆盖式；旧 relay 无字段 = projects null 不支持，
+        // orgConfirms 空表）。畸形条目过滤（同 allowRules 口径，防御而已）
+        const projs = (msg.payload as { projects?: unknown }).projects;
+        conn.projects = Array.isArray(projs)
+          ? projs.filter((g): g is ProjectGroup => !!g && typeof (g as ProjectGroup).id === "string" && !!(g as ProjectGroup).name)
+          : null;
+        const cfs = (msg.payload as { org_confirms?: unknown }).org_confirms;
+        conn.orgConfirms = Array.isArray(cfs)
+          ? cfs.filter((c): c is OrgConfirm => !!c && typeof (c as OrgConfirm).id === "string" && !!(c as OrgConfirm).kind)
+          : [];
         for (const old of conn.sessions.keys()) {
           if (this.sidIndex.get(old) === conn) this.sidIndex.delete(old);
         }
@@ -2216,6 +2244,9 @@ class RelayStore {
         if (msg.payload.artifacts) s.artifacts = msg.payload.artifacts;
         if (msg.payload.artifacts_truncated !== undefined) s.artifacts_truncated = msg.payload.artifacts_truncated;
         if (msg.payload.compacting !== undefined) s.compacting = msg.payload.compacting;
+        // #26 M2 组织归属（组徽标/档位数据源；旧 relay 不带 = undefined 不覆盖）
+        if (msg.payload.project_gid !== undefined) s.project_gid = msg.payload.project_gid;
+        if (msg.payload.dispatch_tier !== undefined) s.dispatch_tier = msg.payload.dispatch_tier;
         // #157 最后活跃时间优先采信载荷显式值：relay 重启后的水合帧（任务清单/用量/
         // 输出物回放重建）不是真实活动，信 envelope ts 会把重启时刻当活动时刻（全表
         // 不置灰根因）。旧 relay 不带该字段 → 回落 msg.ts，行为不变
@@ -2354,6 +2385,28 @@ class RelayStore {
         if (Array.isArray(accs)) {
           conn.acceptances = accs.filter((a): a is AcceptanceSummary => !!a && typeof (a as AcceptanceSummary).id === "string" && !!(a as AcceptanceSummary).id);
         } // 畸形帧不动既有清单（relay 侧必发合法数组，防御而已）
+        break;
+      }
+      // #26 M2 组织态（瞬态广播）：项目组/待决议确认卡覆盖式更新（同 SNAPSHOT 口径，
+      // 旧 relay 无事件 = 收不到帧，重连快照兜底）；任务板增量进 boards 缓存
+      case "PROJECTS_UPDATED": {
+        const gs = (msg.payload as { groups?: unknown }).groups;
+        if (Array.isArray(gs)) {
+          conn.projects = gs.filter((g): g is ProjectGroup => !!g && typeof (g as ProjectGroup).id === "string" && !!(g as ProjectGroup).name);
+        }
+        break;
+      }
+      case "ORG_CONFIRM_UPDATED": {
+        const cfs = (msg.payload as { pending?: unknown }).pending;
+        if (Array.isArray(cfs)) {
+          conn.orgConfirms = cfs.filter((c): c is OrgConfirm => !!c && typeof (c as OrgConfirm).id === "string" && !!(c as OrgConfirm).kind);
+        }
+        break;
+      }
+      case "BOARD_UPDATED": {
+        const gid = (msg.payload as { gid?: unknown }).gid;
+        const b = (msg.payload as { board?: unknown }).board as ProjectBoard | undefined;
+        if (typeof gid === "string" && b && Array.isArray(b.entries)) conn.boards.set(gid, b);
         break;
       }
       // #212 记住规则变更推送（瞬态 seq:0）：删规则后 relay 全量重发——覆盖式更新，
@@ -2540,7 +2593,7 @@ class RelayStore {
   // 显式 sourceId（批3 新建会话选目标源），再退活动源（COMMAND_CREATE / PAIR_*）。
   // ACK 追踪按源隔离（pendingCmds 在 conn 上）：超时重发同源同 command_id，
   // relay 幂等去重兜底，不跨源串扰。onAck（0.4.4）：需要结果语义的调用方注入
-  send(type: string, payload: Record<string, unknown>, sourceId?: string, onAck?: (r: { ok: boolean; err: string | null; artifact?: { size: number; mime: string } }) => void, cmdId?: string): boolean {
+  send(type: string, payload: Record<string, unknown>, sourceId?: string, onAck?: (r: { ok: boolean; err: string | null; artifact?: { size: number; mime: string }; data?: unknown }) => void, cmdId?: string): boolean {
     const sid = typeof payload.session_id === "string" ? (payload.session_id as string) : null;
     // sid 已给但 sidIndex 未命中（#294 审查修复：会话已删/所属源换目标清缓存）：
     // 明确报"会话不存在"，不再回落活动源——回落会把命令发给另一台服务器
@@ -2592,6 +2645,25 @@ class RelayStore {
       return false;
     }
     return true;
+  }
+
+  // ---------- #26 M2 组织域动作（v3.1 矩阵式） ----------
+  // 确认卡决议（✓/✗）：relay 单漏斗 orgAction（决议与执行分离），决议后
+  // ORG_CONFIRM_UPDATED 瞬态帧回推收敛清单——不做本地乐观更新，双端同源权威
+  orgConfirm(sourceId: string, confirmId: string, approve: boolean): boolean {
+    return this.send("COMMAND_ORG_CONFIRM", { confirm_id: confirmId, approve }, sourceId);
+  }
+
+  // 项目组详情：{ group, board, receipts }（编制/任务板/回执流数据源；板不随快照）
+  orgDetail(
+    sourceId: string,
+    gid: string,
+    onDone: (r: { group?: ProjectGroup; board?: ProjectBoard; receipts?: DispatchReceipt[] } | null) => void,
+  ): boolean {
+    return this.send("COMMAND_PROJECT_DETAIL", { gid }, sourceId, (r) => {
+      if (!r.ok) { onDone(null); return; }
+      onDone((r.data as { group?: ProjectGroup; board?: ProjectBoard; receipts?: DispatchReceipt[] } | undefined) ?? null);
+    });
   }
 
   // 回执超时：先重发一次同 id（幂等）；再超时才报失败。连接中途断开由 disconnect 清场

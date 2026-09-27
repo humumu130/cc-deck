@@ -1,15 +1,15 @@
 import { memo, useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState, type Ref } from "react";
-import { Animated, FlatList, Image, Linking, PanResponder, Pressable, RefreshControl, StyleSheet, Text, Vibration, View } from "react-native";
+import { Animated, FlatList, Image, Linking, Modal, PanResponder, Pressable, RefreshControl, ScrollView, StyleSheet, Text, Vibration, View } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
-import { statusColor, withA, type ThemeColors } from "../theme";
+import { STATUS_ZH, statusColor, withA, type ThemeColors } from "../theme";
 import { useTheme, useThemeStyles } from "../theme-context";
 import { LogoMark, PencilIcon } from "../brand";
 import { fmtLastActive, fmtTok, contextPct, contextLevel, CONTEXT_LIMIT_FALLBACK, displaySrcName, isLiveLine, stripLiveMark } from "../fmt";
 import { setListDensity, useListDensity, setAggregate as persistAggregate, useIdleDimMin, isIdleSession, type ListDensity } from "../display-settings";
 import { store, useRelay, type AcceptanceSummary, type SourceStatus } from "../store";
 import { FadeIn, PressScale } from "../motion";
-import type { SessionState } from "../protocol";
+import type { BoardEntry, DispatchReceipt, OrgConfirm, ProjectBoard, ProjectGroup, SessionState } from "../protocol";
 import RenameModal from "./RenameModal";
 import SettingsDrawer from "./SettingsDrawer";
 
@@ -414,7 +414,7 @@ function SrcBadge({ name, color }: { name: string; color: string }) {
 }
 
 const SessionCard = memo(function SessionCard({
-  s, onOpen, onResume, onRename, onDelete, revealSid, onReveal, density, dim, srcBadge,
+  s, onOpen, onResume, onRename, onDelete, revealSid, onReveal, density, dim, srcBadge, orgTag,
 }: {
   s: SessionState;
   onOpen: (sid: string) => void;
@@ -426,6 +426,7 @@ const SessionCard = memo(function SessionCard({
   density: ListDensity;
   dim?: boolean; // #32 离线源降权
   srcBadge?: { name: string; color: string } | null; // #59 聚合模式源归属角标
+  orgTag?: string | null; // #26 M2 组织归属（项目组名/派单档位）：标准档缀元信息行、紧凑档占目录位、极简档无位不显
 }) {
   const { c } = useTheme();
   const styles = useThemeStyles(makeStyles);
@@ -501,6 +502,7 @@ const SessionCard = memo(function SessionCard({
             <Text style={styles.sumC} numberOfLines={1}>{s.action_summary || "…"}</Text>
           )}
           <View style={styles.footC}>
+            {orgTag ? <Text style={styles.folderC} numberOfLines={1}>◈ {orgTag}</Text> : null}
             {s.cwd ? <Text style={styles.folderC} numberOfLines={1}>📁 {folderOf(s.cwd)}</Text> : null}
             <View style={{ flex: 1 }} />
             {/* #145 卡片去改动统计行（详情页统计保留全量）；目录已上卡 */}
@@ -540,7 +542,8 @@ const SessionCard = memo(function SessionCard({
             {/* #86 多源源标签独立放左下（对齐桌面端卡底统计行形态），不再挤标题行 */}
             {srcBadge ? <SrcBadge {...srcBadge} /> : null}
             <Text style={styles.meta} numberOfLines={1}>
-              {s.external ? "外部 CLI" : "托管"}
+              {/* #26 M2 组织归属前置（§2.5 分流形态）：组名/档位最先交代，旧 relay 无字段零变化 */}
+              {orgTag ? `${orgTag} · ` : ""}{s.external ? "外部 CLI" : "托管"}
               {s.cwd ? ` · 📁 ${folderOf(s.cwd)}` : ""}
               {dormant ? " · 已保存" : ""}
               {s.historical && !s.external ? " · 历史" : ""}
@@ -553,6 +556,189 @@ const SessionCard = memo(function SessionCard({
     </SwipeRow>
   );
 });
+
+// ---------- #26 M2 组织区（v3.1 矩阵式）----------
+// 与 web-console 组织域同口径：确认卡（Leader 只提案 → 用户 ✓/✗ 决议，§4「用户是
+// 指挥/验收者」）、项目组三态 chips（结项=archived 单向终态不占常驻位）、组详情弹窗
+// （编制/任务板/回执流）。旧 relay 快照无 projects 字段（null）→ 整区不渲染，兼容
+const ORG_ST_ZH: Record<string, string> = { pending: "待确认", active: "在办", parked: "已挂起", archived: "已结项" };
+const ORG_CF_KIND_ZH: Record<string, string> = {
+  "project-create": "立项", "tier-change": "升降级", "suggest-hold": "建议暂缓", archive: "结项", revive: "复活",
+};
+// chips 排序：待确认 → 在办 → 已挂起（同 web 端 org zone 顺序契约）
+const ORG_ST_ORD: Record<string, number> = { pending: 0, active: 1, parked: 2 };
+function orgStColor(st: string, c: ThemeColors): string {
+  return st === "active" ? c.done : st === "pending" ? c.waiting : c.faint;
+}
+
+// 组织区（列表顶条件区，随待填验收单卡同位）：确认卡行 + 项目组 chips
+function OrgZone({ confirms, groups, onDecide, onOpenGroup }: {
+  confirms: { src: SourceStatus; cf: OrgConfirm }[];
+  groups: { src: SourceStatus; g: ProjectGroup }[];
+  onDecide: (srcId: string, confirmId: string, approve: boolean) => void;
+  onOpenGroup: (src: SourceStatus, g: ProjectGroup) => void;
+}) {
+  const { c } = useTheme();
+  const styles = useThemeStyles(makeStyles);
+  if (!confirms.length && !groups.length) return null;
+  const sorted = [...groups].sort((a, b) => (ORG_ST_ORD[a.g.status] ?? 9) - (ORG_ST_ORD[b.g.status] ?? 9));
+  return (
+    <View style={styles.orgZone}>
+      {confirms.map(({ src, cf }) => (
+        <View key={cf.id} style={styles.orgCf}>
+          <Text style={styles.orgCfKind}>{ORG_CF_KIND_ZH[cf.kind] ?? cf.kind}</Text>
+          <View style={{ flex: 1, minWidth: 0 }}>
+            <Text style={styles.orgCfTitle} numberOfLines={1}>{cf.title}</Text>
+            {cf.reason ? <Text style={styles.orgCfReason} numberOfLines={1}>{cf.reason}</Text> : null}
+          </View>
+          <Pressable
+            style={[styles.orgCfBtn, { backgroundColor: c.done }]}
+            hitSlop={8}
+            accessibilityLabel={`同意确认卡：${cf.title}`}
+            onPress={() => onDecide(src.id, cf.id, true)}
+          >
+            <Text style={[styles.orgCfBtnT, { color: c.onDone }]}>✓</Text>
+          </Pressable>
+          <Pressable
+            style={[styles.orgCfBtn, styles.orgCfBtnR, { borderColor: withA(c.error, 0.5) }]}
+            hitSlop={8}
+            accessibilityLabel={`否决确认卡：${cf.title}`}
+            onPress={() => onDecide(src.id, cf.id, false)}
+          >
+            <Text style={[styles.orgCfBtnT, { color: c.error }]}>✗</Text>
+          </Pressable>
+        </View>
+      ))}
+      <View style={styles.orgChips}>
+        {sorted.map(({ src, g }) => (
+          <Pressable
+            key={g.id}
+            style={[
+              styles.orgChip,
+              g.status === "active" && { borderColor: withA(c.done, 0.5), backgroundColor: withA(c.done, 0.08) },
+              g.status === "pending" && { borderColor: withA(c.waiting, 0.5), backgroundColor: withA(c.waiting, 0.08) },
+            ]}
+            android_ripple={{ color: c.tintSoft, borderless: false, radius: 14 }}
+            accessibilityLabel={`项目组 ${g.name}，${ORG_ST_ZH[g.status] ?? g.status}，${(g.headcount ?? []).length + 1} 人，点按查看详情`}
+            onPress={() => onOpenGroup(src, g)}
+          >
+            <Text style={[styles.orgChipT, { color: orgStColor(g.status, c) }]} numberOfLines={1}>{g.name}</Text>
+            <Text style={styles.orgChipSt}>·{ORG_ST_ZH[g.status] ?? g.status}·{(g.headcount ?? []).length + 1}人</Text>
+          </Pressable>
+        ))}
+      </View>
+    </View>
+  );
+}
+
+// 组详情弹窗（对齐 web 端 org drawer）：状态/档位 → 编制（组内会话可点入）→ 任务板
+//（轻立项单列简化态 / 正经立项三段；挂起=冻结只读）→ 最近派单回执流（§3.5 过程不
+// 回灌只收回执一行）。板不随快照（帧预算纪律）——COMMAND_PROJECT_DETAIL 按需拉取；
+// 状态行优先取源快照实时值（PROJECTS_UPDATED 即时反映），拉取结果兜底
+function GroupModal({ srcId, target, onClose, onOpenSession }: {
+  srcId: string;
+  target: { gid: string; name: string };
+  onClose: () => void;
+  onOpenSession: (sid: string) => void;
+}) {
+  const { c } = useTheme();
+  const styles = useThemeStyles(makeStyles);
+  const snap = useRelay();
+  // undefined=加载中 / null=失败 / 对象=详情
+  const [detail, setDetail] = useState<{ group?: ProjectGroup; board?: ProjectBoard; receipts?: DispatchReceipt[] } | null | undefined>(undefined);
+  useEffect(() => {
+    setDetail(undefined);
+    // send 当即失败（未连接/源不在）没有 ACK 回调，直接落失败态
+    if (!store.orgDetail(srcId, target.gid, setDetail)) setDetail(null);
+  }, [srcId, target.gid]);
+  const g = detail?.group;
+  const board = detail?.board;
+  const ents = board?.entries ?? [];
+  const members = useMemo(
+    () => snap.sessions.filter((s) => s.project_gid === target.gid),
+    [snap.sessions, target.gid],
+  );
+  const liveG = useMemo(() => {
+    for (const src of snap.sources) {
+      const hit = (src.projects ?? []).find((x) => x.id === target.gid);
+      if (hit) return hit;
+    }
+    return g;
+  }, [snap.sources, target.gid, g]);
+  const entRow = (e: BoardEntry) => (
+    <View key={e.id} style={styles.gmEnt}>
+      <Text style={styles.gmEntT} numberOfLines={2}>{e.text}</Text>
+      {e.note ? <Text style={styles.gmEntNote} numberOfLines={1}>{e.note}</Text> : null}
+    </View>
+  );
+  return (
+    <Modal visible animationType="slide" onRequestClose={onClose}>
+      <SafeAreaView style={styles.gmWrap}>
+        <View style={styles.gmHead}>
+          <View style={{ flex: 1, minWidth: 0 }}>
+            <Text style={styles.gmTitle} numberOfLines={1}>{target.name}</Text>
+            <View style={styles.gmTags}>
+              <Text style={[styles.gmTag, { color: orgStColor(liveG?.status ?? "", c) }]}>
+                {ORG_ST_ZH[liveG?.status ?? ""] ?? liveG?.status ?? "…"}
+              </Text>
+              <Text style={styles.gmTag}>{liveG?.tier ?? g?.tier ?? ""}</Text>
+            </View>
+          </View>
+          <Pressable hitSlop={10} onPress={onClose} accessibilityLabel="关闭项目组详情">
+            <Text style={styles.gmClose}>✕</Text>
+          </Pressable>
+        </View>
+        <ScrollView contentContainerStyle={styles.gmBody} showsVerticalScrollIndicator={false}>
+          {detail === undefined ? (
+            <Text style={styles.gmEmpty}>加载中…</Text>
+          ) : detail === null ? (
+            <Text style={styles.gmEmpty}>详情拉取失败（源可能已断开或 relay 版本过旧）</Text>
+          ) : (
+            <>
+              {/* 编制：组内会话（快照实时过滤 project_gid；Leader 兼管不占成员行） */}
+              <Text style={styles.gmSec}>编制 · {(g?.headcount ?? []).length + 1} 人（Leader 兼管）</Text>
+              {members.length ? members.map((m) => (
+                <Pressable
+                  key={m.session_id}
+                  style={styles.gmSess}
+                  android_ripple={{ color: c.tintSoft, borderless: false, radius: 9 }}
+                  onPress={() => { onClose(); onOpenSession(m.session_id); }}
+                >
+                  <View style={[styles.gmDot, { backgroundColor: statusColor(m.status, c) }]} />
+                  <Text style={styles.gmSessT} numberOfLines={1}>{m.title || m.session_id.slice(0, 8)}</Text>
+                  <Text style={styles.gmSessSt}>{STATUS_ZH[m.status] ?? m.status}</Text>
+                </Pressable>
+              )) : <Text style={styles.gmEmpty}>暂无成员会话（Leader 兼管）</Text>}
+              {/* 任务板：轻立项=单列简化态（渲染降级）；正经立项=待办/进行/完成三段 */}
+              <Text style={styles.gmSec}>任务板{board?.frozen ? "（已挂起 · 冻结只读）" : ""}</Text>
+              {ents.length === 0 ? (
+                <Text style={styles.gmEmpty}>板为空</Text>
+              ) : g?.tier === "轻立项" ? (
+                <View style={styles.gmCol}>{ents.map(entRow)}</View>
+              ) : (
+                ([["todo", "待办"], ["doing", "进行"], ["done", "完成"]] as const).map(([st, lb]) => (
+                  <View key={st} style={styles.gmColGroup}>
+                    <Text style={styles.gmColH}>{lb} {ents.filter((e) => e.status === st).length}</Text>
+                    <View style={styles.gmCol}>{ents.filter((e) => e.status === st).map(entRow)}</View>
+                  </View>
+                ))
+              )}
+              {/* 回执流：readDispatchLog 按 project_anchor 过滤，最近 30 条新在前 */}
+              <Text style={styles.gmSec}>最近派单回执</Text>
+              {(detail.receipts ?? []).length ? detail.receipts!.map((r) => (
+                <View key={r.id + r.ts} style={[styles.gmRec, { borderLeftColor: r.status === "failed" ? c.error : c.line }]}>
+                  <Text style={styles.gmRecB}>[{r.tier}] {r.status}{r.target ? ` · ${r.target}` : ""}</Text>
+                  {r.receipt ? <Text style={styles.gmRecT} numberOfLines={3}>{r.receipt}</Text> : null}
+                  <Text style={styles.gmRecMeta}>{r.ts ? new Date(r.ts).toLocaleString() : ""}</Text>
+                </View>
+              )) : <Text style={styles.gmEmpty}>暂无派单回执</Text>}
+            </>
+          )}
+        </ScrollView>
+      </SafeAreaView>
+    </Modal>
+  );
+}
 
 export default function ListScreen({ sessions, connected, connText, onOpen, onNew, onSetup, onScanServer, onEditServer, ref }: Props) {
   const { c } = useTheme();
@@ -838,6 +1024,36 @@ export default function ListScreen({ sessions, connected, connText, onOpen, onNe
   }, [badgeOn, snap.sources]);
   const srcBadgeOf = srcBadgeMap ?? (() => null);
 
+  // #26 M2 组织域：待决议确认卡 + 项目组 chips（结项不占常驻位）——跨源平铺
+  // （src+item 对），组名映射供卡片组织徽标（project_gid → 组名，无组回落档位）
+  const orgConfirms = useMemo(() => {
+    const out: { src: SourceStatus; cf: OrgConfirm }[] = [];
+    for (const src of snap.sources) for (const cf of src.orgConfirms ?? []) out.push({ src, cf });
+    return out;
+  }, [snap.sources]);
+  const orgGroups = useMemo(() => {
+    const out: { src: SourceStatus; g: ProjectGroup }[] = [];
+    for (const src of snap.sources)
+      for (const g of src.projects ?? []) if (g.status !== "archived") out.push({ src, g });
+    return out;
+  }, [snap.sources]);
+  const projNameById = useMemo(() => {
+    const m = new Map<string, string>();
+    for (const src of snap.sources) for (const g of src.projects ?? []) m.set(g.id, g.name);
+    return m;
+  }, [snap.sources]);
+  const orgTagOf = useCallback(
+    (s: SessionState) => (s.project_gid ? projNameById.get(s.project_gid) ?? "项目组" : s.dispatch_tier ?? null),
+    [projNameById],
+  );
+  // 组详情弹窗：点 chip 打开 → COMMAND_PROJECT_DETAIL 按需拉取
+  const [orgOpen, setOrgOpen] = useState<{ srcId: string; gid: string; name: string } | null>(null);
+  const orgDecide = useCallback((srcId: string, confirmId: string, approve: boolean) => {
+    if (store.orgConfirm(srcId, confirmId, approve)) {
+      try { Vibration.vibrate(10); } catch {}
+    }
+  }, []);
+
   // 下拉刷新 = 断开重连一次（重走快照），在线即收起转圈；3s 兜底
   const [refreshing, setRefreshing] = useState(false);
   // 顶栏设备图标源切换菜单（方案 A）：snap.sources 只含运行态摘要，connectServer
@@ -1042,9 +1258,11 @@ export default function ListScreen({ sessions, connected, connText, onOpen, onNe
         }
         contentContainerStyle={{ paddingBottom: insets.bottom + 120, paddingHorizontal: 14, paddingTop: 6 }}
         // #137 待填验收单条件卡：统计行下方、会话列表顶部（有待填单才出现）
+        // #26 M2 组织区（确认卡 + 项目组 chips）与之同位平铺；OrgZone 空数据自返回 null
         ListHeaderComponent={
-          accPending.length > 0 ? (
-            <Pressable
+          <>
+            {accPending.length > 0 ? (
+              <Pressable
               style={styles.accCard}
               android_ripple={{ color: c.tintSoft, borderless: false }}
               accessibilityLabel={`验收单待填：${accPending[0].a.title}，点击打开填写页面`}
@@ -1070,7 +1288,14 @@ export default function ListScreen({ sessions, connected, connText, onOpen, onNe
                 <Text style={styles.accCloseT}>×</Text>
               </Pressable>
             </Pressable>
-          ) : null
+            ) : null}
+            <OrgZone
+              confirms={orgConfirms}
+              groups={orgGroups}
+              onDecide={orgDecide}
+              onOpenGroup={(src, g) => setOrgOpen({ srcId: src.id, gid: g.id, name: g.name })}
+            />
+          </>
         }
         onScrollBeginDrag={() => { scrollArmed.current = true; }}
         onEndReached={footRefresh}
@@ -1096,6 +1321,7 @@ export default function ListScreen({ sessions, connected, connText, onOpen, onNe
               onReveal={setRevealSid}
               density={density}
               srcBadge={srcBadgeOf(item.s.src)}
+              orgTag={orgTagOf(item.s)}
             />
           )
         }
@@ -1177,6 +1403,16 @@ export default function ListScreen({ sessions, connected, connText, onOpen, onNe
             </View>
           </FadeIn>
         </Pressable>
+      ) : null}
+
+      {/* #26 M2 项目组详情弹窗（点组织区 chip 呼出） */}
+      {orgOpen ? (
+        <GroupModal
+          srcId={orgOpen.srcId}
+          target={{ gid: orgOpen.gid, name: orgOpen.name }}
+          onClose={() => setOrgOpen(null)}
+          onOpenSession={onOpen}
+        />
       ) : null}
     </SafeAreaView>
   );
@@ -1400,6 +1636,56 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
     width: 56, height: 56, borderRadius: 16, alignItems: "center", justifyContent: "center",
     backgroundColor: c.fabBg, borderWidth: 1, borderColor: c.fabLine,
   },
+  // #26 M2 组织区（v3.1 矩阵式）：确认卡 + 项目组 chips——确认卡形制对齐验收单卡
+  // （panel 底/line 边/12 圆角），动作色沿用审批按钮（done ✓ / error ✗）；chips 沿
+  // 折叠空闲胶囊形制，状态只到描边+tint（pending 黄 / active 绿 / parked 中性）
+  orgZone: { gap: 6, marginBottom: 8 },
+  orgCf: {
+    flexDirection: "row", alignItems: "center", gap: 8,
+    paddingVertical: 9, paddingHorizontal: 12,
+    borderRadius: 12, borderWidth: 1, backgroundColor: c.panel, borderColor: c.line,
+  },
+  orgCfKind: { color: c.brandA, fontSize: 10, fontWeight: "700", flexShrink: 0 },
+  orgCfTitle: { color: c.text, fontSize: 12.5, fontWeight: "600" },
+  orgCfReason: { color: c.faint, fontSize: 10.5, marginTop: 1 },
+  orgCfBtn: { width: 30, height: 30, borderRadius: 9, alignItems: "center", justifyContent: "center", overflow: "hidden" },
+  orgCfBtnR: { borderWidth: 1, backgroundColor: "transparent" },
+  orgCfBtnT: { fontSize: 14, fontWeight: "700" },
+  orgChips: { flexDirection: "row", flexWrap: "wrap", gap: 6 },
+  orgChip: {
+    flexDirection: "row", alignItems: "center", gap: 4,
+    paddingHorizontal: 9, paddingVertical: 4, borderRadius: 999,
+    borderWidth: 1, borderColor: c.line, backgroundColor: c.tintSoft, maxWidth: 210, overflow: "hidden",
+  },
+  orgChipT: { fontSize: 11.5, fontWeight: "600", maxWidth: 120 },
+  orgChipSt: { color: c.faint, fontSize: 9.5 },
+  // 组详情弹窗（gm*）：头部（名称+状态/档位 tags）→ 编制行 → 板段 → 回执流
+  gmWrap: { flex: 1, backgroundColor: c.bg },
+  gmHead: {
+    flexDirection: "row", alignItems: "center", gap: 10,
+    paddingHorizontal: 16, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: c.line,
+  },
+  gmTitle: { color: c.text, fontSize: 15, fontWeight: "700" },
+  gmTags: { flexDirection: "row", gap: 6, marginTop: 4 },
+  gmTag: { color: c.dim, fontSize: 10.5, paddingHorizontal: 8, paddingVertical: 1.5, borderRadius: 999, borderWidth: 1, borderColor: c.line },
+  gmClose: { color: c.dim, fontSize: 17, padding: 4 },
+  gmBody: { padding: 16, paddingBottom: 40 },
+  gmSec: { color: c.faint, fontSize: 11, fontWeight: "700", letterSpacing: 0.3, marginTop: 16, marginBottom: 7 },
+  gmSess: { flexDirection: "row", alignItems: "center", gap: 8, paddingVertical: 7, paddingHorizontal: 6, borderRadius: 9 },
+  gmDot: { width: 8, height: 8, borderRadius: 4 },
+  gmSessT: { flex: 1, minWidth: 0, color: c.text, fontSize: 12.5 },
+  gmSessSt: { color: c.faint, fontSize: 10 },
+  gmCol: { gap: 5 },
+  gmColGroup: { marginBottom: 8 },
+  gmColH: { color: c.faint, fontSize: 10.5, fontWeight: "700", marginBottom: 4 },
+  gmEnt: { borderWidth: 1, borderColor: c.line, borderRadius: 8, paddingHorizontal: 9, paddingVertical: 6, backgroundColor: c.panel },
+  gmEntT: { color: c.text, fontSize: 12 },
+  gmEntNote: { color: c.faint, fontSize: 10.5, marginTop: 2 },
+  gmRec: { borderLeftWidth: 2, borderLeftColor: c.line, paddingLeft: 8, paddingVertical: 3, marginBottom: 6 },
+  gmRecB: { color: c.text, fontSize: 11.5, fontWeight: "600" },
+  gmRecT: { color: c.dim, fontSize: 11, marginTop: 1 },
+  gmRecMeta: { color: c.faint, fontSize: 10, marginTop: 1 },
+  gmEmpty: { color: c.faint, fontSize: 11.5, paddingVertical: 4 },
 });
 
 // 连接中三点（2026-09-16；#116 wave 式）。#148 同源降级：原 native 逐帧插值

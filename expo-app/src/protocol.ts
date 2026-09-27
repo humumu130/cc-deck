@@ -129,6 +129,66 @@ export interface SessionState {
   // 列表源角标/详情页源标注用。sid 为 uuid 全局唯一，可作跨源主键；单源模式不写
   // （watch 网关直发 snap.sessions，保持手表快照字节不变）
   src?: string;
+  // #26 M2 组织归属：project_gid = 所属项目组（卡徽标 [组名] 与组详情编制的数据源）；
+  // dispatch_tier = 派单档位（随手办/轻立项/正经立项）。旧 relay 不带 = 无组织域
+  project_gid?: string;
+  dispatch_tier?: string;
+}
+
+// ---------- #26 M2 组织域（v3.1 矩阵式；relay projects.ts 镜像） ----------
+// 项目组（SNAPSHOT.projects / PROJECTS_UPDATED 携带；结项=archived 单向终态）
+export interface ProjectGroup {
+  id: string;
+  name: string;
+  anchor_dir: string;
+  tier: "轻立项" | "正经立项";
+  status: "pending" | "active" | "parked" | "archived";
+  created_at: number;
+  updated_at: number;
+  headcount?: { session_id: string; role: string; joined_at: number }[];
+  note?: string;
+}
+
+// 待决议确认卡（SNAPSHOT.org_confirms / ORG_CONFIRM_UPDATED）：Leader 只提案，
+// 用户 ✓/✗ 决议（COMMAND_ORG_CONFIRM）；decided 后不再出现在 pending 清单
+export interface OrgConfirm {
+  id: string;
+  kind: "project-create" | "tier-change" | "suggest-hold" | "archive" | "revive";
+  title: string;
+  reason?: string;
+  created_at: number;
+  status: "pending" | "approved" | "rejected";
+  payload?: Record<string, unknown>;
+}
+
+// 任务板条目（COMMAND_PROJECT_DETAIL.board 携带；BOARD_UPDATED 增量维护）
+export interface BoardEntry {
+  id: string;
+  text: string;
+  status: "todo" | "doing" | "done";
+  note?: string;
+  owner_session?: string;
+  dispatch_id?: string;
+  created_at: number;
+  updated_at: number;
+}
+
+export interface ProjectBoard {
+  gid: string;
+  frozen: boolean;
+  entries: BoardEntry[];
+}
+
+// 派单台账行（COMMAND_PROJECT_DETAIL.receipts 携带，最近 30 条按 anchor 过滤新在前）
+export interface DispatchReceipt {
+  ts: number;
+  id: string;
+  tier: string;
+  target: string;
+  status: string;
+  receipt?: string;
+  session_id?: string;
+  project_anchor?: string;
 }
 
 export interface PendingInput {
@@ -189,7 +249,9 @@ export type CommandType =
   | "COMMAND_MODEL"
   | "COMMAND_REFRESH_TODOS"
   | "COMMAND_ARTIFACT_FETCH"
-  | "COMMAND_ALLOW_RULE_REMOVE";
+  | "COMMAND_ALLOW_RULE_REMOVE"
+  | "COMMAND_ORG_CONFIRM" // #26 M2 确认卡决议（✓/✗；relay 单漏斗 orgAction）
+  | "COMMAND_PROJECT_DETAIL"; // #26 M2 项目组详情 { group, board, receipts } 按需拉取
 
 // 云桥配对信息：relay 经可信 LAN 信道下发，手机落盘后即可走云通道
 export interface CloudPairInfo {
@@ -210,4 +272,6 @@ export interface CommandAck {
   // #79 仅 COMMAND_ARTIFACT_FETCH 成功 ACK 携带：字节数 + 扩展名推导 MIME
   //（分级预览用；数据本体走 ARTIFACT_CHUNK 瞬态帧，ref=command_id）
   artifact?: { size: number; mime: string };
+  // #26 M2 仅 COMMAND_PROJECT_DETAIL 成功 ACK 携带：{ group, board, receipts }
+  data?: unknown;
 }

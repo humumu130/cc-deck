@@ -32,11 +32,12 @@ import { MdText } from "../md";
 import { Collapse, FadeIn, PressScale } from "../motion";
 import RenameModal from "./RenameModal";
 
-// 详情页视图 tab（与网页端 tabs 对齐：消息/任务/全部/输出物/定时/统计，同序）。
-// 消息/全部 = 转录过滤视图；任务/输出物/定时/统计 = 独占内容视图。
+// 详情页视图 tab（与网页端 tabs 对齐：对话/任务/全部/输出物/定时/统计，同序）。
+// 对话/全部 = 转录过滤视图；任务/输出物/定时/统计 = 独占内容视图。
 // 原"工具/系统"过滤 chips 与设置抽屉"过程消息·隐藏档"重叠，移除。
+// #26 M2 词表迁移（v3.1 §2.4）：「消息」→「对话」。
 const VIEWS = [
-  { k: "msg", label: "消息" },
+  { k: "msg", label: "对话" },
   { k: "todos", label: "任务" },
   { k: "all", label: "全部" },
   { k: "arts", label: "输出物" },
