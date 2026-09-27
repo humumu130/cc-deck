@@ -513,7 +513,7 @@ export const PROJECT_CLAUDE_MD_SEED_PREFIX = "# 项目 CLAUDE.md —— 防漂�
 export function projectClaudeMdSeed(name: string): string {
   return `${PROJECT_CLAUDE_MD_SEED_PREFIX}（${name}）
 
-> 矩阵式组织立项时自动生成（幂等种子：已存在则不动）。本文件随会话自动加载，普通会话也覆盖。
+> 矩阵式团队立项时自动生成（幂等种子：已存在则不动）。本文件随会话自动加载，普通会话也覆盖。
 
 ## 防漂移条款（设计稿 §3.4）
 

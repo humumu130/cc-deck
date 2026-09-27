@@ -318,7 +318,7 @@ async function main() {
     mgr10.adopt(new Map([[lid9, {
       state: {
         session_id: lid9, relay_session_id: a9!.leader_sdk_id, cwd: ORG5, initial_prompt: "x",
-        title: "组织 Leader", model: "m", status: "DONE", action_summary: "（历史）",
+        title: "Leader", model: "m", status: "DONE", action_summary: "（历史）",
         started_at: 1, updated_at: 1, stats: { files_changed: 0, lines_added: 0, lines_deleted: 0 },
         pinned: true,
       },

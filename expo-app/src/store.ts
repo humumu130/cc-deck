@@ -304,7 +304,7 @@ const CMD_LABEL: Record<string, string> = {
   COMMAND_WATCH_GRANT: "手表配对",
   COMMAND_LOGIN_GRANT: "扫码授权",
   COMMAND_IMPORT_PUSH: "连接回传",
-  COMMAND_ORG_CONFIRM: "组织确认", // #26 M2 确认卡决议（失败 toast 用）
+  COMMAND_ORG_CONFIRM: "团队确认", // #26 M2 确认卡决议（失败 toast 用；2026-09-27 去「组织」化）
   COMMAND_PROJECT_DETAIL: "项目组详情", // #26 M2 详情按需拉取
 };
 

@@ -417,11 +417,11 @@ if (pinned.saved > 0) {
 }
 console.log(
   leader.ok
-    ? `  组织:   Leader ${leader.created ? "首次创建" : leader.rebuilt ? "已从锚重建" : "在线"}（${orgDir()}）`
-    : `  组织:   Leader 未就绪：${leader.error}（下次启动重试）`,
+    ? `  团队:   Leader ${leader.created ? "首次创建" : leader.rebuilt ? "已从锚重建" : "在线"}（${orgDir()}）`
+    : `  团队:   Leader 未就绪：${leader.error}（下次启动重试）`,
 );
 if (parkedRehydrated > 0) {
-  console.log(`  组织:   ${parkedRehydrated} 个挂起组成员已重建退休标记（不自动拉起）`);
+  console.log(`  团队:   ${parkedRehydrated} 个挂起组成员已重建退休标记（不自动拉起）`);
 }
 console.log(`  桥接:   ${join(cfg.dataDir, "bridge.json")}（外部 CLI 会话经 hooks 接入）`);
 console.log(

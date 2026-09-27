@@ -1640,7 +1640,7 @@ export class SessionManager {
             return { command_id: cmd.command_id, ok: false, error: "会话运行中，不能删除" };
           }
           if (!this.deleteSession(cmd.payload.session_id)) {
-            return { command_id: cmd.command_id, ok: false, error: "组织 Leader 卡不可删除（逻辑常驻，锚是权威）；解散组织请清 org.json 锚后重启" };
+            return { command_id: cmd.command_id, ok: false, error: "Leader 卡不可删除（逻辑常驻，锚是权威）；解散团队请清 org.json 锚后重启" };
           }
           return { command_id: cmd.command_id, ok: true };
         }
@@ -2068,7 +2068,7 @@ export class SessionManager {
             if (managed.unacked.length === 0 && managed.state.status === "WORKING") {
               managed.state.status = "DONE";
               managed.state.done_reason = "待命（等待咨询）";
-              managed.state.action_summary = "组织 Leader · 待命";
+              managed.state.action_summary = "Leader · 待命";
               managed.state.turn_started_at = undefined;
             }
           }
@@ -2478,7 +2478,7 @@ export class SessionManager {
     // 锚不在盘上）+ 下次启动按未建组织再 spawn → 双 Leader 卡。失败即报错返回
     //（会话保留为普通卡可手删；下次启动重试）。崩溃窗口=spawn 与落盘之间，微秒级
     if (!writeOrgAnchor({ version: 1, leader_session_id: id, leader_sdk_id: "", created_at: now, updated_at: now })) {
-      return { ok: false, error: "组织锚写盘失败（盘满/权限？），本次未标记常驻；下次启动重试" };
+      return { ok: false, error: "团队锚写盘失败（盘满/权限？），本次未标记常驻；下次启动重试" };
     }
     // 题名双写：override 文件管跨重启（adopt 套用），内存 state.title 管当下卡片
     //（不设的话首建到下次重启之间卡片显示的是空 prompt 派生名）
@@ -2509,7 +2509,7 @@ export class SessionManager {
       s.state.saved = true;
       if (s.state.status !== "DONE") {
         s.state.status = "DONE";
-        s.state.done_reason = "已保存（组织 Leader 休眠）";
+        s.state.done_reason = "已保存（Leader 休眠）";
       }
     }
     this.pinLeaderFile(id);
@@ -2533,8 +2533,8 @@ export class SessionManager {
         title: ORG_LEADER_TITLE,
         model: this.cfg.model,
         status: "DONE",
-        done_reason: "已保存（组织 Leader 休眠）",
-        action_summary: "组织 Leader · 待命",
+        done_reason: "已保存（Leader 休眠）",
+        action_summary: "Leader · 待命",
         started_at: anchor.created_at || Date.now(),
         updated_at: anchor.updated_at || Date.now(),
         stats: { files_changed: 0, lines_added: 0, lines_deleted: 0 },
@@ -2886,7 +2886,7 @@ export class SessionManager {
           // halted:false 语义与「他组在跑」一致）；外部会话不可入编（member-add
           // 挡过），出现即数据异常，仍拒
           if (s?.state.external) return { ok: false, error: "成员会话为外部会话（不可入编，数据异常）" };
-          if (this.isLeaderSession(sid)) return { ok: false, error: "组织 Leader 不可退休（逻辑常驻，锚是权威）" };
+          if (this.isLeaderSession(sid)) return { ok: false, error: "Leader 不可退休（逻辑常驻，锚是权威）" };
           if ((this.openDispatches.get(sid)?.length ?? 0) > 0) {
             this.closeOpenDispatches(sid, "failed", reason ? truncate(`成员退休：${reason}`, 200) : "成员退休，回合中断", false, false, gid);
           }
@@ -2911,7 +2911,7 @@ export class SessionManager {
           if (g.status !== "active") return { ok: false, error: `项目组 ${g.name} 为 ${g.status}（挂起冻结/结项只读），不可入编` };
           const s = this.sessions.get(sid);
           if (!s || s.state.external) return { ok: false, error: "成员会话不在册（复拉需先有会话卡）" };
-          if (this.isLeaderSession(sid)) return { ok: false, error: "组织 Leader 不可入编（分诊者不接活）" };
+          if (this.isLeaderSession(sid)) return { ok: false, error: "Leader 不可入编（分诊者不接活）" };
           const r = addMember(gid, sid, role);
           if (!r.ok) return { ok: false, error: r.error ?? "入编失败" };
           this.emitOrgState();
@@ -3790,7 +3790,7 @@ export function wrapDispatchPrompt(tier: string, task: string): string {
   return `[${tier} 派单]
 ${task}
 
-—— 派单纪律（矩阵式组织 §3.5 / §4）——
+—— 派单纪律（矩阵式团队 §3.5 / §4）——
 - 过程不回灌，只收回执：不逐动作汇报，结束才回。
 - 改前认领：动文件前先一句说明要改哪些文件；改后报 diff 摘要（改了什么、几处）。
 - commit 归属：提交信息以 [${tier}] 开头并描述任务；无提交环节的任务可省略。

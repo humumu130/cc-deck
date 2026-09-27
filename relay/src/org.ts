@@ -13,7 +13,9 @@ import { readFileSync, writeFileSync, existsSync, mkdirSync, rmSync, chmodSync }
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 
-export const ORG_LEADER_TITLE = "组织 Leader";
+// 用户 2026-09-27 拍板：淡化「组织」概念（设计稿内部术语不进用户面）——卡片直名 Leader，
+// 用户可见文案一律「团队」。代码标识符（ORG_ 前缀/org 目录名）不动（架构层）。
+export const ORG_LEADER_TITLE = "Leader";
 
 // 首建上岗引导消息：fresh parked CLI（空 prompt）在真实链路不回 init——SDK 会话 id
 // 只在 CLI 收到首条输入后才产生（#49 既有实证；M1 真链路复现：parked 2 分钟零输出，
@@ -21,7 +23,7 @@ export const ORG_LEADER_TITLE = "组织 Leader";
 // ② 执行 CLAUDE.md 种子的「上岗读档自检」。只此一回，之后常驻全走 resume 零新回合。
 // 注意：走 create 的 initialPrompt（非 COMMAND_MESSAGE），C3 派单台账不会把它记成咨询。
 export const ORG_LEADER_BOOTSTRAP_PROMPT =
-  "（组织 Leader 上岗引导，系统消息）你已被创建为常驻组织的 Leader。请只做一件事：阅读本目录的 CLAUDE.md（组织记忆与分诊通道），然后用一两句话确认上岗——复述你的五响应分诊（咨询/随手办/轻立项/正经立项/建议暂缓）即可。不要执行其他操作、不要改动任何文件。";
+  "（Leader 上岗引导，系统消息）你已被创建为常驻团队的 Leader。请只做一件事：阅读本目录的 CLAUDE.md（团队记忆与分诊通道），然后用一两句话确认上岗——复述你的五响应分诊（咨询/随手办/轻立项/正经立项/建议暂缓）即可。不要执行其他操作、不要改动任何文件。";
 
 export function orgDir(): string {
   return process.env.CCR_ORG_DIR || join(homedir(), ".cc-deck", "org");
@@ -39,16 +41,16 @@ function orgFilePath(name: string, dir?: string): string {
 
 // ---------- 组织记忆种子（CLAUDE.md） ----------
 
-export const ORG_CLAUDE_MD_SEED = `# 组织 CLAUDE.md —— 常驻组织的记忆与纪律
+export const ORG_CLAUDE_MD_SEED = `# 团队 CLAUDE.md —— 常驻团队的记忆与纪律
 
-> 你在 org 目录工作（组织的家，不属于任何项目），本文件随会话自动加载。
+> 你在 org 目录工作（团队的家，不属于任何项目），本文件随会话自动加载。
 > 个人层（用户手写的全局 CLAUDE.md / memory）优先——冲突时以个人层为准。
 
-## 你的角色：组织 Leader
+## 你的角色：Leader
 
 - 你是用户的技术合伙人：常驻、唯一、不隶属任何项目。
 - 你持有两本账：
-  1. 组织记忆 = 本文件（慢账：经验、偏好、方法论、坑）。
+  1. 团队记忆 = 本文件（慢账：经验、偏好、方法论、坑）。
   2. 派单台账 = 同目录 dispatch-log.ndjson（快账：何时派了什么、结果如何；系统自动记录，勿手改）。
 - 换壳不换档：你会被更换模型或重建会话，账是文件不是记忆。每次上岗先读本文件自检——能复述关键偏好即通过。
 
@@ -58,9 +60,9 @@ export const ORG_CLAUDE_MD_SEED = `# 组织 CLAUDE.md —— 常驻组织的记�
   1. 咨询：技术判断、方案评审、答疑——直接回答，不立项、不动项目文件。
   2. 随手办分诊：几分钟内能闭环的小事可直接办；需要开团的明确转项目侧。
 - 项目事务一律走对应项目的项目 Leader（N+1）：不越权指挥项目会话、不代管项目工作区。
-- 此期间沟通线为 N+1（M2 收敛为 1）：不在项目内代替用户做组织层决策。
+- 此期间沟通线为 N+1（M2 收敛为 1）：不在项目内代替用户做团队层决策。
 
-## 组织记忆写入纪律（宁缺毋滥）
+## 团队记忆写入纪律（宁缺毋滥）
 
 写入门槛——三条同时满足才写：
 - 跨项目可复用（只对单个项目有效的经验写该项目自己的 CLAUDE.md）；
@@ -77,9 +79,9 @@ export const ORG_CLAUDE_MD_SEED = `# 组织 CLAUDE.md —— 常驻组织的记�
 - 一条一事，能一句话说清的不写三句；
 - 过时条目标注「已过时」而非删除（保留审计线索）。
 
-## 组织信息
+## 团队信息
 
-- 组织目录：本文件所在目录。
+- 团队目录：本文件所在目录。
 - 派单台账 / 会话锚：同目录 dispatch-log.ndjson / org.json（均系统维护，勿手改）。
 `;
 
@@ -233,11 +235,11 @@ export function readDispatchLog(dir?: string, max = 500): DispatchEntry[] {
 // 不保证旁边有插件检出——模板内嵌 relay 是唯一「跑到哪带到哪」的形态。单一规范源
 // 在此（不再另存插件 bin 副本，防双源漂移）。
 const ORG_CLI_TEMPLATE = `#!/bin/bash
-# 矩阵式组织分诊 CLI（#26 M2，设计稿 docs/v8-team-matrix.html v3.1 §4）：
+# 矩阵式团队分诊 CLI（#26 M2，设计稿 docs/v8-team-matrix.html v3.1 §4）：
 # Leader 会话内的分诊指令通道——POST /api/org（token 鉴权循 deliver 先例）。
 # Leader 只提案不决议——确认卡 ✓/✗ 由用户在客户端点。
 # 用法：
-#   org status                                     组织全景：项目组索引/待决确认单/进行中派单
+#   org status                                     团队全景：项目组索引/待决确认单/进行中派单
 #   org create <name> <anchor> <轻立项|正经立项>    立项（正经/首次轻 → 用户确认卡；幂等种子防漂移 CLAUDE.md）
 #   org set <id> <active|parked|archived> [note]   状态迁移（结项有悬账/未完 → 出确认卡附核对清单）
 #   org tier <id> <轻立项|正经立项> <reason>        升降级（必须带一句理由；确认卡）
