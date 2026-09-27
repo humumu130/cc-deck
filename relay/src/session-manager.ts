@@ -4,9 +4,19 @@ import { homedir } from "node:os";
 import { isAbsolute, join, resolve, sep } from "node:path";
 import { artifactsDir } from "./artifacts.js";
 import {
-  appendDispatch, clearOrgAnchor, ensureOrgClaudeMd, ensureOrgDir, ORG_LEADER_BOOTSTRAP_PROMPT,
+  appendDispatch, clearOrgAnchor, ensureOrgClaudeMd, ensureOrgCli, ensureOrgDir, ORG_LEADER_BOOTSTRAP_PROMPT,
   ORG_LEADER_TITLE, orgDir, readDispatchLog, readOrgAnchor, writeOrgAnchor,
 } from "./org.js";
+import type { DispatchTier } from "./org.js";
+// #26 M2 项目组底座（纯 fs，无环）：分诊引擎（立项/状态迁移/派单/板/确认单副作用）
+// 全部经 orgAction 单漏斗进出，广播统一 emitOrgState/emitBoard
+import {
+  addConfirm, addMember, buildArchiveChecklist, createGroup, decideConfirm, findGroup,
+  listGroups, listPendingConfirms, loadBoard, moveBoardEntry, moveEntryByDispatch,
+  removeBoardEntry, setGroupStatus, setGroupTier, setLightConfirmTrusted, upsertBoardEntry,
+  ensureProjectClaudeMd,
+  type OrgConfirm, type ProjectGroupStatus, type ProjectTier, type BoardEntryStatus,
+} from "./projects.js";
 import { devId } from "./e2e.js";
 import type { EventBus } from "./event-bus.js";
 import { AgentSession } from "./agent-adapter.js";
@@ -465,10 +475,12 @@ export class SessionManager {
   // #26 矩阵式 M1：组织 Leader 常驻态。leaderId = 当前 Leader 的 relay 会话 id
   //（isLeaderSession 的内存匹配源——COMMAND_MESSAGE/onTurnEnd 高频路径零盘 IO）；
   // ensureLeader 维护，onInit 不重置（resume 换流只会话对象换、relay id 不变）。
-  // leaderOpenDispatch = 进行中派单 id FIFO（回合串行，消息数=回合数；C3 台账收口用）
+  // leaderOpenDispatch = 进行中派单 id FIFO（M2 泛化为 openDispatches：按会话键一
+  // FIFO——Leader=咨询档同机制复用，worker=派单承接；回合串行，消息数=回合数。
+  // 值带收口所需 tier/gid/anchor：收口行写回真实档位，gid 联动任务板搬卡）
+  private openDispatches = new Map<string, { id: string; tier: DispatchTier; gid?: string; anchor?: string }[]>();
   private leaderId: string | null = null;
   private leaderEnsured = false;
-  private leaderOpenDispatch: string[] = [];
 
   /** #388 供 ws-server 读默认模型（快照 payload.models 聚合用） */
   readonly cfg: RelayConfig;
@@ -1390,7 +1402,7 @@ export class SessionManager {
           // initialPrompt 不经此处，天然不入账（org.ts 注释同口径）。
           if (this.isLeaderSession(cmd.payload.session_id)) {
             const dispatchId = randomUUID();
-            this.leaderOpenDispatch.push(dispatchId);
+            this.pushOpenDispatch(cmd.payload.session_id, { id: dispatchId, tier: "咨询" });
             appendDispatch({
               ts: Date.now(), id: dispatchId, tier: "咨询", target: "org-leader",
               status: "running", session_id: cmd.payload.session_id,
@@ -1879,6 +1891,16 @@ export class SessionManager {
           }
           return { command_id: cmd.command_id, ok: true, artifact: { size: st.size, mime: mimeOf(hit.path) } };
         }
+        case "COMMAND_ORG_CONFIRM": {
+          // #26 M2 确认单决议（用户点击确认卡）：决议 + 副作用 + 广播统一走 orgAction
+          const r = this.orgAction("confirm-decide", { confirm_id: cmd.payload.confirm_id, approve: cmd.payload.approve, by });
+          return { command_id: cmd.command_id, ok: r.ok, ...(r.ok ? {} : { error: r.error }) };
+        }
+        case "COMMAND_PROJECT_DETAIL": {
+          // #26 M2 项目组详情：{ group, board, receipts }（编制/板/回执流四分节数据源）
+          const r = this.orgAction("project-detail", { id: cmd.payload.gid });
+          return { command_id: cmd.command_id, ok: r.ok, ...(r.ok ? { data: r.data } : { error: r.error }) };
+        }
         case "COMMAND_WATCH_GRANT":
           // #316 手表配对授权在 ws-server 层处理（持有待配对连接池）；云信道走到这里
           // 说明命令被路由错了——明确报错而非静默
@@ -2150,11 +2172,10 @@ export class SessionManager {
           // 归恢复流程接管（resumeAgent 紧接着设 WORKING），此处让位避免 ERROR/DONE
           // 假终态帧闪现
           if (managed.wd.phase === "recovering") return;
-          // #26 派单台账收口：一回合一单，FIFO 收最旧（多消息排队时按序逐回合收）。
+          // #26 派单台账收口（M2 泛化全会话）：一回合一单，FIFO 收最旧（多消息排队时
+          // 按序逐回合收）；Leader 咨询档与 worker 派单同机制，FIFO 空 = no-op。
           // recovering 让位漏掉的收口由恢复流的下个 onTurnEnd 补上
-          if (managed.state.session_id === this.leaderId) {
-            this.closeLeaderDispatch(ok ? "done" : "failed", reason, false);
-          }
+          this.closeOpenDispatches(managed.state.session_id, ok ? "done" : "failed", reason, false);
           managed.state.updated_at = Date.now();
           managed.state.duration_ms = durationMs;
           // 回合收口同时清残留审批数据（打断等待中的请求等场景）：status 与
@@ -2180,11 +2201,9 @@ export class SessionManager {
           //（状态由恢复流程接管）；其余路径（进程自然退出/stop 收尾）照旧收口，
           // 并复位采样相位——新 agent 由 resumeAgent/reviveSaved 重新起算
           if (managed.wd.phase === "recovering") return;
-          // #26 派单台账兜底：流关闭时仍未收口的派单一律 done（M1 无失败语义可依，
-          // 流没了 = 咨询已无法继续），全清 FIFO
-          if (managed.state.session_id === this.leaderId) {
-            this.closeLeaderDispatch("done", reason, true);
-          }
+          // #26 派单台账兜底（M2 泛化全会话）：流关闭时仍未收口的派单一律 done
+          //（流没了 = 该回合无法继续，咨询与 worker 派单同语义），全清 FIFO
+          this.closeOpenDispatches(managed.state.session_id, "done", reason, true);
           managed.wd.phase = "idle";
           if (managed.state.status !== "DONE" && managed.state.status !== "ERROR") {
             managed.state.status = "DONE";
@@ -2383,13 +2402,16 @@ export class SessionManager {
     try {
       ensureOrgDir();
       ensureOrgClaudeMd();
+      ensureOrgCli(); // #26 M2：物化 ~/.cc-deck/bin/org（Leader 分诊指令通道；测试态跳过）
     } catch (e) {
       return { ok: false, error: `org 目录不可用: ${e instanceof Error ? e.message : String(e)}` };
     }
-    // #26 断档补记：上一进程遗留的 running 悬账（relay 崩溃/强杀时回合没收口）——
-    // 本进程的内存 FIFO 已随进程丢失，不补则永悬；各补一行 done 收口。auto-revive
-    // 续跑不走 COMMAND_MESSAGE 天然不入新账，不会双记。
-    const hung = readDispatchLog().filter((e) => e.status === "running");
+    // #26 断档补记：上一进程遗留的 running/dispatched 悬账（relay 崩溃/强杀时回合
+    // 没收口；dispatched = M2 派单 spawn 窗口崩的账）——本进程的内存 FIFO 已随进程
+    // 丢失，不补则永悬；各补一行 done 收口（不联动搬卡：worker 会话 resume 后板条
+    // 仍归它，Leader 可重派）。auto-revive 续跑不走 COMMAND_MESSAGE 天然不入新账，
+    // 不会双记。
+    const hung = readDispatchLog().filter((e) => e.status === "running" || e.status === "dispatched");
     for (const e of hung) {
       appendDispatch({ ...e, ts: Date.now(), status: "done", receipt: "relay 重启，回合中断" });
     }
@@ -2510,18 +2532,323 @@ export class SessionManager {
     } catch {}
   }
 
-  // #26 派单台账收口：从 FIFO 取未收口派单补 done/failed 行（append-only 状态机，
-  // 读侧同 id 取最后一行收敛）。all=true 全清（onSessionEnd 流关闭兜底）；
-  // FIFO 空 = 无未收口派单（上岗引导回合等），no-op。回执 = terminal_reason 截 200 字。
-  private closeLeaderDispatch(status: "done" | "failed", receipt: string, all = false): void {
-    if (!this.leaderId) return;
-    const ids = all ? this.leaderOpenDispatch.splice(0) : [this.leaderOpenDispatch.shift()].filter((x): x is string => !!x);
-    for (const id of ids) {
+  // #26 派单台账收口（M2 泛化全会话）：按会话键从 FIFO 取未收口派单补 done/failed
+  // 行（append-only 状态机，读侧同 id 取最后一行收敛）。all=true 全清（onSessionEnd
+  // 流关闭兜底）；FIFO 空 = 无未收口派单（上岗引导回合等），no-op。
+  // 回执 = terminal_reason 截 200 字；gid 条目联动任务板：done→done、failed→todo
+  //（退回待认领）。
+  private pushOpenDispatch(key: string, e: { id: string; tier: DispatchTier; gid?: string; anchor?: string }): void {
+    const q = this.openDispatches.get(key) ?? [];
+    q.push(e);
+    this.openDispatches.set(key, q);
+  }
+
+  private closeOpenDispatches(key: string, status: "done" | "failed", receipt: string, all = false): void {
+    const q = this.openDispatches.get(key);
+    if (!q || q.length === 0) return;
+    const es = all
+      ? q.splice(0)
+      : [q.shift()].filter((x): x is { id: string; tier: DispatchTier; gid?: string; anchor?: string } => !!x);
+    if (q.length === 0) this.openDispatches.delete(key);
+    for (const e of es) {
       appendDispatch({
-        ts: Date.now(), id, tier: "咨询", target: "org-leader",
-        status, receipt: truncate(receipt, 200), session_id: this.leaderId,
+        ts: Date.now(), id: e.id, tier: e.tier,
+        target: key === this.leaderId ? "org-leader" : key,
+        status, receipt: truncate(receipt, 200), session_id: key,
+        ...(e.anchor ? { project_anchor: e.anchor } : {}),
+      });
+      if (e.gid) {
+        moveEntryByDispatch(e.gid, e.id, status === "done" ? "done" : "todo");
+        this.emitBoard(e.gid);
+      }
+    }
+  }
+
+  // ---------- #26 M2 分诊引擎（§4 响应四档/第五态 + §6.2 状态机 + 确认门槛） ----------
+  // 单漏斗：Leader CLI（ws-server /api/org HTTP）与用户客户端（COMMAND_ORG_CONFIRM）
+  // 都路由到 orgAction。决议与执行分离：decideConfirm 只记决策，副作用统一
+  // applyConfirmEffects（可审计）。用户是指挥/验收者——Leader 只提案不决议。
+
+  orgAction(action: string, p: Record<string, unknown>): { ok: true; data?: unknown } | { ok: false; error: string } {
+    const str = (k: string): string => (typeof p[k] === "string" ? (p[k] as string).trim() : "");
+    const bool = (k: string): boolean => p[k] === true;
+    try {
+      switch (action) {
+        case "status": {
+          return {
+            ok: true,
+            data: {
+              groups: listGroups(),
+              pending: listPendingConfirms(),
+              open: readDispatchLog().filter((e) => e.status === "running" || e.status === "dispatched").slice(-20),
+            },
+          };
+        }
+        case "project-create": {
+          const name = str("name");
+          const anchor = str("anchor");
+          const tier = str("tier") as ProjectTier;
+          if (!name || !anchor) return { ok: false, error: "name/anchor 必填" };
+          if (!isAbsolute(anchor)) return { ok: false, error: "anchor 必须是绝对路径" };
+          if (tier !== "轻立项" && tier !== "正经立项") return { ok: false, error: "tier 必须是 轻立项|正经立项" };
+          const r = createGroup({ name, anchor_dir: anchor, tier });
+          if (!r.ok) return r;
+          ensureProjectClaudeMd(anchor, name); // §3.4 防漂移种子（幂等：存在即认不覆盖）
+          this.emitOrgState();
+          return { ok: true, data: { group: r.group, needsConfirm: r.needsConfirm, confirm: r.confirm } };
+        }
+        case "project-status": {
+          const id = str("id");
+          const to = str("to") as ProjectGroupStatus;
+          const note = str("note");
+          if (!id || !to) return { ok: false, error: "id/to 必填" };
+          if (!["active", "parked", "archived"].includes(to)) return { ok: false, error: "to 必须是 active|parked|archived" };
+          // 确认门槛不可旁路：pending（正经立项/首次轻立项的确认前态）只经确认卡决议
+          // 出口（✓→active / ✗→archived 留痕），Leader 直接 set 会绕过用户决策
+          const cur = findGroup(id);
+          if (cur?.status === "pending") {
+            return { ok: false, error: `项目组待确认（pending），去留由用户在确认卡上 ✓/✗ 决议` };
+          }
+          if (to === "archived") {
+            const chk = buildArchiveChecklist(id);
+            if (!chk) return { ok: false, error: `项目组不存在: ${id}` };
+            // §3.4 结项断言核对：零悬账零未完 → 一句话归档；有异常 → 确认卡附清单裁决
+            if (chk.openDispatches.length === 0 && chk.openBoardEntries === 0) {
+              const r = setGroupStatus(id, "archived", note || "零异常一句话归档");
+              if (!r.ok) return r;
+              this.emitOrgState();
+              this.emitBoard(r.group.id);
+              return { ok: true, data: { group: r.group, archived: true } };
+            }
+            const confirm = addConfirm({
+              kind: "archive",
+              title: `结项确认：${chk.name}`,
+              reason: `悬账 ${chk.openDispatches.length} 项 / 板未完 ${chk.openBoardEntries} 条，附核对清单裁决`,
+              payload: { gid: chk.gid, checklist: chk, note },
+            });
+            this.emitOrgState();
+            return { ok: true, data: { needsConfirm: true, confirm, checklist: chk } };
+          }
+          // 挂起（你说「先放放」）/ 复活（读档重建）：用户明示决策，直达不走确认单
+          const r = setGroupStatus(id, to, note || undefined);
+          if (!r.ok) return r;
+          this.emitOrgState();
+          this.emitBoard(r.group.id); // 冻结态翻转随板广播
+          return { ok: true, data: { group: r.group } };
+        }
+        case "project-tier": {
+          const id = str("id");
+          const to = str("to") as ProjectTier;
+          const reason = str("reason");
+          if (!id) return { ok: false, error: "id 必填" };
+          if (to !== "轻立项" && to !== "正经立项") return { ok: false, error: "to 必须是 轻立项|正经立项" };
+          if (!reason) return { ok: false, error: "升降级必须带一句理由（§4 矫正通道）" };
+          const g = findGroup(id);
+          if (!g) return { ok: false, error: `项目组不存在: ${id}` };
+          if (g.tier === to) return { ok: true, data: { group: g, noop: true } };
+          const confirm = addConfirm({
+            kind: "tier-change",
+            title: `${to === "正经立项" ? "升级" : "降级"}：${g.name}（${g.tier} → ${to}）`,
+            reason,
+            payload: { gid: g.id, to_tier: to },
+          });
+          this.emitOrgState();
+          return { ok: true, data: { needsConfirm: true, confirm } };
+        }
+        case "suggest-hold": {
+          const id = str("id");
+          const reason = str("reason");
+          const condition = str("condition");
+          if (!reason) return { ok: false, error: "建议暂缓必须带一句理由" };
+          if (!id) {
+            // 无组暂缓（第五态最小形态）：纯台账留痕，回执即解除条件备忘
+            appendDispatch({
+              ts: Date.now(), id: randomUUID(), tier: "暂缓", target: "org-leader",
+              status: "done",
+              receipt: truncate(`${reason}${condition ? `（解除条件：${condition}）` : ""}`, 200),
+              session_id: this.leaderId ?? "",
+            });
+            return { ok: true, data: { ledgered: true } };
+          }
+          const g = findGroup(id);
+          if (!g) return { ok: false, error: `项目组不存在: ${id}` };
+          const confirm = addConfirm({
+            kind: "suggest-hold",
+            title: `建议暂缓：${g.name}`,
+            reason,
+            payload: { gid: g.id, ...(condition ? { condition } : {}) },
+          });
+          this.emitOrgState();
+          return { ok: true, data: { needsConfirm: true, confirm } };
+        }
+        case "dispatch": {
+          return this.dispatchWorker({
+            anchor: str("anchor"),
+            prompt: typeof p.prompt === "string" ? p.prompt : "",
+            gid: str("gid") || undefined,
+            title: str("title") || undefined,
+          });
+        }
+        case "board": {
+          const op = str("op");
+          const gid = str("gid");
+          if (!gid) return { ok: false, error: "gid 必填" };
+          let r: { ok: true; data?: unknown } | { ok: false; error: string };
+          if (op === "upsert") {
+            const text = str("text");
+            if (!text) return { ok: false, error: "text 必填" };
+            const status = str("status") as BoardEntryStatus;
+            if (status && !["todo", "doing", "done"].includes(status)) return { ok: false, error: "status 必须是 todo|doing|done" };
+            const u = upsertBoardEntry(gid, {
+              id: str("entry_id") || undefined,
+              text,
+              ...(status ? { status } : {}),
+              ...(str("note") ? { note: str("note") } : {}),
+            });
+            r = u.ok ? { ok: true, data: { entry: u.entry } } : u;
+          } else if (op === "move") {
+            const m = moveBoardEntry(gid, str("entry_id"), str("status") as BoardEntryStatus);
+            r = m.ok ? { ok: true, data: { entry: m.entry } } : m;
+          } else if (op === "del") {
+            const d = removeBoardEntry(gid, str("entry_id"));
+            r = d.ok ? { ok: true } : d;
+          } else {
+            return { ok: false, error: `未知 board 操作: ${op}` };
+          }
+          if (r.ok) this.emitBoard(gid);
+          return r;
+        }
+        case "project-detail": {
+          const g = findGroup(str("id"));
+          if (!g) return { ok: false, error: `项目组不存在: ${str("id")}` };
+          // §3.1 项目组详情四分节的服务端数据源：状态/编制（group 内）+ 板 + 回执流
+          const receipts = readDispatchLog()
+            .filter((e) => {
+              const a = e.project_anchor ?? "";
+              return a.replace(/\/+$/, "") === g.anchor_dir.replace(/\/+$/, "");
+            })
+            .slice(-30)
+            .reverse();
+          return { ok: true, data: { group: g, board: loadBoard(g.id), receipts } };
+        }
+        case "confirm-decide": {
+          const cid = str("confirm_id");
+          if (!cid) return { ok: false, error: "confirm_id 必填" };
+          const d = decideConfirm(cid, bool("approve"), str("by") || "user");
+          if (!d.ok) return d;
+          this.applyConfirmEffects(d.confirm);
+          return { ok: true, data: { confirm: d.confirm } };
+        }
+        default:
+          return { ok: false, error: `未知 org action: ${action}` };
+      }
+    } catch (e) {
+      return { ok: false, error: e instanceof Error ? e.message : String(e) };
+    }
+  }
+
+  // 确认单决议副作用（一次决一次执行；这里之外不得有组状态迁移的旁路）
+  private applyConfirmEffects(c: OrgConfirm): void {
+    const gid = typeof c.payload.gid === "string" ? c.payload.gid : "";
+    if (c.status === "approved") {
+      switch (c.kind) {
+        case "project-create":
+          if (gid) {
+            setGroupStatus(gid, "active");
+            // §4 信任累积：轻立项首次确认通过 → 同类免确认通道打开
+            if (findGroup(gid)?.tier === "轻立项") setLightConfirmTrusted(true);
+          }
+          break;
+        case "tier-change":
+          if (gid) setGroupTier(gid, (c.payload.to_tier === "轻立项" ? "轻立项" : "正经立项"));
+          break;
+        case "suggest-hold":
+          if (gid) setGroupStatus(gid, "parked"); // 点头即挂起（§4 第五态）
+          break;
+        case "archive":
+          if (gid) {
+            setGroupStatus(gid, "archived", typeof c.payload.note === "string" && c.payload.note ? c.payload.note : "结项确认通过（悬账/未完条目知情放行）");
+          }
+          break;
+        case "revive":
+          if (gid) setGroupStatus(gid, "active");
+          break;
+      }
+    } else if (c.kind === "project-create" && gid) {
+      setGroupStatus(gid, "archived", "立项确认被否决"); // pending → archived 留痕
+    }
+    this.emitOrgState();
+    if (gid) this.emitBoard(gid);
+  }
+
+  // #26 M2 组织广播（瞬态：在线端实时收敛；离线端由 SNAPSHOT.projects/org_confirms
+  // 兜底，板由 COMMAND_PROJECT_DETAIL 按需拉取后经 BOARD_UPDATED 增量维护）
+  emitOrgState(): void {
+    this.bus.emitTransient("PROJECTS_UPDATED", { groups: listGroups() });
+    this.bus.emitTransient("ORG_CONFIRM_UPDATED", { pending: listPendingConfirms() });
+  }
+
+  emitBoard(gid: string): void {
+    this.bus.emitTransient("BOARD_UPDATED", { gid, board: loadBoard(gid) });
+  }
+
+  // #26 M2 派单（§4 随手办/项目组任务）：spawn worker 会话承接。
+  // 先落账再执行（§3.5 台账纪律）：dispatched 行 → spawn → running 行（同 id 收敛）；
+  // spawn 失败即收口 failed 不留悬账；崩溃窗口的 dispatched 由断档补记兜底。
+  // 权限 acceptEdits（§4 随手办纪律）、跳过 sticky 默认目录（worker cwd 锚项目不动全局）。
+  dispatchWorker(input: { anchor: string; prompt: string; gid?: string; title?: string }):
+    { ok: true; dispatch_id: string; session_id: string } | { ok: false; error: string } {
+    if (!input.prompt.trim()) return { ok: false, error: "prompt 必填" };
+    if (!input.anchor.startsWith("/")) return { ok: false, error: "anchor 必须是绝对路径" };
+    let tier: DispatchTier = "随手办";
+    let anchor = input.anchor;
+    if (input.gid) {
+      const g = findGroup(input.gid);
+      if (!g) return { ok: false, error: `项目组不存在: ${input.gid}` };
+      if (g.status !== "active") return { ok: false, error: `项目组 ${g.name} 为 ${g.status}，不可派单（挂起冻结/结项只读）` };
+      tier = g.tier;
+      anchor = g.anchor_dir;
+    }
+    const dispatchId = randomUUID();
+    appendDispatch({ ts: Date.now(), id: dispatchId, tier, target: "spawn-pending", status: "dispatched", session_id: "", project_anchor: anchor });
+    let sessionId: string;
+    try {
+      sessionId = this.create(anchor, wrapDispatchPrompt(tier, input.prompt), "acceptEdits", true, { skipStickyCwd: true });
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      appendDispatch({ ts: Date.now(), id: dispatchId, tier, target: "spawn-pending", status: "failed", receipt: truncate(msg, 200), session_id: "", project_anchor: anchor });
+      return { ok: false, error: `worker 拉起失败: ${msg}` };
+    }
+    const s = this.sessions.get(sessionId);
+    if (s) {
+      s.state.project_gid = input.gid;
+      s.state.dispatch_tier = tier;
+    }
+    if (input.gid) addMember(input.gid, sessionId, "worker");
+    appendDispatch({ ts: Date.now(), id: dispatchId, tier, target: sessionId, status: "running", session_id: sessionId, project_anchor: anchor });
+    this.pushOpenDispatch(sessionId, { id: dispatchId, tier, gid: input.gid, anchor });
+    if (input.gid) {
+      upsertBoardEntry(input.gid, {
+        text: input.title?.trim() || input.prompt.split("\n")[0].slice(0, 60),
+        status: "doing",
+        owner_session: sessionId,
+        dispatch_id: dispatchId,
+      });
+      this.emitBoard(input.gid);
+    }
+    if (input.title?.trim()) this.setTitleOverride(sessionId, `[${tier}] ${input.title.trim().slice(0, 40)}`);
+    // 徽标帧：create 的 SESSION_CREATED 早于归属字段写入（同 tick 内），补一帧部分
+    // 更新带上 project_gid/dispatch_tier（#93 教训：部分帧必随带 status/action_summary）
+    if (s) {
+      this.bus.emit(sessionId, "SESSION_UPDATED", {
+        status: s.state.status,
+        action_summary: s.state.action_summary,
+        ...(s.state.project_gid ? { project_gid: s.state.project_gid } : {}),
+        dispatch_tier: s.state.dispatch_tier,
       });
     }
+    this.emitOrgState();
+    return { ok: true, dispatch_id: dispatchId, session_id: sessionId };
   }
 
   private require(sessionId: string): ManagedSession {
@@ -2907,4 +3234,20 @@ export class SessionManager {
   private cloneState(s: ManagedSession): SessionState {
     return JSON.parse(JSON.stringify(s.state)) as SessionState;
   }
+}
+
+// #26 M2 派单纪律 prompt 前缀（§4 随手办三件套 + §3.5 过程不回灌只收回执）：
+// 三件套 = ①完成回一行结果+改动文件（回执）②commit 归属 [档位] 前缀 ③派单记录
+// 留台账（由 dispatchWorker 自动落）。worker 会话首条输入即此包装，纪律随 cwd
+// 的项目 CLAUDE.md（防漂移种子）双层生效。导出供测试断言。
+export function wrapDispatchPrompt(tier: string, task: string): string {
+  return `[${tier} 派单]
+${task}
+
+—— 派单纪律（矩阵式组织 §3.5 / §4）——
+- 过程不回灌，只收回执：不逐动作汇报，结束才回。
+- 改前认领：动文件前先一句说明要改哪些文件；改后报 diff 摘要（改了什么、几处）。
+- commit 归属：提交信息以 [${tier}] 开头并描述任务；无提交环节的任务可省略。
+- 完成回执：最后一行固定格式「结果：<一行结果>｜改动文件：<文件列表或无>」。
+- 零确认直做（权限 acceptEdits）；发现超范围事项，回报而非扩权。`;
 }

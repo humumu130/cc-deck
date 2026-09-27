@@ -4,6 +4,7 @@
 import type { UploadBlob } from "./uploads.js";
 import type { AcceptanceSummary } from "./acceptance.js";
 import type { AllowRule } from "./allow-rules.js";
+import type { ProjectGroup, ProjectBoard, OrgConfirm } from "./projects.js";
 
 // ---------- 事件信封 ----------
 
@@ -119,6 +120,11 @@ export interface SessionState {
   // 恢复成功即清除，失败保留（卡片标「恢复失败」，可重试）
   pinned?: boolean;
   saved?: boolean;
+  // #26 M2 项目组派单：worker 会话归属的项目组 id（dispatch spawn 时写入；客户端
+  // 列表按 project_gid 分组 = §2.5 单聊项目锚点分流的服务端形态）与承接档位
+  // （咨询 Leader 无此二字段）
+  project_gid?: string;
+  dispatch_tier?: string;
   // 最近一次任务完成汇报（#254）：TASK_DONE 是瞬态事件，客户端断线/进程被杀时收不到；
   // 记入会话状态仅随 SNAPSHOT 下发（SESSION_UPDATED 增量帧不携带），端上按 ts 去重后恢复
   // 未读汇报。remaining_count 为数字（剩余条数）——TASK_DONE 事件的 remaining 是 TodoItem[]，
@@ -280,6 +286,11 @@ export interface SnapshotPayload {
   // #212 允许并记住：已记规则全量（设置页「记住的规则」列表数据源；随快照而非
   // HTTP API 下发——云桥手机无 HTTP 直连通道，WS 快照三端通吃）
   allow_rules?: AllowRule[];
+  // #26 M2 组织：项目组索引 + 待决确认单（LAN ws-server 与 cloud-client 两处快照
+  // 同步组装，#117 教训；空数组也下发——端上以字段存在性判断能力，与 allow_rules
+  // 同口径。板不随快照（一板一文件按需拉：COMMAND_PROJECT_DETAIL）
+  projects?: ProjectGroup[];
+  org_confirms?: OrgConfirm[];
 }
 
 // 时间线条目（M1 调试台用；压缩/截断后的一行文本，不推原始日志流）
@@ -309,6 +320,9 @@ export type EventType =
   | "USER_NOTE"
   | "ACCEPTANCES_UPDATED"
   | "ALLOW_RULES_UPDATED"
+  | "PROJECTS_UPDATED"
+  | "BOARD_UPDATED"
+  | "ORG_CONFIRM_UPDATED"
   | "WATCHDOG"
   | "ARTIFACT_CHUNK";
 
@@ -334,6 +348,14 @@ export type EventPayloadMap = {
   // #212 记住规则变更推送（瞬态，同上语义）：删规则后广播最新全量，在线端设置页
   // 实时收敛；离线端由 SNAPSHOT.allow_rules 兜底
   ALLOW_RULES_UPDATED: AllowRulesUpdatedPayload;
+  // #26 M2 组织变更（瞬态，同 ACCEPTANCES_UPDATED 语义）：立项/状态迁移/升降级/
+  // 派单入编后广播全量索引；离线端由 SNAPSHOT.projects 兜底
+  PROJECTS_UPDATED: ProjectsUpdatedPayload;
+  // #26 M2 任务板变更（瞬态）：派单承接/收口联动搬卡/Leader 板操作后带该组全量板
+  BOARD_UPDATED: BoardUpdatedPayload;
+  // #26 M2 确认单变更（瞬态）：新单入队/决议后广播待决队列；离线端由
+  // SNAPSHOT.org_confirms 兜底
+  ORG_CONFIRM_UPDATED: OrgConfirmUpdatedPayload;
   // #7 SDK 会话流看门狗观测（落 events.ndjson 供复盘误杀率；客户端不消费，
   // 未知事件类型各端 switch 自然跳过）
   WATCHDOG: WatchdogPayload;
@@ -421,6 +443,18 @@ export interface AllowRulesUpdatedPayload {
   rules: AllowRule[];
 }
 
+// #26 M2 组织推送载荷（与 SNAPSHOT 同源同构）
+export interface ProjectsUpdatedPayload {
+  groups: ProjectGroup[]; // listGroups() 全量（小表，写穿全量）
+}
+export interface BoardUpdatedPayload {
+  gid: string;
+  board: ProjectBoard; // 该组全量板（单组小表）
+}
+export interface OrgConfirmUpdatedPayload {
+  pending: OrgConfirm[]; // listPendingConfirms()
+}
+
 // #42 设备身份元数据：pair_req 帧的可选自报字段，配对方各端按自身形态填——
 // 浏览器报 UA 截断摘要+平台（"Chrome·Windows" 式），App 报 OS+型号+版本
 //（"android·Pixel 8 · CC Deck 0.3.35" 式）。桥不解析透传；relay 只做长度校验
@@ -482,6 +516,8 @@ export type CommandType =
   | "COMMAND_RESUME_SESSION"
   | "COMMAND_IMPORT_PUSH"
   | "COMMAND_ALLOW_RULE_REMOVE"
+  | "COMMAND_ORG_CONFIRM"
+  | "COMMAND_PROJECT_DETAIL"
   | "COMMAND_ARTIFACT_FETCH";
 
 export interface CommandBase {
@@ -629,6 +665,20 @@ export interface AllowRuleRemoveCommand extends CommandBase {
   payload: { id: string };
 }
 
+// #26 M2 组织确认单决议（用户点击确认卡 ✓/✗；Leader 只提案不决议）。成功后 relay
+// 广播 ORG_CONFIRM_UPDATED + PROJECTS_UPDATED（副作用=组状态迁移/信任累积等）
+export interface OrgConfirmCommand extends CommandBase {
+  type: "COMMAND_ORG_CONFIRM";
+  payload: { confirm_id: string; approve: boolean };
+}
+
+// #26 M2 项目组详情（ack.data = { group, board, receipts }：编制 + 全量板 + 该锚点
+// 最近派单回执流——§3.1 项目组详情四分节的数据源）
+export interface ProjectDetailCommand extends CommandBase {
+  type: "COMMAND_PROJECT_DETAIL";
+  payload: { gid: string };
+}
+
 export type Command =
   | CreateCommand
   | MessageCommand
@@ -657,6 +707,8 @@ export type Command =
   | ResumeSessionCommand
   | ImportPushCommand
   | AllowRuleRemoveCommand
+  | OrgConfirmCommand
+  | ProjectDetailCommand
   | ArtifactFetchCommand;
 
 // 托管会话权限模式切换（default=每次确认 / acceptEdits=自动接受编辑 / plan=只读规划 /
@@ -771,6 +823,8 @@ export interface CommandAckPayload {
   // #79 仅 COMMAND_ARTIFACT_FETCH 成功时携带：字节数 + 扩展名推导的 MIME
   //（客户端分级预览用；数据本体走 ARTIFACT_CHUNK 瞬态帧）
   artifact?: { size: number; mime: string };
+  // #26 M2 仅 COMMAND_PROJECT_DETAIL 成功时携带：{ group, board, receipts }
+  data?: unknown;
   // #65 幂等重放标记：同 command_id 二次到达时回放首次回执并置 true（首次执行
   // 的回执恒不带）；ok/error 语义保持首次原样，客户端不识别也不受影响
   duplicate?: boolean;

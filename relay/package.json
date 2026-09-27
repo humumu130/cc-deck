@@ -19,7 +19,8 @@
     "test:acceptance": "tsx scripts/test-acceptance.ts",
     "test:org": "tsx scripts/test-org.ts",
     "test:leader": "tsx scripts/test-leader.ts",
-    "test:projects": "tsx scripts/test-projects.ts"
+    "test:projects": "tsx scripts/test-projects.ts",
+    "test:dispatch": "tsx scripts/test-dispatch.ts"
   },
   "dependencies": {
     "@anthropic-ai/claude-agent-sdk": "latest",

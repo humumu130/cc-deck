@@ -3,7 +3,7 @@ import { mkdtempSync, rmSync, writeFileSync, readFileSync, mkdirSync } from "nod
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
-  orgDir, ensureOrgDir, ensureOrgClaudeMd, ORG_CLAUDE_MD_SEED,
+  orgDir, ensureOrgDir, ensureOrgClaudeMd, ORG_CLAUDE_MD_SEED, ORG_CLAUDE_MD_M2_MARKER,
   readOrgAnchor, writeOrgAnchor, clearOrgAnchor,
   appendDispatch, readDispatchLog, dispatchLogPath, type DispatchEntry, type OrgAnchor,
 } from "../src/org.js";
@@ -52,14 +52,25 @@ writeFileSync(join(dir, "org.json"), JSON.stringify({ version: 1, leader_session
 const r3 = readOrgAnchor(dir);
 assert(!!r3 && r3.leader_sdk_id === "", "旧锚缺 sdk_id 容忍为空串");
 
-// ---------- CLAUDE.md 幂等种子 ----------
+// ---------- CLAUDE.md 幂等种子（M2 起带分诊通道增量段，标记幂等追加） ----------
 console.log("CLAUDE.md 种子:");
-assert(ensureOrgClaudeMd(dir) === "created", "首建 → created");
-assert(ensureOrgClaudeMd(dir) === "exists", "再跑 → exists");
-assert(readFileSync(join(dir, "CLAUDE.md"), "utf-8") === ORG_CLAUDE_MD_SEED, "内容 = 种子全文");
-writeFileSync(join(dir, "CLAUDE.md"), ORG_CLAUDE_MD_SEED + "\n2026-09-26 用户偏好测试条目\n", "utf-8");
+const orgMd = () => readFileSync(join(dir, "CLAUDE.md"), "utf-8");
+assert(ensureOrgClaudeMd(dir) === "created", "首建 → created（种子 + M2 分诊段一体）");
+assert(ensureOrgClaudeMd(dir) === "exists", "再跑 → exists（标记在，零写入）");
+assert(orgMd().startsWith(ORG_CLAUDE_MD_SEED) && orgMd().includes(ORG_CLAUDE_MD_M2_MARKER), "内容 = M1 种子 + M2 分诊段");
+// M1 时代已落地的文件（无 M2 标记）：增量追加不回播、不丢既有记忆
+const dirM1 = mkdtempSync(join(tmpdir(), "cc-deck-org-"));
+const m1Content = ORG_CLAUDE_MD_SEED + "\n2026-09-26 用户偏好测试条目\n";
+writeFileSync(join(dirM1, "CLAUDE.md"), m1Content, "utf-8");
+assert(ensureOrgClaudeMd(dirM1) === "upgraded", "M1 旧档 → upgraded（补 M2 段）");
+const upgraded = readFileSync(join(dirM1, "CLAUDE.md"), "utf-8");
+assert(upgraded.includes("用户偏好测试条目") && upgraded.includes(ORG_CLAUDE_MD_M2_MARKER), "既有记忆保留 + M2 段就位");
+assert(ensureOrgClaudeMd(dirM1) === "exists", "已 upgraded 再跑 → exists");
+rmSync(dirM1, { recursive: true, force: true });
+// 手改（有标记）后仍 exists
+writeFileSync(join(dir, "CLAUDE.md"), orgMd() + "\n2026-09-27 新增记忆条目\n", "utf-8");
 assert(ensureOrgClaudeMd(dir) === "exists", "手改后仍 exists");
-assert(readFileSync(join(dir, "CLAUDE.md"), "utf-8").includes("用户偏好测试条目"), "手改内容不被覆盖（幂等不回播种子）");
+assert(orgMd().includes("新增记忆条目"), "手改内容不被覆盖（幂等不回播种子）");
 // 空目录再建
 const dir2 = mkdtempSync(join(tmpdir(), "cc-deck-org-"));
 assert(ensureOrgClaudeMd(dir2) === "created", "新目录首建");

@@ -17,6 +17,8 @@ import {
   type CloudSubmit,
 } from "./acceptance.js";
 import { listModels } from "./models.js";
+// #26 M2 组织项目组：快照字段同源（索引 + 待决确认单）
+import { listGroups, listPendingConfirms } from "./projects.js";
 import { fileURLToPath } from "node:url";
 import { WebSocketServer, WebSocket } from "ws";
 import type { EventBus } from "./event-bus.js";
@@ -160,6 +162,9 @@ const COMMAND_TYPES = new Set([
   // #212 允许并记住：设置页规则删除（漏加时 ws 入口白名单拒发 "invalid command
   // shape"，手机端删除必失败——mgr 的 case 与单测都过，唯独 ws 层挡死，实机首验抓到）
   "COMMAND_ALLOW_RULE_REMOVE",
+  // #26 M2 组织：确认单决议（用户端确认卡）+ 项目组详情拉取
+  "COMMAND_ORG_CONFIRM",
+  "COMMAND_PROJECT_DETAIL",
 ]);
 
 const HEARTBEAT_MS = 30_000;
@@ -578,6 +583,36 @@ export function startServer(
       });
       return;
     }
+    // #26 M2 分诊指令通道（Leader 会话有 Bash，分诊决策 = 执行 org CLI → 此处）：
+    // POST /api/org?token=...  body { action, ...payload }，action 全集见
+    // session-manager.orgAction（status/project-create/project-status/project-tier/
+    // suggest-hold/dispatch/board/project-detail）。鉴权循 deliver 先例（主 token）。
+    // 用户端决议不经此（走 WS COMMAND_ORG_CONFIRM）——Leader 只提案不决议。
+    if (req.method === "POST" && url.pathname === "/api/org") {
+      if ((url.searchParams.get("token") ?? "") !== cfg.token) {
+        res.writeHead(401).end("unauthorized");
+        return;
+      }
+      let body = "";
+      req.on("data", (c: Buffer) => {
+        body += c;
+        if (body.length > 65536) req.destroy(); // 派单 prompt 可长，64KB 上限
+      });
+      req.on("end", () => {
+        try {
+          const { action, ...payload } = JSON.parse(body) as { action?: unknown };
+          if (typeof action !== "string" || !action.trim()) {
+            res.writeHead(400, { "content-type": "application/json" }).end('{"ok":false,"error":"action 必填"}');
+            return;
+          }
+          const r = mgr.orgAction(action.trim(), payload as Record<string, unknown>);
+          res.writeHead(r.ok ? 200 : 422, { "content-type": "application/json" }).end(JSON.stringify(r));
+        } catch {
+          res.writeHead(400).end("bad json");
+        }
+      });
+      return;
+    }
     // #125 验收单在线表单：GET /acceptance/<id> 出自包含表单页，POST /api/acceptance
     // 收勾选结果落 data/acceptances/<id>.results.json。鉴权=登记白名单（id 32hex 必须
     // 命中已登记文件）+ 限流；不使用 relay 主 token——填表链接永不携带主 token。
@@ -810,6 +845,10 @@ export function startServer(
           // #212 允许并记住：已记规则全量（设置页「记住的规则」列表数据源；
           // 空数组也下发——端上以字段存在性判断能力，与 deliverables 同口径）
           allow_rules: mgr.allowRules.list(),
+          // #26 M2 组织：项目组索引 + 待决确认单（cloud-client 云通道快照同步携带，
+          // #117 教训；板不随快照，COMMAND_PROJECT_DETAIL 按需拉）
+          projects: listGroups(),
+          org_confirms: listPendingConfirms(),
           // 云桥启用的 relay 附带自身设备 id（= CloudConfig.relayDev 同源值）：
           // 客户端据此密码学匹配"LAN 直连条目"与"云桥条目"是同一台 relay，自动合并。
           // wan_dev（F7）：手表 /wan 透传通道的凭据 dev，手机侧写进手表连接配置
