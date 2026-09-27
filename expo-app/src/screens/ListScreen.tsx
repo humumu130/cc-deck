@@ -9,7 +9,7 @@ import { fmtLastActive, fmtTok, contextPct, contextLevel, CONTEXT_LIMIT_FALLBACK
 import { setListDensity, useListDensity, setAggregate as persistAggregate, useIdleDimMin, isIdleSession, type ListDensity } from "../display-settings";
 import { store, useRelay, type AcceptanceSummary, type SourceStatus } from "../store";
 import { FadeIn, PressScale } from "../motion";
-import type { BoardEntry, DispatchReceipt, OrgConfirm, ProjectBoard, ProjectGroup, SessionState } from "../protocol";
+import type { BoardEntry, DispatchReceipt, OrgConfirm, ProjectBoard, ProjectGroup, RoutingPoolEntry, SessionState } from "../protocol";
 import RenameModal from "./RenameModal";
 import SettingsDrawer from "./SettingsDrawer";
 
@@ -645,7 +645,7 @@ function GroupModal({ srcId, target, onClose, onOpenSession }: {
   const styles = useThemeStyles(makeStyles);
   const snap = useRelay();
   // undefined=加载中 / null=失败 / 对象=详情
-  const [detail, setDetail] = useState<{ group?: ProjectGroup; board?: ProjectBoard; receipts?: DispatchReceipt[] } | null | undefined>(undefined);
+  const [detail, setDetail] = useState<{ group?: ProjectGroup; board?: ProjectBoard; receipts?: DispatchReceipt[]; pool?: RoutingPoolEntry[] } | null | undefined>(undefined);
   useEffect(() => {
     setDetail(undefined);
     // send 当即失败（未连接/源不在）没有 ACK 回调，直接落失败态
@@ -654,10 +654,9 @@ function GroupModal({ srcId, target, onClose, onOpenSession }: {
   const g = detail?.group;
   const board = detail?.board;
   const ents = board?.entries ?? [];
-  const members = useMemo(
-    () => snap.sessions.filter((s) => s.project_gid === target.gid),
-    [snap.sessions, target.gid],
-  );
+  // #26 M3 熟手池（§5 成员卡进化）：路由表档案 join 运行态，服务端拼好（detail.pool）；
+  // 旧版 relay 无 pool 字段 → 空数组回落（编制快照仍在 group.headcount，不丢信息）
+  const pool = useMemo(() => detail?.pool ?? [], [detail]);
   const liveG = useMemo(() => {
     for (const src of snap.sources) {
       const hit = (src.projects ?? []).find((x) => x.id === target.gid);
@@ -695,20 +694,38 @@ function GroupModal({ srcId, target, onClose, onOpenSession }: {
             <Text style={styles.gmEmpty}>详情拉取失败（源可能已断开或 relay 版本过旧）</Text>
           ) : (
             <>
-              {/* 编制：组内会话（快照实时过滤 project_gid；Leader 兼管不占成员行） */}
-              <Text style={styles.gmSec}>编制 · {(g?.headcount ?? []).length + 1} 人（Leader 兼管）</Text>
-              {members.length ? members.map((m) => (
-                <Pressable
-                  key={m.session_id}
-                  style={styles.gmSess}
-                  android_ripple={{ color: c.tintSoft, borderless: false, radius: 9 }}
-                  onPress={() => { onClose(); onOpenSession(m.session_id); }}
-                >
-                  <View style={[styles.gmDot, { backgroundColor: statusColor(m.status, c) }]} />
-                  <Text style={styles.gmSessT} numberOfLines={1}>{m.title || m.session_id.slice(0, 8)}</Text>
-                  <Text style={styles.gmSessSt}>{STATUS_ZH[m.status] ?? m.status}</Text>
-                </Pressable>
-              )) : <Text style={styles.gmEmpty}>暂无成员会话（Leader 兼管）</Text>}
+              {/* 熟手池：经验 N 次 · 上次 · 在忙/空闲/随组挂起/已退休（退休=只剩路由表档案，
+                  不可点）；空闲/随组挂起可点开（消息/派单即拉起）；Leader 兼管不占行 */}
+              <Text style={styles.gmSec}>熟手池 · {pool.length} 人（经验/上次/状态，Leader 兼管）</Text>
+              {pool.length ? pool.map((p) => {
+                const st = p.busy ? "在忙" : p.parked ? "随组挂起" : p.resumable ? "空闲" : "已退休（档案）";
+                const stColor = p.busy ? c.waiting : p.parked || !p.resumable ? c.faint : c.done;
+                const body = (
+                  <View style={[styles.gmSess, !p.resumable ? { opacity: 0.62 } : null]}>
+                    <View style={{ flex: 1, minWidth: 0 }}>
+                      <Text style={styles.gmSessT} numberOfLines={1}>
+                        {p.title || p.session_id.slice(0, 8)}{p.rating === "bad" ? "（差评·避开）" : ""}
+                      </Text>
+                      <Text style={styles.gmSessSt} numberOfLines={1}>
+                        {`${p.count} 次 · 上次 ${fmtLastActive(p.last_ts)}`}
+                        {p.tags?.length ? ` · ${p.tags.map((t) => "#" + t).join(" ")}` : ""}
+                      </Text>
+                    </View>
+                    <Text style={[styles.gmSessSt, { color: stColor }]}>{st}</Text>
+                  </View>
+                );
+                return p.resumable ? (
+                  <Pressable
+                    key={p.session_id}
+                    android_ripple={{ color: c.tintSoft, borderless: false, radius: 9 }}
+                    onPress={() => { onClose(); onOpenSession(p.session_id); }}
+                  >
+                    {body}
+                  </Pressable>
+                ) : (
+                  <View key={p.session_id}>{body}</View>
+                );
+              }) : <Text style={styles.gmEmpty}>熟手池为空（首次派单后积累）</Text>}
               {/* 任务板：轻立项=单列简化态（渲染降级）；正经立项=待办/进行/完成三段 */}
               <Text style={styles.gmSec}>任务板{board?.frozen ? "（已挂起 · 冻结只读）" : ""}</Text>
               {ents.length === 0 ? (

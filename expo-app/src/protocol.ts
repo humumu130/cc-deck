@@ -191,6 +191,23 @@ export interface DispatchReceipt {
   project_anchor?: string;
 }
 
+// #26 M3 熟手池条目（COMMAND_PROJECT_DETAIL.pool 携带）：路由表档案（§5 成员卡进化：
+// 经验 N 次·上次·评价·标签）join 会话运行态，服务端拼好、端上零 join。
+// resumable=false = 退休（会话不在册/无 SDK 句柄，只剩路由表档案）；parked = 随本组
+// 挂起休眠（org_parked 指回本组）；busy 口径与派单时 pickVeteran 现场口径一致
+export interface RoutingPoolEntry {
+  session_id: string;
+  count: number;
+  failed: number;
+  last_ts: number;
+  rating?: "good" | "bad";
+  tags?: string[];
+  title?: string;
+  busy: boolean;
+  resumable: boolean;
+  parked: boolean;
+}
+
 export interface PendingInput {
   text: string;
   ts: number;
@@ -272,6 +289,6 @@ export interface CommandAck {
   // #79 仅 COMMAND_ARTIFACT_FETCH 成功 ACK 携带：字节数 + 扩展名推导 MIME
   //（分级预览用；数据本体走 ARTIFACT_CHUNK 瞬态帧，ref=command_id）
   artifact?: { size: number; mime: string };
-  // #26 M2 仅 COMMAND_PROJECT_DETAIL 成功 ACK 携带：{ group, board, receipts }
+  // #26 M2/M3 仅 COMMAND_PROJECT_DETAIL 成功 ACK 携带：{ group, board, receipts, pool }
   data?: unknown;
 }

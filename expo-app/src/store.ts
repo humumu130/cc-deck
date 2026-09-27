@@ -3,7 +3,7 @@ import { AppState, Platform } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import Constants from "expo-constants";
 import { getRandomBytes } from "expo-crypto";
-import type { AllowRule, CloudPairInfo, CommandAck, DispatchReceipt, Envelope, LogEntry, ProjectBoard, ProjectGroup, OrgConfirm, SessionState } from "./protocol";
+import type { AllowRule, CloudPairInfo, CommandAck, DispatchReceipt, Envelope, LogEntry, ProjectBoard, ProjectGroup, OrgConfirm, RoutingPoolEntry, SessionState } from "./protocol";
 import { uuid } from "./fmt";
 import { currentVersion } from "./updates";
 import { devId, generateKeyPair, seal, unseal, setRandomBytes, type BoxKeyPair, type SealedBox } from "./e2e";
@@ -2658,11 +2658,11 @@ class RelayStore {
   orgDetail(
     sourceId: string,
     gid: string,
-    onDone: (r: { group?: ProjectGroup; board?: ProjectBoard; receipts?: DispatchReceipt[] } | null) => void,
+    onDone: (r: { group?: ProjectGroup; board?: ProjectBoard; receipts?: DispatchReceipt[]; pool?: RoutingPoolEntry[] } | null) => void,
   ): boolean {
     return this.send("COMMAND_PROJECT_DETAIL", { gid }, sourceId, (r) => {
       if (!r.ok) { onDone(null); return; }
-      onDone((r.data as { group?: ProjectGroup; board?: ProjectBoard; receipts?: DispatchReceipt[] } | undefined) ?? null);
+      onDone((r.data as { group?: ProjectGroup; board?: ProjectBoard; receipts?: DispatchReceipt[]; pool?: RoutingPoolEntry[] } | undefined) ?? null);
     });
   }
 

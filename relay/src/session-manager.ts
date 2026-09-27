@@ -2736,7 +2736,9 @@ export class SessionManager {
         case "project-detail": {
           const g = findGroup(str("id"));
           if (!g) return { ok: false, error: `项目组不存在: ${str("id")}` };
-          // §3.1 项目组详情四分节的服务端数据源：状态/编制（group 内）+ 板 + 回执流
+          // §3.1 项目组详情四分节的服务端数据源：状态/编制（group 内）+ 板 + 回执流；
+          // M3 熟手池（§5 成员卡进化：经验 N 次·上次·在忙/空闲）——路由表档案 join
+          // 会话运行态，服务端拼好端上零 join
           const receipts = readDispatchLog()
             .filter((e) => {
               const a = e.project_anchor ?? "";
@@ -2744,7 +2746,25 @@ export class SessionManager {
             })
             .slice(-30)
             .reverse();
-          return { ok: true, data: { group: g, board: loadBoard(g.id), receipts } };
+          const pool = routingFor(g.id).map((e) => {
+            const s = this.sessions.get(e.session_id);
+            return {
+              session_id: e.session_id,
+              count: e.count,
+              failed: e.failed,
+              last_ts: e.last_ts,
+              rating: e.rating,
+              tags: e.tags,
+              title: s?.state.title || "",
+              /** 在忙/空闲（运行态，派单时现场口径同 pickVeteran） */
+              busy: !!s && (s.state.status === "WORKING" || s.state.status === "WAITING"),
+              /** 可拉起：在册且有 SDK resume 句柄；false = 退休（只剩路由表档案） */
+              resumable: !!s && !!s.state.relay_session_id,
+              /** 随本组挂起休眠（org_parked 指回本组） */
+              parked: s?.state.org_parked === g.id,
+            };
+          });
+          return { ok: true, data: { group: g, board: loadBoard(g.id), receipts, pool } };
         }
         // ---------- #26 M3 路由表评鉴（§5：评价跟着合作记录走，Leader 手动） ----------
         case "rate": {

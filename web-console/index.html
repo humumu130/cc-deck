@@ -1118,6 +1118,16 @@
   #orgdrawer .od-sess:hover { background: rgba(127,127,127,.09); }
   #orgdrawer .od-sess .od-nm { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   #orgdrawer .od-sess .od-sst { flex: none; font-size: 10px; color: var(--faint); }
+  /* #26 M3 熟手池行：经验 N 次 · 上次 · 在忙/空闲（§5 成员卡进化）——右端三段
+     恒定不跳位；退休/挂起行去指针态弱化 */
+  #orgdrawer .od-pl .od-pl-cnt, #orgdrawer .od-pl .od-pl-last { flex: none; font-size: 10px; color: var(--faint); font-variant-numeric: tabular-nums; }
+  #orgdrawer .od-pl .od-pl-tag { flex: none; font-size: 9px; color: var(--dim); border: 1px solid var(--border); border-radius: 999px; padding: 0 5px; }
+  #orgdrawer .od-pl .od-pl-bad { flex: none; font-size: 9px; color: var(--err, #e5484d); }
+  #orgdrawer .od-pl .od-pl-free { flex: none; font-size: 10px; color: var(--ok, #30a46c); }
+  #orgdrawer .od-pl .od-pl-busy { flex: none; font-size: 10px; color: var(--warn, #cb7600); }
+  #orgdrawer .od-pl .od-pl-dim { flex: none; font-size: 10px; color: var(--faint); }
+  #orgdrawer .od-pl-off { cursor: default; opacity: .62; }
+  #orgdrawer .od-pl-off:hover { background: none; }
   #orgdrawer .od-col { display: flex; flex-direction: column; gap: 5px; }
   #orgdrawer .od-ent { padding: 6px 9px; border: 1px solid var(--border); border-radius: 8px; font-size: 12px; color: var(--text); }
   #orgdrawer .od-ent .od-note { font-size: 10.5px; color: var(--faint); margin-top: 2px; }
@@ -4484,7 +4494,8 @@ async function orgOpenDrawer(ctx, gid) {
     d.addEventListener("click", (e) => {
       if (e.target === d || e.target.closest(".od-close")) { orgCloseDrawer(); return; }
       const sess = e.target.closest(".od-sess");
-      if (sess) { orgCloseDrawer(); select(sess.dataset.sid, sess.dataset.src); }
+      // 熟手池退休行带 od-sess 布局类但无 data-sid（不可点）——无 sid 不触发跳转
+      if (sess && sess.dataset.sid) { orgCloseDrawer(); select(sess.dataset.sid, sess.dataset.src); }
     });
     document.body.appendChild(d);
   } else {
@@ -4509,19 +4520,30 @@ function orgRenderDrawer() {
   const g = orgDrawer.data.group || {};
   const board = orgDrawer.data.board || {};
   const ents = Array.isArray(board.entries) ? board.entries : [];
-  const ctx = ctxs.get(orgDrawer.src);
   const head = d.querySelector(".od-head b");
   if (head) head.textContent = g.name || "项目组";
   const body = d.querySelector(".od-body");
   if (!body) return;
-  // 编制（§2 动态项目组）：组内 worker 会话（点击跳会话详情）；Leader 兼管不入列
-  const members = ctx ? [...ctx.sessions.values()].filter((x) => x.project_gid === g.id) : [];
-  const sessHtml = members.length
-    ? members.map((m) => '<div class="od-sess" data-sid="' + escapeHtml(m.session_id) + '" data-src="' + escapeHtml(orgDrawer.src) + '">' +
-        '<span style="width:8px;height:8px;border-radius:50%;flex:none;background:var(--' + (m.status || "done").toLowerCase() + ')"></span>' +
-        '<span class="od-nm" title="' + escapeHtml(m.title || "") + '">' + escapeHtml(m.title || m.session_id.slice(0, 8)) + "</span>" +
-        '<span class="od-sst">' + escapeHtml(m.status || "") + "</span></div>").join("")
-    : '<div class="od-empty">编制为空（Leader 兼管）</div>';
+  // 熟手池（M3 §5 成员卡进化）：本项目经验 N 次 · 上次 · 在忙/空闲——路由表档案 join
+  // 运行态（服务端拼好）；可点跳会话详情（退休档案位不可点）。首单进行中的新会话
+  // 尚无路由记录，由任务板 doing 条目 + 会话列表承载，这里不重复陈列
+  const pool = Array.isArray(orgDrawer.data.pool) ? orgDrawer.data.pool : [];
+  const poolRow = (p) => {
+    const st = p.busy ? "在忙" : p.parked ? "随组挂起" : p.resumable ? "空闲" : "已退休（档案）";
+    const stCls = p.busy ? "od-pl-busy" : p.parked || !p.resumable ? "od-pl-dim" : "od-pl-free";
+    const last = p.last_ts ? new Date(p.last_ts).toLocaleDateString() : "—";
+    const nm = escapeHtml(p.title || String(p.session_id || "").slice(0, 8));
+    const tags = (p.tags || []).map((t) => '<span class="od-pl-tag">' + escapeHtml(t) + "</span>").join("");
+    const bad = p.rating === "bad" ? '<span class="od-pl-bad">差评·避开</span>' : "";
+    return '<div class="od-sess od-pl' + (p.resumable ? '" data-sid="' + escapeHtml(p.session_id) + '" data-src="' + escapeHtml(orgDrawer.src) : " od-pl-off") + '">' +
+      '<span class="od-nm" title="' + nm + '">' + nm + "</span>" + tags + bad +
+      '<span class="od-pl-cnt">' + Number(p.count || 0) + " 次</span>" +
+      '<span class="od-pl-last">上次 ' + last + "</span>" +
+      '<span class="' + stCls + '">' + st + "</span></div>";
+  };
+  const sessHtml = pool.length
+    ? pool.map(poolRow).join("")
+    : '<div class="od-empty">熟手池为空（首次派单后积累）</div>';
   // 任务板：轻立项单卡简化态平铺（v3.1 §4 渲染降级）；正经立项三栏 todo/doing/done
   const entHtml = (e) => '<div class="od-ent">' + escapeHtml(e.text || "") +
     (e.note ? '<div class="od-note">' + escapeHtml(e.note) + "</div>" : "") + "</div>";
@@ -4546,7 +4568,7 @@ function orgRenderDrawer() {
       '<span class="od-st">' + escapeHtml(g.tier || "") + "</span>" +
       (board.frozen ? '<span class="od-st">冻结</span>' : "") +
     "</div>" +
-    "<h5>编制（" + ((g.headcount || []).length + 1) + " 人，Leader 兼管）</h5>" + sessHtml +
+    "<h5>熟手池（" + pool.length + " 人 · 经验/上次/状态，Leader 兼管）</h5>" + sessHtml +
     "<h5>任务板</h5>" + boardHtml +
     "<h5>最近派单回执</h5>" + recsHtml;
 }
