@@ -58,10 +58,13 @@ if [ -f cc-plugins/plugins/cc-deck/scripts/relay.mjs ]; then
     head -8 "$SMOKE_LOG"
     FAIL=1
   fi
-  kill "$SMOKE_PID" 2>/dev/null
+  # 收尾三连全加 || true：进程被 TERM 杀死后 bash 随时 reap，随后 kill -9/wait 对
+  # 已消失 pid 返回非零，裸写会误触 set -e 把整个护栏静默 exit 1——实质检查全过
+  # 却报失败（2026-09-27 实跑抓到，两次跑分别挂在 wait 与 kill -9，纯竞态）
+  kill "$SMOKE_PID" 2>/dev/null || true
   sleep 0.3
-  kill -9 "$SMOKE_PID" 2>/dev/null
-  wait "$SMOKE_PID" 2>/dev/null
+  kill -9 "$SMOKE_PID" 2>/dev/null || true
+  wait "$SMOKE_PID" 2>/dev/null || true
   rm -rf "$SMOKE_DIR"
 fi
 
