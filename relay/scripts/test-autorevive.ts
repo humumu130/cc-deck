@@ -126,6 +126,62 @@ assert(rehy === 1 && mgr.snapshot().find((s) => s.session_id === "m-gp")?.org_pa
 assert(mgr.snapshot().find((s) => s.session_id === "m-parked")?.org_parked === "g-parked", "已有标记不重复处理");
 const n3 = mgr.autoReviveManaged();
 assert(n3 === 0, `rehydrate 后仍不拉起（豁免闭环）got=${n3}`);
+
+// #26 补章审查修正（A/B 双报）：退休成员（member-retire 编制除名，只剩路由档案）
+// 不自动拉起——retired 档清了 org_parked/project_gid，上面双保险全绕过，须按
+//「路由记录在册但不在该组编制」的除名痕迹独立判定；从甲组退休但仍是乙组现役的
+// 不拦（跨组正交：他组在办成员的待办值得续）。沿用同一 org 盘（挂起/结项组态
+// 保留，防换盘后旧成员守卫失据）
+const SID_RET = "autorevive-test-retired-cli";
+const SID_CUR = "autorevive-test-current-cli";
+const SID_X2 = "autorevive-test-xgroup-cli";
+putTodo(SID_RET, "1.json", { id: 1, subject: "退休时残留活", status: "in_progress" });
+putTodo(SID_CUR, "1.json", { id: 1, subject: "现役成员在跑活", status: "in_progress" });
+putTodo(SID_X2, "1.json", { id: 1, subject: "他组现役在跑活", status: "in_progress" });
+writeFileSync(
+  join(ORG, "projects.json"),
+  JSON.stringify({
+    groups: [{
+      id: "g-parked", name: "挂起组", anchor_dir: "/tmp/anchor-g", status: "parked", tier: "正经立项",
+      headcount: [{ session_id: "m-gp", role: "worker" }], single_card: false,
+      created_at: 1, updated_at: 1, parked_at: 1,
+    }, {
+      id: "g-archived", name: "结项组", anchor_dir: "/tmp/anchor-ar", status: "archived", tier: "正经立项",
+      headcount: [{ session_id: "m-ar", role: "worker" }], single_card: false,
+      created_at: 1, updated_at: 1, archived_at: 1,
+    }, {
+      id: "g-a", name: "甲组", anchor_dir: "/tmp/anchor-a", status: "active", tier: "正经立项",
+      headcount: [{ session_id: "m-cur", role: "worker" }], single_card: false, created_at: 1, updated_at: 1,
+    }, {
+      id: "g-b", name: "乙组", anchor_dir: "/tmp/anchor-b", status: "active", tier: "正经立项",
+      headcount: [{ session_id: "m-x2", role: "worker" }], single_card: false, created_at: 1, updated_at: 1,
+    }],
+    trust_light: false,
+  }),
+);
+writeFileSync(
+  join(ORG, "routing.json"),
+  JSON.stringify({
+    // m-ret 曾为甲组干活后被 member-retire 除名（有档案无编制=退休痕迹）；m-x2 对
+    // 甲组同形（从甲组退休）但仍是乙组现役
+    entries: [
+      { gid: "g-a", session_id: "m-ret", count: 2, failed: 0, last_ts: 1, tags: [] },
+      { gid: "g-a", session_id: "m-cur", count: 1, failed: 0, last_ts: 1, tags: [] },
+      { gid: "g-a", session_id: "m-x2", count: 1, failed: 0, last_ts: 1, tags: [] },
+      { gid: "g-b", session_id: "m-x2", count: 1, failed: 0, last_ts: 1, tags: [] },
+    ],
+  }),
+);
+mgr.adopt(new Map([
+  mk("m-ret", SID_RET, false, Date.now()),
+  mk("m-cur", SID_CUR, false, Date.now()),
+  mk("m-x2", SID_X2, false, Date.now()),
+]));
+const n4 = mgr.autoReviveManaged();
+assert(n4 === 2, `退休成员不拉起、现役/他组现役照常拉起 got=${n4}`);
+assert(mgr.snapshot().find((s) => s.session_id === "m-ret")?.status !== "WORKING", "退休成员保持 DONE（编制除名，档案留在路由表）");
+assert(mgr.snapshot().find((s) => s.session_id === "m-cur")?.status === "WORKING", "现役成员照常拉起（判定不过宽）");
+assert(mgr.snapshot().find((s) => s.session_id === "m-x2")?.status === "WORKING", "从甲组退休但乙组现役 → 照常拉起（跨组正交）");
 delete process.env.CCR_ORG_DIR;
 
 rmSync(join(TASKS, SID_BUSY), { recursive: true, force: true });
@@ -133,6 +189,9 @@ rmSync(join(TASKS, SID_IDLE), { recursive: true, force: true });
 rmSync(join(TASKS, SID_PARKED), { recursive: true, force: true });
 rmSync(join(TASKS, SID_GP), { recursive: true, force: true });
 rmSync(join(TASKS, SID_AR), { recursive: true, force: true });
+rmSync(join(TASKS, SID_RET), { recursive: true, force: true });
+rmSync(join(TASKS, SID_CUR), { recursive: true, force: true });
+rmSync(join(TASKS, SID_X2), { recursive: true, force: true });
 rmSync(ROOT, { recursive: true, force: true });
 console.log(`\nAUTOREVIVE TESTS: ${pass} pass / ${fail} fail`);
 process.exit(fail ? 1 : 0);

@@ -134,8 +134,10 @@ export function tagRouting(
   const s = load(dir);
   const e = s.entries.find((x) => x.gid === gid && x.session_id === sessionId);
   if (!e) return { ok: false, error: `无该熟手记录（gid=${gid} sid=${sessionId}）——标签跟着合作记录走` };
-  // 整组替换（§6.1 技能标签是快照不是流水）：去空去重，≤8 个防滥用
-  e.tags = [...new Set(tags.map((t) => t.trim()).filter(Boolean))].slice(0, 8);
+  // 整组替换（§6.1 技能标签是快照不是流水）：去空去重，≤8 个防滥用；统一小写
+  // 归一（审查修正：skills 查询侧已 lowercase，写侧不归一时任何自然书写标签
+  //（Rust/TypeScript）永不被命中——技能臂静默失效退化为纯熟练序）
+  e.tags = [...new Set(tags.map((t) => t.trim().toLowerCase()).filter(Boolean))].slice(0, 8);
   save(s, dir);
   return { ok: true, entry: e };
 }

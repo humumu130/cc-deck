@@ -695,6 +695,12 @@ export class SessionManager {
         const pg = findGroup(s.state.project_gid);
         if (pg && pg.status !== "active") continue;
       }
+      // #26 补章审查修正（A/B 双报）：退休成员（member-retire 编制除名）不得被
+      // auto-revive 起死回生——retired 档清了 org_parked/project_gid，上面两道
+      // 豁免全绕过，重启后残留待办会把已退休 worker 拉回去继续干活（编制门只挡
+      // 派单路由，不挡恢复）。退休痕迹=路由记录在册但不在该组编制（生产路径唯一
+      // 除名通道是 member-retire；结项组 headcount 快照保留，不构成痕迹）
+      if (this.isRetiredMember(s.state.session_id)) continue;
       // #189 resume 互斥：上一轮 resume 的 agent 还在路上（spawn→onInit 窗口），
       // 不重复拉起（双拉 → childPid 未就位补刀落空 → 双进程）
       if (s.resumePending && Date.now() - s.resumePending < resumePendingWindowMs()) continue;
@@ -2875,7 +2881,11 @@ export class SessionManager {
           if (g.status === "archived") return { ok: false, error: "结项组编制已解散（headcount 为快照档案），无成员可退" };
           if (!g.headcount.some((h) => h.session_id === sid)) return { ok: false, error: `成员不在「${g.name}」编制内（已退休只剩档案？复拉走 member-add）` };
           const s = this.sessions.get(sid);
-          if (!s || s.state.external) return { ok: false, error: "成员会话不在册（外部会话/已清理，档案留在路由表）" };
+          // 审查修正（A/C 双报）：会话卡被 evict/events 压缩后 headcount 残条不再
+          // 死锁除名——人不在场（无卡）也照除编制（无会话可停流收口，纯档案清扫，
+          // halted:false 语义与「他组在跑」一致）；外部会话不可入编（member-add
+          // 挡过），出现即数据异常，仍拒
+          if (s?.state.external) return { ok: false, error: "成员会话为外部会话（不可入编，数据异常）" };
           if (this.isLeaderSession(sid)) return { ok: false, error: "组织 Leader 不可退休（逻辑常驻，锚是权威）" };
           if ((this.openDispatches.get(sid)?.length ?? 0) > 0) {
             this.closeOpenDispatches(sid, "failed", reason ? truncate(`成员退休：${reason}`, 200) : "成员退休，回合中断", false, false, gid);
@@ -2883,8 +2893,9 @@ export class SessionManager {
           removeMember(gid, sid);
           this.emitOrgState();
           this.emitBoard(gid);
-          // 他组派单还在跑 → 只除名不停流（矩阵式正交：他组回合自然收口后空闲入池）
-          if ((this.openDispatches.get(sid)?.length ?? 0) > 0) return { ok: true, data: { retired: true, halted: false } };
+          // 无卡（已驱逐）→ 纯除名；他组派单还在跑 → 只除名不停流（矩阵式正交：
+          // 他组回合自然收口后空闲入池）
+          if (!s || (this.openDispatches.get(sid)?.length ?? 0) > 0) return { ok: true, data: { retired: true, halted: false } };
           this.retireSession(s, gid, "retired");
           return { ok: true, data: { retired: true, halted: true } };
         }
@@ -2959,7 +2970,11 @@ export class SessionManager {
           }
           break;
         case "tier-change":
-          if (gid) {
+          // 陈旧卡复核（#26 收尾加固审查修正，A/C 双报）：提案口挡 pending/archived，
+          // 决议口同款——出卡后组被结项/仍待立项，点头不得改档（防「审的是轻、落
+          // 地的是正」与归档终态快照被改写）。非在办态 → 跳过属陈旧卡正常语义
+          //（ok），不报失败（suggest-hold 同款范式）
+          if (gid && (findGroup(gid)?.status === "active" || findGroup(gid)?.status === "parked")) {
             const r = setGroupTier(gid, (c.payload.to_tier === "轻立项" ? "轻立项" : "正经立项"));
             if (!r.ok) return fail("档位迁移", r);
           }
@@ -3113,7 +3128,9 @@ export class SessionManager {
   private pickVeteran(gid: string, skills?: string[]): string | null {
     const wanted = (skills ?? []).map((t) => t.trim().toLowerCase()).filter(Boolean);
     if (wanted.length === 0) return this.pickVeteranEligible(gid, null);
-    const hit = this.pickVeteranEligible(gid, (tags) => wanted.some((w) => tags.includes(w)));
+    // 审查修正（三家同报）：标签比对双侧小写归一——写侧 tagRouting 已归一，读侧
+    // 再归一道防存量档案（归一前写入的大写标签）静默失配
+    const hit = this.pickVeteranEligible(gid, (tags) => wanted.some((w) => tags.some((t) => t.toLowerCase() === w)));
     return hit ?? this.pickVeteranEligible(gid, null);
   }
 
@@ -3206,18 +3223,22 @@ export class SessionManager {
   // 单会话收口（组挂起退休 / 结项解散 / 成员级退休共用）：parked = 留 org_parked
   // 标记随组休眠（板已冻结只读，卡片归组展示不变）；disbanded = 清归属；retired =
   // 成员级退休（#26 补章）——清本组归属但**编制门**接管后续调度（pickVeteran 不
-  // 再 resume，只剩路由表档案），且只清指向本组的 project_gid（跨组正交：他组
-  // 归属不误伤）。unacked 即弃（中断语义，防复活后看门狗恢复重放挂起前的旧指令）
+  // 再 resume，只剩路由表档案），且只清指向本组的 org_parked/project_gid（跨组
+  // 正交：他组标记与归属不误伤）。unacked 即弃（中断语义，防复活后看门狗恢复重放挂起前的旧指令）
   private retireSession(s: ManagedSession, gid: string, mode: "parked" | "disbanded" | "retired"): void {
     this.haltSessionStream(s);
     if (mode === "parked") {
       s.state.org_parked = gid;
     } else if (mode === "disbanded") {
-      s.state.org_parked = undefined;
+      // 审查修正（A）：org_parked 只清指向本组的——跨组正交，他组挂起标记不随
+      // 本组结项陪葬（重启由 rehydrateParkedMembers 按他组状态反推兜底）
+      if (s.state.org_parked === gid) s.state.org_parked = undefined;
       s.state.project_gid = undefined;
       s.state.dispatch_tier = undefined;
     } else {
-      s.state.org_parked = undefined;
+      // retired 同款（审查修正 A）：只清指向本组的标记/归属，他组挂起标记与归属
+      // 不陪葬（成员级退休是本组编制决策）
+      if (s.state.org_parked === gid) s.state.org_parked = undefined;
       if (s.state.project_gid === gid) {
         s.state.project_gid = undefined;
         s.state.dispatch_tier = undefined;
@@ -3266,6 +3287,23 @@ export class SessionManager {
       }
     }
     return n;
+  }
+
+  // #26 补章审查修正：退休成员判定（auto-revive 豁免用）——路由记录在册但不在
+  // 该组编制 = member-retire 除名痕迹（派单必同步入编，生产路径唯一除名通道是
+  // member-retire；结项组 headcount 快照保留不触发）。仍在任一在办组编制 = 现役
+  // 成员（跨组正交：他组在办成员不受本组退休牵连，待办值得续）。纯读 projects/
+  // routing 两本账——重启即可重建判定，无需内存标记（org_parked 式内存态过不了
+  // 重启这一关，这正是 retireSession 清标后必须有独立判定来源的原因）
+  private isRetiredMember(sid: string): boolean {
+    const groups = listGroups();
+    if (groups.some((g) => g.status === "active" && g.headcount.some((h) => h.session_id === sid))) return false;
+    return groups.some(
+      (g) =>
+        g.status !== "archived" &&
+        !g.headcount.some((h) => h.session_id === sid) &&
+        routingFor(g.id).some((e) => e.session_id === sid),
+    );
   }
 
   // ---------- #26 M3 挂起自动化（§5 两周无活动 → 主动建议暂缓） ----------
@@ -3587,7 +3625,6 @@ export class SessionManager {
       if (agent && !agent.ended) {
         await agent.stop().catch(() => {});
       }
-      s.wd.recoveries.push(Date.now());
       // #26 M3 审查修正：恢复流程是长异步（杀树数秒），窗口内会话可能已被组挂起/
       // 结项收口（retireSession 置 agent=null 退休休眠）——此刻不得起死回生（挂起=
       // 停流释放），放弃本次恢复
@@ -3596,6 +3633,9 @@ export class SessionManager {
         s.wd.phase = "idle";
         return;
       }
+      // 收尾加固审查修正（B）：防风暴额度只记真实干预——放弃=零干预零额度（push
+      // 原在放弃守卫之前，两次 park-放弃会烧掉第三次真僵死的自愈机会）
+      s.wd.recoveries.push(Date.now());
       const pending = s.unacked;
       s.unacked = [];
       const sdkId = s.state.relay_session_id;

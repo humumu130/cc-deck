@@ -587,7 +587,8 @@ export function startServer(
     // POST /api/org?token=...  body { action, ...payload }，action 全集见
     // session-manager.orgAction（status/project-create/project-status/project-tier/
     // suggest-hold/dispatch/board/project-detail；M3 追加 rate/tag——路由表评鉴，
-    // Leader 手动记 good/bad 与技能标签）。鉴权循 deliver 先例（主 token）。
+    // Leader 手动记 good/bad 与技能标签；#26 补章追加 member-retire/member-add——
+    // 编制面执行动作）。鉴权循 deliver 先例（主 token）。
     // 用户端决议不经此（走 WS COMMAND_ORG_CONFIRM）——Leader 只提案不决议。
     // M1/M2 审查轮：白名单强制上述口径——confirm-decide 属人类决议面，HTTP 放行
     // 等于允许读过 token 的进程（含 Leader/被注入的 worker）自批确认卡，绕过

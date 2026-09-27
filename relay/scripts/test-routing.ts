@@ -65,6 +65,10 @@ const rMiss = rateRouting("g1", "sess-NONE", "good", dir);
 assert(!rMiss.ok, "无合作记录不可评（评价跟着记录走）");
 const tg = tagRouting("g1", "sess-A", ["rust", " rust ", "", "cli", "rust"], dir);
 assert(tg.ok && tg.entry.tags.join(",") === "rust,cli", "tag 去空去重整组替换");
+// 审查修正（#26 补章三家同报）：写侧小写归一——skills 查询侧已 lowercase，写侧
+// 不归一时自然书写标签（Rust/TypeScript）永不被命中，技能臂静默失效
+const tgCase = tagRouting("g1", "sess-A", ["  Rust ", "TypeScript"], dir);
+assert(tgCase.ok && tgCase.entry.tags.join(",") === "rust,typescript", "tag 小写归一（与 skills 查询侧对偶）");
 const tMiss = tagRouting("g1", "sess-NONE", ["x"], dir);
 assert(!tMiss.ok, "无记录不可打标");
 const many = tagRouting("g1", "sess-A", "a b c d e f g h i j".split(" "), dir);

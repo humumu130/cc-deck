@@ -590,6 +590,19 @@ async function main() {
     mgr.orgAction("confirm-decide", { confirm_id: tEt.data?.confirm?.id ?? "", approve: true, by: "u" });
     assert(listGroups().find((g) => g.id === gidEta)?.tier === "轻立项" && listGroups().find((g) => g.id === gidEta)?.status === "parked", "挂起组改档落地（状态不动）");
 
+    // a2) tier 陈旧卡（审查修正 A/C）：出卡后组结项 → 批旧卡不动档位——决议口与
+    //     提案口同款守卫（提案口挡了直达，决议口漏挡则旁路：归档终态快照被改写）
+    const cSt = mgr.orgAction("project-create", { name: "stale", anchor: join(DATA, "proj-st"), tier: "轻立项" });
+    const gidSt = listGroups().find((g) => g.name === "stale")?.id ?? "";
+    assert(cSt.ok === true && !!gidSt, "stale 立项（前置）");
+    const tSt = mgr.orgAction("project-tier", { id: gidSt, to: "正经立项", reason: "出卡后就结项" }) as { ok: boolean; data?: { confirm?: { id: string } } };
+    assert(tSt.ok === true && !!tSt.data?.confirm, "stale 升级卡在决（前置）");
+    const arSt = mgr.orgAction("project-status", { id: gidSt, to: "archived" });
+    assert(arSt.ok === true, "卡待决期间组结项（前置：零悬账一句话归档）");
+    const apSt = mgr.orgAction("confirm-decide", { confirm_id: tSt.data?.confirm?.id ?? "", approve: true, by: "u" });
+    assert(apSt.ok === true, "陈旧卡点头决议本身成功");
+    assert(listGroups().find((g) => g.id === gidSt)?.tier === "轻立项", "陈旧卡复核：结项组档位不动（决议口守卫）");
+
     // b) recover_abandon：杀树等待窗口内组被挂起收口 → 看门狗放弃恢复（不起死回生）
     mgr.orgAction("project-status", { id: gidD, to: "archived" }); // 腾名额（delta/oldwork 已无悬账未完）
     mgr.orgAction("project-status", { id: gidO2, to: "archived" });
@@ -615,6 +628,10 @@ async function main() {
     assert(wdActions.some((x) => x.sid === wRc && x.action === "recover_abandon"), "看门狗发出 recover_abandon（放弃恢复事件面）");
     assert(hack.sessions.get(wRc)?.state.org_parked === gidRc && hack.sessions.get(wRc)?.agent === null, "放弃恢复：会话保持挂起休眠（不复活不换流）");
     assert(created.length === createdBefore, "放弃恢复零 spawn（不起死回生）");
+    // 审查修正（B）：防风暴额度只记真实干预——放弃=零干预零额度（push 原在放弃
+    // 守卫之前，两次 park-放弃会烧掉第三次真僵死的自愈机会）
+    const wdRc = (hack.sessions.get(wRc) as unknown as { wd: { recoveries: unknown[] } }).wd;
+    assert(wdRc.recoveries.length === 0, "放弃恢复不烧自愈额度（recoveries 只记真实干预）");
     stopNoop = false;
 
     // ---------- D13 补章（skills 定向调度 + 成员级退休/复拉） ----------
@@ -660,7 +677,6 @@ async function main() {
     assert(hack.sessions.get(wT1)?.state.project_gid === undefined, "本组归属清除");
     assert((routingFor(gidTa).find((x) => x.session_id === wT1)?.count ?? -1) === 4, "路由档案保留（count 不动）");
     const ta5 = mgr.orgAction("dispatch", { anchor: taAnchor, prompt: "tau 五单", gid: gidTa }) as { ok: boolean; session_id?: string };
-    const ta5Spawn = created[created.length - 1]; // ta5 的 resume 流（派给 W2）——d) 段收 phi 悬账用它
     assert(ta5.ok === true && ta5.session_id === wT2, "编制门生效：退休熟手不被 resume（只剩档案），落 W2");
     assert(await waitFor(() => (routingFor(gidTa).find((x) => x.session_id === wT2)?.count ?? 0) === 3), "W2 收口（前置）");
     const rtBad1 = mgr.orgAction("member-retire", { gid: gidTh, sid: wT2 }) as { ok: boolean; error?: string };
@@ -675,6 +691,27 @@ async function main() {
     assert(ta6.ok === true && ta6.session_id === wT1, "复拉后编制门放行（原熟手回归 resume）");
     assert(await waitFor(() => (routingFor(gidTa).find((x) => x.session_id === wT1)?.count ?? 0) === 5), "W1 回归收口");
 
+    // c2) 大小写对偶（审查修正，三家同报）：自然书写标签（Rust）× 派单 skills（rust）
+    //     命中——写侧 tagRouting 归一落库，读侧防御存量档案
+    assert(mgr.orgAction("tag", { gid: gidTa, sid: wT2, tags: ["Rust"] }).ok === true, "大写标签写入（前置）");
+    assert((routingFor(gidTa).find((x) => x.session_id === wT2)?.tags ?? []).join(",") === "rust", "写侧归一：标签落库小写");
+    const ta7 = mgr.orgAction("dispatch", { anchor: taAnchor, prompt: "tau 七单（要 Rust）", gid: gidTa, skills: ["rust"] }) as { ok: boolean; session_id?: string };
+    const wT2cb = created[created.length - 1].cb; // ta7 的 resume 流（W2 当前流）——d) 段收 phi 悬账用它
+    assert(ta7.ok === true && ta7.session_id === wT2, "大小写对偶命中（Rust 标签 × rust 查询，越过 W1 熟练序）");
+    assert(await waitFor(() => (routingFor(gidTa).find((x) => x.session_id === wT2)?.count ?? 0) === 4), "七单收口（前置）");
+
+    // c3) 他组挂起标记不陪葬（审查修正 A4）：retired 只清指向本组的 org_parked
+    hack.sessions.get(wT1)!.state.org_parked = "g-elsewhere"; // 模拟他组（别处）挂起标记
+    const rt3 = mgr.orgAction("member-retire", { gid: gidTa, sid: wT1, reason: "再退验他组标记" }) as { ok: boolean; data?: { halted?: boolean } };
+    assert(rt3.ok === true && rt3.data?.halted === true, "W1 二次退休（前置：FIFO 空停流）");
+    assert(hack.sessions.get(wT1)?.state.org_parked === "g-elsewhere", "他组挂起标记保留（成员级退休不陪葬他组状态）");
+
+    // c4) 无卡成员除名（审查修正 A5/C4）：会话卡被 evict/压缩后编制残条不再死锁
+    addMember(gidTa, "ghost-sid", "worker");
+    const rtG = mgr.orgAction("member-retire", { gid: gidTa, sid: "ghost-sid" }) as { ok: boolean; data?: { halted?: boolean } };
+    assert(rtG.ok === true && rtG.data?.halted === false, "无卡成员照常除名（halted:false 纯档案清扫）");
+    assert(!(listGroups().find((g) => g.id === gidTa)?.headcount ?? []).some((h) => h.session_id === "ghost-sid"), "幽灵编制条目已清");
+
     // d) 跨组正交：W2 为 phi 组在跑 → tau 侧 member-retire 只除名不杀流
     const cPh = mgr.orgAction("project-create", { name: "phi", anchor: join(DATA, "proj-ph"), tier: "轻立项" });
     const gidPh = listGroups().find((g) => g.name === "phi")?.id ?? "";
@@ -686,7 +723,7 @@ async function main() {
     assert(rt2.ok === true && rt2.data?.halted === false, "他组在跑 → 只除名不停流（halted:false）");
     assert(readDispatchLog().every((x) => x.id !== "dsp-ph-x"), "他组悬账不陪葬（phi 的单没被 tau 侧退休收口）");
     assert(hack.sessions.get(wT2)?.state.status === "WORKING", "会话仍在干活（未休眠）");
-    ta5Spawn.cb.onTurnEnd(true, "phi 干完", 8); // wT2 自己的流回调（cbFor 此刻会命中 ta6 的 wT1 流，不能用）
+    wT2cb.onTurnEnd(true, "phi 干完", 8); // wT2 自己的流回调（ta7 的 resume 流；cbFor 此刻会命中 wT1 流，不能用）
     assert(readDispatchLog().some((x) => x.id === "dsp-ph-x" && x.status === "done" && x.receipt === "phi 干完"), "他组回合自然收口（写实回执）");
     assert((routingFor(gidPh).find((x) => x.session_id === wT2)?.count ?? 0) === 1, "phi 路由入账（跨组正交面）");
     assert(!hack.openDispatches.has(wT2), "FIFO 清空");
