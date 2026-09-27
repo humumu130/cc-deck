@@ -2769,6 +2769,12 @@ export class Bridge {
   private runVerify(sessionId: string, text: string, round: number): void {
     const st = this.mgr.getExternal(sessionId);
     if (!st?.cli_pid) return;
+    // #211 上限闸：真补发已满 3 次（tries≥3）即收手，不再快照/补发/重挂验证轮——
+    // 原实现主动验证链不查计数，慢机上验证轮与看门狗竞争交错时会在第 3 发之后再
+    // 叠发（CI "caps at 3" 断言 got 4 连续复现；本地快机验证链先跑完故恒绿）。
+    // skips 型放弃（框净幻影，tries=0）不经此闸，新滞留消息仍享快验；晋升/交付/
+    // Stop 的 resetStuckWatch 删表后闸自然放行，③段「重置后走快路径」语义不变。
+    if ((this.stuckWatch.get(sessionId)?.tries ?? 0) >= 3) return;
     // 已晋升（UserPromptSubmit 已到）：不是滞留，收工
     if (!(st.pending_inputs ?? []).some((p) => normKey(pBody(p)) === normKey(text))) return;
     // 与看门狗同款前置：状态不适合补回车 / 正有 flush 或守门在跑 → 交回看门狗兜底
@@ -2880,13 +2886,18 @@ export class Bridge {
   // 真正补发回车（守门通过 / 守门关闭才走到这里——#180 起快照不可用不再 fail-open 盲发）
   private fireStuckEnter(id: string, pid: number, msg?: string): void {
     const w = this.stuckWatch.get(id);
+    // #211 上限闸（收口点）：真补发满 3 次后无论来源（看门狗 sweep / #111 主动验证轮）
+    // 都不得再发——验证链的守门在途期间看门狗第 3 发先行落地置位时，仍在飞的验证轮
+    // 曾在这里叠出第 4 发。与 runVerify 入口闸双保险：本闸覆盖「guard 在途时上限到达」
+    // 的窄窗竞争。tries≥3 只封真回车计数；skips 型放弃（框净幻影，tries=0）不经此闸。
+    if ((w?.tries ?? 0) >= 3) return;
     const tries = (w?.tries ?? 0) + 1;
     this.stuckWatch.set(id, { lastTry: Date.now(), tries, skips: w?.skips ?? 0, blind: 0, given_up: tries >= 3 });
-    // 「暂停自动补发」只在 tries===3 跃迁时打一次：#111 主动验证不查 given_up 门槛，
-    // 后续消息仍会触发本函数（行为有界无害），反复打同款日志会与现实矛盾
+    // 「暂停自动补发」只在 tries===3 跃迁时打一次：入口闸保证 tries 封顶 3、后续不再
+    // 发，日志承诺与实际行为一致（原实现验证轮仍会静默叠发，与之矛盾）
     if (tries === 3) {
       this.mgr.pushExternalLog(id, "system", "排队消息疑似滞留输入框，已补发 3 次回车仍滞留，暂停自动补发（下次发送消息时会一并提交）");
-    } else if (tries < 3) {
+    } else {
       this.mgr.pushExternalLog(id, "system", msg ?? "排队消息疑似滞留输入框，已补发回车");
     }
     void injectEnter(pid).then((r) => {
