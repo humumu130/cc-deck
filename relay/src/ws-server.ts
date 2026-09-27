@@ -157,6 +157,9 @@ const COMMAND_TYPES = new Set([
   "COMMAND_RESUME_SESSION",
   "COMMAND_IMPORT_PUSH",
   "COMMAND_ARTIFACT_FETCH",
+  // #212 允许并记住：设置页规则删除（漏加时 ws 入口白名单拒发 "invalid command
+  // shape"，手机端删除必失败——mgr 的 case 与单测都过，唯独 ws 层挡死，实机首验抓到）
+  "COMMAND_ALLOW_RULE_REMOVE",
 ]);
 
 const HEARTBEAT_MS = 30_000;
@@ -319,6 +322,7 @@ export function startServer(
   const bridge = new Bridge(bus, mgr, {
     gateTools: parseGateTools(opts.gateToolsRaw ?? process.env.CCR_GATE_TOOLS),
     dataDir: cfg.dataDir,
+    rules: mgr.allowRules, // #212 允许并记住：与 AgentSession 同一份规则存储
     // #316 审查修复：待配对手表连接未鉴权，不计入"手机在线"——否则配对连接会让
     // 提问/权限门控误判有手机在场，挂起等一个不存在的审批方
     hasClients: () =>
@@ -803,6 +807,9 @@ export function startServer(
           deliverables: readPluginConfig().deliverables,
           // #137 三步方案②：验收单待填态汇总（云通道 cloud-client 同步携带）
           acceptances: listAcceptances(),
+          // #212 允许并记住：已记规则全量（设置页「记住的规则」列表数据源；
+          // 空数组也下发——端上以字段存在性判断能力，与 deliverables 同口径）
+          allow_rules: mgr.allowRules.list(),
           // 云桥启用的 relay 附带自身设备 id（= CloudConfig.relayDev 同源值）：
           // 客户端据此密码学匹配"LAN 直连条目"与"云桥条目"是同一台 relay，自动合并。
           // wan_dev（F7）：手表 /wan 透传通道的凭据 dev，手机侧写进手表连接配置

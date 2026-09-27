@@ -3,7 +3,7 @@ import { AppState, Platform } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import Constants from "expo-constants";
 import { getRandomBytes } from "expo-crypto";
-import type { CloudPairInfo, CommandAck, Envelope, LogEntry, SessionState } from "./protocol";
+import type { AllowRule, CloudPairInfo, CommandAck, Envelope, LogEntry, SessionState } from "./protocol";
 import { uuid } from "./fmt";
 import { currentVersion } from "./updates";
 import { devId, generateKeyPair, seal, unseal, setRandomBytes, type BoxKeyPair, type SealedBox } from "./e2e";
@@ -84,6 +84,9 @@ export interface SourceConn {
   platform: string;    // SNAPSHOT.platform（relay 本机平台，旧 relay 无字段 = ""）
   deliverables: boolean; // #71 该源 SNAPSHOT.deliverables（输出物看板开关，旧 relay 无字段 = false）
   acceptances: AcceptanceSummary[]; // #137 该源 SNAPSHOT.acceptances（待填验收单，旧 relay 无字段 = 空表）
+  // #212 记住规则（SNAPSHOT.allow_rules / ALLOW_RULES_UPDATED，覆盖式）：null = 旧
+  // relay 不支持（无字段），设置抽屉据此显示「升级后可用」；删除按源路由
+  allowRules: AllowRule[] | null;
   sessions: Map<string, SessionState>;
   timelines: Map<string, LogEntry[]>;
   reconnectDelay: number;
@@ -171,6 +174,10 @@ export interface SourceStatus {
   // 汇总，!done 的单显示；lanHint 供构造表单 LAN 链接（无则回落云通道链接）
   acceptances?: AcceptanceSummary[];
   lanHint?: string;
+  // #212 记住规则（conn.allowRules 透出）：null = 旧 relay 不支持（设置抽屉显示
+  // 「升级后可用」）；[]/数组 = 已收到。非 SESSION_LOG 帧统一走 connStatusPatch
+  // 发布，ALLOW_RULES_UPDATED 到达即重渲（同 acceptances 口径）
+  allowRules?: AllowRule[] | null;
 }
 
 export interface Snapshot {
@@ -485,6 +492,7 @@ class RelayStore {
       deliverables: c.deliverables, // #146 per-源 输出物开关（详情页按会话源取数）
       acceptances: c.acceptances, // #137 待填验收单（列表 badge 跨源汇总）
       lanHint: c.lanHint || undefined, // #137 表单 LAN 链接构造（同网时用）
+      allowRules: c.allowRules, // #212 记住规则（设置抽屉列表 + 按源路由删除）
     }));
     // #388 模型清单取活动源口径（模型切换命令无 sid 路由也走活动源）
     const activeModels = this.activeConn()?.models ?? [];
@@ -825,6 +833,7 @@ class RelayStore {
         platform: "",
         deliverables: false,
         acceptances: [], // #137 SNAPSHOT 覆盖式更新（收到快照前为空）
+        allowRules: null, // #212 SNAPSHOT 覆盖式更新（null = 旧 relay 无 allow_rules 字段）
         sessions: new Map(),
         timelines: new Map(),
         reconnectDelay: RECONNECT_BASE_MS,
@@ -2109,6 +2118,11 @@ class RelayStore {
         conn.acceptances = Array.isArray(accs)
           ? accs.filter((a): a is AcceptanceSummary => !!a && typeof (a as AcceptanceSummary).id === "string" && !!(a as AcceptanceSummary).id)
           : [];
+        // #212 记住规则随快照携带（覆盖式；旧 relay 无字段 = null，UI 显示「升级后可用」）
+        const rules = (msg.payload as { allow_rules?: unknown }).allow_rules;
+        conn.allowRules = Array.isArray(rules)
+          ? rules.filter((r): r is AllowRule => !!r && typeof (r as AllowRule).id === "string" && typeof (r as AllowRule).tool === "string")
+          : null;
         for (const old of conn.sessions.keys()) {
           if (this.sidIndex.get(old) === conn) this.sidIndex.delete(old);
         }
@@ -2342,6 +2356,15 @@ class RelayStore {
         } // 畸形帧不动既有清单（relay 侧必发合法数组，防御而已）
         break;
       }
+      // #212 记住规则变更推送（瞬态 seq:0）：删规则后 relay 全量重发——覆盖式更新，
+      // 设置抽屉列表实时收敛。旧 relay 无此事件 = 收不到帧，重连 SNAPSHOT 兜底
+      case "ALLOW_RULES_UPDATED": {
+        const rules = (msg.payload as { rules?: unknown }).rules;
+        if (Array.isArray(rules)) {
+          conn.allowRules = rules.filter((r): r is AllowRule => !!r && typeof (r as AllowRule).id === "string" && typeof (r as AllowRule).tool === "string");
+        }
+        break;
+      }
       // #79 输出物拉取数据帧（瞬态 seq:0）：ref = 本端预生成的 command_id。其他设备
       // 同拉时全播帧也会到本端——查无此 ref 直接忽略（单用户多端语义可接受）。
       // relay 先发数据帧+done 尾帧、ACK 最后到（execCommand 同步 emit 后才回执），
@@ -2498,6 +2521,18 @@ class RelayStore {
       ...(c ? { cloudUrl: c.url, cloudToken: c.token, relayDev: c.relayDev } : {}),
       ...(conn.wanDev ? { wanDev: conn.wanDev } : {}),
     };
+  }
+
+  // #212 删除规则的本地即时收敛：COMMAND_ALLOW_RULE_REMOVE ack 成功后调用，
+  // 先把该源 conn.allowRules 里的条目滤掉再发快照（UI 秒收，不等
+  // ALLOW_RULES_UPDATED 推送——事件随后到达再全量替换一次，幂等不冲突）
+  dropAllowRuleLocal(sourceId: string, ruleId: string): void {
+    const conn = this.conns.get(sourceId);
+    if (!conn || !Array.isArray(conn.allowRules)) return;
+    const next = conn.allowRules.filter((r) => r.id !== ruleId);
+    if (next.length === conn.allowRules.length) return;
+    conn.allowRules = next;
+    this.emit({});
   }
 
   // 命令路由（#294 批1/批3）：按 payload.session_id 经 sidIndex 定位源（sid 为 uuid

@@ -3,6 +3,7 @@
 
 import type { UploadBlob } from "./uploads.js";
 import type { AcceptanceSummary } from "./acceptance.js";
+import type { AllowRule } from "./allow-rules.js";
 
 // ---------- 事件信封 ----------
 
@@ -227,6 +228,10 @@ export interface WaitingPayload {
   suggestions: string[];
   questions?: AskQuestion[]; // AskUserQuestion 结构化问题（存在时客户端渲染选项点选作答）
   decidable?: boolean;   // false = 仅通知（外部会话 CLI 本地在等，远程无法决定）；默认 true
+  // #212 允许并记住：存在 = 该请求可记忆（非危险形态），客户端展示「记住」入口；
+  // pattern/label 由 relay 侧 suggestPattern 算好，端上零解析成本。作答走
+  // COMMAND_CONTINUE + remember_scope，由 relay 落规则（allow-rules.ts）
+  remember?: { pattern: string; label: string };
 }
 
 // AskUserQuestion 工具的问题结构（SDK input.questions 防御性清洗后）
@@ -272,6 +277,9 @@ export interface SnapshotPayload {
   // relay 本机平台（process.platform，#8）：手机端新建会话表单自适应路径文案与
   // 盘符拦截依据（0.5.3 起客户端已在读，此前 relay 漏组装恒空串）
   platform?: string;
+  // #212 允许并记住：已记规则全量（设置页「记住的规则」列表数据源；随快照而非
+  // HTTP API 下发——云桥手机无 HTTP 直连通道，WS 快照三端通吃）
+  allow_rules?: AllowRule[];
 }
 
 // 时间线条目（M1 调试台用；压缩/截断后的一行文本，不推原始日志流）
@@ -300,6 +308,7 @@ export type EventType =
   | "PAIRED_DEVICE"
   | "USER_NOTE"
   | "ACCEPTANCES_UPDATED"
+  | "ALLOW_RULES_UPDATED"
   | "WATCHDOG"
   | "ARTIFACT_CHUNK";
 
@@ -322,6 +331,9 @@ export type EventPayloadMap = {
   // #184 验收单状态推送（瞬态：seq:0 不落 ndjson；LAN 直播 + 云桥 onEnv 转发）——
   // payload.acceptances 与 SNAPSHOT.acceptances 同源同构（listAcceptances() 全量）
   ACCEPTANCES_UPDATED: AcceptancesUpdatedPayload;
+  // #212 记住规则变更推送（瞬态，同上语义）：删规则后广播最新全量，在线端设置页
+  // 实时收敛；离线端由 SNAPSHOT.allow_rules 兜底
+  ALLOW_RULES_UPDATED: AllowRulesUpdatedPayload;
   // #7 SDK 会话流看门狗观测（落 events.ndjson 供复盘误杀率；客户端不消费，
   // 未知事件类型各端 switch 自然跳过）
   WATCHDOG: WatchdogPayload;
@@ -404,6 +416,11 @@ export interface AcceptancesUpdatedPayload {
   acceptances: AcceptanceSummary[]; // 与 SNAPSHOT.acceptances 同源（listAcceptances()）
 }
 
+// #212 记住规则变更（删规则后广播）：与 SNAPSHOT.allow_rules 同源（store.list() 全量）
+export interface AllowRulesUpdatedPayload {
+  rules: AllowRule[];
+}
+
 // #42 设备身份元数据：pair_req 帧的可选自报字段，配对方各端按自身形态填——
 // 浏览器报 UA 截断摘要+平台（"Chrome·Windows" 式），App 报 OS+型号+版本
 //（"android·Pixel 8 · CC Deck 0.3.35" 式）。桥不解析透传；relay 只做长度校验
@@ -464,6 +481,7 @@ export type CommandType =
   | "COMMAND_PIN_SESSION"
   | "COMMAND_RESUME_SESSION"
   | "COMMAND_IMPORT_PUSH"
+  | "COMMAND_ALLOW_RULE_REMOVE"
   | "COMMAND_ARTIFACT_FETCH";
 
 export interface CommandBase {
@@ -494,7 +512,9 @@ export interface StopCommand extends CommandBase {
 
 export interface ContinueCommand extends CommandBase {
   type: "COMMAND_CONTINUE";
-  payload: { session_id: string; request_id: string };
+  // #212 remember_scope：allow 本次的同时落「允许并记住」规则（本会话/所有会话）。
+  // 可记忆性以当时下发的 WaitingPayload.remember 为准（危险形态 relay 不落规则）
+  payload: { session_id: string; request_id: string; remember_scope?: "session" | "global" };
 }
 
 export interface RejectCommand extends CommandBase {
@@ -602,6 +622,13 @@ export interface ArtifactFetchCommand extends CommandBase {
   payload: { session_id: string; path: string };
 }
 
+// #212 删除「允许并记住」规则（设置页「记住的规则」列表）。成功后 relay 广播
+// ALLOW_RULES_UPDATED 全量，各端列表收敛；幂等（删不存在的 id 回 ok:false）
+export interface AllowRuleRemoveCommand extends CommandBase {
+  type: "COMMAND_ALLOW_RULE_REMOVE";
+  payload: { id: string };
+}
+
 export type Command =
   | CreateCommand
   | MessageCommand
@@ -629,6 +656,7 @@ export type Command =
   | PinSessionCommand
   | ResumeSessionCommand
   | ImportPushCommand
+  | AllowRuleRemoveCommand
   | ArtifactFetchCommand;
 
 // 托管会话权限模式切换（default=每次确认 / acceptEdits=自动接受编辑 / plan=只读规划 /
