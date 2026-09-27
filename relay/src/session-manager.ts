@@ -450,10 +450,30 @@ function resumePendingWindowMs(): number {
   const v = Number(process.env.CCR_RESUME_PENDING_MS);
   return Number.isFinite(v) && v >= 5_000 ? v : 45_000;
 }
-// 冲刺 F-07：resumeAgent 的 init 看门狗时长（测试可缩短；与互斥窗同缺省 45s）
+// 冲刺 F-07：resumeAgent 的 init 看门狗时长（测试可缩短；与互斥窗同缺省 45s）。
+// env 耦合提醒（审查备案）：若把本值调得比 #7 停摆阈值（CCR_WATCHDOG_STALL_MS，
+// 合法下限 5s）还大，停摆看门狗会先于 init 看门狗接管烧自愈额度——缺省 45/600s
+// 安全，调参时保持 init 窗 ≤ 停摆阈值为宜
 function resumeInitTimeoutMs(): number {
   const v = Number(process.env.CCR_RESUME_INIT_MS);
   return Number.isFinite(v) && v >= 100 ? v : 45_000;
+}
+// 冲刺审查加固（F-07b）：CLI transcript 里是否已有 assistant 消息——「会话有无
+// 记忆」的权威事实。内存 logs 有 500 条滚动窗、重启回放只留 300 条尾巴，长会话
+// 早前回合的 assistant_text 可能已被裁掉；zai 桥文本又归类 tool 日志——只看 logs
+// 会把有记忆会话误判成首回合，fresh 回退静默抹上下文。transcript 文件由 CLI 维护
+// 不裁剪，resume 挂死超时是罕见路径，整读可接受。失败安全：任何异常按「无记忆」
+// 处理（与旧口径一致，不阻断 fresh 自愈）
+function transcriptHasAssistant(cwd: string, sdkId: string): boolean {
+  try {
+    // 目录名约定同 Claude Code：cwd 实路径的非字母数字全替换为 '-'（/tmp 在 macOS
+    // 解析为 /private/tmp，realpath 对齐）
+    const slug = realpathSync(cwd).replace(/[^a-zA-Z0-9]/g, "-");
+    const p = join(homedir(), ".claude", "projects", slug, `${sdkId}.jsonl`);
+    return readFileSync(p, "utf-8").includes('"type":"assistant"');
+  } catch {
+    return false;
+  }
 }
 function watchdogDisabled(): boolean {
   return process.env.CCR_WATCHDOG_DISABLE === "1";
@@ -2207,11 +2227,19 @@ export class SessionManager {
           // #26 派单台账收口（M2 泛化全会话）：一回合一单，FIFO 收最旧（多消息排队时
           // 按序逐回合收）；Leader 咨询档与 worker 派单同机制，FIFO 空 = no-op。
           // recovering 让位漏掉的收口由恢复流的下个 onTurnEnd 补上
+          // 审查修正（中断口径统一）：interrupted（用户手动停止）≠ 交付——不拼
+          // 「结果：」行（串台防护：本回合零产出时倒序会捞到上一回合的结果行，
+          // 失败回执拼上前次交付内容会误导结项核对）、不写熟手账、板退 todo，
+          // 与断档补记/挂起/兜底/多消息重放四路径同口径——半成品计入 done 列会
+          // 绕过结项知情
+          const delivered = ok && reason !== "interrupted";
           this.closeOpenDispatches(managed.state.session_id, ok ? "done" : "failed",
-            this.receiptWithResultLine(managed.state.session_id, reason), false,
-            // #26 M3 审查修正：interrupted（用户手动停止，agent-adapter 停止路径固定此
-            // reason）≠ 交付——同「中断不写熟手账」口径，不抬 count（板联动照旧走 done）
-            !(ok && reason === "interrupted"));
+            delivered ? this.receiptWithResultLine(managed.state.session_id, reason) : reason, false,
+            // 路由表记账恢复原判：failed 回合照记（干砸也是 worker 的账，failed 计数
+            // 是避开调度的信号）；仅「成功被用户中断」不记——中断≠交付
+            !(ok && reason === "interrupted"),
+            undefined,
+            delivered ? undefined : "todo");
           managed.state.updated_at = Date.now();
           managed.state.duration_ms = durationMs;
           // 回合收口同时清残留审批数据（打断等待中的请求等场景）：status 与
@@ -2290,13 +2318,24 @@ export class SessionManager {
     const resumeStart = Date.now();
     let inited = false;
     let initTimer: ReturnType<typeof setTimeout> | null = null;
+    const clearInitTimer = () => {
+      if (initTimer) { clearTimeout(initTimer); initTimer = null; }
+    };
     const baseCb = this.agentCallbacks(s);
     const cb: AgentCallbacks = {
       ...baseCb,
       onInit: (id2, model, pm) => {
         inited = true;
-        if (initTimer) clearTimeout(initTimer);
+        clearInitTimer();
         baseCb.onInit(id2, model, pm);
+      },
+      // 审查修正（P1「停了又复活」）：流关闭（用户 STOP / 进程退出）= 本次 resume
+      // 已终局——timer 不撤销的话 45s 后照样开火：首回合分支 fresh spawn 重放用户
+      // 刚停掉的消息（卡面从 DONE 又活了），有记忆分支把 stop 收口的终态覆写成
+      // ERROR。onSessionEnd 与 onInit 双通道都清
+      onSessionEnd: (reason) => {
+        clearInitTimer();
+        baseCb.onSessionEnd(reason);
       },
     };
     const agent = this.newAgent(
@@ -2329,31 +2368,57 @@ export class SessionManager {
     s.unacked.push({ text: firstMessage, images, ts: Date.now() });
     initTimer = setTimeout(() => {
       initTimer = null;
-      if (inited || s.agent !== agent) return; // 已 init / 流已换（stale timer）不动作
+      // 已 init / 流已换（stale timer）/ 流已被 STOP 或自然关闭 / 会话卡已被删
+      //（deleteSession 不停 agent——不为已删会话幽灵拉活）——一律不动作
+      if (inited || s.agent !== agent || agent.ended || this.sessions.get(s.state.session_id) !== s) return;
+      // 接管口径补刀：挂死 CLI 常不响应 interrupt，stop() 后进程仍活（ended≠进程死）
+      // ——先杀树再 stop 兜底，防 fresh 拉起后新旧双进程并存
+      if (agent.childPid) void this.watchdogProcs.killTree(agent.childPid).catch(() => {});
       void agent.stop().catch(() => {});
-      if (!s.logs.some((e) => e.kind === "assistant_text")) {
-        // 首回合挂死 → fresh spawn 重放：清掉本回合未回显账（prompt 经 spawn 参数
-        // 直达，CLI 不 echo——残留会让下轮看门狗误判「消息没送到」重复重放）
-        for (let i = s.unacked.length - 1; i >= 0; i--) {
-          if (s.unacked[i].text === firstMessage && s.unacked[i].ts >= resumeStart) s.unacked.splice(i, 1);
+      // 「无记忆可丢」判定（审查加固）：logs 有 assistant_text、会话累计过输出
+      //（usage.output_tokens——持久口径，不随 500 条内存/300 条回放日志窗滚动丢失）、
+      // 或 CLI transcript 里已有 assistant 消息（重启后日志被裁时的权威事实）都算
+      // 有记忆——有记忆一律走 ERROR+saved 可重试，不赌 fresh 静默抹上下文。
+      // external 双保险（现行各入口都已挡 external，防未来新入口漏守卫）
+      const hasMemory =
+        s.logs.some((e) => e.kind === "assistant_text") ||
+        (s.state.usage?.output_tokens ?? 0) > 0 ||
+        transcriptHasAssistant(s.state.cwd, sdkId);
+      const waitS = Math.round(resumeInitTimeoutMs() / 1000);
+      if (!s.state.external && !hasMemory) {
+        // 首回合挂死 → fresh spawn 重放：resume 窗口内到达的全部未回显消息一并
+        // 合并重放（挂死流的队列没人消费，只重放首条会让窗口内第二条静默丢失、
+        // 无限期悬在 unacked）；多单 FIFO 同 recoverFromStall 的合并口径收口
+        const pendingNow = s.unacked.filter((m) => m.ts >= resumeStart);
+        s.unacked = s.unacked.filter((m) => m.ts < resumeStart);
+        if (pendingNow.length > 1) {
+          for (let i = 1; i < pendingNow.length; i++) {
+            const q = this.openDispatches.get(s.state.session_id);
+            if (!q || q.length <= 1) break;
+            q.unshift(q.pop()!);
+            this.closeOpenDispatches(s.state.session_id, "done", "多消息合并重放（并入同回合）", false, false, undefined, "todo");
+          }
         }
+        const replayText = (pendingNow.length ? pendingNow : [{ text: firstMessage, images }]).map((m) => m.text).join("\n\n");
+        const replayImages = (pendingNow.length ? pendingNow.flatMap((m) => m.images ?? []) : images ?? []).slice(0, 4);
         s.streamGen++;
         s.resumePending = Date.now();
         s.lastProgressAt = Date.now();
         s.lastProgressKind = "";
+        s.state.status = "WORKING"; // 旧终态（如 stop 收口的 DONE）翻活，防新流跑期间卡面停旧态
         s.agent = this.newAgent(
           s.state.cwd,
           s.state.model,
           this.agentCallbacks(s),
-          firstMessage,
-          { permissionMode: s.state.permission_mode ?? "default", images },
+          replayText,
+          { permissionMode: s.state.permission_mode ?? "default", images: replayImages.length ? replayImages : undefined },
         );
         this.pushExternalLog(s.state.session_id, "system",
-          "resume 上游挂死（45s 无 init，疑首回合被杀的悬空 transcript），已回退新会话重放本条消息——该会话无已完成回合，上下文无损");
+          `恢复超时（${waitS} 秒无响应，该会话无已完成回合，疑首次运行被打断所致），已自动用新会话重发本条消息`);
         this.emitUpdated(s, true);
       } else {
         s.state.status = "ERROR";
-        s.state.last_error = "恢复失败: resume 初始化超时（45s，上游 CLI 挂死）";
+        s.state.last_error = `恢复失败: 上游 ${waitS} 秒无响应（疑挂死），已保留现场可重试`;
         s.state.saved = true;
         s.state.action_summary = "恢复失败";
         s.state.updated_at = Date.now();
@@ -2697,6 +2762,8 @@ export class SessionManager {
       const lines = (e.full ?? e.text).split("\n");
       for (let j = lines.length - 1; j >= 0; j--) {
         const t = lines[j].trim();
+        // 160 = terminal_reason 截 200 略收紧：组详情回执流单行不爆版（result 行
+        // 本身是 worker 手写一句话，正常远短于此）
         if (t.startsWith("结果：")) return `${reason}｜${truncate(t, 160)}`;
       }
       break;
@@ -2827,7 +2894,14 @@ export class SessionManager {
           if (!r.ok) return r;
           // #26 M3 两层联动：挂起 → 成员会话全 parked（收悬账+停流+退休进熟手池）；
           // 复活 → 只清标记（原班由路由表在下次派单拉回）
-          if (to === "active") this.reviveGroupMembers(r.group.id);
+          if (to === "active") {
+            this.reviveGroupMembers(r.group.id);
+            // 审查修正（挂起残留 doing 对账）：断档补记的板退对挂起组会被冻结挡住
+            //（no-op），竞态残留的 doing 条目复活后无人收口 → orphan doing 永挂。
+            // 复活时对一次账：不在任何在跑 FIFO、台账也无未收口行的 doing 退 todo
+            //（真交付由 Leader/用户目测搬 done，同 F-08 口径）
+            this.reconcileStaleDoing(r.group.id);
+          }
           this.emitOrgState();
           this.emitBoard(r.group.id); // 冻结态翻转随板广播
           return { ok: true, data: { group: r.group } };
@@ -3170,8 +3244,19 @@ export class SessionManager {
     // autoMkdir=true 静默 mkdir 跑单，Leader 打错锚 = 活跑在幽灵目录无人知
     //（#208 用户显式开关口径）。立项口保持安家语义（ensureProjectClaudeMd
     // 已 mkdir recursive，新项目目录合法诞生）；本口只接「已存在的活目录」。
-    if (!statSync(anchor, { throwIfNoEntry: false })?.isDirectory()) {
+    // 审查修正：三态可读报错——不存在 / 存在但不是目录 / 无法访问（EACCES 等
+    // 原始异常此前绕过人话文案）
+    let anchorSt: ReturnType<typeof statSync> | undefined;
+    try {
+      anchorSt = statSync(anchor, { throwIfNoEntry: false });
+    } catch (e) {
+      return { ok: false, error: `锚目录无法访问: ${anchor}（${e instanceof Error ? e.message : String(e)}）——请核对路径权限` };
+    }
+    if (!anchorSt) {
       return { ok: false, error: `锚目录不存在: ${anchor}（派单不自动建目录——先立项，或核对路径拼写）` };
+    }
+    if (!anchorSt.isDirectory()) {
+      return { ok: false, error: `锚路径不是目录: ${anchor}（是个文件——派单需要目录锚，请核对路径拼写）` };
     }
     const dispatchId = randomUUID();
     // #26 M3 §5 双来源调度：项目组活先查路由表——空闲熟手 resume 原会话（会话亲和：
@@ -3393,6 +3478,21 @@ export class SessionManager {
       if (s.state.action_summary === "已随项目组挂起") s.state.action_summary = "";
       s.state.updated_at = Date.now();
       this.emitUpdated(s, true);
+    }
+  }
+
+  // 审查修正（挂起残留 doing 对账）：复活时扫板——doing 条目既不在任何在跑派单
+  // FIFO、台账里也无未收口（running/dispatched）行的，是「relay 崩溃×挂起冻结」
+  // 竞态留下的孤儿（断档补记对挂起组的板退被冻结挡住），退 todo 防永挂。手动搬
+  // doing 但无 dispatch_id 的条目不动（Leader 手写板无台账可对）
+  private reconcileStaleDoing(gid: string): void {
+    const live = new Set<string>();
+    for (const q of this.openDispatches.values()) for (const e of q) live.add(e.id);
+    const open = new Set(readDispatchLog().filter((e) => e.status === "running" || e.status === "dispatched").map((e) => e.id));
+    for (const ent of loadBoard(gid).entries) {
+      if (ent.status !== "doing" || !ent.dispatch_id) continue;
+      if (live.has(ent.dispatch_id) || open.has(ent.dispatch_id)) continue;
+      moveEntryByDispatch(gid, ent.dispatch_id, "todo");
     }
   }
 

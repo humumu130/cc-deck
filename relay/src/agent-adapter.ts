@@ -63,6 +63,11 @@ export function childEnv(): NodeJS.ProcessEnv {
   };
 }
 
+// #134 id 防碰撞 BOOT 段铸造（2026-09-28 冲刺审查补锁：抽成导出函数供单测
+// 验证「每次调用都是新随机尾」——防未来改回 static 复用静默复发时间线劫持）
+export const mintAdapterBoot = (): string =>
+  Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+
 // streaming input 模式的 prompt 源：push 用户消息 / end 收尾
 export class AsyncQueue<T> {
   private values: T[] = [];
@@ -217,7 +222,7 @@ export class AgentSession {
   // 同会话新旧回合撞 id，被中断回合的条目被新回合流式块顶掉（真链路实锤：同一
   // relay 先后两个 CLI 的 id 共享前缀）。改实例级 + 随机尾段，跨重建永不相撞；
   // bridge.ts XSTREAM_BOOT 为单例+会话级计数（进程内不重置）无此险，不动
-  private readonly adapterBoot = Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+  private readonly adapterBoot = mintAdapterBoot();
   private blockSeq = 0;
   private streamIdx = new Map<number, string>();
   private streamBufs = new Map<string, string>();

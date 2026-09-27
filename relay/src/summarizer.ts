@@ -20,7 +20,11 @@ function normLines(s: string): string {
 
 export function truncate(s: string, n = MAX_SUMMARY): string {
   const one = normLines(s);
-  return one.length <= n ? one : one.slice(0, n - 1) + "…";
+  if (one.length <= n) return one;
+  const cut = one.slice(0, n - 1);
+  // 审查修正：切点落在代理对中间会产出孤立高位代理（emoji 被切成 �，F-02 起
+  // 该截断进持久化台账字段）——回退一码元再接省略号
+  return (/[\uD800-\uDBFF]$/.test(cut) ? cut.slice(0, -1) : cut) + "…";
 }
 
 // 匹配键：CLI 会把多条排队消息合并成一条（"\r" 连接），且消息内换行折叠为空格、

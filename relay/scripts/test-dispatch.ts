@@ -1,8 +1,9 @@
 // #26 矩阵式 M2 —— 分诊引擎集成测试（agentFactory 测试缝，不拉真 CLI）。
 // 覆盖：D1 随手办派单（纪律模板/bypassPermissions[F-10]/sticky 豁免/先落账再执行）
-//       D2 派单收口（done/failed + 板联动退回待办）D3 立项确认门槛与信任累积
-//       D4 升降级/建议暂缓/结项核对（一句话归档 vs 确认卡）D5 状态护栏
-//       D6 断档补记（dispatched/running 悬账）D7 handleCommand 确认决议/详情拉取
+//       D1b 回执拼入「结果：」行（F-02）D2 派单收口（done/failed + 板联动退回待办）
+//       D3 立项确认门槛与信任累积 D4 升降级/建议暂缓/结项核对（一句话归档 vs 确认卡）
+//       D5 状态护栏 D6 断档补记（dispatched/running 悬账）D7 handleCommand 确认决议/详情拉取
+//       D14 resume 挂死自愈（F-07：fresh 重放/ERROR+saved/STOP·删除·合并窗口/usage 记忆）
 import { randomUUID } from "node:crypto";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -84,6 +85,7 @@ async function main() {
   const prevOrg = process.env.CCR_ORG_DIR;
   const prevTitleGen = process.env.CCR_NO_TITLE_GEN;
   const prevCwdEnv = process.env.CCR_CWD;
+  const prevInitMs = process.env.CCR_RESUME_INIT_MS; // 提到 try 外：finally 恢复用（审查修正）
   process.env.CCR_ORG_DIR = ORG;
   process.env.CCR_NO_TITLE_GEN = "1";
   delete process.env.CCR_CWD;
@@ -120,6 +122,11 @@ async function main() {
     assert(!existsSync(ghost), "拒绝后不留幽灵目录（无副作用）");
     const anchor = join(DATA, "proj-x");
     mkdirSync(anchor, { recursive: true });
+    // 审查修正补锁：锚是文件 → 三态可读报错（不再统一说「不存在」）
+    const fileAnchor = join(DATA, "anchor-as-file.txt");
+    writeFileSync(fileAnchor, "x", "utf-8");
+    const df = mgr.orgAction("dispatch", { anchor: fileAnchor, prompt: "试探" }) as { ok: boolean; error?: string };
+    assert(df.ok === false && (df.error ?? "").includes("不是目录"), "锚是文件 → 报错指明「不是目录」（三态区分）");
     const d1 = mgr.orgAction("dispatch", { anchor, prompt: "把 README 的错别字改掉" }) as { ok: boolean; dispatch_id?: string; session_id?: string; error?: string };
     assert(d1.ok === true, "派单成功（锚目录存在）");
     const wid1 = d1.ok ? (d1 as { session_id: string }).session_id : "";
@@ -170,6 +177,8 @@ async function main() {
     const wid2 = d2.ok ? (d2 as { session_id: string }).session_id : "";
     const w2 = mgr.snapshot().find((s) => s.session_id === wid2);
     assert(w2?.project_gid === gidA && w2?.dispatch_tier === "轻立项", "组派单会话态带归属+组档位");
+    // 冲刺 F-05 补锁：派单 title 双写内存态（此前只落盘，重启前后列表标题劈叉）
+    assert(w2?.title === "[轻立项] 按钮任务", "派单 title 即时进会话运行态（F-05，含档位前缀，无需重启）");
     assert((listGroups().find((g) => g.id === gidA)?.headcount ?? []).some((h) => h.session_id === wid2), "worker 入编（headcount）");
     assert(loadBoard(gidA).entries.some((e) => e.dispatch_id === did2 && e.status === "doing"), "板联动：承接条目 doing");
     assert(await waitFor(() => readDispatchLog().filter((e) => e.id === did2).some((e) => e.status === "failed")), "失败回合 → 台账 failed");
@@ -237,6 +246,13 @@ async function main() {
     assert(b3.ok === true && loadBoard(gidD).entries.length === 0, "板 del");
     const b4 = mgr.orgAction("board", { op: "move", gid: gidC, entry_id: "nope", status: "todo" });
     assert(b4.ok === false, "未知操作/归档板拒绝");
+    // 冲刺 F-03 补锁：gid 直调不带 anchor 亦可（anchor 校验移到 gid 解析后，
+    // gid 派单用组锚）——台账 project_anchor 落组锚
+    const e0 = mgr.orgAction("dispatch", { prompt: "gid 直调（无 anchor，F-03）", gid: gidD }) as { ok: boolean; dispatch_id?: string; error?: string };
+    assert(e0.ok === true, "gid 派单不带 anchor 可派（F-03）");
+    const didE0 = e0.ok ? (e0 as { dispatch_id: string }).dispatch_id : "";
+    assert((readDispatchLog().find((e) => e.id === didE0)?.project_anchor ?? "") === join(DATA, "proj-d"), "gid 派单台账锚=组锚（F-03）");
+    assert(await waitFor(() => readDispatchLog().filter((e) => e.id === didE0).some((e) => e.status === "done")), "F-03 直调单收口（板联动 done 收尾，无悬账留给结项核对）");
 
     // ---------- D6 断档补记 ----------
     console.log("D6 断档补记:");
@@ -446,8 +462,10 @@ async function main() {
     assert(await waitFor(() => (routingFor(gidZ).find((x) => x.session_id === wZ4)?.count ?? 0) === 1), "三单正常收口 count=1");
     const cntZ4 = routingFor(gidZ).find((x) => x.session_id === wZ4)!.count;
     hack.openDispatches.set(wZ4, [{ id: "dsp-int-x", tier: "正经立项", gid: gidZ, anchor: projZ }]);
+    upsertBoardEntry(gidZ, { text: "用户手停的活", status: "doing", dispatch_id: "dsp-int-x" });
     cbFor(projZ)!.onTurnEnd(true, "interrupted", 5);
     assert(readDispatchLog().some((e) => e.id === "dsp-int-x" && e.status === "done" && e.receipt === "interrupted"), "用户中断收口：台账 done+写实回执");
+    assert(loadBoard(gidZ).entries.find((x) => x.dispatch_id === "dsp-int-x")?.status === "todo", "审查修正：中断板退 todo（半成品不进 done，结项核对可见）——与其余四路径口径统一");
     assert((routingFor(gidZ).find((x) => x.session_id === wZ4)?.count ?? -1) === cntZ4, "中断不抬 count（≠交付记账）");
     assert(!hack.openDispatches.has(wZ4), "中断收口 FIFO 清空");
 
@@ -666,6 +684,27 @@ async function main() {
     assert(wdRc.recoveries.length === 0, "放弃恢复不烧自愈额度（recoveries 只记真实干预）");
     stopNoop = false;
 
+    // b2) 看门狗接管「无未回显消息」路径（冲刺 F-06 审查补锁：板去向无直测）：
+    //     FIFO 挂单 + 板 doing + unacked 空 → recoverFromStall 直调 → 台账 done+
+    //     写实回执 + 板退 todo。构造要点：①派单 resume 会推 unacked 而 fake 工厂
+    //     不发 user_message 日志（无回显清除），须手工清空才落在 no-pending 分支；
+    //     ②agent.ended 先置真——否则 5s 杀树等待后被 force stop，fake 的
+    //     onSessionEnd 抢先以「stopped」收口 FIFO，目标回执被顶掉
+    mgr.orgAction("project-status", { id: gidEta, to: "active" });
+    const etaD3 = mgr.orgAction("dispatch", { anchor: etaAnchor, prompt: "eta 三单（看门狗接管用）", gid: gidEta }) as { ok: boolean; session_id?: string };
+    assert(etaD3.ok === true && etaD3.session_id === wEta, "eta 复活后原班承接三单（前置）");
+    assert(await waitFor(() => (routingFor(gidEta).find((x) => x.session_id === wEta)?.count ?? 0) === 3), "三单收口 count=3（前置：relay_session_id 在册）");
+    const sEta = hack.sessions.get(wEta) as unknown as { agent: { ended: boolean } | null; unacked: unknown[] };
+    sEta.unacked = []; // 逼出 no-pending 分支（见上①）
+    sEta.agent!.ended = true; // 流已断（见上②）
+    hack.openDispatches.set(wEta, [{ id: "dsp-eta-wd", tier: "轻立项", gid: gidEta, anchor: etaAnchor }]);
+    upsertBoardEntry(gidEta, { text: "看门狗接管的活", status: "doing", dispatch_id: "dsp-eta-wd" });
+    await (mgr as unknown as { recoverFromStall(s: never, lane: string, stalled: number, cpu: number): Promise<void> })
+      .recoverFromStall(hack.sessions.get(wEta) as never, "slow", 1000, 0);
+    assert(readDispatchLog().some((x) => x.id === "dsp-eta-wd" && x.status === "done" && x.receipt === "流中断恢复待命，回合中断"), "看门狗接管：无未回显 → 台账 done+写实回执（F-06）");
+    assert(loadBoard(gidEta).entries.find((x) => x.dispatch_id === "dsp-eta-wd")?.status === "todo", "板退 todo（F-06：活没交付不能停 done，结项核对可见）");
+    assert((routingFor(gidEta).find((x) => x.session_id === wEta)?.count ?? -1) === 3, "中断收口不写路由（count 不动）");
+
     // ---------- D13 补章（skills 定向调度 + 成员级退休/复拉） ----------
     console.log("D13 补章（skills 定向/成员级退休）:");
     const cTa = mgr.orgAction("project-create", { name: "tau", anchor: join(DATA, "proj-ta"), tier: "轻立项" });
@@ -760,14 +799,13 @@ async function main() {
     assert((routingFor(gidPh).find((x) => x.session_id === wT2)?.count ?? 0) === 1, "phi 路由入账（跨组正交面）");
     assert(!hack.openDispatches.has(wT2), "FIFO 清空");
 
-    // ---------- D8 resume 挂死自愈（冲刺 F-07） ----------
+    // ---------- D14 resume 挂死自愈（冲刺 F-07）+ 审查轮补锁 ----------
     console.log("D14 resume 挂死自愈（F-07）:");
-    const prevInitMs = process.env.CCR_RESUME_INIT_MS;
     process.env.CCR_RESUME_INIT_MS = "300";
     const hack14 = mgr as unknown as {
       sessions: Map<string, {
-        state: { status: string; saved?: boolean; last_error?: string; session_id: string };
-        agent: { ended: boolean } | null;
+        state: { status: string; saved?: boolean; last_error?: string; session_id: string; usage?: { input_tokens: number; output_tokens: number } };
+        agent: { ended: boolean; stop: () => Promise<void> } | null;
         logs: { kind: string; text: string }[];
         unacked: { text: string; ts: number }[];
       }>;
@@ -778,31 +816,102 @@ async function main() {
     sW1.agent!.ended = true; // 流已死 → COMMAND_MESSAGE 走 resumeAgent
     hangResume = true;
     const createdBeforeA = created.length;
-    const ack8 = mgr.handleCommand({ command_id: "cmd-f07a", type: "COMMAND_MESSAGE", ts: Date.now(), payload: { session_id: wid1, text: "救命消息（F-07）" } } as Command, "web-1");
-    assert(ack8.ok === true, "消息受理（触发 resume）");
+    const ack14a = mgr.handleCommand({ command_id: "cmd-f07a", type: "COMMAND_MESSAGE", ts: Date.now(), payload: { session_id: wid1, text: "救命消息（F-07）" } } as Command, "web-1");
+    assert(ack14a.ok === true, "消息受理（触发 resume）");
     assert(created.length === createdBeforeA + 1 && !!created[created.length - 1].resume, "resume 形态 spawn 发起");
     assert(await waitFor(() => created.some((c, i) => i >= createdBeforeA && !c.resume && c.prompt?.includes("救命消息（F-07）"))), "超时回退 fresh spawn（prompt=重放消息）");
-    assert(await waitFor(() => sW1.logs.some((e) => e.kind === "system" && e.text.includes("回退新会话重放"))), "回退留痕（system 日志可审计）");
+    assert(await waitFor(() => sW1.logs.some((e) => e.kind === "system" && e.text.includes("用新会话重发"))), "回退留痕（system 日志可审计，用户语言）");
     assert(!sW1.unacked.some((m) => m.text.includes("救命消息（F-07）")), "重放消息未回显账已清（防下轮看门狗重复重放）");
     assert(await waitFor(() => sW1.state.status === "DONE"), "fresh 流回合自然收口（DONE）");
     hangResume = false;
+    // a2) 审查 P1「停了又复活」：init 窗口内用户 STOP → timer 撤销，不 fresh 不覆写
+    const stopSid = (() => {
+      const d = mgr.orgAction("dispatch", { anchor, prompt: "停止窗口用例" }) as { ok: boolean; session_id?: string };
+      return d.ok ? (d as { session_id: string }).session_id : "";
+    })();
+    assert(await waitFor(() => hack14.sessions.get(stopSid)?.state.status === "DONE"), "停止用例会话先收口（前置）");
+    const sStop = hack14.sessions.get(stopSid)!;
+    assert(!sStop.logs.some((e) => e.kind === "assistant_text"), "前置：无已完成回合（首回合形态）");
+    sStop.agent!.ended = true;
+    hangResume = true;
+    const createdBeforeStop = created.length;
+    const ackStop = mgr.handleCommand({ command_id: "cmd-f07-stop", type: "COMMAND_MESSAGE", ts: Date.now(), payload: { session_id: stopSid, text: "要被停掉的消息" } } as Command, "web-1");
+    assert(ackStop.ok === true, "消息受理（触发 resume，前置）");
+    await sStop.agent!.stop(); // 用户 STOP：fake agent 落 ended + onSessionEnd → timer 应被清
+    await wait(600); // 300ms init 窗口 + 缓冲
+    assert(created.length === createdBeforeStop + 1, "STOP 后无 fresh spawn（不复活用户刚停掉的活）");
+    assert(sStop.state.status !== "ERROR" || (sStop.state.last_error ?? "").includes("无响应") === false, "STOP 终态不被超时分支覆写成 ERROR");
+    hangResume = false;
+    // a3) 审查 P2「删除幽灵拉活」：init 窗口内会话卡被删 → timer 不为已删会话开火
+    const delSid = (() => {
+      const d = mgr.orgAction("dispatch", { anchor, prompt: "删除窗口用例" }) as { ok: boolean; session_id?: string };
+      return d.ok ? (d as { session_id: string }).session_id : "";
+    })();
+    assert(await waitFor(() => hack14.sessions.get(delSid)?.state.status === "DONE"), "删除用例会话先收口（前置）");
+    const sDel = hack14.sessions.get(delSid)!;
+    assert(!sDel.logs.some((e) => e.kind === "assistant_text"), "前置：无已完成回合");
+    sDel.agent!.ended = true;
+    hangResume = true;
+    const createdBeforeDel = created.length;
+    const ackDel = mgr.handleCommand({ command_id: "cmd-f07-del", type: "COMMAND_MESSAGE", ts: Date.now(), payload: { session_id: delSid, text: "会被删掉的消息" } } as Command, "web-1");
+    assert(ackDel.ok === true, "消息受理（触发 resume，前置）");
+    hack14.sessions.delete(delSid); // deleteSession 语义：卡移除、不停 agent 不换引用
+    await wait(600);
+    assert(created.length === createdBeforeDel + 1, "会话已删 → 无 fresh spawn（不为幽灵拉活）");
+    hangResume = false;
+    // a4) 审查 P2「窗口内第二条消息丢失」：fresh 重放合并窗口内全部未回显消息
+    const mrgSid = (() => {
+      const d = mgr.orgAction("dispatch", { anchor, prompt: "合并重放用例" }) as { ok: boolean; session_id?: string };
+      return d.ok ? (d as { session_id: string }).session_id : "";
+    })();
+    assert(await waitFor(() => hack14.sessions.get(mrgSid)?.state.status === "DONE"), "合并用例会话先收口（前置）");
+    const sMrg = hack14.sessions.get(mrgSid)!;
+    assert(!sMrg.logs.some((e) => e.kind === "assistant_text"), "前置：无已完成回合");
+    sMrg.agent!.ended = true;
+    hangResume = true;
+    const createdBeforeMrg = created.length;
+    const ackM1 = mgr.handleCommand({ command_id: "cmd-f07-m1", type: "COMMAND_MESSAGE", ts: Date.now(), payload: { session_id: mrgSid, text: "第一条（合并重放）" } } as Command, "web-1");
+    assert(ackM1.ok === true, "首条消息受理（触发 resume，前置）");
+    const ackM2 = mgr.handleCommand({ command_id: "cmd-f07-m2", type: "COMMAND_MESSAGE", ts: Date.now(), payload: { session_id: mrgSid, text: "第二条（窗口内到达）" } } as Command, "web-1");
+    assert(ackM2.ok === true, "窗口内第二条受理（排队路径，前置）");
+    assert(await waitFor(() => created.some((c, i) => i >= createdBeforeMrg && !c.resume && c.prompt?.includes("第一条（合并重放）") && c.prompt?.includes("第二条（窗口内到达）"))), "fresh 重放合并窗口内全部消息（第二条不丢）");
+    assert(!sMrg.unacked.some((m) => m.text.includes("窗口内到达")), "合并后未回显账清空");
+    hangResume = false;
     // b) 有记忆会话：resume 挂死 → 不赌 fresh（抹上下文）→ ERROR+saved 可重试
     emitResultLine = "结果：有记忆的活｜改动文件：a.ts";
-    const d8b = mgr.orgAction("dispatch", { anchor, prompt: "产出一条 assistant 记忆" }) as { ok: boolean; session_id?: string };
-    const wid14b = d8b.ok ? (d8b as { session_id: string }).session_id : "";
+    const d14b = mgr.orgAction("dispatch", { anchor, prompt: "产出一条 assistant 记忆" }) as { ok: boolean; session_id?: string };
+    const wid14b = d14b.ok ? (d14b as { session_id: string }).session_id : "";
     assert(await waitFor(() => hack14.sessions.get(wid14b)?.logs.some((e) => e.kind === "assistant_text") === true), "前置：wid14b 有已完成回合（有记忆形态）");
-    emitResultLine = null; // fake 回合 30ms 异步——收口后再关，防泄漏进别的回合
-    const sW8b = hack14.sessions.get(wid14b)!;
-    sW8b.agent!.ended = true;
+    emitResultLine = null; // fake 回合 30ms 异步——见 onLog 即已收口（onLog 与 onTurnEnd
+    // 同 tick 同步连发，前提见工厂 setTimeout 体；把 onTurnEnd 挪独立 timer 需重审此处）
+    const s14b = hack14.sessions.get(wid14b)!;
+    s14b.agent!.ended = true;
     hangResume = true;
     const createdBefore14b = created.length;
     const ack14b = mgr.handleCommand({ command_id: "cmd-f07b", type: "COMMAND_MESSAGE", ts: Date.now(), payload: { session_id: wid14b, text: "第二条消息" } } as Command, "web-1");
     assert(ack14b.ok === true, "消息受理（触发 resume）");
-    assert(await waitFor(() => sW8b.state.status === "ERROR" && sW8b.state.saved === true), "有记忆会话：ERROR+saved（可重试，不赌 fresh）");
-    assert((sW8b.state.last_error ?? "").includes("resume 初始化超时"), "失败原因写实（上游挂死）");
+    assert(await waitFor(() => s14b.state.status === "ERROR" && s14b.state.saved === true), "有记忆会话：ERROR+saved（可重试，不赌 fresh）");
+    assert((s14b.state.last_error ?? "").includes("无响应"), "失败原因写实（上游挂死）");
     assert(!created.some((c, i) => i >= createdBefore14b && !c.resume), "未发起 fresh spawn（上下文优先）");
     hangResume = false;
-    if (prevInitMs) process.env.CCR_RESUME_INIT_MS = prevInitMs; else delete process.env.CCR_RESUME_INIT_MS;
+    // b2) 记忆判定加固：logs 无 assistant_text 但累计过输出（usage.output_tokens>0）
+    // ——同走 ERROR+saved 不 fresh（logs 滚动窗裁掉早前回合的形态）
+    const uSid = (() => {
+      const d = mgr.orgAction("dispatch", { anchor, prompt: "usage 记忆判定用例" }) as { ok: boolean; session_id?: string };
+      return d.ok ? (d as { session_id: string }).session_id : "";
+    })();
+    assert(await waitFor(() => hack14.sessions.get(uSid)?.state.status === "DONE"), "usage 用例会话先收口（前置）");
+    const sU = hack14.sessions.get(uSid)!;
+    assert(!sU.logs.some((e) => e.kind === "assistant_text"), "前置：relay logs 无 assistant_text（模拟被裁）");
+    sU.state.usage = { input_tokens: 10, output_tokens: 5 };
+    sU.agent!.ended = true;
+    hangResume = true;
+    const createdBeforeU = created.length;
+    const ackU = mgr.handleCommand({ command_id: "cmd-f07u", type: "COMMAND_MESSAGE", ts: Date.now(), payload: { session_id: uSid, text: "usage 判定消息" } } as Command, "web-1");
+    assert(ackU.ok === true, "消息受理（触发 resume，前置）");
+    assert(await waitFor(() => sU.state.status === "ERROR" && sU.state.saved === true), "累计输出>0 = 有记忆：ERROR+saved（不 fresh）");
+    assert(!created.some((c, i) => i >= createdBeforeU && !c.resume), "usage 记忆同样不 fresh spawn");
+    hangResume = false;
 
     // ---------- 收尾 ----------
     console.log(`\n${fail === 0 ? "PASS" : "FAIL"}: ${pass} passed, ${fail} failed`);
@@ -811,6 +920,11 @@ async function main() {
     process.env.CCR_ORG_DIR = prevOrg;
     if (prevTitleGen) process.env.CCR_NO_TITLE_GEN = prevTitleGen; else delete process.env.CCR_NO_TITLE_GEN;
     if (prevCwdEnv) process.env.CCR_CWD = prevCwdEnv; else delete process.env.CCR_CWD;
+    // 审查修正：env 开关恢复统一进 finally——D14 中途断言失败时不再泄漏
+    // CCR_RESUME_INIT_MS=300 进后续同进程逻辑
+    if (prevInitMs !== undefined) {
+      if (prevInitMs) process.env.CCR_RESUME_INIT_MS = prevInitMs; else delete process.env.CCR_RESUME_INIT_MS;
+    }
     rmSync(ORG, { recursive: true, force: true });
     rmSync(DATA, { recursive: true, force: true });
   }

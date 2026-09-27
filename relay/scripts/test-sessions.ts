@@ -152,6 +152,16 @@ assert(
 assert(subs.every((x) => typeof x.ended_at === "number" && x.ended_at > 0), `C all subagents ended (got ${JSON.stringify(subs.map((x) => x.ended_at))})`);
 assert(subagentEventSeen.has(ackC.session_id!), "C emitted SESSION_UPDATED with subagents");
 
+// #134 BOOT 段防碰撞（冲刺 F-13 审查补锁）：mintAdapterBoot 每次调用必须是新
+// 随机尾——改回 static 复用（进程级秒戳）会让 relay 内 resume 重建 adapter 后
+// blockSeq 归零撞 id，被中断回合的条目被新回合流式块顶掉（2026-09-28 真链路实锤）
+{
+  const { mintAdapterBoot } = await import("../src/agent-adapter.js");
+  const b1 = mintAdapterBoot();
+  const b2 = mintAdapterBoot();
+  assert(b1 !== b2 && b1.length > 0 && b2.length > 0, `adapter BOOT 段每次铸造唯一（${b1} / ${b2}）`);
+}
+
 // gitDiff 统计：形状若不匹配会是 0，只告警不判失败（待真机数据核对）
 if (a && a.stats.lines_added > 0) {
   console.log(`ok - A diff stats: ${JSON.stringify(a.stats)}`);
