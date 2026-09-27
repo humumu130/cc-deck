@@ -44,12 +44,15 @@ export interface ProjectGroup {
   archive_note?: string;
 }
 
-export type BoardEntryStatus = "todo" | "doing" | "verify" | "ready" | "done";
+// 板状态只定义收口语义：待办 / 进行（派单承接）/ 完成（收口）。v3.1 §6.1 只要求
+// 「任务板引用」与跨会话存储、§4 只要求「单卡简化态（渲染降级非独立模型）」——
+// 分区/段数是渲染层自由，稿未规定，不预置旧团队看板的五段色（verify/ready/待装机
+// 属已废弃 V5~V7 项目制设计词表，§2.4 词表迁移对象）
+export type BoardEntryStatus = "todo" | "doing" | "done";
 
 export interface BoardEntry {
   id: string;
   text: string;
-  /** 分区 = 渲染端按 status 分组（五段色语义对齐看板规范：灰待认领/绿进行/品牌待验收/琥珀待装机/深完成） */
   status: BoardEntryStatus;
   /** 承接会话（派单联动条目 = worker relay session id） */
   owner_session?: string;
@@ -540,7 +543,7 @@ export interface ArchiveChecklist {
   openDispatches: { id: string; tier: string; status: string; target: string; ts: number }[];
   /** 在编成员会话（结项=解散编制；M2 会话不删档，只解除归属） */
   headcount: ProjectHeadcountEntry[];
-  /** 板上未完成条目数（todo/doing/verify/ready） */
+  /** 板上未完成条目数（todo/doing） */
   openBoardEntries: number;
   anchor_dir: string;
 }

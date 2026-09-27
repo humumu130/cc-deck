@@ -128,12 +128,12 @@ const eid = b1.ok ? b1.entry.id : "";
 const b2 = upsertBoardEntry(gid1, { id: eid, text: "任务甲：改造入口（改）", status: "doing", owner_session: "sess-w1", dispatch_id: "dsp-1" }, dir);
 assert(b2.ok && b2.entry.text.includes("改") && b2.entry.dispatch_id === "dsp-1", "upsert 更新同条目");
 assert(loadBoard(gid1, dir).entries.length === 1, "仍 1 条（无重复）");
-const mv = moveBoardEntry(gid1, eid, "verify", dir);
-assert(mv.ok && mv.entry.status === "verify", "搬卡 verify");
-// 派单联动搬卡
-moveEntryByDispatch(gid1, "dsp-1", "done", dir);
-assert(loadBoard(gid1, dir).entries[0]?.status === "done", "按台账 id 联动搬卡");
-moveEntryByDispatch(gid1, "dsp-none", "todo", dir); // 无对应条目 no-op
+const mv = moveBoardEntry(gid1, eid, "done", dir);
+assert(mv.ok && mv.entry.status === "done", "搬卡 done");
+// 派单联动搬卡（收口失败语义：退回待办）
+moveEntryByDispatch(gid1, "dsp-1", "todo", dir);
+assert(loadBoard(gid1, dir).entries[0]?.status === "todo", "按台账 id 联动搬卡");
+moveEntryByDispatch(gid1, "dsp-none", "done", dir); // 无对应条目 no-op
 assert(loadBoard(gid1, dir).entries.length === 1, "联动 no-op 不炸");
 // 冻结：parked 拒写
 setGroupStatus(gid1, "parked", undefined, dir);
