@@ -483,7 +483,7 @@ function UpdateBanner({ info, onSkip }: { info: UpdateInfo; onSkip: () => void }
   const pct = mine && mine.total > 0 ? Math.min(100, Math.floor((mine.bytes / mine.total) * 100)) : 0;
   // 特性条目：manifest notes 优先，缺失兜底本版摘要（GitHub body 不进正文）
   const lines = noteLines(info.notes);
-  const noteItems = lines.length ? lines : VERSION_NOTES;
+  const noteItems = lines.length ? lines : VERSION_NOTES.map((n) => n.text); // 兜底转纯文本（VersionNote 对象不可直入 Text，基线遗留类型错）
 
   return (
     <Modal visible={!gone} transparent animationType="fade" onRequestClose={close}>
