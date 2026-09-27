@@ -1,5 +1,5 @@
 // #26 矩阵式 M2 —— 分诊引擎集成测试（agentFactory 测试缝，不拉真 CLI）。
-// 覆盖：D1 随手办派单（纪律模板/acceptEdits/sticky 豁免/先落账再执行）
+// 覆盖：D1 随手办派单（纪律模板/bypassPermissions[F-10]/sticky 豁免/先落账再执行）
 //       D2 派单收口（done/failed + 板联动退回待办）D3 立项确认门槛与信任累积
 //       D4 升降级/建议暂缓/结项核对（一句话归档 vs 确认卡）D5 状态护栏
 //       D6 断档补记（dispatched/running 悬账）D7 handleCommand 确认决议/详情拉取
@@ -111,7 +111,7 @@ async function main() {
     const rec1 = created.find((c) => c !== created[0] && c.prompt?.startsWith("[随手办 派单]"));
     assert(!!rec1 && rec1.cwd === anchor, "spawn 携纪律模板 + cwd 锚项目");
     assert(!!rec1 && rec1.prompt === wrapDispatchPrompt("随手办", "把 README 的错别字改掉"), "模板全文一致（wrapDispatchPrompt）");
-    assert(await waitFor(() => mgr.snapshot().find((s) => s.session_id === wid1)?.permission_mode === "acceptEdits"), "权限 acceptEdits（§4 随手办纪律，init 回报后落 state）");
+    assert(await waitFor(() => mgr.snapshot().find((s) => s.session_id === wid1)?.permission_mode === "bypassPermissions"), "权限 bypassPermissions（冲刺 F-10：无人值守派单，CLI 层审批=派单黑洞，纪律约束在 prompt/台账侧）");
     const w1 = mgr.snapshot().find((s) => s.session_id === wid1);
     assert(w1?.dispatch_tier === "随手办", "会话态档位=随手办");
     assert(w1?.project_gid === undefined, "随手办无组归属");

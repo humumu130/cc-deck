@@ -255,10 +255,13 @@ const ORG_CLI_TEMPLATE = `#!/bin/bash
 #   org member-add <gid> <sid> [role]              复拉入编（退休熟手再回编制，调度门重新放行）
 # 相对路径 anchor 以当前目录补全（deliver 同口径）。由 relay 物化与升级（ensureOrgCli）。
 set -euo pipefail
-data="$HOME/.cc-deck/data"
-token="$(cat "$data/token" 2>/dev/null || true)"
-[ -z "$token" ] && { echo "未找到 ~/.cc-deck/data/token（relay 未初始化？）" >&2; exit 1; }
-port="$(python3 -c 'import json,os;print(json.load(open(os.path.expanduser("~/.cc-deck/data/bridge.json")))["port"])' 2>/dev/null || true)"
+# 冲刺 F-09：CCR_DATA_DIR/CCR_PORT/CCR_TOKEN 环境覆盖（沙盒/多实例隔离）。
+# Leader 会话由 relay spawn，经 childEnv 继承 relay 的 CCR_* —— 沙盒 relay 拉起的
+# Leader 调本 CLI 自动打到沙盒；生产无这些 env 时行为与旧版逐字节一致。
+data="\${CCR_DATA_DIR:-\$HOME/.cc-deck/data}"
+token="\${CCR_TOKEN:-\$(cat "\$data/token" 2>/dev/null || true)}"
+[ -z "$token" ] && { echo "未找到 token（\$data/token 或环境变量 CCR_TOKEN，relay 未初始化？）" >&2; exit 1; }
+port="\${CCR_PORT:-\$(python3 -c 'import json,sys;print(json.load(open(sys.argv[1]))["port"])' "\$data/bridge.json" 2>/dev/null || true)}"
 : "\${port:=8787}"
 
 action="\${1:-}"
