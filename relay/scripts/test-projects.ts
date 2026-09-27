@@ -248,6 +248,19 @@ assert(findStaleGroups(now, 14, dir3).some((x) => x.gid === gidF) && !findStaleG
 // 路由表活动（熟手最近收工也算活度）
 recordRoutingResult(gidF, "w", "done", "最近收工", dir3);
 assert(findStaleGroups(now, 14, dir3).length === 0, "路由表 last_ts 刷新活度（熟手最近收工）");
+// 成员会话活动（M3 审查修正第五路）：用户直驱推进不动台账/板/组，成员 updated_at 兜
+const cm = createGroup({ name: "memberdrive", anchor_dir: join(dir3, "a-md"), tier: "轻立项" }, dir3);
+const gidM = cm.ok ? cm.group.id : "";
+decideConfirm(cm.ok && cm.confirm ? cm.confirm.id : "", true, "u", dir3);
+setGroupStatus(gidM, "active", undefined, dir3);
+const pM = JSON.parse(readFileSync(join(dir3, "projects.json"), "utf-8")) as { groups: { id: string; updated_at: number }[] };
+pM.groups.find((x) => x.id === gidM)!.updated_at = now - 20 * DAY;
+writeFileSync(join(dir3, "projects.json"), JSON.stringify(pM), "utf-8");
+assert(findStaleGroups(now, 14, dir3).some((x) => x.gid === gidM), "组静默 20 天 → stale（无成员信号基线）");
+assert(!findStaleGroups(now, 14, dir3, { [gidM]: now - 1 * DAY }).some((x) => x.gid === gidM), "成员会话昨天还在动 → 不 stale（直驱开发不算闲置）");
+assert(findStaleGroups(now, 14, dir3, { [gidM]: now - 30 * DAY }).some((x) => x.gid === gidM), "成员信号也老 → stale");
+assert(findStaleGroups(now, 14, dir3, { "no-such-gid": now }).some((x) => x.gid === gidM), "他组成员信号不串组（gidM 仍 stale，键隔离）");
+setGroupStatus(gidM, "parked", undefined, dir3); // 收编：不污染后续全量计数断言
 // parked/archived 不进扫描
 setGroupStatus(gidF, "parked", undefined, dir3);
 assert(findStaleGroups(now, 14, dir3).length === 0, "非 active 不扫描");

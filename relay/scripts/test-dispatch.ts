@@ -291,7 +291,7 @@ async function main() {
     assert(await waitFor(() => (routingFor(gidZ).find((x) => x.session_id === wZ1)?.count ?? 0) === 1), "zeta 首单收口 count=1");
     // 在跑成员 + 悬账 → 组挂起：悬账收口（中断≠干砸，路由表无感）+ 会话休眠
     const hack = mgr as unknown as {
-      sessions: Map<string, { state: { status: string; org_parked?: string }; agent: { ended: boolean } | null; streamGen: number }>;
+      sessions: Map<string, { state: { status: string; org_parked?: string; project_gid?: string; done_reason?: string }; agent: { ended: boolean } | null; streamGen: number }>;
       openDispatches: Map<string, { id: string; tier: string; gid?: string; anchor?: string }[]>;
     };
     hack.sessions.get(wZ1)!.state.status = "WORKING";
@@ -349,6 +349,76 @@ async function main() {
     const scan5 = mgr.autoSuggestHold();
     assert(scan5.suggested.length === 0, "CCR_ORG_STALE_DAYS=0 触发器关闭");
     if (prevStale === undefined) delete process.env.CCR_ORG_STALE_DAYS; else process.env.CCR_ORG_STALE_DAYS = prevStale;
+
+    // ---------- D10 M3 审查修正（多 Agent 分工审查轮） ----------
+    console.log("D10 审查修正（跨组正交/中断口径/编制解散/挂起防误触）:");
+    const cbFor = (cwd: string): AgentCallbacks | undefined =>
+      [...created].reverse().find((c) => c.cwd === cwd)?.cb;
+    const projZ = join(DATA, "proj-z");
+
+    // a) 跨组正交：同一熟手为 B 组（eps）在跑，A 组（zeta）挂起 → 只收 A 的账，
+    //    会话不退休不杀流（矩阵式「项目×熟手」正交）
+    hack.sessions.get(wZ1)!.state.status = "WORKING";
+    hack.openDispatches.set(wZ1, [{ id: "dsp-E-inflight", tier: "正经立项", gid: gidE, anchor: join(DATA, "proj-e") }]);
+    const pz2 = mgr.orgAction("project-status", { id: gidZ, to: "parked", note: "再放放" });
+    assert(pz2.ok === true, "zeta 二次挂起");
+    assert((hack.openDispatches.get(wZ1) ?? []).some((x) => x.id === "dsp-E-inflight"), "B 组派单不随 A 组挂起陪葬（FIFO 保留）");
+    assert(!readDispatchLog().some((e) => e.id === "dsp-E-inflight"), "B 组悬账未被误收口");
+    assert(hack.sessions.get(wZ1)?.state.org_parked === undefined, "他组在忙成员不打挂起标记（没随本组休眠）");
+    assert(hack.sessions.get(wZ1)?.state.status === "WORKING", "他组在忙成员不退休不停流");
+    // B 组回合自然收口：路由表分开记（wZ1 × eps 首次入账）
+    cbFor(projZ)!.onTurnEnd(true, "success", 5);
+    assert(!hack.openDispatches.has(wZ1), "B 组回合收口后 FIFO 清空");
+    assert((routingFor(gidE).find((x) => x.session_id === wZ1)?.count ?? 0) === 1, "跨组熟手账分开记（zeta 老熟手 × eps count=1）");
+    mgr.orgAction("project-status", { id: gidZ, to: "active" });
+
+    // b) 中断≠交付（interrupted 不写熟手账）：zeta 三单 → 新会话（wZ1 刚收口前忙态
+    //    已被 a) 尾部翻 DONE？——a) 收口即 DONE，pickVeteran 会选它；先置忙逼出新人）
+    hack.sessions.get(wZ1)!.state.status = "WORKING";
+    const z3 = mgr.orgAction("dispatch", { anchor: projZ, prompt: "zeta 三单", gid: gidZ }) as { ok: boolean; session_id?: string };
+    const wZ4 = z3.session_id ?? "";
+    assert(z3.ok === true && !!wZ4 && wZ4 !== wZ1, "首选忙 → 新会话承接三单");
+    assert(await waitFor(() => (routingFor(gidZ).find((x) => x.session_id === wZ4)?.count ?? 0) === 1), "三单正常收口 count=1");
+    const cntZ4 = routingFor(gidZ).find((x) => x.session_id === wZ4)!.count;
+    hack.openDispatches.set(wZ4, [{ id: "dsp-int-x", tier: "正经立项", gid: gidZ, anchor: projZ }]);
+    cbFor(projZ)!.onTurnEnd(true, "interrupted", 5);
+    assert(readDispatchLog().some((e) => e.id === "dsp-int-x" && e.status === "done" && e.receipt === "interrupted"), "用户中断收口：台账 done+写实回执");
+    assert((routingFor(gidZ).find((x) => x.session_id === wZ4)?.count ?? -1) === cntZ4, "中断不抬 count（≠交付记账）");
+    assert(!hack.openDispatches.has(wZ4), "中断收口 FIFO 清空");
+
+    // c) onSessionEnd 兜底 = 中断口径（未开工/被打断的流关闭，不写熟手账）
+    hack.openDispatches.set(wZ4, [{ id: "dsp-fall-x", tier: "正经立项", gid: gidZ, anchor: projZ }]);
+    cbFor(projZ)!.onSessionEnd("stopped");
+    assert(readDispatchLog().some((e) => e.id === "dsp-fall-x" && e.status === "done" && e.receipt === "stopped"), "流关闭兜底收口 done");
+    assert((routingFor(gidZ).find((x) => x.session_id === wZ4)?.count ?? -1) === cntZ4, "兜底收口同样不写熟手账");
+
+    // d) 结项编制解散（§2.2）：eps 零悬账零未完 → 一句话归档 + 成员归属解除 +
+    //    路由表档案永存 + 编制快照留组内
+    const hcE_before = (listGroups().find((g) => g.id === gidE)?.headcount ?? []).length;
+    const az = mgr.orgAction("project-status", { id: gidE, to: "archived" }) as { ok: boolean; data?: { archived?: boolean } };
+    assert(az.ok === true && az.data?.archived === true, "eps 一句话归档");
+    assert(hack.sessions.get(wE3)?.state.project_gid === undefined, "编制解散：成员 project_gid 清空");
+    assert(hack.sessions.get(wE3)?.state.done_reason === "项目组结项（编制解散）", "解散收口 done_reason 写实");
+    assert(routingFor(gidE).length > 0 && (routingFor(gidE).find((x) => x.session_id === wE3)?.count ?? 0) === 2, "路由表档案永存（结项后历史可查）");
+    assert((listGroups().find((g) => g.id === gidE)?.headcount ?? []).length === hcE_before, "编制快照留组内（结项详情可查）");
+
+    // e) 挂起组不再出建议暂缓卡（防陈旧卡点头误杀复活成员）
+    mgr.orgAction("project-status", { id: gidZ, to: "parked", note: "挂起验防误触" });
+    assert(hack.sessions.get(wZ4)?.state.org_parked === gidZ, "zeta 挂起联动（wZ4 退休）");
+    const shP = mgr.orgAction("suggest-hold", { id: gidZ, reason: "试试" });
+    assert(shP.ok === false, "挂起组建议暂缓 → ok:false（无需再建议）");
+
+    // f) 消息复活即脱离挂起休眠（org_parked 清除，走 resumeAgent 路径）
+    const ackMsg = mgr.handleCommand({ command_id: "cmd-m3-revive", type: "COMMAND_MESSAGE", ts: Date.now(), payload: { session_id: wZ4, text: "复活继续干活" } } as Command, "web-1");
+    assert(ackMsg.ok === true, "挂起成员可被消息复活（不锁死）");
+    assert(hack.sessions.get(wZ4)?.state.org_parked === undefined, "复活即脱离挂起休眠（熟手池口径回真）");
+    assert(hack.sessions.get(wZ4)?.state.status === "WORKING", "复活后 WORKING");
+
+    // g) 重启重建挂起标记：内存态丢失 → 按组状态反推补标；已被复活的（agent 在）不回打
+    hack.sessions.get(wZ1)!.state.org_parked = undefined;
+    const rehy = mgr.rehydrateParkedMembers();
+    assert(rehy === 1 && hack.sessions.get(wZ1)?.state.org_parked === gidZ, "rehydrate 按组状态反推补标（只补丢标的）");
+    assert(hack.sessions.get(wZ4)?.state.org_parked === undefined, "复活中的成员不被 rehydrate 回打（agent 守卫）");
 
     // ---------- 收尾 ----------
     console.log(`\n${fail === 0 ? "PASS" : "FAIL"}: ${pass} passed, ${fail} failed`);

@@ -273,6 +273,12 @@ const pinned = mgr.applyPinned();
 // 不可用时只横幅点名，不阻断 relay 其余功能（下次启动重试）
 const leader = mgr.ensureLeader();
 
+// #26 M3 审查修正：挂起标记重启重建——org_parked 是内存态不进事件流，重启后组仍
+// parked（projects.json 持久）但成员标记全丢（熟手池 parked 口径失真 + 下方
+// autoReviveManaged 的豁免失效）。必须在 autoReviveManaged（5s 延迟）之前按组状态
+// 反推补标；零 spawn，纯标记复原
+const parkedRehydrated = mgr.rehydrateParkedMembers();
+
 // #26 M3 挂起自动化：两周无活动的在办组 → Leader 主动建议暂缓（确认卡，用户点头
 // 才挂；CCR_ORG_STALE_DAYS 覆盖窗口，0=关）。boot 即扫一轮 + 每小时巡检
 mgr.startStaleScan();
@@ -413,6 +419,9 @@ console.log(
     ? `  组织:   Leader ${leader.created ? "首次创建" : leader.rebuilt ? "已从锚重建" : "在线"}（${orgDir()}）`
     : `  组织:   Leader 未就绪：${leader.error}（下次启动重试）`,
 );
+if (parkedRehydrated > 0) {
+  console.log(`  组织:   ${parkedRehydrated} 个挂起组成员已重建退休标记（不自动拉起）`);
+}
 console.log(`  桥接:   ${join(cfg.dataDir, "bridge.json")}（外部 CLI 会话经 hooks 接入）`);
 console.log(
   cloudIdentity

@@ -586,7 +586,8 @@ export function startServer(
     // #26 M2 分诊指令通道（Leader 会话有 Bash，分诊决策 = 执行 org CLI → 此处）：
     // POST /api/org?token=...  body { action, ...payload }，action 全集见
     // session-manager.orgAction（status/project-create/project-status/project-tier/
-    // suggest-hold/dispatch/board/project-detail）。鉴权循 deliver 先例（主 token）。
+    // suggest-hold/dispatch/board/project-detail；M3 追加 rate/tag——路由表评鉴，
+    // Leader 手动记 good/bad 与技能标签）。鉴权循 deliver 先例（主 token）。
     // 用户端决议不经此（走 WS COMMAND_ORG_CONFIRM）——Leader 只提案不决议。
     if (req.method === "POST" && url.pathname === "/api/org") {
       if ((url.searchParams.get("token") ?? "") !== cfg.token) {

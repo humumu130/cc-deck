@@ -58,6 +58,11 @@ const mk = (sid: string, cliSid: string, external: boolean, updated: number): [s
     logs: [],
   } as ReplayedSession,
 ];
+// M3 扩展：在 mk 基础上附加团队态字段（org_parked/project_gid）
+const mk2 = (sid: string, cliSid: string, external: boolean, updated: number, extra: Record<string, unknown>): [string, ReplayedSession] => [
+  sid,
+  { state: { ...mk(sid, cliSid, external, updated)[1].state, ...extra }, logs: [] } as unknown as ReplayedSession,
+];
 mgr.adopt(new Map([
   mk("m-busy", SID_BUSY, false, Date.now()),
   mk("m-idle", SID_IDLE, false, Date.now() - 1000),
@@ -77,8 +82,47 @@ process.env.CCR_NO_AUTOREVIVE = "1";
 assert(mgr.autoReviveManaged() === 0, "CCR_NO_AUTOREVIVE=1 逃生阀生效");
 process.env.CCR_NO_AUTOREVIVE = "";
 
+// #26 M3 审查修正：挂起退休成员不自动拉起（组挂起=编制退休释放；org_parked 内存
+// 态 + project_gid 组状态双保险——重启后标记丢了也能按组状态兜住）
+const ORG = join(ROOT, "orgdir");
+mkdirSync(ORG, { recursive: true });
+process.env.CCR_ORG_DIR = ORG;
+const SID_PARKED = "autorevive-test-parked-cli";
+const SID_GP = "autorevive-test-gp-cli";
+putTodo(SID_PARKED, "1.json", { id: 1, subject: "挂起组在跑活", status: "in_progress" });
+putTodo(SID_GP, "1.json", { id: 1, subject: "丢标成员在跑活", status: "in_progress" });
+writeFileSync(
+  join(ORG, "projects.json"),
+  JSON.stringify({
+    groups: [{
+      id: "g-parked", name: "挂起组", anchor_dir: "/tmp/anchor-g", status: "parked", tier: "正经立项",
+      headcount: [{ session_id: "m-gp", role: "worker" }], single_card: false,
+      created_at: Date.now(), updated_at: Date.now(), parked_at: Date.now(),
+    }],
+    trust_light: false,
+  }),
+);
+mgr.adopt(new Map([
+  // ① org_parked 显式在册（挂起联动直接置标）② 重启丢标态：只有 project_gid，
+  // 组状态在盘上是 parked（rehydrateParkedMembers 重建前的裸收养形态）
+  mk2("m-parked", SID_PARKED, false, Date.now(), { org_parked: "g-parked" }),
+  mk2("m-gp", SID_GP, false, Date.now(), { project_gid: "g-parked" }),
+]));
+const n2 = mgr.autoReviveManaged();
+assert(n2 === 0, `挂起退休成员不自动拉起（标记/组状态双保险）got=${n2}`);
+assert(resumes.length === 1, "无新增 resume（挂起成员零拉起）");
+const rehy = mgr.rehydrateParkedMembers();
+assert(rehy === 1 && mgr.snapshot().find((s) => s.session_id === "m-gp")?.org_parked === "g-parked",
+  `重启重建挂起标记（按组状态反推补标）got=${rehy}`);
+assert(mgr.snapshot().find((s) => s.session_id === "m-parked")?.org_parked === "g-parked", "已有标记不重复处理");
+const n3 = mgr.autoReviveManaged();
+assert(n3 === 0, `rehydrate 后仍不拉起（豁免闭环）got=${n3}`);
+delete process.env.CCR_ORG_DIR;
+
 rmSync(join(TASKS, SID_BUSY), { recursive: true, force: true });
 rmSync(join(TASKS, SID_IDLE), { recursive: true, force: true });
+rmSync(join(TASKS, SID_PARKED), { recursive: true, force: true });
+rmSync(join(TASKS, SID_GP), { recursive: true, force: true });
 rmSync(ROOT, { recursive: true, force: true });
 console.log(`\nAUTOREVIVE TESTS: ${pass} pass / ${fail} fail`);
 process.exit(fail ? 1 : 0);

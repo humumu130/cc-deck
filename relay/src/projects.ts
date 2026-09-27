@@ -598,7 +598,14 @@ export interface StaleGroupInfo {
 // 活度口径：组 updated_at ∨ 板 updated_at ∨ 该组派单台账最新 ts ∨ 路由表最新
 // last_ts（熟手最近收工）——四路取最大即「最后活动」。纯函数（now 注入）：
 // 扫描器与单测共用同一判定。staleDays<=0 直接空（触发器关闭态）。
-export function findStaleGroups(now: number, staleDays: number, dir?: string): StaleGroupInfo[] {
+export function findStaleGroups(
+  now: number,
+  staleDays: number,
+  dir?: string,
+  // #26 M3 审查修正（第五路活度）：组员会话 updated_at——用户直驱推进（COMMAND_MESSAGE）
+  // 不动台账/板/组，前四路全静止；会话活动可见就不算闲置
+  memberActivity?: Record<string, number>,
+): StaleGroupInfo[] {
   if (staleDays <= 0) return [];
   const cutoff = now - staleDays * 86_400_000;
   const DAY = 86_400_000;
@@ -615,6 +622,8 @@ export function findStaleGroups(now: number, staleDays: number, dir?: string): S
     for (const r of routingFor(g.id, dir)) {
       if (r.last_ts > last) last = r.last_ts;
     }
+    const ma = memberActivity?.[g.id] ?? 0;
+    if (ma > last) last = ma;
     if (last < cutoff) out.push({ gid: g.id, name: g.name, idleDays: Math.max(1, Math.floor((now - last) / DAY)) });
   }
   return out;
