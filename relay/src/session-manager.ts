@@ -450,6 +450,11 @@ function resumePendingWindowMs(): number {
   const v = Number(process.env.CCR_RESUME_PENDING_MS);
   return Number.isFinite(v) && v >= 5_000 ? v : 45_000;
 }
+// 冲刺 F-07：resumeAgent 的 init 看门狗时长（测试可缩短；与互斥窗同缺省 45s）
+function resumeInitTimeoutMs(): number {
+  const v = Number(process.env.CCR_RESUME_INIT_MS);
+  return Number.isFinite(v) && v >= 100 ? v : 45_000;
+}
 function watchdogDisabled(): boolean {
   return process.env.CCR_WATCHDOG_DISABLE === "1";
 }
@@ -2202,7 +2207,8 @@ export class SessionManager {
           // #26 派单台账收口（M2 泛化全会话）：一回合一单，FIFO 收最旧（多消息排队时
           // 按序逐回合收）；Leader 咨询档与 worker 派单同机制，FIFO 空 = no-op。
           // recovering 让位漏掉的收口由恢复流的下个 onTurnEnd 补上
-          this.closeOpenDispatches(managed.state.session_id, ok ? "done" : "failed", reason, false,
+          this.closeOpenDispatches(managed.state.session_id, ok ? "done" : "failed",
+            this.receiptWithResultLine(managed.state.session_id, reason), false,
             // #26 M3 审查修正：interrupted（用户手动停止，agent-adapter 停止路径固定此
             // reason）≠ 交付——同「中断不写熟手账」口径，不抬 count（板联动照旧走 done）
             !(ok && reason === "interrupted"));
@@ -2273,10 +2279,30 @@ export class SessionManager {
     }
     // #189 resume 互斥标记：spawn→onInit 窗口内的二次 resume 请求在调用侧被拦下
     s.resumePending = Date.now();
+    // 冲刺 F-07（H1 受控实验）：上游 CLI 对「transcript 尾=悬空 user 轮」的会话
+    //（首回合被杀）resume 时**静默挂死**——不 init、不报错、不退出（30s 零输出
+    // 实锤；先灌消息则崩 role 校验）。消息路径此前无 init 超时 → 看门狗反复接管
+    // 最终 gave_up，自动/手动恢复双不可达。加 45s init 看门狗（对齐 #189 互斥窗，
+    // 盖住冷启动；reviveSaved 显式 30s 不动）：
+    // - 首回合会话（无已完成回合 = 无记忆可丢）：回退 fresh spawn 重放 firstMessage，
+    //   语义无损自愈——H2 恢复链路（连续恢复/防风暴/gave_up）打通的前提；
+    // - 有记忆会话：不赌 fresh（会抹上下文）——ERROR+saved 可重试，宁可留死卡等用户。
+    const resumeStart = Date.now();
+    let inited = false;
+    let initTimer: ReturnType<typeof setTimeout> | null = null;
+    const baseCb = this.agentCallbacks(s);
+    const cb: AgentCallbacks = {
+      ...baseCb,
+      onInit: (id2, model, pm) => {
+        inited = true;
+        if (initTimer) clearTimeout(initTimer);
+        baseCb.onInit(id2, model, pm);
+      },
+    };
     const agent = this.newAgent(
       s.state.cwd,
       s.state.model,
-      this.agentCallbacks(s),
+      cb,
       firstMessage,
       { resume: sdkId, permissionMode: s.state.permission_mode ?? "default", images },
     );
@@ -2301,6 +2327,42 @@ export class SessionManager {
     s.wd.phase = "idle";
     s.wd.gaveUp = false;
     s.unacked.push({ text: firstMessage, images, ts: Date.now() });
+    initTimer = setTimeout(() => {
+      initTimer = null;
+      if (inited || s.agent !== agent) return; // 已 init / 流已换（stale timer）不动作
+      void agent.stop().catch(() => {});
+      if (!s.logs.some((e) => e.kind === "assistant_text")) {
+        // 首回合挂死 → fresh spawn 重放：清掉本回合未回显账（prompt 经 spawn 参数
+        // 直达，CLI 不 echo——残留会让下轮看门狗误判「消息没送到」重复重放）
+        for (let i = s.unacked.length - 1; i >= 0; i--) {
+          if (s.unacked[i].text === firstMessage && s.unacked[i].ts >= resumeStart) s.unacked.splice(i, 1);
+        }
+        s.streamGen++;
+        s.resumePending = Date.now();
+        s.lastProgressAt = Date.now();
+        s.lastProgressKind = "";
+        s.agent = this.newAgent(
+          s.state.cwd,
+          s.state.model,
+          this.agentCallbacks(s),
+          firstMessage,
+          { permissionMode: s.state.permission_mode ?? "default", images },
+        );
+        this.pushExternalLog(s.state.session_id, "system",
+          "resume 上游挂死（45s 无 init，疑首回合被杀的悬空 transcript），已回退新会话重放本条消息——该会话无已完成回合，上下文无损");
+        this.emitUpdated(s, true);
+      } else {
+        s.state.status = "ERROR";
+        s.state.last_error = "恢复失败: resume 初始化超时（45s，上游 CLI 挂死）";
+        s.state.saved = true;
+        s.state.action_summary = "恢复失败";
+        s.state.updated_at = Date.now();
+        this.pushExternalLog(s.state.session_id, "system", s.state.last_error);
+        this.bus.emit(s.state.session_id, "SESSION_ERROR", { message: s.state.last_error });
+        this.emitUpdated(s, true);
+      }
+    }, resumeInitTimeoutMs());
+    initTimer.unref?.();
     const marker = images && images.length > 0 ? `（+${images.length} 图）` : "";
     this.pushExternalLog(s.state.session_id, "user_message", echo ?? truncate(firstMessage, 200) + marker);
     this.pushExternalLog(s.state.session_id, "system", `已恢复 SDK 会话（resume ${sdkId.slice(0, 8)}…）`);
@@ -2329,6 +2391,12 @@ export class SessionManager {
       if (inited) return;
       inited = true; // 流关闭与超时可能先后到，双触发只记一次
       if (timer) clearTimeout(timer);
+      // 冲刺 F-07：首回合会话（无已完成回合）的悬空 transcript 上游 CLI 无法
+      // resume，重试永远同结果——指路消息自愈通道（发消息走 resumeAgent 的
+      // fresh-spawn 回退，无记忆可丢、语义无损）
+      if (!s.logs.some((e) => e.kind === "assistant_text")) {
+        reason += "（该会话首次回合未完成即中断，直接恢复走不通；给会话发一条消息可自动回退新会话续命）";
+      }
       s.state.status = "ERROR";
       s.state.last_error = `恢复失败: ${reason}`;
       s.state.done_reason = undefined;
@@ -2613,6 +2681,27 @@ export class SessionManager {
     const q = this.openDispatches.get(key) ?? [];
     q.push(e);
     this.openDispatches.set(key, q);
+  }
+
+  // 冲刺 F-02（B1 实测）：worker 纪律模板要求回执末行「结果：…｜改动文件：…」，但
+  // 台账 receipt 只存 CLI turn-end reason（"completed"）——项目组详情「回执流」无可读
+  // 内容（§3.5 回执语义未落到台账字段）。回合收口时从时间线尾部捞最近一条 assistant
+  // 消息里的「结果：」行拼进回执；无此行（咨询档/中断/未按纪律回）保持原 reason。
+  // 只看最近一条 assistant（更早回合的回执不串台）；text 截断时 full 存原文优先取。
+  private receiptWithResultLine(key: string, reason: string): string {
+    const m = this.sessions.get(key);
+    if (!m) return reason;
+    for (let i = m.logs.length - 1; i >= 0; i--) {
+      const e = m.logs[i];
+      if (e.kind !== "assistant_text") continue;
+      const lines = (e.full ?? e.text).split("\n");
+      for (let j = lines.length - 1; j >= 0; j--) {
+        const t = lines[j].trim();
+        if (t.startsWith("结果：")) return `${reason}｜${truncate(t, 160)}`;
+      }
+      break;
+    }
+    return reason;
   }
 
   private closeOpenDispatches(key: string, status: "done" | "failed", receipt: string, all = false, recordRouting = true, onlyGid?: string, boardTo?: "done" | "todo"): void {

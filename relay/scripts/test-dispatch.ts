@@ -35,10 +35,16 @@ async function waitFor(fn: () => boolean, ms = 3000, every = 25): Promise<boolea
 // resumePending 窗口内 stop 落空（孤儿 CLI 没被杀掉）。
 let okNext = true;
 let stopNoop = false;
+// 冲刺 F-02：非空时 fake agent 在 onTurnEnd 前回一条带「结果：」末行的 assistant
+// 消息（模拟 worker 纪律模板回执），验台账 receipt 拼入该行
+let emitResultLine: string | null = null;
+// 冲刺 F-07：true 时 resume 形态的 spawn 静默挂死（不 init/不报错/不退出——上游
+// CLI 对悬空 transcript 的实锤行为），验 init 超时回退 fresh spawn
+let hangResume = false;
 const stopCalls: string[] = [];
-type SpawnRec = { cwd: string; prompt: string | undefined; cb: AgentCallbacks; agent: AgentLike };
+type SpawnRec = { cwd: string; prompt: string | undefined; cb: AgentCallbacks; agent: AgentLike; resume?: string };
 const makeFakeFactory = (created: SpawnRec[]) =>
-  (cwd: string, model: string, cb: AgentCallbacks, prompt: string | undefined, opts?: { permissionMode?: string }): AgentLike => {
+  (cwd: string, model: string, cb: AgentCallbacks, prompt: string | undefined, opts?: { permissionMode?: string; resume?: string }): AgentLike => {
     const a: AgentLike = {
       id: randomUUID(),
       startedAt: Date.now(),
@@ -53,12 +59,17 @@ const makeFakeFactory = (created: SpawnRec[]) =>
       },
       setPermissionMode: async () => {},
     };
-    created.push({ cwd, prompt, cb, agent: a });
+    created.push({ cwd, prompt, cb, agent: a, resume: opts?.resume });
     const ok = okNext;
+    if (hangResume && opts?.resume) return a; // F-07：挂死流——零回调零退出
     setTimeout(() => {
       if (a.ended) return;
       cb.onInit("sdk-" + a.id.slice(0, 8), model, opts?.permissionMode ?? "default");
-      if (prompt !== undefined) setTimeout(() => { if (!a.ended) cb.onTurnEnd(ok, ok ? "success" : "error exit 1", 12); }, 10);
+      if (prompt !== undefined) setTimeout(() => {
+        if (a.ended) return;
+        if (emitResultLine) cb.onLog("assistant_text", `分析并动手改了。\n${emitResultLine}`, {});
+        cb.onTurnEnd(ok, ok ? "success" : "error exit 1", 12);
+      }, 10);
     }, 20);
     return a;
   };
@@ -126,6 +137,20 @@ async function main() {
     const rows1 = raw1.filter((e) => e.id === did1);
     assert(rows1.length >= 2 && rows1[0]?.status === "dispatched" && rows1[1]?.status === "running", "先落账再执行（dispatched → running 同 id 原始序）");
     assert(readDispatchLog().find((e) => e.id === did1)?.project_anchor === anchor, "台账带项目锚点（§2.5 分流数据源；收敛视图）");
+
+    // ---------- D1b 回执可读性（冲刺 F-02） ----------
+    console.log("D1b 回执可读性（F-02）:");
+    // 先等 D1 的回合真收口再开 emitResultLine——fake 回合是 30ms 异步，开着开关
+    // 派新单会把开关泄漏进上一单的 turn-end（wid1 被误写 assistant 日志，D8 前置被污染）
+    assert(await waitFor(() => readDispatchLog().filter((e) => e.id === did1).some((e) => e.status === "done")), "D1 回合先收口（前置）");
+    emitResultLine = "结果：错别字已改｜改动文件：README.md";
+    const d1b = mgr.orgAction("dispatch", { anchor, prompt: "再改一处" }) as { ok: boolean; dispatch_id?: string };
+    const did1b = d1b.ok ? (d1b as { dispatch_id: string }).dispatch_id : "";
+    assert(await waitFor(() => readDispatchLog().filter((e) => e.id === did1b).some((e) => e.status === "done")), "回合收口 done");
+    emitResultLine = null; // fake 回调是异步 setTimeout——收口后再关，避免回合内被清
+    const rc1b = readDispatchLog().filter((e) => e.id === did1b).find((e) => e.status === "done");
+    assert((rc1b?.receipt ?? "").includes("结果：错别字已改｜改动文件：README.md"), "回执拼入「结果：」行（§3.5 回执语义落到台账字段）");
+    assert((rc1b?.receipt ?? "").startsWith("success"), "回执保留 terminal_reason 前缀（写实）");
 
     // ---------- D2 派单收口 ----------
     console.log("D2 派单收口:");
@@ -734,6 +759,50 @@ async function main() {
     assert(readDispatchLog().some((x) => x.id === "dsp-ph-x" && x.status === "done" && x.receipt === "phi 干完"), "他组回合自然收口（写实回执）");
     assert((routingFor(gidPh).find((x) => x.session_id === wT2)?.count ?? 0) === 1, "phi 路由入账（跨组正交面）");
     assert(!hack.openDispatches.has(wT2), "FIFO 清空");
+
+    // ---------- D8 resume 挂死自愈（冲刺 F-07） ----------
+    console.log("D14 resume 挂死自愈（F-07）:");
+    const prevInitMs = process.env.CCR_RESUME_INIT_MS;
+    process.env.CCR_RESUME_INIT_MS = "300";
+    const hack14 = mgr as unknown as {
+      sessions: Map<string, {
+        state: { status: string; saved?: boolean; last_error?: string; session_id: string };
+        agent: { ended: boolean } | null;
+        logs: { kind: string; text: string }[];
+        unacked: { text: string; ts: number }[];
+      }>;
+    };
+    // a) 首回合会话（无 assistant 产出=无记忆可丢）：resume 挂死 → 300ms 超时 → fresh spawn 重放
+    const sW1 = hack14.sessions.get(wid1)!;
+    assert(!sW1.logs.some((e) => e.kind === "assistant_text"), "前置：wid1 无已完成回合（首回合形态）");
+    sW1.agent!.ended = true; // 流已死 → COMMAND_MESSAGE 走 resumeAgent
+    hangResume = true;
+    const createdBeforeA = created.length;
+    const ack8 = mgr.handleCommand({ command_id: "cmd-f07a", type: "COMMAND_MESSAGE", ts: Date.now(), payload: { session_id: wid1, text: "救命消息（F-07）" } } as Command, "web-1");
+    assert(ack8.ok === true, "消息受理（触发 resume）");
+    assert(created.length === createdBeforeA + 1 && !!created[created.length - 1].resume, "resume 形态 spawn 发起");
+    assert(await waitFor(() => created.some((c, i) => i >= createdBeforeA && !c.resume && c.prompt?.includes("救命消息（F-07）"))), "超时回退 fresh spawn（prompt=重放消息）");
+    assert(await waitFor(() => sW1.logs.some((e) => e.kind === "system" && e.text.includes("回退新会话重放"))), "回退留痕（system 日志可审计）");
+    assert(!sW1.unacked.some((m) => m.text.includes("救命消息（F-07）")), "重放消息未回显账已清（防下轮看门狗重复重放）");
+    assert(await waitFor(() => sW1.state.status === "DONE"), "fresh 流回合自然收口（DONE）");
+    hangResume = false;
+    // b) 有记忆会话：resume 挂死 → 不赌 fresh（抹上下文）→ ERROR+saved 可重试
+    emitResultLine = "结果：有记忆的活｜改动文件：a.ts";
+    const d8b = mgr.orgAction("dispatch", { anchor, prompt: "产出一条 assistant 记忆" }) as { ok: boolean; session_id?: string };
+    const wid14b = d8b.ok ? (d8b as { session_id: string }).session_id : "";
+    assert(await waitFor(() => hack14.sessions.get(wid14b)?.logs.some((e) => e.kind === "assistant_text") === true), "前置：wid14b 有已完成回合（有记忆形态）");
+    emitResultLine = null; // fake 回合 30ms 异步——收口后再关，防泄漏进别的回合
+    const sW8b = hack14.sessions.get(wid14b)!;
+    sW8b.agent!.ended = true;
+    hangResume = true;
+    const createdBefore14b = created.length;
+    const ack14b = mgr.handleCommand({ command_id: "cmd-f07b", type: "COMMAND_MESSAGE", ts: Date.now(), payload: { session_id: wid14b, text: "第二条消息" } } as Command, "web-1");
+    assert(ack14b.ok === true, "消息受理（触发 resume）");
+    assert(await waitFor(() => sW8b.state.status === "ERROR" && sW8b.state.saved === true), "有记忆会话：ERROR+saved（可重试，不赌 fresh）");
+    assert((sW8b.state.last_error ?? "").includes("resume 初始化超时"), "失败原因写实（上游挂死）");
+    assert(!created.some((c, i) => i >= createdBefore14b && !c.resume), "未发起 fresh spawn（上下文优先）");
+    hangResume = false;
+    if (prevInitMs) process.env.CCR_RESUME_INIT_MS = prevInitMs; else delete process.env.CCR_RESUME_INIT_MS;
 
     // ---------- 收尾 ----------
     console.log(`\n${fail === 0 ? "PASS" : "FAIL"}: ${pass} passed, ${fail} failed`);
