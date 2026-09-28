@@ -125,6 +125,13 @@ export interface SessionState {
   // （咨询 Leader 无此二字段）
   project_gid?: string;
   dispatch_tier?: string;
+  // 雇员会话（#17 独立家目录）：Leader/派单 worker/随手办 spawn 时置 true，
+  // 用户自建会话不置。启用 CCR_EMPLOYEE_CONFIG_DIR 时，雇员的 CLI 子进程带
+  // CLAUDE_CONFIG_DIR 指到独立家——transcript/任务清单/全局配置与用户默认家
+  //（~/.claude）物理隔离，用户的会话列表与终端 resume 列表不再出现工作会话。
+  // 读取路径（transcriptHasAssistant / 任务清单轮询）按此标记选家；未启用开关
+  // 时标记仅作身份标识，路径行为与从前逐字节一致
+  employee?: boolean;
   // #26 M3 两层联动（§6.2 组挂起→成员会话全 parked）：成员会话随组挂起休眠时
   // 记来源组 id——进程已停、可点开可发消息（消息路径 resumeAgent 天然复活）；
   // 组复活清除。路由表记录不受影响（档案永存，复活后查表拉原班）

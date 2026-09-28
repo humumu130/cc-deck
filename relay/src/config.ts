@@ -14,6 +14,13 @@ export interface RelayConfig {
   cloudUrls: string[];       // 云桥地址列表（CCR_CLOUD_URL 逗号分隔），空 = 云桥禁用
   cloudUrl: string;          // 主桥（首地址）：PAIR_ACK 下发给新配对设备
   cloudToken: string;        // 云桥层连接 token（CCR_CLOUD_TOKEN，所有桥共用）
+  // 雇员独立家目录（#17）：null = 关闭（行为与从前一致）；路径 = 启用，relay
+  // spawn 的雇员会话（Leader/worker/随手办）CLI 子进程 CLAUDE_CONFIG_DIR 指到
+  // 该目录，transcript/任务清单与用户默认家（~/.claude）物理隔离。
+  // CCR_EMPLOYEE_CONFIG_DIR 三态：未设置 = 关闭；"auto" = <dataDir>/claude-home；
+  // 绝对路径 = 自定义位置。相对路径视为配置错误按关闭处理并告警（防 cwd 漂移
+  // 让家跟着启动目录走）
+  employeeConfigDir: string | null;
 }
 
 export function loadConfig(): RelayConfig {
@@ -77,8 +84,24 @@ export function loadConfig(): RelayConfig {
     .filter(Boolean);
   const cloudToken = process.env.CCR_CLOUD_TOKEN ?? DEFAULT_CLOUD_TOKEN;
 
+  // #17 雇员独立家三态解析（见 RelayConfig.employeeConfigDir 注释）
+  let employeeConfigDir: string | null = null;
+  {
+    const v = (process.env.CCR_EMPLOYEE_CONFIG_DIR ?? "").trim();
+    if (v === "auto") {
+      employeeConfigDir = join(dataDir, "claude-home");
+    } else if (v) {
+      if (v.startsWith("/")) {
+        employeeConfigDir = v;
+      } else {
+        // 相对路径不可预测（守护进程 cwd 漂移），拒绝启用而非猜一个位置
+        console.warn(`[config] CCR_EMPLOYEE_CONFIG_DIR 需绝对路径或 "auto"，收到相对路径 "${v}"，雇员独立家保持关闭`);
+      }
+    }
+  }
+
   return {
     port, token, tokenGenerated: !envToken, defaultCwd, model, bridgeToken, dataDir,
-    cloudUrls, cloudUrl: cloudUrls[0] ?? "", cloudToken,
+    cloudUrls, cloudUrl: cloudUrls[0] ?? "", cloudToken, employeeConfigDir,
   };
 }

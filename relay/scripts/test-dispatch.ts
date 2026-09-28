@@ -43,9 +43,9 @@ let emitResultLine: string | null = null;
 // CLI 对悬空 transcript 的实锤行为），验 init 超时回退 fresh spawn
 let hangResume = false;
 const stopCalls: string[] = [];
-type SpawnRec = { cwd: string; prompt: string | undefined; cb: AgentCallbacks; agent: AgentLike; resume?: string };
+type SpawnRec = { cwd: string; prompt: string | undefined; cb: AgentCallbacks; agent: AgentLike; resume?: string; configHome?: string };
 const makeFakeFactory = (created: SpawnRec[]) =>
-  (cwd: string, model: string, cb: AgentCallbacks, prompt: string | undefined, opts?: { permissionMode?: string; resume?: string }): AgentLike => {
+  (cwd: string, model: string, cb: AgentCallbacks, prompt: string | undefined, opts?: { permissionMode?: string; resume?: string; configHome?: string }): AgentLike => {
     const a: AgentLike = {
       id: randomUUID(),
       startedAt: Date.now(),
@@ -60,7 +60,7 @@ const makeFakeFactory = (created: SpawnRec[]) =>
       },
       setPermissionMode: async () => {},
     };
-    created.push({ cwd, prompt, cb, agent: a, resume: opts?.resume });
+    created.push({ cwd, prompt, cb, agent: a, resume: opts?.resume, configHome: opts?.configHome });
     const ok = okNext;
     if (hangResume && opts?.resume) return a; // F-07：挂死流——零回调零退出
     setTimeout(() => {
@@ -93,7 +93,7 @@ async function main() {
     const cfg: RelayConfig = {
       port: 8793, token: "t", tokenGenerated: false, defaultCwd: "",
       model: "test-model", bridgeToken: "bt", dataDir: DATA,
-      cloudUrls: [], cloudUrl: "", cloudToken: "",
+      cloudUrls: [], cloudUrl: "", cloudToken: "", employeeConfigDir: null,
     };
     const stickySentinel = mkdtempSync(join(tmpdir(), "ccr-sentinel-"));
     writeFileSync(join(DATA, "last-cwd"), stickySentinel, "utf-8");
@@ -912,6 +912,29 @@ async function main() {
     assert(await waitFor(() => sU.state.status === "ERROR" && sU.state.saved === true), "累计输出>0 = 有记忆：ERROR+saved（不 fresh）");
     assert(!created.some((c, i) => i >= createdBeforeU && !c.resume), "usage 记忆同样不 fresh spawn");
     hangResume = false;
+
+    // ---------- D15 雇员独立家（#17）：spawn 传 CLAUDE_CONFIG_DIR、身份标记、开关语义 ----------
+    console.log("D15 雇员独立家（#17）:");
+    {
+      const anchor15 = join(DATA, "proj-emp-home");
+      mkdirSync(anchor15, { recursive: true });
+      // 基线：开关关闭（cfg.employeeConfigDir=null）——雇员身份标记在、configHome 不传
+      const before15 = created.length;
+      const d15a = mgr.orgAction("dispatch", { anchor: anchor15, prompt: "独立家基线单" }) as { ok: boolean; session_id?: string };
+      assert(d15a.ok === true, "基线单派发");
+      await waitFor(() => mgr.snapshot().find((s) => s.session_id === d15a.session_id && s.status === "DONE") !== undefined);
+      assert(created.slice(before15).every((c) => c.configHome === undefined), "开关关闭：spawn 不传 configHome（行为与从前一致）");
+      assert(mgr.snapshot().find((s) => s.session_id === d15a.session_id)?.employee === true, "worker 卡带雇员标记（身份恒在，与开关无关）");
+      // 中途开启：新单立即生效（resume 原班与新 spawn 同口，都带 configHome）
+      const EMP = mkdtempSync(join(tmpdir(), "ccr-emp-home-"));
+      cfg.employeeConfigDir = EMP;
+      const before15b = created.length;
+      const d15b = mgr.orgAction("dispatch", { anchor: anchor15, prompt: "独立家生效单" }) as { ok: boolean; session_id?: string };
+      assert(d15b.ok === true, "生效单派发");
+      await waitFor(() => mgr.snapshot().find((s) => s.session_id === d15b.session_id && s.status === "DONE") !== undefined);
+      assert(created.slice(before15b).every((c) => c.configHome === EMP), "开关开启：spawn 收到 configHome=独立家（含 resume 原班路径）");
+      cfg.employeeConfigDir = null;
+    }
 
     // ---------- 收尾 ----------
     console.log(`\n${fail === 0 ? "PASS" : "FAIL"}: ${pass} passed, ${fail} failed`);

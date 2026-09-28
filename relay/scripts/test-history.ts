@@ -31,6 +31,12 @@ const events: Envelope[] = [];
 let seq = 0;
 const sid = "s1";
 events.push(mk(++seq, sid, "SESSION_CREATED", { cwd: "/tmp", initial_prompt: "测试", title: "测试", model: "m" }));
+
+// #17 雇员标记随首帧流经事件流：重启回放重建卡片后身份存活（独立家选家依赖）
+{
+  const empEv = [mk(++seq, "emp-1", "SESSION_CREATED", { cwd: "/tmp", initial_prompt: "e", model: "m", employee: true })];
+  assert(reduceHistory(empEv).get("emp-1")?.state.employee === true, "回放重建雇员标记");
+}
 for (let i = 0; i < 350; i++) events.push(mk(++seq, sid, "SESSION_LOG", { kind: "assistant_text", text: `log${i}` }));
 for (let i = 0; i < 80; i++) events.push(mk(++seq, sid, "SESSION_UPDATED", { status: "WORKING", action_summary: `u${i}`, stats: null }));
 events.push(mk(++seq, sid, "SESSION_HEARTBEAT", { elapsed_ms: 1, action_summary: "h" }));

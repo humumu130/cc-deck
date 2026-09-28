@@ -464,12 +464,15 @@ function resumeInitTimeoutMs(): number {
 // 会把有记忆会话误判成首回合，fresh 回退静默抹上下文。transcript 文件由 CLI 维护
 // 不裁剪，resume 挂死超时是罕见路径，整读可接受。失败安全：任何异常按「无记忆」
 // 处理（与旧口径一致，不阻断 fresh 自愈）
-function transcriptHasAssistant(cwd: string, sdkId: string): boolean {
+function transcriptHasAssistant(cwd: string, sdkId: string, configHome?: string): boolean {
   try {
     // 目录名约定同 Claude Code：cwd 实路径的非字母数字全替换为 '-'（/tmp 在 macOS
     // 解析为 /private/tmp，realpath 对齐）
     const slug = realpathSync(cwd).replace(/[^a-zA-Z0-9]/g, "-");
-    const p = join(homedir(), ".claude", "projects", slug, `${sdkId}.jsonl`);
+    // #17 雇员独立家：雇员会话 transcript 在独立家下，按会话身份选家目录前缀；
+    // undefined = 用户默认家（~/.claude），与从前逐字节一致
+    const base = configHome ?? join(homedir(), ".claude");
+    const p = join(base, "projects", slug, `${sdkId}.jsonl`);
     return readFileSync(p, "utf-8").includes('"type":"assistant"');
   } catch {
     return false;
@@ -522,12 +525,20 @@ export class SessionManager {
   // #49 测试缝：托管 AgentSession 工厂。生产恒为 null（直接 new AgentSession，
   // 行为与从前逐字节一致）；test-bridge/test-cloud 注入假 agent 验证置顶/按需恢复
   // 与休眠登记路径，免拉真 CLI 子进程
-  private agentFactory: ((cwd: string, model: string, cb: AgentCallbacks, initialPrompt: string | undefined, opts?: { resume?: string; permissionMode?: ManagedPermissionMode; images?: string[]; rules?: AllowRuleStore }) => AgentLike) | null = null;
+  private agentFactory: ((cwd: string, model: string, cb: AgentCallbacks, initialPrompt: string | undefined, opts?: { resume?: string; permissionMode?: ManagedPermissionMode; images?: string[]; rules?: AllowRuleStore; configHome?: string }) => AgentLike) | null = null;
 
   setAgentFactory(
-    fn: ((cwd: string, model: string, cb: AgentCallbacks, initialPrompt: string | undefined, opts?: { resume?: string; permissionMode?: ManagedPermissionMode; images?: string[]; rules?: AllowRuleStore }) => AgentLike) | null,
+    fn: ((cwd: string, model: string, cb: AgentCallbacks, initialPrompt: string | undefined, opts?: { resume?: string; permissionMode?: ManagedPermissionMode; images?: string[]; rules?: AllowRuleStore; configHome?: string }) => AgentLike) | null,
   ): void {
     this.agentFactory = fn;
+  }
+
+  // #17 雇员独立家：雇员会话（Leader/worker/随手办）生效的 CLAUDE_CONFIG_DIR；
+  // 非雇员或未启用开关（cfg.employeeConfigDir=null）返回 undefined = 用户默认家。
+  // spawn（create/resume/fresh 回退/reviveSaved）与读取路径（transcript 判记忆、
+  // 任务清单轮询）统一经此选家
+  private employeeHome(state: SessionState): string | undefined {
+    return state.employee ? this.cfg.employeeConfigDir ?? undefined : undefined;
   }
 
   private newAgent(
@@ -535,7 +546,7 @@ export class SessionManager {
     model: string,
     cb: AgentCallbacks,
     initialPrompt: string | undefined,
-    opts?: { resume?: string; permissionMode?: ManagedPermissionMode; images?: string[] },
+    opts?: { resume?: string; permissionMode?: ManagedPermissionMode; images?: string[]; configHome?: string },
   ): AgentLike {
     const withRules = { ...opts, rules: this.allowRules };
     return this.agentFactory
@@ -594,7 +605,7 @@ export class SessionManager {
       // 子会话 id 一到手就登记（不等 result：超时丢 sid 会让孤儿扫描误收养它）
       this.childSdkIds.add(sid);
       appendChildSession(this.cfg.dataDir, sid);
-    }, titleCwd).then(({ title: t }) => {
+    }, titleCwd, this.cfg.employeeConfigDir ?? undefined).then(({ title: t }) => {
       if (!t) return;
       const s = this.sessions.get(sessionId);
       if (!s || s.state.title === t || s.state.title_locked) return;
@@ -1967,7 +1978,7 @@ export class SessionManager {
     }
   }
 
-  private create(rawCwd: string, prompt: string, permissionMode?: ManagedPermissionMode, autoMkdir = false, opts?: { skipStickyCwd?: boolean }): string {
+  private create(rawCwd: string, prompt: string, permissionMode?: ManagedPermissionMode, autoMkdir = false, opts?: { skipStickyCwd?: boolean; employee?: boolean }): string {
     // #293 三级回落：指定/默认目录无效时回落用户主目录（说明进时间线），完全无可用目录才报错；
     // #208 autoMkdir：指定目录不存在时先 mkdir -p 建出来（失败仍走回落链）
     const { cwd, fallbackNote } = resolveCreateCwd(rawCwd, this.cfg.defaultCwd, autoMkdir);
@@ -1998,6 +2009,9 @@ export class SessionManager {
         turn_started_at: Date.now(),
         updated_at: Date.now(),
         stats: { files_changed: 0, lines_added: 0, lines_deleted: 0 },
+        // #17 雇员身份随卡落位：Leader/派单 worker/随手办置 true（spawn 传
+        // CLAUDE_CONFIG_DIR + 读取路径选家都按它），用户自建会话不置
+        ...(opts?.employee ? { employee: true as const } : {}),
       },
       logs: [],
       lastUpdateEmit: 0,
@@ -2014,7 +2028,11 @@ export class SessionManager {
       this.agentCallbacks(managed),
       // 空提示词 = parked 形态（#49）：会话建好等输入，不注入空消息
       prompt.trim() ? prompt : undefined,
-      permissionMode ? { permissionMode } : undefined,
+      {
+        ...(permissionMode ? { permissionMode } : {}),
+        // #17 雇员独立家：create 是统一 spawn 口，按本次会话身份注入
+        ...(managed.state.employee ? { configHome: this.cfg.employeeConfigDir ?? undefined } : {}),
+      },
     );
 
     managed.agent = agent;
@@ -2025,6 +2043,8 @@ export class SessionManager {
       initial_prompt: prompt,
       title: managed.state.title,
       model: this.cfg.model,
+      // #17 雇员标记随首帧进事件流：重启回放重建卡片后 resume/读取路径照常选家
+      ...(managed.state.employee ? { employee: true } : {}),
     });
     // 目录回落说明进时间线：手机端能看到会话为何落在用户主目录，relay 日志同步留痕
     if (fallbackNote) {
@@ -2343,7 +2363,7 @@ export class SessionManager {
       s.state.model,
       cb,
       firstMessage,
-      { resume: sdkId, permissionMode: s.state.permission_mode ?? "default", images },
+      { resume: sdkId, permissionMode: s.state.permission_mode ?? "default", images, configHome: this.employeeHome(s.state) },
     );
     s.agent = agent;
     // resume 的子 sid 同样经 onInit 回调登记（见 agentCallbacks.onInit 的 #307 落盘）
@@ -2383,7 +2403,7 @@ export class SessionManager {
       const hasMemory =
         s.logs.some((e) => e.kind === "assistant_text") ||
         (s.state.usage?.output_tokens ?? 0) > 0 ||
-        transcriptHasAssistant(s.state.cwd, sdkId);
+        transcriptHasAssistant(s.state.cwd, sdkId, this.employeeHome(s.state));
       const waitS = Math.round(resumeInitTimeoutMs() / 1000);
       if (!s.state.external && !hasMemory) {
         // 首回合挂死 → fresh spawn 重放：resume 窗口内到达的全部未回显消息一并
@@ -2411,7 +2431,7 @@ export class SessionManager {
           s.state.model,
           this.agentCallbacks(s),
           replayText,
-          { permissionMode: s.state.permission_mode ?? "default", images: replayImages.length ? replayImages : undefined },
+          { permissionMode: s.state.permission_mode ?? "default", images: replayImages.length ? replayImages : undefined, configHome: this.employeeHome(s.state) },
         );
         this.pushExternalLog(s.state.session_id, "system",
           `恢复超时（${waitS} 秒无响应，该会话无已完成回合，疑首次运行被打断所致），已自动用新会话重发本条消息`);
@@ -2507,6 +2527,7 @@ export class SessionManager {
     const agent = this.newAgent(s.state.cwd, s.state.model, cb, undefined, {
       resume: sdkId,
       permissionMode: s.state.permission_mode ?? "default",
+      configHome: this.employeeHome(s.state),
     });
     s.agent = agent;
     s.state.status = "WORKING";
@@ -2620,7 +2641,7 @@ export class SessionManager {
     // bypassPermissions 只能 spawn 时决定（CLI 限制：运行时 default→bypass 不可切，
     // COMMAND_PERM 实测报「session was not launched with --dangerously-skip-permissions」）。
     // 安全边界：Leader 权力=只提案不决议（确认卡在 relay 层），CLI 层审批对 Leader 纯噪音
-    const id = this.create(orgDir(), ORG_LEADER_BOOTSTRAP_PROMPT, "bypassPermissions", false, { skipStickyCwd: true });
+    const id = this.create(orgDir(), ORG_LEADER_BOOTSTRAP_PROMPT, "bypassPermissions", false, { skipStickyCwd: true, employee: true });
     const now = Date.now();
     // M1 审查轮：锚写失败不得继续置常驻——否则本进程「假常驻」（leaderEnsured 真、
     // 锚不在盘上）+ 下次启动按未建组织再 spawn → 双 Leader 卡。失败即报错返回
@@ -3277,7 +3298,7 @@ export class SessionManager {
         const msg = e instanceof Error ? e.message : String(e);
         this.pushExternalLog(veteran, "system", `熟手复活失败，本单降级新会话: ${msg}`);
         try {
-          sessionId = this.create(anchor, wrapDispatchPrompt(tier, input.prompt), "bypassPermissions", true, { skipStickyCwd: true });
+          sessionId = this.create(anchor, wrapDispatchPrompt(tier, input.prompt), "bypassPermissions", true, { skipStickyCwd: true, employee: true });
         } catch (e2) {
           const msg2 = e2 instanceof Error ? e2.message : String(e2);
           appendDispatch({ ts: Date.now(), id: dispatchId, tier, target: "spawn-pending", status: "failed", receipt: truncate(`resume 失败(${msg}) 后新会话亦失败: ${msg2}`, 200), session_id: "", project_anchor: anchor });
@@ -3286,7 +3307,7 @@ export class SessionManager {
       }
     } else {
       try {
-        sessionId = this.create(anchor, wrapDispatchPrompt(tier, input.prompt), "bypassPermissions", true, { skipStickyCwd: true });
+        sessionId = this.create(anchor, wrapDispatchPrompt(tier, input.prompt), "bypassPermissions", true, { skipStickyCwd: true, employee: true });
       } catch (e) {
         const msg = e instanceof Error ? e.message : String(e);
         appendDispatch({ ts: Date.now(), id: dispatchId, tier, target: "spawn-pending", status: "failed", receipt: truncate(msg, 200), session_id: "", project_anchor: anchor });
@@ -3937,7 +3958,7 @@ export class SessionManager {
       // 不再随快照携带（手表转发整 sessions，常驻大包白占帧）
       const ltd = s.state.last_task_done;
       if (ltd && Date.now() - ltd.ts > 2 * 3600_000) s.state.last_task_done = undefined;
-      const todos = readTaskStoreTodos(sid);
+      const todos = readTaskStoreTodos(sid, this.employeeHome(s.state));
       if (todos === null) continue;
       // 与 setTodos 同口径先滤隐藏条目：缓存/diff/TASK_DONE 都基于可见集，被隐藏任务完成不弹汇报
       const hidden = hiddenTodoKeys(s.state.session_id);

@@ -45,7 +45,7 @@ import {
 // PATH 仅 /usr/bin:/bin:/usr/sbin:/sbin——会话里 hook 报 node: command not found、
 // gradle 报 Cannot run program "node"（当日实证），每个会话被迫手动补 PATH。spawn 时
 // 统一补常见安装目录（不存在的目录在 PATH 里无害），CCR_EXTRA_PATH 可追加自定义位。
-export function childEnv(): NodeJS.ProcessEnv {
+export function childEnv(opts?: { configHome?: string }): NodeJS.ProcessEnv {
   const extra = [
     join(homedir(), "node/bin"),       // 用户级 node（本机实证位置）
     "/usr/local/bin",                  // macOS Intel / 惯装位
@@ -60,6 +60,10 @@ export function childEnv(): NodeJS.ProcessEnv {
     PATH: merged.join(pathDelimiter),
     CCR_RELAY_CHILD: "1",
     CLAUDE_CODE_ENABLE_TODO_TOOLS: "1",
+    // #17 雇员独立家：configHome 有值时 CLI 子进程的会话记录/任务清单/全局配置
+    // 全部落到该目录，与用户默认家（~/.claude）物理隔离。undefined = 不设此键，
+    // CLI 沿用默认家（用户自建会话/未启用开关的部署，行为与从前一致）
+    ...(opts?.configHome ? { CLAUDE_CONFIG_DIR: opts.configHome } : {}),
   };
 }
 
@@ -254,6 +258,7 @@ export class AgentSession {
       permissionMode?: "default" | "acceptEdits" | "plan" | "bypassPermissions";
       images?: string[];
       rules?: AllowRuleStore; // #212 允许并记住：缺省 = 无规则（标题生成等非会话级用法）
+      configHome?: string;    // #17 雇员独立家：传入则 CLI 子进程带 CLAUDE_CONFIG_DIR
     },
   ) {
     this.rules = opts?.rules;
@@ -279,8 +284,9 @@ export class AgentSession {
         // CLAUDE_CODE_ENABLE_TODO_TOOLS：CLI 按模型身份门控任务工具（TaskCreate/Get/Update/
         // List 仅对 Claude 系模型默认提供），GLM 等其它模型一律裁剪→任务面板恒空。官方
         // 逃生门即此 env——托管会话必须注入，与模型无关（用户级 settings 兜底见 todo-tools-env.ts）
-        // PATH 补全：见 childEnv()（M0）
-        env: childEnv(),
+        // PATH 补全：见 childEnv()（M0）；#17 雇员独立家：configHome 时注入
+        // CLAUDE_CONFIG_DIR（transcript/任务清单落独立家）
+        env: childEnv({ configHome: opts?.configHome }),
         permissionMode: opts?.permissionMode ?? "default",
         ...(opts?.resume ? { resume: opts.resume } : {}),
         // #7 看门狗：包一层默认 spawn 记 pid（SDK 默认行为 = spawn(cmd, args,

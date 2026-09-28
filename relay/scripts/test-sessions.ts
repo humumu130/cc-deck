@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
-import { mkdirSync, rmSync } from "node:fs";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { EventBus } from "../src/event-bus.js";
 import { SessionManager } from "../src/session-manager.js";
@@ -160,6 +161,23 @@ assert(subagentEventSeen.has(ackC.session_id!), "C emitted SESSION_UPDATED with 
   const b1 = mintAdapterBoot();
   const b2 = mintAdapterBoot();
   assert(b1 !== b2 && b1.length > 0 && b2.length > 0, `adapter BOOT 段每次铸造唯一（${b1} / ${b2}）`);
+}
+
+// #17 雇员独立家：childEnv 注入两态 + 任务清单按家读取
+{
+  const { childEnv } = await import("../src/agent-adapter.js");
+  const onEnv = childEnv({ configHome: "/tmp/emp-home-x" });
+  assert(onEnv.CLAUDE_CONFIG_DIR === "/tmp/emp-home-x", "childEnv 传 configHome → 注入 CLAUDE_CONFIG_DIR");
+  const offEnv = childEnv();
+  assert(!("CLAUDE_CONFIG_DIR" in offEnv), "childEnv 未传 → 不设键（CLI 用默认家）");
+  assert(offEnv.CCR_RELAY_CHILD === "1", "childEnv 既有注入不受影响");
+  const { readTaskStoreTodos } = await import("../src/task-store.js");
+  const empHome = mkdtempSync(join(tmpdir(), "ccr-emp-ts-"));
+  mkdirSync(join(empHome, "tasks", "cli-emp-1"), { recursive: true });
+  writeFileSync(join(empHome, "tasks", "cli-emp-1", "1.json"), JSON.stringify({ id: 1, subject: "雇员任务", status: "pending" }));
+  const tsEmp = readTaskStoreTodos("cli-emp-1", empHome);
+  assert(tsEmp !== null && tsEmp.length === 1 && tsEmp[0].content === "雇员任务", "任务清单按独立家读取");
+  assert(readTaskStoreTodos("cli-emp-1") === null, "默认家读不到该会话任务（双家隔离成立）");
 }
 
 // gitDiff 统计：形状若不匹配会是 0，只告警不判失败（待真机数据核对）

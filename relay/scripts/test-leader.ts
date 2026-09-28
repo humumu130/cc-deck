@@ -28,11 +28,11 @@ async function waitFor(fn: () => boolean, ms = 3000, every = 25): Promise<boolea
 // 假 agent 工厂（仿 test-bridge #46）：init = 20ms 后回 onInit；parked（prompt=undefined）
 // 不触发 onTurnEnd——首建 Leader 的形态。created 记录每次 spawn 供计数断言。
 let initMode: "init" | "noinit" | "die" = "init";
-type SpawnRec = { prompt: string | undefined; resume?: string; cb: AgentCallbacks };
+type SpawnRec = { prompt: string | undefined; resume?: string; cb: AgentCallbacks; configHome?: string };
 const makeFakeFactory = (created: SpawnRec[]) =>
-  (cwd: string, model: string, cb: AgentCallbacks, prompt: string | undefined, opts?: { resume?: string }): AgentLike => {
+  (cwd: string, model: string, cb: AgentCallbacks, prompt: string | undefined, opts?: { resume?: string; configHome?: string }): AgentLike => {
     void cwd;
-    created.push({ prompt, resume: opts?.resume, cb });
+    created.push({ prompt, resume: opts?.resume, cb, configHome: opts?.configHome });
     const mode = initMode;
     const a: AgentLike = {
       id: randomUUID(),
@@ -74,7 +74,7 @@ async function main() {
     const cfg: RelayConfig = {
       port: 8791, token: "t", tokenGenerated: false, defaultCwd: "",
       model: "test-model", bridgeToken: "bt", dataDir: DATA,
-      cloudUrls: [], cloudUrl: "", cloudToken: "",
+      cloudUrls: [], cloudUrl: "", cloudToken: "", employeeConfigDir: null,
     };
 
     // ---------- L1 首建 + L2 sticky-cwd 豁免 ----------
@@ -91,6 +91,7 @@ async function main() {
     assert(r1.ok === true && r1.created === true, "L1 首建 created=true");
     const leaderId = r1.ok ? r1.session_id : "";
     assert(created1.length === 1 && created1[0].prompt === ORG_LEADER_BOOTSTRAP_PROMPT, "L1 唯一一次 spawn，携带上岗引导（fresh parked 不回 init，首条输入才产生 sdkId）");
+    assert(mgr1.snapshot().find((s) => s.session_id === leaderId)?.employee === true, "L1 Leader 卡带雇员标记（#17 独立家身份）");
 
     const a1 = readOrgAnchor();
     assert(!!a1 && a1.leader_session_id === leaderId && a1.leader_sdk_id === "", "L1 锚落盘（sdk_id 空串 = 首建窗口）");
