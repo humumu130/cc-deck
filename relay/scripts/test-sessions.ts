@@ -168,9 +168,16 @@ assert(subagentEventSeen.has(ackC.session_id!), "C emitted SESSION_UPDATED with 
   const { childEnv } = await import("../src/agent-adapter.js");
   const onEnv = childEnv({ configHome: "/tmp/emp-home-x" });
   assert(onEnv.CLAUDE_CONFIG_DIR === "/tmp/emp-home-x", "childEnv 传 configHome → 注入 CLAUDE_CONFIG_DIR");
+  // 关闭态断言须屏蔽运行机自身携带的 CLAUDE_CONFIG_DIR（childEnv 透传 process.env，
+  // 本特性面向的恰恰是全局设了该变量的用户——断言口径=「不新增键」而非「键不存在」）
+  const ambientCfg = process.env.CLAUDE_CONFIG_DIR;
+  delete process.env.CLAUDE_CONFIG_DIR;
   const offEnv = childEnv();
   assert(!("CLAUDE_CONFIG_DIR" in offEnv), "childEnv 未传 → 不设键（CLI 用默认家）");
+  if (ambientCfg !== undefined) process.env.CLAUDE_CONFIG_DIR = ambientCfg;
   assert(offEnv.CCR_RELAY_CHILD === "1", "childEnv 既有注入不受影响");
+  assert(childEnv({ configHome: "/tmp/emp-home-y" }).CLAUDE_CONFIG_DIR === "/tmp/emp-home-y",
+    "显式 configHome 覆盖继承值（透传优先级正确）");
   const { readTaskStoreTodos } = await import("../src/task-store.js");
   const empHome = mkdtempSync(join(tmpdir(), "ccr-emp-ts-"));
   mkdirSync(join(empHome, "tasks", "cli-emp-1"), { recursive: true });

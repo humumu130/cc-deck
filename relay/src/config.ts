@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
+import { isAbsolute, join, resolve } from "node:path";
 import { homedir } from "node:os";
 
 export interface RelayConfig {
@@ -89,13 +89,17 @@ export function loadConfig(): RelayConfig {
   {
     const v = (process.env.CCR_EMPLOYEE_CONFIG_DIR ?? "").trim();
     if (v === "auto") {
-      employeeConfigDir = join(dataDir, "claude-home");
+      // resolve 绝对化：CCR_DATA_DIR 允许相对，join 产物若仍是相对串会把「家按
+      // cwd 漂移」从显式相对路径分支重新放进来（审查 P2-1——CLI 子进程 cwd 与
+      // relay 读取路径 cwd 不同，读写两头错位）
+      employeeConfigDir = resolve(join(dataDir, "claude-home"));
     } else if (v) {
-      if (v.startsWith("/")) {
+      if (isAbsolute(v)) {
         employeeConfigDir = v;
       } else {
-        // 相对路径不可预测（守护进程 cwd 漂移），拒绝启用而非猜一个位置
-        console.warn(`[config] CCR_EMPLOYEE_CONFIG_DIR 需绝对路径或 "auto"，收到相对路径 "${v}"，雇员独立家保持关闭`);
+        // 相对路径不可预测（守护进程 cwd 漂移），拒绝启用而非猜一个位置；
+        // "~" 开头不会自动展开，提示用户用 $HOME 展开后的绝对路径
+        console.warn(`[config] CCR_EMPLOYEE_CONFIG_DIR 需绝对路径或 "auto"（~ 请展开为 $HOME/...），收到相对路径 "${v}"，雇员独立家保持关闭`);
       }
     }
   }

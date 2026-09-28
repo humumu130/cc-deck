@@ -184,6 +184,42 @@ assert(mgr.snapshot().find((s) => s.session_id === "m-cur")?.status === "WORKING
 assert(mgr.snapshot().find((s) => s.session_id === "m-x2")?.status === "WORKING", "从甲组退休但乙组现役 → 照常拉起（跨组正交）");
 delete process.env.CCR_ORG_DIR;
 
+// #17 雇员独立家审查修正（P1-1 回归锁）：autoRevive 的任务存储读取必须按会话
+// 家寻址——此口漏传 base 则开关开启后雇员（Leader/worker，带 pending 待办的
+// 主力人群）重启后永不自动恢复；且拉起的 resume 须同样注入 configHome
+{
+  const EMP = join(ROOT, "emp-home");
+  const cfg17 = loadConfig();
+  cfg17.employeeConfigDir = EMP;
+  const mgr17 = new SessionManager(new EventBus(), cfg17);
+  const resumes17: { resume?: string; configHome?: string }[] = [];
+  mgr17.setAgentFactory((_c, _m, _cb, _p, opts) => {
+    resumes17.push({ resume: opts?.resume, configHome: opts?.configHome });
+    return {
+      id: "fake-ar17", startedAt: Date.now(), ended: false,
+      sendMessage() {}, allow: () => false, deny: () => false, answer: () => false,
+      stop: async () => {}, setPermissionMode: async () => {},
+    };
+  });
+  const SID_EMP = "autorevive-test-emp-cli";
+  const SID_EMP2 = "autorevive-test-emp2-cli";
+  // 雇员待办写独立家 tasks/；对照 sid 的待办只写默认家（换家前遗留形态）
+  mkdirSync(join(EMP, "tasks", SID_EMP), { recursive: true });
+  writeFileSync(join(EMP, "tasks", SID_EMP, "1.json"), JSON.stringify({ id: 1, subject: "雇员的活", status: "in_progress" }));
+  putTodo(SID_EMP2, "1.json", { id: 1, subject: "默认家的遗留活", status: "in_progress" });
+  mgr17.adopt(new Map([
+    mk2("m-emp", SID_EMP, false, Date.now(), { employee: true }),
+    mk2("m-emp2", SID_EMP2, false, Date.now(), { employee: true }),
+  ]));
+  const n17 = mgr17.autoReviveManaged();
+  assert(n17 === 1 && resumes17.length === 1 && resumes17[0]!.resume === SID_EMP,
+    `雇员待办在独立家 → 按家命中并拉起 got=${n17}/${JSON.stringify(resumes17.map((r) => r.resume))}`);
+  assert(resumes17[0]!.configHome === EMP, "拉起的 resume 注入 configHome=独立家（spawn 口同规则）");
+  assert(mgr17.snapshot().find((s) => s.session_id === "m-emp2")?.status !== "WORKING",
+    "待办只在默认家的雇员不被误拉（读家按身份×开关，不回退默认家）");
+  rmSync(join(TASKS, SID_EMP2), { recursive: true, force: true });
+}
+
 rmSync(join(TASKS, SID_BUSY), { recursive: true, force: true });
 rmSync(join(TASKS, SID_IDLE), { recursive: true, force: true });
 rmSync(join(TASKS, SID_PARKED), { recursive: true, force: true });

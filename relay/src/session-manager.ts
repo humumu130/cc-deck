@@ -712,7 +712,8 @@ export class SessionManager {
 
   // #75 无人值守连续性（2026-09-19 用户拍板最小闭环：不追求完善机制，先保证
   // 「重启后当前工作会话能被拉起继续干活」）：relay 启动收养历史托管会话后，凡
-  // CLI 任务存储（~/.claude/tasks/<cli_sid>/，权威源）里仍有未完成待办
+  // CLI 任务存储（按会话家：默认 ~/.claude 或雇员独立家的 tasks/<cli_sid>/，
+  // 权威源）里仍有未完成待办
   //（pending/in_progress）的托管会话，自动 resume 并注入续跑指令——不再依赖人
   // 发消息触发恢复。约束：外部会话不适用（用户终端自管，hooks 会重新接入）；
   // 无未完成待办的不拉（已收工/纯闲聊会话拉起来只会空转耗 token）；单次上限
@@ -741,7 +742,9 @@ export class SessionManager {
       // 不重复拉起（双拉 → childPid 未就位补刀落空 → 双进程）
       if (s.resumePending && Date.now() - s.resumePending < resumePendingWindowMs()) continue;
       if (!s.state.relay_session_id) continue; // 首回合未完成即断，无 resume 锚点
-      const todos = readTaskStoreTodos(s.state.relay_session_id);
+      // #17 雇员按家读取任务存储（审查修正：此口漏传则开关开启后雇员任务恒
+      // 读不到 → 有未完待办的雇员会话重启后不再被自动拉起，恰是本函数要保的）
+      const todos = readTaskStoreTodos(s.state.relay_session_id, this.employeeHome(s.state));
       if (!todos || !todos.some((t) => t.status === "pending" || t.status === "in_progress")) continue;
       // 48h 新鲜度：一周前残留的"pending 愿望"不是活工作，拉起来只会空转误导
       if (Date.now() - s.state.updated_at > 48 * 3600_000) continue;
@@ -2030,8 +2033,9 @@ export class SessionManager {
       prompt.trim() ? prompt : undefined,
       {
         ...(permissionMode ? { permissionMode } : {}),
-        // #17 雇员独立家：create 是统一 spawn 口，按本次会话身份注入
-        ...(managed.state.employee ? { configHome: this.cfg.employeeConfigDir ?? undefined } : {}),
+        // #17 雇员独立家：create 是统一 spawn 口，按本次会话身份注入（与 resume
+        // 口同走 employeeHome()，单点编码防两处写法漂移——审查 P3-2）
+        ...(managed.state.employee ? { configHome: this.employeeHome(managed.state) } : {}),
       },
     );
 

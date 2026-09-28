@@ -25,7 +25,8 @@ jobs:
         # test:org / test:leader（#26 矩阵式 M1）：纯 fs + agentFactory 假工厂，同为自包含
         # test:projects / test:dispatch（#26 矩阵式 M2）：mkdtemp 沙盒 + 假工厂派单收口，同上
         # test:routing（#26 矩阵式 M3）：路由表 store 纯 fs 单测，同上
-        script: [test:bus, test:history, test:bridge, test:cloud, test:org, test:leader, test:projects, test:dispatch, test:routing]
+        # test:autorevive（#75/#17）：自动拉起纯单元（假工厂+fs 夹具，含雇员独立家读家锁），同上
+        script: [test:bus, test:history, test:bridge, test:cloud, test:org, test:leader, test:projects, test:dispatch, test:routing, test:autorevive]
     defaults:
       run:
         working-directory: relay
