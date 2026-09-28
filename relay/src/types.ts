@@ -132,6 +132,11 @@ export interface SessionState {
   // 读取路径（transcriptHasAssistant / 任务清单轮询）按此标记选家；未启用开关
   // 时标记仅作身份标识，路径行为与从前逐字节一致
   employee?: boolean;
+  // #17 第二批：创建时实际落定的家（spawn 注入的 CLAUDE_CONFIG_DIR 值）。
+  // resume/读取按「创建时的家」而非当前配置推导——开关翻转只影响新会话，
+  // 存量按记录走（无记录 = 关态/pre-#17 创建，即默认家），切换天然无损。
+  // 随 SESSION_CREATED 首帧流经事件流，回放还原；Leader 锚同字段
+  employee_home?: string;
   // #26 M3 两层联动（§6.2 组挂起→成员会话全 parked）：成员会话随组挂起休眠时
   // 记来源组 id——进程已停、可点开可发消息（消息路径 resumeAgent 天然复活）；
   // 组复活清除。路由表记录不受影响（档案永存，复活后查表拉原班）
@@ -302,6 +307,16 @@ export interface SnapshotPayload {
   // 同口径。板不随快照（一板一文件按需拉：COMMAND_PROJECT_DETAIL）
   projects?: ProjectGroup[];
   org_confirms?: OrgConfirm[];
+  // #17 第二批：雇员独立家开关状态（设置页数据源；空对象也下发——端上以字段
+  // 存在性判断能力）。locked=true（env 显式设置）时端上开关只读
+  settings?: EmployeeHomeSettingsPayload;
+}
+
+// SNAPSHOT.settings / SETTINGS_UPDATED 载荷
+export interface EmployeeHomeSettingsPayload {
+  employee_home: boolean;   // 开关生效态
+  value: string | null;     // 实际家路径（关闭时 null；auto 已展开为绝对路径）
+  source: "env" | "file" | "default"; // env=环境变量锁定（UI 只读）
 }
 
 // 时间线条目（M1 调试台用；压缩/截断后的一行文本，不推原始日志流）
@@ -334,6 +349,7 @@ export type EventType =
   | "PROJECTS_UPDATED"
   | "BOARD_UPDATED"
   | "ORG_CONFIRM_UPDATED"
+  | "SETTINGS_UPDATED"
   | "WATCHDOG"
   | "ARTIFACT_CHUNK";
 
@@ -367,6 +383,9 @@ export type EventPayloadMap = {
   // #26 M2 确认单变更（瞬态）：新单入队/决议后广播待决队列；离线端由
   // SNAPSHOT.org_confirms 兜底
   ORG_CONFIRM_UPDATED: OrgConfirmUpdatedPayload;
+  // #17 第二批 雇员独立家开关变更（瞬态）：切换后广播最新状态；离线端由
+  // SNAPSHOT.settings 兜底
+  SETTINGS_UPDATED: EmployeeHomeSettingsPayload;
   // #7 SDK 会话流看门狗观测（落 events.ndjson 供复盘误杀率；客户端不消费，
   // 未知事件类型各端 switch 自然跳过）
   WATCHDOG: WatchdogPayload;
@@ -529,7 +548,8 @@ export type CommandType =
   | "COMMAND_ALLOW_RULE_REMOVE"
   | "COMMAND_ORG_CONFIRM"
   | "COMMAND_PROJECT_DETAIL"
-  | "COMMAND_ARTIFACT_FETCH";
+  | "COMMAND_ARTIFACT_FETCH"
+  | "COMMAND_SETTINGS_UPDATE";
 
 export interface CommandBase {
   command_id: string;   // 客户端生成（uuid），Relay 按此去重
@@ -690,6 +710,13 @@ export interface ProjectDetailCommand extends CommandBase {
   payload: { gid: string };
 }
 
+// #17 第二批：雇员独立家开关热切换（三端设置项）。ack.data = 最新状态
+//（EmployeeHomeSettingsPayload）；成功后广播 SETTINGS_UPDATED，env 锁定时 ok:false
+export interface SettingsUpdateCommand extends CommandBase {
+  type: "COMMAND_SETTINGS_UPDATE";
+  payload: { employee_home: boolean };
+}
+
 export type Command =
   | CreateCommand
   | MessageCommand
@@ -720,6 +747,7 @@ export type Command =
   | AllowRuleRemoveCommand
   | OrgConfirmCommand
   | ProjectDetailCommand
+  | SettingsUpdateCommand
   | ArtifactFetchCommand;
 
 // 托管会话权限模式切换（default=每次确认 / acceptEdits=自动接受编辑 / plan=只读规划 /

@@ -28,6 +28,8 @@ import type { RelayConfig } from "./config.js";
 import type { ReplayedSession } from "./history.js";
 import { deriveTitle } from "./history.js";
 import { generateTitle } from "./title-gen.js";
+import { resolveEmployeeHome, writeSettingsFile } from "./settings.js";
+import type { EmployeeHomeSettingsPayload } from "./types.js";
 import { cronTasksKey, readCronTasks } from "./cron.js";
 import { readTaskStoreTodos } from "./task-store.js";
 import { killTree, snapshotTree, treeCpuMs } from "./proc-tree.js";
@@ -536,9 +538,12 @@ export class SessionManager {
   // #17 雇员独立家：雇员会话（Leader/worker/随手办）生效的 CLAUDE_CONFIG_DIR；
   // 非雇员或未启用开关（cfg.employeeConfigDir=null）返回 undefined = 用户默认家。
   // spawn（create/resume/fresh 回退/reviveSaved）与读取路径（transcript 判记忆、
-  // 任务清单轮询）统一经此选家
+  // 任务清单轮询）统一经此选家。
+  // #17 第二批根治（三角度审查共识）：会话创建时落定的家（employee_home）优先
+  // 于当前配置推导——开关翻转只影响新会话，存量按记录走；无记录 = 关态/pre-#17
+  // 创建（即默认家），切换天然无损，不再出现「换家后存量 resume 找不到会话」
   private employeeHome(state: SessionState): string | undefined {
-    return state.employee ? this.cfg.employeeConfigDir ?? undefined : undefined;
+    return state.employee_home ?? undefined;
   }
 
   private newAgent(
@@ -589,6 +594,31 @@ export class SessionManager {
 
   snapshot(): SessionState[] {
     return [...this.sessions.values()].map((s) => this.cloneState(s));
+  }
+
+  // #17 第二批：雇员独立家开关（三端设置项后端）。热生效不重启——写
+  // settings.json → cfg 重推导 → 广播 SETTINGS_UPDATED；此后新会话立即用新家，
+  // 存量会话按各自 employee_home 记录走（不受翻转影响）。env 显式设置（部署
+  // 覆盖面）时设置项锁定：拒改并给可读指引
+  applyEmployeeHome(enabled: boolean): { ok: boolean; error?: string; data?: EmployeeHomeSettingsPayload } {
+    const cur = resolveEmployeeHome(this.cfg.dataDir);
+    if (cur.source === "env") {
+      return { ok: false, error: `雇员独立家已由环境变量 CCR_EMPLOYEE_CONFIG_DIR 显式设定（${cur.value ?? "值非法，按关闭处理"}），设置项被部署锁定——请调整环境变量后重启 relay` };
+    }
+    if (!writeSettingsFile(this.cfg.dataDir, { employeeHome: enabled })) {
+      return { ok: false, error: "settings.json 写盘失败（盘满/权限？）" };
+    }
+    const next = resolveEmployeeHome(this.cfg.dataDir);
+    this.cfg.employeeConfigDir = next.value;
+    const payload: EmployeeHomeSettingsPayload = { employee_home: next.enabled, value: next.value, source: next.source };
+    this.bus.emitTransient("SETTINGS_UPDATED", payload);
+    return { ok: true, data: payload };
+  }
+
+  // SNAPSHOT.settings / 设置页数据源（每次现算：env/文件/默认三层合成）
+  employeeHomeState(): EmployeeHomeSettingsPayload {
+    const st = resolveEmployeeHome(this.cfg.dataDir);
+    return { employee_home: st.enabled, value: st.value, source: st.source };
   }
 
   // 自动命名：一次轻量模型调用把首条 prompt 变成短标题（托管/外部会话通用）
@@ -1967,6 +1997,12 @@ export class SessionManager {
           const r = this.orgAction("project-detail", { id: cmd.payload.gid });
           return { command_id: cmd.command_id, ok: r.ok, ...(r.ok ? { data: r.data } : { error: r.error }) };
         }
+        case "COMMAND_SETTINGS_UPDATE": {
+          // #17 第二批：雇员独立家开关热切换（三端设置项入口）。ack 带最新状态；
+          // env 锁定/写盘失败等拒改场景 ok:false 带可读指引
+          const r = this.applyEmployeeHome(cmd.payload.employee_home === true);
+          return { command_id: cmd.command_id, ok: r.ok, ...(r.ok ? { data: r.data } : { error: r.error }) };
+        }
         case "COMMAND_WATCH_GRANT":
           // #316 手表配对授权在 ws-server 层处理（持有待配对连接池）；云信道走到这里
           // 说明命令被路由错了——明确报错而非静默
@@ -2015,6 +2051,9 @@ export class SessionManager {
         // #17 雇员身份随卡落位：Leader/派单 worker/随手办置 true（spawn 传
         // CLAUDE_CONFIG_DIR + 读取路径选家都按它），用户自建会话不置
         ...(opts?.employee ? { employee: true as const } : {}),
+        // #17 第二批：创建时实际落定的家随卡记录——开关此后翻转，本会话
+        // resume/读取仍按此值走（存量无损）；关态创建不落（=默认家）
+        ...(opts?.employee && this.cfg.employeeConfigDir ? { employee_home: this.cfg.employeeConfigDir } : {}),
       },
       logs: [],
       lastUpdateEmit: 0,
@@ -2049,6 +2088,7 @@ export class SessionManager {
       model: this.cfg.model,
       // #17 雇员标记随首帧进事件流：重启回放重建卡片后 resume/读取路径照常选家
       ...(managed.state.employee ? { employee: true } : {}),
+      ...(managed.state.employee_home ? { employee_home: managed.state.employee_home } : {}),
     });
     // 目录回落说明进时间线：手机端能看到会话为何落在用户主目录，relay 日志同步留痕
     if (fallbackNote) {
@@ -2663,7 +2703,15 @@ export class SessionManager {
     // M1 审查轮：锚写失败不得继续置常驻——否则本进程「假常驻」（leaderEnsured 真、
     // 锚不在盘上）+ 下次启动按未建组织再 spawn → 双 Leader 卡。失败即报错返回
     //（会话保留为普通卡可手删；下次启动重试）。崩溃窗口=spawn 与落盘之间，微秒级
-    if (!writeOrgAnchor({ version: 1, leader_session_id: id, leader_sdk_id: "", created_at: now, updated_at: now })) {
+    if (!writeOrgAnchor({
+      version: 1,
+      leader_session_id: id,
+      leader_sdk_id: "",
+      // #17 锚记 Leader 落定的家：重启锚重建还原（开关翻转对常驻 Leader 无损）
+      ...(this.sessions.get(id)?.state.employee_home ? { employee_home: this.sessions.get(id)!.state.employee_home } : {}),
+      created_at: now,
+      updated_at: now,
+    })) {
       return { ok: false, error: "团队锚写盘失败（盘满/权限？），本次未标记常驻；下次启动重试" };
     }
     // 题名双写：override 文件管跨重启（adopt 套用），内存 state.title 管当下卡片
@@ -2730,8 +2778,10 @@ export class SessionManager {
         saved: true,
         // #17 Leader 恒为雇员（边界审查 P1：compactEvents 只保最近 30 会话组，
         // Leader 最老最闲最先被挤出——锚重建丢标记则开关开启时咨询 resume 恒指
-        // 默认家 → No conversation found 快速失败，常驻通道静默变砖）
+        // 默认家 → No conversation found 快速失败，常驻通道静默变砖）。
+        // 家按锚记录还原（第二批：老锚无字段 = 默认家，与旧 transcript 实际所在一致）
         employee: true,
+        ...(anchor.employee_home ? { employee_home: anchor.employee_home } : {}),
       },
       logs: [],
       lastUpdateEmit: 0,

@@ -98,7 +98,7 @@ export function reduceHistory(events: Envelope[]): Map<string, ReplayedSession> 
   for (const e of events) {
     let rs = out.get(e.session_id);
     if (!rs && e.type === "SESSION_CREATED") {
-      const p = e.payload as { cwd: string; initial_prompt: string; model: string; title?: string; external?: boolean; employee?: boolean; started_at?: number };
+      const p = e.payload as { cwd: string; initial_prompt: string; model: string; title?: string; external?: boolean; employee?: boolean; employee_home?: string; started_at?: number };
       rs = {
         state: {
           session_id: e.session_id,
@@ -120,6 +120,8 @@ export function reduceHistory(events: Envelope[]): Map<string, ReplayedSession> 
       // #17 雇员标记随首帧流经事件流：重启回放后 transcript/任务清单读取路径
       // 按此选家（雇员独立家），resume 也据此传 CLAUDE_CONFIG_DIR
       if (p.employee) rs.state.employee = true;
+      // #17 第二批：创建时落定的家随首帧回放——开关翻转后存量会话按记录走
+      if (typeof p.employee_home === "string" && p.employee_home) rs.state.employee_home = p.employee_home;
       out.set(e.session_id, rs);
       continue;
     }

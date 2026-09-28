@@ -22,7 +22,8 @@
     "test:projects": "tsx scripts/test-projects.ts",
     "test:dispatch": "tsx scripts/test-dispatch.ts",
     "test:routing": "tsx scripts/test-routing.ts",
-    "test:autorevive": "tsx scripts/test-autorevive.ts"
+    "test:autorevive": "tsx scripts/test-autorevive.ts",
+    "test:settings": "tsx scripts/test-settings.ts"
   },
   "dependencies": {
     "@anthropic-ai/claude-agent-sdk": "latest",

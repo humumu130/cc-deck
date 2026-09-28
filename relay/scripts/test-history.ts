@@ -36,6 +36,9 @@ events.push(mk(++seq, sid, "SESSION_CREATED", { cwd: "/tmp", initial_prompt: "�
 {
   const empEv = [mk(++seq, "emp-1", "SESSION_CREATED", { cwd: "/tmp", initial_prompt: "e", model: "m", employee: true })];
   assert(reduceHistory(empEv).get("emp-1")?.state.employee === true, "回放重建雇员标记");
+  // 第二批：创建时落定的家随首帧回放——开关翻转后存量会话按记录走（无损）
+  const homeEv = [mk(++seq, "emp-2", "SESSION_CREATED", { cwd: "/tmp", initial_prompt: "e2", model: "m", employee: true, employee_home: "/tmp/emp-home-rec" })];
+  assert(reduceHistory(homeEv).get("emp-2")?.state.employee_home === "/tmp/emp-home-rec", "回放重建创建时的家（employee_home）");
 }
 for (let i = 0; i < 350; i++) events.push(mk(++seq, sid, "SESSION_LOG", { kind: "assistant_text", text: `log${i}` }));
 for (let i = 0; i < 80; i++) events.push(mk(++seq, sid, "SESSION_UPDATED", { status: "WORKING", action_summary: `u${i}`, stats: null }));

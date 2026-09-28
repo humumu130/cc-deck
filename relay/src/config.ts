@@ -3,6 +3,23 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { isAbsolute, join, resolve } from "node:path";
 import { homedir } from "node:os";
 
+// #17 三态解析（纯函数，无副作用——告警由调用方负责）：
+// "" / null → null（关闭）；"auto" → dataDir 下 claude-home（resolve 绝对化）；
+// 绝对路径 → 原样；相对路径 → null（拒绝，防 cwd 漂移）。
+// auto 无需 mkdir：CLI 对不存在的 CLAUDE_CONFIG_DIR（含嵌套缺失父目录）自建并
+// 正常运行（边界审查实测 2.1.269）；relay 读取路径对缺失目录 catch/null 失败
+// 安全——后人勿「补 mkdir」。
+export function parseEmployeeConfigDir(v: string | null | undefined, dataDir: string): string | null {
+  const t = (v ?? "").trim();
+  if (t === "auto") {
+    // resolve 绝对化：CCR_DATA_DIR 允许相对，join 产物若仍是相对串会把「家按
+    // cwd 漂移」从显式相对分支重新放进来（审查 P2-1——CLI 子进程 cwd 与
+    // relay 读取路径 cwd 不同，读写两头错位）
+    return resolve(join(dataDir, "claude-home"));
+  }
+  return t && isAbsolute(t) ? t : null;
+}
+
 export interface RelayConfig {
   port: number;
   token: string;
@@ -84,28 +101,15 @@ export function loadConfig(): RelayConfig {
     .filter(Boolean);
   const cloudToken = process.env.CCR_CLOUD_TOKEN ?? DEFAULT_CLOUD_TOKEN;
 
-  // #17 雇员独立家三态解析（见 RelayConfig.employeeConfigDir 注释）
-  let employeeConfigDir: string | null = null;
-  {
-    const v = (process.env.CCR_EMPLOYEE_CONFIG_DIR ?? "").trim();
-    if (v === "auto") {
-      // resolve 绝对化：CCR_DATA_DIR 允许相对，join 产物若仍是相对串会把「家按
-      // cwd 漂移」从显式相对路径分支重新放进来（审查 P2-1——CLI 子进程 cwd 与
-      // relay 读取路径 cwd 不同，读写两头错位）。
-      // 目录无需 mkdir：CLI 对不存在的 CLAUDE_CONFIG_DIR（含嵌套缺失父目录）
-      // 自建并正常运行（边界审查实测 2.1.269）；relay 读取路径对缺失目录
-      // catch/null 失败安全——后人勿在此「补 mkdir」
-      employeeConfigDir = resolve(join(dataDir, "claude-home"));
-    } else if (v) {
-      if (isAbsolute(v)) {
-        employeeConfigDir = v;
-      } else {
-        // 相对路径不可预测（守护进程 cwd 漂移），拒绝启用而非猜一个位置；
-        // "~" 开头不会自动展开，提示用户用 $HOME 展开后的绝对路径
-        console.warn(`[config] CCR_EMPLOYEE_CONFIG_DIR 需绝对路径或 "auto"（~ 请展开为 $HOME/...），收到相对路径 "${v}"，雇员独立家保持关闭`);
-      }
-    }
+  // #17 雇员独立家三态解析（见 RelayConfig.employeeConfigDir 注释；纯函数抽至
+  // parseEmployeeConfigDir 供 settings.ts 产品层复用）
+  const envRaw = (process.env.CCR_EMPLOYEE_CONFIG_DIR ?? "").trim();
+  if (envRaw && !isAbsolute(envRaw) && envRaw !== "auto") {
+    // 相对路径不可预测（守护进程 cwd 漂移），拒绝启用而非猜一个位置；
+    // "~" 开头不会自动展开，提示用户用 $HOME 展开后的绝对路径
+    console.warn(`[config] CCR_EMPLOYEE_CONFIG_DIR 需绝对路径或 "auto"（~ 请展开为 $HOME/...），收到相对路径 "${envRaw}"，雇员独立家保持关闭`);
   }
+  const employeeConfigDir = parseEmployeeConfigDir(envRaw, dataDir);
 
   return {
     port, token, tokenGenerated: !envToken, defaultCwd, model, bridgeToken, dataDir,

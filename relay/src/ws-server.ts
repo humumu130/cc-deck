@@ -165,6 +165,8 @@ const COMMAND_TYPES = new Set([
   // #26 M2 组织：确认单决议（用户端确认卡）+ 项目组详情拉取
   "COMMAND_ORG_CONFIRM",
   "COMMAND_PROJECT_DETAIL",
+  // #17 第二批：雇员独立家开关切换（三端设置项）
+  "COMMAND_SETTINGS_UPDATE",
 ]);
 
 const HEARTBEAT_MS = 30_000;
@@ -867,6 +869,9 @@ export function startServer(
           // #117 教训；板不随快照，COMMAND_PROJECT_DETAIL 按需拉）
           projects: listGroups(),
           org_confirms: listPendingConfirms(),
+          // #17 第二批：雇员独立家开关（设置页数据源；cloud-client 云通道同步携带，
+          // #117 教训）
+          settings: mgr.employeeHomeState(),
           // 云桥启用的 relay 附带自身设备 id（= CloudConfig.relayDev 同源值）：
           // 客户端据此密码学匹配"LAN 直连条目"与"云桥条目"是同一台 relay，自动合并。
           // wan_dev（F7）：手表 /wan 透传通道的凭据 dev，手机侧写进手表连接配置

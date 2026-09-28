@@ -963,6 +963,29 @@ async function main() {
       assert(readDispatchLog().some((e) => e.id === "dsp-homelost" && e.status === "failed" && (e.receipt ?? "").includes("No conversation found")), "换家失联：台账 failed 写实收口");
       assert((routingFor(gid15).find((x) => x.session_id === f15.session_id)?.failed ?? -1) === failedBefore15, "换家失联不记熟手 failed（配置漂移≠干砸）");
       assert((hack14.sessions.get(f15.session_id!)?.logs.some((e) => e.kind === "system" && e.text.includes("CCR_EMPLOYEE_CONFIG_DIR")) ?? false) === true, "时间线留人话日志（指向开关，可诊断）");
+      // 第二批根治语义正锁：关态创建的熟手无 employee_home 记录 → 开启开关后
+      // resume 仍不带 configHome（默认家 = 旧 transcript 实际所在）——开关翻转
+      // 只影响新会话，存量天然无损（三角度审查共识方案落地）
+      cfg.employeeConfigDir = null; // 关态建组（一锚一组：另起锚，emp-home-g 已占 anchor15）
+      const anchor15b = join(DATA, "proj-emp-home-legacy");
+      mkdirSync(anchor15b, { recursive: true });
+      const c15c = mgr.orgAction("project-create", { name: "emp-home-legacy", anchor: anchor15b, tier: "正经立项" }) as { ok: boolean; data?: { confirm?: { id: string }; group?: { id: string } } };
+      const gid15c = c15c.data?.group?.id ?? "";
+      assert(c15c.ok === true && !!gid15c, "存量熟手组建组（前置）");
+      mgr.orgAction("confirm-decide", { confirm_id: c15c.data?.confirm?.id ?? "", approve: true, by: "u" });
+      assert(cfg.employeeConfigDir === null, "前置：关态");
+      const before15d = created.length;
+      const l15 = mgr.orgAction("dispatch", { anchor: anchor15b, prompt: "存量熟手首单", gid: gid15c }) as { ok: boolean; session_id?: string };
+      assert(l15.ok === true && await waitFor(() => (routingFor(gid15c).find((x) => x.session_id === l15.session_id)?.count ?? 0) === 1), "存量熟手首单收口（前置）");
+      assert(created.slice(before15d).every((c) => c.configHome === undefined), "关态创建 spawn 不带 configHome");
+      assert(mgr.snapshot().find((s) => s.session_id === l15.session_id)?.employee_home === undefined, "关态雇员卡无 employee_home 记录（=默认家）");
+      cfg.employeeConfigDir = EMP;
+      const l15b = mgr.orgAction("dispatch", { anchor: anchor15b, prompt: "存量熟手二单", gid: gid15c }) as { ok: boolean; session_id?: string };
+      assert(l15b.ok === true && l15b.session_id === l15.session_id, "开关开启后熟手照常 resume 原班（前置）");
+      const legacySpawn = created[created.length - 1];
+      assert(!!legacySpawn.resume && legacySpawn.configHome === undefined, "存量熟手 resume 不带 configHome（按创建时记录走默认家，无损）");
+      assert(await waitFor(() => (routingFor(gid15c).find((x) => x.session_id === l15.session_id)?.count ?? 0) === 2), "存量熟手二单收口（闭环）");
+      cfg.employeeConfigDir = null;
       cfg.employeeConfigDir = null;
       if (prevMax15 === undefined) delete process.env.CCR_ORG_MAX_GROUPS; else process.env.CCR_ORG_MAX_GROUPS = prevMax15;
     }

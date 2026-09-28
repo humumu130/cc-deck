@@ -146,6 +146,7 @@ async function main() {
     assert(card3.relay_session_id === a1b.leader_sdk_id, "L3 重建卡 relay_session_id = 锚 sdk id（可 resume）");
     assert(card3.status === "DONE" && card3.saved === true && card3.pinned === true && card3.historical === true, "L3 休眠卡形态：DONE/saved/pinned/historical");
     assert(card3.employee === true, "L3 锚重建保雇员标记（#17 边界审查 P1：compactEvents 30 会话上限挤掉首帧后，重建字面量不得丢身份）");
+    assert(card3.employee_home === undefined && readOrgAnchor()?.employee_home === undefined, "L3 关态锚不带家记录（=默认家，与旧 transcript 实际所在一致）");
     assert(card3.title === ORG_LEADER_TITLE && card3.cwd === ORG, "L3 题名 + org cwd");
     const pinned3 = readJson(join(DATA, "pinned-sessions.json")) as string[] | null;
     assert(Array.isArray(pinned3) && pinned3.includes(leaderId), "L3 pinned 文件重新含 Leader id（重建后写回）");
@@ -354,6 +355,50 @@ async function main() {
     assert(!sess9.has("ev-dummy-0") && sess9.size < 20, `L8 普通旧卡先被挤（余 ${sess9.size} < 20）`);
     rmSync(ORG5, { recursive: true, force: true });
     rmSync(DATA5, { recursive: true, force: true });
+
+    // ---------- L9 #17 第二批：开启态锚记家（建锚写入 → onInit 回写保留 → 重启重建还原） ----------
+    console.log("L9 锚记家（#17 第二批）:");
+    const ORG6 = mkdtempSync(join(tmpdir(), "ccr-org-l9-"));
+    const DATA6 = mkdtempSync(join(tmpdir(), "ccr-data-l9-"));
+    const EMP6 = mkdtempSync(join(tmpdir(), "ccr-emp-l9-"));
+    process.env.CCR_ORG_DIR = ORG6;
+    const created11: SpawnRec[] = [];
+    const cfg11: RelayConfig = { ...cfg6, dataDir: DATA6, employeeConfigDir: EMP6 };
+    const mgr11 = new SessionManager(new EventBus({ persistPath: join(DATA6, "events.ndjson") }), cfg11);
+    mgr11.setAgentFactory(makeFakeFactory(created11));
+    const r11 = mgr11.ensureLeader();
+    const lid11 = r11.ok ? r11.session_id : "";
+    assert(r11.ok === true && !!lid11, "L9 开启态首建 Leader（前置）");
+    assert(created11[0]?.configHome === EMP6, "L9 首建 spawn 带 configHome=独立家（上岗回合即落独立家）");
+    const a11 = readOrgAnchor();
+    assert(a11?.employee_home === EMP6, "L9 锚记家：建锚写入创建时落定的家");
+    assert(mgr11.snapshot().find((s) => s.session_id === lid11)?.employee_home === EMP6, "L9 Leader 卡带 employee_home 记录");
+    // 上岗回合完成 → onInit 回写锚（spread 保留 employee_home 不丢）
+    assert(await waitFor(() => {
+      const c = mgr11.snapshot().find((s) => s.session_id === lid11);
+      return !!c && c.status === "DONE" && c.done_reason === "success";
+    }), "L9 上岗回合完成（前置）");
+    assert(readOrgAnchor()?.employee_home === EMP6 && !!readOrgAnchor()?.leader_sdk_id, "L9 onInit 回写锚后 employee_home 保留（sdk_id 收敛不顶掉家记录）");
+    // 重启锚重建（events 挤掉首帧形态）：开关翻转（关）后重建仍按锚记录还原——
+    // 常驻 Leader 的 resume 恒指其 transcript 实际所在的家
+    cfg11.employeeConfigDir = null; // 重启前用户关了开关
+    const created12: SpawnRec[] = [];
+    const mgr12 = new SessionManager(new EventBus({ persistPath: join(DATA6, "events.ndjson") }), cfg11);
+    mgr12.setAgentFactory(makeFakeFactory(created12));
+    assert(mgr12.adopt(new Map()) === 0, "L9 adopt 空表（events 挤掉首帧形态，前置）");
+    mgr12.applyPinned();
+    const r12 = mgr12.ensureLeader();
+    assert(r12.ok === true && r12.rebuilt === true && r12.session_id === lid11, "L9 锚重建（前置）");
+    const card12 = mgr12.snapshot().find((s) => s.session_id === lid11)!;
+    assert(card12.employee === true && card12.employee_home === EMP6, "L9 重建卡按锚还原 employee_home（开关翻转对常驻 Leader 无损）");
+    // 重建卡消息复活路径的 spawn 选家：employeeHome() 记录优先——resume 带 EMP 而非当前关态的 undefined
+    const ack12 = mgr12.handleCommand({ command_id: randomUUID(), type: "COMMAND_MESSAGE", ts: Date.now(), payload: { session_id: lid11, text: "重建后咨询" } }, "test");
+    assert(ack12.ok === true, "L9 重建卡可发消息复活（前置）");
+    assert(await waitFor(() => created12.some((c) => c.resume)), "L9 复活 resume spawn 发起（前置）");
+    assert(created12.filter((c) => c.resume).every((c) => c.configHome === EMP6), "L9 重建卡 resume 带锚记录的家（关态翻转后仍指 transcript 实际所在）");
+    rmSync(ORG6, { recursive: true, force: true });
+    rmSync(DATA6, { recursive: true, force: true });
+    rmSync(EMP6, { recursive: true, force: true });
   } finally {
     if (prevOrg === undefined) delete process.env.CCR_ORG_DIR; else process.env.CCR_ORG_DIR = prevOrg;
     if (prevTitleGen === undefined) delete process.env.CCR_NO_TITLE_GEN; else process.env.CCR_NO_TITLE_GEN = prevTitleGen;

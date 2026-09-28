@@ -207,16 +207,18 @@ delete process.env.CCR_ORG_DIR;
   mkdirSync(join(EMP, "tasks", SID_EMP), { recursive: true });
   writeFileSync(join(EMP, "tasks", SID_EMP, "1.json"), JSON.stringify({ id: 1, subject: "雇员的活", status: "in_progress" }));
   putTodo(SID_EMP2, "1.json", { id: 1, subject: "默认家的遗留活", status: "in_progress" });
+  // 第二批记录优先语义：开启态创建的会话带 employee_home 记录（无记录 = 关态
+  // 创建 = 默认家，读家随记录走）
   mgr17.adopt(new Map([
-    mk2("m-emp", SID_EMP, false, Date.now(), { employee: true }),
-    mk2("m-emp2", SID_EMP2, false, Date.now(), { employee: true }),
+    mk2("m-emp", SID_EMP, false, Date.now(), { employee: true, employee_home: EMP }),
+    mk2("m-emp2", SID_EMP2, false, Date.now(), { employee: true, employee_home: EMP }),
   ]));
   const n17 = mgr17.autoReviveManaged();
   assert(n17 === 1 && resumes17.length === 1 && resumes17[0]!.resume === SID_EMP,
     `雇员待办在独立家 → 按家命中并拉起 got=${n17}/${JSON.stringify(resumes17.map((r) => r.resume))}`);
   assert(resumes17[0]!.configHome === EMP, "拉起的 resume 注入 configHome=独立家（spawn 口同规则）");
   assert(mgr17.snapshot().find((s) => s.session_id === "m-emp2")?.status !== "WORKING",
-    "待办只在默认家的雇员不被误拉（读家按身份×开关，不回退默认家）");
+    "待办只在默认家的记录家雇员不被误拉（读家按创建时记录，不回退默认家）");
   rmSync(join(TASKS, SID_EMP2), { recursive: true, force: true });
 }
 

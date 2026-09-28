@@ -6,6 +6,7 @@ import { writeFileSync, openSync, readFileSync, rmSync, existsSync, readdirSync,
 import { spawn, execFileSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { loadConfig } from "./config.js";
+import { resolveEmployeeHome } from "./settings.js";
 import { detectLanIp } from "./lan-ip.js";
 import { EventBus } from "./event-bus.js";
 import { SessionManager } from "./session-manager.js";
@@ -30,6 +31,15 @@ if (process.env.CCR_PARENT_PID) {
 }
 
 const cfg = loadConfig();
+// #17 第二批：产品层设置合成覆盖——env 显式设置（部署面）> settings.json（用户面，
+// 三端设置项读写）> 默认值（新装开/存量关）。loadConfig 只解析 env，此处合成最终值
+{
+  const st = resolveEmployeeHome(cfg.dataDir);
+  cfg.employeeConfigDir = st.value;
+  if (st.source !== "env" && st.enabled) {
+    console.log(`[config] 雇员独立家已开启（${st.source === "file" ? "设置项" : "新装默认"}）：${st.value}`);
+  }
+}
 
 // #28（2026-09-10 用户机实测根因）：同数据目录双 relay 进程（CLI 插件 supervisor +
 // exe 内嵌共用 ~/.cc-deck/data，同身份连桥）被桥按 dev 顶号互踢——闪断循环、重启

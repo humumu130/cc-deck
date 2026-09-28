@@ -139,6 +139,9 @@ export interface OrgAnchor {
   leader_session_id: string;
   /** 最新 CLI/SDK session id（resume 锚点；首建到 init 之间为空串，onInit 回填） */
   leader_sdk_id: string;
+  /** #17 Leader 创建时落定的雇员家（spawn 注入值）。缺省 = 关态/pre-#17 锚（默认家）；
+   *  锚重建还原到休眠卡，resume/读取按「创建时的家」走——开关翻转对常驻 Leader 无损 */
+  employee_home?: string;
   created_at: number;
   updated_at: number;
 }
@@ -152,6 +155,7 @@ export function readOrgAnchor(dir?: string): OrgAnchor | null {
       leader_session_id: raw.leader_session_id,
       // 旧锚/手写锚缺该字段容忍为空串（=首建窗口形态，ensureLeader 走废锚重建）
       leader_sdk_id: typeof raw.leader_sdk_id === "string" ? raw.leader_sdk_id : "",
+      employee_home: typeof raw.employee_home === "string" && raw.employee_home ? raw.employee_home : undefined,
       created_at: typeof raw.created_at === "number" ? raw.created_at : 0,
       updated_at: typeof raw.updated_at === "number" ? raw.updated_at : 0,
     };
