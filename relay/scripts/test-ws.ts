@@ -1,11 +1,14 @@
 import { randomUUID } from "node:crypto";
-import { mkdirSync, rmSync } from "node:fs";
+import { mkdirSync, readdirSync, rmSync } from "node:fs";
+import { homedir } from "node:os";
+import { join } from "node:path";
 import { WebSocket } from "ws";
 import { fileURLToPath } from "node:url";
 import { EventBus } from "../src/event-bus.js";
 import { SessionManager } from "../src/session-manager.js";
 import { loadConfig } from "../src/config.js";
 import { startServer } from "../src/ws-server.js";
+import { readSettingsFile } from "../src/settings.js";
 import type { Command, CommandAckPayload, Envelope } from "../src/types.js";
 
 function assert(cond: boolean, msg: string): void {
@@ -63,6 +66,21 @@ mkdirSync(WS_ORG, { recursive: true });
 rmSync(WS_ORG, { recursive: true, force: true });
 mkdirSync(WS_ORG, { recursive: true });
 process.env.CCR_ORG_DIR = WS_ORG;
+// 沙盒铁律：数据目录钉死仓库沙盒。本仓库的测试可能在「生产 relay 之子」的环境里跑
+// （CCR_DATA_DIR/CC_DECK_PLUGIN/CCR_RELAY_CHILD 等生产 env 全套被继承），loadConfig
+// 的 env 优先级会整包劫持数据落点——2026-09-28 事故实证：last-cwd/settings.json/
+// child-sessions.json 落进生产 ~/.cc-deck/data，测试 CLI 的 transcript 进全局目录
+const WS_DATA = fileURLToPath(new URL("../data/test-ws-data/", import.meta.url));
+rmSync(WS_DATA, { recursive: true, force: true });
+mkdirSync(WS_DATA, { recursive: true });
+process.env.CCR_DATA_DIR = WS_DATA;
+delete process.env.CC_DECK_PLUGIN; // 该分支的 dataDir 缺省同样指向 ~/.cc-deck/data
+delete process.env.CCR_PARENT_PID;
+delete process.env.CCR_RELAY_CHILD;
+delete process.env.CCR_EMPLOYEE_CONFIG_DIR; // 防生产锁定 env 渗入（6b 会误走 env 只读分支）
+process.env.CCR_CLOUD_URL = ""; // loadConfig 缺省会连公共云桥（快照外泄到公网桥）
+process.env.CCR_NO_TITLE_GEN = "1"; // 拉真 CLI 但不拉起名子进程：titlegen 会另落一份全局 transcript
+process.env.CCR_NO_BRIDGE_MIRROR = "1"; // 防御性：当前 in-process 无 onReady 镜像，防未来演进踩同坑
 // 孤儿扫描用空临时根，防止测试扫到真实 ~/.claude/projects
 process.env.CCR_PROJECTS_ROOT = fileURLToPath(new URL("../data/test-projects-ws/", import.meta.url));
 // #67 COMMAND_CREATE 探针 cwd 用 .tmp- 沙箱：历史用 process.cwd()（仓库根），
@@ -171,6 +189,76 @@ assert(
   "invalid message got error ack",
 );
 
+// 6b. #17 第二批补强：SNAPSHOT.settings 形状 + 开关热切换双端收敛 + 幂等重发 +
+//     非布尔拒收（状态无关：读现值→翻转→还原，仓库本地 data 目录已 gitignore）。
+//     本套件 in-process 起服不跑 index.ts 物化 → 快照可能停在 default 层——恰好
+//     补上 default 形态；真启动的 file/env 两形态由 test-settings-ws 锁
+{
+  type St = { employee_home?: unknown; value?: unknown; source?: unknown };
+  const st0 = (c1.events[0].payload as { settings?: St }).settings;
+  assert(
+    !!st0 && typeof st0.employee_home === "boolean"
+      && (st0.value === null || typeof st0.value === "string")
+      && (st0.source === "env" || st0.source === "file" || st0.source === "default"),
+    `SNAPSHOT.settings 形状（布尔 + value null|字符串 + source 三态）got=${JSON.stringify(st0)}`,
+  );
+  const cur = (st0 as St).employee_home as boolean;
+  const countUpd = () => c2.events.filter((e) => e.type === "SETTINGS_UPDATED").length;
+  const before = countUpd();
+
+  // 热切换到反值：ack 带最新状态（file 层）→ c2 秒收同值瞬态帧（seq=0）
+  const fid = send(c1, { type: "COMMAND_SETTINGS_UPDATE", payload: { employee_home: !cur } });
+  let fack: CommandAckPayload | undefined;
+  for (let i = 0; i < 30 && !fack; i++) {
+    fack = c1.acks.find((a) => a.command_id === fid);
+    if (!fack) await wait(100);
+  }
+  const fd = (fack as unknown as { data?: St } | undefined)?.data;
+  assert(
+    fack?.ok === true && fd?.employee_home === !cur && fd?.source === "file",
+    `热切换 ack 携带最新状态（file 层）got=${JSON.stringify(fack)}`,
+  );
+  await wait(400);
+  const flips = c2.events.filter((e) => e.type === "SETTINGS_UPDATED");
+  assert(
+    flips.length === before + 1
+      && (flips[flips.length - 1].payload as St).employee_home === !cur
+      && flips[flips.length - 1].seq === 0,
+    "他端同连接秒收 SETTINGS_UPDATED（瞬态 seq=0）",
+  );
+  const afterFlip = countUpd();
+
+  // 幂等：同 command_id 双发 → 第二个 ack duplicate:true；重放不重复广播
+  //（首发与现值相同仍执行 → 恰好多一条广播）
+  const dupId = randomUUID();
+  const frame = JSON.stringify({ type: "COMMAND_SETTINGS_UPDATE", command_id: dupId, ts: Date.now(), payload: { employee_home: !cur } });
+  c1.ws.send(frame);
+  c1.ws.send(frame);
+  for (let i = 0; i < 30 && c1.acks.filter((a) => a.command_id === dupId).length < 2; i++) await wait(100);
+  const dacks = c1.acks.filter((a) => a.command_id === dupId);
+  assert(dacks.length === 2 && dacks.some((a) => a.duplicate === true), "同 command_id 重发 → duplicate 幂等标记");
+  await wait(300);
+  assert(countUpd() === afterFlip + 1, "幂等重放只执行一次（重发不再广播）");
+
+  // 非布尔载荷拒收（防缺键/字符串静默落 false 关掉开关）+ 不广播
+  // 故意发非布尔（类型绕行：被测行为就是协议层拒收畸形载荷）
+  const bid = send(c1, { type: "COMMAND_SETTINGS_UPDATE", payload: { employee_home: "true" } as unknown as Command["payload"] });
+  for (let i = 0; i < 30 && !c1.acks.some((a) => a.command_id === bid); i++) await wait(100);
+  const back = c1.acks.find((a) => a.command_id === bid);
+  assert(back?.ok === false && /布尔/.test(back?.error ?? ""), `非布尔载荷拒收 got=${JSON.stringify(back)}`);
+  await wait(300);
+  assert(countUpd() === afterFlip + 1, "拒收不广播");
+
+  // 还原现值（收尾零残留）+ 落盘核对
+  const rid = send(c1, { type: "COMMAND_SETTINGS_UPDATE", payload: { employee_home: cur } });
+  for (let i = 0; i < 30 && !c1.acks.some((a) => a.command_id === rid); i++) await wait(100);
+  const rack = c1.acks.find((a) => a.command_id === rid);
+  const rd = (rack as unknown as { data?: St } | undefined)?.data;
+  assert(rack?.ok === true && rd?.employee_home === cur, "切回原值 ack 确认");
+  await wait(300);
+  assert(readSettingsFile(cfg.dataDir)?.employeeHome === cur, "settings.json 落盘与还原值一致");
+}
+
 // 7. #26 M1/M2 审查轮：/api/org HTTP 通道——鉴权 + 决议动作白名单（confirm-decide
 //    不开放 HTTP：读过 token 的进程不得自批确认卡，决议只走 WS COMMAND_ORG_CONFIRM）
 const orgBase = `http://127.0.0.1:${cfg.port}/api/org`;
@@ -189,6 +277,16 @@ await wait(2000);
 c1.ws.close();
 c2.ws.close();
 await wait(500);
+
+// 全局 transcript 收尾：真 CLI 的 transcript 落 ~/.claude/projects/<cwd-slug>/，
+// 该 slug 只可能是本测试探针会话（.tmp-test-ws 唯一名）——删净不留测试残渣，
+// 用户可见会话列表零污染（2026-09-28 事故后补的纪律）
+try {
+  const projs = join(homedir(), ".claude", "projects");
+  for (const n of readdirSync(projs)) {
+    if (n.endsWith("-tmp-test-ws")) rmSync(join(projs, n), { recursive: true, force: true });
+  }
+} catch {} // 目录不存在/权限异常不阻塞测试结论
 
 console.log("\nWS TESTS PASSED");
 process.exit(0);
