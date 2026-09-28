@@ -600,6 +600,8 @@
   .gp-plug-row .gp-plug-t .gp-plug-n { font-size: 13px; font-weight: 600; color: var(--gp-text); }
   .gp-plug-row .gp-plug-d { font-size: 11px; color: var(--gp-dim); line-height: 1.45; }
   .gp-plug-rows.off .lever { opacity: .45; pointer-events: none; }
+  /* #17 第二批：设置被部署面（env）锁定时的只读拨杆（同 #448 禁点视觉） */
+  .gp-rows.locked .lever { opacity: .45; pointer-events: none; }
   .gp-plug-note { font-size: 11px; color: var(--gp-faint); padding: 0 4px; line-height: 1.5; }
   /* 已配对设备清单（议题① 2026-09-09）：行 = 在线点/kind 徽章/名称/dev/配对时间/移除 */
   .gp-peers-list { display: flex; flex-direction: column; gap: 2px; }
@@ -2435,6 +2437,17 @@
               <div class="lever" id="gpSvcLever" style="--n:2"><i class="lever-thumb"></i><button type="button" class="lever-opt" data-i="0">关</button><button type="button" class="lever-opt" data-i="1">开</button></div>
             </div>
           </div>
+          <!-- #17 第二批 雇员会话独立存放：数据走 SNAPSHOT.settings + SETTINGS_UPDATED
+               实时收敛，切换发 COMMAND_SETTINGS_UPDATE（ws 通道——LAN/云桥两路同权，
+               区别于 #448 插件页的本机 HTTP）。旧 relay 无 settings 键 → 整卡隐藏不误导；
+               source=env（部署面环境变量显式设置）→ 拨杆锁定只读 -->
+          <div class="gp-card gp-rows" id="gpEmpHomeCard" style="display:none;margin-bottom:10px">
+            <div class="gp-row gp-plug-row">
+              <span class="gi"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3.5 10.5 12 3.8l8.5 6.7"/><path d="M5.5 9.5V20h13V9.5"/><path d="M10 20v-5h4v5"/></svg></span>
+              <span class="gp-plug-t"><span class="gp-plug-n">雇员会话独立存放</span><span class="gp-plug-d" id="gpEmpHomeDesc">团队成员（Leader 与派单成员）的会话记录与日常终端会话分开存放；改动只影响之后新建的会话，已有会话保持原处</span></span>
+              <div class="lever" id="gpEmpHomeLever" style="--n:2"><i class="lever-thumb"></i><button type="button" class="lever-opt" data-i="0">关</button><button type="button" class="lever-opt" data-i="1">开</button></div>
+            </div>
+          </div>
           <div class="gp-sec"><svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9 5.5 10.5 4h3L15 5.5"/><rect x="4" y="5.5" width="16" height="15" rx="3"/><path d="M8.5 11h7M8.5 15h4.5"/></svg>已配对设备</div>
           <div class="gp-card gp-peers">
             <div id="gpPeersList" class="gp-peers-list"><div class="gp-peers-empty">连接服务器后可管理</div></div>
@@ -2967,6 +2980,7 @@ function ensureCtx(cfg) {
       cfg, status: "offline", statusText: "未连接",
       sessions: new Map(), timelines: new Map(), lastSeq: 0, models: [], deliverables: false,
       allowRules: null, // #212 记住规则（SNAPSHOT.allow_rules；null = 旧 relay 不支持）
+      empHomeSettings: null, // #17 第二批 雇员独立家设置（SNAPSHOT.settings；null = 旧 relay 不支持，卡隐藏）
       projects: null, orgConfirms: [], boards: new Map(), // #26 M2 组织态（projects null = 旧 relay 不支持，组织区不渲染；boards 由 BOARD_UPDATED 增量维护）
       ws: null, reconnectDelay: RETRY_BASE_MS, reconnectTimer: 0,
       failKind: "", retryAt: 0, retryNote: "", // #40web 失败归因/重试倒计时（见 setConn/scheduleReconnect）
@@ -4097,7 +4111,9 @@ function onEvent(ctx, msg) {
       ctx.allowRules = Array.isArray(msg.payload.allow_rules) ? msg.payload.allow_rules : null; // #212 记住规则（旧 relay 无字段=不支持）
       ctx.projects = Array.isArray(msg.payload.projects) ? msg.payload.projects : null; // #26 M2 项目组（旧 relay 无字段 = 不支持，组织区不渲染）
       ctx.orgConfirms = Array.isArray(msg.payload.org_confirms) ? msg.payload.org_confirms : [];
+      ctx.empHomeSettings = msg.payload.settings && typeof msg.payload.settings === "object" ? msg.payload.settings : null; // #17 第二批（旧 relay 无字段=不支持）
       renderAllowRules(); // relay 页开着时即时收敛（函数内有可见性 gate）
+      renderEmpHome(); // 同上：雇员独立家卡
       if (msg.payload.homedir) ctx.homedir = msg.payload.homedir; // #368 新建表单默认目录
       if (msg.payload.platform) ctx.platform = msg.payload.platform; // relay 平台：新建表单示例自适应+盘符拦截（旧 relay 无字段=中立文案）
       updateCwdPlaceholder(); // 运行时回调：五块 script 已全部执行，函数全局可达
@@ -4177,6 +4193,11 @@ function onEvent(ctx, msg) {
     // #212 记住规则变更（瞬态广播）：全量替换该源的规则表；设置页打开时实时收敛
     case "ALLOW_RULES_UPDATED": {
       if (Array.isArray(msg.payload.rules)) { ctx.allowRules = msg.payload.rules; renderAllowRules(); }
+      break;
+    }
+    // #17 第二批：雇员独立家设置变更（applyEmployeeHome 广播/ack 后到达，全量替换幂等）
+    case "SETTINGS_UPDATED": {
+      if (msg.payload && typeof msg.payload.employee_home === "boolean") { ctx.empHomeSettings = msg.payload; renderEmpHome(); }
       break;
     }
     // #26 M2 组织态（瞬态广播）：项目组/待决议确认卡全量替换；任务板增量（板不随
@@ -6567,7 +6588,7 @@ function setGearSection(sec) {
     if (nav) nav.classList.toggle("on", on);
   }
   try { if (!window.__ccGearPin) localStorage.setItem(GP_SEC_KEY, sec); } catch {} // ?gear=1 深链会话不污染分页记忆（顺手项①）
-  if (sec === "relay") { probeRelayStat(); refreshPeers(); loadRelaySvc(); renderAllowRules(); } // 设备清单随 relay 页可见时静默刷新（议题①）+ #196 服务化开关状态 + #212 记住规则（纯本地渲染，数据在 SNAPSHOT/事件里已就位）
+  if (sec === "relay") { probeRelayStat(); refreshPeers(); loadRelaySvc(); renderAllowRules(); renderEmpHome(); } // 设备清单随 relay 页可见时静默刷新（议题①）+ #196 服务化开关状态 + #212 记住规则 + #17 第二批雇员独立家卡（纯本地渲染，数据在 SNAPSHOT/事件里已就位）
   if (sec === "plug") loadPluginCfg(); // #448 插件三开关随插件页可见时拉取本机配置
 }
 document.querySelectorAll(".gp-nav-item").forEach((b) => { b.onclick = () => { setGearSection(b.dataset.sec); }; });
@@ -9510,6 +9531,50 @@ $("gpSvcLever")?.querySelectorAll(".lever-opt").forEach((b) => {
       svcRender();
       probeRelayStat(); // relay 属主刚换手（内嵌↔服务），状态行同步刷
     }
+  };
+});
+
+// ── #17 第二批 雇员会话独立存放：状态取 SNAPSHOT.settings（多源时取首个在线且
+//    支持的源——同一 relay 的 LAN/云桥双源值恒一致）；切换走 ws 命令，ack 带
+//    最新状态即时收敛，SETTINGS_UPDATED 广播到达再收敛一次（幂等）──
+let empHomeBusy = false;
+function empHomeCtx() {
+  for (const c of ctxs.values()) {
+    if (c.status === "online" && c.empHomeSettings) return c;
+  }
+  return null;
+}
+function renderEmpHome() {
+  const card = $("gpEmpHomeCard");
+  if (!card) return;
+  const c = empHomeCtx();
+  card.style.display = c ? "" : "none";
+  if (!c) return;
+  const st = c.empHomeSettings;
+  setLever($("gpEmpHomeLever"), st.employee_home ? 1 : 0);
+  const locked = st.source === "env";
+  card.classList.toggle("locked", locked);
+  $("gpEmpHomeDesc").textContent = locked
+    ? "已由部署配置（环境变量 CCR_EMPLOYEE_CONFIG_DIR）统一设定，此处不可修改。当前：" + (st.employee_home ? "独立存放于 " + (st.value || "") : "关闭")
+    : st.employee_home
+      ? "开启中——之后新建的团队成员会话存放于：" + (st.value || "") + "；已有会话保持原处"
+      : "关闭——团队成员会话与日常终端会话共用同一存放位置；改动只影响之后新建的会话";
+}
+$("gpEmpHomeLever")?.querySelectorAll(".lever-opt").forEach((b) => {
+  b.onclick = async () => {
+    const c = empHomeCtx();
+    if (!c || empHomeBusy) return;
+    const st = c.empHomeSettings;
+    if (!st || st.source === "env") return; // 部署面锁定：只读
+    const want = b.dataset.i === "1";
+    if (!!st.employee_home === want) return;
+    empHomeBusy = true;
+    const ack = await commandAck(c, "COMMAND_SETTINGS_UPDATE", { employee_home: want });
+    empHomeBusy = false;
+    if (!ack) { toast("切换失败：服务器无应答"); renderEmpHome(); return; }
+    if (ack.ok && ack.data && typeof ack.data.employee_home === "boolean") c.empHomeSettings = ack.data;
+    else if (!ack.ok) toast("切换失败：" + (ack.error || "未知错误"));
+    renderEmpHome();
   };
 });
 
