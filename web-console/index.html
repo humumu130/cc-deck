@@ -3925,6 +3925,7 @@ function setConn(ctx, status, text, kind) {
   renderServers();
   renderConnChip();
   render();
+  renderEmpHome(); // #17 第二批（审查 P2）：源掉线即时重选显示源，设置卡不滞留旧源值
 }
 
 // #39x 配对中/连接中的状态文字带省略号逐点动效（.pairing::after CSS steps 循环）
@@ -4111,7 +4112,7 @@ function onEvent(ctx, msg) {
       ctx.allowRules = Array.isArray(msg.payload.allow_rules) ? msg.payload.allow_rules : null; // #212 记住规则（旧 relay 无字段=不支持）
       ctx.projects = Array.isArray(msg.payload.projects) ? msg.payload.projects : null; // #26 M2 项目组（旧 relay 无字段 = 不支持，组织区不渲染）
       ctx.orgConfirms = Array.isArray(msg.payload.org_confirms) ? msg.payload.org_confirms : [];
-      ctx.empHomeSettings = msg.payload.settings && typeof msg.payload.settings === "object" ? msg.payload.settings : null; // #17 第二批（旧 relay 无字段=不支持）
+      ctx.empHomeSettings = parseEmpHomeSt(msg.payload.settings); // #17 第二批（旧 relay 无字段/畸形=不支持，卡隐藏）
       renderAllowRules(); // relay 页开着时即时收敛（函数内有可见性 gate）
       renderEmpHome(); // 同上：雇员独立家卡
       if (msg.payload.homedir) ctx.homedir = msg.payload.homedir; // #368 新建表单默认目录
@@ -4195,9 +4196,11 @@ function onEvent(ctx, msg) {
       if (Array.isArray(msg.payload.rules)) { ctx.allowRules = msg.payload.rules; renderAllowRules(); }
       break;
     }
-    // #17 第二批：雇员独立家设置变更（applyEmployeeHome 广播/ack 后到达，全量替换幂等）
+    // #17 第二批：雇员独立家设置变更（applyEmployeeHome 广播/ack 后到达，全量替换幂等）。
+    // 形状校验与快照同尺（parseEmpHomeSt，审查 P3）：畸形帧忽略不覆盖既有值
     case "SETTINGS_UPDATED": {
-      if (msg.payload && typeof msg.payload.employee_home === "boolean") { ctx.empHomeSettings = msg.payload; renderEmpHome(); }
+      const eh = parseEmpHomeSt(msg.payload);
+      if (eh) { ctx.empHomeSettings = eh; renderEmpHome(); }
       break;
     }
     // #26 M2 组织态（瞬态广播）：项目组/待决议确认卡全量替换；任务板增量（板不随
@@ -9534,14 +9537,24 @@ $("gpSvcLever")?.querySelectorAll(".lever-opt").forEach((b) => {
   };
 });
 
-// ── #17 第二批 雇员会话独立存放：状态取 SNAPSHOT.settings（多源时取首个在线且
-//    支持的源——同一 relay 的 LAN/云桥双源值恒一致）；切换走 ws 命令，ack 带
+// ── #17 第二批 雇员会话独立存放：状态取 SNAPSHOT.settings；切换走 ws 命令，ack 带
 //    最新状态即时收敛，SETTINGS_UPDATED 广播到达再收敛一次（幂等）──
+// settings 帧归一化（快照/广播/ack.data 共用一把尺，审查 P3）：布尔 + source 三态
+// 才采信并归一 value；畸形→null（卡隐藏/帧忽略），未来 relay 加新 source 不折叠成可编辑
+function parseEmpHomeSt(st) {
+  return (st && typeof st === "object" && typeof st.employee_home === "boolean" &&
+    (st.source === "env" || st.source === "file" || st.source === "default"))
+    ? { employee_home: st.employee_home, value: typeof st.value === "string" ? st.value : null, source: st.source }
+    : null;
+}
 let empHomeBusy = false;
 function empHomeCtx() {
-  for (const c of ctxs.values()) {
-    if (c.status === "online" && c.empHomeSettings) return c;
-  }
+  // 源选择口径对齐设备清单（firstOnlineCtx：activeServerId 优先）再叠「支持」过滤
+  //（审查 P2）：多 relay 时显示与切换始终作用于用户选中的源，不按 Map 插入序错位——
+  // 否则卡显示 A 的读数、命令却发给 B
+  const pick = (c) => (c && c.status === "online" && c.empHomeSettings) ? c : null;
+  if (activeServerId) { const c = pick(ctxs.get(activeServerId)); if (c) return c; }
+  for (const c of ctxs.values()) { const p = pick(c); if (p) return p; }
   return null;
 }
 function renderEmpHome() {
@@ -9571,9 +9584,15 @@ $("gpEmpHomeLever")?.querySelectorAll(".lever-opt").forEach((b) => {
     empHomeBusy = true;
     const ack = await commandAck(c, "COMMAND_SETTINGS_UPDATE", { employee_home: want });
     empHomeBusy = false;
-    if (!ack) { toast("切换失败：服务器无应答"); renderEmpHome(); return; }
-    if (ack.ok && ack.data && typeof ack.data.employee_home === "boolean") c.empHomeSettings = ack.data;
-    else if (!ack.ok) toast("切换失败：" + (ack.error || "未知错误"));
+    if (!ack) {
+      // 超时但 SETTINGS_UPDATED 可能已先到收敛到位（ACK 帧丢失场景，审查 P3）——
+      // 已达目标态则按成功收口不误报；真未达再报失败
+      const cur = c.empHomeSettings;
+      if (!(cur && !!cur.employee_home === want)) toast("切换失败：服务器无应答");
+      renderEmpHome(); return;
+    }
+    { const eh = parseEmpHomeSt(ack.data); if (ack.ok && eh) c.empHomeSettings = eh; }
+    if (!ack.ok) toast("切换失败：" + (ack.error || "未知错误"));
     renderEmpHome();
   };
 });

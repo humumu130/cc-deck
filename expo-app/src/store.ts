@@ -313,6 +313,7 @@ const CMD_LABEL: Record<string, string> = {
   COMMAND_IMPORT_PUSH: "连接回传",
   COMMAND_ORG_CONFIRM: "团队确认", // #26 M2 确认卡决议（失败 toast 用；2026-09-27 去「组织」化）
   COMMAND_PROJECT_DETAIL: "项目组详情", // #26 M2 详情按需拉取
+  COMMAND_SETTINGS_UPDATE: "雇员独立家", // #17 第二批 设置切换
 };
 
 class RelayStore {
@@ -1662,7 +1663,10 @@ class RelayStore {
         }
         return;
       }
-      if (!ack.ok && ack.error) {
+      // 结果语义命令（p.onAck）的错误由调用方回调接管展示，不叠全局 toast（#17 第二批
+      // 审查 P3：empHomeSet 的 Alert 与 lastErrorCmd toast 同文案双弹；对齐 web-console
+      // ackWaiters 命中即 return 的口径。fetchArtifact/orgDetail 调用方均有本地错误 UI）
+      if (!ack.ok && ack.error && !p?.onAck) {
         this.emit({ lastErrorCmd: ack.error });
       }
       return;
@@ -2174,20 +2178,9 @@ class RelayStore {
           : [];
         // #71 输出物看板开关随快照携带（旧版 relay 无此字段 = 关，详情页藏 tab）
         conn.deliverables = (msg.payload as { deliverables?: unknown }).deliverables === true;
-        // #17 第二批 雇员独立家设置随快照携带（覆盖式；旧 relay 无字段 = null，
-        // 设置行隐藏）。形状校验：employee_home 布尔 + source 三态才采信
-        {
-          const st = (msg.payload as { settings?: unknown }).settings as Record<string, unknown> | undefined;
-          conn.empHome =
-            !!st && typeof st === "object" && typeof st.employee_home === "boolean" &&
-            (st.source === "env" || st.source === "file" || st.source === "default")
-              ? {
-                  employee_home: st.employee_home,
-                  value: typeof st.value === "string" ? st.value : null,
-                  source: st.source,
-                }
-              : null;
-        }
+        // #17 第二批 雇员独立家设置随快照携带（覆盖式；旧 relay 无字段/畸形 = null，
+        // 设置行隐藏）。形状校验与 SETTINGS_UPDATED 共用一把尺（parseEmpHome，审查 P3）
+        conn.empHome = parseEmpHome((msg.payload as { settings?: unknown }).settings);
         for (const s of msg.payload.sessions as SessionState[]) {
           conn.sessions.set(s.session_id, s);
           // logs 可选链（#146 排查加固）：字段缺省/畸形时 TypeError 会中断快照装配
@@ -2430,16 +2423,11 @@ class RelayStore {
         break;
       }
       // #17 第二批 雇员独立家开关热切换广播（瞬态 seq:0）：本端/他端任一处切换都
-      // 实时收敛（覆盖式，同 SNAPSHOT 口径）；旧 relay 无事件 = 收不到帧，重连快照兜底
+      // 实时收敛（覆盖式，同 SNAPSHOT 口径）；旧 relay 无事件 = 收不到帧，重连快照兜底。
+      // 畸形帧忽略不覆盖（parseEmpHome 共用校验——防未来新 source 值让设置行忽隐忽现）
       case "SETTINGS_UPDATED": {
-        const st = msg.payload as Record<string, unknown>;
-        if (typeof st.employee_home === "boolean") {
-          conn.empHome = {
-            employee_home: st.employee_home,
-            value: typeof st.value === "string" ? st.value : null,
-            source: st.source === "env" ? "env" : st.source === "default" ? "default" : "file",
-          };
-        }
+        const eh = parseEmpHome(msg.payload);
+        if (eh) conn.empHome = eh;
         break;
       }
       case "BOARD_UPDATED": {
@@ -2695,9 +2683,28 @@ class RelayStore {
 
   // #17 第二批 雇员独立家开关（relay 三层合成的用户面写入口）：ack 带最新状态由
   // SETTINGS_UPDATED 广播统一收敛（覆盖式，不本地乐观更新）；失败（env 锁定/写盘
-  // 失败）经 onDone 回传可读指引。relay 端幂等（command_id 去重）
+  // 失败）经 onDone 回传可读指引。relay 端幂等（command_id 去重）。
+  // 断连兜底（审查 P3）：断开清场静默清 pendingCmds 不回调 onAck（契约「调用方自带
+  // 兜底超时」），12s 到点仍无回执时按当下快照分流——SETTINGS_UPDATED 已先到收敛
+  // 到目标态则按成功收口（防「连接中断」误报掩盖已生效），否则提示重连自动同步
   empHomeSet(enabled: boolean, onDone?: (r: { ok: boolean; err: string | null }) => void): boolean {
-    return this.send("COMMAND_SETTINGS_UPDATE", { employee_home: enabled }, undefined, (r) => onDone?.({ ok: r.ok, err: r.err }));
+    if (!onDone) return this.send("COMMAND_SETTINGS_UPDATE", { employee_home: enabled });
+    let settled = false;
+    const sent = this.send("COMMAND_SETTINGS_UPDATE", { employee_home: enabled }, undefined, (r) => {
+      settled = true;
+      onDone({ ok: r.ok, err: r.err });
+    });
+    if (!sent) return false;
+    // ack 超时链（4s 重发 + 6s 收摊）最坏 10s 必回调 → settled；12s 仍 false 只有断连
+    // 清场一种路径（clearPendingCmds 不调 onAck）
+    setTimeout(() => {
+      if (settled) return;
+      settled = true;
+      const cur = this.snap.empHome;
+      if (cur && cur.employee_home === enabled) onDone({ ok: true, err: null });
+      else onDone({ ok: false, err: "连接中断，未确认是否生效；重连后将自动同步最新状态" });
+    }, 12_000);
+    return true;
   }
 
   // 项目组详情：{ group, board, receipts }（编制/任务板/回执流数据源；板不随快照）
@@ -2723,7 +2730,9 @@ class RelayStore {
     }
     conn.pendingCmds.delete(id);
     if (p.onAck) {
+      // 结果语义命令：回调已接管反馈（ACK 失败路径同口径，见 onMessage），不叠全局 toast
       try { p.onAck({ ok: false, err: "服务器未确认，可能未送达" }); } catch {}
+      return;
     }
     this.emit({ lastErrorCmd: `${CMD_LABEL[p.type] ?? "命令"}重发后仍未确认，可能未送达` });
   }
@@ -2850,6 +2859,18 @@ function sameCloud(a: CloudConfig | null, b: CloudConfig | null): boolean {
     a === b ||
     (!!a && !!b && a.url === b.url && a.token === b.token && a.relayDev === b.relayDev && a.relayPubkey === b.relayPubkey)
   );
+}
+
+// #17 第二批 settings 帧归一化（SNAPSHOT.settings / SETTINGS_UPDATED / ack.data 共用）：
+// employee_home 布尔 + source 三态才采信并归一 value，否则 null（调用方按需隐藏/忽略）。
+// 两条路径同一把尺——未来 relay 若加新 source 值，设置行统一隐藏而非一条路径折叠成
+// 可编辑形态（审查 P3）
+function parseEmpHome(st: unknown): EmployeeHomeSettings | null {
+  if (!st || typeof st !== "object") return null;
+  const s = st as Record<string, unknown>;
+  if (typeof s.employee_home !== "boolean") return null;
+  if (s.source !== "env" && s.source !== "file" && s.source !== "default") return null;
+  return { employee_home: s.employee_home, value: typeof s.value === "string" ? s.value : null, source: s.source };
 }
 
 // ---------- 服务器条目归并（#398 同目标写法归并 + #401 补强同源身份归并） ----------
