@@ -6,6 +6,11 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { Animated, Pressable, Vibration, View, type StyleProp, type ViewStyle } from "react-native";
 
+// 原生端 Animated 透传载体：Animated.Value 进「普通 Pressable」的 style 在 new-arch
+// 原生上不被插值，transform 收到原始节点对象直接 Render Error（web 端无感——首次
+// 原生构建装机才暴露，2026-09-28 模拟器实锤）。必须用动画化组件承载
+const APressable = Animated.createAnimatedComponent(Pressable);
+
 export function FadeIn({ children, dy = 8, dur = 160 }: { children: ReactNode; dy?: number; dur?: number }) {
   const op = useRef(new Animated.Value(0)).current;
   const y = useRef(new Animated.Value(dy)).current;
@@ -31,7 +36,7 @@ export function PressScale({
   const sc = useRef(new Animated.Value(1)).current;
   const to = (v: number) => Animated.spring(sc, { toValue: v, useNativeDriver: true, speed: 40, bounciness: 5 }).start();
   return (
-    <Pressable
+    <APressable
       disabled={disabled}
       onPressIn={() => {
         to(0.96);
@@ -45,7 +50,7 @@ export function PressScale({
       style={[style, { transform: [{ scale: sc }] }]}
     >
       {children}
-    </Pressable>
+    </APressable>
   );
 }
 
