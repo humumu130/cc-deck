@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { mkdirSync, mkdtempSync, readdirSync, rmSync, writeFileSync } from "node:fs";
+import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
 import { EventBus } from "../src/event-bus.js";
 import { SessionManager } from "../src/session-manager.js";
@@ -20,6 +20,12 @@ function cmd(c: Omit<Command, "command_id" | "ts">): Command {
 }
 
 const bus = new EventBus();
+// 沙盒铁律：真 CLI 会话测试更必须钉死数据目录——create() 写 last-cwd、CLI 子进程
+// 进 child-sessions.json，落点被继承的生产 env 劫持即污染生产（2026-09-28 事故实证）
+process.env.CCR_DATA_DIR = mkdtempSync(join(tmpdir(), "ccr-sessions-"));
+delete process.env.CC_DECK_PLUGIN;
+delete process.env.CCR_EMPLOYEE_CONFIG_DIR;
+process.env.CCR_NO_TITLE_GEN = "1"; // 起名子进程会另落一份全局 transcript，测试不需要
 const cfg = loadConfig();
 const mgr = new SessionManager(bus, cfg);
 
@@ -201,6 +207,16 @@ for (const id of [ackA.session_id, ackB.session_id, ackC.session_id]) {
 }
 await new Promise((r) => setTimeout(r, 3000));
 rmSync(tmpDir, { recursive: true, force: true, maxRetries: 5, retryDelay: 500 });
+
+// 全局 transcript 收尾：真 CLI 的 transcript 落 ~/.claude/projects/<cwd-slug>/，slug
+// 只可能是本测试探针会话（.tmp-test 唯一名）——删净不留残渣进用户可见列表
+//（与 test-ws.ts 同款纪律，2026-09-28 事故后补）
+try {
+  const projs = join(homedir(), ".claude", "projects");
+  for (const n of readdirSync(projs)) {
+    if (n.endsWith("--tmp-test")) rmSync(join(projs, n), { recursive: true, force: true });
+  }
+} catch {} // 目录不存在/权限异常不阻塞测试结论
 
 console.log("\nSESSION TESTS PASSED");
 process.exit(0);

@@ -45,6 +45,11 @@ const BRIDGE_TOKEN = "cloud-token-123";
 const dataDir = mkdtempSync(join(tmpdir(), "cc-cloud-test-"));
 const oldCwd = process.cwd();
 process.chdir(dataDir); // loadConfig 的 dataDir = cwd/data，隔离云身份文件
+// 沙盒铁律：chdir 兜底挡不住被继承的 CCR_DATA_DIR（env 优先级更高，2026-09-28 事故
+// 实证）——显式钉 env 才是真隔离
+process.env.CCR_DATA_DIR = dataDir;
+delete process.env.CC_DECK_PLUGIN;
+delete process.env.CCR_EMPLOYEE_CONFIG_DIR;
 process.env.CCR_CLOUD_URL = `ws://127.0.0.1:${BRIDGE_PORT}/cloud`;
 process.env.CCR_CLOUD_TOKEN = BRIDGE_TOKEN;
 process.env.CCR_NO_TITLE_GEN = "1";

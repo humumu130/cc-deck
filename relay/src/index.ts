@@ -408,7 +408,10 @@ startServer(bus, mgr, cfg, {
     const bridgeJson = JSON.stringify({ port: cfg.port, token: cfg.bridgeToken });
     writeFileSync(join(cfg.dataDir, "bridge.json"), bridgeJson, "utf-8");
     const hookHome = join(homedir(), ".cc-deck", "data");
-    if (cfg.dataDir !== hookHome && existsSync(hookHome)) {
+    // CCR_NO_BRIDGE_MIRROR=1 显式关镜像：测试沙盒 relay 起停会把测试端口/一次性 token
+    // 镜进生产 hook 配置，测试一收 hook 全域失联（2026-09-28 事故实证）。生产/插件
+    // 换班场景不受影响——env 未设时镜像行为原样保留（#211 语义不变）
+    if (!process.env.CCR_NO_BRIDGE_MIRROR && cfg.dataDir !== hookHome && existsSync(hookHome)) {
       try {
         writeFileSync(join(hookHome, "bridge.json"), bridgeJson, "utf-8");
       } catch {}

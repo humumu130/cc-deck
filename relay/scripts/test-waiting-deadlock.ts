@@ -13,6 +13,9 @@
 //   ③ SESSION_UPDATED 恒带 waiting_request 权威值（null = 已清）
 //   ④ RESOLVED 仅在 request_id 匹配当前挂起请求时才收口状态（防时序窗口打掉新请求）
 import { randomUUID } from "node:crypto";
+import { mkdtempSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { EventBus } from "../src/event-bus.js";
 import { SessionManager } from "../src/session-manager.js";
 import type { AgentCallbacks, AgentLike } from "../src/agent-adapter.js";
@@ -96,6 +99,11 @@ class FakeAgent implements AgentLike {
 }
 
 const bus = new EventBus();
+// 沙盒铁律：钉死数据目录防生产泄漏（fake 工厂直驱也会经 create() 写 last-cwd 落到
+// 被继承的生产 dataDir——2026-09-28 事故实证，详见 test-ws.ts 头部）
+process.env.CCR_DATA_DIR = mkdtempSync(join(tmpdir(), "ccr-wdl-"));
+delete process.env.CC_DECK_PLUGIN;
+delete process.env.CCR_EMPLOYEE_CONFIG_DIR;
 const cfg = loadConfig();
 const mgr = new SessionManager(bus, cfg);
 
