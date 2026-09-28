@@ -385,6 +385,9 @@ export class CloudClient {
         acceptances: listAcceptances(),
         // #212 允许并记住：规则全量（与 ws-server 直连快照同源同步，#117 教训）
         allow_rules: this.mgr.allowRules.list(),
+        // #17 第二批：雇员独立家设置（与 ws-server 直连快照同源同步，#117 教训——
+        // 云桥手机设置页同样要读 source 判锁定态）
+        settings: this.mgr.employeeHomeState(),
         // #26 M2 组织：项目组索引 + 待决确认单（与 ws-server 直连快照同源同步，#117 教训）
         projects: listGroups(),
         org_confirms: listPendingConfirms(),
