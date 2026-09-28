@@ -50,6 +50,15 @@ export interface AllowRule {
   created_by: string;
 }
 
+// #17 第二批 雇员独立家设置（relay 三层合成镜像）：SNAPSHOT.settings /
+// SETTINGS_UPDATED 携带。source = 生效来源（env=环境变量锁定 UI 只读；file=设置项；
+// default=新装/存量推导）
+export interface EmployeeHomeSettings {
+  employee_home: boolean;
+  value: string | null;
+  source: "env" | "file" | "default";
+}
+
 export interface TodoItem {
   id?: number; // CLI 任务库任务号（转录 #NNN 跳转定位；旧 TodoWrite 清单无）
   content: string;

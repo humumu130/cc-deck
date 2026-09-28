@@ -119,6 +119,7 @@ const ICON_MSG = "M4 5h16v10H9l-4 4z"; // 消息泡（过程消息）
 const ICON_MOON = "M12 3a9 9 0 1 0 9 9 7 7 0 0 1-9-9z"; // 半月（空闲变灰）
 const ICON_ENTER = "M20 4v6a3 3 0 0 1-3 3H5m4-4-4 4 4 4"; // 回车箭头（回车发送）
 const ICON_BOX = "M6 6h12a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2zM9 6V4h6v2M12 10v4"; // 收纳箱（版本/关于）
+const ICON_HOME = "M3 11 12 4l9 7M5 10v10h14V10"; // 小屋（#17 第二批 雇员独立家）
 
 // 扫描框角标（ScanScreen 取景框同语言 mini 版）：四角 L 亮角 + 中部扫描横线，
 // 纯 View 线条绘制（App 无 svg 依赖，与既有图形语言一致）
@@ -312,6 +313,15 @@ export default function SettingsDrawer({
     );
   };
   const snap = useRelay();
+  // #17 第二批 雇员独立家 ⓘ 弹窗（渲染闭包 snap 即最新——抽屉随 emit 重渲）：
+  // 语义 + 两条边界（只影响新会话 / 新装默认开）+ env 锁定附注
+  const empHomeHelp = () => {
+    Alert.alert(
+      "雇员独立家",
+      "开启后，系统拉起的雇员（自动干活的会话）使用独立目录保存配置与任务，不再读写你本机的 Claude 目录；关闭则共用。\n\n· 改动只影响之后新建的会话，已有会话保持原处\n· 新装默认开启，升级前已部署的默认关闭"
+        + (snap.empHome?.source === "env" ? "\n· 本台服务器由部署环境锁定，开关不可更改" : ""),
+    );
+  };
   const [servers, setServers] = useState<ServerEntry[]>([]);
   rebuildSrvColors(servers.map((s) => s.id));
   const [activeId, setActiveId] = useState<string | null>(null);
@@ -819,6 +829,33 @@ export default function SettingsDrawer({
             thumbColor="#EDEDF2"
           />
         </View>
+        {/* #17 第二批 雇员独立家（relay 级设置，显示组末尾与本地偏好同区收纳）：活动源
+            SNAPSHOT.settings 携带才渲染（旧 relay 无字段 = 行隐藏）；source=env = 部署
+            环境锁定只读；切换走 COMMAND_SETTINGS_UPDATE，成功由 SETTINGS_UPDATED 广播
+            收敛（不本地乐观更新，开关回弹即失败/未生效），失败 Alert 原文提示 */}
+        {snap.empHome ? (
+          <View style={[d.setItem, d.setRow]}>
+            <View style={d.setL}>
+              <LineIcon path={ICON_HOME} />
+              <Text style={d.setLabel}>雇员独立家</Text>
+              <Pressable hitSlop={8} onPress={empHomeHelp} accessibilityLabel="雇员独立家说明">
+                <Text style={d.helpMark}>ⓘ</Text>
+              </Pressable>
+            </View>
+            <Switch
+              value={snap.empHome.employee_home}
+              disabled={snap.empHome.source === "env"}
+              onValueChange={(v) => {
+                if (snap.empHome?.source === "env") return;
+                store.empHomeSet(v, (r) => {
+                  if (!r.ok) Alert.alert("雇员独立家", r.err || "设置未生效，请稍后重试");
+                });
+              }}
+              trackColor={{ false: withA(c.dim, 0.3), true: c.brandA }}
+              thumbColor="#EDEDF2"
+            />
+          </View>
+        ) : null}
         {/* 多源聚合（#294 批4）开关已移除（2026-09-14）：与会话列表上方「单源/聚合」
             胶囊重复，收敛为单一入口（列表就近操作）；行为不变（store.setAggregate） */}
         </>

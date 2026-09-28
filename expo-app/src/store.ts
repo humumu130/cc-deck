@@ -3,7 +3,7 @@ import { AppState, Platform } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import Constants from "expo-constants";
 import { getRandomBytes } from "expo-crypto";
-import type { AllowRule, CloudPairInfo, CommandAck, DispatchReceipt, Envelope, LogEntry, ProjectBoard, ProjectGroup, OrgConfirm, RoutingPoolEntry, SessionState } from "./protocol";
+import type { AllowRule, CloudPairInfo, CommandAck, DispatchReceipt, EmployeeHomeSettings, Envelope, LogEntry, ProjectBoard, ProjectGroup, OrgConfirm, RoutingPoolEntry, SessionState } from "./protocol";
 import { uuid } from "./fmt";
 import { currentVersion } from "./updates";
 import { devId, generateKeyPair, seal, unseal, setRandomBytes, type BoxKeyPair, type SealedBox } from "./e2e";
@@ -87,6 +87,9 @@ export interface SourceConn {
   // #212 记住规则（SNAPSHOT.allow_rules / ALLOW_RULES_UPDATED，覆盖式）：null = 旧
   // relay 不支持（无字段），设置抽屉据此显示「升级后可用」；删除按源路由
   allowRules: AllowRule[] | null;
+  // #17 第二批 雇员独立家设置（SNAPSHOT.settings / SETTINGS_UPDATED，覆盖式）：
+  // null = 旧 relay 无字段（设置行隐藏）；开关命令按活动源路由
+  empHome: EmployeeHomeSettings | null;
   // #26 M2 组织域（SNAPSHOT.projects/org_confirms 覆盖式；PROJECTS_UPDATED /
   // ORG_CONFIRM_UPDATED 增量）：projects null = 旧 relay 不支持，组织区不渲染。
   // boards 为项目组任务板缓存（BOARD_UPDATED 增量维护；详情按需拉全量）
@@ -217,6 +220,9 @@ export interface Snapshot {
   // #71 输出物看板开关（活动源 SNAPSHOT.deliverables，relay 插件配置）：false/缺省
   // （旧 relay 无字段）= 详情页隐藏「输出物」tab；true 才显示
   deliverables?: boolean;
+  // #17 第二批 雇员独立家设置（活动源 SNAPSHOT.settings）：null = 旧 relay 无字段
+  // （设置抽屉行隐藏）；开关命令按活动源路由（对齐 models 口径）
+  empHome: EmployeeHomeSettings | null;
   sessions: SessionState[];
   lastErrorCmd: string | null;
   cloudBusy: boolean;
@@ -256,6 +262,7 @@ const emptySnapshot: Snapshot = {
   aggregate: false,
   models: [],
   deliverables: false,
+  empHome: null,
   sessions: [],
   lastErrorCmd: null,
   cloudBusy: false,
@@ -493,7 +500,7 @@ class RelayStore {
   // 连接状态聚合（#294 批1）：单源 = 活动源直出（既有文案/字段逐字不变）；
   // 聚合 = any-online 派生，connText `${online}/${total} 在线`（connected/connState 供
   // App.tsx 通知权限/前台服务/回前台重连取此口径，调用方零改动）
-  private connStatusPatch(): Pick<Snapshot, "connected" | "connText" | "connState" | "channel" | "failNote" | "sources" | "activeSourceId" | "aggregate" | "models" | "deliverables"> {
+  private connStatusPatch(): Pick<Snapshot, "connected" | "connText" | "connState" | "channel" | "failNote" | "sources" | "activeSourceId" | "aggregate" | "models" | "deliverables" | "empHome"> {
     const sources: SourceStatus[] = [...this.conns.values()].map((c) => ({
       id: c.id,
       name: c.name,
@@ -513,12 +520,14 @@ class RelayStore {
     const activeModels = this.activeConn()?.models ?? [];
     // #71 输出物开关同口径取活动源（详情页 tab 显隐）
     const activeDeliverables = this.activeConn()?.deliverables ?? false;
+    // #17 第二批 雇员独立家设置同口径取活动源（设置抽屉开关行）
+    const activeEmpHome = this.activeConn()?.empHome ?? null;
     const inPlay: SourceConn[] = this.aggregate
       ? [...this.conns.values()]
       : this.activeId
         ? [this.conns.get(this.activeId)].filter((c): c is SourceConn => !!c)
         : [];
-    if (!inPlay.length) return { connected: false, connText: "未配置", connState: "idle", channel: null, failNote: null, sources, activeSourceId: this.activeId, aggregate: this.aggregate, models: [], deliverables: false };
+    if (!inPlay.length) return { connected: false, connText: "未配置", connState: "idle", channel: null, failNote: null, sources, activeSourceId: this.activeId, aggregate: this.aggregate, models: [], deliverables: false, empHome: null };
     if (this.aggregate) {
       const online = inPlay.filter((c) => c.state === "online");
       const connState = online.length
@@ -542,6 +551,7 @@ class RelayStore {
         aggregate: this.aggregate,
         models: activeModels,
         deliverables: activeDeliverables,
+        empHome: activeEmpHome,
       };
     }
     const c = inPlay[0];
@@ -557,6 +567,7 @@ class RelayStore {
       aggregate: this.aggregate,
       models: c.models,
       deliverables: c.deliverables,
+      empHome: c.empHome,
     };
   }
 
@@ -849,6 +860,7 @@ class RelayStore {
         deliverables: false,
         acceptances: [], // #137 SNAPSHOT 覆盖式更新（收到快照前为空）
         allowRules: null, // #212 SNAPSHOT 覆盖式更新（null = 旧 relay 无 allow_rules 字段）
+        empHome: null, // #17 第二批 SNAPSHOT 覆盖式更新（null = 旧 relay 无 settings 字段）
         projects: null, // #26 M2 SNAPSHOT 覆盖式更新（null = 旧 relay 无团队字段）
         orgConfirms: [],
         boards: new Map(),
@@ -2162,6 +2174,20 @@ class RelayStore {
           : [];
         // #71 输出物看板开关随快照携带（旧版 relay 无此字段 = 关，详情页藏 tab）
         conn.deliverables = (msg.payload as { deliverables?: unknown }).deliverables === true;
+        // #17 第二批 雇员独立家设置随快照携带（覆盖式；旧 relay 无字段 = null，
+        // 设置行隐藏）。形状校验：employee_home 布尔 + source 三态才采信
+        {
+          const st = (msg.payload as { settings?: unknown }).settings as Record<string, unknown> | undefined;
+          conn.empHome =
+            !!st && typeof st === "object" && typeof st.employee_home === "boolean" &&
+            (st.source === "env" || st.source === "file" || st.source === "default")
+              ? {
+                  employee_home: st.employee_home,
+                  value: typeof st.value === "string" ? st.value : null,
+                  source: st.source,
+                }
+              : null;
+        }
         for (const s of msg.payload.sessions as SessionState[]) {
           conn.sessions.set(s.session_id, s);
           // logs 可选链（#146 排查加固）：字段缺省/畸形时 TypeError 会中断快照装配
@@ -2400,6 +2426,19 @@ class RelayStore {
         const cfs = (msg.payload as { pending?: unknown }).pending;
         if (Array.isArray(cfs)) {
           conn.orgConfirms = cfs.filter((c): c is OrgConfirm => !!c && typeof (c as OrgConfirm).id === "string" && !!(c as OrgConfirm).kind);
+        }
+        break;
+      }
+      // #17 第二批 雇员独立家开关热切换广播（瞬态 seq:0）：本端/他端任一处切换都
+      // 实时收敛（覆盖式，同 SNAPSHOT 口径）；旧 relay 无事件 = 收不到帧，重连快照兜底
+      case "SETTINGS_UPDATED": {
+        const st = msg.payload as Record<string, unknown>;
+        if (typeof st.employee_home === "boolean") {
+          conn.empHome = {
+            employee_home: st.employee_home,
+            value: typeof st.value === "string" ? st.value : null,
+            source: st.source === "env" ? "env" : st.source === "default" ? "default" : "file",
+          };
         }
         break;
       }
@@ -2652,6 +2691,13 @@ class RelayStore {
   // ORG_CONFIRM_UPDATED 瞬态帧回推收敛清单——不做本地乐观更新，双端同源权威
   orgConfirm(sourceId: string, confirmId: string, approve: boolean): boolean {
     return this.send("COMMAND_ORG_CONFIRM", { confirm_id: confirmId, approve }, sourceId);
+  }
+
+  // #17 第二批 雇员独立家开关（relay 三层合成的用户面写入口）：ack 带最新状态由
+  // SETTINGS_UPDATED 广播统一收敛（覆盖式，不本地乐观更新）；失败（env 锁定/写盘
+  // 失败）经 onDone 回传可读指引。relay 端幂等（command_id 去重）
+  empHomeSet(enabled: boolean, onDone?: (r: { ok: boolean; err: string | null }) => void): boolean {
+    return this.send("COMMAND_SETTINGS_UPDATE", { employee_home: enabled }, undefined, (r) => onDone?.({ ok: r.ok, err: r.err }));
   }
 
   // 项目组详情：{ group, board, receipts }（编制/任务板/回执流数据源；板不随快照）
