@@ -2257,11 +2257,24 @@ export class SessionManager {
           // 与断档补记/挂起/兜底/多消息重放四路径同口径——半成品计入 done 列会
           // 绕过结项知情
           const delivered = ok && reason !== "interrupted";
+          // #17 换家失联识别（边界审查 P2-a，真 CLI 实测 2.1.269）：开关/路径变更后
+          // 创建于旧家的雇员 resume 在新家找不到会话——~3.5s 快速失败（error_
+          // during_execution: No conversation found…），transcript 无损、切回即恢复。
+          // 此形态=配置漂移而非干砸：照收台账但不给熟手记 failed（否则两次后旧熟手
+          // 被调度永久拉黑，账面叙事失真），并补一行人话日志保可诊断性
+          const homeLost = !ok && /No conversation found/i.test(reason);
+          if (homeLost) {
+            const entry = { kind: "system" as const, text: "会话记录不在当前配置的家目录——若改过 CCR_EMPLOYEE_CONFIG_DIR 请切回原值再试，或另派新单（原记录无损保留）", ts: Date.now() };
+            managed.logs.push(entry);
+            if (managed.logs.length > 500) managed.logs.splice(0, managed.logs.length - 500);
+            this.bus.emit(managed.state.session_id, "SESSION_LOG", entry);
+          }
           this.closeOpenDispatches(managed.state.session_id, ok ? "done" : "failed",
             delivered ? this.receiptWithResultLine(managed.state.session_id, reason) : reason, false,
             // 路由表记账恢复原判：failed 回合照记（干砸也是 worker 的账，failed 计数
-            // 是避开调度的信号）；仅「成功被用户中断」不记——中断≠交付
-            !(ok && reason === "interrupted"),
+            // 是避开调度的信号）；仅「成功被用户中断」与「换家失联」不记——
+            // 中断≠交付，换家≠干砸
+            !(ok && reason === "interrupted") && !homeLost,
             undefined,
             delivered ? undefined : "todo");
           managed.state.updated_at = Date.now();
@@ -2715,6 +2728,10 @@ export class SessionManager {
         historical: true,
         pinned: true,
         saved: true,
+        // #17 Leader 恒为雇员（边界审查 P1：compactEvents 只保最近 30 会话组，
+        // Leader 最老最闲最先被挤出——锚重建丢标记则开关开启时咨询 resume 恒指
+        // 默认家 → No conversation found 快速失败，常驻通道静默变砖）
+        employee: true,
       },
       logs: [],
       lastUpdateEmit: 0,

@@ -91,7 +91,10 @@ export function loadConfig(): RelayConfig {
     if (v === "auto") {
       // resolve 绝对化：CCR_DATA_DIR 允许相对，join 产物若仍是相对串会把「家按
       // cwd 漂移」从显式相对路径分支重新放进来（审查 P2-1——CLI 子进程 cwd 与
-      // relay 读取路径 cwd 不同，读写两头错位）
+      // relay 读取路径 cwd 不同，读写两头错位）。
+      // 目录无需 mkdir：CLI 对不存在的 CLAUDE_CONFIG_DIR（含嵌套缺失父目录）
+      // 自建并正常运行（边界审查实测 2.1.269）；relay 读取路径对缺失目录
+      // catch/null 失败安全——后人勿在此「补 mkdir」
       employeeConfigDir = resolve(join(dataDir, "claude-home"));
     } else if (v) {
       if (isAbsolute(v)) {

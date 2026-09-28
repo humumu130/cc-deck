@@ -934,6 +934,37 @@ async function main() {
       await waitFor(() => mgr.snapshot().find((s) => s.session_id === d15b.session_id && s.status === "DONE") !== undefined);
       assert(created.slice(before15b).every((c) => c.configHome === EMP), "开关开启：spawn 收到 configHome=独立家（含 resume 原班路径）");
       cfg.employeeConfigDir = null;
+      // P2-b（边界审查）：上面两单皆无 gid = 恒 fresh create，"resume 原班"声明此前
+      // 未被真正盖住——gid 组造熟手，第二单必走 resume spawn，锁 configHome 到达
+      const prevMax15 = process.env.CCR_ORG_MAX_GROUPS;
+      process.env.CCR_ORG_MAX_GROUPS = "50";
+      const c15 = mgr.orgAction("project-create", { name: "emp-home-g", anchor: anchor15, tier: "正经立项" }) as { ok: boolean; data?: { confirm?: { id: string }; group?: { id: string } } };
+      const gid15 = c15.data?.group?.id ?? "";
+      assert(c15.ok === true && !!gid15, "熟手组建组（正经立项，前置）");
+      mgr.orgAction("confirm-decide", { confirm_id: c15.data?.confirm?.id ?? "", approve: true, by: "u" });
+      cfg.employeeConfigDir = EMP;
+      const before15c = created.length;
+      const f15 = mgr.orgAction("dispatch", { anchor: anchor15, prompt: "熟手首单", gid: gid15 }) as { ok: boolean; session_id?: string };
+      assert(f15.ok === true, "熟手首单派发（前置）");
+      assert(await waitFor(() => (routingFor(gid15).find((x) => x.session_id === f15.session_id)?.count ?? 0) === 1), "首单收口入路由表（前置）");
+      assert(created.slice(before15c).every((c) => c.configHome === EMP), "组 worker fresh spawn 带 configHome");
+      assert(mgr.snapshot().find((s) => s.session_id === f15.session_id)?.employee === true, "组 worker 卡带雇员标记");
+      const f15b = mgr.orgAction("dispatch", { anchor: anchor15, prompt: "熟手二单", gid: gid15 }) as { ok: boolean; session_id?: string };
+      assert(f15b.ok === true && f15b.session_id === f15.session_id, "第二单 resume 原班（会话 id 复用，前置）");
+      const lastSpawn = created[created.length - 1];
+      assert(!!lastSpawn.resume && lastSpawn.configHome === EMP, "resume 原班 spawn 带 configHome=独立家（P2-b 补盖，此前声明的覆盖缺口）");
+      assert(await waitFor(() => (routingFor(gid15).find((x) => x.session_id === f15.session_id)?.count ?? 0) === 2), "二单收口 count=2（前置闭环）");
+      // P2-a：换家失联收口口径（真 CLI 实测形态：error_during_execution: No
+      // conversation found…，~3.5s 快速失败）——台账 failed 写实收口 + 不记熟手
+      // failed（配置漂移≠干砸，防两次后旧熟手被调度永久拉黑）+ 时间线人话日志
+      hack.openDispatches.set(f15.session_id!, [{ id: "dsp-homelost", tier: "正经立项", gid: gid15, anchor: anchor15 }]);
+      const failedBefore15 = routingFor(gid15).find((x) => x.session_id === f15.session_id)?.failed ?? 0;
+      cbFor(anchor15)!.onTurnEnd(false, "error_during_execution: No conversation found with session ID: abc-123", 5);
+      assert(readDispatchLog().some((e) => e.id === "dsp-homelost" && e.status === "failed" && (e.receipt ?? "").includes("No conversation found")), "换家失联：台账 failed 写实收口");
+      assert((routingFor(gid15).find((x) => x.session_id === f15.session_id)?.failed ?? -1) === failedBefore15, "换家失联不记熟手 failed（配置漂移≠干砸）");
+      assert((hack14.sessions.get(f15.session_id!)?.logs.some((e) => e.kind === "system" && e.text.includes("CCR_EMPLOYEE_CONFIG_DIR")) ?? false) === true, "时间线留人话日志（指向开关，可诊断）");
+      cfg.employeeConfigDir = null;
+      if (prevMax15 === undefined) delete process.env.CCR_ORG_MAX_GROUPS; else process.env.CCR_ORG_MAX_GROUPS = prevMax15;
     }
 
     // ---------- 收尾 ----------

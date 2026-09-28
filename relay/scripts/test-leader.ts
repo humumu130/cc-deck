@@ -145,6 +145,7 @@ async function main() {
     const card3 = mgr2.snapshot().find((s) => s.session_id === leaderId)!;
     assert(card3.relay_session_id === a1b.leader_sdk_id, "L3 重建卡 relay_session_id = 锚 sdk id（可 resume）");
     assert(card3.status === "DONE" && card3.saved === true && card3.pinned === true && card3.historical === true, "L3 休眠卡形态：DONE/saved/pinned/historical");
+    assert(card3.employee === true, "L3 锚重建保雇员标记（#17 边界审查 P1：compactEvents 30 会话上限挤掉首帧后，重建字面量不得丢身份）");
     assert(card3.title === ORG_LEADER_TITLE && card3.cwd === ORG, "L3 题名 + org cwd");
     const pinned3 = readJson(join(DATA, "pinned-sessions.json")) as string[] | null;
     assert(Array.isArray(pinned3) && pinned3.includes(leaderId), "L3 pinned 文件重新含 Leader id（重建后写回）");
