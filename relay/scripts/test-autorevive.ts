@@ -203,23 +203,31 @@ delete process.env.CCR_ORG_DIR;
   });
   const SID_EMP = "autorevive-test-emp-cli";
   const SID_EMP2 = "autorevive-test-emp2-cli";
+  const SID_EMP3 = "autorevive-test-emp3-cli";
   // 雇员待办写独立家 tasks/；对照 sid 的待办只写默认家（换家前遗留形态）
   mkdirSync(join(EMP, "tasks", SID_EMP), { recursive: true });
   writeFileSync(join(EMP, "tasks", SID_EMP, "1.json"), JSON.stringify({ id: 1, subject: "雇员的活", status: "in_progress" }));
   putTodo(SID_EMP2, "1.json", { id: 1, subject: "默认家的遗留活", status: "in_progress" });
+  // 无记录雇员（关态/pre-#17 创建）的待办在默认家：即使开关现开启（cfg=EMP），
+  // 读家不随当下配置漂移、恒按记录（无记录 = 默认家）——「读家回退语义」的独立锁
+  putTodo(SID_EMP3, "1.json", { id: 1, subject: "无记录雇员的默认家活", status: "in_progress" });
   // 第二批记录优先语义：开启态创建的会话带 employee_home 记录（无记录 = 关态
   // 创建 = 默认家，读家随记录走）
   mgr17.adopt(new Map([
     mk2("m-emp", SID_EMP, false, Date.now(), { employee: true, employee_home: EMP }),
     mk2("m-emp2", SID_EMP2, false, Date.now(), { employee: true, employee_home: EMP }),
+    mk2("m-emp3", SID_EMP3, false, Date.now(), { employee: true }),
   ]));
   const n17 = mgr17.autoReviveManaged();
-  assert(n17 === 1 && resumes17.length === 1 && resumes17[0]!.resume === SID_EMP,
-    `雇员待办在独立家 → 按家命中并拉起 got=${n17}/${JSON.stringify(resumes17.map((r) => r.resume))}`);
-  assert(resumes17[0]!.configHome === EMP, "拉起的 resume 注入 configHome=独立家（spawn 口同规则）");
+  assert(n17 === 2 && resumes17.map((r) => r.resume).sort().join() === [SID_EMP, SID_EMP3].sort().join(),
+    `记录家雇员按家命中、无记录雇员按默认家命中 got=${n17}/${JSON.stringify(resumes17.map((r) => r.resume))}`);
+  assert(resumes17.find((r) => r.resume === SID_EMP)?.configHome === EMP, "记录家雇员的 resume 注入 configHome=独立家（spawn 口同规则）");
+  assert(resumes17.find((r) => r.resume === SID_EMP3)?.configHome === undefined,
+    "无记录雇员的 resume 不带 configHome（读默认家，不随当下开关漂移）");
   assert(mgr17.snapshot().find((s) => s.session_id === "m-emp2")?.status !== "WORKING",
     "待办只在默认家的记录家雇员不被误拉（读家按创建时记录，不回退默认家）");
   rmSync(join(TASKS, SID_EMP2), { recursive: true, force: true });
+  rmSync(join(TASKS, SID_EMP3), { recursive: true, force: true });
 }
 
 rmSync(join(TASKS, SID_BUSY), { recursive: true, force: true });

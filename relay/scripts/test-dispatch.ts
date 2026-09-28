@@ -986,7 +986,6 @@ async function main() {
       assert(!!legacySpawn.resume && legacySpawn.configHome === undefined, "存量熟手 resume 不带 configHome（按创建时记录走默认家，无损）");
       assert(await waitFor(() => (routingFor(gid15c).find((x) => x.session_id === l15.session_id)?.count ?? 0) === 2), "存量熟手二单收口（闭环）");
       cfg.employeeConfigDir = null;
-      cfg.employeeConfigDir = null;
       if (prevMax15 === undefined) delete process.env.CCR_ORG_MAX_GROUPS; else process.env.CCR_ORG_MAX_GROUPS = prevMax15;
     }
 

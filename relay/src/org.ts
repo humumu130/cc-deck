@@ -140,7 +140,11 @@ export interface OrgAnchor {
   /** 最新 CLI/SDK session id（resume 锚点；首建到 init 之间为空串，onInit 回填） */
   leader_sdk_id: string;
   /** #17 Leader 创建时落定的雇员家（spawn 注入值）。缺省 = 关态/pre-#17 锚（默认家）；
-   *  锚重建还原到休眠卡，resume/读取按「创建时的家」走——开关翻转对常驻 Leader 无损 */
+   *  锚重建还原到休眠卡，resume/读取按「创建时的家」走——开关翻转对常驻 Leader 无损。
+   *  降级链路注意（三角度审查 P3-3 备案）：新锚 → 旧版 relay 跑一次（旧版净化丢此
+   *  字段 + onInit 回写）→ 记录被抹；再升级回来时仅当 Leader 首帧仍在 events 才能从
+   *  回放还原，否则锚重建无记录 = 默认家 → 雇员 Leader resume 快速失败（可另派新单，
+   *  transcript 无损）。复合边界，接受不做兼容，留档于此 */
   employee_home?: string;
   created_at: number;
   updated_at: number;

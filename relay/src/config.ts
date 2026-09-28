@@ -2,6 +2,9 @@ import { randomUUID } from "node:crypto";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { isAbsolute, join, resolve } from "node:path";
 import { homedir } from "node:os";
+// 循环 import 安全：settings.ts ← config.ts 只在函数体内互调（parseEmployeeConfigDir
+// / isFreshInstall 均运行期取 live binding），无模块初始化期交叉
+import { isFreshInstall } from "./settings.js";
 
 // #17 三态解析（纯函数，无副作用——告警由调用方负责）：
 // "" / null → null（关闭）；"auto" → dataDir 下 claude-home（resolve 绝对化）；
@@ -38,6 +41,10 @@ export interface RelayConfig {
   // 绝对路径 = 自定义位置。相对路径视为配置错误按关闭处理并告警（防 cwd 漂移
   // 让家跟着启动目录走）
   employeeConfigDir: string | null;
+  // #17 第二批审查修正 P1：新装判定预算值——loadConfig 在写 token/bridge-token
+  // 之前捕获（首启那两个文件落盘后再判恒为「存量」，「新装默认开」成死码）。
+  // index.ts 启动序把它传给 resolveEmployeeHome；可选=测试字面量不必填
+  freshInstall?: boolean;
 }
 
 export function loadConfig(): RelayConfig {
@@ -50,6 +57,10 @@ export function loadConfig(): RelayConfig {
       ? join(homedir(), ".cc-deck", "data")
       : join(process.cwd(), "data"));
   mkdirSync(dataDir, { recursive: true });
+
+  // #17 第二批审查修正 P1：新装判定必须先于下方 token/bridge-token 首启落盘——
+  // isFreshInstall 把这两个文件当「至少跑过一次」的信号，晚于写盘判恒 false
+  const freshInstall = isFreshInstall(dataDir);
 
   const envToken = process.env.CCR_TOKEN;
   // 插件/daemon 形态没有外部传 token：data/token 持久化（首启生成，重启不变，手机不用重配）
@@ -112,7 +123,7 @@ export function loadConfig(): RelayConfig {
   const employeeConfigDir = parseEmployeeConfigDir(envRaw, dataDir);
 
   return {
-    port, token, tokenGenerated: !envToken, defaultCwd, model, bridgeToken, dataDir,
+    port, token, tokenGenerated: !envToken, defaultCwd, model, bridgeToken, dataDir, freshInstall,
     cloudUrls, cloudUrl: cloudUrls[0] ?? "", cloudToken, employeeConfigDir,
   };
 }

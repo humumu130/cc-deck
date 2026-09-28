@@ -635,7 +635,9 @@ export class SessionManager {
       // 子会话 id 一到手就登记（不等 result：超时丢 sid 会让孤儿扫描误收养它）
       this.childSdkIds.add(sid);
       appendChildSession(this.cfg.dataDir, sid);
-    }, titleCwd, this.cfg.employeeConfigDir ?? undefined).then(({ title: t }) => {
+      // 审查修正（正确性 P3-5）：按被命名会话的身份×记录选家——雇员的一次性命名
+      // 子会话随主会话落独立家；用户自建会话不进雇员家（开关开启时不再旁路常态化）
+    }, titleCwd, this.sessions.get(sessionId)?.state.employee ? this.employeeHome(this.sessions.get(sessionId)!.state) : undefined).then(({ title: t }) => {
       if (!t) return;
       const s = this.sessions.get(sessionId);
       if (!s || s.state.title === t || s.state.title_locked) return;
@@ -1999,8 +2001,12 @@ export class SessionManager {
         }
         case "COMMAND_SETTINGS_UPDATE": {
           // #17 第二批：雇员独立家开关热切换（三端设置项入口）。ack 带最新状态；
-          // env 锁定/写盘失败等拒改场景 ok:false 带可读指引
-          const r = this.applyEmployeeHome(cmd.payload.employee_home === true);
+          // env 锁定/写盘失败等拒改场景 ok:false 带可读指引。审查修正（P2）：字段
+          // 非布尔明确拒收——缺键/字符串一律按 false 落盘会把开关静默关掉
+          if (typeof cmd.payload.employee_home !== "boolean") {
+            return { command_id: cmd.command_id, ok: false, error: "employee_home 须为布尔值" };
+          }
+          const r = this.applyEmployeeHome(cmd.payload.employee_home);
           return { command_id: cmd.command_id, ok: r.ok, ...(r.ok ? { data: r.data } : { error: r.error }) };
         }
         case "COMMAND_WATCH_GRANT":
@@ -2304,7 +2310,9 @@ export class SessionManager {
           // 被调度永久拉黑，账面叙事失真），并补一行人话日志保可诊断性
           const homeLost = !ok && /No conversation found/i.test(reason);
           if (homeLost) {
-            const entry = { kind: "system" as const, text: "会话记录不在当前配置的家目录——若改过 CCR_EMPLOYEE_CONFIG_DIR 请切回原值再试，或另派新单（原记录无损保留）", ts: Date.now() };
+            // 审查修正（边界 P3-2）：第二批记录优先后常见成因=「该会话记录的家目录已
+            // 不在/被删」（记录钉死绝对路径，UI 开关切不回去）——两种成因都给指引
+            const entry = { kind: "system" as const, text: "会话记录不在当前配置的家目录——若改过 CCR_EMPLOYEE_CONFIG_DIR 请切回原值再试；也可能是该会话记录的独立家目录已被删除（原记录无损保留，可另派新单）", ts: Date.now() };
             managed.logs.push(entry);
             if (managed.logs.length > 500) managed.logs.splice(0, managed.logs.length - 500);
             this.bus.emit(managed.state.session_id, "SESSION_LOG", entry);
