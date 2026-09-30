@@ -37,11 +37,14 @@ export const ACCEPTANCE_ID_RE = /^[0-9a-f]{32}$/;
 
 export function acceptanceDir(): string {
   // 随 dataDir（resolveDataDir 与 loadConfig 同源解析）：生产 bundle（CC_DECK_PLUGIN
-  // define）= ~/.cc-deck/data/acceptances——与出单 CLI（~/.cc-deck/bin/acceptance 硬
-  // 编码同路径）咬合不变；开发/沙盒 relay（CCR_DATA_DIR）自然隔离。此前独立硬编码
-  // 家目录，任何沙盒 relay 都会直接服务用户的真实验收单（2026-09-28 expo 沙盒实锤：
-  // 验收单卡出现在测试 app 上）。CCR_ACCEPTANCE_DIR 显式覆盖保留（测试与出单 CLI
-  // 共用的迁移口）
+  // define）= ~/.cc-deck/data/acceptances——与出单 CLI（~/.cc-deck/bin/acceptance，
+  // #22③ 勘误：其缺省路径硬编码同处但头部尊重 CCR_ACCEPTANCE_DIR env）咬合不变；
+  // 开发/沙盒 relay（CCR_DATA_DIR）自然隔离。此前独立硬编码家目录，任何沙盒 relay
+  // 都会直接服务用户的真实验收单（2026-09-28 expo 沙盒实锤：验收单卡出现在测试
+  // app 上）。CCR_ACCEPTANCE_DIR 显式覆盖保留——测试口 + 部署迁移口：**自定义
+  // CCR_DATA_DIR 的生产部署**（非默认家）relay 会去 CCR_DATA_DIR/acceptances、
+  // 出单 CLI 仍写 ~/.cc-deck/data/acceptances，两边劈叉——此时必须给 relay 与
+  // CLI 同设 CCR_ACCEPTANCE_DIR（两端口径一致，任一单边设置都会读写分家）
   return process.env.CCR_ACCEPTANCE_DIR || join(resolveDataDir(), "acceptances");
 }
 

@@ -1,6 +1,7 @@
 // #26 矩阵式 M1 —— Leader 常驻化集成测试（agentFactory 测试缝，不拉真 CLI）。
 // 覆盖：L1 首建（锚/pinned/题名/待命化）+ L2 sticky-cwd 豁免 + L3 重启重建零 spawn
-//       + L4 幂等 + L5 废锚重建 + L6 派单台账（running/done/failed/FIFO/兜底全清/断档补记）。
+//       + L4 幂等 + L5 废锚重建 + L6 派单台账（running/done/failed/FIFO/兜底全清/断档补记）
+//       + L10 首建 init 看门狗（#22①）+ L11 废锚僵尸清锚重首建（#22②）。
 import { randomUUID } from "node:crypto";
 import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -11,6 +12,7 @@ import { ORG_LEADER_BOOTSTRAP_PROMPT, ORG_LEADER_TITLE, readDispatchLog, readOrg
 import type { RelayConfig } from "../src/config.js";
 import type { AgentCallbacks, AgentLike } from "../src/agent-adapter.js";
 import type { ReplayedSession } from "../src/history.js";
+import type { SessionState } from "../src/types.js";
 
 let pass = 0;
 let fail = 0;
@@ -27,7 +29,8 @@ async function waitFor(fn: () => boolean, ms = 3000, every = 25): Promise<boolea
 
 // 假 agent 工厂（仿 test-bridge #46）：init = 20ms 后回 onInit；parked（prompt=undefined）
 // 不触发 onTurnEnd——首建 Leader 的形态。created 记录每次 spawn 供计数断言。
-let initMode: "init" | "noinit" | "die" = "init";
+// "hang" = #22① 靶子：CLI 挂死形态——零回调（不 init、不报错、不退出），stop 仍同步收尾。
+let initMode: "init" | "noinit" | "die" | "hang" = "init";
 type SpawnRec = { prompt: string | undefined; resume?: string; cb: AgentCallbacks; configHome?: string };
 const makeFakeFactory = (created: SpawnRec[]) =>
   (cwd: string, model: string, cb: AgentCallbacks, prompt: string | undefined, opts?: { resume?: string; configHome?: string }): AgentLike => {
@@ -54,6 +57,7 @@ const makeFakeFactory = (created: SpawnRec[]) =>
     } else if (mode === "die") {
       setTimeout(() => { if (!a.ended) { a.ended = true; cb.onSessionEnd("stream closed"); } }, 10);
     }
+    // "hang"：无任何定时回调（挂死）
     return a;
   };
 
@@ -67,6 +71,7 @@ async function main() {
   const prevOrg = process.env.CCR_ORG_DIR;
   const prevTitleGen = process.env.CCR_NO_TITLE_GEN;
   const prevCwdEnv = process.env.CCR_CWD;
+  const prevResumeInit = process.env.CCR_RESUME_INIT_MS;
   process.env.CCR_ORG_DIR = ORG;
   process.env.CCR_NO_TITLE_GEN = "1";
   delete process.env.CCR_CWD; // sticky 豁免分支的前提（设了 CCR_CWD 时该分支本就跳过）
@@ -459,10 +464,95 @@ async function main() {
     rmSync(ORG6, { recursive: true, force: true });
     rmSync(DATA6, { recursive: true, force: true });
     rmSync(EMP6, { recursive: true, force: true });
+
+    // ---------- L10 #22① 首建 init 看门狗（hang CLI：不 init/不报错/不退出） ----------
+    // 首建 prompt 不进 unacked → #7 watchdog pre-init 豁免恰好命中（永无人管）——
+    // bootTimer 是唯一防线：超时=杀树+清锚+卸常驻+删卡；同进程再调 ensureLeader 即重建。
+    // CCR_RESUME_INIT_MS=300 加速；对照组锁正常路径：重建后 init 已到，timer 到点空转不动作
+    {
+      const ORG_G = mkdtempSync(join(tmpdir(), "ccr-org-l10-"));
+      const DATA_G = mkdtempSync(join(tmpdir(), "ccr-data-l10-"));
+      process.env.CCR_ORG_DIR = ORG_G;
+      process.env.CCR_RESUME_INIT_MS = "300";
+      const prevMode10 = initMode;
+      initMode = "hang";
+      const spawned10: SpawnRec[] = [];
+      const mgr10 = new SessionManager(new EventBus({ persistPath: join(DATA_G, "events.ndjson") }), { ...cfg, dataDir: DATA_G });
+      mgr10.setAgentFactory(makeFakeFactory(spawned10));
+      const r10 = mgr10.ensureLeader();
+      const id10 = r10.ok ? r10.session_id : "";
+      assert(r10.ok === true && !!id10 && spawned10.length === 1, "L10 前置：首建 spawn 一次（hang CLI 不回 init）");
+      assert(readOrgAnchor()?.leader_sdk_id === "", "L10 前置：锚 sdk_id 空串（init 未回填）");
+      assert(await waitFor(() => mgr10.snapshot().every((s) => s.session_id !== id10)), "L10 ① 超时开火：挂死首建卡被删（deleteSession 通道）");
+      assert(readOrgAnchor() === null, "L10 ② 废锚清除（空 sdk_id 本就 resume 不了）");
+      const pinned10 = readJson(join(DATA_G, "pinned-sessions.json")) as string[] | null;
+      assert(!Array.isArray(pinned10) || !pinned10.includes(id10), "L10 ③ pinned 写穿同步摘除");
+      // 重建（同进程 ensureLeader，leaderId/Ensured 已卸）：init 模式正常上岗；缺省
+      // 45s 窗内 timer 不会开火，且 init 到达后 relay_session_id 回填=空转条件
+      if (prevResumeInit === undefined) delete process.env.CCR_RESUME_INIT_MS; else process.env.CCR_RESUME_INIT_MS = prevResumeInit;
+      initMode = "init";
+      const r10b = mgr10.ensureLeader();
+      const id10b = r10b.ok ? r10b.session_id : "";
+      assert(r10b.ok === true && r10b.created === true && id10b !== id10, "L10 ④ 清锚后重首建（新 id，旧僵尸不复活）");
+      assert(await waitFor(() => {
+        const c = mgr10.snapshot().find((s) => s.session_id === id10b);
+        return !!c && c.status === "DONE" && c.done_reason === "success";
+      }), "L10 ⑤ 重建 Leader 正常上岗收口（init 已到，timer 空转不误杀）");
+      assert(!!readOrgAnchor()?.leader_sdk_id && readOrgAnchor()?.leader_session_id === id10b, "L10 ⑥ 重建锚 sdk_id 正常回填");
+      initMode = prevMode10;
+      rmSync(ORG_G, { recursive: true, force: true });
+      rmSync(DATA_G, { recursive: true, force: true });
+    }
+
+    // ---------- L11 #22② 废锚僵尸：sdk_id 空锚 + 内存卡 → 清锚重首建 ----------
+    // 场景：首建落了 SESSION_CREATED 但 init 前崩（锚 sdk_id 空串）→ 重启后卡被 adopt
+    // 收养在内存——旧实现 adoptExistingLeader 直接收养置 leaderEnsured，但该卡 resume
+    // 永抛「无 SDK 会话记录」，常驻通道变砖。修法：双条件（锚 sdk_id 空 && 卡
+    // relay_session_id 空）→ 清锚按未建组织重首建（旧卡留为普通卡）；对照组锁
+    // guard 不误杀正常收养
+    {
+      const ORG_H = mkdtempSync(join(tmpdir(), "ccr-org-l11-"));
+      const DATA_H = mkdtempSync(join(tmpdir(), "ccr-data-l11-"));
+      const DATA_I = mkdtempSync(join(tmpdir(), "ccr-data-l11c-"));
+      process.env.CCR_ORG_DIR = ORG_H;
+      const mkCard = (id: string, rid: string): ReplayedSession => ({
+        state: {
+          session_id: id, relay_session_id: rid, cwd: ORG_H, initial_prompt: "", title: "zombie",
+          model: "", status: "DONE", action_summary: "", started_at: Date.now(), updated_at: Date.now(),
+          stats: { files_changed: 0, lines_added: 0, lines_deleted: 0 },
+          external: false, remote_mode: false,
+        } as SessionState,
+        logs: [],
+      });
+      // ① 僵尸形态：空 sdk_id 锚 + 空relay_session_id 卡
+      writeOrgAnchor({ version: 1, leader_session_id: "dead-l11", leader_sdk_id: "", created_at: Date.now(), updated_at: Date.now() });
+      const spawnedH: SpawnRec[] = [];
+      const mgrH = new SessionManager(new EventBus({ persistPath: join(DATA_H, "events.ndjson") }), { ...cfg, dataDir: DATA_H });
+      mgrH.setAgentFactory(makeFakeFactory(spawnedH));
+      mgrH.adopt(new Map([["dead-l11", mkCard("dead-l11", "")]]));
+      const rH = mgrH.ensureLeader();
+      const newH = rH.ok ? rH.session_id : "";
+      assert(rH.ok === true && rH.created === true && newH !== "dead-l11", "L11 ① 僵尸卡不被收养：清锚重首建（created=true 新 id）");
+      assert(spawnedH.length === 1 && readOrgAnchor()?.leader_session_id === newH, "L11 ② 重首建 spawn 一次、锚指向新 Leader");
+      assert(!!mgrH.snapshot().find((s) => s.session_id === "dead-l11"), "L11 ③ 旧僵尸卡保留为普通卡（可手删）");
+      // ② 对照：sdk_id 已回填 + 卡在内存 → 正常收养（不误入僵尸分支）
+      writeOrgAnchor({ version: 1, leader_session_id: "live-l11", leader_sdk_id: "sdk-live-11", created_at: Date.now(), updated_at: Date.now() });
+      const spawnedI: SpawnRec[] = [];
+      const mgrI = new SessionManager(new EventBus({ persistPath: join(DATA_I, "events.ndjson") }), { ...cfg, dataDir: DATA_I });
+      mgrI.setAgentFactory(makeFakeFactory(spawnedI));
+      mgrI.adopt(new Map([["live-l11", mkCard("live-l11", "sdk-live-11")]]));
+      const rI = mgrI.ensureLeader();
+      assert(rI.ok === true && rI.created === false && rI.session_id === "live-l11", "L11 ④ 对照：sdk_id 已回填的锚+内存卡 → 正常收养");
+      assert(spawnedI.length === 0, "L11 ⑤ 对照：收养零 spawn（guard 不误杀）");
+      rmSync(ORG_H, { recursive: true, force: true });
+      rmSync(DATA_H, { recursive: true, force: true });
+      rmSync(DATA_I, { recursive: true, force: true });
+    }
   } finally {
     if (prevOrg === undefined) delete process.env.CCR_ORG_DIR; else process.env.CCR_ORG_DIR = prevOrg;
     if (prevTitleGen === undefined) delete process.env.CCR_NO_TITLE_GEN; else process.env.CCR_NO_TITLE_GEN = prevTitleGen;
     if (prevCwdEnv === undefined) delete process.env.CCR_CWD; else process.env.CCR_CWD = prevCwdEnv;
+    if (prevResumeInit === undefined) delete process.env.CCR_RESUME_INIT_MS; else process.env.CCR_RESUME_INIT_MS = prevResumeInit;
     rmSync(ORG, { recursive: true, force: true });
     rmSync(DATA, { recursive: true, force: true });
   }

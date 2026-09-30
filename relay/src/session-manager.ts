@@ -2710,6 +2710,15 @@ export class SessionManager {
     const anchor = readOrgAnchor();
     if (!anchor) return this.createLeaderFirstTime();
     const s = this.sessions.get(anchor.leader_session_id);
+    // #22② 废锚僵尸补刀：首建落了 SESSION_CREATED 但 init 前崩（锚 sdk_id 空串）
+    // → 下次 boot 该卡被 adopt 收养走到这里——sdk_id 空的卡 resume 永抛「无 SDK
+    // 会话记录」，adoptExistingLeader 置 leaderEnsured 后永不重建（常驻通道变砖）。
+    // 同下方无会话分支的废锚口径：清锚按未建组织重首建（旧卡留为普通卡可手删，
+    // 与锚写失败分支一致）。relay_session_id 已回填 = init 来过，正常收养
+    if (s && !anchor.leader_sdk_id && !s.state.relay_session_id) {
+      clearOrgAnchor();
+      return this.createLeaderFirstTime();
+    }
     if (s) {
       this.adoptExistingLeader(s, anchor);
       return { ok: true, session_id: anchor.leader_session_id, created: false, rebuilt: false };
@@ -2763,6 +2772,28 @@ export class SessionManager {
     this.leaderEnsured = true;
     // 首建即置顶：驱逐豁免（evictOldSessions）+ 重启休眠登记（applyPinned）都吃 pinned
     this.pinLeaderFile(id);
+    // #22① 首建 init 看门狗：create 路径此前无超时（resumeAgent 有 45s init 超时，
+    // 冲刺 F-07 H1）——CLI spawn 后挂死（不 init、不报错、不退出）则 Leader 卡永久
+    // WORKING「启动中」；#7 watchdog 也绕过（首建 prompt 不进 unacked，pre-init 豁免
+    // `relay_session_id 空 && unacked===0` 恰好命中——真·永无人管）。对齐 resume
+    // 口径：超时=杀树
+    // + 清锚 + 删卡（sdk_id 空串的锚本就 resume 不了，留着即 #22② 废锚僵尸），
+    // 下次 relay 启动 ensureLeader 自动重建。正常路径 init 已到（relay_session_id
+    // 回填）/流已换/卡已删，到点自检不动作（timer unref 不阻退出）
+    const bootAgent = s?.agent ?? null;
+    const bootTimer = setTimeout(() => {
+      const cur = this.sessions.get(id);
+      if (!cur || !bootAgent || cur.agent !== bootAgent || bootAgent.ended) return;
+      if (cur.state.relay_session_id) return; // init 已到：回合正常在途
+      if (bootAgent.childPid) void this.watchdogProcs.killTree(bootAgent.childPid).catch(() => {});
+      void bootAgent.stop().catch(() => {});
+      this.leaderId = null; // 先卸常驻身份——deleteSession 拒删 Leader 卡
+      this.leaderEnsured = false;
+      clearOrgAnchor();
+      this.deleteSession(id); // SESSION_DELETED + pinned 写穿清理都有
+      console.log(`[leader] 首建上岗超时（${(resumeInitTimeoutMs() / 1000).toFixed(1)}s 无 init，疑 CLI 挂死），已清除本次首建，下次启动自动重建`);
+    }, resumeInitTimeoutMs());
+    bootTimer.unref?.();
     return { ok: true, session_id: id, created: true, rebuilt: false };
   }
 
