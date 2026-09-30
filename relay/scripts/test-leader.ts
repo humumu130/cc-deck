@@ -623,6 +623,30 @@ async function main() {
       rmSync(DATA_H, { recursive: true, force: true });
       rmSync(DATA_I, { recursive: true, force: true });
     }
+
+    // ---------- L12 #22 审查备案收口：首建 spawn 同步抛错不炸 boot ----------
+    // create 内 newAgent 构造器可同步 throw（CLI 路径解析失败等）——不兜则 throw
+    // 穿过 ensureLeader 炸 boot（index.ts 裸调 → supervisor 重启循环）。修法：
+    // createLeaderFirstTime 内 try/catch 返回 ok:false（org 目录不可用同款横幅口径）
+    {
+      const ORG_L = mkdtempSync(join(tmpdir(), "ccr-org-l12-"));
+      const DATA_L = mkdtempSync(join(tmpdir(), "ccr-data-l12-"));
+      process.env.CCR_ORG_DIR = ORG_L;
+      const thrown: string[] = [];
+      const mgrL = new SessionManager(new EventBus({ persistPath: join(DATA_L, "events.ndjson") }), { ...cfg, dataDir: DATA_L });
+      mgrL.setAgentFactory(() => { thrown.push("boom"); throw new Error("CLI 路径解析失败（模拟）"); });
+      const rL = mgrL.ensureLeader();
+      // 本断言能执行到 = 进程没被 throw 炸掉（旧实现 throw 穿透直达 boot）
+      assert(rL.ok === false && (rL.error ?? "").includes("首建 spawn 失败"), "L12 ① spawn 同步抛错 → ok:false 横幅口径（不炸 boot）");
+      assert(thrown.length === 1 && readOrgAnchor() === null && mgrL.snapshot().length === 0, "L12 ② 无半登记残留（锚未写、零卡）");
+      // 故障恢复：换正常工厂再 ensureLeader（boot 重试/timer retry 同路径）→ 正常上岗
+      const spawnedL: SpawnRec[] = [];
+      mgrL.setAgentFactory(makeFakeFactory(spawnedL));
+      const rL2 = mgrL.ensureLeader();
+      assert(rL2.ok === true && rL2.created === true && spawnedL.length === 1, "L12 ③ 故障恢复：重试 ensureLeader 正常首建");
+      rmSync(ORG_L, { recursive: true, force: true });
+      rmSync(DATA_L, { recursive: true, force: true });
+    }
   } finally {
     if (prevOrg === undefined) delete process.env.CCR_ORG_DIR; else process.env.CCR_ORG_DIR = prevOrg;
     if (prevTitleGen === undefined) delete process.env.CCR_NO_TITLE_GEN; else process.env.CCR_NO_TITLE_GEN = prevTitleGen;

@@ -2761,7 +2761,17 @@ export class SessionManager {
     // bypassPermissions 只能 spawn 时决定（CLI 限制：运行时 default→bypass 不可切，
     // COMMAND_PERM 实测报「session was not launched with --dangerously-skip-permissions」）。
     // 安全边界：Leader 权力=只提案不决议（确认卡在 relay 层），CLI 层审批对 Leader 纯噪音
-    const id = this.create(orgDir(), ORG_LEADER_BOOTSTRAP_PROMPT, "bypassPermissions", false, { skipStickyCwd: true, employee: true });
+    // #22 审查备案收口（boot 侧既有缺口）：create 内部 newAgent 构造器可同步 throw
+    //（CLI 路径解析失败等）——不兜则 throw 穿过 ensureLeader 炸 boot（index.ts 裸调
+    // → supervisor 重启循环）。create 的会话登记在 newAgent 之后，throw 点无半登记
+    // 卡残留，返回 ok:false 横幅点名即可（org 目录不可用同款口径）。bootTimer retry
+    // 侧的 try/catch 由此变纯防御，保留双保险
+    let id: string;
+    try {
+      id = this.create(orgDir(), ORG_LEADER_BOOTSTRAP_PROMPT, "bypassPermissions", false, { skipStickyCwd: true, employee: true });
+    } catch (e) {
+      return { ok: false, error: `Leader 首建 spawn 失败（${e instanceof Error ? e.message : String(e)}）；relay 其余功能不受影响，下次启动重试` };
+    }
     const now = Date.now();
     // M1 审查轮：锚写失败不得继续置常驻——否则本进程「假常驻」（leaderEnsured 真、
     // 锚不在盘上）+ 下次启动按未建组织再 spawn → 双 Leader 卡。失败即报错返回
