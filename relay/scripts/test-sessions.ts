@@ -26,6 +26,7 @@ process.env.CCR_DATA_DIR = mkdtempSync(join(tmpdir(), "ccr-sessions-"));
 delete process.env.CC_DECK_PLUGIN;
 delete process.env.CCR_EMPLOYEE_CONFIG_DIR;
 process.env.CCR_NO_TITLE_GEN = "1"; // 起名子进程会另落一份全局 transcript，测试不需要
+process.env.CCR_CLOUD_URL = ""; // 统一防线口径（in-process 不消费，钉死防未来演进踩真桥）
 const cfg = loadConfig();
 const mgr = new SessionManager(bus, cfg);
 
@@ -209,12 +210,15 @@ await new Promise((r) => setTimeout(r, 3000));
 rmSync(tmpDir, { recursive: true, force: true, maxRetries: 5, retryDelay: 500 });
 
 // 全局 transcript 收尾：真 CLI 的 transcript 落 ~/.claude/projects/<cwd-slug>/，slug
-// 只可能是本测试探针会话（.tmp-test 唯一名）——删净不留残渣进用户可见列表
-//（与 test-ws.ts 同款纪律，2026-09-28 事故后补）
+// 只可能是本测试探针会话——删净不留残渣进用户可见列表（与 test-ws.ts 同款纪律，
+// 2026-09-28 事故后补）。全等匹配（#20 审查修正）：endsWith 会误删任何恰以
+// --tmp-test 结尾的真实项目目录；按探针绝对路径现算 slug（CLI 同规则：非字母
+// 数字→"-"）精确删
 try {
+  const slug = tmpDir.replace(/[^A-Za-z0-9]/g, "-");
   const projs = join(homedir(), ".claude", "projects");
   for (const n of readdirSync(projs)) {
-    if (n.endsWith("--tmp-test")) rmSync(join(projs, n), { recursive: true, force: true });
+    if (n === slug) rmSync(join(projs, n), { recursive: true, force: true });
   }
 } catch {} // 目录不存在/权限异常不阻塞测试结论
 

@@ -10,8 +10,8 @@
 //   ④ 表单页与提交 API 同源，无 CORS 面；登记数据内嵌前做 < 转义（防注入）
 import { readFileSync, writeFileSync, mkdirSync, existsSync, readdirSync } from "node:fs";
 import { join } from "node:path";
-import { homedir } from "node:os";
 import type { ServerResponse } from "node:http";
+import { resolveDataDir } from "./config.js";
 
 export interface AcceptanceRow {
   task: string;
@@ -36,7 +36,13 @@ export interface ResultRow {
 export const ACCEPTANCE_ID_RE = /^[0-9a-f]{32}$/;
 
 export function acceptanceDir(): string {
-  return process.env.CCR_ACCEPTANCE_DIR || join(homedir(), ".cc-deck", "data", "acceptances");
+  // 随 dataDir（resolveDataDir 与 loadConfig 同源解析）：生产 bundle（CC_DECK_PLUGIN
+  // define）= ~/.cc-deck/data/acceptances——与出单 CLI（~/.cc-deck/bin/acceptance 硬
+  // 编码同路径）咬合不变；开发/沙盒 relay（CCR_DATA_DIR）自然隔离。此前独立硬编码
+  // 家目录，任何沙盒 relay 都会直接服务用户的真实验收单（2026-09-28 expo 沙盒实锤：
+  // 验收单卡出现在测试 app 上）。CCR_ACCEPTANCE_DIR 显式覆盖保留（测试与出单 CLI
+  // 共用的迁移口）
+  return process.env.CCR_ACCEPTANCE_DIR || join(resolveDataDir(), "acceptances");
 }
 
 export function loadAcceptance(id: string): Acceptance | null {

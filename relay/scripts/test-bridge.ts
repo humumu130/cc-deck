@@ -72,11 +72,16 @@ rmSync(PROOT, { recursive: true, force: true });
 // 34 段断言删除墓碑：先清上一轮残留，保证测试幂等
 rmSync(fileURLToPath(new URL("../data/deleted-ext.json", import.meta.url)), { force: true });
 // 数据目录隔离（2026-09-16 title-overrides 引爆）：改名持久化/child-sessions/墓碑等
-// 全部落 repo data/，与真实 ~/.cc-deck/data 互不可见——否则套件写入真实目录、下一轮
+// 全落 repo data/，与真实 ~/.cc-deck/data 互不可见——否则套件写入真实目录、下一轮
 // 建卡回放，"title from prompt" 断言失败（功能正确、测试污染）
 const TDATA = fileURLToPath(new URL("../data/test-datadir/", import.meta.url));
 process.env.CCR_DATA_DIR = TDATA;
 rmSync(TDATA, { recursive: true, force: true });
+// Leader 禁用（防御性）：本套件 in-process 直连 SessionManager（不走 index.ts 启动
+// 序），ensureLeader 当前不在调用链上——但任何未来演进（照 index.ts 全序起服务、
+// 或某段补调 ensureLeader）都会踩「无锚即 spawn 真 CLI」路径（2026-09-28 expo 沙盒
+// 实锤同款）。本套件不测团队，先钉死确保永不发生；生产语义不受影响（不设 env）
+process.env.CCR_NO_LEADER = "1";
 // 用户配置隔离：onReady 的任务工具兜底会写 settings.json——指到测试目录，
 // 防止套件碰真实 ~/.claude（外部用户机器上跑同一保护，这里防测试污染本机）
 const CCFG = fileURLToPath(new URL("../data/test-claude-cfg/", import.meta.url));
@@ -2379,8 +2384,9 @@ assert(!mgr.getExternal("ext-ff11bb22-cc33-dd44-ee55-ff6677889900"), "67 multi-t
 //      本套件不启 poll——index.ts 才挂）
 {
   const id184 = randomUUID().replace(/-/g, "");
-  // acceptanceDir() 独立口径（CCR_ACCEPTANCE_DIR / 生产 ~/.cc-deck），不吃 cfg.dataDir
-  // ——不隔离会读到真实单表（本段写入落 TDATA 而 relay 列生产目录，SNAPSHOT 断言必挂）
+  // acceptanceDir() 已随 dataDir（#21 修复：CCR_DATA_DIR=TDATA → TDATA/acceptances，
+  // 旧语义硬编码 ~/.cc-deck 会读到真实单表）。本段仍显式设 CCR_ACCEPTANCE_DIR 到
+  // 独立子目录：顺带锁 env 覆盖优先级（修复后缺省即隔离，显式覆盖留给测试/出单 CLI）
   const dir184 = join(cfg.dataDir, "acceptances-184");
   process.env.CCR_ACCEPTANCE_DIR = dir184;
   mkdirSync(dir184, { recursive: true });

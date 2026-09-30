@@ -13,8 +13,11 @@
 //     切换被拒（可读中文错误）+ 不广播 + 不物化
 //
 // 环境铁律：CCR_CLOUD_URL 置空串（loadConfig 缺省会连公共云桥！）；全部目录走
-// mkdtemp 临时（绝不碰 ~/.cc-deck 与仓库 relay/data）；不创建会话 → 全程不拉
-// 真 CLI，CI 可跑（无凭据依赖）。进程退出兜底 SIGKILL 全部子进程。
+// mkdtemp 临时（绝不碰 ~/.cc-deck 与仓库 relay/data）；CCR_NO_LEADER=1（不设则
+// index.ts 启动序 ensureLeader 无锚即真拉 Leader CLI——「全程不拉真 CLI」由该开关
+// 保证而非碰巧）；CCR_NO_MDNS=1（不往局域网广播幽灵实例）；继承的生产 env
+// （CCR_PARENT_PID/CCR_EMPLOYEE_CONFIG_DIR 等）在 bootRelay 剥净。CI 可跑（无凭据
+// 依赖）。进程退出兜底 SIGKILL 全部子进程（含 SIGINT/SIGTERM 信号路径转发）。
 import { spawn, type ChildProcess } from "node:child_process";
 import { existsSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -65,7 +68,15 @@ function connect(url: string): TestClient {
     }),
   };
   ws.on("message", (data) => {
-    const msg = JSON.parse(String(data)) as Envelope | (CommandAckPayload & { type: string });
+    // 畸形帧不炸测试（#20 审查修正）：被测 relay 吐非 JSON 是值得报告的缺陷，记为
+    // 事件流里一条 BAD_FRAME 让后续断言红出来，而非未捕获异常栈崩
+    let msg: Envelope | (CommandAckPayload & { type: string });
+    try {
+      msg = JSON.parse(String(data)) as Envelope | (CommandAckPayload & { type: string });
+    } catch {
+      c.events.push({ type: "BAD_FRAME", payload: { raw: String(data).slice(0, 200) }, seq: -1, ts: Date.now(), session_id: "" } as unknown as Envelope);
+      return;
+    }
     if ((msg as { type?: string }).type === "COMMAND_ACK") {
       c.acks.push(msg as CommandAckPayload);
       c.order.push(`ack:${(msg as CommandAckPayload).command_id}`);
@@ -130,22 +141,42 @@ process.on("exit", () => {
     }
   }
 });
+// 信号路径兜底（#20 审查修正）：Node 对默认处置的 SIGINT/SIGTERM 直接终止、不跑
+// exit 钩子；relay 又是 detached 独立进程组不随父收信号——Ctrl-C / CI 取消会留下
+// 3 个孤儿 relay 占 8801-8803，下轮端口预检拒跑。转发 exit 让上面的兜底执行
+for (const sig of ["SIGINT", "SIGTERM", "SIGHUP"] as const) {
+  process.on(sig, () => process.exit(1));
+}
 
 async function bootRelay(block: string, port: number, dataDir: string, envExtra: Record<string, string>): Promise<{ child: ChildProcess; token: string; log: () => string }> {
   // 端口预检：上轮泄漏的残留 relay 会让本轮子进程 EADDRINUSE 崩掉、health 轮询却
   // 被孤儿应答（假就绪）——断言全打到别人的 relay 上，先拒绝起测
   try {
-    const pre = await fetch(`http://127.0.0.1:${port}/health`);
+    const pre = await fetch(`http://127.0.0.1:${port}/health`, { signal: AbortSignal.timeout(1000) });
     if (pre.ok) {
       console.error(`[${block}] 端口 ${port} 已有监听（残留 relay？），先清理再跑`);
       process.exit(1);
     }
   } catch {}
+  // 环境基座（#20 审查修正）：裸透传 process.env 会把「生产 relay 之子」的全套继承
+  // env 带进测试 relay——本套件防的正是这类环境（2026-09-28 事故同款）：
+  // CCR_PARENT_PID 继承 → index.ts 看门狗 3s 探活 stale pid 即 exit(0)，relay 中途
+  // 自杀表现为偶发「提前退出/waitAck 超时」；CCR_EMPLOYEE_CONFIG_DIR 继承 → A/B 的
+  // source=file 断言整组假失败；CC_DECK_PLUGIN 改 dataDir 缺省落点。剥净再钉测试值
+  const env: Record<string, string> = { ...process.env } as Record<string, string>;
+  delete env.CCR_PARENT_PID;
+  delete env.CCR_RELAY_CHILD;
+  delete env.CC_DECK_PLUGIN;
+  delete env.CCR_EMPLOYEE_CONFIG_DIR; // C 块 envExtra 显式再设（env 锁定态用例不受影响）
+  // 用户级表面隔离（#20 P1）：真启动 index.ts ×3，onReady 的 ensureTodoToolsEnv 会
+  // 幂等补写 ~/.claude/settings.json（键缺失时）——钉不存在的临时路径让它走
+  // skip-no-dir 零写盘（目录勿预建；test-bridge 的 CLAUDE_CONFIG_DIR 先例同款）
+  env.CLAUDE_CONFIG_DIR = join(dataDir, "claude-cfg");
   const child = spawn(process.execPath, [TSX_CLI, "src/index.ts"], {
     cwd: RELAY_DIR,
     detached: true, // 独立进程组：负 pid 信号可整组收干净（wrapper + tsx 孙进程）
     env: {
-      ...process.env,
+      ...env,
       CCR_PORT: String(port),
       CCR_TOKEN: `test-token-${port}`,
       CCR_DATA_DIR: dataDir,
@@ -158,6 +189,13 @@ async function bootRelay(block: string, port: number, dataDir: string, envExtra:
       // 但镜像条件只看「dataDir≠hookHome 且 hookHome 存在」——不关会把测试端口/一次性
       // token 写进 ~/.cc-deck/data/bridge.json，测试一收生产 hook 全域失联
       CCR_NO_BRIDGE_MIRROR: "1",
+      // 禁 Leader（ensureLeader 无锚即 spawn 真 CLI，口径 ==="1"）：本套件测设置项
+      // 不测团队——不关则 A 块每轮都在沙盒 org 里真拉一个 Leader 上岗回合
+      //（2026-09-28 expo 沙盒实锤同款路径；此前只是恰好被沙盒 containment 圈住
+      // 没伤生产，会话本身是真烧）
+      CCR_NO_LEADER: "1",
+      // 禁 mDNS 广播（#20 审查修正）：否则每轮往局域网发 3 个同名幽灵 relay
+      CCR_NO_MDNS: "1",
       ...envExtra,
     },
     stdio: ["ignore", "pipe", "pipe"],
@@ -166,6 +204,10 @@ async function bootRelay(block: string, port: number, dataDir: string, envExtra:
   let out = "";
   child.stdout?.on("data", (d) => (out += String(d)));
   child.stderr?.on("data", (d) => (out += String(d)));
+  child.once("error", (e) => {
+    console.error(`[${block}] relay spawn 失败: ${e.message}`);
+    process.exit(1);
+  });
   const deadline = Date.now() + 45_000;
   while (Date.now() < deadline) {
     if (child.exitCode !== null) {
@@ -173,7 +215,7 @@ async function bootRelay(block: string, port: number, dataDir: string, envExtra:
       process.exit(1);
     }
     try {
-      const r = await fetch(`http://127.0.0.1:${port}/health`);
+      const r = await fetch(`http://127.0.0.1:${port}/health`, { signal: AbortSignal.timeout(1000) });
       if (r.ok) return { child, token: `test-token-${port}`, log: () => out };
     } catch {}
     await wait(200);
@@ -194,6 +236,7 @@ async function shutdown(child: ChildProcess): Promise<void> {
     child.kill("SIGTERM");
   }
   const killTimer = setTimeout(() => {
+    if (child.exitCode !== null) return; // 已退出：pid 可能已被 OS 复用，勿误杀无关进程组
     try {
       process.kill(-(child.pid as number), "SIGKILL");
     } catch {

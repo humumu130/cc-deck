@@ -47,15 +47,21 @@ export interface RelayConfig {
   freshInstall?: boolean;
 }
 
-export function loadConfig(): RelayConfig {
-  const port = Number(process.env.CCR_PORT ?? 8787);
-  // 插件 bundle（CC_DECK_PLUGIN 由 esbuild define 注入）数据固定 ~/.cc-deck/data，
-  // 与插件升级/卸载解耦；开发模式默认 relay/data
-  const dataDir =
+// dataDir 纯解析（无 mkdir/写 token 副作用）：模块级 store（acceptance 等）需要与
+// loadConfig 同源判定但不该触发目录创建。插件 bundle（CC_DECK_PLUGIN 由 esbuild
+// define 注入）数据固定 ~/.cc-deck/data，与插件升级/卸载解耦；开发模式默认 relay/data
+export function resolveDataDir(): string {
+  return (
     process.env.CCR_DATA_DIR ??
     ((process.env.CC_DECK_PLUGIN as string | undefined)
       ? join(homedir(), ".cc-deck", "data")
-      : join(process.cwd(), "data"));
+      : join(process.cwd(), "data"))
+  );
+}
+
+export function loadConfig(): RelayConfig {
+  const port = Number(process.env.CCR_PORT ?? 8787);
+  const dataDir = resolveDataDir();
   mkdirSync(dataDir, { recursive: true });
 
   // #17 第二批审查修正 P1：新装判定必须先于下方 token/bridge-token 首启落盘——

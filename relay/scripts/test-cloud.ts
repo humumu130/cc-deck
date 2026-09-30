@@ -44,7 +44,9 @@ const BRIDGE_PORT = 8797;
 const BRIDGE_TOKEN = "cloud-token-123";
 const dataDir = mkdtempSync(join(tmpdir(), "cc-cloud-test-"));
 const oldCwd = process.cwd();
-process.chdir(dataDir); // loadConfig 的 dataDir = cwd/data，隔离云身份文件
+// chdir（#20 审查更正）已不承担 dataDir 隔离职责——loadConfig 走 env 钉死的
+// CCR_DATA_DIR（=tmpdir 本身）；保留 chdir 仅为收尾在 Windows 上能删 tmpdir
+process.chdir(dataDir);
 // 沙盒铁律：chdir 兜底挡不住被继承的 CCR_DATA_DIR（env 优先级更高，2026-09-28 事故
 // 实证）——显式钉 env 才是真隔离
 process.env.CCR_DATA_DIR = dataDir;

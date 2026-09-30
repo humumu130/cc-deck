@@ -101,9 +101,14 @@ class FakeAgent implements AgentLike {
 const bus = new EventBus();
 // 沙盒铁律：钉死数据目录防生产泄漏（fake 工厂直驱也会经 create() 写 last-cwd 落到
 // 被继承的生产 dataDir——2026-09-28 事故实证，详见 test-ws.ts 头部）
+// CCR_NO_TITLE_GEN（#20 审查补）：COMMAND_CREATE 带 prompt 会触发 requestSmartTitle
+// 真 spawn 起名 CLI，transcript 落全局 ~/.claude/projects（test-ws 同款残渣）
+// CCR_CLOUD_URL：统一防线口径（in-process 不消费，钉死防未来演进踩真桥）
 process.env.CCR_DATA_DIR = mkdtempSync(join(tmpdir(), "ccr-wdl-"));
 delete process.env.CC_DECK_PLUGIN;
 delete process.env.CCR_EMPLOYEE_CONFIG_DIR;
+process.env.CCR_CLOUD_URL = "";
+process.env.CCR_NO_TITLE_GEN = "1";
 const cfg = loadConfig();
 const mgr = new SessionManager(bus, cfg);
 

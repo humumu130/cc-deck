@@ -1,8 +1,9 @@
 // #125/#137 验收单模块测试（纯单元，不起服务）：saveResult 落盘留痕 +
 // listAcceptances 待填态汇总（无 results=待填、部分已判=待填、全覆盖=done、
 // 排序新的在前、上限截断）。CCR_ACCEPTANCE_DIR 隔离测试目录。
-import { mkdirSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { loadAcceptance, saveResult, listAcceptances, ACCEPTANCE_ID_RE } from "../src/acceptance.js";
 
@@ -100,6 +101,28 @@ process.env.CCR_TOKEN = "test-token";
   mgr.ensureExternal("sid-sym", realDir, "符号链接会话");
   assert(mgr.matchSessionByCwd(linkDir + "/sub") === "sid-sym", "查询路径过符号链接=realpath 归一命中");
   assert(mgr.matchSessionByCwd(linkDir) === "sid-sym", "符号链接精确路径同样命中");
+}
+
+// #21 落点随 dataDir：acceptanceDir() 不再独立硬编码家目录——生产 bundle
+// （CC_DECK_PLUGIN define）仍解析到 ~/.cc-deck/data/acceptances（与出单 CLI 硬编码
+// 落点咬合不变），开发/沙盒（CCR_DATA_DIR）自然隔离（2026-09-28 expo 沙盒实锤：
+// 沙盒 relay 服务了用户真实验收单）。env 优先级锁死
+{
+  const { acceptanceDir } = await import("../src/acceptance.js");
+  const prevAcc = process.env.CCR_ACCEPTANCE_DIR;
+  const prevData = process.env.CCR_DATA_DIR;
+  const prevPlugin = process.env.CC_DECK_PLUGIN;
+  const dd = mkdtempSync(join(tmpdir(), "ccr-acc-datadir-"));
+  delete process.env.CCR_ACCEPTANCE_DIR;
+  process.env.CCR_DATA_DIR = dd;
+  assert(acceptanceDir() === join(dd, "acceptances"), "acceptanceDir 随 CCR_DATA_DIR（沙盒隔离）");
+  delete process.env.CCR_DATA_DIR;
+  delete process.env.CC_DECK_PLUGIN; // 开发模式分支：cwd/data（无 define 注入时）
+  assert(acceptanceDir() === join(process.cwd(), "data", "acceptances"), "acceptanceDir 开发模式缺省=relay/data");
+  if (prevData === undefined) delete process.env.CCR_DATA_DIR; else process.env.CCR_DATA_DIR = prevData;
+  if (prevAcc === undefined) delete process.env.CCR_ACCEPTANCE_DIR; else process.env.CCR_ACCEPTANCE_DIR = prevAcc;
+  if (prevPlugin === undefined) delete process.env.CC_DECK_PLUGIN; else process.env.CC_DECK_PLUGIN = prevPlugin;
+  rmSync(dd, { recursive: true, force: true });
 }
 
 rmSync(ROOT, { recursive: true, force: true });

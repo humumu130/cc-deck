@@ -28,7 +28,8 @@ jobs:
         # test:autorevive（#75/#17）：自动拉起纯单元（假工厂+fs 夹具，含雇员独立家读家锁），同上
         # test:settings（#17 第二批）：设置三层合成纯单元（env>file>default + 热切换广播），同上
         # test:settings-ws（#17 第二批补强）：子进程真 relay 起停 ×3（新装物化/存量收敛/env
-        #   锁定），纯协议断言不创建会话——不拉 CLI，CI 可跑
+        #   锁定），纯协议断言不创建会话——CCR_NO_LEADER=1 显式关掉启动序的 Leader
+        #   首建（不设则无锚即真拉 Leader CLI，「不拉 CLI」靠开关保证而非碰巧），CI 可跑
         script: [test:bus, test:history, test:bridge, test:cloud, test:org, test:leader, test:projects, test:dispatch, test:routing, test:autorevive, test:settings, test:settings-ws]
     defaults:
       run:

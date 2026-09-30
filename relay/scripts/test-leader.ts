@@ -77,6 +77,65 @@ async function main() {
       cloudUrls: [], cloudUrl: "", cloudToken: "", employeeConfigDir: null,
     };
 
+    // ---------- L0 CCR_NO_LEADER 禁用（#21 隔离缺陷批） ----------
+    // 无锚即 spawn 真 CLI 是产品语义（生产首建），但测试/沙盒 relay 不需要 Leader 时
+    // 必须能显式关掉：2026-09-28 expo 沙盒实锤 orgDir「存在但空」被当未建组织直接
+    // 拉起真 Leader（bypassPermissions 上岗回合真烧）。锁死：禁用=零 spawn/零目录
+    // 创建/零锚写盘/幂等
+    {
+      const ORG_D = join(ORG, "disabled-org");
+      const DATA_D = mkdtempSync(join(tmpdir(), "ccr-data-lead-d-"));
+      process.env.CCR_ORG_DIR = ORG_D;
+      process.env.CCR_NO_LEADER = "1";
+      const spawned0: SpawnRec[] = [];
+      const mgr0 = new SessionManager(new EventBus({ persistPath: join(DATA_D, "events.ndjson") }), { ...cfg, dataDir: DATA_D });
+      mgr0.setAgentFactory(makeFakeFactory(spawned0));
+      const r0 = mgr0.ensureLeader();
+      assert(r0.ok === false, "L0 禁用态 ensureLeader 返回 not-ok");
+      assert(spawned0.length === 0, "L0 禁用态零 spawn（不烧真会话）");
+      assert(!existsSync(ORG_D), "L0 禁用态不建 org 目录");
+      assert(!existsSync(join(DATA_D, "pinned-sessions.json")), "L0 禁用态零 pinned 写盘");
+      const r0b = mgr0.ensureLeader();
+      assert(r0b.ok === false, "L0 禁用态幂等（重复调用仍 not-ok，未置常驻标记）");
+      delete process.env.CCR_NO_LEADER;
+      process.env.CCR_ORG_DIR = ORG; // 还原 L1 起的夹具路径
+    }
+
+    // ---------- L0b #21③ 首回合在途不被待命化假翻 ----------
+    // 根因（2026-09-28 沙盒 Leader「已上岗」×N 排查实锤）：create(initialPrompt) 的
+    // prompt 在 adapter 构造时已入 SDK 队列但不进 unacked——init 先于模型输出到达，
+    // 旧待命化条件（unacked===0 && WORKING）在首回合在途时恰好满足 → 回合没跑就被
+    // 假翻 DONE「待命」，首个流式帧又打回 WORKING，事件流呈现「DONE 后 WORKING 复起」
+    //（×N 重复文本本身是同 id 流式部分帧，属观察口径）。pendingInitial 避让+终态清除
+    {
+      const ORG_B = join(ORG, "boot-org");
+      const DATA_B = mkdtempSync(join(tmpdir(), "ccr-data-lead-b-"));
+      const prevMode = initMode;
+      process.env.CCR_ORG_DIR = ORG_B;
+      initMode = "noinit"; // 手动驱动时序：init / 终态分开调，锁中间态
+      const spawnedB: SpawnRec[] = [];
+      const mgrB = new SessionManager(new EventBus({ persistPath: join(DATA_B, "events.ndjson") }), { ...cfg, dataDir: DATA_B });
+      mgrB.setAgentFactory(makeFakeFactory(spawnedB));
+      const rB = mgrB.ensureLeader();
+      const idB = rB.ok ? rB.session_id : "";
+      assert(rB.ok === true && spawnedB.length === 1, "L0b 前置：首建 spawn 一次（带 bootstrap prompt）");
+      assert(spawnedB[0].prompt === ORG_LEADER_BOOTSTRAP_PROMPT, "L0b 前置：bootstrap prompt 在途（pendingInitial 置位的输入面）");
+      // ① init 到达（unacked=0、WORKING、首回合在途）→ 不得假翻 DONE
+      spawnedB[0].cb.onInit("sdk-boot-1", cfg.model, "default");
+      const mid = mgrB.snapshot().find((s) => s.session_id === idB);
+      assert(mid?.status === "WORKING", "L0b ① 首回合在途 onInit 不假翻 DONE（待命化避让）");
+      // ② 回合终态正常收口（pendingInitial 清除路径）
+      spawnedB[0].cb.onTurnEnd(true, "success", 100);
+      const fin = mgrB.snapshot().find((s) => s.session_id === idB);
+      assert(fin?.status === "DONE" && fin.done_reason === "success", "L0b ② 回合终态正常收口 DONE");
+      // ③ 终态后 init 再到（换流形态）：状态稳定不炸、不产生新的假翻路径
+      spawnedB[0].cb.onInit("sdk-boot-2", cfg.model, "default");
+      const after = mgrB.snapshot().find((s) => s.session_id === idB);
+      assert(after?.status === "DONE", "L0b ③ 回合后 init 到达状态稳定（DONE 保持）");
+      initMode = prevMode;
+      process.env.CCR_ORG_DIR = ORG;
+    }
+
     // ---------- L1 首建 + L2 sticky-cwd 豁免 ----------
     console.log("L1 首建 + L2 sticky-cwd 豁免:");
     const sentinel = mkdtempSync(join(tmpdir(), "ccr-sentinel-"));
@@ -107,11 +166,12 @@ async function main() {
     assert(readFileSync(join(DATA, "last-cwd"), "utf-8") === sentinel, "L2 last-cwd 文件未被 org 覆盖（豁免生效）");
     assert(cfg.defaultCwd === sentinel, "L2 cfg.defaultCwd 内存未变");
 
-    // onInit → 锚回填 + 待命化 → 上岗回合收口（等终态防中间态竞态）
+    // onInit → 锚回填 → 上岗回合收口（等终态防中间态竞态；#21③ 修复后 init 不再
+    // 待命化假翻——首回合在途避让，终态由 onTurnEnd 翻 DONE，见 L0b）
     assert(await waitFor(() => {
       const c = mgr1.snapshot().find((s) => s.session_id === leaderId);
       return !!c && c.status === "DONE" && c.done_reason === "success";
-    }), "L1 上岗回合正常收口（onInit 先待命化，onTurnEnd 收口 DONE；reason=CLI terminal_reason，fake 固定 success）");
+    }), "L1 上岗回合正常收口（onTurnEnd 终态收口 DONE；reason=CLI terminal_reason，fake 固定 success）");
     const a1b = readOrgAnchor()!;
     assert(a1b.leader_sdk_id.startsWith("sdk-"), "L1 回填 sdk id（fake 工厂 sdk- 前缀口径）");
     assert(a1b.leader_session_id === leaderId, "L1 回填不换 relay id");

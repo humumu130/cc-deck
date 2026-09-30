@@ -44,7 +44,14 @@ function connect(url: string): TestClient {
     closed: new Promise((res) => ws.once("close", res)),
   };
   ws.on("message", (data) => {
-    const msg = JSON.parse(String(data)) as Envelope | (CommandAckPayload & { type: string });
+    // 畸形帧不炸测试（#20 审查修正）：记为 BAD_FRAME 让断言红出来而非栈崩
+    let msg: Envelope | (CommandAckPayload & { type: string });
+    try {
+      msg = JSON.parse(String(data)) as Envelope | (CommandAckPayload & { type: string });
+    } catch {
+      c.events.push({ type: "BAD_FRAME", payload: { raw: String(data).slice(0, 200) }, seq: -1, ts: Date.now(), session_id: "" } as unknown as Envelope);
+      return;
+    }
     if ((msg as { type?: string }).type === "COMMAND_ACK") c.acks.push(msg as CommandAckPayload);
     else c.events.push(msg as Envelope);
   });
@@ -202,6 +209,11 @@ assert(
       && (st0.source === "env" || st0.source === "file" || st0.source === "default"),
     `SNAPSHOT.settings 形状（布尔 + value null|字符串 + source 三态）got=${JSON.stringify(st0)}`,
   );
+  // #20 审查补锁：in-process 不跑 index.ts 物化块，settings 层必为「存量关」的
+  // default 形态（token/bridge-token 已落盘但 settings.json 不存在）——显式锁死，
+  // 防 in-process 路径未来也物化（source 变 file）而形状断言照绿的假绿
+  assert(st0?.source === "default" && st0?.employee_home === false && st0?.value === null,
+    `6b default 形态显式锁（in-process 无物化：存量关）got=${JSON.stringify(st0)}`);
   const cur = (st0 as St).employee_home as boolean;
   const countUpd = () => c2.events.filter((e) => e.type === "SETTINGS_UPDATED").length;
   const before = countUpd();
@@ -282,9 +294,14 @@ await wait(500);
 // 该 slug 只可能是本测试探针会话（.tmp-test-ws 唯一名）——删净不留测试残渣，
 // 用户可见会话列表零污染（2026-09-28 事故后补的纪律）
 try {
+  // 全等匹配（#20 审查修正）：endsWith 后缀匹配会误删任何恰以 -tmp-test-ws 结尾的
+  // 真实项目目录。按探针绝对路径现算 slug（CLI 同规则：非字母数字→"-"）精确删；
+  // titlegen 探针一并算上（NO_TITLE_GEN 钉死前的历史轮次产物同 slug 可回收）
+  const slug = (p: string) => p.replace(/[^A-Za-z0-9]/g, "-");
+  const want = new Set([slug(PROBE_CWD), slug(join(WS_DATA, ".tmp-titlegen"))]);
   const projs = join(homedir(), ".claude", "projects");
   for (const n of readdirSync(projs)) {
-    if (n.endsWith("-tmp-test-ws")) rmSync(join(projs, n), { recursive: true, force: true });
+    if (want.has(n)) rmSync(join(projs, n), { recursive: true, force: true });
   }
 } catch {} // 目录不存在/权限异常不阻塞测试结论
 

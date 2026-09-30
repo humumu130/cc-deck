@@ -387,6 +387,15 @@ interface ManagedSession {
   // childPid 尚未就位，此时换流补刀必然落空（双进程根源），消息改走 sendMessage
   // 排队等新流就绪。undefined = 无进行中的 resume
   resumePending?: number;
+  // #21③ 首回合在途标记：create(prompt) 的 initialPrompt 在 adapter 构造时已 push 进
+  // SDK 队列（不进 unacked——create 路径没有 user_message 回显日志可出队，塞了会变
+  // 永久悬账激活 watchdog 重放）。onInit 待命化（Leader 防看门狗误杀的 DONE 翻转）
+  // 必须避开它：init 先于模型输出到达，此刻 unacked===0 且 status===WORKING 恰好满足
+  // 旧的待命条件——回合还没跑就被假翻 DONE，首个流式帧又打回 WORKING，事件流上呈现
+  // 「DONE 后 WORKING 复起」（2026-09-28 沙盒 Leader「已上岗」×N 排查实锤的真缺陷；
+  // ×N 重复文本本身是同 id 流式部分帧，观察口径问题）。首个回合终态（onTurnEnd/
+  // onSessionEnd）清除；此后 Leader 空闲 init 到达照旧待命化
+  pendingInitial?: boolean;
 }
 
 interface WatchdogState {
@@ -2061,6 +2070,8 @@ export class SessionManager {
         // resume/读取仍按此值走（存量无损）；关态创建不落（=默认家）
         ...(opts?.employee && this.cfg.employeeConfigDir ? { employee_home: this.cfg.employeeConfigDir } : {}),
       },
+      // #21③ 首回合在途：见 ManagedSession.pendingInitial（onInit 待命化避让用）
+      ...(prompt.trim() ? { pendingInitial: true } : {}),
       logs: [],
       lastUpdateEmit: 0,
       lastProgressAt: Date.now(),
@@ -2160,7 +2171,10 @@ export class SessionManager {
             // 必进 slow lane 被杀树重拉。翻 DONE = 合法的「等待咨询」形态。
             // 消息驱动 resume 先 push unacked 再 spawn，到达这里 unacked≥1 不误翻；
             // reviveSaved 的 onInit 包裹在 base 之后自设 DONE，覆盖不冲突。
-            if (managed.unacked.length === 0 && managed.state.status === "WORKING") {
+            // #21③ 第三种形态补齐：create(initialPrompt) 首回合在途（prompt 已入
+            // SDK 队列、init 先于模型输出到达）——pendingInitial 避让，否则回合
+            // 还没跑就被假翻 DONE、首个流式帧又打回 WORKING
+            if (managed.unacked.length === 0 && managed.state.status === "WORKING" && !managed.pendingInitial) {
               managed.state.status = "DONE";
               managed.state.done_reason = "待命（等待咨询）";
               managed.state.action_summary = "Leader · 待命";
@@ -2290,6 +2304,7 @@ export class SessionManager {
         },
         onTurnEnd: (ok, reason, durationMs) => {
           if (!mine()) return;
+          managed.pendingInitial = undefined; // #21③ 首回合已终态，后续空闲 init 可待命化
           // #7 看门狗恢复期：杀树时 CLI 可能吐出最后的 interrupted result——状态
           // 归恢复流程接管（resumeAgent 紧接着设 WORKING），此处让位避免 ERROR/DONE
           // 假终态帧闪现
@@ -2346,6 +2361,7 @@ export class SessionManager {
         },
         onSessionEnd: (reason) => {
           if (!mine()) return;
+          managed.pendingInitial = undefined; // #21③ 流关闭=首回合不可能再在途（同 onTurnEnd 清除口径）
           // #7 看门狗：恢复期旧 agent 流被杀关闭是预期步骤，不产生 DONE 假终态
           //（状态由恢复流程接管）；其余路径（进程自然退出/stop 收尾）照旧收口，
           // 并复位采样相位——新 agent 由 resumeAgent/reviveSaved 重新起算
@@ -2655,6 +2671,15 @@ export class SessionManager {
   ensureLeader(): { ok: true; session_id: string; created: boolean; rebuilt: boolean } | { ok: false; error: string } {
     if (this.leaderEnsured && this.leaderId) {
       return { ok: true, session_id: this.leaderId, created: false, rebuilt: false };
+    }
+    // CCR_NO_LEADER=1 显式禁用（测试/沙盒铁律）：无锚即 spawn 真 CLI（bypassPermissions
+    // 上岗回合）——测试 relay 每跑一轮都在沙盒 org 里烧一次真会话 + 落 org.json
+    // （2026-09-28 expo 沙盒实锤：orgDir「存在但空」被当未建组织直接拉起真 Leader）。
+    // 生产不设此 env，首建/收养/重建语义原样；测试要测 Leader 生命周期（fake
+    // factory 系）同样不设，开关只挡「不需要 Leader 的 relay」。口径 ==="1"
+    // （与 CCR_NO_TITLE_GEN/CCR_NO_BRIDGE_MIRROR 统一，"0"/"false" 不当关断）
+    if (process.env.CCR_NO_LEADER === "1") {
+      return { ok: false, error: "CCR_NO_LEADER 已设置，本进程不管理 Leader（不建目录、不拉起、不收养）" };
     }
     try {
       ensureOrgDir();

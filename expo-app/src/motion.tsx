@@ -34,6 +34,9 @@ export function PressScale({
   haptic?: boolean;
 }) {
   const sc = useRef(new Animated.Value(1)).current;
+  // 卸载止损（对齐 Collapse 同款）：按压即关弹窗的用法会让 spring 对已销毁节点收尾
+  //（告警级噪音）——unmount 停动画
+  useEffect(() => () => { sc.stopAnimation(); }, [sc]);
   const to = (v: number) => Animated.spring(sc, { toValue: v, useNativeDriver: true, speed: 40, bounciness: 5 }).start();
   return (
     <APressable

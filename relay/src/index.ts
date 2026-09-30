@@ -397,8 +397,12 @@ startServer(bus, mgr, cfg, {
   },
   // daemon 子进程 listen 成功后自写 pid（父进程不预写，端口被占时不留死 pid）
   onReady: () => {
-    // #316 mDNS 广播（_ccdeck._tcp）：手表同 WiFi 零配置发现；失败静默（组播被拦不影响其余）
-    advertiseRelay(cfg.port, `CC Deck Relay (${hostname()})`);
+    // #316 mDNS 广播（_ccdeck._tcp）：手表同 WiFi 零配置发现；失败静默（组播被拦不影响其余）。
+    // CCR_NO_MDNS=1 关断（测试/沙盒）：真启动测试 relay ×3 会往局域网发 3 个同名
+    // 幽灵实例，同网真实设备短窗内可见（#20 审查实锤）。生产不设，广播行为不变
+    if (process.env.CCR_NO_MDNS !== "1") {
+      advertiseRelay(cfg.port, `CC Deck Relay (${hostname()})`);
+    }
     if (process.env.CC_DECK_DAEMON === "1") {
       writeFileSync(join(cfg.dataDir, "relay.pid"), String(process.pid), "utf-8");
     }
@@ -410,8 +414,10 @@ startServer(bus, mgr, cfg, {
     const hookHome = join(homedir(), ".cc-deck", "data");
     // CCR_NO_BRIDGE_MIRROR=1 显式关镜像：测试沙盒 relay 起停会把测试端口/一次性 token
     // 镜进生产 hook 配置，测试一收 hook 全域失联（2026-09-28 事故实证）。生产/插件
-    // 换班场景不受影响——env 未设时镜像行为原样保留（#211 语义不变）
-    if (!process.env.CCR_NO_BRIDGE_MIRROR && cfg.dataDir !== hookHome && existsSync(hookHome)) {
+    // 换班场景不受影响——env 未设时镜像行为原样保留（#211 语义不变）。判断口径
+    // ==="1"（#20 审查修正）：真值判断会把 "0"/"false" 等显式保留意图也当关断，
+    // 与 CCR_NO_TITLE_GEN/CCR_WATCHDOG_DISABLE 的既定约定对齐
+    if (process.env.CCR_NO_BRIDGE_MIRROR !== "1" && cfg.dataDir !== hookHome && existsSync(hookHome)) {
       try {
         writeFileSync(join(hookHome, "bridge.json"), bridgeJson, "utf-8");
       } catch {}
@@ -437,7 +443,9 @@ if (pinned.saved > 0) {
 console.log(
   leader.ok
     ? `  团队:   Leader ${leader.created ? "首次创建" : leader.rebuilt ? "已从锚重建" : "在线"}（${orgDir()}）`
-    : `  团队:   Leader 未就绪：${leader.error}（下次启动重试）`,
+    : process.env.CCR_NO_LEADER === "1"
+      ? "  团队:   Leader 已禁用（CCR_NO_LEADER，测试/沙盒态）"
+      : `  团队:   Leader 未就绪：${leader.error}（下次启动重试）`,
 );
 if (parkedRehydrated > 0) {
   console.log(`  团队:   ${parkedRehydrated} 个挂起组成员已重建退休标记（不自动拉起）`);

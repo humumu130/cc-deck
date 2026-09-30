@@ -105,9 +105,11 @@ const snapshot = { sessions: null as unknown, logs: null as unknown } as Snapsho
 console.log("SessionManager.adopt:");
 // 沙盒铁律：钉死数据目录防生产泄漏（继承的 CCR_DATA_DIR 等生产 env 会被 loadConfig
 // env 优先级整包劫持——2026-09-28 事故实证，详见 test-ws.ts 头部）
+// CCR_CLOUD_URL：统一防线口径（in-process 不消费，钉死防未来演进踩真桥）
 process.env.CCR_DATA_DIR = mkdtempSync(join(tmpdir(), "ccr-hist-cfg-"));
 delete process.env.CC_DECK_PLUGIN;
 delete process.env.CCR_EMPLOYEE_CONFIG_DIR;
+process.env.CCR_CLOUD_URL = "";
 const cfg = loadConfig();
 cfg.token = "test";
 const mgr = new SessionManager(bus2, cfg);
