@@ -1,7 +1,8 @@
 // #26 矩阵式 M1 —— Leader 常驻化集成测试（agentFactory 测试缝，不拉真 CLI）。
 // 覆盖：L1 首建（锚/pinned/题名/待命化）+ L2 sticky-cwd 豁免 + L3 重启重建零 spawn
 //       + L4 幂等 + L5 废锚重建 + L6 派单台账（running/done/failed/FIFO/兜底全清/断档补记）
-//       + L10 首建 init 看门狗（#22①）+ L11 废锚僵尸清锚重首建（#22②）。
+//       + L10 首建 init 看门狗（#22①：hang/die 双形态 + 到点空转 + 有限重试 + 台账主动收口）
+//       + L11 废锚僵尸清锚重首建（#22②）+ 收养双向锚同步（#22 审查处置）。
 import { randomUUID } from "node:crypto";
 import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -45,7 +46,10 @@ const makeFakeFactory = (created: SpawnRec[]) =>
       allow: () => false,
       deny: () => false,
       answer: () => false,
-      stop: async () => { a.ended = true; cb.onSessionEnd("stopped"); },
+      // hang：真挂死 CLI 的 stop 等 interrupt 永不返回——ended 置位但不回
+      // onSessionEnd（#22 审查咬合：在途派单台账从此无人兜底，只能靠 bootTimer
+      // 开火时主动收口，L10③ 的靶子形态；其余形态保持原同步收尾）
+      stop: async () => { a.ended = true; if (mode !== "hang") cb.onSessionEnd("stopped"); },
       setPermissionMode: async () => {},
     };
     if (mode === "init") {
@@ -465,10 +469,14 @@ async function main() {
     rmSync(DATA6, { recursive: true, force: true });
     rmSync(EMP6, { recursive: true, force: true });
 
-    // ---------- L10 #22① 首建 init 看门狗（hang CLI：不 init/不报错/不退出） ----------
+    // ---------- L10 #22① 首建 init 看门狗（hang/die 双形态 + 到点空转 + 有限重试） ----------
     // 首建 prompt 不进 unacked → #7 watchdog pre-init 豁免恰好命中（永无人管）——
-    // bootTimer 是唯一防线：超时=杀树+清锚+卸常驻+删卡；同进程再调 ensureLeader 即重建。
-    // CCR_RESUME_INIT_MS=300 加速；对照组锁正常路径：重建后 init 已到，timer 到点空转不动作
+    // bootTimer 是唯一防线：超时=杀树+清锚+卸常驻+删卡+在途台账主动收口；开火回调
+    // 尾部自动重建 ≤1 次（leaderBootRetries：ensureLeader 仅 boot 调一次，不重建则
+    // 长跑进程失聪到下次重启）。CCR_RESUME_INIT_MS=300 加速，**全程不还原 env**——
+    // 重建卡的 300ms timer 也要到点，⑥ 的延迟否定断言跨过到点窗才锁得住「init 已到
+    // =空转」（#22 审查变异实锤：段内还原 env 后 timer 45s 不开火，旧⑤只锁了重建
+    // 成功=假锁）
     {
       const ORG_G = mkdtempSync(join(tmpdir(), "ccr-org-l10-"));
       const DATA_G = mkdtempSync(join(tmpdir(), "ccr-data-l10-"));
@@ -481,27 +489,73 @@ async function main() {
       mgr10.setAgentFactory(makeFakeFactory(spawned10));
       const r10 = mgr10.ensureLeader();
       const id10 = r10.ok ? r10.session_id : "";
+      const anchorBoot = readOrgAnchor(); // 立即读局部：开火即清锚重写，迟读必 miss（#22 审查竞态）
       assert(r10.ok === true && !!id10 && spawned10.length === 1, "L10 前置：首建 spawn 一次（hang CLI 不回 init）");
-      assert(readOrgAnchor()?.leader_sdk_id === "", "L10 前置：锚 sdk_id 空串（init 未回填）");
-      assert(await waitFor(() => mgr10.snapshot().every((s) => s.session_id !== id10)), "L10 ① 超时开火：挂死首建卡被删（deleteSession 通道）");
-      assert(readOrgAnchor() === null, "L10 ② 废锚清除（空 sdk_id 本就 resume 不了）");
-      const pinned10 = readJson(join(DATA_G, "pinned-sessions.json")) as string[] | null;
-      assert(!Array.isArray(pinned10) || !pinned10.includes(id10), "L10 ③ pinned 写穿同步摘除");
-      // 重建（同进程 ensureLeader，leaderId/Ensured 已卸）：init 模式正常上岗；缺省
-      // 45s 窗内 timer 不会开火，且 init 到达后 relay_session_id 回填=空转条件
-      if (prevResumeInit === undefined) delete process.env.CCR_RESUME_INIT_MS; else process.env.CCR_RESUME_INIT_MS = prevResumeInit;
+      assert(anchorBoot?.leader_sdk_id === "" && anchorBoot.leader_session_id === id10, "L10 前置：锚 sdk_id 空串（init 未回填）");
+      // 埋雷：开火前给挂死 Leader 压一张咨询单——hang 形态 stop 不回 onSessionEnd
+      //（factory 注释），台账只能靠开火主动收口（#22 审查修点的靶子）
+      mgr10.handleCommand({ type: "COMMAND_MESSAGE", command_id: randomUUID(), ts: Date.now(), payload: { session_id: id10, text: "咨询：在吗" } }, "test");
+      assert(await waitFor(() => readDispatchLog(ORG_G).some((e) => e.status === "running")), "L10 前置：咨询单落账 running");
+      // 开火前切 init：timer 回调尾部自动重建的 Leader 正常上岗
       initMode = "init";
-      const r10b = mgr10.ensureLeader();
-      const id10b = r10b.ok ? r10b.session_id : "";
-      assert(r10b.ok === true && r10b.created === true && id10b !== id10, "L10 ④ 清锚后重首建（新 id，旧僵尸不复活）");
+      let id10b = "";
+      assert(await waitFor(() => {
+        const a = readOrgAnchor();
+        if (a && a.leader_session_id !== id10) { id10b = a.leader_session_id; return true; }
+        return false;
+      }), "L10 ① 开火清场 + 自动重建（锚指向新 id，旧僵尸不复活）");
+      assert(mgr10.snapshot().every((s) => s.session_id !== id10), "L10 ② 挂死首建卡被删（deleteSession 通道）");
+      const log10 = readDispatchLog(ORG_G);
+      assert(log10.some((e) => e.status === "failed" && (e.receipt ?? "").includes("首建上岗超时")) && log10.every((e) => e.status !== "running"), "L10 ③ 在途咨询单主动收口 failed「首建上岗超时」，无 running 残留");
+      const pinned10 = readJson(join(DATA_G, "pinned-sessions.json")) as string[] | null;
+      assert(Array.isArray(pinned10) && !pinned10.includes(id10) && pinned10.includes(id10b), "L10 ④ pinned 写穿：旧摘新加");
       assert(await waitFor(() => {
         const c = mgr10.snapshot().find((s) => s.session_id === id10b);
         return !!c && c.status === "DONE" && c.done_reason === "success";
-      }), "L10 ⑤ 重建 Leader 正常上岗收口（init 已到，timer 空转不误杀）");
-      assert(!!readOrgAnchor()?.leader_sdk_id && readOrgAnchor()?.leader_session_id === id10b, "L10 ⑥ 重建锚 sdk_id 正常回填");
+      }), "L10 ⑤ 重建 Leader 正常上岗（init 20ms 先到）");
+      // ⑥ 延迟否定：重建卡的 300ms timer 也已到点（开火后 ≥500ms）——init 已到则
+      // 空转不动作。变异敏感：删掉 relay_session_id 空转守卫 → 重建卡到点再被清场
+      //（重试额度已用光）→ 本断言红
+      await wait(500);
+      const c10b = mgr10.snapshot().find((s) => s.session_id === id10b);
+      assert(!!c10b && c10b.status === "DONE" && !!c10b.relay_session_id, "L10 ⑥ timer 到点空转不误杀（init 已到=握手完成豁免）");
+      assert(readOrgAnchor()?.leader_session_id === id10b && !!readOrgAnchor()?.leader_sdk_id, "L10 ⑦ 锚稳定指向重建卡（sdk 已回填）");
+
+      // ⑧-⑩ die 形态（#22 审查边界角度补靶）：init 前进程退出——卡被 onSessionEnd
+      // 收成 DONE 但 relay_session_id 恒空。旧 ended 守卫会放过它（误判正常收尾），
+      // #7 watchdog ended 盲区要求 sdk 非空才接管也不命中 → 进程内变砖。新守卫只认
+      // sdkId：die 与挂死同罪清场。独立 mgr/目录（leaderBootRetries 按实例隔离）
+      const ORG_G2 = mkdtempSync(join(tmpdir(), "ccr-org-l10d-"));
+      const DATA_G2 = mkdtempSync(join(tmpdir(), "ccr-data-l10d-"));
+      process.env.CCR_ORG_DIR = ORG_G2;
+      initMode = "die";
+      const spawned10d: SpawnRec[] = [];
+      const mgr10d = new SessionManager(new EventBus({ persistPath: join(DATA_G2, "events.ndjson") }), { ...cfg, dataDir: DATA_G2 });
+      mgr10d.setAgentFactory(makeFakeFactory(spawned10d));
+      const r10d = mgr10d.ensureLeader();
+      const id10d = r10d.ok ? r10d.session_id : "";
+      assert(r10d.ok === true && !!id10d && spawned10d.length === 1, "L10⑧ 前置：die 首建 spawn 一次");
+      assert(await waitFor(() => {
+        const c = mgr10d.snapshot().find((s) => s.session_id === id10d);
+        return !!c && c.status === "DONE" && !c.relay_session_id;
+      }), "L10⑧ 前置：die 卡先被 onSessionEnd 收成 DONE（sdk 恒空）");
+      initMode = "init";
+      let id10e = "";
+      assert(await waitFor(() => {
+        const a = readOrgAnchor();
+        if (a && a.leader_session_id !== id10d) { id10e = a.leader_session_id; return true; }
+        return false;
+      }), "L10⑧ die 形态同被看门狗清场重建（ended 不豁免——sdk 空即罪）");
+      assert(mgr10d.snapshot().every((s) => s.session_id !== id10d), "L10⑨ die 首建卡被删");
+      assert(await waitFor(() => {
+        const c = mgr10d.snapshot().find((s) => s.session_id === id10e);
+        return !!c && c.status === "DONE" && c.done_reason === "success";
+      }), "L10⑩ die 后重建 Leader 正常上岗");
       initMode = prevMode10;
       rmSync(ORG_G, { recursive: true, force: true });
       rmSync(DATA_G, { recursive: true, force: true });
+      rmSync(ORG_G2, { recursive: true, force: true });
+      rmSync(DATA_G2, { recursive: true, force: true });
     }
 
     // ---------- L11 #22② 废锚僵尸：sdk_id 空锚 + 内存卡 → 清锚重首建 ----------
@@ -544,6 +598,27 @@ async function main() {
       const rI = mgrI.ensureLeader();
       assert(rI.ok === true && rI.created === false && rI.session_id === "live-l11", "L11 ④ 对照：sdk_id 已回填的锚+内存卡 → 正常收养");
       assert(spawnedI.length === 0, "L11 ⑤ 对照：收养零 spawn（guard 不误杀）");
+      // ③ 半劈叉（#22 审查处置：双向锚同步靶）：锚 sdk 空 + 卡 relay_session_id
+      // 已回填——onInit 两行写（卡/锚）之间崩的形态。僵尸判定双空才命中、漏过它
+      // 直接收养的话锚 sdk 恒空串，卡日后被事件压缩挤掉（>30 会话）即触发清锚重
+      // 首建，Leader 记忆静默丢失。修法：收养时卡→锚回填
+      writeOrgAnchor({ version: 1, leader_session_id: "half-l11", leader_sdk_id: "", created_at: Date.now(), updated_at: Date.now() });
+      const mgrJ = new SessionManager(new EventBus({ persistPath: join(DATA_I, "events-j.ndjson") }), { ...cfg, dataDir: DATA_I });
+      mgrJ.setAgentFactory(makeFakeFactory([]));
+      mgrJ.adopt(new Map([["half-l11", mkCard("half-l11", "sdk-half-11")]]));
+      const rJ = mgrJ.ensureLeader();
+      assert(rJ.ok === true && rJ.created === false && rJ.session_id === "half-l11", "L11 ⑥ 半劈叉（锚空+卡有）→ 正常收养不重建");
+      assert(readOrgAnchor()?.leader_sdk_id === "sdk-half-11", "L11 ⑦ 收养时锚被卡回填（双向同步：卡→锚）");
+      // ④ 镜像劈叉：锚 sdk 有 + 卡 relay_session_id 空——卡侧丢 sdk 的形态，不补则
+      // 该卡日后发消息 resume 永抛「无 SDK 会话记录」。修法：收养时锚→卡恢复句柄
+      writeOrgAnchor({ version: 1, leader_session_id: "mirror-l11", leader_sdk_id: "sdk-mirror-11", created_at: Date.now(), updated_at: Date.now() });
+      const mgrK = new SessionManager(new EventBus({ persistPath: join(DATA_I, "events-k.ndjson") }), { ...cfg, dataDir: DATA_I });
+      mgrK.setAgentFactory(makeFakeFactory([]));
+      mgrK.adopt(new Map([["mirror-l11", mkCard("mirror-l11", "")]]));
+      const rK = mgrK.ensureLeader();
+      assert(rK.ok === true && rK.created === false && rK.session_id === "mirror-l11", "L11 ⑧ 镜像劈叉（锚有+卡空）→ 正常收养不重建");
+      const cardK = mgrK.snapshot().find((s) => s.session_id === "mirror-l11");
+      assert(cardK?.relay_session_id === "sdk-mirror-11", "L11 ⑨ 收养时卡被锚回填（双向同步：锚→卡，resume 句柄恢复）");
       rmSync(ORG_H, { recursive: true, force: true });
       rmSync(DATA_H, { recursive: true, force: true });
       rmSync(DATA_I, { recursive: true, force: true });
@@ -553,6 +628,7 @@ async function main() {
     if (prevTitleGen === undefined) delete process.env.CCR_NO_TITLE_GEN; else process.env.CCR_NO_TITLE_GEN = prevTitleGen;
     if (prevCwdEnv === undefined) delete process.env.CCR_CWD; else process.env.CCR_CWD = prevCwdEnv;
     if (prevResumeInit === undefined) delete process.env.CCR_RESUME_INIT_MS; else process.env.CCR_RESUME_INIT_MS = prevResumeInit;
+    initMode = "init"; // #22 审查：段内还原之外的兜底——异常中断不让 hang/die 形态泄漏给后续使用者
     rmSync(ORG, { recursive: true, force: true });
     rmSync(DATA, { recursive: true, force: true });
   }

@@ -524,6 +524,9 @@ export class SessionManager {
   private openDispatches = new Map<string, { id: string; tier: DispatchTier; gid?: string; anchor?: string }[]>();
   private leaderId: string | null = null;
   private leaderEnsured = false;
+  // #22 审查处置：首建 bootTimer 开火后的进程内自动重建计数（≤1）。ensureLeader 仅
+  // boot 调一次，无此入口则开火清场后要等 relay 下次重启才有 Leader（长跑进程失聪）
+  private leaderBootRetries = 0;
   // #26 M3 挂起自动化扫描节拍（boot + 每小时；startStaleScan 起，CCR_ORG_STALE_DAYS=0 不起）
   private staleTimer: ReturnType<typeof setInterval> | null = null;
 
@@ -2153,6 +2156,9 @@ export class SessionManager {
           managed.resumePending = undefined;
           // #307：托管子会话 sid 即时落盘 child-sessions.json——relay 在此刻之后
           // 任意时点重启，孤儿扫描都认得它是自己的（不再被收养成"relay"垃圾会话）
+          // #22 审查确认：迟到 init（卡已被 bootTimer/deleteSession 删掉）在此登记
+          // 是**故意**的——该 CLI 真实完成过握手、transcript 在场，登记让孤儿扫描
+          // 跳过它，防下次重启被收养成垃圾卡；上文 mine() 已挡掉纯野流
           if (!this.childSdkIds.has(sdkId)) {
             this.childSdkIds.add(sdkId);
             appendChildSession(this.cfg.dataDir, sdkId);
@@ -2716,6 +2722,21 @@ export class SessionManager {
     // 同下方无会话分支的废锚口径：清锚按未建组织重首建（旧卡留为普通卡可手删，
     // 与锚写失败分支一致）。relay_session_id 已回填 = init 来过，正常收养
     if (s && !anchor.leader_sdk_id && !s.state.relay_session_id) {
+      // #22 审查处置：旧卡先降级为普通历史卡再清锚重首建——首建时置的 pinned +
+      // 「Leader」题名 override 是常驻配套，不摘则重首建后侧栏两张置顶 Leader 卡、
+      // 僵尸卡还永久豁免驱逐。title 解锁改中性名（摘 override 只管跨重启回放，
+      // 内存卡当下还顶着 Leader 名）。emitUpdated 补帧让两端列表即时同步
+      s.state.pinned = undefined;
+      writePinnedSessions(this.cfg.dataDir, readPinnedSessions(this.cfg.dataDir).filter((x) => x !== anchor.leader_session_id));
+      if (this.titleOverrides[anchor.leader_session_id]) {
+        delete this.titleOverrides[anchor.leader_session_id];
+        try {
+          writeFileSync(join(this.cfg.dataDir, "title-overrides.json"), JSON.stringify(this.titleOverrides));
+        } catch {}
+      }
+      s.state.title_locked = undefined;
+      if (s.state.title === ORG_LEADER_TITLE) s.state.title = "Leader（首建中断）";
+      this.emitUpdated(s, true);
       clearOrgAnchor();
       return this.createLeaderFirstTime();
     }
@@ -2777,21 +2798,47 @@ export class SessionManager {
     // WORKING「启动中」；#7 watchdog 也绕过（首建 prompt 不进 unacked，pre-init 豁免
     // `relay_session_id 空 && unacked===0` 恰好命中——真·永无人管）。对齐 resume
     // 口径：超时=杀树
-    // + 清锚 + 删卡（sdk_id 空串的锚本就 resume 不了，留着即 #22② 废锚僵尸），
-    // 下次 relay 启动 ensureLeader 自动重建。正常路径 init 已到（relay_session_id
-    // 回填）/流已换/卡已删，到点自检不动作（timer unref 不阻退出）
+    // + 清锚 + 删卡（sdk_id 空串的锚本就 resume 不了，留着即 #22② 废锚僵尸）。
+    // 正常路径 init 已到（relay_session_id 回填）/流已换/卡已删，到点自检不动作
+    //（timer unref 不阻退出）
+    // #22 审查处置补强：① die 形态（init 前进程退出）同罪——ended 不再豁免，只认
+    // relay_session_id（sdkId 回填=握手完成才放过；die 卡被 onSessionEnd 收成 DONE
+    // 但 sdkId 恒空，原 ended 守卫会放过它，而 #7 watchdog ended 盲区要求 sdkId 非空
+    // 才接管也不命中 → 进程内变砖）；② 开火时主动收口派单台账（不等晚到回调）；
+    // ③ 进程内自动重建 ≤1 次（见 leaderBootRetries）
     const bootAgent = s?.agent ?? null;
+    const bootWaitSec = (resumeInitTimeoutMs() / 1000).toFixed(1); // armed 时捕获：fire 时刻 env 可能已变（测试热改场景）
     const bootTimer = setTimeout(() => {
       const cur = this.sessions.get(id);
-      if (!cur || !bootAgent || cur.agent !== bootAgent || bootAgent.ended) return;
-      if (cur.state.relay_session_id) return; // init 已到：回合正常在途
+      // 流已换/卡已删：不动作（防御性——首建卡 sdk 空不可能被 resume，守卫零成本）
+      if (!cur || !bootAgent || cur.agent !== bootAgent) return;
+      if (cur.state.relay_session_id) return; // init 已到：握手完成，回合在途/正常收尾（含 ended）
+      // 派单/咨询台账主动收口（不等晚到 onSessionEnd——真挂死 CLI 的 stop 可能永不
+      // resolve；die 形态 onSessionEnd 已收过则 FIFO 已空，天然 no-op 不双记）。
+      // unacked 随卡弃——首建窗口消息接受可见丢失（CLI 从未收到，console 留条数），
+      // 不做跨会话 stash 重放（窗口=45s×挂死×恰有人发言，极窄）
+      const droppedMsgs = cur.unacked.length;
+      this.closeOpenDispatches(id, "failed", `首建上岗超时（${bootWaitSec}s 无 init），回合中断`, true, false, undefined, "todo");
       if (bootAgent.childPid) void this.watchdogProcs.killTree(bootAgent.childPid).catch(() => {});
       void bootAgent.stop().catch(() => {});
       this.leaderId = null; // 先卸常驻身份——deleteSession 拒删 Leader 卡
       this.leaderEnsured = false;
       clearOrgAnchor();
       this.deleteSession(id); // SESSION_DELETED + pinned 写穿清理都有
-      console.log(`[leader] 首建上岗超时（${(resumeInitTimeoutMs() / 1000).toFixed(1)}s 无 init，疑 CLI 挂死），已清除本次首建，下次启动自动重建`);
+      // 进程内自动重建（≤1 次）：不重建则要等 relay 下次重启才有 Leader（长跑进程
+      // =重启前组织失聪）；限次防 CLI 系统性坏（路径/权限）时无限烧 spawn。try/catch
+      // ——create 同步 throw（AgentSession 构造失败）不得炸 timer 回调（uncaught=进程崩）
+      if (this.leaderBootRetries < 1) {
+        this.leaderBootRetries++;
+        console.log(`[leader] 首建上岗超时（${bootWaitSec}s 无 init，疑 CLI 挂死/早退，弃 ${droppedMsgs} 条在途消息），已清除本次首建，自动重建（第 ${this.leaderBootRetries}/1 次）`);
+        try {
+          this.ensureLeader();
+        } catch (e) {
+          console.log(`[leader] 自动重建抛错（${e instanceof Error ? e.message : String(e)}），等下次 relay 启动重试`);
+        }
+      } else {
+        console.log(`[leader] 首建上岗超时（${bootWaitSec}s 无 init，弃 ${droppedMsgs} 条在途消息），已清除本次首建；本进程已重试 1 次不再自动重建，等下次 relay 启动`);
+      }
     }, resumeInitTimeoutMs());
     bootTimer.unref?.();
     return { ok: true, session_id: id, created: true, rebuilt: false };
@@ -2800,8 +2847,17 @@ export class SessionManager {
   // 正常重启路径：会话已由 adopt 从 events 收养（可能已被 applyPinned 标休眠）。
   // 只做常驻收口：补钉（unpin 过/文件条目被清过都复原——常驻语义）+ 题名 + leaderId。
   // 不 spawn、不改 status（agent 存活时更不动运行态）。
-  private adoptExistingLeader(s: ManagedSession, _anchor: ReturnType<typeof readOrgAnchor>): void {
+  private adoptExistingLeader(s: ManagedSession, anchor: ReturnType<typeof readOrgAnchor>): void {
     const id = s.state.session_id;
+    // #22 审查加固（双向锚同步）：onInit 的两行写（卡 relay_session_id / 锚
+    // leader_sdk_id）之间崩、或锚写盘失败窗，会留下「单侧有 sdk」的劈叉。不收敛
+    // 的话：锚空侧每次重启都重演劈叉；卡侧后来被事件压缩挤掉（>30 会话）后锚
+    // sdk 空串 → 清锚重首建，Leader 记忆静默丢失。两向就地补齐（幂等，补过即合流）
+    if (!s.state.relay_session_id && anchor?.leader_sdk_id) {
+      s.state.relay_session_id = anchor.leader_sdk_id; // 锚→卡：resume 句柄恢复（rebuildDormantLeader 同口径）
+    } else if (s.state.relay_session_id && anchor && !anchor.leader_sdk_id) {
+      writeOrgAnchor({ ...anchor, leader_sdk_id: s.state.relay_session_id, updated_at: Date.now() }); // 卡→锚：回写权威
+    }
     s.state.pinned = true;
     if (!s.agent) {
       s.state.saved = true;
