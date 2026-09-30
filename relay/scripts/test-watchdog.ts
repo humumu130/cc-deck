@@ -7,12 +7,14 @@
 // 到 10min/3min——心跳 5s 与慢窗口 5s 同频，不 hush 时心跳会抢先开窗（抖动源），
 // 手动 tick 前再 arm 回测试值，保证开窗者确定是本测试。
 import { randomUUID } from "node:crypto";
-import { readdirSync, rmSync } from "node:fs";
+import { mkdtempSync, readdirSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { EventBus } from "../src/event-bus.js";
 import { SessionManager } from "../src/session-manager.js";
 import { loadConfig } from "../src/config.js";
+import { readDispatchLog } from "../src/org.js";
 import type { Envelope, WatchdogPayload } from "../src/types.js";
 import type { AgentCallbacks, AgentLike } from "../src/agent-adapter.js";
 
@@ -34,8 +36,12 @@ const waitFor = async (fn: () => boolean, ms = 5000, every = 20): Promise<boolea
 };
 
 // 数据目录隔离 + 短看门狗参数（env 逐次求值，测试内动态可改）
+// org 台账沙盒（#25-P7）：recoverFromStall 自愈动作现在落 dispatch-log.ndjson——
+// 不钉 CCR_ORG_DIR 会直写用户真实 ~/.cc-deck/org（生产数据污染，test:ws 事故同类）
 const TDATA = fileURLToPath(new URL("../data/test-wd-datadir/", import.meta.url));
 process.env.CCR_DATA_DIR = TDATA;
+const TORG = mkdtempSync(join(tmpdir(), "ccr-wd-org-"));
+process.env.CCR_ORG_DIR = TORG;
 process.env.CCR_NO_TITLE_GEN = "1";
 process.env.CCR_WATCHDOG_STALL_MS = "5000";
 process.env.CCR_WATCHDOG_FAST_MS = "2000";
@@ -67,6 +73,8 @@ const wdCount = (action: WatchdogPayload["action"]) =>
   events.filter((e) => e.type === "WATCHDOG" && (e.payload as WatchdogPayload).action === action).length;
 const hasSysLog = (sid: string, kw: string) =>
   events.some((e) => e.type === "SESSION_LOG" && e.session_id === sid && String((e.payload as { text?: string }).text ?? "").includes(kw));
+// #25-P7 台账观察：看门狗自愈动作的 dispatch-log 行（tier="看门狗"）
+const wdLedger = (sid: string) => readDispatchLog().filter((e) => e.tier === "看门狗" && e.session_id === sid);
 
 // ---- 假 agent 工厂：20ms 后 onInit 就绪；保持 WORKING（不自动回合结束） ----
 interface Rec {
@@ -159,6 +167,8 @@ async function main(): Promise<void> {
   assert(recA2 !== recA1 && recA2.resume === sdkA, "A 重拉（resume 同 SDK 会话 id）");
   assert(recA2.prompt === "流断后发的消息", "A 未回显消息随 resume 重放");
   assert(hasSysLog(sidA, "看门狗接管"), "A 时间线留『看门狗接管』（用户可见）");
+  // #25-P7 台账行：自愈动作进回执流（tier=看门狗，done，跨重启可审计）
+  assert(wdLedger(sidA).some((e) => e.status === "done" && (e.receipt ?? "").startsWith("看门狗接管")), "A 台账留看门狗自愈行（done·看门狗接管）");
   assert(stateOf(sidA)?.status === "WORKING", "A 恢复后 WORKING");
   // 回显出队：新 agent 流回显 user_message → unacked 清空 → 再僵死时走 parked 恢复（不重放）。
   // 先等新 agent 的 onInit 落地（工厂 +20ms 延迟回报）——晚了会把 lastProgressKind 从
@@ -268,6 +278,8 @@ async function main(): Promise<void> {
   const stE = stateOf(sidE)!;
   assert((stE.action_summary ?? "").includes("上限"), "E 摘要说明已达上限");
   assert(hasSysLog(sidE, "已达上限"), "E 时间线留已达上限说明");
+  // #25-P7 台账行：放弃=停止干预的重要状态变化，failed 醒目留痕
+  assert(wdLedger(sidE).some((e) => e.status === "failed" && (e.receipt ?? "").includes("停止自动干预")), "E 台账留放弃行（failed·停止自动干预）");
   assert(
     (stE.todos ?? []).some((t) => t.content.includes("[待确认]") && t.content.includes("流中断")),
     "E 黄框通知（[待确认] 条目注入）",
@@ -391,6 +403,7 @@ async function main(): Promise<void> {
   mgr.setAgentFactory(null);
   mgr.setWatchdogProcs(null);
   rmSync(TDATA, { recursive: true, force: true });
+  rmSync(TORG, { recursive: true, force: true });
   console.log(
     `\nWATCHDOG TESTS PASSED（${events.length} events，起疑 ${wdCount("stall_detected")} / 自愈 ${wdCount("recover_ok")} / 放弃 ${wdCount("gave_up")}）`,
   );

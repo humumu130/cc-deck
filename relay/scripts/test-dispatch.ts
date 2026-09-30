@@ -989,6 +989,25 @@ async function main() {
       if (prevMax15 === undefined) delete process.env.CCR_ORG_MAX_GROUPS; else process.env.CCR_ORG_MAX_GROUPS = prevMax15;
     }
 
+    // ---------- D16 #25-P2 删卡清挂单：deleteSession 把在途 FIFO 残条写实收口 ----------
+    console.log("D16 删卡清挂单（#25-P2）:");
+    {
+      // 形态：多消息 FIFO 收口顺序错位 → 会话已 DONE 但队列仍挂着一条（此前进程内
+      // 常驻到重启）。删卡即收口（对齐退休/挂起联动口径）；evictOldSessions 驱逐
+      // 路径同款调用形状（需 50 卡触发，不单测——同一 closeOpenDispatches 行为）
+      const anchor16 = join(DATA, "proj-del16");
+      mkdirSync(anchor16, { recursive: true });
+      const d16 = mgr.orgAction("dispatch", { anchor: anchor16, prompt: "删卡清挂单基线单" }) as { ok: boolean; session_id?: string };
+      assert(d16.ok === true && !!d16.session_id, "基线单派发（前置）");
+      assert(await waitFor(() => mgr.snapshot().find((s) => s.session_id === d16.session_id && s.status === "DONE") !== undefined), "基线单先收口（前置）");
+      hack.openDispatches.set(d16.session_id!, [{ id: "dsp-del-16", tier: "随手办" }]);
+      assert(mgr.deleteSession(d16.session_id!) === true, "deleteSession 成功（worker 卡可删）");
+      assert(!hack.openDispatches.has(d16.session_id!), "FIFO 键随删卡消失（不再进程内常驻）");
+      const e16 = readDispatchLog().filter((e) => e.id === "dsp-del-16").at(-1);
+      assert(e16?.status === "failed" && e16?.receipt === "会话删除，回合中断", "台账残条写实收口（failed·会话删除，回合中断）");
+      assert(mgr.snapshot().find((s) => s.session_id === d16.session_id) === undefined, "卡已删（闭环）");
+    }
+
     // ---------- 收尾 ----------
     console.log(`\n${fail === 0 ? "PASS" : "FAIL"}: ${pass} passed, ${fail} failed`);
     process.exit(fail === 0 ? 0 : 1);

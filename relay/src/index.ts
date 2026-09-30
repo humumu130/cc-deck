@@ -11,7 +11,7 @@ import { detectLanIp } from "./lan-ip.js";
 import { EventBus } from "./event-bus.js";
 import { SessionManager } from "./session-manager.js";
 import { startServer, startAcceptanceCloudPoll } from "./ws-server.js";
-import { compactEvents, loadEvents, reduceHistory, rewriteFile } from "./history.js";
+import { compactEvents, compactEventsFile, loadEvents, reduceHistory, rewriteFile } from "./history.js";
 import { loadOrCreateIdentity } from "./cloud-identity.js";
 import { CloudClient } from "./cloud-client.js";
 import { createPairingCodes } from "./pairing.js";
@@ -257,6 +257,16 @@ setInterval(() => sweepTmpImages(tmpImageDir), 6 * 3600_000).unref?.();
 const prior = loadEvents(persistPath);
 const kept = compactEvents(prior);
 if (prior.length !== kept.length) rewriteFile(persistPath, kept); // 启动时压缩
+// #25-P1 events 运行期压缩：boot 压缩只此一次，长跑进程（7x24 不重启）纯追加
+// 月增 ~100MB（心跳+流式帧稳定供给）。每 6h 查大小，超阈值（CCR_EVENTS_COMPACT_MB
+// 缺省 64，下限 16 防误配 0）压一次——客户端重连走内存 replay 零感知，详见
+// history.ts compactEventsFile 注释
+const eventsCompactBytes = Math.max(16, Number(process.env.CCR_EVENTS_COMPACT_MB ?? "64") || 64) * 1024 * 1024;
+const compactEventsTick = (): void => {
+  const r = compactEventsFile(persistPath, eventsCompactBytes);
+  if (r) console.log(`[events] 运行期压缩：${(r.before / 1048576).toFixed(1)}MB → ${(r.after / 1048576).toFixed(1)}MB`);
+};
+setInterval(compactEventsTick, 6 * 3600_000).unref?.();
 const replayed = reduceHistory(kept);
 
 const bus = new EventBus({ preload: kept, persistPath });

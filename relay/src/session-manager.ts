@@ -1365,6 +1365,9 @@ export class SessionManager {
     const s = this.sessions.get(id);
     if (!s) return true;
     if (this.isLeaderSession(id)) return false;
+    // #25-P2 删卡清挂单：FIFO 残条此前进程内常驻（重启才清）。先收口再删（对齐
+    // 退休/挂起联动口径）；bootTimer 开火路径已先行收口，此处幂等 no-op 不双记
+    this.closeOpenDispatches(id, "failed", "会话删除，回合中断", true, false, undefined, "todo");
     this.sessions.delete(id);
     this.lastStoreTodos.delete(id);
     this.allowRules.dropSession(id); // #212 会话删除清 session 级记住规则
@@ -4038,6 +4041,15 @@ export class SessionManager {
         ? `看门狗接管：会话流已断开且 ${Math.round(stalled / 60000)} 分钟无进展（状态未收尾），正在自动恢复`
         : `看门狗接管：会话流已 ${Math.round(stalled / 60000)} 分钟无进展（进程树 CPU 空闲确认），正在自动恢复`,
     );
+    // #25-P7 看门狗动作落台账（设计稿 §2.5「告警进台账」）：WATCHDOG 瞬态帧三端
+    // 零消费，自愈动作此前用户完全不可见——一行 done 进回执流，跨重启可审计
+    appendDispatch({
+      ts: Date.now(), id: randomUUID(), tier: "看门狗", target: sid, status: "done",
+      receipt: truncate(lane === "ended"
+        ? `看门狗接管：流已断开 ${Math.round(stalled / 60000)} 分钟无进展，自动恢复`
+        : `看门狗接管：${Math.round(stalled / 60000)} 分钟无进展（CPU 空闲确认），杀树恢复`, 200),
+      session_id: sid,
+    });
     try {
       // #109 防风暴检查前置到杀树之前：放弃 = 承诺停止干预，而杀树恰是最重的干预
       // ——误判时（网络长等待 CPU 空闲被判僵死）先杀后弃把活会话弄死，WAITING 钉死
@@ -4058,6 +4070,12 @@ export class SessionManager {
           `流中断自动恢复已达上限（1 小时 ${s.wd.recoveries.length} 次），已停止自愈——请在电脑端检查 CLI，或手动发一条消息触发恢复；若会话仍在工作，显示会自动恢复`,
         );
         this.notifyConfirm(sid, `会话「${s.state.title || sid.slice(0, 8)}」流中断，自动恢复已达上限，请手动处理`);
+        // #25-P7 同款台账行：停止干预是重要状态变化，failed 醒目留痕
+        appendDispatch({
+          ts: Date.now(), id: randomUUID(), tier: "看门狗", target: sid, status: "failed",
+          receipt: truncate(`看门狗：1 小时内自愈 ${s.wd.recoveries.length} 次达上限，停止自动干预`, 200),
+          session_id: sid,
+        });
         this.emitUpdated(s, true);
         s.wd.phase = "idle";
         return;
@@ -4221,6 +4239,9 @@ export class SessionManager {
       .sort((a, b) => a.state.started_at - b.state.started_at);
     for (const s of finished) {
       if (this.sessions.size < MAX_SESSIONS) break;
+      // #25-P2 容量驱逐同款清挂单：驱逐对象是 DONE/ERROR 理论无在途回合，但多消息
+      // FIFO 边缘形态（收口顺序错位）兜底——残留 FIFO 键进程内常驻，重启才清
+      this.closeOpenDispatches(s.state.session_id, "failed", "容量驱逐，回合中断", true, false, undefined, "todo");
       void s.agent?.stop(); // 回收 parked 的 CLI 子进程（历史会话无 agent）
       this.sessions.delete(s.state.session_id);
       this.lastStoreTodos.delete(s.state.session_id);

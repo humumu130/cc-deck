@@ -1,7 +1,7 @@
 // #125/#137 验收单模块测试（纯单元，不起服务）：saveResult 落盘留痕 +
 // listAcceptances 待填态汇总（无 results=待填、部分已判=待填、全覆盖=done、
 // 排序新的在前、上限截断）。CCR_ACCEPTANCE_DIR 隔离测试目录。
-import { mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -54,6 +54,17 @@ assert(listAcceptances().find((x) => x.id === C)!.judged === 3, "null 行不计�
 
 // 上限截断：limit=2 只留最新两张
 assert(listAcceptances(2).map((x) => x.id).join(",") === [C, B].join(","), "limit 截断留最新");
+
+// #25-P4 本地 history 帽 50：单文件被反复改判/云回流签名对账时只增不减——
+// 封顶留最近 50 次（云端 KV 侧同款帽），长跑不再无界膨胀
+{
+  const D = "d".repeat(32);
+  mk(D, "单D帽测", 4000, 1);
+  for (let i = 0; i < 60; i++) saveResult(D, { rows: [{ i: 0, verdict: i % 2 ? "pass" : "fail", note: `第${i}次` }] }, "cap-ua");
+  const h = (JSON.parse(readFileSync(join(ROOT, `${D}.results.json`), "utf-8")) as { history: { rows: { note: string }[] }[] }).history;
+  assert(h.length === 50, "提交 60 次 history 恒 50（超帽裁最旧）");
+  assert(h[0].rows[0].note === "第10次" && h[49].rows[0].note === "第59次", "留最近 50 次（第10~59，最新在尾）");
+}
 
 // loadAcceptance 白名单：id 格式校验
 assert(loadAcceptance("nothex") === null, "非法 id 拒载");

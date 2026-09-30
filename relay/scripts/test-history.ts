@@ -1,11 +1,11 @@
 // 历史持久化测试：deriveTitle / compactEvents / reduceHistory / EventBus 持久化+预载 / adopt
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { EventBus } from "../src/event-bus.js";
 import { SessionManager } from "../src/session-manager.js";
 import { loadConfig } from "../src/config.js";
-import { compactEvents, deriveTitle, loadEvents, reduceHistory, rewriteFile } from "../src/history.js";
+import { compactEvents, compactEventsFile, deriveTitle, loadEvents, reduceHistory, rewriteFile } from "../src/history.js";
 import type { Envelope, SnapshotPayload } from "../src/types.js";
 
 let pass = 0;
@@ -100,6 +100,37 @@ const before = bus2.emit("a", "SESSION_LOG", { kind: "system", text: "y" });
 assert(before.seq === 4, "新事件 seq=4");
 assert(bus2.replayAfter(3).length === 1, "跨重启补发缺口");
 const snapshot = { sessions: null as unknown, logs: null as unknown } as SnapshotPayload;
+
+// ---------- #25-P1 compactEventsFile：运行期压缩（长跑治理） ----------
+console.log("compactEventsFile:");
+{
+  const cdir = mkdtempSync(join(tmpdir(), "ccr-hist-cmp-"));
+  const cpath = join(cdir, "events.ndjson");
+  const mkc = (seq: number, type: string, payload: unknown = {}): Envelope =>
+    ({ seq, session_id: "cx", ts: 1000 + seq, type: type as Envelope["type"], payload });
+  const evs: Envelope[] = [mkc(1, "SESSION_CREATED", { cwd: "/tmp", initial_prompt: "p", title: "t", model: "m" })];
+  for (let i = 0; i < 400; i++) evs.push(mkc(2 + i, "SESSION_LOG", { kind: "assistant_text", text: `l${i}` })); // 流式帧
+  evs.push(mkc(402, "SESSION_HEARTBEAT", { elapsed_ms: 1, action_summary: "h" })); // 心跳：压缩稳定来源
+  evs.push(mkc(403, "SESSION_DONE", { terminal_reason: "success", duration_ms: 5, stats: { files_changed: 0, lines_added: 0, lines_deleted: 0 } }));
+  rewriteFile(cpath, evs);
+  assert(compactEventsFile(cpath, evs.length * 999) === null, "低于阈值不动作（null）");
+  const r1 = compactEventsFile(cpath, 0);
+  assert(!!r1 && r1.after < r1.before, `超阈值压缩生效（${r1?.before}→${r1?.after} 字节）`);
+  const after = loadEvents(cpath);
+  assert(!after.some((e) => e.type === "SESSION_HEARTBEAT"), "压缩后心跳丢弃");
+  assert(after.filter((e) => e.type === "SESSION_LOG").length === 300, "日志留最后 300 条");
+  assert(after.some((e) => e.type === "SESSION_CREATED") && after.some((e) => e.type === "SESSION_DONE"), "CREATED/DONE 保留");
+  assert(after.every((e, i, a) => i === 0 || a[i - 1].seq <= e.seq), "压缩后 seq 有序");
+  assert(compactEventsFile(cpath, 0) === null, "已最简幂等（再压 null 不白写）");
+  // 压缩后继续追加：运行期压缩的真实时序（压缩→新事件照常落盘→重启 load 完整）
+  const cbus = new EventBus({ preload: after, persistPath: cpath });
+  cbus.emit("cx", "SESSION_LOG", { kind: "system", text: "post-compact" });
+  const reloaded = loadEvents(cpath);
+  assert((reloaded.at(-1)!.payload as { text?: string }).text === "post-compact", "压缩后新事件照常追加");
+  assert(new EventBus({ preload: reloaded, persistPath: cpath }).lastSeq() === cbus.lastSeq(), "压缩不破坏 seq 延续（重启视角）");
+  assert(!readdirSync(cdir).some((f) => f.includes(".tmp-")), "原子写无 .tmp 残件");
+  rmSync(cdir, { recursive: true, force: true });
+}
 
 // ---------- SessionManager.adopt ----------
 console.log("SessionManager.adopt:");

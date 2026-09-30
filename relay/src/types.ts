@@ -120,9 +120,10 @@ export interface SessionState {
   // 恢复成功即清除，失败保留（卡片标「恢复失败」，可重试）
   pinned?: boolean;
   saved?: boolean;
-  // #26 M2 项目组派单：worker 会话归属的项目组 id（dispatch spawn 时写入；客户端
-  // 列表按 project_gid 分组 = §2.5 单聊项目锚点分流的服务端形态）与承接档位
-  // （咨询 Leader 无此二字段）
+  // #26 M2 项目组派单：worker 会话归属的项目组 id（dispatch spawn 时写入）与承接
+  // 档位（咨询 Leader 无此二字段）。§2.5 单聊分流的落地面 = 列表卡按 project_gid
+  // 出组徽标 + 项目组详情回执流（消息级视觉分组/话题折叠为设计稿未落项——端上
+  // 实际分组键是数据源 src，非 project_gid，勿据此注释推断端上行为）
   project_gid?: string;
   dispatch_tier?: string;
   // 雇员会话（#17 独立家目录）：Leader/派单 worker/随手办 spawn 时置 true，

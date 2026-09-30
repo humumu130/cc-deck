@@ -190,7 +190,9 @@ export function clearOrgAnchor(dir?: string): void {
 
 // ---------- 派单台账（dispatch-log.ndjson） ----------
 
-export type DispatchTier = "咨询" | "随手办" | "轻立项" | "正经立项" | "暂缓";
+// "看门狗"（#25-P7）非派单档位：SDK 流中断看门狗的自愈动作记台账行专用——设计稿
+// §2.5「watchdog 告警进台账」，WATCHDOG 瞬态帧三端零消费，动作此前用户完全不可见
+export type DispatchTier = "咨询" | "随手办" | "轻立项" | "正经立项" | "暂缓" | "看门狗";
 export type DispatchStatus = "dispatched" | "running" | "done" | "failed";
 
 export interface DispatchEntry {

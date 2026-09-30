@@ -108,6 +108,9 @@ export function saveResult(id: string, payload: unknown, ua: string): string | n
     skip: clean.filter((r) => r.verdict === null).length,
   };
   history.push({ at: Date.now(), ua: ua.slice(0, 100), counts, rows: clean });
+  // #25-P4 本地 history 帽：云端 KV 侧同款 50 条帽，本地落盘此前无上限——单文件
+  // 被反复改判/云回流时只增不减；留最近 50 次提交足够回溯
+  if (history.length > 50) history = history.slice(history.length - 50);
   writeFileSync(file, JSON.stringify({ id, history }, null, 1));
   return null;
 }

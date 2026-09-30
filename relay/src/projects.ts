@@ -610,12 +610,16 @@ export function findStaleGroups(
   const cutoff = now - staleDays * 86_400_000;
   const DAY = 86_400_000;
   const out: StaleGroupInfo[] = [];
+  // #25-P3 出组循环：readDispatchLog 是全文件读+逐行 parse，此前在循环体内 = 每
+  // active 组读一遍（每小时 stale 扫描 N 次 O(全文件)）——台账只增不减，长跑越读
+  // 越贵。提到循环外读一次共用（行为不变：每组的判定字段只依赖台账内容与组锚点）
+  const dispatchLog = readDispatchLog(dir);
   for (const g of listGroups(dir)) {
     if (g.status !== "active") continue;
     const board = loadBoard(g.id, dir);
     let last = Math.max(g.updated_at, board.updated_at);
     const anchor = g.anchor_dir.replace(/\/+$/, "");
-    for (const e of readDispatchLog(dir)) {
+    for (const e of dispatchLog) {
       const a = e.project_anchor ?? "";
       if (a && a.replace(/\/+$/, "") === anchor && e.ts > last) last = e.ts;
     }
