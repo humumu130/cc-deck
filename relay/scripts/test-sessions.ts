@@ -192,6 +192,7 @@ assert(subagentEventSeen.has(ackC.session_id!), "C emitted SESSION_UPDATED with 
   const tsEmp = readTaskStoreTodos("cli-emp-1", empHome);
   assert(tsEmp !== null && tsEmp.length === 1 && tsEmp[0].content === "雇员任务", "任务清单按独立家读取");
   assert(readTaskStoreTodos("cli-emp-1") === null, "默认家读不到该会话任务（双家隔离成立）");
+  rmSync(empHome, { recursive: true, force: true }); // #20 备案收尾：独立家沙盒成功路径此前残留
 }
 
 // gitDiff 统计：形状若不匹配会是 0，只告警不判失败（待真机数据核对）

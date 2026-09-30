@@ -107,6 +107,7 @@ console.log("SessionManager.adopt:");
 // env 优先级整包劫持——2026-09-28 事故实证，详见 test-ws.ts 头部）
 // CCR_CLOUD_URL：统一防线口径（in-process 不消费，钉死防未来演进踩真桥）
 process.env.CCR_DATA_DIR = mkdtempSync(join(tmpdir(), "ccr-hist-cfg-"));
+const cfgDataDir = process.env.CCR_DATA_DIR;
 delete process.env.CC_DECK_PLUGIN;
 delete process.env.CCR_EMPLOYEE_CONFIG_DIR;
 process.env.CCR_CLOUD_URL = "";
@@ -146,6 +147,7 @@ assert(Object.keys(mgr.snapshotLogs()).length === 1, "快照含时间线");
 }
 
 rmSync(dir, { recursive: true, force: true });
+rmSync(cfgDataDir, { recursive: true, force: true }); // #20 备案收尾：cfg 沙盒目录成功路径此前残留
 void snapshot;
 
 console.log(`\n${fail === 0 ? "HISTORY TESTS PASSED" : "HISTORY TESTS FAILED"} (${pass} pass / ${fail} fail)`);
