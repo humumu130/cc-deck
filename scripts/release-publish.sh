@@ -4,6 +4,7 @@
 # 动作：① 从 GitHub Release 下载产物 ② 推 ECS /opt/cc-apk/（APK+exe+双清单）
 #       ③ relay /api/notify 广播发版通知给在线客户端 ④ 输出核对清单
 set -euo pipefail
+cd "$(dirname "$0")/.."  # #29：SSH 用相对路径 known_hosts（仓内固化指纹），锚定仓库根
 VER="${1:?用法: release-publish.sh <版本号> <说明>}"
 NOTES="${2:-新版本已发布}"
 REPO="humumu130/cc-deck"
@@ -12,8 +13,8 @@ ECS_DIR="/opt/cc-apk"
 KEY="$HOME/.ssh/id_ed25519"
 RELAY_TOKEN="${RELAY_TOKEN:-$(grep -oE '"token":"[a-f0-9]+"' "$HOME/.cc-deck/data/bridge.json" | grep -oE '[a-f0-9]+' | head -1)}"
 TMP="$(mktemp -d)"
-SSH="ssh -i $KEY -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null"
-SCP="scp -i $KEY -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null"
+SSH="ssh -i $KEY -o StrictHostKeyChecking=yes -o UserKnownHostsFile=scripts/known_hosts.ecs"
+SCP="scp -i $KEY -o StrictHostKeyChecking=yes -o UserKnownHostsFile=scripts/known_hosts.ecs"
 
 echo "⓪ 版本一致性闸门（VERSION 单一事实源）…"
 node scripts/version.mjs --check

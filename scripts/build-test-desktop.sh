@@ -33,8 +33,8 @@ else
   echo "    代理 $PROXY_CAND 不通，gh 回落直连"
 fi
 KEY="$HOME/.ssh/id_ed25519"
-SSH="ssh -i $KEY -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null"
-SCP="scp -i $KEY -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null"
+SSH="ssh -i $KEY -o StrictHostKeyChecking=yes -o UserKnownHostsFile=scripts/known_hosts.ecs"
+SCP="scp -i $KEY -o StrictHostKeyChecking=yes -o UserKnownHostsFile=scripts/known_hosts.ecs"
 TMP="$(mktemp -d /tmp/cc-deck-desktop-test.XXXXXX)"
 trap 'rm -rf "$TMP"' EXIT
 

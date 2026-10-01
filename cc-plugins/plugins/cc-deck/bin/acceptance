@@ -97,6 +97,9 @@ KVPUT = "/Users/xdd/dev/cc-deck-m1/scripts/kv-put-verified.sh"
 try:
     with open(key_path, "w", encoding="utf-8") as f:
         f.write(skey)
+    # #29（D-P2）：per-sheet 密钥是 32 位提交通行证——落 /tmp 期间最小权限（默认
+    # 644 同机其他账户可读），且无论上传成败用完即删（finally 兜异常路径）
+    os.chmod(key_path, 0o600)
     kv_key = subprocess.run([KVPUT, key_path, f"acceptance-{aid}.key"],
                             capture_output=True, text=True, errors="replace")
     if kv_key.returncode != 0:
@@ -121,3 +124,10 @@ try:
             print(f"   ⚠️ 云端上传失败（家庭网链接仍可用）：{(kv.stdout + kv.stderr).strip()[:200]}")
 except Exception as e:
     print(f"   ⚠️ 云端发布跳过（家庭网链接仍可用）：{e}")
+finally:
+    # #29（D-P2）：临时件清理（密钥必删；html 无敏感性一并收走，链接已打进输出）
+    for p in (key_path, html_path):
+        try:
+            os.remove(p)
+        except OSError:
+            pass

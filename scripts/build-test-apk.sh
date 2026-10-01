@@ -31,8 +31,8 @@ BASE=$(tr -d '[:space:]' < VERSION)
 ECS_HOST="root@8.133.211.170"
 ECS_DIR="/opt/cc-apk"
 KEY="$HOME/.ssh/id_ed25519"
-SSH="ssh -i $KEY -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null"
-SCP="scp -i $KEY -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null"
+SSH="ssh -i $KEY -o StrictHostKeyChecking=yes -o UserKnownHostsFile=scripts/known_hosts.ecs"
+SCP="scp -i $KEY -o StrictHostKeyChecking=yes -o UserKnownHostsFile=scripts/known_hosts.ecs"
 
 # 基线守卫（2026-09-19，0.5.2-test.17 事故防再犯）：latest.json（发版流程写入）是
 # "已发正式版"的权威事实源；base 不严格大于它即拒绝出包——正式版已发布的版本号不再
