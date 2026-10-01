@@ -363,14 +363,17 @@ function TaskRefText({ text, style, numberOfLines, suffix, suffixStyle, onTaskRe
 
 // 内容长按菜单（#249/#260）：复制全文 / 系统分享，仅挂 detail/diff 摘要行——
 // 正文（用户/assistant/思考）长按即原生选择手柄可拖选片段，不走此菜单
-function ContentMenu({ text, onClose }: { text: string; onClose: () => void }) {
+// #216 同构修：受控 visible 常驻渲染（text 空态=关，见 PermPanel 头注释，勿改回条件挂卸）
+function ContentMenu({ text, onClose }: { text: string | null; onClose: () => void }) {
   const { c } = useTheme();
   const d = useThemeStyles(makeStyles);
   const [copied, setCopied] = useState(false);
   const copiedTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   useEffect(() => () => { if (copiedTimer.current) clearTimeout(copiedTimer.current); }, []);
+  const open = !!text;
   return (
-    <Modal visible transparent animationType="fade" onRequestClose={onClose}>
+    <Modal visible={open} transparent animationType="fade" onRequestClose={open ? onClose : undefined}>
+      {open ? (
       <Pressable style={d.menuScrim} onPress={onClose}>
         <Pressable style={d.menuCard} onPress={() => undefined}>
           <View style={d.menuBtns}>
@@ -400,6 +403,7 @@ function ContentMenu({ text, onClose }: { text: string; onClose: () => void }) {
           </View>
         </Pressable>
       </Pressable>
+      ) : null}
     </Modal>
   );
 }
@@ -581,7 +585,8 @@ async function shareArtView(v: ArtViewData): Promise<void> {
 // #79 输出物预览全屏层：图片/HTML/文本内嵌，复杂格式自动呼系统应用（头部按钮可重开）。
 // 晨间反馈补齐：头部「分享」= 文件本体进系统分享面板（存云盘/发微信/存本地一板全收，
 // 就是「下载到本地随用户处理」的系统出口）；HTML 另给「浏览器」按钮交系统浏览器渲染
-function ArtView({ v, onClose }: { v: ArtViewData; onClose: () => void }) {
+// #216 同构修：受控 visible 常驻渲染（v 空态=关，见 PermPanel 头注释，勿改回条件挂卸）
+function ArtView({ v, onClose }: { v: ArtViewData | null; onClose: () => void }) {
   const { c } = useTheme();
   const d = useThemeStyles(makeStyles);
   const [openErr, setOpenErr] = useState<string | null>(null);
@@ -589,10 +594,11 @@ function ArtView({ v, onClose }: { v: ArtViewData; onClose: () => void }) {
   useEffect(() => {
     setOpenErr(null);
     setActErr(null);
-    if (v.kind === "sys") void openArtExternally(v.uri, v.mime).then(setOpenErr);
+    if (v?.kind === "sys") void openArtExternally(v.uri, v.mime).then(setOpenErr);
   }, [v]);
   // 分享文件本体（逻辑在模块级 shareArtView，与 ArtSheet 共用）
   const shareFile = async () => {
+    if (!v) return;
     try {
       await shareArtView(v);
       setActErr(null);
@@ -602,15 +608,17 @@ function ArtView({ v, onClose }: { v: ArtViewData; onClose: () => void }) {
   };
   // HTML 交系统浏览器（App 内 WebView 渲不了的场景兜底，如外链资源/打印）
   const openInBrowser = async () => {
-    if (v.kind !== "html") return;
+    if (!v || v.kind !== "html") return;
     try {
       setActErr(await openArtExternally(await saveArtText(v.name, v.text), "text/html"));
     } catch (e) {
       setActErr(e instanceof Error ? e.message : String(e));
     }
   };
+  const open = !!v;
   return (
-    <Modal visible animationType="fade" onRequestClose={onClose}>
+    <Modal visible={open} animationType="fade" onRequestClose={open ? onClose : undefined}>
+      {open && v ? (
       <SafeAreaView style={{ flex: 1, backgroundColor: c.bg }}>
         <View style={d.avHead}>
           <Text style={d.avName} numberOfLines={1}>{v.name}</Text>
@@ -669,6 +677,7 @@ function ArtView({ v, onClose }: { v: ArtViewData; onClose: () => void }) {
           </View>
         )}
       </SafeAreaView>
+      ) : null}
     </Modal>
   );
 }
@@ -676,7 +685,8 @@ function ArtView({ v, onClose }: { v: ArtViewData; onClose: () => void }) {
 // #35 输出物详情 sheet（#79 起支持实时拉取；#83 重设计）：身份→动作→参考三段式
 // ——标题行（类型 chip + 文件名 14px）→ CTA + caption → 路径盒 + 次级按钮；元信息
 // 收编标题下中性一行（原徽章行 + 5 行键值表合并）。面板形态复用 #36 permSheet
-function ArtSheet({ art, rel, sid, onClose }: { art: ArtifactItem; rel: string; sid: string; onClose: () => void }) {
+// #216 同构修：受控 visible 常驻渲染（art 空态=关，见 PermPanel 头注释，勿改回条件挂卸）
+function ArtSheet({ art, rel, sid, onClose }: { art: ArtifactItem | null; rel: string; sid: string; onClose: () => void }) {
   const { c } = useTheme();
   const d = useThemeStyles(makeStyles);
   const insets = useSafeAreaInsets();
@@ -686,20 +696,24 @@ function ArtSheet({ art, rel, sid, onClose }: { art: ArtifactItem; rel: string; 
   const [busy, setBusy] = useState(false);
   const [ferr, setFerr] = useState<string | null>(null);
   const [view, setView] = useState<ArtViewData | null>(null);
-  const name = (rel || art.path).split(/[\\/]/).pop() || art.path;
-  const dead = art.exists === false;
-  const outside = art.origin === "outside" || (!rel && art.origin !== "cwd");
+  const open = !!art;
+  // 常驻后关闭时复位内嵌预览/错误/忙碌态（防下次打开残留）
+  useEffect(() => { if (!open) { setView(null); setFerr(null); setBusy(false); } }, [open]);
+  const name = (rel || art?.path || "").split(/[\\/]/).pop() || art?.path || "";
+  const dead = art?.exists === false;
+  const outside = art?.origin === "outside" || (!!art && !rel && art.origin !== "cwd");
   const kind = artKindOf(name);
   const KC: Record<ArtKind, string> = { code: c.brandA, doc: c.done, data: c.working, img: c.waiting, zip: c.dim, gen: c.faint };
   // #79 拉取 + 分级路由：图片/HTML/文本直接内嵌预览，复杂格式落缓存后交系统应用。
   // 缓存命中（path+last_at 未变）秒开不重拉——文件在电脑上更新则键失效自动拉最新
-  const cacheKey = `${sid}|${art.path}|${art.last_at ?? art.first_at ?? 0}`;
+  const cacheKey = art ? `${sid}|${art.path}|${art.last_at ?? art.first_at ?? 0}` : "";
   // 已缓存时主按钮变「查看」——用户不再疑惑"为什么又要拉取"（has 无 LRU 副作用；
   // 磁盘层同判：重启后盘缓存仍在，按钮照常显示已缓存）
-  const cached = !dead && (artCache.has(cacheKey) || artDisk.has(cacheKey));
+  const cached = !!art && !dead && (artCache.has(cacheKey) || artDisk.has(cacheKey));
   // 拉取构建（查看与分享共用）：E2E 分块拉取 → 全量落盘（持久缓存，前缀名）→
   // mime 分级 → 入缓存。文本类盘文件=正文 utf8 bytes（读回按 UTF8 解码一致）
   const fetchArtView = async (): Promise<ArtViewData> => {
+    if (!art) throw new Error("artifact unavailable");
     const r = await store.fetchArtifact(sid, art.path);
     const chunks = r.b64s.map(fromB64);
     let n = 0;
@@ -726,7 +740,7 @@ function ArtSheet({ art, rel, sid, onClose }: { art: ArtifactItem; rel: string; 
     return data;
   };
   const doFetch = async () => {
-    if (busy || dead) return;
+    if (busy || dead || !art) return;
     setBusy(true);
     setFerr(null);
     try {
@@ -742,7 +756,7 @@ function ArtSheet({ art, rel, sid, onClose }: { art: ArtifactItem; rel: string; 
   // 晨间反馈二轮：分享=文件本体（原「分享路径」是理解偏了）——未拉取先走同一
   // 拉取链（缓存命中秒出、顺带点亮主按钮「已缓存」），落盘后进系统分享面板
   const doShare = async () => {
-    if (busy || dead) return;
+    if (busy || dead || !art) return;
     setBusy(true);
     setFerr(null);
     try {
@@ -754,8 +768,9 @@ function ArtSheet({ art, rel, sid, onClose }: { art: ArtifactItem; rel: string; 
     }
   };
   return (
-    <Modal visible transparent animationType="slide" onRequestClose={onClose}>
-      {view ? <ArtView v={view} onClose={() => setView(null)} /> : null}
+    <Modal visible={open} transparent animationType="slide" onRequestClose={open ? onClose : undefined}>
+      <ArtView v={view} onClose={() => setView(null)} />
+      {art ? (
       <Pressable style={d.permScrim} onPress={onClose}>
         {/* #83：底部让位手势条（原 paddingBottom 14 在手势导航机型上贴边） */}
         <Pressable style={[d.permSheet, { paddingBottom: 14 + insets.bottom }]} onPress={() => undefined}>
@@ -824,6 +839,7 @@ function ArtSheet({ art, rel, sid, onClose }: { art: ArtifactItem; rel: string; 
           </View>
         </Pressable>
       </Pressable>
+      ) : null}
     </Modal>
   );
 }
@@ -2816,8 +2832,9 @@ export default function DetailScreen({ sid, onBack, initialView, ref }: { sid: s
         onClose={() => setPermPanel(false)}
       />
 
-      {menuText ? <ContentMenu text={menuText} onClose={() => setMenuText(null)} /> : null}
-      {artPop ? <ArtSheet art={artPop} rel={artRelOf(s, artPop)} sid={sid} onClose={() => setArtPop(null)} /> : null}
+      {/* #216 同构修：弹层改常驻受控（勿改回条件挂卸，见各组件头注释） */}
+      <ContentMenu text={menuText} onClose={() => setMenuText(null)} />
+      <ArtSheet art={artPop} rel={artPop ? artRelOf(s, artPop) : ""} sid={sid} onClose={() => setArtPop(null)} />
       {taskPop != null ? (
         <TaskPop
           n={taskPop}
