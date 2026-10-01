@@ -39,6 +39,14 @@ events.push(mk(++seq, sid, "SESSION_CREATED", { cwd: "/tmp", initial_prompt: "�
   // 第二批：创建时落定的家随首帧回放——开关翻转后存量会话按记录走（无损）
   const homeEv = [mk(++seq, "emp-2", "SESSION_CREATED", { cwd: "/tmp", initial_prompt: "e2", model: "m", employee: true, employee_home: "/tmp/emp-home-rec" })];
   assert(reduceHistory(homeEv).get("emp-2")?.state.employee_home === "/tmp/emp-home-rec", "回放重建创建时的家（employee_home）");
+  // #27 引擎标记随首帧回放：codex 卡重启后被当 claude 收养 → resume 走错工厂静默
+  // 换引擎（P1-2）。同款口径：载荷带 key 才落，不带（claude 会话）不带键
+  {
+    const codexEv = [mk(++seq, "eng-1", "SESSION_CREATED", { cwd: "/tmp", initial_prompt: "c", model: "m", engine: "codex" })];
+    assert(reduceHistory(codexEv).get("eng-1")?.state.engine === "codex", "回放重建引擎标记（codex 重启不换引擎）");
+    const claudeEv = [mk(++seq, "eng-2", "SESSION_CREATED", { cwd: "/tmp", initial_prompt: "k", model: "m" })];
+    assert(!("engine" in (reduceHistory(claudeEv).get("eng-2")?.state ?? {})), "无引擎载荷不带键（claude 缺省语义不变）");
+  }
 }
 for (let i = 0; i < 350; i++) events.push(mk(++seq, sid, "SESSION_LOG", { kind: "assistant_text", text: `log${i}` }));
 for (let i = 0; i < 80; i++) events.push(mk(++seq, sid, "SESSION_UPDATED", { status: "WORKING", action_summary: `u${i}`, stats: null }));
