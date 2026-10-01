@@ -6,6 +6,13 @@
 # （去 "- " 列表符）；表格行 "| 任务号 | 验收项 | 通过标准 | … |" 取前三列（通过
 # 与否/问题两列是留给用户填的，忽略），表头与 --- 分隔行自动跳过；表格后的非空行
 # =备注。同 md 重复出单=新 id 新单（旧单历史留痕不清理；改了 md 就重新出一张）。
+#
+# #28 云通道密钥（2026-10-01）：出单时另生成 per-sheet 密钥上传 KV
+#（acceptance-<id>.key，仅 Worker 对照用、HTTP 白名单永不可读），云链接以
+# fragment（#<key>）携带——fragment 不进服务器日志/Referer/缓存键，页面提交时
+# 带回 Worker 验证。目的：id（页面链接）泄露 ≠ 可伪造提交（此前拿到 id 即可
+# 伪造全 ✓ → relay 拉回假关单）。key 上传失败则不吐云链接（LAN 不受影响）——
+# 防止「页面在云上但谁也提交不了」的半残单。
 import json, os, re, secrets, subprocess, sys, time
 
 md = sys.argv[1] if len(sys.argv) > 1 else ""
@@ -45,10 +52,14 @@ acc_dir = os.environ.get("CCR_ACCEPTANCE_DIR") or os.path.join(
     os.path.expanduser("~"), ".cc-deck", "data", "acceptances")
 os.makedirs(acc_dir, exist_ok=True)
 aid = secrets.token_hex(16)
+# #28 per-sheet 密钥：与 KV 上 acceptance-<id>.key 同值落本地 json（sheet_key）——
+# relay 随 SNAPSHOT 汇总下发已配对端（expo 云卡拼 #key）；表单页 DATA 不嵌（公开读面）
+skey = secrets.token_hex(16)
 doc = {"id": aid, "title": title, "created_at": int(time.time()),
        # cwd=出单会话归因键（#138）：用户提交后 relay 按它把「3✓ 1✗ 2未测」摘要
        # 回流成该会话的 system 行；旧单没这字段=回流静默跳过
        "cwd": os.getcwd(),
+       "sheet_key": skey,
        "rows": rows, **({"preface": preface} if preface else {}),
        **({"notes": notes} if notes else {})}
 path = os.path.join(acc_dir, f"{aid}.json")
@@ -72,4 +83,41 @@ for iface in ("en0", "en1"):
         pass
 
 print(f"✅ 已登记 {len(rows)} 行：{path}")
-print(f"   填写链接: http://{ip}:{port}/acceptance/{aid}")
+print(f"   填写链接(家庭网): http://{ip}:{port}/acceptance/{aid}")
+
+# #175 云通道：从本地 relay 拉云版表单页（提交端点烙成 CF /view/acceptance-<id>.results.json）
+# 上传 KV——公司网浏览器经 https://cc.humumu.online/view/acceptance-<id>.html#<key> 打开提交，
+# 家庭 relay 每 60s 拉回结果。上传失败不阻塞出单（LAN 链接仍可用）。
+# #28 顺序：密钥先传成功才传页面/吐云链接（key 缺失的云页面=部署后谁都提交不了）。
+html_path = f"/tmp/acceptance-{aid}.html"
+key_path = f"/tmp/acceptance-{aid}.key"
+# 上传脚本用 m1 worktree 副本（#28：回读校验改 CF API 直读，不再依赖公网 /dl/——
+# /dl/ 已拒 .key 键；旧 checkout 副本无此改造且该目录属 peer 地盘不动）
+KVPUT = "/Users/xdd/dev/cc-deck-m1/scripts/kv-put-verified.sh"
+try:
+    with open(key_path, "w", encoding="utf-8") as f:
+        f.write(skey)
+    kv_key = subprocess.run([KVPUT, key_path, f"acceptance-{aid}.key"],
+                            capture_output=True, text=True, errors="replace")
+    if kv_key.returncode != 0:
+        print(f"   ⚠️ 密钥上传失败，云通道未发布（家庭网链接仍可用）：{(kv_key.stdout + kv_key.stderr).strip()[:200]}")
+    else:
+        subprocess.run(["curl", "-sS", "--max-time", "10", "-o", html_path,
+                        f"http://127.0.0.1:{port}/acceptance-cloud/{aid}"], check=True)
+        # errors="replace"：脚本输出偶带非 UTF-8 字节（代理报错混入），text=True 严格解码
+        # 会把真实失败原因吞成 UnicodeDecodeError；上传本身走抖动链路，失败隔 30s 重试一次
+        kv = None
+        for attempt in (1, 2):
+            kv = subprocess.run([KVPUT, html_path, f"acceptance-{aid}.html"],
+                                capture_output=True, text=True, errors="replace")
+            if kv.returncode == 0:
+                break
+            if attempt == 1:
+                print("    云端上传失败（网络抖动），30s 后重试一次…")
+                time.sleep(30)
+        if kv.returncode == 0:
+            print(f"   填写链接(公司网): https://cc.humumu.online/view/acceptance-{aid}.html#{skey}")
+        else:
+            print(f"   ⚠️ 云端上传失败（家庭网链接仍可用）：{(kv.stdout + kv.stderr).strip()[:200]}")
+except Exception as e:
+    print(f"   ⚠️ 云端发布跳过（家庭网链接仍可用）：{e}")

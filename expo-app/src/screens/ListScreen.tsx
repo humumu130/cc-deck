@@ -992,10 +992,12 @@ export default function ListScreen({ sessions, connected, connText, onOpen, onNe
   };
   const openAcc = (item: { src: SourceStatus; a: AcceptanceSummary }) => {
     // 链接按源当前通道择路（同出单工具双发口径）：LAN 通道 = 同网直连表单页；
-    // 云通道/未知 = CF Worker /view KV 页面（无 token，32hex id 即鉴权）
+    // 云通道/未知 = CF Worker /view KV 页面。#28 起云链接需带 per-sheet 密钥
+    // fragment（…html#<key>，SNAPSHOT key 字段；新 Worker 缺 key 提交 403）——
+    // 旧 relay 无 key 字段（undefined）退回无后缀链接（旧 Worker 本就不验）
     const url = item.src.channel === "lan" && item.src.lanHint
       ? `http://${item.src.lanHint}/acceptance/${item.a.id}`
-      : `https://cc.humumu.online/view/acceptance-${item.a.id}.html`;
+      : `https://cc.humumu.online/view/acceptance-${item.a.id}.html${item.a.key ? `#${item.a.key}` : ""}`;
     void Linking.openURL(url).catch(() => undefined);
     seenAcc(item.a.id);
   };
