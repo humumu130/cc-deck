@@ -273,6 +273,15 @@ export class AgentSession {
         // PATH 补全：见 childEnv()（M0）
         env: childEnv(),
         permissionMode: opts?.permissionMode ?? "default",
+        // #217 无条件带授权标志（CLI 子代理 spawn 同款语义：mode 任意 + allowBypass
+        // 独立正交）：SDK 的 permissionMode 只是 --permission-mode 参数，不构成「以跳过
+        // 权限启动」的授权——CLI 只认 --allow-dangerously-skip-permissions。缺失时
+        // resume 恢复 bypass 档被 Refusing restored mode 静默回落 default（relay 重启
+        // 后 bypass 会话被降级、且运行中 setPermissionMode 切跳过必被拒的根源），
+        // 已被降级的存量会话也永远回不去。带标志不改变初始档（初始档仍由
+        // permissionMode 决定），只打开运行中切跳过档的门——面板跳过行本就有
+        // 「危险」badge + 二次武装，用户点击即明确授权
+        allowDangerouslySkipPermissions: true,
         ...(opts?.resume ? { resume: opts.resume } : {}),
         // #7 看门狗：包一层默认 spawn 记 pid（SDK 默认行为 = spawn(cmd, args,
         // {stdio 三 pipe, cwd, env, signal})，这里逐项镜像）。杀树/CPU 采样都要 pid

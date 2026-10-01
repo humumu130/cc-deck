@@ -1438,7 +1438,13 @@ export class SessionManager {
               this.emitUpdated(live, true);
             })
             .catch((e) => {
-              this.pushExternalLog(live.state.session_id, "system", `权限模式切换失败: ${e instanceof Error ? e.message : String(e)}`);
+              // #217 SDK 硬约束的英文报错翻译成人话（切跳过被拒的真实原因），
+              // 其余错误原文透传
+              const raw = e instanceof Error ? e.message : String(e);
+              const friendly = /not launched with --dangerously-skip-permissions/.test(raw)
+                ? "跳过档不可用：该会话不是以跳过权限创建的（跳过档只能在创建会话时开启）"
+                : raw;
+              this.pushExternalLog(live.state.session_id, "system", `权限模式切换失败: ${friendly}`);
             });
           return { command_id: cmd.command_id, ok: true };
         }
