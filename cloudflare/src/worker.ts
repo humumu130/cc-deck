@@ -31,9 +31,37 @@ function rlDevOfRk(rk: string): string | null {
   return "rl-" + hex;
 }
 
+// #29 残留备案转正（托管版零安全头，2026-10-01）：Worker 出口统一补安全响应头，
+// 覆盖 assets 转发页（run_worker_first 含 /——_headers 文件在 binding 转发下语义
+// 不可靠，出口处补是唯一全覆盖点）与 KV 直出的 /view/ 页。四头皆不破坏自家页面
+//（预览 iframe 均为 blob: 同源）；严格 CSP 故意不上——托管静态页=web-console 本体，
+// 单文件应用带内联脚本，没有 Tauri set_csp 那样的自动哈希注入，script-src 'self'
+// 会当场砸掉云版控制台。HSTS 不带 includeSubDomains：cc-*.humumu.online 的姊妹
+// 子域不归本 Worker 管辖，不替它们做承诺
+const SEC_HEADERS: Record<string, string> = {
+  "x-content-type-options": "nosniff",
+  "referrer-policy": "no-referrer",
+  "x-frame-options": "SAMEORIGIN",
+  "permissions-policy": "camera=(), microphone=(), geolocation=()",
+  "strict-transport-security": "max-age=31536000",
+};
+function withSecHeaders(res: Response): Response {
+  // WS upgrade（101/webSocket）原样放行：Response 构造器拒 101，且安全头对已建立
+  // 的双向通道无意义；上游已带同名的响应不覆盖
+  if (res.webSocket || res.status === 101) return res;
+  const headers = new Headers(res.headers);
+  for (const [k, v] of Object.entries(SEC_HEADERS)) if (!headers.has(k)) headers.set(k, v);
+  return new Response(res.body, { status: res.status, statusText: res.statusText, headers });
+}
+
 export default {
   async fetch(req: Request, env: Env): Promise<Response> {
-    const url = new URL(req.url);
+    return withSecHeaders(await routeFetch(req, env));
+  },
+};
+
+async function routeFetch(req: Request, env: Env): Promise<Response> {
+  const url = new URL(req.url);
     // #24 域名分层：cc-deck.humumu.online = 新主域（/=项目主页、/app=网页控制台、/dl=下载）；
     // cc.humumu.online = 旧域（文档路径 301 平移；/cloud /cloud-poll /wan /health 的 ws/API 通道双域常驻，
     // ws upgrade 不跟随 301——relay 与手机正在用的桥连接绝不能断，烘焙地址收口留给后续版本）
@@ -291,8 +319,7 @@ export default {
     // 必须转发原始 Request——用 req.url 字符串会丢 Upgrade 头，握手即 500
     const stub = env.ROUTER.get(env.ROUTER.idFromName("main"));
     return stub.fetch(req);
-  },
-};
+}
 
 export class RouterDO extends DurableObject {
   // 公共桥防滥用限流（家用规模远够不着阈值，只有真滥用才触发）：

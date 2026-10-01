@@ -8,6 +8,17 @@ import { CloudRouter } from "./router.js";
 // 网页端静态文件目录（仓库 web-console/，部署布局 /opt/cc-cloud-bridge/web-console/）
 const webDir = (name: string) => fileURLToPath(new URL(`../web-console/${name}`, import.meta.url));
 
+// #29 残留备案转正（托管页零安全头，与 CF 形态 withSecHeaders 同刀）：公司网托管
+// 页补四个不破坏自家页面的安全头。HSTS 故意除外——本形态裸 HTTP 无 TLS，浏览器
+// 对 http 响应忽略 HSTS，不装样子；严格 CSP 同 CF 形态不上（web-console 单文件
+// 应用带内联脚本，'self' 会当场砸掉页面）
+const SEC_HEADERS = {
+  "x-content-type-options": "nosniff",
+  "referrer-policy": "no-referrer",
+  "x-frame-options": "SAMEORIGIN",
+  "permissions-policy": "camera=(), microphone=(), geolocation=()",
+} as const;
+
 // #29（B-P0-1 根治）：rl- dev 必须持对应公钥——devId 口径 = 公钥原始字节前 8 字节
 // hex（与 relay/src/e2e.ts devId 一致）。桥侧 rl- 注册此前无鉴权：持 token 者可冒
 // 真实 relay 的 dev 注册 + 上报假 rk，发现帧把「真 dev + 假公钥」喂给浏览器/expo
@@ -75,7 +86,7 @@ export function startCloudServer(port: number, token: string, extraPorts: number
     if (req.method === "GET" && url.pathname === "/health") {
       // #29（B-P3）：只回计数不回 dev 列表（与 CF 形态 RouterDO /health 对齐）——
       // 在线设备 id 名单对任意访客无暴露必要，防踩点
-      res.writeHead(200, { "content-type": "application/json" }).end(
+      res.writeHead(200, { "content-type": "application/json", ...SEC_HEADERS }).end(
         JSON.stringify({ ok: true, devices: router.devs().length }),
       );
       return;
@@ -88,7 +99,7 @@ export function startCloudServer(port: number, token: string, extraPorts: number
         res.writeHead(503).end("web-console/index.html 不存在");
         return;
       }
-      res.writeHead(200, { "content-type": "text/html; charset=utf-8" }).end(readFileSync(file));
+      res.writeHead(200, { "content-type": "text/html; charset=utf-8", ...SEC_HEADERS }).end(readFileSync(file));
       return;
     }
     if (req.method === "GET" && url.pathname === "/nacl.js") {
@@ -97,7 +108,7 @@ export function startCloudServer(port: number, token: string, extraPorts: number
         res.writeHead(503).end("web-console/nacl.js 不存在");
         return;
       }
-      res.writeHead(200, { "content-type": "text/javascript; charset=utf-8" }).end(readFileSync(file));
+      res.writeHead(200, { "content-type": "text/javascript; charset=utf-8", ...SEC_HEADERS }).end(readFileSync(file));
       return;
     }
     res.writeHead(404).end("not found");

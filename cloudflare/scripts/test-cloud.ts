@@ -95,6 +95,15 @@ process.on("exit", () => void killTree());
 
 try {
   assert(await waitHealthy(), "wrangler dev 就绪");
+  // #29 残留备案转正：Worker 出口统一补安全响应头（DO 转发的 /health 也过出口层）
+  {
+    const sh = await fetch(`http://127.0.0.1:${PORT}/health`);
+    assert(sh.headers.get("x-content-type-options") === "nosniff"
+      && sh.headers.get("referrer-policy") === "no-referrer"
+      && sh.headers.get("x-frame-options") === "SAMEORIGIN"
+      && sh.headers.get("strict-transport-security") === "max-age=31536000",
+      "安全响应头: 出口统一补齐（nosniff/referrer/frame/HSTS）");
+  }
   await bridgeSmoke(`ws://127.0.0.1:${PORT}`, TOKEN, assert);
 
   // 轮询传输的发现帧（现实拓扑：relay 走 ws 上报 rk，浏览器被代理掐 ws 时降级 poll）：
