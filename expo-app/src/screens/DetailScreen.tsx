@@ -635,10 +635,25 @@ function ArtView({ v, onClose }: { v: ArtViewData; onClose: () => void }) {
           <Image source={{ uri: v.uri }} style={{ flex: 1, backgroundColor: c.panel2 }} resizeMode="contain" />
         ) : v.kind === "html" ? (
           // 晨间反馈：HTML 报告此前当纯文本显示源码——夜间报告等交付物都是 HTML，
-          // 必须渲染。正文已在内存，source html 免文件权限；透明底让报告自带底色透出
+          // 必须渲染。正文已在内存，source html 免文件权限；透明底让报告自带底色透出。
+          // #29（C-P2-3）：交付物内容=外部会话/LLM 产出，属不可信源——渲染关 JS
+          //（报告不需要脚本；web 端同功能已用无 allow-scripts 的 sandbox iframe 并注
+          // 释「交付物不该带脚本」，此处对齐）、禁新窗口/文件访问，外链跳转交给系统
+          // 浏览器（onShouldStartLoadWithRequest 只放行首帧 about:blank 载入，其余
+          // http(s) 一律转出 App，防全屏 Modal 内任意导航钓鱼）
           <WebView
             source={{ html: v.text }}
             originWhitelist={["*"]}
+            javaScriptEnabled={false}
+            allowFileAccess={false}
+            setSupportMultipleWindows={false}
+            onShouldStartLoadWithRequest={(req) => {
+              // 首帧（about:/data: 源内载入）放行；其余导航一律拦下，http(s) 转系统
+              // 浏览器，非 http(s)（intent:/file:/自定义 scheme）直接丢弃
+              if (/^(about|data):/i.test(req.url)) return true;
+              if (/^https?:/i.test(req.url)) void Linking.openURL(req.url).catch(() => undefined);
+              return false;
+            }}
             style={{ flex: 1, backgroundColor: "transparent" }}
           />
         ) : v.kind === "md" ? (

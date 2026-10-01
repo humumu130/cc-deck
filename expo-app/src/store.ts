@@ -1983,8 +1983,19 @@ class RelayStore {
             (x): x is { dev: string; rk?: string } =>
               !!x && typeof (x as { dev?: unknown }).dev === "string" &&
               String((x as { dev?: unknown }).dev).startsWith("rl-"),
-          );
-          const pick = all.find((x) => x.dev === rd) ?? (all.length === 1 ? all[0] : null);
+          )
+            // #29（B 路纵深，与网页端同款）：上报 rk 的条目必须自洽 dev===devId(rk,"rl")
+            //（公钥前 8 字节派生=64bit 原象碰撞不可行）——桥侧 rl- 注册无鉴权，防「冒
+            // 真 dev 上报假 rk」经命中把假 rk 写进目标（后续密封永久指向攻击者公钥）；
+            // 无 rk 条目=旧版 relay 保留（rk 回落记忆真值，无私钥封不出能解开的 ack）
+            .filter((x) => !x.rk || devId(x.rk, "rl") === x.dev);
+          // #29（C-P1-1，与网页端同构）：码携带的 rd 是信任锚（出码端身份），不允许被
+          // 「列表唯一」覆盖——公共桥假 relay 注册成唯一在线会被当「换代新身份」采信，
+          // rd 被改写后 pair_ack 身份比对恒真（码与手机公钥一起交给攻击者，此后输入的
+          // 每条指令都流向攻击者）。「唯一采信」只服务无锚点新配对；锚定流程目标不在
+          // 线=明示离线（码未消耗可重试），多台在线仍走码广播定位（持码者应答）
+          const anchored = !!o.rd;
+          const pick = all.find((x) => x.dev === rd) ?? (!anchored && all.length === 1 ? all[0] : null);
           if (!pick) {
             if (all.length > 1) {
               // 广播定位态：记候选（ack 试解 + 身份核对），立即广播一拍；仅首次进入
@@ -1996,7 +2007,9 @@ class RelayStore {
               if (fresh) kick();
               return;
             }
-            done("云桥上没有在线的 relay（电脑端离线）");
+            done(anchored
+              ? "目标电脑不在线（配对码未消耗），确认电脑端 CC Deck 已连上云桥后再试"
+              : "云桥上没有在线的 relay（电脑端离线）");
             return;
           }
           const changed = pick.dev !== rd || (!!pick.rk && pick.rk !== rk);
