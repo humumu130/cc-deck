@@ -148,8 +148,25 @@ function makeRouter(): { router: CloudRouter; rec: Recorded } {
   await wait(150);
   assert(srv.router.devs().length === 0, "启动后无设备");
   // #29（B-P3）：/health 只回计数不回 dev 列表（与 CF 形态对齐，防在线设备踩点）
-  const h = (await (await fetch(`http://127.0.0.1:${port}/health`)).json()) as { devices: unknown };
+  const hr = await fetch(`http://127.0.0.1:${port}/health`);
+  const h = (await hr.json()) as { devices: unknown };
   assert(typeof h.devices === "number" && h.devices === 0, "/health 回计数（0）不回 dev 列表");
+  // #29 残留备案转正：托管页/JSON 出口统一补安全头（HSTS 除外——本形态裸 HTTP）
+  assert(hr.headers.get("x-content-type-options") === "nosniff"
+    && hr.headers.get("referrer-policy") === "no-referrer"
+    && hr.headers.get("x-frame-options") === "SAMEORIGIN"
+    && !hr.headers.get("strict-transport-security"),
+    "/health 带安全响应头（nosniff/referrer/frame，无 HSTS）");
+  // 托管页只存在于部署布局（/opt/cc-cloud-bridge/web-console/；仓库内该路径无文件
+  // → 503 是预期形态）。部署形态锁 200+安全头，仓库形态锁 503 干净回退
+  const page = await fetch(`http://127.0.0.1:${port}/`);
+  if (page.status === 200) {
+    assert(page.headers.get("content-type")?.startsWith("text/html")
+      && page.headers.get("x-content-type-options") === "nosniff",
+      "托管控制台页 200 + 安全响应头（部署布局）");
+  } else {
+    assert(page.status === 503, "仓库布局无托管页 → 503 提示（不裸崩）");
+  }
   await bridgeSmoke(`ws://127.0.0.1:${port}`, token, assert);
   await srv.close();
   assert(true, "服务正常关闭");
