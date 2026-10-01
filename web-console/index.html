@@ -3361,7 +3361,16 @@ function resetCloudPairing(cfg) {
 // rd 空串 = 配对码定位广播态（多 relay 桥凭码找持码者）：to:"*" + bc 标记，未持码
 // relay 静默；否则经典单播（旧 relay 全兼容）
 function sendPairReq(ctx, pair, dev) {
-  const body = { t: "pair_req", code: pair.pc, pubkey: ckp.publicKey, name: "web-" + dev.slice(3, 11) };
+  // #29（C-P0-1）：信标帧（扫码登录态 pc 空的在场帧）绝不携带 pubkey——公共桥上
+  // 假 relay 读到 web 公钥即可不经手机授权、直接密封 pair_ack 冒充授权（扫码态页面
+  // 无从比对身份，「密封即授权证明」的论证建立在公钥从未暴露之上，信标恰恰破坏了
+  // 该前提——3699 旧注释自称页面从未暴露公钥，与事实矛盾）。授权链里 relay 所需的
+  // web 公钥由手机 grant 带到（COMMAND_LOGIN_GRANT），信标只作 sighting 在场记录。
+  // 新版 relay 对「无钥空码信标」放行记 f.from；带码帧仍携公钥（码即信任锚，relay
+  // 凭码采信随帧公钥密封 ack）。部署顺序铁律：relay 先发、页面后发（反序会让新版
+  // 页面的信标被旧 relay 拒收，合并码跨网回传的在线判定失灵）
+  const body = { t: "pair_req", code: pair.pc, name: "web-" + dev.slice(3, 11) };
+  if (pair.pc) body.pubkey = ckp.publicKey;
   // #42 web 侧自报元数据：浏览器 UA 摘要 + 平台（relay 存入信任清单，管理卡可辨）
   try {
     const ua = navigator.userAgent;
@@ -3568,13 +3577,25 @@ function onCloudTextRaw(ctx, text) {
     // !pick 分支）；无码流程（扫码登录/运行中）维持歧义即停——交用户决断
     clearTimeout(ctx.discTimer); ctx.discTimer = 0;
     const all = (Array.isArray(f.relays) ? f.relays : [])
-      .filter((x) => x && typeof x.dev === "string" && x.dev.startsWith("rl-"));
+      .filter((x) => x && typeof x.dev === "string" && x.dev.startsWith("rl-"))
+      // #29（B 路纵深）：上报 rk 的条目必须自洽（dev === devId(rk, "rl")，公钥前 8 字节
+      // 派生=64bit 原象碰撞不可行）。桥侧 rl- 注册无鉴权，顶替者可冒真 dev 上报假 rk——
+      // hit 命中后 3620 会把假 rk 写进配对锚，后续所有密封永久指向攻击者公钥（全接管，
+      // 无需 ack 竞争）；自洽校验把错位组合在发现列表源头剔除。无 rk 条目=旧版 relay，
+      // 保留走旧路径（rk 回落记忆真值，顶替者无私钥密封不出能被解开的 ack）
+      .filter((x) => !x.rk || (typeof x.rk === "string" && devId(x.rk, "rl") === x.dev));
     const pair = ctx.pendingPair || pendingPairOf(cfg.id);
     const peer = cloudPeerOf(cfg);
     const known = [pair && pair.rd, peer && peer.relay_dev, cfg.cloud && cfg.cloud.rd, BAKED_RELAY.rd]
       .filter((x) => x && typeof x === "string");
     const hit = all.find((x) => known.includes(x.dev));
-    const pick = hit || (all.length === 1 ? all[0] : null);
+    // #29（C-P1-1）：「列表唯一=换代新身份」只服务无锚点的新配对。流程携带 rd 锚
+    //（配对链接 / QR fresh / 输码携记忆身份）时禁止被唯一在线者覆盖——公共桥上假
+    // relay 注册成唯一在线即被当「换代」采信，rd 被改写后 pair_ack 身份比对恒真
+    //（码与公钥一起交给攻击者）。锚定流程目标不在线=明示「电脑端 relay 离线」，
+    // 真换代重领码（新码携新 fresh rd）/重扫码即恢复
+    const anchored = !!(pair && pair.rd);
+    const pick = hit || (!anchored && all.length === 1 ? all[0] : null);
     if (!pick) {
       // 输码态 + 多台在线且无可信锚点：配对码即定位凭据——改广播 pair_req，持码
       // relay 才回 pair_ack、其余静默；ack 由哪台密封未知，候选公钥逐个试解
@@ -3594,9 +3615,10 @@ function onCloudTextRaw(ctx, text) {
       if (pair && !pair.pc && all.length > 1) {
         // #88 扫码登录态多 relay 歧义：无码可广播定位，但不必「歧义即停」——QR 无
         // rd（fresh 未置）时手机走自己的活动源授权，回传由活动源密封，身份无法
-        // 预知。把在线候选公钥挂 cands 供 unseal 兜底逐个试解。安全性不变：页面
-        // 从未暴露自己的公钥，能对它密封 pair_ack 的只有经手机授权拿到 pk 的那台
-        // relay，密封本身即身份证明（wasLoginQr 采信路径本就豁免 rd 比对）。rd/rk
+        // 预知。把在线候选公钥挂 cands 供 unseal 兜底逐个试解。安全性：信标帧不携
+        // 公钥（#29 C-P0-1），能对页面密封 pair_ack 的只有经手机授权拿到 pk 的那台
+        // relay，密封本身即身份证明；候选列表比对兜第二道（ack 身份必须落在发现
+        // 候选内）。rd/rk
         // 清空沿用广播态形态：看门狗重发的空码 pair_req 变广播（无路由即无
         // ROUTE_MISS），不再撞烘焙 rd 离线反复触发重连震荡
         ctx.pendingPair = { rd: "", rk: "", pc: "", cands: all.filter((x) => x.rk) };
@@ -3701,16 +3723,17 @@ function onCloudTextRaw(ctx, text) {
     // ack 身份必须对应当次请求目标：公共桥上假 relay 可自演自唱（自有密钥解得开），
     // 采信错位身份会把后续 seal 永久指向攻击者公钥
     const wasLoginQr = !!target && target.pc === ""; // #325 扫码登录会话：ack 即授权成功
-    // 身份检查：输码态必比对 rd（pair_req 明文广播过公钥，公共桥上假 relay 可自演自唱，
-    // 采信错位身份会把后续 seal 永久指向攻击者公钥）。扫码登录态豁免——页面从未暴露
-    // 自己的公钥，能对页面密封 pair_ack 的只有经手机授权拿到 pk 的目标 relay，密封本身
-    // 即身份证明；且烘焙 rd 会随 relay 换代过期，比对反而误杀合法 ack（#329 实测踩中）。
-    // 广播态无 rd 可比：回落到发现列表（只有桥上 rl- 收得到广播）
+    // 身份检查：输码态必比对 rd（pair_req 帧曾明文广播公钥与码，公共桥上假 relay 可
+    // 自演自唱，采信错位身份会把后续 seal 永久指向攻击者公钥）。扫码登录态：信标帧
+    // 已不携公钥（#29 C-P0-1），「能对页面密封 pair_ack 的只有经手机授权拿到 pk 的
+    // relay」的前提重新成立，但 rd 比对仍豁免——烘焙 rd 会随 relay 换代过期，比对
+    // 反而误杀合法 ack（#329 实测踩中）；候选列表比对不豁免（授权回传的 relay 必然
+    // 在桥上在线过=发现候选快照内，候选外 ack=身份未锚定，第二道防线）
     if (target && !wasLoginQr && target.rd && inner.relay_dev !== target.rd) {
       console.log("[cloud:" + cfg.name + "] pair_ack 身份错位（" + inner.relay_dev + " ≠ " + target.rd + "），丢弃");
       return;
     }
-    if (target && !wasLoginQr && !target.rd && target.cands && !target.cands.some((c) => c.dev === inner.relay_dev)) {
+    if (target && !target.rd && target.cands && !target.cands.some((c) => c.dev === inner.relay_dev)) {
       console.log("[cloud:" + cfg.name + "] pair_ack 来自发现列表之外的 relay（" + inner.relay_dev + "），丢弃");
       return;
     }
@@ -8111,8 +8134,11 @@ $("modelBtn").onclick = () => {
   if (pop.classList.contains("open")) { closeModelPop(); return; }
   closePermPop(); // #40 防与权限弹层叠加
   pop.innerHTML = models.map((m) =>
+    // #29（C-P2-1）：models 来自 SNAPSHOT.payload.models（relay 下发数据），进
+    // innerHTML 必转义——配对到假 relay / relay 数据被污染时，一条模型名
+    // "<img src=x onerror=…>" 即可在点开模型弹层时执行并偷 localStorage 全部凭据
     '<div class="mp-row' + (m === sel.s.model ? " cur" : "") + '" data-m="' + encodeURIComponent(m) + '">' +
-    '<span>' + m + "</span>" + (m === sel.s.model ? '<span class="mp-cur">当前</span>' : "") + "</div>",
+    "<span>" + escapeHtml(m) + "</span>" + (m === sel.s.model ? '<span class="mp-cur">当前</span>' : "") + "</div>",
   ).join("");
   pop.classList.add("open");
   const r = $("modelBtn").getBoundingClientRect();
