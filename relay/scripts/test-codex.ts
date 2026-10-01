@@ -505,7 +505,14 @@ exit 0`);
       command_id: randomUUID(), type: "COMMAND_STOP", ts: Date.now(), payload: { session_id: sid2 },
     }, "codex-test");
     const prevInitMs = process.env.CCR_RESUME_INIT_MS;
-    process.env.CCR_RESUME_INIT_MS = "200";
+    // flake 根治（2026-10-01 全量回归实录）：此前钉 200ms，高负载下看门狗开火可
+    // 快过挂死桩的 fork+exec——杀树时桩还没写 seq/argv 台账，fresh 重放进程抢到
+    // 2 号槽：argv-3 永不出现（until 超时假 FAIL）+ stdin-3 ENOENT 直接炸测试。
+    // 系统行为本身是对的（fresh 确实发生），碎的是测试「槽位=固定编号」假设。
+    // 双修：①窗口 1500ms（桩启动+写台账的 7 倍余量，仍远小于缺省 45s）；②断言改
+    // 槽位无关内容扫描——stdin 含原消息且 argv 无 resume = fresh 槽；argv 带
+    // resume tid = resume 槽（create 槽因 stdin 是首回合消息天然不混入）
+    process.env.CCR_RESUME_INIT_MS = "1500";
     process.env.CCR_CODEX_PATH = hangBin;
     resetCodexCliCache();
     const m4 = mgr.handleCommand({
@@ -513,13 +520,22 @@ exit 0`);
       payload: { session_id: sid2, text: "恢复试试" },
     }, "codex-test") as { ok: boolean };
     assert(m4.ok === true, "挂死恢复路径消息 ok");
-    const fresh = await until(() => {
-      if (!existsSync(join(STUB, "argv-3.txt"))) return false;
-      return !readFileSync(join(STUB, "argv-3.txt"), "utf-8").includes("resume");
-    }, 10000);
+    const slotOf = (pred: (argv: string, stdin: string) => boolean): boolean => {
+      for (const f of readdirSync(STUB)) {
+        if (!/^argv-\d+\.txt$/.test(f)) continue;
+        const n = f.slice(5, -4);
+        try {
+          if (pred(readFileSync(join(STUB, f), "utf-8"),
+                   readFileSync(join(STUB, `stdin-${n}.txt`), "utf-8"))) return true;
+        } catch { /* 桩台账写一半，下一个轮询再看 */ }
+      }
+      return false;
+    };
+    const fresh = await until(() =>
+      slotOf((argv, stdin) => !argv.includes("resume") && stdin.includes("恢复试试")), 12000);
     assert(fresh, "init 看门狗开火：fresh 重放 argv 无 resume（无记忆不赌 resume）");
-    assert(readFileSync(join(STUB, "stdin-3.txt"), "utf-8").includes("恢复试试"), "fresh 重放原消息经 stdin");
-    assert(readFileSync(join(STUB, "argv-2.txt"), "utf-8").includes("resume tid-1111"), "先走的 resume 进程也是 codex 工厂 spawn（引擎路由不回归）");
+    const resumeRan = await until(() => slotOf((argv) => argv.includes("resume tid-1111")), 12000);
+    assert(resumeRan, "先走的 resume 进程也是 codex 工厂 spawn（引擎路由不回归）");
     // 清理挂死的 fresh 进程 + 还原 env
     mgr.handleCommand({
       command_id: randomUUID(), type: "COMMAND_STOP", ts: Date.now(), payload: { session_id: sid2 },
