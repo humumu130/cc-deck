@@ -104,6 +104,24 @@ fn open_external(app: tauri::AppHandle, url: String) -> Result<(), String> {
     app.opener().open_url(url, None::<&str>).map_err(|e| e.to_string())
 }
 
+/// #29（C-P2-2）执行类/脚本类危险扩展：save_artifact 落盘下载目录与 open_path 系统
+/// 默认程序打开两条 IPC 若被 XSS/假 relay 数据驱动（save 落 .bat 后 open 一次即
+/// ShellExecute），构成 XSS→RCE 链。落盘与打开一律拒绝；reveal（文件管理器定位）
+/// 只定位不执行，保持放行。.js/.sh 一并拒——Windows 下 WSH 双击即跑、macOS 下
+/// .sh 双击开 Terminal 执行，交付物快速保存的便利不值得这条链（分享/下载入口不受影响）
+const DANGEROUS_EXTS: &[&str] = &[
+    "bat", "cmd", "com", "cpl", "scr", "pif", "msc", "hta", "lnk", "url", "reg", "scf",
+    "inf", "ade", "adp", "mst", "jar", "vbs", "vbe", "js", "jse", "wsf", "wsh", "ps1",
+    "psm1", "ps2", "sh", "bash", "zsh", "command", "osx", "app", "exe", "dll", "msi",
+    "apk", "deb", "rpm", "dmg", "pkg", "workflow",
+];
+fn dangerous_ext(name: &str) -> bool {
+    match name.rsplit_once('.') {
+        Some((_, e)) if !e.is_empty() => DANGEROUS_EXTS.contains(&e.to_ascii_lowercase().as_str()),
+        _ => false,
+    }
+}
+
 /// #326 打开转录里的本地文件：reveal=true 在文件管理器中定位该项，false 用系统默认
 /// 程序打开。只接受绝对路径（盘符/UNC/斜杠开头）且拒含 ".."，防相对路径歧义与穿越；
 /// opener 走系统 API 不经 shell，无注入面
@@ -116,6 +134,10 @@ fn open_path(app: tauri::AppHandle, path: String, reveal: bool) -> Result<(), St
         || p.starts_with('/');
     if !is_abs || p.contains("..") {
         return Err("仅支持绝对路径".into());
+    }
+    // #29（C-P2-2）：默认程序打开=Windows 上 ShellExecute，.bat/.lnk 等直接执行
+    if !reveal && dangerous_ext(p) {
+        return Err("已拒绝打开可执行/脚本类文件（防伪造产物执行），请用「在文件夹中显示」定位后自行处理".into());
     }
     if reveal {
         app.opener().reveal_item_in_dir(p).map_err(|e| e.to_string())
@@ -149,6 +171,11 @@ fn save_artifact(app: tauri::AppHandle, name: String, b64: String) -> Result<Str
     let safe: String = name.chars().filter(|c| *c != '/' && *c != '\\' && *c != '\0').collect();
     if safe.is_empty() || safe == "." || safe == ".." {
         return Err("无效文件名".into());
+    }
+    // #29（C-P2-2）：可执行/脚本类扩展拒绝落盘下载目录（配合 open_path 守卫断
+    // XSS→落盘→执行链；错误信息指引用分享/浏览器入口替代）
+    if dangerous_ext(&safe) {
+        return Err(format!("已拒绝保存可执行/脚本类文件（{safe}）：请用「分享」或浏览器打开后另存"));
     }
     // 重名递增：name.ext → name-2.ext（下载目录常有同名旧件，静默覆盖会吞用户文件）
     let (stem, ext) = match safe.rsplit_once('.') {
