@@ -28,7 +28,7 @@ import { useKbHeight } from "../kb";
 import { useEnterSend, useProcessFont, useVoiceInput } from "../display-settings";
 import { voice } from "../voice";
 import { BUILTIN_COMMANDS, fetchSlashCommands, httpBaseOf, matchSlash, type SlashCommand } from "../slash";
-import { MdText } from "../md";
+import { MdText, lastLinkAt } from "../md";
 import { Collapse, FadeIn, PressScale } from "../motion";
 import RenameModal from "./RenameModal";
 
@@ -103,6 +103,10 @@ let agCollapsed = false;
 
 // 输入草稿跨进出保留：按 session_id 暂存（app 生命周期内，发送即清）
 const drafts = new Map<string, string>();
+
+// #216 防误派守卫用：最近一次输入框聚焦时刻（模块级跨进出详情页保持，与
+// md.tsx 的 lastLinkAt 同族——两者由下方 setPermPanel 守卫消费）
+let lastFocusAt = 0;
 
 // #376 cron 表达式人话（常见模式；未识别返回 null 只显原文+下次时间兜底）
 const WEEK_CN = ["日", "一", "二", "三", "四", "五", "六"];
@@ -1249,7 +1253,22 @@ export default function DetailScreen({ sid, onBack, initialView, ref }: { sid: s
   const { c, mode } = useTheme();
   const d = useThemeStyles(makeStyles);
   // #36 权限模式四选一面板：胶囊（Head R2）点开，替代循环切换
-  const [permPanel, setPermPanel] = useState(false);
+  // #216 防误派守卫（三段修，2026-10-02 真机定稿）：OPPO/ColorOS 真机上点底部
+  // 输入框或时间线链接的触摸会被 Android 触摸层错派给顶部权限胶囊的 Pressable
+  // ——onPress 即 setPermPanel(true)，权限面板凭空弹出（0.6.1-test.4 用户主力机
+  // 稳定复现；模拟器 7 次不可复现；JS 层唯一置 true 入口就是胶囊 onPress）。
+  // 差异法定位：无守卫包点输入框必弹、有守卫包必不弹（两包唯一行为差异=本守卫）。
+  // 真用户从底部输入框/链接处把手指移到顶部胶囊物理上不可能 <400ms，吞掉
+  // 400ms 内的打开请求零误伤；正常点胶囊（间隔远超 400ms）照常放行
+  const [permPanel, setPermPanelRaw] = useState(false);
+  const setPermPanel = (v: boolean) => {
+    if (v) {
+      const now = Date.now();
+      const since = Math.min(now - lastFocusAt, now - lastLinkAt.at);
+      if (since >= 0 && since < 400) return;
+    }
+    setPermPanelRaw(v);
+  };
   const snap = useRelay();
   const [input, setInput] = useState(() => drafts.get(sid) ?? "");
   // #68① 多行自动增高：Android 下纯 minHeight/maxHeight 的自适应不可靠（实测长文
@@ -2786,6 +2805,7 @@ export default function DetailScreen({ sid, onBack, initialView, ref }: { sid: s
               // 期间曾长期处于此态且无任何视觉提示。现半透明弱化 + placeholder 说明原因，
               // 用户能自诊断「是断连不是键盘坏了」
               ref={inputRef}
+              onFocus={() => { lastFocusAt = Date.now(); }}
               style={[d.input, { height: inputH }, !canCmd && { opacity: 0.5 }]}
               value={input}
               onChangeText={editInput}
