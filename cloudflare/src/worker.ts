@@ -13,6 +13,9 @@ interface Env {
   ASSETS?: Fetcher; // [assets] 静态托管绑定：/app 路径映射网页控制台
 }
 
+// #28 审查补：/view/ results POST 每 IP 限流窗（isolate 内存级，见使用处注释）
+const postHits = new Map<string, number[]>();
+
 export default {
   async fetch(req: Request, env: Env): Promise<Response> {
     const url = new URL(req.url);
@@ -44,38 +47,95 @@ export default {
     if (url.pathname.startsWith("/view/")) {
       // 文档/设计稿在线预览（KV 直出 text/html 内联打开；/dl/ 是 attachment 下载，
       // HTML 设计稿要看不能下——2026-09-16 relay/连接区重设计提案走此通道）
+      // #28 安全收窄（2026-10-01）：此前 GET 键名白名单 ^[\w.-]+$ 等于把整个 DL KV
+      //（安装包/签名/dmg/验收单结果）全部暴露成 /view/ 可读——键名可猜即事实公开
+      //（用户点名安全问题）。收窄为三类：验收单云版页面（id 128bit 即凭证）+ 验收单
+      // results.json（relay 回流专用，验云桥 token）+ 存量预览键硬名单（列 KV 实测
+      // 仅 acc-132.html 一例）；其余键一律 404。.key 键（#28 提交密钥）不在任何 HTTP
+      // 白名单内——仅 Worker 内部 env.DL.get 对照，HTTP 层永不可读。
       const doc = url.pathname.slice(6);
       if (!/^[\w.-]+$/.test(doc) || !env.DL) return new Response("bad name", { status: 400 });
-      // #175 验收单云通道提交端点（2026-09-24）：公司网浏览器打不开家庭 LAN，云版表单页
+      const ACC_PAGE_RE = /^acceptance-[0-9a-f]{32}\.html$/;
+      const ACC_RESULTS_RE = /^acceptance-[0-9a-f]{32}\.results\.json$/;
+      const PREVIEW_KEYS = new Set(["acc-132.html"]); // 存量设计稿预览（2026-09-16 重设计提案）
+      // #175+#28 验收单云通道提交端点：公司网浏览器打不开家庭 LAN，云版表单页
       //（/view/acceptance-<id>.html，出单工具上传）把勾选结果 POST 到同名 .results.json
-      // 键。键名白名单收紧到 acceptance-<32hex>.results.json——绝不放宽到任意键名，
-      // 防此端点被用来覆盖 apk/清单等 /dl 键。存提交数组（read-merge-write append，
-      // 上限 50 条）：家庭 relay 每 60s 拉回、签名去重落盘（断线期间多次提交一次补齐）。
-      // 无鉴权——id 128bit 不可枚举即凭证（与 relay 本体 /api/acceptance 同口径）。
+      // 键（read-merge-write append 上限 50 条，家庭 relay 每 60s 拉回）。
+      // #28 起加 per-sheet 密钥：出单工具另传 acceptance-<id>.key，填表链接以
+      // fragment（…html#<key>）分发——fragment 不进服务器日志/Referer/CF 缓存键，
+      // 页面 JS 提交时带上，此处对照 KV。缺失/不符 403：断「拿到 id → 伪造全 ✓ →
+      // relay 拉回假关单」链。老单（无 .key 键，存量 12 张均已 submitted）一律 403，
+      // 不留豁免口。
       if (req.method === "POST") {
-        if (!/^acceptance-[0-9a-f]{32}\.results\.json$/.test(doc)) return new Response("bad name", { status: 400 });
+        if (!ACC_RESULTS_RE.test(doc)) return new Response("bad name", { status: 400 });
+        // #28 审查补：每 IP 提交限流（10 次/60s，内存级——Worker isolate 生命周期内
+        // 有效，跨 isolate 不共享但配合边缘分发足够）。持 key 者灌 50+ 条会挤掉未及
+        // 拉回的合法提交（rolling 帽）+ 烧穿账号 KV 写配额殃及其他验收单
+        const ip = req.headers.get("CF-Connecting-IP") ?? "?";
+        const now = Date.now();
+        const arr = (postHits.get(ip) ?? []).filter((t) => now - t < 60_000);
+        if (arr.length >= 10) return new Response("rate limited", { status: 429 });
+        arr.push(now);
+        postHits.set(ip, arr);
+        if (postHits.size > 1000) for (const [k, v] of postHits) if (v.every((t) => now - t >= 60_000)) postHits.delete(k);
         const body = await req.text();
         if (body.length > 65536) return new Response("too large", { status: 413 });
         let rows: unknown;
+        let key: unknown;
         try {
-          rows = (JSON.parse(body) as { rows?: unknown }).rows;
+          const parsed = JSON.parse(body) as { rows?: unknown; key?: unknown };
+          rows = parsed.rows;
+          key = parsed.key;
         } catch {
           return new Response("bad json", { status: 400 });
         }
         if (!Array.isArray(rows) || rows.length === 0 || rows.length > 500) return new Response("bad rows", { status: 400 });
-        const cur = (await env.DL.get(doc, { type: "json" })) as { at: number; ua: string; rows: unknown }[] | null;
-        const hist = Array.isArray(cur) ? cur : [];
-        hist.push({ at: Date.now(), ua: (req.headers.get("user-agent") ?? "").slice(0, 100), rows });
+        const sheetId = doc.slice("acceptance-".length, doc.indexOf(".results.json"));
+        const expectKey = await env.DL.get(`acceptance-${sheetId}.key`);
+        if (!expectKey || typeof key !== "string" || key.length !== 32 || key !== expectKey) {
+          // #28 审查补：文案对老单（从未有 #key 链接）不能误导——指引回家庭网
+          return new Response('{"ok":false,"error":"密钥缺失或不符：请核对链接是否完整（含 # 后缀）；旧单请改用家庭网链接填写"}', {
+            status: 403,
+            headers: { "content-type": "application/json", "cache-control": "no-store" },
+          });
+        }
+        // #28 审查补：键值若被误写成非法 JSON，type:"json" 会 reject 冒泡成 500 且
+        // 永久卡死该单（每次 POST 都炸、须手工清 KV）——兜住当空数组重建即自愈
+        let cur: unknown = null;
+        try {
+          cur = await env.DL.get(doc, { type: "json" });
+        } catch { /* 坏值当 null 重建 */ }
+        const hist = Array.isArray(cur) ? (cur as { at: number; ua: string; k?: string; rows: unknown }[]) : [];
+        // #28 审查补：条目带唯一 k（nonce）——relay 侧按 k 去重（内容签名会把
+        // 「改回原判」的合法重复内容静默吞掉，A→B→A′ 中 A′ 永久丢失）
+        hist.push({ at: Date.now(), ua: (req.headers.get("user-agent") ?? "").slice(0, 100), k: crypto.randomUUID(), rows });
         await env.DL.put(doc, JSON.stringify(hist.slice(-50)));
         return new Response('{"ok":true}', {
           status: 200,
           headers: { "content-type": "application/json", "cache-control": "no-store" },
         });
       }
-      let html = await env.DL.get(doc, { type: "text" });
-      // 链接后缀宽容（2026-09-24 用户实测踩坑）：手抄/转述丢了 .html 的预览链接
-      //（/view/acceptance-<id>）补 .html 重查一次，仍无才 404；POST 白名单不受影响
-      if (!html && !doc.endsWith(".html")) html = await env.DL.get(doc + ".html", { type: "text" });
+      // GET results.json = relay 回流专用读面（提交数组含全部勾选+备注，不该让任何
+      // 拿到 id 的互联网读走）：与 /cloud 桥同源的 token 做 Bearer。部署顺序注意：
+      // relay 带 header 的新版先发（旧 Worker 忽略未知 header），Worker 验证后发——
+      // 反序会让存量 relay 回流 401 断流（KV 数组仍在，relay 升级后幂等补齐）
+      if (ACC_RESULTS_RE.test(doc)) {
+        const auth = req.headers.get("authorization") ?? "";
+        // #28 审查补：!env.CLOUD_TOKEN 前置——secret 漏绑/环境名拼错时模板串会拼出
+        // 字面量 "Bearer undefined"，攻击者发同名 header 即通过（string !== undefined
+        // 恒真的对照组写法在 218 行安全，唯独这里的拼接有此陷阱）
+        if (!env.CLOUD_TOKEN || auth !== `Bearer ${env.CLOUD_TOKEN}`) return new Response("unauthorized", { status: 401 });
+        const val = await env.DL.get(doc);
+        if (val === null) return new Response("[]", { status: 200, headers: { "content-type": "application/json", "cache-control": "no-store" } });
+        return new Response(val, { status: 200, headers: { "content-type": "application/json", "cache-control": "no-store" } });
+      }
+      // #28 审查补：无后缀规范化前置——白名单内键全部以 .html 结尾，若把宽容补查留
+      // 在白名单门后（原写法），补查分支恒不可达（无后缀 doc 在门口就 404），
+      // 2026-09-24 的「手抄丢了 .html 也能打开」行为被收窄无声废除。改为进门时补后缀
+      let page = doc;
+      if (!page.endsWith(".html") && !PREVIEW_KEYS.has(page)) page += ".html";
+      if (!ACC_PAGE_RE.test(page) && !PREVIEW_KEYS.has(page)) return new Response("not found", { status: 404 });
+      const html = await env.DL.get(page, { type: "text" });
       if (!html) return new Response("not found", { status: 404 });
       return new Response(html, {
         status: 200,
@@ -133,10 +193,13 @@ export default {
         return new Response("bad name", { status: 400 });
       }
       if (!/^[\p{L}\p{N}_.-]+$/u.test(name) || !env.DL) return new Response("bad name", { status: 400 });
-      // #220 加固守卫入库（#226 2026-10-02）：下两段守卫此前只存在于 #220 应急直改的生产
-      // 产物里，仓库源码没有（源码/生产分叉，v0.6.0 OTA 404 悬案四层取证才破案）。现正式
-      // 入库，并补一处放行：固定名 cc-deck.apk（点号）不匹配前缀 cc-deck-（横线）曾被
-      // 守卫②误杀 404、专属直出成死代码——豁免之，走下文 KV 直出/302 ECS 分支
+      // #28 审查补（P0，两审查交叉实锤）+ #220/#226 加固守卫入库：/dl/ 此前对任何过
+      // 名字校验的键通用直出，把 /view/ 专门保护的两类键整个旁路——GET
+      // /dl/acceptance-<id>.key 明文回 per-sheet 密钥（伪造提交通行证）、
+      // /dl/…results.json 绕过 Bearer 读全部勾选。验收单键（acceptance- 前缀）与
+      // 密钥/结果后缀一律 404（与不存在键同形，不做存在性侧信道）；#220/#226 再补
+      // 正向白名单（安装包/公开产物才可直出）并豁免固定名 cc-deck.apk（点号不匹配
+      // 前缀 cc-deck-，曾被守卫②误杀 404、专属直出成死代码）
       if (/^acceptance-/.test(name) || name.endsWith(".key") || name.endsWith(".results.json")) {
         return new Response("not found", { status: 404 });
       }
