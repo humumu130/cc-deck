@@ -98,15 +98,33 @@ try {
   await bridgeSmoke(`ws://127.0.0.1:${PORT}`, TOKEN, assert);
 
   // 轮询传输的发现帧（现实拓扑：relay 走 ws 上报 rk，浏览器被代理掐 ws 时降级 poll）：
-  // POST disc → 桥回 RELAYS 入 poll 队列 → GET 取回，与 ws 路径行为一致
+  // POST disc → 桥回 RELAYS 入 poll 队列 → GET 取回，与 ws 路径行为一致。
+  // #29（B-P0-1）：relay 身份须真实派生（桥侧 rl- 注册自洽校验，非派生 dev/rk 被拒）
   {
     const base = `http://127.0.0.1:${PORT}`;
-    const rw = new WebSocket(`ws://127.0.0.1:${PORT}/cloud?token=${TOKEN}&dev=rl-pollt&rk=RkPollRelay1`);
+    const rkPoll = Buffer.alloc(32, 3).toString("base64");
+    const devPoll = "rl-" + [...Buffer.from(rkPoll, "base64").subarray(0, 8)]
+      .map((b) => b.toString(16).padStart(2, "0"))
+      .join("");
+    const rw = new WebSocket(`ws://127.0.0.1:${PORT}/cloud?token=${TOKEN}&dev=${devPoll}&rk=${encodeURIComponent(rkPoll)}`);
     const opened = await new Promise<boolean>((r) => {
       rw.on("open", () => r(true));
       rw.on("error", () => r(false));
     });
     assert(opened, "poll 发现帧: relay ws 连接（带 rk）");
+
+    // #29（B-P2 poll 顶替守卫）：dev 已有活跃 WebSocket 时新建 poll 会话回 409，
+    // 且既有 WS 不被踢——否则持 token 者 POST 猜中 dev 即可免费踢任意在线设备。
+    // 注意威胁模型：rk=公钥是公开信息（RELAYS 帧下发），外层 rl- 自洽校验挡不住
+    // 持公开 rk 者（自洽天然成立），DO 层 409 才是这道门——hijack 须带真 rk 模拟
+    const hijack = await fetch(
+      `${base}/cloud-poll?token=${TOKEN}&dev=${devPoll}&sid=poll-hijack&rk=${encodeURIComponent(rkPoll)}`,
+      { method: "POST", body: JSON.stringify({ to: "*", data: { t: "hb" } }) },
+    );
+    assert(hijack.status === 409, "poll 顶替守卫: 有 WS 在线的 dev 拒新建 poll（409）");
+    await new Promise((r) => setTimeout(r, 300));
+    assert(rw.readyState === WebSocket.OPEN, "poll 顶替守卫: 既有 WS 连接未被 poll 创建踢掉");
+
     const sid = "poll-disc-wb";
     const p = await fetch(`${base}/cloud-poll?token=${TOKEN}&dev=wb-pollt&sid=${sid}`, {
       method: "POST",
@@ -126,7 +144,7 @@ try {
       .find((x) => x && x.type === "RELAYS");
     assert(!!relaysFrame, "poll 发现帧: GET 收到 RELAYS");
     assert(
-      !!relaysFrame?.relays?.some((x) => x.dev === "rl-pollt" && x.rk === "RkPollRelay1"),
+      !!relaysFrame?.relays?.some((x) => x.dev === devPoll && x.rk === rkPoll),
       "poll 发现帧: RELAYS 带 relay 公钥",
     );
     rw.close();

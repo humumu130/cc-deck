@@ -16,6 +16,21 @@ interface Env {
 // #28 审查补：/view/ results POST 每 IP 限流窗（isolate 内存级，见使用处注释）
 const postHits = new Map<string, number[]>();
 
+// #29（B-P0-1 根治）：rl- dev 必须持对应公钥——devId 口径 = 公钥原始字节前 8 字节
+// hex（与 relay/src/e2e.ts devId、Node 桥 index.ts rlDevOfRk 一致）。桥侧 rl- 注册
+// 此前无鉴权：持 token 者可冒真实 relay 的 dev 注册 + 上报假 rk，发现帧把「真 dev +
+// 假公钥」喂给浏览器/expo 写进配对锚 → 后续密封永久指向攻击者公钥（web/expo 侧
+// 过滤是纵深，这里是断根）。现行 relay 自 7b7cd3a 起连桥恒带 rk 且 dev 即派生值，
+// 收紧零影响。wb-/ph-/wt- 无所有权证明，顶替 DoS 面为协议固有，不在本刀范围
+function rlDevOfRk(rk: string): string | null {
+  if (!/^[A-Za-z0-9+/]{43}=$/.test(rk)) return null; // nacl 32 字节公钥恒 43 字符 + '='
+  const bin = atob(rk);
+  if (bin.length !== 32) return null;
+  let hex = "";
+  for (let i = 0; i < 8; i++) hex += bin.charCodeAt(i).toString(16).padStart(2, "0");
+  return "rl-" + hex;
+}
+
 export default {
   async fetch(req: Request, env: Env): Promise<Response> {
     const url = new URL(req.url);
@@ -189,6 +204,14 @@ export default {
       if (/^acceptance-/.test(name) || name.endsWith(".key") || name.endsWith(".results.json")) {
         return new Response("not found", { status: 404 });
       }
+      // #29（B-P3 允许清单）：通用直出只服务安装包/公开产物形态（cc-deck-* 各端
+      // 安装包、tauri-* updater 清单与签名、snap-* 快照指针）——此前对任何过
+      // ^[\w.-]+$ 的 KV 键通用直出，将来误传的任意私货（内网信息/临时文件）会
+      // 自动变成公网可下。白名单外 404（与不存在键同形，不做存在性侧信道）；
+      // acc-132.html 预览走 /view/ 白名单，不在此列
+      if (!/^(cc-deck-|tauri-|snap-)/.test(name)) {
+        return new Response("not found", { status: 404 });
+      }
       // #15 时代的 cc-deck.apk 302 ECS 已废（2026-09-17）：R8 后 APK 16MB < KV 25MiB，
       // 改 KV 直出优先（公司网络屏蔽 ECS 裸 IP，302 对公司死路=更新 99% 循环根因）；
       // KV 未上传时 302 ECS 兜底（家庭 Wi-Fi 可达）
@@ -257,6 +280,13 @@ export default {
     if (dev.length < 1 || dev.length > 64) {
       return new Response("bad dev", { status: 400 });
     }
+    // #29（B-P0-1 根治，与 Node 桥同刀）：rl- dev 必须持对应公钥（dev=rl-<公钥前
+    // 8 字节 hex>），冒名注册真实 relay dev + 假 rk 一律拒——否则发现帧把假公钥喂给
+    // 浏览器/expo 写进配对锚。放外层 fetch（不唤醒 DO 即拒）
+    if (dev.startsWith("rl-")) {
+      const rk = url.searchParams.get("rk") ?? "";
+      if (rlDevOfRk(rk) !== dev) return new Response("bad rk", { status: 401 });
+    }
     // 单 DO 实例承载全部连接，路由表才互相可见。
     // 必须转发原始 Request——用 req.url 字符串会丢 Upgrade 头，握手即 500
     const stub = env.ROUTER.get(env.ROUTER.idFromName("main"));
@@ -292,11 +322,17 @@ export class RouterDO extends DurableObject {
         }
         for (const ws of this.ctx.getWebSockets(connId)) {
           try {
-            // #373 下行解信封：目标为 /wan 手表时 {to,from,data:{t:"wan",frame}} → 明文 frame
+            // #373 下行解信封：目标为 /wan 手表时 {to,from,data:{t:"wan",frame}} → 明文 frame。
+            // #29（B-P2）：仅对 /wan 注册连接（附件带 wanTo）解封——此前对任意目标
+            // 盲目解封，持 token 者可把伪装信封 {t:"wan",frame:"<任意帧>"} 解开后直投
+            // 任意在线设备（内层帧的 from 语义完全丢失，接收方视作桥/relay 下发）。
+            // 常规帧只多一次原有 JSON.parse，仅命中信封形态才读附件，无热路径开销
             let out = frame;
             try {
               const env = JSON.parse(frame) as { data?: { t?: string; frame?: unknown } };
-              if (env?.data?.t === "wan" && typeof env.data.frame === "string") out = env.data.frame;
+              if (env?.data?.t === "wan" && typeof env.data.frame === "string" && this.attachOf(ws)?.wanTo) {
+                out = env.data.frame;
+              }
             } catch { /* 非信封帧原样发 */ }
             ws.send(out);
           } catch (e) {
@@ -336,9 +372,12 @@ export class RouterDO extends DurableObject {
       return Response.json({ ok: true, bridge: "cloudflare", devices: this.router.devs().length });
     }
     if (url.pathname !== "/cloud" && url.pathname !== "/cloud-poll" && url.pathname !== "/wan") return new Response("not found", { status: 404 });
-    // #373 /wan 手表明文透传：to=目标 relay dev 必填（该连接的固定投递目标）
+    // #373 /wan 手表明文透传：to=目标 relay dev 必填（该连接的固定投递目标）。
+    // #29（B-P2）：to 强制 rl- 前缀——该通道语义就是「手表→自家 relay」，放宽到
+    // 任意 dev 等于给手表开了「向任意在线设备投明文帧」的口子（外层 fetch 已过
+    // token，这里补形态校验）
     const wanTo = url.pathname === "/wan" ? url.searchParams.get("to") ?? "" : "";
-    if (url.pathname === "/wan" && (wanTo.length < 1 || wanTo.length > 64)) return new Response("bad to", { status: 400 });
+    if (url.pathname === "/wan" && (!wanTo.startsWith("rl-") || wanTo.length > 64)) return new Response("bad to", { status: 400 });
     const dev = url.searchParams.get("dev") ?? "";
     const rk = url.searchParams.get("rk") ?? ""; // relay 连接上报公钥（发现帧下发；浏览器连接不带）
     if (dev.length < 1 || dev.length > 64) return new Response("bad dev", { status: 400 });
@@ -348,7 +387,8 @@ export class RouterDO extends DurableObject {
     this.rehydrate();
     this.sweepPolls();
     const connCount = this.ctx.getWebSockets().length + this.polls.size;
-    if (connCount > RouterDO.MAX_CONNS || this.router.devs().length > RouterDO.MAX_DEVS) {
+    // #29（B-P3 off-by-one）：>= 才是「最多 MAX 个」——> 会让门禁放到 MAX+1
+    if (connCount >= RouterDO.MAX_CONNS || this.router.devs().length >= RouterDO.MAX_DEVS) {
       return new Response("bridge busy", { status: 429 });
     }
 
@@ -367,7 +407,7 @@ export class RouterDO extends DurableObject {
         const cl = Number(req.headers.get("content-length") ?? "0");
         if (cl > 8 << 20) return new Response("too large", { status: 413 });
         if (!this.rateOk(ip)) return new Response("rate limited", { status: 429 });
-        this.ensurePoll(dev, sid);
+        if (!this.ensurePoll(dev, sid)) return new Response("dev busy via websocket", { status: 409 });
         const body = await req.text();
         if (body.length > 8 << 20) return new Response("too large", { status: 413 });
         this.router.handleFrame("poll:" + sid, body);
@@ -378,6 +418,7 @@ export class RouterDO extends DurableObject {
       // 而占坑攻击必须不断换新 sid——正好逐次扣
       if (!this.polls.has(sid) && !this.rateOk(ip)) return new Response("rate limited", { status: 429 });
       const s = this.ensurePoll(dev, sid);
+      if (!s) return new Response("dev busy via websocket", { status: 409 });
       const waitMs = Math.min(Number(url.searchParams.get("wait") ?? "20") || 20, 25) * 1000;
       if (s.queue.length === 0 && !s.closed) {
         await new Promise<void>((r) => {
@@ -444,10 +485,16 @@ export class RouterDO extends DurableObject {
   // 下一个 POST/GET 即重挂，relay→浏览器方向的帧不再 ROUTE_MISS。
   // register 用会话既有的 p.dev：他人 POST 猜中 sid 时不能把会话改道到自己名下。
   // 同 dev 轮换 sid 占坑由 router 的顶替语义天然化解：新 sid register 踢掉旧
-  // poll 会话（close hook 移出 polls），同 dev 在线 poll 会话恒 ≤ 1
-  private ensurePoll(dev: string, sid: string) {
+  // poll 会话（close hook 移出 polls），同 dev 在线 poll 会话恒 ≤ 1。
+  // #29（B-P2 poll 顶替）：新 poll 会话不得顶替同 dev 的活跃 WebSocket——register
+  // 的顶替语义会把它 4000 踢下线，持 token 者 POST 猜中 dev 即可免费踢任意在线
+  // 设备（poll 创建本该是纯兜底动作）。浏览器只有 WS 升级失败才降级 poll（彼时
+  // WS 已断，无冲突）；返回 null 由调用方回 409
+  private ensurePoll(dev: string, sid: string): { dev: string; queue: string[]; resolver: (() => void) | null; lastSeen: number; closed: boolean } | null {
     let p = this.polls.get(sid);
     if (!p) {
+      const cur = this.router.connOfDev(dev);
+      if (cur && !cur.startsWith("poll:")) return null;
       p = { dev, queue: [], resolver: null, lastSeen: Date.now(), closed: false };
       this.polls.set(sid, p);
     }
