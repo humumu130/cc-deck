@@ -1,6 +1,6 @@
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 import { randomUUID } from "node:crypto";
-import { readFileSync, writeFileSync, mkdirSync, existsSync, readdirSync, type Dirent } from "node:fs";
+import { readFileSync, writeFileSync, mkdirSync, existsSync, readdirSync, statSync, type Dirent } from "node:fs";
 import { join, dirname, sep } from "node:path";
 import { homedir, networkInterfaces } from "node:os";
 import { detectLanIp } from "./lan-ip.js";
@@ -320,7 +320,11 @@ export function startServer(
       return true;
     }
     const file = mobileDir + rel;
-    if (!existsSync(file)) {
+    // #29（A-P3）：existsSync 对目录也真——rel 形如 "." 或命中子目录时 readFileSync
+    // 抛 EISDIR 炸 request 回调，必须 isFile 收口
+    let isFile = false;
+    try { isFile = statSync(file).isFile(); } catch {}
+    if (!isFile) {
       res.writeHead(404).end("not found");
       return true;
     }
@@ -329,7 +333,10 @@ export function startServer(
     return true;
   };
 
-  const wss = new WebSocketServer({ noServer: true });
+  // #29（A-P2）：ws 接收缓冲上限 1MB——此前无 maxPayload，恶意/失控客户端单帧可把
+  // relay 内存吃到上限（ws 默认 100MB/帧）。合法上行帧远小于此：命令帧 KB 级、
+  // 导入回发帧（ccdeck-import-resp 含连接条目列表）实测几十 KB
+  const wss = new WebSocketServer({ noServer: true, maxPayload: 1 << 20 });
   const bridge = new Bridge(bus, mgr, {
     gateTools: parseGateTools(opts.gateToolsRaw ?? process.env.CCR_GATE_TOOLS),
     dataDir: cfg.dataDir,
@@ -398,9 +405,18 @@ export function startServer(
       return;
     }
     if (url.pathname === "/api/lan-auth" && req.method === "POST") {
+      // #29（A-P2）：无鉴权端点（挑战密文落盘前）——body 8KB 帽防内存放大
+      //（合法挑战帧恒 <1KB：dev 路由键+box 密文几十字节），超限直接掐连接
+      if (rateLimited(`lan-auth:${req.socket.remoteAddress ?? "?"}`)) {
+        res.writeHead(429, { "content-type": "application/json" }).end('{"ok":false,"error":"太频繁"}');
+        return;
+      }
       let body = "";
       req.setEncoding("utf8");
-      req.on("data", (c) => { body += c; });
+      req.on("data", (c) => {
+        body += c;
+        if (body.length > 8192) req.destroy();
+      });
       req.on("end", () => {
         try {
           // #95 修正：nacl.box 需发送者公钥解密，dev 藏密文里则无从获取——dev 提为
@@ -456,10 +472,14 @@ export function startServer(
       // 带 Origin（跨源页面）：白名单回显放行；无 Origin：同源 fetch / 本机进程，认 Host。
       // Host 浏览器不可伪造；能伪造的非浏览器进程本来就能直接读 token 文件，非此端点威胁面。
       let allowOrigin = "";
-      // #43 回环豁免：请求落在本机（Host=loopback）时 Origin 一律放行——本机页面/
-      // webview（tauri/electron 的 Origin:null）领码 Failed to fetch 根修；本机到本机的跨源检查无安全意义
+      // #43 回环豁免（#29 收紧）：只认 Origin:"null"（tauri/electron webview 加载本地页
+      // 的真实形态）。原版「Host=loopback 即回显任意 Origin」等于对任意网站开门——远程
+      // 网页的 JS 发起的 loopback 请求 Host 就是 127.0.0.1，恶意页 fetch 本端点即可携
+      // 任意 Origin 读走 {token,…}=主 token 泄露（Safari/Firefox 无 PNA 拦截）。残留：
+      // 沙箱 iframe 也能造 Origin:null（ACAO:* 可读），第二刀=桌面端改走 tauri command
+      // 注入 token 后彻底关闭本豁免（备案）
       const reqLb = (req.headers.host ?? "").split(":")[0] === "127.0.0.1" || (req.headers.host ?? "").split(":")[0] === "localhost";
-      if (origin && reqLb) allowOrigin = origin === "null" ? "*" : origin;
+      if (origin && reqLb && origin === "null") allowOrigin = "*";
       else if (origin) {
         try {
           const u = new URL(origin);
@@ -514,9 +534,10 @@ export function startServer(
       const ips = localIps();
       const hostOk = (h: string) => h === "localhost" || h === "127.0.0.1" || ips.has(h);
       let acao = "";
-      // #43 回环豁免（同 /local-info）：exe webview Origin:null 直通
+      // #43 回环豁免（同 /local-info，#29 同步收紧）：只认 Origin:"null"（exe webview）。
+      // 「Host=loopback 即回显任意 Origin」= 对任意网站开门（loopback 请求 Host 恒 127.0.0.1）
       const reqLb2 = (req.headers.host ?? "").split(":")[0] === "127.0.0.1" || (req.headers.host ?? "").split(":")[0] === "localhost";
-      if (origin && reqLb2) acao = origin === "null" ? "*" : origin;
+      if (origin && reqLb2 && origin === "null") acao = "*";
       else if (origin) {
         try {
           const u = new URL(origin);
@@ -556,7 +577,16 @@ export function startServer(
         res.writeHead(401).end("unauthorized");
         return;
       }
-      if (!serveArtifact(decodeURIComponent(url.pathname.slice("/artifacts/".length)), res)) {
+      // #29（A-P2）：%ZZ 畸形编码让 decodeURIComponent 抛 URIError——未捕获会炸掉整个
+      // http server request 回调（进程级风险），400 兜底
+      let artName: string;
+      try {
+        artName = decodeURIComponent(url.pathname.slice("/artifacts/".length));
+      } catch {
+        res.writeHead(400).end("bad encoding");
+        return;
+      }
+      if (!serveArtifact(artName, res)) {
         res.writeHead(404).end("not found");
       }
       return;
@@ -902,11 +932,14 @@ export function startServer(
         return;
       }
       // #45 三码体系·客户端间转发：手机「从手机导入」的回发帧（t=ccdeck-import-resp）
-      // 不是命令——原样转发给同 relay 的其他已认证 ws 客户端（网页/exe 的导入监听器）
+      // 不是命令——原样转发给同 relay 的其他已认证 ws 客户端（网页/exe 的导入监听器）。
+      // #29（A-P1）：pairing 未鉴权连接必须跳过——该帧含 LAN 主 token/云桥凭据，
+      // 转给待配对手表连接等于把全部凭据喂给任意 LAN 设备（2 分钟配对窗常驻可收）
       if (cmd && (cmd as { t?: string }).t === "ccdeck-import-resp") {
         const raw = JSON.stringify(cmd);
         for (const c of wss.clients) {
-          if (c !== ws && c.readyState === WebSocket.OPEN) c.send(raw);
+          if (c === ws || (c as ClientWs).pairing) continue;
+          if (c.readyState === WebSocket.OPEN) c.send(raw);
         }
         ws.send('{"t":"ccdeck-import-resp-ack"}');
         return;
@@ -999,9 +1032,9 @@ async function handlePluginConfig(req: IncomingMessage, res: ServerResponse): Pr
   const ips = localIps();
   const hostOk = (h: string) => h === "localhost" || h === "127.0.0.1" || ips.has(h);
   let acao = "";
-  // #43 回环豁免（同 /local-info、/api/pair-code）：exe webview Origin:null 直通
+  // #43 回环豁免（同 /local-info、/api/pair-code，#29 同步收紧）：只认 Origin:"null"
   const reqLb = (req.headers.host ?? "").split(":")[0] === "127.0.0.1" || (req.headers.host ?? "").split(":")[0] === "localhost";
-  if (origin && reqLb) acao = origin === "null" ? "*" : origin;
+  if (origin && reqLb && origin === "null") acao = "*";
   else if (origin) {
     try {
       const u = new URL(origin);

@@ -32,6 +32,18 @@ if (process.env.CCR_PARENT_PID) {
 
 const cfg = loadConfig();
 
+// #29（A 路补刀）：进程级兜底——HTTP/WS 回调里漏网的 throw（畸形输入触发解析异常等，
+// 如 /artifacts 的 %ZZ URIError 旧例）默认行为是杀掉整个 relay，全部会话陪葬。
+// 已知 throw 点都在源头修（try/catch 400），这里只兜未枚举到的：记日志留痕继续跑。
+// 权衡：崩溃更糟（supervisor 重启也硬掐在途会话）；单进程本地 relay 的状态一致性
+// 风险由「异常点本就未触达持久层」的工程事实覆盖。
+process.on("uncaughtException", (err) => {
+  console.error(`[uncaught] ${err instanceof Error ? err.stack : String(err)}`);
+});
+process.on("unhandledRejection", (reason) => {
+  console.error(`[unhandledRejection] ${reason instanceof Error ? reason.stack : String(reason)}`);
+});
+
 // #28（2026-09-10 用户机实测根因）：同数据目录双 relay 进程（CLI 插件 supervisor +
 // exe 内嵌共用 ~/.cc-deck/data，同身份连桥）被桥按 dev 顶号互踢——闪断循环、重启
 // 才恢复。数据目录级单实例锁：锁内有活进程则本进程退出（先到先得，覆盖所有入口）
