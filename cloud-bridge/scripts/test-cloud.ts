@@ -65,6 +65,9 @@ function makeRouter(): { router: CloudRouter; rec: Recorded } {
   router.unregister("c2"); // 已被顶替的旧连接 close 事件后到，不应误删新映射
   assert(router.devOfConn("c3") === "phone1", "顶替后的映射不被旧连接 close 破坏");
 
+  // #29（B-P2）：connOfDev 反查（适配器区分「旧 poll 可顶替」与「活跃 WS 不可踢」用）
+  assert(router.connOfDev("phone1") === "c3" && router.connOfDev("ghost") === undefined, "connOfDev 反查占用连接");
+
   router.unregister("c3");
   assert(router.devs().length === 1, "注销后设备移除");
 }
@@ -144,6 +147,9 @@ function makeRouter(): { router: CloudRouter; rec: Recorded } {
   const srv = startCloudServer(port, token);
   await wait(150);
   assert(srv.router.devs().length === 0, "启动后无设备");
+  // #29（B-P3）：/health 只回计数不回 dev 列表（与 CF 形态对齐，防在线设备踩点）
+  const h = (await (await fetch(`http://127.0.0.1:${port}/health`)).json()) as { devices: unknown };
+  assert(typeof h.devices === "number" && h.devices === 0, "/health 回计数（0）不回 dev 列表");
   await bridgeSmoke(`ws://127.0.0.1:${port}`, token, assert);
   await srv.close();
   assert(true, "服务正常关闭");

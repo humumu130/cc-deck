@@ -8,6 +8,19 @@ import { CloudRouter } from "./router.js";
 // 网页端静态文件目录（仓库 web-console/，部署布局 /opt/cc-cloud-bridge/web-console/）
 const webDir = (name: string) => fileURLToPath(new URL(`../web-console/${name}`, import.meta.url));
 
+// #29（B-P0-1 根治）：rl- dev 必须持对应公钥——devId 口径 = 公钥原始字节前 8 字节
+// hex（与 relay/src/e2e.ts devId 一致）。桥侧 rl- 注册此前无鉴权：持 token 者可冒
+// 真实 relay 的 dev 注册 + 上报假 rk，发现帧把「真 dev + 假公钥」喂给浏览器/expo
+// 写进配对锚 → 后续密封永久指向攻击者公钥（web/expo 侧过滤是纵深，这里是断根）。
+// 现行 relay 自 7b7cd3a 起连桥恒带 rk 且 dev 即派生值（cloud-client.ts），收紧零影响。
+// wb-/ph-/wt- 无所有权证明（dev 即随机），顶替 DoS 面为协议固有，不在本刀范围
+function rlDevOfRk(rk: string): string | null {
+  if (!/^[A-Za-z0-9+/]{43}=$/.test(rk)) return null; // nacl 32 字节公钥恒 43 字符 + '='
+  const buf = Buffer.from(rk, "base64");
+  if (buf.length !== 32) return null;
+  return "rl-" + [...buf.subarray(0, 8)].map((b) => b.toString(16).padStart(2, "0")).join("");
+}
+
 const HEARTBEAT_MS = 30_000;
 // #85 心跳容忍度（2026-09-21）：单轮无 pong 即 terminate 对移动端太苛刻——手机
 // 后台停摆（doze/冻结）持续几分钟是常态，且 terminate 硬掐 TCP 不发 close 帧，
@@ -60,8 +73,10 @@ export function startCloudServer(port: number, token: string, extraPorts: number
   const onRequest = (req: IncomingMessage, res: ServerResponse) => {
     const url = new URL(req.url ?? "/", "http://localhost");
     if (req.method === "GET" && url.pathname === "/health") {
+      // #29（B-P3）：只回计数不回 dev 列表（与 CF 形态 RouterDO /health 对齐）——
+      // 在线设备 id 名单对任意访客无暴露必要，防踩点
       res.writeHead(200, { "content-type": "application/json" }).end(
-        JSON.stringify({ ok: true, devices: router.devs() }),
+        JSON.stringify({ ok: true, devices: router.devs().length }),
       );
       return;
     }
@@ -94,11 +109,20 @@ export function startCloudServer(port: number, token: string, extraPorts: number
     const dev = url.searchParams.get("dev") ?? "";
     const rk = url.searchParams.get("rk") ?? ""; // relay 连接上报公钥（发现帧下发，浏览器无需预知）
     const okToken = (url.searchParams.get("token") ?? "") === token;
-    // #373 /wan：手表透传通道，to=目标 relay dev（rl-*）为该连接固定投递目标
+    // #373 /wan：手表透传通道，to=目标 relay dev（rl-*）为该连接固定投递目标。
+    // #29（B-P2）：to 强制 rl- 前缀——该通道语义就是「手表→自家 relay 的明文透传」，
+    // 放宽到任意 dev 等于给手表开了「向任意在线设备投明文帧」的口子
     const isWan = url.pathname === "/wan";
     const wanTo = url.searchParams.get("to") ?? "";
+    // #29（B-P0-1 根治）：rl- dev 注册强制自洽（dev 必须等于上报 rk 的派生值），
+    // 冒名顶替/假 rk 一律拒（详见 rlDevOfRk 注释）
+    const rlBad = dev.startsWith("rl-") && rlDevOfRk(rk) !== dev;
+    if (rlBad) {
+      console.log(`[cloud-bridge] reject rl- self-consistency dev=${dev} rk=${rk.slice(0, 8)}… from=${req.socket.remoteAddress}`);
+    }
     if (
-      !(okToken && dev.length >= 1 && dev.length <= 64 && (url.pathname === "/cloud" || (isWan && wanTo.length >= 1 && wanTo.length <= 64)))
+      rlBad ||
+      !(okToken && dev.length >= 1 && dev.length <= 64 && (url.pathname === "/cloud" || (isWan && wanTo.startsWith("rl-") && wanTo.length <= 64)))
     ) {
       console.log(`[cloud-bridge] reject upgrade from=${req.socket.remoteAddress} path=${url.pathname}`);
       socket.write("HTTP/1.1 401 Unauthorized\r\n\r\n");
