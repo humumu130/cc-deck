@@ -107,7 +107,11 @@ export function startAcceptanceCloudPoll(cfg: RelayConfig, mgr: SessionManager, 
       if (s.done) continue;
       let submits: CloudSubmit[] | null = null;
       try {
+        // #28 results 读面收紧：提交数组含全部勾选+备注，不该让任何拿到 id 的互联网
+        // 读走——GET 携云桥 token（与 /cloud WS 同源密钥）。旧 Worker 忽略未知 header，
+        // 新 Worker 验它——**必须新版 relay 先发、新 Worker 后发**，反序回流 401 断流
         const r = await fetch(`${base}/view/acceptance-${s.id}.results.json`, {
+          headers: { authorization: `Bearer ${cfg.cloudToken}` },
           signal: AbortSignal.timeout(10_000),
         });
         if (r.ok) submits = (await r.json()) as CloudSubmit[];
