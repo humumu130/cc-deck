@@ -92,13 +92,14 @@ async function routeFetch(req: Request, env: Env): Promise<Response> {
       // HTML 设计稿要看不能下——2026-09-16 relay/连接区重设计提案走此通道）
       // #28 安全收窄（2026-10-01）：此前 GET 键名白名单 ^[\w.-]+$ 等于把整个 DL KV
       //（安装包/签名/dmg/验收单结果）全部暴露成 /view/ 可读——键名可猜即事实公开
-      //（用户点名安全问题）。收窄为三类：验收单云版页面（id 128bit 即凭证）+ 验收单
-      // results.json（relay 回流专用，验云桥 token）+ 存量预览键硬名单（列 KV 实测
-      // 仅 acc-132.html 一例）；其余键一律 404。.key 键（#28 提交密钥）不在任何 HTTP
-      // 白名单内——仅 Worker 内部 env.DL.get 对照，HTTP 层永不可读。
+      // #29-fix（2026-10-02 方案 b，用户拍板「堵写不堵读」）：GET 读面从 #29 B 面
+      // 的「acceptance 系 + 硬名单」放宽为 HTML/JSON 文档类通用——#29 收得太死，
+      // 误伤合法文档页（xhs-ccdeck-v6.html 审稿页 404 实锤）。写面不松：POST 提交
+      // 仍锁 acceptance 系 + 每 IP 限流 + per-sheet 密钥；acceptance-*.results.json
+      // 匿名读仍 401（下方 Bearer 分支先行接管，通用读不经过它）；.key 键（#28 提交
+      // 密钥）不在 .html/.json 扩展名集合内，HTTP 层照旧永不可读。
       const doc = url.pathname.slice(6);
       if (!/^[\w.-]+$/.test(doc) || !env.DL) return new Response("bad name", { status: 400 });
-      const ACC_PAGE_RE = /^acceptance-[0-9a-f]{32}\.html$/;
       const ACC_RESULTS_RE = /^acceptance-[0-9a-f]{32}\.results\.json$/;
       const PREVIEW_KEYS = new Set(["acc-132.html"]); // 存量设计稿预览（2026-09-16 重设计提案）
       // #175+#28 验收单云通道提交端点：公司网浏览器打不开家庭 LAN，云版表单页
@@ -172,12 +173,13 @@ async function routeFetch(req: Request, env: Env): Promise<Response> {
         if (val === null) return new Response("[]", { status: 200, headers: { "content-type": "application/json", "cache-control": "no-store" } });
         return new Response(val, { status: 200, headers: { "content-type": "application/json", "cache-control": "no-store" } });
       }
-      // #28 审查补：无后缀规范化前置——白名单内键全部以 .html 结尾，若把宽容补查留
-      // 在白名单门后（原写法），补查分支恒不可达（无后缀 doc 在门口就 404），
-      // 2026-09-24 的「手抄丢了 .html 也能打开」行为被收窄无声废除。改为进门时补后缀
+      // 无后缀规范化前置（保留 2026-09-24「手抄丢了 .html 也能打开」行为，且对 json
+      // 同样不误补）：非 .html/.json 结尾的键名先补 .html 再查——副作用即安全增益：
+      // .key（#28 提交密钥）等任何其他后缀/无后缀键经补后缀后永远寻址不到原键值。
+      // 门=扩展名白名单（文档类），门内不问键名前缀
       let page = doc;
-      if (!page.endsWith(".html") && !PREVIEW_KEYS.has(page)) page += ".html";
-      if (!ACC_PAGE_RE.test(page) && !PREVIEW_KEYS.has(page)) return new Response("not found", { status: 404 });
+      if (!/\.(html|json)$/i.test(page) && !PREVIEW_KEYS.has(page)) page += ".html";
+      if (!/\.(html|json)$/i.test(page) && !PREVIEW_KEYS.has(page)) return new Response("not found", { status: 404 });
       const html = await env.DL.get(page, { type: "text" });
       if (!html) return new Response("not found", { status: 404 });
       return new Response(html, {
@@ -247,12 +249,16 @@ async function routeFetch(req: Request, env: Env): Promise<Response> {
         return new Response("not found", { status: 404 });
       }
       // #29（B-P3 允许清单）：通用直出只服务安装包/公开产物形态（cc-deck-* 各端
-      // 安装包、tauri-* updater 清单与签名、snap-* 快照指针、latest(-test).json
-      // OTA 两清单#c0b8a13）——此前对任何过名字校验的 KV 键通用直出，将来误传的
-      // 任意私货（内网信息/临时文件）会自动变成公网可下。白名单外 404（与不存在键
-      // 同形，不做存在性侧信道）；acc-132.html 预览走 /view/ 白名单，不在此列；
+      // 安装包、tauri-* updater 清单与签名、snap-* 快照指针）——此前对任何过
+      // 名字校验的 KV 键通用直出，将来误传的任意私货（内网信息/临时文件）会
+      // 自动变成公网可下。白名单外 404（与不存在键同形，不做存在性侧信道）；
+      // acc-132.html 预览走 /view/ 白名单，不在此列。
+      // #29-fix（2026-10-02 事故复盘）：允许清单漏了 App OTA 的两份更新清单
+      // latest.json / latest-test.json（updates.ts 的 CF 通道 URL）——23:31 部署
+      // 后 CF 前置通道检查更新全 404，公司网用户（ECS 裸 IP 被墙）检查更新失明，
+      // 复活 #89。两键是纯公开产物（版本号+下载直链），补入允许清单。
       // #226 豁免固定名 cc-deck.apk（点号不匹配前缀 cc-deck-，曾被守卫误杀 404、
-      // 专属直出成死代码）
+      // 专属直出成死代码——豁免之走下文 KV 直出/302 ECS 分支）
       if (
         name !== "cc-deck.apk" &&
         !/^(cc-deck-|tauri-|snap-)/.test(name) &&
