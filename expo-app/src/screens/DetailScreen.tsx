@@ -1259,7 +1259,10 @@ export default function DetailScreen({ sid, onBack, initialView, ref }: { sid: s
   // 稳定复现；模拟器 7 次不可复现；JS 层唯一置 true 入口就是胶囊 onPress）。
   // 差异法定位：无守卫包点输入框必弹、有守卫包必不弹（两包唯一行为差异=本守卫）。
   // 真用户从底部输入框/链接处把手指移到顶部胶囊物理上不可能 <400ms，吞掉
-  // 400ms 内的打开请求零误伤；正常点胶囊（间隔远超 400ms）照常放行
+  // 400ms 内的打开请求零误伤；正常点胶囊（间隔远超 400ms）照常放行。
+  // 四段修补漏：输入框已聚焦后再点不重发 onFocus（RN 行为），时间窗打点不
+  // 刷新、错派直通——胶囊 onPress 增加触点坐标判定（见 permPillRef 处），
+  // 此处时间窗降级为坐标取不到时的第二道防线
   const [permPanel, setPermPanelRaw] = useState(false);
   const setPermPanel = (v: boolean) => {
     if (v) {
@@ -1283,6 +1286,11 @@ export default function DetailScreen({ sid, onBack, initialView, ref }: { sid: s
   // #129 回车键行为：开 = 回车发送（恢复 #68 多行化之前的旧习惯）；关 = 回车换行
   const enterSend = useEnterSend();
   const inputRef = useRef<TextInput>(null);
+  // #216 四段修·坐标守卫：权限胶囊中心窗口坐标（onLayout 时 measureInWindow
+  // 测一次；胶囊随 head 固定在顶部不滚动，一次测量终身有效）——胶囊 onPress
+  // 用触点与中心的距离判错派（机制见 onPress 处注释）
+  const permPillRef = useRef<View>(null);
+  const permPillCtr = useRef<{ x: number; y: number } | null>(null);
   const editInput = (v: string) => {
     if (v) drafts.set(sid, v);
     else drafts.delete(sid);
@@ -2016,14 +2024,33 @@ export default function DetailScreen({ sid, onBack, initialView, ref }: { sid: s
             <View style={d.permCluster}>
               {!external && canCmd && !s.historical ? (
                 <Pressable
+                  ref={permPillRef}
                   style={[
                     d.permPill,
                     perm === "default"
                       ? [d.permPillGhost, { borderColor: mode === "dark" ? "rgba(125,165,220,0.22)" : c.line }]
                       : perm === "bypassPermissions" ? d.permPillWarn : d.permPillLit,
                   ]}
+                  onLayout={() => {
+                    permPillRef.current?.measureInWindow((x, y, w, h) => {
+                      permPillCtr.current = { x: x + w / 2, y: y + h / 2 };
+                    });
+                  }}
                   android_ripple={{ color: c.tintSoft, borderless: false, radius: 8 }}
-                  onPress={() => setPermPanel(true)}
+                  onPress={(e) => {
+                    // #216 四段修·坐标守卫：三段的时间窗守卫漏了「输入框已聚焦
+                    // 后再点不重发 onFocus」的场景（RN 行为，test.5 后真机偶尔仍
+                    // 弹的根因），改按触点位置一刀切：错派触摸的事件坐标保持手指
+                    // 原始位置（屏幕中下部，距胶囊数百 dp），真点胶囊触点必在
+                    // 胶囊上（含 hitSlop 与触点误差）。距中心 >100dp 即吞；坐标
+                    // 取不到时回落 setPermPanel 内的时间窗守卫（双保险）
+                    const t = e.nativeEvent.changedTouches?.[0];
+                    const px = t?.pageX ?? e.nativeEvent.pageX;
+                    const py = t?.pageY ?? e.nativeEvent.pageY;
+                    const ctr = permPillCtr.current;
+                    if (ctr && typeof px === "number" && typeof py === "number" && Math.hypot(px - ctr.x, py - ctr.y) > 100) return;
+                    setPermPanel(true);
+                  }}
                   hitSlop={{ top: 8, bottom: 8, left: 6, right: 6 }}
                   accessibilityLabel={`权限模式：${PERM_LABEL[perm]}，点按选择`}
                 >
