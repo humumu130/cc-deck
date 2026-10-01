@@ -142,6 +142,9 @@ export interface SessionState {
   // dispatch_tier = 派单档位（随手办/轻立项/正经立项）。旧 relay 不带 = 无组织域
   project_gid?: string;
   dispatch_tier?: string;
+  // #27 引擎标记：undefined = claude；"codex" = CodexAgentSession（codex exec
+  // 驱动）。卡片「托管/Codex」徽标数据源；旧 relay 不带 = claude
+  engine?: string;
 }
 
 // ---------- #26 M2 组织域（v3.1 矩阵式；relay projects.ts 镜像） ----------

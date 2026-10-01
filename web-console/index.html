@@ -2329,6 +2329,10 @@
           <!-- #208 目录自动创建（用户配置开关）：勾选随命令带 autoMkdir，relay 侧按输入路径
                mkdir -p（含多级，时间线说明）；不勾（默认）＝旧行为回落默认目录并说明。偏好型开关本地记忆 -->
           <label class="skip-perm" title="勾选：输入的工作目录不存在时按路径新建（含多级）。不勾：回落默认目录并在会话时间线说明"><input type="checkbox" id="autoMkdir">目录不存在时自动创建</label>
+          <!-- #27 引擎选择（偏好型，本地记忆）：codex = CodexAgentSession（codex exec
+               驱动，无审批卡/附图仅首回合；模型接线在 ~/.codex/config.toml）。旧 relay
+               忽略未知字段 = 建出 claude 会话，无害 -->
+          <label class="skip-perm" title="勾选：用 Codex CLI 引擎跑这个会话（需 relay 侧装好 codex 并完成接线）。不勾：默认 Claude 引擎。"><input type="checkbox" id="useCodex">用 Codex 引擎</label>
           <!-- #23 认知引导（罗嗦文案收进悬浮）：面板新建的是后台会话（无终端窗口）；想在终端里看到对话需装 CLI 插件 -->
           <span class="hint-q" title="此为后台会话（无终端窗口）。想在终端里看到对话？给电脑端 CLI 装 CC Deck 插件后用「终端」会话。">?</span>
         </div>
@@ -4130,6 +4134,7 @@ function onEvent(ctx, msg) {
         title: msg.payload.title || msg.payload.initial_prompt.slice(0, 24),
         model: msg.payload.model, status: "WORKING", action_summary: "启动中",
         external: msg.payload.external || false, remote_mode: false,
+        engine: msg.payload.engine, // #27 引擎标记（codex 卡片徽标数据源；claude/缺省=undefined）
         started_at: msg.ts, updated_at: msg.ts, stats: { files_changed: 0, lines_added: 0, lines_deleted: 0 },
       });
       ctx.timelines.set(sid, []);
@@ -4157,7 +4162,7 @@ function onEvent(ctx, msg) {
       // 永远挂着"历史会话"横幅（本地值只在快照时写过一次）
       for (const f of ["remote_mode", "title", "title_locked", "model", "turn_started_at",
         "usage", "context_usage", "context_limit", "todos", "subagents", "permission_mode", "pending_inputs", "relay_session_id", "cron_tasks", "compacting", "pinned", "saved", "historical", "artifacts", "artifacts_truncated",
-        "project_gid", "dispatch_tier"]) { /* #26 M2 组织归属（组徽标/档位徽标数据源） */
+        "project_gid", "dispatch_tier", "engine"]) { /* #26 M2 组织归属（组徽标/档位徽标数据源）；#27 引擎标记 */
         if (msg.payload[f] !== undefined) s[f] = msg.payload[f];
       }
       // #157 最后活跃时间优先采信载荷显式值（relay 水合帧 ≠ 活动帧，信 envelope ts
@@ -4937,7 +4942,7 @@ function render() {
       // #164 挂点迁移：不再进标题行（分类信息与源标签/📁 同族）——移 stats 元信息行
       // #171 英文缩写（用户验收批注「最好改成英文缩写，更简洁」）：SAVED/HIST/CLI/SDK，
       // 四态全部带 title 悬停解释（缩写不自解释；bg 的 cursor:help 原先没有配套 title）
-      const badges = dormant ? '<span class="his-badge" title="已保存休眠（点击卡片恢复）">SAVED</span>' : s.historical ? '<span class="his-badge" title="历史会话（进程已结束）">HIST</span>' : s.external ? '<span class="his-badge ext" title="外部终端里的 CLI 会话">CLI</span>' : '<span class="his-badge bg" title="托管会话（控制台新建，无终端窗口）">SDK</span>';
+      const badges = dormant ? '<span class="his-badge" title="已保存休眠（点击卡片恢复）">SAVED</span>' : s.historical ? '<span class="his-badge" title="历史会话（进程已结束）">HIST</span>' : s.external ? '<span class="his-badge ext" title="外部终端里的 CLI 会话">CLI</span>' : s.engine === "codex" ? '<span class="his-badge bg" title="托管 Codex 会话（codex exec 驱动，无终端窗口）">CODEX</span>' : '<span class="his-badge bg" title="托管会话（控制台新建，无终端窗口）">SDK</span>';
       // #100 后台任务徽标：⑂N 黄胶囊。#161 对齐手机：bgCount > 0 恒显——WORKING 时
       // liveRow 只交代主回合在跑，并行子 Agent 数仍要一眼可见（手机三档密度卡同口径）
       const bgBadge = bgRunning(s) ? '<span class="bg-badge" title="后台子 Agent 运行中">⑂' + bgCount(s) + "</span>" : "";
@@ -7284,7 +7289,9 @@ $("createBtn").onclick = () => {
   const bypass = $("skipPerm").checked;
   // #208 目录自动创建开关（偏好型，本地记忆，与 skipPerm 用后即复位不同）
   const autoMkdir = $("autoMkdir").checked;
-  const id = sendCommandTo(ctx, "COMMAND_CREATE", { cwd: cwd || ".", prompt, ...(bypass ? { permissionMode: "bypassPermissions" } : {}), ...(autoMkdir ? { autoMkdir: true } : {}) });
+  // #27 引擎选择（偏好型）：codex 引擎随命令下发（relay 白名单收口，旧 relay 忽略）
+  const codex = $("useCodex").checked;
+  const id = sendCommandTo(ctx, "COMMAND_CREATE", { cwd: cwd || ".", prompt, ...(bypass ? { permissionMode: "bypassPermissions" } : {}), ...(autoMkdir ? { autoMkdir: true } : {}), ...(codex ? { engine: "codex" } : {}) });
   if (bypass) $("skipPerm").checked = false; // 创建后回落，防止下一次误建 skip 会话
   if (id) {
     // #168 历史目录：按实际建会话的源记最近 5 条历史（pushCwdHist cap 5）+ 双写旧单值键（回滚兼容）

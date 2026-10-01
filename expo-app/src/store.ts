@@ -2204,6 +2204,7 @@ class RelayStore {
           action_summary: "启动中",
           external: msg.payload.external || false,
           remote_mode: false,
+          engine: msg.payload.engine, // #27 引擎标记（codex 徽标数据源）
           started_at: msg.ts,
           updated_at: msg.ts,
           stats: { files_changed: 0, lines_added: 0, lines_deleted: 0 },
@@ -2266,6 +2267,8 @@ class RelayStore {
         // #26 M2 组织归属（组徽标/档位数据源；旧 relay 不带 = undefined 不覆盖）
         if (msg.payload.project_gid !== undefined) s.project_gid = msg.payload.project_gid;
         if (msg.payload.dispatch_tier !== undefined) s.dispatch_tier = msg.payload.dispatch_tier;
+        // #27 引擎标记（codex 徽标；引擎创建后不变，防御性合并）
+        if (msg.payload.engine !== undefined) s.engine = msg.payload.engine;
         // #157 最后活跃时间优先采信载荷显式值：relay 重启后的水合帧（任务清单/用量/
         // 输出物回放重建）不是真实活动，信 envelope ts 会把重启时刻当活动时刻（全表
         // 不置灰根因）。旧 relay 不带该字段 → 回落 msg.ts，行为不变

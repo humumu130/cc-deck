@@ -1748,7 +1748,7 @@ export default function DetailScreen({ sid, onBack, initialView, ref }: { sid: s
       ? snap.sources.find((x) => x.id === s.src)?.name
       : undefined;
   // 元信息次行左段（源标注·无则计时顶格，不空占位）
-  const srcMeta = [external ? "" : "托管", s.historical && !external ? "历史" : "", srcName].filter(Boolean).join(" · ");
+  const srcMeta = [external ? "" : s.engine === "codex" ? "Codex" : "托管", s.historical && !external ? "历史" : "", srcName].filter(Boolean).join(" · ");
   // 上下文水位：relay 下发的当回合占用 + 按模型上限（与列表卡 mini 条、网页端同口径）
   const ctxUsed = s.context_usage ?? 0;
   const ctxLimit = s.context_limit ?? CONTEXT_LIMIT_FALLBACK;

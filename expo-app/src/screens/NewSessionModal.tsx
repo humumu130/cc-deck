@@ -26,6 +26,9 @@ export default function NewSessionModal({ visible, onClose }: { visible: boolean
   // 时间线说明「已自动创建」）；关（默认）=旧行为回落默认目录并说明。AsyncStorage
   // 记忆偏好（偏好型开关，不像 bypass 语义敏感需要每次显式勾）
   const [autoMkdir, setAutoMkdir] = useState(false);
+  // #27 引擎选择（偏好型，同 autoMkdir 记忆口径）：勾选 = codex 引擎（relay 侧
+  // 需装好 codex CLI；旧 relay 忽略未知字段，建出 claude 会话无害）
+  const [useCodex, setUseCodex] = useState(false);
   const [loadedInit, setLoadedInit] = useState(false);
 
   // 目标源（#294 批3 + #369 记忆）：聚合且多源时 chips 选发送目标，默认=上次选择
@@ -53,6 +56,7 @@ export default function NewSessionModal({ visible, onClose }: { visible: boolean
     setTargetId(null);
     void AsyncStorage.getItem("ccr_cwd").then((v) => v && setCwd(v));
     void AsyncStorage.getItem("ccr_auto_mkdir").then((v) => setAutoMkdir(v === "1"));
+    void AsyncStorage.getItem("ccr_use_codex").then((v) => setUseCodex(v === "1"));
     void AsyncStorage.getItem("ccr_new_target").then((v) => {
       if (v && snap.sources.some((x) => x.id === v)) setTargetId(v);
     });
@@ -74,7 +78,7 @@ export default function NewSessionModal({ visible, onClose }: { visible: boolean
     }
     setErr(null);
     void AsyncStorage.setItem("ccr_cwd", cc);
-    if (store.send("COMMAND_CREATE", { cwd: cc, prompt: "" + p, ...(bypass ? { permissionMode: "bypassPermissions" as const } : {}), ...(autoMkdir ? { autoMkdir: true } : {}) }, multi ? effTarget ?? undefined : undefined)) {
+    if (store.send("COMMAND_CREATE", { cwd: cc, prompt: "" + p, ...(bypass ? { permissionMode: "bypassPermissions" as const } : {}), ...(autoMkdir ? { autoMkdir: true } : {}), ...(useCodex ? { engine: "codex" as const } : {}) }, multi ? effTarget ?? undefined : undefined)) {
       setPrompt("");
       onClose();
     } else {
@@ -153,6 +157,23 @@ export default function NewSessionModal({ visible, onClose }: { visible: boolean
                 {autoMkdir ? <Text style={m.bypassCheck}>✓</Text> : null}
               </View>
               <Text style={m.bypassT}>目录不存在时自动创建</Text>
+            </Pressable>
+            {/* #27 引擎选择：同 checkbox 语言 + AsyncStorage 跨次记忆（偏好型） */}
+            <Pressable
+              style={m.bypassRow}
+              hitSlop={6}
+              onPress={() =>
+                setUseCodex((v) => {
+                  const next = !v;
+                  void AsyncStorage.setItem("ccr_use_codex", next ? "1" : "0");
+                  return next;
+                })
+              }
+            >
+              <View style={[m.bypassBox, useCodex && m.bypassBoxOn]}>
+                {useCodex ? <Text style={m.bypassCheck}>✓</Text> : null}
+              </View>
+              <Text style={m.bypassT}>用 Codex 引擎</Text>
             </Pressable>
             <Pressable style={m.createBtn} android_ripple={{ color: "rgba(255,255,255,0.15)", borderless: false }} onPress={create}>
               <Text style={m.createT}>启动会话</Text>

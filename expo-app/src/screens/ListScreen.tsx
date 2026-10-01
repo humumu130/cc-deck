@@ -543,7 +543,7 @@ const SessionCard = memo(function SessionCard({
             {srcBadge ? <SrcBadge {...srcBadge} /> : null}
             <Text style={styles.meta} numberOfLines={1}>
               {/* #26 M2 组织归属前置（§2.5 分流形态）：组名/档位最先交代，旧 relay 无字段零变化 */}
-              {orgTag ? `${orgTag} · ` : ""}{s.external ? "外部 CLI" : "托管"}
+              {orgTag ? `${orgTag} · ` : ""}{s.external ? "外部 CLI" : s.engine === "codex" ? "Codex" : "托管"}
               {s.cwd ? ` · 📁 ${folderOf(s.cwd)}` : ""}
               {dormant ? " · 已保存" : ""}
               {s.historical && !s.external ? " · 历史" : ""}
