@@ -7323,6 +7323,12 @@ try { $("autoMkdir").checked = localStorage.getItem("ccd_auto_mkdir") === "1"; }
 $("autoMkdir").onchange = () => {
   try { localStorage.setItem("ccd_auto_mkdir", $("autoMkdir").checked ? "1" : "0"); } catch {}
 };
+// #27 引擎选择开关：本地记忆（ccd_use_codex，默认关）——偏好型开关同 autoMkdir
+// 口径跨次保留（此前注释声称有记忆但实际没写，审查 P2-14 补齐）
+try { $("useCodex").checked = localStorage.getItem("ccd_use_codex") === "1"; } catch {}
+$("useCodex").onchange = () => {
+  try { localStorage.setItem("ccd_use_codex", $("useCodex").checked ? "1" : "0"); } catch {}
+};
 // ---------- #279 批次3 图片发送（对齐手机 DetailScreen 图片链路） ----------
 // 入口：输入区 📷 选图 + document paste 剪贴板贴图（网页端独有）；
 // 压缩：canvas 重绘 JPEG 长边≤1568 / 质量 0.82（HEIC 等浏览器不解码格式 catch 后 toast）；

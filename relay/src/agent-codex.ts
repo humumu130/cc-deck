@@ -13,11 +13,15 @@
 // P0 已知缺口（备案，非本笔范围）：
 //   - headless 无交互审批通道：allow/deny/answer 恒 false、setPermissionMode no-op、
 //     hasPending 恒 false（WAITING 形态后续版本再议）
-//   - -i 附图仅首回合（codex 协议限制：attach to the initial prompt）；续回合带图
-//     发 system 日志后忽略
+//   - 附图不支持：codex -i 要文件路径，relay 侧图片是 base64（协议不咬合）——
+//     构造/首回合/续回合三口统一 system 日志拒，不吞
 //   - model 参数不透传（relay 的模型名是 Claude 侧概念；codex 用自己的
 //     config.toml 接线——本机 GLM 同源，见研究文档）
 //   - file_change/reasoning 等事件 P0 不映射；stats 恒零（无 Edit/Write 语义面）
+//
+// 协议实测事实（2026-10-01，防漂移）：`codex exec resume` 的输出首行会**重发
+// thread.started**（同 thread_id）——resumeAgent/reviveSaved 的 45s/30s init 看门狗
+// 依赖 onInit 到达，勿改成「thread.started 只在首进程发」。
 //
 // 测试口径：CodexEventMapper 是纯函数面（fixture 喂事件断言回调），CI 零真 spawn；
 // 真链路冒烟在沙盒手工跑（用户已明示预算不敏感，2026-10-01）。
@@ -110,7 +114,7 @@ export class CodexEventMapper {
           const exit = it.exit_code ?? null;
           const ok = it.status === "failed" || (exit !== null && exit !== 0) ? false : true;
           const head = (it.aggregated_output ?? "").trim().split("\n")[0] ?? "";
-          cb.onLog("tool_result", ok ? (head || `退出码 ${exit}`) : `失败（退出码 ${exit ?? "?"}）`, {
+          cb.onLog("tool_result", ok ? (head || `退出码 ${exit ?? "?"}`) : `失败（退出码 ${exit ?? "?"}）`, {
             tool: "command",
             id: it.id,
             full: capDetail(it.aggregated_output ?? ""),
@@ -165,13 +169,18 @@ export function resolveCodexCliPath(): string | null {
     cachedBin = fromEnv;
     return cachedBin;
   }
-  // 父进程 PATH + childEnv 同款补位（spawn env 与此处解析保持同一视野）
+  // 父进程 PATH + childEnv 同款补位（spawn env 与此处解析保持同一视野）。
+  // Windows：npm 全局装的是 codex.cmd 垫片（spawn 非 shell 模式不认 .cmd 以外
+  // 的无后缀名），按 .cmd/.exe/.bat 优先探测
+  const names = process.platform === "win32" ? ["codex.cmd", "codex.exe", "codex.bat", "codex"] : ["codex"];
   const dirs = (childEnv().PATH ?? "").split(delimiter).filter(Boolean);
   for (const d of dirs) {
-    const p = join(d, "codex");
-    if (existsSync(p)) {
-      cachedBin = p;
-      return p;
+    for (const n of names) {
+      const p = join(d, n);
+      if (existsSync(p)) {
+        cachedBin = p;
+        return p;
+      }
     }
   }
   cachedBin = null;
@@ -192,7 +201,8 @@ export interface CodexSessionOpts {
   resume?: string;
   /** 兼容工厂统一签名：headless 无审批通道，忽略 */
   permissionMode?: string;
-  /** 仅首回合生效（-i 协议限制），后续带图在 sendMessage 侧提示并忽略 */
+  /** 工厂统一签名兼容位：P0 不消费（-i 要文件路径，relay 侧是 base64）——构造时
+   *  带图发 system 日志拒；真正消费要等「relay 落盘→传路径」管线（V2 议） */
   images?: string[];
   /** 兼容工厂统一签名：允许规则是 Claude 权限面概念，忽略 */
   rules?: unknown;
@@ -235,13 +245,17 @@ export class CodexAgentSession implements AgentLike {
     this.threadId = opts?.resume;
     const bin = resolveCodexCliPath();
     if (!bin) {
-      // 同步抛 → session-manager create() 的 try/catch（f975fea 先例）兜成
-      // ok:false 横幅；无半登记残留
+      // 同步抛 → execCommand 顶层 catch 兜成 COMMAND_ACK ok:false（Leader 首建口
+      // 另有 createLeaderFirstTime 的 try/catch，f975fea）；create 的会话登记在
+      // newAgent 之后，throw 点无半登记残留
       throw new Error("codex CLI 未找到（安装 codex 或设 CCR_CODEX_PATH）");
     }
     this.bin = bin;
+    if (opts?.images && opts.images.length > 0) {
+      this.cb.onLog("system", "codex 引擎暂不支持附图（协议要文件路径），图片已忽略");
+    }
     // undefined = 按需恢复的 parked 形态：不 spawn，首个回合由 sendMessage 开启
-    if (initialPrompt !== undefined) this.execTurn(initialPrompt, opts?.images);
+    if (initialPrompt !== undefined) this.execTurn(initialPrompt);
   }
 
   sendMessage(text: string, images?: string[], echo?: string): void {
@@ -259,15 +273,20 @@ export class CodexAgentSession implements AgentLike {
         full: full === undefined ? undefined : full + marker,
       });
     }
-    if (images && images.length > 0 && (this.proc || this.threadId)) {
-      this.cb.onLog("system", "codex 续回合暂不支持附图，图片已忽略（P0 已知缺口）");
+    if (images && images.length > 0) {
+      this.cb.onLog("system", "codex 引擎暂不支持附图（协议要文件路径），图片已忽略");
     }
     if (this.proc) {
-      // 回合进行中：排队，干净收口后 merge 再起（进程模型下没有并发回合）
+      // 回合进行中：排队，干净收口后 merge 再起（进程模型下没有并发回合）。
+      // 上限防失控：客户端异常连发不该堆出无界队列（整段将灌进下回合 stdin）
+      if (this.queued.length >= 50) {
+        this.cb.onLog("system", "排队消息已达上限（50 条），本条丢弃");
+        return;
+      }
       this.queued.push(text);
       return;
     }
-    this.execTurn(text, images && images.length > 0 && !this.threadId ? images : undefined);
+    this.execTurn(text);
   }
 
   // headless 无审批通道（WAITING 形态 P0 不做）——三口恒 false，端上不出现审批卡
@@ -293,44 +312,64 @@ export class CodexAgentSession implements AgentLike {
     this.stopping = true;
     this.ended = true;
     this.queued = [];
+    // 同步收口先行：置位 + onSessionEnd 立即到达端上（卡片当场离场），杀树转
+    // 后台——killTree 走 taskkill/pkill 可能秒级，不该让收口回调吊在它后面
     const child = this.proc;
     this.proc = null;
-    if (child?.pid) await killTree(child.pid); // close 事件随杀到达，stopping 守卫拦下
     this.pid = undefined;
     this.cb.onSessionEnd("stopped");
+    if (child?.pid) void killTree(child.pid).catch(() => {}); // close 事件随杀到达，stopping 守卫拦下
   }
 
   // -- 内部 -------------------------------------------------------------
 
-  private execTurn(prompt: string, images?: string[]): void {
+  private execTurn(prompt: string): void {
     const args = ["exec", "--json", "--skip-git-repo-check", "-C", this.cwd];
     if (this.threadId) args.push("resume", this.threadId);
-    if (images && images.length > 0 && !this.threadId) args.push("-i", ...images);
     args.push("-"); // prompt 从 stdin 读（长文本/引号/换行安全）
 
-    const child = spawn(this.bin, args, {
-      stdio: ["pipe", "pipe", "pipe"],
-      cwd: this.cwd,
-      env: childEnv(),
-    });
+    // 回合在途标记先于 spawn 置位：进程零事件退出（坏 provider/CLI 崩溃）时，
+    // onClose 的崩溃分支靠 turnTerminal=false 才能收口——保持初始 true 会静默
+    // 溜过（审查 P1「零事件僵尸卡」：WORKING 卡死到看门狗）。turnStartMs 同步
+    // 重置，时长从 spawn 起算（turn.started 未到时的兜底口径）
+    this.mapper.turnTerminal = false;
+    this.mapper.turnStartMs = Date.now();
+
+    let child: ChildProcess;
+    try {
+      child = spawn(this.bin, args, {
+        stdio: ["pipe", "pipe", "pipe"],
+        cwd: this.cwd,
+        env: childEnv(),
+      });
+    } catch (e) {
+      // 同步 throw（Windows EINVAL/参数超限等）：无进程无 close 事件，走与
+      // onClose 崩溃分支同款收口（failTurn），不炸 relay
+      this.failTurn(`codex 启动失败：${e instanceof Error ? e.message : String(e)}`);
+      return;
+    }
     this.proc = child;
     this.pid = child.pid;
     this.stderrTail = "";
     this.cb.onStatusChange("WORKING", "启动中"); // turn.started 前的窗口别停在 DONE
 
-    let buf = "";
+    // 按字节找 0x0A、切段后再 decode：chunk 边界劈开多字节 UTF-8 字符时，先
+    // toString 后拼接会把断字符固化成 U+FFFD（中文输出被吃字不可逆）
+    let pending = Buffer.alloc(0);
     child.stdout!.on("data", (d: Buffer) => {
-      buf += d.toString("utf-8");
+      pending = Buffer.concat([pending, d]);
       let i: number;
-      while ((i = buf.indexOf("\n")) >= 0) {
-        const line = buf.slice(0, i).trim();
-        buf = buf.slice(i + 1);
+      while ((i = pending.indexOf(0x0a)) >= 0) {
+        const line = pending.subarray(0, i).toString("utf-8").trim();
+        pending = pending.subarray(i + 1);
         if (line) this.onLine(line);
       }
     });
     child.stderr!.on("data", (d: Buffer) => {
-      // 只留尾段：失败原因可诊断即可，不做全量转发（codex 噪声大）
-      this.stderrTail = ((this.stderrTail + d.toString("utf-8")).match(/[\s\S]{500}$/)?.[0] ?? "");
+      // 只留尾段 500 字符：失败原因可诊断即可，不做全量转发（codex 噪声大）。
+      // 审查修正：正则 {500} 要求恰好 500 字符，短 stderr（绝大多数）整段丢弃
+      // ——尾段恒空，B4 测试实锤；slice 语义才是「留尾」
+      this.stderrTail = (this.stderrTail + d.toString("utf-8")).slice(-500);
     });
     child.on("error", (e) => {
       // spawn 运行期失败（EACCES 等；构造期 ENOENT 已在 resolveCodexCliPath 拦）
@@ -379,6 +418,22 @@ export class CodexAgentSession implements AgentLike {
       const merged = this.queued.join("\n\n");
       this.queued = [];
       this.execTurn(merged);
+    }
+  }
+
+  /** spawn 同步失败收口（onClose 崩溃分支的同款语义，无进程版） */
+  private failTurn(why: string): void {
+    this.proc = null;
+    this.pid = undefined;
+    if (this.stopping || this.ended) return;
+    if (!this.mapper.turnTerminal) {
+      this.mapper.turnTerminal = true;
+      const dur = this.mapper.turnStartMs ? Math.max(0, Date.now() - this.mapper.turnStartMs) : 0;
+      this.cb.onTurnEnd(false, truncate(why, 300), dur);
+    }
+    if (!this.threadId) {
+      this.ended = true;
+      this.cb.onSessionEnd("codex 首回合进程退出");
     }
   }
 }

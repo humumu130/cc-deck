@@ -1541,7 +1541,10 @@ export class SessionManager {
             // ended 只是流先关了——此刻再接管必然双拉（新 agent childPid 未就位，
             // 补刀落空 → 双进程）。消息走 sendMessage 排队：AsyncQueue 即 SDK prompt
             // 流，新流 init 后按序消费，语义与正常排队一致
-            if (s.agent && !s.wd.gaveUp && s.resumePending && Date.now() - s.resumePending < resumePendingWindowMs()) {
+            // #27 补 !ended：codex 干净收口后 ended 恒 false（DONE 常驻），但 stop/
+            // 早夭路径 ended=true 且窗口内——对 ended 的 agent sendMessage 只会被
+            // 静默丢（codex 侧 console.warn），消息蒸发；一律走 resumeAgent 真拉活
+            if (s.agent && !s.agent.ended && !s.wd.gaveUp && s.resumePending && Date.now() - s.resumePending < resumePendingWindowMs()) {
               if (s.state.status === "ERROR" || s.state.status === "DONE") s.state.status = "WORKING";
               s.agent.sendMessage(text, sanitizeImages(cmd.payload.images), echo);
               s.unacked.push({ text, images: sanitizeImages(cmd.payload.images), ts: Date.now() });
@@ -1571,6 +1574,11 @@ export class SessionManager {
           }
           const s = this.sessions.get(sid) ?? this.sessions.get(`ext-${sid}`);
           if (!s) return { command_id: cmd.command_id, ok: false, error: "会话不存在" };
+          // #27 codex 拒收：模型接线在 ~/.codex/config.toml（relay 侧模型名是 Claude
+          // 概念，注入 /model 只会被 codex 当普通文本跑一遍）
+          if (s.state.engine === "codex") {
+            return { command_id: cmd.command_id, ok: false, error: "Codex 会话的模型请在 relay 侧 ~/.codex/config.toml 配置，不支持运行时切换" };
+          }
           if (s.state.external) {
             if (!this.bridge) return { command_id: cmd.command_id, ok: false, error: "外部会话通道未就绪" };
             const r = this.bridge.extInput(s.state.session_id, `/model ${model}`);
@@ -2435,6 +2443,12 @@ export class SessionManager {
     // 回调填充中）的窗口由调用侧互斥（resumePending）挡住，不该走到这里
     const old = s.agent;
     s.streamGen++;
+    // #27 先同步 stop() 再补刀：codex 一回合一进程模型下干净收口后 ended 恒 false
+    //（DONE 常驻语义），直接 killTree 杀在途回合会触发 onClose 崩溃分支 → flush
+    // 队列重拉新进程（恰是被接管的对立面，且「kill⇒流关」假设对 codex 不成立）。
+    // stop() 同步置 stopping/ended 挡掉 onClose 全部动作；onSessionEnd 过代际守卫
+    //（streamGen 已递增）零状态污染；杀树由 stop 自带，下方 killTree 是双保险
+    if (old && !old.ended) void old.stop().catch(() => {});
     if (old?.childPid) {
       void this.watchdogProcs.killTree(old.childPid).catch(() => {});
     }
@@ -2592,6 +2606,31 @@ export class SessionManager {
     const sdkId = s.state.relay_session_id;
     if (!sdkId) {
       throw new Error("无 SDK 会话记录（首次回合未完成即中断），无法恢复");
+    }
+    // #27 codex 短路恢复：codex 的「恢复」不需要 spawn（thread_id 常驻，下一条
+    // 消息自然 exec resume 续跑）；照走通用路径 = parked 形态不 spawn、无 onInit，
+    // 30s 看门狗必超时把好卡误报成「恢复失败」。直接合成成功终态（对照下方
+    // onInit 成功路径体），零进程开销，下一条消息 sendMessage 直起回合
+    if (s.state.engine === "codex") {
+      s.streamGen++;
+      s.resumePending = undefined;
+      s.wd.gaveUp = false;
+      s.agent = null; // parked 形态：死卡分支 → resumeAgent 按需重建
+      s.state.saved = undefined;
+      s.state.historical = false;
+      s.state.org_parked = undefined; // 同 claude 路径：恢复即脱离挂起休眠
+      s.state.status = "DONE";
+      s.state.done_reason = "已恢复（等待输入）";
+      s.state.action_summary = "已恢复，等待输入";
+      s.state.turn_started_at = undefined;
+      s.state.last_error = undefined;
+      s.state.updated_at = Date.now();
+      s.lastProgressAt = Date.now();
+      s.lastProgressKind = "";
+      s.wd.phase = "idle";
+      this.pushExternalLog(s.state.session_id, "system", `已恢复 Codex 会话（thread ${sdkId.slice(0, 8)}…）`);
+      this.emitUpdated(s, true);
+      return;
     }
     let inited = false;
     let timer: ReturnType<typeof setTimeout> | null = null;
@@ -3673,24 +3712,29 @@ export class SessionManager {
   private haltSessionStream(s: ManagedSession): void {
     const old = s.agent;
     s.streamGen++;
+    // #27 先同步 stop() 再补刀（同 resumeAgent 口径）：codex 的 ended 恒 false
+    //（干净收口=常驻），单纯 killTree 会让 onClose 崩溃分支 flush 队列重拉进程
+    //（组与板已显示挂起、进程照跑）；stop 置位后 onSessionEnd 过代际守卫零污染
+    if (old && !old.ended) void old.stop().catch(() => {});
     if (old?.childPid) {
       void this.watchdogProcs.killTree(old.childPid).catch(() => {});
-    } else if (old && !old.ended) {
-      void old.stop().catch(() => {});
+    } else if (old) {
       // #26 M3 审查修正：resumePending 窗口（spawn→onInit）内 childPid 尚未就位，
-      // stop 大概率落空且此后无人补刀——孤儿 CLI 会带着派单 prompt 裸奔（组与板
-      // 显示已挂起，文件照改）。窗口期后再补一刀；agent === old 守卫确保只杀这条
-      // 流（期间被复活换了新流则不动）
+      // 上面的 stop 与补刀都可能落空——孤儿 CLI 会带着派单 prompt 裸奔（组与板
+      // 显示已挂起，文件照改）。窗口期后 childPid 就位再补一刀
+      // M1/M2 审查轮（代际守卫）：触发时按 streamGen 判「这条流是否已被复活接管」
+      //（窗口内被复活换流则代际已递增，自然跳过）；old.ended 不再作准——预停已
+      //把它置真，判它会让补刀一次都不发（M3 修复回归）
       const sid = s.state.session_id;
-      // M1/M2 审查轮（代际守卫）：本函数在调度后同步置 s.agent=null，「触发时
-      // agent !== old」恒真（null 或复活后的新对象都 !== old）→ 原守卫是死代码、
-      // 补刀一次都不会发。改看 streamGen（同 attach 回调 mine() 范式）：窗口内被
-      // 复活换流则代际已递增，自然跳过——只补刀这条没被接管的旧流
       const gen = s.streamGen;
       const t = setTimeout(() => {
-        if (this.sessions.get(sid)?.streamGen !== gen || old.ended) return;
+        if (this.sessions.get(sid)?.streamGen !== gen) return;
+        // 复试 stop：真 Agent 首停已同步置 ended（此处守卫自然跳过）；spawn 窗口内
+        // 首停落空的形态（fake 桩 / SDK 未 attach）在此补上。old.ended 只挡这一句、
+        // 不 return 整个补刀——预停已把真 Agent 置真，整体 return 会让下方 killTree
+        // 一次都不发（M3 修复回归，test-dispatch mu 用例锁死这个形态）
+        if (!old.ended) void old.stop().catch(() => {});
         if (old.childPid) void this.watchdogProcs.killTree(old.childPid).catch(() => {});
-        else void old.stop().catch(() => {});
       }, resumePendingWindowMs() + 1000);
       t.unref?.();
     }
@@ -4121,6 +4165,11 @@ export class SessionManager {
         s.wd.phase = "idle";
         return;
       }
+      // #27 先同步 stop() 再杀树（同 resumeAgent 口径）：codex 的 ended 恒 false
+      //（干净收口=常驻），单纯 killTree 会让 onClose 崩溃分支 flush 队列重拉进程；
+      // stop 置位后下方 ended 等待循环即刻命中，恢复期 onSessionEnd 被 wd.phase
+      // 守卫拦下不产生假终态
+      if (agent && !agent.ended) void agent.stop().catch(() => {});
       if (agent?.childPid) {
         await this.watchdogProcs.killTree(agent.childPid);
       }

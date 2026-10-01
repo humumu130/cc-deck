@@ -1,7 +1,7 @@
 // 会话历史持久化：events.ndjson 追加写 + 重启时重放重建
 import { readFileSync, writeFileSync, existsSync, mkdirSync, statSync, renameSync } from "node:fs";
 import { dirname } from "node:path";
-import type { Envelope, EventType, LogEntry, SessionState } from "./types.js";
+import type { Envelope, EventType, LogEntry, SessionEngine, SessionState } from "./types.js";
 import { contextLimitOf, REPLAY_CONTEXT_MAX } from "./context-limit.js";
 
 const MAX_SESSIONS_KEPT = 30;
@@ -124,7 +124,7 @@ export function reduceHistory(events: Envelope[]): Map<string, ReplayedSession> 
   for (const e of events) {
     let rs = out.get(e.session_id);
     if (!rs && e.type === "SESSION_CREATED") {
-      const p = e.payload as { cwd: string; initial_prompt: string; model: string; title?: string; external?: boolean; employee?: boolean; employee_home?: string; started_at?: number };
+      const p = e.payload as { cwd: string; initial_prompt: string; model: string; title?: string; external?: boolean; employee?: boolean; employee_home?: string; engine?: SessionEngine; started_at?: number };
       rs = {
         state: {
           session_id: e.session_id,
@@ -148,6 +148,9 @@ export function reduceHistory(events: Envelope[]): Map<string, ReplayedSession> 
       if (p.employee) rs.state.employee = true;
       // #17 第二批：创建时落定的家随首帧回放——开关翻转后存量会话按记录走
       if (typeof p.employee_home === "string" && p.employee_home) rs.state.employee_home = p.employee_home;
+      // #27 引擎标记随首帧回放：不还原 = 重启后 codex 卡被当 claude 收养（resume
+      // 走 AgentSession + thread_id，会话静默换引擎）——三角度审查 P1-2 实测缺口
+      if (p.engine === "codex") rs.state.engine = "codex";
       out.set(e.session_id, rs);
       continue;
     }
