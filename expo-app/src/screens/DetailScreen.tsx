@@ -833,12 +833,17 @@ function ArtSheet({ art, rel, sid, onClose }: { art: ArtifactItem; rel: string; 
 // 免审执行一切命令与编辑）首击只展开底部确认区、再击「确认跳过」才发命令，误触不可达。
 // 当前项选中靠整行 tintStrong 底 + 右缘 ✓（不靠游离符号）；已处于跳过档时该行直接收起
 // （现状即该危险态，无需再确认一次"保持"）
-function PermPanel({ cur, onPick, onClose }: { cur: PermMode; onPick: (m: PermMode) => void; onClose: () => void }) {
+// #216 受控 visible 常驻渲染（父级不再条件挂卸）：高频会话每秒多次 SESSION_UPDATED
+// 逐帧重渲，卸载型写法在 fade dismiss 动画窗口被 re-render 打断时 Android Dialog 会
+// 关了又 show（用户侧=「权限面板关不掉」）；受控 prop 显隐由 RN 原生侧保证幂等
+function PermPanel({ open, cur, onPick, onClose }: { open: boolean; cur: PermMode; onPick: (m: PermMode) => void; onClose: () => void }) {
   const { c } = useTheme();
   const d = useThemeStyles(makeStyles);
   // #83 同修：sheet 底部让位手势条（确认按钮原同样贴边）
   const insets = useSafeAreaInsets();
   const [arm, setArm] = useState(false);
+  // 常驻后组件不再卸载，关闭时武装态必须随 open 落下复位（防下次打开残留「确认跳过」）
+  useEffect(() => { if (!open) setArm(false); }, [open]);
   const pick = (m: PermMode) => {
     if (m === "bypassPermissions") {
       if (cur === "bypassPermissions") { onClose(); return; } // 已在此档：收起即可
@@ -849,7 +854,7 @@ function PermPanel({ cur, onPick, onClose }: { cur: PermMode; onPick: (m: PermMo
     onClose();
   };
   return (
-    <Modal visible transparent animationType="fade" onRequestClose={onClose}>
+    <Modal visible={open} transparent animationType="fade" onRequestClose={open ? onClose : undefined}>
       <Pressable style={d.permScrim} onPress={onClose}>
         <Pressable style={[d.permSheet, { paddingBottom: 14 + insets.bottom }]} onPress={() => undefined}>
           <View style={d.permGrab} />
@@ -2803,13 +2808,13 @@ export default function DetailScreen({ sid, onBack, initialView, ref }: { sid: s
         }}
       />
 
-      {permPanel ? (
-        <PermPanel
-          cur={perm}
-          onPick={(m) => store.send("COMMAND_PERM", { session_id: sid, mode: m })}
-          onClose={() => setPermPanel(false)}
-        />
-      ) : null}
+      {/* #216 常驻渲染：受控 visible 显隐（勿改回条件挂卸，见 PermPanel 头注释） */}
+      <PermPanel
+        open={permPanel}
+        cur={perm}
+        onPick={(m) => store.send("COMMAND_PERM", { session_id: sid, mode: m })}
+        onClose={() => setPermPanel(false)}
+      />
 
       {menuText ? <ContentMenu text={menuText} onClose={() => setMenuText(null)} /> : null}
       {artPop ? <ArtSheet art={artPop} rel={artRelOf(s, artPop)} sid={sid} onClose={() => setArtPop(null)} /> : null}
