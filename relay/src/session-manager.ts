@@ -61,6 +61,7 @@ import type {
   ManagedPermissionMode,
   PendingInput,
   PeerMeta,
+  SessionEngine,
   SessionState,
   SubagentInfo,
   TodoItem,
@@ -68,6 +69,7 @@ import type {
   WaitingPayload,
   ImportPushEntry,
 } from "./types.js";
+import { CodexAgentSession } from "./agent-codex.js";
 
 function isManagedMode(m: unknown): m is ManagedPermissionMode {
   // bypassPermissions 必须在内：① CLI init 回报 skip 会话时据此镜像记录 state（否则
@@ -539,10 +541,10 @@ export class SessionManager {
   // #49 测试缝：托管 AgentSession 工厂。生产恒为 null（直接 new AgentSession，
   // 行为与从前逐字节一致）；test-bridge/test-cloud 注入假 agent 验证置顶/按需恢复
   // 与休眠登记路径，免拉真 CLI 子进程
-  private agentFactory: ((cwd: string, model: string, cb: AgentCallbacks, initialPrompt: string | undefined, opts?: { resume?: string; permissionMode?: ManagedPermissionMode; images?: string[]; rules?: AllowRuleStore; configHome?: string }) => AgentLike) | null = null;
+  private agentFactory: ((cwd: string, model: string, cb: AgentCallbacks, initialPrompt: string | undefined, opts?: { resume?: string; permissionMode?: ManagedPermissionMode; images?: string[]; rules?: AllowRuleStore; configHome?: string; engine?: SessionEngine }) => AgentLike) | null = null;
 
   setAgentFactory(
-    fn: ((cwd: string, model: string, cb: AgentCallbacks, initialPrompt: string | undefined, opts?: { resume?: string; permissionMode?: ManagedPermissionMode; images?: string[]; rules?: AllowRuleStore; configHome?: string }) => AgentLike) | null,
+    fn: ((cwd: string, model: string, cb: AgentCallbacks, initialPrompt: string | undefined, opts?: { resume?: string; permissionMode?: ManagedPermissionMode; images?: string[]; rules?: AllowRuleStore; configHome?: string; engine?: SessionEngine }) => AgentLike) | null,
   ): void {
     this.agentFactory = fn;
   }
@@ -563,8 +565,17 @@ export class SessionManager {
     model: string,
     cb: AgentCallbacks,
     initialPrompt: string | undefined,
-    opts?: { resume?: string; permissionMode?: ManagedPermissionMode; images?: string[]; configHome?: string },
+    opts?: { resume?: string; permissionMode?: ManagedPermissionMode; images?: string[]; configHome?: string; engine?: SessionEngine },
   ): AgentLike {
+    // #27 引擎分叉（V2 Agent 无关编排的工厂缝）：codex = CodexAgentSession
+    //（一回合一进程，resume 锚 = codex thread_id；允许规则/雇员家是 Claude 概念，
+    // 构造器签名兼容但忽略）。测试注入工厂时同样收 engine——fake factory 可按
+    // 引擎分型。缺省 undefined = claude，行为与从前逐字节一致
+    if (opts?.engine === "codex") {
+      return this.agentFactory
+        ? this.agentFactory(cwd, model, cb, initialPrompt, { engine: "codex", resume: opts.resume, permissionMode: opts.permissionMode, images: opts.images })
+        : new CodexAgentSession(cwd, model, cb, initialPrompt, { resume: opts.resume, permissionMode: opts.permissionMode, images: opts.images });
+    }
     const withRules = { ...opts, rules: this.allowRules };
     return this.agentFactory
       ? this.agentFactory(cwd, model, cb, initialPrompt, withRules)
@@ -1481,7 +1492,11 @@ export class SessionManager {
           // permissionMode: 客户端可选 bypassPermissions（新建时勾选"跳过权限确认"）
           const pm = cmd.payload.permissionMode === "bypassPermissions" ? "bypassPermissions" : undefined;
           // #208 autoMkdir：客户端创建表单「目录不存在时自动创建」开关（默认关＝旧回落行为）
-          const session_id = this.create(cmd.payload.cwd, cmd.payload.prompt, pm, cmd.payload.autoMkdir === true);
+          // #27 引擎选择：payload.engine === "codex" 建 codex 会话；其余值（含
+          // 缺省）一律 claude——白名单式收口，未知引擎名不静默当 claude 以外的
+          // 东西处理（防客户端笔误凭空造引擎）
+          const engine = cmd.payload.engine === "codex" ? ("codex" as const) : undefined;
+          const session_id = this.create(cmd.payload.cwd, cmd.payload.prompt, pm, cmd.payload.autoMkdir === true, engine ? { engine } : undefined);
           return { command_id: cmd.command_id, ok: true, session_id };
         }
         case "COMMAND_MESSAGE": {
@@ -2038,7 +2053,7 @@ export class SessionManager {
     }
   }
 
-  private create(rawCwd: string, prompt: string, permissionMode?: ManagedPermissionMode, autoMkdir = false, opts?: { skipStickyCwd?: boolean; employee?: boolean }): string {
+  private create(rawCwd: string, prompt: string, permissionMode?: ManagedPermissionMode, autoMkdir = false, opts?: { skipStickyCwd?: boolean; employee?: boolean; engine?: SessionEngine }): string {
     // #293 三级回落：指定/默认目录无效时回落用户主目录（说明进时间线），完全无可用目录才报错；
     // #208 autoMkdir：指定目录不存在时先 mkdir -p 建出来（失败仍走回落链）
     const { cwd, fallbackNote } = resolveCreateCwd(rawCwd, this.cfg.defaultCwd, autoMkdir);
@@ -2075,6 +2090,8 @@ export class SessionManager {
         // #17 第二批：创建时实际落定的家随卡记录——开关此后翻转，本会话
         // resume/读取仍按此值走（存量无损）；关态创建不落（=默认家）
         ...(opts?.employee && this.cfg.employeeConfigDir ? { employee_home: this.cfg.employeeConfigDir } : {}),
+        // #27 引擎随卡落位：resume/看门狗/读取路径按它分叉；不落 = claude 存量口径
+        ...(opts?.engine === "codex" ? { engine: "codex" as const } : {}),
       },
       // #21③ 首回合在途：见 ManagedSession.pendingInitial（onInit 待命化避让用）
       ...(prompt.trim() ? { pendingInitial: true } : {}),
@@ -2098,6 +2115,8 @@ export class SessionManager {
         // #17 雇员独立家：create 是统一 spawn 口，按本次会话身份注入（与 resume
         // 口同走 employeeHome()，单点编码防两处写法漂移——审查 P3-2）
         ...(managed.state.employee ? { configHome: this.employeeHome(managed.state) } : {}),
+        // #27 引擎透传（newAgent 工厂缝分叉）
+        ...(opts?.engine ? { engine: opts.engine } : {}),
       },
     );
 
@@ -2112,6 +2131,8 @@ export class SessionManager {
       // #17 雇员标记随首帧进事件流：重启回放重建卡片后 resume/读取路径照常选家
       ...(managed.state.employee ? { employee: true } : {}),
       ...(managed.state.employee_home ? { employee_home: managed.state.employee_home } : {}),
+      // #27 引擎随首帧下发（端上徽标 + 重启回放还原分叉依据）
+      ...(managed.state.engine ? { engine: managed.state.engine } : {}),
     });
     // 目录回落说明进时间线：手机端能看到会话为何落在用户主目录，relay 日志同步留痕
     if (fallbackNote) {
@@ -2120,7 +2141,9 @@ export class SessionManager {
       this.bus.emit(managed.state.session_id, "SESSION_LOG", entry);
       console.log(`[create-cwd] ${agent.id.slice(0, 8)} ${fallbackNote}`);
     }
-    this.requestSmartTitle(agent.id, prompt);
+    // 智能命名是 Claude CLI 一次性子会话（title-gen）：codex 会话不拉（P0 特性
+    // 泄漏守卫——V2 纪律②，标题停在 deriveTitle(initial_prompt)）
+    if (managed.state.engine !== "codex") this.requestSmartTitle(agent.id, prompt);
     return agent.id;
   }
 
@@ -2453,7 +2476,15 @@ export class SessionManager {
       s.state.model,
       cb,
       firstMessage,
-      { resume: sdkId, permissionMode: s.state.permission_mode ?? "default", images, configHome: this.employeeHome(s.state) },
+      {
+        resume: sdkId,
+        permissionMode: s.state.permission_mode ?? "default",
+        images,
+        configHome: this.employeeHome(s.state),
+        // #27 引擎感知 resume：codex 的 resume 锚是 thread_id（CodexAgentSession
+        // 内部自己 exec resume <thread_id>）；claude 缺省路径不变
+        ...(s.state.engine ? { engine: s.state.engine } : {}),
+      },
     );
     s.agent = agent;
     // resume 的子 sid 同样经 onInit 回调登记（见 agentCallbacks.onInit 的 #307 落盘）
@@ -2493,7 +2524,9 @@ export class SessionManager {
       const hasMemory =
         s.logs.some((e) => e.kind === "assistant_text") ||
         (s.state.usage?.output_tokens ?? 0) > 0 ||
-        transcriptHasAssistant(s.state.cwd, sdkId, this.employeeHome(s.state));
+        // transcriptHasAssistant 读 ~/.claude/projects JSONL（Claude 特性泄漏面）：
+        // codex 的记忆判定只看前两口（logs/usage）
+        (s.state.engine !== "codex" && transcriptHasAssistant(s.state.cwd, sdkId, this.employeeHome(s.state)));
       const waitS = Math.round(resumeInitTimeoutMs() / 1000);
       if (!s.state.external && !hasMemory) {
         // 首回合挂死 → fresh spawn 重放：resume 窗口内到达的全部未回显消息一并
@@ -2521,7 +2554,13 @@ export class SessionManager {
           s.state.model,
           this.agentCallbacks(s),
           replayText,
-          { permissionMode: s.state.permission_mode ?? "default", images: replayImages.length ? replayImages : undefined, configHome: this.employeeHome(s.state) },
+          {
+            permissionMode: s.state.permission_mode ?? "default",
+            images: replayImages.length ? replayImages : undefined,
+            configHome: this.employeeHome(s.state),
+            // #27 fresh 回退同引擎重放（codex 首回合挂死 = 无 thread_id 可丢）
+            ...(s.state.engine ? { engine: s.state.engine } : {}),
+          },
         );
         this.pushExternalLog(s.state.session_id, "system",
           `恢复超时（${waitS} 秒无响应，该会话无已完成回合，疑首次运行被打断所致），已自动用新会话重发本条消息`);
@@ -2618,6 +2657,8 @@ export class SessionManager {
       resume: sdkId,
       permissionMode: s.state.permission_mode ?? "default",
       configHome: this.employeeHome(s.state),
+      // #27 引擎感知（codex parked 恢复：exec resume <thread_id> 后待命）
+      ...(s.state.engine ? { engine: s.state.engine } : {}),
     });
     s.agent = agent;
     s.state.status = "WORKING";

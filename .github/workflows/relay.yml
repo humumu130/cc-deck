@@ -30,7 +30,9 @@ jobs:
         # test:settings-ws（#17 第二批补强）：子进程真 relay 起停 ×3（新装物化/存量收敛/env
         #   锁定），纯协议断言不创建会话——CCR_NO_LEADER=1 显式关掉启动序的 Leader
         #   首建（不设则无锚即真拉 Leader CLI，「不拉 CLI」靠开关保证而非碰巧），CI 可跑
-        script: [test:bus, test:history, test:bridge, test:cloud, test:org, test:leader, test:projects, test:dispatch, test:routing, test:autorevive, test:settings, test:settings-ws]
+        # test:codex（#27 P0）：CodexAgentSession 用 /bin/sh 桩脚本替代真 codex CLI
+        #   （CCR_CODEX_PATH 注入），零 codex 二进制零 API key，CI 可跑
+        script: [test:bus, test:history, test:bridge, test:cloud, test:org, test:leader, test:projects, test:dispatch, test:routing, test:autorevive, test:settings, test:settings-ws, test:codex]
     defaults:
       run:
         working-directory: relay
