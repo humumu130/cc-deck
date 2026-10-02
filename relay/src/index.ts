@@ -423,7 +423,9 @@ startServer(bus, mgr, cfg, {
     // CCR_NO_MDNS=1 关断（测试/沙盒）：真启动测试 relay ×3 会往局域网发 3 个同名
     // 幽灵实例，同网真实设备短窗内可见（#20 审查实锤）。生产不设，广播行为不变
     if (process.env.CCR_NO_MDNS !== "1") {
-      advertiseRelay(cfg.port, `CC Deck Relay (${hostname()})`);
+      // CCR_MDNS_NAME：广播名覆盖（#36 M2 并行测试版，2026-10-03）——同机双 relay
+      // 并存（生产 8787 + M2 8788）时发现列表可分辨；缺省与生产逐字节一致
+      advertiseRelay(cfg.port, process.env.CCR_MDNS_NAME ?? `CC Deck Relay (${hostname()})`);
     }
     if (process.env.CC_DECK_DAEMON === "1") {
       writeFileSync(join(cfg.dataDir, "relay.pid"), String(process.pid), "utf-8");
