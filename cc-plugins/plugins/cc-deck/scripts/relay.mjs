@@ -41090,6 +41090,15 @@ var AgentSession = class _AgentSession {
         // PATH 补全：见 childEnv()（M0）
         env: childEnv(),
         permissionMode: opts?.permissionMode ?? "default",
+        // #217 无条件带授权标志（CLI 子代理 spawn 同款语义：mode 任意 + allowBypass
+        // 独立正交）：SDK 的 permissionMode 只是 --permission-mode 参数，不构成「以跳过
+        // 权限启动」的授权——CLI 只认 --allow-dangerously-skip-permissions。缺失时
+        // resume 恢复 bypass 档被 Refusing restored mode 静默回落 default（relay 重启
+        // 后 bypass 会话被降级、且运行中 setPermissionMode 切跳过必被拒的根源），
+        // 已被降级的存量会话也永远回不去。带标志不改变初始档（初始档仍由
+        // permissionMode 决定），只打开运行中切跳过档的门——面板跳过行本就有
+        // 「危险」badge + 二次武装，用户点击即明确授权
+        allowDangerouslySkipPermissions: true,
         ...opts?.resume ? { resume: opts.resume } : {},
         // #7 看门狗：包一层默认 spawn 记 pid（SDK 默认行为 = spawn(cmd, args,
         // {stdio 三 pipe, cwd, env, signal})，这里逐项镜像）。杀树/CPU 采样都要 pid
@@ -42213,6 +42222,7 @@ function writePinnedSessions(dataDir2, ids) {
 var UPDATE_THROTTLE_MS = 2e3;
 var HEARTBEAT_INTERVAL_MS = 5e3;
 var CRON_POLL_INTERVAL_MS = 3e4;
+var ARTIFACT_STAT_INTERVAL_MS = 2e4;
 var MAX_SESSIONS = 20;
 var ARTIFACT_FETCH_MAX_BYTES = 20 * 1024 * 1024;
 var ARTIFACT_CHUNK_BYTES = 512 * 1024;
@@ -42285,6 +42295,8 @@ var SessionManager = class {
       this.pollTaskStore();
     }, CRON_POLL_INTERVAL_MS);
     c.unref();
+    const r = setInterval(() => this.pollArtifactsExistence(), ARTIFACT_STAT_INTERVAL_MS);
+    r.unref();
   }
   bus;
   sessions = /* @__PURE__ */ new Map();
@@ -42323,7 +42335,11 @@ var SessionManager = class {
     return this.deletedExtIds.has(id2);
   }
   snapshot() {
-    return [...this.sessions.values()].map((s) => this.cloneState(s));
+    return [...this.sessions.values()].map((s) => {
+      const c = this.cloneState(s);
+      if (c.artifacts) c.artifacts = c.artifacts.filter((a) => a.exists !== false);
+      return c;
+    });
   }
   // 自动命名：一次轻量模型调用把首条 prompt 变成短标题（托管/外部会话通用）
   // CC 自带的 session name 在本环境基本不生成，这里兜底；已有 CC 名时外部会话由 bridge 跳过
@@ -42751,7 +42767,8 @@ var SessionManager = class {
       status: s.state.status,
       action_summary: s.state.action_summary,
       stats: { ...s.state.stats },
-      artifacts: list.map((a) => ({ ...a })),
+      artifacts: this.aliveArtifacts(s),
+      // #224 下发前 re-stat + 剔除已删
       ...s.state.artifacts_truncated ? { artifacts_truncated: true } : {}
     });
   }
@@ -42796,7 +42813,8 @@ var SessionManager = class {
       status: s.state.status,
       action_summary: s.state.action_summary,
       stats: { ...s.state.stats },
-      artifacts: list.map((a) => ({ ...a })),
+      artifacts: this.aliveArtifacts(s),
+      // #224 下发前 re-stat + 剔除已删
       ...s.state.artifacts_truncated ? { artifacts_truncated: true } : {}
     });
     return { ok: true };
@@ -42840,6 +42858,57 @@ var SessionManager = class {
     const r = this.registerDeliverable(sid, rawPath);
     return r.ok ? { ok: true, session_id: sid } : r;
   }
+  // #224 输出物存在性复查（2026-10-02 用户：「已经删除的输出物为什么还要展示——嫌
+  // 列表不够多不够乱吗」）。设计：面板 = 磁盘现状，不是历史清单——已删条目
+  // （exists === false）一律不下发（emit 帧 / SNAPSHOT 均过滤），删除即从面板消失；
+  // state 内部保留 dead 条目（文件重建时 mergeArtifact 合并复用 adds/dels 历史，
+  // transcript 重扫幂等），fetch 白名单含 dead 无安全问题（文件不在自然 404）。
+  // 复查两层：① 20s 定时轮询（变化才广播，全端面板 ≤20s 收敛）；② 每次 artifacts
+  // 帧下发前 re-stat（emit 点各自调用），保证任何出口数据新鲜。不动 updated_at——
+  // stat 不是会话活动（#157 教训：虚假刷活跃会破坏置灰计时）。
+  restatArtifacts(s) {
+    const list = s.state.artifacts;
+    if (!list || !list.length) return false;
+    let changed = false;
+    s.state.artifacts = list.map((a) => {
+      let size;
+      let exists = true;
+      try {
+        size = statSync4(a.path).size;
+      } catch {
+        exists = false;
+      }
+      if (exists !== a.exists || size !== a.size) {
+        changed = true;
+        return { ...a, size, exists };
+      }
+      return a;
+    });
+    return changed;
+  }
+  // #224 下发口径：re-stat 后剔除已删条目（拷贝下发，防客户端改内存态）
+  aliveArtifacts(s) {
+    this.restatArtifacts(s);
+    return (s.state.artifacts ?? []).filter((a) => a.exists !== false).map((a) => ({ ...a }));
+  }
+  // #224 定时轮询：有 artifacts 的会话全量 re-stat，有变化才广播（无变化静默——
+  // 避免每 20s 无意义 SESSION_UPDATED 刷全端）。updated_at 帧内显式携带 state 原值：
+  // stat 不是会话活动（#157），缺省时三端回落信封时间戳会把删文件/改尺寸刷成
+  // 「最后活跃＝当下」，闲置置灰计时被重置
+  pollArtifactsExistence() {
+    for (const [id2, s] of this.sessions) {
+      if (!s.state.artifacts?.length) continue;
+      if (!this.restatArtifacts(s)) continue;
+      this.bus.emit(id2, "SESSION_UPDATED", {
+        status: s.state.status,
+        action_summary: s.state.action_summary,
+        stats: { ...s.state.stats },
+        artifacts: (s.state.artifacts ?? []).filter((a) => a.exists !== false).map((a) => ({ ...a })),
+        ...s.state.artifacts_truncated ? { artifacts_truncated: true } : {},
+        updated_at: s.state.updated_at
+      });
+    }
+  }
   // 重启回放：把该会话登记过的交付物挂回（登记不在 transcript，靠 deliverables.json）
   applyDeclaredDeliverables(sessionId) {
     const s = this.sessions.get(sessionId);
@@ -42871,13 +42940,13 @@ var SessionManager = class {
     for (const it2 of items) this.mergeArtifact(id2, it2, true);
     this.applyDeclaredDeliverables(id2);
     if (!s.state.artifacts) return;
-    const merged = s.state.artifacts;
     s.state.updated_at = at ?? Date.now();
     this.bus.emit(id2, "SESSION_UPDATED", {
       status: s.state.status,
       action_summary: s.state.action_summary,
       stats: { ...s.state.stats },
-      artifacts: (merged ?? []).map((a) => ({ ...a })),
+      artifacts: this.aliveArtifacts(s),
+      // #224 下发前 re-stat + 剔除已删
       ...s.state.artifacts_truncated ? { artifacts_truncated: true } : {},
       updated_at: s.state.updated_at
     });
@@ -43093,7 +43162,9 @@ var SessionManager = class {
             this.pushExternalLog(live.state.session_id, "system", `\u6743\u9650\u6A21\u5F0F\u5207\u6362: ${PERM_MODE_ZH[mode]}`);
             this.emitUpdated(live, true);
           }).catch((e) => {
-            this.pushExternalLog(live.state.session_id, "system", `\u6743\u9650\u6A21\u5F0F\u5207\u6362\u5931\u8D25: ${e instanceof Error ? e.message : String(e)}`);
+            const raw = e instanceof Error ? e.message : String(e);
+            const friendly = /not launched with --dangerously-skip-permissions/.test(raw) ? "\u8DF3\u8FC7\u6863\u4E0D\u53EF\u7528\uFF1A\u8BE5\u4F1A\u8BDD\u4E0D\u662F\u4EE5\u8DF3\u8FC7\u6743\u9650\u521B\u5EFA\u7684\uFF08\u8DF3\u8FC7\u6863\u53EA\u80FD\u5728\u521B\u5EFA\u4F1A\u8BDD\u65F6\u5F00\u542F\uFF09" : raw;
+            this.pushExternalLog(live.state.session_id, "system", `\u6743\u9650\u6A21\u5F0F\u5207\u6362\u5931\u8D25: ${friendly}`);
           });
           return { command_id: cmd.command_id, ok: true };
         }
