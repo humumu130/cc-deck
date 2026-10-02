@@ -56,19 +56,17 @@ export interface VersionNote {
   note?: string; // 次要说明（灰字小号次行）：默认值/开启方式等
 }
 // 本版本发布日期（正式版发版日），关于弹窗头行与「已是最新」态展示
-export const VERSION_DATE = "2026-09-26";
+export const VERSION_DATE = "2026-10-02";
 export const VERSION_NOTES: VersionNote[] = [
   // 新增
-  { group: "new", text: "输出物看板：会话产出的文档报告自动归集成清单，支持手机远程查看与打开", note: "默认开启，设置中可关闭" },
-  { group: "new", text: "向会话发送文件：支持文档、表格、压缩包，会话产出的文件也可拉回手机" },
-  { group: "new", text: "子 Agent 活性可见：卡片角标显示并行数量，点开看每个子 Agent 正在做什么", note: "外部 CLI 会话同样支持" },
+  { group: "new", text: "远程审批可记住选择：同类操作不再反复弹窗打扰", note: "审批卡上选「允许并记住」即可" },
   // 优化
-  { group: "improved", text: "无人值守自动恢复：电脑重启后自动恢复托管会话，适合夜间挂机场景" },
-  { group: "improved", text: "远程审批：电脑端的权限确认可转移至手机或网页完成" },
-  { group: "improved", text: "权限模式一屏直选：四档模式带说明并列可选，高危操作需二次确认" },
+  { group: "improved", text: "输出物面板按文件夹分组，批量图片不再散乱堆放" },
   // 修复
-  { group: "fixed", text: "会话卡死自愈：自动检测并恢复流式中断的僵死会话" },
-  { group: "fixed", text: "另修复统计失真、检查更新失败、通知中断、标题乱码等问题" },
+  { group: "fixed", text: "删除电脑上的文件后，输出物面板同步消失" },
+  { group: "fixed", text: "修复权限模式切到「跳过」不生效的问题" },
+  { group: "fixed", text: "去掉权限面板上临时显示的排查信息" },
+  { group: "fixed", text: "另修复更新弹窗在个别情况下无法展示的问题" },
 ];
 
 export type UpdateInfo = {
