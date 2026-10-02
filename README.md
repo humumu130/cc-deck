@@ -1,19 +1,22 @@
 # CC Deck
 
+<div align="center">
+
+<img src="docs/readme/hero.svg" alt="CC Deck — Claude Code 会话装进口袋：手机、网页、桌面随身掌控审批、注入与任务汇报" width="880">
+
 [![relay CI](https://github.com/humumu130/cc-deck/actions/workflows/relay.yml/badge.svg)](https://github.com/humumu130/cc-deck/actions/workflows/relay.yml)
 [![android CI](https://github.com/humumu130/cc-deck/actions/workflows/android.yml/badge.svg)](https://github.com/humumu130/cc-deck/actions/workflows/android.yml)
 [![desktop CI](https://github.com/humumu130/cc-deck/actions/workflows/desktop.yml/badge.svg)](https://github.com/humumu130/cc-deck/actions/workflows/desktop.yml)
 [![release](https://img.shields.io/github/v/release/humumu130/cc-deck)](https://github.com/humumu130/cc-deck/releases/latest)
 [![license](https://img.shields.io/badge/license-MIT-blue)](./LICENSE)
+[![stars](https://img.shields.io/github/stars/humumu130/cc-deck?style=social)](https://github.com/humumu130/cc-deck/stargazers)
+[![downloads](https://img.shields.io/github/downloads/humumu130/cc-deck/total?label=downloads)](https://github.com/humumu130/cc-deck/releases)
 
-在手机上使用 PC 端的 Claude Code：查看会话状态、批准权限、发送消息、切换模型、接收任务汇报；电脑断网重启会话不丢，手机点一下即可远程恢复。默认自建 relay，局域网内不经过任何第三方服务；跨网经可自建的 Cloudflare 中继，端到端加密。
+**在手机上使用 PC 端的 Claude Code**：查看会话状态、批准权限、发送消息、切换模型、接收任务汇报。电脑断网重启会话不丢，手机点一下即可远程恢复——局域网直连不经任何第三方，跨网走可自建的 Cloudflare 中继，端到端加密。
 
 [🏠 项目主页](https://cc-deck.humumu.online/) · [网页控制台](https://cc-deck.humumu.online/app) · [下载最新版](https://github.com/humumu130/cc-deck/releases/latest) · [直链下载页](https://cc-deck.humumu.online/download/)
 
-<!-- TODO(截图占位)：三端三联图，源图在内部归档不随仓库发布，补拍后放 docs/screenshots/ 替换
-     1. 手机 App：会话列表（源徽章 + ctx 水位条）+ 设置抽屉
-     2. 网页 / 桌面：会话页（转录时间线 + 模型下拉锚定弹层）+ 设置抽屉竖排菜单
-     3. 手表：会话速览卡 / 径向菜单 -->
+</div>
 
 ## 目录
 

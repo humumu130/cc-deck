@@ -1,0 +1,88 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 300" width="1200" height="300" role="img" aria-label="CC Deck — Claude Code 装进口袋">
+  <defs>
+    <linearGradient id="pri" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#F6A96C"/>
+      <stop offset="1" stop-color="#D97757"/>
+    </linearGradient>
+    <linearGradient id="bgp" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#0A111E"/>
+      <stop offset="1" stop-color="#0C1624"/>
+    </linearGradient>
+    <radialGradient id="glow" cx=".5" cy=".5" r=".5">
+      <stop offset="0" stop-color="#D97757" stop-opacity=".16"/>
+      <stop offset="1" stop-color="#D97757" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+
+  <!-- 画布底：深面板（GitHub 明暗双模式下均可读的封闭色域） -->
+  <rect x="0" y="0" width="1200" height="300" rx="18" fill="url(#bgp)"/>
+  <rect x="0.75" y="0.75" width="1198.5" height="298.5" rx="17.25" fill="none" stroke="#2A3A52" stroke-opacity=".55"/>
+  <!-- 舞台氛围：品牌橙低透明度光斑，锚定右侧 mockup 后方 -->
+  <circle cx="930" cy="160" r="230" fill="url(#glow)"/>
+
+  <!-- ===== 左：标题区 ===== -->
+  <text x="64" y="80" font-family="ui-monospace, 'Cascadia Code', Consolas, monospace" font-size="20" fill="#8EA3BA" letter-spacing="2"><tspan fill="#55D98A">❯</tspan> claude · cc-deck relay on</text>
+  <text x="60" y="150" font-family="system-ui, -apple-system, 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', 'Noto Sans CJK SC', 'Segoe UI', sans-serif" font-size="58" font-weight="800" fill="#E8EFF9">CC Deck</text>
+  <text x="64" y="202" font-family="system-ui, -apple-system, 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', 'Noto Sans CJK SC', 'Segoe UI', sans-serif" font-size="27" font-weight="700" fill="#E8EFF9">Claude Code 会话 <tspan fill="#F6A96C" font-weight="800">装进口袋</tspan></text>
+  <text x="64" y="238" font-family="system-ui, -apple-system, 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', 'Noto Sans CJK SC', 'Segoe UI', sans-serif" font-size="17.5" fill="#8EA3BA">手机 · 网页 · 桌面随身掌控 —— 审批、注入、任务汇报，断线不丢会话</text>
+
+  <!-- ===== 中：终端 → 密文信封 → 手机 的链路 ===== -->
+  <!-- 终端窗 -->
+  <g>
+    <rect x="548" y="86" width="132" height="126" rx="12" fill="#05080F" stroke="#2A3A52" stroke-width="1.5"/>
+    <circle cx="566" cy="102" r="3.5" fill="#E8695A"/>
+    <circle cx="578" cy="102" r="3.5" fill="#E8B64C"/>
+    <circle cx="590" cy="102" r="3.5" fill="#55D98A"/>
+    <text x="562" y="130" font-family="ui-monospace, Consolas, monospace" font-size="13" fill="#8EA3BA"><tspan fill="#55D98A">❯</tspan> claude</text>
+    <text x="562" y="152" font-family="ui-monospace, Consolas, monospace" font-size="13" fill="#53677E">⏺ Write oauth.ts</text>
+    <text x="562" y="174" font-family="ui-monospace, Consolas, monospace" font-size="13" fill="#F6A96C">⚠ 允许写入？</text>
+    <text x="562" y="196" font-family="ui-monospace, Consolas, monospace" font-size="13" fill="#53677E">1. 允许_</text>
+  </g>
+  <!-- 虚线密文流 -->
+  <g stroke="#3A4A63" stroke-width="1.6" stroke-dasharray="5 6" fill="none">
+    <path d="M682 149 C 714 149, 726 122, 748 116"/>
+    <path d="M682 149 C 714 149, 726 176, 748 182"/>
+  </g>
+  <!-- 密文信封（桥只见密文） -->
+  <g>
+    <circle cx="776" cy="120" r="11" fill="none" stroke="#3A4A63" stroke-width="1.8"/>
+    <rect x="772.5" y="112" width="7" height="13" rx="2.5" fill="none" stroke="#8EA3BA" stroke-width="1.8"/><path d="M796 130 C 816 140, 824 148, 840 150" stroke="#3A4A63" stroke-width="1.4" stroke-dasharray="4 5" fill="none" stroke-opacity=".7"/>
+  </g>
+  <!-- ===== 右：手机会话卡 mockup ===== -->
+  <g>
+    <rect x="842" y="42" width="196" height="216" rx="22" fill="#05080F" stroke="#2A3A52" stroke-width="1.5"/>
+    <rect x="918" y="53" width="44" height="4" rx="2" fill="#3A4A63"/>
+    <!-- 卡 1：等待审批（橙描边） -->
+    <rect x="856" y="70" width="168" height="52" rx="10" fill="#0C1624"/>
+    <rect x="856" y="70" width="168" height="52" rx="10" fill="none" stroke="#D97757" stroke-opacity=".8"/>
+    <circle cx="872" cy="86" r="4.5" fill="#F6A96C"/>
+    <text x="884" y="91" font-family="system-ui, -apple-system, 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', 'Noto Sans CJK SC', sans-serif" font-size="12.5" fill="#E8EFF9" font-weight="600">登录改 OAuth</text>
+    <text x="872" y="110" font-family="ui-monospace, Consolas, monospace" font-size="10.5" fill="#8EA3BA">等待审批 · Write oauth.ts</text>
+    <!-- 卡 2：运行中（绿点） -->
+    <rect x="856" y="130" width="168" height="52" rx="10" fill="#0C1624" stroke="#22334A"/>
+    <circle cx="872" cy="146" r="4.5" fill="#55D98A"/>
+    <text x="884" y="151" font-family="system-ui, -apple-system, 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', 'Noto Sans CJK SC', sans-serif" font-size="12.5" fill="#E8EFF9" font-weight="600">修复配对码提示</text>
+    <text x="872" y="170" font-family="ui-monospace, Consolas, monospace" font-size="10.5" fill="#8EA3BA">转录活跃 · 子 Agent ×2</text>
+    <!-- ctx 水位条 -->
+    <rect x="856" y="196" width="168" height="7" rx="3.5" fill="#111C30"/>
+    <rect x="856" y="196" width="58" height="7" rx="3.5" fill="#55D98A"/>
+    <text x="856" y="222" font-family="ui-monospace, Consolas, monospace" font-size="10.5" fill="#53677E">ctx 11% · 三端同色</text>
+  </g>
+  <!-- 远程允许浮标 -->
+  <g>
+    <rect x="940" y="236" width="150" height="30" rx="15" fill="#0C1624"/>
+    <rect x="940" y="236" width="150" height="30" rx="15" fill="none" stroke="#55D98A" stroke-opacity=".7"/>
+    <path d="M954 251 l4.5 4.5 8-9" stroke="#55D98A" stroke-width="2.2" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+    <text x="974" y="256" font-family="system-ui, -apple-system, 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', 'Noto Sans CJK SC', sans-serif" font-size="12" fill="#9FDCB6">已远程允许</text>
+  </g>
+
+  <!-- 底部：四态图例（项目 motif：会话四态徽标） -->
+  <g font-family="ui-monospace, Consolas, monospace" font-size="12.5">
+    <circle cx="70" cy="270" r="4.5" fill="#55D98A"/><text x="82" y="274.5" fill="#8EA3BA">运行中</text>
+    <circle cx="156" cy="270" r="4.5" fill="#F6A96C"/><text x="168" y="274.5" fill="#8EA3BA">等待输入</text>
+    <circle cx="262" cy="270" r="4.5" fill="#E8695A"/><text x="274" y="274.5" fill="#8EA3BA">出错</text>
+    <circle cx="334" cy="270" r="4.5" fill="#53677E"/><text x="346" y="274.5" fill="#8EA3BA">完成</text>
+    <text x="418" y="274.5" fill="#53677E">｜</text>
+    <text x="440" y="274.5" fill="#53677E">E2E 加密 · 云桥可自建 · MIT 开源</text>
+  </g>
+</svg>
