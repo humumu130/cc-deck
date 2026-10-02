@@ -104,27 +104,6 @@ let agCollapsed = false;
 // 输入草稿跨进出保留：按 session_id 暂存（app 生命周期内，发送即清）
 const drafts = new Map<string, string>();
 
-// #216 排查探针（test.9 取证版，定案后移除）：最近一次胶囊 onPress 的完整事件
-// 指纹 + 胶囊中心测量原值。五段修的四道围堵（时间窗/坐标吞/复弹冷却/键盘期
-// 禁点）真机实测把真点也吞了（键盘收起后胶囊点不动），全部拆除——本版只记录
-// 不拦截，真机 logcat 抓 [perm216] 行直接定案：
-//   · d=触点到胶囊中心的距离（-1=坐标或中心取不到）；
-//   · ctr=measureInWindow 原始回值（判单位/错位）；
-//   · kb=onPress 时刻的键盘高度（判 kbInsets 假死）；
-//   · dt/pin=onPressIn 预记录（真手指按下）与 onPress 的间隔/坐标——onPress
-//     触发却无对应 pressIn/坐标不符 = 合成点击（performClick 错派）铁证
-let lastFocusAt = 0;
-const permProbe = { txt: "init", ctr: "?", kb: -1, dt: -1, pin: "none", pinAt: 0, r1s: 0 };
-// #216 探针·渲染风暴计数：近 1 秒 DetailScreen 渲染次数（详情页体每次渲染打点）。
-// 「弱网热点→重连→快照重放→SESSION_UPDATED 风暴」假说的直接检验量：错弹时 r1s
-// 高（>10/s）=风暴实锤，r1s 平静=排除、回到事件层取证。数组滚动窗口，量小无泄漏
-const permRenders: number[] = [];
-function permProbeRenderTick(): void {
-  const now = Date.now();
-  permRenders.push(now);
-  while (permRenders.length && now - permRenders[0] > 1000) permRenders.shift();
-}
-
 // #376 cron 表达式人话（常见模式；未识别返回 null 只显原文+下次时间兜底）
 const WEEK_CN = ["日", "一", "二", "三", "四", "五", "六"];
 function cronDesc(s: string): string | null {
@@ -908,10 +887,6 @@ function PermPanel({ open, cur, onPick, onClose }: { open: boolean; cur: PermMod
               <Text style={d.permX}>✕</Text>
             </Pressable>
           </View>
-          {/* #216 排查探针（test.9 取证版，定案后移除）：最近一次胶囊 onPress 的
-              全指纹（触点/距离/键盘高度/pressIn 间隔）+ 胶囊中心测量原值——真机
-              logcat 的 [perm216] 行同款数据，面板上兜底肉眼可读，长按可复制 */}
-          <Text style={d.permProbeT} selectable>{`probe ${permProbe.txt} · ctr ${permProbe.ctr} · kb${permProbe.kb} · dt${permProbe.dt} · r1s${permProbe.r1s} · ${permProbe.pin}`}</Text>
           {PERM_CYCLE.map((m) => {
             const danger = m === "bypassPermissions";
             return (
@@ -1280,22 +1255,8 @@ export interface DetailBackHandle {
 export default function DetailScreen({ sid, onBack, initialView, ref }: { sid: string; onBack: () => void; initialView?: ViewKind; ref?: Ref<DetailBackHandle> }) {
   const { c, mode } = useTheme();
   const d = useThemeStyles(makeStyles);
-  // #216 探针：渲染风暴打点（体级执行，无条件——每次渲染都计，见模块级注释）
-  permProbeRenderTick();
   // #36 权限模式四选一面板：胶囊（Head R2）点开，替代循环切换
-  // #216 六段修（test.9，用户定调「堵不如疏」）：一~五段修的四道围挡全部拆除
-  // （时间窗/坐标吞/复弹冷却/键盘期禁点——真机实测反把真点吞了：键盘收起后
-  // 胶囊也不响应）。本版 setPermPanel 恢复纯透传，只在打开时打 logcat 取证
-  // 日志（[perm216] 行，配合胶囊 onPress 处的全指纹记录），真机复现「错弹/
-  // 点不动」时数据直接定案根源，再做一次性根治
-  const [permPanel, setPermPanelRaw] = useState(false);
-  const setPermPanel = (v: boolean) => {
-    if (v) {
-      permProbe.r1s = permRenders.length;
-      console.log("[perm216] OPEN", permProbe.txt, "| ctr", permProbe.ctr, "| kb", permProbe.kb, "| dt", permProbe.dt, "| pin", permProbe.pin, "| r1s", permProbe.r1s);
-    }
-    setPermPanelRaw(v);
-  };
+  const [permPanel, setPermPanel] = useState(false);
   const snap = useRelay();
   const [input, setInput] = useState(() => drafts.get(sid) ?? "");
   // #68① 多行自动增高：Android 下纯 minHeight/maxHeight 的自适应不可靠（实测长文
@@ -1310,11 +1271,6 @@ export default function DetailScreen({ sid, onBack, initialView, ref }: { sid: s
   // #129 回车键行为：开 = 回车发送（恢复 #68 多行化之前的旧习惯）；关 = 回车换行
   const enterSend = useEnterSend();
   const inputRef = useRef<TextInput>(null);
-  // #216 四段修·坐标守卫：权限胶囊中心窗口坐标（onLayout 时 measureInWindow
-  // 测一次；胶囊随 head 固定在顶部不滚动，一次测量终身有效）——胶囊 onPress
-  // 用触点与中心的距离判错派（机制见 onPress 处注释）
-  const permPillRef = useRef<View>(null);
-  const permPillCtr = useRef<{ x: number; y: number } | null>(null);
   const editInput = (v: string) => {
     if (v) drafts.set(sid, v);
     else drafts.delete(sid);
@@ -2051,47 +2007,14 @@ export default function DetailScreen({ sid, onBack, initialView, ref }: { sid: s
             <View style={d.permCluster}>
               {!external && canCmd && !s.historical ? (
                 <Pressable
-                  ref={permPillRef}
                   style={[
                     d.permPill,
                     perm === "default"
                       ? [d.permPillGhost, { borderColor: mode === "dark" ? "rgba(125,165,220,0.22)" : c.line }]
                       : perm === "bypassPermissions" ? d.permPillWarn : d.permPillLit,
                   ]}
-                  onLayout={() => {
-                    permPillRef.current?.measureInWindow((x, y, w, h) => {
-                      permPillCtr.current = { x: x + w / 2, y: y + h / 2 };
-                      // #216 探针：中心测量原值（dp 口径应为 ~胶囊中心；若真机
-                      // 回 px 会被 scale 放大 3.5 倍——单位错位当场暴露）
-                      permProbe.ctr = `${Math.round(x)},${Math.round(y)} ${Math.round(w)}x${Math.round(h)}`;
-                    });
-                  }}
                   android_ripple={{ color: c.tintSoft, borderless: false, radius: 8 }}
-                  // #216 探针·pressIn 预记录：真实手指按下必先于 onPress 走这里，
-                  // 坐标即手指真实触点。onPress 触发而 pin 缺失/坐标对不上 =
-                  // 合成点击（performClick 类错派）铁证，logcat 侧 [perm216] 行回读
-                  onPressIn={(e) => {
-                    const t = e.nativeEvent.changedTouches?.[0];
-                    permProbe.pin = `in@${t ? `${Math.round(t.pageX)},${Math.round(t.pageY)}` : "?"}`;
-                    permProbe.pinAt = Date.now();
-                  }}
-                  onPress={(e) => {
-                    // #216 六段修：只记录不拦截（四道围挡已拆，见 setPermPanel 处
-                    // 注释）。全指纹：触点坐标 x/y、距胶囊中心 d（-1=坐标或中心
-                    // 取不到）、kb=当时键盘高度（判 kbInsets 假死）、dt=pressIn→
-                    // press 间隔（-1=无 pressIn）、fΔ=距上次输入框聚焦毫秒
-                    const t = e.nativeEvent.changedTouches?.[0];
-                    const px = t?.pageX ?? e.nativeEvent.pageX;
-                    const py = t?.pageY ?? e.nativeEvent.pageY;
-                    const ctr = permPillCtr.current;
-                    const dist = ctr && typeof px === "number" && typeof py === "number"
-                      ? Math.round(Math.hypot(px - ctr.x, py - ctr.y)) : -1;
-                    permProbe.kb = kb;
-                    permProbe.dt = permProbe.pinAt > 0 ? Date.now() - permProbe.pinAt : -1;
-                    permProbe.txt = `x=${typeof px === "number" ? Math.round(px) : "?"} y=${typeof py === "number" ? Math.round(py) : "?"} d=${dist}${ctr ? "" : "/noctr"}`;
-                    console.log("[perm216] press", permProbe.txt, "| ctr", permProbe.ctr, "| kb", kb, "| dt", permProbe.dt, "|", permProbe.pin, "| fΔ", Date.now() - lastFocusAt);
-                    setPermPanel(true);
-                  }}
+                  onPress={() => setPermPanel(true)}
                   hitSlop={{ top: 8, bottom: 8, left: 6, right: 6 }}
                   accessibilityLabel={`权限模式：${PERM_LABEL[perm]}，点按选择`}
                 >
@@ -2967,7 +2890,6 @@ export default function DetailScreen({ sid, onBack, initialView, ref }: { sid: s
               // 期间曾长期处于此态且无任何视觉提示。现半透明弱化 + placeholder 说明原因，
               // 用户能自诊断「是断连不是键盘坏了」
               ref={inputRef}
-              onFocus={() => { lastFocusAt = Date.now(); }}
               style={[d.input, { height: inputH }, !canCmd && { opacity: 0.5 }]}
               value={input}
               onChangeText={editInput}
@@ -3227,8 +3149,6 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
   permTitleRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 4 },
   permTitle: { color: c.text, fontSize: 13, fontWeight: "600" },
   permX: { color: c.faint, fontSize: 14, lineHeight: 18 },
-  // #216 排查探针（test.8 临时）：9px mono 小字，只求真机截图回读可辨
-  permProbeT: { color: c.faint, fontSize: 9, fontFamily: "monospace", marginBottom: 4, lineHeight: 12 },
   permRow: {
     flexDirection: "row", alignItems: "center", gap: 8,
     paddingVertical: 9, paddingHorizontal: 8, borderRadius: 10, overflow: "hidden",
