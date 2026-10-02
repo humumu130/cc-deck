@@ -226,6 +226,24 @@
   .chp-ico { width: 28px; display: flex; align-items: center; justify-content: center; flex: none; }
   .chp-t { color: var(--text); font-size: 12.5px; }
   .chp-sep { height: 11px; }
+  /* #235 行内问号 tooltip（复用 gp-sec-help 问号样式，锚定行内名而非 section 标题）：
+     悬停任意挂 .gp-help-anchor 的元素显示其下 .gp-help-pop 说明卡（开机自启用） */
+  .gp-help-anchor { position: relative; }
+  .gp-help-anchor .gp-help-pop { display: none; }
+  .gp-help-anchor:hover .gp-help-pop {
+    display: block; position: absolute; top: 24px; left: 0; z-index: 320;
+    background: var(--panel); border: 1px solid var(--border); border-radius: 12px;
+    padding: 12px 14px; width: max-content; max-width: min(300px, calc(100vw - 48px));
+    box-shadow: 0 10px 34px rgba(0,0,0,.5); text-align: left;
+  }
+  .gp-help-pop p { margin: 0 0 6px; font-size: 12px; line-height: 1.55; color: var(--gp-dim); }
+  .gp-help-pop p:last-child { margin-bottom: 0; }
+  /* #235 长列表折叠：列表尾「展开全部 / 收起」轻按钮 */
+  .gp-peers-more {
+    width: 100%; margin-top: 6px; padding: 5px 0; border: none; background: none;
+    color: var(--gp-dim); font-size: 11.5px; cursor: pointer; border-radius: 7px;
+  }
+  .gp-peers-more:hover { color: var(--text); background: var(--gp-rail); }
   #winBtns { display: none; align-items: center; margin-right: -6px; }
   #winBtns button {
     width: 34px; height: 26px; border: none; background: none; cursor: pointer;
@@ -616,7 +634,7 @@
   .gp-peer-kick:hover { border-color: rgba(229,72,77,.45); background: rgba(229,72,77,.08); }
   .gp-peer-kick:disabled { opacity: .5; cursor: default; }
   .gp-peers-empty { padding: 10px 4px; font-size: 12px; color: var(--gp-faint); text-align: center; }
-  /* #212 记住的规则行：pattern 等宽展示（命令前缀/目录路径），scope 徽章右置 */
+  /* #212 自动放行规则行：pattern 等宽展示（命令前缀/目录路径），scope 徽章右置 */
   .gp-rule-pat { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-weight: 500; font-size: 11.5px; }
   .gp-rule-scope { margin-left: auto; flex: none; font-size: 10px; font-weight: 600; border: 1px solid var(--gp-border); color: var(--gp-dim); border-radius: 5px; padding: 1px 5px; }
   .gp-peers-foot { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 8px 4px 2px; }
@@ -2381,7 +2399,7 @@
           <div class="gp-card gp-rows" id="gpSvcCard" style="display:none;margin-bottom:10px">
             <div class="gp-row gp-plug-row">
               <span class="gi"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3.4 20.6 8 12 12.6 3.4 8Z"/><path d="m3.4 12.4 8.6 4.6 8.6-4.6"/><path d="m3.4 16.6 8.6 4.6 8.6-4.6"/></svg></span>
-              <span class="gp-plug-t"><span class="gp-plug-n">开机自启（系统服务）</span><span class="gp-plug-d">开机即有 relay，手机随时可连，不依赖 CC Deck 开着；切换会短暂重启 relay，各端秒级自动恢复</span></span>
+              <span class="gp-plug-t"><span class="gp-plug-n gp-help-anchor">开机自启（系统服务）<span class="gp-sec-help">?</span><div class="gp-help-pop"><p>开启后无需打开 CC Deck，开机即在后台运行连接服务，已配对设备可随时接入。</p><p>切换开关会短暂重启服务，各端连接将自动恢复，无需手动重连。</p></div></span></span>
               <div class="lever" id="gpSvcLever" style="--n:2"><i class="lever-thumb"></i><button type="button" class="lever-opt" data-i="0">关</button><button type="button" class="lever-opt" data-i="1">开</button></div>
             </div>
           </div>
@@ -2400,11 +2418,11 @@
           </div>
           <!-- #212 允许并记住：规则列表（SNAPSHOT.allow_rules 全量 + ALLOW_RULES_UPDATED
                实时收敛；多源合并展示，删除按条目所属源路由命令） -->
-          <div class="gp-sec"><svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3.2a5.8 5.8 0 0 0-5.8 5.8v2.4H5a1.4 1.4 0 0 0 0 2.8h14a1.4 1.4 0 0 0 0-2.8h-1.2V9A5.8 5.8 0 0 0 12 3.2Z"/><path d="M9.2 17.4a2.8 2.8 0 0 0 5.6 0"/></svg>记住的规则</div>
+          <div class="gp-sec"><svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3.2a5.8 5.8 0 0 0-5.8 5.8v2.4H5a1.4 1.4 0 0 0 0 2.8h14a1.4 1.4 0 0 0 0-2.8h-1.2V9A5.8 5.8 0 0 0 12 3.2Z"/><path d="M9.2 17.4a2.8 2.8 0 0 0 5.6 0"/></svg>自动放行规则</div>
           <div class="gp-card gp-peers">
             <div id="gpRulesList" class="gp-peers-list"><div class="gp-peers-empty">连接服务器后可查看</div></div>
             <div class="gp-peers-foot">
-              <span id="gpRulesCount">审批时点「允许并记住」后出现；命中规则的请求自动放行，不再逐条弹窗</span>
+              <span id="gpRulesCount">在审批弹窗中选择「允许并记住」即生成；同类操作此后自动放行，不再逐条询问</span>
             </div>
           </div>
         </section>
@@ -9064,8 +9082,10 @@ async function pdLocalRelayCreds() {
 const PEER_KIND_TXT = { phone: "手机", web: "网页", watch: "手表", other: "设备" };
 let gpPeers = null;         // 最近一次 COMMAND_PEERS 结果
 let gpPeersBusy = false;    // 并发守卫（开关抽屉/事件刷新叠加时只跑一次）
-let gpKickArm = null;       // 两次确认：已 armed 的 dev
+let gpKickArm = null;       // 两次确认：已 armed 的 dev（#235 起跨重渲染保持）
 let gpKickTimer = 0;
+const GP_FOLD_N = 5;        // #235 长列表默认折叠条数（展开后完整显示）
+let gpPeersFolded = true;   // #235 折叠态（跨重渲染保持，手动展开/收起切换）
 function fmtPeerTime(ts) {
   if (!ts) return "";
   const s = Math.floor((Date.now() - ts) / 1000);
@@ -9101,8 +9121,11 @@ async function refreshPeers() {
 function renderPeers() {
   const box = $("gpPeersList");
   if (!box) return;
-  gpKickArm = null;
+  // #235 不在渲染入口清 gpKickArm：SNAPSHOT/事件频繁重渲染会吞掉两次点按的确认态
+  //（「移除」点击没反应的根因）；armed 行渲染后补恢复确认文字，条目消失才清零
   if (!gpPeers || !gpPeers.length) {
+    gpKickArm = null;
+    clearTimeout(gpKickTimer);
     box.innerHTML = '<div class="gp-peers-empty">暂无已配对设备</div>';
     $("gpPeersCount").textContent = "0 台设备";
     return;
@@ -9113,7 +9136,10 @@ function renderPeers() {
   const sorted = gpPeers.slice().sort(function (a, b) {
     return peerOnline(b) - peerOnline(a) || (b.last_seen || 0) - (a.last_seen || 0);
   });
-  box.innerHTML = sorted.map(function (p) {
+  // #235 默认折叠：只显示前 GP_FOLD_N 台（几十台全平铺过长），尾行按钮展开/收起；
+  // 在线置顶排序保证折叠态优先看到活跃设备
+  const shown = gpPeersFolded && sorted.length > GP_FOLD_N ? sorted.slice(0, GP_FOLD_N) : sorted;
+  box.innerHTML = shown.map(function (p) {
     const online = peerOnline(p);
     // #42 meta 展示精简去重：platform（OS·型号）优先于 app 版本号；与 kind 徽章
     // 同义的内容（如 web 端 app 标识）不再重复占格
@@ -9130,8 +9156,24 @@ function renderPeers() {
       '<button class="gp-peer-kick" data-dev="' + escapeHtml(p.dev) + '">移除</button>' +
       "</div>";
   }).join("");
+  if (sorted.length > GP_FOLD_N) {
+    box.innerHTML += '<button class="gp-peers-more">' +
+      (gpPeersFolded ? "展开全部 " + sorted.length + " 台 ▾" : "收起 ▴") + "</button>";
+  }
+  // #235 armed 行重渲染后补恢复确认文字（按钮节点被重建，纯文字改动会丢）
+  if (gpKickArm) {
+    if (sorted.some(function (p) { return p.dev === gpKickArm; })) {
+      const b = box.querySelector('.gp-peer-kick[data-dev="' + gpKickArm + '"]');
+      if (b) b.textContent = "确认移除？";
+    } else {
+      gpKickArm = null;
+      clearTimeout(gpKickTimer);
+    }
+  }
 }
 $("gpPeersList").addEventListener("click", function (ev) {
+  // #235 展开/收起折叠列表
+  if (ev.target.closest(".gp-peers-more")) { gpPeersFolded = !gpPeersFolded; renderPeers(); return; }
   const btn = ev.target.closest(".gp-peer-kick");
   if (!btn) return;
   const dev = btn.dataset.dev;
@@ -9205,11 +9247,12 @@ $("gpPeersImportFile").onchange = function () {
   reader.readAsText(f);
 };
 
-// ===== #212 记住规则（设置页「记住的规则」）=====
+// ===== #212 记住规则（设置页「自动放行规则」，#235 更名澄清用途）=====
 // 数据源：ctx.allowRules（SNAPSHOT 全量 + ALLOW_RULES_UPDATED 全量替换），按源各自
 // 维护；渲染时合并展示，多源时行内标注源名。删除按条目所属源路由——rule id 只在
 // 所属 relay 的存储里有效，发错源只会得到 no such rule
 let gpRuleArm = "", gpRuleTimer = 0;
+let gpRulesFolded = true;   // #235 长列表折叠（同配对设备列表）
 function collectAllowRules() {
   const rows = [];
   let online = 0, legacy = 0;
@@ -9227,7 +9270,7 @@ function renderAllowRules() {
   // relay 页不可见时跳过（SNAPSHOT/事件路径会路过这里，白写 DOM 没意义）
   const page = $("gpPageRelay");
   if (!page || page.classList.contains("off")) return;
-  gpRuleArm = "";
+  // #235 不清 gpRuleArm（同 renderPeers：渲染入口清确认态是「删除」点不动的主因）
   const col = collectAllowRules();
   if (!col.online) {
     box.innerHTML = '<div class="gp-peers-empty">连接服务器后可查看</div>';
@@ -9240,14 +9283,18 @@ function renderAllowRules() {
     return;
   }
   if (!col.rows.length) {
-    box.innerHTML = '<div class="gp-peers-empty">暂无记住的规则</div>';
+    gpRuleArm = "";
+    clearTimeout(gpRuleTimer);
+    box.innerHTML = '<div class="gp-peers-empty">暂无规则</div>';
     $("gpRulesCount").textContent = "0 条规则";
     return;
   }
   $("gpRulesCount").textContent = col.rows.length + " 条规则";
   const multiSrc = new Set(col.rows.map(function (x) { return x.ctx.cfg && x.ctx.cfg.id; })).size > 1;
   col.rows.sort(function (a, b) { return (b.r.created_at || 0) - (a.r.created_at || 0); });
-  box.innerHTML = col.rows.map(function (x) {
+  // #235 默认折叠前 GP_FOLD_N 条（同配对设备列表）
+  const shown = gpRulesFolded && col.rows.length > GP_FOLD_N ? col.rows.slice(0, GP_FOLD_N) : col.rows;
+  box.innerHTML = shown.map(function (x) {
     const r = x.r;
     const pat = r.pattern === "*" ? "全部操作" : r.pattern;
     const src = multiSrc && x.ctx.cfg
@@ -9261,8 +9308,24 @@ function renderAllowRules() {
       '<button class="gp-peer-kick" data-id="' + escapeHtml(r.id) + '">删除</button>' +
       "</div>";
   }).join("");
+  if (col.rows.length > GP_FOLD_N) {
+    box.innerHTML += '<button class="gp-peers-more">' +
+      (gpRulesFolded ? "展开全部 " + col.rows.length + " 条 ▾" : "收起 ▴") + "</button>";
+  }
+  // #235 armed 行重渲染后补恢复确认文字
+  if (gpRuleArm) {
+    if (col.rows.some(function (x) { return x.r.id === gpRuleArm; })) {
+      const b = box.querySelector('.gp-peer-kick[data-id="' + gpRuleArm + '"]');
+      if (b) b.textContent = "确认删除？";
+    } else {
+      gpRuleArm = "";
+      clearTimeout(gpRuleTimer);
+    }
+  }
 }
 $("gpRulesList").addEventListener("click", function (ev) {
+  // #235 展开/收起折叠列表
+  if (ev.target.closest(".gp-peers-more")) { gpRulesFolded = !gpRulesFolded; renderAllowRules(); return; }
   const btn = ev.target.closest(".gp-peer-kick");
   if (!btn) return;
   const id = btn.dataset.id;

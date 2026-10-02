@@ -35,9 +35,9 @@ var __toESM = (mod, isNodeMode, target) => (target = mod != null ? __create(__ge
   mod
 ));
 
-// ../../../../Users/xdd/dev/cc-deck/relay/node_modules/tweetnacl/nacl-fast.js
+// ../../../Users/xdd/dev/cc-deck/relay/node_modules/tweetnacl/nacl-fast.js
 var require_nacl_fast = __commonJS({
-  "../../../../Users/xdd/dev/cc-deck/relay/node_modules/tweetnacl/nacl-fast.js"(exports, module) {
+  "../../../Users/xdd/dev/cc-deck/relay/node_modules/tweetnacl/nacl-fast.js"(exports, module) {
     (function(nacl2) {
       "use strict";
       var gf2 = function(init) {
@@ -2259,9 +2259,9 @@ var require_nacl_fast = __commonJS({
   }
 });
 
-// ../../../../Users/xdd/dev/cc-deck/relay/node_modules/ws/lib/constants.js
+// ../../../Users/xdd/dev/cc-deck/relay/node_modules/ws/lib/constants.js
 var require_constants = __commonJS({
-  "../../../../Users/xdd/dev/cc-deck/relay/node_modules/ws/lib/constants.js"(exports, module) {
+  "../../../Users/xdd/dev/cc-deck/relay/node_modules/ws/lib/constants.js"(exports, module) {
     "use strict";
     var BINARY_TYPES = ["nodebuffer", "arraybuffer", "fragments"];
     var hasBlob = typeof Blob !== "undefined";
@@ -2282,9 +2282,9 @@ var require_constants = __commonJS({
   }
 });
 
-// ../../../../Users/xdd/dev/cc-deck/relay/node_modules/ws/lib/buffer-util.js
+// ../../../Users/xdd/dev/cc-deck/relay/node_modules/ws/lib/buffer-util.js
 var require_buffer_util = __commonJS({
-  "../../../../Users/xdd/dev/cc-deck/relay/node_modules/ws/lib/buffer-util.js"(exports, module) {
+  "../../../Users/xdd/dev/cc-deck/relay/node_modules/ws/lib/buffer-util.js"(exports, module) {
     "use strict";
     var { EMPTY_BUFFER } = require_constants();
     var FastBuffer = Buffer[Symbol.species];
@@ -2357,9 +2357,9 @@ var require_buffer_util = __commonJS({
   }
 });
 
-// ../../../../Users/xdd/dev/cc-deck/relay/node_modules/ws/lib/limiter.js
+// ../../../Users/xdd/dev/cc-deck/relay/node_modules/ws/lib/limiter.js
 var require_limiter = __commonJS({
-  "../../../../Users/xdd/dev/cc-deck/relay/node_modules/ws/lib/limiter.js"(exports, module) {
+  "../../../Users/xdd/dev/cc-deck/relay/node_modules/ws/lib/limiter.js"(exports, module) {
     "use strict";
     var kDone = /* @__PURE__ */ Symbol("kDone");
     var kRun = /* @__PURE__ */ Symbol("kRun");
@@ -2407,9 +2407,9 @@ var require_limiter = __commonJS({
   }
 });
 
-// ../../../../Users/xdd/dev/cc-deck/relay/node_modules/ws/lib/permessage-deflate.js
+// ../../../Users/xdd/dev/cc-deck/relay/node_modules/ws/lib/permessage-deflate.js
 var require_permessage_deflate = __commonJS({
-  "../../../../Users/xdd/dev/cc-deck/relay/node_modules/ws/lib/permessage-deflate.js"(exports, module) {
+  "../../../Users/xdd/dev/cc-deck/relay/node_modules/ws/lib/permessage-deflate.js"(exports, module) {
     "use strict";
     var zlib = __require("zlib");
     var bufferUtil = require_buffer_util();
@@ -2790,9 +2790,9 @@ var require_permessage_deflate = __commonJS({
   }
 });
 
-// ../../../../Users/xdd/dev/cc-deck/relay/node_modules/ws/lib/validation.js
+// ../../../Users/xdd/dev/cc-deck/relay/node_modules/ws/lib/validation.js
 var require_validation = __commonJS({
-  "../../../../Users/xdd/dev/cc-deck/relay/node_modules/ws/lib/validation.js"(exports, module) {
+  "../../../Users/xdd/dev/cc-deck/relay/node_modules/ws/lib/validation.js"(exports, module) {
     "use strict";
     var { isUtf8 } = __require("buffer");
     var { hasBlob } = require_constants();
@@ -2991,9 +2991,9 @@ var require_validation = __commonJS({
   }
 });
 
-// ../../../../Users/xdd/dev/cc-deck/relay/node_modules/ws/lib/receiver.js
+// ../../../Users/xdd/dev/cc-deck/relay/node_modules/ws/lib/receiver.js
 var require_receiver = __commonJS({
-  "../../../../Users/xdd/dev/cc-deck/relay/node_modules/ws/lib/receiver.js"(exports, module) {
+  "../../../Users/xdd/dev/cc-deck/relay/node_modules/ws/lib/receiver.js"(exports, module) {
     "use strict";
     var { Writable } = __require("stream");
     var PerMessageDeflate2 = require_permessage_deflate();
@@ -3614,9 +3614,9 @@ var require_receiver = __commonJS({
   }
 });
 
-// ../../../../Users/xdd/dev/cc-deck/relay/node_modules/ws/lib/sender.js
+// ../../../Users/xdd/dev/cc-deck/relay/node_modules/ws/lib/sender.js
 var require_sender = __commonJS({
-  "../../../../Users/xdd/dev/cc-deck/relay/node_modules/ws/lib/sender.js"(exports, module) {
+  "../../../Users/xdd/dev/cc-deck/relay/node_modules/ws/lib/sender.js"(exports, module) {
     "use strict";
     var { Duplex } = __require("stream");
     var { randomFillSync } = __require("crypto");
@@ -4107,9 +4107,9 @@ var require_sender = __commonJS({
   }
 });
 
-// ../../../../Users/xdd/dev/cc-deck/relay/node_modules/ws/lib/event-target.js
+// ../../../Users/xdd/dev/cc-deck/relay/node_modules/ws/lib/event-target.js
 var require_event_target = __commonJS({
-  "../../../../Users/xdd/dev/cc-deck/relay/node_modules/ws/lib/event-target.js"(exports, module) {
+  "../../../Users/xdd/dev/cc-deck/relay/node_modules/ws/lib/event-target.js"(exports, module) {
     "use strict";
     var { kForOnEventAttribute, kListener } = require_constants();
     var kCode = /* @__PURE__ */ Symbol("kCode");
@@ -4336,9 +4336,9 @@ var require_event_target = __commonJS({
   }
 });
 
-// ../../../../Users/xdd/dev/cc-deck/relay/node_modules/ws/lib/extension.js
+// ../../../Users/xdd/dev/cc-deck/relay/node_modules/ws/lib/extension.js
 var require_extension = __commonJS({
-  "../../../../Users/xdd/dev/cc-deck/relay/node_modules/ws/lib/extension.js"(exports, module) {
+  "../../../Users/xdd/dev/cc-deck/relay/node_modules/ws/lib/extension.js"(exports, module) {
     "use strict";
     var { tokenChars } = require_validation();
     function push(dest, name, elem) {
@@ -4489,9 +4489,9 @@ var require_extension = __commonJS({
   }
 });
 
-// ../../../../Users/xdd/dev/cc-deck/relay/node_modules/ws/lib/websocket.js
+// ../../../Users/xdd/dev/cc-deck/relay/node_modules/ws/lib/websocket.js
 var require_websocket = __commonJS({
-  "../../../../Users/xdd/dev/cc-deck/relay/node_modules/ws/lib/websocket.js"(exports, module) {
+  "../../../Users/xdd/dev/cc-deck/relay/node_modules/ws/lib/websocket.js"(exports, module) {
     "use strict";
     var EventEmitter = __require("events");
     var https = __require("https");
@@ -5385,9 +5385,9 @@ var require_websocket = __commonJS({
   }
 });
 
-// ../../../../Users/xdd/dev/cc-deck/relay/node_modules/ws/lib/stream.js
+// ../../../Users/xdd/dev/cc-deck/relay/node_modules/ws/lib/stream.js
 var require_stream = __commonJS({
-  "../../../../Users/xdd/dev/cc-deck/relay/node_modules/ws/lib/stream.js"(exports, module) {
+  "../../../Users/xdd/dev/cc-deck/relay/node_modules/ws/lib/stream.js"(exports, module) {
     "use strict";
     var WebSocket3 = require_websocket();
     var { Duplex } = __require("stream");
@@ -5483,9 +5483,9 @@ var require_stream = __commonJS({
   }
 });
 
-// ../../../../Users/xdd/dev/cc-deck/relay/node_modules/ws/lib/subprotocol.js
+// ../../../Users/xdd/dev/cc-deck/relay/node_modules/ws/lib/subprotocol.js
 var require_subprotocol = __commonJS({
-  "../../../../Users/xdd/dev/cc-deck/relay/node_modules/ws/lib/subprotocol.js"(exports, module) {
+  "../../../Users/xdd/dev/cc-deck/relay/node_modules/ws/lib/subprotocol.js"(exports, module) {
     "use strict";
     var { tokenChars } = require_validation();
     function parse3(header) {
@@ -5528,9 +5528,9 @@ var require_subprotocol = __commonJS({
   }
 });
 
-// ../../../../Users/xdd/dev/cc-deck/relay/node_modules/ws/lib/websocket-server.js
+// ../../../Users/xdd/dev/cc-deck/relay/node_modules/ws/lib/websocket-server.js
 var require_websocket_server = __commonJS({
-  "../../../../Users/xdd/dev/cc-deck/relay/node_modules/ws/lib/websocket-server.js"(exports, module) {
+  "../../../Users/xdd/dev/cc-deck/relay/node_modules/ws/lib/websocket-server.js"(exports, module) {
     "use strict";
     var EventEmitter = __require("events");
     var http = __require("http");
@@ -5929,9 +5929,9 @@ var require_websocket_server = __commonJS({
   }
 });
 
-// ../../../../Users/xdd/dev/cc-deck/relay/node_modules/qrcode-terminal/vendor/QRCode/QRMode.js
+// ../../../Users/xdd/dev/cc-deck/relay/node_modules/qrcode-terminal/vendor/QRCode/QRMode.js
 var require_QRMode = __commonJS({
-  "../../../../Users/xdd/dev/cc-deck/relay/node_modules/qrcode-terminal/vendor/QRCode/QRMode.js"(exports, module) {
+  "../../../Users/xdd/dev/cc-deck/relay/node_modules/qrcode-terminal/vendor/QRCode/QRMode.js"(exports, module) {
     module.exports = {
       MODE_NUMBER: 1 << 0,
       MODE_ALPHA_NUM: 1 << 1,
@@ -5941,9 +5941,9 @@ var require_QRMode = __commonJS({
   }
 });
 
-// ../../../../Users/xdd/dev/cc-deck/relay/node_modules/qrcode-terminal/vendor/QRCode/QR8bitByte.js
+// ../../../Users/xdd/dev/cc-deck/relay/node_modules/qrcode-terminal/vendor/QRCode/QR8bitByte.js
 var require_QR8bitByte = __commonJS({
-  "../../../../Users/xdd/dev/cc-deck/relay/node_modules/qrcode-terminal/vendor/QRCode/QR8bitByte.js"(exports, module) {
+  "../../../Users/xdd/dev/cc-deck/relay/node_modules/qrcode-terminal/vendor/QRCode/QR8bitByte.js"(exports, module) {
     var QRMode = require_QRMode();
     function QR8bitByte(data) {
       this.mode = QRMode.MODE_8BIT_BYTE;
@@ -5963,9 +5963,9 @@ var require_QR8bitByte = __commonJS({
   }
 });
 
-// ../../../../Users/xdd/dev/cc-deck/relay/node_modules/qrcode-terminal/vendor/QRCode/QRMath.js
+// ../../../Users/xdd/dev/cc-deck/relay/node_modules/qrcode-terminal/vendor/QRCode/QRMath.js
 var require_QRMath = __commonJS({
-  "../../../../Users/xdd/dev/cc-deck/relay/node_modules/qrcode-terminal/vendor/QRCode/QRMath.js"(exports, module) {
+  "../../../Users/xdd/dev/cc-deck/relay/node_modules/qrcode-terminal/vendor/QRCode/QRMath.js"(exports, module) {
     var QRMath = {
       glog: function(n) {
         if (n < 1) {
@@ -6001,9 +6001,9 @@ var require_QRMath = __commonJS({
   }
 });
 
-// ../../../../Users/xdd/dev/cc-deck/relay/node_modules/qrcode-terminal/vendor/QRCode/QRPolynomial.js
+// ../../../Users/xdd/dev/cc-deck/relay/node_modules/qrcode-terminal/vendor/QRCode/QRPolynomial.js
 var require_QRPolynomial = __commonJS({
-  "../../../../Users/xdd/dev/cc-deck/relay/node_modules/qrcode-terminal/vendor/QRCode/QRPolynomial.js"(exports, module) {
+  "../../../Users/xdd/dev/cc-deck/relay/node_modules/qrcode-terminal/vendor/QRCode/QRPolynomial.js"(exports, module) {
     var QRMath = require_QRMath();
     function QRPolynomial(num, shift) {
       if (num.length === void 0) {
@@ -6053,9 +6053,9 @@ var require_QRPolynomial = __commonJS({
   }
 });
 
-// ../../../../Users/xdd/dev/cc-deck/relay/node_modules/qrcode-terminal/vendor/QRCode/QRMaskPattern.js
+// ../../../Users/xdd/dev/cc-deck/relay/node_modules/qrcode-terminal/vendor/QRCode/QRMaskPattern.js
 var require_QRMaskPattern = __commonJS({
-  "../../../../Users/xdd/dev/cc-deck/relay/node_modules/qrcode-terminal/vendor/QRCode/QRMaskPattern.js"(exports, module) {
+  "../../../Users/xdd/dev/cc-deck/relay/node_modules/qrcode-terminal/vendor/QRCode/QRMaskPattern.js"(exports, module) {
     module.exports = {
       PATTERN000: 0,
       PATTERN001: 1,
@@ -6069,9 +6069,9 @@ var require_QRMaskPattern = __commonJS({
   }
 });
 
-// ../../../../Users/xdd/dev/cc-deck/relay/node_modules/qrcode-terminal/vendor/QRCode/QRUtil.js
+// ../../../Users/xdd/dev/cc-deck/relay/node_modules/qrcode-terminal/vendor/QRCode/QRUtil.js
 var require_QRUtil = __commonJS({
-  "../../../../Users/xdd/dev/cc-deck/relay/node_modules/qrcode-terminal/vendor/QRCode/QRUtil.js"(exports, module) {
+  "../../../Users/xdd/dev/cc-deck/relay/node_modules/qrcode-terminal/vendor/QRCode/QRUtil.js"(exports, module) {
     var QRMode = require_QRMode();
     var QRPolynomial = require_QRPolynomial();
     var QRMath = require_QRMath();
@@ -6293,9 +6293,9 @@ var require_QRUtil = __commonJS({
   }
 });
 
-// ../../../../Users/xdd/dev/cc-deck/relay/node_modules/qrcode-terminal/vendor/QRCode/QRErrorCorrectLevel.js
+// ../../../Users/xdd/dev/cc-deck/relay/node_modules/qrcode-terminal/vendor/QRCode/QRErrorCorrectLevel.js
 var require_QRErrorCorrectLevel = __commonJS({
-  "../../../../Users/xdd/dev/cc-deck/relay/node_modules/qrcode-terminal/vendor/QRCode/QRErrorCorrectLevel.js"(exports, module) {
+  "../../../Users/xdd/dev/cc-deck/relay/node_modules/qrcode-terminal/vendor/QRCode/QRErrorCorrectLevel.js"(exports, module) {
     module.exports = {
       L: 1,
       M: 0,
@@ -6305,9 +6305,9 @@ var require_QRErrorCorrectLevel = __commonJS({
   }
 });
 
-// ../../../../Users/xdd/dev/cc-deck/relay/node_modules/qrcode-terminal/vendor/QRCode/QRRSBlock.js
+// ../../../Users/xdd/dev/cc-deck/relay/node_modules/qrcode-terminal/vendor/QRCode/QRRSBlock.js
 var require_QRRSBlock = __commonJS({
-  "../../../../Users/xdd/dev/cc-deck/relay/node_modules/qrcode-terminal/vendor/QRCode/QRRSBlock.js"(exports, module) {
+  "../../../Users/xdd/dev/cc-deck/relay/node_modules/qrcode-terminal/vendor/QRCode/QRRSBlock.js"(exports, module) {
     var QRErrorCorrectLevel = require_QRErrorCorrectLevel();
     function QRRSBlock(totalCount, dataCount) {
       this.totalCount = totalCount;
@@ -6554,9 +6554,9 @@ var require_QRRSBlock = __commonJS({
   }
 });
 
-// ../../../../Users/xdd/dev/cc-deck/relay/node_modules/qrcode-terminal/vendor/QRCode/QRBitBuffer.js
+// ../../../Users/xdd/dev/cc-deck/relay/node_modules/qrcode-terminal/vendor/QRCode/QRBitBuffer.js
 var require_QRBitBuffer = __commonJS({
-  "../../../../Users/xdd/dev/cc-deck/relay/node_modules/qrcode-terminal/vendor/QRCode/QRBitBuffer.js"(exports, module) {
+  "../../../Users/xdd/dev/cc-deck/relay/node_modules/qrcode-terminal/vendor/QRCode/QRBitBuffer.js"(exports, module) {
     function QRBitBuffer() {
       this.buffer = [];
       this.length = 0;
@@ -6589,9 +6589,9 @@ var require_QRBitBuffer = __commonJS({
   }
 });
 
-// ../../../../Users/xdd/dev/cc-deck/relay/node_modules/qrcode-terminal/vendor/QRCode/index.js
+// ../../../Users/xdd/dev/cc-deck/relay/node_modules/qrcode-terminal/vendor/QRCode/index.js
 var require_QRCode = __commonJS({
-  "../../../../Users/xdd/dev/cc-deck/relay/node_modules/qrcode-terminal/vendor/QRCode/index.js"(exports, module) {
+  "../../../Users/xdd/dev/cc-deck/relay/node_modules/qrcode-terminal/vendor/QRCode/index.js"(exports, module) {
     var QR8bitByte = require_QR8bitByte();
     var QRUtil = require_QRUtil();
     var QRPolynomial = require_QRPolynomial();
@@ -6909,9 +6909,9 @@ var require_QRCode = __commonJS({
   }
 });
 
-// ../../../../Users/xdd/dev/cc-deck/relay/node_modules/qrcode-terminal/lib/main.js
+// ../../../Users/xdd/dev/cc-deck/relay/node_modules/qrcode-terminal/lib/main.js
 var require_main = __commonJS({
-  "../../../../Users/xdd/dev/cc-deck/relay/node_modules/qrcode-terminal/lib/main.js"(exports, module) {
+  "../../../Users/xdd/dev/cc-deck/relay/node_modules/qrcode-terminal/lib/main.js"(exports, module) {
     var QRCode = require_QRCode();
     var QRErrorCorrectLevel = require_QRErrorCorrectLevel();
     var black = "\x1B[40m  \x1B[0m";
@@ -6999,9 +6999,9 @@ var require_main = __commonJS({
   }
 });
 
-// ../../../../Users/xdd/dev/cc-deck/relay/node_modules/bonjour-service/dist/lib/utils/dns-equal.js
+// ../../../Users/xdd/dev/cc-deck/relay/node_modules/bonjour-service/dist/lib/utils/dns-equal.js
 var require_dns_equal = __commonJS({
-  "../../../../Users/xdd/dev/cc-deck/relay/node_modules/bonjour-service/dist/lib/utils/dns-equal.js"(exports) {
+  "../../../Users/xdd/dev/cc-deck/relay/node_modules/bonjour-service/dist/lib/utils/dns-equal.js"(exports) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     exports.default = dnsEqual;
@@ -7017,9 +7017,9 @@ var require_dns_equal = __commonJS({
   }
 });
 
-// ../../../../Users/xdd/dev/cc-deck/relay/node_modules/bonjour-service/dist/lib/dns-txt.js
+// ../../../Users/xdd/dev/cc-deck/relay/node_modules/bonjour-service/dist/lib/dns-txt.js
 var require_dns_txt = __commonJS({
-  "../../../../Users/xdd/dev/cc-deck/relay/node_modules/bonjour-service/dist/lib/dns-txt.js"(exports) {
+  "../../../Users/xdd/dev/cc-deck/relay/node_modules/bonjour-service/dist/lib/dns-txt.js"(exports) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     exports.DnsTxt = void 0;
@@ -7060,9 +7060,9 @@ var require_dns_txt = __commonJS({
   }
 });
 
-// ../../../../Users/xdd/dev/cc-deck/relay/node_modules/bonjour-service/dist/lib/service-types.js
+// ../../../Users/xdd/dev/cc-deck/relay/node_modules/bonjour-service/dist/lib/service-types.js
 var require_service_types = __commonJS({
-  "../../../../Users/xdd/dev/cc-deck/relay/node_modules/bonjour-service/dist/lib/service-types.js"(exports) {
+  "../../../Users/xdd/dev/cc-deck/relay/node_modules/bonjour-service/dist/lib/service-types.js"(exports) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     exports.toType = exports.toString = void 0;
@@ -7115,9 +7115,9 @@ var require_service_types = __commonJS({
   }
 });
 
-// ../../../../Users/xdd/dev/cc-deck/relay/node_modules/bonjour-service/dist/lib/service.js
+// ../../../Users/xdd/dev/cc-deck/relay/node_modules/bonjour-service/dist/lib/service.js
 var require_service = __commonJS({
-  "../../../../Users/xdd/dev/cc-deck/relay/node_modules/bonjour-service/dist/lib/service.js"(exports) {
+  "../../../Users/xdd/dev/cc-deck/relay/node_modules/bonjour-service/dist/lib/service.js"(exports) {
     "use strict";
     var __importDefault = exports && exports.__importDefault || function(mod) {
       return mod && mod.__esModule ? mod : { "default": mod };
@@ -7250,9 +7250,9 @@ var require_service = __commonJS({
   }
 });
 
-// ../../../../Users/xdd/dev/cc-deck/relay/node_modules/bonjour-service/dist/lib/registry.js
+// ../../../Users/xdd/dev/cc-deck/relay/node_modules/bonjour-service/dist/lib/registry.js
 var require_registry = __commonJS({
-  "../../../../Users/xdd/dev/cc-deck/relay/node_modules/bonjour-service/dist/lib/registry.js"(exports) {
+  "../../../Users/xdd/dev/cc-deck/relay/node_modules/bonjour-service/dist/lib/registry.js"(exports) {
     "use strict";
     var __importDefault = exports && exports.__importDefault || function(mod) {
       return mod && mod.__esModule ? mod : { "default": mod };
@@ -7397,9 +7397,9 @@ var require_registry = __commonJS({
   }
 });
 
-// ../../../../Users/xdd/dev/cc-deck/relay/node_modules/dns-packet/types.js
+// ../../../Users/xdd/dev/cc-deck/relay/node_modules/dns-packet/types.js
 var require_types = __commonJS({
-  "../../../../Users/xdd/dev/cc-deck/relay/node_modules/dns-packet/types.js"(exports) {
+  "../../../Users/xdd/dev/cc-deck/relay/node_modules/dns-packet/types.js"(exports) {
     "use strict";
     exports.toString = function(type) {
       switch (type) {
@@ -7593,9 +7593,9 @@ var require_types = __commonJS({
   }
 });
 
-// ../../../../Users/xdd/dev/cc-deck/relay/node_modules/dns-packet/rcodes.js
+// ../../../Users/xdd/dev/cc-deck/relay/node_modules/dns-packet/rcodes.js
 var require_rcodes = __commonJS({
-  "../../../../Users/xdd/dev/cc-deck/relay/node_modules/dns-packet/rcodes.js"(exports) {
+  "../../../Users/xdd/dev/cc-deck/relay/node_modules/dns-packet/rcodes.js"(exports) {
     "use strict";
     exports.toString = function(rcode) {
       switch (rcode) {
@@ -7674,9 +7674,9 @@ var require_rcodes = __commonJS({
   }
 });
 
-// ../../../../Users/xdd/dev/cc-deck/relay/node_modules/dns-packet/opcodes.js
+// ../../../Users/xdd/dev/cc-deck/relay/node_modules/dns-packet/opcodes.js
 var require_opcodes = __commonJS({
-  "../../../../Users/xdd/dev/cc-deck/relay/node_modules/dns-packet/opcodes.js"(exports) {
+  "../../../Users/xdd/dev/cc-deck/relay/node_modules/dns-packet/opcodes.js"(exports) {
     "use strict";
     exports.toString = function(opcode) {
       switch (opcode) {
@@ -7755,9 +7755,9 @@ var require_opcodes = __commonJS({
   }
 });
 
-// ../../../../Users/xdd/dev/cc-deck/relay/node_modules/dns-packet/classes.js
+// ../../../Users/xdd/dev/cc-deck/relay/node_modules/dns-packet/classes.js
 var require_classes = __commonJS({
-  "../../../../Users/xdd/dev/cc-deck/relay/node_modules/dns-packet/classes.js"(exports) {
+  "../../../Users/xdd/dev/cc-deck/relay/node_modules/dns-packet/classes.js"(exports) {
     "use strict";
     exports.toString = function(klass) {
       switch (klass) {
@@ -7792,9 +7792,9 @@ var require_classes = __commonJS({
   }
 });
 
-// ../../../../Users/xdd/dev/cc-deck/relay/node_modules/dns-packet/optioncodes.js
+// ../../../Users/xdd/dev/cc-deck/relay/node_modules/dns-packet/optioncodes.js
 var require_optioncodes = __commonJS({
-  "../../../../Users/xdd/dev/cc-deck/relay/node_modules/dns-packet/optioncodes.js"(exports) {
+  "../../../Users/xdd/dev/cc-deck/relay/node_modules/dns-packet/optioncodes.js"(exports) {
     "use strict";
     exports.toString = function(type) {
       switch (type) {
@@ -7886,9 +7886,9 @@ var require_optioncodes = __commonJS({
   }
 });
 
-// ../../../../Users/xdd/dev/cc-deck/relay/node_modules/@leichtgewicht/ip-codec/index.cjs
+// ../../../Users/xdd/dev/cc-deck/relay/node_modules/@leichtgewicht/ip-codec/index.cjs
 var require_ip_codec = __commonJS({
-  "../../../../Users/xdd/dev/cc-deck/relay/node_modules/@leichtgewicht/ip-codec/index.cjs"(exports, module) {
+  "../../../Users/xdd/dev/cc-deck/relay/node_modules/@leichtgewicht/ip-codec/index.cjs"(exports, module) {
     var ipCodec = (function(exports2) {
       "use strict";
       Object.defineProperty(exports2, "__esModule", {
@@ -8079,9 +8079,9 @@ var require_ip_codec = __commonJS({
   }
 });
 
-// ../../../../Users/xdd/dev/cc-deck/relay/node_modules/dns-packet/index.js
+// ../../../Users/xdd/dev/cc-deck/relay/node_modules/dns-packet/index.js
 var require_dns_packet = __commonJS({
-  "../../../../Users/xdd/dev/cc-deck/relay/node_modules/dns-packet/index.js"(exports) {
+  "../../../Users/xdd/dev/cc-deck/relay/node_modules/dns-packet/index.js"(exports) {
     "use strict";
     var Buffer2 = __require("buffer").Buffer;
     var types = require_types();
@@ -9507,9 +9507,9 @@ var require_dns_packet = __commonJS({
   }
 });
 
-// ../../../../Users/xdd/dev/cc-deck/relay/node_modules/thunky/index.js
+// ../../../Users/xdd/dev/cc-deck/relay/node_modules/thunky/index.js
 var require_thunky = __commonJS({
-  "../../../../Users/xdd/dev/cc-deck/relay/node_modules/thunky/index.js"(exports, module) {
+  "../../../Users/xdd/dev/cc-deck/relay/node_modules/thunky/index.js"(exports, module) {
     "use strict";
     var nextTick = nextTickArgs;
     process.nextTick(upgrade, 42);
@@ -9556,9 +9556,9 @@ var require_thunky = __commonJS({
   }
 });
 
-// ../../../../Users/xdd/dev/cc-deck/relay/node_modules/multicast-dns/index.js
+// ../../../Users/xdd/dev/cc-deck/relay/node_modules/multicast-dns/index.js
 var require_multicast_dns = __commonJS({
-  "../../../../Users/xdd/dev/cc-deck/relay/node_modules/multicast-dns/index.js"(exports, module) {
+  "../../../Users/xdd/dev/cc-deck/relay/node_modules/multicast-dns/index.js"(exports, module) {
     var packet = require_dns_packet();
     var dgram = __require("dgram");
     var thunky = require_thunky();
@@ -9729,9 +9729,9 @@ var require_multicast_dns = __commonJS({
   }
 });
 
-// ../../../../Users/xdd/dev/cc-deck/relay/node_modules/fast-deep-equal/es6/index.js
+// ../../../Users/xdd/dev/cc-deck/relay/node_modules/fast-deep-equal/es6/index.js
 var require_es6 = __commonJS({
-  "../../../../Users/xdd/dev/cc-deck/relay/node_modules/fast-deep-equal/es6/index.js"(exports, module) {
+  "../../../Users/xdd/dev/cc-deck/relay/node_modules/fast-deep-equal/es6/index.js"(exports, module) {
     "use strict";
     module.exports = function equal(a, b) {
       if (a === b) return true;
@@ -9785,9 +9785,9 @@ var require_es6 = __commonJS({
   }
 });
 
-// ../../../../Users/xdd/dev/cc-deck/relay/node_modules/bonjour-service/dist/lib/mdns-server.js
+// ../../../Users/xdd/dev/cc-deck/relay/node_modules/bonjour-service/dist/lib/mdns-server.js
 var require_mdns_server = __commonJS({
-  "../../../../Users/xdd/dev/cc-deck/relay/node_modules/bonjour-service/dist/lib/mdns-server.js"(exports) {
+  "../../../Users/xdd/dev/cc-deck/relay/node_modules/bonjour-service/dist/lib/mdns-server.js"(exports) {
     "use strict";
     var __importDefault = exports && exports.__importDefault || function(mod) {
       return mod && mod.__esModule ? mod : { "default": mod };
@@ -9896,9 +9896,9 @@ var require_mdns_server = __commonJS({
   }
 });
 
-// ../../../../Users/xdd/dev/cc-deck/relay/node_modules/bonjour-service/dist/lib/utils/filter-service.js
+// ../../../Users/xdd/dev/cc-deck/relay/node_modules/bonjour-service/dist/lib/utils/filter-service.js
 var require_filter_service = __commonJS({
-  "../../../../Users/xdd/dev/cc-deck/relay/node_modules/bonjour-service/dist/lib/utils/filter-service.js"(exports) {
+  "../../../Users/xdd/dev/cc-deck/relay/node_modules/bonjour-service/dist/lib/utils/filter-service.js"(exports) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     exports.default = (service, txtQuery) => {
@@ -9922,9 +9922,9 @@ var require_filter_service = __commonJS({
   }
 });
 
-// ../../../../Users/xdd/dev/cc-deck/relay/node_modules/bonjour-service/dist/lib/utils/filter-txt.js
+// ../../../Users/xdd/dev/cc-deck/relay/node_modules/bonjour-service/dist/lib/utils/filter-txt.js
 var require_filter_txt = __commonJS({
-  "../../../../Users/xdd/dev/cc-deck/relay/node_modules/bonjour-service/dist/lib/utils/filter-txt.js"(exports) {
+  "../../../Users/xdd/dev/cc-deck/relay/node_modules/bonjour-service/dist/lib/utils/filter-txt.js"(exports) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     exports.default = (data) => Object.keys(data).filter((key) => !key.includes("binary")).reduce((cur, key) => {
@@ -9933,9 +9933,9 @@ var require_filter_txt = __commonJS({
   }
 });
 
-// ../../../../Users/xdd/dev/cc-deck/relay/node_modules/bonjour-service/dist/lib/utils/equal-txt.js
+// ../../../Users/xdd/dev/cc-deck/relay/node_modules/bonjour-service/dist/lib/utils/equal-txt.js
 var require_equal_txt = __commonJS({
-  "../../../../Users/xdd/dev/cc-deck/relay/node_modules/bonjour-service/dist/lib/utils/equal-txt.js"(exports) {
+  "../../../Users/xdd/dev/cc-deck/relay/node_modules/bonjour-service/dist/lib/utils/equal-txt.js"(exports) {
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     exports.default = equalTxt;
@@ -9955,9 +9955,9 @@ var require_equal_txt = __commonJS({
   }
 });
 
-// ../../../../Users/xdd/dev/cc-deck/relay/node_modules/bonjour-service/dist/lib/browser.js
+// ../../../Users/xdd/dev/cc-deck/relay/node_modules/bonjour-service/dist/lib/browser.js
 var require_browser = __commonJS({
-  "../../../../Users/xdd/dev/cc-deck/relay/node_modules/bonjour-service/dist/lib/browser.js"(exports) {
+  "../../../Users/xdd/dev/cc-deck/relay/node_modules/bonjour-service/dist/lib/browser.js"(exports) {
     "use strict";
     var __importDefault = exports && exports.__importDefault || function(mod) {
       return mod && mod.__esModule ? mod : { "default": mod };
@@ -10154,9 +10154,9 @@ var require_browser = __commonJS({
   }
 });
 
-// ../../../../Users/xdd/dev/cc-deck/relay/node_modules/bonjour-service/dist/lib/bonjour.js
+// ../../../Users/xdd/dev/cc-deck/relay/node_modules/bonjour-service/dist/lib/bonjour.js
 var require_bonjour = __commonJS({
-  "../../../../Users/xdd/dev/cc-deck/relay/node_modules/bonjour-service/dist/lib/bonjour.js"(exports) {
+  "../../../Users/xdd/dev/cc-deck/relay/node_modules/bonjour-service/dist/lib/bonjour.js"(exports) {
     "use strict";
     var __importDefault = exports && exports.__importDefault || function(mod) {
       return mod && mod.__esModule ? mod : { "default": mod };
@@ -10209,9 +10209,9 @@ var require_bonjour = __commonJS({
   }
 });
 
-// ../../../../Users/xdd/dev/cc-deck/relay/node_modules/bonjour-service/dist/index.js
+// ../../../Users/xdd/dev/cc-deck/relay/node_modules/bonjour-service/dist/index.js
 var require_dist = __commonJS({
-  "../../../../Users/xdd/dev/cc-deck/relay/node_modules/bonjour-service/dist/index.js"(exports, module) {
+  "../../../Users/xdd/dev/cc-deck/relay/node_modules/bonjour-service/dist/index.js"(exports, module) {
     "use strict";
     var __createBinding = exports && exports.__createBinding || (Object.create ? (function(o, m, k3, k22) {
       if (k22 === void 0) k22 = k3;
@@ -10275,10 +10275,10 @@ var require_dist = __commonJS({
   }
 });
 
-// src/index.ts
+// relay/src/index.ts
 import { randomBytes as randomBytes2 } from "node:crypto";
 
-// src/e2e.ts
+// relay/src/e2e.ts
 var import_tweetnacl = __toESM(require_nacl_fast(), 1);
 var B64 = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
 function toB64(b) {
@@ -10336,14 +10336,14 @@ function unseal(box, theirPublicKeyB64, mySecretKeyB64) {
   return JSON.parse(new TextDecoder().decode(opened));
 }
 
-// src/index.ts
+// relay/src/index.ts
 import { networkInterfaces as networkInterfaces3, homedir as homedir13, hostname, tmpdir as tmpdir2 } from "node:os";
 import { join as join18, sep as sep7 } from "node:path";
 import { writeFileSync as writeFileSync13, openSync as openSync3, readFileSync as readFileSync18, rmSync as rmSync3, existsSync as existsSync12, readdirSync as readdirSync7, statSync as statSync6 } from "node:fs";
 import { spawn as spawn4, execFileSync as execFileSync2 } from "node:child_process";
 import { fileURLToPath as fileURLToPath4 } from "node:url";
 
-// src/config.ts
+// relay/src/config.ts
 import { randomUUID } from "node:crypto";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
@@ -10400,7 +10400,7 @@ function loadConfig() {
   };
 }
 
-// src/lan-ip.ts
+// relay/src/lan-ip.ts
 import * as os from "node:os";
 var VIRTUAL_NIC_RE = /vmware|virtual|vethernet|wsl|loopback|tap|bluetooth|hyper-v|docker|tailscale|zerotier|wireguard|wintun|openvpn|vpn/i;
 var PRIV_RE = /^(192\.168|10|172\.(1[6-9]|2\d|3[01]))\./;
@@ -10428,11 +10428,11 @@ function detectLanIp(interfaces = os.networkInterfaces()) {
   return "";
 }
 
-// src/history.ts
+// relay/src/history.ts
 import { readFileSync as readFileSync2, writeFileSync as writeFileSync2, existsSync as existsSync2, mkdirSync as mkdirSync2 } from "node:fs";
 import { dirname } from "node:path";
 
-// src/context-limit.ts
+// relay/src/context-limit.ts
 var CONTEXT_LIMIT_DEFAULT = 2e5;
 function envOverride() {
   const raw = process.env.CCR_CONTEXT_LIMIT;
@@ -10453,7 +10453,7 @@ function contextLimitOf(model) {
 }
 var REPLAY_CONTEXT_MAX = 15e5;
 
-// src/history.ts
+// relay/src/history.ts
 var MAX_SESSIONS_KEPT = 30;
 var MAX_LOGS_PER_SESSION = 300;
 var MAX_STATE_EVENTS_PER_SESSION = 50;
@@ -10674,7 +10674,7 @@ function deriveTitle(prompt) {
   return t || "\u672A\u547D\u540D\u4F1A\u8BDD";
 }
 
-// src/event-bus.ts
+// relay/src/event-bus.ts
 var EventBus = class {
   constructor(opts = {}) {
     this.opts = opts;
@@ -10748,12 +10748,12 @@ var EventBus = class {
   }
 };
 
-// src/session-manager.ts
+// relay/src/session-manager.ts
 import { mkdirSync as mkdirSync6, readFileSync as readFileSync10, realpathSync as realpathSync2, statSync as statSync4, writeFileSync as writeFileSync6 } from "node:fs";
 import { homedir as homedir6 } from "node:os";
 import { isAbsolute as isAbsolute4, join as join11, resolve as resolve6, sep as sep5 } from "node:path";
 
-// src/artifacts.ts
+// relay/src/artifacts.ts
 import { readdirSync, statSync, readFileSync as readFileSync3, existsSync as existsSync3 } from "node:fs";
 import { join as join2, resolve, extname } from "node:path";
 import { homedir as homedir2 } from "node:os";
@@ -10816,7 +10816,7 @@ function serveArtifact(name, res) {
   }
 }
 
-// ../../../../Users/xdd/dev/cc-deck/relay/node_modules/@anthropic-ai/claude-agent-sdk/sdk.mjs
+// ../../../Users/xdd/dev/cc-deck/relay/node_modules/@anthropic-ai/claude-agent-sdk/sdk.mjs
 import { createRequire as k8 } from "node:module";
 import * as ur from "node:fs/promises";
 import * as An from "node:path";
@@ -40273,13 +40273,13 @@ function VJ(e, t) {
   return null;
 }
 
-// src/agent-adapter.ts
+// relay/src/agent-adapter.ts
 import { spawn as spawn2 } from "node:child_process";
 import { randomUUID as randomUUID4 } from "node:crypto";
 import { homedir as homedir4 } from "node:os";
 import { delimiter as pathDelimiter, join as join9 } from "node:path";
 
-// src/cli-path.ts
+// relay/src/cli-path.ts
 import { accessSync, constants as constants2, existsSync as existsSync5, readFileSync as readFileSync5 } from "node:fs";
 import { createRequire } from "node:module";
 import { delimiter as delimiter2, dirname as dirname5, join as join7 } from "node:path";
@@ -40379,7 +40379,7 @@ function resolveClaudeCliPath() {
   return null;
 }
 
-// src/allow-rules.ts
+// relay/src/allow-rules.ts
 import { randomUUID as randomUUID3 } from "node:crypto";
 import { mkdirSync as mkdirSync4, readFileSync as readFileSync6, writeFileSync as writeFileSync3 } from "node:fs";
 import { join as join8 } from "node:path";
@@ -40542,7 +40542,7 @@ var AllowRuleStore = class {
   }
 };
 
-// src/summarizer.ts
+// relay/src/summarizer.ts
 var MAX_SUMMARY = 80;
 function basename3(p) {
   if (typeof p !== "string") return "";
@@ -41001,7 +41001,7 @@ function taskDoneLabel(t) {
   return typeof t.id === "number" ? `#${t.id} ${t.content}` : t.content;
 }
 
-// src/agent-adapter.ts
+// relay/src/agent-adapter.ts
 function childEnv() {
   const extra = [
     join9(homedir4(), "node/bin"),
@@ -41632,7 +41632,7 @@ var AgentSession = class _AgentSession {
   }
 };
 
-// src/title-gen.ts
+// relay/src/title-gen.ts
 async function generateTitle(task, model, onSid, cwd) {
   const trimmed = task.trim().slice(0, 600);
   if (!trimmed) return { title: null };
@@ -41682,7 +41682,7 @@ async function generateTitle(task, model, onSid, cwd) {
   }
 }
 
-// src/cron.ts
+// relay/src/cron.ts
 import { readFileSync as readFileSync7 } from "node:fs";
 import { join as join10 } from "node:path";
 var str = (v) => typeof v === "string" && v.trim() ? v : void 0;
@@ -41753,7 +41753,7 @@ function cronTasksKey(tasks) {
   return JSON.stringify(tasks);
 }
 
-// src/task-store.ts
+// relay/src/task-store.ts
 import { readdirSync as readdirSync3, readFileSync as readFileSync8, statSync as statSync3 } from "node:fs";
 import { homedir as homedir5 } from "node:os";
 import path from "node:path";
@@ -41785,7 +41785,7 @@ function readTaskStoreTodos(cliSessionId) {
   return out;
 }
 
-// src/proc-tree.ts
+// relay/src/proc-tree.ts
 import { execFile } from "node:child_process";
 function parseCpuTimeMs(s) {
   const raw = (s || "").trim();
@@ -41896,7 +41896,7 @@ async function killTree(root) {
   return "killed";
 }
 
-// src/uploads.ts
+// relay/src/uploads.ts
 import { mkdirSync as mkdirSync5, writeFileSync as writeFileSync4 } from "node:fs";
 import path2 from "node:path";
 function tmpUploadDir(dataDir2) {
@@ -41962,7 +41962,7 @@ function saveUploadFiles(dataDir2, sessionId, files) {
   return saved;
 }
 
-// src/todo-hidden.ts
+// relay/src/todo-hidden.ts
 import { readFileSync as readFileSync9, writeFileSync as writeFileSync5 } from "node:fs";
 import path3 from "node:path";
 import { fileURLToPath } from "node:url";
@@ -42010,7 +42010,7 @@ function addHiddenTodoKey(sessionId, key) {
   }
 }
 
-// src/session-manager.ts
+// relay/src/session-manager.ts
 function isManagedMode(m) {
   return m === "default" || m === "acceptEdits" || m === "plan" || m === "bypassPermissions";
 }
@@ -44267,14 +44267,14 @@ var SessionManager = class {
   }
 };
 
-// src/ws-server.ts
+// relay/src/ws-server.ts
 import { createServer } from "node:http";
 import { randomUUID as randomUUID6 } from "node:crypto";
 import { readFileSync as readFileSync15, writeFileSync as writeFileSync10, mkdirSync as mkdirSync10, existsSync as existsSync9, readdirSync as readdirSync6 } from "node:fs";
 import { join as join15, dirname as dirname6, sep as sep6 } from "node:path";
 import { homedir as homedir11, networkInterfaces as networkInterfaces2 } from "node:os";
 
-// src/acceptance.ts
+// relay/src/acceptance.ts
 import { readFileSync as readFileSync11, writeFileSync as writeFileSync7, mkdirSync as mkdirSync7, existsSync as existsSync6, readdirSync as readdirSync4 } from "node:fs";
 import { join as join12 } from "node:path";
 import { homedir as homedir7 } from "node:os";
@@ -44539,7 +44539,7 @@ function applyCloudSubmits(id2, submits) {
   return added;
 }
 
-// src/models.ts
+// relay/src/models.ts
 import { existsSync as existsSync7, readFileSync as readFileSync12 } from "node:fs";
 import { homedir as homedir8 } from "node:os";
 import { join as join13 } from "node:path";
@@ -44569,10 +44569,10 @@ function listModels(fallbackDefault) {
   return out;
 }
 
-// src/ws-server.ts
+// relay/src/ws-server.ts
 import { fileURLToPath as fileURLToPath3 } from "node:url";
 
-// ../../../../Users/xdd/dev/cc-deck/relay/node_modules/ws/wrapper.mjs
+// ../../../Users/xdd/dev/cc-deck/relay/node_modules/ws/wrapper.mjs
 var import_stream5 = __toESM(require_stream(), 1);
 var import_extension = __toESM(require_extension(), 1);
 var import_permessage_deflate = __toESM(require_permessage_deflate(), 1);
@@ -44583,13 +44583,13 @@ var import_websocket = __toESM(require_websocket(), 1);
 var import_websocket_server = __toESM(require_websocket_server(), 1);
 var wrapper_default = import_websocket.default;
 
-// src/bridge.ts
+// relay/src/bridge.ts
 import { randomUUID as randomUUID5 } from "node:crypto";
 import { closeSync as closeSync2, openSync as openSync2, readSync as readSync2, readFileSync as readFileSync14, readdirSync as readdirSync5, statSync as statSync5, writeFileSync as writeFileSync9 } from "node:fs";
 import { homedir as homedir10 } from "node:os";
 import path5 from "node:path";
 
-// src/injector.ts
+// relay/src/injector.ts
 import { spawn as spawn3, execFileSync } from "node:child_process";
 import { existsSync as existsSync8, mkdirSync as mkdirSync8, appendFileSync as appendFileSync2, readFileSync as readFileSync13, writeFileSync as writeFileSync8, rmSync as rmSync2 } from "node:fs";
 import path4, { join as join14 } from "node:path";
@@ -44926,7 +44926,7 @@ async function captureConsoleBottom(pid, rows = 20) {
   }
 }
 
-// src/type-guard.ts
+// relay/src/type-guard.ts
 function guardConfig() {
   const num = (v, def) => Number(v) > 0 ? Number(v) : def;
   return {
@@ -45021,7 +45021,7 @@ async function guardCompensateEnter(knownTexts, capture, opts = {}) {
   }
 }
 
-// src/bridge.ts
+// relay/src/bridge.ts
 function pBody(p) {
   return p.body ?? p.text;
 }
@@ -47537,7 +47537,7 @@ function parseGateTools(raw) {
   return new Set((raw ?? def).split(",").map((s) => s.trim()).filter(Boolean));
 }
 
-// src/ws-server.ts
+// relay/src/ws-server.ts
 function localIps() {
   const out = /* @__PURE__ */ new Set();
   for (const list of Object.values(networkInterfaces2())) {
@@ -48434,7 +48434,7 @@ async function handleBridgeHook(req, res, bridge, cfg2) {
 }
 var connectionCounter = 0;
 
-// src/cloud-identity.ts
+// relay/src/cloud-identity.ts
 import { existsSync as existsSync10, readFileSync as readFileSync16, writeFileSync as writeFileSync11 } from "node:fs";
 import { join as join16 } from "node:path";
 import { createHash, randomBytes } from "node:crypto";
@@ -48517,7 +48517,7 @@ function loadOrCreateIdentity(dataDir2) {
   };
 }
 
-// src/cloud-client.ts
+// relay/src/cloud-client.ts
 var PEER_META_MAX = 120;
 var SIGHTING_TTL_MS = 18e4;
 var PEER_META_KEYS = ["name", "platform", "ua", "app"];
@@ -49085,7 +49085,7 @@ var CloudClient = class {
   }
 };
 
-// src/pairing.ts
+// relay/src/pairing.ts
 import { randomInt } from "node:crypto";
 var TTL_FLOOR_MS = 6e4;
 var TTL_CEIL_MS = 30 * 6e4;
@@ -49128,7 +49128,7 @@ function createPairingCodes(ttlMs) {
   };
 }
 
-// src/qr.ts
+// relay/src/qr.ts
 var import_qrcode_terminal = __toESM(require_main(), 1);
 function printQr(text, label) {
   console.log(`
@@ -49136,7 +49136,7 @@ ${label}`);
   import_qrcode_terminal.default.generate(text, { small: true });
 }
 
-// src/mdns.ts
+// relay/src/mdns.ts
 var import_bonjour_service = __toESM(require_dist(), 1);
 function advertiseRelay(port, name) {
   try {
@@ -49160,7 +49160,7 @@ function advertiseRelay(port, name) {
   }
 }
 
-// src/todo-tools-env.ts
+// relay/src/todo-tools-env.ts
 import { existsSync as existsSync11, readFileSync as readFileSync17, writeFileSync as writeFileSync12 } from "node:fs";
 import { join as join17 } from "node:path";
 import { homedir as homedir12 } from "node:os";
@@ -49197,7 +49197,7 @@ function ensureTodoToolsEnv() {
   }
 }
 
-// src/index.ts
+// relay/src/index.ts
 if (process.env.CCR_PARENT_PID) {
   const ts2 = () => (/* @__PURE__ */ new Date()).toISOString().replace("T", " ").slice(0, 19) + " ";
   for (const m of ["log", "error", "warn"]) {
