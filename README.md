@@ -295,6 +295,49 @@ node scripts/version.mjs --check   # 校验（pre-commit 自动跑）
 
 ## Roadmap
 
+### 矩阵式团队模式（设计定稿 · 开发中）
+
+多 Claude 会话的矩阵式协作：**常驻组织**（唯一 Leader + 两本账）统筹一切，**动态项目组**按需编制并行推进，**普通会话**保留为逃生舱。
+
+- 单线沟通：只对 Leader 说一句话需求，分诊五档输出（咨询 / 随手办 / 轻立项 / 正经立项 / 建议暂缓）
+- 物理隔离：项目组 = 编制 + git worktree + 任务板，cwd 即项目锚点，并行互不踩踏
+- 记忆三层：个人层（手写 · 跨一切生效）/ 组织层（Leader 维护两本账）/ 项目层（跟目录走）
+- 经验回流：结项经验以提案 diff 回流组织记忆，一键确认后跨项目沉淀复用
+
+```mermaid
+flowchart TB
+    YOU["👤 你"]
+
+    subgraph ORGBOX["🏛 常驻组织 · org 目录"]
+        direction TB
+        LEADER["🧭 Leader · 唯一<br/>分诊 · 立项 · 汇总 · 不进项目干活"]
+        BOOKS["📚 两本账<br/>组织记忆（经验 · 慢涨）<br/>派单台账（状态 · append-only）"]
+        ROUTE["🔀 路由表 · 熟手池<br/>亲和调度（M3）"]
+        LEADER ---|"读档恢复 / 先落账"| BOOKS
+        LEADER -.->|"查熟手"| ROUTE
+    end
+
+    subgraph PG["🧪 动态项目组 × N · cwd 物理隔离"]
+        direction TB
+        PJA["项目组 A · 在办<br/>编制 + worktree + 任务板"]
+        PJB["项目组 B · 挂起<br/>冻结任务板 · 成员退休"]
+    end
+
+    CASUAL["💬 普通会话<br/>逃生舱 · 不经组织"]
+    PERSONAL["✍️ 个人层记忆<br/>全局 CLAUDE.md · 你手写"]
+
+    YOU ==>|"一句话需求<br/>单线沟通"| LEADER
+    LEADER -->|"派单 · cwd=项目锚点"| PJA
+    LEADER -.->|"挂起 · 静默"| PJB
+    PJA -.->|"结项 · 经验回流（提案确认）"| BOOKS
+    YOU -.->|"直达"| CASUAL
+    CASUAL -.->|"随时可移交"| LEADER
+    YOU -.-|"手写 · 跨一切生效"| PERSONAL
+```
+
+- 粗箭头 `⇒`：核心通道（单线沟通）；虚线 `⇢`：弱关联（逃生舱 / 挂起 / 回流提案）
+- 完整设计见决策稿 [v8-team-matrix.html](docs/v8-team-matrix.html)（v3.1）与三图总览 [v8-team-diagrams.html](docs/v8-team-diagrams.html)（组织 / 工作流 / 状态）
+
 - 手表 Tiles（不开 App 直接看状态）
 - 更多手表平台：OPPO ColorOS Watch 适配进行中
 - 多手机 / 多设备同时在线

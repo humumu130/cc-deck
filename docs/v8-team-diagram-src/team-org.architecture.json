@@ -45,7 +45,10 @@
         ],
         "note": "普通会话不经组织直达，随时可移交 Leader。"
       }
-    ]
+    ],
+    "legend": {
+      "mode": "hidden"
+    }
   },
   "components": [
     {
@@ -203,7 +206,11 @@
       "id": "leader-orgstore",
       "from": "leader",
       "to": "orgstore",
-      "label": "读档恢复 / 先落账"
+      "label": "读档恢复 / 先落账",
+      "labelAt": [
+        462,
+        246
+      ]
     },
     {
       "id": "leader-routing",
@@ -218,7 +225,11 @@
       "id": "leader-projA",
       "from": "leader",
       "to": "projA",
-      "label": "派单 · cwd=项目锚点"
+      "label": "派单 · cwd=项目锚点",
+      "labelAt": [
+        462,
+        448
+      ]
     },
     {
       "id": "leader-projB",
