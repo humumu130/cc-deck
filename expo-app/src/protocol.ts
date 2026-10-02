@@ -50,6 +50,11 @@ export interface AllowRule {
   created_by: string;
 }
 
+// #212/#235 允许并记住：阶段性隐藏（2026-10-03 拍板）——功能暂不对用户开放，规则引擎
+// 与 SNAPSHOT/ALLOW_RULES_UPDATED/删除命令等数据流原样保留（已有规则照常自动放行），
+// 仅藏 UI：设置抽屉「记住的规则」列表 + 审批卡「允许并记住」入口。恢复改回 true 即回归。
+export const ALLOW_RULES_UI = false;
+
 export interface TodoItem {
   id?: number; // CLI 任务库任务号（转录 #NNN 跳转定位；旧 TodoWrite 清单无）
   content: string;

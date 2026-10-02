@@ -2417,9 +2417,11 @@
             </div>
           </div>
           <!-- #212 允许并记住：规则列表（SNAPSHOT.allow_rules 全量 + ALLOW_RULES_UPDATED
-               实时收敛；多源合并展示，删除按条目所属源路由命令） -->
-          <div class="gp-sec"><svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3.2a5.8 5.8 0 0 0-5.8 5.8v2.4H5a1.4 1.4 0 0 0 0 2.8h14a1.4 1.4 0 0 0 0-2.8h-1.2V9A5.8 5.8 0 0 0 12 3.2Z"/><path d="M9.2 17.4a2.8 2.8 0 0 0 5.6 0"/></svg>自动放行规则</div>
-          <div class="gp-card gp-peers">
+               实时收敛；多源合并展示，删除按条目所属源路由命令）
+               ——#235 阶段性隐藏（ALLOW_RULES_UI=false）：display:none 藏卡，JS 渲染
+               照跑（元素在、写隐藏 DOM 无害），恢复时去掉两个 display:none 即可 -->
+          <div class="gp-sec" style="display:none"><svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3.2a5.8 5.8 0 0 0-5.8 5.8v2.4H5a1.4 1.4 0 0 0 0 2.8h14a1.4 1.4 0 0 0 0-2.8h-1.2V9A5.8 5.8 0 0 0 12 3.2Z"/><path d="M9.2 17.4a2.8 2.8 0 0 0 5.6 0"/></svg>自动放行规则</div>
+          <div class="gp-card gp-peers" style="display:none">
             <div id="gpRulesList" class="gp-peers-list"><div class="gp-peers-empty">连接服务器后可查看</div></div>
             <div class="gp-peers-foot">
               <span id="gpRulesCount">在审批弹窗中选择「允许并记住」即生成；同类操作此后自动放行，不再逐条询问</span>
@@ -2635,6 +2637,11 @@
 <script>
 "use strict";
 const $ = (id) => document.getElementById(id);
+
+// #212 允许并记住：阶段性隐藏（2026-10-03 拍板）——功能暂不对用户开放，规则引擎、
+// SNAPSHOT/事件下发、删除命令等数据流原样保留（已有规则照常自动放行），仅藏全部
+// 管理 UI：设置页规则卡 + 审批弹窗「允许并记住」入口。恢复时改回 true 即可全量回归。
+const ALLOW_RULES_UI = false;
 
 // ---------- E2E（与 relay/src/e2e.ts 同构；nacl 由 /nacl.js 提供） ----------
 const B64 = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
@@ -4977,8 +4984,9 @@ function renderDetail() {
       (s.waiting_request.suggestions?.length && !isAsk ? " · 建议: " + s.waiting_request.suggestions.join(" / ") : "");
     // 单问题单选：点选项即发，自由输入回车即发——提交大按钮退场（对齐手机端 single 模式）
     const single = isAsk && s.waiting_request.questions.length === 1 && !s.waiting_request.questions[0].multi;
-    // #212 允许并记住：remember 由 relay 判定可记忆才下发（危险形态无此字段=不出现）
-    const remember = !isAsk && !passive && s.waiting_request.remember ? s.waiting_request.remember : null;
+    // #212 允许并记住：remember 由 relay 判定可记忆才下发（危险形态无此字段=不出现）。
+    // #235 阶段性隐藏：ALLOW_RULES_UI=false 时无视 remember 字段——入口/范围条永不出现
+    const remember = ALLOW_RULES_UI && !isAsk && !passive && s.waiting_request.remember ? s.waiting_request.remember : null;
     if (rmOpenFor && rmOpenFor !== s.waiting_request.request_id) rmOpenFor = "";
     const rmOpen = !!remember && rmOpenFor === s.waiting_request.request_id;
     const cmds = document.querySelector("#waitbox .cmds");

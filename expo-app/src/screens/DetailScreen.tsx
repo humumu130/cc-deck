@@ -23,7 +23,7 @@ import { useTheme, useThemeStyles } from "../theme-context";
 import { fmtElapsed, sessionElapsed, fmtHM, dayKey, dayLabel, fmtLastActive, fmtClock, fmtTok, contextPct, contextLevel, CONTEXT_LIMIT_FALLBACK, isVerifyTodo, isLiveLine, stripLiveMark } from "../fmt";
 import { store, useRelay } from "../store";
 import { fromB64, toB64 } from "../e2e";
-import type { ArtifactItem, CronTask, LogEntry, SessionState, TodoItem, WaitingPayload } from "../protocol";
+import { ALLOW_RULES_UI, type ArtifactItem, CronTask, LogEntry, SessionState, TodoItem, WaitingPayload } from "../protocol";
 import { useKbHeight } from "../kb";
 import { useEnterSend, useProcessFont, useVoiceInput } from "../display-settings";
 import { voice } from "../voice";
@@ -2847,8 +2847,10 @@ export default function DetailScreen({ sid, onBack, initialView, ref }: { sid: s
                     <Text style={d.btnRejectT}>✕ 拒绝</Text>
                   </PressScale>
                 </View>
-                {/* #212 remember 由 relay 判定可记忆才下发（危险形态无此字段 = 不出现） */}
-                {wr!.remember ? (
+                {/* #212 remember 由 relay 判定可记忆才下发（危险形态无此字段 = 不出现）
+                    ——#235 阶段性隐藏：ALLOW_RULES_UI=false 时入口永不渲染（范围条
+                    仅能由该入口展开，随之不可达） */}
+                {ALLOW_RULES_UI && wr!.remember ? (
                   <Pressable style={d.rmEntry} android_ripple={{ color: c.tintSoft, borderless: false, radius: 10 }} onPress={() => setRmOpen(true)}>
                     <Text style={d.rmEntryT}>✓ 允许并记住…</Text>
                   </Pressable>

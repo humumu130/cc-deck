@@ -11,7 +11,7 @@ import { LogoMark, PencilIcon } from "../brand";
 import { setProcessFont, useProcessFont, setVoiceInput, useVoiceInput, setAggregate as persistAggregate, useAggregate, getIdleDimMin, setIdleDimMin, setEnterSend, useEnterSend, type ProcessFont } from "../display-settings";
 import { checkUpdate, announceUpdate, VERSION_NOTES, VERSION_DATE, releasePageUrl, type VersionNote } from "../updates";
 import { store, useRelay, type ServerEntry, type SourceStatus, isLanUrl } from "../store";
-import type { AllowRule } from "../protocol";
+import { ALLOW_RULES_UI, type AllowRule } from "../protocol";
 import { fgSupported } from "../notify";
 import KeepAliveCard from "../KeepAliveCard";
 import Svg, { Path, Rect } from "react-native-svg";
@@ -704,7 +704,10 @@ export default function SettingsDrawer({
 
         {/* #212 记住的规则：审批卡「允许并记住」落的规则（各在线源合并展示），
             删除按条目所属源路由发命令。分态：无在线源 / 全旧 relay（不支持）/
-            空表 / 列表。两次点按确认删除（对齐 web 端） */}
+            空表 / 列表。两次点按确认删除（对齐 web 端）
+            ——#235 阶段性隐藏（ALLOW_RULES_UI=false）：功能暂不对用户开放，
+            引擎/数据流保留，恢复时改回 true */}
+        {ALLOW_RULES_UI ? (<>
         <View style={d.secHead}>
           <Text style={d.secTitleT}>记住的规则{ruleRows.length ? ` · ${ruleRows.length}` : ""}</Text>
           <View style={d.secToggle} />
@@ -758,6 +761,7 @@ export default function SettingsDrawer({
             })}
           </View>
         )}
+        </>) : null}
 
         {/* #313 显示区可折叠：服务器列表同款 secHead + ▾/▸，AsyncStorage 记忆。
             #130 默认改折叠（低频区让路；存过偏好的老用户不受影响——null 才用默认） */}
