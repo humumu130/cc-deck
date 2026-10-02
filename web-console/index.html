@@ -1538,6 +1538,24 @@
   .af-act { flex: none; opacity: 0; border: none; background: transparent; color: var(--faint); font-size: 13px; line-height: 1.4; padding: 2px 6px; border-radius: 6px; cursor: pointer; transition: opacity .15s; }
   .afrow:hover .af-act { opacity: 1; }
   .af-act:hover { color: var(--dim); background: var(--hov); }
+  /* ---------- #222 输出物文件夹分组（聚合形态） ---------- */
+  .fgroup > .fkids { display: none; }
+  .fgroup.open > .fkids { display: block; }
+  .afrow.frow { cursor: pointer; } /* 文件夹头行：整行可点折叠/展开 */
+  .frow .chev { flex: none; width: 10px; height: 10px; color: var(--faint); transition: transform .15s; }
+  .fgroup.open > .frow .chev { transform: rotate(90deg); }
+  /* 文件夹 tile 走品牌橙（web 端 f-doc 已占紫，与手机端 brandB 紫对应两端异色是拍板口径） */
+  .fico.f-dir { background: color-mix(in srgb, var(--brand) 15%, transparent); color: var(--brand); }
+  .afname .fname { font-weight: 650; } /* 叶子目录名加粗一档（区别于文件名 550） */
+  .badge.b-cnt { background: color-mix(in srgb, var(--brand) 13%, transparent); color: var(--brand); }
+  /* 展开子列：左缘引导线 + 紧凑一档（padding 8→5，去分隔线） */
+  .fkids { margin: 0 0 2px 13px; border-left: 1px solid var(--side-line); padding-left: 8px; }
+  .fkids .afrow { padding: 5px 2px 5px 0; border-bottom: none; }
+  /* 聚合形态行内徽标：新建=done 绿 / 修改=中性（两组头让位后的补偿信息） */
+  .badge.b-new { background: rgba(43,217,143,.12); color: var(--done); }
+  html.light .badge.b-new { background: rgba(4,120,87,.10); }
+  .badge.b-mod { background: rgba(148,163,190,.16); color: var(--dim); }
+  html.light .badge.b-mod { background: rgba(100,116,139,.12); }
   .af-foot { display: flex; align-items: center; gap: 16px; padding: 14px 6px 30px; font-size: 11.5px; color: var(--dim); flex-wrap: wrap; } /* 视觉审查：暗色 --faint/11px 近乎不可见 → --dim（亮主题自动解析 #5F6C84）+ 左右 2px 贴边放宽 */
   .af-foot .k { border: 1px solid var(--border); border-radius: 5px; padding: 0 5px; margin-right: 5px; font-size: 10.5px; line-height: 1.6; }
   .card-summary { color: var(--card-sub); font-size: 11.5px; line-height: 16px; margin-top: 4px; padding-left: 4px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-height: 16px; } /* #399 悬挂缩进对齐灯列；#54 动作行降档 12.5→11.5 + 提色；#58 行盒+min-height 双钉 16px；#98 灯 8→10px 缩进 6→4 补偿 */
@@ -5279,17 +5297,23 @@ function fmtArtSize(n) {
   if (n < 1024 * 1024) return (n / 1024).toFixed(n < 10240 ? 1 : 0) + " KB";
   return (n / 1048576).toFixed(1) + " MB";
 }
-function artRowHtml(t, s) {
+function artRowHtml(t, s, opts) {
+  const sub = !!(opts && opts.sub); // #222 文件夹展开子行：去目录前缀、紧凑一档
+  const opBadge = opts && opts.badge // #222 聚合形态两组头让位，新建/修改降为行内徽标
+    ? t.op === "create" ? '<span class="badge b-new">新建</span>' : '<span class="badge b-mod">修改</span>'
+    : "";
   const p = String(t.path || "");
   const rel = artRelOf(s, t);
   const name = (rel || p).split(/[\\/]/).pop() || p;
   const dead = t.exists === false;
   const outside = !rel && t.origin !== "cwd";
   // cwd 内：文件名亮显 + 目录前缀灰显随行；cwd 外：绝对路径目录段（rtl 截断保根）+ 琥珀角标
-  const dirHtml = rel
-    ? '<span class="fn">' + escapeHtml(name) + '</span>&nbsp;<span class="dir">' + escapeHtml(rel.slice(0, rel.length - name.length)) + "</span>"
-    : '<span class="dir2">' + escapeHtml(p.slice(0, p.length - name.length)) + '</span><span class="fn">' + escapeHtml(name) + "</span>";
-  const badge = (dead ? '<span class="badge b-del">已删除</span>' : "") + (outside ? '<span class="badge b-out">cwd 外</span>' : "");
+  const dirHtml = sub
+    ? '<span class="fn">' + escapeHtml(name) + "</span>"
+    : rel
+      ? '<span class="fn">' + escapeHtml(name) + '</span>&nbsp;<span class="dir">' + escapeHtml(rel.slice(0, rel.length - name.length)) + "</span>"
+      : '<span class="dir2">' + escapeHtml(p.slice(0, p.length - name.length)) + '</span><span class="fn">' + escapeHtml(name) + "</span>";
+  const badge = opBadge + (dead ? '<span class="badge b-del">已删除</span>' : "") + (outside ? '<span class="badge b-out">cwd 外</span>' : "");
   const k = artKindOf(name);
   return '<div class="afrow' + (dead ? " dead" : "") + '" data-p="' + escapeHtml(p) + '"' +
     (rel ? ' data-rel="' + escapeHtml(rel) + '"' : "") + (dead ? ' data-dead="1"' : "") +
@@ -5303,24 +5327,104 @@ function artRowHtml(t, s) {
     '<button class="af-act" title="更多操作">⋯</button>' +
     "</div>";
 }
+// #222 文件夹分组取父目录（两端同口径，手机端 DetailScreen artDirOf 镜像）：cwd 内按
+// 相对路径、外按绝对路径；兼容 / 与 \（Windows 源）；根下文件（无父目录）返回空串
+// = 散文件，永不聚合
+function artDirOf(s, t) {
+  const rel = artRelOf(s, t);
+  const p = rel || String(t.path || "");
+  const i = Math.max(p.lastIndexOf("/"), p.lastIndexOf("\\"));
+  return i > 0 ? p.slice(0, i) : "";
+}
+// #222 文件夹折叠显式态（内存，随会话记忆）：key = sid|dirLower，值 = 用户点按后的
+// 开合；未记录的走默认（最近活跃的文件夹展开、其余折叠）。tab 内容是 innerHTML 全量
+// 重建字符串，态必须放在字符串外（模块级）
+const artFoldSt = new Map();
+const FDIR_SVG = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3.5 7.2c0-1.3 1-2.3 2.3-2.3h3l2 2.2h6.4c1.3 0 2.3 1 2.3 2.3v7.3c0 1.3-1 2.3-2.3 2.3H5.8c-1.3 0-2.3-1-2.3-2.3z"/></svg>';
+const FCHEV_SVG = '<svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg>';
+// #222 文件夹头行：chevron + 品牌橙文件夹 tile + 目录前缀 + 叶子名 + ×N 文件数 +
+// 总大小/最近活跃（用户反馈：不堆「N 新建 · M 修改」摘要——几个文件、哪个任务的
+// 目录一目了然即可，op 细节看子行徽标）。不挂 data-p / af-act——⋯ 菜单与双击打开
+// 是文件级操作
+function artFolderHtml(s, g, open) {
+  const pre = g.dir.slice(0, g.dir.length - g.leaf.length); // 叶子以上的前缀（含尾分隔符）
+  const abs = /^[\\/]|[A-Za-z]:[\\/]/.test(g.dir); // cwd 外绝对路径 → dir2（rtl 截断保根）
+  const preHtml = pre
+    ? '<span class="' + (abs ? "dir2" : "dir") + '">' + escapeHtml(pre) + "</span>"
+    : "";
+  return '<div class="fgroup' + (open ? " open" : "") + '" data-fk="' + escapeHtml(s.session_id + "|" + g.dir.toLowerCase()) + '">' +
+    '<div class="afrow frow" role="button" tabindex="0" aria-expanded="' + (open ? "true" : "false") + '" title="' + escapeHtml(g.dir) + '">' +
+    FCHEV_SVG +
+    '<span class="fico f-dir">' + FDIR_SVG + "</span>" +
+    '<span class="afname">' + preHtml + '<span class="fn fname">' + escapeHtml(g.leaf) + '</span><span class="badge b-cnt">×' + g.files.length + "</span></span>" +
+    '<span class="afmeta">' +
+    (fmtArtSize(g.size) ? '<span class="sz">' + fmtArtSize(g.size) + "</span>" : "") +
+    '<span class="tm">' + fmtArtTime(g.at) + "</span></span>" +
+    "</div>" +
+    '<div class="fkids">' + g.files.map((t) => artRowHtml(t, s, { sub: true, badge: true })).join("") + "</div>" +
+    "</div>";
+}
 function artifactsTabHtml(s) {
   const arts = s.artifacts ?? [];
   // #49：空态文案不暴露内部机制——三种情形（历史/外部/托管）统一只留一句话
   // #51：收录口径收窄为文档类交付物，空态措辞同步
   if (!arts.length) return '<div class="todo-empty">当前会话还没有文档产出</div>';
   const byRecency = (a, b) => (b.last_at || b.first_at || 0) - (a.last_at || a.first_at || 0);
-  const created = arts.filter((t) => t.op === "create").sort(byRecency);
-  const edited = arts.filter((t) => t.op !== "create").sort(byRecency);
+  // #222 分组聚合（设计稿拍板）：同父目录 ≥2 个文件 → 聚成可折叠文件夹行；单文件
+  // 目录不聚合；key 小写归一（relay mergeArtifact 同口径，Windows 源大小写不敏感）
+  const dirN = new Map();
+  for (const t of arts) {
+    const dk = artDirOf(s, t);
+    if (!dk) continue;
+    const k = dk.toLowerCase();
+    dirN.set(k, (dirN.get(k) || 0) + 1);
+  }
+  const folders = new Map(); // dirLower → { dir, leaf, files[], at, size }
+  const loose = [];
+  for (const t of arts) {
+    const dk = artDirOf(s, t);
+    const k = dk ? dk.toLowerCase() : "";
+    if (!dk || (dirN.get(k) || 0) < 2) { loose.push(t); continue; }
+    let g = folders.get(k);
+    if (!g) {
+      g = { dir: dk, leaf: dk.split(/[\\/]/).pop() || dk, files: [], at: 0, size: 0 };
+      folders.set(k, g);
+    }
+    g.files.push(t);
+    g.at = Math.max(g.at, t.last_at || t.first_at || 0);
+    if (typeof t.size === "number") g.size += t.size;
+  }
+  for (const g of folders.values()) g.files.sort(byRecency);
+  // 文件夹与散文件按各自最近活跃混排降序（最新交付永远在顶）；最近活跃的文件夹默认展开
+  let newestG = null;
+  for (const g of folders.values()) if (!newestG || g.at > newestG.at) newestG = g;
+  const items = [
+    ...loose.map((t) => ({ f: 0, t, at: t.last_at || t.first_at || 0 })),
+    ...[...folders.values()].map((g) => ({ f: 1, g, at: g.at })),
+  ].sort((a, b) => b.at - a.at);
   // 2026-09-21 用户：移除汇总行的「新建 N · 修改 N / +N −N」统计（分组标题仍带计数，信息不丢）
   const shellOk = !!(window.ccDeck && window.ccDeck.openPath);
   let html =
     '<div class="af-sum"><span class="cnt">' + arts.length + " 个文件</span>" +
+    (folders.size ? "<span>" + folders.size + " 个文件夹</span>" : "") +
     (s.artifacts_truncated ? '<span class="af-trunc">已截断 · 保留最新 200</span>' : "") +
     '<span class="sp"></span>' +
     (shellOk && s.cwd ? '<button class="af-open-dir" data-dir="' + escapeHtml(s.cwd) + '"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3.5 7.2c0-1.3 1-2.3 2.3-2.3h3l2 2.2h6.4c1.3 0 2.3 1 2.3 2.3v7.3c0 1.3-1 2.3-2.3 2.3H5.8c-1.3 0-2.3-1-2.3-2.3z"/></svg>打开工作目录</button>' : "") +
     "</div>";
-  if (created.length) html += '<div class="af-gt cr">新建 <span>' + created.length + '</span><span class="sub">本会话产出的文件</span></div>' + created.map((t) => artRowHtml(t, s)).join("");
-  if (edited.length) html += '<div class="af-gt">修改 <span>' + edited.length + "</span></div>" + edited.map((t) => artRowHtml(t, s)).join("");
+  if (folders.size) {
+    // 形态一（聚合）：「新建/修改」两组头让位，op 降为行内徽标；纯散文件会话走形态二保持现状
+    const sid = s.session_id;
+    html += items.map((it) =>
+      it.f
+        ? artFolderHtml(s, it.g, artFoldSt.has(sid + "|" + it.g.dir.toLowerCase()) ? artFoldSt.get(sid + "|" + it.g.dir.toLowerCase()) : it.g === newestG)
+        : artRowHtml(it.t, s, { badge: true }),
+    ).join("");
+  } else {
+    const created = arts.filter((t) => t.op === "create").sort(byRecency);
+    const edited = arts.filter((t) => t.op !== "create").sort(byRecency);
+    if (created.length) html += '<div class="af-gt cr">新建 <span>' + created.length + '</span><span class="sub">本会话产出的文件</span></div>' + created.map((t) => artRowHtml(t, s)).join("");
+    if (edited.length) html += '<div class="af-gt">修改 <span>' + edited.length + "</span></div>" + edited.map((t) => artRowHtml(t, s)).join("");
+  }
   // #49：底部说明去掉"仅收录 Write/Edit…"工具清单（机制不外露）；
   // #51：补一句收录口径（文档类交付物），让"代码为何不在列表"有出处
   html += '<div class="af-foot"><span>仅收录文档、表格等交付物</span><span><span class="k">双击</span>本地打开</span><span><span class="k">右键 / ⋯</span>更多操作</span></div>';
@@ -7924,8 +8028,9 @@ $("timeline").addEventListener("pointerdown", (ev) => {
 $("timeline").addEventListener("contextmenu", (ev) => {
   if (ev.target.closest(".task-ref")) ev.preventDefault();
   // #35 输出物行右键 = ⋯ 同款浮窗（打开/定位/复制；已删除行走 noOpen 分支）
+  // #222：文件夹头行无 data-p，右键不弹文件浮窗
   const afrow = ev.target.closest(".afrow");
-  if (afrow) {
+  if (afrow && afrow.dataset.p) {
     ev.preventDefault();
     openArtPop(afrow, ev.clientX, ev.clientY);
   }
@@ -7958,6 +8063,19 @@ $("timeline").addEventListener("click", (ev) => {
   }
   const cron = ev.target.closest(".cron-item");
   if (cron && !ev.target.closest(".todo-del")) cron.classList.toggle("open");
+  // #222 文件夹头行折叠/展开：直接翻 DOM class（不重渲染），显式态记入 artFoldSt
+  // （tab innerHTML 重建后按记录恢复，未记录的走「最近活跃展开」默认）
+  const frow = ev.target.closest(".frow");
+  if (frow) {
+    const grp = frow.closest(".fgroup");
+    if (grp) {
+      const open = !grp.classList.contains("open");
+      grp.classList.toggle("open", open);
+      frow.setAttribute("aria-expanded", open ? "true" : "false");
+      if (grp.dataset.fk) artFoldSt.set(grp.dataset.fk, open);
+    }
+    return;
+  }
   // #35 输出物：⋯ 菜单钮 / 打开工作目录（仅桌面壳渲染该钮，浏览器不可达）
   const afAct = ev.target.closest(".af-act");
   if (afAct) {
@@ -7990,7 +8108,7 @@ function openArtPop(row, x, y) {
 // 合理形态。已删除行双击只 toast
 $("timeline").addEventListener("dblclick", (ev) => {
   const row = ev.target.closest(".afrow");
-  if (!row) return;
+  if (!row || !row.dataset.p) return; // #222：文件夹头行（.afrow.frow）无 data-p，不进打开链
   const p = row.dataset.p || "";
   if (row.dataset.dead === "1") { toast("文件已不存在（可能已被清理）"); return; }
   if (window.ccDeck && window.ccDeck.openPath) {
