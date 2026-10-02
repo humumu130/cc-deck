@@ -38,7 +38,8 @@ h1 .lite { font-size: 11.5px; color: var(--faint); font-weight: 400; }
 .tbtn { border: 1px solid var(--border); background: var(--panel); color: var(--dim);
   border-radius: 9px; padding: 6px 12px; font-size: 12.5px; cursor: pointer; font-family: inherit; }
 .tbtn:hover { color: var(--text); }
-.subline { flex: none; width: 100%; color: var(--dim); font-size: 12px; margin: -4px 0 0; }
+.subline { flex: none; width: 100%; max-width: 960px; color: var(--dim); font-size: 12px; margin: -4px 0 0; }
+.sep { width: 1px; height: 22px; background: var(--border); flex: none; }
 .subline b { color: var(--text); font-weight: 600; }
 main { flex: 1; min-height: 0; position: relative; }
 iframe { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; background: var(--bg); }
@@ -55,26 +56,29 @@ iframe { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; bac
     <button class="tab" data-i="1">② 工作流主链路</button>
     <button class="tab" data-i="2">③ 状态流转</button>
   </nav>
+  <span class="sep"></span>
   <button class="tbtn" onclick="tgl()">◐ 深浅切换</button>
   <p class="subline" id="subline"></p>
 </header>
 <main><iframe id="frame" title="diagram"></iframe></main>
-<div class="foot">配套决策稿 docs/v8-team-matrix.html（v3.1 裁决稿）· 三图各自带视图聚焦 / 主题切换 / 缩放检索 · preview only，拍板前不 commit</div>
+<div class="foot">配套决策稿 docs/v8-team-matrix.html（<b>v3.1</b> 裁决稿 · 已入库）· 三图各自带视图聚焦 / 主题切换 / 缩放检索</div>
 <script>
 var FRAMES = [
-  { src: 'v8-team-diagram-org.html',   sub: '<b>① 组织形态总览</b>——常驻组织（唯一 Leader + 两本账）+ 动态项目组 + 普通会话逃生舱；cwd 硬规则与记忆三层归位。' },
-  { src: 'v8-team-diagram-flow.html',  sub: '<b>② 工作流主链路</b>——一句话需求 → Leader 分诊五输出 → 执行收回执一行 → 落账与经验回流；确认门槛按成本档。' },
-  { src: 'v8-team-diagram-state.html', sub: '<b>③ 状态流转</b>——项目组三态（在办⇄挂起→结项·复活）× 派单循环 × 成员会话联动，三层状态机咬合。' }
+  { src: 'v8-team-diagram-org.html',   sub: '<b>① 组织形态总览</b>——常驻组织（唯一 Leader + 两本账）+ 动态项目组并行 + 普通会话逃生舱。' },
+  { src: 'v8-team-diagram-flow.html',  sub: '<b>② 工作流主链路</b>——一句话需求 → Leader 分诊五输出 → 执行收回执一行 → 落账与经验回流。' },
+  { src: 'v8-team-diagram-state.html', sub: '<b>③ 状态流转</b>——项目组三态 × 派单循环 × 成员会话联动，三层状态机咬合。' }
 ];
 var frame = document.getElementById('frame');
 var tabs = document.querySelectorAll('.tab');
 var subline = document.getElementById('subline');
+function curTheme() { return document.documentElement.dataset.theme || 'dark'; }
+function frameUrl(k) { return FRAMES[k].src + '?theme=' + curTheme(); }
 function show(i) {
   var h = parseInt(location.hash.slice(1), 10);
   if (!(h >= 0 && h < FRAMES.length)) h = null;
   var k = (i != null) ? i : (h == null ? 0 : h);
   tabs.forEach(function (t, j) { t.classList.toggle('on', j === k); });
-  frame.src = FRAMES[k].src;
+  frame.src = frameUrl(k);
   subline.innerHTML = FRAMES[k].sub;
   if (('#' + k) !== location.hash) { try { history.replaceState(null, '', '#' + k); } catch (e) {} }
 }
@@ -84,7 +88,10 @@ show(null);
 function tgl() {
   var h = document.documentElement;
   h.dataset.theme = h.dataset.theme === 'dark' ? 'light' : 'dark';
-  try { frame.contentWindow.postMessage({ type: 'theme', theme: h.dataset.theme }, '*'); } catch (e) {}
+  var cur = decodeURIComponent(frame.src).split('?')[0].split('/').pop();
+  for (var j = 0; j < FRAMES.length; j++) {
+    if (FRAMES[j].src === cur) { frame.src = frameUrl(j); break; }
+  }
 }
 </script>
 </body>

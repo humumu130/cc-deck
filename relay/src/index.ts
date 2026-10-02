@@ -1,7 +1,7 @@
 import { randomBytes } from "node:crypto";
 import { seal, unseal } from "./e2e.js";
-import { networkInterfaces, homedir, hostname } from "node:os";
-import { join } from "node:path";
+import { networkInterfaces, homedir, hostname, tmpdir } from "node:os";
+import { join, sep } from "node:path";
 import { writeFileSync, openSync, readFileSync, rmSync, existsSync, readdirSync, statSync } from "node:fs";
 import { spawn, execFileSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
@@ -434,12 +434,19 @@ startServer(bus, mgr, cfg, {
     const bridgeJson = JSON.stringify({ port: cfg.port, token: cfg.bridgeToken });
     writeFileSync(join(cfg.dataDir, "bridge.json"), bridgeJson, "utf-8");
     const hookHome = join(homedir(), ".cc-deck", "data");
-    // CCR_NO_BRIDGE_MIRROR=1 显式关镜像：测试沙盒 relay 起停会把测试端口/一次性 token
-    // 镜进生产 hook 配置，测试一收 hook 全域失联（2026-09-28 事故实证）。生产/插件
-    // 换班场景不受影响——env 未设时镜像行为原样保留（#211 语义不变）。判断口径
-    // ==="1"（#20 审查修正）：真值判断会把 "0"/"false" 等显式保留意图也当关断，
-    // 与 CCR_NO_TITLE_GEN/CCR_WATCHDOG_DISABLE 的既定约定对齐
-    if (process.env.CCR_NO_BRIDGE_MIRROR !== "1" && cfg.dataDir !== hookHome && existsSync(hookHome)) {
+    // 沙箱测试形态不镜像（2026-10-02 实锤）：check-bundle-sync 冒烟（mktemp /tmp +
+    // 40000+ 随机端口）与测试套件（CLAUDE_CONFIG_DIR 隔离 ~/.claude）走此分支会把
+    // 随机端口/临时 bridgeToken 顶进生产 ~/.cc-deck/data/bridge.json——hooks/deliver
+    // 读到死端口全断（当晚 deliver 连 46086 拒连实锤；2026-09-28 事故同型）。
+    // 镜像语义只属于真实 dev 形态（repo 内 dataDir、不隔离 CLAUDE 配置），
+    // #211 dev/插件换班语义不受影响。CCR_NO_BRIDGE_MIRROR=1 另留显式关断
+    //（判断口径 ==="1"，与 CCR_NO_TITLE_GEN/CCR_WATCHDOG_DISABLE 约定对齐：
+    // 真值判断会把 "0"/"false" 等显式保留意图也当关断）。
+    // macOS os.tmpdir() 是 /var/folders/…，mktemp 惯用的字面 /tmp 须一并覆盖
+    const sandboxed =
+      !!process.env.CLAUDE_CONFIG_DIR ||
+      [tmpdir(), "/tmp", "/private/tmp", "/var/tmp"].some((t) => (cfg.dataDir + sep).startsWith(t + sep));
+    if (process.env.CCR_NO_BRIDGE_MIRROR !== "1" && cfg.dataDir !== hookHome && !sandboxed && existsSync(hookHome)) {
       try {
         writeFileSync(join(hookHome, "bridge.json"), bridgeJson, "utf-8");
       } catch {}

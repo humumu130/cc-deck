@@ -188,14 +188,18 @@ async function routeFetch(req: Request, env: Env): Promise<Response> {
       });
     }
     if (url.pathname.startsWith("/dl/")) {
-      const name = url.pathname.slice(4);
+      let name = url.pathname.slice(4);
       // /dl/<file> KV 直出（≤25MiB）：Range/206 断点续传（2026-09-17）——手机更新器的
       // .part + Range 续传拿到 200 会弃包全量重下，公司长传输被防火墙掐断后永远差
       // 最后一口气（用户实测"下到 99% 就重下"死循环）。KV 值全量读进内存可承受
       const dlOut = (obj: ArrayBuffer, filename: string): Response => {
+        // 非 ASCII 文件名（中文，#219）：Headers 值必须是 ByteString，中文直接进
+        // filename 会 throw 500——RFC 5987 filename* 主用 + percent-encoded filename
+        // 兜底老浏览器；ASCII 名 encodeURIComponent 为恒等，行为不变
+        const fnAscii = encodeURIComponent(filename);
         const base: Record<string, string> = {
           "content-type": "application/octet-stream",
-          "content-disposition": `attachment; filename="${filename}"`,
+          "content-disposition": `attachment; filename="${fnAscii}"; filename*=UTF-8''${fnAscii}`,
           "cache-control": "no-store",
           "accept-ranges": "bytes",
           "content-length": String(obj.byteLength),
@@ -224,8 +228,17 @@ async function routeFetch(req: Request, env: Env): Promise<Response> {
         if (!env.ASSETS) return new Response("assets unavailable", { status: 503 });
         return env.ASSETS.fetch(new Request("https://assets.local/site/index.html"));
       }
-      if (!/^[\w.-]+$/.test(name) || !env.DL) return new Response("bad name", { status: 400 });
-      // #28 审查补（P0，两审查交叉实锤）：/dl/ 此前对任何过 ^[\w.-]+$ 的键通用直出，
+      // #219（2026-10-02，dev 8f1b789）：pathname 是百分号编码原样（中文名 %E4%B8%AD…），
+      // 解码后再用——此前 /^\w.-+$/ 不认 %，中文名一律 400。KV 键是扁平字符串、无文件
+      // 系统路径语义，校验只需拦控制字符/路径分隔符/空名：Unicode 字母数字（\p{L}\p{N}）
+      // 放行；解码后的 name 同时用于下文 KV get 与下载文件名（与上传侧键对齐）
+      try {
+        name = decodeURIComponent(name);
+      } catch {
+        return new Response("bad name", { status: 400 });
+      }
+      if (!/^[\p{L}\p{N}_.-]+$/u.test(name) || !env.DL) return new Response("bad name", { status: 400 });
+      // #28 审查补（P0，两审查交叉实锤）：/dl/ 此前对任何过键名校验的键通用直出，
       // 把 /view/ 专门保护的两类键整个旁路——GET /dl/acceptance-<id>.key 明文回
       // per-sheet 密钥（伪造提交通行证）、/dl/…results.json 绕过 Bearer 读全部勾选。
       // 本分支只服务安装包/公开产物：验收单键（acceptance- 前缀）与密钥/结果后缀
@@ -235,15 +248,20 @@ async function routeFetch(req: Request, env: Env): Promise<Response> {
         return new Response("not found", { status: 404 });
       }
       // #29（B-P3 允许清单）：通用直出只服务安装包/公开产物形态（cc-deck-* 各端
-      // 安装包、tauri-* updater 清单与签名、snap-* 快照指针）——此前对任何过
-      // ^[\w.-]+$ 的 KV 键通用直出，将来误传的任意私货（内网信息/临时文件）会
-      // 自动变成公网可下。白名单外 404（与不存在键同形，不做存在性侧信道）；
-      // acc-132.html 预览走 /view/ 白名单，不在此列。
+      // 安装包、tauri-* updater 清单与签名、snap-* 快照指针）——将来误传的任意私货
+      //（内网信息/临时文件）不自动变成公网可下。白名单外 404（与不存在键同形，
+      // 不做存在性侧信道）；acc-132.html 预览走 /view/ 白名单，不在此列。
       // #29-fix（2026-10-02 事故复盘）：允许清单漏了 App OTA 的两份更新清单
       // latest.json / latest-test.json（updates.ts 的 CF 通道 URL）——23:31 部署
       // 后 CF 前置通道检查更新全 404，公司网用户（ECS 裸 IP 被墙）检查更新失明，
-      // 复活 #89。两键是纯公开产物（版本号+下载直链），补入允许清单
-      if (!/^(cc-deck-|tauri-|snap-)/.test(name) && !/^latest(-test)?\.json$/.test(name)) {
+      // 复活 #89。两键是纯公开产物（版本号+下载直链），补入允许清单。
+      // #220 放行（dev 8f1b789）：固定名 cc-deck.apk（点号）不匹配前缀 cc-deck-
+      //（横线）曾被守卫误杀 404、专属 KV 直出成死代码——豁免之，走下文直出/302 分支
+      if (
+        name !== "cc-deck.apk" &&
+        !/^(cc-deck-|tauri-|snap-)/.test(name) &&
+        !/^latest(-test)?\.json$/.test(name)
+      ) {
         return new Response("not found", { status: 404 });
       }
       // #15 时代的 cc-deck.apk 302 ECS 已废（2026-09-17）：R8 后 APK 16MB < KV 25MiB，

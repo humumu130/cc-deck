@@ -2,6 +2,7 @@
 <html lang="zh-CN">
 <head>
 <meta charset="utf-8">
+<script>document.documentElement.classList.add('js');</script><!-- JS 探针：无 JS/爬虫场景 reveal 直接可见，不留半透明残页 -->
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <meta name="color-scheme" content="dark">
 <meta name="theme-color" content="#05080F">
@@ -47,9 +48,12 @@
         <span class="brand-mark">CC</span>
         <span class="brand-name">CC Deck</span>
       </a>
-      <a class="nav-ver" href="https://github.com/humumu130/cc-deck/releases" target="_blank" rel="noopener"><i class="pulse"></i>v0.6.0</a>
+      <a class="nav-ver" href="https://github.com/humumu130/cc-deck/releases" target="_blank" rel="noopener"><i class="pulse"></i>v0.6.2</a>
     </div>
     <div class="nav-actions">
+      <a class="nav-link" href="#features">特性</a>
+      <a class="nav-link" href="#how">接入</a>
+      <a class="nav-link" href="#download">下载</a>
       <a class="nav-gh" href="https://github.com/humumu130/cc-deck" target="_blank" rel="noopener">
         <svg class="st" viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path d="M12 .5C5.65.5.5 5.65.5 12c0 5.08 3.29 9.39 7.86 10.91.58.11.79-.25.79-.55v-2.17c-3.2.7-3.87-1.36-3.87-1.36-.52-1.33-1.28-1.69-1.28-1.69-1.04-.71.08-.7.08-.7 1.15.08 1.76 1.19 1.76 1.19 1.03 1.76 2.69 1.25 3.35.96.1-.75.4-1.25.72-1.54-2.55-.29-5.23-1.28-5.23-5.68 0-1.26.45-2.28 1.19-3.09-.12-.29-.52-1.46.11-3.05 0 0 .97-.31 3.18 1.18a11 11 0 0 1 5.79 0c2.2-1.49 3.17-1.18 3.17-1.18.63 1.59.24 2.76.12 3.05.74.81 1.18 1.83 1.18 3.09 0 4.41-2.69 5.38-5.25 5.67.41.35.77 1.05.77 2.12v3.14c0 .3.21.67.8.55A11.51 11.51 0 0 0 23.5 12C23.5 5.65 18.35.5 12 .5z"/></svg>
         <span>GitHub</span>
@@ -72,7 +76,7 @@
   <header class="hero wrap">
     <h1 class="reveal"><span class="nb">Claude Code</span> 会话<br><em>装进口袋</em></h1>
 
-    <p class="hero-tagline reveal" style="--d:.12s">手机、网页、桌面随身掌控——PC 端能做的远程都能做：注入指令、批准权限、收发文件、跟踪任务，任务完成主动推送汇报。</p>
+    <p class="hero-tagline reveal" style="--d:.12s">会话、任务与工作状态实时同步到手机、网页与桌面——离开电脑也不掉线，断网重启会话不丢，任务完成主动推送。</p>
 
     <div class="hero-cta reveal" style="--d:.18s">
       <a class="btn btn-pri btn-lg" href="#download">
@@ -201,6 +205,8 @@
             <div class="term-body">
               <p class="t-tool">Read <span>src/auth/session.ts</span><em>128 行</em></p>
               <p class="t-tool">Write <span>src/auth/oauth.ts</span><em>+96 行</em></p>
+              <p class="t-tool">Bash <span>npm test</span><em>12 通过</em></p>
+              <p class="t-tool">Bash <span>git commit</span><em>✓</em></p>
               <div class="t-perm dm-perm">
                 <p class="t-perm-q">⚠ 允许写入 oauth.ts？</p>
                 <div class="dm-perm-btns">
@@ -220,10 +226,10 @@
   <section class="wrap section" id="features">
     <p class="kicker reveal">WHY CC DECK</p>
     <h2 class="reveal" style="--d:.06s">离开电脑，会话不掉线</h2>
-    <p class="lead reveal" style="--d:.12s">在 PC 端装一个插件，Claude Code 的会话就实时同步到随身设备。适合把 Claude Code 当主力工作流、离开电脑也不想掉线的开发者。</p>
+    <p class="lead reveal" style="--d:.12s">在 PC 端装一个插件，会话、任务与工作状态就实时同步到随身设备——离开电脑也不掉线。</p>
 
     <div class="bento">
-      <article class="cell cell-wide reveal">
+      <article class="cell cell-wide cell-hero reveal">
         <div class="cell-text">
           <div class="ic"><svg viewBox="0 0 24 24" width="17" height="17"><rect x="7" y="2.5" width="10" height="19" rx="2.5"/><path d="M10.5 18.5h3"/></svg></div>
           <h3>随身掌控会话</h3>
@@ -248,6 +254,7 @@
           <span class="t-btn t-btn-yes">✓ 允许</span>
           <span class="t-btn">拒绝</span>
           <span class="t-btn t-btn-soft">回一句「先跑测试」</span>
+          <div class="s-cap">远程点选 · 即时送达终端</div>
         </div>
       </article>
 
@@ -259,52 +266,29 @@
         </div>
         <div class="cell-art toast-art">
           <div class="toast"><i class="dot dot-green"></i>任务完成 · 已跑通 12 个测试</div>
+          <div class="toast"><i class="dot dot-blue"></i><code style="font:11px var(--mono);color:var(--muted)">0 18 * * *</code>&nbsp;→ 每天 18:00</div>
         </div>
       </article>
 
-      <article class="cell reveal" style="--d:.08s">
+      <article class="cell cell-wide reveal" style="--d:.16s">
         <div class="cell-text">
-          <div class="ic"><svg viewBox="0 0 24 24" width="17" height="17"><path d="M21 8l-9-5-9 5v8l9 5 9-5z"/><path d="M3 8l9 5 9-5"/><path d="M12 13v8"/></svg></div>
-          <h3>输出物自动汇集</h3>
-          <p>会话交付的报告、文档自动汇入「输出物」看板——三端一处查看与打开，交付不再散落在各会话里翻找。</p>
+          <div class="ic"><svg viewBox="0 0 24 24" width="17" height="17"><rect x="3.5" y="3.5" width="7" height="7" rx="1.5"/><rect x="13.5" y="3.5" width="7" height="7" rx="1.5"/><rect x="3.5" y="13.5" width="7" height="7" rx="1.5"/><rect x="13.5" y="13.5" width="7" height="7" rx="1.5"/></svg></div>
+          <h3>工作台增强</h3>
+          <p>不止远程操控——会话里发生的一切，都被整理成随手可看的面板，三端实时同步。</p>
         </div>
-        <div class="cell-art sessions">
-          <div class="s-row"><i class="dot dot-blue"></i><span>夜间工作报告.html</span><em>刚刚</em></div>
-          <div class="s-row"><i class="dot dot-violet"></i><span>验收单 · 2026-09-24</span><em>2 小时前</em></div>
-          <div class="s-row s-done"><i class="dot dot-dim"></i><span>ui-review 汇总页</span><em>昨天</em></div>
-          <div class="s-cap">交付自动汇集 · 三端同看</div>
-        </div>
-      </article>
-
-      <article class="cell reveal" style="--d:.16s">
-        <div class="cell-text">
-          <div class="ic"><svg viewBox="0 0 24 24" width="17" height="17"><path d="M6 3v12"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="6" r="3"/><path d="M18 9a9 9 0 0 1-9 9"/></svg></div>
-          <h3>子 Agent 活性可见</h3>
-          <p>卡片角标显示并行运行数，点开面板看每个子 Agent 正在做什么——外部 CLI 会话同样支持。</p>
-        </div>
-        <div class="cell-art sessions">
-          <div class="s-row"><i class="dot dot-orange"></i><span>视觉审查 · 分析截图</span><em>运行中</em></div>
-          <div class="s-row s-done"><i class="dot dot-green"></i><span>代码检索 · 定位实现</span><em>✓ 完成</em></div>
-          <div class="s-cap">角标显示并行数 · 实时刷新</div>
-        </div>
-      </article>
-
-      <article class="cell cell-full reveal">
-        <div class="cell-text">
-          <div class="ic"><svg viewBox="0 0 24 24" width="17" height="17"><path d="M3.5 5l1.5 1.5L8 3.5"/><path d="M3.5 11l1.5 1.5L8 9.5"/><path d="M3.5 17l1.5 1.5L8 15.5"/><path d="M12 5h8.5M12 11h8.5M12 17h8.5"/></svg></div>
-          <h3>任务面板</h3>
-          <p>任务清单实时同步手机与网页：已完成 / 进行中 / 待办分组速览，长按拖动排序并回传 CLI，转录里的 #NNN 任务号点按直达明细。</p>
-        </div>
-        <div class="cell-art tasks-art">
-          <div class="tk-bar"><span class="bar"><i></i></span><b>3 / 5</b></div>
-          <div class="tk-sec tk-sec-done">已完成 3 · 近 1 天</div>
-          <div class="tk-row done"><span class="mark">✓</span><span class="no">#11</span><span class="txt">会话列表间距微调</span><span class="tk-tag">subAgent</span></div>
-          <div class="tk-row done"><span class="mark">✓</span><span class="no">#12</span><span class="txt">下载链接稳定性修复</span></div>
-          <div class="tk-row done"><span class="mark">✓</span><span class="no">#13</span><span class="txt">域名梳理：主域 + 旧域 301</span></div>
-          <div class="tk-sec tk-sec-run">进行中 1</div>
-          <div class="tk-row run"><span class="mark">◐</span><span class="no">#14</span><span class="txt">注入防抢发：检测 CLI 打字中状态</span></div>
-          <div class="tk-sec tk-sec-todo">待办 1</div>
-          <div class="tk-row todo"><span class="mark">○</span><span class="no">#15</span><span class="txt">云桥地址迁移：双桥并行互为备份</span></div>
+        <div class="cell-art feats">
+          <div class="f-row">
+            <span class="f-ic"><svg viewBox="0 0 24 24" width="14" height="14"><path d="M21 8l-9-5-9 5v8l9 5 9-5z"/><path d="M3 8l9 5 9-5"/><path d="M12 13v8"/></svg></span>
+            <div><b>输出物自动汇集</b><p>报告、文档汇入「输出物」看板，三端一处查看与打开</p></div>
+          </div>
+          <div class="f-row">
+            <span class="f-ic"><svg viewBox="0 0 24 24" width="14" height="14"><path d="M6 3v12"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="6" r="3"/><path d="M18 9a9 9 0 0 1-9 9"/></svg></span>
+            <div><b>子 Agent 活性可见</b><p>角标显示并行数，点开看每个在做什么</p></div>
+          </div>
+          <div class="f-row">
+            <span class="f-ic"><svg viewBox="0 0 24 24" width="14" height="14"><path d="M4 6h16M4 12h10M4 18h7"/></svg></span>
+            <div><b>任务面板</b><p>清单实时同步，拖动排序回传 CLI</p></div>
+          </div>
         </div>
       </article>
     </div>
@@ -382,7 +366,7 @@
   <section class="wrap section" id="download">
     <p class="kicker reveal">DOWNLOAD</p>
     <h2 class="reveal" style="--d:.06s">下载客户端</h2>
-    <p class="lead reveal" style="--d:.12s">当前版本 v0.6.0 · 连入同一个 relay 即可互通，多台电脑还可聚合同屏。</p>
+    <p class="lead reveal" style="--d:.12s">当前版本 v0.6.2 · 连入同一个 relay 即可互通，多台电脑还可聚合同屏。</p>
 
     <div class="dl-grid">
       <article class="dl-card reveal">
@@ -404,9 +388,9 @@
       <article class="dl-card dl-card-hot reveal" style="--d:.08s">
         <div class="dl-head">
           <div class="ic"><svg viewBox="0 0 24 24" width="20" height="20"><rect x="2.5" y="4" width="19" height="12.5" rx="2"/><path d="M9 20.5h6M12 16.5v4"/></svg></div>
-          <h3>桌面端<span>Windows · v0.6.0 · Tauri 约 3.4MB</span></h3>
+          <h3>桌面端<span>Windows · v0.6.2 · Tauri 约 3.4MB</span></h3>
         </div>
-        <p>轻量原生客户端，托盘常驻、内建更新，与网页端同一套界面。</p>
+        <p>轻量原生客户端：多会话一屏统管、状态灯实时可见，托盘常驻、内建更新，与网页端同一套界面。</p>
         <div class="dl-btns">
           <a class="btn btn-pri" href="/download/cc-deck-desktop-setup.exe">下载 Windows 安装包</a>
           <a class="btn btn-ghost btn-sm-block" href="https://github.com/humumu130/cc-deck/releases/latest" target="_blank" rel="noopener">macOS（dmg）→ Releases</a>
@@ -431,27 +415,6 @@
       </article>
     </div>
     <p class="reveal" style="--d:.2s;color:var(--muted,#8b93a7);font-size:12.5px;margin-top:14px">稳定版同步发布于 GitHub Releases；⚡ 快照版为开发中构建（可能不稳定），仅直链分发，开发者亦可在仓库 Actions 自取。</p>
-  </section>
-
-  <!-- ======================= V0.6.0 更新亮点 ======================= -->
-  <section class="wrap section" id="whatsnew">
-    <p class="kicker reveal">WHATS NEW</p>
-    <h2 class="reveal" style="--d:.06s">v0.6.0 更新亮点</h2>
-    <p class="lead reveal" style="--d:.12s">本轮聚焦随身工作流闭环：文件双向收发、产出自动归集、并行任务可见。</p>
-    <div class="dl-grid">
-      <article class="dl-card reveal">
-        <div class="dl-head"><div class="ic">📎</div><h3>会话收发文件</h3></div>
-        <p>图片、文档任意文件发进会话——手机相册 / 文件、桌面与网页粘贴或拖入即发；会话产出的文件也可拉回随身端。</p>
-      </article>
-      <article class="dl-card reveal" style="--d:.08s">
-        <div class="dl-head"><div class="ic">📦</div><h3>输出物看板</h3></div>
-        <p>会话交付的报告、文档自动汇集一处，手机 / 网页 / 桌面随时查看与打开；漏登记的产出也会自动收进看板。</p>
-      </article>
-      <article class="dl-card reveal" style="--d:.16s">
-        <div class="dl-head"><div class="ic">🤖</div><h3>子 Agent 活性面板</h3></div>
-        <p>并行子任务实时可见——卡片角标显示并行数量，点开看每个子 Agent 正在做什么。</p>
-      </article>
-    </div>
   </section>
 
   <!-- ======================= FINAL CTA ======================= -->

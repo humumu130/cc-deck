@@ -25,7 +25,9 @@
     "test:autorevive": "tsx scripts/test-autorevive.ts",
     "test:settings": "tsx scripts/test-settings.ts",
     "test:settings-ws": "tsx scripts/test-settings-ws.ts",
-    "test:codex": "tsx scripts/test-codex.ts"
+    "test:codex": "tsx scripts/test-codex.ts",
+    "test:artifacts-dead": "tsx scripts/test-artifacts-dead.ts",
+    "test:deliver-session": "tsx scripts/test-deliver-session.ts"
   },
   "dependencies": {
     "@anthropic-ai/claude-agent-sdk": "latest",

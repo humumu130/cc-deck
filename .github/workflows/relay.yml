@@ -32,7 +32,9 @@ jobs:
         #   首建（不设则无锚即真拉 Leader CLI，「不拉 CLI」靠开关保证而非碰巧），CI 可跑
         # test:codex（#27 P0）：CodexAgentSession 用 /bin/sh 桩脚本替代真 codex CLI
         #   （CCR_CODEX_PATH 注入），零 codex 二进制零 API key，CI 可跑
-        script: [test:bus, test:history, test:bridge, test:cloud, test:org, test:leader, test:projects, test:dispatch, test:routing, test:autorevive, test:settings, test:settings-ws, test:codex]
+        # test:artifacts-dead（#224）/ test:deliver-session（#227/#230，dev 0.6.1/0.6.2 线）：
+        #   输出物下发口径与会话身份挂账，均 mkdtemp 沙盒纯单元，CI 可跑
+        script: [test:bus, test:history, test:bridge, test:cloud, test:org, test:leader, test:projects, test:dispatch, test:routing, test:autorevive, test:settings, test:settings-ws, test:codex, test:artifacts-dead, test:deliver-session]
     defaults:
       run:
         working-directory: relay

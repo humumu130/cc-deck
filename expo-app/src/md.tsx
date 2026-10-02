@@ -267,17 +267,13 @@ function SynText({ text, toks, c, mode }: { text: string; toks: SynTok[]; c: The
   return <>{parts}</>;
 }
 
-// #216 防误派守卫用：最近一次时间线链接点击（LinkSheet 弹出）时刻，模块级跨
-// MdText 实例共享——DetailScreen 的权限面板打开守卫读取（真机触摸错派机制见该处注释）
-export const lastLinkAt = { at: 0 };
-
+// #216 防误派守卫机制（lastLinkAt/lastFocusAt）随 0.6.1 发版探针整体摘除（7076c9c）
 export function MdText({ src, style, selectable, onTaskRef, onTaskRefOut }: { src: string; style?: TextStyle; selectable?: boolean; onTaskRef?: (n: number, hold?: boolean, anchor?: { x: number; y: number }) => void; onTaskRefOut?: () => void }) {
   const { c, mode } = useTheme();
   const d = useThemeStyles(makeStyles);
   const blocks = useMemo(() => parseBlocks(src), [src]);
   const [linkUrl, setLinkUrl] = useState<string | null>(null);
   const openLink = (u: string) => {
-    lastLinkAt.at = Date.now();
     setLinkUrl(u);
   };
   return (

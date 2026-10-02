@@ -1,19 +1,24 @@
 # CC Deck
 
+<div align="center">
+
+<img src="docs/readme/hero.svg" alt="CC Deck — Claude Code 会话装进口袋：随时随地掌握电脑端的会话、任务与工作状态" width="880">
+
 [![relay CI](https://github.com/humumu130/cc-deck/actions/workflows/relay.yml/badge.svg)](https://github.com/humumu130/cc-deck/actions/workflows/relay.yml)
 [![android CI](https://github.com/humumu130/cc-deck/actions/workflows/android.yml/badge.svg)](https://github.com/humumu130/cc-deck/actions/workflows/android.yml)
 [![desktop CI](https://github.com/humumu130/cc-deck/actions/workflows/desktop.yml/badge.svg)](https://github.com/humumu130/cc-deck/actions/workflows/desktop.yml)
 [![release](https://img.shields.io/github/v/release/humumu130/cc-deck)](https://github.com/humumu130/cc-deck/releases/latest)
 [![license](https://img.shields.io/badge/license-MIT-blue)](./LICENSE)
+[![stars](https://img.shields.io/github/stars/humumu130/cc-deck?style=social)](https://github.com/humumu130/cc-deck/stargazers)
+[![downloads](https://img.shields.io/github/downloads/humumu130/cc-deck/total?label=downloads)](https://github.com/humumu130/cc-deck/releases)
 
-在手机上使用 PC 端的 Claude Code：查看会话状态、批准权限、发送消息、切换模型、接收任务汇报；电脑断网重启会话不丢，手机点一下即可远程恢复。默认自建 relay，局域网内不经过任何第三方服务；跨网经可自建的 Cloudflare 中继，端到端加密。
+**在手机、网页与桌面上，随时随地掌握电脑端 Claude Code 的会话、任务与工作状态**。电脑断网重启会话不丢，随手一点即可远程恢复——局域网直连不经任何第三方，跨网中继端到端加密，可自建（Cloudflare / 自有服务器）。
 
-[🏠 项目主页](https://cc-deck.humumu.online/) · [网页控制台](https://cc-deck.humumu.online/app) · [下载最新版](https://github.com/humumu130/cc-deck/releases/latest) · [直链下载页](https://cc-deck.humumu.online/download/)
+<a href="https://cc-deck.humumu.online/"><img src="docs/readme/home-btn.svg" alt="项目主页 · cc-deck.humumu.online" width="176"></a>
 
-<!-- TODO(截图占位)：三端三联图，源图在内部归档不随仓库发布，补拍后放 docs/screenshots/ 替换
-     1. 手机 App：会话列表（源徽章 + ctx 水位条）+ 设置抽屉
-     2. 网页 / 桌面：会话页（转录时间线 + 模型下拉锚定弹层）+ 设置抽屉竖排菜单
-     3. 手表：会话速览卡 / 径向菜单 -->
+[网页控制台](https://cc-deck.humumu.online/app) · [下载最新版](https://github.com/humumu130/cc-deck/releases/latest) · [直链下载页](https://cc-deck.humumu.online/download/)
+
+</div>
 
 ## 目录
 
@@ -34,6 +39,12 @@
 - 给会话发消息、传图片与文件（App 支持语音输入，桌面 / 网页可粘贴或拖入），会话产出的文件可拉回查看 / 保存；历史会话可续聊
 - 消息即发即达：点发送立刻送达电脑（排队回显即时，注入后自动校验、回车被吞秒级补发）
 - 模型远程切换：下拉即切当前会话模型（注入 CLI 原生 `/model`），ctx 水位行内嵌当前模型，App / 网页 / 桌面三端一致
+
+**一屏全览**（桌面端 · 就在电脑前也更顺）
+
+- 会话集中管理：多个 Claude Code 会话聚在一个面板，不用在终端窗口间来回切换
+- 状态灯实时可见：运行中 / 等待输入 / 出错 / 完成，扫一眼就知道哪个会话在等你
+- 输出物、任务清单、完成推送等增强与手机端实时同步
 
 **断线不怕**
 
@@ -283,6 +294,49 @@ node scripts/version.mjs --check   # 校验（pre-commit 自动跑）
 仓库布局：`relay/`（核心，协议唯一定义源 `relay/src/types.ts`）、`web-console/`（网页控制台）、`expo-app/`（Android 手机端 + 手表网关）、`wear-app/`（Wear OS 手表端）、`desktop-tauri/`（桌面客户端主推）与 `desktop/`（Electron，过渡期保留）、`cloud-bridge/` 与 `cloudflare/`（云桥双形态）、`mobile/`（APK 分发页）、`cc-plugins/`（Claude Code 插件成品）、`docs/`（架构文档）。
 
 ## Roadmap
+
+### 矩阵式团队模式（设计定稿 · 开发中）
+
+多 Claude 会话的矩阵式协作：**常驻组织**（唯一 Leader + 两本账）统筹一切，**动态项目组**按需编制并行推进，**普通会话**保留为逃生舱。
+
+- 单线沟通：只对 Leader 说一句话需求，分诊五档输出（咨询 / 随手办 / 轻立项 / 正经立项 / 建议暂缓）
+- 物理隔离：项目组 = 编制 + git worktree + 任务板，cwd 即项目锚点，并行互不踩踏
+- 记忆三层：个人层（手写 · 跨一切生效）/ 组织层（Leader 维护两本账）/ 项目层（跟目录走）
+- 经验回流：结项经验以提案 diff 回流组织记忆，一键确认后跨项目沉淀复用
+
+```mermaid
+flowchart TB
+    YOU["👤 你"]
+
+    subgraph ORGBOX["🏛 常驻组织 · org 目录"]
+        direction TB
+        LEADER["🧭 Leader · 唯一<br/>分诊 · 立项 · 汇总 · 不进项目干活"]
+        BOOKS["📚 两本账<br/>组织记忆（经验 · 慢涨）<br/>派单台账（状态 · append-only）"]
+        ROUTE["🔀 路由表 · 熟手池<br/>亲和调度（M3）"]
+        LEADER ---|"读档恢复 / 先落账"| BOOKS
+        LEADER -.->|"查熟手"| ROUTE
+    end
+
+    subgraph PG["🧪 动态项目组 × N · cwd 物理隔离"]
+        direction TB
+        PJA["项目组 A · 在办<br/>编制 + worktree + 任务板"]
+        PJB["项目组 B · 挂起<br/>冻结任务板 · 成员退休"]
+    end
+
+    CASUAL["💬 普通会话<br/>逃生舱 · 不经组织"]
+    PERSONAL["✍️ 个人层记忆<br/>全局 CLAUDE.md · 你手写"]
+
+    YOU ==>|"一句话需求<br/>单线沟通"| LEADER
+    LEADER -->|"派单 · cwd=项目锚点"| PJA
+    LEADER -.->|"挂起 · 静默"| PJB
+    PJA -.->|"结项 · 经验回流（提案确认）"| BOOKS
+    YOU -.->|"直达"| CASUAL
+    CASUAL -.->|"随时可移交"| LEADER
+    YOU -.-|"手写 · 跨一切生效"| PERSONAL
+```
+
+- 粗箭头 `⇒`：核心通道（单线沟通）；虚线 `⇢`：弱关联（逃生舱 / 挂起 / 回流提案）
+- 完整设计见决策稿 [v8-team-matrix.html](docs/v8-team-matrix.html)（v3.1）与三图总览 [v8-team-diagrams.html](docs/v8-team-diagrams.html)（组织 / 工作流 / 状态）
 
 - 手表 Tiles（不开 App 直接看状态）
 - 更多手表平台：OPPO ColorOS Watch 适配进行中

@@ -11,7 +11,9 @@ REPO="humumu130/cc-deck"
 ECS_HOST="root@8.133.211.170"
 ECS_DIR="/opt/cc-apk"
 KEY="$HOME/.ssh/id_ed25519"
-RELAY_TOKEN="${RELAY_TOKEN:-$(grep -oE '"token":"[a-f0-9]+"' "$HOME/.cc-deck/data/bridge.json" | grep -oE '[a-f0-9]+' | head -1)}"
+# /api/notify 鉴权用 LAN token（relay config.ts：data/token 持久化文件）；
+# bridge.json 里的是 bridgeToken（hooks 桥接令牌），拿它调 notify 必 unauthorized（v0.6.1 发版实踩）
+RELAY_TOKEN="${RELAY_TOKEN:-$(tr -d '[:space:]' < "$HOME/.cc-deck/data/token" 2>/dev/null)}"
 TMP="$(mktemp -d)"
 SSH="ssh -i $KEY -o StrictHostKeyChecking=yes -o UserKnownHostsFile=scripts/known_hosts.ecs"
 SCP="scp -i $KEY -o StrictHostKeyChecking=yes -o UserKnownHostsFile=scripts/known_hosts.ecs"

@@ -83,7 +83,7 @@ export interface ArtifactItem {
   first_at: number;    // 首次出现（ms）
   last_at: number;     // 最后一次写（ms；排序键）
   size?: number;       // 最近一次 stat 的字节数（捕获时顺手 stat；缺省不显）
-  exists?: boolean;    // 最近一次 stat 是否存在；false → UI「已删除」态
+  exists?: boolean;    // 最近一次 stat 是否存在；false → 下发前过滤（#224 面板=磁盘现状，已删不出现）；state 内部保留供文件重建时合并复用
   origin?: "cwd" | "outside";  // 相对会话 cwd 的位置（UI 决定相对/绝对展示与角标）
 }
 
@@ -186,7 +186,8 @@ export interface PendingInput {
   body?: string;
 }
 
-// 托管会话权限模式（SDK PermissionMode 的安全子集：bypassPermissions 不开放远程切换）
+// 托管会话权限模式四档（#217 起 bypassPermissions 也接受：创建时勾选「跳过权限确认」
+// 的会话可切回，SDK 硬约束——非 skip 启动的会话切跳过会被拒，报错译制见 COMMAND_PERM）
 export type ManagedPermissionMode = "default" | "acceptEdits" | "plan" | "bypassPermissions";
 
 // 时间线历史条目（持久化 & 快照下发用）

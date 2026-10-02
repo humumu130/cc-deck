@@ -28,7 +28,7 @@ import { useKbHeight } from "../kb";
 import { useEnterSend, useProcessFont, useVoiceInput } from "../display-settings";
 import { voice } from "../voice";
 import { BUILTIN_COMMANDS, fetchSlashCommands, httpBaseOf, matchSlash, type SlashCommand } from "../slash";
-import { MdText, lastLinkAt } from "../md";
+import { MdText } from "../md";
 import { Collapse, FadeIn, PressScale } from "../motion";
 import RenameModal from "./RenameModal";
 
@@ -105,18 +105,9 @@ let agCollapsed = false;
 // 输入草稿跨进出保留：按 session_id 暂存（app 生命周期内，发送即清）
 const drafts = new Map<string, string>();
 
-// #216 防误派守卫用：最近一次输入框聚焦时刻（模块级跨进出详情页保持，与
-// md.tsx 的 lastLinkAt 同族——两者由下方 setPermPanel 守卫消费）
-let lastFocusAt = 0;
-// #216 五段修（test.8）：面板最近一次关闭时刻——「关掉又重新弹」的直接死因是
-// 关闭后紧随的再次触发（同一轮手势里 scrim 关闭 + 胶囊重开叠加时，表象就是
-// 面板关不掉/关了又弹），关闭后 700ms 内的再次打开一律吞掉（真用户关面板后
-// 700ms 内再点胶囊的场景不存在，零误伤）
-let lastCloseAt = 0;
-// #216 排查探针（test.8 临时，定案后移除）：最近一次胶囊 onPress 的触点/距
-// 离判定（d=-1 表示坐标或胶囊中心取不到）+ 三道守卫累计吞次——面板顶部一行
-// 显示，真机复现时肉眼/截图回读，用于定位错派触摸的真实形态
-const permProbe = { txt: "init", eaten: 0, tw: 0, cw: 0 };
+// #216 防误派守卫/探针机制（三~六段修 + lastFocusAt/lastLinkAt）随 0.6.1 发版
+// 整体摘除（dev 6fef1e3 拆四道围挡 + 7076c9c 探针摘除）：围挡在真机上误伤
+// 正常点胶囊，最终定案=无守卫直连（错派根因由 RN/ColorOS 层消化）
 
 // #376 cron 表达式人话（常见模式；未识别返回 null 只显原文+下次时间兜底）
 const WEEK_CN = ["日", "一", "二", "三", "四", "五", "六"];
@@ -169,6 +160,13 @@ function artExtOf(name: string): string {
 function artRelOf(s: SessionState, t: ArtifactItem): string {
   if (t.origin !== "cwd" || !s.cwd) return "";
   return t.path.startsWith(s.cwd) ? t.path.slice(s.cwd.length).replace(/^[\\/]+/, "") : "";
+}
+// #222 文件夹分组取父目录（与 web-console artDirOf 同口径）：cwd 内按相对路径、外按
+// 绝对路径；兼容 / 与 \（Windows 源）；根下文件（无父目录）返回空串 = 散文件，永不聚合
+function artDirOf(s: SessionState, t: ArtifactItem): string {
+  const p = artRelOf(s, t) || t.path;
+  const i = Math.max(p.lastIndexOf("/"), p.lastIndexOf("\\"));
+  return i > 0 ? p.slice(0, i) : "";
 }
 function fmtArtSize(n: number | undefined): string {
   if (typeof n !== "number" || n < 0) return "";
@@ -873,6 +871,68 @@ function ArtSheet({ art, rel, sid, onClose }: { art: ArtifactItem | null; rel: s
   );
 }
 
+// #222 文件夹 ⋯ sheet（手机端对齐桌面端 openFolderPop 菜单）：chrome 镜像
+// ArtSheet（permScrim/permSheet/permGrab 底部面板）。身份行 = 文件夹 chip +
+// 叶子名 + ×N 徽标；元信息 = 目录 · 总大小 · 最近时间；主 CTA = 展开/收起
+// （写显式折叠记录后即关，sheet 让位看到列表变化）；次级 = 复制目录路径
+// （「已复制 ✓」1.5s，同 ArtSheet 反馈形态）
+function ArtFolSheet({ fol, onToggle, onClose }: { fol: { key: string; dir: string; leaf: string; count: number; size: number; at: number; open: boolean } | null; onToggle: () => void; onClose: () => void }) {
+  const { c } = useTheme();
+  const d = useThemeStyles(makeStyles);
+  const insets = useSafeAreaInsets();
+  const [copied, setCopied] = useState(false);
+  const copiedTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => () => { if (copiedTimer.current) clearTimeout(copiedTimer.current); }, []);
+  return (
+    <Modal visible={!!fol} transparent animationType="slide" onRequestClose={fol ? onClose : undefined}>
+      {fol ? (
+      <Pressable style={d.permScrim} onPress={onClose}>
+        <Pressable style={[d.permSheet, { paddingBottom: 14 + insets.bottom }]} onPress={() => undefined}>
+          <View style={d.permGrab} />
+          <View style={d.artTitleRow}>
+            <View style={[d.artChip, { borderColor: withA(c.brandB, 0.45) }]}>
+              <Svg width={11} height={11} viewBox="0 0 24 24" fill="none" stroke={c.brandB} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+                <Path d="M3.5 7.2c0-1.3 1-2.3 2.3-2.3h3l2 2.2h6.4c1.3 0 2.3 1 2.3 2.3v7.3c0 1.3-1 2.3-2.3 2.3H5.8c-1.3 0-2.3-1-2.3-2.3z" />
+              </Svg>
+            </View>
+            <Text style={d.artTitle} numberOfLines={2}>{fol.leaf}</Text>
+            <Text style={[d.artTag, { color: c.brandB, borderColor: withA(c.brandB, 0.4) }]}>×{fol.count}</Text>
+          </View>
+          <Text style={d.artMeta} numberOfLines={3}>
+            {[fol.dir, fmtArtSize(fol.size), fmtArtTime(fol.at)].filter(Boolean).join(" · ")}
+          </Text>
+          <Pressable
+            style={d.artPri}
+            android_ripple={{ color: "rgba(255,255,255,0.15)", borderless: false, radius: 10 }}
+            onPress={() => { onToggle(); onClose(); }}
+          >
+            <Text style={d.artPriT}>{fol.open ? "收起文件夹" : "展开查看"}</Text>
+          </Pressable>
+          <Text style={d.artCap}>{fol.open ? `收起后 ${fol.count} 个文件折叠为文件夹行` : `展开列出 ${fol.count} 个文件`}</Text>
+          <View style={d.artPath}>
+            <Text style={d.artPathT}>{brkPath(fol.dir)}</Text>
+          </View>
+          <View style={d.artSecRow}>
+            <Pressable
+              style={d.artSec}
+              android_ripple={{ color: withA(c.dim, 0.15), borderless: false, radius: 10 }}
+              onPress={() => {
+                void Clipboard.setStringAsync(fol.dir).then(() => {
+                  setCopied(true);
+                  copiedTimer.current = setTimeout(() => setCopied(false), 1500);
+                });
+              }}
+            >
+              <Text style={d.artSecT}>{copied ? "已复制 ✓" : "复制目录路径"}</Text>
+            </Pressable>
+          </View>
+        </Pressable>
+      </Pressable>
+      ) : null}
+    </Modal>
+  );
+}
+
 // #36 权限模式四选一面板（设计定案 docs/perm-mode-design.md §4.2/4.3）：替代原
 // 循环点击——恒定 2 击直达任意档、每档一句描述首次使用即懂；跳过档（bypassPermissions
 // 免审执行一切命令与编辑）首击只展开底部确认区、再击「确认跳过」才发命令，误触不可达。
@@ -909,10 +969,6 @@ function PermPanel({ open, cur, onPick, onClose }: { open: boolean; cur: PermMod
               <Text style={d.permX}>✕</Text>
             </Pressable>
           </View>
-          {/* #216 排查探针（test.8 临时，定案后移除）：最近一次胶囊 onPress 的触
-              点/距离判定 + 三道守卫累计吞次（吞=坐标 / 窗=时间窗 / 冷=复弹冷却）。
-              再现「弹面板」时这一行就是错派触摸的真身数据，长按可复制 */}
-          <Text style={d.permProbeT} selectable>{`probe ${permProbe.txt} · 吞${permProbe.eaten}/窗${permProbe.tw}/冷${permProbe.cw}`}</Text>
           {PERM_CYCLE.map((m) => {
             const danger = m === "bypassPermissions";
             return (
@@ -1281,34 +1337,10 @@ export interface DetailBackHandle {
 export default function DetailScreen({ sid, onBack, initialView, ref }: { sid: string; onBack: () => void; initialView?: ViewKind; ref?: Ref<DetailBackHandle> }) {
   const { c, mode } = useTheme();
   const d = useThemeStyles(makeStyles);
-  // #36 权限模式四选一面板：胶囊（Head R2）点开，替代循环切换
-  // #216 防误派守卫（三段修，2026-10-02 真机定稿）：OPPO/ColorOS 真机上点底部
-  // 输入框或时间线链接的触摸会被 Android 触摸层错派给顶部权限胶囊的 Pressable
-  // ——onPress 即 setPermPanel(true)，权限面板凭空弹出（0.6.1-test.4 用户主力机
-  // 稳定复现；模拟器 7 次不可复现；JS 层唯一置 true 入口就是胶囊 onPress）。
-  // 差异法定位：无守卫包点输入框必弹、有守卫包必不弹（两包唯一行为差异=本守卫）。
-  // 真用户从底部输入框/链接处把手指移到顶部胶囊物理上不可能 <400ms，吞掉
-  // 400ms 内的打开请求零误伤；正常点胶囊（间隔远超 400ms）照常放行。
-  // 四段修补漏：输入框已聚焦后再点不重发 onFocus（RN 行为），时间窗打点不
-  // 刷新、错派直通——胶囊 onPress 增加触点坐标判定（见 permPillRef 处），
-  // 此处时间窗降级为坐标取不到时的第二道防线
-  // 五段修（test.8 真机实况：坐标守卫后仍弹且回到「关掉又弹」）：①键盘弹出期
-  // 间胶囊整体 pointerEvents=none（见 onPress 处）掐断高发段；②关闭后 700ms
-  // 复弹冷却（lastCloseAt，见模块级）；③permProbe 探针记录判定数据（面板顶
-  // 一行显示），错派形态定案后再做最终收口
-  const [permPanel, setPermPanelRaw] = useState(false);
-  const setPermPanel = (v: boolean) => {
-    if (v) {
-      const now = Date.now();
-      // 五段修·复弹冷却：刚关又开 = 错派循环的指纹，吞（计数进探针）
-      if (now - lastCloseAt < 700) { permProbe.cw++; return; }
-      const since = Math.min(now - lastFocusAt, now - lastLinkAt.at);
-      if (since >= 0 && since < 400) { permProbe.tw++; return; }
-    } else {
-      lastCloseAt = Date.now();
-    }
-    setPermPanelRaw(v);
-  };
+  // #36 权限模式四选一面板：胶囊（Head R2）点开，替代循环切换。
+  // #216 终态（dev 0.6.1/0.6.2 定稿）：三~五段修的守卫链全数拆除，胶囊
+  // onPress 直连 setPermPanel——守卫在真机上误伤正常点击（六段修定案）
+  const [permPanel, setPermPanel] = useState(false);
   const snap = useRelay();
   const [input, setInput] = useState(() => drafts.get(sid) ?? "");
   // #68① 多行自动增高：Android 下纯 minHeight/maxHeight 的自适应不可靠（实测长文
@@ -1323,11 +1355,7 @@ export default function DetailScreen({ sid, onBack, initialView, ref }: { sid: s
   // #129 回车键行为：开 = 回车发送（恢复 #68 多行化之前的旧习惯）；关 = 回车换行
   const enterSend = useEnterSend();
   const inputRef = useRef<TextInput>(null);
-  // #216 四段修·坐标守卫：权限胶囊中心窗口坐标（onLayout 时 measureInWindow
-  // 测一次；胶囊随 head 固定在顶部不滚动，一次测量终身有效）——胶囊 onPress
-  // 用触点与中心的距离判错派（机制见 onPress 处注释）
-  const permPillRef = useRef<View>(null);
-  const permPillCtr = useRef<{ x: number; y: number } | null>(null);
+  // #216 四段修的坐标守卫 ref（permPillRef/permPillCtr）随终态拆除（见上）
   const editInput = (v: string) => {
     if (v) drafts.set(sid, v);
     else drafts.delete(sid);
@@ -1351,6 +1379,9 @@ export default function DetailScreen({ sid, onBack, initialView, ref }: { sid: s
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
   // #376 定时任务条目展开态（按任务 id）
   const [cronOpen, setCronOpen] = useState<Record<string, boolean>>({});
+  // #222 输出物文件夹折叠态（键 sid|dirLower；未记录 = 最近活跃的文件夹展开、其余折叠，
+  // 用户点开/点折叠后以显式记录优先）
+  const [artFold, setArtFold] = useState<Record<string, boolean>>({});
   // 内容长按菜单（#249）：非空即弹 ContentMenu
   const [menuText, setMenuText] = useState<string | null>(null);
   const todoScrollRef = useRef<ScrollView>(null);
@@ -1645,6 +1676,12 @@ export default function DetailScreen({ sid, onBack, initialView, ref }: { sid: s
   const [taskHold, setTaskHold] = useState(false);
   // #35 输出物详情 sheet：点行打开（artPop 为该条快照，rel 由挂载点按会话 cwd 现算）
   const [artPop, setArtPop] = useState<ArtifactItem | null>(null);
+  // #222 文件夹 ⋯ sheet（2026-10-02 用户拍板「手机端也要一样处理」：行尾统一 ⋯，
+  // 菜单内容按文件夹语义定制）：快照 = 分组摘要 + 开合态。folOpen 是输出物视图
+  // IIFE 局部函数，组件根级挂载点不可达——开合态在行尾 Pressable 处（作用域内）
+  // 随快照带出；onToggle 写显式 artFold 记录 + 同步翻转快照（sheet 是 Modal 单发
+  // 交互，主 CTA 按下即关，快照无陈旧窗口）
+  const [folPop, setFolPop] = useState<{ key: string; dir: string; leaf: string; count: number; size: number; at: number; open: boolean } | null>(null);
   const [taskAnchor, setTaskAnchor] = useState<{ x: number; y: number } | undefined>(undefined);
   const openTaskRef = (n: number, hold = false, anchor?: { x: number; y: number }) => {
     setTaskPop(n);
@@ -2061,43 +2098,14 @@ export default function DetailScreen({ sid, onBack, initialView, ref }: { sid: s
             <View style={d.permCluster}>
               {!external && canCmd && !s.historical ? (
                 <Pressable
-                  ref={permPillRef}
                   style={[
                     d.permPill,
                     perm === "default"
                       ? [d.permPillGhost, { borderColor: mode === "dark" ? "rgba(125,165,220,0.22)" : c.line }]
                       : perm === "bypassPermissions" ? d.permPillWarn : d.permPillLit,
                   ]}
-                  onLayout={() => {
-                    permPillRef.current?.measureInWindow((x, y, w, h) => {
-                      permPillCtr.current = { x: x + w / 2, y: y + h / 2 };
-                    });
-                  }}
-                  // 五段修（test.8）：键盘弹出期间整颗胶囊不响应——错派高发段就是
-                  // 点输入框拉起键盘的时刻（含聚焦后再点的漏网场景）；此时开面板
-                  // 键盘还会盖住底部 sheet，本就是坏状态。排查期间键盘开着时先收
-                  // 起键盘再点胶囊（定案后换成只掐错派不清真点的收口）
-                  pointerEvents={kb > 0 ? "none" : "auto"}
                   android_ripple={{ color: c.tintSoft, borderless: false, radius: 8 }}
-                  onPress={(e) => {
-                    // #216 四段修·坐标守卫：三段的时间窗守卫漏了「输入框已聚焦
-                    // 后再点不重发 onFocus」的场景（RN 行为，test.5 后真机偶尔仍
-                    // 弹的根因），改按触点位置一刀切：错派触摸的事件坐标保持手指
-                    // 原始位置（屏幕中下部，距胶囊数百 dp），真点胶囊触点必在
-                    // 胶囊上（含 hitSlop 与触点误差）。距中心 >100dp 即吞；坐标
-                    // 取不到时回落 setPermPanel 内的时间窗守卫（双保险）
-                    // （test.8 真机实况：坐标守卫后仍弹——探针 permProbe 记录每
-                    // 次判定的触点/距离数据，面板顶一行回读）
-                    const t = e.nativeEvent.changedTouches?.[0];
-                    const px = t?.pageX ?? e.nativeEvent.pageX;
-                    const py = t?.pageY ?? e.nativeEvent.pageY;
-                    const ctr = permPillCtr.current;
-                    const dist = ctr && typeof px === "number" && typeof py === "number"
-                      ? Math.round(Math.hypot(px - ctr.x, py - ctr.y)) : -1;
-                    permProbe.txt = `x=${typeof px === "number" ? Math.round(px) : "?"} y=${typeof py === "number" ? Math.round(py) : "?"} d=${dist}${ctr ? "" : "/noctr"}`;
-                    if (dist > 100) { permProbe.eaten++; return; }
-                    setPermPanel(true);
-                  }}
+                  onPress={() => setPermPanel(true)}
                   hitSlop={{ top: 8, bottom: 8, left: 6, right: 6 }}
                   accessibilityLabel={`权限模式：${PERM_LABEL[perm]}，点按选择`}
                 >
@@ -2439,9 +2447,11 @@ export default function DetailScreen({ sid, onBack, initialView, ref }: { sid: s
           )}
         </ScrollView>
       ) : v.k === "arts" ? (
-        /* #35 输出物视图（网页端第 6 tab 同构）：新建/修改两组（组内按最后写入降序）+
-           汇总行（N 个文件 · 新建 X · 修改 Y · +a −d）；行首扩展名 chip 按类型着色。
-           手机端打不开电脑文件——点行弹详情 sheet 给完整路径（复制/分享），不在此行内展开 */
+        /* #35 输出物视图（网页端第 6 tab 同构）。#222 起支持文件夹颗粒度：同父目录
+           ≥2 个文件聚成可折叠文件夹行（最近活跃的默认展开、其余折叠，点按开合有记忆），
+           文件夹与散文件按时间降序混排——最新交付永远在顶；存在文件夹时「新建/修改」
+           两组头降级为行内徽标，纯散文件会话保持两组头不变。行首扩展名 chip 按类型着色；
+           手机端打不开电脑文件——点行弹详情 sheet（复制/分享/拉取预览） */
         <ScrollView style={{ flex: 1 }} contentContainerStyle={{ padding: 14, paddingBottom: 40 + insets.bottom, ...((s.artifacts?.length ?? 0) === 0 ? { flexGrow: 1, justifyContent: "center", paddingBottom: 14 + insets.bottom } : null) }} showsVerticalScrollIndicator={false}>
           {(s.artifacts?.length ?? 0) === 0 ? (
             /* #49：空态文案不暴露内部机制（原三分提示句移除），只留一句话（与网页端同口径）；
@@ -2453,19 +2463,64 @@ export default function DetailScreen({ sid, onBack, initialView, ref }: { sid: s
             const created = arts.filter((t) => t.op === "create").sort(byRec);
             const edited = arts.filter((t) => t.op !== "create").sort(byRec);
             const KC: Record<ArtKind, string> = { code: c.brandA, doc: c.done, data: c.working, img: c.waiting, zip: c.dim, gen: c.faint };
-            const artRow = (t: ArtifactItem, i: number) => {
+            // #222 分组口径（与 web-console artifactsTabHtml 一致）：分组键 = 父目录
+            // toLowerCase 归一（Windows 源大小写不敏感）；同键 ≥2 文件才聚合，单文件
+            // 目录与根目录文件保持散文件；只按直接父目录一层，不递归
+            const dirN = new Map<string, number>();
+            for (const t of arts) {
+              const dir = artDirOf(s, t).toLowerCase();
+              if (dir) dirN.set(dir, (dirN.get(dir) ?? 0) + 1);
+            }
+            const folders = new Map<string, { key: string; dir: string; leaf: string; files: ArtifactItem[]; at: number; size: number }>();
+            const loose: ArtifactItem[] = [];
+            for (const t of arts) {
+              const dir = artDirOf(s, t);
+              const key = dir.toLowerCase();
+              if (dir && (dirN.get(key) ?? 0) >= 2) {
+                let g = folders.get(key);
+                if (!g) {
+                  g = { key, dir, leaf: dir.split(/[\\/]/).pop() || dir, files: [], at: 0, size: 0 };
+                  folders.set(key, g);
+                }
+                g.files.push(t);
+                const at = t.last_at || t.first_at || 0;
+                if (at > g.at) g.at = at;
+                if (typeof t.size === "number") g.size += t.size;
+              } else {
+                loose.push(t);
+              }
+            }
+            for (const g of folders.values()) g.files.sort(byRec);
+            // 默认开合：最近活跃（组内最新时间最大）的文件夹展开、其余折叠；
+            // 用户点过的以 artFold 显式记录优先
+            let newestKey = "";
+            let newestAt = -1;
+            for (const g of folders.values()) if (g.at > newestAt) { newestAt = g.at; newestKey = g.key; }
+            const folOpen = (k: string) => artFold[sid + "|" + k] ?? k === newestKey;
+            // 混排：文件夹（按组内最新时间）与散文件（按各自时间）降序同列竞争
+            const items = [
+              ...[...folders.values()].map((g) => ({ kind: "folder" as const, g })),
+              ...loose.map((t) => ({ kind: "file" as const, t })),
+            ].sort((a, b) =>
+              (b.kind === "folder" ? b.g.at : b.t.last_at || b.t.first_at || 0) -
+              (a.kind === "folder" ? a.g.at : a.t.last_at || a.t.first_at || 0),
+            );
+            const artRow = (t: ArtifactItem, i: number, opts?: { sub?: boolean; badge?: boolean }) => {
               const rel = artRelOf(s, t);
               const name = (rel || t.path).split(/[\\/]/).pop() || t.path;
-              const dir = rel
-                ? (rel.includes("/") || rel.includes("\\") ? rel.slice(0, Math.max(rel.lastIndexOf("/"), rel.lastIndexOf("\\")) + 1) : "")
-                : t.path.slice(0, t.path.length - name.length);
+              // 子行（文件夹展开列内）去目录前缀——目录信息由文件夹头行承载
+              const dir = opts?.sub
+                ? ""
+                : rel
+                  ? (rel.includes("/") || rel.includes("\\") ? rel.slice(0, Math.max(rel.lastIndexOf("/"), rel.lastIndexOf("\\")) + 1) : "")
+                  : t.path.slice(0, t.path.length - name.length);
               const dead = t.exists === false;
               const outside = !rel && t.origin !== "cwd";
               const kc = KC[artKindOf(name)];
               return (
                 <Pressable
                   key={t.path + "|" + i}
-                  style={[d.cronRow, i === 0 && { borderTopWidth: 0, marginTop: 0 }]}
+                  style={[d.cronRow, opts?.sub ? { borderTopWidth: 0, marginTop: 0, paddingVertical: 4 } : i === 0 ? { borderTopWidth: 0, marginTop: 0 } : null]}
                   android_ripple={{ color: c.tintSoft, borderless: false }}
                   onPress={() => setArtPop(t)}
                   accessibilityLabel={`输出物 ${name}，点按查看路径详情`}
@@ -2476,6 +2531,9 @@ export default function DetailScreen({ sid, onBack, initialView, ref }: { sid: s
                   <View style={{ flex: 1, minWidth: 0 }}>
                     <View style={d.artNameRow}>
                       <Text style={[d.cronName, dead && { color: c.dim }]} numberOfLines={1}>{name}</Text>
+                      {opts?.badge ? (
+                        <Text style={[d.artTag, t.op === "create" ? { color: c.done } : { color: c.dim }]}>{t.op === "create" ? "新建" : "修改"}</Text>
+                      ) : null}
                       {dead ? <Text style={[d.artTag, { color: c.error }]}>已删除</Text> : null}
                       {outside ? <Text style={[d.artTag, { color: c.working }]}>cwd 外</Text> : null}
                     </View>
@@ -2487,17 +2545,70 @@ export default function DetailScreen({ sid, onBack, initialView, ref }: { sid: s
                 </Pressable>
               );
             };
+            const artFolder = (g: { key: string; dir: string; leaf: string; files: ArtifactItem[]; at: number; size: number }, idx: number) => {
+              const open = folOpen(g.key);
+              return (
+                <View key={"fol|" + g.key}>
+                  <Pressable
+                    style={[d.cronRow, idx === 0 && { borderTopWidth: 0, marginTop: 0 }, d.artFolRow]}
+                    android_ripple={{ color: c.tintSoft, borderless: false }}
+                    onPress={() => setArtFold((m) => ({ ...m, [sid + "|" + g.key]: !open }))}
+                    accessibilityLabel={`文件夹 ${g.leaf}，${g.files.length} 个文件，点按${open ? "折叠" : "展开"}`}
+                  >
+                    <View style={[d.artChip, { borderColor: withA(c.brandB, 0.45) }]}>
+                      <Svg width={11} height={11} viewBox="0 0 24 24" fill="none" stroke={c.brandB} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+                        <Path d="M3.5 7.2c0-1.3 1-2.3 2.3-2.3h3l2 2.2h6.4c1.3 0 2.3 1 2.3 2.3v7.3c0 1.3-1 2.3-2.3 2.3H5.8c-1.3 0-2.3-1-2.3-2.3z" />
+                      </Svg>
+                    </View>
+                    <View style={{ flex: 1, minWidth: 0 }}>
+                      <View style={d.artNameRow}>
+                        <Text style={[d.cronName, d.artFolName]} numberOfLines={1}>{g.leaf}</Text>
+                        <Text style={[d.artTag, { color: c.brandB, borderColor: withA(c.brandB, 0.4) }]}>×{g.files.length}</Text>
+                      </View>
+                      <Text style={d.cronMeta} numberOfLines={1}>
+                        {/* 用户反馈：不堆「N 新建 · M 修改」摘要——几个文件、哪个任务的
+                            目录一目了然即可，op 细节看子行徽标 */}
+                        {[g.dir, g.size > 0 ? fmtArtSize(g.size) : "", fmtArtTime(g.at)].filter(Boolean).join(" · ")}
+                      </Text>
+                    </View>
+                    {/* #222 行尾统一 ⋯（2026-10-02 用户拍板，两端同口径）：chevron 换
+                        三点菜单钮弹文件夹 sheet（展开/收起 + 复制目录路径）；内层
+                        Pressable 优先接管触点，点它不会触发行级折叠切换 */}
+                    <Pressable
+                      hitSlop={8}
+                      onPress={() => setFolPop({ key: g.key, dir: g.dir, leaf: g.leaf, count: g.files.length, size: g.size, at: g.at, open })}
+                      accessibilityLabel={`文件夹 ${g.leaf} 操作`}
+                    >
+                      <Text style={d.artDots}>⋯</Text>
+                    </Pressable>
+                  </Pressable>
+                  {open ? (
+                    <View style={d.artKids}>
+                      {g.files.map((t, i) => artRow(t, i, { sub: true, badge: true }))}
+                    </View>
+                  ) : null}
+                </View>
+              );
+            };
             return (
               <>
                 <View style={d.artSum}>
-                  {/* 2026-09-21 用户：移除「新建 N · 修改 N / +N −N」统计（分组标题仍带计数，与网页端同改） */}
-                  <Text style={d.artSumN}>{arts.length} 个文件</Text>
+                  {/* 2026-09-21 用户：移除「新建 N · 修改 N / +N −N」统计（#222 聚合形态下
+                      两组头降级为行内徽标，计数由文件夹行「×N · N 新建」承载） */}
+                  <Text style={d.artSumN}>{arts.length} 个文件{folders.size ? ` · ${folders.size} 个文件夹` : ""}</Text>
                 </View>
                 {s.artifacts_truncated ? <Text style={d.artTrunc}>已截断 · 保留最新 200 条</Text> : null}
-                {created.length ? <Text style={[d.artGt, { color: c.done }]}>新建 {created.length} · 本会话产出</Text> : null}
-                {created.map(artRow)}
-                {edited.length ? <Text style={[d.artGt, { color: c.dim }]}>修改 {edited.length}</Text> : null}
-                {edited.map(artRow)}
+                {folders.size ? (
+                  /* #222 聚合形态：文件夹与散文件混排，「新建/修改」两组头消失 */
+                  items.map((it, idx) => (it.kind === "folder" ? artFolder(it.g, idx) : artRow(it.t, idx, { badge: true })))
+                ) : (
+                  <>
+                    {created.length ? <Text style={[d.artGt, { color: c.done }]}>新建 {created.length} · 本会话产出</Text> : null}
+                    {created.map((t, i) => artRow(t, i))}
+                    {edited.length ? <Text style={[d.artGt, { color: c.dim }]}>修改 {edited.length}</Text> : null}
+                    {edited.map((t, i) => artRow(t, i))}
+                  </>
+                )}
                 {/* #49：底部说明去掉"仅收录 Write/Edit…"工具清单（机制不外露）；
                     #51：补收录口径（文档类交付物），与网页端同句 */}
                 <Text style={d.artFoot}>仅收录文档、表格等交付物 · 点文件可拉取到手机预览</Text>
@@ -2882,7 +2993,6 @@ export default function DetailScreen({ sid, onBack, initialView, ref }: { sid: s
               // 期间曾长期处于此态且无任何视觉提示。现半透明弱化 + placeholder 说明原因，
               // 用户能自诊断「是断连不是键盘坏了」
               ref={inputRef}
-              onFocus={() => { lastFocusAt = Date.now(); }}
               style={[d.input, { height: inputH }, !canCmd && { opacity: 0.5 }]}
               value={input}
               onChangeText={editInput}
@@ -2969,6 +3079,17 @@ export default function DetailScreen({ sid, onBack, initialView, ref }: { sid: s
       {/* #216 同构修：弹层改常驻受控（勿改回条件挂卸，见各组件头注释） */}
       <ContentMenu text={menuText} onClose={() => setMenuText(null)} />
       <ArtSheet art={artPop} rel={artPop ? artRelOf(s, artPop) : ""} sid={sid} onClose={() => setArtPop(null)} />
+      {/* #222 文件夹 ⋯ sheet：开合态随 folPop 快照（folOpen 是输出物视图闭包局部，
+          根级不可达）；onToggle 写显式 artFold 记录 + 同步翻转快照，主 CTA 单发即关 */}
+      <ArtFolSheet
+        fol={folPop}
+        onToggle={() => {
+          if (!folPop) return;
+          setArtFold((m) => ({ ...m, [sid + "|" + folPop.key]: !folPop.open }));
+          setFolPop((p) => (p ? { ...p, open: !p.open } : p));
+        }}
+        onClose={() => setFolPop(null)}
+      />
       {taskPop != null ? (
         <TaskPop
           n={taskPop}
@@ -3142,8 +3263,6 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
   permTitleRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 4 },
   permTitle: { color: c.text, fontSize: 13, fontWeight: "600" },
   permX: { color: c.faint, fontSize: 14, lineHeight: 18 },
-  // #216 排查探针（test.8 临时）：9px mono 小字，只求真机截图回读可辨
-  permProbeT: { color: c.faint, fontSize: 9, fontFamily: "monospace", marginBottom: 4, lineHeight: 12 },
   permRow: {
     flexDirection: "row", alignItems: "center", gap: 8,
     paddingVertical: 9, paddingHorizontal: 8, borderRadius: 10, overflow: "hidden",
@@ -3211,6 +3330,13 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
   artNameRow: { flexDirection: "row", alignItems: "center", gap: 6 },
   artTag: { fontSize: 10, lineHeight: 13, borderWidth: 1, borderColor: c.line, borderRadius: 4, paddingHorizontal: 4, paddingVertical: 1 },
   artFoot: { color: c.faint, fontSize: 10.5, textAlign: "center", paddingVertical: 16 },
+  // #222 文件夹分组：文件夹头行（垂直居中 + 叶子名加粗）/ 行尾 ⋯ 菜单钮（与文件行
+  // 同款，点按弹文件夹 sheet，2026-10-02 用户拍板统一）/ 展开子列（左缘引导线 +
+  // 缩进，子行紧凑无分隔线）
+  artFolRow: { alignItems: "center" },
+  artFolName: { color: c.text, fontSize: 12.5, fontWeight: "700", lineHeight: 17 },
+  artDots: { color: c.faint, fontSize: 15, lineHeight: 18, paddingHorizontal: 2 },
+  artKids: { marginLeft: 13, borderLeftWidth: 1, borderLeftColor: c.line, paddingLeft: 8, marginVertical: 2 },
   // #83 sheet 重设计样式（仅 ArtSheet 使用，零共享）：字号阶梯 14 标题 > 13 CTA >
   // 12 次级按钮 > 11 元信息/路径 mono > 10 caption/相对路径 > 9 chip
   artTitleRow: { flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 2 },

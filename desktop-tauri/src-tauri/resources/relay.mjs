@@ -10337,8 +10337,8 @@ function unseal(box, theirPublicKeyB64, mySecretKeyB64) {
 }
 
 // src/index.ts
-import { networkInterfaces as networkInterfaces3, homedir as homedir13, hostname } from "node:os";
-import { join as join18 } from "node:path";
+import { networkInterfaces as networkInterfaces3, homedir as homedir13, hostname, tmpdir as tmpdir2 } from "node:os";
+import { join as join18, sep as sep7 } from "node:path";
 import { writeFileSync as writeFileSync13, openSync as openSync3, readFileSync as readFileSync18, rmSync as rmSync3, existsSync as existsSync12, readdirSync as readdirSync7, statSync as statSync6 } from "node:fs";
 import { spawn as spawn4, execFileSync as execFileSync2 } from "node:child_process";
 import { fileURLToPath as fileURLToPath4 } from "node:url";
@@ -41090,6 +41090,15 @@ var AgentSession = class _AgentSession {
         // PATH 补全：见 childEnv()（M0）
         env: childEnv(),
         permissionMode: opts?.permissionMode ?? "default",
+        // #217 无条件带授权标志（CLI 子代理 spawn 同款语义：mode 任意 + allowBypass
+        // 独立正交）：SDK 的 permissionMode 只是 --permission-mode 参数，不构成「以跳过
+        // 权限启动」的授权——CLI 只认 --allow-dangerously-skip-permissions。缺失时
+        // resume 恢复 bypass 档被 Refusing restored mode 静默回落 default（relay 重启
+        // 后 bypass 会话被降级、且运行中 setPermissionMode 切跳过必被拒的根源），
+        // 已被降级的存量会话也永远回不去。带标志不改变初始档（初始档仍由
+        // permissionMode 决定），只打开运行中切跳过档的门——面板跳过行本就有
+        // 「危险」badge + 二次武装，用户点击即明确授权
+        allowDangerouslySkipPermissions: true,
         ...opts?.resume ? { resume: opts.resume } : {},
         // #7 看门狗：包一层默认 spawn 记 pid（SDK 默认行为 = spawn(cmd, args,
         // {stdio 三 pipe, cwd, env, signal})，这里逐项镜像）。杀树/CPU 采样都要 pid
@@ -42213,6 +42222,7 @@ function writePinnedSessions(dataDir2, ids) {
 var UPDATE_THROTTLE_MS = 2e3;
 var HEARTBEAT_INTERVAL_MS = 5e3;
 var CRON_POLL_INTERVAL_MS = 3e4;
+var ARTIFACT_STAT_INTERVAL_MS = 2e4;
 var MAX_SESSIONS = 20;
 var ARTIFACT_FETCH_MAX_BYTES = 20 * 1024 * 1024;
 var ARTIFACT_CHUNK_BYTES = 512 * 1024;
@@ -42285,6 +42295,8 @@ var SessionManager = class {
       this.pollTaskStore();
     }, CRON_POLL_INTERVAL_MS);
     c.unref();
+    const r = setInterval(() => this.pollArtifactsExistence(), ARTIFACT_STAT_INTERVAL_MS);
+    r.unref();
   }
   bus;
   sessions = /* @__PURE__ */ new Map();
@@ -42323,7 +42335,11 @@ var SessionManager = class {
     return this.deletedExtIds.has(id2);
   }
   snapshot() {
-    return [...this.sessions.values()].map((s) => this.cloneState(s));
+    return [...this.sessions.values()].map((s) => {
+      const c = this.cloneState(s);
+      if (c.artifacts) c.artifacts = c.artifacts.filter((a) => a.exists !== false);
+      return c;
+    });
   }
   // 自动命名：一次轻量模型调用把首条 prompt 变成短标题（托管/外部会话通用）
   // CC 自带的 session name 在本环境基本不生成，这里兜底；已有 CC 名时外部会话由 bridge 跳过
@@ -42751,7 +42767,8 @@ var SessionManager = class {
       status: s.state.status,
       action_summary: s.state.action_summary,
       stats: { ...s.state.stats },
-      artifacts: list.map((a) => ({ ...a })),
+      artifacts: this.aliveArtifacts(s),
+      // #224 下发前 re-stat + 剔除已删
       ...s.state.artifacts_truncated ? { artifacts_truncated: true } : {}
     });
   }
@@ -42796,15 +42813,19 @@ var SessionManager = class {
       status: s.state.status,
       action_summary: s.state.action_summary,
       stats: { ...s.state.stats },
-      artifacts: list.map((a) => ({ ...a })),
+      artifacts: this.aliveArtifacts(s),
+      // #224 下发前 re-stat + 剔除已删
       ...s.state.artifacts_truncated ? { artifacts_truncated: true } : {}
     });
     return { ok: true };
   }
   // cwd→会话归因核心（deliverByCwd 与 #138 验收单回填通知共用）：会话 cwd 与入参
   // cwd 互为前缀都算（agent 会 cd 进子目录交付，也可能反向），命中多个取最近活跃。
-  // Bash 环境拿不到 CLAUDE_SESSION_ID，cwd 前缀+新鲜度是可得的最强归因；同仓库并行
-  // 会话极端场景可能归到姊妹会话，可接受（看板仍在，只是挂在隔壁卡上）。
+  // #227 起降级为兜底：Claude Code 的 Bash 子进程环境现已注入 CLAUDE_CODE_SESSION_ID
+  //（deliver 脚本自动携带、hook 上下文经 CC_DECK_SESSION_ID 透传），/api/deliver 带
+  // session_id 走 deliverBySession 精确挂账——同仓库并行会话被「最近活跃」抢归属的
+  // 误挂（2026-10-02 实锤：推广会话产物挂到外部会话名下）从根上消除。本启发式保留
+  // 给无身份调用：手动终端跑 deliver、#138 验收单回填（relay 自己发起，无会话身份）。
   // 空 cwd 会话跳过（原先 "" + sep 会前缀匹配一切绝对路径，属潜在误归因，顺手修复）
   // #203 realpath 归一（2026-09-25）：macOS /tmp 是 /private/tmp 的符号链接——会话
   // 登记逻辑路径（/tmp）与 Bash/hook 上报物理路径（/private/tmp/keyhive）两种形态
@@ -42840,6 +42861,80 @@ var SessionManager = class {
     const r = this.registerDeliverable(sid, rawPath);
     return r.ok ? { ok: true, session_id: sid } : r;
   }
+  // #230 CLI 原生 sid → 卡 id 反查：deliverBySession 第三查取。裸 UUID 老卡（journal
+  // 回放保留的前 ext- 约定外部卡）与托管会话的卡 id 都和 CLI sid 无前缀推导关系，
+  // 唯一锚点是 state.relay_session_id（ensureExternal 建卡/收养时写入，托管会话即
+  // SDK 会话 id）。ownsCliSession 的返回 id 版本（同款遍历，低频调用可忽略）
+  findByCliSid(cliSid) {
+    for (const s of this.sessions.values()) if (s.state.relay_session_id === cliSid) return s.state.session_id;
+    return null;
+  }
+  // #227 显式归因（/api/deliver 带 session_id）：会话在册 → 精确挂账，绕开 cwd 启发式。
+  // 三查：①卡 id 直接命中（托管会话）②ext- 前缀形态（deliver 环境拿到的是 CLI 原生
+  // id，现行外部会话在 sessions 里存的是 ext- 前缀形态）③relay_session_id 反查（#230
+  // 补：老外部卡/托管卡 id 与 CLI sid 无前缀关系，2026-10-02 生产实锤——deliver 带
+  // CLI sid 两查全 miss，回落 cwd 启发式把产物挂给隔壁卡）。sid 不在册（会话已清理/
+  // env 残留）回落 deliverByCwd——宁可挂隔壁也不丢单。响应带实际归属的卡 id 供核对
+  //（deliverables.json 按 e.sid === 卡 id 绑定，回放 applyDeclaredDeliverables 同口径）
+  deliverBySession(sid, cwd, rawPath) {
+    const real = this.sessions.has(sid) ? sid : this.sessions.has(`ext-${sid}`) ? `ext-${sid}` : this.findByCliSid(sid);
+    if (real) {
+      const r = this.registerDeliverable(real, rawPath);
+      return r.ok ? { ok: true, session_id: real } : r;
+    }
+    return this.deliverByCwd(cwd, rawPath);
+  }
+  // #224 输出物存在性复查（2026-10-02 用户：「已经删除的输出物为什么还要展示——嫌
+  // 列表不够多不够乱吗」）。设计：面板 = 磁盘现状，不是历史清单——已删条目
+  // （exists === false）一律不下发（emit 帧 / SNAPSHOT 均过滤），删除即从面板消失；
+  // state 内部保留 dead 条目（文件重建时 mergeArtifact 合并复用 adds/dels 历史，
+  // transcript 重扫幂等），fetch 白名单含 dead 无安全问题（文件不在自然 404）。
+  // 复查两层：① 20s 定时轮询（变化才广播，全端面板 ≤20s 收敛）；② 每次 artifacts
+  // 帧下发前 re-stat（emit 点各自调用），保证任何出口数据新鲜。不动 updated_at——
+  // stat 不是会话活动（#157 教训：虚假刷活跃会破坏置灰计时）。
+  restatArtifacts(s) {
+    const list = s.state.artifacts;
+    if (!list || !list.length) return false;
+    let changed = false;
+    s.state.artifacts = list.map((a) => {
+      let size;
+      let exists = true;
+      try {
+        size = statSync4(a.path).size;
+      } catch {
+        exists = false;
+      }
+      if (exists !== a.exists || size !== a.size) {
+        changed = true;
+        return { ...a, size, exists };
+      }
+      return a;
+    });
+    return changed;
+  }
+  // #224 下发口径：re-stat 后剔除已删条目（拷贝下发，防客户端改内存态）
+  aliveArtifacts(s) {
+    this.restatArtifacts(s);
+    return (s.state.artifacts ?? []).filter((a) => a.exists !== false).map((a) => ({ ...a }));
+  }
+  // #224 定时轮询：有 artifacts 的会话全量 re-stat，有变化才广播（无变化静默——
+  // 避免每 20s 无意义 SESSION_UPDATED 刷全端）。updated_at 帧内显式携带 state 原值：
+  // stat 不是会话活动（#157），缺省时三端回落信封时间戳会把删文件/改尺寸刷成
+  // 「最后活跃＝当下」，闲置置灰计时被重置
+  pollArtifactsExistence() {
+    for (const [id2, s] of this.sessions) {
+      if (!s.state.artifacts?.length) continue;
+      if (!this.restatArtifacts(s)) continue;
+      this.bus.emit(id2, "SESSION_UPDATED", {
+        status: s.state.status,
+        action_summary: s.state.action_summary,
+        stats: { ...s.state.stats },
+        artifacts: (s.state.artifacts ?? []).filter((a) => a.exists !== false).map((a) => ({ ...a })),
+        ...s.state.artifacts_truncated ? { artifacts_truncated: true } : {},
+        updated_at: s.state.updated_at
+      });
+    }
+  }
   // 重启回放：把该会话登记过的交付物挂回（登记不在 transcript，靠 deliverables.json）
   applyDeclaredDeliverables(sessionId) {
     const s = this.sessions.get(sessionId);
@@ -42871,13 +42966,13 @@ var SessionManager = class {
     for (const it2 of items) this.mergeArtifact(id2, it2, true);
     this.applyDeclaredDeliverables(id2);
     if (!s.state.artifacts) return;
-    const merged = s.state.artifacts;
     s.state.updated_at = at ?? Date.now();
     this.bus.emit(id2, "SESSION_UPDATED", {
       status: s.state.status,
       action_summary: s.state.action_summary,
       stats: { ...s.state.stats },
-      artifacts: (merged ?? []).map((a) => ({ ...a })),
+      artifacts: this.aliveArtifacts(s),
+      // #224 下发前 re-stat + 剔除已删
       ...s.state.artifacts_truncated ? { artifacts_truncated: true } : {},
       updated_at: s.state.updated_at
     });
@@ -43093,7 +43188,9 @@ var SessionManager = class {
             this.pushExternalLog(live.state.session_id, "system", `\u6743\u9650\u6A21\u5F0F\u5207\u6362: ${PERM_MODE_ZH[mode]}`);
             this.emitUpdated(live, true);
           }).catch((e) => {
-            this.pushExternalLog(live.state.session_id, "system", `\u6743\u9650\u6A21\u5F0F\u5207\u6362\u5931\u8D25: ${e instanceof Error ? e.message : String(e)}`);
+            const raw = e instanceof Error ? e.message : String(e);
+            const friendly = /not launched with --dangerously-skip-permissions/.test(raw) ? "\u8DF3\u8FC7\u6863\u4E0D\u53EF\u7528\uFF1A\u8BE5\u4F1A\u8BDD\u4E0D\u662F\u4EE5\u8DF3\u8FC7\u6743\u9650\u521B\u5EFA\u7684\uFF08\u8DF3\u8FC7\u6863\u53EA\u80FD\u5728\u521B\u5EFA\u4F1A\u8BDD\u65F6\u5F00\u542F\uFF09" : raw;
+            this.pushExternalLog(live.state.session_id, "system", `\u6743\u9650\u6A21\u5F0F\u5207\u6362\u5931\u8D25: ${friendly}`);
           });
           return { command_id: cmd.command_id, ok: true };
         }
@@ -44893,7 +44990,7 @@ function removeKnownTexts(s, known) {
 }
 function foreignResidual(box, knownTexts) {
   const stripped = box.map((l, i) => i === 0 ? l.replace(/^\s*❯\s*/, "") : l.replace(/^\s+/, ""));
-  const residuals = ["", " "].map((sep7) => maskNoise(removeKnownTexts(stripped.join(sep7), knownTexts)));
+  const residuals = ["", " "].map((sep8) => maskNoise(removeKnownTexts(stripped.join(sep8), knownTexts)));
   return residuals.every((r) => r) ? residuals[0] ?? "" : "";
 }
 var sleep = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -47889,12 +47986,13 @@ function startServer(bus2, mgr2, cfg2, opts = {}) {
       });
       req.on("end", () => {
         try {
-          const { path: p, cwd } = JSON.parse(body);
+          const { path: p, cwd, session_id: sid } = JSON.parse(body);
           if (typeof p !== "string" || !p.trim()) {
             res.writeHead(400, { "content-type": "application/json" }).end('{"ok":false,"error":"path \u5FC5\u586B"}');
             return;
           }
-          const r = mgr2.deliverByCwd(typeof cwd === "string" && cwd ? cwd : p, p);
+          const c = typeof cwd === "string" && cwd ? cwd : p;
+          const r = typeof sid === "string" && /^[A-Za-z0-9-]{8,64}$/.test(sid) ? mgr2.deliverBySession(sid, c, p) : mgr2.deliverByCwd(c, p);
           res.writeHead(r.ok ? 200 : 404, { "content-type": "application/json" }).end(JSON.stringify(r));
         } catch {
           res.writeHead(400).end("bad json");
@@ -48501,8 +48599,8 @@ var CloudClient = class {
   }
   bridgeUrl() {
     const base = this.url ?? this.cfg.cloudUrl;
-    const sep7 = base.includes("?") ? "&" : "?";
-    return `${base}${sep7}token=${encodeURIComponent(this.cfg.cloudToken)}&dev=${this.identity.relayDev}&rk=${encodeURIComponent(this.identity.keypair.publicKey)}`;
+    const sep8 = base.includes("?") ? "&" : "?";
+    return `${base}${sep8}token=${encodeURIComponent(this.cfg.cloudToken)}&dev=${this.identity.relayDev}&rk=${encodeURIComponent(this.identity.keypair.publicKey)}`;
   }
   connect() {
     if (this.stopped) return;
@@ -49400,7 +49498,8 @@ startServer(bus, mgr, cfg, {
     const bridgeJson = JSON.stringify({ port: cfg.port, token: cfg.bridgeToken });
     writeFileSync13(join18(cfg.dataDir, "bridge.json"), bridgeJson, "utf-8");
     const hookHome = join18(homedir13(), ".cc-deck", "data");
-    if (cfg.dataDir !== hookHome && existsSync12(hookHome)) {
+    const sandboxed = !!process.env.CLAUDE_CONFIG_DIR || [tmpdir2(), "/tmp", "/private/tmp", "/var/tmp"].some((t) => (cfg.dataDir + sep7).startsWith(t + sep7));
+    if (cfg.dataDir !== hookHome && !sandboxed && existsSync12(hookHome)) {
       try {
         writeFileSync13(join18(hookHome, "bridge.json"), bridgeJson, "utf-8");
       } catch {
