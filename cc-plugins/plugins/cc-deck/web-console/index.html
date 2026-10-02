@@ -600,6 +600,8 @@
   .gp-plug-row .gp-plug-t .gp-plug-n { font-size: 13px; font-weight: 600; color: var(--gp-text); }
   .gp-plug-row .gp-plug-d { font-size: 11px; color: var(--gp-dim); line-height: 1.45; }
   .gp-plug-rows.off .lever { opacity: .45; pointer-events: none; }
+  /* #17 第二批：设置被部署面（env）锁定时的只读拨杆（同 #448 禁点视觉） */
+  .gp-rows.locked .lever { opacity: .45; pointer-events: none; }
   .gp-plug-note { font-size: 11px; color: var(--gp-faint); padding: 0 4px; line-height: 1.5; }
   /* 已配对设备清单（议题① 2026-09-09）：行 = 在线点/kind 徽章/名称/dev/配对时间/移除 */
   .gp-peers-list { display: flex; flex-direction: column; gap: 2px; }
@@ -1073,6 +1075,72 @@
     padding: 1px 5px; border-radius: 999px; line-height: 1.2;
   }
   .src-badge .sb-t { max-width: 96px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+  /* ---------- #26 M2 组织区（v3.1 矩阵式）：确认卡 + 项目组 chips + 组织徽标 + 详情抽屉 ---------- */
+  #orgzone { display: none; flex-direction: column; gap: 7px; padding: 2px 16px 10px; }
+  #orgzone.show { display: flex; }
+  .org-cfs { display: flex; flex-direction: column; gap: 5px; }
+  .org-cf { display: flex; align-items: center; gap: 8px; padding: 6px 9px; border-radius: 9px;
+    border: 1px solid rgba(217,119,87,.5); background: rgba(217,119,87,.1); }
+  .org-cf-k { flex: none; font-size: 11px; font-weight: 700; color: var(--brand); }
+  .org-cf-t { flex: 1; min-width: 0; overflow: hidden; }
+  .org-cf-t b { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    font-size: 11.5px; font-weight: 600; color: var(--text); }
+  .org-cf-t i { display: block; font-style: normal; font-size: 10.5px; color: var(--faint);
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .org-cf button { flex: none; width: 34px; min-width: 34px; padding: 4px 0; justify-content: center; } /* #12 审查：✓/✗ 基类形态不同（圆钮 vs 胶囊）曾致 37/30px 不齐，定宽统一 */
+  .org-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+  .org-chip { display: inline-flex; align-items: center; gap: 5px; font-size: 11px; padding: 3px 9px;
+    border-radius: 999px; color: var(--text); max-width: 180px; }
+  .org-chip > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .org-chip i { font-style: normal; font-size: 10px; color: var(--dim); flex: none; }
+  .org-chip.active { border-color: rgba(85,217,138,.55); background: rgba(85,217,138,.1); }
+  .org-chip.pending { border-color: rgba(232,181,4,.55); background: rgba(232,181,4,.1); }
+  .org-chip.parked { border-style: dashed; } /* 冲刺 #12：挂起弱化改虚线边框（原 opacity .62 压字 → 对比度不达标） */
+  .org-chip.on { outline: 1.5px solid rgba(217,119,87,.65); }
+  /* 会话卡组织徽标（§2.5 分流的列表形态）：[组名] 组归属 / [随手办] 无组派单 */
+  .org-badge { display: inline-flex; align-items: center; flex: none; font-size: 9px; font-weight: 600;
+    color: var(--text); padding: 1px 5px; border-radius: 999px; line-height: 1.2;
+    border: 1px solid var(--border); max-width: 110px; }
+  .org-badge > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .org-badge.lv { color: var(--faint); border-style: dashed; }
+  /* 项目组详情抽屉（右侧滑入）：状态/编制/任务板/回执流分节 */
+  #orgdrawer { position: fixed; inset: 0; z-index: 61; background: rgba(2,5,10,.45); display: flex; justify-content: flex-end; }
+  #orgdrawer .od-panel { width: min(430px, 94vw); background: var(--panel); border-left: 1px solid var(--border);
+    display: flex; flex-direction: column; overflow: hidden; box-shadow: -10px 0 34px rgba(0,0,0,.35); }
+  #orgdrawer .od-head { display: flex; align-items: center; gap: 8px; padding: 13px 15px; border-bottom: 1px solid var(--border); }
+  #orgdrawer .od-head b { flex: 1; min-width: 0; font-size: 13.5px; color: var(--text);
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  #orgdrawer .od-st { flex: none; font-size: 10.5px; padding: 2px 8px; border-radius: 999px;
+    border: 1px solid var(--border); color: var(--dim); }
+  #orgdrawer .od-body { flex: 1; overflow-y: auto; padding: 10px 15px 20px; }
+  #orgdrawer h5 { margin: 15px 0 6px; padding-top: 12px; border-top: 1px solid var(--border); /* #12 审查：分区分隔（原仅留白，标题过弱分区靠猜） */
+    font-size: 11px; color: var(--dim); font-weight: 600; letter-spacing: .04em; }
+  #orgdrawer .od-sess { display: flex; align-items: center; gap: 7px; padding: 5px 7px; border-radius: 8px;
+    cursor: pointer; font-size: 12px; color: var(--text); }
+  #orgdrawer .od-sess:hover { background: rgba(127,127,127,.09); }
+  #orgdrawer .od-sess .od-nm { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  #orgdrawer .od-sess .od-sst { flex: none; font-size: 10px; color: var(--faint); }
+  /* #26 M3 熟手池行：经验 N 次 · 上次 · 在忙/空闲（§5 成员卡进化）——右端三段
+     恒定不跳位；退休/挂起行去指针态弱化 */
+  #orgdrawer .od-pl .od-pl-cnt, #orgdrawer .od-pl .od-pl-last { flex: none; font-size: 10px; color: var(--faint); font-variant-numeric: tabular-nums; }
+  #orgdrawer .od-pl .od-pl-tag { flex: none; font-size: 9px; color: var(--dim); border: 1px solid var(--border); border-radius: 999px; padding: 0 5px; }
+  #orgdrawer .od-pl .od-pl-bad { flex: none; font-size: 9px; color: var(--err, #e5484d); }
+  #orgdrawer .od-pl .od-pl-free { flex: none; font-size: 10px; color: var(--ok, #30a46c); }
+  #orgdrawer .od-pl .od-pl-busy { flex: none; font-size: 10px; color: var(--warn, #cb7600); }
+  #orgdrawer .od-pl .od-pl-dim { flex: none; font-size: 10px; color: var(--faint); }
+  #orgdrawer .od-pl-off { cursor: default; opacity: .62; }
+  #orgdrawer .od-pl-off:hover { background: none; }
+  #orgdrawer .od-col { display: flex; flex-direction: column; gap: 5px; }
+  #orgdrawer .od-ent { padding: 6px 9px; border: 1px solid var(--border); border-radius: 8px; font-size: 12px; color: var(--text); }
+  #orgdrawer .od-ent .od-note { font-size: 10.5px; color: var(--faint); margin-top: 2px; }
+  #orgdrawer .od-cols3 { display: flex; gap: 8px; align-items: start; }
+  #orgdrawer .od-cols3 > div { flex: 1; min-width: 0; }
+  #orgdrawer .od-cols3 h6 { font-size: 10.5px; color: var(--faint); margin: 0 0 4px; font-weight: 600; }
+  #orgdrawer .od-rec { padding: 5px 8px; border-left: 2px solid var(--border); margin-bottom: 5px; font-size: 11.5px; color: var(--dim); }
+  #orgdrawer .od-rec b { color: var(--text); font-weight: 600; }
+  #orgdrawer .od-rec .od-meta { font-size: 10px; color: var(--faint); margin-top: 1px; }
+  #orgdrawer .od-empty { font-size: 11.5px; color: var(--faint); padding: 4px 2px; }
 
   /* ---------- 主体 ---------- */
   main { flex: 1; display: flex; overflow: hidden; }
@@ -1982,7 +2050,7 @@
     font-size: 11px; color: var(--dim); opacity: .8;
     white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0;
   }
-  /* ---------- 回到底部浮钮（对齐手机端形态）：消息 tab 下滚动停止且距底 >80px 才浮现；
+  /* ---------- 回到底部浮钮（对齐手机端形态）：对话 tab（原「消息」，#26 M2 词表迁移）下滚动停止且距底 >80px 才浮现；
      绝对定位挂 #cmdbar（不随 #timeline 滚动），bottom:100%+10px 即悬停于输入区上方 10px ---------- */
   #cmdbar > #toBottomBtn {
     position: absolute; bottom: calc(100% + 10px); left: 50%;
@@ -2260,6 +2328,9 @@
       <button id="densityBtn" class="hbtn" title="切换列表密度">密度·标准</button>
     </div>
     <div id="srcChips"></div>
+    <!-- #26 M2 组织区（v3.1 §2/§6）：待决议确认卡（用户是指挥/验收者，✓/✗ 即决议）
+         + 项目组三态 chips（点开详情抽屉）。JS 渲染，旧 relay 无团队字段时整区隐藏 -->
+    <div id="orgzone" hidden></div>
     <div id="cards"></div>
     <div id="newbox">
       <div id="newform">
@@ -2277,6 +2348,10 @@
           <!-- #208 目录自动创建（用户配置开关）：勾选随命令带 autoMkdir，relay 侧按输入路径
                mkdir -p（含多级，时间线说明）；不勾（默认）＝旧行为回落默认目录并说明。偏好型开关本地记忆 -->
           <label class="skip-perm" title="勾选：输入的工作目录不存在时按路径新建（含多级）。不勾：回落默认目录并在会话时间线说明"><input type="checkbox" id="autoMkdir">目录不存在时自动创建</label>
+          <!-- #27 引擎选择（偏好型，本地记忆）：codex = CodexAgentSession（codex exec
+               驱动，无审批卡/附图仅首回合；模型接线在 ~/.codex/config.toml）。旧 relay
+               忽略未知字段 = 建出 claude 会话，无害 -->
+          <label class="skip-perm" title="勾选：用 Codex CLI 引擎跑这个会话（需 relay 侧装好 codex 并完成接线）。不勾：默认 Claude 引擎。"><input type="checkbox" id="useCodex">用 Codex 引擎</label>
           <!-- #23 认知引导（罗嗦文案收进悬浮）：面板新建的是后台会话（无终端窗口）；想在终端里看到对话需装 CLI 插件 -->
           <span class="hint-q" title="此为后台会话（无终端窗口）。想在终端里看到对话？给电脑端 CLI 装 CC Deck 插件后用「终端」会话。">?</span>
         </div>
@@ -2383,6 +2458,17 @@
               <span class="gi"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3.4 20.6 8 12 12.6 3.4 8Z"/><path d="m3.4 12.4 8.6 4.6 8.6-4.6"/><path d="m3.4 16.6 8.6 4.6 8.6-4.6"/></svg></span>
               <span class="gp-plug-t"><span class="gp-plug-n">开机自启（系统服务）</span><span class="gp-plug-d">开机即有 relay，手机随时可连，不依赖 CC Deck 开着；切换会短暂重启 relay，各端秒级自动恢复</span></span>
               <div class="lever" id="gpSvcLever" style="--n:2"><i class="lever-thumb"></i><button type="button" class="lever-opt" data-i="0">关</button><button type="button" class="lever-opt" data-i="1">开</button></div>
+            </div>
+          </div>
+          <!-- #17 第二批 雇员会话独立存放：数据走 SNAPSHOT.settings + SETTINGS_UPDATED
+               实时收敛，切换发 COMMAND_SETTINGS_UPDATE（ws 通道——LAN/云桥两路同权，
+               区别于 #448 插件页的本机 HTTP）。旧 relay 无 settings 键 → 整卡隐藏不误导；
+               source=env（部署面环境变量显式设置）→ 拨杆锁定只读 -->
+          <div class="gp-card gp-rows" id="gpEmpHomeCard" style="display:none;margin-bottom:10px">
+            <div class="gp-row gp-plug-row">
+              <span class="gi"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3.5 10.5 12 3.8l8.5 6.7"/><path d="M5.5 9.5V20h13V9.5"/><path d="M10 20v-5h4v5"/></svg></span>
+              <span class="gp-plug-t"><span class="gp-plug-n">雇员会话独立存放</span><span class="gp-plug-d" id="gpEmpHomeDesc">团队成员（Leader 与派单成员）的会话记录与日常终端会话分开存放；改动只影响之后新建的会话，已有会话保持原处</span></span>
+              <div class="lever" id="gpEmpHomeLever" style="--n:2"><i class="lever-thumb"></i><button type="button" class="lever-opt" data-i="0">关</button><button type="button" class="lever-opt" data-i="1">开</button></div>
             </div>
           </div>
           <div class="gp-sec"><svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9 5.5 10.5 4h3L15 5.5"/><rect x="4" y="5.5" width="16" height="15" rx="3"/><path d="M8.5 11h7M8.5 15h4.5"/></svg>已配对设备</div>
@@ -2496,7 +2582,8 @@
         </div>
       </div>
       <div class="tabs" title="点击或 ←/→ 键切换视图">
-        <button data-tab="activity" class="tab active">消息</button>
+        <!-- #26 M2 词表迁移（v3.1 §2.4）：「消息」→「对话」 -->
+        <button data-tab="activity" class="tab active">对话</button>
         <button data-tab="todos" class="tab">任务</button>
         <button data-tab="log" class="tab">全部</button>
         <button data-tab="artifacts" class="tab">输出物</button>
@@ -2916,6 +3003,8 @@ function ensureCtx(cfg) {
       cfg, status: "offline", statusText: "未连接",
       sessions: new Map(), timelines: new Map(), lastSeq: 0, models: [], deliverables: false,
       allowRules: null, // #212 记住规则（SNAPSHOT.allow_rules；null = 旧 relay 不支持）
+      empHomeSettings: null, // #17 第二批 雇员独立家设置（SNAPSHOT.settings；null = 旧 relay 不支持，卡隐藏）
+      projects: null, orgConfirms: [], boards: new Map(), // #26 M2 组织态（projects null = 旧 relay 不支持，组织区不渲染；boards 由 BOARD_UPDATED 增量维护）
       ws: null, reconnectDelay: RETRY_BASE_MS, reconnectTimer: 0,
       failKind: "", retryAt: 0, retryNote: "", // #40web 失败归因/重试倒计时（见 setConn/scheduleReconnect）
       pendingPair: null, pairTimer: 0, pingTimer: null, lastPong: 0,
@@ -3291,7 +3380,16 @@ function resetCloudPairing(cfg) {
 // rd 空串 = 配对码定位广播态（多 relay 桥凭码找持码者）：to:"*" + bc 标记，未持码
 // relay 静默；否则经典单播（旧 relay 全兼容）
 function sendPairReq(ctx, pair, dev) {
-  const body = { t: "pair_req", code: pair.pc, pubkey: ckp.publicKey, name: "web-" + dev.slice(3, 11) };
+  // #29（C-P0-1）：信标帧（扫码登录态 pc 空的在场帧）绝不携带 pubkey——公共桥上
+  // 假 relay 读到 web 公钥即可不经手机授权、直接密封 pair_ack 冒充授权（扫码态页面
+  // 无从比对身份，「密封即授权证明」的论证建立在公钥从未暴露之上，信标恰恰破坏了
+  // 该前提——3699 旧注释自称页面从未暴露公钥，与事实矛盾）。授权链里 relay 所需的
+  // web 公钥由手机 grant 带到（COMMAND_LOGIN_GRANT），信标只作 sighting 在场记录。
+  // 新版 relay 对「无钥空码信标」放行记 f.from；带码帧仍携公钥（码即信任锚，relay
+  // 凭码采信随帧公钥密封 ack）。部署顺序铁律：relay 先发、页面后发（反序会让新版
+  // 页面的信标被旧 relay 拒收，合并码跨网回传的在线判定失灵）
+  const body = { t: "pair_req", code: pair.pc, name: "web-" + dev.slice(3, 11) };
+  if (pair.pc) body.pubkey = ckp.publicKey;
   // #42 web 侧自报元数据：浏览器 UA 摘要 + 平台（relay 存入信任清单，管理卡可辨）
   try {
     const ua = navigator.userAgent;
@@ -3498,13 +3596,25 @@ function onCloudTextRaw(ctx, text) {
     // !pick 分支）；无码流程（扫码登录/运行中）维持歧义即停——交用户决断
     clearTimeout(ctx.discTimer); ctx.discTimer = 0;
     const all = (Array.isArray(f.relays) ? f.relays : [])
-      .filter((x) => x && typeof x.dev === "string" && x.dev.startsWith("rl-"));
+      .filter((x) => x && typeof x.dev === "string" && x.dev.startsWith("rl-"))
+      // #29（B 路纵深）：上报 rk 的条目必须自洽（dev === devId(rk, "rl")，公钥前 8 字节
+      // 派生=64bit 原象碰撞不可行）。桥侧 rl- 注册无鉴权，顶替者可冒真 dev 上报假 rk——
+      // hit 命中后 3620 会把假 rk 写进配对锚，后续所有密封永久指向攻击者公钥（全接管，
+      // 无需 ack 竞争）；自洽校验把错位组合在发现列表源头剔除。无 rk 条目=旧版 relay，
+      // 保留走旧路径（rk 回落记忆真值，顶替者无私钥密封不出能被解开的 ack）
+      .filter((x) => !x.rk || (typeof x.rk === "string" && devId(x.rk, "rl") === x.dev));
     const pair = ctx.pendingPair || pendingPairOf(cfg.id);
     const peer = cloudPeerOf(cfg);
     const known = [pair && pair.rd, peer && peer.relay_dev, cfg.cloud && cfg.cloud.rd, BAKED_RELAY.rd]
       .filter((x) => x && typeof x === "string");
     const hit = all.find((x) => known.includes(x.dev));
-    const pick = hit || (all.length === 1 ? all[0] : null);
+    // #29（C-P1-1）：「列表唯一=换代新身份」只服务无锚点的新配对。流程携带 rd 锚
+    //（配对链接 / QR fresh / 输码携记忆身份）时禁止被唯一在线者覆盖——公共桥上假
+    // relay 注册成唯一在线即被当「换代」采信，rd 被改写后 pair_ack 身份比对恒真
+    //（码与公钥一起交给攻击者）。锚定流程目标不在线=明示「电脑端 relay 离线」，
+    // 真换代重领码（新码携新 fresh rd）/重扫码即恢复
+    const anchored = !!(pair && pair.rd);
+    const pick = hit || (!anchored && all.length === 1 ? all[0] : null);
     if (!pick) {
       // 输码态 + 多台在线且无可信锚点：配对码即定位凭据——改广播 pair_req，持码
       // relay 才回 pair_ack、其余静默；ack 由哪台密封未知，候选公钥逐个试解
@@ -3524,9 +3634,10 @@ function onCloudTextRaw(ctx, text) {
       if (pair && !pair.pc && all.length > 1) {
         // #88 扫码登录态多 relay 歧义：无码可广播定位，但不必「歧义即停」——QR 无
         // rd（fresh 未置）时手机走自己的活动源授权，回传由活动源密封，身份无法
-        // 预知。把在线候选公钥挂 cands 供 unseal 兜底逐个试解。安全性不变：页面
-        // 从未暴露自己的公钥，能对它密封 pair_ack 的只有经手机授权拿到 pk 的那台
-        // relay，密封本身即身份证明（wasLoginQr 采信路径本就豁免 rd 比对）。rd/rk
+        // 预知。把在线候选公钥挂 cands 供 unseal 兜底逐个试解。安全性：信标帧不携
+        // 公钥（#29 C-P0-1），能对页面密封 pair_ack 的只有经手机授权拿到 pk 的那台
+        // relay，密封本身即身份证明；候选列表比对兜第二道（ack 身份必须落在发现
+        // 候选内）。rd/rk
         // 清空沿用广播态形态：看门狗重发的空码 pair_req 变广播（无路由即无
         // ROUTE_MISS），不再撞烘焙 rd 离线反复触发重连震荡
         ctx.pendingPair = { rd: "", rk: "", pc: "", cands: all.filter((x) => x.rk) };
@@ -3631,16 +3742,17 @@ function onCloudTextRaw(ctx, text) {
     // ack 身份必须对应当次请求目标：公共桥上假 relay 可自演自唱（自有密钥解得开），
     // 采信错位身份会把后续 seal 永久指向攻击者公钥
     const wasLoginQr = !!target && target.pc === ""; // #325 扫码登录会话：ack 即授权成功
-    // 身份检查：输码态必比对 rd（pair_req 明文广播过公钥，公共桥上假 relay 可自演自唱，
-    // 采信错位身份会把后续 seal 永久指向攻击者公钥）。扫码登录态豁免——页面从未暴露
-    // 自己的公钥，能对页面密封 pair_ack 的只有经手机授权拿到 pk 的目标 relay，密封本身
-    // 即身份证明；且烘焙 rd 会随 relay 换代过期，比对反而误杀合法 ack（#329 实测踩中）。
-    // 广播态无 rd 可比：回落到发现列表（只有桥上 rl- 收得到广播）
+    // 身份检查：输码态必比对 rd（pair_req 帧曾明文广播公钥与码，公共桥上假 relay 可
+    // 自演自唱，采信错位身份会把后续 seal 永久指向攻击者公钥）。扫码登录态：信标帧
+    // 已不携公钥（#29 C-P0-1），「能对页面密封 pair_ack 的只有经手机授权拿到 pk 的
+    // relay」的前提重新成立，但 rd 比对仍豁免——烘焙 rd 会随 relay 换代过期，比对
+    // 反而误杀合法 ack（#329 实测踩中）；候选列表比对不豁免（授权回传的 relay 必然
+    // 在桥上在线过=发现候选快照内，候选外 ack=身份未锚定，第二道防线）
     if (target && !wasLoginQr && target.rd && inner.relay_dev !== target.rd) {
       console.log("[cloud:" + cfg.name + "] pair_ack 身份错位（" + inner.relay_dev + " ≠ " + target.rd + "），丢弃");
       return;
     }
-    if (target && !wasLoginQr && !target.rd && target.cands && !target.cands.some((c) => c.dev === inner.relay_dev)) {
+    if (target && !target.rd && target.cands && !target.cands.some((c) => c.dev === inner.relay_dev)) {
       console.log("[cloud:" + cfg.name + "] pair_ack 来自发现列表之外的 relay（" + inner.relay_dev + "），丢弃");
       return;
     }
@@ -3859,6 +3971,7 @@ function setConn(ctx, status, text, kind) {
   renderServers();
   renderConnChip();
   render();
+  renderEmpHome(); // #17 第二批（审查 P2）：源掉线即时重选显示源，设置卡不滞留旧源值
 }
 
 // #39x 配对中/连接中的状态文字带省略号逐点动效（.pairing::after CSS steps 循环）
@@ -4043,7 +4156,11 @@ function onEvent(ctx, msg) {
       ctx.models = Array.isArray(msg.payload.models) ? msg.payload.models : []; // #388 模型清单（旧版 relay 无字段=空）
       ctx.deliverables = msg.payload.deliverables === true; // #71 输出物开关（旧版 relay 无字段=关，tab 隐藏）
       ctx.allowRules = Array.isArray(msg.payload.allow_rules) ? msg.payload.allow_rules : null; // #212 记住规则（旧 relay 无字段=不支持）
+      ctx.projects = Array.isArray(msg.payload.projects) ? msg.payload.projects : null; // #26 M2 项目组（旧 relay 无字段 = 不支持，组织区不渲染）
+      ctx.orgConfirms = Array.isArray(msg.payload.org_confirms) ? msg.payload.org_confirms : [];
+      ctx.empHomeSettings = parseEmpHomeSt(msg.payload.settings); // #17 第二批（旧 relay 无字段/畸形=不支持，卡隐藏）
       renderAllowRules(); // relay 页开着时即时收敛（函数内有可见性 gate）
+      renderEmpHome(); // 同上：雇员独立家卡
       if (msg.payload.homedir) ctx.homedir = msg.payload.homedir; // #368 新建表单默认目录
       if (msg.payload.platform) ctx.platform = msg.payload.platform; // relay 平台：新建表单示例自适应+盘符拦截（旧 relay 无字段=中立文案）
       updateCwdPlaceholder(); // 运行时回调：五块 script 已全部执行，函数全局可达
@@ -4059,6 +4176,7 @@ function onEvent(ctx, msg) {
         title: msg.payload.title || msg.payload.initial_prompt.slice(0, 24),
         model: msg.payload.model, status: "WORKING", action_summary: "启动中",
         external: msg.payload.external || false, remote_mode: false,
+        engine: msg.payload.engine, // #27 引擎标记（codex 卡片徽标数据源；claude/缺省=undefined）
         started_at: msg.ts, updated_at: msg.ts, stats: { files_changed: 0, lines_added: 0, lines_deleted: 0 },
       });
       ctx.timelines.set(sid, []);
@@ -4085,7 +4203,8 @@ function onEvent(ctx, msg) {
       // historical 必须在列（#52）：relay 增量帧恒带该布尔，漏并会让恢复后的会话
       // 永远挂着"历史会话"横幅（本地值只在快照时写过一次）
       for (const f of ["remote_mode", "title", "title_locked", "model", "turn_started_at",
-        "usage", "context_usage", "context_limit", "todos", "subagents", "permission_mode", "pending_inputs", "relay_session_id", "cron_tasks", "compacting", "pinned", "saved", "historical", "artifacts", "artifacts_truncated"]) {
+        "usage", "context_usage", "context_limit", "todos", "subagents", "permission_mode", "pending_inputs", "relay_session_id", "cron_tasks", "compacting", "pinned", "saved", "historical", "artifacts", "artifacts_truncated",
+        "project_gid", "dispatch_tier", "engine"]) { /* #26 M2 组织归属（组徽标/档位徽标数据源）；#27 引擎标记 */
         if (msg.payload[f] !== undefined) s[f] = msg.payload[f];
       }
       // #157 最后活跃时间优先采信载荷显式值（relay 水合帧 ≠ 活动帧，信 envelope ts
@@ -4122,6 +4241,34 @@ function onEvent(ctx, msg) {
     // #212 记住规则变更（瞬态广播）：全量替换该源的规则表；设置页打开时实时收敛
     case "ALLOW_RULES_UPDATED": {
       if (Array.isArray(msg.payload.rules)) { ctx.allowRules = msg.payload.rules; renderAllowRules(); }
+      break;
+    }
+    // #17 第二批：雇员独立家设置变更（applyEmployeeHome 广播/ack 后到达，全量替换幂等）。
+    // 形状校验与快照同尺（parseEmpHomeSt，审查 P3）：畸形帧忽略不覆盖既有值
+    case "SETTINGS_UPDATED": {
+      const eh = parseEmpHomeSt(msg.payload);
+      if (eh) { ctx.empHomeSettings = eh; renderEmpHome(); }
+      break;
+    }
+    // #26 M2 组织态（瞬态广播）：项目组/待决议确认卡全量替换；任务板增量（板不随
+    // 快照下发，COMMAND_PROJECT_DETAIL 按需拉后由 BOARD_UPDATED 维护）。重渲染由
+    // 末尾统一 render() 收口（renderOrgZone 有 key 守卫，代价极小）
+    case "PROJECTS_UPDATED": {
+      if (Array.isArray(msg.payload.groups)) ctx.projects = msg.payload.groups;
+      break;
+    }
+    case "ORG_CONFIRM_UPDATED": {
+      if (Array.isArray(msg.payload.pending)) ctx.orgConfirms = msg.payload.pending;
+      break;
+    }
+    case "BOARD_UPDATED": {
+      if (msg.payload && typeof msg.payload.gid === "string" && msg.payload.board) {
+        ctx.boards.set(msg.payload.gid, msg.payload.board);
+        if (orgDrawer.open && orgDrawer.gid === msg.payload.gid && orgDrawer.data) {
+          orgDrawer.data.board = msg.payload.board;
+          orgRenderDrawer();
+        }
+      }
       break;
     }
     case "SESSION_ERROR": {
@@ -4342,6 +4489,196 @@ function confirmReadMap() {
     return m;
   } catch { return {}; }
 }
+// ---------- #26 M2 组织区（v3.1 矩阵式）：确认卡决议 + 项目组 chips + 详情抽屉 ----------
+// 数据源：SNAPSHOT.projects/org_confirms（旧 relay 无字段 = ctx.projects 恒 null，
+// 整区不渲染不占位）+ 瞬态 PROJECTS_UPDATED/ORG_CONFIRM_UPDATED/BOARD_UPDATED。
+// 决议只走 COMMAND_ORG_CONFIRM（relay 侧单漏斗 orgAction：Leader 只提案、决议与
+// 执行分离）；详情按需 COMMAND_PROJECT_DETAIL 拉 { group, board, receipts }——
+// 板不随快照下发（§2.5 分流数据源），确认卡后 PROJECTS_UPDATED 回帧即收敛。
+const ORG_ST = { pending: "待确认", active: "在办", parked: "已挂起", archived: "已结项" };
+const ORG_CF_KIND = { "project-create": "立项", "tier-change": "升降级", "suggest-hold": "建议暂缓", archive: "结项", revive: "复活" };
+const orgDrawer = { open: false, gid: "", src: "", data: null };
+
+function orgSendConfirm(ctx, confirmId, approve) {
+  const cid = sendCommandTo(ctx, "COMMAND_ORG_CONFIRM", { confirm_id: confirmId, approve });
+  if (cid) toast(approve ? "已同意，正在执行" : "已否决", 2200);
+}
+
+function orgCtxs() {
+  return [...ctxs.values()].filter((c) => Array.isArray(c.projects) && c.status === "online");
+}
+
+function renderOrgZone() {
+  const box = $("orgzone");
+  if (!box) return;
+  const srcs = orgCtxs();
+  const confirms = srcs.flatMap((c) => c.orgConfirms.map((cf) => ({ cf, ctx: c })));
+  const groups = srcs
+    .flatMap((c) => c.projects.map((g) => ({ g, ctx: c })))
+    .filter((x) => x.g.status !== "archived"); // 单向终态不占常驻位（结项留台账可查）
+  if (!confirms.length && !groups.length) {
+    if (box.dataset.key !== "-") { box.dataset.key = "-"; box.hidden = true; box.classList.remove("show"); box.innerHTML = ""; }
+    return;
+  }
+  const key = confirms.map((x) => x.ctx.cfg.id + x.cf.id + (x.cf.status || "")).join(",") + "|" +
+    groups.map((x) => x.ctx.cfg.id + x.g.id + x.g.status + x.g.tier + ":" + (x.g.headcount || []).length).join(",") +
+    (orgDrawer.open ? "|d" + orgDrawer.gid : "");
+  if (box.dataset.key === key) return;
+  box.dataset.key = key;
+  let html = "";
+  if (confirms.length) {
+    html += '<div class="org-cfs">' + confirms.map((x) =>
+      '<div class="org-cf">' +
+        '<span class="org-cf-k">' + escapeHtml(ORG_CF_KIND[x.cf.kind] || x.cf.kind) + "</span>" +
+        '<span class="org-cf-t"><b title="' + escapeHtml(x.cf.title) + '">' + escapeHtml(x.cf.title) + "</b>" +
+          (x.cf.reason ? '<i title="' + escapeHtml(x.cf.reason) + '">' + escapeHtml(x.cf.reason) + "</i>" : "") + "</span>" +
+        '<button class="allow" data-org-cf="' + escapeHtml(x.cf.id) + '" data-approve="1" data-src="' + escapeHtml(x.ctx.cfg.id) + '" title="同意（relay 执行副作用）">✓</button>' +
+        '<button class="reject" data-org-cf="' + escapeHtml(x.cf.id) + '" data-approve="0" data-src="' + escapeHtml(x.ctx.cfg.id) + '" title="否决（立项被否 = 归档留痕）">✗</button>' +
+      "</div>").join("") + "</div>";
+  }
+  if (groups.length) {
+    const ord = { pending: 0, active: 1, parked: 2 };
+    const sorted = [...groups].sort((a, b) => (ord[a.g.status] ?? 9) - (ord[b.g.status] ?? 9));
+    html += '<div class="org-chips">' + sorted.map((x) =>
+      '<button class="org-chip ' + escapeHtml(x.g.status) + (orgDrawer.open && orgDrawer.gid === x.g.id ? " on" : "") +
+        '" data-org-g="' + escapeHtml(x.g.id) + '" data-src="' + escapeHtml(x.ctx.cfg.id) + '"' +
+        ' title="' + escapeHtml(x.g.anchor_dir || "") + '">' +
+        "<span>" + escapeHtml(x.g.name) + "</span><i>·" + escapeHtml(ORG_ST[x.g.status] || x.g.status) + "·" +
+        ((x.g.headcount || []).length + 1) + "人</i></button>").join("") + "</div>"; // +1 = Leader 兼管
+  }
+  box.innerHTML = html;
+  box.hidden = false;
+  box.classList.add("show"); // 冲刺 #12 实测修复：CSS 显示门是 .show 类（#orgzone.show），
+  // 此前只清 hidden 属性 → display:none 恒关，团队区（确认卡+组 chips）永不可见
+}
+
+function orgCloseDrawer() {
+  orgDrawer.open = false;
+  const d = $("orgdrawer");
+  if (d) d.remove();
+  renderOrgZone();
+}
+
+async function orgOpenDrawer(ctx, gid) {
+  orgDrawer.open = true; orgDrawer.gid = gid; orgDrawer.src = ctx.cfg.id; orgDrawer.data = null;
+  let d = $("orgdrawer");
+  if (!d) {
+    d = document.createElement("div");
+    d.id = "orgdrawer";
+    d.innerHTML = '<div class="od-panel"><div class="od-head"><b>项目组详情</b><button class="od-close mini" title="关闭">✕</button></div><div class="od-body"><div class="od-empty">加载中…</div></div></div>';
+    d.addEventListener("click", (e) => {
+      if (e.target === d || e.target.closest(".od-close")) { orgCloseDrawer(); return; }
+      const sess = e.target.closest(".od-sess");
+      // 熟手池退休行带 od-sess 布局类但无 data-sid（不可点）——无 sid 不触发跳转
+      if (sess && sess.dataset.sid) { orgCloseDrawer(); select(sess.dataset.sid, sess.dataset.src); }
+    });
+    document.body.appendChild(d);
+  } else {
+    const body = d.querySelector(".od-body");
+    if (body) body.innerHTML = '<div class="od-empty">加载中…</div>';
+  }
+  renderOrgZone();
+  const ack = await commandAck(ctx, "COMMAND_PROJECT_DETAIL", { gid });
+  if (!orgDrawer.open || orgDrawer.gid !== gid) return;
+  const body = d.querySelector(".od-body");
+  if (!ack || !ack.ok || !ack.data) {
+    if (body) body.innerHTML = '<div class="od-empty">详情拉取失败' + (ack && ack.error ? "：" + escapeHtml(ack.error) : "") + "（源可能已断开或 relay 过旧）</div>";
+    return;
+  }
+  orgDrawer.data = ack.data;
+  orgRenderDrawer();
+}
+
+function orgRenderDrawer() {
+  const d = $("orgdrawer");
+  if (!d || !orgDrawer.open || !orgDrawer.data) return;
+  const g = orgDrawer.data.group || {};
+  const board = orgDrawer.data.board || {};
+  const ents = Array.isArray(board.entries) ? board.entries : [];
+  const head = d.querySelector(".od-head b");
+  if (head) head.textContent = g.name || "项目组";
+  const body = d.querySelector(".od-body");
+  if (!body) return;
+  // 熟手池（M3 §5 成员卡进化）：本项目经验 N 次 · 上次 · 在忙/空闲——路由表档案 join
+  // 运行态（服务端拼好）；可点跳会话详情（退休档案位不可点）。首单进行中的新会话
+  // 尚无路由记录，由任务板 doing 条目 + 会话列表承载，这里不重复陈列
+  const pool = Array.isArray(orgDrawer.data.pool) ? orgDrawer.data.pool : [];
+  const poolRow = (p) => {
+    const st = p.busy ? "在忙" : p.parked ? "随组挂起" : p.resumable ? "空闲" : "已退休（档案）";
+    const stCls = p.busy ? "od-pl-busy" : p.parked || !p.resumable ? "od-pl-dim" : "od-pl-free";
+    const last = p.last_ts ? new Date(p.last_ts).toLocaleDateString() : "—";
+    const nm = escapeHtml(p.title || String(p.session_id || "").slice(0, 8));
+    const tags = (p.tags || []).map((t) => '<span class="od-pl-tag">' + escapeHtml(t) + "</span>").join("");
+    const bad = p.rating === "bad" ? '<span class="od-pl-bad">差评·避开</span>' : "";
+    return '<div class="od-sess od-pl' + (p.resumable ? '" data-sid="' + escapeHtml(p.session_id) + '" data-src="' + escapeHtml(orgDrawer.src) : " od-pl-off") + '">' +
+      '<span class="od-nm" title="' + nm + '">' + nm + "</span>" + tags + bad +
+      '<span class="od-pl-cnt">' + Number(p.count || 0) + " 次</span>" +
+      '<span class="od-pl-last">上次 ' + last + "</span>" +
+      '<span class="' + stCls + '">' + st + "</span></div>";
+  };
+  const sessHtml = pool.length
+    ? pool.map(poolRow).join("")
+    : '<div class="od-empty">熟手池为空（首次派单后积累）</div>';
+  // 任务板：轻立项单卡简化态平铺（v3.1 §4 渲染降级）；正经立项三栏 todo/doing/done
+  const entHtml = (e) => '<div class="od-ent">' + escapeHtml(e.text || "") +
+    (e.note ? '<div class="od-note">' + escapeHtml(e.note) + "</div>" : "") + "</div>";
+  let boardHtml;
+  if (!ents.length) boardHtml = '<div class="od-empty">板为空</div>';
+  else if (g.tier === "轻立项") boardHtml = '<div class="od-col">' + ents.map(entHtml).join("") + "</div>";
+  // 冲刺 #12 视觉审查修复：空列不渲染——430px 抽屉里固定三栏会把卡片挤成 ~128px 窄条
+  //（6 行碎字）且空列悬空成死白；flex 布局 + 只渲染非空列，单列全宽/双列对半/三列等宽
+  else boardHtml = '<div class="od-cols3">' + [["todo", "待办"], ["doing", "进行"], ["done", "完成"]]
+    .map(([st, lb]) => ({ lb, list: ents.filter((e) => e.status === st) }))
+    .filter((c) => c.list.length)
+    .map((c) => "<div><h6>" + c.lb + " " + c.list.length + "</h6><div class=\"od-col\">" +
+      c.list.map(entHtml).join("") + "</div></div>").join("") + "</div>";
+  if (board.frozen) boardHtml = '<div class="od-empty">已挂起：板冻结只读</div>' + boardHtml;
+  // 回执流（§3.5 只收回执一行）：最近 30 条按 anchor 过滤，新在前
+  const recs = orgDrawer.data.receipts || [];
+  const recsHtml = recs.length
+    ? recs.map((r) => '<div class="od-rec"><b>[' + escapeHtml(r.tier || "") + "] " + escapeHtml(r.status || "") + "</b>" +
+        (r.receipt ? "<div>" + escapeHtml(r.receipt) + "</div>" : "") +
+        '<div class="od-meta">' + (r.ts ? new Date(r.ts).toLocaleString() : "") +
+        (r.target && r.target !== "org-leader" ? " · " + escapeHtml(String(r.target).slice(0, 8)) : "") + "</div></div>").join("")
+    : '<div class="od-empty">暂无派单回执</div>';
+  body.innerHTML =
+    '<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:2px">' +
+      '<span class="od-st">' + escapeHtml(ORG_ST[g.status] || g.status || "") + "</span>" +
+      '<span class="od-st">' + escapeHtml(g.tier || "") + "</span>" +
+      (board.frozen ? '<span class="od-st">冻结</span>' : "") +
+    "</div>" +
+    "<h5>熟手池 · " + pool.length + " 人（Leader 兼管）</h5>" + sessHtml +
+    "<h5>任务板</h5>" + boardHtml +
+    "<h5>最近派单回执</h5>" + recsHtml;
+}
+
+// 会话卡组织徽标（§2.5 分流的列表形态）：组归属 [组名]；无组派单 [随手办/档位] 虚线态
+function orgBadgeHtml(ctx, s) {
+  if (!s.project_gid && !s.dispatch_tier) return "";
+  if (s.project_gid) {
+    const g = (ctx.projects || []).find((x) => x.id === s.project_gid);
+    const nm = g ? g.name : "项目组";
+    const tier = s.dispatch_tier || (g ? g.tier : "");
+    return '<span class="org-badge" title="项目组：' + escapeHtml(nm) + (tier ? "（" + escapeHtml(tier) + "）" : "") + '"><span>' + escapeHtml(nm) + "</span></span>";
+  }
+  return '<span class="org-badge lv" title="' + escapeHtml(s.dispatch_tier || "派单") + '（无项目组）"><span>' + escapeHtml(s.dispatch_tier || "派单") + "</span></span>";
+}
+
+// 组织区事件代理（确认卡 ✓/✗ 决议 + chip 开详情抽屉）：挂在 document 上一次绑定
+document.addEventListener("click", (e) => {
+  const cf = e.target.closest("button[data-org-cf]");
+  if (cf) {
+    const c = ctxs.get(cf.dataset.src);
+    if (c) orgSendConfirm(c, cf.dataset.orgCf, cf.dataset.approve === "1");
+    return;
+  }
+  const gb = e.target.closest("button[data-org-g]");
+  if (gb) {
+    const c = ctxs.get(gb.dataset.src);
+    if (c) orgOpenDrawer(c, gb.dataset.orgG);
+  }
+});
+
 // #306 悬浮清单渲染（key 守卫同 cards 口径：快照流式重渲不重建 DOM；展开态走
 // .open class 不参与 key，避免开合闪重绘）
 const cfFloat = { open: false, dragged: false };
@@ -4566,6 +4903,7 @@ function render() {
   }
   renderSrcChips();
   renderConfirmFloat(); // #306 [待确认] 悬浮清单（key 守卫，重渲代价极小）
+  renderOrgZone(); // #26 M2 组织区（key 守卫同上；旧 relay 无团队字段 = 整区隐藏）
 
   // #279⑨ 折叠空闲 + #140 与闲置变灰联动：折叠对象 = 已过变灰阈值的真闲置卡
   //（idleDimmed 同口径，内含 #100 后台在跑豁免）——刚收工的会话处在交流窗口期，
@@ -4646,7 +4984,7 @@ function render() {
       // #164 挂点迁移：不再进标题行（分类信息与源标签/📁 同族）——移 stats 元信息行
       // #171 英文缩写（用户验收批注「最好改成英文缩写，更简洁」）：SAVED/HIST/CLI/SDK，
       // 四态全部带 title 悬停解释（缩写不自解释；bg 的 cursor:help 原先没有配套 title）
-      const badges = dormant ? '<span class="his-badge" title="已保存休眠（点击卡片恢复）">SAVED</span>' : s.historical ? '<span class="his-badge" title="历史会话（进程已结束）">HIST</span>' : s.external ? '<span class="his-badge ext" title="外部终端里的 CLI 会话">CLI</span>' : '<span class="his-badge bg" title="托管会话（控制台新建，无终端窗口）">SDK</span>';
+      const badges = dormant ? '<span class="his-badge" title="已保存休眠（点击卡片恢复）">SAVED</span>' : s.historical ? '<span class="his-badge" title="历史会话（进程已结束）">HIST</span>' : s.external ? '<span class="his-badge ext" title="外部终端里的 CLI 会话">CLI</span>' : s.engine === "codex" ? '<span class="his-badge bg" title="托管 Codex 会话（codex exec 驱动，无终端窗口）">CODEX</span>' : '<span class="his-badge bg" title="托管会话（控制台新建，无终端窗口）">SDK</span>';
       // #100 后台任务徽标：⑂N 黄胶囊。#161 对齐手机：bgCount > 0 恒显——WORKING 时
       // liveRow 只交代主回合在跑，并行子 Agent 数仍要一眼可见（手机三档密度卡同口径）
       const bgBadge = bgRunning(s) ? '<span class="bg-badge" title="后台子 Agent 运行中">⑂' + bgCount(s) + "</span>" : "";
@@ -4689,7 +5027,7 @@ function render() {
       // #58 推翻 #367 的「全空不渲染」：行数 1~3 漂移致同列表卡高参差（用户 2026-09-19
       // 反馈），stats 行恒渲染 + min-height 占位，换取三行恒定等高（空档代价可接受）
       const srcTag = filterSrc === "all" && showSrcTag ? srcBadgeHtml(ctx.cfg) : "";
-      const statsInner = srcTag + badges + folderHtml(s) + ctxHtml(s); /* #164 badges 从标题行移入（分类信息归元信息行） */
+      const statsInner = srcTag + badges + orgBadgeHtml(ctx, s) + folderHtml(s) + ctxHtml(s); /* #164 badges 从标题行移入（分类信息归元信息行）；#26 M2 组织徽标（组归属/档位）同入元信息行 */
       const statsBlock = '<div class="card-stats">' + statsInner + "</div>";
       if (listCompact) {
         // #279⑨ 紧凑卡（对齐手机）：状态点+标题+耗时 / 摘要 / 改动+水位+源标签（#164 徽章同移 stats 行）
@@ -4883,7 +5221,7 @@ function renderDetail() {
   if (!has) return;
 
   // #71 输出物开关：所选会话所属源的 relay 配置（SNAPSHOT.deliverables）关=隐藏
-  // 「输出物」tab。停在 tab 上时开关被关（他处改配置后本端重连）→ 回落消息页；
+  // 「输出物」tab。停在 tab 上时开关被关（他处改配置后本端重连）→ 回落对话页；
   // switchTab 会重进 renderDetail，此刻 activeTab 已换不会递归
   {
     const abtn = document.querySelector('.tabs button.tab[data-tab="artifacts"]');
@@ -6171,7 +6509,7 @@ document.addEventListener("click", (ev) => {
 
 // ⚙ 设置浮层（#317）：显示项为散装开关的镜像（点行 = 触发原按钮再回读状态），
 // 服务器管理不进浮层——左栏常驻面板已是高频区，与手机抽屉同为一级入口
-const CONSOLE_VERSION = "0.6.2";
+const CONSOLE_VERSION = "0.6.2"; // dev 0.6.2 正式版基线并入（#222 分组等）；团队域特性未发版，随其发版再 bump
 // #396 拨杆同步：滑块移到 idx 档（transform 过渡），选中档文字加 .on（白字压品牌色滑块上）
 function setLever(el, idx) {
   if (!el) return;
@@ -6389,7 +6727,7 @@ function setGearSection(sec) {
     if (nav) nav.classList.toggle("on", on);
   }
   try { if (!window.__ccGearPin) localStorage.setItem(GP_SEC_KEY, sec); } catch {} // ?gear=1 深链会话不污染分页记忆（顺手项①）
-  if (sec === "relay") { probeRelayStat(); refreshPeers(); loadRelaySvc(); renderAllowRules(); } // 设备清单随 relay 页可见时静默刷新（议题①）+ #196 服务化开关状态 + #212 记住规则（纯本地渲染，数据在 SNAPSHOT/事件里已就位）
+  if (sec === "relay") { probeRelayStat(); refreshPeers(); loadRelaySvc(); renderAllowRules(); renderEmpHome(); } // 设备清单随 relay 页可见时静默刷新（议题①）+ #196 服务化开关状态 + #212 记住规则 + #17 第二批雇员独立家卡（纯本地渲染，数据在 SNAPSHOT/事件里已就位）
   if (sec === "plug") loadPluginCfg(); // #448 插件三开关随插件页可见时拉取本机配置
 }
 document.querySelectorAll(".gp-nav-item").forEach((b) => { b.onclick = () => { setGearSection(b.dataset.sec); }; });
@@ -7082,7 +7420,9 @@ $("createBtn").onclick = () => {
   const bypass = $("skipPerm").checked;
   // #208 目录自动创建开关（偏好型，本地记忆，与 skipPerm 用后即复位不同）
   const autoMkdir = $("autoMkdir").checked;
-  const id = sendCommandTo(ctx, "COMMAND_CREATE", { cwd: cwd || ".", prompt, ...(bypass ? { permissionMode: "bypassPermissions" } : {}), ...(autoMkdir ? { autoMkdir: true } : {}) });
+  // #27 引擎选择（偏好型）：codex 引擎随命令下发（relay 白名单收口，旧 relay 忽略）
+  const codex = $("useCodex").checked;
+  const id = sendCommandTo(ctx, "COMMAND_CREATE", { cwd: cwd || ".", prompt, ...(bypass ? { permissionMode: "bypassPermissions" } : {}), ...(autoMkdir ? { autoMkdir: true } : {}), ...(codex ? { engine: "codex" } : {}) });
   if (bypass) $("skipPerm").checked = false; // 创建后回落，防止下一次误建 skip 会话
   if (id) {
     // #168 历史目录：按实际建会话的源记最近 5 条历史（pushCwdHist cap 5）+ 双写旧单值键（回滚兼容）
@@ -7113,6 +7453,12 @@ $("createBtn").onclick = () => {
 try { $("autoMkdir").checked = localStorage.getItem("ccd_auto_mkdir") === "1"; } catch {}
 $("autoMkdir").onchange = () => {
   try { localStorage.setItem("ccd_auto_mkdir", $("autoMkdir").checked ? "1" : "0"); } catch {}
+};
+// #27 引擎选择开关：本地记忆（ccd_use_codex，默认关）——偏好型开关同 autoMkdir
+// 口径跨次保留（此前注释声称有记忆但实际没写，审查 P2-14 补齐）
+try { $("useCodex").checked = localStorage.getItem("ccd_use_codex") === "1"; } catch {}
+$("useCodex").onchange = () => {
+  try { localStorage.setItem("ccd_use_codex", $("useCodex").checked ? "1" : "0"); } catch {}
 };
 // ---------- #279 批次3 图片发送（对齐手机 DetailScreen 图片链路） ----------
 // 入口：输入区 📷 选图 + document paste 剪贴板贴图（网页端独有）；
@@ -7896,8 +8242,11 @@ $("modelBtn").onclick = () => {
   if (pop.classList.contains("open")) { closeModelPop(); return; }
   closePermPop(); // #40 防与权限弹层叠加
   pop.innerHTML = models.map((m) =>
+    // #29（C-P2-1）：models 来自 SNAPSHOT.payload.models（relay 下发数据），进
+    // innerHTML 必转义——配对到假 relay / relay 数据被污染时，一条模型名
+    // "<img src=x onerror=…>" 即可在点开模型弹层时执行并偷 localStorage 全部凭据
     '<div class="mp-row' + (m === sel.s.model ? " cur" : "") + '" data-m="' + encodeURIComponent(m) + '">' +
-    '<span>' + m + "</span>" + (m === sel.s.model ? '<span class="mp-cur">当前</span>' : "") + "</div>",
+    "<span>" + escapeHtml(m) + "</span>" + (m === sel.s.model ? '<span class="mp-cur">当前</span>' : "") + "</div>",
   ).join("");
   pop.classList.add("open");
   const r = $("modelBtn").getBoundingClientRect();
@@ -7921,7 +8270,7 @@ function switchTab(name) {
   activeTab = name;
   document.querySelectorAll(".tabs button.tab").forEach((x) => x.classList.toggle("active", x.dataset.tab === name));
   moveTabInd(); // #279③ 指示条平移到新 active（renderDetail 内也会补一次）
-  hideToBottom(); // 回到底部浮钮仅消息 tab 生效，切页即收
+  hideToBottom(); // 回到底部浮钮仅对话 tab 生效，切页即收
   const tl = $("timeline");
   tl.dataset.count = "";
   renderDetail();
@@ -8492,7 +8841,7 @@ $("confirmFloat").addEventListener("click", (ev) => {
   }
   const row = ev.target.closest(".cf-row");
   if (row) {
-    select(row.dataset.sid, row.dataset.src); // select 内部切回"消息"tab，紧接直落"任务"
+    select(row.dataset.sid, row.dataset.src); // select 内部切回"对话"tab（#26 M2 词表迁移），紧接直落"任务"
     switchTab("todos");
     cfFloat.open = false;
     box.classList.remove("open");
@@ -9382,6 +9731,66 @@ $("gpSvcLever")?.querySelectorAll(".lever-opt").forEach((b) => {
       svcRender();
       probeRelayStat(); // relay 属主刚换手（内嵌↔服务），状态行同步刷
     }
+  };
+});
+
+// ── #17 第二批 雇员会话独立存放：状态取 SNAPSHOT.settings；切换走 ws 命令，ack 带
+//    最新状态即时收敛，SETTINGS_UPDATED 广播到达再收敛一次（幂等）──
+// settings 帧归一化（快照/广播/ack.data 共用一把尺，审查 P3）：布尔 + source 三态
+// 才采信并归一 value；畸形→null（卡隐藏/帧忽略），未来 relay 加新 source 不折叠成可编辑
+function parseEmpHomeSt(st) {
+  return (st && typeof st === "object" && typeof st.employee_home === "boolean" &&
+    (st.source === "env" || st.source === "file" || st.source === "default"))
+    ? { employee_home: st.employee_home, value: typeof st.value === "string" ? st.value : null, source: st.source }
+    : null;
+}
+let empHomeBusy = false;
+function empHomeCtx() {
+  // 源选择口径对齐设备清单（firstOnlineCtx：activeServerId 优先）再叠「支持」过滤
+  //（审查 P2）：多 relay 时显示与切换始终作用于用户选中的源，不按 Map 插入序错位——
+  // 否则卡显示 A 的读数、命令却发给 B
+  const pick = (c) => (c && c.status === "online" && c.empHomeSettings) ? c : null;
+  if (activeServerId) { const c = pick(ctxs.get(activeServerId)); if (c) return c; }
+  for (const c of ctxs.values()) { const p = pick(c); if (p) return p; }
+  return null;
+}
+function renderEmpHome() {
+  const card = $("gpEmpHomeCard");
+  if (!card) return;
+  const c = empHomeCtx();
+  card.style.display = c ? "" : "none";
+  if (!c) return;
+  const st = c.empHomeSettings;
+  setLever($("gpEmpHomeLever"), st.employee_home ? 1 : 0);
+  const locked = st.source === "env";
+  card.classList.toggle("locked", locked);
+  $("gpEmpHomeDesc").textContent = locked
+    ? "已由部署配置（环境变量 CCR_EMPLOYEE_CONFIG_DIR）统一设定，此处不可修改。当前：" + (st.employee_home ? "独立存放于 " + (st.value || "") : "关闭")
+    : st.employee_home
+      ? "开启中——之后新建的团队成员会话存放于：" + (st.value || "") + "；已有会话保持原处"
+      : "关闭——团队成员会话与日常终端会话共用同一存放位置；改动只影响之后新建的会话";
+}
+$("gpEmpHomeLever")?.querySelectorAll(".lever-opt").forEach((b) => {
+  b.onclick = async () => {
+    const c = empHomeCtx();
+    if (!c || empHomeBusy) return;
+    const st = c.empHomeSettings;
+    if (!st || st.source === "env") return; // 部署面锁定：只读
+    const want = b.dataset.i === "1";
+    if (!!st.employee_home === want) return;
+    empHomeBusy = true;
+    const ack = await commandAck(c, "COMMAND_SETTINGS_UPDATE", { employee_home: want });
+    empHomeBusy = false;
+    if (!ack) {
+      // 超时但 SETTINGS_UPDATED 可能已先到收敛到位（ACK 帧丢失场景，审查 P3）——
+      // 已达目标态则按成功收口不误报；真未达再报失败
+      const cur = c.empHomeSettings;
+      if (!(cur && !!cur.employee_home === want)) toast("切换失败：服务器无应答");
+      renderEmpHome(); return;
+    }
+    { const eh = parseEmpHomeSt(ack.data); if (ack.ok && eh) c.empHomeSettings = eh; }
+    if (!ack.ok) toast("切换失败：" + (ack.error || "未知错误"));
+    renderEmpHome();
   };
 });
 
