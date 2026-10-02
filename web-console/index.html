@@ -5342,10 +5342,11 @@ function artDirOf(s, t) {
 const artFoldSt = new Map();
 const FDIR_SVG = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3.5 7.2c0-1.3 1-2.3 2.3-2.3h3l2 2.2h6.4c1.3 0 2.3 1 2.3 2.3v7.3c0 1.3-1 2.3-2.3 2.3H5.8c-1.3 0-2.3-1-2.3-2.3z"/></svg>';
 const FCHEV_SVG = '<svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg>';
-// #222 文件夹头行：chevron + 品牌橙文件夹 tile + 目录前缀 + 叶子名 + ×N 文件数 +
-// 总大小/最近活跃（用户反馈：不堆「N 新建 · M 修改」摘要——几个文件、哪个任务的
-// 目录一目了然即可，op 细节看子行徽标）。不挂 data-p / af-act——⋯ 菜单与双击打开
-// 是文件级操作
+// #222 文件夹头行：品牌橙文件夹 tile + 目录前缀 + 叶子名 + ×N 文件数 + 总大小/
+// 最近活跃，行尾 chevron（2026-10-02 用户反馈：箭头放行首会把文件夹图标顶得与
+// 文件行不对齐——挪行尾后图标列对齐，且与手机端 DetailScreen artChev 行尾同构）。
+// 用户另反馈：不堆「N 新建 · M 修改」摘要——几个文件、哪个任务的目录一目了然即可，
+// op 细节看子行徽标。不挂 data-p / af-act——⋯ 菜单与双击打开是文件级操作
 function artFolderHtml(s, g, open) {
   const pre = g.dir.slice(0, g.dir.length - g.leaf.length); // 叶子以上的前缀（含尾分隔符）
   const abs = /^[\\/]|[A-Za-z]:[\\/]/.test(g.dir); // cwd 外绝对路径 → dir2（rtl 截断保根）
@@ -5354,12 +5355,12 @@ function artFolderHtml(s, g, open) {
     : "";
   return '<div class="fgroup' + (open ? " open" : "") + '" data-fk="' + escapeHtml(s.session_id + "|" + g.dir.toLowerCase()) + '">' +
     '<div class="afrow frow" role="button" tabindex="0" aria-expanded="' + (open ? "true" : "false") + '" title="' + escapeHtml(g.dir) + '">' +
-    FCHEV_SVG +
     '<span class="fico f-dir">' + FDIR_SVG + "</span>" +
     '<span class="afname">' + preHtml + '<span class="fn fname">' + escapeHtml(g.leaf) + '</span><span class="badge b-cnt">×' + g.files.length + "</span></span>" +
     '<span class="afmeta">' +
     (fmtArtSize(g.size) ? '<span class="sz">' + fmtArtSize(g.size) + "</span>" : "") +
     '<span class="tm">' + fmtArtTime(g.at) + "</span></span>" +
+    FCHEV_SVG +
     "</div>" +
     '<div class="fkids">' + g.files.map((t) => artRowHtml(t, s, { sub: true, badge: true })).join("") + "</div>" +
     "</div>";
