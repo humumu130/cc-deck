@@ -481,9 +481,10 @@ function UpdateBanner({ info, onSkip }: { info: UpdateInfo; onSkip: () => void }
 
   const mb = (n: number) => `${(n / 1048576).toFixed(1)} MB`;
   const pct = mine && mine.total > 0 ? Math.min(100, Math.floor((mine.bytes / mine.total) * 100)) : 0;
-  // 特性条目：manifest notes 优先，缺失兜底本版摘要（GitHub body 不进正文）
+  // 特性条目：manifest notes 优先，缺失兜底本版摘要（GitHub body 不进正文）。
+  // VERSION_NOTES 是 {group,text,note} 对象数组，直塞 children 会崩——兜底时摊平成文本
   const lines = noteLines(info.notes);
-  const noteItems = lines.length ? lines : VERSION_NOTES;
+  const noteItems: string[] = lines.length ? lines : VERSION_NOTES.map((n) => (n.note ? `${n.text}（${n.note}）` : n.text));
 
   return (
     <Modal visible={!gone} transparent animationType="fade" onRequestClose={close}>
