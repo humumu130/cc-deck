@@ -56,11 +56,16 @@ export interface VersionNote {
   note?: string; // 次要说明（灰字小号次行）：默认值/开启方式等
 }
 // 本版本发布日期（正式版发版日），关于弹窗头行与「已是最新」态展示
-export const VERSION_DATE = "2026-10-02";
+// 2026-10-03：0.6.3 同号重发（补 #236/#237/#238），日期随渠道包更新
+export const VERSION_DATE = "2026-10-03";
 export const VERSION_NOTES: VersionNote[] = [
+  // 新增
+  { group: "new", text: "输出物支持下载到手机「下载/CC Deck/」", note: "详情页「下载」单件保存；列表「多选下载」批量保存" },
   // 优化
+  { group: "improved", text: "会话列表卡片间距收紧，同屏显示更多会话" },
   { group: "improved", text: "精简设置页「本机」区，说明与长列表收纳更紧凑", note: "开机自启说明移入问号图标；配对设备默认折叠前 5 条" },
   // 修复
+  { group: "fixed", text: "修复「后台保活·去优化」点击无反应的问题" },
   { group: "fixed", text: "修复长时间运行的会话，产出文件偶发归到其他会话名下的问题" },
   { group: "fixed", text: "修复设置页「移除」「删除」按钮点击无效的问题" },
 ];
