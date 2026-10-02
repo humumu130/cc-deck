@@ -377,6 +377,9 @@ interface WatchdogState {
 const UPDATE_THROTTLE_MS = 2000;   // 同状态下的 SESSION_UPDATED 节流
 const HEARTBEAT_INTERVAL_MS = 5000;
 const CRON_POLL_INTERVAL_MS = 30_000; // 定时任务文件轮询（无官方文件监听事件，读文件足够便宜）
+// #224 输出物存在性复查周期：exists 原本只在捕获/登记时 stat 一次，用户删掉文件后
+// 条目永远显示「存在」。定时全量 re-stat（≤200 条/会话，毫秒级）变化才广播。
+const ARTIFACT_STAT_INTERVAL_MS = 20_000;
 const MAX_SESSIONS = 20;
 
 // #79 输出物远程拉取限额：单文件 ≤20MB；明文分块 512KB（对齐 #408 快照预算——
@@ -507,6 +510,8 @@ export class SessionManager {
       this.pollTaskStore();
     }, CRON_POLL_INTERVAL_MS);
     c.unref();
+    const r = setInterval(() => this.pollArtifactsExistence(), ARTIFACT_STAT_INTERVAL_MS);
+    r.unref();
   }
 
   // 该 CLI session_id 是否归 relay 自己管（托管会话的 relay_session_id / 一次性子会话）
@@ -521,7 +526,14 @@ export class SessionManager {
   }
 
   snapshot(): SessionState[] {
-    return [...this.sessions.values()].map((s) => this.cloneState(s));
+    // #224 快照不背已删条目（exists === false）——ws-server SNAPSHOT 与云通道
+    // cloud-client 双出口都走这里，一处收口。纯过滤不 re-stat：20s 轮询已把
+    // state 维持新鲜（快照最多 20s 陈旧，可接受）
+    return [...this.sessions.values()].map((s) => {
+      const c = this.cloneState(s);
+      if (c.artifacts) c.artifacts = c.artifacts.filter((a) => a.exists !== false);
+      return c;
+    });
   }
 
   // 自动命名：一次轻量模型调用把首条 prompt 变成短标题（托管/外部会话通用）
@@ -1045,7 +1057,7 @@ export class SessionManager {
       status: s.state.status,
       action_summary: s.state.action_summary,
       stats: { ...s.state.stats },
-      artifacts: list.map((a) => ({ ...a })),
+      artifacts: this.aliveArtifacts(s), // #224 下发前 re-stat + 剔除已删
       ...(s.state.artifacts_truncated ? { artifacts_truncated: true } : {}),
     });
   }
@@ -1091,7 +1103,7 @@ export class SessionManager {
       status: s.state.status,
       action_summary: s.state.action_summary,
       stats: { ...s.state.stats },
-      artifacts: list.map((a) => ({ ...a })),
+      artifacts: this.aliveArtifacts(s), // #224 下发前 re-stat + 剔除已删
       ...(s.state.artifacts_truncated ? { artifacts_truncated: true } : {}),
     });
     return { ok: true };
@@ -1134,6 +1146,57 @@ export class SessionManager {
     return r.ok ? { ok: true, session_id: sid } : r;
   }
 
+  // #224 输出物存在性复查（2026-10-02 用户：「已经删除的输出物为什么还要展示——嫌
+  // 列表不够多不够乱吗」）。设计：面板 = 磁盘现状，不是历史清单——已删条目
+  // （exists === false）一律不下发（emit 帧 / SNAPSHOT 均过滤），删除即从面板消失；
+  // state 内部保留 dead 条目（文件重建时 mergeArtifact 合并复用 adds/dels 历史，
+  // transcript 重扫幂等），fetch 白名单含 dead 无安全问题（文件不在自然 404）。
+  // 复查两层：① 20s 定时轮询（变化才广播，全端面板 ≤20s 收敛）；② 每次 artifacts
+  // 帧下发前 re-stat（emit 点各自调用），保证任何出口数据新鲜。不动 updated_at——
+  // stat 不是会话活动（#157 教训：虚假刷活跃会破坏置灰计时）。
+  private restatArtifacts(s: ManagedSession): boolean {
+    const list = s.state.artifacts;
+    if (!list || !list.length) return false;
+    let changed = false;
+    s.state.artifacts = list.map((a) => {
+      let size: number | undefined;
+      let exists = true;
+      try {
+        size = statSync(a.path).size;
+      } catch {
+        exists = false;
+      }
+      if (exists !== a.exists || size !== a.size) {
+        changed = true;
+        return { ...a, size, exists };
+      }
+      return a;
+    });
+    return changed;
+  }
+
+  // #224 下发口径：re-stat 后剔除已删条目（拷贝下发，防客户端改内存态）
+  private aliveArtifacts(s: ManagedSession): ArtifactItem[] {
+    this.restatArtifacts(s);
+    return (s.state.artifacts ?? []).filter((a) => a.exists !== false).map((a) => ({ ...a }));
+  }
+
+  // #224 定时轮询：有 artifacts 的会话全量 re-stat，有变化才广播（无变化静默——
+  // 避免每 20s 无意义 SESSION_UPDATED 刷全端）
+  private pollArtifactsExistence(): void {
+    for (const [id, s] of this.sessions) {
+      if (!s.state.artifacts?.length) continue;
+      if (!this.restatArtifacts(s)) continue;
+      this.bus.emit(id, "SESSION_UPDATED", {
+        status: s.state.status,
+        action_summary: s.state.action_summary,
+        stats: { ...s.state.stats },
+        artifacts: (s.state.artifacts ?? []).filter((a) => a.exists !== false).map((a) => ({ ...a })),
+        ...(s.state.artifacts_truncated ? { artifacts_truncated: true } : {}),
+      });
+    }
+  }
+
   // 重启回放：把该会话登记过的交付物挂回（登记不在 transcript，靠 deliverables.json）
   private applyDeclaredDeliverables(sessionId: string): void {
     const s = this.sessions.get(sessionId);
@@ -1173,15 +1236,13 @@ export class SessionManager {
     // 空也走这里——只剩登记条目同样要恢复）
     this.applyDeclaredDeliverables(id);
     if (!s.state.artifacts) return;
-    // 局部转写断开 TS 对 776 行 undefined 赋值的窄化（方法调用不重推属性窄化）
-    const merged = s.state.artifacts as ArtifactItem[] | undefined;
     // at 语义同 setTodos：firstRead 输出物回放传转录时刻，防重启水合刷"最后活跃"（#157）
     s.state.updated_at = at ?? Date.now();
     this.bus.emit(id, "SESSION_UPDATED", {
       status: s.state.status,
       action_summary: s.state.action_summary,
       stats: { ...s.state.stats },
-      artifacts: (merged ?? []).map((a) => ({ ...a })),
+      artifacts: this.aliveArtifacts(s), // #224 下发前 re-stat + 剔除已删
       ...(s.state.artifacts_truncated ? { artifacts_truncated: true } : {}),
       updated_at: s.state.updated_at,
     });
