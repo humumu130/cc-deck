@@ -12,9 +12,11 @@
 [![stars](https://img.shields.io/github/stars/humumu130/cc-deck?style=social)](https://github.com/humumu130/cc-deck/stargazers)
 [![downloads](https://img.shields.io/github/downloads/humumu130/cc-deck/total?label=downloads)](https://github.com/humumu130/cc-deck/releases)
 
-**在手机上使用 PC 端的 Claude Code**：查看会话状态、批准权限、发送消息、切换模型、接收任务汇报。电脑断网重启会话不丢，手机点一下即可远程恢复——局域网直连不经任何第三方，跨网走可自建的 Cloudflare 中继，端到端加密。
+**在手机、网页与桌面上使用 PC 端的 Claude Code**：查看会话状态、批准权限、发送消息、切换模型、接收任务汇报。电脑断网重启会话不丢，手机点一下即可远程恢复——局域网直连不经任何第三方，跨网走可自建的 Cloudflare 中继，端到端加密。
 
-[🏠 项目主页](https://cc-deck.humumu.online/) · [网页控制台](https://cc-deck.humumu.online/app) · [下载最新版](https://github.com/humumu130/cc-deck/releases/latest) · [直链下载页](https://cc-deck.humumu.online/download/)
+<a href="https://cc-deck.humumu.online/"><img src="docs/readme/home-btn.svg" alt="项目主页 · cc-deck.humumu.online" width="176"></a>
+
+[网页控制台](https://cc-deck.humumu.online/app) · [下载最新版](https://github.com/humumu130/cc-deck/releases/latest) · [直链下载页](https://cc-deck.humumu.online/download/)
 
 </div>
 
@@ -37,6 +39,12 @@
 - 给会话发消息、传图片与文件（App 支持语音输入，桌面 / 网页可粘贴或拖入），会话产出的文件可拉回查看 / 保存；历史会话可续聊
 - 消息即发即达：点发送立刻送达电脑（排队回显即时，注入后自动校验、回车被吞秒级补发）
 - 模型远程切换：下拉即切当前会话模型（注入 CLI 原生 `/model`），ctx 水位行内嵌当前模型，App / 网页 / 桌面三端一致
+
+**一屏全览**（桌面端 · 就在电脑前也更顺）
+
+- 会话集中管理：多个 Claude Code 会话聚在一个面板，不用在终端窗口间来回切换
+- 状态灯实时可见：运行中 / 等待输入 / 出错 / 完成，扫一眼就知道哪个会话在等你
+- 输出物、任务清单、完成推送等增强与手机端实时同步
 
 **断线不怕**
 

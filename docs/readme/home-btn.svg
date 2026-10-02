@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 176 34" width="176" height="34" role="img" aria-label="CC Deck 项目主页">
+  <defs>
+    <linearGradient id="hb-g" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#F6A96C"/>
+      <stop offset="1" stop-color="#D97757"/>
+    </linearGradient>
+  </defs>
+  <rect x="0.75" y="0.75" width="174.5" height="32.5" rx="8" fill="url(#hb-g)" stroke="#C96442" stroke-opacity=".55"/>
+  <!-- 小房子 -->
+  <g fill="none" stroke="#1A0D06" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M14.5 18.5 L25 9.5 L35.5 18.5"/>
+    <path d="M18 16.8 v8.2 h14 v-8.2"/>
+  </g>
+  <text x="46" y="23" font-family="system-ui, -apple-system, 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', 'Noto Sans CJK SC', sans-serif" font-size="14.5" font-weight="700" fill="#1A0D06">项目主页</text>
+  <!-- 右上箭头 -->
+  <g fill="none" stroke="#1A0D06" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M149 20 L158 11"/>
+    <path d="M151.5 11 H158 V17.5"/>
+  </g>
+</svg>
