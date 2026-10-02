@@ -1182,7 +1182,9 @@ export class SessionManager {
   }
 
   // #224 定时轮询：有 artifacts 的会话全量 re-stat，有变化才广播（无变化静默——
-  // 避免每 20s 无意义 SESSION_UPDATED 刷全端）
+  // 避免每 20s 无意义 SESSION_UPDATED 刷全端）。updated_at 帧内显式携带 state 原值：
+  // stat 不是会话活动（#157），缺省时三端回落信封时间戳会把删文件/改尺寸刷成
+  // 「最后活跃＝当下」，闲置置灰计时被重置
   private pollArtifactsExistence(): void {
     for (const [id, s] of this.sessions) {
       if (!s.state.artifacts?.length) continue;
@@ -1193,6 +1195,7 @@ export class SessionManager {
         stats: { ...s.state.stats },
         artifacts: (s.state.artifacts ?? []).filter((a) => a.exists !== false).map((a) => ({ ...a })),
         ...(s.state.artifacts_truncated ? { artifacts_truncated: true } : {}),
+        updated_at: s.state.updated_at,
       });
     }
   }
