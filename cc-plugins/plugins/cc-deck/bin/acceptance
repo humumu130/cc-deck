@@ -48,8 +48,12 @@ if not rows:
     sys.exit("ERR: 未解析到验收表行（找 | 任务号 | 验收项 | 通过标准 | 形态的表格）")
 title = title or os.path.basename(md)
 
-acc_dir = os.environ.get("CCR_ACCEPTANCE_DIR") or os.path.join(
-    os.path.expanduser("~"), ".cc-deck", "data", "acceptances")
+# 寻址 env 优先序（#36 M2 并行版，2026-10-03，F-09 deliver/org 同款）：CCR_DATA_DIR
+# 缺省回落生产路径；M2 会话由 relay spawn 继承 env 路由到 ~/.cc-deck-m2，生产无 env
+# 时逐字节同行为
+data_dir = os.environ.get("CCR_DATA_DIR") or os.path.join(
+    os.path.expanduser("~"), ".cc-deck", "data")
+acc_dir = os.environ.get("CCR_ACCEPTANCE_DIR") or os.path.join(data_dir, "acceptances")
 os.makedirs(acc_dir, exist_ok=True)
 aid = secrets.token_hex(16)
 # #28 per-sheet 密钥：与 KV 上 acceptance-<id>.key 同值落本地 json（sheet_key）——
@@ -66,12 +70,16 @@ path = os.path.join(acc_dir, f"{aid}.json")
 with open(path, "w", encoding="utf-8") as f:
     json.dump(doc, f, ensure_ascii=False, indent=1)
 
-# 端口以 relay 自报为准（bridge.json），缺省 8787（同 deliver 口径）
-port = "8787"
-try:
-    port = str(json.load(open(os.path.expanduser("~/.cc-deck/data/bridge.json")))["port"])
-except Exception:
-    pass
+# 端口以 relay 自报为准（bridge.json），缺省 8787（同 deliver 口径）。env 优先序：
+# CCR_PORT > bridge.json > 8787（#36 M2 并行版路由，缺省逐字节同行为）
+if os.environ.get("CCR_PORT"):
+    port = os.environ["CCR_PORT"]
+else:
+    port = "8787"
+    try:
+        port = str(json.load(open(os.path.expanduser("~/.cc-deck/data/bridge.json")))["port"])
+    except Exception:
+        pass
 ip = "127.0.0.1"
 for iface in ("en0", "en1"):
     try:

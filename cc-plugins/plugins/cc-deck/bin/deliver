@@ -12,11 +12,14 @@ case "$f" in /*) ;; *) f="$PWD/$f";; esac
 # 变量，经 CC_DECK_SESSION_ID 显式透传（stdin JSON 的 session_id）。都缺（手动
 # 终端跑）不传，relay 回落 cwd 启发式（同仓库并行会话可能挂隔壁卡）
 sid="${CC_DECK_SESSION_ID:-${CLAUDE_CODE_SESSION_ID:-${CLAUDE_SESSION_ID:-}}}"
-data="$HOME/.cc-deck/data"
-token="$(cat "$data/token" 2>/dev/null || true)"
-[ -z "$token" ] && { echo "未找到 ~/.cc-deck/data/token（relay 未初始化？）" >&2; exit 1; }
+# 寻址 env 优先序（#36 M2 并行版，2026-10-03，F-09 org CLI 同款）：CCR_DATA_DIR/
+# CCR_TOKEN/CCR_PORT 缺省回落生产路径。M2 会话由 relay spawn 继承 env 自动路由到
+# 8788 实例；生产无 env 时逐字节同行为
+data="${CCR_DATA_DIR:-$HOME/.cc-deck/data}"
+token="${CCR_TOKEN:-$(cat "$data/token" 2>/dev/null || true)}"
+[ -z "$token" ] && { echo "未找到 relay token（$data/token，relay 未初始化？）" >&2; exit 1; }
 # 端口以 relay 自报为准（bridge.json），缺省回落默认 8787
-port="$(python3 -c 'import json,os;print(json.load(open(os.path.expanduser("~/.cc-deck/data/bridge.json")))["port"])' 2>/dev/null || true)"
+port="${CCR_PORT:-$(python3 -c 'import json,sys;print(json.load(open(sys.argv[1]))["port"])' "$data/bridge.json" 2>/dev/null || true)}"
 : "${port:=8787}"
 body="$(python3 - "$f" "$PWD" "$sid" <<'PY'
 import json, sys
