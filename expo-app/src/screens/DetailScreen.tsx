@@ -851,6 +851,68 @@ function ArtSheet({ art, rel, sid, onClose }: { art: ArtifactItem | null; rel: s
   );
 }
 
+// #222 文件夹 ⋯ sheet（手机端对齐桌面端 openFolderPop 菜单）：chrome 镜像
+// ArtSheet（permScrim/permSheet/permGrab 底部面板）。身份行 = 文件夹 chip +
+// 叶子名 + ×N 徽标；元信息 = 目录 · 总大小 · 最近时间；主 CTA = 展开/收起
+// （写显式折叠记录后即关，sheet 让位看到列表变化）；次级 = 复制目录路径
+// （「已复制 ✓」1.5s，同 ArtSheet 反馈形态）
+function ArtFolSheet({ fol, onToggle, onClose }: { fol: { key: string; dir: string; leaf: string; count: number; size: number; at: number; open: boolean } | null; onToggle: () => void; onClose: () => void }) {
+  const { c } = useTheme();
+  const d = useThemeStyles(makeStyles);
+  const insets = useSafeAreaInsets();
+  const [copied, setCopied] = useState(false);
+  const copiedTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => () => { if (copiedTimer.current) clearTimeout(copiedTimer.current); }, []);
+  return (
+    <Modal visible={!!fol} transparent animationType="slide" onRequestClose={fol ? onClose : undefined}>
+      {fol ? (
+      <Pressable style={d.permScrim} onPress={onClose}>
+        <Pressable style={[d.permSheet, { paddingBottom: 14 + insets.bottom }]} onPress={() => undefined}>
+          <View style={d.permGrab} />
+          <View style={d.artTitleRow}>
+            <View style={[d.artChip, { borderColor: withA(c.brandB, 0.45) }]}>
+              <Svg width={11} height={11} viewBox="0 0 24 24" fill="none" stroke={c.brandB} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+                <Path d="M3.5 7.2c0-1.3 1-2.3 2.3-2.3h3l2 2.2h6.4c1.3 0 2.3 1 2.3 2.3v7.3c0 1.3-1 2.3-2.3 2.3H5.8c-1.3 0-2.3-1-2.3-2.3z" />
+              </Svg>
+            </View>
+            <Text style={d.artTitle} numberOfLines={2}>{fol.leaf}</Text>
+            <Text style={[d.artTag, { color: c.brandB, borderColor: withA(c.brandB, 0.4) }]}>×{fol.count}</Text>
+          </View>
+          <Text style={d.artMeta} numberOfLines={3}>
+            {[fol.dir, fmtArtSize(fol.size), fmtArtTime(fol.at)].filter(Boolean).join(" · ")}
+          </Text>
+          <Pressable
+            style={d.artPri}
+            android_ripple={{ color: "rgba(255,255,255,0.15)", borderless: false, radius: 10 }}
+            onPress={() => { onToggle(); onClose(); }}
+          >
+            <Text style={d.artPriT}>{fol.open ? "收起文件夹" : "展开查看"}</Text>
+          </Pressable>
+          <Text style={d.artCap}>{fol.open ? `收起后 ${fol.count} 个文件折叠为文件夹行` : `展开列出 ${fol.count} 个文件`}</Text>
+          <View style={d.artPath}>
+            <Text style={d.artPathT}>{brkPath(fol.dir)}</Text>
+          </View>
+          <View style={d.artSecRow}>
+            <Pressable
+              style={d.artSec}
+              android_ripple={{ color: withA(c.dim, 0.15), borderless: false, radius: 10 }}
+              onPress={() => {
+                void Clipboard.setStringAsync(fol.dir).then(() => {
+                  setCopied(true);
+                  copiedTimer.current = setTimeout(() => setCopied(false), 1500);
+                });
+              }}
+            >
+              <Text style={d.artSecT}>{copied ? "已复制 ✓" : "复制目录路径"}</Text>
+            </Pressable>
+          </View>
+        </Pressable>
+      </Pressable>
+      ) : null}
+    </Modal>
+  );
+}
+
 // #36 权限模式四选一面板（设计定案 docs/perm-mode-design.md §4.2/4.3）：替代原
 // 循环点击——恒定 2 击直达任意档、每档一句描述首次使用即懂；跳过档（bypassPermissions
 // 免审执行一切命令与编辑）首击只展开底部确认区、再击「确认跳过」才发命令，误触不可达。
@@ -1591,6 +1653,12 @@ export default function DetailScreen({ sid, onBack, initialView, ref }: { sid: s
   const [taskHold, setTaskHold] = useState(false);
   // #35 输出物详情 sheet：点行打开（artPop 为该条快照，rel 由挂载点按会话 cwd 现算）
   const [artPop, setArtPop] = useState<ArtifactItem | null>(null);
+  // #222 文件夹 ⋯ sheet（2026-10-02 用户拍板「手机端也要一样处理」：行尾统一 ⋯，
+  // 菜单内容按文件夹语义定制）：快照 = 分组摘要 + 开合态。folOpen 是输出物视图
+  // IIFE 局部函数，组件根级挂载点不可达——开合态在行尾 Pressable 处（作用域内）
+  // 随快照带出；onToggle 写显式 artFold 记录 + 同步翻转快照（sheet 是 Modal 单发
+  // 交互，主 CTA 按下即关，快照无陈旧窗口）
+  const [folPop, setFolPop] = useState<{ key: string; dir: string; leaf: string; count: number; size: number; at: number; open: boolean } | null>(null);
   const [taskAnchor, setTaskAnchor] = useState<{ x: number; y: number } | undefined>(undefined);
   const openTaskRef = (n: number, hold = false, anchor?: { x: number; y: number }) => {
     setTaskPop(n);
@@ -2480,7 +2548,16 @@ export default function DetailScreen({ sid, onBack, initialView, ref }: { sid: s
                         {[g.dir, g.size > 0 ? fmtArtSize(g.size) : "", fmtArtTime(g.at)].filter(Boolean).join(" · ")}
                       </Text>
                     </View>
-                    <Text style={[d.artChev, open && d.artChevOn]}>›</Text>
+                    {/* #222 行尾统一 ⋯（2026-10-02 用户拍板，两端同口径）：chevron 换
+                        三点菜单钮弹文件夹 sheet（展开/收起 + 复制目录路径）；内层
+                        Pressable 优先接管触点，点它不会触发行级折叠切换 */}
+                    <Pressable
+                      hitSlop={8}
+                      onPress={() => setFolPop({ key: g.key, dir: g.dir, leaf: g.leaf, count: g.files.length, size: g.size, at: g.at, open })}
+                      accessibilityLabel={`文件夹 ${g.leaf} 操作`}
+                    >
+                      <Text style={d.artDots}>⋯</Text>
+                    </Pressable>
                   </Pressable>
                   {open ? (
                     <View style={d.artKids}>
@@ -2976,6 +3053,17 @@ export default function DetailScreen({ sid, onBack, initialView, ref }: { sid: s
       {/* #216 同构修：弹层改常驻受控（勿改回条件挂卸，见各组件头注释） */}
       <ContentMenu text={menuText} onClose={() => setMenuText(null)} />
       <ArtSheet art={artPop} rel={artPop ? artRelOf(s, artPop) : ""} sid={sid} onClose={() => setArtPop(null)} />
+      {/* #222 文件夹 ⋯ sheet：开合态随 folPop 快照（folOpen 是输出物视图闭包局部，
+          根级不可达）；onToggle 写显式 artFold 记录 + 同步翻转快照，主 CTA 单发即关 */}
+      <ArtFolSheet
+        fol={folPop}
+        onToggle={() => {
+          if (!folPop) return;
+          setArtFold((m) => ({ ...m, [sid + "|" + folPop.key]: !folPop.open }));
+          setFolPop((p) => (p ? { ...p, open: !p.open } : p));
+        }}
+        onClose={() => setFolPop(null)}
+      />
       {taskPop != null ? (
         <TaskPop
           n={taskPop}
@@ -3216,12 +3304,12 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
   artNameRow: { flexDirection: "row", alignItems: "center", gap: 6 },
   artTag: { fontSize: 10, lineHeight: 13, borderWidth: 1, borderColor: c.line, borderRadius: 4, paddingHorizontal: 4, paddingVertical: 1 },
   artFoot: { color: c.faint, fontSize: 10.5, textAlign: "center", paddingVertical: 16 },
-  // #222 文件夹分组：文件夹头行（垂直居中 + 叶子名加粗）/ 折叠箭头（› 旋 90° 指下）/
-  // 展开子列（左缘引导线 + 缩进，子行紧凑无分隔线）
+  // #222 文件夹分组：文件夹头行（垂直居中 + 叶子名加粗）/ 行尾 ⋯ 菜单钮（与文件行
+  // 同款，点按弹文件夹 sheet，2026-10-02 用户拍板统一）/ 展开子列（左缘引导线 +
+  // 缩进，子行紧凑无分隔线）
   artFolRow: { alignItems: "center" },
   artFolName: { color: c.text, fontSize: 12.5, fontWeight: "700", lineHeight: 17 },
-  artChev: { color: c.faint, fontSize: 13, lineHeight: 16 },
-  artChevOn: { transform: [{ rotate: "90deg" }] },
+  artDots: { color: c.faint, fontSize: 15, lineHeight: 18, paddingHorizontal: 2 },
   artKids: { marginLeft: 13, borderLeftWidth: 1, borderLeftColor: c.line, paddingLeft: 8, marginVertical: 2 },
   // #83 sheet 重设计样式（仅 ArtSheet 使用，零共享）：字号阶梯 14 标题 > 13 CTA >
   // 12 次级按钮 > 11 元信息/路径 mono > 10 caption/相对路径 > 9 chip

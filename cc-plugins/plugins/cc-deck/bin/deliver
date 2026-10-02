@@ -7,15 +7,24 @@ f="${1:-}"
 [ -z "$f" ] && { echo "用法: deliver <文件路径>" >&2; exit 1; }
 # 相对路径 → 绝对
 case "$f" in /*) ;; *) f="$PWD/$f";; esac
+# 会话身份（#227 根治挂错会话，2026-10-02）：Claude Code 的 Bash 子进程环境注入
+# CLAUDE_CODE_SESSION_ID——自动携带即精确归因；hook（deliver-guard）进程 env 无此
+# 变量，经 CC_DECK_SESSION_ID 显式透传（stdin JSON 的 session_id）。都缺（手动
+# 终端跑）不传，relay 回落 cwd 启发式（同仓库并行会话可能挂隔壁卡）
+sid="${CC_DECK_SESSION_ID:-${CLAUDE_CODE_SESSION_ID:-${CLAUDE_SESSION_ID:-}}}"
 data="$HOME/.cc-deck/data"
 token="$(cat "$data/token" 2>/dev/null || true)"
 [ -z "$token" ] && { echo "未找到 ~/.cc-deck/data/token（relay 未初始化？）" >&2; exit 1; }
 # 端口以 relay 自报为准（bridge.json），缺省回落默认 8787
 port="$(python3 -c 'import json,os;print(json.load(open(os.path.expanduser("~/.cc-deck/data/bridge.json")))["port"])' 2>/dev/null || true)"
 : "${port:=8787}"
-body="$(python3 - "$f" "$PWD" <<'PY'
+body="$(python3 - "$f" "$PWD" "$sid" <<'PY'
 import json, sys
-print(json.dumps({"path": sys.argv[1], "cwd": sys.argv[2]}, ensure_ascii=False))
+sid = sys.argv[3].strip() if len(sys.argv) > 3 else ""
+d = {"path": sys.argv[1], "cwd": sys.argv[2]}
+if sid:
+    d["session_id"] = sid
+print(json.dumps(d, ensure_ascii=False))
 PY
 )"
 exec curl -sS -X POST "http://127.0.0.1:${port}/api/deliver?token=${token}" -H 'content-type: application/json' --data-binary "$body"

@@ -1111,8 +1111,11 @@ export class SessionManager {
 
   // cwd→会话归因核心（deliverByCwd 与 #138 验收单回填通知共用）：会话 cwd 与入参
   // cwd 互为前缀都算（agent 会 cd 进子目录交付，也可能反向），命中多个取最近活跃。
-  // Bash 环境拿不到 CLAUDE_SESSION_ID，cwd 前缀+新鲜度是可得的最强归因；同仓库并行
-  // 会话极端场景可能归到姊妹会话，可接受（看板仍在，只是挂在隔壁卡上）。
+  // #227 起降级为兜底：Claude Code 的 Bash 子进程环境现已注入 CLAUDE_CODE_SESSION_ID
+  //（deliver 脚本自动携带、hook 上下文经 CC_DECK_SESSION_ID 透传），/api/deliver 带
+  // session_id 走 deliverBySession 精确挂账——同仓库并行会话被「最近活跃」抢归属的
+  // 误挂（2026-10-02 实锤：推广会话产物挂到外部会话名下）从根上消除。本启发式保留
+  // 给无身份调用：手动终端跑 deliver、#138 验收单回填（relay 自己发起，无会话身份）。
   // 空 cwd 会话跳过（原先 "" + sep 会前缀匹配一切绝对路径，属潜在误归因，顺手修复）
   // #203 realpath 归一（2026-09-25）：macOS /tmp 是 /private/tmp 的符号链接——会话
   // 登记逻辑路径（/tmp）与 Bash/hook 上报物理路径（/private/tmp/keyhive）两种形态
@@ -1144,6 +1147,19 @@ export class SessionManager {
     if (!sid) return { ok: false, error: "无匹配会话（cwd 对不上任何已知会话）" };
     const r = this.registerDeliverable(sid, rawPath);
     return r.ok ? { ok: true, session_id: sid } : r;
+  }
+
+  // #227 显式归因（/api/deliver 带 session_id）：会话在册 → 精确挂账，绕开 cwd 启发式。
+  // 双查（同 COMMAND_MODEL 惯例）：deliver 环境拿到的是 CLI 原生 id，外部会话在
+  // sessions 里存的是 ext- 前缀形态——两种都认。sid 不在册（会话已清理/env 残留）
+  // 回落 deliverByCwd——宁可挂隔壁也不丢单。响应带实际归属的 session_id 供核对
+  deliverBySession(sid: string, cwd: string, rawPath: string): { ok: boolean; session_id?: string; error?: string } {
+    const real = this.sessions.has(sid) ? sid : this.sessions.has(`ext-${sid}`) ? `ext-${sid}` : null;
+    if (real) {
+      const r = this.registerDeliverable(real, rawPath);
+      return r.ok ? { ok: true, session_id: real } : r;
+    }
+    return this.deliverByCwd(cwd, rawPath);
   }
 
   // #224 输出物存在性复查（2026-10-02 用户：「已经删除的输出物为什么还要展示——嫌

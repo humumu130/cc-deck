@@ -1544,9 +1544,10 @@
   /* ---------- #222 输出物文件夹分组（聚合形态） ---------- */
   .fgroup > .fkids { display: none; }
   .fgroup.open > .fkids { display: block; }
-  .afrow.frow { cursor: pointer; } /* 文件夹头行：整行可点折叠/展开 */
-  .frow .chev { flex: none; width: 10px; height: 10px; color: var(--faint); transition: transform .15s; }
-  .fgroup.open > .frow .chev { transform: rotate(90deg); }
+  /* 文件夹头行：整行可点折叠/展开（展开态看子行显隐即可辨）；尾部 ⋯ 与文件行同构
+     （2026-10-02 用户拍板：统一三点按钮——chevron 比 ⋯ 窄会把大小/时间列顶得
+     文件行/文件夹行错位；菜单内容按文件夹语义定制，见 openFolderPop） */
+  .afrow.frow { cursor: pointer; }
   /* 文件夹 tile 走品牌橙（web 端 f-doc 已占紫，与手机端 brandB 紫对应两端异色是拍板口径） */
   .fico.f-dir { background: color-mix(in srgb, var(--brand) 15%, transparent); color: var(--brand); }
   .afname .fname { font-weight: 650; } /* 叶子目录名加粗一档（区别于文件名 550） */
@@ -5395,12 +5396,14 @@ function artDirOf(s, t) {
 // 重建字符串，态必须放在字符串外（模块级）
 const artFoldSt = new Map();
 const FDIR_SVG = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3.5 7.2c0-1.3 1-2.3 2.3-2.3h3l2 2.2h6.4c1.3 0 2.3 1 2.3 2.3v7.3c0 1.3-1 2.3-2.3 2.3H5.8c-1.3 0-2.3-1-2.3-2.3z"/></svg>';
-const FCHEV_SVG = '<svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg>';
 // #222 文件夹头行：品牌橙文件夹 tile + 目录前缀 + 叶子名 + ×N 文件数 + 总大小/
-// 最近活跃，行尾 chevron（2026-10-02 用户反馈：箭头放行首会把文件夹图标顶得与
-// 文件行不对齐——挪行尾后图标列对齐，且与手机端 DetailScreen artChev 行尾同构）。
+// 最近活跃。行尾 ⋯ 按钮（2026-10-02 用户两轮反馈定案：①箭头挪行尾后仍与文件行
+// 不对齐——chevron 比 ⋯ 按钮窄 ≈15px，大小/时间列随行类型漂移；②用户拍板「统一
+// 成三个点，菜单内容可以不一样」——尾部与文件行完全同构，对齐问题从根消除，
+// 菜单按文件夹语义定制见 openFolderPop：展开/收起 + 打开目录 + 复制路径）。
 // 用户另反馈：不堆「N 新建 · M 修改」摘要——几个文件、哪个任务的目录一目了然即可，
-// op 细节看子行徽标。不挂 data-p / af-act——⋯ 菜单与双击打开是文件级操作
+// op 细节看子行徽标。不挂 data-p——右键/双击/远程拉取等文件级链路全按 data-p 分发，
+// 目录行挂 data-fdir 走文件夹专属菜单
 function artFolderHtml(s, g, open) {
   const pre = g.dir.slice(0, g.dir.length - g.leaf.length); // 叶子以上的前缀（含尾分隔符）
   const abs = /^[\\/]|[A-Za-z]:[\\/]/.test(g.dir); // cwd 外绝对路径 → dir2（rtl 截断保根）
@@ -5408,13 +5411,13 @@ function artFolderHtml(s, g, open) {
     ? '<span class="' + (abs ? "dir2" : "dir") + '">' + escapeHtml(pre) + "</span>"
     : "";
   return '<div class="fgroup' + (open ? " open" : "") + '" data-fk="' + escapeHtml(s.session_id + "|" + g.dir.toLowerCase()) + '">' +
-    '<div class="afrow frow" role="button" tabindex="0" aria-expanded="' + (open ? "true" : "false") + '" title="' + escapeHtml(g.dir) + '">' +
+    '<div class="afrow frow" role="button" tabindex="0" aria-expanded="' + (open ? "true" : "false") + '" data-fdir="' + escapeHtml(g.dir) + '" title="' + escapeHtml(g.dir) + '">' +
     '<span class="fico f-dir">' + FDIR_SVG + "</span>" +
     '<span class="afname">' + preHtml + '<span class="fn fname">' + escapeHtml(g.leaf) + '</span><span class="badge b-cnt">×' + g.files.length + "</span></span>" +
     '<span class="afmeta">' +
     (fmtArtSize(g.size) ? '<span class="sz">' + fmtArtSize(g.size) + "</span>" : "") +
     '<span class="tm">' + fmtArtTime(g.at) + "</span></span>" +
-    FCHEV_SVG +
+    '<button class="af-act" title="文件夹操作">⋯</button>' +
     "</div>" +
     '<div class="fkids">' + g.files.map((t) => artRowHtml(t, s, { sub: true, badge: true })).join("") + "</div>" +
     "</div>";
@@ -6168,7 +6171,7 @@ document.addEventListener("click", (ev) => {
 
 // ⚙ 设置浮层（#317）：显示项为散装开关的镜像（点行 = 触发原按钮再回读状态），
 // 服务器管理不进浮层——左栏常驻面板已是高频区，与手机抽屉同为一级入口
-const CONSOLE_VERSION = "0.6.1";
+const CONSOLE_VERSION = "0.6.2";
 // #396 拨杆同步：滑块移到 idx 档（transform 过渡），选中档文字加 .on（白字压品牌色滑块上）
 function setLever(el, idx) {
   if (!el) return;
@@ -8098,11 +8101,14 @@ $("timeline").addEventListener("pointerdown", (ev) => {
 $("timeline").addEventListener("contextmenu", (ev) => {
   if (ev.target.closest(".task-ref")) ev.preventDefault();
   // #35 输出物行右键 = ⋯ 同款浮窗（打开/定位/复制；已删除行走 noOpen 分支）
-  // #222：文件夹头行无 data-p，右键不弹文件浮窗
+  // #222：文件夹头行（data-fdir）右键 = ⋯ 同款文件夹菜单（展开/收起/打开目录/复制）
   const afrow = ev.target.closest(".afrow");
   if (afrow && afrow.dataset.p) {
     ev.preventDefault();
     openArtPop(afrow, ev.clientX, ev.clientY);
+  } else if (afrow?.dataset.fdir) {
+    ev.preventDefault();
+    openFolderPop(afrow, ev.clientX, ev.clientY);
   }
 });
 // 触屏滚动抢走指针（pointercancel）或按住移出窗口松开（blur）：无 pointerup 可等，
@@ -8133,26 +8139,19 @@ $("timeline").addEventListener("click", (ev) => {
   }
   const cron = ev.target.closest(".cron-item");
   if (cron && !ev.target.closest(".todo-del")) cron.classList.toggle("open");
-  // #222 文件夹头行折叠/展开：直接翻 DOM class（不重渲染），显式态记入 artFoldSt
-  // （tab innerHTML 重建后按记录恢复，未记录的走「最近活跃展开」默认）
-  const frow = ev.target.closest(".frow");
-  if (frow) {
-    const grp = frow.closest(".fgroup");
-    if (grp) {
-      const open = !grp.classList.contains("open");
-      grp.classList.toggle("open", open);
-      frow.setAttribute("aria-expanded", open ? "true" : "false");
-      if (grp.dataset.fk) artFoldSt.set(grp.dataset.fk, open);
-    }
-    return;
-  }
-  // #35 输出物：⋯ 菜单钮 / 打开工作目录（仅桌面壳渲染该钮，浏览器不可达）
+  // #35 输出物：⋯ 菜单钮（必须先于 .frow 判断——#222 起文件夹头行尾也是 ⋯，先判
+  // frow 会把点按钮吃成折叠切换）/ 打开工作目录（仅桌面壳渲染该钮，浏览器不可达）
   const afAct = ev.target.closest(".af-act");
   if (afAct) {
     const row = afAct.closest(".afrow");
-    if (row) openArtPop(row, ev.clientX, ev.clientY);
+    if (row?.dataset.fdir) openFolderPop(row, ev.clientX, ev.clientY);
+    else if (row) openArtPop(row, ev.clientX, ev.clientY);
     return;
   }
+  // #222 文件夹头行折叠/展开：直接翻 DOM class（不重渲染），显式态记入 artFoldSt
+  // （tab innerHTML 重建后按记录恢复，未记录的走「最近活跃展开」默认）
+  const frow = ev.target.closest(".frow");
+  if (frow) { toggleFgroup(frow); return; }
   const afDir = ev.target.closest(".af-open-dir");
   if (afDir && window.ccDeck && window.ccDeck.openPath) {
     // #106 返工：远程会话 cwd 不在本机——明确语义提示，不弹 openPath 报错
@@ -8171,6 +8170,46 @@ function openArtPop(row, x, y) {
     noOpen: row.dataset.dead === "1",
     fetch: row.dataset.dead === "1" || !hit ? null : { ctx: hit.ctx, sid: hit.s.session_id },
   });
+}
+// #222 文件夹头行开合翻转（整行点击与 ⋯ 菜单共用）：直接翻 DOM class 不重渲染，
+// 显式态记入 artFoldSt（tab innerHTML 重建后按记录恢复，未记录走「最近活跃展开」默认）
+function toggleFgroup(frow) {
+  const grp = frow.closest(".fgroup");
+  if (!grp) return;
+  const open = !grp.classList.contains("open");
+  grp.classList.toggle("open", open);
+  frow.setAttribute("aria-expanded", open ? "true" : "false");
+  if (grp.dataset.fk) artFoldSt.set(grp.dataset.fk, open);
+}
+// #222 文件夹 ⋯ 菜单（2026-10-02 用户拍板：行尾统一 ⋯ 与文件行同构——大小/时间列
+// 对齐从根解决；菜单内容按文件夹语义定制）：展开/收起 + 打开目录（桌面壳，先探
+// 本机——远程会话目录不在本机，与 af-open-dir 同口径）+ 复制路径。复用 fpathPop
+// 容器与定位/关闭机制（document capture 关闭监听对同一容器天然生效，#326 口径）
+function openFolderPop(frow, x, y) {
+  const dir = frow.dataset.fdir || "";
+  const grp = frow.closest(".fgroup");
+  const pop = $("fpathPop");
+  pop.innerHTML = "";
+  const mk = (label, fn) => {
+    const b = document.createElement("button");
+    b.textContent = label;
+    b.onclick = (e) => { e.stopPropagation(); pop.classList.remove("open"); fn(); };
+    pop.appendChild(b);
+  };
+  mk(grp?.classList.contains("open") ? "收起" : "展开", () => toggleFgroup(frow));
+  if (window.ccDeck && window.ccDeck.openPath) {
+    mk("打开目录", () => {
+      shellHasLocal(dir).then((local) => {
+        if (!local) { toast("目录不在本机（远程会话）", 3500); return; }
+        window.ccDeck.openPath(dir, false).catch((er) => toast(String(er?.message || er).slice(0, 80), 3500));
+      });
+    });
+  }
+  mk("复制路径", () => copyText(dir));
+  pop.classList.add("open");
+  const r = pop.getBoundingClientRect();
+  pop.style.left = Math.max(8, Math.min(x, innerWidth - r.width - 10)) + "px";
+  pop.style.top = Math.max(8, Math.min(y, innerHeight - r.height - 10)) + "px";
 }
 // #35 双击输出物行 = 本地默认应用打开（核心交互）；#79 远程访问兜底链 + #106 改向：
 // 桌面壳本地打开失败（云源——文件不在本机）→ 实时拉取 + 落盘下载目录 + 系统软件打开
