@@ -6,6 +6,7 @@
 
 - **默认 dev 直推 + 任务号逐笔提交**：一事项一提交（设计稿/实现/follow-up 可分多笔，每笔完整原子），无 WIP 提交。任务号（#NN）就是逻辑分支——`git log --grep '#NN'` 即任务聚合视图，不靠物理分支分层。
 - **分支触发条件（唯一）**：两个 AI 会话需要同时改同一批文件时，后开工的开 `feat/NN-xxx` 临时分支隔离，完事 squash 回 dev（并行交错的历史才值得 squash；串行工作流不产生交错噪声）。分支是工具不是仪式，默认不开。
+- **并行开发强制 worktree 磁盘隔离（2026-09-27 增补，用户令）**：分支只隔离提交历史，`~/dev/cc-deck` 磁盘文件全体会话共享一份——多会话并行时，后开工方必须 `git worktree add` 独立目录做开发编辑，只拉分支不挪目录等于没隔离。构建读磁盘不认分支，混合工作区里打出的 bundle 必然扫进别人的未提交代码（2026-09-27 relay 坏包打挂生产的事故根源）；此期间禁止构建/热部署，部署前必跑 `scripts/check-bundle-sync.sh`。
 - **不重写已推送历史**：dev 单主干 + tag 三段式发版依赖历史稳定，已 push 的提交禁止 rebase/reset 改写。
 - **多会话工作区纪律**：动工前 `git status` 认领本次要改的文件；提交前 `git diff` 核查每处改动归属本任务，混入其他任务未提交改动时用 `git add -p` 拆分提交，严禁一笔试多件事。
 
@@ -20,7 +21,7 @@
 
 ### 更新说明军规（cc-deck 特化落点）
 
-通用五军规/排版结构/通道精度见全局 ~/.claude/CLAUDE.md「更新说明军规」节（2026-09-21，权威，持续打磨）。本节只记项目特化：
+通用六军规/排版结构/通道精度见全局 ~/.claude/CLAUDE.md「更新说明军规」节（2026-09-21 定立、2026-09-22 补措辞语气条，权威，持续打磨）。本节只记项目特化：
 
 - 数据结构：`VERSION_NOTES: { group: "new"|"improved"|"fixed"; text: string; note?: string }[]` + `VERSION_DATE`，在 expo-app/src/updates.ts，随版本同步维护；消费端 = 手机关于弹窗（SettingsDrawer AboutModal）。
 - 桌面端发版说明（Tauri）与 GitHub Release body 同口径：Release 正文放全量细节（弹窗「查看完整变更」的落地页）。

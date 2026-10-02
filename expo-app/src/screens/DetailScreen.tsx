@@ -28,7 +28,7 @@ import { useKbHeight } from "../kb";
 import { useEnterSend, useProcessFont, useVoiceInput } from "../display-settings";
 import { voice } from "../voice";
 import { BUILTIN_COMMANDS, fetchSlashCommands, httpBaseOf, matchSlash, type SlashCommand } from "../slash";
-import { MdText } from "../md";
+import { MdText, lastLinkAt } from "../md";
 import { Collapse, FadeIn, PressScale } from "../motion";
 import RenameModal from "./RenameModal";
 
@@ -104,6 +104,19 @@ let agCollapsed = false;
 
 // 输入草稿跨进出保留：按 session_id 暂存（app 生命周期内，发送即清）
 const drafts = new Map<string, string>();
+
+// #216 防误派守卫用：最近一次输入框聚焦时刻（模块级跨进出详情页保持，与
+// md.tsx 的 lastLinkAt 同族——两者由下方 setPermPanel 守卫消费）
+let lastFocusAt = 0;
+// #216 五段修（test.8）：面板最近一次关闭时刻——「关掉又重新弹」的直接死因是
+// 关闭后紧随的再次触发（同一轮手势里 scrim 关闭 + 胶囊重开叠加时，表象就是
+// 面板关不掉/关了又弹），关闭后 700ms 内的再次打开一律吞掉（真用户关面板后
+// 700ms 内再点胶囊的场景不存在，零误伤）
+let lastCloseAt = 0;
+// #216 排查探针（test.8 临时，定案后移除）：最近一次胶囊 onPress 的触点/距
+// 离判定（d=-1 表示坐标或胶囊中心取不到）+ 三道守卫累计吞次——面板顶部一行
+// 显示，真机复现时肉眼/截图回读，用于定位错派触摸的真实形态
+const permProbe = { txt: "init", eaten: 0, tw: 0, cw: 0 };
 
 // #376 cron 表达式人话（常见模式；未识别返回 null 只显原文+下次时间兜底）
 const WEEK_CN = ["日", "一", "二", "三", "四", "五", "六"];
@@ -364,14 +377,17 @@ function TaskRefText({ text, style, numberOfLines, suffix, suffixStyle, onTaskRe
 
 // 内容长按菜单（#249/#260）：复制全文 / 系统分享，仅挂 detail/diff 摘要行——
 // 正文（用户/assistant/思考）长按即原生选择手柄可拖选片段，不走此菜单
-function ContentMenu({ text, onClose }: { text: string; onClose: () => void }) {
+// #216 同构修：受控 visible 常驻渲染（text 空态=关，见 PermPanel 头注释，勿改回条件挂卸）
+function ContentMenu({ text, onClose }: { text: string | null; onClose: () => void }) {
   const { c } = useTheme();
   const d = useThemeStyles(makeStyles);
   const [copied, setCopied] = useState(false);
   const copiedTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   useEffect(() => () => { if (copiedTimer.current) clearTimeout(copiedTimer.current); }, []);
+  const open = !!text;
   return (
-    <Modal visible transparent animationType="fade" onRequestClose={onClose}>
+    <Modal visible={open} transparent animationType="fade" onRequestClose={open ? onClose : undefined}>
+      {open ? (
       <Pressable style={d.menuScrim} onPress={onClose}>
         <Pressable style={d.menuCard} onPress={() => undefined}>
           <View style={d.menuBtns}>
@@ -401,6 +417,7 @@ function ContentMenu({ text, onClose }: { text: string; onClose: () => void }) {
           </View>
         </Pressable>
       </Pressable>
+      ) : null}
     </Modal>
   );
 }
@@ -582,7 +599,8 @@ async function shareArtView(v: ArtViewData): Promise<void> {
 // #79 输出物预览全屏层：图片/HTML/文本内嵌，复杂格式自动呼系统应用（头部按钮可重开）。
 // 晨间反馈补齐：头部「分享」= 文件本体进系统分享面板（存云盘/发微信/存本地一板全收，
 // 就是「下载到本地随用户处理」的系统出口）；HTML 另给「浏览器」按钮交系统浏览器渲染
-function ArtView({ v, onClose }: { v: ArtViewData; onClose: () => void }) {
+// #216 同构修：受控 visible 常驻渲染（v 空态=关，见 PermPanel 头注释，勿改回条件挂卸）
+function ArtView({ v, onClose }: { v: ArtViewData | null; onClose: () => void }) {
   const { c } = useTheme();
   const d = useThemeStyles(makeStyles);
   const [openErr, setOpenErr] = useState<string | null>(null);
@@ -590,10 +608,11 @@ function ArtView({ v, onClose }: { v: ArtViewData; onClose: () => void }) {
   useEffect(() => {
     setOpenErr(null);
     setActErr(null);
-    if (v.kind === "sys") void openArtExternally(v.uri, v.mime).then(setOpenErr);
+    if (v?.kind === "sys") void openArtExternally(v.uri, v.mime).then(setOpenErr);
   }, [v]);
   // 分享文件本体（逻辑在模块级 shareArtView，与 ArtSheet 共用）
   const shareFile = async () => {
+    if (!v) return;
     try {
       await shareArtView(v);
       setActErr(null);
@@ -603,15 +622,17 @@ function ArtView({ v, onClose }: { v: ArtViewData; onClose: () => void }) {
   };
   // HTML 交系统浏览器（App 内 WebView 渲不了的场景兜底，如外链资源/打印）
   const openInBrowser = async () => {
-    if (v.kind !== "html") return;
+    if (!v || v.kind !== "html") return;
     try {
       setActErr(await openArtExternally(await saveArtText(v.name, v.text), "text/html"));
     } catch (e) {
       setActErr(e instanceof Error ? e.message : String(e));
     }
   };
+  const open = !!v;
   return (
-    <Modal visible animationType="fade" onRequestClose={onClose}>
+    <Modal visible={open} animationType="fade" onRequestClose={open ? onClose : undefined}>
+      {open && v ? (
       <SafeAreaView style={{ flex: 1, backgroundColor: c.bg }}>
         <View style={d.avHead}>
           <Text style={d.avName} numberOfLines={1}>{v.name}</Text>
@@ -685,6 +706,7 @@ function ArtView({ v, onClose }: { v: ArtViewData; onClose: () => void }) {
           </View>
         )}
       </SafeAreaView>
+      ) : null}
     </Modal>
   );
 }
@@ -692,7 +714,8 @@ function ArtView({ v, onClose }: { v: ArtViewData; onClose: () => void }) {
 // #35 输出物详情 sheet（#79 起支持实时拉取；#83 重设计）：身份→动作→参考三段式
 // ——标题行（类型 chip + 文件名 14px）→ CTA + caption → 路径盒 + 次级按钮；元信息
 // 收编标题下中性一行（原徽章行 + 5 行键值表合并）。面板形态复用 #36 permSheet
-function ArtSheet({ art, rel, sid, onClose }: { art: ArtifactItem; rel: string; sid: string; onClose: () => void }) {
+// #216 同构修：受控 visible 常驻渲染（art 空态=关，见 PermPanel 头注释，勿改回条件挂卸）
+function ArtSheet({ art, rel, sid, onClose }: { art: ArtifactItem | null; rel: string; sid: string; onClose: () => void }) {
   const { c } = useTheme();
   const d = useThemeStyles(makeStyles);
   const insets = useSafeAreaInsets();
@@ -702,20 +725,24 @@ function ArtSheet({ art, rel, sid, onClose }: { art: ArtifactItem; rel: string; 
   const [busy, setBusy] = useState(false);
   const [ferr, setFerr] = useState<string | null>(null);
   const [view, setView] = useState<ArtViewData | null>(null);
-  const name = (rel || art.path).split(/[\\/]/).pop() || art.path;
-  const dead = art.exists === false;
-  const outside = art.origin === "outside" || (!rel && art.origin !== "cwd");
+  const open = !!art;
+  // 常驻后关闭时复位内嵌预览/错误/忙碌态（防下次打开残留）
+  useEffect(() => { if (!open) { setView(null); setFerr(null); setBusy(false); } }, [open]);
+  const name = (rel || art?.path || "").split(/[\\/]/).pop() || art?.path || "";
+  const dead = art?.exists === false;
+  const outside = art?.origin === "outside" || (!!art && !rel && art.origin !== "cwd");
   const kind = artKindOf(name);
   const KC: Record<ArtKind, string> = { code: c.brandA, doc: c.done, data: c.working, img: c.waiting, zip: c.dim, gen: c.faint };
   // #79 拉取 + 分级路由：图片/HTML/文本直接内嵌预览，复杂格式落缓存后交系统应用。
   // 缓存命中（path+last_at 未变）秒开不重拉——文件在电脑上更新则键失效自动拉最新
-  const cacheKey = `${sid}|${art.path}|${art.last_at ?? art.first_at ?? 0}`;
+  const cacheKey = art ? `${sid}|${art.path}|${art.last_at ?? art.first_at ?? 0}` : "";
   // 已缓存时主按钮变「查看」——用户不再疑惑"为什么又要拉取"（has 无 LRU 副作用；
   // 磁盘层同判：重启后盘缓存仍在，按钮照常显示已缓存）
-  const cached = !dead && (artCache.has(cacheKey) || artDisk.has(cacheKey));
+  const cached = !!art && !dead && (artCache.has(cacheKey) || artDisk.has(cacheKey));
   // 拉取构建（查看与分享共用）：E2E 分块拉取 → 全量落盘（持久缓存，前缀名）→
   // mime 分级 → 入缓存。文本类盘文件=正文 utf8 bytes（读回按 UTF8 解码一致）
   const fetchArtView = async (): Promise<ArtViewData> => {
+    if (!art) throw new Error("artifact unavailable");
     const r = await store.fetchArtifact(sid, art.path);
     const chunks = r.b64s.map(fromB64);
     let n = 0;
@@ -742,7 +769,7 @@ function ArtSheet({ art, rel, sid, onClose }: { art: ArtifactItem; rel: string; 
     return data;
   };
   const doFetch = async () => {
-    if (busy || dead) return;
+    if (busy || dead || !art) return;
     setBusy(true);
     setFerr(null);
     try {
@@ -758,7 +785,7 @@ function ArtSheet({ art, rel, sid, onClose }: { art: ArtifactItem; rel: string; 
   // 晨间反馈二轮：分享=文件本体（原「分享路径」是理解偏了）——未拉取先走同一
   // 拉取链（缓存命中秒出、顺带点亮主按钮「已缓存」），落盘后进系统分享面板
   const doShare = async () => {
-    if (busy || dead) return;
+    if (busy || dead || !art) return;
     setBusy(true);
     setFerr(null);
     try {
@@ -770,8 +797,9 @@ function ArtSheet({ art, rel, sid, onClose }: { art: ArtifactItem; rel: string; 
     }
   };
   return (
-    <Modal visible transparent animationType="slide" onRequestClose={onClose}>
-      {view ? <ArtView v={view} onClose={() => setView(null)} /> : null}
+    <Modal visible={open} transparent animationType="slide" onRequestClose={open ? onClose : undefined}>
+      <ArtView v={view} onClose={() => setView(null)} />
+      {art ? (
       <Pressable style={d.permScrim} onPress={onClose}>
         {/* #83：底部让位手势条（原 paddingBottom 14 在手势导航机型上贴边） */}
         <Pressable style={[d.permSheet, { paddingBottom: 14 + insets.bottom }]} onPress={() => undefined}>
@@ -840,6 +868,7 @@ function ArtSheet({ art, rel, sid, onClose }: { art: ArtifactItem; rel: string; 
           </View>
         </Pressable>
       </Pressable>
+      ) : null}
     </Modal>
   );
 }
@@ -849,12 +878,17 @@ function ArtSheet({ art, rel, sid, onClose }: { art: ArtifactItem; rel: string; 
 // 免审执行一切命令与编辑）首击只展开底部确认区、再击「确认跳过」才发命令，误触不可达。
 // 当前项选中靠整行 tintStrong 底 + 右缘 ✓（不靠游离符号）；已处于跳过档时该行直接收起
 // （现状即该危险态，无需再确认一次"保持"）
-function PermPanel({ cur, onPick, onClose }: { cur: PermMode; onPick: (m: PermMode) => void; onClose: () => void }) {
+// #216 受控 visible 常驻渲染（父级不再条件挂卸）：高频会话每秒多次 SESSION_UPDATED
+// 逐帧重渲，卸载型写法在 fade dismiss 动画窗口被 re-render 打断时 Android Dialog 会
+// 关了又 show（用户侧=「权限面板关不掉」）；受控 prop 显隐由 RN 原生侧保证幂等
+function PermPanel({ open, cur, onPick, onClose }: { open: boolean; cur: PermMode; onPick: (m: PermMode) => void; onClose: () => void }) {
   const { c } = useTheme();
   const d = useThemeStyles(makeStyles);
   // #83 同修：sheet 底部让位手势条（确认按钮原同样贴边）
   const insets = useSafeAreaInsets();
   const [arm, setArm] = useState(false);
+  // 常驻后组件不再卸载，关闭时武装态必须随 open 落下复位（防下次打开残留「确认跳过」）
+  useEffect(() => { if (!open) setArm(false); }, [open]);
   const pick = (m: PermMode) => {
     if (m === "bypassPermissions") {
       if (cur === "bypassPermissions") { onClose(); return; } // 已在此档：收起即可
@@ -865,7 +899,7 @@ function PermPanel({ cur, onPick, onClose }: { cur: PermMode; onPick: (m: PermMo
     onClose();
   };
   return (
-    <Modal visible transparent animationType="fade" onRequestClose={onClose}>
+    <Modal visible={open} transparent animationType="fade" onRequestClose={open ? onClose : undefined}>
       <Pressable style={d.permScrim} onPress={onClose}>
         <Pressable style={[d.permSheet, { paddingBottom: 14 + insets.bottom }]} onPress={() => undefined}>
           <View style={d.permGrab} />
@@ -875,6 +909,10 @@ function PermPanel({ cur, onPick, onClose }: { cur: PermMode; onPick: (m: PermMo
               <Text style={d.permX}>✕</Text>
             </Pressable>
           </View>
+          {/* #216 排查探针（test.8 临时，定案后移除）：最近一次胶囊 onPress 的触
+              点/距离判定 + 三道守卫累计吞次（吞=坐标 / 窗=时间窗 / 冷=复弹冷却）。
+              再现「弹面板」时这一行就是错派触摸的真身数据，长按可复制 */}
+          <Text style={d.permProbeT} selectable>{`probe ${permProbe.txt} · 吞${permProbe.eaten}/窗${permProbe.tw}/冷${permProbe.cw}`}</Text>
           {PERM_CYCLE.map((m) => {
             const danger = m === "bypassPermissions";
             return (
@@ -1244,7 +1282,33 @@ export default function DetailScreen({ sid, onBack, initialView, ref }: { sid: s
   const { c, mode } = useTheme();
   const d = useThemeStyles(makeStyles);
   // #36 权限模式四选一面板：胶囊（Head R2）点开，替代循环切换
-  const [permPanel, setPermPanel] = useState(false);
+  // #216 防误派守卫（三段修，2026-10-02 真机定稿）：OPPO/ColorOS 真机上点底部
+  // 输入框或时间线链接的触摸会被 Android 触摸层错派给顶部权限胶囊的 Pressable
+  // ——onPress 即 setPermPanel(true)，权限面板凭空弹出（0.6.1-test.4 用户主力机
+  // 稳定复现；模拟器 7 次不可复现；JS 层唯一置 true 入口就是胶囊 onPress）。
+  // 差异法定位：无守卫包点输入框必弹、有守卫包必不弹（两包唯一行为差异=本守卫）。
+  // 真用户从底部输入框/链接处把手指移到顶部胶囊物理上不可能 <400ms，吞掉
+  // 400ms 内的打开请求零误伤；正常点胶囊（间隔远超 400ms）照常放行。
+  // 四段修补漏：输入框已聚焦后再点不重发 onFocus（RN 行为），时间窗打点不
+  // 刷新、错派直通——胶囊 onPress 增加触点坐标判定（见 permPillRef 处），
+  // 此处时间窗降级为坐标取不到时的第二道防线
+  // 五段修（test.8 真机实况：坐标守卫后仍弹且回到「关掉又弹」）：①键盘弹出期
+  // 间胶囊整体 pointerEvents=none（见 onPress 处）掐断高发段；②关闭后 700ms
+  // 复弹冷却（lastCloseAt，见模块级）；③permProbe 探针记录判定数据（面板顶
+  // 一行显示），错派形态定案后再做最终收口
+  const [permPanel, setPermPanelRaw] = useState(false);
+  const setPermPanel = (v: boolean) => {
+    if (v) {
+      const now = Date.now();
+      // 五段修·复弹冷却：刚关又开 = 错派循环的指纹，吞（计数进探针）
+      if (now - lastCloseAt < 700) { permProbe.cw++; return; }
+      const since = Math.min(now - lastFocusAt, now - lastLinkAt.at);
+      if (since >= 0 && since < 400) { permProbe.tw++; return; }
+    } else {
+      lastCloseAt = Date.now();
+    }
+    setPermPanelRaw(v);
+  };
   const snap = useRelay();
   const [input, setInput] = useState(() => drafts.get(sid) ?? "");
   // #68① 多行自动增高：Android 下纯 minHeight/maxHeight 的自适应不可靠（实测长文
@@ -1259,6 +1323,11 @@ export default function DetailScreen({ sid, onBack, initialView, ref }: { sid: s
   // #129 回车键行为：开 = 回车发送（恢复 #68 多行化之前的旧习惯）；关 = 回车换行
   const enterSend = useEnterSend();
   const inputRef = useRef<TextInput>(null);
+  // #216 四段修·坐标守卫：权限胶囊中心窗口坐标（onLayout 时 measureInWindow
+  // 测一次；胶囊随 head 固定在顶部不滚动，一次测量终身有效）——胶囊 onPress
+  // 用触点与中心的距离判错派（机制见 onPress 处注释）
+  const permPillRef = useRef<View>(null);
+  const permPillCtr = useRef<{ x: number; y: number } | null>(null);
   const editInput = (v: string) => {
     if (v) drafts.set(sid, v);
     else drafts.delete(sid);
@@ -1992,14 +2061,43 @@ export default function DetailScreen({ sid, onBack, initialView, ref }: { sid: s
             <View style={d.permCluster}>
               {!external && canCmd && !s.historical ? (
                 <Pressable
+                  ref={permPillRef}
                   style={[
                     d.permPill,
                     perm === "default"
                       ? [d.permPillGhost, { borderColor: mode === "dark" ? "rgba(125,165,220,0.22)" : c.line }]
                       : perm === "bypassPermissions" ? d.permPillWarn : d.permPillLit,
                   ]}
+                  onLayout={() => {
+                    permPillRef.current?.measureInWindow((x, y, w, h) => {
+                      permPillCtr.current = { x: x + w / 2, y: y + h / 2 };
+                    });
+                  }}
+                  // 五段修（test.8）：键盘弹出期间整颗胶囊不响应——错派高发段就是
+                  // 点输入框拉起键盘的时刻（含聚焦后再点的漏网场景）；此时开面板
+                  // 键盘还会盖住底部 sheet，本就是坏状态。排查期间键盘开着时先收
+                  // 起键盘再点胶囊（定案后换成只掐错派不清真点的收口）
+                  pointerEvents={kb > 0 ? "none" : "auto"}
                   android_ripple={{ color: c.tintSoft, borderless: false, radius: 8 }}
-                  onPress={() => setPermPanel(true)}
+                  onPress={(e) => {
+                    // #216 四段修·坐标守卫：三段的时间窗守卫漏了「输入框已聚焦
+                    // 后再点不重发 onFocus」的场景（RN 行为，test.5 后真机偶尔仍
+                    // 弹的根因），改按触点位置一刀切：错派触摸的事件坐标保持手指
+                    // 原始位置（屏幕中下部，距胶囊数百 dp），真点胶囊触点必在
+                    // 胶囊上（含 hitSlop 与触点误差）。距中心 >100dp 即吞；坐标
+                    // 取不到时回落 setPermPanel 内的时间窗守卫（双保险）
+                    // （test.8 真机实况：坐标守卫后仍弹——探针 permProbe 记录每
+                    // 次判定的触点/距离数据，面板顶一行回读）
+                    const t = e.nativeEvent.changedTouches?.[0];
+                    const px = t?.pageX ?? e.nativeEvent.pageX;
+                    const py = t?.pageY ?? e.nativeEvent.pageY;
+                    const ctr = permPillCtr.current;
+                    const dist = ctr && typeof px === "number" && typeof py === "number"
+                      ? Math.round(Math.hypot(px - ctr.x, py - ctr.y)) : -1;
+                    permProbe.txt = `x=${typeof px === "number" ? Math.round(px) : "?"} y=${typeof py === "number" ? Math.round(py) : "?"} d=${dist}${ctr ? "" : "/noctr"}`;
+                    if (dist > 100) { permProbe.eaten++; return; }
+                    setPermPanel(true);
+                  }}
                   hitSlop={{ top: 8, bottom: 8, left: 6, right: 6 }}
                   accessibilityLabel={`权限模式：${PERM_LABEL[perm]}，点按选择`}
                 >
@@ -2784,6 +2882,7 @@ export default function DetailScreen({ sid, onBack, initialView, ref }: { sid: s
               // 期间曾长期处于此态且无任何视觉提示。现半透明弱化 + placeholder 说明原因，
               // 用户能自诊断「是断连不是键盘坏了」
               ref={inputRef}
+              onFocus={() => { lastFocusAt = Date.now(); }}
               style={[d.input, { height: inputH }, !canCmd && { opacity: 0.5 }]}
               value={input}
               onChangeText={editInput}
@@ -2859,16 +2958,17 @@ export default function DetailScreen({ sid, onBack, initialView, ref }: { sid: s
         }}
       />
 
-      {permPanel ? (
-        <PermPanel
-          cur={perm}
-          onPick={(m) => store.send("COMMAND_PERM", { session_id: sid, mode: m })}
-          onClose={() => setPermPanel(false)}
-        />
-      ) : null}
+      {/* #216 常驻渲染：受控 visible 显隐（勿改回条件挂卸，见 PermPanel 头注释） */}
+      <PermPanel
+        open={permPanel}
+        cur={perm}
+        onPick={(m) => store.send("COMMAND_PERM", { session_id: sid, mode: m })}
+        onClose={() => setPermPanel(false)}
+      />
 
-      {menuText ? <ContentMenu text={menuText} onClose={() => setMenuText(null)} /> : null}
-      {artPop ? <ArtSheet art={artPop} rel={artRelOf(s, artPop)} sid={sid} onClose={() => setArtPop(null)} /> : null}
+      {/* #216 同构修：弹层改常驻受控（勿改回条件挂卸，见各组件头注释） */}
+      <ContentMenu text={menuText} onClose={() => setMenuText(null)} />
+      <ArtSheet art={artPop} rel={artPop ? artRelOf(s, artPop) : ""} sid={sid} onClose={() => setArtPop(null)} />
       {taskPop != null ? (
         <TaskPop
           n={taskPop}
@@ -3042,6 +3142,8 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
   permTitleRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 4 },
   permTitle: { color: c.text, fontSize: 13, fontWeight: "600" },
   permX: { color: c.faint, fontSize: 14, lineHeight: 18 },
+  // #216 排查探针（test.8 临时）：9px mono 小字，只求真机截图回读可辨
+  permProbeT: { color: c.faint, fontSize: 9, fontFamily: "monospace", marginBottom: 4, lineHeight: 12 },
   permRow: {
     flexDirection: "row", alignItems: "center", gap: 8,
     paddingVertical: 9, paddingHorizontal: 8, borderRadius: 10, overflow: "hidden",
