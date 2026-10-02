@@ -26,12 +26,14 @@ const raw = evt?.tool_input?.file_path ?? evt?.tool_response?.filePath;
 if (typeof raw !== "string" || raw === "") process.exit(0);
 const p = path.resolve(raw);
 const ext = path.extname(p).slice(1).toLowerCase();
+// hook 进程 env 无 CLAUDE_CODE_SESSION_ID（那是 Bash 工具子进程专属）——身份从
+// 事件 stdin JSON 取，透传给 deliver 脚本精确归因（#227）
+const sid = typeof evt?.session_id === "string" ? evt.session_id : "";
 // #203 收工对账账本：文档类写入全部随手记（不限 docs/——docs/ 外的漏网正是
 // deliver-stop 要提醒的；~/.cc-deck 树/node_modules/隐藏目录在库内排除）。
 // 不查开关/桥接：账本本身零成本（7 天自动清理），读侧 deliver-stop 统一把门，
 // 中途开开关/晚桥接的会话账目也不缺
 if (DOC_EXT.has(ext)) {
-  const sid = typeof evt?.session_id === "string" ? evt.session_id : "";
   if (sid) recordDeliverWatch(sid, p);
 }
 if (!p.split(path.sep).includes("docs")) process.exit(0);
@@ -39,5 +41,5 @@ if (!DOC_EXT.has(ext)) process.exit(0);
 if (!existsSync(p)) process.exit(0);
 const bin = path.join(os.homedir(), ".cc-deck", "bin", "deliver");
 if (!existsSync(bin)) process.exit(0);
-try { spawnSync(bin, [p], { timeout: 8000, stdio: "ignore" }); } catch {}
+try { spawnSync(bin, [p], { timeout: 8000, stdio: "ignore", env: { ...process.env, ...(sid ? { CC_DECK_SESSION_ID: sid } : {}) } }); } catch {}
 process.exit(0);

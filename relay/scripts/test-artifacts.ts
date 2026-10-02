@@ -254,6 +254,48 @@ assert(!!k1 && k1.adds === 1 && a.length === 4 && a.some((x) => x.path === DECLA
   assert(names.includes(DECLARED), "#82 重启挂回：deliver 显式登记条目照旧存活");
 }
 
+// ---------- #227 显式归因：deliver 带 session_id 精确挂账 ----------
+// 复刻 2026-10-02 生产实锤：同 cwd 并行两会话，更新者（外部会话 B）把归属从
+// 交付者（A）手里抢走。裸 id（deliver 脚本从 Bash 环境拿到的 CLI 原生形态）
+// 经 relay 的 ext- 双查精确挂回 A；无身份/未知 sid 回落 cwd 启发式（旧行为保留）
+{
+  const SID_B = "ext-cli-art2";
+  // B 用独立 cli_pid + 独立 transcript：bridge 有 cli_pid 换代接力（同 pid 的后来
+  // 会话会把先者当旧身归档），并行会话真实形态 = 两个进程两份转录
+  const T_B = join(ROOT, "transcript-b.jsonl");
+  writeFileSync(T_B, JSON.stringify({ type: "user", timestamp: new Date().toISOString(), message: { content: "姊妹会话首回合" } }) + "\n");
+  const rb = await fetch(`${http}/bridge/hook`, {
+    method: "POST",
+    headers: { "content-type": "application/json", "x-bridge-token": cfg.bridgeToken },
+    body: JSON.stringify({ session_id: "cli-art2", cwd: CWD, transcript_path: T_B, event: "UserPromptSubmit", prompt: "同目录姊妹会话（更新者，抢归属嫌疑者）", cli_pid: 424242 }),
+  });
+  if (rb.status !== 200) throw new Error("hookB " + rb.status);
+  await wait(300);
+  const D2 = join(CWD, "docs", "显式归因.md");
+  writeFileSync(D2, "# 显式归因\n");
+  const post = async (payload: Record<string, unknown>) => {
+    const r = await fetch(`${http}/api/deliver?token=${cfg.token}`, {
+      method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(payload),
+    });
+    return (await r.json()) as { ok: boolean; session_id?: string };
+  };
+  // ① 无身份 → cwd 启发式兜底：同 cwd 两会话取最近活跃 = B（旧行为不回归）。
+  // 注意顺序：显式登记会刷新归属会话的 updated_at（registerDeliverable 记活跃），
+  // 若先做 ② 再做本条，A 会反超 B 成为「最近活跃」——兜底断言必须在显式挂账前
+  const j1 = await post({ path: D2, cwd: CWD });
+  assert(j1.ok === true && j1.session_id === SID_B, `#227 无 session_id 回落启发式（最近活跃=B）got=${JSON.stringify(j1)}`);
+  // ② 未知 sid（会话已清/env 残留）→ 回落启发式，不丢单
+  const j2 = await post({ path: D2, cwd: CWD, session_id: "ghost-sid-404" });
+  assert(j2.ok === true && j2.session_id === SID_B, `#227 未知 session_id 回落启发式 got=${JSON.stringify(j2)}`);
+  // ③ 裸 session_id（Bash env 形态）→ 精确挂 A，绕开「最近活跃」的 B——生产实锤
+  //    形态的根治断言（A 交付、B 更新，挂账必须归 A）
+  const j3 = await post({ path: D2, cwd: CWD, session_id: "cli-art1" });
+  assert(j3.ok === true && j3.session_id === SID, `#227 裸 session_id 精确挂账（ext- 双查）got=${JSON.stringify(j3)}`);
+  // ④ 挂账真实入板（非只改响应）：A 的看板确有登记条目
+  const artsA = mgr.getExternal(SID)?.artifacts ?? [];
+  assert(artsA.some((x) => x.path === D2 && x.tools.includes("登记")), "#227 A 会话看板含显式登记条目");
+}
+
 ws.close();
 ws2.close();
 await wait(150);

@@ -552,7 +552,9 @@ export function startServer(
     }
     // 2026-09-19 输出物原地登记（意图声明制）：交付物写到它本该在的地方（项目
     // docs/ 等），agent 完成交付后 POST 登记原路径——文件不搬动，看板只记
-    // path/size/时间。归因：发起 cwd 前缀匹配最近活跃会话（见 deliverByCwd）
+    // path/size/时间。归因：#227 起 session_id 优先（deliver 脚本自动携带 Bash 环境的
+    // CLAUDE_CODE_SESSION_ID，hook 上下文经 CC_DECK_SESSION_ID 透传）——精确挂账；
+    // 无身份（手动终端调用）回落 cwd 前缀匹配最近活跃会话（见 deliverByCwd）
     if (req.method === "POST" && url.pathname === "/api/deliver") {
       if ((url.searchParams.get("token") ?? "") !== cfg.token) {
         res.writeHead(401).end("unauthorized");
@@ -565,12 +567,17 @@ export function startServer(
       });
       req.on("end", () => {
         try {
-          const { path: p, cwd } = JSON.parse(body) as { path?: unknown; cwd?: unknown };
+          const { path: p, cwd, session_id: sid } = JSON.parse(body) as {
+            path?: unknown; cwd?: unknown; session_id?: unknown;
+          };
           if (typeof p !== "string" || !p.trim()) {
             res.writeHead(400, { "content-type": "application/json" }).end('{"ok":false,"error":"path 必填"}');
             return;
           }
-          const r = mgr.deliverByCwd(typeof cwd === "string" && cwd ? cwd : p, p);
+          const c = typeof cwd === "string" && cwd ? cwd : p;
+          const r = typeof sid === "string" && /^[A-Za-z0-9-]{8,64}$/.test(sid)
+            ? mgr.deliverBySession(sid, c, p)
+            : mgr.deliverByCwd(c, p);
           res.writeHead(r.ok ? 200 : 404, { "content-type": "application/json" }).end(JSON.stringify(r));
         } catch {
           res.writeHead(400).end("bad json");
