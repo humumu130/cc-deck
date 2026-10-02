@@ -42861,12 +42861,23 @@ var SessionManager = class {
     const r = this.registerDeliverable(sid, rawPath);
     return r.ok ? { ok: true, session_id: sid } : r;
   }
+  // #230 CLI 原生 sid → 卡 id 反查：deliverBySession 第三查取。裸 UUID 老卡（journal
+  // 回放保留的前 ext- 约定外部卡）与托管会话的卡 id 都和 CLI sid 无前缀推导关系，
+  // 唯一锚点是 state.relay_session_id（ensureExternal 建卡/收养时写入，托管会话即
+  // SDK 会话 id）。ownsCliSession 的返回 id 版本（同款遍历，低频调用可忽略）
+  findByCliSid(cliSid) {
+    for (const s of this.sessions.values()) if (s.state.relay_session_id === cliSid) return s.state.session_id;
+    return null;
+  }
   // #227 显式归因（/api/deliver 带 session_id）：会话在册 → 精确挂账，绕开 cwd 启发式。
-  // 双查（同 COMMAND_MODEL 惯例）：deliver 环境拿到的是 CLI 原生 id，外部会话在
-  // sessions 里存的是 ext- 前缀形态——两种都认。sid 不在册（会话已清理/env 残留）
-  // 回落 deliverByCwd——宁可挂隔壁也不丢单。响应带实际归属的 session_id 供核对
+  // 三查：①卡 id 直接命中（托管会话）②ext- 前缀形态（deliver 环境拿到的是 CLI 原生
+  // id，现行外部会话在 sessions 里存的是 ext- 前缀形态）③relay_session_id 反查（#230
+  // 补：老外部卡/托管卡 id 与 CLI sid 无前缀关系，2026-10-02 生产实锤——deliver 带
+  // CLI sid 两查全 miss，回落 cwd 启发式把产物挂给隔壁卡）。sid 不在册（会话已清理/
+  // env 残留）回落 deliverByCwd——宁可挂隔壁也不丢单。响应带实际归属的卡 id 供核对
+  //（deliverables.json 按 e.sid === 卡 id 绑定，回放 applyDeclaredDeliverables 同口径）
   deliverBySession(sid, cwd, rawPath) {
-    const real = this.sessions.has(sid) ? sid : this.sessions.has(`ext-${sid}`) ? `ext-${sid}` : null;
+    const real = this.sessions.has(sid) ? sid : this.sessions.has(`ext-${sid}`) ? `ext-${sid}` : this.findByCliSid(sid);
     if (real) {
       const r = this.registerDeliverable(real, rawPath);
       return r.ok ? { ok: true, session_id: real } : r;
