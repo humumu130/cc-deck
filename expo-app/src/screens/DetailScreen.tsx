@@ -28,7 +28,7 @@ import { useKbHeight } from "../kb";
 import { useEnterSend, useProcessFont, useVoiceInput } from "../display-settings";
 import { voice } from "../voice";
 import { BUILTIN_COMMANDS, fetchSlashCommands, httpBaseOf, matchSlash, type SlashCommand } from "../slash";
-import { MdText, lastLinkAt } from "../md";
+import { MdText } from "../md";
 import { Collapse, FadeIn, PressScale } from "../motion";
 import RenameModal from "./RenameModal";
 
@@ -104,18 +104,26 @@ let agCollapsed = false;
 // 输入草稿跨进出保留：按 session_id 暂存（app 生命周期内，发送即清）
 const drafts = new Map<string, string>();
 
-// #216 防误派守卫用：最近一次输入框聚焦时刻（模块级跨进出详情页保持，与
-// md.tsx 的 lastLinkAt 同族——两者由下方 setPermPanel 守卫消费）
+// #216 排查探针（test.9 取证版，定案后移除）：最近一次胶囊 onPress 的完整事件
+// 指纹 + 胶囊中心测量原值。五段修的四道围堵（时间窗/坐标吞/复弹冷却/键盘期
+// 禁点）真机实测把真点也吞了（键盘收起后胶囊点不动），全部拆除——本版只记录
+// 不拦截，真机 logcat 抓 [perm216] 行直接定案：
+//   · d=触点到胶囊中心的距离（-1=坐标或中心取不到）；
+//   · ctr=measureInWindow 原始回值（判单位/错位）；
+//   · kb=onPress 时刻的键盘高度（判 kbInsets 假死）；
+//   · dt/pin=onPressIn 预记录（真手指按下）与 onPress 的间隔/坐标——onPress
+//     触发却无对应 pressIn/坐标不符 = 合成点击（performClick 错派）铁证
 let lastFocusAt = 0;
-// #216 五段修（test.8）：面板最近一次关闭时刻——「关掉又重新弹」的直接死因是
-// 关闭后紧随的再次触发（同一轮手势里 scrim 关闭 + 胶囊重开叠加时，表象就是
-// 面板关不掉/关了又弹），关闭后 700ms 内的再次打开一律吞掉（真用户关面板后
-// 700ms 内再点胶囊的场景不存在，零误伤）
-let lastCloseAt = 0;
-// #216 排查探针（test.8 临时，定案后移除）：最近一次胶囊 onPress 的触点/距
-// 离判定（d=-1 表示坐标或胶囊中心取不到）+ 三道守卫累计吞次——面板顶部一行
-// 显示，真机复现时肉眼/截图回读，用于定位错派触摸的真实形态
-const permProbe = { txt: "init", eaten: 0, tw: 0, cw: 0 };
+const permProbe = { txt: "init", ctr: "?", kb: -1, dt: -1, pin: "none", pinAt: 0, r1s: 0 };
+// #216 探针·渲染风暴计数：近 1 秒 DetailScreen 渲染次数（详情页体每次渲染打点）。
+// 「弱网热点→重连→快照重放→SESSION_UPDATED 风暴」假说的直接检验量：错弹时 r1s
+// 高（>10/s）=风暴实锤，r1s 平静=排除、回到事件层取证。数组滚动窗口，量小无泄漏
+const permRenders: number[] = [];
+function permProbeRenderTick(): void {
+  const now = Date.now();
+  permRenders.push(now);
+  while (permRenders.length && now - permRenders[0] > 1000) permRenders.shift();
+}
 
 // #376 cron 表达式人话（常见模式；未识别返回 null 只显原文+下次时间兜底）
 const WEEK_CN = ["日", "一", "二", "三", "四", "五", "六"];
@@ -893,10 +901,10 @@ function PermPanel({ open, cur, onPick, onClose }: { open: boolean; cur: PermMod
               <Text style={d.permX}>✕</Text>
             </Pressable>
           </View>
-          {/* #216 排查探针（test.8 临时，定案后移除）：最近一次胶囊 onPress 的触
-              点/距离判定 + 三道守卫累计吞次（吞=坐标 / 窗=时间窗 / 冷=复弹冷却）。
-              再现「弹面板」时这一行就是错派触摸的真身数据，长按可复制 */}
-          <Text style={d.permProbeT} selectable>{`probe ${permProbe.txt} · 吞${permProbe.eaten}/窗${permProbe.tw}/冷${permProbe.cw}`}</Text>
+          {/* #216 排查探针（test.9 取证版，定案后移除）：最近一次胶囊 onPress 的
+              全指纹（触点/距离/键盘高度/pressIn 间隔）+ 胶囊中心测量原值——真机
+              logcat 的 [perm216] 行同款数据，面板上兜底肉眼可读，长按可复制 */}
+          <Text style={d.permProbeT} selectable>{`probe ${permProbe.txt} · ctr ${permProbe.ctr} · kb${permProbe.kb} · dt${permProbe.dt} · r1s${permProbe.r1s} · ${permProbe.pin}`}</Text>
           {PERM_CYCLE.map((m) => {
             const danger = m === "bypassPermissions";
             return (
@@ -1265,31 +1273,19 @@ export interface DetailBackHandle {
 export default function DetailScreen({ sid, onBack, initialView, ref }: { sid: string; onBack: () => void; initialView?: ViewKind; ref?: Ref<DetailBackHandle> }) {
   const { c, mode } = useTheme();
   const d = useThemeStyles(makeStyles);
+  // #216 探针：渲染风暴打点（体级执行，无条件——每次渲染都计，见模块级注释）
+  permProbeRenderTick();
   // #36 权限模式四选一面板：胶囊（Head R2）点开，替代循环切换
-  // #216 防误派守卫（三段修，2026-10-02 真机定稿）：OPPO/ColorOS 真机上点底部
-  // 输入框或时间线链接的触摸会被 Android 触摸层错派给顶部权限胶囊的 Pressable
-  // ——onPress 即 setPermPanel(true)，权限面板凭空弹出（0.6.1-test.4 用户主力机
-  // 稳定复现；模拟器 7 次不可复现；JS 层唯一置 true 入口就是胶囊 onPress）。
-  // 差异法定位：无守卫包点输入框必弹、有守卫包必不弹（两包唯一行为差异=本守卫）。
-  // 真用户从底部输入框/链接处把手指移到顶部胶囊物理上不可能 <400ms，吞掉
-  // 400ms 内的打开请求零误伤；正常点胶囊（间隔远超 400ms）照常放行。
-  // 四段修补漏：输入框已聚焦后再点不重发 onFocus（RN 行为），时间窗打点不
-  // 刷新、错派直通——胶囊 onPress 增加触点坐标判定（见 permPillRef 处），
-  // 此处时间窗降级为坐标取不到时的第二道防线
-  // 五段修（test.8 真机实况：坐标守卫后仍弹且回到「关掉又弹」）：①键盘弹出期
-  // 间胶囊整体 pointerEvents=none（见 onPress 处）掐断高发段；②关闭后 700ms
-  // 复弹冷却（lastCloseAt，见模块级）；③permProbe 探针记录判定数据（面板顶
-  // 一行显示），错派形态定案后再做最终收口
+  // #216 六段修（test.9，用户定调「堵不如疏」）：一~五段修的四道围挡全部拆除
+  // （时间窗/坐标吞/复弹冷却/键盘期禁点——真机实测反把真点吞了：键盘收起后
+  // 胶囊也不响应）。本版 setPermPanel 恢复纯透传，只在打开时打 logcat 取证
+  // 日志（[perm216] 行，配合胶囊 onPress 处的全指纹记录），真机复现「错弹/
+  // 点不动」时数据直接定案根源，再做一次性根治
   const [permPanel, setPermPanelRaw] = useState(false);
   const setPermPanel = (v: boolean) => {
     if (v) {
-      const now = Date.now();
-      // 五段修·复弹冷却：刚关又开 = 错派循环的指纹，吞（计数进探针）
-      if (now - lastCloseAt < 700) { permProbe.cw++; return; }
-      const since = Math.min(now - lastFocusAt, now - lastLinkAt.at);
-      if (since >= 0 && since < 400) { permProbe.tw++; return; }
-    } else {
-      lastCloseAt = Date.now();
+      permProbe.r1s = permRenders.length;
+      console.log("[perm216] OPEN", permProbe.txt, "| ctr", permProbe.ctr, "| kb", permProbe.kb, "| dt", permProbe.dt, "| pin", permProbe.pin, "| r1s", permProbe.r1s);
     }
     setPermPanelRaw(v);
   };
@@ -2055,31 +2051,35 @@ export default function DetailScreen({ sid, onBack, initialView, ref }: { sid: s
                   onLayout={() => {
                     permPillRef.current?.measureInWindow((x, y, w, h) => {
                       permPillCtr.current = { x: x + w / 2, y: y + h / 2 };
+                      // #216 探针：中心测量原值（dp 口径应为 ~胶囊中心；若真机
+                      // 回 px 会被 scale 放大 3.5 倍——单位错位当场暴露）
+                      permProbe.ctr = `${Math.round(x)},${Math.round(y)} ${Math.round(w)}x${Math.round(h)}`;
                     });
                   }}
-                  // 五段修（test.8）：键盘弹出期间整颗胶囊不响应——错派高发段就是
-                  // 点输入框拉起键盘的时刻（含聚焦后再点的漏网场景）；此时开面板
-                  // 键盘还会盖住底部 sheet，本就是坏状态。排查期间键盘开着时先收
-                  // 起键盘再点胶囊（定案后换成只掐错派不清真点的收口）
-                  pointerEvents={kb > 0 ? "none" : "auto"}
                   android_ripple={{ color: c.tintSoft, borderless: false, radius: 8 }}
+                  // #216 探针·pressIn 预记录：真实手指按下必先于 onPress 走这里，
+                  // 坐标即手指真实触点。onPress 触发而 pin 缺失/坐标对不上 =
+                  // 合成点击（performClick 类错派）铁证，logcat 侧 [perm216] 行回读
+                  onPressIn={(e) => {
+                    const t = e.nativeEvent.changedTouches?.[0];
+                    permProbe.pin = `in@${t ? `${Math.round(t.pageX)},${Math.round(t.pageY)}` : "?"}`;
+                    permProbe.pinAt = Date.now();
+                  }}
                   onPress={(e) => {
-                    // #216 四段修·坐标守卫：三段的时间窗守卫漏了「输入框已聚焦
-                    // 后再点不重发 onFocus」的场景（RN 行为，test.5 后真机偶尔仍
-                    // 弹的根因），改按触点位置一刀切：错派触摸的事件坐标保持手指
-                    // 原始位置（屏幕中下部，距胶囊数百 dp），真点胶囊触点必在
-                    // 胶囊上（含 hitSlop 与触点误差）。距中心 >100dp 即吞；坐标
-                    // 取不到时回落 setPermPanel 内的时间窗守卫（双保险）
-                    // （test.8 真机实况：坐标守卫后仍弹——探针 permProbe 记录每
-                    // 次判定的触点/距离数据，面板顶一行回读）
+                    // #216 六段修：只记录不拦截（四道围挡已拆，见 setPermPanel 处
+                    // 注释）。全指纹：触点坐标 x/y、距胶囊中心 d（-1=坐标或中心
+                    // 取不到）、kb=当时键盘高度（判 kbInsets 假死）、dt=pressIn→
+                    // press 间隔（-1=无 pressIn）、fΔ=距上次输入框聚焦毫秒
                     const t = e.nativeEvent.changedTouches?.[0];
                     const px = t?.pageX ?? e.nativeEvent.pageX;
                     const py = t?.pageY ?? e.nativeEvent.pageY;
                     const ctr = permPillCtr.current;
                     const dist = ctr && typeof px === "number" && typeof py === "number"
                       ? Math.round(Math.hypot(px - ctr.x, py - ctr.y)) : -1;
+                    permProbe.kb = kb;
+                    permProbe.dt = permProbe.pinAt > 0 ? Date.now() - permProbe.pinAt : -1;
                     permProbe.txt = `x=${typeof px === "number" ? Math.round(px) : "?"} y=${typeof py === "number" ? Math.round(py) : "?"} d=${dist}${ctr ? "" : "/noctr"}`;
-                    if (dist > 100) { permProbe.eaten++; return; }
+                    console.log("[perm216] press", permProbe.txt, "| ctr", permProbe.ctr, "| kb", kb, "| dt", permProbe.dt, "|", permProbe.pin, "| fΔ", Date.now() - lastFocusAt);
                     setPermPanel(true);
                   }}
                   hitSlop={{ top: 8, bottom: 8, left: 6, right: 6 }}
