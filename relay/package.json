@@ -15,7 +15,8 @@
     "test:waiting-deadlock": "tsx scripts/test-waiting-deadlock.ts",
     "test:cloud": "tsx scripts/test-cloud.ts",
     "test:watchdog": "tsx scripts/test-watchdog.ts",
-    "test:acceptance": "tsx scripts/test-acceptance.ts"
+    "test:acceptance": "tsx scripts/test-acceptance.ts",
+    "test:artifacts-dead": "tsx scripts/test-artifacts-dead.ts"
   },
   "dependencies": {
     "@anthropic-ai/claude-agent-sdk": "latest",
