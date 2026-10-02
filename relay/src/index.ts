@@ -1,7 +1,7 @@
 import { randomBytes } from "node:crypto";
 import { seal, unseal } from "./e2e.js";
-import { networkInterfaces, homedir, hostname } from "node:os";
-import { join } from "node:path";
+import { networkInterfaces, homedir, hostname, tmpdir } from "node:os";
+import { join, sep } from "node:path";
 import { writeFileSync, openSync, readFileSync, rmSync, existsSync, readdirSync, statSync } from "node:fs";
 import { spawn, execFileSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
@@ -373,7 +373,16 @@ startServer(bus, mgr, cfg, {
     const bridgeJson = JSON.stringify({ port: cfg.port, token: cfg.bridgeToken });
     writeFileSync(join(cfg.dataDir, "bridge.json"), bridgeJson, "utf-8");
     const hookHome = join(homedir(), ".cc-deck", "data");
-    if (cfg.dataDir !== hookHome && existsSync(hookHome)) {
+    // 沙箱测试形态不镜像（2026-10-02 实锤）：check-bundle-sync 冒烟（mktemp /tmp +
+    // 40000+ 随机端口）与测试套件（CLAUDE_CONFIG_DIR 隔离 ~/.claude）走此分支会把
+    // 随机端口/临时 bridgeToken 顶进生产 ~/.cc-deck/data/bridge.json——hooks/deliver
+    // 读到死端口全断（当晚 deliver 连 46086 拒连实锤）。镜像语义只属于真实 dev 形态
+    // （repo 内 dataDir、不隔离 CLAUDE 配置），#211 dev/插件换班语义不受影响。
+    // macOS os.tmpdir() 是 /var/folders/…，mktemp 惯用的字面 /tmp 须一并覆盖
+    const sandboxed =
+      !!process.env.CLAUDE_CONFIG_DIR ||
+      [tmpdir(), "/tmp", "/private/tmp", "/var/tmp"].some((t) => (cfg.dataDir + sep).startsWith(t + sep));
+    if (cfg.dataDir !== hookHome && !sandboxed && existsSync(hookHome)) {
       try {
         writeFileSync(join(hookHome, "bridge.json"), bridgeJson, "utf-8");
       } catch {}

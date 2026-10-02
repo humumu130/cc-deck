@@ -10337,8 +10337,8 @@ function unseal(box, theirPublicKeyB64, mySecretKeyB64) {
 }
 
 // src/index.ts
-import { networkInterfaces as networkInterfaces3, homedir as homedir13, hostname } from "node:os";
-import { join as join18 } from "node:path";
+import { networkInterfaces as networkInterfaces3, homedir as homedir13, hostname, tmpdir as tmpdir2 } from "node:os";
+import { join as join18, sep as sep7 } from "node:path";
 import { writeFileSync as writeFileSync13, openSync as openSync3, readFileSync as readFileSync18, rmSync as rmSync3, existsSync as existsSync12, readdirSync as readdirSync7, statSync as statSync6 } from "node:fs";
 import { spawn as spawn4, execFileSync as execFileSync2 } from "node:child_process";
 import { fileURLToPath as fileURLToPath4 } from "node:url";
@@ -44979,7 +44979,7 @@ function removeKnownTexts(s, known) {
 }
 function foreignResidual(box, knownTexts) {
   const stripped = box.map((l, i) => i === 0 ? l.replace(/^\s*❯\s*/, "") : l.replace(/^\s+/, ""));
-  const residuals = ["", " "].map((sep7) => maskNoise(removeKnownTexts(stripped.join(sep7), knownTexts)));
+  const residuals = ["", " "].map((sep8) => maskNoise(removeKnownTexts(stripped.join(sep8), knownTexts)));
   return residuals.every((r) => r) ? residuals[0] ?? "" : "";
 }
 var sleep = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -48588,8 +48588,8 @@ var CloudClient = class {
   }
   bridgeUrl() {
     const base = this.url ?? this.cfg.cloudUrl;
-    const sep7 = base.includes("?") ? "&" : "?";
-    return `${base}${sep7}token=${encodeURIComponent(this.cfg.cloudToken)}&dev=${this.identity.relayDev}&rk=${encodeURIComponent(this.identity.keypair.publicKey)}`;
+    const sep8 = base.includes("?") ? "&" : "?";
+    return `${base}${sep8}token=${encodeURIComponent(this.cfg.cloudToken)}&dev=${this.identity.relayDev}&rk=${encodeURIComponent(this.identity.keypair.publicKey)}`;
   }
   connect() {
     if (this.stopped) return;
@@ -49487,7 +49487,8 @@ startServer(bus, mgr, cfg, {
     const bridgeJson = JSON.stringify({ port: cfg.port, token: cfg.bridgeToken });
     writeFileSync13(join18(cfg.dataDir, "bridge.json"), bridgeJson, "utf-8");
     const hookHome = join18(homedir13(), ".cc-deck", "data");
-    if (cfg.dataDir !== hookHome && existsSync12(hookHome)) {
+    const sandboxed = !!process.env.CLAUDE_CONFIG_DIR || [tmpdir2(), "/tmp", "/private/tmp", "/var/tmp"].some((t) => (cfg.dataDir + sep7).startsWith(t + sep7));
+    if (cfg.dataDir !== hookHome && !sandboxed && existsSync12(hookHome)) {
       try {
         writeFileSync13(join18(hookHome, "bridge.json"), bridgeJson, "utf-8");
       } catch {
