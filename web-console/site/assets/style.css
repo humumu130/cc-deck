@@ -66,8 +66,16 @@ svg.st { fill: currentColor; stroke: none; }
 /* ---------- nav ---------- */
 .nav {
   position: fixed; top: 0; left: 0; right: 0; z-index: 50;
-  border-bottom: 1px solid transparent;
+  border-bottom: 1px solid var(--line);
+  background: rgba(5, 8, 15, .72);
+  backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px);
   transition: background .3s, border-color .3s, backdrop-filter .3s;
+}
+/* JS 在场：页顶先透明（hero 顶部留白区无文字），滚动后由 main.js 加 .scrolled 回玻璃底；
+   无 JS / 脚本失败 / 爬虫：常驻玻璃底，滚动时内容永不与顶栏相叠 */
+.js .nav:not(.scrolled) {
+  background: transparent; backdrop-filter: none; -webkit-backdrop-filter: none;
+  border-color: transparent;
 }
 .nav.scrolled {
   background: rgba(5, 8, 15, .72);
