@@ -12,7 +12,7 @@
 [![stars](https://img.shields.io/github/stars/humumu130/cc-deck?style=social)](https://github.com/humumu130/cc-deck/stargazers)
 [![downloads](https://img.shields.io/github/downloads/humumu130/cc-deck/total?label=downloads)](https://github.com/humumu130/cc-deck/releases)
 
-**在手机、网页与桌面上，随时随地掌握电脑端 Claude Code 的会话、任务与工作状态**。电脑断网重启会话不丢，随手一点即可远程恢复——局域网直连不经任何第三方，跨网走可自建的 Cloudflare 中继，端到端加密。
+**在手机、网页与桌面上，随时随地掌握电脑端 Claude Code 的会话、任务与工作状态**。电脑断网重启会话不丢，随手一点即可远程恢复——局域网直连不经任何第三方，跨网中继端到端加密，可自建（Cloudflare / 自有服务器）。
 
 <a href="https://cc-deck.humumu.online/"><img src="docs/readme/home-btn.svg" alt="项目主页 · cc-deck.humumu.online" width="176"></a>
 
