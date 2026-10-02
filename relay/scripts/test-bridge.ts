@@ -82,6 +82,13 @@ rmSync(TDATA, { recursive: true, force: true });
 // 或某段补调 ensureLeader）都会踩「无锚即 spawn 真 CLI」路径（2026-09-28 expo 沙盒
 // 实锤同款）。本套件不测团队，先钉死确保永不发生；生产语义不受影响（不设 env）
 process.env.CCR_NO_LEADER = "1";
+// org 目录隔离（2026-10-03 实锤）：orgDir() 固定 ~/.cc-deck/org（不跟 CCR_DATA_DIR
+// 走）——本套件看门狗接管流的 dispatch 回执曾漏写真实 org 的 dispatch-log.ndjson
+//（现场三条 22:49/23:18/01:12 同源）。指到测试目录，与其余隔离套件（test-org 等
+// CCR_ORG_DIR 先例）对齐
+const TORG = fileURLToPath(new URL("../data/test-orgdir/", import.meta.url));
+rmSync(TORG, { recursive: true, force: true });
+process.env.CCR_ORG_DIR = TORG;
 // 用户配置隔离：onReady 的任务工具兜底会写 settings.json——指到测试目录，
 // 防止套件碰真实 ~/.claude（外部用户机器上跑同一保护，这里防测试污染本机）
 const CCFG = fileURLToPath(new URL("../data/test-claude-cfg/", import.meta.url));

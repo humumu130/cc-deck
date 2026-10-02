@@ -46,10 +46,17 @@ if [ -f cc-plugins/plugins/cc-deck/scripts/relay.mjs ]; then
   SMOKE_DIR="$(mktemp -d /tmp/ccdeck-smoke-data.XXXXXX)"
   SMOKE_LOG="$SMOKE_DIR/out.log"
   SMOKE_PORT=$(( (RANDOM % 20000) + 40000 ))
-  CCR_PORT="$SMOKE_PORT" CCR_DATA_DIR="$SMOKE_DIR" CC_DECK_PLUGIN=1 \
+  # 密闭五件套（2026-10-03 实锤补齐）：此前只隔端口+数据目录——冒烟 relay 仍会
+  # ①在默认 ~/.cc-deck/org 引导真 Leader（P0 同款生产污染）②连生产云桥 ③镜像写
+  # ~/.cc-deck/data/bridge.json（沙盒检测漏网时）④mDNS 广播幽灵实例。org/云桥/
+  # 镜像/mdns 全部钉死，冒烟只剩「bundle 能起、横幅能出」一件事
+  CCR_PORT="$SMOKE_PORT" CCR_DATA_DIR="$SMOKE_DIR" CCR_ORG_DIR="$SMOKE_DIR/org" \
+    CCR_CLOUD_URL="" CCR_NO_BRIDGE_MIRROR=1 CCR_NO_MDNS=1 CC_DECK_PLUGIN=1 \
     node cc-plugins/plugins/cc-deck/scripts/relay.mjs >"$SMOKE_LOG" 2>&1 &
   SMOKE_PID=$!
-  sleep 3
+  # 8s：orphan-adopt 扫描（~/.claude/projects）+ 2.3MB bundle 冷加载会把横幅拖过
+  # 3s 窗口——曾误报「起服失败」（实为 flaky，2026-10-03 复现实测横幅 ~5s 出）
+  sleep 8
   SMOKE_OK=1
   kill -0 "$SMOKE_PID" 2>/dev/null || SMOKE_OK=0
   grep -q "CC Deck Relay 已启动" "$SMOKE_LOG" || SMOKE_OK=0
