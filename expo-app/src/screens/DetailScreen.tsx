@@ -177,6 +177,13 @@ function artRelOf(s: SessionState, t: ArtifactItem): string {
   if (t.origin !== "cwd" || !s.cwd) return "";
   return t.path.startsWith(s.cwd) ? t.path.slice(s.cwd.length).replace(/^[\\/]+/, "") : "";
 }
+// #222 文件夹分组取父目录（与 web-console artDirOf 同口径）：cwd 内按相对路径、外按
+// 绝对路径；兼容 / 与 \（Windows 源）；根下文件（无父目录）返回空串 = 散文件，永不聚合
+function artDirOf(s: SessionState, t: ArtifactItem): string {
+  const p = artRelOf(s, t) || t.path;
+  const i = Math.max(p.lastIndexOf("/"), p.lastIndexOf("\\"));
+  return i > 0 ? p.slice(0, i) : "";
+}
 function fmtArtSize(n: number | undefined): string {
   if (typeof n !== "number" || n < 0) return "";
   if (n < 1024) return n + " B";
@@ -1331,6 +1338,9 @@ export default function DetailScreen({ sid, onBack, initialView, ref }: { sid: s
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
   // #376 定时任务条目展开态（按任务 id）
   const [cronOpen, setCronOpen] = useState<Record<string, boolean>>({});
+  // #222 输出物文件夹折叠态（键 sid|dirLower；未记录 = 最近活跃的文件夹展开、其余折叠，
+  // 用户点开/点折叠后以显式记录优先）
+  const [artFold, setArtFold] = useState<Record<string, boolean>>({});
   // 内容长按菜单（#249）：非空即弹 ContentMenu
   const [menuText, setMenuText] = useState<string | null>(null);
   const todoScrollRef = useRef<ScrollView>(null);
@@ -2423,9 +2433,11 @@ export default function DetailScreen({ sid, onBack, initialView, ref }: { sid: s
           )}
         </ScrollView>
       ) : v.k === "arts" ? (
-        /* #35 输出物视图（网页端第 6 tab 同构）：新建/修改两组（组内按最后写入降序）+
-           汇总行（N 个文件 · 新建 X · 修改 Y · +a −d）；行首扩展名 chip 按类型着色。
-           手机端打不开电脑文件——点行弹详情 sheet 给完整路径（复制/分享），不在此行内展开 */
+        /* #35 输出物视图（网页端第 6 tab 同构）。#222 起支持文件夹颗粒度：同父目录
+           ≥2 个文件聚成可折叠文件夹行（最近活跃的默认展开、其余折叠，点按开合有记忆），
+           文件夹与散文件按时间降序混排——最新交付永远在顶；存在文件夹时「新建/修改」
+           两组头降级为行内徽标，纯散文件会话保持两组头不变。行首扩展名 chip 按类型着色；
+           手机端打不开电脑文件——点行弹详情 sheet（复制/分享/拉取预览） */
         <ScrollView style={{ flex: 1 }} contentContainerStyle={{ padding: 14, paddingBottom: 40 + insets.bottom, ...((s.artifacts?.length ?? 0) === 0 ? { flexGrow: 1, justifyContent: "center", paddingBottom: 14 + insets.bottom } : null) }} showsVerticalScrollIndicator={false}>
           {(s.artifacts?.length ?? 0) === 0 ? (
             /* #49：空态文案不暴露内部机制（原三分提示句移除），只留一句话（与网页端同口径）；
@@ -2437,19 +2449,64 @@ export default function DetailScreen({ sid, onBack, initialView, ref }: { sid: s
             const created = arts.filter((t) => t.op === "create").sort(byRec);
             const edited = arts.filter((t) => t.op !== "create").sort(byRec);
             const KC: Record<ArtKind, string> = { code: c.brandA, doc: c.done, data: c.working, img: c.waiting, zip: c.dim, gen: c.faint };
-            const artRow = (t: ArtifactItem, i: number) => {
+            // #222 分组口径（与 web-console artifactsTabHtml 一致）：分组键 = 父目录
+            // toLowerCase 归一（Windows 源大小写不敏感）；同键 ≥2 文件才聚合，单文件
+            // 目录与根目录文件保持散文件；只按直接父目录一层，不递归
+            const dirN = new Map<string, number>();
+            for (const t of arts) {
+              const dir = artDirOf(s, t).toLowerCase();
+              if (dir) dirN.set(dir, (dirN.get(dir) ?? 0) + 1);
+            }
+            const folders = new Map<string, { key: string; dir: string; leaf: string; files: ArtifactItem[]; at: number; size: number }>();
+            const loose: ArtifactItem[] = [];
+            for (const t of arts) {
+              const dir = artDirOf(s, t);
+              const key = dir.toLowerCase();
+              if (dir && (dirN.get(key) ?? 0) >= 2) {
+                let g = folders.get(key);
+                if (!g) {
+                  g = { key, dir, leaf: dir.split(/[\\/]/).pop() || dir, files: [], at: 0, size: 0 };
+                  folders.set(key, g);
+                }
+                g.files.push(t);
+                const at = t.last_at || t.first_at || 0;
+                if (at > g.at) g.at = at;
+                if (typeof t.size === "number") g.size += t.size;
+              } else {
+                loose.push(t);
+              }
+            }
+            for (const g of folders.values()) g.files.sort(byRec);
+            // 默认开合：最近活跃（组内最新时间最大）的文件夹展开、其余折叠；
+            // 用户点过的以 artFold 显式记录优先
+            let newestKey = "";
+            let newestAt = -1;
+            for (const g of folders.values()) if (g.at > newestAt) { newestAt = g.at; newestKey = g.key; }
+            const folOpen = (k: string) => artFold[sid + "|" + k] ?? k === newestKey;
+            // 混排：文件夹（按组内最新时间）与散文件（按各自时间）降序同列竞争
+            const items = [
+              ...[...folders.values()].map((g) => ({ kind: "folder" as const, g })),
+              ...loose.map((t) => ({ kind: "file" as const, t })),
+            ].sort((a, b) =>
+              (b.kind === "folder" ? b.g.at : b.t.last_at || b.t.first_at || 0) -
+              (a.kind === "folder" ? a.g.at : a.t.last_at || a.t.first_at || 0),
+            );
+            const artRow = (t: ArtifactItem, i: number, opts?: { sub?: boolean; badge?: boolean }) => {
               const rel = artRelOf(s, t);
               const name = (rel || t.path).split(/[\\/]/).pop() || t.path;
-              const dir = rel
-                ? (rel.includes("/") || rel.includes("\\") ? rel.slice(0, Math.max(rel.lastIndexOf("/"), rel.lastIndexOf("\\")) + 1) : "")
-                : t.path.slice(0, t.path.length - name.length);
+              // 子行（文件夹展开列内）去目录前缀——目录信息由文件夹头行承载
+              const dir = opts?.sub
+                ? ""
+                : rel
+                  ? (rel.includes("/") || rel.includes("\\") ? rel.slice(0, Math.max(rel.lastIndexOf("/"), rel.lastIndexOf("\\")) + 1) : "")
+                  : t.path.slice(0, t.path.length - name.length);
               const dead = t.exists === false;
               const outside = !rel && t.origin !== "cwd";
               const kc = KC[artKindOf(name)];
               return (
                 <Pressable
                   key={t.path + "|" + i}
-                  style={[d.cronRow, i === 0 && { borderTopWidth: 0, marginTop: 0 }]}
+                  style={[d.cronRow, opts?.sub ? { borderTopWidth: 0, marginTop: 0, paddingVertical: 4 } : i === 0 ? { borderTopWidth: 0, marginTop: 0 } : null]}
                   android_ripple={{ color: c.tintSoft, borderless: false }}
                   onPress={() => setArtPop(t)}
                   accessibilityLabel={`输出物 ${name}，点按查看路径详情`}
@@ -2460,6 +2517,9 @@ export default function DetailScreen({ sid, onBack, initialView, ref }: { sid: s
                   <View style={{ flex: 1, minWidth: 0 }}>
                     <View style={d.artNameRow}>
                       <Text style={[d.cronName, dead && { color: c.dim }]} numberOfLines={1}>{name}</Text>
+                      {opts?.badge ? (
+                        <Text style={[d.artTag, t.op === "create" ? { color: c.done } : { color: c.dim }]}>{t.op === "create" ? "新建" : "修改"}</Text>
+                      ) : null}
                       {dead ? <Text style={[d.artTag, { color: c.error }]}>已删除</Text> : null}
                       {outside ? <Text style={[d.artTag, { color: c.working }]}>cwd 外</Text> : null}
                     </View>
@@ -2471,17 +2531,61 @@ export default function DetailScreen({ sid, onBack, initialView, ref }: { sid: s
                 </Pressable>
               );
             };
+            const artFolder = (g: { key: string; dir: string; leaf: string; files: ArtifactItem[]; at: number; size: number }, idx: number) => {
+              const open = folOpen(g.key);
+              return (
+                <View key={"fol|" + g.key}>
+                  <Pressable
+                    style={[d.cronRow, idx === 0 && { borderTopWidth: 0, marginTop: 0 }, d.artFolRow]}
+                    android_ripple={{ color: c.tintSoft, borderless: false }}
+                    onPress={() => setArtFold((m) => ({ ...m, [sid + "|" + g.key]: !open }))}
+                    accessibilityLabel={`文件夹 ${g.leaf}，${g.files.length} 个文件，点按${open ? "折叠" : "展开"}`}
+                  >
+                    <View style={[d.artChip, { borderColor: withA(c.brandB, 0.45) }]}>
+                      <Svg width={11} height={11} viewBox="0 0 24 24" fill="none" stroke={c.brandB} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+                        <Path d="M3.5 7.2c0-1.3 1-2.3 2.3-2.3h3l2 2.2h6.4c1.3 0 2.3 1 2.3 2.3v7.3c0 1.3-1 2.3-2.3 2.3H5.8c-1.3 0-2.3-1-2.3-2.3z" />
+                      </Svg>
+                    </View>
+                    <View style={{ flex: 1, minWidth: 0 }}>
+                      <View style={d.artNameRow}>
+                        <Text style={[d.cronName, d.artFolName]} numberOfLines={1}>{g.leaf}</Text>
+                        <Text style={[d.artTag, { color: c.brandB, borderColor: withA(c.brandB, 0.4) }]}>×{g.files.length}</Text>
+                      </View>
+                      <Text style={d.cronMeta} numberOfLines={1}>
+                        {/* 用户反馈：不堆「N 新建 · M 修改」摘要——几个文件、哪个任务的
+                            目录一目了然即可，op 细节看子行徽标 */}
+                        {[g.dir, g.size > 0 ? fmtArtSize(g.size) : "", fmtArtTime(g.at)].filter(Boolean).join(" · ")}
+                      </Text>
+                    </View>
+                    <Text style={[d.artChev, open && d.artChevOn]}>›</Text>
+                  </Pressable>
+                  {open ? (
+                    <View style={d.artKids}>
+                      {g.files.map((t, i) => artRow(t, i, { sub: true, badge: true }))}
+                    </View>
+                  ) : null}
+                </View>
+              );
+            };
             return (
               <>
                 <View style={d.artSum}>
-                  {/* 2026-09-21 用户：移除「新建 N · 修改 N / +N −N」统计（分组标题仍带计数，与网页端同改） */}
-                  <Text style={d.artSumN}>{arts.length} 个文件</Text>
+                  {/* 2026-09-21 用户：移除「新建 N · 修改 N / +N −N」统计（#222 聚合形态下
+                      两组头降级为行内徽标，计数由文件夹行「×N · N 新建」承载） */}
+                  <Text style={d.artSumN}>{arts.length} 个文件{folders.size ? ` · ${folders.size} 个文件夹` : ""}</Text>
                 </View>
                 {s.artifacts_truncated ? <Text style={d.artTrunc}>已截断 · 保留最新 200 条</Text> : null}
-                {created.length ? <Text style={[d.artGt, { color: c.done }]}>新建 {created.length} · 本会话产出</Text> : null}
-                {created.map(artRow)}
-                {edited.length ? <Text style={[d.artGt, { color: c.dim }]}>修改 {edited.length}</Text> : null}
-                {edited.map(artRow)}
+                {folders.size ? (
+                  /* #222 聚合形态：文件夹与散文件混排，「新建/修改」两组头消失 */
+                  items.map((it, idx) => (it.kind === "folder" ? artFolder(it.g, idx) : artRow(it.t, idx, { badge: true })))
+                ) : (
+                  <>
+                    {created.length ? <Text style={[d.artGt, { color: c.done }]}>新建 {created.length} · 本会话产出</Text> : null}
+                    {created.map((t, i) => artRow(t, i))}
+                    {edited.length ? <Text style={[d.artGt, { color: c.dim }]}>修改 {edited.length}</Text> : null}
+                    {edited.map((t, i) => artRow(t, i))}
+                  </>
+                )}
                 {/* #49：底部说明去掉"仅收录 Write/Edit…"工具清单（机制不外露）；
                     #51：补收录口径（文档类交付物），与网页端同句 */}
                 <Text style={d.artFoot}>仅收录文档、表格等交付物 · 点文件可拉取到手机预览</Text>
@@ -3192,6 +3296,13 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
   artNameRow: { flexDirection: "row", alignItems: "center", gap: 6 },
   artTag: { fontSize: 10, lineHeight: 13, borderWidth: 1, borderColor: c.line, borderRadius: 4, paddingHorizontal: 4, paddingVertical: 1 },
   artFoot: { color: c.faint, fontSize: 10.5, textAlign: "center", paddingVertical: 16 },
+  // #222 文件夹分组：文件夹头行（垂直居中 + 叶子名加粗）/ 折叠箭头（› 旋 90° 指下）/
+  // 展开子列（左缘引导线 + 缩进，子行紧凑无分隔线）
+  artFolRow: { alignItems: "center" },
+  artFolName: { color: c.text, fontSize: 12.5, fontWeight: "700", lineHeight: 17 },
+  artChev: { color: c.faint, fontSize: 13, lineHeight: 16 },
+  artChevOn: { transform: [{ rotate: "90deg" }] },
+  artKids: { marginLeft: 13, borderLeftWidth: 1, borderLeftColor: c.line, paddingLeft: 8, marginVertical: 2 },
   // #83 sheet 重设计样式（仅 ArtSheet 使用，零共享）：字号阶梯 14 标题 > 13 CTA >
   // 12 次级按钮 > 11 元信息/路径 mono > 10 caption/相对路径 > 9 chip
   artTitleRow: { flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 2 },
