@@ -2,7 +2,7 @@
 
 <div align="center">
 
-<img src="docs/readme/hero.svg" alt="CC Deck — Claude Code 会话装进口袋：手机、网页、桌面随身掌控审批、注入与任务汇报" width="880">
+<img src="docs/readme/hero.svg" alt="CC Deck — Claude Code 会话装进口袋：随时随地掌握电脑端的会话、任务与工作状态" width="880">
 
 [![relay CI](https://github.com/humumu130/cc-deck/actions/workflows/relay.yml/badge.svg)](https://github.com/humumu130/cc-deck/actions/workflows/relay.yml)
 [![android CI](https://github.com/humumu130/cc-deck/actions/workflows/android.yml/badge.svg)](https://github.com/humumu130/cc-deck/actions/workflows/android.yml)
@@ -12,7 +12,7 @@
 [![stars](https://img.shields.io/github/stars/humumu130/cc-deck?style=social)](https://github.com/humumu130/cc-deck/stargazers)
 [![downloads](https://img.shields.io/github/downloads/humumu130/cc-deck/total?label=downloads)](https://github.com/humumu130/cc-deck/releases)
 
-**在手机、网页与桌面上使用 PC 端的 Claude Code**：查看会话状态、批准权限、发送消息、切换模型、接收任务汇报。电脑断网重启会话不丢，手机点一下即可远程恢复——局域网直连不经任何第三方，跨网走可自建的 Cloudflare 中继，端到端加密。
+**在手机、网页与桌面上，随时随地掌握电脑端 Claude Code 的会话、任务与工作状态**。电脑断网重启会话不丢，随手一点即可远程恢复——局域网直连不经任何第三方，跨网走可自建的 Cloudflare 中继，端到端加密。
 
 <a href="https://cc-deck.humumu.online/"><img src="docs/readme/home-btn.svg" alt="项目主页 · cc-deck.humumu.online" width="176"></a>
 
