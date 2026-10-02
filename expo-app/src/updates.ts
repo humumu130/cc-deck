@@ -58,15 +58,11 @@ export interface VersionNote {
 // 本版本发布日期（正式版发版日），关于弹窗头行与「已是最新」态展示
 export const VERSION_DATE = "2026-10-02";
 export const VERSION_NOTES: VersionNote[] = [
-  // 新增
-  { group: "new", text: "远程审批可记住选择：同类操作不再反复弹窗打扰", note: "审批卡上选「允许并记住」即可" },
   // 优化
-  { group: "improved", text: "输出物面板按文件夹分组，批量图片不再散乱堆放" },
+  { group: "improved", text: "输出物文件夹行尾改为 ⋯ 菜单，可展开收起、复制目录路径", note: "与文件行的操作样式统一，手机电脑一致" },
   // 修复
-  { group: "fixed", text: "删除电脑上的文件后，输出物面板同步消失" },
-  { group: "fixed", text: "修复权限模式切到「跳过」不生效的问题" },
-  { group: "fixed", text: "去掉权限面板上临时显示的排查信息" },
-  { group: "fixed", text: "另修复更新弹窗在个别情况下无法展示的问题" },
+  { group: "fixed", text: "电脑端输出物列表文件夹行与文件行的大小、时间列恢复对齐" },
+  { group: "fixed", text: "多个会话同时工作时，产出文件不再归到别的会话名下" },
 ];
 
 export type UpdateInfo = {
