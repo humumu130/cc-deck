@@ -58,8 +58,11 @@ export interface VersionNote {
 // 本版本发布日期（正式版发版日），关于弹窗头行与「已是最新」态展示
 export const VERSION_DATE = "2026-10-02";
 export const VERSION_NOTES: VersionNote[] = [
+  // 优化
+  { group: "improved", text: "精简设置页「本机」区，说明与长列表收纳更紧凑", note: "开机自启说明移入问号图标；配对设备默认折叠前 5 条" },
   // 修复
   { group: "fixed", text: "修复长时间运行的会话，产出文件偶发归到其他会话名下的问题" },
+  { group: "fixed", text: "修复设置页「移除」「删除」按钮点击无效的问题" },
 ];
 
 export type UpdateInfo = {
