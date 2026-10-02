@@ -58,11 +58,8 @@ export interface VersionNote {
 // 本版本发布日期（正式版发版日），关于弹窗头行与「已是最新」态展示
 export const VERSION_DATE = "2026-10-02";
 export const VERSION_NOTES: VersionNote[] = [
-  // 优化
-  { group: "improved", text: "输出物文件夹行尾改为 ⋯ 菜单，可展开收起、复制目录路径", note: "与文件行的操作样式统一，手机电脑一致" },
   // 修复
-  { group: "fixed", text: "电脑端输出物列表文件夹行与文件行的大小、时间列恢复对齐" },
-  { group: "fixed", text: "多个会话同时工作时，产出文件不再归到别的会话名下" },
+  { group: "fixed", text: "修复长时间运行的会话，产出文件偶发归到其他会话名下的问题" },
 ];
 
 export type UpdateInfo = {
