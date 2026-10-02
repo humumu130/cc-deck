@@ -10,6 +10,7 @@ import android.content.Intent
 import android.content.pm.ServiceInfo
 import android.os.Build
 import android.os.IBinder
+import expo.modules.kotlin.exception.CodedException
 import expo.modules.kotlin.modules.Module
 import expo.modules.kotlin.modules.ModuleDefinition
 
@@ -205,6 +206,50 @@ class RelayNotifyModule : Module() {
           else -> "none"
         }
       }
+    }
+
+    // #237 保存到系统「下载/CC Deck/」（2026-10-03 用户反馈「想下载都不行」：此前
+    // 唯一出口是系统分享面板，其中「保存文件」入口在部分 ROM 上时隐时现）。API 29+
+    // 走 MediaStore.Downloads（免存储权限，系统下载管理可索引）；API<29 直写公共
+    // Download 目录（WRITE_EXTERNAL_STORAGE 已声明）。path 接受 file:// uri 或裸
+    // 路径（均为 App 沙盒内缓存文件）；返回落点相对路径供 UI 提示
+    Function("saveToDownloads") { path: String, mime: String, displayName: String ->
+      val ctx = appContext.reactContext ?: throw CodedException("ERR_NO_CONTEXT", "应用上下文不可用，请重试", null)
+      val src = java.io.File(android.net.Uri.parse(path).path ?: path)
+      if (!src.exists()) throw CodedException("ERR_FILE", "文件不存在（缓存可能已清理，请重新拉取）", null)
+      val safe = displayName.replace(Regex("[\\\\/:*?\"<>|]"), "_").takeLast(120).ifBlank { "artifact" }
+      val dir = "CC Deck"
+      if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+        val values = android.content.ContentValues().apply {
+          put(android.provider.MediaStore.Downloads.DISPLAY_NAME, safe)
+          put(android.provider.MediaStore.Downloads.MIME_TYPE, if (mime.isBlank()) "application/octet-stream" else mime)
+          put(android.provider.MediaStore.Downloads.RELATIVE_PATH, android.os.Environment.DIRECTORY_DOWNLOADS + "/" + dir)
+          put(android.provider.MediaStore.Downloads.IS_PENDING, 1)
+        }
+        val resolver = ctx.contentResolver
+        val item = resolver.insert(android.provider.MediaStore.Downloads.EXTERNAL_CONTENT_URI, values)
+          ?: throw CodedException("ERR_INSERT", "创建下载记录失败", null)
+        try {
+          // IS_PENDING 流程：先占位再写流，失败删记录不留半截文件
+          resolver.openOutputStream(item)?.use { out -> src.inputStream().use { it.copyTo(out) } }
+            ?: throw CodedException("ERR_WRITE", "打开下载写入流失败", null)
+          values.clear()
+          values.put(android.provider.MediaStore.Downloads.IS_PENDING, 0)
+          resolver.update(item, values, null, null)
+        } catch (e: Exception) {
+          resolver.delete(item, null, null)
+          throw CodedException("ERR_WRITE", "写入下载失败：${e.message}", e)
+        }
+      } else {
+        @Suppress("DEPRECATION")
+        val sub = java.io.File(
+          android.os.Environment.getExternalStoragePublicDirectory(android.os.Environment.DIRECTORY_DOWNLOADS),
+          dir,
+        )
+        if (!sub.exists()) sub.mkdirs()
+        src.copyTo(java.io.File(sub, safe), overwrite = true)
+      }
+      "${android.os.Environment.DIRECTORY_DOWNLOADS}/$dir/$safe"
     }
   }
 }

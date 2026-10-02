@@ -72,6 +72,16 @@ export function requestBatteryExempt(): string {
   }
 }
 
+// #237 保存文件到系统「下载/CC Deck/」（2026-10-03 用户反馈「想下载都不行」：
+// 系统分享面板的「保存文件」入口在部分 ROM 上时隐时现，走原生 MediaStore 直落
+// 下载目录才是确定出口）。同步调用（文件都在本地缓存，无网络等待）；失败向上
+// 抛错（下载的期望就是「落盘成功与否」，与分享的静默兜底不同）
+export function saveToDownloads(uri: string, mime: string, name: string): string {
+  const r = mod?.saveToDownloads?.(uri, mime, name);
+  if (!r) throw new Error("此设备不支持保存到下载目录");
+  return r;
+}
+
 // API 33+ 运行时通知权限（拒绝则通知静默不显示，前台服务照常）
 export async function ensureNotifPermission(): Promise<void> {
   if (Platform.OS !== "android" || Platform.Version < 33) return;

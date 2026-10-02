@@ -31,6 +31,7 @@ import { BUILTIN_COMMANDS, fetchSlashCommands, httpBaseOf, matchSlash, type Slas
 import { MdText } from "../md";
 import { Collapse, FadeIn, PressScale } from "../motion";
 import RenameModal from "./RenameModal";
+import { saveToDownloads } from "../notify";
 
 // 详情页视图 tab（与网页端 tabs 对齐：消息/任务/全部/输出物/定时/统计，同序）。
 // 消息/全部 = 转录过滤视图；任务/输出物/定时/统计 = 独占内容视图。
@@ -589,6 +590,50 @@ async function shareArtView(v: ArtViewData): Promise<void> {
   await Sharing.shareAsync(uri, { mimeType: mime, dialogTitle: `分享 ${v.name}` });
 }
 
+// #237 按 ArtifactItem 拉取并分级（原 ArtSheet 闭包内实现抽出）：单件查看/分享/
+// 下载与批量下载共用同一条链（缓存键、分级、持久层语义完全一致）
+async function fetchArtifactView(sid: string, path: string, cacheKey: string, name: string): Promise<ArtViewData> {
+  const r = await store.fetchArtifact(sid, path);
+  const chunks = r.b64s.map(fromB64);
+  let n = 0;
+  for (const cc of chunks) n += cc.length;
+  const u8 = new Uint8Array(n);
+  let o = 0;
+  for (const cc of chunks) { u8.set(cc, o); o += cc.length; }
+  const mime = r.mime || "application/octet-stream";
+  const uri = artCacheUri(cacheKey, name);
+  await writeArtUri(uri, u8);
+  let data: ArtViewData;
+  if (mime.startsWith("image/")) {
+    data = { kind: "img", name, uri, size: n };
+  } else if (mime === "text/html") {
+    data = { kind: "html", name, text: decodeUtf8(u8), size: n };
+  } else if (mime === "text/markdown") {
+    data = { kind: "md", name, text: decodeUtf8(u8), size: n };
+  } else if (mime.startsWith("text/") || mime === "application/json") {
+    data = { kind: "txt", name, text: decodeUtf8(u8), size: n };
+  } else {
+    data = { kind: "sys", name, uri, mime, size: n };
+  }
+  artCachePut(cacheKey, data);
+  return data;
+}
+
+// #237 下载到系统「下载/CC Deck/」（2026-10-03 用户反馈「想下载都不行」）：mime
+// 映射与 shareArtView 同构，出口换原生 saveToDownloads（分享面板的「保存文件」
+// 入口在部分 ROM 时隐时现，不是确定出口）。返回落点相对路径
+async function downloadArtView(v: ArtViewData): Promise<string> {
+  const mime =
+    v.kind === "sys" ? v.mime
+    : v.kind === "img" ? "image/*"
+    : v.kind === "html" ? "text/html"
+    : v.kind === "md" ? "text/markdown"
+    : "text/plain";
+  const uri = v.kind === "img" || v.kind === "sys" ? v.uri : await saveArtText(v.name, v.text);
+  const safe = v.name.replace(/[\\/:*?"<>|]/g, "_").slice(-80) || "artifact";
+  return saveToDownloads(uri, mime, safe);
+}
+
 // #79 输出物预览全屏层：图片/HTML/文本内嵌，复杂格式自动呼系统应用（头部按钮可重开）。
 // 晨间反馈补齐：头部「分享」= 文件本体进系统分享面板（存云盘/发微信/存本地一板全收，
 // 就是「下载到本地随用户处理」的系统出口）；HTML 另给「浏览器」按钮交系统浏览器渲染
@@ -598,9 +643,11 @@ function ArtView({ v, onClose }: { v: ArtViewData | null; onClose: () => void })
   const d = useThemeStyles(makeStyles);
   const [openErr, setOpenErr] = useState<string | null>(null);
   const [actErr, setActErr] = useState<string | null>(null);
+  const [dlTip, setDlTip] = useState<string | null>(null); // #237 下载成功提示（绿色，同位错误行上方）
   useEffect(() => {
     setOpenErr(null);
     setActErr(null);
+    setDlTip(null);
     if (v?.kind === "sys") void openArtExternally(v.uri, v.mime).then(setOpenErr);
   }, [v]);
   // 分享文件本体（逻辑在模块级 shareArtView，与 ArtSheet 共用）
@@ -611,6 +658,17 @@ function ArtView({ v, onClose }: { v: ArtViewData | null; onClose: () => void })
       setActErr(null);
     } catch (e) {
       setActErr(e instanceof Error ? e.message : String(e));
+    }
+  };
+  // #237 下载到「下载/CC Deck/」（与 ArtSheet doDownload 同一条模块级链）
+  const downloadFile = async () => {
+    if (!v) return;
+    try {
+      setDlTip(`✓ 已保存到 ${await downloadArtView(v)}`);
+      setActErr(null);
+    } catch (e) {
+      setActErr(e instanceof Error ? e.message : String(e));
+      setDlTip(null);
     }
   };
   // HTML 交系统浏览器（App 内 WebView 渲不了的场景兜底，如外链资源/打印）
@@ -635,6 +693,9 @@ function ArtView({ v, onClose }: { v: ArtViewData | null; onClose: () => void })
               <Text style={d.avAct}>浏览器</Text>
             </Pressable>
           ) : null}
+          <Pressable hitSlop={6} onPress={() => { void downloadFile(); }} accessibilityLabel="下载到手机">
+            <Text style={d.avAct}>下载</Text>
+          </Pressable>
           <Pressable hitSlop={6} onPress={() => { void shareFile(); }} accessibilityLabel="分享文件">
             <Text style={d.avAct}>分享</Text>
           </Pressable>
@@ -642,6 +703,7 @@ function ArtView({ v, onClose }: { v: ArtViewData | null; onClose: () => void })
             <Text style={d.avClose}>✕</Text>
           </Pressable>
         </View>
+        {dlTip ? <Text style={d.avDlTip} numberOfLines={2}>{dlTip}</Text> : null}
         {openErr || actErr ? (
           <Text style={d.avErr} numberOfLines={2}>{actErr ?? openErr}</Text>
         ) : null}
@@ -702,10 +764,11 @@ function ArtSheet({ art, rel, sid, onClose }: { art: ArtifactItem | null; rel: s
   useEffect(() => () => { if (copiedTimer.current) clearTimeout(copiedTimer.current); }, []);
   const [busy, setBusy] = useState(false);
   const [ferr, setFerr] = useState<string | null>(null);
+  const [dlOk, setDlOk] = useState<string | null>(null); // #237 单件下载成功提示（ferr 同位的绿色行）
   const [view, setView] = useState<ArtViewData | null>(null);
   const open = !!art;
   // 常驻后关闭时复位内嵌预览/错误/忙碌态（防下次打开残留）
-  useEffect(() => { if (!open) { setView(null); setFerr(null); setBusy(false); } }, [open]);
+  useEffect(() => { if (!open) { setView(null); setFerr(null); setDlOk(null); setBusy(false); } }, [open]);
   const name = (rel || art?.path || "").split(/[\\/]/).pop() || art?.path || "";
   const dead = art?.exists === false;
   const outside = art?.origin === "outside" || (!!art && !rel && art.origin !== "cwd");
@@ -717,34 +780,11 @@ function ArtSheet({ art, rel, sid, onClose }: { art: ArtifactItem | null; rel: s
   // 已缓存时主按钮变「查看」——用户不再疑惑"为什么又要拉取"（has 无 LRU 副作用；
   // 磁盘层同判：重启后盘缓存仍在，按钮照常显示已缓存）
   const cached = !!art && !dead && (artCache.has(cacheKey) || artDisk.has(cacheKey));
-  // 拉取构建（查看与分享共用）：E2E 分块拉取 → 全量落盘（持久缓存，前缀名）→
-  // mime 分级 → 入缓存。文本类盘文件=正文 utf8 bytes（读回按 UTF8 解码一致）
+  // 拉取构建（查看与分享/下载共用，#237 抽出模块级 fetchArtifactView）：E2E 分块
+  // 拉取 → 全量落盘（持久缓存，前缀名）→ mime 分级 → 入缓存
   const fetchArtView = async (): Promise<ArtViewData> => {
     if (!art) throw new Error("artifact unavailable");
-    const r = await store.fetchArtifact(sid, art.path);
-    const chunks = r.b64s.map(fromB64);
-    let n = 0;
-    for (const cc of chunks) n += cc.length;
-    const u8 = new Uint8Array(n);
-    let o = 0;
-    for (const cc of chunks) { u8.set(cc, o); o += cc.length; }
-    const mime = r.mime || "application/octet-stream";
-    const uri = artCacheUri(cacheKey, name);
-    await writeArtUri(uri, u8);
-    let data: ArtViewData;
-    if (mime.startsWith("image/")) {
-      data = { kind: "img", name, uri, size: n };
-    } else if (mime === "text/html") {
-      data = { kind: "html", name, text: decodeUtf8(u8), size: n };
-    } else if (mime === "text/markdown") {
-      data = { kind: "md", name, text: decodeUtf8(u8), size: n };
-    } else if (mime.startsWith("text/") || mime === "application/json") {
-      data = { kind: "txt", name, text: decodeUtf8(u8), size: n };
-    } else {
-      data = { kind: "sys", name, uri, mime, size: n };
-    }
-    artCachePut(cacheKey, data);
-    return data;
+    return fetchArtifactView(sid, art.path, cacheKey, name);
   };
   const doFetch = async () => {
     if (busy || dead || !art) return;
@@ -768,6 +808,21 @@ function ArtSheet({ art, rel, sid, onClose }: { art: ArtifactItem | null; rel: s
     setFerr(null);
     try {
       await shareArtView((await artCacheGetAsync(cacheKey)) ?? (await fetchArtView()));
+    } catch (e) {
+      setFerr(e instanceof Error ? e.message : String(e));
+    } finally {
+      setBusy(false);
+    }
+  };
+  // #237 下载到「下载/CC Deck/」：同一拉取链（缓存命中秒存），出口换原生落盘
+  const doDownload = async () => {
+    if (busy || dead || !art) return;
+    setBusy(true);
+    setFerr(null);
+    setDlOk(null);
+    try {
+      const r = await downloadArtView((await artCacheGetAsync(cacheKey)) ?? (await fetchArtView()));
+      setDlOk(`✓ 已保存到 ${r}`);
     } catch (e) {
       setFerr(e instanceof Error ? e.message : String(e));
     } finally {
@@ -814,6 +869,7 @@ function ArtSheet({ art, rel, sid, onClose }: { art: ArtifactItem | null; rel: s
           </Pressable>
           {/* 脚注升为 CTA caption：它解释的是拉取动作（原沉底贴手势条处可读性最差） */}
           <Text style={d.artCap}>文件在电脑上 · 实时拉取预览（≤20MB，不落云存储）</Text>
+          {dlOk ? <Text style={d.artDlOk} numberOfLines={2}>{dlOk}</Text> : null}
           {ferr ? <Text style={d.artErr} numberOfLines={2}>{ferr}</Text> : null}
           {/* 三眼：路径参考盒——显示串经 brkPath 断行（中文词不拆腰）；复制走下方
               按钮的干净原串（selectable 移除：零宽空格会污染剪贴板） */}
@@ -834,6 +890,14 @@ function ArtSheet({ art, rel, sid, onClose }: { art: ArtifactItem | null; rel: s
               }}
             >
               <Text style={d.artSecT}>{copied ? "已复制 ✓" : "复制路径"}</Text>
+            </Pressable>
+            <Pressable
+              style={[d.artSec, (busy || dead) && { opacity: 0.5 }]}
+              disabled={busy || dead}
+              android_ripple={{ color: withA(c.dim, 0.15), borderless: false, radius: 10 }}
+              onPress={() => { void doDownload(); }}
+            >
+              <Text style={d.artSecT}>{busy ? "拉取中…" : "下载"}</Text>
             </Pressable>
             <Pressable
               style={[d.artSec, (busy || dead) && { opacity: 0.5 }]}
@@ -1341,6 +1405,8 @@ export default function DetailScreen({ sid, onBack, initialView, ref }: { sid: s
   const [slashCommands, setSlashCommands] = useState<SlashCommand[]>(BUILTIN_COMMANDS);
   const [renaming, setRenaming] = useState(false);
   const [view, setView] = useState<ViewKind>(initialView ?? "msg");
+  // #237 离开输出物视图即退出多选/清批次状态（不跨 tab 悬挂，回来干净起步）
+  useEffect(() => { if (view !== "arts") { setDlSel(null); setDlProg(null); setDlDone(null); } }, [view]);
   // 回到底部浮钮（#322 第四轮定位，用户拍板）：对话区顶部居中小胶囊（ChatGPT 手机端
   // 样式，带下箭头），上滑离开底部即出现，吸顶浮动不占布局、不与 App 壳悬浮钮打架
   const [showJump, setShowJump] = useState(false);
@@ -1653,6 +1719,55 @@ export default function DetailScreen({ sid, onBack, initialView, ref }: { sid: s
   const [taskHold, setTaskHold] = useState(false);
   // #35 输出物详情 sheet：点行打开（artPop 为该条快照，rel 由挂载点按会话 cwd 现算）
   const [artPop, setArtPop] = useState<ArtifactItem | null>(null);
+  // #237 批量下载多选（2026-10-03 用户点名）：dlSel=已勾 path 集（null=非多选模式）；
+  // dlProg=批次进度；dlDone=批次完成汇总（显示至下次操作/退出多选）
+  const [dlSel, setDlSel] = useState<Set<string> | null>(null);
+  const [dlProg, setDlProg] = useState<{ done: number; ok: number; total: number } | null>(null);
+  const [dlDone, setDlDone] = useState<string | null>(null);
+  const toggleDl = (path: string) =>
+    setDlSel((m) => {
+      if (!m) return m;
+      const n = new Set(m);
+      if (n.has(path)) n.delete(path);
+      else n.add(path);
+      return n;
+    });
+  // 文件夹整组勾/取消（组内文件同进退；部分勾选时点按=补齐全组）
+  const toggleDlGroup = (paths: string[]) =>
+    setDlSel((m) => {
+      if (!m) return m;
+      const n = new Set(m);
+      const all = paths.every((p) => n.has(p));
+      for (const p of paths) {
+        if (all) n.delete(p);
+        else n.add(p);
+      }
+      return n;
+    });
+  // 逐件「缓存命中 ? 拉取」→ downloadArtView；单件失败不中断批次（汇总里报数）。
+  // 每件完成即刷进度（按钮文案随动），不叠加并发（relay E2E 分块拉取串行更稳）
+  const runBatchDownload = async (list: ArtifactItem[]) => {
+    if (!s || !list.length || dlProg) return;
+    setDlDone(null);
+    setDlProg({ done: 0, ok: 0, total: list.length });
+    let ok = 0;
+    for (let i = 0; i < list.length; i++) {
+      const t = list[i];
+      try {
+        const name = (artRelOf(s, t) || t.path).split(/[\\/]/).pop() || t.path;
+        const key = `${sid}|${t.path}|${t.last_at ?? t.first_at ?? 0}`;
+        const v = (await artCacheGetAsync(key)) ?? (await fetchArtifactView(sid, t.path, key, name));
+        await downloadArtView(v);
+        ok++;
+      } catch {
+        // 计入失败，继续下一件
+      }
+      setDlProg({ done: i + 1, ok, total: list.length });
+    }
+    setDlProg(null);
+    setDlSel(null);
+    setDlDone(ok === list.length ? `✓ 已下载 ${ok} 个文件到 下载/CC Deck/` : `下载完成 ${ok}/${list.length}，失败项可点开单独重试`);
+  };
   // #222 文件夹 ⋯ sheet（2026-10-02 用户拍板「手机端也要一样处理」：行尾统一 ⋯，
   // 菜单内容按文件夹语义定制）：快照 = 分组摘要 + 开合态。folOpen 是输出物视图
   // IIFE 局部函数，组件根级挂载点不可达——开合态在行尾 Pressable 处（作用域内）
@@ -2494,14 +2609,25 @@ export default function DetailScreen({ sid, onBack, initialView, ref }: { sid: s
               const dead = t.exists === false;
               const outside = !rel && t.origin !== "cwd";
               const kc = KC[artKindOf(name)];
+              // #237 多选模式：点行=勾选/取消（行首勾选圈替代类型 chip），批次进行中锁定
+              const selOn = !!dlSel?.has(t.path);
               return (
                 <Pressable
                   key={t.path + "|" + i}
                   style={[d.cronRow, opts?.sub ? { borderTopWidth: 0, marginTop: 0, paddingVertical: 4 } : i === 0 ? { borderTopWidth: 0, marginTop: 0 } : null]}
                   android_ripple={{ color: c.tintSoft, borderless: false }}
-                  onPress={() => setArtPop(t)}
-                  accessibilityLabel={`输出物 ${name}，点按查看路径详情`}
+                  onPress={() => {
+                    if (dlProg) return;
+                    if (dlSel) { if (!dead) toggleDl(t.path); return; }
+                    setArtPop(t);
+                  }}
+                  accessibilityLabel={dlSel ? `输出物 ${name}，点按${selOn ? "取消" : ""}勾选` : `输出物 ${name}，点按查看路径详情`}
                 >
+                  {dlSel ? (
+                    <View style={[d.artChk, { borderColor: selOn ? c.brandA : c.line, backgroundColor: selOn ? c.brandA : "transparent" }]}>
+                      {selOn ? <Text style={d.artChkT}>✓</Text> : null}
+                    </View>
+                  ) : null}
                   <View style={[d.artChip, { borderColor: withA(kc, 0.45) }]}>
                     <Text style={[d.artChipT, { color: kc }]}>{artExtOf(name)}</Text>
                   </View>
@@ -2524,14 +2650,27 @@ export default function DetailScreen({ sid, onBack, initialView, ref }: { sid: s
             };
             const artFolder = (g: { key: string; dir: string; leaf: string; files: ArtifactItem[]; at: number; size: number }, idx: number) => {
               const open = folOpen(g.key);
+              // #237 多选模式：文件夹行=整组勾/取消（部分勾选时补齐）；⋯ 菜单停用
+              const gPaths = g.files.filter((t) => t.exists !== false).map((t) => t.path);
+              const gAll = !!dlSel && gPaths.length > 0 && gPaths.every((p) => dlSel.has(p));
+              const gSome = !!dlSel && gPaths.some((p) => dlSel.has(p));
               return (
                 <View key={"fol|" + g.key}>
                   <Pressable
                     style={[d.cronRow, idx === 0 && { borderTopWidth: 0, marginTop: 0 }, d.artFolRow]}
                     android_ripple={{ color: c.tintSoft, borderless: false }}
-                    onPress={() => setArtFold((m) => ({ ...m, [sid + "|" + g.key]: !open }))}
-                    accessibilityLabel={`文件夹 ${g.leaf}，${g.files.length} 个文件，点按${open ? "折叠" : "展开"}`}
+                    onPress={() => {
+                      if (dlProg) return;
+                      if (dlSel) { toggleDlGroup(gPaths); return; }
+                      setArtFold((m) => ({ ...m, [sid + "|" + g.key]: !open }));
+                    }}
+                    accessibilityLabel={`文件夹 ${g.leaf}，${g.files.length} 个文件，点按${dlSel ? (gAll ? "取消整组" : "勾选整组") : open ? "折叠" : "展开"}`}
                   >
+                    {dlSel ? (
+                      <View style={[d.artChk, { borderColor: gAll ? c.brandA : c.line, backgroundColor: gAll ? c.brandA : "transparent" }]}>
+                        {gAll ? <Text style={d.artChkT}>✓</Text> : gSome ? <Text style={d.artChkT}>–</Text> : null}
+                      </View>
+                    ) : null}
                     <View style={[d.artChip, { borderColor: withA(c.brandB, 0.45) }]}>
                       <Svg width={11} height={11} viewBox="0 0 24 24" fill="none" stroke={c.brandB} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
                         <Path d="M3.5 7.2c0-1.3 1-2.3 2.3-2.3h3l2 2.2h6.4c1.3 0 2.3 1 2.3 2.3v7.3c0 1.3-1 2.3-2.3 2.3H5.8c-1.3 0-2.3-1-2.3-2.3z" />
@@ -2553,6 +2692,7 @@ export default function DetailScreen({ sid, onBack, initialView, ref }: { sid: s
                         Pressable 优先接管触点，点它不会触发行级折叠切换 */}
                     <Pressable
                       hitSlop={8}
+                      disabled={!!dlSel || !!dlProg}
                       onPress={() => setFolPop({ key: g.key, dir: g.dir, leaf: g.leaf, count: g.files.length, size: g.size, at: g.at, open })}
                       accessibilityLabel={`文件夹 ${g.leaf} 操作`}
                     >
@@ -2573,7 +2713,29 @@ export default function DetailScreen({ sid, onBack, initialView, ref }: { sid: s
                   {/* 2026-09-21 用户：移除「新建 N · 修改 N / +N −N」统计（#222 聚合形态下
                       两组头降级为行内徽标，计数由文件夹行「×N · N 新建」承载） */}
                   <Text style={d.artSumN}>{arts.length} 个文件{folders.size ? ` · ${folders.size} 个文件夹` : ""}</Text>
+                  {/* #237 批量下载入口：常态「多选下载」文字链；多选中=「全选 · 下载 N · 取消」
+                      操作排（批次进行中只显进度不可再点） */}
+                  {dlProg ? (
+                    <Text style={d.artDlProg}>下载中 {dlProg.done}/{dlProg.total}…</Text>
+                  ) : dlSel ? (
+                    <View style={{ flexDirection: "row", gap: 12 }}>
+                      <Pressable hitSlop={6} onPress={() => { setDlDone(null); setDlSel(new Set(arts.filter((t) => t.exists !== false).map((t) => t.path))); }}>
+                        <Text style={d.artDlLink}>全选</Text>
+                      </Pressable>
+                      <Pressable hitSlop={6} disabled={dlSel.size === 0} onPress={() => { void runBatchDownload(arts.filter((t) => dlSel.has(t.path) && t.exists !== false)); }}>
+                        <Text style={[d.artDlLink, dlSel.size === 0 && { color: c.faint }]}>下载{dlSel.size ? ` ${dlSel.size} 项` : ""}</Text>
+                      </Pressable>
+                      <Pressable hitSlop={6} onPress={() => { setDlSel(null); setDlDone(null); }}>
+                        <Text style={d.artDlCancel}>取消</Text>
+                      </Pressable>
+                    </View>
+                  ) : (
+                    <Pressable hitSlop={6} onPress={() => { setDlDone(null); setDlSel(new Set()); }}>
+                      <Text style={d.artDlLink}>多选下载</Text>
+                    </Pressable>
+                  )}
                 </View>
+                {dlDone ? <Text style={d.artDlDone} numberOfLines={2}>{dlDone}</Text> : null}
                 {s.artifacts_truncated ? <Text style={d.artTrunc}>已截断 · 保留最新 200 条</Text> : null}
                 {folders.size ? (
                   /* #222 聚合形态：文件夹与散文件混排，「新建/修改」两组头消失 */
@@ -3325,6 +3487,16 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
   artPriDeadT: { color: c.error },
   artCap: { color: c.faint, fontSize: 10, lineHeight: 13, textAlign: "center", marginTop: 6 },
   artErr: { color: c.error, fontSize: 11, lineHeight: 14, textAlign: "center", marginTop: 6 },
+  // #237 下载成功提示（sheet 内绿色行，与 artErr 同位）
+  artDlOk: { color: c.done, fontSize: 11, lineHeight: 14, textAlign: "center", marginTop: 6 },
+  // #237 批量下载：列表头入口/操作排（品牌蓝文字链与全 App 同语言）+ 批次汇总
+  artDlLink: { color: c.brandA, fontSize: 12.5, fontWeight: "600" },
+  artDlCancel: { color: c.faint, fontSize: 12.5, fontWeight: "600" },
+  artDlProg: { color: c.working, fontSize: 12.5, fontWeight: "600", fontVariant: ["tabular-nums"] },
+  artDlDone: { color: c.done, fontSize: 12, lineHeight: 15, paddingVertical: 3 },
+  // #237 多选勾选圈（替代类型 chip 位：18px 圆圈，勾中品牌蓝实底白勾；文件夹半选 –）
+  artChk: { width: 18, height: 18, borderRadius: 9, borderWidth: 1.5, alignItems: "center", justifyContent: "center" },
+  artChkT: { color: "#fff", fontSize: 12, fontWeight: "700", lineHeight: 14 },
   // 路径盒（容器）：panel2 内陷 + 细描边；内文 11px mono（显示串已经 brkPath 断词）
   artPath: { borderWidth: 1, borderColor: c.line, borderRadius: 8, paddingHorizontal: 10, paddingVertical: 8, backgroundColor: c.panel2, marginTop: 12 },
   artPathT: { color: c.text, fontSize: 11, fontFamily: "monospace", lineHeight: 16 },
@@ -3340,6 +3512,7 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
   avClose: { color: c.dim, fontSize: 18, paddingHorizontal: 6 },
   avAct: { color: c.dim, fontSize: 11.5, fontWeight: "600", paddingHorizontal: 4 },
   avErr: { color: c.error, fontSize: 11, lineHeight: 15, paddingHorizontal: 14, paddingVertical: 5, backgroundColor: withA(c.error, 0.06) },
+  avDlTip: { color: c.done, fontSize: 11, lineHeight: 15, paddingHorizontal: 14, paddingVertical: 5, backgroundColor: withA(c.done, 0.08) },
   avTxt: { fontFamily: "monospace", fontSize: 11.5, lineHeight: 17.5, color: c.text },
   avCard: { backgroundColor: c.panel, borderColor: c.line, borderWidth: 1, borderRadius: 14, padding: 18, alignItems: "center", gap: 10, alignSelf: "stretch" },
   avHint: { color: c.faint, fontSize: 11, lineHeight: 16, textAlign: "center", marginTop: 14 },
