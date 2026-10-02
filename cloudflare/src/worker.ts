@@ -83,14 +83,18 @@ export default {
       });
     }
     if (url.pathname.startsWith("/dl/")) {
-      const name = url.pathname.slice(4);
+      let name = url.pathname.slice(4);
       // /dl/<file> KV 直出（≤25MiB）：Range/206 断点续传（2026-09-17）——手机更新器的
       // .part + Range 续传拿到 200 会弃包全量重下，公司长传输被防火墙掐断后永远差
       // 最后一口气（用户实测"下到 99% 就重下"死循环）。KV 值全量读进内存可承受
       const dlOut = (obj: ArrayBuffer, filename: string): Response => {
+        // 非 ASCII 文件名（中文，#219）：Headers 值必须是 ByteString，中文直接进
+        // filename 会 throw 500——RFC 5987 filename* 主用 + percent-encoded filename
+        // 兜底老浏览器；ASCII 名 encodeURIComponent 为恒等，行为不变
+        const fnAscii = encodeURIComponent(filename);
         const base: Record<string, string> = {
           "content-type": "application/octet-stream",
-          "content-disposition": `attachment; filename="${filename}"`,
+          "content-disposition": `attachment; filename="${fnAscii}"; filename*=UTF-8''${fnAscii}`,
           "cache-control": "no-store",
           "accept-ranges": "bytes",
           "content-length": String(obj.byteLength),
@@ -119,7 +123,30 @@ export default {
         if (!env.ASSETS) return new Response("assets unavailable", { status: 503 });
         return env.ASSETS.fetch(new Request("https://assets.local/site/index.html"));
       }
-      if (!/^[\w.-]+$/.test(name) || !env.DL) return new Response("bad name", { status: 400 });
+      // #219（2026-10-02）：pathname 是百分号编码原样（中文名 %E4%B8%AD…），解码后再
+      // 用——此前 /^[\w.-]+$/ 不认 %，中文名一律 400。KV 键是扁平字符串、无文件系统路径
+      // 语义，校验只需拦控制字符/路径分隔符/空名：Unicode 字母数字（\p{L}\p{N}）放行；
+      // 解码后的 name 同时用于下文 KV get 与下载文件名（与上传侧键对齐）
+      try {
+        name = decodeURIComponent(name);
+      } catch {
+        return new Response("bad name", { status: 400 });
+      }
+      if (!/^[\p{L}\p{N}_.-]+$/u.test(name) || !env.DL) return new Response("bad name", { status: 400 });
+      // #220 加固守卫入库（#226 2026-10-02）：下两段守卫此前只存在于 #220 应急直改的生产
+      // 产物里，仓库源码没有（源码/生产分叉，v0.6.0 OTA 404 悬案四层取证才破案）。现正式
+      // 入库，并补一处放行：固定名 cc-deck.apk（点号）不匹配前缀 cc-deck-（横线）曾被
+      // 守卫②误杀 404、专属直出成死代码——豁免之，走下文 KV 直出/302 ECS 分支
+      if (/^acceptance-/.test(name) || name.endsWith(".key") || name.endsWith(".results.json")) {
+        return new Response("not found", { status: 404 });
+      }
+      if (
+        name !== "cc-deck.apk" &&
+        !/^(cc-deck-|tauri-|snap-)/.test(name) &&
+        !/^latest(-test)?\.json$/.test(name)
+      ) {
+        return new Response("not found", { status: 404 });
+      }
       // #15 时代的 cc-deck.apk 302 ECS 已废（2026-09-17）：R8 后 APK 16MB < KV 25MiB，
       // 改 KV 直出优先（公司网络屏蔽 ECS 裸 IP，302 对公司死路=更新 99% 循环根因）；
       // KV 未上传时 302 ECS 兜底（家庭 Wi-Fi 可达）
