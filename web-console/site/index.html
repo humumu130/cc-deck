@@ -2,6 +2,7 @@
 <html lang="zh-CN">
 <head>
 <meta charset="utf-8">
+<script>document.documentElement.classList.add('js');</script><!-- JS 探针：无 JS/爬虫场景 reveal 直接可见，不留半透明残页 -->
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <meta name="color-scheme" content="dark">
 <meta name="theme-color" content="#05080F">
@@ -50,6 +51,9 @@
       <a class="nav-ver" href="https://github.com/humumu130/cc-deck/releases" target="_blank" rel="noopener"><i class="pulse"></i>v0.6.0</a>
     </div>
     <div class="nav-actions">
+      <a class="nav-link" href="#features">特性</a>
+      <a class="nav-link" href="#how">接入</a>
+      <a class="nav-link" href="#download">下载</a>
       <a class="nav-gh" href="https://github.com/humumu130/cc-deck" target="_blank" rel="noopener">
         <svg class="st" viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path d="M12 .5C5.65.5.5 5.65.5 12c0 5.08 3.29 9.39 7.86 10.91.58.11.79-.25.79-.55v-2.17c-3.2.7-3.87-1.36-3.87-1.36-.52-1.33-1.28-1.69-1.28-1.69-1.04-.71.08-.7.08-.7 1.15.08 1.76 1.19 1.76 1.19 1.03 1.76 2.69 1.25 3.35.96.1-.75.4-1.25.72-1.54-2.55-.29-5.23-1.28-5.23-5.68 0-1.26.45-2.28 1.19-3.09-.12-.29-.52-1.46.11-3.05 0 0 .97-.31 3.18 1.18a11 11 0 0 1 5.79 0c2.2-1.49 3.17-1.18 3.17-1.18.63 1.59.24 2.76.12 3.05.74.81 1.18 1.83 1.18 3.09 0 4.41-2.69 5.38-5.25 5.67.41.35.77 1.05.77 2.12v3.14c0 .3.21.67.8.55A11.51 11.51 0 0 0 23.5 12C23.5 5.65 18.35.5 12 .5z"/></svg>
         <span>GitHub</span>
@@ -201,6 +205,8 @@
             <div class="term-body">
               <p class="t-tool">Read <span>src/auth/session.ts</span><em>128 行</em></p>
               <p class="t-tool">Write <span>src/auth/oauth.ts</span><em>+96 行</em></p>
+              <p class="t-tool">Bash <span>npm test</span><em>12 通过</em></p>
+              <p class="t-tool">Bash <span>git commit</span><em>✓</em></p>
               <div class="t-perm dm-perm">
                 <p class="t-perm-q">⚠ 允许写入 oauth.ts？</p>
                 <div class="dm-perm-btns">
@@ -259,6 +265,7 @@
         </div>
         <div class="cell-art toast-art">
           <div class="toast"><i class="dot dot-green"></i>任务完成 · 已跑通 12 个测试</div>
+          <div class="toast"><i class="dot dot-blue"></i><code style="font:11px var(--mono);color:var(--muted)">0 18 * * *</code>&nbsp;→ 每天 18:00</div>
         </div>
       </article>
 
@@ -445,7 +452,7 @@
       </article>
       <article class="dl-card reveal" style="--d:.08s">
         <div class="dl-head"><div class="ic">📦</div><h3>输出物看板</h3></div>
-        <p>会话交付的报告、文档自动汇集一处，手机 / 网页 / 桌面随时查看与打开；漏登记的产出也会自动收进看板。</p>
+        <p>漏登记的交付也会被自动收进看板——报告、文档一处汇齐，三端随时打开，不用再回会话里翻找。</p>
       </article>
       <article class="dl-card reveal" style="--d:.16s">
         <div class="dl-head"><div class="ic">🤖</div><h3>子 Agent 活性面板</h3></div>
