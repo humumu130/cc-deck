@@ -107,6 +107,15 @@ const drafts = new Map<string, string>();
 // #216 防误派守卫用：最近一次输入框聚焦时刻（模块级跨进出详情页保持，与
 // md.tsx 的 lastLinkAt 同族——两者由下方 setPermPanel 守卫消费）
 let lastFocusAt = 0;
+// #216 五段修（test.8）：面板最近一次关闭时刻——「关掉又重新弹」的直接死因是
+// 关闭后紧随的再次触发（同一轮手势里 scrim 关闭 + 胶囊重开叠加时，表象就是
+// 面板关不掉/关了又弹），关闭后 700ms 内的再次打开一律吞掉（真用户关面板后
+// 700ms 内再点胶囊的场景不存在，零误伤）
+let lastCloseAt = 0;
+// #216 排查探针（test.8 临时，定案后移除）：最近一次胶囊 onPress 的触点/距
+// 离判定（d=-1 表示坐标或胶囊中心取不到）+ 三道守卫累计吞次——面板顶部一行
+// 显示，真机复现时肉眼/截图回读，用于定位错派触摸的真实形态
+const permProbe = { txt: "init", eaten: 0, tw: 0, cw: 0 };
 
 // #376 cron 表达式人话（常见模式；未识别返回 null 只显原文+下次时间兜底）
 const WEEK_CN = ["日", "一", "二", "三", "四", "五", "六"];
@@ -884,6 +893,10 @@ function PermPanel({ open, cur, onPick, onClose }: { open: boolean; cur: PermMod
               <Text style={d.permX}>✕</Text>
             </Pressable>
           </View>
+          {/* #216 排查探针（test.8 临时，定案后移除）：最近一次胶囊 onPress 的触
+              点/距离判定 + 三道守卫累计吞次（吞=坐标 / 窗=时间窗 / 冷=复弹冷却）。
+              再现「弹面板」时这一行就是错派触摸的真身数据，长按可复制 */}
+          <Text style={d.permProbeT} selectable>{`probe ${permProbe.txt} · 吞${permProbe.eaten}/窗${permProbe.tw}/冷${permProbe.cw}`}</Text>
           {PERM_CYCLE.map((m) => {
             const danger = m === "bypassPermissions";
             return (
@@ -1263,12 +1276,20 @@ export default function DetailScreen({ sid, onBack, initialView, ref }: { sid: s
   // 四段修补漏：输入框已聚焦后再点不重发 onFocus（RN 行为），时间窗打点不
   // 刷新、错派直通——胶囊 onPress 增加触点坐标判定（见 permPillRef 处），
   // 此处时间窗降级为坐标取不到时的第二道防线
+  // 五段修（test.8 真机实况：坐标守卫后仍弹且回到「关掉又弹」）：①键盘弹出期
+  // 间胶囊整体 pointerEvents=none（见 onPress 处）掐断高发段；②关闭后 700ms
+  // 复弹冷却（lastCloseAt，见模块级）；③permProbe 探针记录判定数据（面板顶
+  // 一行显示），错派形态定案后再做最终收口
   const [permPanel, setPermPanelRaw] = useState(false);
   const setPermPanel = (v: boolean) => {
     if (v) {
       const now = Date.now();
+      // 五段修·复弹冷却：刚关又开 = 错派循环的指纹，吞（计数进探针）
+      if (now - lastCloseAt < 700) { permProbe.cw++; return; }
       const since = Math.min(now - lastFocusAt, now - lastLinkAt.at);
-      if (since >= 0 && since < 400) return;
+      if (since >= 0 && since < 400) { permProbe.tw++; return; }
+    } else {
+      lastCloseAt = Date.now();
     }
     setPermPanelRaw(v);
   };
@@ -2036,6 +2057,11 @@ export default function DetailScreen({ sid, onBack, initialView, ref }: { sid: s
                       permPillCtr.current = { x: x + w / 2, y: y + h / 2 };
                     });
                   }}
+                  // 五段修（test.8）：键盘弹出期间整颗胶囊不响应——错派高发段就是
+                  // 点输入框拉起键盘的时刻（含聚焦后再点的漏网场景）；此时开面板
+                  // 键盘还会盖住底部 sheet，本就是坏状态。排查期间键盘开着时先收
+                  // 起键盘再点胶囊（定案后换成只掐错派不清真点的收口）
+                  pointerEvents={kb > 0 ? "none" : "auto"}
                   android_ripple={{ color: c.tintSoft, borderless: false, radius: 8 }}
                   onPress={(e) => {
                     // #216 四段修·坐标守卫：三段的时间窗守卫漏了「输入框已聚焦
@@ -2044,11 +2070,16 @@ export default function DetailScreen({ sid, onBack, initialView, ref }: { sid: s
                     // 原始位置（屏幕中下部，距胶囊数百 dp），真点胶囊触点必在
                     // 胶囊上（含 hitSlop 与触点误差）。距中心 >100dp 即吞；坐标
                     // 取不到时回落 setPermPanel 内的时间窗守卫（双保险）
+                    // （test.8 真机实况：坐标守卫后仍弹——探针 permProbe 记录每
+                    // 次判定的触点/距离数据，面板顶一行回读）
                     const t = e.nativeEvent.changedTouches?.[0];
                     const px = t?.pageX ?? e.nativeEvent.pageX;
                     const py = t?.pageY ?? e.nativeEvent.pageY;
                     const ctr = permPillCtr.current;
-                    if (ctr && typeof px === "number" && typeof py === "number" && Math.hypot(px - ctr.x, py - ctr.y) > 100) return;
+                    const dist = ctr && typeof px === "number" && typeof py === "number"
+                      ? Math.round(Math.hypot(px - ctr.x, py - ctr.y)) : -1;
+                    permProbe.txt = `x=${typeof px === "number" ? Math.round(px) : "?"} y=${typeof py === "number" ? Math.round(py) : "?"} d=${dist}${ctr ? "" : "/noctr"}`;
+                    if (dist > 100) { permProbe.eaten++; return; }
                     setPermPanel(true);
                   }}
                   hitSlop={{ top: 8, bottom: 8, left: 6, right: 6 }}
@@ -3092,6 +3123,8 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
   permTitleRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 4 },
   permTitle: { color: c.text, fontSize: 13, fontWeight: "600" },
   permX: { color: c.faint, fontSize: 14, lineHeight: 18 },
+  // #216 排查探针（test.8 临时）：9px mono 小字，只求真机截图回读可辨
+  permProbeT: { color: c.faint, fontSize: 9, fontFamily: "monospace", marginBottom: 4, lineHeight: 12 },
   permRow: {
     flexDirection: "row", alignItems: "center", gap: 8,
     paddingVertical: 9, paddingHorizontal: 8, borderRadius: 10, overflow: "hidden",
