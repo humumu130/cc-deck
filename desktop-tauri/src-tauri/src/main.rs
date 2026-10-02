@@ -69,16 +69,17 @@ window.open = (url) => {
 "#;
 
 /// 本机 relay 探测（等价 Electron 的 cc-deck:probe-local）：
-/// GET http://127.0.0.1:8787/local-info，1.5s 超时，返回 { ok, port, token } 或 null；
+/// GET http://127.0.0.1:<relay_port>/local-info，1.5s 超时，返回 { ok, port, token } 或 null；
 /// 失败静默（页面回退手动配置），不 panic 不弹错
 #[tauri::command]
 async fn probe_local() -> Option<Value> {
-    const ENDPOINT: &str = "http://127.0.0.1:8787/local-info";
+    // 端口跟随 relay_port（M2 变体默认 8788；生产 8787——行为不变）
+    let endpoint = format!("http://127.0.0.1:{}/local-info", relay_port());
     let client = reqwest::Client::builder()
         .timeout(std::time::Duration::from_millis(1500))
         .build()
         .ok()?;
-    let resp = match client.get(ENDPOINT).send().await {
+    let resp = match client.get(&endpoint).send().await {
         Ok(r) if r.status().is_success() => r,
         _ => return None,
     };
@@ -371,8 +372,19 @@ static EMBEDDED_RELAY_ERR: std::sync::Mutex<Option<String>> = std::sync::Mutex::
 // 应用退出（kill_embedded_relay）置 false。监督线程据此区分「该重拉」与「别添乱」
 static RELAY_WANTED: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
 
+// #36 M2 并行测试变体（2026-10-03 用户拍板）：构建期 CCDECK_BUILD_M2=1 烙入——与
+// 生产 CC Deck 同机并存互不干扰（默认端口 8788、数据/组织根 ~/.cc-deck-m2、断
+// 生产 bridge.json 镜像、mDNS 广播名带 M2）。生产构建不设该 env = 行为与从前
+// 逐字节一致，提交面保持生产缺省（M2 只在构建命令行注入）
+const M2_BUILD: bool = option_env!("CCDECK_BUILD_M2").is_some();
+
 fn relay_port() -> u16 {
-    std::env::var("CCR_DESKTOP_RELAY_PORT").ok().and_then(|v| v.parse().ok()).unwrap_or(8787)
+    std::env::var("CCR_DESKTOP_RELAY_PORT").ok().and_then(|v| v.parse().ok()).unwrap_or(if M2_BUILD { 8788 } else { 8787 })
+}
+
+// cc-deck 根目录：生产 ~/.cc-deck，M2 变体 ~/.cc-deck-m2（数据/内嵌日志全量隔离）
+fn deck_root(home: &str) -> std::path::PathBuf {
+    std::path::Path::new(home).join(if M2_BUILD { ".cc-deck-m2" } else { ".cc-deck" })
 }
 
 fn port_listening(port: u16) -> bool {
@@ -470,39 +482,60 @@ fn spawn_embedded_relay(app: &tauri::AppHandle) -> Result<(), String> {
         return Err("内置 relay.mjs 缺失（安装包损坏？重装试试）".into());
     }
     let home = std::env::var("USERPROFILE").or_else(|_| std::env::var("HOME")).map_err(|_| "无法定位用户目录".to_string())?;
-    let data_dir = std::path::Path::new(&home).join(".cc-deck").join("data");
+    let data_dir = deck_root(&home).join("data");
     let _ = std::fs::create_dir_all(&data_dir);
+    // M2 变体增补 env（#36 并行测试版）：组织数据隔离到 ~/.cc-deck-m2/org；org CLI
+    // 显式落共享位 ~/.cc-deck/bin/org（ORG_LEADER_BOOTSTRAP_PROMPT 硬编码该绝对
+    // 路径，且 ensureOrgCli 在「设 ORG_DIR 而未设 ORG_BIN_DIR」时不物化）；断
+    // bridge.json 镜像（不覆写生产归属文件）；mDNS 广播名后缀（发现列表可分辨）。
+    // 生产构建为空集零增补
+    let extra_env: Vec<(String, String)> = if M2_BUILD {
+        vec![
+            ("CCR_ORG_DIR".to_string(), deck_root(&home).join("org").to_string_lossy().into_owned()),
+            ("CCR_ORG_BIN_DIR".to_string(), std::path::Path::new(&home).join(".cc-deck").join("bin").join("org").to_string_lossy().into_owned()),
+            ("CCR_NO_BRIDGE_MIRROR".to_string(), "1".to_string()),
+            ("CCR_MDNS_NAME".to_string(), "CC Deck M2 Relay".to_string()),
+        ]
+    } else {
+        Vec::new()
+    };
     // #71 跨平台：CREATE_NO_WINDOW 是 Windows 专属（防 node 子进程闪 cmd 窗），
     // mac 上无此概念——cfg 门控按平台分流
     #[cfg(target_os = "windows")]
-    fn spawn_relay(node: &std::path::Path, script: &std::path::Path, port: u16, data_dir: &std::path::Path, inject_cs: &std::path::Path, log: &std::path::Path) -> std::io::Result<std::process::Child> {
+    fn spawn_relay(node: &std::path::Path, script: &std::path::Path, port: u16, data_dir: &std::path::Path, inject_cs: &std::path::Path, log: &std::path::Path, extra_env: &[(String, String)]) -> std::io::Result<std::process::Child> {
         use std::os::windows::process::CommandExt;
         let out = std::fs::File::create(log)?;
-        std::process::Command::new(node)
-            .arg(script)
+        let mut cmd = std::process::Command::new(node);
+        cmd.arg(script)
             .env("CCR_PORT", port.to_string())
             .env("CCR_DATA_DIR", data_dir)
             .env("CCR_INJECT_CS", inject_cs)
             .env("CCR_NOHOOK_IDLE_MS", "60000")
             .env("CCR_PARENT_PID", std::process::id().to_string())
-            .env_remove("NODE_OPTIONS")
-            .stdout(out.try_clone()?)
+            .env_remove("NODE_OPTIONS");
+        for (k, v) in extra_env {
+            cmd.env(k, v);
+        }
+        cmd.stdout(out.try_clone()?)
             .stderr(out)
             .creation_flags(0x0800_0000) // CREATE_NO_WINDOW
             .spawn()
     }
     #[cfg(not(target_os = "windows"))]
-    fn spawn_relay(node: &std::path::Path, script: &std::path::Path, port: u16, data_dir: &std::path::Path, inject_cs: &std::path::Path, log: &std::path::Path) -> std::io::Result<std::process::Child> {
+    fn spawn_relay(node: &std::path::Path, script: &std::path::Path, port: u16, data_dir: &std::path::Path, inject_cs: &std::path::Path, log: &std::path::Path, extra_env: &[(String, String)]) -> std::io::Result<std::process::Child> {
         let out = std::fs::File::create(log)?;
-        std::process::Command::new(node)
-            .arg(script)
+        let mut cmd = std::process::Command::new(node);
+        cmd.arg(script)
             .env("CCR_PORT", port.to_string())
             .env("CCR_DATA_DIR", data_dir)
             .env("CCR_INJECT_CS", inject_cs)
             .env("CCR_NOHOOK_IDLE_MS", "60000")
             .env("CCR_PARENT_PID", std::process::id().to_string())
-            .env_remove("NODE_OPTIONS")
-            .stdout(out.try_clone()?)
+            .env_remove("NODE_OPTIONS");
+        for (k, v) in extra_env {
+            cmd.env(k, v);
+        }
+        cmd.stdout(out.try_clone()?)
             .stderr(out)
             .spawn()
     }
@@ -510,7 +543,7 @@ fn spawn_embedded_relay(app: &tauri::AppHandle) -> Result<(), String> {
     let node = node_path().ok_or(
         "未检测到 Node.js 运行时——内置 relay 需要它（VS Code 的 Claude Code 扩展自带运行时，不算已装）。请到 nodejs.org 安装 Node.js 后重启 CC Deck",
     )?;
-    match spawn_relay(&node, &script, port, &data_dir, &inject_cs, &log)
+    match spawn_relay(&node, &script, port, &data_dir, &inject_cs, &log, &extra_env)
     {
         Ok(child) => {
             println!("[embedded-relay] spawned pid={} port={}", child.id(), port);
