@@ -4,9 +4,21 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
-B1=$(md5 -q cc-plugins/plugins/cc-deck/scripts/relay.mjs 2>/dev/null || echo MISSING)
-B2=$(md5 -q desktop-tauri/src-tauri/resources/relay.mjs 2>/dev/null || echo MISSING)
-B3=$(md5 -q '/Applications/CC Deck.app/Contents/Resources/resources/relay.mjs' 2>/dev/null || echo "not-installed")
+# #232 md5 解析加固（2026-10-03 发版实跑踩中）：部分 shell 环境 PATH 缺 /sbin
+# （md5 的家），裸 md5 把三处全部假报 MISSING/not-installed——配对比较全成
+# 字符串不等，护栏形同虚设还误拦发版。解析顺序：PATH 内 md5 → /sbin/md5 →
+# shasum-256（同一函数内自洽，摘要算法不影响一致性判断）
+md5q() {
+  local f="$1"
+  [ -f "$f" ] || return 1
+  if command -v md5 >/dev/null 2>&1; then md5 -q "$f"
+  elif [ -x /sbin/md5 ]; then /sbin/md5 -q "$f"
+  elif command -v shasum >/dev/null 2>&1; then shasum -a 256 "$f" | cut -d' ' -f1
+  else return 1; fi
+}
+B1=$(md5q cc-plugins/plugins/cc-deck/scripts/relay.mjs || echo MISSING)
+B2=$(md5q desktop-tauri/src-tauri/resources/relay.mjs || echo MISSING)
+B3=$(md5q '/Applications/CC Deck.app/Contents/Resources/resources/relay.mjs' || echo "not-installed")
 
 FAIL=0
 [ "$B1" = "$B2" ] || { echo "❌ cc-plugins bundle ≠ desktop-tauri resources（git 里的产物过期）"; FAIL=1; }
