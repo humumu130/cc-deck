@@ -1281,7 +1281,7 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
   // 头部上下留白 + 卡片自身 marginBottom，形成"区隔靠间距"的分区节奏）
   grpHead: {
     flexDirection: "row", alignItems: "center", gap: 7,
-    marginTop: 10, marginBottom: 9, paddingBottom: 7,
+    marginTop: 10, marginBottom: 7, paddingBottom: 7, // #238 与卡间 gap 同步 9→7
     borderBottomWidth: 1, borderBottomColor: c.line,
   },
   grpBar: { width: 3, height: 13, borderRadius: 1.5 },
@@ -1313,8 +1313,10 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
   aggBtnOn: { borderColor: withA(c.brandA, 0.65), backgroundColor: withA(c.brandA, 0.1) },
   aggT: { fontSize: 11, color: c.dim },
   aggTOn: { color: c.brandA, fontWeight: "700" },
-  swipeWrap: { marginBottom: 9, borderRadius: 16, overflow: "hidden" },
-  swipeWrapC: { marginBottom: 7 },
+  // #238 间距收紧：卡间 9→7 + 卡内纵向 11→9（相邻卡内容间距 31→25dp，同屏多显
+  // 约半张卡）；紧凑/极简档本就是密度档不动。桌面端 #cards gap/.card padding 同步
+  swipeWrap: { marginBottom: 7, borderRadius: 16, overflow: "hidden" },
+  swipeWrapC: { marginBottom: 6 },
   // 极简行（用户拍板圆角统一）：同标准/紧凑的圆角卡语言，仅行高更矮、间距更密
   swipeWrapM: { marginBottom: 5 },
   swipeCard: { borderRadius: 16, overflow: "hidden", backgroundColor: c.panel },
@@ -1333,7 +1335,7 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
   actT2: { color: "#fff", fontSize: 11.5, fontWeight: "600" },
   card: {
     backgroundColor: c.panel, borderWidth: 1, borderColor: c.line,
-    borderRadius: 16, paddingVertical: 11, paddingHorizontal: 13,
+    borderRadius: 16, paddingVertical: 9, paddingHorizontal: 13, // #238 纵向 11→9
   },
   cardC: { borderRadius: 13, padding: 9 },
   // 极简平铺行：去框（hairline 分隔接管分隔职责），纵向 8 呼吸感比 6 松一点，

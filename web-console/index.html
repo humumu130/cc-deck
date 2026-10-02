@@ -1133,7 +1133,7 @@
   }
   /* #51 首卡上距：4→8px（与 chips 行 12px 底距合计 20px），只推首卡、卡间 gap 9px 不动 */
   /* #13 巡检：底部内边距让出 FAB 悬浮区（bottom:72px + 38px 钮高），末卡"本机"徽章不再被压 */
-  #cards { flex: 1; overflow-y: auto; padding: 8px 14px 88px; display: flex; flex-direction: column; gap: 9px; }
+  #cards { flex: 1; overflow-y: auto; padding: 8px 14px 88px; display: flex; flex-direction: column; gap: 7px; } /* #238 卡间 9→7（与手机端同步） */
   /* #279⑨ 列表工具行：折叠空闲 + 密度切换（网页无设置抽屉，放"会话"标题行，视觉同 tabs mini chips） */
   #listBar { display: flex; align-items: center; gap: 6px; padding: 10px 16px 4px; }
   #listBar h3 { padding: 0; flex: none; }
@@ -1234,7 +1234,8 @@
 
   .card {
     background: var(--panel); border: 1px solid var(--border); border-radius: 14px;
-    padding: 11px 13px; cursor: pointer; position: relative;
+    /* #238 间距收紧（与手机端同步）：纵向 11→9 */
+    padding: 9px 13px; cursor: pointer; position: relative;
     transition: border-color .15s, transform .1s, box-shadow .15s;
   }
   /* #13 巡检：悬停除描边外补一档底色（原只换边框色，与选中态难区分且静止视图无反馈）；
