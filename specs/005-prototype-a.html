@@ -28,7 +28,7 @@
       --ctx-safe: #4BCB91;
       --ctx-attention: #E9B84C;
       --ctx-critical: #EC7472;
-      --ctx-track: #2A4058;
+      --ctx-track: #3A5570;
       --source: #8F9DB1;
       --chrome: #070D15;
       --rail: #06101B;
@@ -51,7 +51,8 @@
       --card-border: rgba(71,101,132,.48);
       --card-veil: rgba(21,39,59,.78);
       --border-strong: #4E6D8E;
-      --selected-line: rgba(240,160,106,.78);
+      --selected-line: #AFC0D2;
+      --selected-bg: rgba(232,239,248,.08);
       --shadow-hover: 0 10px 24px rgba(1,8,16,.28);
       --selected-shadow: 0 9px 24px rgba(1,8,16,.24);
       --status-done-glow: rgba(75,203,145,.35);
@@ -61,8 +62,8 @@
       --action-bg: rgba(226,133,94,.16);
       --done-bg: rgba(75,203,145,.12);
       --info-bg: rgba(126,175,232,.13);
-      --me-bg: rgba(226,133,94,.13);
-      --me-line: rgba(226,133,94,.36);
+      --me-bg: #15273B;
+      --me-line: #4E6D8E;
       --action-ink: #211B0E;
       --done-ink: #082116;
       --badge-ink: #FFFFFF;
@@ -85,8 +86,14 @@
       --source-line: rgba(143,157,177,.24);
       --source-company: #3B7C68;
       --source-company-bg: rgba(75,203,145,.16);
-      --source-home: #7D62B5;
-      --source-home-bg: rgba(180,147,255,.16);
+      --source-home: #5B8FA8;
+      --source-home-bg: rgba(91,143,168,.16);
+      --engine-claude: #A97A62;
+      --engine-codex: #8DABFF;
+      --engine-trae: #58C9B1;
+      --engine-qwen: #B493FF;
+      --engine-codebuddy: #4BA8F0;
+      --engine-zcode: #E58DB0;
       --avatar-worker-bg: #243C59;
       --avatar-worker-text: #9FC4F4;
       --avatar-architect-bg: #3A3157;
@@ -104,9 +111,9 @@
       --notch-shadow: rgba(0,0,0,.4);
       --connection-warn-bg: rgba(233,184,76,.13);
       --connection-error-bg: rgba(236,116,114,.13);
-      --toast-line: rgba(75,203,145,.48);
-      --toast-bg-top: #153426;
-      --toast-bg-bottom: #10271F;
+      --toast-line: #4E6D8E;
+      --toast-bg-top: #15273B;
+      --toast-bg-bottom: #101E2F;
       --toast-highlight: rgba(255,255,255,.06);
       --shadow: 0 26px 80px rgba(0, 0, 0, .42);
       --small-shadow: 0 12px 30px rgba(0, 0, 0, .28);
@@ -134,8 +141,8 @@
       --line-soft: #DCE5EC;
       --text-strong: #15283D;
       --text: #30465B;
-      --dim: #52687D;
-      --faint: #6E8296;
+      --dim: #40566B;
+      --faint: #5B7085;
       --progress-fill: #607D99;
       --brand: #C86440;
       --brand-hover: #D9754D;
@@ -170,7 +177,8 @@
       --card-border: #C6D3DF;
       --card-veil: #FFFFFF;
       --border-strong: #7895AE;
-      --selected-line: #D9754D;
+      --selected-line: #7895AE;
+      --selected-bg: #F3F7FA;
       --shadow-hover: 0 8px 20px rgba(50,74,96,.14);
       --selected-shadow: 0 8px 20px rgba(50,74,96,.12);
       --status-done-glow: rgba(22,141,96,.24);
@@ -206,6 +214,12 @@
       --source-company-bg: rgba(22,141,96,.14);
       --source-home: #2D718B;
       --source-home-bg: rgba(45,113,139,.14);
+      --engine-claude: #B85232;
+      --engine-codex: #4B6FCA;
+      --engine-trae: #168C78;
+      --engine-qwen: #7652C4;
+      --engine-codebuddy: #2679B5;
+      --engine-zcode: #B14E77;
       --avatar-worker-bg: #DCEAF7;
       --avatar-worker-text: #315D88;
       --avatar-architect-bg: #EEE8FF;
@@ -223,9 +237,9 @@
       --notch-shadow: rgba(18,35,52,.28);
       --connection-warn-bg: rgba(165,109,0,.11);
       --connection-error-bg: rgba(200,76,81,.1);
-      --toast-line: rgba(22,141,96,.38);
-      --toast-bg-top: #E8F4EE;
-      --toast-bg-bottom: #DCEFE5;
+      --toast-line: #C6D3DF;
+      --toast-bg-top: #FFFFFF;
+      --toast-bg-bottom: #F1F5F8;
       --toast-highlight: rgba(255,255,255,.7);
       --shadow: 0 24px 62px rgba(50, 74, 96, .18);
       --small-shadow: 0 10px 24px rgba(50, 74, 96, .16);
@@ -276,43 +290,44 @@
     .source-trigger:hover { border-color: var(--brand); background: var(--hover); }
     .source-trigger.source-company { border-color: var(--source-company); background: var(--source-company-bg); }
     .source-trigger.source-home { border-color: var(--source-home); background: var(--source-home-bg); }
-    .source-trigger .source-summary { color: var(--dim); font: 9px var(--mono); }
+    .source-trigger .source-summary { color: var(--dim); font: 10px var(--mono); }
     .source-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--done); box-shadow: 0 0 7px currentColor; color: var(--done); }
     .source-dot.status-reconnecting { background: var(--working); color: var(--working); }
     .source-dot.status-disconnected { background: var(--error); color: var(--error); }
     .source-menu { position: absolute; top: calc(100% + 8px); right: 0; display: none; width: 276px; padding: 8px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface2); box-shadow: var(--small-shadow); }
     .source-menu.open { display: block; }
-    .source-menu-head { padding: 4px 6px 7px; color: var(--faint); font: 9px var(--mono); letter-spacing: .04em; text-transform: uppercase; }
+    .source-menu-head { padding: 4px 6px 7px; color: var(--faint); font: 10px var(--mono); letter-spacing: .04em; text-transform: uppercase; }
     .source-option { display: flex; align-items: center; gap: 8px; width: 100%; padding: 8px 7px; border: 0; border-radius: 7px; background: transparent; color: var(--text); text-align: left; cursor: pointer; }
     .source-option:hover, .source-option.active { background: var(--hover); }
     .source-option[data-source-choice="office"] { border-left: 2px solid var(--source-company); }
     .source-option[data-source-choice="home"] { border-left: 2px solid var(--source-home); }
     .source-option strong { flex: 1; color: var(--text-strong); font-size: 10px; }
-    .source-option small { color: var(--dim); font: 9px var(--mono); }
+    .source-option small { color: var(--dim); font: 10px var(--mono); }
     .source-mode { display: flex; gap: 4px; padding: 8px 0 3px; margin-top: 4px; border-top: 1px solid var(--line-soft); }
-    .source-mode button { flex: 1; padding: 6px 4px; border: 1px solid transparent; border-radius: 6px; background: transparent; color: var(--dim); cursor: pointer; font-size: 9px; }
-    .source-mode button.active { border-color: var(--selected-line); background: var(--brand-soft); color: var(--brand-hover); }
-    .source-manage { display: block; padding: 7px 6px 3px; color: var(--info); font-size: 9px; text-decoration: none; }
+    .source-mode button { flex: 1; padding: 6px 4px; border: 1px solid transparent; border-radius: 6px; background: transparent; color: var(--dim); cursor: pointer; font-size: 10px; }
+    .source-mode button.active { border-color: var(--selected-line); background: var(--selected-bg); color: var(--text-strong); }
+    .source-manage { display: block; padding: 7px 6px 3px; color: var(--info); font-size: 10px; text-decoration: none; }
     .connection-capsule { position: relative; z-index: 6; flex: 0 0 auto; }
-    .connection-capsule-trigger { display: inline-flex; align-items: center; gap: 6px; min-height: 28px; padding: 0 8px; border: 1px solid var(--line); border-radius: 999px; background: var(--surface1); color: var(--text); cursor: pointer; font-size: 10px; }
-    .connection-capsule-trigger:hover { border-color: var(--brand); background: var(--hover); }
-    .connection-capsule.status-reconnecting .connection-capsule-trigger { border-color: var(--working); background: var(--connection-warn-bg); }
-    .connection-capsule.status-disconnected .connection-capsule-trigger { border-color: var(--error); background: var(--connection-error-bg); }
+    .connection-capsule-trigger { position: relative; display: inline-flex; align-items: center; gap: 6px; min-height: 28px; padding: 0 8px; border: 0; border-radius: 999px; background: transparent; color: var(--text); cursor: pointer; font-size: 10px; }
+    .connection-capsule-trigger::before { content: ""; position: absolute; inset: -8px -10px; }
+    .connection-capsule-trigger:hover { background: var(--hover); }
+    .connection-capsule.status-reconnecting .connection-capsule-trigger { color: var(--working); }
+    .connection-capsule.status-disconnected .connection-capsule-trigger { color: var(--error); }
     .connection-summary-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--done); box-shadow: 0 0 7px currentColor; color: var(--done); }
     .connection-summary-dot.status-reconnecting { background: var(--working); color: var(--working); }
     .connection-summary-dot.status-disconnected { background: var(--error); color: var(--error); }
-    .connection-capsule-label { color: var(--text); font: 9px var(--mono); white-space: nowrap; }
+    .connection-capsule-label { color: var(--text); font: 10px var(--mono); white-space: nowrap; }
     .connection-capsule-chevron { color: var(--dim); font-size: 11px; }
     .connection-popover { position: absolute; top: calc(100% + 8px); right: 0; display: none; width: 286px; padding: 8px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface2); box-shadow: var(--small-shadow); }
     .connection-popover.open { display: block; }
-    .connection-popover-head { padding: 4px 6px 7px; color: var(--faint); font: 9px var(--mono); letter-spacing: .04em; text-transform: uppercase; }
+    .connection-popover-head { padding: 4px 6px 7px; color: var(--faint); font: 10px var(--mono); letter-spacing: .04em; text-transform: uppercase; }
     .connection-source-row { display: flex; align-items: center; gap: 7px; min-height: 36px; padding: 6px 7px; border-radius: 7px; }
     .connection-source-row:hover { background: var(--hover); }
     .connection-source-row strong { flex: 1; min-width: 0; color: var(--text-strong); font-size: 10px; }
-    .connection-source-row small { color: var(--dim); font: 9px var(--mono); white-space: nowrap; }
-    .connection-reconnect { padding: 4px 6px; border: 1px solid var(--selected-line); border-radius: 5px; background: var(--action-bg); color: var(--brand-hover); cursor: pointer; font-size: 9px; white-space: nowrap; }
-    .connection-manage { display: block; padding: 8px 6px 3px; margin-top: 4px; border-top: 1px solid var(--line-soft); color: var(--info); font-size: 9px; text-decoration: none; }
-    .source-group-bar { display: none; align-items: center; gap: 5px; padding: 6px 8px; margin-bottom: 8px; border: 1px solid var(--line-soft); border-radius: 7px; background: var(--surface1); color: var(--dim); font: 9px var(--mono); }
+    .connection-source-row small { color: var(--dim); font: 10px var(--mono); white-space: nowrap; }
+    .connection-reconnect { min-height: 34px; padding: 4px 8px; border: 1px solid var(--border-strong); border-radius: 5px; background: var(--surface2); color: var(--text); cursor: pointer; font-size: 10px; white-space: nowrap; }
+    .connection-manage { display: block; padding: 8px 6px 3px; margin-top: 4px; border-top: 1px solid var(--line-soft); color: var(--info); font-size: 10px; text-decoration: none; }
+    .source-group-bar { display: none; align-items: center; gap: 5px; padding: 6px 8px; margin-bottom: 8px; border: 1px solid var(--line-soft); border-radius: 7px; background: var(--surface1); color: var(--dim); font: 10px var(--mono); }
     .source-group-bar span { padding: 3px 5px; border-radius: 4px; }
     .source-group-bar .company { background: var(--source-company-bg); color: var(--source-company); }
     .source-group-bar .home { background: var(--source-home-bg); color: var(--source-home); }
@@ -322,9 +337,9 @@
     .rail-brand { display: grid; place-items: center; width: 38px; height: 38px; margin-bottom: 18px; border: 1px solid var(--rail-brand-line); border-radius: 12px; color: var(--text-strong); font-weight: 800; letter-spacing: -.08em; }
     .rail-btn { position: relative; display: grid; place-items: center; width: 44px; height: 44px; margin-bottom: 7px; border: 1px solid transparent; border-radius: 11px; background: transparent; color: var(--dim); cursor: pointer; font-size: 18px; }
     .rail-btn:hover { color: var(--text); background: var(--hover); }
-    .rail-btn.active { color: var(--brand-hover); background: var(--brand-soft); border-color: var(--selected-line); }
-    .rail-btn.active::before { content: ""; position: absolute; left: -9px; top: 11px; bottom: 11px; width: 3px; border-radius: 3px; background: var(--brand); }
-    .rail-btn .badge { position: absolute; top: 1px; right: 0; min-width: 15px; height: 15px; padding: 0 3px; border-radius: 9px; background: var(--error); color: var(--badge-ink); font: 9px/15px var(--mono); text-align: center; }
+    .rail-btn.active { color: var(--text-strong); background: var(--selected-bg); border-color: var(--selected-line); }
+    .rail-btn.active::before { content: ""; position: absolute; left: -9px; top: 11px; bottom: 11px; width: 3px; border-radius: 3px; background: var(--selected-line); }
+    .rail-btn .badge { position: absolute; top: 1px; right: 0; min-width: 15px; height: 15px; padding: 0 3px; border-radius: 9px; background: var(--error); color: var(--badge-ink); font: 10px/15px var(--mono); text-align: center; }
     .rail-spring { flex: 1; }
     .rail-connection { position: relative; display: grid; place-items: center; width: 44px; height: 39px; margin-bottom: 11px; border: 1px solid transparent; border-radius: 10px; background: transparent; color: var(--done); cursor: pointer; transition: color .18s ease, background .18s ease, border-color .18s ease; }
     .rail-connection:hover { background: var(--hover); border-color: var(--line); }
@@ -351,13 +366,13 @@
     .icon-btn:hover { color: var(--text); background: var(--hover); }
     .queue-switch { display: flex; gap: 4px; padding: 3px; margin-bottom: 14px; border: 1px solid var(--line); border-radius: 8px; background: var(--bg1); }
     .queue-switch button { flex: 1; padding: 6px 3px; border: 0; border-radius: 5px; background: transparent; color: var(--dim); cursor: pointer; font-size: 10px; }
-    .queue-switch button.active { border: 1px solid var(--border-strong); background: var(--hover); color: var(--text-strong); }
+    .queue-switch button.active { border: 1px solid var(--border-strong); background: var(--selected-bg); color: var(--text-strong); box-shadow: var(--selected-shadow); }
     .queue-view { display: none; overflow: hidden auto; height: calc(100% - 78px); padding-right: 2px; }
     .queue-view.active { display: block; }
     .queue-group { margin: 12px 3px 6px; color: var(--faint); font: 10px var(--mono); letter-spacing: .04em; }
     .queue-card { position: relative; padding: 10px; margin-bottom: 7px; border: 1px solid var(--card-border); border-radius: var(--radius); background: var(--card-veil); box-shadow: var(--card-shadow); cursor: pointer; transition: border-color .18s ease, background .18s ease, transform .18s ease, box-shadow .18s ease; }
     .queue-card:hover { border-color: var(--border-strong); background: var(--hover); transform: translateY(-1px); box-shadow: var(--shadow-hover); }
-    .queue-card.selected { border-color: var(--selected-line); background-color: var(--brand-soft); background-image: linear-gradient(135deg, var(--brand-soft), var(--surface2)); box-shadow: inset 3px 0 0 var(--brand), var(--selected-shadow); }
+    .queue-card.selected { border-color: var(--selected-line); background: var(--selected-bg); box-shadow: inset 3px 0 0 var(--selected-line), var(--selected-shadow); }
     .queue-card .row { display: flex; align-items: center; gap: 7px; }
     .queue-card strong { flex: 1; min-width: 0; overflow: hidden; color: var(--text-strong); font-size: 11.5px; text-overflow: ellipsis; white-space: nowrap; }
     .queue-card p { margin: 5px 0 0 14px; color: var(--dim); font-size: 10px; }
@@ -366,7 +381,7 @@
     .status-dot.done { background: var(--done); box-shadow: 0 0 7px var(--status-done-glow); }
     .status-dot.waiting { background: var(--working); }
     .status-dot.error { background: var(--error); box-shadow: 0 0 7px var(--status-error-glow); }
-    .tag { display: inline-flex; align-items: center; gap: 4px; padding: 3px 7px; border: 1px solid var(--tag-border); border-radius: 999px; background: var(--tag-bg); color: var(--dim); font-size: 9px; white-space: nowrap; }
+    .tag { display: inline-flex; align-items: center; gap: 4px; padding: 3px 7px; border: 1px solid var(--tag-border); border-radius: 999px; background: var(--tag-bg); color: var(--dim); font-size: 10px; white-space: nowrap; }
     .tag.action { background: var(--action-bg); color: var(--brand-hover); }
     .tag.danger { border-color: var(--danger-line); background: var(--danger-bg); color: var(--error); }
     .tag.done { background: var(--done-bg); color: var(--done); }
@@ -411,7 +426,7 @@
     .context-meter-head, .context-meter-stats { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
     .context-meter-kicker { color: var(--faint); font: 9px var(--mono); letter-spacing: .06em; text-transform: uppercase; }
     .context-meter-model { display: block; margin-top: 2px; color: var(--text-strong); font-size: 10px; font-weight: 700; }
-    .context-meter-grade { padding: 3px 6px; border: 1px solid color-mix(in srgb, var(--ctx-safe) 42%, transparent); border-radius: 999px; background: color-mix(in srgb, var(--ctx-safe) 12%, transparent); color: var(--ctx-safe); font: 700 9px var(--mono); white-space: nowrap; }
+    .context-meter-grade { padding: 3px 6px; border: 1px solid color-mix(in srgb, var(--ctx-safe) 42%, transparent); border-radius: 999px; background: color-mix(in srgb, var(--ctx-safe) 12%, transparent); color: var(--ctx-safe); font: 700 10px var(--mono); white-space: nowrap; }
     .context-meter.attention .context-meter-grade { border-color: color-mix(in srgb, var(--ctx-attention) 42%, transparent); background: color-mix(in srgb, var(--ctx-attention) 12%, transparent); color: var(--ctx-attention); }
     .context-meter.critical .context-meter-grade { border-color: color-mix(in srgb, var(--ctx-critical) 42%, transparent); background: color-mix(in srgb, var(--ctx-critical) 12%, transparent); color: var(--ctx-critical); }
     .context-meter-band { display: grid; grid-template-columns: repeat(12, minmax(0, 1fr)); gap: 3px; margin: 11px 0 8px; }
@@ -424,7 +439,7 @@
     .context-meter-pct { color: var(--ctx-safe); font: 700 11px var(--mono); }
     .context-meter.attention .context-meter-pct { color: var(--ctx-attention); }
     .context-meter.critical .context-meter-pct { color: var(--ctx-critical); }
-    .context-meter-note { margin-top: 5px; color: var(--dim); font-size: 9px; }
+    .context-meter-note { margin-top: 5px; color: var(--dim); font-size: 10px; }
     .usage-summary { padding: 12px; border: 1px solid var(--line); border-radius: 9px; background: var(--surface2); box-shadow: var(--card-shadow); }
     .usage-summary-top { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
     .usage-summary-number { color: var(--text-strong); font: 700 17px var(--mono); font-variant-numeric: tabular-nums; }
@@ -446,7 +461,7 @@
     .wait-card.allowed strong { color: var(--done); }
     .wait-card p { margin: 5px 0 10px; color: var(--dim); font-size: 10px; }
     .wait-actions { display: flex; gap: 7px; }
-    .wait-actions button { min-height: 29px; padding: 0 10px; border: 1px solid var(--border-strong); border-radius: 6px; background: var(--surface1); color: var(--text); cursor: pointer; font-size: 10px; transition: border-color .18s ease, background .18s ease, color .18s ease, transform .18s ease; }
+    .wait-actions button { min-height: 34px; padding: 0 10px; border: 1px solid var(--border-strong); border-radius: 6px; background: var(--surface2); color: var(--text); cursor: pointer; font-size: 10px; transition: border-color .18s ease, background .18s ease, color .18s ease, transform .18s ease; }
     .wait-actions button:hover { border-color: var(--text); background: var(--hover); transform: translateY(-1px); }
     .wait-actions button:focus-visible { outline: 2px solid var(--brand-hover); outline-offset: 2px; }
     .wait-actions button.allow { border-color: transparent; background: var(--working); color: var(--action-ink); font-weight: 700; }
@@ -463,9 +478,10 @@
     .artifact-group, .artifact-loose { border: 1px solid var(--artifact-group-line); border-radius: var(--radius); background: var(--artifact-group-bg); box-shadow: var(--card-shadow); }
     .artifact-group-head { display: flex; align-items: center; gap: 8px; min-height: 44px; padding: 8px 10px; border-bottom: 1px solid var(--line-soft); }
     .artifact-group.collapsed .artifact-group-head { border-bottom-color: transparent; }
+    .artifact-group.collapsed .artifact-files, .artifact-group.collapsed .artifact-batch { display: none; }
     .artifact-group-title { min-width: 0; flex: 1; }
     .artifact-group-title strong { display: block; overflow: hidden; color: var(--text-strong); font-size: 11px; text-overflow: ellipsis; white-space: nowrap; }
-    .artifact-group-title small { display: block; margin-top: 2px; color: var(--dim); font: 9px var(--mono); }
+    .artifact-group-title small { display: block; margin-top: 2px; color: var(--dim); font: 10px var(--mono); }
     .artifact-folder-icon { color: var(--brand-hover); font-size: 15px; }
     .artifact-group-action { min-height: 28px; padding: 0 9px; }
     .artifact-menu-wrap { position: relative; }
@@ -482,20 +498,29 @@
     .artifact-file-icon { color: var(--info); font-size: 13px; text-align: center; }
     .artifact-file-main { min-width: 0; }
     .artifact-file-name { display: block; overflow: hidden; color: var(--text); font-size: 10px; text-overflow: ellipsis; white-space: nowrap; }
-    .artifact-file-dir { display: block; overflow: hidden; margin-top: 1px; color: var(--faint); font: 9px var(--mono); text-overflow: ellipsis; white-space: nowrap; }
-    .artifact-file-meta { color: var(--faint); font: 9px var(--mono); white-space: nowrap; }
-    .artifact-file-error { color: var(--error); font-size: 9px; white-space: nowrap; }
+    .artifact-file-dir { display: block; overflow: hidden; margin-top: 1px; color: var(--faint); font: 10px var(--mono); text-overflow: ellipsis; white-space: nowrap; }
+    .artifact-file-meta { color: var(--faint); font: 10px var(--mono); white-space: nowrap; }
+    .artifact-file-error { display: none; color: var(--error); font-size: 10px; white-space: nowrap; }
+    .artifact-file.failed .artifact-file-error { display: inline; }
+    .artifact-file-anomaly { padding: 2px 4px; border: 1px solid var(--danger-line); border-radius: 4px; color: var(--error); font: 700 10px var(--mono); white-space: nowrap; }
+    .artifact-file-retry { display: none; min-height: 24px; padding: 0 6px; border: 1px solid var(--danger-line); border-radius: 5px; background: transparent; color: var(--error); cursor: pointer; font-size: 10px; }
+    .artifact-file.failed .artifact-file-retry { display: inline-flex; align-items: center; }
+    .artifact-file.downloading { background: var(--artifact-muted-bg); }
+    .artifact-file.downloading .artifact-file-meta { color: var(--brand); }
+    .artifact-file-retry:focus-visible, .artifact-file-retry:hover { border-color: var(--error); background: var(--danger-bg); }
     .artifact-batch { padding: 0 10px 9px; }
-    .artifact-batch-state { display: flex; align-items: center; justify-content: space-between; gap: 8px; min-height: 25px; padding: 5px 7px; border-radius: 6px; background: var(--artifact-muted-bg); color: var(--dim); font: 9px var(--mono); }
+    .artifact-batch-state { display: flex; align-items: center; justify-content: space-between; gap: 8px; min-height: 25px; padding: 5px 7px; border-radius: 6px; background: var(--artifact-muted-bg); color: var(--dim); font: 10px var(--mono); }
     .artifact-batch-state.complete { background: var(--artifact-complete-bg); color: var(--done); }
     .artifact-batch-state.partial { background: var(--artifact-failed-bg); color: var(--error); }
     .artifact-batch-state button { border: 0; background: transparent; color: inherit; cursor: pointer; font: inherit; text-decoration: underline; }
     .artifact-batch-progress { display: inline-block; width: 76px; height: 4px; overflow: hidden; border-radius: 999px; background: var(--line); vertical-align: middle; }
     .artifact-batch-progress i { display: block; width: 0; height: 100%; border-radius: inherit; background: var(--brand); transition: width .25s ease; }
     .artifact-loose { padding: 0 10px; }
-    .artifact-source { display: grid; gap: 8px; }
+    .artifact-source { display: grid; gap: 8px; padding-left: 9px; border-left: 3px solid var(--source); }
+    .artifact-source.source-company-group { border-left-color: var(--source-company); }
+    .artifact-source.source-home-group { border-left-color: var(--source-home); }
     .artifact-source-head { display: flex; align-items: center; justify-content: space-between; color: var(--text-strong); font-size: 11px; }
-    .artifact-source-head small { color: var(--dim); font: 9px var(--mono); }
+    .artifact-source-head small { color: var(--dim); font: 10px var(--mono); }
     .artifact-source-unreachable { padding: 10px; border: 1px dashed var(--danger-line); border-radius: 8px; background: var(--danger-bg); color: var(--error); font-size: 10px; }
     .artifact-source-link { border: 0; background: transparent; color: var(--info); cursor: pointer; font-size: 10px; }
     .artifact-mobile-action { display: none; }
@@ -505,14 +530,22 @@
     .artifact-sheet h3 { margin: 0 0 8px; color: var(--text-strong); font-size: 12px; }
     .artifact-sheet button { display: block; width: 100%; min-height: 42px; border: 0; border-bottom: 1px solid var(--line-soft); background: transparent; color: var(--text); text-align: left; cursor: pointer; font-size: 11px; }
     .artifact-sheet button:last-child { border-bottom: 0; color: var(--dim); }
+    .mobile-screen .artifact-browser { gap: 8px; }
+    .mobile-screen .artifact-summary { display: block; line-height: 1.6; }
+    .mobile-screen .artifact-summary-path { display: block; max-width: 100%; margin-top: 2px; }
+    .mobile-screen .artifact-group-action, .mobile-screen .artifact-menu-wrap { display: none; }
+    .mobile-screen .artifact-group-head { cursor: pointer; }
+    .segment-bar .faint, .inspector-title > span:last-child, .metric b, .mobile-summary b { color: var(--text-strong); font-variant-numeric: tabular-nums; }
+    .source-trigger .source-summary, .source-menu-head, .source-option small, .source-mode button, .source-manage, .connection-capsule-label, .connection-popover-head, .connection-source-row small, .connection-manage, .source-group-bar, .rail-btn .badge, .tag, .context-meter-grade, .context-meter-note, .artifact-group-title small, .artifact-file-dir, .artifact-file-meta, .artifact-file-error, .artifact-batch-state, .artifact-source-head small, .task-card p, .task-assignee, .member-card p, .mobile-summary span, .engine-badge, .source-badge, .activity-row time, .task-flag, .toggle-control { font-size: 10px; }
+    .context-meter-kicker { font-size: 9px; }
     .board { display: grid; grid-template-columns: repeat(5, minmax(120px, 1fr)); gap: 9px; min-width: 680px; }
     .lane { min-height: 395px; padding: 8px; border: 1px solid var(--line-soft); border-radius: 9px; background: var(--lane-bg); }
     .lane-head { display: flex; justify-content: space-between; margin-bottom: 8px; color: var(--dim); font-size: 10px; font-weight: 700; }
     .task-card { padding: 9px; margin-bottom: 7px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface2); }
     .task-card strong { display: block; color: var(--text); font-size: 10px; }
-    .task-card p { margin: 5px 0 0; color: var(--dim); font-size: 9px; }
+    .task-card p { margin: 5px 0 0; color: var(--dim); font-size: 10px; }
     .task-card .tag { margin-top: 7px; }
-    .task-assignee { display: flex; align-items: center; gap: 6px; margin-top: 7px; color: var(--dim); font-size: 9px; }
+    .task-assignee { display: flex; align-items: center; gap: 6px; margin-top: 7px; color: var(--dim); font-size: 10px; }
     .task-assignee b { color: var(--text); font-weight: 600; }
     .member-list { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
     .member-card { display: flex; gap: 8px; padding: 10px; border: 1px solid var(--line); border-radius: 9px; background: var(--surface2); }
@@ -523,16 +556,16 @@
     .avatar.leader { border: 2px solid var(--brand); border-radius: 50%; background: radial-gradient(circle at 35% 25%, var(--brand-hover), var(--brand) 45%, var(--brand-soft) 100%); color: var(--leader-ink); box-shadow: 0 0 0 3px var(--action-bg), 0 0 14px var(--action-bg); font-size: 15px; }
     .avatar.leader::after { content: ""; position: absolute; inset: -4px; border: 1px solid var(--selected-line); border-radius: 50%; transform: rotate(-18deg); }
     .avatar-engine-dot { position: absolute; right: -4px; bottom: -3px; width: 9px; height: 9px; border: 2px solid var(--surface2); border-radius: 50%; background: var(--engine-color); }
-    .avatar-engine-dot.trae { --engine-color: #58C9B1; }
-    .avatar-engine-dot.claude { --engine-color: #D88B68; }
-    .avatar-engine-dot.qwen { --engine-color: #B493FF; }
-    .avatar-engine-dot.codex { --engine-color: #8DABFF; }
-    .avatar-engine-dot.zcode { --engine-color: #E58DB0; }
-    .avatar-engine-dot.codebuddy { --engine-color: #4BA8F0; }
+    .avatar-engine-dot.trae { --engine-color: var(--engine-trae); }
+    .avatar-engine-dot.claude { --engine-color: var(--engine-claude); }
+    .avatar-engine-dot.qwen { --engine-color: var(--engine-qwen); }
+    .avatar-engine-dot.codex { --engine-color: var(--engine-codex); }
+    .avatar-engine-dot.zcode { --engine-color: var(--engine-zcode); }
+    .avatar-engine-dot.codebuddy { --engine-color: var(--engine-codebuddy); }
     .role-label { display: inline-flex; align-items: center; padding: 2px 5px; border-radius: 999px; font: 700 8px/1 var(--mono); letter-spacing: .02em; }
     .leader-label { border: 1px solid var(--selected-line); background: var(--brand-soft); color: var(--brand-hover); }
     .member-card strong { display: block; color: var(--text-strong); font-size: 10px; }
-    .member-card p { margin: 3px 0 0; color: var(--dim); font-size: 9px; }
+    .member-card p { margin: 3px 0 0; color: var(--dim); font-size: 10px; }
     .project-overview { display: grid; grid-template-columns: repeat(4, minmax(110px, 1fr)); gap: 9px; margin-bottom: 15px; }
     .metric { padding: 11px; border: 1px solid var(--line); border-radius: 9px; background: var(--surface2); }
     .metric b { display: block; color: var(--text-strong); font: 700 19px var(--mono); font-variant-numeric: tabular-nums; }
@@ -545,7 +578,7 @@
     .aggregate-card button { margin-top: 7px; }
     .notice-list { display: grid; gap: 8px; }
     .notice { display: flex; gap: 9px; padding: 11px; border: 1px solid var(--line); border-radius: 9px; background: var(--surface2); cursor: pointer; }
-    .notice.selected { border-color: var(--selected-line); background: var(--brand-soft); }
+    .notice.selected { border-color: var(--selected-line); background: var(--selected-bg); box-shadow: inset 3px 0 0 var(--selected-line); }
     .notice .notice-icon { display: grid; place-items: center; flex: 0 0 27px; width: 27px; height: 27px; border-radius: 8px; background: var(--notice-icon-bg); color: var(--error); }
     .notice strong { display: block; color: var(--text-strong); font-size: 11px; }
     .notice p { margin: 4px 0 0; color: var(--dim); font-size: 10px; }
@@ -579,7 +612,8 @@
     .mobile-sourcebar .source-trigger { width: 100%; justify-content: space-between; min-height: 25px; }
     .mobile-sourcebar .source-menu { top: calc(100% + 5px); right: 0; left: 0; width: auto; }
     .mobile-sourcebar .source-trigger .source-summary { display: none; }
-    .mobile-sourcebar .connection-capsule-trigger { min-height: 25px; padding: 0 7px; }
+    .mobile-sourcebar .connection-capsule-trigger { min-height: 25px; padding: 0 7px; margin: 0 8px; }
+    .mobile-sourcebar .connection-capsule-trigger::before { inset: -10px -12px; }
     .mobile-sourcebar .connection-capsule-label { max-width: 92px; overflow: hidden; text-overflow: ellipsis; }
     .mobile-sourcebar .connection-popover { top: calc(100% + 5px); right: 0; width: 272px; }
     .mobile-head { display: flex; align-items: center; gap: 8px; padding: 14px 14px 12px; border-bottom: 1px solid var(--line-soft); background: var(--mobile-head-bg); box-shadow: 0 7px 16px var(--panel-shadow); }
@@ -593,6 +627,7 @@
     .mobile-nav button.active { color: var(--text-strong); border-bottom-color: var(--brand); background: linear-gradient(180deg, var(--mobile-active-bg), transparent); }
     .mobile-nav button.active b { color: var(--brand-hover); }
     .mobile-notify { position: relative; display: grid; place-items: center; width: 44px; height: 44px; margin: -7px -4px; border: 0; border-radius: 10px; color: var(--text); }
+    .mobile-notify::before { content: ""; position: absolute; inset: -2px; }
     .mobile-notify:hover, .mobile-notify:focus-visible { background: var(--hover); }
     .mobile-notify .notify-count { position: absolute; top: -4px; right: -4px; min-width: 14px; height: 14px; padding: 0 3px; border-radius: 9px; background: var(--error); color: var(--badge-ink); font: 8px/14px var(--mono); }
     .connection-chip { gap: 5px; }
@@ -606,13 +641,13 @@
     .mobile-summary { display: flex; align-items: center; gap: 10px; min-height: 25px; margin-bottom: 11px; padding: 0 2px; }
     .mobile-summary div { display: inline-flex; align-items: baseline; gap: 4px; padding: 0; color: var(--dim); }
     .mobile-summary b { color: var(--text-strong); font: 700 11px var(--mono); font-variant-numeric: tabular-nums; }
-    .mobile-summary span { color: var(--dim); font-size: 9px; }
+    .mobile-summary span { color: var(--dim); font-size: 10px; }
     .mobile-switch { display: flex; gap: 4px; padding: 3px; margin-bottom: 13px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface1); }
     .mobile-switch button { flex: 1; padding: 6px 3px; border: 0; border-radius: 5px; background: transparent; color: var(--dim); cursor: pointer; font-size: 10px; }
-    .mobile-switch button.active { border: 1px solid var(--border-strong); background: var(--hover); color: var(--text-strong); }
+    .mobile-switch button.active { border: 1px solid var(--border-strong); background: var(--selected-bg); color: var(--text-strong); box-shadow: var(--selected-shadow); }
     .mobile-card { padding: 11px; margin-bottom: 8px; border: 1px solid var(--card-border); border-radius: 12px; background: var(--surface2); box-shadow: var(--card-shadow); cursor: pointer; transition: border-color .18s ease, background .18s ease, transform .18s ease, box-shadow .18s ease; }
     .mobile-card:hover { border-color: var(--border-strong); transform: translateY(-1px); box-shadow: var(--shadow-hover); }
-    .mobile-card.primary { border-color: var(--selected-line); box-shadow: inset 3px 0 0 var(--brand), var(--card-shadow); }
+    .mobile-card.primary { border-color: var(--selected-line); background: var(--selected-bg); box-shadow: inset 3px 0 0 var(--selected-line), var(--card-shadow); }
     .mobile-card .row { display: flex; align-items: center; gap: 7px; }
     .mobile-card strong { flex: 1; min-width: 0; color: var(--text-strong); font-size: 11.5px; }
     .mobile-card p { margin: 5px 0 0 35px; color: var(--dim); font-size: 10px; }
@@ -637,26 +672,26 @@
     .mobile-detail-composer { display: flex; gap: 7px; padding: 10px 12px; border-top: 1px solid var(--line-soft); background: var(--composer-bg); box-shadow: 0 -8px 18px var(--panel-shadow); }
     .mobile-detail-composer .composer { min-height: 34px; }
     .mobile-detail-composer .primary-btn { padding: 0 10px; }
-    .toast { position: fixed; right: 22px; bottom: 22px; z-index: 20; max-width: 340px; padding: 11px 14px 11px 13px; border: 1px solid var(--toast-line); border-radius: 10px; background: linear-gradient(180deg, var(--toast-bg-top), var(--toast-bg-bottom)); color: var(--done); box-shadow: var(--small-shadow), inset 0 1px 0 var(--toast-highlight); opacity: 0; pointer-events: none; transform: translateY(8px); transition: opacity .18s ease, transform .18s ease; font-size: 11px; }
+    .toast { position: fixed; right: 22px; bottom: 22px; z-index: 20; max-width: 340px; padding: 11px 14px 11px 13px; border: 1px solid var(--toast-line); border-radius: 10px; background: linear-gradient(180deg, var(--toast-bg-top), var(--toast-bg-bottom)); color: var(--text); box-shadow: var(--small-shadow), inset 0 1px 0 var(--toast-highlight); opacity: 0; pointer-events: none; transform: translateY(8px); transition: opacity .18s ease, transform .18s ease; font-size: 11px; }
     .toast.show { opacity: 1; transform: none; }
     .desktop-only-note { color: var(--faint); font-size: 10px; }
-    .engine-badge, .source-badge { display: inline-flex; align-items: center; gap: 4px; white-space: nowrap; font-size: 9px; line-height: 1; }
+    .engine-badge, .source-badge { display: inline-flex; align-items: center; gap: 4px; white-space: nowrap; font-size: 10px; line-height: 1; }
     .engine-badge { padding: 3px 6px 3px 4px; border: 1px solid color-mix(in srgb, var(--engine-color) 48%, transparent); border-radius: 999px; background: color-mix(in srgb, var(--engine-color) 13%, transparent); color: color-mix(in srgb, var(--engine-color) 78%, white); }
     .engine-badge::before { content: ""; width: 6px; height: 6px; border-radius: 2px; background: var(--engine-color); box-shadow: 0 0 7px color-mix(in srgb, var(--engine-color) 50%, transparent); }
-    .engine-badge.claude { --engine-color: #D88B68; }
-    .engine-badge.codex { --engine-color: #8DABFF; }
-    .engine-badge.trae { --engine-color: #58C9B1; }
-    .engine-badge.qwen { --engine-color: #B493FF; }
-    .engine-badge.codebuddy { --engine-color: #4BA8F0; }
-    .engine-badge.zcode { --engine-color: #E58DB0; }
+    .engine-badge.claude { --engine-color: var(--engine-claude); }
+    .engine-badge.codex { --engine-color: var(--engine-codex); }
+    .engine-badge.trae { --engine-color: var(--engine-trae); }
+    .engine-badge.qwen { --engine-color: var(--engine-qwen); }
+    .engine-badge.codebuddy { --engine-color: var(--engine-codebuddy); }
+    .engine-badge.zcode { --engine-color: var(--engine-zcode); }
     .source-badge { padding: 3px 6px; border: 1px solid var(--source-line); border-radius: 5px; background: var(--source-bg); color: var(--source); }
     .source-badge.source-company { border-color: var(--source-company); background: var(--source-company-bg); color: var(--source-company); }
     .source-badge.source-home { border-color: var(--source-home); background: var(--source-home-bg); color: var(--source-home); }
-    .source-badge::before { content: "↗"; color: var(--faint); font-size: 9px; }
+    .source-badge::before { content: "↗"; color: var(--faint); font-size: 10px; }
     .identity-cluster { display: inline-flex; align-items: center; gap: 5px; flex-wrap: wrap; }
     .queue-card .identity-cluster { margin-top: 7px; margin-left: 14px; }
     .workspace-title-row .identity-cluster { flex: 0 0 auto; }
-    .workspace-title-row .engine-badge, .workspace-title-row .source-badge { font-size: 9px; }
+    .workspace-title-row .engine-badge, .workspace-title-row .source-badge { font-size: 10px; }
     .member-card, .task-card, .notice, .metric, .aggregate-card, .settings-row { box-shadow: var(--card-shadow); transition: border-color .18s ease, background .18s ease, transform .18s ease, box-shadow .18s ease; }
     .member-card:hover, .task-card:hover, .notice:hover, .metric:hover, .aggregate-card:hover, .settings-row:hover { border-color: var(--border-strong); transform: translateY(-1px); box-shadow: var(--shadow-hover); }
     .member-card .identity-cluster, .task-card .identity-cluster, .notice .identity-cluster, .artifact-row .identity-cluster { margin-top: 6px; }
@@ -675,21 +710,23 @@
     .team-member-large p { margin: 3px 0 6px; color: var(--dim); font-size: 10px; }
     .team-activity { display: grid; gap: 0; max-width: 720px; }
     .activity-row { display: grid; grid-template-columns: 70px 16px minmax(0, 1fr); gap: 8px; align-items: center; min-height: 42px; border-bottom: 1px solid var(--line-soft); color: var(--dim); font-size: 10px; }
-    .activity-row time { color: var(--faint); font: 9px var(--mono); }
+    .activity-row time { color: var(--faint); font: 10px var(--mono); }
     .activity-row i { width: 7px; height: 7px; border-radius: 50%; background: var(--brand); }
-    .task-flag { display: inline-flex; align-items: center; gap: 4px; margin-top: 7px; color: var(--brand-hover); font-size: 9px; }
+    .task-flag { display: inline-flex; align-items: center; gap: 4px; margin-top: 7px; color: var(--brand-hover); font-size: 10px; }
     .settings-nav .queue-card { border-color: transparent; background: transparent; box-shadow: none; }
     .settings-nav .queue-card:hover { border-color: transparent; background: var(--hover); transform: none; box-shadow: none; }
-    .settings-nav .queue-card.selected { border-color: transparent; background: var(--brand-soft); box-shadow: inset 3px 0 0 var(--brand); }
+    .settings-nav .queue-card.selected { border-color: transparent; background: var(--selected-bg); box-shadow: inset 3px 0 0 var(--selected-line); }
     .settings-panel .settings-row { border-color: transparent; border-bottom: 1px solid var(--line-soft); border-radius: 0; background: transparent; box-shadow: none; }
     .settings-panel .settings-row:hover { border-color: var(--line-soft); background: var(--hover); transform: none; box-shadow: none; }
-    .toggle-control { min-width: 34px; padding: 3px 7px; border: 1px solid var(--line); border-radius: 999px; background: var(--surface1); color: var(--dim); cursor: pointer; font: 700 9px var(--mono); }
+    .toggle-control { min-width: 34px; padding: 3px 7px; border: 1px solid var(--line); border-radius: 999px; background: var(--surface1); color: var(--dim); cursor: pointer; font: 700 10px var(--mono); }
     .toggle-control.active { border-color: var(--done); background: var(--done-bg); color: var(--done); }
     .mobile-settings .settings-row { border-color: transparent; border-bottom: 1px solid var(--line-soft); border-radius: 0; background: transparent; box-shadow: none; }
     .mobile-settings .settings-row:hover { border-color: var(--line-soft); background: var(--hover); transform: none; box-shadow: none; }
     .notice { border-right: 0; border-top: 0; border-bottom: 1px solid var(--line-soft); border-left: 0; border-radius: 0; background: var(--surface2); box-shadow: none; }
     .notice:hover { border-color: var(--line-soft); background: var(--hover); transform: none; box-shadow: none; }
-    .notice.selected { border-color: var(--selected-line); background: var(--brand-soft); }
+    .notice.selected { border-color: var(--selected-line); background: var(--selected-bg); box-shadow: inset 3px 0 0 var(--selected-line); }
+    .queue-card[data-session-card="mobile"], .mobile-card[data-session-card="mobile"] { border-color: var(--danger-line); background: var(--danger-bg); }
+    .queue-card[data-session-card="mobile"]:hover, .mobile-card[data-session-card="mobile"]:hover { border-color: var(--error); background: var(--danger-bg); }
     .mobile-settings-detail { padding-top: 3px; }
     .mobile-settings-detail h3 { margin: 12px 0; color: var(--text-strong); font-size: 15px; }
     .settings-detail-back { margin-bottom: 4px; }
@@ -704,17 +741,12 @@
     @media (prefers-reduced-motion: reduce) {
       *, *::before, *::after { scroll-behavior: auto !important; transition-duration: .01ms !important; animation-duration: .01ms !important; }
     }
+    .mobile-screen .wait-actions button, .mobile-screen .connection-reconnect { min-height: 44px; }
     html[data-theme="light"] body { background: radial-gradient(950px 520px at 77% -10%, var(--glow-brand), transparent 64%), radial-gradient(720px 480px at 0% 72%, var(--glow-blue), transparent 68%), var(--bg0); }
     html[data-theme="light"] .window-dots i { background: var(--window-dot); }
     html[data-theme="light"] .window-title { color: var(--faint); }
     html[data-theme="light"] .rail-brand { border-color: var(--rail-brand-line); }
     html[data-theme="light"] .domain-rail, html[data-theme="light"] .windowbar { box-shadow: 5px 0 20px var(--rail-shadow); }
-    html[data-theme="light"] .engine-badge.claude { --engine-color: #B85232; }
-    html[data-theme="light"] .engine-badge.codex { --engine-color: #4B6FCA; }
-    html[data-theme="light"] .engine-badge.trae { --engine-color: #168C78; }
-    html[data-theme="light"] .engine-badge.qwen { --engine-color: #7652C4; }
-    html[data-theme="light"] .engine-badge.codebuddy { --engine-color: #2679B5; }
-    html[data-theme="light"] .engine-badge.zcode { --engine-color: #B14E77; }
     html[data-theme="light"] .rail-connection::after { border-color: var(--rail); }
     html[data-theme="light"] .mobile-status { color: var(--dim); }
     @media (max-width: 980px) {
@@ -789,7 +821,7 @@
               </div>
             </aside>
             <section class="workspace">
-              <header class="workspace-head"><div class="workspace-title-row"><i class="status-dot waiting" id="session-dot"></i><h2 id="session-title">0.6.0-test.19 出包</h2><span class="tag action" id="session-status">待收单</span><span class="identity-cluster" id="session-identity"><span class="engine-badge claude">Claude</span><span class="source-badge">公司电脑</span></span></div><div class="workspace-sub" id="session-sub">~/dev/cc-deck · claude · 上下文 41% · 最近活动 12 分钟前</div><div class="segment-bar"><button class="active">对话</button><button>任务 <span class="faint">6/9</span></button><button>输出物 <span class="faint">4</span></button><button>用量</button><button>⋯</button></div></header>
+              <header class="workspace-head"><div class="workspace-title-row"><i class="status-dot waiting" id="session-dot"></i><h2 id="session-title">0.6.0-test.19 出包</h2><span class="tag action" id="session-status">待收单</span><span class="identity-cluster" id="session-identity"><span class="engine-badge claude">Claude</span><span class="source-badge">公司电脑</span></span></div><div class="workspace-sub" id="session-sub">~/dev/cc-deck · claude · 最近活动 12 分钟前</div><div class="segment-bar"><button class="active">对话</button><button>任务 <span class="faint">6/9</span></button><button>输出物 <span class="faint">4</span></button><button>用量</button><button>⋯</button></div></header>
               <div class="workspace-body" id="session-body">
                 <div class="timeline-note">今天 10:42 · 验收上下文</div>
                 <div class="bubble"><div class="bubble-author"><span class="avatar leader">✦<i class="avatar-engine-dot trae"></i></span><strong>Leader</strong><span class="role-label leader-label">Leader</span></div>独立出包已完成，四处版本号已同步。验收单还差 1 项确认收单。</div>
@@ -843,7 +875,7 @@
 
         <div class="mobile-screen" id="m-detail" data-mobile-detail="true">
           <div class="mobile-status"><span>9:41</span><span>▰ ︎◒ 100%</span></div>
-          <header class="mobile-head"><button class="mobile-back" data-mobile-back>‹</button><h2 id="mobile-detail-title">0.6.0-test.19 出包<small>~/dev/cc-deck · claude · 上下文 41%</small></h2><span class="identity-cluster" id="mobile-detail-identity"><span class="engine-badge claude">Claude</span><span class="source-badge">公司电脑</span></span><span class="tag action">待收单</span></header>
+          <header class="mobile-head"><button class="mobile-back" data-mobile-back>‹</button><h2 id="mobile-detail-title">0.6.0-test.19 出包<small>~/dev/cc-deck · claude</small></h2><span class="identity-cluster" id="mobile-detail-identity"><span class="engine-badge claude">Claude</span><span class="source-badge">公司电脑</span></span><span class="tag action">待收单</span></header>
           <div class="mobile-detail-tabs"><button class="active">对话</button><button>任务</button><button>输出物</button><button>用量</button><button>⋯</button></div>
               <div class="mobile-content no-bottom"><div class="timeline-note">今天 10:42 · 来源：待处理收件箱</div><div class="bubble"><div class="bubble-author"><span class="avatar leader">✦<i class="avatar-engine-dot trae"></i></span><strong>Leader</strong><span class="role-label leader-label">Leader</span></div>独立出包已完成，验收单还差 1 项确认收单。</div><div class="bubble me">我先看更新通道隔离，再确认收单。</div><div class="wait-card" data-wait-card><strong class="wait-title">等待你的确认 · Bash 写入 docs/</strong><p class="wait-copy">将把验收证据写入 `docs/release-check.md`，会话才能继续。</p><div class="wait-actions"><button class="allow" data-allow>允许一次</button><button>拒绝并说明</button></div></div><div class="status-note">当前任务：回填验收证据 · 预计还需 2 分钟。</div><div class="artifact-row">📎 docs/release-check.md <span>刚刚</span></div><div class="artifact-row">▧ 0.6.0-test.19.apk <span>1h</span></div></div><div class="mobile-detail-composer"><div class="composer">给会话发消息…</div><button class="primary-btn">发送</button></div>
         </div>
@@ -956,7 +988,7 @@
         const issueCount = Object.values(sourceStates).filter((source) => source.status !== "connected").length;
         const summary = aggregate
           ? `${Object.keys(sourceStates).length} 源 · ${issueCount ? `${issueCount} 异常` : "全部正常"}`
-          : `${current.label} · ${state.label}`;
+          : state.label;
         document.querySelectorAll(".connection-capsule").forEach((capsule) => {
           capsule.classList.remove("status-connected", "status-reconnecting", "status-disconnected");
           capsule.classList.add(state.className);
@@ -1200,7 +1232,7 @@
         { key: "release-docs", dir: "docs/release", count: "3 个文件", total: "28 KB", recent: "刚刚", open: true, local: true, outcome: "complete", files: [
           { icon: "▤", name: "release-check.md", dir: "docs/release", size: "8 KB", time: "刚刚" },
           { icon: "▤", name: "release-notes.md", dir: "docs/release", size: "6 KB", time: "12 分钟前" },
-          { icon: "⌘", name: "evidence.json", dir: "docs/release", size: "14 KB", time: "18 分钟前" }
+          { icon: "⌘", name: "evidence.json", dir: "docs/release", size: "14 KB", time: "18 分钟前", anomaly: "已截断" }
         ] },
         { key: "android-build", dir: "artifacts/android", count: "2 个文件", total: "18.4 MB", recent: "1 小时前", local: true, outcome: "partial", files: [
           { icon: "▧", name: "0.6.0-test.19.apk", dir: "artifacts/android", size: "17.9 MB", time: "1 小时前" },
@@ -1215,12 +1247,18 @@
         ] },
         { key: "lockfile", dir: "", count: "1 个文件", total: "178 KB", recent: "3 天前", local: true, files: [
           { icon: "⌘", name: "package-lock.json", dir: "", size: "178 KB", time: "3 天前" }
+        ] },
+        { key: "architecture-readme", dir: "docs/architecture", count: "1 个文件", total: "12 KB", recent: "3 天前", local: true, files: [
+          { icon: "▤", name: "README.md", dir: "docs/architecture", size: "12 KB", time: "3 天前" }
+        ] },
+        { key: "export-manifest", dir: "exports", count: "1 个文件", total: "2 KB", recent: "4 天前", local: true, files: [
+          { icon: "⌘", name: "manifest.csv", dir: "exports", size: "2 KB", time: "4 天前" }
         ] }
       ];
 
       function artifactFileMarkup(file) {
-        const failure = file.failure ? ` failed" data-artifact-failure="${file.failure}` : "";
-        return `<div class="artifact-file${failure}" data-artifact-file="${file.name}"><span class="artifact-file-icon">${file.icon}</span><div class="artifact-file-main"><span class="artifact-file-name">${file.name}</span><span class="artifact-file-dir">${file.dir || "当前工作目录"}</span></div><span class="artifact-file-meta">${file.size} · ${file.time}</span>${file.failure ? `<span class="artifact-file-error">${file.failure}</span>` : ""}</div>`;
+        const failureAttr = file.failure ? ` data-artifact-failure="${file.failure}"` : "";
+        return `<div class="artifact-file"${failureAttr} data-artifact-file="${file.name}"><span class="artifact-file-icon">${file.icon}</span><div class="artifact-file-main"><span class="artifact-file-name">${file.name}</span><span class="artifact-file-dir">${file.dir || "当前工作目录"}</span></div><span class="artifact-file-meta" data-artifact-meta>${file.size} · ${file.time}</span>${file.anomaly ? `<span class="artifact-file-anomaly">${file.anomaly}</span>` : ""}${file.failure ? `<span class="artifact-file-error">${file.failure}</span><button class="artifact-file-retry" type="button" data-artifact-file-retry>重试</button>` : ""}</div>`;
       }
 
       function artifactGroupMarkup(group, options = {}) {
@@ -1229,7 +1267,7 @@
         const grouped = group.files.length >= 2;
         if (!grouped) return `<div class="artifact-loose" data-artifact-group="${group.key}" data-artifact-local="${group.local !== false}">${group.files.map(artifactFileMarkup).join("")}</div>`;
         const menuItems = `<button type="button" data-artifact-action="toggle">${group.open ? "收起目录" : "展开目录"}</button>${readonly ? "" : `<button type="button" data-artifact-action="open-directory">打开目录</button>`}<button type="button" data-artifact-action="copy-path">复制路径</button>`;
-        return `<section class="artifact-group${group.open ? "" : " collapsed"}" data-artifact-group="${group.key}" data-artifact-local="${group.local !== false}" data-artifact-outcome="${group.outcome || "complete"}"><div class="artifact-group-head" data-artifact-mobile-group="${mobile ? "true" : "false"}"><span class="artifact-folder-icon">📁</span><div class="artifact-group-title"><strong>${group.dir}</strong><small>${group.count} · ${group.total} · 最近 ${group.recent}</small></div>${readonly ? `<button class="artifact-source-link" type="button" data-source-session>查看来源会话</button>` : `<button class="primary-btn artifact-group-action" type="button" data-artifact-batch>批量下载</button>`}<div class="artifact-menu-wrap"><button class="artifact-menu-button" type="button" aria-label="${group.dir} 更多操作" data-artifact-menu-button>⋯</button><div class="artifact-menu">${menuItems}</div></div></div><div class="artifact-files">${group.files.map(artifactFileMarkup).join("")}</div>${readonly ? "" : `<div class="artifact-batch"><div class="artifact-batch-state" data-artifact-batch-state>尚未下载 · 仅组内选择</div></div>`}</section>`;
+        return `<section class="artifact-group${group.open ? "" : " collapsed"}" data-artifact-group="${group.key}" data-artifact-local="${group.local !== false}" data-artifact-outcome="${group.outcome || "complete"}"><div class="artifact-group-head" data-artifact-mobile-group="${mobile ? "true" : "false"}"><span class="artifact-folder-icon">📁</span><div class="artifact-group-title"><strong>${group.dir}</strong><small>${group.count} · ${group.total} · 最近 ${group.recent}</small></div>${readonly ? "" : `<button class="primary-btn artifact-group-action" type="button" data-artifact-batch>批量下载</button>`}<div class="artifact-menu-wrap"><button class="artifact-menu-button" type="button" aria-label="${group.dir} 更多操作" data-artifact-menu-button>⋯</button><div class="artifact-menu">${menuItems}</div></div></div><div class="artifact-files">${group.files.map(artifactFileMarkup).join("")}</div>${readonly ? "" : `<div class="artifact-batch"><div class="artifact-batch-state" data-artifact-batch-state>尚未下载 · 仅组内选择</div></div>`}</section>`;
       }
 
       function renderSessionArtifacts(options = {}) {
@@ -1240,7 +1278,11 @@
 
       function renderProjectArtifacts() {
         const availableGroups = sessionArtifactGroups.slice(0, 3).map((group, index) => ({ ...group, key: `project-office-${group.key}`, open: index === 0 }));
-        return `<div class="artifact-browser" data-artifact-browser="project"><div class="artifact-summary"><span><strong>46</strong> 个文件 · 6 个目录</span><small>只读聚合 · 按源与目录分组</small></div><section class="artifact-source"><div class="artifact-source-head"><span class="source-badge source-company">公司电脑</span><small>可达 · 4 个目录</small></div>${availableGroups.map((group) => artifactGroupMarkup(group, { readonly: true })).join("")}<button class="artifact-source-link" type="button" data-source-session>查看来源会话 →</button></section><section class="artifact-source"><div class="artifact-source-head"><span class="source-badge source-home">家里 iMac</span><small>1 个目录 · 重连中</small></div><div class="artifact-source-unreachable">该源当前不可达，保留目录索引；请先恢复 relay 连接后再查看文件。<br><button class="artifact-source-link" type="button" data-source-settings>去连接与设备恢复 →</button></div></section></div>`;
+        const homeGroup = { key: "project-home-ui-review", dir: "screenshots/ui-review", count: "2 个文件", total: "3.2 MB", recent: "昨天", local: false, open: true, files: [
+          { icon: "▧", name: "home-review.png", dir: "screenshots/ui-review", size: "2.1 MB", time: "昨天" },
+          { icon: "▧", name: "home-notes.md", dir: "screenshots/ui-review", size: "1.1 MB", time: "昨天" }
+        ] };
+        return `<div class="artifact-browser" data-artifact-browser="project"><div class="artifact-summary"><span><strong>46</strong> 个文件 · 6 个目录</span><small>只读聚合 · 按源与目录分组</small></div><section class="artifact-source source-company-group"><div class="artifact-source-head"><span class="source-badge source-company">公司电脑</span><small>可达 · 3 个目录</small></div>${availableGroups.map((group) => artifactGroupMarkup(group, { readonly: true })).join("")}<button class="artifact-source-link" type="button" data-source-session>查看来源会话 →</button></section><section class="artifact-source source-home-group"><div class="artifact-source-head"><span class="source-badge source-home">家里 iMac</span><small>2 个文件 · 来源不可达</small></div>${artifactGroupMarkup(homeGroup, { readonly: true })}<div class="artifact-source-unreachable">该源当前不可达，目录索引保留但文件无法读取；请先恢复 relay 连接。<br><button class="artifact-source-link" type="button" data-source-settings>去连接与设备恢复 →</button></div></section></div>`;
       }
 
       function setupSessionTabs() {
@@ -1260,6 +1302,7 @@
         if (!body || body.dataset.tabsReady) return;
         const conversation = body.innerHTML;
         body.innerHTML = `<div class="workspace-pane active">${conversation}</div><div class="workspace-pane"><div class="mobile-lane"><div class="mobile-lane-head"><span>任务清单</span><span>6/9</span></div><div class="mobile-task">✓ 版本号同步<br><span class="muted">已完成</span></div><div class="mobile-task">○ 公司网检查更新<br><span class="muted">待验收回填</span></div></div></div><div class="workspace-pane"><div class="mobile-lane"><div class="mobile-lane-head"><span>输出物</span><span>4</span></div><div class="mobile-task">📎 docs/release-check.md · 刚刚</div><div class="mobile-task">▧ 0.6.0-test.19.apk · 1h</div></div></div><div class="workspace-pane"><div class="context-meter safe mobile-context-meter"><div class="context-meter-head"><div><span class="context-meter-kicker">Context window</span><strong class="context-meter-model">Claude · 200k 上限</strong></div><span class="context-meter-grade">安全</span></div><div class="context-meter-band" aria-label="上下文已使用 41%"><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div><div class="context-meter-stats"><span><b class="context-meter-used">84k</b> <span class="context-meter-limit">/ 200k tokens</span></span><strong class="context-meter-pct">41%</strong></div><div class="context-meter-note">余量充足，可继续当前验收回填</div></div></div><div class="workspace-pane"><div class="readonly-banner">当前 relay：公司电脑 · 来源返回栈：待处理收件箱</div></div>`;
+        body.children[2].innerHTML = renderSessionArtifacts({ mobile: true });
         compactUsagePane(body.children[3]);
         body.dataset.tabsReady = "1";
         wireSegmentTabs([...screen.querySelectorAll(".mobile-detail-tabs button")], [...body.children]);
@@ -1377,6 +1420,144 @@
         toastTimer = setTimeout(() => toast.classList.remove("show"), 2200);
       }
 
+      function ensureArtifactSheet() {
+        let backdrop = document.querySelector(".artifact-sheet-backdrop");
+        if (backdrop) return backdrop;
+        backdrop = document.createElement("div");
+        backdrop.className = "artifact-sheet-backdrop";
+        backdrop.innerHTML = '<div class="artifact-sheet" role="dialog" aria-modal="true"><h3 data-artifact-sheet-title>输出物目录</h3><div data-artifact-sheet-actions></div></div>';
+        document.body.append(backdrop);
+        return backdrop;
+      }
+
+      function openArtifactSheet(group) {
+        const backdrop = ensureArtifactSheet();
+        const title = backdrop.querySelector("[data-artifact-sheet-title]");
+        const actions = backdrop.querySelector("[data-artifact-sheet-actions]");
+        title.textContent = `${group.querySelector(".artifact-group-title strong")?.textContent || "输出物目录"} · ${group.querySelector(".artifact-group-title small")?.textContent || ""}`;
+        actions.innerHTML = `<button type="button" data-sheet-batch>下载目录全部</button>${[...group.querySelectorAll(".artifact-file")].map((file) => `<button type="button" data-sheet-file="${file.dataset.artifactFile}">下载 ${file.dataset.artifactFile}</button>`).join("")}<button type="button" data-sheet-close>取消</button>`;
+        backdrop.dataset.artifactGroup = group.dataset.artifactGroup;
+        backdrop.classList.add("open");
+      }
+
+      function setArtifactBatchState(group, state, progress = 0, completed = 0, total = 0) {
+        const stateNode = group.querySelector("[data-artifact-batch-state]");
+        if (!stateNode) return;
+        stateNode.className = `artifact-batch-state${state === "complete" ? " complete" : state === "partial" ? " partial" : ""}`;
+        if (state === "queued") stateNode.innerHTML = `<span>已排队 · ${total} 个文件</span>`;
+        if (state === "downloading") stateNode.innerHTML = `<span>已下载 ${completed}/${total} · 进行中</span><span class="artifact-batch-progress"><i style="width:${progress}%"></i></span>`;
+        if (state === "partial") stateNode.innerHTML = `<span>已下载 ${completed} 个 · 1 个失败</span><button type="button" data-artifact-retry>重试失败项</button>`;
+        if (state === "complete") stateNode.innerHTML = `<span>已下载 ${total} 个文件 · 命名冲突自动递增</span>`;
+      }
+
+      function runArtifactBatch(group, retry = false, retryFile = null) {
+        if (!group || group.dataset.batchRunning === "1") return;
+        group.classList.remove("collapsed");
+        group.dataset.batchRunning = "1";
+        const files = retryFile ? [retryFile] : retry ? [...group.querySelectorAll(".artifact-file.failed")] : [...group.querySelectorAll(".artifact-file")];
+        const total = files.length;
+        const batchButton = group.querySelector("[data-artifact-batch]");
+        if (batchButton) { batchButton.disabled = true; batchButton.textContent = "下载中…"; }
+        files.forEach((file) => { file.classList.remove("failed"); file.classList.remove("downloading"); });
+        setArtifactBatchState(group, "queued", 0, 0, total);
+        let index = 0;
+        let completed = 0;
+        let failed = 0;
+        const advance = () => {
+          if (index >= files.length) {
+            const partial = failed > 0;
+            const displayTotal = retry ? group.querySelectorAll(".artifact-file").length : total;
+            const displayCompleted = retry ? displayTotal : completed;
+            setArtifactBatchState(group, partial ? "partial" : "complete", 100, displayCompleted, displayTotal);
+            group.dataset.batchRunning = "0";
+            if (batchButton) { batchButton.disabled = false; batchButton.textContent = "批量下载"; }
+            showToast(partial ? `已下载 ${completed} 个文件 · ${failed} 个失败可重试` : retry ? "失败文件已重试完成" : `已下载 ${completed} 个文件 · 命名冲突自动递增`);
+            return;
+          }
+          const file = files[index];
+          const meta = file.querySelector("[data-artifact-meta]");
+          file.classList.add("downloading");
+          if (meta) meta.textContent = "下载中…";
+          setArtifactBatchState(group, "downloading", Math.round((index / total) * 100), completed, total);
+          setTimeout(() => {
+            file.classList.remove("downloading");
+            const shouldFail = !retry && !retryFile && group.dataset.artifactOutcome === "partial" && file.hasAttribute("data-artifact-failure");
+            if (shouldFail) { file.classList.add("failed"); failed += 1; }
+            else { completed += 1; if (meta) meta.textContent = "已下载"; }
+            index += 1;
+            advance();
+          }, 600);
+        };
+        setTimeout(advance, 220);
+      }
+
+      function copyArtifactPath(group) {
+        const path = `~/dev/cc-deck/${group.querySelector(".artifact-group-title strong")?.textContent || ""}`;
+        try { navigator.clipboard?.writeText(path); } catch (_) {}
+        showToast(`已复制路径 · ${path}`);
+      }
+
+      function wireArtifactBrowser() {
+        document.addEventListener("click", (event) => {
+          const menuButton = event.target.closest("[data-artifact-menu-button]");
+          if (menuButton) {
+            event.stopPropagation();
+            const menu = menuButton.parentElement.querySelector(".artifact-menu");
+            document.querySelectorAll(".artifact-menu.open").forEach((item) => { if (item !== menu) item.classList.remove("open"); });
+            menu?.classList.toggle("open");
+            return;
+          }
+          const groupHead = event.target.closest("[data-artifact-mobile-group]");
+          if (groupHead && groupHead.closest(".mobile-screen") && !event.target.closest("button")) {
+            openArtifactSheet(groupHead.closest("[data-artifact-group]"));
+            return;
+          }
+          const batchButton = event.target.closest("[data-artifact-batch]");
+          if (batchButton) {
+            runArtifactBatch(batchButton.closest("[data-artifact-group]"));
+            return;
+          }
+          const fileRetryButton = event.target.closest("[data-artifact-file-retry]");
+          if (fileRetryButton) {
+            const file = fileRetryButton.closest(".artifact-file");
+            runArtifactBatch(file?.closest("[data-artifact-group]"), true, file);
+            return;
+          }
+          const retryButton = event.target.closest("[data-artifact-retry]");
+          if (retryButton) {
+            runArtifactBatch(retryButton.closest("[data-artifact-group]"), true);
+            return;
+          }
+          const action = event.target.closest("[data-artifact-action]");
+          if (action) {
+            const group = action.closest("[data-artifact-group]");
+            const menu = action.closest(".artifact-menu");
+            menu?.classList.remove("open");
+            if (action.dataset.artifactAction === "toggle") {
+              group?.classList.toggle("collapsed");
+              const toggle = group?.querySelector('[data-artifact-action="toggle"]');
+              if (toggle) toggle.textContent = group.classList.contains("collapsed") ? "展开目录" : "收起目录";
+            } else if (action.dataset.artifactAction === "open-directory") {
+              if (group?.dataset.artifactLocal === "true") showToast(`已打开 ~/dev/cc-deck/${group.querySelector(".artifact-group-title strong")?.textContent || "docs"}`);
+              else showToast("远程源：请在来源设备打开");
+            } else if (action.dataset.artifactAction === "copy-path") copyArtifactPath(group);
+            return;
+          }
+          const sheet = event.target.closest(".artifact-sheet-backdrop");
+          if (sheet?.classList.contains("open")) {
+            if (event.target === sheet) { sheet.classList.remove("open"); return; }
+            if (event.target.closest("[data-sheet-close]")) { sheet.classList.remove("open"); return; }
+            const group = document.querySelector(`[data-artifact-group="${sheet.dataset.artifactGroup}"]`);
+            if (event.target.closest("[data-sheet-batch]")) { sheet.classList.remove("open"); runArtifactBatch(group); return; }
+            const file = event.target.closest("[data-sheet-file]");
+            if (file) { sheet.classList.remove("open"); showToast(`已加入下载队列 · ${file.dataset.sheetFile}`); return; }
+          }
+          if (event.target.closest("[data-source-session]")) { showToast("已回到来源会话 · 输出物写操作仍在原域"); return; }
+          if (event.target.closest("[data-source-settings]")) { setDesktopDomain("settings"); showToast("已打开设置 · 连接与设备"); return; }
+          if (!event.target.closest(".artifact-menu-wrap")) document.querySelectorAll(".artifact-menu.open").forEach((item) => item.classList.remove("open"));
+        });
+      }
+
       function setMode(mode) {
         modeButtons.forEach((button) => {
           const active = button.dataset.mode === mode;
@@ -1397,10 +1578,10 @@
       function selectSession(id) {
         document.querySelectorAll("[data-session-card]").forEach((card) => card.classList.toggle("selected", card.dataset.sessionCard === id));
         const data = {
-          release: { title: "0.6.0-test.19 出包", sub: "~/dev/cc-deck · claude · 上下文 41% · 最近活动 12 分钟前", status: "待收单", dot: "waiting", copy: "当前任务：回填验收证据 · 预计还需 2 分钟。", engine: "Claude", engineClass: "claude", source: "公司电脑" },
+          release: { title: "0.6.0-test.19 出包", sub: "~/dev/cc-deck · claude · 最近活动 12 分钟前", status: "待收单", dot: "waiting", copy: "当前任务：回填验收证据 · 预计还需 2 分钟。", engine: "Claude", engineClass: "claude", source: "公司电脑" },
           mobile: { title: "worker-mobile 失联", sub: "~/dev/cc-deck · claude · 最后日志 25 分钟前", status: "需接替", dot: "error", copy: "当前建议：切换到独立验收厂商，保留原任务板与 git 记忆。", engine: "Qwen Code", engineClass: "qwen", source: "家里 iMac" },
           "team-plan": { title: "团队编制确认", sub: "cc-deck M1 攻坚团 · Leader glm-5.3 · 6 成员", status: "待确认", dot: "waiting", copy: "Leader 已提交编制方案：3 开发 + 独立验收 + 1 调研。", engine: "Trae", engineClass: "trae", source: "公司电脑" },
-          ui: { title: "ui-review 走查", sub: "~/dev/cc-deck · claude · 上下文 58% · 刚刚活跃", status: "运行中", dot: "done", copy: "当前任务：检查 rail 方案的交互与来源返回。", engine: "Codex", engineClass: "codex", source: "公司电脑" },
+          ui: { title: "ui-review 走查", sub: "~/dev/cc-deck · claude · 刚刚活跃", status: "运行中", dot: "done", copy: "当前任务：检查 rail 方案的交互与来源返回。", engine: "Codex", engineClass: "codex", source: "公司电脑" },
           board: { title: "relay 任务板", sub: "~/dev/cc-deck · glm-5.3 · 4/9 卡片进行中", status: "运行中", dot: "done", copy: "T-12/T-15 并行推进，下一检查点在 15 分钟后。", engine: "ZCode", engineClass: "zcode", source: "家里 iMac" },
           android: { title: "android 构建", sub: "~/dev/windclaw · claude · 最近活动 3 小时前", status: "等产物", dot: "waiting", copy: "正在等待安卓产物上传，暂无需你处理的动作。", engine: "CodeBuddy", engineClass: "codebuddy", source: "公司电脑" }
         }[id] || null;
@@ -1503,6 +1684,7 @@
       setupMobileSettingsContent();
       setupSourceGroupBars();
       mountConnectionCapsules();
+      wireArtifactBrowser();
       applyTheme(savedTheme);
       setConnectionState("connected");
       setSource("office");
