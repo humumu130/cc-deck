@@ -1196,12 +1196,59 @@
         meter.outerHTML = '<div class="usage-summary"><div class="usage-summary-top"><span><b class="usage-summary-number">84k</b> <span class="usage-summary-limit">/ 200k tokens</span></span><strong class="usage-summary-pct">41%</strong></div><span class="usage-summary-copy">Claude · 上下文安全</span><span class="usage-summary-hint">在右侧检查器查看完整用量</span></div>';
       }
 
+      const sessionArtifactGroups = [
+        { key: "release-docs", dir: "docs/release", count: "3 个文件", total: "28 KB", recent: "刚刚", open: true, local: true, outcome: "complete", files: [
+          { icon: "▤", name: "release-check.md", dir: "docs/release", size: "8 KB", time: "刚刚" },
+          { icon: "▤", name: "release-notes.md", dir: "docs/release", size: "6 KB", time: "12 分钟前" },
+          { icon: "⌘", name: "evidence.json", dir: "docs/release", size: "14 KB", time: "18 分钟前" }
+        ] },
+        { key: "android-build", dir: "artifacts/android", count: "2 个文件", total: "18.4 MB", recent: "1 小时前", local: true, outcome: "partial", files: [
+          { icon: "▧", name: "0.6.0-test.19.apk", dir: "artifacts/android", size: "17.9 MB", time: "1 小时前" },
+          { icon: "▤", name: "mapping.txt", dir: "artifacts/android", size: "512 KB", time: "1 小时前", failure: "relay 读取超时" }
+        ] },
+        { key: "ui-review", dir: "screenshots/ui-review", count: "2 个文件", total: "3.2 MB", recent: "昨天", local: true, outcome: "complete", files: [
+          { icon: "▧", name: "rail-light.png", dir: "screenshots/ui-review", size: "1.8 MB", time: "昨天" },
+          { icon: "▧", name: "mobile-settings.png", dir: "screenshots/ui-review", size: "1.4 MB", time: "昨天" }
+        ] },
+        { key: "changelog", dir: "", count: "1 个文件", total: "4 KB", recent: "2 天前", local: true, files: [
+          { icon: "▤", name: "CHANGELOG.md", dir: "", size: "4 KB", time: "2 天前" }
+        ] },
+        { key: "lockfile", dir: "", count: "1 个文件", total: "178 KB", recent: "3 天前", local: true, files: [
+          { icon: "⌘", name: "package-lock.json", dir: "", size: "178 KB", time: "3 天前" }
+        ] }
+      ];
+
+      function artifactFileMarkup(file) {
+        const failure = file.failure ? ` failed" data-artifact-failure="${file.failure}` : "";
+        return `<div class="artifact-file${failure}" data-artifact-file="${file.name}"><span class="artifact-file-icon">${file.icon}</span><div class="artifact-file-main"><span class="artifact-file-name">${file.name}</span><span class="artifact-file-dir">${file.dir || "当前工作目录"}</span></div><span class="artifact-file-meta">${file.size} · ${file.time}</span>${file.failure ? `<span class="artifact-file-error">${file.failure}</span>` : ""}</div>`;
+      }
+
+      function artifactGroupMarkup(group, options = {}) {
+        const readonly = Boolean(options.readonly);
+        const mobile = Boolean(options.mobile);
+        const grouped = group.files.length >= 2;
+        if (!grouped) return `<div class="artifact-loose" data-artifact-group="${group.key}" data-artifact-local="${group.local !== false}">${group.files.map(artifactFileMarkup).join("")}</div>`;
+        const menuItems = `<button type="button" data-artifact-action="toggle">${group.open ? "收起目录" : "展开目录"}</button>${readonly ? "" : `<button type="button" data-artifact-action="open-directory">打开目录</button>`}<button type="button" data-artifact-action="copy-path">复制路径</button>`;
+        return `<section class="artifact-group${group.open ? "" : " collapsed"}" data-artifact-group="${group.key}" data-artifact-local="${group.local !== false}" data-artifact-outcome="${group.outcome || "complete"}"><div class="artifact-group-head" data-artifact-mobile-group="${mobile ? "true" : "false"}"><span class="artifact-folder-icon">📁</span><div class="artifact-group-title"><strong>${group.dir}</strong><small>${group.count} · ${group.total} · 最近 ${group.recent}</small></div>${readonly ? `<button class="artifact-source-link" type="button" data-source-session>查看来源会话</button>` : `<button class="primary-btn artifact-group-action" type="button" data-artifact-batch>批量下载</button>`}<div class="artifact-menu-wrap"><button class="artifact-menu-button" type="button" aria-label="${group.dir} 更多操作" data-artifact-menu-button>⋯</button><div class="artifact-menu">${menuItems}</div></div></div><div class="artifact-files">${group.files.map(artifactFileMarkup).join("")}</div>${readonly ? "" : `<div class="artifact-batch"><div class="artifact-batch-state" data-artifact-batch-state>尚未下载 · 仅组内选择</div></div>`}</section>`;
+      }
+
+      function renderSessionArtifacts(options = {}) {
+        const mobile = Boolean(options.mobile);
+        const groups = sessionArtifactGroups.map((group, index) => ({ ...group, open: index === 0 }));
+        return `<div class="artifact-browser" data-artifact-browser="session"><div class="artifact-summary"><span><strong>46</strong> 个文件 · 6 个目录</span><small>部分输出物曾被 relay 截断 · 异常项见文件行</small><span class="artifact-summary-path" title="~/dev/cc-deck">cwd · ~/dev/cc-deck</span></div>${groups.filter((group) => group.files.length >= 2).map((group) => artifactGroupMarkup(group, { mobile })).join("")}<div class="artifact-loose">${groups.filter((group) => group.files.length === 1).flatMap((group) => group.files).map(artifactFileMarkup).join("")}</div></div>`;
+      }
+
+      function renderProjectArtifacts() {
+        const availableGroups = sessionArtifactGroups.slice(0, 3).map((group, index) => ({ ...group, key: `project-office-${group.key}`, open: index === 0 }));
+        return `<div class="artifact-browser" data-artifact-browser="project"><div class="artifact-summary"><span><strong>46</strong> 个文件 · 6 个目录</span><small>只读聚合 · 按源与目录分组</small></div><section class="artifact-source"><div class="artifact-source-head"><span class="source-badge source-company">公司电脑</span><small>可达 · 4 个目录</small></div>${availableGroups.map((group) => artifactGroupMarkup(group, { readonly: true })).join("")}<button class="artifact-source-link" type="button" data-source-session>查看来源会话 →</button></section><section class="artifact-source"><div class="artifact-source-head"><span class="source-badge source-home">家里 iMac</span><small>1 个目录 · 重连中</small></div><div class="artifact-source-unreachable">该源当前不可达，保留目录索引；请先恢复 relay 连接后再查看文件。<br><button class="artifact-source-link" type="button" data-source-settings>去连接与设备恢复 →</button></div></section></div>`;
+      }
+
       function setupSessionTabs() {
         const section = document.querySelector("#d-session");
         const body = section?.querySelector(".workspace-body");
         if (!body || body.dataset.tabsReady) return;
         const conversation = body.innerHTML;
-        body.innerHTML = `<div class="workspace-pane active"><div class="conversation-pane">${conversation}</div></div><div class="workspace-pane"><div class="detail-panel-list"><div class="inspector-block"><div class="inspector-title"><span>任务清单</span><span>6/9</span></div><div class="check-row"><b>✓</b><span>版本号同步</span></div><div class="check-row"><b>✓</b><span>独立出包</span></div><div class="check-row"><span>○</span><span>公司网检查更新</span></div></div><div class="inspector-block"><div class="inspector-title"><span>当前执行</span><span class="tag action">待收单</span></div><div class="inspector-copy">回填验收证据 → 检查更新通道 → 确认收单</div></div></div></div><div class="workspace-pane"><div class="detail-panel-list"><div class="inspector-block"><div class="inspector-title"><span>输出物</span><span>4</span></div><div class="artifact-row">docs/release-check.md <span>刚刚</span></div><div class="artifact-row">0.6.0-test.19.apk <span>1h</span></div><div class="artifact-row">release-notes.md <span>2h</span></div></div></div></div><div class="workspace-pane"><div class="detail-panel-list"><div class="context-meter safe"><div class="context-meter-head"><div><span class="context-meter-kicker">Context window</span><strong class="context-meter-model">Claude · 200k 上限</strong></div><span class="context-meter-grade">安全</span></div><div class="context-meter-band" aria-label="上下文已使用 41%"><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div><div class="context-meter-stats"><span><b class="context-meter-used">84k</b> <span class="context-meter-limit">/ 200k tokens</span></span><strong class="context-meter-pct">41%</strong></div><div class="context-meter-note">余量充足，可继续当前验收回填</div></div><div class="metric"><b>2m</b><span>预计完成剩余验收回填</span></div></div></div><div class="workspace-pane"><div class="readonly-banner">更多上下文：当前 relay 为公司电脑；验收状态由来源会话唯一写入。</div></div>`;
+        body.innerHTML = `<div class="workspace-pane active"><div class="conversation-pane">${conversation}</div></div><div class="workspace-pane"><div class="detail-panel-list"><div class="inspector-block"><div class="inspector-title"><span>任务清单</span><span>6/9</span></div><div class="check-row"><b>✓</b><span>版本号同步</span></div><div class="check-row"><b>✓</b><span>独立出包</span></div><div class="check-row"><span>○</span><span>公司网检查更新</span></div></div><div class="inspector-block"><div class="inspector-title"><span>当前执行</span><span class="tag action">待收单</span></div><div class="inspector-copy">回填验收证据 → 检查更新通道 → 确认收单</div></div></div></div><div class="workspace-pane">${renderSessionArtifacts()}</div><div class="workspace-pane"><div class="detail-panel-list"><div class="context-meter safe"><div class="context-meter-head"><div><span class="context-meter-kicker">Context window</span><strong class="context-meter-model">Claude · 200k 上限</strong></div><span class="context-meter-grade">安全</span></div><div class="context-meter-band" aria-label="上下文已使用 41%"><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div><div class="context-meter-stats"><span><b class="context-meter-used">84k</b> <span class="context-meter-limit">/ 200k tokens</span></span><strong class="context-meter-pct">41%</strong></div><div class="context-meter-note">余量充足，可继续当前验收回填</div></div><div class="metric"><b>2m</b><span>预计完成剩余验收回填</span></div></div></div><div class="workspace-pane"><div class="readonly-banner">更多上下文：当前 relay 为公司电脑；验收状态由来源会话唯一写入。</div></div>`;
         compactUsagePane(body.children[3]);
         body.dataset.tabsReady = "1";
         wireSegmentTabs([...section.querySelectorAll(".segment-bar button")], [...body.children]);
@@ -1233,7 +1280,7 @@
         const body = section?.querySelector(".workspace-body");
         if (!body || body.dataset.tabsReady) return;
         const overview = body.innerHTML;
-        body.innerHTML = `<div class="workspace-pane active">${overview}</div><div class="workspace-pane"><div class="settings-list"><div class="settings-row"><span class="avatar">C</span><div><strong>0.6.0-test.19 出包</strong><p>待收单 · 会话原域</p></div><button class="secondary-btn">在会话中查看</button></div><div class="settings-row"><span class="avatar">U</span><div><strong>ui-review 走查</strong><p>运行中 · 会话原域</p></div><button class="secondary-btn">在会话中查看</button></div></div></div><div class="workspace-pane"><div class="settings-list"><div class="settings-row"><span class="avatar">👥</span><div><strong>cc-deck M1 攻坚团</strong><p>6 成员 · 4 进行中</p></div><button class="secondary-btn">在团队中查看</button></div></div></div><div class="workspace-pane"><div class="settings-list"><div class="settings-row"><span class="avatar">▧</span><div><strong>docs/release-check.md</strong><p>刚刚 · Claude</p></div><span class="source-badge">公司电脑</span></div><div class="settings-row"><span class="avatar">▧</span><div><strong>0.6.0-test.19.apk</strong><p>1 小时前 · Claude</p></div><span class="source-badge">公司电脑</span></div></div></div><div class="workspace-pane"><div class="settings-list"><div class="settings-row"><span class="avatar">✓</span><div><strong>0.6.0-test.19</strong><p>回填 2/3 · 由会话原域处理</p></div><span class="tag action">只读</span></div><div class="settings-row"><span class="avatar">✓</span><div><strong>0.6.0-test.18</strong><p>修复中 · 由会话原域处理</p></div></div></div></div>`;
+        body.innerHTML = `<div class="workspace-pane active">${overview}</div><div class="workspace-pane"><div class="settings-list"><div class="settings-row"><span class="avatar">C</span><div><strong>0.6.0-test.19 出包</strong><p>待收单 · 会话原域</p></div><button class="secondary-btn">在会话中查看</button></div><div class="settings-row"><span class="avatar">U</span><div><strong>ui-review 走查</strong><p>运行中 · 会话原域</p></div><button class="secondary-btn">在会话中查看</button></div></div></div><div class="workspace-pane"><div class="settings-list"><div class="settings-row"><span class="avatar">👥</span><div><strong>cc-deck M1 攻坚团</strong><p>6 成员 · 4 进行中</p></div><button class="secondary-btn">在团队中查看</button></div></div></div><div class="workspace-pane">${renderProjectArtifacts()}</div><div class="workspace-pane"><div class="settings-list"><div class="settings-row"><span class="avatar">✓</span><div><strong>0.6.0-test.19</strong><p>回填 2/3 · 由会话原域处理</p></div><span class="tag action">只读</span></div><div class="settings-row"><span class="avatar">✓</span><div><strong>0.6.0-test.18</strong><p>修复中 · 由会话原域处理</p></div></div></div></div>`;
         body.dataset.tabsReady = "1";
         wireSegmentTabs([...section.querySelectorAll(".segment-bar button")], [...body.children]);
       }
