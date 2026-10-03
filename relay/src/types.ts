@@ -362,6 +362,7 @@ export type EventType =
   | "PROJECTS_UPDATED"
   | "BOARD_UPDATED"
   | "ORG_CONFIRM_UPDATED"
+  | "DISPATCH_DONE"
   | "SETTINGS_UPDATED"
   | "WATCHDOG"
   | "ARTIFACT_CHUNK";
@@ -396,6 +397,8 @@ export type EventPayloadMap = {
   // #26 M2 确认单变更（瞬态）：新单入队/决议后广播待决队列；离线端由
   // SNAPSHOT.org_confirms 兜底
   ORG_CONFIRM_UPDATED: OrgConfirmUpdatedPayload;
+  // #40 M4 派单完成回调（瞬态）：收口时广播，端上弹通知；见 DispatchDonePayload
+  DISPATCH_DONE: DispatchDonePayload;
   // #17 第二批 雇员独立家开关变更（瞬态）：切换后广播最新状态；离线端由
   // SNAPSHOT.settings 兜底
   SETTINGS_UPDATED: EmployeeHomeSettingsPayload;
@@ -496,6 +499,21 @@ export interface BoardUpdatedPayload {
 }
 export interface OrgConfirmUpdatedPayload {
   pending: OrgConfirm[]; // listPendingConfirms()
+}
+
+// #40 M4 派单完成回调（谁派活谁收通知）：worker 派单在 closeOpenDispatches 收口
+// （onTurnEnd/onSessionEnd 兜底/挂起联动）时广播瞬态帧——在线端弹通知/横幅；
+// 离线端由台账（SNAPSHOT 侧 org 状态/板）与重连全量兜底，不重复弹。同步失败路径
+//（spawn 失败 CLI 当场拿 error）与断档补记（relay 重启，用户在场）不发此帧。
+export interface DispatchDonePayload {
+  dispatch_id: string;          // 同台账分单 id
+  tier: string;                 // DispatchTier（圈 tier 字符串宽松化：端上只读展示）
+  status: "done" | "failed";
+  receipt: string;              // 回执（≤200 字，与台账同源）
+  worker_session_id: string;    // 承接方会话（详情跳转用）
+  gid?: string;                 // 项目组单才有（板联动跳转）
+  actor?: string;               // "leader"=Leader CLI 派 / "user"=咨询档 / 缺省=旧数据
+  ts: number;
 }
 
 // #42 设备身份元数据：pair_req 帧的可选自报字段，配对方各端按自身形态填——

@@ -68,6 +68,7 @@ import type {
   TokenUsage,
   WaitingPayload,
   ImportPushEntry,
+  DispatchDonePayload,
 } from "./types.js";
 import { CodexAgentSession } from "./agent-codex.js";
 
@@ -526,7 +527,7 @@ export class SessionManager {
   // leaderOpenDispatch = 进行中派单 id FIFO（M2 泛化为 openDispatches：按会话键一
   // FIFO——Leader=咨询档同机制复用，worker=派单承接；回合串行，消息数=回合数。
   // 值带收口所需 tier/gid/anchor：收口行写回真实档位，gid 联动任务板搬卡）
-  private openDispatches = new Map<string, { id: string; tier: DispatchTier; gid?: string; anchor?: string }[]>();
+  private openDispatches = new Map<string, { id: string; tier: DispatchTier; gid?: string; anchor?: string; actor?: string }[]>();
   private leaderId: string | null = null;
   private leaderEnsured = false;
   // #22 审查处置：首建 bootTimer 开火后的进程内自动重建计数（≤1）。ensureLeader 仅
@@ -1620,10 +1621,10 @@ export class SessionManager {
           // initialPrompt 不经此处，天然不入账（org.ts 注释同口径）。
           if (this.isLeaderSession(cmd.payload.session_id)) {
             const dispatchId = randomUUID();
-            this.pushOpenDispatch(cmd.payload.session_id, { id: dispatchId, tier: "咨询" });
+            this.pushOpenDispatch(cmd.payload.session_id, { id: dispatchId, tier: "咨询", actor: "user" });
             appendDispatch({
               ts: Date.now(), id: dispatchId, tier: "咨询", target: "org-leader",
-              status: "running", session_id: cmd.payload.session_id,
+              status: "running", session_id: cmd.payload.session_id, actor: "user",
             });
           }
           // agent 已死（Relay 重启遗留 / stop 收尾）或已放弃自愈（#109：放弃路径不再
@@ -3145,7 +3146,7 @@ export class SessionManager {
   // 回执 = terminal_reason 截 200 字；gid 条目联动任务板：done→done、failed→todo
   //（退回待认领）。boardTo 显式覆盖板去向：兜底收口（流关闭/恢复待命）台账记
   // done（中断≠交付，回执写实）但活没交付，板须退 todo——不能用台账 status 推板。
-  private pushOpenDispatch(key: string, e: { id: string; tier: DispatchTier; gid?: string; anchor?: string }): void {
+  private pushOpenDispatch(key: string, e: { id: string; tier: DispatchTier; gid?: string; anchor?: string; actor?: string }): void {
     const q = this.openDispatches.get(key) ?? [];
     q.push(e);
     this.openDispatches.set(key, q);
@@ -3187,7 +3188,7 @@ export class SessionManager {
         })()
       : all
         ? q.splice(0)
-        : [q.shift()].filter((x): x is { id: string; tier: DispatchTier; gid?: string; anchor?: string } => !!x);
+        : [q.shift()].filter((x): x is { id: string; tier: DispatchTier; gid?: string; anchor?: string; actor?: string } => !!x);
     if (q.length === 0) this.openDispatches.delete(key);
     for (const e of es) {
       appendDispatch({
@@ -3195,7 +3196,11 @@ export class SessionManager {
         target: key === this.leaderId ? "org-leader" : key,
         status, receipt: truncate(receipt, 200), session_id: key,
         ...(e.anchor ? { project_anchor: e.anchor } : {}),
+        ...(e.actor ? { actor: e.actor } : {}),
       });
+      // #40 M4 派单完成回调（谁派活谁收通知）：收口即通知——端上广播帧恒发；
+      // Leader 会话注入仅 failed 单（见 notifyDispatchClosed 注释的省 token 口径）
+      this.notifyDispatchClosed(e, status, receipt, key);
       if (e.gid) {
         moveEntryByDispatch(e.gid, e.id, boardTo ?? (status === "done" ? "done" : "todo"));
         this.emitBoard(e.gid);
@@ -3205,6 +3210,34 @@ export class SessionManager {
         // 熟手评价无感
         if (recordRouting) recordRoutingResult(e.gid, key, status, receipt);
       }
+    }
+  }
+
+  // #40 M4 派单完成回调（谁派活谁收通知）——closeOpenDispatches 每条收口调用：
+  // (a) 端上 push：DISPATCH_DONE 瞬态帧广播（seq:0 不落盘不补发；web/expo 悬浮通知
+  //     + 系统通知，旧端未知类型 switch 自然跳过）；离线端由重连 SNAPSHOT 的
+  //     projects/board/org 状态兜底，不重复弹。
+  // (b) Leader 会话闭环：仅 failed 单注入回执唤醒（resumeAgent 先例=auto-revive）。
+  //     省 token 口径：每条注入开一个 Leader 回合——done 单用户在端上/任务板可见，
+  //     不打扰；失败是派单方必须当场知道并决策（重派/换人/放弃）的事，值得一个回合。
+  //     咨询档（actor=user，承接方即 Leader 自己）与 actor 缺省（旧数据）不注入。
+  //     注入 try/catch 尽力而为：通知失败绝不阻断收口主路径（台账已落，板已搬）。
+  // 不发帧的两处例外（设计口径）：spawn 失败 = CLI 同步拿 error 当场知道；
+  // 断档补记（ensureLeader）= relay 重启，用户在场且板/台账刷新自然可见。
+  private notifyDispatchClosed(e: { id: string; tier: DispatchTier; gid?: string; anchor?: string; actor?: string }, status: "done" | "failed", receipt: string, workerSessionId: string): void {
+    this.bus.emitTransient("DISPATCH_DONE", {
+      dispatch_id: e.id, tier: e.tier, status,
+      receipt: truncate(receipt, 200), worker_session_id: workerSessionId,
+      ...(e.gid ? { gid: e.gid } : {}),
+      ...(e.actor ? { actor: e.actor } : {}),
+      ts: Date.now(),
+    } satisfies DispatchDonePayload);
+    if (status !== "failed" || e.actor !== "leader" || !this.leaderId || this.leaderId === workerSessionId) return;
+    try {
+      this.pushExternalLog(this.leaderId, "system", `[派单失败回执] ${e.tier} 单 ${e.id.slice(0, 8)} 失败：${truncate(receipt, 160)}`);
+      this.resumeAgent(this.require(this.leaderId), `[派单失败回执] 你派的 ${e.tier} 单（${e.id.slice(0, 8)}${e.gid ? ` · 组 ${e.gid.slice(0, 8)}` : ""}）失败：${truncate(receipt, 160)}\n请决定重派 / 换人接替 / 放弃，并同步任务板。`);
+    } catch (err) {
+      console.warn(`[m4] 派单失败通知注入 Leader 失败: ${err instanceof Error ? err.message : String(err)}`);
     }
   }
 
@@ -3628,7 +3661,7 @@ export class SessionManager {
   // 先落账再执行（§3.5 台账纪律）：dispatched 行 → 拉起 → running 行（同 id 收敛）；
   // 拉起失败即收口 failed 不留悬账；崩溃窗口的 dispatched 由断档补记兜底。
   // 权限 acceptEdits（§4 随手办纪律）、跳过 sticky 默认目录（worker cwd 锚项目不动全局）。
-  dispatchWorker(input: { anchor: string; prompt: string; gid?: string; title?: string; skills?: string[] }):
+  dispatchWorker(input: { anchor: string; prompt: string; gid?: string; title?: string; skills?: string[]; actor?: string }):
     { ok: true; dispatch_id: string; session_id: string } | { ok: false; error: string } {
     if (!input.prompt.trim()) return { ok: false, error: "prompt 必填" };
     // 冲刺 F-03：anchor 校验移 gid 解析之后——gid 派单锚取自组（anchor 参数可空），
@@ -3667,7 +3700,10 @@ export class SessionManager {
     // 档案注入（记忆亲和：干净冷启动）。排队不做——设计允许「排队或次优」，取次优：
     // 熟手全忙即顺延下一位或新会话，活不过夜
     const veteran = input.gid ? this.pickVeteran(input.gid, input.skills) : null;
-    appendDispatch({ ts: Date.now(), id: dispatchId, tier, target: veteran ?? "spawn-pending", status: "dispatched", session_id: veteran ?? "", project_anchor: anchor });
+    // #40 M4 actor 标注：唯一调用方 /api/org dispatch = Leader CLI → 缺省 "leader"；
+    // 台账三行（dispatched/running/终态）同 id 共享 actor，收口通知据此定向
+    const actor = input.actor?.trim() || "leader";
+    appendDispatch({ ts: Date.now(), id: dispatchId, tier, target: veteran ?? "spawn-pending", status: "dispatched", session_id: veteran ?? "", project_anchor: anchor, actor });
     let sessionId: string;
     if (veteran) {
       try {
@@ -3683,7 +3719,7 @@ export class SessionManager {
           sessionId = this.create(anchor, wrapDispatchPrompt(tier, input.prompt), "bypassPermissions", true, { skipStickyCwd: true, employee: true });
         } catch (e2) {
           const msg2 = e2 instanceof Error ? e2.message : String(e2);
-          appendDispatch({ ts: Date.now(), id: dispatchId, tier, target: "spawn-pending", status: "failed", receipt: truncate(`resume 失败(${msg}) 后新会话亦失败: ${msg2}`, 200), session_id: "", project_anchor: anchor });
+          appendDispatch({ ts: Date.now(), id: dispatchId, tier, target: "spawn-pending", status: "failed", receipt: truncate(`resume 失败(${msg}) 后新会话亦失败: ${msg2}`, 200), session_id: "", project_anchor: anchor, actor });
           return { ok: false, error: `worker 拉起失败: ${msg2}` };
         }
       }
@@ -3692,7 +3728,7 @@ export class SessionManager {
         sessionId = this.create(anchor, wrapDispatchPrompt(tier, input.prompt), "bypassPermissions", true, { skipStickyCwd: true, employee: true });
       } catch (e) {
         const msg = e instanceof Error ? e.message : String(e);
-        appendDispatch({ ts: Date.now(), id: dispatchId, tier, target: "spawn-pending", status: "failed", receipt: truncate(msg, 200), session_id: "", project_anchor: anchor });
+        appendDispatch({ ts: Date.now(), id: dispatchId, tier, target: "spawn-pending", status: "failed", receipt: truncate(msg, 200), session_id: "", project_anchor: anchor, actor });
         return { ok: false, error: `worker 拉起失败: ${msg}` };
       }
     }
@@ -3702,8 +3738,8 @@ export class SessionManager {
       s.state.dispatch_tier = tier;
     }
     if (input.gid) addMember(input.gid, sessionId, "worker");
-    appendDispatch({ ts: Date.now(), id: dispatchId, tier, target: sessionId, status: "running", session_id: sessionId, project_anchor: anchor });
-    this.pushOpenDispatch(sessionId, { id: dispatchId, tier, gid: input.gid, anchor });
+    appendDispatch({ ts: Date.now(), id: dispatchId, tier, target: sessionId, status: "running", session_id: sessionId, project_anchor: anchor, actor });
+    this.pushOpenDispatch(sessionId, { id: dispatchId, tier, gid: input.gid, anchor, actor });
     if (input.gid) {
       upsertBoardEntry(input.gid, {
         text: input.title?.trim() || input.prompt.split("\n")[0].slice(0, 60),

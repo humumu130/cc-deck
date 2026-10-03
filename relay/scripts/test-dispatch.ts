@@ -103,8 +103,15 @@ async function main() {
     const bus = new EventBus({ persistPath: join(DATA, "events.ndjson") });
     // D12：看门狗动作面观察缝（WATCHDOG 事件采集，验 recover_abandon 真发出）
     const wdActions: { sid: string; action: string }[] = [];
+    // #40 M4：派单完成回调观察缝（DISPATCH_DONE 瞬态帧采集——缝必须在 D1 之前埋好，
+    // 帧是 seq:0 直播不落盘，晚订阅收不到历史）
+    const doneFrames: { dispatch_id: string; status: string; payload: Record<string, unknown> }[] = [];
     bus.subscribe((env) => {
       if (env.type === "WATCHDOG") wdActions.push({ sid: env.session_id, action: String((env.payload as { action?: string }).action ?? "") });
+      if (env.type === "DISPATCH_DONE") {
+        const p = env.payload as Record<string, unknown>;
+        doneFrames.push({ dispatch_id: String(p.dispatch_id ?? ""), status: String(p.status ?? ""), payload: p });
+      }
     });
     const mgr = new SessionManager(bus, cfg);
     mgr.setAgentFactory(makeFakeFactory(created));
@@ -1006,6 +1013,36 @@ async function main() {
       const e16 = readDispatchLog().filter((e) => e.id === "dsp-del-16").at(-1);
       assert(e16?.status === "failed" && e16?.receipt === "会话删除，回合中断", "台账残条写实收口（failed·会话删除，回合中断）");
       assert(mgr.snapshot().find((s) => s.session_id === d16.session_id) === undefined, "卡已删（闭环）");
+    }
+
+    // ---------- D17 #40 M4 派单完成回调（谁派活谁收通知） ----------
+    console.log("D17 派单完成回调（#40 M4）:");
+    {
+      // (a) 端上广播帧：done/failed 单都有 DISPATCH_DONE（D1/D2 的历史帧——缝在
+      //     main 开头埋好，此处断言采集结果）
+      const f1 = doneFrames.find((f) => f.dispatch_id === did1);
+      assert(f1?.status === "done" && f1.payload.actor === "leader", "done 单广播 DISPATCH_DONE（actor=leader）");
+      const f2 = doneFrames.find((f) => f.dispatch_id === did2);
+      assert(!!f2 && f2.status === "failed", "failed 单广播 DISPATCH_DONE");
+      const p2 = f2?.payload ?? {};
+      assert(p2.worker_session_id === wid2 && p2.gid === gidA, "帧带承接会话+组（跳转数据）");
+      assert(String(p2.receipt ?? "").length > 0, "帧带回执文本");
+      // (b) 缺省口径：D16 hack 直塞 FIFO（无 actor）→ 只广播不注入（帧在、无定向）
+      assert(doneFrames.some((f) => f.dispatch_id === "dsp-del-16" && !("actor" in f.payload)), "旧数据/无 actor 单仍广播（缺省不降级）");
+      // (c) Leader 会话闭环：failed 且 actor=leader → 回执进 Leader 时间线
+      //（pushExternalLog system 行 + resumeAgent 唤醒；resume 形态 prompt 走
+      //  sendMessage，fake 不记录——以时间线 system 行为注入证据）
+      const hack17 = mgr as unknown as { leaderId: string; sessions: Map<string, { logs: { kind: string; text?: string }[] }> };
+      const leaderLogs17 = hack17.sessions.get(hack17.leaderId)?.logs ?? [];
+      assert(leaderLogs17.some((l) => l.kind === "system" && (l.text ?? "").includes("[派单失败回执]") && (l.text ?? "").includes(did2.slice(0, 8))), "failed 单注入 Leader 回执（时间线 system 行）");
+      assert(!leaderLogs17.some((l) => (l.text ?? "").includes("[派单失败回执]") && (l.text ?? "").includes(did1.slice(0, 8))), "done 单不注入（省 token 口径）");
+      // (d) 台账 actor 字段写实（原始 ndjson 序：dispatched→running→failed 同 actor；
+      //     readDispatchLog 是同 id 收敛视图只有末行——多行验证必须读原始文件，D1 同款）
+      const raw17 = readFileSync(join(ORG, "dispatch-log.ndjson"), "utf-8").trim().split("\n").map((l) => JSON.parse(l) as { id: string; status: string; actor?: string });
+      const rows17 = raw17.filter((e) => e.id === did2);
+      assert(rows17.length >= 3 && rows17.every((e) => e.actor === "leader"), "台账行 actor=leader（dispatched→running→failed 全链）");
+      // (e) 全量收口语义：注入不重复派帧——did2 只有一条 DISPATCH_DONE
+      assert(doneFrames.filter((f) => f.dispatch_id === did2).length === 1, "每单恰一帧（不随注入重复）");
     }
 
     // ---------- 收尾 ----------

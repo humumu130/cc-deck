@@ -209,6 +209,9 @@ export interface DispatchEntry {
   receipt?: string;
   /** 承接会话 = Leader 的 relay session id */
   session_id: string;
+  /** #40 M4 谁派活谁收通知："leader"=Leader CLI 派 / "user"=咨询档（用户消息）/
+   *  缺省=旧数据或未标注——读侧缺省不降级（通知仍广播端上，仅不定向注入） */
+  actor?: string;
 }
 
 export function dispatchLogPath(dir?: string): string {
