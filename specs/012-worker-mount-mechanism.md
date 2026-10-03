@@ -42,3 +42,23 @@
 
 - Codex PM 的交付物由 Leader 核验后 commit 并 deliver（现行流程不变，归属错挂问题等批 A）。
 - 用户看 PM 产出以 specs/ git log + 输出物看板为准（现惯例），Codex tab 两面板的空态属已知缺口，勿当 bug 报。
+
+## 5. 通用层/适配层架构（2026-10-03 用户军规：地基打好，多引擎接入不堆屎山）
+
+挂载机制两层职责硬隔离，与 specs/006 AgentAdapter 能力协商同构：
+
+**通用层（core · 引擎无关，所有 Agent 零差别享有）**
+- 派单台账（L1）：relay 唯一事实源，派单即挂载
+- deliver 归属协议：`session_id` 显式归属 + spawn 注入 `CCR_SESSION_ID` + `--from` 代挂——协议对所有引擎同一套
+- 确认注入（L3）：notifyConfirm 通道
+- 铁律：通用层永不出现 `if (engine === ...)` 式分叉
+
+**适配层（per-engine · 能力声明制）**
+- AgentAdapter 声明 `capabilities: { nativeTaskStore, selfDeliver, multimodalIn, sandboxNet, ... }`
+- core 按声明路由挂载策略：
+  - `nativeTaskStore=true` → 叠加 L2 透出（Claude：`~/.claude/tasks` 直读）
+  - `nativeTaskStore=false` → L1+L3 即全部（Codex / 通用 JSONL 兜底路径）
+  - `selfDeliver=false`（沙盒禁网类）→ Leader 代挂路径自动接管
+- **新引擎接入 = 写一个 adapter + 如实声明能力，core 零改动**
+
+本节升格为全项目通用设计军规（不只挂载）：凡多 Agent/多引擎/多端交界面，先定通用层契约，引擎差异全部压进适配层声明。
