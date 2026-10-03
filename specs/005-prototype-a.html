@@ -15,11 +15,12 @@
       --line-soft: #203247;
       --text-strong: #E8EFF8;
       --text: #C4D0DE;
-      --dim: #8394A9;
-      --faint: #53677E;
+      --dim: #9AABBE;
+      --faint: #7188A0;
       --progress-fill: #7793AE;
       --brand: #E2855E;
       --brand-hover: #F0A06A;
+      --brand-strong: #B85B38;
       --brand-soft: #3A251F;
       --done: #4BCB91;
       --working: #E9B84C;
@@ -28,6 +29,9 @@
       --ctx-safe: #4BCB91;
       --ctx-attention: #E9B84C;
       --ctx-critical: #EC7472;
+      --ctx-safe-fill: #79E3B4;
+      --ctx-attention-fill: #F4C95F;
+      --ctx-critical-fill: #FF8A87;
       --ctx-track: #3A5570;
       --source: #8F9DB1;
       --chrome: #070D15;
@@ -58,6 +62,7 @@
       --status-error-glow: rgba(236,116,114,.25);
       --tag-border: rgba(111,139,166,.18);
       --tag-bg: rgba(83,103,126,.19);
+      --tag-ink: #D7E3EF;
       --action-bg: rgba(226,133,94,.16);
       --done-bg: rgba(75,203,145,.12);
       --info-bg: rgba(126,175,232,.13);
@@ -83,6 +88,9 @@
       --scroll-thumb-hover: rgba(143,170,198,.55);
       --source-bg: rgba(143,157,177,.08);
       --source-line: rgba(143,157,177,.24);
+      --identity-bg: rgba(143,157,177,.1);
+      --identity-line: rgba(143,157,177,.34);
+      --identity-ink: #B9C8D8;
       --source-company: #3B7C68;
       --source-company-bg: rgba(75,203,145,.16);
       --source-home: #5B8FA8;
@@ -140,11 +148,12 @@
       --line-soft: #DCE5EC;
       --text-strong: #15283D;
       --text: #30465B;
-      --dim: #40566B;
-      --faint: #5B7085;
+      --dim: #334B61;
+      --faint: #4B6278;
       --progress-fill: #607D99;
       --brand: #C86440;
       --brand-hover: #D9754D;
+      --brand-strong: #A94725;
       --brand-soft: #FBE7DE;
       --done: #168D60;
       --working: #A56D00;
@@ -153,6 +162,9 @@
       --ctx-safe: #168D60;
       --ctx-attention: #A56D00;
       --ctx-critical: #C84C51;
+      --ctx-safe-fill: #168D60;
+      --ctx-attention-fill: #A56D00;
+      --ctx-critical-fill: #C84C51;
       --ctx-track: #C6D3DF;
       --source: #6E8194;
       --chrome: #E5ECF2;
@@ -183,6 +195,7 @@
       --status-error-glow: rgba(200,76,81,.2);
       --tag-border: rgba(96,117,138,.24);
       --tag-bg: rgba(132,151,169,.16);
+      --tag-ink: #2D4358;
       --action-bg: rgba(200,100,64,.14);
       --done-bg: rgba(22,141,96,.11);
       --info-bg: rgba(57,120,184,.11);
@@ -208,6 +221,9 @@
       --scroll-thumb-hover: rgba(96,117,138,.52);
       --source-bg: rgba(110,129,148,.1);
       --source-line: rgba(110,129,148,.3);
+      --identity-bg: #F3F6F8;
+      --identity-line: #B8C8D6;
+      --identity-ink: #40566B;
       --source-company: #20735B;
       --source-company-bg: rgba(22,141,96,.14);
       --source-home: #2D718B;
@@ -369,8 +385,8 @@
     .status-dot.done { background: var(--done); box-shadow: 0 0 7px var(--status-done-glow); }
     .status-dot.waiting { background: var(--working); }
     .status-dot.error { background: var(--error); box-shadow: 0 0 7px var(--status-error-glow); }
-    .tag { display: inline-flex; align-items: center; gap: 4px; padding: 3px 7px; border: 1px solid var(--tag-border); border-radius: 999px; background: var(--tag-bg); color: var(--dim); font-size: 10px; white-space: nowrap; }
-    .tag.action { background: var(--action-bg); color: var(--brand-hover); }
+    .tag { display: inline-flex; align-items: center; gap: 4px; padding: 3px 7px; border: 1px solid var(--tag-border); border-radius: 999px; background: var(--tag-bg); color: var(--tag-ink); font-size: 10px; white-space: nowrap; }
+    .tag.action { background: var(--action-bg); color: var(--brand-strong); }
     .tag.danger { border-color: var(--danger-line); background: var(--danger-bg); color: var(--error); }
     .tag.done { background: var(--done-bg); color: var(--done); }
     .tag.info { background: var(--info-bg); color: var(--info); }
@@ -386,12 +402,12 @@
     .segment-bar .faint, .metric b, .mobile-summary b { font-variant-numeric: tabular-nums; }
     .segment-bar button.active::after { content: ""; position: absolute; right: 0; bottom: -1px; left: 0; height: 2px; border-radius: 2px; background: var(--brand); }
     .workspace-body { flex: 1; min-height: 0; overflow: auto; padding: 20px 22px; }
-    .workspace-body.nopad { padding: 0; }
     .workspace-footer { display: flex; gap: 8px; flex: 0 0 auto; padding: 12px 16px; border-top: 1px solid var(--line-soft); background: var(--footer); box-shadow: 0 -8px 18px var(--panel-shadow); }
     .composer { display: flex; align-items: center; gap: 8px; flex: 1; min-height: 34px; padding: 8px 10px; border: 1px solid var(--line); border-radius: 8px; color: var(--faint); font-size: 11px; }
     .primary-btn, .secondary-btn, .danger-btn { min-height: 34px; padding: 0 12px; border: 1px solid transparent; border-radius: 7px; cursor: pointer; font-size: 11px; }
-    .primary-btn { background: linear-gradient(180deg, var(--brand-hover), var(--brand)); color: var(--on-brand); box-shadow: inset 0 1px 0 var(--brand-highlight), 0 4px 12px var(--brand-shadow); transition: filter .18s ease, transform .18s ease, box-shadow .18s ease; }
+    .primary-btn { background: linear-gradient(180deg, var(--brand), var(--brand-strong)); color: var(--on-brand); box-shadow: inset 0 1px 0 var(--brand-highlight), 0 4px 12px var(--brand-shadow); transition: filter .18s ease, transform .18s ease, box-shadow .18s ease; }
     .primary-btn:hover { filter: brightness(1.05); transform: translateY(-1px); box-shadow: inset 0 1px 0 var(--brand-highlight), 0 7px 16px var(--brand-shadow); }
+    .primary-btn:disabled, .secondary-btn:disabled, .danger-btn:disabled, .artifact-group-action:disabled { opacity: .52; cursor: not-allowed; filter: none; transform: none; box-shadow: none; }
     .secondary-btn { border-color: var(--line); background: var(--surface2); color: var(--text); }
     .secondary-btn:hover { background: var(--hover); }
     .danger-btn { border-color: var(--danger-line); background: var(--danger-bg); color: var(--error); }
@@ -412,9 +428,9 @@
     .progress.critical i { background: var(--ctx-critical); }
     .mini-context-meter { display: grid; grid-template-columns: 1fr auto; align-items: center; gap: 6px; margin-top: 6px; color: var(--dim); font: 10px var(--mono); font-variant-numeric: tabular-nums; }
     .mini-context-meter > i { grid-column: 1 / -1; display: block; height: 5px; overflow: hidden; border-radius: 999px; background: var(--ctx-track); }
-    .mini-context-meter > i b { display: block; height: 100%; border-radius: inherit; background: var(--ctx-safe); }
-    .mini-context-meter.attention > i b { background: var(--ctx-attention); }
-    .mini-context-meter.critical > i b { background: var(--ctx-critical); }
+    .mini-context-meter > i b { display: block; height: 100%; border-radius: inherit; background: var(--ctx-safe-fill); }
+    .mini-context-meter.attention > i b { background: var(--ctx-attention-fill); }
+    .mini-context-meter.critical > i b { background: var(--ctx-critical-fill); }
     .context-meter { padding: 10px; border: 1px solid var(--line); border-radius: 9px; background: var(--surface2); box-shadow: var(--card-shadow); }
     .context-meter-head, .context-meter-stats { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
     .context-meter-kicker { color: var(--faint); font: 9px var(--mono); letter-spacing: .06em; text-transform: uppercase; }
@@ -424,9 +440,9 @@
     .context-meter.critical .context-meter-grade { border-color: color-mix(in srgb, var(--ctx-critical) 42%, transparent); background: color-mix(in srgb, var(--ctx-critical) 12%, transparent); color: var(--ctx-critical); }
     .context-meter-band { display: grid; grid-template-columns: repeat(12, minmax(0, 1fr)); gap: 3px; margin: 11px 0 8px; }
     .context-meter-band i { display: block; height: 7px; border-radius: 3px; background: var(--ctx-track); }
-    .context-meter.safe .context-meter-band i.on { background: var(--ctx-safe); }
-    .context-meter.attention .context-meter-band i.on { background: var(--ctx-attention); }
-    .context-meter.critical .context-meter-band i.on { background: var(--ctx-critical); }
+    .context-meter.safe .context-meter-band i.on { background: var(--ctx-safe-fill); }
+    .context-meter.attention .context-meter-band i.on { background: var(--ctx-attention-fill); }
+    .context-meter.critical .context-meter-band i.on { background: var(--ctx-critical-fill); }
     .context-meter-used { color: var(--text-strong); font: 700 15px var(--mono); }
     .context-meter-limit { color: var(--dim); font: 10px var(--mono); }
     .context-meter-pct { color: var(--ctx-safe); font: 700 11px var(--mono); }
@@ -457,8 +473,8 @@
     .wait-actions button { min-height: 34px; padding: 0 10px; border: 1px solid var(--border-strong); border-radius: 6px; background: var(--surface2); color: var(--text); cursor: pointer; font-size: 10px; transition: border-color .18s ease, background .18s ease, color .18s ease, transform .18s ease; }
     .wait-actions button:hover { border-color: var(--text); background: var(--hover); transform: translateY(-1px); }
     .wait-actions button:focus-visible { outline: 2px solid var(--brand-hover); outline-offset: 2px; }
-    .wait-actions button.allow { border-color: transparent; background: var(--working); color: var(--action-ink); font-weight: 700; }
-    .wait-actions button.allow:hover { background: var(--brand-hover); }
+    .wait-actions button.allow { border-color: transparent; background: var(--brand-strong); color: var(--on-brand); font-weight: 700; }
+    .wait-actions button.allow:hover { background: var(--brand); }
     .wait-card.allowed .wait-actions button.allow { background: var(--done); color: var(--done-ink); }
     .status-note { max-width: 560px; padding: 8px 11px; margin: 14px auto; border: 1px solid var(--line-soft); border-radius: 999px; background: var(--surface1); color: var(--dim); text-align: center; font: 10px var(--mono); }
     .artifact-row { display: flex; align-items: center; gap: 7px; padding: 8px 0; border-bottom: 1px solid var(--line-soft); color: var(--text); font-size: 10px; }
@@ -516,7 +532,6 @@
     .artifact-source-head small { color: var(--dim); font: 10px var(--mono); }
     .artifact-source-unreachable { padding: 10px; border: 1px dashed var(--danger-line); border-radius: 8px; background: var(--danger-bg); color: var(--error); font-size: 10px; }
     .artifact-source-link { border: 0; background: transparent; color: var(--info); cursor: pointer; font-size: 10px; }
-    .artifact-mobile-action { display: none; }
     .artifact-sheet-backdrop { position: fixed; inset: 0; z-index: 30; display: none; align-items: flex-end; background: var(--artifact-sheet-backdrop); }
     .artifact-sheet-backdrop.open { display: flex; }
     .artifact-sheet { width: 100%; padding: 10px 13px calc(13px + env(safe-area-inset-bottom)); border-top: 1px solid var(--line); border-radius: 16px 16px 0 0; background: var(--surface2); box-shadow: var(--shadow); }
@@ -540,8 +555,10 @@
     .task-card .tag { margin-top: 7px; }
     .task-assignee { display: flex; align-items: center; gap: 6px; margin-top: 7px; color: var(--dim); font-size: 10px; }
     .task-assignee b { color: var(--text); font-weight: 600; }
-    .member-list { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
-    .member-card { display: flex; gap: 8px; padding: 10px; border: 1px solid var(--line); border-radius: 9px; background: var(--surface2); }
+    .member-list { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; min-width: 0; }
+    .member-card { display: flex; min-width: 0; gap: 8px; padding: 10px; border: 1px solid var(--line); border-radius: 9px; background: var(--surface2); overflow: hidden; }
+    .member-card > div { min-width: 0; }
+    .member-card .identity-cluster { min-width: 0; flex-wrap: wrap; }
     .avatar { position: relative; display: grid; place-items: center; flex: 0 0 28px; width: 28px; height: 28px; border: 1px solid transparent; border-radius: 8px; background: var(--hover); color: var(--text); font: 700 11px/1 var(--mono); }
     .avatar.worker { background: var(--avatar-worker-bg); color: var(--avatar-worker-text); }
     .avatar.architect { background: var(--avatar-architect-bg); color: var(--avatar-architect-text); }
@@ -569,7 +586,6 @@
     .aggregate-card h4 { margin: 0 0 8px; color: var(--text-strong); font-size: 11px; }
     .aggregate-card p { margin: 5px 0; color: var(--dim); font-size: 10px; }
     .aggregate-card button { margin-top: 7px; }
-    .notice-list { display: grid; gap: 8px; }
     .notice { display: flex; gap: 9px; padding: 11px; border: 1px solid var(--line); border-radius: 9px; background: var(--surface2); cursor: pointer; }
     .notice.selected { border-color: var(--selected-line); background: var(--selected-bg); box-shadow: inset 3px 0 0 var(--selected-line); }
     .notice .notice-icon { display: grid; place-items: center; flex: 0 0 27px; width: 27px; height: 27px; border-radius: 8px; background: var(--notice-icon-bg); color: var(--error); }
@@ -589,11 +605,11 @@
     .notify-source-card .identity-cluster { margin-top: 9px; }
     .notify-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 7px; margin-top: 13px; }
     .notify-actions .primary-btn, .notify-actions .secondary-btn { min-height: 32px; }
-    .notify-light-action { border: 0; background: transparent; color: var(--dim); cursor: pointer; font-size: 10px; }
-    .notify-light-action:hover, .notify-light-action:focus-visible { color: var(--text-strong); text-decoration: underline; }
+    .notify-light-action { min-height: 32px; padding: 0 10px; border: 1px solid var(--line); border-radius: 7px; background: transparent; color: var(--dim); cursor: pointer; font-size: 10px; }
+    .notify-light-action:hover, .notify-light-action:focus-visible { border-color: var(--border-strong); background: var(--hover); color: var(--text-strong); }
     .notify-light-action:disabled { color: var(--faint); cursor: default; text-decoration: none; }
     .notify-state { margin-left: auto; color: var(--faint); font: 10px var(--mono); }
-    .notify-source-summary { padding: 11px 12px; margin-bottom: 12px; border: 1px dashed var(--readonly-line); border-radius: var(--radius-sm); background: var(--readonly-bg); color: var(--info); font-size: 10px; }
+    .notify-source-summary { padding: 11px 12px; margin-bottom: 12px; border: 1px solid var(--readonly-line); border-radius: var(--radius-sm); background: var(--readonly-bg); color: var(--info); font-size: 10px; }
     .mobile-notify-screen .mobile-content { padding-bottom: 18px; }
     .mobile-notify-card { cursor: pointer; }
     .mobile-notify-card .notify-actions { margin-top: 10px; }
@@ -606,14 +622,12 @@
     .settings-row { display: flex; align-items: center; gap: 9px; padding: 11px; border: 1px solid var(--line); border-radius: 9px; background: var(--surface2); }
     button.settings-row { width: 100%; color: inherit; text-align: left; cursor: pointer; }
     .theme-setting:hover { border-color: var(--brand); }
-    .settings-row .setting-icon { display: grid; place-items: center; flex: 0 0 28px; width: 28px; height: 28px; border-radius: 8px; background: var(--hover); }
+    .settings-row .setting-icon { display: grid; place-items: center; flex: 0 0 28px; width: 28px; height: 28px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface1); color: var(--dim); }
+    .settings-row .setting-icon svg { width: 16px; height: 16px; fill: currentColor; }
+    .theme-setting .chev::after { content: "›"; margin-left: 4px; color: var(--faint); }
     .settings-row strong { display: block; color: var(--text-strong); font-size: 11px; }
     .settings-row p { margin: 3px 0 0; color: var(--dim); font-size: 10px; }
     .settings-row .chev { margin-left: auto; color: var(--faint); }
-    .field { margin-bottom: 12px; }
-    .field label { display: block; margin-bottom: 5px; color: var(--dim); font-size: 10px; }
-    .field input { width: 100%; padding: 8px 9px; border: 1px solid var(--line); border-radius: 7px; outline: none; background: var(--bg1); color: var(--text); font: 11px var(--mono); }
-    .field input:focus { border-color: var(--brand); box-shadow: 0 0 0 3px var(--focus-ring); }
     .mobile-frame { width: 390px; max-width: 100%; margin: 0 auto; overflow: hidden; border: 8px solid var(--phone-frame); border-radius: 30px; background: var(--bg1); box-shadow: var(--shadow), 0 0 0 1px var(--frame-shadow); }
     .mobile-notch { position: relative; z-index: 1; width: 126px; height: 20px; margin: -1px auto 0; border-radius: 0 0 14px 14px; background: var(--phone-frame); box-shadow: 0 2px 5px var(--notch-shadow); }
     .mobile-screen { display: none; min-height: 735px; }
@@ -664,8 +678,10 @@
     .mobile-card .row { display: flex; align-items: center; gap: 7px; }
     .mobile-card strong { flex: 1; min-width: 0; color: var(--text-strong); font-size: 11.5px; }
     .mobile-card p { margin: 5px 0 0 35px; color: var(--dim); font-size: 10px; }
-    .mobile-card .avatar { display: grid; place-items: center; flex: 0 0 27px; width: 27px; height: 27px; border-radius: 8px; background: var(--hover); color: var(--text); }
-    .mobile-detail-tabs { display: flex; gap: 17px; overflow: auto; padding: 0 14px; border-bottom: 1px solid var(--line-soft); }
+    .mobile-card .avatar { display: grid; place-items: center; flex: 0 0 28px; width: 28px; height: 28px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface1); color: var(--text); }
+    .mobile-card .avatar .icon-status { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+    .mobile-detail-tabs { display: flex; gap: 17px; overflow-x: auto; overflow-y: hidden; padding: 0 14px; border-right: 0; border-bottom: 1px solid var(--line-soft); box-shadow: none; scrollbar-width: none; }
+    .mobile-detail-tabs::-webkit-scrollbar { display: none; }
     .mobile-detail-tabs button { position: relative; flex: 0 0 auto; padding: 10px 0 8px; border: 0; background: transparent; color: var(--dim); cursor: pointer; font-size: 10px; }
     .mobile-detail-tabs button.active { color: var(--text-strong); font-weight: 700; }
     .mobile-detail-tabs button.active::after { content: ""; position: absolute; right: 0; bottom: -1px; left: 0; height: 2px; background: var(--brand); }
@@ -679,9 +695,8 @@
     .mobile-project-card p { margin: 4px 0 10px; color: var(--dim); font-size: 10px; }
     .mobile-settings { display: grid; gap: 8px; }
     .mobile-settings .settings-row { padding: 12px; }
-    .mobile-topline { display: flex; align-items: center; gap: 7px; margin-bottom: 12px; color: var(--dim); font-size: 10px; }
-    .mobile-topline b { color: var(--text); }
-    .mobile-back { border: 0; background: transparent; color: var(--brand-hover); cursor: pointer; font-size: 18px; line-height: 1; }
+    .mobile-back { position: relative; display: grid; place-items: center; flex: 0 0 30px; width: 30px; height: 30px; border: 1px solid var(--line); border-radius: 7px; background: transparent; color: var(--dim); cursor: pointer; font-size: 18px; line-height: 1; }
+    .mobile-back:hover { background: var(--hover); color: var(--text); }
     .mobile-detail-composer { display: flex; gap: 7px; padding: 10px 12px; border-top: 1px solid var(--line-soft); background: var(--composer-bg); box-shadow: 0 -8px 18px var(--panel-shadow); }
     .mobile-detail-composer .composer { min-height: 34px; }
     .mobile-detail-composer .primary-btn { padding: 0 10px; }
@@ -689,17 +704,16 @@
     .toast.show { opacity: 1; transform: none; }
     .desktop-only-note { color: var(--faint); font-size: 10px; }
     .engine-badge, .source-badge { display: inline-flex; align-items: center; gap: 4px; white-space: nowrap; font-size: 10px; line-height: 1; }
-    .engine-badge { padding: 3px 6px 3px 4px; border: 1px solid color-mix(in srgb, var(--engine-color) 48%, transparent); border-radius: 999px; background: color-mix(in srgb, var(--engine-color) 13%, transparent); color: color-mix(in srgb, var(--engine-color) 78%, white); }
-    .engine-badge::before { content: ""; width: 6px; height: 6px; border-radius: 2px; background: var(--engine-color); box-shadow: 0 0 7px color-mix(in srgb, var(--engine-color) 50%, transparent); }
+    .engine-badge { padding: 3px 6px; border: 1px solid var(--identity-line); border-radius: 999px; background: var(--identity-bg); color: var(--identity-ink); }
+    .engine-badge::before { content: ""; width: 6px; height: 6px; border-radius: 2px; background: currentColor; }
     .engine-badge.claude { --engine-color: var(--engine-claude); }
     .engine-badge.codex { --engine-color: var(--engine-codex); }
     .engine-badge.trae { --engine-color: var(--engine-trae); }
     .engine-badge.qwen { --engine-color: var(--engine-qwen); }
     .engine-badge.codebuddy { --engine-color: var(--engine-codebuddy); }
     .engine-badge.zcode { --engine-color: var(--engine-zcode); }
-    .source-badge { padding: 3px 6px; border: 1px solid var(--source-line); border-radius: 5px; background: var(--source-bg); color: var(--source); }
-    .source-badge.source-company { border-color: var(--source-company); background: var(--source-company-bg); color: var(--source-company); }
-    .source-badge.source-home { border-color: var(--source-home); background: var(--source-home-bg); color: var(--source-home); }
+    .source-badge { padding: 3px 6px; border: 1px solid var(--identity-line); border-radius: 5px; background: var(--identity-bg); color: var(--identity-ink); }
+    .source-badge.source-company, .source-badge.source-home { border-color: var(--identity-line); background: var(--identity-bg); color: var(--identity-ink); }
     .source-badge::before { content: "↗"; color: var(--faint); font-size: 10px; }
     .identity-cluster { display: inline-flex; align-items: center; gap: 5px; flex-wrap: wrap; }
     .queue-card .identity-cluster { position: absolute; right: 10px; bottom: 7px; margin: 0; flex-wrap: nowrap; }
@@ -754,7 +768,16 @@
     @media (prefers-reduced-motion: reduce) {
       *, *::before, *::after { scroll-behavior: auto !important; transition-duration: .01ms !important; animation-duration: .01ms !important; }
     }
-    .mobile-screen .wait-actions button, .mobile-screen .connection-reconnect { min-height: 44px; }
+    .mobile-screen .wait-actions button, .mobile-screen .connection-reconnect, .mobile-screen .notify-light-action { min-height: 44px; }
+    .mobile-notify-card .notify-light-action { padding: 0 11px; }
+    .mobile-card .avatar.status-ok { color: var(--done); }
+    .mobile-card .avatar.status-alert { color: var(--error); }
+    .mobile-card .avatar.status-action { color: var(--brand-strong); }
+    .mobile-card .avatar.status-neutral { color: var(--dim); }
+    .muted { color: var(--dim); }
+    .mobile-sourcebar + .mobile-head .connection-chip { display: none; }
+    #m-detail .mobile-head { padding-left: 13px; }
+    #m-detail .mobile-detail-tabs { padding-left: 13px; }
     html[data-theme="light"] body { background: radial-gradient(950px 520px at 77% -10%, var(--glow-brand), transparent 64%), radial-gradient(720px 480px at 0% 72%, var(--glow-blue), transparent 68%), var(--bg0); }
     html[data-theme="light"] .window-dots i { background: var(--window-dot); }
     html[data-theme="light"] .window-title { color: var(--faint); }
@@ -776,7 +799,7 @@
   </style>
 </head>
 <body>
-  <svg class="icon-sprite" aria-hidden="true" focusable="false"><symbol id="icon-bell" viewBox="0 0 24 24"><path d="M18 9a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9Zm-8.5 11h5a2.5 2.5 0 0 1-5 0Z"></path></symbol><symbol id="icon-home" viewBox="0 0 24 24"><path d="m3 10 9-7 9 7v10a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1V10Z"></path></symbol><symbol id="icon-users" viewBox="0 0 24 24"><path d="M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8Zm6-1a3 3 0 1 0 0-6 3 3 0 0 0 0 6ZM2 20a7 7 0 0 1 14 0v1H2v-1Zm14-5a6 6 0 0 1 6 6h-4v-1a8.9 8.9 0 0 0-2.1-5.8A6 6 0 0 1 16 15Z"></path></symbol><symbol id="icon-grid" viewBox="0 0 24 24"><path d="M3 3h7v7H3V3Zm11 0h7v7h-7V3ZM3 14h7v7H3v-7Zm11 0h7v7h-7v-7Z"></path></symbol><symbol id="icon-gear" viewBox="0 0 24 24"><path d="m19.4 13.5 1.2.9-1.8 3.1-1.4-.6a7.4 7.4 0 0 1-1.8 1l-.2 1.5H11.8l-.2-1.5a7.4 7.4 0 0 1-1.8-1l-1.4.6-1.8-3.1 1.2-.9a7.4 7.4 0 0 1 0-2.1l-1.2-.9 1.8-3.1 1.4.6a7.4 7.4 0 0 1 1.8-1l.2-1.5h3.6l.2 1.5a7.4 7.4 0 0 1 1.8 1l1.4-.6 1.8 3.1-1.2.9a7.4 7.4 0 0 1 0 2.1ZM13.6 16a3.1 3.1 0 1 0 0-6.2 3.1 3.1 0 0 0 0 6.2Z"></path></symbol></svg>
+  <svg class="icon-sprite" aria-hidden="true" focusable="false"><symbol id="icon-bell" viewBox="0 0 24 24"><path d="M18 9a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9Zm-8.5 11h5a2.5 2.5 0 0 1-5 0Z"></path></symbol><symbol id="icon-home" viewBox="0 0 24 24"><path d="m3 10 9-7 9 7v10a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1V10Z"></path></symbol><symbol id="icon-users" viewBox="0 0 24 24"><path d="M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8Zm6-1a3 3 0 1 0 0-6 3 3 0 0 0 0 6ZM2 20a7 7 0 0 1 14 0v1H2v-1Zm14-5a6 6 0 0 1 6 6h-4v-1a8.9 8.9 0 0 0-2.1-5.8A6 6 0 0 1 16 15Z"></path></symbol><symbol id="icon-grid" viewBox="0 0 24 24"><path d="M3 3h7v7H3V3Zm11 0h7v7h-7V3ZM3 14h7v7H3v-7Zm11 0h7v7h-7v-7Z"></path></symbol><symbol id="icon-gear" viewBox="0 0 24 24"><path d="m19.4 13.5 1.2.9-1.8 3.1-1.4-.6a7.4 7.4 0 0 1-1.8 1l-.2 1.5H11.8l-.2-1.5a7.4 7.4 0 0 1-1.8-1l-1.4.6-1.8-3.1 1.2-.9a7.4 7.4 0 0 1 0-2.1l-1.2-.9 1.8-3.1 1.4.6a7.4 7.4 0 0 1 1.8-1l.2-1.5h3.6l.2 1.5a7.4 7.4 0 0 1 1.8 1l1.4-.6 1.8 3.1-1.2.9a7.4 7.4 0 0 1 0 2.1ZM13.6 16a3.1 3.1 0 1 0 0-6.2 3.1 3.1 0 0 0 0 6.2Z"></path></symbol><symbol id="icon-check" viewBox="0 0 24 24"><path d="m5 12.5 4.2 4.2L19 7"></path></symbol><symbol id="icon-alert" viewBox="0 0 24 24"><path d="M12 3 2.8 20h18.4L12 3Zm0 6v5m0 3h.01"></path></symbol><symbol id="icon-link" viewBox="0 0 24 24"><path d="M10 13.5 14 9.5m-6.2 8.7-1.2 1.2a4 4 0 0 1-5.6-5.6l4.4-4.4a4 4 0 0 1 5.6 0m3.6-3.6 1.2-1.2a4 4 0 0 1 5.6 5.6L17 14.6a4 4 0 0 1-5.6 0"></path></symbol><symbol id="icon-info" viewBox="0 0 24 24"><path d="M12 10v7m0-11h.01M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z"></path></symbol></svg>
   <main class="page">
     <header class="topbar">
       <div>
@@ -878,7 +901,7 @@
           <div class="mobile-status"><span>9:41</span><span>▰ ︎◒ 100%</span></div>
           <div class="mobile-sourcebar"><div class="source-switcher"><button class="source-trigger" type="button" data-source-trigger aria-expanded="false"><span class="source-dot status-connected" data-source-dot></span><strong data-current-source>公司电脑</strong><span>⌄</span></button><div class="source-menu" data-source-menu><div class="source-menu-head">数据源与视图</div><button class="source-option active" type="button" data-source-choice="office"><span class="source-dot status-connected"></span><strong>公司电脑</strong><small>6 会话 · 3 行动</small></button><button class="source-option" type="button" data-source-choice="home"><span class="source-dot status-reconnecting"></span><strong>家里 iMac</strong><small>2 会话 · 1 行动</small></button><div class="source-mode"><button class="active" type="button" data-source-mode="single">单源</button><button type="button" data-source-mode="aggregate">多源聚合</button></div><a class="source-manage" href="#d-settings" data-source-settings>⚙ 管理与配对新源 →</a></div></div><span class="source-summary" data-current-summary>6 会话 · 3 行动</span></div>
           <header class="mobile-head"><h2>待我处理<small>3 个行动项 · cc-deck 在线</small></h2><span class="tag action mobile-notify" title="通知 · 2 个需行动项" aria-label="通知 · 2 个需行动项"><svg class="icon-bell" aria-hidden="true"><use href="#icon-bell"></use></svg><span>2</span></span><button class="icon-btn">⌕</button></header>
-          <div class="mobile-content"><div class="mobile-summary"><div><b>3</b><span>需行动</span></div><div><b>4</b><span>运行中</span></div><div><b>2</b><span>待验收</span></div></div><div class="mobile-switch"><button class="active" data-mobile-list="action">待处理</button><button data-mobile-list="all">全部会话</button></div><div class="mobile-card primary" data-open-detail="release"><div class="row"><span class="avatar">✓</span><strong>0.6.0-test.19 出包</strong><span class="tag action">待收单</span></div><p>验收单已回填 2/3 · 点击确认最后一项</p><div class="identity-cluster"><span class="engine-badge claude">Claude</span><span class="source-badge">公司电脑</span></div></div><div class="mobile-card" data-open-detail="mobile"><div class="row"><span class="avatar">!</span><strong>worker-mobile 失联</strong><span class="tag danger">接替</span></div><p>Claude 额度已用尽 · 验收槽不回落同厂商</p><div class="identity-cluster"><span class="engine-badge qwen">Qwen Code</span><span class="source-badge">家里 iMac</span></div></div><div class="mobile-card" data-open-detail="team-plan"><div class="row"><span class="avatar">👥</span><strong>团队编制确认</strong><span class="tag action">待确认</span></div><p>Leader 已提交编制方案 · 3 开发 + 独立验收</p><div class="identity-cluster"><span class="engine-badge trae">Trae</span><span class="source-badge">公司电脑</span></div></div><div class="mobile-card"><div class="row"><span class="avatar">●</span><strong>ui-review 走查</strong><span class="status-dot done"></span></div><p>刚刚活跃 · 检查 rail 方案 · 上下文 58%</p><div class="identity-cluster"><span class="engine-badge codex">Codex</span><span class="source-badge">公司电脑</span></div></div></div>
+          <div class="mobile-content"><div class="mobile-summary"><div><b>3</b><span>需行动</span></div><div><b>4</b><span>运行中</span></div><div><b>2</b><span>待验收</span></div></div><div class="mobile-switch"><button class="active" data-mobile-list="action">待处理</button><button data-mobile-list="all">全部会话</button></div><div class="mobile-card primary" data-open-detail="release"><div class="row"><span class="avatar status-ok"><svg class="icon-status" aria-hidden="true"><use href="#icon-check"></use></svg></span><strong>0.6.0-test.19 出包</strong><span class="tag action">待收单</span></div><p>验收单已回填 2/3 · 点击确认最后一项</p><div class="identity-cluster"><span class="engine-badge claude">Claude</span><span class="source-badge">公司电脑</span></div></div><div class="mobile-card" data-open-detail="mobile"><div class="row"><span class="avatar status-alert"><svg class="icon-status" aria-hidden="true"><use href="#icon-alert"></use></svg></span><strong>worker-mobile 失联</strong><span class="tag danger">接替</span></div><p>Claude 额度已用尽 · 验收槽不回落同厂商</p><div class="identity-cluster"><span class="engine-badge qwen">Qwen Code</span><span class="source-badge">家里 iMac</span></div></div><div class="mobile-card" data-open-detail="team-plan"><div class="row"><span class="avatar status-action"><svg class="icon-status" aria-hidden="true"><use href="#icon-users"></use></svg></span><strong>团队编制确认</strong><span class="tag action">待确认</span></div><p>Leader 已提交编制方案 · 3 开发 + 独立验收</p><div class="identity-cluster"><span class="engine-badge trae">Trae</span><span class="source-badge">公司电脑</span></div></div><div class="mobile-card"><div class="row"><span class="avatar status-neutral"><svg class="icon-status" aria-hidden="true"><use href="#icon-grid"></use></svg></span><strong>ui-review 走查</strong><span class="status-dot done"></span></div><p>刚刚活跃 · 检查 rail 方案 · 上下文 58%</p><div class="identity-cluster"><span class="engine-badge codex">Codex</span><span class="source-badge">公司电脑</span></div></div></div>
           <nav class="mobile-nav"><button class="active" data-mobile-root="inbox"><b><svg class="icon-nav" aria-hidden="true"><use href="#icon-home"></use></svg></b>会话</button><button data-mobile-root="team"><b><svg class="icon-nav" aria-hidden="true"><use href="#icon-users"></use></svg></b>团队<span class="tag action">1</span></button><button data-mobile-root="project"><b><svg class="icon-nav" aria-hidden="true"><use href="#icon-grid"></use></svg></b>项目</button><button data-mobile-root="settings"><b><svg class="icon-nav" aria-hidden="true"><use href="#icon-gear"></use></svg></b>设置</button></nav>
         </div>
 
@@ -940,7 +963,6 @@
       const themeToggles = [...document.querySelectorAll("[data-theme-toggle]")];
       let mobileReturn = "inbox";
       let toastTimer = null;
-      let connectionIndex = 0;
       let activeSource = "office";
       let sourceMode = "single";
       let notifyActionCount = 2;
@@ -948,8 +970,8 @@
       const notifyResolvedKeys = new Set();
 
       const sourceStates = {
-        office: { label: "公司电脑", summary: "6 会话 · 3 行动", status: "connected" },
-        home: { label: "家里 iMac", summary: "2 会话 · 1 行动", status: "reconnecting" }
+        office: { label: "公司电脑", summary: "6 会话 · 2 行动", actions: 2, status: "connected" },
+        home: { label: "家里 iMac", summary: "2 会话 · 2 行动", actions: 2, status: "reconnecting" }
       };
 
       const connectionStates = [
@@ -967,6 +989,25 @@
         if (statuses.includes("disconnected")) return "disconnected";
         if (statuses.includes("reconnecting")) return "reconnecting";
         return "connected";
+      }
+
+      function openMobileSettingsConnection() {
+        openMobileRoot("settings");
+        const screen = document.querySelector("#m-settings");
+        const row = [...(screen?.querySelectorAll(".mobile-settings .settings-row") || [])].find((item) => item.querySelector("strong")?.textContent.trim() === "连接与设备");
+        if (row) {
+          row.scrollIntoView({ block: "nearest" });
+          row.click();
+        }
+        showToast("已打开设置 · 连接与设备");
+      }
+
+      function openConnectionSettings() {
+        if (stages.mobile?.classList.contains("active")) openMobileSettingsConnection();
+        else {
+          setDesktopDomain("settings");
+          showToast("已打开设置 · 连接与设备");
+        }
       }
 
       function mountConnectionCapsules() {
@@ -996,8 +1037,7 @@
           link.addEventListener("click", (event) => {
             event.preventDefault();
             document.querySelectorAll("[data-connection-popover]").forEach((popover) => popover.classList.remove("open"));
-            setDesktopDomain("settings");
-            showToast("已打开设置 · 连接与设备");
+            openConnectionSettings();
           });
         });
         renderConnectionCapsules();
@@ -1043,7 +1083,6 @@
 
       function setConnectionState(key, announce = false) {
         const state = connectionStates.find((item) => item.key === key) || connectionStates[0];
-        connectionIndex = connectionStates.indexOf(state);
         connectionChips.forEach((chip) => {
           chip.classList.remove(...connectionStates.map((item) => item.className));
           chip.classList.add(state.className);
@@ -1085,6 +1124,17 @@
         if (announce) showToast(`已切换到${next === "light" ? "浅色" : "深色"}主题`);
       }
 
+      function syncSourceVisibility() {
+        const aggregate = sourceMode === "aggregate";
+        const activeLabel = sourceStates[activeSource]?.label;
+        document.querySelectorAll("#d-session .queue-card, #m-inbox .mobile-card").forEach((card) => {
+          const badge = card.querySelector(".source-badge");
+          if (!badge) return;
+          const visible = aggregate || badge.textContent.trim() === activeLabel;
+          card.hidden = !visible;
+        });
+      }
+
       function setSource(source, announce = false) {
         const next = sourceStates[source] ? source : "office";
         activeSource = next;
@@ -1102,6 +1152,9 @@
         });
         setConnectionState(state.status);
         renderConnectionCapsules();
+        notifyActionCount = sourceMode === "aggregate" ? Object.values(sourceStates).reduce((total, item) => total + item.actions, 0) : state.actions;
+        syncSourceVisibility();
+        syncNotificationBadges();
         if (announce) showToast(`当前源：${state.label}`);
       }
 
@@ -1111,7 +1164,15 @@
         document.querySelectorAll("[data-source-mode]").forEach((button) => button.classList.toggle("active", button.dataset.sourceMode === sourceMode));
         document.querySelectorAll("[data-current-summary]").forEach((node) => { node.textContent = sourceMode === "aggregate" ? "8 会话 · 4 行动" : sourceStates[activeSource].summary; });
         document.querySelectorAll("[data-source-switcher-label]").forEach((node) => { node.textContent = sourceMode === "aggregate" ? "多源聚合" : "单源"; });
+        document.querySelectorAll("[data-source-choice]").forEach((button) => {
+          const source = sourceStates[button.dataset.sourceChoice];
+          const summary = button.querySelector("small");
+          if (source && summary) summary.textContent = source.summary;
+        });
         renderConnectionCapsules();
+        notifyActionCount = sourceMode === "aggregate" ? Object.values(sourceStates).reduce((total, item) => total + item.actions, 0) : sourceStates[activeSource].actions;
+        syncSourceVisibility();
+        syncNotificationBadges();
         if (announce) showToast(sourceMode === "aggregate" ? "已切换到多源聚合 · badge 按源合计" : "已切换到单源视图");
       }
 
@@ -1141,9 +1202,9 @@
           }
         });
         document.querySelectorAll(".mobile-card").forEach((card) => {
-          if (!card.textContent.includes("Leader")) return;
           const avatar = card.querySelector(".avatar");
-          if (!avatar) return;
+          if (!avatar || avatar.querySelector(".icon-status")) return;
+          if (!(card.querySelector("strong")?.textContent || "").includes("Leader")) return;
           avatar.classList.add("leader");
           avatar.textContent = "✦";
           const dot = document.createElement("i");
@@ -1224,6 +1285,18 @@
       }
 
       function wireNotificationDomain() {
+        const focusNotifySource = (jump) => {
+          const domain = jump.dataset.notifyDomain;
+          setDesktopDomain(domain);
+          if (domain === "session") {
+            selectSession(jump.dataset.notifySession || "release");
+            [...document.querySelectorAll("#d-session .segment-bar button")].find((button) => button.textContent.includes("任务"))?.click();
+          } else {
+            const tabName = jump.dataset.notifyTeamAction === "confirm" ? "看板" : "成员";
+            [...document.querySelectorAll("#d-team .segment-bar button")].find((button) => button.textContent.includes(tabName))?.click();
+          }
+          showToast(domain === "session" ? "已定位来源会话 · 验收写操作在原域完成" : "已定位来源团队 · 接替/编制写操作在原域完成");
+        };
         document.addEventListener("click", (event) => {
           const lightAction = event.target.closest("[data-notify-action]");
           if (lightAction) {
@@ -1232,9 +1305,7 @@
           }
           const jump = event.target.closest("[data-notify-jump]");
           if (jump) {
-            const domain = jump.dataset.notifyDomain;
-            setDesktopDomain(domain);
-            showToast(domain === "session" ? "已定位来源会话 · 验收写操作在原域完成" : "已定位来源团队 · 接替/编制写操作在原域完成");
+            focusNotifySource(jump);
             return;
           }
           const mobileJump = event.target.closest("[data-notify-mobile-jump]");
@@ -1262,6 +1333,12 @@
       function hydrateNotificationIcons() {
         const bell = '<svg class="icon-bell" aria-hidden="true"><use href="#icon-bell"></use></svg>';
         document.querySelectorAll(".notice-icon").forEach((icon) => { icon.innerHTML = bell; });
+        document.querySelectorAll(".mobile-notify-card .avatar").forEach((avatar) => {
+          const cardText = avatar.closest(".mobile-notify-card")?.textContent || "";
+          avatar.classList.remove("status-alert", "status-action", "status-neutral");
+          avatar.classList.add(cardText.includes("历史") ? "status-neutral" : "status-alert");
+          avatar.innerHTML = `<svg class="icon-status" aria-hidden="true"><use href="#icon-${cardText.includes("历史") ? "info" : "alert"}"></use></svg>`;
+        });
         document.querySelectorAll(".mobile-screen:not(#m-detail):not(#m-notify) .mobile-head").forEach((head) => {
           const actionBadge = [...head.querySelectorAll(".tag.action")].find((node) => node.textContent.includes("2"));
           if (actionBadge) {
@@ -1280,6 +1357,13 @@
           }
         });
         document.querySelectorAll(".mobile-notify").forEach((button) => button.addEventListener("click", openMobileNotifyCenter));
+        const settingIcons = { "连接与设备": "link", "模型服务": "grid", "团队身份模板": "users", "扩展": "grid", 关于: "info" };
+        document.querySelectorAll("#m-settings .setting-icon").forEach((icon) => {
+          const name = icon.parentElement?.querySelector("strong")?.textContent.trim();
+          if (!name || icon.closest("[data-theme-toggle]")) return;
+          const symbol = settingIcons[name];
+          if (symbol) icon.innerHTML = `<svg aria-hidden="true"><use href="#icon-${symbol}"></use></svg>`;
+        });
         document.querySelectorAll(".settings-row").forEach((row) => {
           if (row.querySelector("strong")?.textContent.trim() === "团队身份模板") {
             const copy = row.querySelector("p");
@@ -1301,7 +1385,7 @@
           if (queue.querySelector(".source-group-bar")) return;
           const group = document.createElement("div");
           group.className = "source-group-bar";
-          group.innerHTML = '<span class="company">公司电脑 · 3 行动</span><span class="home">家里 iMac · 1 行动</span>';
+          group.innerHTML = '<span class="company">公司电脑 · 2 行动</span><span class="home">家里 iMac · 2 行动</span>';
           queue.querySelector(".queue-switch")?.insertAdjacentElement("afterend", group);
         });
         const inbox = document.querySelector("#m-inbox .mobile-switch");
@@ -1334,6 +1418,16 @@
         if (projectHeaderAction) projectHeaderAction.remove();
         const projectMobileSubtitle = document.querySelector("#m-project .mobile-head h2 small");
         if (projectMobileSubtitle) projectMobileSubtitle.textContent = "只读聚合 · cc-deck / windclaw-qclaw";
+        const projectSubtitle = document.querySelector("#d-project .workspace-sub");
+        if (projectSubtitle) projectSubtitle.textContent = projectSubtitle.textContent.replace("realpath 已归一", "路径已规范化");
+        document.querySelectorAll(".wait-title").forEach((title) => { title.textContent = "等待你的确认 · 写入验收文档"; });
+        document.querySelectorAll(".wait-copy").forEach((copy) => { copy.textContent = "将把验收证据写入 release-check.md，会话才能继续。"; });
+        document.querySelector("#d-notify .queue-head [data-notify-action-count]")?.remove();
+        const notifyGroup = document.querySelector("#d-notify .queue-group");
+        if (notifyGroup) notifyGroup.textContent = "需你行动";
+        const notifyInspectorCopy = document.querySelector("#d-notify .inspector [data-notify-action-count]")?.parentElement;
+        if (notifyInspectorCopy) notifyInspectorCopy.textContent = "当前行动项处理完最后一项才清零。";
+        document.querySelectorAll("#m-project .muted").forEach((copy) => { copy.textContent = copy.textContent.replace("→", "›"); });
       }
 
       function wireSegmentTabs(buttons, panes, activeIndex = 0) {
@@ -1349,6 +1443,16 @@
         const meter = pane?.querySelector(".context-meter");
         if (!meter) return;
         meter.outerHTML = '<div class="usage-summary"><div class="usage-summary-top"><span><b class="usage-summary-number">84k</b> <span class="usage-summary-limit">/ 200k tokens</span></span><strong class="usage-summary-pct">41%</strong></div><span class="usage-summary-copy">Claude · 上下文安全</span><span class="usage-summary-hint">在右侧检查器查看完整用量</span></div>';
+      }
+
+      function syncContextMeterBands() {
+        document.querySelectorAll(".context-meter-band").forEach((band) => {
+          const match = band.getAttribute("aria-label")?.match(/(\d+)%/);
+          if (!match) return;
+          const percent = Number(match[1]);
+          const activeCount = Math.round(percent / 100 * band.children.length);
+          [...band.children].forEach((segment, index) => segment.classList.toggle("on", index < activeCount));
+        });
       }
 
       const sessionArtifactGroups = [
@@ -1438,7 +1542,7 @@
         const board = body.innerHTML;
         body.innerHTML = `<div class="workspace-pane active">${board}</div><div class="workspace-pane"><div class="team-chat"><div class="bubble"><div class="bubble-author"><span class="avatar leader">✦<i class="avatar-engine-dot trae"></i></span><strong>Leader</strong><span class="role-label leader-label">Leader</span></div>编制方案已提交：3 开发 + 独立验收 + 1 调研。</div><div class="bubble"><div class="bubble-author"><span class="avatar worker">W<i class="avatar-engine-dot claude"></i></span><strong>worker-web</strong></div>T-13 更新通道隔离已完成，等待验收单。</div><div class="bubble"><div class="bubble-author"><span class="avatar leader">✦<i class="avatar-engine-dot trae"></i></span><strong>Leader</strong></div>请 worker-mobile 先停留，验收槽改由独立厂商接替。</div><div class="bubble me"><div class="bubble-author"><span class="avatar architect">我</span><strong>我</strong></div>收到，先确认编制再收单。</div><div class="composer">给团队发消息…　📎 附件</div></div></div><div class="workspace-pane"><div class="team-members-grid"><div class="team-member-large"><span class="avatar leader">✦<i class="avatar-engine-dot trae"></i></span><div><strong>Leader <span class="role-label leader-label">Leader</span></strong><p>glm-5.3 · 调度 · 在线</p><span class="engine-badge trae">Trae</span></div></div><div class="team-member-large"><span class="avatar worker">W<i class="avatar-engine-dot claude"></i></span><div><strong>worker-web</strong><p>开发 · 运行中</p><span class="engine-badge claude">Claude</span></div></div><div class="team-member-large"><span class="avatar worker">M<i class="avatar-engine-dot qwen"></i></span><div><strong>worker-mobile</strong><p>失联 · 待接替</p><span class="engine-badge qwen">Qwen Code</span></div></div><div class="team-member-large"><span class="avatar qa">QA<i class="avatar-engine-dot zcode"></i></span><div><strong>验收槽</strong><p>独立厂商 · 待验收</p><span class="engine-badge zcode">ZCode</span></div></div></div></div><div class="workspace-pane"><div class="team-activity"><div class="activity-row"><time>10:42</time><i></i><span>T-13 更新通道隔离进入待验收</span></div><div class="activity-row"><time>10:15</time><i></i><span>worker-relay 派单完成</span></div><div class="activity-row"><time>09:58</time><i></i><span>worker-mobile 失联告警</span></div><div class="activity-row"><time>昨天</time><i></i><span>Leader 提交编制方案</span></div></div></div>`;
         body.dataset.tabsReady = "1";
-        wireSegmentTabs([...section.querySelectorAll(".segment-bar button")], [...body.children], 1);
+        wireSegmentTabs([...section.querySelectorAll(".segment-bar button")], [body.children[1], body.children[0], body.children[2], body.children[3]], 1);
       }
 
       function setupProjectTabs() {
@@ -1459,6 +1563,7 @@
         queue.classList.add("settings-nav");
         const original = body.innerHTML;
         body.innerHTML = `<div class="settings-panel workspace-pane active" data-settings-panel="connections"><div class="settings-connection-tabs workspace-pane active">${original}</div><div class="settings-connection-tabs workspace-pane"><div class="settings-list"><div class="settings-row"><span class="avatar">●</span><div><strong>本机 relay</strong><p>8787 · 事件流自动补发 · 最近心跳刚刚</p></div><span class="tag done">在线</span></div><div class="settings-row"><span class="avatar">☁</span><div><strong>云桥</strong><p>wss://cc.humumu.online/cloud</p></div><span class="tag done">在线</span></div><div class="settings-row"><span class="avatar">▣</span><div><strong>浏览器 · 网页端</strong><p>配对码错误 · 需要重配对</p></div><span class="tag action">异常</span></div></div></div><div class="settings-connection-tabs workspace-pane"><div class="readonly-banner">最近配对：公司电脑 · 09-30；家里 iMac · 09-28。配对码只显示一次。</div><button class="primary-btn">＋ 配对新设备</button></div></div><div class="settings-panel workspace-pane" data-settings-panel="provider"><div class="settings-list"><div class="settings-row"><span class="engine-badge claude">Claude</span><div><strong>Claude Code</strong><p>已接 · 默认模型 claude-sonnet</p></div><span class="tag done">默认</span></div><div class="settings-row"><span class="engine-badge codex">Codex</span><div><strong>Codex</strong><p>已接 · gpt-5-codex</p></div><span class="tag done">已接</span></div><div class="settings-row"><span class="engine-badge trae">Trae</span><div><strong>Trae</strong><p>适配器待安装</p></div><span class="tag">待装</span></div><div class="settings-row"><span class="engine-badge qwen">Qwen Code</span><div><strong>Qwen Code</strong><p>适配器待安装</p></div><span class="tag">待装</span></div><div class="settings-row"><span class="engine-badge codebuddy">CodeBuddy</span><div><strong>CodeBuddy Code</strong><p>适配器待安装</p></div><span class="tag">待装</span></div><div class="settings-row"><span class="engine-badge zcode">ZCode</span><div><strong>ZCode</strong><p>适配器待安装 · 遥测默认关闭</p></div><span class="tag">待装</span></div></div><button class="primary-btn">＋ 添加 provider</button></div><div class="settings-panel workspace-pane" data-settings-panel="general"><div class="settings-list"><div class="settings-row"><span class="avatar">⌘K</span><div><strong>全局搜索</strong><p>⌘K</p></div></div><div class="settings-row"><span class="avatar">⌘N</span><div><strong>新建会话</strong><p>⌘N</p></div></div><div class="settings-row"><span class="avatar">🔔</span><div><strong>通知声音</strong><p>行动项到达时提示</p></div><button class="toggle-control active" data-setting-toggle>开</button></div><div class="settings-row"><span class="avatar">▣</span><div><strong>桌面通知</strong><p>后台 relay 有新行动时提示</p></div><button class="toggle-control active" data-setting-toggle>开</button></div></div></div><div class="settings-panel workspace-pane" data-settings-panel="identity"><div class="settings-list"><div class="member-card"><span class="avatar leader">✦</span><div><strong>Leader</strong><p>Trae · glm-5.3 · 头像自动生成</p><span class="role-label leader-label">覆盖头像</span></div></div><div class="member-card"><span class="avatar architect">A</span><div><strong>架构师</strong><p>Codex · gpt-5-codex · 字符 A</p><span class="role-label">覆盖头像</span></div></div><div class="member-card"><span class="avatar worker">W</span><div><strong>前端 worker</strong><p>Claude · claude-sonnet · 字符 W</p><span class="role-label">覆盖头像</span></div></div><div class="member-card"><span class="avatar qa">QA</span><div><strong>验收槽</strong><p>ZCode · 遥测关闭 · 字符 QA</p><span class="role-label">覆盖头像</span></div></div></div><div class="readonly-banner">开团时可逐成员覆盖；可选 emoji / 字符 / 颜色。</div></div><div class="settings-panel workspace-pane" data-settings-panel="extensions"><div class="settings-list"><div class="settings-row"><span class="avatar">✓</span><div><strong>验收</strong><p>验收单、回填证据与确认收单</p></div><span class="tag done">启用</span></div><div class="settings-row"><span class="avatar">↗</span><div><strong>登记</strong><p>成员、引擎与 relay 来源登记</p></div><span class="tag done">启用</span></div><div class="settings-row"><span class="avatar">▧</span><div><strong>产物</strong><p>输出物归档与来源链路</p></div><span class="tag done">启用</span></div></div></div><div class="settings-panel workspace-pane" data-settings-panel="about"><div class="readonly-banner">cc-deck v0.6.0-test · test 通道<br>Command Bridge 原型 · 零外部资源</div></div>`;
+        body.querySelectorAll(".settings-row p").forEach((copy) => { copy.textContent = copy.textContent.replace("wss://cc.humumu.online/cloud", "云桥连接详情"); });
         body.dataset.settingsReady = "1";
         const panels = [...body.querySelectorAll("[data-settings-panel]")];
         const cards = [...queue.querySelectorAll(".queue-card")];
@@ -1579,7 +1684,7 @@
         }
         const projectInspector = document.querySelector("#d-project .inspector");
         if (projectInspector && !projectInspector.querySelector("[data-context-waterline]")) {
-          projectInspector.insertAdjacentHTML("beforeend", `<div class="inspector-block" data-context-waterline><div class="inspector-title"><span>最活跃会话水位</span><span>58%</span></div><div class="mini-context-meter"><span>58%</span><span>只读聚合</span><i><b style="width:58%"></b></i></div><div class="inspector-copy">ui-review 走查 · 当前会话上下文</div></div>`);
+          projectInspector.insertAdjacentHTML("beforeend", `<div class="inspector-block" data-context-waterline><div class="inspector-title"><span>最活跃会话水位</span><span>58%</span></div><div class="mini-context-meter"><span>只读聚合</span><i><b style="width:58%"></b></i></div><div class="inspector-copy">ui-review 走查 · 当前会话上下文</div></div>`);
         }
       }
 
@@ -1716,7 +1821,7 @@
             if (file) { sheet.classList.remove("open"); showToast(`已加入下载队列 · ${file.dataset.sheetFile}`); return; }
           }
           if (event.target.closest("[data-source-session]")) { showToast("已回到来源会话 · 输出物写操作仍在原域"); return; }
-          if (event.target.closest("[data-source-settings]")) { setDesktopDomain("settings"); showToast("已打开设置 · 连接与设备"); return; }
+          if (event.target.closest("[data-source-settings]")) { event.preventDefault(); event.stopPropagation(); openConnectionSettings(); return; }
           if (!event.target.closest(".artifact-menu-wrap")) document.querySelectorAll(".artifact-menu.open").forEach((item) => item.classList.remove("open"));
         });
       }
@@ -1838,8 +1943,7 @@
       document.querySelectorAll("[data-source-settings]").forEach((link) => link.addEventListener("click", (event) => {
         event.preventDefault();
         document.querySelectorAll("[data-source-menu]").forEach((menu) => menu.classList.remove("open"));
-        setDesktopDomain("settings");
-        showToast("已打开设置 · 连接与设备");
+        openConnectionSettings();
       }));
       document.addEventListener("click", (event) => {
         if (!event.target.closest(".source-switcher")) document.querySelectorAll("[data-source-menu]").forEach((menu) => menu.classList.remove("open"));
@@ -1867,6 +1971,7 @@
       hydrateAvatars();
       hydrateSourceBadges();
       hydrateNotificationIcons();
+      syncContextMeterBands();
       syncNotificationBadges();
       themeToggles.forEach((toggle) => toggle.addEventListener("click", () => {
         applyTheme(document.documentElement.dataset.theme === "light" ? "dark" : "light", true);
