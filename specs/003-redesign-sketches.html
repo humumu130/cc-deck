@@ -1,0 +1,490 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>cc-deck · 从零重设计方向草图 A/B/C</title>
+  <style>
+    :root {
+      --bg: #eef0f3;
+      --paper: #ffffff;
+      --ink: #1e2329;
+      --muted: #6c737d;
+      --faint: #aab0b7;
+      --line: #cfd4da;
+      --line-strong: #9ca4ad;
+      --soft: #f4f5f7;
+      --soft-2: #e7e9ed;
+      --dark: #252a30;
+      --dark-2: #30363d;
+      --accent: #c86b47;
+      --accent-soft: #f2dfd6;
+      --ok: #5e8b72;
+      --warn: #b2874e;
+      --danger: #a75b5b;
+      --shadow: 0 16px 40px rgba(38, 43, 49, .12);
+      --radius: 12px;
+      --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    }
+    * { box-sizing: border-box; }
+    html { min-width: 320px; }
+    body {
+      margin: 0;
+      color: var(--ink);
+      background: linear-gradient(180deg, #f7f8f9 0, var(--bg) 460px);
+      font: 14px/1.45 -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+    }
+    button { font: inherit; }
+    .page { width: min(1540px, calc(100% - 40px)); margin: 0 auto; padding: 34px 0 72px; }
+    .hero { display: flex; align-items: flex-end; justify-content: space-between; gap: 24px; margin-bottom: 24px; }
+    h1 { margin: 0; font-size: 27px; letter-spacing: -.03em; }
+    .hero p { max-width: 760px; margin: 7px 0 0; color: var(--muted); }
+    .meta { color: var(--faint); font-family: var(--mono); font-size: 11px; white-space: nowrap; }
+    .switcher {
+      display: flex; flex-wrap: wrap; gap: 8px; padding: 8px;
+      background: rgba(255,255,255,.78); border: 1px solid var(--line); border-radius: 14px;
+      box-shadow: 0 8px 24px rgba(38,43,49,.06); margin-bottom: 24px;
+    }
+    .switch {
+      flex: 1 1 210px; min-width: 0; border: 1px solid transparent; border-radius: 9px;
+      padding: 10px 13px; text-align: left; color: var(--muted); background: transparent; cursor: pointer;
+    }
+    .switch:hover { background: var(--soft); color: var(--ink); }
+    .switch.active { color: var(--ink); background: var(--dark); border-color: var(--dark); box-shadow: 0 5px 12px rgba(37,42,48,.16); }
+    .switch .code { font: 700 11px var(--mono); letter-spacing: .12em; }
+    .switch .name { display: block; margin-top: 3px; font-weight: 700; }
+    .switch .desc { display: block; margin-top: 2px; font-size: 12px; opacity: .72; }
+    .direction { display: none; }
+    .direction.active { display: block; }
+    .direction-head { display: flex; align-items: baseline; justify-content: space-between; gap: 16px; margin: 0 0 14px; }
+    .direction-head h2 { margin: 0; font-size: 20px; }
+    .direction-head p { margin: 0; color: var(--muted); }
+    .sketch-grid { display: grid; grid-template-columns: minmax(0, 1fr) 390px; align-items: start; gap: 22px; }
+    .screen-card { position: relative; min-width: 0; padding: 13px; background: rgba(255,255,255,.66); border: 1px solid var(--line); border-radius: 16px; }
+    .screen-label { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin: 0 2px 10px; color: var(--muted); font-size: 12px; }
+    .screen-label strong { color: var(--ink); font-size: 13px; }
+    .screen-label code { color: var(--faint); font: 10px var(--mono); }
+    .callout { min-height: 43px; margin: 12px 2px 0; padding: 9px 10px; border-left: 3px solid var(--dark); background: var(--soft); color: var(--muted); font-size: 12px; }
+    .callout b { color: var(--ink); }
+
+    /* shared sketch primitives */
+    .browser { min-height: 635px; overflow: hidden; border: 1px solid var(--line-strong); border-radius: 10px; background: var(--paper); box-shadow: var(--shadow); }
+    .browser-top { display: flex; align-items: center; gap: 8px; height: 30px; padding: 0 11px; background: var(--soft-2); border-bottom: 1px solid var(--line); }
+    .window-dots { display: flex; gap: 5px; }
+    .window-dots i { width: 8px; height: 8px; border-radius: 50%; background: #9da3aa; }
+    .address { flex: 1; height: 16px; border: 1px solid var(--line); border-radius: 9px; background: rgba(255,255,255,.75); }
+    .tiny-icon { color: var(--muted); font-size: 12px; }
+    .phone { width: 390px; max-width: 100%; overflow: hidden; border: 8px solid #20252b; border-radius: 31px; background: var(--paper); box-shadow: var(--shadow); }
+    .phone-notch { width: 124px; height: 19px; margin: -1px auto 0; border-radius: 0 0 14px 14px; background: #20252b; }
+    .phone-status { display: flex; justify-content: space-between; padding: 7px 17px 2px; color: var(--muted); font: 10px var(--mono); }
+    .phone-body { min-height: 675px; }
+    .phone-head { display: flex; align-items: center; gap: 9px; padding: 14px 16px 12px; border-bottom: 1px solid var(--line); }
+    .phone-head .title { flex: 1; min-width: 0; font-weight: 700; }
+    .phone-head .sub { display: block; color: var(--muted); font-size: 11px; font-weight: 400; }
+    .phone-content { padding: 13px 13px 78px; }
+    .phone-nav { display: flex; border-top: 1px solid var(--line); background: #fafafa; }
+    .phone-nav span { flex: 1; padding: 9px 2px 10px; color: var(--muted); text-align: center; font-size: 10px; }
+    .phone-nav span b { display: block; margin-bottom: 2px; color: var(--ink); font-size: 16px; line-height: 1; }
+    .phone-nav span.on { color: var(--ink); font-weight: 700; box-shadow: inset 0 -3px 0 var(--accent); }
+    .pill { display: inline-flex; align-items: center; gap: 4px; padding: 3px 7px; border-radius: 999px; background: var(--soft-2); color: var(--muted); font-size: 10px; white-space: nowrap; }
+    .pill.action { background: var(--accent-soft); color: #88472f; }
+    .pill.ok { background: #e3eee7; color: #476b56; }
+    .pill.warn { background: #f1e8d9; color: #785d31; }
+    .dot { display: inline-block; width: 7px; height: 7px; border-radius: 50%; background: var(--faint); vertical-align: 1px; }
+    .dot.ok { background: var(--ok); }
+    .dot.warn { background: var(--warn); }
+    .dot.danger { background: var(--danger); }
+    .bar { height: 7px; overflow: hidden; border-radius: 5px; background: var(--soft-2); }
+    .bar i { display: block; height: 100%; background: var(--dark-2); }
+    .avatar { display: inline-grid; place-items: center; width: 27px; height: 27px; border-radius: 8px; background: var(--soft-2); color: var(--muted); font-size: 12px; }
+    .muted { color: var(--muted); }
+    .faint { color: var(--faint); }
+    .small { font-size: 11px; }
+    .truncate { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+    /* Direction A: Command Bridge */
+    .a-shell { display: grid; grid-template-columns: 58px 235px minmax(0, 1fr) 218px; height: 605px; background: #f8f9fa; }
+    .a-rail { display: flex; flex-direction: column; align-items: center; gap: 8px; padding: 14px 7px; background: var(--dark); color: #d9dde1; }
+    .a-rail .brand { width: 33px; height: 33px; margin-bottom: 11px; border-radius: 10px; background: #f4f5f6; color: var(--dark); display: grid; place-items: center; font-weight: 800; }
+    .a-rail span { position: relative; display: grid; place-items: center; width: 38px; height: 38px; border-radius: 9px; font-size: 17px; opacity: .72; }
+    .a-rail span.on { background: #f1f3f4; color: var(--dark); opacity: 1; }
+    .a-rail span.badge::after { content: "2"; position: absolute; top: -3px; right: -2px; min-width: 14px; height: 14px; padding: 0 3px; border-radius: 8px; background: var(--danger); color: #fff; font: 9px/14px var(--mono); text-align: center; }
+    .a-rail .spring { flex: 1; }
+    .a-queue { overflow: hidden; padding: 16px 11px; border-right: 1px solid var(--line); background: #f0f2f4; }
+    .queue-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; }
+    .queue-head strong { font-size: 12px; }
+    .queue-section { margin: 13px 3px 6px; color: var(--muted); font: 10px var(--mono); letter-spacing: .04em; }
+    .queue-card { padding: 10px; margin-bottom: 7px; border: 1px solid var(--line); border-radius: 9px; background: #fff; }
+    .queue-card.selected { border-color: var(--dark); box-shadow: inset 3px 0 0 var(--dark); }
+    .queue-card .top { display: flex; align-items: center; gap: 6px; font-size: 11.5px; font-weight: 700; }
+    .queue-card .meta { margin-top: 4px; font: 10px/1.35 var(--mono); white-space: normal; }
+    .a-main { display: flex; min-width: 0; flex-direction: column; background: #fff; }
+    .a-main-head { padding: 15px 18px 10px; border-bottom: 1px solid var(--line); }
+    .a-main-head .line { display: flex; align-items: center; gap: 7px; }
+    .a-main-head h3 { flex: 1; min-width: 0; margin: 0; font-size: 14px; }
+    .a-tabs { display: flex; gap: 15px; margin-top: 12px; color: var(--muted); font-size: 11px; }
+    .a-tabs b { padding-bottom: 6px; color: var(--ink); border-bottom: 2px solid var(--dark); }
+    .a-chat { flex: 1; overflow: hidden; padding: 16px 18px; background: #fbfbfc; }
+    .chat-note { margin-bottom: 12px; color: var(--faint); text-align: center; font-size: 10px; }
+    .bubble { max-width: 82%; padding: 9px 11px; margin-bottom: 9px; border: 1px solid var(--line); border-radius: 10px; background: #fff; font-size: 11px; }
+    .bubble.me { margin-left: auto; background: #f0f1f3; border-color: #c5cbd1; }
+    .wait-card { margin: 12px 0; padding: 11px; border: 1px solid #c8b38c; border-radius: 10px; background: #fbf7ee; }
+    .wait-card strong { display: block; color: #6d552b; font-size: 11px; }
+    .wait-card p { margin: 4px 0 8px; color: #796b51; font-size: 10px; }
+    .wait-actions { display: flex; gap: 6px; }
+    .wait-actions span { padding: 4px 9px; border-radius: 5px; background: var(--dark); color: #fff; font-size: 10px; }
+    .wait-actions span.alt { background: #fff; color: var(--muted); border: 1px solid var(--line); }
+    .a-compose { display: flex; gap: 7px; padding: 11px 15px; border-top: 1px solid var(--line); background: #fff; }
+    .a-compose .input { flex: 1; padding: 7px 9px; border: 1px solid var(--line); border-radius: 7px; color: var(--faint); font-size: 10px; }
+    .a-compose .send { padding: 7px 10px; border-radius: 7px; background: var(--dark); color: #fff; font-size: 10px; }
+    .a-inspector { overflow: hidden; padding: 15px 13px; border-left: 1px solid var(--line); background: #f0f2f4; }
+    .a-inspector h4 { margin: 0 0 12px; font-size: 12px; }
+    .inspect-block { padding: 10px 0; border-top: 1px solid var(--line); }
+    .inspect-title { display: flex; justify-content: space-between; gap: 8px; margin-bottom: 7px; font-size: 10px; font-weight: 700; }
+    .check { display: flex; gap: 6px; margin: 6px 0; color: var(--muted); font-size: 10px; }
+    .check b { color: var(--ok); }
+    .a-phone .phone-content { background: #fafbfc; }
+    .inbox-summary { display: flex; gap: 7px; margin-bottom: 13px; }
+    .inbox-summary div { flex: 1; padding: 8px; border: 1px solid var(--line); border-radius: 8px; background: #fff; }
+    .inbox-summary b { display: block; font-size: 16px; }
+    .inbox-summary span { color: var(--muted); font-size: 10px; }
+    .mobile-card { padding: 11px; margin-bottom: 8px; border: 1px solid var(--line); border-radius: 10px; background: #fff; }
+    .mobile-card.primary { border-color: var(--dark); box-shadow: inset 3px 0 0 var(--dark); }
+    .mobile-card .row { display: flex; align-items: center; gap: 7px; }
+    .mobile-card .row strong { flex: 1; font-size: 11.5px; }
+    .mobile-card p { margin: 5px 0 0 34px; color: var(--muted); font-size: 10px; }
+
+    /* Direction B: Workbench */
+    .b-shell { display: grid; grid-template-columns: 70px 222px minmax(0, 1fr); height: 605px; background: #fff; }
+    .b-space { padding: 13px 8px; background: #e7e9ec; border-right: 1px solid var(--line); }
+    .b-space .brand { display: grid; place-items: center; width: 37px; height: 37px; margin: 0 auto 18px; border-radius: 11px; background: var(--dark); color: #fff; font-weight: 800; }
+    .b-space-item { padding: 10px 3px; margin-bottom: 8px; color: var(--muted); text-align: center; font-size: 10px; border-radius: 8px; }
+    .b-space-item i { display: block; margin-bottom: 4px; font-style: normal; font-size: 18px; }
+    .b-space-item.on { background: #fff; color: var(--ink); box-shadow: 0 2px 5px rgba(50,55,60,.08); }
+    .b-index { overflow: hidden; padding: 16px 12px; background: #f4f5f6; border-right: 1px solid var(--line); }
+    .b-index h3 { margin: 0 0 12px; font-size: 13px; }
+    .index-search { padding: 7px 8px; margin-bottom: 13px; border: 1px solid var(--line); border-radius: 7px; background: #fff; color: var(--faint); font-size: 10px; }
+    .tree-title { margin: 12px 3px 5px; color: var(--muted); font: 10px var(--mono); text-transform: uppercase; }
+    .tree-row { display: flex; align-items: center; gap: 6px; padding: 7px 8px; border-radius: 6px; color: var(--muted); font-size: 11px; }
+    .tree-row.on { background: #fff; color: var(--ink); font-weight: 700; box-shadow: 0 1px 3px rgba(50,55,60,.07); }
+    .tree-row .count { margin-left: auto; color: var(--faint); font: 10px var(--mono); }
+    .b-canvas { display: flex; min-width: 0; flex-direction: column; }
+    .b-canvas-head { display: flex; align-items: center; gap: 10px; padding: 15px 18px 11px; border-bottom: 1px solid var(--line); }
+    .b-canvas-head h3 { flex: 1; margin: 0; font-size: 14px; }
+    .crumb { color: var(--muted); font-size: 10px; }
+    .b-canvas-tabs { display: flex; gap: 14px; padding: 0 18px; border-bottom: 1px solid var(--line); }
+    .b-canvas-tabs span { padding: 9px 0; color: var(--muted); font-size: 11px; }
+    .b-canvas-tabs span.on { color: var(--ink); border-bottom: 2px solid var(--dark); font-weight: 700; }
+    .b-split { display: grid; grid-template-columns: minmax(0, 1.1fr) minmax(190px, .9fr); flex: 1; min-height: 0; }
+    .b-transcript { overflow: hidden; padding: 17px 18px; border-right: 1px solid var(--line); background: #fff; }
+    .b-transcript .bubble { max-width: 92%; }
+    .pinned { overflow: hidden; padding: 16px 14px; background: #f4f5f6; }
+    .pinned h4 { margin: 0 0 10px; font-size: 11px; }
+    .pin-card { padding: 10px; margin-bottom: 8px; border: 1px solid var(--line); border-radius: 8px; background: #fff; }
+    .pin-card strong { display: block; margin-bottom: 4px; font-size: 10.5px; }
+    .pin-card p { margin: 0; color: var(--muted); font-size: 10px; }
+    .b-phone .phone-content { background: #fff; }
+    .space-switch { display: flex; gap: 6px; margin-bottom: 14px; overflow: hidden; }
+    .space-switch span { padding: 5px 8px; border: 1px solid var(--line); border-radius: 6px; color: var(--muted); font-size: 10px; white-space: nowrap; }
+    .space-switch span.on { background: var(--dark); color: #fff; border-color: var(--dark); }
+    .project-group { margin: 14px 0 6px; color: var(--muted); font: 10px var(--mono); }
+    .session-row { display: flex; align-items: center; gap: 8px; padding: 11px 0; border-bottom: 1px solid var(--line); }
+    .session-row .body { flex: 1; min-width: 0; }
+    .session-row strong { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 11.5px; }
+    .session-row small { color: var(--muted); font-size: 10px; }
+
+    /* Direction C: Signal Stream */
+    .c-shell { display: grid; grid-template-columns: 68px minmax(0, 1fr) 245px; height: 605px; background: #fafafa; }
+    .c-signalbar { padding: 13px 8px; background: #20252b; color: #d8dce0; }
+    .c-signalbar .brand { display: grid; place-items: center; width: 37px; height: 37px; margin: 0 auto 18px; border-radius: 50%; background: #fff; color: var(--dark); font-weight: 800; }
+    .signal-item { padding: 10px 2px; margin-bottom: 7px; border-radius: 8px; color: #aab1b8; text-align: center; font-size: 10px; }
+    .signal-item i { display: block; margin-bottom: 4px; font-style: normal; font-size: 17px; }
+    .signal-item.on { background: #fff; color: var(--dark); }
+    .signal-item.alert { position: relative; }
+    .signal-item.alert::after { content: "2"; position: absolute; top: 4px; right: 4px; min-width: 13px; height: 13px; border-radius: 7px; background: var(--danger); color: #fff; font: 8px/13px var(--mono); }
+    .c-timeline { overflow: hidden; padding: 18px 21px; background: #fff; }
+    .timeline-head { display: flex; align-items: center; gap: 8px; margin-bottom: 12px; }
+    .timeline-head h3 { flex: 1; margin: 0; font-size: 15px; }
+    .filter { padding: 5px 7px; border: 1px solid var(--line); border-radius: 5px; color: var(--muted); font-size: 10px; }
+    .timeline-day { margin: 13px 0 6px; color: var(--muted); font: 10px var(--mono); }
+    .event { position: relative; display: grid; grid-template-columns: 41px 10px minmax(0, 1fr); gap: 8px; padding: 0 0 13px; }
+    .event::after { content: ""; position: absolute; top: 18px; bottom: 0; left: 45px; border-left: 1px dashed var(--line-strong); }
+    .event:last-child::after { display: none; }
+    .event time { padding-top: 5px; color: var(--faint); font: 10px var(--mono); }
+    .event .node { z-index: 1; width: 10px; height: 10px; margin-top: 6px; border: 2px solid #fff; border-radius: 50%; background: var(--dark); box-shadow: 0 0 0 1px var(--line-strong); }
+    .event .node.warn { background: var(--warn); }
+    .event .node.danger { background: var(--danger); }
+    .event-card { padding: 9px 10px; border: 1px solid var(--line); border-radius: 8px; background: #fafbfc; }
+    .event-card.selected { border-color: var(--dark); background: #f1f2f3; box-shadow: inset 3px 0 0 var(--dark); }
+    .event-card strong { display: block; font-size: 11px; }
+    .event-card p { margin: 3px 0 0; color: var(--muted); font-size: 10px; }
+    .event-card .event-tags { display: flex; gap: 5px; margin-top: 6px; }
+    .c-context { overflow: hidden; padding: 17px 14px; border-left: 1px solid var(--line); background: #eef0f2; }
+    .c-context h4 { margin: 0 0 13px; font-size: 12px; }
+    .context-entity { padding: 10px; margin-bottom: 10px; border: 1px solid var(--line); border-radius: 8px; background: #fff; }
+    .context-entity strong { display: block; font-size: 11px; }
+    .context-entity p { margin: 4px 0 0; color: var(--muted); font-size: 10px; }
+    .context-action { display: block; padding: 7px; margin-top: 8px; border-radius: 6px; background: var(--dark); color: #fff; text-align: center; font-size: 10px; }
+    .c-phone .phone-content { background: #fafbfc; }
+    .signal-summary { display: flex; gap: 6px; margin-bottom: 13px; }
+    .signal-summary span { flex: 1; padding: 8px 5px; border: 1px solid var(--line); border-radius: 7px; background: #fff; text-align: center; color: var(--muted); font-size: 10px; }
+    .signal-summary b { display: block; margin-bottom: 2px; color: var(--ink); font: 700 15px var(--mono); }
+    .mobile-event { position: relative; padding: 0 0 12px 20px; }
+    .mobile-event::before { content: ""; position: absolute; top: 5px; bottom: 0; left: 4px; border-left: 1px dashed var(--line-strong); }
+    .mobile-event::after { content: ""; position: absolute; top: 5px; left: 0; width: 9px; height: 9px; border: 2px solid #fff; border-radius: 50%; background: var(--dark); box-shadow: 0 0 0 1px var(--line-strong); }
+    .mobile-event.warn::after { background: var(--warn); }
+    .mobile-event.danger::after { background: var(--danger); }
+    .mobile-event time { display: block; margin-bottom: 3px; color: var(--faint); font: 10px var(--mono); }
+    .mobile-event .event-card { background: #fff; }
+
+    @media (max-width: 1120px) {
+      .sketch-grid { grid-template-columns: 1fr; }
+      .phone-card { width: 430px; max-width: 100%; }
+    }
+    @media (max-width: 720px) {
+      .page { width: min(100% - 22px, 620px); padding-top: 22px; }
+      .hero { display: block; }
+      .meta { display: block; margin-top: 12px; }
+      .browser { overflow-x: auto; }
+      .browser > * { min-width: 930px; }
+      .screen-card { padding: 9px; }
+      .phone-card { width: 100%; }
+      .direction-head { display: block; }
+      .direction-head p { margin-top: 5px; }
+    }
+  </style>
+</head>
+<body>
+  <main class="page">
+    <header class="hero">
+      <div>
+        <h1>cc-deck · 从零重设计方向草图</h1>
+        <p>同一组真实功能，不同的产品心智。先看结构和密度，再选择下一轮完整规范与可点击原型的主方向。</p>
+      </div>
+      <div class="meta">2026-10-03 · ZERO-DEPENDENCY SKETCHES</div>
+    </header>
+
+    <nav class="switcher" aria-label="重设计方向切换">
+      <button class="switch active" data-direction="a" aria-pressed="true">
+        <span class="code">A / COMMAND BRIDGE</span>
+        <span class="name">指挥桥</span>
+        <span class="desc">先处理待办，再核对证据</span>
+      </button>
+      <button class="switch" data-direction="b" aria-pressed="false">
+        <span class="code">B / WORKBENCH</span>
+        <span class="name">工作空间</span>
+        <span class="desc">稳定空间，持续深入工作</span>
+      </button>
+      <button class="switch" data-direction="c" aria-pressed="false">
+        <span class="code">C / SIGNAL STREAM</span>
+        <span class="name">信号流</span>
+        <span class="desc">先看刚刚发生了什么</span>
+      </button>
+    </nav>
+
+    <section class="direction active" id="direction-a" aria-labelledby="direction-a-title">
+      <div class="direction-head">
+        <h2 id="direction-a-title">A · 指挥桥 Command Bridge</h2>
+        <p>行动队列 + 主工作区 + 证据检查器</p>
+      </div>
+      <div class="sketch-grid">
+        <article class="screen-card">
+          <div class="screen-label"><strong>桌面宽屏 · 行动驾驶舱</strong><code>WEB / 1440×900</code></div>
+          <div class="browser">
+            <div class="browser-top"><span class="window-dots"><i></i><i></i><i></i></span><span class="address"></span><span class="tiny-icon">⌁</span></div>
+            <div class="a-shell">
+              <aside class="a-rail">
+                <div class="brand">cc</div>
+                <span class="on">⌂</span><span>👥</span><span>▣</span><span class="spring"></span><span class="badge">♢</span><span>⚙</span>
+              </aside>
+              <aside class="a-queue">
+                <div class="queue-head"><strong>待我处理 <span class="pill action">3</span></strong><span class="tiny-icon">⌕</span></div>
+                <div class="queue-section">需行动 · 3</div>
+                <div class="queue-card selected"><div class="top"><span class="dot warn"></span><span class="truncate">0.6.0-test.19 出包</span></div><div class="meta">验收单 · 已回填 2/3 · 等收单</div></div>
+                <div class="queue-card"><div class="top"><span class="dot danger"></span><span class="truncate">worker-mobile 失联</span></div><div class="meta">需接替 · claude 额度尽</div></div>
+                <div class="queue-card"><div class="top"><span class="dot warn"></span><span class="truncate">团队编制确认</span></div><div class="meta">cc-deck M1 攻坚团 · 待你确认</div></div>
+                <div class="queue-section">运行中 · 4</div>
+                <div class="queue-card"><div class="top"><span class="dot ok"></span><span class="truncate">ui-review 走查</span></div><div class="meta">刚刚活跃 · 上下文 58%</div></div>
+                <div class="queue-card"><div class="top"><span class="dot ok"></span><span class="truncate">relay 任务板</span></div><div class="meta">T-12/T-15 并行 · 4/9</div></div>
+              </aside>
+              <section class="a-main">
+                <header class="a-main-head">
+                  <div class="line"><span class="dot ok"></span><h3 class="truncate">0.6.0-test.19 出包</h3><span class="pill action">待收单</span></div>
+                  <div class="small muted">~/dev/cc-deck · claude · 上下文 41%</div>
+                  <div class="a-tabs"><b>对话</b><span>任务 6/9</span><span>输出物 4</span><span>统计</span><span>⋯</span></div>
+                </header>
+                <div class="a-chat">
+                  <div class="chat-note">今天 10:42 · 验收上下文</div>
+                  <div class="bubble"><strong>Leader</strong><br>独立出包已完成，四处版本号已同步。验收单还差 1 项确认收单。</div>
+                  <div class="bubble me">我先看更新通道隔离，再确认收单。</div>
+                  <div class="wait-card"><strong>等待你的确认 · Bash 写入 docs/</strong><p>将把验收证据写入 `docs/release-check.md`，会话才能继续。</p><div class="wait-actions"><span>允许一次</span><span class="alt">拒绝并说明</span></div></div>
+                  <div class="bubble"><strong>Claude</strong><br>当前任务：回填验收证据 · 预计还需 2 分钟。</div>
+                </div>
+                <div class="a-compose"><div class="input">给会话发消息… · 📎 附件 · 图片</div><div class="send">发送</div></div>
+              </section>
+              <aside class="a-inspector">
+                <h4>证据检查器</h4>
+                <div class="inspect-block"><div class="inspect-title"><span>验收进度</span><span>2/3</span></div><div class="bar"><i style="width:66%"></i></div><div class="small muted" style="margin-top:6px">还有 1 项待确认收单</div></div>
+                <div class="inspect-block"><div class="inspect-title"><span>任务清单</span><span class="faint">6/9</span></div><div class="check"><b>✓</b><span>版本号同步</span></div><div class="check"><b>✓</b><span>独立出包</span></div><div class="check"><span>○</span><span>公司网检查更新</span></div></div>
+                <div class="inspect-block"><div class="inspect-title"><span>用量</span><span>41%</span></div><div class="bar"><i style="width:41%"></i></div><div class="small muted" style="margin-top:6px">claude · 84k / 200k</div></div>
+                <div class="inspect-block"><div class="inspect-title"><span>输出物</span><span class="faint">4</span></div><div class="small muted">docs/release-check.md</div><div class="small muted">0.6.0-test.19.apk</div></div>
+              </aside>
+            </div>
+          </div>
+          <div class="callout"><b>这一屏在解决什么：</b>把“我现在要处理什么、证据在哪里、下一步怎么做”放在同一工作面，减少跨页寻找。</div>
+        </article>
+
+        <article class="screen-card phone-card a-phone">
+          <div class="screen-label"><strong>手机首页 · 待处理收件箱</strong><code>EXPO / 390px</code></div>
+          <div class="phone">
+            <div class="phone-notch"></div><div class="phone-status"><span>9:41</span><span>▰ ︎◒ 100%</span></div>
+            <div class="phone-body">
+              <header class="phone-head"><div class="title">待我处理 <span class="sub">3 个行动项 · cc-deck 在线</span></div><span class="pill action">♢ 2</span><span class="tiny-icon">⌕</span></header>
+              <div class="phone-content">
+                <div class="inbox-summary"><div><b>3</b><span>需行动</span></div><div><b>4</b><span>运行中</span></div><div><b>2</b><span>待验收</span></div></div>
+                <div class="small muted" style="margin:0 0 7px">优先处理</div>
+                <div class="mobile-card primary"><div class="row"><span class="avatar">✓</span><strong>0.6.0-test.19 出包</strong><span class="pill action">待收单</span></div><p>验收单已回填 2/3 · 点击确认最后一项</p></div>
+                <div class="mobile-card"><div class="row"><span class="avatar">!</span><strong>worker-mobile 失联</strong><span class="pill warn">接替</span></div><p>claude 额度尽 · 验收槽不回落同厂商</p></div>
+                <div class="mobile-card"><div class="row"><span class="avatar">👥</span><strong>cc-deck M1 攻坚团</strong><span class="pill action">待确认</span></div><p>Leader 已提交编制方案 · 3 开发 + 独立验收</p></div>
+                <div class="small muted" style="margin:15px 0 7px">最近运行</div>
+                <div class="mobile-card"><div class="row"><span class="avatar">●</span><strong>ui-review 走查</strong><span class="dot ok"></span></div><p>刚刚活跃 · 当前任务：检查 rail 方案</p></div>
+              </div>
+              <nav class="phone-nav"><span class="on"><b>⌂</b>会话</span><span><b>👥</b>团队</span><span><b>▣</b>项目</span><span><b>⚙</b>设置</span></nav>
+            </div>
+          </div>
+          <div class="callout"><b>这一屏在解决什么：</b>手机不是桌面缩小版，而是把用户下一步动作提前到首屏。</div>
+        </article>
+      </div>
+    </section>
+
+    <section class="direction" id="direction-b" aria-labelledby="direction-b-title">
+      <div class="direction-head">
+        <h2 id="direction-b-title">B · 工作空间 Workbench</h2>
+        <p>空间栏 + 索引树 + 可拆分画布</p>
+      </div>
+      <div class="sketch-grid">
+        <article class="screen-card">
+          <div class="screen-label"><strong>桌面宽屏 · 会话工作台</strong><code>WEB / 1440×900</code></div>
+          <div class="browser">
+            <div class="browser-top"><span class="window-dots"><i></i><i></i><i></i></span><span class="address"></span><span class="tiny-icon">⌁</span></div>
+            <div class="b-shell">
+              <aside class="b-space"><div class="brand">cc</div><div class="b-space-item on"><i>⌂</i>会话</div><div class="b-space-item"><i>👥</i>团队</div><div class="b-space-item"><i>▣</i>项目</div><div class="b-space-item"><i>⚙</i>设置</div></aside>
+              <aside class="b-index">
+                <h3>会话空间</h3><div class="index-search">⌕ 搜索会话 / 项目</div>
+                <div class="tree-title">项目</div><div class="tree-row on">▾ cc-deck <span class="count">6</span></div><div class="tree-row">　0.6.0-test.19 出包 <span class="count">●</span></div><div class="tree-row">　ui-review 走查 <span class="count">●</span></div><div class="tree-row">　relay 任务板 <span class="count">●</span></div>
+                <div class="tree-row">▸ windclaw-qclaw <span class="count">1</span></div>
+                <div class="tree-title">已固定</div><div class="tree-row">📌 M1 验收回填</div><div class="tree-row">📌 worker-mobile</div>
+              </aside>
+              <section class="b-canvas">
+                <header class="b-canvas-head"><div><div class="crumb">会话空间 / cc-deck / 0.6.0-test.19</div><h3>0.6.0-test.19 出包</h3></div><span class="pill action">待收单</span><span class="tiny-icon">⋯</span></header>
+                <div class="b-canvas-tabs"><span class="on">对话</span><span>任务</span><span>输出物</span><span>用量</span></div>
+                <div class="b-split">
+                  <div class="b-transcript"><div class="chat-note">可拆分画布 · 左侧内容，右侧钉住上下文</div><div class="bubble"><strong>Leader</strong><br>独立出包已完成，验收单还差 1 项确认。</div><div class="bubble me">我先验证公司网更新，再回填证据。</div><div class="wait-card"><strong>等待你的确认 · 写入验收证据</strong><p>允许后继续执行 Bash。</p><div class="wait-actions"><span>允许一次</span><span class="alt">查看权限</span></div></div><div class="a-compose"><div class="input">给会话发消息…</div><div class="send">发送</div></div></div>
+                  <aside class="pinned"><h4>已钉住 · 当前工作上下文</h4><div class="pin-card"><strong>任务进度 6/9</strong><div class="bar"><i style="width:66%"></i></div><p style="margin-top:6px">版本号同步 ✓ · 公司网检查更新 ○</p></div><div class="pin-card"><strong>输出物 4</strong><p>docs/release-check.md<br>0.6.0-test.19.apk</p></div><div class="pin-card"><strong>用量</strong><p>claude · 84k / 200k · 41%</p></div></aside>
+                </div>
+              </section>
+            </div>
+          </div>
+          <div class="callout"><b>这一屏在解决什么：</b>让用户感觉自己进入了一个可持续工作的空间，索引、详情和钉住上下文都能稳定恢复。</div>
+        </article>
+
+        <article class="screen-card phone-card b-phone">
+          <div class="screen-label"><strong>手机首页 · 会话空间列表</strong><code>EXPO / 390px</code></div>
+          <div class="phone">
+            <div class="phone-notch"></div><div class="phone-status"><span>9:41</span><span>▰ ︎◒ 100%</span></div>
+            <div class="phone-body">
+              <header class="phone-head"><div class="title">会话空间 <span class="sub">6 个会话 · cc-deck</span></div><span class="tiny-icon">⌕</span><span class="pill action">♢ 2</span></header>
+              <div class="phone-content">
+                <div class="space-switch"><span class="on">全部</span><span>运行中</span><span>已固定</span></div>
+                <div class="project-group">📁 cc-deck · 6 个会话</div>
+                <div class="session-row"><span class="avatar">●</span><div class="body"><strong>0.6.0-test.19 出包</strong><small>待收单 · 1 小时前</small></div><span class="pill action">待办</span></div>
+                <div class="session-row"><span class="avatar">●</span><div class="body"><strong>ui-review 走查</strong><small>刚刚活跃 · 上下文 58%</small></div><span class="dot ok"></span></div>
+                <div class="session-row"><span class="avatar">●</span><div class="body"><strong>relay 任务板</strong><small>T-12/T-15 并行 · 4/9</small></div><span class="dot ok"></span></div>
+                <div class="session-row"><span class="avatar">●</span><div class="body"><strong>手机验收回填</strong><small>昨天 · 已完成</small></div><span class="dot"></span></div>
+                <div class="project-group">📁 windclaw-qclaw · 1 个会话</div>
+                <div class="session-row"><span class="avatar">●</span><div class="body"><strong>android 构建</strong><small>等待产物 · 3 小时前</small></div><span class="dot warn"></span></div>
+              </div>
+              <nav class="phone-nav"><span class="on"><b>⌂</b>会话</span><span><b>👥</b>团队</span><span><b>▣</b>项目</span><span><b>⚙</b>设置</span></nav>
+            </div>
+          </div>
+          <div class="callout"><b>这一屏在解决什么：</b>让会话像一个长期可整理的工作空间，而不是只按紧急程度排序的通知列表。</div>
+        </article>
+      </div>
+    </section>
+
+    <section class="direction" id="direction-c" aria-labelledby="direction-c-title">
+      <div class="direction-head">
+        <h2 id="direction-c-title">C · 信号流 Signal Stream</h2>
+        <p>信号栏 + 事件时间线 + 上下文面板</p>
+      </div>
+      <div class="sketch-grid">
+        <article class="screen-card">
+          <div class="screen-label"><strong>桌面宽屏 · 今日信号</strong><code>WEB / 1440×900</code></div>
+          <div class="browser">
+            <div class="browser-top"><span class="window-dots"><i></i><i></i><i></i></span><span class="address"></span><span class="tiny-icon">⌁</span></div>
+            <div class="c-shell">
+              <aside class="c-signalbar"><div class="brand">cc</div><div class="signal-item on"><i>◉</i>今日</div><div class="signal-item"><i>⌂</i>会话</div><div class="signal-item"><i>👥</i>团队</div><div class="signal-item"><i>▣</i>项目</div><div class="signal-item alert"><i>♢</i>通知</div><div style="height:150px"></div><div class="signal-item"><i>⚙</i>设置</div></aside>
+              <section class="c-timeline">
+                <div class="timeline-head"><h3>今日信号</h3><span class="pill action">需行动 3</span><span class="filter">全部 ▾</span></div>
+                <div class="small muted">跨会话、团队、项目的实时变化；点击事件查看来源上下文。</div>
+                <div class="timeline-day">今天 · 10:42</div>
+                <div class="event"><time>10:42</time><span class="node warn"></span><div class="event-card selected"><strong>0.6.0-test.19 出包 · 等待确认收单</strong><p>会话 · 验收单已回填 2/3 · 还有 1 项</p><div class="event-tags"><span class="pill action">去验收</span><span class="pill">会话</span></div></div></div>
+                <div class="event"><time>10:31</time><span class="node danger"></span><div class="event-card"><strong>worker-mobile 失联 · 需要接替</strong><p>团队 · claude 额度尽 · 验收槽不回落同厂商</p><div class="event-tags"><span class="pill action">换厂商接替</span><span class="pill">团队</span></div></div></div>
+                <div class="event"><time>10:05</time><span class="node"></span><div class="event-card"><strong>T-15 已提交，进入待验收</strong><p>cc-deck M1 攻坚团 · worker-web · 分支 feat/rail</p><div class="event-tags"><span class="pill">查看看板</span><span class="pill">团队</span></div></div></div>
+                <div class="timeline-day">今天 · 09:00</div>
+                <div class="event"><time>09:18</time><span class="node"></span><div class="event-card"><strong>docs/release-check.md 已生成</strong><p>项目 cc-deck · 输出物已登记 · 来源会话 ui-review</p><div class="event-tags"><span class="pill">查看输出物</span><span class="pill">项目</span></div></div></div>
+                <div class="event"><time>09:02</time><span class="node"></span><div class="event-card"><strong>relay 重连成功</strong><p>本机 relay · 断线补发 6 条事件</p><div class="event-tags"><span class="pill ok">已恢复</span><span class="pill">连接</span></div></div></div>
+              </section>
+              <aside class="c-context"><h4>事件上下文</h4><div class="context-entity"><strong>0.6.0-test.19 出包</strong><p>会话 · claude · ~/dev/cc-deck</p><div class="bar" style="margin-top:8px"><i style="width:66%"></i></div><p>验收 2/3 · 用量 41%</p></div><div class="context-entity"><strong>当前任务</strong><p>公司网下检查更新</p><p>输出物：docs/release-check.md</p><span class="context-action">打开会话详情</span></div><div class="context-entity"><strong>关联团队</strong><p>cc-deck M1 攻坚团 · 6 成员</p><span class="context-action">查看团队</span></div></aside>
+            </div>
+          </div>
+          <div class="callout"><b>这一屏在解决什么：</b>把“刚刚发生了什么”变成主心智，用户先处理信号，再按来源深入实体。</div>
+        </article>
+
+        <article class="screen-card phone-card c-phone">
+          <div class="screen-label"><strong>手机首页 · 行动流</strong><code>EXPO / 390px</code></div>
+          <div class="phone">
+            <div class="phone-notch"></div><div class="phone-status"><span>9:41</span><span>▰ ︎◒ 100%</span></div>
+            <div class="phone-body">
+              <header class="phone-head"><div class="title">今日信号 <span class="sub">刚刚 · 5 条变化</span></div><span class="pill action">需行动 3</span><span class="tiny-icon">♢</span></header>
+              <div class="phone-content">
+                <div class="signal-summary"><span><b>3</b>需行动</span><span><b>2</b>运行中</span><span><b>5</b>今日变化</span></div>
+                <div class="space-switch"><span class="on">全部</span><span>会话</span><span>团队</span><span>项目</span></div>
+                <div class="mobile-event warn"><time>10:42 · 会话</time><div class="event-card"><strong>0.6.0-test.19 出包</strong><p>验收单已回填 2/3 · 确认最后一项收单</p><div class="event-tags"><span class="pill action">去验收</span></div></div></div>
+                <div class="mobile-event danger"><time>10:31 · 团队</time><div class="event-card"><strong>worker-mobile 失联</strong><p>claude 额度尽 · 需要换厂商接替</p><div class="event-tags"><span class="pill action">立即处理</span></div></div></div>
+                <div class="mobile-event"><time>10:05 · 团队</time><div class="event-card"><strong>T-15 已提交</strong><p>进入待验收 · feat/rail · worker-web</p></div></div>
+                <div class="mobile-event"><time>09:18 · 项目</time><div class="event-card"><strong>docs/release-check.md 已生成</strong><p>项目 cc-deck · 输出物已登记</p></div></div>
+                <div class="mobile-event"><time>09:02 · 连接</time><div class="event-card"><strong>relay 重连成功</strong><p>断线补发 6 条事件 · 已恢复</p></div></div>
+              </div>
+              <nav class="phone-nav"><span class="on"><b>◉</b>会话</span><span><b>👥</b>团队</span><span><b>▣</b>项目</span><span><b>⚙</b>设置</span></nav>
+            </div>
+          </div>
+          <div class="callout"><b>这一屏在解决什么：</b>让手机成为实时值守入口，每张信号卡只给一个清晰的下一动作。</div>
+        </article>
+      </div>
+    </section>
+  </main>
+
+  <script>
+    (() => {
+      const buttons = [...document.querySelectorAll(".switch")];
+      const panels = [...document.querySelectorAll(".direction")];
+      buttons.forEach((button) => {
+        button.addEventListener("click", () => {
+          const direction = button.dataset.direction;
+          buttons.forEach((item) => {
+            const active = item === button;
+            item.classList.toggle("active", active);
+            item.setAttribute("aria-pressed", String(active));
+          });
+          panels.forEach((panel) => panel.classList.toggle("active", panel.id === `direction-${direction}`));
+          history.replaceState(null, "", `#${direction}`);
+        });
+      });
+      const initial = location.hash.slice(1);
+      const initialButton = buttons.find((button) => button.dataset.direction === initial);
+      if (initialButton) initialButton.click();
+    })();
+  </script>
+</body>
+</html>
