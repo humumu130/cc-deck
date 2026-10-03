@@ -17,6 +17,7 @@
       --text: #C4D0DE;
       --dim: #8394A9;
       --faint: #53677E;
+      --progress-fill: #7793AE;
       --brand: #E2855E;
       --brand-hover: #F0A06A;
       --brand-soft: #3A251F;
@@ -62,6 +63,9 @@
       --info-bg: rgba(126,175,232,.13);
       --me-bg: rgba(226,133,94,.13);
       --me-line: rgba(226,133,94,.36);
+      --action-ink: #211B0E;
+      --done-ink: #082116;
+      --badge-ink: #FFFFFF;
       --wait-bg: rgba(233,184,76,.08);
       --wait-line: rgba(233,184,76,.5);
       --allowed-bg: rgba(75,203,145,.08);
@@ -123,8 +127,9 @@
       --line-soft: #DCE5EC;
       --text-strong: #15283D;
       --text: #30465B;
-      --dim: #60758A;
-      --faint: #8497A9;
+      --dim: #52687D;
+      --faint: #6E8296;
+      --progress-fill: #607D99;
       --brand: #C86440;
       --brand-hover: #D9754D;
       --brand-soft: #FBE7DE;
@@ -168,8 +173,11 @@
       --action-bg: rgba(200,100,64,.14);
       --done-bg: rgba(22,141,96,.11);
       --info-bg: rgba(57,120,184,.11);
-      --me-bg: rgba(200,100,64,.1);
-      --me-line: rgba(200,100,64,.32);
+      --me-bg: #FFFFFF;
+      --me-line: #C6D3DF;
+      --action-ink: #3C2600;
+      --done-ink: #073C27;
+      --badge-ink: #FFFFFF;
       --wait-bg: rgba(165,109,0,.1);
       --wait-line: rgba(165,109,0,.42);
       --allowed-bg: rgba(22,141,96,.09);
@@ -189,8 +197,8 @@
       --source-line: rgba(110,129,148,.3);
       --source-company: #20735B;
       --source-company-bg: rgba(22,141,96,.14);
-      --source-home: #68479C;
-      --source-home-bg: rgba(118,82,196,.14);
+      --source-home: #2D718B;
+      --source-home-bg: rgba(45,113,139,.14);
       --avatar-worker-bg: #DCEAF7;
       --avatar-worker-text: #315D88;
       --avatar-architect-bg: #EEE8FF;
@@ -302,7 +310,7 @@
     .rail-btn:hover { color: var(--text); background: var(--hover); }
     .rail-btn.active { color: var(--brand-hover); background: var(--brand-soft); border-color: var(--selected-line); }
     .rail-btn.active::before { content: ""; position: absolute; left: -9px; top: 11px; bottom: 11px; width: 3px; border-radius: 3px; background: var(--brand); }
-    .rail-btn .badge { position: absolute; top: 1px; right: 0; min-width: 15px; height: 15px; padding: 0 3px; border-radius: 9px; background: var(--error); color: #fff; font: 9px/15px var(--mono); text-align: center; }
+    .rail-btn .badge { position: absolute; top: 1px; right: 0; min-width: 15px; height: 15px; padding: 0 3px; border-radius: 9px; background: var(--error); color: var(--badge-ink); font: 9px/15px var(--mono); text-align: center; }
     .rail-spring { flex: 1; }
     .rail-connection { position: relative; display: grid; place-items: center; width: 44px; height: 39px; margin-bottom: 11px; border: 1px solid transparent; border-radius: 10px; background: transparent; color: var(--done); cursor: pointer; transition: color .18s ease, background .18s ease, border-color .18s ease; }
     .rail-connection:hover { background: var(--hover); border-color: var(--line); }
@@ -324,11 +332,12 @@
     .queue { overflow: hidden; min-width: 0; padding: 16px 12px; background: linear-gradient(180deg, var(--surface1), var(--queue-deep)); border-right: 1px solid var(--line-soft); box-shadow: 5px 0 18px var(--panel-shadow); }
     .queue-head { display: flex; align-items: center; gap: 8px; margin-bottom: 13px; }
     .queue-head h2 { flex: 1; margin: 0; color: var(--text-strong); font-size: 13px; }
-    .icon-btn { display: grid; place-items: center; width: 30px; height: 30px; border: 1px solid var(--line); border-radius: 7px; background: transparent; color: var(--dim); cursor: pointer; }
+    .icon-btn { position: relative; display: grid; place-items: center; width: 30px; height: 30px; border: 1px solid var(--line); border-radius: 7px; background: transparent; color: var(--dim); cursor: pointer; }
+    .icon-btn::before { content: ""; position: absolute; inset: -7px; }
     .icon-btn:hover { color: var(--text); background: var(--hover); }
     .queue-switch { display: flex; gap: 4px; padding: 3px; margin-bottom: 14px; border: 1px solid var(--line); border-radius: 8px; background: var(--bg1); }
     .queue-switch button { flex: 1; padding: 6px 3px; border: 0; border-radius: 5px; background: transparent; color: var(--dim); cursor: pointer; font-size: 10px; }
-    .queue-switch button.active { background: var(--hover); color: var(--text-strong); }
+    .queue-switch button.active { border: 1px solid var(--border-strong); background: var(--hover); color: var(--text-strong); }
     .queue-view { display: none; overflow: hidden auto; height: calc(100% - 78px); padding-right: 2px; }
     .queue-view.active { display: block; }
     .queue-group { margin: 12px 3px 6px; color: var(--faint); font: 10px var(--mono); letter-spacing: .04em; }
@@ -345,6 +354,7 @@
     .status-dot.error { background: var(--error); box-shadow: 0 0 7px var(--status-error-glow); }
     .tag { display: inline-flex; align-items: center; gap: 4px; padding: 3px 7px; border: 1px solid var(--tag-border); border-radius: 999px; background: var(--tag-bg); color: var(--dim); font-size: 9px; white-space: nowrap; }
     .tag.action { background: var(--action-bg); color: var(--brand-hover); }
+    .tag.danger { border-color: var(--danger-line); background: var(--danger-bg); color: var(--error); }
     .tag.done { background: var(--done-bg); color: var(--done); }
     .tag.info { background: var(--info-bg); color: var(--info); }
     .workspace { display: flex; min-width: 0; flex-direction: column; background: linear-gradient(180deg, var(--workspace-top), var(--bg1)); }
@@ -356,6 +366,7 @@
     .segment-bar button { position: relative; flex: 0 0 auto; padding: 0 0 8px; border: 0; background: transparent; color: var(--dim); cursor: pointer; font-size: 11px; }
     .segment-bar button:hover { color: var(--text); }
     .segment-bar button.active { color: var(--text-strong); font-weight: 700; }
+    .segment-bar .faint, .metric b, .mobile-summary b { font-variant-numeric: tabular-nums; }
     .segment-bar button.active::after { content: ""; position: absolute; right: 0; bottom: -1px; left: 0; height: 2px; border-radius: 2px; background: var(--brand); }
     .workspace-body { flex: 1; min-height: 0; overflow: auto; padding: 20px 22px; }
     .workspace-body.nopad { padding: 0; }
@@ -379,8 +390,9 @@
     .inspector-title { display: flex; justify-content: space-between; gap: 7px; margin-bottom: 7px; color: var(--text); font-size: 10px; font-weight: 700; }
     .inspector-copy { color: var(--dim); font-size: 10px; }
     .progress { height: 6px; overflow: hidden; margin: 7px 0; border-radius: 5px; background: var(--line); }
-    .progress i { display: block; height: 100%; border-radius: inherit; background: var(--brand); }
+    .progress i { display: block; height: 100%; border-radius: inherit; background: var(--progress-fill); }
     .progress.done i { background: var(--done); }
+    .progress.critical i { background: var(--ctx-critical); }
     .context-meter { padding: 10px; border: 1px solid var(--line); border-radius: 9px; background: var(--surface2); box-shadow: var(--card-shadow); }
     .context-meter-head, .context-meter-stats { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
     .context-meter-kicker { color: var(--faint); font: 9px var(--mono); letter-spacing: .06em; text-transform: uppercase; }
@@ -399,11 +411,18 @@
     .context-meter.attention .context-meter-pct { color: var(--ctx-attention); }
     .context-meter.critical .context-meter-pct { color: var(--ctx-critical); }
     .context-meter-note { margin-top: 5px; color: var(--dim); font-size: 9px; }
+    .usage-summary { padding: 12px; border: 1px solid var(--line); border-radius: 9px; background: var(--surface2); box-shadow: var(--card-shadow); }
+    .usage-summary-top { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
+    .usage-summary-number { color: var(--text-strong); font: 700 17px var(--mono); font-variant-numeric: tabular-nums; }
+    .usage-summary-limit, .usage-summary-copy { color: var(--dim); font-size: 10px; }
+    .usage-summary-pct { color: var(--ctx-safe); font: 700 11px var(--mono); font-variant-numeric: tabular-nums; }
+    .usage-summary-hint { display: inline-block; margin-top: 8px; color: var(--info); font-size: 10px; }
     .check-row { display: flex; gap: 7px; margin: 7px 0; color: var(--dim); font-size: 10px; }
     .check-row b { color: var(--done); }
     .bubble { max-width: 82%; padding: 11px 13px; margin-bottom: 11px; border: 1px solid var(--card-border); border-radius: 12px; background: var(--surface2); box-shadow: var(--card-shadow); color: var(--text); font-size: 11px; }
     .bubble.me { margin-left: auto; background: var(--me-bg); border-color: var(--me-line); }
     .bubble strong { color: var(--text-strong); }
+    .bubble .role-label { display: none; }
     .bubble-author { display: flex; align-items: center; gap: 6px; margin-bottom: 6px; color: var(--text-strong); }
     .bubble-author strong { font-size: 10px; }
     .timeline-note { margin-bottom: 15px; color: var(--faint); text-align: center; font: 10px var(--mono); }
@@ -413,9 +432,13 @@
     .wait-card.allowed strong { color: var(--done); }
     .wait-card p { margin: 5px 0 10px; color: var(--dim); font-size: 10px; }
     .wait-actions { display: flex; gap: 7px; }
-    .wait-actions button { min-height: 29px; padding: 0 10px; border: 1px solid var(--line); border-radius: 6px; background: var(--surface2); color: var(--text); cursor: pointer; font-size: 10px; }
-    .wait-actions button.allow { border-color: transparent; background: var(--working); color: #211b0e; font-weight: 700; }
-    .wait-card.allowed .wait-actions button.allow { background: var(--done); color: #082116; }
+    .wait-actions button { min-height: 29px; padding: 0 10px; border: 1px solid var(--border-strong); border-radius: 6px; background: var(--surface1); color: var(--text); cursor: pointer; font-size: 10px; transition: border-color .18s ease, background .18s ease, color .18s ease, transform .18s ease; }
+    .wait-actions button:hover { border-color: var(--text); background: var(--hover); transform: translateY(-1px); }
+    .wait-actions button:focus-visible { outline: 2px solid var(--brand-hover); outline-offset: 2px; }
+    .wait-actions button.allow { border-color: transparent; background: var(--working); color: var(--action-ink); font-weight: 700; }
+    .wait-actions button.allow:hover { background: var(--brand-hover); }
+    .wait-card.allowed .wait-actions button.allow { background: var(--done); color: var(--done-ink); }
+    .status-note { max-width: 560px; padding: 8px 11px; margin: 14px auto; border: 1px solid var(--line-soft); border-radius: 999px; background: var(--surface1); color: var(--dim); text-align: center; font: 10px var(--mono); }
     .artifact-row { display: flex; align-items: center; gap: 7px; padding: 8px 0; border-bottom: 1px solid var(--line-soft); color: var(--text); font-size: 10px; }
     .artifact-row span:last-child { margin-left: auto; color: var(--faint); font-family: var(--mono); }
     .board { display: grid; grid-template-columns: repeat(5, minmax(120px, 1fr)); gap: 9px; min-width: 680px; }
@@ -448,7 +471,7 @@
     .member-card p { margin: 3px 0 0; color: var(--dim); font-size: 9px; }
     .project-overview { display: grid; grid-template-columns: repeat(4, minmax(110px, 1fr)); gap: 9px; margin-bottom: 15px; }
     .metric { padding: 11px; border: 1px solid var(--line); border-radius: 9px; background: var(--surface2); }
-    .metric b { display: block; color: var(--text-strong); font: 700 19px var(--mono); }
+    .metric b { display: block; color: var(--text-strong); font: 700 19px var(--mono); font-variant-numeric: tabular-nums; }
     .metric span { color: var(--dim); font-size: 10px; }
     .readonly-banner { padding: 8px 10px; margin-bottom: 14px; border: 1px dashed var(--readonly-line); border-radius: 8px; background: var(--readonly-bg); color: var(--info); font-size: 10px; }
     .aggregate-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 9px; }
@@ -505,8 +528,9 @@
     .mobile-nav button b { display: block; margin-bottom: 3px; color: var(--text); font-size: 17px; }
     .mobile-nav button.active { color: var(--text-strong); border-bottom-color: var(--brand); background: linear-gradient(180deg, var(--mobile-active-bg), transparent); }
     .mobile-nav button.active b { color: var(--brand-hover); }
-    .mobile-notify { position: relative; color: var(--text); }
-    .mobile-notify .notify-count { position: absolute; top: -4px; right: -4px; min-width: 14px; height: 14px; padding: 0 3px; border-radius: 9px; background: var(--error); color: #fff; font: 8px/14px var(--mono); }
+    .mobile-notify { position: relative; display: grid; place-items: center; width: 44px; height: 44px; margin: -7px -4px; border: 0; border-radius: 10px; color: var(--text); }
+    .mobile-notify:hover, .mobile-notify:focus-visible { background: var(--hover); }
+    .mobile-notify .notify-count { position: absolute; top: -4px; right: -4px; min-width: 14px; height: 14px; padding: 0 3px; border-radius: 9px; background: var(--error); color: var(--badge-ink); font: 8px/14px var(--mono); }
     .connection-chip { gap: 5px; }
     .connection-chip.status-reconnecting { color: var(--working); background: var(--connection-warn-bg); }
     .connection-chip.status-disconnected { color: var(--error); background: var(--connection-error-bg); }
@@ -517,11 +541,11 @@
     .mini-signal i:nth-child(3) { height: 10px; }
     .mobile-summary { display: flex; align-items: center; gap: 10px; min-height: 25px; margin-bottom: 11px; padding: 0 2px; }
     .mobile-summary div { display: inline-flex; align-items: baseline; gap: 4px; padding: 0; color: var(--dim); }
-    .mobile-summary b { color: var(--text-strong); font: 700 11px var(--mono); }
+    .mobile-summary b { color: var(--text-strong); font: 700 11px var(--mono); font-variant-numeric: tabular-nums; }
     .mobile-summary span { color: var(--dim); font-size: 9px; }
     .mobile-switch { display: flex; gap: 4px; padding: 3px; margin-bottom: 13px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface1); }
     .mobile-switch button { flex: 1; padding: 6px 3px; border: 0; border-radius: 5px; background: transparent; color: var(--dim); cursor: pointer; font-size: 10px; }
-    .mobile-switch button.active { background: var(--hover); color: var(--text-strong); }
+    .mobile-switch button.active { border: 1px solid var(--border-strong); background: var(--hover); color: var(--text-strong); }
     .mobile-card { padding: 11px; margin-bottom: 8px; border: 1px solid var(--card-border); border-radius: 12px; background: var(--surface2); box-shadow: var(--card-shadow); cursor: pointer; transition: border-color .18s ease, background .18s ease, transform .18s ease, box-shadow .18s ease; }
     .mobile-card:hover { border-color: var(--border-strong); transform: translateY(-1px); box-shadow: var(--shadow-hover); }
     .mobile-card.primary { border-color: var(--selected-line); box-shadow: inset 3px 0 0 var(--brand), var(--card-shadow); }
@@ -669,10 +693,10 @@
             <div class="rail-brand">cc</div>
             <button class="rail-connection status-connected" data-connection-state="connected" title="连接状态 · 已连接" aria-label="连接状态 · 已连接"><span class="signal-icon" aria-hidden="true"><i></i><i></i><i></i><i></i></span></button>
             <button class="rail-btn active" data-domain="session" title="会话">⌂</button>
-            <button class="rail-btn" data-domain="team" title="团队">👥<span class="badge">1</span></button>
+            <button class="rail-btn" data-domain="team" title="团队">👥<span class="badge" aria-label="团队有 1 项需处理" title="团队 · 1 项需处理">1</span></button>
             <button class="rail-btn" data-domain="project" title="项目">▣</button>
             <div class="rail-spring"></div>
-            <button class="rail-btn" data-domain="notify" title="通知"><svg class="icon-bell" aria-hidden="true"><use href="#icon-bell"></use></svg><span class="badge">2</span></button>
+            <button class="rail-btn" data-domain="notify" title="通知"><svg class="icon-bell" aria-hidden="true"><use href="#icon-bell"></use></svg><span class="badge" aria-label="通知有 2 项需行动" title="通知 · 2 项需行动">2</span></button>
             <button class="rail-btn" data-domain="settings" title="设置">⚙</button>
             <button class="theme-toggle rail-btn" type="button" data-theme-toggle title="切换浅色主题" aria-label="切换浅色主题"><span class="theme-toggle-icon">☼</span></button>
           </nav>
@@ -684,7 +708,7 @@
               <div class="queue-view active" data-queue-view="action">
                 <div class="queue-group">需你处理 · 3</div>
                 <div class="queue-card selected" data-session-card="release"><div class="row"><i class="status-dot waiting"></i><strong>0.6.0-test.19 出包</strong><span class="tag action">待收单</span></div><p>验收单已回填 2/3 · 12 分钟前</p><div class="identity-cluster"><span class="engine-badge claude">Claude</span><span class="source-badge">公司电脑</span></div></div>
-                <div class="queue-card" data-session-card="mobile"><div class="row"><i class="status-dot error"></i><strong>worker-mobile 失联</strong><span class="tag action">接替</span></div><p>claude 额度尽 · 8 分钟前</p><div class="identity-cluster"><span class="engine-badge qwen">Qwen Code</span><span class="source-badge">家里 iMac</span></div></div>
+                <div class="queue-card" data-session-card="mobile"><div class="row"><i class="status-dot error"></i><strong>worker-mobile 失联</strong><span class="tag danger">接替</span></div><p>Claude 额度已用尽 · 8 分钟前</p><div class="identity-cluster"><span class="engine-badge qwen">Qwen Code</span><span class="source-badge">家里 iMac</span></div></div>
                 <div class="queue-card" data-session-card="team-plan"><div class="row"><i class="status-dot waiting"></i><strong>团队编制确认</strong><span class="tag action">待确认</span></div><p>cc-deck M1 攻坚团 · Leader 已提交</p><div class="identity-cluster"><span class="engine-badge trae">Trae</span><span class="source-badge">公司电脑</span></div></div>
                 <div class="queue-group">运行中 · 4</div>
                 <div class="queue-card" data-session-card="ui"><div class="row"><i class="status-dot done"></i><strong>ui-review 走查</strong></div><p>当前任务：检查 rail 方案 · 上下文 58%</p><div class="identity-cluster"><span class="engine-badge codex">Codex</span><span class="source-badge">公司电脑</span></div></div>
@@ -707,7 +731,7 @@
                 <div class="bubble"><div class="bubble-author"><span class="avatar leader">✦<i class="avatar-engine-dot trae"></i></span><strong>Leader</strong><span class="role-label leader-label">Leader</span></div>独立出包已完成，四处版本号已同步。验收单还差 1 项确认收单。</div>
                 <div class="bubble me">我先看更新通道隔离，再确认收单。</div>
                 <div class="wait-card" data-wait-card><strong class="wait-title">等待你的确认 · Bash 写入 docs/</strong><p class="wait-copy">将把验收证据写入 `docs/release-check.md`，会话才能继续。</p><div class="wait-actions"><button class="allow" data-allow>允许一次</button><button>拒绝并说明</button></div></div>
-                <div class="bubble"><div class="bubble-author"><span class="avatar worker">C<i class="avatar-engine-dot claude"></i></span><strong>Claude</strong></div><span id="session-main-copy">当前任务：回填验收证据 · 预计还需 2 分钟。</span></div>
+                <div class="status-note" id="session-main-copy">当前任务：回填验收证据 · 预计还需 2 分钟。</div>
               </div>
               <footer class="workspace-footer"><div class="composer">给会话发消息…　📎 附件　▧ 图片</div><button class="primary-btn">发送</button></footer>
             </section>
@@ -727,7 +751,7 @@
           </section>
 
           <section class="desktop-screen" id="d-notify">
-            <aside class="queue"><div class="queue-head"><h2>通知 <span class="tag action">2</span></h2><button class="icon-btn">×</button></div><div class="queue-group">需你行动 · 2</div><div class="notice selected"><span class="notice-icon">!</span><div><strong>0.6.0-test.19 就绪待收单</strong><p>T-13 已回填 2/3 · 12 分钟前</p><div class="identity-cluster"><span class="engine-badge claude">Claude</span><span class="source-badge">公司电脑</span></div><span class="tag action">验收单</span></div></div><div class="notice"><span class="notice-icon">!</span><div><strong>验收成员失联 · 额度链走尽</strong><p>worker-mobile · 8 分钟前</p><div class="identity-cluster"><span class="engine-badge qwen">Qwen Code</span><span class="source-badge">家里 iMac</span></div><span class="tag action">换厂商接替</span></div></div><div class="queue-group">注意 · 历史</div><div class="notice"><span class="notice-icon">·</span><div><strong>worker-relay 滞留 25 分</strong><p>已通知 Leader · 30 分钟前</p><div class="identity-cluster"><span class="engine-badge codex">Codex</span><span class="source-badge">公司电脑</span></div></div></div></aside>
+            <aside class="queue"><div class="queue-head"><h2>通知 <span class="tag action">2</span></h2><button class="icon-btn">×</button></div><div class="queue-group">需你行动 · 2</div><div class="notice selected"><span class="notice-icon">!</span><div><strong>0.6.0-test.19 就绪待收单</strong><p>T-13 已回填 2/3 · 12 分钟前</p><div class="identity-cluster"><span class="engine-badge claude">Claude</span><span class="source-badge">公司电脑</span></div><span class="tag action">验收单</span></div></div><div class="notice"><span class="notice-icon">!</span><div><strong>验收成员失联 · 额度链走尽</strong><p>worker-mobile · 8 分钟前</p><div class="identity-cluster"><span class="engine-badge qwen">Qwen Code</span><span class="source-badge">家里 iMac</span></div><span class="tag danger">换厂商接替</span></div></div><div class="queue-group">注意 · 历史</div><div class="notice"><span class="notice-icon">·</span><div><strong>worker-relay 滞留 25 分</strong><p>已通知 Leader · 30 分钟前</p><div class="identity-cluster"><span class="engine-badge codex">Codex</span><span class="source-badge">公司电脑</span></div></div></div></aside>
             <section class="workspace"><header class="workspace-head"><div class="workspace-title-row"><span class="tag action">行动告警</span><h2>0.6.0-test.19 · 验收工作台</h2><span class="identity-cluster"><span class="engine-badge claude">Claude</span><span class="source-badge">公司电脑</span></span></div><div class="workspace-sub">来源：cc-deck M1 攻坚团 / 会话 0.6.0-test.19 出包</div><div class="segment-bar"><button class="active">验收单</button><button>来源上下文</button><button>处理记录</button></div></header><div class="workspace-body"><div class="acceptance"><div class="acceptance-head"><h3>回填与确认收单</h3><span class="tag action">2/3</span></div><div class="accept-row"><b>✓</b><span>安装 test.19 后检查版本号通道</span><span>通过</span></div><div class="accept-row"><b>✓</b><span>四处版本号与 release note 一致</span><span>通过</span></div><div class="accept-row pending"><b>○</b><span>公司网下点击“检查更新”能拉到清单</span><span>未测</span></div><div class="wait-card" style="margin-bottom:0"><strong>还差 1 项确认</strong><p>完成第三项后，主动作会变为“确认收单”。</p><div class="wait-actions"><button class="allow">标记通过</button><button>反馈问题</button></div></div></div></div><footer class="workspace-footer"><button class="secondary-btn">回到来源会话</button><button class="primary-btn">提交回填（2/3）</button></footer></section>
             <aside class="inspector"><h3>行动上下文</h3><div class="inspector-block"><div class="inspector-title"><span>通知口径</span><span class="tag action">只计行动</span></div><div class="inspector-copy">打开面板不清零；执行动作或明确处理后清零。</div></div><div class="inspector-block"><div class="inspector-title"><span>来源实体</span></div><div class="inspector-copy">会话：0.6.0-test.19 出包<br>团队：cc-deck M1 攻坚团<br>项目：cc-deck</div><button class="secondary-btn" style="margin-top:9px">打开来源会话</button></div><div class="inspector-block"><div class="inspector-title"><span>下一步</span></div><div class="inspector-copy">回填第三项 → 提交回填 → 确认收单</div></div></aside>
           </section>
@@ -748,8 +772,8 @@
         <div class="mobile-screen active" id="m-inbox" data-mobile-root="inbox">
           <div class="mobile-status"><span>9:41</span><span>▰ ︎◒ 100%</span></div>
           <div class="mobile-sourcebar"><div class="source-switcher"><button class="source-trigger" type="button" data-source-trigger aria-expanded="false"><span class="source-dot status-connected" data-source-dot></span><strong data-current-source>公司电脑</strong><span>⌄</span></button><div class="source-menu" data-source-menu><div class="source-menu-head">数据源与视图</div><button class="source-option active" type="button" data-source-choice="office"><span class="source-dot status-connected"></span><strong>公司电脑</strong><small>6 会话 · 3 行动</small></button><button class="source-option" type="button" data-source-choice="home"><span class="source-dot status-reconnecting"></span><strong>家里 iMac</strong><small>2 会话 · 1 行动</small></button><div class="source-mode"><button class="active" type="button" data-source-mode="single">单源</button><button type="button" data-source-mode="aggregate">多源聚合</button></div><a class="source-manage" href="#d-settings" data-source-settings>⚙ 管理与配对新源 →</a></div></div><span class="source-summary" data-current-summary>6 会话 · 3 行动</span></div>
-          <header class="mobile-head"><h2>待我处理<small>3 个行动项 · cc-deck 在线</small></h2><span class="tag action"><svg class="icon-bell" aria-hidden="true"><use href="#icon-bell"></use></svg> 2</span><button class="icon-btn">⌕</button></header>
-          <div class="mobile-content"><div class="mobile-summary"><div><b>3</b><span>需行动</span></div><div><b>4</b><span>运行中</span></div><div><b>2</b><span>待验收</span></div></div><div class="mobile-switch"><button class="active" data-mobile-list="action">待处理</button><button data-mobile-list="all">全部会话</button></div><div class="mobile-card primary" data-open-detail="release"><div class="row"><span class="avatar">✓</span><strong>0.6.0-test.19 出包</strong><span class="tag action">待收单</span></div><p>验收单已回填 2/3 · 点击确认最后一项</p><div class="identity-cluster"><span class="engine-badge claude">Claude</span><span class="source-badge">公司电脑</span></div></div><div class="mobile-card" data-open-detail="mobile"><div class="row"><span class="avatar">!</span><strong>worker-mobile 失联</strong><span class="tag action">接替</span></div><p>claude 额度尽 · 验收槽不回落同厂商</p><div class="identity-cluster"><span class="engine-badge qwen">Qwen Code</span><span class="source-badge">家里 iMac</span></div></div><div class="mobile-card" data-open-detail="team-plan"><div class="row"><span class="avatar">👥</span><strong>团队编制确认</strong><span class="tag action">待确认</span></div><p>Leader 已提交编制方案 · 3 开发 + 独立验收</p><div class="identity-cluster"><span class="engine-badge trae">Trae</span><span class="source-badge">公司电脑</span></div></div><div class="mobile-card"><div class="row"><span class="avatar">●</span><strong>ui-review 走查</strong><span class="status-dot done"></span></div><p>刚刚活跃 · 检查 rail 方案 · 上下文 58%</p><div class="identity-cluster"><span class="engine-badge codex">Codex</span><span class="source-badge">公司电脑</span></div></div></div>
+          <header class="mobile-head"><h2>待我处理<small>3 个行动项 · cc-deck 在线</small></h2><span class="tag action mobile-notify" title="通知 · 2 个需行动项" aria-label="通知 · 2 个需行动项"><svg class="icon-bell" aria-hidden="true"><use href="#icon-bell"></use></svg><span>2</span></span><button class="icon-btn">⌕</button></header>
+          <div class="mobile-content"><div class="mobile-summary"><div><b>3</b><span>需行动</span></div><div><b>4</b><span>运行中</span></div><div><b>2</b><span>待验收</span></div></div><div class="mobile-switch"><button class="active" data-mobile-list="action">待处理</button><button data-mobile-list="all">全部会话</button></div><div class="mobile-card primary" data-open-detail="release"><div class="row"><span class="avatar">✓</span><strong>0.6.0-test.19 出包</strong><span class="tag action">待收单</span></div><p>验收单已回填 2/3 · 点击确认最后一项</p><div class="identity-cluster"><span class="engine-badge claude">Claude</span><span class="source-badge">公司电脑</span></div></div><div class="mobile-card" data-open-detail="mobile"><div class="row"><span class="avatar">!</span><strong>worker-mobile 失联</strong><span class="tag danger">接替</span></div><p>Claude 额度已用尽 · 验收槽不回落同厂商</p><div class="identity-cluster"><span class="engine-badge qwen">Qwen Code</span><span class="source-badge">家里 iMac</span></div></div><div class="mobile-card" data-open-detail="team-plan"><div class="row"><span class="avatar">👥</span><strong>团队编制确认</strong><span class="tag action">待确认</span></div><p>Leader 已提交编制方案 · 3 开发 + 独立验收</p><div class="identity-cluster"><span class="engine-badge trae">Trae</span><span class="source-badge">公司电脑</span></div></div><div class="mobile-card"><div class="row"><span class="avatar">●</span><strong>ui-review 走查</strong><span class="status-dot done"></span></div><p>刚刚活跃 · 检查 rail 方案 · 上下文 58%</p><div class="identity-cluster"><span class="engine-badge codex">Codex</span><span class="source-badge">公司电脑</span></div></div></div>
           <nav class="mobile-nav"><button class="active" data-mobile-root="inbox"><b>⌂</b>会话</button><button data-mobile-root="team"><b>👥</b>团队<span class="tag action">1</span></button><button data-mobile-root="project"><b>▣</b>项目</button><button data-mobile-root="settings"><b>⚙</b>设置</button></nav>
         </div>
 
@@ -757,7 +781,7 @@
           <div class="mobile-status"><span>9:41</span><span>▰ ︎◒ 100%</span></div>
           <header class="mobile-head"><button class="mobile-back" data-mobile-back>‹</button><h2 id="mobile-detail-title">0.6.0-test.19 出包<small>~/dev/cc-deck · claude · 上下文 41%</small></h2><span class="identity-cluster" id="mobile-detail-identity"><span class="engine-badge claude">Claude</span><span class="source-badge">公司电脑</span></span><span class="tag action">待收单</span></header>
           <div class="mobile-detail-tabs"><button class="active">对话</button><button>任务</button><button>输出物</button><button>用量</button><button>⋯</button></div>
-          <div class="mobile-content no-bottom"><div class="timeline-note">今天 10:42 · 来源：待处理收件箱</div><div class="bubble"><div class="bubble-author"><span class="avatar leader">✦<i class="avatar-engine-dot trae"></i></span><strong>Leader</strong><span class="role-label leader-label">Leader</span></div>独立出包已完成，验收单还差 1 项确认收单。</div><div class="bubble me">我先看更新通道隔离，再确认收单。</div><div class="wait-card" data-wait-card><strong class="wait-title">等待你的确认 · Bash 写入 docs/</strong><p class="wait-copy">将把验收证据写入 `docs/release-check.md`，会话才能继续。</p><div class="wait-actions"><button class="allow" data-allow>允许一次</button><button>拒绝并说明</button></div></div><div class="bubble"><div class="bubble-author"><span class="avatar worker">C<i class="avatar-engine-dot claude"></i></span><strong>Claude</strong></div>当前任务：回填验收证据 · 预计还需 2 分钟。</div><div class="artifact-row">📎 docs/release-check.md <span>刚刚</span></div><div class="artifact-row">▧ 0.6.0-test.19.apk <span>1h</span></div></div><div class="mobile-detail-composer"><div class="composer">给会话发消息…</div><button class="primary-btn">发送</button></div>
+              <div class="mobile-content no-bottom"><div class="timeline-note">今天 10:42 · 来源：待处理收件箱</div><div class="bubble"><div class="bubble-author"><span class="avatar leader">✦<i class="avatar-engine-dot trae"></i></span><strong>Leader</strong><span class="role-label leader-label">Leader</span></div>独立出包已完成，验收单还差 1 项确认收单。</div><div class="bubble me">我先看更新通道隔离，再确认收单。</div><div class="wait-card" data-wait-card><strong class="wait-title">等待你的确认 · Bash 写入 docs/</strong><p class="wait-copy">将把验收证据写入 `docs/release-check.md`，会话才能继续。</p><div class="wait-actions"><button class="allow" data-allow>允许一次</button><button>拒绝并说明</button></div></div><div class="status-note">当前任务：回填验收证据 · 预计还需 2 分钟。</div><div class="artifact-row">📎 docs/release-check.md <span>刚刚</span></div><div class="artifact-row">▧ 0.6.0-test.19.apk <span>1h</span></div></div><div class="mobile-detail-composer"><div class="composer">给会话发消息…</div><button class="primary-btn">发送</button></div>
         </div>
 
         <div class="mobile-screen" id="m-team" data-mobile-root="team">
@@ -1100,12 +1124,19 @@
         activate(activeIndex);
       }
 
+      function compactUsagePane(pane) {
+        const meter = pane?.querySelector(".context-meter");
+        if (!meter) return;
+        meter.outerHTML = '<div class="usage-summary"><div class="usage-summary-top"><span><b class="usage-summary-number">84k</b> <span class="usage-summary-limit">/ 200k tokens</span></span><strong class="usage-summary-pct">41%</strong></div><span class="usage-summary-copy">Claude · 上下文安全</span><span class="usage-summary-hint">在右侧检查器查看完整用量</span></div>';
+      }
+
       function setupSessionTabs() {
         const section = document.querySelector("#d-session");
         const body = section?.querySelector(".workspace-body");
         if (!body || body.dataset.tabsReady) return;
         const conversation = body.innerHTML;
         body.innerHTML = `<div class="workspace-pane active"><div class="conversation-pane">${conversation}</div></div><div class="workspace-pane"><div class="detail-panel-list"><div class="inspector-block"><div class="inspector-title"><span>任务清单</span><span>6/9</span></div><div class="check-row"><b>✓</b><span>版本号同步</span></div><div class="check-row"><b>✓</b><span>独立出包</span></div><div class="check-row"><span>○</span><span>公司网检查更新</span></div></div><div class="inspector-block"><div class="inspector-title"><span>当前执行</span><span class="tag action">待收单</span></div><div class="inspector-copy">回填验收证据 → 检查更新通道 → 确认收单</div></div></div></div><div class="workspace-pane"><div class="detail-panel-list"><div class="inspector-block"><div class="inspector-title"><span>输出物</span><span>4</span></div><div class="artifact-row">docs/release-check.md <span>刚刚</span></div><div class="artifact-row">0.6.0-test.19.apk <span>1h</span></div><div class="artifact-row">release-notes.md <span>2h</span></div></div></div></div><div class="workspace-pane"><div class="detail-panel-list"><div class="context-meter safe"><div class="context-meter-head"><div><span class="context-meter-kicker">Context window</span><strong class="context-meter-model">Claude · 200k 上限</strong></div><span class="context-meter-grade">安全</span></div><div class="context-meter-band" aria-label="上下文已使用 41%"><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div><div class="context-meter-stats"><span><b class="context-meter-used">84k</b> <span class="context-meter-limit">/ 200k tokens</span></span><strong class="context-meter-pct">41%</strong></div><div class="context-meter-note">余量充足，可继续当前验收回填</div></div><div class="metric"><b>2m</b><span>预计完成剩余验收回填</span></div></div></div><div class="workspace-pane"><div class="readonly-banner">更多上下文：当前 relay 为公司电脑；验收状态由来源会话唯一写入。</div></div>`;
+        compactUsagePane(body.children[3]);
         body.dataset.tabsReady = "1";
         wireSegmentTabs([...section.querySelectorAll(".segment-bar button")], [...body.children]);
       }
@@ -1116,6 +1147,7 @@
         if (!body || body.dataset.tabsReady) return;
         const conversation = body.innerHTML;
         body.innerHTML = `<div class="workspace-pane active">${conversation}</div><div class="workspace-pane"><div class="mobile-lane"><div class="mobile-lane-head"><span>任务清单</span><span>6/9</span></div><div class="mobile-task">✓ 版本号同步<br><span class="muted">已完成</span></div><div class="mobile-task">○ 公司网检查更新<br><span class="muted">待验收回填</span></div></div></div><div class="workspace-pane"><div class="mobile-lane"><div class="mobile-lane-head"><span>输出物</span><span>4</span></div><div class="mobile-task">📎 docs/release-check.md · 刚刚</div><div class="mobile-task">▧ 0.6.0-test.19.apk · 1h</div></div></div><div class="workspace-pane"><div class="context-meter safe mobile-context-meter"><div class="context-meter-head"><div><span class="context-meter-kicker">Context window</span><strong class="context-meter-model">Claude · 200k 上限</strong></div><span class="context-meter-grade">安全</span></div><div class="context-meter-band" aria-label="上下文已使用 41%"><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div><div class="context-meter-stats"><span><b class="context-meter-used">84k</b> <span class="context-meter-limit">/ 200k tokens</span></span><strong class="context-meter-pct">41%</strong></div><div class="context-meter-note">余量充足，可继续当前验收回填</div></div></div><div class="workspace-pane"><div class="readonly-banner">当前 relay：公司电脑 · 来源返回栈：待处理收件箱</div></div>`;
+        compactUsagePane(body.children[3]);
         body.dataset.tabsReady = "1";
         wireSegmentTabs([...screen.querySelectorAll(".mobile-detail-tabs button")], [...body.children]);
       }
