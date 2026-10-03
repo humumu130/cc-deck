@@ -45,7 +45,6 @@
       --frame-line: rgba(103,137,170,.34);
       --frame-highlight: rgba(255,255,255,.035);
       --window-dot: #36414D;
-      --rail-brand-line: rgba(232,239,248,.25);
       --rail-shadow: rgba(1,8,16,.16);
       --panel-shadow: rgba(1,8,16,.1);
       --card-border: rgba(71,101,132,.48);
@@ -171,7 +170,6 @@
       --frame-line: #B8C8D6;
       --frame-highlight: rgba(255,255,255,.8);
       --window-dot: #A5B5C3;
-      --rail-brand-line: rgba(21,40,61,.22);
       --rail-shadow: rgba(50,74,96,.08);
       --panel-shadow: rgba(50,74,96,.08);
       --card-border: #C6D3DF;
@@ -334,24 +332,12 @@
     html[data-source-mode="aggregate"] .source-group-bar { display: flex; }
     .desktop-shell { display: flex; min-width: 1120px; height: 780px; }
     .domain-rail { display: flex; flex: 0 0 72px; flex-direction: column; align-items: center; padding: 14px 8px; background: var(--rail); border-right: 1px solid var(--line-soft); box-shadow: 5px 0 20px var(--rail-shadow); }
-    .rail-brand { display: grid; place-items: center; width: 38px; height: 38px; margin-bottom: 18px; border: 1px solid var(--rail-brand-line); border-radius: 12px; color: var(--text-strong); font-weight: 800; letter-spacing: -.08em; }
     .rail-btn { position: relative; display: grid; place-items: center; width: 44px; height: 44px; margin-bottom: 7px; border: 1px solid transparent; border-radius: 11px; background: transparent; color: var(--dim); cursor: pointer; font-size: 18px; }
     .rail-btn:hover { color: var(--text); background: var(--hover); }
     .rail-btn.active { color: var(--text-strong); background: var(--selected-bg); border-color: var(--selected-line); }
     .rail-btn.active::before { content: ""; position: absolute; left: -9px; top: 11px; bottom: 11px; width: 3px; border-radius: 3px; background: var(--selected-line); }
     .rail-btn .badge { position: absolute; top: 1px; right: 0; min-width: 15px; height: 15px; padding: 0 3px; border-radius: 9px; background: var(--error); color: var(--badge-ink); font: 10px/15px var(--mono); text-align: center; }
     .rail-spring { flex: 1; }
-    .rail-connection { position: relative; display: grid; place-items: center; width: 44px; height: 39px; margin-bottom: 11px; border: 1px solid transparent; border-radius: 10px; background: transparent; color: var(--done); cursor: pointer; transition: color .18s ease, background .18s ease, border-color .18s ease; }
-    .rail-connection:hover { background: var(--hover); border-color: var(--line); }
-    .signal-icon { position: relative; display: block; width: 24px; height: 22px; }
-    .signal-icon i { position: absolute; bottom: 3px; display: block; width: 3px; border-radius: 3px; background: currentColor; box-shadow: 0 0 7px color-mix(in srgb, currentColor 42%, transparent); }
-    .signal-icon i:nth-child(1) { left: 2px; height: 6px; }
-    .signal-icon i:nth-child(2) { left: 8px; height: 11px; }
-    .signal-icon i:nth-child(3) { left: 14px; height: 16px; }
-    .signal-icon i:nth-child(4) { left: 20px; height: 20px; }
-    .rail-connection::after { content: ""; position: absolute; right: 3px; bottom: 3px; width: 6px; height: 6px; border: 2px solid var(--rail); border-radius: 50%; background: currentColor; box-shadow: 0 0 8px currentColor; }
-    .rail-connection.status-reconnecting { color: var(--working); }
-    .rail-connection.status-disconnected { color: var(--error); }
     .theme-toggle { margin-top: 7px; margin-bottom: 0; color: var(--dim); }
     .theme-toggle:hover { color: var(--brand-hover); }
     .theme-toggle-icon { font-size: 17px; line-height: 1; }
@@ -745,9 +731,7 @@
     html[data-theme="light"] body { background: radial-gradient(950px 520px at 77% -10%, var(--glow-brand), transparent 64%), radial-gradient(720px 480px at 0% 72%, var(--glow-blue), transparent 68%), var(--bg0); }
     html[data-theme="light"] .window-dots i { background: var(--window-dot); }
     html[data-theme="light"] .window-title { color: var(--faint); }
-    html[data-theme="light"] .rail-brand { border-color: var(--rail-brand-line); }
     html[data-theme="light"] .domain-rail, html[data-theme="light"] .windowbar { box-shadow: 5px 0 20px var(--rail-shadow); }
-    html[data-theme="light"] .rail-connection::after { border-color: var(--rail); }
     html[data-theme="light"] .mobile-status { color: var(--dim); }
     @media (max-width: 980px) {
       .page { width: min(100% - 22px, 760px); }
@@ -786,8 +770,6 @@
         <div class="windowbar"><span class="window-dots"><i></i><i></i><i></i></span><span class="window-title">CC Deck · Command Bridge</span><div class="source-switcher"><button class="source-trigger" type="button" data-source-trigger aria-expanded="false"><span class="source-dot status-connected" data-source-dot></span><strong data-current-source>公司电脑</strong><span class="source-summary" data-current-summary>6 会话 · 3 行动</span><span>⌄</span></button><div class="source-menu" data-source-menu><div class="source-menu-head">当前数据源</div><button class="source-option active" type="button" data-source-choice="office"><span class="source-dot status-connected"></span><strong>公司电脑</strong><small>6 会话 · 3 行动</small></button><button class="source-option" type="button" data-source-choice="home"><span class="source-dot status-reconnecting"></span><strong>家里 iMac</strong><small>2 会话 · 1 行动</small></button><div class="source-mode" aria-label="源显示模式"><button class="active" type="button" data-source-mode="single">单源</button><button type="button" data-source-mode="aggregate">多源聚合</button></div><a class="source-manage" href="#d-settings" data-source-settings>⚙ 管理与配对新源 →</a></div></div><span class="window-link">⌘K 全局搜索</span></div>
         <div class="desktop-shell">
           <nav class="domain-rail" aria-label="桌面域栏">
-            <div class="rail-brand">cc</div>
-            <button class="rail-connection status-connected" data-connection-state="connected" title="连接状态 · 已连接" aria-label="连接状态 · 已连接"><span class="signal-icon" aria-hidden="true"><i></i><i></i><i></i><i></i></span></button>
             <button class="rail-btn active" data-domain="session" title="会话">⌂</button>
             <button class="rail-btn" data-domain="team" title="团队">👥<span class="badge" aria-label="团队有 1 项需处理" title="团队 · 1 项需处理">1</span></button>
             <button class="rail-btn" data-domain="project" title="项目">▣</button>
@@ -915,7 +897,6 @@
       const modeButtons = [...document.querySelectorAll(".mode-btn")];
       const stages = { desktop: document.querySelector("#stage-desktop"), mobile: document.querySelector("#stage-mobile") };
       const toast = document.querySelector("#toast");
-      const connectionButton = document.querySelector(".rail-connection");
       const connectionChips = [...document.querySelectorAll(".connection-chip")];
       const themeToggles = [...document.querySelectorAll("[data-theme-toggle]")];
       let mobileReturn = "inbox";
@@ -1021,13 +1002,6 @@
       function setConnectionState(key, announce = false) {
         const state = connectionStates.find((item) => item.key === key) || connectionStates[0];
         connectionIndex = connectionStates.indexOf(state);
-        if (connectionButton) {
-          connectionButton.classList.remove(...connectionStates.map((item) => item.className));
-          connectionButton.classList.add(state.className);
-          connectionButton.dataset.connectionState = state.key;
-          connectionButton.title = `连接状态 · ${state.label}`;
-          connectionButton.setAttribute("aria-label", connectionButton.title);
-        }
         connectionChips.forEach((chip) => {
           chip.classList.remove(...connectionStates.map((item) => item.className));
           chip.classList.add(state.className);
@@ -1695,10 +1669,6 @@
       themeToggles.forEach((toggle) => toggle.addEventListener("click", () => {
         applyTheme(document.documentElement.dataset.theme === "light" ? "dark" : "light", true);
       }));
-      connectionButton?.addEventListener("click", () => {
-        const next = connectionStates[(connectionIndex + 1) % connectionStates.length];
-        setConnectionState(next.key, true);
-      });
       initInspectors();
     })();
   </script>
