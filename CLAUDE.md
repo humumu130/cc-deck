@@ -5,6 +5,7 @@
 ## 分支与提交纪律（2026-09-20 用户拍板）
 
 - **默认 dev 直推 + 任务号逐笔提交**：一事项一提交（设计稿/实现/follow-up 可分多笔，每笔完整原子），无 WIP 提交。任务号（#NN）就是逻辑分支——`git log --grep '#NN'` 即任务聚合视图，不靠物理分支分层。
+- **main = 门面快照分支（2026-10-03 起）**：仓库 default branch，访客与外部 PR 看到的是它；**不在其上开发**，dev 仍是唯一开发主干一切照旧；发正式版打 tag 后快进同步 `git push origin v<X.Y.Z>:main`（推广期改了 README 想立刻上门面也可随时手动快进 `git push origin origin/dev:main`）。
 - **分支触发条件（唯一）**：两个 AI 会话需要同时改同一批文件时，后开工的开 `feat/NN-xxx` 临时分支隔离，完事 squash 回 dev（并行交错的历史才值得 squash；串行工作流不产生交错噪声）。分支是工具不是仪式，默认不开。
 - **并行开发强制 worktree 磁盘隔离（2026-09-27 增补，用户令）**：分支只隔离提交历史，`~/dev/cc-deck` 磁盘文件全体会话共享一份——多会话并行时，后开工方必须 `git worktree add` 独立目录做开发编辑，只拉分支不挪目录等于没隔离。构建读磁盘不认分支，混合工作区里打出的 bundle 必然扫进别人的未提交代码（2026-09-27 relay 坏包打挂生产的事故根源）；此期间禁止构建/热部署，部署前必跑 `scripts/check-bundle-sync.sh`。
 - **不重写已推送历史**：dev 单主干 + tag 三段式发版依赖历史稳定，已 push 的提交禁止 rebase/reset 改写。
@@ -17,7 +18,7 @@
 2. **Snapshot 包**：本地测试通过后发 snapshot。
    惯例：bump 版本提交（`chore: bump X.Y.Z（snapshot 批：#A-#B 概要）「snap」`）→ 推 `v<X.Y.Z>-snap.N` tag 触发 CI。snap 产物只在 Actions run（不建 GitHub Release、不上传 latest.json 清单）；CI 会把 tag 后缀烙进 versionName，手机端"关于"显示完整通道版本 + "快照版"角标。
 3. **Release 包**：snapshot 攒了几批、连续使用几天无问题后发正式版。
-   `v<X.Y.Z>` 干净 tag → CI 建 GitHub Release 挂产物 + latest.json 轻量清单同步（双镜像，见 updates.ts 的发版八步清单注释）。
+   `v<X.Y.Z>` 干净 tag → CI 建 GitHub Release 挂产物 + latest.json 轻量清单同步（双镜像，见 updates.ts 的发版八步清单注释）→ **main 快进到该 tag**（`git push origin v<X.Y.Z>:main`，门面分支与发版同步）。
 
 ### 更新说明军规（cc-deck 特化落点）
 
