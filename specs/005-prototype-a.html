@@ -569,13 +569,32 @@
     .notice strong { display: block; color: var(--text-strong); font-size: 11px; }
     .notice p { margin: 4px 0 0; color: var(--dim); font-size: 10px; }
     .notice .tag { margin-top: 7px; }
-    .acceptance { padding: 14px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface2); }
-    .acceptance-head { display: flex; align-items: center; gap: 8px; margin-bottom: 12px; }
-    .acceptance-head h3 { flex: 1; margin: 0; color: var(--text-strong); font-size: 13px; }
-    .accept-row { display: grid; grid-template-columns: 24px minmax(0, 1fr) 55px; gap: 7px; align-items: center; padding: 9px 0; border-bottom: 1px solid var(--line-soft); color: var(--dim); font-size: 10px; }
-    .accept-row b { color: var(--done); font-size: 13px; }
-    .accept-row.pending b { color: var(--working); }
-    .accept-row span:last-child { color: var(--text); text-align: right; }
+    .notify-source-list { display: grid; gap: 10px; }
+    .notify-source-card { padding: 13px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface2); box-shadow: var(--card-shadow); transition: border-color .18s ease, background .18s ease, box-shadow .18s ease, opacity .18s ease; }
+    .notify-source-card:hover { border-color: var(--border-strong); box-shadow: var(--shadow-hover); }
+    .notify-source-card.resolved { border-color: var(--line-soft); background: var(--surface1); opacity: .72; }
+    .notify-source-head { display: flex; align-items: flex-start; gap: 9px; }
+    .notify-source-head > div { min-width: 0; flex: 1; }
+    .notify-source-kicker { color: var(--dim); font: 10px var(--mono); }
+    .notify-source-time { float: right; color: var(--faint); font: 10px var(--mono); }
+    .notify-source-card h3 { margin: 5px 0 0; color: var(--text-strong); font-size: 13px; }
+    .notify-source-card p { margin: 5px 0 0; color: var(--dim); font-size: 11px; line-height: 1.55; }
+    .notify-source-card .identity-cluster { margin-top: 9px; }
+    .notify-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 7px; margin-top: 13px; }
+    .notify-actions .primary-btn, .notify-actions .secondary-btn { min-height: 32px; }
+    .notify-light-action { border: 0; background: transparent; color: var(--dim); cursor: pointer; font-size: 10px; }
+    .notify-light-action:hover, .notify-light-action:focus-visible { color: var(--text-strong); text-decoration: underline; }
+    .notify-light-action:disabled { color: var(--faint); cursor: default; text-decoration: none; }
+    .notify-state { margin-left: auto; color: var(--faint); font: 10px var(--mono); }
+    .notify-source-summary { padding: 11px 12px; margin-bottom: 12px; border: 1px dashed var(--readonly-line); border-radius: var(--radius-sm); background: var(--readonly-bg); color: var(--info); font-size: 10px; }
+    .mobile-notify-screen .mobile-content { padding-bottom: 18px; }
+    .mobile-notify-card { cursor: pointer; }
+    .mobile-notify-card .notify-actions { margin-top: 10px; }
+    .mobile-notify-card .notify-actions .primary-btn { flex: 1; }
+    .mobile-notify-detail { display: grid; flex: 1; align-content: start; gap: 12px; padding: 14px 13px 18px; }
+    .mobile-notify-detail[hidden] { display: none; }
+    .mobile-notify-detail h3 { margin: 0; color: var(--text-strong); font-size: 15px; }
+    .mobile-notify-detail p { margin: 0; color: var(--dim); font-size: 11px; line-height: 1.55; }
     .settings-list { display: grid; gap: 8px; }
     .settings-row { display: flex; align-items: center; gap: 9px; padding: 11px; border: 1px solid var(--line); border-radius: 9px; background: var(--surface2); }
     button.settings-row { width: 100%; color: inherit; text-align: left; cursor: pointer; }
@@ -774,7 +793,7 @@
             <button class="rail-btn" data-domain="team" title="团队">👥<span class="badge" aria-label="团队有 1 项需处理" title="团队 · 1 项需处理">1</span></button>
             <button class="rail-btn" data-domain="project" title="项目">▣</button>
             <div class="rail-spring"></div>
-            <button class="rail-btn" data-domain="notify" title="通知"><svg class="icon-bell" aria-hidden="true"><use href="#icon-bell"></use></svg><span class="badge" aria-label="通知有 2 项需行动" title="通知 · 2 项需行动">2</span></button>
+            <button class="rail-btn" data-domain="notify" title="通知"><svg class="icon-bell" aria-hidden="true"><use href="#icon-bell"></use></svg><span class="badge" data-notify-badge aria-label="通知有 2 项需行动" title="通知 · 2 项需行动">2</span></button>
             <button class="rail-btn" data-domain="settings" title="设置">⚙</button>
             <button class="theme-toggle rail-btn" type="button" data-theme-toggle title="切换浅色主题" aria-label="切换浅色主题"><span class="theme-toggle-icon">☼</span></button>
           </nav>
@@ -829,9 +848,9 @@
           </section>
 
           <section class="desktop-screen" id="d-notify">
-            <aside class="queue"><div class="queue-head"><h2>通知 <span class="tag action">2</span></h2><button class="icon-btn">×</button></div><div class="queue-group">需你行动 · 2</div><div class="notice selected"><span class="notice-icon">!</span><div><strong>0.6.0-test.19 就绪待收单</strong><p>T-13 已回填 2/3 · 12 分钟前</p><div class="identity-cluster"><span class="engine-badge claude">Claude</span><span class="source-badge">公司电脑</span></div><span class="tag action">验收单</span></div></div><div class="notice"><span class="notice-icon">!</span><div><strong>验收成员失联 · 额度链走尽</strong><p>worker-mobile · 8 分钟前</p><div class="identity-cluster"><span class="engine-badge qwen">Qwen Code</span><span class="source-badge">家里 iMac</span></div><span class="tag danger">换厂商接替</span></div></div><div class="queue-group">注意 · 历史</div><div class="notice"><span class="notice-icon">·</span><div><strong>worker-relay 滞留 25 分</strong><p>已通知 Leader · 30 分钟前</p><div class="identity-cluster"><span class="engine-badge codex">Codex</span><span class="source-badge">公司电脑</span></div></div></div></aside>
-            <section class="workspace"><header class="workspace-head"><div class="workspace-title-row"><span class="tag action">行动告警</span><h2>0.6.0-test.19 · 验收工作台</h2><span class="identity-cluster"><span class="engine-badge claude">Claude</span><span class="source-badge">公司电脑</span></span></div><div class="workspace-sub">来源：cc-deck M1 攻坚团 / 会话 0.6.0-test.19 出包</div><div class="segment-bar"><button class="active">验收单</button><button>来源上下文</button><button>处理记录</button></div></header><div class="workspace-body"><div class="acceptance"><div class="acceptance-head"><h3>回填与确认收单</h3><span class="tag action">2/3</span></div><div class="accept-row"><b>✓</b><span>安装 test.19 后检查版本号通道</span><span>通过</span></div><div class="accept-row"><b>✓</b><span>四处版本号与 release note 一致</span><span>通过</span></div><div class="accept-row pending"><b>○</b><span>公司网下点击“检查更新”能拉到清单</span><span>未测</span></div><div class="wait-card" style="margin-bottom:0"><strong>还差 1 项确认</strong><p>完成第三项后，主动作会变为“确认收单”。</p><div class="wait-actions"><button class="allow">标记通过</button><button>反馈问题</button></div></div></div></div><footer class="workspace-footer"><button class="secondary-btn">回到来源会话</button><button class="primary-btn">提交回填（2/3）</button></footer></section>
-            <aside class="inspector"><h3>行动上下文</h3><div class="inspector-block"><div class="inspector-title"><span>通知口径</span><span class="tag action">只计行动</span></div><div class="inspector-copy">打开面板不清零；执行动作或明确处理后清零。</div></div><div class="inspector-block"><div class="inspector-title"><span>来源实体</span></div><div class="inspector-copy">会话：0.6.0-test.19 出包<br>团队：cc-deck M1 攻坚团<br>项目：cc-deck</div><button class="secondary-btn" style="margin-top:9px">打开来源会话</button></div><div class="inspector-block"><div class="inspector-title"><span>下一步</span></div><div class="inspector-copy">回填第三项 → 提交回填 → 确认收单</div></div></aside>
+            <aside class="queue"><div class="queue-head"><h2>通知 <span class="tag action" data-notify-action-count>2</span></h2><button class="icon-btn">×</button></div><div class="queue-group">需你行动 · <span data-notify-action-count>2</span></div><div class="notice selected" data-notify-card data-notify-active="true"><span class="notice-icon">!</span><div><strong>0.6.0-test.19 就绪待收单</strong><p>T-13 已回填 2/3 · 12 分钟前</p><div class="identity-cluster"><span class="engine-badge claude">Claude</span><span class="source-badge">公司电脑</span></div><span class="tag action">验收</span></div></div><div class="notice" data-notify-card data-notify-active="true"><span class="notice-icon">!</span><div><strong>团队动作待确认</strong><p>失联接替与编制确认 · 8 分钟前</p><div class="identity-cluster"><span class="engine-badge qwen">Qwen Code</span><span class="source-badge">公司电脑</span></div><span class="tag danger">需处理</span></div></div><div class="queue-group">注意 · 历史</div><div class="notice" data-notify-card data-notify-active="false"><span class="notice-icon">·</span><div><strong>worker-relay 滞留 25 分</strong><p>已通知 Leader · 30 分钟前</p><div class="identity-cluster"><span class="engine-badge codex">Codex</span><span class="source-badge">公司电脑</span></div></div></div></aside>
+            <section class="workspace"><header class="workspace-head"><div class="workspace-title-row"><span class="tag action">行动入口</span><h2>通知中心</h2><span class="tag" data-notify-action-count>2 项需行动</span></div><div class="workspace-sub">通知只做来源摘要与轻动作；验收、接替、编制确认回到原域完成。</div></header><div class="workspace-body"><div class="notify-source-summary">打开通知不会清零。轻动作可就地完成；涉及证据、成员选择或确认卡的重流程，必须回到来源会话或团队。</div><div class="notify-source-list"><article class="notify-source-card" data-notify-card data-notify-active="true"><div class="notify-source-head"><span class="notice-icon">!</span><div><span class="notify-source-kicker">来源会话 · 0.6.0-test.19 出包</span><span class="notify-source-time">12 分钟前</span><h3>验收回填 2/3，等待最后一项确认收单</h3><p>谁：worker-web · 什么事：T-13 独立出包已完成 · 等什么：公司网下检查更新并确认收单</p><div class="identity-cluster"><span class="engine-badge claude">Claude</span><span class="source-badge">公司电脑</span></div></div></div><div class="notify-actions"><button class="primary-btn" type="button" data-notify-jump data-notify-domain="session" data-notify-session="release">去会话验收</button><button class="notify-light-action" type="button" data-notify-action="resolve">标记已读</button><span class="notify-state" data-notify-status>需行动</span></div></article><article class="notify-source-card" data-notify-card data-notify-active="true"><div class="notify-source-head"><span class="notice-icon">!</span><div><span class="notify-source-kicker">来源团队 · cc-deck M1 攻坚团</span><span class="notify-source-time">8 分钟前</span><h3>worker-mobile 失联，编制方案也等待确认</h3><p>谁：Leader / worker-mobile · 什么事：额度链走尽 · 等什么：选择接替引擎并确认 3 开发 + 独立验收编制</p><div class="identity-cluster"><span class="engine-badge qwen">Qwen Code</span><span class="source-badge">公司电脑</span></div></div></div><div class="notify-actions"><button class="primary-btn" type="button" data-notify-jump data-notify-domain="team" data-notify-team-action="takeover">去团队接替</button><button class="secondary-btn" type="button" data-notify-jump data-notify-domain="team" data-notify-team-action="confirm">去团队确认</button><button class="notify-light-action" type="button" data-notify-action="pause">暂停提醒</button><span class="notify-state" data-notify-status>需行动</span></div></article><article class="notify-source-card" data-notify-card data-notify-active="false"><div class="notify-source-head"><span class="notice-icon">·</span><div><span class="notify-source-kicker">来源会话 · relay 任务板</span><span class="notify-source-time">30 分钟前</span><h3>worker-relay 滞留 25 分</h3><p>已通知 Leader；这是提醒类动态，不计入需行动 badge。</p><div class="identity-cluster"><span class="engine-badge codex">Codex</span><span class="source-badge">公司电脑</span></div></div></div><div class="notify-actions"><button class="notify-light-action" type="button" data-notify-action="ack">确认已知</button><span class="notify-state" data-notify-status>历史动态</span></div></article></div></div></section>
+            <aside class="inspector"><h3>通知上下文</h3><div class="inspector-block"><div class="inspector-title"><span>badge 口径</span><span class="tag action">只计行动</span></div><div class="inspector-copy">当前 <b data-notify-action-count>2</b> 项；处理完最后一项行动才清零。</div></div><div class="inspector-block"><div class="inspector-title"><span>写面归属</span></div><div class="inspector-copy">验收回填 → 来源会话<br>失联接替 / 编制确认 → 来源团队<br>项目域只读聚合</div></div><div class="inspector-block"><div class="inspector-title"><span>轻动作白名单</span></div><div class="inspector-copy">标记已读 · 暂停提醒 · 确认已知</div></div></aside>
           </section>
 
           <section class="desktop-screen" id="d-settings">
@@ -860,6 +879,18 @@
           <header class="mobile-head"><button class="mobile-back" data-mobile-back>‹</button><h2 id="mobile-detail-title">0.6.0-test.19 出包<small>~/dev/cc-deck · claude</small></h2><span class="identity-cluster" id="mobile-detail-identity"><span class="engine-badge claude">Claude</span><span class="source-badge">公司电脑</span></span><span class="tag action">待收单</span></header>
           <div class="mobile-detail-tabs"><button class="active">对话</button><button>任务</button><button>输出物</button><button>用量</button><button>⋯</button></div>
               <div class="mobile-content no-bottom"><div class="timeline-note">今天 10:42 · 来源：待处理收件箱</div><div class="bubble"><div class="bubble-author"><span class="avatar leader">✦<i class="avatar-engine-dot trae"></i></span><strong>Leader</strong><span class="role-label leader-label">Leader</span></div>独立出包已完成，验收单还差 1 项确认收单。</div><div class="bubble me">我先看更新通道隔离，再确认收单。</div><div class="wait-card" data-wait-card><strong class="wait-title">等待你的确认 · Bash 写入 docs/</strong><p class="wait-copy">将把验收证据写入 `docs/release-check.md`，会话才能继续。</p><div class="wait-actions"><button class="allow" data-allow>允许一次</button><button>拒绝并说明</button></div></div><div class="status-note">当前任务：回填验收证据 · 预计还需 2 分钟。</div><div class="artifact-row">📎 docs/release-check.md <span>刚刚</span></div><div class="artifact-row">▧ 0.6.0-test.19.apk <span>1h</span></div></div><div class="mobile-detail-composer"><div class="composer">给会话发消息…</div><button class="primary-btn">发送</button></div>
+        </div>
+
+        <div class="mobile-screen mobile-notify-screen" id="m-notify" data-mobile-notify-root="true">
+          <div class="mobile-status"><span>9:41</span><span>▰ ︎◒ 100%</span></div>
+          <header class="mobile-head"><h2>通知中心<small><span data-notify-action-count>2</span> 项需行动 · 打开不自动清零</small></h2><button class="icon-btn" data-notify-center-close type="button">×</button></header>
+          <div class="mobile-content" data-notify-center>
+            <div class="notify-source-summary">轻动作留在通知中心；验收、接替、编制确认等重流程回到来源域。</div>
+            <article class="mobile-card mobile-notify-card" data-notify-card data-notify-active="true" data-notify-mobile-source="release"><div class="row"><span class="avatar">!</span><strong>0.6.0-test.19 待收单</strong><span class="tag action">验收</span></div><p>来源会话 · T-13 已回填 2/3 · 等最后一项检查</p><div class="identity-cluster"><span class="engine-badge claude">Claude</span><span class="source-badge">公司电脑</span></div><div class="notify-actions"><button class="primary-btn" type="button" data-notify-mobile-jump="release">去会话验收</button><button class="notify-light-action" type="button" data-notify-action="resolve">标记已读</button></div></article>
+            <article class="mobile-card mobile-notify-card" data-notify-card data-notify-active="true" data-notify-mobile-source="team-plan"><div class="row"><span class="avatar">!</span><strong>团队动作待确认</strong><span class="tag danger">需处理</span></div><p>来源团队 · worker-mobile 失联 · 选择接替并确认编制</p><div class="identity-cluster"><span class="engine-badge qwen">Qwen Code</span><span class="source-badge">公司电脑</span></div><div class="notify-actions"><button class="primary-btn" type="button" data-notify-mobile-jump="team-plan">去团队确认</button><button class="notify-light-action" type="button" data-notify-action="pause">暂停提醒</button></div></article>
+            <article class="mobile-card mobile-notify-card" data-notify-card data-notify-active="false"><div class="row"><span class="avatar">·</span><strong>worker-relay 滞留 25 分</strong><span class="tag">历史</span></div><p>来源会话 · 已通知 Leader，不计入需行动 badge</p><div class="notify-actions"><button class="notify-light-action" type="button" data-notify-action="ack">确认已知</button></div></article>
+          </div>
+          <div class="mobile-notify-detail" data-notify-source-detail hidden><button class="mobile-back" type="button" data-notify-detail-back>‹ 返回通知中心</button><h3 data-notify-detail-title>来源详情</h3><p data-notify-detail-copy>从通知进入的来源上下文。</p><div class="notify-source-summary">当前只定位来源；验收与团队写操作仍在原域完成。</div><button class="primary-btn" type="button" data-notify-detail-jump>回来源域处理</button></div>
         </div>
 
         <div class="mobile-screen" id="m-team" data-mobile-root="team">
@@ -904,6 +935,9 @@
       let connectionIndex = 0;
       let activeSource = "office";
       let sourceMode = "single";
+      let notifyActionCount = 2;
+      let mobileNotifySource = null;
+      const notifyResolvedKeys = new Set();
 
       const sourceStates = {
         office: { label: "公司电脑", summary: "6 会话 · 3 行动", status: "connected" },
@@ -1110,14 +1144,121 @@
         });
       }
 
+      function syncNotificationBadges() {
+        const count = notifyActionCount;
+        document.querySelectorAll("[data-notify-action-count]").forEach((node) => {
+          node.textContent = node.closest(".workspace-title-row") ? `${count} 项需行动` : String(count);
+        });
+        document.querySelectorAll(".rail-btn[data-domain=\"notify\"] .badge, [data-notify-badge], .mobile-notify .notify-count").forEach((badge) => {
+          badge.textContent = String(count);
+          badge.hidden = count === 0;
+          badge.setAttribute("aria-label", `通知有 ${count} 项需行动`);
+          badge.setAttribute("title", `通知 · ${count} 项需行动`);
+        });
+        document.querySelectorAll(".notify-source-card, .mobile-notify-card").forEach((card) => {
+          if (card.dataset.notifyActive !== "true") return;
+          const status = card.querySelector("[data-notify-status]");
+          if (status && !card.classList.contains("resolved")) status.textContent = "需行动";
+        });
+      }
+
+      function resolveNotification(card, action) {
+        if (!card || card.dataset.notifyResolved === "1") return;
+        const active = card.dataset.notifyActive === "true";
+        const text = card.textContent;
+        const key = text.includes("0.6.0") || text.includes("验收") ? "acceptance" : text.includes("worker-mobile") || text.includes("团队动作") ? "team" : "relay";
+        if (notifyResolvedKeys.has(key)) return;
+        notifyResolvedKeys.add(key);
+        card.dataset.notifyResolved = "1";
+        document.querySelectorAll("[data-notify-card]").forEach((item) => {
+          const itemText = item.textContent;
+          const itemKey = itemText.includes("0.6.0") || itemText.includes("验收") ? "acceptance" : itemText.includes("worker-mobile") || itemText.includes("团队动作") ? "team" : "relay";
+          if (item.dataset.notifyActive === String(active) && itemKey === key) {
+            item.classList.add("resolved");
+            item.dataset.notifyResolved = "1";
+            item.querySelectorAll("[data-notify-action]").forEach((button) => { button.disabled = true; button.textContent = action === "pause" ? "已暂停" : action === "ack" ? "已确认" : "已读"; });
+            const status = item.querySelector("[data-notify-status]");
+            if (status) status.textContent = action === "pause" ? "提醒已暂停" : action === "ack" ? "已确认" : "已读";
+          }
+        });
+        if (active) notifyActionCount = Math.max(0, notifyActionCount - 1);
+        syncNotificationBadges();
+        showToast(action === "pause" ? "已暂停提醒" : action === "ack" ? "已确认已知" : "已标记已读");
+      }
+
+      function openMobileNotifyCenter() {
+        const screen = document.querySelector("#m-notify");
+        if (!screen) return;
+        document.querySelectorAll(".mobile-screen").forEach((item) => item.classList.toggle("active", item === screen));
+        screen.querySelector("[data-notify-center]").hidden = false;
+        screen.querySelector("[data-notify-source-detail]").hidden = true;
+        mobileNotifySource = null;
+        syncNotificationBadges();
+      }
+
+      function openMobileNotifyDetail(source) {
+        const screen = document.querySelector("#m-notify");
+        if (!screen) return;
+        mobileNotifySource = source;
+        const detail = screen.querySelector("[data-notify-source-detail]");
+        const title = screen.querySelector("[data-notify-detail-title]");
+        const copy = screen.querySelector("[data-notify-detail-copy]");
+        const jump = screen.querySelector("[data-notify-detail-jump]");
+        const content = source === "team-plan"
+          ? ["来源团队 · cc-deck M1 攻坚团", "worker-mobile 失联；当前定位到团队接替与编制确认。", "去团队确认"]
+          : ["来源会话 · 0.6.0-test.19 出包", "T-13 已回填 2/3；当前定位到验收回填与确认收单。", "去会话验收"];
+        title.textContent = content[0];
+        copy.textContent = content[1];
+        jump.textContent = content[2];
+        screen.querySelector("[data-notify-center]").hidden = true;
+        detail.hidden = false;
+        document.querySelectorAll(".mobile-screen").forEach((item) => item.classList.toggle("active", item === screen));
+      }
+
+      function wireNotificationDomain() {
+        document.addEventListener("click", (event) => {
+          const lightAction = event.target.closest("[data-notify-action]");
+          if (lightAction) {
+            resolveNotification(lightAction.closest("[data-notify-card]"), lightAction.dataset.notifyAction);
+            return;
+          }
+          const jump = event.target.closest("[data-notify-jump]");
+          if (jump) {
+            const domain = jump.dataset.notifyDomain;
+            setDesktopDomain(domain);
+            showToast(domain === "session" ? "已定位来源会话 · 验收写操作在原域完成" : "已定位来源团队 · 接替/编制写操作在原域完成");
+            return;
+          }
+          const mobileJump = event.target.closest("[data-notify-mobile-jump]");
+          if (mobileJump) {
+            openMobileNotifyDetail(mobileJump.dataset.notifyMobileJump);
+            return;
+          }
+          const mobileCard = event.target.closest("[data-notify-mobile-source]");
+          if (mobileCard && !event.target.closest("button")) {
+            openMobileNotifyDetail(mobileCard.dataset.notifyMobileSource);
+            return;
+          }
+          if (event.target.closest("[data-notify-detail-back]") || event.target.closest("[data-notify-center-close]")) {
+            openMobileNotifyCenter();
+            return;
+          }
+          const detailJump = event.target.closest("[data-notify-detail-jump]");
+          if (detailJump && mobileNotifySource) {
+            mobileReturn = "notify";
+            openMobileDetail(mobileNotifySource);
+          }
+        });
+      }
+
       function hydrateNotificationIcons() {
         const bell = '<svg class="icon-bell" aria-hidden="true"><use href="#icon-bell"></use></svg>';
         document.querySelectorAll(".notice-icon").forEach((icon) => { icon.innerHTML = bell; });
-        document.querySelectorAll(".mobile-screen:not(#m-detail) .mobile-head").forEach((head) => {
+        document.querySelectorAll(".mobile-screen:not(#m-detail):not(#m-notify) .mobile-head").forEach((head) => {
           const actionBadge = [...head.querySelectorAll(".tag.action")].find((node) => node.textContent.includes("2"));
           if (actionBadge) {
             actionBadge.className = "icon-btn mobile-notify";
-            actionBadge.innerHTML = `${bell}<span class="notify-count">2</span>`;
+            actionBadge.innerHTML = `${bell}<span class="notify-count" data-notify-badge>2</span>`;
             actionBadge.title = "通知 · 2 个需行动项";
             actionBadge.setAttribute("aria-label", "通知 · 2 个需行动项");
           } else if (!head.querySelector("[data-mobile-notify]")) {
@@ -1126,11 +1267,11 @@
             button.type = "button";
             button.dataset.mobileNotify = "true";
             button.title = "通知 · 2 项需行动";
-            button.innerHTML = `${bell}<span class="notify-count">2</span>`;
+            button.innerHTML = `${bell}<span class="notify-count" data-notify-badge>2</span>`;
             head.insertBefore(button, head.lastElementChild);
           }
         });
-        document.querySelectorAll(".mobile-notify").forEach((button) => button.addEventListener("click", () => showToast("通知：2 项需行动")));
+        document.querySelectorAll(".mobile-notify").forEach((button) => button.addEventListener("click", openMobileNotifyCenter));
         document.querySelectorAll(".settings-row").forEach((row) => {
           if (row.querySelector("strong")?.textContent.trim() === "团队身份模板") {
             const copy = row.querySelector("p");
@@ -1584,7 +1725,7 @@
       }
 
       function openMobileDetail(id) {
-        mobileReturn = document.querySelector("#m-team.active") ? "team" : document.querySelector("#m-project.active") ? "project" : "inbox";
+        mobileReturn = document.querySelector("#m-notify.active") ? "notify" : document.querySelector("#m-team.active") ? "team" : document.querySelector("#m-project.active") ? "project" : "inbox";
         document.querySelector("#m-detail").classList.add("active");
         document.querySelectorAll(".mobile-screen:not(#m-detail)").forEach((screen) => screen.classList.remove("active"));
         const titles = { release: "0.6.0-test.19 出包", mobile: "worker-mobile 失联", "team-plan": "团队编制确认" };
@@ -1592,11 +1733,17 @@
         document.querySelector("#mobile-detail-title").firstChild.textContent = titles[id] || "会话详情";
         const identity = identities[id] || ["Claude", "claude", "公司电脑"];
         document.querySelector("#mobile-detail-identity").innerHTML = `<span class="engine-badge ${identity[1]}">${identity[0]}</span><span class="source-badge">${identity[2]}</span>`;
+        document.querySelector("[data-mobile-back]").textContent = mobileReturn === "notify" ? "‹ 通知" : "‹";
         hydrateSourceBadges();
       }
 
       function closeMobileDetail() {
         document.querySelector("#m-detail").classList.remove("active");
+        if (mobileReturn === "notify") {
+          openMobileNotifyCenter();
+          document.querySelector("[data-mobile-back]").textContent = "‹";
+          return;
+        }
         document.querySelector(`#m-${mobileReturn}`).classList.add("active");
       }
 
@@ -1659,6 +1806,7 @@
       setupSourceGroupBars();
       mountConnectionCapsules();
       wireArtifactBrowser();
+      wireNotificationDomain();
       applyTheme(savedTheme);
       setConnectionState("connected");
       setSource("office");
@@ -1666,6 +1814,7 @@
       hydrateAvatars();
       hydrateSourceBadges();
       hydrateNotificationIcons();
+      syncNotificationBadges();
       themeToggles.forEach((toggle) => toggle.addEventListener("click", () => {
         applyTheme(document.documentElement.dataset.theme === "light" ? "dark" : "light", true);
       }));
