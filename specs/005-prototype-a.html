@@ -1,0 +1,506 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>cc-deck · A 指挥桥视觉原型</title>
+  <style>
+    :root {
+      --bg0: #050B12;
+      --bg1: #0A111B;
+      --surface1: #0D1826;
+      --surface2: #122235;
+      --hover: #192D43;
+      --line: #243448;
+      --line-soft: #1B293A;
+      --text-strong: #E8EFF8;
+      --text: #C4D0DE;
+      --dim: #8394A9;
+      --faint: #53677E;
+      --brand: #D97757;
+      --brand-hover: #E8985F;
+      --brand-soft: #2B1D1A;
+      --done: #42C98A;
+      --working: #F2BE4C;
+      --error: #F06B68;
+      --info: #76A9E8;
+      --shadow: 0 24px 80px rgba(0, 0, 0, .36);
+      --small-shadow: 0 10px 30px rgba(0, 0, 0, .24);
+      --radius: 10px;
+      --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    }
+    * { box-sizing: border-box; }
+    html, body { min-width: 320px; min-height: 100%; }
+    body {
+      margin: 0;
+      color: var(--text);
+      background: radial-gradient(950px 520px at 77% -10%, rgba(217,119,87,.13), transparent 64%), var(--bg0);
+      font: 13px/1.45 -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+    }
+    button { font: inherit; }
+    .page { width: min(1540px, calc(100% - 38px)); margin: 0 auto; padding: 26px 0 58px; }
+    .topbar { display: flex; align-items: flex-end; justify-content: space-between; gap: 22px; margin-bottom: 18px; }
+    .topbar h1 { margin: 0; color: var(--text-strong); font-size: 23px; letter-spacing: -.03em; }
+    .topbar p { margin: 5px 0 0; color: var(--dim); }
+    .build { color: var(--faint); font: 10px var(--mono); white-space: nowrap; }
+    .mode-switcher { display: flex; gap: 7px; padding: 7px; margin-bottom: 16px; border: 1px solid var(--line); border-radius: 12px; background: rgba(13,24,38,.82); }
+    .mode-btn { flex: 1; min-height: 42px; border: 1px solid transparent; border-radius: 8px; background: transparent; color: var(--dim); cursor: pointer; }
+    .mode-btn:hover { color: var(--text); background: var(--hover); }
+    .mode-btn.active { color: var(--text-strong); background: var(--brand); border-color: var(--brand-hover); box-shadow: 0 4px 16px rgba(217,119,87,.25); }
+    .mode-btn b { display: block; font-size: 12px; }
+    .mode-btn span { display: block; margin-top: 1px; font-size: 10px; opacity: .82; }
+    .mode-stage { display: none; }
+    .mode-stage.active { display: block; }
+    .stage-note { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin: 0 2px 10px; color: var(--dim); font-size: 11px; }
+    .stage-note b { color: var(--text); }
+    .desktop-frame { overflow: hidden; border: 1px solid var(--line); border-radius: 16px; background: var(--bg1); box-shadow: var(--shadow); }
+    .windowbar { display: flex; align-items: center; gap: 10px; height: 34px; padding: 0 13px; background: #070D15; border-bottom: 1px solid var(--line-soft); }
+    .window-dots { display: flex; gap: 6px; }
+    .window-dots i { width: 9px; height: 9px; border-radius: 50%; background: #36414D; }
+    .window-title { flex: 1; color: var(--faint); font-size: 11px; }
+    .window-link { color: var(--dim); font-size: 10px; }
+    .desktop-shell { display: flex; min-width: 1120px; height: 780px; }
+    .domain-rail { display: flex; flex: 0 0 72px; flex-direction: column; align-items: center; padding: 14px 8px; background: #04080E; border-right: 1px solid var(--line-soft); }
+    .rail-brand { display: grid; place-items: center; width: 38px; height: 38px; margin-bottom: 18px; border: 1px solid rgba(232,239,248,.25); border-radius: 12px; color: var(--text-strong); font-weight: 800; letter-spacing: -.08em; }
+    .rail-btn { position: relative; display: grid; place-items: center; width: 44px; height: 44px; margin-bottom: 7px; border: 1px solid transparent; border-radius: 11px; background: transparent; color: var(--dim); cursor: pointer; font-size: 18px; }
+    .rail-btn:hover { color: var(--text); background: var(--hover); }
+    .rail-btn.active { color: var(--brand-hover); background: var(--brand-soft); border-color: rgba(217,119,87,.27); }
+    .rail-btn.active::before { content: ""; position: absolute; left: -9px; top: 11px; bottom: 11px; width: 3px; border-radius: 3px; background: var(--brand); }
+    .rail-btn .badge { position: absolute; top: 1px; right: 0; min-width: 15px; height: 15px; padding: 0 3px; border-radius: 9px; background: var(--error); color: #fff; font: 9px/15px var(--mono); text-align: center; }
+    .rail-spring { flex: 1; }
+    .rail-connection { display: grid; place-items: center; width: 44px; height: 29px; margin-bottom: 11px; color: var(--done); cursor: pointer; }
+    .rail-connection i { width: 9px; height: 9px; border-radius: 50%; background: currentColor; box-shadow: 0 0 12px currentColor; }
+    .desktop-screen { display: none; flex: 1; min-width: 0; }
+    .desktop-screen.active { display: grid; grid-template-columns: 296px minmax(0, 1fr) 320px; }
+    .queue { overflow: hidden; min-width: 0; padding: 16px 12px; background: var(--surface1); border-right: 1px solid var(--line-soft); }
+    .queue-head { display: flex; align-items: center; gap: 8px; margin-bottom: 13px; }
+    .queue-head h2 { flex: 1; margin: 0; color: var(--text-strong); font-size: 13px; }
+    .icon-btn { display: grid; place-items: center; width: 30px; height: 30px; border: 1px solid var(--line); border-radius: 7px; background: transparent; color: var(--dim); cursor: pointer; }
+    .icon-btn:hover { color: var(--text); background: var(--hover); }
+    .queue-switch { display: flex; gap: 4px; padding: 3px; margin-bottom: 14px; border: 1px solid var(--line); border-radius: 8px; background: var(--bg1); }
+    .queue-switch button { flex: 1; padding: 6px 3px; border: 0; border-radius: 5px; background: transparent; color: var(--dim); cursor: pointer; font-size: 10px; }
+    .queue-switch button.active { background: var(--hover); color: var(--text-strong); }
+    .queue-view { display: none; overflow: hidden auto; height: calc(100% - 78px); padding-right: 2px; }
+    .queue-view.active { display: block; }
+    .queue-group { margin: 12px 3px 6px; color: var(--faint); font: 10px var(--mono); letter-spacing: .04em; }
+    .queue-card { padding: 10px; margin-bottom: 7px; border: 1px solid var(--line); border-radius: 9px; background: rgba(18,34,53,.72); cursor: pointer; }
+    .queue-card:hover { border-color: #3c5571; background: var(--hover); }
+    .queue-card.selected { border-color: rgba(217,119,87,.7); background: linear-gradient(135deg, var(--brand-soft), var(--surface2)); box-shadow: inset 3px 0 0 var(--brand); }
+    .queue-card .row { display: flex; align-items: center; gap: 7px; }
+    .queue-card strong { flex: 1; min-width: 0; overflow: hidden; color: var(--text-strong); font-size: 11.5px; text-overflow: ellipsis; white-space: nowrap; }
+    .queue-card p { margin: 5px 0 0 14px; color: var(--dim); font-size: 10px; }
+    .queue-card .tag { margin-top: 7px; }
+    .status-dot { display: inline-block; flex: 0 0 auto; width: 7px; height: 7px; border-radius: 50%; background: var(--faint); }
+    .status-dot.done { background: var(--done); box-shadow: 0 0 7px rgba(66,201,138,.35); }
+    .status-dot.waiting { background: var(--working); }
+    .status-dot.error { background: var(--error); box-shadow: 0 0 7px rgba(240,107,104,.25); }
+    .tag { display: inline-flex; align-items: center; gap: 4px; padding: 3px 6px; border-radius: 999px; background: rgba(83,103,126,.19); color: var(--dim); font-size: 9px; white-space: nowrap; }
+    .tag.action { background: rgba(217,119,87,.16); color: var(--brand-hover); }
+    .tag.done { background: rgba(66,201,138,.12); color: var(--done); }
+    .tag.info { background: rgba(118,169,232,.13); color: var(--info); }
+    .workspace { display: flex; min-width: 0; flex-direction: column; background: var(--bg1); }
+    .workspace-head { flex: 0 0 auto; padding: 17px 20px 11px; border-bottom: 1px solid var(--line-soft); }
+    .workspace-title-row { display: flex; align-items: center; gap: 8px; }
+    .workspace-title-row h2 { flex: 1; min-width: 0; margin: 0; overflow: hidden; color: var(--text-strong); font-size: 16px; text-overflow: ellipsis; white-space: nowrap; }
+    .workspace-sub { margin-top: 5px; color: var(--dim); font: 10px var(--mono); }
+    .segment-bar { display: flex; gap: 17px; overflow: hidden; margin-top: 14px; }
+    .segment-bar button { position: relative; flex: 0 0 auto; padding: 0 0 8px; border: 0; background: transparent; color: var(--dim); cursor: pointer; font-size: 11px; }
+    .segment-bar button:hover { color: var(--text); }
+    .segment-bar button.active { color: var(--text-strong); font-weight: 700; }
+    .segment-bar button.active::after { content: ""; position: absolute; right: 0; bottom: -1px; left: 0; height: 2px; border-radius: 2px; background: var(--brand); }
+    .workspace-body { flex: 1; min-height: 0; overflow: auto; padding: 18px 20px; }
+    .workspace-body.nopad { padding: 0; }
+    .workspace-footer { display: flex; gap: 8px; flex: 0 0 auto; padding: 11px 16px; border-top: 1px solid var(--line-soft); background: var(--surface1); }
+    .composer { display: flex; align-items: center; gap: 8px; flex: 1; min-height: 34px; padding: 8px 10px; border: 1px solid var(--line); border-radius: 8px; color: var(--faint); font-size: 11px; }
+    .primary-btn, .secondary-btn, .danger-btn { min-height: 34px; padding: 0 12px; border: 1px solid transparent; border-radius: 7px; cursor: pointer; font-size: 11px; }
+    .primary-btn { background: var(--brand); color: #fff; }
+    .primary-btn:hover { background: var(--brand-hover); }
+    .secondary-btn { border-color: var(--line); background: var(--surface2); color: var(--text); }
+    .secondary-btn:hover { background: var(--hover); }
+    .danger-btn { border-color: rgba(240,107,104,.4); background: rgba(240,107,104,.12); color: var(--error); }
+    .inspector { overflow: hidden auto; padding: 16px 14px; background: var(--surface1); border-left: 1px solid var(--line-soft); }
+    .inspector h3 { margin: 0 0 14px; color: var(--text-strong); font-size: 12px; }
+    .inspector-block { padding: 12px 0; border-top: 1px solid var(--line-soft); }
+    .inspector-block:first-of-type { border-top: 0; padding-top: 0; }
+    .inspector-title { display: flex; justify-content: space-between; gap: 7px; margin-bottom: 7px; color: var(--text); font-size: 10px; font-weight: 700; }
+    .inspector-copy { color: var(--dim); font-size: 10px; }
+    .progress { height: 6px; overflow: hidden; margin: 7px 0; border-radius: 5px; background: var(--line); }
+    .progress i { display: block; height: 100%; border-radius: inherit; background: var(--brand); }
+    .progress.done i { background: var(--done); }
+    .check-row { display: flex; gap: 7px; margin: 7px 0; color: var(--dim); font-size: 10px; }
+    .check-row b { color: var(--done); }
+    .bubble { max-width: 82%; padding: 10px 12px; margin-bottom: 10px; border: 1px solid var(--line); border-radius: 11px; background: var(--surface2); color: var(--text); font-size: 11px; }
+    .bubble.me { margin-left: auto; background: rgba(217,119,87,.13); border-color: rgba(217,119,87,.36); }
+    .bubble strong { color: var(--text-strong); }
+    .timeline-note { margin-bottom: 15px; color: var(--faint); text-align: center; font: 10px var(--mono); }
+    .wait-card { padding: 12px; margin: 14px 0; border: 1px solid rgba(242,190,76,.5); border-radius: 10px; background: rgba(242,190,76,.08); }
+    .wait-card.allowed { border-color: rgba(66,201,138,.45); background: rgba(66,201,138,.08); }
+    .wait-card strong { display: block; color: var(--working); font-size: 11px; }
+    .wait-card.allowed strong { color: var(--done); }
+    .wait-card p { margin: 5px 0 10px; color: var(--dim); font-size: 10px; }
+    .wait-actions { display: flex; gap: 7px; }
+    .wait-actions button { min-height: 29px; padding: 0 10px; border: 1px solid var(--line); border-radius: 6px; background: var(--surface2); color: var(--text); cursor: pointer; font-size: 10px; }
+    .wait-actions button.allow { border-color: transparent; background: var(--working); color: #211b0e; font-weight: 700; }
+    .wait-card.allowed .wait-actions button.allow { background: var(--done); color: #082116; }
+    .artifact-row { display: flex; align-items: center; gap: 7px; padding: 8px 0; border-bottom: 1px solid var(--line-soft); color: var(--text); font-size: 10px; }
+    .artifact-row span:last-child { margin-left: auto; color: var(--faint); font-family: var(--mono); }
+    .board { display: grid; grid-template-columns: repeat(5, minmax(120px, 1fr)); gap: 9px; min-width: 680px; }
+    .lane { min-height: 395px; padding: 8px; border: 1px solid var(--line-soft); border-radius: 9px; background: rgba(13,24,38,.72); }
+    .lane-head { display: flex; justify-content: space-between; margin-bottom: 8px; color: var(--dim); font-size: 10px; font-weight: 700; }
+    .task-card { padding: 9px; margin-bottom: 7px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface2); }
+    .task-card strong { display: block; color: var(--text); font-size: 10px; }
+    .task-card p { margin: 5px 0 0; color: var(--dim); font-size: 9px; }
+    .task-card .tag { margin-top: 7px; }
+    .member-list { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+    .member-card { display: flex; gap: 8px; padding: 10px; border: 1px solid var(--line); border-radius: 9px; background: var(--surface2); }
+    .avatar { display: grid; place-items: center; flex: 0 0 28px; width: 28px; height: 28px; border-radius: 8px; background: var(--hover); color: var(--text); font-size: 11px; }
+    .member-card strong { display: block; color: var(--text-strong); font-size: 10px; }
+    .member-card p { margin: 3px 0 0; color: var(--dim); font-size: 9px; }
+    .project-overview { display: grid; grid-template-columns: repeat(4, minmax(110px, 1fr)); gap: 9px; margin-bottom: 15px; }
+    .metric { padding: 11px; border: 1px solid var(--line); border-radius: 9px; background: var(--surface2); }
+    .metric b { display: block; color: var(--text-strong); font: 700 19px var(--mono); }
+    .metric span { color: var(--dim); font-size: 10px; }
+    .readonly-banner { padding: 8px 10px; margin-bottom: 14px; border: 1px dashed rgba(118,169,232,.38); border-radius: 8px; background: rgba(118,169,232,.07); color: var(--info); font-size: 10px; }
+    .aggregate-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 9px; }
+    .aggregate-card { padding: 12px; border: 1px solid var(--line); border-radius: 9px; background: var(--surface2); }
+    .aggregate-card h4 { margin: 0 0 8px; color: var(--text-strong); font-size: 11px; }
+    .aggregate-card p { margin: 5px 0; color: var(--dim); font-size: 10px; }
+    .aggregate-card button { margin-top: 7px; }
+    .notice-list { display: grid; gap: 8px; }
+    .notice { display: flex; gap: 9px; padding: 11px; border: 1px solid var(--line); border-radius: 9px; background: var(--surface2); cursor: pointer; }
+    .notice.selected { border-color: rgba(217,119,87,.7); background: var(--brand-soft); }
+    .notice .notice-icon { display: grid; place-items: center; flex: 0 0 27px; width: 27px; height: 27px; border-radius: 8px; background: rgba(240,107,104,.13); color: var(--error); }
+    .notice strong { display: block; color: var(--text-strong); font-size: 11px; }
+    .notice p { margin: 4px 0 0; color: var(--dim); font-size: 10px; }
+    .notice .tag { margin-top: 7px; }
+    .acceptance { padding: 14px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface2); }
+    .acceptance-head { display: flex; align-items: center; gap: 8px; margin-bottom: 12px; }
+    .acceptance-head h3 { flex: 1; margin: 0; color: var(--text-strong); font-size: 13px; }
+    .accept-row { display: grid; grid-template-columns: 24px minmax(0, 1fr) 55px; gap: 7px; align-items: center; padding: 9px 0; border-bottom: 1px solid var(--line-soft); color: var(--dim); font-size: 10px; }
+    .accept-row b { color: var(--done); font-size: 13px; }
+    .accept-row.pending b { color: var(--working); }
+    .accept-row span:last-child { color: var(--text); text-align: right; }
+    .settings-list { display: grid; gap: 8px; }
+    .settings-row { display: flex; align-items: center; gap: 9px; padding: 11px; border: 1px solid var(--line); border-radius: 9px; background: var(--surface2); }
+    .settings-row .setting-icon { display: grid; place-items: center; flex: 0 0 28px; width: 28px; height: 28px; border-radius: 8px; background: var(--hover); }
+    .settings-row strong { display: block; color: var(--text-strong); font-size: 11px; }
+    .settings-row p { margin: 3px 0 0; color: var(--dim); font-size: 10px; }
+    .settings-row .chev { margin-left: auto; color: var(--faint); }
+    .field { margin-bottom: 12px; }
+    .field label { display: block; margin-bottom: 5px; color: var(--dim); font-size: 10px; }
+    .field input { width: 100%; padding: 8px 9px; border: 1px solid var(--line); border-radius: 7px; outline: none; background: var(--bg1); color: var(--text); font: 11px var(--mono); }
+    .field input:focus { border-color: var(--brand); box-shadow: 0 0 0 3px rgba(217,119,87,.13); }
+    .mobile-frame { width: 390px; max-width: 100%; margin: 0 auto; overflow: hidden; border: 8px solid #02060A; border-radius: 30px; background: var(--bg1); box-shadow: var(--shadow); }
+    .mobile-notch { width: 126px; height: 20px; margin: -1px auto 0; border-radius: 0 0 14px 14px; background: #02060A; }
+    .mobile-screen { display: none; min-height: 735px; }
+    .mobile-screen.active { display: flex; flex-direction: column; }
+    .mobile-status { display: flex; justify-content: space-between; padding: 7px 15px 2px; color: var(--dim); font: 10px var(--mono); }
+    .mobile-head { display: flex; align-items: center; gap: 8px; padding: 14px 14px 12px; border-bottom: 1px solid var(--line-soft); }
+    .mobile-head h2 { flex: 1; min-width: 0; margin: 0; color: var(--text-strong); font-size: 15px; }
+    .mobile-head h2 small { display: block; margin-top: 3px; color: var(--dim); font-size: 10px; font-weight: 400; }
+    .mobile-content { flex: 1; overflow: auto; padding: 14px 13px 78px; }
+    .mobile-content.no-bottom { padding-bottom: 18px; }
+    .mobile-nav { display: flex; flex: 0 0 62px; border-top: 1px solid var(--line-soft); background: var(--surface1); }
+    .mobile-nav button { flex: 1; border: 0; border-bottom: 3px solid transparent; background: transparent; color: var(--dim); cursor: pointer; font-size: 10px; }
+    .mobile-nav button b { display: block; margin-bottom: 3px; color: var(--text); font-size: 17px; }
+    .mobile-nav button.active { color: var(--text-strong); border-bottom-color: var(--brand); }
+    .mobile-nav button.active b { color: var(--brand-hover); }
+    .mobile-summary { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; margin-bottom: 13px; }
+    .mobile-summary div { padding: 9px 7px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface2); }
+    .mobile-summary b { display: block; color: var(--text-strong); font: 700 16px var(--mono); }
+    .mobile-summary span { color: var(--dim); font-size: 9px; }
+    .mobile-switch { display: flex; gap: 4px; padding: 3px; margin-bottom: 13px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface1); }
+    .mobile-switch button { flex: 1; padding: 6px 3px; border: 0; border-radius: 5px; background: transparent; color: var(--dim); cursor: pointer; font-size: 10px; }
+    .mobile-switch button.active { background: var(--hover); color: var(--text-strong); }
+    .mobile-card { padding: 11px; margin-bottom: 8px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface2); cursor: pointer; }
+    .mobile-card.primary { border-color: rgba(217,119,87,.7); box-shadow: inset 3px 0 0 var(--brand); }
+    .mobile-card .row { display: flex; align-items: center; gap: 7px; }
+    .mobile-card strong { flex: 1; min-width: 0; color: var(--text-strong); font-size: 11.5px; }
+    .mobile-card p { margin: 5px 0 0 35px; color: var(--dim); font-size: 10px; }
+    .mobile-card .avatar { display: grid; place-items: center; flex: 0 0 27px; width: 27px; height: 27px; border-radius: 8px; background: var(--hover); color: var(--text); }
+    .mobile-detail-tabs { display: flex; gap: 17px; overflow: auto; padding: 0 14px; border-bottom: 1px solid var(--line-soft); }
+    .mobile-detail-tabs button { position: relative; flex: 0 0 auto; padding: 10px 0 8px; border: 0; background: transparent; color: var(--dim); cursor: pointer; font-size: 10px; }
+    .mobile-detail-tabs button.active { color: var(--text-strong); font-weight: 700; }
+    .mobile-detail-tabs button.active::after { content: ""; position: absolute; right: 0; bottom: -1px; left: 0; height: 2px; background: var(--brand); }
+    .mobile-board { display: grid; gap: 9px; }
+    .mobile-lane { padding: 10px; border: 1px solid var(--line); border-radius: 9px; background: var(--surface1); }
+    .mobile-lane-head { display: flex; justify-content: space-between; margin-bottom: 7px; color: var(--dim); font-size: 10px; font-weight: 700; }
+    .mobile-task { padding: 9px; border: 1px solid var(--line); border-radius: 7px; background: var(--surface2); color: var(--text); font-size: 10px; }
+    .mobile-task + .mobile-task { margin-top: 6px; }
+    .mobile-project-card { padding: 12px; margin-bottom: 8px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface2); }
+    .mobile-project-card h3 { margin: 0; color: var(--text-strong); font-size: 12px; }
+    .mobile-project-card p { margin: 4px 0 10px; color: var(--dim); font-size: 10px; }
+    .mobile-settings { display: grid; gap: 8px; }
+    .mobile-settings .settings-row { padding: 12px; }
+    .mobile-topline { display: flex; align-items: center; gap: 7px; margin-bottom: 12px; color: var(--dim); font-size: 10px; }
+    .mobile-topline b { color: var(--text); }
+    .mobile-back { border: 0; background: transparent; color: var(--brand-hover); cursor: pointer; font-size: 18px; line-height: 1; }
+    .mobile-detail-composer { display: flex; gap: 7px; padding: 10px 12px; border-top: 1px solid var(--line-soft); background: var(--surface1); }
+    .mobile-detail-composer .composer { min-height: 34px; }
+    .mobile-detail-composer .primary-btn { padding: 0 10px; }
+    .toast { position: fixed; right: 22px; bottom: 22px; z-index: 20; max-width: 340px; padding: 10px 13px; border: 1px solid rgba(66,201,138,.45); border-radius: 8px; background: #10291F; color: var(--done); box-shadow: var(--small-shadow); opacity: 0; pointer-events: none; transform: translateY(8px); transition: opacity .18s ease, transform .18s ease; font-size: 11px; }
+    .toast.show { opacity: 1; transform: none; }
+    .desktop-only-note { color: var(--faint); font-size: 10px; }
+    @media (max-width: 980px) {
+      .page { width: min(100% - 22px, 760px); }
+      .desktop-frame { overflow-x: auto; }
+      .desktop-frame .windowbar, .desktop-shell { min-width: 1120px; }
+    }
+    @media (max-width: 560px) {
+      .topbar { display: block; }
+      .build { display: block; margin-top: 9px; }
+      .mode-switcher { display: grid; grid-template-columns: 1fr 1fr; }
+      .mode-btn:last-child { grid-column: 1 / -1; }
+      .stage-note { display: block; }
+      .stage-note span { display: block; margin-top: 4px; }
+    }
+  </style>
+</head>
+<body>
+  <main class="page">
+    <header class="topbar">
+      <div>
+        <h1>cc-deck · A 指挥桥 Command Bridge</h1>
+        <p>视觉稿级可点击原型：先处理行动，再核对证据；桌面与手机使用同一信息架构。</p>
+      </div>
+      <div class="build">SPEC 004 · PROTOTYPE 005 · NO EXTERNAL ASSETS</div>
+    </header>
+
+    <nav class="mode-switcher" aria-label="原型视口切换">
+      <button class="mode-btn active" data-mode="desktop" aria-pressed="true"><b>桌面宽屏</b><span>1440 基准 · 五个工作面</span></button>
+      <button class="mode-btn" data-mode="mobile" aria-pressed="false"><b>手机</b><span>390 外框 · root / 详情</span></button>
+    </nav>
+
+    <section class="mode-stage active" id="stage-desktop">
+      <div class="stage-note"><span><b>桌面宽屏 1440 基准</b> · 域栏切换工作面，第二栏展示当前域队列，中央和右侧联动。</span><span class="desktop-only-note">提示：窗口较窄时横向滚动查看完整四层结构。</span></div>
+      <div class="desktop-frame">
+        <div class="windowbar"><span class="window-dots"><i></i><i></i><i></i></span><span class="window-title">CC Deck · Command Bridge</span><span class="window-link">⌘K 全局搜索</span></div>
+        <div class="desktop-shell">
+          <nav class="domain-rail" aria-label="桌面域栏">
+            <div class="rail-brand">cc</div>
+            <button class="rail-connection" title="连接状态 · 已连接"><i></i></button>
+            <button class="rail-btn active" data-domain="session" title="会话">⌂</button>
+            <button class="rail-btn" data-domain="team" title="团队">👥<span class="badge">1</span></button>
+            <button class="rail-btn" data-domain="project" title="项目">▣</button>
+            <div class="rail-spring"></div>
+            <button class="rail-btn" data-domain="notify" title="通知">♢<span class="badge">2</span></button>
+            <button class="rail-btn" data-domain="settings" title="设置">⚙</button>
+          </nav>
+
+          <section class="desktop-screen active" id="d-session">
+            <aside class="queue">
+              <div class="queue-head"><h2>会话</h2><button class="icon-btn">＋</button></div>
+              <div class="queue-switch" aria-label="会话队列视图"><button class="active" data-queue-mode="action">行动队列</button><button data-queue-mode="all">全部会话</button></div>
+              <div class="queue-view active" data-queue-view="action">
+                <div class="queue-group">需你处理 · 3</div>
+                <div class="queue-card selected" data-session-card="release"><div class="row"><i class="status-dot waiting"></i><strong>0.6.0-test.19 出包</strong><span class="tag action">待收单</span></div><p>验收单已回填 2/3 · 12 分钟前</p></div>
+                <div class="queue-card" data-session-card="mobile"><div class="row"><i class="status-dot error"></i><strong>worker-mobile 失联</strong><span class="tag action">接替</span></div><p>claude 额度尽 · 8 分钟前</p></div>
+                <div class="queue-card" data-session-card="team-plan"><div class="row"><i class="status-dot waiting"></i><strong>团队编制确认</strong><span class="tag action">待确认</span></div><p>cc-deck M1 攻坚团 · Leader 已提交</p></div>
+                <div class="queue-group">运行中 · 4</div>
+                <div class="queue-card" data-session-card="ui"><div class="row"><i class="status-dot done"></i><strong>ui-review 走查</strong></div><p>当前任务：检查 rail 方案 · 上下文 58%</p></div>
+                <div class="queue-card" data-session-card="board"><div class="row"><i class="status-dot done"></i><strong>relay 任务板</strong></div><p>T-12/T-15 并行 · 4/9</p></div>
+              </div>
+              <div class="queue-view" data-queue-view="all">
+                <div class="queue-group">📁 cc-deck · 6 个会话</div>
+                <div class="queue-card selected" data-session-card="release"><div class="row"><i class="status-dot waiting"></i><strong>0.6.0-test.19 出包</strong><span class="tag action">待收单</span></div><p>验收单 · 1 小时前</p></div>
+                <div class="queue-card" data-session-card="ui"><div class="row"><i class="status-dot done"></i><strong>ui-review 走查</strong></div><p>刚刚活跃 · 58%</p></div>
+                <div class="queue-card" data-session-card="board"><div class="row"><i class="status-dot done"></i><strong>relay 任务板</strong></div><p>运行中 · 4/9</p></div>
+                <div class="queue-card" data-session-card="mobile"><div class="row"><i class="status-dot error"></i><strong>worker-mobile 失联</strong></div><p>需接替 · 8 分钟前</p></div>
+                <div class="queue-group">📁 windclaw-qclaw · 1 个会话</div>
+                <div class="queue-card" data-session-card="android"><div class="row"><i class="status-dot waiting"></i><strong>android 构建</strong></div><p>等待安卓产物 · 3 小时前</p></div>
+              </div>
+            </aside>
+            <section class="workspace">
+              <header class="workspace-head"><div class="workspace-title-row"><i class="status-dot waiting" id="session-dot"></i><h2 id="session-title">0.6.0-test.19 出包</h2><span class="tag action" id="session-status">待收单</span></div><div class="workspace-sub" id="session-sub">~/dev/cc-deck · claude · 上下文 41% · 最近活动 12 分钟前</div><div class="segment-bar"><button class="active">对话</button><button>任务 <span class="faint">6/9</span></button><button>输出物 <span class="faint">4</span></button><button>用量</button><button>⋯</button></div></header>
+              <div class="workspace-body" id="session-body">
+                <div class="timeline-note">今天 10:42 · 验收上下文</div>
+                <div class="bubble"><strong>Leader</strong><br>独立出包已完成，四处版本号已同步。验收单还差 1 项确认收单。</div>
+                <div class="bubble me">我先看更新通道隔离，再确认收单。</div>
+                <div class="wait-card" data-wait-card><strong class="wait-title">等待你的确认 · Bash 写入 docs/</strong><p class="wait-copy">将把验收证据写入 `docs/release-check.md`，会话才能继续。</p><div class="wait-actions"><button class="allow" data-allow>允许一次</button><button>拒绝并说明</button></div></div>
+                <div class="bubble"><strong>Claude</strong><br id="session-main-copy">当前任务：回填验收证据 · 预计还需 2 分钟。</div>
+              </div>
+              <footer class="workspace-footer"><div class="composer">给会话发消息…　📎 附件　▧ 图片</div><button class="primary-btn">发送</button></footer>
+            </section>
+            <aside class="inspector"><h3>证据检查器</h3><div class="inspector-block"><div class="inspector-title"><span>验收进度</span><span>2/3</span></div><div class="progress"><i style="width:66%"></i></div><div class="inspector-copy">还有 1 项待确认收单</div></div><div class="inspector-block"><div class="inspector-title"><span>任务清单</span><span>6/9</span></div><div class="check-row"><b>✓</b><span>版本号同步</span></div><div class="check-row"><b>✓</b><span>独立出包</span></div><div class="check-row"><span>○</span><span>公司网检查更新</span></div></div><div class="inspector-block"><div class="inspector-title"><span>用量</span><span>41%</span></div><div class="progress"><i style="width:41%"></i></div><div class="inspector-copy">claude · 84k / 200k</div></div><div class="inspector-block"><div class="inspector-title"><span>输出物</span><span>4</span></div><div class="artifact-row">docs/release-check.md <span>刚刚</span></div><div class="artifact-row">0.6.0-test.19.apk <span>1h</span></div></div></aside>
+          </section>
+
+          <section class="desktop-screen" id="d-team">
+            <aside class="queue"><div class="queue-head"><h2>团队行动 <span class="tag action">1</span></h2><button class="icon-btn">＋</button></div><div class="queue-group">待确认 · 1</div><div class="queue-card selected"><div class="row"><i class="status-dot waiting"></i><strong>cc-deck M1 攻坚团</strong><span class="tag action">编制</span></div><p>6 成员 · 4 进行中 · 2 待装机</p></div><div class="queue-group">进行中 · 1</div><div class="queue-card"><div class="row"><i class="status-dot done"></i><strong>v0.5.2 双端发版团</strong></div><p>归档准备 · 09-18</p></div><div class="queue-group">快捷入口</div><div class="queue-card"><div class="row"><span class="avatar">＋</span><strong>新建团队</strong></div><p>描述目标 → Leader 建议编制 → 你确认</p></div></aside>
+            <section class="workspace"><header class="workspace-head"><div class="workspace-title-row"><i class="status-dot done"></i><h2>cc-deck M1 攻坚团</h2><span class="tag action">待你确认</span></div><div class="workspace-sub">6 成员 · 4 进行中 · 2 待装机 · Leader：glm-5.3</div><div class="segment-bar"><button>对话</button><button class="active">看板 <span class="faint">9</span></button><button>成员 <span class="faint">6</span></button><button>活动</button></div></header><div class="workspace-body"><div class="board"><div class="lane"><div class="lane-head"><span>待认领</span><span>2</span></div><div class="task-card"><strong>T-21 导入码迁移</strong><p>等待 worker-web</p><span class="tag">待派单</span></div></div><div class="lane"><div class="lane-head"><span>进行中</span><span>4</span></div><div class="task-card"><strong>T-12 relay 事件流</strong><p>worker-relay · 48%</p><span class="tag info">运行中</span></div><div class="task-card"><strong>T-15 手机列表</strong><p>worker-mobile · 72%</p><span class="tag info">运行中</span></div></div><div class="lane"><div class="lane-head"><span>待验收</span><span>2</span></div><div class="task-card"><strong>T-13 更新通道隔离</strong><p>独立出包已完成</p><span class="tag action">验收单</span></div></div><div class="lane"><div class="lane-head"><span>待装机</span><span>2</span></div><div class="task-card"><strong>T-14 验收槽</strong><p>回填 2/3</p><span class="tag action">待收单</span></div></div><div class="lane"><div class="lane-head"><span>完成</span><span>1</span></div><div class="task-card"><strong>T-10 版本同步</strong><p>已合并 main</p><span class="tag done">完成</span></div></div></div></div><footer class="workspace-footer"><button class="secondary-btn">＋ 新建任务</button><button class="primary-btn">确认编制方案</button></footer></section>
+            <aside class="inspector"><h3>成员与派单</h3><div class="inspector-block"><div class="inspector-title"><span>Leader 建议编制</span><span>待确认</span></div><div class="member-list"><div class="member-card"><span class="avatar">L</span><div><strong>Leader</strong><p>glm-5.3 · 调度</p></div></div><div class="member-card"><span class="avatar">W</span><div><strong>worker-web</strong><p>claude · 开发</p></div></div><div class="member-card"><span class="avatar">M</span><div><strong>worker-mobile</strong><p>失联 · 需接替</p></div></div><div class="member-card"><span class="avatar">QA</span><div><strong>验收槽</strong><p>独立厂商 · claude</p></div></div></div></div><div class="inspector-block"><div class="inspector-title"><span>停留告警</span><span class="tag action">1</span></div><div class="inspector-copy">worker-mobile 25 分钟无日志；已通知 Leader。</div><button class="danger-btn" style="margin-top:9px">换厂商接替</button></div><div class="inspector-block"><div class="inspector-title"><span>团队确认</span><span>1 项</span></div><div class="inspector-copy">3 开发 + 独立验收 + 1 调研</div></div></aside>
+          </section>
+
+          <section class="desktop-screen" id="d-project">
+            <aside class="queue"><div class="queue-head"><h2>项目观测</h2><button class="icon-btn">＋</button></div><div class="queue-group">活跃项目 · 2</div><div class="queue-card selected"><div class="row"><i class="status-dot done"></i><strong>cc-deck</strong><span class="tag action">2</span></div><p>~/dev/cc-deck · 6 会话 · 1 团队</p></div><div class="queue-card"><div class="row"><i class="status-dot waiting"></i><strong>windclaw-qclaw</strong></div><p>~/dev/windclaw · 1 会话 · 等构建</p></div><div class="queue-group">已隐藏 · 1</div><div class="queue-card"><div class="row"><i class="status-dot"></i><strong>legacy-scripts</strong></div><p>右键恢复 · 3 天前活跃</p></div></aside>
+            <section class="workspace"><header class="workspace-head"><div class="workspace-title-row"><span class="tag info">只读聚合</span><h2>cc-deck</h2><span class="tag action">2 需行动</span></div><div class="workspace-sub">目录 ~/dev/cc-deck · realpath 已归一 · 6 会话 · 1 团队 · 输出物 46</div><div class="segment-bar"><button class="active">总览</button><button>会话 <span class="faint">6</span></button><button>团队 <span class="faint">1</span></button><button>输出物 <span class="faint">46</span></button><button>验收单 <span class="faint">3</span></button></div></header><div class="workspace-body"><div class="readonly-banner">项目页只读聚合。需要编辑时，请回到来源会话或团队处理。</div><div class="project-overview"><div class="metric"><b>6</b><span>会话</span></div><div class="metric"><b>1</b><span>活跃团队</span></div><div class="metric"><b>46</b><span>输出物</span></div><div class="metric"><b>2</b><span>需行动</span></div></div><div class="aggregate-grid"><div class="aggregate-card"><h4>💬 会话</h4><p>0.6.0-test.19 出包 · 待收单</p><p>ui-review 走查 · 刚刚活跃</p><button class="secondary-btn">在会话中查看</button></div><div class="aggregate-card"><h4>👥 团队</h4><p>cc-deck M1 攻坚团 · 6 成员</p><p>4 进行中 · 2 待装机</p><button class="secondary-btn">在团队中查看</button></div><div class="aggregate-card"><h4>▣ 输出物</h4><p>docs/release-check.md · 刚刚</p><p>0.6.0-test.19.apk · 1 小时前</p><button class="secondary-btn">查看来源</button></div><div class="aggregate-card"><h4>✓ 验收单</h4><p>0.6.0-test.19 · 回填 2/3</p><p>0.6.0-test.18 · 修复中</p><button class="secondary-btn">在原域处理</button></div></div></div><footer class="workspace-footer"><span class="desktop-only-note">项目不产生第二写面 · 所有动作回原域</span></footer></section>
+            <aside class="inspector"><h3>来源检查器</h3><div class="inspector-block"><div class="inspector-title"><span>最近风险</span><span class="tag action">2</span></div><div class="inspector-copy">0.6.0-test.19 待收单<br>worker-mobile 失联需接替</div></div><div class="inspector-block"><div class="inspector-title"><span>最近产物</span><span>46</span></div><div class="artifact-row">release-check.md <span>会话</span></div><div class="artifact-row">test.19.apk <span>会话</span></div></div><div class="inspector-block"><div class="inspector-title"><span>聚合原则</span></div><div class="inspector-copy">按目录聚合，不复制写状态；源实体被删除或不可达时保留原因。</div></div></aside>
+          </section>
+
+          <section class="desktop-screen" id="d-notify">
+            <aside class="queue"><div class="queue-head"><h2>通知 <span class="tag action">2</span></h2><button class="icon-btn">×</button></div><div class="queue-group">需你行动 · 2</div><div class="notice selected"><span class="notice-icon">!</span><div><strong>0.6.0-test.19 就绪待收单</strong><p>T-13 已回填 2/3 · 12 分钟前</p><span class="tag action">验收单</span></div></div><div class="notice"><span class="notice-icon">!</span><div><strong>验收成员失联 · 额度链走尽</strong><p>worker-mobile · 8 分钟前</p><span class="tag action">换厂商接替</span></div></div><div class="queue-group">注意 · 历史</div><div class="notice"><span class="notice-icon">·</span><div><strong>worker-relay 滞留 25 分</strong><p>已通知 Leader · 30 分钟前</p></div></div></aside>
+            <section class="workspace"><header class="workspace-head"><div class="workspace-title-row"><span class="tag action">行动告警</span><h2>0.6.0-test.19 · 验收工作台</h2></div><div class="workspace-sub">来源：cc-deck M1 攻坚团 / 会话 0.6.0-test.19 出包</div><div class="segment-bar"><button class="active">验收单</button><button>来源上下文</button><button>处理记录</button></div></header><div class="workspace-body"><div class="acceptance"><div class="acceptance-head"><h3>回填与确认收单</h3><span class="tag action">2/3</span></div><div class="accept-row"><b>✓</b><span>安装 test.19 后检查版本号通道</span><span>通过</span></div><div class="accept-row"><b>✓</b><span>四处版本号与 release note 一致</span><span>通过</span></div><div class="accept-row pending"><b>○</b><span>公司网下点击“检查更新”能拉到清单</span><span>未测</span></div><div class="wait-card" style="margin-bottom:0"><strong>还差 1 项确认</strong><p>完成第三项后，主动作会变为“确认收单”。</p><div class="wait-actions"><button class="allow">标记通过</button><button>反馈问题</button></div></div></div></div><footer class="workspace-footer"><button class="secondary-btn">回到来源会话</button><button class="primary-btn">提交回填（2/3）</button></footer></section>
+            <aside class="inspector"><h3>行动上下文</h3><div class="inspector-block"><div class="inspector-title"><span>通知口径</span><span class="tag action">只计行动</span></div><div class="inspector-copy">打开面板不清零；执行动作或明确处理后清零。</div></div><div class="inspector-block"><div class="inspector-title"><span>来源实体</span></div><div class="inspector-copy">会话：0.6.0-test.19 出包<br>团队：cc-deck M1 攻坚团<br>项目：cc-deck</div><button class="secondary-btn" style="margin-top:9px">打开来源会话</button></div><div class="inspector-block"><div class="inspector-title"><span>下一步</span></div><div class="inspector-copy">回填第三项 → 提交回填 → 确认收单</div></div></aside>
+          </section>
+
+          <section class="desktop-screen" id="d-settings">
+            <aside class="queue"><div class="queue-head"><h2>设置</h2><button class="icon-btn">×</button></div><div class="queue-group">连接与设备</div><div class="queue-card selected"><div class="row"><span class="avatar">⌁</span><strong>连接与设备</strong><span class="status-dot done"></span></div><p>relay 在线 · 3 台设备 · 1 异常</p></div><div class="queue-group">配置</div><div class="queue-card"><div class="row"><span class="avatar">◈</span><strong>模型服务</strong></div><p>claude-sonnet · 2 个 provider</p></div><div class="queue-card"><div class="row"><span class="avatar">◌</span><strong>通用与快捷键</strong></div><p>⌘K 搜索 · ⌘N 新建会话</p></div><div class="queue-card"><div class="row"><span class="avatar">👥</span><strong>团队身份模板</strong></div><p>5 个角色 · 开团时可覆盖</p></div><div class="queue-card"><div class="row"><span class="avatar">▦</span><strong>扩展</strong></div><p>验收 · 登记 · 产物</p></div></aside>
+            <section class="workspace"><header class="workspace-head"><div class="workspace-title-row"><span class="tag info">连接状态</span><h2>连接与设备</h2><span class="tag done">已连接</span></div><div class="workspace-sub">relay · 云桥 · 已配设备 · 异常项单独处理</div><div class="segment-bar"><button class="active">连接</button><button>设备</button><button>配对记录</button></div></header><div class="workspace-body"><div class="settings-list"><div class="settings-row"><span class="avatar">●</span><div><strong>本机 relay · 已连接</strong><p>端口 8787 · 事件流自动补发 · 最后心跳刚刚</p></div><span class="tag done">在线</span></div><div class="settings-row"><span class="avatar">☁</span><div><strong>云桥 · 已连接</strong><p>wss://cc.humumu.online/cloud</p></div><span class="tag done">在线</span></div><div class="settings-row"><span class="avatar">▣</span><div><strong>浏览器 · 网页端</strong><p>配对码错误 · 重试中 · 09-18 起</p></div><button class="danger-btn">重配对</button></div></div><div class="readonly-banner" style="margin-top:14px">设备身份 = 配对密钥（E2E）。踢出后需重新配对；手机端仅浏览、验证和换路由。</div><button class="primary-btn">＋ 配对新设备</button></div><footer class="workspace-footer"><button class="secondary-btn">查看连接帮助</button><button class="primary-btn">验证全部连接</button></footer></section>
+            <aside class="inspector"><h3>连接检查器</h3><div class="inspector-block"><div class="inspector-title"><span>连接健康</span><span class="tag done">2/3 在线</span></div><div class="progress done"><i style="width:66%"></i></div><div class="inspector-copy">1 台浏览器设备异常，不影响本机 relay。</div></div><div class="inspector-block"><div class="inspector-title"><span>数据边界</span></div><div class="inspector-copy">凭证仅存你的电脑，不进入事件流；项目/团队状态来自 relay 同一事件源。</div></div><div class="inspector-block"><div class="inspector-title"><span>版本</span><span>v0.6.0-test</span></div><div class="inspector-copy">桌面端 · test 通道</div></div></aside>
+          </section>
+        </div>
+      </div>
+    </section>
+
+    <section class="mode-stage" id="stage-mobile">
+      <div class="stage-note"><span><b>手机 390 外框</b> · root 使用四 Tab；进入详情后底栏隐藏，返回沿来源栈回到原页面。</span><span class="desktop-only-note">点击底栏、卡片和等待动作探索。</span></div>
+      <div class="mobile-frame">
+        <div class="mobile-notch"></div>
+        <div class="mobile-screen active" id="m-inbox" data-mobile-root="inbox">
+          <div class="mobile-status"><span>9:41</span><span>▰ ︎◒ 100%</span></div>
+          <header class="mobile-head"><h2>待我处理<small>3 个行动项 · cc-deck 在线</small></h2><span class="tag action">♢ 2</span><button class="icon-btn">⌕</button></header>
+          <div class="mobile-content"><div class="mobile-summary"><div><b>3</b><span>需行动</span></div><div><b>4</b><span>运行中</span></div><div><b>2</b><span>待验收</span></div></div><div class="mobile-switch"><button class="active" data-mobile-list="action">待处理</button><button data-mobile-list="all">全部会话</button></div><div class="mobile-card primary" data-open-detail="release"><div class="row"><span class="avatar">✓</span><strong>0.6.0-test.19 出包</strong><span class="tag action">待收单</span></div><p>验收单已回填 2/3 · 点击确认最后一项</p></div><div class="mobile-card" data-open-detail="mobile"><div class="row"><span class="avatar">!</span><strong>worker-mobile 失联</strong><span class="tag action">接替</span></div><p>claude 额度尽 · 验收槽不回落同厂商</p></div><div class="mobile-card" data-open-detail="team-plan"><div class="row"><span class="avatar">👥</span><strong>团队编制确认</strong><span class="tag action">待确认</span></div><p>Leader 已提交编制方案 · 3 开发 + 独立验收</p></div><div class="mobile-card"><div class="row"><span class="avatar">●</span><strong>ui-review 走查</strong><span class="status-dot done"></span></div><p>刚刚活跃 · 检查 rail 方案 · 上下文 58%</p></div></div>
+          <nav class="mobile-nav"><button class="active" data-mobile-root="inbox"><b>⌂</b>会话</button><button data-mobile-root="team"><b>👥</b>团队<span class="tag action">1</span></button><button data-mobile-root="project"><b>▣</b>项目</button><button data-mobile-root="settings"><b>⚙</b>设置</button></nav>
+        </div>
+
+        <div class="mobile-screen" id="m-detail" data-mobile-detail="true">
+          <div class="mobile-status"><span>9:41</span><span>▰ ︎◒ 100%</span></div>
+          <header class="mobile-head"><button class="mobile-back" data-mobile-back>‹</button><h2 id="mobile-detail-title">0.6.0-test.19 出包<small>~/dev/cc-deck · claude · 上下文 41%</small></h2><span class="tag action">待收单</span></header>
+          <div class="mobile-detail-tabs"><button class="active">对话</button><button>任务</button><button>输出物</button><button>用量</button><button>⋯</button></div>
+          <div class="mobile-content no-bottom"><div class="timeline-note">今天 10:42 · 来源：待处理收件箱</div><div class="bubble"><strong>Leader</strong><br>独立出包已完成，验收单还差 1 项确认收单。</div><div class="bubble me">我先看更新通道隔离，再确认收单。</div><div class="wait-card" data-wait-card><strong class="wait-title">等待你的确认 · Bash 写入 docs/</strong><p class="wait-copy">将把验收证据写入 `docs/release-check.md`，会话才能继续。</p><div class="wait-actions"><button class="allow" data-allow>允许一次</button><button>拒绝并说明</button></div></div><div class="bubble"><strong>Claude</strong><br>当前任务：回填验收证据 · 预计还需 2 分钟。</div><div class="artifact-row">📎 docs/release-check.md <span>刚刚</span></div><div class="artifact-row">▧ 0.6.0-test.19.apk <span>1h</span></div></div><div class="mobile-detail-composer"><div class="composer">给会话发消息…</div><button class="primary-btn">发送</button></div>
+        </div>
+
+        <div class="mobile-screen" id="m-team" data-mobile-root="team">
+          <div class="mobile-status"><span>9:41</span><span>▰ ︎◒ 100%</span></div>
+          <header class="mobile-head"><h2>团队行动<small>cc-deck M1 攻坚团 · 6 成员</small></h2><span class="tag action">1 待确认</span><button class="icon-btn">＋</button></header>
+          <div class="mobile-content"><div class="mobile-card primary"><div class="row"><span class="avatar">👥</span><strong>编制方案待确认</strong><span class="tag action">确认</span></div><p>3 开发 + 独立验收 + 1 调研 · Leader glm-5.3</p></div><div class="mobile-detail-tabs"><button class="active" data-team-tab="todo">待办</button><button data-team-tab="board">看板</button><button data-team-tab="members">成员</button></div><div data-team-pane="todo"><div class="mobile-lane"><div class="mobile-lane-head"><span>就绪待装机</span><span>2</span></div><div class="mobile-task"><b>T-13 更新通道隔离</b><br><span class="muted">回填 2/3 · 待确认收单</span><br><span class="tag action">验收单</span></div></div><div class="mobile-lane"><div class="mobile-lane-head"><span>停留告警</span><span class="tag action">1</span></div><div class="mobile-task"><b>worker-mobile 失联</b><br><span class="muted">25 分钟无日志 · 换厂商接替</span></div></div></div><div data-team-pane="board" style="display:none"><div class="mobile-board"><div class="mobile-lane"><div class="mobile-lane-head"><span>待认领</span><span>2</span></div><div class="mobile-task">T-21 导入码迁移</div></div><div class="mobile-lane"><div class="mobile-lane-head"><span>进行中</span><span>4</span></div><div class="mobile-task">T-12 relay 事件流 · 48%</div><div class="mobile-task">T-15 手机列表 · 72%</div></div><div class="mobile-lane"><div class="mobile-lane-head"><span>待验收</span><span>2</span></div><div class="mobile-task">T-13 更新通道隔离</div></div></div></div><div data-team-pane="members" style="display:none"><div class="member-list"><div class="member-card"><span class="avatar">L</span><div><strong>Leader</strong><p>glm-5.3 · 调度</p></div></div><div class="member-card"><span class="avatar">W</span><div><strong>worker-web</strong><p>claude · 开发</p></div></div><div class="member-card"><span class="avatar">M</span><div><strong>worker-mobile</strong><p>失联 · 接替</p></div></div><div class="member-card"><span class="avatar">QA</span><div><strong>验收槽</strong><p>独立厂商</p></div></div></div></div></div>
+          <nav class="mobile-nav"><button data-mobile-root="inbox"><b>⌂</b>会话</button><button class="active" data-mobile-root="team"><b>👥</b>团队<span class="tag action">1</span></button><button data-mobile-root="project"><b>▣</b>项目</button><button data-mobile-root="settings"><b>⚙</b>设置</button></nav>
+        </div>
+
+        <div class="mobile-screen" id="m-project" data-mobile-root="project">
+          <div class="mobile-status"><span>9:41</span><span>▰ ︎◒ 100%</span></div>
+          <header class="mobile-head"><h2>项目<small>只读聚合 · 2 个需行动</small></h2><span class="tag action">♢ 2</span><button class="icon-btn">＋</button></header>
+          <div class="mobile-content"><div class="mobile-project-card"><h3>📁 cc-deck</h3><p>~/dev/cc-deck · 6 会话 · 1 团队 · 46 输出物</p><span class="tag action">2 需行动</span></div><div class="mobile-project-card"><h3>📁 windclaw-qclaw</h3><p>~/dev/windclaw · 1 会话 · 等安卓产物</p><span class="tag">运行中</span></div><div class="readonly-banner">项目页只读聚合。查看或编辑请回到会话/团队原始域。</div><div class="mobile-lane"><div class="mobile-lane-head"><span>cc-deck 聚合</span><span>只读</span></div><div class="mobile-task">💬 0.6.0-test.19 出包 · 待收单<br><span class="muted">在会话中查看 →</span></div><div class="mobile-task">👥 cc-deck M1 攻坚团 · 4 进行中<br><span class="muted">在团队中查看 →</span></div><div class="mobile-task">▧ docs/release-check.md · 刚刚<br><span class="muted">查看来源 →</span></div></div></div>
+          <nav class="mobile-nav"><button data-mobile-root="inbox"><b>⌂</b>会话</button><button data-mobile-root="team"><b>👥</b>团队</button><button class="active" data-mobile-root="project"><b>▣</b>项目</button><button data-mobile-root="settings"><b>⚙</b>设置</button></nav>
+        </div>
+
+        <div class="mobile-screen" id="m-settings" data-mobile-root="settings">
+          <div class="mobile-status"><span>9:41</span><span>▰ ︎◒ 100%</span></div>
+          <header class="mobile-head"><h2>设置<small>设备、模型与偏好</small></h2><span class="tag done">relay 在线</span><button class="icon-btn">⋯</button></header>
+          <div class="mobile-content"><div class="mobile-settings"><div class="settings-row"><span class="setting-icon">⌁</span><div><strong>连接与设备</strong><p>2 台在线 · 1 台异常 · 浏览/验证/换路由</p></div><span class="tag action">1</span></div><div class="settings-row"><span class="setting-icon">◈</span><div><strong>模型服务</strong><p>Provider 浏览态 · claude-sonnet</p></div><span class="chev">›</span></div><div class="settings-row"><span class="setting-icon">◌</span><div><strong>通用与快捷键</strong><p>主题、列表密度、⌘K 全局搜索</p></div><span class="chev">›</span></div><div class="settings-row"><span class="setting-icon">👥</span><div><strong>团队身份模板</strong><p>5 个角色 · 开团时逐成员覆盖</p></div><span class="chev">›</span></div><div class="settings-row"><span class="setting-icon">▦</span><div><strong>扩展</strong><p>验收、登记、产物</p></div><span class="chev">›</span></div><div class="settings-row"><span class="setting-icon">ⓘ</span><div><strong>关于</strong><p>v0.6.0-test · test 通道</p></div><span class="chev">›</span></div></div><button class="primary-btn" style="margin-top:14px">扫码添加新设备</button></div>
+          <nav class="mobile-nav"><button data-mobile-root="inbox"><b>⌂</b>会话</button><button data-mobile-root="team"><b>👥</b>团队</button><button data-mobile-root="project"><b>▣</b>项目</button><button class="active" data-mobile-root="settings"><b>⚙</b>设置</button></nav>
+        </div>
+      </div>
+    </section>
+  </main>
+  <div class="toast" id="toast" role="status"></div>
+
+  <script>
+    (() => {
+      const desktopScreens = [...document.querySelectorAll(".desktop-screen")];
+      const railButtons = [...document.querySelectorAll(".rail-btn")];
+      const modeButtons = [...document.querySelectorAll(".mode-btn")];
+      const stages = { desktop: document.querySelector("#stage-desktop"), mobile: document.querySelector("#stage-mobile") };
+      const toast = document.querySelector("#toast");
+      let mobileReturn = "inbox";
+      let toastTimer = null;
+
+      function showToast(message) {
+        toast.textContent = message;
+        toast.classList.add("show");
+        clearTimeout(toastTimer);
+        toastTimer = setTimeout(() => toast.classList.remove("show"), 2200);
+      }
+
+      function setMode(mode) {
+        modeButtons.forEach((button) => {
+          const active = button.dataset.mode === mode;
+          button.classList.toggle("active", active);
+          button.setAttribute("aria-pressed", String(active));
+        });
+        Object.entries(stages).forEach(([key, stage]) => stage.classList.toggle("active", key === mode));
+      }
+
+      function setDesktopDomain(domain) {
+        const screen = document.querySelector(`#d-${domain}`);
+        if (!screen) return;
+        desktopScreens.forEach((item) => item.classList.toggle("active", item === screen));
+        railButtons.forEach((button) => button.classList.toggle("active", button.dataset.domain === domain));
+        showToast(`已切换到${({ session: "会话", team: "团队", project: "项目", notify: "通知", settings: "设置" })[domain]}域`);
+      }
+
+      function selectSession(id) {
+        document.querySelectorAll("[data-session-card]").forEach((card) => card.classList.toggle("selected", card.dataset.sessionCard === id));
+        const data = {
+          release: { title: "0.6.0-test.19 出包", sub: "~/dev/cc-deck · claude · 上下文 41% · 最近活动 12 分钟前", status: "待收单", dot: "waiting", copy: "当前任务：回填验收证据 · 预计还需 2 分钟。" },
+          mobile: { title: "worker-mobile 失联", sub: "~/dev/cc-deck · claude · 最后日志 25 分钟前", status: "需接替", dot: "error", copy: "当前建议：切换到独立验收厂商，保留原任务板与 git 记忆。" },
+          "team-plan": { title: "团队编制确认", sub: "cc-deck M1 攻坚团 · Leader glm-5.3 · 6 成员", status: "待确认", dot: "waiting", copy: "Leader 已提交编制方案：3 开发 + 独立验收 + 1 调研。" },
+          ui: { title: "ui-review 走查", sub: "~/dev/cc-deck · claude · 上下文 58% · 刚刚活跃", status: "运行中", dot: "done", copy: "当前任务：检查 rail 方案的交互与来源返回。" },
+          board: { title: "relay 任务板", sub: "~/dev/cc-deck · glm-5.3 · 4/9 卡片进行中", status: "运行中", dot: "done", copy: "T-12/T-15 并行推进，下一检查点在 15 分钟后。" },
+          android: { title: "android 构建", sub: "~/dev/windclaw · claude · 最近活动 3 小时前", status: "等产物", dot: "waiting", copy: "正在等待安卓产物上传，暂无需你处理的动作。" }
+        }[id] || null;
+        if (!data) return;
+        document.querySelector("#session-title").textContent = data.title;
+        document.querySelector("#session-sub").textContent = data.sub;
+        document.querySelector("#session-status").textContent = data.status;
+        const dot = document.querySelector("#session-dot");
+        dot.className = `status-dot ${data.dot}`;
+        document.querySelector("#session-main-copy").textContent = data.copy;
+      }
+
+      function setQueueMode(mode) {
+        document.querySelectorAll("[data-queue-mode]").forEach((button) => button.classList.toggle("active", button.dataset.queueMode === mode));
+        document.querySelectorAll("[data-queue-view]").forEach((view) => view.classList.toggle("active", view.dataset.queueView === mode));
+      }
+
+      function openMobileRoot(root) {
+        const target = document.querySelector(`#m-${root}`);
+        if (!target) return;
+        mobileReturn = root;
+        document.querySelectorAll(".mobile-screen").forEach((screen) => screen.classList.toggle("active", screen === target));
+        document.querySelectorAll("[data-mobile-root]").forEach((button) => button.classList.toggle("active", button.dataset.mobileRoot === root && button.tagName === "BUTTON" && button.classList.contains("mobile-nav") === false));
+      }
+
+      function openMobileDetail(id) {
+        mobileReturn = document.querySelector("#m-team.active") ? "team" : document.querySelector("#m-project.active") ? "project" : "inbox";
+        document.querySelector("#m-detail").classList.add("active");
+        document.querySelectorAll(".mobile-screen:not(#m-detail)").forEach((screen) => screen.classList.remove("active"));
+        const titles = { release: "0.6.0-test.19 出包", mobile: "worker-mobile 失联", "team-plan": "团队编制确认" };
+        document.querySelector("#mobile-detail-title").firstChild.textContent = titles[id] || "会话详情";
+      }
+
+      function closeMobileDetail() {
+        document.querySelector("#m-detail").classList.remove("active");
+        document.querySelector(`#m-${mobileReturn}`).classList.add("active");
+      }
+
+      modeButtons.forEach((button) => button.addEventListener("click", () => setMode(button.dataset.mode)));
+      railButtons.forEach((button) => button.addEventListener("click", () => setDesktopDomain(button.dataset.domain)));
+      document.querySelectorAll("[data-queue-mode]").forEach((button) => button.addEventListener("click", () => setQueueMode(button.dataset.queueMode)));
+      document.querySelectorAll("[data-session-card]").forEach((card) => card.addEventListener("click", () => selectSession(card.dataset.sessionCard)));
+      document.querySelectorAll("[data-allow]").forEach((button) => button.addEventListener("click", () => {
+        const card = button.closest("[data-wait-card]");
+        if (!card) return;
+        card.classList.add("allowed");
+        card.querySelector(".wait-title").textContent = "已允许一次 · 会话继续执行";
+        card.querySelector(".wait-copy").textContent = "Bash 写入已获本次授权；后续高风险动作仍会再次询问。";
+        button.textContent = "已允许 ✓";
+        button.disabled = true;
+        showToast("已允许一次，当前会话继续执行");
+      }));
+      document.querySelectorAll("[data-mobile-root]").forEach((button) => {
+        if (button.closest(".mobile-nav")) button.addEventListener("click", () => openMobileRoot(button.dataset.mobileRoot));
+      });
+      document.querySelectorAll("[data-open-detail]").forEach((card) => card.addEventListener("click", () => openMobileDetail(card.dataset.openDetail)));
+      document.querySelector("[data-mobile-back]").addEventListener("click", closeMobileDetail);
+      document.querySelectorAll("[data-mobile-list]").forEach((button) => button.addEventListener("click", () => {
+        document.querySelectorAll("[data-mobile-list]").forEach((item) => item.classList.toggle("active", item === button));
+        showToast(button.dataset.mobileList === "all" ? "已切换到全部会话 · 按项目浏览" : "已切换到待处理收件箱");
+      }));
+      document.querySelectorAll("[data-team-tab]").forEach((button) => button.addEventListener("click", () => {
+        document.querySelectorAll("[data-team-tab]").forEach((item) => item.classList.toggle("active", item === button));
+        document.querySelectorAll("[data-team-pane]").forEach((pane) => pane.style.display = pane.dataset.teamPane === button.dataset.teamTab ? "block" : "none");
+      }));
+    })();
+  </script>
+</body>
+</html>
