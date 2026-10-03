@@ -24,6 +24,10 @@
       --working: #E9B84C;
       --error: #EC7472;
       --info: #7EAFE8;
+      --ctx-safe: #4BCB91;
+      --ctx-attention: #E9B84C;
+      --ctx-critical: #EC7472;
+      --ctx-track: #2A4058;
       --source: #8F9DB1;
       --chrome: #070D15;
       --rail: #06101B;
@@ -36,6 +40,7 @@
       --glow-brand: rgba(226,133,94,.14);
       --glow-blue: rgba(41,94,137,.08);
       --surface-veil: rgba(16,30,47,.9);
+      --source-switcher-bg: #101E2F;
       --frame-line: rgba(103,137,170,.34);
       --frame-highlight: rgba(255,255,255,.035);
       --window-dot: #36414D;
@@ -127,6 +132,10 @@
       --working: #A56D00;
       --error: #C84C51;
       --info: #3978B8;
+      --ctx-safe: #168D60;
+      --ctx-attention: #A56D00;
+      --ctx-critical: #C84C51;
+      --ctx-track: #C6D3DF;
       --source: #6E8194;
       --chrome: #E5ECF2;
       --rail: #EDF3F7;
@@ -139,6 +148,7 @@
       --glow-brand: rgba(200,100,64,.1);
       --glow-blue: rgba(58,120,184,.08);
       --surface-veil: rgba(232,239,245,.92);
+      --source-switcher-bg: #E8EFF5;
       --frame-line: #B8C8D6;
       --frame-highlight: rgba(255,255,255,.8);
       --window-dot: #A5B5C3;
@@ -238,7 +248,7 @@
     .window-link { color: var(--dim); font-size: 10px; }
     .icon-sprite { position: absolute; width: 0; height: 0; overflow: hidden; }
     .icon-bell { display: inline-block; width: 18px; height: 18px; vertical-align: middle; fill: currentColor; }
-    .source-switcher { position: relative; z-index: 5; }
+    .source-switcher { position: relative; z-index: 5; border-radius: 8px; background: var(--source-switcher-bg); }
     .windowbar .source-switcher { margin-right: 2px; }
     .source-trigger { display: inline-flex; align-items: center; gap: 6px; min-height: 26px; padding: 0 8px; border: 1px solid var(--line); border-radius: 7px; background: var(--surface1); color: var(--text); cursor: pointer; font-size: 10px; }
     .source-trigger:hover { border-color: var(--brand); background: var(--hover); }
@@ -261,6 +271,25 @@
     .source-mode button { flex: 1; padding: 6px 4px; border: 1px solid transparent; border-radius: 6px; background: transparent; color: var(--dim); cursor: pointer; font-size: 9px; }
     .source-mode button.active { border-color: var(--selected-line); background: var(--brand-soft); color: var(--brand-hover); }
     .source-manage { display: block; padding: 7px 6px 3px; color: var(--info); font-size: 9px; text-decoration: none; }
+    .connection-capsule { position: relative; z-index: 6; flex: 0 0 auto; }
+    .connection-capsule-trigger { display: inline-flex; align-items: center; gap: 6px; min-height: 28px; padding: 0 8px; border: 1px solid var(--line); border-radius: 999px; background: var(--surface1); color: var(--text); cursor: pointer; font-size: 10px; }
+    .connection-capsule-trigger:hover { border-color: var(--brand); background: var(--hover); }
+    .connection-capsule.status-reconnecting .connection-capsule-trigger { border-color: var(--working); background: var(--connection-warn-bg); }
+    .connection-capsule.status-disconnected .connection-capsule-trigger { border-color: var(--error); background: var(--connection-error-bg); }
+    .connection-summary-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--done); box-shadow: 0 0 7px currentColor; color: var(--done); }
+    .connection-summary-dot.status-reconnecting { background: var(--working); color: var(--working); }
+    .connection-summary-dot.status-disconnected { background: var(--error); color: var(--error); }
+    .connection-capsule-label { color: var(--text); font: 9px var(--mono); white-space: nowrap; }
+    .connection-capsule-chevron { color: var(--dim); font-size: 11px; }
+    .connection-popover { position: absolute; top: calc(100% + 8px); right: 0; display: none; width: 286px; padding: 8px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface2); box-shadow: var(--small-shadow); }
+    .connection-popover.open { display: block; }
+    .connection-popover-head { padding: 4px 6px 7px; color: var(--faint); font: 9px var(--mono); letter-spacing: .04em; text-transform: uppercase; }
+    .connection-source-row { display: flex; align-items: center; gap: 7px; min-height: 36px; padding: 6px 7px; border-radius: 7px; }
+    .connection-source-row:hover { background: var(--hover); }
+    .connection-source-row strong { flex: 1; min-width: 0; color: var(--text-strong); font-size: 10px; }
+    .connection-source-row small { color: var(--dim); font: 9px var(--mono); white-space: nowrap; }
+    .connection-reconnect { padding: 4px 6px; border: 1px solid var(--selected-line); border-radius: 5px; background: var(--action-bg); color: var(--brand-hover); cursor: pointer; font-size: 9px; white-space: nowrap; }
+    .connection-manage { display: block; padding: 8px 6px 3px; margin-top: 4px; border-top: 1px solid var(--line-soft); color: var(--info); font-size: 9px; text-decoration: none; }
     .source-group-bar { display: none; align-items: center; gap: 5px; padding: 6px 8px; margin-bottom: 8px; border: 1px solid var(--line-soft); border-radius: 7px; background: var(--surface1); color: var(--dim); font: 9px var(--mono); }
     .source-group-bar span { padding: 3px 5px; border-radius: 4px; }
     .source-group-bar .company { background: var(--source-company-bg); color: var(--source-company); }
@@ -352,6 +381,24 @@
     .progress { height: 6px; overflow: hidden; margin: 7px 0; border-radius: 5px; background: var(--line); }
     .progress i { display: block; height: 100%; border-radius: inherit; background: var(--brand); }
     .progress.done i { background: var(--done); }
+    .context-meter { padding: 10px; border: 1px solid var(--line); border-radius: 9px; background: var(--surface2); box-shadow: var(--card-shadow); }
+    .context-meter-head, .context-meter-stats { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
+    .context-meter-kicker { color: var(--faint); font: 9px var(--mono); letter-spacing: .06em; text-transform: uppercase; }
+    .context-meter-model { display: block; margin-top: 2px; color: var(--text-strong); font-size: 10px; font-weight: 700; }
+    .context-meter-grade { padding: 3px 6px; border: 1px solid color-mix(in srgb, var(--ctx-safe) 42%, transparent); border-radius: 999px; background: color-mix(in srgb, var(--ctx-safe) 12%, transparent); color: var(--ctx-safe); font: 700 9px var(--mono); white-space: nowrap; }
+    .context-meter.attention .context-meter-grade { border-color: color-mix(in srgb, var(--ctx-attention) 42%, transparent); background: color-mix(in srgb, var(--ctx-attention) 12%, transparent); color: var(--ctx-attention); }
+    .context-meter.critical .context-meter-grade { border-color: color-mix(in srgb, var(--ctx-critical) 42%, transparent); background: color-mix(in srgb, var(--ctx-critical) 12%, transparent); color: var(--ctx-critical); }
+    .context-meter-band { display: grid; grid-template-columns: repeat(12, minmax(0, 1fr)); gap: 3px; margin: 11px 0 8px; }
+    .context-meter-band i { display: block; height: 7px; border-radius: 3px; background: var(--ctx-track); }
+    .context-meter.safe .context-meter-band i.on { background: var(--ctx-safe); }
+    .context-meter.attention .context-meter-band i.on { background: var(--ctx-attention); }
+    .context-meter.critical .context-meter-band i.on { background: var(--ctx-critical); }
+    .context-meter-used { color: var(--text-strong); font: 700 15px var(--mono); }
+    .context-meter-limit { color: var(--dim); font: 10px var(--mono); }
+    .context-meter-pct { color: var(--ctx-safe); font: 700 11px var(--mono); }
+    .context-meter.attention .context-meter-pct { color: var(--ctx-attention); }
+    .context-meter.critical .context-meter-pct { color: var(--ctx-critical); }
+    .context-meter-note { margin-top: 5px; color: var(--dim); font-size: 9px; }
     .check-row { display: flex; gap: 7px; margin: 7px 0; color: var(--dim); font-size: 10px; }
     .check-row b { color: var(--done); }
     .bubble { max-width: 82%; padding: 11px 13px; margin-bottom: 11px; border: 1px solid var(--card-border); border-radius: 12px; background: var(--surface2); box-shadow: var(--card-shadow); color: var(--text); font-size: 11px; }
@@ -445,6 +492,9 @@
     .mobile-sourcebar .source-trigger { width: 100%; justify-content: space-between; min-height: 25px; }
     .mobile-sourcebar .source-menu { top: calc(100% + 5px); right: 0; left: 0; width: auto; }
     .mobile-sourcebar .source-trigger .source-summary { display: none; }
+    .mobile-sourcebar .connection-capsule-trigger { min-height: 25px; padding: 0 7px; }
+    .mobile-sourcebar .connection-capsule-label { max-width: 92px; overflow: hidden; text-overflow: ellipsis; }
+    .mobile-sourcebar .connection-popover { top: calc(100% + 5px); right: 0; width: 272px; }
     .mobile-head { display: flex; align-items: center; gap: 8px; padding: 14px 14px 12px; border-bottom: 1px solid var(--line-soft); background: var(--mobile-head-bg); box-shadow: 0 7px 16px var(--panel-shadow); }
     .mobile-head h2 { flex: 1; min-width: 0; margin: 0; color: var(--text-strong); font-size: 15px; }
     .mobile-head h2 small { display: block; margin-top: 3px; color: var(--dim); font-size: 10px; font-weight: 400; }
@@ -661,7 +711,7 @@
               </div>
               <footer class="workspace-footer"><div class="composer">给会话发消息…　📎 附件　▧ 图片</div><button class="primary-btn">发送</button></footer>
             </section>
-            <aside class="inspector"><h3>证据检查器</h3><div class="inspector-block"><div class="inspector-title"><span>验收进度</span><span>2/3</span></div><div class="progress"><i style="width:66%"></i></div><div class="inspector-copy">还有 1 项待确认收单</div></div><div class="inspector-block"><div class="inspector-title"><span>任务清单</span><span>6/9</span></div><div class="check-row"><b>✓</b><span>版本号同步</span></div><div class="check-row"><b>✓</b><span>独立出包</span></div><div class="check-row"><span>○</span><span>公司网检查更新</span></div></div><div class="inspector-block"><div class="inspector-title"><span>用量</span><span>41%</span></div><div class="progress"><i style="width:41%"></i></div><div class="inspector-copy">claude · 84k / 200k</div></div><div class="inspector-block"><div class="inspector-title"><span>输出物</span><span>4</span></div><div class="artifact-row">docs/release-check.md <span>刚刚</span><span class="identity-cluster"><span class="engine-badge claude">Claude</span><span class="source-badge">公司电脑</span></span></div><div class="artifact-row">0.6.0-test.19.apk <span>1h</span><span class="identity-cluster"><span class="engine-badge claude">Claude</span><span class="source-badge">公司电脑</span></span></div></div></aside>
+            <aside class="inspector"><h3>证据检查器</h3><div class="inspector-block"><div class="inspector-title"><span>验收进度</span><span>2/3</span></div><div class="progress"><i style="width:66%"></i></div><div class="inspector-copy">还有 1 项待确认收单</div></div><div class="inspector-block"><div class="inspector-title"><span>任务清单</span><span>6/9</span></div><div class="check-row"><b>✓</b><span>版本号同步</span></div><div class="check-row"><b>✓</b><span>独立出包</span></div><div class="check-row"><span>○</span><span>公司网检查更新</span></div></div><div class="inspector-block"><div class="inspector-title"><span>用量</span></div><div class="context-meter safe"><div class="context-meter-head"><div><span class="context-meter-kicker">Context window</span><strong class="context-meter-model">Claude · 200k 上限</strong></div><span class="context-meter-grade">安全</span></div><div class="context-meter-band" aria-label="上下文已使用 41%"><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div><div class="context-meter-stats"><span><b class="context-meter-used">84k</b> <span class="context-meter-limit">/ 200k tokens</span></span><strong class="context-meter-pct">41%</strong></div><div class="context-meter-note">余量充足，可继续当前验收回填</div></div></div><div class="inspector-block"><div class="inspector-title"><span>输出物</span><span>4</span></div><div class="artifact-row">docs/release-check.md <span>刚刚</span><span class="identity-cluster"><span class="engine-badge claude">Claude</span><span class="source-badge">公司电脑</span></span></div><div class="artifact-row">0.6.0-test.19.apk <span>1h</span><span class="identity-cluster"><span class="engine-badge claude">Claude</span><span class="source-badge">公司电脑</span></span></div></div></aside>
           </section>
 
           <section class="desktop-screen" id="d-team">
@@ -765,6 +815,89 @@
         { key: "disconnected", label: "已断开", className: "status-disconnected" }
       ];
 
+      function connectionStateFor(key) {
+        return connectionStates.find((item) => item.key === key) || connectionStates[0];
+      }
+
+      function aggregateConnectionState() {
+        const statuses = Object.values(sourceStates).map((source) => source.status);
+        if (statuses.includes("disconnected")) return "disconnected";
+        if (statuses.includes("reconnecting")) return "reconnecting";
+        return "connected";
+      }
+
+      function mountConnectionCapsules() {
+        document.querySelectorAll(".windowbar, .mobile-sourcebar").forEach((bar) => {
+          if (bar.querySelector(".connection-capsule")) return;
+          const sourceSwitcher = bar.querySelector(".source-switcher");
+          if (!sourceSwitcher) return;
+          const capsule = document.createElement("div");
+          capsule.className = "connection-capsule";
+          capsule.innerHTML = `<button class="connection-capsule-trigger" type="button" data-connection-trigger aria-expanded="false"><span class="connection-summary-dot status-connected" data-connection-summary-dot></span><span class="connection-capsule-label" data-connection-summary>公司电脑 · 已连接</span><span class="connection-capsule-chevron">⌄</span></button><div class="connection-popover" data-connection-popover><div class="connection-popover-head">连接状态</div><div data-connection-source-list></div><a class="connection-manage" href="#d-settings" data-connection-settings>⚙ 管理连接…</a></div>`;
+          sourceSwitcher.after(capsule);
+        });
+        document.querySelectorAll("[data-connection-trigger]").forEach((button) => {
+          if (button.dataset.bound) return;
+          button.dataset.bound = "1";
+          button.addEventListener("click", (event) => {
+            event.stopPropagation();
+            const popover = button.parentElement.querySelector("[data-connection-popover]");
+            document.querySelectorAll("[data-connection-popover]").forEach((item) => { if (item !== popover) item.classList.remove("open"); });
+            popover.classList.toggle("open");
+            button.setAttribute("aria-expanded", String(popover.classList.contains("open")));
+          });
+        });
+        document.querySelectorAll("[data-connection-settings]").forEach((link) => {
+          if (link.dataset.bound) return;
+          link.dataset.bound = "1";
+          link.addEventListener("click", (event) => {
+            event.preventDefault();
+            document.querySelectorAll("[data-connection-popover]").forEach((popover) => popover.classList.remove("open"));
+            setDesktopDomain("settings");
+            showToast("已打开设置 · 连接与设备");
+          });
+        });
+        renderConnectionCapsules();
+      }
+
+      function renderConnectionCapsules() {
+        const aggregate = sourceMode === "aggregate";
+        const current = sourceStates[activeSource];
+        const summaryState = aggregate ? aggregateConnectionState() : current.status;
+        const state = connectionStateFor(summaryState);
+        const issueCount = Object.values(sourceStates).filter((source) => source.status !== "connected").length;
+        const summary = aggregate
+          ? `${Object.keys(sourceStates).length} 源 · ${issueCount ? `${issueCount} 异常` : "全部正常"}`
+          : `${current.label} · ${state.label}`;
+        document.querySelectorAll(".connection-capsule").forEach((capsule) => {
+          capsule.classList.remove("status-connected", "status-reconnecting", "status-disconnected");
+          capsule.classList.add(state.className);
+          const label = capsule.querySelector("[data-connection-summary]");
+          const dot = capsule.querySelector("[data-connection-summary-dot]");
+          if (label) label.textContent = summary;
+          if (dot) {
+            dot.classList.remove("status-connected", "status-reconnecting", "status-disconnected");
+            dot.classList.add(state.className);
+          }
+          const list = capsule.querySelector("[data-connection-source-list]");
+          if (!list) return;
+          list.innerHTML = Object.entries(sourceStates).map(([key, source]) => {
+            const sourceState = connectionStateFor(source.status);
+            const action = source.status === "connected" ? "" : `<button class="connection-reconnect" type="button" data-connection-reconnect="${key}">重连</button>`;
+            const detail = source.status === "connected" ? "已连接 · 42 ms" : `${sourceState.label} · 等待响应`;
+            return `<div class="connection-source-row"><span class="source-dot ${sourceState.className}"></span><strong>${source.label}</strong><small>${detail}</small>${action}</div>`;
+          }).join("");
+          list.querySelectorAll("[data-connection-reconnect]").forEach((button) => button.addEventListener("click", (event) => {
+            event.stopPropagation();
+            const key = button.dataset.connectionReconnect;
+            if (!sourceStates[key]) return;
+            sourceStates[key].status = "connected";
+            setSource(activeSource, false);
+            showToast(`${sourceStates[key].label} 已发起重连`);
+          }));
+        });
+      }
+
       function setConnectionState(key, announce = false) {
         const state = connectionStates.find((item) => item.key === key) || connectionStates[0];
         connectionIndex = connectionStates.indexOf(state);
@@ -794,6 +927,7 @@
           dot.classList.remove("status-connected", "status-reconnecting", "status-disconnected");
           dot.classList.add(`status-${source.status}`);
         });
+        renderConnectionCapsules();
         if (announce) showToast(`连接状态：${state.label}`);
       }
 
@@ -831,6 +965,7 @@
           button.classList.add(next === "office" ? "source-company" : "source-home");
         });
         setConnectionState(state.status);
+        renderConnectionCapsules();
         if (announce) showToast(`当前源：${state.label}`);
       }
 
@@ -840,6 +975,7 @@
         document.querySelectorAll("[data-source-mode]").forEach((button) => button.classList.toggle("active", button.dataset.sourceMode === sourceMode));
         document.querySelectorAll("[data-current-summary]").forEach((node) => { node.textContent = sourceMode === "aggregate" ? "8 会话 · 4 行动" : sourceStates[activeSource].summary; });
         document.querySelectorAll("[data-source-switcher-label]").forEach((node) => { node.textContent = sourceMode === "aggregate" ? "多源聚合" : "单源"; });
+        renderConnectionCapsules();
         if (announce) showToast(sourceMode === "aggregate" ? "已切换到多源聚合 · badge 按源合计" : "已切换到单源视图");
       }
 
@@ -969,7 +1105,7 @@
         const body = section?.querySelector(".workspace-body");
         if (!body || body.dataset.tabsReady) return;
         const conversation = body.innerHTML;
-        body.innerHTML = `<div class="workspace-pane active"><div class="conversation-pane">${conversation}</div></div><div class="workspace-pane"><div class="detail-panel-list"><div class="inspector-block"><div class="inspector-title"><span>任务清单</span><span>6/9</span></div><div class="check-row"><b>✓</b><span>版本号同步</span></div><div class="check-row"><b>✓</b><span>独立出包</span></div><div class="check-row"><span>○</span><span>公司网检查更新</span></div></div><div class="inspector-block"><div class="inspector-title"><span>当前执行</span><span class="tag action">待收单</span></div><div class="inspector-copy">回填验收证据 → 检查更新通道 → 确认收单</div></div></div></div><div class="workspace-pane"><div class="detail-panel-list"><div class="inspector-block"><div class="inspector-title"><span>输出物</span><span>4</span></div><div class="artifact-row">docs/release-check.md <span>刚刚</span></div><div class="artifact-row">0.6.0-test.19.apk <span>1h</span></div><div class="artifact-row">release-notes.md <span>2h</span></div></div></div></div><div class="workspace-pane"><div class="detail-panel-list"><div class="metric"><b>41%</b><span>上下文用量 · claude 84k / 200k</span></div><div class="progress"><i style="width:41%"></i></div><div class="metric"><b>2m</b><span>预计完成剩余验收回填</span></div></div></div><div class="workspace-pane"><div class="readonly-banner">更多上下文：当前 relay 为公司电脑；验收状态由来源会话唯一写入。</div></div>`;
+        body.innerHTML = `<div class="workspace-pane active"><div class="conversation-pane">${conversation}</div></div><div class="workspace-pane"><div class="detail-panel-list"><div class="inspector-block"><div class="inspector-title"><span>任务清单</span><span>6/9</span></div><div class="check-row"><b>✓</b><span>版本号同步</span></div><div class="check-row"><b>✓</b><span>独立出包</span></div><div class="check-row"><span>○</span><span>公司网检查更新</span></div></div><div class="inspector-block"><div class="inspector-title"><span>当前执行</span><span class="tag action">待收单</span></div><div class="inspector-copy">回填验收证据 → 检查更新通道 → 确认收单</div></div></div></div><div class="workspace-pane"><div class="detail-panel-list"><div class="inspector-block"><div class="inspector-title"><span>输出物</span><span>4</span></div><div class="artifact-row">docs/release-check.md <span>刚刚</span></div><div class="artifact-row">0.6.0-test.19.apk <span>1h</span></div><div class="artifact-row">release-notes.md <span>2h</span></div></div></div></div><div class="workspace-pane"><div class="detail-panel-list"><div class="context-meter safe"><div class="context-meter-head"><div><span class="context-meter-kicker">Context window</span><strong class="context-meter-model">Claude · 200k 上限</strong></div><span class="context-meter-grade">安全</span></div><div class="context-meter-band" aria-label="上下文已使用 41%"><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div><div class="context-meter-stats"><span><b class="context-meter-used">84k</b> <span class="context-meter-limit">/ 200k tokens</span></span><strong class="context-meter-pct">41%</strong></div><div class="context-meter-note">余量充足，可继续当前验收回填</div></div><div class="metric"><b>2m</b><span>预计完成剩余验收回填</span></div></div></div><div class="workspace-pane"><div class="readonly-banner">更多上下文：当前 relay 为公司电脑；验收状态由来源会话唯一写入。</div></div>`;
         body.dataset.tabsReady = "1";
         wireSegmentTabs([...section.querySelectorAll(".segment-bar button")], [...body.children]);
       }
@@ -979,7 +1115,7 @@
         const body = screen?.querySelector(".mobile-content.no-bottom");
         if (!body || body.dataset.tabsReady) return;
         const conversation = body.innerHTML;
-        body.innerHTML = `<div class="workspace-pane active">${conversation}</div><div class="workspace-pane"><div class="mobile-lane"><div class="mobile-lane-head"><span>任务清单</span><span>6/9</span></div><div class="mobile-task">✓ 版本号同步<br><span class="muted">已完成</span></div><div class="mobile-task">○ 公司网检查更新<br><span class="muted">待验收回填</span></div></div></div><div class="workspace-pane"><div class="mobile-lane"><div class="mobile-lane-head"><span>输出物</span><span>4</span></div><div class="mobile-task">📎 docs/release-check.md · 刚刚</div><div class="mobile-task">▧ 0.6.0-test.19.apk · 1h</div></div></div><div class="workspace-pane"><div class="mobile-lane"><div class="mobile-lane-head"><span>用量</span><span>41%</span></div><div class="progress"><i style="width:41%"></i></div><p class="muted">claude · 84k / 200k</p></div></div><div class="workspace-pane"><div class="readonly-banner">当前 relay：公司电脑 · 来源返回栈：待处理收件箱</div></div>`;
+        body.innerHTML = `<div class="workspace-pane active">${conversation}</div><div class="workspace-pane"><div class="mobile-lane"><div class="mobile-lane-head"><span>任务清单</span><span>6/9</span></div><div class="mobile-task">✓ 版本号同步<br><span class="muted">已完成</span></div><div class="mobile-task">○ 公司网检查更新<br><span class="muted">待验收回填</span></div></div></div><div class="workspace-pane"><div class="mobile-lane"><div class="mobile-lane-head"><span>输出物</span><span>4</span></div><div class="mobile-task">📎 docs/release-check.md · 刚刚</div><div class="mobile-task">▧ 0.6.0-test.19.apk · 1h</div></div></div><div class="workspace-pane"><div class="context-meter safe mobile-context-meter"><div class="context-meter-head"><div><span class="context-meter-kicker">Context window</span><strong class="context-meter-model">Claude · 200k 上限</strong></div><span class="context-meter-grade">安全</span></div><div class="context-meter-band" aria-label="上下文已使用 41%"><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div><div class="context-meter-stats"><span><b class="context-meter-used">84k</b> <span class="context-meter-limit">/ 200k tokens</span></span><strong class="context-meter-pct">41%</strong></div><div class="context-meter-note">余量充足，可继续当前验收回填</div></div></div><div class="workspace-pane"><div class="readonly-banner">当前 relay：公司电脑 · 来源返回栈：待处理收件箱</div></div>`;
         body.dataset.tabsReady = "1";
         wireSegmentTabs([...screen.querySelectorAll(".mobile-detail-tabs button")], [...body.children]);
       }
@@ -1208,6 +1344,7 @@
       }));
       document.addEventListener("click", (event) => {
         if (!event.target.closest(".source-switcher")) document.querySelectorAll("[data-source-menu]").forEach((menu) => menu.classList.remove("open"));
+        if (!event.target.closest(".connection-capsule")) document.querySelectorAll("[data-connection-popover]").forEach((popover) => popover.classList.remove("open"));
       });
       let savedTheme = "dark";
       try { savedTheme = localStorage.getItem("cc-deck-theme") || "dark"; } catch (_) {}
@@ -1220,6 +1357,7 @@
       setupSettingsContent();
       setupMobileSettingsContent();
       setupSourceGroupBars();
+      mountConnectionCapsules();
       applyTheme(savedTheme);
       setConnectionState("connected");
       setSource("office");
