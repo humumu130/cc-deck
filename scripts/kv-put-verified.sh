@@ -4,6 +4,9 @@
 # 且下载端"下载到99%重头循环"曾误导向更新链——坏文件必须在上传时拦截）
 #   用法：scripts/kv-put-verified.sh <本地文件> <KV key>
 set -euo pipefail
+# #239 加固①：GUI 会话 shell 的 PATH 常缺 /sbin（macOS md5 在 /sbin/md5，#232 同款教训）
+# ——缺了会假报 command not found 且 set -e 直接退出成假失败
+PATH="/sbin:/usr/sbin:/usr/bin:/bin:/usr/local/bin:$PATH"
 cd "$(dirname "$0")/.."
 
 FILE="${1:?用法: kv-put-verified.sh <本地文件> <KV key>}"
@@ -37,21 +40,49 @@ if ! (cd cloudflare && CLOUDFLARE_API_TOKEN="$CF_TOKEN" npx wrangler kv key put 
     | grep -q '"success":true' || { echo "ERR: KV 上传失败（wrangler 与 curl 代理均失败）"; exit 1; }
 fi
 
-# 回读校验（2026-09-23 #154 加重试）：CF KV 是最终一致——put 成功后立即经
-# cc.humumu.online 回读，边缘可能仍返回旧值 → md5 不匹配被误判「上传失败」
-#（test.28 发布实证：put 实际成功、清单滞留旧版让 App 检查更新拿到旧包）。不匹配
-# 隔 6s 重读最多 4 次；仍不一致才算真失败（坏上传不会被重试掩盖）
-echo "[2/3] 回读校验（KV 最终一致，不匹配重读最多 4 次）"
+# 回读校验（2026-09-23 #154 加重试；#239 加固②）：CF KV 是最终一致——put 成功后
+# 立即经 cc.humumu.online 回读，边缘可能仍返回旧值 → md5 不匹配被误判「上传失败」
+#（test.28 发布实证：put 实际成功、清单滞留旧版让 App 检查更新拿到旧包）。
+# #239 实锤（0.6.3 发版）：传播窗可超 90s——4×6s=24s 窗口内全不一致 ≠ 失败。
+# 改为 6×15s=90s 窗口；窗口耗尽后直读 KV API 分辨「传播未到」vs「真失败」
+echo "[2/3] 回读校验（KV 最终一致 ~60s 传播窗，不匹配重读最多 6 次×15s）"
 TMP=$(mktemp /tmp/kv-verify.XXXXXX)
 REMOTE_MD5=""; REMOTE_SIZE=""; VERIFY_OK=0
-for i in 1 2 3 4; do
+for i in 1 2 3 4 5 6; do
   # 家里到 CF 的下载速度波动大（实测 80KB/s~5.7MB/s），120s 曾把大文件校验误判成超时
   if curl -sS --max-time 300 -o "$TMP" "$DOMAIN/dl/$KEY"; then
     REMOTE_MD5=$(md5 -q "$TMP"); REMOTE_SIZE=$(stat -f%z "$TMP")
     if [ "$LOCAL_MD5" = "$REMOTE_MD5" ] && [ "$LOCAL_SIZE" = "$REMOTE_SIZE" ]; then VERIFY_OK=1; break; fi
   fi
-  [ "$i" = "4" ] || { echo "    第 $i 次回读未一致（remote=$REMOTE_MD5），6s 后重读"; sleep 6; }
+  [ "$i" = "6" ] || { echo "    第 $i 次回读未一致（remote=$REMOTE_MD5），15s 后重读"; sleep 15; }
 done
+
+# 域名边缘窗口耗尽仍未一致 → 直读 KV 存储本体分辨真伪（绕过域名边缘）：
+#   直读已是新值 = put 成功、边缘传播中，不算失败（~60s 后域名自然出新）
+#   直读也是旧值/为空 = 真上传失败
+# 直读双路：wrangler 主路（stdout 重定向取二进制——--outfile 旗标不被识别），
+# curl+代理 REST 回落（api.cloudflare.com 被墙时 wrangler 直连超时，与上传回落对称）
+if [ "$VERIFY_OK" != "1" ]; then
+  echo "    域名回读未一致，直读 KV 存储分辨（传播窗 vs 真失败）…"
+  KVDIRECT=$(mktemp /tmp/kv-direct.XXXXXX)
+  DIRECT_OK=0
+  if (cd cloudflare && CLOUDFLARE_API_TOKEN="$CF_TOKEN" npx wrangler kv key get "$KEY" \
+      --namespace-id "$KV_NS" --remote >"$KVDIRECT" 2>/dev/null) \
+      && [ "$(md5 -q "$KVDIRECT")" = "$LOCAL_MD5" ] && [ "$(stat -f%z "$KVDIRECT")" = "$LOCAL_SIZE" ]; then
+    DIRECT_OK=1
+  elif curl -sS --max-time 120 -x "$CF_PROXY" -H "Authorization: Bearer $CF_TOKEN" \
+      -o "$KVDIRECT" "https://api.cloudflare.com/client/v4/accounts/$CF_ACCOUNT/storage/kv/namespaces/$KV_NS/values/$KEY" 2>/dev/null \
+      && [ "$(md5 -q "$KVDIRECT")" = "$LOCAL_MD5" ] && [ "$(stat -f%z "$KVDIRECT")" = "$LOCAL_SIZE" ]; then
+    DIRECT_OK=1
+  fi
+  if [ "$DIRECT_OK" = "1" ]; then
+    rm -f "$TMP" "$KVDIRECT"
+    echo "✅ KV 上传实际成功（存储直读一致 $LOCAL_MD5）——域名边缘传播中，~60s 后自然出新，非失败"
+    echo "   直链: $DOMAIN/dl/$KEY"
+    exit 0
+  fi
+  rm -f "$KVDIRECT"
+fi
 rm -f "$TMP"
 
 echo "[3/3] 比对"

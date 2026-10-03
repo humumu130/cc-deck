@@ -27,10 +27,15 @@ EXE=$(find "$TMP" -name '*-setup.exe' ! -name '*portable*' | head -1)
 LATEST_YML=$(find "$TMP" -name 'latest.yml' | head -1)
 
 echo "② 推 ECS（APK 直链 + 手机 latest.json + Electron exe + latest.yml）…"
+# latest.json 四字段（0.6.3 起口径）：手机 OTA 需要 url（KV 版本化直链）+ size，
+# 只有两字段时 App 端清单校验/进度条缺料——本地生成一份，ECS 与 KV 双通道用同一内容
+APK_SIZE=$(stat -f%z "$APK")
+OTA_URL="https://cc.humumu.online/dl/cc-deck-$VER.apk"
+printf '{"version":"%s","url":"%s","size":%s,"notes":"%s"}' "$VER" "$OTA_URL" "$APK_SIZE" "$NOTES" > "$TMP/latest.json"
 $SCP "$APK" "$ECS_HOST:$ECS_DIR/cc-deck.apk"
 [ -n "$EXE" ] && $SCP "$EXE" "$ECS_HOST:$ECS_DIR/cc-deck-desktop-setup.exe"
 if [ -n "$LATEST_YML" ]; then $SCP "$LATEST_YML" "$ECS_HOST:$ECS_DIR/latest.yml"; fi
-printf '{"version":"%s","notes":"%s"}' "$VER" "$NOTES" | $SSH $ECS_HOST "cat > $ECS_DIR/latest.json"
+$SCP "$TMP/latest.json" "$ECS_HOST:$ECS_DIR/latest.json"
 
 # Tauri 桌面更新链（2026-09-16 补全）：桌面 updater 读 cc.humumu.online/download/tauri-latest.json
 # （KV 镜像），exe 内链必须公司可达 → setup.exe 上 KV、清单 url 指 CF 域名。
@@ -49,13 +54,43 @@ else
   echo "   ⚠️ 缺 sig/latest.json/CF_TOKEN——桌面更新链未更新（CI 产物不全或未配 token）"
 fi
 
-echo "③ relay 广播发版通知给在线客户端…"
+# #239（2026-10-03 主页审计实锤）：KV 固定名同步——Worker /dl/ 对 cc-deck-* 前缀是
+# 纯 KV 直出（KV miss 直接 404，不回落 ECS：ECS 回源被阿里云对 CF 境外出口 403 挡、
+# 公司网又屏蔽裸 IP，KV 是唯一全通路径）。此前发版只更 ECS 不更 KV → KV 旧包永久
+# 遮蔽新包（0.6.3 实锤：主页 Windows 直链发的还是 0.5.x 时代旧 exe、安卓固定名同患）。
+# 四键齐上：latest.json（手机 OTA 清单）+ cc-deck.apk（主页安卓固定名）+
+# cc-deck-$VER.apk（版本化，OTA url 指向它）+ cc-deck-desktop-setup.exe（主页 Windows 固定名）
+echo "③ KV 同步（Worker /dl/ 唯一货源：OTA 清单 + 安卓双键 + Windows 固定名）…"
+if [ -n "${CF_TOKEN:-${CLOUDFLARE_API_TOKEN:-}}" ]; then
+  $SCP "$APK" "$ECS_HOST:$ECS_DIR/cc-deck-$VER.apk"
+  ./scripts/kv-put-verified.sh "$TMP/latest.json" "latest.json"
+  ./scripts/kv-put-verified.sh "$APK" "cc-deck.apk"
+  ./scripts/kv-put-verified.sh "$APK" "cc-deck-$VER.apk"
+  [ -n "$EXE" ] && ./scripts/kv-put-verified.sh "$EXE" "cc-deck-desktop-setup.exe"
+else
+  echo "   ⚠️ 缺 CF_TOKEN/CLOUDFLARE_API_TOKEN——KV 未同步，主页直链/OTA 将滞留旧版（#239）"
+fi
+
+echo "④ relay 广播发版通知给在线客户端…"
 curl -sS -X POST "http://127.0.0.1:8787/api/notify?token=$RELAY_TOKEN" \
   -H 'content-type: application/json' \
   -d "{\"done\":[\"🎉 v$VER 发布：$NOTES\"]}" | head -c 60; echo
 
-echo "④ 核对："
+echo "⑤ 核对："
 curl -sS -m 8 "http://8.133.211.170:8888/latest.json" | head -c 120; echo
 curl -sS -m 8 -o /dev/null -w "APK 直链 HTTP=%{http_code}\n" -r 0-99 "http://8.133.211.170:8888/cc-deck.apk"
+curl -sS -m 15 -o /dev/null -w "KV 主页安卓固定名 HTTP=%{http_code} %{size_download}B（Range）\n" -r 0-99 "https://cc-deck.humumu.online/dl/cc-deck.apk"
+curl -sS -m 15 -I "https://cc-deck.humumu.online/download/cc-deck-desktop-setup.exe" | grep -i '^HTTP\|^content-length'
+
+# #239：主页版本号随发版上线——version.mjs --write 只改仓库文件不会自动生效，
+# 静态资产必须 wrangler deploy（0.6.2/0.6.3 两版徽章停在 v0.6.1 的根因）。
+# deploy 同时带 worker.ts 上线：发版分支基于 dev，worker 代码天然同步，无 #220 分叉风险
+echo "⑥ 主页版本上线（wrangler deploy 静态资产）…"
+if [ -n "${CF_TOKEN:-${CLOUDFLARE_API_TOKEN:-}}" ]; then
+  (cd cloudflare && CLOUDFLARE_API_TOKEN="${CF_TOKEN:-${CLOUDFLARE_API_TOKEN:-}}" npx wrangler deploy 2>&1 | tail -3)
+else
+  echo "   ⚠️ 缺 CF_TOKEN——主页未部署，版本徽章将停更（#239）"
+fi
+
 echo "✅ v$VER 发布推送完成（手机 24h 内提示 / 在线设备即时通知 / Tauri 更新链随 Release latest.json 生效）"
 echo "清理临时目录: $TMP"
