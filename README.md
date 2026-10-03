@@ -134,44 +134,11 @@ claude plugin install cc-deck@cc-deck-plugins
 
 ## 架构
 
-```mermaid
-flowchart LR
-    subgraph SCR["四块屏幕 · 同一套协议"]
-        direction TB
-        APP["📱 手机 App（expo-app / Android）"]
-        WATCH["⌚ Wear OS 手表（wear-app）"]
-        WEB["🌐 网页控制台 / PWA（web-console）"]
-        EXE["🖥️ 桌面客户端（Tauri 主推 · Electron 过渡）"]
-    end
+![CC Deck 系统架构](docs/readme/architecture.png)
 
-    CLOUD["☁️ CF 云桥 cc.humumu.online<br/>零知识密文路由 · 默认公共桥 · 可自建"]
-
-    subgraph PC["你的 PC · 任意网络环境（Node ≥ 20）"]
-        RELAY["CC Deck Relay（:8787）<br/>事件总线 · seq 断线补发 · 事件落盘<br/>审批门控 · 任务汇报 · 定时任务 · /api/notify"]
-        EXT["Claude Code 外部会话<br/>你自己开的 CLI ×N"]
-        HOSTED["Claude Code 托管会话<br/>Agent SDK query() 拉起"]
-        RELAY <-->|"hooks · 六类事件上报 · 审批挂起 · 按键注入"| EXT
-        RELAY <-->|"stdio 流式"| HOSTED
-    end
-
-    APP -->|"同 WiFi 直连 ws://ip:8787 + token（可扫码）"| RELAY
-    WEB -->|"浏览器打开 relay 控制台"| RELAY
-    EXE -->|"默认自动连本机 relay"| RELAY
-    WATCH -->|"WS 直连（LAN）· 云桥透传（外出）"| RELAY
-    WATCH <-.->|"蓝牙 RFCOMM 中继 · 零配置免联网"| APP
-
-    RELAY ==>|"仅出站 WSS · tweetnacl 密文信封"| CLOUD
-    APP ==>|"仅出站 WSS · 6 位配对码交换公钥"| CLOUD
-    WEB ==>|"E2E · WS 被拦自动降级 HTTP 长轮询"| CLOUD
-    EXE ==>|"E2E"| CLOUD
-
-    CI["⚙️ GitHub Actions · 打 tag 自动出 APK + 桌面安装包挂 Release"]
-    CI -.-> APP
-    CI -.-> EXE
-```
-
-- 细箭头 `→`：局域网 / 本机通道，token 鉴权，仅限可信局域网
-- 粗箭头 `⇒`：云桥端到端密文通道——桥只按公钥派生的设备 id 路由，无法解密、不落盘
+- 实线 `→`：同网直连（同一局域网 / 本机），token 鉴权，仅限可信局域网
+- 绿色粗线 `⇒`：跨网云通道，端到端密文——桥只按公钥派生的设备 id 路由，无法解密、不落盘；手表外出时直连云桥 `/wan` 端点透传，网页被拦自动降级 HTTP 长轮询
+- 虚线：ᛒ 蓝牙透传（手机 ↔ 手表）；手表为开发中版本，PC ② 为示意（更多同款 PC 各自连云桥）
 - 详细模块图 / 数据流时序 / 持久化机制见 [docs/architecture.md](docs/architecture.md)
 
 ## 安全模型
