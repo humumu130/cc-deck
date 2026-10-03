@@ -4328,6 +4328,19 @@ function onEvent(ctx, msg) {
       showUserNote(msg.payload?.text);
       break;
     }
+    // #40 M4 派单完成回调（瞬态 seq:0 不补发）：worker 派单收口（回合 done/failed）
+    // 时广播——谁派活谁收通知，右下通知条提示结果。离线端由台账/重连快照兜底，
+    // 不重复弹；旧 relay 不发此帧，case 缺失也无副作用。receipt ≤200 字，展示截 120
+    case "DISPATCH_DONE": {
+      const dp = msg.payload || {};
+      if (dp.status === "done" || dp.status === "failed") {
+        const head = dp.status === "done" ? "派单完成" : "派单失败";
+        const tier = typeof dp.tier === "string" && dp.tier ? dp.tier : "任务";
+        const rc = typeof dp.receipt === "string" ? dp.receipt : "";
+        showUserNote(head + " · " + tier + (rc ? "：" + (rc.length > 120 ? rc.slice(0, 120) + "…" : rc) : ""));
+      }
+      break;
+    }
     // 议题①（2026-09-09）配对设备变更（瞬态帧 seq:0）：新配对 = 补偿告警（公共桥
     // 广播定位的 race 攻击即便得手，攻击设备立刻出现在这里）；踢除 = 刷新清单。
     // 旧事件里没有——此 case 只对新 relay 生效，老客户端/老 relay 互不干扰

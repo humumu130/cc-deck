@@ -7,7 +7,7 @@ import type { AllowRule, CloudPairInfo, CommandAck, DispatchReceipt, EmployeeHom
 import { uuid } from "./fmt";
 import { currentVersion } from "./updates";
 import { devId, generateKeyPair, seal, unseal, setRandomBytes, type BoxKeyPair, type SealedBox } from "./e2e";
-import { fgSupported, startForegroundService, stopForegroundService } from "./notify";
+import { fgSupported, notifyAlert, startForegroundService, stopForegroundService } from "./notify";
 
 // #42 设备实名上报（配对时）：expo-constants 的 deviceName（Android = Build.MODEL，
 // 如 "Find X8"）优先，回落 RN Platform.constants.Model；都无 → "手机"。
@@ -2410,6 +2410,24 @@ class RelayStore {
         if (p.action === "add" && typeof p.dev === "string" && p.dev) {
           this.onPairedDevice?.({ dev: p.dev, name: typeof p.name === "string" ? p.name : "" });
         }
+        break;
+      }
+      // #40 M4 派单完成回调（瞬态 seq:0 不补发）：worker 派单收口（回合 done/failed）
+      // 时广播——谁派活谁收通知。落两处：①承接会话时间线 system 行（详情页可查，
+      // 会话在本端快照内才落——TASK_DONE 同款守卫）②系统通知（notifyAlert：自有
+      // Android 构建原生模块，Expo Go/iOS 无模块静默）。离线端由台账/重连快照
+      // 兜底，不重复弹；旧 relay 不发此帧，case 缺失也无副作用
+      case "DISPATCH_DONE": {
+        const p = msg.payload as { status?: unknown; tier?: unknown; receipt?: unknown; worker_session_id?: unknown };
+        if (p.status !== "done" && p.status !== "failed") break;
+        const head = p.status === "done" ? "派单完成" : "派单失败";
+        const tier = typeof p.tier === "string" && p.tier ? p.tier : "任务";
+        const rc = typeof p.receipt === "string" ? p.receipt : "";
+        const text = head + " · " + tier + (rc ? "：" + (rc.length > 120 ? rc.slice(0, 120) + "…" : rc) : "");
+        if (typeof p.worker_session_id === "string" && conn.sessions.has(p.worker_session_id)) {
+          this.pushLog(conn, p.worker_session_id, { ts: msg.ts, kind: "system", text });
+        }
+        notifyAlert(head + " · " + tier, rc.length > 60 ? rc.slice(0, 60) + "…" : rc);
         break;
       }
       // #184 验收单状态推送（瞬态 seq:0）：他端提交/新出单后 relay 全量重发汇总——
