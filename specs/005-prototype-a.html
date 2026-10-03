@@ -1048,6 +1048,8 @@
           if (actionBadge) {
             actionBadge.className = "icon-btn mobile-notify";
             actionBadge.innerHTML = `${bell}<span class="notify-count">2</span>`;
+            actionBadge.title = "通知 · 2 个需行动项";
+            actionBadge.setAttribute("aria-label", "通知 · 2 个需行动项");
           } else if (!head.querySelector("[data-mobile-notify]")) {
             const button = document.createElement("button");
             button.className = "icon-btn mobile-notify";
