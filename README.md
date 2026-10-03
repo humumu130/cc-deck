@@ -4,19 +4,20 @@
 
 <img src="docs/readme/hero.svg" alt="CC Deck — Claude Code 会话装进口袋：随时随地掌握电脑端的会话、任务与工作状态" width="880">
 
-[![relay CI](https://github.com/humumu130/cc-deck/actions/workflows/relay.yml/badge.svg)](https://github.com/humumu130/cc-deck/actions/workflows/relay.yml)
-[![android CI](https://github.com/humumu130/cc-deck/actions/workflows/android.yml/badge.svg)](https://github.com/humumu130/cc-deck/actions/workflows/android.yml)
-[![desktop CI](https://github.com/humumu130/cc-deck/actions/workflows/desktop.yml/badge.svg)](https://github.com/humumu130/cc-deck/actions/workflows/desktop.yml)
 [![release](https://img.shields.io/github/v/release/humumu130/cc-deck)](https://github.com/humumu130/cc-deck/releases/latest)
 [![license](https://img.shields.io/badge/license-MIT-blue)](./LICENSE)
-[![stars](https://img.shields.io/github/stars/humumu130/cc-deck?style=social)](https://github.com/humumu130/cc-deck/stargazers)
+[![stars](https://img.shields.io/github/stars/humumu130/cc-deck)](https://github.com/humumu130/cc-deck/stargazers)
 [![downloads](https://img.shields.io/github/downloads/humumu130/cc-deck/total?label=downloads)](https://github.com/humumu130/cc-deck/releases)
 
-**在手机、网页与桌面上，随时随地掌握电脑端 Claude Code 的会话、任务与工作状态**。电脑断网重启会话不丢，随手一点即可远程恢复——局域网直连不经任何第三方，跨网中继端到端加密，可自建（Cloudflare / 自有服务器）。
+**跑长任务离开电脑，回来发现 Claude Code 卡在等审批？**
+**CC Deck 把会话、任务与审批装进手机——点一下 Allow，它继续跑。**
+
+局域网直连不经任何第三方，跨网中继端到端加密，可自建（Cloudflare / 自有服务器）。
+电脑断网、重启，会话不丢——在手机上点一下即可恢复。
 
 <a href="https://cc-deck.humumu.online/"><img src="docs/readme/home-btn.svg" alt="项目主页 · cc-deck.humumu.online" width="176"></a>
 
-[网页控制台](https://cc-deck.humumu.online/app) · [下载最新版](https://github.com/humumu130/cc-deck/releases/latest) · [直链下载页](https://cc-deck.humumu.online/download/)
+[下载最新版](https://github.com/humumu130/cc-deck/releases/latest) · [直链下载页](https://cc-deck.humumu.online/download/) · [网页控制台](https://cc-deck.humumu.online/app)（需先完成[快速开始](#快速开始)）
 
 </div>
 
@@ -29,18 +30,27 @@
 - [进阶](#进阶)
 - [开发](#开发)
 - [Roadmap](#roadmap)
+- [反馈与交流](#反馈与交流)
 
 ## 功能
 
+- **远程审批不卡流程**：权限请求推到手机点 Allow / Reject，AskUserQuestion 提问远程点选，随时打断——人不在电脑前也不耽误
+- **随时对话**：给会话发消息、传图片与文件（App 支持语音输入），会话产出的文件可拉回查看 / 保存，历史会话可续聊
+- **断线原地恢复**：电脑死机、重启、意外断开，手机上会话卡片保留不丢——点一下发消息，电脑自动原地恢复原会话（权限模式原样镜像，无人值守也不卡确认）
+- **任务完成主动汇报**：悬浮框（可拖动、位置记忆）+ App 通知，点按直达任务；任何脚本 / 定时任务 / CI 都能把消息推到你手机
+- **上下文水位 + 完整转录**：会话还能跑多久一眼可见；工具调用 / diff / 思考过程全量转录，`#NNN` 任务号点击速览，代码块语法高亮
+- **四端一致**：Android App、网页 / PWA、Windows / macOS 桌面端，同一套设计语言，一端操作三端同步
+
+<details>
+<summary>完整功能清单</summary>
+
 **随身掌控**
 
-- 多会话实时同步，四态徽标（运行中 / 等待输入 / 出错 / 完成），断线自动补发
-- 权限审批推到手机点 Allow / Reject；AskUserQuestion 提问远程点选；随时打断
-- 给会话发消息、传图片与文件（App 支持语音输入，桌面 / 网页可粘贴或拖入），会话产出的文件可拉回查看 / 保存；历史会话可续聊
-- 消息即发即达：点发送立刻送达电脑（排队回显即时，注入后自动校验、回车被吞秒级补发）
-- 模型远程切换：下拉即切当前会话模型（注入 CLI 原生 `/model`），ctx 水位行内嵌当前模型，App / 网页 / 桌面三端一致
+- 多会话实时同步，四态徽标（运行中 / 等待输入 / 出错 / 完成），断线重连不漏消息
+- 消息即发即达：点发送立刻送达电脑（偶发按键丢失会自动重试，无需重发）
+- 模型远程切换：下拉即换当前会话模型，App / 网页 / 桌面三端一致（上下文水位条同步显示当前模型）
 
-**一屏全览**（桌面端 · 就在电脑前也更顺）
+**一屏全览**（桌面端 · 在电脑前使用同样顺手）
 
 - 会话集中管理：多个 Claude Code 会话聚在一个面板，不用在终端窗口间来回切换
 - 状态灯实时可见：运行中 / 等待输入 / 出错 / 完成，扫一眼就知道哪个会话在等你
@@ -48,35 +58,34 @@
 
 **断线不怕**
 
-- 电脑死机 / 重启 / 意外断开，手机会话卡片保留不丢：点一下发消息，电脑自动原地恢复原会话（权限模式原样镜像，无人值守也不卡确认）
+- Wi-Fi 中断数秒内自动切换到云桥（跨网中继服务，可自建）保持可用，网络恢复后自动切回更快的局域网直连
 - 电脑端正常退出的会话自动从手机列表清除，列表里留下的都是真正能用的会话
-- Wi-Fi 中断数秒内自动切云桥保持可用，网络恢复后自动切回更快的直连；LAN 探测失败进入短冷却，不再拖慢切换
 
 **替你盯着**
 
-- 任务完成主动汇报：悬浮框（可拖动、位置记忆）+ App 通知，点按直达任务
-- 待确认事项黄色悬浮框 + `/api/notify` 注入接口：任何脚本都能把一条消息推到你手机上（用法见[进阶](#进阶)）
-- 上下文水位三端同口径分级色条，会话还能跑多久一眼可见；上下文压缩（Compacting）进行中三端明示，不再误判"卡死"
-- 完整转录（工具调用 / diff / 思考过程），`#NNN` 任务号点击弹气泡速览详情；代码块按语言语法高亮
-- 子 Agent 活性可见：卡片角标显示并行运行数，点开面板看每个子 Agent 正在做什么（外部 CLI 会话同样支持）
-- 交付自动归集：会话产出的报告 / 文档汇入「输出物」看板，三端一处查看与打开；漏登记的产出也会自动收进看板
-- 验收单在线填报：一批功能一张验收单，手机 / 网页直接勾选，回填自动汇总回会话（跨网可提交）
+- 待确认事项黄色悬浮框提醒，点按直达会话
+- 上下文水位分级色条三端一致；上下文压缩（Compacting）进行中三端明示，不再误判「卡死」
+- 子 Agent 活性可见：卡片角标显示并行运行数，点开面板看每个子 Agent 正在做什么（你自己开着的终端会话同样支持）
+- 交付自动归集：会话产出的报告 / 文档汇入「输出物」看板，三端一处查看与打开；未主动登记的产出也会自动收进
+- 验收单在线填报：一批功能一张验收单，手机 / 网页直接勾选，结果自动送回电脑端会话（跨网可提交）
 - 任务清单可拖动排序：手机 / 网页长按拖动调整优先级，CLI 按新顺序执行
-- 定时任务随身可查：cron 表达式自动译成人话（"每天 08:00"），点开看完整指令；过期的一次性任务自动滤除
 
 **多源多端**
 
-- Android App、网页 / PWA、Windows 桌面客户端（Tauri 主推 3.4MB）
-- 多台 PC 可聚合同屏（opt-in），卡片角标区分来源；新建会话可选发往哪台（记住上次选择）
-- 同一台 PC 多通道自动归并：LAN 与云桥两条连接按公钥派生的设备 id 密码学合并；127.0.0.1 / 主机名 / IP 等写法差异同样收敛为一条，不再裂出重复条目
-- 跨网络经 6 位配对码接入云桥，全程密文，桥只见密文——在任何网络打开网页，输入家里 PC 领的 6 位码即连
-- 三端在线更新：App 启动自动检查（镜像优先 + 断点续传 + 安装包完整性校验），桌面内建 updater 对接 GitHub Releases
+- Android App、网页 / PWA、Windows / macOS（Apple 芯）桌面客户端，安装包约 10MB
+- 多台 PC 可聚合同屏（默认关闭），卡片角标区分来源；新建会话可选发往哪台（记住上次选择）
+- 一台电脑只显示一条：本机、局域网 IP、云桥等不同方式连入自动归并，不出现重复会话
+- 跨网络经 8 位配对码接入云桥，全程密文，桥只见密文——在任何网络打开网页，输入家里 PC 领的 8 位码即连
+- 三端在线更新：App 启动自动检查新版本（断点续传 + 安装包完整性校验），桌面端从 GitHub Releases 更新
 
 **细节到位**
 
 - 浅色模式默认、深色与跟随系统可选，App / 网页 / 桌面同一套设计语言
-- 设置中心竖排菜单 + 卡片分区（连接 / Relay / 显示 / 关于）：Relay 状态、扫码配对、本机领码、添加手机收拢一页
+- 设置中心竖排菜单 + 卡片分区（连接 / Relay / 显示 / 关于）：连接状态、扫码配对、本机领码、添加手机收拢一页
 - 会话列表三档密度（标准 / 紧凑 / 极简）、源徽章按来源着色，信息密度自己调；空闲会话自动置灰（阈值可配，负数永不变灰）
+- 定时任务随身可查：cron 自动译成自然语言（如「每天 08:00」），点开看完整指令；过期的一次性任务自动滤除
+
+</details>
 
 <details>
 <summary>四端能力矩阵</summary>
@@ -100,35 +109,52 @@
 
 ## 快速开始
 
-### 第 0 步 · PC 上装插件（两条命令）
+PC 端两种装法，**选一种即可**（也可以都用：桌面端检测到插件已在运行会自动让位，互不冲突）。
+
+### 装法 A · Claude Code 插件（终端流）
 
 ```bash
 claude plugin marketplace add humumu130/cc-deck
 claude plugin install cc-deck@cc-deck-plugins
 ```
 
-装好重启 Claude Code，在任意会话里执行 `/cc-deck`：后台启动 relay，终端打出三张二维码（App 下载 / App 直连 / 网页控制台）。插件自带的 hooks 会自动桥接**新开的** Claude Code 会话；已运行的会话需重开。数据目录 `~/.cc-deck/data/`，与插件升级解耦。
+装好重启 Claude Code，在任意会话里执行 `/cc-deck`：后台启动本机控制服务 **relay**（电脑端常驻，手机 / 网页 / 桌面都连它），终端打出三张二维码（App 下载 / App 直连 / 网页控制台）。**你自己新开的 Claude Code 会话自动接入**；已运行的会话重开后接入。数据存于 `~/.cc-deck/data/`，升级插件不影响已有数据。
 
-配套命令：`/cc-deck-pair` 领 6 位云桥配对码（5 分钟内有效、一次性），`/cc-deck-stop` 停止后台 relay。
+配套命令：`/cc-deck-pair` 领 8 位云桥配对码（5 分钟内有效、一次性），`/cc-deck-stop` 停止后台 relay。
 
-### 场景 A · 同一网络（局域网）
+### 装法 B · 桌面客户端（图形流，不敲命令）
 
-- **手机 App**：[Releases](https://github.com/humumu130/cc-deck/releases) 或[直链下载页](https://cc-deck.humumu.online/dl/)下载 APK 安装，「新增服务器 → 扫码添加」扫 `/cc-deck` 的 App 直连码，零手输；装好后 App 内即可检查更新
-- **浏览器**：桌面浏览器打开时会自动嗅探本机 relay（`127.0.0.1:8787`），命中即零配置直连；或扫控制台码 / 直接打开 `http://<PC-IP>:8787/?token=…`
-- **桌面**：下载 `CC-Deck-Setup-<tag>.exe`，启动自动连本机。未签名 exe 首次运行会触发 SmartScreen，选「更多信息 → 仍要运行」
+从 [Releases](https://github.com/humumu130/cc-deck/releases) 下载桌面端：
 
-### 场景 B · 跨网络（外出 / 异地）
+- **Windows**：`CC.Deck_<v>_x64-setup.exe`（未签名 exe 首次运行触发 SmartScreen，选「更多信息 → 仍要运行」）
+- **macOS（Apple 芯）**：`.dmg`
+- Intel Mac / Linux：暂无桌面包——用装法 A + 浏览器即可，功能不缺
 
-1. PC 保持 relay 运行，执行 `/cc-deck-pair` 领 6 位配对码（PC 只发出站连接，无需公网 IP）
+启动即自动带起内置 relay，在设置里领配对码或扫码，手机 / 网页即连；桌面里新建的会话全功能可用。
+
+> 💡 装法 B 下，你自己开的终端 CLI 会话**不会自动接入**（内置 relay 不装 hooks）——需要桥接终端会话请再装装法 A 的插件，两者共存无冲突。
+
+### 连接你的设备
+
+**场景 A · 同一网络（局域网）**
+
+- **手机 App（Android）**：[Releases](https://github.com/humumu130/cc-deck/releases) 或[直链下载页](https://cc-deck.humumu.online/download/)下载 APK 安装，扫 App 直连码即可添加，无需手动输入；App 内可直接检查更新
+- **iPhone / iPad**：暂未上架 App Store——先用网页版 PWA：Safari 打开网页控制台输码连接，「添加到主屏幕」即得类 App 全屏体验。系统推送通知目前是 Android App 专属，iOS 以页面内提醒为主（Web Push 在 [Roadmap](#roadmap)）
+- **浏览器**：本机浏览器打开时自动发现本机服务（`127.0.0.1:8787`），无需配置即连；其他设备打开 `http://<PC-IP>:8787/?token=…`
+
+**场景 B · 跨网络（外出 / 异地）**
+
+1. PC 保持运行（装法 A 的 relay 或装法 B 的桌面端均可），领 8 位配对码（PC 只发出站连接，无需公网 IP）
 2. 手机 App「新增服务器 → 配对码」输码；或任意浏览器打开 <https://cc-deck.humumu.online> 输码（PWA 可加主屏）
-3. 所在网络拦截 WSS 时，网页端自动降级 HTTP 长轮询保持在线
+3. 所在网络限制较严时，网页端自动改用兼容的连接方式保持在线
 
 <details>
-<summary>更多姿势（手动跑 relay / 手表 / 平台说明）</summary>
+<summary>更多方式（手动运行 / 手表 / 平台说明）</summary>
 
-- **手动跑 relay**：`cd relay && npm install && npm run dev`；要桥接自己开的 CLI 会话再执行 `node scripts/install-hooks.mjs`；领配对码 `npx tsx src/index.ts --pair`
+- **手动跑 relay**：`cd relay && npm install && npm run dev`；要接入自己开的 CLI 会话再执行 `node scripts/install-hooks.mjs`；领配对码 `npx tsx src/index.ts --pair`
 - **Wear OS 手表**：`wear-app/` 构建安装。经手机蓝牙 RFCOMM 中继零配置接入（手表免联网、免录入，无 GMS 设备可用）；也支持 WS 直连 relay，或在手表设置粘贴云桥地址远程使用
-- **平台**：Windows / macOS / Linux 均可跑 relay；「向外部 CLI 会话注入按键」依赖 Windows 专属注入器，其他平台外部会话为只读监控 + 审批，托管会话全功能可用
+- **平台说明**：Windows / macOS / Linux 均可跑 relay。「向外部会话注入按键」支持 Windows 与 macOS（Terminal 内），Linux 上自开的终端会话为只读监控 + 审批；托管会话全平台全功能
+  - 外部会话 = 你自己开着的终端里的 Claude Code 会话；托管会话 = 由 CC Deck 从面板新建、代你启动的会话
 
 </details>
 
@@ -145,7 +171,8 @@ claude plugin install cc-deck@cc-deck-plugins
 
 - **LAN token 是共享秘密**：拿到 token 即可完全控制你的会话。token 首启随机生成，请经安全渠道传递；换发删 `data/token` 重启或设 `CCR_TOKEN`
 - **局域网直连无 TLS**：token 出现在 URL / WebSocket 参数中，仅限可信局域网；跨公网走云桥
-- **云通道端到端加密**：手机与 relay 各持 tweetnacl box 密钥，桥上流转的全是密文信封 `{n,c}`
+- **云通道端到端加密**：手机与电脑各持独立密钥，中继服务器上流转的全部是密文，运营方也无法解密
+- **配对码只用于首次接入**：设备携公钥与配对码请求绑定，校验通过即配对；一次性、默认 5 分钟过期，此后配对码不再参与通信
 - **更新链路完整性**：App 下载更新包先校验结构完整性（防截断包进安装器），版本以 GitHub Releases 为源，镜像仅作分发
 - **默认公共桥由作者运营**（带连接数 / 设备数 / 帧率限流）：能防窃听，但桥运营方理论上可观测元数据。介意者按[进阶](#进阶)4 条命令自建
 
@@ -177,7 +204,7 @@ curl -X POST "http://127.0.0.1:8787/api/notify?token=<TOKEN>" \
 |---|---|---|
 | `CCR_PORT` | `8787` | 监听端口 |
 | `CCR_TOKEN` | `data/token` 文件 | 鉴权 token；设环境变量（≥8 位）可覆盖 |
-| `CCR_CWD` | 用户主目录 | 托管新建会话的缺省工作目录 |
+| `CCR_CWD` | 上次会话目录（无则主目录） | 托管新建会话的缺省工作目录 |
 | `CCR_MODEL` | `ANTHROPIC_DEFAULT_SONNET_MODEL` | 托管会话模型；不用默认值时请显式指定 |
 | `CCR_DEBUG` | – | 打印 CLI stderr 与工具原始结构 |
 | `CCR_GATE_TOOLS` | `Bash,Edit,Write,NotebookEdit,WebFetch,WebSearch` | 远程审批门控的工具名 |
@@ -248,23 +275,18 @@ cd desktop-tauri && npx tauri build              # Tauri
 cd relay && node scripts/build-plugin.mjs
 ```
 
-**版本号单一事实源**：根目录 `VERSION` 文件。发版只改它，再跑 `node scripts/version.mjs --write` 同步到各落点（web-console `CONSOLE_VERSION`、expo-app `app.json` 与 `build.gradle`、desktop-tauri `package.json`、项目主页三处版本展示）；`--check` 由 git pre-commit 钩子强制校验，不同步的提交直接拦截。
-
-```bash
-node scripts/version.mjs           # 查看各落点当前值
-node scripts/version.mjs --write   # 发版：把 VERSION 写入全部落点
-node scripts/version.mjs --check   # 校验（pre-commit 自动跑）
-```
-
 </details>
 
-仓库布局：`relay/`（核心，协议唯一定义源 `relay/src/types.ts`）、`web-console/`（网页控制台）、`expo-app/`（Android 手机端 + 手表网关）、`wear-app/`（Wear OS 手表端）、`desktop-tauri/`（桌面客户端主推）与 `desktop/`（Electron，过渡期保留）、`cloud-bridge/` 与 `cloudflare/`（云桥双形态）、`mobile/`（APK 分发页）、`cc-plugins/`（Claude Code 插件成品）、`docs/`（架构文档）。
+仓库布局：`relay/`（核心，协议唯一定义源 `relay/src/types.ts`）、`web-console/`（网页控制台）、`expo-app/`（Android 手机端 + 手表网关）、`wear-app/`（Wear OS 手表端）、`desktop-tauri/`（桌面客户端）与 `desktop/`（Electron，过渡期保留）、`cloud-bridge/` 与 `cloudflare/`（云桥双形态）、`mobile/`（APK 分发页）、`cc-plugins/`（Claude Code 插件成品）、`docs/`（架构文档）。
+
+CI：[relay](https://github.com/humumu130/cc-deck/actions/workflows/relay.yml) · [android](https://github.com/humumu130/cc-deck/actions/workflows/android.yml) · [desktop](https://github.com/humumu130/cc-deck/actions/workflows/desktop.yml)。版本号与发版流程见 [CONTRIBUTING.md](CONTRIBUTING.md)。
 
 ## Roadmap
 
-### 矩阵式团队模式（设计定稿 · 开发中）
+- **矩阵式团队模式**（设计定稿 · 开发中）：多个 Claude 会话组队协作——你只对 Leader 提一句话需求，它分诊、立项、派单、汇总；项目组间物理隔离并行不干扰，结项经验回流复用。设计定稿与流程图见 [v8-team-matrix.html](docs/v8-team-matrix.html) / [v8-team-diagrams.html](docs/v8-team-diagrams.html)
 
-多 Claude 会话的矩阵式协作：**常驻组织**（唯一 Leader + 两本账）统筹一切，**动态项目组**按需编制并行推进，**普通会话**保留为逃生舱。
+<details>
+<summary>矩阵式团队模式 · 设计速览</summary>
 
 - 单线沟通：只对 Leader 说一句话需求，分诊五档输出（咨询 / 随手办 / 轻立项 / 正经立项 / 建议暂缓）
 - 物理隔离：项目组 = 编制 + git worktree + 任务板，cwd 即项目锚点，并行互不踩踏
@@ -303,13 +325,20 @@ flowchart TB
 ```
 
 - 粗箭头 `⇒`：核心通道（单线沟通）；虚线 `⇢`：弱关联（逃生舱 / 挂起 / 回流提案）
-- 完整设计见决策稿 [v8-team-matrix.html](docs/v8-team-matrix.html)（v3.1）与三图总览 [v8-team-diagrams.html](docs/v8-team-diagrams.html)（组织 / 工作流 / 状态）
+
+</details>
 
 - 手表 Tiles（不开 App 直接看状态）
 - 更多手表平台：OPPO ColorOS Watch 适配进行中
 - 多手机 / 多设备同时在线
+- Web Push：iOS / 浏览器锁屏推送（网页端 PWA 补齐推送能力）
 - LAN 直连 WSS / TLS 部署加固
 - 会话恢复扩展到更多桌面场景（当前支持 macOS Terminal / Windows cmd）
+
+## 反馈与交流
+
+- [GitHub Discussions](https://github.com/humumu130/cc-deck/discussions)：使用问题、玩法分享、想法讨论
+- [Issue](https://github.com/humumu130/cc-deck/issues)：Bug 报告与功能请求
 
 ## License
 
