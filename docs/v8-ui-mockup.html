@@ -371,7 +371,7 @@
   .ppane.on { display: block; }
   .ppane::-webkit-scrollbar { display: none; }
 
-  /* v6 手机底部导航（微信式三 Tab：会话 / 团队 / 设置；详情页不加——root 页才有） */
+  /* v7.1/v8 对齐：手机底部导航（微信式四 Tab：会话 / 团队 / 项目 / 设置；项目为长期一级域，详情页不加——root 页才有）；依据：specs/000-ui-skeleton-review.md */
   .ptabbar { flex: none; height: 56px; display: flex; background: var(--p-panel); border-top: 1px solid var(--p-line); }
   .ptab { flex: 1; position: relative; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px; font-size: 10px; color: var(--p-dim); }
   .ptab .ic { font-size: 19px; line-height: 1; }
