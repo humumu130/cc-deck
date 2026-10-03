@@ -31,7 +31,10 @@ echo "② 推 ECS（APK 直链 + 手机 latest.json + Electron exe + latest.yml�
 # 只有两字段时 App 端清单校验/进度条缺料——本地生成一份，ECS 与 KV 双通道用同一内容
 APK_SIZE=$(stat -f%z "$APK")
 OTA_URL="https://cc.humumu.online/dl/cc-deck-$VER.apk"
-printf '{"version":"%s","url":"%s","size":%s,"notes":"%s"}' "$VER" "$OTA_URL" "$APK_SIZE" "$NOTES" > "$TMP/latest.json"
+# notes 走 printf 直拼进 JSON——摘要含双引号/反斜杠会破 JSON（App 端解析失败=OTA 失明），
+# 先做最小 JSON 字符串转义（双引号/反斜杠；控制字符人工摘要里不出现，不做全量）
+NOTES_JSON=${NOTES//\\/\\\\}; NOTES_JSON=${NOTES_JSON//\"/\\\"}
+printf '{"version":"%s","url":"%s","size":%s,"notes":"%s"}' "$VER" "$OTA_URL" "$APK_SIZE" "$NOTES_JSON" > "$TMP/latest.json"
 $SCP "$APK" "$ECS_HOST:$ECS_DIR/cc-deck.apk"
 [ -n "$EXE" ] && $SCP "$EXE" "$ECS_HOST:$ECS_DIR/cc-deck-desktop-setup.exe"
 if [ -n "$LATEST_YML" ]; then $SCP "$LATEST_YML" "$ECS_HOST:$ECS_DIR/latest.yml"; fi
@@ -85,9 +88,25 @@ curl -sS -m 15 -I "https://cc-deck.humumu.online/download/cc-deck-desktop-setup.
 # #239：主页版本号随发版上线——version.mjs --write 只改仓库文件不会自动生效，
 # 静态资产必须 wrangler deploy（0.6.2/0.6.3 两版徽章停在 v0.6.1 的根因）。
 # deploy 同时带 worker.ts 上线：发版分支基于 dev，worker 代码天然同步，无 #220 分叉风险
+# 安全批部署守卫（2026-10-03 事故复盘）：上午修主页徽章的 deploy 从缺安全批的分支上线，
+# 把生产 worker 抹回无加固版本（#28/#29 全部失守数小时）——「本地=origin/dev」不能保证
+# deploy 安全（生产实际部署源曾是含安全批的 m2 分支）。deploy 是整树上线：树上没有 =
+# 线上被抹掉。守卫拦「树里没有」，线上复核拦「部署的不是这棵树」，双保险
+if ! grep -q 'SEC_HEADERS' cloudflare/src/worker.ts || ! grep -q 'rlDevOfRk' cloudflare/src/worker.ts; then
+  echo "❌ 拒部：当前树 cloudflare/src/worker.ts 缺安全批特征（SEC_HEADERS / rlDevOfRk）——"
+  echo "   wrangler deploy 整树上线会把生产安全批抹掉（2026-10-03 事故复盘）。先合并安全批再发版"
+  exit 1
+fi
 echo "⑥ 主页版本上线（wrangler deploy 静态资产）…"
 if [ -n "${CF_TOKEN:-${CLOUDFLARE_API_TOKEN:-}}" ]; then
   (cd cloudflare && CLOUDFLARE_API_TOKEN="${CF_TOKEN:-${CLOUDFLARE_API_TOKEN:-}}" npx wrangler deploy 2>&1 | tail -3)
+  # 部署后线上复核：生产实际拿到安全头才算闭环（传播秒级，直查即可）
+  sleep 3
+  if curl -sIm 15 "https://cc-deck.humumu.online/" | grep -qi 'x-frame-options'; then
+    echo "   ✅ 线上安全头复核通过"
+  else
+    echo "   ⚠️ 线上未见安全头——部署可能未按预期生效，人工核查 wrangler.toml/部署目录"
+  fi
 else
   echo "   ⚠️ 缺 CF_TOKEN——主页未部署，版本徽章将停更（#239）"
 fi
