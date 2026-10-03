@@ -72,6 +72,7 @@
     .rail-connection i { width: 9px; height: 9px; border-radius: 50%; background: currentColor; box-shadow: 0 0 12px currentColor; }
     .desktop-screen { display: none; flex: 1; min-width: 0; }
     .desktop-screen.active { display: grid; grid-template-columns: 296px minmax(0, 1fr) 320px; }
+    .desktop-screen.inspector-collapsed { grid-template-columns: 296px minmax(0, 1fr) 42px; }
     .queue { overflow: hidden; min-width: 0; padding: 16px 12px; background: var(--surface1); border-right: 1px solid var(--line-soft); }
     .queue-head { display: flex; align-items: center; gap: 8px; margin-bottom: 13px; }
     .queue-head h2 { flex: 1; margin: 0; color: var(--text-strong); font-size: 13px; }
@@ -118,8 +119,13 @@
     .secondary-btn { border-color: var(--line); background: var(--surface2); color: var(--text); }
     .secondary-btn:hover { background: var(--hover); }
     .danger-btn { border-color: rgba(240,107,104,.4); background: rgba(240,107,104,.12); color: var(--error); }
-    .inspector { overflow: hidden auto; padding: 16px 14px; background: var(--surface1); border-left: 1px solid var(--line-soft); }
+    .inspector { position: relative; overflow: hidden auto; padding: 16px 14px; background: var(--surface1); border-left: 1px solid var(--line-soft); }
     .inspector h3 { margin: 0 0 14px; color: var(--text-strong); font-size: 12px; }
+    .inspector-toggle { position: absolute; top: 11px; right: 10px; display: grid; place-items: center; width: 24px; height: 24px; border: 1px solid var(--line); border-radius: 6px; background: var(--surface2); color: var(--dim); cursor: pointer; font-size: 12px; }
+    .inspector-toggle:hover { color: var(--text); background: var(--hover); }
+    .inspector.collapsed { overflow: hidden; padding: 12px 6px; }
+    .inspector.collapsed > :not(.inspector-toggle) { display: none; }
+    .inspector.collapsed .inspector-toggle { position: static; width: 100%; height: 34px; background: transparent; }
     .inspector-block { padding: 12px 0; border-top: 1px solid var(--line-soft); }
     .inspector-block:first-of-type { border-top: 0; padding-top: 0; }
     .inspector-title { display: flex; justify-content: space-between; gap: 7px; margin-bottom: 7px; color: var(--text); font-size: 10px; font-weight: 700; }
@@ -205,9 +211,9 @@
     .mobile-nav button b { display: block; margin-bottom: 3px; color: var(--text); font-size: 17px; }
     .mobile-nav button.active { color: var(--text-strong); border-bottom-color: var(--brand); }
     .mobile-nav button.active b { color: var(--brand-hover); }
-    .mobile-summary { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; margin-bottom: 13px; }
-    .mobile-summary div { padding: 9px 7px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface2); }
-    .mobile-summary b { display: block; color: var(--text-strong); font: 700 16px var(--mono); }
+    .mobile-summary { display: flex; align-items: center; gap: 10px; min-height: 25px; margin-bottom: 11px; padding: 0 2px; }
+    .mobile-summary div { display: inline-flex; align-items: baseline; gap: 4px; padding: 0; color: var(--dim); }
+    .mobile-summary b { color: var(--text-strong); font: 700 11px var(--mono); }
     .mobile-summary span { color: var(--dim); font-size: 9px; }
     .mobile-switch { display: flex; gap: 4px; padding: 3px; margin-bottom: 13px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface1); }
     .mobile-switch button { flex: 1; padding: 6px 3px; border: 0; border-radius: 5px; background: transparent; color: var(--dim); cursor: pointer; font-size: 10px; }
@@ -404,6 +410,41 @@
       let mobileReturn = "inbox";
       let toastTimer = null;
 
+      function setInspectorCollapsed(screen, collapsed) {
+        const inspector = screen.querySelector(".inspector");
+        const button = inspector?.querySelector(".inspector-toggle");
+        if (!inspector || !button) return;
+        screen.classList.toggle("inspector-collapsed", collapsed);
+        inspector.classList.toggle("collapsed", collapsed);
+        button.textContent = collapsed ? "›" : "‹";
+        button.title = collapsed ? "展开证据检查器" : "收起证据检查器";
+        button.setAttribute("aria-label", button.title);
+      }
+
+      function applyInspectorBreakpoint() {
+        const narrow = window.matchMedia("(max-width: 1279px)").matches;
+        desktopScreens.forEach((screen) => {
+          if (!screen.dataset.inspectorManual) setInspectorCollapsed(screen, narrow);
+        });
+      }
+
+      function initInspectors() {
+        desktopScreens.forEach((screen) => {
+          const inspector = screen.querySelector(".inspector");
+          if (!inspector) return;
+          const button = document.createElement("button");
+          button.className = "inspector-toggle";
+          button.type = "button";
+          inspector.prepend(button);
+          button.addEventListener("click", () => {
+            screen.dataset.inspectorManual = "1";
+            setInspectorCollapsed(screen, !screen.classList.contains("inspector-collapsed"));
+          });
+        });
+        applyInspectorBreakpoint();
+        window.addEventListener("resize", applyInspectorBreakpoint);
+      }
+
       function showToast(message) {
         toast.textContent = message;
         toast.classList.add("show");
@@ -457,7 +498,7 @@
         if (!target) return;
         mobileReturn = root;
         document.querySelectorAll(".mobile-screen").forEach((screen) => screen.classList.toggle("active", screen === target));
-        document.querySelectorAll("[data-mobile-root]").forEach((button) => button.classList.toggle("active", button.dataset.mobileRoot === root && button.tagName === "BUTTON" && button.classList.contains("mobile-nav") === false));
+        document.querySelectorAll(".mobile-nav [data-mobile-root]").forEach((button) => button.classList.toggle("active", button.dataset.mobileRoot === root));
       }
 
       function openMobileDetail(id) {
@@ -500,6 +541,7 @@
         document.querySelectorAll("[data-team-tab]").forEach((item) => item.classList.toggle("active", item === button));
         document.querySelectorAll("[data-team-pane]").forEach((pane) => pane.style.display = pane.dataset.teamPane === button.dataset.teamTab ? "block" : "none");
       }));
+      initInspectors();
     })();
   </script>
 </body>
