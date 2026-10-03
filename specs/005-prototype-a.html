@@ -111,6 +111,13 @@
       --shadow: 0 26px 80px rgba(0, 0, 0, .42);
       --small-shadow: 0 12px 30px rgba(0, 0, 0, .28);
       --card-shadow: 0 8px 22px rgba(1, 8, 16, .2);
+      --artifact-group-bg: rgba(16, 30, 47, .62);
+      --artifact-group-line: rgba(103, 137, 170, .34);
+      --artifact-muted-bg: rgba(83, 103, 126, .12);
+      --artifact-failed-bg: rgba(236, 116, 114, .12);
+      --artifact-failed-line: rgba(236, 116, 114, .42);
+      --artifact-complete-bg: rgba(75, 203, 145, .1);
+      --artifact-sheet-backdrop: rgba(1, 8, 16, .56);
       --radius: 10px;
       --radius-sm: 7px;
       --radius-lg: 14px;
@@ -223,6 +230,13 @@
       --shadow: 0 24px 62px rgba(50, 74, 96, .18);
       --small-shadow: 0 10px 24px rgba(50, 74, 96, .16);
       --card-shadow: 0 6px 16px rgba(50, 74, 96, .1);
+      --artifact-group-bg: #F7FAFC;
+      --artifact-group-line: #C6D3DF;
+      --artifact-muted-bg: #EEF3F7;
+      --artifact-failed-bg: #FCEBEC;
+      --artifact-failed-line: #C84C51;
+      --artifact-complete-bg: #E8F5EF;
+      --artifact-sheet-backdrop: rgba(50, 74, 96, .28);
     }
     * { box-sizing: border-box; }
     html, body { min-width: 320px; min-height: 100%; }
@@ -441,6 +455,56 @@
     .status-note { max-width: 560px; padding: 8px 11px; margin: 14px auto; border: 1px solid var(--line-soft); border-radius: 999px; background: var(--surface1); color: var(--dim); text-align: center; font: 10px var(--mono); }
     .artifact-row { display: flex; align-items: center; gap: 7px; padding: 8px 0; border-bottom: 1px solid var(--line-soft); color: var(--text); font-size: 10px; }
     .artifact-row span:last-child { margin-left: auto; color: var(--faint); font-family: var(--mono); }
+    .artifact-browser { display: grid; gap: 10px; }
+    .artifact-summary { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; padding-bottom: 2px; color: var(--dim); font-size: 10px; }
+    .artifact-summary strong { color: var(--text-strong); font: 700 13px var(--mono); font-variant-numeric: tabular-nums; }
+    .artifact-summary small { color: var(--faint); font: 10px var(--mono); }
+    .artifact-summary-path { overflow: hidden; max-width: 48%; color: var(--faint); font: 10px var(--mono); text-overflow: ellipsis; white-space: nowrap; }
+    .artifact-group, .artifact-loose { border: 1px solid var(--artifact-group-line); border-radius: var(--radius); background: var(--artifact-group-bg); box-shadow: var(--card-shadow); }
+    .artifact-group-head { display: flex; align-items: center; gap: 8px; min-height: 44px; padding: 8px 10px; border-bottom: 1px solid var(--line-soft); }
+    .artifact-group.collapsed .artifact-group-head { border-bottom-color: transparent; }
+    .artifact-group-title { min-width: 0; flex: 1; }
+    .artifact-group-title strong { display: block; overflow: hidden; color: var(--text-strong); font-size: 11px; text-overflow: ellipsis; white-space: nowrap; }
+    .artifact-group-title small { display: block; margin-top: 2px; color: var(--dim); font: 9px var(--mono); }
+    .artifact-folder-icon { color: var(--brand-hover); font-size: 15px; }
+    .artifact-group-action { min-height: 28px; padding: 0 9px; }
+    .artifact-menu-wrap { position: relative; }
+    .artifact-menu-button { width: 28px; height: 28px; border: 1px solid transparent; border-radius: 6px; background: transparent; color: var(--dim); cursor: pointer; }
+    .artifact-menu-button:hover { border-color: var(--line); background: var(--hover); color: var(--text); }
+    .artifact-menu { position: absolute; top: calc(100% + 5px); right: 0; z-index: 6; display: none; min-width: 165px; padding: 5px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface2); box-shadow: var(--small-shadow); }
+    .artifact-menu.open { display: grid; }
+    .artifact-menu button { padding: 7px 8px; border: 0; border-radius: 5px; background: transparent; color: var(--text); text-align: left; cursor: pointer; font-size: 10px; }
+    .artifact-menu button:hover { background: var(--hover); }
+    .artifact-files { padding: 0 10px; }
+    .artifact-file { display: grid; grid-template-columns: 22px minmax(0, 1fr) auto auto; align-items: center; gap: 7px; min-height: 42px; border-bottom: 1px solid var(--line-soft); }
+    .artifact-file:last-child { border-bottom: 0; }
+    .artifact-file.failed { margin: 0 -4px; padding: 0 4px; border-radius: 5px; background: var(--artifact-failed-bg); color: var(--error); }
+    .artifact-file-icon { color: var(--info); font-size: 13px; text-align: center; }
+    .artifact-file-main { min-width: 0; }
+    .artifact-file-name { display: block; overflow: hidden; color: var(--text); font-size: 10px; text-overflow: ellipsis; white-space: nowrap; }
+    .artifact-file-dir { display: block; overflow: hidden; margin-top: 1px; color: var(--faint); font: 9px var(--mono); text-overflow: ellipsis; white-space: nowrap; }
+    .artifact-file-meta { color: var(--faint); font: 9px var(--mono); white-space: nowrap; }
+    .artifact-file-error { color: var(--error); font-size: 9px; white-space: nowrap; }
+    .artifact-batch { padding: 0 10px 9px; }
+    .artifact-batch-state { display: flex; align-items: center; justify-content: space-between; gap: 8px; min-height: 25px; padding: 5px 7px; border-radius: 6px; background: var(--artifact-muted-bg); color: var(--dim); font: 9px var(--mono); }
+    .artifact-batch-state.complete { background: var(--artifact-complete-bg); color: var(--done); }
+    .artifact-batch-state.partial { background: var(--artifact-failed-bg); color: var(--error); }
+    .artifact-batch-state button { border: 0; background: transparent; color: inherit; cursor: pointer; font: inherit; text-decoration: underline; }
+    .artifact-batch-progress { display: inline-block; width: 76px; height: 4px; overflow: hidden; border-radius: 999px; background: var(--line); vertical-align: middle; }
+    .artifact-batch-progress i { display: block; width: 0; height: 100%; border-radius: inherit; background: var(--brand); transition: width .25s ease; }
+    .artifact-loose { padding: 0 10px; }
+    .artifact-source { display: grid; gap: 8px; }
+    .artifact-source-head { display: flex; align-items: center; justify-content: space-between; color: var(--text-strong); font-size: 11px; }
+    .artifact-source-head small { color: var(--dim); font: 9px var(--mono); }
+    .artifact-source-unreachable { padding: 10px; border: 1px dashed var(--danger-line); border-radius: 8px; background: var(--danger-bg); color: var(--error); font-size: 10px; }
+    .artifact-source-link { border: 0; background: transparent; color: var(--info); cursor: pointer; font-size: 10px; }
+    .artifact-mobile-action { display: none; }
+    .artifact-sheet-backdrop { position: fixed; inset: 0; z-index: 30; display: none; align-items: flex-end; background: var(--artifact-sheet-backdrop); }
+    .artifact-sheet-backdrop.open { display: flex; }
+    .artifact-sheet { width: 100%; padding: 10px 13px calc(13px + env(safe-area-inset-bottom)); border-top: 1px solid var(--line); border-radius: 16px 16px 0 0; background: var(--surface2); box-shadow: var(--shadow); }
+    .artifact-sheet h3 { margin: 0 0 8px; color: var(--text-strong); font-size: 12px; }
+    .artifact-sheet button { display: block; width: 100%; min-height: 42px; border: 0; border-bottom: 1px solid var(--line-soft); background: transparent; color: var(--text); text-align: left; cursor: pointer; font-size: 11px; }
+    .artifact-sheet button:last-child { border-bottom: 0; color: var(--dim); }
     .board { display: grid; grid-template-columns: repeat(5, minmax(120px, 1fr)); gap: 9px; min-width: 680px; }
     .lane { min-height: 395px; padding: 8px; border: 1px solid var(--line-soft); border-radius: 9px; background: var(--lane-bg); }
     .lane-head { display: flex; justify-content: space-between; margin-bottom: 8px; color: var(--dim); font-size: 10px; font-weight: 700; }
