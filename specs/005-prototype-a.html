@@ -500,7 +500,7 @@
     .wait-actions button.allow { border-color: transparent; background: var(--brand-strong); color: var(--on-brand); font-weight: 700; }
     .wait-actions button.allow:hover { background: var(--brand); }
     .wait-card.allowed .wait-actions button.allow { background: var(--done); color: var(--done-ink); }
-    .status-note { max-width: 560px; padding: 8px 11px; margin: 14px auto; border: 1px solid var(--line-soft); border-radius: 999px; background: var(--surface1); color: var(--dim); text-align: center; font: 10px var(--mono); }
+    .status-note { max-width: 560px; padding: 8px 11px; margin: 14px auto; border: 1px solid var(--line); border-left: 3px solid var(--working); border-radius: 7px; background: var(--surface1); color: var(--text); text-align: left; font: 10px var(--mono); }
     .artifact-row { display: flex; align-items: center; gap: 7px; padding: 8px 0; border-bottom: 1px solid var(--line-soft); color: var(--text); font-size: 10px; }
     .artifact-row span:last-child { margin-left: auto; color: var(--faint); font-family: var(--mono); }
     .artifact-browser { display: grid; gap: 10px; }
@@ -573,12 +573,15 @@
     .board { display: grid; grid-template-columns: repeat(5, minmax(120px, 1fr)); gap: 9px; min-width: 680px; }
     .lane { min-height: 395px; padding: 8px; border: 1px solid var(--line-soft); border-radius: 9px; background: var(--lane-bg); }
     .lane-head { display: flex; justify-content: space-between; margin-bottom: 8px; color: var(--dim); font-size: 10px; font-weight: 700; }
-    .task-card { padding: 9px; margin-bottom: 7px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface2); }
-    .task-card strong { display: block; color: var(--text); font-size: 10px; }
-    .task-card p { margin: 5px 0 0; color: var(--dim); font-size: 10px; }
+    .task-card { min-width: 0; padding: 9px; margin-bottom: 7px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface2); }
+    .task-card strong, .task-card p { display: block; min-width: 0; overflow: hidden; color: var(--text); text-overflow: ellipsis; white-space: nowrap; font-size: 10px; }
+    .task-card p { margin: 5px 0 0; color: var(--dim); }
     .task-card .tag { margin-top: 7px; }
-    .task-assignee { display: flex; align-items: center; gap: 6px; margin-top: 7px; color: var(--dim); font-size: 10px; }
+    .task-assignee { display: flex; align-items: center; gap: 6px; min-width: 0; margin-top: 7px; overflow: hidden; color: var(--dim); font-size: 10px; white-space: nowrap; }
+    .task-assignee > span:last-child { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .task-assignee .assignee-meta { color: var(--dim); font-weight: 400; }
     .task-assignee b { color: var(--text); font-weight: 600; }
+    .queue-card-meta { display: block; height: 18px; min-width: 0; overflow: hidden; margin: 2px 0 0 14px; color: var(--dim); text-overflow: ellipsis; white-space: nowrap; font-size: 10px; line-height: 18px; }
     .member-list { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; min-width: 0; }
     .member-card { display: flex; min-width: 0; gap: 8px; padding: 10px; border: 1px solid var(--line); border-radius: 9px; background: var(--surface2); overflow: hidden; }
     .member-card > div { min-width: 0; }
@@ -626,6 +629,13 @@
     .notify-source-time { float: right; color: var(--faint); font: 10px var(--mono); }
     .notify-source-card h3 { margin: 5px 0 0; color: var(--text-strong); font-size: 13px; }
     .notify-source-card p { margin: 5px 0 0; color: var(--dim); font-size: 11px; line-height: 1.55; }
+    .notify-facts { display: grid; gap: 4px; margin-top: 7px; }
+    .notify-fact { display: grid; grid-template-columns: 38px minmax(0, 1fr); gap: 7px; min-width: 0; align-items: baseline; font-size: 10px; line-height: 1.35; }
+    .notify-fact-label { color: var(--faint); }
+    .notify-fact-value { min-width: 0; overflow: hidden; color: var(--text); text-overflow: ellipsis; white-space: nowrap; }
+    .notify-fact-value strong { color: var(--text-strong); font-weight: 700; }
+    .mobile-notify-card .notify-facts { margin: 6px 0 0 35px; }
+    .mobile-notify-card .notify-fact { grid-template-columns: 34px minmax(0, 1fr); gap: 5px; }
     .notify-source-card .identity-cluster { margin-top: 9px; }
     .notify-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 7px; margin-top: 13px; }
     .notify-actions .primary-btn, .notify-actions .secondary-btn { min-height: 32px; }
@@ -669,6 +679,9 @@
     .mobile-head { display: flex; align-items: center; gap: 8px; padding: 14px 14px 12px; border-bottom: 1px solid var(--line-soft); background: var(--mobile-head-bg); box-shadow: 0 7px 16px var(--panel-shadow); }
     .mobile-head h2 { flex: 1; min-width: 0; margin: 0; color: var(--text-strong); font-size: 15px; }
     .mobile-head h2 small { display: block; overflow: hidden; margin-top: 3px; color: var(--dim); font-size: 10px; font-weight: 400; text-overflow: ellipsis; white-space: nowrap; }
+    #m-detail .mobile-head h2 small { display: flex; align-items: baseline; gap: 6px; min-width: 0; }
+    .mobile-detail-path { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .mobile-detail-time { flex: 0 0 auto; color: var(--text); white-space: nowrap; }
     .mobile-content { flex: 1; overflow: auto; padding: 14px 13px 78px; }
     .mobile-content.no-bottom { padding-bottom: 18px; }
     .mobile-nav { display: flex; flex: 0 0 62px; border-top: 1px solid var(--line-soft); background: var(--mobile-nav-bg); box-shadow: 0 -10px 20px var(--rail-shadow); }
@@ -721,6 +734,7 @@
     .mobile-project-card p { margin: 4px 0 10px; color: var(--dim); font-size: 10px; }
     .mobile-settings { display: grid; gap: 8px; }
     .mobile-settings .settings-row { padding: 12px; }
+    #m-settings .mobile-settings::before { content: "连接管理"; display: block; margin: 2px 2px 0; color: var(--faint); font: 700 10px var(--mono); letter-spacing: .04em; }
     .mobile-back { position: relative; display: grid; place-items: center; flex: 0 0 30px; width: 30px; height: 30px; border: 1px solid var(--line); border-radius: 7px; background: transparent; color: var(--dim); cursor: pointer; font-size: 18px; line-height: 1; }
     .mobile-back:hover { background: var(--hover); color: var(--text); }
     .mobile-detail-composer { display: flex; gap: 7px; padding: 10px 12px; border-top: 1px solid var(--line-soft); background: var(--composer-bg); box-shadow: 0 -8px 18px var(--panel-shadow); }
@@ -931,7 +945,7 @@
           </section>
 
           <section class="desktop-screen" id="d-team">
-            <aside class="queue"><div class="queue-head"><h2>团队行动 <span class="tag action">1</span></h2><button class="icon-btn">＋</button></div><div class="queue-group">待确认 · 1</div><div class="queue-card selected"><div class="row"><i class="status-dot waiting"></i><strong>cc-deck M1 攻坚团</strong><span class="tag action">编制</span></div><p>6 成员 · 4 进行中 · 2 待装机</p><div class="identity-cluster"><span class="source-badge">公司电脑</span></div></div><div class="queue-group">进行中 · 1</div><div class="queue-card"><div class="row"><i class="status-dot done"></i><strong>v0.5.2 双端发版团</strong></div><p>归档准备 · 09-18</p><div class="identity-cluster"><span class="source-badge">家里 iMac</span></div></div><div class="queue-group">快捷入口</div><div class="queue-card"><div class="row"><span class="avatar">＋</span><strong>新建团队</strong></div><p>描述目标 → Leader 建议编制 → 你确认</p></div></aside>
+            <aside class="queue"><div class="queue-head"><h2>团队行动 <span class="tag action">1</span></h2><button class="icon-btn">＋</button></div><div class="queue-group">待确认 · 1</div><div class="queue-card selected"><div class="row"><i class="status-dot waiting"></i><strong>cc-deck M1 攻坚团</strong><span class="tag action">编制</span></div><p>6 成员 · 4 进行中 · 2 待装机</p><div class="identity-cluster"><span class="source-badge">公司电脑</span></div></div><div class="queue-group">进行中 · 1</div><div class="queue-card"><div class="row"><i class="status-dot done"></i><strong>v0.5.2 双端发版团</strong></div><p>归档准备 · 09-18</p><div class="identity-cluster"><span class="source-badge">家里 iMac</span></div><div class="queue-card-meta">双端 · test 通道 · 待收单</div></div><div class="queue-group">快捷入口</div><div class="queue-card"><div class="row"><span class="avatar">＋</span><strong>新建团队</strong></div><p>描述目标 → Leader 建议编制 → 你确认</p></div></aside>
             <section class="workspace"><header class="workspace-head"><div class="workspace-title-row"><i class="status-dot done"></i><h2>cc-deck M1 攻坚团</h2><span class="tag action">待你确认</span><span class="source-badge">公司电脑</span></div><div class="workspace-sub">6 成员 · 4 进行中 · 2 待装机 · Leader：glm-5.3</div><div class="segment-bar"><button>对话</button><button class="active">看板 <span class="faint">9</span></button><button>成员 <span class="faint">6</span></button><button>活动</button></div></header><div class="workspace-body"><div class="board"><div class="lane"><div class="lane-head"><span>待认领</span><span>2</span></div><div class="task-card"><strong>T-21 导入码迁移</strong><p>等待 worker-web</p><div class="identity-cluster"><span class="engine-badge codebuddy">CodeBuddy</span><span class="source-badge">公司电脑</span></div><span class="tag">待派单</span></div></div><div class="lane"><div class="lane-head"><span>进行中</span><span>4</span></div><div class="task-card"><strong>T-12 relay 事件流</strong><p>worker-relay · 48%</p><div class="identity-cluster"><span class="engine-badge codex">Codex</span><span class="source-badge">公司电脑</span></div><span class="tag info">运行中</span></div><div class="task-card"><strong>T-15 手机列表</strong><p>worker-mobile · 72%</p><div class="identity-cluster"><span class="engine-badge qwen">Qwen Code</span><span class="source-badge">家里 iMac</span></div><span class="tag info">运行中</span></div></div><div class="lane"><div class="lane-head"><span>待验收</span><span>2</span></div><div class="task-card"><strong>T-13 更新通道隔离</strong><p>独立出包已完成</p><div class="task-assignee"><span class="avatar worker">W<i class="avatar-engine-dot claude"></i></span><span><b>worker-web · 执行者</b><br>Claude · 公司电脑</span></div><span class="tag action">验收单</span></div></div><div class="lane"><div class="lane-head"><span>待装机</span><span>2</span></div><div class="task-card"><strong>T-14 验收槽</strong><p>回填 2/3</p><div class="task-assignee"><span class="avatar leader">✦<i class="avatar-engine-dot trae"></i></span><span><b>Leader · 编排</b><br>Trae · 公司电脑</span></div><span class="tag action">待收单</span></div></div><div class="lane"><div class="lane-head"><span>完成</span><span>1</span></div><div class="task-card"><strong>T-10 版本同步</strong><p>已合并 main</p><div class="identity-cluster"><span class="engine-badge zcode">ZCode</span><span class="source-badge">家里 iMac</span></div><span class="tag done">完成</span></div></div></div></div><footer class="workspace-footer"><button class="secondary-btn">＋ 新建任务</button><button class="primary-btn">确认编制方案</button></footer></section>
             <aside class="inspector"><h3>成员与派单</h3><div class="inspector-block"><div class="inspector-title"><span>Leader 建议编制</span><span>待确认</span></div><div class="member-list"><div class="member-card"><span class="avatar leader">✦<i class="avatar-engine-dot trae"></i></span><div><strong>Leader <span class="role-label leader-label">Leader</span></strong><p>glm-5.3 · 调度</p><div class="identity-cluster"><span class="engine-badge trae">Trae</span><span class="source-badge">公司电脑</span></div></div></div><div class="member-card"><span class="avatar worker">W<i class="avatar-engine-dot claude"></i></span><div><strong>worker-web</strong><p>claude · 开发</p><div class="identity-cluster"><span class="engine-badge claude">Claude</span><span class="source-badge">公司电脑</span></div></div></div><div class="member-card"><span class="avatar worker">M<i class="avatar-engine-dot qwen"></i></span><div><strong>worker-mobile</strong><p>失联 · 需接替</p><div class="identity-cluster"><span class="engine-badge qwen">Qwen Code</span><span class="source-badge">家里 iMac</span></div></div></div><div class="member-card"><span class="avatar qa">QA<i class="avatar-engine-dot codex"></i></span><div><strong>验收槽</strong><p>独立厂商 · claude</p><div class="identity-cluster"><span class="engine-badge codex">Codex</span><span class="source-badge">公司电脑</span></div></div></div></div></div><div class="inspector-block"><div class="inspector-title"><span>停留告警</span><span class="tag action">1</span></div><div class="inspector-copy">worker-mobile 25 分钟无日志；已通知 Leader。</div><button class="danger-btn" style="margin-top:9px">换厂商接替</button></div><div class="inspector-block"><div class="inspector-title"><span>团队确认</span><span>1 项</span></div><div class="inspector-copy">3 开发 + 独立验收 + 1 调研</div></div></aside>
           </section>
@@ -1504,6 +1518,13 @@
         if (team) {
           team.querySelectorAll(".queue .source-badge, .task-card .source-badge, .member-card .source-badge").forEach((badge) => badge.remove());
           team.querySelectorAll(".queue-card .identity-cluster:empty").forEach((cluster) => cluster.remove());
+          team.querySelectorAll(".task-assignee").forEach((assignee) => {
+            const details = assignee.querySelector(":scope > span:last-child");
+            const name = details?.querySelector("b")?.textContent.trim();
+            if (!details || !name) return;
+            const meta = details.textContent.replace(name, "").replace(/\s+/g, " ").trim();
+            details.innerHTML = `<b>${name}</b>${meta ? `<span class="assignee-meta"> · ${meta}</span>` : ""}`;
+          });
           team.querySelectorAll(".task-card > .tag").forEach((tag) => {
             if (tag.textContent.trim() === "验收单") {
               const flag = document.createElement("span");
@@ -1514,6 +1535,27 @@
           });
         }
         document.querySelectorAll("#m-team .mobile-content .source-badge").forEach((badge) => badge.remove());
+      }
+
+      function normalizeLeaderLabels() {
+        document.querySelectorAll(".leader-label").forEach((label) => {
+          if (label.textContent.trim() === "Leader") label.textContent = "调度";
+        });
+      }
+
+      function normalizeNotificationFacts() {
+        const facts = [
+          ["<strong>worker-web</strong>", "<strong>T-13</strong> 独立出包已完成", "公司网下检查更新并确认收单"],
+          ["<strong>Leader / worker-mobile</strong>", "额度链走尽", "选择接替引擎并确认 <strong>3 开发 + 独立验收</strong> 编制"],
+          ["<strong>worker-relay</strong>", "滞留 25 分钟", "已通知 Leader，无需处理"]
+        ];
+        const markup = (items) => `<div class="notify-facts">${items.map(([label, value]) => `<div class="notify-fact"><span class="notify-fact-label">${label}</span><span class="notify-fact-value">${value}</span></div>`).join("")}</div>`;
+        ["#d-notify .notify-source-card", "#m-notify .mobile-notify-card"].forEach((selector) => {
+          document.querySelectorAll(selector).forEach((card, index) => {
+            const paragraph = card.querySelector("p");
+            if (paragraph) paragraph.outerHTML = markup([["谁", facts[index]?.[0] || "—"], ["什么事", facts[index]?.[1] || "—"], ["等什么", facts[index]?.[2] || "—"]]);
+          });
+        });
       }
 
       function auditRedundancy() {
@@ -1540,6 +1582,8 @@
         document.querySelector("#d-notify .queue-head [data-notify-action-count]")?.remove();
         const notifyGroup = document.querySelector("#d-notify .queue-group");
         if (notifyGroup) notifyGroup.textContent = "需你行动";
+        const settingsGroup = document.querySelector("#d-settings .queue-group");
+        if (settingsGroup) settingsGroup.textContent = "连接管理";
         const notifyInspectorCopy = document.querySelector("#d-notify .inspector [data-notify-action-count]")?.parentElement;
         if (notifyInspectorCopy) notifyInspectorCopy.textContent = "当前行动项处理完最后一项才清零。";
         document.querySelectorAll("#m-project .muted").forEach((copy) => { copy.textContent = copy.textContent.replace("→", "›"); });
@@ -2062,6 +2106,15 @@
         elapsed.hidden = !data.elapsed;
       }
 
+      function updateMobileDetailSubtitle(lastActive) {
+        const subtitle = document.querySelector("#mobile-detail-sub");
+        if (!subtitle) return;
+        const separator = lastActive.lastIndexOf(" · ");
+        const path = separator > -1 ? lastActive.slice(0, separator) : "";
+        const time = separator > -1 ? lastActive.slice(separator + 3) : lastActive;
+        subtitle.innerHTML = `<span class="mobile-detail-path">${path}</span><span class="mobile-detail-time">${time}</span>`;
+      }
+
       function selectSession(id) {
         document.querySelectorAll("[data-session-card]").forEach((card) => card.classList.toggle("selected", card.dataset.sessionCard === id));
         const data = sessionStateData[id] || null;
@@ -2094,7 +2147,7 @@
         document.querySelectorAll(".mobile-screen:not(#m-detail)").forEach((screen) => screen.classList.remove("active"));
         const data = sessionStateData[id] || sessionStateData.release;
         document.querySelector("#mobile-detail-title").firstChild.textContent = data.title;
-        document.querySelector("#mobile-detail-sub").textContent = data.lastActive;
+        updateMobileDetailSubtitle(data.lastActive);
         document.querySelector("#mobile-detail-identity").innerHTML = `<span class="engine-badge ${data.engineClass}">${data.engine}</span><span class="source-badge">${data.source}</span>`;
         updateSessionStateRow(document.querySelector("#mobile-detail-state"), data);
         document.querySelector("[data-mobile-back]").textContent = mobileReturn === "notify" ? "‹ 通知" : "‹";
@@ -2177,6 +2230,7 @@
       setupSourceGroupBars();
       mountConnectionCapsules();
       wireArtifactBrowser();
+      normalizeNotificationFacts();
       wireNotificationDomain();
       applyTheme(savedTheme);
       applyCardDensity(savedCardDensity);
@@ -2184,6 +2238,8 @@
       setSource("office");
       setSourceMode("single");
       hydrateAvatars();
+      normalizeLeaderLabels();
+      updateMobileDetailSubtitle(sessionStateData.release.lastActive);
       hydrateSourceBadges();
       hydrateNotificationIcons();
       syncContextMeterBands();
