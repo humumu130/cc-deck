@@ -6,6 +6,8 @@
 - 范围：新增 Trae、Qwen Code、CodeBuddy Code、ZCode 四个引擎适配器；保留 Claude、Codex 行为不变
 - 纪律：本文件只定义架构、契约、验证和实施拆解，不直接修改 `relay/src` 实现
 
+> 2026-10-05 事实订正：来源=`/tmp/workerB-engine-facts.md`（本地 CLI help 面盘点，无凭证环境）。本次只订正 Trae、CodeBuddy 的命令与输出事实，不改变适配器架构设计。
+
 > 本规格中的“已确认”来自当前仓库源码与 `test-codex` 的现状盘点；CLI 命令、事件字段和原生续接能力如果没有被仓库或一次真实 `--help`/冒烟确认，统一标注“待冒烟核实”，不得当作稳定契约硬编码。
 
 ## 0. 设计结论先行
@@ -143,6 +145,11 @@ interface EngineDefinition {
 | turn 完成/失败 | `onTurnEnd` | 每 turn exactly once |
 | 进程和会话终结 | `onSessionEnd` | 区分 clean turn exit 与 logical end |
 
+两家已完成本地 help 面核对后的特殊口径：
+
+- **Trae**：help 没有 `--output-format`、`--json`、`--jsonl` 或 `--stream-json`。第一期按 stdout 纯文本适配：保留正文，收到 stdout 行即刷新 `WORKING` 活性，不把文本行伪造成 `init`、工具、usage、todo 或 artifact 事件。通用 JSON/JSONL 分帧器仍保留，作为未来协议或用户自定义 JSONL CLI 的兜底，不代表 Trae 原生事件协议。
+- **CodeBuddy**：`--print` 下 help 声明 `--output-format text|json|stream-json`，并支持 `--input-format text|stream-json`；因此分帧方向成立，但事件类型、字段和终态语义必须等真回合 `stream-json` 样本后再锁定，当前 mapper 字段表统一标记为“待样本”。
+
 ### 2.4 provider 配置面
 
 统一配置模型建议如下，凭证值不落 `projects.json` 或普通事件日志：
@@ -176,33 +183,37 @@ interface EngineProviderConfig {
 
 ### 3.1 Trae（`bytedance/trae-agent`）
 
-#### 定位与候选调用
+#### 定位与已核实调用形态
 
-Trae 是第一期重点接入的开源 CLI。当前仓库没有 Trae 依赖或协议实现，因此以下均为设计候选：
-
-```text
-trae-agent --cwd <cwd> --prompt-file <prompt-file> --output-format jsonl
-```
-
-备选是 prompt 走 stdin：
+Trae 是第一期重点接入的开源 CLI。本地 help 已核实可执行文件名为 `trae-cli`，第一期调用形态为：
 
 ```text
-trae-agent --cwd <cwd> --output-format jsonl < prompt-file
+/path/to/trae-cli run [TASK]
 ```
 
-**待冒烟核实：** 可执行文件名、是否存在 `run` 子命令、prompt 参数名、是否支持 stdin、JSON/JSONL 开关、非交互/自动批准开关、模型和 provider 参数、退出码语义、是否有 session/resume 参数。实现不得先写死 `--prompt` 或 `--output-format jsonl` 后再用猜测补救。
+cwd 使用：
+
+```text
+/path/to/trae-cli run -w <cwd> [TASK]
+```
+
+prompt 可使用位置参数 `TASK`，或文件参数 `-f/--file <path>`。已核实的 provider/model 参数为 `-p/--provider`、`-m/--model`、`--model-base-url`、`-k/--api-key`；密钥只能通过受控子进程环境/安全引用传递，禁止进入 argv 日志、普通事件或错误文本。其他常用控制项包括 `--config-file`、`--max-steps`、`-mp/--must-patch`、`-t/--trajectory-file` 和 `-pp/--patch-path`。
+
+help 没有声明 JSON/JSONL/stream-json 输出开关，只有 `-ct/--console-type simple|rich`。没有声明自动批准或权限批准开关；`--must-patch` 只是补丁约束，不代表自动批准。help 未见 `--resume`、`--continue` 或 session id 参数，故能力位为 `resume=false`，措辞为“help 未见（非原生保证）”，不能据此声称 CLI 永远没有续接能力。
+
+无配置 fixture 已实测：`trae-cli run hi` 退出码为 `1`，输出 `Error: Config file not found. Please specify a valid config file on the command line option --config-file`，错误可诊断且不泄露密钥。
 
 #### 输出与进度解析
 
-- 先按字节分帧，尝试 JSONL；如果 Trae 的 JSON 模式是单个完整 JSON，则允许 whole-document fallback。
-- 设计事件分类：`session/init` → `onInit`；`turn/start`、`tool/start`、`command`、`file` → `WORKING`；assistant text delta/final → `onLog`；turn success/failure → `onTurnEnd`。
-- 如果只输出人类文本，解析器保留正文并按“收到 stdout 行”刷新活性；不把每一行当成工具事件。工具、diff、usage、todo 只有字段被冒烟确认才映射。
-- Trae 没有已知稳定 resume 契约，第一期按 **无 resume** 设计；即使后续发现隐藏 session 参数，也要通过能力探测显式升级，不能让存量会话隐式改变续接语义。
+- 通用进程层仍按字节分帧，并保留 JSON/JSONL/whole-document fallback；但 Trae 当前只能按 stdout 纯文本路径接入。
+- 收到 stdout 行时刷新 `WORKING`，保留正文和诊断行；不把文本行伪造成 `init`、工具、diff、usage、todo 或 artifact 事件。
+- `onInit`、工具事件、usage、todo、artifact 只有后续真实配置冒烟取得可靠字段后才可映射；否则对应能力位为 unavailable/none。
+- `resume=false`，原因是当前 help 未见原生续接参数；首期每轮 fresh spawn + context packet，不让存量会话隐式改变续接语义。
 
 #### 鉴权、provider 与图片
 
-- 默认从 Trae 原生配置/登录读取；CC Deck 只提供 `command`、`model`、`provider`、`base_url`、`api_key_ref` 的映射槽。
-- 是否接受 OpenAI-compatible `base_url`/`api_key` **待冒烟核实**；确认前不得默认注入 `OPENAI_BASE_URL`。
+- 默认从 Trae 原生配置/登录读取；CC Deck 可提供 `command`、`model`、`provider`、`base_url`、`api_key_ref` 的映射槽，但仅注入 help/官方文档确认过的参数。
+- `--model-base-url`、`-k/--api-key` 已在 help 中确认；是否能稳定复用 OpenAI-compatible 中转、参数优先级和真实连通性仍待有效配置冒烟，确认前不得猜测或默认注入任何 `OPENAI_*` 环境变量。
 - 图片和文件先落到 relay 管理的临时目录，提示中只注入安全的绝对路径和“请读取该文件”的明确指令；原生附件参数若存在，另列能力位并单测。
 
 #### 上下文重注入
@@ -246,34 +257,53 @@ prompt 优先走参数还是 stdin、JSON 是单对象还是多行、是否支�
 
 #### 无头调用
 
-用户给定的硬要求是使用 CI 模式。候选入口：
+本地 help 已否定 `--ci-mode` 入口。生产优先使用已安装的本地 bin（`codebuddy` 或 `cbc`），标准非交互形态为：
 
 ```text
-codebuddy --ci-mode <prompt>
+codebuddy --print <prompt> --output-format <text|json|stream-json>
 ```
 
-或 npm 包入口：
+`-p/--print` 是布尔非交互开关，prompt 是位置参数，不是 `-p` 的值。`npx` 只作为安装/开发候选，不作为生产每回合运行形态。已确认输出和输入参数为 `--output-format text|json|stream-json`、`--input-format text|stream-json`；另有 `--json-schema`、`--include-partial-messages`（后者用于 stream-json）。
 
-```text
-npx --yes @tencent-ai/codebuddy-code --ci-mode <prompt>
-```
-
-**待冒烟核实：** 实际 bin 名、prompt 是 positional/`-p`/stdin、是否有 JSON/JSONL 输出、CI 模式是否自动确认、模型/provider/base URL 参数、退出码、resume 能力。生产不应每回合依赖 `npx` 在线安装；preflight 要优先解析本地 bin，只有显式开发配置才允许包管理器入口。
+已确认会话参数包括 `-c/--continue`、`-r/--resume [sessionId]`、`--session-id`、`--fork-session`；relay 首期仍主动不用，能力位保持 `resume=false`，统一 fresh spawn + context packet。
 
 #### 输出与权限解析
 
-- `--ci-mode` 只代表非交互运行候选，不等于 relay 可显示审批卡；只有 CLI 给出可回传 decision id 和决策参数，才实现 `allow/deny/answer`。
-- 先支持非流式最终结果和 stderr 活性，再按实测事件增加流式正文/工具事件。
-- 若 CodeBuddy 有 CI 专用 JSON 输出，写独立 `CodeBuddyEventMapper`；若只有文本，使用 text-final mapper，能力位标记 `streaming=none`、`usage=none` 等。
-- 文件与图片采用路径提示降级；`--ci-mode` 下任何授权风险必须在会话卡显示“自动执行模式”。
+- `--print` 只代表非交互输出，不等于 relay 可显示审批卡；只有 CLI 给出可回传 decision id 和决策参数，才实现 `allow/deny/answer`。
+- help 明示 `-y/--dangerously-skip-permissions` 在 HIGH/CRITICAL 风险下仍可能询问，不能把它当作全量 CI 自动批准。已确认 `--permission-mode` 六档为 `acceptEdits|bypassPermissions|default|plan|dontAsk|auto`；首期只有存在真实 decision 回传通道时才允许 `WAITING`，否则权限问题映射为 `ERROR` 并带可行动诊断。
+- `json` 是单结果格式，`stream-json` 是 realtime streaming；事件类型、字段、终态和工具调用映射均待真回合 `stream-json` 样本确认，mapper 字段表不得提前写成稳定契约。
+- 文件与图片采用路径提示降级；没有真实授权决策通道时，不伪造审批等待。
 
 #### 鉴权与续接
 
-腾讯账号/密钥和 OpenAI-compatible 中转的变量名 **待冒烟核实**；不能将 `TENCENT_*` 或 `OPENAI_*` 其中任何一组作为事实写死。
+- 当前 help 只确认 `--model`；provider、base URL、api key 和鉴权来源未在 help 中确认。应查官方 settings/header/原生配置后再建 profile，不能猜测 `TENCENT_*`、`OPENAI_*` 或其他环境变量。
 
-第一期默认无 resume：如官方 CLI 提供可稳定恢复的会话 id，再新增 native profile；否则 fresh spawn + context packet。CI 模式若没有交互审批，`WAITING` 不应出现，权限问题映射为 `ERROR` 并带可行动诊断。
+第一期主动不使用 CLI 原生 resume：每轮 fresh spawn + context packet。无凭证最小调用 `codebuddy -p hi` 实测退出码为 `0` 但无 CLI 正文或错误，因此退出码不可单独作为成功判定；真回合必须以输出事件/正文为准。
 
-### 3.4 ZCode（智谱 CLI）
+### 3.4 真模型冒烟欠账（Trae / CodeBuddy，等有效配置/凭证）
+
+以下项目执行前提均为取得有效配置/凭证；本节不把本地 help 事实扩展成设计承诺。
+
+**Trae：**
+
+1. 用 `trae-cli run --config-file <合法配置> "输出 hello"` 记录退出码、stdout/stderr 和是否仅有文本。
+2. 验证位置 TASK、`-f/--file`、`-w/--working-dir` 的实际行为，确认 relay 注入 cwd 的方式。
+3. 验证 `-p/--provider`、`-m/--model`、`--model-base-url`、`-k/--api-key` 的优先级；密钥不得进入日志或 argv 记录。
+4. 验证 `--must-patch`、`--max-steps`、trajectory/patch 输出是否适合 relay 生命周期。
+5. 确认成功、模型失败、配置失败的退出码与诊断语义；确认没有可用 session/resume 后维持 reinjection。
+6. 若 stdout 仍无结构化事件，按纯文本能力位落地，不因通用 parser 存在而虚构 JSONL 事件。
+
+**CodeBuddy：**
+
+1. 运行 `codebuddy --print "输出 hello" --output-format json`，记录单对象字段与退出码。
+2. 运行 `--output-format stream-json`，记录 UTF-8 分帧、事件类型、终态事件和工具调用字段。
+3. 验证位置 prompt 与 `--input-format stream-json` 的输入协议，不默认把 stdin 当普通文本协议。
+4. 分别验证 `-y`、`--permission-mode dontAsk`、`--permission-mode auto` 对低风险/高风险工具的行为；确认哪些情况仍会询问。
+5. 核对 `--model` 与官方 settings/header 的 provider、base URL、鉴权配置；不猜环境变量。
+6. 核对 `-c`、`-r`、`--session-id` 的原生恢复事实，但 relay 第一阶段继续 `resume=false`、每轮 fresh spawn + context packet。
+7. 记录认证失败、模型失败、工具失败、正常完成的退出码与输出；不能把当前“退出 0、无正文”测试当作成功。
+
+### 3.5 ZCode（智谱 CLI）
 
 #### 安全前置与调用形态
 
@@ -540,9 +570,9 @@ dispatchWorker({
 
 ### 批次 4：CodeBuddy Code adapter
 
-**交付：** 本地 npm bin resolver、`--ci-mode`、非交互错误语义、文本/JSON mapper；如果 CLI 无审批，能力位和 UI 提示一并落地。
+**交付：** 本地 npm bin resolver、`--print`（布尔开关）+ 位置 prompt + 显式 `--output-format`、非交互错误语义、文本/JSON mapper；如果 CLI 无审批，能力位和 UI 提示一并落地。
 
-**测试：** package bin stub、`--ci-mode` argv 断言、自动确认不被误映射成 WAITING、非零退出含 stderr、reinjection 二轮。
+**测试：** package bin stub、`--print` argv 断言、自动确认不被误映射成 WAITING、非零退出含 stderr、reinjection 二轮；无凭证「退出 0 无正文」不当成功判定。
 
 ### 批次 5：ZCode adapter 与隐私闸门
 
