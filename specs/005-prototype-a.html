@@ -735,6 +735,19 @@
     .queue-card .identity-cluster { position: absolute; right: 10px; bottom: 7px; margin: 0; flex-wrap: nowrap; }
     #d-session .queue-card p { margin: 4px 0 0 14px; }
     #d-session .queue-card .identity-cluster { display: flex; position: static; margin: 6px 0 0 14px; }
+    body { --density-card-block-size: 76px; --density-card-pad-block: 7px; --density-card-pad-inline: 10px; --density-card-row-gap: 3px; --density-notice-block-size: 108px; }
+    body[data-card-density="compact"] { --density-card-block-size: 58px; --density-card-pad-block: 7px; --density-card-pad-inline: 10px; --density-card-row-gap: 6px; --density-notice-block-size: 96px; }
+    body[data-card-density="relaxed"] { --density-card-block-size: 86px; --density-card-pad-block: 10px; --density-card-pad-inline: 12px; --density-card-row-gap: 5px; --density-notice-block-size: 120px; }
+    #d-session .queue-card { display: grid; block-size: var(--density-card-block-size); padding: var(--density-card-pad-block) var(--density-card-pad-inline); grid-template-columns: minmax(0, 1fr); grid-template-rows: repeat(3, 18px); row-gap: var(--density-card-row-gap); align-content: start; overflow: hidden; }
+    #d-session .queue-card .row { grid-row: 1; min-block-size: 18px; }
+    #d-session .queue-card p { grid-column: 1; grid-row: 2; block-size: 18px; min-block-size: 18px; margin: 0 0 0 14px; }
+    #d-session .queue-card .identity-cluster { grid-column: 1; grid-row: 3; block-size: 18px; min-block-size: 18px; margin: 0 0 0 14px; }
+    body[data-card-density="compact"] #d-session .queue-card { grid-template-rows: repeat(2, 18px); }
+    body[data-card-density="compact"] #d-session .queue-card p { margin-right: 138px; }
+    body[data-card-density="compact"] #d-session .queue-card:not(:has(.identity-cluster)) p { margin-right: 0; }
+    body[data-card-density="compact"] #d-session .queue-card .identity-cluster { grid-column: 1; grid-row: 2; align-self: center; justify-self: end; margin: 0; }
+    #d-team .queue-card, #d-project .queue-card, #d-settings .queue-card { block-size: var(--density-card-block-size); padding: var(--density-card-pad-block) var(--density-card-pad-inline); overflow: hidden; }
+    #d-notify .notice { block-size: var(--density-notice-block-size); overflow: hidden; }
     .workspace-title-row .identity-cluster { flex: 0 0 auto; }
     .workspace-title-row .engine-badge, .workspace-title-row .source-badge { font-size: 10px; }
     .member-card, .task-card, .notice, .metric, .aggregate-card, .settings-row { box-shadow: var(--card-shadow); transition: border-color .18s ease, background .18s ease, transform .18s ease, box-shadow .18s ease; }
@@ -742,12 +755,6 @@
     .member-card .identity-cluster, .task-card .identity-cluster, .notice .identity-cluster { margin-top: 6px; }
     .artifact-row > span:not(.identity-cluster) { margin-left: auto; color: var(--faint); font-family: var(--mono); }
     .mobile-card .identity-cluster { margin: 6px 0 0 35px; }
-    body[data-card-density="compact"] #d-session .queue-card p { margin-right: 138px; }
-    body[data-card-density="compact"] #d-session .queue-card:not(:has(.identity-cluster)) p { margin-right: 0; }
-    body[data-card-density="compact"] #d-session .queue-card .identity-cluster { position: absolute; right: 10px; bottom: 7px; margin: 0; }
-    body[data-card-density="relaxed"] #d-session .queue-card { min-height: 66px; padding: 10px 12px; }
-    body[data-card-density="relaxed"] #d-session .queue-card p { margin-top: 7px; }
-    body[data-card-density="relaxed"] #d-session .queue-card .identity-cluster { margin-top: 9px; }
     body[data-card-density="relaxed"] .mobile-card { padding: 13px; }
     body[data-card-density="relaxed"] .mobile-card p { margin-top: 8px; }
     body[data-card-density="relaxed"] .mobile-card .identity-cluster { margin-top: 9px; }
@@ -1476,6 +1483,7 @@
         const team = document.querySelector("#d-team");
         if (team) {
           team.querySelectorAll(".queue .source-badge, .task-card .source-badge, .member-card .source-badge").forEach((badge) => badge.remove());
+          team.querySelectorAll(".queue-card .identity-cluster:empty").forEach((cluster) => cluster.remove());
           team.querySelectorAll(".task-card > .tag").forEach((tag) => {
             if (tag.textContent.trim() === "验收单") {
               const flag = document.createElement("span");
