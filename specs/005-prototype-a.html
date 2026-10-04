@@ -369,7 +369,7 @@
     .rail-spring { flex: 1; }
     .theme-toggle { margin-top: 7px; margin-bottom: 0; color: var(--dim); }
     .theme-toggle:hover { color: var(--brand-hover); }
-    .theme-toggle-icon { font-size: 17px; line-height: 1; }
+    .theme-toggle-icon { display: block; width: 18px; height: 18px; fill: currentColor; }
     .desktop-screen { display: none; flex: 1; min-width: 0; }
     .desktop-screen.active { display: grid; grid-template-columns: 296px minmax(0, 1fr) 320px; }
     .desktop-screen.inspector-collapsed { grid-template-columns: 296px minmax(0, 1fr) 42px; }
@@ -407,7 +407,16 @@
     .workspace-title-row { display: flex; align-items: center; gap: 8px; }
     .workspace-title-row h2 { flex: 1; min-width: 0; margin: 0; overflow: hidden; color: var(--text-strong); font-size: 16px; text-overflow: ellipsis; white-space: nowrap; }
     .workspace-sub { margin-top: 5px; color: var(--dim); font: 10px var(--mono); }
+    .session-head-sub { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.75fr); align-items: baseline; gap: 12px; min-width: 0; padding-left: 8px; border-left: 2px solid var(--session-state-color); }
+    .session-head-sub[data-session-state="waiting"] { --session-state-color: var(--working); }
+    .session-head-sub[data-session-state="running"] { --session-state-color: var(--done); }
+    .session-head-sub[data-session-state="closing"] { --session-state-color: var(--brand-hover); }
+    .session-head-sub[data-session-state="suspended"] { --session-state-color: var(--error); }
+    .session-head-meta { display: flex; min-width: 0; gap: 6px; overflow: hidden; white-space: nowrap; }
+    .session-head-path { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .session-head-time { flex: 0 0 auto; color: var(--text); white-space: nowrap; }
     .session-state-row { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: baseline; gap: 7px; min-width: 0; margin-top: 6px; padding-left: 8px; border-left: 2px solid var(--session-state-color); color: var(--dim); font-size: 10px; line-height: 15px; }
+    .session-head-sub .session-state-row { margin: 0; padding-left: 0; border-left: 0; }
     .session-state-row[data-session-state="waiting"] { --session-state-color: var(--working); }
     .session-state-row[data-session-state="running"] { --session-state-color: var(--done); }
     .session-state-row[data-session-state="closing"] { --session-state-color: var(--brand-hover); }
@@ -728,8 +737,11 @@
     .mobile-detail-tabs button { position: relative; flex: 0 0 auto; padding: 10px 0 8px; border: 0; background: transparent; color: var(--dim); cursor: pointer; font-size: 10px; }
     .mobile-detail-tabs button.active { color: var(--text-strong); font-weight: 700; }
     .mobile-detail-tabs button.active::after { content: ""; position: absolute; right: 0; bottom: -1px; left: 0; height: 2px; background: var(--brand); }
-    #m-detail .session-state-row { grid-template-columns: auto minmax(0, 1fr); margin: 0; padding: 8px 13px 7px 11px; border-right: 0; border-bottom: 1px solid var(--line-soft); border-left-width: 2px; }
-    #m-detail .session-state-elapsed { grid-column: 2; justify-self: end; margin-left: 0; }
+    #m-detail .mobile-detail-head-main { flex: 1; min-width: 0; }
+    #m-detail .mobile-head { align-items: flex-start; }
+    #m-detail .session-state-row { grid-template-columns: auto minmax(0, 1fr) auto; margin: 6px 0 0; padding: 0 0 0 8px; border: 0; border-left: 2px solid var(--session-state-color); line-height: 14px; }
+    #m-detail .session-state-summary { display: -webkit-box; overflow: hidden; -webkit-box-orient: vertical; -webkit-line-clamp: 2; white-space: normal; }
+    #m-detail .session-state-elapsed { grid-column: auto; justify-self: auto; margin-left: 0; }
     .mobile-board { display: grid; gap: 9px; }
     .mobile-lane { padding: 10px; border: 1px solid var(--line); border-radius: 9px; background: var(--surface1); }
     .mobile-lane-head { display: flex; justify-content: space-between; margin-bottom: 7px; color: var(--dim); font-size: 10px; font-weight: 700; }
@@ -934,7 +946,7 @@
             <div class="rail-spring"></div>
             <button class="rail-btn" data-domain="notify" title="通知"><svg class="icon-bell" aria-hidden="true"><use href="#icon-bell"></use></svg><span class="badge" data-notify-badge aria-label="通知有 2 项需行动" title="通知 · 2 项需行动">2</span></button>
             <button class="rail-btn" data-domain="settings" title="设置"><svg class="icon-nav" aria-hidden="true"><use href="#icon-gear"></use></svg></button>
-            <button class="theme-toggle rail-btn" type="button" data-theme-toggle title="切换浅色主题" aria-label="切换浅色主题"><span class="theme-toggle-icon">☼</span></button>
+            <button class="theme-toggle rail-btn" type="button" data-theme-toggle title="切换浅色主题" aria-label="切换浅色主题"><svg class="theme-toggle-icon" aria-hidden="true"><use href="#icon-sun"></use></svg></button>
           </nav>
 
           <section class="desktop-screen active" id="d-session">
@@ -1031,7 +1043,7 @@
           <div class="mobile-status"><span>9:41</span><span>▰ ︎◒ 100%</span></div>
           <div class="mobile-sourcebar"><div class="source-switcher"><button class="source-trigger" type="button" data-source-trigger aria-expanded="false"><span class="source-dot status-connected" data-source-dot></span><strong data-current-source>公司电脑</strong><span>⌄</span></button><div class="source-menu" data-source-menu><div class="source-menu-head">数据源与视图</div><button class="source-option active" type="button" data-source-choice="office"><span class="source-dot status-connected"></span><strong>公司电脑</strong><small>6 会话 · 2 行动</small></button><button class="source-option" type="button" data-source-choice="home"><span class="source-dot status-reconnecting"></span><strong>家里 iMac</strong><small>2 会话 · 2 行动</small></button><div class="source-mode"><button class="active" type="button" data-source-mode="single">单源</button><button type="button" data-source-mode="aggregate">多源聚合</button></div><a class="source-manage" href="#d-settings" data-source-settings>⚙ 管理与配对新源 →</a></div></div><span class="source-summary" data-current-summary>6 会话 · 2 行动</span></div>
           <header class="mobile-head"><h2>设置<small>设备、模型与偏好</small></h2><span class="tag done connection-chip status-connected"><span class="mini-signal" aria-hidden="true"><i></i><i></i><i></i></span>relay 在线</span><button class="icon-btn">⋯</button></header>
-          <div class="mobile-content"><div class="mobile-settings"><div class="settings-row"><span class="setting-icon">⌁</span><div><strong>连接与设备</strong><p>2 台在线 · 1 台异常 · 浏览/验证/换路由</p></div><span class="tag action">1</span></div><div class="settings-row"><span class="setting-icon">◈</span><div><strong>模型服务</strong><p>Provider 浏览态 · claude-sonnet</p></div><span class="chev">›</span></div><button class="settings-row theme-setting" type="button" data-theme-toggle aria-label="切换主题"><span class="setting-icon theme-toggle-icon">☼</span><div><strong>主题</strong><p data-theme-label>深色主题 · 点击切换浅色</p></div><span class="chev" data-theme-value>深色</span></button><div class="settings-row"><span class="setting-icon"><svg class="icon-inline" aria-hidden="true"><use href="#icon-users"></use></svg></span><div><strong>团队身份模板</strong><p>5 个角色 · 开团时逐成员覆盖</p></div><span class="chev">›</span></div><div class="settings-row"><span class="setting-icon">▦</span><div><strong>扩展</strong><p>验收、登记、产物</p></div><span class="chev">›</span></div><div class="settings-row"><span class="setting-icon">ⓘ</span><div><strong>关于</strong><p>v0.6.0-test · test 通道</p></div><span class="chev">›</span></div></div><button class="primary-btn" style="margin-top:14px">扫码添加新设备</button></div>
+          <div class="mobile-content"><div class="mobile-settings"><div class="settings-row"><span class="setting-icon">⌁</span><div><strong>连接与设备</strong><p>2 台在线 · 1 台异常 · 浏览/验证/换路由</p></div><span class="tag action">1</span></div><div class="settings-row"><span class="setting-icon">◈</span><div><strong>模型服务</strong><p>Provider 浏览态 · claude-sonnet</p></div><span class="chev">›</span></div><button class="settings-row theme-setting" type="button" data-theme-toggle aria-label="切换主题"><span class="setting-icon"><svg class="theme-toggle-icon" aria-hidden="true"><use href="#icon-sun"></use></svg></span><div><strong>主题</strong><p data-theme-label>深色主题 · 点击切换浅色</p></div><span class="chev" data-theme-value>深色</span></button><div class="settings-row"><span class="setting-icon"><svg class="icon-inline" aria-hidden="true"><use href="#icon-users"></use></svg></span><div><strong>团队身份模板</strong><p>5 个角色 · 开团时逐成员覆盖</p></div><span class="chev">›</span></div><div class="settings-row"><span class="setting-icon">▦</span><div><strong>扩展</strong><p>验收、登记、产物</p></div><span class="chev">›</span></div><div class="settings-row"><span class="setting-icon">ⓘ</span><div><strong>关于</strong><p>v0.6.0-test · test 通道</p></div><span class="chev">›</span></div></div><button class="primary-btn" style="margin-top:14px">扫码添加新设备</button></div>
           <nav class="mobile-nav"><button data-mobile-root="inbox"><b><svg class="icon-nav" aria-hidden="true"><use href="#icon-home"></use></svg></b>会话</button><button data-mobile-root="team"><b><svg class="icon-nav" aria-hidden="true"><use href="#icon-users"></use></svg></b>团队</button><button data-mobile-root="project"><b><svg class="icon-nav" aria-hidden="true"><use href="#icon-grid"></use></svg></b>项目</button><button class="active" data-mobile-root="settings"><b><svg class="icon-nav" aria-hidden="true"><use href="#icon-gear"></use></svg></b>设置</button></nav>
         </div>
       </div>
@@ -1183,6 +1195,12 @@
         if (announce) showToast(`连接状态：${state.label}`);
       }
 
+      function ensureThemeSymbols() {
+        const sprite = document.querySelector(".icon-sprite");
+        if (!sprite || sprite.querySelector("#icon-sun")) return;
+        sprite.insertAdjacentHTML("beforeend", '<symbol id="icon-sun" viewBox="0 0 24 24"><path d="M12 5a7 7 0 1 0 0 14 7 7 0 1 0 0-14Zm-1-5h2v3h-2Zm0 21h2v3h-2ZM0 11h3v2H0Zm21 0h3v2h-3ZM3.5 4.9l1.4-1.4L7 5.6 5.6 7Zm13.5 13.5 2.1 2.1-1.4 1.4-2.1-2.1ZM3.5 19.1l2.1-2.1L7 18.4l-2.1 2.1ZM17 5.6l2.1-2.1 1.4 1.4-2.1 2.1Z"></path></symbol><symbol id="icon-moon" viewBox="0 0 24 24"><path d="M20.5 15.5A8.5 8.5 0 0 1 8.5 3.5 8.5 8.5 0 1 0 20.5 15.5Z"></path></symbol>');
+      }
+
       function applyTheme(theme, announce = false) {
         const next = theme === "light" ? "light" : "dark";
         document.documentElement.dataset.theme = next;
@@ -1192,7 +1210,7 @@
           const label = toggle.querySelector("[data-theme-label]");
           const value = toggle.querySelector("[data-theme-value]");
           const target = next === "light" ? "深色" : "浅色";
-          if (icon) icon.textContent = next === "light" ? "☾" : "☼";
+          if (icon) icon.innerHTML = `<use href="#icon-${next === "light" ? "moon" : "sun"}"></use>`;
           if (label) label.textContent = `${next === "light" ? "浅色" : "深色"}主题 · 点击切换${target}`;
           if (value) value.textContent = next === "light" ? "浅色" : "深色";
           toggle.title = `切换${target}主题`;
@@ -2315,11 +2333,57 @@
       function updateSessionStateRow(row, data) {
         if (!row) return;
         row.dataset.sessionState = data.state;
+        row.closest(".session-head-sub")?.setAttribute("data-session-state", data.state);
         row.querySelector("[data-session-state-label]").textContent = data.stateLabel;
         row.querySelector("[data-session-state-summary]").textContent = data.summary;
         const elapsed = row.querySelector("[data-session-state-elapsed]");
         elapsed.textContent = data.elapsed || "";
         elapsed.hidden = !data.elapsed;
+      }
+
+      function updateSessionHeadMeta(lastActive) {
+        const subtitle = document.querySelector("#session-sub");
+        if (!subtitle) return;
+        const separator = lastActive.lastIndexOf(" · ");
+        const path = separator > -1 ? lastActive.slice(0, separator) : lastActive;
+        const time = separator > -1 ? lastActive.slice(separator + 3) : "";
+        const pathNode = subtitle.querySelector(".session-head-path");
+        const timeNode = subtitle.querySelector(".session-head-time");
+        if (pathNode) pathNode.textContent = path;
+        if (timeNode) timeNode.textContent = time;
+      }
+
+      function mergeSessionHead() {
+        const subtitle = document.querySelector("#session-sub");
+        const state = document.querySelector("#session-state-row");
+        if (!subtitle || !state || state.parentElement === subtitle) return;
+        const raw = subtitle.textContent.trim();
+        const separator = raw.lastIndexOf(" · ");
+        const path = separator > -1 ? raw.slice(0, separator) : raw;
+        const time = separator > -1 ? raw.slice(separator + 3) : "";
+        const meta = document.createElement("span");
+        meta.className = "session-head-meta";
+        meta.innerHTML = `<span class="session-head-path"></span><span class="session-head-time"></span>`;
+        subtitle.classList.add("session-head-sub");
+        subtitle.dataset.sessionState = state.dataset.sessionState || "waiting";
+        subtitle.replaceChildren(meta, state);
+        meta.querySelector(".session-head-path").textContent = path;
+        meta.querySelector(".session-head-time").textContent = time;
+      }
+
+      function mergeMobileDetailHead() {
+        const head = document.querySelector("#m-detail .mobile-head");
+        const title = head?.querySelector("#mobile-detail-title");
+        const state = document.querySelector("#mobile-detail-state");
+        if (!head || !title || !state) return;
+        let main = head.querySelector(".mobile-detail-head-main");
+        if (!main) {
+          main = document.createElement("div");
+          main.className = "mobile-detail-head-main";
+          title.replaceWith(main);
+          main.append(title);
+        }
+        main.append(state);
       }
 
       function updateMobileDetailSubtitle(lastActive) {
@@ -2336,7 +2400,7 @@
         const data = sessionStateData[id] || null;
         if (!data) return;
         document.querySelector("#session-title").textContent = data.title;
-        document.querySelector("#session-sub").textContent = data.lastActive;
+        updateSessionHeadMeta(data.lastActive);
         document.querySelector("#session-status").textContent = data.status;
         document.querySelector("#session-identity").innerHTML = `<span class="engine-badge ${data.engineClass}">${data.engine}</span><span class="source-badge">${data.source}</span>`;
         updateSessionStateRow(document.querySelector("#session-state-row"), data);
@@ -2537,6 +2601,9 @@
       renderSessionViews();
       renderNotificationViews();
       renderSourceMenus();
+      ensureThemeSymbols();
+      mergeSessionHead();
+      mergeMobileDetailHead();
       normalizeTeamRedundancy();
       auditRedundancy();
       hydrateContextWaterlines();
