@@ -13,8 +13,9 @@
 // P0 已知缺口（备案，非本笔范围）：
 //   - headless 无交互审批通道：allow/deny/answer 恒 false、setPermissionMode no-op、
 //     hasPending 恒 false（WAITING 形态后续版本再议）
-//   - 附图不支持：codex -i 要文件路径，relay 侧图片是 base64（协议不咬合）——
-//     构造/首回合/续回合三口统一 system 日志拒，不吞
+//   - 附图：#63 视觉审查链路修通（2026-10-04）——base64 落盘临时文件 →
+//     `--image <path>`（codex-cli 0.154.0 exec/resume 均支持）→ 回合收口清理。
+//     每「条消息」一个 tmpdir，排队消息的图在落盘时即持久，消费回合结束才删
 //   - model 参数不透传（relay 的模型名是 Claude 侧概念；codex 用自己的
 //     config.toml 接线——本机 GLM 同源，见研究文档）
 //   - file_change/reasoning 等事件 P0 不映射；stats 恒零（无 Edit/Write 语义面）
@@ -27,9 +28,9 @@
 // 真链路冒烟在沙盒手工跑（用户已明示预算不敏感，2026-10-01）。
 import { spawn, type ChildProcess } from "node:child_process";
 import { randomUUID } from "node:crypto";
-import { existsSync } from "node:fs";
-import { homedir } from "node:os";
-import { delimiter, join } from "node:path";
+import { existsSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { homedir, tmpdir } from "node:os";
+import { delimiter, dirname, join } from "node:path";
 import { killTree } from "./proc-tree.js";
 import { childEnv } from "./agent-adapter.js";
 import type { AgentCallbacks, AgentLike } from "./agent-adapter.js";
@@ -165,6 +166,13 @@ let cachedBin: string | null | undefined;
 export function resolveCodexCliPath(): string | null {
   if (cachedBin !== undefined) return cachedBin;
   const fromEnv = process.env.CCR_CODEX_PATH;
+  // 测试缝：显式声明「无 CLI」的确定空值。环境漂移实证（2026-10-03）：第三方在
+  // /usr/local/bin 建了 codex symlink，而 childEnv 补位目录硬编码含该路径——
+  // 测试清空 PATH/HOME 后探测仍命中，「CLI 缺失」用例失去环境无关性
+  if (fromEnv === "__none__") {
+    cachedBin = null;
+    return null;
+  }
   if (fromEnv && existsSync(fromEnv)) {
     cachedBin = fromEnv;
     return cachedBin;
@@ -192,6 +200,30 @@ export function resetCodexCliCache(): void {
   cachedBin = undefined;
 }
 
+/**
+ * base64 图落盘临时文件（#63 视觉审查链路）：`codex exec --image` 要文件路径，
+ * relay 协议里图是 base64——在发送侧物化成 CLI 可消费的路径。
+ * 每次调用建一个独立 tmpdir（一条消息一个目录），返回写入成功的路径；
+ * 单张写失败跳过（不炸回合），全失败返回空数组=本条不带图。
+ * 清理责任在消费方：CodexAgentSession 回合收口后 rmSync 目录（见 cleanupTurnImages）。
+ */
+function materializeImages(images?: string[]): string[] {
+  if (!images || images.length === 0) return [];
+  const dir = mkdtempSync(join(tmpdir(), "ccr-codex-img-"));
+  const out: string[] = [];
+  images.forEach((b64, i) => {
+    if (typeof b64 !== "string" || b64.length === 0) return;
+    try {
+      const p = join(dir, `${i}.img`);
+      writeFileSync(p, Buffer.from(b64, "base64"));
+      out.push(p);
+    } catch {
+      // 单张失败静默跳过：回合照跑，只是少一张图
+    }
+  });
+  return out;
+}
+
 // ---------------------------------------------------------------------------
 // 会话（一回合一进程；逻辑会话 = thread_id）
 // ---------------------------------------------------------------------------
@@ -201,8 +233,7 @@ export interface CodexSessionOpts {
   resume?: string;
   /** 兼容工厂统一签名：headless 无审批通道，忽略 */
   permissionMode?: string;
-  /** 工厂统一签名兼容位：P0 不消费（-i 要文件路径，relay 侧是 base64）——构造时
-   *  带图发 system 日志拒；真正消费要等「relay 落盘→传路径」管线（V2 议） */
+  /** 首回合附图（base64）——#63 起消费：落盘临时文件后经 `--image` 传入 */
   images?: string[];
   /** 兼容工厂统一签名：允许规则是 Claude 权限面概念，忽略 */
   rules?: unknown;
@@ -223,7 +254,11 @@ export class CodexAgentSession implements AgentLike {
   private mapper = new CodexEventMapper();
   private proc: ChildProcess | null = null;
   private pid: number | undefined;
-  private queued: string[] = [];
+  // 排队消息带图绑定（#63）：文本与该条的临时图路径一起入队，merge 时图拼接；
+  // 队列元素里的图路径在落盘时已持久，消费回合结束才清理
+  private queued: Array<{ text: string; images?: string[] }> = [];
+  // 本回合消费的图所在目录（回合收口清理；排队中未消费的不在此列）
+  private turnImageDirs = new Set<string>();
   private stopping = false;
   private stderrTail = "";
 
@@ -251,11 +286,8 @@ export class CodexAgentSession implements AgentLike {
       throw new Error("codex CLI 未找到（安装 codex 或设 CCR_CODEX_PATH）");
     }
     this.bin = bin;
-    if (opts?.images && opts.images.length > 0) {
-      this.cb.onLog("system", "codex 引擎暂不支持附图（协议要文件路径），图片已忽略");
-    }
     // undefined = 按需恢复的 parked 形态：不 spawn，首个回合由 sendMessage 开启
-    if (initialPrompt !== undefined) this.execTurn(initialPrompt);
+    if (initialPrompt !== undefined) this.execTurn(initialPrompt, materializeImages(opts?.images));
   }
 
   sendMessage(text: string, images?: string[], echo?: string): void {
@@ -274,16 +306,28 @@ export class CodexAgentSession implements AgentLike {
       });
     }
     if (images && images.length > 0) {
-      this.cb.onLog("system", "codex 引擎暂不支持附图（协议要文件路径），图片已忽略");
+      // #63：落盘先行（排队场景路径也要持久存在），失败条目被跳过
+      const paths = materializeImages(images);
+      if (this.proc) {
+        // 回合进行中：排队，干净收口后 merge 再起（进程模型下没有并发回合）。
+        // 上限防失控：客户端异常连发不该堆出无界队列（整段将灌进下回合 stdin）
+        if (this.queued.length >= 50) {
+          this.cb.onLog("system", "排队消息已达上限（50 条），本条丢弃");
+          return;
+        }
+        this.queued.push({ text, images: paths.length > 0 ? paths : undefined });
+        return;
+      }
+      this.execTurn(text, paths);
+      return;
     }
     if (this.proc) {
-      // 回合进行中：排队，干净收口后 merge 再起（进程模型下没有并发回合）。
-      // 上限防失控：客户端异常连发不该堆出无界队列（整段将灌进下回合 stdin）
+      // 同上：无图路径（队列元素 images 为 undefined）
       if (this.queued.length >= 50) {
         this.cb.onLog("system", "排队消息已达上限（50 条），本条丢弃");
         return;
       }
-      this.queued.push(text);
+      this.queued.push({ text });
       return;
     }
     this.execTurn(text);
@@ -311,7 +355,10 @@ export class CodexAgentSession implements AgentLike {
     if (this.ended) return;
     this.stopping = true;
     this.ended = true;
+    // 排队未消费的图随会话终止一并清（防 tmpdir 滞留）
+    const queuedDirs = new Set(this.queued.flatMap((q) => (q.images ?? []).map((p) => dirname(p))));
     this.queued = [];
+    this.cleanupTurnImages(queuedDirs);
     // 同步收口先行：置位 + onSessionEnd 立即到达端上（卡片当场离场），杀树转
     // 后台——killTree 走 taskkill/pkill 可能秒级，不该让收口回调吊在它后面
     const child = this.proc;
@@ -323,10 +370,13 @@ export class CodexAgentSession implements AgentLike {
 
   // -- 内部 -------------------------------------------------------------
 
-  private execTurn(prompt: string): void {
+  private execTurn(prompt: string, images: string[] = []): void {
     const args = ["exec", "--json", "--skip-git-repo-check", "-C", this.cwd];
     if (this.threadId) args.push("resume", this.threadId);
+    // #63 附图：已落盘的文件路径（exec 与 exec resume 均支持，0.154.0 实测）
+    if (images.length > 0) args.push("--image", ...images);
     args.push("-"); // prompt 从 stdin 读（长文本/引号/换行安全）
+    this.turnImageDirs = new Set(images.map((p) => dirname(p)));
 
     // 回合在途标记先于 spawn 置位：进程零事件退出（坏 provider/CLI 崩溃）时，
     // onClose 的崩溃分支靠 turnTerminal=false 才能收口——保持初始 true 会静默
@@ -399,6 +449,7 @@ export class CodexAgentSession implements AgentLike {
   private onClose(code: number | null): void {
     this.proc = null;
     this.pid = undefined;
+    this.cleanupTurnImages(); // 本回合图已消费完，先清再起下一回合（新回合会重设）
     if (this.stopping) return; // stop() 自己收口（onSessionEnd 已发）
     if (!this.mapper.turnTerminal) {
       // 进程退出而回合未收口：崩溃/被杀/协议漂移。有 threadId = 可 resume 自愈
@@ -415,9 +466,24 @@ export class CodexAgentSession implements AgentLike {
     }
     // 干净收口：不发 onSessionEnd（逻辑会话常驻，对齐 AgentSession DONE 语义）
     if (this.queued.length > 0 && !this.ended) {
-      const merged = this.queued.join("\n\n");
+      const merged = this.queued.map((q) => q.text).join("\n\n");
+      const imgs = this.queued.flatMap((q) => q.images ?? []);
       this.queued = [];
-      this.execTurn(merged);
+      this.execTurn(merged, imgs);
+    }
+  }
+
+  /** 回合收口清理本回合消费的临时图目录；extraDirs=会话终止时排队未消费的 */
+  private cleanupTurnImages(extraDirs?: Set<string>): void {
+    const dirs = this.turnImageDirs;
+    this.turnImageDirs = new Set();
+    for (const d of extraDirs ?? []) dirs.add(d);
+    for (const d of dirs) {
+      try {
+        rmSync(d, { recursive: true, force: true });
+      } catch {
+        // 清理失败不炸链路（tmpdir 系统级兜底）
+      }
     }
   }
 
@@ -426,6 +492,7 @@ export class CodexAgentSession implements AgentLike {
     this.proc = null;
     this.pid = undefined;
     if (this.stopping || this.ended) return;
+    this.cleanupTurnImages(); // 无进程无 close 事件，这里不清就滞留 tmpdir
     if (!this.mapper.turnTerminal) {
       this.mapper.turnTerminal = true;
       const dur = this.mapper.turnStartMs ? Math.max(0, Date.now() - this.mapper.turnStartMs) : 0;

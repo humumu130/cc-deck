@@ -9,7 +9,7 @@
 // 沙盒 + CCR_CLOUD_URL 置空 + CCR_NO_LEADER/CCR_NO_TITLE_GEN，收尾还原 env。
 import { chmodSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { randomUUID } from "node:crypto";
 import { fileURLToPath } from "node:url";
 import type { Envelope, EventType } from "../src/types.js";
@@ -351,21 +351,42 @@ exit 0`);
     assert(s2.childPid === undefined, "parked 无进程（childPid undefined，看门狗不误收养）");
   }
 
-  // B6b 拒图（-i 需文件路径，relay 侧是 base64——三口统一 system 留痕拒绝）
+  // B6b 附图管线（#63 修通）：base64 落盘临时文件 → exec/resume `--image <路径>` →
+  // 回合收口清理临时目录；正文仍走 stdin；无图回合不残留 flag
   {
     clearArtifacts();
+    // slow 桩（sleep 0.6s）制造窗口：落盘文件要在清理前读到（happy 桩秒退没窗口）
+    process.env.CCR_CODEX_PATH = slow;
+    resetCodexCliCache();
     const r = recorder();
-    const s = new CodexAgentSession(cwd, "m", r.cb, undefined, {
-      resume: "tid-prev",
-      images: ["data:image/png;base64,AAAA"],
+    // 构造带图（initialPrompt 非 undefined 才起进程；parked 形态不 spawn 测不到 argv）
+    const s = new CodexAgentSession(cwd, "m", r.cb, "首轮看图", {
+      images: ["QUJDREVG"], // base64 → "ABCDEF"
     });
-    assert(r.of("onLog").some((c) => c.a[0] === "system" && String(c.a[1]).includes("不支持附图")), "构造路径带图 → system 拒图留痕（不吞）");
-    s.sendMessage("看这张图", ["data:image/png;base64,BBBB"]);
-    assert(r.of("onLog").filter((c) => c.a[0] === "system" && String(c.a[1]).includes("不支持附图")).length >= 2, "sendMessage 带图 → system 拒图留痕");
-    const ok = await until(() => r.of("onTurnEnd").length >= 1);
-    assert(ok && r.of("onLog").some((c) => c.a[0] === "user_message" && String(c.a[1]).includes("看这张图")), "拒图不影响正文投递（回合照常收口）");
+    const argvReady = await until(() => existsSync(join(STUB, "argv-1.txt")), 3000);
+    assert(argvReady, "带图构造：桩已记录 argv");
     const argv1 = readFileSync(join(STUB, "argv-1.txt"), "utf-8");
-    assert(!argv1.includes("-i"), "argv 不带 -i（base64 非文件路径，不硬塞）");
+    const p1 = argv1.split(/\s+/).find((a) => a.includes("ccr-codex-img-"));
+    assert(argv1.includes("--image"), "首回合 argv 带 --image");
+    assert(!!p1 && existsSync(p1) && readFileSync(p1, "utf-8") === "ABCDEF", "落盘文件路径在 argv 且内容=base64 解码");
+    assert(await until(() => r.of("onTurnEnd").length >= 1), "带图构造：回合照常收口");
+    assert(await until(() => !existsSync(dirname(p1!)), 5000), "回合收口后临时图目录清理");
+    // sendMessage 带图（切回 happy 桩：断言路径与正文，不需要窗口）
+    process.env.CCR_CODEX_PATH = happy;
+    resetCodexCliCache();
+    s.sendMessage("看这张图", ["QUJD"]);
+    assert(await until(() => r.of("onTurnEnd").length >= 2), "sendMessage 带图：回合收口");
+    const argv2 = readFileSync(join(STUB, "argv-2.txt"), "utf-8");
+    const p2 = argv2.split(/\s+/).find((a) => a.includes("ccr-codex-img-"));
+    assert(!!p2 && argv2.includes("--image"), "二回合 argv 带 --image");
+    assert(readFileSync(join(STUB, "stdin-2.txt"), "utf-8") === "看这张图", "带图消息正文仍走 stdin");
+    assert(r.of("onLog").some((c) => c.a[0] === "user_message" && String(c.a[1]).includes("看这张图") && String(c.a[1]).includes("（+1 图）")), "回显带「（+1 图）」标记");
+    assert(await until(() => !existsSync(dirname(p2!)), 5000), "二回合收口后临时图目录清理");
+    // 无图消息不残留 flag
+    s.sendMessage("无图跟进");
+    assert(await until(() => r.of("onTurnEnd").length >= 3), "三回合（无图）收口");
+    assert(!readFileSync(join(STUB, "argv-3.txt"), "utf-8").includes("--image"), "无图回合 argv 不带 --image");
+    s.stop();
   }
 }
 
@@ -427,14 +448,11 @@ exit 0`);
   assert(persisted?.payload?.engine === "codex", "事件流 SESSION_CREATED engine 落盘（重启回放还原分叉依据）");
 
   // C2 CLI 缺失 → 构造器同步 throw → create ack ok:false（f975fea 同款兜底，测试 ⑭）。
-  // 判空要同时清 PATH 与 HOME：childEnv 有四条硬编码补位目录（~/node/bin 恰是本机
-  // 真 codex 所在），单清 PATH 探测仍会命中
+  // CCR_CODEX_PATH="__none__"（resolveCodexCliPath 测试缝）：环境无关的确定空值。
+  // 旧法「清 PATH+HOME」已被环境漂移击穿——2026-10-03 /usr/local/bin 出现第三方
+  // codex symlink，恰在 childEnv 硬编码补位目录里，探测恒命中
   {
-    const prevPath = process.env.PATH;
-    const prevHome = process.env.HOME;
-    process.env.PATH = "";
-    process.env.HOME = join(SBOX, "nohome");
-    process.env.CCR_CODEX_PATH = join(SBOX, "absent-codex");
+    process.env.CCR_CODEX_PATH = "__none__";
     resetCodexCliCache();
     const th = mgr.handleCommand({
       command_id: randomUUID(), type: "COMMAND_CREATE", ts: Date.now(),
@@ -442,8 +460,6 @@ exit 0`);
     }, "codex-test") as { ok: boolean; error?: string };
     assert(th.ok === false && (th.error ?? "").includes("codex"), "CLI 缺失 → create ok:false 可读错误（同步 throw 不炸 relay）");
     assert(!mgr.snapshot().some((s) => s.title === "x"), "失败建卡无半登记残留");
-    process.env.PATH = prevPath ?? "";
-    if (prevHome === undefined) delete process.env.HOME; else process.env.HOME = prevHome;
     process.env.CCR_CODEX_PATH = happy;
     resetCodexCliCache();
   }
