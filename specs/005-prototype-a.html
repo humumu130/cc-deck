@@ -353,6 +353,10 @@
     .source-group-bar .company { background: var(--source-company-bg); color: var(--source-company); }
     .source-group-bar .home { background: var(--source-home-bg); color: var(--source-home); }
     html[data-source-mode="aggregate"] .source-group-bar { display: flex; }
+    .source-filter-cta { display: flex; align-items: center; justify-content: space-between; gap: 8px; width: 100%; padding: 8px 9px; margin: 8px 0 4px; border: 1px dashed var(--line); border-radius: 8px; background: var(--surface1); color: var(--dim); cursor: pointer; text-align: left; font-size: 10px; }
+    .source-filter-cta[hidden] { display: none; }
+    .source-filter-cta:hover { border-color: var(--info); background: var(--hover); color: var(--text); }
+    .source-filter-cta strong { flex: 0 0 auto; color: var(--info); font-size: 10px; font-weight: 700; white-space: nowrap; }
     .desktop-shell { display: flex; min-width: min(1122px, 100%); height: 780px; }
     .domain-rail { display: flex; flex: 0 0 72px; flex-direction: column; align-items: center; padding: 14px 8px; background: var(--rail); border-right: 1px solid var(--line-soft); box-shadow: 5px 0 20px var(--rail-shadow); }
     .rail-btn { position: relative; display: grid; place-items: center; width: 44px; height: 44px; margin-bottom: 7px; border: 1px solid transparent; border-radius: 11px; background: transparent; color: var(--dim); cursor: pointer; font-size: 18px; }
@@ -782,6 +786,7 @@
     .member-card .identity-cluster, .task-card .identity-cluster, .notice .identity-cluster { margin-top: 6px; }
     .artifact-row > span:not(.identity-cluster) { margin-left: auto; color: var(--faint); font-family: var(--mono); }
     .mobile-card .identity-cluster { margin: 6px 0 0 35px; }
+    .mobile-content .source-filter-cta { margin: 10px 0 4px; }
     body[data-card-density="relaxed"] .mobile-card { padding: 13px; }
     body[data-card-density="relaxed"] .mobile-card p { margin-top: 8px; }
     body[data-card-density="relaxed"] .mobile-card .identity-cluster { margin-top: 9px; }
@@ -814,6 +819,28 @@
     .activity-row time { color: var(--faint); font: 10px var(--mono); }
     .activity-row i { width: 7px; height: 7px; border-radius: 50%; background: var(--brand); }
     .task-flag { display: inline-flex; align-items: center; gap: 4px; margin-top: 7px; color: var(--brand-hover); font-size: 10px; }
+    .demo-state-badge { position: absolute; z-index: 18; top: 42px; right: 13px; padding: 4px 7px; border: 1px solid var(--line); border-radius: 999px; background: var(--surface2); color: var(--dim); font: 700 9px var(--mono); pointer-events: none; }
+    .mobile-frame .demo-state-badge { top: 12px; right: 12px; }
+    .demo-empty-state { display: grid; place-items: center; gap: 8px; min-height: 120px; padding: 22px 14px; border: 1px dashed var(--line); border-radius: 10px; background: var(--surface1); color: var(--dim); text-align: center; }
+    .demo-empty-state p { margin: 0; color: var(--text-strong); font-size: 12px; }
+    .demo-empty-state button { min-height: 30px; padding: 0 10px; border: 1px solid var(--line); border-radius: 7px; background: var(--surface2); color: var(--info); cursor: pointer; font-size: 10px; }
+    .demo-empty-state button:hover { border-color: var(--info); background: var(--hover); }
+    .demo-skeleton-list { display: grid; gap: 8px; }
+    .demo-skeleton-group { width: 38%; height: 10px; margin: 8px 3px 0; border-radius: 4px; background: var(--line-soft); }
+    .demo-skeleton-card { display: grid; gap: 8px; padding: 11px; border: 1px solid var(--line-soft); border-radius: var(--radius); background: var(--surface1); }
+    .demo-skeleton-line { height: 9px; border-radius: 5px; background: linear-gradient(90deg, var(--line-soft), var(--surface2), var(--line-soft)); background-size: 220% 100%; animation: demo-shimmer 1.6s ease-in-out infinite; }
+    .demo-skeleton-line.short { width: 58%; }
+    .demo-skeleton-line.tiny { width: 32%; height: 7px; }
+    .demo-skeleton-head { display: grid; gap: 8px; padding: 2px 0 12px; }
+    .demo-skeleton-timeline { display: grid; gap: 12px; max-width: 720px; }
+    .demo-skeleton-timeline .demo-skeleton-card { min-height: 42px; }
+    .demo-error-bar { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; padding: 9px 10px; margin: 0 0 12px; border: 1px solid var(--danger-line); border-left: 3px solid var(--error); border-radius: 8px; background: var(--danger-bg); color: var(--text); font-size: 10px; }
+    .demo-error-bar strong { color: var(--error); }
+    .demo-error-copy { flex: 1 1 160px; min-width: 0; }
+    .demo-error-actions { display: flex; gap: 6px; }
+    .demo-error-actions button { padding: 4px 7px; border: 1px solid var(--danger-line); border-radius: 6px; background: var(--surface2); color: var(--text); cursor: pointer; font-size: 10px; }
+    .demo-error-actions button:hover { border-color: var(--error); }
+    @keyframes demo-shimmer { 0% { background-position: 200% 0; } 100% { background-position: -20% 0; } }
     .settings-nav .queue-card { border-color: transparent; background: transparent; box-shadow: none; }
     .settings-nav .queue-card:hover { border-color: transparent; background: var(--hover); transform: none; box-shadow: none; }
     .settings-nav .queue-card.selected { border-color: transparent; background: var(--selected-bg); box-shadow: inset 3px 0 0 var(--selected-line); }
@@ -1045,6 +1072,10 @@
       let sourceMode = "single";
       let notifyActionCount = 2;
       let mobileNotifySource = null;
+      let activeDemo = (() => {
+        const demo = new URLSearchParams(window.location.search).get("demo");
+        return ["empty", "loading", "error"].includes(demo) ? demo : "";
+      })();
       const notifyResolvedKeys = new Set();
 
       const sourceStates = {
@@ -1227,20 +1258,206 @@
         });
       }
 
+      function ensureSourceFilterEntrances() {
+        document.querySelectorAll("#d-session .queue-view").forEach((view) => {
+          if (view.querySelector("[data-source-filter-cta]")) return;
+          const button = document.createElement("button");
+          button.className = "source-filter-cta";
+          button.type = "button";
+          button.dataset.sourceFilterCta = "1";
+          button.innerHTML = "<span></span><strong></strong>";
+          view.append(button);
+        });
+        const mobileContent = document.querySelector("#m-inbox .mobile-content");
+        if (mobileContent && !mobileContent.querySelector("[data-source-filter-cta]")) {
+          const button = document.createElement("button");
+          button.className = "source-filter-cta";
+          button.type = "button";
+          button.dataset.sourceFilterCta = "1";
+          button.innerHTML = "<span></span><strong></strong>";
+          mobileContent.append(button);
+        }
+      }
+
+      function updateSourceFilterEntrance(button, hiddenCount) {
+        button.hidden = sourceMode !== "single" || hiddenCount === 0;
+        const label = button.querySelector("span");
+        const action = button.querySelector("strong");
+        if (label) label.textContent = "已按当前源过滤";
+        if (action) action.textContent = `查看全部 ${hiddenCount} 个会话`;
+      }
+
       function syncSourceVisibility() {
         const aggregate = sourceMode === "aggregate";
         const activeLabel = sourceStates[activeSource]?.label;
+        ensureSourceFilterEntrances();
         document.querySelectorAll("#d-session .queue-card, #m-inbox .mobile-card").forEach((card) => {
           const badge = card.querySelector(".source-badge");
-          if (!badge) return;
-          const visible = aggregate || badge.textContent.trim() === activeLabel;
-          card.hidden = !visible;
+          card.hidden = Boolean(badge && !aggregate && badge.textContent.trim() !== activeLabel);
         });
+        document.querySelectorAll("#d-session .queue-view").forEach((view) => {
+          const button = view.querySelector("[data-source-filter-cta]");
+          if (!button) return;
+          const hiddenCount = [...view.querySelectorAll(":scope > .queue-card")].filter((card) => card.hidden).length;
+          updateSourceFilterEntrance(button, hiddenCount);
+        });
+        const mobileButton = document.querySelector("#m-inbox [data-source-filter-cta]");
+        if (mobileButton) {
+          const hiddenCount = [...document.querySelectorAll("#m-inbox .mobile-card")].filter((card) => card.hidden).length;
+          updateSourceFilterEntrance(mobileButton, hiddenCount);
+        }
         const counts = aggregate ? { actions: 3, running: 4, acceptance: 2 } : sourceStates[activeSource].mobile;
         const summary = document.querySelector("#m-inbox .mobile-head h2 small");
         if (summary) summary.textContent = `${counts.actions} 个行动项 · cc-deck 在线`;
         document.querySelectorAll("#m-inbox .mobile-summary b").forEach((node, index) => {
           node.textContent = String([counts.actions, counts.running, counts.acceptance][index] ?? 0);
+        });
+      }
+
+      function createDemoEmptyState(message, actionLabel, action) {
+        const state = document.createElement("div");
+        state.className = "demo-empty-state";
+        const copy = document.createElement("p");
+        copy.textContent = message;
+        state.append(copy);
+        if (actionLabel) {
+          const button = document.createElement("button");
+          button.type = "button";
+          button.textContent = actionLabel;
+          button.addEventListener("click", action);
+          state.append(button);
+        }
+        return state;
+      }
+
+      function createDemoSkeletonList() {
+        const list = document.createElement("div");
+        list.className = "demo-skeleton-list";
+        ["待你处理", "运行中", "最近会话"].forEach((label) => {
+          const group = document.createElement("div");
+          group.className = "demo-skeleton-group";
+          group.setAttribute("aria-label", `${label}加载中`);
+          list.append(group);
+          const card = document.createElement("div");
+          card.className = "demo-skeleton-card";
+          card.innerHTML = '<i class="demo-skeleton-line"></i><i class="demo-skeleton-line short"></i><i class="demo-skeleton-line tiny"></i>';
+          list.append(card);
+        });
+        return list;
+      }
+
+      function createDemoSkeletonTimeline() {
+        const timeline = document.createElement("div");
+        timeline.className = "demo-skeleton-timeline";
+        for (let index = 0; index < 4; index += 1) {
+          const card = document.createElement("div");
+          card.className = "demo-skeleton-card";
+          card.innerHTML = `<i class="demo-skeleton-line ${index % 2 ? "short" : ""}"></i><i class="demo-skeleton-line"></i>`;
+          timeline.append(card);
+        }
+        return timeline;
+      }
+
+      function mountDemoStateBadge() {
+        if (!activeDemo) return;
+        const labels = { empty: "演示 · 空态", loading: "演示 · 加载态", error: "演示 · 错误态" };
+        document.body.dataset.demo = activeDemo;
+        document.querySelectorAll(".desktop-frame, .mobile-frame").forEach((frame) => {
+          if (frame.querySelector(".demo-state-badge")) return;
+          const badge = document.createElement("span");
+          badge.className = "demo-state-badge";
+          badge.textContent = labels[activeDemo];
+          frame.append(badge);
+        });
+      }
+
+      function applyEmptyDemo() {
+        const actionView = document.querySelector('#d-session [data-queue-view="action"]');
+        const allView = document.querySelector('#d-session [data-queue-view="all"]');
+        actionView?.replaceChildren(createDemoEmptyState("暂无待你处理", "查看全部会话", () => setQueueMode("all")));
+        allView?.replaceChildren(createDemoEmptyState("还没有会话", "新建会话", () => showToast("新建会话 · 原型演示占位")));
+        const session = document.querySelector("#d-session");
+        const head = session?.querySelector(".workspace-head");
+        const footer = session?.querySelector(".workspace-footer");
+        const body = session?.querySelector(".workspace-body");
+        if (head) head.hidden = true;
+        if (footer) footer.hidden = true;
+        body?.replaceChildren(createDemoEmptyState("请选择一个会话查看详情", "新建会话", () => showToast("新建会话 · 原型演示占位")));
+        const mobileContent = document.querySelector("#m-inbox .mobile-content");
+        mobileContent?.replaceChildren(createDemoEmptyState("暂无待你处理", "查看全部会话", () => showToast("当前收件箱没有更多会话 · 原型演示")));
+        document.querySelector("#d-notify .notify-source-list")?.replaceChildren(createDemoEmptyState("暂无需要你行动的通知"));
+      }
+
+      function applyLoadingDemo() {
+        document.querySelectorAll("#d-session .queue-view").forEach((view) => view.replaceChildren(createDemoSkeletonList()));
+        const session = document.querySelector("#d-session");
+        const head = session?.querySelector(".workspace-head");
+        const body = session?.querySelector(".workspace-body");
+        head?.querySelectorAll(".workspace-title-row, .workspace-sub, .session-state-row").forEach((node) => { node.hidden = true; });
+        if (head && !head.querySelector(".demo-skeleton-head")) {
+          const skeletonHead = document.createElement("div");
+          skeletonHead.className = "demo-skeleton-head";
+          skeletonHead.innerHTML = '<i class="demo-skeleton-line short"></i><i class="demo-skeleton-line tiny"></i>';
+          head.prepend(skeletonHead);
+        }
+        body?.replaceChildren(createDemoSkeletonTimeline());
+        const mobileContent = document.querySelector("#m-inbox .mobile-content");
+        mobileContent?.querySelectorAll(".mobile-card").forEach((card) => { card.hidden = true; });
+        mobileContent?.querySelector("[data-source-filter-cta]")?.setAttribute("hidden", "true");
+        if (mobileContent && !mobileContent.querySelector(".demo-skeleton-list")) mobileContent.append(createDemoSkeletonList());
+      }
+
+      function createDemoErrorBar() {
+        const bar = document.createElement("div");
+        bar.className = "demo-error-bar";
+        bar.dataset.demoError = "1";
+        bar.innerHTML = '<strong>连接/事件流异常</strong><span class="demo-error-copy">数据可能过期 · 最后更新 10:42</span><span class="demo-error-actions"><button type="button" data-demo-reconnect>重连</button><button type="button" data-demo-settings>打开连接设置</button></span>';
+        return bar;
+      }
+
+      function applyErrorDemo() {
+        const queue = document.querySelector("#d-session .queue");
+        const queueHead = queue?.querySelector(".queue-head");
+        if (queueHead && !queue.querySelector("[data-demo-error]")) queueHead.insertAdjacentElement("afterend", createDemoErrorBar());
+        const sessionBody = document.querySelector("#d-session .workspace-body");
+        if (sessionBody && !sessionBody.querySelector("[data-demo-error]")) sessionBody.prepend(createDemoErrorBar());
+        const mobileContent = document.querySelector("#m-inbox .mobile-content");
+        if (mobileContent && !mobileContent.querySelector("[data-demo-error]")) mobileContent.prepend(createDemoErrorBar());
+      }
+
+      function exitDemoError() {
+        activeDemo = "";
+        delete document.body.dataset.demo;
+        document.querySelectorAll(".demo-state-badge, [data-demo-error]").forEach((node) => node.remove());
+        try {
+          const url = new URL(window.location.href);
+          url.searchParams.delete("demo");
+          window.history.replaceState({}, "", url.href);
+        } catch (_) {}
+        showToast("已重连 · 已退出错误演示");
+      }
+
+      function applyDemoState() {
+        if (!activeDemo) return;
+        mountDemoStateBadge();
+        if (activeDemo === "empty") applyEmptyDemo();
+        if (activeDemo === "loading") applyLoadingDemo();
+        if (activeDemo === "error") applyErrorDemo();
+      }
+
+      function wireDemoActions() {
+        document.addEventListener("click", (event) => {
+          if (event.target.closest("[data-source-filter-cta]")) {
+            setSourceMode("aggregate", true);
+            return;
+          }
+          if (event.target.closest("[data-demo-reconnect]")) {
+            if (activeDemo === "error") exitDemoError();
+            return;
+          }
+          if (event.target.closest("[data-demo-settings]")) {
+            openConnectionSettings();
+          }
         });
       }
 
@@ -2203,6 +2420,7 @@
       }));
       document.querySelectorAll("[data-source-choice]").forEach((button) => button.addEventListener("click", () => setSource(button.dataset.sourceChoice, true)));
       document.querySelectorAll("button[data-source-mode]").forEach((button) => button.addEventListener("click", () => setSourceMode(button.dataset.sourceMode, true)));
+      wireDemoActions();
       document.querySelectorAll("[data-source-settings]").forEach((link) => link.addEventListener("click", (event) => {
         event.preventDefault();
         document.querySelectorAll("[data-source-menu]").forEach((menu) => menu.classList.remove("open"));
@@ -2248,6 +2466,7 @@
         applyTheme(document.documentElement.dataset.theme === "light" ? "dark" : "light", true);
       }));
       initInspectors();
+      applyDemoState();
     })();
   </script>
 </body>
