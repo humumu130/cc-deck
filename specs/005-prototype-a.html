@@ -294,7 +294,7 @@
     .mode-stage.active { display: block; }
     .stage-note { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin: 0 2px 10px; color: var(--dim); font-size: 11px; }
     .stage-note b { color: var(--text); }
-    .desktop-frame { overflow: hidden; width: 100%; border: 1px solid var(--frame-line); border-radius: 16px; background: var(--bg1); box-shadow: var(--shadow), inset 0 1px 0 var(--frame-highlight); transition: width .18s ease; }
+    .desktop-frame { position: relative; overflow: hidden; width: 100%; border: 1px solid var(--frame-line); border-radius: 16px; background: var(--bg1); box-shadow: var(--shadow), inset 0 1px 0 var(--frame-highlight); transition: width .18s ease; }
     .desktop-frame.inspector-collapsed { width: calc(100% - 278px); }
     .windowbar { display: flex; align-items: center; gap: 10px; height: 34px; padding: 0 13px; background: var(--chrome); border-bottom: 1px solid var(--line-soft); }
     .window-dots { display: flex; gap: 6px; }
@@ -427,6 +427,8 @@
     .primary-btn, .secondary-btn, .danger-btn { min-height: 34px; padding: 0 12px; border: 1px solid transparent; border-radius: 7px; cursor: pointer; font-size: 11px; }
     .primary-btn { background: linear-gradient(180deg, var(--brand), var(--brand-strong)); color: var(--on-brand); box-shadow: inset 0 1px 0 var(--brand-highlight), 0 4px 12px var(--brand-shadow); transition: filter .18s ease, transform .18s ease, box-shadow .18s ease; }
     .primary-btn:hover { filter: brightness(1.05); transform: translateY(-1px); box-shadow: inset 0 1px 0 var(--brand-highlight), 0 7px 16px var(--brand-shadow); }
+    .primary-btn.composer-secondary-action { border-color: var(--line); background: var(--surface2); color: var(--text); box-shadow: none; }
+    .primary-btn.composer-secondary-action:hover { background: var(--hover); filter: none; box-shadow: none; }
     .primary-btn:disabled, .secondary-btn:disabled, .danger-btn:disabled, .artifact-group-action:disabled { opacity: .52; cursor: not-allowed; filter: none; transform: none; box-shadow: none; }
     .secondary-btn { border-color: var(--line); background: var(--surface2); color: var(--text); }
     .secondary-btn:hover { background: var(--hover); }
@@ -650,7 +652,7 @@
     .settings-row strong { display: block; color: var(--text-strong); font-size: 11px; }
     .settings-row p { margin: 3px 0 0; color: var(--dim); font-size: 10px; }
     .settings-row .chev { margin-left: auto; color: var(--faint); }
-    .mobile-frame { width: 390px; max-width: 100%; margin: 0 auto; overflow: hidden; border: 8px solid var(--phone-frame); border-radius: 30px; background: var(--bg1); box-shadow: var(--shadow), 0 0 0 1px var(--frame-shadow); }
+    .mobile-frame { position: relative; width: 390px; max-width: 100%; margin: 0 auto; overflow: hidden; border: 8px solid var(--phone-frame); border-radius: 30px; background: var(--bg1); box-shadow: var(--shadow), 0 0 0 1px var(--frame-shadow); }
     .mobile-notch { position: relative; z-index: 1; width: 126px; height: 20px; margin: -1px auto 0; border-radius: 0 0 14px 14px; background: var(--phone-frame); box-shadow: 0 2px 5px var(--notch-shadow); }
     .mobile-screen { display: none; min-height: 735px; }
     .mobile-screen.active { display: flex; flex-direction: column; }
@@ -724,7 +726,8 @@
     .mobile-detail-composer { display: flex; gap: 7px; padding: 10px 12px; border-top: 1px solid var(--line-soft); background: var(--composer-bg); box-shadow: 0 -8px 18px var(--panel-shadow); }
     .mobile-detail-composer .composer { min-height: 34px; }
     .mobile-detail-composer .primary-btn { padding: 0 10px; }
-    .toast { position: fixed; right: 22px; bottom: 22px; z-index: 20; max-width: 340px; padding: 11px 14px 11px 13px; border: 1px solid var(--toast-line); border-radius: 10px; background: linear-gradient(180deg, var(--toast-bg-top), var(--toast-bg-bottom)); color: var(--text); box-shadow: var(--small-shadow), inset 0 1px 0 var(--toast-highlight); opacity: 0; pointer-events: none; transform: translateY(8px); transition: opacity .18s ease, transform .18s ease; font-size: 11px; }
+    .toast { position: absolute; right: 22px; bottom: 22px; z-index: 20; max-width: 340px; padding: 11px 14px 11px 13px; border: 1px solid var(--toast-line); border-radius: 10px; background: linear-gradient(180deg, var(--toast-bg-top), var(--toast-bg-bottom)); color: var(--text); box-shadow: var(--small-shadow), inset 0 1px 0 var(--toast-highlight); opacity: 0; pointer-events: none; transform: translateY(8px); transition: opacity .18s ease, transform .18s ease; font-size: 11px; }
+    .mobile-frame .toast { right: 12px; bottom: 74px; max-width: calc(100% - 24px); }
     .toast.show { opacity: 1; transform: none; }
     .desktop-only-note { color: var(--faint); font-size: 10px; }
     .engine-badge, .source-badge { display: inline-flex; align-items: center; gap: 4px; white-space: nowrap; font-size: 10px; line-height: 1; }
@@ -899,12 +902,12 @@
                 <div class="queue-card selected" data-session-card="release"><div class="row"><i class="status-dot waiting"></i><strong>0.6.0-test.19 出包</strong><span class="tag action">待收单</span></div><p>验收单已回填 2/3 · 12 分钟前</p><div class="identity-cluster"><span class="engine-badge claude">Claude</span><span class="source-badge">公司电脑</span></div></div>
                 <div class="queue-card" data-session-card="mobile"><div class="row"><i class="status-dot error"></i><strong>worker-mobile 失联</strong><span class="tag danger">接替</span></div><p>Claude 额度已用尽 · 8 分钟前</p><div class="identity-cluster"><span class="engine-badge qwen">Qwen Code</span><span class="source-badge">家里 iMac</span></div></div>
                 <div class="queue-card" data-session-card="team-plan"><div class="row"><i class="status-dot waiting"></i><strong>团队编制确认</strong><span class="tag action">待确认</span></div><p>cc-deck M1 攻坚团 · Leader 已提交</p><div class="identity-cluster"><span class="engine-badge trae">Trae</span><span class="source-badge">公司电脑</span></div></div>
-                <div class="queue-group">运行中 · 4</div>
+                <div class="queue-group">运行中 · 2</div>
                 <div class="queue-card" data-session-card="ui"><div class="row"><i class="status-dot done"></i><strong>ui-review 走查</strong></div><p>当前任务：检查 rail 方案 · 上下文 58%</p><div class="identity-cluster"><span class="engine-badge codex">Codex</span><span class="source-badge">公司电脑</span></div></div>
                 <div class="queue-card" data-session-card="board"><div class="row"><i class="status-dot done"></i><strong>relay 任务板</strong></div><p>T-12/T-15 并行 · 4/9</p><div class="identity-cluster"><span class="engine-badge zcode">ZCode</span><span class="source-badge">家里 iMac</span></div></div>
               </div>
               <div class="queue-view" data-queue-view="all">
-                <div class="queue-group"><svg class="icon-inline" aria-hidden="true"><use href="#icon-folder"></use></svg> cc-deck · 6 个会话</div>
+                <div class="queue-group"><svg class="icon-inline" aria-hidden="true"><use href="#icon-folder"></use></svg> cc-deck · 4 个会话</div>
                 <div class="queue-card selected" data-session-card="release"><div class="row"><i class="status-dot waiting"></i><strong>0.6.0-test.19 出包</strong><span class="tag action">待收单</span></div><p>验收单 · 1 小时前</p><div class="identity-cluster"><span class="engine-badge claude">Claude</span><span class="source-badge">公司电脑</span></div></div>
                 <div class="queue-card" data-session-card="ui"><div class="row"><i class="status-dot done"></i><strong>ui-review 走查</strong></div><p>刚刚活跃 · 58%</p><div class="identity-cluster"><span class="engine-badge codex">Codex</span><span class="source-badge">公司电脑</span></div></div>
                 <div class="queue-card" data-session-card="board"><div class="row"><i class="status-dot done"></i><strong>relay 任务板</strong></div><p>运行中 · 4/9</p><div class="identity-cluster"><span class="engine-badge zcode">ZCode</span><span class="source-badge">家里 iMac</span></div></div>
@@ -950,6 +953,7 @@
             <section class="workspace"><header class="workspace-head"><div class="workspace-title-row"><span class="tag info">连接状态</span><h2>连接与设备</h2><span class="tag done">已连接</span></div><div class="workspace-sub">relay · 云桥 · 已配设备 · 异常项单独处理</div><div class="segment-bar"><button class="active">连接</button><button>设备</button><button>配对记录</button></div></header><div class="workspace-body"><div class="settings-list"><div class="settings-row"><span class="avatar">●</span><div><strong>本机 relay · 已连接</strong><p>端口 8787 · 事件流自动补发 · 最后心跳刚刚</p></div><span class="tag done">在线</span></div><div class="settings-row"><span class="avatar">☁</span><div><strong>云桥 · 已连接</strong><p>wss://cc.humumu.online/cloud</p></div><span class="tag done">在线</span></div><div class="settings-row"><span class="avatar">▣</span><div><strong>浏览器 · 网页端</strong><p>配对码错误 · 重试中 · 09-18 起</p></div><button class="danger-btn">重配对</button></div></div><div class="readonly-banner" style="margin-top:14px">设备身份 = 配对密钥（E2E）。踢出后需重新配对；手机端仅浏览、验证和换路由。</div><button class="primary-btn">＋ 配对新设备</button></div><footer class="workspace-footer"><button class="secondary-btn">查看连接帮助</button><button class="primary-btn">验证全部连接</button></footer></section>
             <aside class="inspector"><h3>连接检查器</h3><div class="inspector-block"><div class="inspector-title"><span>连接健康</span><span class="tag done">2/3 在线</span></div><div class="progress done"><i style="width:66%"></i></div><div class="inspector-copy">1 台浏览器设备异常，不影响本机 relay。</div></div><div class="inspector-block"><div class="inspector-title"><span>数据边界</span></div><div class="inspector-copy">凭证仅存你的电脑，不进入事件流；项目/团队状态来自 relay 同一事件源。</div></div><div class="inspector-block"><div class="inspector-title"><span>版本</span><span>v0.6.0-test</span></div><div class="inspector-copy">桌面端 · test 通道</div></div></aside>
           </section>
+          <div class="toast" id="toast" role="status"></div>
         </div>
       </div>
     </section>
@@ -1012,8 +1016,6 @@
       </div>
     </section>
   </main>
-  <div class="toast" id="toast" role="status"></div>
-
   <script>
     (() => {
       const desktopScreens = [...document.querySelectorAll(".desktop-screen")];
@@ -1032,9 +1034,15 @@
       const notifyResolvedKeys = new Set();
 
       const sourceStates = {
-        office: { label: "公司电脑", summary: "6 会话 · 2 行动", actions: 2, mobile: { actions: 2, running: 1, acceptance: 1 }, status: "connected" },
+        office: { label: "公司电脑", summary: "6 会话 · 2 行动", actions: 2, mobile: { actions: 3, running: 1, acceptance: 1 }, status: "connected" },
         home: { label: "家里 iMac", summary: "2 会话 · 2 行动", actions: 2, mobile: { actions: 1, running: 3, acceptance: 1 }, status: "reconnecting" }
       };
+
+      function syncSourceSwitcherLabels() {
+        const source = sourceStates[activeSource];
+        const label = sourceMode === "aggregate" ? `${source.label} · 多源聚合` : source.label;
+        document.querySelectorAll("[data-current-source]").forEach((node) => { node.textContent = label; });
+      }
 
       const connectionStates = [
         { key: "connected", label: "已连接", className: "status-connected" },
@@ -1226,7 +1234,7 @@
         const next = sourceStates[source] ? source : "office";
         activeSource = next;
         const state = sourceStates[next];
-        document.querySelectorAll("[data-current-source]").forEach((node) => { node.textContent = state.label; });
+        syncSourceSwitcherLabels();
         document.querySelectorAll("[data-current-summary]").forEach((node) => { node.textContent = sourceMode === "aggregate" ? "8 会话 · 4 行动" : state.summary; });
         document.querySelectorAll("[data-source-dot]").forEach((node) => {
           node.classList.remove("status-connected", "status-reconnecting", "status-disconnected");
@@ -1249,6 +1257,7 @@
         sourceMode = mode === "aggregate" ? "aggregate" : "single";
         document.documentElement.dataset.sourceMode = sourceMode;
         document.body.dataset.sourceMode = sourceMode;
+        syncSourceSwitcherLabels();
         document.querySelectorAll("button[data-source-mode]").forEach((button) => button.classList.toggle("active", button.dataset.sourceMode === sourceMode));
         document.querySelectorAll("[data-current-summary]").forEach((node) => { node.textContent = sourceMode === "aggregate" ? "8 会话 · 4 行动" : sourceStates[activeSource].summary; });
         document.querySelectorAll("[data-source-switcher-label]").forEach((node) => { node.textContent = sourceMode === "aggregate" ? "多源聚合" : "单源"; });
@@ -1509,10 +1518,21 @@
 
       function auditRedundancy() {
         document.querySelectorAll("#d-session .inspector .identity-cluster, #d-project .aggregate-card .identity-cluster, #d-team .task-assignee .identity-cluster, #d-team .task-assignee .engine-badge, #d-team .task-assignee .source-badge").forEach((badge) => badge.remove());
+        document.querySelector("#m-inbox .mobile-card .status-neutral")?.closest(".mobile-card")?.remove();
+        const mobileTeamReady = [...document.querySelectorAll("#m-team .mobile-lane-head")].find((head) => head.firstElementChild?.textContent.trim() === "就绪待装机");
+        if (mobileTeamReady?.lastElementChild) mobileTeamReady.lastElementChild.textContent = "1";
         const projectHeaderAction = document.querySelector("#d-project .workspace-title-row > .tag.action");
         if (projectHeaderAction) projectHeaderAction.remove();
+        const projectQueueAction = document.querySelector("#d-project .queue-card.selected .tag.action");
+        if (projectQueueAction) projectQueueAction.textContent = "需行动 2";
+        const projectFooterNote = document.querySelector("#d-project .workspace-footer .desktop-only-note");
+        if (projectFooterNote) projectFooterNote.textContent = "编辑请回来源域";
         const projectMobileSubtitle = document.querySelector("#m-project .mobile-head h2 small");
-        if (projectMobileSubtitle) projectMobileSubtitle.textContent = "只读聚合 · cc-deck / windclaw-qclaw";
+        if (projectMobileSubtitle) projectMobileSubtitle.textContent = "cc-deck / windclaw-qclaw · 2 个需行动";
+        const projectMobileHead = document.querySelector("#m-project .mobile-head");
+        if (projectMobileHead && !projectMobileHead.querySelector(".project-readonly-status")) projectMobileHead.querySelector("h2")?.insertAdjacentHTML("afterend", '<span class="tag info project-readonly-status">只读聚合</span>');
+        projectMobileHead?.querySelector(".icon-btn")?.remove();
+        document.querySelector("#m-project .mobile-lane-head span:last-child")?.remove();
         const projectSubtitle = document.querySelector("#d-project .workspace-sub");
         if (projectSubtitle) projectSubtitle.textContent = projectSubtitle.textContent.replace("realpath 已归一", "路径已规范化");
         document.querySelectorAll(".wait-title").forEach((title) => { title.textContent = "等待你的确认 · 写入验收文档"; });
@@ -1641,6 +1661,29 @@
         wireSegmentTabs([...section.querySelectorAll(".segment-bar button")], [body.children[1], body.children[0], body.children[2], body.children[3]], 1);
       }
 
+      function composerHasVisibleWaitCard(kind) {
+        const scope = kind === "mobile"
+          ? document.querySelector("#stage-mobile.active #m-detail.active")
+          : kind === "session"
+            ? document.querySelector("#stage-desktop.active #d-session.active")
+            : null;
+        return Boolean(scope?.querySelector("[data-wait-card]:not(.allowed)"));
+      }
+
+      function syncComposerActionState(composer, sendButton) {
+        if (!composer || !sendButton) return;
+        const input = composer.querySelector(".composer-input");
+        const hasText = Boolean(input?.value.trim());
+        sendButton.disabled = !hasText;
+        sendButton.classList.toggle("composer-secondary-action", hasText && composerHasVisibleWaitCard(composer.dataset.composer));
+      }
+
+      function syncComposerActionStates() {
+        document.querySelectorAll("[data-composer]").forEach((composer) => {
+          syncComposerActionState(composer, composer.parentElement?.querySelector("[data-composer-send]"));
+        });
+      }
+
       function wireComposer(composer, sendButton) {
         const kind = composer.dataset.composer;
         const input = composer.querySelector(".composer-input");
@@ -1651,11 +1694,10 @@
             ? document.querySelector("#m-detail .mobile-content > .workspace-pane")
             : document.querySelector("#d-team .team-chat");
         if (!input || !clip || !sendButton || !target) return;
+        syncComposerActionState(composer, sendButton);
         const send = () => {
           const text = input.value.trim();
           if (!text) {
-            showToast("会话消息：先输入内容");
-            input.focus();
             return;
           }
           const bubble = document.createElement("div");
@@ -1665,10 +1707,12 @@
           input.value = "";
           const scrollContainer = kind === "team" ? target : target.closest(".workspace-body, .mobile-content");
           if (scrollContainer) scrollContainer.scrollTop = scrollContainer.scrollHeight;
+          syncComposerActionState(composer, sendButton);
           showToast(`${kind === "team" ? "团队消息" : "会话消息"}已发送 · 会话回执等待中（原型演示）`);
           input.focus();
         };
         sendButton.addEventListener("click", send);
+        input.addEventListener("input", () => syncComposerActionState(composer, sendButton));
         input.addEventListener("keydown", (event) => {
           if (event.key !== "Enter") return;
           event.preventDefault();
@@ -1692,6 +1736,8 @@
         if (!body || body.dataset.tabsReady) return;
         const overview = body.innerHTML;
         body.innerHTML = `<div class="workspace-pane active">${overview}</div><div class="workspace-pane"><div class="settings-list"><div class="settings-row"><span class="avatar">C</span><div><strong>0.6.0-test.19 出包</strong><p>待收单 · 会话原域</p></div><button class="secondary-btn">在会话中查看</button></div><div class="settings-row"><span class="avatar">U</span><div><strong>ui-review 走查</strong><p>运行中 · 会话原域</p></div><button class="secondary-btn">在会话中查看</button></div></div></div><div class="workspace-pane"><div class="settings-list"><div class="settings-row"><span class="avatar"><svg class="icon-inline" aria-hidden="true"><use href="#icon-users"></use></svg></span><div><strong>cc-deck M1 攻坚团</strong><p>6 成员 · 4 进行中</p></div><button class="secondary-btn">在团队中查看</button></div></div></div><div class="workspace-pane">${renderProjectArtifacts()}</div><div class="workspace-pane"><div class="settings-list"><div class="settings-row"><span class="avatar">✓</span><div><strong>0.6.0-test.19</strong><p>回填 2/3 · 由会话原域处理</p></div><span class="tag action">只读</span></div><div class="settings-row"><span class="avatar">✓</span><div><strong>0.6.0-test.18</strong><p>修复中 · 由会话原域处理</p></div></div></div></div>`;
+        body.querySelectorAll(".artifact-summary small").forEach((copy) => { copy.textContent = copy.textContent.replace("只读聚合 · ", ""); });
+        body.querySelectorAll(".settings-row .tag.action").forEach((tag) => { if (tag.textContent.trim() === "只读") tag.remove(); });
         body.dataset.tabsReady = "1";
         wireSegmentTabs([...section.querySelectorAll(".segment-bar button")], [...body.children]);
       }
@@ -1801,6 +1847,9 @@
       }
 
       function showToast(message) {
+        const mode = document.querySelector("#stage-mobile.active") ? "mobile" : "desktop";
+        const host = document.querySelector(mode === "mobile" ? ".mobile-frame" : ".desktop-frame");
+        if (host && toast.parentElement !== host) host.append(toast);
         toast.textContent = message;
         toast.classList.add("show");
         clearTimeout(toastTimer);
@@ -1829,7 +1878,7 @@
         }
         const projectInspector = document.querySelector("#d-project .inspector");
         if (projectInspector && !projectInspector.querySelector("[data-context-waterline]")) {
-          projectInspector.insertAdjacentHTML("beforeend", `<div class="inspector-block" data-context-waterline><div class="inspector-title"><span>最活跃会话水位</span><span>58%</span></div><div class="mini-context-meter"><span>只读聚合</span><i><b style="width:58%"></b></i></div><div class="inspector-copy">ui-review 走查 · 当前会话上下文</div></div>`);
+          projectInspector.insertAdjacentHTML("beforeend", `<div class="inspector-block" data-context-waterline><div class="inspector-title"><span>最活跃会话水位</span><span>58%</span></div><div class="mini-context-meter"><span>聚合水位</span><i><b style="width:58%"></b></i></div><div class="inspector-copy">ui-review 走查 · 当前会话上下文</div></div>`);
         }
       }
 
@@ -1979,6 +2028,8 @@
           button.setAttribute("aria-pressed", String(active));
         });
         Object.entries(stages).forEach(([key, stage]) => stage.classList.toggle("active", key === mode));
+        const host = document.querySelector(mode === "mobile" ? ".mobile-frame" : ".desktop-frame");
+        if (host && toast.parentElement !== host) host.append(toast);
       }
 
       function setDesktopDomain(domain) {
@@ -2064,7 +2115,9 @@
       railButtons.forEach((button) => button.addEventListener("click", () => setDesktopDomain(button.dataset.domain)));
       document.querySelectorAll("[data-queue-mode]").forEach((button) => button.addEventListener("click", () => setQueueMode(button.dataset.queueMode)));
       document.querySelectorAll("[data-session-card]").forEach((card) => card.addEventListener("click", () => selectSession(card.dataset.sessionCard)));
-      document.querySelectorAll("[data-allow]").forEach((button) => button.addEventListener("click", () => {
+      document.addEventListener("click", (event) => {
+        const button = event.target.closest("[data-allow]");
+        if (!button) return;
         const card = button.closest("[data-wait-card]");
         if (!card) return;
         card.classList.add("allowed");
@@ -2072,8 +2125,9 @@
         card.querySelector(".wait-copy").textContent = "Bash 写入已获本次授权；后续高风险动作仍会再次询问。";
         button.textContent = "已允许 ✓";
         button.disabled = true;
+        syncComposerActionStates();
         showToast("已允许一次，当前会话继续执行");
-      }));
+      });
       document.querySelectorAll("[data-mobile-root]").forEach((button) => {
         if (button.closest(".mobile-nav")) button.addEventListener("click", () => openMobileRoot(button.dataset.mobileRoot));
       });
