@@ -373,8 +373,10 @@ export class CodexAgentSession implements AgentLike {
   private execTurn(prompt: string, images: string[] = []): void {
     const args = ["exec", "--json", "--skip-git-repo-check", "-C", this.cwd];
     if (this.threadId) args.push("resume", this.threadId);
-    // #63 附图：已落盘的文件路径（exec 与 exec resume 均支持，0.154.0 实测）
-    if (images.length > 0) args.push("--image", ...images);
+    // #63 附图：已落盘的文件路径。codex-cli 0.154.0 两子命令的 --image 定义不同：
+    // exec 是变长 <FILE>...，exec resume 是单值 <FILE>——统一按「重复 flag」拼
+    // （--image p1 --image p2），两种形态都合法，避免 resume 多图时游离参数报退出码 2。
+    for (const p of images) args.push("--image", p);
     args.push("-"); // prompt 从 stdin 读（长文本/引号/换行安全）
     this.turnImageDirs = new Set(images.map((p) => dirname(p)));
 

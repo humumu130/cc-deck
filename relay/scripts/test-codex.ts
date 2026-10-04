@@ -382,10 +382,19 @@ exit 0`);
     assert(readFileSync(join(STUB, "stdin-2.txt"), "utf-8") === "看这张图", "带图消息正文仍走 stdin");
     assert(r.of("onLog").some((c) => c.a[0] === "user_message" && String(c.a[1]).includes("看这张图") && String(c.a[1]).includes("（+1 图）")), "回显带「（+1 图）」标记");
     assert(await until(() => !existsSync(dirname(p2!)), 5000), "二回合收口后临时图目录清理");
+    // resume 多图（#63 事故回归锁）：exec resume 的 --image 是单值定义，
+    // 多图必须拼成重复 flag（--image p1 --image p2）——变长写法会让第二张
+    // 变游离位置参数、`-` 报 unexpected argument（codex 退出码 2）。
+    s.sendMessage("再看两张", ["QUI=", "QUM="]); // "AB" / "AC"
+    assert(await until(() => r.of("onTurnEnd").length >= 3), "三回合（resume 双图）收口");
+    const argv3 = readFileSync(join(STUB, "argv-3.txt"), "utf-8");
+    assert(argv3.includes("resume"), "三回合走 resume 分支");
+    const imgFlags = argv3.split(/\s+/).filter((a) => a === "--image").length;
+    assert(imgFlags === 2, `resume 双图 = 两个 --image flag（实测 ${imgFlags}）`);
     // 无图消息不残留 flag
     s.sendMessage("无图跟进");
-    assert(await until(() => r.of("onTurnEnd").length >= 3), "三回合（无图）收口");
-    assert(!readFileSync(join(STUB, "argv-3.txt"), "utf-8").includes("--image"), "无图回合 argv 不带 --image");
+    assert(await until(() => r.of("onTurnEnd").length >= 4), "四回合（无图）收口");
+    assert(!readFileSync(join(STUB, "argv-4.txt"), "utf-8").includes("--image"), "无图回合 argv 不带 --image");
     s.stop();
   }
 }
