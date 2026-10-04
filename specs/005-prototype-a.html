@@ -93,8 +93,10 @@
       --identity-ink: #B9C8D8;
       --source-company: #3B7C68;
       --source-company-bg: rgba(75,203,145,.16);
+      --source-company-ink: #9AE2C2;
       --source-home: #5B8FA8;
       --source-home-bg: rgba(91,143,168,.16);
+      --source-home-ink: #A8D6EA;
       --engine-claude: #A97A62;
       --engine-codex: #8DABFF;
       --engine-trae: #58C9B1;
@@ -226,8 +228,10 @@
       --identity-ink: #40566B;
       --source-company: #20735B;
       --source-company-bg: rgba(22,141,96,.14);
+      --source-company-ink: #146044;
       --source-home: #2D718B;
       --source-home-bg: rgba(45,113,139,.14);
+      --source-home-ink: #245D73;
       --engine-claude: #B85232;
       --engine-codex: #4B6FCA;
       --engine-trae: #168C78;
@@ -723,10 +727,14 @@
     .engine-badge.codebuddy { --engine-color: var(--engine-codebuddy); }
     .engine-badge.zcode { --engine-color: var(--engine-zcode); }
     .source-badge { padding: 3px 6px; border: 1px solid var(--identity-line); border-radius: 5px; background: var(--identity-bg); color: var(--identity-ink); }
-    .source-badge.source-company, .source-badge.source-home { border-color: var(--identity-line); background: var(--identity-bg); color: var(--identity-ink); }
+    .source-badge.source-company { border-color: var(--source-company); background: var(--source-company-bg); color: var(--source-company-ink); }
+    .source-badge.source-home { border-color: var(--source-home); background: var(--source-home-bg); color: var(--source-home-ink); }
+    .source-badge.source-company::before, .source-badge.source-home::before { color: currentColor; }
     .source-badge::before { content: "↗"; color: var(--faint); font-size: 10px; }
     .identity-cluster { display: inline-flex; align-items: center; gap: 5px; flex-wrap: wrap; }
     .queue-card .identity-cluster { position: absolute; right: 10px; bottom: 7px; margin: 0; flex-wrap: nowrap; }
+    #d-session .queue-card p { margin: 4px 0 0 14px; }
+    #d-session .queue-card .identity-cluster { display: flex; position: static; margin: 6px 0 0 14px; }
     .workspace-title-row .identity-cluster { flex: 0 0 auto; }
     .workspace-title-row .engine-badge, .workspace-title-row .source-badge { font-size: 10px; }
     .member-card, .task-card, .notice, .metric, .aggregate-card, .settings-row { box-shadow: var(--card-shadow); transition: border-color .18s ease, background .18s ease, transform .18s ease, box-shadow .18s ease; }
@@ -735,6 +743,24 @@
     .artifact-row > span:not(.identity-cluster) { margin-left: auto; color: var(--faint); font-family: var(--mono); }
     .artifact-row .identity-cluster { margin-top: 0; margin-left: 8px; }
     .mobile-card .identity-cluster { margin: 6px 0 0 35px; }
+    body[data-card-density="compact"] #d-session .queue-card p { margin-right: 138px; }
+    body[data-card-density="compact"] #d-session .queue-card:not(:has(.identity-cluster)) p { margin-right: 0; }
+    body[data-card-density="compact"] #d-session .queue-card .identity-cluster { position: absolute; right: 10px; bottom: 7px; margin: 0; }
+    body[data-card-density="relaxed"] #d-session .queue-card { min-height: 66px; padding: 10px 12px; }
+    body[data-card-density="relaxed"] #d-session .queue-card p { margin-top: 7px; }
+    body[data-card-density="relaxed"] #d-session .queue-card .identity-cluster { margin-top: 9px; }
+    body[data-card-density="relaxed"] .mobile-card { padding: 13px; }
+    body[data-card-density="relaxed"] .mobile-card p { margin-top: 8px; }
+    body[data-card-density="relaxed"] .mobile-card .identity-cluster { margin-top: 9px; }
+    body[data-source-mode="single"] #d-session .queue-card .source-badge, body[data-source-mode="single"] #m-inbox .mobile-card .source-badge { display: none; }
+    body[data-source-mode="single"][data-card-density="compact"] #d-session .queue-card p { margin-right: 80px; }
+    body[data-source-mode="single"][data-card-density="compact"] #d-session .queue-card:not(:has(.identity-cluster)) p { margin-right: 0; }
+    .density-control { display: inline-flex; gap: 3px; padding: 3px; margin-left: auto; border: 1px solid var(--line); border-radius: 7px; background: var(--surface1); }
+    .density-control button { padding: 5px 7px; border: 0; border-radius: 5px; background: transparent; color: var(--dim); cursor: pointer; font-size: 10px; }
+    .density-control button.active { background: var(--selected-bg); color: var(--text-strong); box-shadow: var(--selected-shadow); }
+    .density-detail { display: grid; gap: 10px; }
+    .density-detail p { margin: 0; color: var(--dim); font-size: 10px; }
+    .density-detail .density-control { width: max-content; margin-left: 0; }
     .mobile-nav .tag { position: absolute; top: 5px; right: 11px; padding: 2px 5px; font-size: 8px; }
     .workspace-pane { display: none; min-height: 100%; }
     .workspace-pane.active { display: block; }
@@ -813,7 +839,7 @@
     }
   </style>
 </head>
-<body>
+<body data-card-density="standard" data-source-mode="single">
   <svg class="icon-sprite" aria-hidden="true" focusable="false"><symbol id="icon-bell" viewBox="0 0 24 24"><path d="M18 9a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9Zm-8.5 11h5a2.5 2.5 0 0 1-5 0Z"></path></symbol><symbol id="icon-home" viewBox="0 0 24 24"><path d="m3 10 9-7 9 7v10a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1V10Z"></path></symbol><symbol id="icon-users" viewBox="0 0 24 24"><path d="M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8Zm6-1a3 3 0 1 0 0-6 3 3 0 0 0 0 6ZM2 20a7 7 0 0 1 14 0v1H2v-1Zm14-5a6 6 0 0 1 6 6h-4v-1a8.9 8.9 0 0 0-2.1-5.8A6 6 0 0 1 16 15Z"></path></symbol><symbol id="icon-grid" viewBox="0 0 24 24"><path d="M3 3h7v7H3V3Zm11 0h7v7h-7V3ZM3 14h7v7H3v-7Zm11 0h7v7h-7v-7Z"></path></symbol><symbol id="icon-gear" viewBox="0 0 24 24"><path d="m19.4 13.5 1.2.9-1.8 3.1-1.4-.6a7.4 7.4 0 0 1-1.8 1l-.2 1.5H11.8l-.2-1.5a7.4 7.4 0 0 1-1.8-1l-1.4.6-1.8-3.1 1.2-.9a7.4 7.4 0 0 1 0-2.1l-1.2-.9 1.8-3.1 1.4.6a7.4 7.4 0 0 1 1.8-1l.2-1.5h3.6l.2 1.5a7.4 7.4 0 0 1 1.8 1l1.4-.6 1.8 3.1-1.2.9a7.4 7.4 0 0 1 0 2.1ZM13.6 16a3.1 3.1 0 1 0 0-6.2 3.1 3.1 0 0 0 0 6.2Z"></path></symbol><symbol id="icon-check" viewBox="0 0 24 24"><path d="m5 12.5 4.2 4.2L19 7"></path></symbol><symbol id="icon-alert" viewBox="0 0 24 24"><path d="M12 3 2.8 20h18.4L12 3Zm0 6v5m0 3h.01"></path></symbol><symbol id="icon-link" viewBox="0 0 24 24"><path d="M10 13.5 14 9.5m-6.2 8.7-1.2 1.2a4 4 0 0 1-5.6-5.6l4.4-4.4a4 4 0 0 1 5.6 0m3.6-3.6 1.2-1.2a4 4 0 0 1 5.6 5.6L17 14.6a4 4 0 0 1-5.6 0"></path></symbol><symbol id="icon-info" viewBox="0 0 24 24"><path d="M12 10v7m0-11h.01M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z"></path></symbol><symbol id="icon-folder" viewBox="0 0 24 24"><path d="M4 5h6l2 2h8v12H4Z"></path></symbol><symbol id="icon-clip" viewBox="0 0 24 24"><path d="m8 12.5 7.5-7.5a3 3 0 1 1 4.2 4.2l-8.4 8.4a4.5 4.5 0 0 1-6.4-6.4L13 3.5"></path></symbol><symbol id="icon-chat" viewBox="0 0 24 24"><path d="M4 5h16v11H8l-4 4Z"></path></symbol></svg>
   <main class="page">
     <header class="topbar">
@@ -1139,6 +1165,25 @@
         if (announce) showToast(`已切换到${next === "light" ? "浅色" : "深色"}主题`);
       }
 
+      function applyCardDensity(density, announce = false) {
+        const next = ["compact", "standard", "relaxed"].includes(density) ? density : "standard";
+        document.body.dataset.cardDensity = next;
+        try { localStorage.setItem("cc-deck-card-density", next); } catch (_) {}
+        document.querySelectorAll("[data-card-density-option]").forEach((button) => {
+          button.classList.toggle("active", button.dataset.cardDensityOption === next);
+          button.setAttribute("aria-pressed", String(button.dataset.cardDensityOption === next));
+        });
+        if (announce) showToast(`卡片密度：${({ compact: "紧凑", standard: "标准", relaxed: "宽松" })[next]}`);
+      }
+
+      function wireCardDensityControls(root = document) {
+        root.querySelectorAll("[data-card-density-option]").forEach((button) => {
+          if (button.dataset.cardDensityBound) return;
+          button.dataset.cardDensityBound = "1";
+          button.addEventListener("click", () => applyCardDensity(button.dataset.cardDensityOption, true));
+        });
+      }
+
       function syncSourceVisibility() {
         const aggregate = sourceMode === "aggregate";
         const activeLabel = sourceStates[activeSource]?.label;
@@ -1182,7 +1227,8 @@
       function setSourceMode(mode, announce = false) {
         sourceMode = mode === "aggregate" ? "aggregate" : "single";
         document.documentElement.dataset.sourceMode = sourceMode;
-        document.querySelectorAll("[data-source-mode]").forEach((button) => button.classList.toggle("active", button.dataset.sourceMode === sourceMode));
+        document.body.dataset.sourceMode = sourceMode;
+        document.querySelectorAll("button[data-source-mode]").forEach((button) => button.classList.toggle("active", button.dataset.sourceMode === sourceMode));
         document.querySelectorAll("[data-current-summary]").forEach((node) => { node.textContent = sourceMode === "aggregate" ? "8 会话 · 4 行动" : sourceStates[activeSource].summary; });
         document.querySelectorAll("[data-source-switcher-label]").forEach((node) => { node.textContent = sourceMode === "aggregate" ? "多源聚合" : "单源"; });
         document.querySelectorAll("[data-source-choice]").forEach((button) => {
@@ -1634,7 +1680,9 @@
         queue.classList.add("settings-nav");
         const original = body.innerHTML;
         body.innerHTML = `<div class="settings-panel workspace-pane active" data-settings-panel="connections"><div class="settings-connection-tabs workspace-pane active">${original}</div><div class="settings-connection-tabs workspace-pane"><div class="settings-list"><div class="settings-row"><span class="avatar">●</span><div><strong>本机 relay</strong><p>8787 · 事件流自动补发 · 最近心跳刚刚</p></div><span class="tag done">在线</span></div><div class="settings-row"><span class="avatar">☁</span><div><strong>云桥</strong><p>wss://cc.humumu.online/cloud</p></div><span class="tag done">在线</span></div><div class="settings-row"><span class="avatar">▣</span><div><strong>浏览器 · 网页端</strong><p>配对码错误 · 需要重配对</p></div><span class="tag action">异常</span></div></div></div><div class="settings-connection-tabs workspace-pane"><div class="readonly-banner">最近配对：公司电脑 · 09-30；家里 iMac · 09-28。配对码只显示一次。</div><button class="primary-btn">＋ 配对新设备</button></div></div><div class="settings-panel workspace-pane" data-settings-panel="provider"><div class="settings-list"><div class="settings-row"><span class="engine-badge claude">Claude</span><div><strong>Claude Code</strong><p>已接 · 默认模型 claude-sonnet</p></div><span class="tag done">默认</span></div><div class="settings-row"><span class="engine-badge codex">Codex</span><div><strong>Codex</strong><p>已接 · gpt-5-codex</p></div><span class="tag done">已接</span></div><div class="settings-row"><span class="engine-badge trae">Trae</span><div><strong>Trae</strong><p>适配器待安装</p></div><span class="tag">待装</span></div><div class="settings-row"><span class="engine-badge qwen">Qwen Code</span><div><strong>Qwen Code</strong><p>适配器待安装</p></div><span class="tag">待装</span></div><div class="settings-row"><span class="engine-badge codebuddy">CodeBuddy</span><div><strong>CodeBuddy Code</strong><p>适配器待安装</p></div><span class="tag">待装</span></div><div class="settings-row"><span class="engine-badge zcode">ZCode</span><div><strong>ZCode</strong><p>适配器待安装 · 遥测默认关闭</p></div><span class="tag">待装</span></div></div><button class="primary-btn">＋ 添加 provider</button></div><div class="settings-panel workspace-pane" data-settings-panel="general"><div class="settings-list"><div class="settings-row"><span class="avatar">⌘K</span><div><strong>全局搜索</strong><p>⌘K</p></div></div><div class="settings-row"><span class="avatar">⌘N</span><div><strong>新建会话</strong><p>⌘N</p></div></div><div class="settings-row"><span class="avatar">🔔</span><div><strong>通知声音</strong><p>行动项到达时提示</p></div><button class="toggle-control active" data-setting-toggle>开</button></div><div class="settings-row"><span class="avatar">▣</span><div><strong>桌面通知</strong><p>后台 relay 有新行动时提示</p></div><button class="toggle-control active" data-setting-toggle>开</button></div></div></div><div class="settings-panel workspace-pane" data-settings-panel="identity"><div class="settings-list"><div class="member-card"><span class="avatar leader">✦</span><div><strong>Leader</strong><p>Trae · glm-5.3 · 头像自动生成</p><span class="role-label leader-label">覆盖头像</span></div></div><div class="member-card"><span class="avatar architect">A</span><div><strong>架构师</strong><p>Codex · gpt-5-codex · 字符 A</p><span class="role-label">覆盖头像</span></div></div><div class="member-card"><span class="avatar worker">W</span><div><strong>前端 worker</strong><p>Claude · claude-sonnet · 字符 W</p><span class="role-label">覆盖头像</span></div></div><div class="member-card"><span class="avatar qa">QA</span><div><strong>验收槽</strong><p>ZCode · 遥测关闭 · 字符 QA</p><span class="role-label">覆盖头像</span></div></div></div><div class="readonly-banner">开团时可逐成员覆盖；可选 emoji / 字符 / 颜色。</div></div><div class="settings-panel workspace-pane" data-settings-panel="extensions"><div class="settings-list"><div class="settings-row"><span class="avatar">✓</span><div><strong>验收</strong><p>验收单、回填证据与确认收单</p></div><span class="tag done">启用</span></div><div class="settings-row"><span class="avatar">↗</span><div><strong>登记</strong><p>成员、引擎与 relay 来源登记</p></div><span class="tag done">启用</span></div><div class="settings-row"><span class="avatar">▧</span><div><strong>产物</strong><p>输出物归档与来源链路</p></div><span class="tag done">启用</span></div></div></div><div class="settings-panel workspace-pane" data-settings-panel="about"><div class="readonly-banner">cc-deck v0.6.0-test · test 通道<br>Command Bridge 原型 · 零外部资源</div></div>`;
+        body.querySelector('[data-settings-panel="general"] .settings-list')?.insertAdjacentHTML("beforeend", '<div class="settings-row"><span class="avatar">▦</span><div><strong>卡片密度</strong><p>会话卡片信息密度 · 默认标准</p></div><div class="density-control" role="group" aria-label="卡片密度"><button type="button" data-card-density-option="compact">紧凑</button><button type="button" data-card-density-option="standard">标准</button><button type="button" data-card-density-option="relaxed">宽松</button></div></div>');
         body.querySelectorAll(".settings-row p").forEach((copy) => { copy.textContent = copy.textContent.replace("wss://cc.humumu.online/cloud", "云桥连接详情"); });
+        wireCardDensityControls(body);
         body.dataset.settingsReady = "1";
         const panels = [...body.querySelectorAll("[data-settings-panel]")];
         const cards = [...queue.querySelectorAll(".queue-card")];
@@ -1661,6 +1709,7 @@
         const content = screen?.querySelector(".mobile-content");
         const list = content?.querySelector(".mobile-settings");
         if (!content || !list || content.dataset.settingsReady) return;
+        list.insertAdjacentHTML("beforeend", '<div class="settings-row"><span class="setting-icon">▦</span><div><strong>通用与快捷键</strong><p>快捷键、通知与卡片密度</p></div><span class="chev">›</span></div>');
         const detail = document.createElement("div");
         detail.className = "mobile-settings-detail";
         detail.hidden = true;
@@ -1670,7 +1719,7 @@
         rows.forEach((row) => row.addEventListener("click", () => {
           const name = row.querySelector("strong")?.textContent.trim();
           if (!name || name === "主题") return;
-          const html = name === "连接与设备" ? '<div class="mobile-lane"><div class="mobile-lane-head"><span>公司电脑</span><span class="tag done">在线</span></div><div class="mobile-task">端口 8787 · 最近心跳刚刚</div></div><div class="mobile-lane"><div class="mobile-lane-head"><span>家里 iMac</span><span class="tag action">重连中</span></div><div class="mobile-task">事件流等待恢复 · 可在源切换器切换</div></div>' : name === "模型服务" ? '<div class="mobile-task">Claude Code · 默认 claude-sonnet · 已接</div><div class="mobile-task">Codex · gpt-5-codex · 已接</div><div class="mobile-task">Trae / Qwen Code / CodeBuddy / ZCode · 待装</div>' : name === "团队身份模板" ? '<div class="mobile-task">Leader · Trae · 头像自动生成，可覆盖</div><div class="mobile-task">架构师 / 前端 worker / 验收槽 · 角色默认模板</div>' : name === "扩展" ? '<div class="mobile-task">验收 · 启用</div><div class="mobile-task">登记 · 启用</div><div class="mobile-task">产物 · 启用</div>' : '<div class="mobile-task">⌘K 搜索 · ⌘N 新建会话</div><div class="mobile-task">通知声音与桌面通知 · 已开启</div>'; render(name, html);
+          const html = name === "连接与设备" ? '<div class="mobile-lane"><div class="mobile-lane-head"><span>公司电脑</span><span class="tag done">在线</span></div><div class="mobile-task">端口 8787 · 最近心跳刚刚</div></div><div class="mobile-lane"><div class="mobile-lane-head"><span>家里 iMac</span><span class="tag action">重连中</span></div><div class="mobile-task">事件流等待恢复 · 可在源切换器切换</div></div>' : name === "模型服务" ? '<div class="mobile-task">Claude Code · 默认 claude-sonnet · 已接</div><div class="mobile-task">Codex · gpt-5-codex · 已接</div><div class="mobile-task">Trae / Qwen Code / CodeBuddy / ZCode · 待装</div>' : name === "通用与快捷键" ? '<div class="density-detail"><p>会话卡片信息密度，默认使用标准档。</p><div class="density-control" role="group" aria-label="卡片密度"><button type="button" data-card-density-option="compact">紧凑</button><button type="button" data-card-density-option="standard">标准</button><button type="button" data-card-density-option="relaxed">宽松</button></div></div><div class="mobile-task">⌘K 搜索 · ⌘N 新建会话</div><div class="mobile-task">通知声音与桌面通知 · 已开启</div>' : name === "团队身份模板" ? '<div class="mobile-task">Leader · Trae · 头像自动生成，可覆盖</div><div class="mobile-task">架构师 / 前端 worker / 验收槽 · 角色默认模板</div>' : name === "扩展" ? '<div class="mobile-task">验收 · 启用</div><div class="mobile-task">登记 · 启用</div><div class="mobile-task">产物 · 启用</div>' : '<div class="mobile-task">⌘K 搜索 · ⌘N 新建会话</div><div class="mobile-task">通知声音与桌面通知 · 已开启</div>'; render(name, html); wireCardDensityControls(detail);
         }));
         const about = rows.find((row) => row.querySelector("strong")?.textContent.trim() === "关于");
         about?.addEventListener("click", () => render("关于", '<div class="readonly-banner">cc-deck v0.6.0-test · test 通道<br>Command Bridge 原型 · 零外部资源<br>设计基线：SPEC 004</div>'));
@@ -2011,7 +2060,7 @@
         button.setAttribute("aria-expanded", String(menu.classList.contains("open")));
       }));
       document.querySelectorAll("[data-source-choice]").forEach((button) => button.addEventListener("click", () => setSource(button.dataset.sourceChoice, true)));
-      document.querySelectorAll("[data-source-mode]").forEach((button) => button.addEventListener("click", () => setSourceMode(button.dataset.sourceMode, true)));
+      document.querySelectorAll("button[data-source-mode]").forEach((button) => button.addEventListener("click", () => setSourceMode(button.dataset.sourceMode, true)));
       document.querySelectorAll("[data-source-settings]").forEach((link) => link.addEventListener("click", (event) => {
         event.preventDefault();
         document.querySelectorAll("[data-source-menu]").forEach((menu) => menu.classList.remove("open"));
@@ -2023,6 +2072,8 @@
       });
       let savedTheme = "dark";
       try { savedTheme = localStorage.getItem("cc-deck-theme") || "dark"; } catch (_) {}
+      let savedCardDensity = "standard";
+      try { savedCardDensity = localStorage.getItem("cc-deck-card-density") || "standard"; } catch (_) {}
       normalizeTeamRedundancy();
       auditRedundancy();
       hydrateContextWaterlines();
@@ -2033,11 +2084,13 @@
       setupProjectTabs();
       setupSettingsContent();
       setupMobileSettingsContent();
+      wireCardDensityControls();
       setupSourceGroupBars();
       mountConnectionCapsules();
       wireArtifactBrowser();
       wireNotificationDomain();
       applyTheme(savedTheme);
+      applyCardDensity(savedCardDensity);
       setConnectionState("connected");
       setSource("office");
       setSourceMode("single");
