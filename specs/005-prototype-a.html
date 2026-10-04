@@ -401,6 +401,14 @@
     .workspace-title-row { display: flex; align-items: center; gap: 8px; }
     .workspace-title-row h2 { flex: 1; min-width: 0; margin: 0; overflow: hidden; color: var(--text-strong); font-size: 16px; text-overflow: ellipsis; white-space: nowrap; }
     .workspace-sub { margin-top: 5px; color: var(--dim); font: 10px var(--mono); }
+    .session-state-row { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: baseline; gap: 7px; min-width: 0; margin-top: 6px; padding-left: 8px; border-left: 2px solid var(--session-state-color); color: var(--dim); font-size: 10px; line-height: 15px; }
+    .session-state-row[data-session-state="waiting"] { --session-state-color: var(--working); }
+    .session-state-row[data-session-state="running"] { --session-state-color: var(--done); }
+    .session-state-row[data-session-state="closing"] { --session-state-color: var(--brand-hover); }
+    .session-state-row[data-session-state="suspended"] { --session-state-color: var(--error); }
+    .session-state-label { color: var(--session-state-color); font-weight: 700; white-space: nowrap; }
+    .session-state-summary { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .session-state-elapsed { margin-left: auto; color: var(--faint); font: 10px var(--mono); white-space: nowrap; }
     .segment-bar { display: flex; gap: 17px; overflow: hidden; margin-top: 14px; background: var(--segment-bg); }
     .segment-bar button { position: relative; flex: 0 0 auto; padding: 0 0 8px; border: 0; background: transparent; color: var(--dim); cursor: pointer; font-size: 11px; }
     .segment-bar button:hover { color: var(--text); }
@@ -699,6 +707,8 @@
     .mobile-detail-tabs button { position: relative; flex: 0 0 auto; padding: 10px 0 8px; border: 0; background: transparent; color: var(--dim); cursor: pointer; font-size: 10px; }
     .mobile-detail-tabs button.active { color: var(--text-strong); font-weight: 700; }
     .mobile-detail-tabs button.active::after { content: ""; position: absolute; right: 0; bottom: -1px; left: 0; height: 2px; background: var(--brand); }
+    #m-detail .session-state-row { grid-template-columns: auto minmax(0, 1fr); margin: 0; padding: 8px 13px 7px 11px; border-right: 0; border-bottom: 1px solid var(--line-soft); border-left-width: 2px; }
+    #m-detail .session-state-elapsed { grid-column: 2; justify-self: end; margin-left: 0; }
     .mobile-board { display: grid; gap: 9px; }
     .mobile-lane { padding: 10px; border: 1px solid var(--line); border-radius: 9px; background: var(--surface1); }
     .mobile-lane-head { display: flex; justify-content: space-between; margin-bottom: 7px; color: var(--dim); font-size: 10px; font-weight: 700; }
@@ -904,7 +914,7 @@
               </div>
             </aside>
             <section class="workspace">
-              <header class="workspace-head"><div class="workspace-title-row"><i class="status-dot waiting" id="session-dot"></i><h2 id="session-title">0.6.0-test.19 出包</h2><span class="tag action" id="session-status">待收单</span><span class="identity-cluster" id="session-identity"><span class="engine-badge claude">Claude</span><span class="source-badge">公司电脑</span></span></div><div class="workspace-sub" id="session-sub">~/dev/cc-deck · 最近活动 12 分钟前</div><div class="segment-bar"><button class="active">对话</button><button>任务 <span class="faint">6/9</span></button><button>输出物 <span class="faint">4</span></button><button>用量</button><button>⋯</button></div></header>
+              <header class="workspace-head"><div class="workspace-title-row"><h2 id="session-title">0.6.0-test.19 出包</h2><span class="tag action" id="session-status">待收单</span><span class="identity-cluster" id="session-identity"><span class="engine-badge claude">Claude</span><span class="source-badge">公司电脑</span></span></div><div class="workspace-sub" id="session-sub">~/dev/cc-deck · 最近活动 12 分钟前</div><div class="session-state-row" id="session-state-row" data-session-state="waiting"><span class="session-state-label" data-session-state-label>等待确认</span><span class="session-state-summary" data-session-state-summary>Bash 写入 docs/</span><span class="session-state-elapsed" data-session-state-elapsed>2 分钟</span></div><div class="segment-bar"><button class="active">对话</button><button>任务 <span class="faint">6/9</span></button><button>输出物 <span class="faint">4</span></button><button>用量</button><button>⋯</button></div></header>
               <div class="workspace-body" id="session-body">
                 <div class="timeline-note">今天 10:42 · 验收上下文</div>
                 <div class="bubble"><div class="bubble-author"><span class="avatar leader">✦<i class="avatar-engine-dot trae"></i></span><strong>Leader</strong><span class="role-label leader-label">Leader</span></div>独立出包已完成，四处版本号已同步。验收单还差 1 项确认收单。</div>
@@ -958,8 +968,9 @@
 
         <div class="mobile-screen" id="m-detail" data-mobile-detail="true">
           <div class="mobile-status"><span>9:41</span><span>▰ ︎◒ 100%</span></div>
-          <header class="mobile-head"><button class="mobile-back" data-mobile-back>‹</button><h2 id="mobile-detail-title">0.6.0-test.19 出包<small>~/dev/cc-deck · 最近活动</small></h2><span class="identity-cluster" id="mobile-detail-identity"><span class="engine-badge claude">Claude</span><span class="source-badge">公司电脑</span></span><span class="tag action">待收单</span></header>
+          <header class="mobile-head"><button class="mobile-back" data-mobile-back>‹</button><h2 id="mobile-detail-title">0.6.0-test.19 出包<small id="mobile-detail-sub">~/dev/cc-deck · 最近活动</small></h2><span class="identity-cluster" id="mobile-detail-identity"><span class="engine-badge claude">Claude</span><span class="source-badge">公司电脑</span></span><span class="tag action">待收单</span></header>
           <div class="mobile-detail-tabs"><button class="active">对话</button><button>任务</button><button>输出物</button><button>用量</button><button>⋯</button></div>
+          <div class="session-state-row" id="mobile-detail-state" data-session-state="waiting"><span class="session-state-label" data-session-state-label>等待确认</span><span class="session-state-summary" data-session-state-summary>Bash 写入 docs/</span><span class="session-state-elapsed" data-session-state-elapsed>2 分钟</span></div>
               <div class="mobile-content no-bottom"><div class="timeline-note">今天 10:42 · 来源：待处理收件箱</div><div class="bubble"><div class="bubble-author"><span class="avatar leader">✦<i class="avatar-engine-dot trae"></i></span><strong>Leader</strong><span class="role-label leader-label">Leader</span></div>独立出包已完成，验收单还差 1 项确认收单。</div><div class="bubble me">我先看更新通道隔离，再确认收单。</div><div class="wait-card" data-wait-card><strong class="wait-title">等待你的确认 · Bash 写入 docs/</strong><p class="wait-copy">将把验收证据写入 `docs/release-check.md`，会话才能继续。</p><div class="wait-actions"><button class="allow" data-allow>允许一次</button><button>拒绝并说明</button></div></div><div class="status-note">当前任务：回填验收证据 · 预计还需 2 分钟。</div><div class="artifact-row"><svg class="icon-inline" aria-hidden="true"><use href="#icon-clip"></use></svg> docs/release-check.md <span>刚刚</span></div><div class="artifact-row">▧ 0.6.0-test.19.apk <span>1h</span></div></div><div class="mobile-detail-composer"><div class="composer" data-composer="mobile"><button class="composer-clip" type="button" title="附件" aria-label="附件"><svg class="icon-inline" aria-hidden="true"><use href="#icon-clip"></use></svg></button><input class="composer-input" type="text" placeholder="给会话发消息…" aria-label="给会话发消息"></div><button class="primary-btn" type="button" data-composer-send>发送</button></div>
         </div>
 
@@ -1981,23 +1992,34 @@
         showToast(`已切换到${({ session: "会话", team: "团队", project: "项目", notify: "通知", settings: "设置" })[domain]}域`);
       }
 
+      const sessionStateData = {
+        release: { title: "0.6.0-test.19 出包", lastActive: "~/dev/cc-deck · 最近活动 12 分钟前", status: "待收单", state: "waiting", stateLabel: "等待确认", summary: "Bash 写入 docs/", elapsed: "2 分钟", copy: "当前任务：回填验收证据 · 预计还需 2 分钟。", engine: "Claude", engineClass: "claude", source: "公司电脑" },
+        mobile: { title: "worker-mobile 失联", lastActive: "~/dev/cc-deck · 最后日志 25 分钟前", status: "需接替", state: "suspended", stateLabel: "挂起", summary: "切换独立验收厂商", elapsed: "25 分钟", copy: "当前建议：切换到独立验收厂商，保留原任务板与 git 记忆。", engine: "Qwen Code", engineClass: "qwen", source: "家里 iMac" },
+        "team-plan": { title: "团队编制确认", lastActive: "cc-deck M1 攻坚团 · 最近活动 18 分钟前", status: "待确认", state: "waiting", stateLabel: "等待确认", summary: "Leader 编制方案待确认", elapsed: "18 分钟", copy: "Leader 已提交编制方案：3 开发 + 独立验收 + 1 调研。", engine: "Trae", engineClass: "trae", source: "公司电脑" },
+        ui: { title: "ui-review 走查", lastActive: "~/dev/cc-deck · 刚刚活跃", status: "运行中", state: "running", stateLabel: "运行", summary: "检查 rail 方案", elapsed: "刚刚", copy: "当前任务：检查 rail 方案的交互与来源返回。", engine: "Codex", engineClass: "codex", source: "公司电脑" },
+        board: { title: "relay 任务板", lastActive: "~/dev/cc-deck · 最近活动 15 分钟前", status: "运行中", state: "running", stateLabel: "运行", summary: "T-12/T-15 并行推进", elapsed: "15 分钟", copy: "T-12/T-15 并行推进，下一检查点在 15 分钟后。", engine: "ZCode", engineClass: "zcode", source: "家里 iMac" },
+        android: { title: "android 构建", lastActive: "~/dev/windclaw · 最近活动 3 小时前", status: "等产物", state: "closing", stateLabel: "收口", summary: "等待安卓产物上传", elapsed: "3 小时", copy: "正在等待安卓产物上传，暂无需你处理的动作。", engine: "CodeBuddy", engineClass: "codebuddy", source: "公司电脑" }
+      };
+
+      function updateSessionStateRow(row, data) {
+        if (!row) return;
+        row.dataset.sessionState = data.state;
+        row.querySelector("[data-session-state-label]").textContent = data.stateLabel;
+        row.querySelector("[data-session-state-summary]").textContent = data.summary;
+        const elapsed = row.querySelector("[data-session-state-elapsed]");
+        elapsed.textContent = data.elapsed || "";
+        elapsed.hidden = !data.elapsed;
+      }
+
       function selectSession(id) {
         document.querySelectorAll("[data-session-card]").forEach((card) => card.classList.toggle("selected", card.dataset.sessionCard === id));
-        const data = {
-          release: { title: "0.6.0-test.19 出包", sub: "~/dev/cc-deck · 最近活动 12 分钟前", status: "待收单", dot: "waiting", copy: "当前任务：回填验收证据 · 预计还需 2 分钟。", engine: "Claude", engineClass: "claude", source: "公司电脑" },
-          mobile: { title: "worker-mobile 失联", sub: "~/dev/cc-deck · 最后日志 25 分钟前", status: "需接替", dot: "error", copy: "当前建议：切换到独立验收厂商，保留原任务板与 git 记忆。", engine: "Qwen Code", engineClass: "qwen", source: "家里 iMac" },
-          "team-plan": { title: "团队编制确认", sub: "cc-deck M1 攻坚团 · Leader glm-5.3 · 6 成员", status: "待确认", dot: "waiting", copy: "Leader 已提交编制方案：3 开发 + 独立验收 + 1 调研。", engine: "Trae", engineClass: "trae", source: "公司电脑" },
-          ui: { title: "ui-review 走查", sub: "~/dev/cc-deck · 刚刚活跃", status: "运行中", dot: "done", copy: "当前任务：检查 rail 方案的交互与来源返回。", engine: "Codex", engineClass: "codex", source: "公司电脑" },
-          board: { title: "relay 任务板", sub: "~/dev/cc-deck · glm-5.3 · 4/9 卡片进行中", status: "运行中", dot: "done", copy: "T-12/T-15 并行推进，下一检查点在 15 分钟后。", engine: "ZCode", engineClass: "zcode", source: "家里 iMac" },
-          android: { title: "android 构建", sub: "~/dev/windclaw · 最近活动 3 小时前", status: "等产物", dot: "waiting", copy: "正在等待安卓产物上传，暂无需你处理的动作。", engine: "CodeBuddy", engineClass: "codebuddy", source: "公司电脑" }
-        }[id] || null;
+        const data = sessionStateData[id] || null;
         if (!data) return;
         document.querySelector("#session-title").textContent = data.title;
-        document.querySelector("#session-sub").textContent = data.sub;
+        document.querySelector("#session-sub").textContent = data.lastActive;
         document.querySelector("#session-status").textContent = data.status;
         document.querySelector("#session-identity").innerHTML = `<span class="engine-badge ${data.engineClass}">${data.engine}</span><span class="source-badge">${data.source}</span>`;
-        const dot = document.querySelector("#session-dot");
-        dot.className = `status-dot ${data.dot}`;
+        updateSessionStateRow(document.querySelector("#session-state-row"), data);
         document.querySelector("#session-main-copy").textContent = data.copy;
         hydrateSourceBadges();
       }
@@ -2019,11 +2041,11 @@
         mobileReturn = document.querySelector("#m-notify.active") ? "notify" : document.querySelector("#m-team.active") ? "team" : document.querySelector("#m-project.active") ? "project" : "inbox";
         document.querySelector("#m-detail").classList.add("active");
         document.querySelectorAll(".mobile-screen:not(#m-detail)").forEach((screen) => screen.classList.remove("active"));
-        const titles = { release: "0.6.0-test.19 出包", mobile: "worker-mobile 失联", "team-plan": "团队编制确认" };
-        const identities = { release: ["Claude", "claude", "公司电脑"], mobile: ["Qwen Code", "qwen", "家里 iMac"], "team-plan": ["Trae", "trae", "公司电脑"] };
-        document.querySelector("#mobile-detail-title").firstChild.textContent = titles[id] || "会话详情";
-        const identity = identities[id] || ["Claude", "claude", "公司电脑"];
-        document.querySelector("#mobile-detail-identity").innerHTML = `<span class="engine-badge ${identity[1]}">${identity[0]}</span><span class="source-badge">${identity[2]}</span>`;
+        const data = sessionStateData[id] || sessionStateData.release;
+        document.querySelector("#mobile-detail-title").firstChild.textContent = data.title;
+        document.querySelector("#mobile-detail-sub").textContent = data.lastActive;
+        document.querySelector("#mobile-detail-identity").innerHTML = `<span class="engine-badge ${data.engineClass}">${data.engine}</span><span class="source-badge">${data.source}</span>`;
+        updateSessionStateRow(document.querySelector("#mobile-detail-state"), data);
         document.querySelector("[data-mobile-back]").textContent = mobileReturn === "notify" ? "‹ 通知" : "‹";
         hydrateSourceBadges();
       }
