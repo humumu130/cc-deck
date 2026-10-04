@@ -405,7 +405,13 @@
     .segment-bar button.active::after { content: ""; position: absolute; right: 0; bottom: -1px; left: 0; height: 2px; border-radius: 2px; background: var(--brand); }
     .workspace-body { flex: 1; min-height: 0; overflow: auto; padding: 20px 22px; }
     .workspace-footer { display: flex; gap: 8px; flex: 0 0 auto; padding: 12px 16px; border-top: 1px solid var(--line-soft); background: var(--footer); box-shadow: 0 -8px 18px var(--panel-shadow); }
-    .composer { display: flex; align-items: center; gap: 8px; flex: 1; min-height: 34px; padding: 8px 10px; border: 1px solid var(--line); border-radius: 8px; color: var(--faint); font-size: 11px; }
+    .composer { display: flex; align-items: center; gap: 8px; flex: 1; min-height: 34px; padding: 0 10px; border: 1px solid var(--line); border-radius: 8px; color: var(--text); font-size: 11px; }
+    .composer:focus-within { border-color: var(--brand); }
+    .composer-input { min-width: 0; flex: 1; padding: 8px 0; border: 0; outline: none; background: transparent; color: var(--text); font: inherit; }
+    .composer-input::placeholder { color: var(--faint); }
+    .composer-clip { display: grid; place-items: center; flex: 0 0 24px; width: 24px; height: 24px; padding: 0; border: 0; border-radius: 5px; background: transparent; color: var(--dim); cursor: pointer; }
+    .composer-clip:hover, .composer-clip:focus-visible { background: var(--hover); color: var(--text-strong); }
+    .composer-clip .icon-inline { width: 15px; height: 15px; }
     .primary-btn, .secondary-btn, .danger-btn { min-height: 34px; padding: 0 12px; border: 1px solid transparent; border-radius: 7px; cursor: pointer; font-size: 11px; }
     .primary-btn { background: linear-gradient(180deg, var(--brand), var(--brand-strong)); color: var(--on-brand); box-shadow: inset 0 1px 0 var(--brand-highlight), 0 4px 12px var(--brand-shadow); transition: filter .18s ease, transform .18s ease, box-shadow .18s ease; }
     .primary-btn:hover { filter: brightness(1.05); transform: translateY(-1px); box-shadow: inset 0 1px 0 var(--brand-highlight), 0 7px 16px var(--brand-shadow); }
@@ -735,6 +741,8 @@
     .team-chat { display: grid; align-content: start; gap: 8px; max-width: 720px; }
     .team-chat .bubble { max-width: 92%; margin-bottom: 0; }
     .team-chat .bubble.me { margin-left: 0; }
+    .team-composer-row { display: flex; gap: 8px; max-width: 720px; margin-top: 8px; }
+    .team-composer-row .composer { min-width: 0; }
     .team-members-grid { display: grid; grid-template-columns: repeat(2, minmax(180px, 1fr)); gap: 10px; }
     .team-member-large { display: flex; align-items: center; gap: 10px; padding: 12px; border-bottom: 1px solid var(--line-soft); background: var(--surface2); }
     .team-member-large strong { display: block; color: var(--text-strong); font-size: 12px; }
@@ -868,7 +876,7 @@
                 <div class="wait-card" data-wait-card><strong class="wait-title">等待你的确认 · Bash 写入 docs/</strong><p class="wait-copy">将把验收证据写入 `docs/release-check.md`，会话才能继续。</p><div class="wait-actions"><button class="allow" data-allow>允许一次</button><button>拒绝并说明</button></div></div>
                 <div class="status-note" id="session-main-copy">当前任务：回填验收证据 · 预计还需 2 分钟。</div>
               </div>
-              <footer class="workspace-footer"><div class="composer">给会话发消息…　<svg class="icon-inline" aria-hidden="true"><use href="#icon-clip"></use></svg> 附件　▧ 图片</div><button class="primary-btn">发送</button></footer>
+              <footer class="workspace-footer"><div class="composer" data-composer="session"><button class="composer-clip" type="button" title="附件" aria-label="附件"><svg class="icon-inline" aria-hidden="true"><use href="#icon-clip"></use></svg></button><input class="composer-input" type="text" placeholder="给会话发消息…" aria-label="给会话发消息"></div><button class="primary-btn" type="button" data-composer-send>发送</button></footer>
             </section>
             <aside class="inspector"><h3>证据检查器</h3><div class="inspector-block"><div class="inspector-title"><span>验收进度</span><span>2/3</span></div><div class="progress"><i style="width:66%"></i></div><div class="inspector-copy">还有 1 项待确认收单</div></div><div class="inspector-block"><div class="inspector-title"><span>任务清单</span><span>6/9</span></div><div class="check-row"><b>✓</b><span>版本号同步</span></div><div class="check-row"><b>✓</b><span>独立出包</span></div><div class="check-row"><span>○</span><span>公司网检查更新</span></div></div><div class="inspector-block"><div class="inspector-title"><span>用量</span></div><div class="context-meter safe"><div class="context-meter-head"><div><span class="context-meter-kicker">Context window</span><strong class="context-meter-model">Claude · 200k 上限</strong></div><span class="context-meter-grade">安全</span></div><div class="context-meter-band" aria-label="上下文已使用 41%"><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div><div class="context-meter-stats"><span><b class="context-meter-used">84k</b> <span class="context-meter-limit">/ 200k tokens</span></span><strong class="context-meter-pct">41%</strong></div><div class="context-meter-note">余量充足，可继续当前验收回填</div></div></div><div class="inspector-block"><div class="inspector-title"><span>输出物</span><span>4</span></div><div class="artifact-row">docs/release-check.md <span>刚刚</span><span class="identity-cluster"><span class="engine-badge claude">Claude</span><span class="source-badge">公司电脑</span></span></div><div class="artifact-row">0.6.0-test.19.apk <span>1h</span><span class="identity-cluster"><span class="engine-badge claude">Claude</span><span class="source-badge">公司电脑</span></span></div></div></aside>
           </section>
@@ -886,7 +894,7 @@
           </section>
 
           <section class="desktop-screen" id="d-notify">
-            <aside class="queue"><div class="queue-head"><h2>通知 <span class="tag action" data-notify-action-count>2</span></h2><button class="icon-btn">×</button></div><div class="queue-group">需你行动 · <span data-notify-action-count>2</span></div><div class="notice selected" data-notify-card data-notify-active="true"><span class="notice-icon">!</span><div><strong>0.6.0-test.19 就绪待收单</strong><p>T-13 已回填 2/3 · 12 分钟前</p><div class="identity-cluster"><span class="engine-badge claude">Claude</span><span class="source-badge">公司电脑</span></div><span class="tag action">验收</span></div></div><div class="notice" data-notify-card data-notify-active="true"><span class="notice-icon">!</span><div><strong>团队动作待确认</strong><p>失联接替与编制确认 · 8 分钟前</p><div class="identity-cluster"><span class="engine-badge qwen">Qwen Code</span><span class="source-badge">公司电脑</span></div><span class="tag danger">需处理</span></div></div><div class="queue-group">注意 · 历史</div><div class="notice" data-notify-card data-notify-active="false"><span class="notice-icon">·</span><div><strong>worker-relay 滞留 25 分</strong><p>已通知 Leader · 30 分钟前</p><div class="identity-cluster"><span class="engine-badge codex">Codex</span><span class="source-badge">公司电脑</span></div></div></div></aside>
+            <aside class="queue"><div class="queue-head"><h2>通知 <span class="tag action" data-notify-action-count>2</span></h2><button class="icon-btn">×</button></div><div class="queue-group">需你行动 · <span data-notify-action-count>2</span></div><div class="notice selected" data-notify-card data-notify-active="true" data-notify-jump data-notify-domain="session" data-notify-session="release" title="整卡可点 · 去会话验收"><span class="notice-icon">!</span><div><strong>0.6.0-test.19 就绪待收单</strong><p>T-13 已回填 2/3 · 12 分钟前</p><div class="identity-cluster"><span class="engine-badge claude">Claude</span><span class="source-badge">公司电脑</span></div><span class="tag action">验收</span></div></div><div class="notice" data-notify-card data-notify-active="true" data-notify-jump data-notify-domain="team" data-notify-team-action="takeover" title="整卡可点 · 去团队处理"><span class="notice-icon">!</span><div><strong>团队动作待确认</strong><p>失联接替与编制确认 · 8 分钟前</p><div class="identity-cluster"><span class="engine-badge qwen">Qwen Code</span><span class="source-badge">公司电脑</span></div><span class="tag danger">需处理</span></div></div><div class="queue-group">注意 · 历史</div><div class="notice" data-notify-card data-notify-active="false"><span class="notice-icon">·</span><div><strong>worker-relay 滞留 25 分</strong><p>已通知 Leader · 30 分钟前</p><div class="identity-cluster"><span class="engine-badge codex">Codex</span><span class="source-badge">公司电脑</span></div></div></div></aside>
             <section class="workspace"><header class="workspace-head"><div class="workspace-title-row"><span class="tag action">行动入口</span><h2>通知中心</h2><span class="tag" data-notify-action-count>2 项需行动</span></div><div class="workspace-sub">通知只做来源摘要与轻动作；验收、接替、编制确认回到原域完成。</div></header><div class="workspace-body"><div class="notify-source-summary">打开通知不会清零。轻动作可就地完成；涉及证据、成员选择或确认卡的重流程，必须回到来源会话或团队。</div><div class="notify-source-list"><article class="notify-source-card" data-notify-card data-notify-active="true"><div class="notify-source-head"><span class="notice-icon">!</span><div><span class="notify-source-kicker">来源会话 · 0.6.0-test.19 出包</span><span class="notify-source-time">12 分钟前</span><h3>验收回填 2/3，等待最后一项确认收单</h3><p>谁：worker-web · 什么事：T-13 独立出包已完成 · 等什么：公司网下检查更新并确认收单</p><div class="identity-cluster"><span class="engine-badge claude">Claude</span><span class="source-badge">公司电脑</span></div></div></div><div class="notify-actions"><button class="primary-btn" type="button" data-notify-jump data-notify-domain="session" data-notify-session="release">去会话验收</button><button class="notify-light-action" type="button" data-notify-action="resolve">标记已读</button><span class="notify-state" data-notify-status>需行动</span></div></article><article class="notify-source-card" data-notify-card data-notify-active="true"><div class="notify-source-head"><span class="notice-icon">!</span><div><span class="notify-source-kicker">来源团队 · cc-deck M1 攻坚团</span><span class="notify-source-time">8 分钟前</span><h3>worker-mobile 失联，编制方案也等待确认</h3><p>谁：Leader / worker-mobile · 什么事：额度链走尽 · 等什么：选择接替引擎并确认 3 开发 + 独立验收编制</p><div class="identity-cluster"><span class="engine-badge qwen">Qwen Code</span><span class="source-badge">公司电脑</span></div></div></div><div class="notify-actions"><button class="primary-btn" type="button" data-notify-jump data-notify-domain="team" data-notify-team-action="takeover">去团队接替</button><button class="secondary-btn" type="button" data-notify-jump data-notify-domain="team" data-notify-team-action="confirm">去团队确认</button><button class="notify-light-action" type="button" data-notify-action="pause">暂停提醒</button><span class="notify-state" data-notify-status>需行动</span></div></article><article class="notify-source-card" data-notify-card data-notify-active="false"><div class="notify-source-head"><span class="notice-icon">·</span><div><span class="notify-source-kicker">来源会话 · relay 任务板</span><span class="notify-source-time">30 分钟前</span><h3>worker-relay 滞留 25 分</h3><p>已通知 Leader；这是提醒类动态，不计入需行动 badge。</p><div class="identity-cluster"><span class="engine-badge codex">Codex</span><span class="source-badge">公司电脑</span></div></div></div><div class="notify-actions"><button class="notify-light-action" type="button" data-notify-action="ack">确认已知</button><span class="notify-state" data-notify-status>历史动态</span></div></article></div></div></section>
             <aside class="inspector"><h3>通知上下文</h3><div class="inspector-block"><div class="inspector-title"><span>badge 口径</span><span class="tag action">只计行动</span></div><div class="inspector-copy">当前 <b data-notify-action-count>2</b> 项；处理完最后一项行动才清零。</div></div><div class="inspector-block"><div class="inspector-title"><span>写面归属</span></div><div class="inspector-copy">验收回填 → 来源会话<br>失联接替 / 编制确认 → 来源团队<br>项目域只读聚合</div></div><div class="inspector-block"><div class="inspector-title"><span>轻动作白名单</span></div><div class="inspector-copy">标记已读 · 暂停提醒 · 确认已知</div></div></aside>
           </section>
@@ -916,7 +924,7 @@
           <div class="mobile-status"><span>9:41</span><span>▰ ︎◒ 100%</span></div>
           <header class="mobile-head"><button class="mobile-back" data-mobile-back>‹</button><h2 id="mobile-detail-title">0.6.0-test.19 出包<small>~/dev/cc-deck · claude</small></h2><span class="identity-cluster" id="mobile-detail-identity"><span class="engine-badge claude">Claude</span><span class="source-badge">公司电脑</span></span><span class="tag action">待收单</span></header>
           <div class="mobile-detail-tabs"><button class="active">对话</button><button>任务</button><button>输出物</button><button>用量</button><button>⋯</button></div>
-              <div class="mobile-content no-bottom"><div class="timeline-note">今天 10:42 · 来源：待处理收件箱</div><div class="bubble"><div class="bubble-author"><span class="avatar leader">✦<i class="avatar-engine-dot trae"></i></span><strong>Leader</strong><span class="role-label leader-label">Leader</span></div>独立出包已完成，验收单还差 1 项确认收单。</div><div class="bubble me">我先看更新通道隔离，再确认收单。</div><div class="wait-card" data-wait-card><strong class="wait-title">等待你的确认 · Bash 写入 docs/</strong><p class="wait-copy">将把验收证据写入 `docs/release-check.md`，会话才能继续。</p><div class="wait-actions"><button class="allow" data-allow>允许一次</button><button>拒绝并说明</button></div></div><div class="status-note">当前任务：回填验收证据 · 预计还需 2 分钟。</div><div class="artifact-row"><svg class="icon-inline" aria-hidden="true"><use href="#icon-clip"></use></svg> docs/release-check.md <span>刚刚</span></div><div class="artifact-row">▧ 0.6.0-test.19.apk <span>1h</span></div></div><div class="mobile-detail-composer"><div class="composer">给会话发消息…</div><button class="primary-btn">发送</button></div>
+              <div class="mobile-content no-bottom"><div class="timeline-note">今天 10:42 · 来源：待处理收件箱</div><div class="bubble"><div class="bubble-author"><span class="avatar leader">✦<i class="avatar-engine-dot trae"></i></span><strong>Leader</strong><span class="role-label leader-label">Leader</span></div>独立出包已完成，验收单还差 1 项确认收单。</div><div class="bubble me">我先看更新通道隔离，再确认收单。</div><div class="wait-card" data-wait-card><strong class="wait-title">等待你的确认 · Bash 写入 docs/</strong><p class="wait-copy">将把验收证据写入 `docs/release-check.md`，会话才能继续。</p><div class="wait-actions"><button class="allow" data-allow>允许一次</button><button>拒绝并说明</button></div></div><div class="status-note">当前任务：回填验收证据 · 预计还需 2 分钟。</div><div class="artifact-row"><svg class="icon-inline" aria-hidden="true"><use href="#icon-clip"></use></svg> docs/release-check.md <span>刚刚</span></div><div class="artifact-row">▧ 0.6.0-test.19.apk <span>1h</span></div></div><div class="mobile-detail-composer"><div class="composer" data-composer="mobile"><button class="composer-clip" type="button" title="附件" aria-label="附件"><svg class="icon-inline" aria-hidden="true"><use href="#icon-clip"></use></svg></button><input class="composer-input" type="text" placeholder="给会话发消息…" aria-label="给会话发消息"></div><button class="primary-btn" type="button" data-composer-send>发送</button></div>
         </div>
 
         <div class="mobile-screen mobile-notify-screen" id="m-notify" data-mobile-notify-root="true">
@@ -1316,6 +1324,11 @@
             resolveNotification(lightAction.closest("[data-notify-card]"), lightAction.dataset.notifyAction);
             return;
           }
+          const historyCard = event.target.closest('[data-notify-card][data-notify-active="false"]');
+          if (historyCard && !event.target.closest("button")) {
+            showToast("历史动态 · 已归档，无需处理");
+            return;
+          }
           const jump = event.target.closest("[data-notify-jump]");
           if (jump) {
             focusNotifySource(jump);
@@ -1553,9 +1566,54 @@
         const body = section?.querySelector(".workspace-body");
         if (!body || body.dataset.tabsReady) return;
         const board = body.innerHTML;
-        body.innerHTML = `<div class="workspace-pane active">${board}</div><div class="workspace-pane"><div class="team-chat"><div class="bubble"><div class="bubble-author"><span class="avatar leader">✦<i class="avatar-engine-dot trae"></i></span><strong>Leader</strong><span class="role-label leader-label">Leader</span></div>编制方案已提交：3 开发 + 独立验收 + 1 调研。</div><div class="bubble"><div class="bubble-author"><span class="avatar worker">W<i class="avatar-engine-dot claude"></i></span><strong>worker-web</strong></div>T-13 更新通道隔离已完成，等待验收单。</div><div class="bubble"><div class="bubble-author"><span class="avatar leader">✦<i class="avatar-engine-dot trae"></i></span><strong>Leader</strong></div>请 worker-mobile 先停留，验收槽改由独立厂商接替。</div><div class="bubble me"><div class="bubble-author"><span class="avatar architect">我</span><strong>我</strong></div>收到，先确认编制再收单。</div><div class="composer">给团队发消息…　<svg class="icon-inline" aria-hidden="true"><use href="#icon-clip"></use></svg> 附件</div></div></div><div class="workspace-pane"><div class="team-members-grid"><div class="team-member-large"><span class="avatar leader">✦<i class="avatar-engine-dot trae"></i></span><div><strong>Leader <span class="role-label leader-label">Leader</span></strong><p>glm-5.3 · 调度 · 在线</p><span class="engine-badge trae">Trae</span></div></div><div class="team-member-large"><span class="avatar worker">W<i class="avatar-engine-dot claude"></i></span><div><strong>worker-web</strong><p>开发 · 运行中</p><span class="engine-badge claude">Claude</span></div></div><div class="team-member-large"><span class="avatar worker">M<i class="avatar-engine-dot qwen"></i></span><div><strong>worker-mobile</strong><p>失联 · 待接替</p><span class="engine-badge qwen">Qwen Code</span></div></div><div class="team-member-large"><span class="avatar qa">QA<i class="avatar-engine-dot zcode"></i></span><div><strong>验收槽</strong><p>独立厂商 · 待验收</p><span class="engine-badge zcode">ZCode</span></div></div></div></div><div class="workspace-pane"><div class="team-activity"><div class="activity-row"><time>10:42</time><i></i><span>T-13 更新通道隔离进入待验收</span></div><div class="activity-row"><time>10:15</time><i></i><span>worker-relay 派单完成</span></div><div class="activity-row"><time>09:58</time><i></i><span>worker-mobile 失联告警</span></div><div class="activity-row"><time>昨天</time><i></i><span>Leader 提交编制方案</span></div></div></div>`;
+        body.innerHTML = `<div class="workspace-pane active">${board}</div><div class="workspace-pane"><div class="team-chat"><div class="bubble"><div class="bubble-author"><span class="avatar leader">✦<i class="avatar-engine-dot trae"></i></span><strong>Leader</strong><span class="role-label leader-label">Leader</span></div>编制方案已提交：3 开发 + 独立验收 + 1 调研。</div><div class="bubble"><div class="bubble-author"><span class="avatar worker">W<i class="avatar-engine-dot claude"></i></span><strong>worker-web</strong></div>T-13 更新通道隔离已完成，等待验收单。</div><div class="bubble"><div class="bubble-author"><span class="avatar leader">✦<i class="avatar-engine-dot trae"></i></span><strong>Leader</strong></div>请 worker-mobile 先停留，验收槽改由独立厂商接替。</div><div class="bubble me"><div class="bubble-author"><span class="avatar architect">我</span><strong>我</strong></div>收到，先确认编制再收单。</div></div><div class="team-composer-row"><div class="composer" data-composer="team"><button class="composer-clip" type="button" title="附件" aria-label="附件"><svg class="icon-inline" aria-hidden="true"><use href="#icon-clip"></use></svg></button><input class="composer-input" type="text" placeholder="给团队发消息…" aria-label="给团队发消息"></div><button class="primary-btn" type="button" data-composer-send>发送</button></div></div><div class="workspace-pane"><div class="team-members-grid"><div class="team-member-large"><span class="avatar leader">✦<i class="avatar-engine-dot trae"></i></span><div><strong>Leader <span class="role-label leader-label">Leader</span></strong><p>glm-5.3 · 调度 · 在线</p><span class="engine-badge trae">Trae</span></div></div><div class="team-member-large"><span class="avatar worker">W<i class="avatar-engine-dot claude"></i></span><div><strong>worker-web</strong><p>开发 · 运行中</p><span class="engine-badge claude">Claude</span></div></div><div class="team-member-large"><span class="avatar worker">M<i class="avatar-engine-dot qwen"></i></span><div><strong>worker-mobile</strong><p>失联 · 待接替</p><span class="engine-badge qwen">Qwen Code</span></div></div><div class="team-member-large"><span class="avatar qa">QA<i class="avatar-engine-dot zcode"></i></span><div><strong>验收槽</strong><p>独立厂商 · 待验收</p><span class="engine-badge zcode">ZCode</span></div></div></div></div><div class="workspace-pane"><div class="team-activity"><div class="activity-row"><time>10:42</time><i></i><span>T-13 更新通道隔离进入待验收</span></div><div class="activity-row"><time>10:15</time><i></i><span>worker-relay 派单完成</span></div><div class="activity-row"><time>09:58</time><i></i><span>worker-mobile 失联告警</span></div><div class="activity-row"><time>昨天</time><i></i><span>Leader 提交编制方案</span></div></div></div>`;
         body.dataset.tabsReady = "1";
         wireSegmentTabs([...section.querySelectorAll(".segment-bar button")], [body.children[1], body.children[0], body.children[2], body.children[3]], 1);
+      }
+
+      function wireComposer(composer, sendButton) {
+        const kind = composer.dataset.composer;
+        const input = composer.querySelector(".composer-input");
+        const clip = composer.querySelector(".composer-clip");
+        const target = kind === "session"
+          ? document.querySelector("#d-session .conversation-pane")
+          : kind === "mobile"
+            ? document.querySelector("#m-detail .mobile-content > .workspace-pane")
+            : document.querySelector("#d-team .team-chat");
+        if (!input || !clip || !sendButton || !target) return;
+        const send = () => {
+          const text = input.value.trim();
+          if (!text) {
+            showToast("会话消息：先输入内容");
+            input.focus();
+            return;
+          }
+          const bubble = document.createElement("div");
+          bubble.className = "bubble me";
+          bubble.textContent = text;
+          target.append(bubble);
+          input.value = "";
+          const scrollContainer = target.closest(".workspace-body, .mobile-content");
+          if (scrollContainer) scrollContainer.scrollTop = scrollContainer.scrollHeight;
+          showToast(`${kind === "team" ? "团队消息" : "会话消息"}已发送 · 会话回执等待中（原型演示）`);
+          input.focus();
+        };
+        sendButton.addEventListener("click", send);
+        input.addEventListener("keydown", (event) => {
+          if (event.key !== "Enter") return;
+          event.preventDefault();
+          send();
+        });
+        clip.addEventListener("click", () => {
+          showToast("附件选择 · 原型演示占位");
+          input.focus();
+        });
+      }
+
+      function wireComposers() {
+        document.querySelectorAll("[data-composer]").forEach((composer) => {
+          wireComposer(composer, composer.parentElement?.querySelector("[data-composer-send]"));
+        });
       }
 
       function setupProjectTabs() {
@@ -1971,6 +2029,7 @@
       setupSessionTabs();
       setupMobileDetailTabs();
       setupTeamTabs();
+      wireComposers();
       setupProjectTabs();
       setupSettingsContent();
       setupMobileSettingsContent();
