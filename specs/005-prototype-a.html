@@ -319,9 +319,11 @@
     .source-menu.open { display: block; }
     .source-menu-head { padding: 4px 6px 7px; color: var(--faint); font: 10px var(--mono); letter-spacing: .04em; text-transform: uppercase; }
     .source-option { display: flex; align-items: center; gap: 8px; width: 100%; padding: 8px 7px; border: 0; border-radius: 7px; background: transparent; color: var(--text); text-align: left; cursor: pointer; }
-    .source-option:hover, .source-option.active { background: var(--hover); }
+    .source-option:hover { background: var(--hover); }
+    .source-option.active { background: var(--selected-bg); }
     .source-option[data-source-choice="office"] { border-left: 2px solid var(--source-company); }
     .source-option[data-source-choice="home"] { border-left: 2px solid var(--source-home); }
+    .source-option.active[data-source-choice="office"], .source-option.active[data-source-choice="home"] { border-left: 3px solid var(--brand); }
     .source-option strong { flex: 1; color: var(--text-strong); font-size: 10px; }
     .source-option small { color: var(--dim); font: 10px var(--mono); }
     .source-mode { display: flex; gap: 4px; padding: 8px 0 3px; margin-top: 4px; border-top: 1px solid var(--line-soft); }
@@ -385,7 +387,7 @@
     .queue-group { margin: 12px 3px 6px; color: var(--faint); font: 10px var(--mono); letter-spacing: .04em; }
     .queue-card { position: relative; min-height: 57px; padding: 7px 10px; margin-bottom: 6px; border: 1px solid var(--card-border); border-radius: var(--radius); background: var(--card-veil); box-shadow: var(--card-shadow); cursor: pointer; transition: border-color .18s ease, background .18s ease, transform .18s ease, box-shadow .18s ease; }
     .queue-card:hover { border-color: var(--border-strong); background: var(--hover); transform: translateY(-1px); box-shadow: var(--shadow-hover); }
-    .queue-card.selected { border-color: var(--selected-line); background: var(--selected-bg); box-shadow: inset 3px 0 0 var(--selected-line), var(--selected-shadow); }
+    .queue-card.selected { border-color: var(--card-border); background: var(--selected-bg); box-shadow: inset 2px 0 0 var(--selected-line); }
     .queue-card .row { display: flex; align-items: center; gap: 7px; }
     .queue-card strong { flex: 1; min-width: 0; overflow: hidden; color: var(--text-strong); font-size: 11.5px; text-overflow: ellipsis; white-space: nowrap; }
     .queue-card p { overflow: hidden; overflow-wrap: break-word; min-height: 18px; margin: 4px 138px 0 14px; color: var(--dim); font-size: 10px; text-overflow: ellipsis; white-space: nowrap; }
@@ -618,7 +620,7 @@
     .aggregate-card p { margin: 5px 0; color: var(--dim); font-size: 10px; }
     .aggregate-card button { margin-top: 7px; }
     .notice { display: flex; gap: 9px; padding: 11px; border: 1px solid var(--line); border-radius: 9px; background: var(--surface2); cursor: pointer; }
-    .notice.selected { border-color: var(--selected-line); background: var(--selected-bg); box-shadow: inset 3px 0 0 var(--selected-line); }
+    .notice.selected { border-color: var(--line); background: var(--selected-bg); box-shadow: inset 2px 0 0 var(--selected-line); }
     .notice .notice-icon { display: grid; place-items: center; flex: 0 0 27px; width: 27px; height: 27px; border-radius: 8px; background: var(--notice-icon-bg); color: var(--error); }
     .notice strong { display: block; color: var(--text-strong); font-size: 11px; }
     .notice p { margin: 4px 0 0; color: var(--dim); font-size: 10px; }
@@ -715,7 +717,7 @@
     .mobile-switch button.active { border: 1px solid var(--border-strong); background: var(--selected-bg); color: var(--text-strong); box-shadow: var(--selected-shadow); }
     .mobile-card { padding: 11px; margin-bottom: 8px; border: 1px solid var(--card-border); border-radius: 12px; background: var(--surface2); box-shadow: var(--card-shadow); cursor: pointer; transition: border-color .18s ease, background .18s ease, transform .18s ease, box-shadow .18s ease; }
     .mobile-card:hover { border-color: var(--border-strong); transform: translateY(-1px); box-shadow: var(--shadow-hover); }
-    .mobile-card.primary { border-color: var(--selected-line); background: var(--selected-bg); box-shadow: inset 3px 0 0 var(--selected-line), var(--card-shadow); }
+    .mobile-card.primary { border-color: var(--card-border); background: var(--selected-bg); box-shadow: inset 2px 0 0 var(--selected-line); }
     .mobile-card .row { display: flex; align-items: center; gap: 7px; }
     .mobile-card strong { flex: 1; min-width: 0; color: var(--text-strong); font-size: 11.5px; }
     .mobile-card p { margin: 5px 0 0 35px; color: var(--dim); font-size: 10px; }
@@ -782,7 +784,8 @@
     .workspace-title-row .identity-cluster { flex: 0 0 auto; }
     .workspace-title-row .engine-badge, .workspace-title-row .source-badge { font-size: 10px; }
     .member-card, .task-card, .notice, .metric, .aggregate-card, .settings-row { box-shadow: var(--card-shadow); transition: border-color .18s ease, background .18s ease, transform .18s ease, box-shadow .18s ease; }
-    .member-card:hover, .task-card:hover, .notice:hover, .metric:hover, .aggregate-card:hover, .settings-row:hover { border-color: var(--border-strong); transform: translateY(-1px); box-shadow: var(--shadow-hover); }
+    .member-card:hover, .notice:hover, .metric:hover, .aggregate-card:hover, .settings-row:hover { border-color: var(--border-strong); transform: translateY(-1px); box-shadow: var(--shadow-hover); }
+    .task-card:hover { border-color: var(--border-strong); background: var(--hover); transform: none; box-shadow: none; }
     .member-card .identity-cluster, .task-card .identity-cluster, .notice .identity-cluster { margin-top: 6px; }
     .artifact-row > span:not(.identity-cluster) { margin-left: auto; color: var(--faint); font-family: var(--mono); }
     .mobile-card .identity-cluster { margin: 6px 0 0 35px; }
@@ -843,7 +846,7 @@
     @keyframes demo-shimmer { 0% { background-position: 200% 0; } 100% { background-position: -20% 0; } }
     .settings-nav .queue-card { border-color: transparent; background: transparent; box-shadow: none; }
     .settings-nav .queue-card:hover { border-color: transparent; background: var(--hover); transform: none; box-shadow: none; }
-    .settings-nav .queue-card.selected { border-color: transparent; background: var(--selected-bg); box-shadow: inset 3px 0 0 var(--selected-line); }
+    .settings-nav .queue-card.selected { border-color: transparent; background: var(--selected-bg); box-shadow: inset 3px 0 0 var(--brand); }
     .settings-panel .settings-row { border-color: transparent; border-bottom: 1px solid var(--line-soft); border-radius: 0; background: transparent; box-shadow: none; }
     .settings-panel .settings-row:hover { border-color: var(--line-soft); background: var(--hover); transform: none; box-shadow: none; }
     .toggle-control { min-width: 34px; padding: 3px 7px; border: 1px solid var(--line); border-radius: 999px; background: var(--surface1); color: var(--dim); cursor: pointer; font: 700 10px var(--mono); }
@@ -852,7 +855,7 @@
     .mobile-settings .settings-row:hover { border-color: var(--line-soft); background: var(--hover); transform: none; box-shadow: none; }
     .notice { border-right: 0; border-top: 0; border-bottom: 1px solid var(--line-soft); border-left: 0; border-radius: 0; background: var(--surface2); box-shadow: none; }
     .notice:hover { border-color: var(--line-soft); background: var(--hover); transform: none; box-shadow: none; }
-    .notice.selected { border-color: var(--selected-line); background: var(--selected-bg); box-shadow: inset 3px 0 0 var(--selected-line); }
+    .notice.selected { border-color: var(--line); background: var(--selected-bg); box-shadow: inset 2px 0 0 var(--selected-line); }
     .queue-card[data-session-card="mobile"], .mobile-card[data-session-card="mobile"] { border-color: var(--danger-line); background: var(--danger-bg); }
     .queue-card[data-session-card="mobile"]:hover, .mobile-card[data-session-card="mobile"]:hover { border-color: var(--error); background: var(--danger-bg); }
     .mobile-settings-detail { padding-top: 3px; }
