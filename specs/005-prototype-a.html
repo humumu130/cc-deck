@@ -764,10 +764,13 @@
     .mobile-nav .tag { position: absolute; top: 5px; right: 11px; padding: 2px 5px; font-size: 8px; }
     .workspace-pane { display: none; min-height: 100%; }
     .workspace-pane.active { display: block; }
+    .workspace-pane.team-conversation-pane.active { display: flex; flex-direction: column; min-height: calc(100% + 20px); margin-bottom: -20px; }
     .team-chat { display: grid; align-content: start; gap: 8px; max-width: 720px; }
+    .team-conversation-pane .team-chat { flex: 1; min-height: 0; overflow: auto; width: 100%; max-width: 720px; margin: 0 auto; }
     .team-chat .bubble { max-width: 92%; margin-bottom: 0; }
     .team-chat .bubble.me { margin-left: 0; }
     .team-composer-row { display: flex; gap: 8px; max-width: 720px; margin-top: 8px; }
+    .team-conversation-pane .team-composer-row { flex: 0 0 auto; width: 100%; max-width: 720px; padding-top: 12px; margin: 8px auto 0; border-top: 1px solid var(--line-soft); background: var(--footer); box-shadow: 0 -8px 18px var(--panel-shadow); }
     .team-composer-row .composer { min-width: 0; }
     .team-members-grid { display: grid; grid-template-columns: repeat(2, minmax(180px, 1fr)); gap: 10px; }
     .team-member-large { display: flex; align-items: center; gap: 10px; padding: 12px; border-bottom: 1px solid var(--line-soft); background: var(--surface2); }
@@ -1613,6 +1616,7 @@
         if (!body || body.dataset.tabsReady) return;
         const board = body.innerHTML;
         body.innerHTML = `<div class="workspace-pane active">${board}</div><div class="workspace-pane"><div class="team-chat"><div class="bubble"><div class="bubble-author"><span class="avatar leader">✦<i class="avatar-engine-dot trae"></i></span><strong>Leader</strong><span class="role-label leader-label">Leader</span></div>编制方案已提交：3 开发 + 独立验收 + 1 调研。</div><div class="bubble"><div class="bubble-author"><span class="avatar worker">W<i class="avatar-engine-dot claude"></i></span><strong>worker-web</strong></div>T-13 更新通道隔离已完成，等待验收单。</div><div class="bubble"><div class="bubble-author"><span class="avatar leader">✦<i class="avatar-engine-dot trae"></i></span><strong>Leader</strong></div>请 worker-mobile 先停留，验收槽改由独立厂商接替。</div><div class="bubble me"><div class="bubble-author"><span class="avatar architect">我</span><strong>我</strong></div>收到，先确认编制再收单。</div></div><div class="team-composer-row"><div class="composer" data-composer="team"><button class="composer-clip" type="button" title="附件" aria-label="附件"><svg class="icon-inline" aria-hidden="true"><use href="#icon-clip"></use></svg></button><input class="composer-input" type="text" placeholder="给团队发消息…" aria-label="给团队发消息"></div><button class="primary-btn" type="button" data-composer-send>发送</button></div></div><div class="workspace-pane"><div class="team-members-grid"><div class="team-member-large"><span class="avatar leader">✦<i class="avatar-engine-dot trae"></i></span><div><strong>Leader <span class="role-label leader-label">Leader</span></strong><p>glm-5.3 · 调度 · 在线</p><span class="engine-badge trae">Trae</span></div></div><div class="team-member-large"><span class="avatar worker">W<i class="avatar-engine-dot claude"></i></span><div><strong>worker-web</strong><p>开发 · 运行中</p><span class="engine-badge claude">Claude</span></div></div><div class="team-member-large"><span class="avatar worker">M<i class="avatar-engine-dot qwen"></i></span><div><strong>worker-mobile</strong><p>失联 · 待接替</p><span class="engine-badge qwen">Qwen Code</span></div></div><div class="team-member-large"><span class="avatar qa">QA<i class="avatar-engine-dot zcode"></i></span><div><strong>验收槽</strong><p>独立厂商 · 待验收</p><span class="engine-badge zcode">ZCode</span></div></div></div></div><div class="workspace-pane"><div class="team-activity"><div class="activity-row"><time>10:42</time><i></i><span>T-13 更新通道隔离进入待验收</span></div><div class="activity-row"><time>10:15</time><i></i><span>worker-relay 派单完成</span></div><div class="activity-row"><time>09:58</time><i></i><span>worker-mobile 失联告警</span></div><div class="activity-row"><time>昨天</time><i></i><span>Leader 提交编制方案</span></div></div></div>`;
+        body.children[1].classList.add("team-conversation-pane");
         body.dataset.tabsReady = "1";
         wireSegmentTabs([...section.querySelectorAll(".segment-bar button")], [body.children[1], body.children[0], body.children[2], body.children[3]], 1);
       }
@@ -1639,7 +1643,7 @@
           bubble.textContent = text;
           target.append(bubble);
           input.value = "";
-          const scrollContainer = target.closest(".workspace-body, .mobile-content");
+          const scrollContainer = kind === "team" ? target : target.closest(".workspace-body, .mobile-content");
           if (scrollContainer) scrollContainer.scrollTop = scrollContainer.scrollHeight;
           showToast(`${kind === "team" ? "团队消息" : "会话消息"}已发送 · 会话回执等待中（原型演示）`);
           input.focus();
