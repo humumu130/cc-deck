@@ -938,28 +938,7 @@
           </nav>
 
           <section class="desktop-screen active" id="d-session">
-            <aside class="queue">
-              <div class="queue-head"><h2>会话</h2><button class="icon-btn">＋</button></div>
-              <div class="queue-switch" aria-label="会话队列视图"><button class="active" data-queue-mode="action">行动队列</button><button data-queue-mode="all">全部会话</button></div>
-              <div class="queue-view active" data-queue-view="action">
-                <div class="queue-group">需你处理 · 3</div>
-                <div class="queue-card selected" data-session-card="release"><div class="row"><i class="status-dot waiting"></i><strong>0.6.0-test.19 出包</strong><span class="tag action">待收单</span></div><p>验收单已回填 2/3 · 12 分钟前</p><div class="identity-cluster"><span class="engine-badge claude">Claude</span><span class="source-badge">公司电脑</span></div></div>
-                <div class="queue-card" data-session-card="mobile"><div class="row"><i class="status-dot error"></i><strong>worker-mobile 失联</strong><span class="tag danger">接替</span></div><p>Claude 额度已用尽 · 8 分钟前</p><div class="identity-cluster"><span class="engine-badge qwen">Qwen Code</span><span class="source-badge">家里 iMac</span></div></div>
-                <div class="queue-card" data-session-card="team-plan"><div class="row"><i class="status-dot waiting"></i><strong>团队编制确认</strong><span class="tag action">待确认</span></div><p>cc-deck M1 攻坚团 · Leader 已提交</p><div class="identity-cluster"><span class="engine-badge trae">Trae</span><span class="source-badge">公司电脑</span></div></div>
-                <div class="queue-group">运行中 · 2</div>
-                <div class="queue-card" data-session-card="ui"><div class="row"><i class="status-dot done"></i><strong>ui-review 走查</strong></div><p>当前任务：检查 rail 方案 · 上下文 58%</p><div class="identity-cluster"><span class="engine-badge codex">Codex</span><span class="source-badge">公司电脑</span></div></div>
-                <div class="queue-card" data-session-card="board"><div class="row"><i class="status-dot done"></i><strong>relay 任务板</strong></div><p>T-12/T-15 并行 · 4/9</p><div class="identity-cluster"><span class="engine-badge zcode">ZCode</span><span class="source-badge">家里 iMac</span></div></div>
-              </div>
-              <div class="queue-view" data-queue-view="all">
-                <div class="queue-group"><svg class="icon-inline" aria-hidden="true"><use href="#icon-folder"></use></svg> cc-deck · 4 个会话</div>
-                <div class="queue-card selected" data-session-card="release"><div class="row"><i class="status-dot waiting"></i><strong>0.6.0-test.19 出包</strong><span class="tag action">待收单</span></div><p>验收单 · 1 小时前</p><div class="identity-cluster"><span class="engine-badge claude">Claude</span><span class="source-badge">公司电脑</span></div></div>
-                <div class="queue-card" data-session-card="ui"><div class="row"><i class="status-dot done"></i><strong>ui-review 走查</strong></div><p>刚刚活跃 · 58%</p><div class="identity-cluster"><span class="engine-badge codex">Codex</span><span class="source-badge">公司电脑</span></div></div>
-                <div class="queue-card" data-session-card="board"><div class="row"><i class="status-dot done"></i><strong>relay 任务板</strong></div><p>运行中 · 4/9</p><div class="identity-cluster"><span class="engine-badge zcode">ZCode</span><span class="source-badge">家里 iMac</span></div></div>
-                <div class="queue-card" data-session-card="mobile"><div class="row"><i class="status-dot error"></i><strong>worker-mobile 失联</strong></div><p>需接替 · 8 分钟前</p><div class="identity-cluster"><span class="engine-badge qwen">Qwen Code</span><span class="source-badge">家里 iMac</span></div></div>
-                <div class="queue-group"><svg class="icon-inline" aria-hidden="true"><use href="#icon-folder"></use></svg> windclaw-qclaw · 1 个会话</div>
-                <div class="queue-card" data-session-card="android"><div class="row"><i class="status-dot waiting"></i><strong>android 构建</strong></div><p>等待安卓产物 · 3 小时前</p><div class="identity-cluster"><span class="engine-badge codebuddy">CodeBuddy</span><span class="source-badge">公司电脑</span></div></div>
-              </div>
-            </aside>
+            <aside class="queue"><div class="queue-head"><h2>会话</h2><button class="icon-btn">＋</button></div><div class="queue-switch" aria-label="会话队列视图"><button class="active" data-queue-mode="action">行动队列</button><button data-queue-mode="all">全部会话</button></div><div class="queue-view active" data-queue-view="action"><div data-session-queue="action"></div></div><div class="queue-view" data-queue-view="all"><div data-session-queue="all"></div></div></aside>
             <section class="workspace">
               <header class="workspace-head"><div class="workspace-title-row"><h2 id="session-title">0.6.0-test.19 出包</h2><span class="tag action" id="session-status">待收单</span><span class="identity-cluster" id="session-identity"><span class="engine-badge claude">Claude</span><span class="source-badge">公司电脑</span></span></div><div class="workspace-sub" id="session-sub">~/dev/cc-deck · 最近活动 12 分钟前</div><div class="session-state-row" id="session-state-row" data-session-state="waiting"><span class="session-state-label" data-session-state-label>等待确认</span><span class="session-state-summary" data-session-state-summary>Bash 写入 docs/</span><span class="session-state-elapsed" data-session-state-elapsed>2 分钟</span></div><div class="segment-bar"><button class="active">对话</button><button>任务 <span class="faint">6/9</span></button><button>输出物 <span class="faint">4</span></button><button>用量</button><button>⋯</button></div></header>
               <div class="workspace-body" id="session-body">
@@ -976,7 +955,7 @@
 
           <section class="desktop-screen" id="d-team">
             <aside class="queue"><div class="queue-head"><h2>团队行动 <span class="tag action">1</span></h2><button class="icon-btn">＋</button></div><div class="queue-group">待确认 · 1</div><div class="queue-card selected"><div class="row"><i class="status-dot waiting"></i><strong>cc-deck M1 攻坚团</strong><span class="tag action">编制</span></div><p>6 成员 · 4 进行中 · 2 待装机</p><div class="identity-cluster"><span class="source-badge">公司电脑</span></div></div><div class="queue-group">进行中 · 1</div><div class="queue-card"><div class="row"><i class="status-dot done"></i><strong>v0.5.2 双端发版团</strong></div><p>归档准备 · 09-18</p><div class="identity-cluster"><span class="source-badge">家里 iMac</span></div><div class="queue-card-meta">双端 · test 通道 · 待收单</div></div><div class="queue-group">快捷入口</div><div class="queue-card"><div class="row"><span class="avatar">＋</span><strong>新建团队</strong></div><p>描述目标 → Leader 建议编制 → 你确认</p></div></aside>
-            <section class="workspace"><header class="workspace-head"><div class="workspace-title-row"><i class="status-dot done"></i><h2>cc-deck M1 攻坚团</h2><span class="tag action">待你确认</span><span class="source-badge">公司电脑</span></div><div class="workspace-sub">6 成员 · 4 进行中 · 2 待装机 · Leader：glm-5.3</div><div class="segment-bar"><button>对话</button><button class="active">看板 <span class="faint">9</span></button><button>成员 <span class="faint">6</span></button><button>活动</button></div></header><div class="workspace-body"><div class="board"><div class="lane"><div class="lane-head"><span>待认领</span><span>2</span></div><div class="task-card"><strong>T-21 导入码迁移</strong><p>等待 worker-web</p><div class="identity-cluster"><span class="engine-badge codebuddy">CodeBuddy</span><span class="source-badge">公司电脑</span></div><span class="tag">待派单</span></div></div><div class="lane"><div class="lane-head"><span>进行中</span><span>4</span></div><div class="task-card"><strong>T-12 relay 事件流</strong><p>worker-relay · 48%</p><div class="identity-cluster"><span class="engine-badge codex">Codex</span><span class="source-badge">公司电脑</span></div><span class="tag info">运行中</span></div><div class="task-card"><strong>T-15 手机列表</strong><p>worker-mobile · 72%</p><div class="identity-cluster"><span class="engine-badge qwen">Qwen Code</span><span class="source-badge">家里 iMac</span></div><span class="tag info">运行中</span></div></div><div class="lane"><div class="lane-head"><span>待验收</span><span>2</span></div><div class="task-card"><strong>T-13 更新通道隔离</strong><p>独立出包已完成</p><div class="task-assignee"><span class="avatar worker">W<i class="avatar-engine-dot claude"></i></span><span><b>worker-web · 执行者</b><br>Claude · 公司电脑</span></div><span class="tag action">验收单</span></div></div><div class="lane"><div class="lane-head"><span>待装机</span><span>2</span></div><div class="task-card"><strong>T-14 验收槽</strong><p>回填 2/3</p><div class="task-assignee"><span class="avatar leader">✦<i class="avatar-engine-dot trae"></i></span><span><b>Leader · 编排</b><br>Trae · 公司电脑</span></div><span class="tag action">待收单</span></div></div><div class="lane"><div class="lane-head"><span>完成</span><span>1</span></div><div class="task-card"><strong>T-10 版本同步</strong><p>已合并 main</p><div class="identity-cluster"><span class="engine-badge zcode">ZCode</span><span class="source-badge">家里 iMac</span></div><span class="tag done">完成</span></div></div></div></div><footer class="workspace-footer"><button class="secondary-btn">＋ 新建任务</button><button class="primary-btn">确认编制方案</button></footer></section>
+            <section class="workspace"><header class="workspace-head"><div class="workspace-title-row"><i class="status-dot done"></i><h2>cc-deck M1 攻坚团</h2><span class="tag action">待你确认</span><span class="source-badge">公司电脑</span></div><div class="workspace-sub">6 成员 · 4 进行中 · 2 待装机 · Leader：glm-5.3</div><div class="segment-bar"><button>对话</button><button class="active">看板 <span class="faint">9</span></button><button>成员 <span class="faint">6</span></button><button>活动</button></div></header><div class="workspace-body"><div class="board"><div class="lane"><div class="lane-head"><span>待认领</span><span>2</span></div><div class="task-card"><strong>T-21 导入码迁移</strong><p>等待 worker-web</p><div class="identity-cluster"><span class="engine-badge codebuddy">CodeBuddy</span><span class="source-badge">公司电脑</span></div><span class="tag">待派单</span></div></div><div class="lane"><div class="lane-head"><span>进行中</span><span>4</span></div><div class="task-card"><strong>T-12 relay 事件流</strong><p>worker-relay · 48%</p><div class="identity-cluster"><span class="engine-badge codex">Codex</span><span class="source-badge">公司电脑</span></div><span class="tag info">运行中</span></div><div class="task-card"><strong>T-15 手机列表</strong><p>worker-mobile · 72%</p><div class="identity-cluster"><span class="engine-badge qwen">Qwen Code</span><span class="source-badge">家里 iMac</span></div><span class="tag info">运行中</span></div></div><div class="lane"><div class="lane-head"><span>待验收</span><span>2</span></div><div class="task-card"><strong>T-13 更新通道隔离</strong><p>独立出包已完成</p><div class="task-assignee"><span class="avatar worker">W<i class="avatar-engine-dot claude"></i></span><span><b>worker-web · 执行者</b> Claude · 公司电脑</span></div><span class="tag action">验收单</span></div></div><div class="lane"><div class="lane-head"><span>待装机</span><span>2</span></div><div class="task-card"><strong>T-14 验收槽</strong><p>回填 2/3</p><div class="task-assignee"><span class="avatar leader">✦<i class="avatar-engine-dot trae"></i></span><span><b>Leader · 编排</b> Trae · 公司电脑</span></div><span class="tag action">待收单</span></div></div><div class="lane"><div class="lane-head"><span>完成</span><span>1</span></div><div class="task-card"><strong>T-10 版本同步</strong><p>已合并 main</p><div class="identity-cluster"><span class="engine-badge zcode">ZCode</span><span class="source-badge">家里 iMac</span></div><span class="tag done">完成</span></div></div></div></div><footer class="workspace-footer"><button class="secondary-btn">＋ 新建任务</button><button class="primary-btn">确认编制方案</button></footer></section>
             <aside class="inspector"><h3>成员与派单</h3><div class="inspector-block"><div class="inspector-title"><span>Leader 建议编制</span><span>待确认</span></div><div class="member-list"><div class="member-card"><span class="avatar leader">✦<i class="avatar-engine-dot trae"></i></span><div><strong>Leader <span class="role-label leader-label">Leader</span></strong><p>glm-5.3 · 调度</p><div class="identity-cluster"><span class="engine-badge trae">Trae</span><span class="source-badge">公司电脑</span></div></div></div><div class="member-card"><span class="avatar worker">W<i class="avatar-engine-dot claude"></i></span><div><strong>worker-web</strong><p>claude · 开发</p><div class="identity-cluster"><span class="engine-badge claude">Claude</span><span class="source-badge">公司电脑</span></div></div></div><div class="member-card"><span class="avatar worker">M<i class="avatar-engine-dot qwen"></i></span><div><strong>worker-mobile</strong><p>失联 · 需接替</p><div class="identity-cluster"><span class="engine-badge qwen">Qwen Code</span><span class="source-badge">家里 iMac</span></div></div></div><div class="member-card"><span class="avatar qa">QA<i class="avatar-engine-dot codex"></i></span><div><strong>验收槽</strong><p>独立厂商 · claude</p><div class="identity-cluster"><span class="engine-badge codex">Codex</span><span class="source-badge">公司电脑</span></div></div></div></div></div><div class="inspector-block"><div class="inspector-title"><span>停留告警</span><span class="tag action">1</span></div><div class="inspector-copy">worker-mobile 25 分钟无日志；已通知 Leader。</div><button class="danger-btn" style="margin-top:9px">换厂商接替</button></div><div class="inspector-block"><div class="inspector-title"><span>团队确认</span><span>1 项</span></div><div class="inspector-copy">3 开发 + 独立验收 + 1 调研</div></div></aside>
           </section>
 
@@ -987,8 +966,8 @@
           </section>
 
           <section class="desktop-screen" id="d-notify">
-            <aside class="queue"><div class="queue-head"><h2>通知 <span class="tag action" data-notify-action-count>2</span></h2><button class="icon-btn">×</button></div><div class="queue-group">需你行动 · <span data-notify-action-count>2</span></div><div class="notice selected" data-notify-card data-notify-active="true" data-notify-jump data-notify-domain="session" data-notify-session="release" title="整卡可点 · 去会话验收"><span class="notice-icon">!</span><div><strong>0.6.0-test.19 就绪待收单</strong><p>T-13 已回填 2/3 · 12 分钟前</p><div class="identity-cluster"><span class="engine-badge claude">Claude</span><span class="source-badge">公司电脑</span></div><span class="tag action">验收</span></div></div><div class="notice" data-notify-card data-notify-active="true" data-notify-jump data-notify-domain="team" data-notify-team-action="takeover" title="整卡可点 · 去团队处理"><span class="notice-icon">!</span><div><strong>团队动作待确认</strong><p>失联接替与编制确认 · 8 分钟前</p><div class="identity-cluster"><span class="engine-badge qwen">Qwen Code</span><span class="source-badge">公司电脑</span></div><span class="tag danger">需处理</span></div></div><div class="queue-group">注意 · 历史</div><div class="notice" data-notify-card data-notify-active="false"><span class="notice-icon">·</span><div><strong>worker-relay 滞留 25 分</strong><p>已通知 Leader · 30 分钟前</p><div class="identity-cluster"><span class="engine-badge codex">Codex</span><span class="source-badge">公司电脑</span></div></div></div></aside>
-            <section class="workspace"><header class="workspace-head"><div class="workspace-title-row"><span class="tag action">行动入口</span><h2>通知中心</h2><span class="tag" data-notify-action-count>2 项需行动</span></div><div class="workspace-sub">通知只做来源摘要与轻动作；验收、接替、编制确认回到原域完成。</div></header><div class="workspace-body"><div class="notify-source-summary">打开通知不会清零。轻动作可就地完成；涉及证据、成员选择或确认卡的重流程，必须回到来源会话或团队。</div><div class="notify-source-list"><article class="notify-source-card" data-notify-card data-notify-active="true"><div class="notify-source-head"><span class="notice-icon">!</span><div><span class="notify-source-kicker">来源会话 · 0.6.0-test.19 出包</span><span class="notify-source-time">12 分钟前</span><h3>验收回填 2/3，等待最后一项确认收单</h3><p>谁：worker-web · 什么事：T-13 独立出包已完成 · 等什么：公司网下检查更新并确认收单</p><div class="identity-cluster"><span class="engine-badge claude">Claude</span><span class="source-badge">公司电脑</span></div></div></div><div class="notify-actions"><button class="primary-btn" type="button" data-notify-jump data-notify-domain="session" data-notify-session="release">去会话验收</button><button class="notify-light-action" type="button" data-notify-action="resolve">标记已读</button><span class="notify-state" data-notify-status>需行动</span></div></article><article class="notify-source-card" data-notify-card data-notify-active="true"><div class="notify-source-head"><span class="notice-icon">!</span><div><span class="notify-source-kicker">来源团队 · cc-deck M1 攻坚团</span><span class="notify-source-time">8 分钟前</span><h3>worker-mobile 失联，编制方案也等待确认</h3><p>谁：Leader / worker-mobile · 什么事：额度链走尽 · 等什么：选择接替引擎并确认 3 开发 + 独立验收编制</p><div class="identity-cluster"><span class="engine-badge qwen">Qwen Code</span><span class="source-badge">公司电脑</span></div></div></div><div class="notify-actions"><button class="primary-btn" type="button" data-notify-jump data-notify-domain="team" data-notify-team-action="takeover">去团队接替</button><button class="secondary-btn" type="button" data-notify-jump data-notify-domain="team" data-notify-team-action="confirm">去团队确认</button><button class="notify-light-action" type="button" data-notify-action="pause">暂停提醒</button><span class="notify-state" data-notify-status>需行动</span></div></article><article class="notify-source-card" data-notify-card data-notify-active="false"><div class="notify-source-head"><span class="notice-icon">·</span><div><span class="notify-source-kicker">来源会话 · relay 任务板</span><span class="notify-source-time">30 分钟前</span><h3>worker-relay 滞留 25 分</h3><p>已通知 Leader；这是提醒类动态，不计入需行动 badge。</p><div class="identity-cluster"><span class="engine-badge codex">Codex</span><span class="source-badge">公司电脑</span></div></div></div><div class="notify-actions"><button class="notify-light-action" type="button" data-notify-action="ack">确认已知</button><span class="notify-state" data-notify-status>历史动态</span></div></article></div></div></section>
+            <aside class="queue" data-notification-queue></aside>
+            <section class="workspace"><header class="workspace-head"><div class="workspace-title-row"><span class="tag action">行动入口</span><h2>通知中心</h2><span class="tag" data-notify-action-count>2 项需行动</span></div><div class="workspace-sub">通知只做来源摘要与轻动作；验收、接替、编制确认回到原域完成。</div></header><div class="workspace-body"><div class="notify-source-summary">打开通知不会清零。轻动作可就地完成；涉及证据、成员选择或确认卡的重流程，必须回到来源会话或团队。</div><div class="notify-source-list" data-notification-list></div></div></section>
             <aside class="inspector"><h3>通知上下文</h3><div class="inspector-block"><div class="inspector-title"><span>badge 口径</span><span class="tag action">只计行动</span></div><div class="inspector-copy">当前 <b data-notify-action-count>2</b> 项；处理完最后一项行动才清零。</div></div><div class="inspector-block"><div class="inspector-title"><span>写面归属</span></div><div class="inspector-copy">验收回填 → 来源会话<br>失联接替 / 编制确认 → 来源团队<br>项目域只读聚合</div></div><div class="inspector-block"><div class="inspector-title"><span>轻动作白名单</span></div><div class="inspector-copy">标记已读 · 暂停提醒 · 确认已知</div></div></aside>
           </section>
 
@@ -1010,7 +989,7 @@
           <div class="mobile-status"><span>9:41</span><span>▰ ︎◒ 100%</span></div>
           <div class="mobile-sourcebar"><div class="source-switcher"><button class="source-trigger" type="button" data-source-trigger aria-expanded="false"><span class="source-dot status-connected" data-source-dot></span><strong data-current-source>公司电脑</strong><span>⌄</span></button><div class="source-menu" data-source-menu><div class="source-menu-head">数据源与视图</div><button class="source-option active" type="button" data-source-choice="office"><span class="source-dot status-connected"></span><strong>公司电脑</strong><small>6 会话 · 2 行动</small></button><button class="source-option" type="button" data-source-choice="home"><span class="source-dot status-reconnecting"></span><strong>家里 iMac</strong><small>2 会话 · 2 行动</small></button><div class="source-mode"><button class="active" type="button" data-source-mode="single">单源</button><button type="button" data-source-mode="aggregate">多源聚合</button></div><a class="source-manage" href="#d-settings" data-source-settings>⚙ 管理与配对新源 →</a></div></div><span class="source-summary" data-current-summary>6 会话 · 2 行动</span></div>
           <header class="mobile-head"><h2>待我处理<small>2 个行动项 · cc-deck 在线</small></h2><span class="tag action mobile-notify" title="通知 · 2 个需行动项" aria-label="通知 · 2 个需行动项"><svg class="icon-bell" aria-hidden="true"><use href="#icon-bell"></use></svg><span>2</span></span><button class="icon-btn">⌕</button></header>
-          <div class="mobile-content"><div class="mobile-summary"><div><b>2</b><span>需行动</span></div><div><b>1</b><span>运行中</span></div><div><b>1</b><span>待验收</span></div></div><div class="mobile-switch"><button class="active" data-mobile-list="action">待处理</button><button data-mobile-list="all">全部会话</button></div><div class="mobile-card primary" data-open-detail="release"><div class="row"><span class="avatar status-ok"><svg class="icon-status" aria-hidden="true"><use href="#icon-check"></use></svg></span><strong>0.6.0-test.19 出包</strong><span class="tag action">待收单</span></div><p>验收单已回填 2/3 · 点击确认最后一项</p><div class="identity-cluster"><span class="engine-badge claude">Claude</span><span class="source-badge">公司电脑</span></div></div><div class="mobile-card" data-open-detail="mobile"><div class="row"><span class="avatar status-alert"><svg class="icon-status" aria-hidden="true"><use href="#icon-alert"></use></svg></span><strong>worker-mobile 失联</strong><span class="tag danger">接替</span></div><p>Claude 额度已用尽 · 验收槽不回落同厂商</p><div class="identity-cluster"><span class="engine-badge qwen">Qwen Code</span><span class="source-badge">家里 iMac</span></div></div><div class="mobile-card" data-open-detail="team-plan"><div class="row"><span class="avatar status-action"><svg class="icon-status" aria-hidden="true"><use href="#icon-users"></use></svg></span><strong>团队编制确认</strong><span class="tag action">待确认</span></div><p>Leader 已提交编制方案 · 3 开发 + 独立验收</p><div class="identity-cluster"><span class="engine-badge trae">Trae</span><span class="source-badge">公司电脑</span></div></div><div class="mobile-card"><div class="row"><span class="avatar status-neutral"><svg class="icon-status" aria-hidden="true"><use href="#icon-grid"></use></svg></span><strong>ui-review 走查</strong><span class="status-dot done"></span></div><p>刚刚活跃 · 检查 rail 方案 · 上下文 58%</p><div class="identity-cluster"><span class="engine-badge codex">Codex</span><span class="source-badge">公司电脑</span></div></div></div>
+          <div class="mobile-content"><div class="mobile-summary"><div><b>2</b><span>需行动</span></div><div><b>1</b><span>运行中</span></div><div><b>1</b><span>待验收</span></div></div><div class="mobile-switch"><button class="active" data-mobile-list="action">待处理</button><button data-mobile-list="all">全部会话</button></div><div data-mobile-session-list></div></div>
           <nav class="mobile-nav"><button class="active" data-mobile-root="inbox"><b><svg class="icon-nav" aria-hidden="true"><use href="#icon-home"></use></svg></b>会话</button><button data-mobile-root="team"><b><svg class="icon-nav" aria-hidden="true"><use href="#icon-users"></use></svg></b>团队<span class="tag action">1</span></button><button data-mobile-root="project"><b><svg class="icon-nav" aria-hidden="true"><use href="#icon-grid"></use></svg></b>项目</button><button data-mobile-root="settings"><b><svg class="icon-nav" aria-hidden="true"><use href="#icon-gear"></use></svg></b>设置</button></nav>
         </div>
 
@@ -1025,11 +1004,9 @@
         <div class="mobile-screen mobile-notify-screen" id="m-notify" data-mobile-notify-root="true">
           <div class="mobile-status"><span>9:41</span><span>▰ ︎◒ 100%</span></div>
           <header class="mobile-head"><h2>通知中心<small><span data-notify-action-count>2</span> 项需行动 · 打开不自动清零</small></h2><button class="icon-btn" data-notify-center-close type="button">×</button></header>
-          <div class="mobile-content" data-notify-center>
+            <div class="mobile-content" data-notify-center>
             <div class="notify-source-summary">轻动作留在通知中心；验收、接替、编制确认等重流程回到来源域。</div>
-            <article class="mobile-card mobile-notify-card" data-notify-card data-notify-active="true" data-notify-mobile-source="release"><div class="row"><span class="avatar">!</span><strong>0.6.0-test.19 待收单</strong><span class="tag action">验收</span></div><p>来源会话 · T-13 已回填 2/3 · 等最后一项检查</p><div class="identity-cluster"><span class="engine-badge claude">Claude</span><span class="source-badge">公司电脑</span></div><div class="notify-actions"><button class="primary-btn" type="button" data-notify-mobile-jump="release">去会话验收</button><button class="notify-light-action" type="button" data-notify-action="resolve">标记已读</button></div></article>
-            <article class="mobile-card mobile-notify-card" data-notify-card data-notify-active="true" data-notify-mobile-source="team-plan"><div class="row"><span class="avatar">!</span><strong>团队动作待确认</strong><span class="tag danger">需处理</span></div><p>来源团队 · worker-mobile 失联 · 选择接替并确认编制</p><div class="identity-cluster"><span class="engine-badge qwen">Qwen Code</span><span class="source-badge">公司电脑</span></div><div class="notify-actions"><button class="primary-btn" type="button" data-notify-mobile-jump="team-plan">去团队确认</button><button class="notify-light-action" type="button" data-notify-action="pause">暂停提醒</button></div></article>
-            <article class="mobile-card mobile-notify-card" data-notify-card data-notify-active="false"><div class="row"><span class="avatar">·</span><strong>worker-relay 滞留 25 分</strong><span class="tag">历史</span></div><p>来源会话 · 已通知 Leader，不计入需行动 badge</p><div class="notify-actions"><button class="notify-light-action" type="button" data-notify-action="ack">确认已知</button></div></article>
+            <div data-mobile-notification-list></div>
           </div>
           <div class="mobile-notify-detail" data-notify-source-detail hidden><button class="mobile-back" type="button" data-notify-detail-back>‹ 返回通知中心</button><h3 data-notify-detail-title>来源详情</h3><p data-notify-detail-copy>从通知进入的来源上下文。</p><div class="notify-source-summary">当前只定位来源；验收与团队写操作仍在原域完成。</div><button class="primary-btn" type="button" data-notify-detail-jump>回来源域处理</button></div>
         </div>
@@ -1086,17 +1063,36 @@
         home: { label: "家里 iMac", summary: "2 会话 · 2 行动", actions: 2, mobile: { actions: 1, running: 3, acceptance: 1 }, status: "reconnecting" }
       };
 
+      const sessionQueueData = { action: [{ id: "release", status: "waiting", title: "0.6.0-test.19 出包", tag: "待收单", tagClass: "action", summary: "验收单已回填 2/3 · 12 分钟前", engine: "Claude", engineClass: "claude", source: "公司电脑", selected: true }, { id: "mobile", status: "error", title: "worker-mobile 失联", tag: "接替", tagClass: "danger", summary: "Claude 额度已用尽 · 8 分钟前", engine: "Qwen Code", engineClass: "qwen", source: "家里 iMac" }, { id: "team-plan", status: "waiting", title: "团队编制确认", tag: "待确认", tagClass: "action", summary: "cc-deck M1 攻坚团 · Leader 已提交", engine: "Trae", engineClass: "trae", source: "公司电脑" }, { id: "ui", status: "done", title: "ui-review 走查", summary: "当前任务：检查 rail 方案 · 上下文 58%", engine: "Codex", engineClass: "codex", source: "公司电脑" }, { id: "board", status: "done", title: "relay 任务板", summary: "T-12/T-15 并行 · 4/9", engine: "ZCode", engineClass: "zcode", source: "家里 iMac" }], all: [{ id: "release", status: "waiting", title: "0.6.0-test.19 出包", tag: "待收单", tagClass: "action", summary: "验收单 · 1 小时前", engine: "Claude", engineClass: "claude", source: "公司电脑", selected: true }, { id: "ui", status: "done", title: "ui-review 走查", summary: "刚刚活跃 · 58%", engine: "Codex", engineClass: "codex", source: "公司电脑" }, { id: "board", status: "done", title: "relay 任务板", summary: "运行中 · 4/9", engine: "ZCode", engineClass: "zcode", source: "家里 iMac" }, { id: "mobile", status: "error", title: "worker-mobile 失联", summary: "需接替 · 8 分钟前", engine: "Qwen Code", engineClass: "qwen", source: "家里 iMac" }, { id: "android", status: "waiting", title: "android 构建", summary: "等待安卓产物 · 3 小时前", engine: "CodeBuddy", engineClass: "codebuddy", source: "公司电脑" }] };
+
+      const mobileSessionData = [{ id: "release", title: "0.6.0-test.19 出包", tag: "待收单", tagClass: "action", summary: "验收单已回填 2/3 · 点击确认最后一项", engine: "Claude", engineClass: "claude", source: "公司电脑", avatar: "status-ok", icon: "check", primary: true }, { id: "mobile", title: "worker-mobile 失联", tag: "接替", tagClass: "danger", summary: "Claude 额度已用尽 · 验收槽不回落同厂商", engine: "Qwen Code", engineClass: "qwen", source: "家里 iMac", avatar: "status-alert", icon: "alert" }, { id: "team-plan", title: "团队编制确认", tag: "待确认", tagClass: "action", summary: "Leader 已提交编制方案 · 3 开发 + 独立验收", engine: "Trae", engineClass: "trae", source: "公司电脑", avatar: "status-action", icon: "users" }];
+      const notificationData = [{ key: "release", active: true, domain: "session", session: "release", mobileSource: "release", leftTitle: "0.6.0-test.19 就绪待收单", leftSummary: "T-13 已回填 2/3 · 12 分钟前", desktopKicker: "来源会话 · 0.6.0-test.19 出包", time: "12 分钟前", desktopTitle: "验收回填 2/3，等待最后一项确认收单", desktopCopy: "谁：worker-web · 什么事：T-13 独立出包已完成 · 等什么：公司网下检查更新并确认收单", mobileTitle: "0.6.0-test.19 待收单", mobileCopy: "来源会话 · T-13 已回填 2/3 · 等最后一项检查", engine: "Claude", engineClass: "claude", source: "公司电脑", tag: "验收", tagClass: "action", action: "resolve", actionLabel: "标记已读", jumpLabel: "去会话验收" }, { key: "team-plan", active: true, domain: "team", teamAction: "takeover", mobileSource: "team-plan", leftTitle: "团队动作待确认", leftSummary: "失联接替与编制确认 · 8 分钟前", desktopKicker: "来源团队 · cc-deck M1 攻坚团", time: "8 分钟前", desktopTitle: "worker-mobile 失联，编制方案也等待确认", desktopCopy: "谁：Leader / worker-mobile · 什么事：额度链走尽 · 等什么：选择接替引擎并确认 3 开发 + 独立验收编制", mobileTitle: "团队动作待确认", mobileCopy: "来源团队 · worker-mobile 失联 · 选择接替并确认编制", engine: "Qwen Code", engineClass: "qwen", source: "公司电脑", tag: "需处理", tagClass: "danger", action: "pause", actionLabel: "暂停提醒", jumpLabel: "去团队接替", confirmLabel: "去团队确认" }, { key: "relay", active: false, leftTitle: "worker-relay 滞留 25 分", leftSummary: "已通知 Leader · 30 分钟前", desktopKicker: "来源会话 · relay 任务板", time: "30 分钟前", desktopTitle: "worker-relay 滞留 25 分", desktopCopy: "已通知 Leader；这是提醒类动态，不计入需行动 badge。", mobileTitle: "worker-relay 滞留 25 分", mobileCopy: "来源会话 · 已通知 Leader，不计入需行动 badge", engine: "Codex", engineClass: "codex", source: "公司电脑", tag: "历史", tagClass: "", action: "ack", actionLabel: "确认已知" }];
+      const teamMembers = [{ name: "Leader", role: "glm-5.3 · 调度", engine: "Trae", engineClass: "trae", source: "公司电脑", avatar: "leader", glyph: "✦" }, { name: "worker-web", role: "开发 · 运行中", engine: "Claude", engineClass: "claude", source: "公司电脑", avatar: "worker", glyph: "W" }, { name: "worker-mobile", role: "失联 · 待接替", engine: "Qwen Code", engineClass: "qwen", source: "家里 iMac", avatar: "worker", glyph: "M" }, { name: "验收槽", role: "独立厂商 · 待验收", engine: "ZCode", engineClass: "zcode", source: "公司电脑", avatar: "qa", glyph: "QA" }];
+      const teamTasks = [{ lane: "待认领", count: "2", title: "T-21 导入码迁移", copy: "等待 worker-web", engine: "CodeBuddy", engineClass: "codebuddy", source: "公司电脑", tag: "待派单", tagClass: "" }, { lane: "进行中", count: "4", title: "T-12 relay 事件流", copy: "worker-relay · 48%", engine: "Codex", engineClass: "codex", source: "公司电脑", tag: "运行中", tagClass: "info" }, { lane: "进行中", count: "4", title: "T-15 手机列表", copy: "worker-mobile · 72%", engine: "Qwen Code", engineClass: "qwen", source: "家里 iMac", tag: "运行中", tagClass: "info" }, { lane: "待验收", count: "2", title: "T-13 更新通道隔离", copy: "独立出包已完成", assignee: "worker-web · 执行者", assigneeClass: "worker", assigneeGlyph: "W", assigneeEngine: "Claude", assigneeEngineClass: "claude", assigneeSource: "公司电脑", tag: "验收单", tagClass: "action" }, { lane: "待装机", count: "2", title: "T-14 验收槽", copy: "回填 2/3", assignee: "Leader · 编排", assigneeClass: "leader", assigneeGlyph: "✦", assigneeEngine: "Trae", assigneeEngineClass: "trae", assigneeSource: "公司电脑", tag: "待收单", tagClass: "action" }, { lane: "完成", count: "1", title: "T-10 版本同步", copy: "已合并 main", engine: "ZCode", engineClass: "zcode", source: "家里 iMac", tag: "完成", tagClass: "done" }];
+      const identityMarkup = (item, includeEngine = true) => `<div class="identity-cluster">${includeEngine ? `<span class="engine-badge ${item.engineClass}">${item.engine}</span>` : ""}<span class="source-badge">${item.source}</span></div>`;
+      const renderSessionCard = (item, variant) => variant === "mobile" ? `<div class="mobile-card${item.primary ? " primary" : ""}" data-open-detail="${item.id}"><div class="row"><span class="avatar ${item.avatar}"><svg class="icon-status" aria-hidden="true"><use href="#icon-${item.icon}"></use></svg></span><strong>${item.title}</strong>${item.tag ? `<span class="tag ${item.tagClass}">${item.tag}</span>` : ""}</div><p>${item.summary}</p>${identityMarkup(item)}</div>` : `<div class="queue-card${item.selected ? " selected" : ""}" data-session-card="${item.id}"><div class="row"><i class="status-dot ${item.status}"></i><strong>${item.title}</strong>${item.tag ? `<span class="tag ${item.tagClass}">${item.tag}</span>` : ""}</div><p>${item.summary}</p>${identityMarkup(item)}</div>`;
+      const renderSessionQueue = (mode) => { const groups = mode === "action" ? [["需你处理 · 3", sessionQueueData.action], ["运行中 · 2", sessionQueueData.action.slice(3)]] : [[`<svg class="icon-inline" aria-hidden="true"><use href="#icon-folder"></use></svg> cc-deck · 4 个会话`, sessionQueueData.all.slice(0, 4)], [`<svg class="icon-inline" aria-hidden="true"><use href="#icon-folder"></use></svg> windclaw-qclaw · 1 个会话`, sessionQueueData.all.slice(4)]]; return groups.map(([label, items]) => `<div class="queue-group">${label}</div>${items.map((item) => renderSessionCard(item, "desktop")).join("")}`).join(""); };
+      const notificationIdentity = (item) => identityMarkup(item);
+
+      const renderNotificationQueue = () => `<div class="queue-head"><h2>通知 <span class="tag action" data-notify-action-count>2</span></h2><button class="icon-btn">×</button></div><div class="queue-group">需你行动 · <span data-notify-action-count>2</span></div>${notificationData.slice(0, 2).map((item, index) => `<div class="notice${index === 0 ? " selected" : ""}" data-notify-card data-notify-active="true" data-notify-jump data-notify-domain="${item.domain}"${item.session ? ` data-notify-session="${item.session}"` : ""}${item.teamAction ? ` data-notify-team-action="${item.teamAction}"` : ""} title="整卡可点 · ${item.jumpLabel}"><span class="notice-icon">!</span><div><strong>${item.leftTitle}</strong><p>${item.leftSummary}</p>${notificationIdentity(item)}<span class="tag ${item.tagClass}">${item.tag}</span></div></div>`).join("")}<div class="queue-group">注意 · 历史</div><div class="notice" data-notify-card data-notify-active="false"><span class="notice-icon">·</span><div><strong>${notificationData[2].leftTitle}</strong><p>${notificationData[2].leftSummary}</p>${notificationIdentity(notificationData[2])}</div></div>`;
+      const renderNotificationSourceCards = () => notificationData.map((item) => `<article class="notify-source-card" data-notify-card data-notify-active="${item.active}"><div class="notify-source-head"><span class="notice-icon">${item.active ? "!" : "·"}</span><div><span class="notify-source-kicker">${item.desktopKicker}</span><span class="notify-source-time">${item.time}</span><h3>${item.desktopTitle}</h3><p>${item.desktopCopy}</p>${notificationIdentity(item)}</div></div><div class="notify-actions">${item.active ? `<button class="primary-btn" type="button" data-notify-jump data-notify-domain="${item.domain}"${item.session ? ` data-notify-session="${item.session}"` : ""}${item.teamAction ? ` data-notify-team-action="${item.teamAction}"` : ""}>${item.jumpLabel}</button>${item.confirmLabel ? `<button class="secondary-btn" type="button" data-notify-jump data-notify-domain="team" data-notify-team-action="confirm">${item.confirmLabel}</button>` : ""}` : ""}<button class="notify-light-action" type="button" data-notify-action="${item.action}">${item.actionLabel}</button>${item.active ? `<span class="notify-state" data-notify-status>需行动</span>` : `<span class="notify-state" data-notify-status>历史动态</span>`}</div></article>`).join("");
+      const renderMobileNotificationCards = () => notificationData.map((item) => `<article class="mobile-card mobile-notify-card" data-notify-card data-notify-active="${item.active}"${item.mobileSource ? ` data-notify-mobile-source="${item.mobileSource}"` : ""}><div class="row"><span class="avatar">${item.active ? "!" : "·"}</span><strong>${item.mobileTitle}</strong><span class="tag ${item.tagClass}">${item.tag || "历史"}</span></div><p>${item.mobileCopy}</p>${notificationIdentity(item)}<div class="notify-actions">${item.active ? `<button class="primary-btn" type="button" data-notify-mobile-jump="${item.mobileSource}">${item.key === "team-plan" ? "去团队确认" : item.jumpLabel}</button>` : ""}<button class="notify-light-action" type="button" data-notify-action="${item.action}">${item.actionLabel}</button></div></article>`).join("");
+
+      const renderTeamMember = (item, large = false) => `<div class="${large ? "team-member-large" : "member-card"}"><span class="avatar ${item.avatar}">${item.glyph}<i class="avatar-engine-dot ${item.engineClass}"></i></span><div><strong>${item.name}${item.name === "Leader" ? ' <span class="role-label leader-label">Leader</span>' : ""}</strong><p>${item.role}</p>${large ? `<span class="engine-badge ${item.engineClass}">${item.engine}</span>` : identityMarkup(item)}</div></div>`;
+      const renderTeamTask = (task, mobile = false) => mobile ? `<div class="mobile-task"><b>${task.title}</b>${task.copy ? `<br><span class="muted">${task.copy}</span>` : ""}${task.engine ? identityMarkup(task) : ""}${task.tag ? `<br><span class="tag ${task.tagClass}">${task.tag}</span>` : ""}</div>` : `<div class="task-card"><strong>${task.title}</strong><p>${task.copy}</p>${task.assignee ? `<div class="task-assignee"><span class="avatar ${task.assigneeClass}">${task.assigneeGlyph}<i class="avatar-engine-dot ${task.assigneeEngineClass}"></i></span><span><b>${task.assignee}</b> ${task.assigneeEngine} · ${task.assigneeSource}</span></div>` : identityMarkup(task)}${task.tag ? `<span class="tag ${task.tagClass}">${task.tag}</span>` : ""}</div>`;
+      const renderTeamBoard = (mobile = false) => [...new Map(teamTasks.map((task) => [task.lane, task.count])).entries()].map(([lane, count]) => `<div class="${mobile ? "mobile-lane" : "lane"}"><div class="${mobile ? "mobile-lane-head" : "lane-head"}"><span>${lane}</span><span>${count}</span></div>${teamTasks.filter((task) => task.lane === lane).map((task) => renderTeamTask(task, mobile)).join("")}</div>`).join("");
+
+      const renderSessionViews = () => { document.querySelectorAll("[data-session-queue]").forEach((view) => { view.innerHTML = renderSessionQueue(view.dataset.sessionQueue); }); document.querySelector("[data-mobile-session-list]")?.replaceChildren(...mobileSessionData.map((item) => { const template = document.createElement("template"); template.innerHTML = renderSessionCard(item, "mobile"); return template.content.firstElementChild; })); };
+      const renderNotificationViews = () => { document.querySelector("[data-notification-queue]")?.insertAdjacentHTML("beforeend", renderNotificationQueue()); document.querySelector("[data-notification-list]")?.insertAdjacentHTML("beforeend", renderNotificationSourceCards()); document.querySelector("[data-mobile-notification-list]")?.insertAdjacentHTML("beforeend", renderMobileNotificationCards()); };
+
+      const renderSourceMenus = () => document.querySelectorAll("[data-source-menu]").forEach((menu) => { const head = menu.closest(".windowbar") ? "当前数据源" : "数据源与视图"; menu.innerHTML = `<div class="source-menu-head">${head}</div>${Object.entries(sourceStates).map(([key, source]) => `<button class="source-option${key === activeSource ? " active" : ""}" type="button" data-source-choice="${key}"><span class="source-dot status-${source.status}"></span><strong>${source.label}</strong><small>${source.summary}</small></button>`).join("")}<div class="source-mode"><button class="${sourceMode === "single" ? "active" : ""}" type="button" data-source-mode="single">单源</button><button class="${sourceMode === "aggregate" ? "active" : ""}" type="button" data-source-mode="aggregate">多源聚合</button></div><a class="source-manage" href="#d-settings" data-source-settings>⚙ 管理与配对新源 →</a>`; });
       function syncSourceSwitcherLabels() {
         const source = sourceStates[activeSource];
         const label = sourceMode === "aggregate" ? `${source.label} · 多源聚合` : source.label;
         document.querySelectorAll("[data-current-source]").forEach((node) => { node.textContent = label; });
       }
 
-      const connectionStates = [
-        { key: "connected", label: "已连接", className: "status-connected" },
-        { key: "reconnecting", label: "重连中", className: "status-reconnecting" },
-        { key: "disconnected", label: "已断开", className: "status-disconnected" }
-      ];
+      const connectionStates = [{ key: "connected", label: "已连接", className: "status-connected" }, { key: "reconnecting", label: "重连中", className: "status-reconnecting" }, { key: "disconnected", label: "已断开", className: "status-disconnected" }];
 
       function connectionStateFor(key) {
         return connectionStates.find((item) => item.key === key) || connectionStates[0];
@@ -1109,16 +1105,7 @@
         return "connected";
       }
 
-      function openMobileSettingsConnection() {
-        openMobileRoot("settings");
-        const screen = document.querySelector("#m-settings");
-        const row = [...(screen?.querySelectorAll(".mobile-settings .settings-row") || [])].find((item) => item.querySelector("strong")?.textContent.trim() === "连接与设备");
-        if (row) {
-          row.scrollIntoView({ block: "nearest" });
-          row.click();
-        }
-        showToast("已打开设置 · 连接与设备");
-      }
+      function openMobileSettingsConnection() { openMobileRoot("settings"); const screen = document.querySelector("#m-settings"); const row = [...(screen?.querySelectorAll(".mobile-settings .settings-row") || [])].find((item) => item.querySelector("strong")?.textContent.trim() === "连接与设备"); if (row) { row.scrollIntoView({ block: "nearest" }); row.click(); } showToast("已打开设置 · 连接与设备"); }
 
       function openConnectionSettings() {
         if (stages.mobile?.classList.contains("active")) openMobileSettingsConnection();
@@ -1137,31 +1124,6 @@
           capsule.className = "connection-capsule";
           capsule.innerHTML = `<button class="connection-capsule-trigger" type="button" data-connection-trigger aria-expanded="false"><span class="connection-summary-dot status-connected" data-connection-summary-dot></span><span class="connection-capsule-label" data-connection-summary>公司电脑 · 已连接</span><span class="connection-capsule-chevron">⌄</span></button><div class="connection-popover" data-connection-popover><div class="connection-popover-head">连接状态</div><div data-connection-source-list></div><a class="connection-manage" href="#d-settings" data-connection-settings>⚙ 管理连接…</a></div>`;
           sourceSwitcher.after(capsule);
-        });
-        document.querySelectorAll("[data-connection-trigger]").forEach((button) => {
-          if (button.dataset.bound) return;
-          button.dataset.bound = "1";
-          button.addEventListener("click", (event) => {
-            event.stopPropagation();
-            const popover = button.parentElement.querySelector("[data-connection-popover]");
-            document.querySelectorAll("[data-connection-popover]").forEach((item) => {
-              if (item === popover) return;
-              item.classList.remove("open");
-              item.closest(".connection-capsule")?.querySelector("[data-connection-trigger]")?.setAttribute("aria-expanded", "false");
-            });
-            const open = popover.classList.toggle("open");
-            button.setAttribute("aria-expanded", String(open));
-            if (open) popover.querySelector("button:not([disabled]), a[href]")?.focus();
-          });
-        });
-        document.querySelectorAll("[data-connection-settings]").forEach((link) => {
-          if (link.dataset.bound) return;
-          link.dataset.bound = "1";
-          link.addEventListener("click", (event) => {
-            event.preventDefault();
-            document.querySelectorAll("[data-connection-popover]").forEach((popover) => popover.classList.remove("open"));
-            openConnectionSettings();
-          });
         });
         renderConnectionCapsules();
       }
@@ -1193,14 +1155,6 @@
             const detail = source.status === "connected" ? "已连接 · 42 ms" : `${sourceState.label} · 等待响应`;
             return `<div class="connection-source-row"><span class="source-dot ${sourceState.className}"></span><strong>${source.label}</strong><small>${detail}</small>${action}</div>`;
           }).join("");
-          list.querySelectorAll("[data-connection-reconnect]").forEach((button) => button.addEventListener("click", (event) => {
-            event.stopPropagation();
-            const key = button.dataset.connectionReconnect;
-            if (!sourceStates[key]) return;
-            sourceStates[key].status = "connected";
-            setSource(activeSource, false);
-            showToast(`${sourceStates[key].label} 已发起重连`);
-          }));
         });
       }
 
@@ -1260,9 +1214,7 @@
 
       function wireCardDensityControls(root = document) {
         root.querySelectorAll("[data-card-density-option]").forEach((button) => {
-          if (button.dataset.cardDensityBound) return;
-          button.dataset.cardDensityBound = "1";
-          button.addEventListener("click", () => applyCardDensity(button.dataset.cardDensityOption, true));
+          button.setAttribute("aria-pressed", String(button.dataset.cardDensityOption === document.body.dataset.cardDensity));
         });
       }
 
@@ -1306,7 +1258,7 @@
         document.querySelectorAll("#d-session .queue-view").forEach((view) => {
           const button = view.querySelector("[data-source-filter-cta]");
           if (!button) return;
-          const hiddenCount = [...view.querySelectorAll(":scope > .queue-card")].filter((card) => card.hidden).length;
+          const hiddenCount = [...view.querySelectorAll(".queue-card")].filter((card) => card.hidden).length;
           updateSourceFilterEntrance(button, hiddenCount);
         });
         const mobileButton = document.querySelector("#m-inbox [data-source-filter-cta]");
@@ -1332,7 +1284,7 @@
           const button = document.createElement("button");
           button.type = "button";
           button.textContent = actionLabel;
-          button.addEventListener("click", action);
+          button.dataset.demoAction = actionLabel;
           state.append(button);
         }
         return state;
@@ -1453,22 +1405,6 @@
         if (activeDemo === "error") applyErrorDemo();
       }
 
-      function wireDemoActions() {
-        document.addEventListener("click", (event) => {
-          if (event.target.closest("[data-source-filter-cta]")) {
-            setSourceMode("aggregate", true);
-            return;
-          }
-          if (event.target.closest("[data-demo-reconnect]")) {
-            if (activeDemo === "error") exitDemoError();
-            return;
-          }
-          if (event.target.closest("[data-demo-settings]")) {
-            openConnectionSettings();
-          }
-        });
-      }
-
       function setSource(source, announce = false) {
         const next = sourceStates[source] ? source : "office";
         activeSource = next;
@@ -1484,6 +1420,7 @@
           button.classList.remove("source-company", "source-home");
           button.classList.add(next === "office" ? "source-company" : "source-home");
         });
+        renderSourceMenus();
         setConnectionState(state.status);
         renderConnectionCapsules();
         notifyActionCount = sourceMode === "aggregate" ? Object.values(sourceStates).reduce((total, item) => total + item.actions, 0) : state.actions;
@@ -1505,6 +1442,7 @@
           const summary = button.querySelector("small");
           if (source && summary) summary.textContent = source.summary;
         });
+        renderSourceMenus();
         renderConnectionCapsules();
         notifyActionCount = sourceMode === "aggregate" ? Object.values(sourceStates).reduce((total, item) => total + item.actions, 0) : sourceStates[activeSource].actions;
         syncSourceVisibility();
@@ -1684,6 +1622,7 @@
           const actionBadge = [...head.querySelectorAll(".tag.action")].find((node) => node.textContent.includes("2"));
           if (actionBadge) {
             actionBadge.className = "icon-btn mobile-notify";
+            actionBadge.dataset.mobileNotify = "true";
             actionBadge.innerHTML = `${bell}<span class="notify-count" data-notify-badge>2</span>`;
             actionBadge.title = "通知 · 2 个需行动项";
             actionBadge.setAttribute("aria-label", "通知 · 2 个需行动项");
@@ -1697,7 +1636,6 @@
             head.insertBefore(button, head.lastElementChild);
           }
         });
-        document.querySelectorAll(".mobile-notify").forEach((button) => button.addEventListener("click", openMobileNotifyCenter));
         const settingIcons = { "连接与设备": "link", "模型服务": "grid", "团队身份模板": "users", "扩展": "grid", 关于: "info" };
         document.querySelectorAll("#m-settings .setting-icon").forEach((icon) => {
           const name = icon.parentElement?.querySelector("strong")?.textContent.trim();
@@ -1969,6 +1907,10 @@
         const tablist = screen?.querySelector(".mobile-detail-tabs");
         const panes = [...(screen?.querySelectorAll("[data-team-pane]") || [])];
         if (!tablist || !panes.length || tablist.dataset.tabsReady) return;
+        const board = screen.querySelector('[data-team-pane="board"]');
+        const members = screen.querySelector('[data-team-pane="members"] .member-list');
+        if (board) board.innerHTML = `<div class="mobile-board">${renderTeamBoard(true)}</div>`;
+        if (members) members.innerHTML = teamMembers.map((item) => renderTeamMember(item)).join("");
         tablist.dataset.tabsReady = "1";
         wireSegmentTabs([...tablist.querySelectorAll("button")], panes);
       }
@@ -1977,8 +1919,9 @@
         const section = document.querySelector("#d-team");
         const body = section?.querySelector(".workspace-body");
         if (!body || body.dataset.tabsReady) return;
-        const board = body.innerHTML;
-        body.innerHTML = `<div class="workspace-pane active">${board}</div><div class="workspace-pane"><div class="team-chat"><div class="bubble"><div class="bubble-author"><span class="avatar leader">✦<i class="avatar-engine-dot trae"></i></span><strong>Leader</strong><span class="role-label leader-label">Leader</span></div>编制方案已提交：3 开发 + 独立验收 + 1 调研。</div><div class="bubble"><div class="bubble-author"><span class="avatar worker">W<i class="avatar-engine-dot claude"></i></span><strong>worker-web</strong></div>T-13 更新通道隔离已完成，等待验收单。</div><div class="bubble"><div class="bubble-author"><span class="avatar leader">✦<i class="avatar-engine-dot trae"></i></span><strong>Leader</strong></div>请 worker-mobile 先停留，验收槽改由独立厂商接替。</div><div class="bubble me"><div class="bubble-author"><span class="avatar architect">我</span><strong>我</strong></div>收到，先确认编制再收单。</div></div><div class="team-composer-row"><div class="composer" data-composer="team"><button class="composer-clip" type="button" title="附件" aria-label="附件"><svg class="icon-inline" aria-hidden="true"><use href="#icon-clip"></use></svg></button><input class="composer-input" type="text" placeholder="给团队发消息…" aria-label="给团队发消息"></div><button class="primary-btn" type="button" data-composer-send>发送</button></div></div><div class="workspace-pane"><div class="team-members-grid"><div class="team-member-large"><span class="avatar leader">✦<i class="avatar-engine-dot trae"></i></span><div><strong>Leader <span class="role-label leader-label">Leader</span></strong><p>glm-5.3 · 调度 · 在线</p><span class="engine-badge trae">Trae</span></div></div><div class="team-member-large"><span class="avatar worker">W<i class="avatar-engine-dot claude"></i></span><div><strong>worker-web</strong><p>开发 · 运行中</p><span class="engine-badge claude">Claude</span></div></div><div class="team-member-large"><span class="avatar worker">M<i class="avatar-engine-dot qwen"></i></span><div><strong>worker-mobile</strong><p>失联 · 待接替</p><span class="engine-badge qwen">Qwen Code</span></div></div><div class="team-member-large"><span class="avatar qa">QA<i class="avatar-engine-dot zcode"></i></span><div><strong>验收槽</strong><p>独立厂商 · 待验收</p><span class="engine-badge zcode">ZCode</span></div></div></div></div><div class="workspace-pane"><div class="team-activity"><div class="activity-row"><time>10:42</time><i></i><span>T-13 更新通道隔离进入待验收</span></div><div class="activity-row"><time>10:15</time><i></i><span>worker-relay 派单完成</span></div><div class="activity-row"><time>09:58</time><i></i><span>worker-mobile 失联告警</span></div><div class="activity-row"><time>昨天</time><i></i><span>Leader 提交编制方案</span></div></div></div>`;
+        const board = `<div class="board">${renderTeamBoard()}</div>`;
+        const members = teamMembers.map((item) => renderTeamMember(item, true)).join("");
+        body.innerHTML = `<div class="workspace-pane active">${board}</div><div class="workspace-pane"><div class="team-chat"><div class="bubble"><div class="bubble-author"><span class="avatar leader">✦<i class="avatar-engine-dot trae"></i></span><strong>Leader</strong><span class="role-label leader-label">调度</span></div>编制方案已提交：3 开发 + 独立验收 + 1 调研。</div><div class="bubble"><div class="bubble-author"><span class="avatar worker">W<i class="avatar-engine-dot claude"></i></span><strong>worker-web</strong></div>T-13 更新通道隔离已完成，等待验收单。</div><div class="bubble"><div class="bubble-author"><span class="avatar leader">✦<i class="avatar-engine-dot trae"></i></span><strong>Leader</strong></div>请 worker-mobile 先停留，验收槽改由独立厂商接替。</div><div class="bubble me"><div class="bubble-author"><span class="avatar architect">我</span><strong>我</strong></div>收到，先确认编制再收单。</div></div><div class="team-composer-row"><div class="composer" data-composer="team"><button class="composer-clip" type="button" title="附件" aria-label="附件"><svg class="icon-inline" aria-hidden="true"><use href="#icon-clip"></use></svg></button><input class="composer-input" type="text" placeholder="给团队发消息…" aria-label="给团队发消息"></div><button class="primary-btn" type="button" data-composer-send>发送</button></div></div><div class="workspace-pane"><div class="team-members-grid">${members}</div></div><div class="workspace-pane"><div class="team-activity"><div class="activity-row"><time>10:42</time><i></i><span>T-13 更新通道隔离进入待验收</span></div><div class="activity-row"><time>10:15</time><i></i><span>worker-relay 派单完成</span></div><div class="activity-row"><time>09:58</time><i></i><span>worker-mobile 失联告警</span></div><div class="activity-row"><time>昨天</time><i></i><span>Leader 提交编制方案</span></div></div></div>`;
         body.children[1].classList.add("team-conversation-pane");
         body.dataset.tabsReady = "1";
         wireSegmentTabs([...section.querySelectorAll(".segment-bar button")], [body.children[1], body.children[0], body.children[2], body.children[3]], 1);
@@ -2007,51 +1950,30 @@
         });
       }
 
-      function wireComposer(composer, sendButton) {
-        const kind = composer.dataset.composer;
-        const input = composer.querySelector(".composer-input");
-        const clip = composer.querySelector(".composer-clip");
+      function sendComposerMessage(sendButton) {
+        const composer = sendButton?.closest("[data-composer]") || sendButton?.parentElement?.querySelector("[data-composer]");
+        const input = composer?.querySelector(".composer-input");
+        const kind = composer?.dataset.composer;
         const target = kind === "session"
           ? document.querySelector("#d-session .conversation-pane")
           : kind === "mobile"
             ? document.querySelector("#m-detail .mobile-content > .workspace-pane")
             : document.querySelector("#d-team .team-chat");
-        if (!input || !clip || !sendButton || !target) return;
+        const text = input?.value.trim();
+        if (!composer || !input || !target || !text) return;
+        const bubble = document.createElement("div");
+        bubble.className = "bubble me";
+        bubble.textContent = text;
+        target.append(bubble);
+        input.value = "";
+        const scrollContainer = kind === "team" ? target : target.closest(".workspace-body, .mobile-content");
+        if (scrollContainer) scrollContainer.scrollTop = scrollContainer.scrollHeight;
         syncComposerActionState(composer, sendButton);
-        const send = () => {
-          const text = input.value.trim();
-          if (!text) {
-            return;
-          }
-          const bubble = document.createElement("div");
-          bubble.className = "bubble me";
-          bubble.textContent = text;
-          target.append(bubble);
-          input.value = "";
-          const scrollContainer = kind === "team" ? target : target.closest(".workspace-body, .mobile-content");
-          if (scrollContainer) scrollContainer.scrollTop = scrollContainer.scrollHeight;
-          syncComposerActionState(composer, sendButton);
-          showToast(`${kind === "team" ? "团队消息" : "会话消息"}已发送 · 会话回执等待中（原型演示）`);
-          input.focus();
-        };
-        sendButton.addEventListener("click", send);
-        input.addEventListener("input", () => syncComposerActionState(composer, sendButton));
-        input.addEventListener("keydown", (event) => {
-          if (event.key !== "Enter") return;
-          event.preventDefault();
-          send();
-        });
-        clip.addEventListener("click", () => {
-          showToast("附件选择 · 原型演示占位");
-          input.focus();
-        });
+        showToast(`${kind === "team" ? "团队消息" : "会话消息"}已发送 · 会话回执等待中（原型演示）`);
+        input.focus();
       }
 
-      function wireComposers() {
-        document.querySelectorAll("[data-composer]").forEach((composer) => {
-          wireComposer(composer, composer.parentElement?.querySelector("[data-composer-send]"));
-        });
-      }
+      function wireComposers() { document.addEventListener("click", (event) => { const sendButton = event.target.closest("[data-composer-send]"); if (sendButton) { sendComposerMessage(sendButton); return; } const clip = event.target.closest(".composer-clip"); if (clip) { showToast("附件选择 · 原型演示占位"); clip.closest("[data-composer]")?.querySelector(".composer-input")?.focus(); } }); document.addEventListener("input", (event) => { const input = event.target.closest("[data-composer] .composer-input"); if (input) syncComposerActionState(input.closest("[data-composer]"), input.closest("[data-composer]")?.parentElement?.querySelector("[data-composer-send]")); }); document.addEventListener("keydown", (event) => { if (event.key !== "Enter" || !event.target.closest("[data-composer] .composer-input")) return; event.preventDefault(); sendComposerMessage(event.target.closest("[data-composer]")?.parentElement?.querySelector("[data-composer-send]")); }); syncComposerActionStates(); }
 
       function setupProjectTabs() {
         const section = document.querySelector("#d-project");
@@ -2091,10 +2013,10 @@
           if (subtitle) subtitle.textContent = key === "connections" ? "relay · 云桥 · 已配设备 · 异常项单独处理" : "配置项按列表行呈现 · 修改后即时生效";
           section.querySelector(".segment-bar").style.display = key === "connections" ? "flex" : "none";
         }
-        cards.forEach((card, index) => card.addEventListener("click", () => activateSettings(index)));
+        cards.forEach((card, index) => { card.dataset.settingsIndex = index; });
+        section._activateSettings = activateSettings;
         const connectionPanes = [...body.querySelectorAll('[data-settings-panel="connections"] > .settings-connection-tabs')];
         wireSegmentTabs([...section.querySelectorAll(".segment-bar button")], connectionPanes);
-        body.querySelectorAll("[data-setting-toggle]").forEach((toggle) => toggle.addEventListener("click", () => { toggle.classList.toggle("active"); toggle.textContent = toggle.classList.contains("active") ? "开" : "关"; }));
       }
 
       function setupMobileSettingsContent() {
@@ -2108,14 +2030,12 @@
         detail.hidden = true;
         content.append(detail);
         const rows = [...list.querySelectorAll(".settings-row")];
-        const render = (title, html) => { list.hidden = true; content.querySelector(".primary-btn")?.setAttribute("hidden", "true"); detail.hidden = false; detail.innerHTML = `<button class="mobile-back settings-detail-back" type="button">‹ 设置</button><h3>${title}</h3>${html}`; detail.querySelector(".settings-detail-back").addEventListener("click", () => { detail.hidden = true; list.hidden = false; content.querySelector(".primary-btn")?.removeAttribute("hidden"); }); };
-        rows.forEach((row) => row.addEventListener("click", () => {
-          const name = row.querySelector("strong")?.textContent.trim();
+        const render = (title, html) => { list.hidden = true; content.querySelector(".primary-btn")?.setAttribute("hidden", "true"); detail.hidden = false; detail.innerHTML = `<button class="mobile-back settings-detail-back" data-settings-detail-back type="button">‹ 设置</button><h3>${title}</h3>${html}`; wireCardDensityControls(detail); };
+        content._renderSettingsDetail = (name) => {
           if (!name || name === "主题") return;
-          const html = name === "连接与设备" ? '<div class="mobile-lane"><div class="mobile-lane-head"><span>公司电脑</span><span class="tag done">在线</span></div><div class="mobile-task">端口 8787 · 最近心跳刚刚</div></div><div class="mobile-lane"><div class="mobile-lane-head"><span>家里 iMac</span><span class="tag action">重连中</span></div><div class="mobile-task">事件流等待恢复 · 可在源切换器切换</div></div>' : name === "模型服务" ? '<div class="mobile-task">Claude Code · 默认 claude-sonnet · 已接</div><div class="mobile-task">Codex · gpt-5-codex · 已接</div><div class="mobile-task">Trae / Qwen Code / CodeBuddy / ZCode · 待装</div>' : name === "通用与快捷键" ? '<div class="density-detail"><p>会话卡片信息密度，默认使用标准档。</p><div class="density-control" role="group" aria-label="卡片密度"><button type="button" data-card-density-option="compact">紧凑</button><button type="button" data-card-density-option="standard">标准</button><button type="button" data-card-density-option="relaxed">宽松</button></div></div><div class="mobile-task">⌘K 搜索 · ⌘N 新建会话</div><div class="mobile-task">通知声音与桌面通知 · 已开启</div>' : name === "团队身份模板" ? '<div class="mobile-task">Leader · Trae · 头像自动生成，可覆盖</div><div class="mobile-task">架构师 / 前端 worker / 验收槽 · 角色默认模板</div>' : name === "扩展" ? '<div class="mobile-task">验收 · 启用</div><div class="mobile-task">登记 · 启用</div><div class="mobile-task">产物 · 启用</div>' : '<div class="mobile-task">⌘K 搜索 · ⌘N 新建会话</div><div class="mobile-task">通知声音与桌面通知 · 已开启</div>'; render(name, html); wireCardDensityControls(detail);
-        }));
-        const about = rows.find((row) => row.querySelector("strong")?.textContent.trim() === "关于");
-        about?.addEventListener("click", () => render("关于", '<div class="readonly-banner">cc-deck v0.6.0-test · test 通道<br>Command Bridge 原型 · 零外部资源<br>设计基线：SPEC 004</div>'));
+          const html = name === "关于" ? '<div class="readonly-banner">cc-deck v0.6.0-test · test 通道<br>Command Bridge 原型 · 零外部资源<br>设计基线：SPEC 004</div>' : name === "连接与设备" ? '<div class="mobile-lane"><div class="mobile-lane-head"><span>公司电脑</span><span class="tag done">在线</span></div><div class="mobile-task">端口 8787 · 最近心跳刚刚</div></div><div class="mobile-lane"><div class="mobile-lane-head"><span>家里 iMac</span><span class="tag action">重连中</span></div><div class="mobile-task">事件流等待恢复 · 可在源切换器切换</div></div>' : name === "模型服务" ? '<div class="mobile-task">Claude Code · 默认 claude-sonnet · 已接</div><div class="mobile-task">Codex · gpt-5-codex · 已接</div><div class="mobile-task">Trae / Qwen Code / CodeBuddy / ZCode · 待装</div>' : name === "通用与快捷键" ? '<div class="density-detail"><p>会话卡片信息密度，默认使用标准档。</p><div class="density-control" role="group" aria-label="卡片密度"><button type="button" data-card-density-option="compact">紧凑</button><button type="button" data-card-density-option="standard">标准</button><button type="button" data-card-density-option="relaxed">宽松</button></div></div><div class="mobile-task">⌘K 搜索 · ⌘N 新建会话</div><div class="mobile-task">通知声音与桌面通知 · 已开启</div>' : name === "团队身份模板" ? '<div class="mobile-task">Leader · Trae · 头像自动生成，可覆盖</div><div class="mobile-task">架构师 / 前端 worker / 验收槽 · 角色默认模板</div>' : name === "扩展" ? '<div class="mobile-task">验收 · 启用</div><div class="mobile-task">登记 · 启用</div><div class="mobile-task">产物 · 启用</div>' : '<div class="mobile-task">⌘K 搜索 · ⌘N 新建会话</div><div class="mobile-task">通知声音与桌面通知 · 已开启</div>';
+          render(name, html);
+        };
         content.dataset.settingsReady = "1";
       }
 
@@ -2152,18 +2072,8 @@
           const button = document.createElement("button");
           button.className = "inspector-toggle";
           button.type = "button";
+          button.dataset.inspectorToggle = "true";
           inspector.prepend(button);
-          button.addEventListener("click", () => {
-            const narrow = window.matchMedia("(max-width: 1279px)").matches;
-            const collapsed = screen.classList.contains("inspector-collapsed");
-            if (narrow && collapsed) {
-              showToast("窗口过窄，暂时无法展开检查器");
-              return;
-            }
-            const nextCollapsed = !collapsed;
-            screen.dataset.inspectorManual = nextCollapsed ? "collapsed" : "expanded";
-            setInspectorCollapsed(screen, nextCollapsed);
-          });
         });
         applyInspectorBreakpoint();
         window.addEventListener("resize", applyInspectorBreakpoint);
@@ -2470,71 +2380,163 @@
         document.querySelector(`#m-${mobileReturn}`).classList.add("active");
       }
 
-      modeButtons.forEach((button) => button.addEventListener("click", () => setMode(button.dataset.mode)));
-      railButtons.forEach((button) => button.addEventListener("click", () => setDesktopDomain(button.dataset.domain)));
-      document.querySelectorAll("[data-queue-mode]").forEach((button) => button.addEventListener("click", () => setQueueMode(button.dataset.queueMode)));
-      document.querySelectorAll("[data-session-card]").forEach((card) => card.addEventListener("click", () => selectSession(card.dataset.sessionCard)));
-      document.addEventListener("click", (event) => {
-        const button = event.target.closest("[data-allow]");
-        if (!button) return;
-        const card = button.closest("[data-wait-card]");
-        if (!card) return;
-        card.classList.add("allowed");
-        card.querySelector(".wait-title").textContent = "已允许一次 · 会话继续执行";
-        card.querySelector(".wait-copy").textContent = "Bash 写入已获本次授权；后续高风险动作仍会再次询问。";
-        button.textContent = "已允许 ✓";
-        button.disabled = true;
-        syncComposerActionStates();
-        showToast("已允许一次，当前会话继续执行");
-      });
-      document.querySelectorAll("[data-mobile-root]").forEach((button) => {
-        if (button.closest(".mobile-nav")) button.addEventListener("click", () => openMobileRoot(button.dataset.mobileRoot));
-      });
-      document.querySelectorAll("[data-open-detail]").forEach((card) => card.addEventListener("click", () => openMobileDetail(card.dataset.openDetail)));
-      document.querySelector("[data-mobile-back]").addEventListener("click", closeMobileDetail);
-      document.querySelectorAll("[data-mobile-list]").forEach((button) => button.addEventListener("click", () => {
-        document.querySelectorAll("[data-mobile-list]").forEach((item) => item.classList.toggle("active", item === button));
-        showToast(button.dataset.mobileList === "all" ? "已切换到全部会话 · 按项目浏览" : "已切换到待处理收件箱");
-      }));
-      document.querySelectorAll("[data-team-tab]").forEach((button) => button.addEventListener("click", () => {
-        document.querySelectorAll("[data-team-tab]").forEach((item) => item.classList.toggle("active", item === button));
-        document.querySelectorAll("[data-team-pane]").forEach((pane) => pane.style.display = pane.dataset.teamPane === button.dataset.teamTab ? "block" : "none");
-      }));
-      document.querySelectorAll("[data-source-trigger]").forEach((button) => button.addEventListener("click", (event) => {
-        event.stopPropagation();
-        const menu = button.parentElement.querySelector("[data-source-menu]");
-        document.querySelectorAll("[data-source-menu]").forEach((item) => {
-          if (item === menu) return;
-          item.classList.remove("open");
-          item.closest(".source-switcher")?.querySelector("[data-source-trigger]")?.setAttribute("aria-expanded", "false");
+      function wireGlobalInteractions() {
+        document.addEventListener("click", (event) => {
+          const target = event.target;
+          if (target.closest("[data-source-filter-cta]")) { setSourceMode("aggregate", true); return; }
+          if (target.closest("[data-demo-reconnect]")) { if (activeDemo === "error") exitDemoError(); return; }
+          if (target.closest("[data-demo-settings]")) { openConnectionSettings(); return; }
+          const demoAction = target.closest("[data-demo-action]");
+          if (demoAction) {
+            if (demoAction.dataset.demoAction === "查看全部会话") setQueueMode("all");
+            else showToast(`${demoAction.dataset.demoAction} · 原型演示占位`);
+            return;
+          }
+          const modeButton = target.closest(".mode-btn[data-mode]");
+          if (modeButton) { setMode(modeButton.dataset.mode); return; }
+          const railButton = target.closest(".rail-btn[data-domain]");
+          if (railButton) { setDesktopDomain(railButton.dataset.domain); return; }
+          const queueMode = target.closest("[data-queue-mode]");
+          if (queueMode) { setQueueMode(queueMode.dataset.queueMode); return; }
+          const sessionCard = target.closest("[data-session-card]");
+          if (sessionCard) { selectSession(sessionCard.dataset.sessionCard); return; }
+          const allowButton = target.closest("[data-allow]");
+          if (allowButton) {
+            const card = allowButton.closest("[data-wait-card]");
+            if (!card) return;
+            card.classList.add("allowed");
+            card.querySelector(".wait-title").textContent = "已允许一次 · 会话继续执行";
+            card.querySelector(".wait-copy").textContent = "Bash 写入已获本次授权；后续高风险动作仍会再次询问。";
+            allowButton.textContent = "已允许 ✓";
+            allowButton.disabled = true;
+            syncComposerActionStates();
+            showToast("已允许一次，当前会话继续执行");
+            return;
+          }
+          const mobileRoot = target.closest(".mobile-nav [data-mobile-root]");
+          if (mobileRoot) { openMobileRoot(mobileRoot.dataset.mobileRoot); return; }
+          const openDetail = target.closest("[data-open-detail]");
+          if (openDetail) { openMobileDetail(openDetail.dataset.openDetail); return; }
+          if (target.closest("[data-mobile-back]")) { closeMobileDetail(); return; }
+          const mobileList = target.closest("[data-mobile-list]");
+          if (mobileList) {
+            document.querySelectorAll("[data-mobile-list]").forEach((item) => item.classList.toggle("active", item === mobileList));
+            showToast(mobileList.dataset.mobileList === "all" ? "已切换到全部会话 · 按项目浏览" : "已切换到待处理收件箱");
+            return;
+          }
+          const teamTab = target.closest("[data-team-tab]");
+          if (teamTab) {
+            document.querySelectorAll("[data-team-tab]").forEach((item) => item.classList.toggle("active", item === teamTab));
+            document.querySelectorAll("[data-team-pane]").forEach((pane) => { pane.style.display = pane.dataset.teamPane === teamTab.dataset.teamTab ? "block" : "none"; });
+            return;
+          }
+          const settingsCard = target.closest("#d-settings [data-settings-index]");
+          if (settingsCard) {
+            settingsCard.closest("#d-settings")?._activateSettings?.(Number(settingsCard.dataset.settingsIndex));
+            return;
+          }
+          if (target.closest("#m-settings [data-settings-detail-back]")) {
+            const content = target.closest("#m-settings .mobile-content");
+            const list = content?.querySelector(".mobile-settings");
+            const detail = content?.querySelector(".mobile-settings-detail");
+            if (content && list && detail) { detail.hidden = true; list.hidden = false; content.querySelector(".primary-btn")?.removeAttribute("hidden"); }
+            return;
+          }
+          const mobileSettingsRow = target.closest("#m-settings .mobile-settings .settings-row");
+          if (mobileSettingsRow && !mobileSettingsRow.matches("[data-theme-toggle]")) {
+            mobileSettingsRow.closest(".mobile-content")?._renderSettingsDetail?.(mobileSettingsRow.querySelector("strong")?.textContent.trim());
+            return;
+          }
+          const sourceTrigger = target.closest("[data-source-trigger]");
+          if (sourceTrigger) {
+            const menu = sourceTrigger.parentElement.querySelector("[data-source-menu]");
+            document.querySelectorAll("[data-source-menu]").forEach((item) => {
+              if (item === menu) return;
+              item.classList.remove("open");
+              item.closest(".source-switcher")?.querySelector("[data-source-trigger]")?.setAttribute("aria-expanded", "false");
+            });
+            const open = menu.classList.toggle("open");
+            sourceTrigger.setAttribute("aria-expanded", String(open));
+            if (open) menu.querySelector("button:not([disabled]), a[href]")?.focus();
+            return;
+          }
+          const sourceChoice = target.closest("[data-source-choice]");
+          if (sourceChoice) { setSource(sourceChoice.dataset.sourceChoice, true); return; }
+          const sourceModeButton = target.closest("button[data-source-mode]");
+          if (sourceModeButton) { setSourceMode(sourceModeButton.dataset.sourceMode, true); return; }
+          const sourceSettings = target.closest("[data-source-settings]");
+          if (sourceSettings) {
+            event.preventDefault();
+            document.querySelectorAll("[data-source-menu]").forEach((menu) => menu.classList.remove("open"));
+            openConnectionSettings();
+            return;
+          }
+          const connectionTrigger = target.closest("[data-connection-trigger]");
+          if (connectionTrigger) {
+            const popover = connectionTrigger.parentElement.querySelector("[data-connection-popover]");
+            document.querySelectorAll("[data-connection-popover]").forEach((item) => {
+              if (item === popover) return;
+              item.classList.remove("open");
+              item.closest(".connection-capsule")?.querySelector("[data-connection-trigger]")?.setAttribute("aria-expanded", "false");
+            });
+            const open = popover.classList.toggle("open");
+            connectionTrigger.setAttribute("aria-expanded", String(open));
+            if (open) popover.querySelector("button:not([disabled]), a[href]")?.focus();
+            return;
+          }
+          const connectionSettings = target.closest("[data-connection-settings]");
+          if (connectionSettings) { event.preventDefault(); openConnectionSettings(); return; }
+          const reconnect = target.closest("[data-connection-reconnect]");
+          if (reconnect) {
+            const key = reconnect.dataset.connectionReconnect;
+            if (!sourceStates[key]) return;
+            sourceStates[key].status = "connected";
+            setSource(activeSource, false);
+            showToast(`${sourceStates[key].label} 已发起重连`);
+            return;
+          }
+          const density = target.closest("[data-card-density-option]");
+          if (density) { applyCardDensity(density.dataset.cardDensityOption, true); return; }
+          const themeToggle = target.closest("[data-theme-toggle]");
+          if (themeToggle) { applyTheme(document.documentElement.dataset.theme === "light" ? "dark" : "light", true); return; }
+          const mobileNotify = target.closest(".mobile-notify");
+          if (mobileNotify) { openMobileNotifyCenter(); return; }
+          const settingToggle = target.closest("[data-setting-toggle]");
+          if (settingToggle) {
+            settingToggle.classList.toggle("active");
+            settingToggle.textContent = settingToggle.classList.contains("active") ? "开" : "关";
+            return;
+          }
+          const inspectorToggle = target.closest("[data-inspector-toggle]");
+          if (inspectorToggle) {
+            const screen = inspectorToggle.closest(".desktop-screen");
+            const narrow = window.matchMedia("(max-width: 1279px)").matches;
+            const collapsed = screen.classList.contains("inspector-collapsed");
+            if (narrow && collapsed) { showToast("窗口过窄，暂时无法展开检查器"); return; }
+            const nextCollapsed = !collapsed;
+            screen.dataset.inspectorManual = nextCollapsed ? "collapsed" : "expanded";
+            setInspectorCollapsed(screen, nextCollapsed);
+            return;
+          }
+          if (!target.closest(".source-switcher")) document.querySelectorAll(".source-menu.open").forEach((menu) => {
+            menu.classList.remove("open");
+            menu.closest(".source-switcher")?.querySelector("[data-source-trigger]")?.setAttribute("aria-expanded", "false");
+          });
+          if (!target.closest(".connection-capsule")) document.querySelectorAll(".connection-popover.open").forEach((popover) => {
+            popover.classList.remove("open");
+            popover.closest(".connection-capsule")?.querySelector("[data-connection-trigger]")?.setAttribute("aria-expanded", "false");
+          });
         });
-        const open = menu.classList.toggle("open");
-        button.setAttribute("aria-expanded", String(open));
-        if (open) menu.querySelector("button:not([disabled]), a[href]")?.focus();
-      }));
-      document.querySelectorAll("[data-source-choice]").forEach((button) => button.addEventListener("click", () => setSource(button.dataset.sourceChoice, true)));
-      document.querySelectorAll("button[data-source-mode]").forEach((button) => button.addEventListener("click", () => setSourceMode(button.dataset.sourceMode, true)));
-      wireDemoActions();
-      document.querySelectorAll("[data-source-settings]").forEach((link) => link.addEventListener("click", (event) => {
-        event.preventDefault();
-        document.querySelectorAll("[data-source-menu]").forEach((menu) => menu.classList.remove("open"));
-        openConnectionSettings();
-      }));
-      document.addEventListener("click", (event) => {
-        if (!event.target.closest(".source-switcher")) document.querySelectorAll("[data-source-menu]").forEach((menu) => {
-          menu.classList.remove("open");
-          menu.closest(".source-switcher")?.querySelector("[data-source-trigger]")?.setAttribute("aria-expanded", "false");
-        });
-        if (!event.target.closest(".connection-capsule")) document.querySelectorAll("[data-connection-popover]").forEach((popover) => {
-          popover.classList.remove("open");
-          popover.closest(".connection-capsule")?.querySelector("[data-connection-trigger]")?.setAttribute("aria-expanded", "false");
-        });
-      });
+      }
+      wireGlobalInteractions();
       wireOverlayEscape();
       let savedTheme = "dark";
       try { savedTheme = localStorage.getItem("cc-deck-theme") || "dark"; } catch (_) {}
       let savedCardDensity = "standard";
       try { savedCardDensity = localStorage.getItem("cc-deck-card-density") || "standard"; } catch (_) {}
+      renderSessionViews();
+      renderNotificationViews();
+      renderSourceMenus();
       normalizeTeamRedundancy();
       auditRedundancy();
       hydrateContextWaterlines();
@@ -2564,9 +2566,6 @@
       hydrateNotificationIcons();
       syncContextMeterBands();
       syncNotificationBadges();
-      themeToggles.forEach((toggle) => toggle.addEventListener("click", () => {
-        applyTheme(document.documentElement.dataset.theme === "light" ? "dark" : "light", true);
-      }));
       initInspectors();
       applyDemoState();
     })();
