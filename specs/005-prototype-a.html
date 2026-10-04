@@ -1141,9 +1141,14 @@
           button.addEventListener("click", (event) => {
             event.stopPropagation();
             const popover = button.parentElement.querySelector("[data-connection-popover]");
-            document.querySelectorAll("[data-connection-popover]").forEach((item) => { if (item !== popover) item.classList.remove("open"); });
-            popover.classList.toggle("open");
-            button.setAttribute("aria-expanded", String(popover.classList.contains("open")));
+            document.querySelectorAll("[data-connection-popover]").forEach((item) => {
+              if (item === popover) return;
+              item.classList.remove("open");
+              item.closest(".connection-capsule")?.querySelector("[data-connection-trigger]")?.setAttribute("aria-expanded", "false");
+            });
+            const open = popover.classList.toggle("open");
+            button.setAttribute("aria-expanded", String(open));
+            if (open) popover.querySelector("button:not([disabled]), a[href]")?.focus();
           });
         });
         document.querySelectorAll("[data-connection-settings]").forEach((link) => {
@@ -1806,10 +1811,55 @@
         document.querySelectorAll("#m-project .muted").forEach((copy) => { copy.textContent = copy.textContent.replace("→", "›"); });
       }
 
+      let tablistSequence = 0;
+
+      function wireSegmentTabSemantics(buttons, panes) {
+        const tablist = buttons[0]?.parentElement;
+        if (!tablist || tablist.dataset.ariaTabsReady) return;
+        tablist.dataset.ariaTabsReady = "1";
+        tablist.setAttribute("role", "tablist");
+        const prefix = `tablist-${++tablistSequence}`;
+        buttons.forEach((button, index) => {
+          const pane = panes[index];
+          const tabId = button.id || `${prefix}-tab-${index + 1}`;
+          const panelId = pane?.id || `panel-${prefix}-${index + 1}`;
+          button.id = tabId;
+          button.setAttribute("role", "tab");
+          button.setAttribute("aria-controls", panelId);
+          button.tabIndex = -1;
+          if (pane) {
+            pane.id = panelId;
+            pane.setAttribute("role", "tabpanel");
+            pane.setAttribute("aria-labelledby", tabId);
+          }
+        });
+        buttons.forEach((button, index) => {
+          button.addEventListener("keydown", (event) => {
+            if (event.key !== "ArrowRight" && event.key !== "ArrowLeft") return;
+            event.preventDefault();
+            const direction = event.key === "ArrowRight" ? 1 : -1;
+            const nextIndex = (index + direction + buttons.length) % buttons.length;
+            buttons[nextIndex].click();
+            buttons[nextIndex].focus();
+          });
+        });
+        function activateTab(index) {
+          buttons.forEach((button, buttonIndex) => {
+            const active = buttonIndex === index;
+            button.setAttribute("aria-selected", String(active));
+            button.tabIndex = active ? 0 : -1;
+          });
+          panes.forEach((pane, paneIndex) => pane?.setAttribute("aria-hidden", String(paneIndex !== index)));
+        }
+        return activateTab;
+      }
+
       function wireSegmentTabs(buttons, panes, activeIndex = 0) {
+        const activateAriaTab = wireSegmentTabSemantics(buttons, panes);
         const activate = (index) => {
           buttons.forEach((button, buttonIndex) => button.classList.toggle("active", buttonIndex === index));
           panes.forEach((pane, paneIndex) => pane.classList.toggle("active", paneIndex === index));
+          activateAriaTab?.(index);
         };
         buttons.forEach((button, index) => button.addEventListener("click", () => activate(index)));
         activate(activeIndex);
@@ -1909,6 +1959,15 @@
         compactUsagePane(body.children[3]);
         body.dataset.tabsReady = "1";
         wireSegmentTabs([...screen.querySelectorAll(".mobile-detail-tabs button")], [...body.children]);
+      }
+
+      function setupMobileTeamTabs() {
+        const screen = document.querySelector("#m-team");
+        const tablist = screen?.querySelector(".mobile-detail-tabs");
+        const panes = [...(screen?.querySelectorAll("[data-team-pane]") || [])];
+        if (!tablist || !panes.length || tablist.dataset.tabsReady) return;
+        tablist.dataset.tabsReady = "1";
+        wireSegmentTabs([...tablist.querySelectorAll("button")], panes);
       }
 
       function setupTeamTabs() {
@@ -2118,8 +2177,35 @@
       }
 
       function closeTransientOverlays() {
-        document.querySelectorAll(".artifact-sheet-backdrop.open, .connection-popover.open, .source-menu.open, .artifact-menu.open").forEach((overlay) => overlay.classList.remove("open"));
+        document.querySelectorAll(".artifact-sheet-backdrop.open, .connection-popover.open, .source-menu.open, .artifact-menu.open").forEach((overlay) => {
+          overlay.classList.remove("open");
+          overlay.closest(".source-switcher")?.querySelector("[data-source-trigger]")?.setAttribute("aria-expanded", "false");
+          overlay.closest(".connection-capsule")?.querySelector("[data-connection-trigger]")?.setAttribute("aria-expanded", "false");
+        });
         document.querySelectorAll("[data-source-trigger][aria-expanded='true'], [data-connection-trigger][aria-expanded='true']").forEach((trigger) => trigger.setAttribute("aria-expanded", "false"));
+      }
+
+      function wireOverlayEscape() {
+        document.addEventListener("keydown", (event) => {
+          if (event.key !== "Escape") return;
+          const menu = document.querySelector(".source-menu.open");
+          if (menu) {
+            const trigger = menu.closest(".source-switcher")?.querySelector("[data-source-trigger]");
+            menu.classList.remove("open");
+            trigger?.setAttribute("aria-expanded", "false");
+            trigger?.focus();
+            event.preventDefault();
+            return;
+          }
+          const popover = document.querySelector(".connection-popover.open");
+          if (popover) {
+            const trigger = popover.closest(".connection-capsule")?.querySelector("[data-connection-trigger]");
+            popover.classList.remove("open");
+            trigger?.setAttribute("aria-expanded", "false");
+            trigger?.focus();
+            event.preventDefault();
+          }
+        });
       }
 
       function hydrateContextWaterlines() {
@@ -2414,9 +2500,14 @@
       document.querySelectorAll("[data-source-trigger]").forEach((button) => button.addEventListener("click", (event) => {
         event.stopPropagation();
         const menu = button.parentElement.querySelector("[data-source-menu]");
-        document.querySelectorAll("[data-source-menu]").forEach((item) => { if (item !== menu) item.classList.remove("open"); });
-        menu.classList.toggle("open");
-        button.setAttribute("aria-expanded", String(menu.classList.contains("open")));
+        document.querySelectorAll("[data-source-menu]").forEach((item) => {
+          if (item === menu) return;
+          item.classList.remove("open");
+          item.closest(".source-switcher")?.querySelector("[data-source-trigger]")?.setAttribute("aria-expanded", "false");
+        });
+        const open = menu.classList.toggle("open");
+        button.setAttribute("aria-expanded", String(open));
+        if (open) menu.querySelector("button:not([disabled]), a[href]")?.focus();
       }));
       document.querySelectorAll("[data-source-choice]").forEach((button) => button.addEventListener("click", () => setSource(button.dataset.sourceChoice, true)));
       document.querySelectorAll("button[data-source-mode]").forEach((button) => button.addEventListener("click", () => setSourceMode(button.dataset.sourceMode, true)));
@@ -2427,9 +2518,16 @@
         openConnectionSettings();
       }));
       document.addEventListener("click", (event) => {
-        if (!event.target.closest(".source-switcher")) document.querySelectorAll("[data-source-menu]").forEach((menu) => menu.classList.remove("open"));
-        if (!event.target.closest(".connection-capsule")) document.querySelectorAll("[data-connection-popover]").forEach((popover) => popover.classList.remove("open"));
+        if (!event.target.closest(".source-switcher")) document.querySelectorAll("[data-source-menu]").forEach((menu) => {
+          menu.classList.remove("open");
+          menu.closest(".source-switcher")?.querySelector("[data-source-trigger]")?.setAttribute("aria-expanded", "false");
+        });
+        if (!event.target.closest(".connection-capsule")) document.querySelectorAll("[data-connection-popover]").forEach((popover) => {
+          popover.classList.remove("open");
+          popover.closest(".connection-capsule")?.querySelector("[data-connection-trigger]")?.setAttribute("aria-expanded", "false");
+        });
       });
+      wireOverlayEscape();
       let savedTheme = "dark";
       try { savedTheme = localStorage.getItem("cc-deck-theme") || "dark"; } catch (_) {}
       let savedCardDensity = "standard";
@@ -2439,6 +2537,7 @@
       hydrateContextWaterlines();
       setupSessionTabs();
       setupMobileDetailTabs();
+      setupMobileTeamTabs();
       setupTeamTabs();
       wireComposers();
       setupProjectTabs();
