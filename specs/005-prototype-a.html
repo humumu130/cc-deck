@@ -739,9 +739,8 @@
     .workspace-title-row .engine-badge, .workspace-title-row .source-badge { font-size: 10px; }
     .member-card, .task-card, .notice, .metric, .aggregate-card, .settings-row { box-shadow: var(--card-shadow); transition: border-color .18s ease, background .18s ease, transform .18s ease, box-shadow .18s ease; }
     .member-card:hover, .task-card:hover, .notice:hover, .metric:hover, .aggregate-card:hover, .settings-row:hover { border-color: var(--border-strong); transform: translateY(-1px); box-shadow: var(--shadow-hover); }
-    .member-card .identity-cluster, .task-card .identity-cluster, .notice .identity-cluster, .artifact-row .identity-cluster { margin-top: 6px; }
+    .member-card .identity-cluster, .task-card .identity-cluster, .notice .identity-cluster { margin-top: 6px; }
     .artifact-row > span:not(.identity-cluster) { margin-left: auto; color: var(--faint); font-family: var(--mono); }
-    .artifact-row .identity-cluster { margin-top: 0; margin-left: 8px; }
     .mobile-card .identity-cluster { margin: 6px 0 0 35px; }
     body[data-card-density="compact"] #d-session .queue-card p { margin-right: 138px; }
     body[data-card-density="compact"] #d-session .queue-card:not(:has(.identity-cluster)) p { margin-right: 0; }
@@ -798,6 +797,7 @@
     .mobile-settings-detail { padding-top: 3px; }
     .mobile-settings-detail h3 { margin: 12px 0; color: var(--text-strong); font-size: 15px; }
     .settings-detail-back { margin-bottom: 4px; }
+    body[data-source-mode="single"] #d-session .workspace-title-row .source-badge, body[data-source-mode="single"] #d-project .workspace-title-row .source-badge, body[data-source-mode="single"] #m-detail .mobile-head .source-badge { display: none; }
     html[data-source-mode="aggregate"] .identity-cluster { flex-direction: row-reverse; justify-content: flex-end; }
     ::-webkit-scrollbar { width: 9px; height: 9px; }
     ::-webkit-scrollbar-track { background: var(--scroll-track); }
@@ -897,7 +897,7 @@
               </div>
             </aside>
             <section class="workspace">
-              <header class="workspace-head"><div class="workspace-title-row"><i class="status-dot waiting" id="session-dot"></i><h2 id="session-title">0.6.0-test.19 出包</h2><span class="tag action" id="session-status">待收单</span><span class="identity-cluster" id="session-identity"><span class="engine-badge claude">Claude</span><span class="source-badge">公司电脑</span></span></div><div class="workspace-sub" id="session-sub">~/dev/cc-deck · claude · 最近活动 12 分钟前</div><div class="segment-bar"><button class="active">对话</button><button>任务 <span class="faint">6/9</span></button><button>输出物 <span class="faint">4</span></button><button>用量</button><button>⋯</button></div></header>
+              <header class="workspace-head"><div class="workspace-title-row"><i class="status-dot waiting" id="session-dot"></i><h2 id="session-title">0.6.0-test.19 出包</h2><span class="tag action" id="session-status">待收单</span><span class="identity-cluster" id="session-identity"><span class="engine-badge claude">Claude</span><span class="source-badge">公司电脑</span></span></div><div class="workspace-sub" id="session-sub">~/dev/cc-deck · 最近活动 12 分钟前</div><div class="segment-bar"><button class="active">对话</button><button>任务 <span class="faint">6/9</span></button><button>输出物 <span class="faint">4</span></button><button>用量</button><button>⋯</button></div></header>
               <div class="workspace-body" id="session-body">
                 <div class="timeline-note">今天 10:42 · 验收上下文</div>
                 <div class="bubble"><div class="bubble-author"><span class="avatar leader">✦<i class="avatar-engine-dot trae"></i></span><strong>Leader</strong><span class="role-label leader-label">Leader</span></div>独立出包已完成，四处版本号已同步。验收单还差 1 项确认收单。</div>
@@ -951,7 +951,7 @@
 
         <div class="mobile-screen" id="m-detail" data-mobile-detail="true">
           <div class="mobile-status"><span>9:41</span><span>▰ ︎◒ 100%</span></div>
-          <header class="mobile-head"><button class="mobile-back" data-mobile-back>‹</button><h2 id="mobile-detail-title">0.6.0-test.19 出包<small>~/dev/cc-deck · claude</small></h2><span class="identity-cluster" id="mobile-detail-identity"><span class="engine-badge claude">Claude</span><span class="source-badge">公司电脑</span></span><span class="tag action">待收单</span></header>
+          <header class="mobile-head"><button class="mobile-back" data-mobile-back>‹</button><h2 id="mobile-detail-title">0.6.0-test.19 出包<small>~/dev/cc-deck · 最近活动</small></h2><span class="identity-cluster" id="mobile-detail-identity"><span class="engine-badge claude">Claude</span><span class="source-badge">公司电脑</span></span><span class="tag action">待收单</span></header>
           <div class="mobile-detail-tabs"><button class="active">对话</button><button>任务</button><button>输出物</button><button>用量</button><button>⋯</button></div>
               <div class="mobile-content no-bottom"><div class="timeline-note">今天 10:42 · 来源：待处理收件箱</div><div class="bubble"><div class="bubble-author"><span class="avatar leader">✦<i class="avatar-engine-dot trae"></i></span><strong>Leader</strong><span class="role-label leader-label">Leader</span></div>独立出包已完成，验收单还差 1 项确认收单。</div><div class="bubble me">我先看更新通道隔离，再确认收单。</div><div class="wait-card" data-wait-card><strong class="wait-title">等待你的确认 · Bash 写入 docs/</strong><p class="wait-copy">将把验收证据写入 `docs/release-check.md`，会话才能继续。</p><div class="wait-actions"><button class="allow" data-allow>允许一次</button><button>拒绝并说明</button></div></div><div class="status-note">当前任务：回填验收证据 · 预计还需 2 分钟。</div><div class="artifact-row"><svg class="icon-inline" aria-hidden="true"><use href="#icon-clip"></use></svg> docs/release-check.md <span>刚刚</span></div><div class="artifact-row">▧ 0.6.0-test.19.apk <span>1h</span></div></div><div class="mobile-detail-composer"><div class="composer" data-composer="mobile"><button class="composer-clip" type="button" title="附件" aria-label="附件"><svg class="icon-inline" aria-hidden="true"><use href="#icon-clip"></use></svg></button><input class="composer-input" type="text" placeholder="给会话发消息…" aria-label="给会话发消息"></div><button class="primary-btn" type="button" data-composer-send>发送</button></div>
         </div>
@@ -1489,6 +1489,7 @@
       }
 
       function auditRedundancy() {
+        document.querySelectorAll("#d-session .inspector .identity-cluster, #d-project .aggregate-card .identity-cluster, #d-team .task-assignee .identity-cluster, #d-team .task-assignee .engine-badge, #d-team .task-assignee .source-badge").forEach((badge) => badge.remove());
         const projectHeaderAction = document.querySelector("#d-project .workspace-title-row > .tag.action");
         if (projectHeaderAction) projectHeaderAction.remove();
         const projectMobileSubtitle = document.querySelector("#m-project .mobile-head h2 small");
@@ -1975,12 +1976,12 @@
       function selectSession(id) {
         document.querySelectorAll("[data-session-card]").forEach((card) => card.classList.toggle("selected", card.dataset.sessionCard === id));
         const data = {
-          release: { title: "0.6.0-test.19 出包", sub: "~/dev/cc-deck · claude · 最近活动 12 分钟前", status: "待收单", dot: "waiting", copy: "当前任务：回填验收证据 · 预计还需 2 分钟。", engine: "Claude", engineClass: "claude", source: "公司电脑" },
-          mobile: { title: "worker-mobile 失联", sub: "~/dev/cc-deck · claude · 最后日志 25 分钟前", status: "需接替", dot: "error", copy: "当前建议：切换到独立验收厂商，保留原任务板与 git 记忆。", engine: "Qwen Code", engineClass: "qwen", source: "家里 iMac" },
+          release: { title: "0.6.0-test.19 出包", sub: "~/dev/cc-deck · 最近活动 12 分钟前", status: "待收单", dot: "waiting", copy: "当前任务：回填验收证据 · 预计还需 2 分钟。", engine: "Claude", engineClass: "claude", source: "公司电脑" },
+          mobile: { title: "worker-mobile 失联", sub: "~/dev/cc-deck · 最后日志 25 分钟前", status: "需接替", dot: "error", copy: "当前建议：切换到独立验收厂商，保留原任务板与 git 记忆。", engine: "Qwen Code", engineClass: "qwen", source: "家里 iMac" },
           "team-plan": { title: "团队编制确认", sub: "cc-deck M1 攻坚团 · Leader glm-5.3 · 6 成员", status: "待确认", dot: "waiting", copy: "Leader 已提交编制方案：3 开发 + 独立验收 + 1 调研。", engine: "Trae", engineClass: "trae", source: "公司电脑" },
-          ui: { title: "ui-review 走查", sub: "~/dev/cc-deck · claude · 刚刚活跃", status: "运行中", dot: "done", copy: "当前任务：检查 rail 方案的交互与来源返回。", engine: "Codex", engineClass: "codex", source: "公司电脑" },
+          ui: { title: "ui-review 走查", sub: "~/dev/cc-deck · 刚刚活跃", status: "运行中", dot: "done", copy: "当前任务：检查 rail 方案的交互与来源返回。", engine: "Codex", engineClass: "codex", source: "公司电脑" },
           board: { title: "relay 任务板", sub: "~/dev/cc-deck · glm-5.3 · 4/9 卡片进行中", status: "运行中", dot: "done", copy: "T-12/T-15 并行推进，下一检查点在 15 分钟后。", engine: "ZCode", engineClass: "zcode", source: "家里 iMac" },
-          android: { title: "android 构建", sub: "~/dev/windclaw · claude · 最近活动 3 小时前", status: "等产物", dot: "waiting", copy: "正在等待安卓产物上传，暂无需你处理的动作。", engine: "CodeBuddy", engineClass: "codebuddy", source: "公司电脑" }
+          android: { title: "android 构建", sub: "~/dev/windclaw · 最近活动 3 小时前", status: "等产物", dot: "waiting", copy: "正在等待安卓产物上传，暂无需你处理的动作。", engine: "CodeBuddy", engineClass: "codebuddy", source: "公司电脑" }
         }[id] || null;
         if (!data) return;
         document.querySelector("#session-title").textContent = data.title;
