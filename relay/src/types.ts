@@ -26,7 +26,13 @@ export interface Envelope<T extends string = string, P = unknown> {
 // engine 标记驱动 spawn 工厂分叉（session-manager newAgent）与 resume 锚语义
 // （claude=SDK session_id / codex=thread_id）。扩展第三引擎时在此扩枚举——
 // 接入纪律②：契约从「编排需要什么」出发，不从「某个 Agent 有什么」
-export type SessionEngine = "claude" | "codex";
+export type SessionEngine = "claude" | "codex" | "trae" | "qwen-code" | "codebuddy" | "zcode";
+
+export interface EngineSelection {
+  engine?: SessionEngine;
+  model?: string;
+  provider?: string;
+}
 
 export type SessionStatus =
   | "WORKING"   // 推导中/执行工具
@@ -148,6 +154,9 @@ export interface SessionState {
   // 行为逐字节不变）；"codex" = CodexAgentSession（codex exec 一回合一进程，
   // resume 锚 = codex thread_id）。随 SESSION_CREATED 首帧流经事件流，回放还原
   engine?: SessionEngine;
+  engine_model?: string;
+  engine_provider?: string;
+  engine_role?: string;
   // #26 M3 两层联动（§6.2 组挂起→成员会话全 parked）：成员会话随组挂起休眠时
   // 记来源组 id——进程已停、可点开可发消息（消息路径 resumeAgent 天然复活）；
   // 组复活清除。路由表记录不受影响（档案永存，复活后查表拉原班）
@@ -212,6 +221,7 @@ export interface SessionCreatedPayload {
   model: string;
   external?: boolean;
   engine?: SessionEngine;     // #27 非 claude 引擎随首帧下发（端上徽标数据源）
+  provider?: string;
 }
 
 export interface SessionUpdatedPayload {
@@ -592,9 +602,8 @@ export interface CreateCommand extends CommandBase {
   type: "COMMAND_CREATE";
   // autoMkdir（#208）：客户端创建表单「目录不存在时自动创建」开关，开=指定目录
   // 不存在时 relay 侧 mkdir -p；缺省/假 = 旧三级回落行为
-  // engine（#27）：缺省 = claude；"codex" = CodexAgentSession（relay 侧白名单
-  // 收口，未知值一律按 claude 处理）
-  payload: { cwd: string; prompt: string; permissionMode?: ManagedPermissionMode; autoMkdir?: boolean; engine?: SessionEngine };
+  // engine：缺省 = claude；未知引擎由 relay registry 明确拒绝。
+  payload: { cwd: string; prompt: string; permissionMode?: ManagedPermissionMode; autoMkdir?: boolean; engine?: SessionEngine; model?: string; provider?: string };
 }
 
 export interface MessageCommand extends CommandBase {

@@ -71,6 +71,7 @@ import type {
   DispatchDonePayload,
 } from "./types.js";
 import { CodexAgentSession } from "./agent-codex.js";
+import { createRegisteredEngine, isReinjectionEngine, isSessionEngine, providerProfileFor } from "./engine-registry.js";
 
 function isManagedMode(m: unknown): m is ManagedPermissionMode {
   // bypassPermissions 必须在内：① CLI init 回报 skip 会话时据此镜像记录 state（否则
@@ -545,10 +546,10 @@ export class SessionManager {
   // #49 测试缝：托管 AgentSession 工厂。生产恒为 null（直接 new AgentSession，
   // 行为与从前逐字节一致）；test-bridge/test-cloud 注入假 agent 验证置顶/按需恢复
   // 与休眠登记路径，免拉真 CLI 子进程
-  private agentFactory: ((cwd: string, model: string, cb: AgentCallbacks, initialPrompt: string | undefined, opts?: { resume?: string; permissionMode?: ManagedPermissionMode; images?: string[]; rules?: AllowRuleStore; configHome?: string; engine?: SessionEngine }) => AgentLike) | null = null;
+  private agentFactory: ((cwd: string, model: string, cb: AgentCallbacks, initialPrompt: string | undefined, opts?: { resume?: string; permissionMode?: ManagedPermissionMode; images?: string[]; rules?: AllowRuleStore; configHome?: string; engine?: SessionEngine; provider?: string; role?: string }) => AgentLike) | null = null;
 
   setAgentFactory(
-    fn: ((cwd: string, model: string, cb: AgentCallbacks, initialPrompt: string | undefined, opts?: { resume?: string; permissionMode?: ManagedPermissionMode; images?: string[]; rules?: AllowRuleStore; configHome?: string; engine?: SessionEngine }) => AgentLike) | null,
+    fn: ((cwd: string, model: string, cb: AgentCallbacks, initialPrompt: string | undefined, opts?: { resume?: string; permissionMode?: ManagedPermissionMode; images?: string[]; rules?: AllowRuleStore; configHome?: string; engine?: SessionEngine; provider?: string; role?: string }) => AgentLike) | null,
   ): void {
     this.agentFactory = fn;
   }
@@ -569,12 +570,25 @@ export class SessionManager {
     model: string,
     cb: AgentCallbacks,
     initialPrompt: string | undefined,
-    opts?: { resume?: string; permissionMode?: ManagedPermissionMode; images?: string[]; configHome?: string; engine?: SessionEngine },
+    opts?: { resume?: string; permissionMode?: ManagedPermissionMode; images?: string[]; configHome?: string; engine?: SessionEngine; provider?: string; role?: string },
   ): AgentLike {
     // #27 引擎分叉（V2 Agent 无关编排的工厂缝）：codex = CodexAgentSession
     //（一回合一进程，resume 锚 = codex thread_id；允许规则/雇员家是 Claude 概念，
     // 构造器签名兼容但忽略）。测试注入工厂时同样收 engine——fake factory 可按
     // 引擎分型。缺省 undefined = claude，行为与从前逐字节一致
+    if (opts?.engine && opts.engine !== "claude" && opts.engine !== "codex") {
+      const registered = createRegisteredEngine(opts.engine, {
+        cwd,
+        model,
+        provider: opts.provider,
+        cb,
+        initialPrompt,
+        contextPacket: opts.role ? `role=${opts.role}\nprovider=${opts.provider ?? "default"}` : undefined,
+        providerProfile: providerProfileFor(opts.engine, opts.provider),
+      });
+      if (registered) return registered;
+      throw new Error(`未注册引擎: ${opts.engine}`);
+    }
     if (opts?.engine === "codex") {
       return this.agentFactory
         ? this.agentFactory(cwd, model, cb, initialPrompt, { engine: "codex", resume: opts.resume, permissionMode: opts.permissionMode, images: opts.images })
@@ -1585,11 +1599,16 @@ export class SessionManager {
           // permissionMode: 客户端可选 bypassPermissions（新建时勾选"跳过权限确认"）
           const pm = cmd.payload.permissionMode === "bypassPermissions" ? "bypassPermissions" : undefined;
           // #208 autoMkdir：客户端创建表单「目录不存在时自动创建」开关（默认关＝旧回落行为）
-          // #27 引擎选择：payload.engine === "codex" 建 codex 会话；其余值（含
-          // 缺省）一律 claude——白名单式收口，未知引擎名不静默当 claude 以外的
-          // 东西处理（防客户端笔误凭空造引擎）
-          const engine = cmd.payload.engine === "codex" ? ("codex" as const) : undefined;
-          const session_id = this.create(cmd.payload.cwd, cmd.payload.prompt, pm, cmd.payload.autoMkdir === true, engine ? { engine } : undefined);
+          const requestedEngine = (cmd.payload as { engine?: unknown }).engine;
+          if (requestedEngine !== undefined && !isSessionEngine(requestedEngine)) {
+            return { command_id: cmd.command_id, ok: false, error: `未知引擎: ${String(requestedEngine)}` };
+          }
+          const engine = requestedEngine as SessionEngine | undefined;
+          const session_id = this.create(cmd.payload.cwd, cmd.payload.prompt, pm, cmd.payload.autoMkdir === true, {
+            ...(engine ? { engine } : {}),
+            ...(cmd.payload.model ? { model: cmd.payload.model } : {}),
+            ...(cmd.payload.provider ? { provider: cmd.payload.provider } : {}),
+          });
           return { command_id: cmd.command_id, ok: true, session_id };
         }
         case "COMMAND_MESSAGE": {
@@ -1669,8 +1688,8 @@ export class SessionManager {
           if (!s) return { command_id: cmd.command_id, ok: false, error: "会话不存在" };
           // #27 codex 拒收：模型接线在 ~/.codex/config.toml（relay 侧模型名是 Claude
           // 概念，注入 /model 只会被 codex 当普通文本跑一遍）
-          if (s.state.engine === "codex") {
-            return { command_id: cmd.command_id, ok: false, error: "Codex 会话的模型请在 relay 侧 ~/.codex/config.toml 配置，不支持运行时切换" };
+          if (s.state.engine) {
+            return { command_id: cmd.command_id, ok: false, error: `${s.state.engine} 会话不支持运行时切换模型，请新建会话时指定` };
           }
           if (s.state.external) {
             if (!this.bridge) return { command_id: cmd.command_id, ok: false, error: "外部会话通道未就绪" };
@@ -2160,7 +2179,7 @@ export class SessionManager {
     }
   }
 
-  private create(rawCwd: string, prompt: string, permissionMode?: ManagedPermissionMode, autoMkdir = false, opts?: { skipStickyCwd?: boolean; employee?: boolean; engine?: SessionEngine }): string {
+  private create(rawCwd: string, prompt: string, permissionMode?: ManagedPermissionMode, autoMkdir = false, opts?: { skipStickyCwd?: boolean; employee?: boolean; engine?: SessionEngine; model?: string; provider?: string; role?: string }): string {
     // #293 三级回落：指定/默认目录无效时回落用户主目录（说明进时间线），完全无可用目录才报错；
     // #208 autoMkdir：指定目录不存在时先 mkdir -p 建出来（失败仍走回落链）
     const { cwd, fallbackNote } = resolveCreateCwd(rawCwd, this.cfg.defaultCwd, autoMkdir);
@@ -2176,6 +2195,7 @@ export class SessionManager {
     }
     this.evictOldSessions();
 
+    const selectedModel = opts?.model?.trim() || this.cfg.model;
     const managed: ManagedSession = {
       agent: null,
       state: {
@@ -2184,7 +2204,7 @@ export class SessionManager {
         cwd,
         initial_prompt: prompt,
         title: deriveTitle(prompt),
-        model: this.cfg.model,
+        model: selectedModel,
         status: "WORKING",
         action_summary: "启动中",
         started_at: Date.now(),
@@ -2198,7 +2218,9 @@ export class SessionManager {
         // resume/读取仍按此值走（存量无损）；关态创建不落（=默认家）
         ...(opts?.employee && this.cfg.employeeConfigDir ? { employee_home: this.cfg.employeeConfigDir } : {}),
         // #27 引擎随卡落位：resume/看门狗/读取路径按它分叉；不落 = claude 存量口径
-        ...(opts?.engine === "codex" ? { engine: "codex" as const } : {}),
+        ...(opts?.engine ? { engine: opts.engine } : {}),
+        ...(opts?.provider ? { engine_provider: opts.provider } : {}),
+        ...(opts?.role ? { engine_role: opts.role } : {}),
       },
       // #21③ 首回合在途：见 ManagedSession.pendingInitial（onInit 待命化避让用）
       ...(prompt.trim() ? { pendingInitial: true } : {}),
@@ -2213,7 +2235,7 @@ export class SessionManager {
 
     const agent = this.newAgent(
       cwd,
-      this.cfg.model,
+      selectedModel,
       this.agentCallbacks(managed),
       // 空提示词 = parked 形态（#49）：会话建好等输入，不注入空消息
       prompt.trim() ? prompt : undefined,
@@ -2224,6 +2246,8 @@ export class SessionManager {
         ...(managed.state.employee ? { configHome: this.employeeHome(managed.state) } : {}),
         // #27 引擎透传（newAgent 工厂缝分叉）
         ...(opts?.engine ? { engine: opts.engine } : {}),
+        ...(opts?.provider ? { provider: opts.provider } : {}),
+        ...(opts?.role ? { role: opts.role } : {}),
       },
     );
 
@@ -2234,7 +2258,8 @@ export class SessionManager {
       cwd,
       initial_prompt: prompt,
       title: managed.state.title,
-      model: this.cfg.model,
+      model: selectedModel,
+      ...(managed.state.engine_provider ? { provider: managed.state.engine_provider } : {}),
       // #17 雇员标记随首帧进事件流：重启回放重建卡片后 resume/读取路径照常选家
       ...(managed.state.employee ? { employee: true } : {}),
       ...(managed.state.employee_home ? { employee_home: managed.state.employee_home } : {}),
@@ -2250,7 +2275,7 @@ export class SessionManager {
     }
     // 智能命名是 Claude CLI 一次性子会话（title-gen）：codex 会话不拉（P0 特性
     // 泄漏守卫——V2 纪律②，标题停在 deriveTitle(initial_prompt)）
-    if (managed.state.engine !== "codex") this.requestSmartTitle(agent.id, prompt);
+    if (!managed.state.engine) this.requestSmartTitle(agent.id, prompt);
     return agent.id;
   }
 
@@ -2534,6 +2559,31 @@ export class SessionManager {
     if (!sdkId) {
       throw new Error("会话已结束且无 SDK 会话记录，无法恢复（模型尚未完成初始化）");
     }
+    if (isReinjectionEngine(s.state.engine)) {
+      const old = s.agent;
+      s.streamGen++;
+      if (old && !old.ended) void old.stop().catch(() => {});
+      if (old?.childPid) void this.watchdogProcs.killTree(old.childPid).catch(() => {});
+      const cb = this.agentCallbacks(s);
+      const agent = this.newAgent(s.state.cwd, s.state.model, cb, firstMessage, {
+        engine: s.state.engine,
+        provider: s.state.engine_provider,
+        role: s.state.engine_role,
+        configHome: this.employeeHome(s.state),
+      });
+      s.agent = agent;
+      s.state.status = "WORKING";
+      s.state.action_summary = "重新注入上下文";
+      s.state.last_error = undefined;
+      s.state.done_reason = undefined;
+      s.state.turn_started_at = Date.now();
+      s.lastProgressAt = Date.now();
+      s.lastProgressKind = "";
+      s.wd.gaveUp = false;
+      s.unacked.push({ text: firstMessage, images, ts: Date.now() });
+      this.emitUpdated(s, true);
+      return;
+    }
     // #109 旧流收尾：放弃路径不再预杀树，接管时在此补刀（防孤儿进程/双流并发）。
     // 代际递增先于补刀——旧流的收尾回调过不了身份守卫，不会污染新流状态
     // #189 补刀不看 ended：ended 只代表 SDK 流关闭，进程可能还活着（流半开/早断，
@@ -2706,11 +2756,11 @@ export class SessionManager {
     if (!sdkId) {
       throw new Error("无 SDK 会话记录（首次回合未完成即中断），无法恢复");
     }
-    // #27 codex 短路恢复：codex 的「恢复」不需要 spawn（thread_id 常驻，下一条
+    // #27 codex / 无 resume 引擎短路恢复：下一条消息自然 fresh spawn，
     // 消息自然 exec resume 续跑）；照走通用路径 = parked 形态不 spawn、无 onInit，
     // 30s 看门狗必超时把好卡误报成「恢复失败」。直接合成成功终态（对照下方
     // onInit 成功路径体），零进程开销，下一条消息 sendMessage 直起回合
-    if (s.state.engine === "codex") {
+    if (s.state.engine === "codex" || isReinjectionEngine(s.state.engine)) {
       s.streamGen++;
       s.resumePending = undefined;
       s.wd.gaveUp = false;
@@ -3268,7 +3318,20 @@ export class SessionManager {
           if (!name || !anchor) return { ok: false, error: "name/anchor 必填" };
           if (!isAbsolute(anchor)) return { ok: false, error: "anchor 必须是绝对路径" };
           if (tier !== "轻立项" && tier !== "正经立项") return { ok: false, error: "tier 必须是 轻立项|正经立项" };
-          const r = createGroup({ name, anchor_dir: anchor, tier });
+          const roleDefaults: Record<string, { engine?: SessionEngine; model?: string; provider?: string }> = {};
+          if (p.role_defaults && typeof p.role_defaults === "object" && !Array.isArray(p.role_defaults)) {
+            for (const [role, raw] of Object.entries(p.role_defaults as Record<string, unknown>)) {
+              if (!raw || typeof raw !== "object" || Array.isArray(raw)) continue;
+              const item = raw as Record<string, unknown>;
+              if (item.engine !== undefined && !isSessionEngine(item.engine)) return { ok: false, error: `角色 ${role} 的引擎无效` };
+              roleDefaults[role] = {
+                ...(item.engine ? { engine: item.engine } : {}),
+                ...(typeof item.model === "string" && item.model.trim() ? { model: item.model.trim() } : {}),
+                ...(typeof item.provider === "string" && item.provider.trim() ? { provider: item.provider.trim() } : {}),
+              };
+            }
+          }
+          const r = createGroup({ name, anchor_dir: anchor, tier, ...(Object.keys(roleDefaults).length > 0 ? { role_defaults: roleDefaults } : {}) });
           if (!r.ok) return r;
           ensureProjectClaudeMd(anchor, name); // §3.4 防漂移种子（幂等：存在即认不覆盖）
           this.emitOrgState();
@@ -3398,12 +3461,17 @@ export class SessionManager {
           return { ok: true, data: { needsConfirm: true, confirm } };
         }
         case "dispatch": {
+          if (p.engine !== undefined && !isSessionEngine(p.engine)) return { ok: false, error: `未知引擎: ${String(p.engine)}` };
           return this.dispatchWorker({
             anchor: str("anchor"),
             prompt: typeof p.prompt === "string" ? p.prompt : "",
             gid: str("gid") || undefined,
             title: str("title") || undefined,
             skills: Array.isArray(p.skills) ? p.skills.filter((x): x is string => typeof x === "string") : undefined,
+            role: str("role") || undefined,
+            engine: p.engine as SessionEngine | undefined,
+            model: str("model") || undefined,
+            provider: str("provider") || undefined,
           });
         }
         case "board": {
@@ -3532,6 +3600,13 @@ export class SessionManager {
           const gid = str("gid");
           const sid = str("sid");
           const role = str("role") || "worker";
+          const engineValue = p.engine;
+          if (engineValue !== undefined && !isSessionEngine(engineValue)) return { ok: false, error: `未知引擎: ${String(engineValue)}` };
+          const selection = {
+            ...(engineValue ? { engine: engineValue } : {}),
+            ...(typeof p.model === "string" && p.model.trim() ? { model: p.model.trim() } : {}),
+            ...(typeof p.provider === "string" && p.provider.trim() ? { provider: p.provider.trim() } : {}),
+          };
           if (!gid || !sid) return { ok: false, error: "gid/sid 必填" };
           const g = findGroup(gid);
           if (!g) return { ok: false, error: `项目组不存在: ${gid}` };
@@ -3539,7 +3614,7 @@ export class SessionManager {
           const s = this.sessions.get(sid);
           if (!s || s.state.external) return { ok: false, error: "成员会话不在册（复拉需先有会话卡）" };
           if (this.isLeaderSession(sid)) return { ok: false, error: "Leader 不可入编（分诊者不接活）" };
-          const r = addMember(gid, sid, role);
+          const r = addMember(gid, sid, role, selection);
           if (!r.ok) return { ok: false, error: r.error ?? "入编失败" };
           this.emitOrgState();
           return { ok: true, data: { group: r.group } };
@@ -3661,7 +3736,7 @@ export class SessionManager {
   // 先落账再执行（§3.5 台账纪律）：dispatched 行 → 拉起 → running 行（同 id 收敛）；
   // 拉起失败即收口 failed 不留悬账；崩溃窗口的 dispatched 由断档补记兜底。
   // 权限 acceptEdits（§4 随手办纪律）、跳过 sticky 默认目录（worker cwd 锚项目不动全局）。
-  dispatchWorker(input: { anchor: string; prompt: string; gid?: string; title?: string; skills?: string[]; actor?: string }):
+  dispatchWorker(input: { anchor: string; prompt: string; gid?: string; title?: string; skills?: string[]; actor?: string; role?: string; engine?: SessionEngine; model?: string; provider?: string }):
     { ok: true; dispatch_id: string; session_id: string } | { ok: false; error: string } {
     if (!input.prompt.trim()) return { ok: false, error: "prompt 必填" };
     // 冲刺 F-03：anchor 校验移 gid 解析之后——gid 派单锚取自组（anchor 参数可空），
@@ -3669,13 +3744,22 @@ export class SessionManager {
     if (!input.gid && !input.anchor.startsWith("/")) return { ok: false, error: "anchor 必须是绝对路径" };
     let tier: DispatchTier = "随手办";
     let anchor = input.anchor;
+    let group = input.gid ? findGroup(input.gid) : null;
     if (input.gid) {
-      const g = findGroup(input.gid);
+      const g = group;
       if (!g) return { ok: false, error: `项目组不存在: ${input.gid}` };
       if (g.status !== "active") return { ok: false, error: `项目组 ${g.name} 为 ${g.status}，不可派单（挂起冻结/结项只读）` };
       tier = g.tier;
       anchor = g.anchor_dir;
     }
+    const role = input.role?.trim() || "worker";
+    if (input.engine !== undefined && !isSessionEngine(input.engine)) return { ok: false, error: `未知引擎: ${String(input.engine)}` };
+    const roleDefault = group?.role_defaults?.[role];
+    const planned = {
+      engine: input.engine ?? roleDefault?.engine,
+      model: input.model ?? roleDefault?.model,
+      provider: input.provider ?? roleDefault?.provider,
+    };
     // 冲刺 F-04（B8 幽灵锚）：派单 = 干活语义，锚目录不存在即拒——原路径恒
     // autoMkdir=true 静默 mkdir 跑单，Leader 打错锚 = 活跑在幽灵目录无人知
     //（#208 用户显式开关口径）。立项口保持安家语义（ensureProjectClaudeMd
@@ -3699,7 +3783,15 @@ export class SessionManager {
     // 上下文连续，适合长线运维）；忙/避开/只剩档案记录 → 新会话 + 锚点 CLAUDE.md
     // 档案注入（记忆亲和：干净冷启动）。排队不做——设计允许「排队或次优」，取次优：
     // 熟手全忙即顺延下一位或新会话，活不过夜
-    const veteran = input.gid ? this.pickVeteran(input.gid, input.skills) : null;
+    let veteran = input.gid ? this.pickVeteran(input.gid, input.skills) : null;
+    if (veteran && (planned.engine || planned.model || planned.provider)) {
+      const veteranState = this.require(veteran).state;
+      if ((planned.engine && veteranState.engine !== planned.engine) ||
+          (planned.model && veteranState.model !== planned.model) ||
+          (planned.provider && veteranState.engine_provider !== planned.provider)) {
+        veteran = null;
+      }
+    }
     // #40 M4 actor 标注：唯一调用方 /api/org dispatch = Leader CLI → 缺省 "leader"；
     // 台账三行（dispatched/running/终态）同 id 共享 actor，收口通知据此定向
     const actor = input.actor?.trim() || "leader";
@@ -3716,7 +3808,12 @@ export class SessionManager {
         const msg = e instanceof Error ? e.message : String(e);
         this.pushExternalLog(veteran, "system", `熟手复活失败，本单降级新会话: ${msg}`);
         try {
-          sessionId = this.create(anchor, wrapDispatchPrompt(tier, input.prompt), "bypassPermissions", true, { skipStickyCwd: true, employee: true });
+          sessionId = this.create(anchor, wrapDispatchPrompt(tier, input.prompt), "bypassPermissions", true, {
+            skipStickyCwd: true, employee: true, role,
+            ...(planned.engine ? { engine: planned.engine } : {}),
+            ...(planned.model ? { model: planned.model } : {}),
+            ...(planned.provider ? { provider: planned.provider } : {}),
+          });
         } catch (e2) {
           const msg2 = e2 instanceof Error ? e2.message : String(e2);
           appendDispatch({ ts: Date.now(), id: dispatchId, tier, target: "spawn-pending", status: "failed", receipt: truncate(`resume 失败(${msg}) 后新会话亦失败: ${msg2}`, 200), session_id: "", project_anchor: anchor, actor });
@@ -3725,7 +3822,12 @@ export class SessionManager {
       }
     } else {
       try {
-        sessionId = this.create(anchor, wrapDispatchPrompt(tier, input.prompt), "bypassPermissions", true, { skipStickyCwd: true, employee: true });
+        sessionId = this.create(anchor, wrapDispatchPrompt(tier, input.prompt), "bypassPermissions", true, {
+          skipStickyCwd: true, employee: true, role,
+          ...(planned.engine ? { engine: planned.engine } : {}),
+          ...(planned.model ? { model: planned.model } : {}),
+          ...(planned.provider ? { provider: planned.provider } : {}),
+        });
       } catch (e) {
         const msg = e instanceof Error ? e.message : String(e);
         appendDispatch({ ts: Date.now(), id: dispatchId, tier, target: "spawn-pending", status: "failed", receipt: truncate(msg, 200), session_id: "", project_anchor: anchor, actor });
@@ -3737,7 +3839,14 @@ export class SessionManager {
       s.state.project_gid = input.gid;
       s.state.dispatch_tier = tier;
     }
-    if (input.gid) addMember(input.gid, sessionId, "worker");
+    if (input.gid) {
+      const actual = this.sessions.get(sessionId)?.state;
+      addMember(input.gid, sessionId, role, {
+        ...(actual?.engine ? { engine: actual.engine } : {}),
+        ...(actual?.model ? { model: actual.model } : {}),
+        ...(actual?.engine_provider ? { provider: actual.engine_provider } : {}),
+      });
+    }
     appendDispatch({ ts: Date.now(), id: dispatchId, tier, target: sessionId, status: "running", session_id: sessionId, project_anchor: anchor, actor });
     this.pushOpenDispatch(sessionId, { id: dispatchId, tier, gid: input.gid, anchor, actor });
     if (input.gid) {

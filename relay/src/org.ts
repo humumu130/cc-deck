@@ -276,7 +276,7 @@ const ORG_CLI_TEMPLATE = `#!/bin/bash
 #   org rate <gid> <sid> <good|bad>                熟手评价（M3 路由表；bad=下次派单避开）
 #   org tag <gid> <sid> <tag>...                   技能标签（整组替换，空格分隔）
 #   org member-retire <gid> <sid> [reason]         成员级退休（编制除名；本组悬账按中断收口，路由档案保留）
-#   org member-add <gid> <sid> [role]              复拉入编（退休熟手再回编制，调度门重新放行）
+#   org member-add <gid> <sid> [role] [engine] [model] [provider]  复拉入编（可覆盖引擎选择）
 # 相对路径 anchor 以当前目录补全（deliver 同口径）。由 relay 物化与升级（ensureOrgCli）。
 set -euo pipefail
 # 冲刺 F-09：CCR_DATA_DIR/CCR_PORT/CCR_TOKEN 环境覆盖（沙盒/多实例隔离）。
@@ -407,11 +407,18 @@ PY
 )"
     ;;
   member-add)
-    [ $# -ge 2 ] || { echo "用法: org member-add <gid> <sid> [role]" >&2; exit 1; }
+    [ $# -ge 2 ] || { echo "用法: org member-add <gid> <sid> [role] [engine] [model] [provider]" >&2; exit 1; }
     role="\${3:-worker}"
-    body="$(python3 - "$1" "$2" "$role" <<'PY'
+    engine="\${4:-}"
+    model="\${5:-}"
+    provider="\${6:-}"
+    body="$(python3 - "$1" "$2" "$role" "$engine" "$model" "$provider" <<'PY'
 import json, sys
-print(json.dumps({"action":"member-add","gid":sys.argv[1],"sid":sys.argv[2],"role":sys.argv[3]},ensure_ascii=False))
+d={"action":"member-add","gid":sys.argv[1],"sid":sys.argv[2],"role":sys.argv[3]}
+if sys.argv[4]: d["engine"]=sys.argv[4]
+if sys.argv[5]: d["model"]=sys.argv[5]
+if sys.argv[6]: d["provider"]=sys.argv[6]
+print(json.dumps(d,ensure_ascii=False))
 PY
 )"
     ;;

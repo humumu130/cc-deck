@@ -16,6 +16,7 @@ import { join } from "node:path";
 import { orgDir, readDispatchLog } from "./org.js";
 // #26 M3 挂起自动化活度口径需要路由表（熟手最近收工）；routing 只 import org，无环
 import { routingFor } from "./routing.js";
+import type { SessionEngine } from "./types.js";
 
 // ---------- 类型 ----------
 
@@ -25,6 +26,15 @@ export type ProjectTier = "轻立项" | "正经立项";
 export interface ProjectHeadcountEntry {
   session_id: string;
   role: string;
+  engine?: SessionEngine;
+  model?: string;
+  provider?: string;
+}
+
+export interface ProjectRoleDefault {
+  engine?: SessionEngine;
+  model?: string;
+  provider?: string;
 }
 
 export interface ProjectGroup {
@@ -36,6 +46,7 @@ export interface ProjectGroup {
   tier: ProjectTier;
   /** 编制快照（M2 形态 = 1 worker + Leader 兼管；升降级只补不重建） */
   headcount: ProjectHeadcountEntry[];
+  role_defaults?: Record<string, ProjectRoleDefault>;
   /** 轻立项 = 任务板单卡简化态（渲染降级标记，非独立模型） */
   single_card: boolean;
   created_at: number;
@@ -207,7 +218,7 @@ export type CreateGroupResult =
  * 护栏：active 数量达上限拒绝（防止活跃台账失控）。锚点目录被在办/挂起组占用拒绝（一锚一组）。
  */
 export function createGroup(
-  input: { name: string; anchor_dir: string; tier: ProjectTier; headcount?: ProjectHeadcountEntry[] },
+  input: { name: string; anchor_dir: string; tier: ProjectTier; headcount?: ProjectHeadcountEntry[]; role_defaults?: Record<string, ProjectRoleDefault> },
   dir?: string,
 ): CreateGroupResult {
   const f = readProjectsFile(dir);
@@ -228,6 +239,7 @@ export function createGroup(
     status: needsConfirm ? "pending" : "active",
     tier: input.tier,
     headcount: input.headcount ?? [],
+    ...(input.role_defaults ? { role_defaults: input.role_defaults } : {}),
     single_card: input.tier === "轻立项",
     created_at: now,
     updated_at: now,
@@ -290,14 +302,30 @@ export function setGroupTier(id: string, to: ProjectTier, dir?: string): Transit
   return { ok: true, group: g };
 }
 
-export function addMember(gid: string, sessionId: string, role: string, dir?: string): TransitionResult {
-  const f = readProjectsFile(dir);
+export function addMember(
+  gid: string,
+  sessionId: string,
+  role: string,
+  selectionOrDir?: { engine?: SessionEngine; model?: string; provider?: string } | string,
+  dir?: string,
+): TransitionResult {
+  const selection = typeof selectionOrDir === "string" ? undefined : selectionOrDir;
+  const dataDir = typeof selectionOrDir === "string" ? selectionOrDir : dir;
+  const f = readProjectsFile(dataDir);
   const g = f.groups.find((x) => x.id === gid);
   if (!g) return { ok: false, error: `项目组不存在: ${gid}` };
-  if (!g.headcount.some((h) => h.session_id === sessionId)) {
-    g.headcount.push({ session_id: sessionId, role });
+  const current = g.headcount.find((h) => h.session_id === sessionId);
+  if (!current) {
+    g.headcount.push({ session_id: sessionId, role, ...selection });
     g.updated_at = Date.now();
-    if (!saveGroup(g, dir)) return { ok: false, error: "索引写入失败" };
+    if (!saveGroup(g, dataDir)) return { ok: false, error: "索引写入失败" };
+  } else if (selection || current.role !== role) {
+    current.role = role;
+    if (selection?.engine !== undefined) current.engine = selection.engine;
+    if (selection?.model !== undefined) current.model = selection.model;
+    if (selection?.provider !== undefined) current.provider = selection.provider;
+    g.updated_at = Date.now();
+    if (!saveGroup(g, dataDir)) return { ok: false, error: "索引写入失败" };
   }
   return { ok: true, group: g };
 }

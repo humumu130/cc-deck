@@ -124,7 +124,7 @@ export function reduceHistory(events: Envelope[]): Map<string, ReplayedSession> 
   for (const e of events) {
     let rs = out.get(e.session_id);
     if (!rs && e.type === "SESSION_CREATED") {
-      const p = e.payload as { cwd: string; initial_prompt: string; model: string; title?: string; external?: boolean; employee?: boolean; employee_home?: string; engine?: SessionEngine; started_at?: number };
+      const p = e.payload as { cwd: string; initial_prompt: string; model: string; title?: string; external?: boolean; employee?: boolean; employee_home?: string; engine?: SessionEngine; provider?: string; started_at?: number };
       rs = {
         state: {
           session_id: e.session_id,
@@ -150,7 +150,8 @@ export function reduceHistory(events: Envelope[]): Map<string, ReplayedSession> 
       if (typeof p.employee_home === "string" && p.employee_home) rs.state.employee_home = p.employee_home;
       // #27 引擎标记随首帧回放：不还原 = 重启后 codex 卡被当 claude 收养（resume
       // 走 AgentSession + thread_id，会话静默换引擎）——三角度审查 P1-2 实测缺口
-      if (p.engine === "codex") rs.state.engine = "codex";
+      if (p.engine) rs.state.engine = p.engine;
+      if (p.provider) rs.state.engine_provider = p.provider;
       out.set(e.session_id, rs);
       continue;
     }
