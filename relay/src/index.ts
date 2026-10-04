@@ -19,6 +19,8 @@ import { printQr } from "./qr.js";
 import { advertiseRelay } from "./mdns.js";
 import { ensureTodoToolsEnv, TODO_TOOLS_ENV_KEY } from "./todo-tools-env.js";
 import { orgDir } from "./org.js";
+import { listConfirms } from "./projects.js";
+import { DecisionNotificationWatcher } from "./decision-notify.js";
 
 // 内嵌模式（桌面壳 CCR_PARENT_PID 标记）：日志加时间戳——embedded-relay.log 此前
 // 全是裸行，云桥翻动/断连这类时序问题无从对表排障（2026-09-18 电脑端排查之痛）
@@ -311,6 +313,15 @@ const pinned = mgr.applyPinned();
 //（首建即 spawn，见 org.ts 引导注释）；org 目录不可用时只横幅点名，不阻断 relay
 // 其余功能（下次启动重试）
 const leader = mgr.ensureLeader();
+
+const decisionNotify = new DecisionNotificationWatcher({
+  dataDir: cfg.dataDir,
+  listConfirms,
+  snapshotSessions: () => mgr.snapshot(),
+  leaderSessionId: () => mgr.getLeaderSessionId(),
+  notify: (sessionId, text) => mgr.notifyConfirm(sessionId, text),
+});
+decisionNotify.start();
 
 // #26 M3 审查修正：挂起标记重启重建——org_parked 是内存态不进事件流，重启后组仍
 // parked（projects.json 持久）但成员标记全丢（熟手池 parked 口径失真 + 下方

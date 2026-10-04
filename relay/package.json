@@ -20,6 +20,7 @@
     "test:org": "tsx scripts/test-org.ts",
     "test:leader": "tsx scripts/test-leader.ts",
     "test:projects": "tsx scripts/test-projects.ts",
+    "test:decision-notify": "tsx scripts/test-decision-notify.ts",
     "test:dispatch": "tsx scripts/test-dispatch.ts",
     "test:routing": "tsx scripts/test-routing.ts",
     "test:autorevive": "tsx scripts/test-autorevive.ts",

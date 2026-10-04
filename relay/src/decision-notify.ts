@@ -1,0 +1,268 @@
+import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { join } from "node:path";
+import type { OrgConfirm } from "./projects.js";
+import type { SessionState } from "./types.js";
+
+export type DecisionNotificationKind = "org-confirm" | "waiting";
+
+export interface DecisionNotification {
+  key: string;
+  kind: DecisionNotificationKind;
+  source_session_id: string;
+  created_at: number;
+  first_sent_at?: number;
+  reminded_at?: number;
+  resolved_at?: number;
+  revision: string;
+}
+
+export interface DecisionNotificationLedger {
+  notifications: DecisionNotification[];
+}
+
+export interface DecisionNotificationWatcherOptions {
+  dataDir?: string;
+  ledgerPath?: string;
+  intervalMs?: number;
+  waitMin?: number;
+  remindHours?: number;
+  enabled?: boolean;
+  listConfirms: () => OrgConfirm[];
+  snapshotSessions: () => SessionState[];
+  leaderSessionId: () => string | null | undefined;
+  notify: (sessionId: string, text: string) => boolean;
+  now?: () => number;
+}
+
+const DEFAULT_WAIT_MIN = 10;
+const DEFAULT_REMIND_HOURS = 24;
+const DEFAULT_INTERVAL_MS = 20_000;
+
+function numberEnv(name: string, fallback: number, min: number): number {
+  const value = Number(process.env[name]);
+  return Number.isFinite(value) && value >= min ? value : fallback;
+}
+
+function enabledEnv(): boolean {
+  return process.env.CCR_DECISION_NOTIFY !== "0";
+}
+
+function ledgerPathOf(options: Pick<DecisionNotificationWatcherOptions, "dataDir" | "ledgerPath">): string {
+  const override = options.ledgerPath ?? process.env.CCR_DECISION_NOTIFY_LEDGER_PATH ??
+    process.env.CCR_DECISION_NOTIFY_LEDGER ?? process.env.CCR_DECISION_LEDGER_PATH ?? process.env.CCR_DECISION_LEDGER;
+  if (override) return override;
+  const dataDir = options.dataDir ?? process.env.CCR_DATA_DIR ?? join(process.cwd(), "data");
+  return join(dataDir, "decision-notifications.json");
+}
+
+export function readDecisionNotificationLedger(path: string): DecisionNotificationLedger {
+  try {
+    const raw = JSON.parse(readFileSync(path, "utf-8")) as unknown;
+    const list = Array.isArray(raw)
+      ? raw
+      : raw && typeof raw === "object" && Array.isArray((raw as { notifications?: unknown }).notifications)
+        ? (raw as { notifications: unknown[] }).notifications
+        : [];
+    const notifications = list.filter((item): item is DecisionNotification => {
+      if (!item || typeof item !== "object") return false;
+      const x = item as Partial<DecisionNotification>;
+      return typeof x.key === "string" && (x.kind === "org-confirm" || x.kind === "waiting") &&
+        typeof x.source_session_id === "string" && typeof x.created_at === "number" && typeof x.revision === "string";
+    });
+    return { notifications };
+  } catch {
+    return { notifications: [] };
+  }
+}
+
+export function writeDecisionNotificationLedger(path: string, ledger: DecisionNotificationLedger): void {
+  mkdirSync(join(path, ".."), { recursive: true });
+  writeFileSync(path, JSON.stringify(ledger.notifications, null, 2) + "\n", "utf-8");
+}
+
+function confirmRevision(confirm: OrgConfirm): string {
+  const revision = (confirm as OrgConfirm & { revision?: unknown }).revision;
+  return typeof revision === "string" || typeof revision === "number" ? String(revision) : String(confirm.created_at);
+}
+
+function confirmKey(confirm: OrgConfirm): string {
+  return `org-confirm:${confirm.id}:${confirmRevision(confirm)}`;
+}
+
+function confirmSourceSession(confirm: OrgConfirm): string {
+  for (const key of ["source_session_id", "session_id", "source_session"]) {
+    const value = confirm.payload?.[key];
+    if (typeof value === "string" && value) return value;
+  }
+  return "";
+}
+
+function waitingKey(session: SessionState): string {
+  return `waiting:${session.session_id}:${session.waiting_request!.request_id}`;
+}
+
+function allowWaiting(session: SessionState): boolean {
+  const request = session.waiting_request;
+  return session.status === "WAITING" && !!request && request.decidable !== false && !request.questions?.length;
+}
+
+function kindLabel(kind: OrgConfirm["kind"]): string {
+  switch (kind) {
+    case "project-create": return "立项确认";
+    case "tier-change": return "档位变更";
+    case "suggest-hold": return "暂缓建议";
+    case "archive": return "结项确认";
+    case "revive": return "复活确认";
+  }
+}
+
+function compact(text: string, max = 160): string {
+  const oneLine = text.replace(/[\r\n]+/g, " ").replace(/\s+/g, " ").trim();
+  return oneLine.length > max ? `${oneLine.slice(0, max - 1)}…` : oneLine;
+}
+
+function confirmText(confirm: OrgConfirm, sourceSessionId: string): string {
+  const source = sourceSessionId ? ` · 来源会话 ${sourceSessionId.slice(0, 12)}` : " · 来源：Leader 控制会话";
+  const summary = confirm.reason ? `：${compact(confirm.reason)}` : "";
+  return `[拍板] ${compact(confirm.title, 70)} · ${kindLabel(confirm.kind)}${source}${summary}`;
+}
+
+function waitingText(session: SessionState): string {
+  const tool = compact(session.waiting_request?.tool_name || "操作", 60);
+  return `[审批] 当前会话等待允许 ${tool} · 来源会话 ${session.session_id.slice(0, 12)}`;
+}
+
+export class DecisionNotificationWatcher {
+  private readonly path: string;
+  private readonly intervalMs: number;
+  private readonly waitMs: number;
+  private readonly remindMs: number;
+  private readonly enabled: boolean;
+  private readonly now: () => number;
+  private readonly options: DecisionNotificationWatcherOptions;
+  private ledger: DecisionNotificationLedger;
+  private timer: ReturnType<typeof setInterval> | null = null;
+
+  constructor(options: DecisionNotificationWatcherOptions) {
+    this.options = options;
+    this.path = ledgerPathOf(options);
+    this.intervalMs = options.intervalMs ?? numberEnv("CCR_DECISION_NOTIFY_INTERVAL_MS", DEFAULT_INTERVAL_MS, 1000);
+    this.waitMs = (options.waitMin ?? numberEnv("CCR_DECISION_WAIT_MIN", DEFAULT_WAIT_MIN, 0)) * 60_000;
+    this.remindMs = (options.remindHours ?? numberEnv("CCR_DECISION_REMIND_HOURS", DEFAULT_REMIND_HOURS, 0)) * 3_600_000;
+    this.enabled = options.enabled ?? enabledEnv();
+    this.now = options.now ?? (() => Date.now());
+    this.ledger = readDecisionNotificationLedger(this.path);
+  }
+
+  get ledgerPath(): string { return this.path; }
+
+  snapshotLedger(): DecisionNotification[] {
+    return this.ledger.notifications.map((item) => ({ ...item }));
+  }
+
+  start(): void {
+    if (!this.enabled || this.timer) return;
+    this.scan();
+    this.timer = setInterval(() => this.scan(), this.intervalMs);
+    this.timer.unref?.();
+  }
+
+  stop(): void {
+    if (this.timer) clearInterval(this.timer);
+    this.timer = null;
+  }
+
+  scan(now = this.now()): void {
+    if (!this.enabled) return;
+    const confirms = this.options.listConfirms();
+    const sessions = this.options.snapshotSessions();
+    const byKey = new Map(this.ledger.notifications.map((item) => [item.key, item]));
+    const activeConfirmKeys = new Set<string>();
+    const activeWaitingKeys = new Set<string>();
+    let changed = false;
+
+    for (const confirm of confirms) {
+      const key = confirmKey(confirm);
+      const existing = byKey.get(key);
+      if (confirm.status === "pending") {
+        activeConfirmKeys.add(key);
+        const item = existing ?? {
+          key,
+          kind: "org-confirm" as const,
+          source_session_id: confirmSourceSession(confirm),
+          created_at: confirm.created_at,
+          revision: confirmRevision(confirm),
+        };
+        if (!existing) {
+          this.ledger.notifications.push(item);
+          byKey.set(key, item);
+          changed = true;
+        }
+        if (!item.source_session_id) {
+          const source = confirmSourceSession(confirm);
+          if (source) item.source_session_id = source;
+        }
+        const target = this.targetSession(item.source_session_id, sessions);
+        if (!item.first_sent_at && target && this.options.notify(target, confirmText(confirm, target))) {
+          item.source_session_id = target;
+          item.first_sent_at = now;
+          changed = true;
+        } else if (item.first_sent_at && !item.reminded_at && this.remindMs > 0 && now - item.first_sent_at >= this.remindMs && target && this.options.notify(target, confirmText(confirm, target))) {
+          item.reminded_at = now;
+          changed = true;
+        }
+      } else if (existing && !existing.resolved_at) {
+        existing.resolved_at = confirm.decided_at ?? now;
+        changed = true;
+      }
+    }
+
+    for (const session of sessions) {
+      if (!allowWaiting(session)) continue;
+      const key = waitingKey(session);
+      activeWaitingKeys.add(key);
+      const existing = byKey.get(key);
+      const item = existing ?? {
+        key,
+        kind: "waiting" as const,
+        source_session_id: session.session_id,
+        created_at: session.waiting_started_at ?? session.updated_at,
+        revision: session.waiting_request!.request_id,
+      };
+      if (!existing) {
+        this.ledger.notifications.push(item);
+        byKey.set(key, item);
+        changed = true;
+      }
+      const startedAt = session.waiting_started_at ?? session.updated_at;
+      if (!item.first_sent_at && now - startedAt >= this.waitMs && this.options.notify(session.session_id, waitingText(session))) {
+        item.first_sent_at = now;
+        changed = true;
+      } else if (item.first_sent_at && !item.reminded_at && this.remindMs > 0 && now - item.first_sent_at >= this.remindMs && this.options.notify(session.session_id, waitingText(session))) {
+        item.reminded_at = now;
+        changed = true;
+      }
+    }
+
+    for (const item of this.ledger.notifications) {
+      if (item.resolved_at) continue;
+      if (item.kind === "org-confirm" && !activeConfirmKeys.has(item.key)) {
+        item.resolved_at = now;
+        changed = true;
+      }
+      if (item.kind === "waiting" && !activeWaitingKeys.has(item.key)) {
+        item.resolved_at = now;
+        changed = true;
+      }
+    }
+
+    if (changed) writeDecisionNotificationLedger(this.path, this.ledger);
+  }
+
+  private targetSession(preferred: string, sessions: SessionState[]): string | null {
+    if (preferred && sessions.some((session) => session.session_id === preferred)) return preferred;
+    const leader = this.options.leaderSessionId();
+    if (leader && sessions.some((session) => session.session_id === leader)) return leader;
+    return sessions[0]?.session_id ?? null;
+  }
+}

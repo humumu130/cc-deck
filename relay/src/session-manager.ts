@@ -979,6 +979,7 @@ export class SessionManager {
     const changed = s.state.status !== status;
     s.state.status = status;
     s.state.action_summary = summary;
+    if (status !== "WAITING") s.state.waiting_started_at = undefined;
     if (status === "WORKING" && turnStartedAt) s.state.turn_started_at = turnStartedAt;
     s.state.updated_at = Date.now();
     if (changed || status === "WORKING") {
@@ -1046,6 +1047,7 @@ export class SessionManager {
     if (!s) return false;
     const todos = [...(s.state.todos ?? []), { content: `[待确认] ${text}`, status: "pending" as const }];
     this.setTodos(sessionId, todos);
+    this.bus.emitTransient("USER_NOTE", { text, ts: Date.now() });
     return true;
   }
 
@@ -1460,9 +1462,11 @@ export class SessionManager {
   setExternalWaiting(id: string, payload: WaitingPayload): void {
     const s = this.sessions.get(id);
     if (!s) return;
+    const at = Date.now();
     s.state.status = "WAITING";
     s.state.waiting_request = payload;
-    s.state.updated_at = Date.now();
+    s.state.waiting_started_at = at;
+    s.state.updated_at = at;
     this.bus.emit(id, "SESSION_WAITING", payload);
   }
 
@@ -1513,6 +1517,7 @@ export class SessionManager {
     s.state.done_reason = reason;
     s.state.duration_ms = durationMs;
     s.state.waiting_request = undefined;
+    s.state.waiting_started_at = undefined;
     s.state.updated_at = at;
     this.bus.emit(id, "SESSION_DONE", {
       terminal_reason: reason,
@@ -2298,6 +2303,7 @@ export class SessionManager {
         managed.state.status = "WORKING";
         managed.state.action_summary = "流已恢复";
         managed.state.waiting_request = undefined;
+        managed.state.waiting_started_at = undefined;
         managed.state.turn_started_at = Date.now();
         this.pushExternalLog(managed.state.session_id, "system", "检测到会话流仍在工作，已自动撤销等待状态");
         this.emitUpdated(managed, true);
@@ -2364,7 +2370,10 @@ export class SessionManager {
           // 回合起点：非 WORKING → WORKING 的跳变时刻（手机/手表状态行计时用）
           if (changed && effStatus === "WORKING") managed.state.turn_started_at = Date.now();
           const cleared = live && effStatus !== "WAITING";
-          if (cleared) managed.state.waiting_request = undefined;
+          if (cleared) {
+            managed.state.waiting_request = undefined;
+            managed.state.waiting_started_at = undefined;
+          }
           managed.state.status = effStatus;
           managed.state.action_summary = summary;
           // 审批数据清零是关键翻转，不受节流吞帧（下一帧 UPDATE 即各端收敛的保证）
@@ -2373,9 +2382,11 @@ export class SessionManager {
         onWaiting: (p) => {
           if (!mine()) return;
           touch("waiting");
+          const at = Date.now();
           managed.state.status = "WAITING";
           managed.state.waiting_request = p;
-          managed.state.updated_at = Date.now();
+          managed.state.waiting_started_at = at;
+          managed.state.updated_at = at;
           this.bus.emit(managed.state.session_id, "SESSION_WAITING", p);
         },
         onWaitingResolved: (requestId, decision, resolvedBy) => {
@@ -2388,6 +2399,7 @@ export class SessionManager {
           if (!cur || cur.request_id === requestId) {
             managed.state.status = "WORKING";
             managed.state.waiting_request = undefined;
+            managed.state.waiting_started_at = undefined;
             // 强制补一帧带 waiting_request:null 的 UPDATE：RESOLVED 是瞬态帧，云桥/
             // 断线丢帧时这帧是各端收敛的第二通道（不受节流）
             this.emitUpdated(managed, true);
@@ -2509,6 +2521,7 @@ export class SessionManager {
           // 回合收口同时清残留审批数据（打断等待中的请求等场景）：status 与
           // waiting_request 脱钩是审批弹窗死锁的根源，任何离开 WAITING 的路径都收口
           managed.state.waiting_request = undefined;
+          managed.state.waiting_started_at = undefined;
           if (ok) {
             managed.state.status = "DONE";
             managed.state.done_reason = reason;
@@ -2883,6 +2896,7 @@ export class SessionManager {
           s.state.action_summary = "已保存，点击恢复";
           s.state.last_error = undefined;
           s.state.waiting_request = undefined;
+          s.state.waiting_started_at = undefined;
           saved++;
         }
         if (!was) this.emitUpdated(s, true);
@@ -2904,6 +2918,10 @@ export class SessionManager {
 
   isLeaderSession(sessionId: string): boolean {
     return this.leaderId === sessionId;
+  }
+
+  getLeaderSessionId(): string | null {
+    return this.leaderId;
   }
 
   ensureLeader(): { ok: true; session_id: string; created: boolean; rebuilt: boolean } | { ok: false; error: string } {
@@ -4014,6 +4032,7 @@ export class SessionManager {
         : "成员退休（编制除名，路由表档案保留）";
     s.state.action_summary = mode === "parked" ? "已随项目组挂起" : mode === "disbanded" ? "已随项目组结项解散" : "已退休（编制除名）";
     s.state.waiting_request = undefined;
+    s.state.waiting_started_at = undefined;
     s.state.last_error = undefined;
     s.state.updated_at = Date.now();
     s.unacked = [];
@@ -4175,6 +4194,7 @@ export class SessionManager {
     if (!s) return;
     s.state.status = "WORKING";
     s.state.waiting_request = undefined;
+    s.state.waiting_started_at = undefined;
     s.state.updated_at = Date.now();
     this.bus.emit(sessionId, "SESSION_WAITING_RESOLVED", { request_id: requestId, decision, by });
   }
@@ -4191,6 +4211,7 @@ export class SessionManager {
       // 根治③的权威自愈通道：waiting_request 恒随增量帧携带（null = 已清），端上
       // 无论错过哪条 RESOLVED/WAITING，下一帧 UPDATE 即收敛一致
       waiting_request: s.state.waiting_request ?? null,
+      ...(s.state.waiting_started_at ? { waiting_started_at: s.state.waiting_started_at } : {}),
       stats: { ...s.state.stats },
       ...(s.state.turn_started_at ? { turn_started_at: s.state.turn_started_at } : {}),
       ...(s.state.usage ? { usage: { ...s.state.usage } } : {}),
@@ -4391,6 +4412,7 @@ export class SessionManager {
         s.state.status = "WAITING";
         s.state.action_summary = "流中断，自动恢复已达上限";
         s.state.waiting_request = undefined;
+        s.state.waiting_started_at = undefined;
         s.unacked = [];
         this.pushExternalLog(
           sid,
@@ -4474,6 +4496,7 @@ export class SessionManager {
       s.state.status = "ERROR";
       s.state.last_error = `看门狗恢复失败: ${msg}`;
       s.state.waiting_request = undefined;
+      s.state.waiting_started_at = undefined;
       this.pushExternalLog(sid, "system", s.state.last_error);
       this.emitUpdated(s, true);
       s.wd.phase = "idle";
