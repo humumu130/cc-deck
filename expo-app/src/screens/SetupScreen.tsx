@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Alert, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { LinearGradient } from "expo-linear-gradient";
@@ -7,6 +7,7 @@ import { withA, type ThemeColors } from "../theme";
 import { LogoMark } from "../brand";
 import { useTheme, useThemeStyles } from "../theme-context";
 import { store, useRelay, identityOf, type ServerEntry } from "../store";
+import { capabilityCardModel, capsuleSubline } from "../protocol"; // E4a 只读投影（纯函数，protocol.ts E4a 段）
 import { uuid } from "../fmt";
 import { currentVersion } from "../updates";
 import { useKbHeight } from "../kb";
@@ -406,11 +407,20 @@ export default function SetupScreen({ onClose, editId, initialScan }: Props) {
   // 配对」——一眼知道自己要不要输码。relay 实测态叠加：unpaired（收到明确 pair_nack）
   // 时翻成「配对失效」，与本地存档区分（存档还在，但 relay 已不认）
   const srcState = new Map(snap.sources.map((x) => [x.id, x.state] as const));
+  // E4a 源胶囊副行数据源：快照带 capability/version 类字段才有内容（capsuleSubline
+  // 内部把关，旧 relay 缺 schema_version → null 行隐藏，不猜字段不造假数据）
+  const srcById = new Map(snap.sources.map((x) => [x.id, x] as const));
 
   // ④ 连接失败反馈三态分流：connecting/reconnecting 是传输层问题（杀网/断桥），自动
   // 重试自愈，文案绝不提配对码；unpaired（relay 明确拒绝身份）才引导输码重新配对；
   // failNote（桥不可达/电脑端 relay 离线等诊断）优先透出
   const activeEntry = servers.find((e) => e.id === activeId);
+  // E4a 能力卡模型（memoize：仅快照能力字段变化重算；行全单行截断，390 宽不整屏抖动）。
+  // 旧 relay（schema_version 与 source_capabilities 均缺）→ null = 整卡隐藏
+  const cap = useMemo(
+    () => capabilityCardModel({ schemaVersion: snap.schemaVersion, sourceCapabilities: snap.sourceCapabilities, models: snap.models }),
+    [snap.schemaVersion, snap.sourceCapabilities, snap.models],
+  );
   const connDotColor =
     snap.connState === "connecting" || snap.connState === "reconnecting" ? c.working : c.waiting;
   let connMain = "";
@@ -484,8 +494,13 @@ export default function SetupScreen({ onClose, editId, initialScan }: Props) {
                 const isEditTarget = effEditId === e.id;
                 // 状态单语言（方案 A）：点色=连接态（绿在线/琥珀未配对/灰其余），徽标=配对态文字
                 const dotColor = st === "online" ? c.done : st === "unpaired" ? c.waiting : c.faint;
-                const badge = st === "unpaired" ? "配对失效" : e.cloud ? "已配对" : "未配对";
-                const badgeStyle = st === "unpaired" ? s.srvBadgeDead : e.cloud ? s.srvBadgeOk : s.srvBadgeNo;
+                // E4a 轻量收敛（018 §2.6「状态点+源名+必要异常」）：徽标只在必要异常/引导态
+                // 出现——配对失效（异常）、未配对（输码引导）；「已配对」为正常态，绿点+
+                // 下方云桥区块已承载，不再逐行重复
+                const badge = st === "unpaired" ? "配对失效" : e.cloud ? null : "未配对";
+                const badgeStyle = st === "unpaired" ? s.srvBadgeDead : s.srvBadgeNo;
+                // E4a 副行：v+通道+能力提示（旧 relay 无 schema_version → null 不渲染）
+                const sub = capsuleSubline(srcById.get(e.id));
                 return (
                   <View key={e.id} style={[s.srvRow, isEditTarget && s.srvRowOn]}>
                     <Pressable
@@ -497,9 +512,10 @@ export default function SetupScreen({ onClose, editId, initialScan }: Props) {
                       <View style={s.srvHead}>
                         <View style={[s.srvDot, { backgroundColor: dotColor }]} />
                         <Text style={s.srvName} numberOfLines={1}>{e.name}</Text>
-                        <Text style={badgeStyle}>{badge}</Text>
+                        {badge ? <Text style={badgeStyle}>{badge}</Text> : null}
                       </View>
                       <Text style={s.srvUrl} numberOfLines={1}>{e.wsUrl}</Text>
+                      {sub ? <Text style={s.srvSub} numberOfLines={1}>{sub}</Text> : null}
                     </Pressable>
                   
                   </View>
@@ -531,6 +547,22 @@ export default function SetupScreen({ onClose, editId, initialScan }: Props) {
                   <Text style={s.pairMsg} numberOfLines={2}>{snap.cloudMsg}</Text>
                 </Pressable>
               ) : null}
+            </View>
+          ) : null}
+
+          {/* E4a 引擎能力卡（设置域 018 §2.5/§2.7）：活动源能力位+协议版本只读展示，
+              行级按字段在场渲染（缺 key 不出行，不出假「—」）；隐私提示=profile 非秘密
+              引用文案，本卡无任何 token/密钥渲染位 */}
+          {cap ? (
+            <View style={s.capCard}>
+              <Text style={s.label}>引擎与能力</Text>
+              {cap.rows.map((r) => (
+                <View key={r.key} style={s.capRow}>
+                  <Text style={s.capLabel} numberOfLines={1}>{r.label}</Text>
+                  <Text style={[s.capValue, r.value === "不可用" && s.capValueOff]} numberOfLines={1}>{r.value}</Text>
+                </View>
+              ))}
+              <Text style={s.capPrivacy}>{cap.privacy}</Text>
             </View>
           ) : null}
 
@@ -703,6 +735,13 @@ export default function SetupScreen({ onClose, editId, initialScan }: Props) {
 const makeStyles = (c: ThemeColors) => StyleSheet.create({
   // #60 后台保活豁免卡样式随组件迁至 src/KeepAliveCard.tsx（#85 抽共享），此处只留外层定位
   kaWrap: { width: "100%", maxWidth: 340, marginBottom: 20 },
+  // E4a 能力卡：行=label 左 value 右、全单行截断（390 宽行高恒定）；不可用值弱化
+  capCard: { width: "100%", maxWidth: 340, borderWidth: 1, borderColor: c.line, borderRadius: 10, padding: 12, marginBottom: 20 },
+  capRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingVertical: 5 },
+  capLabel: { color: c.text, fontSize: 12.5, flexShrink: 1, marginRight: 12 },
+  capValue: { color: c.text, fontSize: 12.5, fontWeight: "600", textAlign: "right" },
+  capValueOff: { color: c.faint, fontWeight: "500" },
+  capPrivacy: { color: c.faint, fontSize: 11, lineHeight: 16, marginTop: 8 },
   saveBarFix: {
     paddingHorizontal: 18, paddingTop: 10, paddingBottom: 12,
     backgroundColor: c.panel, borderTopWidth: 1, borderTopColor: c.line,
@@ -752,10 +791,11 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
   srvDot: { width: 7, height: 7, borderRadius: 4 },
   srvName: { color: c.text, fontSize: 14, fontWeight: "600" },
   srvUrl: { color: c.faint, fontSize: 11, marginTop: 2 },
+  // E4a 源胶囊副行（v·通道·能力提示）：恒单行截断，行高不抖
+  srvSub: { color: c.faint, fontSize: 10.5, marginTop: 2, opacity: 0.85 },
   srvDel: { width: 40, height: 44, alignItems: "center", justifyContent: "center" },
   srvDelT: { color: c.faint, fontSize: 15 },
   // ① 配对状态徽标（替代旧 ☁ 图标，信息更明确）：已配对=绿 / 未配对=灰 / 配对失效=红
-  srvBadgeOk: { color: c.done, fontSize: 10.5, fontWeight: "700" },
   srvBadgeNo: { color: c.faint, fontSize: 10.5, fontWeight: "600" },
   srvBadgeDead: { color: c.waiting, fontSize: 10.5, fontWeight: "700" },
   pairRow: { marginTop: 4, alignSelf: "flex-start", flexDirection: "row", gap: 8 },

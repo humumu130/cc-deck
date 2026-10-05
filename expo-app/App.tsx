@@ -6,7 +6,7 @@ import { store, useRelay } from "./src/store";
 import type { TaskDoneReport } from "./src/store";
 import { isConfirmTodo, displaySrcName } from "./src/fmt";
 import type { DetailBackHandle } from "./src/screens/DetailScreen";
-import type { SessionState } from "./src/protocol";
+import { projectNotifications, type SessionState } from "./src/protocol";
 import { ensureNotifPermission, fgSupported, notifyAlert, startForegroundService, updateForeground, updateForegroundStats } from "./src/notify";
 import { startWatchGateway } from "./src/watch";
 import { ThemeProvider, useTheme, useThemeStyles } from "./src/theme-context";
@@ -799,14 +799,19 @@ function Shell() {
     } else {
       const dist: Partial<Record<SessionState["status"], number>> = { WORKING: 0, WAITING: 0, ERROR: 0, DONE: 0 };
       for (const s of snap.sessions) if (s.status in dist) dist[s.status] = (dist[s.status] ?? 0) + 1;
-      text = `S|${dist.WORKING ?? 0}|${dist.WAITING ?? 0}|${dist.ERROR ?? 0}|${dist.DONE ?? 0}`;
+      // E4a 通知 projection（007 IA 分组口径）：未决 actionable 计数折进前台通知标题。
+      // 旧 relay（notifications=null）badge=0 不出「待办」位（按能力隐藏）；NOTIFICATIONS_
+      // UPDATED 值替换帧驱动重算，fgText 去抖兜住重复原生调用（角标变化才重发）
+      const badge = projectNotifications(snap.notifications).badgeCount;
+      text = `S|${dist.WORKING ?? 0}|${dist.WAITING ?? 0}|${dist.ERROR ?? 0}|${dist.DONE ?? 0}|${badge}`;
     }
     if (text === fgText.current) return;
     fgText.current = text;
     if (text.startsWith("S|")) {
-      const [, w, wa, e, dn] = text.split("|").map(Number);
-      // #370 title=状态概览（去软件名防展开双标题）：有活跃态列计数，全空闲列完成数
+      const [, w, wa, e, dn, nb] = text.split("|").map(Number);
+      // #370 title=状态概览（去软件名防展开双标题）：待办置顶，其余有活跃态列计数，全空闲列完成数
       const bits: string[] = [];
+      if (nb) bits.push(`待办${nb}`);
       if (w) bits.push(`工作${w}`);
       if (wa) bits.push(`等待${wa}`);
       if (e) bits.push(`错误${e}`);
@@ -815,7 +820,7 @@ function Shell() {
     } else {
       updateForeground(text);
     }
-  }, [snap.sessions, snap.connected, snap.connState]);
+  }, [snap.sessions, snap.connected, snap.connState, snap.notifications]);
 
   useEffect(() => {
     const sub = AppState.addEventListener("change", (st) => {

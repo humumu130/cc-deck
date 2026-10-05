@@ -514,3 +514,111 @@ export interface CommandAck {
   // #26 M2/M3 仅 COMMAND_PROJECT_DETAIL 成功 ACK 携带：{ group, board, receipts, pool }
   data?: unknown;
 }
+
+// ─── E4a 只读投影（源胶囊副行 / 通知域分组 / 能力卡）：纯函数零依赖，
+// test-e4a-setup.ts 直跑 import（同 test-e1-reducer 先例，无需模块桩） ───
+
+/** 通知域分组词表（007 IA B+ 口径）：action=需你行动 / attention=注意 / activity=动态。
+ * 与 relay NotificationGroup 同源（relay/src/types.ts），值替换帧只改账不改词表 */
+export type NotificationGroup = "action" | "attention" | "activity";
+
+export interface NotificationBucketView {
+  group: NotificationGroup;
+  count: number;
+  badgeCount: number; // 仅 action 组有意义：未决 actionable 计数
+}
+
+export interface NotificationProjection {
+  legacy: boolean; // true = 旧 relay（无通知账 null/undefined）→ 横幅计数整块不渲染
+  total: number;
+  badgeCount: number; // 未决 actionable（action 组）——前台通知角标/「需你行动」计数
+  buckets: Record<NotificationGroup, NotificationBucketView>;
+}
+
+// dismissed_at 为 relay lifecycle 扩展字段、冻结面 NotificationItem 暂无（E3b 回单
+// 备案 4，不擅改）——此处防御读取：帧里带了就算已处理，没带不误判
+type NotificationLifecycleExtras = { dismissed_at?: number };
+
+function notificationHandled(n: NotificationItem): boolean {
+  const x = n as NotificationItem & NotificationLifecycleExtras;
+  return n.handled_at !== undefined || x.dismissed_at !== undefined || n.resolved_at !== undefined;
+}
+
+/** 通知域只读投影（镜像 relay groupNotifications 读侧语义，单遍 O(n)）：
+ * 未知分组条目跳过（畸形防御，同 relay `if (!bucket) continue`）；角标=action 组
+ * 且 actionable 且未决（handled/dismissed/resolved 全空）。入参只读不突变（重连
+ * 快照/值替换帧反复投影不丢不重） */
+export function projectNotifications(items: readonly NotificationItem[] | null | undefined): NotificationProjection {
+  const buckets: Record<NotificationGroup, NotificationBucketView> = {
+    action: { group: "action", count: 0, badgeCount: 0 },
+    attention: { group: "attention", count: 0, badgeCount: 0 },
+    activity: { group: "activity", count: 0, badgeCount: 0 },
+  };
+  if (!items) return { legacy: true, total: 0, badgeCount: 0, buckets };
+  let total = 0;
+  for (const n of items) {
+    const b = buckets[n.group as NotificationGroup];
+    if (!b) continue;
+    total++;
+    b.count++;
+    if (n.group === "action" && n.actionable && !notificationHandled(n)) b.badgeCount++;
+  }
+  return { legacy: false, total, badgeCount: buckets.action.badgeCount, buckets };
+}
+
+/** 源胶囊副行输入（结构化最小面，store SourceStatus 天然满足）：018 §2.6 轻量口径
+ * 之外，仅当快照带 capability/version 类字段才补一行说明 */
+export interface SourceCapsuleInput {
+  channel: "lan" | "cloud" | null;
+  schemaVersion?: number;
+  notificationsLegacy?: boolean;
+}
+
+/** 源胶囊副行：`v{schema} · 云桥|直连 ·(通知不可用)`；旧 relay（schema_version 缺省）
+ * → null = 不出该行（轻量行保持 状态点+源名+必要异常 原样，不猜字段不造假数据） */
+export function capsuleSubline(src: SourceCapsuleInput | null | undefined): string | null {
+  if (!src || typeof src.schemaVersion !== "number") return null;
+  const parts = [`v${src.schemaVersion}`, src.channel === "cloud" ? "云桥" : "直连"];
+  if (src.notificationsLegacy) parts.push("通知不可用");
+  return parts.join(" · ");
+}
+
+/** 能力卡模型（设置页只读）：快照带 schema_version / source_capabilities 任一才出卡；
+ * 旧 relay 两者皆缺 → null = 整卡隐藏（018 §2.7「旧 relay 缺字段按能力隐藏」）。
+ * 行级同样按字段在场渲染（缺 key 不出该行，不出假「—」）。隐私红线：本模型只产
+ * 文案与计数，绝不携带 token/密钥类字段值——source_capabilities 上的未知键一律
+ * 不读（018 §2.5：秘密只存 env/keychain 引用，不进快照更不进渲染树） */
+export interface CapabilityRow {
+  key: string;
+  label: string;
+  value: string;
+}
+
+export interface CapabilityCardModel {
+  rows: CapabilityRow[];
+  privacy: string; // profile 非秘密引用文案（静态，不含任何密钥内容）
+}
+
+export function capabilityCardModel(input: {
+  schemaVersion?: number;
+  sourceCapabilities?: SourceCapabilities;
+  models?: string[];
+}): CapabilityCardModel | null {
+  const caps = input.sourceCapabilities;
+  if (typeof input.schemaVersion !== "number" && !caps) return null;
+  const rows: CapabilityRow[] = [];
+  if (typeof input.schemaVersion === "number") {
+    rows.push({ key: "schema", label: "协议版本", value: `v${input.schemaVersion}` });
+  }
+  if (caps) {
+    if (caps.activity !== undefined) rows.push({ key: "activity", label: "活动摘要/耗时", value: caps.activity ? "支持" : "不可用" });
+    if (caps.models !== undefined) rows.push({ key: "modelsCap", label: "模型清单", value: caps.models ? "支持" : "不可用" });
+    if (caps.notifications !== undefined) rows.push({ key: "notifications", label: "通知域", value: caps.notifications ? "支持" : "不可用" });
+    if (Array.isArray(caps.commands) && caps.commands.length) rows.push({ key: "commands", label: "已登记命令", value: `${caps.commands.length} 项` });
+  }
+  if (Array.isArray(input.models) && input.models.length) rows.push({ key: "modelCount", label: "可用模型", value: `${input.models.length} 个` });
+  return {
+    rows,
+    privacy: "引擎凭证只以环境变量或系统密钥引用保存在电脑端，不随快照下发，也不在本页显示。",
+  };
+}
