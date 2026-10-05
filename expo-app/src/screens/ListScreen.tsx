@@ -138,26 +138,113 @@ function clipSrcName(name: string): string {
 
 // ---------- E2a 列表只读投影（纯函数段，零 RN 依赖） ----------
 // 数据源全部是 store 现有状态（activity / activity_capabilities / aggregate /
-// sources / source_capabilities，#018-E1 落库口径），只投影不取数、不接真命令。
-// scripts/test-e2a-list.ts 绕过 RN 桩直跑本段做断言。
+// sources / source_capabilities / notifications，#018-E1/E4 落库口径），只投影不
+// 取数、不接真命令。expo-app/scripts/test-e2a-list.ts 与 relay/scripts/
+// test-e2a-queue.ts（#018-E2a-up fixture）绕过 RN 桩直跑本段做断言。
 
-// 待处理判定：WAITING（等待确认）置顶，其余归「其他会话」；同一 session_id 只
-// 入一组（首见优先，重复直接过滤）——两组互斥由构造保证
+/* E2A-QUEUE-START */
+// #018-E2a-up 单流投影富版（018 §2.1.1 推荐分组规则；与 W1a Web queueFlagsOf /
+// queuePartition 同语义——非共享代码层，Web/Expo 各自实现、fixture 同套）。E2a 简版
+// （WAITING 全占待处理）与 W1a 的口径分叉就此对齐：
+// - needs_action 三型入待处理 + working 一型：真实 WAITING 可决策（reason=waiting）/
+//   待验收类持久行动（last_task_done，reason=acceptance）/ 会话级 actionable 未决
+//   通知（reason=notification）/ 确有可观察工作状态的 WORKING（reason=working）；
+// - 不占位四则：WAITING 无 waiting_request（脱钩帧）、decidable:false、已 resolved
+//   通知、绑定他人 session 的通知；在线空转 WORKING（无活动证据）同样不占行动位；
+// - 同键互斥首见优先（默认键 session_id，多源场景 opts.keyOf 注入复合键）；
+// - 组内序：pending 按 reason 优先级（waiting>acceptance>notification>working）+
+//   updated_at 倒序，others 按 updated_at 倒序；
+// - 旧 relay 降级：无 status / waiting_request、last_task_done、activity 畸形 /
+//   通知池非数组 / 条目非对象，一律安全落组不崩不伪造。
+export type QueueReason = "waiting" | "acceptance" | "notification" | "working" | "other";
+
+// queue_flags 五标志（018 §2.1.1 协议语义，客户端派生）
+export interface QueueFlags {
+  needs_action: boolean; // 行动位（waiting/acceptance/notification 三型任一）
+  is_working: boolean; // WORKING 事实位（在线不占位——进不进待处理另看活动证据）
+  needs_acceptance: boolean; // 待验收汇报在
+  is_other: boolean; // 不入待处理组
+  reason: QueueReason;
+}
+
+// 待处理组内排序优先级：可决策 > 待验收 > 通知要求 > 工作中
+export const QUEUE_REASON_ORDER: Record<string, number> = { waiting: 0, acceptance: 1, notification: 2, working: 3 };
+
+// 五标志判定（旧 relay 缺字段全形态降级：不崩、不伪造）
+export function queueFlagsOf(s: SessionState, notifActionable?: boolean): QueueFlags {
+  const o: Partial<SessionState> = s && typeof s === "object" ? s : {};
+  const st = typeof o.status === "string" ? o.status : "";
+  const wr = o.waiting_request;
+  // 真实可决策 WAITING：waiting_request 在且为对象、decidable 非 false（缺省=可决策）
+  const waitingDecidable = st === "WAITING" && !!wr && typeof wr === "object" && wr.decidable !== false;
+  const ltd = o.last_task_done;
+  const acceptance = !!ltd && typeof ltd === "object";
+  const notif = notifActionable === true;
+  const working = st === "WORKING";
+  const act = o.activity?.activity;
+  // 可观察工作状态：活动正文或工具名在场（仅 kind/时间戳不算——在线不占行动位）
+  const observableWork = !!(act && ((typeof act.text === "string" && act.text !== "") || (typeof act.tool === "string" && act.tool !== "")));
+  const needsAction = waitingDecidable || acceptance || notif;
+  const inPending = needsAction || (working && observableWork);
+  const reason: QueueReason = waitingDecidable ? "waiting"
+    : acceptance ? "acceptance"
+    : notif ? "notification"
+    : working && observableWork ? "working"
+    : "other";
+  return { needs_action: needsAction, is_working: working, needs_acceptance: acceptance, is_other: !inPending, reason };
+}
+
+// 单流分区主入口：pending（待处理，置顶）/ others（其他会话）两组互斥。同一会话
+// 只出现一次（首见优先，重复 id 直接过滤）；opts.notifications = 全源归一通知池
+//（判「通知明确要求动作」：actionable 且未 resolved 且 sourceContext.sessionId
+// 绑定本会话）；畸形会话（非对象/无 id）跳过不入流、非数组入参 → 空两组（旧 relay
+// 缺字段降级不崩）。flags 逐会话在账（键=keyOf）。调用方必须先做完筛选（折叠空闲/
+// 删除舞步）再进来——组头计数只能来自过滤后实际渲染卡数，不能使用源总数（018
+// §2.1.1 硬条款，buildListProjection 的段头 count 全部取自本函数输出）
+export interface SplitOptions {
+  keyOf?: (s: SessionState) => string;
+  notifications?: unknown; // 归一化 NotificationItem[]；非数组 = 旧 relay 降级空池
+}
 export interface PendingSplit {
   pending: SessionState[];
   others: SessionState[];
+  flags: Map<string, QueueFlags>;
 }
-export function splitPending(sessions: SessionState[]): PendingSplit {
+export function splitPending(sessions: SessionState[], opts?: SplitOptions): PendingSplit {
+  const keyOf = typeof opts?.keyOf === "function" ? opts.keyOf : (s: SessionState) => s.session_id;
+  const notifSids = new Set<string>();
+  const pool: unknown[] = Array.isArray(opts?.notifications) ? opts.notifications : [];
+  for (const n of pool) {
+    if (!n || typeof n !== "object") continue;
+    const item = n as { actionable?: unknown; resolved_at?: unknown; sourceContext?: { sessionId?: unknown } };
+    if (item.actionable !== true) continue;
+    if (item.resolved_at !== undefined && item.resolved_at !== null) continue; // 已解决不再要求动作
+    const sid = item.sourceContext && typeof item.sourceContext === "object" ? item.sourceContext.sessionId : undefined;
+    if (typeof sid === "string" && sid) notifSids.add(sid); // 只认绑定本会话的未决通知
+  }
   const pending: SessionState[] = [];
   const others: SessionState[] = [];
+  const flags = new Map<string, QueueFlags>();
   const seen = new Set<string>();
-  for (const s of sessions) {
-    if (seen.has(s.session_id)) continue;
-    seen.add(s.session_id);
-    (s.status === "WAITING" ? pending : others).push(s);
+  for (const s of Array.isArray(sessions) ? sessions : []) {
+    if (!s || typeof s !== "object" || typeof s.session_id !== "string" || !s.session_id) continue;
+    const k = String(keyOf(s));
+    if (seen.has(k)) continue; // 首见优先，重复直接滤
+    seen.add(k);
+    const f = queueFlagsOf(s, notifSids.has(s.session_id));
+    flags.set(k, f);
+    (f.is_other ? others : pending).push(s);
   }
-  return { pending, others };
+  const recency = (x: SessionState): number => (x && (x.updated_at || x.started_at)) || 0;
+  pending.sort((a, b) => {
+    const ra = QUEUE_REASON_ORDER[flags.get(String(keyOf(a)))?.reason ?? "other"] ?? 9;
+    const rb = QUEUE_REASON_ORDER[flags.get(String(keyOf(b)))?.reason ?? "other"] ?? 9;
+    return ra !== rb ? ra - rb : recency(b) - recency(a);
+  });
+  others.sort((a, b) => recency(b) - recency(a));
+  return { pending, others, flags };
 }
+/* E2A-QUEUE-END */
 
 // 源配色映射（#294 审查修复口径）：按跨端稳定键 colorKey 排序等距分配调色板，
 // 与输入顺序无关——分组头与逐卡角标共用同一映射，同屏同源必同色
@@ -208,6 +295,9 @@ export interface ProjectionParams {
   sources: ProjectionSource[];
   // 活动源 source_capabilities?.activity === true；旧 relay 缺省/false = legacy
   sourceActivityCap: boolean;
+  // #018-E2a-up 全源归一通知池（snap.sources 各源 notifications 平铺）；缺省 =
+  // 无通知域，旧 relay（notifications 为 null/缺字段）自然降级空池
+  notifications?: unknown;
 }
 
 // 列表投影主入口：
@@ -217,7 +307,9 @@ export interface ProjectionParams {
 // - 聚合多源 + 能力缺失（legacy）→ 降级为单一「—」占位组平铺，不隐藏结构；
 // - 聚合分组下无 src / 源已不在列表的会话落「—」占位组殿后（降级不丢卡）
 export function buildListProjection(p: ProjectionParams): ProjectionRow[] {
-  const { pending, others } = splitPending(p.sessions);
+  // E2a-up 富版分区：needs_action 四型/不占位四则/互斥/组内序全在 splitPending
+  //（018 §2.1.1）；段头/组头 count 全部取自本函数输出的过滤后卡数，绝不用源总数
+  const { pending, others } = splitPending(p.sessions, { notifications: p.notifications });
   const rows: ProjectionRow[] = [];
   if (pending.length) {
     rows.push({ kind: "section", key: "sec-pending", label: "待处理", count: pending.length });
@@ -1200,16 +1292,19 @@ export default function ListScreen({ sessions, connected, connText, onOpen, onNe
     [sorted, collapseIdle, idleDimMin, pendingDel, deleting],
   );
 
-  // E2a 行模型 = 纯函数投影（buildListProjection）：待处理段置顶 → 其他会话按
-  // 模式分流（单源平铺 / 聚合多源按源分组 / legacy 降级「—」占位组）。行包装
-  // 对象每快照重建无妨——会话对象引用原样透传，SessionCard memo 的行级重渲
-  // 不受影响；组头/段头 count 一律=去重后实际卡数
+  // E2a 行模型 = 纯函数投影（buildListProjection）：待处理段置顶（E2a-up 富版：
+  // 可决策 WAITING/待验收/未决 actionable 通知/有活动证据的 WORKING，非 WAITING
+  // 全占的简版）→ 其他会话按模式分流（单源平铺 / 聚合多源按源分组 / legacy 降级
+  // 「—」占位组）。行包装对象每快照重建无妨——会话对象引用原样透传，SessionCard
+  // memo 的行级重渲不受影响；组头/段头 count 一律=去重后实际卡数
   const projection = useMemo(
     () => buildListProjection({
       sessions: visible,
       aggregate: snap.aggregate,
       sources: snap.sources,
       sourceActivityCap: snap.sourceCapabilities?.activity === true,
+      // E2a-up：全源归一通知池（各源 notifications 平铺；旧 relay null → 空池降级）
+      notifications: snap.sources.flatMap((x) => x.notifications ?? []),
     }),
     [visible, snap.aggregate, snap.sources, snap.sourceCapabilities],
   );

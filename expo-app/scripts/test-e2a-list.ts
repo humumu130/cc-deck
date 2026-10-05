@@ -142,7 +142,15 @@ const baseSession = (over: Partial<SessionState> = {}): SessionState => ({
 });
 
 const sess = (id: string, status: SessionState["status"], src?: string, updated_at = 100): SessionState =>
-  baseSession({ session_id: id, status, src, updated_at });
+  baseSession({
+    session_id: id, status, src, updated_at,
+    // #018-E2a-up 富版口径：裸 WAITING（无 waiting_request）= 脱钩帧不占待处理，
+    // 本套 WAITING fixture 一律视作可决策卡——互斥/计数/分组断言语义不变；五型
+    // 判定/降级/通知 grounding 细则归 relay/scripts/test-e2a-queue.ts fixture
+    ...(status === "WAITING"
+      ? { waiting_request: { request_id: `r-${id}`, tool_name: "Bash", input_summary: "", suggestions: [] } }
+      : {}),
+  });
 
 const withActivity = (capability: ActivityCapabilities, over: Partial<SessionState> = {}): SessionState =>
   baseSession({
