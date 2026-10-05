@@ -44,5 +44,5 @@ node "${CLAUDE_PLUGIN_ROOT}/scripts/relay.mjs" --qr
 "${CLAUDE_PLUGIN_ROOT}/bin/dispatch" payload.json <session_id>
 ```
 
-命令收到 ACK 后打印 `ok=true` 与 `command_id`；失败、断线或 15 秒超时均非零退出。
-每次投递追加审计行到 `$CCR_DATA_DIR/cli-dispatches.ndjson`，未设置时使用 `~/.cc-deck/data`。
+命令收到 ACK（`ok:true`）后打印 `ok=true` 与 `command_id`；relay 明确拒收（`ok:false`）立即非零退出；超时或断线自动短重试一次（stderr 提示「第 2 次尝试」，沿用同一 command_id 防双投），仍无有效 ACK 才非零退出并提示转人工巡检。
+每次投递追加审计行（含 `attempt` 尝试次数）到 `$CCR_DATA_DIR/cli-dispatches.ndjson`，未设置时使用 `~/.cc-deck/data`。

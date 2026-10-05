@@ -42,11 +42,12 @@ PY
 )"
 log="$data/cli-dispatches.ndjson"
 mkdir -p "$data"
+attempt="${attempt:-1}"
 append_log() {
-  python3 - "$log" "$sid" "$dispatch_id" "$command_id" "$1" "$2" <<'PY'
+  python3 - "$log" "$sid" "$dispatch_id" "$command_id" "$1" "$2" "${attempt:-1}" <<'PY'
 import json, sys
 from datetime import datetime, timezone
-path, sid, dispatch_id, command_id, ok, error = sys.argv[1:]
+path, sid, dispatch_id, command_id, ok, error, attempt = sys.argv[1:8]
 record = {
     "ts": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
     "session_id": sid,
@@ -55,6 +56,8 @@ record = {
     "type": "COMMAND_MESSAGE",
     "ok": ok == "true",
     "error": error or None,
+    # 018 :88 状态机：attempt 落审计——短重试用掉第几次、终局在哪一拍，可判定
+    "attempt": int(attempt),
 }
 with open(path, "a", encoding="utf-8") as f:
     f.write(json.dumps(record, ensure_ascii=False, separators=(",", ":")) + "\n")
@@ -62,7 +65,9 @@ PY
 }
 fail() {
   msg="$1"
-  echo "dispatch 失败：$msg；请确认 relay 在线后重试，未静默丢单。" >&2
+  extra=""
+  [ "${attempt:-1}" -ge 2 ] && extra="；已短重试一次仍无有效 ACK，转人工巡检，勿自动重复派单"
+  echo "dispatch 失败：$msg$extra；请确认 relay 在线后重试，未静默丢单。" >&2
   append_log "false" "$msg" || echo "dispatch 审计写入失败：$log" >&2
   exit 1
 }
@@ -97,7 +102,12 @@ then
 fi
 
 set +e
-ack="$(node - "$port" "$token" "$command_file" "$command_id" <<'NODE'
+# 单次投递（内嵌 RFC6455 客户端）：SEND_ACK/SEND_STATUS/SEND_ERR 落全局，供重试循环与
+# 下方 redaction 阶段共用；stderr 落临时文件（node 侧 finish 已做 token 消毒），
+# 供无 ACK 时取具体失败原因（连不上/超时/断线）落审计，不只留笼统话
+send_once() {
+  SEND_ERR_FILE="$(mktemp "${TMPDIR:-/tmp}/cc-deck-dispatch-err.XXXXXX")"
+  SEND_ACK="$(node - "$port" "$token" "$command_file" "$command_id" 2>"$SEND_ERR_FILE" <<'NODE'
 const fs = require("node:fs");
 const net = require("node:net");
 const crypto = require("node:crypto");
@@ -113,7 +123,9 @@ function finish(code, message, ack) {
   if (finished) return;
   finished = true; clearTimeout(timer);
   if (ack) process.stdout.write(JSON.stringify(ack));
-  if (message) process.stderr.write(message + "\n");
+  // stderr 同红线：relay 回传的 error 可能回显 token（如鉴权失败信息），与 bash 层
+  // redaction 同口径消毒后再落控制台
+  if (message) process.stderr.write(message.split(token).join("[redacted]") + "\n");
   socket.destroy(); process.exitCode = code;
 }
 function frame(data, opcode = 1) {
@@ -166,10 +178,29 @@ socket.on("error", () => finish(11, "无法连接 relay（连接拒绝/网络错
 socket.on("close", () => { if (!finished) finish(11, "WS 连接意外关闭"); });
 NODE
 )"
-node_status=$?
+  SEND_STATUS=$?
+  SEND_ERR="$(head -1 "$SEND_ERR_FILE" 2>/dev/null || true)"
+  rm -f "$SEND_ERR_FILE"
+}
+
+attempt=1
+send_once
+# 018 :88「超时未 ACK：一次短重试；仍无 ACK 转人工巡检，不自动重复派单」：
+# 未有效 ACK = 12（15s 超时）/ 11（连不上、握手失败、连接中断）；10 = relay 明确
+# 拒收（ok:false），不重试转人工。重试沿用同一 envelope 与 command_id（relay 对
+# 重复 command_id 幂等回放首次 ACK，不双投副作用），不另起新 id
+if [ "$SEND_STATUS" -ne 0 ] && [ "$SEND_STATUS" -ne 10 ]; then
+  attempt=2
+  echo "dispatch：第 2 次尝试（首次未收到有效 ACK，2 秒后短重试）…" >&2
+  sleep 2
+  send_once
+fi
 set -e
+ack="$SEND_ACK"
+node_status="$SEND_STATUS"
 if [ "$node_status" -ne 0 ]; then
-  ack_error="$(python3 - "$ack" "$token" <<'PY'
+  if [ -n "$ack" ]; then
+    ack_error="$(python3 - "$ack" "$token" <<'PY'
 import json, sys
 try:
     print(str(json.loads(sys.argv[1]).get("error") or "ACK ok 非 true").replace(sys.argv[2], "[redacted]"))
@@ -177,6 +208,10 @@ except Exception:
     print("WS 连接失败或未收到有效 ACK")
 PY
 )"
+  else
+    # 无 ACK 可解析（连不上/超时/断线）：取 node 侧消毒后的 stderr 首行作具体原因
+    ack_error="${SEND_ERR:-WS 连接失败或未收到有效 ACK}"
+  fi
   fail "$ack_error"
 fi
 ack_ok="$(python3 - "$ack" <<'PY'
