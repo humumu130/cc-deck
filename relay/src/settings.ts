@@ -4,13 +4,38 @@
 // 默认值策略（用户 2026-09-28 拍板）：新装默认开（全新环境零迁移负担）；
 // 存量升级默认关（行为不变，UI 引导后再开——开启只影响新会话，存量会话按
 // 创建时记录的家走，无需迁移）。
-import { existsSync, readFileSync, renameSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { parseEmployeeConfigDir } from "./config.js";
+import type { SessionEngine } from "./types.js";
 
 export interface RelaySettings {
   employeeHome: boolean;
 }
+
+export interface EngineProfile {
+  engine: SessionEngine;
+  provider: string;
+  profile_ref: string;
+  model?: string;
+  capabilities?: string[];
+  enabled?: boolean;
+  base_url?: string;
+  api_key_env?: string;
+  base_url_env?: string;
+  keychain_ref?: string;
+}
+
+export interface EngineProfilePreflight {
+  ok: boolean;
+  errors: string[];
+  warnings: string[];
+  env_refs: string[];
+}
+
+export type EngineProfileWriteResult =
+  | { ok: true; profiles: EngineProfile[] }
+  | { ok: false; error: string };
 
 /** 最终生效的雇员独立家状态（SNAPSHOT/设置页数据源） */
 export interface EmployeeHomeState {
@@ -23,6 +48,118 @@ export interface EmployeeHomeState {
 }
 
 const SETTINGS_FILE = "settings.json";
+const ENGINE_PROFILES_FILE = "engine-profiles.json";
+const ENGINE_PROFILE_ENGINES: readonly SessionEngine[] = ["claude", "codex", "trae", "qwen-code", "codebuddy", "zcode"];
+const SECRET_FIELD = /(token|secret|password|api[_-]?key|private[_-]?key)/i;
+const REFERENCE_FIELD = /(?:_env|_ref)$/i;
+
+export function engineProfilesPath(dataDir: string): string {
+  return join(dataDir, ENGINE_PROFILES_FILE);
+}
+
+function secretFieldPaths(value: unknown, prefix = ""): string[] {
+  if (!value || typeof value !== "object") return [];
+  if (Array.isArray(value)) return value.flatMap((item, index) => secretFieldPaths(item, `${prefix}[${index}]`));
+  const out: string[] = [];
+  for (const [key, child] of Object.entries(value as Record<string, unknown>)) {
+    const path = prefix ? `${prefix}.${key}` : key;
+    if (SECRET_FIELD.test(key) && !REFERENCE_FIELD.test(key)) out.push(path);
+    if (REFERENCE_FIELD.test(key) && typeof child !== "string") out.push(path);
+    out.push(...secretFieldPaths(child, path));
+  }
+  return out;
+}
+
+export function validateEngineProfile(profile: unknown): { ok: true; profile: EngineProfile } | { ok: false; error: string } {
+  if (!profile || typeof profile !== "object" || Array.isArray(profile)) return { ok: false, error: "profile 必须是对象" };
+  const raw = profile as Record<string, unknown>;
+  const secretPaths = secretFieldPaths(raw);
+  if (secretPaths.length > 0) return { ok: false, error: `profile 含秘密字段: ${secretPaths.join(",")}` };
+  if (!ENGINE_PROFILE_ENGINES.includes(raw.engine as SessionEngine)) return { ok: false, error: "engine 无效" };
+  if (typeof raw.provider !== "string" || !raw.provider.trim()) return { ok: false, error: "provider 必填" };
+  if (typeof raw.profile_ref !== "string" || !raw.profile_ref.trim()) return { ok: false, error: "profile_ref 必填" };
+  if (raw.model !== undefined && typeof raw.model !== "string") return { ok: false, error: "model 必须是字符串" };
+  if (raw.capabilities !== undefined && (!Array.isArray(raw.capabilities) || raw.capabilities.some((item) => typeof item !== "string"))) return { ok: false, error: "capabilities 必须是字符串数组" };
+  if (raw.enabled !== undefined && typeof raw.enabled !== "boolean") return { ok: false, error: "enabled 必须是布尔值" };
+  if (raw.base_url !== undefined) {
+    if (typeof raw.base_url !== "string") return { ok: false, error: "base_url 必须是字符串" };
+    try { new URL(raw.base_url); } catch { return { ok: false, error: "base_url 无法解析" }; }
+  }
+  return {
+    ok: true,
+    profile: {
+      engine: raw.engine as SessionEngine,
+      provider: raw.provider.trim(),
+      profile_ref: raw.profile_ref.trim(),
+      ...(typeof raw.model === "string" && raw.model.trim() ? { model: raw.model.trim() } : {}),
+      ...(Array.isArray(raw.capabilities) ? { capabilities: raw.capabilities as string[] } : {}),
+      ...(typeof raw.enabled === "boolean" ? { enabled: raw.enabled } : {}),
+      ...(typeof raw.base_url === "string" ? { base_url: raw.base_url.trim() } : {}),
+      ...(typeof raw.api_key_env === "string" ? { api_key_env: raw.api_key_env.trim() } : {}),
+      ...(typeof raw.base_url_env === "string" ? { base_url_env: raw.base_url_env.trim() } : {}),
+      ...(typeof raw.keychain_ref === "string" ? { keychain_ref: raw.keychain_ref.trim() } : {}),
+    },
+  };
+}
+
+export function readEngineProfilesFile(dataDir: string): EngineProfile[] | null {
+  try {
+    const raw = JSON.parse(readFileSync(engineProfilesPath(dataDir), "utf-8")) as unknown;
+    const list = Array.isArray(raw) ? raw : raw && typeof raw === "object" && Array.isArray((raw as { profiles?: unknown }).profiles) ? (raw as { profiles: unknown[] }).profiles : null;
+    if (!list) return null;
+    const profiles: EngineProfile[] = [];
+    for (const item of list) {
+      const checked = validateEngineProfile(item);
+      if (!checked.ok) return null;
+      profiles.push(checked.profile);
+    }
+    return profiles;
+  } catch {
+    return null;
+  }
+}
+
+export function writeEngineProfilesFile(dataDir: string, profiles: unknown[]): EngineProfileWriteResult {
+  const checked: EngineProfile[] = [];
+  for (const item of profiles) {
+    const result = validateEngineProfile(item);
+    if (!result.ok) return result;
+    checked.push(result.profile);
+  }
+  try {
+    mkdirSync(dataDir, { recursive: true });
+    const target = engineProfilesPath(dataDir);
+    const tmp = target + ".tmp";
+    writeFileSync(tmp, JSON.stringify({ profiles: checked }, null, 2) + "\n", "utf-8");
+    renameSync(tmp, target);
+    return { ok: true, profiles: checked };
+  } catch {
+    return { ok: false, error: "engine profile 写入失败" };
+  }
+}
+
+export function preflightEngineProfile(profile: unknown, env: NodeJS.ProcessEnv = process.env): EngineProfilePreflight {
+  const checked = validateEngineProfile(profile);
+  if (!checked.ok) return { ok: false, errors: [checked.error], warnings: [], env_refs: [] };
+  const value = checked.profile;
+  const errors: string[] = [];
+  const warnings: string[] = [];
+  const envRefs: string[] = [];
+  for (const ref of [value.api_key_env, value.base_url_env]) {
+    if (!ref) continue;
+    envRefs.push(ref);
+    if (!env[ref]) errors.push(`环境引用未设置: ${ref}`);
+  }
+  if (value.base_url_env && env[value.base_url_env]) {
+    try { new URL(env[value.base_url_env]!); } catch { errors.push(`base URL 环境引用无法解析: ${value.base_url_env}`); }
+  }
+  if (value.keychain_ref) warnings.push(`凭证由 keychain 引用提供: ${value.keychain_ref}`);
+  if (value.engine === "zcode") errors.push("ZCode unsupported/fail-closed");
+  return { ok: errors.length === 0, errors, warnings, env_refs: envRefs };
+}
+
+export const readEngineProfiles = readEngineProfilesFile;
+export const writeEngineProfiles = writeEngineProfilesFile;
 
 export function settingsPath(dataDir: string): string {
   return join(dataDir, SETTINGS_FILE);

@@ -12,7 +12,7 @@
 //   <orgDir>/confirms.json           组织确认单队列（正经立项/升降级/建议暂缓/结项/复活）
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { randomUUID } from "node:crypto";
-import { join } from "node:path";
+import { isAbsolute, join } from "node:path";
 import { orgDir, readDispatchLog } from "./org.js";
 // #26 M3 挂起自动化活度口径需要路由表（熟手最近收工）；routing 只 import org，无环
 import { routingFor } from "./routing.js";
@@ -259,6 +259,31 @@ export function createGroup(
   }
   return { ok: true, group, needsConfirm, confirm };
 }
+
+export interface OrgActionCreatePayload {
+  action: "create" | string;
+  name: string;
+  anchor_dir: string;
+  tier: string;
+}
+
+/** B2a adapter：只把 COMMAND_ORG_ACTION=create 收敛到既有 createGroup 单漏斗。 */
+export function handleOrgActionCreate(payload: unknown, dir?: string): CreateGroupResult {
+  if (!payload || typeof payload !== "object" || Array.isArray(payload)) {
+    return { ok: false, error: "org action payload 无效" };
+  }
+  const raw = payload as Partial<OrgActionCreatePayload>;
+  if (raw.action !== "create") return { ok: false, error: `unsupported org action: ${String(raw.action ?? "")}` };
+  const name = typeof raw.name === "string" ? raw.name.trim() : "";
+  const anchor = typeof raw.anchor_dir === "string" ? raw.anchor_dir.trim() : "";
+  const tier = typeof raw.tier === "string" ? raw.tier.trim() : "";
+  if (!name || !anchor) return { ok: false, error: "name/anchor_dir 必填" };
+  if (!isAbsolute(anchor)) return { ok: false, error: "anchor_dir 必须是绝对路径" };
+  if (tier !== "轻立项" && tier !== "正经立项") return { ok: false, error: "tier 必须是 轻立项|正经立项" };
+  return createGroup({ name, anchor_dir: anchor, tier }, dir);
+}
+
+export const adaptOrgAction = handleOrgActionCreate;
 
 export type TransitionResult = { ok: true; group: ProjectGroup } | { ok: false; error: string };
 

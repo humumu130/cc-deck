@@ -1,0 +1,11 @@
+{
+  "engine": "claude",
+  "provider": "example",
+  "profile_ref": "profile/example-default",
+  "model": "claude-test",
+  "capabilities": ["streaming", "approval"],
+  "enabled": true,
+  "base_url": "https://api.example.test/v1",
+  "api_key_env": "TEST_PROVIDER_KEY",
+  "base_url_env": "TEST_PROVIDER_BASE_URL"
+}

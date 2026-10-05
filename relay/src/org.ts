@@ -12,6 +12,85 @@
 import { readFileSync, writeFileSync, existsSync, mkdirSync, rmSync, chmodSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
+import type { SessionEngine } from "./types.js";
+
+export type CommandRole = "owner" | "operator" | "viewer";
+export type CommandCapability = "org:write" | "profile:write" | "artifact:read" | "artifact:batch";
+
+export const COMMAND_CAPABILITY_MATRIX: Record<CommandRole, readonly CommandCapability[]> = {
+  owner: ["org:write", "profile:write", "artifact:read"],
+  operator: ["org:write", "profile:write", "artifact:read"],
+  viewer: ["artifact:read"],
+};
+
+export const ZCODE_DEFAULT_CAPABILITY = {
+  engine: "zcode" as const,
+  enabled: false,
+  unsupported: true,
+  capabilities: [] as const,
+};
+
+export interface ForbiddenCommandAck {
+  command_id: string;
+  ok: false;
+  error: "forbidden";
+  actor_role: CommandRole;
+}
+
+export interface CommandPermissionResult {
+  allowed: boolean;
+  actor_role: CommandRole;
+  capability: string;
+  ack?: ForbiddenCommandAck;
+  reason?: string;
+}
+
+export interface CommandPermissionOptions {
+  command_id?: string;
+  capabilities?: readonly string[];
+  engine?: SessionEngine;
+}
+
+/** 纯权限判定；调用方仍需从真实连接身份解析 actor，不信任客户端自报角色。 */
+export function evaluateCommandPermission(
+  actorRole: CommandRole,
+  capability: string,
+  options: CommandPermissionOptions | string = {},
+): CommandPermissionResult {
+  const normalized = typeof options === "string" ? { command_id: options } : options;
+  const roleCapabilities = COMMAND_CAPABILITY_MATRIX[actorRole];
+  const explicit = normalized.capabilities ?? [];
+  const zcodeDenied = normalized.engine === "zcode";
+  const allowed = !zcodeDenied && (
+    roleCapabilities?.includes(capability as CommandCapability) === true ||
+    (capability === "artifact:batch" && (actorRole === "owner" || actorRole === "operator") && explicit.includes("artifact:batch"))
+  );
+  if (allowed) return { allowed: true, actor_role: actorRole, capability };
+  return {
+    allowed: false,
+    actor_role: actorRole,
+    capability,
+    reason: zcodeDenied ? "zcode_unsupported" : "missing_capability",
+    ack: {
+      command_id: normalized.command_id ?? "",
+      ok: false,
+      error: "forbidden",
+      actor_role: actorRole,
+    },
+  };
+}
+
+export interface EngineCapabilityPermission {
+  allowed: boolean;
+  engine: SessionEngine;
+  capability: string;
+  reason: string;
+}
+
+export function evaluateEngineCapability(engine: SessionEngine, capability: string): EngineCapabilityPermission {
+  if (engine === "zcode") return { allowed: false, engine, capability, reason: "unsupported" };
+  return { allowed: true, engine, capability, reason: "registered" };
+}
 
 // 用户 2026-09-27 拍板：淡化「组织」概念（设计稿内部术语不进用户面）——卡片直名 Leader，
 // 用户可见文案一律「团队」。代码标识符（ORG_ 前缀/org 目录名）不动（架构层）。
