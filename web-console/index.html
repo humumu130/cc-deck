@@ -1094,6 +1094,11 @@
   .notice-row .nr-text { color: var(--dim); font-size: 10.5px; flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .notice-row .nr-src { color: var(--faint); font-size: 10px; flex: none; }
   .notice-row.nr-done { opacity: .55; }
+  /* #018-W1b 通知动作位/错误行/组头可行动计数 */
+  .notice-row .nr-ack { flex: none; font-size: 10px; padding: 2px 8px; border-radius: 999px; border: 1px solid var(--border); background: var(--panel); color: var(--text-strong); cursor: pointer; }
+  .notice-row .nr-ack:hover { border-color: var(--done); color: var(--done); }
+  .ng-act { font-style: normal; margin-left: 5px; padding: 0 6px; border-radius: 999px; background: rgba(255,159,10,.14); color: var(--warn, #c77c11); font-size: 10px; }
+  .notice-err { margin: 2px 5px 4px; padding: 5px 8px; border-radius: 6px; background: rgba(255,59,48,.10); color: #c0392b; font-size: 11px; }
   .notice-empty { color: var(--faint); font-size: 11px; padding: 2px 5px; }
   /* #399 源徽章实底填色：整胶囊即源色（去圆点），字色由 JS 按源色亮度内联指定 */
   .src-badge {
@@ -1134,6 +1139,20 @@
   .org-badge.lv { color: var(--faint); border-style: dashed; }
   /* 项目组详情抽屉（右侧滑入）：状态/编制/任务板/回执流分节 */
   #orgdrawer { position: fixed; inset: 0; z-index: 61; background: rgba(2,5,10,.45); display: flex; justify-content: flex-end; }
+  /* #018-W1b 远程立项轻模态（orgnew）：复用 orgdrawer 的遮罩语汇，居中窄卡 */
+  #orgnew { position: fixed; inset: 0; z-index: 62; background: rgba(2,5,10,.45); display: flex; align-items: center; justify-content: center; }
+  #orgnew .on-panel { width: min(360px, 92vw); background: var(--panel); border: 1px solid var(--border); border-radius: 12px; box-shadow: 0 12px 40px rgba(0,0,0,.25); }
+  #orgnew .on-head { display: flex; align-items: center; gap: 8px; padding: 12px 14px; border-bottom: 1px solid var(--border); }
+  #orgnew .on-head b { flex: 1; font-size: 13.5px; color: var(--text-strong); }
+  #orgnew .on-body { padding: 12px 14px 14px; display: flex; flex-direction: column; gap: 5px; }
+  #orgnew .on-lb { font-size: 11px; color: var(--dim); margin-top: 6px; }
+  #orgnew input, #orgnew select { font-size: 12.5px; padding: 7px 9px; border: 1px solid var(--border); border-radius: 8px; background: var(--bg, #fff); color: var(--text); min-width: 0; }
+  #orgnew .on-err { margin-top: 8px; padding: 6px 9px; border-radius: 6px; background: rgba(255,59,48,.10); color: #c0392b; font-size: 11.5px; }
+  #orgnew .on-foot { display: flex; justify-content: flex-end; gap: 8px; margin-top: 12px; }
+  #orgnew .on-go { font-size: 12px; padding: 6px 14px; border-radius: 8px; border: 1px solid var(--done); background: var(--done); color: #fff; cursor: pointer; }
+  .org-newrow { padding: 8px 2px 2px; }
+  .org-new { font-size: 11.5px; padding: 4px 12px; border-radius: 999px; border: 1px dashed var(--border); background: transparent; color: var(--dim); cursor: pointer; }
+  .org-new:hover { border-color: var(--done); color: var(--done); }
   #orgdrawer .od-panel { width: min(430px, 94vw); background: var(--panel); border-left: 1px solid var(--border);
     display: flex; flex-direction: column; overflow: hidden; box-shadow: -10px 0 34px rgba(0,0,0,.35); }
   #orgdrawer .od-head { display: flex; align-items: center; gap: 8px; padding: 13px 15px; border-bottom: 1px solid var(--border); }
@@ -3041,6 +3060,7 @@ function ensureCtx(cfg) {
       sessions: new Map(), timelines: new Map(), lastSeq: 0, models: [], deliverables: false,
       schemaVersion: 0, legacyMode: true, sourceCapabilities: null,
       notifications: [], notificationsSupported: false, dockActivities: new Map(),
+      cmdCaps: {}, // #018-W1b 本源命令能力位记忆（未知命令错误 → 本会话静默降级不再发）
       allowRules: null, // #212 记住规则（SNAPSHOT.allow_rules；null = 旧 relay 不支持）
       empHomeSettings: null, // #17 第二批 雇员独立家设置（SNAPSHOT.settings；null = 旧 relay 不支持，卡隐藏）
       projects: null, orgConfirms: [], boards: new Map(), // #26 M2 组织态（projects null = 旧 relay 不支持，组织区不渲染；boards 由 BOARD_UPDATED 增量维护）
@@ -4556,6 +4576,13 @@ function projectSnapshotFields(ctx, payload) {
   ctx.schemaVersion = version;
   ctx.legacyMode = !hasSchema || version < 1;
   ctx.relayId = typeof p.relay_id === "string" ? p.relay_id : ""; // #018-W1a 源身份主键（B0 relay_id 必带；旧 relay 无字段=空 → 源胶囊走 legacy 回落）
+  // #018-W1b 降级能力位恢复：relay 身份变更（连接换指另一实例）或 schema_version>=1
+  //（relay 升级新命令面上线）→ 清本会话未知命令记忆；旧 relay 恒 legacyMode(0) 记忆稳定
+  {
+    const capKey = ctx.relayId + "|" + (typeof p.relay_dev === "string" ? p.relay_dev : "") + "|" + (ctx.cfg ? (ctx.cfg.cloud ? String(ctx.cfg.cloud.rd || ctx.cfg.cloud.url || "") : String(ctx.cfg.wsUrl || "")) : "");
+    ctx.cmdCaps = cmdCapRecoverOnSnapshot(ctx.cmdCaps, p, ctx.__capKey !== undefined && ctx.__capKey !== capKey);
+    ctx.__capKey = capKey;
+  }
   ctx.sourceCapabilities = p.source_capabilities && typeof p.source_capabilities === "object"
     ? { ...p.source_capabilities } : null;
   const capNotifications = ctx.sourceCapabilities?.notifications;
@@ -4670,9 +4697,93 @@ const ORG_ST = { pending: "待确认", active: "在办", parked: "已挂起", ar
 const ORG_CF_KIND = { "project-create": "立项", "tier-change": "升降级", "suggest-hold": "建议暂缓", archive: "结项", revive: "复活" };
 const orgDrawer = { open: false, gid: "", src: "", data: null };
 
-function orgSendConfirm(ctx, confirmId, approve) {
-  const cid = sendCommandTo(ctx, "COMMAND_ORG_CONFIRM", { confirm_id: confirmId, approve });
-  if (cid) toast(approve ? "已同意，正在执行" : "已否决", 2200);
+// 确认卡决议（#018-W1b ACK 严格判定升级）：COMMAND_ORG_CONFIRM {confirm_id, approve}
+// —— approve 真布尔（relay 咽喉 `payload.approve === true` 严判，字符串 "1" 会判否决）。
+// 决议成功只 toast + 等 PROJECTS_UPDATED/ORG_CONFIRM_UPDATED 权威帧增量刷新（不本地造
+// 状态）；失败可见错误；同确认单飞行中双击闸；旧 relay 未知命令 → 能力位记忆+静默
+const orgCfFlight = new Set();
+async function orgSendConfirm(ctx, confirmId, approve) {
+  if (ackTapGuard(orgCfFlight, confirmId) === "skip") return;
+  const payload = orgConfirmPayload(confirmId, approve);
+  if (!payload) return;
+  orgCfFlight.add(confirmId);
+  try {
+    const ack = await commandAck(ctx, "COMMAND_ORG_CONFIRM", payload);
+    const v = ackVerdict(ack);
+    if (v.ok) { toast(approve ? "已同意，正在执行" : "已否决", 2200); return; } // 帧回来自动刷
+    if (unknownCommandError(v.error)) {
+      ctx.cmdCaps = cmdCapRemember(ctx.cmdCaps, "COMMAND_ORG_CONFIRM");
+      renderOrgZone(); // 该源确认卡动作位静默收起（无弹窗轰炸）
+      return;
+    }
+    toast("决议失败: " + v.error);
+  } finally {
+    orgCfFlight.delete(confirmId);
+  }
+}
+
+// #018-W1b 远程立项轻入口（007 B+）：组织区「＋ 新建团队」→ COMMAND_ORG_ACTION
+// {action:"create", name, anchor_dir, tier}。成功 ACK data {group,needsConfirm,confirm?}
+// ——快照/帧刷新出组或确认卡，不改本地卡；失败/校验错误行内直显；旧 relay 降级记忆。
+// 锚点目录是 relay 侧文件系统绝对路径——web 端文本输入 + relay 校验错误直显
+function orgCreateSrcs() {
+  return orgCtxs().filter((c) => !cmdCapBlocked(c.cmdCaps, "COMMAND_ORG_ACTION"));
+}
+function orgCloseCreate() {
+  const d = $("orgnew");
+  if (d) d.remove();
+}
+async function orgCreateSubmit() {
+  const d = $("orgnew");
+  if (!d) return;
+  const errLine = d.querySelector(".on-err");
+  const name = d.querySelector(".on-name").value;
+  const anchor = d.querySelector(".on-anchor").value;
+  const tier = d.querySelector(".on-tier").value;
+  const srcId = d.querySelector(".on-src") ? d.querySelector(".on-src").value : "";
+  const showErr = (m) => { if (errLine) { errLine.textContent = m; errLine.hidden = false; } };
+  const v = orgCreatePayload({ name, anchor_dir: anchor, tier });
+  if (!v.ok) { showErr(v.error); return; }
+  const ctx = ctxs.get(srcId) || orgCreateSrcs()[0];
+  if (!ctx) { showErr("无可用源"); return; }
+  const ack = await commandAck(ctx, "COMMAND_ORG_ACTION", v.payload);
+  const r = ackVerdict(ack);
+  if (r.ok) {
+    orgCloseCreate();
+    const data = ack && typeof ack.data === "object" && ack.data ? ack.data : {};
+    toast(data.needsConfirm ? "已提交立项（待确认）" : "已立项：" + name, 2400);
+    return; // 组/确认卡由 emitOrgState 帧与下轮快照刷新，不本地造
+  }
+  if (unknownCommandError(r.error)) {
+    ctx.cmdCaps = cmdCapRemember(ctx.cmdCaps, "COMMAND_ORG_ACTION");
+    renderOrgZone();
+    showErr("当前源 relay 版本较旧，不支持远程立项");
+    return;
+  }
+  showErr("立项失败：" + r.error);
+}
+function orgOpenCreate() {
+  orgCloseCreate();
+  const srcs = orgCreateSrcs();
+  const d = document.createElement("div");
+  d.id = "orgnew";
+  d.innerHTML = '<div class="on-panel"><div class="on-head"><b>新建团队</b><button class="on-close mini" title="关闭">✕</button></div>' +
+    '<div class="on-body">' +
+      '<label class="on-lb">名称</label><input class="on-name" type="text" placeholder="如：收银台改造" maxlength="60">' +
+      '<label class="on-lb">锚点目录（relay 侧绝对路径）</label><input class="on-anchor" type="text" placeholder="/Users/you/dev/some-repo" spellcheck="false">' +
+      '<label class="on-lb">层级</label><select class="on-tier"><option value="轻立项">轻立项（首单出确认卡）</option><option value="正经立项">正经立项（出确认卡）</option></select>' +
+      (srcs.length > 1 ? '<label class="on-lb">源</label><select class="on-src">' + srcs.map((c) => '<option value="' + escapeHtml(c.cfg.id) + '">' + escapeHtml(srcDisplayName(c.cfg)) + "</option>").join("") + "</select>" : "") +
+      '<div class="on-err" hidden></div>' +
+      '<div class="on-foot"><button class="on-cancel mini">取消</button><button class="on-go">提交立项</button></div>' +
+    "</div></div>";
+  d.addEventListener("click", (e) => {
+    if (e.target === d || e.target.closest(".on-close") || e.target.closest(".on-cancel")) orgCloseCreate();
+    else if (e.target.closest(".on-go")) orgCreateSubmit();
+  });
+  d.addEventListener("keydown", (e) => { if (e.key === "Enter" && e.target.classList && e.target.classList.contains("on-anchor")) orgCreateSubmit(); });
+  document.body.appendChild(d);
+  const nameInput = d.querySelector(".on-name");
+  if (nameInput) nameInput.focus();
 }
 
 function orgCtxs() {
@@ -4716,6 +4827,10 @@ function renderOrgZone() {
         ' title="' + escapeHtml(x.g.anchor_dir || "") + '">' +
         "<span>" + escapeHtml(x.g.name) + "</span><i>·" + escapeHtml(ORG_ST[x.g.status] || x.g.status) + "·" +
         ((x.g.headcount || []).length + 1) + "人</i></button>").join("") + "</div>"; // +1 = Leader 兼管
+  }
+  // #018-W1b 远程立项轻入口：至少一个未被旧 relay 降级记忆封锁的 org 源才显示
+  if (orgCreateSrcs().length) {
+    html += '<div class="org-newrow"><button class="org-new" data-org-new="1" title="远程立项（轻立项/正经立项，relay 侧执行）">＋ 新建团队</button></div>';
   }
   box.innerHTML = html;
   box.hidden = false;
@@ -4835,7 +4950,7 @@ function orgBadgeHtml(ctx, s) {
   return '<span class="org-badge lv" title="' + escapeHtml(s.dispatch_tier || "派单") + '（无项目组）"><span>' + escapeHtml(s.dispatch_tier || "派单") + "</span></span>";
 }
 
-// 组织区事件代理（确认卡 ✓/✗ 决议 + chip 开详情抽屉）：挂在 document 上一次绑定
+// 组织区事件代理（确认卡 ✓/✗ 决议 + chip 开详情抽屉 + 新建团队入口）：挂在 document 上一次绑定
 document.addEventListener("click", (e) => {
   const cf = e.target.closest("button[data-org-cf]");
   if (cf) {
@@ -4847,6 +4962,15 @@ document.addEventListener("click", (e) => {
   if (gb) {
     const c = ctxs.get(gb.dataset.src);
     if (c) orgOpenDrawer(c, gb.dataset.orgG);
+    return;
+  }
+  const nb = e.target.closest("button[data-org-new]");
+  if (nb) { orgOpenCreate(); return; }
+  // #018-W1b 通知「知道了」：委托绑定（通知区 innerHTML 整体重建，行上挂不了监听）
+  const nk = e.target.closest("button[data-nack-key]");
+  if (nk) {
+    const c = ctxs.get(nk.dataset.src);
+    if (c) notifAck(c, nk.dataset.nackKey);
   }
 });
 
@@ -5159,6 +5283,139 @@ function queuePartition(sessions, opts) {
 }
 /* W1A-PROJECTION-END */
 
+/* W1B-COMMANDS-START */
+// #018-W1b 命令/通知/组织写链路纯函数段（自包含零 DOM，锚点供 test-w1b-commands.ts
+// 正则提取 node 直跑——与 W1A-PROJECTION 同套路）。§5.4 硬条款：ACK 必须核 ok:true，
+// HTTP 200/已发送/退出 0 都不算成功；无自动重试风暴（重试=用户重点）。
+// payload 口径对齐 relay 实况（expo 同语义参照、不共享代码）：
+//   COMMAND_NOTIFICATION_ACK {notification_key, action:"handled"|"dismissed"}（B0 冻结词表）
+//   COMMAND_ORG_CONFIRM      {confirm_id, approve:boolean}
+//   COMMAND_ORG_ACTION       {action:"create", name, anchor_dir, tier:"轻立项"|"正经立项"}
+//                            （ws create 路径 projects.ts :271 adaptOrgAction 校验——
+//                            action 必须="create"，tier 不收随手办，anchor 须绝对路径）
+
+// ACK 严格判定三态：commandAck() 对 发送失败/超时 resolve null → kind "unconfirmed"；
+// ok===true 才算成功；其余一律 rejected。永不把「已发送」当「已成功」
+function ackVerdict(ack) {
+  if (ack == null) return { ok: false, error: "命令未确认（超时或源未连接），可重试", kind: "unconfirmed" };
+  if (ack.ok === true) return { ok: true, error: null, kind: "ok" };
+  return { ok: false, error: typeof ack.error === "string" && ack.error ? ack.error : "命令被拒绝", kind: "rejected" };
+}
+
+// 旧 relay 未知命令错误签名（三种来源）：ws 白名单拒发 "invalid command shape"（ws-server
+// :987）/ 旧 handleCommand default "unsupported command" / orgCommand 咽喉不认识的 action
+// "unsupported org action: x"。命中 = 该源 relay 版本没有这条命令，非暂时性故障
+function unknownCommandError(err) {
+  return typeof err === "string" && /invalid command shape|^unsupported command|unsupported org action/.test(err);
+}
+
+// 本源能力位记忆（纯对象进出）：未知命令错误后记住「本会话此源不再发该命令」——
+// 静默降级防弹窗轰炸。恢复条件（cmdCapRecoverOnSnapshot）：①relay 身份变更（同一连接
+// 换指了另一台 relay 实例）②快照 schema_version>=1（relay 升级新命令面上线）。
+// 旧 relay 恒 legacyMode（version 0）→ 记忆稳定不被快照冲掉
+function cmdCapRemember(caps, cmd) {
+  const next = Object.assign({}, caps && typeof caps === "object" ? caps : {});
+  next[cmd] = false;
+  return next;
+}
+function cmdCapBlocked(caps, cmd) {
+  return !!(caps && typeof caps === "object" && caps[cmd] === false);
+}
+function cmdCapRecoverOnSnapshot(caps, snapshotLike, identityChanged) {
+  const p = snapshotLike && typeof snapshotLike === "object" ? snapshotLike : {};
+  const v = typeof p.schema_version === "number" && Number.isFinite(p.schema_version) ? p.schema_version : 0;
+  if (identityChanged !== true && v < 1) return caps; // 无恢复条件：记忆原样保留
+  return {}; // 清零重放行（连接身份换源/relay 升级）
+}
+
+// 双击闸（expo ackTapGuard 同语义同 fixture，不共享代码）：飞行中同键再点 → skip
+function ackTapGuard(inFlight, flightKey) {
+  return inFlight && inFlight.has(flightKey) ? "skip" : "go";
+}
+// Web 多源复合飞行键：通知 key 是 relay 局域命名空间，跨源可能撞名
+function notifFlightKey(srcId, key) {
+  return String(srcId) + "/" + String(key);
+}
+
+// 通知乐观 reducer（expo ackNotification 同语义镜像）：只填空位——已 resolved/已
+// handled 的行不再突变（ACK 照发，relay 幂等 ok；返回 null=调用方跳过本地突变）。
+// 乐观副本带 __w1b_pend 标记供渲染隐藏（「知道了」行即刻消失）与回滚判别
+function notifOptimistic(items, key, action, at) {
+  if (!Array.isArray(items) || typeof key !== "string") return null;
+  if (action !== "handled" && action !== "dismissed") return null;
+  const i = items.findIndex((n) => n && typeof n === "object" && n.key === key);
+  if (i < 0) return null;
+  const prev = items[i];
+  // 只填空位（expo 镜像判据）：resolved 未收口，且 handled 空位（dismissed 可在
+  // 已 handled 行补 dismissed_at 空位）
+  if (prev.resolved_at != null) return null; // 账已收口（来源动作成功），无从乐观
+  if (prev.handled_at != null && !(action === "dismissed" && prev.dismissed_at == null)) return null;
+  if (prev.__w1b_pend) return null; // 已有一笔在飞（双击闸漏网兜底），不叠突变
+  const optimistic = Object.assign({}, prev, { __w1b_pend: { action: action, at: at } });
+  if (action === "dismissed") optimistic.dismissed_at = prev.dismissed_at != null ? prev.dismissed_at : at;
+  optimistic.handled_at = prev.handled_at != null ? prev.handled_at : at;
+  const next = items.slice();
+  next[i] = optimistic;
+  return { items: next, prev: prev, index: i };
+}
+
+// 回滚：行回来。仅当该行仍是「我方的乐观副本」（__w1b_pend 在身）才还原——期间若
+// NOTIFICATIONS_UPDATED/快照权威帧已覆盖（值被替换），以权威为准不动（expo 同判据：
+// 引用同一对象才回滚）
+function notifRollback(items, key, prev) {
+  if (!Array.isArray(items)) return { items: Array.isArray(items) ? items : [], rolled: false };
+  const i = items.findIndex((n) => n && typeof n === "object" && n.key === key);
+  if (i < 0 || !items[i].__w1b_pend) return { items: items, rolled: false };
+  const next = items.slice();
+  next[i] = prev;
+  return { items: next, rolled: true };
+}
+
+// 可行动项（知道了按钮位 + 计数）：actionable 且未 resolved/未 handled/未 dismissed
+function notifActionableOf(items) {
+  if (!Array.isArray(items)) return [];
+  return items.filter((n) => n && typeof n === "object" && n.actionable === true
+    && n.resolved_at == null && n.handled_at == null && n.dismissed_at == null);
+}
+
+// 分组计数随可行动项：组头「操作 · N」的 N 来源（handled 乐观后立即收缩）
+function notifGroupCounts(items) {
+  const out = [];
+  if (!Array.isArray(items)) return out;
+  const byGroup = new Map();
+  for (const n of items) {
+    if (!n || typeof n !== "object") continue;
+    const g = typeof n.group === "string" && n.group ? n.group : "activity";
+    if (!byGroup.has(g)) byGroup.set(g, { group: g, total: 0, actionable: 0 });
+    const e = byGroup.get(g);
+    e.total++;
+    if (n.actionable === true && n.resolved_at == null && n.handled_at == null && n.dismissed_at == null) e.actionable++;
+  }
+  return [...byGroup.values()];
+}
+
+// 组织确认卡决议 payload 组装（relay 咽喉 confirm-decide：approve 必须真布尔——
+// relay 侧 `payload.approve === true` 严格判，字符串 "1" 会判否决）
+function orgConfirmPayload(confirmId, approve) {
+  if (typeof confirmId !== "string" || !confirmId.trim()) return null;
+  return { confirm_id: confirmId, approve: approve === true };
+}
+
+// 远程立项 payload 组装：name/anchor_dir 必填、anchor 须绝对路径（relay 侧文件系统）、
+// tier 只收 轻立项|正经立项（ws create 路径不收随手办——随手办组由会话页派单流程产生）
+function orgCreatePayload(input) {
+  const inp = input && typeof input === "object" ? input : {};
+  const name = typeof inp.name === "string" ? inp.name.trim() : "";
+  const anchor = typeof inp.anchor_dir === "string" ? inp.anchor_dir.trim() : "";
+  const tier = typeof inp.tier === "string" ? inp.tier.trim() : "";
+  if (!name) return { ok: false, error: "名称必填" };
+  if (!anchor) return { ok: false, error: "锚点目录必填" };
+  if (anchor !== "/" && !anchor.startsWith("/")) return { ok: false, error: "锚点目录必须是 relay 侧绝对路径" };
+  if (tier !== "轻立项" && tier !== "正经立项") return { ok: false, error: "层级必须是 轻立项|正经立项" };
+  return { ok: true, payload: { action: "create", name: name, anchor_dir: anchor, tier: tier } };
+}
+/* W1B-COMMANDS-END */
+
 // 列表上方源过滤 chips（#343，#018-W1a 源胶囊化）：默认只"全部"；胶囊=状态点+源名+
 // 必要异常（legacy 标记），源级会话统计不进顶部（总数只在「全部」chip——2026-09-16
 // 用户口径）。LAN/云桥同源按 relay identity 归并（projectSources 三级回落）；选中
@@ -5197,6 +5454,15 @@ function renderSrcChips() {
 }
 
 const NOTICE_GROUP_LABEL = { action: "操作", attention: "需要关注", activity: "活动" };
+// #018-W1b 通知动作失败行内错误（回滚后行回来 + 错误行可见；成功即清，6s 兜底自清）
+let notifErr = "";
+let notifErrTimer = 0;
+function notifErrShow(msg) {
+  notifErr = msg;
+  clearTimeout(notifErrTimer);
+  notifErrTimer = setTimeout(() => { notifErr = ""; renderNotifications(); }, 6000);
+  renderNotifications();
+}
 function renderNotifications() {
   const box = $("notifications");
   if (!box) return;
@@ -5208,15 +5474,18 @@ function renderNotifications() {
     box.innerHTML = "";
     return;
   }
-  const rows = sources.flatMap((ctx) => (ctx.notifications || []).map((item) => ({ ctx, item })));
   const doneOf = (item) => !!(item.resolved_at || item.handled_at || item.dismissed_at);
-  const key = sources.map((ctx) => ctx.cfg.id + ":" + ctx.notifications.length + ":" + ctx.schemaVersion + ":" + ctx.legacyMode).join("|") + "|" + rows.map(({ ctx, item }) => ctx.cfg.id + ":" + item.key + ":" + item.title + ":" + item.body + ":" + (doneOf(item) ? 1 : 0)).join("|");
+  // 乐观在飞行（__w1b_pend）即刻消失不渲染——消失只是乐观视图，账面不动（§3.3 通知
+  // 不清零：打开/浏览/重连/切视图都不清，权威帧回来按 handled 灰显归位）
+  const rows = sources.flatMap((ctx) => (ctx.notifications || []).filter((item) => !item.__w1b_pend).map((item) => ({ ctx, item })));
+  const key = notifErr + "§" + sources.map((ctx) => ctx.cfg.id + ":" + ctx.notifications.length + ":" + ctx.schemaVersion + ":" + ctx.legacyMode).join("|") + "|" + rows.map(({ ctx, item }) => ctx.cfg.id + ":" + item.key + ":" + item.title + ":" + item.body + ":" + (doneOf(item) ? 1 : 0)).join("|");
   if (box.dataset.key === key) return;
   box.dataset.key = key;
   box.hidden = false;
   box.classList.add("show");
+  const errHtml = notifErr ? '<div class="notice-err">' + escapeHtml(notifErr) + "</div>" : "";
   if (!rows.length) {
-    box.innerHTML = '<div class="notice-empty">暂无通知</div>';
+    box.innerHTML = errHtml + '<div class="notice-empty">暂无通知</div>';
     return;
   }
   const groups = new Map();
@@ -5225,17 +5494,63 @@ function renderNotifications() {
     if (!groups.has(group)) groups.set(group, []);
     groups.get(group).push(row);
   }
-  box.innerHTML = [...groups.entries()].map(([group, groupRows]) =>
-    '<section class="notice-group" data-group="' + escapeHtml(group) + '">' +
-      '<div class="notice-group-head">' + escapeHtml(NOTICE_GROUP_LABEL[group] || group) + "</div>" +
+  box.innerHTML = errHtml + [...groups.entries()].map(([group, groupRows]) => {
+    // 组头计数随可行动项（018 计数口径在通知面的对应：只数可行动在办，不数源总数）
+    const act = notifActionableOf(groupRows.map((r) => r.item)).length;
+    return '<section class="notice-group" data-group="' + escapeHtml(group) + '">' +
+      '<div class="notice-group-head">' + escapeHtml(NOTICE_GROUP_LABEL[group] || group) + (act > 0 ? '<i class="ng-act">' + act + "</i>" : "") + "</div>" +
       [...groupRows].sort((a, b) => Number(doneOf(a.item)) - Number(doneOf(b.item))) .map(({ ctx, item }) => {
         const src = srcDisplayName(ctx.cfg);
+        // 「知道了」轻动作位（007 B+）：可行动未收口 + 本源未被旧 relay 降级记忆封锁
+        const canAck = item.actionable === true && !doneOf(item) && !cmdCapBlocked(ctx.cmdCaps, "COMMAND_NOTIFICATION_ACK");
         return '<div class="notice-row' + (doneOf(item) ? " nr-done" : "") + '" data-key="' + escapeHtml(item.key) + '" title="' + escapeHtml(item.title) + (item.body ? "&#10;" + escapeHtml(item.body) : "") + '">' +
           '<div class="nr-body"><div class="nr-title">' + escapeHtml(item.title) + '</div><div class="nr-text">' + escapeHtml(item.body) + '</div></div>' +
+          (canAck ? '<button class="nr-ack" data-nack-key="' + escapeHtml(item.key) + '" data-src="' + escapeHtml(ctx.cfg.id) + '" title="标记已处理（handled）">知道了</button>' : "") +
           '<span class="nr-src">' + escapeHtml(src) + "</span></div>";
       }).join("") +
-    "</section>"
-  ).join("");
+    "</section>";
+  }).join("");
+}
+
+// #018-W1b 「知道了」轻动作（007 B+）：COMMAND_NOTIFICATION_ACK {notification_key,
+// action:"handled"}。乐观行即刻消失 → ACK ok:true 收口（权威帧回来灰显归位）；
+// 失败回滚（行回来+行内错误行）；旧 relay 未知命令 → 能力位记忆+静默降级（动作位
+// 隐藏，无错误行轰炸）；双击闸防双发；无自动重试（重试=用户重点）
+const notifFlight = new Set();
+async function notifAck(ctx, key) {
+  const fk = notifFlightKey(ctx.cfg.id, key);
+  if (ackTapGuard(notifFlight, fk) === "skip") return;
+  notifFlight.add(fk);
+  try {
+    const opt = notifOptimistic(ctx.notifications, key, "handled", Date.now());
+    if (opt) { ctx.notifications = opt.items; renderNotifications(); render(); }
+    const ack = await commandAck(ctx, "COMMAND_NOTIFICATION_ACK", { notification_key: key, action: "handled" });
+    const v = ackVerdict(ack);
+    if (v.ok) {
+      if (opt) {
+        // 收口：揭乐观标记（行按 handled 灰显归位等权威帧），handled_at 保留——
+        // 权威帧到达前不回弹为可行动
+        ctx.notifications = ctx.notifications.map((n) => n && n.key === key && n.__w1b_pend
+          ? (() => { const c = Object.assign({}, n); delete c.__w1b_pend; return c; })() : n);
+        if (notifErr) { notifErr = ""; renderNotifications(); }
+      }
+      render();
+      return;
+    }
+    if (opt) {
+      const rb = notifRollback(ctx.notifications, key, opt.prev);
+      if (rb.rolled) { ctx.notifications = rb.items; renderNotifications(); render(); }
+    }
+    if (unknownCommandError(v.error)) {
+      // 旧 relay 不认识本命令：记忆本源能力位 → 动作位隐藏，静默（无错误行）
+      ctx.cmdCaps = cmdCapRemember(ctx.cmdCaps, "COMMAND_NOTIFICATION_ACK");
+      renderNotifications();
+      return;
+    }
+    notifErrShow("通知处理失败：" + v.error);
+  } finally {
+    notifFlight.delete(fk);
+  }
 }
 
 function render() {
