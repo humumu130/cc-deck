@@ -2401,7 +2401,7 @@
             <!-- 呼出/收起（Tauri 层录制，桌面专属）：自显示栏迁入 -->
             <div class="gp-row" id="gpHotkey" style="display:none"><span class="gi"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="6.2" width="18" height="11.6" rx="2.2"/><path d="M7 10v3.6M7 10.1v.1"/><path d="M11 10v3.6M14.5 10v3.6M18 10v3.6"/></svg></span>呼出/收起<b class="gp-hk" id="gpHotkeyVal">—</b></div>
             <!-- #67 方向键修饰键可配置：影响「切会话 ↑↓」与「切源 ←→」两组 -->
-            <div class="gp-row" id="gpKbMod"><span class="gi"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M15.4 7.5a5 5 0 1 0 2.2 6.7H12"/></svg></span>方向键修饰<div class="lever" id="gpKbModLever" style="--n:2"><i class="lever-thumb"></i><button type="button" class="lever-opt" data-i="0">Alt</button><button type="button" class="lever-opt" data-i="1">Ctrl</button></div></div>
+            <div class="gp-row" id="gpKbMod"><span class="gi"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M15.4 7.5a5 5 0 1 0 2.2 6.7H12"/></svg></span>方向键修饰<div class="lever" id="gpKbModLever" style="--n:3"><i class="lever-thumb"></i><button type="button" class="lever-opt" data-i="0">无</button><button type="button" class="lever-opt" data-i="1">Alt</button><button type="button" class="lever-opt" data-i="2">Ctrl</button></div></div>
             <div class="gp-row gp-static"><span class="gi"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19.5 5 12l7-7.5"/><path d="M19 19.5 12 12l7-7.5"/></svg></span>切换会话<b class="gp-hk" id="gpKbSessTxt">修饰键+↑↓</b></div>
             <div class="gp-row gp-static"><span class="gi"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4.5 12h15"/><path d="m9.5 7-5 5 5 5"/><path d="m14.5 7 5 5-5 5"/></svg></span>切换数据源<b class="gp-hk" id="gpKbSrcTxt">修饰键+←→</b></div>
           </div>
@@ -6246,22 +6246,45 @@ function focusMsgInput() {
 window.addEventListener("focus", () => {
   if (window.ccDeck) setTimeout(focusMsgInput, 60);
 });
-// #67 方向键修饰键可配置（Alt/Ctrl，localStorage ccd_kb_mod，默认 alt）：
-// 影响「切会话 ↑↓」与「切源 ←→」两组——呼出/收起键独立录制（Tauri 层）不受影响
+// #67 方向键修饰键可配置（无/Alt/Ctrl，localStorage ccd_kb_mod，默认 alt）：
+// 影响「切会话 ↑↓」与「切源 ←→」两组——呼出/收起键独立录制（Tauri 层）不受影响。
+// #240 加「无」档（微信式回归）：输入框为空时裸 ↑↓ 直接切会话，翻历史挪到 Alt+↑↓
+// （两组键位互补互换）；切源在「无」档固定回落 Alt+←→——裸 ←→ 是输入框内光标移动
+// 高频操作，不能抢。老用户已存的 "alt"/"ctrl" 值不受影响，默认仍 alt
 const KB_MOD_KEY = "ccd_kb_mod";
-const kbMod = () => (localStorage.getItem(KB_MOD_KEY) === "ctrl" ? "ctrl" : "alt");
+const kbMod = () => {
+  const v = localStorage.getItem(KB_MOD_KEY);
+  return v === "ctrl" || v === "none" ? v : "alt";
+};
+// 修饰键组合命中（Alt/Ctrl 档位语义；「无」档走 Alt 分支——供切源 ←→ 复用）
 const kbModHit = (ev) => (kbMod() === "ctrl" ? ev.ctrlKey && !ev.altKey : ev.altKey && !ev.ctrlKey) && !ev.metaKey;
+// #240 切会话键命中：「无」档=裸 ↑↓（不带任何修饰键，shift 也不行——shift+↑↓ 是
+// 文本选择意图）；Alt/Ctrl 档=修饰组合（原 kbModHit 语义，零回归）
+const sessKeyHit = (ev) => {
+  if (kbMod() === "none") return !ev.altKey && !ev.ctrlKey && !ev.metaKey && !ev.shiftKey;
+  return kbModHit(ev);
+};
+// #240 翻历史键命中（msginput 内，#34）：与切会话键互补——「无」档时 Alt+↑↓ 翻
+// 历史（裸 ↑↓ 让位切会话）；Alt/Ctrl 档时仍是裸 ↑↓（现状不变）
+const histKeyHit = (ev) => {
+  if (ev.metaKey) return false;
+  if (kbMod() === "none") return ev.altKey && !ev.ctrlKey;
+  return !ev.altKey && !ev.ctrlKey;
+};
 function syncKbModLever() {
-  const idx = kbMod() === "ctrl" ? 1 : 0;
+  const m = kbMod();
+  const idx = m === "ctrl" ? 2 : m === "none" ? 0 : 1;
   $("gpKbModLever").querySelectorAll(".lever-opt").forEach((b) => b.classList.toggle("on", +b.dataset.i === idx));
   $("gpKbModLever").querySelector(".lever-thumb").style.setProperty("--i", idx);
-  const name = kbMod() === "ctrl" ? "Ctrl" : "Alt";
-  $("gpKbSessTxt").textContent = name + "+↑↓";
+  const name = m === "ctrl" ? "Ctrl" : "Alt";
+  $("gpKbSessTxt").textContent = m === "none" ? "↑↓（空输入时）" : name + "+↑↓";
   $("gpKbSrcTxt").textContent = name + "+←→";
+  // 注：不在 msginput placeholder 上联动键位提示——select() 按会话状态动态覆盖
+  // placeholder（外部注入/历史恢复/普通发送三分支，L5005 一带），多方竞争位不再加写方
 }
 $("gpKbModLever").querySelectorAll(".lever-opt").forEach((b) => {
   b.onclick = () => {
-    localStorage.setItem(KB_MOD_KEY, +b.dataset.i === 1 ? "ctrl" : "alt");
+    localStorage.setItem(KB_MOD_KEY, ["none", "alt", "ctrl"][+b.dataset.i]);
     syncKbModLever();
   };
 });
@@ -6292,17 +6315,21 @@ document.addEventListener("keydown", (ev) => {
   focusMsgInput();
 });
 
-// Alt+↑/↓ 切换会话（#8→#19 改 Alt，桌面端专属）+ 微信式裸 ↑/↓（#19 补：输入框为空时
-// 不带修饰键的上下键直接切换）：列表内上下移动选中卡并跟进滚动，切完焦点进输入框
-// 直接打字；浮层打开（设置/右键菜单/登录码）时不抢键。
-// #67 起 Alt/Ctrl 修饰键可配置（与切源 ←→ 同一处选择）
+// 切换会话方向键（桌面端专属）：Alt/Ctrl 档=修饰键组合任意位置触发（#8→#19→#67）；
+// #240「无」档=微信式裸 ↑↓ 回归——仅输入框为空时触发（打字中途裸 ↑↓ 是光标移动，
+// 有草稿时保护不切）。列表内上下移动选中卡并跟进滚动，切完焦点进输入框直接打字；
+// 浮层打开（设置/右键菜单/登录码/审批）时不抢键。
+// 裸 ↑↓ 曾于 35f5c9c 按用户点单移除（与 #34 翻历史抢键歧义大）；#240 拍板回归并
+// 把翻历史挪到 Alt+↑↓（histKeyHit），两组键位互补不再打架
 document.addEventListener("keydown", (ev) => {
   if (!window.ccDeck || (ev.key !== "ArrowUp" && ev.key !== "ArrowDown")) return;
   const t = ev.target;
-  // 触发：可配置修饰键组合（任意位置）——微信式裸 ↑↓ 已按用户要求移除（2026-09-11）
-  const altCombo = kbModHit(ev);
-  if (!altCombo) return;
-  if (altCombo && t && t !== $("msginput") && (t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.isContentEditable)) return;
+  const combo = sessKeyHit(ev);
+  if (!combo) return;
+  // 「无」档裸键：只认空输入——msginput 元素级 keydown（翻历史）先于此冒泡监听
+  // 执行，histKeyHit 已放行裸键，由这里接管切换
+  if (kbMod() === "none" && $("msginput").value !== "") return;
+  if (combo && t && t !== $("msginput") && (t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.isContentEditable)) return;
   if ($("gearPop").classList.contains("open") || $("cardMenu").classList.contains("open") || $("loginQrPop").classList.contains("open")) return;
   const items = [...$("cards").querySelectorAll(".card")];
   if (!items.length) return;
@@ -6314,6 +6341,21 @@ document.addEventListener("keydown", (ev) => {
   const d = items[idx];
   select(d.dataset.sid, d.dataset.src);
   d.scrollIntoView({ block: "nearest" });
+  focusMsgInput();
+});
+// #240 点击非输入区自动回焦（微信同款）：点击时间线/卡片背景/空白处后焦点自动回
+// 消息输入框——配合语音输入（长按 Command 说话）免去「先点输入框」前置，全程不
+// 碰触控板。不抢的面：交互控件（按钮/链接/输入/下拉）与其内点击；正在拖选/双击
+// 选词的文本选择（selection 非空）；浮层与审批弹窗打开期间
+document.addEventListener("click", (ev) => {
+  if (!window.ccDeck || !selected) return;
+  const t = ev.target;
+  if (!(t instanceof Element)) return;
+  if (t.closest("button, a, input, textarea, select, label, [contenteditable]")) return;
+  const sel = window.getSelection();
+  if (sel && !sel.isCollapsed && sel.toString()) return; // 选词/选段中：不打扰
+  if ($("gearPop").classList.contains("open") || $("cardMenu").classList.contains("open") || $("loginQrPop").classList.contains("open")) return;
+  if ($("waitbox").style.display === "block") return; // 审批/提问弹窗打开：焦点归它
   focusMsgInput();
 });
 $("gpTheme") && ($("gpTheme").onclick = () => { $("themeBtn").click(); syncGearPop(); });
@@ -7472,8 +7514,11 @@ function histApply(v) {
   updateSlashBox();
 }
 $("msginput").addEventListener("keydown", (e) => {
-  if (e.altKey || e.ctrlKey || e.metaKey || e.isComposing) return;
+  if (e.isComposing) return;
   if (e.key !== "ArrowUp" && e.key !== "ArrowDown") return;
+  // #240 翻历史键位随方向键档位互补：「无」档=Alt+↑↓（裸 ↑↓ 让位切会话，冒泡到
+  // document 的切会话监听接管）；Alt/Ctrl 档=裸 ↑↓（原语义不变）
+  if (!histKeyHit(e)) return;
   const el = e.target;
   if (e.key === "ArrowUp") {
     const atStart = el.selectionStart === 0 && el.selectionEnd === 0;
