@@ -2,8 +2,8 @@
 // CLI（会话）把输出物（设计稿/报告/导出包）写入该目录即对全部客户端可见——手机/网页
 // 经 /api/artifacts 列表 + /artifacts/<file> 取用，桌面端"输出物"区同理。
 // 安全：文件名白名单（同云桥 /dl/ 风格）+ resolve 后必须仍位于产物目录内（防穿越）。
-import { readdirSync, statSync, readFileSync, existsSync } from "node:fs";
-import { dirname, extname, join, normalize, relative, resolve } from "node:path";
+import { accessSync, constants, readdirSync, statSync, readFileSync, existsSync } from "node:fs";
+import { dirname, extname, join, normalize, relative, resolve, sep } from "node:path";
 import { homedir } from "node:os";
 import type { ArtifactItem } from "./types.js";
 
@@ -23,6 +23,9 @@ const MIME: Record<string, string> = {
   ".css": "text/css; charset=utf-8",
   ".js": "text/javascript; charset=utf-8",
 };
+
+const ARTIFACT_SEGMENT = "[\\w一-鿿][\\w一-鿿.-]*";
+const ARTIFACT_NAME_RE = new RegExp(`^${ARTIFACT_SEGMENT}(?:/${ARTIFACT_SEGMENT})?$`);
 
 export function artifactsDir(): string {
   // CCR_ARTIFACTS_DIR 覆盖（测试隔离用）；默认全局产物目录 ~/.cc-deck/artifacts/
@@ -204,35 +207,85 @@ export function groupArtifacts(items: readonly ArtifactGroupingItem[], opts: Art
 
 export function listArtifacts(): { name: string; size: number; mtime: number }[] {
   const dir = artifactsDir();
-  let files: string[];
+  let entries: import("node:fs").Dirent[];
   try {
-    files = readdirSync(dir);
+    entries = readdirSync(dir, { withFileTypes: true });
   } catch {
     return [];
   }
   const out: { name: string; size: number; mtime: number }[] = [];
-  for (const f of files) {
-    if (f.startsWith(".")) continue;
+  const addFile = (name: string, path: string): void => {
+    if (name.startsWith(".")) return;
     try {
-      const st = statSync(join(dir, f));
-      if (st.isFile()) out.push({ name: f, size: st.size, mtime: st.mtimeMs });
+      const st = statSync(path);
+      if (st.isFile()) out.push({ name, size: st.size, mtime: st.mtimeMs });
     } catch {}
+  };
+  for (const entry of entries) {
+    if (entry.name.startsWith(".")) continue;
+    const path = join(dir, entry.name);
+    if (entry.isDirectory()) {
+      let children: import("node:fs").Dirent[];
+      try {
+        children = readdirSync(path, { withFileTypes: true });
+      } catch {
+        continue;
+      }
+      for (const child of children) {
+        if (child.name.startsWith(".")) continue;
+        addFile(`${entry.name}/${child.name}`, join(path, child.name));
+      }
+    } else {
+      addFile(entry.name, path);
+    }
   }
   out.sort((a, b) => b.mtime - a.mtime);
   return out;
+}
+
+export interface DeliverablePathValidation {
+  ok: boolean;
+  path: string;
+  error?: string;
+}
+
+// /api/deliver 的登记前安全闸：只允许存在、可读的普通文件，且返回规范化绝对路径。
+// 调用方必须在任何 session 归因/回退之前调用，避免幽灵登记或错挂其他会话。
+export function validateDeliverablePath(rawPath: string): DeliverablePathValidation {
+  const trimmed = rawPath.trim();
+  if (!trimmed) return { ok: false, path: "", error: "path 必须是非空文件路径" };
+  const path = resolve(trimmed);
+  let st: ReturnType<typeof statSync>;
+  try {
+    st = statSync(path);
+  } catch {
+    return { ok: false, path, error: `交付物不存在或不可访问: ${path}` };
+  }
+  if (!st.isFile()) return { ok: false, path, error: `交付物必须是普通文件: ${path}` };
+  try {
+    accessSync(path, constants.R_OK);
+  } catch {
+    return { ok: false, path, error: `交付物不可读: ${path}` };
+  }
+  return { ok: true, path };
 }
 
 // 命中并写出返回 true；文件名非法/不存在返回 false（调用方 404）
 // 文件名允许中文（2026-09-19）：中文命名交付物（工作报告-….html）列得出就要下
 // 得了，原 \w 正则对中文一律 404
 export function serveArtifact(name: string, res: import("node:http").ServerResponse): boolean {
-  if (!/^[\w一-鿿][\w一-鿿.-]*$/.test(name)) return false;
+  if (!ARTIFACT_NAME_RE.test(name) || name.includes("\\")) return false;
   const dir = resolve(artifactsDir());
   const full = resolve(join(dir, name));
-  if (!full.startsWith(dir + "/") && full !== dir) return false;
+  if (!full.startsWith(dir + sep) || relative(dir, full).split(sep).length > 2) return false;
   const path = full;
   if (!existsSync(path)) return false;
-  const st = statSync(path);
+  let st: ReturnType<typeof statSync>;
+  try {
+    st = statSync(path);
+  } catch {
+    return false;
+  }
   if (!st.isFile()) return false;
   const type = MIME[extname(path).toLowerCase()] ?? "application/octet-stream";
   try {

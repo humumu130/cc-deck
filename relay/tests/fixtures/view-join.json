@@ -1,0 +1,69 @@
+{
+  "artifacts_root": "/workspace/cc-deck/artifacts",
+  "sources": {
+    "local": { "reachable": true },
+    "remote": { "reachable": false }
+  },
+  "artifacts": [
+    {
+      "name": "018-后端实施/018-00-api.md",
+      "source_id": "local",
+      "size": 128,
+      "mtime": 1800,
+      "exists": true
+    }
+  ],
+  "sessions": [
+    {
+      "session_id": "session-local",
+      "source_id": "local",
+      "project_gid": "project-a",
+      "cwd": "/workspace/cc-deck",
+      "artifacts": [
+        {
+          "path": "/workspace/cc-deck/artifacts/018-后端实施/018-00-api.md",
+          "last_at": 1700,
+          "exists": true
+        }
+      ],
+      "deliverables": [
+        {
+          "path": "/workspace/cc-deck/artifacts/018-后端实施/018-00-api.md",
+          "delivery_group_key": "batch-018-backend",
+          "last_at": 1750,
+          "exists": true
+        },
+        {
+          "path": "/workspace/cc-deck/docs/missing-report.md",
+          "delivery_group_key": "batch-018-backend",
+          "last_at": 1600,
+          "exists": false
+        }
+      ]
+    },
+    {
+      "session_id": "session-remote",
+      "source_id": "remote",
+      "project_gid": "project-b",
+      "source_reachable": false,
+      "artifacts": [
+        {
+          "path": "/workspace/cc-deck/artifacts/018-后端实施/018-00-api.md",
+          "last_at": 1650,
+          "exists": true
+        }
+      ]
+    },
+    {
+      "session_id": "session-legacy",
+      "project_gid": "project-legacy",
+      "artifacts": [
+        {
+          "path": "legacy-report.md",
+          "last_at": 1500,
+          "exists": true
+        }
+      ]
+    }
+  ]
+}

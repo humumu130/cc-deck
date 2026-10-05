@@ -1,0 +1,5 @@
+{
+  "directory": "ghost-directory",
+  "broken_link": "ghost-link.md",
+  "missing_file": "ghost-missing.md"
+}

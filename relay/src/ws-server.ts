@@ -4,7 +4,7 @@ import { readFileSync, writeFileSync, mkdirSync, existsSync, readdirSync, statSy
 import { join, dirname, sep } from "node:path";
 import { homedir, networkInterfaces } from "node:os";
 import { detectLanIp } from "./lan-ip.js";
-import { listArtifacts, serveArtifact } from "./artifacts.js";
+import { listArtifacts, serveArtifact, validateDeliverablePath } from "./artifacts.js";
 import {
   serveAcceptancePage,
   loadAcceptance,
@@ -615,10 +615,16 @@ export function startServer(
             res.writeHead(400, { "content-type": "application/json" }).end('{"ok":false,"error":"path 必填"}');
             return;
           }
+          const validated = validateDeliverablePath(p);
+          if (!validated.ok) {
+            res.writeHead(400, { "content-type": "application/json" })
+              .end(JSON.stringify({ ok: false, error: validated.error }));
+            return;
+          }
           const c = typeof cwd === "string" && cwd ? cwd : p;
           const r = typeof sid === "string" && /^[A-Za-z0-9-]{8,64}$/.test(sid)
-            ? mgr.deliverBySession(sid, c, p)
-            : mgr.deliverByCwd(c, p);
+            ? mgr.deliverBySession(sid, c, validated.path)
+            : mgr.deliverByCwd(c, validated.path);
           res.writeHead(r.ok ? 200 : 404, { "content-type": "application/json" }).end(JSON.stringify(r));
         } catch {
           res.writeHead(400).end("bad json");
