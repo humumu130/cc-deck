@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { mkdirSync, readFileSync, realpathSync, statSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, realpathSync, statSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { isAbsolute, join, resolve, sep } from "node:path";
 import { artifactsDir } from "./artifacts.js";
@@ -16,7 +16,7 @@ import {
   findGroup, findGroupByAnchor, findStaleGroups, listConfirms, listGroups, listGroupsByStatus,
   listPendingConfirms, loadBoard, markHoldSuggested, maxActiveGroups,
   moveBoardEntry, moveEntryByDispatch,
-  removeBoardEntry, removeMember, setGroupStatus, setGroupTier, setLightConfirmTrusted, upsertBoardEntry,
+  removeBoardEntry, removeMember, setConfirmCreatedHook, setGroupStatus, setGroupTier, setLightConfirmTrusted, upsertBoardEntry,
   ensureProjectClaudeMd,
   type OrgConfirm, type ProjectGroupStatus, type ProjectTier, type BoardEntryStatus,
 } from "./projects.js";
@@ -643,6 +643,11 @@ export class SessionManager {
     this.deletedExtIds = new Set(readDeletedExts(cfg.dataDir));
     this.titleOverrides = readTitleOverrides(cfg.dataDir);
     this.loadNotifications(); // #018-R1c 离线重载：重启从 notifications.json 还原进快照
+    this.reconcileOrphanConfirms(); // #018-R1FIX1 P2-5：启动对账孤儿/已决确认单（事实源缺席不判孤儿）
+    // #018-R1FIX1 P1-1：确认单产生回调（projects.addConfirm 单咽喉 → 本 manager
+    // 通知账）。单回调槽后注册覆盖——生产单 manager 进程假设内成立（多 manager
+    // 仅测试形态，后建者接管产生登记）
+    setConfirmCreatedHook((c) => this.recordOrgConfirmNotification(c));
     const t = setInterval(() => this.heartbeat(), HEARTBEAT_INTERVAL_MS);
     t.unref();
     const c = setInterval(() => {
@@ -840,6 +845,87 @@ export class SessionManager {
       return;
     }
     this.transitionNotifications((n) => n.kind === "waiting" && n.sourceContext.sessionId === managed.state.session_id, "resolved");
+  }
+
+  // #018-R1FIX1 P1-1 org-confirm 单一产生适配口：projects.addConfirm 是全部确认单
+  // 的唯一产生咽喉（立项/结项/档位/暂缓/自动暂缓），构造器经 setConfirmCreatedHook
+  // 把每张新卡同步入账。此前仅 orgCommand("create") 接了账（R1c 源①），旧 orgAction
+  // 四入口与自动暂缓建议落单只在 confirms.json 可见，三端结构化通知面漏项、离线端
+  // 重启后无账可还原（PM R1 终审 P1-1）。stableKey=org-confirm:<id>:<created_at>，
+  // 同 key 重放天然去重（B3a 口径）
+  private recordOrgConfirmNotification(confirm: OrgConfirm): void {
+    this.upsertNotification("org-confirm", confirm.id, String(confirm.created_at), {
+      title: confirm.title,
+      body: confirm.reason,
+      severity: "waiting",
+      group: "action",
+      actionable: true,
+      sessionId: this.leaderId ?? undefined,
+      domain: "org",
+      returnPath: "org",
+    });
+  }
+
+  // #018-R1FIX1 P2-1 superseded waiting 精确收口：按 (session, request_id) 只关旧
+  // key。场景：req-1 在等时 req-2 已替代（状态机守卫正确不动当前请求），迟到的
+  // req-1 resolved 若走 syncWaitingNotification 会被「仍在等」分支挡住——旧 key
+  // 永久悬挂成假 action、端上 badge 虚高。matcher 带 request_id 精确匹配，绝不清
+  // 当前 req-2
+  private resolveWaitingNotification(sessionId: string, requestId: string): void {
+    this.transitionNotifications(
+      (n) => n.kind === "waiting" && n.sourceContext.sessionId === sessionId && n.key === stableKey("waiting", sessionId, requestId),
+      "resolved",
+    );
+  }
+
+  // #018-R1FIX1 P2-2 确认副作用失败语义：原确认项不 resolved，同 key 原地转 error
+  // 告警面——「决议已落 + 执行失败」结构化告警，重启后仍可见、可 ACK handled/
+  // dismissed 收口。transitionNotification 只填空位的幂等纪律在此不适用（severity/
+  // title 需覆写），本方法是通知账段内专用收口点：Map 写点仍集中在本段，单写者
+  // 纪律不变（P3-1 口径）。原账缺失（异常清理）时静默——失败事实已由 ACK/审计面
+  // 与 COMMAND 错误回执承载
+  private failConfirmNotification(confirm: OrgConfirm, what: string, error: string): void {
+    const key = stableKey("org-confirm", confirm.id, String(confirm.created_at));
+    const item = this.notifications.get(key);
+    if (!item || item.resolved_at !== undefined) return;
+    const next: NotificationLifecycleItem = {
+      ...item,
+      severity: "error",
+      title: `决议执行失败：${item.title}`,
+      body: `${what}失败: ${error}（决议已留痕 ${confirm.status}；可用 org set 直达通道补救，处理后可 ACK 收口）`,
+    };
+    if (JSON.stringify(next) === JSON.stringify(item)) return; // 值变才发（同款 dedup）
+    this.notifications.set(key, next);
+    this.persistNotifications();
+    this.projectNotifications();
+  }
+
+  // #018-R1FIX1 P2-5 org-confirm 孤儿对账（启动时对事实源）：确认单被外部清理/
+  // 损坏后，通知账 pending 项会永久悬挂成假 action——转 resolved 并在 body 记
+  // 「孤儿对账」原因。范围收窄备案：只对账「确认单彻底不在事实源」的孤儿；事实源
+  // 里已决议的 pending 通知不在此收口——那是 P2-2 error 告警面的载体（副作用失败
+  // = 决议已落 + 通知未决），启动对账若一并收口会让 P2-2 的「重启后可见」失效。
+  // 事实源文件整体缺失（org 目录未建/换域挂载）不判孤儿——防 org 目录错配时误收
+  // 口全部在决项。只对账不删除，审计面不动
+  private reconcileOrphanConfirms(): void {
+    if (!existsSync(join(orgDir(), "confirms.json"))) return;
+    const known = new Set(listConfirms().map((c) => c.id));
+    const at = Date.now();
+    let changed = false;
+    for (const n of [...this.notifications.values()]) {
+      if (n.kind !== "org-confirm" || n.resolved_at !== undefined) continue;
+      if (known.has(n.sourceContext.entityId)) continue;
+      const next = transitionNotification(
+        { ...n, body: `${n.body}（孤儿对账：确认单已不在事实源，启动对账自动收口）` },
+        "resolved", at,
+      );
+      this.notifications.set(n.key, next);
+      changed = true;
+    }
+    if (changed) {
+      this.persistNotifications();
+      this.projectNotifications();
+    }
   }
 
   // 自动命名：一次轻量模型调用把首条 prompt 变成短标题（托管/外部会话通用）
@@ -2737,6 +2823,12 @@ export class SessionManager {
             this.emitUpdated(managed, true);
             // R1c：决议收口 → waiting 通知 resolved（统一同步点）
             this.syncWaitingNotification(managed);
+          } else {
+            // #018-R1FIX1 P2-1：superseded 旧决议——状态机不动当前 req-2（上方守卫
+            // 口径），通知账按 (session, request_id) 精确收口旧 key。不走
+            // syncWaitingNotification：它在「仍在等」分支只 upsert 当前请求，旧 key
+            // 会永久悬挂成假 action、badge 虚高（PM R1 终审 P2-1）
+            this.resolveWaitingNotification(managed.state.session_id, requestId);
           }
           managed.state.updated_at = Date.now();
           this.bus.emit(managed.state.session_id, "SESSION_WAITING_RESOLVED", {
@@ -3297,25 +3389,9 @@ export class SessionManager {
     } catch (e) {
       return { ok: false, error: `org 目录不可用: ${e instanceof Error ? e.message : String(e)}` };
     }
-    // #26 断档补记：上一进程遗留的 running/dispatched 悬账（relay 崩溃/强杀时回合
-    // 没收口；dispatched = M2 派单 spawn 窗口崩的账）——本进程的内存 FIFO 已随进程
-    // 丢失，不补则永悬；各补一行 done 收口。auto-revive 续跑不走 COMMAND_MESSAGE
-    // 天然不入新账，不会双记。
-    // 冲刺 F-08（G1 实测校准）：板条同步退 todo（中断口径，同 E1/onSessionEnd）——
-    // 原设想「板条仍归 worker、续跑收口」不成立：auto-revive 续跑回合不走派单 FIFO、
-    // 无钩子搬 done → orphan doing 永挂（实测 t-g.txt 已交付板仍 doing，用户视角
-    // 假「进行中」）。退 todo 更诚实：真交付了由 Leader/用户目测搬 done。
-    // gid 不在台账字段里——按 dispatch id 扫现役+挂起组的板试搬（moveEntryByDispatch
-    // 板里无此 id 即 no-op，随手办无板条天然豁免；挂起组板冻结由 writableBoard 挡）。
-    const hung = readDispatchLog().filter((e) => e.status === "running" || e.status === "dispatched");
-    if (hung.length) {
-      const bySt = listGroupsByStatus();
-      const scanGids = [...bySt.active, ...bySt.parked].map((g) => g.id);
-      for (const e of hung) {
-        appendDispatch({ ...e, ts: Date.now(), status: "done", receipt: "relay 重启，回合中断" });
-        if (e.project_anchor) for (const gid of scanGids) moveEntryByDispatch(gid, e.id, "todo");
-      }
-    }
+    // #26 断档补记（P1-2 后抽为 closeHungDispatchRows：补记 + 板条退 todo + 结构化
+    // 通知账对账，注释与口径见该方法）
+    this.closeHungDispatchRows();
     const anchor = readOrgAnchor();
     if (!anchor) return this.createLeaderFirstTime();
     const s = this.sessions.get(anchor.leader_session_id);
@@ -3635,17 +3711,51 @@ export class SessionManager {
     }
   }
 
-  // #40 M4 派单完成回调（谁派活谁收通知）——closeOpenDispatches 每条收口调用：
+  // #018-R1FIX1 P1-2 出口①重启悬账补记（抽出自 ensureLeader 内联块，补记行为同
+  // 口径 + 通知对账）：上一进程遗留 running/dispatched 悬账各补一行 done 收口（事实
+  // 源先行），板条同步退 todo（中断口径，F-08 实测校准注释随块迁入——auto-revive
+  // 续跑回合不走派单 FIFO、无钩子搬 done → orphan doing 永挂；退 todo 更诚实，真
+  // 交付了由 Leader/用户目测搬 done；gid 不在台账字段里，按 dispatch id 扫现役+挂起
+  // 组的板试搬，板里无此 id 即 no-op，随手办无板条天然豁免，挂起组板冻结由
+  // writableBoard 挡），并统一走 notifyDispatchClosed 落结构化账——done 归 activity
+  // 桶不可操作、无 actor 不注入 Leader（M4 规则天然豁免）。此前补记只写台账，通知
+  // 账与台账不对称、离线端重启后看不到「哪些单被打断」（PM R1 终审 P1-2）。补记
+  // 豁免的只有熟手路由评价（recordRoutingResult 不经此，维持原口径：relay 重启不是
+  // worker 的账）
+  private closeHungDispatchRows(): void {
+    const hung = readDispatchLog().filter((e) => e.status === "running" || e.status === "dispatched");
+    if (!hung.length) return;
+    const bySt = listGroupsByStatus();
+    const scanGids = [...bySt.active, ...bySt.parked].map((g) => g.id);
+    for (const e of hung) {
+      appendDispatch({ ...e, ts: Date.now(), status: "done", receipt: "relay 重启，回合中断" });
+      if (e.project_anchor) for (const gid of scanGids) moveEntryByDispatch(gid, e.id, "todo");
+      this.notifyDispatchClosed(
+        { id: e.id, tier: e.tier, ...(e.project_anchor ? { anchor: e.project_anchor } : {}), ...(e.actor ? { actor: e.actor } : {}) },
+        "done", "relay 重启，回合中断", e.session_id,
+      );
+    }
+  }
+
+  // #40 M4 派单完成回调（谁派活谁收通知）——#018-R1FIX1 P1-2 后为全系统唯一
+  // dispatch 终态通知策略口：各出口先写事实源（appendDispatch），再统一走此入口。
+  // 协议显式无隐式例外（PM R1 终审 P1-2）：
   // (a) 端上 push：DISPATCH_DONE 瞬态帧广播（seq:0 不落盘不补发；web/expo 悬浮通知
-  //     + 系统通知，旧端未知类型 switch 自然跳过）；离线端由重连 SNAPSHOT 的
-  //     projects/board/org 状态兜底，不重复弹。
-  // (b) Leader 会话闭环：仅 failed 单注入回执唤醒（resumeAgent 先例=auto-revive）。
+  //     + 系统通知，旧端未知类型 switch 自然跳过）。
+  // (b) 结构化通知账（R1c 源③）：stableKey=dispatch:id 一单一行，重复收口事件不双
+  //     发（对账去重口径）；done 归 activity 桶（结果可见即可），failed 归 action 桶
+  //     可操作（重派/换人/放弃要对账决策）。离线端由重连 SNAPSHOT /
+  //     notifications.json 兜底——所有 status=done|failed 终态行都落账，台账与通知
+  //     账对称。排除项备案：无——五个终态出口（closeOpenDispatches / 重启悬账补记 /
+  //     复活后再失败 / 首次拉起失败 / 看门狗接管 done+上限 failed）全部入账；旧设计
+  //     「spawn 失败与断档补记不发帧」例外只针对在线弹窗通道 (a)（spawn 失败 CLI 同
+  //     步拿 error 当场知道、重启补记用户在场），账面 (b) 不豁免。
+  // (c) Leader 会话闭环：仅 failed 单注入回执唤醒（resumeAgent 先例=auto-revive）。
   //     省 token 口径：每条注入开一个 Leader 回合——done 单用户在端上/任务板可见，
   //     不打扰；失败是派单方必须当场知道并决策（重派/换人/放弃）的事，值得一个回合。
-  //     咨询档（actor=user，承接方即 Leader 自己）与 actor 缺省（旧数据）不注入。
-  //     注入 try/catch 尽力而为：通知失败绝不阻断收口主路径（台账已落，板已搬）。
-  // 不发帧的两处例外（设计口径）：spawn 失败 = CLI 同步拿 error 当场知道；
-  // 断档补记（ensureLeader）= relay 重启，用户在场且板/台账刷新自然可见。
+  //     咨询档（actor=user，承接方即 Leader 自己）与 actor 缺省（旧数据/看门狗行/
+  //     重启补记行）不注入。注入 try/catch 尽力而为：通知失败绝不阻断收口主路径
+  //    （台账已落，板已搬）。
   private notifyDispatchClosed(e: { id: string; tier: DispatchTier; gid?: string; anchor?: string; actor?: string }, status: "done" | "failed", receipt: string, workerSessionId: string): void {
     this.bus.emitTransient("DISPATCH_DONE", {
       dispatch_id: e.id, tier: e.tier, status,
@@ -3701,19 +3811,10 @@ export class SessionManager {
         return { ok: false, error: r.error };
       }
       ensureProjectClaudeMd(r.group.anchor_dir, r.group.name); // §3.4 防漂移种子（幂等），与 HTTP 漏斗同序
-      // R1c 源①：needsConfirm 落单 → org-confirm 通知（决议在 applyConfirmEffects 收口）
-      if (r.needsConfirm && r.confirm) {
-        this.upsertNotification("org-confirm", r.confirm.id, String(r.confirm.created_at), {
-          title: r.confirm.title,
-          body: r.confirm.reason,
-          severity: "waiting",
-          group: "action",
-          actionable: true,
-          sessionId: this.leaderId ?? undefined,
-          domain: "org",
-          returnPath: "org",
-        });
-      }
+      // R1c 源①→#018-R1FIX1 P1-1 改道：needsConfirm 落单的 org-confirm 通知不再
+      // 在此内联 upsert——adaptOrgAction → createGroup → projects.addConfirm 单咽喉
+      // 的产生回调（recordOrgConfirmNotification）已入账，此处与旧 orgAction 四入口
+      // 同源，单一产生源成立（决议在 applyConfirmEffects 收口）
       this.emitOrgState();
       this.auditOrgCommand(
         actor, device, action, r.group.anchor_dir, r.group.tier, true,
@@ -4141,14 +4242,14 @@ export class SessionManager {
   // 确认单决议副作用（一次决一次执行；这里之外不得有组状态迁移的旁路）。
   // M1/M2 审查轮：副作用失败必须回传——静默失败会让「卡已 approved、组没动」的
   // 劈叉态无人知晓（两层联动只做了成员侧）。失败时决议留痕不回滚（decideConfirm
-  // 已落盘），错误带回决议方（卡上可见），用户可走直达通道（project-status）补救
+  // 已落盘），错误带回决议方（卡上可见），用户可走直达通道（project-status）补救。
+  // #018-R1FIX1 P2-2：通知面语义对齐事实——副作用成功后 org-confirm 才转 resolved
+  //（决议 + 执行双落）；失败则原卡同 key 原地转 error 告警面不 resolved（旧序在
+  // 副作用前 resolve，失败时通知显示已决而实际是劈叉态，重连后无结构化告警）
   private applyConfirmEffects(c: OrgConfirm): { ok: boolean; error?: string } {
-    // R1c 源①收口：确认单已决议（decideConfirm 已落盘）→ org-confirm 通知转
-    // resolved。放在副作用执行前——决议时刻即收口，效果成败走各自的失败通道，
-    // 通知面只对齐「卡已决」这一事实
-    this.transitionNotifications((n) => n.kind === "org-confirm" && n.sourceContext.entityId === c.id, "resolved");
     const gid = typeof c.payload.gid === "string" ? c.payload.gid : "";
     const fail = (what: string, r: { error?: string }): { ok: false; error: string } => {
+      this.failConfirmNotification(c, what, r.error ?? "未知原因"); // P2-2：error 面，不 resolved
       this.emitOrgState(); // 失败路径同样广播：成员侧可能已部分变更（如挂起回滚）
       if (gid) this.emitBoard(gid);
       return { ok: false, error: `${what}失败: ${r.error ?? "未知原因"}（决议已留痕，可用 org set 直达通道补救）` };
@@ -4209,6 +4310,10 @@ export class SessionManager {
     }
     this.emitOrgState();
     if (gid) this.emitBoard(gid);
+    // R1c 源①收口（P2-2 改序）：副作用全部成功 → org-confirm 通知转 resolved。
+    // matcher 按 confirm id 定位（key 含 revision 不受影响）；陈旧卡跳过分支也走
+    // 此处——卡已决且无需执行，通知面收口口径不变
+    this.transitionNotifications((n) => n.kind === "org-confirm" && n.sourceContext.entityId === c.id, "resolved");
     return { ok: true };
   }
 
@@ -4308,7 +4413,11 @@ export class SessionManager {
           });
         } catch (e2) {
           const msg2 = e2 instanceof Error ? e2.message : String(e2);
-          appendDispatch({ ts: Date.now(), id: dispatchId, tier, target: "spawn-pending", status: "failed", receipt: truncate(`resume 失败(${msg}) 后新会话亦失败: ${msg2}`, 200), session_id: "", project_anchor: anchor, actor });
+          // P1-2（R1FIX1）出口②复活后再失败：事实源先行，统一通知口（failed →
+          // action/error 可操作；actor=leader 按 M4 规则注入派单方）
+          const receipt = truncate(`resume 失败(${msg}) 后新会话亦失败: ${msg2}`, 200);
+          appendDispatch({ ts: Date.now(), id: dispatchId, tier, target: "spawn-pending", status: "failed", receipt, session_id: "", project_anchor: anchor, actor });
+          this.notifyDispatchClosed({ id: dispatchId, tier, anchor, actor }, "failed", receipt, "");
           return { ok: false, error: `worker 拉起失败: ${msg2}` };
         }
       }
@@ -4322,7 +4431,11 @@ export class SessionManager {
         });
       } catch (e) {
         const msg = e instanceof Error ? e.message : String(e);
-        appendDispatch({ ts: Date.now(), id: dispatchId, tier, target: "spawn-pending", status: "failed", receipt: truncate(msg, 200), session_id: "", project_anchor: anchor, actor });
+        // P1-2（R1FIX1）出口③首次拉起失败：同出口②口径（旧「CLI 同步拿 error」
+        // 例外只针对在线弹窗通道，账面不豁免）
+        const receipt = truncate(msg, 200);
+        appendDispatch({ ts: Date.now(), id: dispatchId, tier, target: "spawn-pending", status: "failed", receipt, session_id: "", project_anchor: anchor, actor });
+        this.notifyDispatchClosed({ id: dispatchId, tier, anchor, actor }, "failed", receipt, "");
         return { ok: false, error: `worker 拉起失败: ${msg}` };
       }
     }
@@ -4865,14 +4978,19 @@ export class SessionManager {
         : `看门狗接管：会话流已 ${Math.round(stalled / 60000)} 分钟无进展（进程树 CPU 空闲确认），正在自动恢复`,
     );
     // #25-P7 看门狗动作落台账（设计稿 §2.5「告警进台账」）：WATCHDOG 瞬态帧三端
-    // 零消费，自愈动作此前用户完全不可见——一行 done 进回执流，跨重启可审计
+    // 零消费，自愈动作此前用户完全不可见——一行 done 进回执流，跨重启可审计。
+    // P1-2（R1FIX1）出口④a：接管行同时落结构化通知账（activity 桶不可操作；无
+    // actor 不注入 Leader）
+    const takeoverReceipt = truncate(lane === "ended"
+      ? `看门狗接管：流已断开 ${Math.round(stalled / 60000)} 分钟无进展，自动恢复`
+      : `看门狗接管：${Math.round(stalled / 60000)} 分钟无进展（CPU 空闲确认），杀树恢复`, 200);
+    const takeoverId = randomUUID();
     appendDispatch({
-      ts: Date.now(), id: randomUUID(), tier: "看门狗", target: sid, status: "done",
-      receipt: truncate(lane === "ended"
-        ? `看门狗接管：流已断开 ${Math.round(stalled / 60000)} 分钟无进展，自动恢复`
-        : `看门狗接管：${Math.round(stalled / 60000)} 分钟无进展（CPU 空闲确认），杀树恢复`, 200),
+      ts: Date.now(), id: takeoverId, tier: "看门狗", target: sid, status: "done",
+      receipt: takeoverReceipt,
       session_id: sid,
     });
+    this.notifyDispatchClosed({ id: takeoverId, tier: "看门狗" }, "done", takeoverReceipt, sid);
     try {
       // #109 防风暴检查前置到杀树之前：放弃 = 承诺停止干预，而杀树恰是最重的干预
       // ——误判时（网络长等待 CPU 空闲被判僵死）先杀后弃把活会话弄死，WAITING 钉死
@@ -4894,12 +5012,18 @@ export class SessionManager {
           `流中断自动恢复已达上限（1 小时 ${s.wd.recoveries.length} 次），已停止自愈——请在电脑端检查 CLI，或手动发一条消息触发恢复；若会话仍在工作，显示会自动恢复`,
         );
         this.notifyConfirm(sid, `会话「${s.state.title || sid.slice(0, 8)}」流中断，自动恢复已达上限，请手动处理`);
-        // #25-P7 同款台账行：停止干预是重要状态变化，failed 醒目留痕
+        // #25-P7 同款台账行：停止干预是重要状态变化，failed 醒目留痕。
+        // P1-2（R1FIX1）出口④b：上限 failed 行同时落结构化通知账（action/error
+        // 可操作，与 notifyConfirm 旧文本通道互补；无 actor 不注入 Leader——用户
+        // 已被文本通道点名，此处是三端结构化面兜底）
+        const gaveUpReceipt = truncate(`看门狗：1 小时内自愈 ${s.wd.recoveries.length} 次达上限，停止自动干预`, 200);
+        const gaveUpId = randomUUID();
         appendDispatch({
-          ts: Date.now(), id: randomUUID(), tier: "看门狗", target: sid, status: "failed",
-          receipt: truncate(`看门狗：1 小时内自愈 ${s.wd.recoveries.length} 次达上限，停止自动干预`, 200),
+          ts: Date.now(), id: gaveUpId, tier: "看门狗", target: sid, status: "failed",
+          receipt: gaveUpReceipt,
           session_id: sid,
         });
+        this.notifyDispatchClosed({ id: gaveUpId, tier: "看门狗" }, "failed", gaveUpReceipt, sid);
         this.emitUpdated(s, true);
         s.wd.phase = "idle";
         return;

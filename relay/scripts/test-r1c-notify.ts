@@ -4,12 +4,20 @@
 //       源（done/failed 分桶）+ 一单一行去重；N5 ACK 生命周期三态 + 幂等不复活 +
 //       未知 key 拒收；N6 值变才发（同值静默）；N7 重启还原进快照数据源（零重发帧）；
 //       N8 坏 JSON 容错 + 写侧还原；N9 未知命令 B0 default 收口。
+// #018-R1FIX1 增补：N10 org-confirm 五入口单一产生源（旧 orgAction create/archive/
+//       tier/suggest-hold 手动/autoSuggestHold 自动）+ 三端投影 + 重启还原；N11
+//       dispatch 终态出口（首派失败/看门狗 done+failed/重启悬账补记）；N12 superseded
+//       waiting 精确收口（旧 key 关、当前 key 不动）；N13 确认副作用失败语义（error
+//       面不 resolved）；N14 确认单孤儿对账（重启收口记原因 + 重放不复活）。
 import { randomUUID } from "node:crypto";
 import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { EventBus } from "../src/event-bus.js";
 import { SessionManager } from "../src/session-manager.js";
+import { appendDispatch, readDispatchLog } from "../src/org.js";
+import { setConfirmCreatedHook } from "../src/projects.js";
+import type { OrgConfirm } from "../src/projects.js";
 import type { AgentCallbacks, AgentLike } from "../src/agent-adapter.js";
 import type { RelayConfig } from "../src/config.js";
 import type { Command, NotificationItem } from "../src/types.js";
@@ -208,6 +216,10 @@ async function main() {
     const mgr3 = new SessionManager(bus, cfg);
     assert(mgr3.notificationsList().length === 0,
       "N8① 坏 JSON → 空账起步不炸读侧");
+    // #018-R1FIX1：mgr3 构造会抢走确认单产生回调槽（单回调槽后注册覆盖）——
+    // 绑回 mgr，mgr3 只作坏账隔离样本，不承接后续产生
+    setConfirmCreatedHook((c: OrgConfirm) =>
+      (mgr as unknown as { recordOrgConfirmNotification(c: OrgConfirm): void }).recordOrgConfirmNotification(c));
     closeDispatch.call(mgr3, { id: "d-3", tier: "咨询" }, "done", "重启后首单", "s-x");
     const parsed = storeFile();
     assert(Array.isArray(parsed?.notifications) && parsed.notifications.some((n) => n.key === "dispatch:d-3"),
@@ -218,6 +230,186 @@ async function main() {
     const ack10 = send(mgr, "n9", "COMMAND_NOTIFICATION_BOGUS", {}, "web-1");
     assert(ack10.ok === false && ack10.error === "unsupported command",
       "N9① 未知命令走 B0 execCommand default");
+
+    // ---------- N10 P1-1 org-confirm 单一产生源（五入口全接） ----------
+    console.log("N10 P1-1 org-confirm 五入口产生源");
+    const orgConfirmCount = () => findKind("org-confirm").length;
+    const beforeN10 = orgConfirmCount();
+    const framesBeforeN10 = frames.length;
+    // 出口①旧 orgAction 漏斗 project-create（R1c 只接了 orgCommand create，此路径
+    // 此前只在 confirms.json 落单、通知面漏项——hook 挂 projects.addConfirm 单咽喉）
+    const r10a = mgr.orgAction("project-create", {
+      name: "R1FIX1 旧漏斗组", anchor: mkdtempSync(join(tmpdir(), "ccr-anchor-fix1-")), tier: "轻立项",
+    });
+    const d10a = r10a.ok ? (r10a.data as { needsConfirm?: boolean; confirm?: { id: string } } | undefined) : undefined;
+    assert(r10a.ok === true && d10a?.needsConfirm === true && !!d10a.confirm
+      && findKind("org-confirm", (n) => n.sourceContext.entityId === d10a.confirm?.id).length === 1,
+      "N10① 旧 orgAction project-create 落单 → org-confirm 通知入账（漏接收口）");
+    // 出口②结项 archive：种一行 running 台账（按锚点匹配）→ 清单非零 → 确认卡
+    appendDispatch({ ts: Date.now(), id: "d-arch-fix1", tier: "随手办", target: "s-arch", status: "running", session_id: "s-arch", project_anchor: anchor });
+    const r10b = mgr.orgAction("project-status", { id: d1?.group?.id, to: "archived" });
+    const d10b = r10b.ok ? (r10b.data as { needsConfirm?: boolean; confirm?: { id: string } } | undefined) : undefined;
+    assert(r10b.ok === true && d10b?.needsConfirm === true && !!d10b.confirm
+      && findKind("org-confirm", (n) => n.sourceContext.entityId === d10b.confirm?.id).length === 1,
+      "N10② 结项 archive 确认卡 → org-confirm 通知入账");
+    // 出口③档位 tier-change：组 B 轻立项先决议激活，再升正经立项出卡
+    const r10c0 = mgr.orgAction("project-create", {
+      name: "R1FIX1 升档组", anchor: mkdtempSync(join(tmpdir(), "ccr-anchor-fix2-")), tier: "轻立项",
+    });
+    const d10c0 = r10c0.ok ? (r10c0.data as { group?: { id: string }; confirm?: { id: string } } | undefined) : undefined;
+    const ack10c0 = send(mgr, "n10c0", "COMMAND_ORG_CONFIRM", { confirm_id: d10c0?.confirm?.id, approve: true }, "web-1");
+    assert(ack10c0.ok === true, "N10③前置 升档组立项决议通过（激活）");
+    const r10c = mgr.orgAction("project-tier", { id: d10c0?.group?.id, to: "正经立项", reason: "R1FIX1 fixture 升档" });
+    const d10c = r10c.ok ? (r10c.data as { needsConfirm?: boolean; confirm?: { id: string } } | undefined) : undefined;
+    assert(r10c.ok === true && d10c?.needsConfirm === true
+      && findKind("org-confirm", (n) => n.sourceContext.entityId === d10c.confirm?.id).length === 1,
+      "N10③ project-tier 出卡 → org-confirm 通知入账");
+    // 出口④组暂缓 suggest-hold（手动，在办组）
+    const r10d = mgr.orgAction("suggest-hold", { id: d10c0?.group?.id, reason: "R1FIX1 fixture 手动建议暂缓" });
+    const d10d = r10d.ok ? (r10d.data as { needsConfirm?: boolean; confirm?: { id: string } } | undefined) : undefined;
+    assert(r10d.ok === true && d10d?.needsConfirm === true
+      && findKind("org-confirm", (n) => n.sourceContext.entityId === d10d.confirm?.id).length === 1,
+      "N10④ suggest-hold（手动）出卡 → org-confirm 通知入账");
+    // 出口⑤自动暂缓建议：组 D 立项激活后 updated_at 回溯 30 天 + 窗口收 7 天
+    const r10e0 = mgr.orgAction("project-create", {
+      name: "R1FIX1 沉睡组", anchor: mkdtempSync(join(tmpdir(), "ccr-anchor-fix3-")), tier: "轻立项",
+    });
+    const d10e0 = r10e0.ok ? (r10e0.data as { group?: { id: string }; confirm?: { id: string } } | undefined) : undefined;
+    send(mgr, "n10e0", "COMMAND_ORG_CONFIRM", { confirm_id: d10e0?.confirm?.id, approve: true }, "web-1");
+    const projectsFile = join(process.env.CCR_ORG_DIR as string, "projects.json");
+    const pj10 = JSON.parse(readFileSync(projectsFile, "utf-8")) as { groups: { id: string; updated_at: number }[]; trust_light: boolean };
+    const sleepy = pj10.groups.find((g) => g.id === d10e0?.group?.id);
+    if (sleepy) sleepy.updated_at = Date.now() - 30 * 86_400_000;
+    writeFileSync(projectsFile, JSON.stringify(pj10, null, 2) + "\n", "utf-8");
+    const prevStale = process.env.CCR_ORG_STALE_DAYS;
+    process.env.CCR_ORG_STALE_DAYS = "7";
+    const sug = mgr.autoSuggestHold(Date.now());
+    if (prevStale === undefined) delete process.env.CCR_ORG_STALE_DAYS;
+    else process.env.CCR_ORG_STALE_DAYS = prevStale;
+    const autoItem = findKind("org-confirm").find((n) => n.title === "建议暂缓：R1FIX1 沉睡组");
+    assert(!!d10e0?.group?.id && sug.suggested.includes(d10e0.group.id) && !!autoItem,
+      "N10⑤ autoSuggestHold 自动出卡 → org-confirm 通知入账（漏接收口）");
+    // 三端投影对账：列表合计 + 持久 + 重启还原（零重发帧）
+    // 六张 = 五入口目标卡（create/archive/tier/hold手动/hold自动）+ 出口③④共用的
+    // 升档组建卡（轻立项首建同样出卡）；决议收口另有帧，不计入产生数
+    assert(orgConfirmCount() === beforeN10 + 6,
+      "N10⑥ 五入口各产一条 action 项（无漏接无重复；含前置建卡合计 6）");
+    const keys10 = findKind("org-confirm").map((n) => n.key);
+    assert(keys10.every((k) => storeFile()?.notifications.some((n) => n.key === k) === true),
+      "N10⑦ notifications.json 持久落账（离线端兜底）");
+    const framesBeforeRestart10 = frames.length;
+    const mgr10 = new SessionManager(bus, cfg); // 同 dataDir 模拟重启
+    assert(mgr10.notificationsList().filter((n) => n.kind === "org-confirm").length === beforeN10 + 6,
+      "N10⑧ 重启还原：五入口通知全量在账");
+    assert(frames.length === framesBeforeRestart10,
+      "N10⑨ 重启还原零重发 NOTIFICATIONS_UPDATED（孤儿对账无变更不发声）");
+    // 重启 manager 抢走了产生回调槽——绑回 mgr（模拟生产：后续命令仍由原 manager 承接）
+    setConfirmCreatedHook((c: OrgConfirm) =>
+      (mgr as unknown as { recordOrgConfirmNotification(c: OrgConfirm): void }).recordOrgConfirmNotification(c));
+    void mgr10;
+
+    // ---------- N11 P1-2 dispatch 终态出口 ----------
+    console.log("N11 P1-2 dispatch 终态出口");
+    // 出口③首次拉起失败：工厂抛异常 → failed 台账行 + action/error 通知（旧「CLI
+    // 同步拿 error」例外只针对在线弹窗通道，账面不豁免）
+    mgr.setAgentFactory((): AgentLike => { throw new Error("boom-spawn-fix1"); });
+    const r11a = mgr.dispatchWorker({ anchor: CWD, prompt: "R1FIX1 首派失败" });
+    mgr.setAgentFactory(makeFakeFactory(created));
+    const spawnFail = findKind("dispatch", (n) => n.body.includes("boom-spawn-fix1"))[0];
+    assert(r11a.ok === false && !!spawnFail && spawnFail.group === "action"
+      && spawnFail.severity === "error" && spawnFail.actionable === true,
+      "N11① 首次拉起失败 → failed 行 + action/error 可操作通知（离线可见）");
+    // 出口④看门狗（recoveries 已达上限 → 一次 recoverFromStall 同时产接管 done 行
+    // 与上限 failed 行两账；gaveUp 分支先落台账再返回，杀树路径不触达）
+    const sid11 = create(CWD, "R1FIX1 看门狗通知");
+    const cb11 = created[created.length - 1].cb;
+    cb11.onInit("sdk-fix1-wd", "test-model");
+    type WdState = { wd: { recoveries: number[]; phase: string; gaveUp: boolean }; state: { session_id: string } };
+    const s11 = (mgr as unknown as { sessions: Map<string, WdState> }).sessions.get(sid11);
+    if (s11) s11.wd.recoveries = [Date.now() - 1_200_000, Date.now() - 600_000];
+    await (mgr as unknown as {
+      recoverFromStall(s: WdState, lane: "slow" | "fast" | "ended", stalled: number, cpuDelta: number): Promise<void>;
+    }).recoverFromStall(s11 as WdState, "slow", 11 * 60_000, 0);
+    const wdDone = findKind("dispatch", (n) => n.title === "看门狗 单完成");
+    const wdFail = findKind("dispatch", (n) => n.title === "看门狗 单失败");
+    assert(wdDone.length === 1 && wdDone[0].group === "activity" && wdDone[0].actionable === false,
+      "N11② 看门狗接管 done → activity 桶通知（不可操作）");
+    assert(wdFail.length === 1 && wdFail[0].group === "action" && wdFail[0].severity === "error"
+      && wdFail[0].actionable === true,
+      "N11③ 看门狗上限 failed → action/error 可操作通知（结构化面兜底）");
+    // 出口①重启悬账补记（closeHungDispatchRows 直测：种 running 行 → done 收敛 +
+    // activity 通知；done/无 actor → Leader 注入按 M4 规则天然豁免）
+    appendDispatch({ ts: Date.now() - 60_000, id: "d-hung-fix1", tier: "正经立项", target: "s-hung", status: "running", session_id: "s-hung", project_anchor: anchor });
+    (mgr as unknown as { closeHungDispatchRows(): void }).closeHungDispatchRows();
+    const hungLog = readDispatchLog().filter((e) => e.id === "d-hung-fix1");
+    const hungItem = findKind("dispatch", (n) => n.sourceContext.entityId === "d-hung-fix1")[0];
+    assert(hungLog.length === 1 && hungLog[0].status === "done" && !!hungItem
+      && hungItem.group === "activity" && hungItem.severity === "done" && hungItem.actionable === false,
+      "N11④ 重启悬账补记 → done 台账收敛 + activity 通知（台账/通知账对称）");
+
+    // ---------- N12 P2-1 superseded waiting 精确收口 ----------
+    console.log("N12 superseded waiting 收口");
+    const sid12 = create(CWD, "R1FIX1 superseded 等待");
+    const cb12 = created[created.length - 1].cb;
+    cb12.onInit("sdk-fix1-sup", "test-model");
+    cb12.onStatusChange("WORKING", "开工");
+    const reqOld = { request_id: "req-old", tool_name: "Bash", input_summary: "旧请求", suggestions: [] as string[] };
+    cb12.onWaiting(reqOld);
+    cb12.onWaiting({ ...reqOld, request_id: "req-new", tool_name: "Write", input_summary: "新请求" });
+    const wOld = findKind("waiting", (n) => n.key === `waiting:${sid12}:req-old`)[0];
+    const wNew = findKind("waiting", (n) => n.key === `waiting:${sid12}:req-new`)[0];
+    assert(!!wOld && !!wNew && wOld.resolved_at === undefined && wNew.resolved_at === undefined,
+      "N12① 前置：双请求双账均在等（req-new 已替代 req-old）");
+    cb12.onWaitingResolved("req-old", "allow", "web-x"); // 迟到的旧决议
+    const wOldAfter = findKind("waiting", (n) => n.key === `waiting:${sid12}:req-old`)[0];
+    const wNewAfter = findKind("waiting", (n) => n.key === `waiting:${sid12}:req-new`)[0];
+    assert((wOldAfter.resolved_at ?? 0) > 0 && wNewAfter.resolved_at === undefined,
+      "N12② 迟到旧决议：旧 key 精确收口，当前 req-new 账未动");
+    const st12 = (mgr as unknown as { sessions: Map<string, { state: { status: string; waiting_request?: { request_id: string } } }> })
+      .sessions.get(sid12)?.state;
+    assert(st12?.status === "WAITING" && st12?.waiting_request?.request_id === "req-new",
+      "N12③ 状态机不受牵连：仍 WAITING 且当前请求是 req-new");
+
+    // ---------- N13 P2-2 确认副作用失败语义 ----------
+    console.log("N13 副作用失败 error 面");
+    const r13 = mgr.orgAction("project-create", {
+      name: "R1FIX1 劈叉组", anchor: mkdtempSync(join(tmpdir(), "ccr-anchor-fix4-")), tier: "正经立项",
+    });
+    const d13 = r13.ok ? (r13.data as { group?: { id: string }; confirm?: { id: string } } | undefined) : undefined;
+    // 手术：组从事实源抹掉 → 激活副作用必失败（setGroupStatus 组不存在）
+    const pj13 = JSON.parse(readFileSync(projectsFile, "utf-8")) as { groups: { id: string }[]; trust_light: boolean };
+    pj13.groups = pj13.groups.filter((g) => g.id !== d13?.group?.id);
+    writeFileSync(projectsFile, JSON.stringify({ groups: pj13.groups, trust_light: pj13.trust_light }, null, 2) + "\n", "utf-8");
+    const ack13 = send(mgr, "n13", "COMMAND_ORG_CONFIRM", { confirm_id: d13?.confirm?.id, approve: true }, "web-1");
+    const failItem = findKind("org-confirm", (n) => n.sourceContext.entityId === d13?.confirm?.id)[0];
+    assert(ack13.ok === false && typeof ack13.error === "string",
+      "N13① 激活失败 → 决议命令错误回执（决议留痕不回滚）");
+    assert(!!failItem && failItem.resolved_at === undefined && failItem.severity === "error"
+      && failItem.title.includes("决议执行失败") && failItem.actionable === true,
+      "N13② 同 key 原地转 error 告警面：不 resolved、可操作（旧序失败时显示已决）");
+    assert(!!failItem && failItem.body.includes("org set"),
+      "N13③ error 面带补救通道指引（决议已留痕 + 直达通道）");
+    assert(!!failItem && storeFile()?.notifications.some((n) => n.key === failItem.key && n.severity === "error") === true,
+      "N13④ error 面持久落账（重启后可见）");
+
+    // ---------- N14 P2-5 确认单孤儿对账 ----------
+    console.log("N14 孤儿对账");
+    const orphanId = d10d?.confirm?.id as string;
+    const confirmsFile = join(process.env.CCR_ORG_DIR as string, "confirms.json");
+    const cf14 = JSON.parse(readFileSync(confirmsFile, "utf-8")) as { confirms: { id: string }[] };
+    cf14.confirms = cf14.confirms.filter((c) => c.id !== orphanId);
+    writeFileSync(confirmsFile, JSON.stringify(cf14, null, 2) + "\n", "utf-8");
+    const orphanBefore = findKind("org-confirm", (n) => n.sourceContext.entityId === orphanId)[0];
+    assert(!!orphanBefore && orphanBefore.resolved_at === undefined,
+      "N14① 前置：通知在账 pending、事实源已无此确认单（孤儿形态）");
+    const mgr14 = new SessionManager(bus, cfg); // 同 dataDir 重启 → 启动对账
+    const orphanAfter = mgr14.notificationsList().find((n) => n.sourceContext.entityId === orphanId);
+    assert(!!orphanAfter && (orphanAfter.resolved_at ?? 0) > 0 && orphanAfter.body.includes("孤儿对账"),
+      "N14② 重启对账：孤儿确认单通知自动收口并在 body 记原因");
+    const ack14 = send(mgr14, "n14", "COMMAND_ORG_CONFIRM", { confirm_id: orphanId, approve: true }, "web-1");
+    const orphanFinal = mgr14.notificationsList().find((n) => n.sourceContext.entityId === orphanId);
+    assert(ack14.ok === false && (orphanFinal?.resolved_at ?? 0) > 0,
+      "N14③ 重放决议 → 确认单不存在拒收（decideConfirm 口径）；通知保持 resolved 不复活");
   } finally {
     process.env.CCR_ORG_DIR = prevOrg;
     if (prevTitleGen === undefined) delete process.env.CCR_NO_TITLE_GEN;

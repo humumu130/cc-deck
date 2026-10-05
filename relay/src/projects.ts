@@ -524,6 +524,17 @@ export function listPendingConfirms(dir?: string): OrgConfirm[] {
   return readConfirms(dir).filter((c) => c.status === "pending");
 }
 
+// #018-R1FIX1 P1-1 确认单产生回调面：addConfirm 是全模块唯一确认单产生咽喉
+//（立项/结项/档位/暂缓/自动暂缓全部经此落单），SessionManager 构造时注册回调，
+// 把每张新卡同步进结构化通知账（recordOrgConfirmNotification）。单回调槽（后注册
+// 覆盖）：生产单 manager 进程假设内成立；未注册（projects 独立使用/纯函数测试）
+// = 零行为变化
+type ConfirmCreatedHook = (confirm: OrgConfirm) => void;
+let confirmCreatedHook: ConfirmCreatedHook | null = null;
+export function setConfirmCreatedHook(hook: ConfirmCreatedHook | null): void {
+  confirmCreatedHook = hook;
+}
+
 export function addConfirm(
   input: { kind: ConfirmKind; title: string; reason: string; payload?: Record<string, unknown> },
   dir?: string,
@@ -540,6 +551,12 @@ export function addConfirm(
   const list = readConfirms(dir);
   list.push(c);
   writeConfirms(list, dir);
+  // 先事实源后通知（P1-2 dispatch 终态同口径）；回调异常不阻断落单主路径
+  try {
+    confirmCreatedHook?.(c);
+  } catch (e) {
+    console.warn(`[projects] 确认单产生回调失败: ${e instanceof Error ? e.message : String(e)}`);
+  }
   return c;
 }
 
