@@ -377,11 +377,13 @@
     .icon-btn { position: relative; display: grid; place-items: center; width: 30px; height: 30px; border: 1px solid var(--line); border-radius: 7px; background: transparent; color: var(--dim); cursor: pointer; }
     .icon-btn::before { content: ""; position: absolute; inset: -7px; }
     .icon-btn:hover { color: var(--text); background: var(--hover); }
-    .queue-switch { display: flex; gap: 4px; padding: 3px; margin-bottom: 14px; border: 1px solid var(--line); border-radius: 8px; background: var(--bg1); }
-    .queue-switch button { flex: 1; padding: 6px 3px; border: 0; border-radius: 5px; background: transparent; color: var(--dim); cursor: pointer; font-size: 10px; }
-    .queue-switch button.active { border: 1px solid var(--border-strong); background: var(--selected-bg); color: var(--text-strong); box-shadow: var(--selected-shadow); }
-    .queue-view { display: none; overflow: hidden auto; height: calc(100% - 78px); padding-right: 2px; }
-    .queue-view.active { display: block; }
+    .session-list-tools { display: flex; align-items: center; gap: 6px; margin-bottom: 10px; }
+    .session-list-tools input { min-width: 0; flex: 1; height: 28px; padding: 0 8px; border: 1px solid var(--line); border-radius: 7px; background: var(--surface2); color: var(--text); font: 10px var(--sans); }
+    .session-list-tools input::placeholder { color: var(--faint); }
+    .session-list-tools span { flex: 0 0 auto; color: var(--dim); font: 10px var(--mono); white-space: nowrap; }
+    .session-list-tools button { min-height: 28px; padding: 0 7px; border: 1px solid var(--line); border-radius: 7px; background: transparent; color: var(--dim); cursor: pointer; font: 10px var(--mono); white-space: nowrap; }
+    .session-list-tools button:hover { border-color: var(--border-strong); background: var(--hover); color: var(--text); }
+    .session-list { overflow: hidden auto; height: calc(100% - 54px); padding-right: 2px; }
     .queue-group { margin: 12px 3px 6px; color: var(--faint); font: 10px var(--mono); letter-spacing: .04em; }
     .queue-card { position: relative; min-height: 57px; padding: 7px 10px; margin-bottom: 6px; border: 1px solid var(--card-border); border-radius: var(--radius); background: var(--card-veil); box-shadow: var(--card-shadow); cursor: pointer; transition: border-color .18s ease, background .18s ease, transform .18s ease, box-shadow .18s ease; }
     .queue-card:hover { border-color: var(--border-strong); background: var(--hover); transform: translateY(-1px); box-shadow: var(--shadow-hover); }
@@ -468,7 +470,7 @@
     .mini-context-meter > i b { display: block; height: 100%; border-radius: inherit; background: var(--ctx-safe-fill); }
     .mini-context-meter.attention > i b { background: var(--ctx-attention-fill); }
     .mini-context-meter.critical > i b { background: var(--ctx-critical-fill); }
-    .context-meter { padding: 10px; border: 1px solid var(--line); border-radius: 9px; background: var(--surface2); box-shadow: var(--card-shadow); }
+    .context-meter { padding: 0 0 10px; border: 0; border-bottom: 1px solid var(--line-soft); border-radius: 0; background: transparent; box-shadow: none; }
     .context-meter-head, .context-meter-stats { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
     .context-meter-kicker { color: var(--faint); font: 9px var(--mono); letter-spacing: .06em; text-transform: uppercase; }
     .context-meter-model { display: block; margin-top: 2px; color: var(--text-strong); font-size: 10px; font-weight: 700; }
@@ -595,8 +597,8 @@
     .task-assignee .assignee-meta { color: var(--dim); font-weight: 400; }
     .task-assignee b { color: var(--text); font-weight: 600; }
     .queue-card-meta { display: block; height: 18px; min-width: 0; overflow: hidden; margin: 2px 0 0 14px; color: var(--dim); text-overflow: ellipsis; white-space: nowrap; font-size: 10px; line-height: 18px; }
-    .member-list { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; min-width: 0; }
-    .member-card { display: flex; min-width: 0; gap: 8px; padding: 10px; border: 1px solid var(--line); border-radius: 9px; background: var(--surface2); overflow: hidden; }
+    .member-list { display: grid; grid-template-columns: 1fr; gap: 0; min-width: 0; }
+    .member-card { display: flex; min-width: 0; gap: 8px; padding: 9px 0; border: 0; border-bottom: 1px solid var(--line-soft); border-radius: 0; background: transparent; overflow: hidden; }
     .member-card > div { min-width: 0; }
     .member-card .identity-cluster { min-width: 0; flex-wrap: wrap; }
     .avatar { position: relative; display: grid; place-items: center; flex: 0 0 28px; width: 28px; height: 28px; border: 1px solid transparent; border-radius: 8px; background: var(--hover); color: var(--text); font: 700 11px/1 var(--mono); }
@@ -615,25 +617,27 @@
     .leader-label { border: 1px solid var(--selected-line); background: var(--brand-soft); color: var(--brand-hover); }
     .member-card strong { display: block; color: var(--text-strong); font-size: 10px; }
     .member-card p { margin: 3px 0 0; color: var(--dim); font-size: 10px; }
-    .project-overview { display: grid; grid-template-columns: repeat(4, minmax(110px, 1fr)); gap: 9px; margin-bottom: 15px; }
-    .metric { padding: 11px; border: 1px solid var(--line); border-radius: 9px; background: var(--surface2); }
+    .project-overview { display: grid; grid-template-columns: repeat(4, minmax(110px, 1fr)); gap: 0; margin-bottom: 15px; border-top: 1px solid var(--line-soft); border-bottom: 1px solid var(--line-soft); }
+    .metric { min-width: 0; padding: 10px 12px; border: 0; border-left: 1px solid var(--line-soft); border-radius: 0; background: transparent; }
+    .metric:first-child { border-left: 0; }
     .metric b { display: block; color: var(--text-strong); font: 700 19px var(--mono); font-variant-numeric: tabular-nums; }
     .metric span { color: var(--dim); font-size: 10px; }
     .readonly-banner { padding: 8px 10px; margin-bottom: 14px; border: 1px dashed var(--readonly-line); border-radius: 8px; background: var(--readonly-bg); color: var(--info); font-size: 10px; }
-    .aggregate-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 9px; }
-    .aggregate-card { padding: 12px; border: 1px solid var(--line); border-radius: 9px; background: var(--surface2); }
-    .aggregate-card h4 { margin: 0 0 8px; color: var(--text-strong); font-size: 11px; }
-    .aggregate-card p { margin: 5px 0; color: var(--dim); font-size: 10px; }
-    .aggregate-card button { margin-top: 7px; }
-    .notice { display: flex; gap: 9px; padding: 11px; border: 1px solid var(--line); border-radius: 9px; background: var(--surface2); cursor: pointer; }
+    .aggregate-grid { display: grid; gap: 0; }
+    .aggregate-card { display: grid; grid-template-columns: 24px minmax(0, 1fr) auto; align-items: center; gap: 8px; padding: 11px 0; border: 0; border-bottom: 1px solid var(--line-soft); border-radius: 0; background: transparent; }
+    .aggregate-card h4 { margin: 0; color: var(--text-strong); font-size: 11px; }
+    .aggregate-card p { grid-column: 2; margin: 2px 0 0; color: var(--dim); font-size: 10px; }
+    .aggregate-card p + p { margin-top: 1px; }
+    .aggregate-card button { grid-column: 3; grid-row: 1 / span 3; margin-top: 0; }
+    .notice { display: flex; gap: 9px; padding: 10px 0; border: 0; border-bottom: 1px solid var(--line-soft); border-radius: 0; background: transparent; cursor: pointer; }
     .notice.selected { border-color: var(--line); background: var(--selected-bg); box-shadow: inset 2px 0 0 var(--selected-line); }
     .notice .notice-icon { display: grid; place-items: center; flex: 0 0 27px; width: 27px; height: 27px; border-radius: 8px; background: var(--notice-icon-bg); color: var(--error); }
     .notice strong { display: block; color: var(--text-strong); font-size: 11px; }
     .notice p { margin: 4px 0 0; color: var(--dim); font-size: 10px; }
     .notice .tag { margin-top: 7px; }
     .notify-source-list { display: grid; gap: 10px; }
-    .notify-source-card { padding: 13px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface2); box-shadow: var(--card-shadow); transition: border-color .18s ease, background .18s ease, box-shadow .18s ease, opacity .18s ease; }
-    .notify-source-card:hover { border-color: var(--border-strong); box-shadow: var(--shadow-hover); }
+    .notify-source-card { padding: 11px 0; border: 0; border-bottom: 1px solid var(--line-soft); border-radius: 0; background: transparent; box-shadow: none; transition: background .18s ease, opacity .18s ease; }
+    .notify-source-card:hover { background: var(--hover); }
     .notify-source-card.resolved { border-color: var(--line-soft); background: var(--surface1); opacity: .72; }
     .notify-source-head { display: flex; align-items: flex-start; gap: 9px; }
     .notify-source-head > div { min-width: 0; flex: 1; }
@@ -718,12 +722,11 @@
     .mobile-summary div { display: inline-flex; align-items: baseline; gap: 4px; padding: 0; color: var(--dim); }
     .mobile-summary b { color: var(--text-strong); font: 700 11px var(--mono); font-variant-numeric: tabular-nums; }
     .mobile-summary span { color: var(--dim); font-size: 10px; }
-    .mobile-switch { display: flex; gap: 4px; padding: 3px; margin-bottom: 13px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface1); }
-    .mobile-switch button { flex: 1; padding: 6px 3px; border: 0; border-radius: 5px; background: transparent; color: var(--dim); cursor: pointer; font-size: 10px; }
-    .mobile-switch button.active { border: 1px solid var(--border-strong); background: var(--selected-bg); color: var(--text-strong); box-shadow: var(--selected-shadow); }
     .mobile-card { padding: 11px; margin-bottom: 8px; border: 1px solid var(--card-border); border-radius: 12px; background: var(--surface2); box-shadow: var(--card-shadow); cursor: pointer; transition: border-color .18s ease, background .18s ease, transform .18s ease, box-shadow .18s ease; }
     .mobile-card:hover { border-color: var(--border-strong); transform: translateY(-1px); box-shadow: var(--shadow-hover); }
     .mobile-card.primary { border-color: var(--card-border); background: var(--selected-bg); box-shadow: inset 2px 0 0 var(--selected-line); }
+    .mobile-notify-card { padding: 10px 0; margin-bottom: 0; border: 0; border-bottom: 1px solid var(--line-soft); border-radius: 0; background: transparent; box-shadow: none; }
+    .mobile-notify-card:hover { background: var(--hover); transform: none; box-shadow: none; }
     .mobile-card .row { display: flex; align-items: center; gap: 7px; }
     .mobile-card strong { flex: 1; min-width: 0; color: var(--text-strong); font-size: 11.5px; }
     .mobile-card p { margin: 5px 0 0 35px; color: var(--dim); font-size: 10px; }
@@ -744,9 +747,10 @@
     .mobile-lane-head { display: flex; justify-content: space-between; margin-bottom: 7px; color: var(--dim); font-size: 10px; font-weight: 700; }
     .mobile-task { padding: 9px; border: 1px solid var(--line); border-radius: 7px; background: var(--surface2); color: var(--text); font-size: 10px; }
     .mobile-task + .mobile-task { margin-top: 6px; }
-    .mobile-project-card { padding: 12px; margin-bottom: 8px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface2); }
+    .mobile-project-card { display: grid; grid-template-columns: 22px minmax(0, 1fr) auto; align-items: center; gap: 7px; padding: 11px 0; margin-bottom: 0; border: 0; border-bottom: 1px solid var(--line-soft); border-radius: 0; background: transparent; }
     .mobile-project-card h3 { margin: 0; color: var(--text-strong); font-size: 12px; }
-    .mobile-project-card p { margin: 4px 0 10px; color: var(--dim); font-size: 10px; }
+    .mobile-project-card p { grid-column: 2; margin: 2px 0 0; color: var(--dim); font-size: 10px; }
+    .mobile-project-card > .tag { grid-column: 3; grid-row: 1 / span 2; }
     .mobile-settings { display: grid; gap: 8px; }
     .mobile-settings .settings-row { padding: 12px; }
     #m-settings .mobile-settings::before { content: "连接管理"; display: block; margin: 2px 2px 0; color: var(--faint); font: 700 10px var(--mono); letter-spacing: .04em; }
@@ -794,6 +798,9 @@
     .workspace-title-row .engine-badge, .workspace-title-row .source-badge { font-size: 10px; }
     .member-card, .task-card, .notice, .metric, .aggregate-card, .settings-row { box-shadow: var(--card-shadow); transition: border-color .18s ease, background .18s ease, transform .18s ease, box-shadow .18s ease; }
     .member-card:hover, .notice:hover, .metric:hover, .aggregate-card:hover, .settings-row:hover { border-color: var(--border-strong); transform: translateY(-1px); box-shadow: var(--shadow-hover); }
+    .member-card, .notice, .metric, .aggregate-card { box-shadow: none; }
+    .member-card:hover, .notice:hover, .metric:hover, .aggregate-card:hover { border-color: var(--line-soft); background: var(--hover); transform: none; box-shadow: none; }
+    .team-member-large { background: transparent; }
     .task-card:hover { border-color: var(--border-strong); background: var(--hover); transform: none; box-shadow: none; }
     .member-card .identity-cluster, .task-card .identity-cluster, .notice .identity-cluster { margin-top: 6px; }
     .artifact-row > span:not(.identity-cluster) { margin-left: auto; color: var(--faint); font-family: var(--mono); }
@@ -948,7 +955,7 @@
           </nav>
 
           <section class="desktop-screen active" id="d-session">
-            <aside class="queue"><div class="queue-head"><h2>会话</h2><button class="icon-btn">＋</button></div><div class="queue-switch" aria-label="会话队列视图"><button class="active" data-queue-mode="action">行动队列</button><button data-queue-mode="all">全部会话</button></div><div class="queue-view active" data-queue-view="action"><div data-session-queue="action"></div></div><div class="queue-view" data-queue-view="all"><div data-session-queue="all"></div></div></aside>
+            <aside class="queue"><div class="queue-head"><h2>会话</h2><button class="icon-btn">＋</button></div><div class="session-list-tools"><input type="search" placeholder="搜索会话、项目或来源" aria-label="搜索会话、项目或来源"><button type="button" data-session-filter>筛选 · 全部</button><span data-session-source-label>当前源 · 公司电脑</span></div><div class="session-list" data-session-list></div></aside>
             <section class="workspace">
               <header class="workspace-head"><div class="workspace-title-row"><h2 id="session-title">0.6.0-test.19 出包</h2><span class="tag action" id="session-status">待收单</span><span class="identity-cluster" id="session-identity"><span class="engine-badge claude">Claude</span><span class="source-badge">公司电脑</span></span></div><div class="workspace-sub" id="session-sub">~/dev/cc-deck · 最近活动 12 分钟前</div><div class="session-state-row" id="session-state-row" data-session-state="waiting"><span class="session-state-label" data-session-state-label>等待确认</span><span class="session-state-summary" data-session-state-summary>Bash 写入 docs/</span><span class="session-state-elapsed" data-session-state-elapsed>2 分钟</span></div><div class="segment-bar"><button class="active">对话</button><button>任务</button><button>输出物</button><button>用量</button><button>⋯</button></div></header>
               <div class="workspace-body" id="session-body">
@@ -999,7 +1006,7 @@
           <div class="mobile-status"><span>9:41</span><span>▰ ︎◒ 100%</span></div>
           <div class="mobile-sourcebar"><div class="source-switcher"><button class="source-trigger" type="button" data-source-trigger aria-expanded="false"><span class="source-dot status-connected" data-source-dot></span><strong data-current-source>公司电脑</strong><span>⌄</span></button><div class="source-menu" data-source-menu><div class="source-menu-head">数据源与视图</div><button class="source-option active" type="button" data-source-choice="office"><span class="source-dot status-connected"></span><strong>公司电脑</strong><small>6 会话 · 2 行动</small></button><button class="source-option" type="button" data-source-choice="home"><span class="source-dot status-reconnecting"></span><strong>家里 iMac</strong><small>2 会话 · 2 行动</small></button><div class="source-mode"><button class="active" type="button" data-source-mode="single">单源</button><button type="button" data-source-mode="aggregate">多源聚合</button></div><a class="source-manage" href="#d-settings" data-source-settings>⚙ 管理与配对新源 →</a></div></div>
           <header class="mobile-head"><h2>待我处理<small>会话行动与状态</small></h2><span class="tag action mobile-notify" title="通知 · 2 个需行动项" aria-label="通知 · 2 个需行动项"><svg class="icon-bell" aria-hidden="true"><use href="#icon-bell"></use></svg><span>2</span></span><button class="icon-btn">⌕</button></header>
-          <div class="mobile-content"><div class="mobile-summary"><div><b>2</b><span>需行动</span></div><div><b>1</b><span>运行中</span></div><div><b>1</b><span>待验收</span></div></div><div class="mobile-switch"><button class="active" data-mobile-list="action">待处理</button><button data-mobile-list="all">全部会话</button></div><div data-mobile-session-list></div></div>
+          <div class="mobile-content"><div class="mobile-summary"><div><b>2</b><span>需行动</span></div><div><b>1</b><span>运行中</span></div><div><b>1</b><span>待验收</span></div></div><div data-mobile-session-list></div></div>
           <nav class="mobile-nav"><button class="active" data-mobile-root="inbox"><b><svg class="icon-nav" aria-hidden="true"><use href="#icon-chat"></use></svg></b>会话</button><button data-mobile-root="team"><b><svg class="icon-nav" aria-hidden="true"><use href="#icon-users"></use></svg></b>团队<span class="tag action">1</span></button><button data-mobile-root="project"><b><svg class="icon-nav" aria-hidden="true"><use href="#icon-grid"></use></svg></b>项目</button><button data-mobile-root="settings"><b><svg class="icon-nav" aria-hidden="true"><use href="#icon-gear"></use></svg></b>设置</button></nav>
         </div>
 
@@ -1081,10 +1088,26 @@
       const teamTasks = [{ lane: "待认领", count: "2", title: "T-21 导入码迁移", copy: "等待 worker-web", engine: "CodeBuddy", engineClass: "codebuddy", source: "公司电脑", tag: "待派单", tagClass: "" }, { lane: "进行中", count: "4", title: "T-12 relay 事件流", copy: "worker-relay · 48%", engine: "Codex", engineClass: "codex", source: "公司电脑", tag: "运行中", tagClass: "info" }, { lane: "进行中", count: "4", title: "T-15 手机列表", copy: "worker-mobile · 72%", engine: "Qwen Code", engineClass: "qwen", source: "家里 iMac", tag: "运行中", tagClass: "info" }, { lane: "待验收", count: "2", title: "T-13 更新通道隔离", copy: "独立出包已完成", assignee: "worker-web · 执行者", assigneeClass: "worker", assigneeGlyph: "W", assigneeEngine: "Claude", assigneeEngineClass: "claude", assigneeSource: "公司电脑", tag: "验收单", tagClass: "action" }, { lane: "待装机", count: "2", title: "T-14 验收槽", copy: "回填 2/3", assignee: "Leader · 编排", assigneeClass: "leader", assigneeGlyph: "✦", assigneeEngine: "Trae", assigneeEngineClass: "trae", assigneeSource: "公司电脑", tag: "待收单", tagClass: "action" }, { lane: "完成", count: "1", title: "T-10 版本同步", copy: "已合并 main", engine: "ZCode", engineClass: "zcode", source: "家里 iMac", tag: "完成", tagClass: "done" }];
       const identityMarkup = (item, includeEngine = true) => `<div class="identity-cluster">${includeEngine ? `<span class="engine-badge ${item.engineClass}">${item.engine}</span>` : ""}<span class="source-badge">${item.source}</span></div>`;
       const renderSessionCard = (item, variant) => variant === "mobile" ? `<div class="mobile-card${item.primary ? " primary" : ""}" data-open-detail="${item.id}"><div class="row"><span class="avatar ${item.avatar}"><svg class="icon-status" aria-hidden="true"><use href="#icon-${item.icon}"></use></svg></span><strong>${item.title}</strong>${item.tag ? `<span class="tag ${item.tagClass}">${item.tag}</span>` : ""}</div><p>${item.summary}</p>${identityMarkup(item)}</div>` : `<div class="queue-card${item.selected ? " selected" : ""}" data-session-card="${item.id}"><div class="row"><i class="status-dot ${item.status}"></i><strong>${item.title}</strong>${item.tag ? `<span class="tag ${item.tagClass}">${item.tag}</span>` : ""}</div><p>${item.summary}</p>${identityMarkup(item)}</div>`;
-      const renderSessionQueue = (mode) => { const groups = mode === "action" ? [["需你处理 · 3", sessionQueueData.action], ["运行中 · 2", sessionQueueData.action.slice(3)]] : [[`<svg class="icon-inline" aria-hidden="true"><use href="#icon-folder"></use></svg> cc-deck · 4 个会话`, sessionQueueData.all.slice(0, 4)], [`<svg class="icon-inline" aria-hidden="true"><use href="#icon-folder"></use></svg> windclaw-qclaw · 1 个会话`, sessionQueueData.all.slice(4)]]; return groups.map(([label, items]) => `<div class="queue-group">${label}</div>${items.map((item) => renderSessionCard(item, "desktop")).join("")}`).join(""); };
+      const getSessionProject = (item) => item.id === "android" ? "windclaw-qclaw" : "cc-deck";
+      const sessionPendingItems = () => sessionQueueData.action.slice(0, 3);
+      const sessionOtherItems = () => sessionQueueData.all.filter((item) => !sessionPendingItems().some((pending) => pending.id === item.id));
+      const mobileSessionCardData = (item) => ({ ...item, avatar: item.status === "error" ? "status-alert" : item.status === "waiting" ? "status-action" : "status-ok", icon: item.status === "error" ? "alert" : item.status === "waiting" ? "check" : "info", primary: false });
+      const renderSessionGroup = (group, items, variant) => `<div class="session-group" data-session-group="${group}"><div class="queue-group"><span>${group === "pending" ? "待处理" : getSessionProject(items[0] || { id: "" })}</span> · <span data-session-group-count>${items.length}</span></div>${items.map((item) => renderSessionCard(item, variant)).join("")}</div>`;
+      const renderSessionQueue = () => { const other = sessionOtherItems(); return `${renderSessionGroup("pending", sessionPendingItems(), "desktop")}<div class="session-group" data-session-group="other"><div class="queue-group"><span>其他会话</span> · <span data-session-group-count>${other.length}</span></div>${[...new Set(other.map(getSessionProject))].map((project) => renderSessionGroup("project", other.filter((item) => getSessionProject(item) === project), "desktop")).join("")}</div>`; };
+      const renderMobileSessionStream = () => {
+        const pending = mobileSessionData.slice(0, 3);
+        const other = sessionOtherItems().map(mobileSessionCardData);
+        const projectGroups = [...new Set(other.map(getSessionProject))];
+        const otherMarkup = projectGroups.length === 1 ? other.map((item) => renderSessionCard(item, "mobile")).join("") : projectGroups.map((project) => `<div class="session-group" data-session-group="project"><div class="queue-group"><span>${project}</span> · <span data-session-group-count>${other.filter((item) => getSessionProject(item) === project).length}</span></div>${other.filter((item) => getSessionProject(item) === project).map((item) => renderSessionCard(item, "mobile")).join("")}</div>`).join("");
+        return `<div class="session-group" data-session-group="pending"><div class="queue-group"><span>待处理</span> · <span data-session-group-count>${pending.length}</span></div>${pending.map((item) => renderSessionCard(item, "mobile")).join("")}</div><div class="session-group" data-session-group="other"><div class="queue-group"><span>其他会话</span> · <span data-session-group-count>${other.length}</span></div>${otherMarkup}</div>`;
+      };
       const notificationIdentity = (item) => identityMarkup(item);
+      const notificationFactMarkup = (item) => {
+        const facts = item.key === "release" ? [["谁", "<strong>worker-web</strong>"], ["什么事", "<strong>T-13</strong> 独立出包已完成"], ["等什么", "公司网下检查更新并确认收单"]] : item.key === "team-plan" ? [["谁", "<strong>Leader / worker-mobile</strong>"], ["什么事", "额度链走尽"], ["等什么", "选择接替引擎并确认 <strong>3 开发 + 独立验收</strong> 编制"]] : [["谁", "<strong>worker-relay</strong>"], ["什么事", "滞留 25 分钟"], ["等什么", "已通知 Leader，无需处理"]];
+        return `<div class="notify-facts">${facts.map(([label, value]) => `<div class="notify-fact"><span class="notify-fact-label">${label}</span><span class="notify-fact-value">${value}</span></div>`).join("")}</div>`;
+      };
 
-      const renderNotificationQueueCard = (item, group, selected = false) => `<div class="notice${selected ? " selected" : ""}" data-notify-card data-notify-active="${item.active}" data-notify-group="${group}"${item.active ? ` data-notify-jump data-notify-domain="${item.domain}"${item.session ? ` data-notify-session="${item.session}"` : ""}${item.teamAction ? ` data-notify-team-action="${item.teamAction}"` : ""}` : ""} title="${item.active ? `整卡可点 · ${item.jumpLabel}` : "历史动态 · 无需处理"}"><span class="notice-icon">${item.active ? "!" : "·"}</span><div><strong>${item.leftTitle}</strong><p>${item.leftSummary}</p>${notificationIdentity(item)}${item.tag ? `<span class="tag ${item.tagClass}">${item.tag}</span>` : ""}</div></div>`;
+      const renderNotificationQueueCard = (item, group, selected = false) => `<div class="notice${selected ? " selected" : ""}" data-notify-card data-notify-active="${item.active}" data-notify-group="${group}"${item.active ? ` data-notify-jump data-notify-domain="${item.domain}"${item.session ? ` data-notify-session="${item.session}"` : ""}${item.teamAction ? ` data-notify-team-action="${item.teamAction}"` : ""}` : ""} title="${item.active ? `整卡可点 · ${item.jumpLabel}` : "历史动态 · 无需处理"}"><span class="notice-icon">${item.active ? "!" : "·"}</span><div><strong>${item.leftTitle}</strong>${notificationFactMarkup(item)}${notificationIdentity(item)}${item.tag ? `<span class="tag ${item.tagClass}">${item.tag}</span>` : ""}</div></div>`;
       const renderNotificationQueueGroup = (label, group, items, selected = false) => `<div class="queue-group">${label} · <span data-notify-group-count="${group}">${items.length}</span></div>${items.map((item, index) => renderNotificationQueueCard(item, group, selected && index === 0)).join("")}`;
       const renderNotificationQueue = () => {
         const actionItems = notificationData.filter((item) => item.active);
@@ -1099,7 +1122,7 @@
       const renderTeamTask = (task, mobile = false) => mobile ? `<div class="mobile-task"><b>${task.title}</b>${task.copy ? `<br><span class="muted">${task.copy}</span>` : ""}${task.engine ? identityMarkup(task) : ""}${task.tag ? `<br><span class="tag ${task.tagClass}">${task.tag}</span>` : ""}</div>` : `<div class="task-card"><strong>${task.title}</strong><p>${task.copy}</p>${task.assignee ? `<div class="task-assignee"><span class="avatar ${task.assigneeClass}">${task.assigneeGlyph}<i class="avatar-engine-dot ${task.assigneeEngineClass}"></i></span><span><b>${task.assignee}</b>${task.assigneeClass === "leader" ? ' <span class="role-label leader-label">调度</span>' : ""} ${task.assigneeEngine} · ${task.assigneeSource}</span></div>` : identityMarkup(task)}${task.tag ? `<span class="tag ${task.tagClass}">${task.tag}</span>` : ""}</div>`;
       const renderTeamBoard = (mobile = false) => [...new Map(teamTasks.map((task) => [task.lane, task.count])).entries()].map(([lane, count]) => `<div class="${mobile ? "mobile-lane" : "lane"}"><div class="${mobile ? "mobile-lane-head" : "lane-head"}"><span>${lane}</span><span>${count}</span></div>${teamTasks.filter((task) => task.lane === lane).map((task) => renderTeamTask(task, mobile)).join("")}</div>`).join("");
 
-      const renderSessionViews = () => { document.querySelectorAll("[data-session-queue]").forEach((view) => { view.innerHTML = renderSessionQueue(view.dataset.sessionQueue); }); document.querySelector("[data-mobile-session-list]")?.replaceChildren(...mobileSessionData.map((item) => { const template = document.createElement("template"); template.innerHTML = renderSessionCard(item, "mobile"); return template.content.firstElementChild; })); };
+      const renderSessionViews = () => { document.querySelector("[data-session-list]")?.replaceChildren(...(() => { const template = document.createElement("template"); template.innerHTML = renderSessionQueue(); return template.content.childNodes; })()); const mobileList = document.querySelector("[data-mobile-session-list]"); if (mobileList) mobileList.innerHTML = renderMobileSessionStream(); };
       const renderNotificationViews = () => { document.querySelector("[data-notification-queue]")?.insertAdjacentHTML("beforeend", renderNotificationQueue()); document.querySelector("[data-notification-list]")?.insertAdjacentHTML("beforeend", renderNotificationSourceCards()); document.querySelector("[data-mobile-notification-list]")?.insertAdjacentHTML("beforeend", renderMobileNotificationCards()); };
 
       const renderSourceMenus = () => document.querySelectorAll("[data-source-menu]").forEach((menu) => { const head = menu.closest(".windowbar") ? "当前数据源" : "数据源与视图"; menu.innerHTML = `<div class="source-menu-head">${head}</div>${Object.entries(sourceStates).map(([key, source]) => `<button class="source-option${key === activeSource ? " active" : ""}" type="button" data-source-choice="${key}"><span class="source-dot status-${source.status}"></span><strong>${source.label}</strong><small>${source.summary}</small></button>`).join("")}<div class="source-mode"><button class="${sourceMode === "single" ? "active" : ""}" type="button" data-source-mode="single">单源</button><button class="${sourceMode === "aggregate" ? "active" : ""}" type="button" data-source-mode="aggregate">多源聚合</button></div><a class="source-manage" href="#d-settings" data-source-settings>⚙ 管理与配对新源 →</a>`; });
@@ -1107,6 +1130,7 @@
         const source = sourceStates[activeSource];
         const label = sourceMode === "aggregate" ? `${source.label} · 多源聚合` : source.label;
         document.querySelectorAll("[data-current-source]").forEach((node) => { node.textContent = label; });
+        document.querySelectorAll("[data-session-source-label]").forEach((node) => { node.textContent = `当前源 · ${label}`; });
       }
 
       const connectionStates = [{ key: "connected", label: "已连接", className: "status-connected" }, { key: "reconnecting", label: "重连中", className: "status-reconnecting" }, { key: "disconnected", label: "已断开", className: "status-disconnected" }];
@@ -1242,7 +1266,7 @@
       }
 
       function ensureSourceFilterEntrances() {
-        document.querySelectorAll("#d-session .queue-view").forEach((view) => {
+        document.querySelectorAll("#d-session .session-list").forEach((view) => {
           if (view.querySelector("[data-source-filter-cta]")) return;
           const button = document.createElement("button");
           button.className = "source-filter-cta";
@@ -1251,7 +1275,7 @@
           button.innerHTML = "<span></span><strong></strong>";
           view.append(button);
         });
-        const mobileContent = document.querySelector("#m-inbox .mobile-content");
+        const mobileContent = document.querySelector("#m-inbox [data-mobile-session-list]");
         if (mobileContent && !mobileContent.querySelector("[data-source-filter-cta]")) {
           const button = document.createElement("button");
           button.className = "source-filter-cta";
@@ -1276,15 +1300,16 @@
         ensureSourceFilterEntrances();
         document.querySelectorAll("#d-session .queue-card, #m-inbox .mobile-card").forEach((card) => {
           const badge = card.querySelector(".source-badge");
-          card.hidden = Boolean(badge && !aggregate && badge.textContent.trim() !== activeLabel);
+          const sourceHidden = Boolean(badge && !aggregate && badge.textContent.trim() !== activeLabel);
+          card.hidden = sourceHidden || card.dataset.searchHidden === "true";
         });
-        document.querySelectorAll("#d-session .queue-view").forEach((view) => {
+        document.querySelectorAll("#d-session .session-list").forEach((view) => {
           const button = view.querySelector("[data-source-filter-cta]");
           if (!button) return;
           const hiddenCount = [...view.querySelectorAll(".queue-card")].filter((card) => card.hidden).length;
           updateSourceFilterEntrance(button, hiddenCount);
         });
-        const mobileButton = document.querySelector("#m-inbox [data-source-filter-cta]");
+        const mobileButton = document.querySelector("#m-inbox [data-mobile-session-list] [data-source-filter-cta]");
         if (mobileButton) {
           const hiddenCount = [...document.querySelectorAll("#m-inbox .mobile-card")].filter((card) => card.hidden).length;
           updateSourceFilterEntrance(mobileButton, hiddenCount);
@@ -1292,6 +1317,16 @@
         const counts = aggregate ? { actions: 3, running: 4, acceptance: 2 } : sourceStates[activeSource].mobile;
         document.querySelectorAll("#m-inbox .mobile-summary b").forEach((node, index) => {
           node.textContent = String([counts.actions, counts.running, counts.acceptance][index] ?? 0);
+        });
+        document.querySelectorAll("#d-session .session-list, #m-inbox [data-mobile-session-list]").forEach((list) => {
+          list.querySelectorAll(".session-group").forEach((group) => {
+            const cards = [...group.querySelectorAll(".queue-card, .mobile-card")];
+            const visible = cards.filter((card) => !card.hidden);
+            const count = group.querySelector("[data-session-group-count]");
+            if (count) count.textContent = String(visible.length);
+            if (group.dataset.sessionGroup === "other") group.hidden = visible.length === 0;
+            if (group.dataset.sessionGroup === "project") group.hidden = visible.length === 0;
+          });
         });
       }
 
@@ -1353,10 +1388,8 @@
       }
 
       function applyEmptyDemo() {
-        const actionView = document.querySelector('#d-session [data-queue-view="action"]');
-        const allView = document.querySelector('#d-session [data-queue-view="all"]');
-        actionView?.replaceChildren(createDemoEmptyState("暂无待你处理", "查看全部会话", () => setQueueMode("all")));
-        allView?.replaceChildren(createDemoEmptyState("还没有会话", "新建会话", () => showToast("新建会话 · 原型演示占位")));
+        const sessionList = document.querySelector("#d-session [data-session-list]");
+        if (sessionList) sessionList.innerHTML = `<div class="session-group" data-session-group="pending"><div class="queue-group">待处理 · 0</div>${createDemoEmptyState("暂无待你处理", "查看全部会话", () => showToast("还没有会话 · 原型演示" )).outerHTML}</div><div class="session-group" data-session-group="other"><div class="queue-group">其他会话 · 0</div>${createDemoEmptyState("还没有会话", "新建会话", () => showToast("新建会话 · 原型演示占位")).outerHTML}</div>`;
         const session = document.querySelector("#d-session");
         const head = session?.querySelector(".workspace-head");
         const footer = session?.querySelector(".workspace-footer");
@@ -1370,7 +1403,7 @@
       }
 
       function applyLoadingDemo() {
-        document.querySelectorAll("#d-session .queue-view").forEach((view) => view.replaceChildren(createDemoSkeletonList()));
+        document.querySelectorAll("#d-session .session-list").forEach((view) => view.replaceChildren(createDemoSkeletonList()));
         const session = document.querySelector("#d-session");
         const head = session?.querySelector(".workspace-head");
         const body = session?.querySelector(".workspace-body");
@@ -1693,15 +1726,8 @@
           const group = document.createElement("div");
           group.className = "source-group-bar";
           group.innerHTML = '<span class="company">公司电脑 · 2 行动</span><span class="home">家里 iMac · 2 行动</span>';
-          queue.querySelector(".queue-switch")?.insertAdjacentElement("afterend", group);
+          queue.querySelector(".session-list-tools")?.insertAdjacentElement("afterend", group);
         });
-        const inbox = document.querySelector("#m-inbox .mobile-switch");
-        if (inbox && !inbox.nextElementSibling?.classList.contains("source-group-bar")) {
-          const group = document.createElement("div");
-          group.className = "source-group-bar";
-          group.innerHTML = '<span class="company">公司电脑 · 3</span><span class="home">家里 iMac · 1</span>';
-          inbox.insertAdjacentElement("afterend", group);
-        }
       }
 
       function normalizeTeamRedundancy() {
@@ -2454,17 +2480,16 @@
         hydrateSourceBadges();
       }
 
-      function setQueueMode(mode) {
-        document.querySelectorAll("[data-queue-mode]").forEach((button) => button.classList.toggle("active", button.dataset.queueMode === mode));
-        document.querySelectorAll("[data-queue-view]").forEach((view) => view.classList.toggle("active", view.dataset.queueView === mode));
-      }
-
       function openMobileRoot(root) {
         const target = document.querySelector(`#m-${root}`);
         if (!target) return;
         mobileReturn = root;
         document.querySelectorAll(".mobile-screen").forEach((screen) => screen.classList.toggle("active", screen === target));
         document.querySelectorAll(".mobile-nav [data-mobile-root]").forEach((button) => button.classList.toggle("active", button.dataset.mobileRoot === root));
+        if (root === "inbox") {
+          const list = target.querySelector(".mobile-content");
+          if (list) list.scrollTop = 0;
+        }
       }
 
       function openMobileDetail(id) {
@@ -2491,6 +2516,15 @@
       }
 
       function wireGlobalInteractions() {
+        document.addEventListener("input", (event) => {
+          const search = event.target.closest(".session-list-tools input");
+          if (!search) return;
+          const query = search.value.trim().toLowerCase();
+          document.querySelectorAll("#d-session .session-list .queue-card, #m-inbox [data-mobile-session-list] .mobile-card").forEach((card) => {
+            card.dataset.searchHidden = String(Boolean(query && !card.textContent.toLowerCase().includes(query)));
+          });
+          syncSourceVisibility();
+        });
         document.addEventListener("click", (event) => {
           const target = event.target;
           if (target.closest("[data-source-filter-cta]")) { setSourceMode("aggregate", true); return; }
@@ -2498,16 +2532,14 @@
           if (target.closest("[data-demo-settings]")) { openConnectionSettings(); return; }
           const demoAction = target.closest("[data-demo-action]");
           if (demoAction) {
-            if (demoAction.dataset.demoAction === "查看全部会话") setQueueMode("all");
-            else showToast(`${demoAction.dataset.demoAction} · 原型演示占位`);
+            showToast(`${demoAction.dataset.demoAction} · 原型演示占位`);
             return;
           }
           const modeButton = target.closest(".mode-btn[data-mode]");
           if (modeButton) { setMode(modeButton.dataset.mode); return; }
+          if (target.closest("[data-session-filter]")) { showToast("会话筛选 · 原型演示占位"); return; }
           const railButton = target.closest(".rail-btn[data-domain]");
           if (railButton) { setDesktopDomain(railButton.dataset.domain); return; }
-          const queueMode = target.closest("[data-queue-mode]");
-          if (queueMode) { setQueueMode(queueMode.dataset.queueMode); return; }
           const sessionCard = target.closest("[data-session-card]");
           if (sessionCard) { selectSession(sessionCard.dataset.sessionCard); return; }
           const teamConfirm = target.closest("[data-team-confirm]");
@@ -2536,12 +2568,6 @@
           const openDetail = target.closest("[data-open-detail]");
           if (openDetail) { openMobileDetail(openDetail.dataset.openDetail); return; }
           if (target.closest("[data-mobile-back]")) { closeMobileDetail(); return; }
-          const mobileList = target.closest("[data-mobile-list]");
-          if (mobileList) {
-            document.querySelectorAll("[data-mobile-list]").forEach((item) => item.classList.toggle("active", item === mobileList));
-            showToast(mobileList.dataset.mobileList === "all" ? "已切换到全部会话 · 按项目浏览" : "已切换到待处理收件箱");
-            return;
-          }
           const teamTab = target.closest("[data-team-tab]");
           if (teamTab) {
             document.querySelectorAll("[data-team-tab]").forEach((item) => item.classList.toggle("active", item === teamTab));
