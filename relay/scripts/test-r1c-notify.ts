@@ -9,6 +9,9 @@
 //       dispatch 终态出口（首派失败/看门狗 done+failed/重启悬账补记）；N12 superseded
 //       waiting 精确收口（旧 key 关、当前 key 不动）；N13 确认副作用失败语义（error
 //       面不 resolved）；N14 确认单孤儿对账（重启收口记原因 + 重放不复活）。
+// #018-R1FIX2 增补：N15 孤儿对账闸门 fail-closed（坏 JSON/空数组/非数组/文件缺失
+//       四态不对账保留 pending，仅非空可读才正常对账——P2-5/P2-6）；N16 无组
+//       suggest-hold 台账行不入结构化通知账（P3-1 排除备案：同步 ACK 即达+纯审计面）。
 import { randomUUID } from "node:crypto";
 import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -410,6 +413,71 @@ async function main() {
     const orphanFinal = mgr14.notificationsList().find((n) => n.sourceContext.entityId === orphanId);
     assert(ack14.ok === false && (orphanFinal?.resolved_at ?? 0) > 0,
       "N14③ 重放决议 → 确认单不存在拒收（decideConfirm 口径）；通知保持 resolved 不复活");
+
+    // ---------- N15 P2-5/P2-6 孤儿对账闸门 fail-closed ----------
+    console.log("N15 孤儿对账闸门");
+    // 闸门口径（fail-closed 总则）：读失败（坏 JSON/读异常）/confirms 空或非数组/
+    // 文件不存在 → 不对账（保留 pending）；仅非空且全 id 可读 → 正常对账。
+    // 误收口的代价=丢用户确认提醒，漏收口的代价=假 pending 留着用户点进去拒收——取后者。
+    const r15 = mgr.orgAction("project-create", {
+      // 正经立项（N13 同款）：N10 两次轻立项决议已把信任直通点开（trust_light），
+      // 轻立项此处会零确认直通建组——正经立项恒出卡，前置形态稳定
+      name: "R1FIX2 闸门组", anchor: mkdtempSync(join(tmpdir(), "ccr-anchor-r1fix2-")), tier: "正经立项",
+    });
+    const d15 = r15.ok ? (r15.data as { needsConfirm?: boolean; confirm?: { id: string } } | undefined) : undefined;
+    const n15Id = d15?.confirm?.id as string;
+    const pending15 = mgr14.notificationsList().find((n) => n.sourceContext.entityId === n15Id);
+    assert(r15.ok === true && !!pending15 && pending15.resolved_at === undefined,
+      "N15① 前置：新确认卡 pending 在账（hook→mgr14 承接产生）");
+    const framesBefore15 = frames.length;
+    // 四个 fail-closed 样本：确认单事实源读不出有效非空清单 → 闸门不对账
+    writeFileSync(confirmsFile, "{broken-json", "utf-8");
+    const mgr15a = new SessionManager(bus, cfg);
+    assert(mgr15a.notificationsList().find((n) => n.sourceContext.entityId === n15Id)?.resolved_at === undefined,
+      "N15② 坏 JSON → 不对账，pending 保留（读失败不冒充空清单）");
+    writeFileSync(confirmsFile, JSON.stringify({ confirms: [] }, null, 2) + "\n", "utf-8");
+    const mgr15b = new SessionManager(bus, cfg);
+    assert(mgr15b.notificationsList().find((n) => n.sourceContext.entityId === n15Id)?.resolved_at === undefined,
+      "N15③ confirms 空数组 → 不收口，pending 保留");
+    writeFileSync(confirmsFile, JSON.stringify({ confirms: { id: "n15-not-array" } }, null, 2) + "\n", "utf-8");
+    const mgr15c = new SessionManager(bus, cfg);
+    assert(mgr15c.notificationsList().find((n) => n.sourceContext.entityId === n15Id)?.resolved_at === undefined,
+      "N15④ confirms 非数组 → 不对账，pending 保留");
+    rmSync(confirmsFile);
+    const mgr15d = new SessionManager(bus, cfg);
+    assert(mgr15d.notificationsList().find((n) => n.sourceContext.entityId === n15Id)?.resolved_at === undefined,
+      "N15⑤ 文件不存在 → 不收口，pending 保留");
+    assert(frames.length === framesBefore15,
+      "N15⑥ 四个 fail-closed 样本零帧零迁移（闸门静默面）");
+    // positive control：非空可读且不含该确认单 → 正常对账（N14 既有行为保持）
+    writeFileSync(confirmsFile, JSON.stringify({ confirms: [
+      { id: "n15-other-confirm", kind: "suggest-hold", title: "R1FIX2 对照单", reason: "对照", payload: {}, status: "pending", created_at: 1728100000000 },
+    ] }, null, 2) + "\n", "utf-8");
+    const mgr15e = new SessionManager(bus, cfg);
+    const resolved15 = mgr15e.notificationsList().find((n) => n.sourceContext.entityId === n15Id);
+    assert(!!resolved15 && (resolved15.resolved_at ?? 0) > 0 && resolved15.body.includes("孤儿对账"),
+      "N15⑦ 非空可读 → 正常对账收口记因（positive control；N14 行为保持）");
+
+    // ---------- N16 P3-1 无组 suggest-hold 终态行（协议排除备案） ----------
+    // 可达路径备案：无组暂缓在 orgAction 漏斗（COMMAND_ORG_ACTION 线上咽喉仅
+    // create/confirm-decide 两 action，suggest-hold 未上端——N10④ 同款内部入口）
+    console.log("N16 无组 suggest-hold 不入通知口");
+    const logBefore16 = readDispatchLog().length;
+    const storeBefore16 = storeFile()?.notifications.length ?? 0;
+    const framesBefore16 = frames.length;
+    const ack16 = mgr.orgAction("suggest-hold", { reason: "R1FIX2 无组暂缓备忘", condition: "用户解除时" });
+    const d16 = ack16.ok ? (ack16.data as { ledgered?: boolean } | undefined) : undefined;
+    assert(ack16.ok === true && d16?.ledgered === true,
+      "N16① 无组暂缓同步回执：ok + ledgered（发起者当场知晓，回执即备忘）");
+    const log16 = readDispatchLog();
+    const tail16 = log16[log16.length - 1];
+    assert(log16.length === logBefore16 + 1 && tail16.status === "done" && tail16.tier === "暂缓",
+      "N16② 台账行落账：done/暂缓（纯审计面保持）");
+    assert(typeof tail16.receipt === "string" && tail16.receipt.includes("R1FIX2 无组暂缓备忘")
+      && tail16.receipt.includes("解除条件：用户解除时"),
+      "N16③ receipt 即解除条件备忘（理由+条件完整入台账）");
+    assert(frames.length === framesBefore16 && (storeFile()?.notifications.length ?? 0) === storeBefore16,
+      "N16④ 结构化通知账零入账：零帧零新项（P3-1 排除备案焊死）");
   } finally {
     process.env.CCR_ORG_DIR = prevOrg;
     if (prevTitleGen === undefined) delete process.env.CCR_NO_TITLE_GEN;

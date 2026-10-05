@@ -906,10 +906,20 @@ export class SessionManager {
   // 里已决议的 pending 通知不在此收口——那是 P2-2 error 告警面的载体（副作用失败
   // = 决议已落 + 通知未决），启动对账若一并收口会让 P2-2 的「重启后可见」失效。
   // 事实源文件整体缺失（org 目录未建/换域挂载）不判孤儿——防 org 目录错配时误收
-  // 口全部在决项。只对账不删除，审计面不动
+  // 口全部在决项。只对账不删除，审计面不动。
+  // #018-R1FIX2 P2-5/P2-6 闸门加固（PM 复审）：existsSync 只挡「当前路径完全没有
+  // 文件」——文件在但读取/JSON 失败时 listConfirms 回退空集合、或 CCR_ORG_DIR 指
+  // 到另一个已有 confirms.json 的域，都会把全部 pending org-confirm 批量误标
+  // resolved。fail-closed 总则：误收口的代价 = 丢用户确认提醒；漏收口的代价 = 假
+  // pending 留着、用户点进去 discover 拒收——取后者。五档判定：文件不存在 / 读
+  // 异常 / 解析失败 / 结构不符（confirms 非数组或条目缺有效 id）/ 空清单（空与
+  // 「刚被清空的外域」证明力等价，不足）→ 一律不对账（保留通知）；仅「非空且全部
+  // 条目带有效 id」→ 正常对账。OrgConfirm 无 anchor/domain 类域身份字段
+  //（projects.ts OrgConfirm 勘察：id/kind/title/reason/payload/status/created_at）
+  //，跨域误指无法在数据层比对——不硬造，以「非空才对账」收窄误收口窗口
   private reconcileOrphanConfirms(): void {
-    if (!existsSync(join(orgDir(), "confirms.json"))) return;
-    const known = new Set(listConfirms().map((c) => c.id));
+    const known = this.readConfirmsForReconcile();
+    if (!known) return;
     const at = Date.now();
     let changed = false;
     for (const n of [...this.notifications.values()]) {
@@ -926,6 +936,36 @@ export class SessionManager {
       this.persistNotifications();
       this.projectNotifications();
     }
+  }
+
+  // R1FIX2 对账闸门读取：null = 事实源证明力不足（不对账，保留通知）；Set = known
+  // id 集合（正常对账）。自治读文件而非经 listConfirms——后者的 catch-回退空正是
+  // P2-6 把「读失败」伪装成「空清单」再放行批量收口的通道，闸门处必须区分「读不
+  // 出来」与「真的没有」（只读消费 confirms.json 文件本身，projects.ts 结构不动）
+  private readConfirmsForReconcile(): Set<string> | null {
+    const path = join(orgDir(), "confirms.json");
+    if (!existsSync(path)) return null; // 文件不存在：org 目录未建/换域挂载，不对账
+    let raw: string;
+    try {
+      raw = readFileSync(path, "utf-8");
+    } catch {
+      return null; // 读异常：不对账
+    }
+    let parsed: { confirms?: unknown };
+    try {
+      parsed = JSON.parse(raw) as { confirms?: unknown };
+    } catch {
+      return null; // 解析失败（坏 JSON）：不对账
+    }
+    if (!Array.isArray(parsed.confirms)) return null; // 结构不符：不对账
+    const known = new Set<string>();
+    for (const c of parsed.confirms) {
+      const id = (c as { id?: unknown } | null)?.id;
+      if (typeof id !== "string" || !id) return null; // 条目畸形 = 文件证明力不足，整体不对账
+      known.add(id);
+    }
+    if (known.size === 0) return null; // 空清单：证明力不足（外域刚清空 ≠ 本域孤儿已处置），不对账
+    return known;
   }
 
   // 自动命名：一次轻量模型调用把首条 prompt 变成短标题（托管/外部会话通用）
@@ -3746,10 +3786,22 @@ export class SessionManager {
   //     发（对账去重口径）；done 归 activity 桶（结果可见即可），failed 归 action 桶
   //     可操作（重派/换人/放弃要对账决策）。离线端由重连 SNAPSHOT /
   //     notifications.json 兜底——所有 status=done|failed 终态行都落账，台账与通知
-  //     账对称。排除项备案：无——五个终态出口（closeOpenDispatches / 重启悬账补记 /
-  //     复活后再失败 / 首次拉起失败 / 看门狗接管 done+上限 failed）全部入账；旧设计
-  //     「spawn 失败与断档补记不发帧」例外只针对在线弹窗通道 (a)（spawn 失败 CLI 同
-  //     步拿 error 当场知道、重启补记用户在场），账面 (b) 不豁免。
+  //     账对称。五个终态出口（closeOpenDispatches / 重启悬账补记 / 复活后再失败 /
+  //     首次拉起失败 / 看门狗接管 done+上限 failed）全部入账；旧设计「spawn 失败与
+  //     断档补记不发帧」例外只针对在线弹窗通道 (a)（spawn 失败 CLI 同步拿 error 当
+  //     场知道、重启补记用户在场），账面 (b) 不豁免。
+  //     排除项备案（#018-R1FIX2 P3-1，一项）：orgAction 无组 suggest-hold 台账行
+  //     （:orgAction case "suggest-hold" 的 !id 分支；COMMAND_ORG_ACTION 线上咽喉
+  //     未暴露该 action，仅内部漏斗可达）**不入本口**——纯审计台账
+  //     （auditOrgCommand 同类），判定依据三条：①同步回执即知晓：发起者当场收
+  //     COMMAND_ACK ok:true {ledgered:true}，「建议暂缓+解除条件」在发起时刻已达
+  //     在场方，结构化通知账的职责是给不在场端补账离线异步事实（派单终态/确认单产
+  //     生），不是回显发起者刚输入的内容；②无决策对象：无 gid、无确认卡、done 即
+  //     收口、receipt=发起者自述理由——后续无任何用户动作可依此通知发起（对照
+  //     failed 行有重派/换人/放弃、org-confirm 有 approve/reject），action 桶的价
+  //     值在「可操作」而该行不可操作；③入账即自扰：三端每端多一张「Leader 自己刚
+  //     记录的备忘」卡片，badge 虚高且无消费路径。N16③ 断言焊死该排除（台账行在、
+  //     通知账零新增）。
   // (c) Leader 会话闭环：仅 failed 单注入回执唤醒（resumeAgent 先例=auto-revive）。
   //     省 token 口径：每条注入开一个 Leader 回合——done 单用户在端上/任务板可见，
   //     不打扰；失败是派单方必须当场知道并决策（重派/换人/放弃）的事，值得一个回合。
@@ -4025,7 +4077,11 @@ export class SessionManager {
           const condition = str("condition");
           if (!reason) return { ok: false, error: "建议暂缓必须带一句理由" };
           if (!id) {
-            // 无组暂缓（第五态最小形态）：纯台账留痕，回执即解除条件备忘
+            // 无组暂缓（第五态最小形态）：纯台账留痕，回执即解除条件备忘。
+            // 终态协议显式排除（#018-R1FIX2 P3-1）：本行不入 notifyDispatchClosed
+            // 结构化通知账——auditOrgCommand 同类的纯审计面（同步 ACK ok+ledgered
+            // 已达发起者；无决策对象/不可操作；入账即三端自扰噪声），判定理由三条
+            // 全文见 notifyDispatchClosed 协议注释 (b) 排除项备案。
             appendDispatch({
               ts: Date.now(), id: randomUUID(), tier: "暂缓", target: "org-leader",
               status: "done",
