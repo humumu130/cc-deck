@@ -16,6 +16,10 @@
 # 行完整性（C2fix/P2-1）：error 字段必在场且为 null|string（C1 schema 恒写）——
 # 缺省/类型错计坏行报行号，不进 orphan/timeout 语义分类（坏行不臆断未达）。
 # DELIVER 行（deliver HTTP 直投）无状态机，不入本对账面（失败回退属 C3 线）。
+# 环境注入（#018-C1 文档化）：离线审计读者，只需 CCR_DATA_DIR（或位置参数显式账本
+# 路径）；不读 CCR_TOKEN/CCR_PORT（不对 relay 建连）。
+# timeout/orphan 项携带 dispatch_ids（#018-C1：PM 对账三 ID 键对齐 cli-dispatches
+# 行与控制台 phase 日志——grep '"dispatch_id":"<id>"' 一套键贯穿）。
 # 用法: dispatch-report [--json] [--strict] [账本路径]
 #   --json    机器可读 {counts, items, verdict}
 #   --strict  duplicate/seq-gap 升级为非零退出（缺省仅 warn）
@@ -103,11 +107,14 @@ with open(ledger, encoding="utf-8") as f:
             bad.append({"line": lineno, "reason": "非 JSON 对象"})
             continue
         errs = []
+        rtype = obj.get("type")
         for field in ("session_id", "dispatch_id", "type"):
             v = obj.get(field)
-            if not isinstance(v, str) or not v:
+            # DELIVER 行允许 session_id 空串：deliver 三级归因全缺时已 stderr 警告、
+            # 空值如实落账（合法状态非损坏）；COMMAND_MESSAGE 仍严判（dispatch 用法
+            # 强制 session_id 位置参数，空串只可能是坏行）
+            if not isinstance(v, str) or (not v and not (field == "session_id" and rtype == "DELIVER")):
                 errs.append(f"缺/错字段 {field}")
-        rtype = obj.get("type")
         if isinstance(rtype, str) and rtype not in ("COMMAND_MESSAGE", "DELIVER"):
             errs.append(f"未知 type（{rtype}）")
         # ok 严格布尔：缺省/字符串/数字全是 ACK 误读态——不算成功，也不臆断失败
@@ -187,7 +194,9 @@ for cmd, rs in by_cmd.items():
     )
     item = {
         "command_id": cmd, "lines": lines,
-        "session_id": last["session_id"], "attempt": last["attempt"],
+        "session_id": last["session_id"],
+        "dispatch_ids": sorted({r["dispatch_id"] for r in rs}),
+        "attempt": last["attempt"],
         "error": last["error"] or "",
     }
     (timeout_items if terminal else orphan_items).append(item)
@@ -243,10 +252,10 @@ else:
     print(f"共 {counts['rows']} 行：有效 {counts['valid_rows']}（内 DELIVER {counts['deliver_rows']} 不入对账）/ 坏行 {counts['bad_rows']}")
     print(f"① timeout（重试用尽待处置）：{counts['timeout']}")
     for it in timeout_items:
-        print(f"   - L{it['lines'][-1]} command_id={it['command_id']} session={it['session_id']} attempt:{it['attempt']} error={it['error']}")
+        print(f"   - L{it['lines'][-1]} command_id={it['command_id']} session_id={it['session_id']} dispatch_id={','.join(it['dispatch_ids'])} attempt:{it['attempt']} error={it['error']}")
     print(f"② orphan（未达待人工重投）：{counts['orphan']}")
     for it in orphan_items:
-        print(f"   - L{it['lines'][0]} command_id={it['command_id']} session={it['session_id']} error={it['error']}")
+        print(f"   - L{it['lines'][0]} command_id={it['command_id']} session_id={it['session_id']} dispatch_id={','.join(it['dispatch_ids'])} error={it['error']}")
     print(f"③ duplicate（重复迹象待核验）：{len(dup_all)}")
     for it in dup_all:
         if it["kind"] == "command_id":

@@ -11,6 +11,13 @@
 //   ④ dispatch 首连被静默关闭、重试后 ACK ok → exit 0 + 审计 attempt:2 + 两帧同 command_id
 //   ⑤ deliver HTTP 三态（ok / ok:false / 拒连）+ DELIVER 审计行
 //   ⑥ acceptance 本地登记 + 云端失败非零退出（CF token 消毒 → kv 脚本快败，无网络副作用）
+// —— #018-C1 二轮（日志链+严判+环境注入）新增 ——
+//   ⑦ dispatch 超时态（桩收帧不 ACK，CCR_ACK_TIMEOUT_MS=300）→ 短重试仍超时 +
+//     审计 attempt:2 error 含超时 + stderr 三 ID phase 日志（send×2/ack×2/final 同键）
+//   ⑧ deliver 超时态（桩迟应，CCR_TIMEOUT=1）→ 非零 + error 含超时
+//   ⑨ deliver --session 显式参数优先于 env 三级链（phase 日志与审计同归因）
+//   ⑩ deliver 三级全缺 → stderr 警告不静默 + 审计 session_id 空串如实落账
+//   ⑪ dispatch-report 真账交叉对账（本轮全部真实 CLI 落账行 → 四类判定+dispatch_ids）
 // 沙箱：CCR_DATA_DIR=mkdtemp、CCR_TOKEN/CCR_PORT 注入桩，生产 ~/.cc-deck 零触达。
 // 纪律：断言不比对两个独立取时点的 Date.now()（全部为结构与内容断言）。
 
@@ -27,6 +34,7 @@ const ROOT = path.resolve(HERE, "..", ".."); // relay/scripts → 仓库根
 const DISPATCH = path.join(ROOT, "cc-plugins/plugins/cc-deck/bin/dispatch");
 const DELIVER = path.join(ROOT, "cc-plugins/plugins/cc-deck/bin/deliver");
 const ACCEPTANCE = path.join(ROOT, "cc-plugins/plugins/cc-deck/bin/acceptance");
+const REPORT = path.join(ROOT, "cc-plugins/plugins/cc-deck/bin/dispatch-report");
 
 let tests = 0;
 const check = (condition: unknown, msg = "assertion failed"): void => {
@@ -41,7 +49,7 @@ fs.mkdirSync(dataDir, { recursive: true });
 const TOKEN = "tok-SECRET-abc123";
 const AUDIT_LOG = path.join(dataDir, "cli-dispatches.ndjson");
 
-type WsMode = "ok" | "reject" | "ok-second";
+type WsMode = "ok" | "reject" | "ok-second" | "silent";
 let wsMode: WsMode = "ok";
 let wsSawOnce = false; // ok-second：首连接静默关闭、次连接正常 ACK
 const wsReceived: { command_id: string; text: string }[] = [];
@@ -107,6 +115,10 @@ const wsServer = net.createServer((sock) => {
       let cmd: { command_id?: string } = {};
       try { cmd = JSON.parse(text) as { command_id?: string }; } catch { continue; }
       wsReceived.push({ command_id: String(cmd.command_id ?? ""), text });
+      if (wsMode === "silent") {
+        // 超时态剧本：收帧不 ACK 不断连——客户端单拍 ACK 等待到点判超时
+        return;
+      }
       if (wsMode === "ok" || (wsMode === "ok-second" && wsSawOnce)) {
         sock.write(wsFrame(Buffer.from(JSON.stringify({ type: "COMMAND_ACK", command_id: cmd.command_id, ok: true }))));
       } else if (wsMode === "reject") {
@@ -121,8 +133,11 @@ const wsServer = net.createServer((sock) => {
 });
 
 // deliver 的 HTTP 桩
-let deliverMode: "ok" | "reject" | "down" = "ok";
+let deliverMode: "ok" | "reject" | "down" | "slow" = "ok";
 const httpServer = http.createServer((req, res) => {
+  // 超时态剧本：客户端 curl 先到点断开，桩随后写死套接字——错误静音防未处理事件
+  req.on("error", () => {});
+  res.on("error", () => {});
   let body = "";
   req.on("data", (c: Buffer) => { body += String(c); });
   req.on("end", () => {
@@ -132,6 +147,14 @@ const httpServer = http.createServer((req, res) => {
     } else if (deliverMode === "reject") {
       res.writeHead(200, { "content-type": "application/json" });
       res.end(JSON.stringify({ ok: false, error: `invalid token ${TOKEN} leak` }));
+    } else if (deliverMode === "slow") {
+      // 迟应 > CCR_TIMEOUT（测试注入 1s）：curl 到点判超时，本桩的迟响应被丢弃
+      setTimeout(() => {
+        try {
+          res.writeHead(200, { "content-type": "application/json" });
+          res.end(JSON.stringify({ ok: true, path: (JSON.parse(body) as { path: string }).path }));
+        } catch { /* 客户端已断 */ }
+      }, 1300);
     } else {
       res.writeHead(500, { "content-type": "application/json" });
       res.end(JSON.stringify({ ok: false, error: "stub down" }));
@@ -190,6 +213,13 @@ async function main(): Promise<void> {
 
   const runDispatch = (port: number, payload: string, sid: string) =>
     runCli("bash", [DISPATCH, "-c", payload, sid], envFor(port));
+  // 超时态专用：ACK 单拍等待调到 300ms（否则 15s×2 拍 + 2s 短重试间隔拖垮套件）
+  const runDispatchT = (port: number, payload: string, sid: string) =>
+    runCli("bash", [DISPATCH, "-c", payload, sid], { ...envFor(port), CCR_ACK_TIMEOUT_MS: "300" });
+  // 三 ID phase 日志解析（stderr 单行 JSON，{"tool":"dispatch"|"deliver"} 开头）
+  interface PhaseLine { tool: string; phase: string; ts: string; session_id: string; dispatch_id: string; command_id: string | null; attempt: number; ok: boolean | null; error: string | null }
+  const phaseLines = (stderr: string, tool: string): PhaseLine[] =>
+    stderr.split("\n").filter((l) => l.startsWith(`{"tool":"${tool}"`)).map((l) => JSON.parse(l) as PhaseLine);
 
   // ═══════════ ① dispatch：ACK ok:true ═══════════
   {
@@ -311,6 +341,99 @@ async function main(): Promise<void> {
     check(doc.session_id === "sess-E2E", "⑥ 会话归因（CC_DECK_SESSION_ID 透传）");
     check(doc.notes.join("").includes("备注"), "⑥ 表格后备注段解析");
     check(!r.stdout.includes(TOKEN), "⑥ token 不入 stdout");
+  }
+
+  // ═══════════ ⑦ dispatch：超时态（桩收帧不 ACK，CCR_ACK_TIMEOUT_MS 调快） ═══════════
+  {
+    wsMode = "silent";
+    const portT = await listen(wsServer);
+    const before = wsReceived.length;
+    const auditBefore = readAudit().length;
+    const r = await runDispatchT(portT, JSON.stringify({ text: "超时单" }), "sess-5");
+    check(r.status !== 0, "⑦ 超时 → 非零退出");
+    check(r.stderr.includes("第 2 次尝试") && r.stderr.includes("转人工巡检") && r.stderr.includes("未静默丢单"),
+      "⑦ 超时短重试仍败 → 转人工巡检提示");
+    const two = wsReceived.slice(before);
+    check(two.length === 2 && two[0]!.command_id === two[1]!.command_id, "⑦ 两拍 envelope 同 command_id（超时重发同 id）");
+    const audit = readAudit();
+    const last = audit[audit.length - 1]!;
+    check(audit.length === auditBefore + 1 && last.ok === false && last.attempt === 2 && (last.error ?? "").includes("超时"),
+      "⑦ 审计 attempt:2、error 含超时（TIMEOUT_CLASS 可判）");
+    // 三 ID 全链路 phase 日志：send×2/ack×2/final，全拍同 dispatch_id/command_id
+    const ph = phaseLines(r.stderr, "dispatch");
+    check(ph.length === 5 && ph.filter((p) => p.phase === "send").length === 2 && ph.filter((p) => p.phase === "ack").length === 2 && ph[4]!.phase === "final",
+      "⑦ phase 日志五拍齐（send×2/ack×2/final）");
+    check(new Set(ph.map((p) => p.dispatch_id)).size === 1 && ph.every((p) => p.command_id === last.command_id),
+      "⑦ 全拍同 dispatch_id/command_id（grep '" + '"dispatch_id"' + "' 单键可对账）");
+    check(ph.map((p) => p.attempt).join(",") === "1,1,2,2,2" && ph[4]!.ok === false && (ph[3]!.error ?? "").includes("超时"),
+      "⑦ attempt 随拍推进、ack 超时错误可判定、final ok=false");
+    await close(wsServer);
+  }
+
+  // ═══════════ ⑧ deliver：超时态（桩迟应，CCR_TIMEOUT 调快） ═══════════
+  {
+    deliverMode = "slow";
+    const portT = await listen(httpServer);
+    const file = path.join(sandbox, "交付物.md");
+    const auditBefore = readAudit().length;
+    const r = await runCli("bash", [DELIVER, file], { ...envFor(portT), CCR_TIMEOUT: "1" });
+    check(r.status !== 0, "⑧ 超时 → 非零退出");
+    check(r.stderr.includes("无法连接 relay（超时") && r.stderr.includes("未静默丢单"), "⑧ 超时可判定文案 + 未静默丢单");
+    const audit = readAudit();
+    const last = audit[audit.length - 1]!;
+    check(audit.length === auditBefore + 1 && last.ok === false && (last.error ?? "").includes("超时"),
+      "⑧ DELIVER 审计 false 行 error 含超时");
+    await close(httpServer);
+  }
+
+  // ═══════════ ⑨ deliver：--session 显式参数优先于 env 三级链 ═══════════
+  {
+    deliverMode = "ok";
+    const portT = await listen(httpServer);
+    const file = path.join(sandbox, "交付物.md");
+    const r = await runCli("bash", [DELIVER, "--session", "sess-explicit", file],
+      { ...envFor(portT), CC_DECK_SESSION_ID: "", CLAUDE_CODE_SESSION_ID: "sess-env", CLAUDE_SESSION_ID: "" });
+    check(r.status === 0, `⑨ --session 显式归因 exit 0（got ${r.status}，stderr=${r.stderr.slice(0, 200)}）`);
+    const last = readAudit()[readAudit().length - 1]!;
+    check(last.session_id === "sess-explicit" && last.ok === true, "⑨ 审计归因=显式参数（优先于 env 链）");
+    const ph = phaseLines(r.stderr, "deliver");
+    check(ph.length === 3 && ph.map((p) => p.phase).join(",") === "send,ack,final" && ph.every((p) => p.session_id === "sess-explicit"),
+      "⑨ phase 日志三拍同显式归因（send/ack/final）");
+    check(new Set(ph.map((p) => p.dispatch_id)).size === 1 && ph[2]!.ok === true, "⑨ phase 日志同 dispatch_id、final ok=true");
+    await close(httpServer);
+  }
+
+  // ═══════════ ⑩ deliver：三级全缺 → stderr 警告不静默空值归因 ═══════════
+  {
+    deliverMode = "ok";
+    const portT = await listen(httpServer);
+    const file = path.join(sandbox, "交付物.md");
+    const r = await runCli("bash", [DELIVER, file],
+      { ...envFor(portT), CC_DECK_SESSION_ID: "", CLAUDE_CODE_SESSION_ID: "", CLAUDE_SESSION_ID: "" });
+    check(r.status === 0, "⑩ 全缺仍登记成功（警告不拦单）");
+    check(r.stderr.includes("警告：session_id 全缺") && r.stderr.includes("挂错卡"), "⑩ stderr 明确警告（不静默空值归因）");
+    const last = readAudit()[readAudit().length - 1]!;
+    check(last.session_id === "", "⑩ 审计 session_id 空串如实落账");
+    await close(httpServer);
+  }
+
+  // ═══════════ ⑪ dispatch-report：真账交叉对账（本轮真实 CLI 落账 → 四类判定） ═══════════
+  {
+    const r = await runCli("bash", [REPORT, "--json", AUDIT_LOG], childEnv);
+    check(r.status === 1, "⑪ 对账 verdict=fail（orphan/timeout 在册）→ exit 1");
+    const j = JSON.parse(r.stdout) as {
+      verdict: string;
+      counts: { success_commands: number; timeout: number; orphan: number; deliver_rows: number; bad_rows: number };
+      items: { timeout: { dispatch_ids: string[] }[] };
+    };
+    check(j.verdict === "fail", "⑪ verdict fail");
+    check(j.counts.success_commands === 2, "⑪ 成功 2（① attempt:1 与 ④ attempt:2 各一）");
+    check(j.counts.timeout === 2, "⑪ timeout 2（③ 拒连重试用尽 + ⑦ 超时重试用尽）");
+    check(j.counts.orphan === 1, "⑪ orphan 1（② 明确拒收 attempt:1 不属超时类）");
+    check(j.counts.deliver_rows === 6, `⑪ DELIVER 行 6（got ${j.counts.deliver_rows}；counts=${JSON.stringify(j.counts)}）`);
+    check(j.counts.bad_rows === 0, "⑪ 坏行 0（⑩ 空归因 DELIVER 行是已警告的合法账，不判坏行）");
+    check(j.items.timeout.every((it) => Array.isArray(it.dispatch_ids) && it.dispatch_ids.length >= 1),
+      "⑪ timeout 项携带 dispatch_ids（PM 对账键贯穿台账）");
   }
 
   console.log(`C1 cli three-state tests ${tests}/${tests} passed (sandbox=${sandbox})`);

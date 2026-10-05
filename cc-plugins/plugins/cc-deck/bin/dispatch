@@ -4,6 +4,18 @@
 # 中除 session_id 外的字段；本脚本会用第二个参数强制覆盖 payload.session_id。
 # 插件分发环境不保证存在 node_modules/ws，因此下面的系统 node 代码只依赖
 # net/crypto/fs，内置最小 RFC6455 客户端；不降级 HTTP 轮询，避免丢失 COMMAND_ACK。
+#
+# 环境注入链（#018-C1 文档化，与 bin/deliver 同一口径）：M2 会话由 relay spawn 时
+# 继承注入 CCR_DATA_DIR/CCR_TOKEN/CCR_PORT 三件套（relay/src/org.ts F-09 CLI 模板
+# 同源）；手动终端无注入时逐级回落生产默认：
+#   CCR_DATA_DIR       relay 数据目录（默认 ~/.cc-deck/data）
+#   CCR_TOKEN          relay 令牌（缺省读 $CCR_DATA_DIR/token）
+#   CCR_PORT           relay 端口（缺省读 $CCR_DATA_DIR/bridge.json 的 port，再缺省 8787）
+#   CCR_ACK_TIMEOUT_MS 单拍 ACK 等待毫秒（默认 15000；<100 收敛为 100，桩测/慢网可调）
+# 三 ID 全链路日志（#018 :653 DoD，PM 侧 reconciliation 对账面）：每拍向 stderr 打
+# 单行 JSON（phase=send/ack/final，恒含 session_id/dispatch_id/command_id/attempt），
+# grep '"dispatch_id":"<id>"' 即可对账投递→ACK→回执三拍；权威账仍是
+# $CCR_DATA_DIR/cli-dispatches.ndjson（append-only，终态一行，attempt 记终局拍）。
 set -uo pipefail
 
 usage() {
@@ -43,6 +55,27 @@ PY
 log="$data/cli-dispatches.ndjson"
 mkdir -p "$data"
 attempt="${attempt:-1}"
+# ACK 单拍等待（CCR_ACK_TIMEOUT_MS 可调，默认 15s；非数字/过小收敛）
+ack_timeout="${CCR_ACK_TIMEOUT_MS:-15000}"
+case "$ack_timeout" in ""|*[!0-9]*) ack_timeout=15000 ;; esac
+[ "$ack_timeout" -ge 100 ] || ack_timeout=100
+# 三 ID 每拍日志（stderr 单行 JSON）：phase send/ack/final ×ok/error/attempt，
+# 与 append_log 同键名——控制台 grep 与台账对账同一套 ID
+phase_log() { # $1=phase $2=ok(true|false|null) $3=error（须已消毒）
+  python3 - "$sid" "$dispatch_id" "$command_id" "$1" "$2" "$3" "${attempt:-1}" <<'PY'
+import json, sys
+from datetime import datetime, timezone
+sid, did, cid, phase, ok, error, attempt = sys.argv[1:8]
+print(json.dumps({
+    "tool": "dispatch", "phase": phase,
+    "ts": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
+    "session_id": sid, "dispatch_id": did, "command_id": cid,
+    "attempt": int(attempt),
+    "ok": None if ok == "null" else ok == "true",
+    "error": error or None,
+}, ensure_ascii=False, separators=(",", ":")), file=sys.stderr)
+PY
+}
 append_log() {
   python3 - "$log" "$sid" "$dispatch_id" "$command_id" "$1" "$2" "${attempt:-1}" <<'PY'
 import json, sys
@@ -68,8 +101,23 @@ fail() {
   extra=""
   [ "${attempt:-1}" -ge 2 ] && extra="；已短重试一次仍无有效 ACK，转人工巡检，勿自动重复派单"
   echo "dispatch 失败：$msg$extra；请确认 relay 在线后重试，未静默丢单。" >&2
+  phase_log final false "$msg"
   append_log "false" "$msg" || echo "dispatch 审计写入失败：$log" >&2
   exit 1
+}
+# 失败原因归一（消毒后单行）：有 ACK 可解析取其 error，无 ACK 取 node 侧 stderr 首行
+attempt_error() {
+  if [ -n "$SEND_ACK" ]; then
+    python3 - "$SEND_ACK" "$token" <<'PY'
+import json, sys
+try:
+    print(str(json.loads(sys.argv[1]).get("error") or "ACK ok 非 true").replace(sys.argv[2], "[redacted]"))
+except Exception:
+    print("WS 连接失败或未收到有效 ACK")
+PY
+  else
+    echo "${SEND_ERR:-WS 连接失败或未收到有效 ACK}"
+  fi
 }
 
 [ -n "$token" ] || fail "未找到 relay token（$data/token，relay 未初始化？）"
@@ -107,18 +155,21 @@ set +e
 # 供无 ACK 时取具体失败原因（连不上/超时/断线）落审计，不只留笼统话
 send_once() {
   SEND_ERR_FILE="$(mktemp "${TMPDIR:-/tmp}/cc-deck-dispatch-err.XXXXXX")"
-  SEND_ACK="$(node - "$port" "$token" "$command_file" "$command_id" 2>"$SEND_ERR_FILE" <<'NODE'
+  SEND_ACK="$(node - "$port" "$token" "$command_file" "$command_id" "$ack_timeout" 2>"$SEND_ERR_FILE" <<'NODE'
 const fs = require("node:fs");
 const net = require("node:net");
 const crypto = require("node:crypto");
-const [portText, token, commandPath, commandId] = process.argv.slice(2);
+const [portText, token, commandPath, commandId, timeoutText] = process.argv.slice(2);
 const port = Number(portText), command = fs.readFileSync(commandPath);
+// 单拍 ACK 等待（bash 层已校验数字与下限；此处再兜底）
+const ACK_TIMEOUT = Math.max(100, Number(timeoutText) || 15000);
+const timeoutLabel = `${ACK_TIMEOUT / 1000}s`.replace(/\.0$/, "");
 const key = crypto.randomBytes(16).toString("base64");
 const expected = crypto.createHash("sha1").update(key + "258EAFA5-E914-47DA-95CA-C5AB0DC85B11").digest("base64");
 const socket = net.createConnection({ host: "127.0.0.1", port });
 let buffer = Buffer.alloc(0), upgraded = false, finished = false;
-const timer = setTimeout(() => finish(12, "15s 超时，未收到 COMMAND_ACK"), 15000);
-socket.setTimeout(15000, () => finish(12, "15s 超时，未收到 COMMAND_ACK"));
+const timer = setTimeout(() => finish(12, `${timeoutLabel} 超时，未收到 COMMAND_ACK`), ACK_TIMEOUT);
+socket.setTimeout(ACK_TIMEOUT, () => finish(12, `${timeoutLabel} 超时，未收到 COMMAND_ACK`));
 function finish(code, message, ack) {
   if (finished) return;
   finished = true; clearTimeout(timer);
@@ -184,35 +235,27 @@ NODE
 }
 
 attempt=1
+phase_log send null ""
 send_once
+if [ "$SEND_STATUS" -eq 0 ]; then phase_log ack true "" ; else phase_log ack false "$(attempt_error)"; fi
 # 018 :88「超时未 ACK：一次短重试；仍无 ACK 转人工巡检，不自动重复派单」：
-# 未有效 ACK = 12（15s 超时）/ 11（连不上、握手失败、连接中断）；10 = relay 明确
-# 拒收（ok:false），不重试转人工。重试沿用同一 envelope 与 command_id（relay 对
-# 重复 command_id 幂等回放首次 ACK，不双投副作用），不另起新 id
+# 未有效 ACK = 12（超时，单拍 CCR_ACK_TIMEOUT_MS 可调）/ 11（连不上、握手失败、连接
+# 中断）；10 = relay 明确拒收（ok:false），不重试转人工。重试沿用同一 envelope 与
+# command_id（relay 对重复 command_id 幂等回放首次 ACK，不双投副作用），不另起新 id
 if [ "$SEND_STATUS" -ne 0 ] && [ "$SEND_STATUS" -ne 10 ]; then
   attempt=2
   echo "dispatch：第 2 次尝试（首次未收到有效 ACK，2 秒后短重试）…" >&2
   sleep 2
+  phase_log send null ""
   send_once
+  if [ "$SEND_STATUS" -eq 0 ]; then phase_log ack true "" ; else phase_log ack false "$(attempt_error)"; fi
 fi
 set -e
 ack="$SEND_ACK"
 node_status="$SEND_STATUS"
 if [ "$node_status" -ne 0 ]; then
-  if [ -n "$ack" ]; then
-    ack_error="$(python3 - "$ack" "$token" <<'PY'
-import json, sys
-try:
-    print(str(json.loads(sys.argv[1]).get("error") or "ACK ok 非 true").replace(sys.argv[2], "[redacted]"))
-except Exception:
-    print("WS 连接失败或未收到有效 ACK")
-PY
-)"
-  else
-    # 无 ACK 可解析（连不上/超时/断线）：取 node 侧消毒后的 stderr 首行作具体原因
-    ack_error="${SEND_ERR:-WS 连接失败或未收到有效 ACK}"
-  fi
-  fail "$ack_error"
+  # 有 ACK 取其 error、无 ACK（连不上/超时/断线）取 node 侧消毒后的 stderr 首行
+  fail "$(attempt_error)"
 fi
 ack_ok="$(python3 - "$ack" <<'PY'
 import json, sys
@@ -224,4 +267,5 @@ PY
 )"
 [ "$ack_ok" = "true" ] || fail "ACK ok 非 true"
 echo "ok=true command_id=$command_id"
+phase_log final true ""
 append_log "true" ""
