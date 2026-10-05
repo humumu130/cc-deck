@@ -5,11 +5,11 @@ import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context"
 import { STATUS_ZH, statusColor, withA, type ThemeColors } from "../theme";
 import { useTheme, useThemeStyles } from "../theme-context";
 import { LogoMark, PencilIcon } from "../brand";
-import { fmtLastActive, fmtTok, contextPct, contextLevel, CONTEXT_LIMIT_FALLBACK, displaySrcName, isLiveLine, stripLiveMark } from "../fmt";
+import { fmtLastActive, fmtTok, fmtElapsed, contextPct, contextLevel, CONTEXT_LIMIT_FALLBACK, displaySrcName, isLiveLine, stripLiveMark } from "../fmt";
 import { setListDensity, useListDensity, setAggregate as persistAggregate, useIdleDimMin, isIdleSession, type ListDensity } from "../display-settings";
 import { store, useRelay, type AcceptanceSummary, type SourceStatus } from "../store";
 import { FadeIn, PressScale } from "../motion";
-import type { BoardEntry, DispatchReceipt, OrgConfirm, ProjectBoard, ProjectGroup, RoutingPoolEntry, SessionState } from "../protocol";
+import { hasActivityCapability, type BoardEntry, type DispatchReceipt, type OrgConfirm, type ProjectBoard, type ProjectGroup, type RoutingPoolEntry, type SessionState, type SessionStatus } from "../protocol";
 import RenameModal from "./RenameModal";
 import SettingsDrawer from "./SettingsDrawer";
 
@@ -92,6 +92,18 @@ const GroupHeader = memo(function GroupHeader({ name, color, online, count }: {
   );
 });
 
+// 段头（E2a 只读投影）：「待处理」/「其他会话」小节标题 + 实际渲染卡数；与源
+// 分组头同族形制（色条换粗体小标，无源属性）。吸顶行自带底色，滚动叠加不透字
+const SectionHeader = memo(function SectionHeader({ label, count }: { label: string; count: number }) {
+  const styles = useThemeStyles(makeStyles);
+  return (
+    <View style={styles.secHead} accessibilityLabel={`${label}，${count} 个会话`}>
+      <Text style={styles.secHeadT}>{label}</Text>
+      <Text style={styles.secCount}>{count}</Text>
+    </View>
+  );
+});
+
 // 新增会话 ＋：圆头细条十字，与品牌星芒同线条语言
 function PlusMark({ size = 20, color = "#D97757" }: { size?: number; color?: string }) {
   const w = 2.8;
@@ -106,10 +118,12 @@ function PlusMark({ size = 20, color = "#D97757" }: { size?: number; color?: str
 const ACT_W = 78;    // 单个操作按钮宽
 const FULL_W = 156;  // 操作面板总宽（重命名 + 删除）
 
-// 列表行模型（信息层级重设计）：聚合多源时插源分组头行，会话行原样引用
-// SessionState 对象（分组/包装不改写会话，行级 memo 依赖引用不变）
+// 列表行模型（E2a 只读投影）：三行型——段头（待处理/其他会话）、源分组头、
+// 会话卡；卡行原样引用 SessionState 对象（分组/包装不改写会话，行级 memo 依赖
+// 引用不变）。行序与 key 由 buildListProjection 纯函数产出
 type ListRow =
-  | { h: true; key: string; name: string; color: string; online: boolean; count: number }
+  | { h: "sec"; key: string; label: string; count: number }
+  | { h: "src"; key: string; name: string; color: string; online: boolean; count: number }
   | { h: false; key: string; s: SessionState };
 
 // #102 源胶囊限长：按视觉宽度截断（英文/数字 1、中文等全角 2），上限 6 英文宽
@@ -120,6 +134,139 @@ function clipSrcName(name: string): string {
     if (w > 6) return name.slice(0, i > 0 ? i : 1).trimEnd() + "…";
   }
   return name;
+}
+
+// ---------- E2a 列表只读投影（纯函数段，零 RN 依赖） ----------
+// 数据源全部是 store 现有状态（activity / activity_capabilities / aggregate /
+// sources / source_capabilities，#018-E1 落库口径），只投影不取数、不接真命令。
+// scripts/test-e2a-list.ts 绕过 RN 桩直跑本段做断言。
+
+// 待处理判定：WAITING（等待确认）置顶，其余归「其他会话」；同一 session_id 只
+// 入一组（首见优先，重复直接过滤）——两组互斥由构造保证
+export interface PendingSplit {
+  pending: SessionState[];
+  others: SessionState[];
+}
+export function splitPending(sessions: SessionState[]): PendingSplit {
+  const pending: SessionState[] = [];
+  const others: SessionState[] = [];
+  const seen = new Set<string>();
+  for (const s of sessions) {
+    if (seen.has(s.session_id)) continue;
+    seen.add(s.session_id);
+    (s.status === "WAITING" ? pending : others).push(s);
+  }
+  return { pending, others };
+}
+
+// 源配色映射（#294 审查修复口径）：按跨端稳定键 colorKey 排序等距分配调色板，
+// 与输入顺序无关——分组头与逐卡角标共用同一映射，同屏同源必同色
+export function sourcePalette(sources: { id: string; colorKey?: string }[]): Map<string, string> {
+  const sorted = [...sources].sort((a, b) => (a.colorKey ?? a.id).localeCompare(b.colorKey ?? b.id));
+  return new Map(sorted.map((x, i) => [x.id, SRC_COLORS[i % SRC_COLORS.length]]));
+}
+
+// 活动指标行模型：store activity 最后值的只读投影。四行（状态/动作/耗时/审批）
+// 按各自 capability 门控——字段缺省 = 该行不渲染；activity 缺失 = 返回 null
+//（整块不渲染，不显示假「空闲」）。activity 在而 capability 全关（旧 relay
+// 归一化产物）→ 返回空对象，渲染层按空块处理
+export interface ActivityMetrics {
+  state?: SessionStatus;     // native_status 门控
+  summary?: string;          // operation_summary 门控（activity.text）
+  elapsedMs?: number;        // native_elapsed 门控（elapsed_ms；缺失不出行）
+  approvalPending?: boolean; // approval 门控（waiting_request 存在 = 待审批）
+}
+export function activityMetricsOf(s: SessionState): ActivityMetrics | null {
+  const a = s.activity;
+  if (!a) return null;
+  const out: ActivityMetrics = {};
+  if (hasActivityCapability(s, "native_status")) out.state = a.state;
+  if (hasActivityCapability(s, "operation_summary")) out.summary = a.activity?.text ?? "";
+  if (hasActivityCapability(s, "native_elapsed") && typeof a.elapsed_ms === "number") out.elapsedMs = a.elapsed_ms;
+  if (hasActivityCapability(s, "approval")) out.approvalPending = !!s.waiting_request;
+  return out;
+}
+
+// 投影行模型：section（待处理/其他会话段头）· source（源分组头，srcId=null =
+// 「—」降级占位组）· card（会话卡，pending 标记置顶组归属）。组头 count 一律
+// = 该组实际渲染卡数（去重后），不是原始数组长度
+export type ProjectionRow =
+  | { kind: "section"; key: string; label: string; count: number }
+  | { kind: "source"; key: string; srcId: string | null; name: string; color: string; online: boolean; count: number }
+  | { kind: "card"; key: string; s: SessionState; pending: boolean };
+
+export interface ProjectionSource {
+  id: string;
+  name: string;
+  state: string;
+  colorKey?: string;
+}
+
+export interface ProjectionParams {
+  sessions: SessionState[];
+  aggregate: boolean;
+  sources: ProjectionSource[];
+  // 活动源 source_capabilities?.activity === true；旧 relay 缺省/false = legacy
+  sourceActivityCap: boolean;
+}
+
+// 列表投影主入口：
+// - 待处理段恒置顶（跨源汇总，段头计数=实际卡数）；
+// - 非聚合或仅单源 → 「其他会话」平铺直列；
+// - 聚合多源 + 能力在 → 按源分组（组序=store 源序，组头带源名/配色/在线/计数）；
+// - 聚合多源 + 能力缺失（legacy）→ 降级为单一「—」占位组平铺，不隐藏结构；
+// - 聚合分组下无 src / 源已不在列表的会话落「—」占位组殿后（降级不丢卡）
+export function buildListProjection(p: ProjectionParams): ProjectionRow[] {
+  const { pending, others } = splitPending(p.sessions);
+  const rows: ProjectionRow[] = [];
+  if (pending.length) {
+    rows.push({ kind: "section", key: "sec-pending", label: "待处理", count: pending.length });
+    for (const s of pending) rows.push({ kind: "card", key: s.session_id, s, pending: true });
+  }
+  if (!others.length) return rows;
+  const useGroups = p.aggregate && p.sources.length > 1;
+  if (!useGroups) {
+    rows.push({ kind: "section", key: "sec-others", label: "其他会话", count: others.length });
+    for (const s of others) rows.push({ kind: "card", key: s.session_id, s, pending: false });
+    return rows;
+  }
+  if (!p.sourceActivityCap) {
+    // legacy relay：源能力缺失，分组依据不可信 → 「—」占位组平铺（结构保留）
+    rows.push({ kind: "source", key: "src-degraded", srcId: null, name: "—", color: "", online: false, count: others.length });
+    for (const s of others) rows.push({ kind: "card", key: s.session_id, s, pending: false });
+    return rows;
+  }
+  const palette = sourcePalette(p.sources);
+  const stateOf = new Map(p.sources.map((x) => [x.id, x.state] as const));
+  const bySrc = new Map<string, SessionState[]>();
+  for (const s of others) {
+    const k = s.src ?? "";
+    const list = bySrc.get(k);
+    if (list) list.push(s);
+    else bySrc.set(k, [s]);
+  }
+  for (const src of p.sources) {
+    const cards = bySrc.get(src.id);
+    if (!cards?.length) continue;
+    bySrc.delete(src.id);
+    rows.push({
+      kind: "source",
+      key: `src-${src.id}`,
+      srcId: src.id,
+      name: displaySrcName(src.name),
+      color: palette.get(src.id) ?? srcColor(src.colorKey ?? src.id),
+      online: stateOf.get(src.id) === "online",
+      count: cards.length,
+    });
+    for (const s of cards) rows.push({ kind: "card", key: s.session_id, s, pending: false });
+  }
+  // 无归属（快照无 src / 源已删）→ 「—」占位组殿后
+  const rest = [...bySrc.values()].flat();
+  if (rest.length) {
+    rows.push({ kind: "source", key: "src-unknown", srcId: null, name: "—", color: "", online: false, count: rest.length });
+    for (const s of rest) rows.push({ kind: "card", key: s.session_id, s, pending: false });
+  }
+  return rows;
 }
 
 // cc light 风格：运行中黄灯呼吸（亮度呼吸，对齐网页端呼吸灯）
@@ -413,6 +560,33 @@ function SrcBadge({ name, color }: { name: string; color: string }) {
   );
 }
 
+// E2a 活动指标块：store activity 最后值的只读投影——状态/动作/耗时/审批四行，
+// 各自按 activity_capabilities 门控显隐；activity 缺失=整块不渲染（不显示假
+// 「空闲」），capability 全关（legacy 归一化产物）= 空块同效不渲染。行高恒定
+//（lineHeight 定值）+ 单行 ellipsis 截断 + tabular 数字，390 宽小屏不抖卡高
+function ActivityBlock({ s }: { s: SessionState }) {
+  const { c } = useTheme();
+  const styles = useThemeStyles(makeStyles);
+  const m = activityMetricsOf(s);
+  if (!m) return null;
+  const lines: [string, string, string][] = [];
+  if (m.state !== undefined) lines.push(["状态", STATUS_ZH[m.state] ?? m.state, statusColor(m.state, c)]);
+  if (m.summary !== undefined) lines.push(["动作", m.summary || "—", c.dim]);
+  if (m.elapsedMs !== undefined) lines.push(["耗时", fmtElapsed(m.elapsedMs), c.dim]);
+  if (m.approvalPending !== undefined) lines.push(["审批", m.approvalPending ? "待审批" : "—", m.approvalPending ? c.waiting : c.faint]);
+  if (!lines.length) return null;
+  return (
+    <View style={styles.actBlock}>
+      {lines.map(([k, v, vc]) => (
+        <Text key={k} style={styles.actLine} numberOfLines={1}>
+          <Text style={styles.actKey}>{k} </Text>
+          <Text style={[styles.actVal, { color: vc }]}>{v}</Text>
+        </Text>
+      ))}
+    </View>
+  );
+}
+
 const SessionCard = memo(function SessionCard({
   s, onOpen, onResume, onRename, onDelete, revealSid, onReveal, density, dim, srcBadge, orgTag,
 }: {
@@ -501,6 +675,8 @@ const SessionCard = memo(function SessionCard({
           ) : (
             <Text style={styles.sumC} numberOfLines={1}>{s.action_summary || "…"}</Text>
           )}
+          {/* E2a 活动指标块（紧凑档）：activity 缺失/能力全关时自返回 null */}
+          <ActivityBlock s={s} />
           <View style={styles.footC}>
             {orgTag ? <Text style={styles.folderC} numberOfLines={1}>◈ {orgTag}</Text> : null}
             {s.cwd ? <Text style={styles.folderC} numberOfLines={1}>📁 {folderOf(s.cwd)}</Text> : null}
@@ -535,6 +711,8 @@ const SessionCard = memo(function SessionCard({
           ) : (
             <Text style={styles.sum} numberOfLines={1}>{s.action_summary || "…"}</Text>
           )}
+          {/* E2a 活动指标块（标准档）：四行按 capability 门控；极简档无位不显 */}
+          <ActivityBlock s={s} />
           {/* 次要信息合并行（降噪）：托管/外部 · 目录 · 历史 一行小字（原 tag 胶囊 +
               目录/历史分散多段 → 单段 faint 尾截断），右侧 ctx 水位（#145 改动统计行
               移除，详情页统计保留全量） */}
@@ -927,6 +1105,10 @@ export default function ListScreen({ sessions, connected, connText, onOpen, onNe
   // 聚合多源 = 分组态（信息层级重设计：#294 批2 逐卡源角标改为分组头归属）；
   // 统计行「N 源聚合」/空态文案/顶栏副标题沿用同一开关
   const badgeOn = snap.aggregate && snap.sources.length > 1;
+  // E2a 分组渲染条件：聚合 + 多源 + 源活动能力在（source_capabilities.activity，
+  // 旧 relay legacy 缺省 = 降级「—」占位组，不逐源分组）。分组头已交代归属时
+  // 逐卡源角标同步收起，避免同屏双份源标注
+  const grouped = badgeOn && snap.sourceCapabilities?.activity === true;
   // 聚合源在线数（#294 批4）：统计行「N 源聚合」与空态「online/total 源」共用
   const onlineSrcs = snap.sources.filter((x) => x.state === "online").length;
   // 唯一在线源（在线源=1 时列表平铺单源视图）：唯一在线源即"当前源"，顶栏副标题
@@ -1018,32 +1200,43 @@ export default function ListScreen({ sessions, connected, connText, onOpen, onNe
     [sorted, collapseIdle, idleDimMin, pendingDel, deleting],
   );
 
-  // 分组态行模型：按源分区渲染（组头：源色条+源名+在线点+计数 → 组内会话卡）；
-  // 组序按组内最近活动倒序，组内保持全局排序（活跃置顶+更新倒序）。非分组态
-  // （单源/聚合单源）原样平铺，渲染不变。行包装对象每快照重建无妨——会话对象
-  // 引用原样透传，SessionCard memo 的行级重渲不受影响；映射在 memo 内构建，
-  // 依赖稳定（snap.sources 快照粒度变化）
-  const rows = useMemo<ListRow[]>(() => {
-    // 全局排序平铺（2026-09-17）：活跃置顶 + 最近优先，不分源组
-    //（源归属由每卡胶囊标签承载，不再按源分区打乱全局顺序）
-    return visible.map((s) => ({ h: false as const, key: s.session_id, s }));
-  }, [badgeOn, visible, snap.sources, onlineSrcs]);
+  // E2a 行模型 = 纯函数投影（buildListProjection）：待处理段置顶 → 其他会话按
+  // 模式分流（单源平铺 / 聚合多源按源分组 / legacy 降级「—」占位组）。行包装
+  // 对象每快照重建无妨——会话对象引用原样透传，SessionCard memo 的行级重渲
+  // 不受影响；组头/段头 count 一律=去重后实际卡数
+  const projection = useMemo(
+    () => buildListProjection({
+      sessions: visible,
+      aggregate: snap.aggregate,
+      sources: snap.sources,
+      sourceActivityCap: snap.sourceCapabilities?.activity === true,
+    }),
+    [visible, snap.aggregate, snap.sources, snap.sourceCapabilities],
+  );
+  const rows = useMemo<ListRow[]>(() => projection.map((r) =>
+    r.kind === "section"
+      ? { h: "sec" as const, key: r.key, label: r.label, count: r.count }
+      : r.kind === "source"
+        ? { h: "src" as const, key: r.key, name: r.name, color: r.color, online: r.online, count: r.count }
+        : { h: false as const, key: r.key, s: r.s },
+  ), [projection]);
+  // 段头/组头吸顶（E2a 390 宽稳定口径）：头行定高+自带底色，滚动叠加不跳动
+  const stickyIndices = useMemo(
+    () => rows.reduce<number[]>((acc, r, i) => { if (r.h !== false) acc.push(i); return acc; }, []),
+    [rows],
+  );
 
-  // #59 逐卡源归属角标（用户点单：聚合模式卡片要能分辨哪台电脑）：聚合开启即恒显
-  // （分组头只在多在线源时出现——单源在线/离线源缓存混排时卡片曾全裸奔）；
-  // 配色与分组头同调色板，同屏稳定
+  // #59 逐卡源归属角标（用户点单：聚合模式卡片要能分辨哪台电脑）：聚合开启且未
+  // 走分组头（降级/单在线源混排）时恒显；配色与分组头共用 sourcePalette，同屏稳定
   const srcBadgeMap = useMemo(() => {
-    if (!badgeOn) return null;
+    if (!badgeOn || grouped) return null;
     const nameOf = new Map(snap.sources.map((x) => [x.id, displaySrcName(x.name)] as const));
-    // 源跨端配色键（#294 审查修复）：同屏配色去重——按 colorKey 稳定排序分配调色板
-    // （0014daa 补回 nameOf 时漏了 colorOf，release 包渲染即 ReferenceError 闪退）
-    const sortedSrcs = [...snap.sources].sort((a, b) => (a.colorKey ?? a.id).localeCompare(b.colorKey ?? b.id));
-    const colorOf = new Map(sortedSrcs.map((x, i) => [x.id, SRC_COLORS[i % SRC_COLORS.length]] as const));
+    const colorOf = sourcePalette(snap.sources);
     return (src: string | undefined): { name: string; color: string } | null => {
       if (!src) return null;
       return { name: nameOf.get(src) ?? "其他", color: colorOf.get(src) ?? srcColor(src) };
     };
-  }, [badgeOn, snap.sources]);
+  }, [badgeOn, grouped, snap.sources]);
   const srcBadgeOf = srcBadgeMap ?? (() => null);
 
   // #26 M2 组织域：待决议确认卡 + 项目组 chips（结项不占常驻位）——跨源平铺
@@ -1268,6 +1461,7 @@ export default function ListScreen({ sessions, connected, connText, onOpen, onNe
         key={density}
         data={rows}
         keyExtractor={(r) => r.key}
+        stickyHeaderIndices={stickyIndices}
         showsVerticalScrollIndicator={false}
         refreshControl={
           <RefreshControl
@@ -1332,8 +1526,10 @@ export default function ListScreen({ sessions, connected, connText, onOpen, onNe
           ) : null
         }
         renderItem={({ item }) =>
-          item.h ? (
-            <GroupHeader name={item.name} color={item.color} online={item.online} count={item.count} />
+          item.h === "sec" ? (
+            <SectionHeader label={item.label} count={item.count} />
+          ) : item.h === "src" ? (
+            <GroupHeader name={item.name} color={item.color || c.faint} online={item.online} count={item.count} />
           ) : (
             <SessionCard
               s={item.s}
@@ -1538,12 +1734,30 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
   legendDot: { width: 8, height: 8, borderRadius: 4 },
   legendT: { color: c.text, fontSize: 12.5 },
   // 源分组头：源色竖条+源名+在线点+会话计数，下衬 hairline 分区线（组间距 =
-  // 头部上下留白 + 卡片自身 marginBottom，形成"区隔靠间距"的分区节奏）
+  // 头部上下留白 + 卡片自身 marginBottom，形成"区隔靠间距"的分区节奏）；
+  // E2a 起组头吸顶（stickyHeaderIndices），自带页面底色防滚动叠加透字
   grpHead: {
     flexDirection: "row", alignItems: "center", gap: 7,
     marginTop: 10, marginBottom: 9, paddingBottom: 7,
     borderBottomWidth: 1, borderBottomColor: c.line,
+    backgroundColor: c.bg,
   },
+  // E2a 段头（待处理/其他会话）：分组头同族小节标题 + 实际渲染计数；吸顶行
+  // 定高（无内容浮动）+ 自带底色
+  secHead: {
+    flexDirection: "row", alignItems: "baseline", gap: 6,
+    marginTop: 10, marginBottom: 7, paddingBottom: 6,
+    borderBottomWidth: 1, borderBottomColor: c.line,
+    backgroundColor: c.bg,
+  },
+  secHeadT: { color: c.dim, fontSize: 12, fontWeight: "700", letterSpacing: 0.2 },
+  secCount: { color: c.faint, fontSize: 11, fontVariant: ["tabular-nums"] },
+  // E2a 活动指标块：四行定高小字（行距 gap 3、lineHeight 定值、单行 ellipsis），
+  // 键淡值常——activity 缺失/能力全关时整块不渲染
+  actBlock: { marginTop: 4, marginBottom: 1, paddingLeft: 6, gap: 3 },
+  actLine: { fontSize: 11, lineHeight: 14 },
+  actKey: { color: c.faint, fontSize: 10 },
+  actVal: { fontSize: 11, fontVariant: ["tabular-nums"] },
   grpBar: { width: 3, height: 13, borderRadius: 1.5 },
   grpName: { color: c.dim, fontSize: 12, fontWeight: "700", letterSpacing: 0.2, flexShrink: 1 },
   grpDot: { width: 6, height: 6, borderRadius: 3 },
