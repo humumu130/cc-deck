@@ -10,7 +10,7 @@
   },
   "lanes": [
     { "id": "user", "label": "用户 · whether 拍板" },
-    { "id": "lead", "label": "指挥链 · 架构师 + Leader" },
+    { "id": "lead", "label": "指挥链 · PM" },
     { "id": "worker", "label": "Worker 池 · 实现" }
   ],
   "phases": [
@@ -30,9 +30,9 @@
   },
   "nodes": [
     { "id": "demand", "lane": "user", "col": 0, "type": "security", "label": "一句话需求", "sublabel": "不挑粒度 · 唯一入口" },
-    { "id": "triage", "lane": "lead", "col": 0, "type": "backend", "label": "Leader 分诊", "sublabel": "五响应 · 四档+暂缓" },
+    { "id": "triage", "lane": "lead", "col": 0, "type": "backend", "label": "PM 分诊", "sublabel": "五响应 · 四档+暂缓" },
     { "id": "confirm", "lane": "user", "col": 1, "type": "security", "label": "立项确认卡", "sublabel": "正经必经 · 首次轻立项", "tag": "whether" },
-    { "id": "spec", "lane": "lead", "col": 1, "type": "frontend", "label": "架构师任务书", "sublabel": "五要素 + 批次拆解", "tag": "what&how" },
+    { "id": "spec", "lane": "lead", "col": 1, "type": "frontend", "label": "PM 任务书", "sublabel": "五要素 + 批次拆解", "tag": "what&how" },
     { "id": "intake", "lane": "lead", "col": 2, "type": "backend", "label": "核验入库", "sublabel": "spec 审读 · 批次入板" },
     { "id": "hold", "lane": "worker", "col": 1, "type": "database", "label": "建议暂缓", "sublabel": "一句理由 + 解除条件" },
     { "id": "dispatch", "lane": "lead", "col": 3, "type": "backend", "label": "逐单派发", "sublabel": "熟手查表 + 技能标签", "tag": "who&when" },
@@ -59,8 +59,8 @@
     { "from": "rework", "to": "worker", "label": "回炉返工", "role": "return", "variant": "dashed" }
   ],
   "cards": [
-    { "dot": "cyan", "title": "三权分立 · 任务书纪律", "items": ["架构师定 what&how：任务书与批次拆解", "Leader 定 who&when：调度与核验把关", "用户定 whether：确认卡与验收拍板", "五要素：P 级、复现、根因、要求、断言", "验收可断言：选择器 + 期望值同源"] },
+    { "dot": "cyan", "title": "三权分立 · 任务书纪律", "items": ["PM 定 what&how：任务书与批次拆解", "PM 定 who&when：调度与核验把关", "用户定 whether：确认卡与验收拍板", "评审卡：高风险盲评复审 · 跑完即删", "五要素+可断言验收：P 级/复现/根因/要求/断言"] },
     { "dot": "violet", "title": "模型分层 · 调度并发", "items": ["6 家引擎池：角色 → 引擎映射配置", "难度升档：轻任务低配起，实锤再升", "熟手双来源调度：路由表记忆 + 编制门", "插单排队：在跑回合收口后注入", "扩编触发：首选次优皆忙且活不过夜"] },
-    { "dot": "rose", "title": "核验与回调闭环", "items": ["DISPATCH_DONE 帧：三端齐通知", "failed 注入 Leader：重派换人或放弃", "FAIL 三问：口径、可见、正解", "视觉关卡：多模态复审 + 源码探针", "边界显式写；fix1/fix2 带根因回炉"] }
+    { "dot": "rose", "title": "核验与回调闭环", "items": ["DISPATCH_DONE 帧：三端齐通知", "failed 注入 PM：重派换人或放弃", "FAIL 三问：口径、可见、正解", "视觉关卡：多模态复审 + 源码探针", "边界显式写；fix1/fix2 带根因回炉"] }
   ]
 }
