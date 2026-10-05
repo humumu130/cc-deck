@@ -4,9 +4,13 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
-B1=$(md5 -q cc-plugins/plugins/cc-deck/scripts/relay.mjs 2>/dev/null || echo MISSING)
-B2=$(md5 -q desktop-tauri/src-tauri/resources/relay.mjs 2>/dev/null || echo MISSING)
-B3=$(md5 -q '/Applications/CC Deck.app/Contents/Resources/resources/relay.mjs' 2>/dev/null || echo "not-installed")
+# 哈希工具用 shasum -a 256（P1b 修复，2026-10-05）：Mac 无 PATH 内 md5（原 md5 -q
+# 两处全落 MISSING → B1=MISSING=B2 假通过，真漂移检不出+误报「bundle 不存在」）；
+# shasum macOS 自带且 Linux 通用（md5sum 语法跨平台不一致），256 位与 P1a 核验口径
+# 统一。shasum 失败时输出 "MISSING MISSING" 经 awk 取 $1 仍得 MISSING，保持原哨兵语义
+B1=$( { shasum -a 256 cc-plugins/plugins/cc-deck/scripts/relay.mjs 2>/dev/null || echo "MISSING MISSING"; } | awk '{print $1}')
+B2=$( { shasum -a 256 desktop-tauri/src-tauri/resources/relay.mjs 2>/dev/null || echo "MISSING MISSING"; } | awk '{print $1}')
+B3=$( { shasum -a 256 '/Applications/CC Deck.app/Contents/Resources/resources/relay.mjs' 2>/dev/null || echo "not-installed not-installed"; } | awk '{print $1}')
 
 FAIL=0
 [ "$B1" = "$B2" ] || { echo "❌ cc-plugins bundle ≠ desktop-tauri resources（git 里的产物过期）"; FAIL=1; }
