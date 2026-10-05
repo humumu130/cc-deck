@@ -172,6 +172,8 @@ const COMMAND_TYPES = new Set([
   // #018-R1b：org 命令真链路（立项 create；与云通道同走 mgr.orgCommand 咽喉——
   // 漏加时 ws 白名单在此拒发，mgr 的 case 与单测都过、唯独 LAN 实机死路，#212 同款坑）
   "COMMAND_ORG_ACTION",
+  // #018-R1c：通知生命周期 ACK（handled/dismissed；与云通道同走 mgr）
+  "COMMAND_NOTIFICATION_ACK",
   // #17 第二批：雇员独立家开关切换（三端设置项）
   "COMMAND_SETTINGS_UPDATE",
 ]);
@@ -924,6 +926,9 @@ export function startServer(
           // #117 教训；板不随快照，COMMAND_PROJECT_DETAIL 按需拉）
           projects: listGroups(),
           org_confirms: listPendingConfirms(),
+          // #018-R1c 决策通知账（cloud-client 云通道同步携带，#117 教训；空数组也
+          // 下发——端上以字段存在性判断能力）
+          notifications: mgr.notificationsList(),
           // #17 第二批：雇员独立家开关（设置页数据源；cloud-client 云通道同步携带，
           // #117 教训）
           settings: mgr.employeeHomeState(),

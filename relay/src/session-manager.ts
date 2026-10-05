@@ -73,7 +73,14 @@ import type {
   WaitingPayload,
   ImportPushEntry,
   DispatchDonePayload,
+  NotificationItem,
+  NotificationKind,
+  NotificationGroup,
+  NotificationSeverity,
 } from "./types.js";
+// #018-R1c 决策通知账（B3a 纯函数层，只消费不改）：stableKey 防重 + 生命周期迁移
+import { stableKey, transitionNotification } from "./decision-notify.js";
+import type { NotificationLifecycleAction, NotificationLifecycleItem } from "./decision-notify.js";
 import { CodexAgentSession, CODEX_ACTIVITY_CAPABILITIES } from "./agent-codex.js";
 import { TRAE_ACTIVITY_CAPABILITIES } from "./agent-trae.js";
 import { QWEN_ACTIVITY_CAPABILITIES } from "./agent-qwen.js";
@@ -532,6 +539,11 @@ export class SessionManager {
   private childSdkIds: Set<string>;
   private deletedExtIds: Set<string>;
   private titleOverrides: Record<string, string>;
+  // #018-R1c 决策通知账（结构化投影）：内存 Map + notifications.json 持久。
+  // 与 decision-notify watcher 的文本推送通道（decision-notifications.json）并存
+  // 不冲突——那边管「注入会话的提醒文本」，这边管「端上通知列表的结构化数据源」
+  private notifications = new Map<string, NotificationLifecycleItem>();
+  private notificationsJson = ""; // 上次投影的序列化基线（值变才发帧的 dedup 锚）
 
   // #26 矩阵式 M1：组织 Leader 常驻态。leaderId = 当前 Leader 的 relay 会话 id
   //（isLeaderSession 的内存匹配源——COMMAND_MESSAGE/onTurnEnd 高频路径零盘 IO）；
@@ -624,6 +636,7 @@ export class SessionManager {
     this.childSdkIds = new Set(readChildSessions(cfg.dataDir));
     this.deletedExtIds = new Set(readDeletedExts(cfg.dataDir));
     this.titleOverrides = readTitleOverrides(cfg.dataDir);
+    this.loadNotifications(); // #018-R1c 离线重载：重启从 notifications.json 还原进快照
     const t = setInterval(() => this.heartbeat(), HEARTBEAT_INTERVAL_MS);
     t.unref();
     const c = setInterval(() => {
@@ -680,6 +693,147 @@ export class SessionManager {
   employeeHomeState(): EmployeeHomeSettingsPayload {
     const st = resolveEmployeeHome(this.cfg.dataDir);
     return { employee_home: st.enabled, value: st.value, source: st.source };
+  }
+
+  // ---------- #018-R1c 决策通知账（产生/生命周期/投影三段，B3a 纯函数只消费） ----------
+  // 数据面：NOTIFICATIONS_UPDATED 瞬态帧（全量替换语义）+ SNAPSHOT.notifications
+  //（ws-server 与 cloud-client 两处快照组装同源取 notificationsList()，#117 教训）。
+  // 与 M4 DISPATCH_DONE / ORG_CONFIRM_UPDATED 等既有瞬时通道并存：那些管在线弹，
+  // 这边持久落账管离线兜底与列表沉淀（任务书对账：不双发靠 stableKey 一单一行）。
+
+  private notificationsPath(): string {
+    return join(this.cfg.dataDir, "notifications.json");
+  }
+
+  // SNAPSHOT.notifications 数据源（空数组也下发——端上以字段存在性判断能力，
+  // allow_rules 同口径）。稳定排序保证投影 dedup 与持久化形态确定
+  notificationsList(): NotificationItem[] {
+    return [...this.notifications.values()]
+      .sort((a, b) => a.created_at - b.created_at || (a.key < b.key ? -1 : 1));
+  }
+
+  // 重启还原：坏 JSON 容错 → 空账起步（仿 org store 范式，写侧首落即还原合法存储）
+  private loadNotifications(): void {
+    try {
+      const raw = JSON.parse(readFileSync(this.notificationsPath(), "utf-8")) as { notifications?: NotificationLifecycleItem[] };
+      const list = Array.isArray(raw.notifications) ? raw.notifications : [];
+      for (const item of list) {
+        if (item && typeof item.key === "string" && item.key) this.notifications.set(item.key, item);
+      }
+    } catch { /* 缺文件/坏 JSON：空账 */ }
+    this.trimNotifications();
+    this.notificationsJson = JSON.stringify(this.notificationsList()); // 重启基线：不重发还原帧
+  }
+
+  // 上限纪律（仿 org confirms 只留 200 条已决）：未决全留 + 最近 200 条已决
+  private trimNotifications(): void {
+    const all = [...this.notifications.values()]
+      .sort((a, b) => a.created_at - b.created_at || (a.key < b.key ? -1 : 1));
+    const resolved = all.filter((n) => n.resolved_at !== undefined || n.handled_at !== undefined || n.dismissed_at !== undefined);
+    for (const n of resolved.slice(0, Math.max(0, resolved.length - 200))) this.notifications.delete(n.key);
+  }
+
+  private persistNotifications(): void {
+    this.trimNotifications();
+    try {
+      mkdirSync(this.cfg.dataDir, { recursive: true });
+      writeFileSync(this.notificationsPath(), JSON.stringify({ notifications: this.notificationsList() }, null, 2) + "\n", "utf-8");
+    } catch (e) {
+      console.warn(`[notify] 通知账写入失败: ${e instanceof Error ? e.message : String(e)}`);
+    }
+  }
+
+  // 值变才发（R1a applyActivity 同款 dedup 纪律）：序列化比对，集合无变不发帧
+  private projectNotifications(): void {
+    const json = JSON.stringify(this.notificationsList());
+    if (json === this.notificationsJson) return;
+    this.notificationsJson = json;
+    this.bus.emitTransient("NOTIFICATIONS_UPDATED", { items: JSON.parse(json) as NotificationItem[] });
+  }
+
+  // 产生源统一入口：B3a stableKey 防重——同 key 已在账即静默（重复事件/重放不双发，
+  // 已决议的账同 key 重放也不复活）。revision 语义对齐 B3a：org-confirm=created_at、
+  // waiting=request_id、dispatch 无 revision（一单一行）
+  private upsertNotification(
+    kind: NotificationKind,
+    entityId: string,
+    revision: string | undefined,
+    seed: { title: string; body: string; severity: NotificationSeverity; group: NotificationGroup; actionable: boolean; sessionId?: string; domain: string; returnPath: string },
+  ): void {
+    const key = stableKey(kind, entityId, revision);
+    if (this.notifications.has(key)) return;
+    const item: NotificationLifecycleItem = {
+      key,
+      kind,
+      group: seed.group,
+      severity: seed.severity,
+      title: seed.title,
+      body: seed.body,
+      sourceContext: {
+        domain: seed.domain,
+        entityId,
+        ...(seed.sessionId ? { sessionId: seed.sessionId } : {}),
+        alertId: key,
+        returnPath: seed.returnPath,
+      },
+      actionable: seed.actionable,
+      created_at: Date.now(),
+    };
+    this.notifications.set(key, item);
+    this.persistNotifications();
+    this.projectNotifications();
+  }
+
+  // 生命周期收口：matcher 定位（org-confirm 按 confirm id、waiting 按会话），
+  // transitionNotification 只填空位（幂等）；已 resolved 的账跳过（ACK 不复活）。
+  // action 用 B3a 词表：source_succeeded（=handled）/dismissed/resolved
+  private transitionNotifications(match: (n: NotificationLifecycleItem) => boolean, action: NotificationLifecycleAction): void {
+    const at = Date.now();
+    let changed = false;
+    for (const n of [...this.notifications.values()]) {
+      if (!match(n) || n.resolved_at !== undefined) continue;
+      const next = transitionNotification(n, action, at);
+      if (JSON.stringify(next) !== JSON.stringify(n)) {
+        this.notifications.set(n.key, next);
+        changed = true;
+      }
+    }
+    if (changed) {
+      this.persistNotifications();
+      this.projectNotifications();
+    }
+  }
+
+  // COMMAND_NOTIFICATION_ACK 后端（B0 冻结 action 词表 handled|dismissed；resolved
+  // 由来源事件驱动不经此）。已 resolved 的账幂等 ok 不复活；未知 key 拒收
+  notificationAck(key: string, action: "handled" | "dismissed"): { ok: boolean; error?: string } {
+    const item = this.notifications.get(key);
+    if (!item) return { ok: false, error: `通知不存在: ${key.slice(0, 48)}` };
+    if (item.resolved_at !== undefined) return { ok: true };
+    this.transitionNotifications((n) => n.key === key, action === "dismissed" ? "dismissed" : "source_succeeded");
+    return { ok: true };
+  }
+
+  // R1c 源②同步点：WAITING 在等 → 产生（stableKey=waiting:session:request，同请求
+  // 重放天然去重）；不在等（决议翻回/终态）→ 该会话未决 waiting 账全 resolved。
+  // onWaiting/onStatusChange/onWaitingResolved/onTurnEnd/onSessionEnd 五路共用，
+  // 勿在回调里散写迁移
+  private syncWaitingNotification(managed: ManagedSession): void {
+    const req = managed.state.waiting_request;
+    if (managed.state.status === "WAITING" && req) {
+      this.upsertNotification("waiting", managed.state.session_id, req.request_id, {
+        title: `等待批准 ${req.tool_name}`,
+        body: req.input_summary,
+        severity: "waiting",
+        group: "action",
+        actionable: req.decidable !== false, // 仅通知形态（decidable=false）不可端上决议
+        sessionId: managed.state.session_id,
+        domain: "session",
+        returnPath: "session",
+      });
+      return;
+    }
+    this.transitionNotifications((n) => n.kind === "waiting" && n.sourceContext.sessionId === managed.state.session_id, "resolved");
   }
 
   // 自动命名：一次轻量模型调用把首条 prompt 变成短标题（托管/外部会话通用）
@@ -2203,6 +2357,15 @@ export class SessionManager {
           const r = this.applyEmployeeHome(cmd.payload.employee_home);
           return { command_id: cmd.command_id, ok: r.ok, ...(r.ok ? { data: r.data } : { error: r.error }) };
         }
+        case "COMMAND_NOTIFICATION_ACK": {
+          // #018-R1c 通知生命周期（B0 冻结 action 词表 handled|dismissed；resolved
+          // 由来源事件驱动不经此）。幂等：已 resolved 的账 ok 不复活；未知 key 拒收
+          if (typeof cmd.payload.notification_key !== "string" || !cmd.payload.notification_key) {
+            return { command_id: cmd.command_id, ok: false, error: "notification_key 必填" };
+          }
+          const r = this.notificationAck(cmd.payload.notification_key, cmd.payload.action);
+          return { command_id: cmd.command_id, ok: r.ok, ...(r.ok ? {} : { error: r.error }) };
+        }
         case "COMMAND_WATCH_GRANT":
           // #316 手表配对授权在 ws-server 层处理（持有待配对连接池）；云信道走到这里
           // 说明命令被路由错了——明确报错而非静默
@@ -2501,6 +2664,8 @@ export class SessionManager {
           }));
           // 审批数据清零是关键翻转，不受节流吞帧（下一帧 UPDATE 即各端收敛的保证）
           this.emitUpdated(managed, changed || cleared);
+          // R1c：状态翻走 WAITING → waiting 通知 resolved（统一同步点）
+          this.syncWaitingNotification(managed);
         },
         onWaiting: (p) => {
           if (!mine()) return;
@@ -2528,6 +2693,8 @@ export class SessionManager {
           managed.state.waiting_request = p;
           managed.state.waiting_started_at = at;
           managed.state.updated_at = at;
+          // R1c 源②：WAITING 通知（stableKey=waiting:session:request_id 防重）
+          this.syncWaitingNotification(managed);
           this.bus.emit(managed.state.session_id, "SESSION_WAITING", p);
         },
         onWaitingResolved: (requestId, decision, resolvedBy) => {
@@ -2544,6 +2711,8 @@ export class SessionManager {
             // 强制补一帧带 waiting_request:null 的 UPDATE：RESOLVED 是瞬态帧，云桥/
             // 断线丢帧时这帧是各端收敛的第二通道（不受节流）
             this.emitUpdated(managed, true);
+            // R1c：决议收口 → waiting 通知 resolved（统一同步点）
+            this.syncWaitingNotification(managed);
           }
           managed.state.updated_at = Date.now();
           this.bus.emit(managed.state.session_id, "SESSION_WAITING_RESOLVED", {
@@ -2691,6 +2860,8 @@ export class SessionManager {
             managed.state.last_error = reason;
             this.bus.emit(managed.state.session_id, "SESSION_ERROR", { message: reason });
           }
+          // R1c：终态收口（waiting_request 已清）→ waiting 通知 resolved（统一同步点）
+          this.syncWaitingNotification(managed);
         },
         onSessionEnd: (reason) => {
           if (!mine()) return;
@@ -2716,6 +2887,8 @@ export class SessionManager {
               stats: { ...managed.state.stats },
             });
           }
+          // R1c：流关闭兜底收口 → waiting 通知 resolved（统一同步点）
+          this.syncWaitingNotification(managed);
         },
     };
   }
@@ -3457,6 +3630,20 @@ export class SessionManager {
       ...(e.actor ? { actor: e.actor } : {}),
       ts: Date.now(),
     } satisfies DispatchDonePayload);
+    // R1c 源③：结构化通知账落一行——DISPATCH_DONE 是瞬时通道（seq:0 不落盘不补发，
+    // 离线端收不到），通知账持久 + 随快照/NOTIFICATIONS_UPDATED 兜底。stableKey=
+    // dispatch:id 一单一行，重复收口事件不双发（对账去重口径）；done 归 activity 桶
+    //（结果可见即可），failed 归 action 桶可操作（重派/换人/放弃要对账决策）
+    this.upsertNotification("dispatch", e.id, undefined, {
+      title: `${e.tier} 单${status === "done" ? "完成" : "失败"}`,
+      body: truncate(receipt, 160),
+      severity: status === "done" ? "done" : "error",
+      group: status === "done" ? "activity" : "action",
+      actionable: status !== "done",
+      sessionId: workerSessionId,
+      domain: "dispatch",
+      returnPath: "dispatch",
+    });
     if (status !== "failed" || e.actor !== "leader" || !this.leaderId || this.leaderId === workerSessionId) return;
     try {
       this.pushExternalLog(this.leaderId, "system", `[派单失败回执] ${e.tier} 单 ${e.id.slice(0, 8)} 失败：${truncate(receipt, 160)}`);
@@ -3490,6 +3677,19 @@ export class SessionManager {
         return { ok: false, error: r.error };
       }
       ensureProjectClaudeMd(r.group.anchor_dir, r.group.name); // §3.4 防漂移种子（幂等），与 HTTP 漏斗同序
+      // R1c 源①：needsConfirm 落单 → org-confirm 通知（决议在 applyConfirmEffects 收口）
+      if (r.needsConfirm && r.confirm) {
+        this.upsertNotification("org-confirm", r.confirm.id, String(r.confirm.created_at), {
+          title: r.confirm.title,
+          body: r.confirm.reason,
+          severity: "waiting",
+          group: "action",
+          actionable: true,
+          sessionId: this.leaderId ?? undefined,
+          domain: "org",
+          returnPath: "org",
+        });
+      }
       this.emitOrgState();
       this.auditOrgCommand(
         actor, device, action, r.group.anchor_dir, r.group.tier, true,
@@ -3919,6 +4119,10 @@ export class SessionManager {
   // 劈叉态无人知晓（两层联动只做了成员侧）。失败时决议留痕不回滚（decideConfirm
   // 已落盘），错误带回决议方（卡上可见），用户可走直达通道（project-status）补救
   private applyConfirmEffects(c: OrgConfirm): { ok: boolean; error?: string } {
+    // R1c 源①收口：确认单已决议（decideConfirm 已落盘）→ org-confirm 通知转
+    // resolved。放在副作用执行前——决议时刻即收口，效果成败走各自的失败通道，
+    // 通知面只对齐「卡已决」这一事实
+    this.transitionNotifications((n) => n.kind === "org-confirm" && n.sourceContext.entityId === c.id, "resolved");
     const gid = typeof c.payload.gid === "string" ? c.payload.gid : "";
     const fail = (what: string, r: { error?: string }): { ok: false; error: string } => {
       this.emitOrgState(); // 失败路径同样广播：成员侧可能已部分变更（如挂起回滚）
