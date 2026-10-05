@@ -23,7 +23,7 @@ import {
 import { rateRouting, recordRoutingResult, routingFor, tagRouting } from "./routing.js";
 import { devId } from "./e2e.js";
 import type { EventBus } from "./event-bus.js";
-import { AgentSession } from "./agent-adapter.js";
+import { AgentSession, CLAUDE_ACTIVITY_CAPABILITIES, mapActivityState } from "./agent-adapter.js";
 import type { RelayConfig } from "./config.js";
 import type { ReplayedSession } from "./history.js";
 import { deriveTitle } from "./history.js";
@@ -51,8 +51,10 @@ import { AllowRuleStore } from "./allow-rules.js";
 import { addHiddenTodoKey, hiddenTodoKeys } from "./todo-hidden.js";
 import type {
   AgentCallbacks,
+  MappedStatusDock,
 } from "./agent-adapter.js";
 import type {
+  ActivityCapabilities,
   ArtifactItem,
   Command,
   CommandAckPayload,
@@ -61,8 +63,10 @@ import type {
   ManagedPermissionMode,
   PendingInput,
   PeerMeta,
+  SessionActivityPayload,
   SessionEngine,
   SessionState,
+  StatusDockState,
   SubagentInfo,
   TodoItem,
   TokenUsage,
@@ -70,7 +74,11 @@ import type {
   ImportPushEntry,
   DispatchDonePayload,
 } from "./types.js";
-import { CodexAgentSession } from "./agent-codex.js";
+import { CodexAgentSession, CODEX_ACTIVITY_CAPABILITIES } from "./agent-codex.js";
+import { TRAE_ACTIVITY_CAPABILITIES } from "./agent-trae.js";
+import { QWEN_ACTIVITY_CAPABILITIES } from "./agent-qwen.js";
+import { CODEBUDDY_ACTIVITY_CAPABILITIES } from "./agent-codebuddy.js";
+import { ZCODE_ACTIVITY_CAPABILITIES } from "./agent-zcode.js";
 import { createRegisteredEngine, isReinjectionEngine, isSessionEngine, providerProfileFor } from "./engine-registry.js";
 
 function isManagedMode(m: unknown): m is ManagedPermissionMode {
@@ -386,6 +394,9 @@ interface ManagedSession {
   // 不匹配即忽略——旧流的任何后续事件（接管补刀的收尾回调 / 网络回魂）不再写
   // 状态/时间线/用量，双流并发写同一会话在此根治
   streamGen: number;
+  // R1a activity 状态舱（#018 单写者批·段1）：SESSION_ACTIVITY 瞬态帧的会话内
+  // 本地序号，每发一条 +1（端上排序/补洞依据；与全局 seq 无关，瞬态不占 seq）
+  activitySeq: number;
   // #189 resume 互斥：上次 resumeAgent/reviveSaved 发起时刻（新流 onInit 清除）。
   // 窗口内（resumePendingWindowMs）到达的消息/auto-revive 不再换流——新 agent 的
   // childPid 尚未就位，此时换流补刀必然落空（双进程根源），消息改走 sendMessage
@@ -785,7 +796,7 @@ export class SessionManager {
         rs.state.title = ov;
         rs.state.title_locked = true;
       }
-      this.sessions.set(id, { agent: null, state: rs.state, logs: rs.logs, lastUpdateEmit: 0, lastProgressAt: 0, lastProgressKind: "", unacked: [], wd: { phase: "idle", recoveries: [], gaveUp: false }, streamGen: 0 });
+      this.sessions.set(id, { agent: null, state: rs.state, logs: rs.logs, lastUpdateEmit: 0, lastProgressAt: 0, lastProgressKind: "", unacked: [], wd: { phase: "idle", recoveries: [], gaveUp: false }, streamGen: 0, activitySeq: 0 });
       this.applyDeclaredDeliverables(id);
       adopted++;
     }
@@ -956,7 +967,7 @@ export class SessionManager {
       state.title = ov;
       state.title_locked = true;
     }
-    this.sessions.set(id, { agent: null, state, logs: [], lastUpdateEmit: 0, lastProgressAt: 0, lastProgressKind: "", unacked: [], wd: { phase: "idle", recoveries: [], gaveUp: false }, streamGen: 0 });
+    this.sessions.set(id, { agent: null, state, logs: [], lastUpdateEmit: 0, lastProgressAt: 0, lastProgressKind: "", unacked: [], wd: { phase: "idle", recoveries: [], gaveUp: false }, streamGen: 0, activitySeq: 0 });
     this.applyDeclaredDeliverables(id);
     this.bus.emit(id, "SESSION_CREATED", {
       cwd: state.cwd,
@@ -2238,6 +2249,7 @@ export class SessionManager {
       unacked: [],
       wd: { phase: "idle", recoveries: [], gaveUp: false },
       streamGen: 0,
+      activitySeq: 0,
     };
 
     const agent = this.newAgent(
@@ -2284,6 +2296,83 @@ export class SessionManager {
     // 泄漏守卫——V2 纪律②，标题停在 deriveTitle(initial_prompt)）
     if (!managed.state.engine) this.requestSmartTitle(agent.id, prompt);
     return agent.id;
+  }
+
+  // ===== R1a activity 状态舱（#018 单写者批·段1）=====
+  // mapper（agent-adapter/agent-jsonl 纯函数层，本批只 import 消费）产出的 dock
+  // 经 applyActivity 唯一咽喉写入 state.activity / activity_capabilities：
+  // 值有变才写才发（防重放风暴）；终态（DONE/ERROR）冻结——保留最后状态供
+  // SNAPSHOT，不再发新瞬态。ws-server SNAPSHOT 用 mgr.snapshot() 直通
+  //（SessionState 带上字段即自动进快照），本批不碰 ws-server。
+
+  // 引擎 → activity 能力位（B0 冻结口径，claude 缺省）。codex 的 approval 位随
+  // remote_mode（远端决议通道开 = 可审批），与 mapCodexActivity 的
+  // remoteDecisionChannel 同源语义；各常量从对应 adapter 模块 import 消费
+  private activityCapabilitiesOf(state: SessionState): ActivityCapabilities {
+    switch (state.engine) {
+      case "codex": return { ...CODEX_ACTIVITY_CAPABILITIES, approval: state.remote_mode === true };
+      case "trae": return { ...TRAE_ACTIVITY_CAPABILITIES };
+      case "qwen-code": return { ...QWEN_ACTIVITY_CAPABILITIES };
+      case "codebuddy": return { ...CODEBUDDY_ACTIVITY_CAPABILITIES };
+      case "zcode": return { ...ZCODE_ACTIVITY_CAPABILITIES };
+      default: return { ...CLAUDE_ACTIVITY_CAPABILITIES };
+    }
+  }
+
+  // dock 展示值比较（浅口径）：只比端上可见内容（state/task_summary 文本与来源/
+  // activity 三元组/capabilities），忽略 updated_at、observed_at、occurred_at、
+  // task_summary.updated_at 等纯计时字段——重复回调（流式重吐/同帧重放）时间戳
+  // 必然刷新，比进去就永远不等，防风暴 dedup 形同虚设
+  private activityDockEqual(a: StatusDockState | undefined, b: StatusDockState): boolean {
+    if (!a) return false;
+    if (a.state !== b.state) return false;
+    const ta = a.task_summary;
+    const tb = b.task_summary;
+    if ((ta === undefined) !== (tb === undefined)) return false;
+    if (ta && tb && (ta.text !== tb.text || ta.source !== tb.source)) return false;
+    const aa = a.activity;
+    const ba = b.activity;
+    if ((aa === undefined) !== (ba === undefined)) return false;
+    if (aa && ba) {
+      if (aa.kind !== ba.kind || aa.text !== ba.text || aa.tool !== ba.tool) return false;
+    }
+    const ca = a.capabilities;
+    const cb = b.capabilities;
+    return ca.native_status === cb.native_status && ca.operation_summary === cb.operation_summary
+      && ca.native_elapsed === cb.native_elapsed && ca.approval === cb.approval;
+  }
+
+  // dock 写入唯一咽喉：值有变才写 state + 发 SESSION_ACTIVITY 瞬态（不进
+  // events.ndjson、不占 seq；重连恢复靠 SNAPSHOT 最后值，快照直通天然成立）。
+  // 终态（DONE/ERROR）下整体冻结：不覆写（保留收口前最后状态供快照）、不发帧
+  //（迟到的流尾回调不再打扰各端；错误详情走既有 SESSION_ERROR/SESSION_LOG 通道）。
+  // 存储形态裁回 StatusDockState（time_basis/unsupported/diagnostic 是 mapper
+  // 内部元数据，不进会话状态）
+  private applyActivity(managed: ManagedSession, dock: MappedStatusDock): void {
+    if (managed.state.status === "DONE" || managed.state.status === "ERROR") return;
+    const next: StatusDockState = {
+      state: dock.state,
+      ...(dock.task_summary ? { task_summary: { ...dock.task_summary } } : {}),
+      ...(dock.activity ? { activity: { ...dock.activity } } : {}),
+      capabilities: { ...dock.capabilities },
+      updated_at: dock.updated_at,
+    };
+    if (this.activityDockEqual(managed.state.activity, next)) return;
+    managed.state.activity = next;
+    managed.state.activity_capabilities = { ...dock.capabilities };
+    const act = next.activity;
+    const payload: SessionActivityPayload = {
+      session_id: managed.state.session_id,
+      state: next.state,
+      activity_kind: act?.kind ?? "system",
+      text: act?.text ?? next.task_summary?.text ?? "",
+      ...(act?.tool ? { tool: act.tool } : {}),
+      observed_at: act?.observed_at ?? next.updated_at,
+      ...(act?.occurred_at !== undefined ? { occurred_at: act.occurred_at } : {}),
+      capabilities: { ...next.capabilities },
+      seq_local: ++managed.activitySeq,
+    };
+    this.bus.emitTransient("SESSION_ACTIVITY", payload);
   }
 
   // AgentSession 回调：create 与 resume 共用（状态机与事件下发完全一致）
@@ -2378,6 +2467,16 @@ export class SessionManager {
           }
           managed.state.status = effStatus;
           managed.state.action_summary = summary;
+          // R1a：状态变化同步刷 activity 状态舱（先落 status 再刷 dock——终态守卫
+          // 按「已落的新状态」判定，resume 翻回 WORKING 不被误冻结）
+          this.applyActivity(managed, mapActivityState({
+            state: effStatus,
+            operation: summary,
+            now: Date.now(),
+            task: { todos: managed.state.todos },
+            capabilities: this.activityCapabilitiesOf(managed.state),
+            allowWaiting: true,
+          }));
           // 审批数据清零是关键翻转，不受节流吞帧（下一帧 UPDATE 即各端收敛的保证）
           this.emitUpdated(managed, changed || cleared);
         },
@@ -2479,6 +2578,21 @@ export class SessionManager {
             if (managed.logs.length > 500) managed.logs.splice(0, managed.logs.length - 500);
           }
           this.bus.emit(managed.state.session_id, "SESSION_LOG", entry);
+          // R1a：工具/文本活动同步刷 activity 状态舱。user_message 是用户侧活动
+          // 不入 dock；thinking 归 assistant_text（B0 的 ActivityKind 词表无 thinking）
+          if (kind !== "user_message") {
+            this.applyActivity(managed, mapActivityState({
+              state: managed.state.status,
+              activityKind: kind === "thinking" ? "assistant_text" : kind,
+              activityText: text,
+              ...(meta?.tool ? { tool: meta.tool } : {}),
+              ts: entry.ts,
+              now: entry.ts,
+              task: { todos: managed.state.todos },
+              capabilities: this.activityCapabilitiesOf(managed.state),
+              allowWaiting: true,
+            }));
+          }
         },
         onTurnEnd: (ok, reason, durationMs) => {
           if (!mine()) return;
@@ -3172,6 +3286,7 @@ export class SessionManager {
       unacked: [],
       wd: { phase: "idle", recoveries: [], gaveUp: false },
       streamGen: 0,
+      activitySeq: 0,
     };
     this.sessions.set(id, managed);
     this.pinLeaderFile(id);

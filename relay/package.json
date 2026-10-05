@@ -33,7 +33,8 @@
     "test:artifact-groups": "tsx scripts/test-artifact-groups.ts",
     "test:activity-mapper": "tsx scripts/test-activity-mapper.ts",
     "test:deliver-session": "tsx scripts/test-deliver-session.ts",
-    "test:snapshot-parity": "tsx scripts/test-snapshot-parity.ts"
+    "test:snapshot-parity": "tsx scripts/test-snapshot-parity.ts",
+    "test:r1a-activity": "tsx scripts/test-r1a-activity.ts"
   },
   "dependencies": {
     "@anthropic-ai/claude-agent-sdk": "latest",
