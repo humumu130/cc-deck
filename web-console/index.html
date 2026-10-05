@@ -1067,17 +1067,21 @@
   #srcChips button span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   #srcChips button.on { color: var(--text); border-color: rgba(217,119,87,.6); background: rgba(217,119,87,.12); }
   #srcChips button i { width: 7px; height: 7px; border-radius: 50%; flex: none; }
-  /* #018 W1a：通知投影只保留分组头+行，旧 relay 缺字段时整区不占位 */
-  #notifications { display: none; flex-direction: column; gap: 5px; padding: 2px 16px 10px; }
+  /* #018 W1a-1 通知行紧凑化（用户反馈：两行卡片过高过重，title/body 双截断都看不全）：
+     单行「title·body」流动截断（title 让位上限 55%，body 收尾），去逐行卡片框改
+     hover 微亮；已决行弱化殿后；整行原生 tooltip 兜底全文 */
+  #notifications { display: none; flex-direction: column; gap: 4px; padding: 2px 16px 8px; }
   #notifications.show { display: flex; }
-  .notice-group { display: flex; flex-direction: column; gap: 3px; }
-  .notice-group-head { color: var(--faint); font-size: 10px; letter-spacing: .5px; }
-  .notice-row { display: flex; align-items: flex-start; gap: 7px; padding: 5px 8px; border: 1px solid var(--border); border-radius: 8px; background: var(--bg-soft); min-width: 0; }
-  .notice-row .nr-body { min-width: 0; flex: 1; }
-  .notice-row .nr-title { color: var(--text); font-size: 11.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .notice-row .nr-text { color: var(--dim); font-size: 10.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .notice-group { display: flex; flex-direction: column; gap: 1px; }
+  .notice-group-head { color: var(--faint); font-size: 10px; letter-spacing: .5px; padding: 1px 5px; }
+  .notice-row { display: flex; align-items: center; gap: 6px; padding: 2px 6px; border-radius: 6px; min-width: 0; }
+  .notice-row:hover { background: rgba(127,127,127,.09); }
+  .notice-row .nr-body { min-width: 0; flex: 1; display: flex; align-items: baseline; gap: 5px; overflow: hidden; white-space: nowrap; }
+  .notice-row .nr-title { color: var(--text); font-size: 11px; flex: none; max-width: 55%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .notice-row .nr-text { color: var(--dim); font-size: 10.5px; flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .notice-row .nr-src { color: var(--faint); font-size: 10px; flex: none; }
-  .notice-empty { color: var(--faint); font-size: 11px; padding: 3px 2px; }
+  .notice-row.nr-done { opacity: .55; }
+  .notice-empty { color: var(--faint); font-size: 11px; padding: 2px 5px; }
   /* #399 源徽章实底填色：整胶囊即源色（去圆点），字色由 JS 按源色亮度内联指定 */
   .src-badge {
     display: inline-flex; align-items: center; flex: none;
@@ -5041,7 +5045,8 @@ function renderNotifications() {
     return;
   }
   const rows = sources.flatMap((ctx) => (ctx.notifications || []).map((item) => ({ ctx, item })));
-  const key = sources.map((ctx) => ctx.cfg.id + ":" + ctx.notifications.length + ":" + ctx.schemaVersion + ":" + ctx.legacyMode).join("|") + "|" + rows.map(({ ctx, item }) => ctx.cfg.id + ":" + item.key + ":" + item.title + ":" + item.body).join("|");
+  const doneOf = (item) => !!(item.resolved_at || item.handled_at || item.dismissed_at);
+  const key = sources.map((ctx) => ctx.cfg.id + ":" + ctx.notifications.length + ":" + ctx.schemaVersion + ":" + ctx.legacyMode).join("|") + "|" + rows.map(({ ctx, item }) => ctx.cfg.id + ":" + item.key + ":" + item.title + ":" + item.body + ":" + (doneOf(item) ? 1 : 0)).join("|");
   if (box.dataset.key === key) return;
   box.dataset.key = key;
   box.hidden = false;
@@ -5059,9 +5064,9 @@ function renderNotifications() {
   box.innerHTML = [...groups.entries()].map(([group, groupRows]) =>
     '<section class="notice-group" data-group="' + escapeHtml(group) + '">' +
       '<div class="notice-group-head">' + escapeHtml(NOTICE_GROUP_LABEL[group] || group) + "</div>" +
-      groupRows.map(({ ctx, item }) => {
+      [...groupRows].sort((a, b) => Number(doneOf(a.item)) - Number(doneOf(b.item))) .map(({ ctx, item }) => {
         const src = srcDisplayName(ctx.cfg);
-        return '<div class="notice-row" data-key="' + escapeHtml(item.key) + '">' +
+        return '<div class="notice-row' + (doneOf(item) ? " nr-done" : "") + '" data-key="' + escapeHtml(item.key) + '" title="' + escapeHtml(item.title) + (item.body ? "&#10;" + escapeHtml(item.body) : "") + '">' +
           '<div class="nr-body"><div class="nr-title">' + escapeHtml(item.title) + '</div><div class="nr-text">' + escapeHtml(item.body) + '</div></div>' +
           '<span class="nr-src">' + escapeHtml(src) + "</span></div>";
       }).join("") +
