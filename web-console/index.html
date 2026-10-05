@@ -1059,6 +1059,7 @@
   }
   .srv-pbadge.dead { color: var(--error); background: rgba(239,90,90,.10); border-color: rgba(239,90,90,.30); }
   .srv-pbadge.no { color: var(--faint); background: transparent; border-color: var(--border); }
+  .srv-pbadge.dim { color: var(--dim); background: rgba(148,163,190,.12); border-color: rgba(148,163,190,.30); } /* #018-W3 旧 relay 能力降级徽 */
   /* #40web ② 行内重试钮：仅失败态渲染（isRetryable），点击跳过退避立即重连 */
   .srv-row .srv-retry {
     flex: none; background: none; border: 1px solid var(--border); cursor: pointer;
@@ -1738,6 +1739,10 @@
   .af-batch-err span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .af-deadretry, .af-retry { flex: none; padding: 2px 10px; border: 1px solid color-mix(in srgb, var(--error) 40%, transparent); border-radius: 6px; background: none; color: var(--error); cursor: pointer; font-size: 11.5px; }
   .af-deadretry:hover, .af-retry:hover { border-color: var(--error); background: color-mix(in srgb, var(--error) 14%, transparent); }
+  /* #018-W3 批量下载进度条（005 artifact-batch-state 色档对齐：进行中中性/complete 绿/partial 红） */
+  .af-batch-err.batch { border-color: color-mix(in srgb, var(--dim) 28%, transparent); background: color-mix(in srgb, var(--dim) 8%, var(--panel)); color: var(--dim); }
+  .af-batch-err.batch.complete { border-color: color-mix(in srgb, var(--done) 36%, transparent); background: color-mix(in srgb, var(--done) 9%, var(--panel)); color: var(--done); }
+  .af-batch-err.batch.partial { border-color: color-mix(in srgb, var(--error) 48%, transparent); background: color-mix(in srgb, var(--error) 12%, var(--panel)); color: var(--error); }
   /* 聚合形态行内徽标：新建=done 绿 / 修改=中性（两组头让位后的补偿信息） */
   .badge.b-new { background: rgba(43,217,143,.12); color: var(--done); }
   html.light .badge.b-new { background: rgba(4,120,87,.10); }
@@ -2599,7 +2604,7 @@
           <div class="gp-card gp-rows" id="gpEmpHomeCard" style="display:none;margin-bottom:10px">
             <div class="gp-row gp-plug-row">
               <span class="gi"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3.5 10.5 12 3.8l8.5 6.7"/><path d="M5.5 9.5V20h13V9.5"/><path d="M10 20v-5h4v5"/></svg></span>
-              <span class="gp-plug-t"><span class="gp-plug-n">雇员会话独立存放</span><span class="gp-plug-d" id="gpEmpHomeDesc">团队成员（Leader 与派单成员）的会话记录与日常终端会话分开存放；改动只影响之后新建的会话，已有会话保持原处</span></span>
+              <span class="gp-plug-t"><span class="gp-plug-n">雇员会话独立存放</span><span class="gp-plug-d" id="gpEmpHomeDesc">团队成员（PM 与派单成员）的会话记录与日常终端会话分开存放；改动只影响之后新建的会话，已有会话保持原处</span></span>
               <div class="lever" id="gpEmpHomeLever" style="--n:2"><i class="lever-thumb"></i><button type="button" class="lever-opt" data-i="0">关</button><button type="button" class="lever-opt" data-i="1">开</button></div>
             </div>
           </div>
@@ -4783,7 +4788,7 @@ function confirmReadMap() {
 // ---------- #26 M2 组织区（v3.1 矩阵式）：确认卡决议 + 项目组 chips + 详情抽屉 ----------
 // 数据源：SNAPSHOT.projects/org_confirms（旧 relay 无字段 = ctx.projects 恒 null，
 // 整区不渲染不占位）+ 瞬态 PROJECTS_UPDATED/ORG_CONFIRM_UPDATED/BOARD_UPDATED。
-// 决议只走 COMMAND_ORG_CONFIRM（relay 侧单漏斗 orgAction：Leader 只提案、决议与
+// 决议只走 COMMAND_ORG_CONFIRM（relay 侧单漏斗 orgAction：PM 只提案、决议与
 // 执行分离）；详情按需 COMMAND_PROJECT_DETAIL 拉 { group, board, receipts }——
 // 板不随快照下发（§2.5 分流数据源），确认卡后 PROJECTS_UPDATED 回帧即收敛。
 const ORG_ST = { pending: "待确认", active: "在办", parked: "已挂起", archived: "已结项" };
@@ -4919,7 +4924,7 @@ function renderOrgZone() {
         '" data-org-g="' + escapeHtml(x.g.id) + '" data-src="' + escapeHtml(x.ctx.cfg.id) + '"' +
         ' title="' + escapeHtml(x.g.anchor_dir || "") + '">' +
         "<span>" + escapeHtml(x.g.name) + "</span><i>·" + escapeHtml(ORG_ST[x.g.status] || x.g.status) + "·" +
-        ((x.g.headcount || []).length + 1) + "人</i></button>").join("") + "</div>"; // +1 = Leader 兼管
+        ((x.g.headcount || []).length + 1) + "人</i></button>").join("") + "</div>"; // +1 = 组织 Leader 位（A 模式=用户自占/B 模式=薄 Leader，018 §9.1；relay headcount 不含该位）
   }
   // #018-W1b 远程立项轻入口：至少一个未被旧 relay 降级记忆封锁的 org 源才显示
   if (orgCreateSrcs().length) {
@@ -5019,6 +5024,7 @@ function orgRenderDrawer() {
         (r.receipt ? "<div>" + escapeHtml(r.receipt) + "</div>" : "") +
         '<div class="od-meta">' + (r.ts ? new Date(r.ts).toLocaleString() : "") +
         (r.target && r.target !== "org-leader" ? " · " + escapeHtml(String(r.target).slice(0, 8)) : "") + "</div></div>").join("")
+    // ↑ 协议值保持 org-leader（relay 兼容，动则断链），UI 显示词按 018 §9.7 迁移
     : '<div class="od-empty">暂无派单回执</div>';
   body.innerHTML =
     '<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:2px">' +
@@ -5026,7 +5032,7 @@ function orgRenderDrawer() {
       '<span class="od-st">' + escapeHtml(g.tier || "") + "</span>" +
       (board.frozen ? '<span class="od-st">冻结</span>' : "") +
     "</div>" +
-    "<h5>熟手池 · " + pool.length + " 人（Leader 兼管）</h5>" + sessHtml +
+    "<h5>熟手池 · " + pool.length + " 人（PM 兼管）</h5>" + sessHtml +
     "<h5>任务板</h5>" + boardHtml +
     "<h5>最近派单回执</h5>" + recsHtml;
 }
@@ -6422,10 +6428,12 @@ function renderDetail() {
   }
   if (activeTab === "artifacts") {
     // #35 输出物：全量序列化作 key（cron 同款）——增删行累计/角标/截断标记任一变化触发重建
-    const artKey = "art:" + s.session_id + ":" + JSON.stringify(s.artifacts ?? null) + ":" + (s.artifacts_truncated ? 1 : 0);
+    // #018-W3 能力缺失降级：旧 relay 无 artifacts 同步能力 → 空态文案换能力提示（不误导「没有产出」）
+    const legacy = sel.ctx.legacyMode === true;
+    const artKey = "art:" + s.session_id + ":" + JSON.stringify(s.artifacts ?? null) + ":" + (s.artifacts_truncated ? 1 : 0) + ":" + (legacy ? 1 : 0);
     if (tl.dataset.count !== artKey) {
       tl.dataset.count = artKey;
-      tl.innerHTML = artifactsTabHtml(s);
+      tl.innerHTML = artifactsTabHtml(s, legacy);
     }
     return;
   }
@@ -6746,11 +6754,13 @@ function artFolderHtml(s, g, open) {
       '<button class="af-deadretry" data-dir="' + escapeHtml(g.dir) + '">重试</button></div>') +
     "</div>";
 }
-function artifactsTabHtml(s) {
+function artifactsTabHtml(s, legacy) {
   const arts = s.artifacts ?? [];
   // #49：空态文案不暴露内部机制——三种情形（历史/外部/托管）统一只留一句话
   // #51：收录口径收窄为文档类交付物，空态措辞同步
-  if (!arts.length) return '<div class="todo-empty">当前会话还没有文档产出</div>';
+  // #018-W3 能力缺失降级：legacy relay（schema_version<1）无 artifacts 同步 →
+  // 能力提示替代空态（对齐 expo「旧 relay 缺字段降级」口径，不白屏不误导）
+  if (!arts.length) return '<div class="todo-empty">' + (legacy ? "当前 relay 版本不支持输出物同步，升级 relay 后可见" : "当前会话还没有文档产出") + "</div>";
   const byRecency = (a, b) => (b.last_at || b.first_at || 0) - (a.last_at || a.first_at || 0);
   // #222 分组聚合（设计稿拍板）：同父目录 ≥2 个文件 → 聚成可折叠文件夹行；单文件
   // 目录不聚合；key 小写归一（relay mergeArtifact 同口径，Windows 源大小写不敏感）
@@ -8296,6 +8306,12 @@ function renderServers() {
     // #40web ① 配对徽章独立成徽（已配对/配对失效/未配对），不再拼进地址摘要——
     // 传输失败时「已配对」徽仍在场，连接失败 ≠ 需要重新输码
     const pb = pairBadgeOf(s, ctx);
+    // #018-W3 能力缺失可见降级（对齐 expo E4a 能力副行口径）：在线旧 relay 标「旧版 relay」
+    // 徽 + 悬停说明影响面——cmdCap/notificationsSupported 等数据层降级位已在（W1b），
+    // 此处补可见性；仅在线判（离线无从读 schema_version）
+    const legacyBadge = ctx && ctx.status === "online" && ctx.legacyMode === true
+      ? '<span class="srv-pbadge dim" title="旧版 relay：输出物同步、通知、组织命令等能力可能不可用，升级 relay 后恢复">旧版 relay</span>'
+      : "";
     const addr = srvAddrText(s, ctx);
     // 方案 A 卡片化（2026-09-16）：分享动作上卡（唯一出码入口），本机条目=系统卡
     //（"自动接入"小字括号注记紧跟名称——独立 chip 会换行撑高行，2026-09-16 用户反馈）
@@ -8312,7 +8328,7 @@ function renderServers() {
       '<span class="srv-addr' + (pdPairingAnim(stText) ? " pairing" : "") + '">' + escapeHtml(addr) + "</span></div>" +
       // #64 状态/模式图标恒右对齐（对齐手机端 #46/#51：名称 flex 占满，[通道标记][配对徽章][插头] 右列；
       // 副行纯地址——状态汉字撤，状态由插头三色承载）
-      '<span class="srv-right">' + (pb ? '<span class="srv-pbadge ' + pb.c + '">' + pb.t + '</span>' : "") + "</span>" +
+      '<span class="srv-right">' + (pb ? '<span class="srv-pbadge ' + pb.c + '">' + pb.t + '</span>' : "") + legacyBadge + "</span>" +
       '<span class="srv-ops">' +
       (isRetryable(ctx) ? '<button class="srv-retry" title="跳过退避等待，立即重连">↻</button>' : "") +
       '<button class="srv-share"' + (ctx && ctx.status === "online" ? "" : " disabled") + ' title="' + (ctx && ctx.status === "online" ? "手机扫一下接入这台电脑（同网直连 · 跨网云桥，自动路由）" : "该源未在线") + '">分享</button>' +
@@ -9626,6 +9642,12 @@ function openFolderPop(frow, x, y) {
       });
     });
   }
+  // #018-W3 组级批量下载（005 artifact-batch 形态对齐）：仅桌面壳（有 saveArtifact）
+  // 显示菜单项——纯浏览器无落盘通道，入口即降级；进度/失败重试走组尾 batch 条
+  if (grp && window.ccDeck && window.ccDeck.saveArtifact) {
+    const n = grp.querySelectorAll(".fkids .afrow:not(.dead)").length;
+    if (n) mk("批量下载（" + n + " 个文件）", () => batchDownloadGroup(dir, grp));
+  }
   mk("复制路径", () => copyText(dir));
   pop.classList.add("open");
   const r = pop.getBoundingClientRect();
@@ -9776,6 +9798,70 @@ function markArtFetchError(path, retry) {
 function clearArtFetchError(path) {
   const frow = [...$("timeline").querySelectorAll(".afrow[data-p]")].find((r) => r.dataset.p === path);
   frow?.closest(".fgroup")?.querySelector(".af-batch-err[data-fetch-err]")?.remove();
+}
+
+// #018-W3 组级批量下载（005 原型 artifact-batch/artifact-batch-state 形态对齐；
+// W2b 探测并发 3 先例复用）：组内非 dead 文件逐个 fetchArtifact → 壳落盘下载目录
+// （saveArtifact，不逐个 openPath——批量动作不轰炸系统应用）。进度实时走组尾
+// batch 条（data-batch 与 W2b 两条错误条共存互斥）；完成 complete 绿 / 失败余留
+// partial 红 +「重试失败 N」只重拉失败文件。组级 dataset.batchBusy 防双击重入
+function artBatchBar(grp) {
+  let bar = grp.querySelector(".af-batch-err[data-batch]");
+  if (!bar) {
+    bar = document.createElement("div");
+    bar.className = "af-batch-err batch";
+    bar.dataset.batch = "1";
+    grp.appendChild(bar);
+  }
+  return bar;
+}
+async function batchDownloadGroup(dir, grp) {
+  if (!grp || grp.dataset.batchBusy) return;
+  const hit = selSession();
+  if (!hit || !(window.ccDeck && window.ccDeck.saveArtifact)) return;
+  const { ctx, s } = hit;
+  const key = dir.toLowerCase();
+  const all = (s.artifacts ?? []).filter((t) => {
+    const d = artDirOf(s, t);
+    return d && d.toLowerCase() === key && t.exists !== false;
+  });
+  if (!all.length) { toast("该目录没有可下载的文件"); return; }
+  grp.dataset.batchBusy = "1";
+  const bar = artBatchBar(grp);
+  const pull = async (list) => {
+    let done = 0, i = 0;
+    const failed = [];
+    const paint = (over) => {
+      bar.className = "af-batch-err batch" + (over ? (failed.length ? " partial" : " complete") : "");
+      bar.innerHTML = "<span>" + (over
+        ? failed.length
+          ? done + " / " + list.length + " 已下载 · " + failed.length + " 个失败"
+          : "全部 " + list.length + " 个文件已下载"
+        : "正在下载 " + done + " / " + list.length + "…") + "</span>";
+      if (over && failed.length) {
+        const b = document.createElement("button");
+        b.className = "af-retry";
+        b.textContent = "重试失败 " + failed.length;
+        b.onclick = () => { void pull(failed); };
+        bar.appendChild(b);
+      }
+    };
+    paint(false);
+    await Promise.all(Array.from({ length: Math.min(3, list.length) }, async () => {
+      while (i < list.length) {
+        const t = list[i++];
+        const name = t.path.split(/[\\/]/).pop() || "输出物";
+        try {
+          const r = await fetchArtifact(ctx, s.session_id, t.path);
+          await window.ccDeck.saveArtifact(name, bytesToB64(artB64ToBytes(r.b64s)));
+          done++;
+          paint(false);
+        } catch { failed.push(t); }
+      }
+    }));
+    paint(true);
+  };
+  try { await pull(all); } finally { grp.dataset.batchBusy = ""; }
 }
 let artViewerUrl = "";
 function closeArtViewer() {
