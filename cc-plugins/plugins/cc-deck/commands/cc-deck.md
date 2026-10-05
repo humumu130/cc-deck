@@ -34,3 +34,15 @@ node "${CLAUDE_PLUGIN_ROOT}/scripts/relay.mjs" --qr
 - 停止用 `/cc-deck-stop`。
 
 注意：若用户 ~/.claude/settings.json 中已存在旧的 bridge-hook.mjs 手动 hooks（relay/scripts/install-hooks.mjs 安装的），提醒用户二者会重复上报，建议手动删除旧条目。
+
+## 向指定会话投递消息
+
+使用插件内置 `dispatch` 通过 relay WS 投递 `COMMAND_MESSAGE`：
+
+```bash
+"${CLAUDE_PLUGIN_ROOT}/bin/dispatch" -c '{"text":"请继续处理"}' <session_id>
+"${CLAUDE_PLUGIN_ROOT}/bin/dispatch" payload.json <session_id>
+```
+
+命令收到 ACK 后打印 `ok=true` 与 `command_id`；失败、断线或 15 秒超时均非零退出。
+每次投递追加审计行到 `$CCR_DATA_DIR/cli-dispatches.ndjson`，未设置时使用 `~/.cc-deck/data`。

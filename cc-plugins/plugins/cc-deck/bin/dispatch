@@ -1,0 +1,192 @@
+#!/bin/bash
+# COMMAND_MESSAGE 投递工具：dispatch <payload.json 文件> <session_id>
+# 或 dispatch -c '{"text":"..."}' <session_id>。payload 是 COMMAND_MESSAGE.payload
+# 中除 session_id 外的字段；本脚本会用第二个参数强制覆盖 payload.session_id。
+# 插件分发环境不保证存在 node_modules/ws，因此下面的系统 node 代码只依赖
+# net/crypto/fs，内置最小 RFC6455 客户端；不降级 HTTP 轮询，避免丢失 COMMAND_ACK。
+set -uo pipefail
+
+usage() {
+  echo "用法: dispatch <payload.json 文件> <session_id>" >&2
+  echo "      dispatch -c '<payload JSON>' <session_id>" >&2
+  exit 1
+}
+
+mode="file"
+payload_source=""
+if [ "${1:-}" = "-c" ]; then
+  [ "$#" -eq 3 ] || usage
+  mode="json"
+  payload_source="$2"
+  sid="$3"
+else
+  [ "$#" -eq 2 ] || usage
+  payload_source="$1"
+  sid="$2"
+fi
+[ -n "$sid" ] || usage
+
+data="${CCR_DATA_DIR:-$HOME/.cc-deck/data}"
+token="${CCR_TOKEN:-$(cat "$data/token" 2>/dev/null || true)}"
+port="${CCR_PORT:-$(python3 -c 'import json,sys;print(json.load(open(sys.argv[1]))["port"])' "$data/bridge.json" 2>/dev/null || true)}"
+: "${port:=8787}"
+dispatch_id="$(python3 - <<'PY'
+import uuid
+print(uuid.uuid4())
+PY
+)"
+command_id="$(python3 - <<'PY'
+import uuid
+print(uuid.uuid4())
+PY
+)"
+log="$data/cli-dispatches.ndjson"
+mkdir -p "$data"
+append_log() {
+  python3 - "$log" "$sid" "$dispatch_id" "$command_id" "$1" "$2" <<'PY'
+import json, sys
+from datetime import datetime, timezone
+path, sid, dispatch_id, command_id, ok, error = sys.argv[1:]
+record = {
+    "ts": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
+    "session_id": sid,
+    "dispatch_id": dispatch_id,
+    "command_id": command_id,
+    "type": "COMMAND_MESSAGE",
+    "ok": ok == "true",
+    "error": error or None,
+}
+with open(path, "a", encoding="utf-8") as f:
+    f.write(json.dumps(record, ensure_ascii=False, separators=(",", ":")) + "\n")
+PY
+}
+fail() {
+  msg="$1"
+  echo "dispatch 失败：$msg；请确认 relay 在线后重试，未静默丢单。" >&2
+  append_log "false" "$msg" || echo "dispatch 审计写入失败：$log" >&2
+  exit 1
+}
+
+[ -n "$token" ] || fail "未找到 relay token（$data/token，relay 未初始化？）"
+if [ "$mode" = "file" ]; then
+  [ -f "$payload_source" ] || fail "payload 文件不存在：$payload_source"
+  payload_file="$payload_source"
+else
+  payload_file="$(mktemp "${TMPDIR:-/tmp}/cc-deck-dispatch-payload.XXXXXX")"
+  printf '%s' "$payload_source" >"$payload_file"
+fi
+command_file="$(mktemp "${TMPDIR:-/tmp}/cc-deck-dispatch-command.XXXXXX")"
+trap 'rm -f "$command_file"; [ "$mode" = "json" ] && rm -f "$payload_file"' EXIT
+if ! python3 - "$payload_file" "$command_file" "$sid" "$command_id" <<'PY'
+import json, sys, time
+payload = json.load(open(sys.argv[1], encoding="utf-8"))
+if not isinstance(payload, dict):
+    raise SystemExit("payload 必须是 JSON 对象")
+payload["session_id"] = sys.argv[3]
+command = {
+    "command_id": sys.argv[4],
+    "type": "COMMAND_MESSAGE",
+    "ts": int(time.time() * 1000),
+    "payload": payload,
+}
+with open(sys.argv[2], "w", encoding="utf-8") as f:
+    json.dump(command, f, ensure_ascii=False, separators=(",", ":"))
+PY
+then
+  fail "payload 不是有效 JSON 对象"
+fi
+
+set +e
+ack="$(node - "$port" "$token" "$command_file" "$command_id" <<'NODE'
+const fs = require("node:fs");
+const net = require("node:net");
+const crypto = require("node:crypto");
+const [portText, token, commandPath, commandId] = process.argv.slice(2);
+const port = Number(portText), command = fs.readFileSync(commandPath);
+const key = crypto.randomBytes(16).toString("base64");
+const expected = crypto.createHash("sha1").update(key + "258EAFA5-E914-47DA-95CA-C5AB0DC85B11").digest("base64");
+const socket = net.createConnection({ host: "127.0.0.1", port });
+let buffer = Buffer.alloc(0), upgraded = false, finished = false;
+const timer = setTimeout(() => finish(12, "15s 超时，未收到 COMMAND_ACK"), 15000);
+socket.setTimeout(15000, () => finish(12, "15s 超时，未收到 COMMAND_ACK"));
+function finish(code, message, ack) {
+  if (finished) return;
+  finished = true; clearTimeout(timer);
+  if (ack) process.stdout.write(JSON.stringify(ack));
+  if (message) process.stderr.write(message + "\n");
+  socket.destroy(); process.exitCode = code;
+}
+function frame(data, opcode = 1) {
+  const body = Buffer.isBuffer(data) ? data : Buffer.from(data), mask = crypto.randomBytes(4);
+  let header;
+  if (body.length < 126) header = Buffer.from([0x80 | opcode, 0x80 | body.length]);
+  else if (body.length < 65536) { header = Buffer.alloc(4); header[0] = 0x80 | opcode; header[1] = 0x80 | 126; header.writeUInt16BE(body.length, 2); }
+  else { header = Buffer.alloc(10); header[0] = 0x80 | opcode; header[1] = 0x80 | 127; header.writeBigUInt64BE(BigInt(body.length), 2); }
+  const masked = Buffer.alloc(body.length);
+  for (let i = 0; i < body.length; i++) masked[i] = body[i] ^ mask[i % 4];
+  return Buffer.concat([header, mask, masked]);
+}
+function consumeFrames() {
+  while (buffer.length >= 2) {
+    const first = buffer[0], second = buffer[1], opcode = first & 0x0f, masked = !!(second & 0x80);
+    let length = second & 0x7f, offset = 2;
+    if (length === 126) { if (buffer.length < 4) return; length = buffer.readUInt16BE(2); offset = 4; }
+    else if (length === 127) { if (buffer.length < 10) return; const n = buffer.readBigUInt64BE(2); if (n > BigInt(Number.MAX_SAFE_INTEGER)) return finish(11, "WS 帧过大"); length = Number(n); offset = 10; }
+    let mask;
+    if (masked) { if (buffer.length < offset + 4) return; mask = buffer.subarray(offset, offset + 4); offset += 4; }
+    if (buffer.length < offset + length) return;
+    const body = Buffer.from(buffer.subarray(offset, offset + length)); buffer = buffer.subarray(offset + length);
+    if (mask) for (let i = 0; i < body.length; i++) body[i] ^= mask[i % 4];
+    if (opcode === 8) return finish(11, "relay 关闭了 WS 连接");
+    if (opcode === 9) { socket.write(frame(body, 10)); continue; }
+    if (opcode !== 1) continue;
+    let ack; try { ack = JSON.parse(body.toString("utf8")); } catch { continue; }
+    if (ack && ack.type === "COMMAND_ACK" && ack.command_id === commandId) {
+      return ack.ok === true ? finish(0, "", ack) : finish(10, String(ack.error || "ACK ok 非 true"), ack);
+    }
+  }
+}
+socket.on("connect", () => {
+  const path = "/ws?token=" + encodeURIComponent(token);
+  socket.write("GET " + path + " HTTP/1.1\r\nHost: 127.0.0.1:" + port + "\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Key: " + key + "\r\nSec-WebSocket-Version: 13\r\n\r\n");
+});
+socket.on("data", (chunk) => {
+  buffer = Buffer.concat([buffer, chunk]);
+  if (!upgraded) {
+    const end = buffer.indexOf("\r\n\r\n"); if (end < 0) return;
+    const header = buffer.subarray(0, end).toString("latin1"); buffer = buffer.subarray(end + 4);
+    const status = header.split("\r\n", 1)[0] || "";
+    const accept = /^Sec-WebSocket-Accept:\s*(.+)$/im.exec(header)?.[1]?.trim();
+    if (!/^HTTP\/1\.1 101\b/.test(status) || accept !== expected) return finish(11, "WS 握手失败（token 或 relay 连接无效）");
+    upgraded = true; socket.write(frame(command));
+  }
+  if (upgraded) consumeFrames();
+});
+socket.on("error", () => finish(11, "无法连接 relay（连接拒绝/网络错误/超时）"));
+socket.on("close", () => { if (!finished) finish(11, "WS 连接意外关闭"); });
+NODE
+)"
+node_status=$?
+set -e
+if [ "$node_status" -ne 0 ]; then
+  ack_error="$(python3 - "$ack" "$token" <<'PY'
+import json, sys
+try:
+    print(str(json.loads(sys.argv[1]).get("error") or "ACK ok 非 true").replace(sys.argv[2], "[redacted]"))
+except Exception:
+    print("WS 连接失败或未收到有效 ACK")
+PY
+)"
+  fail "$ack_error"
+fi
+ack_ok="$(python3 - "$ack" <<'PY'
+import json, sys
+try:
+    print("true" if json.loads(sys.argv[1]).get("ok") is True else "false")
+except Exception:
+    print("false")
+PY
+)"
+[ "$ack_ok" = "true" ] || fail "ACK ok 非 true"
+echo "ok=true command_id=$command_id"
+append_log "true" ""

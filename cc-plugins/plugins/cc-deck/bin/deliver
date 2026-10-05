@@ -2,7 +2,7 @@
 # 交付物原地登记（2026-09-19 意图声明制，#71 起随插件分发）：文件写在本该在的地方，
 # 本脚本只把路径登记到 cc-deck 看板（POST /api/deliver）。用法：deliver <文件路径>
 # （相对路径按当前目录补全）。guard-context 开关开启时自动同步到 ~/.cc-deck/bin/。
-set -euo pipefail
+set -uo pipefail
 f="${1:-}"
 [ -z "$f" ] && { echo "用法: deliver <文件路径>" >&2; exit 1; }
 # 相对路径 → 绝对
@@ -17,7 +17,6 @@ sid="${CC_DECK_SESSION_ID:-${CLAUDE_CODE_SESSION_ID:-${CLAUDE_SESSION_ID:-}}}"
 # 8788 实例；生产无 env 时逐字节同行为
 data="${CCR_DATA_DIR:-$HOME/.cc-deck/data}"
 token="${CCR_TOKEN:-$(cat "$data/token" 2>/dev/null || true)}"
-[ -z "$token" ] && { echo "未找到 relay token（$data/token，relay 未初始化？）" >&2; exit 1; }
 # 端口以 relay 自报为准（bridge.json），缺省回落默认 8787
 port="${CCR_PORT:-$(python3 -c 'import json,sys;print(json.load(open(sys.argv[1]))["port"])' "$data/bridge.json" 2>/dev/null || true)}"
 : "${port:=8787}"
@@ -30,4 +29,65 @@ if sid:
 print(json.dumps(d, ensure_ascii=False))
 PY
 )"
-exec curl -sS -X POST "http://127.0.0.1:${port}/api/deliver?token=${token}" -H 'content-type: application/json' --data-binary "$body"
+
+dispatch_id="$(python3 - <<'PY'
+import uuid
+print(uuid.uuid4())
+PY
+)"
+log="$data/cli-dispatches.ndjson"
+mkdir -p "$data"
+append_log() {
+  python3 - "$log" "$sid" "$dispatch_id" "$1" "$2" "$3" <<'PY'
+import json, sys
+from datetime import datetime, timezone
+path, sid, dispatch_id, command_id, ok, error = sys.argv[1:]
+record = {
+    "ts": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
+    "session_id": sid,
+    "dispatch_id": dispatch_id,
+    "command_id": command_id or None,
+    "type": "DELIVER",
+    "ok": ok == "true",
+    "error": error or None,
+}
+with open(path, "a", encoding="utf-8") as f:
+    f.write(json.dumps(record, ensure_ascii=False, separators=(",", ":")) + "\n")
+PY
+}
+fail() {
+  msg="$1"
+  echo "deliver 失败：$msg；请确认 relay 在线后重试，未静默丢单。" >&2
+  append_log "" "false" "$msg" || echo "deliver 审计写入失败：$log" >&2
+  exit 1
+}
+[ -n "$token" ] || fail "未找到 relay token（$data/token，relay 未初始化？）"
+
+tmp="$(mktemp "${TMPDIR:-/tmp}/cc-deck-deliver.XXXXXX")"
+errfile="${tmp}.err"
+trap 'rm -f "$tmp" "$errfile"' EXIT
+if ! curl -sS --max-time 15 -X POST "http://127.0.0.1:${port}/api/deliver?token=${token}" \
+  -H 'content-type: application/json' --data-binary "$body" -o "$tmp" -w '%{http_code}' >"${tmp}.status" 2>"$errfile"; then
+  rm -f "${tmp}.status"
+  fail "无法连接 relay（连接拒绝/网络错误/超时）"
+fi
+status="$(cat "${tmp}.status")"
+rm -f "${tmp}.status"
+[ "$status" = "200" ] || fail "relay 返回 HTTP $status"
+ack="$(python3 - "$tmp" "$token" <<'PY'
+import json, sys
+token = sys.argv[2]
+try:
+    value = json.load(open(sys.argv[1], encoding="utf-8"))
+except Exception:
+    print("bad response")
+    raise SystemExit
+if value.get("ok") is not True:
+    print(str(value.get("error") or "ACK ok 非 true").replace(token, "[redacted]"))
+    raise SystemExit
+print("ok")
+PY
+)"
+[ "$ack" = "ok" ] || fail "relay ACK body 无效：$ack"
+cat "$tmp"
+append_log "" "true" "" || echo "deliver 审计写入失败：$log" >&2

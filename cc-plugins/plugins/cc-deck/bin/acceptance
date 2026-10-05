@@ -59,13 +59,18 @@ aid = secrets.token_hex(16)
 # #28 per-sheet 密钥：与 KV 上 acceptance-<id>.key 同值落本地 json（sheet_key）——
 # relay 随 SNAPSHOT 汇总下发已配对端（expo 云卡拼 #key）；表单页 DATA 不嵌（公开读面）
 skey = secrets.token_hex(16)
+# 会话身份沿用 deliver 的注入优先级：Claude Code 子进程通常有
+# CLAUDE_CODE_SESSION_ID；hook/显式转发场景用 CC_DECK_SESSION_ID；手动终端为空。
+sid = (os.environ.get("CC_DECK_SESSION_ID") or os.environ.get("CLAUDE_CODE_SESSION_ID") or
+       os.environ.get("CLAUDE_SESSION_ID") or "").strip()
 doc = {"id": aid, "title": title, "created_at": int(time.time()),
        # cwd=出单会话归因键（#138）：用户提交后 relay 按它把「3✓ 1✗ 2未测」摘要
        # 回流成该会话的 system 行；旧单没这字段=回流静默跳过
        "cwd": os.getcwd(),
        "sheet_key": skey,
        "rows": rows, **({"preface": preface} if preface else {}),
-       **({"notes": notes} if notes else {})}
+       **({"notes": notes} if notes else {}),
+       **({"session_id": sid} if sid else {})}
 path = os.path.join(acc_dir, f"{aid}.json")
 with open(path, "w", encoding="utf-8") as f:
     json.dump(doc, f, ensure_ascii=False, indent=1)
@@ -95,10 +100,11 @@ print(f"   填写链接(家庭网): http://{ip}:{port}/acceptance/{aid}")
 
 # #175 云通道：从本地 relay 拉云版表单页（提交端点烙成 CF /view/acceptance-<id>.results.json）
 # 上传 KV——公司网浏览器经 https://cc.humumu.online/view/acceptance-<id>.html#<key> 打开提交，
-# 家庭 relay 每 60s 拉回结果。上传失败不阻塞出单（LAN 链接仍可用）。
+# 家庭 relay 每 60s 拉回结果。云端上传失败仍保留 LAN 链接，但命令非零提醒补投。
 # #28 顺序：密钥先传成功才传页面/吐云链接（key 缺失的云页面=部署后谁都提交不了）。
 html_path = f"/tmp/acceptance-{aid}.html"
 key_path = f"/tmp/acceptance-{aid}.key"
+cloud_failed = False
 # 上传脚本用 m1 worktree 副本（#28：回读校验改 CF API 直读，不再依赖公网 /dl/——
 # /dl/ 已拒 .key 键；旧 checkout 副本无此改造且该目录属 peer 地盘不动）
 KVPUT = "/Users/xdd/dev/cc-deck-m1/scripts/kv-put-verified.sh"
@@ -111,27 +117,49 @@ try:
     kv_key = subprocess.run([KVPUT, key_path, f"acceptance-{aid}.key"],
                             capture_output=True, text=True, errors="replace")
     if kv_key.returncode != 0:
-        print(f"   ⚠️ 密钥上传失败，云通道未发布（家庭网链接仍可用）：{(kv_key.stdout + kv_key.stderr).strip()[:200]}")
+        cloud_failed = True
+        print(f"   ❌ 密钥上传失败，云通道未发布（家庭网链接仍可用，请修复网络后重试）：{(kv_key.stdout + kv_key.stderr).strip()[:200]}")
     else:
-        subprocess.run(["curl", "-sS", "--max-time", "10", "-o", html_path,
-                        f"http://127.0.0.1:{port}/acceptance-cloud/{aid}"], check=True)
+        try:
+            page = subprocess.run(["curl", "-sS", "--max-time", "10", "-o", html_path,
+                                   "-w", "%{http_code}",
+                                   f"http://127.0.0.1:{port}/acceptance-cloud/{aid}"],
+                                  check=True, capture_output=True, text=True, errors="replace")
+            status = page.stdout.strip()
+            if status != "200":
+                raise RuntimeError(f"HTTP {status}")
+            raw_page = open(html_path, encoding="utf-8").read().strip()
+            if not raw_page:
+                raise RuntimeError("响应体为空")
+            try:
+                ack = json.loads(raw_page)
+            except json.JSONDecodeError:
+                ack = None
+            if isinstance(ack, dict) and ack.get("ok") is not True:
+                raise RuntimeError(f"ACK ok 非 true：{ack.get('error') or '未知错误'}")
+        except Exception as e:
+            cloud_failed = True
+            print(f"   ❌ 云端表单页获取失败（{e}，请确认 relay 在线后重试；家庭网链接仍可用）")
         # errors="replace"：脚本输出偶带非 UTF-8 字节（代理报错混入），text=True 严格解码
-        # 会把真实失败原因吞成 UnicodeDecodeError；上传本身走抖动链路，失败隔 30s 重试一次
+        # 会把真实失败原因吞成 UnicodeDecodeError；上传失败只做一次快速重试，最终非零退出
         kv = None
-        for attempt in (1, 2):
-            kv = subprocess.run([KVPUT, html_path, f"acceptance-{aid}.html"],
-                                capture_output=True, text=True, errors="replace")
-            if kv.returncode == 0:
-                break
-            if attempt == 1:
-                print("    云端上传失败（网络抖动），30s 后重试一次…")
-                time.sleep(30)
-        if kv.returncode == 0:
-            print(f"   填写链接(公司网): https://cc.humumu.online/view/acceptance-{aid}.html#{skey}")
-        else:
-            print(f"   ⚠️ 云端上传失败（家庭网链接仍可用）：{(kv.stdout + kv.stderr).strip()[:200]}")
+        if not cloud_failed:
+            for attempt in (1, 2):
+                kv = subprocess.run([KVPUT, html_path, f"acceptance-{aid}.html"],
+                                    capture_output=True, text=True, errors="replace")
+                if kv.returncode == 0:
+                    break
+                if attempt == 1:
+                    print("    云端上传失败（网络抖动），请确认网络后自动重试一次…")
+            if kv and kv.returncode == 0:
+                print(f"   填写链接(公司网): https://cc.humumu.online/view/acceptance-{aid}.html#{skey}")
+            else:
+                cloud_failed = True
+                detail = (kv.stdout + kv.stderr).strip()[:200] if kv else "未执行上传"
+                print(f"   ❌ 云端上传失败（家庭网链接仍可用，请修复网络后重试）：{detail}")
 except Exception as e:
-    print(f"   ⚠️ 云端发布跳过（家庭网链接仍可用）：{e}")
+    cloud_failed = True
+    print(f"   ❌ 云端发布失败（家庭网链接仍可用，请确认 relay 在线后重试）：{e}")
 finally:
     # #29（D-P2）：临时件清理（密钥必删；html 无敏感性一并收走，链接已打进输出）
     for p in (key_path, html_path):
@@ -139,3 +167,6 @@ finally:
             os.remove(p)
         except OSError:
             pass
+
+if cloud_failed:
+    sys.exit(1)
