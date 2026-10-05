@@ -359,14 +359,20 @@ async function main(): Promise<void> {
     const last = audit[audit.length - 1]!;
     check(audit.length === auditBefore + 1 && last.ok === false && last.attempt === 2 && (last.error ?? "").includes("超时"),
       "⑦ 审计 attempt:2、error 含超时（TIMEOUT_CLASS 可判）");
-    // 三 ID 全链路 phase 日志：send×2/ack×2/final，全拍同 dispatch_id/command_id
+    // 三 ID 全链路 phase 日志：send×2/ack×2/final+queued（C3 失败自动转存尾拍）
     const ph = phaseLines(r.stderr, "dispatch");
-    check(ph.length === 5 && ph.filter((p) => p.phase === "send").length === 2 && ph.filter((p) => p.phase === "ack").length === 2 && ph[4]!.phase === "final",
-      "⑦ phase 日志五拍齐（send×2/ack×2/final）");
+    check(ph.length === 6 && ph.filter((p) => p.phase === "send").length === 2 && ph.filter((p) => p.phase === "ack").length === 2 && ph[4]!.phase === "final" && ph[5]!.phase === "queued",
+      "⑦ phase 日志六拍齐（send×2/ack×2/final+queued，C3 转存尾拍）");
     check(new Set(ph.map((p) => p.dispatch_id)).size === 1 && ph.every((p) => p.command_id === last.command_id),
       "⑦ 全拍同 dispatch_id/command_id（grep '" + '"dispatch_id"' + "' 单键可对账）");
-    check(ph.map((p) => p.attempt).join(",") === "1,1,2,2,2" && ph[4]!.ok === false && (ph[3]!.error ?? "").includes("超时"),
+    check(ph.map((p) => p.attempt).join(",") === "1,1,2,2,2,2" && ph[4]!.ok === false && (ph[3]!.error ?? "").includes("超时"),
       "⑦ attempt 随拍推进、ack 超时错误可判定、final ok=false");
+    // C3：超时转存后队列凭据行落沙箱（queued 含 envelope 同 command_id），台账 error 带 deferred 前缀
+    check(last.error !== null && String(last.error).startsWith("deferred") && String(last.error).includes("超时"),
+      "⑦ 台账 error 带 deferred: 前缀（挂起第四态判据，错误明细保留）");
+    const qrow = JSON.parse(fs.readFileSync(path.join(dataDir, "cli-deferred.ndjson"), "utf-8").trim().split("\n").pop()!) as Record<string, unknown>;
+    check(qrow.type === "queued" && qrow.command_id === last.command_id && qrow.attempts_used === 2,
+      "⑦ 队列凭据行 queued（同 command_id、attempts_used=2 忠实试错史）");
     await close(wsServer);
   }
 
@@ -417,23 +423,25 @@ async function main(): Promise<void> {
     await close(httpServer);
   }
 
-  // ═══════════ ⑪ dispatch-report：真账交叉对账（本轮真实 CLI 落账 → 四类判定） ═══════════
+  // ═══════════ ⑪ dispatch-report：真账交叉对账（本轮真实 CLI 落账 → C3 五态判定） ═══════════
   {
     const r = await runCli("bash", [REPORT, "--json", AUDIT_LOG], childEnv);
-    check(r.status === 1, "⑪ 对账 verdict=fail（orphan/timeout 在册）→ exit 1");
+    check(r.status === 1, "⑪ 对账 verdict=fail（② 拒收 orphan 在册 blocking）→ exit 1");
     const j = JSON.parse(r.stdout) as {
       verdict: string;
-      counts: { success_commands: number; timeout: number; orphan: number; deliver_rows: number; bad_rows: number };
-      items: { timeout: { dispatch_ids: string[] }[] };
+      counts: { success_commands: number; timeout: number; orphan: number; deferred: number; queue_pending: number; discarded: number; deliver_rows: number; bad_rows: number };
+      items: { deferred: { dispatch_ids: string[]; queue_state: string; error: string }[] };
     };
     check(j.verdict === "fail", "⑪ verdict fail");
     check(j.counts.success_commands === 2, "⑪ 成功 2（① attempt:1 与 ④ attempt:2 各一）");
-    check(j.counts.timeout === 2, "⑪ timeout 2（③ 拒连重试用尽 + ⑦ 超时重试用尽）");
-    check(j.counts.orphan === 1, "⑪ orphan 1（② 明确拒收 attempt:1 不属超时类）");
+    check(j.counts.timeout === 0 && j.counts.orphan === 1,
+      "⑪ timeout 0（③ 拒连/⑦ 超时 C3 转存归 deferred，不再 timeout）+ orphan 1（② 明确拒收不转存）");
+    check(j.counts.deferred === 2, "⑪ deferred 2（连接性失败转存挂起，第四态不进 blocking）");
+    check(j.counts.queue_pending === 0 && j.counts.discarded === 0, "⑪ 队列交叉：转存单台账行在册非 queue-only，无放弃终态");
     check(j.counts.deliver_rows === 6, `⑪ DELIVER 行 6（got ${j.counts.deliver_rows}；counts=${JSON.stringify(j.counts)}）`);
     check(j.counts.bad_rows === 0, "⑪ 坏行 0（⑩ 空归因 DELIVER 行是已警告的合法账，不判坏行）");
-    check(j.items.timeout.every((it) => Array.isArray(it.dispatch_ids) && it.dispatch_ids.length >= 1),
-      "⑪ timeout 项携带 dispatch_ids（PM 对账键贯穿台账）");
+    check(j.items.deferred.length === 2 && j.items.deferred.every((it) => it.queue_state === "queued" && Array.isArray(it.dispatch_ids) && it.dispatch_ids.length >= 1 && it.error.includes("deferred")),
+      "⑪ deferred 项队列态互证 queued、dispatch_ids 贯穿、error 带 deferred 前缀");
   }
 
   console.log(`C1 cli three-state tests ${tests}/${tests} passed (sandbox=${sandbox})`);

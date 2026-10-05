@@ -37,16 +37,17 @@ const row = (over: RowOver = {}): string => JSON.stringify({
 interface Counts {
   rows: number; valid_rows: number; deliver_rows: number; bad_rows: number;
   ack_misread_rows: number; ts_regressions: number; timeout: number; orphan: number;
+  deferred: number; discarded: number; queue_pending: number; queue_bad_lines: number;
   duplicate_commands: number; duplicate_dispatches: number; success_commands: number;
 }
 interface Item {
   kind?: string; command_id?: string; dispatch_id?: string; lines?: number[]; line?: number;
   reason?: string; command_ids?: string[]; dispatch_ids?: string[]; session_id?: string;
-  error?: string; attempt?: number; note?: string;
+  error?: string; attempt?: number; note?: string; queue_state?: string;
 }
-interface ReportJson { counts: Counts; items: { timeout: Item[]; orphan: Item[]; duplicate: Item[]; seqgap: Item[] }; verdict: string }
-interface PhaseCounts { rows: number; bad_lines: number; broken: number; failed: number; complete: number; success_missing_ledger_row: number; ledger_without_phase: number; phase_file_exists: boolean }
-interface PhaseJson { counts: PhaseCounts; items: { broken: { dispatch_id: string; missing: string[]; tool: string; session_id: string; command_id: string }[]; failed: { dispatch_id: string; error: string; tool: string }[]; success_missing_ledger_row: string[] }; verdict: string }
+interface ReportJson { counts: Counts; items: { timeout: Item[]; orphan: Item[]; deferred: Item[]; queue_pending: string[]; duplicate: Item[]; seqgap: Item[] }; verdict: string }
+interface PhaseCounts { rows: number; bad_lines: number; broken: number; failed: number; complete: number; success_missing_ledger_row: number; ledger_without_phase: number; pending_chains: number; phase_file_exists: boolean }
+interface PhaseJson { counts: PhaseCounts; items: { broken: { dispatch_id: string; missing: string[]; tool: string; session_id: string; command_id: string }[]; failed: { dispatch_id: string; error: string; tool: string }[]; success_missing_ledger_row: string[]; pending_chains: { dispatch_id: string; command_id: string }[] }; verdict: string }
 interface RunResult { status: number | null; stdout: string; stderr: string }
 
 const writeLedger = (name: string, lines: string[]): string => {
@@ -382,7 +383,7 @@ async function main(): Promise<void> {
     fs.rmSync(sbC, { recursive: true, force: true });
   }
 
-  // ═══════ T17 --phase 真链路：无网真跑 dispatch → phase 账五拍 → 过程对账 warn ═══════
+  // ═══════ T17 --phase 真链路：无网真跑 dispatch → phase 账六拍（C3 失败自动转存尾拍 queued）→ 过程对账 warn ═══════
   {
     const DISPATCH = path.join(ROOT, "cc-plugins/plugins/cc-deck/bin/dispatch");
     const sb = fs.mkdtempSync(path.join(os.tmpdir(), "cc-c2-real-"));
@@ -396,17 +397,29 @@ async function main(): Promise<void> {
     });
     check(dr.status === 1, `T17 无网 dispatch 非零退出（got ${dr.status}）`);
     const phaseRows = fs.readFileSync(path.join(sb, "cli-phase.ndjson"), "utf-8").trim().split("\n").map((l) => JSON.parse(l) as Record<string, unknown>);
-    check(phaseRows.length === 5, `T17 phase 账五拍（send/ack×2+final，got ${phaseRows.length}）`);
-    check(phaseRows.map((o) => o.phase).join(",") === "send,ack,send,ack,final", "T17 phase 序列 send,ack,send,ack,final");
-    check(phaseRows.map((o) => o.attempt).join(",") === "1,1,2,2,2", "T17 attempt 序列 1,1,2,2,2（短重试同拍链）");
+    // C3：失败自动转存后终局多一拍 queued（send,ack,send,ack,final,queued 六拍）
+    check(phaseRows.length === 6, `T17 phase 账六拍（send/ack×2+final+queued，got ${phaseRows.length}）`);
+    check(phaseRows.map((o) => o.phase).join(",") === "send,ack,send,ack,final,queued", "T17 phase 序列 send,ack,send,ack,final,queued（C3 转存尾拍）");
+    check(phaseRows.map((o) => o.attempt).join(",") === "1,1,2,2,2,2", "T17 attempt 序列 1,1,2,2,2,2（queued 承终局 attempt）");
     check(new Set(phaseRows.map((o) => o.dispatch_id)).size === 1 && new Set(phaseRows.map((o) => o.command_id)).size === 1,
-      "T17 五拍同 dispatch_id 同 command_id（三 ID 贯穿）");
+      "T17 六拍同 dispatch_id 同 command_id（三 ID 贯穿）");
     check(phaseRows[4].ok === false && String(phaseRows[4].error).includes("无法连接 relay"), "T17 final ok:false 可判定错误");
+    check(phaseRows[5].phase === "queued" && phaseRows[5].ok === null && phaseRows[5].error === "deferred", "T17 queued 尾拍 ok:null error=deferred（挂起证据）");
+    // C3 联动：无网真跑同时落队列凭据行（queued 含 envelope 全文）
+    const qrow = JSON.parse(fs.readFileSync(path.join(sb, "cli-deferred.ndjson"), "utf-8").trim().split("\n")[0]) as Record<string, unknown>;
+    check(qrow.type === "queued" && qrow.source === "auto" && qrow.dispatch_id === phaseRows[0].dispatch_id && qrow.command_id === phaseRows[0].command_id,
+      "T17 队列凭据行 queued 与 phase 链三 ID 一致（source=auto）");
     const pr = run(null, { json: true, phase: true }, path.join(sb, "cli-dispatches.ndjson"));
     const pj = phaseJsonOf(pr);
     check(pr.status === 0 && pj.verdict === "warn" && pj.counts.broken === 0 && pj.counts.failed === 1,
-      "T17 --phase 过程对账 warn exit 0（三拍齐但失败；终态处置归台账面）");
+      "T17 --phase 过程对账 warn exit 0（三拍齐但失败；终态处置归台账面；queued 拍不断拍）");
     check(pj.counts.success_missing_ledger_row === 0, "T17 台账有终态行，无缺行");
+    // C3 主对账联动：台账 error 带 deferred: 前缀 → 排除 orphan/timeout 归 deferred，warn 不 blocking
+    const mr = run(null, { json: true }, path.join(sb, "cli-dispatches.ndjson"));
+    const mj = jsonOf(mr);
+    check(mr.status === 0 && mj.verdict === "warn", "T17 主对账 deferred 单 warn exit 0（挂起非 blocking）");
+    check(mj.counts.deferred === 1 && mj.counts.orphan === 0 && mj.counts.timeout === 0,
+      "T17 台账 deferred 行归第四态（不进 orphan/timeout）");
     fs.rmSync(sb, { recursive: true, force: true });
   }
 
