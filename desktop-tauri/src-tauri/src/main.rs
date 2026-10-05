@@ -378,8 +378,18 @@ static RELAY_WANTED: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBo
 // 逐字节一致，提交面保持生产缺省（M2 只在构建命令行注入）
 const M2_BUILD: bool = option_env!("CCDECK_BUILD_M2").is_some();
 
+const PRODUCTION_RELAY_PORT: u16 = 8787;
+const M2_RELAY_PORT: u16 = 8788;
+
+fn default_relay_port(m2: bool) -> u16 {
+    if m2 { M2_RELAY_PORT } else { PRODUCTION_RELAY_PORT }
+}
+
 fn relay_port() -> u16 {
-    std::env::var("CCR_DESKTOP_RELAY_PORT").ok().and_then(|v| v.parse().ok()).unwrap_or(if M2_BUILD { 8788 } else { 8787 })
+    std::env::var("CCR_DESKTOP_RELAY_PORT")
+        .ok()
+        .and_then(|v| v.parse().ok())
+        .unwrap_or(default_relay_port(M2_BUILD))
 }
 
 // cc-deck 根目录：生产 ~/.cc-deck，M2 变体 ~/.cc-deck-m2（数据/内嵌日志全量隔离）
@@ -389,6 +399,221 @@ fn deck_root(home: &str) -> std::path::PathBuf {
 
 fn port_listening(port: u16) -> bool {
     std::net::TcpStream::connect(("127.0.0.1", port)).is_ok()
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum ResourceState {
+    Present,
+    Missing,
+    InvalidPath,
+}
+
+#[derive(Debug, Clone)]
+struct EmbeddedRelayResources {
+    script: std::path::PathBuf,
+    inject_cs: std::path::PathBuf,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct ResourceProbe {
+    script: ResourceState,
+    inject_cs: ResourceState,
+}
+
+fn absolute_resource_path(path: std::path::PathBuf) -> std::path::PathBuf {
+    let canonical = std::fs::canonicalize(&path).unwrap_or(path);
+    let mut value = canonical.to_string_lossy().into_owned();
+    if let Some(stripped) = value.strip_prefix("\\\\?\\") {
+        value = stripped.to_string();
+    }
+    std::path::PathBuf::from(value)
+}
+
+fn embedded_relay_resources(resource_dir: &std::path::Path) -> EmbeddedRelayResources {
+    EmbeddedRelayResources {
+        script: absolute_resource_path(resource_dir.join("resources").join("relay.mjs")),
+        inject_cs: absolute_resource_path(resource_dir.join("resources").join("bin").join("inject.cs")),
+    }
+}
+
+fn probe_resource_path(path: &std::path::Path) -> ResourceState {
+    if !path.is_absolute() {
+        return ResourceState::InvalidPath;
+    }
+    if !path.exists() {
+        return ResourceState::Missing;
+    }
+    if path.is_file() {
+        ResourceState::Present
+    } else {
+        ResourceState::InvalidPath
+    }
+}
+
+fn probe_embedded_relay_resources(resource_dir: &std::path::Path) -> ResourceProbe {
+    let resources = embedded_relay_resources(resource_dir);
+    ResourceProbe {
+        script: probe_resource_path(&resources.script),
+        inject_cs: probe_resource_path(&resources.inject_cs),
+    }
+}
+
+fn resource_error(label: &str, path: &std::path::Path, state: ResourceState) -> String {
+    match state {
+        ResourceState::Missing => format!("内置 {label} 缺失：{}", path.display()),
+        ResourceState::InvalidPath => format!("内置 {label} 路径无效：{}", path.display()),
+        ResourceState::Present => String::new(),
+    }
+}
+
+#[allow(dead_code)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum RelayPortOwner {
+    Available,
+    EmbeddedRelay,
+    ExternalRelay,
+    ExternalProcess,
+}
+
+#[allow(dead_code)]
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct RelayPortProbe {
+    port: u16,
+    owner: RelayPortOwner,
+    process_name: Option<String>,
+}
+
+#[allow(dead_code)]
+impl RelayPortProbe {
+    fn conclusion(&self) -> String {
+        match self.owner {
+            RelayPortOwner::Available => format!("端口 {} 空闲", self.port),
+            RelayPortOwner::EmbeddedRelay => format!("端口 {} 由自家 relay 占用", self.port),
+            RelayPortOwner::ExternalRelay => format!("端口 {} 由外部 relay 占用", self.port),
+            RelayPortOwner::ExternalProcess => format!(
+                "端口 {} 由外来进程占用（{}）",
+                self.port,
+                self.process_name.as_deref().unwrap_or("进程名未知"),
+            ),
+        }
+    }
+}
+
+fn classify_relay_port(listening: bool, embedded: bool, relay_handshake: bool) -> RelayPortOwner {
+    if !listening {
+        RelayPortOwner::Available
+    } else if embedded {
+        RelayPortOwner::EmbeddedRelay
+    } else if relay_handshake {
+        RelayPortOwner::ExternalRelay
+    } else {
+        RelayPortOwner::ExternalProcess
+    }
+}
+
+#[allow(dead_code)]
+fn relay_handshake(port: u16) -> bool {
+    use std::io::{Read, Write};
+    use std::net::{SocketAddr, TcpStream};
+    use std::time::Duration;
+
+    let address = SocketAddr::from(([127, 0, 0, 1], port));
+    let Ok(mut stream) = TcpStream::connect_timeout(&address, Duration::from_millis(250)) else {
+        return false;
+    };
+    let _ = stream.set_read_timeout(Some(Duration::from_millis(250)));
+    let _ = stream.set_write_timeout(Some(Duration::from_millis(250)));
+    if stream
+        .write_all(b"GET /local-info HTTP/1.1\r\nHost: 127.0.0.1\r\nConnection: close\r\n\r\n")
+        .is_err()
+    {
+        return false;
+    }
+    let mut response = Vec::new();
+    if stream.read_to_end(&mut response).is_err() {
+        return false;
+    }
+    let response_text = String::from_utf8_lossy(&response);
+    let body = response_text
+        .split_once("\r\n\r\n")
+        .map(|(_, body)| body)
+        .unwrap_or("");
+    serde_json::from_str::<Value>(body)
+        .ok()
+        .and_then(|value| value.get("ok").and_then(Value::as_bool))
+        .unwrap_or(false)
+}
+
+#[cfg(unix)]
+#[allow(dead_code)]
+fn process_name_for_port(port: u16) -> Option<String> {
+    let output = std::process::Command::new("lsof")
+        .args(["-nP", "-a", "-iTCP", &port.to_string(), "-sTCP:LISTEN", "-Fpc"])
+        .output()
+        .ok()?;
+    if !output.status.success() {
+        return None;
+    }
+    String::from_utf8_lossy(&output.stdout)
+        .lines()
+        .find_map(|line| line.strip_prefix('c').filter(|name| !name.is_empty()).map(str::to_owned))
+}
+
+#[cfg(not(unix))]
+#[allow(dead_code)]
+fn process_name_for_port(_port: u16) -> Option<String> {
+    None
+}
+
+#[allow(dead_code)]
+fn probe_relay_port(port: u16) -> RelayPortProbe {
+    let listening = port_listening(port);
+    let embedded = EMBEDDED_RELAY.lock().map(|relay| relay.is_some()).unwrap_or(false);
+    let handshake = listening && !embedded && relay_handshake(port);
+    let process_name = if listening && !embedded && !handshake {
+        process_name_for_port(port)
+    } else {
+        None
+    };
+    RelayPortProbe {
+        port,
+        owner: classify_relay_port(listening, embedded, handshake),
+        process_name,
+    }
+}
+
+#[allow(dead_code)]
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct RelayDevContract {
+    name: &'static str,
+    default_port: u16,
+    port_env: &'static str,
+    data_dir_env: &'static str,
+}
+
+#[allow(dead_code)]
+fn relay_dev_contracts() -> [RelayDevContract; 2] {
+    [
+        RelayDevContract { name: "production", default_port: PRODUCTION_RELAY_PORT, port_env: "CCR_PORT", data_dir_env: "CCR_DATA_DIR" },
+        RelayDevContract { name: "M2", default_port: M2_RELAY_PORT, port_env: "CCR_PORT", data_dir_env: "CCR_DATA_DIR" },
+    ]
+}
+
+fn relay_spawn_env(port: u16, data_dir: &std::path::Path, inject_cs: &std::path::Path, parent_pid: u32) -> Vec<(String, String)> {
+    vec![
+        ("CCR_PORT".into(), port.to_string()),
+        ("CCR_DATA_DIR".into(), data_dir.to_string_lossy().into_owned()),
+        ("CCR_INJECT_CS".into(), inject_cs.to_string_lossy().into_owned()),
+        ("CCR_NOHOOK_IDLE_MS".into(), "60000".into()),
+        ("CCR_PARENT_PID".into(), parent_pid.to_string()),
+    ]
+}
+
+fn apply_relay_spawn_env(cmd: &mut std::process::Command, envs: &[(String, String)]) {
+    cmd.env_remove("NODE_OPTIONS");
+    for (key, value) in envs {
+        cmd.env(key, value);
+    }
 }
 
 // node 探测只做 PATH 查找（不执行 node——Windows 商店的 WindowsApps 假别名 stub
@@ -467,19 +692,16 @@ fn spawn_embedded_relay(app: &tauri::AppHandle) -> Result<(), String> {
     // resource_dir 可能给盘符相对路径（"D:..."），CreateProcess 传参会被 node 解析成
     // 纯盘符 EISDIR——canonicalize 成 \?\ 绝对路径，一劳永逸
     // canonicalize 后剥掉 \?\ verbatim 前缀：node 的 realpathSync 不认它（剥成盘符 EISDIR）
-    let abs = |p: std::path::PathBuf| {
-        let c = std::fs::canonicalize(&p).unwrap_or(p);
-        let mut s = c.to_string_lossy().into_owned();
-        if let Some(t) = s.strip_prefix("\\\\?\\") {
-            s = t.to_string();
-        }
-        std::path::PathBuf::from(s)
-    };
-    let script = abs(res.join("resources").join("relay.mjs"));
-    let inject_cs = abs(res.join("resources").join("bin").join("inject.cs"));
+    let resources = embedded_relay_resources(&res);
+    let resource_probe = probe_embedded_relay_resources(&res);
+    let script = resources.script;
+    let inject_cs = resources.inject_cs;
     println!("[embedded-relay] script={}", script.display());
-    if !script.exists() {
-        return Err("内置 relay.mjs 缺失（安装包损坏？重装试试）".into());
+    if resource_probe.script != ResourceState::Present {
+        return Err(resource_error("relay.mjs", &script, resource_probe.script));
+    }
+    if resource_probe.inject_cs != ResourceState::Present {
+        return Err(resource_error("inject.cs", &inject_cs, resource_probe.inject_cs));
     }
     let home = std::env::var("USERPROFILE").or_else(|_| std::env::var("HOME")).map_err(|_| "无法定位用户目录".to_string())?;
     let data_dir = deck_root(&home).join("data");
@@ -506,13 +728,9 @@ fn spawn_embedded_relay(app: &tauri::AppHandle) -> Result<(), String> {
         use std::os::windows::process::CommandExt;
         let out = std::fs::File::create(log)?;
         let mut cmd = std::process::Command::new(node);
-        cmd.arg(script)
-            .env("CCR_PORT", port.to_string())
-            .env("CCR_DATA_DIR", data_dir)
-            .env("CCR_INJECT_CS", inject_cs)
-            .env("CCR_NOHOOK_IDLE_MS", "60000")
-            .env("CCR_PARENT_PID", std::process::id().to_string())
-            .env_remove("NODE_OPTIONS");
+        let envs = relay_spawn_env(port, data_dir, inject_cs, std::process::id());
+        cmd.arg(script);
+        apply_relay_spawn_env(&mut cmd, &envs);
         for (k, v) in extra_env {
             cmd.env(k, v);
         }
@@ -525,13 +743,9 @@ fn spawn_embedded_relay(app: &tauri::AppHandle) -> Result<(), String> {
     fn spawn_relay(node: &std::path::Path, script: &std::path::Path, port: u16, data_dir: &std::path::Path, inject_cs: &std::path::Path, log: &std::path::Path, extra_env: &[(String, String)]) -> std::io::Result<std::process::Child> {
         let out = std::fs::File::create(log)?;
         let mut cmd = std::process::Command::new(node);
-        cmd.arg(script)
-            .env("CCR_PORT", port.to_string())
-            .env("CCR_DATA_DIR", data_dir)
-            .env("CCR_INJECT_CS", inject_cs)
-            .env("CCR_NOHOOK_IDLE_MS", "60000")
-            .env("CCR_PARENT_PID", std::process::id().to_string())
-            .env_remove("NODE_OPTIONS");
+        let envs = relay_spawn_env(port, data_dir, inject_cs, std::process::id());
+        cmd.arg(script);
+        apply_relay_spawn_env(&mut cmd, &envs);
         for (k, v) in extra_env {
             cmd.env(k, v);
         }
@@ -989,4 +1203,112 @@ fn main() {
                 let _ = app_handle;
             }
         });
+}
+
+#[cfg(test)]
+mod t1a_tests {
+    use super::*;
+    use std::path::Path;
+
+    #[test]
+    fn t1a_probe_report() {
+        let mut failures = 0;
+        let mut check = |label: &str, passed: bool| {
+            if passed {
+                println!("t1a {label}: ok");
+            } else {
+                failures += 1;
+                println!("t1a {label}: fail");
+            }
+        };
+
+        let temp_root = std::env::temp_dir().join(format!(
+            "cc-deck-t1a-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .expect("system clock before unix epoch")
+                .as_nanos()
+        ));
+        let resource_root = temp_root.join("bundle");
+        std::fs::create_dir_all(resource_root.join("resources/bin")).expect("create probe resources");
+        std::fs::write(resource_root.join("resources/relay.mjs"), b"// probe").expect("write relay fixture");
+        std::fs::write(resource_root.join("resources/bin/inject.cs"), b"// probe").expect("write inject fixture");
+
+        let present = probe_embedded_relay_resources(&resource_root);
+        check(
+            "resource present",
+            present.script == ResourceState::Present && present.inject_cs == ResourceState::Present,
+        );
+
+        std::fs::remove_file(resource_root.join("resources/relay.mjs")).expect("remove relay fixture");
+        let missing = probe_embedded_relay_resources(&resource_root);
+        check("resource missing", missing.script == ResourceState::Missing);
+        check(
+            "resource invalid path",
+            probe_resource_path(Path::new("relative/resources/relay.mjs")) == ResourceState::InvalidPath,
+        );
+
+        let free_probe = probe_relay_port(0);
+        check(
+            "port available",
+            free_probe.owner == RelayPortOwner::Available
+                && free_probe.conclusion() == "端口 0 空闲",
+        );
+        check(
+            "port self relay",
+            classify_relay_port(true, true, false) == RelayPortOwner::EmbeddedRelay,
+        );
+        check(
+            "port external relay handshake",
+            classify_relay_port(true, false, true) == RelayPortOwner::ExternalRelay,
+        );
+        check(
+            "port external process",
+            classify_relay_port(true, false, false) == RelayPortOwner::ExternalProcess,
+        );
+
+        let contracts = relay_dev_contracts();
+        let data_dir = temp_root.join("data");
+        let inject_cs = temp_root.join("inject.cs");
+        let production_env = relay_spawn_env(contracts[0].default_port, &data_dir, &inject_cs, 42);
+        let m2_env = relay_spawn_env(contracts[1].default_port, &data_dir, &inject_cs, 42);
+        let env_value = |envs: &[(String, String)], key: &str| {
+            envs.iter().find(|(name, _)| name == key).map(|(_, value)| value.clone())
+        };
+        check(
+            "spawn production default 8787",
+            contracts[0].name == "production" && contracts[0].default_port == PRODUCTION_RELAY_PORT,
+        );
+        check(
+            "spawn M2 default 8788",
+            contracts[1].name == "M2" && contracts[1].default_port == M2_RELAY_PORT,
+        );
+        check(
+            "spawn production CCR_PORT",
+            contracts[0].port_env == "CCR_PORT"
+                && env_value(&production_env, contracts[0].port_env) == Some("8787".to_string()),
+        );
+        check(
+            "spawn M2 CCR_PORT",
+            contracts[1].port_env == "CCR_PORT"
+                && env_value(&m2_env, contracts[1].port_env) == Some("8788".to_string()),
+        );
+        check(
+            "spawn production CCR_DATA_DIR",
+            contracts[0].data_dir_env == "CCR_DATA_DIR"
+                && env_value(&production_env, contracts[0].data_dir_env)
+                    == data_dir.to_str().map(str::to_owned),
+        );
+        check(
+            "spawn M2 CCR_DATA_DIR",
+            contracts[1].data_dir_env == "CCR_DATA_DIR"
+                && env_value(&m2_env, contracts[1].data_dir_env)
+                    == data_dir.to_str().map(str::to_owned),
+        );
+
+        let _ = std::fs::remove_dir_all(&temp_root);
+        println!("t1a summary: ok={} fail={}", 13 - failures, failures);
+        assert_eq!(failures, 0, "T1a probe failures");
+    }
 }
