@@ -793,9 +793,9 @@
     .queue-card .identity-cluster { position: absolute; right: 10px; bottom: 7px; margin: 0; flex-wrap: nowrap; }
     #d-session .queue-card p { margin: 4px 0 0 14px; }
     #d-session .queue-card .identity-cluster { display: flex; position: static; margin: 6px 0 0 14px; }
-    body { --density-card-block-size: 76px; --density-card-pad-block: 7px; --density-card-pad-inline: 10px; --density-card-row-gap: 3px; --density-notice-block-size: 108px; }
-    body[data-card-density="compact"] { --density-card-block-size: 58px; --density-card-pad-block: 7px; --density-card-pad-inline: 10px; --density-card-row-gap: 6px; --density-notice-block-size: 96px; }
-    body[data-card-density="relaxed"] { --density-card-block-size: 86px; --density-card-pad-block: 10px; --density-card-pad-inline: 12px; --density-card-row-gap: 5px; --density-notice-block-size: 120px; }
+    body { --density-card-block-size: 76px; --density-card-pad-block: 7px; --density-card-pad-inline: 10px; --density-card-row-gap: 3px; --density-notice-block-size: 54px; }
+    body[data-card-density="compact"] { --density-card-block-size: 58px; --density-card-pad-block: 7px; --density-card-pad-inline: 10px; --density-card-row-gap: 6px; --density-notice-block-size: 48px; }
+    body[data-card-density="relaxed"] { --density-card-block-size: 86px; --density-card-pad-block: 10px; --density-card-pad-inline: 12px; --density-card-row-gap: 5px; --density-notice-block-size: 62px; }
     #d-session .queue-card { display: grid; block-size: var(--density-card-block-size); padding: var(--density-card-pad-block) var(--density-card-pad-inline); grid-template-columns: minmax(0, 1fr); grid-template-rows: repeat(3, 18px); row-gap: var(--density-card-row-gap); align-content: start; overflow: hidden; }
     #d-session .queue-card .row { grid-row: 1; min-block-size: 18px; }
     #d-session .queue-card p { grid-column: 1; grid-row: 2; block-size: 18px; min-block-size: 18px; margin: 0 0 0 14px; }
@@ -806,6 +806,14 @@
     body[data-card-density="compact"] #d-session .queue-card .identity-cluster { grid-column: 1; grid-row: 2; align-self: center; justify-self: end; margin: 0; }
     #d-team .queue-card, #d-project .queue-card, #d-settings .queue-card { block-size: var(--density-card-block-size); padding: var(--density-card-pad-block) var(--density-card-pad-inline); overflow: hidden; }
     #d-notify .notice { block-size: var(--density-notice-block-size); overflow: hidden; }
+    /* order6：队列行瘦身配套——紧凑档卡高压到 48px，块向 padding 同步收一档防内容裁切；
+       标题行与 tag 同排（tag 的 margin-top:7px 是旧独立行排布的遗留） */
+    body[data-card-density="compact"] #d-notify .notice { padding-block: 8px; }
+    .notice .notice-title-row { display: flex; align-items: center; gap: 7px; min-width: 0; }
+    .notice .notice-title-row strong { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .notice .notice-title-row .tag { flex: none; margin-top: 0; }
+    .notice .notify-line { margin: 4px 0 0; color: var(--dim); font-size: 10px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .notice .notify-line strong { color: var(--text); font-weight: 600; display: inline; }
     .workspace-title-row .identity-cluster { flex: 0 0 auto; }
     .workspace-title-row .engine-badge, .workspace-title-row .source-badge { font-size: 10px; }
     .member-card, .task-card, .notice, .metric, .aggregate-card, .settings-row { box-shadow: var(--card-shadow); transition: border-color .18s ease, background .18s ease, transform .18s ease, box-shadow .18s ease; }
@@ -1117,8 +1125,14 @@
         const facts = item.key === "release" ? [["谁", "<strong>worker-web</strong>"], ["什么事", "<strong>T-13</strong> 独立出包已完成"], ["等什么", "公司网下检查更新并确认收单"]] : item.key === "team-plan" ? [["谁", "<strong>Leader / worker-mobile</strong>"], ["什么事", "额度链走尽"], ["等什么", "选择接替引擎并确认 <strong>3 开发 + 独立验收</strong> 编制"]] : [["谁", "<strong>worker-relay</strong>"], ["什么事", "滞留 25 分钟"], ["等什么", "已通知 Leader，无需处理"]];
         return `<div class="notify-facts">${facts.map(([label, value]) => `<div class="notify-fact"><span class="notify-fact-label">${label}</span><span class="notify-fact-value">${value}</span></div>`).join("")}</div>`;
       };
+      // order6 队列行瘦身：第二列是导航队列不是详情——三行 facts 与 identity 簇留给第三列
+      // 详情卡（notify-source-card 不限高），队列行只留「谁·什么事·等什么」一行合成摘要
+      const notificationSummaryLine = (item) => {
+        const facts = item.key === "release" ? ["<strong>worker-web</strong>", "<strong>T-13</strong> 出包完成", "待公司网确认收单"] : item.key === "team-plan" ? ["<strong>Leader / worker-mobile</strong>", "额度链走尽", "待选接替引擎"] : ["<strong>worker-relay</strong>", "卡 25 分钟", "已转告 Leader"];
+        return `<p class="notify-line">${facts.join(" · ")}</p>`;
+      };
 
-      const renderNotificationQueueCard = (item, group, selected = false) => `<div class="notice${selected ? " selected" : ""}" data-notify-card data-notify-active="${item.active}" data-notify-group="${group}"${item.active ? ` data-notify-jump data-notify-domain="${item.domain}"${item.session ? ` data-notify-session="${item.session}"` : ""}${item.teamAction ? ` data-notify-team-action="${item.teamAction}"` : ""}` : ""} title="${item.active ? `整卡可点 · ${item.jumpLabel}` : "历史动态 · 无需处理"}"><span class="notice-icon">${item.active ? "!" : "·"}</span><div><strong>${item.leftTitle}</strong>${notificationFactMarkup(item)}${notificationIdentity(item)}${item.tag ? `<span class="tag ${item.tagClass}">${item.tag}</span>` : ""}</div></div>`;
+      const renderNotificationQueueCard = (item, group, selected = false) => `<div class="notice${selected ? " selected" : ""}" data-notify-card data-notify-active="${item.active}" data-notify-group="${group}"${item.active ? ` data-notify-jump data-notify-domain="${item.domain}"${item.session ? ` data-notify-session="${item.session}"` : ""}${item.teamAction ? ` data-notify-team-action="${item.teamAction}"` : ""}` : ""} title="${item.active ? `整卡可点 · ${item.jumpLabel}` : "历史动态 · 无需处理"}"><span class="notice-icon">${item.active ? "!" : "·"}</span><div><div class="notice-title-row"><strong>${item.leftTitle}</strong>${item.tag ? `<span class="tag ${item.tagClass}">${item.tag}</span>` : ""}</div>${notificationSummaryLine(item)}</div></div>`;
       const renderNotificationQueueGroup = (label, group, items, selected = false) => `<div class="queue-group">${label} · <span data-notify-group-count="${group}">${items.length}</span></div>${items.map((item, index) => renderNotificationQueueCard(item, group, selected && index === 0)).join("")}`;
       const renderNotificationQueue = () => {
         const actionItems = notificationData.filter((item) => item.active);
