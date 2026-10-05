@@ -2809,6 +2809,70 @@ class RelayStore {
     });
   }
 
+  // ---------- E3b 通知消费（R1c 面端侧接线） ----------
+  // 通知 ACK（B0 冻结 action 词表 handled|dismissed）：乐观本地点亮 handled_at
+  //（镜像 relay transitionNotification「只填空位」语义），不等帧；NOTIFICATIONS_UPDATED
+  // 值替换帧到即对账（权威账整体覆盖，乐观账时间戳差异无视觉翻转）。失败/旧 relay
+  // 命令拒（unsupported）→ 回滚乐观账 + onDone 报错，不重试风暴（沿用全局 ACK 纪律：
+  // 4s 重发一次、6s 收摊回调一次，用户重试=重点按钮）。路由按持账源定位（key 是源域
+  // 稳定键），跨源不串扰。
+  // 协议缺口备案：dismissed_at 为 relay 侧 lifecycle 扩展字段，protocol.ts 冻结面
+  // NotificationItem 暂无——本地对象按运行时形状带上（cast），帧到对账后以权威为准
+  ackNotification(key: string, action: "handled" | "dismissed", onDone?: (r: { ok: boolean; err: string | null }) => void): boolean {
+    let owner: SourceConn | null = null;
+    let idx = -1;
+    for (const c of this.conns.values()) {
+      const i = (c.notifications ?? []).findIndex((n) => n.key === key);
+      if (i >= 0) { owner = c; idx = i; break; }
+    }
+    const list = owner?.notifications ?? null;
+    if (!owner || !list || idx < 0) {
+      onDone?.({ ok: false, err: "通知不存在或已同步" });
+      return false;
+    }
+    const prev = list[idx];
+    const at = Date.now();
+    const prevExtra = prev as NotificationItem & { dismissed_at?: number };
+    // 只填空位（镜像 relay）：handled_at 已在/账已 resolved → 不做乐观突变（ACK 照发，
+    // relay 幂等 ok）
+    const optimistic = prev.resolved_at === undefined
+      && (prev.handled_at === undefined || (action === "dismissed" && prevExtra.dismissed_at === undefined));
+    let optimisticItem: NotificationItem | null = null;
+    let settled = false;
+    const rollback = (): void => {
+      if (settled) return;
+      settled = true;
+      const cur = owner?.notifications;
+      if (!cur || !optimisticItem) return;
+      const i = cur.findIndex((n) => n.key === key);
+      // 引用同一对象才回滚：期间若值替换帧已到（权威账覆盖），本地以帧为准不动
+      if (i >= 0 && cur[i] === optimisticItem) {
+        owner!.notifications = [...cur.slice(0, i), prev, ...cur.slice(i + 1)];
+        this.emit({});
+      }
+    };
+    if (optimistic) {
+      optimisticItem = {
+        ...prev,
+        ...(action === "dismissed" ? { dismissed_at: prevExtra.dismissed_at ?? at } : {}),
+        ...(prev.handled_at === undefined ? { handled_at: at } : {}),
+      } as NotificationItem;
+      owner.notifications = [...list.slice(0, idx), optimisticItem, ...list.slice(idx + 1)];
+      this.emit({});
+    }
+    const sent = this.send("COMMAND_NOTIFICATION_ACK", { notification_key: key, action }, owner.id, (r) => {
+      if (r.ok) { settled = true; onDone?.({ ok: true, err: null }); return; }
+      rollback();
+      onDone?.({ ok: false, err: r.err });
+    });
+    if (!sent) {
+      rollback();
+      onDone?.({ ok: false, err: this.snap.lastErrorCmd || "命令未发送" });
+      return false;
+    }
+    return true;
+  }
+
   // 回执超时：先重发一次同 id（幂等）；再超时才报失败。连接中途断开由 disconnect 清场
   private onCmdTimeout(conn: SourceConn, id: string) {
     const p = conn.pendingCmds.get(id);

@@ -351,6 +351,13 @@ export function dockModelOf(s: SessionState | null | undefined): DockModel | nul
   if (hasActivityCapability(s, "native_elapsed") && typeof act.elapsed_ms === "number") m.elapsedMs = act.elapsed_ms;
   return m;
 }
+
+/** E3b 决议定向守卫（纯）：晚到 ACK 失败是否仍应提示——仅当同一 request 仍挂起
+ * （已翻态/换请求=帧已收敛，不误报「决议未生效」）。决议 payload 本就带 request_id
+ * （relay 按 id 执行），此守卫管的是**回执侧**的定向 */
+export function decisionStillPending(wr: WaitingPayload | null | undefined, requestId: string): boolean {
+  return !!wr && wr.request_id === requestId;
+}
 // \u2500\u2500\u2500 E3a \u7EAF\u51FD\u6570\u6BB5\u6B62 \u2500\u2500\u2500
 
 // 转录行：user=右气泡 / assistant=正文流式 / tool=紧凑卡片 / system=居中弱化
@@ -935,7 +942,9 @@ function ArtSheet({ art, rel, sid, onClose }: { art: ArtifactItem | null; rel: s
     return data;
   };
   const doFetch = async () => {
-    if (busy || dead || !art) return;
+    // E3b 三态守卫：unknown（B4a 显式状态未知）不给拉取——行层已不开 sheet，此为
+    // 双保险；失败回退由 ferr 可见错误承载（行/列表不清不动，三态定格）
+    if (busy || dead || !art || artExistenceOf(art) === "unknown") return;
     setBusy(true);
     setFerr(null);
     try {
@@ -951,7 +960,7 @@ function ArtSheet({ art, rel, sid, onClose }: { art: ArtifactItem | null; rel: s
   // 晨间反馈二轮：分享=文件本体（原「分享路径」是理解偏了）——未拉取先走同一
   // 拉取链（缓存命中秒出、顺带点亮主按钮「已缓存」），落盘后进系统分享面板
   const doShare = async () => {
-    if (busy || dead || !art) return;
+    if (busy || dead || !art || artExistenceOf(art) === "unknown") return; // E3b 三态守卫同 doFetch
     setBusy(true);
     setFerr(null);
     try {
@@ -1617,6 +1626,9 @@ export default function DetailScreen({ sid, onBack, initialView, ref }: { sid: s
   const scrollRef = useRef<ScrollView>(null);
   const allScrollRef = useRef<ScrollView>(null);
   const pagerRef = useRef<ScrollView>(null);
+  // E3b 决议定向守卫：晚到 ACK 失败只在同一请求仍挂起时提示（wr 每渲染同步进 ref，
+  // 回调闭包读到的不是过期渲染帧）
+  const wrRef = useRef<WaitingPayload | null>(null);
   // 六视图滑动指示条：由翻页滚动位置原生驱动（useNativeDriver 跟手，不走 JS 线程不掉帧）
   const scrollX = useRef(new Animated.Value(0)).current;
   const [tabRowW, setTabRowW] = useState(0);
@@ -2095,6 +2107,7 @@ export default function DetailScreen({ sid, onBack, initialView, ref }: { sid: s
   // waiting_request.request_id）。当前协议单请求挂起即 0/1 条；R1 冻结后多请求
   // 列表零改渲染层
   const wr = dedupeWaitingBars([s.waiting_request])[0] ?? null;
+  wrRef.current = wr; // E3b 决议定向守卫同步（见 wrRef 声明处）
   // 审批横幅对称化：必须同时处于 WAITING 态（与列表卡/网页端同口径）——脱钩帧
   //（waiting_request 残留 + status 已翻走）不再渲染横幅，防"以为在等审批"的假等待
   const bannerVisible = !!wr && s.status === "WAITING" && wr.decidable !== false;
@@ -2257,10 +2270,21 @@ export default function DetailScreen({ sid, onBack, initialView, ref }: { sid: s
   };
   const decide = (allow: boolean, rememberScope?: "session" | "global") => {
     if (!wr) return;
+    const rid = wr.request_id;
+    // E3b 审批真链路：ACK ok 才翻本地态——本地零预清（等待条由 SESSION_UPDATED/
+    // SESSION_WAITING 权威帧收敛，relay 执行后同步推帧）；失败回退=等待条保留 +
+    // 全局错误 toast（notifyCmdError 走 App toast 通道）。request_id 定向：晚到失败
+    // 只在同一请求仍挂起时提示（decisionStillPending 守卫）。不重试风暴：沿用全局
+    // ACK 纪律（4s 重发一次、6s 收摊回调），重试=用户重点按钮；send false 路径
+    //（未连接/会话不存在）已有全局 toast，不叠报
     // #212 remember_scope：allow 的同时落「允许并记住」规则（relay 侧判定危险形态不落）
     store.send(allow ? "COMMAND_CONTINUE" : "COMMAND_REJECT", {
-      session_id: sid, request_id: wr.request_id,
+      session_id: sid, request_id: rid,
       ...(allow && rememberScope ? { remember_scope: rememberScope } : {}),
+    }, undefined, (r) => {
+      if (r.ok) return;
+      if (!decisionStillPending(wrRef.current, rid)) return;
+      store.notifyCmdError(`决议未生效（${r.err || "命令未确认"}），等待条保留，可重点按钮重试`);
     });
     setRmOpen(false);
   };
