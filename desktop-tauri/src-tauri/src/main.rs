@@ -323,6 +323,7 @@ fn app_version(app: tauri::AppHandle) -> String {
 fn ime_click(window: tauri::WebviewWindow, x: f64, y: f64) -> Result<(), String> {
     #[cfg(target_os = "macos")]
     {
+        use objc2::MainThreadMarker;
         use objc2_app_kit::{NSApplication, NSEvent, NSEventModifierFlags, NSEventType, NSWindow};
         use objc2_foundation::NSPoint;
         if !window.is_focused().unwrap_or(false) {
@@ -332,20 +333,24 @@ fn ime_click(window: tauri::WebviewWindow, x: f64, y: f64) -> Result<(), String>
         let h_pts = window.inner_size().map_err(|e| e.to_string())?.height as f64 / scale;
         // WebView CSS px（左上原点）→ NSEvent 窗口本地坐标（内容区左下原点）：仅 y 翻转
         let loc = NSPoint::new(x, h_pts - y);
-        unsafe {
-            let app = NSApplication::sharedApplication();
-            let win_num = (window.ns_window().map_err(|e| e.to_string())?
-                as *mut NSWindow)
-                .as_ref()
-                .map(|w| w.windowNumber())
-                .unwrap_or(0);
-            for ty in [NSEventType::LeftMouseDown, NSEventType::LeftMouseUp] {
-                let ev = NSEvent::mouseEventWithType(
-                    ty, loc, NSEventModifierFlags::empty(), 0.0, win_num, None, 0, 1, 1.0,
-                )
-                .ok_or("NSEvent 构造失败")?;
-                app.sendEvent(&ev);
-            }
+        // #018-T2 适配 objc2-app-kit 0.3 生成绑定：sharedApplication 需 MainThreadMarker、
+        // mouseEventWithType 生成为 snake_case 长名（参数序不变）。Tauri 同步 command 跑
+        // 主线程，MainThreadMarker::new() 正常 Some；None=非常规调用态，显式报错不静默
+        let mtm = MainThreadMarker::new().ok_or("ime_click 须在主线程调用")?;
+        let app = NSApplication::sharedApplication(mtm);
+        // 安全性：ns_window() 返回的 NSWindow 指针在本窗口存续期有效（Tauri 契约），
+        // as_ref 仅在该前提下读 windowNumber
+        let win_num = unsafe { (window.ns_window().map_err(|e| e.to_string())?
+            as *mut NSWindow)
+            .as_ref() }
+            .map(|w| w.windowNumber())
+            .unwrap_or(0);
+        for ty in [NSEventType::LeftMouseDown, NSEventType::LeftMouseUp] {
+            let ev = NSEvent::mouseEventWithType_location_modifierFlags_timestamp_windowNumber_context_eventNumber_clickCount_pressure(
+                ty, loc, NSEventModifierFlags::empty(), 0.0, win_num, None, 0, 1, 1.0,
+            )
+            .ok_or("NSEvent 构造失败")?;
+            app.sendEvent(&ev);
         }
         Ok(())
     }
@@ -1001,7 +1006,9 @@ fn write_relay_service_plist(app: &tauri::AppHandle) -> Result<std::path::PathBu
     }
     let inject_cs = abs(res.join("resources").join("bin").join("inject.cs"));
     let home = std::env::var("HOME").map_err(|_| "无法定位用户目录".to_string())?;
-    let data_dir = format!("{home}/.cc-deck/data");
+    // #018-T2：走 deck_root（M2 变体 → ~/.cc-deck-m2/data）——此前硬编码 ~/.cc-deck/data，
+    // M2 构建开「开机自启」会把 M2 relay 数据写进生产数据目录（跨变体污染）
+    let data_dir = deck_root(&home).join("data").to_string_lossy().into_owned();
     let log = format!("{data_dir}/relay-service.log");
     let port = relay_port();
     let inject_env = if std::path::Path::new(&inject_cs).exists() {
@@ -1356,5 +1363,65 @@ mod t1a_tests {
         let _ = std::fs::remove_dir_all(&temp_root);
         println!("t1a summary: ok={} fail={}", 13 - failures, failures);
         assert_eq!(failures, 0, "T1a probe failures");
+    }
+}
+
+// #018-T2 平台差异/资源契约 Rust 侧探针（cargo test --bin cc-deck-desktop-tauri t2_probe；
+// node 直跑对照面见 tests/t2-probes.mjs）。只测纯函数与静态结构——需要 GUI/AppHandle
+// 的路径（tray/窗口装饰/launchd 真注册）归 T3 装机批。
+#[cfg(test)]
+mod t2_tests {
+    use super::*;
+
+    #[test]
+    fn t2_probe_report() {
+        let mut failures = 0;
+        let mut check = |label: &str, passed: bool| {
+            if passed {
+                println!("t2 {label}: ok");
+            } else {
+                failures += 1;
+                println!("t2 {label}: fail");
+            }
+        };
+
+        // 平台差异·盘点锁：危险扩展清单跨平台一致（#29 C-P2-2 双平台同守卫）
+        check("dangerous_ext: Windows/mac 双平台危险扩展全拒（大小写不敏感）",
+            dangerous_ext("evil.bat") && dangerous_ext("EVIL.SH") && dangerous_ext("x.Js")
+                && dangerous_ext("malware.app") && dangerous_ext("a.b.exe"));
+        check("dangerous_ext: 普通交付物放行（md/无扩展名/空串）",
+            !dangerous_ext("报告.md") && !dangerous_ext("noext") && !dangerous_ext(""));
+
+        // 平台差异·盘点锁：home 根随变体隔离（M2 构建 → .cc-deck-m2；生产 → .cc-deck 不变）
+        let expected_root = if M2_BUILD { ".cc-deck-m2" } else { ".cc-deck" };
+        check("deck_root: 数据根随构建变体隔离（plist 服务化 data_dir 同源）",
+            deck_root("/home/u").ends_with(expected_root));
+
+        // 平台差异·盘点锁：Windows \\?\ verbatim 前缀剥除（canonicalize 产物 node 不认）
+        let verbatim = std::path::PathBuf::from(r"\\?\C:\Users\u\app\resources\relay.mjs");
+        check("absolute_resource_path: 剥 \\\\?\\ verbatim 前缀（Windows canonicalize 形态）",
+            absolute_resource_path(verbatim).to_string_lossy().starts_with("C:"));
+
+        // 资源加载·握手分界：真 TCP 上 ExternalRelay（回 {"ok":true}）vs ExternalProcess（非 relay 回包）
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").expect("bind probe port");
+        let port = listener.local_addr().expect("local addr").port();
+        let server = std::thread::spawn(move || {
+            if let Ok((mut stream, _)) = listener.accept() {
+                let _ = stream.set_read_timeout(Some(std::time::Duration::from_millis(500)));
+                let mut buf = [0u8; 512];
+                let _ = std::io::Read::read(&mut stream, &mut buf);
+                let _ = std::io::Write::write_all(
+                    &mut stream,
+                    b"HTTP/1.1 200 OK\r\nContent-Type: application/json\r\n\r\n{\"ok\":true}",
+                );
+            }
+        });
+        check("relay_handshake: relay 形应答 → ExternalRelay 判定", relay_handshake(port));
+        let _ = server.join();
+        check("classify: listening+handshake → ExternalRelay（外部托管 relay 让位不抢）",
+            classify_relay_port(true, false, true) == RelayPortOwner::ExternalRelay);
+
+        println!("t2 summary: ok={} fail={}", 6 - failures, failures);
+        assert_eq!(failures, 0, "T2 probe failures");
     }
 }
