@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta name="generator" content="archify 2.17.0-dev.1">
-  <title>CC Deck M2 · 混编团队系统全景</title>
+  <title>M2 系统架构与信任边界</title>
   <script>
     // Resolve the theme before first paint so light-preference users don't
     // see a dark flash. The toolbar script below re-applies with UI state.
@@ -5081,12 +5081,12 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
            data-preset-badge-blueprint="蓝图 / 修订 01"
            data-preset-badge-editorial="编辑风格 / 现场笔记">
         <div class="pulse-dot"></div>
-        <h1>CC Deck M2 · 混编团队系统全景</h1>
+        <h1>M2 系统架构与信任边界</h1>
       </div>
     </div>
 
-    <script id="archify-guided-views-data" type="application/json">[]</script>
-    <script id="archify-source-evidence-data" type="application/json">{"schemaVersion":1,"verified":true,"repository":{"url":"https://github.com/humumu130/cc-deck","revision":"aa9ed68707dcaf855086185418c5ee4cfc4e7c23","shortRevision":"aa9ed68","label":"humumu130/cc-deck","linkMode":"local-only"},"referenceCount":5,"nodes":{"relay":[{"path":"relay/src/ws-server.ts","label":"LAN 出口"},{"path":"relay/src/session-manager.ts","label":"协调面"},{"path":"relay/src/cloud-client.ts","label":"云桥出口"}],"engines":[{"path":"relay/src/engine-registry.ts","line":36,"endLine":61,"label":"registry 注册"},{"path":"relay/src/agent-adapter.ts","label":"AgentLike 契约"}]}}</script>
+    <script id="archify-guided-views-data" type="application/json">[{"id":"main-path","label":"主链路：客户端到会话","focus":["user","web","bridge","relaycore","engines","pmcard"],"note":"用户客户端经 LAN/云桥到 relay 核心，再到引擎与会话卡。"},{"id":"fact-stores","label":"事实源四存储","focus":["relaycore","orgstore","eventlog","taskstore","artifactstore"],"note":"四个独立数据节点：org 层、事件账本、任务库、输出物目录。"},{"id":"collab-cards","label":"协作会话卡","focus":["pmcard","reviewcard","workercards","relaycore"],"note":"PM 常驻管理，评审卡临时跑完即删，worker 实施回单。"}]</script>
+
     <script id="archify-i18n-data" type="application/json">{"locale":"zh-CN","messages":{"viewer.kind.frontend":"前端","viewer.kind.backend":"后端","viewer.kind.database":"数据库","viewer.kind.cloud":"云服务","viewer.kind.security":"安全","viewer.kind.messagebus":"消息总线","viewer.kind.external":"外部系统","viewer.kind.neutral":"中性","viewer.kind.node":"节点","viewer.kind.start":"开始","viewer.kind.active":"活动","viewer.kind.waiting":"等待","viewer.kind.decision":"决策","viewer.kind.success":"成功","viewer.kind.failure":"失败","viewer.toolbar.actions":"图表操作","viewer.theme.toggle.title":"切换主题（T）","viewer.theme.toggle":"切换颜色主题","viewer.theme.dark":"深色","viewer.theme.light":"浅色","viewer.preset.choose.title":"选择视觉风格（S 循环切换）","viewer.preset.choose":"选择视觉风格","viewer.preset.style":"风格","viewer.preset.menu":"视觉风格","viewer.preset.identity":"视觉表达","viewer.preset.cycles":"S 循环切换","viewer.preset.classic":"经典","viewer.preset.classic.short":"经典","viewer.preset.classic.hint":"稳定的技术默认风格","viewer.preset.flow":"信号流","viewer.preset.flow.short":"流动","viewer.preset.flow.hint":"突出动态流向","viewer.preset.blueprint":"蓝图","viewer.preset.blueprint.hint":"工程评审","viewer.preset.editorial":"编辑风格","viewer.preset.editorial.hint":"适合发布与上线说明","viewer.preset.badge.signalFlow":"信号流","viewer.preset.badge.blueprint":"蓝图 / 修订 01","viewer.preset.badge.editorial":"编辑风格 / 现场笔记","viewer.preset.badge.editorialPlate":"ARCHIFY / 图版 04","viewer.preset.current":"当前视觉风格：{style}。选择视觉风格","viewer.motion.live":"动态","viewer.motion.still":"静态","viewer.motion.pause":"暂停动效","viewer.motion.resume":"恢复动效","viewer.motion.reduced":"已根据减少动态效果偏好暂停动效","viewer.motion.hidden":"页面不可见时已暂停动效","viewer.motion.yielding":"暂停动效；当前让位于{owner}","viewer.motion.yielding.title":"动态预览已启用 · 正在让位于{owner}","viewer.owner.story":"引导故事","viewer.owner.chapter":"当前章节","viewer.owner.chapterPreview":"章节差异预览","viewer.owner.handoff":"章节交接","viewer.owner.route":"路径探测","viewer.owner.lens":"语义透镜","viewer.owner.relationship":"关系预览","viewer.owner.intent":"意图追踪","viewer.owner.focus":"语义聚焦","viewer.owner.legend":"图例预览","viewer.owner.reader":"读者交互","viewer.present.enter":"进入演示模式","viewer.present.enter.title":"演示模式（F）","viewer.present.exit":"退出演示模式","viewer.present.exit.title":"退出演示模式（F 或 Escape）","viewer.present.present":"演示","viewer.present.exit.label":"退出","viewer.export.button":"导出","viewer.export.button.title":"导出图表（E）","viewer.export.diagram":"导出图表","viewer.export.menu":"导出","viewer.export.subtitle":"便携、整洁的输出","viewer.export.share":"分享","viewer.export.shareCard":"分享卡片","viewer.export.routeShareCard":"路径分享卡片","viewer.export.reachShareCard":"可达范围分享卡片","viewer.export.copyShareCard":"复制分享卡片","viewer.export.copyDiagram":"复制图表","viewer.export.clipboardPng":"复制 PNG 到剪贴板","viewer.export.raster":"位图","viewer.export.image":"图像","viewer.export.lossless":"无损图像","viewer.export.compact":"紧凑图像","viewer.export.modern":"现代图像格式","viewer.export.vectorMotion":"矢量与动效","viewer.export.vectorMotion.heading":"矢量与动效","viewer.export.editable":"可编辑矢量图","viewer.export.motion6s":"6 秒动效","viewer.export.unsupported":"当前浏览器不支持","viewer.export.clipboardUnsupported":"当前浏览器不支持写入图片剪贴板","viewer.export.clipboardUnsupported.period":"当前浏览器不支持写入图片剪贴板。","viewer.export.clipboardUnsupported.short":"此浏览器不支持写入图片剪贴板。","viewer.export.motionUnavailable":"当前浏览器无法录制动效","viewer.export.webmUnavailable":"当前浏览器不支持 WebM","viewer.export.failed":"导出失败：{message}","viewer.export.unknownVariant":"未知的分享卡片类型：{variant}","viewer.export.routeRequired":"请先追踪路径，再导出路径分享卡片","viewer.export.reachRequired":"请先追踪编写可达范围，再导出可达范围分享卡片","viewer.export.unknown":"未知错误","viewer.export.routeFailed":"路径分享卡片导出失败：{message}","viewer.export.reachFailed":"可达范围分享卡片导出失败：{message}","viewer.export.copyFailed":"复制失败：{message}","viewer.export.copiedPng":"已将 PNG 复制到剪贴板","viewer.export.copiedShare":"已复制分享卡片","viewer.export.downloadedShare":"已下载分享卡片","viewer.export.downloadedRoute":"已下载路径分享卡片","viewer.export.downloadedReach":"已下载可达范围分享卡片","viewer.export.downloadedWebm":"已下载 WebM","viewer.export.recording":"正在录制 6 秒动效…","viewer.export.card.routeSummary.one":"路径：{source} → {target} · {count} 个有向跳转","viewer.export.card.routeSummary.other":"路径：{source} → {target} · {count} 个有向跳转","viewer.export.card.reachSummary":"从{origin}开始的编写{direction} · {nodes} · {links} · 最深 {hops}","viewer.export.card.node.one":"{count} 个节点","viewer.export.card.node.other":"{count} 个节点","viewer.export.card.link.one":"{count} 条连接","viewer.export.card.link.other":"{count} 条连接","viewer.export.card.hop.one":"{count} 跳","viewer.export.card.hop.other":"{count} 跳","viewer.export.card.routeBadge":"ARCHIFY · 路径 · {hops}","viewer.export.card.reachBadge":"ARCHIFY · {direction}可达范围","viewer.export.card.defaultBadge":"ARCHIFY · {preset} · {theme}","viewer.export.direction.upstream":"上游","viewer.export.direction.downstream":"下游","viewer.export.error.canvasUnavailable":"无法为{label}使用画布","viewer.export.error.contextUnavailable":"无法为{label}创建二维画布上下文","viewer.export.error.toBlobUnavailable":"{label}无法使用 canvas.toBlob","viewer.export.error.toBlobNull":"{label}的 canvas.toBlob 未返回数据","viewer.export.error.variantsCombined":"无法同时组合多种分享卡片类型","viewer.export.error.viewerState":"分享卡片导出无法移除临时 Viewer 状态","viewer.export.error.routeState":"路径卡片导出无法安全保留已解析路径","viewer.export.error.reachState":"可达范围卡片导出无法安全保留编写的可达范围","viewer.export.error.webmRequirements":"WebM 动效导出需要追踪动画及浏览器 MediaRecorder 支持","viewer.export.error.mediaRecorder":"MediaRecorder 录制失败","viewer.export.error.emptyWebm":"MediaRecorder 生成了空的 WebM","viewer.export.error.webmBackground":"无法为 WebM 导出加载 SVG 背景","viewer.guided.region":"图表引导视图","viewer.guided.previous":"上一个引导视图","viewer.guided.previous.title":"上一个引导视图（[）","viewer.guided.next":"下一个引导视图","viewer.guided.next.title":"下一个引导视图（]）","viewer.guided.views":"引导视图","viewer.guided.explore":"探索此系统","viewer.guided.intro":"沿精选路径逐步查看，而不改变源图表。","viewer.guided.trail":"故事轨迹","viewer.guided.beat":"节点","viewer.guided.nextBeat":"下一步","viewer.guided.play":"播放引导故事","viewer.guided.play.title":"播放引导故事（P）","viewer.guided.pause":"暂停引导故事","viewer.guided.pause.title":"暂停引导故事（P）","viewer.guided.replay":"重播引导故事","viewer.guided.replay.title":"重播引导故事（P）","viewer.guided.playStory":"播放故事","viewer.guided.pauseStory":"暂停","viewer.guided.replayStory":"重播故事","viewer.guided.motionUnavailable":"静态模式下无法播放故事","viewer.guided.enableMotion":"切换为动态模式以播放引导故事","viewer.guided.selectBeatLink":"选择故事节点以复制其精确链接","viewer.guided.copyMoment":"复制此刻","viewer.guided.momentCopied":"已复制时刻链接","viewer.guided.momentCopyFailed":"无法复制故事时刻链接","viewer.guided.copied":"已复制","viewer.guided.copyFailed":"复制失败","viewer.guided.showAll":"显示全部","viewer.guided.showAll.aria":"显示完整图表","viewer.guided.chapters":"故事章节","viewer.guided.storyTrail":"{label}的故事轨迹：{count} 个节点","viewer.guided.chapter.open":"打开第 {index}/{total} 章：{label}，{count} 个停靠点","viewer.guided.chapter.current":"当前第 {index}/{total} 章：{label}，{count} 个停靠点","viewer.guided.chapter.selectedNodes":"已选择 {count} 个节点","viewer.guided.chapter.stops":"{count} 个停靠点","viewer.guided.chapter.stop.one":"{count} 个停靠点","viewer.guided.chapter.stop.other":"{count} 个停靠点","viewer.guided.chapter.current.title":"{label} — 当前章节，{count} 个停靠点","viewer.guided.chapter.delta.expanded":"{stay} 个保留，{enter} 个进入，{leave} 个离开","viewer.guided.chapter.delta.aria":"打开第 {index}/{total} 章：{label}。章节聚焦差异：{delta}","viewer.guided.chapter.delta.title":"{label} — 章节聚焦 {delta}","viewer.guided.handoff":"{from} → {to} · 经由{label}","viewer.guided.share.chapter":"章节 {index} / {total}","viewer.guided.share.initial":"章节 01 / 01","viewer.guided.share.default":"引导章节","viewer.guided.state.ready":"就绪","viewer.guided.state.playing":"播放中","viewer.guided.state.settled":"已完成","viewer.guided.state.paused":"已暂停","viewer.guided.state.pinned":"已固定","viewer.guided.state.still":"静态","viewer.guided.share.step":"步骤 {index} / {total} · {label}","viewer.guided.share.staticMoment":"{step} · 静态时刻","viewer.guided.share.complete":"{count} 个步骤已完成 · {note}","viewer.guided.share.settled":"路径已稳定，可供阅读。","viewer.guided.share.staticPath":"{count} 个步骤 · 静态路径","viewer.guided.share.ready":"{count} 个步骤 · 就绪","viewer.guided.share.aria":"{state}，第 {index}/{total} 章：{label}。{beat}。{route}","viewer.guided.beat.start":"节点 {index} / {total} · {label} · 起点","viewer.guided.beat.forward":"节点 {index} / {total} · {from} → {to}","viewer.guided.beat.reverse":"节点 {index} / {total} · {from} → {to} · 反向编写连接","viewer.guided.beat.multiple":"节点 {index} / {total} · {from} ⇄ {to} · {count} 条编写连接","viewer.guided.beat.group":"节点 {index} / {total} · {from} · {to} · 分组 · 无直接连接","viewer.guided.beat.aria.prefix":"故事节点 {index}/{total}：{label}。","viewer.guided.beat.aria.start":"起点。","viewer.guided.beat.aria.forward":"从{from}经一条正向编写关系到达。","viewer.guided.beat.aria.reverse":"从{from}出发；编写关系实际由{to}指向{from}。","viewer.guided.beat.aria.multiple":"从{from}经 {count} 条编写关系到达；不使用任意动效。","viewer.guided.beat.aria.group":"与{from}分组展示，没有直接编写关系。","viewer.guided.caption.start":"起点","viewer.guided.caption.grouped":"分组过渡 · 无直接编写连接","viewer.guided.caption.more":" +另外 {count} 条","viewer.guided.caption.reverse":"反向编写关系","viewer.guided.caption.relationships":"{count} 条编写关系","viewer.guided.caption.relationship":"编写关系","viewer.guided.caption.direction":"编写方向：{from} → {to}","viewer.guided.caption.starting":"编写起点","viewer.guided.beatLink":"复制当前故事时刻链接：第 {index}/{total} 个节点：{label}","viewer.guided.noStory":"此图表没有编写引导故事。","viewer.guide.eyebrow":"图表指南","viewer.guide.close":"关闭图表指南","viewer.guide.inspecting":"正在检查已编译语义","viewer.guide.actions":"图表探索操作","viewer.guide.find":"查找任意节点","viewer.guide.find.hint":"搜索标签、职责、类型和稳定 ID。","viewer.guide.route":"追踪路径","viewer.guide.route.aria":"追踪有向路径","viewer.guide.route.hint":"查看两个语义节点如何按编写方向连接。","viewer.guide.map":"查看完整系统","viewer.guide.map.hint":"打开带实时视口和稳定节点的语义雷达。","viewer.guide.lens":"比较语义类型","viewer.guide.lens.hint":"统计角色、显示流量并比较直接编写的连接。","viewer.guide.story":"播放引导故事","viewer.guide.story.hint":"浏览已编写的章节和真实关系。","viewer.guide.present":"进入演示模式","viewer.guide.present.hint":"让实时图表占满视口，同时不改变导出。","viewer.guide.shortcuts":"其他键盘快捷键","viewer.guide.shortcut.export":"导出","viewer.guide.shortcut.theme":"主题","viewer.guide.shortcut.style":"风格","viewer.guide.shortcut.reset":"重置","viewer.guide.shortcut.zoomIn":"放大","viewer.guide.shortcut.zoomOut":"缩小","viewer.guide.shortcut.close":"关闭","viewer.guide.facts":"{nodes} · {relationships} · {views}","viewer.guide.fact.node.one":"{count} 个语义节点","viewer.guide.fact.node.other":"{count} 个语义节点","viewer.guide.fact.relationship.one":"{count} 条关系","viewer.guide.fact.relationship.other":"{count} 条关系","viewer.guide.fact.view.one":"{count} 个引导视图","viewer.guide.fact.view.other":"{count} 个引导视图","viewer.guide.story.available.one":"浏览 {count} 个已编写章节及其真实关系。","viewer.guide.story.available.other":"浏览 {count} 个已编写章节及其真实关系。","viewer.guide.story.unavailable":"此图表没有编写引导故事。","viewer.guide.open":"打开图表指南","viewer.guide.noStory":"此图表没有编写引导故事。","viewer.finder.title":"查找节点","viewer.finder.close":"关闭节点查找器","viewer.finder.placeholder":"搜索标签或 ID","viewer.finder.search":"搜索图表节点","viewer.finder.results":"图表节点","viewer.finder.empty":"没有匹配的节点","viewer.finder.result.focus":"聚焦{label}","viewer.finder.result.routeStart":"选择{label}作为路径起点","viewer.finder.result.routeTarget":"选择{label}作为路径终点，{links}","viewer.finder.status.empty":"没有匹配的节点","viewer.finder.status.count.one":"{count} 个匹配节点","viewer.finder.status.count.other":"{count} 个匹配节点","viewer.finder.noun.nodes":"个节点","viewer.finder.link.one":"{count} 条连接","viewer.finder.link.other":"{count} 条连接","viewer.finder.result.focus.one":"聚焦{label}，{count} 条相关连接","viewer.finder.result.focus.other":"聚焦{label}，{count} 条相关连接","viewer.finder.status.filtered":"{visible}/{available} {noun}","viewer.finder.status.all":"{available} {noun}","viewer.passport.eyebrow":"语义护照","viewer.passport.metadata":"节点元数据","viewer.passport.evidence":"已验证的源代码证据","viewer.passport.verified":"已验证来源","viewer.passport.verificationScope":"已按固定修订版本验证本地 Git 证据，未检查远程访问权限。","viewer.passport.reach":"编写可达范围","viewer.passport.reach.trace":"追踪编写的可达性","viewer.passport.upstream":"上游","viewer.passport.downstream":"下游","viewer.passport.upstream.trace":"追踪上游编写可达性","viewer.passport.downstream.trace":"追踪下游编写可达性","viewer.passport.close":"关闭语义护照","viewer.passport.copy":"复制链接","viewer.passport.copy.focus":"复制聚焦节点的链接","viewer.passport.relations":"关系","viewer.passport.relations.show":"显示关联关系","viewer.passport.relations.hide":"隐藏关联关系","viewer.passport.relations.list":"关联关系","viewer.passport.copyRelation":"复制关系","viewer.passport.copyNode":"复制节点","viewer.passport.copyPinned":"复制固定关系的链接","viewer.passport.copySource":"复制来源节点的链接","viewer.passport.copy.focused.success":"已复制聚焦节点链接","viewer.passport.copy.pinned.success":"已复制固定关系链接","viewer.passport.copy.focused.failed":"无法复制聚焦节点链接","viewer.passport.copy.pinned.failed":"无法复制固定关系链接","viewer.passport.relationship.none":"没有关联关系","viewer.passport.relationship.count.one":"{count} 条关系","viewer.passport.relationship.count.other":"{count} 条关系","viewer.passport.relationship.show.one":"显示 {count} 条关联关系","viewer.passport.relationship.show.other":"显示 {count} 条关联关系","viewer.passport.relationship.summary":"{out} 条出向 · {in} 条入向{loops}","viewer.passport.relationship.loops":" · {count} 条自环","viewer.passport.relationship.explorer":"直接关系浏览器","viewer.passport.relationship.help":"使用方向键浏览关系。按 Enter 或空格键固定详情；按 Escape 清除。","viewer.passport.relationship.loopsBack":"回环","viewer.passport.relationship.connectsTo":"连接到","viewer.passport.relationship.connectsFrom":"连接自","viewer.passport.relationship.pinned":"已固定关系 · {from} → {to} · {label}","viewer.passport.relationship.inspect":"检查第 {index}/{total} 条关系：{from} 到 {to}，{label}。按 Enter 查看详情。","viewer.passport.relationship.group.out":"出向","viewer.passport.relationship.group.in":"入向","viewer.passport.relationship.group.loop":"自环","viewer.passport.relationship.row":"{group}：{relationship}，{neighbor}","viewer.passport.relationship.direction.out":"出 →","viewer.passport.relationship.direction.in":"← 入","viewer.passport.relationship.direction.loop":"自环","viewer.passport.sourceCount.one":"{count} 个已验证来源引用","viewer.passport.sourceCount.other":"{count} 个已验证来源引用","viewer.passport.sourceMarker":"来源","viewer.passport.beacon.one":"{count} 个已验证来源；聚焦此节点以检查","viewer.passport.beacon.other":"{count} 个已验证来源；聚焦此节点以检查","viewer.passport.repository.open":"打开已验证的仓库修订版本 {revision}","viewer.passport.source.open":"打开修订版本 {revision} 中已验证的来源 {path}","viewer.passport.source.openLink":"打开 ↗","viewer.passport.reach.upstream.one":"追踪 {count} 个上游编写节点","viewer.passport.reach.upstream.other":"追踪 {count} 个上游编写节点","viewer.passport.reach.downstream.one":"追踪 {count} 个下游编写节点","viewer.passport.reach.downstream.other":"追踪 {count} 个下游编写节点","viewer.passport.reach.noUpstream":"没有上游编写节点","viewer.passport.reach.noDownstream":"没有下游编写节点","viewer.passport.reach.status":"{direction} · {nodes} 个节点 · {links} 条连接 · 最深 {hops} 跳","viewer.route.eyebrow":"路径探测","viewer.route.start":"选择起点节点","viewer.route.start.find":"查找起点","viewer.route.start.find.aria":"查找路径起点","viewer.route.copy":"复制链接","viewer.route.copy.aria":"复制已追踪路径的链接","viewer.route.clear":"清除","viewer.route.clear.aria":"清除路径探测","viewer.route.traced":"已追踪路径","viewer.route.pickTwo":"在图表中选择两个语义节点","viewer.route.pickOne":"在图表中选择一个语义节点","viewer.route.controls":"路径旅程控制","viewer.route.previous":"上一个路径位置","viewer.route.play":"播放路径旅程","viewer.route.pause":"暂停路径旅程","viewer.route.replay":"重播路径旅程","viewer.route.next":"下一个路径位置","viewer.route.journey":"旅程","viewer.route.pause.label":"暂停","viewer.route.replay.label":"重播","viewer.route.overview":"总览","viewer.route.overview.aria":"显示完整路径总览","viewer.route.instructions":"先选择来源，再选择目标；方向很重要。","viewer.route.destination":"选择从{label}出发的目标","viewer.route.destination.find":"查找目标","viewer.route.destination.find.aria":"查找可达的路径目标","viewer.route.differentDestination":"选择其他目标","viewer.route.distinct":"一条路径需要两个不同的语义节点。","viewer.route.unreachable":"没有通往{label}的有向路径","viewer.route.unreachable.detail":"从{source}无法到达{target}。请选择高亮的目标。","viewer.route.start.instructions":"选择来源。下一步只会显示有向可达的目标。","viewer.route.copy.success":"已复制路径链接","viewer.route.copy.failed":"无法复制路径链接","viewer.route.position":"路径位置 {index}/{total}：{label}","viewer.route.step":"第 {index}/{total} 步 · {phase} · {label}","viewer.route.motionRequired":"自动旅程需要动态模式","viewer.route.trigger.clear":"清除已追踪路径","viewer.route.overview.status":"{nodes} · {hops} · 最短编写路径","viewer.route.overview.node.one":"{count} 个节点","viewer.route.overview.node.other":"{count} 个节点","viewer.route.overview.hop.one":"{count} 个有向跳转","viewer.route.overview.hop.other":"{count} 个有向跳转","viewer.route.phase.playing":"播放中","viewer.route.phase.complete":"已完成","viewer.route.phase.inspecting":"检查中","viewer.route.destination.count.one":"有 {count} 个有向目标可用。请选择高亮节点。","viewer.route.destination.count.other":"有 {count} 个有向目标可用。请选择高亮节点。","viewer.route.noOutgoing":"此处没有可用的出向路径。请清除后选择其他来源。","viewer.route.result.title":"{source} 到 {target}","viewer.route.finder.source.title":"选择路径起点","viewer.route.finder.source.placeholder":"搜索路径来源","viewer.route.finder.source.empty":"没有匹配的路径来源","viewer.route.finder.source.results":"可作为路径起点的节点","viewer.route.finder.source.noun":"个路径来源","viewer.route.finder.source.badge":"起点","viewer.route.finder.target.title":"从{label}出发的目标","viewer.route.finder.target.placeholder":"搜索可达目标","viewer.route.finder.target.empty":"没有匹配的可达目标","viewer.route.finder.target.results":"可达路径目标","viewer.route.finder.target.noun":"个可达目标","viewer.route.hop.one":"{count} 跳","viewer.route.hop.other":"{count} 跳","viewer.lens.eyebrow":"语义透镜","viewer.lens.title":"比较系统角色","viewer.lens.close":"关闭语义透镜","viewer.lens.instruction":"最多选择两种语义类型。选择一种可显示其真实流量；选择两种只比较直接编写的关系。","viewer.lens.kinds":"语义类型","viewer.lens.choose":"选择一种类型以检查其节点和相连关系。","viewer.lens.copy":"复制语义透镜链接","viewer.lens.clear":"清除语义透镜","viewer.lens.open":"打开语义透镜","viewer.lens.openActive":"打开当前语义透镜","viewer.lens.legend":"语义图例","viewer.lens.legend.inspect.one":"检查{label}，{count} 个节点","viewer.lens.legend.inspect.other":"检查{label}，{count} 个节点","viewer.lens.kind.count.one":"{label}，{count} 个节点","viewer.lens.kind.count.other":"{label}，{count} 个节点","viewer.lens.compare.one":"{first} → {second}：{forward} · {second} → {first}：{reverse} · 共 {count} 条直接关系","viewer.lens.compare.other":"{first} → {second}：{forward} · {second} → {first}：{reverse} · 共 {count} 条直接关系","viewer.lens.single":"{nodes} · {relationships} · 已连接节点保持可见","viewer.lens.node.one":"{count} 个{label}节点","viewer.lens.node.other":"{count} 个{label}节点","viewer.lens.relationship.one":"{count} 条相连关系","viewer.lens.relationship.other":"{count} 条相连关系","viewer.radar.title":"语义雷达","viewer.radar.building":"正在构建总览","viewer.radar.openFull":"打开完整语义雷达","viewer.radar.open":"打开雷达","viewer.radar.close":"关闭语义雷达","viewer.radar.surface":"图表总览。点击节点进行聚焦，或使用方向键平移。","viewer.radar.click":"点击节点","viewer.radar.drag":"拖动平移","viewer.radar.space":"语义雷达需要更多地图可见空间。","viewer.radar.nodes":"语义图表雷达节点","viewer.radar.focus":"从语义雷达聚焦{label}","viewer.radar.status":"{count} 个节点 · {viewport}","viewer.radar.fullMap":"{count} 个节点 · 完整地图","viewer.radar.compacted":"已收紧雷达，避免遮挡语义护照或地图控件。","viewer.radar.cancelWaiting":"取消等待更多地图空间的语义雷达","viewer.radar.needsSpace":"语义雷达需要更多可见地图空间","viewer.radar.viewport.full":"完整地图","viewer.radar.viewport.width":"宽度 {percent}%","viewer.radar.viewport.scale":"视口 {percent}%","viewer.nav.controls":"图表视图控制","viewer.nav.route":"追踪有向路径","viewer.nav.route.title":"追踪路径（R）","viewer.nav.route.short":"路径","viewer.nav.radar":"打开语义雷达","viewer.nav.radar.title":"语义雷达（M）","viewer.nav.radar.short":"地图","viewer.nav.lens":"打开语义透镜","viewer.nav.lens.title":"语义透镜（L）","viewer.nav.lens.short":"透镜","viewer.nav.find":"查找节点","viewer.nav.find.title":"查找节点（/）","viewer.nav.guide":"打开图表指南","viewer.nav.guide.title":"图表指南（?）","viewer.nav.zoomOut":"缩小","viewer.nav.zoomOut.title":"缩小（-）","viewer.nav.reset":"重置图表视图","viewer.nav.reset.title":"重置视图（0）","viewer.nav.read":"阅读","viewer.nav.zoomIn":"放大","viewer.nav.zoomIn.title":"放大（+）","viewer.nav.camera":"{hint}。重置图表视图","viewer.nav.camera.title":"{semantic}{hint} · 重置视图（0）","viewer.nav.camera.semantic":"语义相机已启用 · ","viewer.nav.level.map":"概览","viewer.nav.level.read":"阅读","viewer.nav.level.full":"完整","viewer.nav.level.auto":"自动","viewer.nav.detail.map":"放大以显示关系标签和节点上下文","viewer.nav.detail.read":"再次放大以显示标签和注释","viewer.nav.detail.full":"完整图表详情","viewer.intent.summary":"{label}。{out} 条出向，{in} 条入向{loops}。共 {total} 条连接。按 Enter 查看详情。","viewer.intent.loops":"，{count} 条自环","viewer.common.copied":"已复制","viewer.common.copyFailed":"复制失败","viewer.common.copyLink":"复制链接","viewer.common.clear":"清除","viewer.common.close":"关闭"}}</script>
     <div class="guided-views no-print" id="guided-views" hidden aria-label="图表引导视图">
       <button id="guided-view-prev" type="button" aria-label="上一个引导视图" title="上一个引导视图（[）">&#8592;</button>
@@ -5130,8 +5130,8 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
     <!-- Main Diagram -->
     <div class="diagram-container" data-detail-level="read"
          data-preset-badge-editorial-plate="ARCHIFY / 图版 04">
-      <svg viewBox="0 0 1220 650" role="img" lang="zh-CN" aria-labelledby="archify-diagram-title archify-diagram-description" data-preset="classic" data-quality-profile="showcase">
-        <title id="archify-diagram-title">CC Deck M2 · 混编团队系统全景</title>
+      <svg viewBox="0 0 1300 692" role="img" lang="zh-CN" aria-labelledby="archify-diagram-title archify-diagram-description" data-preset="classic" data-quality-profile="showcase">
+        <title id="archify-diagram-title">M2 系统架构与信任边界</title>
         <desc id="archify-diagram-description">由 Archify 生成的架构图。</desc>
         <!-- Definitions -->
         <defs>
@@ -5156,258 +5156,284 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
         <rect width="100%" height="100%" fill="url(#grid)" />
 
         <!-- Boundaries (behind everything) -->
-        <rect data-graph-role="structural-frame" data-composition-frame-kind="region" data-composition-frame-id="0" data-composition-frame-label="Cloudflare 边缘" x="470" y="100" width="220" height="106" rx="12" class="c-region" stroke-width="1"/>
+        <rect data-graph-role="structural-frame" data-composition-frame-kind="region" data-composition-frame-id="0" data-composition-frame-label="Cloudflare 边缘" x="320" y="300" width="210" height="114" rx="12" class="c-region" stroke-width="1"/>
 
-        <rect data-graph-role="structural-frame" data-composition-frame-kind="region" data-composition-frame-id="1" data-composition-frame-label="本机 · M2 dev 环境" x="30" y="90" width="1160" height="527" rx="12" class="c-region" stroke-width="1"/>
+        <rect data-graph-role="structural-frame" data-composition-frame-kind="region" data-composition-frame-id="1" data-composition-frame-label="本机 · M2 dev 环境" x="370" y="30" width="890" height="594" rx="12" class="c-region" stroke-width="1"/>
 
         <!-- Connection paths (before components for correct z-order) -->
-        <path data-edge-from="user" data-edge-to="webconsole" data-edge-key="0" data-edge-id="user-web" data-composition-points="120,82;120,111;140,111;140,140" d="M 120 82 L 120 103 Q 120 111 128 111 L 132 111 Q 140 111 140 119 L 140 140" class="a-default" stroke-width="1.5" marker-end="url(#arrowhead)"/>
-        <path data-edge-from="user" data-edge-to="expoapp" data-edge-key="1" data-edge-id="user-expo" data-composition-points="190,56;362.5,56;362.5,140" d="M 190 56 L 354.5 56 Q 362.5 56 362.5 64 L 362.5 140" class="a-default" stroke-width="1.5" marker-end="url(#arrowhead)"/>
-        <path data-edge-from="webconsole" data-edge-to="relay" data-edge-label="LAN ws 直连" data-edge-key="2" data-edge-id="web-relay" data-composition-points="235,168;259,168;259,304;450,304" d="M 235 168 L 251 168 Q 259 168 259 176 L 259 296 Q 259 304 267 304 L 450 304" class="a-emphasis" stroke-width="1.8" marker-end="url(#arrowhead-emphasis)"/>
-        <path data-edge-from="expoapp" data-edge-to="bridge" data-edge-label="WAN HTTPS" data-edge-key="3" data-edge-id="expo-bridge" data-composition-points="435,166;459,166;459,182;476,182;476,158;500,158" d="M 435 166 L 451 166 Q 459 166 459 174 L 459 174 Q 459 182 467 182 L 468 182 Q 476 182 476 174 L 476 166 Q 476 158 484 158 L 500 158" class="a-default" stroke-width="1.5" marker-end="url(#arrowhead)"/>
-        <path data-edge-from="bridge" data-edge-to="relay" data-edge-label="E2E 指令上行" data-edge-key="4" data-edge-id="bridge-relay-up" data-composition-points="580,186;580,228;545,228;545,270" d="M 580 186 L 580 220 Q 580 228 572 228 L 553 228 Q 545 228 545 236 L 545 270" class="a-default" stroke-width="1.5" marker-end="url(#arrowhead)"/>
-        <path data-edge-from="relay" data-edge-to="bridge" data-edge-label="事件下行" data-edge-key="5" data-edge-id="relay-bridge-down" data-composition-points="545,270;545,228;580,228;580,186" d="M 545 270 L 545 236 Q 545 228 553 228 L 572 228 Q 580 228 580 220 L 580 186" class="a-dashed" stroke-width="1.5" marker-end="url(#arrowhead-dashed)"/>
-        <path data-edge-from="relay" data-edge-to="engines" data-edge-label="command / stdin" data-edge-key="6" data-edge-id="relay-engine-cmd" data-composition-points="450,304;250,304;250,420" d="M 450 304 L 258 304 Q 250 304 250 312 L 250 420" class="a-emphasis" stroke-width="1.8" marker-end="url(#arrowhead-emphasis)"/>
-        <path data-edge-from="engines" data-edge-to="relay" data-edge-label="JSONL / transcript events" data-edge-key="7" data-edge-id="engine-relay-jsonl" data-composition-points="370,452;545,452;545,338" d="M 370 452 L 537 452 Q 545 452 545 444 L 545 338" class="a-emphasis" stroke-width="1.8" marker-end="url(#arrowhead-emphasis)"/>
-        <path data-edge-from="engines" data-edge-to="leader" data-edge-label="spawn" data-edge-key="8" data-edge-id="engine-leader" data-composition-points="243,484;243,514.5;132.5,514.5;132.5,545" d="M 243 484 L 243 506.5 Q 243 514.5 235 514.5 L 140.5 514.5 Q 132.5 514.5 132.5 522.5 L 132.5 545" class="a-default" stroke-width="1.5" marker-end="url(#arrowhead)"/>
-        <path data-edge-from="engines" data-edge-to="pm" data-edge-label="spawn" data-edge-key="9" data-edge-id="engine-pm" data-composition-points="257,484;257,514.5;367.5,514.5;367.5,545" d="M 257 484 L 257 506.5 Q 257 514.5 265 514.5 L 359.5 514.5 Q 367.5 514.5 367.5 522.5 L 367.5 545" class="a-default" stroke-width="1.5" marker-end="url(#arrowhead)"/>
-        <path data-edge-from="engines" data-edge-to="workers" data-edge-label="spawn" data-edge-key="10" data-edge-id="engine-workers" data-composition-points="370,452;605,452;605,545" d="M 370 452 L 597 452 Q 605 452 605 460 L 605 545" class="a-default" stroke-width="1.5" marker-end="url(#arrowhead)"/>
-        <path data-edge-from="relay" data-edge-to="store-org" data-edge-label="读写" data-edge-key="11" data-edge-id="relay-store-org" data-composition-points="640,304;720,304;720,146;800,146" d="M 640 304 L 712 304 Q 720 304 720 296 L 720 154 Q 720 146 728 146 L 800 146" class="a-default" stroke-width="1.5" marker-end="url(#arrowhead)"/>
-        <path data-edge-from="relay" data-edge-to="store-events" data-edge-label="append 事件" data-edge-key="12" data-edge-id="relay-store-events" data-composition-points="640,304;664,304;664,96;1072.5,96;1072.5,120" d="M 640 304 L 656 304 Q 664 304 664 296 L 664 104 Q 664 96 672 96 L 1064.5 96 Q 1072.5 96 1072.5 104 L 1072.5 120" class="a-default" stroke-width="1.5" marker-end="url(#arrowhead)"/>
-        <path data-edge-from="store-events" data-edge-to="relay" data-edge-label="重放对账" data-edge-key="13" data-edge-id="store-events-replay" data-composition-points="1072.5,172;1072.5,196;664,196;664,304;640,304" d="M 1072.5 172 L 1072.5 188 Q 1072.5 196 1064.5 196 L 672 196 Q 664 196 664 204 L 664 296 Q 664 304 656 304 L 640 304" class="a-dashed" stroke-width="1.5" marker-end="url(#arrowhead-dashed)"/>
-        <path data-edge-from="relay" data-edge-to="store-tasks" data-edge-label="快照直读" data-edge-key="14" data-edge-id="relay-store-tasks" data-composition-points="640,304;720,304;720,261;800,261" d="M 640 304 L 712 304 Q 720 304 720 296 L 720 269 Q 720 261 728 261 L 800 261" class="a-default" stroke-width="1.5" marker-end="url(#arrowhead)"/>
-        <path data-edge-from="relay" data-edge-to="store-artifacts" data-edge-label="输出登记" data-edge-key="15" data-edge-id="relay-store-artifacts" data-composition-points="640,304;664,304;664,211;1072.5,211;1072.5,235" d="M 640 304 L 656 304 Q 664 304 664 296 L 664 219 Q 664 211 672 211 L 1064.5 211 Q 1072.5 211 1072.5 219 L 1072.5 235" class="a-default" stroke-width="1.5" marker-end="url(#arrowhead)"/>
+        <path data-edge-from="user" data-edge-to="web" data-edge-label="操作" data-edge-key="0" data-edge-id="user-web" data-composition-points="150,355;175,355;175,232;200,232" d="M 150 355 L 167 355 Q 175 355 175 347 L 175 240 Q 175 232 183 232 L 200 232" class="a-default" stroke-width="1.5" marker-end="url(#arrowhead)"/>
+        <path data-edge-from="user" data-edge-to="expo" data-edge-label="操作" data-edge-key="1" data-edge-id="user-expo" data-composition-points="150,369;175,369;175,492;200,492" d="M 150 369 L 167 369 Q 175 369 175 377 L 175 484 Q 175 492 183 492 L 200 492" class="a-default" stroke-width="1.5" marker-end="url(#arrowhead)"/>
+        <path data-edge-from="web" data-edge-to="relaycore" data-edge-label="LAN ws 直连" data-edge-key="2" data-edge-id="web-relay" data-composition-points="370,232;546,232;546,328;570,328" d="M 370 232 L 538 232 Q 546 232 546 240 L 546 320 Q 546 328 554 328 L 570 328" class="a-default" stroke-width="1.5" marker-end="url(#arrowhead)"/>
+        <path data-edge-from="expo" data-edge-to="bridge" data-edge-label="WAN HTTPS" data-edge-key="3" data-edge-id="expo-bridge" data-composition-points="370,492;425,492;425,394" d="M 370 492 L 417 492 Q 425 492 425 484 L 425 394" class="a-default" stroke-width="1.5" marker-end="url(#arrowhead)"/>
+        <path data-edge-from="bridge" data-edge-to="relaycore" data-edge-label="E2E 上行" data-edge-key="4" data-edge-id="bridge-relay-up" data-composition-points="500,355;524,355;524,371;546,371;546,342;570,342" d="M 500 355 L 516 355 Q 524 355 524 363 L 524 363 Q 524 371 532 371 L 538 371 Q 546 371 546 363 L 546 350 Q 546 342 554 342 L 570 342" class="a-default" stroke-width="1.5" marker-end="url(#arrowhead)"/>
+        <path data-edge-from="relaycore" data-edge-to="bridge" data-edge-label="事件下行" data-edge-key="5" data-edge-id="relay-bridge-down" data-composition-points="570,356;546,356;546,385;524,385;524,369;500,369" d="M 570 356 L 554 356 Q 546 356 546 364 L 546 377 Q 546 385 538 385 L 532 385 Q 524 385 524 377 L 524 377 Q 524 369 516 369 L 500 369" class="a-default" stroke-width="1.5" marker-end="url(#arrowhead)"/>
+        <path data-edge-from="relaycore" data-edge-to="engines" data-edge-label="command/stdin" data-edge-key="6" data-edge-id="relay-engines-cmd" data-composition-points="750,342;795,342;795,222;840,222" d="M 750 342 L 787 342 Q 795 342 795 334 L 795 230 Q 795 222 803 222 L 840 222" class="a-default" stroke-width="1.5" marker-end="url(#arrowhead)"/>
+        <path data-edge-from="engines" data-edge-to="relaycore" data-edge-label="JSONL 事件" data-edge-key="7" data-edge-id="engines-relay-jsonl" data-composition-points="840,222;795,222;795,342;750,342" d="M 840 222 L 803 222 Q 795 222 795 230 L 795 334 Q 795 342 787 342 L 750 342" class="a-default" stroke-width="1.5" marker-end="url(#arrowhead)"/>
+        <path data-edge-from="engines" data-edge-to="pmcard" data-edge-label="spawn / resume" data-edge-key="8" data-edge-id="engines-pm" data-composition-points="1030,215;1045,215;1045,92;1060,92" d="M 1030 215 L 1037.5 215 Q 1045 215 1045 207.5 L 1045 99.5 Q 1045 92 1052.5 92 L 1060 92" class="a-default" stroke-width="1.5" marker-end="url(#arrowhead)"/>
+        <path data-edge-from="engines" data-edge-to="reviewcard" data-edge-label="临时开卡" data-edge-key="9" data-edge-id="engines-review" data-composition-points="1030,222;1045,222;1045,262;1060,262" d="M 1030 222 L 1037.5 222 Q 1045 222 1045 229.5 L 1045 254.5 Q 1045 262 1052.5 262 L 1060 262" class="a-dashed" stroke-width="1.5" marker-end="url(#arrowhead-dashed)"/>
+        <path data-edge-from="engines" data-edge-to="workercards" data-edge-label="spawn / resume" data-edge-key="10" data-edge-id="engines-workers" data-composition-points="1030,229;1045,229;1045,432;1060,432" d="M 1030 229 L 1037.5 229 Q 1045 229 1045 236.5 L 1045 424.5 Q 1045 432 1052.5 432 L 1060 432" class="a-default" stroke-width="1.5" marker-end="url(#arrowhead)"/>
+        <path data-edge-from="relaycore" data-edge-to="orgstore" data-edge-label="读写" data-edge-key="11" data-edge-id="relay-org" data-composition-points="646,384;646,462;485,462;485,540" d="M 646 384 L 646 454 Q 646 462 638 462 L 493 462 Q 485 462 485 470 L 485 540" class="a-default" stroke-width="1.5" marker-end="url(#arrowhead)"/>
+        <path data-edge-from="relaycore" data-edge-to="eventlog" data-edge-label="append 事件" data-edge-key="12" data-edge-id="relay-events" data-composition-points="660,384;660,408;681,408;681,516;665,516;665,540" d="M 660 384 L 660 400 Q 660 408 668 408 L 673 408 Q 681 408 681 416 L 681 508 Q 681 516 673 516 L 673 516 Q 665 516 665 524 L 665 540" class="a-default" stroke-width="1.5" marker-end="url(#arrowhead)"/>
+        <path data-edge-from="relaycore" data-edge-to="taskstore" data-edge-label="快照直读" data-edge-key="13" data-edge-id="relay-taskstore" data-composition-points="660,384;660,462;845,462;845,540" d="M 660 384 L 660 454 Q 660 462 668 462 L 837 462 Q 845 462 845 470 L 845 540" class="a-default" stroke-width="1.5" marker-end="url(#arrowhead)"/>
+        <path data-edge-from="relaycore" data-edge-to="artifactstore" data-edge-label="输出登记" data-edge-key="14" data-edge-id="relay-artifactstore" data-composition-points="674,384;674,462;1025,462;1025,540" d="M 674 384 L 674 454 Q 674 462 682 462 L 1017 462 Q 1025 462 1025 470 L 1025 540" class="a-default" stroke-width="1.5" marker-end="url(#arrowhead)"/>
 
         <!-- Components -->
         <g id="node-user" data-node-id="user" data-node-label="用户" tabindex="0" role="button" aria-label="聚焦用户，拍板 · 验收, 架构组件" aria-pressed="false" data-node-kind="external" data-node-sublabel="拍板 · 验收" data-node-context="架构组件">
           <title>用户 · 拍板 · 验收 · 架构组件</title>
-          <rect x="50" y="30" width="140" height="52" rx="6" class="c-mask"/>
-          <rect x="50" y="30" width="140" height="52" rx="6" class="c-external" stroke-width="1.5"/>
-          <g aria-hidden="true" data-semantic-sigil="external" class="semantic-sigil s-external" transform="translate(56 36) scale(0.6875)">
+          <rect x="40" y="330" width="110" height="64" rx="6" class="c-mask"/>
+          <rect x="40" y="330" width="110" height="64" rx="6" class="c-external" stroke-width="1.5"/>
+          <g aria-hidden="true" data-semantic-sigil="external" class="semantic-sigil s-external" transform="translate(46 336) scale(0.6875)">
             <rect x="2.5" y="5" width="8.5" height="8" rx="1.5"/>
             <path d="M8 2.5h5.5V8M13.5 2.5 7.5 8.5"/>
           </g>
-          <text data-node-label="" data-detail-anchor="" x="120" y="54" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">用户</text>
-        <text data-detail="context" x="120" y="70" class="t-muted" font-size="9" text-anchor="middle">拍板 · 验收</text>
+          <text data-node-label="" data-detail-anchor="" x="95" y="360" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">用户</text>
+        <text data-detail="context" x="95" y="376" class="t-muted" font-size="9" text-anchor="middle">拍板 · 验收</text>
         </g>
 
-        <g id="node-webconsole" data-node-id="webconsole" data-node-label="Web / 桌面端" tabindex="0" role="button" aria-label="聚焦Web / 桌面端，web-console 单文件 · Tauri 壳, 架构组件" aria-pressed="false" data-node-kind="frontend" data-node-sublabel="web-console 单文件 · Tauri 壳" data-node-context="架构组件">
-          <title>Web / 桌面端 · web-console 单文件 · Tauri 壳 · 架构组件</title>
-          <rect x="45" y="140" width="190" height="56" rx="6" class="c-mask"/>
-          <rect x="45" y="140" width="190" height="56" rx="6" class="c-frontend" stroke-width="1.5"/>
-          <g aria-hidden="true" data-semantic-sigil="frontend" class="semantic-sigil s-frontend" transform="translate(51 146) scale(0.6875)">
+        <g id="node-web" data-node-id="web" data-node-label="Web / 桌面端" tabindex="0" role="button" aria-label="聚焦Web / 桌面端，单文件 · Tauri, 架构组件" aria-pressed="false" data-node-kind="frontend" data-node-sublabel="单文件 · Tauri" data-node-context="架构组件">
+          <title>Web / 桌面端 · 单文件 · Tauri · 架构组件</title>
+          <rect x="200" y="200" width="170" height="64" rx="6" class="c-mask"/>
+          <rect x="200" y="200" width="170" height="64" rx="6" class="c-frontend" stroke-width="1.5"/>
+          <g aria-hidden="true" data-semantic-sigil="frontend" class="semantic-sigil s-frontend" transform="translate(206 206) scale(0.6875)">
             <rect x="2" y="3" width="12" height="10" rx="2"/>
             <path d="M2 6.5h12"/>
             <circle cx="4.1" cy="4.8" r=".7" class="sigil-fill"/>
             <circle cx="6.3" cy="4.8" r=".7" class="sigil-fill"/>
           </g>
-          <text data-node-label="" data-detail-anchor="" x="140" y="166" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">Web / 桌面端</text>
-        <text data-detail="context" x="140" y="182" class="t-muted" font-size="9" text-anchor="middle">web-console 单文件 · Tauri 壳</text>
+          <text data-node-label="" data-detail-anchor="" x="285" y="230" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">Web / 桌面端</text>
+        <text data-detail="context" x="285" y="246" class="t-muted" font-size="9" text-anchor="middle">单文件 · Tauri</text>
         </g>
 
-        <g id="node-expoapp" data-node-id="expoapp" data-node-label="expo-app" tabindex="0" role="button" aria-label="聚焦expo-app，手机端 · LAN / 云, 架构组件" aria-pressed="false" data-node-kind="frontend" data-node-sublabel="手机端 · LAN / 云" data-node-context="架构组件">
-          <title>expo-app · 手机端 · LAN / 云 · 架构组件</title>
-          <rect x="290" y="140" width="145" height="52" rx="6" class="c-mask"/>
-          <rect x="290" y="140" width="145" height="52" rx="6" class="c-frontend" stroke-width="1.5"/>
-          <g aria-hidden="true" data-semantic-sigil="frontend" class="semantic-sigil s-frontend" transform="translate(296 146) scale(0.6875)">
+        <g id="node-expo" data-node-id="expo" data-node-label="expo-app" tabindex="0" role="button" aria-label="聚焦expo-app，手机 · LAN / 云, 架构组件" aria-pressed="false" data-node-kind="frontend" data-node-sublabel="手机 · LAN / 云" data-node-context="架构组件">
+          <title>expo-app · 手机 · LAN / 云 · 架构组件</title>
+          <rect x="200" y="460" width="170" height="64" rx="6" class="c-mask"/>
+          <rect x="200" y="460" width="170" height="64" rx="6" class="c-frontend" stroke-width="1.5"/>
+          <g aria-hidden="true" data-semantic-sigil="frontend" class="semantic-sigil s-frontend" transform="translate(206 466) scale(0.6875)">
             <rect x="2" y="3" width="12" height="10" rx="2"/>
             <path d="M2 6.5h12"/>
             <circle cx="4.1" cy="4.8" r=".7" class="sigil-fill"/>
             <circle cx="6.3" cy="4.8" r=".7" class="sigil-fill"/>
           </g>
-          <text data-node-label="" data-detail-anchor="" x="362.5" y="164" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">expo-app</text>
-        <text data-detail="context" x="362.5" y="180" class="t-muted" font-size="9" text-anchor="middle">手机端 · LAN / 云</text>
+          <text data-node-label="" data-detail-anchor="" x="285" y="490" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">expo-app</text>
+        <text data-detail="context" x="285" y="506" class="t-muted" font-size="9" text-anchor="middle">手机 · LAN / 云</text>
         </g>
 
-        <g id="node-bridge" data-node-id="bridge" data-node-label="云桥" tabindex="0" role="button" aria-label="聚焦云桥，Cloudflare Worker · E2E 转发, Cloudflare 边缘" aria-pressed="false" data-node-kind="cloud" data-node-sublabel="Cloudflare Worker · E2E 转发" data-node-context="Cloudflare 边缘">
-          <title>云桥 · Cloudflare Worker · E2E 转发 · Cloudflare 边缘</title>
-          <rect x="500" y="130" width="160" height="56" rx="6" class="c-mask"/>
-          <rect x="500" y="130" width="160" height="56" rx="6" class="c-cloud" stroke-width="1.5"/>
-          <g aria-hidden="true" data-semantic-sigil="cloud" class="semantic-sigil s-cloud" transform="translate(506 136) scale(0.6875)">
+        <g id="node-bridge" data-node-id="bridge" data-node-label="云桥" tabindex="0" role="button" aria-label="聚焦云桥，CF Worker · E2E, Cloudflare 边缘" aria-pressed="false" data-node-kind="cloud" data-node-sublabel="CF Worker · E2E" data-node-context="Cloudflare 边缘">
+          <title>云桥 · CF Worker · E2E · Cloudflare 边缘</title>
+          <rect x="350" y="330" width="150" height="64" rx="6" class="c-mask"/>
+          <rect x="350" y="330" width="150" height="64" rx="6" class="c-cloud" stroke-width="1.5"/>
+          <g aria-hidden="true" data-semantic-sigil="cloud" class="semantic-sigil s-cloud" transform="translate(356 336) scale(0.6875)">
             <path d="M4.3 12.5h7.3a2.4 2.4 0 0 0 .2-4.8 4 4 0 0 0-7.5-1.3A3.1 3.1 0 0 0 4.3 12.5Z"/>
           </g>
-          <text data-node-label="" data-detail-anchor="" x="580" y="156" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">云桥</text>
-        <text data-detail="context" x="580" y="172" class="t-muted" font-size="9" text-anchor="middle">Cloudflare Worker · E2E 转发</text>
+          <text data-node-label="" data-detail-anchor="" x="425" y="360" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">云桥</text>
+        <text data-detail="context" x="425" y="376" class="t-muted" font-size="9" text-anchor="middle">CF Worker · E2E</text>
         </g>
 
-        <g id="node-relay" data-node-id="relay" data-node-label="M2 Relay 核心" tabindex="0" role="button" aria-label="聚焦M2 Relay 核心，ws-server · session-manager, 本机 · M2 dev 环境" aria-pressed="false" data-node-kind="backend" data-node-sublabel="ws-server · session-manager" data-node-tag="唯一协调面 · 三出口" data-node-context="本机 · M2 dev 环境">
-          <title>M2 Relay 核心 · ws-server · session-manager · 本机 · M2 dev 环境 · 唯一协调面 · 三出口</title>
-          <rect x="450" y="270" width="190" height="68" rx="6" class="c-mask"/>
-          <rect x="450" y="270" width="190" height="68" rx="6" class="c-backend" stroke-width="1.5"/>
-          <g aria-hidden="true" data-semantic-sigil="backend" class="semantic-sigil s-backend" transform="translate(456 276) scale(0.6875)">
+        <g id="node-relaycore" data-node-id="relaycore" data-node-label="M2 Relay 核心" tabindex="0" role="button" aria-label="聚焦M2 Relay 核心，session-manager, 本机 · M2 dev 环境" aria-pressed="false" data-node-kind="backend" data-node-sublabel="session-manager" data-node-context="本机 · M2 dev 环境">
+          <title>M2 Relay 核心 · session-manager · 本机 · M2 dev 环境</title>
+          <rect x="570" y="300" width="180" height="84" rx="6" class="c-mask"/>
+          <rect x="570" y="300" width="180" height="84" rx="6" class="c-backend" stroke-width="1.5"/>
+          <g aria-hidden="true" data-semantic-sigil="backend" class="semantic-sigil s-backend" transform="translate(576 306) scale(0.6875)">
             <path d="M6 3 3 8l3 5M10 3l3 5-3 5"/>
           </g>
-          <text data-node-label="" data-detail-anchor="" x="545" y="302" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">M2 Relay 核心</text>
-        <text data-detail="context" x="545" y="318" class="t-muted" font-size="9" text-anchor="middle">ws-server · session-manager</text>
-        <text data-detail="fine" x="545" y="330" class="t-backend" font-size="7" text-anchor="middle">唯一协调面 · 三出口</text>
+          <text data-node-label="" data-detail-anchor="" x="660" y="340" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">M2 Relay 核心</text>
+        <text data-detail="context" x="660" y="356" class="t-muted" font-size="9" text-anchor="middle">session-manager</text>
         </g>
 
-        <g id="node-engines" data-node-id="engines" data-node-label="EngineRegistry / Adapter" tabindex="0" role="button" aria-label="聚焦EngineRegistry / Adapter，六类枚举 · 三类已注册 · Claude/Codex 专用路径, 本机 · M2 dev 环境" aria-pressed="false" data-node-kind="backend" data-node-sublabel="六类枚举 · 三类已注册 · Claude/Codex 专用路径" data-node-tag="ZCode unsupported · fail-closed" data-node-context="本机 · M2 dev 环境">
-          <title>EngineRegistry / Adapter · 六类枚举 · 三类已注册 · Claude/Codex 专用路径 · 本机 · M2 dev 环境 · ZCode unsupported · fail-closed</title>
-          <rect x="130" y="420" width="240" height="64" rx="6" class="c-mask"/>
-          <rect x="130" y="420" width="240" height="64" rx="6" class="c-backend" stroke-width="1.5"/>
-          <g aria-hidden="true" data-semantic-sigil="backend" class="semantic-sigil s-backend" transform="translate(136 426) scale(0.6875)">
+        <g id="node-engines" data-node-id="engines" data-node-label="EngineRegistry / Adapter" tabindex="0" role="button" aria-label="聚焦EngineRegistry / Adapter，六类枚举 · 三类已注册, 本机 · M2 dev 环境" aria-pressed="false" data-node-kind="backend" data-node-sublabel="六类枚举 · 三类已注册" data-node-context="本机 · M2 dev 环境">
+          <title>EngineRegistry / Adapter · 六类枚举 · 三类已注册 · 本机 · M2 dev 环境</title>
+          <rect x="840" y="180" width="190" height="84" rx="6" class="c-mask"/>
+          <rect x="840" y="180" width="190" height="84" rx="6" class="c-backend" stroke-width="1.5"/>
+          <g aria-hidden="true" data-semantic-sigil="backend" class="semantic-sigil s-backend" transform="translate(846 186) scale(0.6875)">
             <path d="M6 3 3 8l3 5M10 3l3 5-3 5"/>
           </g>
-          <text data-node-label="" data-detail-anchor="" x="250" y="450" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">EngineRegistry / Adapter</text>
-        <text data-detail="context" x="250" y="466" class="t-muted" font-size="8.5" text-anchor="middle">六类枚举 · 三类已注册 · Claude/Codex 专用路径</text>
-        <text data-detail="fine" x="250" y="476" class="t-backend" font-size="7" text-anchor="middle">ZCode unsupported · fail-closed</text>
+          <text data-node-label="" data-detail-anchor="" x="935" y="220" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">EngineRegistry / Adapter</text>
+        <text data-detail="context" x="935" y="236" class="t-muted" font-size="9" text-anchor="middle">六类枚举 · 三类已注册</text>
         </g>
 
-        <g id="node-leader" data-node-id="leader" data-node-label="Leader 会话" tabindex="0" role="button" aria-label="聚焦Leader 会话，勘察 · 派单 · 核验 · 代提交, 本机 · M2 dev 环境" aria-pressed="false" data-node-kind="backend" data-node-sublabel="勘察 · 派单 · 核验 · 代提交" data-node-context="本机 · M2 dev 环境">
-          <title>Leader 会话 · 勘察 · 派单 · 核验 · 代提交 · 本机 · M2 dev 环境</title>
-          <rect x="60" y="545" width="145" height="52" rx="6" class="c-mask"/>
-          <rect x="60" y="545" width="145" height="52" rx="6" class="c-backend" stroke-width="1.5"/>
-          <g aria-hidden="true" data-semantic-sigil="backend" class="semantic-sigil s-backend" transform="translate(66 551) scale(0.6875)">
+        <g id="node-pmcard" data-node-id="pmcard" data-node-label="PM 会话" tabindex="0" role="button" aria-label="聚焦PM 会话，派单 · 核验 · 提交, 本机 · M2 dev 环境" aria-pressed="false" data-node-kind="security" data-node-sublabel="派单 · 核验 · 提交" data-node-context="本机 · M2 dev 环境">
+          <title>PM 会话 · 派单 · 核验 · 提交 · 本机 · M2 dev 环境</title>
+          <rect x="1060" y="60" width="170" height="64" rx="6" class="c-mask"/>
+          <rect x="1060" y="60" width="170" height="64" rx="6" class="c-security" stroke-width="1.5"/>
+          <g aria-hidden="true" data-semantic-sigil="security" class="semantic-sigil s-security" transform="translate(1066 66) scale(0.6875)">
+            <path d="M8 2.2 13 4v3.5c0 3.1-1.8 5.4-5 6.5-3.2-1.1-5-3.4-5-6.5V4Z"/>
+            <path d="m5.8 8 1.5 1.5 3-3"/>
+          </g>
+          <text data-node-label="" data-detail-anchor="" x="1145" y="90" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">PM 会话</text>
+        <text data-detail="context" x="1145" y="106" class="t-muted" font-size="9" text-anchor="middle">派单 · 核验 · 提交</text>
+        </g>
+
+        <g id="node-reviewcard" data-node-id="reviewcard" data-node-label="评审卡" tabindex="0" role="button" aria-label="聚焦评审卡，盲评 · 复审 · 即删, 本机 · M2 dev 环境" aria-pressed="false" data-node-kind="backend" data-node-sublabel="盲评 · 复审 · 即删" data-node-context="本机 · M2 dev 环境">
+          <title>评审卡 · 盲评 · 复审 · 即删 · 本机 · M2 dev 环境</title>
+          <rect x="1060" y="230" width="170" height="64" rx="6" class="c-mask"/>
+          <rect x="1060" y="230" width="170" height="64" rx="6" class="c-backend" stroke-width="1.5"/>
+          <g aria-hidden="true" data-semantic-sigil="backend" class="semantic-sigil s-backend" transform="translate(1066 236) scale(0.6875)">
             <path d="M6 3 3 8l3 5M10 3l3 5-3 5"/>
           </g>
-          <text data-node-label="" data-detail-anchor="" x="132.5" y="569" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">Leader 会话</text>
-        <text data-detail="context" x="132.5" y="585" class="t-muted" font-size="8.4" text-anchor="middle">勘察 · 派单 · 核验 · 代提交</text>
+          <text data-node-label="" data-detail-anchor="" x="1145" y="260" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">评审卡</text>
+        <text data-detail="context" x="1145" y="276" class="t-muted" font-size="9" text-anchor="middle">盲评 · 复审 · 即删</text>
         </g>
 
-        <g id="node-pm" data-node-id="pm" data-node-label="PM 会话" tabindex="0" role="button" aria-label="聚焦PM 会话，设计单 · 规范 · 004/013, 本机 · M2 dev 环境" aria-pressed="false" data-node-kind="backend" data-node-sublabel="设计单 · 规范 · 004/013" data-node-context="本机 · M2 dev 环境">
-          <title>PM 会话 · 设计单 · 规范 · 004/013 · 本机 · M2 dev 环境</title>
-          <rect x="295" y="545" width="145" height="52" rx="6" class="c-mask"/>
-          <rect x="295" y="545" width="145" height="52" rx="6" class="c-backend" stroke-width="1.5"/>
-          <g aria-hidden="true" data-semantic-sigil="backend" class="semantic-sigil s-backend" transform="translate(301 551) scale(0.6875)">
-            <path d="M6 3 3 8l3 5M10 3l3 5-3 5"/>
-          </g>
-          <text data-node-label="" data-detail-anchor="" x="367.5" y="569" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">PM 会话</text>
-        <text data-detail="context" x="367.5" y="585" class="t-muted" font-size="9" text-anchor="middle">设计单 · 规范 · 004/013</text>
-        </g>
-
-        <g id="node-workers" data-node-id="workers" data-node-label="worker A / B" tabindex="0" role="button" aria-label="聚焦worker A / B，实施 · 自查 · 回单, 本机 · M2 dev 环境" aria-pressed="false" data-node-kind="backend" data-node-sublabel="实施 · 自查 · 回单" data-node-context="本机 · M2 dev 环境">
+        <g id="node-workercards" data-node-id="workercards" data-node-label="worker A / B" tabindex="0" role="button" aria-label="聚焦worker A / B，实施 · 自查 · 回单, 本机 · M2 dev 环境" aria-pressed="false" data-node-kind="backend" data-node-sublabel="实施 · 自查 · 回单" data-node-context="本机 · M2 dev 环境">
           <title>worker A / B · 实施 · 自查 · 回单 · 本机 · M2 dev 环境</title>
-          <rect x="530" y="545" width="150" height="52" rx="6" class="c-mask"/>
-          <rect x="530" y="545" width="150" height="52" rx="6" class="c-backend" stroke-width="1.5"/>
-          <g aria-hidden="true" data-semantic-sigil="backend" class="semantic-sigil s-backend" transform="translate(536 551) scale(0.6875)">
+          <rect x="1060" y="400" width="170" height="64" rx="6" class="c-mask"/>
+          <rect x="1060" y="400" width="170" height="64" rx="6" class="c-backend" stroke-width="1.5"/>
+          <g aria-hidden="true" data-semantic-sigil="backend" class="semantic-sigil s-backend" transform="translate(1066 406) scale(0.6875)">
             <path d="M6 3 3 8l3 5M10 3l3 5-3 5"/>
           </g>
-          <text data-node-label="" data-detail-anchor="" x="605" y="569" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">worker A / B</text>
-        <text data-detail="context" x="605" y="585" class="t-muted" font-size="9" text-anchor="middle">实施 · 自查 · 回单</text>
+          <text data-node-label="" data-detail-anchor="" x="1145" y="430" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">worker A / B</text>
+        <text data-detail="context" x="1145" y="446" class="t-muted" font-size="9" text-anchor="middle">实施 · 自查 · 回单</text>
         </g>
 
-        <g id="node-store-org" data-node-id="store-org" data-node-label="org 数据层" tabindex="0" role="button" aria-label="聚焦org 数据层，projects · boards · confirms, 本机 · M2 dev 环境" aria-pressed="false" data-node-kind="database" data-node-sublabel="projects · boards · confirms" data-node-context="本机 · M2 dev 环境">
-          <title>org 数据层 · projects · boards · confirms · 本机 · M2 dev 环境</title>
-          <rect x="800" y="120" width="175" height="52" rx="6" class="c-mask"/>
-          <rect x="800" y="120" width="175" height="52" rx="6" class="c-database" stroke-width="1.5"/>
-          <g aria-hidden="true" data-semantic-sigil="database" class="semantic-sigil s-database" transform="translate(806 126) scale(0.6875)">
+        <g id="node-orgstore" data-node-id="orgstore" data-node-label="org 数据层" tabindex="0" role="button" aria-label="聚焦org 数据层，项目 · 板 · 确认单, 本机 · M2 dev 环境" aria-pressed="false" data-node-kind="database" data-node-sublabel="项目 · 板 · 确认单" data-node-context="本机 · M2 dev 环境">
+          <title>org 数据层 · 项目 · 板 · 确认单 · 本机 · M2 dev 环境</title>
+          <rect x="400" y="540" width="170" height="64" rx="6" class="c-mask"/>
+          <rect x="400" y="540" width="170" height="64" rx="6" class="c-database" stroke-width="1.5"/>
+          <g aria-hidden="true" data-semantic-sigil="database" class="semantic-sigil s-database" transform="translate(406 546) scale(0.6875)">
             <ellipse cx="8" cy="4" rx="5" ry="2"/>
             <path d="M3 4v8c0 1.1 2.2 2 5 2s5-.9 5-2V4M3 8c0 1.1 2.2 2 5 2s5-.9 5-2"/>
           </g>
-          <text data-node-label="" data-detail-anchor="" x="887.5" y="144" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">org 数据层</text>
-        <text data-detail="context" x="887.5" y="160" class="t-muted" font-size="9" text-anchor="middle">projects · boards · confirms</text>
+          <text data-node-label="" data-detail-anchor="" x="485" y="570" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">org 数据层</text>
+        <text data-detail="context" x="485" y="586" class="t-muted" font-size="9" text-anchor="middle">项目 · 板 · 确认单</text>
         </g>
 
-        <g id="node-store-events" data-node-id="store-events" data-node-label="events.ndjson" tabindex="0" role="button" aria-label="聚焦events.ndjson，append-only 事件账本 · 事实源, 本机 · M2 dev 环境" aria-pressed="false" data-node-kind="database" data-node-sublabel="append-only 事件账本 · 事实源" data-node-context="本机 · M2 dev 环境">
-          <title>events.ndjson · append-only 事件账本 · 事实源 · 本机 · M2 dev 环境</title>
-          <rect x="985" y="120" width="175" height="52" rx="6" class="c-mask"/>
-          <rect x="985" y="120" width="175" height="52" rx="6" class="c-database" stroke-width="1.5"/>
-          <g aria-hidden="true" data-semantic-sigil="database" class="semantic-sigil s-database" transform="translate(991 126) scale(0.6875)">
+        <g id="node-eventlog" data-node-id="eventlog" data-node-label="events.ndjson" tabindex="0" role="button" aria-label="聚焦events.ndjson，事件账本 · 事实源, 本机 · M2 dev 环境" aria-pressed="false" data-node-kind="database" data-node-sublabel="事件账本 · 事实源" data-node-context="本机 · M2 dev 环境">
+          <title>events.ndjson · 事件账本 · 事实源 · 本机 · M2 dev 环境</title>
+          <rect x="580" y="540" width="170" height="64" rx="6" class="c-mask"/>
+          <rect x="580" y="540" width="170" height="64" rx="6" class="c-database" stroke-width="1.5"/>
+          <g aria-hidden="true" data-semantic-sigil="database" class="semantic-sigil s-database" transform="translate(586 546) scale(0.6875)">
             <ellipse cx="8" cy="4" rx="5" ry="2"/>
             <path d="M3 4v8c0 1.1 2.2 2 5 2s5-.9 5-2V4M3 8c0 1.1 2.2 2 5 2s5-.9 5-2"/>
           </g>
-          <text data-node-label="" data-detail-anchor="" x="1072.5" y="144" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">events.ndjson</text>
-        <text data-detail="context" x="1072.5" y="160" class="t-muted" font-size="9" text-anchor="middle">append-only 事件账本 · 事实源</text>
+          <text data-node-label="" data-detail-anchor="" x="665" y="570" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">events.ndjson</text>
+        <text data-detail="context" x="665" y="586" class="t-muted" font-size="9" text-anchor="middle">事件账本 · 事实源</text>
         </g>
 
-        <g id="node-store-tasks" data-node-id="store-tasks" data-node-label="CLI task-store" tabindex="0" role="button" aria-label="聚焦CLI task-store，~/.claude/tasks/&lt;id&gt;, 本机 · M2 dev 环境" aria-pressed="false" data-node-kind="database" data-node-sublabel="~/.claude/tasks/&lt;id&gt;" data-node-context="本机 · M2 dev 环境">
-          <title>CLI task-store · ~/.claude/tasks/&lt;id&gt; · 本机 · M2 dev 环境</title>
-          <rect x="800" y="235" width="175" height="52" rx="6" class="c-mask"/>
-          <rect x="800" y="235" width="175" height="52" rx="6" class="c-database" stroke-width="1.5"/>
-          <g aria-hidden="true" data-semantic-sigil="database" class="semantic-sigil s-database" transform="translate(806 241) scale(0.6875)">
+        <g id="node-taskstore" data-node-id="taskstore" data-node-label="CLI task-store" tabindex="0" role="button" aria-label="聚焦CLI task-store，CLI 任务库, 本机 · M2 dev 环境" aria-pressed="false" data-node-kind="database" data-node-sublabel="CLI 任务库" data-node-context="本机 · M2 dev 环境">
+          <title>CLI task-store · CLI 任务库 · 本机 · M2 dev 环境</title>
+          <rect x="760" y="540" width="170" height="64" rx="6" class="c-mask"/>
+          <rect x="760" y="540" width="170" height="64" rx="6" class="c-database" stroke-width="1.5"/>
+          <g aria-hidden="true" data-semantic-sigil="database" class="semantic-sigil s-database" transform="translate(766 546) scale(0.6875)">
             <ellipse cx="8" cy="4" rx="5" ry="2"/>
             <path d="M3 4v8c0 1.1 2.2 2 5 2s5-.9 5-2V4M3 8c0 1.1 2.2 2 5 2s5-.9 5-2"/>
           </g>
-          <text data-node-label="" data-detail-anchor="" x="887.5" y="259" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">CLI task-store</text>
-        <text data-detail="context" x="887.5" y="275" class="t-muted" font-size="9" text-anchor="middle">~/.claude/tasks/&lt;id&gt;</text>
+          <text data-node-label="" data-detail-anchor="" x="845" y="570" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">CLI task-store</text>
+        <text data-detail="context" x="845" y="586" class="t-muted" font-size="9" text-anchor="middle">CLI 任务库</text>
         </g>
 
-        <g id="node-store-artifacts" data-node-id="store-artifacts" data-node-label="artifact store" tabindex="0" role="button" aria-label="聚焦artifact store，输出物目录 · deliver 登记, 本机 · M2 dev 环境" aria-pressed="false" data-node-kind="database" data-node-sublabel="输出物目录 · deliver 登记" data-node-context="本机 · M2 dev 环境">
-          <title>artifact store · 输出物目录 · deliver 登记 · 本机 · M2 dev 环境</title>
-          <rect x="985" y="235" width="175" height="52" rx="6" class="c-mask"/>
-          <rect x="985" y="235" width="175" height="52" rx="6" class="c-database" stroke-width="1.5"/>
-          <g aria-hidden="true" data-semantic-sigil="database" class="semantic-sigil s-database" transform="translate(991 241) scale(0.6875)">
+        <g id="node-artifactstore" data-node-id="artifactstore" data-node-label="artifact store" tabindex="0" role="button" aria-label="聚焦artifact store，输出物 · 登记, 本机 · M2 dev 环境" aria-pressed="false" data-node-kind="database" data-node-sublabel="输出物 · 登记" data-node-context="本机 · M2 dev 环境">
+          <title>artifact store · 输出物 · 登记 · 本机 · M2 dev 环境</title>
+          <rect x="940" y="540" width="170" height="64" rx="6" class="c-mask"/>
+          <rect x="940" y="540" width="170" height="64" rx="6" class="c-database" stroke-width="1.5"/>
+          <g aria-hidden="true" data-semantic-sigil="database" class="semantic-sigil s-database" transform="translate(946 546) scale(0.6875)">
             <ellipse cx="8" cy="4" rx="5" ry="2"/>
             <path d="M3 4v8c0 1.1 2.2 2 5 2s5-.9 5-2V4M3 8c0 1.1 2.2 2 5 2s5-.9 5-2"/>
           </g>
-          <text data-node-label="" data-detail-anchor="" x="1072.5" y="259" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">artifact store</text>
-        <text data-detail="context" x="1072.5" y="275" class="t-muted" font-size="9" text-anchor="middle">输出物目录 · deliver 登记</text>
+          <text data-node-label="" data-detail-anchor="" x="1025" y="570" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">artifact store</text>
+        <text data-detail="context" x="1025" y="586" class="t-muted" font-size="9" text-anchor="middle">输出物 · 登记</text>
         </g>
 
         <!-- Connection labels -->
-
-
-        <g data-detail="context" data-edge-from="webconsole" data-edge-to="relay" data-edge-label="LAN ws 直连" data-edge-key="2" data-edge-id="web-relay">
-          <rect x="227.6" y="202" width="62.8" height="14" rx="3" class="c-mask"/>
-          <text x="259" y="212" class="t-backend" font-size="8" text-anchor="middle">LAN ws 直连</text>
+        <g data-detail="context" data-edge-from="user" data-edge-to="web" data-edge-label="操作" data-edge-key="0" data-edge-id="user-web">
+          <rect x="160" y="273.5" width="30" height="14" rx="3" class="c-mask"/>
+          <text x="175" y="283.5" class="t-muted" font-size="8" text-anchor="middle">操作</text>
         </g>
-        <g data-detail="context" data-edge-from="expoapp" data-edge-to="bridge" data-edge-label="WAN HTTPS" data-edge-key="3" data-edge-id="expo-bridge">
-          <rect x="448.4" y="136" width="53.199999999999996" height="14" rx="3" class="c-mask"/>
-          <text x="475" y="146" class="t-muted" font-size="8" text-anchor="middle">WAN HTTPS</text>
+        <g data-detail="context" data-edge-from="user" data-edge-to="expo" data-edge-label="操作" data-edge-key="1" data-edge-id="user-expo">
+          <rect x="160" y="410.5" width="30" height="14" rx="3" class="c-mask"/>
+          <text x="175" y="420.5" class="t-muted" font-size="8" text-anchor="middle">操作</text>
         </g>
-        <g data-detail="context" data-edge-from="bridge" data-edge-to="relay" data-edge-label="E2E 指令上行" data-edge-key="4" data-edge-id="bridge-relay-up">
-          <rect x="591.2" y="238" width="67.6" height="14" rx="3" class="c-mask"/>
-          <text x="625" y="248" class="t-muted" font-size="8" text-anchor="middle">E2E 指令上行</text>
+        <g data-detail="context" data-edge-from="web" data-edge-to="relaycore" data-edge-label="LAN ws 直连" data-edge-key="2" data-edge-id="web-relay">
+          <rect x="514.6" y="260" width="62.8" height="14" rx="3" class="c-mask"/>
+          <text x="546" y="270" class="t-muted" font-size="8" text-anchor="middle">LAN ws 直连</text>
         </g>
-        <g data-detail="context" data-edge-from="relay" data-edge-to="bridge" data-edge-label="事件下行" data-edge-key="5" data-edge-id="relay-bridge-down">
-          <rect x="495.8" y="200" width="48.4" height="14" rx="3" class="c-mask"/>
-          <text x="520" y="210" class="t-messagebus" font-size="8" text-anchor="middle">事件下行</text>
+        <g data-detail="context" data-edge-from="expo" data-edge-to="bridge" data-edge-label="WAN HTTPS" data-edge-key="3" data-edge-id="expo-bridge">
+          <rect x="398.4" y="423" width="53.199999999999996" height="14" rx="3" class="c-mask"/>
+          <text x="425" y="433" class="t-muted" font-size="8" text-anchor="middle">WAN HTTPS</text>
         </g>
-        <g data-detail="context" data-edge-from="relay" data-edge-to="engines" data-edge-label="command / stdin" data-edge-key="6" data-edge-id="relay-engine-cmd">
-          <rect x="309" y="345" width="82" height="14" rx="3" class="c-mask"/>
-          <text x="350" y="355" class="t-backend" font-size="8" text-anchor="middle">command / stdin</text>
+        <g data-detail="context" data-edge-from="bridge" data-edge-to="relaycore" data-edge-label="E2E 上行" data-edge-key="4" data-edge-id="bridge-relay-up">
+          <rect x="479.8" y="299" width="48.4" height="14" rx="3" class="c-mask"/>
+          <text x="504" y="309" class="t-muted" font-size="8" text-anchor="middle">E2E 上行</text>
         </g>
-        <g data-detail="context" data-edge-from="engines" data-edge-to="relay" data-edge-label="JSONL / transcript events" data-edge-key="7" data-edge-id="engine-relay-jsonl">
-          <rect x="335" y="385" width="130" height="14" rx="3" class="c-mask"/>
-          <text x="400" y="395" class="t-backend" font-size="8" text-anchor="middle">JSONL / transcript events</text>
+        <g data-detail="context" data-edge-from="relaycore" data-edge-to="bridge" data-edge-label="事件下行" data-edge-key="5" data-edge-id="relay-bridge-down">
+          <rect x="521.8" y="376.5" width="48.4" height="14" rx="3" class="c-mask"/>
+          <text x="546" y="386.5" class="t-muted" font-size="8" text-anchor="middle">事件下行</text>
         </g>
-        <g data-detail="context" data-edge-from="engines" data-edge-to="leader" data-edge-label="spawn" data-edge-key="8" data-edge-id="engine-leader">
-          <rect x="170.75" y="494.5" width="34" height="14" rx="3" class="c-mask"/>
-          <text x="187.75" y="504.5" class="t-muted" font-size="8" text-anchor="middle">spawn</text>
+        <g data-detail="context" data-edge-from="relaycore" data-edge-to="engines" data-edge-label="command/stdin" data-edge-key="6" data-edge-id="relay-engines-cmd">
+          <rect x="760.8" y="182" width="72.4" height="14" rx="3" class="c-mask"/>
+          <text x="797" y="192" class="t-muted" font-size="8" text-anchor="middle">command/stdin</text>
         </g>
-        <g data-detail="context" data-edge-from="engines" data-edge-to="pm" data-edge-label="spawn" data-edge-key="9" data-edge-id="engine-pm">
-          <rect x="295.25" y="494.5" width="34" height="14" rx="3" class="c-mask"/>
-          <text x="312.25" y="504.5" class="t-muted" font-size="8" text-anchor="middle">spawn</text>
+        <g data-detail="context" data-edge-from="engines" data-edge-to="relaycore" data-edge-label="JSONL 事件" data-edge-key="7" data-edge-id="engines-relay-jsonl">
+          <rect x="768" y="354" width="58" height="14" rx="3" class="c-mask"/>
+          <text x="797" y="364" class="t-muted" font-size="8" text-anchor="middle">JSONL 事件</text>
         </g>
-        <g data-detail="context" data-edge-from="engines" data-edge-to="workers" data-edge-label="spawn" data-edge-key="10" data-edge-id="engine-workers">
-          <rect x="588" y="478.5" width="34" height="14" rx="3" class="c-mask"/>
-          <text x="605" y="488.5" class="t-muted" font-size="8" text-anchor="middle">spawn</text>
+        <g data-detail="context" data-edge-from="engines" data-edge-to="pmcard" data-edge-label="spawn / resume" data-edge-key="8" data-edge-id="engines-pm">
+          <rect x="1006.4" y="133.5" width="77.2" height="14" rx="3" class="c-mask"/>
+          <text x="1045" y="143.5" class="t-muted" font-size="8" text-anchor="middle">spawn / resume</text>
         </g>
-        <g data-detail="context" data-edge-from="relay" data-edge-to="store-org" data-edge-label="读写" data-edge-key="11" data-edge-id="relay-store-org">
-          <rect x="677" y="230" width="30" height="14" rx="3" class="c-mask"/>
-          <text x="692" y="240" class="t-muted" font-size="8" text-anchor="middle">读写</text>
+        <g data-detail="context" data-edge-from="engines" data-edge-to="reviewcard" data-edge-label="临时开卡" data-edge-key="9" data-edge-id="engines-review">
+          <rect x="975.8" y="330" width="48.4" height="14" rx="3" class="c-mask"/>
+          <text x="1000" y="340" class="t-messagebus" font-size="8" text-anchor="middle">临时开卡</text>
         </g>
-        <g data-detail="context" data-edge-from="relay" data-edge-to="store-events" data-edge-label="append 事件" data-edge-key="12" data-edge-id="relay-store-events">
-          <rect x="828.6" y="71" width="62.8" height="14" rx="3" class="c-mask"/>
-          <text x="860" y="81" class="t-muted" font-size="8" text-anchor="middle">append 事件</text>
+        <g data-detail="context" data-edge-from="engines" data-edge-to="workercards" data-edge-label="spawn / resume" data-edge-key="10" data-edge-id="engines-workers">
+          <rect x="1006.4" y="310.5" width="77.2" height="14" rx="3" class="c-mask"/>
+          <text x="1045" y="320.5" class="t-muted" font-size="8" text-anchor="middle">spawn / resume</text>
         </g>
-        <g data-detail="context" data-edge-from="store-events" data-edge-to="relay" data-edge-label="重放对账" data-edge-key="13" data-edge-id="store-events-replay">
-          <rect x="844.05" y="176" width="48.4" height="14" rx="3" class="c-mask"/>
-          <text x="868.25" y="186" class="t-messagebus" font-size="8" text-anchor="middle">重放对账</text>
+        <g data-detail="context" data-edge-from="relaycore" data-edge-to="orgstore" data-edge-label="读写" data-edge-key="11" data-edge-id="relay-org">
+          <rect x="550.5" y="442" width="30" height="14" rx="3" class="c-mask"/>
+          <text x="565.5" y="452" class="t-muted" font-size="8" text-anchor="middle">读写</text>
         </g>
-        <g data-detail="context" data-edge-from="relay" data-edge-to="store-tasks" data-edge-label="快照直读" data-edge-key="14" data-edge-id="relay-store-tasks">
-          <rect x="735.8" y="266" width="48.4" height="14" rx="3" class="c-mask"/>
-          <text x="760" y="276" class="t-muted" font-size="8" text-anchor="middle">快照直读</text>
+        <g data-detail="context" data-edge-from="relaycore" data-edge-to="eventlog" data-edge-label="append 事件" data-edge-key="12" data-edge-id="relay-events">
+          <rect x="621.6" y="490" width="62.8" height="14" rx="3" class="c-mask"/>
+          <text x="653" y="500" class="t-muted" font-size="8" text-anchor="middle">append 事件</text>
         </g>
-        <g data-detail="context" data-edge-from="relay" data-edge-to="store-artifacts" data-edge-label="输出登记" data-edge-key="15" data-edge-id="relay-store-artifacts">
-          <rect x="835.8" y="173" width="48.4" height="14" rx="3" class="c-mask"/>
-          <text x="860" y="183" class="t-muted" font-size="8" text-anchor="middle">输出登记</text>
+        <g data-detail="context" data-edge-from="relaycore" data-edge-to="taskstore" data-edge-label="快照直读" data-edge-key="13" data-edge-id="relay-taskstore">
+          <rect x="728.3" y="442" width="48.4" height="14" rx="3" class="c-mask"/>
+          <text x="752.5" y="452" class="t-muted" font-size="8" text-anchor="middle">快照直读</text>
+        </g>
+        <g data-detail="context" data-edge-from="relaycore" data-edge-to="artifactstore" data-edge-label="输出登记" data-edge-key="14" data-edge-id="relay-artifactstore">
+          <rect x="825.3" y="442" width="48.4" height="14" rx="3" class="c-mask"/>
+          <text x="849.5" y="452" class="t-muted" font-size="8" text-anchor="middle">输出登记</text>
         </g>
 
         <!-- Boundary labels (foreground masks keep routes out of titles) -->
         <g data-graph-role="structural-frame-label" data-composition-frame-id="0" data-composition-frame-kind="region" data-composition-frame-label="Cloudflare 边缘">
-          <rect data-graph-role="structural-frame-label-mask" x="474" y="110" width="91" height="16" rx="3" class="c-mask"/>
-          <text data-boundary-label="" x="478" y="123" class="t-cloud" font-size="9" font-weight="600">Cloudflare 边缘</text>
+          <rect data-graph-role="structural-frame-label-mask" x="324" y="310" width="91" height="16" rx="3" class="c-mask"/>
+          <text data-boundary-label="" x="328" y="323" class="t-cloud" font-size="9" font-weight="600">Cloudflare 边缘</text>
         </g>
 
         <g data-graph-role="structural-frame-label" data-composition-frame-id="1" data-composition-frame-kind="region" data-composition-frame-label="本机 · M2 dev 环境">
-          <rect data-graph-role="structural-frame-label-mask" x="34" y="100" width="107.2" height="16" rx="3" class="c-mask"/>
-          <text data-boundary-label="" x="38" y="113" class="t-cloud" font-size="9" font-weight="600">本机 · M2 dev 环境</text>
+          <rect data-graph-role="structural-frame-label-mask" x="374" y="40" width="107.2" height="16" rx="3" class="c-mask"/>
+          <text data-boundary-label="" x="378" y="53" class="t-cloud" font-size="9" font-weight="600">本机 · M2 dev 环境</text>
         </g>
 
         <!-- Legend -->
-
+        <g data-legend="" data-legend-bridge="">
+          <text x="40" y="656" class="t-primary" font-size="12" font-weight="650">图例</text>
+          <g data-legend-semantic-kind="frontend" data-legend-kind="frontend" data-legend-label="前端" data-legend-x="40" data-legend-baseline="676" data-legend-width="63">
+            <rect x="40" y="667" width="16" height="10" rx="2.5" class="c-frontend" stroke-width="1"/>
+            <text x="62" y="676" class="t-muted" font-size="10" font-weight="500">前端</text>
+          </g>
+          <g data-legend-semantic-kind="backend" data-legend-kind="backend" data-legend-label="后端" data-legend-x="125" data-legend-baseline="676" data-legend-width="63">
+            <rect x="125" y="667" width="16" height="10" rx="2.5" class="c-backend" stroke-width="1"/>
+            <text x="147" y="676" class="t-muted" font-size="10" font-weight="500">后端</text>
+          </g>
+          <g data-legend-semantic-kind="database" data-legend-kind="database" data-legend-label="数据库" data-legend-x="210" data-legend-baseline="676" data-legend-width="73">
+            <rect x="210" y="667" width="16" height="10" rx="2.5" class="c-database" stroke-width="1"/>
+            <text x="232" y="676" class="t-muted" font-size="10" font-weight="500">数据库</text>
+          </g>
+          <g data-legend-semantic-kind="cloud" data-legend-kind="cloud" data-legend-label="云服务" data-legend-x="305" data-legend-baseline="676" data-legend-width="73">
+            <rect x="305" y="667" width="16" height="10" rx="2.5" class="c-cloud" stroke-width="1"/>
+            <text x="327" y="676" class="t-muted" font-size="10" font-weight="500">云服务</text>
+          </g>
+          <g data-legend-semantic-kind="security" data-legend-kind="security" data-legend-label="安全" data-legend-x="400" data-legend-baseline="676" data-legend-width="63">
+            <rect x="400" y="667" width="16" height="10" rx="2.5" class="c-security" stroke-width="1"/>
+            <text x="422" y="676" class="t-muted" font-size="10" font-weight="500">安全</text>
+          </g>
+          <g data-legend-semantic-kind="external" data-legend-kind="external" data-legend-label="外部系统" data-legend-x="485" data-legend-baseline="676" data-legend-width="83">
+            <rect x="485" y="667" width="16" height="10" rx="2.5" class="c-external" stroke-width="1"/>
+            <text x="507" y="676" class="t-muted" font-size="10" font-weight="500">外部系统</text>
+          </g>
+        </g>
       </svg>
       <p class="intent-trace-status no-print" id="intent-trace-status" role="status" aria-live="polite" aria-atomic="true"></p>
       <div class="share-chapter-cue no-print" id="share-chapter-cue" hidden role="status" aria-live="polite">
@@ -5597,11 +5623,36 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
       <div class="card">
         <div class="card-header">
           <div class="card-dot cyan"></div>
+          <h3>信任边界</h3>
+        </div>
+        <ul>
+          <li>&bull; 云桥只传 E2E 密文，业务命令在源 relay 鉴权、幂等、执行</li>
+          <li>&bull; 三出口（LAN / 云桥 / WAN）同源快照，客户端皆投影</li>
+          <li>&bull; ZCode unsupported · fail-closed</li>
+          <li>&bull; Claude/Codex 专用适配路径</li>
+        </ul>
+      </div>
+
+      <div class="card">
+        <div class="card-header">
+          <div class="card-dot amber"></div>
           <h3>事实源与投影</h3>
         </div>
         <ul>
-          <li>&bull; events.ndjson 为 append-only 事实源，SNAPSHOT 只是投影</li>
-          <li>&bull; 状态不清先查 events.ndjson 与 ACK，不以聊天轮询推断成功</li>
+          <li>&bull; events.ndjson 是唯一事实源，状态不清先查事件与 ACK</li>
+          <li>&bull; org / task-store / artifact 各自独立，不并库</li>
+        </ul>
+      </div>
+
+      <div class="card">
+        <div class="card-header">
+          <div class="card-dot violet"></div>
+          <h3>会话卡编制</h3>
+        </div>
+        <ul>
+          <li>&bull; PM 常驻重角色：分诊 / 任务书 / 派单 / 验收链 / 代提交 / rescue</li>
+          <li>&bull; 评审卡临时专家，跑完即删；worker 实施自查回单</li>
+          <li>&bull; PM 派单 / worker 回单全流程见协作图（图 3）</li>
         </ul>
       </div>
     </div>

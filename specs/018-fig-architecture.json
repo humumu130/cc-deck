@@ -1,0 +1,426 @@
+{
+  "schema_version": 1,
+  "diagram_type": "architecture",
+  "meta": {
+    "title": "M2 系统架构与信任边界",
+    "locale": "zh-CN",
+    "quality_profile": "showcase",
+    "views": [
+      {
+        "id": "main-path",
+        "label": "主链路：客户端到会话",
+        "focus": [
+          "user",
+          "web",
+          "bridge",
+          "relaycore",
+          "engines",
+          "pmcard"
+        ],
+        "note": "用户客户端经 LAN/云桥到 relay 核心，再到引擎与会话卡。"
+      },
+      {
+        "id": "fact-stores",
+        "label": "事实源四存储",
+        "focus": [
+          "relaycore",
+          "orgstore",
+          "eventlog",
+          "taskstore",
+          "artifactstore"
+        ],
+        "note": "四个独立数据节点：org 层、事件账本、任务库、输出物目录。"
+      },
+      {
+        "id": "collab-cards",
+        "label": "协作会话卡",
+        "focus": [
+          "pmcard",
+          "reviewcard",
+          "workercards",
+          "relaycore"
+        ],
+        "note": "PM 常驻管理，评审卡临时跑完即删，worker 实施回单。"
+      }
+    ]
+  },
+  "components": [
+    {
+      "id": "user",
+      "type": "external",
+      "label": "用户",
+      "sublabel": "拍板 · 验收",
+      "pos": [
+        40,
+        330
+      ],
+      "size": [
+        110,
+        64
+      ]
+    },
+    {
+      "id": "web",
+      "type": "frontend",
+      "label": "Web / 桌面端",
+      "sublabel": "单文件 · Tauri",
+      "pos": [
+        200,
+        200
+      ],
+      "size": [
+        170,
+        64
+      ]
+    },
+    {
+      "id": "expo",
+      "type": "frontend",
+      "label": "expo-app",
+      "sublabel": "手机 · LAN / 云",
+      "pos": [
+        200,
+        460
+      ],
+      "size": [
+        170,
+        64
+      ]
+    },
+    {
+      "id": "bridge",
+      "type": "cloud",
+      "label": "云桥",
+      "sublabel": "CF Worker · E2E",
+      "pos": [
+        350,
+        330
+      ],
+      "size": [
+        150,
+        64
+      ]
+    },
+    {
+      "id": "relaycore",
+      "type": "backend",
+      "label": "M2 Relay 核心",
+      "sublabel": "session-manager",
+      "pos": [
+        570,
+        300
+      ],
+      "size": [
+        180,
+        84
+      ]
+    },
+    {
+      "id": "engines",
+      "type": "backend",
+      "label": "EngineRegistry / Adapter",
+      "sublabel": "六类枚举 · 三类已注册",
+      "pos": [
+        840,
+        180
+      ],
+      "size": [
+        190,
+        84
+      ]
+    },
+    {
+      "id": "pmcard",
+      "type": "security",
+      "label": "PM 会话",
+      "sublabel": "派单 · 核验 · 提交",
+      "pos": [
+        1060,
+        60
+      ],
+      "size": [
+        170,
+        64
+      ]
+    },
+    {
+      "id": "reviewcard",
+      "type": "backend",
+      "label": "评审卡",
+      "sublabel": "盲评 · 复审 · 即删",
+      "pos": [
+        1060,
+        230
+      ],
+      "size": [
+        170,
+        64
+      ]
+    },
+    {
+      "id": "workercards",
+      "type": "backend",
+      "label": "worker A / B",
+      "sublabel": "实施 · 自查 · 回单",
+      "pos": [
+        1060,
+        400
+      ],
+      "size": [
+        170,
+        64
+      ]
+    },
+    {
+      "id": "orgstore",
+      "type": "database",
+      "label": "org 数据层",
+      "sublabel": "项目 · 板 · 确认单",
+      "pos": [
+        400,
+        540
+      ],
+      "size": [
+        170,
+        64
+      ]
+    },
+    {
+      "id": "eventlog",
+      "type": "database",
+      "label": "events.ndjson",
+      "sublabel": "事件账本 · 事实源",
+      "pos": [
+        580,
+        540
+      ],
+      "size": [
+        170,
+        64
+      ]
+    },
+    {
+      "id": "taskstore",
+      "type": "database",
+      "label": "CLI task-store",
+      "sublabel": "CLI 任务库",
+      "pos": [
+        760,
+        540
+      ],
+      "size": [
+        170,
+        64
+      ]
+    },
+    {
+      "id": "artifactstore",
+      "type": "database",
+      "label": "artifact store",
+      "sublabel": "输出物 · 登记",
+      "pos": [
+        940,
+        540
+      ],
+      "size": [
+        170,
+        64
+      ]
+    }
+  ],
+  "boundaries": [
+    {
+      "kind": "region",
+      "label": "Cloudflare 边缘",
+      "wraps": [
+        "bridge"
+      ]
+    },
+    {
+      "kind": "region",
+      "label": "本机 · M2 dev 环境",
+      "wraps": [
+        "relaycore",
+        "engines",
+        "pmcard",
+        "reviewcard",
+        "workercards",
+        "orgstore",
+        "eventlog",
+        "taskstore",
+        "artifactstore"
+      ]
+    }
+  ],
+  "connections": [
+    {
+      "id": "user-web",
+      "from": "user",
+      "to": "web",
+      "label": "操作",
+      "fromSide": "right",
+      "toSide": "left"
+    },
+    {
+      "id": "user-expo",
+      "from": "user",
+      "to": "expo",
+      "label": "操作",
+      "fromSide": "right",
+      "toSide": "left"
+    },
+    {
+      "id": "web-relay",
+      "from": "web",
+      "to": "relaycore",
+      "label": "LAN ws 直连",
+      "fromSide": "right",
+      "toSide": "left"
+    },
+    {
+      "id": "expo-bridge",
+      "from": "expo",
+      "to": "bridge",
+      "label": "WAN HTTPS",
+      "fromSide": "right",
+      "toSide": "bottom"
+    },
+    {
+      "id": "bridge-relay-up",
+      "from": "bridge",
+      "to": "relaycore",
+      "label": "E2E 上行",
+      "fromSide": "right",
+      "toSide": "left",
+      "labelDy": -44,
+      "labelDx": -20
+    },
+    {
+      "id": "relay-bridge-down",
+      "from": "relaycore",
+      "to": "bridge",
+      "label": "事件下行",
+      "fromSide": "left",
+      "toSide": "right",
+      "labelDy": 26
+    },
+    {
+      "id": "relay-engines-cmd",
+      "from": "relaycore",
+      "to": "engines",
+      "label": "command/stdin",
+      "fromSide": "right",
+      "toSide": "left",
+      "labelAt": [
+        797,
+        192
+      ]
+    },
+    {
+      "id": "engines-relay-jsonl",
+      "from": "engines",
+      "to": "relaycore",
+      "label": "JSONL 事件",
+      "fromSide": "left",
+      "toSide": "right",
+      "labelAt": [
+        797,
+        364
+      ]
+    },
+    {
+      "id": "engines-pm",
+      "from": "engines",
+      "to": "pmcard",
+      "label": "spawn / resume",
+      "fromSide": "right",
+      "toSide": "left"
+    },
+    {
+      "id": "engines-review",
+      "from": "engines",
+      "to": "reviewcard",
+      "label": "临时开卡",
+      "variant": "dashed",
+      "fromSide": "right",
+      "toSide": "left",
+      "labelAt": [
+        1000,
+        340
+      ]
+    },
+    {
+      "id": "engines-workers",
+      "from": "engines",
+      "to": "workercards",
+      "label": "spawn / resume",
+      "fromSide": "right",
+      "toSide": "left"
+    },
+    {
+      "id": "relay-org",
+      "from": "relaycore",
+      "to": "orgstore",
+      "label": "读写",
+      "fromSide": "bottom",
+      "toSide": "top"
+    },
+    {
+      "id": "relay-events",
+      "from": "relaycore",
+      "to": "eventlog",
+      "label": "append 事件",
+      "fromSide": "bottom",
+      "toSide": "top",
+      "labelAt": [
+        653,
+        500
+      ]
+    },
+    {
+      "id": "relay-taskstore",
+      "from": "relaycore",
+      "to": "taskstore",
+      "label": "快照直读",
+      "fromSide": "bottom",
+      "toSide": "top"
+    },
+    {
+      "id": "relay-artifactstore",
+      "from": "relaycore",
+      "to": "artifactstore",
+      "label": "输出登记",
+      "fromSide": "bottom",
+      "toSide": "top"
+    }
+  ],
+  "cards": [
+    {
+      "dot": "cyan",
+      "title": "信任边界",
+      "items": [
+        "云桥只传 E2E 密文，业务命令在源 relay 鉴权、幂等、执行",
+        "三出口（LAN / 云桥 / WAN）同源快照，客户端皆投影",
+        "ZCode unsupported · fail-closed",
+        "Claude/Codex 专用适配路径"
+      ]
+    },
+    {
+      "dot": "amber",
+      "title": "事实源与投影",
+      "items": [
+        "events.ndjson 是唯一事实源，状态不清先查事件与 ACK",
+        "org / task-store / artifact 各自独立，不并库"
+      ]
+    },
+    {
+      "dot": "violet",
+      "title": "会话卡编制",
+      "items": [
+        "PM 常驻重角色：分诊 / 任务书 / 派单 / 验收链 / 代提交 / rescue",
+        "评审卡临时专家，跑完即删；worker 实施自查回单",
+        "PM 派单 / worker 回单全流程见协作图（图 3）"
+      ]
+    }
+  ]
+}
