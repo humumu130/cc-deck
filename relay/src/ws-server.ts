@@ -169,6 +169,9 @@ const COMMAND_TYPES = new Set([
   // #26 M2 组织：确认单决议（用户端确认卡）+ 项目组详情拉取
   "COMMAND_ORG_CONFIRM",
   "COMMAND_PROJECT_DETAIL",
+  // #018-R1b：org 命令真链路（立项 create；与云通道同走 mgr.orgCommand 咽喉——
+  // 漏加时 ws 白名单在此拒发，mgr 的 case 与单测都过、唯独 LAN 实机死路，#212 同款坑）
+  "COMMAND_ORG_ACTION",
   // #17 第二批：雇员独立家开关切换（三端设置项）
   "COMMAND_SETTINGS_UPDATE",
 ]);

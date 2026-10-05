@@ -4,14 +4,14 @@ import { homedir } from "node:os";
 import { isAbsolute, join, resolve, sep } from "node:path";
 import { artifactsDir } from "./artifacts.js";
 import {
-  appendDispatch, clearOrgAnchor, ensureOrgClaudeMd, ensureOrgCli, ensureOrgDir, ORG_LEADER_BOOTSTRAP_PROMPT,
-  ORG_LEADER_TITLE, orgDir, readDispatchLog, readOrgAnchor, writeOrgAnchor,
+  appendDispatch, clearOrgAnchor, ensureOrgClaudeMd, ensureOrgCli, ensureOrgDir, evaluateCommandPermission,
+  ORG_LEADER_BOOTSTRAP_PROMPT, ORG_LEADER_TITLE, orgDir, readDispatchLog, readOrgAnchor, writeOrgAnchor,
 } from "./org.js";
-import type { DispatchTier } from "./org.js";
+import type { CommandRole, DispatchTier, ForbiddenCommandAck } from "./org.js";
 // #26 M2 项目组底座（纯 fs，无环）：分诊引擎（立项/状态迁移/派单/板/确认单副作用）
 // 全部经 orgAction 单漏斗进出，广播统一 emitOrgState/emitBoard
 import {
-  addConfirm, addMember, buildArchiveChecklist, canTransition, createGroup, decideConfirm,
+  adaptOrgAction, addConfirm, addMember, buildArchiveChecklist, canTransition, createGroup, decideConfirm,
   findGroup, findGroupByAnchor, findStaleGroups, listConfirms, listGroups, listGroupsByStatus,
   listPendingConfirms, loadBoard, markHoldSuggested, maxActiveGroups,
   moveBoardEntry, moveEntryByDispatch,
@@ -2161,9 +2161,31 @@ export class SessionManager {
           }
           return { command_id: cmd.command_id, ok: true, artifact: { size: st.size, mime: mimeOf(hit.path) } };
         }
+        case "COMMAND_ORG_ACTION": {
+          // #018-R1b org 命令真链路：LAN（ws-server）与 cloud（cloud-client）两入口
+          // 都经 handleCommand 到这里，统一收口 orgCommand 咽喉（权限矩阵 + B2a
+          // adapter + 审计）。ACK data 冻结口径 {group, needsConfirm, confirm?}。
+          // 现连接面全部持主 token（ws hello / cloud E2E 密封），无 viewer 通道——
+          // 角色统一记 owner；未来连接级角色（viewer 分享链接等）只换这里实参，
+          // 咽喉零改（org.ts：不信任客户端自报角色，actor 由连接身份解析）
+          const r = this.orgCommand(
+            "owner",
+            by,
+            String((cmd.payload as { action?: unknown }).action ?? ""),
+            cmd.payload as Record<string, unknown>,
+          );
+          if ("forbidden" in r) return r.forbidden;
+          return { command_id: cmd.command_id, ok: r.ok, ...(r.ok ? { data: r.data } : { error: r.error }) };
+        }
         case "COMMAND_ORG_CONFIRM": {
-          // #26 M2 确认单决议（用户点击确认卡）：决议 + 副作用 + 广播统一走 orgAction
-          const r = this.orgAction("confirm-decide", { confirm_id: cmd.payload.confirm_id, approve: cmd.payload.approve, by });
+          // #26 M2 确认单决议（用户点击确认卡）：R1b 起同走 orgCommand 咽喉（审计 +
+          // 二次决议幂等收口）；决议后确认单状态与 projects 三态联动在咽喉内落地。
+          // ACK 保持既有口径（ok，不带 data——B0 冻结的客户端形状不动）
+          const r = this.orgCommand("owner", by, "confirm-decide", {
+            confirm_id: cmd.payload.confirm_id,
+            approve: cmd.payload.approve,
+          });
+          if ("forbidden" in r) return r.forbidden;
           return { command_id: cmd.command_id, ok: r.ok, ...(r.ok ? {} : { error: r.error }) };
         }
         case "COMMAND_PROJECT_DETAIL": {
@@ -2484,6 +2506,24 @@ export class SessionManager {
           if (!mine()) return;
           touch("waiting");
           const at = Date.now();
+          // R1b：WAITING 同步刷 activity 状态舱（R1a 尾巴——审批等待是用户最需要看见
+          // 的活动形态）。沿用 applyActivity 唯一写入口：终态守卫 + 同值 dedup 都在
+          // 里面，勿在此新开写路径。顺序刻意「先刷舱后翻状态」：终态守卫按「当前已
+          // 落状态」判冻结，先翻 WAITING 守卫就看不见 DONE/ERROR 了——收口后迟到的
+          // 等待帧必须冻结在收口前值（onStatusChange 相反：先落 status 再刷舱，resume
+          // 翻回 WORKING 不被旧终态误冻，R1a 注释同源）。B0 词表（types.ts
+          // ActivityKind）无 approval——kind 落 system（R1a thinking→assistant_text
+          // 同款词表纪律），文案点明等待批准；能力位照常带 approval 位
+          this.applyActivity(managed, mapActivityState({
+            state: "WAITING",
+            operation: `等待批准 ${p.tool_name}：${p.input_summary}`,
+            activityKind: "system",
+            activityText: `等待批准 ${p.tool_name}：${p.input_summary}`,
+            now: at,
+            task: { todos: managed.state.todos },
+            capabilities: this.activityCapabilitiesOf(managed.state),
+            allowWaiting: true,
+          }));
           managed.state.status = "WAITING";
           managed.state.waiting_request = p;
           managed.state.waiting_started_at = at;
@@ -3424,6 +3464,95 @@ export class SessionManager {
     } catch (err) {
       console.warn(`[m4] 派单失败通知注入 Leader 失败: ${err instanceof Error ? err.message : String(err)}`);
     }
+  }
+
+  // ---------- #018-R1b org 命令咽喉（用户端 org 命令统一收口） ----------
+  // COMMAND_ORG_ACTION / COMMAND_ORG_CONFIRM 全走这里：权限矩阵判定（B2a fixture
+  // 口径）→ B2a adapter（create→createGroup，needsConfirm 时确认单已落
+  // org/confirms.json）/ confirm-decide 漏斗（决议 + applyConfirmEffects 三态联动）
+  // → dispatch-log 审计一行（复用既有台账通道，不新开文件；行记
+  // actor/device/action/anchor）。ACK data 冻结口径 {group, needsConfirm, confirm?}。
+  orgCommand(actor: CommandRole, device: string, action: string, payload: Record<string, unknown>):
+    { ok: true; data?: unknown } | { ok: false; error: string } | { ok: false; forbidden: ForbiddenCommandAck } {
+    const perm = evaluateCommandPermission(actor, "org:write", { command_id: `org:${action}` });
+    if (!perm.allowed) {
+      this.auditOrgCommand(actor, device, action, "", "随手办", false, `权限拒收：${perm.actor_role} 无 org:write 能力`);
+      return { ok: false, forbidden: perm.ack ?? { command_id: "", ok: false, error: "forbidden", actor_role: actor } };
+    }
+    if (action === "create") {
+      const anchor = typeof payload.anchor_dir === "string" ? payload.anchor_dir.trim() : "";
+      const tier = payload.tier === "轻立项" || payload.tier === "正经立项" ? payload.tier : "随手办";
+      // B2a 单漏斗：create → createGroup（校验 name/anchor_dir/tier；needsConfirm 时
+      // addConfirm 已落 confirms.json，组停 pending 等用户 ✓/✗）
+      const r = adaptOrgAction(payload);
+      if (!r.ok) {
+        this.auditOrgCommand(actor, device, action, anchor, tier, false, r.error);
+        return { ok: false, error: r.error };
+      }
+      ensureProjectClaudeMd(r.group.anchor_dir, r.group.name); // §3.4 防漂移种子（幂等），与 HTTP 漏斗同序
+      this.emitOrgState();
+      this.auditOrgCommand(
+        actor, device, action, r.group.anchor_dir, r.group.tier, true,
+        r.needsConfirm ? `立项待确认（确认单 ${r.confirm?.id.slice(0, 8) ?? ""} 已落 confirms.json）：${r.group.name}` : `轻立项信任直通：${r.group.name}`,
+      );
+      return {
+        ok: true,
+        data: {
+          group: r.group,
+          needsConfirm: r.needsConfirm,
+          ...(r.confirm ? { confirm: r.confirm } : {}),
+        },
+      };
+    }
+    if (action === "confirm-decide") {
+      const cid = typeof payload.confirm_id === "string" ? payload.confirm_id.trim() : "";
+      if (!cid) {
+        this.auditOrgCommand(actor, device, action, "", "随手办", false, "confirm_id 必填");
+        return { ok: false, error: "confirm_id 必填" };
+      }
+      const groupTierOf = (gid: unknown): { tier: DispatchTier; anchor: string } => {
+        const g = typeof gid === "string" ? findGroup(gid) : undefined;
+        return { tier: g?.tier === "轻立项" || g?.tier === "正经立项" ? g.tier : "随手办", anchor: g?.anchor_dir ?? "" };
+      };
+      // 幂等收口：同确认单二次决议 → ACK ok 但不重复落账（decideConfirm 的 one-shot
+      // 闸门会回 ok:false，咽喉先行拦截——决议状态以确认单为权威，副作用不重放；
+      // 审计行照记：重放尝试本身是安全相关事件，台账 append-only 面不吞）
+      const existing = listConfirms().find((c) => c.id === cid);
+      if (existing && existing.status !== "pending") {
+        const { tier, anchor } = groupTierOf(existing.payload.gid);
+        this.auditOrgCommand(actor, device, action, anchor, tier, true, `幂等重放：确认单 ${cid.slice(0, 8)} 已决议（${existing.status}），不重复落账`);
+        return { ok: true, data: { confirm: existing } };
+      }
+      // 首决：并行名额前置核 + decideConfirm + applyConfirmEffects（三态联动）全在
+      // orgAction 漏斗里，咽喉只做鉴权/幂等/审计三件套，不复制决议逻辑
+      const r = this.orgAction("confirm-decide", { confirm_id: cid, approve: payload.approve === true, by: device });
+      const { tier, anchor } = groupTierOf(existing?.payload.gid);
+      this.auditOrgCommand(
+        actor, device, action, anchor, tier, r.ok,
+        r.ok ? `决议落账：确认单 ${cid.slice(0, 8)} → 确认单状态与组三态已联动` : r.error,
+      );
+      return r.ok ? { ok: true, data: r.data } : { ok: false, error: r.error };
+    }
+    return { ok: false, error: `unsupported org action: ${action}` };
+  }
+
+  // org 命令审计行（dispatch-log 台账通道，append-only；org.ts 口径：审计不进
+  // events.ndjson）。status 只用 done/failed——不混入 status 动作的 open 在办清单；
+  // actor 恒 user（命令通道是用户面，也避开 failed+leader 组合的 Leader 失败注入
+  // 误触）；tier 取分诊档位语义（create=项目档位、confirm-decide=组档位，取不到落
+  // 随手办 占位）；device 无专属列，随 receipt 文本留痕（截 200 字由 appendDispatch 收口）
+  private auditOrgCommand(actor: CommandRole, device: string, action: string, anchor: string, tier: DispatchTier, ok: boolean, receipt: string): void {
+    appendDispatch({
+      ts: Date.now(),
+      id: randomUUID(),
+      tier,
+      target: "org-command",
+      ...(anchor ? { project_anchor: anchor } : {}),
+      status: ok ? "done" : "failed",
+      receipt: truncate(`org ${action} · actor=${actor} device=${device}：${receipt}`, 200),
+      session_id: this.leaderId ?? "",
+      actor: "user",
+    });
   }
 
   // ---------- #26 M2 分诊引擎（§4 响应四档/第五态 + §6.2 状态机 + 确认门槛） ----------
