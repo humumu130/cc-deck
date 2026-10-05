@@ -1,0 +1,7 @@
+{
+  "tool": {"type":"item.started","item":{"type":"command_execution","command":"npm test"}},
+  "assistant": {"type":"item.completed","item":{"type":"agent_message","text":"引擎输出"}},
+  "result": {"type":"item.completed","item":{"type":"command_execution","command":"npm test","aggregated_output":"ok","exit_code":0}},
+  "failed": {"type":"turn.failed","error":"fixture failure"},
+  "unknown": {"type":"future.event","value":1}
+}

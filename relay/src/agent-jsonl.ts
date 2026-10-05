@@ -2,10 +2,11 @@ import { spawn, type ChildProcess } from "node:child_process";
 import { accessSync, constants } from "node:fs";
 import { spawnSync } from "node:child_process";
 import { randomUUID } from "node:crypto";
-import type { AgentCallbacks, AgentLike } from "./agent-adapter.js";
-import { childEnv } from "./agent-adapter.js";
+import { childEnv, mapActivityState, type ActivityMapperInput, type ActivityTaskSources, type AgentCallbacks, type AgentLike, type MappedStatusDock } from "./agent-adapter.js";
 import { killTree } from "./proc-tree.js";
 import type { FileChangeStats, TodoItem, TokenUsage } from "./types.js";
+
+export type { MappedStatusDock } from "./agent-adapter.js";
 
 export type JsonLineEvent = Record<string, unknown>;
 
@@ -51,6 +52,82 @@ export interface PreflightResult {
   command: string;
   errors: string[];
   warnings: string[];
+}
+
+export interface JsonlActivityOptions {
+  capabilities: ActivityMapperInput["capabilities"];
+  now?: number;
+  task?: ActivityTaskSources;
+}
+
+function numericField(event: Record<string, unknown>, ...keys: string[]): number | undefined {
+  for (const key of keys) {
+    const value = event[key];
+    if (typeof value === "number" && Number.isFinite(value)) return value;
+  }
+  return undefined;
+}
+
+function nestedItem(event: Record<string, unknown>): Record<string, unknown> | undefined {
+  return event.item && typeof event.item === "object" && !Array.isArray(event.item)
+    ? event.item as Record<string, unknown>
+    : undefined;
+}
+
+export function mapJsonlActivity(raw: unknown, options: JsonlActivityOptions): MappedStatusDock {
+  const now = options.now ?? Date.now();
+  if (typeof raw === "string") {
+    const text = raw.trim();
+    return mapActivityState({
+      state: "WORKING",
+      activityKind: text ? "assistant_text" : undefined,
+      activityText: text || undefined,
+      now,
+      task: options.task,
+      capabilities: options.capabilities,
+    });
+  }
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) {
+    return mapActivityState({ state: "WORKING", now, task: options.task, capabilities: options.capabilities });
+  }
+  const event = raw as Record<string, unknown>;
+  const item = nestedItem(event);
+  const rawType = event.type ?? event.event ?? event.kind ?? item?.type;
+  const type = typeof rawType === "string" ? rawType.toLowerCase() : "";
+  const errorText = textOf(event.error) ?? textOf(event.message);
+  const occurredAt = numericField(event, "occurred_at", "occurredAt", "created_at", "createdAt", "timestamp");
+  const receivedAt = numericField(event, "received_at", "receivedAt", "ts") ?? now;
+  if (type.includes("error") || event.error !== undefined) {
+    return mapActivityState({
+      state: "ERROR",
+      activityKind: "system",
+      activityText: errorText ?? "引擎返回错误",
+      ts: receivedAt,
+      occurred_at: occurredAt,
+      now,
+      task: options.task,
+      capabilities: options.capabilities,
+    });
+  }
+  const resultish = type.includes("tool_result") || type.includes("tool.completed") || type === "function_result";
+  const toolish = type.includes("tool") || type.includes("command") || type === "function_call" || type === "function_result" || item?.type === "command_execution";
+  const tool = typeof (event.tool ?? event.name ?? event.command ?? item?.command) === "string"
+    ? String(event.tool ?? event.name ?? event.command ?? item?.command)
+    : undefined;
+  const text = textOf(event.delta ?? event.text ?? event.content ?? event.output ?? event.response ?? event.result ?? event.message)
+    ?? textOf(item?.text ?? item?.aggregated_output);
+  const terminal = type.includes("done") || type.includes("complete") || type === "result" || type === "finish" || event.done === true;
+  return mapActivityState({
+    state: terminal ? "DONE" : "WORKING",
+    activityKind: resultish ? "tool_result" : toolish ? "tool_use" : text ? "assistant_text" : undefined,
+    activityText: text ?? (toolish ? `${tool ?? "工具"} 执行中` : undefined),
+    tool,
+    ts: receivedAt,
+    occurred_at: occurredAt,
+    now,
+    task: options.task,
+    capabilities: options.capabilities,
+  });
 }
 
 export function splitUtf8Lines(): {

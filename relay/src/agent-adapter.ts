@@ -14,9 +14,12 @@ import { resolveClaudeCliPath } from "./cli-path.js";
 import { suggestPattern, type AllowRuleStore } from "./allow-rules.js";
 import type {
   FileChangeStats,
+  ActivityCapabilities,
+  ActivityKind,
   SessionLogPayload,
   SessionStatus,
   SubagentInfo,
+  StatusDockState,
   TodoItem,
   TokenUsage,
   WaitingPayload,
@@ -71,6 +74,161 @@ export function childEnv(opts?: { configHome?: string }): NodeJS.ProcessEnv {
 // 验证「每次调用都是新随机尾」——防未来改回 static 复用静默复发时间线劫持）
 export const mintAdapterBoot = (): string =>
   Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+
+export interface ActivityTaskSources {
+  todos?: TodoItem[];
+  dispatch?: string;
+  board?: string;
+  session?: string;
+}
+
+export interface ActivityMapperInput {
+  state?: SessionStatus;
+  operation?: string;
+  activityKind?: ActivityKind;
+  activityText?: string;
+  tool?: string;
+  ts?: number;
+  occurred_at?: number;
+  now?: number;
+  task?: ActivityTaskSources;
+  capabilities: ActivityCapabilities;
+  allowWaiting?: boolean;
+  unsupported?: string;
+}
+
+export type ActivityTimeBasis = "occurred_at" | "relay_received";
+
+export interface AdapterPreflightResult {
+  ok: boolean;
+  command: string;
+  errors: string[];
+  warnings: string[];
+}
+
+export interface ClaudePreflightOptions {
+  cliPath?: string | null;
+  credentialConfigured?: boolean;
+  version?: string;
+}
+
+export function preflightClaude(options: ClaudePreflightOptions = {}): AdapterPreflightResult {
+  const errors: string[] = [];
+  const warnings: string[] = [];
+  const cliPath = options.cliPath === undefined ? resolveClaudeCliPath() : options.cliPath;
+  if (!cliPath) errors.push("Claude CLI 未找到或不可执行");
+  if (typeof query !== "function") errors.push("Claude SDK query 不可用");
+  if (options.credentialConfigured === false) errors.push("Claude provider 凭证未配置");
+  else if (options.credentialConfigured === undefined) warnings.push("凭证状态需由部署配置显式核验");
+  if (!options.version) warnings.push("Claude CLI 版本需在目标环境通过 --version 核验");
+  return { ok: errors.length === 0, command: cliPath ?? "claude", errors, warnings };
+}
+
+export type MappedStatusDock = StatusDockState & {
+  time_basis: ActivityTimeBasis;
+  unsupported?: boolean;
+  diagnostic?: string;
+};
+
+function finiteTime(value: unknown, fallback: number): number {
+  return typeof value === "number" && Number.isFinite(value) ? value : fallback;
+}
+
+export function deriveActivityTaskSummary(task: ActivityTaskSources | undefined, now = Date.now()): StatusDockState["task_summary"] {
+  const todo = task?.todos?.find((item) => item.status === "in_progress" && item.active_form?.trim());
+  if (todo?.active_form) return { text: todo.active_form.trim(), source: "todo", updated_at: todo.updated_at ?? now };
+  if (task?.dispatch?.trim()) return { text: task.dispatch.trim(), source: "dispatch", updated_at: now };
+  if (task?.board?.trim()) return { text: task.board.trim(), source: "board", updated_at: now };
+  if (task?.session?.trim()) return { text: task.session.trim(), source: "session", updated_at: now };
+  return undefined;
+}
+
+export function mapActivityState(input: ActivityMapperInput): MappedStatusDock {
+  const now = finiteTime(input.now, Date.now());
+  const receivedAt = finiteTime(input.ts, now);
+  const occurredAt = typeof input.occurred_at === "number" && Number.isFinite(input.occurred_at)
+    ? input.occurred_at
+    : undefined;
+  const requestedState = input.state ?? "WORKING";
+  const state = requestedState === "WAITING" && !input.allowWaiting ? "WORKING" : requestedState;
+  const text = input.activityText?.trim() || input.operation?.trim();
+  const activity = text ? {
+    kind: input.activityKind ?? "system",
+    text,
+    ...(input.tool ? { tool: input.tool } : {}),
+    observed_at: receivedAt,
+    ...(occurredAt === undefined ? {} : { occurred_at: occurredAt }),
+  } : undefined;
+  const result: MappedStatusDock = {
+    state,
+    ...(deriveActivityTaskSummary(input.task, now) ? { task_summary: deriveActivityTaskSummary(input.task, now) } : {}),
+    ...(activity ? { activity } : {}),
+    capabilities: input.capabilities,
+    updated_at: now,
+    time_basis: occurredAt === undefined ? "relay_received" : "occurred_at",
+    ...(input.unsupported ? { unsupported: true, diagnostic: input.unsupported } : {}),
+  };
+  return result;
+}
+
+export interface ActivityMergeResult {
+  state: MappedStatusDock;
+  merged: boolean;
+  terminal: boolean;
+}
+
+export function mergeActivitySamples(
+  previous: MappedStatusDock | undefined,
+  next: MappedStatusDock,
+  options: { windowMs?: number; terminal?: boolean } = {},
+): ActivityMergeResult {
+  const terminal = options.terminal === true || next.state === "DONE" || next.state === "ERROR" || next.activity?.kind === "tool_result";
+  const sameTool = Boolean(previous?.activity?.tool && next.activity?.tool && previous.activity.tool === next.activity.tool);
+  const sameKind = previous?.activity?.kind === next.activity?.kind;
+  const delta = previous && next.activity ? Math.abs(next.activity.observed_at - (previous.activity?.observed_at ?? 0)) : Infinity;
+  const windowMs = options.windowMs ?? 150;
+  if (!terminal && sameTool && sameKind && delta <= windowMs) return { state: next, merged: true, terminal: false };
+  return { state: next, merged: false, terminal };
+}
+
+export function mergeActivityFragments(
+  previous: MappedStatusDock | undefined,
+  next: MappedStatusDock,
+  options: { windowMs?: number; terminal?: boolean } = {},
+): MappedStatusDock {
+  return mergeActivitySamples(previous, next, options).state;
+}
+
+export const CLAUDE_ACTIVITY_CAPABILITIES: ActivityCapabilities = {
+  native_status: true,
+  operation_summary: true,
+  native_elapsed: false,
+  approval: true,
+};
+
+export interface ClaudeActivityInput {
+  status: SessionStatus;
+  actionSummary?: string;
+  log?: { kind: ActivityKind; text: string; tool?: string; ts?: number; occurred_at?: number };
+  task?: ActivityTaskSources;
+  now?: number;
+}
+
+export function mapClaudeActivity(input: ClaudeActivityInput): MappedStatusDock {
+  return mapActivityState({
+    state: input.status,
+    operation: input.actionSummary,
+    activityKind: input.log?.kind,
+    activityText: input.log?.text,
+    tool: input.log?.tool,
+    ts: input.log?.ts,
+    occurred_at: input.log?.occurred_at,
+    now: input.now,
+    task: input.task,
+    capabilities: CLAUDE_ACTIVITY_CAPABILITIES,
+    allowWaiting: true,
+  });
+}
 
 // streaming input 模式的 prompt 源：push 用户消息 / end 收尾
 export class AsyncQueue<T> {

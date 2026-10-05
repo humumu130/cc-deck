@@ -1,5 +1,5 @@
 import type { AgentCallbacks } from "./agent-adapter.js";
-import { JsonProcessAgentSession, preflightEngine, type EngineConfig, type EngineSpawnOptions, type PreflightResult } from "./agent-jsonl.js";
+import { JsonProcessAgentSession, mapJsonlActivity, preflightEngine, type EngineConfig, type EngineSpawnOptions, type JsonlActivityOptions, type MappedStatusDock, type PreflightResult } from "./agent-jsonl.js";
 
 export const TRAE_CAPABILITIES = {
   resume: false,
@@ -12,11 +12,22 @@ export const TRAE_CAPABILITIES = {
   streaming: false,
 } as const;
 
+export const TRAE_ACTIVITY_CAPABILITIES = {
+  native_status: false,
+  operation_summary: true,
+  native_elapsed: false,
+  approval: false,
+} as const;
+
 export const TRAE_PENDING_SMOKE = [
   "--help/版本确认 JSON 或 JSONL 输出开关",
   "非交互/自动批准、provider/model 参数与退出码",
   "原生 session/resume 能力（第一期固定不启用）",
 ] as const;
+
+export function mapTraeActivity(raw: unknown, options: Omit<JsonlActivityOptions, "capabilities"> = {}): MappedStatusDock {
+  return mapJsonlActivity(raw, { ...options, capabilities: TRAE_ACTIVITY_CAPABILITIES });
+}
 
 export interface TraeSessionOptions extends Omit<EngineSpawnOptions, "label" | "args"> {
   command?: string;

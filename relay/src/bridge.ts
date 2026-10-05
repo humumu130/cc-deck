@@ -36,6 +36,8 @@ import { deriveTitle } from "./history.js";
 import { readTaskStoreTodos } from "./task-store.js";
 import { saveUploadImages, saveUploadFiles, type UploadBlob } from "./uploads.js";
 import { suggestPattern, type AllowRuleStore } from "./allow-rules.js";
+import { mapActivityState, type ActivityTaskSources, type MappedStatusDock } from "./agent-adapter.js";
+import type { ActivityKind } from "./types.js";
 
 export interface BridgeOptions {
   gateTools: Set<string>;          // 远程审批门控的工具名
@@ -50,6 +52,53 @@ export interface BridgeDecision {
   decision: "allow" | "deny" | "pass";   // pass = 不干预，CLI 走正常权限流程
   reason?: string;
   updatedInput?: Record<string, unknown>; // allow 时改写工具入参（AskUserQuestion 答案注入）
+}
+
+export const BRIDGE_ACTIVITY_CAPABILITIES = {
+  native_status: true,
+  operation_summary: true,
+  native_elapsed: false,
+  approval: true,
+} as const;
+
+export interface BridgeActivityInput {
+  event?: string;
+  kind?: ActivityKind;
+  text?: string;
+  tool?: string;
+  ts?: number;
+  occurred_at?: number;
+  now?: number;
+  task?: ActivityTaskSources;
+}
+
+/** 将外部 bridge hook/transcript/onLog 记录压成统一 activity 片段。 */
+export function mapBridgeActivity(input: BridgeActivityInput): MappedStatusDock {
+  const event = input.event?.toLowerCase() ?? "";
+  const kind = input.kind
+    ?? (event.includes("pretool") || event.includes("tool_use") ? "tool_use"
+      : event.includes("posttool") || event.includes("tool_result") ? "tool_result"
+        : event.includes("error") ? "system"
+          : event.includes("assistant") || event.includes("transcript") || event.includes("log") ? "assistant_text"
+            : undefined);
+  const terminal = event.includes("sessionend") || event === "done" || event === "stop";
+  const state = event.includes("error") ? "ERROR" : terminal ? "DONE" : "WORKING";
+  const tool = input.tool;
+  const text = input.text?.trim()
+    || (tool && kind === "tool_use" ? `${tool} 执行中` : undefined)
+    || (tool && kind === "tool_result" ? `${tool} 已完成` : undefined);
+  return mapActivityState({
+    state,
+    activityKind: kind,
+    activityText: text,
+    tool,
+    ts: input.ts,
+    occurred_at: input.occurred_at,
+    now: input.now,
+    task: input.task,
+    capabilities: BRIDGE_ACTIVITY_CAPABILITIES,
+    allowWaiting: true,
+  });
 }
 
 interface Pending {

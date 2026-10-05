@@ -32,7 +32,7 @@ import { existsSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { homedir, tmpdir } from "node:os";
 import { delimiter, dirname, join } from "node:path";
 import { killTree } from "./proc-tree.js";
-import { childEnv } from "./agent-adapter.js";
+import { childEnv, mapActivityState, type ActivityTaskSources, type AdapterPreflightResult, type MappedStatusDock } from "./agent-adapter.js";
 import type { AgentCallbacks, AgentLike } from "./agent-adapter.js";
 import { capDetail, fullText, truncate } from "./summarizer.js";
 import type { FileChangeStats } from "./types.js";
@@ -67,6 +67,73 @@ interface CodexEvent {
 }
 
 const num = (v: unknown): number => (typeof v === "number" && Number.isFinite(v) ? v : 0);
+
+export interface CodexActivityOptions {
+  now?: number;
+  task?: ActivityTaskSources;
+  remoteDecisionChannel?: boolean;
+}
+
+export const CODEX_ACTIVITY_CAPABILITIES = {
+  native_status: true,
+  operation_summary: true,
+  native_elapsed: false,
+  approval: false,
+} as const;
+
+export interface CodexPreflightOptions {
+  cliPath?: string | null;
+  credentialConfigured?: boolean;
+  version?: string;
+}
+
+export function preflightCodex(options: CodexPreflightOptions = {}): AdapterPreflightResult {
+  const errors: string[] = [];
+  const warnings: string[] = [];
+  const cliPath = options.cliPath === undefined ? resolveCodexCliPath() : options.cliPath;
+  if (!cliPath) errors.push("Codex CLI 未找到或不可执行");
+  if (options.credentialConfigured === false) errors.push("Codex provider 凭证未配置");
+  else if (options.credentialConfigured === undefined) warnings.push("凭证状态需由部署配置显式核验");
+  if (!options.version) warnings.push("Codex CLI 版本需在目标环境通过 --version 核验");
+  return { ok: errors.length === 0, command: cliPath ?? "codex", errors, warnings };
+}
+
+export function mapCodexActivity(raw: unknown, options: CodexActivityOptions = {}): MappedStatusDock {
+  const now = options.now ?? Date.now();
+  const capabilities = { ...CODEX_ACTIVITY_CAPABILITIES, approval: options.remoteDecisionChannel === true };
+  if (typeof raw === "string") {
+    return mapActivityState({ state: "WORKING", activityKind: "assistant_text", activityText: "引擎输出中", now, task: options.task, capabilities });
+  }
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) {
+    return mapActivityState({ state: "WORKING", now, task: options.task, capabilities });
+  }
+  const event = raw as CodexEvent & Record<string, unknown>;
+  const item = event.item;
+  const occurredAt = typeof event.occurred_at === "number" && Number.isFinite(event.occurred_at) ? event.occurred_at : undefined;
+  const receivedAt = typeof event.ts === "number" && Number.isFinite(event.ts) ? event.ts : now;
+  if (event.type === "turn.failed" || event.type === "error") {
+    const error = typeof event.error === "string" ? event.error : event.error?.message;
+    return mapActivityState({ state: "ERROR", activityKind: "system", activityText: error ?? "回合失败", ts: receivedAt, occurred_at: occurredAt, now, task: options.task, capabilities });
+  }
+  if (event.type === "turn.completed") {
+    return mapActivityState({ state: "DONE", activityKind: "system", activityText: "已完成", ts: receivedAt, occurred_at: occurredAt, now, task: options.task, capabilities });
+  }
+  if (event.type === "item.started" && item?.type === "command_execution") {
+    return mapActivityState({ state: "WORKING", activityKind: "tool_use", activityText: item.command ?? "命令执行中", tool: "command", ts: receivedAt, occurred_at: occurredAt, now, task: options.task, capabilities });
+  }
+  if (event.type === "item.completed" && item?.type === "agent_message") {
+    return mapActivityState({ state: "WORKING", activityKind: "assistant_text", activityText: item.text ?? "引擎输出中", ts: receivedAt, occurred_at: occurredAt, now, task: options.task, capabilities });
+  }
+  if (event.type === "item.completed" && item?.type === "command_execution") {
+    const exit = item.exit_code ?? null;
+    const text = item.status === "failed" || (exit !== null && exit !== 0) ? `失败（退出码 ${exit ?? "?"}）` : (item.aggregated_output ?? "命令完成");
+    return mapActivityState({ state: "WORKING", activityKind: "tool_result", activityText: text, tool: "command", ts: receivedAt, occurred_at: occurredAt, now, task: options.task, capabilities });
+  }
+  if (event.type === "turn.started") {
+    return mapActivityState({ state: "WORKING", operation: "执行中", ts: receivedAt, occurred_at: occurredAt, now, task: options.task, capabilities });
+  }
+  return mapActivityState({ state: "WORKING", now, task: options.task, capabilities });
+}
 
 /** thread.started / turn.* / item.* / error → AgentCallbacks。
  *  会话侧另在 mapper 之前截获 thread.started 回填 threadId（锚在会话不在映射器）。 */

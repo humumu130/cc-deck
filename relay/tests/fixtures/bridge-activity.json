@@ -1,0 +1,7 @@
+{
+  "tool": {"event":"PreToolUse","tool":"Bash","text":"执行测试","ts":100},
+  "result": {"event":"PostToolUse","tool":"Bash","text":"测试完成","occurred_at":90},
+  "transcript": {"event":"transcript","text":"外部会话输出"},
+  "error": {"event":"error","text":"权限失败"},
+  "end": {"event":"SessionEnd","text":"会话结束"}
+}

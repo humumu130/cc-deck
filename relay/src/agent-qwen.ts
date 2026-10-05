@@ -1,5 +1,5 @@
 import type { AgentCallbacks } from "./agent-adapter.js";
-import { JsonProcessAgentSession, preflightEngine, type EngineConfig, type EngineSpawnOptions, type PreflightResult } from "./agent-jsonl.js";
+import { JsonProcessAgentSession, mapJsonlActivity, preflightEngine, type EngineConfig, type EngineSpawnOptions, type JsonlActivityOptions, type MappedStatusDock, type PreflightResult } from "./agent-jsonl.js";
 
 export const QWEN_CODE_CAPABILITIES = {
   resume: false,
@@ -12,11 +12,22 @@ export const QWEN_CODE_CAPABILITIES = {
   streaming: false,
 } as const;
 
+export const QWEN_ACTIVITY_CAPABILITIES = {
+  native_status: false,
+  operation_summary: true,
+  native_elapsed: false,
+  approval: false,
+} as const;
+
 export const QWEN_PENDING_SMOKE = [
   "JSONL 是否可用及事件字段稳定性",
   "原生 resume 参数与会话锚点（第一期固定走重注入）",
   "provider/base URL/model 参数与鉴权变量名",
 ] as const;
+
+export function mapQwenCodeActivity(raw: unknown, options: Omit<JsonlActivityOptions, "capabilities"> = {}): MappedStatusDock {
+  return mapJsonlActivity(raw, { ...options, capabilities: QWEN_ACTIVITY_CAPABILITIES });
+}
 
 export interface QwenCodeSessionOptions extends Omit<EngineSpawnOptions, "label" | "args"> {
   command?: string;

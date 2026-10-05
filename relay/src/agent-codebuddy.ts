@@ -1,5 +1,5 @@
 import type { AgentCallbacks } from "./agent-adapter.js";
-import { JsonProcessAgentSession, preflightEngine, type EngineConfig, type EngineSpawnOptions, type PreflightResult } from "./agent-jsonl.js";
+import { JsonProcessAgentSession, mapJsonlActivity, preflightEngine, type EngineConfig, type EngineSpawnOptions, type JsonlActivityOptions, type MappedStatusDock, type PreflightResult } from "./agent-jsonl.js";
 
 export const CODEBUDDY_CAPABILITIES = {
   resume: false,
@@ -12,11 +12,22 @@ export const CODEBUDDY_CAPABILITIES = {
   streaming: false,
 } as const;
 
+export const CODEBUDDY_ACTIVITY_CAPABILITIES = {
+  native_status: false,
+  operation_summary: true,
+  native_elapsed: false,
+  approval: false,
+} as const;
+
 export const CODEBUDDY_PENDING_SMOKE = [
   "官方 --help 核对 bin、prompt 入口与输出协议",
   "provider/base URL/model 参数与鉴权变量名",
   "CI 权限失败退出码与是否存在 decision channel",
 ] as const;
+
+export function mapCodeBuddyActivity(raw: unknown, options: Omit<JsonlActivityOptions, "capabilities"> = {}): MappedStatusDock {
+  return mapJsonlActivity(raw, { ...options, capabilities: CODEBUDDY_ACTIVITY_CAPABILITIES });
+}
 
 export interface CodeBuddySessionOptions extends Omit<EngineSpawnOptions, "label" | "args"> {
   command?: string;
