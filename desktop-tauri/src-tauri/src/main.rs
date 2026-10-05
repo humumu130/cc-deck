@@ -52,6 +52,8 @@ if (!window.ccDeck) {
     relayStatus: () => window.__TAURI__.core.invoke("relay_status"),
     relayToggle: (on) => window.__TAURI__.core.invoke("relay_toggle", { on }),
     saveArtifact: (name, b64) => window.__TAURI__.core.invoke("save_artifact", { name, b64 }),
+    // #240 IME 激活点击（仅 macOS 壳实现）：焦点真丢后拉回输入框必须走原生 hit-test
+    imeClick: (x, y) => window.__TAURI__.core.invoke("ime_click", { x, y }),
   };
 }
 document.addEventListener("click", (e) => {
@@ -280,6 +282,50 @@ fn set_toggle_shortcut(app: tauri::AppHandle, combo: Option<String>) -> Result<S
 #[tauri::command]
 fn app_version(app: tauri::AppHandle) -> String {
     app.config().version.clone().unwrap_or_else(|| "unknown".into())
+}
+
+/// #240 IME 激活点击：web 传来 msginput 中心点的「WebView 本地坐标」（CSS px，左上原点），
+/// 壳构造原生 NSEvent（mouseDown+mouseUp）经 NSApp sendEvent 派发——走 WebView 原生
+/// hit-test 才会激活 NSTextInputClient（第三方输入法如微信输入法的组字上下文），
+/// JS programmatic focus 不触发（实测：caret 闪、IME 悬浮条假活、打字全丢；系统
+/// 输入法无恙，故仅第三方 IME 用户受害）。窗口本地坐标避开多屏 y 翻转；
+/// app 内部 sendEvent 不经 HID，零辅助功能权限。仅 macOS；其他平台返回 Err
+/// 由 web 侧回落 JS focus（Windows WebView2 无此病，#19 eval focus 已够）。
+#[tauri::command]
+fn ime_click(window: tauri::WebviewWindow, x: f64, y: f64) -> Result<(), String> {
+    #[cfg(target_os = "macos")]
+    {
+        use objc2_app_kit::{NSApplication, NSEvent, NSEventModifierFlags, NSEventType, NSWindow};
+        use objc2_foundation::NSPoint;
+        if !window.is_focused().unwrap_or(false) {
+            let _ = window.set_focus();
+        }
+        let scale = window.scale_factor().map_err(|e| e.to_string())?;
+        let h_pts = window.inner_size().map_err(|e| e.to_string())?.height as f64 / scale;
+        // WebView CSS px（左上原点）→ NSEvent 窗口本地坐标（内容区左下原点）：仅 y 翻转
+        let loc = NSPoint::new(x, h_pts - y);
+        unsafe {
+            let app = NSApplication::sharedApplication();
+            let win_num = (window.ns_window().map_err(|e| e.to_string())?
+                as *mut NSWindow)
+                .as_ref()
+                .map(|w| w.windowNumber())
+                .unwrap_or(0);
+            for ty in [NSEventType::LeftMouseDown, NSEventType::LeftMouseUp] {
+                let ev = NSEvent::mouseEventWithType(
+                    ty, loc, NSEventModifierFlags::empty(), 0.0, win_num, None, 0, 1, 1.0,
+                )
+                .ok_or("NSEvent 构造失败")?;
+                app.sendEvent(&ev);
+            }
+        }
+        Ok(())
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        let _ = (window, x, y);
+        Err("ime_click 仅 macOS".into())
+    }
 }
 
 /// 托盘（等价 Electron 的 createTray）：默认窗口图标 + “显示主窗口/退出”菜单，双击唤起；
@@ -838,7 +884,7 @@ fn main() {
         .plugin(tauri_plugin_dialog::init())
         // #8 全局快捷键（呼出/收起）：默认键在 setup 注册，网页侧可经 set_toggle_shortcut 改绑
         .plugin(tauri_plugin_global_shortcut::Builder::new().build())
-        .invoke_handler(tauri::generate_handler![probe_local, open_external, open_path, probe_path, save_artifact, relay_status, relay_toggle, relay_service_status, relay_service_toggle, set_toggle_shortcut, app_version])
+        .invoke_handler(tauri::generate_handler![probe_local, open_external, open_path, probe_path, save_artifact, relay_status, relay_toggle, relay_service_status, relay_service_toggle, set_toggle_shortcut, app_version, ime_click])
         .setup(|app| {
             if build_tray(app).is_ok() {
                 TRAY_OK.store(true, Ordering::SeqCst);

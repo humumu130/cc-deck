@@ -6198,7 +6198,7 @@ document.addEventListener("click", (ev) => {
 
 // ⚙ 设置浮层（#317）：显示项为散装开关的镜像（点行 = 触发原按钮再回读状态），
 // 服务器管理不进浮层——左栏常驻面板已是高频区，与手机抽屉同为一级入口
-const CONSOLE_VERSION = "0.6.4-test.1";
+const CONSOLE_VERSION = "0.6.4-test.2";
 // #396 拨杆同步：滑块移到 idx 档（transform 过渡），选中档文字加 .on（白字压品牌色滑块上）
 function setLever(el, idx) {
   if (!el) return;
@@ -6320,9 +6320,26 @@ function comboFromEvent(ev) {
   return { combo: [...mods, key].join("+"), display: [...mods.map((m) => m[0].toUpperCase() + m.slice(1)), key === "space" ? "Space" : key.toUpperCase()].join("+") };
 }
 // #19 消息输入框聚焦（呼出/切会话后直接打字）：仅桌面端、有选中会话且输入框可用时
+// #240 macOS WKWebView 实测：JS programmatic focus 后第三方输入法（微信输入法）不激活
+// 组字上下文——caret 照闪、IME 悬浮条假活、打字全丢（系统输入法无恙）；唯一可靠激活
+// 路径是原生鼠标点击（WebView hit-test → NSTextInputClient attach）。故焦点真丢时改走
+// 壳合成原生点击（ccDeck.imeClick，macOS 专属 command），elementFromPoint 先确认点击处
+// 无浮层遮挡；浏览器/Windows/桥缺失/invoke 失败一律回落纯 JS focus（无此病）。
 function focusMsgInput() {
   const el = $("msginput");
   if (el && !el.disabled && selected) {
+    if (document.activeElement !== el && window.ccDeck && window.ccDeck.imeClick) {
+      const r = el.getBoundingClientRect();
+      const x = Math.min(Math.max(r.left + Math.min(r.width / 2, 60), r.left + 4), r.right - 4);
+      const y = Math.min(Math.max(r.top + r.height / 2, r.top + 4), r.bottom - 4);
+      const hit = (x >= 0 && y >= 0 && x <= innerWidth && y <= innerHeight) ? document.elementFromPoint(x, y) : null;
+      if (hit === el || (hit && el.contains(hit))) {
+        window.ccDeck.imeClick(x, y).catch(() => {
+          try { el.focus({ preventScroll: true }); } catch { el.focus(); }
+        });
+        return;
+      }
+    }
     try { el.focus({ preventScroll: true }); } catch { el.focus(); }
   }
 }
