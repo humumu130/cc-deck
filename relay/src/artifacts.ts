@@ -2,7 +2,9 @@
 // CLI（会话）把输出物（设计稿/报告/导出包）写入该目录即对全部客户端可见——手机/网页
 // 经 /api/artifacts 列表 + /artifacts/<file> 取用，桌面端"输出物"区同理。
 // 安全：文件名白名单（同云桥 /dl/ 风格）+ resolve 后必须仍位于产物目录内（防穿越）。
-import { accessSync, constants, readdirSync, statSync, readFileSync, existsSync } from "node:fs";
+// #72A0（2026-10-05 安全批）：symlink 越界/TOCTOU 修复——serve 走 realpath containment +
+// fd 级读取（O_NOFOLLOW/fstat），list 判型不跟随，deliver 校验闸一次性采集 stat 快照。
+import { closeSync, constants, fstatSync, lstatSync, openSync, readdirSync, readFileSync, realpathSync } from "node:fs";
 import { dirname, extname, join, normalize, relative, resolve, sep } from "node:path";
 import { homedir } from "node:os";
 import type { ArtifactItem } from "./types.js";
@@ -137,8 +139,11 @@ function cwdOf(opts: ArtifactGroupOptions): string | undefined {
   return opts.cwd ?? opts.session_cwd ?? opts.sessionCwd;
 }
 
+// #72A0（P2-3A）：分组键结构化编码——source_id 与 parent 都可能含 "::"，裸拼接可构造
+// 跨源混组（如 source "a"+parent "b::c" 与 source "a::b"+parent "c" 同键）。JSON 数组
+// 编码使键空间无歧义；group_key 是不透明 id，人类可读展示走 directory_label
 export function normalizeArtifactGroupKey(parent: string, source_id: string): string {
-  return `${source_id}::${normalizedPath(parent)}`;
+  return JSON.stringify([source_id, normalizedPath(parent)]);
 }
 
 export function summarizeGroup(group: Pick<ArtifactGroup, "items" | "source_id"> & Partial<Pick<ArtifactGroup, "reachable">>): ArtifactGroupSummary {
@@ -217,12 +222,17 @@ export function listArtifacts(): { name: string; size: number; mtime: number }[]
   const addFile = (name: string, path: string): void => {
     if (name.startsWith(".")) return;
     try {
-      const st = statSync(path);
+      // #72A0（P1-1A）：lstat 不跟随——symlink 条目按本体判型，外部目标的
+      // size/mtime 不得列进面板（d_type 未知兜底场景由下方 Dirent 判型前置挡掉）
+      const st = lstatSync(path);
       if (st.isFile()) out.push({ name, size: st.size, mtime: st.mtimeMs });
     } catch {}
   };
   for (const entry of entries) {
     if (entry.name.startsWith(".")) continue;
+    // #72A0（P1-1A）：symlink 一律跳过不跟随——文件 link（可能指向根外）与目录
+    // link（可能递归带出根外整棵树）都不进列表
+    if (entry.isSymbolicLink()) continue;
     const path = join(dir, entry.name);
     if (entry.isDirectory()) {
       let children: import("node:fs").Dirent[];
@@ -233,6 +243,7 @@ export function listArtifacts(): { name: string; size: number; mtime: number }[]
       }
       for (const child of children) {
         if (child.name.startsWith(".")) continue;
+        if (child.isSymbolicLink()) continue;
         addFile(`${entry.name}/${child.name}`, join(path, child.name));
       }
     } else {
@@ -247,53 +258,97 @@ export interface DeliverablePathValidation {
   ok: boolean;
   path: string;
   error?: string;
+  /** 校验同一时刻采集的 stat 快照（fstat 与 open 同一 fd）；unverified 时为 null */
+  size?: number | null;
+  mtime?: number | null;
+  /** 路径含 symlink 分量：原地交付物合法不拒绝，但目标元数据不得当文件本体记账 */
+  unverified?: boolean;
 }
 
 // /api/deliver 的登记前安全闸：只允许存在、可读的普通文件，且返回规范化绝对路径。
 // 调用方必须在任何 session 归因/回退之前调用，避免幽灵登记或错挂其他会话。
+// #72A0（P1-1B）：校验一次性完成——open 即读权限判定的唯一时刻（不可读直接打开
+// 失败），isFile/size/mtime 由同一 fd 的 fstat 采集，消灭「先 stat 后 access 再用」
+// 的 check-then-use 窗口；快照随结果返回，登记方应直接用它、不再二次 stat。
 export function validateDeliverablePath(rawPath: string): DeliverablePathValidation {
   const trimmed = rawPath.trim();
   if (!trimmed) return { ok: false, path: "", error: "path 必须是非空文件路径" };
   const path = resolve(trimmed);
-  let st: ReturnType<typeof statSync>;
+  let fd: number;
   try {
-    st = statSync(path);
-  } catch {
+    fd = openSync(path, constants.O_RDONLY);
+  } catch (e) {
+    if ((e as NodeJS.ErrnoException)?.code === "EISDIR") {
+      return { ok: false, path, error: `交付物必须是普通文件: ${path}` };
+    }
     return { ok: false, path, error: `交付物不存在或不可访问: ${path}` };
   }
-  if (!st.isFile()) return { ok: false, path, error: `交付物必须是普通文件: ${path}` };
   try {
-    accessSync(path, constants.R_OK);
-  } catch {
-    return { ok: false, path, error: `交付物不可读: ${path}` };
+    const st = fstatSync(fd);
+    if (!st.isFile()) return { ok: false, path, error: `交付物必须是普通文件: ${path}` };
+    // symlink 分量检测：末段本体是 link，或父链某段经 symlink 解析（realpath 与词法
+    // 路径不一致，macOS /tmp→/private/tmp 也算）。原地交付物合法不拒绝，但快照留空
+    // ——symlink 目标的元数据不得当文件本体记账
+    let unverified = false;
+    try {
+      unverified = lstatSync(path).isSymbolicLink() || realpathSync(dirname(path)) !== dirname(path);
+    } catch {
+      unverified = true;
+    }
+    if (unverified) return { ok: true, path, size: null, mtime: null, unverified: true };
+    return { ok: true, path, size: st.size, mtime: st.mtimeMs, unverified: false };
+  } finally {
+    try {
+      closeSync(fd);
+    } catch {}
   }
-  return { ok: true, path };
 }
 
 // 命中并写出返回 true；文件名非法/不存在返回 false（调用方 404）
 // 文件名允许中文（2026-09-19）：中文命名交付物（工作报告-….html）列得出就要下
 // 得了，原 \w 正则对中文一律 404
+// #72A0（P1-1A/1B）：两道闸——①词法快筛后必须 realpath 求真实路径做 containment
+// （目录内 symlink 指向根外时词法通过但真实越界；断链/循环按不存在 404）；
+// ②读取走 fd 级：open（O_NOFOLLOW 拒末段 symlink 竞态替换）→ fstat（isFile/size
+// 与读同一 fd，content-length 不会错配他文件）→ 从 fd 读内容。
 export function serveArtifact(name: string, res: import("node:http").ServerResponse): boolean {
   if (!ARTIFACT_NAME_RE.test(name) || name.includes("\\")) return false;
   const dir = resolve(artifactsDir());
-  const full = resolve(join(dir, name));
-  if (!full.startsWith(dir + sep) || relative(dir, full).split(sep).length > 2) return false;
-  const path = full;
-  if (!existsSync(path)) return false;
-  let st: ReturnType<typeof statSync>;
+  let realRoot: string;
   try {
-    st = statSync(path);
+    realRoot = realpathSync(dir);
   } catch {
     return false;
   }
-  if (!st.isFile()) return false;
-  const type = MIME[extname(path).toLowerCase()] ?? "application/octet-stream";
+  const full = resolve(join(dir, name));
+  if (!full.startsWith(dir + sep) || relative(dir, full).split(sep).length > 2) return false;
+  let real: string;
   try {
-    const data = readFileSync(path);
+    real = realpathSync(full);
+  } catch {
+    return false;
+  }
+  if (real !== realRoot && !real.startsWith(realRoot + sep)) return false;
+  if (relative(realRoot, real).split(sep).length > 2) return false;
+  const type = MIME[extname(real).toLowerCase()] ?? "application/octet-stream";
+  let fd: number;
+  try {
+    fd = openSync(real, constants.O_RDONLY | constants.O_NOFOLLOW);
+  } catch {
+    return false;
+  }
+  try {
+    const st = fstatSync(fd);
+    if (!st.isFile()) return false;
+    const data = readFileSync(fd);
     res.writeHead(200, { "content-type": type, "content-length": st.size, "cache-control": "no-store" });
     res.end(data);
     return true;
   } catch {
     return false;
+  } finally {
+    try {
+      closeSync(fd);
+    } catch {}
   }
 }

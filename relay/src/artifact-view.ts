@@ -2,7 +2,8 @@ import { basename, dirname, normalize, resolve } from "node:path";
 import type { ArtifactItem } from "./types.js";
 
 export type ArtifactViewOrigin = "artifacts" | "deliverable" | "session";
-export type ArtifactViewExistence = "exists" | "missing" | "unreachable";
+// #72A0（P2-3C）："unknown" = 缺 exists 证据（无 scan/登记 boolean 报告），不默认存在
+export type ArtifactViewExistence = "exists" | "missing" | "unreachable" | "unknown";
 
 export interface ArtifactViewScanEntry {
   name?: string;
@@ -143,6 +144,13 @@ function stringValue(...values: unknown[]): string | undefined {
   return values.find((value): value is string => typeof value === "string" && value.trim().length > 0)?.trim();
 }
 
+// #72A0（P1-1C）：NUL 与 C0 控制字符显式拒绝——裸拼接键的分隔符歧义源头，边界层
+// 拒收后走 unknown/unverified 分支（不抛异常）
+const C0_CONTROL_RE = /[\u0000-\u001f]/;
+function hasControlChars(value: string): boolean {
+  return C0_CONTROL_RE.test(value);
+}
+
 function normalizedPath(path: string): string {
   return normalize(path).replaceAll("\\", "/").replace(/\/+$/, "") || ".";
 }
@@ -150,6 +158,8 @@ function normalizedPath(path: string): string {
 function pathState(record: { path?: unknown; normalized_path?: unknown; name?: unknown }, cwd?: string, root?: string): PathState {
   const raw = stringValue(record.normalized_path, record.path, record.name);
   if (!raw) return { path: "", verifiable: false };
+  // #72A0（P1-1C）：含 NUL/C0 的路径显式拒绝——不可验证，走 unverified 分支不抛异常
+  if (hasControlChars(raw)) return { path: "", verifiable: false };
   if (raw.startsWith("/") || /^[A-Za-z]:[\\/]/.test(raw)) {
     return { path: normalizedPath(resolve(raw)), verifiable: true };
   }
@@ -160,7 +170,12 @@ function pathState(record: { path?: unknown; normalized_path?: unknown; name?: u
 
 function sourceState(record: Record<string, unknown>, fallback?: SourceState): SourceState {
   const raw = stringValue(record.source_id, record.sourceId);
-  if (raw) return { id: raw, known: true };
+  if (raw) {
+    // #72A0（P1-1C）：显式携带 NUL/C0 的 source_id 视为非法——落 unknown/unverified
+    // 分支（不回落 fallback、不抛异常），防构造键碰撞/跨源错挂归属
+    if (hasControlChars(raw)) return { id: UNKNOWN_SOURCE, known: false };
+    return { id: raw, known: true };
+  }
   if (fallback) return { ...fallback };
   return { id: UNKNOWN_SOURCE, known: false };
 }
@@ -241,7 +256,10 @@ function addRecord(
   const path = pathState(record, context.cwd, root);
   const source = sourceState(record, context.source);
   const mergeable = source.known && path.verifiable && path.path.length > 0;
-  const key = mergeable ? `${source.id}\u0000${path.path}` : `unknown\u0000unverified-${counter.value++}`;
+  // #72A0（P1-1C）：merge key 弃用 source/path 裸拼接（\u0000 分隔符歧义可构造碰撞，
+  // 如 (source "a", path "/dir\u0000b") 与 (source "a\u0000", path "b") 同键），改 JSON 数组
+  // 结构化编码——键空间无歧义；含 NUL/C0 的非法输入已被上方两处显式拒收
+  const key = mergeable ? JSON.stringify([source.id, path.path]) : `unknown\u0000unverified-${counter.value++}`;
   let current = map.get(key);
   if (!current) {
     current = createAccumulator(key, source, path, kind, record);
@@ -322,16 +340,29 @@ export function deriveArtifactView(
 
   return [...map.values()].map((item) => {
     const unreachable = item.source_reachable === false || item.unverified;
-    const exists = item.artifact_exists ?? item.registration_exists ?? true;
-    const existence_state: ArtifactViewExistence = unreachable ? "unreachable" : exists ? "exists" : "missing";
+    // #72A0（P2-3C）：缺证据不默认存在——unknown 态，exists=false，open/reveal 不开
+    //（幽灵产物不再显示为可打开）；只有 artifacts scan 或登记校验明确报告 boolean
+    // 存在才置 exists/missing
+    const evidence = item.artifact_exists ?? item.registration_exists;
+    const exists = evidence === true;
+    const existence_state: ArtifactViewExistence = unreachable
+      ? "unreachable"
+      : evidence === undefined
+        ? "unknown"
+        : evidence
+          ? "exists"
+          : "missing";
     const derivedPrefix = item.derived_prefix_group;
     const missingOrUnreachable = existence_state !== "exists";
     const canOpen = existence_state === "exists";
     const canDownload = canOpen && item.origin === "artifacts";
     const parent = item.normalized_path ? normalizedPath(dirname(item.normalized_path)) : `unverified/${item.key}`;
+    // #72A0（P2-3A）：分组键结构化编码（同 merge key 方案）防 "::" 碰撞；unknown
+    // 组键沿用运行内 counter——unverified-${counter} 在本次投影内唯一即可，不作跨
+    // 刷新稳定身份（客户端不得持久化该键，刷新后以 source+path 重新 join）
     const groupKey = item.unverified
       ? `unknown::待刷新/${item.key.replace("\u0000", "-")}`
-      : `${item.source_id}::${parent}`;
+      : JSON.stringify([item.source_id, parent]);
     return {
       source_id: item.unverified ? UNKNOWN_SOURCE : item.source_id,
       normalized_path: item.normalized_path,

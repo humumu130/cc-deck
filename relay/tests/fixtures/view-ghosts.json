@@ -1,5 +1,9 @@
 {
   "directory": "ghost-directory",
   "broken_link": "ghost-link.md",
-  "missing_file": "ghost-missing.md"
+  "missing_file": "ghost-missing.md",
+  "external_link": "ext-link.md",
+  "sub_link": "018-后端实施/sub-link.md",
+  "dir_link": "dir-link",
+  "broken_artifact": "broken-art.md"
 }

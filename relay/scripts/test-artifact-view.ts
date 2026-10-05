@@ -1,4 +1,4 @@
-import { mkdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { setTimeout as wait } from "node:timers/promises";
 import { loadConfig } from "../src/config.js";
@@ -55,6 +55,46 @@ const unverifiablePath = deriveArtifactView({
 });
 assert(unverifiablePath[0]?.source_label === "来源未知/待刷新" && unverifiablePath[0]?.needs_refresh, "不可验证路径进入来源未知/待刷新");
 
+// #72A0（P1-1C）NUL 键碰撞：旧裸拼接下 (source "a", path "/dir\0/b.md") 与
+// (source "a\0/dir", path "/b.md") 生成同一 merge key 会被错误合并；
+// 新结构化编码 + NUL 拒收后两记录必须独立且走 unknown/unverified 分支
+const NUL = String.fromCharCode(0);
+const collideView = deriveArtifactView({
+  sessions: [
+    { session_id: "session-nul-1", source_id: "a", artifacts: [{ path: `/dir${NUL}/b.md`, exists: true }] },
+    { session_id: "session-nul-2", source_id: `a${NUL}/dir`, artifacts: [{ path: "/b.md", exists: true }] },
+  ],
+});
+assert(collideView.length === 2, "NUL source/path 构造键碰撞：两记录独立不 merge");
+assert(
+  collideView.every((r) => r.source_label === "来源未知/待刷新" && r.needs_refresh),
+  "NUL 非法输入落 unknown/unverified 分支（不抛异常）",
+);
+
+// #72A0（P2-3A）分组键：source id 含 "::" 的两条不同源记录不得同组
+//（旧 `${source_id}::${parent}` 下 ("a", "/x::/y") 与 ("a::/x", "/y") 同键混组）
+const groupView = deriveArtifactView({
+  sessions: [
+    { session_id: "session-gk-1", source_id: "a", artifacts: [{ path: "/x::/y/f-one.md", exists: true }] },
+    { session_id: "session-gk-2", source_id: "a::/x", artifacts: [{ path: "/y/f-two.md", exists: true }] },
+  ],
+});
+assert(groupView.length === 2, "分组键测试前置：两记录独立存在");
+const gkOne = groupView.find((r) => r.display_name === "f-one.md");
+const gkTwo = groupView.find((r) => r.display_name === "f-two.md");
+assert(!!gkOne && !!gkTwo && gkOne.group_key !== gkTwo.group_key, "source id 含 :: 的不同源记录不得同组");
+
+// #72A0（P2-3C）exists 缺省：无 artifact_exists/registration_exists 证据 → unknown，
+// exists=false，open/reveal/download 不开（幽灵产物不再默认可打开）
+const noEvidence = deriveArtifactView({
+  deliverables: [{ path: "/w/project/report-final.md", source_id: "local" }],
+});
+assert(noEvidence.length === 1 && noEvidence[0]?.existence_state === "unknown" && noEvidence[0]?.exists === false, "缺 exists 证据：existence_state=unknown 且 exists=false");
+assert(
+  noEvidence[0]?.capabilities.open === false && noEvidence[0]?.capabilities.reveal === false && noEvidence[0]?.capabilities.download === false,
+  "缺证据记录 open/reveal/download 不开",
+);
+
 const target = join(ROOT, "project", "deliver.md");
 const directory = join(ROOT, "project", "deliver-dir");
 const missingPath = join(ROOT, "project", "not-there.md");
@@ -67,6 +107,15 @@ assert(validateDeliverablePath(target).ok, "登记前允许存在且可读普通
 assert(!validateDeliverablePath(directory).ok && validateDeliverablePath(directory).error?.includes("普通文件"), "登记前拒绝目录");
 assert(!validateDeliverablePath(missingPath).ok && validateDeliverablePath(missingPath).error?.includes("不存在"), "登记前拒绝不存在文件");
 assert(!validateDeliverablePath(brokenLink).ok, "登记前拒绝断链");
+
+// #72A0（P1-1B）deliver 校验闸：fd 级单时刻快照 + symlink 分量标记（不拒绝原地交付）
+const liveLink = join(ROOT, "project", "live-link.md");
+try { symlinkSync(target, liveLink); } catch { writeFileSync(liveLink, "# deliver\n"); }
+const liveLinkResult = validateDeliverablePath(liveLink);
+const plainResult = validateDeliverablePath(target);
+assert(liveLinkResult.ok === true && liveLinkResult.unverified === true, "指向可读文件的 symlink 登记不拒绝且标 unverified");
+assert(liveLinkResult.size === null && liveLinkResult.mtime === null, "unverified 登记快照不采集 symlink 目标元数据");
+assert(plainResult.ok === true && plainResult.unverified === false && typeof plainResult.size === "number" && typeof plainResult.mtime === "number", "普通文件登记快照带 size/mtime 且 unverified=false");
 
 const artifactFile = join(artifactsDir(), "018-后端实施", "018-00-api.md");
 const rootArtifact = join(artifactsDir(), "root.txt");
@@ -91,6 +140,36 @@ assert(serveArtifact("018-后端实施/018-00-api.md", nestedResponse), "一级�
 assert(serveArtifact("root.txt", response()), "根目录文件行为不回归");
 assert(!serveArtifact("018-后端实施/deep/bad.txt", response()) && !serveArtifact("../root.txt", response()), "二级嵌套与穿越路径均拒绝");
 
+// #72A0（P1-1A）symlink 越界：外部目标 link / 目录 link 一律拒下、拒列；
+// 外部区用 mkdtemp 临时目录（artifacts 根外），不触碰真实 ~/.cc-deck
+const outsideDir = mkdtempSync(join(ROOT, "outside-"));
+const outsideFile = join(outsideDir, "secret.txt");
+writeFileSync(outsideFile, "top secret\n");
+writeFileSync(join(outsideDir, "inner.txt"), "inner\n");
+const ghostNames = JSON.parse(readFileSync(join(process.cwd(), "tests", "fixtures", "view-ghosts.json"), "utf8")) as {
+  external_link: string;
+  sub_link: string;
+  dir_link: string;
+  broken_artifact: string;
+};
+symlinkSync(outsideFile, join(artifactsDir(), ghostNames.external_link));
+symlinkSync(outsideFile, join(artifactsDir(), ghostNames.sub_link));
+symlinkSync(outsideDir, join(artifactsDir(), ghostNames.dir_link));
+symlinkSync(join(artifactsDir(), "no-such-target.md"), join(artifactsDir(), ghostNames.broken_artifact));
+
+const listedWithLinks = listArtifacts();
+assert(!listedWithLinks.some((i) => i.name === ghostNames.external_link), "指向根外文件的 symlink 不入列表");
+assert(!listedWithLinks.some((i) => i.name === ghostNames.sub_link), "一级子目录内 symlink 不入列表");
+assert(!listedWithLinks.some((i) => i.name === ghostNames.dir_link), "目录 symlink 本体不入列表");
+assert(!listedWithLinks.some((i) => i.name.startsWith(`${ghostNames.dir_link}/`)), "目录 symlink 不递归跟随列出根外文件");
+assert(listedWithLinks.some((i) => i.name === "018-后端实施/018-00-api.md"), "symlink 排除不影响真实文件列出");
+
+assert(!serveArtifact(ghostNames.external_link, response()), "symlink 指向根外文件 serve 拒绝");
+assert(!serveArtifact(ghostNames.sub_link, response()), "子目录 symlink 指向根外 serve 拒绝");
+assert(!serveArtifact(`${ghostNames.dir_link}/inner.txt`, response()), "目录 symlink 借道越界拒绝");
+assert(!serveArtifact(ghostNames.broken_artifact, response()), "断链 symlink serve 按不存在拒绝");
+assert(serveArtifact("root.txt", response()), "symlink 排除后真实文件仍可服务");
+
 if (process.env.CCR_RUN_HTTP === "1") {
   const bus = new EventBus();
   const cfg = loadConfig();
@@ -113,6 +192,12 @@ if (process.env.CCR_RUN_HTTP === "1") {
   const ledgerAfterGhosts = JSON.parse(readFileSync(join(ROOT, "data", "deliverables.json"), "utf8")) as unknown[];
   assert(directoryResponse.status === 400 && missingResponse.status === 400 && brokenResponse.status === 400, "deliver ghost 目录/不存在/断链均返回 4xx");
   assert(ledgerAfterValid.length === 1 && ledgerAfterGhosts.length === 1, "幽灵登记在 session 归因前被拦截且不写账");
+  // #72A0（P1-1B）：symlink 分量路径 deliver 不拒绝（原地交付合法），200 响应带 unverified 标记
+  const linkDeliverResponse = await postDeliver(liveLink);
+  assert(
+    linkDeliverResponse.status === 200 && (await linkDeliverResponse.json() as Record<string, unknown>).unverified === true,
+    "deliver symlink 分量路径 200 且响应带 unverified 标记",
+  );
   await server.close();
 } else {
   console.log("skip - HTTP deliver integration (set CCR_RUN_HTTP=1 outside restricted sandbox)");

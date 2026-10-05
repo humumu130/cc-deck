@@ -625,7 +625,11 @@ export function startServer(
           const r = typeof sid === "string" && /^[A-Za-z0-9-]{8,64}$/.test(sid)
             ? mgr.deliverBySession(sid, c, validated.path)
             : mgr.deliverByCwd(c, validated.path);
-          res.writeHead(r.ok ? 200 : 404, { "content-type": "application/json" }).end(JSON.stringify(r));
+          // #72A0（P1-1B）：校验闸已在 open+fstat 同一时刻采集 stat 快照并标记
+          // symlink 分量（unverified——原地交付合法不拒绝，目标元数据不当文件本体
+          // 口径）；标记随响应回传供调用方核对
+          const respBody = r.ok && validated.unverified ? { ...r, unverified: true } : r;
+          res.writeHead(r.ok ? 200 : 404, { "content-type": "application/json" }).end(JSON.stringify(respBody));
         } catch {
           res.writeHead(400).end("bad json");
         }
