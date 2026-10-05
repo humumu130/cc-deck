@@ -18,12 +18,13 @@ import * as FileSystem from "expo-file-system/legacy";
 import { WebView } from "react-native-webview";
 import * as Sharing from "expo-sharing";
 import * as Clipboard from "expo-clipboard";
-import { withA, type ThemeColors } from "../theme";
+import { withA, STATUS_ZH, type ThemeColors } from "../theme";
 import { useTheme, useThemeStyles } from "../theme-context";
 import { fmtElapsed, sessionElapsed, fmtHM, dayKey, dayLabel, fmtLastActive, fmtClock, fmtTok, contextPct, contextLevel, CONTEXT_LIMIT_FALLBACK, isVerifyTodo, isLiveLine, stripLiveMark } from "../fmt";
 import { store, useRelay } from "../store";
 import { fromB64, toB64 } from "../e2e";
-import type { ArtifactItem, CronTask, LogEntry, SessionState, TodoItem, WaitingPayload } from "../protocol";
+// E3a：hasActivityCapability 为值导入（E1 落库面，只消费不修改）；其余仍纯类型
+import { hasActivityCapability, type ArtifactItem, type CronTask, type LogEntry, type SessionState, type SessionStatus, type TodoItem, type WaitingPayload } from "../protocol";
 import { useKbHeight } from "../kb";
 import { useEnterSend, useProcessFont, useVoiceInput } from "../display-settings";
 import { voice } from "../voice";
@@ -184,6 +185,173 @@ function fmtArtTime(ts: number): string {
 // 词内给出断点，长中文路径会被从词中间拆开，ZWSP 提供合法断点。仅用于显示；复制走
 // 按钮的原串（零宽空格进剪贴板=粘到终端的隐性坏路径），故路径 Text 不再开 selectable
 const brkPath = (p: string) => p.replace(/([\\/])/g, "$1\u200B").replace(/-/g, "-\u200B");
+
+// \u2500\u2500\u2500 E3a \u53EA\u8BFB\u6295\u5F71\u7EAF\u51FD\u6570\u6BB5\uFF08\u96F6 RN \u8FD0\u884C\u65F6\u4F9D\u8D56\uFF0Ctest-e3a-detail.ts \u76F4\u8DD1 import\uFF09\u2500\u2500\u2500\u2500
+//
+// #018-E3a\uFF1Adetail \u8BFB\u4FA7\u4E09\u9762\u6295\u5F71\u2014\u2014\u7B49\u5F85\u6761\u53BB\u91CD / dock \u6D3B\u52A8\u8231\u6A21\u578B / \u4EA7\u7269\u5206\u7EC4\u3002
+// \u534F\u8BAE\u7F3A\u53E3\u5907\u6848\uFF1AB0/B4a \u7684 group_key\u3001directory_label\u3001existence_state \u4E09\u5B57\u6BB5\u5C1A\u672A\u8FDB
+// protocol.ts \u7684 ArtifactItem\uFF08E1 \u53EA\u843D\u4E86 activity \u9762\uFF09\uFF0C\u6B64\u5904\u4EE5\u672C\u5730\u7ED3\u6784\u6269\u5C55\u9632\u5FA1\u6D88\u8D39
+// \u2014\u2014\u5B57\u6BB5\u51FA\u73B0\u5373\u7528\uFF0C\u4E0D\u51FA\u73B0\u8D70 #222/\u65E7 relay \u56DE\u9000\uFF1B\u534F\u8BAE\u843D\u5E93\u540E\u628A B4aArtifact \u4E0A\u79FB\u5373\u53EF\u3002
+
+/** B4a \u4EA7\u7269\u5206\u7EC4\u6269\u5C55\u5B57\u6BB5\uFF08\u534F\u8BAE\u7F3A\u53E3\u672C\u5730\u5907\u6848\uFF0C\u89C1\u4E0A\uFF1Brelay \u843D\u5E93\u540E\u4E0A\u79FB protocol.ts\uFF09 */
+type B4aArtifact = ArtifactItem & {
+  group_key?: string | null;       // \u4E0D\u900F\u660E\u5206\u7EC4 id\uFF08relay \u6743\u5A01\uFF0C\u975E\u8DEF\u5F84\u6D3E\u751F\uFF09
+  directory_label?: string | null; // \u5206\u7EC4\u5C55\u793A\u540D
+  existence_state?: "exists" | "missing" | "unknown" | null;
+};
+
+export type ArtExistence = "exists" | "missing" | "unknown";
+export interface GroupedArtifact { item: ArtifactItem; existence: ArtExistence; openable: boolean }
+export interface ArtifactGroup { key: string; label: string; leaf: string; files: GroupedArtifact[]; at: number; size: number }
+export type ArtifactRow =
+  | { kind: "group"; group: ArtifactGroup; at: number }
+  | { kind: "file"; art: GroupedArtifact; at: number };
+
+/** existence \u4E09\u6001\u5F52\u4E00\uFF1AB4a \u663E\u5F0F\u5B57\u6BB5\u4F18\u5148\uFF1B\u65E7 relay \u65E0\u5B57\u6BB5\u56DE\u9000 exists \u5E03\u5C14
+ * \uFF08false\u2192missing \u53EF\u5F00 sheet \u770B\u300C\u5DF2\u5220\u9664\u300D\u5B9A\u683C CTA\uFF1B\u7F3A\u7701\u2192exists\uFF09\u3002unknown \u53EA\u6765\u81EA
+ * B4a \u663E\u5F0F\u4E0B\u53D1\u2014\u2014\u4E0D\u731C\u3001\u4E0D\u7ED9\u65E7\u6570\u636E\u9020\u672A\u77E5\u6001\uFF08\u65E7\u884C\u4FDD\u6301\u53EF\u6253\u5F00\uFF0C\u96F6\u56DE\u5F52\uFF09 */
+export function artExistenceOf(t: ArtifactItem): ArtExistence {
+  const st = (t as B4aArtifact).existence_state;
+  if (st === "exists" || st === "missing" || st === "unknown") return st;
+  return t.exists === false ? "missing" : "exists";
+}
+
+const artRecOf = (t: ArtifactItem): number => t.last_at || t.first_at || 0;
+
+/**
+ * \u4EA7\u7269\u5206\u7EC4\u6295\u5F71\uFF08arts tab \u6570\u636E\u9762\uFF09\uFF1A
+ * - B4a group_key \u5B58\u5728 \u2192 \u6309\u4E0D\u900F\u660E id \u5206\u6876\uFF0Clabel = directory_label ?? key\uFF08relay
+ *   \u6743\u5A01\u5206\u7EC4\uFF0C\u5355\u6587\u4EF6\u7EC4\u4E5F\u7167\u7EC4\u6E32\u67D3\uFF09\uFF1Bleaf \u53D6\u5C55\u793A\u540D\u672B\u6BB5\uFF08\u8DEF\u5F84\u5F62\uFF09\u6216\u539F\u6837
+ * - \u65E0 group_key \u2192 #222 \u65E7\u53E3\u5F84\u56DE\u9000\uFF1AdirOf \u6D3E\u751F\u7236\u76EE\u5F55\uFF0C\u540C\u76EE\u5F55\uFF08lowercase \u5F52\u4E00\uFF09\u22652
+ *   \u4E2A\u6587\u4EF6\u624D\u805A\u5408\uFF0C\u5355\u6587\u4EF6\u76EE\u5F55\u4E0E\u6839\u6563\u4EF6\u4FDD\u6301\u6563\u884C
+ * - \u7EC4\u5185\u6309\u6700\u8FD1\u6D3B\u8DC3\u964D\u5E8F\uFF1B\u7EC4 at=\u7EC4\u5185\u6700\u65B0\u3001size=\u6210\u5458\u5408\u8BA1\uFF1B\u7EC4\u4E0E\u6563\u6587\u4EF6\u6309 at \u964D\u5E8F\u6DF7\u6392
+ *   \uFF08\u4E0E #222 \u6DF7\u6392\u540C\u5219\uFF0C\u300C\u6700\u65B0\u4EA4\u4ED8\u6C38\u8FDC\u5728\u9876\u300D\uFF09
+ */
+export function artifactRowsOf(items: ArtifactItem[], dirOf: (t: ArtifactItem) => string): ArtifactRow[] {
+  const arts = items.map((item) => ({ item, existence: artExistenceOf(item) }));
+  // \u65E7\u53E3\u5F84\u76EE\u5F55\u8BA1\u6570\uFF08lowercase \u5F52\u4E00\uFF0C\u4E0E web-console artDirOf \u540C\u5224\uFF09
+  const dirN = new Map<string, number>();
+  for (const { item } of arts) {
+    const dir = (dirOf(item) || "").toLowerCase();
+    if (dir) dirN.set(dir, (dirN.get(dir) ?? 0) + 1);
+  }
+  const groups = new Map<string, ArtifactGroup>();
+  const loose: GroupedArtifact[] = [];
+  const of = (item: ArtifactItem, existence: ArtExistence): GroupedArtifact =>
+    ({ item, existence, openable: existence !== "unknown" });
+  for (const { item, existence } of arts) {
+    const gk = (item as B4aArtifact).group_key;
+    if (typeof gk === "string" && gk) {
+      let g = groups.get(gk);
+      if (!g) {
+        const label = (item as B4aArtifact).directory_label || gk;
+        g = { key: gk, label, leaf: label.split(/[\\/]/).pop() || label, files: [], at: 0, size: 0 };
+        groups.set(gk, g);
+      }
+      g.files.push(of(item, existence));
+    } else {
+      const dir = dirOf(item) || "";
+      if (dir && (dirN.get(dir.toLowerCase()) ?? 0) >= 2) {
+        const key = dir.toLowerCase();
+        let g = groups.get(key);
+        if (!g) {
+          g = { key, label: dir, leaf: dir.split(/[\\/]/).pop() || dir, files: [], at: 0, size: 0 };
+          groups.set(key, g);
+        }
+        g.files.push(of(item, existence));
+      } else {
+        loose.push(of(item, existence));
+      }
+    }
+  }
+  for (const g of groups.values()) {
+    g.files.sort((a, b) => artRecOf(b.item) - artRecOf(a.item));
+    for (const f of g.files) {
+      const at = artRecOf(f.item);
+      if (at > g.at) g.at = at;
+      if (typeof f.item.size === "number") g.size += f.item.size;
+    }
+  }
+  loose.sort((a, b) => artRecOf(b.item) - artRecOf(a.item));
+  return [
+    ...[...groups.values()].map((group) => ({ kind: "group" as const, group, at: group.at })),
+    ...loose.map((art) => ({ kind: "file" as const, art, at: artRecOf(art.item) })),
+  ].sort((a, b) => b.at - a.at);
+}
+
+/** \u7B49\u5F85\u6761\u53BB\u91CD\uFF1A\u540C request \u53EA\u6E32\u67D3\u4E00\u6761\uFF0C\u952E = waiting_request.request_id\uFF08\u4EFB\u52A1\u4E66\u6240\u79F0
+ * waiting_request.id \u7684\u534F\u8BAE\u5B9E\u540D\uFF1B\u7F3A id \u624D\u56DE\u9000 received_at|tool \u6D3E\u751F\u952E\uFF09\u3002\u9996\u89C1\u4F18\u5148\u3001
+ * \u8F93\u5165\u6B21\u5E8F\u5373\u6743\u5A01\u5E8F\u2014\u2014\u5FEB\u7167\u6062\u590D/\u4E8B\u4EF6\u91CD\u6295/R1 \u591A\u8BF7\u6C42\u5217\u8868\u5171\u7528\u6B64\u5F52\u4E00 */
+export function dedupeWaitingBars(payloads: (WaitingPayload | null | undefined)[]): WaitingPayload[] {
+  const seen = new Set<string>();
+  const out: WaitingPayload[] = [];
+  for (const p of payloads) {
+    if (!p) continue;
+    const key = p.request_id || `${p.received_at ?? ""}|${p.tool_name ?? ""}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(p);
+  }
+  return out;
+}
+
+/** done/error \u6536\u53E3\u6761\uFF1AERROR \u26A0 \u5E38\u9A7B\uFF08\u5BF9\u9F50\u65E2\u6709\u72B6\u6001\u6761\u8BED\u4E49\uFF09\uFF1BDONE \u2713 \u53EA\u5728\u56DE\u5408\u6536\u5C3E
+ * \u5C3E\u7A97\u5185\u663E\u793A\uFF08activity.state=DONE \u843D\u5B9A\u540E DONE_TAIL_MS \u5185\uFF09\u2014\u2014DONE \u662F\u4F1A\u8BDD\u9759\u606F\u6001\uFF0C
+ * \u5E38\u9A7B\u6536\u53E3\u6761\u4F1A\u7ED9\u6BCF\u4E2A\u5386\u53F2\u4F1A\u8BDD\u90FD\u7CCA\u4E00\u6761\uFF1B\u5C3E\u7A97\u5373\u300C\u672C\u8F6E\u521A\u6536\u53E3\u300D\u8BED\u4E49\uFF0C\u8FC7\u7A97\u81EA\u9690 */
+export const DONE_TAIL_MS = 8000;
+export type ClosingBar = { kind: "done" | "error"; text: string };
+export function closingBarOf(s: SessionState | null | undefined, now: number): ClosingBar | null {
+  if (!s) return null;
+  if (s.status === "ERROR") return { kind: "error", text: s.last_error || "\u51FA\u9519\u4E86" };
+  if (s.status === "DONE" && s.activity?.state === "DONE" && typeof s.activity.updated_at === "number") {
+    const age = now - s.activity.updated_at;
+    if (age >= 0 && age <= DONE_TAIL_MS) return { kind: "done", text: "\u672C\u8F6E\u5DF2\u5B8C\u6210" };
+  }
+  return null;
+}
+
+// \u56DB\u6001\u56FE\u6807\uFF1A\u4E0E\u8272\u53CC\u901A\u9053\u533A\u5206\uFF08\u2736\u25C9\u2713\u26A0 + working/waiting/done/error \u56DB\u4E3B\u9898\u8272\uFF09\uFF0C\u4E0D\u5F15\u65B0\u4F9D\u8D56
+const DOCK_ICONS: Record<string, string> = { WORKING: "\u2736", WAITING: "\u25C9", DONE: "\u2713", ERROR: "\u26A0" };
+
+export interface DockModel {
+  state: SessionStatus;
+  icon: string;
+  summary?: string;   // \u4EFB\u52A1\u6458\u8981\uFF08task_summary.text\uFF09
+  actKind?: string;   // \u5F53\u524D\u6D3B\u52A8 kind
+  actText?: string;
+  actTool?: string;
+  elapsedMs?: number;
+}
+
+/**
+ * \u5934\u90E8\u6D3B\u52A8\u8231\u6295\u5F71\uFF08B0 StatusDockState \u53EA\u8BFB\u6D88\u8D39\uFF09\uFF1A
+ * - activity \u7F3A\u5931 \u2192 null\uFF08\u6574\u8231\u4E0D\u6E32\u67D3\uFF0C\u65E0\u5047\u300C\u7A7A\u95F2\u300D\uFF09
+ * - native_status \u80FD\u529B\u5173 \u2192 null\uFF08\u6838\u5FC3\u80FD\u529B\u4E0D\u5728\u6574\u8231\u4E0D\u6E32\u67D3\uFF1Blegacy \u5F52\u4E00\u5316\u80FD\u529B\u5168\u5173\u540C\u6B64\uFF09
+ * - \u4EFB\u52A1\u6458\u8981/\u5F53\u524D\u6D3B\u52A8\u6309 operation_summary\u3001\u8017\u65F6\u6309 native_elapsed \u5404\u81EA\u95E8\u63A7\uFF0C\u5B57\u6BB5
+ *   \u7F3A\u7701\u4E0D\u51FA\u884C\uFF08\u4E0D\u51FA\u5047 0 / \u5047\u7A7A\u4E32\uFF09
+ * - approval \u4E0D\u5165\u8231\uFF1A\u5BA1\u6279\u7531\u6A2A\u5E45/\u72B6\u6001\u6761\u627F\u8F7D\uFF0C\u8231\u5185\u4E0D\u51FA\u7B2C\u56DB\u884C\u5047\u5360\u4F4D
+ */
+export function dockModelOf(s: SessionState | null | undefined): DockModel | null {
+  const act = s?.activity;
+  if (!act || !s) return null;
+  if (!hasActivityCapability(s, "native_status")) return null;
+  if (act.state !== "WORKING" && act.state !== "WAITING" && act.state !== "DONE" && act.state !== "ERROR") return null;
+  const m: DockModel = { state: act.state, icon: DOCK_ICONS[act.state] ?? "\u00B7" };
+  if (hasActivityCapability(s, "operation_summary")) {
+    const ts = act.task_summary;
+    const text = typeof ts?.text === "string" ? ts.text.trim() : "";
+    if (text) m.summary = text;
+    const a = act.activity;
+    if (a && typeof a.text === "string" && a.text.trim()) {
+      m.actText = a.text.trim();
+      if (typeof a.kind === "string" && a.kind) m.actKind = a.kind;
+      if (typeof a.tool === "string" && a.tool) m.actTool = a.tool;
+    }
+  }
+  if (hasActivityCapability(s, "native_elapsed") && typeof act.elapsed_ms === "number") m.elapsedMs = act.elapsed_ms;
+  return m;
+}
+// \u2500\u2500\u2500 E3a \u7EAF\u51FD\u6570\u6BB5\u6B62 \u2500\u2500\u2500
 
 // 转录行：user=右气泡 / assistant=正文流式 / tool=紧凑卡片 / system=居中弱化
 // 转录字号分级：过程消息（工具/结果/系统/思考）比消息（用户/assistant）小一档，可在设置抽屉调。
@@ -1171,6 +1339,46 @@ function LiveStatusLine({ summary, startedAt, color, tok }: { summary: string; s
   );
 }
 
+// E3a 状态/收口条（类 CLI，固定工具区内）：ERROR ⚠ 常驻 / DONE ✓ 尾窗收口（本轮
+// 刚结束 8s 内，「本轮已完成」）/ WAITING 等待行（横幅不可见时的兜底行，原状态条
+// 语义原样收编）。显隐与文案全部走 closingBarOf 纯投影；仅 DONE 尾窗激活期起 1s
+// 低频步进自隐（#148 铁律不用 Animated/高频帧），其余态零计时器零多余渲染
+function StatusStrip({ s, wr, bannerVisible }: { s: SessionState; wr: WaitingPayload | null; bannerVisible: boolean }) {
+  const { c } = useTheme();
+  const d = useThemeStyles(makeStyles);
+  const [, tick] = useState(0);
+  const bar = closingBarOf(s, Date.now());
+  const tailLive = bar?.kind === "done";
+  useEffect(() => {
+    if (!tailLive) return;
+    const t = setInterval(() => tick((n) => n + 1), 1000);
+    return () => clearInterval(t);
+  }, [tailLive]);
+  if (s.status === "ERROR" || bar) {
+    return (
+      <View style={d.strip}>
+        {s.status === "ERROR" ? (
+          <Text style={d.stripErr} numberOfLines={2}>⚠ {s.last_error || "出错了"}</Text>
+        ) : (
+          <Text style={d.stripDone} numberOfLines={1}>✓ {bar!.text}</Text>
+        )}
+      </View>
+    );
+  }
+  if (s.status === "WAITING" && !bannerVisible) {
+    return (
+      <View style={d.strip}>
+        <LiveStatusLine
+          summary={wr ? (wr.questions?.length ? `等待作答：${wr.questions[0]?.header ?? ""}` : `等待确认：${wr.tool_name || (wr.input_summary ?? "").slice(0, 48)}`) : "等待 CLI 输入"}
+          startedAt={wr?.received_at}
+          color={c.waiting}
+        />
+      </View>
+    );
+  }
+  return null;
+}
+
 // 排队注入消息：脉冲呼吸（类 CLI queued），CLI 处理/回合结束时上浮为正式消息。
 // #148 同源降级：原 Animated 逐帧呼吸（native 驱动 900ms 往返）与列表呼吸灯同一
 // 渲染风暴——改低频步进：六级三角波 600ms/步（3.6s 一拍），每秒 ~1.7 次提交
@@ -1883,13 +2091,17 @@ export default function DetailScreen({ sid, onBack, initialView, ref }: { sid: s
   const canCmd = snap.connected && (!s.historical || external || resumable);
   // #36 权限模式：胶囊四态（幽灵/点亮/警示）+ 面板直选，替代 subFilterRow 循环 chip
   const perm = (s.permission_mode ?? "default") as PermMode;
-  const wr = s.waiting_request;
+  // E3a 等待条去重：渲染层只认 dedupeWaitingBars 产出（同 request 只一条，键=
+  // waiting_request.request_id）。当前协议单请求挂起即 0/1 条；R1 冻结后多请求
+  // 列表零改渲染层
+  const wr = dedupeWaitingBars([s.waiting_request])[0] ?? null;
   // 审批横幅对称化：必须同时处于 WAITING 态（与列表卡/网页端同口径）——脱钩帧
   //（waiting_request 残留 + status 已翻走）不再渲染横幅，防"以为在等审批"的假等待
   const bannerVisible = !!wr && s.status === "WAITING" && wr.decidable !== false;
-  // 状态条只保留"需要注意"的状态：出错/等待确认（横幅未兜底时）。
-  // WORKING 状态行移入对话流（类 CLI），不再占顶栏
-  const showStrip = s.status === "ERROR" || (s.status === "WAITING" && !bannerVisible);
+  // E3a 头部活动舱投影：activity 缺失 / native_status 能力关 → null 整舱不渲染
+  const dock = dockModelOf(s);
+  // 舱态配色：四态各占主题色（图标+文字同色双通道）；其余态投影已滤不为 null
+  const dockColor = !dock ? "" : dock.state === "WORKING" ? c.working : dock.state === "WAITING" ? c.waiting : dock.state === "DONE" ? c.done : c.error;
 
   const send = (override?: string) => {
     const text = (override ?? input).trim();
@@ -2222,6 +2434,25 @@ export default function DetailScreen({ sid, onBack, initialView, ref }: { sid: s
               </Pressable>
             </View>
           </View>
+          {/* E3a 头部活动舱（B0 StatusDockState 只读投影）：状态行 + 任务摘要 + 当前活动。
+              四态图标/色双通道区分（✶◉✓⚠ + 四主题色），不引新依赖；行高恒定 lineHeight +
+              numberOfLines=1（390 宽不抖）；耗时按 native_elapsed、摘要/活动按
+              operation_summary 各自门控；approval 不入舱（横幅承载） */}
+          {dock ? (
+            <View style={d.dock}>
+              <View style={d.dockRow}>
+                <Text style={[d.dockIcon, { color: dockColor }]}>{dock.icon}</Text>
+                <Text style={[d.dockStateT, { color: dockColor }]}>{STATUS_ZH[dock.state] ?? dock.state}</Text>
+                {dock.elapsedMs !== undefined ? <Text style={d.dockElapsed}>· {fmtElapsed(dock.elapsedMs)}</Text> : null}
+              </View>
+              {dock.summary ? <Text style={d.dockSummary} numberOfLines={1}>{dock.summary}</Text> : null}
+              {dock.actText ? (
+                <Text style={d.dockAct} numberOfLines={1}>
+                  {dock.actKind === "tool_use" ? "⚙ " : ""}{dock.actTool ? `${dock.actTool} · ` : ""}{dock.actText}
+                </Text>
+              ) : null}
+            </View>
+          ) : null}
         </View>
       </View>
 
@@ -2229,19 +2460,10 @@ export default function DetailScreen({ sid, onBack, initialView, ref }: { sid: s
           且运行中自动滚底的跳变会打断按压；固定区根本不经过滚动手势系统。头部 ▴/▾ 可整体折叠 */}
       {!collapsed ? (
       <View style={d.fixedBar}>
-        {showStrip ? (
-            <View style={d.strip}>
-              {s.status === "ERROR" ? (
-                <Text style={d.stripErr} numberOfLines={2}>⚠ {s.last_error || "出错了"}</Text>
-              ) : (
-                <LiveStatusLine
-                  summary={wr ? (wr.questions?.length ? `等待作答：${wr.questions[0]?.header ?? ""}` : `等待确认：${wr.tool_name || (wr.input_summary ?? "").slice(0, 48)}`) : "等待 CLI 输入"}
-                  startedAt={wr?.received_at}
-                  color={c.waiting}
-                />
-              )}
-            </View>
-          ) : null}
+        {/* E3a：状态/收口条收编 StatusStrip——ERROR ⚠ 常驻 / DONE ✓ 尾窗收口 / WAITING
+            兜底行；投影与显隐判定内聚组件内（含尾窗自隐计时），WORKING 状态行仍居
+            对话流（类 CLI），顶栏只留「需要注意」的态 */}
+        <StatusStrip s={s} wr={wr} bannerVisible={bannerVisible} />
           {/* tab 行：模型 chip 已挪头部副信息行（#391 返工）；tabWrap 自测宽供指示条几何 */}
           <View style={d.filterRow}>
             <View style={d.tabWrap} onLayout={(e) => setTabRowW(e.nativeEvent.layout.width)}>
@@ -2463,47 +2685,29 @@ export default function DetailScreen({ sid, onBack, initialView, ref }: { sid: s
             const created = arts.filter((t) => t.op === "create").sort(byRec);
             const edited = arts.filter((t) => t.op !== "create").sort(byRec);
             const KC: Record<ArtKind, string> = { code: c.brandA, doc: c.done, data: c.working, img: c.waiting, zip: c.dim, gen: c.faint };
-            // #222 分组口径（与 web-console artifactsTabHtml 一致）：分组键 = 父目录
-            // toLowerCase 归一（Windows 源大小写不敏感）；同键 ≥2 文件才聚合，单文件
-            // 目录与根目录文件保持散文件；只按直接父目录一层，不递归
-            const dirN = new Map<string, number>();
-            for (const t of arts) {
-              const dir = artDirOf(s, t).toLowerCase();
-              if (dir) dirN.set(dir, (dirN.get(dir) ?? 0) + 1);
-            }
+            // E3a 分组投影统一走 artifactRowsOf：B4a group_key/directory_label 优先
+            //（不透明 id 分桶、relay 展示名、单文件组照组渲染），旧 relay 无 B4a 字段
+            // 回退 #222 父目录口径（同键 ≥2 才聚合、单文件目录与根散件保持散行）；
+            // existence 三态在此归一，行渲染按 openable 收打开按钮
+            const rows = artifactRowsOf(arts, (t) => artDirOf(s, t));
             const folders = new Map<string, { key: string; dir: string; leaf: string; files: ArtifactItem[]; at: number; size: number }>();
-            const loose: ArtifactItem[] = [];
-            for (const t of arts) {
-              const dir = artDirOf(s, t);
-              const key = dir.toLowerCase();
-              if (dir && (dirN.get(key) ?? 0) >= 2) {
-                let g = folders.get(key);
-                if (!g) {
-                  g = { key, dir, leaf: dir.split(/[\\/]/).pop() || dir, files: [], at: 0, size: 0 };
-                  folders.set(key, g);
-                }
-                g.files.push(t);
-                const at = t.last_at || t.first_at || 0;
-                if (at > g.at) g.at = at;
-                if (typeof t.size === "number") g.size += t.size;
-              } else {
-                loose.push(t);
+            for (const r of rows) {
+              if (r.kind === "group") {
+                folders.set(r.group.key, { key: r.group.key, dir: r.group.label, leaf: r.group.leaf, files: r.group.files.map((f) => f.item), at: r.at, size: r.group.size });
               }
             }
-            for (const g of folders.values()) g.files.sort(byRec);
             // 默认开合：最近活跃（组内最新时间最大）的文件夹展开、其余折叠；
             // 用户点过的以 artFold 显式记录优先
             let newestKey = "";
             let newestAt = -1;
             for (const g of folders.values()) if (g.at > newestAt) { newestAt = g.at; newestKey = g.key; }
             const folOpen = (k: string) => artFold[sid + "|" + k] ?? k === newestKey;
-            // 混排：文件夹（按组内最新时间）与散文件（按各自时间）降序同列竞争
-            const items = [
-              ...[...folders.values()].map((g) => ({ kind: "folder" as const, g })),
-              ...loose.map((t) => ({ kind: "file" as const, t })),
-            ].sort((a, b) =>
-              (b.kind === "folder" ? b.g.at : b.t.last_at || b.t.first_at || 0) -
-              (a.kind === "folder" ? a.g.at : a.t.last_at || a.t.first_at || 0),
+            // 混排：artifactRowsOf 已按 at 降序（组 at=组内最新、散件按各自时间），
+            // 此处只换渲染形（文件夹行 / 散文件行同列竞争）
+            const items = rows.map((r) =>
+              r.kind === "group"
+                ? { kind: "folder" as const, g: folders.get(r.group.key)! }
+                : { kind: "file" as const, t: r.art.item },
             );
             const artRow = (t: ArtifactItem, i: number, opts?: { sub?: boolean; badge?: boolean }) => {
               const rel = artRelOf(s, t);
@@ -2514,7 +2718,12 @@ export default function DetailScreen({ sid, onBack, initialView, ref }: { sid: s
                 : rel
                   ? (rel.includes("/") || rel.includes("\\") ? rel.slice(0, Math.max(rel.lastIndexOf("/"), rel.lastIndexOf("\\")) + 1) : "")
                   : t.path.slice(0, t.path.length - name.length);
-              const dead = t.exists === false;
+              // E3a existence 三态：missing 沿用「已删除」红标（sheet 内定格 CTA 仍可开）；
+              // unknown=B4a 显式「状态未知」中性标且不给打开按钮（Pressable disabled +
+              // 无 onPress，旧 relay 数据不猜 unknown 零回归）
+              const existence = artExistenceOf(t);
+              const dead = existence === "missing";
+              const unknown = existence === "unknown";
               const outside = !rel && t.origin !== "cwd";
               const kc = KC[artKindOf(name)];
               return (
@@ -2522,19 +2731,21 @@ export default function DetailScreen({ sid, onBack, initialView, ref }: { sid: s
                   key={t.path + "|" + i}
                   style={[d.cronRow, opts?.sub ? { borderTopWidth: 0, marginTop: 0, paddingVertical: 4 } : i === 0 ? { borderTopWidth: 0, marginTop: 0 } : null]}
                   android_ripple={{ color: c.tintSoft, borderless: false }}
-                  onPress={() => setArtPop(t)}
-                  accessibilityLabel={`输出物 ${name}，点按查看路径详情`}
+                  disabled={unknown}
+                  onPress={unknown ? undefined : () => setArtPop(t)}
+                  accessibilityLabel={unknown ? `输出物 ${name}，状态未知，不可打开` : `输出物 ${name}，点按查看路径详情`}
                 >
                   <View style={[d.artChip, { borderColor: withA(kc, 0.45) }]}>
                     <Text style={[d.artChipT, { color: kc }]}>{artExtOf(name)}</Text>
                   </View>
                   <View style={{ flex: 1, minWidth: 0 }}>
                     <View style={d.artNameRow}>
-                      <Text style={[d.cronName, dead && { color: c.dim }]} numberOfLines={1}>{name}</Text>
+                      <Text style={[d.cronName, (dead || unknown) && { color: c.dim }]} numberOfLines={1}>{name}</Text>
                       {opts?.badge ? (
                         <Text style={[d.artTag, t.op === "create" ? { color: c.done } : { color: c.dim }]}>{t.op === "create" ? "新建" : "修改"}</Text>
                       ) : null}
                       {dead ? <Text style={[d.artTag, { color: c.error }]}>已删除</Text> : null}
+                      {unknown ? <Text style={[d.artTag, { color: c.faint }]}>状态未知</Text> : null}
                       {outside ? <Text style={[d.artTag, { color: c.working }]}>cwd 外</Text> : null}
                     </View>
                     <Text style={d.cronMeta} numberOfLines={1}>
@@ -3205,6 +3416,17 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
     borderRadius: 12, paddingHorizontal: 11, paddingVertical: 8, marginBottom: 8,
   },
   stripErr: { flex: 1, color: c.error, fontSize: 12.5, fontWeight: "600" },
+  // E3a done 收口条（与 stripErr 同形同号级，色走 done）
+  stripDone: { flex: 1, color: c.done, fontSize: 12.5, fontWeight: "600" },
+  // E3a 头部活动舱：行高恒定（lineHeight 锁定）+ 单行截断，390 宽不抖；紧凑三行
+  //（状态/摘要/活动）随内容 0~3 行，能力门控缺行不占位
+  dock: { marginTop: 5 },
+  dockRow: { flexDirection: "row", alignItems: "center", gap: 5 },
+  dockIcon: { fontSize: 11, width: 13, textAlign: "center", lineHeight: 15 },
+  dockStateT: { fontSize: 11, fontWeight: "700", lineHeight: 15 },
+  dockElapsed: { fontSize: 10.5, color: c.dim, fontVariant: ["tabular-nums"], lineHeight: 15 },
+  dockSummary: { fontSize: 11, color: c.dim, lineHeight: 15, marginTop: 1 },
+  dockAct: { fontSize: 10.5, color: c.faint, lineHeight: 14, marginTop: 1 },
   stripBtnWarn: {
     height: 26, borderRadius: 8, paddingHorizontal: 10, backgroundColor: c.panel2,
     borderWidth: 1, borderColor: withA(c.waiting, 0.3), alignItems: "center", justifyContent: "center",
