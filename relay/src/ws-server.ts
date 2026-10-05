@@ -25,7 +25,7 @@ import type { EventBus } from "./event-bus.js";
 import type { SessionManager } from "./session-manager.js";
 import type { RelayConfig } from "./config.js";
 import { Bridge, parseGateTools } from "./bridge.js";
-import type { BridgeEvent, Command, CommandAckPayload, Envelope } from "./types.js";
+import { SNAPSHOT_SCHEMA_VERSION, type BridgeEvent, type Command, type CommandAckPayload, type Envelope } from "./types.js";
 
 function localIps(): Set<string> {
   const out = new Set<string>();
@@ -894,6 +894,7 @@ export function startServer(
           logs: snapLogs.logs,
           ...(Object.keys(snapLogs.logs_truncated).length ? { logs_truncated: snapLogs.logs_truncated } : {}),
           server_time: Date.now(),
+          schema_version: SNAPSHOT_SCHEMA_VERSION,
           homedir: homedir(),
           // relay 本机平台（#8：手机端 NewSessionModal 自适应路径文案/盘符拦截依据；
           // #117 教训——云通道快照同名字段必须同步，云桥手机才收得到）
@@ -955,7 +956,6 @@ export function startServer(
         !cmd ||
         typeof cmd.command_id !== "string" ||
         typeof cmd.type !== "string" ||
-        !COMMAND_TYPES.has(cmd.type) ||
         typeof cmd.payload !== "object" ||
         cmd.payload === null
       ) {
@@ -967,6 +967,10 @@ export function startServer(
             error: "invalid command shape",
           }),
         );
+        return;
+      }
+      if (!COMMAND_TYPES.has(cmd.type)) {
+        ws.send(JSON.stringify({ type: "COMMAND_ACK", command_id: cmd.command_id, ok: false, error: "unsupported command" }));
         return;
       }
       // #316 手表配对授权：ws-server 层消化（持有待配对池），不进 mgr

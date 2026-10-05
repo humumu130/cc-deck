@@ -1,4 +1,5 @@
 import WebSocket from "ws";
+import { homedir } from "node:os";
 import type { EventBus } from "./event-bus.js";
 import type { SessionManager } from "./session-manager.js";
 import type { RelayConfig } from "./config.js";
@@ -8,7 +9,8 @@ import { devId, seal, unseal, type SealedBox } from "./e2e.js";
 import { readPluginConfig } from "./ws-server.js";
 import { listAcceptances } from "./acceptance.js";
 import { listGroups, listPendingConfirms } from "./projects.js";
-import type { Command, CommandAckPayload, Envelope, PeerMeta } from "./types.js";
+import { listModels } from "./models.js";
+import { SNAPSHOT_SCHEMA_VERSION, type Command, type CommandAckPayload, type Envelope, type PeerMeta } from "./types.js";
 
 interface PhoneState {
   lastSeq: number; // hello 时上报，用于补发
@@ -377,6 +379,7 @@ export class CloudClient {
         logs: snapLogs.logs,
         ...(Object.keys(snapLogs.logs_truncated).length ? { logs_truncated: snapLogs.logs_truncated } : {}),
         server_time: Date.now(),
+        schema_version: SNAPSHOT_SCHEMA_VERSION,
         relay_dev: this.identity.relayDev,
         wan_dev: this.identity.wanDev,
         // #71 输出物开关（与 ws-server 直连快照同源）：云通道手机 tab 同样跟随
@@ -394,6 +397,8 @@ export class CloudClient {
         // relay 本机平台（#8）：与 ws-server 直连快照同源同步（#117 教训：云桥手机
         // 建会话的路径文案/盘符拦截同样需要；旧客户端忽略未知键）
         platform: process.platform,
+        homedir: homedir(),
+        models: listModels(this.mgr.cfg.model),
         // #117：云通道快照补 lan_hint/relay_name——#95/#100 此前只挂在 ws-server
         // 直连快照上，云通道手机收不到（LAN 角标恒☁️、默认名不生效的根因）
         ...(this.extra?.lanHint?.() ? { lan_hint: this.extra.lanHint() } : {}),
@@ -701,6 +706,8 @@ export class CloudClient {
         logs: snapLogs.logs,
         ...(Object.keys(snapLogs.logs_truncated).length ? { logs_truncated: snapLogs.logs_truncated } : {}),
         server_time: Date.now(),
+        schema_version: SNAPSHOT_SCHEMA_VERSION,
+        models: listModels(this.mgr.cfg.model),
       },
     };
     this.sendWan(dev, snapshot);

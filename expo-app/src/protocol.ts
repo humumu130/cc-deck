@@ -14,6 +14,46 @@ export interface TokenUsage {
   cache_creation_input_tokens: number;
 }
 
+export type ActivityKind = "tool_use" | "tool_result" | "assistant_text" | "system";
+
+export interface ActivityCapabilities {
+  native_status: boolean;
+  operation_summary: boolean;
+  native_elapsed: boolean;
+  approval: boolean;
+}
+
+export interface StatusDockState {
+  state: SessionStatus;
+  task_summary?: { text: string; source: "todo" | "dispatch" | "board" | "session"; updated_at: number };
+  activity?: { kind: ActivityKind; text: string; tool?: string; observed_at: number; occurred_at?: number };
+  elapsed_ms?: number;
+  capabilities: ActivityCapabilities;
+  updated_at: number;
+}
+
+export interface SourceCapabilities {
+  models?: boolean;
+  activity?: boolean;
+  notifications?: boolean;
+  commands?: string[];
+  [key: string]: boolean | string[] | undefined;
+}
+
+export interface NotificationItem {
+  key: string;
+  kind: string;
+  group: string;
+  severity: string;
+  title: string;
+  body: string;
+  sourceContext: { domain: string; entityId: string; sessionId?: string; segment?: string; alertId: string; returnPath: string };
+  actionable: boolean;
+  created_at: number;
+  resolved_at?: number;
+  handled_at?: number;
+}
+
 export interface AskOption {
   label: string;
   description?: string;
@@ -106,6 +146,8 @@ export interface SessionState {
   action_summary: string;
   started_at: number;
   updated_at: number;
+  activity?: StatusDockState; // optional: old relay snapshots omit activity
+  activity_capabilities?: ActivityCapabilities; // optional: capability-aware downgrade
   waiting_request?: WaitingPayload | null;
   stats: FileChangeStats;
   last_error?: string;
@@ -249,6 +291,7 @@ export interface LogEntry {
   streaming?: boolean; // true = 该文本块仍在生成中
   detail?: string; // 工具完整入参/输出（展开查看）
   diff?: string[]; // Edit/Write 的 +/- diff 行（着色渲染）
+  occurred_at?: number; // optional: old relay only has relay receive time ts
 }
 
 export interface Envelope {
@@ -257,6 +300,29 @@ export interface Envelope {
   ts: number;
   type: string;
   payload: any;
+}
+
+export type EventType =
+  | "SESSION_ACTIVITY"
+  | "NOTIFICATIONS_UPDATED"
+  | string;
+
+export interface SnapshotPayload {
+  sessions: SessionState[];
+  logs: Record<string, LogEntry[]>;
+  server_time: number;
+  schema_version?: number;
+  models?: string[];
+  homedir?: string;
+  deliverables?: boolean;
+  acceptances?: unknown[];
+  relay_dev?: string;
+  relay_name?: string;
+  projects?: ProjectGroup[];
+  boards?: ProjectBoard[];
+  org_confirms?: OrgConfirm[];
+  notifications?: NotificationItem[];
+  source_capabilities?: SourceCapabilities;
 }
 
 export type CommandType =
@@ -280,7 +346,11 @@ export type CommandType =
   | "COMMAND_ARTIFACT_FETCH"
   | "COMMAND_ALLOW_RULE_REMOVE"
   | "COMMAND_ORG_CONFIRM" // #26 M2 确认卡决议（✓/✗；relay 单漏斗 orgAction）
-  | "COMMAND_PROJECT_DETAIL"; // #26 M2 项目组详情 { group, board, receipts } 按需拉取
+  | "COMMAND_PROJECT_DETAIL"
+  | "COMMAND_ORG_ACTION"
+  | "COMMAND_NOTIFICATION_ACK"
+  | "COMMAND_ENGINE_PROFILE_UPDATE"
+  | "COMMAND_ARTIFACT_GROUP_FETCH"; // B0 types-only commands; old relay ignores/rejects
 
 // 云桥配对信息：relay 经可信 LAN 信道下发，手机落盘后即可走云通道
 export interface CloudPairInfo {

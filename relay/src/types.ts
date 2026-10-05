@@ -54,6 +54,71 @@ export interface TokenUsage {
   cache_creation_input_tokens: number;
 }
 
+export type ActivityKind = "tool_use" | "tool_result" | "assistant_text" | "system";
+
+export interface ActivityCapabilities {
+  native_status: boolean;
+  operation_summary: boolean;
+  native_elapsed: boolean;
+  approval: boolean;
+}
+
+export interface StatusDockState {
+  state: SessionStatus;
+  task_summary?: {
+    text: string;
+    source: "todo" | "dispatch" | "board" | "session";
+    updated_at: number;
+  };
+  activity?: {
+    kind: ActivityKind;
+    text: string;
+    tool?: string;
+    observed_at: number;
+    occurred_at?: number;
+  };
+  elapsed_ms?: number;
+  capabilities: ActivityCapabilities;
+  updated_at: number;
+}
+
+export interface SourceCapabilities {
+  models?: boolean;
+  activity?: boolean;
+  notifications?: boolean;
+  commands?: string[];
+  [key: string]: boolean | string[] | undefined;
+}
+
+export interface NotificationSourceContext {
+  domain: string;
+  entityId: string;
+  sessionId?: string;
+  segment?: string;
+  alertId: string;
+  returnPath: string;
+}
+
+export type NotificationKind = "org-confirm" | "waiting" | "dispatch" | "acceptance" | "system";
+export type NotificationGroup = "action" | "attention" | "activity";
+export type NotificationSeverity = "info" | "working" | "waiting" | "error" | "done";
+
+export interface NotificationItem {
+  key: string;
+  kind: NotificationKind;
+  group: NotificationGroup;
+  severity: NotificationSeverity;
+  title: string;
+  body: string;
+  sourceContext: NotificationSourceContext;
+  actionable: boolean;
+  created_at: number;
+  resolved_at?: number;
+  handled_at?: number;
+}
+
+export const SNAPSHOT_SCHEMA_VERSION = 1 as const;
+
 // 任务清单（CLI TodoWrite 工具的最新快照；手表/手机进度展示用）
 export interface TodoItem {
   id?: number;               // CLI 任务库数字任务号（转录 #NNN 跳转定位用；TodoWrite 旧清单无号）
@@ -105,6 +170,8 @@ export interface SessionState {
   action_summary: string;     // 最近动作摘要，如 "修改 src/auth.ts"
   started_at: number;
   updated_at: number;
+  activity?: StatusDockState;
+  activity_capabilities?: ActivityCapabilities;
   waiting_request?: WaitingPayload;   // status===WAITING 时必有
   waiting_started_at?: number;        // 当前 WAITING 实例起点（与 request_id 一一对应）
   stats: FileChangeStats;
@@ -211,6 +278,7 @@ export interface LogEntry {
   streaming?: boolean; // true = 该文本块仍在生成中
   detail?: string; // P2 转录：工具完整入参/输出（等宽展开）
   diff?: string[]; // P2 转录：Edit/Write 的 +/- diff 行（着色渲染）
+  occurred_at?: number; // 引擎/bridge 明确提供的原生产生时间；缺失时沿用 ts
 }
 
 // ---------- 事件 payload（Relay -> 客户端） ----------
@@ -316,6 +384,7 @@ export interface SnapshotPayload {
   sessions: SessionState[];
   logs: Record<string, LogEntry[]>;   // session_id -> 时间线（重启用历史补齐；#408 预算截断：每会话最近 K 条 + 总字节上限）
   server_time: number;
+  schema_version?: number;
   // #408 大帧根治截断标记：session_id -> 被裁掉的更早条数（未截断的会话不出现）。
   // LogEntry 无独立 seq（seq 在 Envelope 层，日志条目本身不存），无法给出可续传的
   // earliest_seq 序号，改用"被省略条数"表达截断；旧客户端忽略未知字段，新客户端
@@ -324,6 +393,15 @@ export interface SnapshotPayload {
   // relay 本机平台（process.platform，#8）：手机端新建会话表单自适应路径文案与
   // 盘符拦截依据（0.5.3 起客户端已在读，此前 relay 漏组装恒空串）
   platform?: string;
+  models?: string[];
+  homedir?: string;
+  deliverables?: boolean;
+  acceptances?: AcceptanceSummary[];
+  relay_dev?: string;
+  relay_name?: string;
+  boards?: ProjectBoard[];
+  notifications?: NotificationItem[];
+  source_capabilities?: SourceCapabilities;
   // #212 允许并记住：已记规则全量（设置页「记住的规则」列表数据源；随快照而非
   // HTTP API 下发——云桥手机无 HTTP 直连通道，WS 快照三端通吃）
   allow_rules?: AllowRule[];
@@ -351,6 +429,23 @@ export interface SessionLogPayload {
   tool?: string;
   detail?: string;
   diff?: string[];
+  occurred_at?: number;
+}
+
+export interface SessionActivityPayload {
+  session_id: string;
+  state: SessionStatus;
+  activity_kind: ActivityKind;
+  text: string;
+  tool?: string;
+  observed_at: number;
+  occurred_at?: number;
+  capabilities: ActivityCapabilities;
+  seq_local: number;
+}
+
+export interface NotificationsUpdatedPayload {
+  items: NotificationItem[];
 }
 
 export type EventType =
@@ -362,6 +457,7 @@ export type EventType =
   | "SESSION_ERROR"
   | "SESSION_DONE"
   | "SESSION_LOG"
+  | "SESSION_ACTIVITY"
   | "TASK_DONE"
   | "SESSION_DELETED"
   | "SNAPSHOT"
@@ -376,6 +472,7 @@ export type EventType =
   | "ORG_CONFIRM_UPDATED"
   | "DISPATCH_DONE"
   | "SETTINGS_UPDATED"
+  | "NOTIFICATIONS_UPDATED"
   | "WATCHDOG"
   | "ARTIFACT_CHUNK";
 
@@ -388,6 +485,7 @@ export type EventPayloadMap = {
   SESSION_ERROR: SessionErrorPayload;
   SESSION_DONE: SessionDonePayload;
   SESSION_LOG: SessionLogPayload;
+  SESSION_ACTIVITY: SessionActivityPayload;
   TASK_DONE: TaskDonePayload;
   SESSION_DELETED: SessionDeletedPayload;
   SNAPSHOT: SnapshotPayload;
@@ -414,6 +512,7 @@ export type EventPayloadMap = {
   // #17 第二批 雇员独立家开关变更（瞬态）：切换后广播最新状态；离线端由
   // SNAPSHOT.settings 兜底
   SETTINGS_UPDATED: EmployeeHomeSettingsPayload;
+  NOTIFICATIONS_UPDATED: NotificationsUpdatedPayload;
   // #7 SDK 会话流看门狗观测（落 events.ndjson 供复盘误杀率；客户端不消费，
   // 未知事件类型各端 switch 自然跳过）
   WATCHDOG: WatchdogPayload;
@@ -592,12 +691,26 @@ export type CommandType =
   | "COMMAND_ORG_CONFIRM"
   | "COMMAND_PROJECT_DETAIL"
   | "COMMAND_ARTIFACT_FETCH"
-  | "COMMAND_SETTINGS_UPDATE";
+  | "COMMAND_SETTINGS_UPDATE"
+  | "COMMAND_ORG_ACTION"
+  | "COMMAND_NOTIFICATION_ACK"
+  | "COMMAND_ENGINE_PROFILE_UPDATE"
+  | "COMMAND_ARTIFACT_GROUP_FETCH";
 
 export interface CommandBase {
   command_id: string;   // 客户端生成（uuid），Relay 按此去重
   type: CommandType;
   ts: number;
+  auth?: {
+    device_id: string;
+    role: "owner" | "operator" | "viewer";
+    capabilities: string[];
+  };
+  actor?: {
+    device_id: string;
+    role: "owner" | "operator" | "viewer";
+    capabilities: string[];
+  };
 }
 
 export interface CreateCommand extends CommandBase {
@@ -761,6 +874,26 @@ export interface SettingsUpdateCommand extends CommandBase {
   payload: { employee_home: boolean };
 }
 
+export interface OrgActionCommand extends CommandBase {
+  type: "COMMAND_ORG_ACTION";
+  payload: { action: "create"; name: string; anchor_dir: string; tier: string };
+}
+
+export interface NotificationAckCommand extends CommandBase {
+  type: "COMMAND_NOTIFICATION_ACK";
+  payload: { notification_key: string; action: "handled" | "dismissed" };
+}
+
+export interface EngineProfileUpdateCommand extends CommandBase {
+  type: "COMMAND_ENGINE_PROFILE_UPDATE";
+  payload: { engine: SessionEngine; provider: string; profile_ref: string };
+}
+
+export interface ArtifactGroupFetchCommand extends CommandBase {
+  type: "COMMAND_ARTIFACT_GROUP_FETCH";
+  payload: { session_id: string; group_key: string };
+}
+
 export type Command =
   | CreateCommand
   | MessageCommand
@@ -792,7 +925,11 @@ export type Command =
   | OrgConfirmCommand
   | ProjectDetailCommand
   | SettingsUpdateCommand
-  | ArtifactFetchCommand;
+  | ArtifactFetchCommand
+  | OrgActionCommand
+  | NotificationAckCommand
+  | EngineProfileUpdateCommand
+  | ArtifactGroupFetchCommand;
 
 // 托管会话权限模式切换（default=每次确认 / acceptEdits=自动接受编辑 / plan=只读规划 /
 // bypassPermissions=跳过全部确认——skip 会话被误切后靠此切回）

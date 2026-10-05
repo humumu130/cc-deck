@@ -1,0 +1,20 @@
+{
+  "sessions": [
+    {
+      "session_id": "s-demo",
+      "activity": {
+        "state": "WORKING",
+        "task_summary": {"text": "核对快照协议", "source": "session", "updated_at": 1791158400000},
+        "capabilities": {"native_status": true, "operation_summary": true, "native_elapsed": false, "approval": false},
+        "updated_at": 1791158400000
+      },
+      "activity_capabilities": {"native_status": true, "operation_summary": true, "native_elapsed": false, "approval": false}
+    }
+  ],
+  "logs": {},
+  "server_time": 1791158400000,
+  "schema_version": 1,
+  "models": ["glm-5.3"],
+  "notifications": [],
+  "source_capabilities": {"models": true, "activity": true, "notifications": false}
+}
