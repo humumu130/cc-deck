@@ -1,4 +1,5 @@
 // #018-E2b expo root 真命令/通知/组织接线直跑测试（worker G）。
+// #018-E2c 增补：⑨E COMMAND_CREATE 三态输入扩断言 + ⑪ NewSessionModal 宿主结构闸。
 //
 // 直跑入口（relay 目录）：env -u CCR_ORG_DIR node --import tsx scripts/test-e2b-root.ts
 //
@@ -12,7 +13,7 @@
 // 必须 process.exit。注意②：store 的 send() 比较 conn.ws.readyState !== WebSocket.OPEN
 //（RN 全局）——node 下即内置全局 WebSocket，OPEN=1；假 ws readyState 取同值。
 
-// @ts-expect-error node:module 未进 expo tsconfig types 字段（relay tsconfig 不含本文件亦可）
+// node:module 直引（relay tsconfig types 含 @types/node，无需 expect-error）
 import { registerHooks } from "node:module";
 import * as fs from "node:fs";
 import * as path from "node:path";
@@ -97,7 +98,8 @@ const hooks: ModuleHooks = {
     return nextLoad(url, context);
   },
 };
-registerHooks(hooks);
+// tsx 运行时签名与 @types/node 的 LoadHookSync 变型存在协变差，测试桩场景直通
+registerHooks(hooks as Parameters<typeof registerHooks>[0]);
 
 // ---------- 断言器 ----------
 let tests = 0;
@@ -109,16 +111,24 @@ const check = (condition: unknown, msg = "assertion failed"): void => {
 // ---------- 被测模块（计算拼接串：relay tsc 不顺图谱查 expo 侧 TS） ----------
 const STORE_TS = "../../expo-app/" + "src/store.ts";
 const LIST_TSX = "../../expo-app/" + "src/screens/ListScreen.tsx";
+const MODAL_TS = "../../expo-app/" + "src/screens/NewSessionModal.tsx";
 const LIST_PATH = path.resolve(path.dirname(new URL(import.meta.url).pathname), "..", "..", "expo-app", "src", "screens", "ListScreen.tsx");
+const MODAL_PATH = path.resolve(path.dirname(new URL(import.meta.url).pathname), "..", "..", "expo-app", "src", "screens", "NewSessionModal.tsx");
 
 interface AckVerdict { ok: boolean; error: string | null; kind: "ok" | "rejected" | "unconfirmed" }
 
+// store 三入口类型（对齐 store.ts 实签名；回调参数由此获得语境类型，strict 下
+// 不再隐式 any——非 literal 动态 import 本身返回 any，无需 expect-error）
+type StoreAck = { ok: boolean; err: string | null; artifact?: { size: number; mime: string }; data?: unknown };
+type SendFn = (type: string, payload: Record<string, unknown>, sourceId?: string, onAck?: (r: StoreAck) => void, cmdId?: string) => boolean;
+type OrgConfirmFn = (sourceId: string, confirmId: string, approve: boolean, onAck?: (r: { ok: boolean; err: string | null }) => void) => boolean;
+type AckNotifFn = (key: string, action: "handled" | "dismissed", onDone?: (r: { ok: boolean; err: string | null }) => void) => boolean;
+
 async function main(): Promise<void> {
-  // @ts-expect-error The direct test runner loads TypeScript through tsx.
+  // tsx 直载 TS（计算拼接串，tsc 不顺图谱查 expo 侧）
   const storeMod = await import(STORE_TS);
-  // @ts-expect-error The direct test runner loads TypeScript through tsx.
   const list = await import(LIST_TSX);
-  const { store } = storeMod as { store: Record<string, unknown> & { send: Function; orgConfirm: Function; ackNotification: Function } };
+  const { store } = storeMod as { store: { send: SendFn; orgConfirm: OrgConfirmFn; ackNotification: AckNotifFn } };
   const {
     ackVerdict, unknownCommandError, cmdCapRemember, cmdCapBlocked, cmdCapRecoverOnSnapshot,
     ackTapGuard, orgFlightKey, orgConfirmPayload, notifActionableOf,
@@ -412,6 +422,41 @@ async function main(): Promise<void> {
       "⑨ 断连新建 → 拒发+全局错误可见（不静默丢单）");
   }
 
+  // ═══════ ⑨E E2c 扩·COMMAND_CREATE 三态输入（NewSessionModal 判定门消费面） ═══════
+  {
+    const { conn, sent } = makeConn("srcD");
+    // rejected：relay 业务错误经 onAck 透传，判定门归类 rejected（弹窗行内可重试）
+    const acksR: { ok: boolean; err: string | null }[] = [];
+    store.send("COMMAND_CREATE", { cwd: "/tmp/r1", prompt: "" }, "srcD", (r) => acksR.push(r));
+    const cr = sentOf(sent, "COMMAND_CREATE")[0];
+    ack(conn, cr.command_id, false, { error: "目录不存在" });
+    check(acksR.length === 1 && ackVerdict(acksR[0]).kind === "rejected" && ackVerdict(acksR[0]).error === "目录不存在",
+      "⑨E ok:false 业务错误 → rejected 透传原文");
+    // 旧 relay 签名：宿主记能力位静默降级的输入成立
+    const acksU: { ok: boolean; err: string | null }[] = [];
+    store.send("COMMAND_CREATE", { cwd: "/tmp/r2", prompt: "" }, "srcD", (r) => acksU.push(r));
+    const cu = sentOf(sent, "COMMAND_CREATE")[1];
+    ack(conn, cu.command_id, false, { error: "unsupported command" });
+    check(acksU.length === 1 && unknownCommandError(acksU[0].err) === true,
+      "⑨E 旧 relay 签名 → unknownCommandError 判真（降级输入）");
+    // 超时收摊：重发同 id 一次 → 二次超时收摊回调一次 err 可见（无自动重试风暴）
+    const acksT: { ok: boolean; err: string | null }[] = [];
+    store.send("COMMAND_CREATE", { cwd: "/tmp/r3", prompt: "" }, "srcD", (r) => acksT.push(r));
+    const ct = sentOf(sent, "COMMAND_CREATE")[2];
+    iv.onCmdTimeout(conn, ct.command_id);
+    check(sentOf(sent, "COMMAND_CREATE").length === 4, "⑨E 首次超时重发一次");
+    iv.onCmdTimeout(conn, ct.command_id);
+    check(acksT.length === 1 && acksT[0].ok === false && acksT[0].err === "服务器未确认，可能未送达",
+      "⑨E 二次超时收摊回调一次 err 文案在位");
+    check(ackVerdict(acksT[0]).kind === "rejected" && ackVerdict(acksT[0]).error === "服务器未确认，可能未送达",
+      "⑨E 收摊 err 经判定门成行内错误（可重试呈现）");
+    // 能力位记忆→拦截→快照恢复（COMMAND_CREATE 面，宿主 createCaps 同款调用）
+    let caps = cmdCapRemember({}, "COMMAND_CREATE");
+    check(cmdCapBlocked(caps, "COMMAND_CREATE") === true, "⑨E 记忆后 COMMAND_CREATE 拦截（他命令不受累）");
+    caps = cmdCapRecoverOnSnapshot(caps, { schema_version: 1 }, false);
+    check(cmdCapBlocked(caps, "COMMAND_CREATE") === false, "⑨E schema_version>=1 快照恢复放行");
+  }
+
   // ═══════ ⑩ 结构闸（e2a-queue 先例：源文本级） ═══════
   {
     const src = fs.readFileSync(LIST_PATH, "utf-8");
@@ -423,6 +468,37 @@ async function main(): Promise<void> {
       "⑩ 锚点段零 RN/零 store 依赖/零时钟（纯函数可直跑）");
     check(!/\.notifications\s*=\s*(\[\]|null)/.test(src),
       "⑩ ListScreen 全文无通知池清空赋值（不清零硬条款的静态面）");
+  }
+
+  // ═══════ ⑪ E2c 宿主结构闸（NewSessionModal 判定门接线，源文本级） ═══════
+  {
+    const msrc = fs.readFileSync(MODAL_PATH, "utf-8");
+    const anchors = ["ackVerdict", "ackTapGuard", "cmdCapBlocked", "cmdCapRemember", "unknownCommandError", "orgFlightKey"];
+    check(anchors.every((a) => msrc.includes(a)) && msrc.includes('from "./ListScreen"'),
+      "⑪ 锚点六函数经 ListScreen import 全引用（零复制直用）");
+    check(!/(function|const)\s+(ackVerdict|ackTapGuard|cmdCapBlocked|cmdCapRemember|cmdCapRecoverOnSnapshot|unknownCommandError|orgFlightKey|orgConfirmPayload|notifActionableOf)\b/.test(msrc),
+      "⑪ 宿主零锚点函数重定义（纯绑定无影子实现）");
+    const body = (msrc.split("const create = () => {")[1] ?? "").split("\n  };\n")[0] ?? "";
+    check(body.length > 0 && body.indexOf("ackTapGuard") >= 0 && body.indexOf("ackTapGuard") < body.indexOf("COMMAND_CREATE"),
+      "⑪ create 内双击闸先于发送（orgDecide 同序）");
+    check(body.indexOf("cmdCapBlocked") >= 0 && body.indexOf("cmdCapBlocked") < body.indexOf("COMMAND_CREATE"),
+      "⑪ create 内能力位拦截先于发送");
+    check(body.includes("settle(ackVerdict(r))") && body.includes("settle(ackVerdict(null))"),
+      "⑪ onAck 三态收场+断连拒发同 unconfirmed 口径");
+    check(body.includes("if (v.ok)") && body.includes("onClose()"),
+      "⑪ ok 才收弹窗（rejected/unconfirmed 留在弹窗行内可重试）");
+    check(body.includes("unknownCommandError") && body.includes("cmdCapRemember"),
+      "⑪ 旧 relay 签名→能力位记忆（降级不轰炸）");
+    check(!/if\s*\(\s*store\.send\(/.test(msrc),
+      "⑪ sent-bool 即收弹窗旧态已移除（全链判定门替换）");
+    check(msrc.includes("命令未确认（超时或源未连接），可重试"),
+      "⑪ unconfirmed 文案与 E2b 一致");
+    check(msrc.includes("不支持新建会话"),
+      "⑪ 能力位降级提示在位");
+    check(/useState<Set<string>>/.test(msrc) && /createFlight/.test(msrc),
+      "⑪ 双击闸飞行表状态在位");
+    check(!msrc.includes("Leader"),
+      "⑪ 词汇新口径（零 Leader 字样，018 §9 迁移后 PM/薄 Leader 语境不涉及本弹窗）");
   }
 
   console.log(`E2b root wiring tests ${tests}/${tests} passed`);
