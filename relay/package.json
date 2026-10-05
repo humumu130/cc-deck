@@ -40,12 +40,14 @@
   },
   "dependencies": {
     "@anthropic-ai/claude-agent-sdk": "latest",
+    "better-sqlite3": "^11.10.0",
     "bonjour-service": "^1.4.4",
     "qrcode-terminal": "^0.12.0",
     "tweetnacl": "^1.0.3",
     "ws": "latest"
   },
   "devDependencies": {
+    "@types/better-sqlite3": "^9.6.0",
     "@types/node": "latest",
     "@types/ws": "latest",
     "tsx": "latest",
