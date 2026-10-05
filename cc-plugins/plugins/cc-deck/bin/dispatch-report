@@ -13,6 +13,8 @@
 #             「行完整性+时序单调」代位；V1 若 events 侧需要可另接
 # ACK 误读防护：成功统计与 orphan/timeout 判定只认 ok 严格布尔真——ok:"yes"/"1"/
 # "true"（字符串）或缺省一律不算成功，按坏行（ACK 误读态）计数，绝不进成功账。
+# 行完整性（C2fix/P2-1）：error 字段必在场且为 null|string（C1 schema 恒写）——
+# 缺省/类型错计坏行报行号，不进 orphan/timeout 语义分类（坏行不臆断未达）。
 # DELIVER 行（deliver HTTP 直投）无状态机，不入本对账面（失败回退属 C3 线）。
 # 用法: dispatch-report [--json] [--strict] [账本路径]
 #   --json    机器可读 {counts, items, verdict}
@@ -113,8 +115,12 @@ with open(ledger, encoding="utf-8") as f:
             errs.append("缺字段 ok（ACK 误读态）")
         elif not isinstance(obj["ok"], bool):
             errs.append(f"ok 类型错（{json.dumps(obj['ok'], ensure_ascii=False)}，非布尔——ACK 误读态）")
-        # error 宽容：缺省/None 均可；出现则必须 str（写侧两工具都写 str|None）
-        if not (obj.get("error") is None or isinstance(obj["error"], str)):
+        # error 必在场且为 null|string（C2fix/P2-1：C1 写账 schema 恒写 error——成功
+        # null、失败字符串）——缺省即坏行：损坏/截断行（如 ok:false 且缺 error）不得
+        # 混进 valid 被臆断成 orphan「未达」而误触发重投（坏行不进语义分类）
+        if "error" not in obj:
+            errs.append("缺字段 error")
+        elif not (obj["error"] is None or isinstance(obj["error"], str)):
             errs.append("错字段 error")
         if rtype == "COMMAND_MESSAGE":
             cid = obj.get("command_id")
@@ -250,8 +256,12 @@ else:
     print(f"④ seq-gap（行完整性/时序代位）：坏行 {counts['bad_rows']} + 倒序 {counts['ts_regressions']}")
     for it in seqgap_all:
         print(f"   - L{it['line']} {it['reason']}")
-    if verdict == "fail":
+    if verdict == "fail" and blocking:
         print("结论：fail——orphan/timeout 待处置，转人工巡检（重投前先核台账，勿自动重复派单）")
+    elif verdict == "fail":
+        # C2fix/P3-1：strict 下仅 duplicate/seq-gap 升级的 fail——对账异常话术，
+        # 不喊重投（无 orphan/timeout 时「待处置重投」文案会误导操作员重复派单）
+        print("结论：fail——对账异常（duplicate/seq-gap 待人工核验；无 orphan/timeout，无需重投）")
     elif verdict == "warn":
         print("结论：warn——duplicate/seq-gap 待人工核验（--strict 可升级为非零退出）")
     else:

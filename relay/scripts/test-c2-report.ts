@@ -241,6 +241,61 @@ async function main(): Promise<void> {
     }
   }
 
+  // ═══════ T13 C2fix/P2-1 error 字段三形态：缺 error=坏行不臆断 orphan ═══════
+  {
+    const noError = (over: RowOver): string => {
+      const o = JSON.parse(row(over)) as Record<string, unknown>;
+      delete o.error; // C1 schema 恒写 error——删除即模拟损坏/截断行
+      return JSON.stringify(o);
+    };
+    const led = writeLedger("t13.ndjson", [
+      noError({ command_id: "c-corrupt", dispatch_id: "d-corrupt", ok: false, attempt: 1 }),  // L1 ok:false+缺 error
+      row({ command_id: "c-ok", dispatch_id: "d-ok", ok: true, error: null, attempt: 1 }),    // L2 成功行 error:null 合法
+      row({ command_id: "c-badtype", dispatch_id: "d-bt", ok: true, error: 123, attempt: 1 }), // L3 error 非串非 null
+      row({ command_id: "c-real", dispatch_id: "d-real", ok: false, error: "ACK ok 非 true：project not found", attempt: 1 }), // L4 真 orphan
+    ]);
+    const r = run(led, { json: true });
+    const j = jsonOf(r);
+    check(j.counts.bad_rows === 2 && j.counts.valid_rows === 2,
+      "T13 缺 error 与 error 类型错均计坏行（2），成功 error:null 行仍有效（2）");
+    check(j.counts.success_commands === 1 && j.counts.orphan === 1 && j.counts.timeout === 0,
+      "T13 损坏行不进语义账：orphan 只剩真未达 1（缺 error 的 ok:false 不臆断「未达」）");
+    check(j.items.orphan.length === 1 && j.items.orphan[0]?.command_id === "c-real",
+      "T13 orphan 明细=c-real（损坏行 command_id 不入 orphan 清单）");
+    check(r.status === 1 && j.verdict === "fail", `T13 真 orphan 在 → blocking fail exit 1（got ${r.status}）`);
+    check(j.items.seqgap.filter((it) => it.line === 1 || it.line === 3).length === 2,
+      "T13 两坏行报行号 L1/L3");
+    const h = run(led);
+    check(h.stdout.includes("缺字段 error") && h.stdout.includes("错字段 error"),
+      "T13 人类可读：缺 error 与类型错均报原因");
+  }
+
+  // ═══════ T14 C2fix/P3-1 strict 文案两分支：blocking 喊重投 / warnable 对账异常 ═══════
+  {
+    const ledA = writeLedger("t14a.ndjson", [
+      row({ command_id: "cd1", dispatch_id: "dd1", ok: true, attempt: 1 }),
+      row({ command_id: "cd1", dispatch_id: "dd1", ok: true, attempt: 2 }), // duplicate（warnable）
+      "garbage-line", // 坏行（warnable）
+    ]);
+    const rs = run(ledA, { json: true, strict: true });
+    check(rs.status === 1 && jsonOf(rs).verdict === "fail",
+      `T14 strict 仅 warnable 失败 → exit 1 verdict fail（got ${rs.status}）`);
+    const hs = run(ledA, { strict: true });
+    check(hs.stdout.includes("对账异常") && hs.stdout.includes("无需重投"),
+      "T14 strict warnable fail 人类文案=对账异常+无需重投（新分支）");
+    check(!hs.stdout.includes("转人工巡检"),
+      "T14 strict warnable fail 不喊「转人工巡检」（P3-1 误导话术已除）");
+    const hw = run(ledA, { json: true });
+    check(hw.status === 0 && jsonOf(hw).verdict === "warn",
+      "T14 缺省（非 strict）同账仍 warn exit 0（exit 语义不动）");
+    const ledB = writeLedger("t14b.ndjson", [
+      row({ command_id: "cx", dispatch_id: "dx", ok: false, error: "未找到 relay token", attempt: 1 }), // 真 orphan
+    ]);
+    const hb = run(ledB, { strict: true });
+    check(hb.status === 1 && hb.stdout.includes("orphan/timeout 待处置") && hb.stdout.includes("转人工巡检"),
+      "T14 blocking fail（含 strict）仍走待处置重投话术（原分支不回退）");
+  }
+
   console.log(`C2 dispatch-report tests ${tests}/${tests} passed (sandbox=${SANDBOX})`);
 }
 
