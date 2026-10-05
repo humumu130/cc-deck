@@ -374,6 +374,9 @@
     .queue { overflow: hidden; min-width: 0; padding: 16px 12px; background: linear-gradient(180deg, var(--surface1), var(--queue-deep)); border-right: 1px solid var(--line-soft); box-shadow: 5px 0 18px var(--panel-shadow); }
     .queue-head { display: flex; align-items: center; gap: 8px; margin-bottom: 13px; }
     .queue-head h2 { flex: 1; margin: 0; color: var(--text-strong); font-size: 13px; }
+    .team-create-action { display: flex; align-items: center; justify-content: center; width: 100%; min-height: 38px; margin-top: 12px; border: 1px solid var(--line); border-radius: 8px; background: transparent; color: var(--text); cursor: pointer; font-size: 11px; }
+    .team-create-action:hover { border-color: var(--border-strong); background: var(--hover); color: var(--text-strong); }
+    .team-create-note { margin: 6px 2px 0; color: var(--faint); font-size: 10px; line-height: 1.4; }
     .icon-btn { position: relative; display: grid; place-items: center; width: 30px; height: 30px; border: 1px solid var(--line); border-radius: 7px; background: transparent; color: var(--dim); cursor: pointer; }
     .icon-btn::before { content: ""; position: absolute; inset: -7px; }
     .icon-btn:hover { color: var(--text); background: var(--hover); }
@@ -407,23 +410,6 @@
     .workspace-title-row { display: flex; align-items: center; gap: 8px; }
     .workspace-title-row h2 { flex: 1; min-width: 0; margin: 0; overflow: hidden; color: var(--text-strong); font-size: 16px; text-overflow: ellipsis; white-space: nowrap; }
     .workspace-sub { margin-top: 5px; color: var(--dim); font: 10px var(--mono); }
-    .session-head-sub { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.75fr); align-items: baseline; gap: 12px; min-width: 0; padding-left: 8px; border-left: 2px solid var(--session-state-color); }
-    .session-head-sub[data-session-state="waiting"] { --session-state-color: var(--working); }
-    .session-head-sub[data-session-state="running"] { --session-state-color: var(--done); }
-    .session-head-sub[data-session-state="closing"] { --session-state-color: var(--brand-hover); }
-    .session-head-sub[data-session-state="suspended"] { --session-state-color: var(--error); }
-    .session-head-meta { display: flex; min-width: 0; gap: 6px; overflow: hidden; white-space: nowrap; }
-    .session-head-path { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-    .session-head-time { flex: 0 0 auto; color: var(--text); white-space: nowrap; }
-    .session-state-row { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: baseline; gap: 7px; min-width: 0; margin-top: 6px; padding-left: 8px; border-left: 2px solid var(--session-state-color); color: var(--dim); font-size: 10px; line-height: 15px; }
-    .session-head-sub .session-state-row { margin: 0; padding-left: 0; border-left: 0; }
-    .session-state-row[data-session-state="waiting"] { --session-state-color: var(--working); }
-    .session-state-row[data-session-state="running"] { --session-state-color: var(--done); }
-    .session-state-row[data-session-state="closing"] { --session-state-color: var(--brand-hover); }
-    .session-state-row[data-session-state="suspended"] { --session-state-color: var(--error); }
-    .session-state-label { color: var(--session-state-color); font-weight: 700; white-space: nowrap; }
-    .session-state-summary { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-    .session-state-elapsed { margin-left: auto; color: var(--faint); font: 10px var(--mono); white-space: nowrap; }
     .segment-bar { display: flex; gap: 17px; overflow: hidden; margin-top: 14px; }
     .segment-bar button { position: relative; flex: 0 0 auto; padding: 0 0 8px; border: 0; background: transparent; color: var(--dim); cursor: pointer; font-size: 11px; }
     .segment-bar button:hover { color: var(--text); }
@@ -488,7 +474,7 @@
     .context-meter.attention .context-meter-pct { color: var(--ctx-attention); }
     .context-meter.critical .context-meter-pct { color: var(--ctx-critical); }
     .context-meter-note { margin-top: 5px; color: var(--dim); font-size: 10px; }
-    .usage-summary { padding: 12px; border: 1px solid var(--line); border-radius: 9px; background: var(--surface2); box-shadow: var(--card-shadow); }
+    .usage-summary { padding: 12px 0; border-bottom: 1px solid var(--line-soft); border-radius: 0; background: transparent; box-shadow: none; }
     .usage-summary-top { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
     .usage-summary-number { color: var(--text-strong); font: 700 17px var(--mono); font-variant-numeric: tabular-nums; }
     .usage-summary-limit, .usage-summary-copy { color: var(--dim); font-size: 10px; }
@@ -497,11 +483,16 @@
     .check-row { display: flex; gap: 7px; margin: 7px 0; color: var(--dim); font-size: 10px; }
     .check-row b { color: var(--done); }
     .bubble { max-width: 82%; padding: 11px 13px; margin-bottom: 11px; border: 1px solid var(--card-border); border-radius: 12px; background: var(--surface2); box-shadow: var(--card-shadow); color: var(--text); font-size: 11px; }
+    .bubble:not(.me) { max-width: none; padding: 0; border: 0; border-radius: 0; background: transparent; box-shadow: none; }
     .bubble.me { margin-left: auto; background: var(--me-bg); border-color: var(--me-line); }
     .bubble strong { color: var(--text-strong); }
-    .bubble .role-label { display: none; }
-    .bubble-author { display: flex; align-items: center; gap: 6px; margin-bottom: 6px; color: var(--text-strong); }
-    .bubble-author strong { font-size: 10px; }
+    .message-ai { margin: 0 0 15px; color: var(--text); font-size: 11px; }
+    .message-author { display: flex; align-items: center; gap: 6px; margin-bottom: 5px; color: var(--text-strong); }
+    .message-author strong { font-size: 10px; }
+    .message-author .role-label { color: var(--faint); font-size: 9px; font-weight: 400; }
+    .message-author time { margin-left: auto; color: var(--faint); font: 9px var(--mono); }
+    .message-body { min-width: 0; line-height: 1.55; }
+    .message-body pre, .message-body code { max-width: 100%; overflow-x: auto; white-space: pre-wrap; overflow-wrap: anywhere; }
     .timeline-note { margin-bottom: 15px; color: var(--faint); text-align: center; font: 10px var(--mono); }
     .wait-card { padding: 12px; margin: 14px 0; border: 1px solid var(--wait-line); border-radius: 10px; background: var(--wait-bg); }
     .wait-card.allowed { border-color: var(--allowed-line); background: var(--allowed-bg); }
@@ -515,7 +506,17 @@
     .wait-actions button.allow { border-color: transparent; background: var(--brand-strong); color: var(--on-brand); font-weight: 700; }
     .wait-actions button.allow:hover { background: var(--brand); }
     .wait-card.allowed .wait-actions button.allow { background: var(--done); color: var(--done-ink); }
-    .status-note { max-width: 560px; padding: 8px 11px; margin: 14px auto; border: 1px solid var(--line); border-left: 3px solid var(--working); border-radius: 7px; background: var(--surface1); color: var(--text); text-align: left; font: 10px var(--mono); }
+    .session-state-dock { display: flex; align-items: center; gap: 14px; min-width: 0; padding: 8px 16px; border-top: 1px solid var(--line-soft); border-left: 2px solid var(--session-state-color); color: var(--dim); font: 10px var(--mono); }
+    .session-state-dock[data-session-state="waiting"] { --session-state-color: var(--working); }
+    .session-state-dock[data-session-state="running"] { --session-state-color: var(--done); }
+    .session-state-dock[data-session-state="closing"] { --session-state-color: var(--brand-hover); }
+    .session-state-dock[data-session-state="suspended"] { --session-state-color: var(--error); }
+    .session-state-task { min-width: 0; overflow: hidden; color: var(--dim); text-overflow: ellipsis; white-space: nowrap; }
+    .session-state-activity { display: flex; align-items: center; justify-content: flex-end; gap: 5px; min-width: 0; margin-left: auto; color: var(--text); white-space: nowrap; }
+    .session-state-dot { width: 7px; height: 7px; flex: 0 0 auto; border-radius: 50%; background: var(--session-state-color); }
+    .session-state-label { color: var(--text-strong); font-weight: 700; }
+    .session-state-operation { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .session-state-elapsed { flex: 0 0 auto; color: var(--text-strong); font-variant-numeric: tabular-nums; }
     .artifact-row { display: flex; align-items: center; gap: 7px; padding: 8px 0; border-bottom: 1px solid var(--line-soft); color: var(--text); font-size: 10px; }
     .artifact-row span:last-child { margin-left: auto; color: var(--faint); font-family: var(--mono); }
     .artifact-browser { display: grid; gap: 10px; }
@@ -523,7 +524,9 @@
     .artifact-summary strong { color: var(--text-strong); font: 700 13px var(--mono); font-variant-numeric: tabular-nums; }
     .artifact-summary small { color: var(--faint); font: 10px var(--mono); }
     .artifact-summary-path { overflow: hidden; max-width: 48%; color: var(--faint); font: 10px var(--mono); text-overflow: ellipsis; white-space: nowrap; }
-    .artifact-group, .artifact-loose { border: 1px solid var(--artifact-group-line); border-radius: var(--radius); background: var(--artifact-group-bg); box-shadow: var(--card-shadow); }
+    .artifact-group, .artifact-loose { border-top: 1px solid var(--artifact-group-line); border-bottom: 1px solid var(--artifact-group-line); border-radius: 0; background: transparent; box-shadow: none; }
+    .artifact-group { border-left: 2px solid transparent; border-right: 0; }
+    .artifact-group:not(.collapsed) { border-left-color: var(--artifact-group-line); }
     .artifact-group-head { display: flex; align-items: center; gap: 8px; min-height: 44px; padding: 8px 10px; border-bottom: 1px solid var(--line-soft); }
     .artifact-group.collapsed .artifact-group-head { border-bottom-color: transparent; }
     .artifact-group.collapsed .artifact-files, .artifact-group.collapsed .artifact-batch { display: none; }
@@ -544,6 +547,7 @@
     .artifact-file:last-child { border-bottom: 0; }
     .artifact-file.failed { margin: 0 -4px; padding: 0 4px; border-radius: 5px; background: var(--artifact-failed-bg); color: var(--error); }
     .artifact-file-icon { color: var(--info); font-size: 13px; text-align: center; }
+    .artifact-file-icon .icon-inline, .artifact-folder-icon .icon-inline { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; vertical-align: -3px; }
     .artifact-file-main { min-width: 0; }
     .artifact-file-name { display: block; overflow: hidden; color: var(--text); font-size: 10px; text-overflow: ellipsis; white-space: nowrap; }
     .artifact-file-dir { display: block; overflow: hidden; margin-top: 1px; color: var(--faint); font: 10px var(--mono); text-overflow: ellipsis; white-space: nowrap; }
@@ -564,13 +568,14 @@
     .artifact-batch-progress { display: inline-block; width: 76px; height: 4px; overflow: hidden; border-radius: 999px; background: var(--line); vertical-align: middle; }
     .artifact-batch-progress i { display: block; width: 0; height: 100%; border-radius: inherit; background: var(--brand); transition: width .25s ease; }
     .artifact-loose { padding: 0 10px; }
-    .artifact-source { display: grid; gap: 8px; padding-left: 9px; border-left: 3px solid var(--source); }
+    .artifact-source { display: grid; gap: 8px; padding: 8px 0 8px 9px; border-left: 2px solid var(--source); }
     .artifact-source.source-company-group { border-left-color: var(--source-company); }
     .artifact-source.source-home-group { border-left-color: var(--source-home); }
     .artifact-source-head { display: flex; align-items: center; justify-content: space-between; color: var(--text-strong); font-size: 11px; }
     .artifact-source-head small { color: var(--dim); font: 10px var(--mono); }
     .artifact-source-unreachable { padding: 10px; border: 1px dashed var(--danger-line); border-radius: 8px; background: var(--danger-bg); color: var(--error); font-size: 10px; }
     .artifact-source-link { border: 0; background: transparent; color: var(--info); cursor: pointer; font-size: 10px; }
+    .artifact-source-copy { color: var(--faint); font: 10px var(--mono); }
     .artifact-sheet-backdrop { position: fixed; inset: 0; z-index: 30; display: none; align-items: flex-end; background: var(--artifact-sheet-backdrop); }
     .artifact-sheet-backdrop.open { display: flex; }
     .artifact-sheet { width: 100%; padding: 10px 13px calc(13px + env(safe-area-inset-bottom)); border-top: 1px solid var(--line); border-radius: 16px 16px 0 0; background: var(--surface2); box-shadow: var(--shadow); }
@@ -673,7 +678,7 @@
     button.settings-row { width: 100%; color: inherit; text-align: left; cursor: pointer; }
     .theme-setting:hover { border-color: var(--brand); }
     .settings-row .setting-icon { display: grid; place-items: center; flex: 0 0 28px; width: 28px; height: 28px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface1); color: var(--dim); }
-    .settings-row .setting-icon svg { width: 16px; height: 16px; fill: currentColor; }
+    .settings-row .setting-icon svg, .settings-nav .avatar svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
     .theme-setting .chev::after { content: "›"; margin-left: 4px; color: var(--faint); }
     .settings-row strong { display: block; color: var(--text-strong); font-size: 11px; }
     .settings-row p { margin: 3px 0 0; color: var(--dim); font-size: 10px; }
@@ -739,9 +744,6 @@
     .mobile-detail-tabs button.active::after { content: ""; position: absolute; right: 0; bottom: -1px; left: 0; height: 2px; background: var(--brand); }
     #m-detail .mobile-detail-head-main { flex: 1; min-width: 0; }
     #m-detail .mobile-head { align-items: flex-start; }
-    #m-detail .session-state-row { grid-template-columns: auto minmax(0, 1fr) auto; margin: 6px 0 0; padding: 0 0 0 8px; border: 0; border-left: 2px solid var(--session-state-color); line-height: 14px; }
-    #m-detail .session-state-summary { display: -webkit-box; overflow: hidden; -webkit-box-orient: vertical; -webkit-line-clamp: 2; white-space: normal; }
-    #m-detail .session-state-elapsed { grid-column: auto; justify-self: auto; margin-left: 0; }
     .mobile-board { display: grid; gap: 9px; }
     .mobile-lane { padding: 10px; border: 1px solid var(--line); border-radius: 9px; background: var(--surface1); }
     .mobile-lane-head { display: flex; justify-content: space-between; margin-bottom: 7px; color: var(--dim); font-size: 10px; font-weight: 700; }
@@ -751,6 +753,8 @@
     .mobile-project-card h3 { margin: 0; color: var(--text-strong); font-size: 12px; }
     .mobile-project-card p { grid-column: 2; margin: 2px 0 0; color: var(--dim); font-size: 10px; }
     .mobile-project-card > .tag { grid-column: 3; grid-row: 1 / span 2; }
+    .mobile-project-summary { display: flex; gap: 10px; overflow: auto; padding: 3px 0 10px; border-bottom: 1px solid var(--line-soft); color: var(--dim); font: 10px var(--mono); white-space: nowrap; }
+    .mobile-project-summary span { flex: 0 0 auto; }
     .mobile-settings { display: grid; gap: 8px; }
     .mobile-settings .settings-row { padding: 12px; }
     #m-settings .mobile-settings::before { content: "连接管理"; display: block; margin: 2px 2px 0; color: var(--faint); font: 700 10px var(--mono); letter-spacing: .04em; }
@@ -759,6 +763,10 @@
     .mobile-detail-composer { display: flex; gap: 7px; padding: 10px 12px; border-top: 1px solid var(--line-soft); background: var(--composer-bg); box-shadow: 0 -8px 18px var(--panel-shadow); }
     .mobile-detail-composer .composer { min-height: 34px; }
     .mobile-detail-composer .primary-btn { padding: 0 10px; }
+    #m-detail .session-state-dock { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 3px 8px; padding: 8px 12px; border-left: 0; }
+    #m-detail .session-state-task { grid-column: 1 / -1; }
+    #m-detail .session-state-activity { grid-column: 1 / -1; justify-content: flex-start; margin-left: 0; }
+    #m-detail .session-state-operation { max-width: 46%; }
     .toast { position: absolute; right: 22px; bottom: 22px; z-index: 20; max-width: 340px; padding: 11px 14px 11px 13px; border: 1px solid var(--toast-line); border-radius: 10px; background: linear-gradient(180deg, var(--toast-bg-top), var(--toast-bg-bottom)); color: var(--text); box-shadow: var(--small-shadow), inset 0 1px 0 var(--toast-highlight); opacity: 0; pointer-events: none; transform: translateY(8px); transition: opacity .18s ease, transform .18s ease; font-size: 11px; }
     .mobile-frame .toast { right: 12px; bottom: 74px; max-width: calc(100% - 24px); }
     .toast.show { opacity: 1; transform: none; }
@@ -925,6 +933,7 @@
 </head>
 <body data-card-density="standard" data-source-mode="single">
   <svg class="icon-sprite" aria-hidden="true" focusable="false"><symbol id="icon-bell" viewBox="0 0 24 24"><path d="M18 9a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9Zm-8.5 11h5a2.5 2.5 0 0 1-5 0Z"></path></symbol><symbol id="icon-users" viewBox="0 0 24 24"><path d="M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8Zm6-1a3 3 0 1 0 0-6 3 3 0 0 0 0 6ZM2 20a7 7 0 0 1 14 0v1H2v-1Zm14-5a6 6 0 0 1 6 6h-4v-1a8.9 8.9 0 0 0-2.1-5.8A6 6 0 0 1 16 15Z"></path></symbol><symbol id="icon-grid" viewBox="0 0 24 24"><path d="M3 3h7v7H3V3Zm11 0h7v7h-7V3ZM3 14h7v7H3v-7Zm11 0h7v7h-7v-7Z"></path></symbol><symbol id="icon-gear" viewBox="0 0 24 24"><path d="m19.4 13.5 1.2.9-1.8 3.1-1.4-.6a7.4 7.4 0 0 1-1.8 1l-.2 1.5H11.8l-.2-1.5a7.4 7.4 0 0 1-1.8-1l-1.4.6-1.8-3.1 1.2-.9a7.4 7.4 0 0 1 0-2.1l-1.2-.9 1.8-3.1 1.4.6a7.4 7.4 0 0 1 1.8-1l.2-1.5h3.6l.2 1.5a7.4 7.4 0 0 1 1.8 1l1.4-.6 1.8 3.1-1.2.9a7.4 7.4 0 0 1 0 2.1ZM13.6 16a3.1 3.1 0 1 0 0-6.2 3.1 3.1 0 0 0 0 6.2Z"></path></symbol><symbol id="icon-check" viewBox="0 0 24 24"><path d="m5 12.5 4.2 4.2L19 7"></path></symbol><symbol id="icon-alert" viewBox="0 0 24 24"><path d="M12 3 2.8 20h18.4L12 3Zm0 6v5m0 3h.01"></path></symbol><symbol id="icon-link" viewBox="0 0 24 24"><path d="M10 13.5 14 9.5m-6.2 8.7-1.2 1.2a4 4 0 0 1-5.6-5.6l4.4-4.4a4 4 0 0 1 5.6 0m3.6-3.6 1.2-1.2a4 4 0 0 1 5.6 5.6L17 14.6a4 4 0 0 1-5.6 0"></path></symbol><symbol id="icon-info" viewBox="0 0 24 24"><path d="M12 10v7m0-11h.01M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z"></path></symbol><symbol id="icon-folder" viewBox="0 0 24 24"><path d="M4 5h6l2 2h8v12H4Z"></path></symbol><symbol id="icon-clip" viewBox="0 0 24 24"><path d="m8 12.5 7.5-7.5a3 3 0 1 1 4.2 4.2l-8.4 8.4a4.5 4.5 0 0 1-6.4-6.4L13 3.5"></path></symbol><symbol id="icon-chat" viewBox="0 0 24 24"><path d="M4 5h16v11H8l-4 4Z"></path></symbol></svg>
+  <svg class="icon-sprite" aria-hidden="true" focusable="false"><symbol id="icon-package" viewBox="0 0 24 24"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"></path><polyline points="3.27 6.96 12 12.01 20.73 6.96"></polyline><line x1="12" y1="22.08" x2="12" y2="12"></line><line x1="16.5" y1="9.4" x2="7.5" y2="4.21"></line></symbol><symbol id="icon-server" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="7" rx="2"></rect><rect x="3" y="14" width="18" height="7" rx="2"></rect><line x1="7" y1="6.5" x2="7.01" y2="6.5"></line><line x1="7" y1="17.5" x2="7.01" y2="17.5"></line></symbol><symbol id="icon-layers" viewBox="0 0 24 24"><polygon points="12 2 2 7 12 12 22 7 12 2"></polygon><polyline points="2 12 12 17 22 12"></polyline><polyline points="2 17 12 22 22 17"></polyline></symbol><symbol id="icon-sliders" viewBox="0 0 24 24"><line x1="4" y1="6" x2="20" y2="6"></line><line x1="4" y1="12" x2="20" y2="12"></line><line x1="4" y1="18" x2="20" y2="18"></line><circle cx="9" cy="6" r="2"></circle><circle cx="15" cy="12" r="2"></circle><circle cx="11" cy="18" r="2"></circle></symbol></svg>
   <main class="page">
     <header class="topbar">
       <div>
@@ -957,14 +966,14 @@
           <section class="desktop-screen active" id="d-session">
             <aside class="queue"><div class="queue-head"><h2>会话</h2><button class="icon-btn">＋</button></div><div class="session-list-tools"><input type="search" placeholder="搜索会话、项目或来源" aria-label="搜索会话、项目或来源"><button type="button" data-session-filter>筛选 · 全部</button><span data-session-source-label>当前源 · 公司电脑</span></div><div class="session-list" data-session-list></div></aside>
             <section class="workspace">
-              <header class="workspace-head"><div class="workspace-title-row"><h2 id="session-title">0.6.0-test.19 出包</h2><span class="tag action" id="session-status">待收单</span><span class="identity-cluster" id="session-identity"><span class="engine-badge claude">Claude</span><span class="source-badge">公司电脑</span></span></div><div class="workspace-sub" id="session-sub">~/dev/cc-deck · 最近活动 12 分钟前</div><div class="session-state-row" id="session-state-row" data-session-state="waiting"><span class="session-state-label" data-session-state-label>等待确认</span><span class="session-state-summary" data-session-state-summary>Bash 写入 docs/</span><span class="session-state-elapsed" data-session-state-elapsed>2 分钟</span></div><div class="segment-bar"><button class="active">对话</button><button>任务</button><button>输出物</button><button>用量</button><button>⋯</button></div></header>
+              <header class="workspace-head"><div class="workspace-title-row"><h2 id="session-title">0.6.0-test.19 出包</h2><span class="tag action" id="session-status">待收单</span><span class="identity-cluster" id="session-identity"><span class="engine-badge claude">Claude</span><span class="source-badge">公司电脑</span></span></div><div class="workspace-sub" id="session-sub">~/dev/cc-deck · 最近活动 12 分钟前</div><div class="segment-bar"><button class="active">对话</button><button>任务</button><button>输出物</button><button>用量</button><button>⋯</button></div></header>
               <div class="workspace-body" id="session-body">
                 <div class="timeline-note">今天 10:42 · 验收上下文</div>
                 <div class="bubble"><div class="bubble-author"><span class="avatar leader">✦<i class="avatar-engine-dot trae"></i></span><strong>Leader</strong><span class="role-label leader-label">Leader</span></div>独立出包已完成，四处版本号已同步。验收单还差 1 项确认收单。</div>
                 <div class="bubble me">我先看更新通道隔离，再确认收单。</div>
                 <div class="wait-card" data-wait-card><strong class="wait-title">等待你的确认 · Bash 写入 docs/</strong><p class="wait-copy">将把验收证据写入 `docs/release-check.md`，会话才能继续。</p><div class="wait-actions"><button class="allow" data-allow>允许一次</button><button>拒绝并说明</button></div></div>
-                <div class="status-note" id="session-main-copy">当前任务：回填验收证据 · 预计还需 2 分钟。</div>
               </div>
+              <div class="session-state-dock" id="session-state-dock" data-session-state="waiting"><span class="session-state-task" data-session-state-task>当前任务 · 回填验收证据</span><span class="session-state-activity"><i class="session-state-dot"></i><span class="session-state-label" data-session-state-label>已暂停</span><span class="session-state-operation" data-session-state-operation>—</span><span class="session-state-elapsed" data-session-state-elapsed>2m</span></span></div>
               <footer class="workspace-footer"><div class="composer" data-composer="session"><button class="composer-clip" type="button" title="附件" aria-label="附件"><svg class="icon-inline" aria-hidden="true"><use href="#icon-clip"></use></svg></button><input class="composer-input" type="text" placeholder="给会话发消息…" aria-label="给会话发消息"></div><button class="primary-btn" type="button" data-composer-send>发送</button></footer>
             </section>
             <aside class="inspector"><h3>证据检查器</h3><div class="inspector-block"><div class="inspector-title"><span>验收进度</span><span>2/3</span></div><div class="progress"><i style="width:66%"></i></div><div class="inspector-copy">还有 1 项待确认收单</div></div><div class="inspector-block"><div class="inspector-title"><span>任务清单</span><span>6/9</span></div><div class="check-row"><b>✓</b><span>版本号同步</span></div><div class="check-row"><b>✓</b><span>独立出包</span></div><div class="check-row"><span>○</span><span>公司网检查更新</span></div></div><div class="inspector-block"><div class="inspector-title"><span>用量</span></div><div class="context-meter safe"><div class="context-meter-head"><div><span class="context-meter-kicker">Context window</span><strong class="context-meter-model">Claude · 200k 上限</strong></div><span class="context-meter-grade">安全</span></div><div class="context-meter-band" aria-label="上下文已使用 41%"><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div><div class="context-meter-stats"><span><b class="context-meter-used">84k</b> <span class="context-meter-limit">/ 200k tokens</span></span><strong class="context-meter-pct">41%</strong></div><div class="context-meter-note">余量充足，可继续当前验收回填</div></div></div><div class="inspector-block"><div class="inspector-title"><span>输出物</span><span>4</span></div><div class="artifact-row">docs/release-check.md <span>刚刚</span><span class="identity-cluster"><span class="engine-badge claude">Claude</span><span class="source-badge">公司电脑</span></span></div><div class="artifact-row">0.6.0-test.19.apk <span>1h</span><span class="identity-cluster"><span class="engine-badge claude">Claude</span><span class="source-badge">公司电脑</span></span></div></div></aside>
@@ -1009,15 +1018,12 @@
           <div class="mobile-content"><div class="mobile-summary"><div><b>2</b><span>需行动</span></div><div><b>1</b><span>运行中</span></div><div><b>1</b><span>待验收</span></div></div><div data-mobile-session-list></div></div>
           <nav class="mobile-nav"><button class="active" data-mobile-root="inbox"><b><svg class="icon-nav" aria-hidden="true"><use href="#icon-chat"></use></svg></b>会话</button><button data-mobile-root="team"><b><svg class="icon-nav" aria-hidden="true"><use href="#icon-users"></use></svg></b>团队<span class="tag action">1</span></button><button data-mobile-root="project"><b><svg class="icon-nav" aria-hidden="true"><use href="#icon-grid"></use></svg></b>项目</button><button data-mobile-root="settings"><b><svg class="icon-nav" aria-hidden="true"><use href="#icon-gear"></use></svg></b>设置</button></nav>
         </div>
-
         <div class="mobile-screen" id="m-detail" data-mobile-detail="true">
           <div class="mobile-status"><span>9:41</span><span>▰ ︎◒ 100%</span></div>
           <header class="mobile-head"><button class="mobile-back" data-mobile-back>‹</button><h2 id="mobile-detail-title">0.6.0-test.19 出包<small id="mobile-detail-sub">~/dev/cc-deck · 最近活动</small></h2><span class="identity-cluster" id="mobile-detail-identity"><span class="engine-badge claude">Claude</span><span class="source-badge">公司电脑</span></span><span class="tag action">待收单</span></header>
           <div class="mobile-detail-tabs"><button class="active">对话</button><button>任务</button><button>输出物</button><button>用量</button><button>⋯</button></div>
-          <div class="session-state-row" id="mobile-detail-state" data-session-state="waiting"><span class="session-state-label" data-session-state-label>等待确认</span><span class="session-state-summary" data-session-state-summary>Bash 写入 docs/</span><span class="session-state-elapsed" data-session-state-elapsed>2 分钟</span></div>
-              <div class="mobile-content no-bottom"><div class="timeline-note">今天 10:42 · 来源：待处理收件箱</div><div class="bubble"><div class="bubble-author"><span class="avatar leader">✦<i class="avatar-engine-dot trae"></i></span><strong>Leader</strong><span class="role-label leader-label">Leader</span></div>独立出包已完成，验收单还差 1 项确认收单。</div><div class="bubble me">我先看更新通道隔离，再确认收单。</div><div class="wait-card" data-wait-card><strong class="wait-title">等待你的确认 · Bash 写入 docs/</strong><p class="wait-copy">将把验收证据写入 `docs/release-check.md`，会话才能继续。</p><div class="wait-actions"><button class="allow" data-allow>允许一次</button><button>拒绝并说明</button></div></div><div class="status-note">当前任务：回填验收证据 · 预计还需 2 分钟。</div><div class="artifact-row"><svg class="icon-inline" aria-hidden="true"><use href="#icon-clip"></use></svg> docs/release-check.md <span>刚刚</span></div><div class="artifact-row">▧ 0.6.0-test.19.apk <span>1h</span></div></div><div class="mobile-detail-composer"><div class="composer" data-composer="mobile"><button class="composer-clip" type="button" title="附件" aria-label="附件"><svg class="icon-inline" aria-hidden="true"><use href="#icon-clip"></use></svg></button><input class="composer-input" type="text" placeholder="给会话发消息…" aria-label="给会话发消息"></div><button class="primary-btn" type="button" data-composer-send>发送</button></div>
+              <div class="mobile-content no-bottom"><div class="timeline-note">今天 10:42 · 来源：待处理收件箱</div><div class="message-ai"><div class="message-author"><span class="avatar leader">✦<i class="avatar-engine-dot trae"></i></span><strong>Leader</strong><span class="role-label leader-label">调度</span></div><div class="message-body">独立出包已完成，四处版本号已同步。验收单还差 1 项确认收单。</div></div><div class="bubble me">我先看更新通道隔离，再确认收单。</div><div class="wait-card" data-wait-card><strong class="wait-title">等待你的确认 · Bash 写入 docs/</strong><p class="wait-copy">将把验收证据写入 `docs/release-check.md`，会话才能继续。</p><div class="wait-actions"><button class="allow" data-allow>允许一次</button><button>拒绝并说明</button></div></div><div class="artifact-row"><svg class="icon-inline" aria-hidden="true"><use href="#icon-clip"></use></svg> docs/release-check.md <span>刚刚</span></div><div class="artifact-row"><svg class="icon-inline" aria-hidden="true"><use href="#icon-package"></use></svg> 0.6.0-test.19.apk <span>1h</span></div></div><div class="session-state-dock" id="mobile-detail-state-dock" data-session-state="waiting"><span class="session-state-task" data-session-state-task>当前任务 · 回填验收证据</span><span class="session-state-activity"><i class="session-state-dot"></i><span class="session-state-label" data-session-state-label>已暂停</span><span class="session-state-operation" data-session-state-operation hidden>—</span><span class="session-state-elapsed" data-session-state-elapsed>2m</span></span></div><div class="mobile-detail-composer"><div class="composer" data-composer="mobile"><button class="composer-clip" type="button" title="附件" aria-label="附件"><svg class="icon-inline" aria-hidden="true"><use href="#icon-clip"></use></svg></button><input class="composer-input" type="text" placeholder="给会话发消息…" aria-label="给会话发消息"></div><button class="primary-btn" type="button" data-composer-send>发送</button></div>
         </div>
-
         <div class="mobile-screen mobile-notify-screen" id="m-notify" data-mobile-notify-root="true">
           <div class="mobile-status"><span>9:41</span><span>▰ ︎◒ 100%</span></div>
           <div class="mobile-sourcebar"><div class="source-switcher"><button class="source-trigger" type="button" data-source-trigger aria-expanded="false"><span class="source-dot status-connected" data-source-dot></span><strong data-current-source>公司电脑</strong><span>⌄</span></button><div class="source-menu" data-source-menu><div class="source-menu-head">数据源与视图</div><button class="source-option active" type="button" data-source-choice="office"><span class="source-dot status-connected"></span><strong>公司电脑</strong><small>6 会话 · 2 行动</small></button><button class="source-option" type="button" data-source-choice="home"><span class="source-dot status-reconnecting"></span><strong>家里 iMac</strong><small>2 会话 · 2 行动</small></button><div class="source-mode"><button class="active" type="button" data-source-mode="single">单源</button><button type="button" data-source-mode="aggregate">多源聚合</button></div><a class="source-manage" href="#d-settings" data-source-settings>⚙ 管理与配对新源 →</a></div></div>
@@ -1028,7 +1034,6 @@
           </div>
           <div class="mobile-notify-detail" data-notify-source-detail hidden><button class="mobile-back" type="button" data-notify-detail-back>‹ 返回通知中心</button><h3 data-notify-detail-title>来源详情</h3><p data-notify-detail-copy>从通知进入的来源上下文。</p><div class="notify-source-summary">当前只定位来源；验收与团队写操作仍在原域完成。</div><button class="primary-btn" type="button" data-notify-detail-jump>回来源域处理</button></div>
         </div>
-
         <div class="mobile-screen" id="m-team" data-mobile-root="team">
           <div class="mobile-status"><span>9:41</span><span>▰ ︎◒ 100%</span></div>
           <header class="mobile-head"><h2>团队行动<small>cc-deck M1 攻坚团</small></h2><span class="tag action">1 待确认</span><button class="icon-btn">＋</button></header>
@@ -1040,7 +1045,7 @@
           <div class="mobile-status"><span>9:41</span><span>▰ ︎◒ 100%</span></div>
           <div class="mobile-sourcebar"><div class="source-switcher"><button class="source-trigger" type="button" data-source-trigger aria-expanded="false"><span class="source-dot status-connected" data-source-dot></span><strong data-current-source>公司电脑</strong><span>⌄</span></button><div class="source-menu" data-source-menu><div class="source-menu-head">数据源与视图</div><button class="source-option active" type="button" data-source-choice="office"><span class="source-dot status-connected"></span><strong>公司电脑</strong><small>6 会话 · 2 行动</small></button><button class="source-option" type="button" data-source-choice="home"><span class="source-dot status-reconnecting"></span><strong>家里 iMac</strong><small>2 会话 · 2 行动</small></button><div class="source-mode"><button class="active" type="button" data-source-mode="single">单源</button><button type="button" data-source-mode="aggregate">多源聚合</button></div><a class="source-manage" href="#d-settings" data-source-settings>⚙ 管理与配对新源 →</a></div></div>
           <header class="mobile-head"><h2>项目<small>只读聚合</small></h2><span class="tag action"><svg class="icon-bell" aria-hidden="true"><use href="#icon-bell"></use></svg> 2</span><button class="icon-btn">＋</button></header>
-          <div class="mobile-content"><div class="mobile-project-card"><h3><svg class="icon-inline" aria-hidden="true"><use href="#icon-folder"></use></svg> cc-deck</h3><p>~/dev/cc-deck · 6 会话 · 1 团队 · 46 输出物</p><span class="tag action">需行动 2</span></div><div class="mobile-project-card"><h3><svg class="icon-inline" aria-hidden="true"><use href="#icon-folder"></use></svg> windclaw-qclaw</h3><p>~/dev/windclaw · 1 会话 · 等安卓产物</p><span class="tag">运行中</span></div><div class="readonly-banner">项目页只读聚合。查看或编辑请回到会话/团队原始域。</div><div class="mobile-lane"><div class="mobile-lane-head"><span>cc-deck 聚合</span><span>只读</span></div><div class="mobile-task"><svg class="icon-inline" aria-hidden="true"><use href="#icon-chat"></use></svg> 0.6.0-test.19 出包 · 待收单<br><span class="muted">在会话中查看 →</span></div><div class="mobile-task"><svg class="icon-inline" aria-hidden="true"><use href="#icon-users"></use></svg> cc-deck M1 攻坚团 · 4 进行中<br><span class="muted">在团队中查看 →</span></div><div class="mobile-task">▧ docs/release-check.md · 刚刚<br><span class="muted">查看来源 →</span></div></div></div>
+          <div class="mobile-content"><div class="mobile-project-card"><h3><svg class="icon-inline" aria-hidden="true"><use href="#icon-folder"></use></svg> cc-deck</h3><p>~/dev/cc-deck</p><span class="tag action">需行动 2</span></div><div class="mobile-project-card"><h3><svg class="icon-inline" aria-hidden="true"><use href="#icon-folder"></use></svg> windclaw-qclaw</h3><p>~/dev/windclaw · 等安卓产物</p><span class="tag">运行中</span></div><div class="readonly-banner">项目页只读聚合。查看或编辑请回到会话/团队原始域。</div><div class="mobile-lane"><div class="mobile-lane-head"><span>cc-deck 聚合</span><span>只读</span></div><div class="mobile-task"><svg class="icon-inline" aria-hidden="true"><use href="#icon-chat"></use></svg> 0.6.0-test.19 出包 · 待收单<br><span class="muted">在会话中查看 →</span></div><div class="mobile-task"><svg class="icon-inline" aria-hidden="true"><use href="#icon-users"></use></svg> cc-deck M1 攻坚团 · 4 进行中<br><span class="muted">在团队中查看 →</span></div><div class="mobile-task"><svg class="icon-inline" aria-hidden="true"><use href="#icon-package"></use></svg> docs/release-check.md · 刚刚<br><span class="muted">查看来源 →</span></div></div></div>
           <nav class="mobile-nav"><button data-mobile-root="inbox"><b><svg class="icon-nav" aria-hidden="true"><use href="#icon-chat"></use></svg></b>会话</button><button data-mobile-root="team"><b><svg class="icon-nav" aria-hidden="true"><use href="#icon-users"></use></svg></b>团队</button><button class="active" data-mobile-root="project"><b><svg class="icon-nav" aria-hidden="true"><use href="#icon-grid"></use></svg></b>项目</button><button data-mobile-root="settings"><b><svg class="icon-nav" aria-hidden="true"><use href="#icon-gear"></use></svg></b>设置</button></nav>
         </div>
 
@@ -1076,7 +1081,7 @@
       const notifyResolvedKeys = new Set();
 
       const sourceStates = {
-        office: { label: "公司电脑", summary: "6 会话 · 2 行动", actions: 2, mobile: { actions: 3, running: 1, acceptance: 1 }, status: "connected" },
+        office: { label: "公司电脑", summary: "6 会话 · 2 行动", actions: 2, mobile: { actions: 2, running: 1, acceptance: 1 }, status: "connected" },
         home: { label: "家里 iMac", summary: "2 会话 · 2 行动", actions: 2, mobile: { actions: 1, running: 3, acceptance: 1 }, status: "reconnecting" }
       };
 
@@ -1226,8 +1231,15 @@
 
       function ensureThemeSymbols() {
         const sprite = document.querySelector(".icon-sprite");
-        if (!sprite || sprite.querySelector("#icon-sun")) return;
-        sprite.insertAdjacentHTML("beforeend", '<symbol id="icon-sun" viewBox="0 0 24 24"><path d="M12 5a7 7 0 1 0 0 14 7 7 0 1 0 0-14Zm-1-5h2v3h-2Zm0 21h2v3h-2ZM0 11h3v2H0Zm21 0h3v2h-3ZM3.5 4.9l1.4-1.4L7 5.6 5.6 7Zm13.5 13.5 2.1 2.1-1.4 1.4-2.1-2.1ZM3.5 19.1l2.1-2.1L7 18.4l-2.1 2.1ZM17 5.6l2.1-2.1 1.4 1.4-2.1 2.1Z"></path></symbol><symbol id="icon-moon" viewBox="0 0 24 24"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path></symbol>');
+        if (!sprite) return;
+        if (!sprite.querySelector("#icon-sun")) sprite.insertAdjacentHTML("beforeend", '<symbol id="icon-sun" viewBox="0 0 24 24"><path d="M12 5a7 7 0 1 0 0 14 7 7 0 1 0 0-14Zm-1-5h2v3h-2Zm0 21h2v3h-2ZM0 11h3v2H0Zm21 0h3v2h-3ZM3.5 4.9l1.4-1.4L7 5.6 5.6 7Zm13.5 13.5 2.1 2.1-1.4 1.4-2.1-2.1ZM3.5 19.1l2.1-2.1L7 18.4l-2.1 2.1ZM17 5.6l2.1-2.1 1.4 1.4-2.1 2.1Z"></path></symbol>');
+        if (!sprite.querySelector("#icon-moon")) sprite.insertAdjacentHTML("beforeend", '<symbol id="icon-moon" viewBox="0 0 24 24"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path></symbol>');
+        if (!sprite.querySelector("#icon-server")) sprite.insertAdjacentHTML("beforeend", '<symbol id="icon-server" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="6" rx="1"></rect><rect x="3" y="14" width="18" height="6" rx="1"></rect><line x1="7" y1="7" x2="7.01" y2="7"></line><line x1="7" y1="17" x2="7.01" y2="17"></line></symbol>');
+        if (!sprite.querySelector("#icon-layers")) sprite.insertAdjacentHTML("beforeend", '<symbol id="icon-layers" viewBox="0 0 24 24"><polygon points="12 2 21 7 12 12 3 7 12 2"></polygon><polyline points="3 12 12 17 21 12"></polyline><polyline points="3 17 12 22 21 17"></polyline></symbol>');
+        if (!sprite.querySelector("#icon-sliders")) sprite.insertAdjacentHTML("beforeend", '<symbol id="icon-sliders" viewBox="0 0 24 24"><line x1="4" y1="6" x2="20" y2="6"></line><line x1="4" y1="12" x2="20" y2="12"></line><line x1="4" y1="18" x2="20" y2="18"></line><circle cx="9" cy="6" r="2"></circle><circle cx="15" cy="12" r="2"></circle><circle cx="10" cy="18" r="2"></circle></symbol>');
+        if (!sprite.querySelector("#icon-package")) sprite.insertAdjacentHTML("beforeend", '<symbol id="icon-package" viewBox="0 0 24 24"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"></path><polyline points="3.27 6.96 12 12.01 20.73 6.96"></polyline><line x1="12" y1="22.08" x2="12" y2="12"></line><line x1="16.5" y1="9.4" x2="7.5" y2="4.21"></line></symbol>');
+        const info = sprite.querySelector("#icon-info");
+        if (info) info.innerHTML = '<circle cx="12" cy="12" r="10"></circle><line x1="12" y1="16" x2="12" y2="12"></line><line x1="12" y1="8" x2="12.01" y2="8"></line>';
       }
 
       function applyTheme(theme, announce = false) {
@@ -1407,7 +1419,7 @@
         const session = document.querySelector("#d-session");
         const head = session?.querySelector(".workspace-head");
         const body = session?.querySelector(".workspace-body");
-        head?.querySelectorAll(".workspace-title-row, .workspace-sub, .session-state-row").forEach((node) => { node.hidden = true; });
+        head?.querySelectorAll(".workspace-title-row, .workspace-sub").forEach((node) => { node.hidden = true; });
         if (head && !head.querySelector(".demo-skeleton-head")) {
           const skeletonHead = document.createElement("div");
           skeletonHead.className = "demo-skeleton-head";
@@ -1479,6 +1491,7 @@
         renderConnectionCapsules();
         notifyActionCount = sourceMode === "aggregate" ? Object.values(sourceStates).reduce((total, item) => total + item.actions, 0) : state.actions;
         syncSourceVisibility();
+        refreshProjectArtifactPane();
         syncNotificationBadges();
         if (announce) showToast(`当前源：${state.label}`);
       }
@@ -1500,8 +1513,17 @@
         renderConnectionCapsules();
         notifyActionCount = sourceMode === "aggregate" ? Object.values(sourceStates).reduce((total, item) => total + item.actions, 0) : sourceStates[activeSource].actions;
         syncSourceVisibility();
+        refreshProjectArtifactPane();
         syncNotificationBadges();
         if (announce) showToast(sourceMode === "aggregate" ? "已切换到多源聚合 · badge 按源合计" : "已切换到单源视图");
+      }
+
+      function refreshProjectArtifactPane() {
+        const pane = document.querySelector("#d-project [data-artifact-browser=project]")?.closest(".workspace-pane");
+        if (pane) pane.innerHTML = renderProjectArtifacts();
+        const badge = document.querySelector("#d-project .workspace-title-row > .source-badge");
+        if (badge) badge.textContent = sourceMode === "aggregate" ? "多源聚合" : sourceStates[activeSource].label;
+        hydrateSourceBadges();
       }
 
       function hydrateAvatars() {
@@ -1697,12 +1719,18 @@
             head.insertBefore(button, head.lastElementChild);
           }
         });
-        const settingIcons = { "连接与设备": "link", "模型服务": "grid", "团队身份模板": "users", "扩展": "grid", 关于: "info" };
-        document.querySelectorAll("#m-settings .setting-icon").forEach((icon) => {
+        const settingIcons = { "连接与设备": "link", "模型服务": "server", "通用与快捷键": "sliders", "团队身份模板": "users", "扩展": "layers", 关于: "info" };
+        document.querySelectorAll("#m-settings .setting-icon, #d-settings .queue-card .avatar").forEach((icon) => {
           const name = icon.parentElement?.querySelector("strong")?.textContent.trim();
           if (!name || icon.closest("[data-theme-toggle]")) return;
           const symbol = settingIcons[name];
           if (symbol) icon.innerHTML = `<svg aria-hidden="true"><use href="#icon-${symbol}"></use></svg>`;
+        });
+        const desktopSettingIcons = { "连接与设备": "link", "模型服务": "server", "通用与快捷键": "sliders", "团队身份模板": "users", "扩展": "layers" };
+        document.querySelectorAll("#d-settings .queue-card .avatar").forEach((icon) => {
+          const name = icon.closest(".queue-card")?.querySelector("strong")?.textContent.trim();
+          const symbol = desktopSettingIcons[name];
+          if (symbol) icon.innerHTML = `<svg class="icon-inline" aria-hidden="true"><use href="#icon-${symbol}"></use></svg>`;
         });
         document.querySelectorAll(".settings-row").forEach((row) => {
           if (row.querySelector("strong")?.textContent.trim() === "团队身份模板") {
@@ -1733,6 +1761,13 @@
       function normalizeTeamRedundancy() {
         const team = document.querySelector("#d-team");
         if (team) {
+          team.querySelector(".queue-head .icon-btn")?.remove();
+          const queue = team.querySelector(".queue");
+          const shortcutHead = [...(queue?.querySelectorAll(".queue-group") || [])].find((head) => head.textContent.trim() === "快捷入口");
+          const shortcutCard = shortcutHead?.nextElementSibling;
+          shortcutCard?.remove();
+          shortcutHead?.remove();
+        if (queue && !queue.querySelector(".team-create-action")) queue.insertAdjacentHTML("beforeend", '<button class="team-create-action" type="button" data-team-create>＋ 新建团队</button><p class="team-create-note">创建后由 Leader 提建议，你确认编制</p>');
           team.querySelectorAll(".queue .source-badge, .task-card .source-badge, .member-card .source-badge").forEach((badge) => badge.remove());
           team.querySelectorAll(".queue-card .identity-cluster:empty").forEach((cluster) => cluster.remove());
           team.querySelectorAll(".task-assignee").forEach((assignee) => {
@@ -1758,6 +1793,54 @@
         document.querySelectorAll(".leader-label").forEach((label) => {
           if (label.textContent.trim() === "Leader") label.textContent = "调度";
         });
+      }
+
+      function normalizeStatistics() {
+        document.querySelectorAll("#d-project .project-overview .metric").forEach((metric) => {
+          const rawLabel = metric.querySelector("span")?.textContent.trim();
+          const label = rawLabel === "活跃团队" ? "团队" : rawLabel;
+          const icon = label === "会话" ? "chat" : label === "团队" ? "users" : label === "输出物" ? "package" : "";
+          const number = metric.querySelector("b")?.textContent.trim();
+          if (icon && number && label) metric.innerHTML = `<svg class="icon-inline" aria-hidden="true"><use href="#icon-${icon}"></use></svg><span>${label} ${number}</span>`;
+          else if (number && label) metric.innerHTML = `<span>${label} ${number}</span>`;
+        });
+        document.querySelectorAll("#d-project .aggregate-card h4").forEach((heading) => {
+          const text = heading.textContent.trim();
+          const icon = text.includes("会话") ? "chat" : text.includes("团队") ? "users" : text.includes("输出物") ? "package" : "";
+          if (icon && !heading.querySelector("svg")) heading.innerHTML = `<svg class="icon-inline" aria-hidden="true"><use href="#icon-${icon}"></use></svg> ${text.replace(/^▣\s*/, "")}`;
+        });
+        const projectSubtitle = document.querySelector("#d-project .workspace-sub");
+        if (projectSubtitle) projectSubtitle.textContent = "目录 ~/dev/cc-deck · realpath 已归一";
+        const mobileProject = document.querySelector("#m-project .mobile-content");
+        const firstProjectCopy = mobileProject?.querySelector(".mobile-project-card p");
+        if (firstProjectCopy) firstProjectCopy.textContent = "~/dev/cc-deck";
+        if (mobileProject && !mobileProject.querySelector(".mobile-project-summary")) mobileProject.insertAdjacentHTML("afterbegin", '<div class="mobile-project-summary"><span><svg class="icon-inline" aria-hidden="true"><use href="#icon-chat"></use></svg> 会话 6</span><span><svg class="icon-inline" aria-hidden="true"><use href="#icon-users"></use></svg> 团队 1</span><span><svg class="icon-inline" aria-hidden="true"><use href="#icon-package"></use></svg> 输出物 46</span><span>需行动 2</span></div>');
+      }
+
+      function normalizeAiMessages(root = document) {
+        root.querySelectorAll(".bubble.me .bubble-author").forEach((author) => author.remove());
+        root.querySelectorAll(".bubble:not(.me)").forEach((bubble) => {
+          if (bubble.classList.contains("message-ai")) return;
+          const author = bubble.querySelector(":scope > .bubble-author");
+          if (!author) return;
+          const body = document.createElement("div");
+          body.className = "message-body";
+          [...bubble.childNodes].filter((node) => node !== author).forEach((node) => body.append(node));
+          author.className = "message-author";
+          bubble.className = "message-ai";
+          bubble.replaceChildren(author, body);
+        });
+      }
+
+      function setupTeamCreateAction() {
+        const queue = document.querySelector("#d-team .queue");
+        if (!queue || queue.querySelector(".team-create-action")) return;
+        const shortcut = [...queue.querySelectorAll(".queue-group")].find((group) => group.textContent.includes("快捷入口"));
+        const shortcutCard = shortcut?.nextElementSibling;
+        shortcut?.remove();
+        shortcutCard?.remove();
+        queue.querySelector(".queue-head .icon-btn")?.remove();
+        queue.insertAdjacentHTML("beforeend", '<button class="team-create-action" type="button">＋ 新建团队</button><p class="team-create-note">创建后由 Leader 提建议，你确认编制</p>');
       }
 
       function normalizeNotificationFacts() {
@@ -1790,7 +1873,13 @@
         projectMobileHead?.querySelector(".icon-btn")?.remove();
         document.querySelector("#m-project .mobile-lane-head span:last-child")?.remove();
         const projectSubtitle = document.querySelector("#d-project .workspace-sub");
-        if (projectSubtitle) projectSubtitle.textContent = projectSubtitle.textContent.replace("realpath 已归一", "路径已规范化");
+        if (projectSubtitle) projectSubtitle.textContent = "目录 ~/dev/cc-deck · 路径已规范化";
+        document.querySelectorAll("#d-project .pane-summary").forEach((summary) => {
+          if (summary.textContent.includes("验收单")) summary.textContent = "3 份验收单";
+        });
+        document.querySelectorAll("#m-project .mobile-project-card p").forEach((copy) => {
+          copy.textContent = copy.textContent.replace(/\s*·\s*\d+\s*进行中/g, "");
+        });
         document.querySelectorAll(".wait-title").forEach((title) => { title.textContent = "等待你的确认 · 写入验收文档"; });
         document.querySelectorAll(".wait-copy").forEach((copy) => { copy.textContent = "将把验收证据写入 release-check.md，会话才能继续。"; });
         const settingsGroup = document.querySelector("#d-settings .queue-group");
@@ -1900,7 +1989,7 @@
 
       function artifactFileMarkup(file) {
         const failureAttr = file.failure ? ` data-artifact-failure="${file.failure}"` : "";
-        return `<div class="artifact-file"${failureAttr} data-artifact-file="${file.name}"><span class="artifact-file-icon">${file.icon}</span><div class="artifact-file-main"><span class="artifact-file-name">${file.name}</span><span class="artifact-file-dir">${file.dir || "当前工作目录"}</span></div><span class="artifact-file-meta" data-artifact-meta>${file.size} · ${file.time}</span>${file.anomaly ? `<span class="artifact-file-anomaly">${file.anomaly}</span>` : ""}${file.failure ? `<span class="artifact-file-error">${file.failure}</span><button class="artifact-file-retry" type="button" data-artifact-file-retry>重试</button>` : ""}</div>`;
+        return `<div class="artifact-file"${failureAttr} data-artifact-file="${file.name}"><span class="artifact-file-icon"><svg class="icon-inline" aria-hidden="true"><use href="#icon-package"></use></svg></span><div class="artifact-file-main"><span class="artifact-file-name">${file.name}</span><span class="artifact-file-dir">${file.dir || "当前工作目录"}</span></div><span class="artifact-file-meta" data-artifact-meta>${file.size} · ${file.time}</span>${file.anomaly ? `<span class="artifact-file-anomaly">${file.anomaly}</span>` : ""}${file.failure ? `<span class="artifact-file-error">${file.failure}</span><button class="artifact-file-retry" type="button" data-artifact-file-retry>重试</button>` : ""}</div>`;
       }
 
       function artifactGroupMarkup(group, options = {}) {
@@ -1915,16 +2004,22 @@
       function renderSessionArtifacts(options = {}) {
         const mobile = Boolean(options.mobile);
         const groups = sessionArtifactGroups.map((group, index) => ({ ...group, open: index === 0 }));
-        return `<div class="artifact-browser" data-artifact-browser="session"><div class="artifact-summary"><span><strong>输出物 4</strong> · 46 个文件 · 6 个目录</span><small>部分输出物曾被 relay 截断 · 异常项见文件行</small><span class="artifact-summary-path" title="~/dev/cc-deck">cwd · ~/dev/cc-deck</span></div>${groups.filter((group) => group.files.length >= 2).map((group) => artifactGroupMarkup(group, { mobile })).join("")}<div class="artifact-loose">${groups.filter((group) => group.files.length === 1).flatMap((group) => group.files).map(artifactFileMarkup).join("")}</div></div>`;
+        return `<div class="artifact-browser" data-artifact-browser="session"><div class="artifact-summary"><span><svg class="icon-inline" aria-hidden="true"><use href="#icon-package"></use></svg> <strong>4 个输出物</strong> · 46 个文件 · 6 个目录<small> · 部分输出物曾被 relay 截断</small></span><span class="artifact-summary-path" title="~/dev/cc-deck">cwd · ~/dev/cc-deck</span></div>${groups.filter((group) => group.files.length >= 2).map((group) => artifactGroupMarkup(group, { mobile })).join("")}<div class="artifact-loose">${groups.filter((group) => group.files.length === 1).flatMap((group) => group.files).map(artifactFileMarkup).join("")}</div></div>`;
       }
 
       function renderProjectArtifacts() {
-        const availableGroups = sessionArtifactGroups.slice(0, 3).map((group, index) => ({ ...group, key: `project-office-${group.key}`, open: index === 0 }));
+        const officeGroups = sessionArtifactGroups.slice(0, 3).map((group, index) => ({ ...group, key: `project-office-${group.key}`, open: index === 0 }));
         const homeGroup = { key: "project-home-ui-review", dir: "screenshots/ui-review", count: "2 个文件", total: "3.2 MB", recent: "昨天", local: false, open: true, files: [
           { icon: "▧", name: "home-review.png", dir: "screenshots/ui-review", size: "2.1 MB", time: "昨天" },
           { icon: "▧", name: "home-notes.md", dir: "screenshots/ui-review", size: "1.1 MB", time: "昨天" }
         ] };
-        return `<div class="artifact-browser" data-artifact-browser="project"><div class="artifact-summary"><span><strong>46</strong> 个文件 · 6 个目录</span><small>只读聚合 · 按源与目录分组</small></div><section class="artifact-source source-company-group"><div class="artifact-source-head"><span class="source-badge source-company">公司电脑</span><small>可达 · 3 个目录</small></div>${availableGroups.map((group) => artifactGroupMarkup(group, { readonly: true })).join("")}<button class="artifact-source-link" type="button" data-source-session>查看来源会话 →</button></section><section class="artifact-source source-home-group"><div class="artifact-source-head"><span class="source-badge source-home">家里 iMac</span><small>2 个文件 · 来源不可达</small></div>${artifactGroupMarkup(homeGroup, { readonly: true })}<div class="artifact-source-unreachable">该源当前不可达，目录索引保留但文件无法读取；请先恢复 relay 连接。<br><button class="artifact-source-link" type="button" data-source-settings>去连接与设备恢复 →</button></div></section></div>`;
+        const sourceGroups = sourceMode === "aggregate"
+          ? [{ label: "公司电脑", className: "source-company-group", note: "可达 · 3 个目录 · 独立源副本", groups: officeGroups }, { label: "家里 iMac", className: "source-home-group", note: "2 个文件 · 来源不可达 · 独立源副本", groups: [homeGroup], unreachable: true }]
+          : activeSource === "office"
+            ? [{ label: "公司电脑", className: "source-company-group", note: "可达 · 当前源", groups: officeGroups }]
+            : [{ label: "家里 iMac", className: "source-home-group", note: "来源不可达 · 当前源", groups: [homeGroup], unreachable: true }];
+        const hiddenCopy = sourceMode === "single" ? "另有 1 个源副本 · 切换到多源聚合查看" : "";
+        return `<div class="artifact-browser" data-artifact-browser="project"><div class="artifact-summary"><span><svg class="icon-inline" aria-hidden="true"><use href="#icon-package"></use></svg> <strong>输出物 46</strong> · 6 个目录</span><small>${sourceMode === "aggregate" ? "多源聚合 · 按源与目录分组" : "当前源 · 只读查看"}</small></div>${hiddenCopy ? `<button class="artifact-source-copy" type="button" data-source-mode="aggregate">${hiddenCopy}</button>` : ""}${sourceGroups.map((source) => `<section class="artifact-source ${source.className}"><div class="artifact-source-head"><span class="source-badge ${source.className === "source-company-group" ? "source-company" : "source-home"}">${source.label}</span><small>${source.note}</small></div>${source.groups.map((group) => artifactGroupMarkup(group, { readonly: true })).join("")}${source.unreachable ? `<div class="artifact-source-unreachable">该源当前不可达，目录索引保留但文件无法读取；请先恢复 relay 连接。<br><button class="artifact-source-link" type="button" data-source-settings>去连接与设备恢复 →</button></div>` : ""}</section>`).join("")}</div>`;
       }
 
       function setupSessionTabs() {
@@ -1967,9 +2062,9 @@
         const section = document.querySelector("#d-team");
         const body = section?.querySelector(".workspace-body");
         if (!body || body.dataset.tabsReady) return;
-        const board = `<div class="pane-summary">任务 9</div><div class="board">${renderTeamBoard()}</div>`;
+        const board = `<div class="pane-summary"><svg class="icon-inline" aria-hidden="true"><use href="#icon-check"></use></svg> 9 项任务</div><div class="board">${renderTeamBoard()}</div>`;
         const members = teamMembers.map((item) => renderTeamMember(item, true)).join("");
-        body.innerHTML = `<div class="workspace-pane active">${board}</div><div class="workspace-pane"><div class="team-chat"><div class="bubble"><div class="bubble-author"><span class="avatar leader">✦<i class="avatar-engine-dot trae"></i></span><strong>Leader</strong><span class="role-label leader-label">调度</span></div>编制方案已提交：3 开发 + 独立验收 + 1 调研。</div><div class="bubble"><div class="bubble-author"><span class="avatar worker">W<i class="avatar-engine-dot claude"></i></span><strong>worker-web</strong></div>T-13 更新通道隔离已完成，等待验收单。</div><div class="bubble"><div class="bubble-author"><span class="avatar leader">✦<i class="avatar-engine-dot trae"></i></span><strong>Leader</strong><span class="role-label leader-label">调度</span></div>请 worker-mobile 先停留，验收槽改由独立厂商接替。</div><div class="bubble me"><div class="bubble-author"><span class="avatar architect">我</span><strong>我</strong></div>收到，先确认编制再收单。</div></div><div class="team-composer-row"><div class="composer" data-composer="team"><button class="composer-clip" type="button" title="附件" aria-label="附件"><svg class="icon-inline" aria-hidden="true"><use href="#icon-clip"></use></svg></button><input class="composer-input" type="text" placeholder="给团队发消息…" aria-label="给团队发消息"></div><button class="primary-btn" type="button" data-composer-send>发送</button></div></div><div class="workspace-pane"><div class="pane-summary">成员 6</div><div class="team-members-grid">${members}</div></div><div class="workspace-pane"><div class="team-activity"><div class="activity-row"><time>10:42</time><i></i><span>T-13 更新通道隔离进入待验收</span></div><div class="activity-row"><time>10:15</time><i></i><span>worker-relay 派单完成</span></div><div class="activity-row"><time>09:58</time><i></i><span>worker-mobile 失联告警</span></div><div class="activity-row"><time>昨天</time><i></i><span>Leader 提交编制方案</span></div></div></div>`;
+        body.innerHTML = `<div class="workspace-pane active">${board}</div><div class="workspace-pane"><div class="team-chat"><div class="bubble"><div class="bubble-author"><span class="avatar leader">✦<i class="avatar-engine-dot trae"></i></span><strong>Leader</strong><span class="role-label leader-label">调度</span></div>编制方案已提交：3 开发 + 独立验收 + 1 调研。</div><div class="bubble"><div class="bubble-author"><span class="avatar worker">W<i class="avatar-engine-dot claude"></i></span><strong>worker-web</strong></div>T-13 更新通道隔离已完成，等待验收单。</div><div class="bubble"><div class="bubble-author"><span class="avatar leader">✦<i class="avatar-engine-dot trae"></i></span><strong>Leader</strong><span class="role-label leader-label">调度</span></div>请 worker-mobile 先停留，验收槽改由独立厂商接替。</div><div class="bubble me"><div class="bubble-author"><span class="avatar architect">我</span><strong>我</strong></div>收到，先确认编制再收单。</div></div><div class="team-composer-row"><div class="composer" data-composer="team"><button class="composer-clip" type="button" title="附件" aria-label="附件"><svg class="icon-inline" aria-hidden="true"><use href="#icon-clip"></use></svg></button><input class="composer-input" type="text" placeholder="给团队发消息…" aria-label="给团队发消息"></div><button class="primary-btn" type="button" data-composer-send>发送</button></div></div><div class="workspace-pane"><div class="pane-summary"><svg class="icon-inline" aria-hidden="true"><use href="#icon-users"></use></svg> 6 名成员</div><div class="team-members-grid">${members}</div></div><div class="workspace-pane"><div class="team-activity"><div class="activity-row"><time>10:42</time><i></i><span>T-13 更新通道隔离进入待验收</span></div><div class="activity-row"><time>10:15</time><i></i><span>worker-relay 派单完成</span></div><div class="activity-row"><time>09:58</time><i></i><span>worker-mobile 失联告警</span></div><div class="activity-row"><time>昨天</time><i></i><span>Leader 提交编制方案</span></div></div></div>`;
         body.children[1].classList.add("team-conversation-pane");
         body.dataset.tabsReady = "1";
         wireSegmentTabs([...section.querySelectorAll(".segment-bar button")], [body.children[1], body.children[0], body.children[2], body.children[3]], 1);
@@ -2114,7 +2209,7 @@
         const content = screen?.querySelector(".mobile-content");
         const list = content?.querySelector(".mobile-settings");
         if (!content || !list || content.dataset.settingsReady) return;
-        list.insertAdjacentHTML("beforeend", '<div class="settings-row"><span class="setting-icon">▦</span><div><strong>通用与快捷键</strong><p>快捷键、通知与卡片密度</p></div><span class="chev">›</span></div>');
+        list.insertAdjacentHTML("beforeend", '<div class="settings-row"><span class="setting-icon"><svg class="icon-inline" aria-hidden="true"><use href="#icon-sliders"></use></svg></span><div><strong>通用与快捷键</strong><p>快捷键、通知与卡片密度</p></div><span class="chev">›</span></div>');
         const detail = document.createElement("div");
         detail.className = "mobile-settings-detail";
         detail.hidden = true;
@@ -2402,60 +2497,25 @@
         android: { title: "android 构建", lastActive: "~/dev/windclaw · 最近活动 3 小时前", status: "等产物", state: "closing", stateLabel: "收口", summary: "等待安卓产物上传", elapsed: "3 小时", copy: "正在等待安卓产物上传，暂无需你处理的动作。", engine: "CodeBuddy", engineClass: "codebuddy", source: "公司电脑" }
       };
 
-      function updateSessionStateRow(row, data) {
-        if (!row) return;
-        row.dataset.sessionState = data.state;
-        row.closest(".session-head-sub")?.setAttribute("data-session-state", data.state);
-        row.querySelector("[data-session-state-label]").textContent = data.stateLabel;
-        row.querySelector("[data-session-state-summary]").textContent = data.summary;
-        const elapsed = row.querySelector("[data-session-state-elapsed]");
-        elapsed.textContent = data.elapsed || "";
-        elapsed.hidden = !data.elapsed;
+      function updateSessionStateDock(data) {
+        const task = data.copy.replace(/^当前任务：|^当前建议：/, "").replace(/ · 预计还需.*$/, "").replace(/。$/, "");
+        const label = data.state === "waiting" ? "已暂停" : data.state === "running" ? "运行中" : data.state === "closing" ? "已完成" : "错误";
+        const operation = data.state === "waiting" || data.state === "closing" ? "" : data.summary;
+        document.querySelectorAll(".session-state-dock").forEach((dock) => {
+          dock.dataset.sessionState = data.state;
+          dock.querySelector("[data-session-state-task]").textContent = `当前任务 · ${task}`;
+          dock.querySelector("[data-session-state-label]").textContent = label;
+          const operationNode = dock.querySelector("[data-session-state-operation]");
+          operationNode.textContent = operation;
+          operationNode.hidden = !operation;
+          dock.querySelector("[data-session-state-elapsed]").textContent = data.elapsed === "2 分钟" ? "2m" : data.elapsed || "";
+        });
       }
 
       function updateSessionHeadMeta(lastActive) {
         const subtitle = document.querySelector("#session-sub");
         if (!subtitle) return;
-        const separator = lastActive.lastIndexOf(" · ");
-        const path = separator > -1 ? lastActive.slice(0, separator) : lastActive;
-        const time = separator > -1 ? lastActive.slice(separator + 3) : "";
-        const pathNode = subtitle.querySelector(".session-head-path");
-        const timeNode = subtitle.querySelector(".session-head-time");
-        if (pathNode) pathNode.textContent = path;
-        if (timeNode) timeNode.textContent = time;
-      }
-
-      function mergeSessionHead() {
-        const subtitle = document.querySelector("#session-sub");
-        const state = document.querySelector("#session-state-row");
-        if (!subtitle || !state || state.parentElement === subtitle) return;
-        const raw = subtitle.textContent.trim();
-        const separator = raw.lastIndexOf(" · ");
-        const path = separator > -1 ? raw.slice(0, separator) : raw;
-        const time = separator > -1 ? raw.slice(separator + 3) : "";
-        const meta = document.createElement("span");
-        meta.className = "session-head-meta";
-        meta.innerHTML = `<span class="session-head-path"></span><span class="session-head-time"></span>`;
-        subtitle.classList.add("session-head-sub");
-        subtitle.dataset.sessionState = state.dataset.sessionState || "waiting";
-        subtitle.replaceChildren(meta, state);
-        meta.querySelector(".session-head-path").textContent = path;
-        meta.querySelector(".session-head-time").textContent = time;
-      }
-
-      function mergeMobileDetailHead() {
-        const head = document.querySelector("#m-detail .mobile-head");
-        const title = head?.querySelector("#mobile-detail-title");
-        const state = document.querySelector("#mobile-detail-state");
-        if (!head || !title || !state) return;
-        let main = head.querySelector(".mobile-detail-head-main");
-        if (!main) {
-          main = document.createElement("div");
-          main.className = "mobile-detail-head-main";
-          title.replaceWith(main);
-          main.append(title);
-        }
-        main.append(state);
+        subtitle.textContent = lastActive;
       }
 
       function updateMobileDetailSubtitle(lastActive) {
@@ -2475,8 +2535,7 @@
         updateSessionHeadMeta(data.lastActive);
         document.querySelector("#session-status").textContent = data.status;
         document.querySelector("#session-identity").innerHTML = `<span class="engine-badge ${data.engineClass}">${data.engine}</span><span class="source-badge">${data.source}</span>`;
-        updateSessionStateRow(document.querySelector("#session-state-row"), data);
-        document.querySelector("#session-main-copy").textContent = data.copy;
+        updateSessionStateDock(data);
         hydrateSourceBadges();
       }
 
@@ -2500,7 +2559,7 @@
         document.querySelector("#mobile-detail-title").firstChild.textContent = data.title;
         updateMobileDetailSubtitle(data.lastActive);
         document.querySelector("#mobile-detail-identity").innerHTML = `<span class="engine-badge ${data.engineClass}">${data.engine}</span><span class="source-badge">${data.source}</span>`;
-        updateSessionStateRow(document.querySelector("#mobile-detail-state"), data);
+        updateSessionStateDock(data);
         document.querySelector("[data-mobile-back]").textContent = mobileReturn === "notify" ? "‹ 通知" : "‹";
         hydrateSourceBadges();
       }
@@ -2548,6 +2607,10 @@
             if (selectedTeam) selectedTeam.dataset.teamState = "confirmed";
             syncTeamFooter("confirmed");
             showToast("编制方案已确认，团队进入执行中");
+            return;
+          }
+          if (target.closest("[data-team-create]")) {
+            showToast("新建团队 · 请给 Leader 发消息说明目标");
             return;
           }
           const allowButton = target.closest("[data-allow]");
@@ -2682,8 +2745,6 @@
       renderNotificationViews();
       renderSourceMenus();
       ensureThemeSymbols();
-      mergeSessionHead();
-      mergeMobileDetailHead();
       normalizeTeamRedundancy();
       auditRedundancy();
       hydrateContextWaterlines();
@@ -2691,11 +2752,14 @@
       setupMobileDetailTabs();
       setupMobileTeamTabs();
       setupTeamTabs();
+      setupTeamCreateAction();
       setupTeamFooter();
       wireComposers();
       setupProjectTabs();
       setupSettingsContent();
       setupMobileSettingsContent();
+      normalizeAiMessages();
+      normalizeStatistics();
       wireCardDensityControls();
       setupSourceGroupBars();
       mountConnectionCapsules();
@@ -2710,6 +2774,7 @@
       hydrateAvatars();
       normalizeLeaderLabels();
       updateMobileDetailSubtitle(sessionStateData.release.lastActive);
+      updateSessionStateDock(sessionStateData.release);
       hydrateSourceBadges();
       hydrateNotificationIcons();
       syncContextMeterBands();
