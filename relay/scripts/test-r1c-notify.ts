@@ -12,7 +12,11 @@
 // #018-R1FIX2 增补：N15 孤儿对账闸门 fail-closed（坏 JSON/空数组/非数组/文件缺失
 //       四态不对账保留 pending，仅非空可读才正常对账——P2-5/P2-6）；N16 无组
 //       suggest-hold 台账行不入结构化通知账（P3-1 排除备案：同步 ACK 即达+纯审计面）。
+// #018-R1FIX3 增补：N15 补根值非对象三档（null/数字/字符串——修复前根 null 取
+//       .confirms 直接炸构造器，P2-7 七档收口）；N16 补 /api/org HTTP 真入口探针
+//       （白名单实含 suggest-hold，真 relay HTTP 面直探——P3-1 备案按真实入口重写）。
 import { randomUUID } from "node:crypto";
+import * as http from "node:http";
 import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -20,6 +24,7 @@ import { EventBus } from "../src/event-bus.js";
 import { SessionManager } from "../src/session-manager.js";
 import { appendDispatch, readDispatchLog } from "../src/org.js";
 import { setConfirmCreatedHook } from "../src/projects.js";
+import { startServer } from "../src/ws-server.js";
 import type { OrgConfirm } from "../src/projects.js";
 import type { AgentCallbacks, AgentLike } from "../src/agent-adapter.js";
 import type { RelayConfig } from "../src/config.js";
@@ -447,20 +452,39 @@ async function main() {
     const mgr15d = new SessionManager(bus, cfg);
     assert(mgr15d.notificationsList().find((n) => n.sourceContext.entityId === n15Id)?.resolved_at === undefined,
       "N15⑤ 文件不存在 → 不收口，pending 保留");
+    // 第七档（R1FIX3 P2-7）：根值非对象——JSON.parse 成功但根为 null/数字/字符串。
+    // 修复前根 null 在取 .confirms 时抛 TypeError，构造 SessionManager 直接失败
+    //（比「不对账保留」糟一个量级）；数组根由「非数组」档拦截，判序无新洞
+    writeFileSync(confirmsFile, "null", "utf-8");
+    const mgr15e = new SessionManager(bus, cfg);
+    assert(mgr15e.notificationsList().find((n) => n.sourceContext.entityId === n15Id)?.resolved_at === undefined,
+      "N15⑥ 根值 null → 构造不炸且不对账，pending 保留（P2-7 根值非对象档）");
+    writeFileSync(confirmsFile, "123", "utf-8");
+    const mgr15f = new SessionManager(bus, cfg);
+    assert(mgr15f.notificationsList().find((n) => n.sourceContext.entityId === n15Id)?.resolved_at === undefined,
+      "N15⑦ 根值数字 → 不对账，pending 保留（根值非对象档）");
+    writeFileSync(confirmsFile, JSON.stringify("str"), "utf-8");
+    const mgr15g = new SessionManager(bus, cfg);
+    assert(mgr15g.notificationsList().find((n) => n.sourceContext.entityId === n15Id)?.resolved_at === undefined,
+      "N15⑧ 根值字符串 → 不对账，pending 保留（根值非对象档）");
     assert(frames.length === framesBefore15,
-      "N15⑥ 四个 fail-closed 样本零帧零迁移（闸门静默面）");
+      "N15⑨ 七个 fail-closed 样本零帧零迁移（闸门静默面）");
     // positive control：非空可读且不含该确认单 → 正常对账（N14 既有行为保持）
     writeFileSync(confirmsFile, JSON.stringify({ confirms: [
       { id: "n15-other-confirm", kind: "suggest-hold", title: "R1FIX2 对照单", reason: "对照", payload: {}, status: "pending", created_at: 1728100000000 },
     ] }, null, 2) + "\n", "utf-8");
-    const mgr15e = new SessionManager(bus, cfg);
-    const resolved15 = mgr15e.notificationsList().find((n) => n.sourceContext.entityId === n15Id);
+    const mgr15h = new SessionManager(bus, cfg);
+    const resolved15 = mgr15h.notificationsList().find((n) => n.sourceContext.entityId === n15Id);
     assert(!!resolved15 && (resolved15.resolved_at ?? 0) > 0 && resolved15.body.includes("孤儿对账"),
-      "N15⑦ 非空可读 → 正常对账收口记因（positive control；N14 行为保持）");
+      "N15⑩ 非空可读 → 正常对账收口记因（positive control；N14 行为保持）");
 
     // ---------- N16 P3-1 无组 suggest-hold 终态行（协议排除备案） ----------
-    // 可达路径备案：无组暂缓在 orgAction 漏斗（COMMAND_ORG_ACTION 线上咽喉仅
-    // create/confirm-decide 两 action，suggest-hold 未上端——N10④ 同款内部入口）
+    // 可达路径备案（R1FIX3 按真实入口重写）：无组暂缓除 orgAction 漏斗（WS
+    // COMMAND_ORG_ACTION 线上咽喉仅 create/confirm-decide 两 action——N10④ 同款
+    // 内部入口）外，还有真实 HTTP 入口：POST /api/org 白名单实含 suggest-hold
+    //（ws-server ORG_HTTP_ACTIONS，R1FIX2 备案「线上未暴露」不成立已删）。
+    // ⑤-⑦以真 relay HTTP 面直探该入口，「真实入口也排除」焊死，不再依赖内部
+    // 漏斗路径
     console.log("N16 无组 suggest-hold 不入通知口");
     const logBefore16 = readDispatchLog().length;
     const storeBefore16 = storeFile()?.notifications.length ?? 0;
@@ -478,6 +502,56 @@ async function main() {
       "N16③ receipt 即解除条件备忘（理由+条件完整入台账）");
     assert(frames.length === framesBefore16 && (storeFile()?.notifications.length ?? 0) === storeBefore16,
       "N16④ 结构化通知账零入账：零帧零新项（P3-1 排除备案焊死）");
+
+    // ---------- N16⑤-⑦ R1FIX3 P3-1：/api/org HTTP 真入口探针 ----------
+    // 起 relay HTTP 面（真实 startServer + 真实 ORG_HTTP_ACTIONS 白名单，非最小桩）：
+    // POST action=suggest-hold 无 id → 同步 200 {ok,ledgered:true} + 台账行 + 通知账
+    // 零新增零帧——真实入口与内部漏斗同判（回执即知晓面，协议排除不变）
+    console.log("N16⑤-⑦ /api/org HTTP 真入口");
+    const post = (port: number, urlPath: string, body: Record<string, unknown>): Promise<{
+      status: number | undefined; json: { ok?: boolean; data?: { ledgered?: boolean }; error?: string };
+    }> =>
+      new Promise((resolve, reject) => {
+        const req = http.request(
+          { host: "127.0.0.1", port, path: urlPath, method: "POST", headers: { "content-type": "application/json" } },
+          (res) => {
+            let raw = "";
+            res.on("data", (c: Buffer) => { raw += String(c); });
+            res.on("end", () => {
+              let json: { ok?: boolean; data?: { ledgered?: boolean }; error?: string } = {};
+              try { json = JSON.parse(raw) as typeof json; } catch { /* 4xx 纯文本面 */ }
+              resolve({ status: res.statusCode, json });
+            });
+          },
+        );
+        req.on("error", reject);
+        req.end(JSON.stringify(body));
+      });
+    const probeCfg: RelayConfig = { ...cfg, port: 8796 };
+    let probeReady: (() => void) | undefined;
+    const ready = new Promise<void>((r) => { probeReady = r; });
+    const probeMgr = new SessionManager(bus, probeCfg); // 独立实例：探针不触碰主 mgr 接线
+    const probeSrv = startServer(bus, probeMgr, probeCfg, { onReady: () => probeReady?.() });
+    try {
+      await ready;
+      const logBefore16b = readDispatchLog().length;
+      const storeBefore16b = storeFile()?.notifications.length ?? 0;
+      const framesBefore16b = frames.length;
+      const res16 = await post(probeCfg.port, "/api/org?token=t",
+        { action: "suggest-hold", reason: "R1FIX3 HTTP 入口暂缓", condition: "HTTP 侧解除条件" });
+      assert(res16.status === 200 && res16.json.ok === true && res16.json.data?.ledgered === true,
+        "N16⑤ HTTP 真入口：POST /api/org suggest-hold 无 id → 同步 200 ok+ledgered（白名单实放行）");
+      const log16b = readDispatchLog();
+      const tail16b = log16b[log16b.length - 1];
+      assert(log16b.length === logBefore16b + 1 && tail16b.status === "done" && tail16b.tier === "暂缓"
+        && typeof tail16b.receipt === "string" && tail16b.receipt.includes("R1FIX3 HTTP 入口暂缓")
+        && tail16b.receipt.includes("HTTP 侧解除条件"),
+        "N16⑥ HTTP 入口台账行：done/暂缓 + 理由与解除条件完整落账");
+      assert(frames.length === framesBefore16b && (storeFile()?.notifications.length ?? 0) === storeBefore16b,
+        "N16⑦ HTTP 真入口同样零入账：通知账零新增零帧（真实入口也排除，焊死）");
+    } finally {
+      await probeSrv.close();
+    }
   } finally {
     process.env.CCR_ORG_DIR = prevOrg;
     if (prevTitleGen === undefined) delete process.env.CCR_NO_TITLE_GEN;

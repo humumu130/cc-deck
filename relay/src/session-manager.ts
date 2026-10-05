@@ -911,8 +911,8 @@ export class SessionManager {
   // 文件」——文件在但读取/JSON 失败时 listConfirms 回退空集合、或 CCR_ORG_DIR 指
   // 到另一个已有 confirms.json 的域，都会把全部 pending org-confirm 批量误标
   // resolved。fail-closed 总则：误收口的代价 = 丢用户确认提醒；漏收口的代价 = 假
-  // pending 留着、用户点进去 discover 拒收——取后者。五档判定：文件不存在 / 读
-  // 异常 / 解析失败 / 结构不符（confirms 非数组或条目缺有效 id）/ 空清单（空与
+  // pending 留着、用户点进去 discover 拒收——取后者。七档判定：文件不存在 / 读
+  // 异常 / 解析失败 / 根值非对象 / confirms 非数组 / 条目缺有效 id / 空清单（空与
   // 「刚被清空的外域」证明力等价，不足）→ 一律不对账（保留通知）；仅「非空且全部
   // 条目带有效 id」→ 正常对账。OrgConfirm 无 anchor/domain 类域身份字段
   //（projects.ts OrgConfirm 勘察：id/kind/title/reason/payload/status/created_at）
@@ -951,15 +951,21 @@ export class SessionManager {
     } catch {
       return null; // 读异常：不对账
     }
-    let parsed: { confirms?: unknown };
+    let parsed: unknown;
     try {
-      parsed = JSON.parse(raw) as { confirms?: unknown };
+      parsed = JSON.parse(raw) as unknown;
     } catch {
       return null; // 解析失败（坏 JSON）：不对账
     }
-    if (!Array.isArray(parsed.confirms)) return null; // 结构不符：不对账
+    // 第七档（R1FIX3 P2-7）：根值非对象——JSON.parse 成功但根为 null/数字/字符串。
+    // 必须在取 .confirms 前判：根 null 时 parsed.confirms 直接抛 TypeError，
+    // 构造 SessionManager 整个炸掉，比「不对账保留通知」糟一个量级。数组也是
+    // object，会落进下一档（根数组取 .confirms 得 undefined → 非数组档拦下），
+    // 判序无新洞
+    if (typeof parsed !== "object" || parsed === null) return null; // 根值非对象：不对账
+    if (!Array.isArray((parsed as { confirms?: unknown }).confirms)) return null; // 结构不符：不对账
     const known = new Set<string>();
-    for (const c of parsed.confirms) {
+    for (const c of (parsed as { confirms: unknown[] }).confirms) {
       const id = (c as { id?: unknown } | null)?.id;
       if (typeof id !== "string" || !id) return null; // 条目畸形 = 文件证明力不足，整体不对账
       known.add(id);
@@ -3790,18 +3796,21 @@ export class SessionManager {
   //     首次拉起失败 / 看门狗接管 done+上限 failed）全部入账；旧设计「spawn 失败与
   //     断档补记不发帧」例外只针对在线弹窗通道 (a)（spawn 失败 CLI 同步拿 error 当
   //     场知道、重启补记用户在场），账面 (b) 不豁免。
-  //     排除项备案（#018-R1FIX2 P3-1，一项）：orgAction 无组 suggest-hold 台账行
-  //     （:orgAction case "suggest-hold" 的 !id 分支；COMMAND_ORG_ACTION 线上咽喉
-  //     未暴露该 action，仅内部漏斗可达）**不入本口**——纯审计台账
-  //     （auditOrgCommand 同类），判定依据三条：①同步回执即知晓：发起者当场收
-  //     COMMAND_ACK ok:true {ledgered:true}，「建议暂缓+解除条件」在发起时刻已达
-  //     在场方，结构化通知账的职责是给不在场端补账离线异步事实（派单终态/确认单产
-  //     生），不是回显发起者刚输入的内容；②无决策对象：无 gid、无确认卡、done 即
-  //     收口、receipt=发起者自述理由——后续无任何用户动作可依此通知发起（对照
-  //     failed 行有重派/换人/放弃、org-confirm 有 approve/reject），action 桶的价
-  //     值在「可操作」而该行不可操作；③入账即自扰：三端每端多一张「Leader 自己刚
-  //     记录的备忘」卡片，badge 虚高且无消费路径。N16③ 断言焊死该排除（台账行在、
-  //     通知账零新增）。
+  //     排除项备案（#018-R1FIX2 P3-1 立，R1FIX3 按真实入口重写，一项）：orgAction
+  //     无组 suggest-hold 台账行（:orgAction case "suggest-hold" 的 !id 分支）
+  //     **不入本口**——纯审计台账（auditOrgCommand 同类）。该行有真实线上入口：
+  //     POST /api/org action=suggest-hold 无 id（ws-server ORG_HTTP_ACTIONS 白名单
+  //     放行）同步返回 200 {ok:true,ledgered:true}，非「仅内部漏斗可达」（R1FIX2
+  //     备案此句有误，已删）；N16⑤ HTTP 探针焊死真实入口也排除。判定依据三条：
+  //     ①回执即知晓面：发起者当场收同步回执（HTTP 200/ledgered:true；WS 通道则
+  //     COMMAND_ACK 同内容），「建议暂缓+解除条件」在发起时刻已达在场方，结构化
+  //     通知账的职责是给不在场端补账离线异步事实（派单终态/确认单产生），不是回
+  //     显发起者刚收到的回执；②无决策对象：无 gid、无确认卡、done 即收口、
+  //     receipt=发起者自述理由——后续无任何用户动作可依此通知发起（对照 failed
+  //     行有重派/换人/放弃、org-confirm 有 approve/reject），action 桶的价值在
+  //     「可操作」而该行不可操作；③入账即自扰：三端每端多一张「Leader 自己刚
+  //     记录的备忘」卡片，badge 虚高且无消费路径。N16④-⑦ 断言焊死该排除（内部
+  //     漏斗与 HTTP 真入口两路：台账行在、通知账零新增零帧）。
   // (c) Leader 会话闭环：仅 failed 单注入回执唤醒（resumeAgent 先例=auto-revive）。
   //     省 token 口径：每条注入开一个 Leader 回合——done 单用户在端上/任务板可见，
   //     不打扰；失败是派单方必须当场知道并决策（重派/换人/放弃）的事，值得一个回合。
@@ -4078,10 +4087,12 @@ export class SessionManager {
           if (!reason) return { ok: false, error: "建议暂缓必须带一句理由" };
           if (!id) {
             // 无组暂缓（第五态最小形态）：纯台账留痕，回执即解除条件备忘。
-            // 终态协议显式排除（#018-R1FIX2 P3-1）：本行不入 notifyDispatchClosed
-            // 结构化通知账——auditOrgCommand 同类的纯审计面（同步 ACK ok+ledgered
-            // 已达发起者；无决策对象/不可操作；入账即三端自扰噪声），判定理由三条
-            // 全文见 notifyDispatchClosed 协议注释 (b) 排除项备案。
+            // 终态协议显式排除（#018-R1FIX2 P3-1 立，R1FIX3 按真实入口重写）：本行
+            // 不入 notifyDispatchClosed 结构化通知账——auditOrgCommand 同类的纯审计
+            // 面。入口属实存在（POST /api/org action=suggest-hold 无 id 同步 200/
+            // ledgered:true，非仅内部漏斗），但同步回执即知晓面；无决策对象/不可
+            // 操作；入账即三端自扰噪声——判定理由三条全文见 notifyDispatchClosed
+            // 协议注释 (b) 排除项备案。
             appendDispatch({
               ts: Date.now(), id: randomUUID(), tier: "暂缓", target: "org-leader",
               status: "done",
