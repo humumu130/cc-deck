@@ -1,0 +1,182 @@
+{
+ "schema_version": 1,
+ "diagram_type": "dataflow",
+ "meta": {
+  "title": "018 数据流与事实源（PM 口径）",
+  "locale": "zh-CN",
+  "quality_profile": "showcase",
+  "viewBox": [
+   1080,
+   460
+  ]
+ },
+ "stages": [
+  {
+   "label": "01 / 需求"
+  },
+  {
+   "label": "02 / 编排"
+  },
+  {
+   "label": "03 / 投递"
+  },
+  {
+   "label": "04 / 执行"
+  },
+  {
+   "label": "05 / 验收与固化"
+  }
+ ],
+ "nodes": [
+  {
+   "id": "user",
+   "type": "external",
+   "label": "用户",
+   "stage": 0,
+   "row": 0,
+   "sublabel": "需求 · 拍板"
+  },
+  {
+   "id": "pm",
+   "type": "security",
+   "label": "PM",
+   "stage": 1,
+   "row": 0,
+   "sublabel": "勘察 · 任务书 · 核验",
+   "tag": "设计判定 · 调度"
+  },
+  {
+   "id": "relay",
+   "type": "messagebus",
+   "label": "relay 命令通道",
+   "stage": 2,
+   "row": 0,
+   "sublabel": "COMMAND_MESSAGE",
+   "tag": "ws 8788"
+  },
+  {
+   "id": "worker",
+   "type": "backend",
+   "label": "worker",
+   "stage": 3,
+   "row": 0,
+   "sublabel": "实施 · 自查",
+   "tag": "codex exec"
+  },
+  {
+   "id": "events",
+   "type": "database",
+   "label": "events.ndjson",
+   "stage": 3,
+   "row": 1,
+   "sublabel": "回合事件流",
+   "tag": "唯一事实源"
+  },
+  {
+   "id": "probe",
+   "type": "security",
+   "label": "断言探针",
+   "stage": 4,
+   "row": 0,
+   "sublabel": "CDP · 20+ 断言",
+   "tag": "秒验"
+  },
+  {
+   "id": "git",
+   "type": "database",
+   "label": "git 提交 · 004/013",
+   "stage": 4,
+   "row": 1,
+   "sublabel": "规范固化",
+   "tag": "逐笔 · 代提交"
+  }
+ ],
+ "flows": [
+  {
+   "from": "user",
+   "to": "pm",
+   "label": "议题问询",
+   "labelDy": 26
+  },
+  {
+   "from": "pm",
+   "to": "user",
+   "label": "决策",
+   "variant": "dashed",
+   "labelDy": -26
+  },
+  {
+   "from": "pm",
+   "to": "relay",
+   "label": "任务书 · command_id",
+   "classification": "六件套",
+   "variant": "emphasis"
+  },
+  {
+   "from": "relay",
+   "to": "worker",
+   "label": "stdin 投递",
+   "route": "bottom-channel"
+  },
+  {
+   "from": "worker",
+   "to": "relay",
+   "label": "ACK ok:true",
+   "variant": "dashed"
+  },
+  {
+   "from": "worker",
+   "to": "events",
+   "label": "回合事件 · JSONL",
+   "labelDy": 24
+  },
+  {
+   "from": "worker",
+   "to": "probe",
+   "label": "交付文件",
+   "route": "straight"
+  },
+  {
+   "from": "probe",
+   "to": "git",
+   "label": "全绿 → 代提交",
+   "classification": "PM 核验后",
+   "labelDy": 24
+  },
+  {
+   "from": "worker",
+   "to": "git",
+   "label": "回单 + diff",
+   "variant": "dashed"
+  }
+ ],
+ "cards": [
+  {
+   "dot": "cyan",
+   "title": "事实源纪律",
+   "items": [
+    "events.ndjson 是唯一事实源，回单文件是交付证据",
+    "截图只存 /tmp，不进提交",
+    "进度账每单一行，事故复盘当日出"
+   ]
+  },
+  {
+   "dot": "amber",
+   "title": "投递与巡检",
+   "items": [
+    "派单帧必带 command_id，ACK 必核 ok:true",
+    "轮询通知不可靠，PM 主动巡检兜底",
+    "死会话收新消息自动 revive（dev relay）"
+   ]
+  },
+  {
+   "dot": "violet",
+   "title": "收口纪律",
+   "items": [
+    "探针全绿才放行提交，结构闸防文件尾泄漏",
+    "逐笔提交带 Co-Authored-By，可推送不合流",
+    "004/013 随收口同步，规范不漂移"
+   ]
+  }
+ ]
+}
