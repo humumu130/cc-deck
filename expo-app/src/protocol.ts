@@ -622,3 +622,39 @@ export function capabilityCardModel(input: {
     privacy: "引擎凭证只以环境变量或系统密钥引用保存在电脑端，不随快照下发，也不在本页显示。",
   };
 }
+
+// ─── E4b 通知 ACK 可见面（Setup 通知区模型 + 双击闸）：接线所需增量，纯函数零依赖 ───
+
+/** 待办通知行（Setup 通知区渲染模型）：key=源域稳定键（ackNotification 定位键），
+ * title 单行展示。语义=角标镜像（action 组且 actionable 且未决），与
+ * projectNotifications 的 badgeCount 同一口径——乐观 handled_at 一落账（ackNotification
+ * 乐观突变）行即刻消失（无再点位），ACK 失败回滚后行回来（重试=重点按钮） */
+export interface TodoRow {
+  key: string;
+  title: string;
+}
+
+export interface TodoSurface {
+  rows: TodoRow[]; // 有界 ≤TODO_SURFACE_MAX（390 宽不整屏失控）
+  overflow: number; // 溢出计数（「还有 N 条」角标行）
+}
+
+export const TODO_SURFACE_MAX = 8;
+
+export function todoSurface(items: readonly NotificationItem[] | null | undefined): TodoSurface {
+  if (!items || items.length === 0) return { rows: [], overflow: 0 };
+  const pending: NotificationItem[] = [];
+  for (const n of items) {
+    if (n.group !== "action" || !n.actionable) continue;
+    if (notificationHandled(n)) continue;
+    pending.push(n);
+  }
+  const rows = pending.slice(0, TODO_SURFACE_MAX).map((n) => ({ key: n.key, title: n.title }));
+  return { rows, overflow: pending.length - rows.length };
+}
+
+/** ACK 双击闸：飞行中同 key 再点 → skip（不双发命令）；出结果（onDone）后出闸。
+ * node 直测锁定「重复点击不双发」的调用面语义 */
+export function ackTapGuard(inFlight: ReadonlySet<string>, key: string): "skip" | "go" {
+  return inFlight.has(key) ? "skip" : "go";
+}

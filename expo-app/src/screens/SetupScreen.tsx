@@ -7,7 +7,7 @@ import { withA, type ThemeColors } from "../theme";
 import { LogoMark } from "../brand";
 import { useTheme, useThemeStyles } from "../theme-context";
 import { store, useRelay, identityOf, type ServerEntry } from "../store";
-import { capabilityCardModel, capsuleSubline } from "../protocol"; // E4a 只读投影（纯函数，protocol.ts E4a 段）
+import { ackTapGuard, capabilityCardModel, capsuleSubline, todoSurface } from "../protocol"; // E4a 只读投影 + E4b ACK 可见面（纯函数，protocol.ts 段）
 import { uuid } from "../fmt";
 import { currentVersion } from "../updates";
 import { useKbHeight } from "../kb";
@@ -421,6 +421,27 @@ export default function SetupScreen({ onClose, editId, initialScan }: Props) {
     () => capabilityCardModel({ schemaVersion: snap.schemaVersion, sourceCapabilities: snap.sourceCapabilities, models: snap.models }),
     [snap.schemaVersion, snap.sourceCapabilities, snap.models],
   );
+  // E4b 通知 ACK 接线（Setup 通知区最小面，018 :643「通知收口」）：store.ackNotification
+  // 已交付乐观+对账+回滚+不重试风暴（E3b）；本面只管调用纪律——飞行中同 key 重复点击
+  // 不双发（ackTapGuard 纯闸）、失败行内红字可见、重试=用户重点（回滚后行回来），
+  // 绝不自动重试。旧 relay（通知域 null）与无未决 → todoSurface 空 → 整区隐藏
+  const [ackErrs, setAckErrs] = useState<Record<string, string>>({});
+  const ackInFlight = useRef<Set<string>>(new Set());
+  const ackRow = (key: string) => {
+    if (ackTapGuard(ackInFlight.current, key) === "skip") return;
+    ackInFlight.current.add(key);
+    setAckErrs((m) => {
+      if (!(key in m)) return m;
+      const next = { ...m };
+      delete next[key];
+      return next;
+    });
+    store.ackNotification(key, "handled", (r) => {
+      ackInFlight.current.delete(key);
+      if (!r.ok) setAckErrs((m) => ({ ...m, [key]: r.err || "操作失败，请重试" }));
+    });
+  };
+  const todo = useMemo(() => todoSurface(snap.notifications), [snap.notifications]);
   const connDotColor =
     snap.connState === "connecting" || snap.connState === "reconnecting" ? c.working : c.waiting;
   let connMain = "";
@@ -563,6 +584,31 @@ export default function SetupScreen({ onClose, editId, initialScan }: Props) {
                 </View>
               ))}
               <Text style={s.capPrivacy}>{cap.privacy}</Text>
+            </View>
+          ) : null}
+
+          {/* E4b 通知 ACK 区（通知收口最小面）：未决 actionable 行内「知道了」→
+              store.ackNotification（乐观即消失；失败回滚+行内红字，重试=重点）。
+              无未决 / 旧 relay（通知域不可用）整区隐藏；行有界 ≤8 + 溢出计数 */}
+          {todo.rows.length ? (
+            <View style={s.capCard}>
+              <Text style={s.label}>待办通知{todo.overflow > 0 ? `（另 ${todo.overflow} 条）` : ""}</Text>
+              {todo.rows.map((r) => (
+                <View key={r.key}>
+                  <View style={s.todoRow}>
+                    <Text style={s.todoT} numberOfLines={1}>{r.title}</Text>
+                    <Pressable
+                      style={[s.todoAck, ackInFlight.current.has(r.key) && s.todoAckOff]}
+                      disabled={ackInFlight.current.has(r.key)}
+                      android_ripple={{ color: c.tintSoft, borderless: false, radius: 15 }}
+                      onPress={() => ackRow(r.key)}
+                    >
+                      <Text style={s.todoAckT}>知道了</Text>
+                    </Pressable>
+                  </View>
+                  {ackErrs[r.key] ? <Text style={s.todoErr} numberOfLines={2}>{ackErrs[r.key]}</Text> : null}
+                </View>
+              ))}
             </View>
           ) : null}
 
@@ -742,6 +788,13 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
   capValue: { color: c.text, fontSize: 12.5, fontWeight: "600", textAlign: "right" },
   capValueOff: { color: c.faint, fontWeight: "500" },
   capPrivacy: { color: c.faint, fontSize: 11, lineHeight: 16, marginTop: 8 },
+  // E4b 待办通知区：行=title 左单行 + 「知道了」钮；失败红字随行
+  todoRow: { flexDirection: "row", alignItems: "center", gap: 10, paddingVertical: 7, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: c.line },
+  todoT: { color: c.text, fontSize: 13, flex: 1 },
+  todoAck: { backgroundColor: c.panel2, borderWidth: 1, borderColor: c.line, borderRadius: 10, paddingHorizontal: 12, paddingVertical: 5 },
+  todoAckOff: { opacity: 0.5 },
+  todoAckT: { color: c.text, fontSize: 12, fontWeight: "600" },
+  todoErr: { color: c.error, fontSize: 11.5, marginTop: 2, marginBottom: 4 },
   saveBarFix: {
     paddingHorizontal: 18, paddingTop: 10, paddingBottom: 12,
     backgroundColor: c.panel, borderTopWidth: 1, borderTopColor: c.line,

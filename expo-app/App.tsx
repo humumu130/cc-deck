@@ -7,7 +7,7 @@ import type { TaskDoneReport } from "./src/store";
 import { isConfirmTodo, displaySrcName } from "./src/fmt";
 import type { DetailBackHandle } from "./src/screens/DetailScreen";
 import { projectNotifications, type SessionState } from "./src/protocol";
-import { ensureNotifPermission, fgSupported, notifyAlert, startForegroundService, updateForeground, updateForegroundStats } from "./src/notify";
+import { ensureNotifPermission, fgStatsKey, fgStatsTitle, fgSupported, markPermHintShown, notifPermissionState, notifyAlert, openNotifSettings, permHintActive, startForegroundService, updateForeground, updateForegroundStats } from "./src/notify";
 import { startWatchGateway } from "./src/watch";
 import { ThemeProvider, useTheme, useThemeStyles } from "./src/theme-context";
 import { useKbHeight } from "./src/kb";
@@ -578,6 +578,24 @@ function UpdateBanner({ info, onSkip }: { info: UpdateInfo; onSkip: () => void }
   );
 }
 
+// E4b 权限拒绝横幅（018 :419「权限拒绝可见」）：一次性薄条浮层，首屏/设置页通用。
+// 语义在 notify.ts（permHintActive 会话级去重 + openNotifSettings 深链），本组件只渲染
+function PermBar({ onDismiss }: { onDismiss: () => void }) {
+  const insets = useSafeAreaInsets();
+  const st = useThemeStyles(makeStyles);
+  return (
+    <View style={[st.permBar, { top: insets.top + 4 }]}>
+      <Text style={st.permBarT} numberOfLines={1}>通知权限未授予，审批提醒不可见</Text>
+      <Pressable hitSlop={6} onPress={() => openNotifSettings()}>
+        <Text style={st.permBarA}>去设置</Text>
+      </Pressable>
+      <Pressable hitSlop={8} onPress={onDismiss}>
+        <Text style={st.permBarX}>✕</Text>
+      </Pressable>
+    </View>
+  );
+}
+
 function Shell() {
   const { c, mode } = useTheme();
   const st = useThemeStyles(makeStyles);
@@ -801,26 +819,54 @@ function Shell() {
       for (const s of snap.sessions) if (s.status in dist) dist[s.status] = (dist[s.status] ?? 0) + 1;
       // E4a 通知 projection（007 IA 分组口径）：未决 actionable 计数折进前台通知标题。
       // 旧 relay（notifications=null）badge=0 不出「待办」位（按能力隐藏）；NOTIFICATIONS_
-      // UPDATED 值替换帧驱动重算，fgText 去抖兜住重复原生调用（角标变化才重发）
+      // UPDATED 值替换帧驱动重算，fgText 去抖兜住重复原生调用（角标变化才重发）。
+      // E4b：S| 键与 title 组装抽 notify.ts 纯函数（fgStatsKey/fgStatsTitle），输出
+      // 与旧实现逐字节一致——重连快照/回前台同账重放时键不变，原生不重发、通知不闪跳
       const badge = projectNotifications(snap.notifications).badgeCount;
-      text = `S|${dist.WORKING ?? 0}|${dist.WAITING ?? 0}|${dist.ERROR ?? 0}|${dist.DONE ?? 0}|${badge}`;
+      text = fgStatsKey(dist.WORKING ?? 0, dist.WAITING ?? 0, dist.ERROR ?? 0, dist.DONE ?? 0, badge);
     }
     if (text === fgText.current) return;
     fgText.current = text;
     if (text.startsWith("S|")) {
       const [, w, wa, e, dn, nb] = text.split("|").map(Number);
       // #370 title=状态概览（去软件名防展开双标题）：待办置顶，其余有活跃态列计数，全空闲列完成数
-      const bits: string[] = [];
-      if (nb) bits.push(`待办${nb}`);
-      if (w) bits.push(`工作${w}`);
-      if (wa) bits.push(`等待${wa}`);
-      if (e) bits.push(`错误${e}`);
-      const title = bits.length ? `${bits.join(" · ")}｜共${w + wa + e + dn}会话` : `空闲｜${dn} 会话`;
-      updateForegroundStats(w, wa, e, dn, title);
+      updateForegroundStats(w, wa, e, dn, fgStatsTitle(w, wa, e, dn, nb));
     } else {
       updateForeground(text);
     }
   }, [snap.sessions, snap.connected, snap.connState, snap.notifications]);
+
+  // E4b 权限拒绝可见且不重试风暴：连接成功后请求权限（每次冷启首连一次），被拒 →
+  // 一次性横幅（notify.ts permHintActive 会话级去重，重连周期反复请求不重复弹）；
+  // 用户「去设置」（主动动作不占额度）→ 回前台复查 → 授予后横幅消失
+  const [permDenied, setPermDenied] = useState(false);
+  const permDismissedRef = useRef(false);
+  useEffect(() => {
+    if (!snap.connected) return;
+    void (async () => {
+      const granted = await ensureNotifPermission();
+      if (granted) {
+        setPermDenied(false);
+        return;
+      }
+      if (permHintActive(granted, permDismissedRef.current)) {
+        markPermHintShown();
+        setPermDenied(true);
+      }
+    })();
+  }, [snap.connected]);
+
+  // 从系统设置返回（AppState active）复查授权态：已授予 → 横幅消失；仍拒 → 常驻不重弹
+  useEffect(() => {
+    if (!permDenied) return;
+    const sub = AppState.addEventListener("change", (st2) => {
+      if (st2 !== "active") return;
+      void notifPermissionState().then((g) => {
+        if (g) setPermDenied(false);
+      });
+    });
+    return () => sub.remove();
+  }, [permDenied]);
 
   useEffect(() => {
     const sub = AppState.addEventListener("change", (st) => {
@@ -844,6 +890,15 @@ function Shell() {
   return (
     <SafeAreaProvider>
       <StatusBar style={mode === "dark" ? "light" : "dark"} />
+      {/* E4b 权限拒绝可见：一次性横幅浮层（首屏/设置页通用，授予或关闭后消失） */}
+      {permDenied ? (
+        <PermBar
+          onDismiss={() => {
+            permDismissedRef.current = true;
+            setPermDenied(false);
+          }}
+        />
+      ) : null}
       {hasCfg && !setup ? (
         <>
           {(!detail || navPhase !== "idle") && (
@@ -1084,4 +1139,14 @@ const makeStyles = (c: ThemeColors) => StyleSheet.create({
     backgroundColor: c.brandA, overflow: "hidden",
   },
   wpAllowT: { color: "#fff", fontSize: 14, fontWeight: "700" },
+  // E4b 权限拒绝横幅：顶部浮层薄条（一次性提示，可关），390 宽单行收纳
+  permBar: {
+    position: "absolute", left: 12, right: 12, zIndex: 95, elevation: 9,
+    flexDirection: "row", alignItems: "center", gap: 10,
+    backgroundColor: c.panel, borderWidth: 1, borderColor: c.waiting,
+    borderRadius: 12, paddingHorizontal: 12, paddingVertical: 9,
+  },
+  permBarT: { color: c.text, fontSize: 12.5, flex: 1 },
+  permBarA: { color: c.brandA, fontSize: 12.5, fontWeight: "700" },
+  permBarX: { color: c.faint, fontSize: 13, paddingHorizontal: 2 },
 });
