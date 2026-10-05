@@ -1,8 +1,18 @@
 # v2 开发团队编制表（#92，2026-10-06 用户放行开工）
 
 > 依据：`docs/v2-dev-plan.md` 定稿 41 单。工作树=~/dev/cc-deck-m1（feat/matrix-team-m2）。
-> 现编制 4+1：PM=5244c206（Codex）、H=4aa55f60（前端/web-console 锁）、G=5b47be31（relay/协议/存储熟手）、J=7b5ffab6（GLM，测试/审查）、Leader=ext-7f5c3601（核验/代提交/锚单）。
+> 现编制 4+1（2026-10-06 核验订正：以会话号为准，双代号钉死对应）：
+
+| 角色 | 会话号 | 开卡代号 | Leader 惯用代号 | 引擎/模型 |
+|---|---|---|---|---|
+| PM | 5244c206 | PM | PM | Codex 引擎（兼架构/UI 设计） |
+| 前端 worker | 4aa55f60 | worker F | H | Claude Code CLI / claude-sonnet-5 |
+| relay worker | 5b47be31 | worker E | G | Claude Code CLI / claude-sonnet-5 |
+| 测试/审查 worker | 7b5ffab6 | worker I | J | Claude Code CLI（GLM 档 / glm-5.3） |
+| Leader | ext-7f5c3601 | — | — | Claude Agent SDK / glm-5.3（核验/代提交/锚单，不下场写 worker 代码） |
+
 > 纪律：PM 不下场写 worker 代码（018 §5.7）；worker 不 commit；同靶子锁显式串行；Leader 只做核验/代提交与明确承担的锚单。
+> 扩编点：K（存储/迁移熟手，sonnet 档建议）＝M11 导入线；L（Expo/Tauri 前端）＝M1-3 呈现线。开卡时引导词代号顺延（下一字母），并在本表登记会话号。
 
 ## 前端军规（用户拍板 2026-10-06，所有前端单任务书固定段）
 
