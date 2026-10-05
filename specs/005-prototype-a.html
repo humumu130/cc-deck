@@ -518,6 +518,8 @@
     .session-state-operation { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     .session-state-elapsed { flex: 0 0 auto; color: var(--text-strong); font-variant-numeric: tabular-nums; }
     .artifact-row { display: flex; align-items: center; gap: 7px; padding: 8px 0; border-bottom: 1px solid var(--line-soft); color: var(--text); font-size: 10px; }
+    .artifact-row-icon { display: inline-flex; flex: 0 0 auto; color: var(--info); }
+    .artifact-row-icon .icon-inline { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; vertical-align: -3px; }
     .artifact-row span:last-child { margin-left: auto; color: var(--faint); font-family: var(--mono); }
     .artifact-browser { display: grid; gap: 10px; }
     .artifact-summary { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; padding-bottom: 2px; color: var(--dim); font-size: 10px; }
@@ -736,7 +738,7 @@
     .mobile-card strong { flex: 1; min-width: 0; color: var(--text-strong); font-size: 11.5px; }
     .mobile-card p { margin: 5px 0 0 35px; color: var(--dim); font-size: 10px; }
     .mobile-card .avatar { display: grid; place-items: center; flex: 0 0 28px; width: 28px; height: 28px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface1); color: var(--text); }
-    .mobile-card .avatar .icon-status { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+    .icon-status { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
     .mobile-detail-tabs { display: flex; gap: 17px; overflow-x: auto; overflow-y: hidden; padding: 0 14px; border-right: 0; border-bottom: 1px solid var(--line-soft); box-shadow: none; scrollbar-width: none; }
     .mobile-detail-tabs::-webkit-scrollbar { display: none; }
     .mobile-detail-tabs button { position: relative; flex: 0 0 auto; padding: 10px 0 8px; border: 0; background: transparent; color: var(--dim); cursor: pointer; font-size: 10px; }
@@ -774,6 +776,8 @@
     .engine-badge, .source-badge { display: inline-flex; align-items: center; gap: 4px; white-space: nowrap; font-size: 10px; line-height: 1; }
     .engine-badge { padding: 3px 6px; border: 1px solid var(--identity-line); border-radius: 999px; background: var(--identity-bg); color: var(--identity-ink); }
     .engine-badge::before { content: ""; width: 6px; height: 6px; border-radius: 2px; background: currentColor; }
+    .engine-badge:has(.engine-icon)::before { display: none; }
+    .engine-badge .engine-icon { width: 12px; height: 12px; fill: none; stroke: var(--engine-color, currentColor); stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
     .engine-badge.claude { --engine-color: var(--engine-claude); }
     .engine-badge.codex { --engine-color: var(--engine-codex); }
     .engine-badge.trae { --engine-color: var(--engine-trae); }
@@ -1087,16 +1091,18 @@
 
       const sessionQueueData = { action: [{ id: "release", status: "waiting", title: "0.6.0-test.19 出包", tag: "待收单", tagClass: "action", summary: "验收单已回填 2/3 · 12 分钟前", engine: "Claude", engineClass: "claude", source: "公司电脑", selected: true }, { id: "mobile", status: "error", title: "worker-mobile 失联", tag: "接替", tagClass: "danger", summary: "Claude 额度已用尽 · 8 分钟前", engine: "Qwen Code", engineClass: "qwen", source: "家里 iMac" }, { id: "team-plan", status: "waiting", title: "团队编制确认", tag: "待确认", tagClass: "action", summary: "cc-deck M1 攻坚团 · Leader 已提交", engine: "Trae", engineClass: "trae", source: "公司电脑" }, { id: "ui", status: "done", title: "ui-review 走查", summary: "当前任务：检查 rail 方案 · 上下文 58%", engine: "Codex", engineClass: "codex", source: "公司电脑" }, { id: "board", status: "done", title: "relay 任务板", summary: "T-12/T-15 并行 · 4/9", engine: "ZCode", engineClass: "zcode", source: "家里 iMac" }], all: [{ id: "release", status: "waiting", title: "0.6.0-test.19 出包", tag: "待收单", tagClass: "action", summary: "验收单 · 1 小时前", engine: "Claude", engineClass: "claude", source: "公司电脑", selected: true }, { id: "ui", status: "done", title: "ui-review 走查", summary: "刚刚活跃 · 58%", engine: "Codex", engineClass: "codex", source: "公司电脑" }, { id: "board", status: "done", title: "relay 任务板", summary: "运行中 · 4/9", engine: "ZCode", engineClass: "zcode", source: "家里 iMac" }, { id: "mobile", status: "error", title: "worker-mobile 失联", summary: "需接替 · 8 分钟前", engine: "Qwen Code", engineClass: "qwen", source: "家里 iMac" }, { id: "android", status: "waiting", title: "android 构建", summary: "等待安卓产物 · 3 小时前", engine: "CodeBuddy", engineClass: "codebuddy", source: "公司电脑" }] };
 
-      const mobileSessionData = [{ id: "release", title: "0.6.0-test.19 出包", tag: "待收单", tagClass: "action", summary: "验收单已回填 2/3 · 点击确认最后一项", engine: "Claude", engineClass: "claude", source: "公司电脑", avatar: "status-ok", icon: "check", primary: true }, { id: "mobile", title: "worker-mobile 失联", tag: "接替", tagClass: "danger", summary: "Claude 额度已用尽 · 验收槽不回落同厂商", engine: "Qwen Code", engineClass: "qwen", source: "家里 iMac", avatar: "status-alert", icon: "alert" }, { id: "team-plan", title: "团队编制确认", tag: "待确认", tagClass: "action", summary: "Leader 已提交编制方案 · 3 开发 + 独立验收", engine: "Trae", engineClass: "trae", source: "公司电脑", avatar: "status-action", icon: "users" }];
+      const mobileSessionData = [{ id: "release", title: "0.6.0-test.19 出包", tag: "待收单", tagClass: "action", summary: "验收单已回填 2/3 · 点击确认最后一项", engine: "Claude", engineClass: "claude", source: "公司电脑", avatar: "status-action", icon: "clock", primary: true }, { id: "mobile", title: "worker-mobile 失联", tag: "接替", tagClass: "danger", summary: "Claude 额度已用尽 · 验收槽不回落同厂商", engine: "Qwen Code", engineClass: "qwen", source: "家里 iMac", avatar: "status-alert", icon: "alert" }, { id: "team-plan", title: "团队编制确认", tag: "待确认", tagClass: "action", summary: "Leader 已提交编制方案 · 3 开发 + 独立验收", engine: "Trae", engineClass: "trae", source: "公司电脑", avatar: "status-action", icon: "clock" }];
       const notificationData = [{ key: "release", active: true, domain: "session", session: "release", mobileSource: "release", leftTitle: "0.6.0-test.19 就绪待收单", leftSummary: "T-13 已回填 2/3 · 12 分钟前", desktopKicker: "来源会话 · 0.6.0-test.19 出包", time: "12 分钟前", desktopTitle: "验收回填 2/3，等待最后一项确认收单", desktopCopy: "谁：worker-web · 什么事：T-13 独立出包已完成 · 等什么：公司网下检查更新并确认收单", mobileTitle: "0.6.0-test.19 待收单", mobileCopy: "来源会话 · T-13 已回填 2/3 · 等最后一项检查", engine: "Claude", engineClass: "claude", source: "公司电脑", tag: "验收", tagClass: "action", action: "resolve", actionLabel: "标记已读", jumpLabel: "去会话验收" }, { key: "team-plan", active: true, domain: "team", teamAction: "takeover", mobileSource: "team-plan", leftTitle: "团队动作待确认", leftSummary: "失联接替与编制确认 · 8 分钟前", desktopKicker: "来源团队 · cc-deck M1 攻坚团", time: "8 分钟前", desktopTitle: "worker-mobile 失联，编制方案也等待确认", desktopCopy: "谁：Leader / worker-mobile · 什么事：额度链走尽 · 等什么：选择接替引擎并确认 3 开发 + 独立验收编制", mobileTitle: "团队动作待确认", mobileCopy: "来源团队 · worker-mobile 失联 · 选择接替并确认编制", engine: "Qwen Code", engineClass: "qwen", source: "公司电脑", tag: "需处理", tagClass: "danger", action: "pause", actionLabel: "暂停提醒", jumpLabel: "去团队接替", confirmLabel: "去团队确认" }, { key: "relay", active: false, leftTitle: "worker-relay 滞留 25 分", leftSummary: "已通知 Leader · 30 分钟前", desktopKicker: "来源会话 · relay 任务板", time: "30 分钟前", desktopTitle: "worker-relay 滞留 25 分", desktopCopy: "已通知 Leader；这是提醒类动态，不计入需行动 badge。", mobileTitle: "worker-relay 滞留 25 分", mobileCopy: "来源会话 · 已通知 Leader，不计入需行动 badge", engine: "Codex", engineClass: "codex", source: "公司电脑", tag: "历史", tagClass: "", action: "ack", actionLabel: "确认已知" }];
       const teamMembers = [{ name: "Leader", role: "glm-5.3 · 调度", engine: "Trae", engineClass: "trae", source: "公司电脑", avatar: "leader", glyph: "✦" }, { name: "worker-web", role: "开发 · 运行中", engine: "Claude", engineClass: "claude", source: "公司电脑", avatar: "worker", glyph: "W" }, { name: "worker-mobile", role: "失联 · 待接替", engine: "Qwen Code", engineClass: "qwen", source: "家里 iMac", avatar: "worker", glyph: "M" }, { name: "验收槽", role: "独立厂商 · 待验收", engine: "ZCode", engineClass: "zcode", source: "公司电脑", avatar: "qa", glyph: "QA" }];
       const teamTasks = [{ lane: "待认领", count: "2", title: "T-21 导入码迁移", copy: "等待 worker-web", engine: "CodeBuddy", engineClass: "codebuddy", source: "公司电脑", tag: "待派单", tagClass: "" }, { lane: "进行中", count: "4", title: "T-12 relay 事件流", copy: "worker-relay · 48%", engine: "Codex", engineClass: "codex", source: "公司电脑", tag: "运行中", tagClass: "info" }, { lane: "进行中", count: "4", title: "T-15 手机列表", copy: "worker-mobile · 72%", engine: "Qwen Code", engineClass: "qwen", source: "家里 iMac", tag: "运行中", tagClass: "info" }, { lane: "待验收", count: "2", title: "T-13 更新通道隔离", copy: "独立出包已完成", assignee: "worker-web · 执行者", assigneeClass: "worker", assigneeGlyph: "W", assigneeEngine: "Claude", assigneeEngineClass: "claude", assigneeSource: "公司电脑", tag: "验收单", tagClass: "action" }, { lane: "待装机", count: "2", title: "T-14 验收槽", copy: "回填 2/3", assignee: "Leader · 编排", assigneeClass: "leader", assigneeGlyph: "✦", assigneeEngine: "Trae", assigneeEngineClass: "trae", assigneeSource: "公司电脑", tag: "待收单", tagClass: "action" }, { lane: "完成", count: "1", title: "T-10 版本同步", copy: "已合并 main", engine: "ZCode", engineClass: "zcode", source: "家里 iMac", tag: "完成", tagClass: "done" }];
-      const identityMarkup = (item, includeEngine = true) => `<div class="identity-cluster">${includeEngine ? `<span class="engine-badge ${item.engineClass}">${item.engine}</span>` : ""}<span class="source-badge">${item.source}</span></div>`;
+      const engineIconFor = (engineClass = "") => engineClass === "claude" ? "chat" : engineClass === "codex" ? "code" : engineClass === "trae" ? "sliders" : "server";
+      const engineBadgeMarkup = (item) => `<span class="engine-badge ${item.engineClass}"><svg class="engine-icon" aria-hidden="true"><use href="#icon-${engineIconFor(item.engineClass)}"></use></svg>${item.engine}</span>`;
+      const identityMarkup = (item, includeEngine = true) => `<div class="identity-cluster">${includeEngine ? engineBadgeMarkup(item) : ""}<span class="source-badge">${item.source}</span></div>`;
       const renderSessionCard = (item, variant) => variant === "mobile" ? `<div class="mobile-card${item.primary ? " primary" : ""}" data-open-detail="${item.id}"><div class="row"><span class="avatar ${item.avatar}"><svg class="icon-status" aria-hidden="true"><use href="#icon-${item.icon}"></use></svg></span><strong>${item.title}</strong>${item.tag ? `<span class="tag ${item.tagClass}">${item.tag}</span>` : ""}</div><p>${item.summary}</p>${identityMarkup(item)}</div>` : `<div class="queue-card${item.selected ? " selected" : ""}" data-session-card="${item.id}"><div class="row"><i class="status-dot ${item.status}"></i><strong>${item.title}</strong>${item.tag ? `<span class="tag ${item.tagClass}">${item.tag}</span>` : ""}</div><p>${item.summary}</p>${identityMarkup(item)}</div>`;
       const getSessionProject = (item) => item.id === "android" ? "windclaw-qclaw" : "cc-deck";
       const sessionPendingItems = () => sessionQueueData.action.slice(0, 3);
       const sessionOtherItems = () => sessionQueueData.all.filter((item) => !sessionPendingItems().some((pending) => pending.id === item.id));
-      const mobileSessionCardData = (item) => ({ ...item, avatar: item.status === "error" ? "status-alert" : item.status === "waiting" ? "status-action" : "status-ok", icon: item.status === "error" ? "alert" : item.status === "waiting" ? "check" : "info", primary: false });
+      const mobileSessionCardData = (item) => ({ ...item, avatar: item.status === "error" ? "status-alert" : item.status === "waiting" ? "status-action" : "status-ok", icon: item.status === "error" ? "alert" : item.status === "waiting" ? "clock" : "check", primary: false });
       const renderSessionGroup = (group, items, variant) => `<div class="session-group" data-session-group="${group}"><div class="queue-group"><span>${group === "pending" ? "待处理" : getSessionProject(items[0] || { id: "" })}</span> · <span data-session-group-count>${items.length}</span></div>${items.map((item) => renderSessionCard(item, variant)).join("")}</div>`;
       const renderSessionQueue = () => { const other = sessionOtherItems(); return `${renderSessionGroup("pending", sessionPendingItems(), "desktop")}<div class="session-group" data-session-group="other"><div class="queue-group"><span>其他会话</span> · <span data-session-group-count>${other.length}</span></div>${[...new Set(other.map(getSessionProject))].map((project) => renderSessionGroup("project", other.filter((item) => getSessionProject(item) === project), "desktop")).join("")}</div>`; };
       const renderMobileSessionStream = () => {
@@ -1238,6 +1244,11 @@
         if (!sprite.querySelector("#icon-layers")) sprite.insertAdjacentHTML("beforeend", '<symbol id="icon-layers" viewBox="0 0 24 24"><polygon points="12 2 21 7 12 12 3 7 12 2"></polygon><polyline points="3 12 12 17 21 12"></polyline><polyline points="3 17 12 22 21 17"></polyline></symbol>');
         if (!sprite.querySelector("#icon-sliders")) sprite.insertAdjacentHTML("beforeend", '<symbol id="icon-sliders" viewBox="0 0 24 24"><line x1="4" y1="6" x2="20" y2="6"></line><line x1="4" y1="12" x2="20" y2="12"></line><line x1="4" y1="18" x2="20" y2="18"></line><circle cx="9" cy="6" r="2"></circle><circle cx="15" cy="12" r="2"></circle><circle cx="10" cy="18" r="2"></circle></symbol>');
         if (!sprite.querySelector("#icon-package")) sprite.insertAdjacentHTML("beforeend", '<symbol id="icon-package" viewBox="0 0 24 24"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"></path><polyline points="3.27 6.96 12 12.01 20.73 6.96"></polyline><line x1="12" y1="22.08" x2="12" y2="12"></line><line x1="16.5" y1="9.4" x2="7.5" y2="4.21"></line></symbol>');
+        if (!sprite.querySelector("#icon-file-text")) sprite.insertAdjacentHTML("beforeend", '<symbol id="icon-file-text" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8Z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="8" y1="13" x2="16" y2="13"></line><line x1="8" y1="17" x2="16" y2="17"></line><line x1="8" y1="9" x2="10" y2="9"></line></symbol>');
+        if (!sprite.querySelector("#icon-code")) sprite.insertAdjacentHTML("beforeend", '<symbol id="icon-code" viewBox="0 0 24 24"><polyline points="16 18 22 12 16 6"></polyline><polyline points="8 6 2 12 8 18"></polyline><line x1="14" y1="4" x2="10" y2="20"></line></symbol>');
+        if (!sprite.querySelector("#icon-archive")) sprite.insertAdjacentHTML("beforeend", '<symbol id="icon-archive" viewBox="0 0 24 24"><path d="M3 6h18v14H3Z"></path><path d="M3 6l2-3h14l2 3M8 10h8M10 14h4"></path></symbol>');
+        if (!sprite.querySelector("#icon-image")) sprite.insertAdjacentHTML("beforeend", '<symbol id="icon-image" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2"></rect><circle cx="8.5" cy="8.5" r="1.5"></circle><path d="m21 15-5-5L5 21"></path></symbol>');
+        if (!sprite.querySelector("#icon-clock")) sprite.insertAdjacentHTML("beforeend", '<symbol id="icon-clock" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"></circle><polyline points="12 7 12 12 15 14"></polyline></symbol>');
         const info = sprite.querySelector("#icon-info");
         if (info) info.innerHTML = '<circle cx="12" cy="12" r="10"></circle><line x1="12" y1="16" x2="12" y2="12"></line><line x1="12" y1="8" x2="12.01" y2="8"></line>';
       }
@@ -1987,9 +1998,33 @@
         ] }
       ];
 
+      const artifactIconForFile = (name = "") => {
+        const extension = name.toLowerCase().split(".").pop();
+        if (["md", "txt", "rst", "adoc"].includes(extension)) return "file-text";
+        if (["js", "jsx", "ts", "tsx", "py", "rs", "go", "java", "c", "h", "cpp", "cc", "css", "html", "vue", "sh"].includes(extension)) return "code";
+        if (["zip", "tar", "gz", "tgz", "bz2", "xz", "7z", "rar"].includes(extension)) return "archive";
+        if (["png", "jpg", "jpeg", "gif", "webp", "svg", "ico"].includes(extension)) return "image";
+        if (["apk", "ipa", "dmg", "exe", "msi"].includes(extension)) return "package";
+        if (["json", "toml", "yaml", "yml", "ini", "env"].includes(extension)) return "gear";
+        return "clip";
+      };
+      const artifactIconMarkup = (name) => `<svg class="icon-inline artifact-type-icon" aria-hidden="true"><use href="#icon-${artifactIconForFile(name)}"></use></svg>`;
+      function hydrateArtifactRows() {
+        document.querySelectorAll(".artifact-row").forEach((row) => {
+          const file = row.textContent.match(/(?:[\w.-]+\/)*[\w.-]+\.[a-z0-9]+/i)?.[0];
+          if (!file) return;
+          const existingIcon = row.querySelector("svg.icon-inline");
+          if (existingIcon) {
+            existingIcon.classList.add("artifact-type-icon");
+            existingIcon.innerHTML = `<use href="#icon-${artifactIconForFile(file)}"></use>`;
+            return;
+          }
+          row.insertAdjacentHTML("afterbegin", `<span class="artifact-row-icon">${artifactIconMarkup(file)}</span>`);
+        });
+      }
       function artifactFileMarkup(file) {
         const failureAttr = file.failure ? ` data-artifact-failure="${file.failure}"` : "";
-        return `<div class="artifact-file"${failureAttr} data-artifact-file="${file.name}"><span class="artifact-file-icon"><svg class="icon-inline" aria-hidden="true"><use href="#icon-package"></use></svg></span><div class="artifact-file-main"><span class="artifact-file-name">${file.name}</span><span class="artifact-file-dir">${file.dir || "当前工作目录"}</span></div><span class="artifact-file-meta" data-artifact-meta>${file.size} · ${file.time}</span>${file.anomaly ? `<span class="artifact-file-anomaly">${file.anomaly}</span>` : ""}${file.failure ? `<span class="artifact-file-error">${file.failure}</span><button class="artifact-file-retry" type="button" data-artifact-file-retry>重试</button>` : ""}</div>`;
+        return `<div class="artifact-file"${failureAttr} data-artifact-file="${file.name}"><span class="artifact-file-icon">${artifactIconMarkup(file.name)}</span><div class="artifact-file-main"><span class="artifact-file-name">${file.name}</span><span class="artifact-file-dir">${file.dir || "当前工作目录"}</span></div><span class="artifact-file-meta" data-artifact-meta>${file.size} · ${file.time}</span>${file.anomaly ? `<span class="artifact-file-anomaly">${file.anomaly}</span>` : ""}${file.failure ? `<span class="artifact-file-error">${file.failure}</span><button class="artifact-file-retry" type="button" data-artifact-file-retry>重试</button>` : ""}</div>`;
       }
 
       function artifactGroupMarkup(group, options = {}) {
@@ -2760,6 +2795,7 @@
       setupMobileSettingsContent();
       normalizeAiMessages();
       normalizeStatistics();
+      hydrateArtifactRows();
       wireCardDensityControls();
       setupSourceGroupBars();
       mountConnectionCapsules();
