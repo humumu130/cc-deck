@@ -1067,6 +1067,19 @@
   #srcChips button span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   #srcChips button.on { color: var(--text); border-color: rgba(217,119,87,.6); background: rgba(217,119,87,.12); }
   #srcChips button i { width: 7px; height: 7px; border-radius: 50%; flex: none; }
+  /* #018-W1a 源胶囊：状态点（在线=完成绿/离线=弱化灰点）+ legacy 必要异常小标；
+     源级会话统计不进顶部（去逐源 N 计数，总数只在「全部」chip） */
+  #srcChips button i.src-on { background: var(--done); }
+  #srcChips button i.src-off { background: var(--dim); opacity: .45; }
+  #srcChips button .src-ex {
+    font-style: normal; font-size: 9.5px; line-height: 1; padding: 2px 4px; border-radius: 4px;
+    color: var(--dim); border: 1px solid var(--border); margin-left: 2px; flex: none;
+  }
+  /* #018-W1a 单流两组段头（待处理/其他会话）：与设置页「标记+标题」分区语言同族，
+     小号粗体 + 实际渲染卡数；非交互行（无 .card 类，右键/点击委托天然忽略） */
+  .q-head { display: flex; align-items: baseline; gap: 8px; padding: 10px 16px 4px; }
+  .q-head-t { font-size: 12px; font-weight: 700; color: var(--text-strong); letter-spacing: .02em; }
+  .q-head-n { font-size: 11px; color: var(--dim); }
   /* #018 W1a-1 通知行紧凑化（用户反馈：两行卡片过高过重，title/body 双截断都看不全）：
      单行「title·body」流动截断（title 让位上限 55%，body 收尾），去逐行卡片框改
      hover 微亮；已决行弱化殿后；整行原生 tooltip 兜底全文 */
@@ -4542,6 +4555,7 @@ function projectSnapshotFields(ctx, payload) {
   const version = typeof p.schema_version === "number" && Number.isFinite(p.schema_version) ? p.schema_version : 0;
   ctx.schemaVersion = version;
   ctx.legacyMode = !hasSchema || version < 1;
+  ctx.relayId = typeof p.relay_id === "string" ? p.relay_id : ""; // #018-W1a 源身份主键（B0 relay_id 必带；旧 relay 无字段=空 → 源胶囊走 legacy 回落）
   ctx.sourceCapabilities = p.source_capabilities && typeof p.source_capabilities === "object"
     ? { ...p.source_capabilities } : null;
   const capNotifications = ctx.sourceCapabilities?.notifications;
@@ -5009,23 +5023,173 @@ function srcBadgeHtml(cfg) {
   return '<span class="src-badge" title="' + escapeHtml(cfg.name) + '" style="background:' + c + ';color:' + fg + '"><span class="sb-t">' + escapeHtml(srcDisplayName(cfg)) + '</span></span>';
 }
 
-// 列表上方源过滤 chips（#343）：默认只"全部"；源选项跟"下方出现该源的卡"走——
-// 有会话才亮出对应 chip（空源不占位）；选中源的会话清零时自愈回"全部"
+/* W1A-PROJECTION-START */
+// #018-W1a 第二列单流投影纯函数段：自包含零 DOM 依赖（scripts/test-w1a-queue.ts 经
+// 本锚点提取直跑做 fixture 断言）。queuePartition 不是共享代码层——Web/Expo 各自
+// 实现、使用相同 fixture 语义（018 §2.1.1/:130）；只投影不取数、不接真命令（W1b 的事）。
+
+// endpoint 归一：协议大小写/默认端口/路径/userinfo 全部抹平 → host:port（host 小写）。
+// 供 legacy-endpoint 源身份回落用；非 ws(s) URL 或畸形输入 → 空串（调用方落孤立键）
+function normalizeEndpoint(u) {
+  const raw = String(u || "");
+  const m = /^wss?:\/\/[^/?#]+/i.exec(raw);
+  if (!m) return "";
+  let rest = m[0].replace(/^wss?:\/\//i, "").toLowerCase();
+  const at = rest.lastIndexOf("@");
+  if (at >= 0) rest = rest.slice(at + 1); // 剥 userinfo
+  const colon = rest.lastIndexOf(":");
+  const bracket = rest.indexOf("]");
+  let host = rest, port = "";
+  if (colon >= 0 && bracket < colon) { host = rest.slice(0, colon); port = rest.slice(colon + 1); }
+  const def = /^wss:/i.test(m[0]) ? "443" : "80";
+  return host + ":" + (port || def);
+}
+
+// 源身份三级回落（018 :238 矩阵）：relay_id（B0 必带）→ legacy:<relay_dev> →
+// legacy-endpoint:<归一 endpoint>；连 endpoint 都没有 → 按条目自身孤立（不误归并）。
+// tier: "v1" | "legacy-dev" | "legacy-endpoint" | "none"（none 非 legacy，不标异常）
+function sourceIdentityOf(e) {
+  const relayId = e && typeof e.relayId === "string" && e.relayId ? e.relayId : "";
+  if (relayId) return { key: "rid:" + relayId, tier: "v1" };
+  const relayDev = e && typeof e.relayDev === "string" && e.relayDev ? e.relayDev : "";
+  if (relayDev) return { key: "legacy:" + relayDev, tier: "legacy-dev" };
+  const ep = normalizeEndpoint(e && (e.wsUrl || e.cloudUrl));
+  if (ep) return { key: "legacy-endpoint:" + ep, tier: "legacy-endpoint" };
+  return { key: "solo:" + String((e && e.id) || ""), tier: "none" };
+}
+
+// 源投影（客户端层归并；跨源 merge 只发生在本层，不碰 relay 间同步）：
+// list 条目 = {id, name?, wsUrl?, cloudUrl?, relayId?, relayDev?, online?}
+// → 按 identity key 归并的胶囊模型 [{key, name, online, exceptions, srcIds}]。
+// 胶囊只携带 状态点(online) + 源名 + 必要异常(exceptions，现仅 "legacy")；源级统计
+// 不在此层产出（顶部不进源级会话计数）。畸形条目跳过、非数组入参 → 空投影（不崩）
+function projectSources(list) {
+  const out = [];
+  const byKey = new Map();
+  for (const e of Array.isArray(list) ? list : []) {
+    if (!e || typeof e !== "object") continue;
+    const ident = sourceIdentityOf(e);
+    let g = byKey.get(ident.key);
+    if (!g) {
+      g = { key: ident.key, name: "", online: false, exceptions: [], srcIds: [] };
+      byKey.set(ident.key, g);
+      out.push(g);
+    }
+    g.srcIds.push(String(e.id || ""));
+    if (!g.name && typeof e.name === "string" && e.name) g.name = e.name;
+    g.online = g.online || e.online === true;
+    if ((ident.tier === "legacy-dev" || ident.tier === "legacy-endpoint") && g.exceptions.indexOf("legacy") < 0) g.exceptions.push("legacy");
+  }
+  return out;
+}
+
+// queue_flags 五标志判定（018 §2.1.1 推荐分组规则的 Web 落法）：
+// - needs_action：真实 WAITING 可决策（status=WAITING + waiting_request 在 + 可判定
+//   非false）/ 待验收类持久行动（last_task_done 汇报在）/ 会话级通知明确要求动作
+//   （actionable 且未 resolved 的通知绑定本 session）——三者任一；
+// - is_working：status=WORKING 事实位（在线不占位——是否进待处理另看可观察工作状态）；
+// - needs_acceptance：last_task_done 对象在（汇报/确认类持久行动）；
+// - is_other：不入待处理组（其余一律，含在线空转 WORKING）；
+// - reason：waiting | acceptance | notification | working | other。
+// 普通 WORKING 只有确有可观察工作状态（activity 正文/工具名在）才进待处理
+function queueFlagsOf(s, notifActionable) {
+  const o = s && typeof s === "object" ? s : {};
+  const st = typeof o.status === "string" ? o.status : "";
+  const waitingDecidable = st === "WAITING" && !!o.waiting_request && typeof o.waiting_request === "object"
+    && o.waiting_request.decidable !== false;
+  const acceptance = !!o.last_task_done && typeof o.last_task_done === "object";
+  const notif = notifActionable === true;
+  const working = st === "WORKING";
+  const act = o.activity && typeof o.activity.activity === "object" ? o.activity.activity : null;
+  const observableWork = !!(act && ((typeof act.text === "string" && act.text !== "") || (typeof act.tool === "string" && act.tool !== "")));
+  const needsAction = waitingDecidable || acceptance || notif;
+  const inPending = needsAction || (working && observableWork);
+  const reason = waitingDecidable ? "waiting"
+    : acceptance ? "acceptance"
+    : notif ? "notification"
+    : working && observableWork ? "working"
+    : "other";
+  return { needs_action: needsAction, is_working: working, needs_acceptance: acceptance, is_other: !inPending, reason };
+}
+
+// 待处理组内排序优先级：可决策 > 待验收 > 通知要求 > 工作中
+const QUEUE_REASON_ORDER = { waiting: 0, acceptance: 1, notification: 2, working: 3 };
+
+// 单流分区主入口：pending（待处理，置顶）/ others（其他会话）两组互斥。同一会话
+// 只出现一次（首见优先，重复 id 直接过滤——E2a 同语义；默认互斥键 session_id，
+// 多源场景经 opts.keyOf 注入 源+会话 复合键，跨源同 id 各自成卡）。opts.notifications
+// = 全源归一通知池（判"通知明确要求动作"：actionable 且未 resolved 且
+// sourceContext.sessionId 绑定）。畸形会话（无 id/null）跳过不入流、非数组入参 →
+// 空两组（旧 relay 缺字段降级不崩）。组内默认序：pending 按 reason 优先级 +
+// updated_at 倒序，others 按 updated_at 倒序。调用方必须先做完筛选再进来——
+// 组头计数只能来自过滤后实际渲染卡数，不能使用源总数（018 §2.1.1 硬条款）
+function queuePartition(sessions, opts) {
+  const o = opts && typeof opts === "object" ? opts : {};
+  const keyOf = typeof o.keyOf === "function" ? o.keyOf : (s) => s.session_id;
+  const notifSids = new Set();
+  for (const n of Array.isArray(o.notifications) ? o.notifications : []) {
+    if (!n || typeof n !== "object" || n.actionable !== true) continue;
+    if (n.resolved_at !== undefined && n.resolved_at !== null) continue;
+    const sid = n.sourceContext && typeof n.sourceContext === "object" ? n.sourceContext.sessionId : undefined;
+    if (typeof sid === "string" && sid) notifSids.add(sid);
+  }
+  const pending = [];
+  const others = [];
+  const flags = new Map();
+  const seen = new Set();
+  for (const s of Array.isArray(sessions) ? sessions : []) {
+    if (!s || typeof s !== "object" || typeof s.session_id !== "string" || !s.session_id) continue;
+    const k = String(keyOf(s));
+    if (seen.has(k)) continue;
+    seen.add(k);
+    const f = queueFlagsOf(s, notifSids.has(s.session_id));
+    flags.set(k, f);
+    (f.is_other ? others : pending).push(s);
+  }
+  const recency = (s) => (s && (s.updated_at || s.started_at)) || 0;
+  pending.sort((a, b) => {
+    const fa = flags.get(String(keyOf(a))) || {};
+    const fb = flags.get(String(keyOf(b))) || {};
+    const ra = QUEUE_REASON_ORDER[fa.reason] !== undefined ? QUEUE_REASON_ORDER[fa.reason] : 9;
+    const rb = QUEUE_REASON_ORDER[fb.reason] !== undefined ? QUEUE_REASON_ORDER[fb.reason] : 9;
+    return ra !== rb ? ra - rb : recency(b) - recency(a);
+  });
+  others.sort((a, b) => recency(b) - recency(a));
+  return { pending, others, flags };
+}
+/* W1A-PROJECTION-END */
+
+// 列表上方源过滤 chips（#343，#018-W1a 源胶囊化）：默认只"全部"；胶囊=状态点+源名+
+// 必要异常（legacy 标记），源级会话统计不进顶部（总数只在「全部」chip——2026-09-16
+// 用户口径）。LAN/云桥同源按 relay identity 归并（projectSources 三级回落）；选中
+// 胶囊过滤该组全部连接条目（filterSrc 存组内 srcIds 逗号串），组内条目全部消失自愈回"全部"
 function renderSrcChips() {
   const live = servers.filter((s) => (ctxs.get(s.id)?.sessions.size || 0) > 0);
-  if (filterSrc !== "all" && !live.some((s) => s.id === filterSrc)) filterSrc = "all";
+  // #018-W1a 源胶囊：LAN/云桥同源按 relay identity 归并；云桥条目身份取配对 rd，
+  // LAN 条目 B0 后取快照 relay_id（projectSnapshotFields 捕获），都缺 → endpoint 归一回落
+  const groups = projectSources(live.map((s) => ({
+    id: s.id,
+    name: srcDisplayName(s),
+    wsUrl: s.wsUrl,
+    cloudUrl: s.cloud ? s.cloud.url : "",
+    relayId: (ctxs.get(s.id) && ctxs.get(s.id).relayId) || "",
+    relayDev: s.cloud && s.cloud.rd ? s.cloud.rd : "",
+    online: !!ctxs.get(s.id) && ctxs.get(s.id).status === "online",
+  })));
+  if (filterSrc !== "all" && !groups.some((g) => g.srcIds.indexOf(filterSrc) >= 0)) filterSrc = "all";
   const box = $("srcChips");
-  if (live.length <= 1) { box.style.display = "none"; box.dataset.key = ""; box.innerHTML = ""; return; }
-  const parts = live.map((s) => s.id + ":" + s.name + ":" + (ctxs.get(s.id)?.sessions.size || 0));
+  if (groups.length <= 1) { box.style.display = "none"; box.dataset.key = ""; box.innerHTML = ""; return; }
+  const parts = groups.map((g) => g.key + ":" + g.name + ":" + (g.online ? 1 : 0) + ":" + g.exceptions.join("/") + ":" + g.srcIds.join("+"));
   const key = filterSrc + "|" + parts.join("|");
   if (box.dataset.key === key) return;
   box.dataset.key = key;
   box.style.display = "flex";
   box.innerHTML = '<button data-f="all" class="' + (filterSrc === "all" ? "on" : "") + '">全部 ' + allSessions().length + "</button>" +
-    live.map((s) => {
-      const n = ctxs.get(s.id)?.sessions.size || 0;
-      return '<button data-f="' + s.id + '" class="' + (filterSrc === s.id ? "on" : "") + '" title="' + escapeHtml(s.name) + '">' +
-        '<i style="background:' + srcColorByKey(s) + '"></i><span>' + escapeHtml(srcDisplayName(s)) + " " + n + "</span></button>";
+    groups.map((g) => {
+      const f = g.srcIds.join(",");
+      const legacyTag = g.exceptions.indexOf("legacy") >= 0;
+      return '<button data-f="' + escapeHtml(f) + '" class="' + (filterSrc === f ? "on" : "") + '" title="' + escapeHtml(g.name) + (legacyTag ? "&#10;旧版 relay：快照字段降级显示" : "") + '">' +
+        '<i class="' + (g.online ? "src-on" : "src-off") + '"></i><span>' + escapeHtml(g.name) + (legacyTag ? '<em class="src-ex">旧</em>' : "") + "</span></button>";
     }).join("");
   box.querySelectorAll("button").forEach((b) => {
     b.onclick = () => { filterSrc = b.dataset.f; renderSrcChips(); render(); };
@@ -5121,20 +5285,33 @@ function render() {
   }
 
   const box = $("cards");
-  // 排序：等待 > 运行 > 错误 > 完成；组内按更新时间倒序（#279E 对齐手机口径：
-  // 新完成的会话紧跟活跃段顶部，不再按启动时间沉到 DONE 组底部像"消失"）
-  const order = { WAITING: 0, WORKING: 1, ERROR: 2, DONE: 3 };
-  // #100 后台在跑的 DONE 卡视同 WORKING 档（在干活不上沉）；组内排序不变
-  const rankOf = (s) => (s.status === "DONE" && bgRunning(s) ? 1 : order[s.status]);
   let entries = allSessions();
-  if (filterSrc !== "all") entries = entries.filter((e) => e.ctx.cfg.id === filterSrc);
+  // #018-W1a 源胶囊按组过滤：filterSrc = "all" | 组内 srcIds 逗号串（renderSrcChips 产出）
+  if (filterSrc !== "all") {
+    const ids = filterSrc.split(",");
+    entries = entries.filter((e) => ids.indexOf(e.ctx.cfg.id) >= 0);
+  }
   // #140 折叠空闲与闲置变灰联动：只折已变灰的真闲置卡（idleDimmed 同口径，
   // #100 后台在跑豁免内含）——刚收工的会话留在交流窗口期可见
   if (collapseIdle) entries = entries.filter((e) => !idleDimmed(e.s));
   // #279① 挂起删除（4s 撤销窗口内）与已提交删除（待 SESSION_DELETED 确认）的卡片保持隐藏
   entries = entries.filter((e) => e.s.session_id !== pendingDel.sid && !deleting.has(e.s.session_id));
-  const list = entries.sort((a, b) =>
-    (rankOf(a.s) - rankOf(b.s)) || ((b.s.updated_at || b.s.started_at) - (a.s.updated_at || a.s.started_at)));
+  // #018-W1a 第二列单流改造（删 005 原型「行动/全部」双视图语义 → 待处理置顶单流
+  // 两组）：筛选（搜索/源/项目/状态类列表工具行）全部做完再进 queuePartition——
+  // 组头计数只能来自过滤后实际渲染卡数，不能使用源总数（018 §2.1.1 硬条款）。
+  // activity 用 dockActivityOf（E1 在线 dock 最后值 + 快照 activity 归并）作可观察
+  // 工作状态证据；通知池取各源 W1a 读侧投影（projectSnapshotFields 归一）
+  const notifPool = [];
+  for (const c of ctxs.values()) for (const n of c.notifications || []) notifPool.push(n);
+  const notifFP = notifPool.reduce((a, n) => a + (n && n.actionable === true && n.resolved_at == null ? 1 : 0), 0);
+  const decorated = entries.map((e) => {
+    const s2 = Object.assign({}, e.s, { activity: dockActivityOf(e.ctx, e.s) || e.s.activity });
+    s2.__qid = e.ctx.cfg.id + "/" + e.s.session_id; // Web 多源互斥键=源+会话（跨源同 id 各自成卡）；纯函数默认键 session_id 供单源/fixture
+    return s2;
+  });
+  const q = queuePartition(decorated, { notifications: notifPool, keyOf: (s) => String(s.__qid) });
+  const entryOf = new Map(entries.map((e) => [e.ctx.cfg.id + "/" + e.s.session_id, e]));
+  const list = q.pending.concat(q.others).map((s) => entryOf.get(s.__qid)).filter(Boolean);
   // #50 徽章显隐按「在线源数」判定：唯一在线源时无归属歧义，全部视图下也不渲染；
   // 全部离线时回落按配置源数>1（旧行为，离线卡的来源仍可辨）。
   // 显隐因子入 key：源上下线会翻转显隐，key 不含则不重渲、徽章残留/缺失
@@ -5142,12 +5319,17 @@ function render() {
   const showSrcTag = onlineSrcs > 1 || (onlineSrcs === 0 && ctxs.size > 1);
   // key 含 filterSrc：切 chip 时徽章显隐随聚合/单源变化，强制重渲即时生效
   // #49 key 含 pinned/saved：保存恢复切换/恢复点击后徽章与休眠态即时重渲
-  const key = (listCompact ? "C|" : "") + filterSrc + "|" + (showSrcTag ? "b1|" : "b0|") + list.map((e) => e.ctx.cfg.id + ":" + e.s.session_id + ":" + e.s.status + ":" + (e.s.title || "") + ":" + (e.s.action_summary || "") + ":" + dockActivityText(e.ctx, e.s) + ":" + (e.s.waiting_request ? 1 : 0) + ":" + ctxPct(e.s) + ":" + (e.s.pinned ? 1 : 0) + ":" + (isDormant(e.s) ? "d" : "") + ":" + (bgRunning(e.s) ? "g" : "") + ":" + (idleDimmed(e.s) ? "i" : "")).join("|");
+  // #018-W1a key 含 notifFP（actionable 未决通知数）：通知面变化会改待处理分组归属，
+  // 卡片字段不变也要重渲；含 last_task_done 标记同理（acceptance 分组翻转）
+  const pendingQids = new Set(q.pending.map((s) => s.__qid));
+  const key = (listCompact ? "C|" : "") + filterSrc + "|" + (showSrcTag ? "b1|" : "b0|") + notifFP + "|" + list.map((e) => e.ctx.cfg.id + ":" + e.s.session_id + ":" + e.s.status + ":" + (e.s.title || "") + ":" + (e.s.action_summary || "") + ":" + dockActivityText(e.ctx, e.s) + ":" + (e.s.waiting_request ? 1 : 0) + ":" + ctxPct(e.s) + ":" + (e.s.pinned ? 1 : 0) + ":" + (isDormant(e.s) ? "d" : "") + ":" + (bgRunning(e.s) ? "g" : "") + ":" + (idleDimmed(e.s) ? "i" : "") + ":" + (e.s.last_task_done ? "a" : "")).join("|");
   if (box.dataset.key !== key) {
     // 就地改名进行中：跳过重建（运行中会话 key 每秒变，会把编辑框冲掉）
     if (document.activeElement && document.activeElement.classList.contains("card-rename")) return;
     box.dataset.key = key;
     box.innerHTML = "";
+    let pendHeadDone = false; // #018-W1a 两组段头各只出一次
+    let othHeadDone = false;
     if (!list.length) {
       const on = [...ctxs.values()].filter((c) => c.status === "online").length;
       const total = ctxs.size;
@@ -5162,6 +5344,23 @@ function render() {
       box.appendChild(d2);
     }
     for (const { ctx, s } of list) {
+      // #018-W1a 组头（待处理/其他会话）：出现在每组首卡前，计数=过滤后实际渲染卡数
+      // （q.pending/q.others 即分区后渲染集，非源总数）；同组只出头一次
+      const inPending = pendingQids.has(ctx.cfg.id + "/" + s.session_id);
+      if (inPending && !pendHeadDone) {
+        const h = document.createElement("div");
+        h.className = "q-head";
+        h.innerHTML = '<span class="q-head-t">待处理</span><span class="q-head-n">' + q.pending.length + "</span>";
+        box.appendChild(h);
+        pendHeadDone = true;
+      }
+      if (!inPending && !othHeadDone) {
+        const h = document.createElement("div");
+        h.className = "q-head";
+        h.innerHTML = '<span class="q-head-t">其他会话</span><span class="q-head-n">' + q.others.length + "</span>";
+        box.appendChild(h);
+        othHeadDone = true;
+      }
       const dormant = isDormant(s);
       const d = document.createElement("div");
       d.dataset.sid = s.session_id;
