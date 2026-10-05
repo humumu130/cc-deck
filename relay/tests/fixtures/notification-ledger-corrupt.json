@@ -1,0 +1,2 @@
+{"notifications": [
+  {"key": "waiting:s1:req-1", "kind": "waiting", "source_session_id": "s1", "created_at": 1000, "revision": "req-1"

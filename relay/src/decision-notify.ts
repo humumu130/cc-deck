@@ -1,7 +1,7 @@
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import type { OrgConfirm } from "./projects.js";
-import type { NotificationGroup, NotificationItem, SessionState } from "./types.js";
+import type { NotificationGroup, NotificationItem, NotificationSourceContext, SessionState } from "./types.js";
 
 export type DecisionNotificationKind = "org-confirm" | "waiting" | "dispatch" | "acceptance" | "system";
 export const DECISION_NOTIFICATION_KINDS = ["org-confirm", "waiting", "dispatch", "acceptance", "system"] as const;
@@ -27,6 +27,9 @@ export interface DecisionNotification {
   group: NotificationGroup;
   actionable: boolean;
   revision: string;
+  /** #018-B3a：产生源快照（离线重载后 sourceContext 不丢——重启前已发出的通知项溯源
+   * 与回跳路径可还原）。坏形状整块丢弃不炸（normalize 洗刷，任一必填字段缺=不可判定）。 */
+  source_context?: NotificationSourceContext;
 }
 
 export interface NotificationGroupBucket {
@@ -131,6 +134,7 @@ function mergeNotificationPair(current: DecisionNotification, incoming: Decision
     resolved_at: current.resolved_at ?? incoming.resolved_at,
     handled_at: current.handled_at ?? incoming.handled_at,
     dismissed_at: current.dismissed_at ?? incoming.dismissed_at,
+    source_context: current.source_context ?? incoming.source_context,
   };
 }
 
@@ -194,6 +198,25 @@ function defaultActionable(kind: DecisionNotificationKind, group: NotificationGr
   return group === "action" && kind !== "system";
 }
 
+/** #018-B3a sourceContext 洗刷：domain/entityId/alertId/returnPath 必填 string——任一缺
+ * =整块不可判定，丢弃（返回 undefined）不炸不猜；sessionId/segment 可选，类型对才带。 */
+export function normalizeSourceContext(value: unknown): NotificationSourceContext | undefined {
+  if (!value || typeof value !== "object") return undefined;
+  const x = value as Partial<NotificationSourceContext>;
+  if (typeof x.domain !== "string" || !x.domain ||
+      typeof x.entityId !== "string" || !x.entityId ||
+      typeof x.alertId !== "string" || !x.alertId ||
+      typeof x.returnPath !== "string") return undefined;
+  return {
+    domain: x.domain,
+    entityId: x.entityId,
+    alertId: x.alertId,
+    returnPath: x.returnPath,
+    ...(typeof x.sessionId === "string" ? { sessionId: x.sessionId } : {}),
+    ...(typeof x.segment === "string" ? { segment: x.segment } : {}),
+  };
+}
+
 export function normalizeDecisionNotification(item: unknown): DecisionNotification | null {
   if (!item || typeof item !== "object") return null;
   const x = item as Partial<DecisionNotification>;
@@ -203,6 +226,7 @@ export function normalizeDecisionNotification(item: unknown): DecisionNotificati
   const group = x.group === "action" || x.group === "attention" || x.group === "activity"
     ? x.group
     : defaultNotificationGroup(x.kind);
+  const sourceContext = normalizeSourceContext(x.source_context);
   return {
     key: x.key,
     kind: x.kind,
@@ -216,6 +240,7 @@ export function normalizeDecisionNotification(item: unknown): DecisionNotificati
     group,
     actionable: typeof x.actionable === "boolean" ? x.actionable : defaultActionable(x.kind, group),
     revision: x.revision,
+    ...(sourceContext ? { source_context: sourceContext } : {}),
   };
 }
 
@@ -237,6 +262,68 @@ export function readDecisionNotificationLedger(path: string): DecisionNotificati
 export function writeDecisionNotificationLedger(path: string, ledger: DecisionNotificationLedger): void {
   mkdirSync(join(path, ".."), { recursive: true });
   writeFileSync(path, JSON.stringify(ledger.notifications, null, 2) + "\n", "utf-8");
+}
+
+// ---------- #018-B3a 扩展面：ledger→通知投影 / 离线重载幂等（纯函数，接线归 R1） ----------
+
+const LEDGER_KIND_LABELS: Record<DecisionNotificationKind, string> = {
+  "org-confirm": "确认单",
+  waiting: "审批",
+  dispatch: "派单",
+  acceptance: "验收",
+  system: "系统",
+};
+
+function ledgerEntityId(item: DecisionNotification): string {
+  const parts = item.key.split(":");
+  return parts[1] ?? item.key;
+}
+
+/** ledger 行 → 通知项投影（groupNotifications 的上一环，R1 接线出口）。确定性：
+ * 同输入恒同输出——severity 按 actionable/resolved 判（非 actionable 或 system→info、
+ * resolved→done、否则→waiting）、sourceContext 优先还原持久化快照、旧行（无
+ * source_context）从 key+source_session_id 合成降级（不静默丢溯源）；
+ * 输出按 created_at 升序、同 ts 按 key 字典序（分组视图与组计数稳定）。 */
+export function projectLedgerNotifications(
+  items: DecisionNotification[],
+  options: { includeHandled?: boolean } = {},
+): NotificationItem[] {
+  const includeHandled = options.includeHandled ?? true;
+  const projected = items
+    .filter((item) => includeHandled || (item.handled_at === undefined && item.dismissed_at === undefined && item.resolved_at === undefined))
+    .map((item): NotificationItem => ({
+      key: item.key,
+      kind: item.kind,
+      group: item.group,
+      severity: !item.actionable || item.kind === "system"
+        ? "info"
+        : (item.resolved_at !== undefined ? "done" : "waiting"),
+      title: `${LEDGER_KIND_LABELS[item.kind]} ${ledgerEntityId(item)}`,
+      body: item.source_session_id ? `来源会话 ${item.source_session_id.slice(0, 12)}` : LEDGER_KIND_LABELS[item.kind],
+      sourceContext: item.source_context ?? {
+        domain: item.kind,
+        entityId: ledgerEntityId(item),
+        alertId: item.key,
+        returnPath: "",
+        ...(item.source_session_id ? { sessionId: item.source_session_id } : {}),
+      },
+      actionable: item.actionable,
+      created_at: item.created_at,
+      ...(item.resolved_at !== undefined ? { resolved_at: item.resolved_at } : {}),
+      ...(item.handled_at !== undefined ? { handled_at: item.handled_at } : {}),
+    }));
+  return projected.sort((a, b) => (a.created_at - b.created_at) || (a.key < b.key ? -1 : a.key > b.key ? 1 : 0));
+}
+
+/** 离线重载合并（进程重启幂等入口）：盘上台账（权威——可能含离线期间其他写面的进展）
+ * 与内存态合并，同 identity 重复 decision 去重且生命周期字段保留（mergeNotificationPair
+ * 语义）。幂等：对同一对 (内存, 盘) 重复调用结果深度相等——重载不重发、不翻已处置态。 */
+export function mergeReloadedLedger(
+  inMemory: DecisionNotification[],
+  onDisk: DecisionNotification[],
+): DecisionNotification[] {
+  return mergeDecisionNotifications(onDisk, inMemory)
+    .sort((a, b) => (a.created_at - b.created_at) || (a.key < b.key ? -1 : a.key > b.key ? 1 : 0));
 }
 
 function confirmRevision(confirm: OrgConfirm): string {
