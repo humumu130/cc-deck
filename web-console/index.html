@@ -1067,6 +1067,17 @@
   #srcChips button span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   #srcChips button.on { color: var(--text); border-color: rgba(217,119,87,.6); background: rgba(217,119,87,.12); }
   #srcChips button i { width: 7px; height: 7px; border-radius: 50%; flex: none; }
+  /* #018 W1a：通知投影只保留分组头+行，旧 relay 缺字段时整区不占位 */
+  #notifications { display: none; flex-direction: column; gap: 5px; padding: 2px 16px 10px; }
+  #notifications.show { display: flex; }
+  .notice-group { display: flex; flex-direction: column; gap: 3px; }
+  .notice-group-head { color: var(--faint); font-size: 10px; letter-spacing: .5px; }
+  .notice-row { display: flex; align-items: flex-start; gap: 7px; padding: 5px 8px; border: 1px solid var(--border); border-radius: 8px; background: var(--bg-soft); min-width: 0; }
+  .notice-row .nr-body { min-width: 0; flex: 1; }
+  .notice-row .nr-title { color: var(--text); font-size: 11.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .notice-row .nr-text { color: var(--dim); font-size: 10.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .notice-row .nr-src { color: var(--faint); font-size: 10px; flex: none; }
+  .notice-empty { color: var(--faint); font-size: 11px; padding: 3px 2px; }
   /* #399 源徽章实底填色：整胶囊即源色（去圆点），字色由 JS 按源色亮度内联指定 */
   .src-badge {
     display: inline-flex; align-items: center; flex: none;
@@ -1313,6 +1324,9 @@
   /* #54 三行卡层级：标题行（15px/--text-strong）不动；动作行降一档 12→11px、
      色从 --dim 回调到 --card-sub（介于原值与标题色之间）；元信息行 12→11px 保持 --faint */
   .c-live { display: flex; align-items: center; gap: 8px; margin: 4px 0 0; padding-left: 4px; font-size: 11px; line-height: 16px; color: var(--card-sub); font-variant-numeric: tabular-nums; min-width: 0; min-height: 16px; } /* #58 统一卡高：与 .card-summary 同几何（上距 4 + 行盒 16），WORKING/空闲卡等高；#98 灯 8→10px 悬挂缩进 6→4 补偿 */
+  .card-activity { display: flex; align-items: center; gap: 5px; margin: 3px 0 0; padding-left: 4px; color: var(--working); font-size: 10.5px; line-height: 15px; min-width: 0; }
+  .card-activity .ca-k { flex: none; opacity: .75; }
+  .card-activity .ca-t { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .c-live .lv-dot { width: 9px; height: 9px; border-radius: 50%; background: var(--working); flex: none; animation: dot-breathe 2.4s ease-in-out infinite; }
   html.light .c-live .lv-dot { background: #FFD60A; box-shadow: 0 0 0 1.5px var(--working); } /* #124①返工：同列表卡 run 灯芯——纯黄芯+金环 */
   .c-live .lv-sec { color: var(--working); flex: none; }
@@ -1743,6 +1757,10 @@
   @keyframes rot { to { transform: rotate(360deg); } }
   #liverow .sum { flex: 1; color: var(--working); font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   #liverow .el { color: var(--faint); font-variant-numeric: tabular-nums; font-size: 11.5px; }
+  #dockActivityRow { display: none; align-items: center; gap: 7px; margin: -4px auto 10px; width: calc(100% - 40px); max-width: min(1040px, 100%); color: var(--working); font-size: 11.5px; line-height: 16px; }
+  #dockActivityRow.show { display: flex; }
+  #dockActivityRow .dar-k { flex: none; opacity: .75; }
+  #dockActivityRow .dar-t { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
   /* #14 提问卡排版重设计：提问态（.ask）中性面板+品牌轻描边——AskUserQuestion 是中性
      提问不是告警；审批态（默认，权限允许/拒绝）保留黄警示语言，两态互不污染 */
@@ -2331,6 +2349,7 @@
     <!-- #26 M2 组织区（v3.1 §2/§6）：待决议确认卡（用户是指挥/验收者，✓/✗ 即决议）
          + 项目组三态 chips（点开详情抽屉）。JS 渲染，旧 relay 无团队字段时整区隐藏 -->
     <div id="orgzone" hidden></div>
+    <div id="notifications" hidden></div>
     <div id="cards"></div>
     <div id="newbox">
       <div id="newform">
@@ -2630,6 +2649,7 @@
       <span class="sum" id="livesum">思考中…</span>
       <span class="el" id="liveel"></span>
     </div>
+    <div id="dockActivityRow"><span class="dar-k">活动</span><span class="dar-t" id="dockActivityText"></span></div>
     <!-- #142 子 Agent 状态：主状态行（liverow）下方的续行，不再是独立大框 -->
     <div id="agbox"></div>
     <div id="imgrow"></div>
@@ -3002,6 +3022,8 @@ function ensureCtx(cfg) {
     c = {
       cfg, status: "offline", statusText: "未连接",
       sessions: new Map(), timelines: new Map(), lastSeq: 0, models: [], deliverables: false,
+      schemaVersion: 0, legacyMode: true, sourceCapabilities: null,
+      notifications: [], notificationsSupported: false, dockActivities: new Map(),
       allowRules: null, // #212 记住规则（SNAPSHOT.allow_rules；null = 旧 relay 不支持）
       empHomeSettings: null, // #17 第二批 雇员独立家设置（SNAPSHOT.settings；null = 旧 relay 不支持，卡隐藏）
       projects: null, orgConfirms: [], boards: new Map(), // #26 M2 组织态（projects null = 旧 relay 不支持，组织区不渲染；boards 由 BOARD_UPDATED 增量维护）
@@ -4145,16 +4167,12 @@ function artB64ToBytes(b64s) {
 // ---------- 事件处理（作用于事件所属源的 ctx） ----------
 function onEvent(ctx, msg) {
   const sid = msg.session_id;
+  projectReadFrame(ctx, msg);
   switch (msg.type) {
     case "SNAPSHOT": {
-      ctx.sessions.clear(); ctx.timelines.clear();
-      for (const s of msg.payload.sessions) {
-        ctx.sessions.set(s.session_id, s);
-        ctx.timelines.set(s.session_id, msg.payload.logs[s.session_id] || []);
-      }
       ctx.lastSeq = Math.max(ctx.lastSeq, msg.seq);
       ctx.models = Array.isArray(msg.payload.models) ? msg.payload.models : []; // #388 模型清单（旧版 relay 无字段=空）
-      ctx.deliverables = msg.payload.deliverables === true; // #71 输出物开关（旧版 relay 无字段=关，tab 隐藏）
+      ctx.deliverables = msg.payload.deliverables === true && (!ctx.legacyMode || own(msg.payload, "deliverables")); // #71 输出物开关；schema 缺失仍按字段存在性兼容旧 relay
       ctx.allowRules = Array.isArray(msg.payload.allow_rules) ? msg.payload.allow_rules : null; // #212 记住规则（旧 relay 无字段=不支持）
       ctx.projects = Array.isArray(msg.payload.projects) ? msg.payload.projects : null; // #26 M2 项目组（旧 relay 无字段 = 不支持，组织区不渲染）
       ctx.orgConfirms = Array.isArray(msg.payload.org_confirms) ? msg.payload.org_confirms : [];
@@ -4204,7 +4222,7 @@ function onEvent(ctx, msg) {
       // 永远挂着"历史会话"横幅（本地值只在快照时写过一次）
       for (const f of ["remote_mode", "title", "title_locked", "model", "turn_started_at",
         "usage", "context_usage", "context_limit", "todos", "subagents", "permission_mode", "pending_inputs", "relay_session_id", "cron_tasks", "compacting", "pinned", "saved", "historical", "artifacts", "artifacts_truncated",
-        "project_gid", "dispatch_tier", "engine"]) { /* #26 M2 组织归属（组徽标/档位徽标数据源）；#27 引擎标记 */
+        "project_gid", "dispatch_tier", "engine", "activity", "activity_capabilities"]) { /* #26 M2 组织归属（组徽标/档位徽标数据源）；#27 引擎标记；#018 W1a 活动投影 */
         if (msg.payload[f] !== undefined) s[f] = msg.payload[f];
       }
       // #157 最后活跃时间优先采信载荷显式值（relay 水合帧 ≠ 活动帧，信 envelope ts
@@ -4238,6 +4256,10 @@ function onEvent(ctx, msg) {
       pushLog(ctx, sid, { ts: msg.ts, kind: "system", text: dText + (d === "timeout" || d === "superseded" ? "" : " (by " + msg.payload.by + ")") });
       break;
     }
+    // #018 W1a：瞬态活动只进入可见会话 dock，不进入 timelines / 历史。
+    case "SESSION_ACTIVITY": {
+      break;
+    }
     // #212 记住规则变更（瞬态广播）：全量替换该源的规则表；设置页打开时实时收敛
     case "ALLOW_RULES_UPDATED": {
       if (Array.isArray(msg.payload.rules)) { ctx.allowRules = msg.payload.rules; renderAllowRules(); }
@@ -4248,6 +4270,10 @@ function onEvent(ctx, msg) {
     case "SETTINGS_UPDATED": {
       const eh = parseEmpHomeSt(msg.payload);
       if (eh) { ctx.empHomeSettings = eh; renderEmpHome(); }
+      break;
+    }
+    // #018 W1a：通知快照/增量只更新源级通知投影，不改变会话历史。
+    case "NOTIFICATIONS_UPDATED": {
       break;
     }
     // #26 M2 组织态（瞬态广播）：项目组/待决议确认卡全量替换；任务板增量（板不随
@@ -4287,6 +4313,7 @@ function onEvent(ctx, msg) {
     }
     case "SESSION_DELETED": {
       ctx.sessions.delete(sid);
+      ctx.dockActivities.delete(sid);
       // #95 会话删除即清它的输入历史桶（无 lsDel 封装，直接删；无桶时静默）
       try { localStorage.removeItem("cc.input.hist." + sid); } catch {}
       // #279① 服务器确认删除：已提交项出列（保持隐藏的使命完成）；挂起中的
@@ -4474,6 +4501,119 @@ function allSessions() {
   const out = [];
   for (const ctx of ctxs.values()) for (const s of ctx.sessions.values()) out.push({ ctx, s });
   return out;
+}
+
+// #018 W1a 读侧投影：新字段全部可选，缺 schema 的源明确标成 legacy，
+// 但不清理已有 deliverables 行为；旧 relay 仍沿用原有会话/时间线投影。
+const own = (obj, key) => Object.prototype.hasOwnProperty.call(obj || {}, key);
+function activityCapabilitiesOf(s) {
+  return s?.activity_capabilities || s?.activity?.capabilities || null;
+}
+function normalizeActivityCapabilities(value) {
+  if (!value || typeof value !== "object") return null;
+  return {
+    native_status: value.native_status === true,
+    operation_summary: value.operation_summary === true,
+    native_elapsed: value.native_elapsed === true,
+    approval: value.approval === true,
+  };
+}
+function normalizeNotification(item) {
+  if (!item || typeof item !== "object" || typeof item.key !== "string") return null;
+  const sourceContext = item.sourceContext && typeof item.sourceContext === "object"
+    ? item.sourceContext
+    : { sessionId: typeof item.source_session_id === "string" ? item.source_session_id : undefined };
+  return {
+    ...item,
+    group: typeof item.group === "string" ? item.group : "activity",
+    title: typeof item.title === "string" && item.title ? item.title : (item.kind || "通知"),
+    body: typeof item.body === "string" ? item.body : "",
+    sourceContext,
+  };
+}
+function projectSnapshotFields(ctx, payload) {
+  const p = payload && typeof payload === "object" ? payload : {};
+  if (!ctx.dockActivities) ctx.dockActivities = new Map();
+  const hasSchema = own(p, "schema_version");
+  const version = typeof p.schema_version === "number" && Number.isFinite(p.schema_version) ? p.schema_version : 0;
+  ctx.schemaVersion = version;
+  ctx.legacyMode = !hasSchema || version < 1;
+  ctx.sourceCapabilities = p.source_capabilities && typeof p.source_capabilities === "object"
+    ? { ...p.source_capabilities } : null;
+  const capNotifications = ctx.sourceCapabilities?.notifications;
+  ctx.notificationsSupported = (own(p, "notifications") && capNotifications !== false) || capNotifications === true;
+  ctx.notifications = Array.isArray(p.notifications) ? p.notifications.map(normalizeNotification).filter(Boolean) : [];
+  ctx.dockActivities.clear();
+}
+function dockSessionVisible(ctx, sid) {
+  if (selected && selected.src === ctx.cfg.id && selected.sid === sid) return true;
+  for (const el of document.querySelectorAll("#cards .card")) {
+    if (el.dataset.src === ctx.cfg.id && el.dataset.sid === sid) return true;
+  }
+  return false;
+}
+function projectReadFrame(ctx, msg, options = {}) {
+  if (!ctx || !msg) return false;
+  if (!ctx.dockActivities) ctx.dockActivities = new Map();
+  if (msg.type === "SNAPSHOT") {
+    if (!ctx.sessions) ctx.sessions = new Map();
+    if (!ctx.timelines) ctx.timelines = new Map();
+    ctx.sessions.clear(); ctx.timelines.clear();
+    const payload = msg.payload && typeof msg.payload === "object" ? msg.payload : {};
+    for (const session of Array.isArray(payload.sessions) ? payload.sessions : []) {
+      if (!session || typeof session.session_id !== "string") continue;
+      ctx.sessions.set(session.session_id, session);
+      ctx.timelines.set(session.session_id, payload.logs?.[session.session_id] || []);
+    }
+    projectSnapshotFields(ctx, msg.payload);
+    return true;
+  }
+  if (msg.type === "NOTIFICATIONS_UPDATED") {
+    const items = Array.isArray(msg.payload?.items) ? msg.payload.items : Array.isArray(msg.payload?.notifications) ? msg.payload.notifications : [];
+    ctx.notifications = items.map(normalizeNotification).filter(Boolean);
+    ctx.notificationsSupported = true;
+    return true;
+  }
+  if (msg.type !== "SESSION_ACTIVITY") return false;
+  if (ctx.sourceCapabilities?.activity === false) return false;
+  const p = msg.payload && typeof msg.payload === "object" ? msg.payload : {};
+  const sid = typeof p.session_id === "string" ? p.session_id : msg.session_id;
+  if (!sid || !ctx.sessions.has(sid)) return false;
+  const visible = typeof options.visible === "function" ? options.visible(ctx, sid) : dockSessionVisible(ctx, sid);
+  if (!visible) return false;
+  if (typeof p.text !== "string" || !p.text) {
+    ctx.dockActivities.delete(sid);
+    return true;
+  }
+  const observedAt = typeof p.observed_at === "number" ? p.observed_at : (msg.ts || Date.now());
+  ctx.dockActivities.set(sid, {
+    state: p.state || ctx.sessions.get(sid).status,
+    activity: {
+      kind: p.activity_kind || "system",
+      text: p.text,
+      ...(typeof p.tool === "string" ? { tool: p.tool } : {}),
+      observed_at: observedAt,
+      ...(typeof p.occurred_at === "number" ? { occurred_at: p.occurred_at } : {}),
+    },
+    capabilities: normalizeActivityCapabilities(p.capabilities) || activityCapabilitiesOf(ctx.sessions.get(sid)) || {},
+    updated_at: observedAt,
+  });
+  return true;
+}
+
+function dockActivityOf(ctx, s) {
+  return ctx?.dockActivities?.get(s?.session_id) || s?.activity || null;
+}
+function dockActivityText(ctx, s) {
+  const activity = dockActivityOf(ctx, s)?.activity;
+  return activity && typeof activity.text === "string" ? activity.text : "";
+}
+function dockActivityHtml(ctx, s) {
+  const text = dockActivityText(ctx, s);
+  if (!text) return "";
+  const activity = dockActivityOf(ctx, s)?.activity;
+  const label = activity?.tool ? "活动 · " + activity.tool : "活动";
+  return '<div class="card-activity" title="' + escapeHtml(text) + '"><span class="ca-k">' + escapeHtml(label) + '</span><span class="ca-t">' + escapeHtml(text) + "</span></div>";
 }
 
 // ---------- #300/#306 [待确认] 悬浮清单（与手机端 fmt.isConfirmTodo 同款正则/口径） ----------
@@ -4888,6 +5028,47 @@ function renderSrcChips() {
   });
 }
 
+const NOTICE_GROUP_LABEL = { action: "操作", attention: "需要关注", activity: "活动" };
+function renderNotifications() {
+  const box = $("notifications");
+  if (!box) return;
+  const sources = [...ctxs.values()].filter((ctx) => ctx.notificationsSupported);
+  if (!sources.length) {
+    box.hidden = true;
+    box.classList.remove("show");
+    box.dataset.key = "";
+    box.innerHTML = "";
+    return;
+  }
+  const rows = sources.flatMap((ctx) => (ctx.notifications || []).map((item) => ({ ctx, item })));
+  const key = sources.map((ctx) => ctx.cfg.id + ":" + ctx.notifications.length + ":" + ctx.schemaVersion + ":" + ctx.legacyMode).join("|") + "|" + rows.map(({ ctx, item }) => ctx.cfg.id + ":" + item.key + ":" + item.title + ":" + item.body).join("|");
+  if (box.dataset.key === key) return;
+  box.dataset.key = key;
+  box.hidden = false;
+  box.classList.add("show");
+  if (!rows.length) {
+    box.innerHTML = '<div class="notice-empty">暂无通知</div>';
+    return;
+  }
+  const groups = new Map();
+  for (const row of rows) {
+    const group = row.item.group || "activity";
+    if (!groups.has(group)) groups.set(group, []);
+    groups.get(group).push(row);
+  }
+  box.innerHTML = [...groups.entries()].map(([group, groupRows]) =>
+    '<section class="notice-group" data-group="' + escapeHtml(group) + '">' +
+      '<div class="notice-group-head">' + escapeHtml(NOTICE_GROUP_LABEL[group] || group) + "</div>" +
+      groupRows.map(({ ctx, item }) => {
+        const src = srcDisplayName(ctx.cfg);
+        return '<div class="notice-row" data-key="' + escapeHtml(item.key) + '">' +
+          '<div class="nr-body"><div class="nr-title">' + escapeHtml(item.title) + '</div><div class="nr-text">' + escapeHtml(item.body) + '</div></div>' +
+          '<span class="nr-src">' + escapeHtml(src) + "</span></div>";
+      }).join("") +
+    "</section>"
+  ).join("");
+}
+
 function render() {
   // 运行计数（全源汇总；灯+数字，无文字标签——含义见 ？ 图例）
   let total = 0, anyOnline = false;
@@ -4915,6 +5096,7 @@ function render() {
     $("runhint").textContent = anyOnline ? "已连接 · 暂无会话" : "等待连接";
   }
   renderSrcChips();
+  renderNotifications(); // #018 W1a：缺 notifications 字段的旧 relay 不显示入口
   renderConfirmFloat(); // #306 [待确认] 悬浮清单（key 守卫，重渲代价极小）
   renderOrgZone(); // #26 M2 组织区（key 守卫同上；旧 relay 无团队字段 = 整区隐藏）
 
@@ -4955,7 +5137,7 @@ function render() {
   const showSrcTag = onlineSrcs > 1 || (onlineSrcs === 0 && ctxs.size > 1);
   // key 含 filterSrc：切 chip 时徽章显隐随聚合/单源变化，强制重渲即时生效
   // #49 key 含 pinned/saved：保存恢复切换/恢复点击后徽章与休眠态即时重渲
-  const key = (listCompact ? "C|" : "") + filterSrc + "|" + (showSrcTag ? "b1|" : "b0|") + list.map((e) => e.ctx.cfg.id + ":" + e.s.session_id + ":" + e.s.status + ":" + (e.s.title || "") + ":" + (e.s.action_summary || "") + ":" + (e.s.waiting_request ? 1 : 0) + ":" + ctxPct(e.s) + ":" + (e.s.pinned ? 1 : 0) + (isDormant(e.s) ? "d" : "") + (bgRunning(e.s) ? "g" : "") + (idleDimmed(e.s) ? "i" : "")).join("|");
+  const key = (listCompact ? "C|" : "") + filterSrc + "|" + (showSrcTag ? "b1|" : "b0|") + list.map((e) => e.ctx.cfg.id + ":" + e.s.session_id + ":" + e.s.status + ":" + (e.s.title || "") + ":" + (e.s.action_summary || "") + ":" + dockActivityText(e.ctx, e.s) + ":" + (e.s.waiting_request ? 1 : 0) + ":" + ctxPct(e.s) + ":" + (e.s.pinned ? 1 : 0) + ":" + (isDormant(e.s) ? "d" : "") + ":" + (bgRunning(e.s) ? "g" : "") + ":" + (idleDimmed(e.s) ? "i" : "")).join("|");
   if (box.dataset.key !== key) {
     // 就地改名进行中：跳过重建（运行中会话 key 每秒变，会把编辑框冲掉）
     if (document.activeElement && document.activeElement.classList.contains("card-rename")) return;
@@ -4979,6 +5161,7 @@ function render() {
       const d = document.createElement("div");
       d.dataset.sid = s.session_id;
       d.dataset.src = ctx.cfg.id;
+      d.dataset.protocol = ctx.legacyMode ? "legacy" : "v" + ctx.schemaVersion;
       // #161 对齐手机 bgLive 口径：非 WORKING 且子 Agent 在跑（不限 DONE）——灯转黄呼吸
       d.className = "card " + s.status + (listCompact ? " compact" : "") + (selected && selected.src === ctx.cfg.id && s.session_id === selected.sid ? " sel" : "") + (s.historical && !dormant ? " historical" : "") + (dormant ? " dormant" : "") + (s.status !== "WORKING" && bgRunning(s) ? " bg-live" : "") + (idleDimmed(s) ? " idle" : "");
       if (dormant) d.title = "已保存休眠 · 点击恢复";
@@ -5031,6 +5214,7 @@ function render() {
       // `action_summary || "…"` 同口径；#58 等高由 .card-summary 的 min-height 钉住
       const summaryRow =
         '<div class="card-summary' + (waiting ? " waiting" : "") + '">' + escapeHtml(waitingText || "…") + "</div>";
+      const activityRow = dockActivityHtml(ctx, s);
       const ctaRow = waiting && !s.historical && s.waiting_request?.decidable !== false ? '<div class="card-cta"><button>处理</button></div>' : "";
       // #367 源标签内联进 stats 行右侧（多源才有；不再独立占一整行留白）；
       // #383 源标签移最左与上两行左对齐；ctx 水位条压到最右（不再悬中间）
@@ -5046,9 +5230,10 @@ function render() {
         // #279⑨ 紧凑卡（对齐手机）：状态点+标题+耗时 / 摘要 / 改动+水位+源标签（#164 徽章同移 stats 行）
         d.innerHTML =
           '<div class="c-row1">' + pinFlag + '<span class="c-dot' + (s.status === "WORKING" || (s.status !== "WORKING" && bgRunning(s)) ? " run" : "") /* #100/#161 后台在跑也呼吸（bgLive 不限 DONE） */ + '" style="--sc:var(--' + (s.status || "").toLowerCase() + ')"></span>' +
-            '<span class="card-title"><span class="c-tt" title="' + escapeHtml(s.title || "") + '">' + escapeHtml(s.title || "") + "</span>" + bgBadge + "</span>" +
+          '<span class="card-title"><span class="c-tt" title="' + escapeHtml(s.title || "") + '">' + escapeHtml(s.title || "") + "</span>" + bgBadge + "</span>" +
             '<span class="elapsed" title="最后活跃">' + fmtLastActive(s.updated_at) + "</span>" +
             '<span class="c-ops">' + opBtns + "</span></div>" +
+          activityRow +
           summaryRow +
           statsBlock +
           ctaRow;
@@ -5056,6 +5241,7 @@ function render() {
         d.innerHTML =
           headRow +
           (s.status === "WORKING" ? liveRow : summaryRow) +
+          activityRow +
           statsBlock +
           ctaRow;
       }
@@ -5331,6 +5517,20 @@ function renderDetail() {
 
   // WORKING 状态行（类 CLI：✶ 摘要 · 回合耗时）
   const lr = $("liverow");
+  const dar = $("dockActivityRow");
+  if (dar) {
+    const darText = dockActivityText(sel.ctx, s);
+    if (darText) {
+      dar.classList.add("show");
+      $("dockActivityText").textContent = darText;
+      const dockActivity = dockActivityOf(sel.ctx, s)?.activity;
+      dar.title = dockActivity?.tool ? "活动 · " + dockActivity.tool : "活动";
+    } else {
+      dar.classList.remove("show");
+      $("dockActivityText").textContent = "";
+      dar.title = "";
+    }
+  }
   if (s.status === "WORKING") {
     lr.style.display = "flex";
     // 终端实时行（\u200B 前缀）：自带活动时长/↓token——隐藏自家走秒+ctx（2026-09-16 反馈）
@@ -10156,6 +10356,69 @@ async function probeLocalRelay() {
     }, 6000);
   }
 })();
+
+// #018 W1a 内置读侧 fixture：验收探针可注入假帧序列，不触发真命令发送。
+const W1A_PROJECTION_FRAMES = Object.freeze([
+  { source: "a", visible: true, msg: { type: "SNAPSHOT", seq: 1, payload: {
+    schema_version: 1,
+    sessions: [{ session_id: "fixture-a", status: "WORKING", title: "源 A", activity: {
+      state: "WORKING", activity: { kind: "tool_use", text: "读取配置", observed_at: 100 },
+      capabilities: { native_status: true, operation_summary: true, native_elapsed: false, approval: false }, updated_at: 100,
+    }, activity_capabilities: { native_status: true, operation_summary: true, native_elapsed: false, approval: false } }],
+    logs: { "fixture-a": [{ kind: "system", text: "历史基线", ts: 90 }] },
+    notifications: [{ key: "fixture-notice", kind: "system", group: "activity", severity: "info", title: "源 A 通知", body: "只读投影", sourceContext: { domain: "fixture", entityId: "a", alertId: "a-1", returnPath: "" }, actionable: false, created_at: 100 }],
+    source_capabilities: { activity: true, notifications: true },
+  } } },
+  { source: "b", visible: true, msg: { type: "SNAPSHOT", seq: 1, payload: {
+    schema_version: 1,
+    sessions: [{ session_id: "fixture-b", status: "WORKING", title: "源 B" }],
+    logs: { "fixture-b": [{ kind: "system", text: "源 B 历史", ts: 90 }] },
+    notifications: [],
+    source_capabilities: { activity: true, notifications: true },
+  } } },
+  { source: "a", visible: true, msg: { type: "SESSION_ACTIVITY", session_id: "fixture-a", ts: 110, payload: {
+    session_id: "fixture-a", state: "WORKING", activity_kind: "tool_use", text: "运行测试", tool: "Bash", observed_at: 110,
+    capabilities: { native_status: true, operation_summary: true, native_elapsed: false, approval: false }, seq_local: 2,
+  } } },
+  { source: "b", visible: true, msg: { type: "SESSION_ACTIVITY", session_id: "fixture-b", ts: 111, payload: {
+    session_id: "fixture-b", state: "WORKING", activity_kind: "assistant_text", text: "分析中", observed_at: 111,
+    capabilities: { native_status: true, operation_summary: true, native_elapsed: false, approval: false }, seq_local: 1,
+  } } },
+  { source: "a", visible: false, msg: { type: "SESSION_ACTIVITY", session_id: "fixture-a", ts: 120, payload: {
+    session_id: "fixture-a", state: "WORKING", activity_kind: "tool_use", text: "不可见更新", observed_at: 120,
+    capabilities: { native_status: true, operation_summary: true, native_elapsed: false, approval: false }, seq_local: 3,
+  } } },
+  { source: "a", visible: true, msg: { type: "NOTIFICATIONS_UPDATED", session_id: "", ts: 130, payload: {
+    items: [{ key: "fixture-notice-2", kind: "dispatch", group: "attention", severity: "waiting", title: "待处理", body: "源 A", sourceContext: { domain: "fixture", entityId: "a", alertId: "a-2", returnPath: "" }, actionable: true, created_at: 130 }],
+  } } },
+]);
+function runW1aProjectionFixture(frames = W1A_PROJECTION_FRAMES) {
+  const makeCtx = (id) => ({ cfg: { id, name: id }, sessions: new Map(), timelines: new Map(), dockActivities: new Map(), notifications: [] });
+  const contexts = { a: makeCtx("fixture-src-a"), b: makeCtx("fixture-src-b") };
+  const selectedBefore = selected;
+  for (const frame of frames) {
+    const ctx = contexts[frame.source] || contexts.a;
+    projectReadFrame(ctx, frame.msg, { visible: () => frame.visible !== false });
+  }
+  const a = contexts.a, b = contexts.b;
+  const aTimeline = a.timelines.get("fixture-a") || [];
+  const bTimeline = b.timelines.get("fixture-b") || [];
+  const checks = {
+    single_composer_exclusive: selected === selectedBefore,
+    source_state_isolated: dockActivityText(a, a.sessions.get("fixture-a")) === "运行测试" && dockActivityText(b, b.sessions.get("fixture-b")) === "分析中",
+    transient_does_not_pollute_history: aTimeline.length === 1 && bTimeline.length === 1 && aTimeline[0].text === "历史基线" && bTimeline[0].text === "源 B 历史",
+    snapshot_activity_projected: a.sessions.get("fixture-a")?.activity_capabilities?.native_status === true,
+    notifications_projected: a.notifications.length === 1 && a.notifications[0].group === "attention",
+    hidden_activity_does_not_replace_visible_dock: dockActivityText(a, a.sessions.get("fixture-a")) !== "不可见更新",
+    activity_missing_hides_row: dockActivityHtml(b, b.sessions.get("fixture-b")) !== "",
+  };
+  const legacy = makeCtx("fixture-legacy");
+  projectReadFrame(legacy, { type: "SNAPSHOT", seq: 1, payload: { sessions: [], logs: {} } });
+  checks.legacy_degrade = legacy.legacyMode === true && legacy.schemaVersion === 0 && legacy.notificationsSupported === false;
+  const passed = Object.values(checks).filter(Boolean).length;
+  return { passed, total: Object.keys(checks).length, checks, contexts };
+}
+window.__ccDeckProjectionFixture = { frames: W1A_PROJECTION_FRAMES, run: runW1aProjectionFixture };
 </script>
 </body>
 </html>
