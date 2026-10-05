@@ -9,7 +9,7 @@ import { fmtLastActive, fmtTok, fmtElapsed, contextPct, contextLevel, CONTEXT_LI
 import { setListDensity, useListDensity, setAggregate as persistAggregate, useIdleDimMin, isIdleSession, type ListDensity } from "../display-settings";
 import { store, useRelay, type AcceptanceSummary, type SourceStatus } from "../store";
 import { FadeIn, PressScale } from "../motion";
-import { hasActivityCapability, type BoardEntry, type DispatchReceipt, type OrgConfirm, type ProjectBoard, type ProjectGroup, type RoutingPoolEntry, type SessionState, type SessionStatus } from "../protocol";
+import { hasActivityCapability, type BoardEntry, type DispatchReceipt, type NotificationItem, type OrgConfirm, type ProjectBoard, type ProjectGroup, type RoutingPoolEntry, type SessionState, type SessionStatus } from "../protocol";
 import RenameModal from "./RenameModal";
 import SettingsDrawer from "./SettingsDrawer";
 
@@ -245,6 +245,87 @@ export function splitPending(sessions: SessionState[], opts?: SplitOptions): Pen
   return { pending, others, flags };
 }
 /* E2A-QUEUE-END */
+
+// E2B-COMMANDS-START
+// #018-E2b root 写链路纯函数段（自包含零 RN 依赖；W1b 347768d W1B-COMMANDS 同构
+// 参照——两端同语义不共享代码）。§5.4 硬条款：ACK 必须核 ok === true，HTTP 200/
+// 已发送/退出 0 都不算成功；无自动重试风暴（重试=用户重点；store 全局纪律已封顶：
+// 4s 超时重发同 command_id 一次 → 6s 收摊回调一次，调用方只呈现不自动重发）。
+// payload 口径对齐 relay 实况：
+//   COMMAND_NOTIFICATION_ACK {notification_key, action:"handled"|"dismissed"}（B0 冻结词表）
+//   COMMAND_ORG_CONFIRM      {confirm_id, approve:boolean}（relay 咽喉 ===true 严判）
+// 通知不清零（B3a 口径）：本段与消费组件均无清池操作——打开/浏览/重连/动作失败
+// 回滚零删行；badge 收缩只随 handled/dismissed 权威账。
+export interface AckLike { ok?: unknown; error?: unknown; err?: unknown }
+export interface AckVerdict { ok: boolean; error: string | null; kind: "ok" | "rejected" | "unconfirmed" }
+
+// ACK 严格判定三态：ack 缺失（发送失败/超时收摊）→ unconfirmed（可重试文案）；
+// ok === true 才成功；其余一律 rejected（error/err 字符串透传，非串兜底文案）
+export function ackVerdict(ack: AckLike | null | undefined): AckVerdict {
+  if (ack == null || typeof ack !== "object") {
+    return { ok: false, error: "命令未确认（超时或源未连接），可重试", kind: "unconfirmed" };
+  }
+  if (ack.ok === true) return { ok: true, error: null, kind: "ok" };
+  const msg = typeof ack.error === "string" && ack.error ? ack.error
+    : typeof ack.err === "string" && ack.err ? ack.err : null;
+  return { ok: false, error: msg ?? "命令被拒绝", kind: "rejected" };
+}
+
+// 旧 relay 未知命令错误三签名（ws 白名单拒发 "invalid command shape" / 旧
+// handleCommand default "unsupported command" / org 咽喉 "unsupported org action: x"）。
+// 命中 = 该源 relay 版本没有这条命令（非暂时性故障）→ 能力位记忆，静默降级防弹窗轰炸
+export function unknownCommandError(err: unknown): boolean {
+  return typeof err === "string" && /invalid command shape|^unsupported command|unsupported org action/.test(err);
+}
+
+export type CmdCaps = Record<string, boolean>;
+// 能力位记忆（纯对象进出）：未知命令错误后记住「此源不再发该命令」
+export function cmdCapRemember(caps: unknown, cmd: string): CmdCaps {
+  const next: CmdCaps = { ...((caps && typeof caps === "object" ? caps : {}) as CmdCaps) };
+  next[cmd] = false;
+  return next;
+}
+export function cmdCapBlocked(caps: unknown, cmd: string): boolean {
+  return !!(caps && typeof caps === "object" && (caps as CmdCaps)[cmd] === false);
+}
+// 恢复条件：①relay 身份变更（同一连接换指另一台 relay 实例）②快照 schema_version>=1
+//（relay 升级新命令面上线）。旧 relay 恒 legacy（version 0）→ 记忆稳定不被快照冲掉
+export function cmdCapRecoverOnSnapshot(caps: unknown, snapshotLike: unknown, identityChanged: boolean): CmdCaps {
+  const p = (snapshotLike && typeof snapshotLike === "object" ? snapshotLike : {}) as Record<string, unknown>;
+  const v = typeof p.schema_version === "number" && Number.isFinite(p.schema_version) ? p.schema_version : 0;
+  if (identityChanged !== true && v < 1) return (caps && typeof caps === "object" ? caps : {}) as CmdCaps;
+  return {};
+}
+
+// 双击闸：飞行中同键再点 → skip（expo/W1b 同语义同 fixture，不共享代码）
+export function ackTapGuard(inFlight: Set<string> | null | undefined, flightKey: string): "go" | "skip" {
+  return inFlight && inFlight.has(flightKey) ? "skip" : "go";
+}
+// 组织确认复合飞行键：confirm_id 是源域命名空间，跨源可能撞名
+export function orgFlightKey(srcId: string, confirmId: string): string {
+  return String(srcId) + "/" + String(confirmId);
+}
+
+// 组织确认 payload 组装（relay 咽喉 confirm-decide：approve 必须真布尔——
+// `payload.approve === true` 严格判，字符串 "1"/数字 1 会判否决）；confirm_id 空串/null 拒发
+export function orgConfirmPayload(confirmId: unknown, approve: unknown): { confirm_id: string; approve: boolean } | null {
+  if (typeof confirmId !== "string" || !confirmId.trim()) return null;
+  return { confirm_id: confirmId, approve: approve === true };
+}
+
+// 可行动项（badge 计数/「知道了」按钮位口径）：actionable===true 且 resolved_at/
+// handled_at/dismissed_at 全空且 key 为字符串。池非数组/条目畸形一律安全空——
+// 不清零不伪造（通知不清零的收缩面只由权威账驱动）
+export function notifActionableOf(items: unknown): { key: string }[] {
+  if (!Array.isArray(items)) return [];
+  return items.filter((n): n is { key: string } => {
+    if (!n || typeof n !== "object") return false;
+    const o = n as Record<string, unknown>;
+    return o.actionable === true && o.resolved_at == null && o.handled_at == null
+      && o.dismissed_at == null && typeof o.key === "string";
+  });
+}
+// E2B-COMMANDS-END
 
 // 源配色映射（#294 审查修复口径）：按跨端稳定键 colorKey 排序等距分配调色板，
 // 与输入顺序无关——分组头与逐卡角标共用同一映射，同屏同源必同色
@@ -1142,6 +1223,8 @@ export default function ListScreen({ sessions, connected, connText, onOpen, onNe
   const [drawerOpen, setDrawerOpen] = useState(false);
   // 状态图例浮窗（统计行 ？ 呼出）
   const [legendOpen, setLegendOpen] = useState(false);
+  // E2b 通知中心开关（声明前置：requestBack 返回栈句柄在其上方引用）
+  const [notifOpen, setNotifOpen] = useState(false);
   // 顶栏品牌区副标题：当前连接的服务器名（多源场景区分不同来源）。
   // 抽屉关上时重读——切服务器不重挂载本页，副标题要跟着换
   const [activeName, setActiveName] = useState("");
@@ -1156,9 +1239,15 @@ export default function ListScreen({ sessions, connected, connText, onOpen, onNe
   }, [drawerOpen]);
 
   // 硬件返回（#282）：抽屉/图例开着时先关浮层而不是退出 App（列表页是根路由）。
-  // 原两处局部 BackHandler 订阅已并入 App.tsx 顶层单订阅，这里经 ref 句柄承接分发
+  // 原两处局部 BackHandler 订阅已并入 App.tsx 顶层单订阅，这里经 ref 句柄承接分发。
+  // E2b：通知中心 Modal 纳入返回栈最前位——返回键只关浮层，列表分组/滚动位/
+  // 未决计数零触碰（通知中心打开不清零，返回也不重置）
   useImperativeHandle(ref, () => ({
     requestBack: () => {
+      if (notifOpen) {
+        setNotifOpen(false);
+        return true;
+      }
       if (legendOpen) {
         setLegendOpen(false);
         return true;
@@ -1169,7 +1258,7 @@ export default function ListScreen({ sessions, connected, connText, onOpen, onNe
       }
       return false;
     },
-  }), [drawerOpen, legendOpen]);
+  }), [notifOpen, drawerOpen, legendOpen]);
 
   // 左缘手势条：从屏幕左缘右滑呼出侧边栏（透明覆盖条，只认横向滑动，不拦点击/竖向滚动）
   const edgePan = useRef(
@@ -1358,11 +1447,87 @@ export default function ListScreen({ sessions, connected, connText, onOpen, onNe
   );
   // 组详情弹窗：点 chip 打开 → COMMAND_PROJECT_DETAIL 按需拉取
   const [orgOpen, setOrgOpen] = useState<{ srcId: string; gid: string; name: string } | null>(null);
+  // E2b：确认卡决议走 ACK 严格判定门（W1b 同构）——approve 经 orgConfirmPayload
+  // 强转真布尔（relay 咽喉 ===true 严判）、双击闸、失败可见态；unknownCommandError
+  // 记能力位后该源决议降级禁用（不再弹错轰炸）；成功不本地造状态，等
+  // ORG_CONFIRM_UPDATED 权威帧收敛（与 store orgConfirm 注释同口径）。无自动重试
+  //（重试=用户重点；store 全局 4s 重发一次+6s 收摊封顶）
+  const [orgFlight, setOrgFlight] = useState<Set<string>>(new Set());
+  const [orgErr, setOrgErr] = useState<{ key: string; msg: string } | null>(null);
+  const [orgCaps, setOrgCaps] = useState<CmdCaps>({});
+  const ORG_CMD = "COMMAND_ORG_CONFIRM";
+  const ORG_CAP_MSG = "该源 relay 版本不支持确认卡决议，升级 relay 后可用";
   const orgDecide = useCallback((srcId: string, confirmId: string, approve: boolean) => {
-    if (store.orgConfirm(srcId, confirmId, approve)) {
-      try { Vibration.vibrate(10); } catch {}
+    const fk = orgFlightKey(srcId, confirmId);
+    if (ackTapGuard(orgFlight, fk) === "skip") return;
+    const payload = orgConfirmPayload(confirmId, approve);
+    if (!payload) return;
+    if (cmdCapBlocked(orgCaps, ORG_CMD)) {
+      setOrgErr({ key: fk, msg: ORG_CAP_MSG });
+      return;
     }
-  }, []);
+    setOrgFlight((prev) => new Set(prev).add(fk));
+    setOrgErr(null);
+    const settle = (v: AckVerdict): void => {
+      setOrgFlight((prev) => {
+        const n = new Set(prev);
+        n.delete(fk);
+        return n;
+      });
+      if (v.ok) return; // 成功等权威帧，不本地造状态
+      if (unknownCommandError(v.error)) {
+        setOrgCaps((prev) => cmdCapRemember(prev, ORG_CMD));
+        setOrgErr({ key: fk, msg: ORG_CAP_MSG });
+        return;
+      }
+      setOrgErr({ key: fk, msg: v.error ?? "决议未生效，可重试" });
+    };
+    const sent = store.orgConfirm(srcId, confirmId, payload.approve, (r) => settle(ackVerdict(r)));
+    if (!sent) settle(ackVerdict(null)); // 未连接：同 unconfirmed 口径可见可重试
+  }, [orgFlight, orgCaps]);
+
+  // E2b：通知中心（root 通知动作宿主）。池=全源 notifications 只读平铺——
+  // **不清零硬条款**（B3a 口径）：打开/浏览/关闭/重连/动作失败回滚零删行（本组件
+  // 无任何清池 state；badge 与行动行只随 handled/dismissed 权威账收缩）。
+  // 动作走 store.ackNotification（E3b 真链路：乐观+失败回滚+onDone），本层 ACK
+  // 严格判定后呈现行内错误；无自动重试（重试=重点按钮），双击闸防重复 ACK
+  const notifRows = useMemo(() => {
+    const out: { srcId: string; srcName: string; item: NotificationItem }[] = [];
+    for (const src of snap.sources)
+      for (const n of src.notifications ?? [])
+        out.push({ srcId: src.id, srcName: displaySrcName(src.name), item: n });
+    return out;
+  }, [snap.sources]);
+  const notifPending = useMemo(() => notifActionableOf(notifRows.map((r) => r.item)), [notifRows]);
+  const [notifFlight, setNotifFlight] = useState<Set<string>>(new Set());
+  const [notifErr, setNotifErr] = useState<Map<string, string>>(new Map());
+  const notifAct = useCallback((key: string, action: "handled" | "dismissed") => {
+    if (ackTapGuard(notifFlight, key) === "skip") return;
+    setNotifFlight((prev) => new Set(prev).add(key));
+    const settle = (msg: string | null): void => {
+      setNotifFlight((prev) => {
+        const n = new Set(prev);
+        n.delete(key);
+        return n;
+      });
+      setNotifErr((prev) => {
+        const n = new Map(prev);
+        if (msg) n.set(key, msg);
+        else n.delete(key);
+        return n;
+      });
+    };
+    const sent = store.ackNotification(key, action, (r) => {
+      const v = ackVerdict({ ok: r.ok, error: r.err });
+      if (v.ok) {
+        settle(null);
+        return;
+      }
+      // 乐观回滚由 store 负责（E3b 行回来）；本层只呈现行内错误，不自动重试
+      settle(unknownCommandError(v.error) ? "该源 relay 版本不支持通知动作" : v.error ?? "未生效，可重试");
+    });
+    if (!sent) settle(ackVerdict(null).error); // 未连接：unconfirmed 文案
+  }, [notifFlight]);
 
   // 下拉刷新 = 断开重连一次（重走快照），在线即收起转圈；3s 兜底
   const [refreshing, setRefreshing] = useState(false);
@@ -1547,6 +1712,18 @@ export default function ListScreen({ sessions, connected, connText, onOpen, onNe
             </Text>
           </Pressable>
         ) : null}
+        {notifPending.length > 0 ? (
+          // E2b 通知中心入口：badge=未决行动项计数（只随权威账收缩，打开不清零）
+          <Pressable
+            style={styles.bellBtn}
+            android_ripple={{ color: c.tintSoft, borderless: false, radius: 16 }}
+            onPress={() => setNotifOpen(true)}
+            hitSlop={4}
+            accessibilityLabel={`通知中心，${notifPending.length} 项需行动`}
+          >
+            <Text style={styles.bellT} numberOfLines={1}>通知 · {notifPending.length > 99 ? "99+" : notifPending.length}</Text>
+          </Pressable>
+        ) : null}
       </View>
 
       <FlatList
@@ -1608,6 +1785,15 @@ export default function ListScreen({ sessions, connected, connText, onOpen, onNe
               onDecide={orgDecide}
               onOpenGroup={(src, g) => setOrgOpen({ srcId: src.id, gid: g.id, name: g.name })}
             />
+            {orgErr ? (
+              // E2b：决议失败可见态（ACK 判定门产出）——行内错误可关闭，无自动重试
+              <View style={styles.orgErrRow}>
+                <Text style={styles.orgErrT} numberOfLines={2}>{orgErr.msg}</Text>
+                <Pressable hitSlop={8} accessibilityLabel="关闭决议错误提示" onPress={() => setOrgErr(null)}>
+                  <Text style={styles.orgErrClose}>×</Text>
+                </Pressable>
+              </View>
+            ) : null}
           </>
         }
         onScrollBeginDrag={() => { scrollArmed.current = true; }}
@@ -1729,12 +1915,134 @@ export default function ListScreen({ sessions, connected, connText, onOpen, onNe
           onOpenSession={onOpen}
         />
       ) : null}
+
+      {/* E2b 通知中心（铃铛/返回键呼出；打开/关闭零清零，池只读自快照） */}
+      <NotifCenterModal
+        open={notifOpen}
+        onClose={() => setNotifOpen(false)}
+        rows={notifRows}
+        flight={notifFlight}
+        errs={notifErr}
+        onAct={notifAct}
+      />
     </SafeAreaView>
+  );
+}
+
+// E2b 通知中心 Modal：全源通知池只读列表 + actionable 未决行「知道了/忽略」动作。
+// 池只读自 store 快照——本组件无任何清池路径（打开/浏览/关闭/重连不清零）；
+// 动作经 ACK 严格判定门（notifAct）：失败行内错误可重试，飞行中按钮转「…」；
+// 旧 relay notifications null/缺失 → 池空自然降级空态，不崩不伪造
+function NotifCenterModal({ open, onClose, rows, flight, errs, onAct }: {
+  open: boolean;
+  onClose: () => void;
+  rows: { srcId: string; srcName: string; item: NotificationItem }[];
+  flight: Set<string>;
+  errs: Map<string, string>;
+  onAct: (key: string, action: "handled" | "dismissed") => void;
+}) {
+  const { c } = useTheme();
+  const styles = useThemeStyles(makeStyles);
+  const pendingKeys = useMemo(
+    () => new Set(notifActionableOf(rows.map((r) => r.item)).map((n) => n.key)),
+    [rows],
+  );
+  return (
+    <Modal visible={open} transparent animationType="slide" onRequestClose={onClose}>
+      <Pressable style={styles.notiMask} onPress={onClose}>
+        <Pressable style={styles.notiSheet} onPress={(e) => e.stopPropagation()}>
+          <View style={styles.notiHead}>
+            <Text style={styles.notiTitle}>通知中心</Text>
+            <Text style={styles.notiSub}>{pendingKeys.size > 0 ? `${pendingKeys.size} 项需行动` : "暂无待行动项"}</Text>
+            <Pressable hitSlop={10} accessibilityLabel="关闭通知中心" onPress={onClose}>
+              <Text style={styles.notiClose}>×</Text>
+            </Pressable>
+          </View>
+          <ScrollView style={styles.notiList} contentContainerStyle={{ paddingBottom: 24 }}>
+            {rows.length === 0 ? (
+              <Text style={styles.notiEmpty}>暂无通知</Text>
+            ) : rows.map(({ srcId, srcName, item }) => {
+              const actionable = pendingKeys.has(item.key);
+              const busy = flight.has(item.key);
+              const err = errs.get(item.key);
+              return (
+                <View key={`${srcId}/${item.key}`} style={styles.notiRow}>
+                  <View style={styles.notiRowHead}>
+                    {actionable ? <View style={styles.notiDot} /> : null}
+                    <Text style={[styles.notiRowTitle, !actionable && { color: c.dim }]} numberOfLines={1}>{item.title}</Text>
+                    <Text style={styles.notiSrc} numberOfLines={1}>{srcName}</Text>
+                  </View>
+                  {item.body ? <Text style={styles.notiBody} numberOfLines={2}>{item.body}</Text> : null}
+                  {err ? <Text style={styles.notiErrT} numberOfLines={2}>{err}</Text> : null}
+                  {actionable ? (
+                    <View style={styles.notiActRow}>
+                      <Pressable
+                        style={[styles.notiBtn, { backgroundColor: c.done, opacity: busy ? 0.5 : 1 }]}
+                        disabled={busy}
+                        accessibilityLabel={`知道了：${item.title}`}
+                        onPress={() => onAct(item.key, "handled")}
+                      >
+                        <Text style={[styles.notiBtnT, { color: c.onDone }]}>{busy ? "…" : "知道了"}</Text>
+                      </Pressable>
+                      <Pressable
+                        style={[styles.notiBtn, styles.notiBtnGhost, { borderColor: withA(c.dim, 0.5), opacity: busy ? 0.5 : 1 }]}
+                        disabled={busy}
+                        accessibilityLabel={`忽略：${item.title}`}
+                        onPress={() => onAct(item.key, "dismissed")}
+                      >
+                        <Text style={[styles.notiBtnT, { color: c.dim }]}>{busy ? "…" : "忽略"}</Text>
+                      </Pressable>
+                    </View>
+                  ) : null}
+                </View>
+              );
+            })}
+          </ScrollView>
+        </Pressable>
+      </Pressable>
+    </Modal>
   );
 }
 
 const makeStyles = (c: ThemeColors) => StyleSheet.create({
   safe: { flex: 1, backgroundColor: c.bg },
+  // ═══════ E2b：通知中心入口/Modal + 决议错误行 ═══════
+  bellBtn: {
+    backgroundColor: c.tintSoft, borderRadius: 14, paddingHorizontal: 9, paddingVertical: 6,
+  },
+  bellT: { color: c.brandA, fontSize: 11, fontWeight: "700" },
+  notiMask: { flex: 1, backgroundColor: "rgba(0,0,0,.45)", justifyContent: "flex-end" },
+  notiSheet: {
+    backgroundColor: c.panel, borderTopLeftRadius: 16, borderTopRightRadius: 16,
+    borderWidth: 1, borderColor: c.line, maxHeight: "78%",
+  },
+  notiHead: {
+    flexDirection: "row", alignItems: "center", gap: 8,
+    paddingHorizontal: 14, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: c.line,
+  },
+  notiTitle: { color: c.text, fontSize: 15, fontWeight: "700", flex: 1 },
+  notiSub: { color: c.brandA, fontSize: 11, fontWeight: "600" },
+  notiClose: { color: c.faint, fontSize: 20, fontWeight: "600", paddingLeft: 6 },
+  notiList: { paddingHorizontal: 14 },
+  notiEmpty: { color: c.faint, fontSize: 12, textAlign: "center", paddingVertical: 32 },
+  notiRow: { paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: c.line, gap: 4 },
+  notiRowHead: { flexDirection: "row", alignItems: "center", gap: 6 },
+  notiDot: { width: 7, height: 7, borderRadius: 4, backgroundColor: c.working },
+  notiRowTitle: { color: c.text, fontSize: 13, fontWeight: "600", flexShrink: 1 },
+  notiSrc: { color: c.faint, fontSize: 10, marginLeft: "auto" },
+  notiBody: { color: c.dim, fontSize: 12, lineHeight: 17 },
+  notiActRow: { flexDirection: "row", gap: 8, marginTop: 2 },
+  notiBtn: { borderRadius: 8, paddingHorizontal: 12, paddingVertical: 6 },
+  notiBtnGhost: { backgroundColor: "transparent", borderWidth: 1 },
+  notiBtnT: { fontSize: 12, fontWeight: "600" },
+  notiErrT: { color: c.error, fontSize: 11, lineHeight: 15 },
+  orgErrRow: {
+    flexDirection: "row", alignItems: "center", gap: 8,
+    borderRadius: 10, borderWidth: 1, borderColor: withA(c.error, 0.45),
+    backgroundColor: c.panel, paddingHorizontal: 10, paddingVertical: 8, marginBottom: 8,
+  },
+  orgErrT: { color: c.error, fontSize: 11.5, lineHeight: 16, flex: 1 },
+  orgErrClose: { color: c.faint, fontSize: 15, fontWeight: "600" },
   // #137 待填验收单卡（列表顶部条件卡）：卡片形制对齐会话卡（panel 底/line 边/
   // 12 圆角），品牌色只点「验收单」标签与「去填写」动作（#102 品牌色克制）
   accCard: {

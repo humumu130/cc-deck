@@ -2767,8 +2767,9 @@ class RelayStore {
   // ---------- #26 M2 组织域动作（v3.1 矩阵式） ----------
   // 确认卡决议（✓/✗）：relay 单漏斗 orgAction（决议与执行分离），决议后
   // ORG_CONFIRM_UPDATED 瞬态帧回推收敛清单——不做本地乐观更新，双端同源权威
-  orgConfirm(sourceId: string, confirmId: string, approve: boolean): boolean {
-    return this.send("COMMAND_ORG_CONFIRM", { confirm_id: confirmId, approve }, sourceId);
+  orgConfirm(sourceId: string, confirmId: string, approve: boolean, onAck?: (r: { ok: boolean; err: string | null }) => void): boolean {
+    // E2b：onAck 透传（E2b 判定门用）——ACK ok 才算成功，失败/超时经回调可见可重试
+    return this.send("COMMAND_ORG_CONFIRM", { confirm_id: confirmId, approve }, sourceId, onAck);
   }
 
   // #17 第二批 雇员独立家开关（relay 三层合成的用户面写入口）：ack 带最新状态由
