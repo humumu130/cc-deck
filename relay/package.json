@@ -30,6 +30,7 @@
     "test:codex": "tsx scripts/test-codex.ts",
     "test:engine-adapters": "tsx scripts/test-engine-adapters.ts",
     "test:artifacts-dead": "tsx scripts/test-artifacts-dead.ts",
+    "test:artifact-groups": "tsx scripts/test-artifact-groups.ts",
     "test:deliver-session": "tsx scripts/test-deliver-session.ts",
     "test:snapshot-parity": "tsx scripts/test-snapshot-parity.ts"
   },
