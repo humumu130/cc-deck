@@ -12,7 +12,7 @@ import type { CommandRole, DispatchTier, ForbiddenCommandAck } from "./org.js";
 // #26 M2 项目组底座（纯 fs，无环）：分诊引擎（立项/状态迁移/派单/板/确认单副作用）
 // 全部经 orgAction 单漏斗进出，广播统一 emitOrgState/emitBoard
 import {
-  adaptOrgAction, addConfirm, addMember, buildArchiveChecklist, canTransition, createGroup, decideConfirm,
+  adaptOrgAction, addConfirm, addMember, buildArchiveChecklist, canTransition, computeReady, createGroup, decideConfirm,
   findGroup, findGroupByAnchor, findStaleGroups, listConfirms, listGroups, listGroupsByStatus,
   listPendingConfirms, loadBoard, markHoldSuggested, maxActiveGroups,
   moveBoardEntry, moveEntryByDispatch,
@@ -4125,6 +4125,7 @@ export class SessionManager {
             title: str("title") || undefined,
             skills: Array.isArray(p.skills) ? p.skills.filter((x): x is string => typeof x === "string") : undefined,
             role: str("role") || undefined,
+            entry_id: str("entry_id") || undefined, // #087 beads：认领既有板卡（前置检查+认领承接）
             engine: p.engine as SessionEngine | undefined,
             model: str("model") || undefined,
             provider: str("provider") || undefined,
@@ -4400,7 +4401,7 @@ export class SessionManager {
   // 先落账再执行（§3.5 台账纪律）：dispatched 行 → 拉起 → running 行（同 id 收敛）；
   // 拉起失败即收口 failed 不留悬账；崩溃窗口的 dispatched 由断档补记兜底。
   // 权限 acceptEdits（§4 随手办纪律）、跳过 sticky 默认目录（worker cwd 锚项目不动全局）。
-  dispatchWorker(input: { anchor: string; prompt: string; gid?: string; title?: string; skills?: string[]; actor?: string; role?: string; engine?: SessionEngine; model?: string; provider?: string }):
+  dispatchWorker(input: { anchor: string; prompt: string; gid?: string; title?: string; skills?: string[]; actor?: string; role?: string; engine?: SessionEngine; model?: string; provider?: string; /** #087 beads：认领既有板卡（触发依赖/gate 前置检查；缺省=新卡派单无依赖可查） */ entry_id?: string }):
     { ok: true; dispatch_id: string; session_id: string } | { ok: false; error: string } {
     if (!input.prompt.trim()) return { ok: false, error: "prompt 必填" };
     // 冲刺 F-03：anchor 校验移 gid 解析之后——gid 派单锚取自组（anchor 参数可空），
@@ -4415,6 +4416,19 @@ export class SessionManager {
       if (g.status !== "active") return { ok: false, error: `项目组 ${g.name} 为 ${g.status}，不可派单（挂起冻结/结项只读）` };
       tier = g.tier;
       anchor = g.anchor_dir;
+      // #087 beads 思想采纳（009 §4 M2）：派单前置检查——认领既有板卡时依赖非全 done
+      // 或 gate 未过即拒（纯函数 computeReady，原因逐条可判定；确认卡仍是用户决策唯一
+      // 写面，relay 无自动放行/关闭路径）。缺 entry_id = 新卡派单，无依赖可查不检查
+      if (input.entry_id) {
+        const board = loadBoard(input.gid);
+        const card = board.entries.find((x) => x.id === input.entry_id);
+        if (!card) return { ok: false, error: `板卡不存在: ${input.entry_id}（先建卡再认领派单）` };
+        const ready = computeReady(card, board);
+        if (!ready.ready) {
+          const why = [...ready.reasons, ...(ready.gate_reason ? [`gate 未过: ${ready.gate_reason}`] : [])].join("；");
+          return { ok: false, error: `板卡 ${input.entry_id} 未就绪不可派: ${why}` };
+        }
+      }
     }
     const role = input.role?.trim() || "worker";
     if (input.engine !== undefined && !isSessionEngine(input.engine)) return { ok: false, error: `未知引擎: ${String(input.engine)}` };
@@ -4522,12 +4536,10 @@ export class SessionManager {
     appendDispatch({ ts: Date.now(), id: dispatchId, tier, target: sessionId, status: "running", session_id: sessionId, project_anchor: anchor, actor });
     this.pushOpenDispatch(sessionId, { id: dispatchId, tier, gid: input.gid, anchor, actor });
     if (input.gid) {
-      upsertBoardEntry(input.gid, {
-        text: input.title?.trim() || input.prompt.split("\n")[0].slice(0, 60),
-        status: "doing",
-        owner_session: sessionId,
-        dispatch_id: dispatchId,
-      });
+      upsertBoardEntry(input.gid, input.entry_id
+        ? // #087 beads：认领模式——前置检查已过，既有卡 todo→doing 挂派单（卡是同一张，依赖关系保留）
+          { id: input.entry_id, text: input.title?.trim() || input.prompt.split("\n")[0].slice(0, 60), status: "doing", owner_session: sessionId, dispatch_id: dispatchId }
+        : { text: input.title?.trim() || input.prompt.split("\n")[0].slice(0, 60), status: "doing", owner_session: sessionId, dispatch_id: dispatchId });
       this.emitBoard(input.gid);
     }
     if (input.title?.trim()) this.setTitleOverride(sessionId, `[${tier}] ${input.title.trim().slice(0, 40)}`);

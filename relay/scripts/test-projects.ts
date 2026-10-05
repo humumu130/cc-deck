@@ -10,6 +10,7 @@ import {
   loadBoard, upsertBoardEntry, moveBoardEntry, removeBoardEntry, moveEntryByDispatch,
   listConfirms, listPendingConfirms, addConfirm, decideConfirm,
   ensureProjectClaudeMd, buildArchiveChecklist, setLightConfirmTrusted, isLightConfirmTrusted,
+  computeReady, computeReadySet, addLesson, listLessons,
 } from "../src/projects.js";
 
 let pass = 0;
@@ -204,6 +205,73 @@ assert(chk?.openBoardEntries === 1, "板未完成计数");
 assert(chk?.headcount.length === 1, "在编成员入清单");
 assert(buildArchiveChecklist("pg-none", dir2) === null, "组不存在 → null");
 rmSync(dir2, { recursive: true, force: true });
+
+// ---------- #087 beads 思想采纳（009 §4 M1/M2）：depends_on / ready / gate→blocked / lessons ----------
+console.log("beads·依赖字段:");
+const dirB = mkdtempSync(join(tmpdir(), "cc-deck-projects-beads-"));
+const cb = createGroup({ name: "beads", anchor_dir: join(dirB, "a-beads"), tier: "轻立项" }, dirB);
+const gidB = cb.ok ? cb.group.id : "";
+decideConfirm(cb.ok && cb.confirm ? cb.confirm.id : "", true, "u", dirB);
+setGroupStatus(gidB, "active", undefined, dirB);
+assert(findGroup(gidB, dirB)?.status === "active", "beads 组就位 active（独立沙盒）");
+// 依赖字段：写入+洗刷+落盘恢复+空数组清除
+const depSrc = upsertBoardEntry(gidB, { text: "依赖源卡", status: "todo" }, dirB);
+const depId = depSrc.ok ? depSrc.entry.id : "";
+const wDep = upsertBoardEntry(gidB, { text: "主卡", status: "todo", depends_on: [depId, "", depId, "  "] }, dirB);
+const wid = wDep.ok ? wDep.entry.id : "";
+assert(wDep.ok && wDep.entry.depends_on?.length === 1 && wDep.entry.depends_on[0] === depId, "depends_on 落卡（空串洗刷+去重）");
+assert(loadBoard(gidB, dirB).entries.find((x) => x.id === wid)?.depends_on?.length === 1, "depends_on 落盘恢复");
+const wDepClr = upsertBoardEntry(gidB, { id: wid, text: "主卡", depends_on: [] }, dirB);
+assert(wDepClr.ok && wDepClr.entry.depends_on === undefined, "空数组清除 depends_on（字段退场）");
+
+console.log("beads·ready 就绪集:");
+const freeCheck = computeReady({ id: "t-free" }, loadBoard(gidB, dirB));
+assert(freeCheck.ready && freeCheck.reasons.length === 0 && freeCheck.gate_reason === null, "无依赖无 gate → ready（纯函数正面）");
+upsertBoardEntry(gidB, { id: wid, text: "主卡", depends_on: [depId] }, dirB);
+const blockCard = loadBoard(gidB, dirB).entries.find((x) => x.id === wid)!;
+const rBlock = computeReady(blockCard, loadBoard(gidB, dirB));
+assert(!rBlock.ready && rBlock.reasons.length === 1 && rBlock.reasons[0].includes(depId) && rBlock.reasons[0].includes("todo"), "依赖 todo → not ready（原因含依赖 id+状态可判定）");
+moveBoardEntry(gidB, depId, "done", dirB);
+assert(computeReady(blockCard, loadBoard(gidB, dirB)).ready === true, "依赖 done → ready（全 done 放行）");
+upsertBoardEntry(gidB, { id: wid, text: "主卡", depends_on: ["t-ghost"] }, dirB);
+const ghostCard = loadBoard(gidB, dirB).entries.find((x) => x.id === wid)!;
+const rGhost = computeReady(ghostCard, loadBoard(gidB, dirB));
+assert(!rGhost.ready && rGhost.reasons[0]?.includes("t-ghost") && rGhost.reasons[0]?.includes("坏引用"), "坏引用按未就绪容错（不炸不静默放行）");
+const set1 = computeReadySet(loadBoard(gidB, dirB));
+assert(set1.length === 1 && set1[0].id === wid && set1[0].check.ready === false, "computeReadySet 过滤 done 只余未完成卡（bd ready 前沿思想）");
+
+console.log("beads·gate→blocked:");
+const wGate = upsertBoardEntry(gidB, { id: wid, text: "主卡", depends_on: [], gate: { reason: "等用户验收点确认" } }, dirB);
+assert(wGate.ok && wGate.entry.gate?.reason === "等用户验收点确认" && typeof wGate.entry.gate.opened_at === "number", "gate 设闸落卡（reason+opened_at 自动补）");
+const gateCard = loadBoard(gidB, dirB).entries.find((x) => x.id === wid)!;
+const rGate = computeReady(gateCard, loadBoard(gidB, dirB));
+assert(!rGate.ready && rGate.gate_reason === "等用户验收点确认", "gate 在场 → blocked 可判定（原因可查）");
+const wGateClr = upsertBoardEntry(gidB, { id: wid, text: "主卡", gate: null }, dirB);
+assert(wGateClr.ok && wGateClr.entry.gate === undefined, "gate 清除唯一口=人显式 upsert gate:null");
+const clrCard = loadBoard(gidB, dirB).entries.find((x) => x.id === wid)!;
+assert(computeReady(clrCard, loadBoard(gidB, dirB)).gate_reason === null, "清除后 gate_reason 归 null（清除动作是人做的，无自动放行）");
+const wG2 = upsertBoardEntry(gidB, { text: "gate 卡", gate: { reason: "挂起等外部" } }, dirB);
+const g2id = wG2.ok ? wG2.entry.id : "";
+moveBoardEntry(gidB, g2id, "doing", dirB);
+const g2After = loadBoard(gidB, dirB).entries.find((x) => x.id === g2id)!;
+assert(g2After.gate?.reason === "挂起等外部", "搬卡不动 gate（无自动关闭路径）");
+assert(g2After.status === "doing" && computeReady(g2After, loadBoard(gidB, dirB)).gate_reason === "挂起等外部", "doing 态 gate 卡仍 blocked（gate 独立于状态机，不自动放行）");
+
+console.log("beads·lessons 回流:");
+const l1 = addLesson(gidB, { text: "T17 教训：spawnSync env 必显式钉 CCR_TOKEN", tags: ["worker-G", "测试", "claude"], source_dispatch_id: "dsp-l1" }, dirB);
+assert(l1.ok && l1.lesson.tags.length === 3 && l1.lesson.source_dispatch_id === "dsp-l1", "lessons 写入（tag+来源派单可回溯）");
+addLesson(gidB, { text: "lessons 语义由 cc-deck 定义", tags: ["PM", "设计"] }, dirB);
+addLesson(gidB, { text: "无 tag 经验也合法", tags: [] }, dirB);
+assert(loadBoard(gidB, dirB).lessons?.length === 3, "lessons 落盘恢复（board 分区）");
+assert(listLessons(gidB, undefined, dirB).length === 3, "无 filter 全量（文件序=时间序）");
+assert(listLessons(gidB, { tags: ["测试"] }, dirB).length === 1, "单 tag 筛选命中");
+assert(listLessons(gidB, { tags: ["worker-G", "claude"] }, dirB).length === 1 && listLessons(gidB, { tags: ["worker-G", "PM"] }, dirB).length === 0, "多 tag AND 筛选（项目/角色/引擎组合键）");
+assert(listLessons(gidB, { tags: ["不存在的tag"] }, dirB).length === 0, "无命中返回空（不炸）");
+assert(!addLesson(gidB, { text: "   " }, dirB).ok, "空 text 拒写");
+setGroupStatus(gidB, "parked", undefined, dirB);
+assert(!addLesson(gidB, { text: "冻结期经验" }, dirB).ok, "冻结板 lessons 拒写（与卡同口径）");
+setGroupStatus(gidB, "active", undefined, dirB);
+rmSync(dirB, { recursive: true, force: true });
 
 // ---------- M3 挂起自动化：findStaleGroups / markHoldSuggested ----------
 console.log("挂起自动化（活度口径）:");

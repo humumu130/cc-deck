@@ -77,11 +77,32 @@ export interface BoardEntry {
   ts: number;
   updated_at: number;
   note?: string;
+  /** #087 beads 思想采纳（009 §5 裁决，M1 字段）：依赖卡 id 引用——依赖全 done 才可派
+   *（computeReady 判定；坏引用容错按未就绪处理不炸） */
+  depends_on?: string[];
+  /** beads gate 思想（009 §2/§5：CI/定时/外部等待映射 blocked）：字段在场=blocked 可判定。
+   * 红线：无自动放行/关闭路径——清除只能由人显式 upsert（gate:null），确认卡仍是用户决策唯一写面 */
+  gate?: { reason: string; opened_at: number };
+}
+
+/** #087 经验回流（009 §4 M2）：board lessons 分区——收口回执写入，任务书按 tag 筛选
+ * 注入的下一步消费留出口（本批只落存储+查询，注入接线不做）。语义对齐 009 §2：
+ * lessons 语义由 cc-deck 定义，不把经验散落到外部 memory */
+export interface LessonEntry {
+  id: string;
+  text: string;
+  /** 项目/角色/引擎 tag（筛选键，AND 语义） */
+  tags: string[];
+  ts: number;
+  /** 来源派单台账 id（可回溯到收口回执） */
+  source_dispatch_id?: string;
 }
 
 export interface ProjectBoard {
   gid: string;
   entries: BoardEntry[];
+  /** #087 lessons 分区（经验回流，append-only 语义：只增不删，量大了再议归档） */
+  lessons?: LessonEntry[];
   /** 挂起/结项 = 冻结只读（active 才可写，§2.2 任务板冻结保留） */
   frozen: boolean;
   updated_at: number;
@@ -373,6 +394,7 @@ function loadBoardFile(gid: string, dir?: string): ProjectBoard {
     return {
       gid,
       entries: Array.isArray(raw.entries) ? (raw.entries as BoardEntry[]) : [],
+      ...(Array.isArray(raw.lessons) ? { lessons: raw.lessons as LessonEntry[] } : {}),
       frozen: raw.frozen === true,
       updated_at: typeof raw.updated_at === "number" ? raw.updated_at : 0,
     };
@@ -417,12 +439,22 @@ function freezeBoard(gid: string, frozen: boolean, dir?: string): void {
 
 export function upsertBoardEntry(
   gid: string,
-  entry: { id?: string; text: string; status?: BoardEntryStatus; owner_session?: string; dispatch_id?: string; note?: string },
+  entry: {
+    id?: string; text: string; status?: BoardEntryStatus;
+    owner_session?: string; dispatch_id?: string; note?: string;
+    /** #087 beads：依赖卡 id 引用（空串元素洗刷剔除） */
+    depends_on?: string[];
+    /** #087 beads gate：对象=设闸（opened_at 自动补）；null=显式清除（唯一清除口，人决策）；缺省=不动 */
+    gate?: { reason: string } | null;
+  },
   dir?: string,
 ): { ok: true; entry: BoardEntry } | { ok: false; error: string } {
   const w = writableBoard(gid, dir);
   if (!w.ok) return w;
   const now = Date.now();
+  const deps = entry.depends_on === undefined
+    ? undefined
+    : [...new Set(entry.depends_on.filter((d): d is string => typeof d === "string" && d.trim() !== ""))];
   let e: BoardEntry | undefined = entry.id ? w.board.entries.find((x) => x.id === entry.id) : undefined;
   if (e) {
     e.text = entry.text;
@@ -430,6 +462,14 @@ export function upsertBoardEntry(
     if (entry.owner_session !== undefined) e.owner_session = entry.owner_session;
     if (entry.dispatch_id !== undefined) e.dispatch_id = entry.dispatch_id;
     if (entry.note !== undefined) e.note = entry.note;
+    if (deps !== undefined) {
+      if (deps.length === 0) delete e.depends_on;
+      else e.depends_on = deps;
+    }
+    if (entry.gate !== undefined) {
+      if (entry.gate === null) delete e.gate;
+      else e.gate = { reason: entry.gate.reason, opened_at: now };
+    }
     e.updated_at = now;
   } else {
     e = {
@@ -441,6 +481,8 @@ export function upsertBoardEntry(
       ts: now,
       updated_at: now,
       note: entry.note,
+      ...(deps && deps.length > 0 ? { depends_on: deps } : {}),
+      ...(entry.gate ? { gate: { reason: entry.gate.reason, opened_at: now } } : {}),
     };
     w.board.entries.push(e);
   }
@@ -487,6 +529,78 @@ export function moveEntryByDispatch(gid: string, dispatchId: string, to: BoardEn
   e.updated_at = Date.now();
   w.board.updated_at = e.updated_at;
   saveBoardFile(w.board, dir);
+}
+
+// ---------- #087 beads 思想采纳（009 §4 M1/M2 + §5 裁决；零外部依赖，不引 bd/Dolt） ----------
+//
+// 四件：depends_on 依赖字段 / ready 就绪集 / gate→blocked / lessons 回流。
+// 红线（§5 裁决）：确认卡仍是用户决策唯一写面——gate 清除无自动路径，relay 不自动放行；
+// `bd ready` 思想只在 relay 内实现（computeReady 纯函数，派单路径与 UI 共用，不绑 fs）。
+
+export interface ReadyCheck {
+  ready: boolean;
+  /** 未就绪原因逐条可判定：缺哪些依赖/各自状态；坏引用单列（不炸不静默忽略） */
+  reasons: string[];
+  /** gate 阻塞原因（gate 未过时非 null；清除=人显式 upsert gate:null，无自动路径） */
+  gate_reason: string | null;
+}
+
+/** 就绪判定纯函数（M2「派单前 ready 就绪集计算」的核心）：依赖卡全 done 且 gate 未设才
+ * ready。坏引用（指向不存在卡）按未就绪处理——保守向：板被外部改过/引用丢了宁可拦下
+ * 让人看，不静默放行。自引用/环不特判：自己依赖自己天然恒不就绪（可判定坏态，不炸）。 */
+export function computeReady(
+  card: Pick<BoardEntry, "id" | "depends_on" | "gate">,
+  board: Pick<ProjectBoard, "entries">,
+): ReadyCheck {
+  const gate_reason = card.gate ? (card.gate.reason || "gate 未过（原因未注明）") : null;
+  const reasons: string[] = [];
+  for (const dep of card.depends_on ?? []) {
+    const d = board.entries.find((x) => x.id === dep);
+    if (!d) reasons.push(`依赖卡不存在: ${dep}（坏引用按未就绪处理，请核板）`);
+    else if (d.status !== "done") reasons.push(`依赖卡 ${dep} 未完成（${d.status}）`);
+  }
+  return { ready: reasons.length === 0 && gate_reason === null, reasons, gate_reason };
+}
+
+/** 就绪集薄组合（bd ready 思想）：全板逐卡判定，UI 前沿视图与巡检共用；非破坏性纯函数 */
+export function computeReadySet(board: Pick<ProjectBoard, "entries">): { id: string; check: ReadyCheck }[] {
+  return board.entries
+    .filter((e) => e.status !== "done")
+    .map((e) => ({ id: e.id, check: computeReady(e, board) }));
+}
+
+// ---------- #087 lessons 回流（009 §4 M2：收口回执写 board lessons 分区，按 tag 筛选查询） ----------
+
+/** 写入一条经验（板须 active 可写——冻结语义与卡写入同口径）。tags 洗刷去重，text 必填。 */
+export function addLesson(
+  gid: string,
+  input: { text: string; tags?: string[]; source_dispatch_id?: string },
+  dir?: string,
+): { ok: true; lesson: LessonEntry } | { ok: false; error: string } {
+  const text = input.text.trim();
+  if (!text) return { ok: false, error: "lesson text 必填" };
+  const w = writableBoard(gid, dir);
+  if (!w.ok) return w;
+  const lesson: LessonEntry = {
+    id: `ls-${randomUUID().slice(0, 8)}`,
+    text,
+    tags: [...new Set((input.tags ?? []).filter((t): t is string => typeof t === "string" && t.trim() !== ""))],
+    ts: Date.now(),
+    ...(input.source_dispatch_id ? { source_dispatch_id: input.source_dispatch_id } : {}),
+  };
+  w.board.lessons = [...(w.board.lessons ?? []), lesson];
+  w.board.updated_at = Date.now();
+  if (!saveBoardFile(w.board, dir)) return { ok: false, error: "板写入失败" };
+  return { ok: true, lesson };
+}
+
+/** 查询：无 filter 全量（文件序=时间序）；带 tags 为 AND 筛选（任务书注入的下一步消费留
+ * 出口——按项目/角色/引擎 tag 挑相关经验，不全量灌 Leader 上下文，009 §4 M2 原文）。 */
+export function listLessons(gid: string, filter?: { tags?: string[] }, dir?: string): LessonEntry[] {
+  const all = loadBoardFile(gid, dir).lessons ?? [];
+  const want = filter?.tags ?? [];
+  if (want.length === 0) return all;
+  return all.filter((l) => want.every((t) => l.tags.includes(t)));
 }
 
 // ---------- 确认单（人类决策队列，持久化；不复用 waiting_request——其生命周期与回合强耦合
