@@ -48,3 +48,15 @@ node "${CLAUDE_PLUGIN_ROOT}/scripts/relay.mjs" --qr
 
 命令收到 ACK（`ok:true`）后打印 `ok=true` 与 `command_id`；relay 明确拒收（`ok:false`）立即非零退出；超时或断线自动短重试一次（stderr 提示「第 2 次尝试」，沿用同一 command_id 防双投），仍无有效 ACK 才非零退出并提示转人工巡检。
 每次投递追加审计行（含 `attempt` 尝试次数）到 `$CCR_DATA_DIR/cli-dispatches.ndjson`，未设置时使用 `~/.cc-deck/data`。
+
+## 派单巡检对账
+
+收到 dispatch 的「转人工巡检」提示，或需定期核对派单审计账时，用插件内置 `dispatch-report` 做四类判定（orphan 未达待重投 / duplicate 重复迹象 / timeout 重试用尽 / seq-gap 行完整性与时序）：
+
+```bash
+"${CLAUDE_PLUGIN_ROOT}/bin/dispatch-report"              # 人类可读；账本取 $CCR_DATA_DIR/cli-dispatches.ndjson
+"${CLAUDE_PLUGIN_ROOT}/bin/dispatch-report" --json       # 机器可读 {counts, items, verdict}
+"${CLAUDE_PLUGIN_ROOT}/bin/dispatch-report" --strict     # duplicate/seq-gap 也升级为非零退出
+```
+
+退出码：`0` = 账干净或仅 warn（duplicate/seq-gap 属待人工核验，不阻断）；`1` = orphan/timeout 待处置（`--strict` 下含 duplicate/seq-gap）；`2` = 用法错误或账本不存在。成功只认审计行 `ok` 严格布尔真，字符串或缺省一律不进成功账；DELIVER 行（deliver 直投）不入此对账面。
