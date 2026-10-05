@@ -1,0 +1,269 @@
+{
+ "schema_version": 2,
+ "diagram_type": "workflow",
+ "meta": {
+  "title": "018 混编团队协作流程（PM 口径）",
+  "locale": "zh-CN",
+  "quality_profile": "showcase"
+ },
+ "lanes": [
+  {
+   "id": "user",
+   "label": "01 / 用户"
+  },
+  {
+   "id": "pm",
+   "label": "02 / 指挥层 · PM"
+  },
+  {
+   "id": "worker",
+   "label": "04 / worker · 实施（含 EX 返工）"
+  }
+ ],
+ "phases": [
+  {
+   "id": "p-design",
+   "label": "勘察与设计",
+   "fromCol": 0,
+   "toCol": 1
+  },
+  {
+   "id": "p-exec",
+   "label": "派单与实施",
+   "fromCol": 2,
+   "toCol": 3,
+   "variant": "emphasis"
+  },
+  {
+   "id": "p-close",
+   "label": "验收与收口",
+   "fromCol": 4,
+   "toCol": 5
+  }
+ ],
+ "mainPath": [
+  "demand",
+  "survey",
+  "design",
+  "brief",
+  "dispatch",
+  "impl",
+  "verify",
+  "commit",
+  "report"
+ ],
+ "semanticChecks": {
+  "allowedRoots": [
+   "demand"
+  ],
+  "allowedTerminals": [
+   "report"
+  ],
+  "requiredEdges": [
+   {
+    "from": "verify",
+    "to": "rework"
+   },
+   {
+    "from": "rework",
+    "to": "impl"
+   },
+   {
+    "from": "incident",
+    "to": "dispatch"
+   }
+  ]
+ },
+ "nodes": [
+  {
+   "id": "demand",
+   "lane": "user",
+   "col": 0,
+   "type": "external",
+   "label": "需求",
+   "sublabel": "反馈 · 拍板"
+  },
+  {
+   "id": "survey",
+   "lane": "pm",
+   "col": 0,
+   "type": "backend",
+   "label": "勘察",
+   "sublabel": "file:line 证据"
+  },
+  {
+   "id": "design",
+   "lane": "pm",
+   "col": 1,
+   "type": "security",
+   "label": "设计单",
+   "sublabel": "单议题收敛",
+   "tag": "PM 判定"
+  },
+  {
+   "id": "brief",
+   "lane": "pm",
+   "col": 2,
+   "type": "security",
+   "label": "任务书",
+   "sublabel": "六件套自包含"
+  },
+  {
+   "id": "dispatch",
+   "lane": "pm",
+   "col": 3,
+   "type": "messagebus",
+   "label": "派单",
+   "sublabel": "command_id · ACK",
+   "tag": "ws 8788"
+  },
+  {
+   "id": "incident",
+   "lane": "worker",
+   "col": 2,
+   "type": "security",
+   "label": "投递事故",
+   "sublabel": "拒收 · 静默积压"
+  },
+  {
+   "id": "impl",
+   "lane": "worker",
+   "col": 3,
+   "type": "backend",
+   "label": "实施 · 自查",
+   "sublabel": "串行锁 · reply.md"
+  },
+  {
+   "id": "verify",
+   "lane": "pm",
+   "col": 4,
+   "type": "security",
+   "label": "探针验收",
+   "sublabel": "断言电池 + 截图"
+  },
+  {
+   "id": "rework",
+   "lane": "worker",
+   "col": 4,
+   "type": "security",
+   "label": "打回返工",
+   "sublabel": "hotfix · 单批窗口"
+  },
+  {
+   "id": "commit",
+   "lane": "pm",
+   "col": 5,
+   "type": "database",
+   "label": "代提交",
+   "sublabel": "Co-Authored-By"
+  },
+  {
+   "id": "report",
+   "lane": "user",
+   "col": 5,
+   "type": "database",
+   "label": "进度账 · 报告",
+   "sublabel": "每单一行"
+  }
+ ],
+ "edges": [
+  {
+   "from": "demand",
+   "to": "survey",
+   "label": "议题"
+  },
+  {
+   "from": "survey",
+   "to": "design"
+  },
+  {
+   "from": "design",
+   "to": "brief"
+  },
+  {
+   "from": "brief",
+   "to": "dispatch"
+  },
+  {
+   "from": "dispatch",
+   "to": "impl"
+  },
+  {
+   "from": "impl",
+   "to": "verify",
+   "label": "回单"
+  },
+  {
+   "from": "verify",
+   "to": "commit",
+   "label": "全绿"
+  },
+  {
+   "from": "commit",
+   "to": "report"
+  },
+  {
+   "from": "report",
+   "to": "demand",
+   "label": "反馈 · 拍板",
+   "variant": "dashed"
+  },
+  {
+   "from": "dispatch",
+   "to": "incident",
+   "variant": "dashed"
+  },
+  {
+   "from": "incident",
+   "to": "dispatch",
+   "label": "v2 重投 · stdin",
+   "variant": "dashed"
+  },
+  {
+   "from": "verify",
+   "to": "rework",
+   "label": "断言红",
+   "variant": "dashed"
+  },
+  {
+   "from": "rework",
+   "to": "impl",
+   "label": "hotfix",
+   "variant": "dashed"
+  },
+  {
+   "from": "report",
+   "to": "demand",
+   "label": "反馈 · 拍板",
+   "variant": "dashed"
+  }
+ ],
+ "cards": [
+  {
+   "dot": "cyan",
+   "title": "分工纪律",
+   "items": [
+    "设计判定归 PM，PM 不下场写 worker 代码（018 §5.7）"
+   ]
+  },
+  {
+   "dot": "amber",
+   "title": "事故窗口",
+   "items": [
+    "探针红即打回，事故窗口压到单批",
+    "投递失败三证：ok:false / 事件零 / 进程无",
+    "任务书 shape 拒按实施口径重对"
+   ]
+  },
+  {
+   "dot": "violet",
+   "title": "验收三件套",
+   "items": [
+    "回单 + 探针 + 截图 = 验收三件套",
+    "结构闸拦文件尾泄漏",
+    "events.ndjson 对账，主动巡检兜底",
+    "004/013 随收口同步，逐笔可回滚"
+   ]
+  }
+ ]
+}
