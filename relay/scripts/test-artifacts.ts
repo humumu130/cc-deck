@@ -5,7 +5,7 @@
 // 代码）一律不收。含 fileEditMetrics 单元 / hook 实时 + transcript 回放 /
 // SNAPSHOT / 整表替换保留登记 / 中文文件名下载回归。
 // 环境隔离口径同 test-bridge（独立数据目录/项目根/claude 配置/端口）
-import { mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { join } from "node:path";
 import { setTimeout as wait } from "node:timers/promises";
@@ -63,6 +63,9 @@ const { bridge } = startServer(bus, mgr, cfg, {});
 await wait(250);
 const http = `http://127.0.0.1:${cfg.port}`;
 const SID = "ext-cli-art1";
+// #224 口径（面板=磁盘现状）：state 全量 vs 帧下发分层断言的读取器——exists=false
+// 条目入 state（文件重建时合并复用历史），帧/SNAPSHOT 一律过滤（快照不背已删条目）
+const stateArts = (): ArtifactItem[] => mgr.getExternal(SID)?.artifacts ?? [];
 
 // WS 订阅（SNAPSHOT + 实时帧都收）
 const frames: Envelope[] = [];
@@ -145,12 +148,16 @@ async function hook(ev: Partial<BridgeEvent> & { event: string }): Promise<void>
 await hook({ event: "UserPromptSubmit", prompt: "产物目录投递回合", cli_pid: process.pid });
 await wait(4000);
 let a = arts();
-assert(a.length === 2, `回放只收产物目录投递 got=${a.length}`);
-const byPath = (p: string) => a.find((x) => x.path === p);
+// #72A0FIX2 分账重写（worker I 未尽#1）：原七处断言是 #224 之前的「历史清单」
+// 口径（exists=false 条目也出现在帧/SNAPSHOT），#224（8f2ef8d）后必红。现按
+// #224 口径分层：state 全量记账（含 exists=false），帧/SNAPSHOT 只发存活条目
+assert(stateArts().length === 2 && a.length === 1 && a.every((x) => x.exists !== false),
+  `回放只收产物目录投递：state 全量 2 条、帧只存活 1 条（#224 过滤 exists=false）got=${stateArts().length}/${a.length}`);
+const byPath = (p: string) => stateArts().find((x) => x.path === p);
 const a1 = byPath(join(ART, "工作报告-2026-09-19.html"));
 assert(!!a1 && a1.op === "create" && a1.exists === true, "回放：产物目录 HTML 收录（中文路径、盘上真实存在 exists=true）");
 const a2 = byPath(join(ART, "汇总表.pdf"));
-assert(!!a2 && a2.exists === false, "回放：任意格式收录（pdf，未落盘 exists=false）");
+assert(!!a2 && a2.exists === false, "回放：任意格式收录（pdf，未落盘 exists=false 入 state；帧不下发）");
 assert(!byPath(join(CWD, "docs/new.md")) && !byPath(join(CWD, "src/app.ts")), "回放：项目目录 Write/Edit 一律不收（启发式已废）");
 
 // 实时路径①：产物目录新文件 → 收录
@@ -161,7 +168,7 @@ await hook({
 });
 await wait(300);
 a = arts();
-assert(a.length === 3 && !!byPath(join(ART, "实时-补充.md")), "实时：产物目录 Write 收录");
+assert(stateArts().length === 3 && !!byPath(join(ART, "实时-补充.md")) && a.every((x) => x.exists !== false), "实时：产物目录 Write 收录（state；帧仍只存活条目）");
 // 实时路径②：项目目录文件 → 不收，清单不膨胀
 await hook({
   event: "PostToolUse", tool_name: "Write", cli_pid: process.pid,
@@ -169,8 +176,7 @@ await hook({
   tool_response: { type: "create", filePath: "docs/another.md", structuredPatch: [], content: "不该进清单\n" },
 });
 await wait(300);
-a = arts();
-assert(a.length === 3, "实时：项目目录 Write 不收，清单不膨胀");
+assert(stateArts().length === 3, "实时：项目目录 Write 不收，清单不膨胀");
 
 // ---------- 原地登记通道（/api/deliver） ----------
 const DECLARED = join(CWD, "docs", "登记制说明.md");
@@ -189,8 +195,10 @@ writeFileSync(DECLARED, "# 登记制\n交付物原地不动，看板只登记。
 }
 await wait(300);
 a = arts();
-const d1 = a.find((x) => x.path === DECLARED);
-assert(a.length === 4 && !!d1 && d1.tools.includes("登记") && d1.exists === true && d1.adds === 0, "deliver：登记条目入板（tools=登记、原路径真实存在、不动 adds/dels）");
+const d1 = byPath(DECLARED);
+assert(stateArts().length === 4 && !!d1 && d1.tools.includes("登记") && d1.exists === true && d1.adds === 0,
+  "deliver：登记条目入板（state；tools=登记、原路径真实存在、不动 adds/dels）");
+assert(a.length === 2 && a.every((x) => x.exists !== false), "#224 口径：登记帧只带存活条目（HTML+登记，pdf/实时未落盘不下发）");
 
 // SNAPSHOT 携带（新 WS 连接全量拉取）
 const ws2 = new WebSocket(`ws://127.0.0.1:${cfg.port}/ws?token=${cfg.token}`);
@@ -203,7 +211,9 @@ await new Promise((r) => ws2.once("open", r));
 await wait(300);
 const snapArts = ((snap as { payload?: { sessions?: { session_id: string; artifacts?: ArtifactItem[] }[] } })?.payload?.sessions ?? [])
   .find((x) => x.session_id === SID)?.artifacts;
-assert(Array.isArray(snapArts) && snapArts.length === 4 && snapArts.some((x) => x.tools.includes("登记")), "SNAPSHOT 全量携带 artifacts（含登记条目）");
+// #224：快照不背已删条目（snapshot() 过滤 exists===false，state 全量 4 条只发存活 2 条）
+assert(Array.isArray(snapArts) && snapArts.length === 2 && snapArts.every((x) => x.exists !== false) && snapArts.some((x) => x.tools.includes("登记")),
+  "SNAPSHOT 携带存活 artifacts（#224 快照不背已删条目；含登记条目）");
 
 // 回放幂等 + 登记保留：转录换文件（≈轮转）重触 firstRead → setArtifacts 整表替换，
 // 产物目录基线回放 + 登记条目从 deliverables.json 挂回（不丢、不双计）。
@@ -221,8 +231,9 @@ writeFileSync(T2, lines.slice(0, -1).join("\n") + "\n");
 }
 await wait(4000);
 a = arts();
-const k1 = a.find((x) => x.path === join(ART, "工作报告-2026-09-19.html"));
-assert(!!k1 && k1.adds === 1 && a.length === 4 && a.some((x) => x.path === DECLARED) && a.some((x) => x.path === join(ART, "实时-补充.md")), `幂等：整表替换回产物基线，活采与登记条目均保留 got=${a.length}（#82 前活采条目被轮转洗掉）`);
+const k1 = byPath(join(ART, "工作报告-2026-09-19.html"));
+assert(!!k1 && k1.adds === 1 && stateArts().length === 4 && !!byPath(DECLARED) && !!byPath(join(ART, "实时-补充.md")),
+  `幂等：整表替换回产物基线，活采与登记条目均保留（state）got=${stateArts().length}（#82 前活采条目被轮转洗掉）`);
 
 // ---------- 产物中心 HTTP：列表 + 中文文件名下载 ----------
 {
@@ -294,6 +305,46 @@ assert(!!k1 && k1.adds === 1 && a.length === 4 && a.some((x) => x.path === DECLA
   // ④ 挂账真实入板（非只改响应）：A 的看板确有登记条目
   const artsA = mgr.getExternal(SID)?.artifacts ?? [];
   assert(artsA.some((x) => x.path === D2 && x.tools.includes("登记")), "#227 A 会话看板含显式登记条目");
+}
+
+// ---------- #72A0FIX2 deliver 登记快照穿透：unverified 落账 + 重启存活 + 失败不先落账 ----------
+{
+  const LEDGER = join(cfg.dataDir, "deliverables.json");
+  const ledger = (): { sid: string; path: string; unverified?: boolean }[] =>
+    JSON.parse(readFileSync(LEDGER, "utf-8")) as { sid: string; path: string; unverified?: boolean }[];
+  const ledgerCount = (): number => ledger().length;
+  // ① 校验闸 !ok 快照直达登记侧：拒收且零落账（失败不先落账的防御分支）
+  const beforeGhost = ledgerCount();
+  const badSnap = mgr.registerDeliverable(SID, join(CWD, "docs", "快照拒绝.md"), { ok: false, path: "/x", error: "快照未过闸" });
+  assert(badSnap.ok === false && ledgerCount() === beforeGhost, "registerDeliverable 带 !ok 快照：拒收且零落账");
+  // ② HTTP 闸拒收路径同样零写账（闸在归因前拦截，deliverables.json 不见幽灵）
+  const ghost = await fetch(`${http}/api/deliver?token=${cfg.token}`, {
+    method: "POST", headers: { "content-type": "application/json" },
+    body: JSON.stringify({ path: join(CWD, "docs", "不在.md"), cwd: CWD }),
+  });
+  assert(ghost.status === 400 && ledgerCount() === beforeGhost, "校验失败路径不写 deliverables.json（失败不先落账）");
+  // ③ 普通（已验证）登记：账面无 unverified；闸快照的 size 直接入账（登记侧不再二次 stat）
+  const plainItem = byPath(DECLARED) as (ArtifactItem & { unverified?: boolean }) | undefined;
+  assert(!!plainItem && plainItem.unverified === undefined, "普通文件登记账面不带 unverified");
+  // ④ symlink 分量登记：闸标 unverified → 签名穿透 → ArtifactItem + deliverables.json 双落账
+  const LINK = join(CWD, "docs", "symlink-登记.md");
+  symlinkSync(DECLARED, LINK);
+  const rl = await fetch(`${http}/api/deliver?token=${cfg.token}`, {
+    method: "POST", headers: { "content-type": "application/json" },
+    body: JSON.stringify({ path: LINK, cwd: CWD, session_id: "cli-art1" }),
+  });
+  const jl = (await rl.json()) as { ok: boolean; unverified?: boolean; session_id?: string };
+  assert(rl.status === 200 && jl.ok === true && jl.unverified === true && jl.session_id === SID,
+    "symlink 分量 deliver：200 + unverified 标记（响应口径不回归）");
+  const linkItem = byPath(LINK) as (ArtifactItem & { unverified?: boolean }) | undefined;
+  assert(!!linkItem && linkItem.unverified === true && linkItem.exists === true, "unverified 落 ArtifactItem 账面（不只 HTTP 响应）");
+  assert(ledger().some((e) => e.sid === SID && e.path === LINK && e.unverified === true), "unverified 落 deliverables.json（持久层）");
+  // ⑤ 重启存活：新 manager 收养 → applyDeclaredDeliverables 挂回仍带标记（重启后不丢）
+  const bus3 = new EventBus();
+  const mgr3 = new SessionManager(bus3, cfg);
+  mgr3.ensureExternal(SID, CWD, "重启挂回 unverified 不丢（72A0FIX2）", "cli-art1");
+  const rem = (mgr3.getExternal(SID)?.artifacts ?? []).find((x) => x.path === LINK) as (ArtifactItem & { unverified?: boolean }) | undefined;
+  assert(rem?.unverified === true, "重启挂回：unverified 标记经 deliverables.json 存活");
 }
 
 ws.close();

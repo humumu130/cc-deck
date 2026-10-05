@@ -627,9 +627,11 @@ export function startServer(
             return;
           }
           const c = typeof cwd === "string" && cwd ? cwd : p;
+          // #72A0FIX2：校验闸快照随签名穿透进登记侧——mgr 不再二次 stat（TOCTOU
+          // 剩余段收口），unverified 标记由登记侧落账（deliverables.json + 账面）
           const r = typeof sid === "string" && /^[A-Za-z0-9-]{8,64}$/.test(sid)
-            ? mgr.deliverBySession(sid, c, validated.path)
-            : mgr.deliverByCwd(c, validated.path);
+            ? mgr.deliverBySession(sid, c, validated.path, validated)
+            : mgr.deliverByCwd(c, validated.path, validated);
           // #72A0（P1-1B）：校验闸已在 open+fstat 同一时刻采集 stat 快照并标记
           // symlink 分量（unverified——原地交付合法不拒绝，目标元数据不当文件本体
           // 口径）；标记随响应回传供调用方核对

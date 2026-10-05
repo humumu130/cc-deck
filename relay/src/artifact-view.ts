@@ -43,6 +43,8 @@ export interface ArtifactViewRegistration extends Omit<Partial<ArtifactItem>, "o
   reachable?: boolean;
   source_reachable?: boolean;
   sourceReachable?: boolean;
+  /** #72A0FIX2：登记闸 unverified 标记（symlink 分量交付）——缺可信存在证据 */
+  unverified?: boolean;
   capabilities?: Record<string, boolean>;
 }
 
@@ -146,9 +148,14 @@ function stringValue(...values: unknown[]): string | undefined {
 
 // #72A0（P1-1C）：NUL 与 C0 控制字符显式拒绝——裸拼接键的分隔符歧义源头，边界层
 // 拒收后走 unknown/unverified 分支（不抛异常）
-const C0_CONTROL_RE = /[\u0000-\u001f]/;
+// #72A0FIX2（C1 硬化）：补 C1 类控制字符（U+007F DEL 与 U+0080–U+009F C1 集）与
+// 字段长度上限——不可见控制位与超长输入同口径拒收（按非法走 unknown/unverified
+// 分支，不抛异常、不静默截断路径语义）
+const CONTROL_RE = /[\u0000-\u001f\u007f-\u009f]/;
+const MAX_PATH_LEN = 4096; // 路径长度上限（Linux PATH_MAX 上界；超长视同不可验证）
+const MAX_ID_LEN = 256; // 标识类上限（source_id/session_id/project_gid/展示名兜底）
 function hasControlChars(value: string): boolean {
-  return C0_CONTROL_RE.test(value);
+  return CONTROL_RE.test(value);
 }
 
 function normalizedPath(path: string): string {
@@ -159,7 +166,8 @@ function pathState(record: { path?: unknown; normalized_path?: unknown; name?: u
   const raw = stringValue(record.normalized_path, record.path, record.name);
   if (!raw) return { path: "", verifiable: false };
   // #72A0（P1-1C）：含 NUL/C0 的路径显式拒绝——不可验证，走 unverified 分支不抛异常
-  if (hasControlChars(raw)) return { path: "", verifiable: false };
+  // #72A0FIX2：C1 类控制字符与超长（>4096）同口径拒收
+  if (hasControlChars(raw) || raw.length > MAX_PATH_LEN) return { path: "", verifiable: false };
   if (raw.startsWith("/") || /^[A-Za-z]:[\\/]/.test(raw)) {
     return { path: normalizedPath(resolve(raw)), verifiable: true };
   }
@@ -173,7 +181,8 @@ function sourceState(record: Record<string, unknown>, fallback?: SourceState): S
   if (raw) {
     // #72A0（P1-1C）：显式携带 NUL/C0 的 source_id 视为非法——落 unknown/unverified
     // 分支（不回落 fallback、不抛异常），防构造键碰撞/跨源错挂归属
-    if (hasControlChars(raw)) return { id: UNKNOWN_SOURCE, known: false };
+    // #72A0FIX2：C1 类控制字符与超长（>256）同口径拒收
+    if (hasControlChars(raw) || raw.length > MAX_ID_LEN) return { id: UNKNOWN_SOURCE, known: false };
     return { id: raw, known: true };
   }
   if (fallback) return { ...fallback };
@@ -201,7 +210,8 @@ function projectIds(record: Record<string, unknown>, context: RegistrationContex
     record.projectGid,
     ...context.projectGids,
   ];
-  return [...new Set(values.filter((value): value is string => typeof value === "string" && value.trim().length > 0).map((value) => value.trim()))];
+  return [...new Set(values.filter((value): value is string => typeof value === "string" && value.trim().length > 0).map((value) => value.trim()))]
+    .filter((value) => value.length <= MAX_ID_LEN); // #72A0FIX2：超长 gid 视同未提供
 }
 
 function addUnique(list: string[], values: readonly string[]): void {
@@ -224,7 +234,9 @@ function originFor(kind: ArtifactViewOrigin, current: ArtifactViewOrigin): Artif
 }
 
 function createAccumulator(key: string, source: SourceState, path: PathState, kind: ArtifactViewOrigin, record: Record<string, unknown>): Accumulator {
-  const displayName = path.path ? basename(path.path) : stringValue(record.name, record.path) ?? UNKNOWN_LABEL;
+  // #72A0FIX2：展示名兜底串截断到标识类上限（纯展示位；路径合法时 display 走
+  // basename，天然 ≤ 路径上限）
+  const displayName = path.path ? basename(path.path) : (stringValue(record.name, record.path) ?? UNKNOWN_LABEL).slice(0, MAX_ID_LEN);
   return {
     key,
     source_id: source.id,
@@ -236,7 +248,8 @@ function createAccumulator(key: string, source: SourceState, path: PathState, ki
     project_gids: [],
     source_unknown: !source.known,
     path_verifiable: path.verifiable,
-    unverified: !source.known || !path.verifiable,
+    // #72A0FIX2：登记侧落账的 unverified 标记（symlink 分量交付形态）显式入场
+    unverified: !source.known || !path.verifiable || record.unverified === true,
     size: typeof record.size === "number" ? record.size : null,
     mtime: typeof record.mtime === "number" ? record.mtime : typeof record.last_at === "number" ? record.last_at : null,
     delivery_group_key: explicitDeliveryGroup(record),
@@ -269,6 +282,7 @@ function addRecord(
   current.source_unknown ||= !source.known;
   current.path_verifiable ||= path.verifiable;
   current.unverified ||= !source.known || !path.verifiable;
+  if (record.unverified === true) current.unverified = true; // #72A0FIX2：标记粘滞（同 key 任一来源 unverified 即整条待刷新）
   const reachable = sourceReachability(record, context, input.sources);
   if (reachable !== undefined) current.source_reachable = current.source_reachable === false ? false : reachable;
   if (kind === "artifacts" && typeof record.exists === "boolean") current.artifact_exists = record.exists;
@@ -276,7 +290,8 @@ function addRecord(
   if (typeof record.size === "number" && (current.size === null || kind === "artifacts")) current.size = record.size;
   if (typeof record.mtime === "number" && (current.mtime === null || kind === "artifacts" || record.mtime > current.mtime)) current.mtime = record.mtime;
   const sessionId = stringValue(record.session_id, record.sessionId, context.sessionId);
-  if (sessionId && !current.session_ids.includes(sessionId)) current.session_ids.push(sessionId);
+  // #72A0FIX2：超长 session_id（>256）视同未提供，不入归因
+  if (sessionId && sessionId.length <= MAX_ID_LEN && !current.session_ids.includes(sessionId)) current.session_ids.push(sessionId);
   addUnique(current.project_gids, projectIds(record, context));
   const deliveryGroup = explicitDeliveryGroup(record);
   if (deliveryGroup && !current.delivery_group_key) current.delivery_group_key = deliveryGroup;
@@ -339,11 +354,16 @@ export function deriveArtifactView(
   }, input);
 
   return [...map.values()].map((item) => {
-    const unreachable = item.source_reachable === false || item.unverified;
+    // #72A0FIX2：unverified 从「unreachable」映射改判「unknown」——待刷新信号
+    // （登记闸 symlink 分量标记/来源未知/路径不可验证）缺的是存在证据，与「源
+    // 确认不可达」（source_reachable=false，可重连）语义分轨；needs_refresh 输出
+    // 位仍同时覆盖两者
+    const unreachable = item.source_reachable === false;
     // #72A0（P2-3C）：缺证据不默认存在——unknown 态，exists=false，open/reveal 不开
     //（幽灵产物不再显示为可打开）；只有 artifacts scan 或登记校验明确报告 boolean
-    // 存在才置 exists/missing
-    const evidence = item.artifact_exists ?? item.registration_exists;
+    // 存在才置 exists/missing。#72A0FIX2：unverified 记录的存在证据不可采信
+    //（symlink 分量下 boolean 证据不描述本体）——抑制 exists/missing 判定
+    const evidence = item.unverified ? undefined : (item.artifact_exists ?? item.registration_exists);
     const exists = evidence === true;
     const existence_state: ArtifactViewExistence = unreachable
       ? "unreachable"

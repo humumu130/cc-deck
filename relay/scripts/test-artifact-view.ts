@@ -1,12 +1,15 @@
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
+import { performance } from "node:perf_hooks";
 import { setTimeout as wait } from "node:timers/promises";
 import { loadConfig } from "../src/config.js";
 import { deriveArtifactView } from "../src/artifact-view.js";
+import type { ArtifactViewInput } from "../src/artifact-view.js";
 import { artifactsDir, listArtifacts, serveArtifact, validateDeliverablePath } from "../src/artifacts.js";
 import { EventBus } from "../src/event-bus.js";
 import { SessionManager } from "../src/session-manager.js";
 import { startServer } from "../src/ws-server.js";
+import type { ArtifactItem } from "../src/types.js";
 
 const ROOT = join(process.cwd(), ".tmp-test-artifact-view");
 rmSync(ROOT, { recursive: true, force: true });
@@ -48,7 +51,9 @@ assert(!!remote && remote.normalized_path === joined?.normalized_path && remote.
 assert(joined?.delivery_group_key === "batch-018-backend", "显式交付批次优先");
 assert(joined?.derived_prefix_group === "018-" && joined.derived_prefix_label === "按文件名前缀推断", "文件名前缀只生成推断显示字段");
 assert(remote?.availability === "unreachable" && remote.collapsed && remote.needs_refresh, "不可达源保留记录并默认折叠");
-assert(legacy?.source_label === "来源未知/待刷新" && legacy.availability === "unreachable", "无 source_id 旧记录进入来源未知/待刷新");
+// #72A0FIX2：待刷新信号（unverified）映射进 existence_state=unknown——原映射
+// unreachable 与「源确认不可达」混轨，unknown 才是「缺存在证据」的正确桶
+assert(legacy?.source_label === "来源未知/待刷新" && legacy.availability === "unknown" && legacy.needs_refresh, "无 source_id 旧记录进入来源未知/待刷新（unknown 态，#72A0FIX2 映射）");
 assert(missing?.exists === false && missing.availability === "missing" && missing.collapsed, "缺失登记不删除且默认折叠");
 const unverifiablePath = deriveArtifactView({
   sessions: [{ session_id: "session-relative", source_id: "local", artifacts: [{ path: "relative-old.md", exists: true }] }],
@@ -94,6 +99,72 @@ assert(
   noEvidence[0]?.capabilities.open === false && noEvidence[0]?.capabilities.reveal === false && noEvidence[0]?.capabilities.download === false,
   "缺证据记录 open/reveal/download 不开",
 );
+
+// #72A0FIX2：unverified 登记落账形态（symlink 分量交付）→ existence_state=unknown
+//（非 unreachable），且被标记污染的 exists 证据不可采信
+const unverifiedView = deriveArtifactView({
+  deliverables: [
+    { path: "/w/project/symlink-report.md", source_id: "local", unverified: true },
+    { path: "/w/project/scanned-report.md", source_id: "local", unverified: true, exists: true },
+  ],
+});
+assert(
+  unverifiedView.length === 2 && unverifiedView.every((r) => r.existence_state === "unknown" && r.exists === false && r.needs_refresh),
+  "unverified 登记 → existence_state=unknown 且 boolean 存在证据不采信",
+);
+assert(
+  unverifiedView.every((r) => r.capabilities.open === false && r.capabilities.retry === false && r.source_label === "来源未知/待刷新"),
+  "unverified 记录 open/retry 不开、来源标待刷新（retry 是重连通源，救不了 symlink 分量）",
+);
+// 源不可达（source_reachable=false）保持 unreachable 桶不回归
+const unreachableStill = deriveArtifactView({
+  deliverables: [{ path: "/w/project/offline.md", source_id: "local", reachable: false }],
+});
+assert(unreachableStill[0]?.existence_state === "unreachable" && unreachableStill[0]?.needs_refresh, "源确认不可达仍映射 unreachable（与 unverified 分轨不回归）");
+
+// #72A0FIX2（C1 硬化）：C1 类控制字符（DEL/C1 集）与超长字段同 NUL 口径拒收——
+// 落 unknown/unverified 分支，不抛异常
+const DEL = String.fromCharCode(0x007f);
+const NEL = String.fromCharCode(0x0085);
+const c1View = deriveArtifactView({
+  sessions: [
+    { session_id: "s-c1", source_id: `a${DEL}`, artifacts: [{ path: "/x/f-c1.md", exists: true }] },
+    { session_id: "s-nel", source_id: `b${NEL}`, artifacts: [{ path: "/y/f-nel.md", exists: true }] },
+  ],
+});
+assert(
+  c1View.length === 2 && c1View.every((r) => r.source_label === "来源未知/待刷新" && r.needs_refresh && r.exists === false),
+  "C1 类控制字符（DEL/NEL）source_id 拒收落 unknown/unverified 分支",
+);
+const longView = deriveArtifactView({
+  sessions: [
+    { session_id: "s-longpath", source_id: "local", artifacts: [{ path: `/${"l".repeat(5000)}/f-long.md`, exists: true }] },
+    { session_id: "s-longsid", source_id: "x".repeat(300), artifacts: [{ path: "/y/f-sid.md", exists: true }] },
+    { session_id: "z".repeat(300), source_id: "local", artifacts: [{ path: "/y/f-sess.md", exists: true }] },
+  ],
+});
+assert(longView.length === 3, "长度硬化测试前置：三记录独立存在");
+// 超长路径记录：path 不可验证 → normalized_path 空、展示名走兜底截断——以空路径定位
+const longPathRec = longView.find((r) => !r.normalized_path);
+const longSidRec = longView.find((r) => r.display_name === "f-sid.md");
+const longSessRec = longView.find((r) => r.display_name === "f-sess.md");
+assert(!!longPathRec && longPathRec.needs_refresh && longPathRec.exists === false, "超长路径（>4096）视同不可验证走待刷新分支");
+assert(!!longSidRec && longSidRec.source_label === "来源未知/待刷新", "超长 source_id（>256）拒收落 unknown 分支");
+assert(!!longSessRec && longSessRec.session_ids.length === 0 && longSessRec.exists === true, "超长 session_id（>256）不入归因（其余判定不受牵连）");
+
+// #72A0FIX2：merge/normalize 热路径粗性能预算——2 万 scan + 1 万登记（其中一半与
+// scan 同 key 合并）防 O(n²) 回归。预算为单钟差、百倍裕量（沙盒抖动不敏感；
+// 非 N1② 教训禁用的「两独立取时点相等比对」形态）
+const PERF_N = 20000;
+const bigInput: ArtifactViewInput = {
+  artifacts: Array.from({ length: PERF_N }, (_, i) => ({ path: `/scan/dir${i % 50}/f-${i}.md`, source_id: "local", exists: true, size: i, mtime: 1000 + i })),
+  deliverables: Array.from({ length: PERF_N / 2 }, (_, i) => ({ path: `/scan/dir${i % 50}/f-${i}.md`, source_id: "local", exists: true })),
+};
+const perfT0 = performance.now();
+const bigView = deriveArtifactView(bigInput);
+const perfElapsed = performance.now() - perfT0;
+assert(bigView.length === PERF_N, `热路径前置：3 万条输入合并为 ${PERF_N} 条 got=${bigView.length}`);
+assert(perfElapsed < 2000, `merge/normalize 热路径预算：3 万条 ${perfElapsed.toFixed(0)}ms < 2000ms（防 O(n²) 回归）`);
 
 const target = join(ROOT, "project", "deliver.md");
 const directory = join(ROOT, "project", "deliver-dir");
@@ -198,6 +269,13 @@ if (process.env.CCR_RUN_HTTP === "1") {
     linkDeliverResponse.status === 200 && (await linkDeliverResponse.json() as Record<string, unknown>).unverified === true,
     "deliver symlink 分量路径 200 且响应带 unverified 标记",
   );
+  // #72A0FIX2：快照穿透 + unverified 落账——闸的标记经签名进登记侧，账面/持久层可还原
+  const fixLedger = JSON.parse(readFileSync(join(ROOT, "data", "deliverables.json"), "utf8")) as { sid: string; path: string; unverified?: boolean }[];
+  assert(fixLedger.some((e) => e.path === liveLink && e.unverified === true), "unverified 落 deliverables.json（重启可还原）");
+  const linkItem = mgr.getExternal(sid)?.artifacts?.find((x) => x.path === liveLink) as ArtifactItem & { unverified?: boolean };
+  assert(linkItem?.unverified === true && linkItem.exists === true, "unverified 落 ArtifactItem 账面（不只 HTTP 响应）");
+  const plainItem = mgr.getExternal(sid)?.artifacts?.find((x) => x.path === target) as ArtifactItem & { unverified?: boolean };
+  assert(!!plainItem && plainItem.unverified === undefined, "普通文件登记账面不带 unverified");
   await server.close();
 } else {
   console.log("skip - HTTP deliver integration (set CCR_RUN_HTTP=1 outside restricted sandbox)");

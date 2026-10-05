@@ -3,6 +3,7 @@ import { mkdirSync, readFileSync, realpathSync, statSync, writeFileSync } from "
 import { homedir } from "node:os";
 import { isAbsolute, join, resolve, sep } from "node:path";
 import { artifactsDir } from "./artifacts.js";
+import type { DeliverablePathValidation } from "./artifacts.js";
 import {
   appendDispatch, clearOrgAnchor, ensureOrgClaudeMd, ensureOrgCli, ensureOrgDir, evaluateCommandPermission,
   ORG_LEADER_BOOTSTRAP_PROMPT, ORG_LEADER_TITLE, orgDir, readDispatchLog, readOrgAnchor, writeOrgAnchor,
@@ -316,7 +317,12 @@ function appendDeletedExt(dataDir: string, id: string): void {
 // 模式），ensureExternal/adopt/setArtifacts 三处回放挂回
 const DELIVERABLES_CAP = 300;
 
-interface DeliverableEntry { sid: string; path: string; ts: number }
+interface DeliverableEntry { sid: string; path: string; ts: number; unverified?: boolean }
+
+// #72A0FIX2：unverified 标记（symlink 分量交付，目标元数据不当文件本体记账）的
+// 账面扩展位。types.ts 的 ArtifactItem 冻结面不动，本文件内结构化交叉类型承载，
+// JSON 落盘/下发随 extra 字段走（旧客户端忽略未知字段，线格式兼容）
+type LedgerArtifactItem = ArtifactItem & { unverified?: boolean };
 
 function readDeliverables(dataDir: string): DeliverableEntry[] {
   try {
@@ -1386,32 +1392,48 @@ export class SessionManager {
   // 意图声明制 · 原地登记（/api/deliver）：交付物路径原样记录（项目内 docs/ 等
   // 不搬动），stat 补 size/exists；同路径重复登记幂等合并（tools 记「登记」，
   // 产物目录自动收录的条目并入同 key 不重复）。持久化 deliverables.json
-  registerDeliverable(sessionId: string, rawPath: string): { ok: boolean; error?: string } {
+  // #72A0FIX2（P1-1B 剩余段收口）：①签名穿透校验闸快照——入参带
+  // validateDeliverablePath 的一次性快照时本侧不再 statSync（消「闸后二次 stat」
+  // 的 TOCTOU 剩余段：size 取快照值；unverified 快照 size=null → 账面不记尺寸，
+  // symlink 目标元数据不入账）；②失败不先落账——取证/校验全部通过前不碰
+  // deliverables.json（旧序 appendDeliverable 先于 stat，登记即失败也已写账）；
+  // ③unverified 标记随 ArtifactItem + deliverables.json 落账（applyDeclaredDeliverables
+  // 重启挂回还原），此前只到 HTTP 响应、重启即丢；重复登记以最新证据为准
+  registerDeliverable(sessionId: string, rawPath: string, snapshot?: DeliverablePathValidation): { ok: boolean; error?: string } {
     const s = this.sessions.get(sessionId);
     if (!s) return { ok: false, error: `会话不存在: ${sessionId}` };
     const p = resolve(rawPath.trim());
-    appendDeliverable(this.cfg.dataDir, { sid: sessionId, path: p, ts: Date.now() });
-    const list: ArtifactItem[] = s.state.artifacts ? s.state.artifacts.map((a) => ({ ...a })) : [];
-    const idx = list.findIndex((a) => a.path.toLowerCase() === p.toLowerCase());
+    // 取证先行（快照直用，或无闸直调时本侧兜底 stat）——失败路径零落账
     let size: number | undefined;
     let exists = true;
-    try {
-      size = statSync(p).size;
-    } catch {
-      exists = false;
+    let unverified = false;
+    if (snapshot) {
+      if (!snapshot.ok) return { ok: false, error: snapshot.error ?? "交付物校验未通过" };
+      size = snapshot.size ?? undefined;
+      unverified = snapshot.unverified === true;
+    } else {
+      try {
+        size = statSync(p).size;
+      } catch {
+        exists = false;
+      }
     }
+    appendDeliverable(this.cfg.dataDir, { sid: sessionId, path: p, ts: Date.now(), ...(unverified ? { unverified: true } : {}) });
+    const list: LedgerArtifactItem[] = s.state.artifacts ? s.state.artifacts.map((a) => ({ ...a })) : [];
+    const idx = list.findIndex((a) => a.path.toLowerCase() === p.toLowerCase());
     const ts = Date.now();
     if (idx >= 0) {
-      const a = list[idx] as ArtifactItem;
+      const a = list[idx] as LedgerArtifactItem;
       list[idx] = {
         ...a,
         tools: a.tools.includes("登记") ? a.tools : [...a.tools, "登记"],
         last_at: ts,
         size,
         exists,
+        unverified: unverified || undefined, // 最新证据 wins：复核过普通文件即摘标
       };
     } else {
-      list.push({ path: p, op: "create", tools: ["登记"], adds: 0, dels: 0, first_at: ts, last_at: ts, size, exists });
+      list.push({ path: p, op: "create", tools: ["登记"], adds: 0, dels: 0, first_at: ts, last_at: ts, size, exists, ...(unverified ? { unverified: true } : {}) });
       if (list.length > 200) {
         list.sort((x, y) => y.last_at - x.last_at);
         list.length = 200;
@@ -1462,11 +1484,12 @@ export class SessionManager {
     return best ? best.id : null;
   }
 
-  // /api/deliver 归因（matchSessionByCwd 之上叠交付物登记）
-  deliverByCwd(cwd: string, rawPath: string): { ok: boolean; session_id?: string; error?: string } {
+  // /api/deliver 归因（matchSessionByCwd 之上叠交付物登记）。#72A0FIX2：可选透传
+  // 校验闸快照（签名穿透，登记侧不再二次 stat）
+  deliverByCwd(cwd: string, rawPath: string, snapshot?: DeliverablePathValidation): { ok: boolean; session_id?: string; error?: string } {
     const sid = this.matchSessionByCwd(cwd);
     if (!sid) return { ok: false, error: "无匹配会话（cwd 对不上任何已知会话）" };
-    const r = this.registerDeliverable(sid, rawPath);
+    const r = this.registerDeliverable(sid, rawPath, snapshot);
     return r.ok ? { ok: true, session_id: sid } : r;
   }
 
@@ -1486,13 +1509,13 @@ export class SessionManager {
   // CLI sid 两查全 miss，回落 cwd 启发式把产物挂给隔壁卡）。sid 不在册（会话已清理/
   // env 残留）回落 deliverByCwd——宁可挂隔壁也不丢单。响应带实际归属的卡 id 供核对
   //（deliverables.json 按 e.sid === 卡 id 绑定，回放 applyDeclaredDeliverables 同口径）
-  deliverBySession(sid: string, cwd: string, rawPath: string): { ok: boolean; session_id?: string; error?: string } {
+  deliverBySession(sid: string, cwd: string, rawPath: string, snapshot?: DeliverablePathValidation): { ok: boolean; session_id?: string; error?: string } {
     const real = this.sessions.has(sid) ? sid : this.sessions.has(`ext-${sid}`) ? `ext-${sid}` : this.findByCliSid(sid);
     if (real) {
-      const r = this.registerDeliverable(real, rawPath);
+      const r = this.registerDeliverable(real, rawPath, snapshot);
       return r.ok ? { ok: true, session_id: real } : r;
     }
-    return this.deliverByCwd(cwd, rawPath);
+    return this.deliverByCwd(cwd, rawPath, snapshot);
   }
 
   // #224 输出物存在性复查（2026-10-02 用户：「已经删除的输出物为什么还要展示——嫌
@@ -1549,13 +1572,14 @@ export class SessionManager {
     }
   }
 
-  // 重启回放：把该会话登记过的交付物挂回（登记不在 transcript，靠 deliverables.json）
+  // 重启回放：把该会话登记过的交付物挂回（登记不在 transcript，靠 deliverables.json）。
+  // #72A0FIX2：挂回条目还原 unverified 标记（落账面持久化的最后一环——标记跨重启不丢）
   private applyDeclaredDeliverables(sessionId: string): void {
     const s = this.sessions.get(sessionId);
     if (!s) return;
     const entries = readDeliverables(this.cfg.dataDir).filter((e) => e.sid === sessionId);
     if (!entries.length) return;
-    const list: ArtifactItem[] = s.state.artifacts ? s.state.artifacts.map((a) => ({ ...a })) : [];
+    const list: LedgerArtifactItem[] = s.state.artifacts ? s.state.artifacts.map((a) => ({ ...a })) : [];
     for (const e of entries) {
       if (list.some((a) => a.path.toLowerCase() === e.path.toLowerCase())) continue;
       let size: number | undefined;
@@ -1565,7 +1589,7 @@ export class SessionManager {
       } catch {
         exists = false;
       }
-      list.push({ path: e.path, op: "create", tools: ["登记"], adds: 0, dels: 0, first_at: e.ts, last_at: e.ts, size, exists });
+      list.push({ path: e.path, op: "create", tools: ["登记"], adds: 0, dels: 0, first_at: e.ts, last_at: e.ts, size, exists, ...(e.unverified ? { unverified: true } : {}) });
     }
     s.state.artifacts = list;
   }

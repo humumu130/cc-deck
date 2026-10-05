@@ -86,7 +86,9 @@ async function main() {
     const before1 = frames.length;
     const ack1 = send(mgr, "n1", "COMMAND_ORG_ACTION",
       { action: "create", name: "R1C 通知组", anchor_dir: anchor, tier: "正经立项" }, "web-1");
-    const d1 = ack1.data as { group?: { id: string }; confirm?: { id: string } } | undefined;
+    // #72A0FIX2 类型面补注（Leader N1② 修订的既有 tsc 伤，零行为变化）：confirm
+    // 实际携带 created_at（stableKey 的 revision 来源），cast 声明面补齐
+    const d1 = ack1.data as { group?: { id: string }; confirm?: { id: string; created_at?: number } } | undefined;
     const cfItems = findKind("org-confirm");
     assert(ack1.ok === true && cfItems.length === 1,
       "N1① needsConfirm 落单产 org-confirm 通知恰好一条");
