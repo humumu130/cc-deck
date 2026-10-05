@@ -1,0 +1,22 @@
+{
+  "notifications": [
+    {
+      "key": "dispatch:dispatch-42",
+      "kind": "dispatch",
+      "source_session_id": "worker-1",
+      "created_at": 1791158400000,
+      "group": "attention",
+      "actionable": false,
+      "revision": "1"
+    },
+    {
+      "key": "system:relay-1",
+      "kind": "system",
+      "source_session_id": "",
+      "created_at": 1791158400000,
+      "group": "activity",
+      "actionable": false,
+      "revision": "1"
+    }
+  ]
+}

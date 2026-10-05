@@ -1,0 +1,16 @@
+[
+  {
+    "key": "org-confirm:cf-old:7",
+    "kind": "org-confirm",
+    "source_session_id": "leader-1",
+    "created_at": 1791158400000,
+    "revision": "7"
+  },
+  {
+    "key": "waiting:session-1:req-1",
+    "kind": "waiting",
+    "source_session_id": "session-1",
+    "created_at": 1791158401000,
+    "revision": "req-1"
+  }
+]

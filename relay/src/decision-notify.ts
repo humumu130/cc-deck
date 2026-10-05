@@ -1,9 +1,18 @@
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import type { OrgConfirm } from "./projects.js";
-import type { SessionState } from "./types.js";
+import type { NotificationGroup, NotificationItem, SessionState } from "./types.js";
 
-export type DecisionNotificationKind = "org-confirm" | "waiting";
+export type DecisionNotificationKind = "org-confirm" | "waiting" | "dispatch" | "acceptance" | "system";
+export const DECISION_NOTIFICATION_KINDS = ["org-confirm", "waiting", "dispatch", "acceptance", "system"] as const;
+
+export function isDecisionNotificationKind(value: unknown): value is DecisionNotificationKind {
+  return typeof value === "string" && (DECISION_NOTIFICATION_KINDS as readonly string[]).includes(value);
+}
+
+// 019 leader-duty 预留：后续 D3 只需在此常量与文案映射扩展，不改变 ledger 形状。
+
+export type NotificationLifecycleItem = NotificationItem & { dismissed_at?: number };
 
 export interface DecisionNotification {
   key: string;
@@ -13,7 +22,129 @@ export interface DecisionNotification {
   first_sent_at?: number;
   reminded_at?: number;
   resolved_at?: number;
+  handled_at?: number;
+  dismissed_at?: number;
+  group: NotificationGroup;
+  actionable: boolean;
   revision: string;
+}
+
+export interface NotificationGroupBucket {
+  items: NotificationItem[];
+  count: number;
+  badgeItems: NotificationItem[];
+  badgeCount: number;
+}
+
+export interface GroupedNotifications {
+  action: NotificationGroupBucket;
+  attention: NotificationGroupBucket;
+  activity: NotificationGroupBucket;
+  groups: Record<NotificationGroup, NotificationGroupBucket>;
+  badgeItems: NotificationItem[];
+  badgeCount: number;
+}
+
+function emptyNotificationBucket(): NotificationGroupBucket {
+  return { items: [], count: 0, badgeItems: [], badgeCount: 0 };
+}
+
+function isHandled(item: NotificationLifecycleItem): boolean {
+  return item.handled_at !== undefined || item.dismissed_at !== undefined || item.resolved_at !== undefined;
+}
+
+export function groupNotifications(items: NotificationItem[]): GroupedNotifications {
+  const action = emptyNotificationBucket();
+  const attention = emptyNotificationBucket();
+  const activity = emptyNotificationBucket();
+  const groups = { action, attention, activity } satisfies Record<NotificationGroup, NotificationGroupBucket>;
+  for (const item of items) {
+    const bucket = groups[item.group];
+    if (!bucket) continue;
+    bucket.items.push(item);
+    bucket.count++;
+    const lifecycle = item as NotificationLifecycleItem;
+    if (item.group === "action" && item.actionable && !isHandled(lifecycle)) {
+      bucket.badgeItems.push(item);
+      bucket.badgeCount++;
+    }
+  }
+  const badgeItems = action.badgeItems;
+  return { action, attention, activity, groups, badgeItems, badgeCount: badgeItems.length };
+}
+
+export type NotificationLifecycleAction =
+  | "opened"
+  | "browsed"
+  | "reconnected"
+  | "source_succeeded"
+  | "dismissed"
+  | "resolved";
+
+export function transitionNotification<T extends NotificationLifecycleItem>(
+  item: T,
+  action: NotificationLifecycleAction,
+  at: number,
+): T {
+  const next = { ...item } as T;
+  if (action === "source_succeeded" && next.handled_at === undefined) next.handled_at = at;
+  if (action === "dismissed") {
+    if (next.dismissed_at === undefined) next.dismissed_at = at;
+    if (next.handled_at === undefined) next.handled_at = at;
+  }
+  if (action === "resolved" && next.resolved_at === undefined) next.resolved_at = at;
+  return next;
+}
+
+export function markNotificationHandled<T extends NotificationLifecycleItem>(item: T, at: number): T {
+  return transitionNotification(item, "source_succeeded", at);
+}
+
+export function markNotificationDismissed<T extends NotificationLifecycleItem>(item: T, at: number): T {
+  return transitionNotification(item, "dismissed", at);
+}
+
+export function markNotificationResolved<T extends NotificationLifecycleItem>(item: T, at: number): T {
+  return transitionNotification(item, "resolved", at);
+}
+
+export function stableKey(kind: DecisionNotificationKind, entityId: string, revision?: string | number): string {
+  if (!isDecisionNotificationKind(kind)) throw new Error(`unsupported notification kind: ${String(kind)}`);
+  if (kind === "dispatch") return `${kind}:${entityId}`;
+  if (revision === undefined || String(revision).length === 0) return `${kind}:${entityId}`;
+  return `${kind}:${entityId}:${String(revision)}`;
+}
+
+function keyIdentity(item: DecisionNotification): string {
+  const parts = item.key.split(":");
+  if (item.kind === "org-confirm" || item.kind === "acceptance") return `${item.kind}:${parts[1] ?? item.key}`;
+  return item.key;
+}
+
+function mergeNotificationPair(current: DecisionNotification, incoming: DecisionNotification): DecisionNotification {
+  return {
+    ...current,
+    ...incoming,
+    created_at: Math.min(current.created_at, incoming.created_at),
+    first_sent_at: current.first_sent_at ?? incoming.first_sent_at,
+    reminded_at: current.reminded_at ?? incoming.reminded_at,
+    resolved_at: current.resolved_at ?? incoming.resolved_at,
+    handled_at: current.handled_at ?? incoming.handled_at,
+    dismissed_at: current.dismissed_at ?? incoming.dismissed_at,
+  };
+}
+
+export function mergeDecisionNotifications(
+  current: DecisionNotification[],
+  incoming: DecisionNotification[],
+): DecisionNotification[] {
+  const merged = new Map<string, DecisionNotification>();
+  for (const item of [...current, ...incoming]) {
+    const identity = keyIdentity(item);
+    const existing = merged.get(identity);
+    merged.set(identity, existing ? mergeNotificationPair(existing, item) : { ...item });
+  }
+  return [...merged.values()];
 }
 
 export interface DecisionNotificationLedger {
@@ -55,6 +186,39 @@ function ledgerPathOf(options: Pick<DecisionNotificationWatcherOptions, "dataDir
   return join(dataDir, "decision-notifications.json");
 }
 
+function defaultNotificationGroup(kind: DecisionNotificationKind): NotificationGroup {
+  return kind === "system" ? "activity" : "action";
+}
+
+function defaultActionable(kind: DecisionNotificationKind, group: NotificationGroup): boolean {
+  return group === "action" && kind !== "system";
+}
+
+export function normalizeDecisionNotification(item: unknown): DecisionNotification | null {
+  if (!item || typeof item !== "object") return null;
+  const x = item as Partial<DecisionNotification>;
+  if (typeof x.key !== "string" || !isDecisionNotificationKind(x.kind) ||
+      typeof x.source_session_id !== "string" || typeof x.created_at !== "number" ||
+      typeof x.revision !== "string") return null;
+  const group = x.group === "action" || x.group === "attention" || x.group === "activity"
+    ? x.group
+    : defaultNotificationGroup(x.kind);
+  return {
+    key: x.key,
+    kind: x.kind,
+    source_session_id: x.source_session_id,
+    created_at: x.created_at,
+    ...(typeof x.first_sent_at === "number" ? { first_sent_at: x.first_sent_at } : {}),
+    ...(typeof x.reminded_at === "number" ? { reminded_at: x.reminded_at } : {}),
+    ...(typeof x.resolved_at === "number" ? { resolved_at: x.resolved_at } : {}),
+    ...(typeof x.handled_at === "number" ? { handled_at: x.handled_at } : {}),
+    ...(typeof x.dismissed_at === "number" ? { dismissed_at: x.dismissed_at } : {}),
+    group,
+    actionable: typeof x.actionable === "boolean" ? x.actionable : defaultActionable(x.kind, group),
+    revision: x.revision,
+  };
+}
+
 export function readDecisionNotificationLedger(path: string): DecisionNotificationLedger {
   try {
     const raw = JSON.parse(readFileSync(path, "utf-8")) as unknown;
@@ -63,12 +227,7 @@ export function readDecisionNotificationLedger(path: string): DecisionNotificati
       : raw && typeof raw === "object" && Array.isArray((raw as { notifications?: unknown }).notifications)
         ? (raw as { notifications: unknown[] }).notifications
         : [];
-    const notifications = list.filter((item): item is DecisionNotification => {
-      if (!item || typeof item !== "object") return false;
-      const x = item as Partial<DecisionNotification>;
-      return typeof x.key === "string" && (x.kind === "org-confirm" || x.kind === "waiting") &&
-        typeof x.source_session_id === "string" && typeof x.created_at === "number" && typeof x.revision === "string";
-    });
+    const notifications = list.map(normalizeDecisionNotification).filter((item): item is DecisionNotification => item !== null);
     return { notifications };
   } catch {
     return { notifications: [] };
@@ -86,7 +245,7 @@ function confirmRevision(confirm: OrgConfirm): string {
 }
 
 function confirmKey(confirm: OrgConfirm): string {
-  return `org-confirm:${confirm.id}:${confirmRevision(confirm)}`;
+  return stableKey("org-confirm", confirm.id, confirmRevision(confirm));
 }
 
 function confirmSourceSession(confirm: OrgConfirm): string {
@@ -98,7 +257,7 @@ function confirmSourceSession(confirm: OrgConfirm): string {
 }
 
 function waitingKey(session: SessionState): string {
-  return `waiting:${session.session_id}:${session.waiting_request!.request_id}`;
+  return stableKey("waiting", session.session_id, session.waiting_request!.request_id);
 }
 
 function allowWaiting(session: SessionState): boolean {
@@ -191,6 +350,8 @@ export class DecisionNotificationWatcher {
           kind: "org-confirm" as const,
           source_session_id: confirmSourceSession(confirm),
           created_at: confirm.created_at,
+          group: "action" as const,
+          actionable: true,
           revision: confirmRevision(confirm),
         };
         if (!existing) {
@@ -227,6 +388,8 @@ export class DecisionNotificationWatcher {
         kind: "waiting" as const,
         source_session_id: session.session_id,
         created_at: session.waiting_started_at ?? session.updated_at,
+        group: "action" as const,
+        actionable: true,
         revision: session.waiting_request!.request_id,
       };
       if (!existing) {
