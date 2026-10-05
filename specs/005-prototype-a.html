@@ -59,6 +59,9 @@
       --selected-shadow: 0 9px 24px rgba(1,8,16,.24);
       --status-done-glow: rgba(75,203,145,.35);
       --status-error-glow: rgba(236,116,114,.25);
+      --status-working-glow: rgba(233,184,76,.35);
+      --q-row-hov: rgba(148,163,190,.07);
+      --q-row-sel: rgba(148,163,190,.14);
       --tag-border: rgba(111,139,166,.18);
       --tag-bg: rgba(83,103,126,.19);
       --tag-ink: #D7E3EF;
@@ -193,6 +196,9 @@
       --selected-shadow: 0 8px 20px rgba(50,74,96,.12);
       --status-done-glow: rgba(22,141,96,.24);
       --status-error-glow: rgba(200,76,81,.2);
+      --status-working-glow: rgba(165,109,0,.22);
+      --q-row-hov: rgba(16,24,40,.05);
+      --q-row-sel: rgba(16,24,40,.09);
       --tag-border: rgba(96,117,138,.24);
       --tag-bg: rgba(132,151,169,.16);
       --tag-ink: #2D4358;
@@ -397,6 +403,8 @@
     .status-dot.done { background: var(--done); box-shadow: 0 0 7px var(--status-done-glow); }
     .status-dot.waiting { background: var(--working); }
     .status-dot.error { background: var(--error); box-shadow: 0 0 7px var(--status-error-glow); }
+    .status-dot.working { background: var(--working); animation: dot-breathe 2.4s ease-in-out infinite; }
+    @keyframes dot-breathe { 0%, 100% { box-shadow: 0 0 0 0 var(--status-working-glow); } 50% { box-shadow: 0 0 7px var(--status-working-glow); } }
     .tag { display: inline-flex; align-items: center; gap: 4px; padding: 3px 7px; border: 1px solid var(--tag-border); border-radius: 999px; background: var(--tag-bg); color: var(--tag-ink); font-size: 10px; white-space: nowrap; }
     .tag.action { background: var(--action-bg); color: var(--brand-strong); }
     .tag.danger { border-color: var(--danger-line); background: var(--danger-bg); color: var(--error); }
@@ -687,6 +695,17 @@
     .notify-light-action:disabled { color: var(--faint); cursor: default; text-decoration: none; }
     .notify-state { margin-left: auto; color: var(--faint); font: 10px var(--mono); }
     .notify-source-summary { padding: 11px 12px; margin-bottom: 12px; border: 1px solid var(--readonly-line); border-radius: var(--radius-sm); background: var(--readonly-bg); color: var(--info); font-size: 10px; }
+    /* #005-UI 通知源分组头与统计（旧版 order4 拍板演进吸收）：组头=源名+需行动统计；
+       组间留白 + 首组顶线免贴；摘要行结构化三段（谁/什么事/等什么 各占一行，lead 着色） */
+    .notify-source-group + .notify-source-group { margin-top: 14px; }
+    .notify-source-group-head { display: flex; align-items: baseline; gap: 8px; padding: 8px 0 6px; border-top: 1px solid var(--line-soft); }
+    .notify-source-group:first-child .notify-source-group-head { border-top: 0; padding-top: 0; }
+    .notify-source-group-name { color: var(--text-strong); font-size: 11px; font-weight: 600; }
+    .notify-source-group-stat { margin-left: auto; color: var(--faint); font: 10px var(--mono); }
+    .notify-source-group-stat b { color: var(--brand); font-weight: 700; }
+    .notify-copy { display: grid; gap: 2px; margin: 5px 0 0; }
+    .notify-copy-row { color: var(--dim); font-size: 11px; line-height: 1.5; }
+    .notify-copy-row b { color: var(--text); font-weight: 600; }
     .mobile-notify-screen .mobile-content { padding-bottom: 18px; }
     .mobile-notify-card { cursor: pointer; }
     .mobile-notify-card .notify-actions { margin-top: 10px; }
@@ -811,19 +830,50 @@
     .source-badge::before { content: "↗"; color: var(--faint); font-size: 10px; }
     .identity-cluster { display: inline-flex; align-items: center; gap: 5px; flex-wrap: wrap; }
     .queue-card .identity-cluster { position: absolute; right: 10px; bottom: 7px; margin: 0; flex-wrap: nowrap; }
-    #d-session .queue-card p { margin: 4px 0 0 14px; }
-    #d-session .queue-card .identity-cluster { display: flex; position: static; margin: 6px 0 0 14px; }
     body { --density-card-block-size: 76px; --density-card-pad-block: 7px; --density-card-pad-inline: 10px; --density-card-row-gap: 3px; --density-notice-block-size: 54px; }
     body[data-card-density="compact"] { --density-card-block-size: 58px; --density-card-pad-block: 7px; --density-card-pad-inline: 10px; --density-card-row-gap: 6px; --density-notice-block-size: 48px; }
     body[data-card-density="relaxed"] { --density-card-block-size: 86px; --density-card-pad-block: 10px; --density-card-pad-inline: 12px; --density-card-row-gap: 5px; --density-notice-block-size: 62px; }
-    #d-session .queue-card { display: grid; block-size: var(--density-card-block-size); padding: var(--density-card-pad-block) var(--density-card-pad-inline); grid-template-columns: minmax(0, 1fr); grid-template-rows: repeat(3, 18px); row-gap: var(--density-card-row-gap); align-content: start; overflow: hidden; }
-    #d-session .queue-card .row { grid-row: 1; min-block-size: 18px; }
-    #d-session .queue-card p { grid-column: 1; grid-row: 2; block-size: 18px; min-block-size: 18px; margin: 0 0 0 14px; }
-    #d-session .queue-card .identity-cluster { grid-column: 1; grid-row: 3; block-size: 18px; min-block-size: 18px; margin: 0 0 0 14px; }
-    body[data-card-density="compact"] #d-session .queue-card { grid-template-rows: repeat(2, 18px); }
-    body[data-card-density="compact"] #d-session .queue-card p { margin-right: 138px; }
-    body[data-card-density="compact"] #d-session .queue-card:not(:has(.identity-cluster)) p { margin-right: 0; }
-    body[data-card-density="compact"] #d-session .queue-card .identity-cluster { grid-column: 1; grid-row: 2; align-self: center; justify-self: end; margin: 0; }
+    /* ---------- #005-UI 会话列微信式通栏行（参照旧版 #78 拍板演进移植，005 命名体系
+       srow-* 前缀，勿搬旧版 q-*）：无框通栏、行间零分隔线（纯留白分行）；三段式骨架 =
+       srow-ava（源色淡化头像 + 状态灯叠角）/ srow-main（r1 名行：标题+徽章族+时间 /
+       r2 摘要行：走秒直更）/ srow-side（需行动角标，hover 原位切「处理」CTA 互斥）。
+       hover .06s 瞬时淡底（扫过即现即逝）、选中持续淡底，走 --q-row-* 暗亮双值 ---------- */
+    body { --srow-pad-block: 8px; --srow-ava: 34px; --srow-ava-font: 15px; --srow-gap: 3px; --srow-name-size: 12.5px; --srow-sub-size: 10.5px; }
+    body[data-card-density="compact"] { --srow-pad-block: 4px; --srow-ava: 26px; --srow-ava-font: 12px; --srow-gap: 1px; --srow-name-size: 12px; --srow-sub-size: 10px; }
+    body[data-card-density="relaxed"] { --srow-pad-block: 11px; --srow-ava: 38px; --srow-ava-font: 16px; --srow-gap: 5px; --srow-name-size: 13px; --srow-sub-size: 11px; }
+    #d-session .queue-card { display: flex; position: relative; align-items: center; gap: 11px; min-width: 0; min-height: 0; margin: 0; padding: var(--srow-pad-block) 12px; border: 0; border-radius: 10px; background: none; box-shadow: none; overflow: hidden; cursor: pointer; transition: background .06s linear; }
+    /* 行形态 display:flex 会压过 [hidden] 的 UA display:none——源筛选/搜索隐藏链（card.hidden）保真 */
+    #d-session .queue-card[hidden] { display: none; }
+    /* 微信电脑端「扫过见底」：hover 瞬时淡底；选中持续淡底（原描边/悬浮抬升档废止） */
+    #d-session .queue-card:hover { border-color: transparent; background: var(--q-row-hov); transform: none; box-shadow: none; }
+    #d-session .queue-card.selected { border-color: transparent; background: var(--q-row-sel); box-shadow: none; }
+    /* 失联卡 danger 语义保留（原边框底卡改行淡底） */
+    #d-session .queue-card[data-session-card="mobile"] { background: var(--danger-bg); }
+    #d-session .queue-card[data-session-card="mobile"]:hover { background: var(--danger-bg); }
+    #d-session .srow-ava { position: relative; display: grid; place-items: center; flex: 0 0 var(--srow-ava); width: var(--srow-ava); height: var(--srow-ava); border-radius: 9px; background: color-mix(in srgb, var(--srow-ava-c, var(--source)) 16%, var(--surface2)); color: var(--srow-ava-c, var(--text-strong)); font: 700 var(--srow-ava-font)/1 var(--mono); user-select: none; }
+    #d-session .srow-ava .status-dot { position: absolute; right: -3px; bottom: -3px; box-shadow: 0 0 0 2px var(--bg1); }
+    #d-session .srow-main { display: flex; flex: 1; min-width: 0; flex-direction: column; gap: var(--srow-gap); }
+    #d-session .srow-r1 { display: flex; align-items: center; gap: 6px; min-width: 0; }
+    #d-session .srow-r1 strong { flex: 0 1 auto; min-width: 0; overflow: hidden; color: var(--text-strong); font-size: var(--srow-name-size); text-overflow: ellipsis; white-space: nowrap; }
+    #d-session .srow-r1 .tag { flex: none; margin-top: 0; }
+    #d-session .srow-r1 .engine-badge, #d-session .srow-r1 .source-badge { flex: none; }
+    #d-session .srow-time { flex: none; margin-left: auto; color: var(--faint); font: 10px var(--mono); font-variant-numeric: tabular-nums; }
+    #d-session .srow-r2 { display: flex; align-items: center; gap: 7px; min-width: 0; overflow: hidden; color: var(--dim); font-size: var(--srow-sub-size); line-height: 16px; }
+    #d-session .srow-r2 .engine-badge { flex: none; }
+    #d-session .srow-r2-t { min-width: 0; flex: 0 1 auto; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    #d-session .srow-sec { flex: none; color: var(--working); font-variant-numeric: tabular-nums; }
+    #d-session .srow-side { display: flex; flex: none; align-items: center; justify-content: flex-end; gap: 6px; min-width: 22px; }
+    #d-session .srow-side:empty { display: none; }
+    /* 需行动角标（微信待办提示位）与 hover「处理」CTA 原位互斥（占位不破坏行静观感） */
+    #d-session .srow-n { display: inline-flex; align-items: center; justify-content: center; min-width: 17px; height: 17px; padding: 0 5px; border-radius: 999px; background: var(--brand); color: var(--bg0); font: 700 10px/1 var(--mono); font-variant-numeric: tabular-nums; }
+    #d-session .srow-cta { display: none; min-height: 22px; padding: 0 9px; border: 1px solid var(--line); border-radius: 7px; background: var(--surface2); color: var(--text-strong); cursor: pointer; font-size: 10px; align-items: center; }
+    #d-session .srow-cta:hover { border-color: var(--brand); color: var(--brand); }
+    #d-session .queue-card:hover .srow-side:has(.srow-cta) .srow-n { display: none; }
+    #d-session .queue-card:hover .srow-cta { display: inline-flex; }
+    /* 行变量三档语义（原 --density-card-* 卡变量改造为行变量；档位循环与设置键不变）：
+       紧凑=压缩两行（头像 26px/字号降档，对齐手机「简洁列表」）——见上方 body 三条 */
+    /* 组头 sticky（旧版 #78 同拍板）：滚动时组名钉在列表顶，底色盖住穿行的行淡底 */
+    #d-session .session-list .queue-group { position: sticky; top: 0; z-index: 2; margin: 10px 0 6px; padding: 2px 3px; background: var(--surface1); }
     #d-team .queue-card, #d-project .queue-card, #d-settings .queue-card { block-size: var(--density-card-block-size); padding: var(--density-card-pad-block) var(--density-card-pad-inline); overflow: hidden; }
     #d-notify .notice { block-size: var(--density-notice-block-size); overflow: hidden; }
     /* order6：队列行瘦身配套——紧凑档卡高压到 48px，块向 padding 同步收一档防内容裁切；
@@ -850,8 +900,6 @@
     body[data-card-density="relaxed"] .mobile-card p { margin-top: 8px; }
     body[data-card-density="relaxed"] .mobile-card .identity-cluster { margin-top: 9px; }
     body[data-source-mode="single"] #d-session .queue-card .source-badge, body[data-source-mode="single"] #m-inbox .mobile-card .source-badge { display: none; }
-    body[data-source-mode="single"][data-card-density="compact"] #d-session .queue-card p { margin-right: 80px; }
-    body[data-source-mode="single"][data-card-density="compact"] #d-session .queue-card:not(:has(.identity-cluster)) p { margin-right: 0; }
     .density-control { display: inline-flex; gap: 3px; padding: 3px; margin-left: auto; border: 1px solid var(--line); border-radius: 7px; background: var(--surface1); }
     .density-control button { padding: 5px 7px; border: 0; border-radius: 5px; background: transparent; color: var(--dim); cursor: pointer; font-size: 10px; }
     .density-control button.active { background: var(--selected-bg); color: var(--text-strong); box-shadow: var(--selected-shadow); }
@@ -1117,16 +1165,26 @@
         home: { label: "家里 iMac", summary: "2 会话 · 2 行动", actions: 2, mobile: { actions: 1, running: 3, acceptance: 1 }, status: "reconnecting" }
       };
 
-      const sessionQueueData = { action: [{ id: "release", status: "waiting", title: "0.6.0-test.19 出包", tag: "待收单", tagClass: "action", summary: "验收单已回填 2/3 · 12 分钟前", engine: "Claude", engineClass: "claude", source: "公司电脑", selected: true }, { id: "mobile", status: "error", title: "worker-mobile 失联", tag: "接替", tagClass: "danger", summary: "Claude 额度已用尽 · 8 分钟前", engine: "Qwen Code", engineClass: "qwen", source: "家里 iMac" }, { id: "team-plan", status: "waiting", title: "团队编制确认", tag: "待确认", tagClass: "action", summary: "cc-deck M1 攻坚团 · PM 已提交", engine: "Trae", engineClass: "trae", source: "公司电脑" }, { id: "ui", status: "done", title: "ui-review 走查", summary: "当前任务：检查 rail 方案 · 上下文 58%", engine: "Codex", engineClass: "codex", source: "公司电脑" }, { id: "board", status: "done", title: "relay 任务板", summary: "T-12/T-15 并行 · 4/9", engine: "ZCode", engineClass: "zcode", source: "家里 iMac" }], all: [{ id: "release", status: "waiting", title: "0.6.0-test.19 出包", tag: "待收单", tagClass: "action", summary: "验收单 · 1 小时前", engine: "Claude", engineClass: "claude", source: "公司电脑", selected: true }, { id: "ui", status: "done", title: "ui-review 走查", summary: "刚刚活跃 · 58%", engine: "Codex", engineClass: "codex", source: "公司电脑" }, { id: "board", status: "done", title: "relay 任务板", summary: "运行中 · 4/9", engine: "ZCode", engineClass: "zcode", source: "家里 iMac" }, { id: "mobile", status: "error", title: "worker-mobile 失联", summary: "需接替 · 8 分钟前", engine: "Qwen Code", engineClass: "qwen", source: "家里 iMac" }, { id: "android", status: "waiting", title: "android 构建", summary: "等待安卓产物 · 3 小时前", engine: "CodeBuddy", engineClass: "codebuddy", source: "公司电脑" }] };
+      // #005-UI 会话行数据：time 从 summary 尾部拆出（r1 名行右侧时间位）；board 转
+      // working 走秒卡（r2 摘要行 .srow-sec 每秒直更，旧版 #78「走秒直更」语义移植）
+      const sessionQueueData = { action: [{ id: "release", status: "waiting", title: "0.6.0-test.19 出包", tag: "待收单", tagClass: "action", summary: "验收单已回填 2/3", time: "12 分钟前", engine: "Claude", engineClass: "claude", source: "公司电脑", selected: true }, { id: "mobile", status: "error", title: "worker-mobile 失联", tag: "接替", tagClass: "danger", summary: "Claude 额度已用尽", time: "8 分钟前", engine: "Qwen Code", engineClass: "qwen", source: "家里 iMac" }, { id: "team-plan", status: "waiting", title: "团队编制确认", tag: "待确认", tagClass: "action", summary: "cc-deck M1 攻坚团 · PM 已提交", time: "9 分钟前", engine: "Trae", engineClass: "trae", source: "公司电脑" }, { id: "ui", status: "done", title: "ui-review 走查", summary: "当前任务：检查 rail 方案 · 上下文 58%", time: "刚刚", engine: "Codex", engineClass: "codex", source: "公司电脑" }, { id: "board", status: "working", title: "relay 任务板", summary: "T-12/T-15 并行 · 4/9", time: "刚刚", workSecs: 96, engine: "ZCode", engineClass: "zcode", source: "家里 iMac" }], all: [{ id: "release", status: "waiting", title: "0.6.0-test.19 出包", tag: "待收单", tagClass: "action", summary: "验收单", time: "1 小时前", engine: "Claude", engineClass: "claude", source: "公司电脑", selected: true }, { id: "ui", status: "done", title: "ui-review 走查", summary: "刚刚活跃 · 58%", time: "", engine: "Codex", engineClass: "codex", source: "公司电脑" }, { id: "board", status: "working", title: "relay 任务板", summary: "运行中 · 4/9", time: "刚刚", workSecs: 96, engine: "ZCode", engineClass: "zcode", source: "家里 iMac" }, { id: "mobile", status: "error", title: "worker-mobile 失联", summary: "需接替", time: "8 分钟前", engine: "Qwen Code", engineClass: "qwen", source: "家里 iMac" }, { id: "android", status: "waiting", title: "android 构建", summary: "等待安卓产物", time: "3 小时前", engine: "CodeBuddy", engineClass: "codebuddy", source: "公司电脑" }] };
 
       const mobileSessionData = [{ id: "release", title: "0.6.0-test.19 出包", tag: "待收单", tagClass: "action", summary: "验收单已回填 2/3 · 点击确认最后一项", engine: "Claude", engineClass: "claude", source: "公司电脑", avatar: "status-action", icon: "clock", primary: true }, { id: "mobile", title: "worker-mobile 失联", tag: "接替", tagClass: "danger", summary: "Claude 额度已用尽 · 验收槽不回落同厂商", engine: "Qwen Code", engineClass: "qwen", source: "家里 iMac", avatar: "status-alert", icon: "alert" }, { id: "team-plan", title: "团队编制确认", tag: "待确认", tagClass: "action", summary: "PM 已提交编制方案 · 3 开发 + 独立验收", engine: "Trae", engineClass: "trae", source: "公司电脑", avatar: "status-action", icon: "clock" }];
-      const notificationData = [{ key: "release", active: true, domain: "session", session: "release", mobileSource: "release", leftTitle: "0.6.0-test.19 就绪待收单", leftSummary: "T-13 已回填 2/3 · 12 分钟前", desktopKicker: "来源会话 · 0.6.0-test.19 出包", time: "12 分钟前", desktopTitle: "验收回填 2/3，等待最后一项确认收单", desktopCopy: "谁：worker-web · 什么事：T-13 独立出包已完成 · 等什么：公司网下检查更新并确认收单", mobileTitle: "0.6.0-test.19 待收单", mobileCopy: "来源会话 · T-13 已回填 2/3 · 等最后一项检查", engine: "Claude", engineClass: "claude", source: "公司电脑", tag: "验收", tagClass: "action", action: "resolve", actionLabel: "标记已读", jumpLabel: "去会话验收" }, { key: "team-plan", active: true, domain: "team", teamAction: "takeover", mobileSource: "team-plan", leftTitle: "团队动作待确认", leftSummary: "失联接替与编制确认 · 8 分钟前", desktopKicker: "来源团队 · cc-deck M1 攻坚团", time: "8 分钟前", desktopTitle: "worker-mobile 失联，编制方案也等待确认", desktopCopy: "谁：PM / worker-mobile · 什么事：额度链走尽 · 等什么：选择接替引擎并确认 3 开发 + 独立验收编制", mobileTitle: "团队动作待确认", mobileCopy: "来源团队 · worker-mobile 失联 · 选择接替并确认编制", engine: "Qwen Code", engineClass: "qwen", source: "公司电脑", tag: "需处理", tagClass: "danger", action: "pause", actionLabel: "暂停提醒", jumpLabel: "去团队接替", confirmLabel: "去团队确认" }, { key: "relay", active: false, leftTitle: "worker-relay 滞留 25 分", leftSummary: "已通知 PM · 30 分钟前", desktopKicker: "来源会话 · relay 任务板", time: "30 分钟前", desktopTitle: "worker-relay 滞留 25 分", desktopCopy: "已通知 PM；这是提醒类动态，不计入需行动 badge。", mobileTitle: "worker-relay 滞留 25 分", mobileCopy: "来源会话 · 已通知 PM，不计入需行动 badge", engine: "Codex", engineClass: "codex", source: "公司电脑", tag: "历史", tagClass: "", action: "ack", actionLabel: "确认已知" }];
+      const notificationData = [{ key: "release", active: true, domain: "session", session: "release", mobileSource: "release", leftTitle: "0.6.0-test.19 就绪待收单", leftSummary: "T-13 已回填 2/3 · 12 分钟前", desktopKicker: "来源会话 · 0.6.0-test.19 出包", time: "12 分钟前", desktopTitle: "验收回填 2/3，等待最后一项确认收单", desktopCopy: "谁：worker-web · 什么事：T-13 独立出包已完成 · 等什么：公司网下检查更新并确认收单", mobileTitle: "0.6.0-test.19 待收单", mobileCopy: "来源会话 · T-13 已回填 2/3 · 等最后一项检查", engine: "Claude", engineClass: "claude", source: "公司电脑", tag: "验收", tagClass: "action", action: "resolve", actionLabel: "标记已读", jumpLabel: "去会话验收" }, { key: "team-plan", active: true, domain: "team", teamAction: "takeover", mobileSource: "team-plan", leftTitle: "团队动作待确认", leftSummary: "失联接替与编制确认 · 8 分钟前", desktopKicker: "来源团队 · cc-deck M1 攻坚团", time: "8 分钟前", desktopTitle: "worker-mobile 失联，编制方案也等待确认", desktopCopy: "谁：PM / worker-mobile · 什么事：额度链走尽 · 等什么：选择接替引擎并确认 3 开发 + 独立验收编制", mobileTitle: "团队动作待确认", mobileCopy: "来源团队 · worker-mobile 失联 · 选择接替并确认编制", engine: "Qwen Code", engineClass: "qwen", source: "公司电脑", tag: "需处理", tagClass: "danger", action: "pause", actionLabel: "暂停提醒", jumpLabel: "去团队接替", confirmLabel: "去团队确认" }, { key: "relay", active: false, leftTitle: "worker-relay 滞留 25 分", leftSummary: "已通知 PM · 30 分钟前", desktopKicker: "来源会话 · relay 任务板", time: "30 分钟前", desktopTitle: "worker-relay 滞留 25 分", desktopCopy: "已通知 PM；这是提醒类动态，不计入需行动 badge。", mobileTitle: "worker-relay 滞留 25 分", mobileCopy: "来源会话 · 已通知 PM，不计入需行动 badge", engine: "Codex", engineClass: "codex", source: "家里 iMac", tag: "历史", tagClass: "", action: "ack", actionLabel: "确认已知" }];
       const teamMembers = [{ name: "PM", role: "glm-5.3 · 调度", engine: "Trae", engineClass: "trae", source: "公司电脑", avatar: "pm", glyph: "✦" }, { name: "worker-web", role: "开发 · 运行中", engine: "Claude", engineClass: "claude", source: "公司电脑", avatar: "worker", glyph: "W" }, { name: "worker-mobile", role: "失联 · 待接替", engine: "Qwen Code", engineClass: "qwen", source: "家里 iMac", avatar: "worker", glyph: "M" }, { name: "验收槽", role: "独立厂商 · 待验收", engine: "ZCode", engineClass: "zcode", source: "公司电脑", avatar: "qa", glyph: "QA" }];
       const teamTasks = [{ lane: "待认领", count: "2", title: "T-21 导入码迁移", copy: "等待 worker-web", engine: "CodeBuddy", engineClass: "codebuddy", source: "公司电脑", tag: "待派单", tagClass: "" }, { lane: "进行中", count: "4", title: "T-12 relay 事件流", copy: "worker-relay · 48%", engine: "Codex", engineClass: "codex", source: "公司电脑", tag: "运行中", tagClass: "info" }, { lane: "进行中", count: "4", title: "T-15 手机列表", copy: "worker-mobile · 72%", engine: "Qwen Code", engineClass: "qwen", source: "家里 iMac", tag: "运行中", tagClass: "info" }, { lane: "待验收", count: "2", title: "T-13 更新通道隔离", copy: "独立出包已完成", assignee: "worker-web · 执行者", assigneeClass: "worker", assigneeGlyph: "W", assigneeEngine: "Claude", assigneeEngineClass: "claude", assigneeSource: "公司电脑", tag: "验收单", tagClass: "action" }, { lane: "待装机", count: "2", title: "T-14 验收槽", copy: "回填 2/3", assignee: "PM · 编排", assigneeClass: "pm", assigneeGlyph: "✦", assigneeEngine: "Trae", assigneeEngineClass: "trae", assigneeSource: "公司电脑", tag: "待收单", tagClass: "action" }, { lane: "完成", count: "1", title: "T-10 版本同步", copy: "已合并 main", engine: "ZCode", engineClass: "zcode", source: "家里 iMac", tag: "完成", tagClass: "done" }];
       const engineIconFor = (engineClass = "") => engineClass === "claude" ? "chat" : engineClass === "codex" ? "code" : engineClass === "trae" ? "sliders" : "server";
       const engineBadgeMarkup = (item) => `<span class="engine-badge ${item.engineClass}"><svg class="engine-icon" aria-hidden="true"><use href="#icon-${engineIconFor(item.engineClass)}"></use></svg>${item.engine}</span>`;
       const identityMarkup = (item, includeEngine = true) => `<div class="identity-cluster">${includeEngine ? engineBadgeMarkup(item) : ""}<span class="source-badge">${item.source}</span></div>`;
-      const renderSessionCard = (item, variant) => variant === "mobile" ? `<div class="mobile-card${item.primary ? " primary" : ""}" data-open-detail="${item.id}"><div class="row"><span class="avatar ${item.avatar}"><svg class="icon-status" aria-hidden="true"><use href="#icon-${item.icon}"></use></svg></span><strong>${item.title}</strong>${item.tag ? `<span class="tag ${item.tagClass}">${item.tag}</span>` : ""}</div><p>${item.summary}</p>${identityMarkup(item)}</div>` : `<div class="queue-card${item.selected ? " selected" : ""}" data-session-card="${item.id}"><div class="row"><i class="status-dot ${item.status}"></i><strong>${item.title}</strong>${item.tag ? `<span class="tag ${item.tagClass}">${item.tag}</span>` : ""}</div><p>${item.summary}</p>${identityMarkup(item)}</div>`;
+      // #005-UI 微信式通栏行（三段式 srow-*）：头像位源色淡化 + 状态灯叠角；r1 名行
+      // （标题+tag 徽章+源徽+时间）/ r2 摘要行（引擎徽与走秒 .srow-sec 挂行尾——
+      // 285px 窄列 r1 四件套会把标题 shrink 成省略号，引擎徽降 r2 保标题伸展）；
+      // srow-side 需行动角标（tagClass action/danger），hover 原位切「处理」CTA。
+      // 功能保留面：selected/status-dot/tag/engine/source 徽（syncSourceVisibility 读
+      // .source-badge 文本）/data-session-card/danger 失联卡语义全部随行保留
+      const sessionSourceColor = (source) => source === "家里 iMac" ? "var(--source-home)" : "var(--source-company)";
+      const sessionSideMarkup = (item) => item.tagClass === "action" || item.tagClass === "danger" ? `<span class="srow-n" title="有待处理事项">1</span><button type="button" class="srow-cta">处理</button>` : "";
+      const renderSessionCard = (item, variant) => variant === "mobile" ? `<div class="mobile-card${item.primary ? " primary" : ""}" data-open-detail="${item.id}"><div class="row"><span class="avatar ${item.avatar}"><svg class="icon-status" aria-hidden="true"><use href="#icon-${item.icon}"></use></svg></span><strong>${item.title}</strong>${item.tag ? `<span class="tag ${item.tagClass}">${item.tag}</span>` : ""}</div><p>${item.summary}</p>${identityMarkup(item)}</div>` : `<div class="queue-card${item.selected ? " selected" : ""}" data-session-card="${item.id}"><span class="srow-ava" style="--srow-ava-c:${sessionSourceColor(item.source)}">${(item.title || "·").trim().charAt(0).toUpperCase()}<i class="status-dot ${item.status}"></i></span><span class="srow-main"><span class="srow-r1"><strong title="${item.title}">${item.title}</strong>${item.tag ? `<span class="tag ${item.tagClass}">${item.tag}</span>` : ""}<span class="source-badge">${item.source}</span>${item.time ? `<time class="srow-time">${item.time}</time>` : ""}</span><span class="srow-r2"><span class="srow-r2-t">${item.summary}</span>${engineBadgeMarkup(item)}${item.status === "working" ? `<span class="srow-sec" data-work-sec="${item.workSecs || 0}">${item.workSecs || 0}s</span>` : ""}</span></span><span class="srow-side">${sessionSideMarkup(item)}</span></div>`;
       const getSessionProject = (item) => item.id === "android" ? "windclaw-qclaw" : "cc-deck";
       const sessionPendingItems = () => sessionQueueData.action.slice(0, 3);
       const sessionOtherItems = () => sessionQueueData.all.filter((item) => !sessionPendingItems().some((pending) => pending.id === item.id));
@@ -1160,7 +1218,13 @@
         const dynamicItems = notificationData.filter((item) => !item.active);
         return `<div class="queue-head"><h2>通知</h2><button class="icon-btn">×</button></div>${renderNotificationQueueGroup("需你行动", "action", actionItems, true)}${renderNotificationQueueGroup("注意", "attention", attentionItems)}${renderNotificationQueueGroup("动态", "dynamic", dynamicItems)}`;
       };
-      const renderNotificationSourceCards = () => notificationData.map((item) => `<article class="notify-source-card" data-notify-card data-notify-active="${item.active}"><div class="notify-source-head"><span class="notice-icon">${item.active ? "!" : "·"}</span><div><span class="notify-source-kicker">${item.desktopKicker}</span><span class="notify-source-time">${item.time}</span><h3>${item.desktopTitle}</h3><p>${item.desktopCopy}</p>${notificationIdentity(item)}</div></div><div class="notify-actions">${item.active ? `<button class="primary-btn" type="button" data-notify-jump data-notify-domain="${item.domain}"${item.session ? ` data-notify-session="${item.session}"` : ""}${item.teamAction ? ` data-notify-team-action="${item.teamAction}"` : ""}>${item.jumpLabel}</button>${item.confirmLabel ? `<button class="secondary-btn" type="button" data-notify-jump data-notify-domain="team" data-notify-team-action="confirm">${item.confirmLabel}</button>` : ""}` : ""}<button class="notify-light-action" type="button" data-notify-action="${item.action}">${item.actionLabel}</button>${item.active ? `<span class="notify-state" data-notify-status>需行动</span>` : `<span class="notify-state" data-notify-status>历史动态</span>`}</div></article>`).join("");
+      // #005-UI 通知源分组与统计（旧版 order4 拍板演进吸收）：按 source 分组，组头=
+      // 源名 + 「N 项需行动 · M 条动态」统计（需行动数 brand 高亮）；摘要行结构化
+      // 三段（谁/什么事/等什么 各占一行 lead 着色，旧版 #54 摘要密度演进）；
+      // 轻动作内联（jump/confirm/light-action）与 resolved/空白态链原样保留
+      const notifyCopyRows = (copy) => String(copy || "").split(" · ").map((seg) => { const i = seg.indexOf("："); return `<div class="notify-copy-row">${i > 0 ? `<b>${seg.slice(0, i + 1)}</b>${seg.slice(i + 1)}` : seg}</div>`; }).join("");
+      const notificationSourceCard = (item) => `<article class="notify-source-card" data-notify-card data-notify-active="${item.active}"><div class="notify-source-head"><span class="notice-icon">${item.active ? "!" : "·"}</span><div><span class="notify-source-kicker">${item.desktopKicker}</span><span class="notify-source-time">${item.time}</span><h3>${item.desktopTitle}</h3><div class="notify-copy">${notifyCopyRows(item.desktopCopy)}</div>${notificationIdentity(item)}</div></div><div class="notify-actions">${item.active ? `<button class="primary-btn" type="button" data-notify-jump data-notify-domain="${item.domain}"${item.session ? ` data-notify-session="${item.session}"` : ""}${item.teamAction ? ` data-notify-team-action="${item.teamAction}"` : ""}>${item.jumpLabel}</button>${item.confirmLabel ? `<button class="secondary-btn" type="button" data-notify-jump data-notify-domain="team" data-notify-team-action="confirm">${item.confirmLabel}</button>` : ""}` : ""}<button class="notify-light-action" type="button" data-notify-action="${item.action}">${item.actionLabel}</button>${item.active ? `<span class="notify-state" data-notify-status>需行动</span>` : `<span class="notify-state" data-notify-status>历史动态</span>`}</div></article>`;
+      const renderNotificationSourceCards = () => [...new Set(notificationData.map((item) => item.source))].map((source) => { const items = notificationData.filter((item) => item.source === source); const activeN = items.filter((item) => item.active).length; return `<div class="notify-source-group" data-notify-group="${source}"><div class="notify-source-group-head"><span class="notify-source-group-name">${source}</span><span class="notify-source-group-stat">${activeN ? `<b>${activeN}</b> 项需行动 · ` : "无待办 · "}${items.length} 条动态</span></div>${items.map(notificationSourceCard).join("")}</div>`; }).join("");
       const renderMobileNotificationCards = () => notificationData.map((item) => `<article class="mobile-card mobile-notify-card" data-notify-card data-notify-active="${item.active}"${item.mobileSource ? ` data-notify-mobile-source="${item.mobileSource}"` : ""}><div class="row"><span class="avatar">${item.active ? "!" : "·"}</span><strong>${item.mobileTitle}</strong><span class="tag ${item.tagClass}">${item.tag || "历史"}</span></div><p>${item.mobileCopy}</p>${notificationIdentity(item)}<div class="notify-actions">${item.active ? `<button class="primary-btn" type="button" data-notify-mobile-jump="${item.mobileSource}">${item.key === "team-plan" ? "去团队确认" : item.jumpLabel}</button>` : ""}<button class="notify-light-action" type="button" data-notify-action="${item.action}">${item.actionLabel}</button></div></article>`).join("");
 
       const renderTeamMember = (item, large = false) => `<div class="${large ? "team-member-large" : "member-card"}"><span class="avatar ${item.avatar}">${item.glyph}<i class="avatar-engine-dot ${item.engineClass}"></i></span><div><strong>${item.name}${item.name === "PM" ? ' <span class="role-label pm-label">PM</span>' : ""}</strong><p>${item.role}${!large && item.engine ? ` <span class="engine-badge ${item.engineClass}">${item.engine}</span>` : ""}</p>${large ? `<span class="engine-badge ${item.engineClass}">${item.engine}</span>` : ""}</div></div>`;
@@ -3001,6 +3065,15 @@
       let savedCardDensity = "standard";
       try { savedCardDensity = localStorage.getItem("cc-deck-card-density") || "standard"; } catch (_) {}
       renderSessionViews();
+      // #005-UI 摘要走秒直更（旧版 #78「走秒直更」语义）：working 行 .srow-sec 每秒
+      // 直更（基值 data-work-sec + 页面流逝秒），重渲染后由 data-work-sec 重挂基值
+      const srowTickStart = Date.now();
+      setInterval(() => {
+        const elapsed = Math.floor((Date.now() - srowTickStart) / 1000);
+        document.querySelectorAll("#d-session .srow-sec[data-work-sec]").forEach((el) => {
+          el.textContent = Number(el.dataset.workSec) + elapsed + "s";
+        });
+      }, 1000);
       renderNotificationViews();
       renderSourceMenus();
       ensureThemeSymbols();
