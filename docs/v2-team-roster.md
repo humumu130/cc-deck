@@ -6,13 +6,15 @@
 | 角色 | 会话号 | 开卡代号 | Leader 惯用代号 | 引擎/模型 |
 |---|---|---|---|---|
 | PM | 5244c206 | PM | PM | Codex 引擎（兼架构/UI 设计） |
-| 前端 worker | 4aa55f60 | worker F | H | Claude Code CLI / claude-sonnet-5 |
-| relay worker | 5b47be31 | worker E | G | Claude Code CLI / claude-sonnet-5 |
-| 测试/审查 worker | 7b5ffab6 | worker I | J | Claude Code CLI（GLM 档 / glm-5.3） |
+| 前端 worker | 4aa55f60 | worker F | H | Claude Code CLI / GLM（sonnet 档别名） |
+| relay worker | 5b47be31 | worker E | G | Claude Code CLI / GLM（sonnet 档别名） |
+| 测试/审查 worker | 7b5ffab6 | worker I | J | Claude Code CLI / GLM |
 | Leader | ext-7f5c3601 | — | — | Claude Agent SDK / glm-5.3（核验/代提交/锚单，不下场写 worker 代码） |
 
+> **模型口径订正（2026-10-06 用户澄清）**：全机 Claude Code 未配 Anthropic 自家模型，`ANTHROPIC_BASE_URL` 指向 GLM 兼容端点（bigmodel）；「claude-sonnet-5」等只是 `ANTHROPIC_DEFAULT_*_MODEL` 档位别名，实际后端均为 GLM。所有 Claude Code 卡同引擎同后端——卡间能力差异来自上下文与分工史（如 H 交付 005 主体单的设计语言积累），不来自模型档位。前端还原度实证同理修正：005 主体由 GLM 后端的卡交付且逐单过关，GLM 有「完全还原」级实证。
+
 > 纪律：PM 不下场写 worker 代码（018 §5.7）；worker 不 commit；同靶子锁显式串行；Leader 只做核验/代提交与明确承担的锚单。
-> 扩编点：K（存储/迁移熟手，sonnet 档建议）＝M11 导入线；L（Expo/Tauri 前端）＝M1-3 呈现线。开卡时引导词代号顺延（下一字母），并在本表登记会话号。
+> 扩编点：K（存储/迁移熟手，Claude Code CLI 开卡即可，同 GLM 后端）＝M11 导入线；L（Expo/Tauri 前端，同）＝M1-3 呈现线。开卡时引导词代号顺延（下一字母），并在本表登记会话号。
 
 ## 前端军规（用户拍板 2026-10-06，所有前端单任务书固定段）
 
@@ -54,8 +56,8 @@ G 全串 M12-1→8（session-manager 单写者锁天然串行）；Leader 核验
 
 ## 扩编点（两个，均不阻塞启动）
 
-- **K（存储/迁移熟手）**：M11-B2 完成前开卡，接 D1/E1/F1/F2 导入线。档位建议 sonnet/relay 惯例档。
-- **L（Expo/Tauri 前端）**：M1-2 期间开卡，接 M13-4/5+P72 Expo 侧。前端军规约束。
+- **K（存储/迁移熟手）**：M11-B2 完成前开卡，接 D1/E1/F1/F2 导入线。Claude Code CLI 开卡即可（同 GLM 后端）。
+- **L（Expo/Tauri 前端）**：M1-2 期间开卡，接 M13-4/5+P72 Expo 侧。前端军规约束。同 GLM 后端。
 
 ## 在途与衔接
 
