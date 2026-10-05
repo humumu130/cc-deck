@@ -58,7 +58,51 @@ export interface JsonlActivityOptions {
   capabilities: ActivityMapperInput["capabilities"];
   now?: number;
   task?: ActivityTaskSources;
+  // B1a：引擎形态档位（ENGINE_JSONL_PROFILES 键）。批量流解析（mapJsonlStream）
+  // 据此分档：structured=false 引擎（trae）的纯文本行是合法正文而非畸形
+  profileId?: string;
 }
+
+// ---------------------------------------------------------------------------
+// B1a 引擎 JSONL 形态档位表：各引擎行格式的显式备案（显式档位而非散落 if）。
+// 样本来源口径（018 B1a「真 CLI 样本不凭想象」）：
+//   - trae：006 §3.1 一手 help 核实——无 JSON/JSONL 输出开关（仅 -ct/--console-type
+//     simple|rich），stdout 只有纯文本 → structured=false，工具/时间字段不伪造
+//   - qwen-code：006 §3.2 基线 `qwen -p <prompt> --output-format json`（单对象
+//     文档，whole-document 回落已兜）；是否支持 stream-json 待真机冒烟 → 宽容两吃
+//   - codebuddy：006 §3.3 一手 help 核实 `--output-format text|json|stream-json`
+//     实存（Claude Code 协议同构族）；事件字段词汇待真回合冒烟（§3.4 欠账）→
+//     按家族同构宽容解析，不提前写成稳定契约
+//   - codex：不走本表（agent-codex.ts 专用 mapper，词汇表为 0.154.0 一手实测，
+//     见 docs/codex-integration-research.md 附录）
+//   - zcode：unsupported 主档（agent-zcode.ts preflightZCode 显式拒绝，不进映射）
+// ---------------------------------------------------------------------------
+export interface EngineJsonlProfile {
+  /** 引擎是否声明结构化输出开关；false = 纯文本路径（stdout 行不作事件解析） */
+  structured: boolean;
+  /** occurred_at 候选字段（顶层按序探测） */
+  timeFields: string[];
+  /** 备案注记：样本来源与冒烟欠账 */
+  note: string;
+}
+
+export const ENGINE_JSONL_PROFILES: Record<string, EngineJsonlProfile> = {
+  trae: {
+    structured: false,
+    timeFields: [],
+    note: "006 §3.1 help 核实无 JSONL 开关，纯文本路径；工具/时间不伪造（§3.4.6）",
+  },
+  "qwen-code": {
+    structured: true,
+    timeFields: ["created_at", "createdAt", "timestamp"],
+    note: "006 §3.2 基线 -p --output-format json 单对象；JSONL/stream 形态待冒烟，宽容两吃",
+  },
+  codebuddy: {
+    structured: true,
+    timeFields: ["occurred_at", "occurredAt", "created_at", "createdAt", "timestamp"],
+    note: "006 §3.3 help 核实 stream-json 实存（Claude 协议同构族）；事件字段真回合冒烟欠账（§3.4），宽容解析",
+  },
+};
 
 function numericField(event: Record<string, unknown>, ...keys: string[]): number | undefined {
   for (const key of keys) {
@@ -66,6 +110,48 @@ function numericField(event: Record<string, unknown>, ...keys: string[]): number
     if (typeof value === "number" && Number.isFinite(value)) return value;
   }
   return undefined;
+}
+
+// 018 :260 口径：引擎原生产生时间优先透传；没有则空（relay 侧落 relay_received
+// 接收时间）。时间值兼容数字毫秒与 ISO8601 字符串（Claude 协议族 stream-json 的
+// 行级 timestamp 为 ISO 字符串；既有 numericField 只吃数字，B1a 补齐）
+function occurredAtOf(event: Record<string, unknown>, keys: string[]): number | undefined {
+  for (const key of keys) {
+    const value = event[key];
+    if (typeof value === "number" && Number.isFinite(value)) return value;
+    if (typeof value === "string" && value.trim()) {
+      const parsed = Date.parse(value);
+      if (Number.isFinite(parsed)) return parsed;
+    }
+  }
+  return undefined;
+}
+
+// Claude 协议族 stream-json 形态（codebuddy 同构；relay 自身 AgentSession 消费的
+// 即同款家族）：assistant/user 行的事件体在 event.message.content（块数组或纯
+// 字符串）。宽容提取为块列表，不命中返回 undefined——未知形态仍走顶层探测
+function messageBlocksOf(event: Record<string, unknown>): Record<string, unknown>[] | undefined {
+  const message = event.message;
+  if (!message || typeof message !== "object" || Array.isArray(message)) return undefined;
+  const content = (message as Record<string, unknown>).content;
+  if (typeof content === "string") return [{ type: "text", text: content }];
+  if (!Array.isArray(content)) return undefined;
+  return content.filter(
+    (b): b is Record<string, unknown> => Boolean(b) && typeof b === "object" && !Array.isArray(b),
+  );
+}
+
+function blockOf(blocks: Record<string, unknown>[] | undefined, blockType: string): Record<string, unknown> | undefined {
+  return blocks?.find((b) => String(b.type ?? "").toLowerCase() === blockType);
+}
+
+function blockTextOf(blocks: Record<string, unknown>[] | undefined): string | undefined {
+  if (!blocks) return undefined;
+  const text = blocks
+    .filter((b) => String(b.type ?? "").toLowerCase() === "text" && typeof b.text === "string")
+    .map((b) => b.text as string)
+    .join("");
+  return text || undefined;
 }
 
 function nestedItem(event: Record<string, unknown>): Record<string, unknown> | undefined {
@@ -94,10 +180,15 @@ export function mapJsonlActivity(raw: unknown, options: JsonlActivityOptions): M
   const item = nestedItem(event);
   const rawType = event.type ?? event.event ?? event.kind ?? item?.type;
   const type = typeof rawType === "string" ? rawType.toLowerCase() : "";
-  const errorText = textOf(event.error) ?? textOf(event.message);
-  const occurredAt = numericField(event, "occurred_at", "occurredAt", "created_at", "createdAt", "timestamp");
+  // B1a：Claude 协议族 stream-json（codebuddy 同构）的事件体在 message.content
+  // 块数组——顶层探测不命中时按块补位；未知形态维持宽容跳过，不伪造
+  const blocks = messageBlocksOf(event);
+  const errorText = textOf(event.error) ?? textOf(event.message) ?? textOf(event.result);
+  const occurredAt = occurredAtOf(event, ["occurred_at", "occurredAt", "created_at", "createdAt", "timestamp"]);
   const receivedAt = numericField(event, "received_at", "receivedAt", "ts") ?? now;
-  if (type.includes("error") || event.error !== undefined) {
+  // is_error（Claude 协议族 result 行的失败终态）：fail-closed 转 ERROR，不落 DONE
+  const isErrorFlag = event.is_error === true || event.isError === true;
+  if (type.includes("error") || event.error !== undefined || isErrorFlag) {
     return mapActivityState({
       state: "ERROR",
       activityKind: "system",
@@ -109,13 +200,19 @@ export function mapJsonlActivity(raw: unknown, options: JsonlActivityOptions): M
       capabilities: options.capabilities,
     });
   }
-  const resultish = type.includes("tool_result") || type.includes("tool.completed") || type === "function_result";
-  const toolish = type.includes("tool") || type.includes("command") || type === "function_call" || type === "function_result" || item?.type === "command_execution";
+  const blockToolUse = blockOf(blocks, "tool_use");
+  const blockToolResult = blockOf(blocks, "tool_result");
+  const resultish = type.includes("tool_result") || type.includes("tool.completed") || type === "function_result" || Boolean(blockToolResult);
+  const toolish = type.includes("tool") || type.includes("command") || type === "function_call" || type === "function_result" || item?.type === "command_execution" || Boolean(blockToolUse);
   const tool = typeof (event.tool ?? event.name ?? event.command ?? item?.command) === "string"
     ? String(event.tool ?? event.name ?? event.command ?? item?.command)
-    : undefined;
+    : typeof blockToolUse?.name === "string"
+      ? blockToolUse.name
+      : undefined;
   const text = textOf(event.delta ?? event.text ?? event.content ?? event.output ?? event.response ?? event.result ?? event.message)
-    ?? textOf(item?.text ?? item?.aggregated_output);
+    ?? textOf(item?.text ?? item?.aggregated_output)
+    ?? blockTextOf(blocks)
+    ?? (blockToolResult ? textOf(blockToolResult.content) : undefined);
   const terminal = type.includes("done") || type.includes("complete") || type === "result" || type === "finish" || event.done === true;
   return mapActivityState({
     state: terminal ? "DONE" : "WORKING",
@@ -128,6 +225,51 @@ export function mapJsonlActivity(raw: unknown, options: JsonlActivityOptions): M
     task: options.task,
     capabilities: options.capabilities,
   });
+}
+
+export interface JsonlStreamOutcome {
+  /** 每个成功解析（或纯文本档合法正文）行的映射结果，按行序 */
+  docks: MappedStatusDock[];
+  /** 成功解析为事件的行数 */
+  parsed: number;
+  /** 畸形行数（JSONL 档单行解析失败）：跳过并计数，不中断流（018 B1a 验收口径） */
+  malformed: number;
+  /** 纯文本档（structured=false）按正文处理的行数 */
+  textLines: number;
+}
+
+// B1a 批量纯函数面：逐行 parse → mapJsonlActivity，fixture 直跑断言用
+//（JsonProcessAgentSession 流式路径的同一口径在 execTurn close 兜底处落地）。
+// profileId 缺省按 JSONL 保守档（解析失败计 malformed）；structured=false 档
+//（trae）纯文本行是合法正文——走 mapJsonlActivity string 分支不计数为畸形。
+// 空行不计（分帧噪声，非事件）。
+export function mapJsonlStream(lines: string[], options: JsonlActivityOptions): JsonlStreamOutcome {
+  const structured = options.profileId
+    ? ENGINE_JSONL_PROFILES[options.profileId]?.structured !== false
+    : true;
+  const docks: MappedStatusDock[] = [];
+  let parsed = 0;
+  let malformed = 0;
+  let textLines = 0;
+  for (const line of lines) {
+    const trimmed = line.trim();
+    if (!trimmed) continue;
+    let event: unknown;
+    try {
+      event = JSON.parse(trimmed);
+    } catch {
+      if (!structured) {
+        textLines += 1;
+        docks.push(mapJsonlActivity(trimmed, options));
+        continue;
+      }
+      malformed += 1;
+      continue;
+    }
+    parsed += 1;
+    docks.push(mapJsonlActivity(event, options));
+  }
+  return { docks, parsed, malformed, textLines };
 }
 
 export function splitUtf8Lines(): {
@@ -235,21 +377,33 @@ export class GenericJsonEventMapper {
       this.initialized = true;
       cb.onInit(sessionId ?? "external", model ?? "unknown");
     }
-    if (type.includes("error") || event.error !== undefined) {
-      const message = textOf(event.error) ?? textOf(event.message) ?? "引擎返回错误";
+    // B1a：is_error（Claude 协议族 result 行失败终态）与顶层 error 同档 fail-closed
+    const isErrorFlag = event.is_error === true || event.isError === true;
+    if (type.includes("error") || event.error !== undefined || isErrorFlag) {
+      const message = textOf(event.error) ?? textOf(event.message) ?? textOf(event.result) ?? "引擎返回错误";
       cb.onLog("system", message, { full: message });
       cb.onStatusChange("ERROR", message);
       this.turnTerminal = true;
       cb.onTurnEnd(false, message, 0);
       return;
     }
-    if (type.includes("tool") || type.includes("command") || type === "function_call") {
-      const name = String(event.name ?? event.tool ?? event.command ?? "工具");
-      const detail = textOf(event.input ?? event.arguments ?? event.detail);
+    // B1a：Claude 协议族 stream-json（codebuddy 同构）块形态补位——tool_use/
+    // tool_result 块在 message.content 里，与顶层探测两吃（块缺失零行为变化）
+    const blocks = messageBlocksOf(event);
+    const blockToolUse = blockOf(blocks, "tool_use");
+    const blockToolResult = blockOf(blocks, "tool_result");
+    if (type.includes("tool") || type.includes("command") || type === "function_call" || blockToolUse) {
+      const name = String(event.name ?? event.tool ?? event.command ?? blockToolUse?.name ?? "工具");
+      const detail = textOf(event.input ?? event.arguments ?? event.detail ?? blockToolUse?.input);
       cb.onLog("tool_use", `${name} 调用`, { tool: name, detail });
       cb.onStatusChange("WORKING", `${name} 执行中`);
     }
-    const text = textOf(event.delta ?? event.text ?? event.content ?? event.output ?? event.response ?? event.result ?? event.message);
+    if (blockToolResult) {
+      const resultText = textOf(blockToolResult.content) ?? "工具结果";
+      cb.onLog("tool_result", resultText.slice(0, 400), { full: resultText });
+      cb.onStatusChange("WORKING", "工具结果");
+    }
+    const text = textOf(event.delta ?? event.text ?? event.content ?? event.output ?? event.response ?? event.result ?? event.message) ?? blockTextOf(blocks);
     if (text) {
       const id = `jsonl-${++this.textSequence}`;
       cb.onLog("assistant_text", text.slice(0, 400), { full: text, id });
@@ -327,9 +481,17 @@ export abstract class JsonProcessAgentSession implements AgentLike {
   private stderrTail = "";
   private mapper = new GenericJsonEventMapper();
   private jsonCandidateLines: string[] = [];
+  // B1a 畸形行计数：JSONL 档单行解析失败跳过并计数（不中断流）。批量纯函数面
+  // mapJsonlStream 同口径供 fixture 直跑断言；此处是流式会话侧的落地
+  private malformedLines = 0;
   protected readonly opts: EngineSpawnOptions;
 
   get childPid(): number | undefined { return this.pid; }
+
+  /** 本会话累计的畸形行数（单行解析失败被跳过的行；诊断面用，不影响流） */
+  get malformedLineCount(): number {
+    return this.malformedLines;
+  }
 
   constructor(opts: EngineSpawnOptions) {
     this.opts = opts;
@@ -422,6 +584,15 @@ export abstract class JsonProcessAgentSession implements AgentLike {
         const fallback = parseJsonDocument(this.jsonCandidateLines);
         if (fallback.length === 1) {
           this.mapper.handle(fallback[0], this.mapperCallbacks());
+        } else if (fallback.length === 0) {
+          // B1a 畸形行口径：候选行整体解析失败 = 单行解析失败跳过并计数，
+          // 留痕可见但不中断流（进程已退，此处在 close 收尾里补记）
+          this.malformedLines += this.jsonCandidateLines.length;
+          this.opts.cb.onLog(
+            "system",
+            `${this.opts.label}: ${this.jsonCandidateLines.length} 行无法解析为 JSON，已跳过`,
+            { full: this.jsonCandidateLines.map((l) => l.slice(0, 120)).join("\n") },
+          );
         }
       }
       this.proc = null;

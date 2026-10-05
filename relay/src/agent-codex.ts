@@ -85,6 +85,10 @@ export interface CodexPreflightOptions {
   cliPath?: string | null;
   credentialConfigured?: boolean;
   version?: string;
+  // 018 :293-294 矩阵「preflight 检查 CLI/凭证/版本与 JSONL 能力」第四要素：
+  // `codex exec --json` 事件流能力由部署冒烟显式核验后传入。undefined = 未核验
+  // （warning，不阻断）；false = 已核验但缺失（error，fail-closed 不伪造 activity）
+  jsonlSupported?: boolean;
 }
 
 export function preflightCodex(options: CodexPreflightOptions = {}): AdapterPreflightResult {
@@ -95,6 +99,8 @@ export function preflightCodex(options: CodexPreflightOptions = {}): AdapterPref
   if (options.credentialConfigured === false) errors.push("Codex provider 凭证未配置");
   else if (options.credentialConfigured === undefined) warnings.push("凭证状态需由部署配置显式核验");
   if (!options.version) warnings.push("Codex CLI 版本需在目标环境通过 --version 核验");
+  if (options.jsonlSupported === false) errors.push("Codex JSONL（--json 事件流）能力未通过核验（fail-closed，不伪造 activity）");
+  else if (options.jsonlSupported === undefined) warnings.push("Codex JSONL（--json 事件流）能力需由部署冒烟显式核验（0.154.0 一手词汇表见 docs/codex-integration-research.md 附录）");
   return { ok: errors.length === 0, command: cliPath ?? "codex", errors, warnings };
 }
 

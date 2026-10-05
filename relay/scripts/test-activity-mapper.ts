@@ -95,6 +95,9 @@ check(mapJsonlActivity({ type: "tool_result", tool: "Read", result: "ok" }, { ca
 check(!preflightClaude({ cliPath: null, credentialConfigured: false }).ok, "Claude preflight fails closed without CLI/credentials");
 check(!preflightCodex({ cliPath: null, credentialConfigured: false }).ok, "Codex preflight fails closed without CLI/credentials");
 check(preflightClaude({ cliPath: "/tmp/claude", credentialConfigured: true, version: "1.0" }).warnings.length === 0, "Claude preflight accepts explicit checks without secret inspection");
-check(preflightCodex({ cliPath: "/tmp/codex", credentialConfigured: true, version: "1.0" }).warnings.length === 0, "Codex preflight accepts explicit checks without secret inspection");
+// B1a：018 :293-294 矩阵给 Codex preflight 加了 JSONL 能力要素——显式核验四要素
+// （CLI/凭证/版本/jsonlSupported）才零警告；缺 jsonlSupported 属「未核验」warning 档
+check(preflightCodex({ cliPath: "/tmp/codex", credentialConfigured: true, version: "1.0", jsonlSupported: true }).warnings.length === 0, "Codex preflight accepts explicit checks without secret inspection");
+check(preflightCodex({ cliPath: "/tmp/codex", credentialConfigured: true, version: "1.0" }).warnings.some((w) => w.includes("JSONL")), "Codex preflight warns when JSONL capability is unverified");
 
 finish();

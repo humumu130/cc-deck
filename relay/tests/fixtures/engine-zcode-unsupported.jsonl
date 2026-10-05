@@ -1,0 +1,2 @@
+{"type":"assistant","text":"ZCode 事件不应被映射"}
+{"type":"tool_call","name":"read_file"}
