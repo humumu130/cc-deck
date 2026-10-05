@@ -466,6 +466,15 @@ export interface ProjectGroup {
 
 设计口径：
 
+角色→引擎映射表（组织模型 v2，018 §9；存量 `role:"leader"` 读取时映射 `team_pm`，新写入记 `team_pm`）：
+
+| 角色 | 引擎档 | 说明 |
+|---|---|---|
+| `team_pm`（PM） | 强推理档 | 常驻重角色：分诊/任务书/派单/验收/巡检/代提交/rescue，锚定最强推理引擎档位 |
+| 薄 Leader（`global_leader`） | 中档 | 仅 B 模式；只路由/聚合/提醒/升级，无验收与 commit 权 |
+| `worker` | 按任务 | 默认档，`role_defaults`/派单 tier 决定；难度升档实锤再加 |
+| 评审卡（`review_card`） | 强档临时 | 盲评/复审/高风险验收，跑完即删，不计常驻编制 |
+
 - `headcount[]` 是实际成员快照，成员入编时把当时的 role/engine/model/provider 落进去；这样历史项目不会因全局默认变化而漂移。
 - `role_defaults` 是项目组角色模板，供“该角色需要新会话”时选择引擎；没有模板时回落到全局默认。
 - 旧 JSON 无新字段时按 `engine=claude`、model 使用现有 relay 默认值处理；序列化只写已声明的可选字段，避免无意义的大面积文件变更。
@@ -489,7 +498,7 @@ org member-add <gid> <sid> [role] [engine] [model] [provider]
 
 - 缺省 role 仍为 `worker`；缺省 engine/model/provider 表示继承该 role 的 `role_defaults`，再继承全局默认。
 - engine 必须经过 registry 白名单；model 可以是引擎原生模型名，但不能为空字符串。
-- CLI 生成的 JSON action 增加可选字段：`engine`、`model`、`provider`；旧 Leader 仍可用旧参数。
+- CLI 生成的 JSON action 增加可选字段：`engine`、`model`、`provider`；旧 PM 仍可用旧参数。
 - `member-add` 复拉退休成员时，如未传新选择，优先保留原 headcount 快照；显式传入才更新声明，并在项目详情中标出“配置已变更，下一次派单生效”。
 - 新增一个可选管理动作用于设置角色模板：
 
@@ -615,7 +624,7 @@ dispatchWorker({
 
 ### 第二步：M2 沙盒建会话
 
-用隔离 `CCR_DATA_DIR`、`CCR_ORG_DIR`、`CCR_CLOUD_URL=""`、无真实 Leader 的条件，类似 `test-codex.ts`：
+用隔离 `CCR_DATA_DIR`、`CCR_ORG_DIR`、`CCR_CLOUD_URL=""`、无真实 PM 的条件，类似 `test-codex.ts`：
 
 1. `COMMAND_CREATE(engine=...)` 创建会话，检查 `SESSION_CREATED.engine`、model/provider、状态首帧和引擎 badge。
 2. 第一轮完成后发第二条消息；native resume 验证原生锚点，reinjection 验证 packet 含未完成任务/上一轮结果且无无关历史。

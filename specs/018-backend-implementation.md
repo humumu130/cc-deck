@@ -4,7 +4,7 @@
 - **日期**：2026-10-04
 - **状态**：v2 定稿级实施方案；协议与拆批可直接派单，用户拍板项见第 6 章
 - **范围**：relay 核心、web-console、expo 手机端、desktop-tauri 壳层、cc-plugins CLI 的后端支撑与协议落地
-- **不在本单**：不改 005 视觉判定；不把本文件直接当作代码任务书；每一批实施前仍须由 Leader 从本文件提炼自包含任务书
+- **不在本单**：不改 005 视觉判定；不把本文件直接当作代码任务书；每一批实施前仍须由 PM 从本文件提炼自包含任务书（角色口径见 §9 组织模型 v2）
 
 > 本方案把 005 的 UI 组件还原成真实数据、事件和命令。已有能力均以当前源码为准；“需扩展/需新建”是实施设计，不代表已经存在。协议字段先改 relay 类型与双快照出口，再改三端镜像，避免前端先猜字段。
 
@@ -33,28 +33,29 @@ relay identity 独立于云桥状态：v2 新增 `data/relay-identity.json`，�
 
 [成品图：018-fig-architecture.html](018-fig-architecture.html)（archify 交付，sha256 前 12 位 7b585aba8050，9/9 checks）
 
-**图 1 图注：系统架构与信任边界。** Leader 重绘时必须从左至右表现“用户客户端 → LAN/Cloud Bridge → Relay Core → EngineRegistry/Adapter → CLI/SDK”，并在 relay 下方明确画出四个独立数据节点：`org/projects/boards/confirms`、事件审计 `events.ndjson`、CLI task-store、artifact store。EngineRegistry 节点标注“六类 SessionEngine 枚举 / 当前已注册三类；Claude/Codex 专用路径；ZCode unsupported”。引擎边拆成两条有向边：`Relay → Adapter/CLI：command/stdin` 与 `Adapter/CLI → Relay：JSONL/transcript events`。云桥只传递 E2E 密文；业务命令最终在源 relay 鉴权、幂等和执行。
+**图 1 图注：系统架构与信任边界。** PM 重绘时必须从左至右表现“用户客户端 → LAN/Cloud Bridge → Relay Core → EngineRegistry/Adapter → CLI/SDK”，并在 relay 下方明确画出四个独立数据节点：`org/projects/boards/confirms`、事件审计 `events.ndjson`、CLI task-store、artifact store。EngineRegistry 节点标注“六类 SessionEngine 枚举 / 当前已注册三类；Claude/Codex 专用路径；ZCode unsupported”。引擎边拆成两条有向边：`Relay → Adapter/CLI：command/stdin` 与 `Adapter/CLI → Relay：JSONL/transcript events`。云桥只传递 E2E 密文；业务命令最终在源 relay 鉴权、幂等和执行。
 
 [成品图：018-fig-dataflow.html](018-fig-dataflow.html)（Agent 任务单旅程图，runtime protocol 以 §3.1 parity matrix 为准）
 
-**图 2 图注：任务单/Agent 旅程叙事。** 本版本选择审查员 R3 的方案 (a)：图 2 保持 Agent 任务单旅程（需求→编排→投递→执行→验收/固化），不再把它宣称为运行时协议流；这样与现有 archify 成品及图 3 的协作叙事一致。真正的运行时流不依赖图 2，统一由第 3.1 节的 SNAPSHOT parity matrix、命令状态机和文字契约承载：`COMMAND(command_id) → ACK → SessionManager/OrgAction → EventBus → LAN/cloud/WAN`，断线时 `last_seq → replay`，超出缓冲则 `SNAPSHOT + bounded logs`。Leader 重绘图 2 时应在图注或旁注写明“runtime protocol = §3.1”，不得补画成与任务单旅程混淆的第二套事实。
+**图 2 图注：任务单/Agent 旅程叙事。** 本版本选择审查员 R3 的方案 (a)：图 2 保持 Agent 任务单旅程（需求→编排→投递→执行→验收/固化），不再把它宣称为运行时协议流；这样与现有 archify 成品及图 3 的协作叙事一致。真正的运行时流不依赖图 2，统一由第 3.1 节的 SNAPSHOT parity matrix、命令状态机和文字契约承载：`COMMAND(command_id) → ACK → SessionManager/OrgAction → EventBus → LAN/cloud/WAN`，断线时 `last_seq → replay`，超出缓冲则 `SNAPSHOT + bounded logs`。PM 重绘图 2 时应在图注或旁注写明“runtime protocol = §3.1”，不得补画成与任务单旅程混淆的第二套事实。
 
 [成品图：018-fig-workflow.html](018-fig-workflow.html)（从设计到生产的工作流）
 
-**图 3 图注：从设计到生产的工作流。** 用户拍板设计；PM 输出判定和规范；Leader 勘察源码、拆自包含任务、串行锁定同靶子、派 worker；worker 改代码并回执；Leader 用探针/真链路/双端对查验收并代提交；最后把实施差异固化到 004/013。任何状态不清先查 `events.ndjson` 与 ACK，不以聊天轮询推断成功。
+**图 3 图注：从设计到生产的工作流。** 用户拍板设计；PM 输出判定和规范；PM 勘察源码、拆自包含任务、串行锁定同靶子、派 worker；worker 改代码并回执；PM 用探针/真链路/双端对查验收并代提交；最后把实施差异固化到 004/013。任何状态不清先查 `events.ndjson` 与 ACK，不以聊天轮询推断成功。
 
-图由 Leader 使用 archify 生成成品 HTML；本文件只保留占位和图注，不在此手画 SVG。
+图由 PM 使用 archify 生成成品 HTML；本文件只保留占位和图注，不在此手画 SVG。
 
 ### 1.3 Agent 协作模型
 
 | 角色 | 允许做什么 | 明确不做什么 | 交互协议 |
 |---|---|---|---|
-| 用户 | 拍板设计冲突、批准生产变更/合流/凭证/花钱、最终验收 | 不被动承担 worker 的逐步调度 | PM 设计单需要“建议直接做/须用户拍板”；生产动作需显式确认 |
-| Leader | 源码勘察、事实核对、提炼任务书、派单、串行锁、探针/真链路验收、代提交、写回单 | 不下场替 worker 写实现；不替 PM 改设计口径；不绕过用户做生产变更 | `dispatch_id`/`command_id` 可追踪；收到 ACK 必须核 `ok:true`；完成回执固定含结果与改动文件 |
-| PM | 设计判定、信息架构、规范条款、冲突收敛、DoD | 不改实现、不代替 Leader 验证源码事实 | 输出设计单/规范草案；设计结论优先于旧任务书，实施偏差由 Leader 标注 |
-| worker | 在明确靶子文件内实施、写测试/探针、回分段报告和最终回执 | 不扩范围、不自行改变协议语义、不把过程日志灌回 Leader | 改前认领、改后 diff 摘要、零确认直做；最后一行按任务书格式回执 |
-| 视觉审查员 | 逐屏核对层级、密度、双端形态和错投 | 不把无法看到的能力猜成缺陷 | 截图批次 + P2/P3/P1 + 明确暂不判定项 |
-| 三角度审查员 | 从结构/语义/实现完整性三角度复核；抓错屏、假交互、重复信息 | 不越权改代码或改变已拍板规范 | 每项给证据、风险等级、重投/修复建议 |
+| 用户 | 拍板设计冲突、批准生产变更/合流/凭证/花钱、最终验收 | 不被动承担 worker 的逐步调度 | PM 任务书需要“建议直接做/须用户拍板”；生产动作需显式确认 |
+| PM | 分诊、任务书、源码勘察、事实核对、派单、串行锁、探针/真链路验收、巡检、代提交、rescue、写回单 | 不常态下场替 worker 写实现（受控 rescue 除外，限时留痕）；不绕过用户做生产变更 | `dispatch_id`/`command_id` 可追踪；收到 ACK 必须核 `ok:true`；完成回执固定含结果与改动文件 |
+| 评审卡 | 盲评、复审、高风险验收；视觉/三角度等专项审查（临时开卡） | 不越权改代码或改变已拍板规范；跑完即删不驻留 | 每项给证据、风险等级、重投/修复建议；结论落盘后停卡 |
+| worker | 在明确靶子文件内实施、写测试/探针、回分段报告和最终回执 | 不扩范围、不自行改变协议语义、不把过程日志灌回 PM | 改前认领、改后 diff 摘要、零确认直做；最后一行按任务书格式回执 |
+| 薄 Leader（可选） | 仅 B 模式存在：路由用户消息到正确 PM、聚合 PM 回报、提醒与升级 | 无验收权、无 commit 权、不接管 PM 裁决与 rescue | 汇总保留来源 PM 与 `gid`；只改路由/状态不改验收结论（§9.3） |
+
+> 角色口径按组织模型 v2（§9）：PM 为每团队常驻重角色；评审卡为临时专家角色（旧“临时 PM/Codex 专家卡”语义归此）；薄 Leader 仅 B 模式存在。评审论证见组织模型评审文档（codex-minstaff-review.md §14/§16/§17）。
 
 派单通道必须把“角色协议”落成可验证字段：`dispatch_id` 贯穿 dispatched/running/done/failed；客户端命令必须有 `command_id`；回执必须包含同一 id、`ok`、错误或数据。`SessionManager.handleCommand` 已有重复 `command_id` 回放机制：`relay/src/session-manager.ts:1582-1597`；后续所有新命令复用这一机制。
 
@@ -103,7 +104,9 @@ relay identity 独立于云桥状态：v2 新增 `data/relay-identity.json`，�
 }
 ```
 
-状态机：`dispatched → accepted → running → done|failed|cancelled`。Leader 发起并写 `dispatch-log.ndjson`；relay/派单通道触发 worker；worker 首次收到任务在租约内回 `WorkerAck(status=accepted)`；ACK 必须同 `command_id` 且 `ok:true` 才允许进入 running。超时未 ACK：一次短重试；仍无 ACK 转人工巡检，不自动重复派单。ACK 后无 receipt：按租约超时标记 `timeout`，Leader 可选择 `retry(attempt+1)`、`handoff` 或 `cancel`，不得无审计覆盖原单。worker 明确拒收回 `ok:false + error + reason`，不进入 running；执行中取消只允许由 Leader/用户有权限的命令触发，最终态仍保留原 receipt。任何 done/failed/cancelled 都不可回写成 running；重复 envelope 只回放首次 ACK/最终 receipt。
+状态机：`dispatched → accepted → running → done|failed|cancelled`。PM 发起并写 `dispatch-log.ndjson`；relay/派单通道触发 worker；worker 首次收到任务在租约内回 `WorkerAck(status=accepted)`；ACK 必须同 `command_id` 且 `ok:true` 才允许进入 running。超时未 ACK：一次短重试；仍无 ACK 转人工巡检，不自动重复派单。ACK 后无 receipt：按租约超时标记 `timeout`，PM 可选择 `retry(attempt+1)`、`handoff` 或 `cancel`，不得无审计覆盖原单。worker 明确拒收回 `ok:false + error + reason`，不进入 running；执行中取消只允许由 PM/用户有权限的命令触发，最终态仍保留原 receipt。任何 done/failed/cancelled 都不可回写成 running；重复 envelope 只回放首次 ACK/最终 receipt。
+
+> actor 兼容注（组织模型 v2，§9）：历史台账值 `actor:"leader"` 读取时映射为 `team_pm`；新写入记 `pm` 并携带 `source_pm`/`gid`（薄 Leader 转发不记为派单发起者）。字段枚举不改，旧客户端继续可读。
 
 #### 1.3.2 命令权限与审计边界
 
@@ -135,7 +138,7 @@ relay identity 独立于云桥状态：v2 新增 `data/relay-identity.json`，�
 
 | 已有 | 需扩展 | 需新建 |
 |---|---|---|
-| 日志由 `LogEntry` 统一表示，含 `ts/kind/text/full/id/streaming/detail/diff`，接口均定义在 `relay/src/types.ts:203-214`；`pushExternalLog` 支持同 id 原地替换和 `SESSION_LOG` 广播，见 `relay/src/session-manager.ts:1535-1555`；适配器通过 `onLog` 把 `assistant_text/tool_use/tool_result/system/user_message` 送入统一回调，见 `relay/src/agent-adapter.ts:155-164`。 | 保持正文流协议不变，补充 `speaker/role` 的可靠来源（托管会话默认 agent，用户消息为 user，团队成员由 `project_gid + session_id` 解析），并把源/引擎身份作为元信息而非正文。`full` 仍只用于长文/markdown，前端按 id 替换流式块。 | 共享的是协议语义，不是假设已有 shared package：Web 在 `web-console/index.html`、Expo 在 `expo-app/src/store.ts`/`DetailScreen.tsx` 各自实现 `renderMessage`。AI/Leader/worker 使用头像行+无框正文，用户使用气泡；relay 不新增“气泡事件”。 |
+| 日志由 `LogEntry` 统一表示，含 `ts/kind/text/full/id/streaming/detail/diff`，接口均定义在 `relay/src/types.ts:203-214`；`pushExternalLog` 支持同 id 原地替换和 `SESSION_LOG` 广播，见 `relay/src/session-manager.ts:1535-1555`；适配器通过 `onLog` 把 `assistant_text/tool_use/tool_result/system/user_message` 送入统一回调，见 `relay/src/agent-adapter.ts:155-164`。 | 保持正文流协议不变，补充 `speaker/role` 的可靠来源（托管会话默认 agent，用户消息为 user，团队成员由 `project_gid + session_id` 解析），并把源/引擎身份作为元信息而非正文。`full` 仍只用于长文/markdown，前端按 id 替换流式块。 | 共享的是协议语义，不是假设已有 shared package：Web 在 `web-console/index.html`、Expo 在 `expo-app/src/store.ts`/`DetailScreen.tsx` 各自实现 `renderMessage`。AI/PM/worker 使用头像行+无框正文，用户使用气泡；relay 不新增“气泡事件”。 |
 
 时间口径：`relay/src/types.ts:11-21` 的 Envelope 与 `relay/src/types.ts:203-214` 的 LogEntry 当前都是 relay 记录/接收时间，底层 `Date.now()` 记账见 `relay/src/event-bus.ts:29-35`，不能把它宣称为模型/工具实际生成时间。若审计或 dock 需要生成时间，适配器在 `meta` 增加可选 `occurred_at`；缺失时显示“收到时间”，不伪造精度。旧日志只含 `ts` 时继续按接收时间排序。
 
@@ -174,7 +177,7 @@ relay identity 独立于云桥状态：v2 新增 `data/relay-identity.json`，�
 | 看板 | `ProjectBoard`、`BoardEntry`、`boards/<gid>.json` 已有，`relay/src/projects.ts:63-88`、`117-130`；`BOARD_UPDATED` 与 `COMMAND_PROJECT_DETAIL` 已有，`relay/src/types.ts:404-411`、`752-758`。 | 增加 board 条目与 worker `dispatch_id/owner_session` 的一致性探针；快照不内嵌整板，详情按需拉取保持帧小。 | 暂不新建板存储；若需要手机首屏摘要，只新增 `BoardSummary`，不把完整板塞入 SNAPSHOT。 |
 | 对话 pane | 成员会话均是 `SessionState`，项目归属字段已有 `project_gid`，见 `relay/src/types.ts:136-141`；日志 `SNAPSHOT.logs` 按 session_id 提供，见 `relay/src/types.ts:315-323`。 | 按 group headcount/`project_gid` 聚合成员会话，定义排序=最近活动；排除已退休、已删和跨组会话；聚合前保留 source/session 标识；时间优先 `occurred_at ?? ts`。 | 新建 `TEAM_LOG` 只是可选优化；一期由客户端对现有 logs 做聚合，避免复制消息事实源。成员归档身份必须参与 join，保证历史行不随 headcount 变化改名或消失。 |
 | 成员 pane | 编制快照 `headcount` 与 add/remove member 已有，`relay/src/projects.ts:305-346`；成员引擎/模型/provider 字段见 `ProjectHeadcountEntry:26-32`。 | 提供成员在线/最近活动/状态的 join：以 `session_id` 查当前快照，找不到只显示档案态；退休成员不得被误标在线。 | 不新建全局 members 表；项目组 headcount 是组织成员的现行事实；项目存储新增不可变 `member_archive[]`，字段至少含 `session_id/role/engine/model/provider/display_name/avatar_key/joined_at/retired_at`。 |
-| 活动 pane | 派单台账 `DispatchEntry` 有状态、回执、session、actor，`relay/src/org.ts:191-215`；收口时 `DISPATCH_DONE` 已广播，`relay/src/session-manager.ts:3295-3305`。 | 给前端一个按 gid/session 的活动投影，保留 dispatched/running/done/failed 全生命周期；失败回执仍注入 Leader。 | 新建 `TeamActivityProjection` 读侧，不新增事实日志。 |
+| 活动 pane | 派单台账 `DispatchEntry` 有状态、回执、session、actor，`relay/src/org.ts:191-215`；收口时 `DISPATCH_DONE` 已广播，`relay/src/session-manager.ts:3295-3305`。 | 给前端一个按 gid/session 的活动投影，保留 dispatched/running/done/failed 全生命周期；失败回执仍注入 PM。 | 新建 `TeamActivityProjection` 读侧，不新增事实日志。 |
 | footer 状态驱动 | 团队状态机 `pending/active/parked/archived` 与迁移规则已有，`relay/src/projects.ts:23-24`、`197-210`；确认单 kind/status 已有，`relay/src/projects.ts:90-108`。 | 明确按钮计算：只有 pending confirmation 才显示确认编制；其他状态只显示 composer/去看板；状态变化同时来自 `PROJECTS_UPDATED/ORG_CONFIRM_UPDATED/BOARD_UPDATED`。 | 暂不新建 footer 命令；确认继续 `COMMAND_ORG_CONFIRM`，写操作回 orgAction 单漏斗。 |
 | 新建团队轻入口 | 组织 CLI `org create` 生成项目组/确认单，模板位于 `relay/src/org.ts:261-280`；服务端组织动作入口在 `relay/src/session-manager.ts:3312-3738`。 | 为手机/桌面统一提供认证的创建命令或 HTTP 委托；创建成功返回现有 `{group, needsConfirm, confirm?}`，不能让前端只改本地卡。 | 新增 `COMMAND_ORG_ACTION`（一期只允许 create），命令层由 `{anchor_dir}` adapter 到现有 `orgAction("project-create", {anchor})`，加入 `ws-server.ts` allowlist 和 `Command` union。 |
 
@@ -380,7 +383,7 @@ group summary = file_count, failed_count, latest_at, source_id, reachable
 2. 从当前 `SNAPSHOT.sessions` 筛选 `project_gid === gid`；
 3. 从 `SNAPSHOT.logs[session_id]` 合并为只读 team timeline；
 4. 排序键优先 `LogEntry.occurred_at ?? LogEntry.ts`，同值再用 session_id/entry id；
-5. 发消息时必须带具体 `session_id`，team pane 的“回复 Leader/某成员”只是路由 UI；
+5. 发消息时必须带具体 `session_id`，team pane 的“回复 PM/某成员”只是路由 UI；
 6. 组成员被移除后，历史消息保留归档身份，不能因当前 headcount 移除而改写历史。
 
 ## 4. 三端实施拆批
@@ -422,10 +425,10 @@ group summary = file_count, failed_count, latest_at, source_id, reachable
 | T2 | Tauri 平台差异、版本/协议显示与资源加载回归 | `desktop-tauri/src-tauri/src/main.rs`、`desktop-tauri/tests/*` | T1a+P1；与 C2 并行 | 目标平台 dev/bundle 行为一致；8787/8788 不冲突；协议版本可见 | 中 |
 | T3 | 安装包 smoke 与升级/旧 relay 兼容 | 安装包测试脚本、Tauri 配置/不改业务源 | T2+P1；与 C3 并行 | 安装包启动、内置 relay、旧端 fixture、回滚到上一 bundle | 中 |
 | C2 | CLI ACK/派单巡检日志与 reconciliation 输出 | `cc-plugins/plugins/cc-deck/commands/*`、CLI 测试 | C1+R1；与 T2 并行 | orphan/duplicate/timeout/seq-gap 可判定，ACK 误读不能判成功 | 小-中 |
-| C3 | CLI 无网/失败回退、重投/代挂路径 | CLI 源脚本与测试 | C2+P1；与 T3 并行 | 无网转 Leader 代挂或重试；不丢 command_id；receipt 最终态明确 | 中 |
+| C3 | CLI 无网/失败回退、重投/代挂路径 | CLI 源脚本与测试 | C2+P1；与 T3 并行 | 无网转 PM 代挂或重试；不丢 command_id；receipt 最终态明确 | 中 |
 | V1 | 全链路集成、回滚/兼容和双端验收 | 探针/脚本/验收单，不与产品靶子并写 | P1+T3+C3+W3+E2b/E3b/E4b | 91+14+20 电池、三出口 parity、四类对账异常、三视口/390 真链路 | 大 |
 
-预估规模是相对估算，不是工时承诺；真正的并行上限由靶子文件和验收环境决定，而不是 worker 数量。每批回执必须同时报告 `rollback target`、数据兼容/迁移方式、降级行为、环境差异（worker 若 Chrome SIGTRAP 则由 Leader CDP 补验）、角色越权检查、受影响的 004/013 章节及“不适用”理由。
+预估规模是相对估算，不是工时承诺；真正的并行上限由靶子文件和验收环境决定，而不是 worker 数量。每批回执必须同时报告 `rollback target`、数据兼容/迁移方式、降级行为、环境差异（worker 若 Chrome SIGTRAP 则由 PM CDP 补验）、角色越权检查、受影响的 004/013 章节及“不适用”理由。
 
 ### 4.3 五条流水线的批序列
 
@@ -452,7 +455,7 @@ group summary = file_count, failed_count, latest_at, source_id, reachable
 3. **纪律**：类型、兼容、同靶子串行、不得猜字段；
 4. **自查**：worker 自己执行的 grep/typecheck/局部测试；
 5. **回单路径**：固定写入哪个 `/tmp` 回单，最后一行格式；
-6. **验收点**：Leader 后续用什么探针、真链路和截图核验。
+6. **验收点**：PM 后续用什么探针、真链路和截图核验。
 
 本周 relay 故障期间，靠 v2 接替单凭完整任务书无损续命，证明任务书不是说明文，而是 worker 进程死亡后的接管协议。新会话只要拿到任务书，就应能从源码恢复上下文，不依赖已死进程聊天记录。
 
@@ -480,7 +483,7 @@ group summary = file_count, failed_count, latest_at, source_id, reachable
 - `command_id` 必填，且在 relay/云桥/客户端回执中保持不变；
 - ACK 必须核 `ok:true`，只看到 HTTP 200、进程退出 0 或“已发送”不能判成功；
 - 事故教训：字段丢失曾造成三单静默积压 40 分钟，ACK 误读成功又放大了误判；
-- 轮询通知不可靠，必须有 Leader 主动巡检：事件日志、派单台账、进程状态和 worker 回单四项至少核三项；
+- 轮询通知不可靠，必须有 PM 主动巡检：事件日志、派单台账、进程状态和 worker 回单四项至少核三项；
 - `events.ndjson` 是唯一事件事实源，聊天消息/通知 toast/临时状态都只是投影；
 - 任何新命令加入 `ws-server.ts` allowlist，否则 manager 有 case 也会被入口挡住；这是现有 `COMMAND_ALLOW_RULE_REMOVE` 漏白名单后手机失败的同类风险，白名单位置见 `relay/src/ws-server.ts:138-174`。
 
@@ -496,14 +499,14 @@ group summary = file_count, failed_count, latest_at, source_id, reachable
 
 ### 5.6 环境差异兜底
 
-- worker 环境 Chrome 可能 SIGTRAP，不能自测时不以“本机打不开”判实现失败；Leader 用 CDP 环境补验收并记录环境差异；
+- worker 环境 Chrome 可能 SIGTRAP，不能自测时不以“本机打不开”判实现失败；PM 用 CDP 环境补验收并记录环境差异；
 - 旧版 bundle 有死会话不 revive、附图管线缺失等债务，不能假定生产 bundle 与 dev 树一致；由 dev 树接管实现与验证，再单独做 bundle/安装包 smoke；
 - Tauri 内置 relay 资源路径、Windows `CREATE_NO_WINDOW`、macOS 服务化是壳层差异，业务协议只测 relay 契约；
 - 真 CLI 不宜在 CI 依赖 API key；006 规定 mapper fixture、进程 stub、SessionManager 接线三层测试，见 `specs/006-engine-adapters-spec.md:610-630`。
 
 ### 5.7 角色纪律
 
-Leader 只勘察/派单/核验/代提交，不下场写 worker 代码；设计判定归 PM；生产变更、合流、凭证、花钱由用户拍板。worker 发现超范围事项只回报，不自行扩权、不重写规范。审查员只能判定和给证据，不能把“无法判定”改成“缺陷已证实”。
+PM 只勘察/派单/核验/巡检/代提交，不常态下场写 worker 代码（受控 rescue 除外，限时留痕）；设计判定同归 PM（常驻重角色，§9）；生产变更、合流、凭证、花钱由用户拍板。worker 发现超范围事项只回报，不自行扩权、不重写规范。评审卡只能判定和给证据，不能把“无法判定”改成“缺陷已证实”。
 
 ### 5.8 收敛流程
 
@@ -511,7 +514,7 @@ Leader 只勘察/派单/核验/代提交，不下场写 worker 代码；设计�
 
 `设计单（单议题快速收敛，约 4 分钟实证） → 任务书（提炼实施口径，冲突以设计单为准） → 分段报告 → 回单 → 探针验收 → 代提交 → 004/013 规范固化`。
 
-旧任务书与新设计单冲突时，不默默混用：任务书注明“以哪一版设计单为准”，Leader 在回单标出实现偏差，PM 再决定是否更新规范。
+旧任务书与新设计单冲突时，不默默混用：任务书注明“以哪一版设计单为准”，PM 在回单标出实现偏差，再决定是否更新规范。
 
 ### 5.9 速度结论
 
@@ -559,7 +562,7 @@ Leader 只勘察/派单/核验/代提交，不下场写 worker 代码；设计�
 2. **组织动作范围**
    - **背景一句**：新建团队必须通过现有 `orgAction` 单漏斗，成员增删/状态迁移尚未有同等稳定命令契约。
    - **推荐选项**：一期只批准 `COMMAND_ORG_ACTION=create`，adapter 固定映射 `project-create/anchor`。
-   - **保守降级**：新建团队继续由 CLI/Leader 触发，客户端只读确认卡。
+   - **保守降级**：新建团队继续由 CLI/PM 触发，客户端只读确认卡。
    - **不拍板阻塞什么**：阻塞手机/桌面新建团队真链路，不阻塞已有 org confirm 展示。
    - **预计成本**：一个命令 handler、权限/ACK fixture 和组织状态回帧；扩展成员动作另计。
 
@@ -616,7 +619,7 @@ Leader 只勘察/派单/核验/代提交，不下场写 worker 代码；设计�
 - 受影响 004/013 章节列出“已更新/不适用及理由”，并给 file:line 索引；
 - 失败项标明是既有 known failure 还是本批 required failure，required failure 阻断进入依赖批；
 - 失败/返工批必须附事故洋葱复盘与防复发探针；正常批也记录实际瓶颈和可复用提速结论；
-- Leader 验收单记录计划/实际引擎、模型、provider、回执和改动文件。
+- PM 验收单记录计划/实际引擎、模型、provider、回执和改动文件。
 
 **协议批模板（B0）**：类型检查、LAN/cloud phone/WAN parity、旧端 fixture、未知命令错误 ACK、schema/capability 兼容矩阵；不要求客户端真 UI。
 
@@ -650,7 +653,7 @@ Leader 只勘察/派单/核验/代提交，不下场写 worker 代码；设计�
 | C1 | CLI 显式 `session_id/dispatch_id/command_id`、`ok:true` 判定、无网不静默丢单；不改 bundle。 |
 | P1 | Web 插件副本、插件 `relay.mjs`、Tauri `relay.mjs` 由同一脚本生成且 SHA/版本一致。 |
 | T2/T3 | 壳平台差异、版本显示、安装包启动/升级/回滚、旧 relay 兼容。 |
-| C2/C3 | ACK/派单对账四类异常；无网/失败重投或 Leader 代挂；最终 receipt 明确。 |
+| C2/C3 | ACK/派单对账四类异常；无网/失败重投或 PM 代挂；最终 receipt 明确。 |
 | V1 | 91+14+20 探针、三出口 parity、LAN/cloud 断线恢复、多源单/聚合、四态 dock、通知不清零、全链路真验收；reconciliation 四类异常为零或有明确 known failure。 |
 
 ### 7.3 全局自测军规引用
@@ -661,7 +664,7 @@ UI 与交付验收继续遵守 `specs/013-ui-design-playbook.md:1-74`：形态�
 
 ## 8. v2 变更日志
 
-本节是三审查员结论的落点索引；实施时以实际源码和本文件的“已有/需扩展/需新建”列为准，若实现与草案不同，Leader 必须在批次回执中标注差异。
+本节是三审查员结论的落点索引；实施时以实际源码和本文件的“已有/需扩展/需新建”列为准，若实现与草案不同，PM 必须在批次回执中标注差异。
 
 ### 8.1 A 类必修落实
 
@@ -675,7 +678,7 @@ UI 与交付验收继续遵守 `specs/013-ui-design-playbook.md:1-74`：形态�
 | A6 / R1-6 | 已落实：projects store 增不可变 `member_archive[]`，timeline live-first/archive-fallback，历史身份不随 headcount 改写。 | §2.2、§3.1.2、§3.5 |
 | A7 / R1-7 | 已落实：六枚举/三类 Registry 已注册矩阵，Claude/Codex preflight，ZCode unsupported/fail-closed。 | §1.1、§3.1.3、§3.2、§4.2 B1a |
 | A8 / R2 核心 | 已落实：按 B0→并行纯模块→B2a→R1 relay integration→客户端读侧/真链路→P1→T2/T3、C2/C3→V1 重排；补齐 T2/T3/C2/C3，P1 统一生成三份产物，`session-manager.ts` 单写者。 | §4.1-4.3、§7.2 |
-| A9 / R3 图文一致 | 已落实：图 1 图注加入四数据层节点、双向 EngineRegistry 边、六枚举/三注册；图 2 明确采用方案 (a)，parity matrix 与协议文字承载运行时流；Leader 重绘源图，不改 HTML。 | §1.2、§8.3 |
+| A9 / R3 图文一致 | 已落实：图 1 图注加入四数据层节点、双向 EngineRegistry 边、六枚举/三注册；图 2 明确采用方案 (a)，parity matrix 与协议文字承载运行时流；PM 重绘源图，不改 HTML。 | §1.2、§8.3 |
 | A10 / R3 协议精度 | 已落实：DispatchEnvelope/WorkerAck/WorkerReceipt JSON 示例与状态机、超时/拒收/重投/取消/接替/重复 envelope 语义已冻结。 | §1.3.1 |
 | A11 / R3 拍板五格 | 已落实：第 6 章 8 项均使用“背景/推荐/保守降级/阻塞/成本”五格；权限与 ZCode 合并为第 8 项。 | §6.2 |
 | A12 / R3 经验落点 | 已落实：六件套、环境差异、角色纪律、回滚、004/013 同步进入批模板/DoD；V1 纳入 orphan/duplicate/timeout/seq-gap reconciliation。 | §4.1、§4.2、§7.1-7.2 |
@@ -691,9 +694,9 @@ UI 与交付验收继续遵守 `specs/013-ui-design-playbook.md:1-74`：形态�
 - `SESSION_ACTIVITY` 明确 transient/durable 拆分；见 §2.1.3、§3.1、§3.2。
 - 采纳 R2 的 W2/E3 再拆、W1a/E2a fixture 先行、B1a/B3a/B4a 纯模块先行与 P1 bundle 统一；理由是消除单文件冲突并增加可独立验收的并行靶子，见 §4.2-4.3。
 
-### 8.3 图源 JSON 交接清单（Leader 重绘）
+### 8.3 图源 JSON 交接清单（PM 重绘）
 
-Leader 只修改 archify 图的源 JSON/HTML，不修改本文件的三个占位。图 1 源 JSON 需：新增 `org/projects/boards/confirms`、`events.ndjson`、`CLI task-store`、`artifact store` 四节点；将原单向 `Relay→EngineRegistry: JSONL` 边拆为 `Relay→Adapter/CLI: command/stdin` 与 `Adapter/CLI→Relay: JSONL/transcript events`；EngineRegistry 标签改为“六类枚举/三类已注册/Claude-Codex 专用/ZCode unsupported”；补四个存储节点的读写边与事实源/投影说明。图 2 保留任务单旅程节点，不新增伪运行时边；将标题/旁注改为“Agent 任务单旅程，runtime protocol 见 §3.1 parity matrix”，删除任何暗示图 2 自己表达 ACK、last_seq 或双出口的标签。图 3 保留协作工作流，但在批次节点旁标出六件套、单 writer、探针验收和规范固化门禁。
+PM 只修改 archify 图的源 JSON/HTML，不修改本文件的三个占位。图 1 源 JSON 需：新增 `org/projects/boards/confirms`、`events.ndjson`、`CLI task-store`、`artifact store` 四节点；将原单向 `Relay→EngineRegistry: JSONL` 边拆为 `Relay→Adapter/CLI: command/stdin` 与 `Adapter/CLI→Relay: JSONL/transcript events`；EngineRegistry 标签改为“六类枚举/三类已注册/Claude-Codex 专用/ZCode unsupported”；补四个存储节点的读写边与事实源/投影说明。图 2 保留任务单旅程节点，不新增伪运行时边；将标题/旁注改为“Agent 任务单旅程，runtime protocol 见 §3.1 parity matrix”，删除任何暗示图 2 自己表达 ACK、last_seq 或双出口的标签。图 3 保留协作工作流，但在批次节点旁标出六件套、单 writer、探针验收和规范固化门禁。
 
 ### 8.4 取舍与未采纳项
 
@@ -701,8 +704,57 @@ Leader 只修改 archify 图的源 JSON/HTML，不修改本文件的三个占位
 - 未采纳“所有 relay 核心批可并行”建议，改为 `session-manager.ts` 单写者 R1；并行只放到不冲突的 mapper/ledger/artifact fixture。
 - 未采纳“B0 同时负责 Web 类型消费”建议，B0 只冻结协议与 Expo mirror，Web 消费移入 W1a，避免协议批扩大靶子和破坏独立验收。
 - 未采纳“以 `relay_dev` 作为稳定源主键”建议，改为独立持久 `relay_id` + legacy fallback。
-- 未采纳“图 2 必须重画为运行时数据流图”作为本轮阻塞，选择 R3 方案 (a)：保留已有任务旅程图，运行时精确性由 parity matrix、文字状态机和 B0 fixture 保证，减少与 Leader 已有成图的重复改造；若后续用户要求可视化运行时流，再另开图单。
+- 未采纳“图 2 必须重画为运行时数据流图”作为本轮阻塞，选择 R3 方案 (a)：保留已有任务旅程图，运行时精确性由 parity matrix、文字状态机和 B0 fixture 保证，减少与 PM 已有成图的重复改造；若后续用户要求可视化运行时流，再另开图单。
 
 ### 8.5 013 playbook 术语增补建议
 
 下一次规范固化时，建议在 `013-ui-design-playbook.md` 增加新人速查词条：`relay`、`source`、`SNAPSHOT`、`event`、`COMMAND`、`ACK`、`dispatch_id`、`command_id`、`projection`、`task-store`、`artifact store`、`status dock`、`指标带`、`列表行`、`轻量分组行`、`member archive`、`parity matrix`、`reconciliation probe`。本批不直接修改 013。
+
+## 9. 组织模型 v2
+
+> 本章为 2026-10-05 口径迁移的结论落点（术语表见章首引言；论证与推导不在本文展开，统一见组织模型评审文档 codex-minstaff-review.md §14 职责重分配、§16 最终汇总、§17 PM 常驻编制）。已完成迁移的词法样例：`specs/017-team-collab-flow.json`。
+
+### 9.1 A/B 双模式与开关
+
+- 组织模型是同一条“Leader 位 → PM → Worker”链路的全局二值开关：**A 模式（`mode:"self"`，默认）** 用户自占 Leader 位（不占卡），直接面对各团队 PM；**B 模式（`mode:"delegated"`）** 在用户与各团队 PM 之间插入一个全局薄 Leader 卡。
+- 开关作用域=当前 relay 组织作用域（org 根），不做 per-team 混合；配置持久化建议独立 `org-config.json`（`org.json` 是 B 模式 Leader 身份锚，A 模式可能无锚）。范围必须在 UI 显示。
+- 客户端线协议零新增：A/B 复用现有 `COMMAND_MESSAGE`、`COMMAND_ORG_ACTION`、`COMMAND_ORG_CONFIRM`、回执与通知运力；真增量在 relay 内部投递目标分支、薄 Leader 卡产品化与模式交接（评审 §15.4.2/§16）。
+
+### 9.2 PM 常驻编制
+
+- **PM 是每团队常驻重角色**：分诊、任务书、派单、验收链、巡检、代提交、rescue、对用户（A）或薄 Leader（B）汇报；即 §1.3 表 PM 行。旧文档中承担调度职责的“Leader/架构师”均指 PM。
+- 编制：**A = PM×1 + Worker×N（N≥1）**；**B = 薄 Leader×1 + PM×N + Workers**（每活跃团队至少 PM×1 + Worker×1）；评审卡不计常驻。
+- “常驻”指角色与责任随团队存续（队列、权限、团队上下文、交接责任），PM 卡可 saved/parked/resume/替换，不等于物理进程常跑。当前 M2 的“AI Leader”卡即 PM：原卡保上下文改身份（`team_pm`），不删卡重建。
+
+### 9.3 薄 Leader 作用域与权限面
+
+- 仅 B 模式存在；A 模式不建、不收养、不显示。作用域=当前 relay/org 根一个薄 Leader（多组织并存时按 `org_id` 建索引，不跨组织路由）。
+- 权限面：路由用户消息到正确 PM、聚合 PM 结构化回报、提醒与升级；**无验收权、无 commit 权、不接管 PM rescue**。纪律重点从“Leader 禁下场”转为“Leader 不得越权替 PM 裁决”。
+- 卡产品化=开卡+引导词（“只路由/聚合/升级，不验收、不提交”）+SNAPSHOT 入口；它是一个可被投递的会话，不是 relay 新路由服务。团队归属判断是薄 Leader 的 AI 行为，不硬编码进 relay。
+- 梳理失真护栏：PM 回报结构化（`gid`/工作包/状态/阻塞/证据/下一动作/是否需用户决策）；聚合保留原始来源与时间；路由回显目标与置信度；薄 Leader 只改路由/状态，不改 PM 的验收/提交/风险结论。
+
+### 9.4 评审卡生命周期
+
+- 临时专家角色：`proposed → active → retired`，跑完即删，保留决策记录与审查产物；盲评、复审、高风险验收、方案判断（旧“临时 PM/Codex 专家卡/视觉/三角度审查员”语义归此）。
+- 不继承 PM 的团队队列权限；输出必须落盘，不驻留 standby；高风险/方案未定/争议复审时按触发器开卡（任一模式皆可）。
+
+### 9.5 模式切换状态机
+
+- `active → switching → active(new_mode)`，双向（A↔B）；不对布尔字段直接覆盖。
+- **A→B**：注入交接包=项目/团队清单、PM 联系点、活动工作包、未决确认、路由表、用户最近意图与待拍板事项。**B→A**：生成 PM 交接清单=各 PM 当前工作与下一动作、待用户事项、未回执消息、在途路由。
+- 切换边界：在途派单/确认/提交/验收先冻结或排空再切；**交接失败保持旧模式**，不得出现调度断档。切换记录含旧模式、新模式、快照版本、未决项数量、生效时间。
+
+### 9.6 通知路由按模式分支
+
+- **A 模式**：PM 的确认单/回执/值守告警直接落用户可见面（通知中心=用户值守面），必须携带 `project_gid`、PM 来源与返回路径，不只弹泛化“团队有事”。
+- **B 模式**：同一类回报先投薄 Leader 会话聚合给用户；用户决议仍回到原 PM，不丢团队上下文。派单回执继续“谁派活谁收通知”，薄 Leader 只汇聚不冒充派单者。
+- 实现落点：`recordOrgConfirmNotification()` 当前把 `sessionId` 指向 `leaderId`，需按模式分支（A 指 PM/用户工作台，B 指薄 Leader 并保留 `source_pm`+`gid`）；`notifyDispatchClosed` 目标选择同理。底层共用 notifications ledger、`NOTIFICATIONS_UPDATED`、`COMMAND_NOTIFICATION_ACK`，不建第二通知事实源。
+
+### 9.7 与本文批次表的关系
+
+- **B0**：SNAPSHOT 增 `org_mode`/入口可选字段，进 parity matrix 与旧端 fixture。
+- **R1**：`ensureLeader`（现名，#83 实施批更名）开关化、`recordOrgConfirmNotification`/`notifyDispatchClosed` 目标分支、模式切换交接状态机是 relay 集成新增量；`session-manager.ts` 单写者纪律不变。
+- **W 线 UI 词汇**：`leader-label`（现名，#83 实施批更名）等文案与角色徽标按 §1.3 表迁移（PM/评审卡/薄 Leader）；A 模式用户工具面（PM 工作台：选 PM 发需求、看待处理/等待用户/验收/空转、建派单/确认卡/看回执）是 W 线新增关键路径。
+- **P1 三产物**：org 引导词/CLAUDE.md seed/CLI 模板随产物统一刷新；旧 seed 幂等不覆盖，需兼容升级段。
+- **T2/T3 命名**：协议版本与模式入口显示进壳层回归；安装包 smoke 覆盖 A/B 字段缺失降级。
+- 既有拆批与依赖不变：本章节为口径与验收口径增补，不新增批次；受影响批在其任务书中引用本章节条款。

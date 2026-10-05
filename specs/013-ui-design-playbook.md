@@ -72,3 +72,29 @@ hover / active / focus-visible（键盘可达）/ disabled / **空态**（一句
 - 菱形等抽象符号代替通用图标（order13 起铃铛先例）
 - 浅色下灰成一团/黑块（token 纪律）
 - 占位假 Tab（点击无效的 Tab 不许上屏）
+
+## 11. 术语速查表（新人 30 秒）
+
+> 角色词条按组织模型 v2（018 §9；评审论证见 codex-minstaff-review.md §14/§16/§17）；工程词条与 018 §8.5 建议清单一一对应。
+
+- **PM**：每团队常驻重角色——分诊/任务书/派单/验收链/巡检/代提交/rescue；A 模式直接对用户。旧文档里承担调度的「Leader/架构师」即 PM。
+- **薄 Leader**：仅 B 模式存在的全局薄角色——路由/聚合/提醒/升级；无验收权无 commit 权，开关插拔；A 模式=用户自占 Leader 位不占卡。
+- **评审卡**：临时专家角色——盲评/复审/高风险验收，`proposed→active→retired` 跑完即删；旧「临时 PM/Codex 专家卡」语义归此。
+- **relay**：每台工作机的本地服务核心（8787），会话生命周期/命令路由/事件广播/快照的唯一业务真相源。
+- **source**：一个 relay 连接在一端的身份（多源列表的行单位），跨源同路径不合并。
+- **SNAPSHOT**：全量状态快照帧，断线恢复/首连用；LAN 与云桥双出口必须同构。
+- **event**：relay 广播的状态变化帧（`SESSION_UPDATED` 等），客户端只是投影；审计事实在 `events.ndjson`。
+- **COMMAND**：客户端→relay 的命令帧（`COMMAND_CREATE` 等），必须进白名单才被受理。
+- **ACK**：relay 对命令的回执（同 `command_id`），`ok:true` 严格判定才算成功，超时/`ok:false` 可见可重试。
+- **dispatch_id**：一张派单的全链路追踪 id（dispatched→running→done/failed）。
+- **command_id**：单条命令的幂等键，重复回放首次 ACK，不二次执行。
+- **projection**：客户端从事实源派生的只读视图，不建第二状态库。
+- **task-store**：引擎原生任务记录（CLI 自己的 todo/任务文件），relay 不冒充它。
+- **artifact store**：输出物登记与拉取层；文件本体留在源机器，跨端 E2E 拉取。
+- **status dock**：会话状态舱——任务级摘要段+操作级活动段双段结构。
+- **指标带**：项目聚合的度量行（会话数/活跃团队/输出物/需行动），计数只来自实际渲染口径。
+- **列表行**：导航与配置用的行形态（区别于卡片=可选实体）。
+- **轻量分组行**：输出物目录组/通知分组头一类轻量行，只带计数与折叠，不复制内容。
+- **member archive**：项目组的不可变成员身份快照，成员退休后历史消息仍显示归档身份。
+- **parity matrix**：SNAPSHOT 逐字段×三出口（LAN/cloud/WAN）的对照事实表，新字段先登记再进客户端。
+- **reconciliation probe**：派单对账探针，判定 orphan/duplicate/timeout/seq-gap 四类异常。
