@@ -59,6 +59,12 @@
     --toast-shadow: 0 6px 24px rgba(0,0,0,.5);
     /* #98 选中卡辉光去橙（列表最大常驻橙）：暗色中性深投影；描边仍走 --brand-line */
     --sel-shadow: 0 4px 20px rgba(0,0,0,.35);
+    /* #78 微信式会话行（第二列卡片→通栏行）：hover 扫过淡底 / 选中持续淡底，中性灰调
+       双值（亮暗各自成对；行间零分隔线，分行靠留白——对齐微信电脑端「扫过见底」量级） */
+    --q-row-hov: rgba(148,163,190,.07);
+    --q-row-sel: rgba(148,163,190,.14);
+    /* #78 needs_action 角标底（微信红量级；暗色降一档饱和保白字对比） */
+    --q-n-bg: #E05552;
     --scroll: #1E2B42;
     --hov: #33436B;
     --hov2: #2C3D63;
@@ -120,6 +126,11 @@
     /* #98 选中卡降橙：辉光中性化 + 描边降亮一档（--brand-line #E07B4C 白底仅 2.95:1
        且高亮橙线贴着黄灯；#C2603E 保品牌识别不再发浮） */
     --sel-shadow: 0 4px 20px rgba(15,23,42,.12);
+    /* #78 微信式会话行：浅色淡底双值（同 :root 语义，灰调压暗档适配白底） */
+    --q-row-hov: rgba(16,24,40,.05);
+    --q-row-sel: rgba(16,24,40,.09);
+    /* #78 角标底浅色值（白字 4.5:1） */
+    --q-n-bg: #DC2626;
     --sel-line: #C2603E;
     --scroll: #C3CBD9;
     --hov: #B9C4D6;
@@ -1077,7 +1088,8 @@
   }
   /* #018-W1a 单流两组段头（待处理/其他会话）：与设置页「标记+标题」分区语言同族，
      小号粗体 + 实际渲染卡数；非交互行（无 .card 类，右键/点击委托天然忽略） */
-  .q-head { display: flex; align-items: baseline; gap: 8px; padding: 10px 16px 4px; }
+  /* #78 组头 sticky（微信分组头心智）：实底 --side-bg 遮滚过行；横向 16px 与行内距对齐 */
+  .q-head { display: flex; align-items: baseline; gap: 8px; padding: 10px 16px 4px; position: sticky; top: 0; z-index: 2; background: var(--side-bg); }
   .q-head-t { font-size: 12px; font-weight: 700; color: var(--text-strong); letter-spacing: .02em; }
   .q-head-n { font-size: 11px; color: var(--dim); }
   /* #018 W1a-1 通知行紧凑化（用户反馈：两行卡片过高过重，title/body 双截断都看不全）：
@@ -1233,7 +1245,9 @@
   }
   /* #51 首卡上距：4→8px（与 chips 行 12px 底距合计 20px），只推首卡、卡间 gap 9px 不动 */
   /* #13 巡检：底部内边距让出 FAB 悬浮区（bottom:72px + 38px 钮高），末卡"本机"徽章不再被压 */
-  #cards { flex: 1; overflow-y: auto; padding: 8px 14px 88px; display: flex; flex-direction: column; gap: 9px; }
+  /* #78 微信式行容器：横向 padding 归零（通栏行自带 16px 内距，与组头 16px 对齐）；
+     gap 2px 纯留白分行（行间零分隔线，行高节奏靠行内 padding） */
+  #cards { flex: 1; overflow-y: auto; padding: 4px 0 88px; display: flex; flex-direction: column; gap: 2px; }
   /* #279⑨ 列表工具行：折叠空闲 + 密度切换（网页无设置抽屉，放"会话"标题行，视觉同 tabs mini chips） */
   #listBar { display: flex; align-items: center; gap: 6px; padding: 10px 16px 4px; }
   #listBar h3 { padding: 0; flex: none; }
@@ -1332,17 +1346,19 @@
   .skip-perm { display: flex; align-items: center; gap: 5px; font-size: 11.5px; color: var(--dim); cursor: pointer; user-select: none; }
   .hint-q { display: inline-flex; align-items: center; justify-content: center; width: 14px; height: 14px; border-radius: 50%; border: 1px solid var(--border); color: var(--dim); font-size: 10px; cursor: help; flex: none; }
 
+  /* #78 微信式会话行（原卡片盒废止）：通栏、无底无边无圆角、行间零分隔线（纯留白
+     分行）；三段式骨架 = q-ava（头像位）+ q-main（名行/摘要行）+ q-side（角标位）。
+     hover 瞬时淡底（扫过即现即逝）、选中持续淡底（当前会话恒可见）走 --q-row-* 双值 */
   .card {
-    background: var(--panel); border: 1px solid var(--border); border-radius: 14px;
-    padding: 11px 13px; cursor: pointer; position: relative;
-    transition: border-color .15s, transform .1s, box-shadow .15s;
+    background: none; border: none; border-radius: 10px;
+    padding: 7px 16px; cursor: pointer; position: relative;
+    display: flex; align-items: center; gap: 11px; min-width: 0;
+    transition: background .06s linear;
   }
-  /* #13 巡检：悬停除描边外补一档底色（原只换边框色，与选中态难区分且静止视图无反馈）；
-     选中态线条用 --brand-line（浅色下纯 --brand 偏红显脏） */
-  .card:hover { border-color: var(--hov2); background: var(--panel-2); }
-  /* #98 选中卡辉光去橙（常态恒有一张卡选中=列表恒有一块橙）：投影改 --sel-shadow
-     （暗=中性深 / 浅=中性墨），描边浅色降亮走 --sel-line（暗色 fallback 品牌线不变） */
-  .card.sel { border-color: var(--sel-line, var(--brand-line)); box-shadow: 0 0 0 1px var(--sel-line, var(--brand-line)), var(--sel-shadow); }
+  /* 微信电脑端「扫过见底」：hover 瞬时淡底（原 #13 悬停描边档废止——无框行没有边） */
+  .card:hover { background: var(--q-row-hov); }
+  /* 选中态持续淡底（微信选中灰量级，亮暗双值见主题变量）；原辉光/描边废止 */
+  .card.sel { background: var(--q-row-sel); }
   .card.historical { opacity: .75; }
   /* #96 空闲置灰（手机 isIdleCard 同口径）：DONE/ERROR 静默 30min 降透明度退后，
      hover 回一档便于辨认操作；#100 后台在跑卡豁免（不加 idle 类） */
@@ -1407,6 +1423,42 @@
   .card:hover .elapsed { opacity: 0; }
   /* 重命名进行中 ✎ 与标题内 ✓ 重复——输入框在 .card-title 里时收掉浮层（:has 不支持则无害降级） */
   .card:has(.card-title input) .c-ops { opacity: 0 !important; pointer-events: none; }
+  /* ---------- #78 微信式行骨架（三段式：q-ava 头像位 / q-main 名行+摘要行 / q-side 角标位） ---------- */
+  /* 左段头像位：标题首字符 + 源色淡化底（微信「名字首字头像」心智，底色/字色 JS 内联注入）；
+     状态灯复用 .c-dot（--sc 注入与呼吸/浅色 LED 规则全继承），绝对定位叠右下角 */
+  .q-ava {
+    position: relative; flex: none; width: 34px; height: 34px; border-radius: 9px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 15px; font-weight: 650; user-select: none;
+  }
+  .q-ava .c-dot { position: absolute; right: -3px; bottom: -3px; box-shadow: 0 0 0 2px var(--side-bg), 0 0 0 4px color-mix(in srgb, var(--sc, var(--dim)) 20%, transparent); }
+  /* 中段：r1=名行（pin+标题+徽章族+源标+时间+✎✕ 浮层）/ r2=摘要单行（ellipsis）；
+     r1 relative 作 ✎/✕ 绝对定位浮层锚点（原 .c-head 同职） */
+  .q-main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+  .q-r1 { display: flex; align-items: center; gap: 7px; min-width: 0; position: relative; }
+  .q-r1 .card-title { flex: 0 1 auto; min-width: 0; margin-top: 0; }
+  .q-r1 .elapsed { flex: none; margin-left: auto; }
+  .q-r2 { display: flex; align-items: center; gap: 8px; min-width: 0; font-size: 11.5px; line-height: 16px; color: var(--card-sub); }
+  .q-r2-t { min-width: 0; flex: 0 1 auto; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .q-r2-t.is-waiting { color: var(--waiting); }
+  /* 原 .card-stats 挂点下的子规则随内容迁入 r2（.card-stats 容器废止后补同效规则） */
+  .q-r2 .card-dir { flex: 0 1 auto; min-width: 0; max-width: 45%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .q-r2 .ctx-mini { margin-left: auto; flex: none; }
+  .q-r2 .src-badge { flex: none; }
+  .q-r2 .lv-sec { color: var(--working); flex: none; font-variant-numeric: tabular-nums; }
+  .q-r2 .lv-tok { flex: none; }
+  /* 右段：needs_action 角标（数字圆点，微信待办提示位）；waiting 行 hover 时原位切换
+     「处理」快捷钮（.card-cta 复用、点击链不变）——互斥占位不破坏行静观感 */
+  .q-side { flex: none; display: flex; align-items: center; justify-content: flex-end; min-width: 30px; }
+  .q-n {
+    min-width: 17px; height: 17px; padding: 0 5px; border-radius: 999px;
+    background: var(--q-n-bg); color: #fff; font-size: 10.5px; font-weight: 700;
+    display: inline-flex; align-items: center; justify-content: center;
+    font-variant-numeric: tabular-nums;
+  }
+  .q-side .card-cta { display: none; margin: 0; }
+  .card:hover .q-side:has(.card-cta) .q-n { display: none; }
+  .card:hover .q-side .card-cta { display: flex; }
   /* #279① 会话删除 ✕（与 ✎ 同款 hover 显现；DONE/ERROR 才可删，运行中置灰） */
   .card-del {
     flex: none; background: none; border: none; cursor: pointer;
@@ -1459,9 +1511,12 @@
   #apkQrPop canvas { display: block; border-radius: 10px; }
   #apkQrPop .aq-t { color: var(--text); font-size: 13px; font-weight: 600; }
   #apkQrPop .aq-u { color: var(--faint); font-size: 11px; }
-  /* #279⑨ 紧凑卡（对齐手机"简洁列表"三行）：状态点+标题+耗时 / 摘要 / 角标+改动+水位 */
-  .card.compact { padding: 7px 11px 8px; border-radius: 10px; }
-  .card.compact .c-row1 { display: flex; align-items: center; gap: 7px; position: relative; } /* #164 ✎/✕ 浮层锚点 */
+  /* #279⑨→#78 紧凑档（对齐手机"简洁列表"）：行式同构压缩行高——头像 26px/标题 13px/
+     摘要 11px 单行（原 compact 三行卡 DOM 分支废止，标准/紧凑共用三段式骨架） */
+  .card.compact { padding: 4px 16px; }
+  .card.compact .q-ava { width: 26px; height: 26px; border-radius: 7px; font-size: 12px; }
+  .card.compact .q-main { gap: 1px; }
+  .card.compact .q-r1 { gap: 6px; }
   /* #98 状态灯系统升级：8→10px（面积 +56%）+ 静态光圈（白底呈淡彩圈，深点+彩圈=
      指示徽而非裸墨点）；WORKING 呼吸动画的 box-shadow 关键帧会自然接管光圈（预期） */
   .c-dot { width: 10px; height: 10px; border-radius: 50%; background: var(--sc, var(--dim)); flex: none; box-shadow: 0 0 0 3px color-mix(in srgb, var(--sc, var(--dim)) 20%, transparent); }
@@ -1484,11 +1539,11 @@
   html.light .card.bg-live .c-dot { background: color-mix(in srgb, var(--working) 55%, #fff); border: 1.5px solid var(--working); }
   /* #100 ⑂N 徽标：黄描边小胶囊（「在跑」语义色），his-badge 同形制 */
   .bg-badge { font-size: 10px; color: var(--working); border: 1px solid color-mix(in srgb, var(--working) 45%, transparent); padding: 1px 6px; border-radius: 999px; flex: none; font-weight: 600; }
-  .card.compact .card-title { flex: 1; min-width: 0; margin-top: 0; font-size: 13px; gap: 6px; }
+  .card.compact .card-title { flex: 0 1 auto; min-width: 0; margin-top: 0; font-size: 13px; gap: 6px; }
   .card.compact .c-tt { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .card.compact .card-title input { font-size: 12.5px; }
-  .card.compact .card-summary { font-size: 11px; line-height: 15px; margin-top: 3px; padding-left: 4px; min-height: 15px; } /* #399 compact 灯列 = 8px 点 + 7px gap；#54 11.5→11；#58 行盒+占位双钉 15px；#98 灯 8→10px 缩进 6→4 补偿 */
-  .card.compact .card-stats { font-size: 10px; line-height: 14px; margin-top: 5px; gap: 8px; min-height: 14px; } /* #54 10.5→10；#58 行盒+占位双钉 14px */
+  .card.compact .q-r2 { font-size: 11px; line-height: 14px; gap: 6px; }
+  .card.compact .q-n { min-width: 15px; height: 15px; padding: 0 4px; font-size: 9.5px; }
 
   /* ---------- 任务面板（详情页"任务" tab） ---------- */
   .todo-head { display: flex; align-items: center; gap: 10px; padding: 16px 4px 6px; }
@@ -2313,7 +2368,7 @@
     #srvPop { left: auto; right: 10px; }
     #timeline { font-size: calc(14px * var(--tl-scale, 1)); }
     .brand h1 { font-size: 14px; }
-    #cards { padding: 8px 10px 88px; }
+    #cards { padding: 4px 0 88px; }
     #srcChips { padding: 6px 10px 12px; }
     #listBar { padding: 10px 10px 4px; }
     .srv-row .srv-del { opacity: 1; }
@@ -5775,6 +5830,16 @@ function render() {
   const notifPool = [];
   for (const c of ctxs.values()) for (const n of c.notifications || []) notifPool.push(n);
   const notifFP = notifPool.reduce((a, n) => a + (n && n.actionable === true && n.resolved_at == null ? 1 : 0), 0);
+  // #78 行角标计数：per-session actionable 未决通知数（sourceContext.sessionId 绑定；
+  // notifActionableOf 同口径加 handled/dismissed 收缩）。通知读侧无源标识，跨源同
+  // sid 合并计（角标是提醒语义，失真面可忽略）；needs_action 行无通知时记 1（见渲染处）
+  const notifNBySid = new Map();
+  for (const n of notifPool) {
+    if (!n || typeof n !== "object" || n.actionable !== true) continue;
+    if (n.resolved_at != null || n.handled_at != null || n.dismissed_at != null) continue;
+    const sid = n.sourceContext && typeof n.sourceContext === "object" ? n.sourceContext.sessionId : undefined;
+    if (typeof sid === "string" && sid) notifNBySid.set(sid, (notifNBySid.get(sid) || 0) + 1);
+  }
   const decorated = entries.map((e) => {
     const s2 = Object.assign({}, e.s, { activity: dockActivityOf(e.ctx, e.s) || e.s.activity });
     s2.__qid = e.ctx.cfg.id + "/" + e.s.session_id; // Web 多源互斥键=源+会话（跨源同 id 各自成卡）；纯函数默认键 session_id 供单源/fixture
@@ -5866,60 +5931,51 @@ function render() {
         '<button class="card-edit" title="重命名">✎</button>' +
         '<button class="card-del' + (deletable ? "" : " off") + '" title="' + (deletable ? "删除会话" : "运行中，不能删除") + '">✕</button>';
       const tok = s.usage && s.usage.output_tokens ? s.usage.output_tokens : 0;
-      // #362 标题恒第一行：灯（WORKING 呼吸）+标题+总时长同构一行，状态切换不跳行；
-      // WORKING 实时行（回合秒+↓tokens+动作摘要）退居第二行，空闲第二行=摘要
-      // #164：标题行只剩 灯+标题+⑂N+时间（徽章下移 stats 行、✎/✕ 悬停浮层盖时间），
-      // 名称净增 ~90px——悬停标题可见全文 tooltip
-      const headRow =
-        '<div class="c-head">' + pinFlag + '<span class="c-dot' + (s.status === "WORKING" || (s.status !== "WORKING" && bgRunning(s)) ? " run" : "") /* #100/#161 后台在跑也呼吸（bgLive 不限 DONE） */ + '" style="--sc:var(--' + (s.status || "").toLowerCase() + ')"></span>' +
-          '<span class="card-title"><span class="c-tt" title="' + escapeHtml(s.title || "") + '">' + escapeHtml(s.title || "") + "</span>" + bgBadge + "</span>" +
-          '<span class="elapsed" title="最后活跃">' + fmtLastActive(s.updated_at) + "</span>" +
-          '<span class="c-ops">' + opBtns + "</span></div>";
-      const liveRow = s.status === "WORKING"
-        ? '<div class="c-live">' +
-          (s.compacting ? '<span class="lv-tok">⟳ 压缩上下文</span>' : "") +
-          '<span class="lv-sec">' + Math.max(0, Math.floor((Date.now() - (s.turn_started_at ?? s.updated_at)) / 1000)) + 's</span>' +
-          (tok ? '<span class="lv-tok">↓ ' + tokStr(tok) + "</span>" : "") +
-          (s.action_summary && !s.compacting ? '<span class="lv-sum">' + escapeHtml(s.action_summary) + "</span>" : "") +
-          "</div>"
-        : "";
-      // #170 中间行永不空白：去 #341 的 dupTitle 抑制（前缀匹配误伤面大——标题是项目名
-      // 而摘要恰以它开头时整行消失，用户实测「有的卡片工作状态消失」）与状态限制（紧凑
-      // 密度下 WORKING 卡曾因此恒落 blank 占位），空摘要回落「…」——与手机两档密度
-      // `action_summary || "…"` 同口径；#58 等高由 .card-summary 的 min-height 钉住
-      const summaryRow =
-        '<div class="card-summary' + (waiting ? " waiting" : "") + '">' + escapeHtml(waitingText || "…") + "</div>";
-      const activityRow = dockActivityHtml(ctx, s);
-      const ctaRow = waiting && !s.historical && s.waiting_request?.decidable !== false ? '<div class="card-cta"><button>处理</button></div>' : "";
-      // #367 源标签内联进 stats 行右侧（多源才有；不再独立占一整行留白）；
-      // #383 源标签移最左与上两行左对齐；ctx 水位条压到最右（不再悬中间）
-      // 源徽章仅在聚合视图（全部）显示：筛选到单一源时 chip 已表明来源，整枚不渲染
-      // （省 DOM，非 visibility 隐藏）；详情页头部 #dsrc 徽章不受此影响
-      // #50 在线源唯一时同样不渲染（showSrcTag，见上）
-      // #58 推翻 #367 的「全空不渲染」：行数 1~3 漂移致同列表卡高参差（用户 2026-09-19
-      // 反馈），stats 行恒渲染 + min-height 占位，换取三行恒定等高（空档代价可接受）
+      // #78 微信式行（三段式）：q-ava 头像位（标题首字+源色淡化底+状态灯叠角）/ q-main
+      // （r1 名行+徽章族+时间 / r2 摘要单行）/ q-side（needs_action 角标，waiting 行
+      // hover 原位切「处理」钮）。原 headRow/liveRow/summaryRow/statsBlock 多行卡结构
+      // 废止；徽章族信息零丢失（分类徽/⑂/pin/组标/📁 并 r1，源标+水位条入 r2 尾）；
+      // 标准/紧凑共用同一 DOM，密度档只走 .card.compact 尺寸（原 listCompact DOM 分支废止）
+      const avaChar = escapeHtml((s.title || "").trim().charAt(0).toUpperCase() || "·");
+      const avaColor = srcColorByKey(ctx.cfg);
+      const avaBlock =
+        '<div class="q-ava" style="background:color-mix(in srgb, ' + avaColor + ' 16%, var(--panel-2)); color:' + avaColor + '">' + avaChar +
+        '<span class="c-dot' + (s.status === "WORKING" || (s.status !== "WORKING" && bgRunning(s)) ? " run" : "") /* #100/#161 后台在跑也呼吸（bgLive 不限 DONE） */ + '" style="--sc:var(--' + (s.status || "").toLowerCase() + ')"></span></div>';
+      // r2 取值链（#60 现有口径行式合并，两行容量取最新）：waiting 文（红）> WORKING
+      // 实时（走秒+↓tokens+摘要，.lv-sec 类保 :6058 每秒直更链）> dock 最近活动文本
+      // （比回合摘要更实时，dockActivityOf E1 链）> 回合摘要 > 「…」（#170 永不空白同口径）
+      const idleText = dockActivityText(ctx, s) || s.action_summary || "";
+      const r2t = waiting
+        ? '<span class="q-r2-t is-waiting" title="' + escapeHtml(waitingText || "") + '">' + escapeHtml(waitingText || "…") + "</span>"
+        : s.status === "WORKING"
+          ? '<span class="lv-sec">' + Math.max(0, Math.floor((Date.now() - (s.turn_started_at ?? s.updated_at)) / 1000)) + 's</span>' +
+            (tok ? '<span class="lv-tok">↓ ' + tokStr(tok) + "</span>" : "") +
+            '<span class="q-r2-t" title="' + escapeHtml(s.action_summary || "") + '">' + escapeHtml((s.compacting ? "⟳ 压缩上下文" : s.action_summary) || "…") + "</span>"
+          : '<span class="q-r2-t" title="' + escapeHtml(idleText) + '">' + escapeHtml(idleText || "…") + "</span>";
+      // 源徽章仅在聚合视图（全部+多源）显示（#367/#50 口径不变，chip/详情页不受影响）；
+      // ctx 水位条随行尾（原 stats 行右压语义）
       const srcTag = filterSrc === "all" && showSrcTag ? srcBadgeHtml(ctx.cfg) : "";
-      const statsInner = srcTag + badges + orgBadgeHtml(ctx, s) + folderHtml(s) + ctxHtml(s); /* #164 badges 从标题行移入（分类信息归元信息行）；#26 M2 组织徽标（组归属/档位）同入元信息行 */
-      const statsBlock = '<div class="card-stats">' + statsInner + "</div>";
-      if (listCompact) {
-        // #279⑨ 紧凑卡（对齐手机）：状态点+标题+耗时 / 摘要 / 改动+水位+源标签（#164 徽章同移 stats 行）
-        d.innerHTML =
-          '<div class="c-row1">' + pinFlag + '<span class="c-dot' + (s.status === "WORKING" || (s.status !== "WORKING" && bgRunning(s)) ? " run" : "") /* #100/#161 后台在跑也呼吸（bgLive 不限 DONE） */ + '" style="--sc:var(--' + (s.status || "").toLowerCase() + ')"></span>' +
-          '<span class="card-title"><span class="c-tt" title="' + escapeHtml(s.title || "") + '">' + escapeHtml(s.title || "") + "</span>" + bgBadge + "</span>" +
+      const r2tail = srcTag + ctxHtml(s);
+      const ctaRow = waiting && !s.historical && s.waiting_request?.decidable !== false ? '<div class="card-cta"><button>处理</button></div>' : "";
+      // needs_action 角标（微信待办提示位）：数字=该会话绑定的 actionable 未决通知数
+      // （notifNBySid，无通知的 waiting/acceptance 记 1=「有待办」最低提示）；纯 working
+      // 不出角标（flags.needs_action 精确判定，queuePartition 语义）；历史会话不出
+      const qflags = q.flags.get(ctx.cfg.id + "/" + s.session_id) || {};
+      const nCount = notifNBySid.get(s.session_id) || 0;
+      const sideBlock = qflags.needs_action && !s.historical
+        ? '<div class="q-side">' + ctaRow + '<span class="q-n" title="有待处理事项">' + Math.max(1, nCount) + "</span></div>"
+        : "";
+      d.innerHTML =
+        avaBlock +
+        '<div class="q-main">' +
+          '<div class="q-r1">' + pinFlag +
+            '<span class="card-title"><span class="c-tt" title="' + escapeHtml(s.title || "") + '">' + escapeHtml(s.title || "") + "</span>" + bgBadge + "</span>" +
+            badges + orgBadgeHtml(ctx, s) + folderHtml(s) +
             '<span class="elapsed" title="最后活跃">' + fmtLastActive(s.updated_at) + "</span>" +
             '<span class="c-ops">' + opBtns + "</span></div>" +
-          activityRow +
-          summaryRow +
-          statsBlock +
-          ctaRow;
-      } else {
-        d.innerHTML =
-          headRow +
-          (s.status === "WORKING" ? liveRow : summaryRow) +
-          activityRow +
-          statsBlock +
-          ctaRow;
-      }
+          '<div class="q-r2">' + r2t + r2tail + "</div>" +
+        "</div>" +
+        sideBlock;
       // #49 休眠卡点击 = 发恢复命令（不进详情）；ACK 成功后本地转正常态，等 SNAPSHOT 回帧收口
       d.onclick = () => {
         if (dormant) { resumeDormantSession(ctx, s); return; }
