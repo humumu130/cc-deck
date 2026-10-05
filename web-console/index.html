@@ -1086,9 +1086,12 @@
   #notifications { display: none; flex-direction: column; gap: 4px; padding: 2px 16px 8px; }
   #notifications.show { display: flex; }
   .notice-group { display: flex; flex-direction: column; gap: 1px; }
-  .notice-group-head { color: var(--faint); font-size: 10px; letter-spacing: .5px; padding: 1px 5px; }
-  .notice-row { display: flex; align-items: center; gap: 6px; padding: 2px 6px; border-radius: 6px; min-width: 0; }
-  .notice-row:hover { background: rgba(127,127,127,.09); }
+  /* 通知列表观感修正（2026-10-05 用户反馈：不要底色、图标文字离边缘太近）：hover 底
+     整个去掉，交互反馈降为标题微亮（无色块）；行内留白 6px→10px 与第二列行卡节奏对齐
+     （容器 #notifications 侧边 16px 已足，贴边感来自行内 padding） */
+  .notice-group-head { color: var(--faint); font-size: 10px; letter-spacing: .5px; padding: 2px 10px; }
+  .notice-row { display: flex; align-items: center; gap: 6px; padding: 5px 10px; border-radius: 6px; min-width: 0; }
+  .notice-row:hover .nr-title { color: var(--text-strong); }
   .notice-row .nr-body { min-width: 0; flex: 1; display: flex; align-items: baseline; gap: 5px; overflow: hidden; white-space: nowrap; }
   .notice-row .nr-title { color: var(--text); font-size: 11px; flex: none; max-width: 55%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .notice-row .nr-text { color: var(--dim); font-size: 10.5px; flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -1797,6 +1800,16 @@
   #dockActivityRow.show { display: flex; }
   #dockActivityRow .dar-k { flex: none; opacity: .75; }
   #dockActivityRow .dar-t { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  /* #018-W2a 双段 dock：任务段（todos 摘要）+ 活动段（activity 节流最后值）+ 终态收口
+     条（ERROR ⚠ 常驻 / DONE ✓ 8s 尾窗）共用 dar-* 行族；WAITING 期等待卡独占 dock
+     三行全隐（硬条款不重复渲染），旧 relay 无 activity 活动段自隐=单段降级 */
+  #dockTodoRow, #dockCloseRow { display: none; align-items: center; gap: 7px; margin: -4px auto 10px; width: calc(100% - 40px); max-width: min(1040px, 100%); font-size: 11.5px; line-height: 16px; }
+  #dockTodoRow.show, #dockCloseRow.show { display: flex; }
+  #dockTodoRow { color: var(--dim); }
+  #dockTodoRow .dar-k { flex: none; opacity: .75; }
+  #dockCloseRow { color: var(--done); }
+  #dockCloseRow.err { color: var(--error); }
+  #dockTodoRow .dar-t, #dockCloseRow .dar-t { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
   /* #14 提问卡排版重设计：提问态（.ask）中性面板+品牌轻描边——AskUserQuestion 是中性
      提问不是告警；审批态（默认，权限允许/拒绝）保留黄警示语言，两态互不污染 */
@@ -1927,6 +1940,8 @@
     color: var(--dim); font-size: 14px; flex: none; border: 1px solid var(--line);
   }
   .msg-ai .ai-name { font-weight: 650; font-size: 13.5px; }
+  /* #018-W2a 成员身份元信息（源/引擎身份是元信息行不进正文——§2.1.2）：组名·档位 */
+  .msg-ai .ai-meta { color: var(--faint); font-size: 11px; font-weight: 400; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .msg-ai .ai-body { padding-left: 37px; min-width: 0; }
   .msg-ai .mt { color: var(--faint); font-size: 10.5px; font-variant-numeric: tabular-nums; }
   /* 命令行复制按钮：hover 行尾显现 */
@@ -2685,6 +2700,10 @@
       <span class="sum" id="livesum">思考中…</span>
       <span class="el" id="liveel"></span>
     </div>
+    <!-- #018-W2a 双段 dock（composer 前状态坞）：任务段 todos 摘要 + 活动段 activity；
+         终态收口条 ERROR/DONE 尾窗；WAITING 期等待卡独占三行全隐 -->
+    <div id="dockTodoRow"><span class="dar-k">任务</span><span class="dar-t" id="dockTodoText"></span></div>
+    <div id="dockCloseRow"><span class="dar-t" id="dockCloseText"></span></div>
     <div id="dockActivityRow"><span class="dar-k">活动</span><span class="dar-t" id="dockActivityText"></span></div>
     <!-- #142 子 Agent 状态：主状态行（liverow）下方的续行，不再是独立大框 -->
     <div id="agbox"></div>
@@ -4446,7 +4465,12 @@ function pushLog(ctx, sid, entry) {
   };
   if (e.id) {
     const i = list.findIndex((x) => x.id === e.id);
-    if (i >= 0) { list[i] = e; return; }
+    if (i >= 0) {
+      // #018-W2a 迟到残帧不回退：已收口条目（终帧已落/快照回放含终文）遇无 full 的
+      // streaming 残帧丢弃（重连重放/乱序窗口）；其余同 id 帧原地覆盖，绝不追加
+      if (streamMergeDecide(list[i], e) === "skip") return;
+      list[i] = e; return;
+    }
   }
   list.push(e);
   if (list.length > 400) list.splice(0, list.length - 400);
@@ -4631,7 +4655,10 @@ function projectReadFrame(ctx, msg, options = {}) {
     return true;
   }
   const observedAt = typeof p.observed_at === "number" ? p.observed_at : (msg.ts || Date.now());
-  ctx.dockActivities.set(sid, {
+  // #018-W2a 活动段节流：同态同文重复帧在 1s 窗口内不刷账（与渲染钟同拍；文本/状态
+  // 一变立即放行），账面 last-wins 语义不变
+  const prevDock = ctx.dockActivities.get(sid);
+  const nextDock = {
     state: p.state || ctx.sessions.get(sid).status,
     activity: {
       kind: p.activity_kind || "system",
@@ -4640,6 +4667,10 @@ function projectReadFrame(ctx, msg, options = {}) {
       observed_at: observedAt,
       ...(typeof p.occurred_at === "number" ? { occurred_at: p.occurred_at } : {}),
     },
+  };
+  if (dockActivityThrottled(prevDock, nextDock, observedAt, 1000)) return true;
+  ctx.dockActivities.set(sid, {
+    ...nextDock,
     capabilities: normalizeActivityCapabilities(p.capabilities) || activityCapabilitiesOf(ctx.sessions.get(sid)) || {},
     updated_at: observedAt,
   });
@@ -5416,6 +5447,131 @@ function orgCreatePayload(input) {
 }
 /* W1B-COMMANDS-END */
 
+/* W2A-MESSAGES-START */
+// #018-W2a 详情对话 pane 与双段 dock 读侧投影（018 §2.1.2 + :646 验收四点）：
+// 纯函数锚点段——自包含零 DOM、不取时（now 由调用方注入），node fixture 直跑
+//（test-w2a-messages.ts）。同语义参照 expo E3a（DetailScreen.tsx dedupeWaitingBars/
+// closingBarOf/dockModelOf），不共享代码；协议层零改动（LogEntry/kind 面冻结）。
+
+// 引擎显示名（源/引擎身份是元信息行不进正文）：SessionEngine 词表（relay types.ts），
+// 缺省/未知回落 Claude——维持升级前头像行文案，旧 relay 零影响
+var ENGINE_LABEL = { claude: "Claude", codex: "Codex", trae: "Trae", "qwen-code": "Qwen Code", codebuddy: "CodeBuddy", zcode: "ZCode" };
+
+// role 判定（pane 协议：前端按 kind 判定，relay 不新增「气泡事件」）：user_message 是
+// 唯一气泡面；其余全部 AI 无框面（正文/思考折叠/工具折叠/结果行/系统弱化行）。未知
+// kind 兜底 ai-sys——不冒充用户气泡也不崩
+function msgRoleOf(kind) {
+  if (kind === "user_message") return "user";
+  if (kind === "assistant_text") return "ai-text";
+  if (kind === "thinking") return "ai-think";
+  if (kind === "tool_use") return "ai-tool";
+  if (kind === "tool_result") return "ai-result";
+  return "ai-sys";
+}
+
+// 头像行身份（AI 无框头像行元信息）：引擎名按 session.engine 映射；团队成员会话
+// （project_gid 在身）追加组归属元信息（组名 + 档位，档位 session 优先回落组档）；
+// 无组会话 meta 空（元信息行不渲染）
+function aiHeadOf(session, projects) {
+  const s = session && typeof session === "object" ? session : {};
+  const eng = typeof s.engine === "string" && s.engine ? s.engine : "claude";
+  const name = ENGINE_LABEL[eng] || "Claude";
+  const gid = typeof s.project_gid === "string" ? s.project_gid : "";
+  if (!gid) return { name: name, meta: "" };
+  const g = Array.isArray(projects) ? projects.find((x) => x && x.id === gid) : null;
+  let meta = g && typeof g.name === "string" && g.name ? g.name : "项目组";
+  const tier = (typeof s.dispatch_tier === "string" && s.dispatch_tier) || (g && typeof g.tier === "string" && g.tier) || "";
+  if (tier) meta += " · " + tier;
+  return { name: name, meta: meta };
+}
+
+// 流式合并判定（「同 id 原地替换绝不追加」的增量面）：append=新块 / replace=原地覆盖 /
+// skip=迟到残帧丢弃。已收口条目（无 streaming 标记=终帧已落或快照已含终文）遇到无
+// full 的 streaming 残帧 → skip 不回退（重连重放/乱序窗口）；其余同 id 一律 replace
+//（真实终帧带 full 覆盖在位）。存储桶按 sid 分桶（pushLog ctx.timelines.get(sid)），
+// 跨会话帧天然不串桶，渲染只取当前选中会话——此判定只管同桶内同 id 前后帧
+function streamMergeDecide(existing, incoming) {
+  const inc = incoming && typeof incoming === "object" ? incoming : null;
+  if (!inc) return "skip";
+  const id = typeof inc.id === "string" && inc.id ? inc.id : "";
+  if (!id) return "append";
+  const cur = existing && typeof existing === "object" ? existing : null;
+  if (!cur || (typeof cur.id === "string" ? cur.id : "") !== id) return "append";
+  if (!cur.streaming && inc.streaming && !inc.full) return "skip";
+  return "replace";
+}
+
+// 流式收口判定（终态揭标）：条目仍挂 streaming 标记而会话已离 WORKING（DONE/ERROR/
+// WAITING/历史）→ 渲染层揭标（光标不闪）；存储不动，真实终帧到达走 replace 覆盖
+function streamFinalized(entry, status) {
+  const e = entry && typeof entry === "object" ? entry : null;
+  if (!e || !e.streaming) return true;
+  return status !== "WORKING";
+}
+
+// WAITING 独占判定（硬条款）：等待卡（waitbox）在显窗口 = status=WAITING + waiting_request
+// 在 + 非历史——与 renderDetail waitbox 显隐同口径（decidable:false 的被动等待同样在
+// 显，同样独占）。独占期任务/活动/收口三行全部让位：等待语义只渲染一处（E3a「审批
+// 不入舱」同源——舱内不出第二处等待假占位）
+function dockExclusiveOf(s) {
+  const x = s && typeof s === "object" ? s : {};
+  return x.status === "WAITING" && !!x.waiting_request && x.historical !== true;
+}
+
+// 任务段投影（todos 摘要）：完成数/总数 + 当前 in_progress 条目（active_form 优先，
+// TodoWrite 词表）；空清单/非数组 → null（整段不渲染，无假「0/0」）
+function dockTaskOf(todos) {
+  const list = Array.isArray(todos) ? todos.filter((t) => t && typeof t.content === "string" && t.content) : [];
+  if (!list.length) return null;
+  const done = list.filter((t) => t.status === "completed").length;
+  const cur = list.find((t) => t.status === "in_progress");
+  const current = cur ? String(cur.active_form || cur.content || "").trim() : "";
+  let text = "任务 " + done + "/" + list.length;
+  if (current) text += " · " + current;
+  return { done: done, total: list.length, current: current, text: text };
+}
+
+// 活动段节流：同 state 同 text 的重复帧在 minMs 窗口内不刷新账面（last-wins 语义已由
+// 覆盖写保证，窗口只挡重复帧刷账）；文本/状态一变立即放行（不牺牲新鲜度）；时钟回退/
+// 乱序 observed_at 放行不节流
+function dockActivityThrottled(prev, next, now, minMs) {
+  if (!prev || !prev.activity || !next || !next.activity) return false;
+  if (prev.state !== next.state || prev.activity.text !== next.activity.text) return false;
+  const at = typeof prev.updated_at === "number" ? prev.updated_at : 0;
+  if (!(now >= at)) return false;
+  return now - at < (minMs || 0);
+}
+
+// 双段 dock 投影（composer 前状态坞）：waiting 独占 → 两段 null（含收口条调用方一并
+// 让位）；旧 relay 无 activity（能力关或无数据）→ activity null 单段降级；todos 空 →
+// task null。两段互不拖拽显隐
+function dockSegmentsOf(input) {
+  const inp = input && typeof input === "object" ? input : {};
+  const s = inp.session && typeof inp.session === "object" ? inp.session : {};
+  if (dockExclusiveOf(s)) return { waiting: true, task: null, activity: null };
+  const text = typeof inp.activityText === "string" ? inp.activityText.trim() : "";
+  const activity = inp.activityCap !== false && text
+    ? { text: text, tool: typeof inp.activityTool === "string" ? inp.activityTool : "" }
+    : null;
+  return { waiting: false, task: dockTaskOf(s.todos), activity: activity };
+}
+
+// 终态收口条（E3a closingBarOf 同语义）：ERROR ⚠ 常驻（last_error 透传，缺省「出错了」）；
+// DONE ✓ 只在回合收尾尾窗内显示（activity.state=DONE 落定后 tailMs 内「本轮已完成」，
+// 缺省 8000）——DONE 是会话静息态，常驻收口条给每个历史会话都糊一条；尾窗即「本轮刚
+// 收口」，过窗自隐。now 由调用方注入（段内不取时）
+function dockClosingOf(s, now, tailMs) {
+  const x = s && typeof s === "object" ? s : {};
+  if (x.status === "ERROR") return { kind: "error", text: (typeof x.last_error === "string" && x.last_error) || "出错了" };
+  const act = x.activity && typeof x.activity === "object" ? x.activity : null;
+  if (x.status === "DONE" && act && act.state === "DONE" && typeof act.updated_at === "number") {
+    const age = now - act.updated_at;
+    if (age >= 0 && age <= (typeof tailMs === "number" && tailMs > 0 ? tailMs : 8000)) return { kind: "done", text: "本轮已完成" };
+  }
+  return null;
+}
+/* W2A-MESSAGES-END */
+
 // 列表上方源过滤 chips（#343，#018-W1a 源胶囊化）：默认只"全部"；胶囊=状态点+源名+
 // 必要异常（legacy 标记），源级会话统计不进顶部（总数只在「全部」chip——2026-09-16
 // 用户口径）。LAN/云桥同源按 relay identity 归并（projectSources 三级回落）；选中
@@ -6036,18 +6192,35 @@ function renderDetail() {
 
   // WORKING 状态行（类 CLI：✶ 摘要 · 回合耗时）
   const lr = $("liverow");
-  const dar = $("dockActivityRow");
-  if (dar) {
-    const darText = dockActivityText(sel.ctx, s);
-    if (darText) {
-      dar.classList.add("show");
-      $("dockActivityText").textContent = darText;
-      const dockActivity = dockActivityOf(sel.ctx, s)?.activity;
-      dar.title = dockActivity?.tool ? "活动 · " + dockActivity.tool : "活动";
-    } else {
-      dar.classList.remove("show");
-      $("dockActivityText").textContent = "";
-      dar.title = "";
+  // #018-W2a 双段 dock + 终态收口条（composer 前状态坞）：任务段 todos 摘要 / 活动段
+  // activity（节流最后值）；WAITING 期等待卡独占 dock 三行全隐（硬条款：等待语义只
+  // 渲染一处）；旧 relay 无 activity 活动段自隐=单段降级；收口条 ERROR ⚠ 常驻 / DONE ✓
+  // 8s 尾窗自隐（E3a closingBarOf 同语义，now 由渲染钟注入）
+  {
+    const seg = dockSegmentsOf({
+      session: s,
+      activityText: dockActivityText(sel.ctx, s),
+      activityTool: dockActivityOf(sel.ctx, s)?.activity?.tool,
+      activityCap: sel.ctx.sourceCapabilities?.activity,
+    });
+    const tr = $("dockTodoRow");
+    if (tr) {
+      tr.classList.toggle("show", !seg.waiting && !!seg.task);
+      $("dockTodoText").textContent = seg.task ? seg.task.text : "";
+      tr.title = seg.task ? "任务进度 " + seg.task.done + "/" + seg.task.total : "";
+    }
+    const dar = $("dockActivityRow");
+    if (dar) {
+      dar.classList.toggle("show", !seg.waiting && !!seg.activity);
+      $("dockActivityText").textContent = seg.activity ? seg.activity.text : "";
+      dar.title = seg.activity && seg.activity.tool ? "活动 · " + seg.activity.tool : "活动";
+    }
+    const closing = dockClosingOf(s, Date.now(), 8000);
+    const cr = $("dockCloseRow");
+    if (cr) {
+      cr.classList.toggle("show", !!closing);
+      cr.classList.toggle("err", !!closing && closing.kind === "error");
+      $("dockCloseText").textContent = closing ? (closing.kind === "error" ? "⚠ " : "✓ ") + closing.text : "";
     }
   }
   if (s.status === "WORKING") {
@@ -6194,14 +6367,15 @@ function renderDetail() {
     ? full.filter((e) => e.kind === "assistant_text" || e.kind === "user_message" || e.kind === "system" || (e.kind === "thinking" && thinkShown) || (e.kind === "tool_use" && /^(TaskCreate|TaskUpdate|TodoWrite)$/.test(e.tool || "")))
     : full;
   const last = list[list.length - 1];
-  // 流式更新（同条 text 变长）与展开切换都要触发重建
-  const renderKey = [s.session_id, activeTab, list.length, last?.text?.length ?? 0, last?.full?.length ?? 0, expandRev, thinkShown].join(":");
+  // 流式更新（同条 text 变长）与展开切换都要触发重建；#018-W2a 会话态入 key——终态
+  // 翻帧（WORKING→DONE/ERROR/WAITING）触发重建以揭 streaming 光标（streamFinalized）
+  const renderKey = [s.session_id, activeTab, s.status, list.length, last?.text?.length ?? 0, last?.full?.length ?? 0, expandRev, thinkShown].join(":");
   if (tl.dataset.count !== renderKey) {
     const nearBottom = tl.scrollHeight - tl.scrollTop - tl.clientHeight < 80;
     tl.dataset.count = renderKey;
     tl.innerHTML = list.length === 0
       ? '<div class="tl-empty">（暂无内容）</div>'
-      : renderTimeline(list);
+      : renderTimeline(list, aiHeadOf(s, sel.ctx.projects), s.status);
     if (nearBottom || list.length <= 5) tl.scrollTop = tl.scrollHeight;
   }
 }
@@ -6875,7 +7049,7 @@ const eKey = (e) => (selected?.src || "") + ":" + (e.id ?? (e.ts + "|" + e.kind 
 const diffLine = (l) =>
   '<div class="' + (l.startsWith("@@") ? "h" : l.startsWith("+") ? "a" : l.startsWith("-") ? "d" : "c") + '">' + escapeHtml(l || " ") + "</div>";
 
-function entryHtml(e, prevDay) {
+function entryHtml(e, prevDay, head, status) {
   const k = escapeHtml(eKey(e)); // data-x 属性安全
   const open = expanded.has(eKey(e));
   const hm = e.ts ? fmtHM(e.ts) : "";
@@ -6883,7 +7057,10 @@ function entryHtml(e, prevDay) {
   const day = e.ts ? dayKey(e.ts) : "";
   // #162 分隔线标签套微信式分级（今天/昨天/M月d日/跨年带年份），同日判定仍走 dayKey
   if (day && day !== prevDay) html += '<div class="day-sep">── ' + dayLabel(e.ts) + " ──</div>";
-  if (e.kind === "user_message") {
+  // #018-W2a role 判定单点化（W2A-MESSAGES 段）：user_message 唯一气泡面，其余 AI
+  // 无框面；head=头像行身份（引擎名+成员元信息），status=会话态（streaming 收口揭标）
+  const role = msgRoleOf(e.kind);
+  if (role === "user") {
     // #38/#149 长消息默认折叠可展开（>100 字 ≈ 3+ 行，与 AI 消息同款 x-full 交互）：
     // 折叠 3 行 + 省略号（8 行→3 行、300 字→100 字，2026-09-22 用户反馈行数偏多
     // 且 line-clamp 末行半截）
@@ -6892,19 +7069,22 @@ function entryHtml(e, prevDay) {
     html += '<div class="msg-user"><div class="ub' + (long && !open ? " clamp" : "") + '">' + userMsgHtml(src) + "</div>" +
       (long ? '<span class="x-full" data-x="' + k + '">' + (open ? "收起 ▴" : "展开全文 " + String(src ?? "").length + " 字 ▾") + "</span>" : "") +
       (hm ? '<div class="mt">' + hm + "</div>" : "") + "</div>";
-  } else if (e.kind === "assistant_text") {
-    html += '<div class="msg-ai"><div class="ai-head"><span class="ai-ava">✻</span><span class="ai-name">Claude</span>' +
+  } else if (role === "ai-text") {
+    // 头像行身份动态化（原写死 ✻ Claude）：引擎名按会话 engine 映射 + 团队成员会话
+    // （project_gid）组归属元信息——身份是元信息行，不进正文（§2.1.2）
+    html += '<div class="msg-ai"><div class="ai-head"><span class="ai-ava">✻</span><span class="ai-name">' + escapeHtml(head ? head.name : "Claude") + "</span>" +
+      (head && head.meta ? '<span class="ai-meta">' + escapeHtml(head.meta) + "</span>" : "") +
       (hm ? '<span class="mt">' + hm + "</span>" : "") + "</div>" +
       '<div class="ai-body"><div class="txt md">' + mdHtml(open ? (e.full ?? e.text) : e.text) +
-      (e.streaming ? '<span class="stream-cur">▌</span>' : "") + "</div>" +
+      (e.streaming && !streamFinalized(e, status) ? '<span class="stream-cur">▌</span>' : "") + "</div>" +
       (e.full ? '<span class="x-full" data-x="' + k + '">' + (open ? "收起 ▴" : "展开全文 " + e.full.length + " 字 ▾") + "</span>" : "") +
       "</div></div>";
-  } else if (e.kind === "thinking") {
+  } else if (role === "ai-think") {
     const src = e.full ?? e.text;
     html += '<div class="think"><div class="th-head" data-x="' + k + '">' +
       (open ? "▾ 思考过程" : "▸ 思考过程 · " + src.length + " 字") + (hm ? " · " + hm : "") + "</div>" +
       (open ? '<div class="th-body txt md">' + mdHtml(src) + "</div>" : "") + "</div>";
-  } else if (e.kind === "tool_use") {
+  } else if (role === "ai-tool") {
     const t = e.tool || "";
     const tico = /^(Edit|Write|MultiEdit|NotebookEdit)$/.test(t) ? "✎" : t === "Bash" ? "❯_" : /^(Read|Glob|Grep|WebFetch|WebSearch)$/.test(t) ? "▤" : "⚙";
     // #128 摘要单行省略保留（Task 行默认紧凑）；#204（2026-09-25 用户反馈「只看得到
@@ -6920,7 +7100,7 @@ function entryHtml(e, prevDay) {
           : '<span class="x-full" data-x="' + k + '">展开 ▾</span>')
         : "") + "</div>" +
       (open && e.detail ? '<div class="tdetail">' + escapeHtml(e.detail) + "</div>" : "") + "</div>";
-  } else if (e.kind === "tool_result") {
+  } else if (role === "ai-result") {
     if (e.diff && e.diff.length) {
       const plus = e.diff.filter((l) => l.startsWith("+")).length;
       const minus = e.diff.filter((l) => l.startsWith("-")).length;
@@ -6943,11 +7123,11 @@ function entryHtml(e, prevDay) {
   return html;
 }
 
-function renderTimeline(list) {
+function renderTimeline(list, head, status) {
   let prevDay = "";
   let html = "";
   for (const e of list) {
-    html += entryHtml(e, prevDay);
+    html += entryHtml(e, prevDay, head, status);
     if (e.ts) prevDay = dayKey(e.ts);
   }
   return html;
