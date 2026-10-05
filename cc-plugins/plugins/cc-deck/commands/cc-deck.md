@@ -46,8 +46,12 @@ node "${CLAUDE_PLUGIN_ROOT}/scripts/relay.mjs" --qr
 "${CLAUDE_PLUGIN_ROOT}/bin/dispatch" payload.json <session_id>
 ```
 
-命令收到 ACK（`ok:true`）后打印 `ok=true` 与 `command_id`；relay 明确拒收（`ok:false`）立即非零退出；超时或断线自动短重试一次（stderr 提示「第 2 次尝试」，沿用同一 command_id 防双投），仍无有效 ACK 才非零退出并提示转人工巡检。
-每次投递追加审计行（含 `attempt` 尝试次数）到 `$CCR_DATA_DIR/cli-dispatches.ndjson`，未设置时使用 `~/.cc-deck/data`。
+命令收到 ACK（`ok:true`）后打印 `ok=true` 与 `command_id`；relay 明确拒收（`ok:false`）立即非零退出；超时或断线自动短重试一次（stderr 提示「第 2 次尝试」，沿用同一 command_id 防双投），仍无有效 ACK 才非零退出并提示转人工巡检。单拍 ACK 等待默认 15 秒，慢网可用 `CCR_ACK_TIMEOUT_MS`（毫秒）调整。
+每次投递追加审计行（含 `attempt` 尝试次数）到 `$CCR_DATA_DIR/cli-dispatches.ndjson`，未设置时使用 `~/.cc-deck/data`。同时每拍向 stderr 打单行 JSON 过程日志（phase=send/ack/final，恒含 `session_id/dispatch_id/command_id`）并落盘 `$CCR_DATA_DIR/cli-phase.ndjson`——按 dispatch_id 对账投递全链用：
+
+```bash
+grep '"dispatch_id":"<id>"' "$CCR_DATA_DIR/cli-phase.ndjson"   # 投递→ACK→final 三拍
+```
 
 ## 派单巡检对账
 
@@ -57,6 +61,20 @@ node "${CLAUDE_PLUGIN_ROOT}/scripts/relay.mjs" --qr
 "${CLAUDE_PLUGIN_ROOT}/bin/dispatch-report"              # 人类可读；账本取 $CCR_DATA_DIR/cli-dispatches.ndjson
 "${CLAUDE_PLUGIN_ROOT}/bin/dispatch-report" --json       # 机器可读 {counts, items, verdict}
 "${CLAUDE_PLUGIN_ROOT}/bin/dispatch-report" --strict     # duplicate/seq-gap 也升级为非零退出
+"${CLAUDE_PLUGIN_ROOT}/bin/dispatch-report" --phase      # 过程面：三拍链完整性（断拍=可判定）
 ```
 
-退出码：`0` = 账干净或仅 warn（duplicate/seq-gap 属待人工核验，不阻断）；`1` = orphan/timeout 待处置（`--strict` 下含 duplicate/seq-gap）；`2` = 用法错误或账本不存在。成功只认审计行 `ok` 严格布尔真，字符串或缺省一律不进成功账；DELIVER 行（deliver 直投）不入此对账面。
+退出码：`0` = 账干净或仅 warn（duplicate/seq-gap 属待人工核验，不阻断）；`1` = orphan/timeout 待处置（`--strict` 下含 duplicate/seq-gap），`--phase` 下为断拍/终态账缺行；`2` = 用法错误或账本不存在。成功只认审计行 `ok` 严格布尔真，字符串或缺省一律不进成功账；DELIVER 行（deliver 直投）不入此对账面。
+
+`--phase` 对账的是投递过程链（投递→ACK→final 三拍齐不齐、成功链有没有落进终态账），不判定命令执行结果——ACK ok 只证明投达，不证明会话执行了命令；终态失败（orphan/timeout）归上面主对账面处置。
+
+## 交付物登记（deliver）
+
+输出物看板登记用插件内置 `deliver`（文件留在原地，只登记路径）：
+
+```bash
+"${CLAUDE_PLUGIN_ROOT}/bin/deliver" <文件路径>                    # 会话归因走环境变量链
+"${CLAUDE_PLUGIN_ROOT}/bin/deliver" --session <id> <文件路径>     # 显式归因（跨会话代登记/修正用）
+```
+
+会话归因取值顺序：`--session` 显式参数 > `CC_DECK_SESSION_ID` > `CLAUDE_CODE_SESSION_ID` > `CLAUDE_SESSION_ID`；全缺时 stderr 警告（可能挂错会话卡），不静默丢归因。relay 不可达时按 curl 错误分类给出可判定文案（连接拒绝/超时/网络错误），单请求超时默认 15 秒，`CCR_TIMEOUT`（秒）可调；ACK 非 `ok:true`（明确拒收或 body 无效）一律非零退出，不静默丢单。

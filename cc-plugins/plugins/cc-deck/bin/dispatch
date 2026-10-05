@@ -53,6 +53,10 @@ print(uuid.uuid4())
 PY
 )"
 log="$data/cli-dispatches.ndjson"
+# phase 过程账（#018-C2）：每拍一行独立 ndjson，与终态台账分账——台账不变量是
+# 「append-only 终态一行」，中间拍混入会破坏 dispatch-report 四类判定；过程链
+# 完整性对账（断拍=可判定）走 dispatch-report --phase 消费此账
+phase_log_file="$data/cli-phase.ndjson"
 mkdir -p "$data"
 attempt="${attempt:-1}"
 # ACK 单拍等待（CCR_ACK_TIMEOUT_MS 可调，默认 15s；非数字/过小收敛）
@@ -60,9 +64,11 @@ ack_timeout="${CCR_ACK_TIMEOUT_MS:-15000}"
 case "$ack_timeout" in ""|*[!0-9]*) ack_timeout=15000 ;; esac
 [ "$ack_timeout" -ge 100 ] || ack_timeout=100
 # 三 ID 每拍日志（stderr 单行 JSON）：phase send/ack/final ×ok/error/attempt，
-# 与 append_log 同键名——控制台 grep 与台账对账同一套 ID
+# 与 append_log 同键名——控制台 grep 与台账对账同一套 ID。同行落盘 phase 过程账
+# （cli-phase.ndjson），落盘失败不阻塞主流程（stderr 仍出，审计面尽力而为）
 phase_log() { # $1=phase $2=ok(true|false|null) $3=error（须已消毒）
-  python3 - "$sid" "$dispatch_id" "$command_id" "$1" "$2" "$3" "${attempt:-1}" <<'PY'
+  local line
+  line="$(python3 - "$sid" "$dispatch_id" "$command_id" "$1" "$2" "$3" "${attempt:-1}" <<'PY'
 import json, sys
 from datetime import datetime, timezone
 sid, did, cid, phase, ok, error, attempt = sys.argv[1:8]
@@ -73,8 +79,12 @@ print(json.dumps({
     "attempt": int(attempt),
     "ok": None if ok == "null" else ok == "true",
     "error": error or None,
-}, ensure_ascii=False, separators=(",", ":")), file=sys.stderr)
+}, ensure_ascii=False, separators=(",", ":")))
 PY
+)" || return 0
+  printf '%s\n' "$line" >&2
+  printf '%s\n' "$line" >> "$phase_log_file" 2>/dev/null \
+    || echo "dispatch：phase 过程账写入失败（$phase_log_file），stderr 日志仍可 grep 对账" >&2
 }
 append_log() {
   python3 - "$log" "$sid" "$dispatch_id" "$command_id" "$1" "$2" "${attempt:-1}" <<'PY'

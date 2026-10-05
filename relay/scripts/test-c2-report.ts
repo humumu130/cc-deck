@@ -45,6 +45,8 @@ interface Item {
   error?: string; attempt?: number; note?: string;
 }
 interface ReportJson { counts: Counts; items: { timeout: Item[]; orphan: Item[]; duplicate: Item[]; seqgap: Item[] }; verdict: string }
+interface PhaseCounts { rows: number; bad_lines: number; broken: number; failed: number; complete: number; success_missing_ledger_row: number; ledger_without_phase: number; phase_file_exists: boolean }
+interface PhaseJson { counts: PhaseCounts; items: { broken: { dispatch_id: string; missing: string[]; tool: string; session_id: string; command_id: string }[]; failed: { dispatch_id: string; error: string; tool: string }[]; success_missing_ledger_row: string[] }; verdict: string }
 interface RunResult { status: number | null; stdout: string; stderr: string }
 
 const writeLedger = (name: string, lines: string[]): string => {
@@ -53,16 +55,25 @@ const writeLedger = (name: string, lines: string[]): string => {
   return p;
 };
 
-const run = (ledger: string | null, opts: { json?: boolean; strict?: boolean } = {}, argOverride?: string): RunResult => {
+const run = (ledger: string | null, opts: { json?: boolean; strict?: boolean; phase?: boolean } = {}, argOverride?: string): RunResult => {
   const args = [REPORT];
   if (opts.json) args.push("--json");
   if (opts.strict) args.push("--strict");
+  if (opts.phase) args.push("--phase");
   args.push(argOverride ?? ledger ?? "");
   // CCR_DATA_DIR 双保险指沙箱：即使账本参数意外为空也绝不落到生产默认路径
   const r = spawnSync("bash", args, { encoding: "utf8", env: { ...process.env, CCR_DATA_DIR: SANDBOX } });
   return { status: r.status, stdout: r.stdout ?? "", stderr: r.stderr ?? "" };
 };
 const jsonOf = (r: RunResult): ReportJson => JSON.parse(r.stdout) as ReportJson;
+const phaseJsonOf = (r: RunResult): PhaseJson => JSON.parse(r.stdout) as PhaseJson;
+
+// phase 过程账行工厂（--phase 模式 fixture；C1 phase_log schema：tool/phase/ts/
+// session_id/dispatch_id/command_id/attempt/ok/error）
+const prow = (over: Record<string, unknown> = {}): string => JSON.stringify({
+  ts: iso(), tool: "dispatch", phase: "final", session_id: "sess-a",
+  dispatch_id: "dp-auto", command_id: "cp-auto", attempt: 1, ok: true, error: null, ...over,
+});
 
 async function main(): Promise<void> {
   // ═══════ T1 纯成功账：clean / exit 0 ═══════
@@ -294,6 +305,129 @@ async function main(): Promise<void> {
     const hb = run(ledB, { strict: true });
     check(hb.status === 1 && hb.stdout.includes("orphan/timeout 待处置") && hb.stdout.includes("转人工巡检"),
       "T14 blocking fail（含 strict）仍走待处置重投话术（原分支不回退）");
+  }
+
+  // ═══════ T15 --phase 三拍链桩测：断拍可判定 / 失败链降提示 / 完整链 ═══════
+  {
+    const led = writeLedger("t15-led.ndjson", [
+      row({ command_id: "c-ok", dispatch_id: "d-ok", ok: true, attempt: 1 }),      // d-ok 完整链终态
+      row({ command_id: "c-fail", dispatch_id: "d-fail", ok: false, error: "15s 超时，未收到 COMMAND_ACK", attempt: 2 }), // d-fail 终态失败
+    ]);
+    writeLedger("cli-phase.ndjson", [
+      prow({ dispatch_id: "d-ok", command_id: "c-ok", phase: "send" }),
+      prow({ dispatch_id: "d-ok", command_id: "c-ok", phase: "ack" }),
+      prow({ dispatch_id: "d-ok", command_id: "c-ok", phase: "final", ok: true }),
+      prow({ dispatch_id: "d-b1", command_id: "c-b1", phase: "send" }),            // 断拍：缺 ack+final
+      prow({ dispatch_id: "d-b2", command_id: "c-b2", phase: "send" }),            // 断拍：缺 ack（send+final 在）
+      prow({ dispatch_id: "d-b2", command_id: "c-b2", phase: "final", ok: false, error: "WS 连接意外关闭" }),
+      prow({ dispatch_id: "d-fail", command_id: "c-fail", phase: "send" }),
+      prow({ dispatch_id: "d-fail", command_id: "c-fail", phase: "ack" }),
+      prow({ dispatch_id: "d-fail", command_id: "c-fail", phase: "final", ok: false, error: "15s 超时，未收到 COMMAND_ACK" }),
+    ]);
+    const r = run(led, { json: true, phase: true });
+    const j = phaseJsonOf(r);
+    check(r.status === 1, `T15 断拍存在 → exit 1（got ${r.status}）`);
+    check(j.verdict === "fail" && j.counts.broken === 2 && j.counts.failed === 1 && j.counts.complete === 1,
+      "T15 broken=2（d-b1 缺 ack+final / d-b2 缺 ack）failed=1 complete=1");
+    const b1 = j.items.broken.find((it) => it.dispatch_id === "d-b1");
+    const b2 = j.items.broken.find((it) => it.dispatch_id === "d-b2");
+    check(!!b1 && b1.missing.join(",") === "ack,final" && !!b2 && b2.missing.join(",") === "ack",
+      "T15 断拍明细：缺拍清单逐链可判定（b1 缺 ack+final / b2 仅缺 ack）");
+    check(j.counts.success_missing_ledger_row === 0 && j.counts.ledger_without_phase === 0,
+      "T15 交叉零异常（d-ok/d-fail 台账都有行）");
+    const h = run(led, { phase: true });
+    check(h.status === 1 && h.stdout.includes("① 断拍链") && h.stdout.includes("d-b1") && h.stdout.includes("勿臆断已投达"),
+      "T15 人类可读：断拍链标记 + dispatch_id + 可判定文案");
+    check(h.stdout.includes("② 失败链") && h.stdout.includes("归主对账面"),
+      "T15 失败链降提示不重复判（019：ack ok 只证明投递不证明执行）");
+  }
+
+  // ═══════ T16 --phase 台账交叉：成功链终态缺行 fail / 旧账无 phase 链提示 / phase 账缺文件不谎报 ═══════
+  {
+    const ledA = writeLedger("t16a.ndjson", [
+      row({ command_id: "c-x", dispatch_id: "d-other", ok: true, attempt: 1 }), // 台账只有别的 id
+    ]);
+    // phase 账与账本同目录同名派生（cli-phase.ndjson）——用独立沙箱目录承载固定名
+    const sbA = fs.mkdtempSync(path.join(os.tmpdir(), "cc-c2-ph-"));
+    fs.writeFileSync(path.join(sbA, "cli-dispatches.ndjson"), fs.readFileSync(ledA, "utf-8"), "utf-8");
+    fs.writeFileSync(path.join(sbA, "cli-phase.ndjson"), [
+      prow({ dispatch_id: "d-ghost", phase: "send" }),
+      prow({ dispatch_id: "d-ghost", phase: "ack" }),
+      prow({ dispatch_id: "d-ghost", phase: "final", ok: true }),
+    ].join("\n") + "\n", "utf-8");
+    const rA = run(null, { json: true, phase: true }, path.join(sbA, "cli-dispatches.ndjson"));
+    const jA = phaseJsonOf(rA);
+    check(rA.status === 1 && jA.verdict === "fail" && jA.counts.success_missing_ledger_row === 1,
+      `T16 成功链终态缺行 → fail exit 1（got ${rA.status}）`);
+    check(jA.items.success_missing_ledger_row[0] === "d-ghost", "T16 缺行明细带 dispatch_id");
+    fs.rmSync(sbA, { recursive: true, force: true });
+
+    const ledB = writeLedger("t16b.ndjson", [
+      row({ command_id: "c-old", dispatch_id: "d-old", ok: true, attempt: 1 }), // 旧版期台账行
+    ]);
+    const sbB = fs.mkdtempSync(path.join(os.tmpdir(), "cc-c2-ph-"));
+    fs.writeFileSync(path.join(sbB, "cli-dispatches.ndjson"), fs.readFileSync(ledB, "utf-8"), "utf-8");
+    fs.writeFileSync(path.join(sbB, "cli-phase.ndjson"), "", "utf-8");
+    const rB = run(null, { json: true, phase: true }, path.join(sbB, "cli-dispatches.ndjson"));
+    const jB = phaseJsonOf(rB);
+    check(rB.status === 0 && jB.verdict === "clean" && jB.counts.ledger_without_phase === 1,
+      "T16 旧账无 phase 链 → 提示计数不 fail（旧版/未落盘期非异常）");
+    fs.rmSync(sbB, { recursive: true, force: true });
+
+    const sbC = fs.mkdtempSync(path.join(os.tmpdir(), "cc-c2-ph-")); // 无 cli-phase.ndjson
+    fs.writeFileSync(path.join(sbC, "cli-dispatches.ndjson"), fs.readFileSync(ledB, "utf-8"), "utf-8");
+    const rC = run(null, { phase: true }, path.join(sbC, "cli-dispatches.ndjson"));
+    check(rC.status === 0 && rC.stdout.includes("phase 过程账不存在"),
+      "T16 phase 账缺文件 → 明说非异常证据，不谎报 clean 也不误报 fail");
+    fs.rmSync(sbC, { recursive: true, force: true });
+  }
+
+  // ═══════ T17 --phase 真链路：无网真跑 dispatch → phase 账五拍 → 过程对账 warn ═══════
+  {
+    const DISPATCH = path.join(ROOT, "cc-plugins/plugins/cc-deck/bin/dispatch");
+    const sb = fs.mkdtempSync(path.join(os.tmpdir(), "cc-c2-real-"));
+    const port = 1; // 保留端口必连接拒绝——无网态真跑，不走桩
+    const dr = spawnSync("bash", [DISPATCH, "-c", '{"text":"c2-t17"}', "sess-real"], {
+      encoding: "utf8",
+      // CCR_TOKEN 显式钉测试常量（C2-fix）：port=1 连接拒绝不涉真鉴权，但 dispatch
+      // :42 前置解析 token——透传 process.env 时纯净环境（无 CCR_TOKEN）走 fail
+      // 「未找到 relay token」只落 1 拍，五拍断言即红（PM 无 CCR_TOKEN 环境坐实）
+      env: { ...process.env, CCR_DATA_DIR: sb, CCR_PORT: String(port), CCR_ACK_TIMEOUT_MS: "100", CCR_TOKEN: "t17-fixed-token" },
+    });
+    check(dr.status === 1, `T17 无网 dispatch 非零退出（got ${dr.status}）`);
+    const phaseRows = fs.readFileSync(path.join(sb, "cli-phase.ndjson"), "utf-8").trim().split("\n").map((l) => JSON.parse(l) as Record<string, unknown>);
+    check(phaseRows.length === 5, `T17 phase 账五拍（send/ack×2+final，got ${phaseRows.length}）`);
+    check(phaseRows.map((o) => o.phase).join(",") === "send,ack,send,ack,final", "T17 phase 序列 send,ack,send,ack,final");
+    check(phaseRows.map((o) => o.attempt).join(",") === "1,1,2,2,2", "T17 attempt 序列 1,1,2,2,2（短重试同拍链）");
+    check(new Set(phaseRows.map((o) => o.dispatch_id)).size === 1 && new Set(phaseRows.map((o) => o.command_id)).size === 1,
+      "T17 五拍同 dispatch_id 同 command_id（三 ID 贯穿）");
+    check(phaseRows[4].ok === false && String(phaseRows[4].error).includes("无法连接 relay"), "T17 final ok:false 可判定错误");
+    const pr = run(null, { json: true, phase: true }, path.join(sb, "cli-dispatches.ndjson"));
+    const pj = phaseJsonOf(pr);
+    check(pr.status === 0 && pj.verdict === "warn" && pj.counts.broken === 0 && pj.counts.failed === 1,
+      "T17 --phase 过程对账 warn exit 0（三拍齐但失败；终态处置归台账面）");
+    check(pj.counts.success_missing_ledger_row === 0, "T17 台账有终态行，无缺行");
+    fs.rmSync(sb, { recursive: true, force: true });
+  }
+
+  // ═══════ T18 ACK 误读防回退锁死：三态（ok:false/超时 error/缺 ok）绝不判 success ═══════
+  {
+    const noOk = (over: RowOver): string => {
+      const o = JSON.parse(row(over)) as Record<string, unknown>;
+      delete o.ok;
+      return JSON.stringify(o);
+    };
+    const led = writeLedger("t18.ndjson", [
+      row({ command_id: "c-rej", dispatch_id: "d-rej", ok: false, error: "ACK ok 非 true：project not found", attempt: 1 }), // 明确拒收
+      row({ command_id: "c-to", dispatch_id: "d-to", ok: false, error: "15s 超时，未收到 COMMAND_ACK", attempt: 2 }),       // 超时终态
+      noOk({ command_id: "c-nook", dispatch_id: "d-nook" }),                                                              // body 无效形态（缺 ok）
+    ]);
+    const r = run(led, { json: true });
+    const j = jsonOf(r);
+    check(j.counts.success_commands === 0, "T18 三态行 success_commands 严格为 0（误读/失败绝不判成功）");
+    check(j.counts.orphan === 1 && j.counts.timeout === 1 && j.counts.bad_rows === 1,
+      "T18 拒收归 orphan、超时终态归 timeout、缺 ok 归坏行（三态各归其类）");
+    check(r.status === 1, `T18 orphan+timeout 在 → exit 1（got ${r.status}）`);
   }
 
   console.log(`C2 dispatch-report tests ${tests}/${tests} passed (sandbox=${SANDBOX})`);

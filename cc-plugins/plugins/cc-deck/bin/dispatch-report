@@ -20,12 +20,19 @@
 # 路径）；不读 CCR_TOKEN/CCR_PORT（不对 relay 建连）。
 # timeout/orphan 项携带 dispatch_ids（#018-C1：PM 对账三 ID 键对齐 cli-dispatches
 # 行与控制台 phase 日志——grep '"dispatch_id":"<id>"' 一套键贯穿）。
-# 用法: dispatch-report [--json] [--strict] [账本路径]
+# --phase 模式（#018-C2）：对账 phase 过程账（$CCR_DATA_DIR/cli-phase.ndjson，
+# dispatch/deliver 每拍落盘）的「投递→ACK→final 三拍链完整性」——缺拍=脚本中断
+# 可判定；phase 成功而终态台账无行=崩在落账前可判定。口径（019 巡检）：ack ok 只
+# 证明投递不证明执行——final ok:false 且台账有行者不在此重复判失败（orphan/timeout
+# 归主对账面），此处降为 warn 提示。phase 账不存在=旧版/未落盘期，提示不谎报干净。
+# 用法: dispatch-report [--json] [--strict] [--phase] [账本路径]
 #   --json    机器可读 {counts, items, verdict}
-#   --strict  duplicate/seq-gap 升级为非零退出（缺省仅 warn）
+#   --strict  duplicate/seq-gap 升级为非零退出（缺省仅 warn）；--phase 下对断拍/
+#             终态缺行本就非零，无额外效果
+#   --phase   过程账三拍链对账模式（主对账不跑；phase 账与位置参数账本同目录）
 #   账本缺省 $CCR_DATA_DIR/cli-dispatches.ndjson（未设 CCR_DATA_DIR 时 ~/.cc-deck/data）
-# 退出码：0=账干净或仅 warn；1=orphan/timeout 待处置（--strict 下含 duplicate/seq-gap）；
-#         2=用法错误/账本不存在（不静默谎报干净）
+# 退出码：0=账干净或仅 warn；1=orphan/timeout 待处置（--strict 下含 duplicate/seq-gap）
+#         或 --phase 断拍/终态缺行；2=用法错误/账本不存在（不静默谎报干净）
 set -uo pipefail
 
 usage() {
@@ -37,11 +44,13 @@ usage() {
 
 json_mode=0
 strict=0
+phase_mode=0
 ledger=""
 while [ $# -gt 0 ]; do
   case "$1" in
     --json) json_mode=1 ;;
     --strict) strict=1 ;;
+    --phase) phase_mode=1 ;;
     -h|--help) usage ;;
     -*) usage ;;
     *)
@@ -53,7 +62,7 @@ while [ $# -gt 0 ]; do
 done
 [ -n "$ledger" ] || ledger="${CCR_DATA_DIR:-$HOME/.cc-deck/data}/cli-dispatches.ndjson"
 
-exec python3 - "$ledger" "$json_mode" "$strict" <<'PY'
+exec python3 - "$ledger" "$json_mode" "$strict" "$phase_mode" <<'PY'
 import json
 import os
 import sys
@@ -62,10 +71,7 @@ from datetime import datetime
 ledger = sys.argv[1]
 json_mode = sys.argv[2] == "1"
 strict = sys.argv[3] == "1"
-
-if not os.path.isfile(ledger):
-    print(f"dispatch 巡检失败：账本不存在：{ledger}（未发生过派单？路径设错？——不静默谎报干净）", file=sys.stderr)
-    sys.exit(2)
+phase_mode = sys.argv[4] == "1"
 
 # C1 三态（exit 11 连不上/断线、12 超时）对应的 error 文本类；匹配用子串——
 # 10（relay 明确拒收）与 bash 前置失败（缺 token/payload 坏）不属此类，落 orphan
@@ -84,6 +90,134 @@ def parse_ts_ms(ts):
         except (ValueError, TypeError):
             return None
     return None
+
+
+# ---------- --phase：过程账三拍链对账（#018-C2） ----------
+# 主对象=cli-phase.ndjson（与账本同目录）；终态台账仅交叉用（可缺）。
+# 判定域：断拍（缺 send/ack/final 任一拍=脚本中断迹象）与「phase 成功而终态账
+# 缺行」（崩在 append_log 前）= fail；final ok:false=终态失败，台账面已判
+# orphan/timeout，此处仅 warn 提示不重复判（019 口径：ack ok 只证明投递不证明
+# 执行，过程面不替内容面下结论）。phase 账不存在=旧版/未落盘期，明说非异常。
+def run_phase_mode():
+    phase_file = os.path.join(os.path.dirname(os.path.abspath(ledger)), "cli-phase.ndjson")
+    exists = os.path.isfile(phase_file)
+    chains = {}
+    bad_lines = 0
+    rows = 0
+    if exists:
+        with open(phase_file, encoding="utf-8") as f:
+            for raw in f:
+                line = raw.strip()
+                if not line:
+                    continue
+                rows += 1
+                try:
+                    obj = json.loads(line)
+                except (json.JSONDecodeError, ValueError):
+                    bad_lines += 1
+                    continue
+                if not isinstance(obj, dict):
+                    bad_lines += 1
+                    continue
+                did = obj.get("dispatch_id")
+                ph = obj.get("phase")
+                if not isinstance(did, str) or not did or ph not in ("send", "ack", "final"):
+                    bad_lines += 1
+                    continue
+                c = chains.setdefault(did, {
+                    "phases": [], "final_ok": None, "error": "",
+                    "tool": obj.get("tool") if isinstance(obj.get("tool"), str) else "",
+                    "session_id": obj.get("session_id") if isinstance(obj.get("session_id"), str) else "",
+                    "command_id": obj.get("command_id") if isinstance(obj.get("command_id"), str) else "",
+                })
+                if ph not in c["phases"]:
+                    c["phases"].append(ph)
+                if ph == "final":
+                    if isinstance(obj.get("ok"), bool):
+                        c["final_ok"] = obj["ok"]
+                    if isinstance(obj.get("error"), str) and obj["error"]:
+                        c["error"] = obj["error"]
+    broken = []
+    failed = []
+    complete = 0
+    for did in sorted(chains):
+        c = chains[did]
+        missing = [p for p in ("send", "ack", "final") if p not in c["phases"]]
+        if not missing and c["final_ok"] is None:
+            missing = ["final(ok 非布尔)"]
+        if missing:
+            broken.append({
+                "dispatch_id": did, "missing": missing, "tool": c["tool"],
+                "session_id": c["session_id"], "command_id": c["command_id"],
+            })
+        elif c["final_ok"] is False:
+            failed.append({"dispatch_id": did, "error": c["error"], "tool": c["tool"]})
+        else:
+            complete += 1
+    ledger_dids = set()
+    if os.path.isfile(ledger):
+        with open(ledger, encoding="utf-8") as f:
+            for raw in f:
+                try:
+                    obj = json.loads(raw.strip())
+                except (json.JSONDecodeError, ValueError):
+                    continue
+                if isinstance(obj, dict) and isinstance(obj.get("dispatch_id"), str) and obj["dispatch_id"]:
+                    ledger_dids.add(obj["dispatch_id"])
+    # 交叉只对「phase 判成功」的链要求台账有行：断拍/失败链本身已是可判定异常，
+    # 崩在落账前的情形由断拍项覆盖，不双报
+    missing_in_ledger = sorted(
+        d for d in chains if d not in ledger_dids and chains[d]["final_ok"] is True
+    )
+    no_phase = sorted(ledger_dids - set(chains))
+    counts = {
+        "rows": rows, "bad_lines": bad_lines,
+        "broken": len(broken), "failed": len(failed), "complete": complete,
+        "success_missing_ledger_row": len(missing_in_ledger),
+        "ledger_without_phase": len(no_phase),
+        "phase_file_exists": exists,
+    }
+    verdict = "fail" if (broken or missing_in_ledger) else ("warn" if failed else "clean")
+    if json_mode:
+        print(json.dumps({
+            "counts": counts,
+            "items": {
+                "broken": broken, "failed": failed,
+                "success_missing_ledger_row": missing_in_ledger,
+            },
+            "verdict": verdict,
+        }, ensure_ascii=False, indent=2))
+    else:
+        if not exists:
+            print(f"phase 链对账：phase 过程账不存在（{phase_file}）——C1 前旧账或未发生投递，非异常证据")
+        else:
+            print(f"phase 链对账（C2 过程面）：{phase_file}")
+            print(f"共 {rows} 行：完整 {complete} / 断拍 {len(broken)} / 失败链 {len(failed)} / 坏行 {bad_lines}")
+        print(f"① 断拍链（缺 phase 拍——脚本中断/崩溃迹象，可判定）：{len(broken)}")
+        for it in broken:
+            print(f"   - dispatch_id={it['dispatch_id']} 缺 {','.join(it['missing'])} tool={it['tool']} session_id={it['session_id']} command_id={it['command_id']}")
+        print(f"② 失败链（final ok:false——orphan/timeout 归主对账面，此处仅过程提示）：{len(failed)}")
+        for it in failed:
+            print(f"   - dispatch_id={it['dispatch_id']} error={it['error']}")
+        print(f"③ 终态账缺行（phase 成功但台账无该 dispatch_id——崩在落账前，可判定）：{len(missing_in_ledger)}")
+        for d in missing_in_ledger:
+            print(f"   - dispatch_id={d}")
+        print(f"④ 无 phase 链的台账行（旧版/未落盘期，提示不判异常）：{len(no_phase)}")
+        if verdict == "fail":
+            print("结论：fail——断拍/终态账缺行待人工巡检（投递链不完整，勿臆断已投达）")
+        elif verdict == "warn":
+            print("结论：warn——存在失败链（终态处置归台账面，过程面仅提示）")
+        else:
+            print("结论：clean——phase 链全完整（投递→ACK→final 三拍齐，终态账对得上）")
+    return 1 if verdict == "fail" else 0
+
+
+if phase_mode:
+    sys.exit(run_phase_mode())
+
+if not os.path.isfile(ledger):
+    print(f"dispatch 巡检失败：账本不存在：{ledger}（未发生过派单？路径设错？——不静默谎报干净）", file=sys.stderr)
+    sys.exit(2)
 
 
 rows_total = 0

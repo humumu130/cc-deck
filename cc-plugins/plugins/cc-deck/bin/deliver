@@ -74,11 +74,15 @@ print(uuid.uuid4())
 PY
 )"
 log="$data/cli-dispatches.ndjson"
+# phase 过程账（#018-C2）：与 dispatch 同账同构，与终态台账分账（台账不变量
+# 「append-only 终态一行」不被中间拍污染）；dispatch-report --phase 消费
+phase_log_file="$data/cli-phase.ndjson"
 mkdir -p "$data"
 # 三 ID 每拍日志（stderr 单行 JSON）：HTTP 直投无命令信封，command_id 恒 null——
-# 字段位保留与 dispatch 日志同构，PM 侧对账 grep 一套键
+# 字段位保留与 dispatch 日志同构，PM 侧对账 grep 一套键。同行落盘 phase 过程账
 phase_log() { # $1=phase $2=ok(true|false|null) $3=error（须已消毒）
-  python3 - "$sid" "$dispatch_id" "$1" "$2" "$3" <<'PY'
+  local line
+  line="$(python3 - "$sid" "$dispatch_id" "$1" "$2" "$3" <<'PY'
 import json, sys
 from datetime import datetime, timezone
 sid, did, phase, ok, error = sys.argv[1:6]
@@ -89,8 +93,12 @@ print(json.dumps({
     "attempt": 1,
     "ok": None if ok == "null" else ok == "true",
     "error": error or None,
-}, ensure_ascii=False, separators=(",", ":")), file=sys.stderr)
+}, ensure_ascii=False, separators=(",", ":")))
 PY
+)" || return 0
+  printf '%s\n' "$line" >&2
+  printf '%s\n' "$line" >> "$phase_log_file" 2>/dev/null \
+    || echo "deliver：phase 过程账写入失败（$phase_log_file），stderr 日志仍可 grep 对账" >&2
 }
 append_log() {
   python3 - "$log" "$sid" "$dispatch_id" "$1" "$2" "$3" <<'PY'
