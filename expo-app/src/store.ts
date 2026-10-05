@@ -3,7 +3,9 @@ import { AppState, Platform } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import Constants from "expo-constants";
 import { getRandomBytes } from "expo-crypto";
-import type { AllowRule, CloudPairInfo, CommandAck, DispatchReceipt, EmployeeHomeSettings, Envelope, LogEntry, ProjectBoard, ProjectGroup, OrgConfirm, RoutingPoolEntry, SessionState } from "./protocol";
+import { hasActivityCapability, normalizeActivityCapabilities, normalizeNotifications, normalizeSnapshotPayload, parseSessionActivityPayload, reduceSessionActivity } from "./protocol";
+import type { AllowRule, CloudPairInfo, CommandAck, DispatchReceipt, EmployeeHomeSettings, Envelope, LogEntry, NotificationItem, NotificationsUpdatedPayload, ProjectBoard, ProjectGroup, OrgConfirm, RoutingPoolEntry, SessionState, SnapshotPayload, SourceCapabilities } from "./protocol";
+export { hasActivityCapability, normalizeActivityCapabilities, normalizeNotifications, normalizeSnapshotPayload, parseSessionActivityPayload, reduceSessionActivity } from "./protocol";
 import { uuid } from "./fmt";
 import { currentVersion } from "./updates";
 import { devId, generateKeyPair, seal, unseal, setRandomBytes, type BoxKeyPair, type SealedBox } from "./e2e";
@@ -81,9 +83,13 @@ export interface SourceConn {
   // 原因等），连上即清。UI 据此给诊断文案，而非一律引导输码
   failNote: string | null;
   lastSeq: number;
+  activitySeq: Map<string, number>;
   models: string[];    // #388 该源 SNAPSHOT.models 携带的可用模型清单
   platform: string;    // SNAPSHOT.platform（relay 本机平台，旧 relay 无字段 = ""）
   deliverables: boolean; // #71 该源 SNAPSHOT.deliverables（输出物看板开关，旧 relay 无字段 = false）
+  schemaVersion?: number; // SNAPSHOT.schema_version；缺省表示 legacy relay
+  sourceCapabilities?: SourceCapabilities; // SNAPSHOT.source_capabilities；旧 relay 缺省
+  notifications: NotificationItem[] | null; // null = 旧 relay 未提供通知能力
   acceptances: AcceptanceSummary[]; // #137 该源 SNAPSHOT.acceptances（待填验收单，旧 relay 无字段 = 空表）
   // #212 记住规则（SNAPSHOT.allow_rules / ALLOW_RULES_UPDATED，覆盖式）：null = 旧
   // relay 不支持（无字段），设置抽屉据此显示「升级后可用」；删除按源路由
@@ -193,6 +199,10 @@ export interface SourceStatus {
   // 不支持（列表组织区不渲染）；orgConfirms = 待决议确认卡（✓/✗ 决议入口）
   projects?: ProjectGroup[] | null;
   orgConfirms?: OrgConfirm[];
+  schemaVersion?: number;
+  sourceCapabilities?: SourceCapabilities;
+  notifications?: NotificationItem[] | null;
+  notificationsLegacy?: boolean;
 }
 
 export interface Snapshot {
@@ -218,6 +228,10 @@ export interface Snapshot {
   aggregate: boolean;
   // #388 可用模型清单（活动源 SNAPSHOT.models：厂商配置聚合，详情页下拉切换）
   models: string[];
+  schemaVersion?: number;
+  sourceCapabilities?: SourceCapabilities;
+  notifications: NotificationItem[] | null;
+  notificationsLegacy: boolean;
   // #71 输出物看板开关（活动源 SNAPSHOT.deliverables，relay 插件配置）：false/缺省
   // （旧 relay 无字段）= 详情页隐藏「输出物」tab；true 才显示
   deliverables?: boolean;
@@ -262,6 +276,8 @@ const emptySnapshot: Snapshot = {
   activeSourceId: null,
   aggregate: false,
   models: [],
+  notifications: null,
+  notificationsLegacy: true,
   deliverables: false,
   empHome: null,
   sessions: [],
@@ -502,7 +518,7 @@ class RelayStore {
   // 连接状态聚合（#294 批1）：单源 = 活动源直出（既有文案/字段逐字不变）；
   // 聚合 = any-online 派生，connText `${online}/${total} 在线`（connected/connState 供
   // App.tsx 通知权限/前台服务/回前台重连取此口径，调用方零改动）
-  private connStatusPatch(): Pick<Snapshot, "connected" | "connText" | "connState" | "channel" | "failNote" | "sources" | "activeSourceId" | "aggregate" | "models" | "deliverables" | "empHome"> {
+  private connStatusPatch(): Pick<Snapshot, "connected" | "connText" | "connState" | "channel" | "failNote" | "sources" | "activeSourceId" | "aggregate" | "models" | "deliverables" | "empHome" | "schemaVersion" | "sourceCapabilities" | "notifications" | "notificationsLegacy"> {
     const sources: SourceStatus[] = [...this.conns.values()].map((c) => ({
       id: c.id,
       name: c.name,
@@ -517,6 +533,10 @@ class RelayStore {
       allowRules: c.allowRules, // #212 记住规则（设置抽屉列表 + 按源路由删除）
       projects: c.projects, // #26 M2 项目组（列表组织区 + 组详情）
       orgConfirms: c.orgConfirms, // #26 M2 待决议确认卡
+      schemaVersion: c.schemaVersion,
+      sourceCapabilities: c.sourceCapabilities,
+      notifications: c.notifications,
+      notificationsLegacy: c.notifications === null,
     }));
     // #388 模型清单取活动源口径（模型切换命令无 sid 路由也走活动源）
     const activeModels = this.activeConn()?.models ?? [];
@@ -529,7 +549,7 @@ class RelayStore {
       : this.activeId
         ? [this.conns.get(this.activeId)].filter((c): c is SourceConn => !!c)
         : [];
-    if (!inPlay.length) return { connected: false, connText: "未配置", connState: "idle", channel: null, failNote: null, sources, activeSourceId: this.activeId, aggregate: this.aggregate, models: [], deliverables: false, empHome: null };
+    if (!inPlay.length) return { connected: false, connText: "未配置", connState: "idle", channel: null, failNote: null, sources, activeSourceId: this.activeId, aggregate: this.aggregate, models: [], deliverables: false, empHome: null, schemaVersion: undefined, sourceCapabilities: undefined, notifications: null, notificationsLegacy: true };
     if (this.aggregate) {
       const online = inPlay.filter((c) => c.state === "online");
       const connState = online.length
@@ -554,6 +574,10 @@ class RelayStore {
         models: activeModels,
         deliverables: activeDeliverables,
         empHome: activeEmpHome,
+        schemaVersion: this.activeConn()?.schemaVersion,
+        sourceCapabilities: this.activeConn()?.sourceCapabilities,
+        notifications: this.activeConn()?.notifications ?? null,
+        notificationsLegacy: this.activeConn()?.notifications === null,
       };
     }
     const c = inPlay[0];
@@ -570,6 +594,10 @@ class RelayStore {
       models: c.models,
       deliverables: c.deliverables,
       empHome: c.empHome,
+      schemaVersion: c.schemaVersion,
+      sourceCapabilities: c.sourceCapabilities,
+      notifications: c.notifications,
+      notificationsLegacy: c.notifications === null,
     };
   }
 
@@ -857,9 +885,13 @@ class RelayStore {
         stateText: null,
         failNote: null,
         lastSeq: 0,
+        activitySeq: new Map(),
         models: [],
         platform: "",
         deliverables: false,
+        schemaVersion: undefined,
+        sourceCapabilities: undefined,
+        notifications: null,
         acceptances: [], // #137 SNAPSHOT 覆盖式更新（收到快照前为空）
         allowRules: null, // #212 SNAPSHOT 覆盖式更新（null = 旧 relay 无 allow_rules 字段）
         empHome: null, // #17 第二批 SNAPSHOT 覆盖式更新（null = 旧 relay 无 settings 字段）
@@ -921,7 +953,11 @@ class RelayStore {
       }
       conn.sessions.clear();
       conn.timelines.clear();
+      conn.activitySeq.clear();
       conn.lastSeq = 0;
+      conn.schemaVersion = undefined;
+      conn.sourceCapabilities = undefined;
+      conn.notifications = null;
       conn.cfg = { wsUrl: entry.wsUrl, token };
       conn.cloudCfg = entry.cloud ?? null;
     }
@@ -969,6 +1005,7 @@ class RelayStore {
     }
     conn.sessions.clear();
     conn.timelines.clear();
+    conn.activitySeq.clear();
     conn.lastSeq = 0;
     this.conns.delete(id);
   }
@@ -2123,6 +2160,7 @@ class RelayStore {
     const sid = msg.session_id;
     switch (msg.type) {
       case "SNAPSHOT": {
+        const snapshot = normalizeSnapshotPayload(msg.payload as SnapshotPayload);
         if ((msg.payload as { relay_name?: string }).relay_name) conn.relayName = (msg.payload as { relay_name?: string }).relay_name!; // #100
         const lanHint = (msg.payload as { lan_hint?: string }).lan_hint; // #95
         if (lanHint && conn.lanHint !== lanHint) { conn.lanHint = lanHint; conn.lanToken = ""; conn.lanProbeCool = 0; }
@@ -2186,16 +2224,20 @@ class RelayStore {
         }
         conn.sessions.clear();
         conn.timelines.clear();
+        conn.activitySeq.clear();
         // #388 模型清单随快照携带（旧版 relay 无此字段 = 空表，UI 藏入口）
         conn.models = Array.isArray(msg.payload.models)
           ? msg.payload.models.filter((m: unknown): m is string => typeof m === "string" && !!m)
           : [];
         // #71 输出物看板开关随快照携带（旧版 relay 无此字段 = 关，详情页藏 tab）
-        conn.deliverables = (msg.payload as { deliverables?: unknown }).deliverables === true;
+        conn.deliverables = snapshot.deliverables;
+        conn.schemaVersion = snapshot.schemaVersion;
+        conn.sourceCapabilities = snapshot.sourceCapabilities;
+        conn.notifications = snapshot.notifications;
         // #17 第二批 雇员独立家设置随快照携带（覆盖式；旧 relay 无字段/畸形 = null，
         // 设置行隐藏）。形状校验与 SETTINGS_UPDATED 共用一把尺（parseEmpHome，审查 P3）
         conn.empHome = parseEmpHome((msg.payload as { settings?: unknown }).settings);
-        for (const s of msg.payload.sessions as SessionState[]) {
+        for (const s of snapshot.sessions) {
           conn.sessions.set(s.session_id, s);
           // logs 可选链（#146 排查加固）：字段缺省/畸形时 TypeError 会中断快照装配
           //（deliverables 已赋值但 emit 未跑，UI 停留旧态）——回落空时间线继续
@@ -2203,7 +2245,14 @@ class RelayStore {
           this.sidIndex.set(s.session_id, conn);
         }
         conn.lastSeq = Math.max(conn.lastSeq, msg.seq);
-        this.recoverTaskDone(msg.payload.sessions as SessionState[]);
+        this.recoverTaskDone(snapshot.sessions);
+        break;
+      }
+      case "SESSION_ACTIVITY": {
+        const activity = parseSessionActivityPayload(msg.payload);
+        if (conn.state === "online" && activity?.session_id === sid) {
+          reduceSessionActivity(conn.sessions, conn.activitySeq, activity);
+        }
         break;
       }
       case "SESSION_CREATED": {
@@ -2439,6 +2488,12 @@ class RelayStore {
         if (Array.isArray(accs)) {
           conn.acceptances = accs.filter((a): a is AcceptanceSummary => !!a && typeof (a as AcceptanceSummary).id === "string" && !!(a as AcceptanceSummary).id);
         } // 畸形帧不动既有清单（relay 侧必发合法数组，防御而已）
+        break;
+      }
+      case "NOTIFICATIONS_UPDATED": {
+        const items = (msg.payload as NotificationsUpdatedPayload | undefined)?.items;
+        const notifications = normalizeNotifications(items);
+        if (notifications !== null) conn.notifications = notifications;
         break;
       }
       // #26 M2 组织态（瞬态广播）：项目组/待决议确认卡覆盖式更新（同 SNAPSHOT 口径，

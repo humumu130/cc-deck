@@ -32,6 +32,18 @@ export interface StatusDockState {
   updated_at: number;
 }
 
+export interface SessionActivityPayload {
+  session_id: string;
+  state: SessionStatus;
+  activity_kind: ActivityKind;
+  text: string;
+  tool?: string;
+  observed_at: number;
+  occurred_at?: number;
+  capabilities: ActivityCapabilities;
+  seq_local: number;
+}
+
 export interface SourceCapabilities {
   models?: boolean;
   activity?: boolean;
@@ -52,6 +64,10 @@ export interface NotificationItem {
   created_at: number;
   resolved_at?: number;
   handled_at?: number;
+}
+
+export interface NotificationsUpdatedPayload {
+  items: NotificationItem[];
 }
 
 export interface AskOption {
@@ -323,6 +339,130 @@ export interface SnapshotPayload {
   org_confirms?: OrgConfirm[];
   notifications?: NotificationItem[];
   source_capabilities?: SourceCapabilities;
+}
+
+const ACTIVITY_KINDS: readonly ActivityKind[] = ["tool_use", "tool_result", "assistant_text", "system"];
+const SESSION_STATUSES: readonly SessionState["status"][] = ["WORKING", "WAITING", "ERROR", "DONE"];
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return !!value && typeof value === "object";
+}
+
+export function normalizeActivityCapabilities(value: unknown): ActivityCapabilities {
+  const raw = isRecord(value) ? value : {};
+  return {
+    native_status: raw.native_status === true,
+    operation_summary: raw.operation_summary === true,
+    native_elapsed: raw.native_elapsed === true,
+    approval: raw.approval === true,
+  };
+}
+
+export function hasActivityCapability(session: SessionState, capability: keyof ActivityCapabilities): boolean {
+  return session.activity_capabilities?.[capability] === true || session.activity?.capabilities[capability] === true;
+}
+
+export function parseSessionActivityPayload(value: unknown): SessionActivityPayload | null {
+  if (!isRecord(value)) return null;
+  if (typeof value.session_id !== "string" || !value.session_id) return null;
+  if (typeof value.state !== "string" || !SESSION_STATUSES.includes(value.state as SessionState["status"])) return null;
+  if (typeof value.activity_kind !== "string" || !ACTIVITY_KINDS.includes(value.activity_kind as ActivityKind)) return null;
+  if (typeof value.text !== "string" || typeof value.observed_at !== "number" || !Number.isFinite(value.observed_at)) return null;
+  if (typeof value.seq_local !== "number" || !Number.isInteger(value.seq_local) || value.seq_local < 0) return null;
+  if (value.tool !== undefined && typeof value.tool !== "string") return null;
+  if (value.occurred_at !== undefined && (typeof value.occurred_at !== "number" || !Number.isFinite(value.occurred_at))) return null;
+  return {
+    session_id: value.session_id,
+    state: value.state as SessionActivityPayload["state"],
+    activity_kind: value.activity_kind as ActivityKind,
+    text: value.text,
+    ...(value.tool === undefined ? {} : { tool: value.tool }),
+    observed_at: value.observed_at,
+    ...(value.occurred_at === undefined ? {} : { occurred_at: value.occurred_at }),
+    capabilities: normalizeActivityCapabilities(value.capabilities),
+    seq_local: value.seq_local,
+  };
+}
+
+export function normalizeSnapshotSession(session: SessionState): SessionState {
+  const capabilities = session.activity
+    ? normalizeActivityCapabilities(session.activity.capabilities ?? session.activity_capabilities)
+    : session.activity_capabilities === undefined
+      ? undefined
+      : normalizeActivityCapabilities(session.activity_capabilities);
+  if (!session.activity && capabilities === undefined) return session;
+  if (!session.activity) return { ...session, activity_capabilities: capabilities };
+  const activity: StatusDockState = { ...session.activity, capabilities: capabilities! };
+  return { ...session, activity, activity_capabilities: capabilities };
+}
+
+export function normalizeNotifications(value: unknown): NotificationItem[] | null {
+  if (!Array.isArray(value)) return null;
+  return value.filter((item): item is NotificationItem => isRecord(item) && typeof item.key === "string" && !!item.key);
+}
+
+function normalizeSourceCapabilities(value: unknown): SourceCapabilities | undefined {
+  if (!isRecord(value)) return undefined;
+  const out: SourceCapabilities = {};
+  for (const [key, entry] of Object.entries(value)) {
+    if (typeof entry === "boolean" || (Array.isArray(entry) && entry.every((item) => typeof item === "string"))) out[key] = entry;
+  }
+  return out;
+}
+
+export interface NormalizedSnapshotPayload {
+  sessions: SessionState[];
+  notifications: NotificationItem[] | null;
+  notificationsLegacy: boolean;
+  deliverables: boolean;
+  schemaVersion?: number;
+  sourceCapabilities?: SourceCapabilities;
+}
+
+export function normalizeSnapshotPayload(value: unknown): NormalizedSnapshotPayload {
+  const payload = isRecord(value) ? value : {};
+  const notifications = normalizeNotifications(payload.notifications);
+  const sessions = Array.isArray(payload.sessions)
+    ? payload.sessions.filter((session): session is SessionState => isRecord(session) && typeof session.session_id === "string").map(normalizeSnapshotSession)
+    : [];
+  return {
+    sessions,
+    notifications,
+    notificationsLegacy: notifications === null,
+    deliverables: payload.deliverables === true,
+    ...(typeof payload.schema_version === "number" ? { schemaVersion: payload.schema_version } : {}),
+    sourceCapabilities: normalizeSourceCapabilities(payload.source_capabilities),
+  };
+}
+
+export function reduceSessionActivity(
+  sessions: Map<string, SessionState>,
+  activitySeq: Map<string, number>,
+  value: unknown,
+): boolean {
+  const activity = parseSessionActivityPayload(value);
+  if (!activity) return false;
+  const session = sessions.get(activity.session_id);
+  if (!session) return false;
+  const previousSeq = activitySeq.get(activity.session_id);
+  if (previousSeq !== undefined && activity.seq_local <= previousSeq) return false;
+  const capabilities = normalizeActivityCapabilities(activity.capabilities);
+  const dock: StatusDockState = {
+    ...(session.activity ?? {}),
+    state: activity.state,
+    activity: {
+      kind: activity.activity_kind,
+      text: activity.text,
+      ...(activity.tool === undefined ? {} : { tool: activity.tool }),
+      observed_at: activity.observed_at,
+      ...(activity.occurred_at === undefined ? {} : { occurred_at: activity.occurred_at }),
+    },
+    capabilities,
+    updated_at: activity.observed_at,
+  };
+  sessions.set(activity.session_id, { ...session, activity: dock, activity_capabilities: capabilities });
+  activitySeq.set(activity.session_id, activity.seq_local);
+  return true;
 }
 
 export type CommandType =
