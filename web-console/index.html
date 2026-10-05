@@ -1731,6 +1731,13 @@
   /* 展开子列：左缘引导线 + 紧凑一档（padding 8→5，去分隔线） */
   .fkids { margin: 0 0 2px 13px; border-left: 1px solid var(--side-line); padding-left: 8px; }
   .fkids .afrow { padding: 5px 2px 5px 0; border-bottom: none; }
+  /* #018-W2b 组级失败/不可达态（005 artifact-failed/batch-state 色板对齐；--error 自带暗亮双值） */
+  .af-deadbadge { flex: none; margin-left: 8px; padding: 1px 7px; border: 1px solid color-mix(in srgb, var(--error) 38%, transparent); border-radius: 999px; color: var(--error); font-size: 10.5px; white-space: nowrap; }
+  .af-batch-err { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin: 2px 0 8px 13px; padding: 5px 9px; border: 1px solid color-mix(in srgb, var(--error) 30%, transparent); border-radius: 8px; background: color-mix(in srgb, var(--error) 7%, var(--panel)); color: var(--error); font-size: 11.5px; }
+  .af-batch-err.hard { border-color: color-mix(in srgb, var(--error) 48%, transparent); background: color-mix(in srgb, var(--error) 12%, var(--panel)); }
+  .af-batch-err span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .af-deadretry, .af-retry { flex: none; padding: 2px 10px; border: 1px solid color-mix(in srgb, var(--error) 40%, transparent); border-radius: 6px; background: none; color: var(--error); cursor: pointer; font-size: 11.5px; }
+  .af-deadretry:hover, .af-retry:hover { border-color: var(--error); background: color-mix(in srgb, var(--error) 14%, transparent); }
   /* 聚合形态行内徽标：新建=done 绿 / 修改=中性（两组头让位后的补偿信息） */
   .badge.b-new { background: rgba(43,217,143,.12); color: var(--done); }
   html.light .badge.b-new { background: rgba(4,120,87,.10); }
@@ -6141,6 +6148,10 @@ let agCollapsed = false;
 // #212 记住范围确认条展开态：展开中的 request_id（renderDetail 每秒重渲不丢态；
 // 换请求/审批收口自动复位）
 let rmOpenFor = "";
+// #018-W2b wait-card 审批绑定：renderDetail 渲染 waitbox 时冻结 {ctx, sid, rid}——
+// 审批动作发送一律用冻结值（018 :162「审批动作继续回来源会话」），渲染与点击之间的
+// 选中漂移（通知跳转/快速切会话）不再可能把动作发进别的会话
+let waitBind = null;
 
 function renderDetail() {
   const sel = selSession();
@@ -6241,9 +6252,11 @@ function renderDetail() {
     $("rmbar").style.display = rmOpen ? "flex" : "none";
     if (rmOpen) $("rmLabel").textContent = remember.label || remember.pattern || "";
     renderQuestions(s.waiting_request);
+    waitBind = { ctx: sel.ctx, sid: s.session_id, rid: s.waiting_request.request_id }; // #018-W2b 冻结审批绑定
   } else {
     wb.style.display = "none";
     rmOpenFor = ""; // #212 审批收口/切走会话，复位记住范围条
+    waitBind = null; // #018-W2b 绑定随 waitbox 消隐收口
   }
 
   // WORKING 状态行（类 CLI：✶ 摘要 · 回合耗时）
@@ -6710,16 +6723,27 @@ function artFolderHtml(s, g, open) {
   const preHtml = pre
     ? '<span class="' + (abs ? "dir2" : "dir") + '">' + escapeHtml(pre) + "</span>"
     : "";
-  return '<div class="fgroup' + (open ? " open" : "") + '" data-fk="' + escapeHtml(s.session_id + "|" + g.dir.toLowerCase()) + '">' +
+  // #018-W2b 组级失败/不可达 outcome（对齐 005 原型 data-artifact-outcome 形态）：
+  // 组内全部文件 exists:false → failed（目录不可达）；部分 → partial；否则 complete。
+  // 纯快照投影——exists 由 relay 扫描下发、本端不写（单写者纪律）；重试入口见 retryDeadGroup
+  const deadN = g.files.filter((t) => t.exists === false).length;
+  const outcome = deadN >= g.files.length ? "failed" : deadN > 0 ? "partial" : "complete";
+  const fk = escapeHtml(s.session_id + "|" + g.dir.toLowerCase());
+  return '<div class="fgroup' + (open ? " open" : "") + '" data-fk="' + fk + '" data-artifact-outcome="' + outcome + '">' +
     '<div class="afrow frow" role="button" tabindex="0" aria-expanded="' + (open ? "true" : "false") + '" data-fdir="' + escapeHtml(g.dir) + '" title="' + escapeHtml(g.dir) + '">' +
     '<span class="fico f-dir">' + FDIR_SVG + "</span>" +
     '<span class="afname">' + preHtml + '<span class="fn fname">' + escapeHtml(g.leaf) + '</span><span class="badge b-cnt">×' + g.files.length + "</span></span>" +
     '<span class="afmeta">' +
     (fmtArtSize(g.size) ? '<span class="sz">' + fmtArtSize(g.size) + "</span>" : "") +
     '<span class="tm">' + fmtArtTime(g.at) + "</span></span>" +
+    (outcome === "failed" ? '<span class="af-deadbadge">目录不可达</span>' : outcome === "partial" ? '<span class="af-deadbadge">' + deadN + " 个失效</span>" : "") +
     '<button class="af-act" title="文件夹操作">⋯</button>' +
     "</div>" +
     '<div class="fkids">' + g.files.map((t) => artRowHtml(t, s, { sub: true, badge: true })).join("") + "</div>" +
+    (outcome === "complete" ? "" :
+      '<div class="af-batch-err' + (outcome === "failed" ? " hard" : "") + '" data-fk="' + fk + '">' +
+      "<span>" + (outcome === "failed" ? "源端已无这些文件——或快照未刷新，可重试核实" : deadN + " 个文件源端已不存在，可重试核实") + "</span>" +
+      '<button class="af-deadretry" data-dir="' + escapeHtml(g.dir) + '">重试</button></div>') +
     "</div>";
 }
 function artifactsTabHtml(s) {
@@ -7326,11 +7350,8 @@ function syncSelClasses(qs) {
   });
 }
 function sendAnswer(answers) {
-  const sel = selSession();
-  if (!sel || !sel.s.waiting_request) return;
-  if (sendCommandTo(sel.ctx, "COMMAND_ANSWER", { session_id: selected.sid, request_id: sel.s.waiting_request.request_id, answers })) {
-    toast("已作答");
-  }
+  // #018-W2b 冻结绑定 + ok:true 严判：ACK 确认后才报「已作答」（原「已发送即报」废止）
+  sendWaitingVerdict("COMMAND_ANSWER", { answers }, () => toast("已作答"));
 }
 function submitAnswer() {
   const sel = selSession();
@@ -8994,34 +9015,38 @@ $("stopBtn").onclick = () => {
   if (sel.s.external) sendCommandTo(sel.ctx, "COMMAND_EXT_STOP", { session_id: selected.sid });
   else sendCommandTo(sel.ctx, "COMMAND_STOP", { session_id: selected.sid });
 };
-$("allowBtn").onclick = () => {
-  const sel = selSession();
-  if (sel && sel.s.waiting_request) sendCommandTo(sel.ctx, "COMMAND_CONTINUE", { session_id: selected.sid, request_id: sel.s.waiting_request.request_id });
-};
+// #018-W2b 审批动作发送（wait-card 回原 session）：一律走冻结绑定 waitBind——
+// 点击时动态取 sel 的旧写法在「渲染后、点击前」窗口里会随选中漂移串会话。
+// ACK 走 W1b 判定门 ackVerdict：ok===true 才算送达（静默——UI 收口仍走
+// SESSION_WAITING_RESOLVED 帧，不双写状态）；unconfirmed/rejected 显式 toast
+// 不白屏不静默，无自动重试（重试=用户重点）
+function sendWaitingVerdict(type, extra, onOk) {
+  const b = waitBind;
+  if (!b) return;
+  void commandAck(b.ctx, type, Object.assign({ session_id: b.sid, request_id: b.rid }, extra || {})).then((ack) => {
+    const v = ackVerdict(ack);
+    if (v.ok) { if (onOk) onOk(); }
+    else toast("等待处理未确认：" + v.error + (v.kind === "unconfirmed" ? "，可重试" : ""), 5000);
+  });
+}
+$("allowBtn").onclick = () => sendWaitingVerdict("COMMAND_CONTINUE");
 // #212 允许并记住：展开范围两选 → 点选即 allow+remember_scope（relay 落规则）
 $("rememberBtn").onclick = () => {
   const sel = selSession();
   if (sel && sel.s.waiting_request) { rmOpenFor = sel.s.waiting_request.request_id; renderDetail(); }
 };
 const rmSend = (scope) => {
-  const sel = selSession();
-  if (sel && sel.s.waiting_request) {
+  if (waitBind) {
     rmOpenFor = "";
-    sendCommandTo(sel.ctx, "COMMAND_CONTINUE", { session_id: selected.sid, request_id: sel.s.waiting_request.request_id, remember_scope: scope });
+    sendWaitingVerdict("COMMAND_CONTINUE", { remember_scope: scope });
   }
 };
 $("rmSessBtn").onclick = () => rmSend("session");
 $("rmAllBtn").onclick = () => rmSend("global");
 $("rmCancelBtn").onclick = () => { rmOpenFor = ""; renderDetail(); };
 $("answerBtn").onclick = submitAnswer;
-$("askCancel").onclick = () => {
-  const sel = selSession();
-  if (sel && sel.s.waiting_request) sendCommandTo(sel.ctx, "COMMAND_REJECT", { session_id: selected.sid, request_id: sel.s.waiting_request.request_id });
-};
-$("rejectBtn").onclick = () => {
-  const sel = selSession();
-  if (sel && sel.s.waiting_request) sendCommandTo(sel.ctx, "COMMAND_REJECT", { session_id: selected.sid, request_id: sel.s.waiting_request.request_id });
-};
+$("askCancel").onclick = () => sendWaitingVerdict("COMMAND_REJECT");
+$("rejectBtn").onclick = () => sendWaitingVerdict("COMMAND_REJECT");
 $("backBtn").onclick = closeDetail;
 // ---------- #279① 会话删除 + 4s 撤销（对齐手机 ListScreen #247） ----------
 // 点删除只隐藏卡片 + 底部弹撤销条，4s 内可撤（纯客户端延迟提交），超时才真发
@@ -9536,6 +9561,14 @@ $("timeline").addEventListener("click", (ev) => {
     else if (row) openArtPop(row, ev.clientX, ev.clientY);
     return;
   }
+  // #018-W2b 不可达组「重试」钮：组尾收口条内（不在 .afrow 内，不影响下方 frow 折叠判断），
+  // 探测链见 retryDeadGroup——输出物 tab 只在当前选中会话渲染，selSession() 即目标
+  const deadRetry = ev.target.closest(".af-deadretry");
+  if (deadRetry) {
+    const hit = selSession();
+    if (hit) retryDeadGroup(hit.ctx, hit.s.session_id, deadRetry.dataset.dir || "");
+    return;
+  }
   // #222 文件夹头行折叠/展开：直接翻 DOM class（不重渲染），显式态记入 artFoldSt
   // （tab innerHTML 重建后按记录恢复，未记录的走「最近活跃展开」默认）
   const frow = ev.target.closest(".frow");
@@ -9649,8 +9682,11 @@ async function downloadAndOpenArtifact(ctx, sid, path) {
     const r = await fetchArtifact(ctx, sid, path);
     const saved = await window.ccDeck.saveArtifact(name, bytesToB64(artB64ToBytes(r.b64s)));
     try { await window.ccDeck.openPath(saved, false); } catch {} // 打开失败不算下载失败——路径已 toast，用户可自取
+    clearArtFetchError(path); // #018-W2b 成功清除组尾请求失败条
     toast("已下载并打开：" + saved, 5000);
   } catch (e) {
+    // #018-W2b 请求失败不只 toast（即逝）——组尾持久错误条 + 重试原动作
+    markArtFetchError(path, () => { downloadAndOpenArtifact(ctx, sid, path); });
     toast(String(e?.message || e), 4500);
   } finally {
     artDlBusy = false;
@@ -9672,10 +9708,74 @@ async function previewArtifact(ctx, sid, path) {
   toast("正在拉取「" + name + "」…", 60_000);
   try {
     const r = await fetchArtifact(ctx, sid, path);
+    clearArtFetchError(path); // #018-W2b 成功清除组尾请求失败条
     openArtViewer(name, r.mime, artB64ToBytes(r.b64s));
   } catch (e) {
+    // #018-W2b 同下载链：组尾持久错误条 + 重试原动作
+    markArtFetchError(path, () => { previewArtifact(ctx, sid, path); });
     toast(String(e?.message || e), 4500);
   }
+}
+
+// ---------- #018-W2b 输出物组级失败/不可达收口 ----------
+// 两条错误链路、同一个组尾收口条（.af-batch-err）：
+// ① 不可达（exists:false 快照投影）——artFolderHtml 渲染 outcome 徽标 +「重试」钮，
+//    走 retryDeadGroup 探测：relay 对不存在文件的 COMMAND_ARTIFACT_FETCH 是 stat 同步
+//    拒绝（轻量 ACK 往返，不传数据）；文件实际恢复时全量拉回（≤20MB，结果丢弃只看
+//    成败）。快照 exists 由 relay 周期刷新、Web 无主动刷新命令——探测是唯一轻量核实
+//    手段。并发 3 防多文件组瞬时打满
+// ② 请求失败（拉取超时/断线/缺块）——fetchArtifact reject 后 markArtFetchError 定位
+//    文件所在组尾插持久错误条 +「重试」重发原动作，成功（下载/预览任一路径）清除。
+//    不白屏不静默；散文件行（无所属组）toast 兜底不挂条
+async function retryDeadGroup(ctx, sid, dir) {
+  const s = ctx?.sessions?.get(sid);
+  if (!s) return;
+  const key = dir.toLowerCase();
+  const dead = (s.artifacts ?? []).filter((t) => {
+    const d = artDirOf(s, t);
+    return d && d.toLowerCase() === key && t.exists === false;
+  });
+  if (!dead.length) { toast("该目录没有待核实的文件"); return; }
+  toast("正在核实 " + dead.length + " 个文件…", 60_000);
+  let ok = 0, gone = 0, other = 0, i = 0;
+  await Promise.all(Array.from({ length: Math.min(3, dead.length) }, async () => {
+    while (i < dead.length) {
+      const t = dead[i++];
+      try { await fetchArtifact(ctx, sid, t.path); ok++; }
+      catch (e) {
+        const m = String(e?.message || e);
+        if (/不存在|不可访问/.test(m)) gone++;
+        else if (/20MB 上限/.test(m)) ok++; // 超限=文件在源端只是拉不动——计入可达
+        else other++;
+      }
+    }
+  }));
+  if (ok && !gone && !other) toast(dead.length + " 个文件全部可达——源端状态刷新后更新", 5000);
+  else if (ok) toast(ok + " 个已可达 · " + gone + " 个仍不可达" + (other ? " · " + other + " 个核实失败" : ""), 5000);
+  else toast("仍不可达（文件已不在源端）" + (other ? " · " + other + " 个核实失败" : ""), 5000);
+}
+function markArtFetchError(path, retry) {
+  const frow = [...$("timeline").querySelectorAll(".afrow[data-p]")].find((r) => r.dataset.p === path);
+  const grp = frow?.closest(".fgroup");
+  if (!grp) return; // 散文件行/组外——toast 已兜底
+  let bar = grp.querySelector(".af-batch-err[data-fetch-err]");
+  if (!bar) {
+    bar = document.createElement("div");
+    bar.className = "af-batch-err hard";
+    bar.dataset.fetchErr = "1";
+    grp.appendChild(bar);
+  }
+  const name = path.split(/[\\/]/).pop() || "输出物";
+  bar.innerHTML = "<span>「" + escapeHtml(name) + "」拉取失败</span>";
+  const b = document.createElement("button");
+  b.className = "af-retry";
+  b.textContent = "重试";
+  b.onclick = retry;
+  bar.appendChild(b);
+}
+function clearArtFetchError(path) {
+  const frow = [...$("timeline").querySelectorAll(".afrow[data-p]")].find((r) => r.dataset.p === path);
+  frow?.closest(".fgroup")?.querySelector(".af-batch-err[data-fetch-err]")?.remove();
 }
 let artViewerUrl = "";
 function closeArtViewer() {
