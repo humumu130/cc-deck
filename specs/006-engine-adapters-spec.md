@@ -665,7 +665,7 @@ dispatchWorker({
 |---|---|---|
 | ZCode 隐私开关不可验证或关闭语义漂移 | 可能造成 Git 历史或项目内容外传 | 默认关闭 + strict privacy fail-closed；未通过安全冒烟不进入默认列表 |
 | Trae 无 resume 且 CLI 协议未知 | 上下文连续性、首轮事件和 watchdog 容易失真 | 先实现通用 reinjection；先做 mapper/stub，再接真实命令 |
-| CodeBuddy CI 模式输出/权限语义未知 | 可能把自动运行误显示为可审批 | 能力位先保守；无真实 decision channel 不发 WAITING |
+| CodeBuddy 非交互输出/权限语义未知 | 可能把自动运行误显示为可审批 | 能力位先保守；无真实 decision channel 不发 WAITING |
 | Qwen JSON 输出形态与 resume 版本漂移 | 解析和会话续接不稳定 | 单对象/JSONL 双 parser；native resume 必须实测后启用 |
 | provider env 变量命名不统一 | 中转配置不生效或误把 key 传错 CLI | profile 映射 + preflight；不做跨 CLI 环境变量猜测 |
 
