@@ -1,0 +1,10 @@
+{
+  "v":1,
+  "feed_id":"feed-1",
+  "actions":[
+    {"kind":"accept","ids":["sid-receipt"]},
+    {"kind":"notify","ids":["blocked-1"]}
+  ],
+  "blocked":[{"id":"confirm-1","reason":"user_confirm"}],
+  "next_trigger":"event"
+}

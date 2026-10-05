@@ -1,0 +1,11 @@
+{
+  "now": 1000000,
+  "pending_receipts": [],
+  "failed_or_hanging_dispatches": [],
+  "unlocked_todos": [],
+  "stale_doing": [],
+  "running_sessions": [
+    {"session_id":"worker-web","status":"WORKING","recent_progress":true},
+    {"session_id":"worker-mobile","status":"running","recent_progress":true}
+  ]
+}

@@ -1,0 +1,11 @@
+{
+  "pending_receipts": [],
+  "failed_or_hanging_dispatches": [],
+  "unlocked_todos": [],
+  "stale_doing": [],
+  "running_sessions": [],
+  "blocked": [
+    {"id":"confirm-1","reason":"user_confirm"},
+    {"id":"credential-1","reason":"permission"}
+  ]
+}
