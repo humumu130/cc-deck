@@ -40,6 +40,9 @@ export const STORAGE_INDEXES = [
   "idx_acceptance_task",
 ] as const;
 
+/** v2 导入台账表名清单（import_checkpoint + import_loss，M11-B2；非冻结件 15 表口径，单独列）。 */
+export const IMPORT_LEDGER_TABLES = ["import_checkpoint", "import_loss"] as const;
+
 // v1 基线 DDL——与冻结件 §2 逐字对齐（含引号写法 "group"）。
 const BASELINE_15_TABLES_DDL = `
 CREATE TABLE project (
@@ -148,11 +151,40 @@ CREATE INDEX idx_notification_action ON notification(level,resolved_at,handled_a
 CREATE INDEX idx_acceptance_task ON acceptance_sheet(task_id,group_id);
 `;
 
-/** 迁移列表：v1 一次性建全 15 表 + 6 索引（v2+ 逐版追加）。入口 runMigrations(port, migrations)。 */
+// v2 导入台账 DDL（M11-B2）——checkpoint 断点续跑表 + loss 台账表。
+// 冻结件 §4 验收口径内（M1-1B：15 表 DDL、6 索引、FK/CHECK、schema_version、checkpoint 表）。
+// checkpoint 五元组=path+mtime_ms+line_count+offset+schema_version；offset 存列名 line_offset
+// （offset 是 SQL 关键字），行数语义：前 offset 行已处理，续跑从 offset+1 行起。
+// loss 台账：缺归因/坏行/悬空引用追加记录，实体行归因列写 NULL，绝不造关联（冻结件 §1 口径）。
+const IMPORT_LEDGER_DDL = `
+CREATE TABLE import_checkpoint (
+  path TEXT PRIMARY KEY,
+  mtime_ms INTEGER NOT NULL,
+  line_count INTEGER NOT NULL,
+  line_offset INTEGER NOT NULL,
+  schema_version INTEGER NOT NULL,
+  updated_at INTEGER NOT NULL
+);
+CREATE TABLE import_loss (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  source_path TEXT NOT NULL,
+  line_no INTEGER NOT NULL,
+  reason TEXT NOT NULL,
+  excerpt TEXT NOT NULL DEFAULT '',
+  created_at INTEGER NOT NULL
+);
+`;
+
+/** 迁移列表：v1 一次性建全 15 表 + 6 索引；v2 导入台账（checkpoint+loss）（v3+ 逐版追加）。入口 runMigrations(port, migrations)。 */
 export const migrations: readonly Migration[] = [
   {
     version: 1,
     name: "baseline-15-tables",
     up: (p) => p.exec(BASELINE_15_TABLES_DDL),
+  },
+  {
+    version: 2,
+    name: "import-ledger",
+    up: (p) => p.exec(IMPORT_LEDGER_DDL),
   },
 ];

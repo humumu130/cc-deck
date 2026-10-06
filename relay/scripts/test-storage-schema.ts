@@ -1,5 +1,7 @@
 // M11-B1 基线 schema 测试：v1 迁移落地 15 表 6 索引 + FK/CHECK/唯一键逐项对冻结件
 // （docs/v2-m10-freeze.md §2）。范式沿用 test-storage（mkdtemp+env 全清+assert 计数+两轮连跑）。
+// 本套只验 v1 基线（migrations.slice(0, 1)）——v2 导入台账（import_checkpoint/import_loss）
+// 归 M11-B2 测试（test-storage-checkpoint.ts）。
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -41,7 +43,7 @@ function versionOf(p: typeof port): number {
 
 // ---------- 1. v1 迁移落地 15 表 + 6 索引（验收 1） ----------
 console.log("v1 基线落地:");
-const r1 = runMigrations(port, migrations);
+const r1 = runMigrations(port, migrations.slice(0, 1));
 assert(r1.from === 0 && r1.to === 1 && r1.applied.length === 1 && r1.applied[0] === 1, "fresh 库 v1 一次执行（applied=[1]）");
 assert(versionOf(port) === 1, "user_version=1");
 const tables = port.query<{ name: string }>("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' ORDER BY name").map((r) => r.name);
@@ -164,7 +166,7 @@ expectThrow(() => port.exec("INSERT INTO notification_client_state (notification
 
 // ---------- 6. 幂等 + 重开持久性（验收 1/3 补证） ----------
 console.log("幂等与重开:");
-const r2 = runMigrations(port, migrations);
+const r2 = runMigrations(port, migrations.slice(0, 1));
 assert(r2.applied.length === 0, "v1 幂等重跑零执行");
 port.close();
 const port2 = createSqlitePort({ dataDir, filename: "schema.sqlite3" });
@@ -172,7 +174,7 @@ port2.open();
 assert(versionOf(port2) === 1, "重开库 user_version=1（重启持久）");
 const reopened = port2.query<{ n: number }>("SELECT COUNT(*) AS n FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'")[0]?.n;
 assert(reopened === 15, "重开库 15 表仍在");
-const r3 = runMigrations(port2, migrations);
+const r3 = runMigrations(port2, migrations.slice(0, 1));
 assert(r3.from === 1 && r3.applied.length === 0, "重开库幂等续跑零执行");
 port2.close();
 
