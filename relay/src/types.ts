@@ -617,6 +617,14 @@ export interface AllowRulesUpdatedPayload {
 // 应用零变化（幂等规格，test-delta-projection 锁）。帧级判定（三端照此实现）：
 // `payload.delta !== undefined` → 增量 merge；缺席 → 覆盖式消费旧字段（旧 relay /
 // mgr 重启后首帧，零行为变化）。
+//
+// 锚定纪律（M13-REV P1 回炉定案，三端照此实现）：delta 帧仅可在**锚定后**应用——
+// 该域已消费过覆盖式帧（PROJECTS 域：SNAPSHOT.projects 全量索引或任一带 groups 的帧；
+// BOARD 域：该 gid 任一带 board 的帧）。未锚定收到 delta 帧 = 丢弃 + 重拉重锚
+//（PROJECTS 域随下一帧 SNAPSHOT 自愈；BOARD 域显式 COMMAND_PROJECT_DETAIL 按需重拉）。
+// 「基线缺失→空集/空板起底 merge」是**禁止路径**：瞬态帧 seq:0 不进缓冲、重连不补发、
+// 板域又无 SNAPSHOT 兜底，把「缺锚」错当「空集」会把中间态差分起底成错乱终态（掉帧
+// 静默错乱）。覆盖式帧兼任锚定帧：先到先锚，之后 delta 帧才可应用。
 export interface EntityDelta<T extends { id: string }> {
   /** 变更实体完整条目（整条替换，含未变字段——端上不做字段级合并） */
   upserts: T[];

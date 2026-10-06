@@ -5068,7 +5068,7 @@ export class SessionManager {
     const entries = this.diffById(prev.entries, board.entries) ?? { upserts: [], removes: [] };
     // 前值 lessons undefined（板升级前旧文件）视为空表，首次出现=全量 upserts
     const lessons = this.diffById(prev.lessons ?? [], board.lessons ?? []) ?? { upserts: [], removes: [] };
-    const metaChanged = prev.frozen !== board.frozen || prev.updated_at !== board.updated_at;
+    // meta 恒随 delta 下发（frozen/updated_at 深比不等才有实义；全空差分+无 meta 变化帧=纯心跳，M13-REV P3-1 死变量清理）
     const delta: BoardDelta = { entries, lessons, meta: { frozen: board.frozen, updated_at: board.updated_at } };
     this.bus.emitTransient("BOARD_UPDATED", {
       gid,

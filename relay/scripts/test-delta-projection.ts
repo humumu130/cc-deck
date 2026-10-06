@@ -8,7 +8,10 @@
 //   ② 幂等锁——同状态重复发射帧级深等（JSON.stringify）；delta 全部用带稳定 id 的完整条目
 //      表达 → 参考端 merge（按 id upsert、removes 剔除、未知 id 忽略）对同一帧二次应用零变化；
 //      全帧 merge 链终态 == 覆盖式（只认旧字段 board/groups）终态 == 板文件现值。
-//   ③ 双出口同步锁（#117）——同一 emitTransient 帧经 LAN（ws-server 总线转发）与 phone
+//   ③ 锚定纪律锁（M13-REV P1）——未锚定（无覆盖式帧起底）收 delta 帧=跳帧丢弃，
+//      禁止「基线缺失→空集/空板起底 merge」（瞬态 seq:0 不补发+板域无 SNAPSHOT 兜底，
+//      三端照抄空板起底即掉帧静默错乱；参考实现 anchor/prev undefined → 返回未定义）。
+//   ④ 双出口同步锁（#117）——同一 emitTransient 帧经 LAN（ws-server 总线转发）与 phone
 //      （cloud-client 密封转发）各收一份，payload 序列化深等；快照面 v2 信号位在 M13-1 件锁，
 //      此处 wire 复证事件帧通道同构。
 // 隔离：mgr 级段直连 EventBus 捕获；wire 段真桥（cloud-bridge 本地件）端口 8792/8793，
@@ -69,16 +72,23 @@ async function waitFor(fn: () => boolean, ms = 4000, every = 25): Promise<boolea
 
 // 参考端 merge 实现（回单「delta payload 形状规格」的可执行演示：三端照此实现）。
 // 帧级判定：payload.delta !== undefined → 增量 merge；缺席 → 覆盖式消费旧字段。
-function applyProjectsFrame(state: ProjectGroup[], p: ProjectsUpdatedPayload): ProjectGroup[] {
-  if (!p.delta) return [...p.groups];
-  const next = new Map(state.map((g) => [g.id, g]));
+// 锚定纪律（M13-REV P1 回炉，与 types.ts 规格注释同源）：delta 帧仅可在锚定后应用
+//（PROJECTS 域锚=SNAPSHOT.projects 或任一覆盖式帧；BOARD 域锚=该 gid 覆盖式帧——板域
+// 无 SNAPSHOT 兜底，瞬态 seq:0 重连不补发）。anchor/prev === undefined（未锚定）收
+// delta 帧 → 返回 undefined 跳帧（端上=丢弃+重拉重锚）；「基线缺失→空集/空板起底
+// merge」是禁止路径。覆盖式帧兼任锚定帧：先到先锚。
+function applyProjectsFrame(anchor: ProjectGroup[] | undefined, p: ProjectsUpdatedPayload): ProjectGroup[] | undefined {
+  if (!p.delta) return [...p.groups]; // 覆盖式帧：同时完成锚定
+  if (anchor === undefined) return undefined; // 未锚定 → 跳帧（禁止空集起底）
+  const next = new Map(anchor.map((g) => [g.id, g]));
   for (const id of p.delta.removes) next.delete(id); // 未知 id 删除=no-op（幂等天然）
   for (const g of p.delta.upserts) next.set(g.id, g); // 按 id 整条替换
   return [...next.values()];
 }
-function applyBoardFrame(prev: ProjectBoard | undefined, gid: string, p: BoardUpdatedPayload): ProjectBoard {
-  if (!p.delta) return p.board; // 覆盖式
-  const base: ProjectBoard = prev ?? { gid, entries: [], updated_at: 0, frozen: false };
+function applyBoardFrame(prev: ProjectBoard | undefined, gid: string, p: BoardUpdatedPayload): ProjectBoard | undefined {
+  if (!p.delta) return p.board; // 覆盖式帧：同时完成锚定
+  if (prev === undefined) return undefined; // 未锚定 → 跳帧（禁止空板起底；端上丢弃+COMMAND_PROJECT_DETAIL 重拉）
+  const base: ProjectBoard = prev;
   const entries = new Map(base.entries.map((e) => [e.id, e]));
   for (const id of p.delta.entries.removes) entries.delete(id);
   for (const e of p.delta.entries.upserts) entries.set(e.id, e);
@@ -126,7 +136,8 @@ try {
     "entity_refs == upserts∪removes 去重 id 集",
   );
   assert(Array.isArray(createFrame.groups) && createFrame.groups.some((g) => g.id === gid), "旧字段 groups 仍全量在场（旧端消费输入保留）");
-  assert(JSON.stringify(applyProjectsFrame([], createFrame)) === JSON.stringify(createFrame.groups), "delta merge 首用 == groups 覆盖终态（两消费路径起点一致）");
+  //（首参 [] = 已锚定空集——模拟 SNAPSHOT.projects=[] 后收到 create delta；undefined 才是未锚定跳帧态）
+  assert(JSON.stringify(applyProjectsFrame([], createFrame)) === JSON.stringify(createFrame.groups), "已锚定空集收 create delta：merge == groups 覆盖终态（两消费路径起点一致）");
 
   // ---------- 段 2：BOARD_UPDATED delta 全谱（直调板函数 + emitBoard 发射） ----------
   console.log("S2 BOARD_UPDATED delta 全谱");
@@ -234,6 +245,9 @@ try {
   // 同一 delta 二次应用零变化
   const twice = applyBoardFrame({ ...live, entries: [...live.entries], lessons: [...(live.lessons ?? [])] }, gid, lastBoardFrame());
   assert(JSON.stringify(twice) === JSON.stringify(live), "对已收敛状态二次应用同一 delta：零变化（重复投递幂等）");
+  // 锚定纪律锁（M13-REV P1 回炉）：未锚定收 delta 帧 = 跳帧，禁止空集/空板起底
+  assert(applyBoardFrame(undefined, gid, lastBoardFrame()) === undefined, "未锚定收 BOARD delta 帧：参考实现跳帧（返回未定义，不产出空板起底错乱终态）");
+  assert(applyProjectsFrame(undefined, createFrame) === undefined, "未锚定收 PROJECTS delta 帧：参考实现跳帧");
 
   // ---------- 段 4：重启首帧（发射缓存冷 = 无 delta 键，覆盖式兜底） ----------
   console.log("S4 重启首帧");
